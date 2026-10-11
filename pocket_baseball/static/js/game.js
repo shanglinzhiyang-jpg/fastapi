@@ -74,6 +74,75 @@
         return "";
     }
   };
+  // テレビの「きょうの成績」風の短い表記 (中フライ・左安・三振 …)
+  Talk.POS1 = { P: "投", C: "捕", "1B": "一", "2B": "二", "3B": "三", SS: "遊", LF: "左", CF: "中", RF: "右" };
+  Talk.short = function (res) {
+    const T = Talk.POS1;
+    const ft = res.firstTouch;
+    const of = () => T[Talk.dirOf(res).pos] || "中";
+    switch (res.type) {
+      case "H1":
+        return ft && ["LF", "CF", "RF"].indexOf(ft) < 0 ? (T[ft] || "") + "内安" : of() + "安";
+      case "H2":
+        return of() + "二";
+      case "H3":
+        return of() + "三";
+      case "HR":
+      case "IPHR": {
+        const th = res.launch ? res.launch.phi : 0;
+        return (res.type === "IPHR" ? of() : th < -15 ? "左" : th > 15 ? "右" : "中") + "本";
+      }
+      case "GO":
+        return (T[ft] || "") + "ゴロ";
+      case "FO":
+      case "PO":
+        return (T[ft] || "") + "フライ";
+      case "LO":
+        return (T[ft] || "") + "ライナー";
+      case "DP":
+        return (T[ft] || "") + "併殺";
+      case "DPF":
+        return (T[ft] || "") + "直併殺";
+      case "TP":
+        return "三重殺";
+      case "SF":
+        return (T[ft] || "") + "犠飛";
+      case "SAC":
+        return "犠打";
+      case "FC":
+        return "野選";
+      case "E":
+        return (T[(res.error && res.error.pos) || ft] || "") + "失";
+      case "FFO":
+        return (T[ft] || "") + "邪飛";
+      default:
+        return "";
+    }
+  };
+  // 得点場面の一行 (今日の結果): 鳥谷4号先制2ラン / 矢野 同点適時二塁打 / 金本 押し出し四球で勝ち越し
+  Talk.scoreText = function (o) {
+    const ctx = o.walkoff ? "サヨナラ" : o.ctx;
+    const n = o.n;
+    const nm = o.name;
+    if (o.kind === "walk") return nm + " 押し出し" + (o.hbp ? "死球" : "四球") + (ctx ? "で" + ctx : "");
+    const res = o.res || {};
+    switch (res.type) {
+      case "HR":
+        return nm + (o.hrNo ? o.hrNo + "号" : " ") + ctx + (n >= 4 ? "満塁弾" : n === 1 ? "ソロ" : n + "ラン");
+      case "IPHR":
+        return nm + " " + ctx + "ランニング本塁打";
+      case "H1":
+      case "H2":
+      case "H3":
+        return nm + " " + ctx + (n > 1 ? n + "点" : "") + { H1: "適時打", H2: "適時二塁打", H3: "適時三塁打" }[res.type];
+      case "SF":
+        return nm + " " + ctx + "犠飛";
+      default: {
+        const how = { GO: "内野ゴロ", DP: "併殺打", FC: "野選", E: "敵失", SAC: "犠打", FO: "外野フライ", PO: "内野フライ", LO: "ライナー" }[res.type] || "";
+        return nm + " " + (how ? how + "の間に" : "") + (ctx || n + "点");
+      }
+    }
+  };
   PB.Talk = Talk;
 
   /* ---------- 試合 ---------- */
@@ -103,6 +172,8 @@
       this.bi = { away: 0, home: 0 };
       this.box = {};
       this.log = [];
+      this.paLog = {}; // 打者ごとの今日の打席結果 (短い表記)
+      this.scoreLog = []; // 得点場面 (今日の結果)
       this.over = false;
       this.used = { away: [], home: [] };
       this.pstate = {};
@@ -224,6 +295,9 @@
 
     addLog(text, kind) {
       this.log.push({ inning: this.inning, top: this.top, text, kind: kind || "info" });
+    }
+    addPA(id, code) {
+      (this.paLog[id] || (this.paLog[id] = [])).push(code);
     }
 
     newPA() {
@@ -396,7 +470,9 @@
       const ps = this.stat(this.pstate[this.fieldingSide()].id);
       ps.pbb++;
       this.addLog(bat.name + (hbp ? " デッドボール" : " フォアボール"), "walk");
+      this.addPA(bat.id, hbp ? "死球" : "四球");
       this.emit("walk", { hbp });
+      this.cause = { kind: "walk", hbp, bat };
       this.scoreRuns(scored, true);
       this.endPA();
     }
@@ -412,6 +488,7 @@
       this.pstate[this.fieldingSide()].outsAtEnter++;
       this.stat(this.pstate[this.fieldingSide()].id).outs++;
       this.addLog(bat.name + (bunt ? " スリーバント失敗" : swinging ? " 空振り三振" : " 見逃し三振"), "out");
+      this.addPA(bat.id, bunt ? "バント失敗" : swinging ? "空三振" : "見三振");
       this.emit("strikeout", { swinging });
       this.endPA();
     }
@@ -432,6 +509,15 @@
       }
       if (rbiOK) this.stat(this.batter().id).rbi += players.length;
       const after = this.leadOf(bs);
+      const c = this.cause;
+      this.cause = null;
+      if (c) {
+        const total0 = this.score.home + this.score.away - players.length;
+        const ctx = total0 === 0 ? "先制" : before < 0 && after === 0 ? "同点" : before < 0 && after > 0 ? "逆転" : before === 0 && after > 0 ? "勝ち越し" : "";
+        const walkoff = !this.top && this.inning >= this.innings && before <= 0 && after > 0;
+        const text = Talk.scoreText({ kind: c.kind, hbp: c.hbp, res: c.res, name: c.bat.name, n: players.length, ctx, walkoff, hrNo: c.hrNo });
+        this.scoreLog.push({ side: bs, inning: this.inning, top: this.top, text, ctx: walkoff ? "サヨナラ" : ctx, n: players.length, hr: !!(c.res && (c.res.type === "HR" || c.res.type === "IPHR")), score: { away: this.score.away, home: this.score.home } });
+      }
       // 勝利/敗戦投手の候補
       if (before <= 0 && after > 0) {
         this.record.win[bs] = this.pstate[bs].id;
@@ -475,6 +561,10 @@
       this.bases = res.bases;
       const rbiOK = t !== "E" && t !== "DP" && t !== "DPF";
       const er = res.error ? 0 : 1;
+      this.addPA(bat.id, Talk.short(res));
+      // 本塁打の号数 (シーズン成績があるときだけ)
+      if (HIT_BASES[t] === 4 && this.season) res.hrNo = ((this.season[bat.id] || {}).hr || 0) + s.hr;
+      this.cause = { kind: "play", res, bat, hrNo: res.hrNo };
       this.scoreRuns(res.scorers, rbiOK);
       if (!er) ps.er -= res.scorers.length;
       this.addLog(bat.name + " " + desc + (res.runs ? "（" + res.runs + "点）" : ""), HIT_BASES[t] ? "hit" : res.batterOut ? "out" : "info");

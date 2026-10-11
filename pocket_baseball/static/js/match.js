@@ -43,6 +43,7 @@
       this.time = 0;
       R.night = opt.night != null ? opt.night : this.S.night;
       R.bg = {};
+      if (opt.season && !this.g.season) this.g.season = opt.season;
       this.g.on((type, d) => this.onGame(type, d));
       this.buildHUD();
       A.ambient(true);
@@ -92,18 +93,15 @@
       this.hud = hud;
       hud.hidden = false;
       hud.className = "hud" + (this.S.lefty ? " lefty" : "");
+      if (this.tv) this.tv.destroy();
+      this.tv = new PB.TV(this);
       hud.innerHTML =
-        '<div class="sb">' +
-        '<div class="sb-teams"><div class="sb-t" data-side="away"></div><div class="sb-t" data-side="home"></div></div>' +
-        '<div class="sb-inn"></div>' +
-        '<div class="sb-bso"><div class="b"><span>B</span><i></i><i></i><i></i></div><div class="s"><span>S</span><i></i><i></i></div><div class="o"><span>O</span><i></i><i></i></div></div>' +
-        '<div class="sb-bases"><i class="b2"></i><i class="b3"></i><i class="b1"></i></div>' +
-        '<button class="sb-pause" data-hud="pause" aria-label="タイム">タイム</button>' +
-        "</div>" +
-        '<div class="info"><div class="card bat"></div><div class="card pit"></div></div>' +
+        this.tv.html() +
+        '<button class="tv-pause" data-hud="pause" aria-label="タイム">タイム</button>' +
         '<div class="talk"></div>' +
         '<div class="banner"></div>' +
         '<div class="ctrl"></div>';
+      this.tv.mount(hud);
       hud.onpointerdown = (e) => {
         const b = e.target.closest("[data-hud]");
         if (!b) return;
@@ -116,65 +114,8 @@
     }
 
     updateHUD() {
-      const g = this.g;
-      const hud = this.hud;
-      if (!hud) return;
-      for (const side of ["away", "home"]) {
-        const t = g.teams[side];
-        const el = hud.querySelector('.sb-t[data-side="' + side + '"]');
-        const atBat = g.battingSide() === side;
-        el.className = "sb-t" + (atBat ? " atbat" : "");
-        el.innerHTML = UI.mark(t, 18) + '<span class="nm">' + esc(t.short) + '</span><b class="sc">' + g.score[side] + "</b>";
-      }
-      if (this.derby) {
-        hud.querySelector(".sb-inn").innerHTML = '<span class="d-l">HR</span><b>' + this.derby.hr + '</b><span class="d-l">残り</span><b>' + Math.max(0, this.derby.maxOuts - this.derby.outs) + "</b>";
-      } else {
-        hud.querySelector(".sb-inn").innerHTML = '<span class="arr">' + (g.top ? "▲" : "▼") + "</span><b>" + g.inning + "</b>";
-      }
-      const lamp = (sel, n) => hud.querySelectorAll(sel + " i").forEach((el, i) => el.classList.toggle("on", i < n));
-      lamp(".sb-bso .b", g.balls);
-      lamp(".sb-bso .s", g.strikes);
-      lamp(".sb-bso .o", g.outs);
-      ["b1", "b2", "b3"].forEach((k, i) => hud.querySelector(".sb-bases ." + k).classList.toggle("on", !!g.bases[i + 1]));
-      // 打者・投手カード
-      const bat = g.batter();
-      const pit = g.pitcher();
-      const bs = g.box[bat.id] || {};
-      const seasonB = this.opt.season ? this.opt.season[bat.id] : null;
-      const order = g.bi[g.battingSide()] + 1;
-      const bline = seasonB ? "打率" + U.fmtAvg(seasonB.h || 0, seasonB.ab || 0) + " " + (seasonB.hr || 0) + "本" : "今日 " + (bs.ab || 0) + "-" + (bs.h || 0) + (bs.hr ? " " + bs.hr + "HR" : "");
-      hud.querySelector(".card.bat").innerHTML =
-        '<div class="c-top"><span class="ord">' +
-        (this.derby ? "HR" : order + "番") +
-        "</span><b>" +
-        esc(bat.name) +
-        '</b><span class="hand">' +
-        (P.batSide(bat, pit) === "L" ? "左" : "右") +
-        '打</span></div><div class="c-mid">' +
-        UI.compactAb(bat) +
-        '<span class="traj-s">弾' +
-        bat.traj +
-        "</span></div>" +
-        '<div class="c-bot">' +
-        esc(bline) +
-        "</div>";
-      const st = g.pstate[g.fieldingSide()];
-      const ratio = st.stamina / st.max;
-      const last = this.lastPitch ? '<span class="spd">' + this.lastPitch.speedKmh + 'km/h</span><span class="pname">' + esc(this.lastPitch.name) + "</span>" : '<span class="pname">最速' + pit.velo + "km/h</span>";
-      hud.querySelector(".card.pit").innerHTML =
-        '<div class="c-top"><span class="ord">投</span><b>' +
-        esc(pit.name) +
-        '</b><span class="hand">' +
-        (pit.throws === "L" ? "左" : "右") +
-        '投</span></div><div class="c-mid">' +
-        last +
-        '</div><div class="c-bot"><span class="stam"><i style="width:' +
-        Math.round(ratio * 100) +
-        "%;background:" +
-        (ratio > 0.5 ? "#3ddc84" : ratio > 0.25 ? "#ffd23f" : "#ff4d4d") +
-        '"></i></span><span class="np">' +
-        st.pitches +
-        "球</span></div>";
+      if (!this.hud || !this.tv) return;
+      this.tv.update();
     }
 
     updateControls() {
@@ -218,7 +159,7 @@
         } else {
           html = '<div class="row-r"><button class="cbtn sm" data-hud="speed">' + (this.speed > 1 ? "等速" : "早送り ≫") + "</button></div>";
         }
-      } else if (st === "paIntro" || st === "change" || st === "intro") {
+      } else if (st === "paIntro" || st === "change" || st === "intro" || st === "tvscore") {
         html = '<div class="row-r"><button class="cbtn sm" data-hud="next">次へ ▶</button></div>';
       }
       c.innerHTML = html;
@@ -292,7 +233,7 @@
           this.drag.abs = true;
         }
       }
-      if ((this.state === "change" || this.state === "paIntro" || this.state === "intro") && this.t > 0.3) this.t = 99;
+      if ((this.state === "change" || this.state === "paIntro" || this.state === "intro" || this.state === "tvscore") && this.t > 0.3) this.t = 99;
       if (this.state === "result" && this.t > 0.5) this.t = 99;
     }
     pointerMove(e) {
@@ -328,7 +269,10 @@
       if (type === "strikeout") this.lastPAEv = { type: "K" };
       if (type === "walk") this.lastPAEv = { type: "BB" };
       if (type === "play") this.lastPAEv = { type: d.type, res: d };
-      if (type === "pitcherChange") this.say("ピッチャー交代、" + d.p.name + "。");
+      if (type === "pitcherChange") {
+        this.say("ピッチャー交代、" + d.p.name + "。");
+        if (this.tv && !this.derby) this.tv.pitcherIntro(d.p, d.side, "change");
+      }
       if (type === "pinchHit") this.say("代打、" + this.g.P(d.id).name + "！");
     }
 
@@ -352,9 +296,17 @@
       this.updateHUD();
       this.enter("paIntro");
       const bat = g.batter();
-      const ord = g.bi[g.battingSide()] + 1;
       if (this.derby) this.banner('<small>ホームラン競争</small>' + esc(bat.name), "info", 1000);
-      else this.banner("<small>" + ord + "番 " + esc(D.POS_FULL[g.batterPos()] || "") + "</small>" + esc(bat.name), "info", 1100);
+      else {
+        // 中継風: 先発投手の紹介 → 打者の紹介
+        this.tv.hide("tick");
+        const fs = g.fieldingSide();
+        if (this.mode === "game" && !this.tv.spShown[fs] && g.used[fs].length === 1) {
+          this.tv.spShown[fs] = true;
+          this.tv.pitcherIntro(g.pitcher(), fs, "start");
+        }
+        this.tv.batter();
+      }
       A.chant(this.userBat() && !this.derby);
     }
 
@@ -425,6 +377,7 @@
       this.jr = jr;
       this.swUsed = sw;
       this.lastPitch = pc;
+      this.tv.pitch(pc);
       if (this.derby) return this.resolveDerby(jr);
       if (jr.call === "inplay") {
         const strong = jr.res.ev > 40 && jr.res.la > 15 && jr.res.la < 40;
@@ -503,6 +456,19 @@
       const g = this.g;
       this.updateHUD();
       if (g.over) return this.finish();
+      // 点が入ったら中継風の得点テロップ
+      if (this.mode === "game" && !this.derby && g.scoreLog.length > this.tv.scoreSeen) {
+        this.tv.scoreSeen = g.scoreLog.length;
+        this.tvKey = key0;
+        this.enter("tvscore");
+        this.tv.scoreBoard("score");
+        return;
+      }
+      this.afterTV(key0);
+    }
+
+    afterTV(key0) {
+      const g = this.g;
       if (this.mode === "mini" && this.paKey().split("/")[0] !== key0.split("/")[0]) {
         this.paCount++;
         const ev = this.lastPAEv;
@@ -525,24 +491,17 @@
     }
 
     showChange() {
-      const g = this.g;
-      const n = Math.max(g.line.away.length, g.line.home.length, g.innings);
-      let cells = "";
-      const row = (side) => {
-        let s = "<tr><th>" + UI.mark(g.teams[side], 16) + esc(g.teams[side].short) + "</th>";
-        for (let i = 0; i < n; i++) {
-          const v = g.line[side][i];
-          s += "<td>" + (v == null ? "" : v) + "</td>";
-        }
-        return s + '<td class="r">' + g.score[side] + "</td></tr>";
-      };
-      cells = '<table class="ls"><tr><th></th>' + Array.from({ length: n }, (_, i) => "<td>" + (i + 1) + "</td>").join("") + '<td class="r">R</td></tr>' + row("away") + row("home") + "</table>";
-      this.banner('<span class="chg">チェンジ</span>' + cells, "change", 2400);
+      this.tv.hide("l3");
+      this.tv.inningBoard();
+      // 今日の結果を流すぶん少し長めに
+      const n = Math.min(3, this.g.scoreLog.length);
+      this.changeT = n ? Math.min(5.2, 0.6 + 2.3 * n) : 2.4;
     }
 
     /* ---------- インプレー ---------- */
     startPlay(play, kind) {
       this.play = play;
+      if (this.tv) this.tv.hide("l3");
       this.playKind = kind;
       this.evIdx = 0;
       this.skipPlay = false;
@@ -646,7 +605,7 @@
         cls = "hr";
         A.fanfare();
         for (let i = 0; i < 6; i++) setTimeout(() => R.firework(), 200 + i * 320);
-        this.banner('<span class="hr-t">ホームラン</span><small>' + esc(desc) + (res.runs > 1 ? " " + res.runs + "ラン" : "") + "</small>", "hr", 2600);
+        this.tv.homeRun(res, g.batter());
       } else if (["H1", "H2", "H3"].indexOf(res.type) >= 0) {
         cls = "hit";
         A.cheer(res.type === "H1" ? 0.6 : 0.9, 1.6);
@@ -865,10 +824,12 @@
           this.destroy();
           if (this.opt.onEnd) this.opt.onEnd(this);
         },
-        this.derby ? 1200 : 1600
+        this.derby ? 1200 : this.mode === "game" ? 3000 : 1600
       );
       if (!this.derby && this.mode === "game") {
-        this.banner("ゲームセット", "change", 1600);
+        this.tv.hide("l3");
+        this.tv.hide("tick");
+        this.tv.scoreBoard("final");
         A.whistle();
       }
     }
@@ -877,6 +838,7 @@
       A.chant(false);
       A.ambient(false);
       this.dead = true;
+      if (this.tv) this.tv.destroy();
       if (this.hud) {
         this.hud.hidden = true;
         this.hud.innerHTML = "";
@@ -898,10 +860,14 @@
           const a = g.teams.away;
           const h = g.teams.home;
           if (this.derby) this.banner('<span class="chg">ホームラン競争</span><small>' + this.derby.maxOuts + "アウトまでに何本打てるか！</small>", "change", 1800);
+          else if (this.mode === "game") this.tv.scoreBoard("open");
           else this.banner('<span class="vs">' + esc(a.name) + "<i>VS</i>" + esc(h.name) + "</span><small>" + esc(h.stadium || "") + "</small>", "change", 2000);
           A.cheer(0.5, 2);
         }
-        if (this.t > 2.0) this.startPA();
+        if (this.t > (this.mode === "game" && !this.derby ? 2.7 : 2.0)) {
+          this.tv.hide("center");
+          this.startPA();
+        }
       } else if (st === "paIntro") {
         if (this.t > 1.1) this.nextPitch();
       } else if (st === "ready") {
@@ -963,9 +929,15 @@
       } else if (st === "result") {
         if (this.t > this.resultT) this.applyPlayResult();
       } else if (st === "change") {
-        if (this.t > 2.4) {
+        if (this.t > (this.changeT || 2.4)) {
           R.bg = {};
+          this.tv.hide("center");
           this.startPA();
+        }
+      } else if (st === "tvscore") {
+        if (this.t > 2.3) {
+          this.tv.hide("center");
+          this.afterTV(this.tvKey);
         }
       }
     }
@@ -1172,7 +1144,7 @@
         const bat = g.batter();
         const pit = g.pitcher();
         if (this.state !== "inplay") R.drawZone(ctx, cam, 0.85);
-        if (this.userBat() && this.state !== "change") {
+        if (this.userBat() && this.state !== "change" && this.state !== "tvscore") {
           const cs = P.cursor(bat, pit, g.ctx("bat"));
           R.drawCursor(ctx, cam, { x: this.cur.x, z: this.cur.z, rx: cs.rx, rz: cs.rz, bunt: this.bunt, flash: this.swingT != null && this.swingT < 0.2 });
         }
@@ -1233,7 +1205,7 @@
       // ゾーン・カーソル
       const showZone = this.state !== "inplay";
       if (showZone) R.drawZone(ctx, cam, 0.9);
-      if (this.userBat() && this.state !== "change") {
+      if (this.userBat() && this.state !== "change" && this.state !== "tvscore") {
         const cs = P.cursor(bat, pit, g.ctx("bat"));
         R.drawCursor(ctx, cam, { x: this.cur.x, z: this.cur.z, rx: cs.rx, rz: cs.rz, bunt: this.bunt, flash: this.swingT != null && this.swingT < 0.2 });
       }
