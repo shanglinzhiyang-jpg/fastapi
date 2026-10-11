@@ -15,7 +15,7 @@
     erase: 消す範囲 (crop 後の画像に対する比率) の一覧。触れ合っている別の選手 (スライディングした走者など) を消すのに使う。
 
 出力:
-  static/img/players/<球団>_<背番号>.webp  (縦 640px・白い縁取り・余白なし)
+  static/img/players/<球団>_<背番号>.webp  (背景を抜いただけの写真。縦 640px 以下・余白なし。--outline で白い縁取りも付けられる)
   static/js/photos.js                      PB.PHOTOS[球団][背番号] = {src, w, h, kind, cut, foot}
 
 切り抜きは onnxruntime で動かす学習済みモデル (rembg が GitHub で配布している ONNX):
@@ -300,7 +300,7 @@ def decontaminate(rgb, a):
     return np.where(edge[..., None], f, rgb)
 
 
-def cutout(src, model="isnet", height=640, outline=4, pick=None, crop=None, flip=False, erase=None):
+def cutout(src, model="isnet", height=640, outline=0, pick=None, crop=None, flip=False, erase=None):
     img = ImageOps.exif_transpose(Image.open(src)).convert("RGB")
     if crop:
         W, H = img.size
@@ -325,12 +325,11 @@ def cutout(src, model="isnet", height=640, outline=4, pick=None, crop=None, flip
     im = Image.fromarray(rgba, "RGBA")
     if flip:
         im = ImageOps.mirror(im)
-    # 縦 height - 余白 に合わせる (小さすぎる写真は 1.6 倍まで)
-    pad = outline + 2
-    sc = min((height - 2 * pad) / im.height, 1.6)
-    im = im.resize((max(1, round(im.width * sc)), max(1, round(im.height * sc))), Image.LANCZOS)
-    if sc > 1.05:
-        im = im.filter(ImageFilter.UnsharpMask(1.2, 60, 2))
+    # 大きい写真だけ縦 height に縮める (拡大・シャープなどの加工はしない)
+    pad = outline + 2 if outline > 0 else 0
+    sc = min((height - 2 * pad) / im.height, 1.0)
+    if sc < 1.0:
+        im = im.resize((max(1, round(im.width * sc)), max(1, round(im.height * sc))), Image.LANCZOS)
     canvas = Image.new("RGBA", (im.width + 2 * pad, im.height + 2 * pad), (255, 255, 255, 0))
     canvas.alpha_composite(im, (pad, pad))
     if outline > 0:
@@ -342,7 +341,7 @@ def cutout(src, model="isnet", height=640, outline=4, pick=None, crop=None, flip
         base.alpha_composite(canvas)
         canvas = base
     # 写真の端で切れている辺は縁取りなしでまっすぐに (カードの端に当てる)
-    if "b" in cut:
+    if "b" in cut and pad:
         canvas = canvas.crop((0, 0, canvas.width, canvas.height - pad))
     # 足元の位置 (下端付近の不透明画素の中心, 幅に対する比率)
     al = np.asarray(canvas)[..., 3]
@@ -413,7 +412,7 @@ def main():
     ap.add_argument("--only", help="この選手だけ (例: c_43)")
     ap.add_argument("--model", choices=sorted(MODELS), default="isnet", help="isnet: 速い / birefnet: きれい (遅い)")
     ap.add_argument("--height", type=int, default=640)
-    ap.add_argument("--outline", type=int, default=4, help="白い縁取りの太さ px (0 でなし)")
+    ap.add_argument("--outline", type=int, default=0, help="白い縁取りの太さ px (既定 0: 縁取りなし)")
     ap.add_argument("--quality", type=int, default=86)
     ap.add_argument("--sheet", help="確認用の一覧画像 (jpg)")
     ap.add_argument("--dry-run", action="store_true", help="名簿との対応だけ確かめる")

@@ -399,8 +399,8 @@
     // 選手 (白い縁取りと光)
     if (portrait) {
       const meta = portrait._photo || null;
-      // 写真は切り抜きの時に縁取り済み。3D の選手・2 頭身のキャラはここで縁取る
-      const img = meta && meta.outline ? portrait : sticker(portrait, Math.max(2, portrait.height / 150));
+      // 写真は切り抜いたまま使う (縁取り・光などの加工はしない)。3D の選手・2 頭身のキャラは白く縁取る
+      const img = meta ? portrait : sticker(portrait, Math.max(2, portrait.height / 150));
       const pw = img.width;
       const ph = img.height;
       // 膝から上などで写真の下端が切れているときは、カードの下端に合わせる
@@ -413,14 +413,17 @@
       const fx = meta && meta.foot != null ? meta.foot : 0.5;
       const dx = U.clamp(w / 2 - fx * dw, Math.min(0, w - dw), Math.max(0, w - dw));
       const dy = (flush ? h : h * 0.9) - dh;
-      ctx.save();
-      ctx.shadowColor = th.style === "burst" ? "rgba(255,250,230,0.95)" : "rgba(200,245,255,0.95)";
-      ctx.shadowBlur = w * 0.04;
-      ctx.drawImage(img, dx, dy, dw, dh);
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
-      ctx.shadowBlur = w * 0.012;
-      ctx.drawImage(img, dx, dy, dw, dh);
-      ctx.restore();
+      if (meta) ctx.drawImage(img, dx, dy, dw, dh);
+      else {
+        ctx.save();
+        ctx.shadowColor = th.style === "burst" ? "rgba(255,250,230,0.95)" : "rgba(200,245,255,0.95)";
+        ctx.shadowBlur = w * 0.04;
+        ctx.drawImage(img, dx, dy, dw, dh);
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = w * 0.012;
+        ctx.drawImage(img, dx, dy, dw, dh);
+        ctx.restore();
+      }
     }
     // 下の帯
     let g = ctx.createLinearGradient(0, h * 0.7, 0, h);
