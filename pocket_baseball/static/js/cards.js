@@ -336,10 +336,41 @@
     ctx.fillText(text, x, y);
   }
 
+  // 切り抜いた絵に白い縁取りをつける (シールのように)。結果は元の絵に覚えておく
+  function sticker(src, r) {
+    if (src._sticker) return src._sticker;
+    const pad = Math.ceil(r) + 1;
+    const W = src.width + pad * 2;
+    const H = src.height + pad * 2;
+    const sil = document.createElement("canvas");
+    sil.width = W;
+    sil.height = H;
+    const sc = sil.getContext("2d");
+    sc.drawImage(src, pad, pad);
+    sc.globalCompositeOperation = "source-in";
+    sc.fillStyle = "#fff";
+    sc.fillRect(0, 0, W, H);
+    const out = document.createElement("canvas");
+    out.width = W;
+    out.height = H;
+    const oc = out.getContext("2d");
+    for (const k of [1, 0.55])
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        oc.drawImage(sil, Math.cos(a) * r * k, Math.sin(a) * r * k);
+      }
+    oc.drawImage(src, pad, pad);
+    src._sticker = out;
+    return out;
+  }
+
   /* ---------- カードを描く ---------- */
   // portrait: 切り抜いた選手の画像 (canvas / image)。null のときは背番号を大きく描く
+  // 球団マークを読み込んでから描く (マークは選手の後ろに置き、頭が隠れないように)
   Cards.draw = function (cv, p, team, portrait, opts) {
-    const o = opts || {};
+    return loadImg(team.logo).then((logo) => paint(cv, p, team, portrait, opts || {}, logo));
+  };
+  function paint(cv, p, team, portrait, o, logo) {
     const ctx = cv.getContext("2d");
     const w = cv.width;
     const h = cv.height;
@@ -360,22 +391,35 @@
       ctx.fillText(String(p.num), w * 0.5, h * 0.56);
       ctx.restore();
     }
-    // 選手 (光の縁取り)
+    // 球団マーク (右上)
+    if (logo) {
+      const ls = o.mini ? w * 0.26 : w * 0.17;
+      ctx.drawImage(logo, w - ls - w * 0.04, o.mini ? w * 0.04 : h * 0.025, ls, ls);
+    }
+    // 選手 (白い縁取りと光)
     if (portrait) {
-      const pw = portrait.width;
-      const ph = portrait.height;
-      const scale = Math.min((w * 1.0) / pw, (h * 0.92) / ph);
+      const meta = portrait._photo || null;
+      // 写真は切り抜きの時に縁取り済み。3D の選手・2 頭身のキャラはここで縁取る
+      const img = meta && meta.outline ? portrait : sticker(portrait, Math.max(2, portrait.height / 150));
+      const pw = img.width;
+      const ph = img.height;
+      // 膝から上などで写真の下端が切れているときは、カードの下端に合わせる
+      const flush = !!(meta && meta.cut && meta.cut.indexOf("b") >= 0);
+      // 写真は横に広い姿勢 (投球の踏み出し・スイング) でも小さくならないよう、左右は少しはみ出してよい
+      const scale = flush ? Math.min((w * 1.15) / pw, (h * 0.97) / ph) : meta ? Math.min((w * 1.2) / pw, (h * 0.87) / ph) : Math.min((w * 1.0) / pw, (h * 0.92) / ph);
       const dw = pw * scale;
       const dh = ph * scale;
-      const dx = (w - dw) / 2;
-      const dy = h * 0.9 - dh;
+      // 足元 (写真では記録した位置) をカードの中央に
+      const fx = meta && meta.foot != null ? meta.foot : 0.5;
+      const dx = U.clamp(w / 2 - fx * dw, Math.min(0, w - dw), Math.max(0, w - dw));
+      const dy = (flush ? h : h * 0.9) - dh;
       ctx.save();
       ctx.shadowColor = th.style === "burst" ? "rgba(255,250,230,0.95)" : "rgba(200,245,255,0.95)";
       ctx.shadowBlur = w * 0.04;
-      ctx.drawImage(portrait, dx, dy, dw, dh);
+      ctx.drawImage(img, dx, dy, dw, dh);
       ctx.shadowColor = "rgba(0,0,0,0.5)";
       ctx.shadowBlur = w * 0.012;
-      ctx.drawImage(portrait, dx, dy, dw, dh);
+      ctx.drawImage(img, dx, dy, dw, dh);
       ctx.restore();
     }
     // 下の帯
@@ -416,12 +460,20 @@
     ctx.strokeStyle = fg;
     ctx.stroke();
     ctx.restore();
-    return loadImg(team.logo).then((im) => {
-      if (!im) return;
-      const ls = o.mini ? w * 0.26 : w * 0.17;
-      ctx.drawImage(im, w - ls - w * 0.04, o.mini ? w * 0.04 : h * 0.025, ls, ls);
-    });
-  };
+  }
+
+  // カードの文字の書体を読み込む。すでに使える (または読み込めない環境) なら null
+  function fontLoad(text) {
+    const F = document.fonts;
+    if (!F || !F.load || !F.check) return null;
+    const specs = ['900 20px "M PLUS 1p"', '400 20px "Archivo Black"'];
+    try {
+      if (specs.every((f) => F.check(f, text))) return null;
+    } catch (e) {
+      return null;
+    }
+    return Promise.all(specs.map((f) => F.load(f, text))).catch(() => {});
+  }
 
   // すぐに使える <canvas> を返し、選手の画像が描けたら描き直す
   Cards.el = function (p, team, opts) {
@@ -437,8 +489,9 @@
     cv.className = "pbcard" + (o.mini ? " mini" : "");
     cv.setAttribute("role", "img");
     cv.setAttribute("aria-label", (p.full || p.name) + " " + (team.short || "") + " " + Cards.overall(p).rank + "ランク");
-    // 書体の読み込みが終わってから描き直す (文字が別の書体になるのを防ぐ)
-    if (document.fonts && document.fonts.status !== "loaded") document.fonts.ready.then(() => Cards.draw(cv, p, team, cv._portrait || null, o));
+    // 書体 (その文字の分) を読み込んでから描き直す。画面でまだ使っていない書体は canvas では読み込まれないため
+    const fl = fontLoad((p.full || p.name) + (p.given || "") + (team.short || "") + "総合2004#" + (D.POS_JP[o.pos || p.pos] || "") + (p.num != null ? p.num : ""));
+    if (fl) fl.then(() => Cards.draw(cv, p, team, cv._portrait || null, o));
     Cards.draw(cv, p, team, null, o);
     const src = Cards.portraitOf(p, team, o);
     if (src)
@@ -453,17 +506,31 @@
     return cv;
   };
 
-  // 選手の画像: 利用者が用意した写真 (切り抜き済み) があればそれ、なければ 3D の選手の描画
+  // 利用者が用意した写真 (tools/player_photo.py で切り抜いたもの)。球団と背番号で引く
+  Cards.photoOf = function (p, team) {
+    if (!PB.PHOTOS || p.custom || p.num == null) return null;
+    const t = PB.PHOTOS[team.id];
+    return (t && t[p.num]) || null;
+  };
+  // 選手の画像: 写真があればそれ、なければ 3D の選手の描画、3D が使えなければ 2 頭身のキャラ
   Cards.portraitOf = function (p, team, o) {
-    const photo = PB.PHOTOS && PB.PHOTOS[p.id];
-    if (photo) return loadImg(D.asset ? D.asset(photo) : photo);
+    const ph = Cards.photoOf(p, team);
+    if (ph)
+      return loadImg(D.asset ? D.asset(ph.src) : ph.src).then((im) => {
+        if (!im) return rendered(p, team, o); // 画像が読めなければ 3D で
+        im._photo = ph;
+        return im;
+      });
+    return rendered(p, team, o);
+  };
+  function rendered(p, team, o) {
     if (PB.Portraits && PB.Portraits.available() && PB.View3D && PB.View3D.active) {
       const ov = Cards.overall(p);
       const th = Cards.theme(ov.rank, team);
       return PB.Portraits.get(p, team, { kind: o && o.kind, home: o && o.home, rim: th.ray }).catch(() => chibi(p, team));
     }
     return Promise.resolve(chibi(p, team));
-  };
+  }
   // 3D が使えないときは 2 頭身のキャラで (ガッツポーズ・投手は投げる形)
   function chibi(p, team) {
     if (!PB.Chara) return null;

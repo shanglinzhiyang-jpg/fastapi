@@ -1,2 +1,4 @@
 dist/
 saves/
+# 選手写真の元画像 (tools/player_photo.py の入力。著作物なので入れない)
+photos_in/
