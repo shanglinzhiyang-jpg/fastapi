@@ -875,5 +875,8 @@
     return player;
   };
 
+  M.batGeometry = batGeometry;
+  M.gloveGeometry = gloveGeometry;
+  M.capLogoTexture = capLogoTexture;
   PB.Model3D = M;
 })((window.PB = window.PB || {}));

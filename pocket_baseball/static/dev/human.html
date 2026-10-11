@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>選手モデル確認</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Graduate&family=Yellowtail&family=Dela+Gothic+One&display=swap">
+<style>html,body{margin:0;height:100%;background:#1c2733}canvas{display:block;width:100%;height:100%}</style>
+</head><body>
+<script src="../vendor/three.min.js"></script>
+<script src="../js/three/model.js"></script>
+<script src="../js/three/anim.js"></script>
+<script src="../js/three/human.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const T = THREE, A = PB.Anim, H = PB.Human;
+const W = innerWidth, Hh = innerHeight;
+const r = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setPixelRatio(1); r.setSize(W, Hh); r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap;
+r.outputColorSpace = T.SRGBColorSpace; r.toneMapping = T.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
+document.body.appendChild(r.domElement);
+const scene = new T.Scene(); scene.background = new T.Color('#3b4c5e');
+scene.add(new T.HemisphereLight('#dfe9ff', '#4a5a3a', 1.0));
+const sun = new T.DirectionalLight('#fff4e0', 2.4); sun.position.set(3, 7, 6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 }); sun.shadow.bias = -0.0004; scene.add(sun);
+const fill = new T.DirectionalLight('#c8d8ff', 0.6); fill.position.set(-4, 3, -3); scene.add(fill);
+const ground = new T.Mesh(new T.PlaneGeometry(30, 30), new T.MeshStandardMaterial({ color: '#557a45', roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const tigers = { id: 't', main: '#111111', sub: '#ffe100', cap: '#111111', mark: 'HT', en: 'Tigers', uniform: { pinstripe: '#1a1a1a', chest: 'Tigers', letter: '#111', outline: '#ffe100', trim: '#111', under: '#111', socks: '#111', piping: false } };
+const giants = { id: 'g', main: '#f97709', sub: '#000000', cap: '#111111', mark: 'YG', en: 'GIANTS', uniform: { chest: 'GIANTS', script: false, letter: '#111', outline: '#f97709', trim: '#f97709', under: '#111', socks: '#111' } };
+const carp = { id: 'c', main: '#d7001e', sub: '#ffffff', cap: '#d7001e', mark: 'C', en: 'Carp', uniform: { chest: 'Carp', letter: '#d7001e', outline: '#0b2240', trim: '#d7001e', under: '#d7001e', socks: '#d7001e' } };
+const mode = q.get('mode') || 'lineup';
+const list = [];
+function addP(opts, x, z, yaw, poseFn) {
+  const p = H.createPlayer(opts);
+  p.group.position.set(x, 0, z); p.group.rotation.y = yaw;
+  scene.add(p.group);
+  const rig = new H.Rig(p);
+  rig.apply(poseFn(p));
+  list.push({ p, rig });
+  return p;
+}
+H.load('../models/').then(() => document.fonts.ready).then(() => {
+  if (mode === 'lineup') {
+    addP({ team: tigers, num: 1, nameEn: 'TORITANI', bats: 'L', throws: 'R', seed: 1, skinTone: 1 }, -1.8, 0, 0.15, () => A.LIB.stand);
+    const b = addP({ team: giants, num: 7, nameEn: 'NIOKA', bats: 'R', throws: 'R', helmet: true, seed: 2, home: false }, -0.6, 0, 0.5, () => A.batIdle(0));
+    b.showBat(true); b.showGlove(false); b.setBattingGloves(true);
+    addP({ team: carp, num: 6, nameEn: 'NODA', seed: 3, longPants: true }, 0.6, 0, -0.3, () => A.LIB.ready);
+    addP({ team: tigers, num: 39, nameEn: 'YANO', pos: 'C', role: 'catcher', seed: 4 }, 1.8, 0, -0.4, () => A.LIB.crouch);
+  } else if (mode === 'back') {
+    addP({ team: tigers, num: 1, nameEn: 'TORITANI', seed: 1 }, -0.5, 0, Math.PI, () => A.LIB.stand);
+    addP({ team: giants, num: 55, nameEn: 'MATSUI', seed: 5, home: true }, 0.5, 0, Math.PI * 0.85, () => A.LIB.stand);
+  } else if (mode === 'face') {
+    for (let i = 0; i < 4; i++) addP({ team: [tigers, giants, carp, tigers][i], num: 10 + i, seed: 100 + i * 7, skinTone: i % 3 }, -0.75 + i * 0.5, 0, 0, () => A.LIB.stand);
+  } else if (mode === 'pitch') {
+    const clip = A.pitchClip();
+    [0, 0.32, 0.62, 0.76, 0.86, 1.02].forEach((tt, i) => addP({ team: tigers, num: 22, seed: 9, throws: 'R' }, -2.5 + i * 1.0, 0, -Math.PI / 2 + 0.5, () => A.sample(clip, tt)));
+  } else if (mode === 'swing') {
+    const clip = A.swingClip(0.8, 0);
+    [0, 0.05, 0.09, 0.12, 0.2, 0.3].forEach((tt, i) => { const p = addP({ team: giants, num: 25, seed: 11, bats: 'R', helmet: true }, -2.5 + i * 1.0, 0, 0.3, () => A.sample(clip, tt)); p.showGlove(false); p.setBattingGloves(true); });
+  } else if (mode === 'run') {
+    [0, 1, 2, 3, 4, 5].forEach((k, i) => addP({ team: carp, num: 7, seed: 12 }, -2.5 + i * 1.0, 0, Math.PI / 2 - 0.3, () => A.run(k * Math.PI / 3, 1)));
+  }
+  const cam = new T.PerspectiveCamera(Number(q.get('fov') || 30), W / Hh, 0.05, 200);
+  cam.position.set(Number(q.get('cx') || 0), Number(q.get('cy') || 1.2), Number(q.get('cz') || 7));
+  cam.lookAt(Number(q.get('lx') || 0), Number(q.get('ly') || 0.95), 0);
+  r.render(scene, cam);
+  window.__ready = true;
+});
+</script></body></html>
