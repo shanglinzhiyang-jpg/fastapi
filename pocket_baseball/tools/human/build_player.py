@@ -592,10 +592,27 @@ ETH = {
 for key, spec, _ in FACE_MODS:
     d = face_delta(spec)
     head.morphs.append((key, d[head.src]))
+
+
+def joints_of(Pm):
+    out = np.zeros((len(BONES), 3))
+    for n, i in BI.items():
+        h = RIG[n]["head"]
+        out[i] = mh.joint_pos(Pm, VG, h["cube_name"]) if h.get("strategy") == "CUBE" else Pm[h["vertex_indices"]].mean(axis=0)
+    return out
+
+
+# 体型の違い (人種のターゲットは身長・首の長さも変える) で骨ごと動く分は差し引き、顔の形の違いだけを残す。
+# 残さないと頭だけが 12〜18cm 浮き上がり、目やヘルメット (骨に付いている) とずれる。
+_J0 = joints_of(P)
+_WN = WD / np.maximum(WD.sum(axis=1, keepdims=True), 1e-6)
 for key, Vx in ETH.items():
-    d = (Vx - BASE) * SCALE
+    Q = to_m(Vx)
+    d = Q - P
+    d = d - _WN @ (joints_of(Q) - _J0)
     # 頭以外は差分を消す (体格は共通)
     d = d * np.clip((HEADW[:, None] - 0.3) / 0.4, 0, 1)
+    print(key, "face-only delta max %.4f m" % float(np.abs(d[head.src]).max()))
     head.morphs.append((key, d[head.src]))
 print("morphs", len(head.morphs))
 
