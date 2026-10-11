@@ -156,8 +156,9 @@
     }
     // 顔
     if (!tiny && (view === "front" || view === "left" || view === "right")) {
-      const ex = view === "front" ? 0.12 : 0.12;
-      const ox = view === "front" ? 0 : flip * 0.13;
+      // 目の間隔・横顔の目の位置 (1m あたり s ピクセル)
+      const ex = 0.12 * s;
+      const ox = view === "front" ? 0 : flip * 0.13 * s;
       const ey = HY + 0.07 * s;
       const eyes = face.eyes;
       ctx.fillStyle = "#1b1b22";

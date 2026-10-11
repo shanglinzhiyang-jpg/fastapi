@@ -687,6 +687,12 @@
     };
     document.addEventListener("keydown", onKey);
     const lgCount = new Set(list.map((x) => lgOf(x.r.home))).size;
+    // 選手の画像を先に作り始めておく (タイトルの間に描ける)
+    if (PB.Cards)
+      list.forEach(({ e, r }) => {
+        const p = player(e.id);
+        if (p.pos) PB.Cards.portraitOf(p, team(hrTeam(r, e)), {});
+      });
     const titleCard = () => {
       root.innerHTML =
         '<div class="hrdg-bg" style="--tc:#13819f"></div>' +
@@ -737,7 +743,8 @@
       const sc = e.score || { away: r.as, home: r.hs };
       const title = e.n >= 4 && e.type !== "IPHR" ? "GRAND SLAM" : "HOME RUN";
       const p = player(e.id);
-      const full = p.id === e.id && PB.TV && PB.TV.fullName ? PB.TV.fullName(p) : batName(e);
+      const full = p.pos && PB.TV && PB.TV.fullName ? PB.TV.fullName(p) : batName(e);
+      const withPc = !!(PB.Cards && p.pos);
       root.innerHTML =
         '<div class="hrdg-bg" style="--tc:' +
         c +
@@ -788,7 +795,7 @@
         chipsHTML(e, 4) +
         "</div>" +
         // 中継の HOME RUN 帯 (broadcast.js と同じ見た目)
-        '<div class="tv-hr show hrdg-band"><div class="hr-wrap"><div class="hr-rail t"></div><div class="hr-rail b"></div><div class="hr-bar"><span class="hr-nm">' +
+        '<div class="tv-hr show hrdg-band' + (withPc ? " low" : "") + '"><div class="hr-wrap"><div class="hr-rail t"></div><div class="hr-rail b"></div><div class="hr-bar"><span class="hr-nm">' +
         esc(batName(e)) +
         "</span>" +
         (e.no ? '<span class="hr-no">' + e.no + "<small>号</small></span>" : '<span class="hr-no lbl">' + kindShort(e) + "</span>") +
@@ -798,7 +805,22 @@
         title +
         '">' +
         title +
-        '</span></div></div></div><p class="hrdg-hint">タップで次へ</p>';
+        '</span></div></div></div>' +
+        (withPc ? '<div class="hrdg-pc"></div>' : "") +
+        '<p class="hrdg-hint">タップで次へ</p>';
+      // 打った選手のカード (切り抜きの選手): 記録と HOME RUN の帯の間に収まる大きさで
+      const slot = root.querySelector(".hrdg-pc");
+      if (slot) {
+        const info = root.querySelector(".hrdg-card");
+        const band = root.querySelector(".hrdg-band");
+        const top = info.offsetTop + info.offsetHeight + 10;
+        const avail = band.offsetTop - top - 6;
+        const w = Math.round(Math.min(210, window.innerWidth * 0.55, avail / 1.333));
+        if (w >= 90) {
+          slot.style.top = Math.round(top + Math.max(0, (avail - w * 1.333) / 2)) + "px";
+          slot.appendChild(PB.Cards.el(p, t, { w, mini: w < 140 }));
+        } else slot.remove();
+      }
       if (PB.Audio && PB.Audio.fanfare) PB.Audio.fanfare();
       clearTimeout(timer);
       timer = setTimeout(next, PER);

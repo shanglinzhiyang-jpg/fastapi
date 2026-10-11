@@ -253,6 +253,8 @@
       extra || {}
     );
   }
+  // 選手カードの描画 (portrait.js) でも同じ見た目の選手を作る
+  V3.specFor = (p, team, home, extra) => makeSpec(p, team, home, extra);
   function umpireSpec() {
     return { role: "umpire", team: { main: "#1b2230", sub: "#e9e9ee", cap: "#14171d" }, skin: M.SKINS[1], bats: "R", throws: "R" };
   }

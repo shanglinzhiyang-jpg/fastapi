@@ -306,13 +306,16 @@
   UI.showPlayer = function (id, season) {
     const r = UI.findPlayer(id);
     if (!r) return;
-    UI.modal(UI.playerCard(r.p, r.team, season) + '<div class="row-btns"><button class="btn primary" data-act="close">とじる</button></div>', {
+    UI.modal((PB.Cards ? '<div class="pbslot"></div>' : "") + UI.playerCard(r.p, r.team, season) + '<div class="row-btns"><button class="btn primary" data-act="close">とじる</button></div>', {
       cls: "wide",
       onAct(act) {
         if (act === "close") UI.closeModal();
       },
       mount(box) {
         UI.drawFaces(box, UI.findPlayer);
+        // 選手カード (派手な切り抜き)
+        const slot = box.querySelector(".pbslot");
+        if (slot) slot.appendChild(PB.Cards.el(r.p, r.team, { w: Math.min(280, window.innerWidth - 80) }));
       },
     });
   };

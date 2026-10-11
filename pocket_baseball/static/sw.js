@@ -1,5 +1,5 @@
 /* オフラインでも遊べるようにゲーム本体をキャッシュする (API は常にネットワーク) */
-const CACHE = "pocket-baseball-v2";
+const CACHE = "pocket-baseball-v3";
 const ASSETS = [
   "./",
   "index.html",
@@ -24,9 +24,11 @@ const ASSETS = [
   "js/three/human.js",
   "js/three/stadium.js",
   "js/three/view.js",
+  "js/three/portrait.js",
   "js/audio.js",
   "js/store.js",
   "js/ui.js",
+  "js/cards.js",
   "js/broadcast.js",
   "js/match.js",
   "js/screens.js",

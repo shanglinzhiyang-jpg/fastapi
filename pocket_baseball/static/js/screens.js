@@ -242,11 +242,70 @@
   };
 
   /* ---------- オーダー ---------- */
+  // 守備位置の図での場所 (%: 左, 上)
+  const FIELD_XY = { P: [50, 67], C: [50, 89], "1B": [80, 69], "2B": [70, 46], SS: [30, 46], "3B": [20, 69], LF: [15, 23], CF: [50, 16], RF: [85, 23], DH: [86, 89] };
+  // 守備位置の図の背景 (外野の芝・内野の土・ベース)
+  const FIELD_SVG =
+    '<svg class="of-bg" viewBox="0 0 100 125" preserveAspectRatio="none" aria-hidden="true">' +
+    '<path d="M50 110 L1 61 Q50 -12 99 61 Z" fill="#2f7a3a" stroke="#e8f0e0" stroke-width=".6"/>' +
+    '<path d="M50 110 L1 61 Q50 -12 99 61 Z" fill="url(#ofs)" opacity=".5"/>' +
+    '<defs><pattern id="ofs" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="5" fill="#3b8a45"/></pattern></defs>' +
+    '<path d="M50 108 L22 80 Q50 42 78 80 Z" fill="#b8865a"/>' +
+    '<path d="M50 100 L68 82 L50 64 L32 82 Z" fill="#3a8a46" stroke="#f4f4f4" stroke-width=".5"/>' +
+    '<circle cx="50" cy="83" r="3.4" fill="#b8865a"/>' +
+    '<g fill="#fff"><rect x="66.6" y="80.6" width="2.8" height="2.8" transform="rotate(45 68 82)"/><rect x="48.6" y="62.6" width="2.8" height="2.8" transform="rotate(45 50 64)"/><rect x="30.6" y="80.6" width="2.8" height="2.8" transform="rotate(45 32 82)"/><path d="M48.6 100 h2.8 v1.4 l-1.4 1.4 l-1.4 -1.4 Z"/></g>' +
+    "</svg>";
+  const ORDER_VIEWS = [
+    ["list", "打順"],
+    ["field", "守備位置"],
+    ["cards", "スタメン"],
+  ];
   Sc.order = function (team, opts) {
     let sel = null;
     let pickStarter = false;
+    const st = { view: (opts && opts.view) || "list" };
+    // スタメンと守備位置 (DH 制でない打順の「投」は次の先発)
+    const starters = () => {
+      const next = team.rotation[(team.rotIdx || 0) % team.rotation.length];
+      const out = team.lineup.map((e, i) => ({ id: e.pos === "P" ? next : e.id, pos: e.pos, ord: i + 1 }));
+      if (!out.some((e) => e.pos === "P")) out.push({ id: next, pos: "P", ord: 0 });
+      return out;
+    };
+    const cardsView = () => {
+      if (st.view === "field") {
+        return (
+          '<div class="ofield">' +
+          FIELD_SVG +
+          starters()
+            .map((e) => {
+              const xy = FIELD_XY[e.pos] || [50, 50];
+              return '<button class="fslot" data-act="info" data-arg="' + esc(e.id) + '" data-card="' + esc(e.id) + '" data-pos="' + e.pos + '" style="left:' + xy[0] + "%;top:" + xy[1] + '%"><span class="fs-pos">' + (e.ord ? e.ord + " " : "") + D.POS_JP[e.pos] + "</span></button>";
+            })
+            .join("") +
+          "</div>"
+        );
+      }
+      return (
+        '<div class="ocards">' +
+        starters()
+          .filter((e) => e.ord)
+          .map((e) => '<button class="ocard" data-act="info" data-arg="' + esc(e.id) + '" data-card="' + esc(e.id) + '" data-pos="' + e.pos + '"><span class="oc-n">' + e.ord + '</span><span class="oc-p">' + D.POS_JP[e.pos] + "</span></button>")
+          .join("") +
+        "</div>"
+      );
+    };
     return {
       html() {
+        if (st.view !== "list" && PB.Cards) {
+          return (
+            UI.header(team.name + " オーダー", "back") +
+            '<div class="scr-body">' +
+            seg("view", ORDER_VIEWS, st.view) +
+            cardsView() +
+            '<p class="note">カードをタップすると詳しい能力を表示します。打順の入れ替えは「打順」から。</p>' +
+            '<div class="row-btns stick"><button class="btn primary" data-act="done">決定</button></div></div>'
+          );
+        }
         const P = (id) => D.player(team, id);
         const rows = team.lineup
           .map((e, i) => {
@@ -284,7 +343,11 @@
           .join("");
         return (
           UI.header(team.name + " オーダー", "back") +
-          '<div class="scr-body"><p class="note">2人をタップすると打順を入れ替え。スタメンと控えを順にタップすると交代。名前を長押し（または右の i）で能力を確認。</p>' +
+          '<div class="scr-body">' +
+          (PB.Cards
+            ? seg("view", ORDER_VIEWS, st.view)
+            : "") +
+          '<p class="note">2人をタップすると打順を入れ替え。スタメンと控えを順にタップすると交代。名前を長押し（または右の i）で能力を確認。</p>' +
           '<div class="olist">' +
           rows +
           '</div><h3 class="lbl">控え</h3><div class="olist">' +
@@ -299,7 +362,10 @@
           Store.save();
           return opts.onBack();
         }
-        if (act === "auto") {
+        if (act === "view") {
+          st.view = arg;
+          sel = null;
+        } else if (act === "auto") {
           const keep = team.rotIdx;
           D.autoOrder(team);
           team.rotIdx = keep;
@@ -338,6 +404,16 @@
         UI.refresh();
       },
       mount(root) {
+        // 選手カード (守備位置の図・スタメン)
+        root.querySelectorAll("[data-card]").forEach((el) => {
+          const p = D.player(team, el.getAttribute("data-card"));
+          if (!p) return;
+          const field = el.classList.contains("fslot");
+          const w = field ? Math.min(68, Math.round(el.parentNode.clientWidth * 0.18)) : Math.min(120, Math.floor((el.parentNode.clientWidth - 16) / 3));
+          const pos = el.getAttribute("data-pos");
+          // 守備位置の図では捕手は構えた姿 (防具つき)
+          el.insertBefore(PB.Cards.el(p, team, { w, mini: true, pos, kind: field && pos === "C" ? "cat" : undefined }), el.firstChild);
+        });
         // 長押しで能力表示
         let timer = null;
         root.querySelectorAll(".orow").forEach((el) => {
@@ -491,7 +567,7 @@
           "</b>" +
           (S ? "　S <b>" + esc(S) + "</b>" : "") +
           "</p>" +
-          (mp ? '<div class="mvp"><canvas class="pc-face" width="72" height="72" data-face="' + esc(mp.id) + '"></canvas><div><span class="mvp-l">今日のヒーロー</span><b>' + esc(mp.full || mp.name) + "</b><small>" + esc(mline) + "</small></div></div>" : "") +
+          (mp ? '<div class="mvp' + (PB.Cards ? ' has-card"><div class="mvp-pc"></div>' : '"><canvas class="pc-face" width="72" height="72" data-face="' + esc(mp.id) + '"></canvas>') + '<div><span class="mvp-l">今日のヒーロー</span><b>' + esc(mp.full || mp.name) + "</b><small>" + esc(mline) + "</small></div></div>" : "") +
           '<details class="box-det"><summary>スコアブック</summary>' +
           Sc.boxScoreHTML(g) +
           "</details>" +
@@ -504,11 +580,18 @@
         );
       },
       mount(root) {
-        UI.drawFaces(root, (id) => {
+        const lookup = (id) => {
           const p = g.P(id);
           const side = g.teams.home.players.indexOf(p) >= 0 ? "home" : "away";
           return { p, team: g.teams[side] };
-        });
+        };
+        UI.drawFaces(root, lookup);
+        // 今日のヒーローは選手カードで
+        const slot = root.querySelector(".mvp-pc");
+        if (slot && mvp) {
+          const r = lookup(mvp);
+          slot.appendChild(PB.Cards.el(r.p, r.team, { w: Math.min(132, Math.round(window.innerWidth * 0.34)), home: r.team === g.teams.home }));
+        }
       },
       onAct(act) {
         if (act === "done") opts.onDone();
