@@ -34,7 +34,8 @@ WRAW = mh.weights()
 
 
 # ---------------------------------------------------------------- 体型
-def shaped(muscle=0.7, weight=0.55, height=0.62, proportions=0.85, race=None, extra=None):
+def shaped(muscle=0.55, weight=0.5, height=0.62, proportions=0.85, race=None, extra=None):
+    # 筋肉 0.55 / 体重 0.5: 引き締まった野球選手の体 (以前の 0.7/0.55 は肩・胸がふくらみすぎた)
     V = V0.copy()
     mh.macro(V, muscle=muscle, weight=weight, height=height, proportions=proportions, race=race)
     for k, v in (extra or {}).items():
@@ -376,14 +377,17 @@ parts["hands"] = hands
 # シャツ (胴体と半袖)
 shirt = Part("shirt", faces_with("shirt"), "shirt")
 y = shirt.pos[:, 1]
-off = np.full(len(shirt.pos), 0.016)
+off = np.full(len(shirt.pos), 0.014)
 # 腹まわり・背中はゆったり (ただしベルトの近くはパンツの内側に収める)
 off += np.clip((J["spine_03"][1] - y) / 0.25, 0, 1) * 0.016 * np.clip((y - BELT_Y) / 0.08, 0, 1)
 off -= np.clip((BELT_Y + 0.03 - y) / 0.06, 0, 1) * 0.008
-off += np.clip((y - (J["spine_03"][1] + 0.05)) / 0.2, 0, 1) * 0.004
-# 袖はゆったり
+off += np.clip((y - (J["spine_03"][1] + 0.05)) / 0.2, 0, 1) * 0.002
+# 袖は少しゆったり (肩・上腕を風船のようにふくらませない)
 armness = ARMW[shirt.src]
-off += armness * 0.008
+off += armness * 0.004
+# 肩の上 (鎖骨の高さより上の外側) は体に沿わせる
+_shoulder = np.clip((y - J["clavicle_l"][1] + 0.02) / 0.06, 0, 1) * np.clip((np.abs(shirt.pos[:, 0]) - 0.1) / 0.08, 0, 1)
+off -= _shoulder * 0.005
 # 首まわりは詰める
 off -= HEADW[shirt.src] * 0.006
 shirt.inflate(off)
@@ -406,12 +410,12 @@ parts["under"] = under
 for key, tag in (("pants", "pants"), ("pantsL", "pantsL")):
     pt = Part(key, faces_with(tag), "pants")
     y = pt.pos[:, 1]
-    off = np.full(len(pt.pos), 0.024)
+    off = np.full(len(pt.pos), 0.021)
     lw = LEGW[pt.src]
-    off += lw * 0.016
-    # 股の内側はふくらませて段差をなくす
+    off += lw * 0.012
+    # 股の内側はふくらませて段差をなくす (大きすぎると股がふくらんで見える)
     inner = np.clip(1 - np.abs(pt.pos[:, 0]) / 0.07, 0, 1) * np.clip(1 - np.abs(pt.pos[:, 1] - (J["pelvis"][1] - 0.08)) / 0.12, 0, 1)
-    off += inner * 0.02
+    off += inner * 0.012
     # 膝下は少し絞る (ショート丈は裾がふくらむ)
     off -= CALFW[pt.src] * (0.004 if key == "pants" else 0.01)
     # 腰まわりはシャツの外側に (ベルトで締めた分だけ)
@@ -974,6 +978,44 @@ sh.src = np.concatenate([sh.src, _c["src"]])
 sh.tri = np.vstack([sh.tri, _c["tri"] + _n0])
 COLLAR_BAND = {"vOut": round(VB_OUT, 5), "vIn": VB_IN, "vEdge": round(VB_OUT + (VB_IN - VB_OUT) * _c["edge"] / _c["plen"][-1], 5), "mmOut": round(_c["edge"] * 1000, 2), "mmIn": round((_c["plen"][-1] - _c["edge"]) * 1000, 2)}
 print("collar band uv", COLLAR_BAND)
+
+
+# 胴体のテクスチャの行 (v) ごとに、u → 布の上の距離 (m) の表を作る。
+# 円筒 UV は角度で u を切るので、正面の中央と脇とで 1 u あたりの長さが違う。
+# 胸マーク・番号を実寸で描く (human.js の jerseyTexture) ために使う
+def torso_arc(part, rows, nb=64):
+    uv, pos, tri = part.uv, part.pos, part.tri
+    out = []
+    for v0 in rows:
+        dens = np.zeros(nb)
+        for a, b, c in tri:
+            pts = []
+            for i, j in ((a, b), (b, c), (c, a)):
+                vi, vj = uv[i, 1], uv[j, 1]
+                if (vi - v0) * (vj - v0) < 0:
+                    t = (v0 - vi) / (vj - vi)
+                    pts.append((uv[i, 0] + t * (uv[j, 0] - uv[i, 0]), pos[i] + t * (pos[j] - pos[i])))
+            if len(pts) != 2:
+                continue
+            (u1, p1), (u2, p2) = pts
+            if u2 < u1:
+                u1, u2 = u2, u1
+            if u2 - u1 < 1e-9 or u2 - u1 > 0.5:
+                continue
+            seg = float(np.linalg.norm(p1 - p2))
+            for k in range(int(u1 * nb), int(u2 * nb) + 1):
+                lo = max(u1, k / nb)
+                hi = min(u2, (k + 1) / nb)
+                if hi > lo:
+                    dens[k % nb] += seg * (hi - lo) / (u2 - u1)
+        s = np.concatenate([[0.0], np.cumsum(dens)])
+        out.append([round(float(x), 4) for x in s])
+    return out
+
+
+_ROWS = [round(0.4 + 0.05 * k, 2) for k in range(12)]
+TORSO_ARC = {"v": _ROWS, "y": [round(float(_ylo), 4), round(float(_yhi), 4)], "s": torso_arc(sh, _ROWS)}
+print("torso arc (m) at v", _ROWS[6], "circumference %.3f, front centre %.3f" % (TORSO_ARC["s"][6][-1], TORSO_ARC["s"][6][16]))
 
 for key in ("pants", "pantsL"):
     pt = parts[key]
@@ -1604,6 +1646,7 @@ extra["beltY"] = float(BELT_Y)
 # 襟ぐりの UV (前立ての位置を決めるため) と、襟の帯のテクスチャ上の位置
 extra["collarUV"] = [[round(u, 4), round(v, 4)] for u, v in COLLAR_UV]
 extra["collarBand"] = COLLAR_BAND
+extra["torsoArc"] = TORSO_ARC
 extra["capLogo"] = CAP_LOGO
 extra["helmetLogo"] = HELMET_LOGO
 extra["headTop"] = float(P[parts["head"].src][:, 1].max()) if parts["head"].src is not None else 1.8

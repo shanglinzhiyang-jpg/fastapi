@@ -1203,7 +1203,9 @@
     const r = 70;
     const cx = Math.sin(ang) * r;
     const cy = 28 - Math.cos(ang) * r;
-    const rc = new PB.R.Cam().set([cx, cy, 22 + Math.sin(t * 0.07) * 4], [0, 26, 1.5], (H * 0.5) / Math.tan(0.42), W / 2, H * 0.46);
+    // スタンドの上を通るときは観客 (と張り出した上段) より上に保つ
+    const cz = Math.max(22 + Math.sin(t * 0.07) * 4, st.standTop ? st.standTop(cx, cy) + 2.5 : 0);
+    const rc = new PB.R.Cam().set([cx, cy, cz], [0, 26, 1.5], (H * 0.5) / Math.tan(0.42), W / 2, H * 0.46);
     syncCam(cam, rc);
     // 投球練習とキャッチボール
     if (home && home.players) {

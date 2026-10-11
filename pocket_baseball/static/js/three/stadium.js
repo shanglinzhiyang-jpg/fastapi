@@ -1121,6 +1121,31 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     const upD0 = (p) => lower.rows * lower.tread + upper.gap;
     const upZ0 = (p) => lowerZ0(p) + lower.rows * lower.rise + upper.lift;
     buildTiers(upper, upD0, upZ0, isUpper, true);
+    // スタンドの高さ (ゲーム座標 x, y。フィールドの中は 0、観客の頭の高さを含む)。
+    // タイトル画面のカメラが観客席や上段の張り出しに潜らないようにする。上段の前の縁の手前 6m からなめらかに上げる
+    st.standTop = function (x, y) {
+      const a = (y + x) * SQ;
+      const b = (y - x) * SQ;
+      const py = y + 6.13;
+      let d;
+      let z0 = 1.2;
+      let up = true;
+      if (py < -Math.abs(x)) d = Math.hypot(x, py) - 13.67;
+      else if (a >= 0 && b >= 0) {
+        d = Math.hypot(x, y) - F.fenceDist(Math.atan2(x, y));
+        z0 = F.FENCE_H;
+        up = false;
+      } else d = x < 0 ? -18 - a : -18 - b;
+      if (d <= 0) return 0;
+      const dl = lower.rows * lower.tread;
+      let z = z0 + Math.min(d, dl) * (lower.rise / lower.tread);
+      if (up) {
+        const du = d - (dl + upper.gap);
+        const zu = z0 + lower.rows * lower.rise + upper.lift + Math.max(0, Math.min(du, upper.rows * upper.tread)) * (upper.rise / upper.tread);
+        if (zu > z) z += (zu - z) * Math.max(0, Math.min(1, (du + 6) / 6));
+      }
+      return z + 1.2;
+    };
     {
       const g = keep(new T.BufferGeometry());
       g.setAttribute("position", new T.Float32BufferAttribute(standPos, 3));
