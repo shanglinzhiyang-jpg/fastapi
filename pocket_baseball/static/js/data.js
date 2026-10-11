@@ -355,18 +355,7 @@
       p.face = genFace(rng);
       p.full = p.name + " " + p.given;
     });
-    const team = {
-      id: tdef.id,
-      name: tdef.name,
-      short: tdef.short,
-      en: tdef.en,
-      mark: tdef.mark,
-      main: tdef.main,
-      sub: tdef.sub,
-      cap: tdef.cap,
-      stadium: tdef.stadium,
-      players,
-    };
+    const team = Object.assign({}, tdef, { players });
     D.autoOrder(team);
     return team;
   };

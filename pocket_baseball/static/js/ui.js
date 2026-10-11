@@ -111,6 +111,10 @@
   /* ---------- 部品 ---------- */
   UI.mark = function (team, size) {
     const s = size || 28;
+    const def = PB.D.teamDef ? PB.D.teamDef(team.id) : null;
+    const logo = team.logo || (def && def.logo);
+    // 球団ロゴ (背景を抜いた画像) をそのまま置く
+    if (logo) return '<img class="tmark tmark-img" src="' + logo + '" alt="' + esc(team.short || "") + '" style="width:' + s + "px;height:" + s + 'px" loading="lazy" draggable="false">';
     return (
       '<span class="tmark" style="width:' +
       s +

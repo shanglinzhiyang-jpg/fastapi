@@ -28,14 +28,26 @@
     return rounds;
   }
 
+  // ペナントに参加している球団 (古いセーブは全球団)
+  function penTeams(pen) {
+    const all = Store.teams();
+    if (!pen || !pen.ids) return all;
+    return all.filter((t) => pen.ids.indexOf(t.id) >= 0);
+  }
+  Pen.teams = penTeams;
+
   Pen.create = function (my, perPair, level, innings) {
-    const ids = Store.teams().map((t) => t.id);
+    // 自チームの所属リーグ (6 球団) で戦う
+    const myDef = PB.D.teamDef(my);
+    const ids = Store.teams()
+      .filter((t) => !myDef || !PB.D.teamDef(t.id) || PB.D.teamDef(t.id).lg === myDef.lg)
+      .map((t) => t.id);
     const rr = roundRobin(ids);
     const schedule = [];
     for (let k = 0; k < perPair; k++) {
       for (const day of rr) schedule.push(day.map((m) => (k % 2 === 0 ? { home: m.home, away: m.away } : { home: m.away, away: m.home })));
     }
-    const p = { my, perPair, level, innings, schedule, day: 0, results: [], stats: {}, lastPitched: {}, finished: false, started: Date.now() };
+    const p = { my, ids, perPair, level, innings, schedule, day: 0, results: [], stats: {}, lastPitched: {}, finished: false, started: Date.now() };
     Store.data.pennant = p;
     Store.save();
     return p;
@@ -43,7 +55,7 @@
 
   Pen.standings = function (pen) {
     const tbl = {};
-    for (const t of Store.teams()) tbl[t.id] = { id: t.id, g: 0, w: 0, l: 0, d: 0, rs: 0, ra: 0 };
+    for (const t of penTeams(pen)) tbl[t.id] = { id: t.id, g: 0, w: 0, l: 0, d: 0, rs: 0, ra: 0 };
     for (const r of pen.results) {
       const h = tbl[r.home];
       const a = tbl[r.away];
@@ -313,7 +325,7 @@
 
   Pen.setup = function () {
     const S = Store.settings();
-    const st = { my: "phx", perPair: 2, level: S.level, innings: 9 };
+    const st = { my: "t", perPair: 2, level: S.level, innings: 9 };
     return {
       html() {
         return (
@@ -369,9 +381,9 @@
     const st = { tab: "bat" };
     return {
       html() {
-        const teamGames = pen.results.length ? (pen.results.length * 2) / Store.teams().length : 0;
+        const teamGames = pen.results.length ? (pen.results.length * 2) / penTeams(pen).length : 0;
         const all = [];
-        for (const t of Store.teams()) for (const p of t.players) if (pen.stats[p.id]) all.push({ p, t, s: pen.stats[p.id] });
+        for (const t of penTeams(pen)) for (const p of t.players) if (pen.stats[p.id]) all.push({ p, t, s: pen.stats[p.id] });
         const top = (arr, f, fmt, n) =>
           arr
             .sort((a, b) => f(b) - f(a))

@@ -14,11 +14,12 @@
     <link rel="apple-touch-icon" href="icon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=DotGothic16&family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=DotGothic16&family=Graduate&family=M+PLUS+Rounded+1c:wght@400;700;800&family=Rye&family=Ultra&family=Yellowtail&display=swap">
     <link rel="stylesheet" href="css/style.css">
   </head>
   <body>
     <div id="app">
+      <canvas id="gl" aria-hidden="true"></canvas>
       <canvas id="cv" aria-label="球場"></canvas>
       <div id="hud" class="hud" hidden></div>
       <div id="screen" class="screen"></div>
@@ -28,6 +29,7 @@
     <!-- build:scripts -->
     <script src="js/util.js"></script>
     <script src="js/data.js"></script>
+    <script src="js/npb.js"></script>
     <script src="js/field.js"></script>
     <script src="js/pitch.js"></script>
     <script src="js/play.js"></script>
@@ -35,6 +37,12 @@
     <script src="js/game.js"></script>
     <script src="js/chara.js"></script>
     <script src="js/render.js"></script>
+    <script src="vendor/three.min.js"></script>
+    <script src="js/three/model.js"></script>
+    <script src="js/three/anim.js"></script>
+    <script src="js/three/human.js"></script>
+    <script src="js/three/stadium.js"></script>
+    <script src="js/three/view.js"></script>
     <script src="js/audio.js"></script>
     <script src="js/store.js"></script>
     <script src="js/ui.js"></script>

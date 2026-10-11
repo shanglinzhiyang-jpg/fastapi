@@ -94,7 +94,9 @@
         scene.remove(stadium.group);
         stadium.dispose();
       }
-      stadium = S3.build({ home, away, night, quality: V3.quality });
+      const lg = home && PB.D.teamDef && PB.D.teamDef(home.id) ? PB.D.teamDef(home.id).lg : null;
+      const flags = lg ? PB.D.TEAMS.filter((t) => t.lg === lg) : [];
+      stadium = S3.build({ home, away, night, quality: V3.quality, flags });
       for (const l of [stadium.lights.hemi, stadium.lights.key, stadium.lights.fill]) l.layers.enableAll();
       scene.add(stadium.group);
       scene.fog = stadium.fog;
@@ -229,9 +231,15 @@
     return M.SKINS[hashStr(p.id || p.name || "x") % 5];
   }
   function makeSpec(p, team, home, extra) {
+    const human = HM();
+    const h = hashStr(p.id || p.name || "x");
     return Object.assign(
       {
-        team: look(team, home),
+        team: human ? team : look(team, home),
+        seed: p.id || p.name,
+        skinTone: p.foreign ? (h % 3 === 0 ? 4 : 1) : h % 3,
+        race: p.foreign ? (h % 3 === 0 ? { african: 0.9 } : { caucasian: 0.85 }) : null,
+        longPants: p.longPants != null ? p.longPants : h % 5 < 2,
         home,
         num: p.num,
         nameEn: D.romaji(p),
@@ -249,19 +257,35 @@
     return { role: "umpire", team: { main: "#1b2230", sub: "#e9e9ee", cap: "#14171d" }, skin: M.SKINS[1], bats: "R", throws: "R" };
   }
 
+  const HM = () => PB.Human && PB.Human.ready;
   function getActor(key, specFn, budget) {
     let a = actors.get(key);
+    // 実写モデルの読み込みが終わったら簡易モデルを置き換える
+    if (a && a.kind === "p" && HM() && created < (budget || 2)) {
+      scene.remove(a.pl.group);
+      a.pl.dispose();
+      actors.delete(key);
+      a = null;
+    }
     if (!a) {
       if (created >= (budget || 2)) return null;
       created++;
-      const pl = M.createPlayer(specFn());
-      a = { key, pl, rig: new A.Rig(pl), mem: {}, used: tick, yaw: 0, layer: 0, fresh: true, helmet: !!pl.opts.helmet, bat: false, glove: true };
+      const spec = specFn();
+      const human = HM();
+      const pl = human ? PB.Human.createPlayer(spec) : M.createPlayer(spec);
+      if (!pl) return null;
+      a = { key, pl, kind: human ? "h" : "p", rig: human ? new PB.Human.Rig(pl) : new A.Rig(pl), mem: {}, used: tick, yaw: 0, layer: 0, fresh: true, helmet: !!pl.opts.helmet, bat: false, glove: true };
       actors.set(key, a);
       scene.add(pl.group);
     }
     a.used = tick;
     return a;
   }
+  // 試合の前に、両チームの画像・フォントと人体モデルを読み込む
+  V3.prepare = function (teams) {
+    if (!PB.Human) return Promise.resolve();
+    return PB.Human.load("models/").then(() => Promise.all((teams || []).filter(Boolean).map((t) => PB.Human.preloadTeam(t))));
+  };
   function setLayer(a, layer) {
     if (a.layer === layer) return;
     a.layer = layer;
@@ -304,9 +328,12 @@
     else a.rig.drive(p, dt, o.rate || 14);
     a.fresh = false;
     setLayer(a, o.layer || 0);
+    // 後から骨に付けた道具 (バット) もレイヤーをそろえる
+    const bat = a.pl.gear && a.pl.gear.bat;
+    if (bat && bat.layers.mask !== a.pl.group.layers.mask) bat.layers.mask = a.pl.group.layers.mask;
   }
   const handPos = (a, side) => {
-    const b = a.pl.bones["hand." + side];
+    const b = a.pl.human ? a.pl.bones["hand_" + side.toLowerCase()] : a.pl.bones["hand." + side];
     const v = new T.Vector3();
     b.getWorldPosition(v);
     return [v.x, -v.z, v.y];
@@ -469,9 +496,10 @@
           const zh = z.y1 - z.y0;
           const zw = z.x1 - z.x0;
           const kz = zh / (P.ZONE.hi - P.ZONE.lo);
-          const k = kz * 0.52;
-          const sx = left ? z.x1 + zw * 0.06 + 0.42 * k : z.x0 - zw * 0.06 - 0.42 * k;
-          const sy = (z.y0 + z.y1) / 2 + 0.98 * k;
+          // 打者はゾーンの横に、ゾーンより少し小さい縮尺で置く (縦画面でも全身が入る)
+          const k = kz * 0.42;
+          const sx = left ? z.x1 + 0.3 * k : z.x0 - 0.3 * k;
+          const sy = (z.y0 + z.y1) / 2 + 0.95 * k;
           const bx = left ? 0.85 : -0.85;
           pose(a, bx, 0.0, 0, left ? -Math.PI / 2 : Math.PI / 2, q, dt, { layer: 1, rate: 22, turn: 30 });
           syncLayerCam(rc, [bx, 0, 0], sx, sy, k);
@@ -932,5 +960,6 @@
   };
 
   // 画面サイズのチェック用
+  V3._actors = actors;
   V3.info = () => ({ actors: actors.size, calls: renderer ? renderer.info.render.calls : 0, tris: renderer ? renderer.info.render.triangles : 0 });
 })((window.PB = window.PB || {}));

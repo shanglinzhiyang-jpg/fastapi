@@ -375,7 +375,7 @@
   Su.playerMenu = function (i) {
     const p = Store.data.success.players[i];
     const where = UI.findPlayer(p.id);
-    const team = where ? where.team : Store.team("phx");
+    const team = where ? where.team : Store.team("t");
     UI.modal(
       UI.playerCard(where ? where.p : p, team) +
         '<div class="col-btns"><button class="btn" data-act="reg">' +
@@ -516,7 +516,7 @@
 
   /* ---------- 画面: 作成 ---------- */
   Su.create = function () {
-    const st = { name: U.pick(D.SURNAMES), given: U.pick(D.GIVEN), pos: "SS", throws: "R", bats: "R", team: "phx", skin: D.SKINS[0], eyes: "round", pitch: "SL", num: U.randi(0, 99) };
+    const st = { name: U.pick(D.SURNAMES), given: U.pick(D.GIVEN), pos: "SS", throws: "R", bats: "R", team: "t", skin: D.SKINS[0], eyes: "round", pitch: "SL", num: U.randi(0, 99) };
     const POS_OPTS = [
       ["P", "投手"],
       ["C", "捕手"],

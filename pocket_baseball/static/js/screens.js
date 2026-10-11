@@ -114,7 +114,7 @@
   /* ---------- クイック対戦 ---------- */
   Sc.exhibition = function () {
     const S = Store.settings();
-    const st = Sc._exh || (Sc._exh = { my: "phx", opp: "oct", side: "home", innings: S.innings || 9, level: S.level, night: S.night });
+    const st = Sc._exh || (Sc._exh = { my: "t", opp: "g", side: "home", innings: S.innings || 9, level: S.level, night: S.night });
     return {
       html() {
         return (
@@ -518,7 +518,7 @@
 
   /* ---------- ホームラン競争 ---------- */
   Sc.derbySetup = function () {
-    const st = Sc._derby || (Sc._derby = { team: "oct", batter: null, level: "normal" });
+    const st = Sc._derby || (Sc._derby = { team: "g", batter: null, level: "normal" });
     return {
       html() {
         const t = Store.team(st.team);
@@ -627,7 +627,7 @@
 
   /* ---------- 選手名鑑 ---------- */
   Sc.roster = function () {
-    const st = Sc._roster || (Sc._roster = { team: "phx", tab: "bat" });
+    const st = Sc._roster || (Sc._roster = { team: "t", tab: "bat" });
     return {
       html() {
         const t = Store.team(st.team);

@@ -21,6 +21,8 @@
     if (M.match) M.match.destroy();
     document.body.classList.add("in-game");
     M.layout();
+    const V3 = PB.View3D;
+    if (V3 && V3.active && opt.game && opt.game.teams) V3.prepare([opt.game.teams.home, opt.game.teams.away]);
     M.match = new PB.Match(opt);
   };
 
@@ -90,16 +92,38 @@
     ctx.fillRect(0, 0, R.W, R.H);
   }
 
+  // タイトル画面の 3D 背景 (好きな球団の本拠地)
+  function drawTitle3D(ctx, dt) {
+    const V3 = PB.View3D;
+    const teams = Store.teams();
+    const fav = Store.settings().favTeam;
+    const home = teams.find((t) => t.id === fav) || teams[1] || teams[0];
+    const away = teams.find((t) => t !== home && PB.D.teamDef(t.id) && PB.D.teamDef(home.id) && PB.D.teamDef(t.id).lg === PB.D.teamDef(home.id).lg) || teams[0];
+    if (!M.titlePrepared) {
+      M.titlePrepared = true;
+      V3.prepare([home, away]);
+    }
+    if (!V3.renderTitle(dt, [home, away], R.night)) return false;
+    ctx.clearRect(0, 0, R.W, R.H);
+    const g = ctx.createLinearGradient(0, 0, 0, R.H);
+    g.addColorStop(0, "rgba(6,12,24,0.15)");
+    g.addColorStop(1, "rgba(6,12,24,0.55)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, R.W, R.H);
+    return true;
+  }
+
   function frame(ts) {
     const dt = Math.min(0.05, last ? (ts - last) / 1000 : 0.016);
     last = ts;
     const ctx = R.ctx;
     ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
     try {
+      const V3 = PB.View3D;
       if (M.match && !M.match.dead) {
         M.match.update(dt);
         M.match.draw(ctx, dt);
-      } else {
+      } else if (!(V3 && V3.active && drawTitle3D(ctx, dt))) {
         drawTitle(ctx, dt);
       }
     } catch (err) {
@@ -117,6 +141,14 @@
     M.applySettings();
     const cv = document.getElementById("cv");
     R.init(cv);
+    // 3D 描画 (WebGL)。使えない端末や「2D」設定では従来の描画のまま
+    const gl = document.getElementById("gl");
+    const gfx = Store.settings().gfx || "mid";
+    if (gl && PB.View3D && gfx !== "2d" && PB.View3D.init(gl, gfx)) {
+      PB.View3D.active = true;
+      document.body.classList.add("gl3d");
+      PB.View3D.resize(R.W, R.H, R.dpr);
+    } else if (gl) gl.style.display = "none";
     R.night = Store.settings().night;
     UI.init();
     bindCanvas(cv);
@@ -125,6 +157,7 @@
       clearTimeout(rt);
       rt = setTimeout(() => {
         R.resize();
+        if (PB.View3D && PB.View3D.active) PB.View3D.resize(R.W, R.H, R.dpr);
         if (M.match) M.layout();
       }, 120);
     });

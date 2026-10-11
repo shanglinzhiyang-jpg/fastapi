@@ -222,8 +222,14 @@ def classify(f):
             tags.add("pantsL")
     if "sleeve" in tags or ("collar" in tags and "head" not in tags):
         tags.add("shirt")
-    if "collar" in tags and c[1] < J["neck_01"][1] + 0.02:
-        tags.add("shirt")
+    if "collar" in tags:
+        # 襟ぐり: 後ろは首の付け根、前は鎖骨の間まで下がる
+        nk = J["neck_01"]
+        front = np.clip((c[2] - nk[2]) / 0.07, 0, 1)
+        if c[1] < nk[1] - 0.004 - 0.07 * front:
+            tags.add("shirt")
+        else:
+            tags.discard("shirt")
     if "foot" in tags and "socks" not in tags and fw < 0.85:
         tags.add("socks")
     return tags
@@ -293,6 +299,24 @@ class Part:
                     d[i] = 0
                 self.pos += d
 
+    def smooth_boundary(self, iters=6, k=0.5):
+        """縁 (襟・袖口・裾) の頂点を、縁に沿って隣り合う頂点の平均へ寄せる (ギザギザを取る)。"""
+        from collections import Counter, defaultdict
+
+        e = Counter()
+        for a, b, c in self.tri:
+            for u, v in ((a, b), (b, c), (c, a)):
+                e[(min(u, v), max(u, v))] += 1
+        nb = defaultdict(list)
+        for (u, v), n in e.items():
+            if n == 1:
+                nb[u].append(v)
+                nb[v].append(u)
+        idx = np.array(sorted(nb), np.int64)
+        for _ in range(iters):
+            avg = np.array([self.pos[nb[i]].mean(axis=0) for i in idx])
+            self.pos[idx] += (avg - self.pos[idx]) * k
+
     def smooth_weights(self, iters=2):
         nb = self.neighbors()
         for _ in range(iters):
@@ -337,16 +361,18 @@ parts["hands"] = hands
 shirt = Part("shirt", faces_with("shirt"), "shirt")
 y = shirt.pos[:, 1]
 off = np.full(len(shirt.pos), 0.016)
-# 腹まわり・背中はゆったり
-off += np.clip((J["spine_03"][1] - y) / 0.25, 0, 1) * 0.016
+# 腹まわり・背中はゆったり (ただしベルトの近くはパンツの内側に収める)
+off += np.clip((J["spine_03"][1] - y) / 0.25, 0, 1) * 0.016 * np.clip((y - BELT_Y) / 0.08, 0, 1)
+off -= np.clip((BELT_Y + 0.03 - y) / 0.06, 0, 1) * 0.008
 off += np.clip((y - (J["spine_03"][1] + 0.05)) / 0.2, 0, 1) * 0.004
 # 袖はゆったり
 armness = ARMW[shirt.src]
-off += armness * 0.014
+off += armness * 0.008
 # 首まわりは詰める
 off -= HEADW[shirt.src] * 0.006
 shirt.inflate(off)
 shirt.smooth(iters=10)
+shirt.smooth_boundary(12)
 ensure_outside(shirt, 0.008)
 shirt.smooth(iters=3)
 ensure_outside(shirt, 0.007)
@@ -364,15 +390,22 @@ parts["under"] = under
 for key, tag in (("pants", "pants"), ("pantsL", "pantsL")):
     pt = Part(key, faces_with(tag), "pants")
     y = pt.pos[:, 1]
-    off = np.full(len(pt.pos), 0.02)
+    off = np.full(len(pt.pos), 0.024)
     lw = LEGW[pt.src]
-    off += lw * 0.012
+    off += lw * 0.016
+    # 股の内側はふくらませて段差をなくす
+    inner = np.clip(1 - np.abs(pt.pos[:, 0]) / 0.07, 0, 1) * np.clip(1 - np.abs(pt.pos[:, 1] - (J["pelvis"][1] - 0.08)) / 0.12, 0, 1)
+    off += inner * 0.02
     # 膝下は少し絞る (ショート丈は裾がふくらむ)
     off -= CALFW[pt.src] * (0.004 if key == "pants" else 0.01)
-    # 腰はベルトで締める
-    off -= np.clip(1 - abs(y - BELT_Y) / 0.05, 0, 1) * 0.006
+    # 腰まわりはシャツの外側に (ベルトで締めた分だけ)
+    off += np.clip(1 - abs(y - BELT_Y) / 0.06, 0, 1) * 0.004
+    # お尻は丸みをならす
+    back = np.clip(-(pt.pos[:, 2] - J["pelvis"][2]) / 0.08, 0, 1) * np.clip(1 - abs(y - (J["pelvis"][1] - 0.05)) / 0.15, 0, 1)
+    off += back * 0.012
     pt.inflate(off)
-    pt.smooth(iters=10)
+    pt.smooth(iters=24)
+    pt.smooth_boundary(8)
     ensure_outside(pt, 0.012)
     pt.smooth(iters=2)
     ensure_outside(pt, 0.01)
@@ -478,6 +511,10 @@ def load_eyes(Vshape):
     key = {}
     outp, outuv, tri = [], [], []
     for f in fs:
+        # 角膜 (透明な膜) はテクスチャの右下の青い円を使う → 不透明で描くと白目に見えるので除く
+        uvs_f = [vts[ti] for _, ti in f if ti >= 0]
+        if uvs_f and all(u > 0.8 and v < 0.2 for u, v in uvs_f):
+            continue
         ids = []
         for vi, ti in f:
             k = (vi, ti)
@@ -617,38 +654,103 @@ def torso_center(pos):
 
 
 # シャツ: 胴体は テクスチャ上部 [0,1]x[0.3,1]、袖は下部 (左 [0,0.5], 右 [0.5,1]) x [0,0.28]
+def corner_split(part, cuv):
+    """三角形の角ごとの UV (ntri,3,2) に合わせて頂点を複製する。"""
+    key = {}
+    pos, nrm, W, uvs, src, col = [], [], [], [], [], []
+    morphs = [[] for _ in part.morphs]
+    tri = []
+    for t in range(len(part.tri)):
+        ids = []
+        for c in range(3):
+            vi = part.tri[t, c]
+            u = cuv[t, c]
+            k = (vi, round(float(u[0]) * 4096), round(float(u[1]) * 4096))
+            if k not in key:
+                key[k] = len(pos)
+                pos.append(part.pos[vi])
+                nrm.append(part.nrm[vi])
+                W.append(part.W[vi])
+                uvs.append(u)
+                if part.src is not None:
+                    src.append(part.src[vi])
+                if part.color is not None:
+                    col.append(part.color[vi])
+                for m, (_, d) in enumerate(part.morphs):
+                    morphs[m].append(d[vi])
+            ids.append(key[k])
+        tri.append(ids)
+    part.pos = np.array(pos)
+    part.nrm = np.array(nrm)
+    part.W = np.array(W)
+    part.uv = np.array(uvs)
+    part.tri = np.array(tri, np.int64)
+    if src:
+        part.src = np.array(src)
+    if col:
+        part.color = np.array(col)
+    part.morphs = [(n, np.array(m)) for (n, _), m in zip(part.morphs, morphs)]
+
+
 sh = parts["shirt"]
-uv = cyl_uv(sh, torso_center, v0=0.3, v1=1.0, ylo=BELT_Y - 0.08, yhi=J["neck_01"][1] + 0.02)
-arm = ARMW[sh.src] > 0.35
-for s, (a0, a1) in (("l", (0.0, 0.5)), ("r", (0.5, 1.0))):
-    m = arm & ((sh.pos[:, 0] > 0) if s == "l" else (sh.pos[:, 0] < 0))
-    A = J["upperarm_" + s]
-    B = J["lowerarm_" + s]
+torso_uv = cyl_uv(sh, torso_center, v0=0.3, v1=1.0, ylo=BELT_Y - 0.08, yhi=J["neck_01"][1] + 0.02)
+sleeve_uv = {}
+for s_, (a0, a1) in (("l", (0.0, 0.5)), ("r", (0.5, 1.0))):
+    A = J["upperarm_" + s_]
+    B = J["lowerarm_" + s_]
     ax = (B - A) / np.linalg.norm(B - A)
-    rel = sh.pos[m] - A
+    rel = sh.pos - A
     t = rel @ ax
     perp = rel - np.outer(t, ax)
+    # 継ぎ目は脇の下 (体の内側・下向き) に置く
     ref = np.cross(ax, [0, 0, 1.0])
     ref /= np.linalg.norm(ref)
     ref2 = np.cross(ax, ref)
     ang = np.arctan2(perp @ ref2, perp @ ref)
-    uv[m, 0] = a0 + ((ang / (2 * math.pi)) % 1.0) * (a1 - a0)
-    uv[m, 1] = 0.28 - np.clip(t / np.linalg.norm(B - A) / 0.7, 0, 1) * 0.26
-sh.uv = split_seam(sh, uv)
+    lu = (ang / (2 * math.pi)) % 1.0
+    lv = 0.28 - np.clip(t / np.linalg.norm(B - A) / 0.7, 0, 1) * 0.26
+    sleeve_uv[s_] = (lu, lv, a0, a1)
+armv = ARMW[sh.src] > 0.35
+cuv = np.zeros((len(sh.tri), 3, 2))
+for ti, tri in enumerate(sh.tri):
+    nm = armv[tri].sum()
+    side = "l" if sh.pos[tri, 0].mean() > 0 else "r"
+    if nm >= 2:
+        lu, lv, a0, a1 = sleeve_uv[side]
+        us = lu[tri].copy()
+        if us.max() - us.min() > 0.5:
+            us = np.where(us < 0.5, 1.0, us)
+        cuv[ti, :, 0] = a0 + us * (a1 - a0)
+        cuv[ti, :, 1] = lv[tri]
+    else:
+        us = torso_uv[tri, 0].copy()
+        if us.max() - us.min() > 0.5:
+            us = np.where(us < 0.5, us + 1.0, us)
+        cuv[ti, :, 0] = us
+        cuv[ti, :, 1] = torso_uv[tri, 1]
+corner_split(sh, cuv)
 sh.recompute_normals = lambda: None
 
 for key in ("pants", "pantsL"):
     pt = parts[key]
-    # 脚ごとの円筒 (左脚 u 0..0.5, 右脚 0.5..1)
-    uv = np.zeros((len(pt.pos), 2))
-    for s, (a0, a1) in (("l", (0.0, 0.5)), ("r", (0.5, 1.0))):
-        m = pt.pos[:, 0] >= 0 if s == "l" else pt.pos[:, 0] < 0
-        cx = np.interp(pt.pos[m, 1], [J["calf_" + s][1], J["thigh_" + s][1]], [J["calf_" + s][0], J["thigh_" + s][0]])
-        cz = np.interp(pt.pos[m, 1], [J["calf_" + s][1], J["thigh_" + s][1]], [J["calf_" + s][2], J["thigh_" + s][2]])
-        ang = np.arctan2(pt.pos[m, 0] - cx, pt.pos[m, 2] - cz)
-        uv[m, 0] = a0 + ((0.25 + ang / (2 * math.pi)) % 1.0) * (a1 - a0)
-        uv[m, 1] = np.clip(pt.pos[m, 1] / (BELT_Y + 0.05), 0, 1)
-    pt.uv = uv
+    # 脚ごとの円筒 (左脚 u 0..0.5, 右脚 0.5..1)。三角形ごとにどちらの脚か決めて頂点を分ける
+    local = {}
+    for s_ in ("l", "r"):
+        cx = np.interp(pt.pos[:, 1], [J["calf_" + s_][1], J["thigh_" + s_][1]], [J["calf_" + s_][0], J["thigh_" + s_][0]])
+        cz = np.interp(pt.pos[:, 1], [J["calf_" + s_][1], J["thigh_" + s_][1]], [J["calf_" + s_][2], J["thigh_" + s_][2]])
+        ang = np.arctan2(pt.pos[:, 0] - cx, pt.pos[:, 2] - cz)
+        local[s_] = (0.25 + ang / (2 * math.pi)) % 1.0
+    vv = np.clip(pt.pos[:, 1] / (BELT_Y + 0.05), 0, 1)
+    cuv = np.zeros((len(pt.tri), 3, 2))
+    for ti, tri in enumerate(pt.tri):
+        s_ = "l" if pt.pos[tri, 0].mean() >= 0 else "r"
+        a0, a1 = (0.0, 0.5) if s_ == "l" else (0.5, 1.0)
+        us = local[s_][tri].copy()
+        if us.max() - us.min() > 0.5:
+            us = np.where(us < 0.5, 1.0, us) if s_ == "l" else np.where(us > 0.5, 0.0, us)
+        cuv[ti, :, 0] = a0 + us * (a1 - a0)
+        cuv[ti, :, 1] = vv[tri]
+    corner_split(pt, cuv)
 
 # 肌 (顔・手) は アトラスに詰め直して焼き込む
 SKIN_TEX = 1024
@@ -871,9 +973,11 @@ def bake_skin(variant="clean"):
     hc = J["head"]
     eyeL = mh.joint_pos(P, VG, "joint-l-eye")
     eyeR = mh.joint_pos(P, VG, "joint-r-eye")
-    mouth = mh.joint_pos(P, VG, "joint-mouth")
+    # 口の位置は唇マスクの重心 (joint-mouth は頭の内側の骨で、唇より上にある)
+    _lm = sample_mask(MASKS["lips"], mhuv) > 0.5
+    mouth = pos[_lm].mean(axis=0) if _lm.any() else mh.joint_pos(P, VG, "joint-mouth")
     rel = pos - hc
-    base = np.array([0.80, 0.62, 0.52])  # 中間の肌色 (マテリアル色で人ごとに着色)
+    base = np.array([0.95, 0.83, 0.74])  # 明るめの肌色 (マテリアル色で人ごとに着色)
     col = np.tile(base, (len(pos), 1))
     # まだら・赤み
     n1 = fbm(pos, 30, 3, 1)[:, None]
@@ -891,16 +995,16 @@ def bake_skin(variant="clean"):
     col = col * (1 - lips * 0.55) + np.array([0.66, 0.38, 0.36]) * lips * 0.55
     # まぶた (少し暗く) とまつげの線
     lid = sample_mask(MASKS["eyelids"], mhuv)[:, None]
-    col *= 1 - lid * 0.12
+    col *= 1 - lid * 0.05
     # 目の周り (眼窩) の陰り
     for e in (eyeL, eyeR):
         d = np.linalg.norm((pos - e) * [1, 1.3, 0.6], axis=1)
         sock = np.clip(1 - d / 0.03, 0, 1)[:, None] * face[:, None]
-        col *= 1 - sock * 0.18
+        col *= 1 - sock * 0.08
         # まつげ (上まぶたのふち)
         dl = np.abs((pos[:, 1] - (e[1] + 0.0065)) / 0.0018) + np.maximum(0, np.abs(pos[:, 0] - e[0]) - 0.013) / 0.002
         lash = np.clip(1 - dl, 0, 1) * (pos[:, 2] > e[2] - 0.004)
-        col = col * (1 - lash[:, None] * 0.85) + np.array([0.08, 0.06, 0.05]) * lash[:, None] * 0.85
+        del lash  # まつげの線は描かない (二重まぶたのように見えるため)
     # 眉毛
     hair_col = np.array([0.075, 0.06, 0.05])
     for e, s in ((eyeL, 1), (eyeR, -1)):
@@ -1025,6 +1129,13 @@ for s in ("l", "r"):
 extra["eyeL"] = mh.joint_pos(P, VG, "joint-l-eye").tolist()
 extra["eyeR"] = mh.joint_pos(P, VG, "joint-r-eye").tolist()
 extra["beltY"] = float(BELT_Y)
+# 襟ぐりの UV (テクスチャに襟の縁取りを描くため): シャツの縁のうち首まわりの頂点
+_sh = parts["shirt"]
+_bv = _sh.boundary()
+_nk = J["neck_01"]
+_col = [_sh.uv[i].tolist() for i in _bv if _sh.pos[i, 1] > J["spine_03"][1] + 0.12 and ARMW[_sh.src[i]] < 0.3 and abs(_sh.pos[i, 0]) < 0.1 and abs(_sh.pos[i, 2] - _nk[2]) < 0.12]
+_col.sort(key=lambda t: t[0])
+extra["collarUV"] = [[round(u, 4), round(v, 4)] for u, v in _col]
 extra["headTop"] = float(P[parts["head"].src][:, 1].max()) if parts["head"].src is not None else 1.8
 
 manifest = {

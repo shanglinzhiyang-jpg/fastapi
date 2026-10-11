@@ -41,6 +41,8 @@
   };
   S3.parkFor = function (team) {
     if (!team) return { dome: false, seat: "#2d4f86", wall: "#14402c", skyline: true };
+    const def = PB.D && PB.D.teamDef ? PB.D.teamDef(team.id) : null;
+    if (def && def.park) return Object.assign({ turf: "mlb" }, def.park);
     if (S3.PARKS[team.id]) return S3.PARKS[team.id];
     const h = hashStr(team.id || team.name || "x");
     return { dome: h % 3 === 0, seat: team.main || "#2d4f86", wall: h % 2 ? "#14402c" : "#173a63", roof: "#e4e4de", skyline: h % 2 === 0 };
@@ -63,6 +65,28 @@
     ["フルカウント保険", "#ffffff", "#2a7de1"],
     ["サヨナラ銀行", "#ffffff", "#7a1f9b"],
   ];
+
+  // 広告板の色 (実在スポンサーの名前で、色だけ用意する)
+  const AD_COLORS = [
+    ["#ffffff", "#e60012"],
+    ["#ffffff", "#0b3d91"],
+    ["#111111", "#ffd400"],
+    ["#ffffff", "#111111"],
+    ["#0b2a5b", "#f2f2f2"],
+    ["#ffffff", "#00754a"],
+    ["#ffffff", "#ff6a00"],
+    ["#ffe25c", "#b5121b"],
+    ["#ffffff", "#2a7de1"],
+    ["#d4af37", "#101010"],
+  ];
+  let curSponsors = null;
+  function sponsorList() {
+    if (!curSponsors || !curSponsors.length) return SPONSORS;
+    return curSponsors.map((n, i) => {
+      const c = n.indexOf("コカ・コーラ") >= 0 || n.indexOf("Coca") >= 0 ? ["#ffffff", "#e60012"] : AD_COLORS[i % AD_COLORS.length];
+      return [n, c[0], c[1]];
+    });
+  }
 
   /* ---------- テクスチャ ---------- */
   function canvasTex(w, h, draw, opts) {
@@ -124,7 +148,8 @@
             s += 2;
             continue;
           }
-          const [name, fg, bg] = SPONSORS[si++ % SPONSORS.length];
+          const SP = sponsorList();
+          const [name, fg, bg] = SP[si++ % SP.length];
           const x0 = s * k;
           const y0 = H * 0.3;
           const ww = w * k;
@@ -180,7 +205,8 @@
         let i = Math.floor(r() * SPONSORS.length);
         while (x < W - 2) {
           const w = Math.min(W - x, (6 + Math.floor(r() * 3) * 2) * k);
-          const [name, fg, bg] = SPONSORS[i++ % SPONSORS.length];
+          const SP = sponsorList();
+          const [name, fg, bg] = SP[i++ % SP.length];
           ctx.fillStyle = bg;
           ctx.fillRect(x + 2, H * 0.14, w - 4, H * 0.66);
           ctx.fillStyle = fg;
@@ -289,6 +315,65 @@
     );
   }
 
+  // 球団旗 (画像があればそれを、なければ定義から描く)
+  function flagTexture(def) {
+    const fl = (def && def.flag) || {};
+    const W = 256;
+    const H = 168;
+    const c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    const g = c.getContext("2d");
+    const tex = new T.CanvasTexture(c);
+    tex.colorSpace = T.SRGBColorSpace;
+    const paint = () => {
+      const bg = fl.bg || [def.main || "#333", def.sub || "#fff"];
+      g.fillStyle = bg[0];
+      g.fillRect(0, 0, W, H);
+      if (fl.stripes) {
+        g.fillStyle = bg[1];
+        for (let k = 0; k < 6; k++) if (k % 2) g.fillRect(0, (k * H) / 6, W, H / 6);
+      } else if (bg[1] && !fl.image) {
+        g.fillStyle = bg[1];
+        g.fillRect(0, H * 0.78, W, H * 0.22);
+      }
+      const img = (url, x, y, w, h) => {
+        const e = PB.Human && PB.Human.image ? PB.Human.image(url) : null;
+        if (e && e.ok) {
+          const k = Math.min(w / e.img.width, h / e.img.height);
+          g.drawImage(e.img, x - (e.img.width * k) / 2, y - (e.img.height * k) / 2, e.img.width * k, e.img.height * k);
+          return true;
+        }
+        if (e) e.p.then(() => {
+          paint();
+          tex.needsUpdate = true;
+        });
+        return false;
+      };
+      if (fl.image) {
+        img(fl.image, W / 2, H / 2, W, H);
+        return;
+      }
+      if (fl.topImage) img(fl.topImage, W * 0.2, H * 0.2, W * 0.3, H * 0.3);
+      if (fl.logo) img(fl.logo, fl.word || fl.text ? W * 0.3 : W / 2, H * 0.45, H * 0.72, H * 0.72);
+      if (fl.word) img(fl.word, fl.logo ? W * 0.68 : W / 2, H * 0.45, W * 0.55, H * 0.5);
+      if (fl.text) {
+        g.font = "400 " + (fl.textFont === "Yellowtail" ? 46 : 34) + "px '" + (fl.textFont || "Graduate") + "', sans-serif";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.lineWidth = 5;
+        g.strokeStyle = bg[0];
+        g.fillStyle = "#ffffff";
+        g.strokeText(fl.text, fl.logo ? W * 0.68 : W / 2, H * 0.45);
+        g.fillText(fl.text, fl.logo ? W * 0.68 : W / 2, H * 0.45);
+      }
+    };
+    paint();
+    tex.needsUpdate = true;
+    return tex;
+  }
+  S3.flagTexture = flagTexture;
+
   // 照明のランプ面
   function lampTexture() {
     return canvasTex(256, 160, (ctx, w, h) => {
@@ -354,6 +439,7 @@
   const GROUND_GLSL = `
 uniform vec3 uGrass; uniform vec3 uGrass2; uniform vec3 uFoul; uniform vec3 uDirt; uniform vec3 uClay; uniform vec3 uTrack; uniform vec3 uLine; uniform vec3 uOut;
 uniform float uMow;
+uniform float uInfield;
 varying vec2 vG;
 float gh(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float gn(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f*f*(3.0-2.0*f);
@@ -399,7 +485,8 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
   float dHome = r - 4.2;
   float dMound = length(p - vec2(0.0, 17.98)) - 2.75;
   float dBase = min(min(length(p - abxy(27.431, 0.0)), length(p - abxy(0.0, 27.431))), length(p - abxy(27.431, 27.431))) - 2.4;
-  float dDirt = min(min(dSkin, dHome), min(dMound, dBase));
+  if (uInfield > 1.5) dSkin = max(length(p - vec2(0.0, 18.44)) - 29.0, max(-1.2 - a, -1.2 - b));
+  float dDirt = uInfield > 0.5 && uInfield < 1.5 ? min(dHome, min(dMound, dBase)) : min(min(dSkin, dHome), min(dMound, dBase));
   // 外野フェンス際・ファウルゾーンのウォーニングトラック
   float dTrack = 1e5;
   if (fair) dTrack = (fd - 4.6) - r;
@@ -461,6 +548,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       uLine: { value: C("#f4f4ec") },
       uOut: { value: C("#3a3d42") },
       uMow: { value: 0.75 },
+      uInfield: { value: 0 },
     };
     const m = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0 });
     m.onBeforeCompile = (sh) => {
@@ -540,6 +628,8 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     const home = o.home || null;
     const away = o.away || null;
     const park = Object.assign({}, S3.parkFor(home), o.park || {});
+    const hdef = home && PB.D && PB.D.teamDef ? PB.D.teamDef(home.id) : null;
+    curSponsors = (hdef && hdef.sponsors) || null;
     const dome = o.dome != null ? o.dome : park.dome;
     const qual = o.quality || "mid";
     const group = new T.Group();
@@ -550,6 +640,23 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
 
     /* 地面 */
     const gmat = keep(groundMaterial());
+    {
+      // 芝の種類: 人工芝は明るく均一、甲子園は黒土の内野
+      const U_ = gmat.userData.uniforms;
+      if (park.turf === "turf") {
+        U_.uInfield.value = 1;
+        U_.uGrass.value.set("#3c9a46");
+        U_.uGrass2.value.set("#43a34d");
+        U_.uFoul.value.set("#3a9443");
+        U_.uMow.value = 0.35;
+        U_.uDirt.value.set("#a8714a");
+      } else if (park.turf === "dirt") {
+        U_.uInfield.value = 2;
+        U_.uDirt.value.set("#5c3f2c");
+        U_.uClay.value.set("#4d3424");
+        U_.uTrack.value.set("#5a3e2b");
+      }
+    }
     const ground = new T.Mesh(keep(new T.PlaneGeometry(420, 420, 1, 1)), gmat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(0, 0, -50);
@@ -983,6 +1090,34 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       sign.position.copy(V(x, y - 0.03, z0 + bh + 3.2));
       group.add(sign);
       st.boardPos = [x, y, z0 + bh / 2];
+      // 球団旗 (同じリーグの 6 球団) をスコアボードの上になびかせる
+      const flagTeams = o.flags || [];
+      const fu = { uTime: { value: 0 } };
+      st.flagUniforms = fu;
+      const poleMat = keep(new T.MeshStandardMaterial({ color: "#c9ced6", roughness: 0.4, metalness: 0.6 }));
+      flagTeams.forEach((ft, i) => {
+        const n = flagTeams.length;
+        const fxp = x + (i - (n - 1) / 2) * (bw / n);
+        const topZ = z0 + bh + 6.5;
+        const pole = new T.Mesh(keep(new T.CylinderGeometry(0.12, 0.15, 9, 6)), poleMat);
+        pole.position.copy(V(fxp, y + 1.2, topZ + 4.5 - 1));
+        group.add(pole);
+        const geo = keep(new T.PlaneGeometry(4.6, 3.0, 14, 6));
+        geo.translate(2.3, 0, 0);
+        const mat = keep(new T.MeshStandardMaterial({ map: keep(flagTexture(ft)), side: T.DoubleSide, roughness: 0.9 }));
+        mat.onBeforeCompile = (sh) => {
+          sh.uniforms.uTime = fu.uTime;
+          sh.vertexShader = "uniform float uTime;\n" + sh.vertexShader.replace(
+            "#include <begin_vertex>",
+            "#include <begin_vertex>\n float k = position.x / 4.6; transformed.z += sin(uTime * 3.2 + position.x * 1.4 + " + (i * 1.7).toFixed(2) + ") * 0.35 * k; transformed.y -= k * k * 0.25;"
+          );
+        };
+        mat.customProgramCacheKey = () => "pb-flag-" + i;
+        const fl = new T.Mesh(geo, mat);
+        fl.position.copy(V(fxp, y + 1.2, topZ + 7));
+        fl.rotation.y = Math.PI;
+        group.add(fl);
+      });
     }
 
     /* 照明・屋根・空 */
@@ -1210,6 +1345,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       st.crowd.uniforms.uExc.value.set(st.exc[0], st.exc[1], st.exc[2]);
       if (sky) sky.material.uniforms.uTime.value = st.time;
       if (st.ribbon) st.ribbon.material.map.offset.x = (st.time * 0.02) % 1;
+      if (st.flagUniforms) st.flagUniforms.uTime.value = st.time;
     };
     st.dispose = function () {
       for (const d of disposables) if (d && d.dispose) d.dispose();

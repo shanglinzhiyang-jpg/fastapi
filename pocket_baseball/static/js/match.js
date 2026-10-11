@@ -983,6 +983,23 @@
     /* ---------- 描画 ---------- */
     draw(ctx, dt) {
       if (this.dead) return;
+      const V3 = PB.View3D;
+      if (V3 && V3.active && !V3.lost) {
+        const blend3 = U.smooth(this.camBlend);
+        let cam3;
+        if (blend3 <= 0.001) {
+          cam3 = R.cams.bat;
+          this.dyn = null;
+        } else {
+          const fc = this.dynCam(dt);
+          cam3 = blend3 >= 0.999 ? fc : Cam.lerp(R.cams.bat, fc, blend3);
+        }
+        if (V3.renderMatch(this, cam3, dt, blend3)) {
+          ctx.clearRect(0, 0, R.W, R.H);
+          this.drawOverlay3D(ctx, cam3, dt, blend3);
+          return;
+        }
+      }
       const g = this.g;
       const W = R.W;
       const H = R.H;
@@ -1144,6 +1161,51 @@
       const b = F.BASES[Math.min(r.from + 1, 4)];
       const s = r.state === "return" ? -1 : 1;
       return [(b[0] - a[0]) * s, (b[1] - a[1]) * s];
+    }
+
+    // 3D 描画のときの 2D 重ね描き (ゾーン・カーソル・ミット・ボールの軌跡・落下点・エフェクト)
+    drawOverlay3D(ctx, cam, dt, blend) {
+      const g = this.g;
+      const fieldView = blend > 0.5;
+      const play = this.play;
+      if (!fieldView) {
+        const bat = g.batter();
+        const pit = g.pitcher();
+        if (this.state !== "inplay") R.drawZone(ctx, cam, 0.85);
+        if (this.userBat() && this.state !== "change") {
+          const cs = P.cursor(bat, pit, g.ctx("bat"));
+          R.drawCursor(ctx, cam, { x: this.cur.x, z: this.cur.z, rx: cs.rx, rz: cs.rz, bunt: this.bunt, flash: this.swingT != null && this.swingT < 0.2 });
+        }
+        if (this.userPitch() && (this.state === "ready" || this.state === "windup" || this.state === "pitch" || this.state === "call")) {
+          const def = D.PITCHES[this.selPitch];
+          const ent = (pit.pitches || []).find((x) => x.t === this.selPitch);
+          const lv = ent ? ent.lv : 0;
+          let dx = def.bx(lv) * (pit.throws === "R" ? 1 : -1);
+          let dz = def.bz(lv);
+          if (this.state !== "ready") dx = dz = 0;
+          R.drawMitt(ctx, cam, this.aim, { dx: dx * 2.2, dz: dz * 2.2 });
+        }
+        // 投球の軌跡 (ボール本体は 3D)
+        if ((this.state === "pitch" || (this.state === "call" && this.pendingCall !== "derby")) && this.pc && !this.foulBall) {
+          const pT = Math.min(this.pT, this.pc.T + 0.025);
+          const p = P.pos(this.pc, pT);
+          const q = cam.p(p[0], p[1], p[2]);
+          const prev = this.prevBall;
+          if (q && prev) {
+            const r = Math.max(2, 0.037 * q.s);
+            ctx.strokeStyle = "rgba(255,255,255,0.28)";
+            ctx.lineWidth = r * 1.5;
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(prev.x, prev.y);
+            ctx.lineTo(q.x, q.y);
+            ctx.stroke();
+          }
+          this.prevBall = q ? { x: q.x, y: q.y } : null;
+        }
+      }
+      if (play && play.icpt && play.icpt.air && play.ball.mode === "live" && fieldView) R.drawLanding(ctx, cam, play.icpt.x, play.icpt.y, this.time);
+      R.drawFx(ctx, dt);
     }
 
     drawBatterView(ctx, cam) {

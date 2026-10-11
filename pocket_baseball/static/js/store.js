@@ -75,6 +75,12 @@
   };
 
   S.teams = function () {
+    // 球団の定義が変わった (旧バージョンの架空球団など) ときは作り直す
+    const D = PB.D;
+    if (S.data.teams && (S.data.teams.length !== D.TEAMS.length || S.data.teams.some((t) => !D.teamDef(t.id)))) {
+      S.data.teams = null;
+      S.data.pennant = null;
+    }
     if (!S.data.teams) {
       S.data.teams = PB.D.newTeams();
       S.save();

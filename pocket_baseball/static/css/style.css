@@ -78,6 +78,15 @@ textarea {
   display: block;
   touch-action: none;
 }
+/* 3D 描画 (WebGL) は 2D キャンバスの下に敷く */
+#gl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
 
 /* ---------- 画面 ---------- */
 .screen {
@@ -364,6 +373,14 @@ textarea {
   line-height: 1;
   vertical-align: middle;
   box-sizing: border-box;
+}
+.tmark-img {
+  border: 0;
+  border-radius: 0;
+  object-fit: contain;
+  background: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+  -webkit-user-drag: none;
 }
 .tpick {
   display: grid;
