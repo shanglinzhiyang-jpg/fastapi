@@ -497,9 +497,11 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
   // 大きなむら (水はけ・日当たり)・ところどころ黄ばんだ所・細かいむら
   float big = gfbm(p * 0.045);
   grass *= 0.9 + 0.2 * big;
+  grass *= 1.0 + (gn(p * 7.0) - 0.5) * 0.16 * fine + (gn(p * 31.0) - 0.5) * 0.14 * clamp(1.0 - fw * 20.0, 0.0, 1.0);
+  // (低画質では黄ばみ・傷み・つや・土の細かい凹凸を省く)
+  #ifndef PB_LOWQ
   float huge = gn(p * 0.013 + vec2(5.0, 1.0));
   grass = mix(grass, grass * vec3(1.12, 1.03, 0.76), smoothstep(0.45, 0.95, huge) * 0.5 * uWear);
-  grass *= 1.0 + (gn(p * 7.0) - 0.5) * 0.16 * fine + (gn(p * 31.0) - 0.5) * 0.14 * clamp(1.0 - fw * 20.0, 0.0, 1.0);
   // 踏まれて傷んだ芝 (外野手・塁審・ベースコーチの立ち位置、土との境目)
   vec2 ab = vec2(a, b);
   float wear = 0.0;
@@ -514,6 +516,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
   wear = clamp(wear * (0.35 + 0.65 * gn(p * 1.7)) * uWear, 0.0, 1.0) * 0.7;
   // 傷んだ芝は黄ばんで、少し土が見える
   grass = mix(grass, mix(grass * vec3(1.15, 1.02, 0.68), vec3(0.2, 0.14, 0.08), 0.22), wear);
+  #endif
   vec3 col = grass;
   float rough = 0.93;
   // 外野フェンス際・ファウルゾーンのウォーニングトラック
@@ -523,8 +526,13 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
   else { dTrack = min(a + 15.4, b + 15.4); dTrack = min(dTrack, min(95.4 - a, 95.4 - b)); }
   // 土の凹凸 (高さ m)。細かい成分ほど近くだけ (遠くでちらつかない)
   float f1 = clamp(1.0 - fw * 3.0, 0.0, 1.0);
+  #ifdef PB_LOWQ
+  float f2 = 0.0;
+  float f3 = 0.0;
+  #else
   float f2 = clamp(1.0 - fw * 12.0, 0.0, 1.0);
   float f3 = clamp(1.0 - fw * 40.0, 0.0, 1.0);
+  #endif
   float hD = 0.0;
   vec3 dirt = uDirt;
   vec3 track = uTrack;
@@ -569,10 +577,12 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
   float kTrack = cov(dTrack);
   col = mix(col, track, kTrack);
   float kSoil = max(kDirt, kTrack);
-  // 芝はわずかに、土はしっかり凹凸で法線を傾ける
-  gH = mix((gn(p * 9.0) - 0.5) * 0.003 * f1, hD, kSoil);
+  // 土の凹凸で法線を傾ける
+  gH = hD * kSoil;
   // 芝のつや (低い角度から見ると葉の側面が光を返して明るい)
+  #ifndef PB_LOWQ
   gSheen = uSheen * (1.0 - kSoil) * pow(1.0 - vd.z, 3.0);
+  #endif
   // ネクストバッターズサークル
   for (int s = 0; s < 2; s++) {
     vec2 oc = vec2(s == 0 ? -11.5 : 11.5, -6.5);
@@ -616,7 +626,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
   }
 `;
 
-  function groundMaterial(night) {
+  function groundMaterial(qual) {
     const C = (s) => new T.Color(s);
     const uniforms = {
       // 芝は少し黄色寄りで彩度を抑える (緑一色のゲーム盤に見えないように)
@@ -646,7 +656,9 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
         .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + GROUND_BUMP)
         .replace("#include <lights_fragment_end>", "#include <lights_fragment_end>\n reflectedLight.directDiffuse *= 1.0 + gSheen; reflectedLight.indirectDiffuse *= 1.0 + gSheen * 0.6;");
     };
-    m.customProgramCacheKey = () => "pb-ground-v2";
+    // 低画質は軽い版 (刈り目と土の大きな凹凸だけ)
+    if (qual === "low") m.defines = { PB_LOWQ: "" };
+    m.customProgramCacheKey = () => "pb-ground-v2" + (qual === "low" ? "l" : "");
     m.userData.uniforms = uniforms;
     return m;
   }
@@ -737,7 +749,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     const emitters = []; // 自分で光る板 (スコアボード・LED・看板): 仕上げ処理があるときは HDR にして光をにじませる
 
     /* 地面 */
-    const gmat = keep(groundMaterial());
+    const gmat = keep(groundMaterial(qual));
     {
       // 芝の種類: 人工芝は明るく均一、甲子園は黒土の内野
       const U_ = gmat.userData.uniforms;
