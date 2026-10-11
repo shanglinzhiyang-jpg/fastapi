@@ -113,6 +113,21 @@
     if (!ok()) return;
     [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.35, "triangle", 0.15, i * 0.11));
   };
+  // ニュースのジングル (オリジナルの短いフレーズ)
+  A.newsJingle = function () {
+    if (!ok()) return;
+    const seq = [
+      [523, 0.12, 0],
+      [659, 0.12, 0.12],
+      [784, 0.12, 0.24],
+      [1047, 0.42, 0.36],
+    ];
+    seq.forEach(([f, d, w]) => {
+      tone(f, d, "square", 0.07, w);
+      tone(f / 2, d, "triangle", 0.12, w);
+    });
+    [1047, 1319, 1568].forEach((f) => tone(f, 0.6, "triangle", 0.06, 0.36));
+  };
   A.click = function () {
     if (!ok()) return;
     tone(1200, 0.04, "square", 0.06);

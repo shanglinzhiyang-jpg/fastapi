@@ -821,6 +821,8 @@
       A.chant(false);
       setTimeout(
         () => {
+          // 試合終了の演出中に「やめる」を選んだときは記録しない
+          if (this.quit) return;
           this.destroy();
           if (this.opt.onEnd) this.opt.onEnd(this);
         },

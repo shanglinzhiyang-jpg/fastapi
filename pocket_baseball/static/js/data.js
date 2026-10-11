@@ -301,7 +301,10 @@
   }
 
   // 実在選手の能力をゲームの基準に合わせる補正 (2004 年の打高: 1 試合 4.5 点・打率 .280 前後になるよう調整)
-  D.CALIB = { meet: 5, power: 14, speed: 10, lv: -1, velo: 0, control: -7 };
+  D.CALIB = { meet: -5, power: 4, speed: 10, lv: -1, velo: 0, control: -7 };
+  // 補正を変えたら上げる (保存済みのチームの能力を作り直す目印)
+  D.CALIB_VER = 2;
+  D.RATING_KEYS = ["meet", "power", "speed", "arm", "field", "catch", "traj", "velo", "control", "stamina", "pitches"];
 
   // 実在選手の名簿 (rosters2004.js) からチームを作る
   D.rosterTeam = function (tdef, ro) {

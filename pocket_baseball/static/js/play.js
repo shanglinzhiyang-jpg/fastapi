@@ -896,6 +896,8 @@
         fenceHit: this.pred ? this.pred.info.fenceHit : false,
         steals: [],
       };
+      // 本塁打の飛距離 (フェンスが無かった場合の落下地点まで)
+      if (this.hr && this.o.ball) res.dist = Math.round(F.carry(this.o.ball.p, this.o.ball.v));
       // 得点の有効判定
       let counted = this.scored.slice();
       if (this.outs >= 3) {

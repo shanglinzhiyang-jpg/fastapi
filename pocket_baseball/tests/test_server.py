@@ -89,3 +89,25 @@ def test_engine_simulation() -> None:
         timeout=120,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js が必要")
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["hr_flags_check.js"],
+        ["pennant_check.js", "t", "10"],
+        ["pennant_check.js", "h", "10"],
+    ],
+)
+def test_pennant_news(args: list[str]) -> None:
+    # セ・パ両リーグのペナントで、本塁打の記録 (号数・タグ) と「今日のホームラン」のニュースが
+    # ボックススコアと食い違わないか確認する
+    proc = subprocess.run(
+        ["node", str(ROOT / "tools" / args[0]), *args[1:]],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip().endswith("OK"), proc.stdout

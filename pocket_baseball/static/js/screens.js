@@ -495,6 +495,7 @@
           '<details class="box-det"><summary>スコアブック</summary>' +
           Sc.boxScoreHTML(g) +
           "</details>" +
+          (opts.extra ? '<div class="row-btns"><button class="btn res-extra" data-act="extra">' + esc(opts.extra.label) + "</button></div>" : "") +
           '<div class="row-btns stick">' +
           (opts.again ? '<button class="btn" data-act="again">もう一度</button>' : "") +
           '<button class="btn primary" data-act="done">' +
@@ -512,6 +513,7 @@
       onAct(act) {
         if (act === "done") opts.onDone();
         else if (act === "again" && opts.again) opts.again();
+        else if (act === "extra" && opts.extra) opts.extra.onTap();
       },
     };
   };

@@ -129,11 +129,17 @@
       if (ctx.cursorMul) rx *= ctx.cursorMul;
     }
     if (pitcher.throws === "L" && D.has(batter, "vsLeft")) rx *= 1.1;
+    // アベレージヒッター: 芯が広い
+    if (D.has(batter, "avgHitter")) rx *= P.EV.avg;
     if (side === "L" && D.has(pitcher, "vsLeftP")) rx *= 0.92;
     return { rx, rz: rx * 0.72 };
   };
 
   P.window = (ctx) => 0.085 * ((ctx && ctx.windowMul) || 1);
+
+  // 打球速度 (m/s) の係数: 最大打球速度 = base + パワー × slope、ばらつき noise
+  // top: 完璧な当たりでのパワーの効き (m/s / パワー 1)、avg: アベレージヒッターのカーソルの広がり
+  P.EV = { base: 46.8, slope: 0.06, noise: 3.0, traj: 3, ph: 0.12, pull: 15, top: 0.08, avg: 1.06, maxEV: 54 };
 
   /* スイング判定
    * sw = {cx, cz, t(リリースからの押下時刻), bunt}
@@ -173,20 +179,29 @@
       res.phi = U.pick([-1, 1]) * U.rand(50, 120);
       return res;
     }
-    const q = 1 - (D.has(batter, "avgHitter") ? 0.42 : 0.55) * Math.pow(d2, 0.75);
+    // 芯からのずれによる当たりの質 (アベレージヒッターは打球速度ではなくライナー性の打球で表す)
+    const q = 1 - 0.55 * Math.pow(d2, 0.75);
     const tq = 1 - 0.55 * (e / W) * (e / W);
-    let power = batter.power;
-    if (ctx && ctx.clutchSpot && D.has(batter, "clutch")) power += 10;
-    if (ctx && ctx.powerBonus) power += ctx.powerBonus;
-    const maxEV = 38 + power * 0.16;
-    let ev = maxEV * (0.5 + 0.5 * q * tq) + (pc.speedKmh - 135) * 0.025 + U.gauss() * 0.8;
+    const K = P.EV;
+    const power = batter.power;
+    const qq = q * tq;
+    const maxEV = K.base + power * K.slope;
+    // 芯で完璧に捉えたときほどパワーの差がはっきり出る (非力な打者・投手は完璧でも柵越えしにくい)
+    let ev = maxEV * (0.5 + 0.5 * qq) + K.top * (power - 50) * Math.pow(qq, 6) + (pc.speedKmh - 135) * 0.025 + U.clamp(U.gauss(), -2.5, 1.3) * K.noise;
+    // 難易度・勝負強さの補正は打球速度 (m/s) で足す
+    if (ctx && ctx.clutchSpot && D.has(batter, "clutch")) ev += 1.6;
+    if (ctx && ctx.powerBonus) ev += ctx.powerBonus * 0.16;
+    // 人が打てる打球速度の上限 (約 195km/h)
+    ev = Math.min(ev, K.maxEV);
     if (D.has(pitcher, "heavy")) ev *= 0.95;
     const rel = U.clamp((bz - sw.cz) / cs.rz, -1.4, 1.4);
-    let la = 3 + 32 * rel + (batter.traj - 2) * 4 + U.gauss() * 6;
-    if (D.has(batter, "powerHitter")) la += (27 - la) * 0.2 + 1;
+    let la = 3 + 32 * rel + (batter.traj - 2) * K.traj + U.gauss() * 6;
+    if (D.has(batter, "powerHitter")) la += (27 - la) * K.ph + 1;
+    if (D.has(batter, "avgHitter")) la += (13 - la) * 0.3;
     const side = P.batSide(batter, pitcher);
     const inside = side === "R" ? -bx : bx; // 内角ほど正
-    let pull = (-e / W) * 36 + (inside / 0.25) * 9 + U.gauss() * 8;
+    // 芯で捉えた強い打球ほど引っ張り方向に飛びやすい
+    let pull = (-e / W) * 36 + (inside / 0.25) * 9 + U.gauss() * 8 + K.pull * q * tq;
     if (pull < -10 && !D.has(batter, "spray")) ev *= 0.94;
     const phi = side === "R" ? -pull : pull;
     res.q = q * tq;

@@ -304,8 +304,10 @@
     },
   ];
 
+  // 画像の場所 (1 ファイル版では埋め込んだ data URI に置き換わる)
+  D.asset = (p) => (window.PB_ASSETS && window.PB_ASSETS[p]) || p;
   for (const t of T) {
-    t.logo = "img/teams/" + t.id + ".webp";
+    t.logo = D.asset("img/teams/" + t.id + ".webp");
   }
   D.TEAMS = T;
   D.LEAGUES = { C: "セントラル・リーグ", P: "パシフィック・リーグ" };

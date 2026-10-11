@@ -35,30 +35,52 @@
     return all.filter((t) => pen.ids.indexOf(t.id) >= 0);
   }
   Pen.teams = penTeams;
+  function lgOf(id) {
+    const d = PB.D.teamDef(id);
+    return d ? d.lg : "C";
+  }
+  Pen.lgOf = lgOf;
+  // 自チームのリーグ (古いセーブは自チームから求める)
+  function myLg(pen) {
+    return pen.lg || lgOf(pen.my);
+  }
+  // リーグごとの球団 (lg を省くと自チームのリーグ)
+  function lgTeams(pen, lg) {
+    const L = lg || myLg(pen);
+    return penTeams(pen).filter((t) => lgOf(t.id) === L);
+  }
+  Pen.lgTeams = lgTeams;
 
   Pen.create = function (my, perPair, level, innings) {
-    // 自チームの所属リーグ (6 球団) で戦う
-    const myDef = PB.D.teamDef(my);
-    const ids = Store.teams()
-      .filter((t) => !myDef || !PB.D.teamDef(t.id) || PB.D.teamDef(t.id).lg === myDef.lg)
-      .map((t) => t.id);
-    const rr = roundRobin(ids);
+    // セ・パ両リーグを同じ日程で進める (自チームは所属リーグの 6 球団と対戦)
+    const lg = lgOf(my);
+    const ids = Store.teams().map((t) => t.id);
+    const byLg = {};
+    for (const id of ids) (byLg[lgOf(id)] || (byLg[lgOf(id)] = [])).push(id);
+    const leagues = Object.keys(byLg).filter((k) => byLg[k].length >= 2 && byLg[k].length % 2 === 0);
+    const rrs = leagues.map((k) => roundRobin(byLg[k]));
     const schedule = [];
     for (let k = 0; k < perPair; k++) {
-      for (const day of rr) schedule.push(day.map((m) => (k % 2 === 0 ? { home: m.home, away: m.away } : { home: m.away, away: m.home })));
+      const n = rrs[0] ? rrs[0].length : 0;
+      for (let r = 0; r < n; r++) {
+        const day = [];
+        for (const rr of rrs) for (const m of rr[r] || []) day.push(k % 2 === 0 ? { home: m.home, away: m.away } : { home: m.away, away: m.home });
+        schedule.push(day);
+      }
     }
-    const p = { my, ids, perPair, level, innings, schedule, day: 0, results: [], stats: {}, lastPitched: {}, finished: false, started: Date.now() };
+    const p = { my, lg, ids, perPair, level, innings, schedule, day: 0, results: [], stats: {}, lastPitched: {}, news: [], newsState: { top: {}, hrTop: {}, done: {} }, hrv: 1, hrSince: 0, finished: false, started: Date.now() };
     Store.data.pennant = p;
     Store.save();
     return p;
   };
 
-  Pen.standings = function (pen) {
+  Pen.standings = function (pen, lg) {
     const tbl = {};
-    for (const t of penTeams(pen)) tbl[t.id] = { id: t.id, g: 0, w: 0, l: 0, d: 0, rs: 0, ra: 0 };
+    for (const t of lgTeams(pen, lg)) tbl[t.id] = { id: t.id, g: 0, w: 0, l: 0, d: 0, rs: 0, ra: 0 };
     for (const r of pen.results) {
       const h = tbl[r.home];
       const a = tbl[r.away];
+      if (!h || !a) continue;
       h.g++;
       a.g++;
       h.rs += r.hs;
@@ -115,7 +137,7 @@
   function makeGame(pen, m, user) {
     const home = U.clone(Store.team(m.home));
     const away = U.clone(Store.team(m.away));
-    return new PB.Game({
+    const g = new PB.Game({
       home,
       away,
       innings: pen.innings,
@@ -124,10 +146,47 @@
       tired: tiredList(pen),
       starters: { home: nextStarter(Store.team(m.home), pen), away: nextStarter(Store.team(m.away), pen) },
     });
+    // 本塁打の号数はシーズン成績から数える
+    g.season = pen.stats;
+    return g;
   }
 
-  function recordGame(pen, m, game) {
-    pen.results.push({ day: pen.day, home: m.home, away: m.away, hs: game.score.home, as: game.score.away, inn: game.inning });
+  // その打者が自チームの直近の試合で続けて本塁打を打っているか (今日を含む試合数)
+  // 本塁打の記録が無い古い結果に当たったら数えるのをやめる (連続記録をでっち上げない)
+  function hrGameStreak(pen, tid, id) {
+    let n = 1;
+    for (let i = pen.results.length - 1; i >= 0; i--) {
+      const r = pen.results[i];
+      if (r.home !== tid && r.away !== tid) continue;
+      if (!Array.isArray(r.hr) || !r.hr.some((e) => e.id === id)) break;
+      n++;
+    }
+    return n;
+  }
+
+  function recordGame(pen, m, game, gi) {
+    // 同じ試合を二度記録しない
+    if (gi != null && pen.results.some((x) => x.day === pen.day && x.gi === gi)) return;
+    const r = { day: pen.day, gi: gi == null ? 0 : gi, home: m.home, away: m.away, hs: game.score.home, as: game.score.away, inn: game.inning };
+    const res = game.result || {};
+    if (res.W) r.W = res.W;
+    if (res.L) r.L = res.L;
+    if (res.S) r.S = res.S;
+    if (res.walkoff) r.wo = 1;
+    // 今日のホームラン用 (試合で起きた本塁打だけ。0 本でも空の配列を残し「記録なし」と区別する)
+    if (pen.hrSince == null) pen.hrSince = pen.day;
+    const seen = {};
+    r.hr = (game.hrLog || []).map((e) => {
+      const x = Object.assign({}, e);
+      if (pen.day === 0) x.open = 1;
+      if (!seen[x.id]) {
+        seen[x.id] = 1;
+        const gs = hrGameStreak(pen, x.tid || (x.side === "home" ? m.home : m.away), x.id);
+        if (gs >= 2) x.gs = gs;
+      }
+      return x;
+    });
+    pen.results.push(r);
     mergeStats(pen, game);
     for (const id of [m.home, m.away]) {
       const t = Store.team(id);
@@ -135,21 +194,87 @@
     }
   }
 
-  // 自分の試合以外を消化して日付を進める
-  function finishDay(pen, myGame) {
-    const day = pen.schedule[pen.day];
-    for (const m of day) {
-      if (m.home === pen.my || m.away === pen.my) {
-        if (myGame) recordGame(pen, m, myGame);
-        continue;
+  // 1 試合ぶん: 自分の試合は記録だけ、他球場はシミュレーションしてから記録
+  function playDayGame(pen, m, gi, myGame) {
+    if (m.home === pen.my || m.away === pen.my) {
+      if (myGame) recordGame(pen, m, myGame, gi);
+      return;
+    }
+    const g = makeGame(pen, m, null);
+    g.simToEnd();
+    recordGame(pen, m, g, gi);
+  }
+
+  function closeDay(pen) {
+    // その日の全試合が確定してからニュースを作る
+    if (PB.News) {
+      try {
+        PB.News.generate(pen, pen.day);
+      } catch (err) {
+        console.error(err);
       }
-      const g = makeGame(pen, m, null);
-      g.simToEnd();
-      recordGame(pen, m, g);
     }
     pen.day++;
     if (pen.day >= pen.schedule.length) pen.finished = true;
     Store.save();
+  }
+
+  function isMine(pen, m) {
+    return m.home === pen.my || m.away === pen.my;
+  }
+  // まだ記録していないその日の試合 (自分の試合が先)
+  function pendingGames(pen) {
+    const day = pen.schedule[pen.day] || [];
+    const done = new Set(pen.results.filter((r) => r.day === pen.day).map((r) => r.gi));
+    return day
+      .map((m, gi) => ({ m, gi }))
+      .filter((x) => !done.has(x.gi))
+      .sort((a, b) => (isMine(pen, b.m) ? 1 : 0) - (isMine(pen, a.m) ? 1 : 0));
+  }
+  // 途中まで消化した日 (集計中にアプリを閉じたなど)
+  function partialDay(pen) {
+    return !pen.finished && pen.results.some((r) => r.day === pen.day);
+  }
+  Pen.partialDay = partialDay;
+
+  // 自分の試合以外を消化して日付を進める
+  function finishDay(pen, myGame) {
+    for (const x of pendingGames(pen)) playDayGame(pen, x.m, x.gi, myGame);
+    closeDay(pen);
+  }
+
+  // 画面を止めないよう 1 試合ずつ間をあけて消化する (結果は finishDay と同じ)。
+  // 同時に二度は走らせない。自分の試合はすぐ記録して保存する
+  let dayLock = false;
+  function finishDayAsync(pen, myGame, onProgress, done) {
+    if (dayLock || pen.finished || !pen.schedule[pen.day]) return false;
+    dayLock = true;
+    const dayNo = pen.day;
+    const list = pendingGames(pen);
+    const others = list.filter((x) => !isMine(pen, x.m)).length;
+    let i = 0;
+    let k = 0;
+    const step = () => {
+      if (pen.day !== dayNo || Store.data.pennant !== pen) {
+        dayLock = false;
+        return done && done();
+      }
+      if (i >= list.length) {
+        closeDay(pen);
+        dayLock = false;
+        return done && done();
+      }
+      const x = list[i++];
+      playDayGame(pen, x.m, x.gi, myGame);
+      if (isMine(pen, x.m)) Store.save();
+      else {
+        k++;
+        if (onProgress) onProgress(k, others);
+      }
+      setTimeout(step, 0);
+    };
+    step();
+    return true;
   }
 
   function myMatch(pen) {
@@ -163,7 +288,21 @@
     if (!pen) return Pen.setup();
     if (pen.finished) return Pen.final();
     let busy = false;
+    const hs = { lg: myLg(pen) };
+    // 途中まで消化した日があれば (集計中に閉じたなど) 残りを先に消化する
+    if (partialDay(pen)) {
+      busy = true;
+      setTimeout(() => {
+        const ok = finishDayAsync(pen, null, null, () => {
+          busy = false;
+          if (UI.cur && UI.cur.isPenHub) UI.go(pen.finished ? Pen.final() : Pen.hub());
+        });
+        if (!ok) busy = false;
+      }, 30);
+    }
+    const lgs = Object.keys(D.LEAGUES || {}).filter((k) => lgTeams(pen, k).length);
     return {
+      isPenHub: true,
       html() {
         const m = myMatch(pen);
         const my = Store.team(pen.my);
@@ -214,16 +353,30 @@
           (busy ? " disabled" : "") +
           ">5試合進める</button></div>" +
           (busy ? '<p class="note center">試合を消化しています…</p>' : "") +
+          (PB.News ? PB.News.hubPanel(pen) : "") +
           '<h3 class="lbl">順位表</h3>' +
-          Pen.standingsHTML(pen, st) +
+          (lgs.length > 1
+            ? Sc.seg(
+                "stlg",
+                lgs.map((k) => [k, D.LEAGUES[k]]),
+                hs.lg
+              )
+            : "") +
+          Pen.standingsHTML(pen, hs.lg === myLg(pen) ? st : Pen.standings(pen, hs.lg)) +
           '<div class="row-btns"><button class="btn" data-act="order">オーダー</button><button class="btn" data-act="leaders">個人成績</button><button class="btn" data-act="results">試合結果</button></div>' +
+          (PB.News && pen.results.length ? '<div class="row-btns"><button class="btn" data-act="news" data-arg="news">スポーツニュース</button></div>' : "") +
           '<div class="row-btns"><button class="btn ghost" data-act="abandon">シーズンをやめる</button></div>' +
           "</div>"
         );
       },
-      onAct(act) {
+      onAct(act, arg) {
         if (busy) return;
         if (act === "back") return UI.go(Sc.title());
+        if (act === "stlg") {
+          hs.lg = arg;
+          return UI.refresh();
+        }
+        if (act === "news") return UI.go(PB.News.screen({ tab: arg || "hr" }));
         if (act === "order") return UI.go(Sc.order(Store.team(pen.my), { onBack: () => UI.go(Pen.hub()) }));
         if (act === "leaders") return UI.go(Pen.leaders());
         if (act === "results") return UI.go(Pen.results());
@@ -257,8 +410,34 @@
               if (g.result.tie) r.ties++;
               else if (g.result.winner === user) r.wins++;
               else r.losses++;
-              finishDay(pen, g);
-              UI.go(Sc.result(match, { onDone: () => UI.go(Pen.hub()), doneLabel: "ペナントへ" }));
+              // 他球場の試合を消化しているあいだ集計画面を出す
+              const prog = { k: 0, n: 0 };
+              UI.go({
+                html: () => '<div class="scr-body busy-body"><p class="busy-t">他球場の試合を集計中…</p><p class="busy-n">' + prog.k + " / " + prog.n + "</p></div>",
+              });
+              const dayIdx = pen.day;
+              const started = finishDayAsync(
+                pen,
+                g,
+                (k, n) => {
+                  prog.k = k;
+                  prog.n = n;
+                  UI.refresh();
+                },
+                () => {
+                  const n = PB.News ? PB.News.dayHRs(pen, dayIdx).length : 0;
+                  const toHub = () => UI.go(pen.finished ? Pen.final() : Pen.hub());
+                  UI.go(
+                    Sc.result(match, {
+                      onDone: toHub,
+                      doneLabel: "ペナントへ",
+                      extra: PB.News ? { label: "今日のホームラン（" + n + "本）", onTap: () => UI.go(PB.News.screen({ day: dayIdx, tab: "hr", onBack: () => Pen.hub() })) } : null,
+                    })
+                  );
+                }
+              );
+              // 消化中で受け付けられなかったとき (通常は起きない) は結果だけ出す
+              if (!started) UI.go(Sc.result(match, { onDone: () => UI.go(Pen.hub()), doneLabel: "ペナントへ" }));
             },
             onQuit: () => UI.go(Pen.hub()),
           });
@@ -278,8 +457,10 @@
             const m = myMatch(pen);
             const g = makeGame(pen, m, null);
             g.simToEnd();
-            finishDay(pen, g);
-            setTimeout(stepDay, 30);
+            if (!finishDayAsync(pen, g, null, () => setTimeout(stepDay, 20))) {
+              busy = false;
+              UI.refresh();
+            }
           };
           setTimeout(stepDay, 60);
         }
@@ -378,12 +559,13 @@
 
   Pen.leaders = function () {
     const pen = Store.data.pennant;
-    const st = { tab: "bat" };
+    const st = { tab: "bat", lg: myLg(pen) };
+    const lgs = Object.keys(D.LEAGUES || {}).filter((k) => lgTeams(pen, k).length);
     return {
       html() {
         const teamGames = pen.results.length ? (pen.results.length * 2) / penTeams(pen).length : 0;
         const all = [];
-        for (const t of penTeams(pen)) for (const p of t.players) if (pen.stats[p.id]) all.push({ p, t, s: pen.stats[p.id] });
+        for (const t of lgTeams(pen, st.lg)) for (const p of t.players) if (pen.stats[p.id]) all.push({ p, t, s: pen.stats[p.id] });
         const top = (arr, f, fmt, n) =>
           arr
             .sort((a, b) => f(b) - f(a))
@@ -413,6 +595,13 @@
         return (
           UI.header("個人成績", "back") +
           '<div class="scr-body">' +
+          (lgs.length > 1
+            ? Sc.seg(
+                "lg",
+                lgs.map((k) => [k, D.LEAGUES[k]]),
+                st.lg
+              )
+            : "") +
           Sc.seg(
             "tab",
             [
@@ -429,6 +618,7 @@
       onAct(act, arg) {
         if (act === "back") return UI.go(pen.finished ? Pen.final() : Pen.hub());
         if (act === "tab") st.tab = arg;
+        if (act === "lg") st.lg = arg;
         UI.refresh();
       },
     };
@@ -450,15 +640,16 @@
                   const myScore = r.home === pen.my ? r.hs : r.as;
                   const opScore = r.home === pen.my ? r.as : r.hs;
                   const wl = myScore > opScore ? "win" : myScore < opScore ? "lose" : "tie";
-                  return '<div class="rrow ' + wl + '"><span class="d">' + (r.day + 1) + "</span>" + UI.mark(a, 18) + "<b>" + esc(a.short) + "</b><span class=\"sc\">" + r.as + " - " + r.hs + "</span><b>" + esc(h.short) + "</b>" + UI.mark(h, 18) + '<span class="wl">' + (wl === "win" ? "○" : wl === "lose" ? "●" : "△") + "</span></div>";
+                  return '<div class="rrow ' + wl + '"' + (PB.News ? ' data-act="day" data-arg="' + r.day + '"' : "") + '><span class="d">' + (r.day + 1) + "</span>" + UI.mark(a, 18) + "<b>" + esc(a.short) + "</b><span class=\"sc\">" + r.as + " - " + r.hs + "</span><b>" + esc(h.short) + "</b>" + UI.mark(h, 18) + '<span class="wl">' + (wl === "win" ? "○" : wl === "lose" ? "●" : "△") + "</span></div>";
                 })
                 .join("")
             : '<p class="muted">まだ試合がありません</p>') +
           "</div></div>"
         );
       },
-      onAct(act) {
-        if (act === "back") UI.go(Pen.hub());
+      onAct(act, arg) {
+        if (act === "back") return UI.go(Pen.hub());
+        if (act === "day" && PB.News) UI.go(PB.News.screen({ day: Number(arg), tab: "res", onBack: () => Pen.results() }));
       },
     };
   };
@@ -481,11 +672,18 @@
           UI.mark(champ, 64) +
           "</div>" +
           Pen.standingsHTML(pen, st) +
-          '<div class="row-btns"><button class="btn" data-act="leaders">個人成績</button></div><div class="row-btns stick"><button class="btn red" data-act="new">新しいシーズン</button><button class="btn primary" data-act="title">タイトルへ</button></div></div>'
+          Object.keys(D.LEAGUES || {})
+            .filter((k) => k !== myLg(pen) && lgTeams(pen, k).length)
+            .map((k) => '<h3 class="lbl">' + esc(D.LEAGUES[k]) + "</h3>" + Pen.standingsHTML(pen, Pen.standings(pen, k)))
+            .join("") +
+          '<div class="row-btns"><button class="btn" data-act="leaders">個人成績</button>' +
+          (PB.News && pen.results.length ? '<button class="btn" data-act="news">スポーツニュース</button>' : "") +
+          '</div><div class="row-btns stick"><button class="btn red" data-act="new">新しいシーズン</button><button class="btn primary" data-act="title">タイトルへ</button></div></div>'
         );
       },
       onAct(act) {
         if (act === "leaders") return UI.go(Pen.leaders());
+        if (act === "news") return UI.go(PB.News.screen({ onBack: () => Pen.final() }));
         if (act === "new") {
           Store.data.pennant = null;
           Store.save();
@@ -496,5 +694,7 @@
     };
   };
 
+  // テスト用 (node から日程を進める)
+  Pen._internal = { finishDay, finishDayAsync, makeGame, myMatch, recordGame, hrGameStreak };
   PB.Pennant = Pen;
 })((window.PB = window.PB || {}));

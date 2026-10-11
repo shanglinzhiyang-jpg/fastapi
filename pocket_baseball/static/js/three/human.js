@@ -667,10 +667,20 @@
     const leather = new T.MeshStandardMaterial({ color: team.gloveColor || "#8a4e24", roughness: 0.55 });
     const gloveHand = o.throws === "L" ? "R" : "L";
     const kind = o.pos === "C" ? "catcher" : o.pos === "1B" ? "first" : "fielder";
-    const glove = new T.Mesh(PB.Model3D.gloveGeometry(kind), leather);
+    const isCatcher = o.pos === "C" && o.role === "catcher" && !!PB.Gear;
+    const gearCols = isCatcher || umpire ? PB.Gear.colors(st, team) : null;
+    // 捕手はひもの付いた黒いキャッチャーミット
+    let glove;
+    if (isCatcher) glove = PB.Gear.mitt(gearCols);
+    else if (PB.Gear && !umpire) {
+      const gc = o.gloveColors || PB.Gear.GLOVE_COLORS[Math.floor(rnd() * PB.Gear.GLOVE_COLORS.length)];
+      glove = PB.Gear.glove(kind, gc[0], gc[1]);
+    } else glove = new T.Mesh(PB.Model3D.gloveGeometry(kind), leather);
     glove.castShadow = true;
     glove.position.set(0, -0.085, 0.012);
-    glove.rotation.set(0, 0, gloveHand === "L" ? 0 : Math.PI);
+    // グラブ・ミットは指先 (-Y) を保ったまま左右を入れ替える
+    if (glove.isGroup) glove.rotation.set(0, gloveHand === "L" ? 0 : Math.PI, 0);
+    else glove.rotation.set(0, 0, gloveHand === "L" ? 0 : Math.PI);
     handStd[gloveHand].add(glove);
     gear.glove = glove;
     if (umpire) glove.visible = false;
@@ -678,21 +688,9 @@
     bat.castShadow = true;
     bat.visible = false;
     gear.bat = bat;
-    // 捕手のマスク・プロテクター
-    if (o.pos === "C" && o.role === "catcher") {
-      const pad = new T.Mesh(new T.SphereGeometry(0.17, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.6), new T.MeshStandardMaterial({ color: "#151515", roughness: 0.6 }));
-      pad.scale.set(1.05, 1.5, 0.55);
-      pad.rotation.x = Math.PI / 2;
-      pad.position.set(0, 0.08, 0.13);
-      byName.spine_03.add(pad);
-      const mask = new T.Mesh(new T.TorusGeometry(0.075, 0.008, 6, 18), new T.MeshStandardMaterial({ color: "#222", roughness: 0.4, metalness: 0.5 }));
-      mask.position.set(0, eyeL.y - hb.y - 0.01, eyeL.z - hb.z + 0.05);
-      headBone.add(mask);
-      gear.mask = mask;
-    }
-    if (umpire) {
-      const mask = new T.Mesh(new T.TorusGeometry(0.073, 0.008, 6, 18), new T.MeshStandardMaterial({ color: "#111", roughness: 0.4, metalness: 0.5 }));
-      mask.position.set(0, eyeL.y - hb.y - 0.012, eyeL.z - hb.z + 0.05);
+    // 球審のマスク (黒)
+    if (umpire && PB.Gear) {
+      const mask = PB.Gear.mask(asset, Object.assign({}, gearCols, { metal: "#26282c", trim: "#3a3d44", pad: "#18191c" }), "classic");
       headBone.add(mask);
       gear.mask = mask;
     }
@@ -732,6 +730,37 @@
     };
     void capParts;
     setHelmet(helmetOn);
+    // 捕手の防具 (マスク / ホッケー型ヘルメット・プロテクター・肩当て・レガース)
+    if (isCatcher) {
+      const style = o.maskStyle || (rnd() < 0.3 ? "hockey" : "classic");
+      const cg = PB.Gear.attach(player, asset, st, team, { style });
+      gear.mask = cg.mask;
+      player.catcherGear = cg;
+      const baseSetHelmet = player.setHelmet;
+      // 防具を着けているあいだは帽子の代わりに後ろ向きのヘルメット (ホッケー型はヘルメットごと)
+      const applyCatcher = () => {
+        const on = cg.on !== false;
+        for (const part of cg.parts) part.visible = on;
+        if (!on) return;
+        meshes.cap.visible = false;
+        meshes.helmet.visible = style !== "hockey";
+        brim.visible = false;
+        logo.visible = false;
+        button.visible = false;
+        flap.visible = false;
+      };
+      player.setHelmet = (h) => {
+        brim.visible = true;
+        logo.visible = !umpire;
+        baseSetHelmet(h);
+        applyCatcher();
+      };
+      player.setCatcherGear = (on) => {
+        cg.on = !!on;
+        player.setHelmet(helmetOn);
+      };
+      applyCatcher();
+    }
     return player;
   };
 
@@ -911,8 +940,14 @@
       for (const s of ["l", "r"]) {
         let k = this.grip[s.toUpperCase()];
         if (p.bat.on) k = 1;
-        else if (gl && s === gh) k = 0.5;
+        else if (gl && s === gh) k = this.player.gear.glove.isGroup ? 0.1 : 0.5; // グラブの中では指をのばす
         this.fingers(s, k);
+        // グラブをはめた手の指は中に収まるよう小さくする (外から見えない)
+        const hide = gl && s === gh && this.player.gear.glove.isGroup ? 0.55 : 1;
+        for (const f of ["index", "middle", "ring", "pinky", "thumb"]) {
+          const bn = this.b[f + "_01_" + s];
+          if (bn && bn.scale.x !== hide) bn.scale.setScalar(hide);
+        }
       }
       b.Root.updateMatrixWorld(true);
       // バット

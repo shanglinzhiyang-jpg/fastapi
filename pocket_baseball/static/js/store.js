@@ -63,8 +63,10 @@
   let pushTimer = null;
   S.save = function () {
     S.data.updated = Date.now();
+    // サーバーへは保存した時点の内容を送る (日程の消化途中の状態を送らない)
+    S._saved = JSON.stringify(S.data);
     try {
-      window.localStorage.setItem(S.KEY, JSON.stringify(S.data));
+      window.localStorage.setItem(S.KEY, S._saved);
     } catch (e) {
       /* 容量不足・プライベートモードなど */
     }
@@ -83,6 +85,25 @@
     }
     if (!S.data.teams) {
       S.data.teams = PB.D.newTeams();
+      S.data.calibVer = D.CALIB_VER;
+      S.save();
+    }
+    // 能力の補正が変わったら、実在選手の能力だけ名簿から作り直す (打順・登録した選手などはそのまま)
+    if (D.CALIB_VER && S.data.calibVer !== D.CALIB_VER) {
+      for (const t of S.data.teams) {
+        const ro = D.ROSTERS && D.ROSTERS[t.id];
+        const def = D.teamDef(t.id);
+        if (!ro || !def || !D.rosterTeam) continue;
+        const rebuilt = D.rosterTeam(def, ro);
+        const byId = {};
+        for (const p of rebuilt.players) byId[p.id] = p;
+        for (const p of t.players) {
+          const f = byId[p.id];
+          if (!f || !p.real) continue;
+          for (const k of D.RATING_KEYS) if (f[k] !== undefined) p[k] = Array.isArray(f[k]) ? f[k].map((x) => Object.assign({}, x)) : f[k];
+        }
+      }
+      S.data.calibVer = D.CALIB_VER;
       S.save();
     }
     return S.data.teams;
@@ -140,7 +161,7 @@
     return fetch("api/saves/" + encodeURIComponent(S.slot), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: S.data }),
+      body: '{"data":' + (S._saved || JSON.stringify(S.data)) + "}",
     })
       .then((r) => r.ok)
       .catch(() => false);

@@ -130,7 +130,7 @@
       case "HR":
         return nm + (o.hrNo ? o.hrNo + "号" : " ") + ctx + (n >= 4 ? "満塁弾" : n === 1 ? "ソロ" : n + "ラン");
       case "IPHR":
-        return nm + " " + ctx + "ランニング本塁打";
+        return nm + (o.hrNo ? o.hrNo + "号" : " ") + ctx + "ランニング本塁打";
       case "H1":
       case "H2":
       case "H3":
@@ -174,6 +174,10 @@
       this.log = [];
       this.paLog = {}; // 打者ごとの今日の打席結果 (短い表記)
       this.scoreLog = []; // 得点場面 (今日の結果)
+      this.hrLog = []; // 本塁打の記録 (ニュースの「今日のホームラン」用)
+      this.hrRun = 0; // このイニングで続いている本塁打の打席数 (N者連続の判定)
+      this.phIds = {}; // この半イニングに代打で出た選手
+      this.paN = { away: 0, home: 0 }; // チームの打席数 (先頭打者の判定)
       this.over = false;
       this.used = { away: [], home: [] };
       this.pstate = {};
@@ -515,6 +519,7 @@
         const total0 = this.score.home + this.score.away - players.length;
         const ctx = total0 === 0 ? "先制" : before < 0 && after === 0 ? "同点" : before < 0 && after > 0 ? "逆転" : before === 0 && after > 0 ? "勝ち越し" : "";
         const walkoff = !this.top && this.inning >= this.innings && before <= 0 && after > 0;
+        this.lastCtx = { ctx, walkoff, before, after };
         const text = Talk.scoreText({ kind: c.kind, hbp: c.hbp, res: c.res, name: c.bat.name, n: players.length, ctx, walkoff, hrNo: c.hrNo });
         this.scoreLog.push({ side: bs, inning: this.inning, top: this.top, text, ctx: walkoff ? "サヨナラ" : ctx, n: players.length, hr: !!(c.res && (c.res.type === "HR" || c.res.type === "IPHR")), score: { away: this.score.away, home: this.score.home } });
       }
@@ -561,12 +566,17 @@
       this.bases = res.bases;
       const rbiOK = t !== "E" && t !== "DP" && t !== "DPF";
       const er = res.error ? 0 : 1;
+      const isHR = HIT_BASES[t] === 4;
+      const hrFlags = isHR ? this.hrFlags(bat, s, bs) : null;
       this.addPA(bat.id, Talk.short(res));
       // 本塁打の号数 (シーズン成績があるときだけ)
       if (HIT_BASES[t] === 4 && this.season) res.hrNo = ((this.season[bat.id] || {}).hr || 0) + s.hr;
       this.cause = { kind: "play", res, bat, hrNo: res.hrNo };
+      this.lastCtx = null;
       this.scoreRuns(res.scorers, rbiOK);
       if (!er) ps.er -= res.scorers.length;
+      if (isHR) this.recordHR(res, bat, bs, fs, hrFlags);
+      this.thisPAHR = isHR;
       this.addLog(bat.name + " " + desc + (res.runs ? "（" + res.runs + "点）" : ""), HIT_BASES[t] ? "hit" : res.batterOut ? "out" : "info");
       this.lastPlay = res;
       this.emit("play", res);
@@ -600,8 +610,64 @@
       if (this.outs >= 3) this.endHalf(true);
     }
 
+    // 本塁打の状況 (打席の結果を記録する前に調べる。s.pa はこの打席を含む)
+    hrFlags(bat, s, bs) {
+      const prev = this.paLog[bat.id] || [];
+      let c = 1;
+      for (let i = prev.length - 1; i >= 0 && /本$/.test(prev[i]); i--) c++;
+      return {
+        b2b: this.hrRun > 0 ? this.hrRun + 1 : 0, // N者連続
+        consec: c >= 2 ? c : 0, // N打席連続
+        ph: !!this.phIds[bat.id] && s.pa === 1, // 代打 (代打で出た打席だけ)
+        lead: this.paN[bs] === 0, // 先頭打者 (試合で最初の打席)
+        hand: P.batSide(bat, this.pitcher(this.fieldingSide())),
+      };
+    }
+
+    // 本塁打 1 本ぶんの記録 (確定した数字だけを残す)
+    recordHR(res, bat, bs, fs, f) {
+      const c = this.lastCtx || {};
+      const n = res.scorers.length;
+      const th = res.launch ? res.launch.phi : 0;
+      const pid = this.pstate[fs].id;
+      const e = {
+        id: bat.id,
+        nm: bat.name,
+        tid: this.teams[bs].id,
+        side: bs,
+        pid,
+        pn: this.P(pid).name,
+        inn: this.inning,
+        top: this.top,
+        outs: this.outs - (res.outsAdded || 0),
+        n,
+        no: res.hrNo || 0,
+        dist: res.dist || 0,
+        dir: res.type === "IPHR" ? "" : th < -15 ? "左" : th > 15 ? "右" : "中",
+        type: res.type,
+        ctx: c.walkoff ? "サヨナラ" : c.ctx || "",
+        game: this.stat(bat.id).hr, // この試合 何本目
+        score: { away: this.score.away, home: this.score.home },
+      };
+      if (f) {
+        if (f.b2b >= 2) e.b2b = f.b2b;
+        if (f.consec >= 2) e.consec = f.consec;
+        if (f.ph) e.ph = 1;
+        if (f.lead) e.lead = 1;
+        if (f.hand) e.hand = f.hand;
+        // 両打席本塁打 (スイッチヒッターが左右両方で打った)
+        if (f.hand && this.hrLog.some((x) => x.id === bat.id && x.hand && x.hand !== f.hand)) e.both = 1;
+      }
+      if (this.inning > this.innings) e.extra = 1;
+      this.hrLog.push(e);
+      return e;
+    }
+
     endPA() {
+      this.hrRun = this.thisPAHR ? this.hrRun + 1 : 0;
+      this.thisPAHR = false;
       const bs = this.battingSide();
+      this.paN[bs]++;
       this.bi[bs] = (this.bi[bs] + 1) % 9;
       this.newPA();
       if (this.checkWalkoff()) return;
@@ -619,6 +685,9 @@
 
     endHalf(midPA) {
       void midPA;
+      this.hrRun = 0;
+      // 代打は出た半イニングのあいだだけ (守備についたら代打ではない)
+      this.phIds = {};
       this.outs = 0;
       this.bases = [null, null, null, null];
       this.newPA();
@@ -703,6 +772,7 @@
       // 投手の代打: 次の守備で投手を交代する
       if (slot.pos === "P") slot.pos = "PH";
       slot.id = id;
+      this.phIds[id] = 1;
       const st = this.stat(id);
       st.g = 1;
       this.addLog("代打 " + this.P(id).name + "（" + old.name + "）", "info");

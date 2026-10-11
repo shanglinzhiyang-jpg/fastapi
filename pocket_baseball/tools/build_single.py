@@ -7,11 +7,18 @@
 """
 
 import argparse
+import base64
+import json
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "static"
+
+
+def data_uri(path: Path) -> str:
+    mime = {".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg"}[path.suffix]
+    return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode("ascii")
 
 
 def build(fragment: bool) -> str:
@@ -22,12 +29,15 @@ def build(fragment: bool) -> str:
     assert fonts, "フォントの <link> が見つかりません"
     body = re.search(r"<body>(.*?)<!-- build:scripts -->", index, re.S)
     assert body, "index.html の <body> が見つかりません"
-    scripts = re.findall(r'<script src="(js/[^"]+)"></script>', index)
+    # 3D 表示 (three.js とモデルのファイルが要る) は 1 ファイル版では使わず 2D で動かす
+    scripts = [s for s in re.findall(r'<script src="(js/[^"]+)"></script>', index) if not s.startswith("js/three/")]
     css = (STATIC / "css" / "style.css").read_text(encoding="utf-8")
     js = "\n".join(
         f"/* --- {name} --- */\n" + (STATIC / name).read_text(encoding="utf-8")
         for name in scripts
     )
+    # 球団マークなどの画像は data URI にして埋め込む
+    js = re.sub(r'"(img/[^"]+\.(?:webp|png|jpg))"', lambda m: '"' + data_uri(STATIC / m.group(1)) + '"', js)
     # </script> がスクリプト中に現れても HTML が壊れないようにする
     js = js.replace("</script", "<\\/script")
     head = (
@@ -35,9 +45,14 @@ def build(fragment: bool) -> str:
         f'<link rel="stylesheet" href="{fonts.group(1)}">\n'
         f"<style>\n{css}\n</style>\n"
     )
+    # 名前を組み立てて読む画像 (球団マーク) は表にして渡す
+    assets = {
+        f"img/teams/{p.name}": data_uri(p) for p in sorted((STATIC / "img" / "teams").glob("*.webp"))
+    }
     page = (
         f"{body.group(1).strip()}\n"
-        "<script>window.PB_STANDALONE = true;</script>\n"
+        "<script>window.PB_STANDALONE = true;\n"
+        f"window.PB_ASSETS = {json.dumps(assets)};</script>\n"
         f"<script>\n{js}\n</script>\n"
     )
     if fragment:
