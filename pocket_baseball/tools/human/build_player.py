@@ -547,6 +547,10 @@ def collar_band(part, N=64):
     Np /= np.linalg.norm(Np, axis=1, keepdims=True)
     Wp = Wc[j] * (1 - f) + Wc[j + 1] * f
     Sp = Sl[np.where(f[:, 0] < 0.5, j, (j + 1) % len(L))]
+    # 縁の法線はばらつくので、輪に沿ってならす
+    for _ in range(8):
+        Np = 0.5 * Np + 0.25 * (np.roll(Np, 1, 0) + np.roll(Np, -1, 0))
+        Np /= np.linalg.norm(Np, axis=1, keepdims=True)
     Tg = np.roll(Pp, -1, 0) - np.roll(Pp, 1, 0)
     Tg /= np.linalg.norm(Tg, axis=1, keepdims=True)
     Bn = np.cross(Np, Tg)
@@ -564,20 +568,46 @@ def collar_band(part, N=64):
     fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
 
     def on_surface(q, nref, h):
+        """表面上の最も近い点 (+ 法線方向に h) と、その点の重み (三角形の頂点の重みを重心座標で補間)"""
         p, k = closest_on_tris(q, TA, TB, TC)
         n = fn[k] if np.dot(fn[k], nref) > 0 else -fn[k]
         n = n * 0.6 + nref * 0.4
-        return p + n / np.linalg.norm(n) * h
+        a, b, c = TA[k], TB[k], TC[k]
+        v0, v1, v2 = b - a, c - a, p - a
+        d00, d01, d11, d20, d21 = v0 @ v0, v0 @ v1, v1 @ v1, v2 @ v0, v2 @ v1
+        den = max(d00 * d11 - d01 * d01, 1e-20)
+        bv = (d11 * d20 - d01 * d21) / den
+        bw = (d00 * d21 - d01 * d20) / den
+        bc = np.clip([1 - bv - bw, bv, bw], 0, 1)
+        bc /= bc.sum()
+        t = part.tri[near[k]]
+        w = bc[0] * part.W[t[0]] + bc[1] * part.W[t[1]] + bc[2] * part.W[t[2]]
+        return p + n / np.linalg.norm(n) * h, w
 
     # 断面 (s: 縁から布の上へ, h: 表面からの高さ)。表の端 → 表 → 縁の上 → 縁の下 → 裏 → 裏の端
     prof = [(0.012, 0.0012, True), (0.0045, 0.0024, True), (-0.0008, 0.0016, False), (-0.0008, -0.0022, False), (0.0045, -0.0032, True), (0.012, -0.0036, True)]
     rows = []
+    wrows = []
     for s, h, proj in prof:
         row = []
+        wrow = []
         for i in range(N):
             q = Pp[i] + Bn[i] * s
-            row.append(on_surface(q, Np[i], h) if proj else q + Np[i] * h)
-        rows.append(np.array(row))
+            if proj:
+                # 表面に沿う点は、その下の布と同じように動くよう布の重みを使う (ずれて布に埋もれないように)
+                pt, w = on_surface(q, Np[i], h)
+                row.append(pt)
+                wrow.append(w)
+            else:
+                row.append(q + Np[i] * h)
+                wrow.append(Wp[i])
+        row = np.array(row)
+        wrows.append(np.array(wrow))
+        # 表面へ寄せた点は三角形の境で飛ぶので、輪に沿ってならす
+        for _ in range(8):
+            for k in (0.5, -0.53):
+                row += (0.5 * (np.roll(row, 1, 0) + np.roll(row, -1, 0)) - row) * k
+        rows.append(row)
     # 断面の弧長 (テクスチャの帯の位置)
     plen = [0.0]
     for k in range(1, len(prof)):
@@ -602,7 +632,7 @@ def collar_band(part, N=64):
         a, b = k * N, nr * N + k
         m = nrm[a] + nrm[b]
         nrm[a] = nrm[b] = m / max(np.linalg.norm(m), 1e-9)
-    W = np.vstack([Wp] * nr + [Wp[:1]] * nr)
+    W = np.vstack(wrows + [wr[:1] for wr in wrows])
     src = np.concatenate([Sp] * nr + [Sp[:1]] * nr)
     ucol = np.concatenate([np.tile(np.arange(N) / N, nr), np.ones(nr)])
     print("collar band: loop %d verts, length %.3f m, profile %s mm" % (len(loop), tot, [round(x * 1000, 1) for x in plen]))
@@ -1012,9 +1042,9 @@ def pack_skin(partlist):
                 area2 += abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2
             isl.append({"p": p, "tris": g, "lo": lo, "hi": hi, "a3": area3, "a2": max(area2, 1e-9)})
     # テクセル密度をそろえる (顔は 1.6 倍)
-    tot = sum(i["a3"] * (2.5 if i["p"].name == "head" else 1.0) for i in isl)
+    tot = sum(i["a3"] * (2.5 if i["p"].name == "head" else 0.7) for i in isl)
     for i in isl:
-        boost = 2.5 if i["p"].name == "head" else 1.0
+        boost = 2.5 if i["p"].name == "head" else 0.7
         i["s"] = math.sqrt(i["a3"] * boost / tot * 0.62 / i["a2"])
         i["w"] = (i["hi"][0] - i["lo"][0]) * i["s"]
         i["h"] = (i["hi"][1] - i["lo"][1]) * i["s"]
@@ -1065,14 +1095,25 @@ def pack_skin(partlist):
                     sky.append(seg)
         return top_all, out
 
-    # アトラスに収まるいちばん大きい倍率を探す (以前は右半分が空いていた)
-    lo, hi = 0.1, 6.0
-    for _ in range(40):
-        m = (lo + hi) / 2
-        if shelf(m)[0] <= 1:
-            lo = m
-        else:
-            hi = m
+    # アトラスに収まるいちばん大きい倍率を探す (以前は右半分が空いていた)。並べる順もいくつか試す
+    best = None
+    for key in (lambda i: -i["h"], lambda i: -i["w"], lambda i: -i["w"] * i["h"], lambda i: -max(i["w"], i["h"])):
+        isl.sort(key=key)
+        lo, hi = 0.1, 6.0
+        for _ in range(40):
+            m = (lo + hi) / 2
+            if shelf(m)[0] <= 1:
+                lo = m
+            else:
+                hi = m
+        # 倍率を少しずつ上げて入る限り大きく (詰め方は倍率に対して単調ではない)
+        m = lo
+        for _ in range(60):
+            if shelf(m * 1.01)[0] <= 1:
+                m *= 1.01
+        if best is None or m > best[0]:
+            best = (m, list(isl))
+    lo, isl[:] = best
     total_h, placed = shelf(lo)
     for i, (ox, oy) in zip(isl, placed):
         i["s"] *= lo
@@ -1181,8 +1222,78 @@ def dome_uv(p, logo_up, logo_h):
     return {"u": round(float(uv0[0]), 4), "v": round(float(uv0[1]), 4), "su": round(float(su), 3), "sv": round(float(sv), 3), "h": logo_h}
 
 
-CAP_LOGO = dome_uv(parts["cap"], 0.034, 0.044)
+CAP_LOGO = dome_uv(parts["cap"], 0.035, 0.05)
 HELMET_LOGO = dome_uv(parts["helmet"], 0.04, 0.05)
+
+
+# ---------------------------------------------------------------- 環境光の遮蔽 (AO) の焼き込み
+# 休止姿勢の体・服・目をボクセルにして、頂点ごとに半球へ光線を飛ばす (首の下・耳の裏・わき・股・襟の内側が暗くなる)
+AO_H = 0.004  # ボクセルの大きさ [m]
+
+
+def voxelize(tris_pos, h):
+    """三角形 (n,3,3) の表面を占有格子にする"""
+    lo = tris_pos.reshape(-1, 3).min(0) - 0.2
+    hi = tris_pos.reshape(-1, 3).max(0) + 0.2
+    dims = np.ceil((hi - lo) / h).astype(int) + 1
+    occ = np.zeros(dims, bool)
+    a, b, c = tris_pos[:, 0], tris_pos[:, 1], tris_pos[:, 2]
+    longest = np.maximum(np.maximum(np.linalg.norm(b - a, axis=1), np.linalg.norm(c - b, axis=1)), np.linalg.norm(a - c, axis=1))
+    nsub = np.clip(np.ceil(longest / (h * 0.6)).astype(int), 1, 64)
+    for n in np.unique(nsub):
+        sel = nsub == n
+        i, j = np.meshgrid(np.arange(n + 1), np.arange(n + 1))
+        m = (i + j) <= n
+        u = (i[m] / n)[None, :, None]
+        v = (j[m] / n)[None, :, None]
+        pts = a[sel][:, None] * (1 - u - v) + b[sel][:, None] * u + c[sel][:, None] * v
+        q = np.round((pts.reshape(-1, 3) - lo) / h).astype(int)
+        occ[q[:, 0], q[:, 1], q[:, 2]] = True
+    return occ, lo
+
+
+def hemisphere_dirs(n=32):
+    """余弦重みの半球方向 (+Z まわり)"""
+    k = np.arange(n) + 0.5
+    r = np.sqrt(k / n)
+    phi = k * math.pi * (3 - math.sqrt(5))
+    return np.stack([r * np.cos(phi), r * np.sin(phi), np.sqrt(1 - r * r)], axis=1)
+
+
+def bake_ao(pos, nrm, occ, lo, h, max_d, n_dirs=32):
+    D = hemisphere_dirs(n_dirs)
+    n = nrm / np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-9)
+    # 法線まわりの正規直交基底
+    t = np.where(np.abs(n[:, :1]) < 0.9, np.array([[1.0, 0, 0]]), np.array([[0, 1.0, 0]]))
+    t = np.cross(n, t)
+    t /= np.linalg.norm(t, axis=1, keepdims=True)
+    bt = np.cross(n, t)
+    dirs = D[None, :, 0:1] * t[:, None] + D[None, :, 1:2] * bt[:, None] + D[None, :, 2:3] * n[:, None]  # (nv, nd, 3)
+    start = pos[:, None, :] + n[:, None, :] * (1.6 * h)
+    hit_t = np.full(dirs.shape[:2], np.inf)
+    steps = np.arange(h, max_d, h * 0.9)
+    dims = np.array(occ.shape)
+    for s_ in steps:
+        q = np.round((start + dirs * s_ - lo) / h).astype(int)
+        ok = np.all((q >= 0) & (q < dims), axis=2)
+        qc = np.clip(q, 0, dims - 1)
+        hit = occ[qc[..., 0], qc[..., 1], qc[..., 2]] & ok & np.isinf(hit_t)
+        hit_t[hit] = s_
+    w = np.where(np.isfinite(hit_t), 1 - (np.minimum(hit_t, max_d) / max_d) ** 2, 0)
+    return 1 - w.mean(axis=1)
+
+
+_occ_parts = [P[ALLTRI], parts["shirt"].pos[parts["shirt"].tri], parts["pants"].pos[parts["pants"].tri], parts["eyes"].pos[parts["eyes"].tri]]
+OCC, OCC_LO = voxelize(np.concatenate(_occ_parts), AO_H)
+print("ao grid", OCC.shape, int(OCC.sum()))
+for key, dist in (("head", 0.06), ("hands", 0.05), ("shirt", 0.15), ("under", 0.12), ("pants", 0.15), ("pantsL", 0.15), ("socks", 0.12)):
+    _p = parts[key]
+    _p.ao = bake_ao(_p.pos, _p.nrm, OCC, OCC_LO, AO_H, dist)
+    print("ao", key, "mean %.2f min %.2f" % (_p.ao.mean(), _p.ao.min()))
+# 布は頂点色 (拡散反射に掛かる) にする。暗くなりすぎないよう弱める
+for key in ("shirt", "under", "pants", "pantsL", "socks"):
+    _a = 0.28 + 0.72 * parts[key].ao ** 1.3
+    parts[key].color = np.repeat(np.clip(_a, 0, 1)[:, None], 3, axis=1)
 
 
 # ---------------------------------------------------------------- 肌テクスチャの焼き込み
@@ -1207,6 +1318,7 @@ def rasterize(parts_list, N):
     nrmb = np.zeros((N, N, 3), np.float32)
     mhb = np.zeros((N, N, 2), np.float32)
     idb = np.full((N, N), -1, np.int16)
+    aob = np.ones((N, N), np.float32)
     for pi, p in enumerate(parts_list):
         for t in p.tri:
             uv = p.uv[t] * N
@@ -1235,7 +1347,9 @@ def rasterize(parts_list, N):
             nrmb[yy, xx] = L @ p.nrm[t]
             mhb[yy, xx] = L @ p.mhuv_v[t]
             idb[yy, xx] = pi
-    return posb, nrmb, mhb, idb
+            if getattr(p, "ao", None) is not None:
+                aob[yy, xx] = L @ p.ao[t]
+    return posb, nrmb, mhb, idb, aob
 
 
 def vnoise(p, scale, seed=0):
@@ -1277,7 +1391,7 @@ def fbm(p, scale, oct=4, seed=0):
 def bake_skin(variant="clean"):
     N = SKIN_TEX
     plist = [parts["head"], parts["hands"]]
-    posb, nrmb, mhb, idb = rasterize(plist, N)
+    posb, nrmb, mhb, idb, aob = rasterize(plist, N)
     valid = idb >= 0
     pos = posb[valid]
     mhuv = mhb[valid]
@@ -1343,7 +1457,8 @@ def bake_skin(variant="clean"):
     sb = sstep(-0.013, -0.003, front) * (1 - sstep(0.022, 0.034, front)) * sstep(0.054, 0.064, side)
     hairline = hairline + (np.minimum(hairline, ear_y - 0.02) - hairline) * sb
     hd = (rel[:, 1] - hairline) / 0.006
-    hairmask = np.clip(hd + 0.5, 0, 1) * (idb[valid] == 0)
+    # 耳には髪を描かない
+    hairmask = np.clip(hd + 0.5, 0, 1) * (idb[valid] == 0) * (1 - sample_mask(MASKS["ears"], mhuv))
     strands = 0.6 + 0.4 * vnoise(pos * [1, 2.5, 1], 700, 11)
     hairmask = hairmask * np.clip(strands + 0.25, 0, 1)
     col = col * (1 - hairmask[:, None] * 0.93) + hair_col * 1.15 * hairmask[:, None] * 0.93
@@ -1370,6 +1485,8 @@ def bake_skin(variant="clean"):
     # 爪
     nails = sample_mask(MASKS["fingernails"], mhuv)[:, None]
     col = col * (1 - nails * 0.5) + np.array([0.92, 0.78, 0.74]) * nails * 0.5
+    # 環境光の遮蔽 (目のくぼみ・小鼻・耳の裏・あごの下・襟元)
+    col *= (0.5 + 0.5 * aob[valid])[:, None]
     img = np.zeros((N, N, 3), np.float32)
     img[valid] = np.clip(col, 0, 1)
     # すき間を埋める (島の外側へにじませる)
@@ -1422,6 +1539,15 @@ class Bin:
         return off
 
 
+def quant_weights(w):
+    """重みを 0..255 にする。合計がちょうど 255 になるよう端数を最大の重みで調整する
+    (1/255 ずれると、高さ 1.5m の頂点が 6mm 動く → 襟・首の縁がギザギザになっていた)"""
+    q = np.round(w * 255).astype(np.int32)
+    k = np.argmax(q, axis=1)
+    q[np.arange(len(q)), k] += 255 - q.sum(axis=1)
+    return np.clip(q, 0, 255).astype(np.uint8)
+
+
 binf = Bin()
 meshes = []
 for key, p in parts.items():
@@ -1434,7 +1560,7 @@ for key, p in parts.items():
         "position": binf.add(p.pos.astype(np.float32), np.float32),
         "normal": binf.add(np.clip(p.nrm * 32767, -32767, 32767).astype(np.int16), np.int16),
         "skinIndex": binf.add(idx, np.uint8),
-        "skinWeight": binf.add(np.round(w * 255).astype(np.uint8), np.uint8),
+        "skinWeight": binf.add(quant_weights(w), np.uint8),
     }
     if p.uv is not None:
         entry["uv"] = binf.add(p.uv.astype(np.float32), np.float32)

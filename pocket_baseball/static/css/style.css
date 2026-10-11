@@ -1931,6 +1931,27 @@ textarea {
 }
 
 /* ---------- 設定 ---------- */
+/* 画質は 5 択なので、狭い画面でも 1 行に収める */
+.gfx-seg .seg {
+  flex-wrap: nowrap;
+}
+.gfx-seg .seg button {
+  min-width: 0;
+  flex: 1 1 0;
+  padding-inline: 4px;
+}
+.gfx-note {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.gfx-note b {
+  color: var(--led);
+}
+.gfx-gpu {
+  margin-left: 4px;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
+}
 .tgs {
   display: flex;
   flex-direction: column;

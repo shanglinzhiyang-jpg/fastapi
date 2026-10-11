@@ -13,19 +13,37 @@
 <script src="js/three/anim.js"></script>
 <script src="js/three/gear.js"></script>
 <script src="js/three/human.js"></script>
+<script src="js/three/look.js"></script>
+<script src="js/three/post.js"></script>
 <script>
 const q = new URLSearchParams(location.search);
 const T = THREE, A = PB.Anim, H = PB.Human;
 const W = innerWidth, Hh = innerHeight;
-const r = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+// 光: ?look=night|day|dome|studio (試合と同じ PB.Look の光と環境マップ) / old (以前の確認用の光)。?post=0 で仕上げ処理なし
+const lookKind = q.get('look') || 'night';
+const usePost = q.get('post') !== '0' && lookKind !== 'old';
+const r = new T.WebGLRenderer({ antialias: !usePost, preserveDrawingBuffer: true });
 r.setPixelRatio(1); r.setSize(W, Hh); r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap;
 r.outputColorSpace = T.SRGBColorSpace; r.toneMapping = T.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
 document.body.appendChild(r.domElement);
-const scene = new T.Scene(); scene.background = new T.Color('#3b4c5e');
-scene.add(new T.HemisphereLight('#dfe9ff', '#4a5a3a', 1.0));
-const sun = new T.DirectionalLight('#fff4e0', 2.4); sun.position.set(3, 7, 6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 }); sun.shadow.bias = -0.0004; scene.add(sun);
-const fill = new T.DirectionalLight('#c8d8ff', 0.6); fill.position.set(-4, 3, -3); scene.add(fill);
+const scene = new T.Scene(); scene.background = new T.Color({ night: '#0b1220', day: '#8fb3dc', dome: '#3a3f48', studio: '#3b4c5e' }[lookKind] || '#3b4c5e');
+let sun, stage = null;
+if (lookKind === 'old') {
+  scene.add(new T.HemisphereLight('#dfe9ff', '#4a5a3a', 1.0));
+  sun = new T.DirectionalLight('#fff4e0', 2.4); sun.position.set(3, 7, 6); scene.add(sun);
+  const fill = new T.DirectionalLight('#c8d8ff', 0.6); fill.position.set(-4, 3, -3); scene.add(fill);
+} else {
+  stage = PB.Look.stage(scene, r, { kind: lookKind, rim: false, seat: '#2d4f86' });
+  sun = stage.lights.key;
+  // 試合の主光源と同じ向き (夜: 三塁側後方の照明塔, 昼: 一塁側の太陽, ドーム: ほぼ真上)。人は +Z (カメラ) 向き
+  const dirs = { night: [-35, 120, 70], day: [70, 85, -20], dome: [-10, 120, 30], studio: [-2.5, 3.2, 4.5] };
+  const kd = new T.Vector3(...dirs[lookKind]).normalize();
+  if (q.get('key') === 'front') kd.set(-0.35, 0.7, 0.62).normalize();
+  sun.position.copy(kd).multiplyScalar(8);
+  r.toneMappingExposure = stage.exposure;
+}
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
 const ground = new T.Mesh(new T.PlaneGeometry(30, 30), new T.MeshStandardMaterial({ color: '#557a45', roughness: 1 }));
 ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 const tigers0 = { id: 't', main: '#111111', sub: '#ffe100', cap: '#111111', mark: 'HT', en: 'Tigers', uniform: { pinstripe: '#1a1a1a', chest: 'Tigers', letter: '#111', outline: '#ffe100', trim: '#111', under: '#111', socks: '#111', piping: false } };
@@ -83,7 +101,14 @@ H.load("models/").then(() => Promise.all(PB.D.TEAMS.map((t) => H.preloadTeam(t))
   const cam = new T.PerspectiveCamera(Number(q.get('fov') || 30), W / Hh, 0.05, 200);
   cam.position.set(Number(q.get('cx') || 0), Number(q.get('cy') || 1.2), Number(q.get('cz') || 7));
   cam.lookAt(Number(q.get('lx') || 0), Number(q.get('ly') || 0.95), 0);
-  r.render(scene, cam);
+  // 試合と同じ仕上げ処理 (HDR + bloom + ACES + 色味)
+  const post = usePost && PB.Post.create(r, 'high');
+  if (post && post.ok && post.setSize(W, Hh)) {
+    post.begin();
+    r.render(scene, cam);
+    post.end(PB.Look.preset(lookKind).post);
+  } else r.render(scene, cam);
+  window.__info = { calls: r.info.render.calls, env: !!scene.environment, post: !!(post && post.ok) };
   window.__ready = true;
 });
 </script></body></html>

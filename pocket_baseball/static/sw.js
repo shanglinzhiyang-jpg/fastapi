@@ -22,6 +22,8 @@ const ASSETS = [
   "js/three/anim.js",
   "js/three/gear.js",
   "js/three/human.js",
+  "js/three/look.js",
+  "js/three/post.js",
   "js/three/stadium.js",
   "js/three/view.js",
   "js/three/portrait.js",

@@ -78,6 +78,88 @@
     }
   }
 
+  /* ---------- 小物をまとめる (描画の呼び出しを減らす) ---------- */
+  // grp の直下のメッシュを、マテリアルの種類 (kindOf が返すキー) ごとに 1 つのメッシュへまとめる。
+  // 色は頂点色に焼き込み、まとめたマテリアルは mats[キー] を使う。形・マテリアルは共有 (userData.shared)
+  const _mm = new T.Matrix4();
+  const _nm = new T.Matrix3();
+  const _v = new T.Vector3();
+  function bake(grp, kindOf, mats) {
+    const buckets = {};
+    for (const m of grp.children) {
+      if (!m.isMesh) continue;
+      const k = kindOf(m.material);
+      (buckets[k] = buckets[k] || []).push(m);
+    }
+    const out = [];
+    for (const k in buckets) {
+      const list = buckets[k];
+      let nv = 0;
+      let ni = 0;
+      for (const m of list) {
+        const g = m.geometry;
+        nv += g.attributes.position.count;
+        ni += g.index ? g.index.count : g.attributes.position.count;
+      }
+      const P = new Float32Array(nv * 3);
+      const N = new Float32Array(nv * 3);
+      const C = new Float32Array(nv * 3);
+      const I = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
+      let ov = 0;
+      let oi = 0;
+      for (const m of list) {
+        const g = m.geometry;
+        m.updateMatrix();
+        _mm.copy(m.matrix);
+        _nm.getNormalMatrix(_mm);
+        const pa = g.attributes.position;
+        const na = g.attributes.normal;
+        const ca = g.attributes.color;
+        const col = m.material.color || new T.Color(1, 1, 1);
+        for (let i = 0; i < pa.count; i++) {
+          const o = (ov + i) * 3;
+          _v.fromBufferAttribute(pa, i).applyMatrix4(_mm);
+          P[o] = _v.x;
+          P[o + 1] = _v.y;
+          P[o + 2] = _v.z;
+          _v.fromBufferAttribute(na, i).applyMatrix3(_nm).normalize();
+          N[o] = _v.x;
+          N[o + 1] = _v.y;
+          N[o + 2] = _v.z;
+          C[o] = col.r * (ca ? ca.getX(i) : 1);
+          C[o + 1] = col.g * (ca ? ca.getY(i) : 1);
+          C[o + 2] = col.b * (ca ? ca.getZ(i) : 1);
+        }
+        if (g.index) for (let i = 0; i < g.index.count; i++) I[oi + i] = g.index.getX(i) + ov;
+        else for (let i = 0; i < pa.count; i++) I[oi + i] = i + ov;
+        ov += pa.count;
+        oi += g.index ? g.index.count : pa.count;
+        g.dispose();
+      }
+      const geo = new T.BufferGeometry();
+      geo.setAttribute("position", new T.BufferAttribute(P, 3));
+      geo.setAttribute("normal", new T.BufferAttribute(N, 3));
+      geo.setAttribute("color", new T.BufferAttribute(C, 3));
+      geo.setIndex(new T.BufferAttribute(I, 1));
+      geo.computeBoundingSphere();
+      geo.userData.shared = true;
+      mats[k].userData.shared = true;
+      out.push({ geo, mat: mats[k] });
+    }
+    return out;
+  }
+  // まとめた形から、選手ごとのグループ (向き・位置は選手ごと) を作る
+  function instance(baked, shadow) {
+    const grp = new T.Group();
+    for (const b of baked) {
+      const m = new T.Mesh(b.geo, b.mat);
+      m.castShadow = !!shadow;
+      grp.add(m);
+    }
+    return grp;
+  }
+  const bakedCache = {};
+
   function tube(points, r, segs, closed) {
     const curve = new T.CatmullRomCurve3(points, !!closed, "catmullrom", 0.5);
     return new T.TubeGeometry(curve, segs || Math.max(8, points.length * 4), r, 7, !!closed);
@@ -444,6 +526,13 @@
     };
   }
   G.mask = function (asset, cols, style) {
+    const key = ["mask", style, cols.metal, cols.pad, cols.trim, cols.strap, cols.base].join("|");
+    if (!bakedCache[key]) bakedCache[key] = buildMask(asset, cols, style);
+    const grp = instance(bakedCache[key], true);
+    grp.name = "catcherMask";
+    return grp;
+  };
+  function buildMask(asset, cols, style) {
     const hb = V(...asset.bones.find((b) => b.name === "head").pos);
     const eye = V(...asset.extra.eyeL);
     const grp = new T.Group();
@@ -452,6 +541,7 @@
     const metal = new T.MeshStandardMaterial({ color: hockey ? "#2a2c30" : cols.metal, roughness: hockey ? 0.45 : 0.28, metalness: hockey ? 0.4 : 0.9 });
     const padM = new T.MeshStandardMaterial({ color: cols.pad, roughness: 0.6 });
     const trimM = new T.MeshStandardMaterial({ color: cols.trim, roughness: 0.4, metalness: 0.3 });
+    let shellM = null;
     const S = maskSurface(asset, hb, 0.142, eye.z - 0.085, eye.y - 0.165, eye.y + 0.088, 1.08);
     const frame = [];
     for (let k = 0; k <= 40; k++) {
@@ -517,7 +607,7 @@
       // ホッケー型: 頭全体を覆う殻 + 顔の前の格子
       const shell = new T.SphereGeometry(0.128, 30, 18, Math.PI * 0.62, Math.PI * 1.76, 0, Math.PI * 0.78);
       shell.scale(0.86, 1.04, 1.12);
-      const shellM = new T.MeshPhysicalMaterial({ color: cols.base, roughness: 0.55, clearcoat: 0.3 });
+      shellM = new T.MeshPhysicalMaterial({ color: cols.base, roughness: 0.55, clearcoat: 0.3 });
       shellM.side = T.DoubleSide;
       const sh = new T.Mesh(shell, shellM);
       sh.position.set(0, eye.y + 0.02 - hb.y, eye.z - 0.075 - hb.z);
@@ -525,15 +615,26 @@
       pad(arc(0.86, -0.75, 0.75, 0.02), 0.012);
       pad(arc(-0.9, -0.6, 0.6, 0.02), 0.012);
     }
-    grp.traverse((n) => {
-      if (n.isMesh) n.castShadow = true;
-    });
-    return grp;
-  };
+    // 金属の格子・ホッケー型の殻・パッド類 (布・革) の 2〜3 つにまとめる
+    const kinds = {
+      metal: new T.MeshStandardMaterial({ vertexColors: true, roughness: hockey ? 0.45 : 0.28, metalness: hockey ? 0.4 : 0.9, envMapIntensity: 1.0 }),
+      soft: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: T.DoubleSide, envMapIntensity: 0.5 }),
+    };
+    if (shellM) kinds.shell = new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.55, clearcoat: 0.3, side: T.DoubleSide, envMapIntensity: 1.0 });
+    return bake(grp, (m) => (m === metal ? "metal" : m === shellM ? "shell" : "soft"), kinds);
+  }
 
   /* ---------- キャッチャーミット (手の骨の「標準の手」座標) ---------- */
   // 標準の手の座標: 指先が -Y、手のひらは +X (ポケットを +X に向け、背中で手の甲を包む)
   G.mitt = function (cols) {
+    const key = "mitt|" + cols.lace;
+    if (!bakedCache[key]) bakedCache[key] = buildMitt(cols);
+    const grp = instance(bakedCache[key], true);
+    // ポケットは手のひらの前 (この座標では +X)、背中は手の甲の後ろ
+    grp.position.set(0.072, -0.04, -0.008);
+    return grp;
+  };
+  function buildMitt(cols) {
     const grp = new T.Group();
     const leather = new T.MeshStandardMaterial({ color: "#151517", roughness: 0.45, metalness: 0.05 });
     const pocket = new T.MeshStandardMaterial({ color: "#1d1d20", roughness: 0.6 });
@@ -578,16 +679,18 @@
     const strap = new T.Mesh(new T.BoxGeometry(0.03, 0.032, 0.11), leather);
     strap.position.set(-0.03, R * 0.92, 0);
     grp.add(strap);
-    // ポケットは手のひらの前 (この座標では +X)、背中は手の甲の後ろ
-    grp.position.set(0.072, -0.04, -0.008);
-    grp.traverse((n) => {
-      if (n.isMesh) n.castShadow = true;
-    });
-    return grp;
-  };
+    return bake(grp, () => "all", { all: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.04, envMapIntensity: 0.5 }) });
+  }
 
   /* ---------- 野手のグラブ (手の座標は G.mitt と同じ: 指先 -Y・手のひら +X) ---------- */
   G.glove = function (kind, leatherColor, laceColor) {
+    const key = ["glove", kind === "first" ? "first" : "f", leatherColor, laceColor].join("|");
+    if (!bakedCache[key]) bakedCache[key] = buildGlove(kind, leatherColor, laceColor);
+    const grp = instance(bakedCache[key], true);
+    grp.position.set(0.066, -0.035, -0.004);
+    return grp;
+  };
+  function buildGlove(kind, leatherColor, laceColor) {
     const grp = new T.Group();
     const leather = new T.MeshStandardMaterial({ color: leatherColor, roughness: 0.5, metalness: 0.03 });
     const dark = new T.MeshStandardMaterial({ color: colorOf(leatherColor).multiplyScalar(0.7), roughness: 0.55 });
@@ -636,12 +739,8 @@
       m.rotation.x = -a;
       grp.add(m);
     }
-    grp.position.set(0.066, -0.035, -0.004);
-    grp.traverse((n) => {
-      if (n.isMesh) n.castShadow = true;
-    });
-    return grp;
-  };
+    return bake(grp, () => "all", { all: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.52, metalness: 0.03, envMapIntensity: 0.5 }) });
+  }
   G.GLOVE_COLORS = [
     ["#8a4e24", "#e0b070"],
     ["#b8743a", "#5a2e12"],
@@ -656,26 +755,31 @@
     const cols = G.colors(st, team);
     const byName = player.bones;
     const parts = [];
-    const vmat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.05 });
+    const vmat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.05, envMapIntensity: 0.8 });
+    // 体と同じ球で視錐台の判定をする (human.js の SkinnedMesh と同じ)
+    const sphere = player.meshes.shirt.boundingSphere || null;
     // プロテクター (スキン)
     const pg = G.protector(asset, cols);
     const prot = new T.SkinnedMesh(pg, vmat);
     prot.name = "protector";
     prot.castShadow = true;
-    prot.frustumCulled = false;
+    prot.receiveShadow = true;
+    if (sphere) prot.boundingSphere = sphere;
+    prot.frustumCulled = !!sphere;
     player.group.add(prot);
     prot.bind(player.skeleton, player.meshes.shirt.bindMatrix);
     parts.push(prot);
-    const hm = new T.SkinnedMesh(G.harness(asset, cols), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: T.DoubleSide }));
+    const hm = new T.SkinnedMesh(G.harness(asset, cols), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: T.DoubleSide, envMapIntensity: 0.5 }));
     hm.name = "harness";
-    hm.frustumCulled = false;
+    if (sphere) hm.boundingSphere = sphere;
+    hm.frustumCulled = !!sphere;
     player.group.add(hm);
     hm.bind(player.skeleton, player.meshes.shirt.bindMatrix);
     parts.push(hm);
     // 肩当て
     for (const s of ["l", "r"]) {
       const m = new T.Mesh(G.shoulderCap(asset, s, cols), vmat);
-      m.castShadow = true;
+      m.castShadow = false; // 小さいので影は落とさない
       byName["clavicle_" + s].add(m);
       parts.push(m);
     }

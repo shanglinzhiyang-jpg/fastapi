@@ -16,6 +16,8 @@
 <script src="js/three/anim.js"></script>
 <script src="js/three/gear.js"></script>
 <script src="js/three/human.js"></script>
+<script src="js/three/look.js"></script>
+<script src="js/three/post.js"></script>
 <script src="js/three/stadium.js"></script>
 <script src="js/three/view.js"></script>
 <script src="js/three/portrait.js"></script>
@@ -25,6 +27,13 @@ const q = new URLSearchParams(location.search);
 const mode = q.get('mode') || 'bg';
 const W = Number(q.get('w') || 300);
 (async () => {
+  // ?shared=1: ゲームと同じように View3D を初期化して、その WebGL で選手を描く (?gfx=low|mid|high)
+  if (q.get('shared') === '1') {
+    const gl = document.createElement('canvas');
+    gl.style.cssText = 'position:fixed;left:-9999px;width:64px;height:64px';
+    document.body.appendChild(gl);
+    if (PB.View3D.init(gl, q.get('gfx') || 'mid')) { PB.View3D.active = true; PB.View3D.resize(64, 64, 1); }
+  }
   await document.fonts.ready;
   if (mode === 'bg') {
     const rows = [['S', 'c'], ['A', 'g'], ['B', 'd'], ['C', 't'], ['D', 'l'], ['E', 'h']];
@@ -53,6 +62,7 @@ const W = Number(q.get('w') || 300);
     }
     await Promise.all(jobs);
   }
+  window.__info = { mode: PB.Portraits && PB.Portraits.mode ? PB.Portraits.mode() : '' };
   window.__ready = true;
 })();
 </script></body></html>

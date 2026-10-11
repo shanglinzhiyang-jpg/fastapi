@@ -250,6 +250,9 @@
             const cx = (i + 0.5) * px;
             ctx.fillStyle = seatBack;
             ctx.fillRect(cx - px * 0.4, y0 + BH * 0.62, px * 0.8, BH * 0.38);
+            // 背もたれは人より少し暗く (上から見たとき座席の色ばかりにならないように)
+            ctx.fillStyle = "rgba(0,0,0,0.22)";
+            ctx.fillRect(cx - px * 0.4, y0 + BH * 0.62, px * 0.8, BH * 0.38);
             ctx.fillStyle = "rgba(0,0,0,0.25)";
             ctx.fillRect(cx - px * 0.4, y0 + BH * 0.94, px * 0.8, BH * 0.06);
           }
@@ -440,6 +443,7 @@
 uniform vec3 uGrass; uniform vec3 uGrass2; uniform vec3 uFoul; uniform vec3 uDirt; uniform vec3 uClay; uniform vec3 uTrack; uniform vec3 uLine; uniform vec3 uOut;
 uniform float uMow;
 uniform float uInfield;
+uniform float uWear; uniform float uSheen; uniform float uBump;
 varying vec2 vG;
 float gh(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float gn(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f*f*(3.0-2.0*f);
@@ -470,16 +474,8 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
   else inside = a > -18.0 && b > -18.0 && a < 100.3 && b < 100.3;
   float fw = fwidth(p.x) + fwidth(p.y);
   float fine = clamp(1.0 - fw * 4.0, 0.0, 1.0);
-  // 芝 (刈り込みの市松模様 + むら)
-  float ck = sin(a * 0.4134) * sin(b * 0.4134);
-  float kw = max(fwidth(ck), 1e-3);
-  float mow = smoothstep(-kw, kw, ck);
-  vec3 grass = fair ? mix(uGrass, uGrass2, mow * uMow) : mix(uFoul, uGrass2 * 0.94, mow * uMow * 0.6);
-  float big = gfbm(p * 0.045);
-  grass *= 0.9 + 0.2 * big;
-  grass *= 1.0 + (gn(p * 7.0) - 0.5) * 0.16 * fine + (gn(p * 31.0) - 0.5) * 0.14 * clamp(1.0 - fw * 20.0, 0.0, 1.0);
-  vec3 col = grass;
-  float rough = 0.93;
+  // 視線の向き (ゲーム座標: x, y, 上)。芝の刈り目とつやは見る向きで変わる
+  vec3 vd = normalize(vec3(cameraPosition.x - p.x, -cameraPosition.z - p.y, max(cameraPosition.y, 0.05)));
   // 土 (内野のスキン, 本塁, マウンド, ベースの切り欠き)
   float dSkin = max(max(26.1 - max(a, b), length(p - vec2(0.0, 18.44)) - 29.0), max(-1.0 - a, -1.0 - b));
   float dHome = r - 4.2;
@@ -487,24 +483,96 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
   float dBase = min(min(length(p - abxy(27.431, 0.0)), length(p - abxy(0.0, 27.431))), length(p - abxy(27.431, 27.431))) - 2.4;
   if (uInfield > 1.5) dSkin = max(length(p - vec2(0.0, 18.44)) - 29.0, max(-1.2 - a, -1.2 - b));
   float dDirt = uInfield > 0.5 && uInfield < 1.5 ? min(dHome, min(dMound, dBase)) : min(min(dSkin, dHome), min(dMound, dBase));
+  // 芝 (刈り込みの市松模様)。刈った向きに葉が寝るので、寝ている向きと視線で明るさが入れ替わる (テレビ中継の縞)
+  float sa = sin(a * 0.4134);
+  float sb = sin(b * 0.4134);
+  float fa = clamp(sa / max(fwidth(sa), 1e-3), -1.0, 1.0);
+  float fb = clamp(sb / max(fwidth(sb), 1e-3), -1.0, 1.0);
+  float mowFade = 1.0 - smoothstep(0.6, 1.6, fwidth(a * 0.4134));
+  // a の帯は b の向きに、b の帯は a の向きに刈る
+  vec2 lean = (fa * vec2(-0.70710678, 0.70710678) + fb * vec2(0.70710678, 0.70710678)) * 0.5;
+  float mowV = -dot(vd.xy, lean);
+  float mowM = clamp(0.5 + uMow * (0.85 * mowV + 0.2 * fa * fb) * mowFade, 0.0, 1.0);
+  vec3 grass = fair ? mix(uGrass, uGrass2, mowM) : mix(uFoul, uGrass2 * 0.94, mowM * 0.8);
+  // 大きなむら (水はけ・日当たり)・ところどころ黄ばんだ所・細かいむら
+  float big = gfbm(p * 0.045);
+  grass *= 0.9 + 0.2 * big;
+  float huge = gn(p * 0.013 + vec2(5.0, 1.0));
+  grass = mix(grass, grass * vec3(1.12, 1.03, 0.76), smoothstep(0.45, 0.95, huge) * 0.5 * uWear);
+  grass *= 1.0 + (gn(p * 7.0) - 0.5) * 0.16 * fine + (gn(p * 31.0) - 0.5) * 0.14 * clamp(1.0 - fw * 20.0, 0.0, 1.0);
+  // 踏まれて傷んだ芝 (外野手・塁審・ベースコーチの立ち位置、土との境目)
+  vec2 ab = vec2(a, b);
+  float wear = 0.0;
+  wear = max(wear, 1.0 - smoothstep(1.0, 4.6, length((p - vec2(-42.0, 80.0)) * vec2(1.0, 0.75))));
+  wear = max(wear, 1.0 - smoothstep(1.0, 4.6, length((p - vec2(0.0, 95.0)) * vec2(1.0, 0.75))));
+  wear = max(wear, 1.0 - smoothstep(1.0, 4.6, length((p - vec2(42.0, 80.0)) * vec2(1.0, 0.75))));
+  wear = max(wear, (1.0 - smoothstep(-0.6, 1.8, boxd(ab, vec2(25.0, -6.1), vec2(2.6, 1.2)))) * 0.85);
+  wear = max(wear, (1.0 - smoothstep(-0.6, 1.8, boxd(ab, vec2(-6.1, 25.0), vec2(1.2, 2.6)))) * 0.85);
+  wear = max(wear, 1.0 - smoothstep(0.5, 2.0, length(ab - vec2(30.5, -3.2))));
+  wear = max(wear, 1.0 - smoothstep(0.5, 2.0, length(ab - vec2(-3.2, 30.5))));
+  wear = max(wear, (1.0 - smoothstep(0.0, 1.4, dDirt)) * 0.6);
+  wear = clamp(wear * (0.35 + 0.65 * gn(p * 1.7)) * uWear, 0.0, 1.0) * 0.7;
+  // 傷んだ芝は黄ばんで、少し土が見える
+  grass = mix(grass, mix(grass * vec3(1.15, 1.02, 0.68), vec3(0.2, 0.14, 0.08), 0.22), wear);
+  vec3 col = grass;
+  float rough = 0.93;
   // 外野フェンス際・ファウルゾーンのウォーニングトラック
   float dTrack = 1e5;
   if (fair) dTrack = (fd - 4.6) - r;
   else if (corner) dTrack = (13.67 - 2.6) - length(pc);
   else { dTrack = min(a + 15.4, b + 15.4); dTrack = min(dTrack, min(95.4 - a, 95.4 - b)); }
-  vec3 dirt = uDirt * (0.86 + 0.24 * gfbm(p * 0.9)) * (1.0 + (gn(p * 23.0) - 0.5) * 0.22 * fine);
-  // 芝との境目は湿って濃い
-  dirt *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.9, -dDirt));
-  // 打席・マウンドの粘土
-  float clay = max(1.0 - smoothstep(1.6, 2.6, length(p - vec2(0.0, -0.5))), 1.0 - smoothstep(0.5, 1.3, length(p - vec2(0.0, 18.2))));
-  dirt = mix(dirt, uClay * (0.9 + 0.2 * gn(p * 11.0)), clay * 0.85);
-  // 打席の足跡
-  float hole = max(1.0 - smoothstep(0.0, 0.25, length(vec2(abs(p.x) - 0.95, (p.y + 0.15) * 0.8))), 1.0 - smoothstep(0.0, 0.3, length(vec2(p.x, (p.y - 17.2) * 0.7))));
-  dirt *= 1.0 - hole * 0.18;
-  col = mix(col, dirt, cov(dDirt));
-  rough = mix(rough, 0.97, cov(dDirt));
-  vec3 track = uTrack * (0.85 + 0.25 * gfbm(p * 1.3));
-  col = mix(col, track, cov(dTrack));
+  // 土の凹凸 (高さ m)。細かい成分ほど近くだけ (遠くでちらつかない)
+  float f1 = clamp(1.0 - fw * 3.0, 0.0, 1.0);
+  float f2 = clamp(1.0 - fw * 12.0, 0.0, 1.0);
+  float f3 = clamp(1.0 - fw * 40.0, 0.0, 1.0);
+  float hD = 0.0;
+  vec3 dirt = uDirt;
+  vec3 track = uTrack;
+  // 土の細部は土のある所だけ計算する (芝の画素では省く)
+  if (inside && min(dDirt, dTrack) < 1.0 + 2.0 * fw) {
+    if (f1 > 0.0) hD = (gfbm(p * 2.3) - 0.5) * 0.02 * f1 + (gn(p * 5.7) - 0.5) * 0.009 * f1;
+    if (f2 > 0.0) {
+      hD += (gn(p * 13.0) - 0.5) * 0.006 * f2;
+      // スパイクの跡 (塁・打席・マウンドのまわりほど多い)
+      float busy = max(max(1.0 - smoothstep(1.0, 5.0, dBase + 2.4), 1.0 - smoothstep(1.5, 4.5, r)), 1.0 - smoothstep(0.8, 2.6, length(p - vec2(0.0, 17.6))));
+      vec2 ci = floor(p * 5.0);
+      vec2 sf = fract(p * 5.0) - 0.5 - (vec2(gh(ci + 1.3), gh(ci + 7.1)) - 0.5) * 0.5;
+      float sang = gh(ci + 9.9) * 6.2832;
+      sf = mat2(cos(sang), -sin(sang), sin(sang), cos(sang)) * sf;
+      float spike = step(gh(ci + 3.7), 0.05 + 0.3 * busy) * (1.0 - smoothstep(0.05, 0.15, length(sf * vec2(1.0, 2.4))));
+      hD -= spike * (0.004 + 0.005 * gh(ci + 5.3)) * f2;
+    }
+    if (f3 > 0.0) {
+      hD += (gn(p * 61.0) - 0.5) * 0.002 * f3;
+      // トンボがけの筋 (マウンドを中心にした輪。ところどころ踏み荒らされて消えている)
+      hD += sin(length(p - vec2(0.0, 18.44)) * 150.0 + gn(p * 1.3) * 9.0) * 0.0013 * f3 * smoothstep(0.25, 0.65, gn(p * 0.8 + 3.0));
+    }
+    dirt *= (0.86 + 0.24 * gfbm(p * 0.9)) * (1.0 + (gn(p * 23.0) - 0.5) * 0.22 * fine);
+    // 芝との境目は湿って濃い
+    dirt *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.9, -dDirt));
+    // 打席・マウンドの粘土
+    float clay = max(1.0 - smoothstep(1.6, 2.6, length(p - vec2(0.0, -0.5))), 1.0 - smoothstep(0.5, 1.3, length(p - vec2(0.0, 18.2))));
+    dirt = mix(dirt, uClay * (0.9 + 0.2 * gn(p * 11.0)), clay * 0.85);
+    // 打席の足跡 (掘れている)
+    float hole = max(1.0 - smoothstep(0.0, 0.25, length(vec2(abs(p.x) - 0.95, (p.y + 0.15) * 0.8))), 1.0 - smoothstep(0.0, 0.3, length(vec2(p.x, (p.y - 17.2) * 0.7))));
+    dirt *= 1.0 - hole * 0.18;
+    hD -= hole * 0.02 * f1;
+    // くぼみは暗く、盛り上がりは明るく。乾いた土の粒が白っぽく光る
+    float cav = 1.0 + clamp(hD * 24.0, -0.32, 0.26);
+    dirt *= cav;
+    if (f3 > 0.0) dirt *= 1.0 + smoothstep(0.7, 0.82, gn(p * 47.0 + 11.0)) * 0.35 * f3;
+    track *= (0.85 + 0.25 * gfbm(p * 1.3)) * cav;
+  }
+  float kDirt = cov(dDirt);
+  col = mix(col, dirt, kDirt);
+  rough = mix(rough, 0.97, kDirt);
+  float kTrack = cov(dTrack);
+  col = mix(col, track, kTrack);
+  float kSoil = max(kDirt, kTrack);
+  // 芝はわずかに、土はしっかり凹凸で法線を傾ける
+  gH = mix((gn(p * 9.0) - 0.5) * 0.003 * f1, hD, kSoil);
+  // 芝のつや (低い角度から見ると葉の側面が光を返して明るい)
+  gSheen = uSheen * (1.0 - kSoil) * pow(1.0 - vd.z, 3.0);
   // ネクストバッターズサークル
   for (int s = 0; s < 2; s++) {
     vec2 oc = vec2(s == 0 ? -11.5 : 11.5, -6.5);
@@ -531,17 +599,30 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
   ln = max(ln, chalk(boxd(vec2(a, b), vec2(-6.1, 25.0), vec2(1.52, 3.05)), 0.035) * step(a, -4.4));
   col = mix(col, uLine, ln * 0.92);
   rough = mix(rough, 0.75, ln);
-  if (!inside) { col = uOut * (0.9 + 0.1 * gn(p * 0.5)); rough = 0.9; }
+  if (!inside) { col = uOut * (0.9 + 0.1 * gn(p * 0.5)); rough = 0.9; gH = 0.0; gSheen = 0.0; }
   diffuseColor.rgb = col;
   gRough = rough;
+`;
+  // 高さ gH (m) の微分で法線を傾ける (bump map と同じ式。テクスチャは使わない)
+  const GROUND_BUMP = `
+  {
+    vec3 bsx = dFdx(-vViewPosition);
+    vec3 bsy = dFdy(-vViewPosition);
+    vec3 br1 = cross(bsy, normal);
+    vec3 br2 = cross(normal, bsx);
+    float bdet = dot(bsx, br1) * faceDirection;
+    vec3 bgrad = sign(bdet) * (dFdx(gH) * br1 + dFdy(gH) * br2) * uBump;
+    normal = normalize(abs(bdet) * normal - bgrad);
+  }
 `;
 
   function groundMaterial(night) {
     const C = (s) => new T.Color(s);
     const uniforms = {
-      uGrass: { value: C("#3d8f3a") },
-      uGrass2: { value: C("#46993f") },
-      uFoul: { value: C("#3b8838") },
+      // 芝は少し黄色寄りで彩度を抑える (緑一色のゲーム盤に見えないように)
+      uGrass: { value: C("#3f8638") },
+      uGrass2: { value: C("#4c983e") },
+      uFoul: { value: C("#3d8137") },
       uDirt: { value: C("#b57a4b") },
       uClay: { value: C("#9a5a36") },
       uTrack: { value: C("#8c5a3c") },
@@ -549,18 +630,34 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       uOut: { value: C("#3a3d42") },
       uMow: { value: 0.75 },
       uInfield: { value: 0 },
+      uWear: { value: 1 }, // 芝の傷み・黄ばみ (人工芝は 0)
+      uSheen: { value: 0.28 }, // 低い角度から見た芝のつや
+      uBump: { value: 1 }, // 土の凹凸
     };
     const m = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0 });
+    // 環境マップは控えめに (昼の青空を受けすぎると芝が水色っぽく白ける)
+    m.envMapIntensity = 0.5;
     m.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, uniforms);
       sh.vertexShader = "varying vec2 vG;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n vec4 gw = modelMatrix * vec4(transformed, 1.0); vG = vec2(gw.x, -gw.z);");
       sh.fragmentShader = GROUND_GLSL + sh.fragmentShader
-        .replace("#include <map_fragment>", "float gRough = 0.9;\n" + GROUND_MAIN)
-        .replace("#include <roughnessmap_fragment>", "float roughnessFactor = gRough;");
+        .replace("#include <map_fragment>", "float gRough = 0.9; float gH = 0.0; float gSheen = 0.0;\n" + GROUND_MAIN)
+        .replace("#include <roughnessmap_fragment>", "float roughnessFactor = gRough;")
+        .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + GROUND_BUMP)
+        .replace("#include <lights_fragment_end>", "#include <lights_fragment_end>\n reflectedLight.directDiffuse *= 1.0 + gSheen; reflectedLight.indirectDiffuse *= 1.0 + gSheen * 0.6;");
     };
-    m.customProgramCacheKey = () => "pb-ground-v1";
+    m.customProgramCacheKey = () => "pb-ground-v2";
     m.userData.uniforms = uniforms;
     return m;
+  }
+
+  // 照明で照らされた分の底上げ (環境マップが届かない Lambert 用。夜のスタンドや屋根が真っ黒にならないように)
+  function liftMaterial(m, u) {
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uLift = u;
+      sh.fragmentShader = "uniform float uLift;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * uLift;");
+    };
+    m.customProgramCacheKey = () => "pb-lift-v1";
   }
 
   /* ---------- 外周 (フィールドの境界) ---------- */
@@ -637,6 +734,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     const disposables = [];
     const keep = (x) => (disposables.push(x), x);
     const st = { group, park, dome, night: o.night !== false, time: 0, exc: [0.15, 0.3, 0.3], excT: [0.15, 0.3, 0.3] };
+    const emitters = []; // 自分で光る板 (スコアボード・LED・看板): 仕上げ処理があるときは HDR にして光をにじませる
 
     /* 地面 */
     const gmat = keep(groundMaterial());
@@ -645,10 +743,12 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       const U_ = gmat.userData.uniforms;
       if (park.turf === "turf") {
         U_.uInfield.value = 1;
-        U_.uGrass.value.set("#3c9a46");
-        U_.uGrass2.value.set("#43a34d");
-        U_.uFoul.value.set("#3a9443");
-        U_.uMow.value = 0.35;
+        U_.uGrass.value.set("#3a8f45");
+        U_.uGrass2.value.set("#45a04f");
+        U_.uFoul.value.set("#3a8a43");
+        U_.uMow.value = 0.5;
+        U_.uWear.value = 0;
+        U_.uSheen.value = 0.2;
         U_.uDirt.value.set("#a8714a");
       } else if (park.turf === "dirt") {
         U_.uInfield.value = 2;
@@ -662,6 +762,17 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     ground.position.set(0, 0, -50);
     ground.receiveShadow = true;
     group.add(ground);
+    // 球場の外の地面 (地平線まで)。かすみで空の地平線の色に溶ける
+    let farGround = null;
+    if (!dome) {
+      const fg = keep(new T.CircleGeometry(3000, 48));
+      const fm = keep(new T.MeshStandardMaterial({ color: "#3a3d42", roughness: 0.95, metalness: 0 }));
+      fm.envMapIntensity = 0.5;
+      farGround = new T.Mesh(fg, fm);
+      farGround.rotation.x = -Math.PI / 2;
+      farGround.position.set(0, -0.35, -50);
+      group.add(farGround);
+    }
     // マウンド (同じシェーダーで土色になる)
     {
       const rings = 14;
@@ -855,15 +966,19 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     /* スタンド (外周に沿った段々) */
     const seatCol = new T.Color(park.seat);
     const concrete = new T.Color("#5b5f66");
-    const screenCol = new T.Color("#173d2b");
+    const screenCol = new T.Color("#0f281c"); // バックスクリーンは打者が球を見やすい暗い緑
     const lower = { rows: 30, tread: 0.92, rise: 0.46 };
-    const upper = { rows: 18, tread: 0.95, rise: 0.62, gap: 3.2, lift: 3.6 };
+    // 上段は下段の奥の 5 列の上に張り出す (gap が負)。張り出しの下は暗い
+    const upper = { rows: 18, tread: 0.95, rise: 0.62, gap: -4.6, lift: 3.6 };
     const isScreen = (p) => p.kind === "of" && Math.abs(p.th) < 9.5 * D2R;
     const isUpper = (p) => p.kind === "side" || p.kind === "back";
     const crowdPos = [];
     const crowdUv = [];
     const crowdInfo = [];
+    const crowdOut = [];
+    const crowdAo = [];
     const crowdIdx = [];
+    const standLift = { value: 0 };
     const standPos = [];
     const standCol = [];
     const standNrm = [];
@@ -896,9 +1011,29 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
         cols.push(col.r, col.g, col.b);
         nrms.push(nrm[0], nrm[1], nrm[2]);
       }
-      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      // 表の面が法線の向きになるように巻き方向をそろえる
+      // (DoubleSide では裏面の法線が反転するので、逆巻きの踏み面は下向きになって真っ黒に見えていた)
+      const ux = b[0] - a[0];
+      const uy = b[1] - a[1];
+      const uz = b[2] - a[2];
+      const vx = c[0] - a[0];
+      const vy = c[1] - a[1];
+      const vz = c[2] - a[2];
+      const dn = (uy * vz - uz * vy) * nrm[0] + (uz * vx - ux * vz) * nrm[1] + (ux * vy - uy * vx) * nrm[2];
+      if (dn < 0) idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+      else idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     };
     const tierInfo = []; // 各頂点の上段の位置 (照明塔・スコアボード用)
+    // 列ごとの暗さ (前の壁の陰・上段の張り出しの下・奥の壁の前)。under: 張り出しの下になる列数
+    const OVER = Math.max(0, Math.round(-upper.gap / lower.tread));
+    function rowAO(k, rows, under) {
+      let ao = 0.86 + 0.14 * Math.min(1, k / 2);
+      const u = k - (rows - under);
+      if (under && u >= -1) ao *= u < 0 ? 0.84 : 0.6 - 0.055 * u;
+      else ao *= 1 - (0.14 * Math.max(0, k - (rows - 3))) / 2;
+      return ao;
+    }
+    const tmpC = new T.Color();
     function buildTiers(cfg, d0Of, z0Of, sel, upperDeck) {
       const n = path.length;
       for (let i = 0; i < n; i++) {
@@ -919,18 +1054,20 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
           tierInfo[i] = { d: dT, z: zp0 + cfg.rows * cfg.rise };
           continue;
         }
+        const under = !upperDeck && OVER && isUpper(p) && isUpper(q) ? OVER : 0;
         for (let k = 0; k < cfg.rows; k++) {
           const dp = d0Of(p) + k * cfg.tread;
           const dq = d0Of(q) + k * cfg.tread;
           const zp = z0Of(p) + k * cfg.rise;
           const zq = z0Of(q) + k * cfg.rise;
           const P = (pp, d, z) => [pp.x + pp.nx * d, z, -(pp.y + pp.ny * d)];
-          const c1 = scr ? screenCol : seatCol.clone().multiplyScalar(0.55 + 0.1 * (k % 2));
-          const c2 = scr ? screenCol : concrete;
+          const ao = scr ? 1 : rowAO(k, cfg.rows, under);
           // 踏み面
-          quad(standPos, standCol, standNrm, standIdx, P(p, dp, zp), P(q, dq, zq), P(q, dq + cfg.tread, zq), P(p, dp + cfg.tread, zp), c1, [0, 1, 0]);
+          tmpC.copy(scr ? screenCol : seatCol).multiplyScalar(scr ? 1 : (0.55 + 0.1 * (k % 2)) * ao);
+          quad(standPos, standCol, standNrm, standIdx, P(p, dp, zp), P(q, dq, zq), P(q, dq + cfg.tread, zq), P(p, dp + cfg.tread, zp), tmpC, [0, 1, 0]);
           // 蹴上げ
-          quad(standPos, standCol, standNrm, standIdx, P(p, dp + cfg.tread, zp), P(q, dq + cfg.tread, zq), P(q, dq + cfg.tread, zq + cfg.rise), P(p, dp + cfg.tread, zp + cfg.rise), c2, [-p.nx, 0, p.ny]);
+          tmpC.copy(scr ? screenCol : concrete).multiplyScalar(ao);
+          quad(standPos, standCol, standNrm, standIdx, P(p, dp + cfg.tread, zp), P(q, dq + cfg.tread, zq), P(q, dq + cfg.tread, zq + cfg.rise), P(p, dp + cfg.tread, zp + cfg.rise), tmpC, [-p.nx, 0, p.ny]);
           // 観客
           if (!scr && grp >= 0) {
             const band = pickBand(grp, p);
@@ -945,6 +1082,9 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
             crowdUv.push(u0, 0, u1, 0, u1, 1, u0, 1);
             const seed = R();
             for (let v = 0; v < 4; v++) crowdInfo.push(band, grp, seed);
+            // 外向き (three の XZ)。高い所から見るときに観客の板を倒す向きの基準
+            for (let v = 0; v < 4; v++) crowdOut.push(p.nx, -p.ny);
+            crowdAo.push(ao, ao, ao, ao);
             crowdIdx.push(base, base + 1, base + 2, base, base + 2, base + 3);
           }
         }
@@ -952,7 +1092,14 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
         const dTop = (pp) => d0Of(pp) + cfg.rows * cfg.tread;
         const zTop = (pp) => z0Of(pp) + cfg.rows * cfg.rise;
         const P = (pp, d, z) => [pp.x + pp.nx * d, z, -(pp.y + pp.ny * d)];
-        quad(standPos, standCol, standNrm, standIdx, P(p, dTop(p), zTop(p)), P(q, dTop(q), zTop(q)), P(q, dTop(q), zTop(q) + (upperDeck ? 3.5 : 2.4)), P(p, dTop(p), zTop(p) + (upperDeck ? 3.5 : 2.4)), concrete.clone().multiplyScalar(0.7), [-p.nx, 0, p.ny]);
+        quad(standPos, standCol, standNrm, standIdx, P(p, dTop(p), zTop(p)), P(q, dTop(q), zTop(q)), P(q, dTop(q), zTop(q) + (upperDeck ? 3.5 : 2.4)), P(p, dTop(p), zTop(p) + (upperDeck ? 3.5 : 2.4)), tmpC.copy(concrete).multiplyScalar(under ? 0.32 : 0.7), [-p.nx, 0, p.ny]);
+        if (under) {
+          // 張り出した上段の裏 (下段の奥から見上げる天井)。前の縁は LED のリボンボードの下端
+          const dF = d0Of(p) + cfg.rows * cfg.tread + upper.gap - 0.1;
+          const zF = (pp) => z0Of(pp) + cfg.rows * cfg.rise + 0.4;
+          const nd = 0.39;
+          quad(standPos, standCol, standNrm, standIdx, P(p, dF, zF(p)), P(q, dF, zF(q)), P(q, dTop(q), zTop(q) + 2.4), P(p, dTop(p), zTop(p) + 2.4), tmpC.copy(concrete).multiplyScalar(0.3), [p.nx * nd, -0.92, -p.ny * nd]);
+        }
         if (!upperDeck) tierInfo[i] = { d: dTop(p), z: zTop(p) };
       }
     }
@@ -968,7 +1115,9 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       g.setAttribute("normal", new T.Float32BufferAttribute(standNrm, 3));
       g.setAttribute("color", new T.Float32BufferAttribute(standCol, 3));
       g.setIndex(standIdx);
-      const m = new T.Mesh(g, keep(new T.MeshLambertMaterial({ vertexColors: true, side: T.DoubleSide })));
+      const sm = keep(new T.MeshLambertMaterial({ vertexColors: true, side: T.DoubleSide }));
+      liftMaterial(sm, standLift);
+      const m = new T.Mesh(g, sm);
       m.receiveShadow = qual === "high";
       group.add(m);
     }
@@ -1010,6 +1159,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       g.setAttribute("uv", new T.Float32BufferAttribute(uv, 2));
       g.setIndex(idx);
       const m = new T.Mesh(g, keep(new T.MeshBasicMaterial({ map: tex, side: T.DoubleSide, toneMapped: false })));
+      emitters.push(m.material);
       st.ribbon = m;
       group.add(m);
     }
@@ -1020,14 +1170,35 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       g.setAttribute("position", new T.Float32BufferAttribute(crowdPos, 3));
       g.setAttribute("uv", new T.Float32BufferAttribute(crowdUv, 2));
       g.setAttribute("aInfo", new T.Float32BufferAttribute(crowdInfo, 3));
+      g.setAttribute("aOut", new T.Float32BufferAttribute(crowdOut, 2));
+      g.setAttribute("aAo", new T.Float32BufferAttribute(crowdAo, 1));
       g.setIndex(crowdIdx);
       const mat = keep(new T.MeshBasicMaterial({ map: atlas, alphaTest: 0.5, side: T.DoubleSide }));
+      mat.extensions = { derivatives: true }; // WebGL1 でも fwidth を使う
       const cu = { uTime: { value: 0 }, uExc: { value: new T.Vector3(0.1, 0.2, 0.2) } };
       mat.onBeforeCompile = (sh) => {
         Object.assign(sh.uniforms, cu);
-        sh.vertexShader = "attribute vec3 aInfo;\nvarying vec3 vInfo;\n" + sh.vertexShader.replace("#include <uv_vertex>", "#include <uv_vertex>\n vInfo = aInfo;");
+        sh.vertexShader =
+          "attribute vec3 aInfo;\nattribute vec2 aOut;\nattribute float aAo;\nvarying vec3 vInfo;\nvarying float vAo;\n" +
+          sh.vertexShader.replace("#include <uv_vertex>", "#include <uv_vertex>\n vInfo = aInfo; vAo = aAo;").replace(
+            "#include <begin_vertex>",
+            `#include <begin_vertex>
+            // 上の頂点をカメラの高さに応じて、カメラと反対側へ倒す (上から見下ろしても観客が板の縁にならない)
+            // フィールド側から見るときは後ろへ、スタンドの後ろから見るときは前へ倒れる
+            if (uv.y > 0.5) {
+              vec3 base = transformed - vec3(0.0, 1.15, 0.0);
+              vec3 tc = cameraPosition - (modelMatrix * vec4(base, 1.0)).xyz;
+              vec2 o2 = normalize(aOut);
+              float side = dot(tc.xz, o2);
+              vec2 away = side > 0.0 ? -o2 : o2;
+              float el = atan(tc.y, max(abs(side), 2.0));
+              // 倒しすぎると次の列の踏み面に埋まるので 0.62rad (約 35 度) まで
+              float tl = clamp(el * 0.8, 0.0, 0.62);
+              transformed = base + vec3(away.x * sin(tl), cos(tl), away.y * sin(tl)) * 1.15;
+            }`
+          );
         sh.fragmentShader =
-          "uniform float uTime;\nuniform vec3 uExc;\nvarying vec3 vInfo;\n" +
+          "uniform float uTime;\nuniform vec3 uExc;\nvarying vec3 vInfo;\nvarying float vAo;\n" +
           sh.fragmentShader.replace(
             "#include <map_fragment>",
             `
@@ -1037,12 +1208,20 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
             float jump = ex * max(0.0, sin(uTime * (6.5 + hh * 4.0) + hh * 6.2832)) * 0.2;
             float ly = vMapUv.y - jump;
             if (ly < 0.0) discard;
-            vec4 sampledDiffuseColor = texture2D(map, vec2(vMapUv.x, (7.0 - vInfo.x + min(ly, 0.995)) / 8.0));
+            vec2 cuv = vec2(vMapUv.x, (7.0 - vInfo.x + min(ly, 0.995)) / 8.0);
+            vec4 sampledDiffuseColor = texture2D(map, cuv);
+            // 遠くの小さな mip でアルファが薄まって人が消える・ちらつくのを抑える (mip に応じて濃くし、1px で切る)
+            vec2 tx = cuv * vec2(2048.0, 1024.0);
+            float lod = 0.5 * log2(max(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx))), 1.0));
+            float ca = sampledDiffuseColor.a * (1.0 + lod * 0.3);
+            sampledDiffuseColor.a = clamp((ca - 0.5) / max(fwidth(ca), 1e-4) + 0.5, 0.0, 1.0);
             diffuseColor *= sampledDiffuseColor;
+            // 張り出しの下・前の壁の陰
+            diffuseColor.rgb *= vAo;
             `
           );
       };
-      mat.customProgramCacheKey = () => "pb-crowd-v1";
+      mat.customProgramCacheKey = () => "pb-crowd-v3";
       const m = new T.Mesh(g, mat);
       st.crowd = { mesh: m, uniforms: cu, mat };
       group.add(m);
@@ -1070,6 +1249,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       const board = makeBoard(home, away);
       keep(board.tex);
       const face = new T.Mesh(keep(new T.PlaneGeometry(bw, bh)), keep(new T.MeshBasicMaterial({ map: board.tex, toneMapped: false })));
+      emitters.push(face.material);
       face.position.copy(V(x, y - 0.02, z0 + bh / 2));
       group.add(face);
       st.board = board;
@@ -1087,6 +1267,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
         })
       );
       const sign = new T.Mesh(keep(new T.PlaneGeometry(bw, 4.2)), keep(new T.MeshBasicMaterial({ map: nameTex, toneMapped: false })));
+      emitters.push(sign.material);
       sign.position.copy(V(x, y - 0.03, z0 + bh + 3.2));
       group.add(sign);
       st.boardPos = [x, y, z0 + bh / 2];
@@ -1134,14 +1315,17 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     lights.fill = new T.DirectionalLight("#cfe0ff", 0.5);
     group.add(lights.hemi, lights.key, lights.key.target, lights.fill, lights.fill.target);
     st.lights = lights;
+    const roofLift = { value: 0 };
 
     const towers = [];
+    let lampMatRef = null;
     if (!dome) {
       // 照明塔
       const lampTex = keep(lampTexture());
       const glowTex = keep(glowTexture());
       const poleMat = keep(new T.MeshStandardMaterial({ color: "#8d96a3", roughness: 0.5, metalness: 0.5 }));
       const lampMat = keep(new T.MeshBasicMaterial({ map: lampTex, toneMapped: false }));
+      lampMatRef = lampMat;
       const frameMat = keep(new T.MeshStandardMaterial({ color: "#3a3f47", roughness: 0.6 }));
       const center = [0, 45];
       for (const deg of [-150, -105, -50, 50, 105, 150]) {
@@ -1203,7 +1387,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
             void main(){
               float y = clamp(vD.y, -0.2, 1.0);
               vec3 dayTop = vec3(0.18, 0.42, 0.85); vec3 dayHz = vec3(0.70, 0.84, 0.96);
-              vec3 nTop = vec3(0.008, 0.016, 0.05); vec3 nHz = vec3(0.10, 0.14, 0.24);
+              vec3 nTop = vec3(0.006, 0.012, 0.04); vec3 nHz = vec3(0.065, 0.09, 0.16);
               float k = pow(max(0.0, y), 0.45);
               vec3 day = mix(dayHz, dayTop, k);
               vec3 nit = mix(nHz, nTop, k);
@@ -1286,51 +1470,170 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       const zc = -160;
       const g = keep(new T.SphereGeometry(R0, 64, 20, 0, Math.PI * 2, 0, Math.acos(-zc / R0 * 0.999) ));
       const m = new T.Mesh(g, keep(new T.MeshLambertMaterial({ map: rTex, emissiveMap: lTex, emissive: "#ffffff", emissiveIntensity: 1.4, side: T.BackSide })));
+      // 屋根の膜は照明の照り返しで明るい (下向きの面なので平行光源では照らせない)
+      liftMaterial(m.material, roofLift);
       m.position.set(0, zc, -48);
       group.add(m);
       st.roof = m;
     }
 
-    /* 霧 (遠景のかすみ) */
-    st.fog = new T.Fog(dome ? "#1c2230" : "#0a1428", 260, 1400);
+    /* かすみ (球場の中にも少しかかって奥行きが出る。色は空の地平線と同じにして、遠くの地面を空に溶かす) */
+    st.fog = new T.FogExp2(dome ? "#1c2230" : "#0a1428", 0.0015);
 
     /* 状態の切り替え */
+    st.envOn = false; // 環境マップ (IBL) で照らしているか
+    st.postOn = false; // 仕上げ処理 (HDR・bloom) を通しているか
+    const LK = PB.Look;
+    function applyLights() {
+      const N = dome ? false : st.night;
+      const kind = dome ? "dome" : N ? "night" : "day";
+      const env = st.envOn;
+      if (LK && LK.setLights) {
+        const p = LK.setLights(lights, kind, env);
+        st.exposure = p.exposure;
+        st.post = p.post;
+      } else {
+        lights.hemi.color.set(dome ? "#f4f1ea" : N ? "#9fb0d0" : "#cfe4ff");
+        lights.hemi.groundColor.set(dome ? "#4a4a3a" : N ? "#28361f" : "#4f5f2c");
+        lights.hemi.intensity = dome ? 1.25 : N ? 0.85 : 1.0;
+        lights.key.color.set(N ? "#fff1dc" : dome ? "#fffaf0" : "#fff2d6");
+        lights.key.intensity = dome ? 1.7 : N ? 2.3 : 3.0;
+        lights.fill.intensity = dome ? 0.6 : N ? 0.55 : 0.35;
+        st.exposure = dome ? 1.05 : N ? 1.1 : 0.95;
+        st.post = null;
+      }
+      // Lambert のスタンドと屋根には環境マップが届かないので、そのぶんと照明塔の照り返しを底上げする
+      standLift.value = dome ? (env ? 0.24 : 0.1) : N ? (env ? 0.26 : 0.16) : env ? 0.14 : 0.02;
+      roofLift.value = env ? 0.38 : 0.26;
+    }
+    function updateGlow() {
+      // 照明塔のにじみ (板) は bloom が無いときだけ
+      for (const t of towers) t.glow.visible = !dome && st.night && !st.postOn;
+    }
     st.setNight = function (night) {
       st.night = !!night;
       const N = dome ? false : st.night;
       if (sky) sky.material.uniforms.uNight.value = N ? 1 : 0;
       if (st.skyline) st.skyline.material.opacity = N ? 1 : 0.55;
-      for (const t of towers) t.glow.visible = N;
-      lights.hemi.color.set(dome ? "#f4f1ea" : N ? "#9fb0d0" : "#cfe4ff");
-      lights.hemi.groundColor.set(dome ? "#4a4a3a" : N ? "#28361f" : "#4f5f2c");
-      lights.hemi.intensity = dome ? 1.25 : N ? 0.85 : 1.0;
-      lights.key.color.set(N ? "#fff1dc" : dome ? "#fffaf0" : "#fff2d6");
-      lights.key.intensity = dome ? 1.7 : N ? 2.3 : 3.0;
-      lights.fill.intensity = dome ? 0.6 : N ? 0.55 : 0.35;
+      updateGlow();
       st.keyDir = dome ? V(-10, -30, 120).normalize() : N ? V(-35, -70, 120).normalize() : V(70, 20, 85).normalize();
       st.fillDir = V(30, 160, 60).normalize();
-      st.fog.color.set(dome ? "#2a2f3a" : N ? "#0d1830" : "#b9d3ee");
+      shadowBasis();
+      // かすみの色 = 空の地平線の色 (空のシェーダーの dayHz / nHz と同じ線形の値)
+      if (dome) st.fog.color.setRGB(0.1, 0.1, 0.105);
+      else if (N) st.fog.color.setRGB(0.065, 0.09, 0.16);
+      else st.fog.color.setRGB(0.7, 0.84, 0.96);
+      // 昼は球場の中は澄んでいて、遠くだけかすむ
+      st.fog.density = dome ? 0.0012 : N ? 0.0017 : 0.0008;
+      // 球場の外は照明が当たらないので夜は暗く
+      const out = N ? "#101318" : "#55585a";
+      gmat.userData.uniforms.uOut.value.set(out);
+      if (farGround) farGround.material.color.set(out);
       st.crowd.mat.color.setScalar(dome ? 0.95 : N ? 0.82 : 1.0);
       if (st.ribbon) st.ribbon.visible = true;
-      st.exposure = dome ? 1.05 : N ? 1.1 : 0.95;
+      applyLights();
     };
-    st.setNight(st.night);
+    // 環境マップを使うか (使うと半球ライトと補助光を弱める)
+    st.setEnv = function (on) {
+      if (st.envOn === !!on) return;
+      st.envOn = !!on;
+      applyLights();
+    };
+    // 仕上げ処理があるときは、光る物を HDR にして bloom でにじませる
+    st.setPost = function (on) {
+      st.postOn = !!on;
+      if (lampMatRef) lampMatRef.color.setScalar(on ? 30 : 1);
+      for (const m of emitters) m.color.setScalar(on ? 1.45 : 1);
+      if (st.roof) st.roof.material.emissiveIntensity = on ? 4 : 1.4;
+      updateGlow();
+    };
+    // MSAA があれば観客の切り抜きを alpha-to-coverage でなめらかに
+    st.setMSAA = function (on) {
+      const m = st.crowd.mat;
+      m.alphaToCoverage = !!on;
+      m.alphaTest = on ? 0.06 : 0.5;
+    };
 
+    /* 環境マップ (IBL): 昼・夜ごとに 1 枚、必要になったときに作る */
+    const envs = {};
+    st.envFor = function (renderer) {
+      if (!LK || !LK.makeEnv || !LK.canEnv(renderer)) return null;
+      const kind = LK.kindOf(st.night, dome);
+      if (!(kind in envs)) {
+        const c = V(0, 45, 1.5);
+        const gu = gmat.userData.uniforms;
+        envs[kind] = LK.makeEnv(renderer, {
+          kind,
+          seat: park.seat,
+          roof: park.roof,
+          grass: gu.uGrass.value,
+          dirt: gu.uDirt.value,
+          towers: towers.map((t) => t.bank.position.clone().sub(c).normalize()),
+          key: st.keyDir,
+        });
+      }
+      return envs[kind];
+    };
+
+    // 影のカメラの基底 (keyDir 方向から見た平面)。範囲の中心を 1 テクセル単位にそろえてちらつきを止める
+    const SB = { x: new T.Vector3(), y: new T.Vector3(), p: new T.Vector3(), last: [NaN, 0, 0, 0] };
+    function shadowBasis() {
+      SB.x.set(0, 1, 0).cross(st.keyDir).normalize();
+      SB.y.copy(st.keyDir).cross(SB.x);
+      SB.last[0] = NaN;
+    }
+    // 光から見た平面上の中心 (cu, cv) と半分の幅 (hu, hv) で影の範囲を決める
+    function applyShadow(cu, cv, hu, hv) {
+      const L = lights.key;
+      const ms = L.shadow.mapSize.x || 1024;
+      // 大きさは 2m 刻み (細かく変えるとテクセルの格子がずれる)、中心は 1 テクセル刻み
+      hu = Math.max(3, Math.ceil(hu / 2) * 2);
+      hv = Math.max(3, Math.ceil(hv / 2) * 2);
+      const tu = (2 * hu) / ms;
+      const tv = (2 * hv) / ms;
+      cu = Math.round(cu / tu) * tu;
+      cv = Math.round(cv / tv) * tv;
+      const ls = SB.last;
+      if (ls[0] === cu && ls[1] === cv && ls[2] === hu && ls[3] === hv) return;
+      ls[0] = cu;
+      ls[1] = cv;
+      ls[2] = hu;
+      ls[3] = hv;
+      SB.p.set(0, 0, 0).addScaledVector(SB.x, cu).addScaledVector(SB.y, cv);
+      L.target.position.copy(SB.p);
+      L.position.copy(SB.p).addScaledVector(st.keyDir, 200);
+      const c = L.shadow.camera;
+      c.left = -hu;
+      c.right = hu;
+      c.top = hv;
+      c.bottom = -hv;
+      c.updateProjectionMatrix();
+      lights.fill.target.position.copy(SB.p);
+      lights.fill.position.copy(SB.p).addScaledVector(st.fillDir, 200);
+    }
     // 影を落とす範囲 (ゲーム座標の中心と半径)
     st.focusShadow = function (cx, cy, rad) {
-      const L = lights.key;
-      const tgt = V(cx, cy, 0);
-      L.target.position.copy(tgt);
-      L.position.copy(tgt).addScaledVector(st.keyDir, 200);
-      const c = L.shadow.camera;
-      c.left = -rad;
-      c.right = rad;
-      c.top = rad;
-      c.bottom = -rad;
-      c.updateProjectionMatrix();
-      lights.fill.target.position.copy(tgt);
-      lights.fill.position.copy(tgt).addScaledVector(st.fillDir, 200);
+      SB.p.set(cx, 0, -cy);
+      applyShadow(SB.p.dot(SB.x), SB.p.dot(SB.y), rad, rad);
     };
+    // ゲーム座標の矩形 (地面) と、その上の高さ h までが入るように影の範囲を合わせる
+    st.fitShadow = function (x0, x1, y0, y1, h) {
+      let u0 = 1e9;
+      let u1 = -1e9;
+      let v0 = 1e9;
+      let v1 = -1e9;
+      for (let i = 0; i < 8; i++) {
+        SB.p.set(i & 1 ? x1 : x0, i & 4 ? h || 2.5 : 0, -(i & 2 ? y1 : y0));
+        const u = SB.p.dot(SB.x);
+        const v = SB.p.dot(SB.y);
+        if (u < u0) u0 = u;
+        if (u > u1) u1 = u;
+        if (v < v0) v0 = v;
+        if (v > v1) v1 = v;
+      }
+      applyShadow((u0 + u1) / 2, (v0 + v1) / 2, (u1 - u0) / 2 + 1, (v1 - v0) / 2 + 1);
+    };
+    st.setNight(st.night);
     st.focusShadow(0, 30, 70);
 
     // 観客の盛り上がり (0..1) — neutral, home, away
@@ -1349,6 +1652,10 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     };
     st.dispose = function () {
       for (const d of disposables) if (d && d.dispose) d.dispose();
+      for (const k of Object.keys(envs)) {
+        if (envs[k]) envs[k].dispose();
+        delete envs[k];
+      }
     };
     return st;
   };

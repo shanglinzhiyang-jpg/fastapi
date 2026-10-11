@@ -756,6 +756,35 @@
   };
 
   /* ---------- 設定 ---------- */
+  const GFX_NAME = { "2d": "2D", low: "低", mid: "中", high: "高", auto: "自動" };
+  // 画質 (3D 表示)。3D の無い版 (1 ファイル版) では出さない
+  function gfxBlock(S) {
+    const M = PB.main;
+    const V3 = PB.View3D;
+    if (!M || !M.gfxLevel || !V3 || !V3.init) return "";
+    const cur = S.gfx || "auto";
+    let note = "重いときは「低」か「2D」に。高は新しい機種向けです。";
+    if (cur === "auto") {
+      const a = M.autoGfx();
+      const gpu = String(a.gpu || "")
+        .replace(/^ANGLE \(/, "")
+        .replace(/\)$/, "")
+        .slice(0, 40);
+      note = "この端末の判定: <b>" + GFX_NAME[a.lvl] + "</b>" + (gpu ? '<span class="gfx-gpu">（' + esc(gpu) + "）</span>" : "") + "<br>" + note;
+    }
+    if (M.gfxLevel() !== "2d" && !V3.ok) note = "この端末では 3D 表示を使えないため、2D で表示しています。";
+    return (
+      '<h3 class="lbl">画質（3D 表示）</h3><div class="gfx-seg">' +
+      seg(
+        "gfx",
+        ["2d", "low", "mid", "high", "auto"].map((k) => [k, GFX_NAME[k]]),
+        cur
+      ) +
+      '</div><p class="note gfx-note">' +
+      note +
+      "</p>"
+    );
+  }
   Sc.settings = function () {
     const S = Store.settings();
     return {
@@ -803,6 +832,7 @@
             ],
             String(S.playSpeed)
           ) +
+          gfxBlock(S) +
           '<div class="tgs">' +
           tog("sound", "効果音") +
           tog("bgm", "応援トランペット") +
@@ -834,7 +864,11 @@
           PB.main.applySettings();
         } else if (["level", "swingMode", "assist"].indexOf(act) >= 0) S[act] = arg;
         else if (act === "playSpeed") S.playSpeed = Number(arg);
-        else if (act === "slot") {
+        else if (act === "gfx") {
+          // 画質はすぐに反映する (タイトル画面の背景が切り替わる)
+          S.gfx = arg;
+          if (!PB.main.applyGfx(true) && arg !== "2d") UI.toast("この端末では 3D 表示を使えないため 2D で表示します");
+        } else if (act === "slot") {
           const v = (document.getElementById("slot").value || "").trim().replace(/[^\w\-ぁ-んァ-ヶ一-龠]/g, "");
           Store.setSlot(v || "default");
           Store.pull().then((changed) => {

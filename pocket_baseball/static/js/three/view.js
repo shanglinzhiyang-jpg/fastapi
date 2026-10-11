@@ -20,6 +20,11 @@
 
   let renderer = null;
   let canvasEl = null;
+  let post = null; // 仕上げ処理 (post.js)。low と、使えない端末では null (画面に直接描く)
+  let canvasAA = true; // 画面のキャンバス自体が MSAA を持つか
+  // 確認用の切り替え (?post=0|ldr, ?env=0)
+  const QS = new URLSearchParams((window.location && window.location.search) || "");
+  V3.gen = 0; // WebGL コンテキストを作り直した回数 (portrait.js が環境マップを作り直す目印)
   const scene = new T.Scene();
   const cam = new T.PerspectiveCamera(30, 1, 0.4, 4000);
   const layerCam = new T.PerspectiveCamera(30, 1, 0.2, 400);
@@ -35,31 +40,57 @@
   const MAX_ACTORS = 46;
 
   /* ---------- 初期化 ---------- */
-  V3.init = function (cv, quality) {
-    canvasEl = cv;
+  // 仕上げ処理 (MSAA 付きの RenderTarget) を使う画質では、画面のキャンバスに MSAA は要らない
+  const wantCanvasAA = (q) => !(q !== "low" && PB.Post && typeof window.WebGL2RenderingContext !== "undefined" && QS.get("post") !== "0");
+  function makeRenderer(cv, q) {
+    canvasAA = wantCanvasAA(q);
+    let r = null;
     try {
-      renderer = new T.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: "high-performance", stencil: false });
+      r = new T.WebGLRenderer({ canvas: cv, antialias: canvasAA, powerPreference: "high-performance", stencil: false });
     } catch (e) {
       console.warn("WebGL を初期化できませんでした", e);
-      return false;
+      return null;
     }
-    if (!renderer.getContext()) return false;
-    renderer.outputColorSpace = T.SRGBColorSpace;
-    renderer.toneMapping = T.ACESFilmicToneMapping;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = T.PCFSoftShadowMap;
-    renderer.setClearColor(0x05080f, 1);
-    makeBall();
+    if (!r.getContext()) return null;
+    // GPU の名前 (ソフトウェア描画では解像度の自動調整をしない)
+    try {
+      const gl = r.getContext();
+      const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+      V3.gpu = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || "");
+    } catch (e) {
+      V3.gpu = "";
+    }
+    r.outputColorSpace = T.SRGBColorSpace;
+    r.toneMapping = T.ACESFilmicToneMapping;
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = T.PCFSoftShadowMap;
+    r.setClearColor(0x05080f, 1);
+    // 1 フレームの全部の描画 (影・打者レイヤー・仕上げ) を数える
+    r.info.autoReset = false;
+    // 差し替えて捨てたキャンバスの通知は無視する
     cv.addEventListener("webglcontextlost", (e) => {
+      if (cv !== canvasEl) return;
       e.preventDefault();
       V3.lost = true;
     });
     cv.addEventListener("webglcontextrestored", () => {
+      if (cv !== canvasEl) return;
       V3.lost = false;
+      V3.gen++;
       stadiumKey = "";
+      if (post) post.reset();
+      V3.resize(W, H, DPR);
     });
+    return r;
+  }
+  V3.init = function (cv, quality) {
+    canvasEl = cv;
+    const q = quality || "mid";
+    renderer = makeRenderer(cv, q);
+    if (!renderer) return false;
+    if (!ball) makeBall();
     V3.ok = true;
-    V3.setQuality(quality || "mid");
+    V3.setQuality(q);
     if (document.fonts && document.fonts.ready)
       document.fonts.ready.then(() => {
         if (stadium) {
@@ -68,24 +99,160 @@
       });
     return true;
   };
+  V3.canvas = () => canvasEl;
+
+  // 3D を休ませる (2D 表示に切り替えたとき・キャンバスを作り直すとき): 球場・選手・仕上げ処理の GPU 資源を手放す
+  V3.release = function () {
+    V3.clearActors();
+    if (stadium) {
+      scene.remove(stadium.group);
+      stadium.dispose();
+      stadium = null;
+    }
+    stadiumKey = "";
+    scene.environment = null;
+    scene.fog = null;
+    if (post) post.dispose();
+    post = null;
+  };
+
+  // 画面のキャンバスの MSAA の有無は後から変えられないので、low ⇔ mid/high で変わるときはキャンバスごと作り直す
+  function swapCanvas(q) {
+    const old = renderer;
+    const oc = canvasEl;
+    if (!oc || !oc.parentNode) return false;
+    V3.release();
+    const nc = oc.cloneNode(false);
+    oc.parentNode.replaceChild(nc, oc);
+    canvasEl = nc;
+    old.dispose();
+    try {
+      old.forceContextLoss();
+    } catch (e) {
+      /* 古いコンテキストはもう使わない */
+    }
+    V3.gen++;
+    V3.lost = false;
+    renderer = makeRenderer(nc, q);
+    if (!renderer) {
+      V3.ok = false;
+      return false;
+    }
+    return true;
+  }
 
   V3.setQuality = function (q) {
-    V3.quality = q || "mid";
+    q = q || "mid";
+    const prev = V3.quality;
+    V3.quality = q;
     if (!renderer) return;
-    renderer.shadowMap.enabled = V3.quality !== "low";
+    if (canvasAA !== wantCanvasAA(q) && !swapCanvas(q)) return;
+    // 選手のマテリアル (肌・帽子のテクスチャ) は画質ごとに作り分けるので作り直す
+    if (prev !== q) V3.clearActors();
+    renderer.shadowMap.enabled = q !== "low";
+    // 仕上げ処理: mid/high だけ (low は画面に直接描く)
+    if (post) post.dispose();
+    post = null;
+    if (q !== "low" && PB.Post && PB.Post.create && QS.get("post") !== "0") {
+      post = PB.Post.create(renderer, q, { force: QS.get("post") });
+      if (!post.ok) post = null;
+    }
+    drsReset();
     V3.resize(W, H, DPR);
     stadiumKey = "";
   };
 
+  const _size = new T.Vector2();
+  // 画質ごとの描画解像度 (ピクセル比) の上限
+  const prCap = () => (V3.quality === "high" ? Math.min(DPR, 2) : V3.quality === "mid" ? Math.min(DPR, 1.5) : Math.min(DPR, 1));
   V3.resize = function (w, h, dpr) {
     W = w;
     H = h;
     DPR = dpr || 1;
     if (!renderer) return;
-    const pr = V3.quality === "high" ? Math.min(DPR, 2) : V3.quality === "mid" ? Math.min(DPR, 1.5) : Math.min(DPR, 1);
-    renderer.setPixelRatio(pr);
-    renderer.setSize(w, h, false);
+    applySize(true);
   };
+  // 仕上げ処理があれば画面のキャンバスは上限の解像度のままで、描き込む RenderTarget だけを縮める (仕上げで拡大して出す)
+  function applySize(full) {
+    const cap = prCap();
+    const s = DRS.on ? DRS.scale : 1;
+    if (full || !post) {
+      renderer.setPixelRatio(post ? cap : cap * s);
+      renderer.setSize(W, H, false);
+    }
+    if (post) {
+      renderer.getDrawingBufferSize(_size);
+      // 作れなかったら (フレームバッファ未対応など) 直接描く
+      if (!post.setSize(_size.x * s, _size.y * s)) {
+        post.dispose();
+        post = null;
+        renderer.setPixelRatio(cap * s);
+        renderer.setSize(W, H, false);
+      }
+    }
+  }
+
+  /* ---------- 解像度の自動調整 (mid/high) ---------- */
+  // 1 フレームの間隔の移動平均を見て、重い状態が 1 秒続いたら描画の解像度を 1 段下げ、
+  // 軽い状態 (画面の更新に間に合っている) が続いたら 1 段戻す。戻してすぐ重くなったら、次に戻すまでの待ちを倍にする
+  const DRS = { on: false, scale: 1, min: 0.7, ema: 16.7, last: 0, slowT: 0, fastT: 0, wait: 3, upAt: -1e9, poorT: 0 };
+  const DRS_SLOW = 21; // ms (48fps を割る)
+  const DRS_FAST = 17.8; // ms (60fps の画面更新に間に合っている)
+  const SOFT_GPU = /swiftshader|llvmpipe|softpipe|software|basic render/i;
+  function drsReset() {
+    const forced = Number(QS.get("drs"));
+    // ソフトウェア描画 (SwiftShader などのテスト環境) では GPU の重さを測れないので調整しない
+    // (?drs=on で強制的に有効、?drs=0 で無効)
+    DRS.on = V3.quality !== "low" && QS.get("drs") !== "0" && (!SOFT_GPU.test(V3.gpu || "") || QS.get("drs") === "on" || forced > 0);
+    // ?drs=0.7 などで縮尺を固定 (確認用)
+    DRS.fixed = forced > 0 && forced <= 1 ? forced : 0;
+    DRS.scale = DRS.fixed || 1;
+    DRS.ema = 16.7;
+    DRS.slowT = DRS.fastT = DRS.poorT = 0;
+    DRS.wait = 3;
+    DRS.last = 0;
+  }
+  function drsSet(s) {
+    s = Math.max(DRS.min, Math.min(1, Math.round(s * 100) / 100));
+    if (s === DRS.scale) return;
+    DRS.scale = s;
+    applySize(false);
+  }
+  function drsTick() {
+    const now = performance.now();
+    const ft = DRS.last ? now - DRS.last : 0;
+    DRS.last = now;
+    // 止まっていたフレーム (タブの切り替え・シェーダーの準備) は数えない
+    if (!DRS.on || ft <= 0 || ft > 250) return;
+    DRS.ema += (ft - DRS.ema) * 0.08;
+    if (DRS.fixed) return;
+    const sec = ft / 1000;
+    if (DRS.ema > DRS_SLOW) {
+      DRS.slowT += sec;
+      DRS.fastT = 0;
+    } else if (DRS.ema < DRS_FAST) {
+      DRS.fastT += sec;
+      DRS.slowT = 0;
+    } else DRS.slowT = DRS.fastT = 0;
+    if (DRS.slowT > 1 && DRS.scale > DRS.min) {
+      // 戻してすぐ重くなった: 次に戻すまで長く待つ
+      if (now - DRS.upAt < 5000) DRS.wait = Math.min(60, DRS.wait * 2);
+      DRS.slowT = 0;
+      drsSet(DRS.scale - 0.1);
+    } else if (DRS.fastT > DRS.wait && DRS.scale < 1) {
+      DRS.fastT = 0;
+      DRS.upAt = now;
+      drsSet(DRS.scale + 0.1);
+    } else if (DRS.fastT > 20) DRS.wait = 3;
+    // 一番下げても 25fps に届かない状態が続いたら知らせる (main.js が「自動」の画質を 1 段下げる)
+    DRS.poorT = DRS.scale <= DRS.min && DRS.ema > 40 ? DRS.poorT + sec : 0;
+    if (DRS.poorT > 6) {
+      DRS.poorT = -1e9;
+      if (V3.onPoor) V3.onPoor(V3.quality);
+    }
+  }
+  // 選手カード (portrait.js) が同じ WebGL コンテキストで描くため
+  V3.renderer = () => (V3.ok && !V3.lost ? renderer : null);
 
   function ensureStadium(home, away, night) {
     const key = (home ? home.id : "-") + "|" + (away ? away.id : "-") + "|" + V3.quality;
@@ -103,6 +270,16 @@
       stadiumKey = key;
     }
     if (stadium.night !== !!night) stadium.setNight(night);
+    // 環境マップ (IBL): 球場の空・スタンド・照明塔から作る (昼夜を切り替えたら作り直す)
+    const env = QS.get("env") !== "0" && stadium.envFor ? stadium.envFor(renderer) : null;
+    scene.environment = env ? env.texture : null;
+    if (stadium.setEnv) stadium.setEnv(!!env);
+    if (stadium.setPost && stadium.postOn !== !!post) stadium.setPost(!!post);
+    const msaa = post ? post.samples > 0 : canvasAA;
+    if (stadium.setMSAA && stadium.msaa !== msaa) {
+      stadium.msaa = msaa;
+      stadium.setMSAA(msaa);
+    }
     renderer.toneMappingExposure = stadium.exposure;
     return stadium;
   }
@@ -135,6 +312,7 @@
   let ball = null;
   let ballShadow = null;
   let layerShadow = null;
+  let batShadow = null;
   function makeBall() {
     const c = document.createElement("canvas");
     c.width = 256;
@@ -173,12 +351,19 @@
     ballShadow = new T.Mesh(new T.PlaneGeometry(1, 1), smat);
     ballShadow.rotation.x = -Math.PI / 2;
     scene.add(ballShadow);
-    // 打者レイヤーの足元の影
-    layerShadow = new T.Mesh(new T.PlaneGeometry(1, 1), smat);
+    // 打者レイヤーの足元の影 (接地のぼかし)
+    layerShadow = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ map: stex, transparent: true, depthWrite: false }));
     layerShadow.rotation.x = -Math.PI / 2;
     layerShadow.layers.set(1);
     layerShadow.scale.set(1.3, 0.9, 1);
     scene.add(layerShadow);
+    // 打者の本当の影: レイヤー 1 の影だけを受ける透明な板 (レイヤーの描画で影の地図も打者だけで作り直される)
+    batShadow = new T.Mesh(new T.PlaneGeometry(6, 6), new T.ShadowMaterial({ opacity: 0.5, depthWrite: false }));
+    batShadow.rotation.x = -Math.PI / 2;
+    batShadow.receiveShadow = true;
+    batShadow.layers.set(1);
+    batShadow.renderOrder = 1;
+    scene.add(batShadow);
   }
   // ボールを置く (minPx: 画面上の最小直径)
   function placeBall(x, y, z, minPx, spin, dt) {
@@ -193,9 +378,11 @@
     ballShadow.visible = z > 0.05;
     if (ballShadow.visible) {
       ballShadow.position.set(x, 0.03, -y);
-      const k = Math.max(0.18, 0.28 * s) * (1 + Math.min(1, z / 30));
+      // 影はメートルで大きさを決める (ボールを見やすく拡大しても影は広げない)。高いほど薄くぼける。遠くても 3px は残す
+      const ds = cam.position.distanceTo(ballShadow.position);
+      const k = Math.max(Math.min(0.6, 0.12 + 0.012 * z), (3 * ds) / Math.max(1, f));
       ballShadow.scale.set(k, k, 1);
-      ballShadow.material.opacity = Math.max(0.25, 1 - z / 40);
+      ballShadow.material.opacity = Math.max(0.22, 0.8 * (1 - Math.min(1, z / 35)));
     }
   }
   function hideBall() {
@@ -326,6 +513,7 @@
     if (a.fresh || o.snap) a.yaw = yaw;
     else a.yaw = angTo(a.yaw, yaw, dt * (o.turn || 10));
     g.rotation.y = a.yaw;
+    lookHook(a, p);
     if (a.fresh || o.snap || !dt) a.rig.apply(p);
     else a.rig.drive(p, dt, o.rate || 14);
     a.fresh = false;
@@ -333,6 +521,21 @@
     // 後から骨に付けた道具 (バット) もレイヤーをそろえる
     const bat = a.pl.gear && a.pl.gear.bat;
     if (bat && bat.layers.mask !== a.pl.group.layers.mask) bat.layers.mask = a.pl.group.layers.mask;
+  }
+  // 視線と待機中の動き (human.js の HRig.setLook): 見えているボール (前のフレームの位置) を頭で追う。
+  // 手元のボールは見ない。打者はスイング中は追わない、走者は前を見る。低画質では視線・呼吸などを切る (足の固定は残る)
+  function lookHook(a, p) {
+    const rig = a.rig;
+    if (!rig.setLook) return;
+    const life = V3.quality !== "low";
+    let w = 0;
+    if (life && ball && ball.visible) {
+      const g = a.pl.group.position;
+      const b = ball.position;
+      const near = Math.hypot(b.x - g.x, b.z - g.z) < 1.6 && b.y - g.y < 2.6;
+      if (!near) w = p.kind === "swing" ? 0 : p.kind === "run" ? (a.helmet ? 0.3 : 0.9) : p.bat && p.bat.on ? 0.7 : 0.85;
+    }
+    rig.setLook(w > 0 ? ball.position : null, w, life);
   }
   const handPos = (a, side) => {
     const b = a.pl.human ? a.pl.bones["hand_" + side.toLowerCase()] : a.pl.bones["hand." + side];
@@ -415,6 +618,8 @@
     const budget = 3;
     syncCam(cam, rc);
     let layerUsed = false;
+    let layerBx = 0;
+    fadeBatFx(blend);
 
     /* --- 守備側 --- */
     const pitching = state === "windup" || state === "pitch";
@@ -507,13 +712,19 @@
           syncLayerCam(rc, [bx, 0, 0], sx, sy, k);
           layerShadow.position.set(bx, 0.01, 0);
           layerShadow.visible = true;
+          // 影の地図があれば本当の影を落とし、ぼかしは足元の接地感だけにする
+          const realShadow = renderer.shadowMap.enabled;
+          batShadow.visible = realShadow;
+          batShadow.position.set(bx, 0.005, 0);
+          layerShadow.material.opacity = realShadow ? 0.6 : 1;
+          layerBx = bx;
           layerUsed = true;
         } else {
           pose(a, left ? 0.85 : -0.85, 0.0, 0, left ? -Math.PI / 2 : Math.PI / 2, q, dt, { rate: 22, turn: 30 });
         }
       }
     }
-    if (!layerUsed) layerShadow.visible = false;
+    if (!layerUsed) layerShadow.visible = batShadow.visible = false;
 
     /* --- 走者 --- */
     if (play) {
@@ -615,27 +826,107 @@
     const homeBat = bs === "home";
     st.setExcite(0.08 + hot * 0.4, homeBat ? 0.3 + hot * 0.7 : 0.06, homeBat ? 0.06 : 0.3 + hot * 0.7);
     st.update(dt);
-    if (fieldView) {
-      const tx = rc.target[0];
-      const ty = rc.target[1];
-      st.focusShadow(tx, ty, Math.max(34, 72 / (m.dyn ? m.dyn.zoom : 1)));
-    } else st.focusShadow(0, 9, 15);
 
     endFrame();
-    draw(layerUsed);
+    // 影の範囲: 守備視点は見えている地面と選手のいる所の重なり、打席視点は投手のまわり
+    if (fieldView) fitShadowToView(st);
+    else st.fitShadow(-9, 9, 7, 27, 2.6);
+    draw(layerUsed, layerBx);
     return true;
   };
 
-  function draw(layerUsed) {
+  // 打った瞬間の火花 (2D の R.burst) は打席カメラの画面に貼り付いているので、守備視点へ動き出したら消す
+  // (残すと守備視点の芝の上に黄色い四角が散らばって見える)
+  function fadeBatFx(blend) {
+    const fx = PB.R && PB.R.fx;
+    if (!fx || !fx.length) return;
+    for (const p of fx) {
+      // 打席視点で生まれた粒 (と、打球の火花の色の粒) に印を付ける。花火は残す
+      if (p.v3 == null) p.v3 = blend <= 0.2 || p.c === "#fff3b0" ? 1 : 0;
+      if (p.v3 === 1 && blend > 0.3) {
+        p.life = Math.min(p.life, p.t + 0.1);
+        p.v3 = 2;
+      }
+    }
+  }
+
+  // 影の範囲を、画面に写っている地面 (視錐台の光線と地面の交点) と選手のいる範囲の重なりに合わせる
+  const _ray = new T.Vector3();
+  function fitShadowToView(st) {
+    const o = cam.position;
+    let x0 = 1e9;
+    let x1 = -1e9;
+    let y0 = 1e9;
+    let y1 = -1e9;
+    for (let i = 0; i < 4; i++)
+      for (let j = 0; j < 4; j++) {
+        _ray.set((i / 3) * 2 - 1, (j / 3) * 2 - 1, 0.5).unproject(cam).sub(o);
+        let gx;
+        let gy;
+        if (_ray.y < -1e-3 && -o.y / _ray.y < 600) {
+          const t = -o.y / _ray.y;
+          gx = o.x + _ray.x * t;
+          gy = -(o.z + _ray.z * t);
+        } else {
+          // 地面に当たらない (空を向く) 光線は遠くで止める
+          const l = Math.hypot(_ray.x, _ray.z) || 1;
+          gx = o.x + (_ray.x / l) * 600;
+          gy = -(o.z + (_ray.z / l) * 600);
+        }
+        if (gx < x0) x0 = gx;
+        if (gx > x1) x1 = gx;
+        if (gy < y0) y0 = gy;
+        if (gy > y1) y1 = gy;
+      }
+    let a0 = 1e9;
+    let a1 = -1e9;
+    let b0 = 1e9;
+    let b1 = -1e9;
+    for (const a of actors.values()) {
+      if (a.used !== tick || !a.pl.group.visible || a.layer !== 0) continue;
+      const p = a.pl.group.position;
+      if (p.x < a0) a0 = p.x;
+      if (p.x > a1) a1 = p.x;
+      if (-p.z < b0) b0 = -p.z;
+      if (-p.z > b1) b1 = -p.z;
+    }
+    if (a0 > a1) {
+      a0 = -20;
+      a1 = 20;
+      b0 = 0;
+      b1 = 40;
+    }
+    const m = 3;
+    let fx0 = Math.max(x0, a0 - m, -112);
+    let fx1 = Math.min(x1, a1 + m, 112);
+    let fy0 = Math.max(y0, b0 - m, -30);
+    let fy1 = Math.min(y1, b1 + m, 135);
+    if (fx0 >= fx1 || fy0 >= fy1) {
+      fx0 = a0 - m;
+      fx1 = a1 + m;
+      fy0 = b0 - m;
+      fy1 = b1 + m;
+    }
+    st.fitShadow(fx0, fx1, fy0, fy1, 2.4);
+  }
+
+  function draw(layerUsed, layerBx) {
+    drsTick();
+    renderer.info.reset();
     renderer.autoClear = true;
     cam.layers.set(0);
+    const usePost = !!post && post.begin();
     renderer.render(scene, cam);
     if (layerUsed) {
+      // 打者だけの 2 回目: 影の範囲を打者のまわりに絞る (影の地図はこの描画で打者だけから作り直される)
+      if (stadium) stadium.focusShadow(layerBx || 0, 0, 2.6);
       renderer.autoClear = false;
-      renderer.clearDepth();
+      if (usePost) post.clearDepth();
+      else renderer.clearDepth();
       renderer.render(scene, layerCam);
       renderer.autoClear = true;
     }
+    if (usePost) post.end(stadium && stadium.post);
   }
 
   /* 投手 (試合の打席前・投球中) */
@@ -951,17 +1242,29 @@
       });
     }
     hideBall();
-    layerShadow.visible = false;
+    layerShadow.visible = batShadow.visible = false;
     st.setExcite(0.1, 0.25, 0.25);
     st.update(dt);
-    st.focusShadow(-8, 30, 45);
     st.board.draw({ msg: "熱闘！ポケットベースボール", home: { short: home ? home.short : "" }, away: { short: away ? away.short : "" } });
     endFrame();
+    fitShadowToView(st);
     draw(false);
     return true;
   };
 
   // 画面サイズのチェック用
   V3._actors = actors;
-  V3.info = () => ({ actors: actors.size, calls: renderer ? renderer.info.render.calls : 0, tris: renderer ? renderer.info.render.triangles : 0 });
+  // 1 フレーム分の合計 (影の地図・打者レイヤー・仕上げ処理を含む)
+  V3.info = () => ({
+    actors: actors.size,
+    calls: renderer ? renderer.info.render.calls : 0,
+    tris: renderer ? renderer.info.render.triangles : 0,
+    post: post ? (post.hdr ? "hdr" : "ldr") + " msaa" + post.samples : "off",
+    env: !!scene.environment,
+    quality: V3.quality,
+    // 実際の描画解像度 (ピクセル比) と自動調整の縮尺・1 フレームの間隔 (ms)
+    pr: renderer ? Math.round(prCap() * (DRS.on ? DRS.scale : 1) * 100) / 100 : 0,
+    scale: DRS.on ? DRS.scale : 1,
+    ft: Math.round(DRS.ema * 10) / 10,
+  });
 })((window.PB = window.PB || {}));
