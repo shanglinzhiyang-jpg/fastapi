@@ -27,16 +27,20 @@
   // フェンスまでの距離 (両翼100m・中堅122m)
   F.fenceDist = (theta) => 100 + 22 * Math.cos(2 * U.clamp(theta, -F.FOUL_ANGLE, F.FOUL_ANGLE));
   F.isFairAngle = (theta) => Math.abs(theta) <= F.FOUL_ANGLE + 1e-6;
-  // 内野の土 (マウンド中心 半径 29m の円の内側)
+  /* 内野の形 (3D 球場の地面シェーダーと同じ定義)
+   * a = 本塁→一塁 方向の座標, b = 本塁→三塁 方向の座標。
+   * 内野の芝は a,b < GRASS_EDGE の正方形、その外側から マウンド中心 R=29m の円弧までが土。 */
+  F.SHAPE = { GRASS_EDGE: 26.1, ARC_R: 29, MOUND_C: [0, 17.98], MOUND_R: 2.75, HOME_R: 4.2, CUT_R: 2.4 };
   F.isDirt = function (x, y) {
+    const S = F.SHAPE;
     const r = Math.hypot(x, y);
-    if (r < 4.2) return true;
-    const dm = Math.hypot(x, y - F.MOUND[1]);
-    if (dm < 2.9) return true;
-    if (Math.abs(F.angle(x, y)) > F.FOUL_ANGLE + 0.05) return false;
-    if (dm < 29 && r > 26) return true;
-    // ベースライン沿い
-    return false;
+    if (r < S.HOME_R) return true;
+    if (Math.hypot(x - S.MOUND_C[0], y - S.MOUND_C[1]) < S.MOUND_R) return true;
+    for (let i = 1; i <= 3; i++) if (Math.hypot(x - F.BASES[i][0], y - F.BASES[i][1]) < S.CUT_R) return true;
+    const a = (y + x) * Math.SQRT1_2;
+    const b = (y - x) * Math.SQRT1_2;
+    if (a < -1 || b < -1) return false;
+    return Math.max(a, b) > S.GRASS_EDGE && Math.hypot(x, y - F.MOUND[1]) < S.ARC_R;
   };
 
   /* 打球 (位置 p, 速度 v) を時間 dt だけ進める。b はミュータブル。

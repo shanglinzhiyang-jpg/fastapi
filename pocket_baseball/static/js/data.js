@@ -103,6 +103,47 @@
     "翔太 大輝 健太 拓也 直樹 亮 達也 誠 隼人 優斗 蓮 悠真 颯太 大和 陸 湊 樹 海斗 慎吾 剛 大地 翼 将太 勇気 一輝 和也 浩二 雄大 光 純平 圭介 智也 康介 秀樹 龍之介 虎太郎 新 晴人 蒼 涼介 豪 鉄平 弾 球児 竜也 迅 烈 銀次 力 鷹也"
   ).split(" ");
 
+  // 背ネーム用のローマ字
+  D.ROMAJI = {};
+  (function () {
+    const a = (
+      "佐藤 SATO 鈴木 SUZUKI 高橋 TAKAHASHI 田中 TANAKA 伊藤 ITO 渡辺 WATANABE 山本 YAMAMOTO 中村 NAKAMURA 小林 KOBAYASHI 加藤 KATO 吉田 YOSHIDA 山田 YAMADA 佐々木 SASAKI 山口 YAMAGUCHI 松本 MATSUMOTO 井上 INOUE 木村 KIMURA 林 HAYASHI 斎藤 SAITO 清水 SHIMIZU 山崎 YAMAZAKI 森 MORI 池田 IKEDA 橋本 HASHIMOTO 阿部 ABE 石川 ISHIKAWA 山下 YAMASHITA 中島 NAKAJIMA 石井 ISHII 小川 OGAWA 前田 MAEDA 岡田 OKADA 長谷川 HASEGAWA 藤田 FUJITA 後藤 GOTO 近藤 KONDO 遠藤 ENDO 青木 AOKI 福田 FUKUDA 太田 OTA 西村 NISHIMURA 藤井 FUJII 金子 KANEKO 藤原 FUJIWARA 中野 NAKANO 三浦 MIURA 原田 HARADA 中川 NAKAGAWA 松田 MATSUDA 竹内 TAKEUCHI 小野 ONO 田村 TAMURA 中山 NAKAYAMA 和田 WADA 石田 ISHIDA 森田 MORITA 上田 UEDA 原 HARA 内田 UCHIDA 柴田 SHIBATA 酒井 SAKAI 宮崎 MIYAZAKI 横山 YOKOYAMA 高木 TAKAGI 安藤 ANDO 宮本 MIYAMOTO 大野 ONO 小島 KOJIMA 谷口 TANIGUCHI 今井 IMAI 工藤 KUDO 高田 TAKADA 増田 MASUDA 丸山 MARUYAMA 杉山 SUGIYAMA 大塚 OTSUKA 新井 ARAI 小山 KOYAMA 平野 HIRANO 藤本 FUJIMOTO 河野 KONO 上野 UENO 野口 NOGUCHI 武田 TAKEDA 千葉 CHIBA 岩崎 IWASAKI 菅原 SUGAWARA 木下 KINOSHITA 久保 KUBO 佐野 SANO 野村 NOMURA 松尾 MATSUO 菊地 KIKUCHI 杉本 SUGIMOTO 市川 ICHIKAWA 古川 FURUKAWA 大西 ONISHI 島田 SHIMADA 水野 MIZUNO 桜井 SAKURAI 高野 TAKANO 渡部 WATANABE 吉川 YOSHIKAWA 山内 YAMAUCHI 西田 NISHIDA 飯田 IIDA 西川 NISHIKAWA 小松 KOMATSU 北村 KITAMURA 安田 YASUDA 五十嵐 IGARASHI 川口 KAWAGUCHI 平田 HIRATA 関 SEKI 服部 HATTORI 東 AZUMA 岩田 IWATA 土屋 TSUCHIYA 川崎 KAWASAKI 福島 FUKUSHIMA 本田 HONDA 辻 TSUJI 樋口 HIGUCHI 秋山 AKIYAMA 田口 TAGUCHI 永井 NAGAI 山中 YAMANAKA 中西 NAKANISHI 吉村 YOSHIMURA 川上 KAWAKAMI 石原 ISHIHARA 大橋 OHASHI 松岡 MATSUOKA 馬場 BABA 浅野 ASANO 荒木 ARAKI 大久保 OKUBO 野田 NODA 小沢 OZAWA 田辺 TANABE 川村 KAWAMURA 星野 HOSHINO 黒田 KURODA 堀 HORI 尾崎 OZAKI 望月 MOCHIZUKI 永田 NAGATA 熊谷 KUMAGAI 内藤 NAITO 松村 MATSUMURA 西山 NISHIYAMA 大島 OSHIMA 根本 NEMOTO 早川 HAYAKAWA 片山 KATAYAMA 宇野 UNO 鶴田 TSURUTA 猪俣 INOMATA 霧島 KIRISHIMA 雷電 RAIDEN 剛田 GODA 鬼塚 ONIZUKA 獅子堂 SHISHIDO 鷹野 TAKANO 白鳥 SHIRATORI 赤星 AKAHOSHI 黒岩 KUROIWA 竜崎 RYUZAKI"
+    ).split(" ");
+    for (let i = 0; i + 1 < a.length; i += 2) D.ROMAJI[a[i]] = a[i + 1];
+  })();
+  // かな → ローマ字 (読みがある選手用)
+  const KANA = { あ: "A", い: "I", う: "U", え: "E", お: "O", か: "KA", き: "KI", く: "KU", け: "KE", こ: "KO", さ: "SA", し: "SHI", す: "SU", せ: "SE", そ: "SO", た: "TA", ち: "CHI", つ: "TSU", て: "TE", と: "TO", な: "NA", に: "NI", ぬ: "NU", ね: "NE", の: "NO", は: "HA", ひ: "HI", ふ: "FU", へ: "HE", ほ: "HO", ま: "MA", み: "MI", む: "MU", め: "ME", も: "MO", や: "YA", ゆ: "YU", よ: "YO", ら: "RA", り: "RI", る: "RU", れ: "RE", ろ: "RO", わ: "WA", を: "O", ん: "N", が: "GA", ぎ: "GI", ぐ: "GU", げ: "GE", ご: "GO", ざ: "ZA", じ: "JI", ず: "ZU", ぜ: "ZE", ぞ: "ZO", だ: "DA", ぢ: "JI", づ: "ZU", で: "DE", ど: "DO", ば: "BA", び: "BI", ぶ: "BU", べ: "BE", ぼ: "BO", ぱ: "PA", ぴ: "PI", ぷ: "PU", ぺ: "PE", ぽ: "PO" };
+  const YOON = { ゃ: "YA", ゅ: "YU", ょ: "YO" };
+  D.kanaToRomaji = function (s) {
+    s = String(s || "").replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+    let out = "";
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      const n = s[i + 1];
+      if (c === "っ" && n && KANA[n]) {
+        out += KANA[n][0];
+        continue;
+      }
+      if (c === "ー") continue;
+      if (n && YOON[n] && KANA[c]) {
+        const base = KANA[c];
+        out += (base === "SHI" ? "SH" : base === "CHI" ? "CH" : base === "JI" ? "J" : base.slice(0, -1)) + (base === "SHI" || base === "CHI" || base === "JI" ? YOON[n].slice(1) : YOON[n]);
+        i++;
+        continue;
+      }
+      out += KANA[c] || (/[A-Za-z]/.test(c) ? c.toUpperCase() : "");
+    }
+    return out.replace(/OU/g, "O").replace(/OO/g, "O").replace(/UU/g, "U");
+  };
+  D.romaji = function (p) {
+    if (!p) return "";
+    if (p.nameEn) return p.nameEn;
+    if (D.ROMAJI[p.name]) return D.ROMAJI[p.name];
+    if (p.kana) return D.kanaToRomaji(String(p.kana).split(/[ 　]/)[0]);
+    if (/^[A-Za-z .'-]+$/.test(p.name || "")) return String(p.name).toUpperCase();
+    return "";
+  };
+
   /* ---------- 顔 ---------- */
   D.SKINS = ["#ffd9b8", "#f7caa0", "#eab78f", "#d9a274", "#ffe1c8"];
   D.EYES = ["round", "round", "round", "smile", "line", "big", "sharp", "glasses"];

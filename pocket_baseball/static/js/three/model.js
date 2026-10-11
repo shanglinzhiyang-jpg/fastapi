@@ -730,8 +730,15 @@
     const matCapV = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 });
     const matHelmetV = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.18, metalness: 0.2 });
     const matLogo = new T.MeshStandardMaterial({ map: capLogoTexture(team.mark || "", team.capMark || team.sub || "#fff", capColor), transparent: true, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2 });
+    const capCache = {};
     const makeCap = (helmet) => {
-      capGroup.clear();
+      // 帽子とヘルメットは一度作ったら表示を切り替えるだけ
+      const key = helmet ? "h" + (o.bats === "L" ? "L" : "R") : "c";
+      for (const k in capCache) capCache[k].visible = k === key;
+      if (capCache[key]) return;
+      const holder = new T.Group();
+      capCache[key] = holder;
+      capGroup.add(holder);
       const m = helmet ? matHelmet : matCap;
       const sh = new T.Shape();
       sh.absellipse(0, 0, helmet ? 0.074 : 0.084, helmet ? 0.05 : 0.074, 0, Math.PI, false);
@@ -749,12 +756,12 @@
       else cparts.push({ geo: geoCache("btn", () => new T.SphereGeometry(0.008, 8, 6)), color: capColor, pos: [0, 0.122, -0.002] });
       const capMesh = new T.Mesh(mergeColored(cparts), helmet ? matHelmetV : matCapV);
       capMesh.castShadow = true;
-      capGroup.add(capMesh);
+      holder.add(capMesh);
       if (!umpire && team.mark) {
         const logo = new T.Mesh(geoCache("logoPlane", () => new T.PlaneGeometry(0.046, 0.046)), matLogo);
         logo.position.set(0, helmet ? 0.066 : 0.074, helmet ? 0.106 : 0.0985);
         logo.rotation.x = -0.5;
-        capGroup.add(logo);
+        holder.add(logo);
       }
       void m;
     };
