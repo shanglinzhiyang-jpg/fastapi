@@ -8,7 +8,7 @@ const N = Number(process.argv[2] || 24);
 const teams = PB.D.newTeams();
 const tot = { pa: 0, ab: 0, h: 0, hr: 0, bb: 0, k: 0, r: 0, g: 0 };
 for (let i = 0; i < N; i++) {
-  const away = teams[i % 6];
+  const away = teams[i % teams.length];
   const home = teams[(i + 1 + Math.floor(i / 6)) % 6 === i % 6 ? (i + 2) % 6 : (i + 1 + Math.floor(i / 6)) % 6];
   const g = new PB.Game({ away: PB.U.clone(away), home: PB.U.clone(home), innings: 9 });
   g.simToEnd();

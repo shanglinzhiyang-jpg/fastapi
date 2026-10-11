@@ -96,7 +96,10 @@
       this.line = { away: [], home: [] };
       this.hits = { away: 0, home: 0 };
       this.errors = { away: 0, home: 0 };
-      this.order = { away: U.clone(o.away.lineup), home: U.clone(o.home.lineup) };
+      // DH 制: 本拠地のリーグで決める (2004 年はセ・リーグ = なし, パ・リーグ = あり)
+      const hdef = PB.D.teamDef ? PB.D.teamDef(o.home.id) : null;
+      this.dh = o.dh != null ? !!o.dh : !(hdef && hdef.lg === "C");
+      this.order = PB.D.lineupFor ? { away: PB.D.lineupFor(o.away, this.dh), home: PB.D.lineupFor(o.home, this.dh) } : { away: U.clone(o.away.lineup), home: U.clone(o.home.lineup) };
       this.bi = { away: 0, home: 0 };
       this.box = {};
       this.log = [];
@@ -111,6 +114,7 @@
         const t = this.teams[side];
         const sid = (o.starters && o.starters[side]) || t.rotation[(t.rotIdx || 0) % t.rotation.length];
         this.setPitcher(side, sid, true);
+        for (const e of this.order[side]) if (e.pos === "P") e.id = this.pstate[side].id;
         this.order[side].forEach((e) => this.stat(e.id).g || (this.stat(e.id).g = 1));
       }
       this.line.away.push(0);
@@ -138,7 +142,9 @@
     }
     batter() {
       const s = this.battingSide();
-      return this.P(this.order[s][this.bi[s]].id);
+      const e = this.order[s][this.bi[s]];
+      // DH なし: 投手の打順にはその時の投手が入る
+      return e.pos === "P" ? this.pitcher(s) : this.P(e.id);
     }
     batterPos() {
       const s = this.battingSide();
@@ -146,7 +152,8 @@
     }
     onDeck(k) {
       const s = this.battingSide();
-      return this.P(this.order[s][(this.bi[s] + (k || 1)) % 9].id);
+      const e = this.order[s][(this.bi[s] + (k || 1)) % 9];
+      return e.pos === "P" ? this.pitcher(s) : this.P(e.id);
     }
     pitcher(side) {
       return this.P(this.pstate[side || this.fieldingSide()].id);
@@ -157,7 +164,7 @@
     defense(side) {
       const s = side || this.fieldingSide();
       const m = {};
-      for (const e of this.order[s]) if (e.pos !== "DH") m[e.pos] = this.P(e.id);
+      for (const e of this.order[s]) if (e.pos !== "DH" && e.pos !== "PH" && e.pos !== "P") m[e.pos] = this.P(e.id);
       m.P = this.pitcher(s);
       return m;
     }
@@ -546,6 +553,7 @@
         this.inning++;
         this.line.away.push(0);
       }
+      this.fixPinchHitPitcher(this.fieldingSide());
       this.emit("half", { inning: this.inning, top: this.top });
     }
 
@@ -585,10 +593,25 @@
       this.setPitcher(side, id, false);
     }
 
+    // 投手に代打を出したチームが守備につくとき、救援投手をその打順に入れる
+    fixPinchHitPitcher(side) {
+      const slot = this.order[side].find((e) => e.pos === "PH");
+      if (!slot) return;
+      const pen = this.bullpenAvailable(side);
+      const t = this.teams[side];
+      const pick = pen.map((id) => this.P(id)).filter(Boolean).sort((a, b) => PB.D.pitOverall(b) - PB.D.pitOverall(a) - (b.role === "CL" ? 20 : 0) + (a.role === "CL" ? 20 : 0))[0];
+      if (pick) this.changePitcher(side, pick.id);
+      slot.id = this.pstate[side].id;
+      slot.pos = "P";
+      void t;
+    }
+
     pinchHit(id) {
       const s = this.battingSide();
       const slot = this.order[s][this.bi[s]];
-      const old = this.P(slot.id);
+      const old = slot.pos === "P" ? this.pitcher(s) : this.P(slot.id);
+      // 投手の代打: 次の守備で投手を交代する
+      if (slot.pos === "P") slot.pos = "PH";
       slot.id = id;
       const st = this.stat(id);
       st.g = 1;

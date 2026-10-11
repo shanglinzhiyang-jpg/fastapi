@@ -300,7 +300,112 @@
     return { name: s, given: rng.pick(D.GIVEN) };
   }
 
+  // 実在選手の能力をゲームの基準に合わせる補正 (2004 年の打高: 1 試合 4.5 点・打率 .280 前後になるよう調整)
+  D.CALIB = { meet: 5, power: 14, speed: 10, lv: -1, velo: 0, control: -7 };
+
+  // 実在選手の名簿 (rosters2004.js) からチームを作る
+  D.rosterTeam = function (tdef, ro) {
+    const rng = U.seeded(tdef.seed || 1);
+    const players = ro.players.map((r, i) => {
+      const nm = String(r.name || "");
+      let name = nm;
+      let given = "";
+      if (nm.indexOf(" ") > 0) {
+        [name, given] = nm.split(" ");
+      } else if (nm.indexOf("・") > 0) {
+        const parts = nm.split("・");
+        name = parts[parts.length - 1];
+        given = parts.slice(0, -1).join("・");
+      }
+      // 能力の補正 (ゲームの打高・投高のバランスに合わせる)
+      const C = D.CALIB || {};
+      const a0 = r.r || {};
+      const a = Object.assign({}, a0);
+      if (r.pos !== "P") {
+        a.meet = (a0.meet || 40) + (C.meet || 0);
+        a.power = (a0.power || 40) + (C.power || 0);
+        a.speed = (a0.speed || 45) + (C.speed || 0);
+      }
+      if (r.pos === "P") {
+        a.velo = (a0.velo || 140) + (C.velo || 0);
+        a.control = (a0.control || 50) + (C.control || 0);
+        a.pitches = (a0.pitches || []).map((x) => ({ t: x.t, lv: x.lv + (C.lv || 0) }));
+      }
+      const p = {
+        id: tdef.id + "_" + i,
+        name,
+        given,
+        full: nm.replace(" ", ""),
+        kana: r.kana,
+        nameEn: r.nameEn,
+        num: r.num,
+        pos: r.pos,
+        bats: r.bats || "R",
+        throws: r.throws || "R",
+        age: r.age,
+        foreign: !!r.foreign,
+        meet: clampAb(a.meet || 40),
+        power: clampAb(a.power || 40),
+        speed: clampAb(a.speed || 45),
+        arm: clampAb(a.arm || 50),
+        field: clampAb(a.field || 50),
+        catch: clampAb(a.catch || 50),
+        traj: U.clamp(a.traj || 2, 1, 4),
+        skills: (r.skills || []).filter((k) => D.SKILLS[k]),
+        real: { stats: r.stats || {}, season: ro.season },
+      };
+      if (r.pos === "P") {
+        p.role = r.role || "RP";
+        p.velo = Math.round(U.clamp(a.velo || 140, 115, 165));
+        p.control = clampAb(a.control || 50);
+        p.stamina = clampAb(a.stamina || (p.role === "SP" ? 65 : 35));
+        p.pitches = (a.pitches || []).filter((x) => D.PITCHES[x.t] && x.t !== "FB").map((x) => ({ t: x.t, lv: U.clamp(x.lv | 0, 1, 7) }));
+      }
+      p.face = genFace(rng);
+      if (p.foreign) p.face.skin = D.SKINS[3];
+      return p;
+    });
+    const team = Object.assign({}, tdef, { players, manager: ro.manager });
+    const byName = (n) => players.find((p) => p.full === String(n || "").replace(" ", ""));
+    // 打順 (セ・リーグは投手が 9 番)
+    const order = (ro.lineup || []).map((e) => {
+      const p = byName(e.name);
+      return p ? { id: p.id, pos: e.pos } : null;
+    });
+    if (order.length === 9 && order.every(Boolean)) {
+      team.lineup = order;
+      const used = new Set(order.map((e) => e.id));
+      team.bench = players.filter((p) => p.pos !== "P" && !used.has(p.id)).map((p) => p.id);
+      const rot = (ro.rotation || []).map(byName).filter(Boolean);
+      team.rotation = rot.length ? rot.map((p) => p.id) : players.filter((p) => p.role === "SP").map((p) => p.id);
+      const cl = byName(ro.closer);
+      team.closer = cl ? cl.id : null;
+      team.bullpen = players.filter((p) => p.pos === "P" && team.rotation.indexOf(p.id) < 0).sort((a, b) => (a.id === team.closer ? 1 : 0) - (b.id === team.closer ? 1 : 0)).map((p) => p.id);
+      team.rotIdx = 0;
+    } else D.autoOrder(team);
+    // 投手の打順に入る先発
+    for (const e of team.lineup) if (e.pos === "P") e.id = team.rotation[0];
+    return team;
+  };
+
+  // 試合の DH 制に合わせた打順 (DH あり ⇔ 投手が打つ)
+  D.lineupFor = function (team, dh) {
+    const L = team.lineup.map((e) => Object.assign({}, e));
+    const pi = L.findIndex((e) => e.pos === "P");
+    const di = L.findIndex((e) => e.pos === "DH");
+    if (dh && pi >= 0) {
+      const used = new Set(L.map((e) => e.id));
+      const best = (team.bench || []).map((id) => team.players.find((p) => p.id === id)).filter((p) => p && !used.has(p.id)).sort((a, b) => D.batOverall(b) - D.batOverall(a))[0];
+      if (best) L[pi] = { id: best.id, pos: "DH" };
+    } else if (!dh && di >= 0) {
+      L.splice(di, 1);
+      L.push({ id: team.rotation[0], pos: "P" });
+    }
+    return L;
+  };
+
   D.generateTeam = function (tdef) {
+    if (D.ROSTERS && D.ROSTERS[tdef.id]) return D.rosterTeam(tdef, D.ROSTERS[tdef.id]);
     const rng = U.seeded(tdef.seed);
     const style = tdef.style;
     const used = new Set();

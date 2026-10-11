@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const ENGINE_FILES = ["util.js", "data.js", "field.js", "pitch.js", "play.js", "ai.js", "game.js"];
+const ENGINE_FILES = ["util.js", "data.js", "npb.js", "rosters2004.js", "field.js", "pitch.js", "play.js", "ai.js", "game.js"];
 
 function loadEngine(files) {
   const ctx = { console, Math, Date, JSON, Set, Map, Object, Array, Number, String, Boolean, Error, isFinite, setTimeout, clearTimeout };
