@@ -289,19 +289,28 @@
         this.setE(b.neck_01, _ne);
         this.setE(b.head, _he);
       }
-      // バットの握り
+      // バットの握り: 下の手 = g、上の手 = g + d·th (th: 握りからの距離。バントは 0.36)。
+      // flags.batOne のときは下の手だけで持ち、上の手は armX.t へ
       let armL = p.armL.t;
       let armR = p.armR.t;
-      if (p.bat.on) {
+      const batOn = !!p.bat.on;
+      const lb = this.player.opts.bats === "L";
+      const one = batOn && !!(p.flags && p.flags.batOne);
+      const th = p.bat.th == null ? 0.085 : p.bat.th;
+      const bd = _v3;
+      if (batOn) {
         const g = p.bat.g;
-        const d = _v1.set(p.bat.d[0], p.bat.d[1], p.bat.d[2]).normalize();
-        const top = [g[0] + d.x * 0.085, g[1] + d.y * 0.085, g[2] + d.z * 0.085];
-        if (this.player.opts.bats === "L") {
-          armR = g;
-          armL = top;
+        bd.set(p.bat.d[0], p.bat.d[1], p.bat.d[2]).normalize();
+        for (let i = 0; i < 3; i++) _gg[i] = g[i];
+        _gt[0] = g[0] + bd.x * th;
+        _gt[1] = g[1] + bd.y * th;
+        _gt[2] = g[2] + bd.z * th;
+        if (lb) {
+          armR = _gg;
+          if (!one) armL = _gt;
         } else {
-          armL = g;
-          armR = top;
+          armL = _gg;
+          if (!one) armR = _gt;
         }
       }
       // 鎖骨: 手を高く上げるほど肩をすくめる
@@ -314,6 +323,28 @@
         b["clavicle_" + s].quaternion.setFromEuler(_e);
       }
       b.Root.updateMatrixWorld(true);
+      // 握りの補正 (新しいクリップのポーズ = flags があるときだけ): 下の手が肩から届かなければ握りを肩の方へ、
+      // 次に上の手が届かなければその分だけ握りをずらす (交互に 3 回まで)。バットも補正した握りに置く → 手がバットから離れない
+      this.gripFix = 0;
+      if (batOn && p.flags) {
+        _mr.copy(b.Root.matrixWorld).invert();
+        _sB.setFromMatrixPosition(b[lb ? "upperarm_r" : "upperarm_l"].matrixWorld).applyMatrix4(_mr);
+        _sT.setFromMatrixPosition(b[lb ? "upperarm_l" : "upperarm_r"].matrixWorld).applyMatrix4(_mr);
+        let fix = 0;
+        for (let it = 0; it < 3; it++) {
+          fix += clampTo(_gg, _sB, GRIP_MAX);
+          _gt[0] = _gg[0] + bd.x * th;
+          _gt[1] = _gg[1] + bd.y * th;
+          _gt[2] = _gg[2] + bd.z * th;
+          const mv = one ? 0 : clampTo(_gt, _sT, GRIP_MAX);
+          if (!mv) break;
+          fix += mv;
+          _gg[0] = _gt[0] - bd.x * th;
+          _gg[1] = _gt[1] - bd.y * th;
+          _gg[2] = _gt[2] - bd.z * th;
+        }
+        this.gripFix = fix;
+      }
       const tw = _tw;
       const pw = _pw;
       this.limb(b.upperarm_l, b.lowerarm_l, b.hand_l, RIG.arm_l, this.toWorld(armL, tw), this.toWorld(p.armL.p, pw));

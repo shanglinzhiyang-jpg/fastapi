@@ -211,7 +211,8 @@ def classify(f):
                 tags.add("pantsL")
             if t > 0.34:
                 tags.add("socks")
-        else:
+        elif FOOTW[vi].mean() <= 0.3:
+            # 足首の面 (ふくらはぎの重みが小さく足の重みが大きい) はパンツにしない (靴の中に入っていた 8 枚の三角形)
             tags.add("pants")
             tags.add("pantsL")
     if not tags or (not tags & {"head", "hand", "foot", "sleeve", "under", "pants", "socks"}):
@@ -377,14 +378,15 @@ parts["hands"] = hands
 # シャツ (胴体と半袖)
 shirt = Part("shirt", faces_with("shirt"), "shirt")
 y = shirt.pos[:, 1]
-off = np.full(len(shirt.pos), 0.014)
+# 2004 年のユニフォームはゆったりめ (以前の 1.4 cm は体に貼り付いて見えた)
+off = np.full(len(shirt.pos), 0.020)
 # 腹まわり・背中はゆったり (ただしベルトの近くはパンツの内側に収める)
 off += np.clip((J["spine_03"][1] - y) / 0.25, 0, 1) * 0.016 * np.clip((y - BELT_Y) / 0.08, 0, 1)
 off -= np.clip((BELT_Y + 0.03 - y) / 0.06, 0, 1) * 0.008
 off += np.clip((y - (J["spine_03"][1] + 0.05)) / 0.2, 0, 1) * 0.002
 # 袖は少しゆったり (肩・上腕を風船のようにふくらませない)
 armness = ARMW[shirt.src]
-off += armness * 0.004
+off += armness * 0.007
 # 肩の上 (鎖骨の高さより上の外側) は体に沿わせる
 _shoulder = np.clip((y - J["clavicle_l"][1] + 0.02) / 0.06, 0, 1) * np.clip((np.abs(shirt.pos[:, 0]) - 0.1) / 0.08, 0, 1)
 off -= _shoulder * 0.005
@@ -410,12 +412,13 @@ parts["under"] = under
 for key, tag in (("pants", "pants"), ("pantsL", "pantsL")):
     pt = Part(key, faces_with(tag), "pants")
     y = pt.pos[:, 1]
-    off = np.full(len(pt.pos), 0.021)
+    # 2004 年のパンツはゆったりめ (以前の 2.1 cm はレギンスのように見えた)
+    off = np.full(len(pt.pos), 0.024)
     lw = LEGW[pt.src]
     off += lw * 0.012
     # 股の内側はふくらませて段差をなくす (大きすぎると股がふくらんで見える)
     inner = np.clip(1 - np.abs(pt.pos[:, 0]) / 0.07, 0, 1) * np.clip(1 - np.abs(pt.pos[:, 1] - (J["pelvis"][1] - 0.08)) / 0.12, 0, 1)
-    off += inner * 0.012
+    off += inner * 0.008
     # 膝下は少し絞る (ショート丈は裾がふくらむ)
     off -= CALFW[pt.src] * (0.004 if key == "pants" else 0.01)
     # 腰まわりはシャツの外側に (ベルトで締めた分だけ)
@@ -425,6 +428,27 @@ for key, tag in (("pants", "pants"), ("pantsL", "pantsL")):
     off += back * 0.012
     pt.inflate(off)
     pt.smooth(iters=24)
+    # 股: 脚の付け根のくぼみ (前から見ると V 字のふくらみ) を、股のまわりだけ強くならして消す
+    crotch = np.clip(1 - np.abs(pt.pos[:, 0]) / 0.085, 0, 1) * np.clip(1 - np.abs(pt.pos[:, 1] - (J["pelvis"][1] - 0.10)) / 0.12, 0, 1)
+    pt.smooth(iters=30, fix_boundary=False, mask=crotch)
+    ensure_outside(pt, 0.01)
+    if key == "pantsL":
+        # 長いパンツは膝からまっすぐ落ちる (すねに沿わせない)。膝の高さの太さから裾へ 12% だけ細く
+        for s_, sx in (("l", 1), ("r", -1)):
+            kn, ft = J["calf_" + s_], J["foot_" + s_]
+            m = pt.pos[:, 0] * sx > 0
+            cx = np.interp(pt.pos[:, 1], [ft[1], kn[1]], [ft[0], kn[0]])
+            cz = np.interp(pt.pos[:, 1], [ft[1], kn[1]], [ft[2], kn[2]])
+            dx, dz = pt.pos[:, 0] - cx, pt.pos[:, 2] - cz
+            r = np.hypot(dx, dz)
+            Rk = r[m & (np.abs(pt.pos[:, 1] - kn[1]) < 0.01)].mean()
+            tgt = Rk * (1 - 0.12 * (kn[1] - pt.pos[:, 1]) / kn[1])
+            k = np.where(m & (pt.pos[:, 1] < kn[1]), np.maximum(r, tgt) / np.maximum(r, 1e-6), 1.0)
+            pt.pos[:, 0] = cx + dx * k
+            pt.pos[:, 2] = cz + dz * k
+        # 膝のつなぎ目をならす
+        knee = np.clip(1 - np.abs(pt.pos[:, 1] - J["calf_l"][1]) / 0.12, 0, 1)
+        pt.smooth(iters=6, mask=knee)
     pt.smooth_boundary(8)
     ensure_outside(pt, 0.012)
     pt.smooth(iters=2)
@@ -672,9 +696,22 @@ def cap_part(name, offset, cut_front, cut_back, mat):
     return cp
 
 
+def lift_crown(cp, edge_y):
+    """帽子の前の上を持ち上げて、つばから約 10 cm の高いクラウンにする (頭にぴったりの形は浅いニット帽に見えた)。
+    edge_y: 前の縁の高さ (頭の骨から)"""
+    rel = cp.pos - J["head"]
+    top = rel[:, 1].max()
+    front = np.clip((rel[:, 2] + 0.02) / 0.10, 0, 1)
+    elev = np.clip((rel[:, 1] - edge_y) / (top - edge_y), 0, 1) ** 0.7
+    cp.pos[:, 1] += 0.034 * front**1.5 * elev + 0.012 * elev * (1 - front)
+    cp.smooth(iters=8, fix_boundary=True)
+    cp.recompute_normals()
+
+
 EYE_Y = mh.joint_pos(P, VG, "joint-l-eye")[1]
 HEAD_Y = J["head"][1]
 parts["cap"] = cap_part("cap", 0.011, EYE_Y - HEAD_Y + 0.052, EYE_Y - HEAD_Y + 0.0, "cap")
+lift_crown(parts["cap"], EYE_Y - HEAD_Y + 0.052)
 parts["helmet"] = cap_part("helmet", 0.022, EYE_Y - HEAD_Y + 0.045, EYE_Y - HEAD_Y - 0.035, "helmet")
 
 # ---------------------------------------------------------------- 目 (high-poly eyes を配置)
@@ -875,8 +912,23 @@ def split_seam(part, uv):
     return np.array(uvs)
 
 
+def section_axis(part, y_lo, y_hi, step=0.01):
+    """胴体の円筒の軸: 高さ 1 cm ごとの断面 (腕を除いた中央部) の前後の中点。抜けた高さは補間し、5 点の移動平均でならす。
+    (以前は骨の z をつないだ線で、体の 5〜6 cm 後ろにあった → u 0 / 0.5 が本当の脇ではなく、前身頃 57 cm・後ろ 30 cm になっていた)"""
+    ys = np.arange(y_lo, y_hi + step, step)
+    zc = np.full(len(ys), np.nan)
+    for k, yy in enumerate(ys):
+        sel = (np.abs(part.pos[:, 1] - yy) < step) & (np.abs(part.pos[:, 0]) < 0.12) & (ARMW[part.src] < 0.3)
+        if sel.sum() > 6:
+            zc[k] = 0.5 * (part.pos[sel, 2].min() + part.pos[sel, 2].max())
+    ok = ~np.isnan(zc)
+    zc = np.interp(ys, ys[ok], zc[ok])
+    zc = np.convolve(np.pad(zc, 2, mode="edge"), np.ones(5) / 5, mode="valid")
+    return ys, zc
+
+
 def torso_center(pos):
-    return np.zeros(len(pos)), np.interp(pos[:, 1], [0.9, 1.2, 1.5], [J["pelvis"][2], J["spine_03"][2], J["neck_01"][2] - 0.02])
+    return np.zeros(len(pos)), np.interp(pos[:, 1], *_AX)
 
 
 # シャツ: 胴体は テクスチャ上部 [0,1]x[0.3,1]、袖は下部 (左 [0,0.5], 右 [0.5,1]) x [0,0.28]
@@ -919,12 +971,29 @@ def corner_split(part, cuv):
 
 
 sh = parts["shirt"]
+_AX = section_axis(sh, BELT_Y - 0.08, J["neck_01"][1] + 0.02)
 torso_uv = cyl_uv(sh, torso_center, v0=0.3, v1=1.0, ylo=BELT_Y - 0.08, yhi=J["neck_01"][1] + 0.02)
+# 袖の三角形: 肩の付け根の面 (腕の軸を少し上へ傾けた法線、肩の関節の 1.5 cm 内側を通る) より外で、腕の重みのある所。
+# 以前は腕の重み > 0.35 の頂点で分けていたので、袖と胴の境がギザギザだった
+_tc = sh.pos[sh.tri].mean(axis=1)
+_tarm = ARMW[sh.src][sh.tri].mean(axis=1)
+sleeve_tri = np.zeros(len(sh.tri), bool)
+for s_, sx in (("l", 1.0), ("r", -1.0)):
+    A = J["upperarm_" + s_]
+    ax = (J["lowerarm_" + s_] - A) / np.linalg.norm(J["lowerarm_" + s_] - A)
+    nA = ax + np.array([0, 0.25, 0])
+    nA /= np.linalg.norm(nA)
+    S0 = A + np.array([-0.015 * sx, 0, 0])
+    sleeve_tri |= (_tc[:, 0] * sx > 0) & ((_tc - S0) @ nA > 0) & (_tarm > 0.12)
+# 袖の UV: 腕のまわり (継ぎ目は脇の下) × 腕に沿った長さ。肩の上 (関節より内側) から袖口までを v 0.272 → 0.025 に (以前は肩の上を v 0.28 の 1 行に詰めていた)
+SLEEVE_TOP = 0.272
 sleeve_uv = {}
+_sv = []
 for s_, (a0, a1) in (("l", (0.0, 0.5)), ("r", (0.5, 1.0))):
     A = J["upperarm_" + s_]
     B = J["lowerarm_" + s_]
-    ax = (B - A) / np.linalg.norm(B - A)
+    L = np.linalg.norm(B - A)
+    ax = (B - A) / L
     rel = sh.pos - A
     t = rel @ ax
     perp = rel - np.outer(t, ax)
@@ -934,14 +1003,18 @@ for s_, (a0, a1) in (("l", (0.0, 0.5)), ("r", (0.5, 1.0))):
     ref2 = np.cross(ax, ref)
     ang = np.arctan2(perp @ ref2, perp @ ref)
     lu = (ang / (2 * math.pi)) % 1.0
-    lv = 0.28 - np.clip(t / np.linalg.norm(B - A) / 0.7, 0, 1) * 0.26
+    mine = sleeve_tri & ((_tc[:, 0] > 0) == (s_ == "l"))
+    sv_ = np.unique(sh.tri[mine])
+    tmin = t[sv_].min()
+    lv = SLEEVE_TOP - np.clip((t - tmin) / (0.7 * L - tmin), 0, 1) * 0.247
     sleeve_uv[s_] = (lu, lv, a0, a1)
-armv = ARMW[sh.src] > 0.35
+    _sv.append((SLEEVE_TOP - (0 - tmin) / (0.7 * L - tmin) * 0.247, lv[sv_].min(), tmin))
+SLEEVE_V = {"top": SLEEVE_TOP, "shoulder": round(float(np.mean([a for a, _, _ in _sv])), 4), "cuff": round(float(np.mean([b for _, b, _ in _sv])), 4)}
+print("sleeve v", SLEEVE_V, "tmin", [round(float(c_), 3) for _, _, c_ in _sv], "sleeve tris", int(sleeve_tri.sum()))
 cuv = np.zeros((len(sh.tri), 3, 2))
 for ti, tri in enumerate(sh.tri):
-    nm = armv[tri].sum()
     side = "l" if sh.pos[tri, 0].mean() > 0 else "r"
-    if nm >= 2:
+    if sleeve_tri[ti]:
         lu, lv, a0, a1 = sleeve_uv[side]
         us = lu[tri].copy()
         if us.max() - us.min() > 0.5:
@@ -1013,7 +1086,8 @@ def torso_arc(part, rows, nb=64):
     return out
 
 
-_ROWS = [round(0.4 + 0.05 * k, 2) for k in range(12)]
+# 首の近く (肩の首の付け根・背ネームの上) まで実寸で引けるよう、0.95 の上にも 3 行
+_ROWS = [round(0.4 + 0.05 * k, 2) for k in range(12)] + [0.965, 0.98, 0.99]
 TORSO_ARC = {"v": _ROWS, "y": [round(float(_ylo), 4), round(float(_yhi), 4)], "s": torso_arc(sh, _ROWS)}
 print("torso arc (m) at v", _ROWS[6], "circumference %.3f, front centre %.3f" % (TORSO_ARC["s"][6][-1], TORSO_ARC["s"][6][16]))
 
@@ -1217,10 +1291,58 @@ split_by_uv(parts["hands"])
 parts["head"].recompute_normals = lambda: None
 parts["hands"].recompute_normals = lambda: None
 
-# 靴・ソックス・アンダーは単色 (UV は簡易)
-for key in ("socks", "under", "shoes"):
-    p = parts[key]
-    p.uv = np.stack([p.pos[:, 0] * 2 + 0.5, p.pos[:, 1] * 2], axis=1)
+def limb_uv(part, ends, v_of, back):
+    """腕・脚ごとの円筒 UV (左 u 0..0.5 / 右 0.5..1)。ends[s] = (A, B): 軸の端, v_of(t, s): 軸に沿った長さ (A から, m) → v,
+    back[s]: 局所の u 0.5 (= 全体の 0.25 / 0.75) に来る向き。継ぎ目はその反対側"""
+    loc, vv = {}, {}
+    for s_ in ("l", "r"):
+        A, B = ends[s_]
+        ax = (B - A) / np.linalg.norm(B - A)
+        rel = part.pos - A
+        t = rel @ ax
+        perp = rel - np.outer(t, ax)
+        e1 = back[s_] - ax * float(back[s_] @ ax)
+        e1 /= np.linalg.norm(e1)
+        e2 = np.cross(ax, e1)
+        loc[s_] = (0.5 + np.arctan2(perp @ e2, perp @ e1) / (2 * math.pi)) % 1.0
+        vv[s_] = v_of(t, s_)
+    cuv = np.zeros((len(part.tri), 3, 2))
+    for ti, tri in enumerate(part.tri):
+        s_ = "l" if part.pos[tri, 0].mean() >= 0 else "r"
+        a0 = 0.0 if s_ == "l" else 0.5
+        us = loc[s_][tri].copy()
+        if us.max() - us.min() > 0.5:
+            us = np.where(us < 0.5, us + 1.0, us)
+            if us.min() > 1.0 - 1e-9:
+                us -= 1.0
+        cuv[ti, :, 0] = a0 + np.clip(us, 0, 1) * 0.5
+        cuv[ti, :, 1] = vv[s_][tri]
+    corner_split(part, cuv)
+
+
+def palm_of(s):
+    hp, mid, idx_, pk, th = (J[n + s] for n in ("hand_", "middle_01_", "index_01_", "pinky_01_", "thumb_02_"))
+    nrm = np.cross(idx_ - pk, mid - hp)
+    nrm /= np.linalg.norm(nrm)
+    return -nrm if np.dot(th - hp, nrm) < 0 else nrm
+
+
+# アンダーシャツの袖: 前腕の円筒。v 0 = 手首, 1 = ひじ (その上は 1 を超えて続く)、u 0.25 / 0.75 = 手の甲の側 (腕の外側)
+_ue = {s: (J["lowerarm_" + s], J["hand_" + s]) for s in ("l", "r")}
+_uL = {s: float(np.linalg.norm(_ue[s][1] - _ue[s][0])) for s in ("l", "r")}
+limb_uv(parts["under"], _ue, lambda t, s: np.clip((_uL[s] - t) / _uL[s], 0, 1.6), {s: -palm_of(s) for s in ("l", "r")})
+# ストッキング: すねの円筒。v 0 = 足首, 1 = 上の端、u 0.25 / 0.75 = すねの前 (継ぎ目はふくらはぎの後ろ)
+_se = {s: (J["foot_" + s], J["calf_" + s]) for s in ("l", "r")}
+_sp = parts["socks"]
+_stop = {}
+for s in ("l", "r"):
+    A, B = _se[s]
+    m = (_sp.pos[:, 0] >= 0) == (s == "l")
+    _stop[s] = float(((_sp.pos[m] - A) @ ((B - A) / np.linalg.norm(B - A))).max())
+limb_uv(_sp, _se, lambda t, s: np.clip(t / _stop[s], 0, 1), {s: np.array([0, 0, 1.0]) for s in ("l", "r")})
+UNDER_V = {"wrist": 0, "elbow": 1}
+# 靴は単色 (UV は簡易)
+parts["shoes"].uv = np.stack([parts["shoes"].pos[:, 0] * 2 + 0.5, parts["shoes"].pos[:, 1] * 2], axis=1)
 
 
 def dome_uv(p, logo_up, logo_h):
