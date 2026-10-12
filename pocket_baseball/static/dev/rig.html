@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3D モデル確認</title>
+<style>html,body{margin:0;height:100%;background:#203040}canvas{display:block;width:100%;height:100%}</style>
+</head><body>
+<script src="../vendor/three.min.js"></script>
+<script src="../js/three/model.js"></script>
+<script src="../js/three/anim.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const T = THREE, A = PB.Anim;
+const W = innerWidth, H = innerHeight;
+const r = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setPixelRatio(Math.min(2, devicePixelRatio)); r.setSize(W, H); r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap;
+r.outputColorSpace = T.SRGBColorSpace; r.toneMapping = T.ACESFilmicToneMapping; r.toneMappingExposure = 1.05;
+document.body.appendChild(r.domElement);
+const scene = new T.Scene(); scene.background = new T.Color('#33475c');
+scene.add(new T.HemisphereLight('#dfe9ff', '#3a5a2a', 0.9));
+const sun = new T.DirectionalLight('#fff4e0', 2.2); sun.position.set(4, 8, 6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 }); scene.add(sun);
+const ground = new T.Mesh(new T.PlaneGeometry(20, 20), new T.MeshStandardMaterial({ color: '#4c7a3c', roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const team = { main: '#d7263d', sub: '#ffd23f', cap: '#7d0f1f', mark: 'P', en: 'PHOENIX', pinstripe: false };
+const team2 = { main: '#22406e', sub: '#f4d35e', cap: '#0b1a33', mark: 'M', en: 'THUNDERS', jersey: '#22406e', pinstripe: false };
+const mode = q.get('mode') || 'lineup';
+const t = Number(q.get('t') || 0);
+const players = [];
+function addP(opts, x, z, yaw, poseFn) {
+  const p = PB.Model3D.createPlayer(opts);
+  p.group.position.set(x, 0, z); p.group.rotation.y = yaw;
+  scene.add(p.group);
+  const rig = new A.Rig(p);
+  rig.apply(poseFn(p));
+  players.push({ p, rig });
+  return p;
+}
+if (mode === 'lineup') {
+  addP({ team, num: 18, nameEn: 'HAYAKAWA', skin: '#e2b996', bats: 'R', throws: 'R' }, -1.6, 0, 0, () => A.LIB.stand);
+  const b = addP({ team: team2, num: 5, nameEn: 'TAKEDA', skin: '#d9a77f', bats: 'R', throws: 'R', helmet: true }, -0.55, 0, 0.5, () => A.batIdle(0));
+  b.setBattingGloves(true);
+  addP({ team, num: 6, nameEn: 'OGAWA', skin: '#c99772', bats: 'L', throws: 'R', pos: 'SS' }, 0.55, 0, -0.3, () => A.LIB.ready);
+  addP({ team, num: 2, nameEn: 'YAMAZAKI', skin: '#f1d0b1', bats: 'R', throws: 'R', pos: 'C', role: 'catcher' }, 1.6, 0, -0.5, () => A.LIB.crouch);
+} else if (mode === 'back') {
+  addP({ team, num: 18, nameEn: 'HAYAKAWA', skin: '#e2b996' }, -0.5, 0, Math.PI, () => A.LIB.stand);
+  addP({ team: team2, num: 55, nameEn: 'TAKAGI', skin: '#e2b996' }, 0.5, 0, Math.PI * 0.8, () => A.LIB.stand);
+} else if (mode === 'pitch') {
+  const clip = A.pitchClip();
+  [0, 0.32, 0.62, 0.76, 0.86, 1.02].forEach((tt, i) => addP({ team, num: 18, skin: '#e2b996', throws: 'R' }, -2.5 + i * 1.0, 0, -Math.PI / 2 + 0.5, () => A.sample(clip, tt)));
+} else if (mode === 'swing') {
+  const clip = A.swingClip(0.8, 0);
+  [0, 0.05, 0.09, 0.12, 0.2, 0.3].forEach((tt, i) => { const p = addP({ team: team2, num: 5, skin: '#d9a77f', bats: 'R', helmet: true }, -2.5 + i * 1.0, 0, 0.3, () => A.sample(clip, tt)); p.setBattingGloves(true); });
+} else if (mode === 'run') {
+  [0, 1, 2, 3, 4, 5].forEach((k, i) => addP({ team, num: 7, skin: '#e2b996' }, -2.5 + i * 1.0, 0, Math.PI / 2 - 0.3, () => A.run(k * Math.PI / 3, 1)));
+} else if (mode === 'face') {
+  addP({ team, num: 18, skin: '#e2b996' }, 0, 0, 0, () => A.LIB.stand);
+}
+const cam = new T.PerspectiveCamera(Number(q.get('fov') || 32), W / H, 0.05, 200);
+const cx = Number(q.get('cx') || 0), cy = Number(q.get('cy') || 1.2), cz = Number(q.get('cz') || 6.5);
+cam.position.set(cx, cy, cz); cam.lookAt(Number(q.get('lx') || 0), Number(q.get('ly') || 0.9), 0);
+r.render(scene, cam);
+window.__ready = true;
+</script></body></html>

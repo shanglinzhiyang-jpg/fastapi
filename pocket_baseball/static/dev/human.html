@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>選手モデル確認</title>
+<base href="/">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Graduate&family=Yellowtail&family=Rye&family=Ultra&family=Archivo+Black&family=Lobster&family=Oleo+Script:wght@700&family=Dela+Gothic+One&display=swap">
+<style>html,body{margin:0;height:100%;background:#1c2733}canvas{display:block;width:100%;height:100%}</style>
+</head><body>
+<script src="vendor/three.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/npb.js"></script>
+<script src="js/three/model.js"></script>
+<script src="js/three/anim.js"></script>
+<script src="js/three/clips.js"></script>
+<script src="js/three/gear.js"></script>
+<script src="js/three/human.js"></script>
+<script src="js/three/hrig.js"></script>
+<script src="js/three/look.js"></script>
+<script src="js/three/post.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const T = THREE, A = PB.Anim, H = PB.Human;
+const W = innerWidth, Hh = innerHeight;
+// 光: ?look=night|day|dome|studio (試合と同じ PB.Look の光と環境マップ) / old (以前の確認用の光)。?post=0 で仕上げ処理なし
+const lookKind = q.get('look') || 'night';
+const usePost = q.get('post') !== '0' && lookKind !== 'old';
+const r = new T.WebGLRenderer({ antialias: !usePost, preserveDrawingBuffer: true });
+r.setPixelRatio(1); r.setSize(W, Hh); r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap;
+r.outputColorSpace = T.SRGBColorSpace; r.toneMapping = T.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
+document.body.appendChild(r.domElement);
+const scene = new T.Scene(); scene.background = new T.Color({ night: '#0b1220', day: '#8fb3dc', dome: '#3a3f48', studio: '#3b4c5e' }[lookKind] || '#3b4c5e');
+let sun, stage = null;
+if (lookKind === 'old') {
+  scene.add(new T.HemisphereLight('#dfe9ff', '#4a5a3a', 1.0));
+  sun = new T.DirectionalLight('#fff4e0', 2.4); sun.position.set(3, 7, 6); scene.add(sun);
+  const fill = new T.DirectionalLight('#c8d8ff', 0.6); fill.position.set(-4, 3, -3); scene.add(fill);
+} else {
+  stage = PB.Look.stage(scene, r, { kind: lookKind, rim: false, seat: '#2d4f86' });
+  sun = stage.lights.key;
+  // 試合の主光源と同じ向き (夜: 三塁側後方の照明塔, 昼: 一塁側の太陽, ドーム: ほぼ真上)。人は +Z (カメラ) 向き
+  const dirs = { night: [-35, 120, 70], day: [70, 85, -20], dome: [-10, 120, 30], studio: [-2.5, 3.2, 4.5] };
+  const kd = new T.Vector3(...dirs[lookKind]).normalize();
+  if (q.get('key') === 'front') kd.set(-0.35, 0.7, 0.62).normalize();
+  sun.position.copy(kd).multiplyScalar(8);
+  r.toneMappingExposure = stage.exposure;
+}
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+const ground = new T.Mesh(new T.PlaneGeometry(30, 30), new T.MeshStandardMaterial({ color: '#557a45', roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const tigers0 = { id: 't', main: '#111111', sub: '#ffe100', cap: '#111111', mark: 'HT', en: 'Tigers', uniform: { pinstripe: '#1a1a1a', chest: 'Tigers', letter: '#111', outline: '#ffe100', trim: '#111', under: '#111', socks: '#111', piping: false } };
+const giants0 = { id: 'g', main: '#f97709', sub: '#000000', cap: '#111111', mark: 'YG', en: 'GIANTS', uniform: { chest: 'GIANTS', script: false, letter: '#111', outline: '#f97709', trim: '#f97709', under: '#111', socks: '#111' } };
+const carp0 = { id: 'c', main: '#d7001e', sub: '#ffffff', cap: '#d7001e', mark: 'C', en: 'Carp', uniform: { chest: 'Carp', letter: '#d7001e', outline: '#0b2240', trim: '#d7001e', under: '#d7001e', socks: '#d7001e' } };
+const mode = q.get('mode') || 'lineup';
+const list = [];
+function addP(opts, x, z, yaw, poseFn) {
+  const p = H.createPlayer(opts);
+  p.group.position.set(x, 0, z); p.group.rotation.y = yaw;
+  scene.add(p.group);
+  const rig = new H.Rig(p);
+  rig.apply(poseFn(p));
+  list.push({ p, rig });
+  return p;
+}
+const TT = (id) => PB.D.teamDef(id);
+// 使っていない別のユニフォームを着せる: ?uni=g:away=awayYG,c:away=awayRed
+H.uniOverride = {};
+for (const kv of (q.get('uni') || '').split(',').filter(Boolean)) {
+  const [k, v] = kv.split('=');
+  H.uniOverride[k] = v;
+}
+// 確認用にユニフォームの項目を書き換える: ?set=g.home.sleeveTextSide:R,s.home.sleevePatchSide:R (値は文字列のまま)
+for (const kv of (q.get('set') || '').split(',').filter(Boolean)) {
+  const [path, val] = kv.split(':');
+  const ks = path.split('.');
+  let o = TT(ks[0]);
+  for (const k of ks.slice(1, -1)) o = o && o[k];
+  if (o) o[ks[ks.length - 1]] = val === 'null' ? null : val;
+}
+const tigers = PB.D.teamDef('t'), giants = PB.D.teamDef('g'), carp = PB.D.teamDef('c');
+H.load("models/").then(() => Promise.all(PB.D.TEAMS.map((t) => H.preloadTeam(t)))).then(() => document.fonts.ready).then(() => {
+  if (mode === 'teams' || mode === 'teamsback' || mode === 'away') {
+    const ids = (q.get('ids') || 'g,t,d,s,c,yb').split(',');
+    // 1 人だけなら中央に。長いパンツは 2004 年らしく 6/7 (?long=0 で全員短く, 1 で全員長く)
+    const lp = q.get('long');
+    ids.forEach((id, i) => addP({ team: TT(id), num: [1, 5, 7, 18, 25, 55][i % 6], nameEn: ['MATSUI', 'SHINJYO', 'TATSUNAMI', 'IWAMURA', 'MAEDA', 'KANEMOTO'][i % 6], seed: 30 + i, home: mode !== 'away', longPants: lp != null ? lp === '1' : i % 7 !== 3 }, (i - (ids.length - 1) / 2) * 0.76, 0, mode === 'teamsback' ? Math.PI : 0, () => A.LIB.stand));
+  }
+  if (mode === 'tex') {
+    // テクスチャそのものを並べて見る (?ids=g,t&side=away): ジャージ / パンツ / 帽子
+    r.domElement.style.display = 'none';
+    document.body.style.cssText = 'margin:0;background:#333;display:flex;flex-wrap:wrap;gap:6px;padding:6px;align-content:flex-start';
+    (q.get('ids') || 'g').split(',').forEach((id, i) => {
+      const p = H.createPlayer({ team: TT(id), num: [1, 5, 7, 18, 25, 55][i % 6], nameEn: ['MATSUI', 'SHINJYO', 'TATSUNAMI', 'IWAMURA', 'MAEDA', 'KANEMOTO'][i % 6], seed: 30 + i, home: q.get('side') !== 'away' });
+      for (const mk of [TT(id).capStyle, TT(id).helmet]) {
+        const r2 = mk && H._markCanvas(Object.assign({ markText: TT(id).mark, markColor: TT(id).sub }, mk));
+        if (r2) { r2.c.style.cssText = 'width:128px;height:128px;background:' + (mk.crown || mk.color); document.body.appendChild(r2.c); }
+      }
+      // v3 の目録では打者のヘルメット (helmetR) はかぶせたときに作られる
+      if (!p.meshes.helmet) { p.setHelmet(true); p.setHelmet(false); }
+      for (const m of [p.meshes.shirt, p.meshes.pants, p.meshes.cap, p.meshes.helmet || p.meshes.helmetR]) {
+        const im = m.material.map && m.material.map.image;
+        if (!im) continue;
+        const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+        c.getContext('2d').drawImage(im, 0, 0);
+        const hh = Number(q.get('h') || 512) * (im.width > im.height * 2 ? 0.25 : 1);
+        c.style.cssText = 'width:' + (hh * im.width / im.height) + 'px;height:' + hh + 'px'; document.body.appendChild(c);
+      }
+    });
+    window.__ready = true;
+    return;
+  }
+  if (mode === 'lineup') {
+    addP({ team: tigers, num: 1, nameEn: 'TORITANI', bats: 'L', throws: 'R', seed: 1, skinTone: 1 }, -1.8, 0, 0.15, () => A.LIB.stand);
+    const b = addP({ team: giants, num: 7, nameEn: 'NIOKA', bats: 'R', throws: 'R', helmet: true, seed: 2, home: false }, -0.6, 0, 0.5, () => A.batIdle(0));
+    b.showBat(true); b.showGlove(false); b.setBattingGloves(true);
+    addP({ team: carp, num: 6, nameEn: 'NODA', seed: 3, longPants: true }, 0.6, 0, -0.3, () => A.LIB.ready);
+    addP({ team: tigers, num: 39, nameEn: 'YANO', pos: 'C', role: 'catcher', seed: 4 }, 1.8, 0, -0.4, () => A.LIB.crouch);
+  } else if (mode === 'back') {
+    addP({ team: tigers, num: 1, nameEn: 'TORITANI', seed: 1 }, -0.5, 0, Math.PI, () => A.LIB.stand);
+    addP({ team: giants, num: 55, nameEn: 'MATSUI', seed: 5, home: true }, 0.5, 0, Math.PI * 0.85, () => A.LIB.stand);
+  } else if (mode === 'face') {
+    for (let i = 0; i < 4; i++) addP({ team: [tigers, giants, carp, tigers][i], num: 10 + i, seed: 100 + i * 7, skinTone: i % 3 }, -0.75 + i * 0.5, 0, 0, () => A.LIB.stand);
+  } else if (mode === 'pitch') {
+    const clip = A.pitchClip();
+    [0, 0.32, 0.62, 0.76, 0.86, 1.02].forEach((tt, i) => addP({ team: tigers, num: 22, seed: 9, throws: 'R' }, -2.5 + i * 1.0, 0, -Math.PI / 2 + 0.5, () => A.sample(clip, tt)));
+  } else if (mode === 'swing') {
+    const clip = A.swingClip(0.8, 0);
+    [0, 0.05, 0.09, 0.12, 0.2, 0.3].forEach((tt, i) => { const p = addP({ team: giants, num: 25, seed: 11, bats: 'R', helmet: true }, -2.5 + i * 1.0, 0, 0.3, () => A.sample(clip, tt)); p.showGlove(false); p.setBattingGloves(true); });
+  } else if (mode === 'catcher') {
+    const yaw = Number(q.get('yaw') || 0);
+    addP({ team: tigers, num: 39, nameEn: 'YANO', pos: 'C', role: 'catcher', seed: 4, maskStyle: 'classic' }, -1.3, 0, yaw, () => A.LIB.crouch);
+    addP({ team: giants, num: 10, nameEn: 'ABE', pos: 'C', role: 'catcher', seed: 6, maskStyle: 'hockey' }, 0, 0, yaw, () => A.LIB.crouch);
+    addP({ team: TT(q.get('t3') || 'h'), num: 2, nameEn: 'JOJIMA', pos: 'C', role: 'catcher', seed: 8, maskStyle: 'classic', longPants: true }, 1.3, 0, yaw, () => A.LIB.stand);
+  } else if (mode === 'glove') {
+    addP({ team: carp, num: 6, nameEn: 'NODA', seed: 3, throws: 'R' }, -0.5, 0, 0.6, () => A.LIB.ready);
+    addP({ team: giants, num: 2, nameEn: 'NIOKA', seed: 21, throws: 'L' }, 0.5, 0, -0.6, () => A.LIB.ready);
+  } else if (mode === 'umpire') {
+    addP({ team: tigers, num: 39, pos: 'C', role: 'catcher', seed: 4 }, -0.5, 0, 0, () => A.LIB.crouch);
+    addP({ role: 'umpire', seed: 7 }, 0.6, 0, 0, () => A.LIB.stand);
+  } else if (mode === 'chest') {
+    // 1 人を正面から大きく (?ids=g&side=away): 胸の文字・番号・パイピング・襟
+    const id = (q.get('ids') || 'g').split(',')[0];
+    addP({ team: TT(id), num: Number(q.get('num') || 25), nameEn: 'MATSUI', seed: 30, home: q.get('side') !== 'away', longPants: true }, 0, 0, Number(q.get('yaw') || 0), () => A.LIB.stand);
+  } else if (mode === 'sleeve') {
+    // 左袖を横から (?ids=g,s,d): 袖の文字・ワッペン・袖口のライン・肩の帯
+    const ids = (q.get('ids') || 'g,s,d').split(',');
+    ids.forEach((id, i) => addP({ team: TT(id), num: 7, nameEn: 'NAME', seed: 40 + i, home: q.get('side') !== 'away', longPants: true }, (i - (ids.length - 1) / 2) * 0.62, 0, q.get('view') === 'right' ? Math.PI / 2 : -Math.PI / 2, () => A.LIB.stand));
+  } else if (mode === 'caps') {
+    // 12 球団の帽子 (上の段) とヘルメット (下の段)。?view=q で斜め前から、?bats=L で左打者の耳当て (右耳)
+    const ids = (q.get('ids') || PB.D.TEAMS.map((t) => t.id).join(',')).split(',');
+    const yaw = q.get('view') === 'q' ? -0.65 : q.get('view') === 'qr' ? 0.65 : 0;
+    ids.forEach((id, i) => {
+      const x = (i - (ids.length - 1) / 2) * 0.27;
+      addP({ team: TT(id), num: 1, seed: 50 + i, home: q.get('side') !== 'away' }, x, 0.0, yaw, () => A.LIB.stand);
+      const p = addP({ team: TT(id), num: 1, seed: 50 + i, home: q.get('side') !== 'away', helmet: true, bats: q.get('bats') === 'L' ? 'L' : 'R' }, x, 0.6, yaw, () => A.LIB.stand);
+      p.group.position.y = -0.34;
+    });
+  } else if (mode === 'pants') {
+    // パンツ: 長い・短いを正面と横から (?ids=g,l,t): ベルト・バックル・脇のライン・股
+    const ids = (q.get('ids') || 'g,l,t').split(',');
+    let k = 0;
+    ids.forEach((id, i) => [true, false].forEach((lp) => { addP({ team: TT(id), num: 7, seed: 60 + i, home: q.get('side') !== 'away', longPants: lp }, (k - (ids.length * 2 - 1) / 2) * 0.62, 0, q.get('view') === 'side' ? -Math.PI / 2 : 0, () => A.LIB.stand); k++; }));
+  } else if (mode === 'run') {
+    [0, 1, 2, 3, 4, 5].forEach((k, i) => addP({ team: carp, num: 7, seed: 12 }, -2.5 + i * 1.0, 0, Math.PI / 2 - 0.3, () => A.run(k * Math.PI / 3, 1)));
+  }
+  // 見る位置の既定はモードごと (?cx=&cy=&cz=&lx=&ly=&fov= で上書き)
+  const CAM = { chest: [0, 1.32, 1.5, 0, 1.3, 22], sleeve: [0, 1.32, 3.4, 0, 1.25, 26], caps: [0, 1.5, 16, 0, 1.5, 7], pants: [0, 0.8, 5.6, 0, 0.62, 30] }[mode] || [0, 1.2, 7, 0, 0.95, 30];
+  const qn = (k, i) => (q.get(k) != null ? Number(q.get(k)) : CAM[i]);
+  const cam = new T.PerspectiveCamera(qn('fov', 5), W / Hh, 0.05, 200);
+  cam.position.set(qn('cx', 0), qn('cy', 1), qn('cz', 2));
+  cam.lookAt(qn('lx', 3), qn('ly', 4), 0);
+  // 試合と同じ仕上げ処理 (HDR + bloom + ACES + 色味)
+  const post = usePost && PB.Post.create(r, 'high');
+  if (post && post.ok && post.setSize(W, Hh)) {
+    post.begin();
+    r.render(scene, cam);
+    post.end(PB.Look.preset(lookKind).post);
+  } else r.render(scene, cam);
+  // 選手ごとの描画の数 (見えているメッシュ) と三角形の数
+  const per = list.map(({ p }) => { let n = 0, t = 0; p.group.traverse((o) => { if (o.isMesh && o.visible && (function vis(x) { for (; x; x = x.parent) if (!x.visible) return false; return true; })(o)) { n++; const g = o.geometry; t += (g.index ? g.index.count : g.attributes.position.count) / 3; } }); return [n, Math.round(t)]; });
+  window.__info = { calls: r.info.render.calls, tris: r.info.render.triangles, env: !!scene.environment, post: !!(post && post.ok), perPlayer: per, model: H._scaleInfo ? H._scaleInfo().version : null };
+  window.__ready = true;
+});
+</script></body></html>

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><base href="/">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>manga dev</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Graduate&family=Archivo+Black&family=M+PLUS+1p:wght@800;900&family=M+PLUS+Rounded+1c:wght@400;700;800&family=Ultra&family=Yellowtail&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  /* ?view=sheet|icons|big|small|me|teams|card|people|all  &team=t  &who=kanto  &ex=normal  &skin=0..4 (view=me)  &draw=1 (ユーザーの絵ではなく描く絵) */
+  body.full #app { position: fixed; inset: 0; height: 100%; }
+  body { margin: 0; padding: 10px; background: #0d1626; color: #eee; font: 12px sans-serif; overflow: auto; height: auto; }
+  #app { position: static; height: auto; }
+  h2 { margin: 14px 0 6px; font-size: 14px; color: #ffd23f; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .cell .mg { display: block; }
+  .s80 .mg { width: 80px; height: 96px; }
+  .s280 .mg { width: 280px; height: 336px; }
+  .s40 .mg { width: 40px; height: 40px; border-radius: 50%; }
+  .s120 .mg { width: 120px; height: 144px; }
+  .s92 .mg { width: 92px; height: 110px; }
+  .s28 .mg { width: 28px; height: 28px; }
+  .s24 .mg { width: 24px; height: 24px; }
+  .s52 .mg { width: 52px; height: 52px; border-radius: 8px; box-shadow: 0 0 0 2px #fff; }
+  .row.sheet { flex-wrap: nowrap; }
+  .sheet .cell { width: 132px; }
+  .sheet .cell .mg { width: 120px; height: 144px; box-shadow: 0 0 0 2px #fff; }
+  .sheet .who { width: 92px; align-self: center; font-size: 13px; font-weight: 700; color: #fff; }
+  .cell span em { color: #ffd23f; font-style: normal; }
+</style>
+</head><body>
+<div id="out"></div>
+<div id="app"><div id="screen" class="screen" hidden></div><div id="modal" hidden></div><div id="toast" hidden></div></div>
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/npb.js"></script>
+<script src="js/rosters2004.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/store.js"></script>
+<script>PB.Store.save = () => {}; /* 開発ページからゲームのセーブを書きかえない */</script>
+<script src="js/ui.js"></script>
+<script src="js/manga.js"></script>
+<script src="js/success.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const view = q.get("view") || "all";
+const team = () => (q.get("team") ? PB.D.teamDef(q.get("team")) : PB.D.teamDef("t"));
+const out = document.getElementById("out");
+const M = PB.Manga;
+const who5 = ["kanto", "goda", "hayase", "inukai", "ryuzaki"];
+// &draw=1: ユーザーの絵ではなく描く絵 (前の絵・絵が読めないときの代わり)
+const DRAW = !!q.get("draw");
+if (DRAW) {
+  const sv = M.svg;
+  const ic = M.icon;
+  M.svg = (w, o) => sv(w, Object.assign({}, o, { draw: true }));
+  M.icon = (w, o) => ic(w, Object.assign({}, o, { draw: true }));
+}
+const NAME = { kanto: "鬼瓦 監督", goda: "剛田 鉄平", hayase: "早瀬 ひかり", inukai: "宇佐美 コーチ", ryuzaki: "竜崎 レン", me: "自分" };
+function cell(svg, cap, cls) { return '<div class="cell ' + cls + '">' + svg + "<span>" + cap + "</span></div>"; }
+let h = "";
+if (view === "sheet") {
+  // 6 人 × 6 表情 (いまゲームで出る絵。絵のない表情は → で代わりの絵)
+  h += "<h2>サクセスの絵 (6 人 × 6 表情)" + (DRAW ? " — 描く絵" : "") + "</h2>";
+  for (const w of who5.concat(["me"])) {
+    h += '<div class="row sheet"><span class="who">' + NAME[w] + "</span>" + M.EXPRS.map((ex) => { const pe = M.picEx(w, ex); return cell(M.svg(w, { team: team(), ex, size: 120 }), M.EX_JP[ex] + (pe !== ex && !DRAW ? " <em>→" + M.EX_JP[pe] + "</em>" : ""), ""); }).join("") + "</div>";
+  }
+}
+if (view === "icons") {
+  // 小さなアイコン (人物 52px・仲よし 28px・練習 24px) と、まだ会っていない人のシルエット
+  for (const w of who5.concat(["me"])) {
+    const sig = (PB.Success.CAST[w] && PB.Success.CAST[w].sig) || "normal";
+    h += '<div class="row"><span class="who" style="width:92px;align-self:center;font-weight:700">' + NAME[w] + "</span>" + [52, 28, 24].map((px) => cell(M.icon(w, { team: team(), ex: sig }), px + "px", "s" + px)).join("") + cell(M.icon(w, { team: team(), ex: "happy" }), "笑顔", "s52") + [52, 28, 24].map((px) => cell(M.icon(w, { team: team(), ex: "normal", sil: true }), "未 " + px, "s" + px)).join("") + "</div>";
+  }
+}
+if (view === "all" || view === "small") {
+  h += "<h2>80px × 表情 / 顔 40px (アイコン) / 会話 92px / 小 28・24px</h2>";
+  for (const w of who5.concat(["me"])) {
+    const fc = { skin: "#ffd9b8", eyes: "round", hs: 0 };
+    h += '<div class="row">' + M.EXPRS.map((ex) => cell(M.svg(w, { team: team(), ex, size: 80, face: fc }), w + " " + ex, "s80")).join("") + M.EXPRS.slice(0, 2).map((ex) => cell(M.svg(w, { team: team(), ex, size: 40, crop: "face", face: fc }), "face", "s40")).join("") + cell(M.svg(w, { team: team(), ex: "normal", size: 96, face: fc }), "92", "s92") + cell(M.icon(w, { team: team(), ex: "normal", face: fc }), "28", "s28") + cell(M.icon(w, { team: team(), ex: "normal", face: fc }), "24", "s24") + cell(M.icon(w, { team: team(), ex: "normal", face: fc, sil: true }), "?", "s28") + "</div>";
+  }
+}
+if (view === "all" || view === "big") {
+  const ws = q.get("who") ? [q.get("who")] : who5;
+  const exs = q.get("ex") ? [q.get("ex")] : M.EXPRS;
+  h += "<h2>280px</h2>";
+  for (const w of ws) h += '<div class="row">' + exs.map((ex) => cell(M.svg(w, { team: team(), ex, size: 280 }), w + " " + ex, "s280")).join("") + "</div>";
+}
+if (view === "zoom") {
+  // 何人か × 表情を 1 行に並べる (?who=kanto,goda&ex=normal,happy&px=280)
+  const ws = (q.get("who") || "me").split(",");
+  const exs = (q.get("ex") || "normal").split(",");
+  const px = +q.get("px") || 280;
+  const fc = { skin: PB.D.SKINS[+q.get("skin") || 0], eyes: q.get("eyes") || "round", hs: +q.get("hs") || 0 };
+  h += '<div class="row">';
+  for (const w of ws) for (const ex of exs) h += '<div class="cell"><div style="width:' + px + "px;height:" + Math.round(px * 1.2) + 'px">' + M.svg(w, { team: team(), ex, size: px, face: fc }) + "</div><span>" + w + " " + ex + "</span></div>";
+  h += "</div>";
+}
+if (view === "all" || view === "me") {
+  h += "<h2>自分 (肌 × 目 × 髪型)</h2>";
+  const eyes = ["round", "big", "sharp", "smile", "line", "glasses"];
+  const skins = q.get("skin") ? [PB.D.SKINS[+q.get("skin")]] : PB.D.SKINS;
+  for (const skin of skins) {
+    for (const hs of q.get("skin") ? [0, 1, 2] : [null]) h += '<div class="row">' + eyes.map((e, i) => cell(M.svg("me", { team: team(), ex: q.get("ex") || "normal", size: 120, face: { skin, eyes: e, hs: hs == null ? i % 3 : hs } }), e + " hs" + (hs == null ? i % 3 : hs), "s120")).join("") + "</div>";
+  }
+}
+if (view === "teams") {
+  h += "<h2>チーム</h2><div class=\"row\">";
+  const tw = q.get("who") ? [q.get("who")] : ["ryuzaki", "hayase"];
+  for (const w of tw) for (const t of PB.D.TEAMS) h += cell(M.svg(w, { team: t, ex: "normal", size: 120, face: { skin: "#ffd9b8", eyes: "round", hs: 0 } }), t.short, "s120");
+  h += "</div>";
+}
+out.innerHTML = h;
+// 紹介カード・人物一覧 (success.js の本物の画面)
+if (view === "card" || view === "people") {
+  document.body.classList.add("full");
+  PB.UI.init();
+  PB.Store.data.success.run = { team: (q.get("team") || "t"), eval: 46, rel: { goda: 62, hayase: 35, inukai: 20, ryuzaki: 12 }, met: { kanto: 1, goda: 1, hayase: 1, inukai: 1, ryuzaki: q.get("unmet") ? 0 : 1 }, player: { id: "dev", full: "開発 太郎", face: { skin: "#ffd9b8", eyes: "round", hs: 0 } } };
+  const C = PB.Success.CAST;
+  const w = q.get("who") || "kanto";
+  if (view === "card") PB.Success.introCard(w, q.get("line") || C[w].line, q.get("ex") || C[w].sig);
+  else PB.Success.people();
+}
+</script>
+</body></html>

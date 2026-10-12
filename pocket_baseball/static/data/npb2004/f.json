@@ -1,0 +1,1012 @@
+{
+ "id": "f",
+ "season": 2004,
+ "name": "北海道日本ハムファイターズ",
+ "manager": {
+  "name": "トレイ・ヒルマン",
+  "num": 88
+ },
+ "players": [
+  {
+   "name": "金村 曉",
+   "kana": "かねむら さとる",
+   "nameEn": "KANEMURA",
+   "num": 16,
+   "pos": "P",
+   "role": "SP",
+   "bats": "R",
+   "throws": "R",
+   "age": 28,
+   "foreign": false,
+   "stats": {
+    "g": 25,
+    "w": 13,
+    "l": 8,
+    "sv": 0,
+    "era": 3.93
+   },
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 145,
+    "control": 70,
+    "stamina": 80,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 5
+     },
+     {
+      "t": "SH",
+      "lv": 4
+     },
+     {
+      "t": "FK",
+      "lv": 3
+     }
+    ]
+   },
+   "skills": [
+    "tough"
+   ]
+  },
+  {
+   "name": "カルロス・ミラバル",
+   "kana": "カルロス・ミラバル",
+   "nameEn": "MIRABAL",
+   "num": 0,
+   "pos": "P",
+   "role": "SP",
+   "bats": "R",
+   "throws": "R",
+   "age": 30,
+   "foreign": true,
+   "stats": {
+    "g": 29,
+    "w": 11,
+    "l": 9,
+    "sv": 0,
+    "era": 4.82
+   },
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 150,
+    "control": 52,
+    "stamina": 72,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 4
+     },
+     {
+      "t": "SF",
+      "lv": 4
+     }
+    ]
+   },
+   "skills": [
+    "heavy"
+   ]
+  },
+  {
+   "name": "正田 樹",
+   "kana": "しょうだ いつき",
+   "nameEn": "SHODA",
+   "num": 28,
+   "pos": "P",
+   "role": "SP",
+   "bats": "L",
+   "throws": "L",
+   "age": 22,
+   "foreign": false,
+   "stats": {
+    "g": 17,
+    "w": 8,
+    "l": 5,
+    "sv": 0,
+    "era": 5.0
+   },
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 140,
+    "control": 55,
+    "stamina": 62,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 4
+     },
+     {
+      "t": "CB",
+      "lv": 3
+     },
+     {
+      "t": "CH",
+      "lv": 3
+     }
+    ]
+   },
+   "skills": [
+    "vsLeftP"
+   ]
+  },
+  {
+   "name": "押本 健彦",
+   "kana": "おしもと たけひこ",
+   "nameEn": "OSHIMOTO",
+   "num": 61,
+   "pos": "P",
+   "role": "SP",
+   "bats": "R",
+   "throws": "R",
+   "age": 23,
+   "foreign": false,
+   "stats": {
+    "g": 21,
+    "w": 7,
+    "l": 8,
+    "sv": 0,
+    "era": 4.47
+   },
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 148,
+    "control": 55,
+    "stamina": 60,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 4
+     },
+     {
+      "t": "FK",
+      "lv": 3
+     }
+    ]
+   },
+   "skills": []
+  },
+  {
+   "name": "入来 祐作",
+   "kana": "いりき ゆうさく",
+   "nameEn": "IRIKI",
+   "num": 49,
+   "pos": "P",
+   "role": "SP",
+   "bats": "R",
+   "throws": "R",
+   "age": 31,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 145,
+    "control": 55,
+    "stamina": 60,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 4
+     },
+     {
+      "t": "FK",
+      "lv": 3
+     },
+     {
+      "t": "CB",
+      "lv": 2
+     }
+    ]
+   },
+   "skills": []
+  },
+  {
+   "name": "鎌倉 健",
+   "kana": "かまくら けん",
+   "nameEn": "KAMAKURA",
+   "num": 12,
+   "pos": "P",
+   "role": "RP",
+   "bats": "R",
+   "throws": "R",
+   "age": 23,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 146,
+    "control": 52,
+    "stamina": 55,
+    "pitches": [
+     {
+      "t": "FK",
+      "lv": 4
+     },
+     {
+      "t": "SL",
+      "lv": 3
+     }
+    ]
+   },
+   "skills": []
+  },
+  {
+   "name": "横山 道哉",
+   "kana": "よこやま ゆきや",
+   "nameEn": "YOKOYAMA",
+   "num": 15,
+   "pos": "P",
+   "role": "CL",
+   "bats": "R",
+   "throws": "R",
+   "age": 29,
+   "foreign": false,
+   "stats": {
+    "g": 58,
+    "w": 4,
+    "l": 5,
+    "sv": 28,
+    "era": 3.39
+   },
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 148,
+    "control": 58,
+    "stamina": 38,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 4
+     },
+     {
+      "t": "FK",
+      "lv": 4
+     }
+    ]
+   },
+   "skills": [
+    "k"
+   ]
+  },
+  {
+   "name": "建山 義紀",
+   "kana": "たてやま よしのり",
+   "nameEn": "TATEYAMA",
+   "num": 22,
+   "pos": "P",
+   "role": "RP",
+   "bats": "R",
+   "throws": "R",
+   "age": 28,
+   "foreign": false,
+   "stats": {
+    "g": 41,
+    "w": 1,
+    "l": 3,
+    "ip": 46.1,
+    "era": 2.33
+   },
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 144,
+    "control": 66,
+    "stamina": 38,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 5
+     },
+     {
+      "t": "SH",
+      "lv": 3
+     }
+    ]
+   },
+   "skills": [
+    "kire"
+   ]
+  },
+  {
+   "name": "武田 久",
+   "kana": "たけだ ひさし",
+   "nameEn": "TAKEDA",
+   "num": 21,
+   "pos": "P",
+   "role": "RP",
+   "bats": "R",
+   "throws": "R",
+   "age": 25,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 145,
+    "control": 60,
+    "stamina": 38,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 4
+     },
+     {
+      "t": "SH",
+      "lv": 3
+     }
+    ]
+   },
+   "skills": []
+  },
+  {
+   "name": "江尻 慎太郎",
+   "kana": "えじり しんたろう",
+   "nameEn": "EJIRI",
+   "num": 27,
+   "pos": "P",
+   "role": "RP",
+   "bats": "R",
+   "throws": "R",
+   "age": 27,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 146,
+    "control": 50,
+    "stamina": 40,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 4
+     },
+     {
+      "t": "FK",
+      "lv": 3
+     }
+    ]
+   },
+   "skills": []
+  },
+  {
+   "name": "立石 尚行",
+   "kana": "たていし なおゆき",
+   "nameEn": "TATEISHI",
+   "num": 25,
+   "pos": "P",
+   "role": "RP",
+   "bats": "R",
+   "throws": "R",
+   "age": 34,
+   "foreign": false,
+   "stats": {
+    "g": 28,
+    "w": 4,
+    "l": 3,
+    "era": 3.55
+   },
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 143,
+    "control": 58,
+    "stamina": 40,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 4
+     },
+     {
+      "t": "SK",
+      "lv": 3
+     }
+    ]
+   },
+   "skills": []
+  },
+  {
+   "name": "伊達 昌司",
+   "kana": "だて まさし",
+   "nameEn": "DATE",
+   "num": 17,
+   "pos": "P",
+   "role": "RP",
+   "bats": "R",
+   "throws": "R",
+   "age": 29,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 145,
+    "control": 55,
+    "stamina": 36,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 3
+     },
+     {
+      "t": "FK",
+      "lv": 3
+     }
+    ]
+   },
+   "skills": []
+  },
+  {
+   "name": "高橋 憲幸",
+   "kana": "たかはし のりゆき",
+   "nameEn": "N.TAKAHASHI",
+   "num": 42,
+   "pos": "P",
+   "role": "RP",
+   "bats": "L",
+   "throws": "L",
+   "age": 26,
+   "foreign": false,
+   "stats": {
+    "g": 10,
+    "ip": 8.2,
+    "era": 3.12
+   },
+   "r": {
+    "meet": 15,
+    "power": 12,
+    "speed": 30,
+    "arm": 60,
+    "field": 50,
+    "catch": 50,
+    "traj": 1,
+    "velo": 138,
+    "control": 55,
+    "stamina": 32,
+    "pitches": [
+     {
+      "t": "SL",
+      "lv": 3
+     },
+     {
+      "t": "CB",
+      "lv": 3
+     }
+    ]
+   },
+   "skills": [
+    "vsLeftP"
+   ]
+  },
+  {
+   "name": "高橋 信二",
+   "kana": "たかはし しんじ",
+   "nameEn": "S.TAKAHASHI",
+   "num": 30,
+   "pos": "C",
+   "bats": "R",
+   "throws": "R",
+   "age": 25,
+   "foreign": false,
+   "stats": {
+    "avg": 0.285,
+    "hr": 26,
+    "rbi": 84
+   },
+   "r": {
+    "meet": 62,
+    "power": 67,
+    "speed": 35,
+    "arm": 58,
+    "field": 52,
+    "catch": 56,
+    "traj": 3
+   },
+   "skills": [
+    "chance"
+   ]
+  },
+  {
+   "name": "實松 一成",
+   "kana": "さねまつ かずなり",
+   "nameEn": "SANEMATSU",
+   "num": 40,
+   "pos": "C",
+   "bats": "L",
+   "throws": "R",
+   "age": 23,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 35,
+    "power": 40,
+    "speed": 35,
+    "arm": 70,
+    "field": 60,
+    "catch": 60,
+    "traj": 3
+   },
+   "skills": []
+  },
+  {
+   "name": "中嶋 聡",
+   "kana": "なかじま さとし",
+   "nameEn": "NAKAJIMA",
+   "num": 32,
+   "pos": "C",
+   "bats": "R",
+   "throws": "R",
+   "age": 35,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 36,
+    "power": 35,
+    "speed": 30,
+    "arm": 72,
+    "field": 66,
+    "catch": 66,
+    "traj": 2
+   },
+   "skills": [
+    "catcher"
+   ]
+  },
+  {
+   "name": "フェルナンド・セギノール",
+   "kana": "フェルナンド・セギノール",
+   "nameEn": "SEGUIGNOL",
+   "num": 5,
+   "pos": "1B",
+   "bats": "S",
+   "throws": "R",
+   "age": 29,
+   "foreign": true,
+   "stats": {
+    "avg": 0.305,
+    "hr": 44,
+    "rbi": 108
+   },
+   "r": {
+    "meet": 70,
+    "power": 86,
+    "speed": 30,
+    "arm": 55,
+    "field": 42,
+    "catch": 45,
+    "traj": 4
+   },
+   "skills": [
+    "powerHitter",
+    "chance"
+   ]
+  },
+  {
+   "name": "木元 邦之",
+   "kana": "きもと くにゆき",
+   "nameEn": "KIMOTO",
+   "num": 10,
+   "pos": "2B",
+   "bats": "L",
+   "throws": "R",
+   "age": 23,
+   "foreign": false,
+   "stats": {
+    "avg": 0.285,
+    "hr": 9,
+    "rbi": 62,
+    "sb": 4
+   },
+   "r": {
+    "meet": 62,
+    "power": 48,
+    "speed": 50,
+    "arm": 58,
+    "field": 58,
+    "catch": 58,
+    "traj": 2
+   },
+   "skills": []
+  },
+  {
+   "name": "小笠原 道大",
+   "kana": "おがさわら みちひろ",
+   "nameEn": "OGASAWARA",
+   "num": 2,
+   "pos": "3B",
+   "bats": "L",
+   "throws": "R",
+   "age": 30,
+   "foreign": false,
+   "stats": {
+    "g": 101,
+    "ab": 377,
+    "h": 130,
+    "avg": 0.345,
+    "hr": 18,
+    "rbi": 70,
+    "sb": 3
+   },
+   "r": {
+    "meet": 86,
+    "power": 68,
+    "speed": 50,
+    "arm": 60,
+    "field": 60,
+    "catch": 62,
+    "traj": 4
+   },
+   "skills": [
+    "avgHitter",
+    "chance",
+    "spray",
+    "eye"
+   ]
+  },
+  {
+   "name": "金子 誠",
+   "kana": "かねこ まこと",
+   "nameEn": "KANEKO",
+   "num": 8,
+   "pos": "SS",
+   "bats": "L",
+   "throws": "R",
+   "age": 28,
+   "foreign": false,
+   "stats": {
+    "avg": 0.256,
+    "hr": 3,
+    "rbi": 39
+   },
+   "r": {
+    "meet": 50,
+    "power": 36,
+    "speed": 55,
+    "arm": 68,
+    "field": 80,
+    "catch": 80,
+    "traj": 1
+   },
+   "skills": [
+    "throwAcc"
+   ]
+  },
+  {
+   "name": "小田 智之",
+   "kana": "おだ ともゆき",
+   "nameEn": "ODA",
+   "num": 51,
+   "pos": "1B",
+   "bats": "L",
+   "throws": "R",
+   "age": 25,
+   "foreign": false,
+   "stats": {
+    "avg": 0.322,
+    "hr": 8,
+    "rbi": 31
+   },
+   "r": {
+    "meet": 72,
+    "power": 57,
+    "speed": 35,
+    "arm": 50,
+    "field": 45,
+    "catch": 50,
+    "traj": 3
+   },
+   "skills": []
+  },
+  {
+   "name": "田中 幸雄",
+   "kana": "たなか ゆきお",
+   "nameEn": "Y.TANAKA",
+   "num": 6,
+   "pos": "1B",
+   "bats": "R",
+   "throws": "R",
+   "age": 36,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 50,
+    "power": 50,
+    "speed": 40,
+    "arm": 58,
+    "field": 62,
+    "catch": 65,
+    "traj": 3
+   },
+   "skills": [
+    "chance"
+   ]
+  },
+  {
+   "name": "田中 賢介",
+   "kana": "たなか けんすけ",
+   "nameEn": "K.TANAKA",
+   "num": 3,
+   "pos": "2B",
+   "bats": "L",
+   "throws": "R",
+   "age": 23,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 45,
+    "power": 35,
+    "speed": 65,
+    "arm": 55,
+    "field": 58,
+    "catch": 58,
+    "traj": 2
+   },
+   "skills": []
+  },
+  {
+   "name": "奈良原 浩",
+   "kana": "ならはら ひろし",
+   "nameEn": "NARAHARA",
+   "num": 4,
+   "pos": "SS",
+   "bats": "R",
+   "throws": "R",
+   "age": 36,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 42,
+    "power": 25,
+    "speed": 55,
+    "arm": 62,
+    "field": 70,
+    "catch": 72,
+    "traj": 1
+   },
+   "skills": []
+  },
+  {
+   "name": "新庄 剛志",
+   "kana": "しんじょう つよし",
+   "nameEn": "SHINJO",
+   "num": 1,
+   "pos": "CF",
+   "bats": "R",
+   "throws": "R",
+   "age": 32,
+   "foreign": false,
+   "stats": {
+    "g": 123,
+    "ab": 503,
+    "h": 150,
+    "avg": 0.298,
+    "hr": 24,
+    "rbi": 79
+   },
+   "r": {
+    "meet": 67,
+    "power": 64,
+    "speed": 70,
+    "arm": 85,
+    "field": 85,
+    "catch": 80,
+    "traj": 3
+   },
+   "skills": [
+    "laser",
+    "clutch",
+    "chance"
+   ]
+  },
+  {
+   "name": "坪井 智哉",
+   "kana": "つぼい ともちか",
+   "nameEn": "TSUBOI",
+   "num": 7,
+   "pos": "RF",
+   "bats": "L",
+   "throws": "R",
+   "age": 30,
+   "foreign": false,
+   "stats": {
+    "avg": 0.284,
+    "hr": 11,
+    "rbi": 43
+   },
+   "r": {
+    "meet": 62,
+    "power": 54,
+    "speed": 60,
+    "arm": 58,
+    "field": 62,
+    "catch": 62,
+    "traj": 2
+   },
+   "skills": [
+    "spray"
+   ]
+  },
+  {
+   "name": "アンヘル・エチェバリア",
+   "kana": "アンヘル・エチェバリア",
+   "nameEn": "ECHEVARRIA",
+   "num": 43,
+   "pos": "LF",
+   "bats": "R",
+   "throws": "R",
+   "age": 33,
+   "foreign": true,
+   "stats": {
+    "avg": 0.258,
+    "hr": 16,
+    "rbi": 54
+   },
+   "r": {
+    "meet": 51,
+    "power": 60,
+    "speed": 35,
+    "arm": 55,
+    "field": 45,
+    "catch": 48,
+    "traj": 3
+   },
+   "skills": []
+  },
+  {
+   "name": "島田 一輝",
+   "kana": "しまだ かずき",
+   "nameEn": "SHIMADA",
+   "num": 39,
+   "pos": "RF",
+   "bats": "L",
+   "throws": "R",
+   "age": 32,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 46,
+    "power": 42,
+    "speed": 55,
+    "arm": 60,
+    "field": 60,
+    "catch": 60,
+    "traj": 2
+   },
+   "skills": []
+  },
+  {
+   "name": "森本 稀哲",
+   "kana": "もりもと ひちょり",
+   "nameEn": "MORIMOTO",
+   "num": 46,
+   "pos": "LF",
+   "bats": "R",
+   "throws": "R",
+   "age": 23,
+   "foreign": false,
+   "stats": {},
+   "r": {
+    "meet": 42,
+    "power": 35,
+    "speed": 75,
+    "arm": 62,
+    "field": 68,
+    "catch": 66,
+    "traj": 2
+   },
+   "skills": []
+  }
+ ],
+ "lineup": [
+  {
+   "pos": "RF",
+   "name": "坪井 智哉"
+  },
+  {
+   "pos": "CF",
+   "name": "新庄 剛志"
+  },
+  {
+   "pos": "3B",
+   "name": "小笠原 道大"
+  },
+  {
+   "pos": "1B",
+   "name": "フェルナンド・セギノール"
+  },
+  {
+   "pos": "C",
+   "name": "高橋 信二"
+  },
+  {
+   "pos": "2B",
+   "name": "木元 邦之"
+  },
+  {
+   "pos": "LF",
+   "name": "アンヘル・エチェバリア"
+  },
+  {
+   "pos": "DH",
+   "name": "小田 智之"
+  },
+  {
+   "pos": "SS",
+   "name": "金子 誠"
+  }
+ ],
+ "rotation": [
+  "金村 曉",
+  "カルロス・ミラバル",
+  "正田 樹",
+  "押本 健彦",
+  "入来 祐作"
+ ],
+ "closer": "横山 道哉"
+}

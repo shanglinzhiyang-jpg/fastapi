@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#08111f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="スマホで遊べるオリジナル野球ゲーム。打撃・投球・ペナント・サクセス・ホームラン競争。">
+    <title>熱闘！ポケットベースボール</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=DotGothic16&family=Graduate&family=Archivo+Black&family=M+PLUS+1p:wght@800;900&family=M+PLUS+Rounded+1c:wght@400;700;800&family=Rye&family=Ultra&family=Yellowtail&family=Lobster&family=Oleo+Script:wght@700&display=swap">
+    <link rel="stylesheet" href="css/style.css">
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="gl" aria-hidden="true"></canvas>
+      <canvas id="cv" aria-label="球場"></canvas>
+      <div id="hud" class="hud" hidden></div>
+      <div id="screen" class="screen"></div>
+      <div id="modal" hidden></div>
+      <div id="toast" role="status" hidden></div>
+    </div>
+    <!-- build:scripts -->
+    <script src="js/util.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/npb.js"></script>
+    <script src="js/rosters2004.js"></script>
+    <script src="js/parks.js"></script>
+    <script src="js/field.js"></script>
+    <script src="js/pitch.js"></script>
+    <script src="js/play.js"></script>
+    <script src="js/ai.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/chara.js"></script>
+    <script src="js/render.js"></script>
+    <script src="vendor/three.min.js"></script>
+    <script src="js/three/model.js"></script>
+    <script src="js/three/anim.js"></script>
+    <script src="js/three/clips.js"></script>
+    <script src="js/three/gear.js"></script>
+    <script src="js/three/human.js"></script>
+    <script src="js/three/hrig.js"></script>
+    <script src="js/three/look.js"></script>
+    <script src="js/three/post.js"></script>
+    <script src="js/three/parkparts.js"></script>
+    <script src="js/three/stadium.js"></script>
+    <script src="js/three/motion.js"></script>
+    <script src="js/three/view.js"></script>
+    <script src="js/three/portrait.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/store.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/photos.js"></script>
+    <script src="js/cards.js"></script>
+    <script src="js/broadcast.js"></script>
+    <script src="js/match.js"></script>
+    <script src="js/screens.js"></script>
+    <script src="js/pennant.js"></script>
+    <script src="js/pennant_sched.js"></script>
+    <script src="js/bip_table.js"></script>
+    <script src="js/quicksim.js"></script>
+    <script src="js/pennant_post.js"></script>
+    <script src="js/pennant_awards.js"></script>
+    <script src="js/pennant_life.js"></script>
+    <script src="js/pennant_records.js"></script>
+    <script src="js/news.js"></script>
+    <script src="js/manga.js"></script>
+    <script src="js/success.js"></script>
+    <script src="js/main.js"></script>
+    <!-- /build:scripts -->
+  </body>
+</html>

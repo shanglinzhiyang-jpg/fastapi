@@ -1,0 +1,15 @@
+{
+  "name": "熱闘！ポケットベースボール",
+  "short_name": "ポケベ",
+  "description": "スマホで遊べるオリジナル野球ゲーム",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#08111f",
+  "theme_color": "#08111f",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
