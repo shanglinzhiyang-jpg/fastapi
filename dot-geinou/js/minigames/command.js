@@ -222,16 +222,6 @@ function fillEllipse(ctx, cx, cy, rx, ry, color) {
   }
 }
 
-function starPts(cx, cy, rx, ry, spikes, inner, rot = 0) {
-  const pts = [];
-  for (let i = 0; i < spikes * 2; i++) {
-    const a = rot + (i * Math.PI) / spikes;
-    const r = i % 2 ? inner : 1;
-    pts.push([cx + Math.cos(a) * rx * r, cy + Math.sin(a) * ry * r]);
-  }
-  return pts;
-}
-
 // Rounded box with a 1px outline.
 function roundBox(ctx, x, y, w, h, fill, edge = INK) {
   x = Math.round(x); y = Math.round(y);
@@ -1040,7 +1030,7 @@ class CommandAction extends Minigame {
       if (this.state === 'fail' && i >= c.idx) st = 'failed';
       if (st === 'done' && c.hitAt[i] != null && this.pt - c.hitAt[i] < 5) y -= 3;
       if (st === 'now' && c.missT > 0) x += c.missT % 4 < 2 ? -2 : 2;
-      this.drawChip(ctx, c.seq[i], x, y, st, result);
+      this.drawChip(ctx, c.seq[i], x, y, st);
       const cx = x + CHIP / 2;
       if (this.theme === 'acting' && !result) {
         const col = st === 'done' ? '#7a7a88' : st === 'now' ? T.accent : '#e8e8f0';
@@ -1068,7 +1058,7 @@ class CommandAction extends Minigame {
     }
   }
 
-  drawChip(ctx, key, x, y, st, result) {
+  drawChip(ctx, key, x, y, st) {
     const T = this.T;
     let bg = T.chip;
     if (st === 'done') bg = T.accent;
@@ -1387,12 +1377,10 @@ class CommandAction extends Minigame {
     const s = 3, x = 136, feet = 150;
     let kind = this.pose.kind;
     const t = this.pose.t;
-    const rot = 0;
     if (this.state === 'fail' && this.st >= 8) kind = 'hurt';
     const info = this.tate_pose(kind, t);
     shadowAt(ctx, x + 24, feet - 1, 18, 3);
     this.drawPerson(ctx, this.samSheet, this.samLook, x, feet, s, info, {
-      rot,
       pop: Math.min(1, (t + 1) / 3),
       over: (c) => {
         c.fillStyle = '#f4f4f4';
@@ -1647,7 +1635,6 @@ class CommandAction extends Minigame {
     const look = hero ? this.heroLk : this.look;
     let kind = this.pose.kind;
     const t = this.pose.t;
-    let rot = 0;
     let info;
     if (kind === 'kick') {
       const sd = this.kickSide === 'left' ? -1 : 1;
@@ -1664,13 +1651,15 @@ class CommandAction extends Minigame {
     } else {
       info = this.basePose(kind, t);
     }
-    if (this.state === 'fail' && this.st >= 10 && this.cur && this.cur.kind !== 'henshin') { rot = -(Math.PI / 2) * Math.min(1, (this.st - 10) / 6); info = { dir: 'down' }; kind = 'hurt'; }
+    if (this.state === 'fail' && this.st >= 10 && this.cur && this.cur.kind !== 'henshin') {
+      info = { dir: 'down', armless: true, crouch: true, arms: [[3, 15, 4, 6], [12, 15, 11, 6]] };
+      kind = 'hurt';
+    }
     const air = (info.dy || 0) < -6;
-    if (!rot) shadowAt(ctx, x + 24, feet - 1, air ? 12 : 18, air ? 2 : 3);
+    shadowAt(ctx, x + 24, feet - 1, air ? 12 : 18, air ? 2 : 3);
     const glow = this.cur && this.state === 'input' ? this.cur.idx / this.cur.n : hero ? 0.8 : 0.2;
     const flick = this.state === 'input' && (this.pt >> 2) % 2 ? 0.15 : 0;
     this.drawPerson(ctx, sheet, look, x, feet, s, info, {
-      rot,
       pop: Math.min(1, (t + 1) / 3),
       under: hero ? (c) => {
         if (info.dir !== 'down') return;
@@ -1680,7 +1669,7 @@ class CommandAction extends Minigame {
       } : null,
       over: (c) => this.henshin_belt(c, info.dir, clamp(glow + flick, 0, 1)),
     });
-    if (kind === 'hurt' && this.st > 16) this.drawDizzy(ctx, x + 2, feet - 14, this.pt);
+    if (kind === 'hurt' && this.st > 12) this.drawDizzy(ctx, x + 24, feet - 58, this.pt);
     if (this.state === 'input' && this.cur && this.cur.kind === 'henshin' && this.cur.idx > 0) {
       // charging aura
       ctx.globalAlpha = 0.25 + 0.15 * Math.sin(this.pt / 3);
@@ -2071,7 +2060,8 @@ class CommandAction extends Minigame {
     const kind = this.pose.kind, t = this.pose.t;
     const face = this.kFace;
     let mouth = 0, tail = 0, claws = false, step = 0, headUp = 0, glow = false;
-    if (this.state === 'cue' && this.st < this.walkLen && this.ri > 0) step = Math.floor(this.st / 7) % 2 ? 1 : -1;
+    const walking = this.state === 'cue' && this.st < this.walkLen - 2;
+    if (walking) step = Math.floor(this.st / 7) % 2 ? 1 : -1;
     switch (kind) {
       case 'down': step = t < 6 ? 1 : 0; break;
       case 'up': mouth = 2; headUp = t < 26 ? 1 : 0; break;
@@ -2081,7 +2071,7 @@ class CommandAction extends Minigame {
       case 'b': claws = true; mouth = 1; break;
       default: break;
     }
-    if (this.state === 'cue' && this.st < this.walkLen && this.ri > 0) glow = false;
+    if (walking) glow = false;
     // tripped: plops down on its bottom, dizzy
     const sit = this.kFallT > 0 && this.kFallT < 52 ? Math.min(1, this.kFallT / 5) * (this.kFallT > 44 ? (52 - this.kFallT) / 8 : 1) : 0;
     const back = Math.round(sit * 3) * (face === 'left' ? 1 : -1);
@@ -2107,7 +2097,7 @@ class CommandAction extends Minigame {
     rect(ctx, 16, 27 + bl, 9, 3, INK);
     rect(ctx, 17, 27 + bl, 7, 2, D);
     // dorsal plates
-    const hy = -headUp - breathe * 0;
+    const hy = -headUp;
     for (const tri of [[[14, 3 + hy], [18, -1 + hy], [19, 4 + hy]], [[18, 7], [23, 4], [23, 10]], [[21, 11], [27, 9], [25, 15]], [[23, 16], [29, 15], [25, 20]]]) polyOut(ctx, tri, P);
     // body
     E(16, 19 + breathe, 8, 8, G);
@@ -2164,7 +2154,7 @@ class CommandAction extends Minigame {
   }
 
   // ================================================================ ACTING (感情演技)
-  acting_bg(c, r) {
+  acting_bg(c) {
     rect(c, 0, 16, W, 142, '#17131c');
     // lighting rig
     rect(c, 0, 18, W, 3, '#3a3d48');
@@ -2313,7 +2303,7 @@ class CommandAction extends Minigame {
     this.emo = { key: k, t: 0 };
     this.coEmote = { ch: CO_REACT[k], t: 0 };
     this.snd('voice');
-    this.popup(EMO[k].say, 196, 82, '#ffffff', 10);
+    this.popup(EMO[k].say, this.cur.idx % 2 ? 184 : 214, 80, '#ffffff', 10);
     if (k === 'a') this.sparkBurst(200, 104, 5, ['#ffffff', '#fff6a8'], 1.4);
     if (k === 'left') this.shake(4, 1);
   }
@@ -2510,7 +2500,7 @@ class CommandAction extends Minigame {
   }
 
   // ================================================================ DANCE (ダンスステップ)
-  dance_bg(c, r) {
+  dance_bg(c) {
     vgrad(c, 0, 16, W, 96, [[0, '#0c0620'], [1, '#2a0f4a']]);
     for (let x = 6; x < W; x += 22) rect(c, x, 26, 2, 84, 'rgba(255,255,255,0.04)');
     // truss

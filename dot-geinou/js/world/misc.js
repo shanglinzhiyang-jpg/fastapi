@@ -732,6 +732,24 @@ function drawSteam(ctx, g, cam) {
   ctx.restore();
 }
 
+const SENTO_GOSSIP = [
+  'スポーツ新聞の芸能面：\n「新人俳優、時代劇で堂々の主演デビュー！」',
+  '芸能雑誌：「お笑いコンビ、結成10年目で\n初の単独ライブ！チケットは即完売」',
+  '芸能雑誌：「人気アイドルの趣味は銭湯めぐり！？\n湯上がりの一杯はフルーツ牛乳派」',
+  '芸能雑誌：「売れっ子の共通点は、あいさつと体力。\nよく食べ、よく寝て、よくお風呂！」',
+];
+let sentoGossipIdx = 0;
+
+async function sentoIntro(g) {
+  if (!(await firstEnter(g, 'sento_met'))) return;
+  g.sfx('hit');
+  await g.say('カポーン……\n奥から、おけの音がひびいてくる。');
+  await g.emote('sento_okami', '!');
+  await say(g, OKAMI, ['いらっしゃい！ドットの湯へようこそ。', 'お風呂は大人¥500。番台で払っておくれ。\n左ののれんが男湯、右が女湯だよ！']);
+  await g.emote('sento_kid', '♪');
+  await say(g, KID, 'おふろあがりのフルーツ牛乳、さいこう〜！');
+}
+
 function drawSentoSign(ctx, sx, sy) {
   R(ctx, sx + 1, sy + 1, 62, 14, '#3a2512');
   R(ctx, sx + 2, sy + 2, 60, 12, '#6e4428');
@@ -752,12 +770,12 @@ registerPlace({
       wall: 'cream',
       tiles: [
         '################',
-        '#=c=AB====CD=H=#',
+        '#=c=AB====CD=HV#',
         '#FF...sOGs....m#',
         '#......KK......#',
         '#..............#',
-        '#.............f#',
-        '#..........bb..#',
+        '#..........bb.f#',
+        '#..........tt..#',
         '#UU.........P.U#',
         '#######MM#######',
       ],
@@ -765,7 +783,7 @@ registerPlace({
         A: 'sento_noren_ml', B: 'sento_noren_mr', C: 'sento_noren_fl', D: 'sento_noren_fr',
         H: 'wall_cream+sento_board', F: 'sento_milkcase', s: 'sento_bandai_side', O: 'sento_bandai_floor',
         G: 'sento_bandai_goods', K: 'sento_bandai_front', m: 'sento_massage', f: 'sento_fan',
-        b: 'bench', U: 'sento_getabako', P: 'plant',
+        b: 'bench', t: 'table_low', U: 'sento_getabako', P: 'plant', V: 'wall_cream+tv_wall',
       },
       warps: [
         { x: 7, y: 8, to: 'exit' }, { x: 8, y: 8, to: 'exit' },
@@ -824,21 +842,18 @@ registerPlace({
         { x: 1, y: 7, w: 2, on: 'action', run: (g) => g.say('木の下駄箱だ。\n木の札が、そのまま鍵になっている。') },
         { x: 14, y: 7, on: 'action', run: (g) => g.say('木の下駄箱だ。\n「松」「竹」「梅」…札に字が書いてある。') },
         { x: 14, y: 5, on: 'action', run: (g) => g.say('扇風機が首を振っている。\n風呂上がりの体に、たまらない風！') },
-        { x: 11, y: 6, w: 2, on: 'action', run: (g) => g.say('休憩用のベンチだ。\n風呂上がりの人たちが、ここでひと休みする。') },
+        { x: 11, y: 5, w: 2, on: 'action', run: (g) => g.say('休憩用のベンチだ。\n風呂上がりの人たちが、ここでひと休みする。') },
+        {
+          x: 11, y: 6, w: 2, on: 'action',
+          run: async (g) => { await g.say(['テーブルの上に、新聞と芸能雑誌が置いてある。', SENTO_GOSSIP[sentoGossipIdx++ % SENTO_GOSSIP.length]]); },
+        },
       ],
       drawUnder(ctx, g, cam) {
         text(ctx, '男', 5 * TILE - cam.x, TILE + 3 - cam.y, { size: 10, align: 'center', color: '#ffffff', shadow: null });
         text(ctx, '女', 11 * TILE - cam.x, TILE + 3 - cam.y, { size: 10, align: 'center', color: '#ffffff', shadow: null });
       },
-      onEnter: async (g) => {
-        if (!(await firstEnter(g, 'sento_met'))) return;
-        g.sfx('hit');
-        await g.say('カポーン……\n奥から、おけの音がひびいてくる。');
-        await g.emote('sento_okami', '!');
-        await say(g, OKAMI, ['いらっしゃい！ドットの湯へようこそ。', 'お風呂は大人¥500。番台で払っておくれ。\n左ののれんが男湯、右が女湯だよ！']);
-        await g.emote('sento_kid', '♪');
-        await say(g, KID, 'おふろあがりのフルーツ牛乳、さいこう〜！');
-      },
+      // started with g.run so the room finishes loading first (the cutscene keeps the player busy)
+      onEnter: (g) => { if (!g.flag('sento_met')) g.run(sentoIntro); },
     },
 
     // ------------------------------------------------------------ 浴室（男湯｜女湯）＋脱衣所
@@ -1347,8 +1362,8 @@ registerPlace({
         {
           type: 'prop', x: 11, y: 1, w: 2, h: 1, solid: false,
           draw(ctx, sx, sy) {
-            R(ctx, sx + 6, sy + 1, 20, 9, '#c9a227'); R(ctx, sx + 7, sy + 2, 18, 7, '#fff6dc');
-            text(ctx, '宴会場', sx + 16, sy, { size: 8, align: 'center', color: '#5a3420', shadow: null });
+            R(ctx, sx, sy - 6, 32, 12, '#c9a227'); R(ctx, sx + 1, sy - 5, 30, 10, '#fff6dc');
+            text(ctx, '宴会場', sx + 16, sy - 6, { size: 10, align: 'center', color: '#5a3420', shadow: null });
           },
         },
         {
@@ -1761,6 +1776,14 @@ const TAKO_TV = [
 ];
 let takoTvIdx = 0;
 
+async function takoIntro(g) {
+  if (!(await firstEnter(g, 'takoyaki_met'))) return;
+  await g.emote('takoyaki_taisho', '!');
+  await say(g, TAISHO, ['まいど！いらっしゃい！', '大阪名物たこ焼き、焼きたてやで〜！\n外はカリッ、中はトロッや！']);
+  await g.emote('takoyaki_senpai', '♪');
+  await say(g, SENPAI, 'バイトも募集中やで〜！\n大将に声かけてな！');
+}
+
 function drawTakoSign(ctx, sx, sy) {
   R(ctx, sx + 1, sy + 1, 62, 14, '#20232a');
   R(ctx, sx + 2, sy + 2, 60, 12, '#d62f2f');
@@ -1858,13 +1881,7 @@ registerPlace({
         { x: 10, y: 6, w: 2, on: 'action', run: (g) => g.say('立ち食い用のテーブルだ。\n「熱いのでご注意を」と書いてある。') },
         { x: 13, y: 8, w: 2, on: 'action', run: (g) => g.say('持ち帰りのお客さん用のベンチだ。\n焼き上がりを待つ間に、ひと休み。') },
       ],
-      onEnter: async (g) => {
-        if (!(await firstEnter(g, 'takoyaki_met'))) return;
-        await g.emote('takoyaki_taisho', '!');
-        await say(g, TAISHO, ['まいど！いらっしゃい！', '大阪名物たこ焼き、焼きたてやで〜！\n外はカリッ、中はトロッや！']);
-        await g.emote('takoyaki_senpai', '♪');
-        await say(g, SENPAI, 'バイトも募集中やで〜！\n大将に声かけてな！');
-      },
+      onEnter: (g) => { if (!g.flag('takoyaki_met')) g.run(takoIntro); },
     },
   },
 });

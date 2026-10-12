@@ -532,7 +532,7 @@ function buildSet(key, o) {
     S.board = { x: 4, y: 20, w: 70, h: 22, style: 'news' };
     S.meter = { x: 184, y: 18 };
     S.plate = { x: 160, y: 90 };
-    S.pop = { x: 103, y: 62 };
+    S.pop = { x: 106, y: 66 };
   } else if (key === 'drama') {
     vgrad(c, 0, 16, W, 58, '#f6e6c8', '#e6cfa6');
     for (let x = 4; x < W; x += 10) rect(c, x, 16, 2, 58, 'rgba(160,110,60,0.08)');
@@ -1177,6 +1177,8 @@ class TalkShow extends Minigame {
       for (const a of all) if (a.layer === layer) this.drawActor(ctx, a);
       if (layer < 2) ctx.drawImage(S.over[layer], 0, 0);
     }
+    // a studio guest with four legs, sitting on the desk
+    if (this.cur && this.idx < this.n && /子犬/.test(this.cur.body)) this.drawPuppy(ctx, S.key === 'news' ? 112 : (this.me.x - 18), S.key === 'news' ? 70 : this.me.y + 18);
     if (S.audience) this.drawAudience(ctx);
     for (const a of all) this.drawActorFx(ctx, a);
     if (this.state === 'answer' || this.state === 'type') this.drawYouMarker(ctx);
@@ -1301,6 +1303,22 @@ class TalkShow extends Minigame {
       const size = fitSize(ctx, this.show, w - 8);
       text(ctx, this.show, x + w / 2, y + Math.round((h - size) / 2), { size, align: 'center', color: '#22202a', shadow: null });
     }
+  }
+
+  drawPuppy(ctx, x, y) {
+    const wag = Math.floor(this.t / 6) % 2;
+    const P = [
+      '..oo.......',
+      '.obbo......',
+      '.obeboooo..',
+      'onbbbbbbbo.',
+      '.obbbbbbbbo',
+      '..oobbbbbo' + (wag ? 'o' : '.'),
+      '...obooobo.',
+      '...oo..oo..',
+    ];
+    const col = { o: '#3a2412', b: '#e0a060', e: '#1a1a1a', n: '#1a1a1a' };
+    P.forEach((row, j) => { for (let i = 0; i < row.length; i++) if (col[row[i]]) rect(ctx, x + i * 2, y + j * 2, 2, 2, col[row[i]]); });
   }
 
   drawPlate(ctx, p) {

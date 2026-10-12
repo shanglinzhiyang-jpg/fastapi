@@ -714,11 +714,12 @@ async function approach(g, id, speed = 1.5) {
   e.dir = dirTo(e.x, e.y, p.x, p.y);
 }
 
-function hintFor(g) {
+// inside = said by someone in the backstage (no need to point at the stage door)
+function hintFor(g, inside = false) {
   const st = g.state;
   if (!st.agency) {
     return [
-      'まずは「通行人役のエキストラ」からやな。\n楽屋口から入って、舞台監督に声をかけてみ。',
+      inside ? 'まずは「通行人役のエキストラ」からやな。\n舞台監督に言うたら、すぐ出られるで。' : 'まずは「通行人役のエキストラ」からやな。\n楽屋口から入って、舞台監督に声をかけてみ。',
       'よしもとに入りたいなら、舞台監督が「座員オーディション」もやってるで！',
     ];
   }
@@ -730,8 +731,20 @@ function hintFor(g) {
   if (st.fame < 250) return 'ちょい役で場数を踏もう！\n★250になったら、準レギュラーの声がかかるで。';
   if (st.fame < 1000) return '準レギュラーで大活躍やな！\n★1000になったら、座長公演の大事な役をまかせたい。';
   if (st.fame < 2000) return '★2000になったら…座長に抜擢されるかもしれへんで！';
-  if (!g.flag('shinkigeki_zacho')) return 'いよいよ座長に抜擢のチャンスや！\n楽屋の座長か舞台監督に声をかけてみ！';
+  if (!g.flag('shinkigeki_zacho')) return inside ? 'いよいよ座長に抜擢のチャンスや！\nお仕事の「座長に抜擢！」で、主役に挑戦や！' : 'いよいよ座長に抜擢のチャンスや！\n楽屋の座長か舞台監督に声をかけてみ！';
   return '座長、おつかれさまです！\n国民的スターまで、あと少しや！';
+}
+
+// The same advice in the front-of-house staff's polite words.
+function politeHint(g) {
+  const st = g.state;
+  if (!st.agency) return ['舞台に立ってみたい方は、\n楽屋口の奥の舞台監督へどうぞ！\nエキストラなら、どなたでも出られます。', 'よしもとの「座員オーディション」も、舞台監督が受け付けていますよ♪'];
+  if (!member(g)) return st.fame < 100 ? 'エキストラで経験を積んで★100になると、\n「ちょい役」で出演できるそうですよ！' : '「ちょい役」なら出演できますよ！\n準レギュラーから上は、よしもと所属の方だけなんです。';
+  if (st.fame < 250) return 'ちょい役でたくさん出演して、★250を目指しましょう！\n準レギュラーのお声がかかりますよ♪';
+  if (st.fame < 1000) return '準レギュラーとして大活躍ですね！\n★1000になると、座長公演の大事な役が回ってきますよ。';
+  if (st.fame < 2000) return '★2000になったら…座長に抜擢されるかもしれません！\n楽しみにしていますね♪';
+  if (!g.flag('shinkigeki_zacho')) return '座長に抜擢のチャンスです！\n楽屋の座長か舞台監督に、声をかけてみてください！';
+  return '座長、いつもありがとうございます！\n国民的スターまで、あと少しですね♪';
 }
 
 function blockReason(g, j) {
@@ -1026,14 +1039,15 @@ async function runStageJob(g, j, who) {
     curtainK = 1;
     lights = true;
     await g.fadeIn();
+    await moveCurtain(g, 0);
+    g.sfx('applause');
     for (const [w, t] of INTRO[j.mode]) await g.say(t, WHO[w]);
     if (zachoMode) {
       g.setFlag('shinkigeki_zacho_day', st.day);
       await g.walkNpcTo(CAST.zacho, 18, 5, 1.5);
       g.showNpc(CAST.zacho, false);
+      await g.emote('player', '!');
     }
-    await moveCurtain(g, 0);
-    g.sfx('applause');
     res = await g.job({ ...def, confirm: false });
     if (res) {
       await crowdReact(g, res);
@@ -1154,7 +1168,7 @@ async function zachoTalk(g) {
   if (i === 0) {
     if (member(g) && st.fame >= 2000) await runStageJob(g, job('zacho'), who);
     else if (member(g) && st.fame >= 1000) await runStageJob(g, job('key'), who);
-    else await g.say(hintFor(g), who);
+    else await g.say(hintFor(g, true), who);
   } else if (i === 1) {
     await g.say(pick([
       ['ズッコケは、ギャグを最後まで聞いてから。', '早よ転んだら「フライング」や。\nオチの「間」を、体で覚えるんやで。'],
@@ -1197,7 +1211,7 @@ async function butaiTalk(g) {
   else if (pickd === 'オーディション') {
     await g.say(['よしもとの「座員オーディション」や。', 'ギャグのオチの「ドーン！」で、ズッコケる！\n「シーン…」の時はガマンや。合格したら、よしもと所属やで！'], who);
     await auditionHere(g, who);
-  } else if (pickd === '相談する') await g.say(hintFor(g), who);
+  } else if (pickd === '相談する') await g.say(hintFor(g, true), who);
   else await g.say('出番がほしなったら、いつでも言うてや。', who);
 }
 
@@ -1265,7 +1279,7 @@ async function welcome(g) {
   await g.showLogo('shinkigeki', 'よしもと新喜劇');
   await g.say([
     'ここでは毎日、よしもと新喜劇を上演しています！',
-    '下町のお店や家族が舞台の、笑いあり涙ありのお芝居。\nギャグのあとは、みんなでズッコケるのがお約束です！',
+    '下町のお店や家族が舞台の、\n笑いあり涙ありのお芝居。\nギャグのあとは、みんなでズッコケるのがお約束！',
     'チケットはこちらの受付で。右の赤い扉が劇場ホール、左の扉は楽屋口です！',
   ], WHO.annai);
 }
@@ -1286,7 +1300,7 @@ async function annaiTalk(g) {
       'ギャグのオチで、出演者がそろってズッコケる！\nそれが新喜劇のお約束です♪',
     ], who);
   } else if (i === 2) {
-    await g.say(hintFor(g), who);
+    await g.say(politeHint(g), who);
   } else {
     await g.say('ごゆっくりどうぞ♪', who);
   }
@@ -1603,8 +1617,8 @@ registerPlace({
       ],
       entities: [
         { type: 'logo', x: 7.4, y: 0.55, w: 5.2, h: 3.1, logo: 'shinkigeki', board: true, lights: true },
-        plate(1, 1, 3, 'グッズ'),
-        plate(3.25, 1, 2.5, '楽屋口', { bg: '#3a2414', edge: WOOD_L }),
+        plate(1, 1, 2.25, 'グッズ'),
+        plate(3.375, 1, 2.25, '楽屋口', { bg: '#3a2414', edge: WOOD_L }),
         plate(15.125, 1, 3.75, '劇場ホール'),
         kaohameBoard,
         npc('sk_ticket', 8, 4, 'down', WHO.ticket, { talk: ticketTalk }),

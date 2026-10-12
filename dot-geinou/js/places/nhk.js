@@ -789,7 +789,7 @@ async function finaleFlow(g) {
     await g.fadeIn(12);
     await g.say('はい、完成！テレビの向こうのみんなに、最高の笑顔を見せてあげて！', SP.makeup);
     g.facePlayer('down');
-    await g.moveNpc('nhk_bs_ad', 'up up up', 1.6);
+    await g.moveNpc('nhk_bs_ad', 'up up up left face:up', 1.6);
     await g.emote('nhk_bs_ad', '!');
     await g.say('まもなく本番でーす！\n{name}さん、スタンバイお願いしまーす！', SP.ad);
     await g.emote('player', '!');
@@ -1015,6 +1015,7 @@ async function jobGuide(g, npc) {
   else if (st.fame < 250) lines.push(`★250になったら、ニュースやクイズ番組も紹介できます。（あと★${250 - st.fame}）`);
   else if (st.fame < 1000) lines.push(`★1000で、朝の連続ドラマへの出演も夢じゃありません！（あと★${1000 - st.fame}）`);
   else if (st.fame < 2000) lines.push(`★2000になったら、歴史ドラマの主演も…！（あと★${2000 - st.fame}）`);
+  else if (finalePending(g)) lines.push('そして…年末の大型歌番組のプロデューサーが、入り口の近くで{name}さんをお待ちですよ！');
   else if (!g.flag('finaleDone')) lines.push(`★${FINALE_FAME}…国民的スターになれば、年末の大きな歌番組から、きっと声がかかりますよ！`);
   else lines.push('NHKホールの凱旋コンサートも、いつでもお待ちしています！');
   await g.say(lines, s);
@@ -1028,7 +1029,7 @@ async function kidsJob(g, npc) {
   }
   await g.say(['こども番組「ドットンとうたおう！」のディレクターです。', 'ドットンといっしょに歌って踊る、うたのおにいさん・おねえさんを探してるんですよ！'], s);
   const res = await g.job({
-    id: 'nhk_kids_song', title: 'うたのおにいさん・おねえさん', desc: 'こども番組で歌って踊ろう！', client: npc.name,
+    id: 'nhk_kids_song', title: 'うたのおにいさん・おねえさん', desc: 'こども番組で歌って踊ろう！', client: npc.name, clientLook: npc.look,
     stamina: 20, minigame: 'rhythm', opts: { difficulty: 1, lanes: 1, song: 'ドットンとうたおう！' }, pay: 4500, fame: 15, skill: 'uta', gain: 2,
   });
   if (!res) return;
@@ -1043,12 +1044,12 @@ async function kidsJob(g, npc) {
 async function newsJob(g, npc) {
   const s = as(npc);
   if (g.state.fame < 250) {
-    await g.say(['夕方のニュースを担当しています。原稿読みをお願いするのは、知名度★250以上の方なんです。', 'となりのベテランアナの滑舌レッスンで、まずは準備を！'], s);
+    await g.say(['夕方のニュースを担当しています。原稿読みをお願いするのは、知名度★250以上の方なんです。', 'スタジオの左にいるベテランアナの滑舌レッスンで、まずは準備を！'], s);
     return;
   }
   await g.say(['ちょうどいいところに！', '夕方のニュースの「街の話題」コーナー、読んでもらえませんか？難しい読みの漢字に気をつけて！'], s);
   await nhkJob(g, {
-    id: 'nhk_news', title: 'ニュース原稿読み', desc: '漢字の読みまちがいに注意！', client: npc.name,
+    id: 'nhk_news', title: 'ニュース原稿読み', desc: '漢字の読みまちがいに注意！', client: npc.name, clientLook: npc.look,
     stamina: 20, minigame: 'announce', opts: { difficulty: 3, words: NEWS_WORDS, count: 5 }, pay: 10000, fame: 40, skill: 'talk', gain: 3,
     requires: { fame: 250 },
   });
@@ -1063,7 +1064,7 @@ async function quizPanel(g, speaker) {
   if (i !== 0 && i !== 1) return;
   const cat = i === 0 ? 'general' : 'tv';
   await nhkJob(g, {
-    id: 'nhk_quiz_' + cat, title: i === 0 ? '雑学クイズ番組の解答者' : 'テレビクイズ番組の解答者', client: speaker.name,
+    id: 'nhk_quiz_' + cat, title: i === 0 ? '雑学クイズ番組の解答者' : 'テレビクイズ番組の解答者', client: speaker.name, clientLook: speaker.look,
     stamina: 25, minigame: 'quiz', opts: { difficulty: 3, category: cat, count: 5 }, pay: 12000, fame: 45, skill: 'talk', gain: 3,
     requires: { fame: 250 },
   });
@@ -1077,7 +1078,7 @@ async function morningDrama(g, npc) {
   }
   await g.say(['{name}さん、いいところに！', 'ヒロインの幼なじみ役、ぜひ{name}さんにお願いしたいんです！'], s);
   await nhkJob(g, {
-    id: 'nhk_morning_drama', title: '朝の連続ドラマに出演', desc: 'ヒロインの幼なじみ役！', client: npc.name,
+    id: 'nhk_morning_drama', title: '朝の連続ドラマに出演', desc: 'ヒロインの幼なじみ役！', client: npc.name, clientLook: npc.look,
     stamina: 25, minigame: 'command', opts: { difficulty: 4, theme: 'acting' }, pay: 30000, fame: 110, skill: 'engi', gain: 4,
     requires: { fame: 1000 },
   });
@@ -1086,7 +1087,7 @@ async function morningDrama(g, npc) {
 async function historyDrama(g, npc) {
   const s = as(npc);
   if (g.state.fame < 2000) {
-    await g.say(['日曜夜の歴史ドラマの監督だ。', '主演は一年の顔。知名度★2000…「スター」と呼ばれるくらいの人にしか任せられないな。', 'となりの殺陣師さんの稽古で、腕を磨いておくといい。'], s);
+    await g.say(['日曜夜の歴史ドラマの監督だ。', '主演は一年の顔。知名度★2000…「スター」と呼ばれるくらいの人にしか任せられないな。', 'セットにいる殺陣師さんの稽古で、腕を磨いておくといい。'], s);
     return;
   }
   const i = await g.ask(['{name}さん…次の主演は、君しかいない！', '「日曜夜の歴史ドラマで主演」\nギャラ ¥70,000〜／体力 -30'], ['引き受ける', 'やめておく'], s);
@@ -1103,7 +1104,7 @@ async function historyDrama(g, npc) {
   g.sfx('snare');
   await g.say('スタート！', s);
   await nhkJob(g, {
-    id: 'nhk_history_drama', title: '日曜夜の歴史ドラマで主演', client: npc.name, confirm: false,
+    id: 'nhk_history_drama', title: '日曜夜の歴史ドラマで主演', client: npc.name, clientLook: npc.look, confirm: false,
     stamina: 30, minigame: 'command', opts: { difficulty: 5, theme: 'tate' }, pay: 70000, fame: 250, skill: 'engi', gain: 5,
     requires: { fame: 2000 },
   });
@@ -1177,7 +1178,7 @@ registerPlace({
       tiles: [
         '####################',
         '#uuuuVVuuuuuuVVuuuu#',
-        '#g===vv======vv===g#',
+        '#g====v======v====g#',
         '#..................#',
         '#P.....KKKKKK.....P#',
         '#........rr.....B..#',
@@ -1204,8 +1205,8 @@ registerPlace({
           type: 'logo', x: 7.5, y: 1.1, w: 5, h: 1.8, logo: 'nhk',
           talk: async (g) => { await g.showLogo('nhk', 'NHK放送センター'); await g.say('大きなNHKのロゴだ。\nここから毎日、たくさんの番組が届けられている。'); },
         },
-        plate(2, 2, 'ギャラリー', 3),
-        plate(15, 2, 'スタジオ棟', 3),
+        plate(2, 2, 'ギャラリー', 4),
+        plate(14, 2, 'スタジオ棟', 4),
         { type: 'sign', x: 16, y: 5, text: '「スタジオ見学ツアー 受付中！」\n1日1回・無料。ガイドさんに声をかけてね。' },
         {
           type: 'npc', id: 'nhk_recep', x: 9, y: 3, dir: 'down', look: L.recep, name: '受付さん',
@@ -1316,7 +1317,7 @@ registerPlace({
           },
         },
         {
-          type: 'npc', id: 'nhk_ad', x: 9, y: 4, dir: 'left', look: L.ad, name: 'AD', wander: 2,
+          type: 'npc', id: 'nhk_ad', x: 9, y: 4, dir: 'left', look: L.ad, name: 'AD', wander: 1,
           text: ['すみませーん、通りまーす！…あ、見学の方ですか？', 'ドアの横の「ON AIR」ランプが光ってたら本番中。静かにお願いしますね！', 'ちなみに奥から、ニュース・クイズ・こども番組・ドラマのスタジオです。'],
         },
         {
@@ -1442,11 +1443,11 @@ registerPlace({
           text: ['今日のテーマは何かのう。どんな問題でもドンと来いじゃ！', 'クイズはな、知識だけじゃなく「ひらめき」も大事なんじゃよ。'],
         },
         {
-          type: 'npc', id: 'nhk_queen', x: 10, y: 2, dir: 'down', look: L.queen, name: 'クイズ女王',
+          type: 'npc', id: 'nhk_queen', x: 12, y: 2, dir: 'down', look: L.queen, name: 'クイズ女王',
           text: ['早押しのコツ？問題文を最後まで…ふふ、それは秘密。', '黄色い席は、いつだって私の指定席よ。'],
         },
         {
-          type: 'npc', id: 'nhk_geinin', x: 12, y: 2, dir: 'down', look: L.geinin, name: '若手芸人',
+          type: 'npc', id: 'nhk_geinin', x: 10, y: 2, dir: 'down', look: L.geinin, name: '若手芸人',
           text: ['ボケる場所を探してたら、問題が終わってもうたわ…。', 'クイズ番組はな、正解するだけやなくて、トークで盛り上げるのも大事なんやで！'],
         },
         {
@@ -1454,7 +1455,7 @@ registerPlace({
           talk: async (g, npc) => {
             await g.say(['クイズ番組の「一般参加予選会」、受付中でーす！', 'どなたでも参加OK！放送やテレビにまつわる問題が出ますよ。'], as(npc));
             await nhkJob(g, {
-              id: 'nhk_quiz_yosen', title: 'クイズ番組の一般予選', desc: '放送やテレビの問題が出るらしい。', client: npc.name,
+              id: 'nhk_quiz_yosen', title: 'クイズ番組の一般予選', desc: '放送やテレビにまつわる問題が出ます！', client: npc.name, clientLook: npc.look,
               stamina: 15, minigame: 'quiz', opts: { difficulty: 1, questions: NHK_QUIZ, count: 3 }, pay: 1000, fame: 5, skill: 'talk', gain: 1,
             });
           },
@@ -1722,7 +1723,7 @@ registerPlace({
             if (g.flag('finaleDone')) {
               await g.say(['{name}さん！またこのステージで歌ってくれませんか？', 'あの年末の歌声が忘れられないって、凱旋コンサートのリクエストが殺到してるんです！'], s);
               await nhkJob(g, {
-                id: 'nhk_encore', title: 'NHKホール 凱旋コンサート', desc: 'あの舞台に、もう一度！', client: npc.name,
+                id: 'nhk_encore', title: 'NHKホール 凱旋コンサート', desc: 'あの舞台に、もう一度！', client: npc.name, clientLook: npc.look,
                 stamina: 30, minigame: 'rhythm', opts: { difficulty: 5, lanes: 4, song: 'ありがとう、ニッポン' }, pay: 70000, fame: 250, skill: 'uta', gain: 5,
                 requires: { fame: 2000 },
               });
@@ -1736,7 +1737,7 @@ registerPlace({
           talk: async (g, npc) => watchRehearsal(g, npc),
         },
         {
-          type: 'npc', id: 'nhk_producer2', x: 13, y: 5, dir: 'left', look: L.producer, name: 'プロデューサー',
+          type: 'npc', id: 'nhk_producer2', x: 12, y: 5, dir: 'left', look: L.producer, name: 'プロデューサー',
           cond: (g) => !!g.flag('finaleDone') && !SHOW.on,
           text: ['{name}さん、あの年末のステージは、放送の歴史に残りますよ。', 'このホールは、いつでも{name}さんのために空けておきます！'],
         },

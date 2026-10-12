@@ -5,7 +5,8 @@
 // opts
 //   gags   : [{ setup, cue, fake? }]  setup = 座長のフリ, cue = オチのセリフ（言い終わって少し「間」があって ドーン！）
 //            fake: true のものは「シーン…」になる（押したらペナルティ）。fake が無ければ組み込みのものを使う。
-//   fakes  : [{ setup, cue }]         「シーン…」用のセリフだけを差し替えたい時
+//            足りない分は組み込みのネタで補う（同じネタのくり返しを避けるため）。
+//   fakes  : [{ setup, cue }]         「シーン…」用のセリフだけを差し替えたい時（足りない分は組み込みで補う）
 //   rounds : 合計ネタ数（3〜12）。省略時は難易度で 5〜9。
 //
 // 採点：本物のオチごとに PERFECT 100 / GOOD 75 / LATE 45 / MISS 0 の平均。
@@ -18,6 +19,7 @@ import { audio } from '../engine/audio.js';
 import { W, H, clamp, makeCanvas, shuffle } from '../engine/util.js';
 
 const FOOT = 178; // y of the cast's feet on the stage floor
+const LIE_SHIFT = 10; // a fallen member slides this far back toward the lead, so a solo fall never lands on a neighbour
 
 // ---------------------------------------------------------------- built-in content (all original)
 const GAGS = [
@@ -26,7 +28,7 @@ const GAGS = [
   { setup: '大変や！ 店の前に長い行列が！', cue: '…よう見たら、アリさんの行列やった！' },
   { setup: 'ワシな、遠いところから来たんや。', cue: '…となりの店からや！' },
   { setup: '雨がすごいから、傘を持ってきたで！', cue: '…開いてみたら、日傘やった！' },
-  { setup: '新しいバイトの子、張り切ってたで。', cue: '張り切りすぎて、もう帰りよった！' },
+  { setup: '新しいバイトの子、張り切ってたで。', cue: '張り切りすぎて、もう疲れて寝とる！' },
   { setup: 'ワシ、毎朝10キロ走ってるねん。', cue: '…夢の中でな！' },
   { setup: 'この店で一番高いもん、知ってるか？', cue: '…天井や！' },
   { setup: '今日はお客さんに特別サービスや！', cue: 'お水が…おかわり自由！' },
@@ -44,7 +46,7 @@ const GAGS = [
   { setup: '店のエアコン、新しくしたで！', cue: 'うちわに、電池つけただけや！' },
   { setup: 'お客さん、空いてる席へどうぞ！', cue: '…あ、椅子ぜんぶ修理に出してたわ！' },
   { setup: 'ワシ、料理の天才やねん。', cue: 'ゆで卵…３回に１回は成功や！' },
-  { setup: 'いらっしゃい！ 本日はお日柄もよく…', cue: '…あかん、お見合いのあいさつや！' },
+  { setup: 'いらっしゃい！ 本日はお日柄もよく…', cue: '…あかん、結婚式のスピーチや！' },
   { setup: 'よーし、店の大そうじするで！', cue: '気合い入れすぎて、ほうき折れた！' },
   { setup: 'ワシな、昔はモテモテやったんや。', cue: '…公園のハトにな！' },
   { setup: '金庫の番号、ちゃんと覚えたで！', cue: '…メモごと、金庫にしまってもうた！' },
@@ -55,12 +57,12 @@ const GAGS = [
 const FAKES = [
   { setup: 'ここで一発、ギャグいくで！', cue: '…ふとんが、ふかふかや！' },
   { setup: 'おもろい話、思い出したわ。', cue: '…いや、ふつうの話やったわ。' },
-  { setup: 'お待たせ！ 特製きつねうどんや！', cue: '…熱いから、気ぃつけてな。' },
+  { setup: 'お待たせ！ 特製きつねうどんや！', cue: '…熱いから、気ぃつけてな！' },
   { setup: '今日は特別に、新ネタ見せたる！', cue: '…ちょっと待ってな、メモ探すわ。' },
   { setup: 'ワシの新ギャグ、聞いてや！', cue: '…あかん、オチ忘れてもうた。' },
   { setup: 'よーし、ここで決めたるで！', cue: '…明日は、くもりのち晴れです。' },
-  { setup: 'みんな、大事な話があるんや。', cue: '…来週から、定休日が水曜になります。' },
-  { setup: 'すごいもん、見せたろか？', cue: '…ふつうの、えんぴつや。' },
+  { setup: 'みんな、大事な話があるんや。', cue: '…来週から、定休日が水曜や！' },
+  { setup: 'すごいもん、見せたろか？', cue: '…ふつうの、えんぴつや！' },
 ];
 
 // ---------------------------------------------------------------- cast
@@ -137,7 +139,7 @@ function buildStage() {
   R(130, 56, 60, 2, '#3a2512');
   R(132, 58, 56, 26, '#27407a');
   R(132, 58, 56, 2, '#1c2f5c');
-  for (const x of [150, 169]) R(x, 66, 2, 18, '#efdcb2');
+  for (const x of [150, 169]) R(x, 75, 2, 9, '#efdcb2');
   R(132, 82, 56, 2, '#1c2f5c');
 
   // menu strips (お品書き) on the right
@@ -221,8 +223,10 @@ class Zukko extends Minigame {
     this.hold = [50, 44, 38, 32, 28][i]; // pause after the setup line
     this.maMin = [22, 18, 14, 12, 10][i]; // 間 between the punch line and the cue
     this.maMax = [40, 50, 62, 72, 84][i];
-    this.winPerfect = Math.round(this.ease([26, 23, 20, 18, 16][i], 0.4));
-    this.winGood = Math.round(this.ease([16, 15, 14, 12, 11][i], 0.4));
+    // The cue comes after a random 間, so these are pure reaction windows (human reaction + input/display
+    // latency is ~0.3 s): PERFECT stays reachable for an attentive player at every difficulty.
+    this.winPerfect = Math.round(this.ease([28, 25, 22, 20, 18][i], 0.4));
+    this.winGood = Math.round(this.ease([16, 15, 14, 13, 12][i], 0.4));
     this.winLate = 18;
     this.grace = 3; // a press this many frames before the cue still counts
     this.fakeWin = 48;
@@ -241,10 +245,8 @@ class Zukko extends Minigame {
       .filter((x) => x && typeof x.cue === 'string' && x.cue)
       .map((x) => ({ setup: typeof x.setup === 'string' ? x.setup : '', cue: x.cue, fake: !!x.fake }));
     const custom = clean(this.opts.gags);
-    let reals = custom.filter((x) => !x.fake);
-    let fakes = custom.filter((x) => x.fake).concat(clean(this.opts.fakes));
-    if (!reals.length) reals = GAGS;
-    if (!fakes.length) fakes = FAKES;
+    const reals = custom.filter((x) => !x.fake);
+    const fakes = custom.filter((x) => x.fake).concat(clean(this.opts.fakes));
 
     // Fake rounds: never first, never two in a row.
     const fakeAt = new Set();
@@ -253,8 +255,14 @@ class Zukko extends Minigame {
       if (fakeAt.has(p - 1) || fakeAt.has(p + 1)) continue;
       fakeAt.add(p);
     }
-    const realQ = shuffle(reals, this.rng);
-    const fakeQ = shuffle(fakes, this.rng);
+    // The caller's lines come first; top up from the built-in pool so a short custom list doesn't repeat.
+    const topUp = (mine, pool, need) => {
+      const q = shuffle(mine, this.rng);
+      if (q.length < need) q.push(...shuffle(pool, this.rng).slice(0, need - q.length));
+      return q.length ? q : shuffle(pool, this.rng);
+    };
+    const realQ = topUp(reals, GAGS, total - fakeAt.size);
+    const fakeQ = topUp(fakes, FAKES, fakeAt.size);
     let ri = 0, fi = 0;
     this.plan = [];
     for (let k = 0; k < total; k++) {
@@ -398,6 +406,7 @@ class Zukko extends Minigame {
           this.fall(this.player, true);
           this.judge(early ? 'fly' : 'oops', `-${FAKE_PENALTY}`);
           if (early) r.flownAt = t;
+          this.player.emote = null;
           this.setEmote(this.lead, '!?', t + 40);
           audio.sfx('buzz');
         }
@@ -446,7 +455,7 @@ class Zukko extends Minigame {
       if (m.upAt !== null && this.pt - m.upAt >= 10) { m.fallAt = null; m.upAt = null; m.landed = true; }
       if (m.fallAt !== null && m.upAt === null && !m.landed && this.pt - m.fallAt >= 7) {
         m.landed = true;
-        const gx = m.x + m.side * 24;
+        const gx = m.x + m.side * (24 - LIE_SHIFT);
         for (let k = 0; k < 7; k++) {
           this.parts.push({ x: gx + (this.rng() * 30 - 15), y: FOOT - 2, vx: (this.rng() - 0.5) * 1.6, vy: -this.rng() * 1.2, life: 0, max: 18 + Math.floor(this.rng() * 10) });
         }
@@ -629,10 +638,11 @@ class Zukko extends Minigame {
         if (talking) bob = Math.floor(t / 6) % 2;
         if (realCue && t - r.tC < 12) bob = Math.round(Math.sin(((t - r.tC) / 12) * Math.PI) * 6);
       }
+      const lx = Math.round(m.x - m.side * LIE_SHIFT * ps.lying);
       // shadow
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       if (ps.lying > 0.5) {
-        const sx = m.side > 0 ? m.x : m.x - 40;
+        const sx = m.side > 0 ? lx : lx - 40;
         ctx.fillRect(sx + 2, FOOT - 1, 38, 3);
       } else {
         ctx.fillRect(m.x - 10, FOOT - 2, 20, 3);
@@ -640,7 +650,7 @@ class Zukko extends Minigame {
       }
       const img = sheet[dir][ps.frame] || sheet[dir][0];
       ctx.save();
-      ctx.translate(m.x, Math.round(FOOT - ps.hop - 16 * Math.sin(ps.a) - bob));
+      ctx.translate(lx, Math.round(FOOT - ps.hop - 16 * Math.sin(ps.a) - bob));
       if (ps.a) ctx.rotate((m.side || 1) * ps.a);
       ctx.drawImage(img, -16, -40, 32, 40);
       ctx.restore();
@@ -655,15 +665,15 @@ class Zukko extends Minigame {
       }
 
       // head position (for markers & emotes)
-      const hx = ps.lying > 0.5 ? m.x + m.side * 32 : m.x;
+      const hx = ps.lying > 0.5 ? lx + m.side * 32 : m.x;
       const hy = ps.lying > 0.5 ? FOOT - 34 : FOOT - 46 - bob;
       const emote = m.emote && t < m.emoteUntil ? m.emote : null;
       if (emote) this.overlays.push(() => this.drawEmote(ctx, hx, hy, emote, t));
       // "あなた" marker (hidden while a judgement popup floats there, and mid-fall)
-      if (m.player && this.pt - this.judgeAt > 46 && (ps.lying === 0 || ps.lying === 1)) {
+      if (m.player && this.pt - this.judgeAt > 46 && (ps.lying === 0 || ps.lying === 1) && (!emote || emote === 'sweat')) {
         this.overlays.push(() => {
           const blink = Math.floor(this.pt / 16) % 2;
-          const my = hy - (emote ? 22 : 4);
+          const my = hy - 4;
           text(ctx, 'あなた', hx, my - 14, { size: 10, align: 'center', color: COLORS.pink, outline: '#22202a' });
           ctx.fillStyle = COLORS.pink;
           for (let i = 0; i < 4; i++) ctx.fillRect(hx - 3 + i, my - 2 + blink + i, 7 - i * 2, 1);
@@ -754,8 +764,13 @@ class Zukko extends Minigame {
       if (s) text(ctx, s, x + 11, y + 7 + i * lh, { size, color: ink, shadow: null });
     });
     if (gag) {
-      // a little "!" mark: the punch line is coming
-      text(ctx, '！', x + w - 12, y - 10, { size: 12, color: '#d62f2f', outline: '#ffffff' });
+      // a red 「！」 badge on the corner: this is the punch line
+      const bx = x + w - 6, by2 = y - 1;
+      fillDisc(ctx, bx, by2, 7, ink);
+      fillDisc(ctx, bx, by2, 6, '#d62f2f');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(bx - 1, by2 - 4, 3, 5);
+      ctx.fillRect(bx - 1, by2 + 2, 3, 2);
     }
   }
 
@@ -784,7 +799,7 @@ class Zukko extends Minigame {
       ctx.fillRect(0, 0, W, H);
       const a = clamp(k / 8, 0, 1) * (t > r.tUp - 10 ? (r.tUp - t) / 10 : 1);
       ctx.globalAlpha = clamp(a, 0, 1);
-      this.bigText(ctx, 'シーン…', 160, 72 + Math.min(8, Math.floor(k * 0.12)), 24, '#dfe9ff', '#2a3a7a');
+      this.bigText(ctx, 'シーン…', 114, 72 + Math.min(8, Math.floor(k * 0.12)), 24, '#dfe9ff', '#2a3a7a');
       ctx.globalAlpha = 1;
       // a crow flies across
       const cx = Math.round(336 - k * 3.2);

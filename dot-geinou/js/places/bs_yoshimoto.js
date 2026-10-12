@@ -680,6 +680,18 @@ async function canDo(g, key, who) {
     await g.say(['解答者さんは、事務所に所属している人か、★30以上の人にお願いしているんです。', `（いまは★${g.state.fame}）\nまずは番組観覧で、テレビの空気に慣れてみてね！`], who);
     return false;
   }
+  const need = (JOBS[key].def.requires || {}).fame || 0;
+  if (g.state.fame < need) {
+    const now = `（いまは★${g.state.fame}）`;
+    const rough = who === WHO.director;
+    const msg = {
+      loke: rough ? [`ロケのリポーターは、★${need}からお願いしてるんだ。`, `${now}\nまずはクイズ番組で、カメラに慣れてこい！`] : [`ロケのリポーターは、★${need}からお願いしています。`, `${now}\nまずはクイズ番組で、カメラに慣れてくださいね。`],
+      live: rough ? [`生放送のMCは、★${need}からだな。`, `${now}\nロケで場数を踏んでから、また来てくれ！`] : [`生放送のMCは、★${need}からお願いしています。`, `${now}\nロケで場数を踏んでから、ぜひ！`],
+      special: [`特番の総合司会は、★${need}の人気者にお願いしています。`, `${now}\n生放送のMCで、腕を磨いてくださいね！`],
+    }[key];
+    await g.say(msg, who);
+    return false;
+  }
   const why = g.checkRequires(JOBS[key].def.requires);
   if (why) { await g.say(why); return false; }
   if (key === 'special' && today(g, 'bs_yoshimoto_sp_day')) {
@@ -689,7 +701,7 @@ async function canDo(g, key, who) {
   return true;
 }
 
-function hintFor(g) {
+function hintFor(g, byProducer = false) {
   const st = g.state;
   if (!st.agency && st.fame < 30) {
     return [
@@ -700,6 +712,7 @@ function hintFor(g) {
   if (st.fame < 250) return 'スタジオのフロアディレクターに声をかけて、クイズ番組に出よう！\n★250になったら、副調整室のディレクターがロケを任せてくれるかも。';
   if (st.fame < 1000) return '副調整室のディレクターに頼んで、ロケ番組で全国の魅力を伝えよう！\n★1000になったら生放送のMCも夢じゃない！';
   if (st.fame < 2000) return '生放送の情報番組MCで、原稿読みの腕を磨こう！\n★2000になったら、特番の総合司会のお話が来るはず！';
+  if (byProducer) return '特番の総合司会、いつでもお任せしたいです！\n「お仕事リスト」からどうぞ。国民的スター（★4000）まで、もうひと息ですよ！';
   return '特番の総合司会は、副調整室のプロデューサーからいつでも！\n国民的スター（★4000）まで、もうひと息！';
 }
 
@@ -1102,6 +1115,8 @@ async function welcome(g) {
   g.setFlag('bs_yoshimoto_welcome');
   await g.wait(250);
   await g.emote('bsy_uketsuke', '!');
+  const p0 = g.map.player;
+  if (p0.x === 9 && p0.y === 11) await g.movePlayer('up up up up up up');
   await g.say('いらっしゃいませ！\nBSよしもとへ、ようこそ！', WHO.uketsuke);
   g.sfx('chime');
   await g.showLogo(PID, 'BSよしもと');
@@ -1136,7 +1151,7 @@ async function uketsukeTalk(g) {
     await g.say([
       'BSよしもとは、日本全国の地域の魅力を発信するBSのテレビ局です。',
       'もちろん、お笑いもたっぷり！\n各地の人や名物を、楽しく紹介しています。',
-      'おとなりの、よしもと東京本部のみなさんにも、よく出演していただいてるんですよ。',
+      'おとなりの、よしもと東京本部の芸人さんたちも、\nよく遊びに来てくれるんですよ。',
     ], who);
   } else if (i === 2) {
     await g.say(hintFor(g), who);
@@ -1350,7 +1365,7 @@ async function producerTalk(g) {
   const greet = st.fame >= 2000 ? '{name}さん！特番の総合司会、\nいつでもお願いしたいくらいです！' : st.fame >= 1000 ? '{name}さん、生放送の評判いいですよ！' : st.fame >= 250 ? '{name}さん、ロケのお話が来ていますよ。' : 'いまの{name}さんにできるお仕事を\nいっしょに探しましょう。';
   const i = await g.ask(greet, ['お仕事リスト', '相談する', 'またね'], who);
   if (i === 0) await jobBoard(g, who);
-  else if (i === 1) await g.say(hintFor(g), who);
+  else if (i === 1) await g.say(hintFor(g, true), who);
   else await g.say('いい番組、いっしょに作りましょう！', who);
 }
 
