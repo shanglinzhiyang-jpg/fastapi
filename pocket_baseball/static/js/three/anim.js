@@ -1073,7 +1073,7 @@
   const QANG = /^(az|below|phi|yaw|deg|ang|open|batTilt|batAz|tilt|roll|turn)$/;
   const QRATIO = /^(power|crouch|lift|pause|uppercut|waggle|w|k|early)$/;
   // ボール・ミートの点は 2 cm (グラブ・バットの芯がボールからずれて見えないように)
-  const QFINE = /^(S|ball|pocket|bag)$/;
+  const QFINE = /^(S|ball|aim|pocket|bag)$/;
   function qv(k, v, parts) {
     if (typeof v === "number") {
       const q = QANG.test(k) ? 5 : QRATIO.test(k) ? 0.1 : QFINE.test(k) ? 0.02 : 0.05;

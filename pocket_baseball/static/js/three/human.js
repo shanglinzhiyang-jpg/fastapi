@@ -412,7 +412,8 @@
       }
       const a = m > 2 ? (m * sxy - sx * sy) / (m * sxx - sx * sx) : -1.38;
       const rows = [];
-      for (let v = 0.04; v < Math.min(0.275, vTop + 0.003); v += 0.03) rows.push(+v.toFixed(2));
+      // 行は肩の縫い目まで (v3。その上の袖山は輪が途切れる)
+      for (let v = 0.04; v < Math.min(0.275, vTop + 0.003, sv.shoulder ? sv.shoulder + 0.012 : 1); v += 0.03) rows.push(+v.toFixed(2));
       sleeve[side] = makeScale(rows, arcTable(shirt, rows, u0, u0 + 0.5, 32), u0, u0 + 0.5, 1 / Math.max(0.2, Math.abs(a)));
       sleeve[side].cuffV = cuffV;
     }
@@ -963,7 +964,8 @@
       g.restore();
     };
     const hemV = tor.hemV || 0.34;
-    const sTop = SV.top - 0.02; // 袖の実寸表を引くときの上限 (肩の近くは形が崩れる)
+    // 袖の実寸表を引くときの上限: 肩の縫い目 (sleeveV.shoulder) より上は袖山で、腕のまわりの輪が途切れて表が崩れる
+    const sTop = Math.min(SV.top - 0.02, SV.shoulder + 0.005);
     // 脇のパネル (中日・阪神のビジター): 脇の下 (v 0.8) から裾へ、上 topCm・下 bottomCm の幅。frontShiftCm で裾ほど前へ曲がる。
     // 脇の縫い目は u 0 (= 1) と 0.5。u 0 では前が +u、u 0.5 では前が -u。袖の内側にも同じ色 (sleeve: false でなし)
     if (u.sidePanels) {
@@ -1067,8 +1069,8 @@
           segs.push([cc, off, off + w]);
           off += w + gap;
         });
-        // V の下端 = 第 1 ボタンの少し上 (襟の前点から 1.5 cm)。それより上は肩の首の付け根へ曲がる
-        const vPT = frontV ? vCF - cmV(1.5) : vCF + 0.005;
+        // V の下端 = 第 1 ボタンの下 (襟の前点から 7 cm)。それより上は肩の首の付け根へ斜めに上がる (写真では第 2 ボタンの少し上で前立てにつながる)
+        const vPT = frontV ? vCF - cmV(7) : vCF + 0.005;
         for (const [cc, a, b] of segs) {
           band(tor, fx, half + a, half + b, hemV, vPT, cc, 0.02, 0.4, 0.9);
           band(tor, fx, -half - b, -half - a, hemV, vPT, cc, 0.02, 0.4, 0.9);
@@ -1237,57 +1239,49 @@
     t.anisotropy = o.low ? 2 : 8;
     return t;
   }
-  // 巨人の V 字のパイピング: 肩の首の付け根 (SN) から第 1 ボタンの上 (PT) へ曲がって前立てにつながる。
-  // segs: [色, 前立ての縁から外へ a..b (m)]。曲線は cm の座標 (横 = 前の中心から布に沿った長さ, 縦 = 高さ) で外側へずらす
+  // 巨人の V 字のパイピング: 肩の首の付け根 (SN) から斜めに下りて、第 1 ボタンの下 (PT) で前立てにつながる (写真 c439892e)。
+  // 曲線はテクスチャの (u, v) で引き、帯の幅とずらしは場所ごとの px/cm で布の上の mm にする (首の近くの行は布が途切れていて、布に沿った長さでは測れない)。
+  // segs: [色, 前立ての縁から外へ a..b (m)]。外 = 前立てから離れる側 (肩の側)
   function frontVPiping(g, S, tor, fx, half, vPT, segs) {
     const vy = (v) => (1 - v) * S;
-    const mv = tor.mPerV * 100; // cm / v
-    const X = (v, uu) => (tor.arc(v, uu) - tor.arc(v, fx)) * 100;
-    const rowsTop = tor.rows[tor.rows.length - 1];
+    const pY = tor.pxY(S);
     for (const sg of [-1, 1]) {
-      // SN: 襟ぐりの点のうち、前の中心から布に沿って 6.5〜8.5 cm でいちばん高い点 (表が 0.99 まであるときだけ)
-      let sn = null;
-      if (rowsTop >= 0.985)
-        for (const p of SC.col) {
-          const d = X(p[1], p[0]) * sg;
-          if (d >= 6.5 && d <= 8.5 && (!sn || p[1] > sn[1])) sn = p;
-        }
-      if (!sn) sn = [fx + sg * 0.17, 0.965];
+      // SN: 襟ぐりの点のうち、前の中心から u で 0.2 離れた所 (肩の上の、首の横)
+      const ut = fx + sg * 0.2;
+      const sn = SC.col.length ? SC.col.reduce((bb, p) => (Math.abs(p[0] - ut) < Math.abs(bb[0] - ut) ? p : bb), SC.col[0]) : [ut, 0.99];
       const uPT = tor.uAt(vPT, fx, sg * half);
-      const cv = sn[1] - 0.3 * (sn[1] - vPT);
-      // 2 次ベジエ PT → SN (制御点は PT の真上なので、PT では前立てと同じ縦の向き)
+      // 制御点は PT の真上 (PT では前立てと同じ縦の向き)。SN からは急な斜めに下りる
+      const cu = uPT;
+      const cv = sn[1] - 0.55 * (sn[1] - vPT);
       const pts = [];
       for (let i = 0; i <= 32; i++) {
         const t = i / 32;
-        const uu = (1 - t) * (1 - t) * uPT + 2 * (1 - t) * t * uPT + t * t * sn[0];
-        const v = (1 - t) * (1 - t) * vPT + 2 * (1 - t) * t * cv + t * t * sn[1];
-        pts.push([X(v, uu), v * mv]);
+        pts.push([(1 - t) * (1 - t) * sn[0] + 2 * (1 - t) * t * cu + t * t * uPT, (1 - t) * (1 - t) * sn[1] + 2 * (1 - t) * t * cv + t * t * vPT]);
       }
-      // 外向きの法線 (PT では +X·sg、肩の側では下向き)
+      // 各点の法線 (cm の空間で 90° 回す)。向きは PT で前立てから離れる側 (u が sg の向き) にそろえる
       const nrm = pts.map((p, i) => {
-        const a = pts[Math.max(0, i - 1)];
-        const b = pts[Math.min(pts.length - 1, i + 1)];
-        const dx = b[0] - a[0];
-        const dy = b[1] - a[1];
+        const a0 = pts[Math.max(0, i - 1)];
+        const b0 = pts[Math.min(pts.length - 1, i + 1)];
+        const pX = tor.pxX(Math.min(p[1], 0.985), p[0], S);
+        const dx = ((b0[0] - a0[0]) * S) / pX;
+        const dy = ((b0[1] - a0[1]) * S) / pY;
         const l = Math.hypot(dx, dy) || 1;
-        return [(sg * dy) / l, (-sg * dx) / l];
+        return [-dy / l, dx / l, pX];
       });
-      const at = (i, d) => {
-        const x = pts[i][0] + nrm[i][0] * d;
-        const v = (pts[i][1] + nrm[i][1] * d) / mv;
-        return [tor.uAt(v, fx, x / 100) * S, vy(v)];
-      };
+      const k = nrm[nrm.length - 1][0] * sg >= 0 ? 1 : -1;
+      const off = nrm.map((n) => [(k * n[0] * n[2]) / S, (k * n[1] * pY) / S]); // 1 cm ずらしたときの (du, dv)
+      const at = (i, cm) => [(pts[i][0] + off[i][0] * cm) * S, vy(pts[i][1] + off[i][1] * cm)];
       for (const [cc, a, b] of segs) {
         g.fillStyle = cc;
         g.beginPath();
         for (let i = 0; i < pts.length; i++) {
-          const p = at(i, a * 100);
-          if (i) g.lineTo(p[0], p[1]);
-          else g.moveTo(p[0], p[1]);
+          const q = at(i, a * 100);
+          if (i) g.lineTo(q[0], q[1]);
+          else g.moveTo(q[0], q[1]);
         }
         for (let i = pts.length - 1; i >= 0; i--) {
-          const p = at(i, b * 100);
-          g.lineTo(p[0], p[1]);
+          const q = at(i, b * 100);
+          g.lineTo(q[0], q[1]);
         }
         g.closePath();
         g.fill();
@@ -1736,12 +1730,15 @@
     const matUnder = new T.MeshStandardMaterial({ color: st.under, roughness: 0.8, envMapIntensity: 0.5, vertexColors: ao("under") });
     const matSocks = new T.MeshStandardMaterial({ color: st.socks, roughness: 0.85, envMapIntensity: 0.5, vertexColors: ao("socks") });
     const matShoes = new T.MeshStandardMaterial({ color: st.shoes, vertexColors: true, roughness: 0.35, metalness: 0.05, envMapIntensity: 0.8 });
+    // 目録 v3: 帽子のメッシュにつば・ボタン、helmetR / helmetL につば・耳当てが入っていて、色はテクスチャの色見本の行から引く
+    const v3 = !!asset.extra.domeSwatch && !!asset.geos.helmetR;
     const matCap = new T.MeshStandardMaterial({ map: domeTexture("cap", st.cap.crown, st.cap, st.cap.stripes, lowQ), roughness: 0.78, envMapIntensity: 0.5 });
-    const matBrim = new T.MeshStandardMaterial({ color: st.cap.brim, roughness: 0.7, envMapIntensity: 0.5 });
+    const matBrim = v3 ? null : new T.MeshStandardMaterial({ color: st.cap.brim, roughness: 0.7, envMapIntensity: 0.5 });
     const helmetP = { roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.12, envMapIntensity: 1.0 };
     const matHelmet = new T.MeshPhysicalMaterial(Object.assign({ map: domeTexture("helmet", st.helmet.color, umpire ? {} : st.helmet, null, lowQ) }, helmetP));
-    // つば・耳当て・捕手の後ろ向きヘルメットはマークなし
+    // つば・耳当て (v2)・捕手の後ろ向きヘルメットはマークなし
     const matHelmetPlain = new T.MeshPhysicalMaterial(Object.assign({ color: st.helmet.color }, helmetP));
+    const isCatcher = o.pos === "C" && o.role === "catcher" && !!PB.Gear;
     const matGloveHands = new T.MeshStandardMaterial({ color: o.batGlove || "#f2f2f0", roughness: 0.55, envMapIntensity: 0.5 });
     const meshes = {};
     // 画面外の選手を描かないよう、体全体を包む球で視錐台の判定をする (SkinnedMesh の既定は骨を動かして計算 → 重いので固定の球)
@@ -1753,8 +1750,10 @@
       m.receiveShadow = true;
       m.boundingSphere = bodySphere;
       m.frustumCulled = true;
+      // あとから足す部品 (ヘルメット) は、ほかの部品と同じ表示レイヤー・同じ bind 行列に
+      if (meshes.shirt) m.layers.mask = meshes.shirt.layers.mask;
       group.add(m);
-      m.bind(skeleton, m.matrixWorld);
+      m.bind(skeleton, meshes.shirt ? meshes.shirt.bindMatrix : m.matrixWorld);
       meshes[name] = m;
       return m;
     };
@@ -1771,7 +1770,9 @@
     add("socks", matSocks, !longPants).visible = !longPants; // 長いパンツの下のストッキングは描かない
     add("shoes", matShoes);
     add("cap", matCap);
-    add("helmet", matHelmet);
+    // v3: 打者のヘルメット (helmetR / helmetL) はかぶるときに作る。捕手の後ろ向きのヘルメットは殻だけ (helmet)
+    if (!v3) add("helmet", matHelmet);
+    else if (isCatcher) add("helmet", matHelmetPlain).visible = false;
     // 顔の個性 (モーフ)
     const head = meshes.head;
     const names = asset.geos.head.userData.morphNames || [];
@@ -1801,25 +1802,37 @@
     const eyeL = new T.Vector3().fromArray(asset.extra.eyeL);
     const browY = eyeL.y + 0.05 - hb.y;
     const front = eyeL.z - hb.z + 0.035;
-    const SG = sharedGeos();
-    const brim = new T.Mesh(SG.brim, matBrim);
-    brim.position.set(0, browY + 0.012, front - 0.012);
-    brim.rotation.x = 0.16;
-    brim.castShadow = true;
-    capGroup.add(brim);
-    // マークは帽子・ヘルメットのテクスチャに描き込んである
-    // 帽子のてっぺんのボタン
-    const button = new T.Mesh(SG.button, new T.MeshStandardMaterial({ color: st.cap.button, roughness: 0.6, envMapIntensity: 0.5 }));
-    button.scale.set(1, 0.55, 1);
-    button.position.set(0, asset.extra.headTop - hb.y + 0.012, eyeL.z - hb.z - 0.075);
-    capGroup.add(button);
-    const flap = new T.Mesh(SG.flap, matHelmetPlain);
-    capGroup.add(flap);
-    const capParts = { brim, flap };
+    // v2 の目録だけ: 共有の形のつば・ボタン・耳当てを頭の骨に付ける (マークは帽子・ヘルメットのテクスチャに描き込んである)
+    let brim = null;
+    let button = null;
+    let flap = null;
+    if (!v3) {
+      const SG = sharedGeos();
+      brim = new T.Mesh(SG.brim, matBrim);
+      brim.position.set(0, browY + 0.012, front - 0.012);
+      brim.rotation.x = 0.16;
+      brim.castShadow = true;
+      capGroup.add(brim);
+      // 帽子のてっぺんのボタン
+      button = new T.Mesh(SG.button, new T.MeshStandardMaterial({ color: st.cap.button, roughness: 0.6, envMapIntensity: 0.5 }));
+      button.scale.set(1, 0.55, 1);
+      button.position.set(0, asset.extra.headTop - hb.y + 0.012, eyeL.z - hb.z - 0.075);
+      capGroup.add(button);
+      flap = new T.Mesh(SG.flap, matHelmetPlain);
+      capGroup.add(flap);
+    }
     let helmetOn = !!o.helmet;
     function setHelmet(h) {
       helmetOn = !!h;
       meshes.cap.visible = !helmetOn;
+      if (v3) {
+        // 耳当ては投手側の耳 (右打者は左耳 = helmetR)。打席が変わったら (スイッチヒッター) かぶり直す
+        const hk = player.opts.bats === "L" ? "helmetL" : "helmetR";
+        if (helmetOn && !meshes[hk]) add(hk, matHelmet);
+        for (const k of ["helmetR", "helmetL"]) if (meshes[k]) meshes[k].visible = helmetOn && k === hk;
+        if (meshes.helmet) meshes.helmet.visible = false;
+        return;
+      }
       meshes.helmet.visible = helmetOn;
       brim.position.y = browY + (helmetOn ? 0.018 : 0.012);
       brim.position.z = front - (helmetOn ? 0.0 : 0.012);
@@ -1843,7 +1856,6 @@
     const leather = new T.MeshStandardMaterial({ color: team.gloveColor || "#8a4e24", roughness: 0.55, envMapIntensity: 0.5 });
     const gloveHand = o.throws === "L" ? "R" : "L";
     const kind = o.pos === "C" ? "catcher" : o.pos === "1B" ? "first" : "fielder";
-    const isCatcher = o.pos === "C" && o.role === "catcher" && !!PB.Gear;
     const gearCols = isCatcher || umpire ? PB.Gear.colors(st, team) : null;
     // 捕手はひもの付いた黒いキャッチャーミット
     let glove;
@@ -1892,7 +1904,7 @@
       },
       dispose() {
         // 付け替えで今は使っていないマテリアル (つば・ヘルメット・バッティング手袋) も含めて捨てる
-        const mats = new Set([matSkin, matGloveHands, matBrim, matHelmet, matHelmetPlain, matCap, bat.material]);
+        const mats = new Set([matSkin, matGloveHands, matBrim, matHelmet, matHelmetPlain, matCap, bat.material].filter(Boolean));
         group.traverse((n) => {
           if (n.material) for (const m of Array.isArray(n.material) ? n.material : [n.material]) mats.add(m);
           if (n.geometry && !n.geometry.userData.shared && !Object.values(asset.geos).includes(n.geometry) && n.geometry !== PB.Model3D.batGeometry()) n.geometry.dispose();
@@ -1906,7 +1918,18 @@
         skeleton.dispose();
       },
     };
-    void capParts;
+    // 打席 (opts.bats) が変わったらヘルメットの耳当てを付け替える (view.js はヘルメットをかぶせた後に bats を書き換える)
+    let batsV = o.bats;
+    Object.defineProperty(o, "bats", {
+      configurable: true,
+      enumerable: true,
+      get: () => batsV,
+      set: (v) => {
+        if (v === batsV) return;
+        batsV = v;
+        if (helmetOn) player.setHelmet(true);
+      },
+    });
     setHelmet(helmetOn);
     // 捕手の防具 (マスク / ホッケー型ヘルメット・プロテクター・肩当て・レガース)
     if (isCatcher) {
@@ -1919,17 +1942,16 @@
       const applyCatcher = () => {
         const on = cg.on !== false;
         for (const part of cg.parts) part.visible = on;
-        // 後ろ向きにかぶるヘルメットは正面のマークを見せない
-        meshes.helmet.material = on ? matHelmetPlain : matHelmet;
+        // 後ろ向きにかぶるヘルメットは正面のマークを見せない (v3 は殻だけのメッシュ)
+        if (!v3) meshes.helmet.material = on ? matHelmetPlain : matHelmet;
         if (!on) return;
         meshes.cap.visible = false;
         meshes.helmet.visible = style !== "hockey";
-        brim.visible = false;
-        button.visible = false;
-        flap.visible = false;
+        for (const k of ["helmetR", "helmetL"]) if (meshes[k]) meshes[k].visible = false;
+        for (const m of [brim, button, flap]) if (m) m.visible = false;
       };
       player.setHelmet = (h) => {
-        brim.visible = true;
+        if (brim) brim.visible = true;
         baseSetHelmet(h);
         applyCatcher();
       };

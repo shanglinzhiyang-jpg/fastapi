@@ -966,7 +966,10 @@
     const rc = Pen.race(pen, lg);
     const champ = (pen.clinch && pen.clinch[lg] && pen.clinch[lg].id) || rc.champ;
     const po = lg === "P" ? Object.keys((pen.clinch && pen.clinch.po) || {}) : [];
+    const begun = list.some((x) => x.g > 0);
     const mark = (x, i) => {
+      // 開幕前は差を出さない
+      if (!begun) return "-";
       if (i !== 0) return x.gb.toFixed(1);
       if (champ === x.id) return '<span class="pen-v">' + (lg === "P" ? "1位" : "優勝") + "</span>";
       if (rc.magic && rc.magic.id === x.id) return '<span class="pen-mg">M' + rc.magic.m + "</span>";
