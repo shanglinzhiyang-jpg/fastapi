@@ -74,7 +74,7 @@ export class Game {
       acc += Math.min(250, now - last);
       last = now;
       let n = 0;
-      while (acc >= STEP && n < 5) {
+      while (acc >= STEP && n < 5 && !this.paused) {
         this.update();
         acc -= STEP;
         n++;
@@ -280,6 +280,50 @@ export class Game {
 
   facePlayer(dir) { this.map.player.dir = dir; }
 
+  // Teleport an NPC / the player (cutscenes).
+  placeNpc(id, x, y, dir) {
+    const e = this.npc(id);
+    if (!e) { console.error('placeNpc: no npc', id); return; }
+    Object.assign(e, { x, y, px: x * TILE, py: y * TILE, moving: false, t: 0 });
+    if (dir) e.dir = dir;
+  }
+  showNpc(id, visible = true) {
+    const e = this.npc(id);
+    if (e) e.hidden = !visible;
+  }
+  placePlayer(x, y, dir) {
+    const p = this.map.player;
+    Object.assign(p, { x, y, px: x * TILE, py: y * TILE, moving: false, t: 0 });
+    if (dir) p.dir = dir;
+    this.map.updateCamera(true);
+  }
+
+  // Walk an NPC to (x, y) along a shortest free path (BFS). Resolves when it
+  // arrives, or immediately when no path exists.
+  walkNpcTo(id, x, y, speed = 1) {
+    const e = this.npc(id);
+    if (!e) { console.error('walkNpcTo: no npc', id); return Promise.resolve(); }
+    const m = this.map;
+    const key = (a, b) => a + ',' + b;
+    const prev = new Map([[key(e.x, e.y), null]]);
+    const q = [[e.x, e.y]];
+    while (q.length) {
+      const [cx, cy] = q.shift();
+      if (cx === x && cy === y) break;
+      for (const [d, [dx, dy]] of Object.entries(DIRS)) {
+        const nx = cx + dx, ny = cy + dy;
+        if (prev.has(key(nx, ny)) || m.blocked(nx, ny, e)) continue;
+        prev.set(key(nx, ny), [cx, cy, d]);
+        q.push([nx, ny]);
+      }
+    }
+    if (!prev.has(key(x, y))) return Promise.resolve();
+    const steps = [];
+    let cur = key(x, y);
+    while (prev.get(cur)) { const [px, py, d] = prev.get(cur); steps.unshift(d); cur = key(px, py); }
+    return steps.length ? this.moveNpc(id, steps, speed) : Promise.resolve();
+  }
+
   // kind: '!' '?' '♪' '♥' '…' '💢' 'w'
   emote(target, kind = '!', frames = 50) {
     const e = target === 'player' ? this.map.player : this.npc(target);
@@ -450,7 +494,7 @@ export class Game {
   }
 
   // Standard paid job. Returns the minigame result or null if not done.
-  // def: { id, title, desc, stamina=20, minigame, opts={}, pay=3000, fame=10, skill, gain=2, requires, confirm=true, client }
+  // def: { id, title, desc, stamina=20, minigame, opts={}, pay=3000, fame=10, skill, gain=2, requires, confirm=true, client, clientLook }
   async job(def) {
     const st = this.state;
     const stamina = def.stamina ?? 20;
@@ -458,7 +502,7 @@ export class Game {
     if (why) { await this.say(why); return null; }
     if (def.confirm !== false) {
       const desc = def.desc ? def.desc + '\n' : '';
-      const i = await this.ask(`${desc}「${def.title}」\nギャラ ${fmtMoney(def.pay ?? 3000)}〜／体力 -${stamina}`, ['受ける', 'やめておく'], { name: def.client });
+      const i = await this.ask(`${desc}「${def.title}」\nギャラ ${fmtMoney(def.pay ?? 3000)}〜／体力 -${stamina}`, ['受ける', 'やめておく'], { name: def.client, look: def.clientLook });
       if (i !== 0) return null;
     }
     if (st.stamina < stamina) {
@@ -512,30 +556,35 @@ export class Game {
   }
 
   // Agency audition. def: { agency, title, minigame, opts, pass=55, stamina=15, requires }
+  // Returns true when the player is (now) a member. g.lastAudition tells why:
+  // 'passed' | 'already' | 'failed' | 'declined' | 'nostamina' | 'blocked' | 'transferDeclined'
   async audition(def) {
     const st = this.state;
     const ag = AGENCIES[def.agency];
+    this.lastAudition = 'blocked';
     if (!ag) { console.error('audition: unknown agency', def.agency); return false; }
-    if (st.agency === def.agency) { await this.say(`もう${ag.name}に所属しているよ。`); return true; }
+    if (st.agency === def.agency) { this.lastAudition = 'already'; await this.say(`もう${ag.name}に所属しているよ。`); return true; }
     const why = this.checkRequires(def.requires);
     if (why) { await this.say(why); return false; }
     const stamina = def.stamina ?? 15;
     const i = await this.ask(`「${def.title || ag.name + 'オーディション'}」\n合格すると${ag.name}所属になれる。（体力 -${stamina}）`, ['受ける', 'やめておく']);
-    if (i !== 0) return false;
-    if (st.stamina < stamina) { await this.say('体力が足りない…。万全の状態で挑もう。'); return false; }
+    if (i !== 0) { this.lastAudition = 'declined'; return false; }
+    if (st.stamina < stamina) { this.lastAudition = 'nostamina'; await this.say('体力が足りない…。万全の状態で挑もう。'); return false; }
     st.stamina -= stamina;
     const pass = def.pass ?? 55;
     const res = await this.minigame(def.minigame, { ...(def.opts || {}), skill: def.skill || ag.skill, title: def.title || ag.name + 'オーディション', pass });
     if (res.score < pass) {
+      this.lastAudition = 'failed';
       await this.say(`不合格…。（${res.score}点／合格ライン${pass}点）\nレッスンで腕を磨いて、また挑戦しよう！`);
       return false;
     }
     if (st.agency) {
       const old = AGENCIES[st.agency].name;
       const j = await this.ask(`合格！\nいまは${old}に所属している。${ag.name}に移籍する？`, ['移籍する', 'やめておく']);
-      if (j !== 0) { await this.say('今回は辞退した。'); return false; }
+      if (j !== 0) { this.lastAudition = 'transferDeclined'; await this.say('今回は辞退した。'); return false; }
     }
     st.agency = def.agency;
+    this.lastAudition = 'passed';
     audio.sfx('fanfare');
     this.addFame(10, true);
     await this.say(`合格！おめでとう！\n今日から${ag.name}所属のタレントだ！`);

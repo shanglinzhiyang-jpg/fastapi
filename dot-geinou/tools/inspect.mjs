@@ -50,9 +50,11 @@ async function runMode(mode) {
     let e0 = errStart();
     const info = await page.evaluate(async ({ pid, roomId }) => {
       const g = window.__game;
-      g.auto = null;
+      const enterLog = [];
+      g.auto = { log: enterLog, score: 70, choice: 0 };
       await g.goto(pid, roomId, undefined, undefined, 'down', { fade: false });
-      await window.__settle(2000);
+      await window.__settle(4000);
+      g.auto = null;
       const m = g.map;
       const place = g.PLACES[pid];
       // arrival points
@@ -118,11 +120,16 @@ async function runMode(mode) {
         else targets.push({ kind: 'step', idx: i, label: `event:step@${ev.x},${ev.y}`, stand: cells.find(([x, y]) => reachable(x, y)) ? { x: cells.find(([x, y]) => reachable(x, y))[0], y: cells.find(([x, y]) => reachable(x, y))[1], dir: 'down' } : null });
       });
       const warps = m.room.warps.map((w, i) => ({ idx: i, label: `warp@${w.x},${w.y}->${w.to || (w.place || '') + '/' + (w.room || '')}`, reachable: reachable(w.x, w.y), x: w.x, y: w.y }));
-      return { w: W, h: H, arrivals, badArrivals, targets, warps, reachableCount: seen.size };
+      return { w: W, h: H, arrivals, badArrivals, targets, warps, reachableCount: seen.size, enterLog };
     }, { pid, roomId });
 
     if (mode.shots) report.screenshots.push(await shotCanvas(page, path.join(OUT, `${pid}_${roomId}.png`)));
     for (const e of errSince(e0)) report.errors.push(`[${mode.name}] room ${roomId} load: ${e}`);
+    if (info.enterLog.length) {
+      dialog.push(`### [${mode.name}] ${roomId} (on enter)`);
+      for (const l of info.enterLog) dialog.push(`${l.name ? l.name + '：' : ''}${l.text}${l.choices ? '  [' + l.choices.join(' / ') + ']' : ''}`);
+      dialog.push('');
+    }
     for (const a of info.badArrivals) report.issues.push(`[${mode.name}] ${roomId}: arrival point ${a} is blocked`);
     for (const w of info.warps) if (!w.reachable) report.issues.push(`[${mode.name}] ${roomId}: ${w.label} is not reachable`);
     for (const t of info.targets) if (!t.stand) report.issues.push(`[${mode.name}] ${roomId}: ${t.label} cannot be reached/talked to`);
@@ -131,7 +138,9 @@ async function runMode(mode) {
     for (const t of info.targets) {
       if (!t.stand) continue;
       const firstChoices = [0, 1, 2, 3, 4];
-      for (const first of QUICK ? [0] : firstChoices) {
+      let repeated = false;
+      for (let fi = 0; fi < (QUICK ? 1 : firstChoices.length); fi++) {
+        const first = firstChoices[fi];
         e0 = errStart();
         const res = await page.evaluate(async ({ pid, roomId, t, first }) => {
           const g = window.__game;
@@ -175,6 +184,8 @@ async function runMode(mode) {
         if (res.where !== `${pid}/${roomId}`) {
           await page.evaluate(async ({ pid, roomId }) => { const g = window.__game; await g.goto(pid, roomId, undefined, undefined, 'down', { fade: false }); await window.__settle(2000); }, { pid, roomId });
         }
+        // a one-time intro with no question: talk again so later menus get explored
+        if (res.asks === 0 && !repeated && !QUICK) { repeated = true; fi--; continue; }
         if (first + 1 >= Math.max(1, res.firstN)) break;
       }
     }

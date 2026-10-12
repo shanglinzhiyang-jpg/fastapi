@@ -53,14 +53,14 @@ export function pix(c, rows, pal, ox = 0, oy = 0) {
     }
   });
 }
-function disc(c, cx, cy, rad, col) {
+export function disc(c, cx, cy, rad, col) {
   for (let y = -rad; y <= rad; y++) {
     for (let x = -rad; x <= rad; x++) {
       if (x * x + y * y <= rad * rad + rad * 0.6) P(c, cx + x, cy + y, col);
     }
   }
 }
-function shadowEllipse(c, cx, cy, rx, ry) {
+export function shadowEllipse(c, cx, cy, rx, ry) {
   c.fillStyle = 'rgba(0,0,0,0.22)';
   for (let y = -ry; y <= ry; y++) {
     const w = Math.round(rx * Math.sqrt(1 - (y * y) / (ry * ry + 0.01)));

@@ -152,18 +152,56 @@ defineTile('toho_wall_lo', {
     R(c, 0, 13, 16, 3, NAVY_DD); R(c, 0, 13, 16, 1, GOLD_D);
   },
 });
+defineTile('toho_wall_mid', {
+  solid: true,
+  draw(c) {
+    R(c, 0, 0, 16, 16, NAVY);
+    for (const x of [4, 12]) {
+      const y = 8;
+      P(c, x, y - 2, NAVY_L); R(c, x - 1, y - 1, 3, 1, NAVY_L); R(c, x - 2, y, 5, 1, NAVY_L); R(c, x - 1, y + 1, 3, 1, NAVY_L); P(c, x, y + 2, NAVY_L);
+      P(c, x, y, GOLD_D);
+    }
+  },
+});
+defineTile('toho_sconce', {
+  solid: true, obj: true,
+  draw(c) {
+    c.fillStyle = 'rgba(255,226,140,0.18)';
+    for (let y = 0; y < 12; y++) { const w = 3 + Math.round(y * 0.5); c.fillRect(8 - w, y, w * 2, 1); }
+    R(c, 7, 6, 2, 7, GOLD_D); R(c, 5, 12, 6, 2, GOLD); R(c, 6, 13, 4, 1, GOLD_D);
+    R(c, 5, 3, 6, 4, '#fff1b8'); R(c, 6, 2, 4, 1, '#fff6d0'); R(c, 5, 6, 6, 1, GOLD);
+  },
+});
+function doorTop(side) {
+  return (c) => {
+    const L = side === 'l';
+    R(c, 0, 0, 16, 16, NAVY);
+    R(c, 0, 0, 16, 1, GOLD_L); R(c, 0, 1, 16, 1, GOLD); R(c, 0, 2, 16, 1, GOLD_D); R(c, 0, 3, 16, 1, NAVY_DD);
+    const cx = L ? 16 : 0, cy = 16;
+    for (let y = 3; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const dx = x + 0.5 - cx, dy = y + 0.5 - cy, d = Math.sqrt(dx * dx + dy * dy);
+        if (d <= 11.5) {
+          const ang = Math.atan2(-dy, Math.abs(dx));
+          P(c, x, y, Math.floor(ang / (Math.PI / 10)) % 2 ? '#ffe9a8' : '#f2c96a');
+        } else if (d <= 14) P(c, x, y, d <= 13 ? GOLD : GOLD_D);
+      }
+    }
+    R(c, L ? 14 : 0, 2, 2, 4, GOLD_L);
+    R(c, 0, 15, 16, 1, GOLD);
+  };
+}
+defineTile('toho_door_top_l', { solid: true, draw: doorTop('l') });
+defineTile('toho_door_top_r', { solid: true, draw: doorTop('r') });
 function doorHi(side) {
   return (c) => {
     const L = side === 'l';
     R(c, 0, 0, 16, 16, CRIM);
     R(c, 0, 0, 16, 2, GOLD); R(c, 0, 0, 16, 1, GOLD_L);
     R(c, L ? 0 : 14, 0, 2, 16, GOLD); R(c, L ? 0 : 15, 0, 1, 16, GOLD_D);
-    const x0 = L ? 2 : 0;
-    // transom window (lit)
-    R(c, x0 + 1, 3, 13, 5, GOLD_D); R(c, x0 + 2, 4, 11, 3, '#ffe9a8'); R(c, x0 + 2, 4, 11, 1, '#fff6d0');
-    for (let x = x0 + 5; x < x0 + 13; x += 4) R(c, x, 4, 1, 3, GOLD_D);
-    // tufted leather
-    for (const y of [10, 14]) for (const x of [x0 + 3, x0 + 7, x0 + 11]) P(c, x, y, GOLD_L);
+    const x0 = L ? 2 : 0, wx = L ? 9 : 6;
+    disc(c, wx, 8, 4, GOLD_D); disc(c, wx, 8, 3, GOLD); disc(c, wx, 8, 2, '#ffe9a8'); P(c, wx - 1, 7, '#fff6d0');
+    for (const [x, y] of [[x0 + 2, 4], [x0 + 11, 4], [x0 + 2, 13], [x0 + 11, 13]]) P(c, x, y, GOLD_L);
     R(c, L ? 15 : 0, 2, 1, 14, CRIM_D);
   };
 }
@@ -382,6 +420,14 @@ defineTile('toho_swall_lo', {
     R(c, 0, 13, 16, 3, '#1a1b22'); R(c, 0, 13, 16, 1, '#4a4d5c');
   },
 });
+defineTile('toho_studio_floor', {
+  variants: 16,
+  draw(c, r, f, v) {
+    R(c, 0, 0, 16, 16, '#2e3038'); speckle(c, r, ['#34363f', '#292b32'], 14);
+    if (v === 3) { R(c, 4, 9, 6, 1, '#e8c43a'); R(c, 6, 7, 1, 5, '#e8c43a'); }
+    if (v === 9) { R(c, 10, 4, 4, 1, '#c8c8c0'); }
+  },
+});
 defineTile('toho_mini_ground', { draw(c, r) { R(c, 0, 0, 16, 16, '#8b9480'); speckle(c, r, ['#7f8874', '#97a08c'], 14); } });
 defineTile('toho_mini_road', {
   variants: 3,
@@ -484,7 +530,7 @@ defineTile('toho_set_edge', {
 defineTile('toho_set_side', {
   solid: true,
   draw(c, r) {
-    R(c, 0, 0, 16, 16, '#2e3038'); speckle(c, r, ['#34363f', '#292b32'], 10);
+    R(c, 0, 0, 16, 16, '#2e3038'); speckle(c, r, ['#34363f', '#292b32'], 14);
     R(c, 0, 0, 3, 16, '#8b9480'); R(c, 3, 0, 1, 16, '#5a6050'); R(c, 4, 0, 3, 16, '#1e1f26');
   },
 });
@@ -742,7 +788,7 @@ function sodaIcon(ctx, x, y) {
 
 function boardProp(x, kind) {
   return {
-    type: 'prop', x, y: 1, w: 3, h: 2,
+    type: 'prop', x, y: 1.55, w: 3, h: 2,
     draw(ctx, sx, sy, g) {
       F(ctx, sx + 1, sy + 3, 46, 26, GOLD_D);
       F(ctx, sx + 2, sy + 4, 44, 24, NAVY_DD);
@@ -765,8 +811,9 @@ function boardProp(x, kind) {
 
 function posterProp(x, kind, txt) {
   return {
-    type: 'prop', x, y: 1, w: 1, h: 2, text: txt,
-    draw(ctx, sx, sy, g) {
+    type: 'prop', x, y: 2, w: 1, h: 2, text: txt,
+    draw(ctx, sx, sy0, g) {
+      const sy = sy0 - 9;
       F(ctx, sx + 1, sy + 2, 14, 28, GOLD_D);
       F(ctx, sx + 2, sy + 3, 12, 26, GOLD);
       if (kind === 'kaiju') {
@@ -795,7 +842,7 @@ function posterProp(x, kind, txt) {
 }
 
 const standee = {
-  type: 'prop', x: 4, y: 6, w: 1, h: 1,
+  type: 'prop', x: 5, y: 7, w: 1, h: 1,
   text: '大怪獣ガオドンの等身大パネル！\n…にしては、だいぶ小さい。',
   draw(ctx, sx, sy) {
     F(ctx, sx + 2, sy + 13, 12, 3, 'rgba(0,0,0,0.22)');
@@ -827,14 +874,14 @@ const screenProp = {
 };
 
 // ---------------------------------------------------------------- shared FX state
-const fx = { spot: 0, spotTarget: 0, spotX: 9.5, spotY: 3.8, flash: 0 };
+const fx = { spot: 0, spotTarget: 0, spotX: 9.5, spotY: 4.3, flash: 0 };
 function resetFx() { fx.spot = 0; fx.spotTarget = 0; fx.flash = 0; }
 
 function drawSpotlight(ctx, g, cam) {
   fx.spot += (fx.spotTarget - fx.spot) * 0.12;
   if (fx.spot < 0.02) { fx.spot = fx.spotTarget ? fx.spot : 0; return; }
   const a = fx.spot * 0.78;
-  const cx = Math.round(fx.spotX * TILE - cam.x), cy = Math.round(fx.spotY * TILE - cam.y), rx = 64, ry = 30;
+  const cx = Math.round(fx.spotX * TILE - cam.x), cy = Math.round(fx.spotY * TILE - cam.y), rx = 66, ry = 22;
   for (let y = 0; y < H; y += 2) {
     const dy = (y + 1 - cy) / ry;
     ctx.fillStyle = `rgba(4,6,18,${a})`;
@@ -917,9 +964,14 @@ function drawShow(ctx, t, sheets) {
   F(ctx, 24, 18, 272, 14, '#7a1520'); F(ctx, 24, 30, 272, 2, GOLD);
   F(ctx, 18, 12, 284, 6, GOLD_D); F(ctx, 18, 12, 6, 156, GOLD_D); F(ctx, 296, 12, 6, 156, GOLD_D);
   // audience
-  for (let x = 4; x < W; x += 14) {
-    const bob = Math.floor(t / 20 + x) % 7 === 0 ? 1 : 0;
-    F(ctx, x + 2, 186 - bob, 10, 9, '#141625'); F(ctx, x, 194, 14, 20, '#141625');
+  F(ctx, 0, 204, W, 12, '#11131f');
+  for (let row = 0; row < 2; row++) {
+    for (let x = 6 + row * 9; x < W; x += 18) {
+      const bob = (Math.floor(t / 15) + x + row) % 6 === 0 ? 1 : 0;
+      const y = 190 + row * 12 - bob;
+      discF(ctx, x + 6, y, 5, row ? '#1a1d2e' : '#141625');
+      F(ctx, x - 1, y + 5, 15, 14, row ? '#1a1d2e' : '#141625');
+    }
   }
   text(ctx, 'ミュージカル『星降る街のメロディ』', W / 2, 220, { size: 12, align: 'center', color: GOLD_L });
 }
@@ -1125,8 +1177,8 @@ const JOBS = {
   extra: { id: 'toho_extra', title: '映画のエキストラ', desc: '通行人の役で映画に出演！', client: '助監督', stamina: 15, minigame: 'command', opts: { theme: 'acting', difficulty: 1, rounds: 3 }, pay: 1000, fame: 5, skill: 'engi', gain: 1 },
   citizen: { id: 'toho_citizen', title: '怪獣から逃げまどう市民役', desc: '怪獣に追いかけられる市民の役！', client: '特撮監督', stamina: 20, minigame: 'command', opts: { theme: 'acting', difficulty: 2, rounds: 4 }, pay: 4000, fame: 15, skill: 'engi', gain: 2 },
   suit: { id: 'toho_suit', title: '怪獣のスーツアクター', desc: '怪獣スーツでミニチュアの街を歩く！', client: '特撮監督', stamina: 25, minigame: 'command', opts: { theme: 'kaiju', difficulty: 3, rounds: 5 }, pay: 12000, fame: 45, skill: 'engi', gain: 3, requires: { fame: 250 } },
-  ensemble: { id: 'toho_ensemble', title: 'ミュージカルのアンサンブル', desc: '歌って踊って、舞台をいろどる！', client: '演出家', stamina: 25, minigame: 'rhythm', opts: { difficulty: 3, lanes: 2, bpm: 120, length: 48, song: 'toho_musical' }, pay: 10000, fame: 40, skill: 'uta', gain: 3, requires: { fame: 250 } },
-  lead: { id: 'toho_musical_lead', title: 'ミュージカル主演', desc: '劇場の真ん中で歌い上げる主役！', client: '演出家', stamina: 30, minigame: 'rhythm', opts: { difficulty: 4, lanes: 4, bpm: 120, length: 64, song: 'toho_musical' }, pay: 30000, fame: 120, skill: 'uta', gain: 4, requires: { fame: 1000 } },
+  ensemble: { id: 'toho_ensemble', title: 'ミュージカルのアンサンブル', desc: '歌って踊って、舞台をいろどる！', client: '演出家', stamina: 25, minigame: 'rhythm', opts: { difficulty: 3, lanes: 2, bpm: 120, length: 48, song: '星降る街のメロディ' }, pay: 10000, fame: 40, skill: 'uta', gain: 3, requires: { fame: 250 } },
+  lead: { id: 'toho_musical_lead', title: 'ミュージカル主演', desc: '劇場の真ん中で歌い上げる主役！', client: '演出家', stamina: 30, minigame: 'rhythm', opts: { difficulty: 4, lanes: 4, bpm: 120, length: 64, song: '星降る街のメロディ' }, pay: 30000, fame: 120, skill: 'uta', gain: 4, requires: { fame: 1000 } },
   movie: { id: 'toho_movie_lead', title: '大作映画の主演', desc: '東宝の大作映画で、主役に大抜擢！', client: 'プロデューサー', stamina: 30, minigame: 'command', opts: { theme: 'acting', difficulty: 5, rounds: 6 }, pay: 65000, fame: 220, skill: 'engi', gain: 5, requires: { fame: 2000 } },
 };
 
@@ -1225,7 +1277,7 @@ async function usherTalk(g, npc) {
 
 // ---------------------------------------------------------------- theater scripts
 async function rehearsal(g) {
-  fx.spotX = 9.5; fx.spotY = 3.9; fx.spotTarget = 1;
+  fx.spotX = 9.5; fx.spotY = 4.3; fx.spotTarget = 1;
   try {
     g.bgm('toho_musical');
     await g.emote('toho_conductor', '♪');
@@ -1263,7 +1315,7 @@ async function conductorTalk(g, npc) {
 async function curtainCall(g) {
   await g.fadeOut(16);
   await g.goto('toho', 'theater', 9, 4, 'down', { fade: false });
-  fx.spotX = 9.5; fx.spotY = 4.2; fx.spotTarget = 1; fx.spot = 1;
+  fx.spotX = 9.5; fx.spotY = 4.3; fx.spotTarget = 1; fx.spot = 1;
   await g.fadeIn(16);
   g.sfx('applause');
   await g.say('ブラボー！！\n客席から、割れんばかりの拍手！');
@@ -1302,7 +1354,7 @@ async function vocalTalk(g, npc) {
   await g.say('歌唱指導の担当よ。\nミュージカルの歌はセリフと同じ。\n気持ちを込めて歌うの！', sp(npc));
   const r = await g.lesson({
     title: 'ミュージカル歌唱', skill: 'uta', price: 4000, stamina: 12, gain: 4,
-    minigame: 'rhythm', opts: { difficulty: 1, lanes: 1, bpm: 120, length: 24, song: 'toho_musical' }, teacher: npc.name,
+    minigame: 'rhythm', opts: { difficulty: 1, lanes: 1, bpm: 120, length: 24, song: '星降る街のメロディ' }, teacher: npc.name,
   });
   if (r) await g.say('いい声が出てきたわね！\nその調子よ♪', sp(npc));
 }
@@ -1496,6 +1548,7 @@ async function premiere(g) {
     fx.flash = 0;
   }
   await g.goto('toho', 'screening', 11, 5, 'right', { fade: false });
+  faceNpc(g, 'toho_producer', 'left');
   await g.fadeIn(20);
 }
 
@@ -1537,7 +1590,7 @@ registerPlace({
   name: '東宝',
   kind: 'building',
   bgm: 'toho_lobby',
-  start: { room: 'lobby', x: 9, y: 10, dir: 'up' },
+  start: { room: 'lobby', x: 9, y: 11, dir: 'up' },
   rooms: {
     // ---------------------------------------------------------- ロビー
     lobby: {
@@ -1547,9 +1600,10 @@ registerPlace({
       tiles: [
         '####################',
         '#UUUUUUUU[]UUUUUUUU#',
+        '#VVVoVVVV()VVVVoVVV#',
         '#LLLLLLLL{}LLLLLLLL#',
-        '#P...P...rR...PJ.OP#',
-        '#.KkK....rR....SsS.#',
+        '#...P....rR....PJ.O#',
+        '#KkK.....rR.....SsS#',
         '#........rR........#',
         '#........rR........#',
         '<........rR........>',
@@ -1559,8 +1613,9 @@ registerPlace({
         '#########MM#########',
       ],
       legend: {
-        U: 'toho_wall_hi', L: 'toho_wall_lo',
-        '[': 'toho_door_hi_l', ']': 'toho_door_hi_r', '{': 'toho_door_lo_l', '}': 'toho_door_lo_r',
+        U: 'toho_wall_hi', V: 'toho_wall_mid', L: 'toho_wall_lo', o: 'toho_wall_mid+toho_sconce',
+        '[': 'toho_door_top_l', ']': 'toho_door_top_r',
+        '(': 'toho_door_hi_l', ')': 'toho_door_hi_r', '{': 'toho_door_lo_l', '}': 'toho_door_lo_r',
         '<': 'toho_passage_l', '>': 'toho_passage_r',
         r: 'toho_runner_l', R: 'toho_runner_r',
         P: 'plant', K: 'toho_counter', k: 'toho_counter_tix', S: 'toho_counter', s: 'toho_counter_reg',
@@ -1568,41 +1623,41 @@ registerPlace({
         a: 'toho_signpost_l', b: 'toho_signpost_r',
       },
       warps: [
-        { x: 9, y: 11, to: 'exit' },
-        { x: 10, y: 11, to: 'exit' },
-        { x: 9, y: 2, room: 'theater', tx: 9, ty: 13, dir: 'up' },
-        { x: 10, y: 2, room: 'theater', tx: 10, ty: 13, dir: 'up' },
-        { x: 0, y: 7, room: 'studio', tx: 18, ty: 11, dir: 'left' },
-        { x: 19, y: 7, room: 'screening', tx: 1, ty: 7, dir: 'right' },
+        { x: 9, y: 12, to: 'exit' },
+        { x: 10, y: 12, to: 'exit' },
+        { x: 9, y: 3, room: 'theater', tx: 9, ty: 13, dir: 'up' },
+        { x: 10, y: 3, room: 'theater', tx: 10, ty: 13, dir: 'up' },
+        { x: 0, y: 8, room: 'studio', tx: 18, ty: 11, dir: 'left' },
+        { x: 19, y: 8, room: 'screening', tx: 1, ty: 7, dir: 'right' },
       ],
       entities: [
-        boardProp(2, 'ticket'),
-        boardProp(15, 'snack'),
-        posterProp(6, 'kaiju', 'ポスター『大怪獣ガオドン』\n「港町に、やさしい巨人がやってくる！」\n近日公開！'),
-        posterProp(13, 'musical', 'ポスター：ミュージカル\n『星降る街のメロディ』\n好評上演中！'),
-        { type: 'logo', x: 7, y: 1.1, w: 2, h: 1.8, logo: 'toho', lights: true, text: '東宝のロゴマークだ。\n金色の額縁が、まぶしく光っている！' },
-        { type: 'logo', x: 11, y: 1.1, w: 2, h: 1.8, logo: 'toho', lights: true, text: '東宝のロゴマークだ。\n映画も演劇も、このマークから始まる！' },
+        boardProp(1, 'ticket'),
+        boardProp(16, 'snack'),
+        posterProp(5, 'kaiju', 'ポスター『大怪獣ガオドン』\n「港町に、やさしい巨人がやってくる！」\n近日公開！'),
+        posterProp(14, 'musical', 'ポスター：ミュージカル\n『星降る街のメロディ』\n好評上演中！'),
+        { type: 'logo', x: 6.1, y: 1.35, w: 2.8, h: 2.4, logo: 'toho', lights: true, text: '東宝のロゴマークだ。\n金色の額縁が、まぶしく光っている！' },
+        { type: 'logo', x: 11.1, y: 1.35, w: 2.8, h: 2.4, logo: 'toho', lights: true, text: '東宝のロゴマークだ。\n映画も演劇も、このマークから始まる！' },
         standee,
-        { type: 'sign', x: 1, y: 8, text: '← 撮影スタジオ（関係者通路）\nただいまエキストラ募集中！' },
-        { type: 'sign', x: 18, y: 8, text: '試写室 →\n新作映画の試写をやっています。' },
-        { type: 'npc', id: 'toho_ticket', x: 3, y: 3, dir: 'down', look: LK.ticket, name: 'チケット係', talk: ticketTalk },
-        { type: 'npc', id: 'toho_snack', x: 16, y: 3, dir: 'down', look: LK.snack, name: '売店スタッフ', talk: snackTalk },
-        { type: 'npc', id: 'toho_usher', x: 11, y: 3, dir: 'down', look: LK.usher, name: '案内係', talk: usherTalk },
+        { type: 'sign', x: 1, y: 9, text: '← 撮影スタジオ（関係者通路）\nただいまエキストラ募集中！' },
+        { type: 'sign', x: 18, y: 9, text: '試写室 →\n新作映画の試写をやっています。' },
+        { type: 'npc', id: 'toho_ticket', x: 2, y: 4, dir: 'down', look: LK.ticket, name: 'チケット係', talk: ticketTalk },
+        { type: 'npc', id: 'toho_snack', x: 17, y: 4, dir: 'down', look: LK.snack, name: '売店スタッフ', talk: snackTalk },
+        { type: 'npc', id: 'toho_usher', x: 11, y: 4, dir: 'down', look: LK.usher, name: '案内係', talk: usherTalk },
         {
-          type: 'npc', id: 'toho_guard', x: 1, y: 6, dir: 'right', look: LK.guard, name: '警備員',
+          type: 'npc', id: 'toho_guard', x: 1, y: 7, dir: 'right', look: LK.guard, name: '警備員',
           text: ['左の通路の先は撮影スタジオです。\nふだんは関係者以外立入禁止ですが…', 'いまはエキストラ募集中！\nどなたでもどうぞ。\n助監督さんに声をかけてくださいね。'],
         },
         {
-          type: 'npc', id: 'toho_fan', x: 13, y: 6, dir: 'down', look: LK.fan, name: '映画ファン', wander: 2,
+          type: 'npc', id: 'toho_fan', x: 13, y: 7, dir: 'down', look: LK.fan, name: '映画ファン', wander: 2,
           text: ['新作の怪獣映画、楽しみすぎる！\n…まだ公開前なんだけどね。', '右の通路の試写室で、\nちょっとだけ見せてもらえるんだって！'],
         },
-        { type: 'npc', id: 'toho_kid', x: 4, y: 7, dir: 'up', look: LK.kid, name: '男の子', talk: kidTalk },
-        { type: 'npc', id: 'toho_madam', x: 4, y: 9, dir: 'left', look: LK.madam, name: '観劇好きのマダム', talk: madamTalk },
+        { type: 'npc', id: 'toho_kid', x: 5, y: 8, dir: 'up', look: LK.kid, name: '男の子', talk: kidTalk },
+        { type: 'npc', id: 'toho_madam', x: 4, y: 10, dir: 'left', look: LK.madam, name: '観劇好きのマダム', talk: madamTalk },
       ],
       events: [
-        { x: 1, y: 8, w: 18, h: 2, on: 'step', once: 'toho_welcome', run: welcome },
+        { x: 1, y: 9, w: 18, h: 2, on: 'step', once: 'toho_welcome', run: welcome },
       ],
-      drawUnder: goldFrames([[7, 1.1, 2, 1.8], [11, 1.1, 2, 1.8]]),
+      drawUnder: goldFrames([[6.1, 1.35, 2.8, 2.4], [11.1, 1.35, 2.8, 2.4]]),
       onEnter: () => { resetFx(); },
     },
 
@@ -1635,11 +1690,11 @@ registerPlace({
         I: 'toho_pit_side', R: 'toho_pit_rail', S: 'seat', M: 'exit_mat',
       },
       warps: [
-        { x: 9, y: 14, room: 'lobby', tx: 9, ty: 3, dir: 'down' },
-        { x: 10, y: 14, room: 'lobby', tx: 10, ty: 3, dir: 'down' },
+        { x: 9, y: 14, room: 'lobby', tx: 9, ty: 4, dir: 'down' },
+        { x: 10, y: 14, room: 'lobby', tx: 10, ty: 4, dir: 'down' },
       ],
       entities: [
-        { type: 'logo', x: 9, y: 1.15, w: 2, h: 1.7, logo: 'toho', text: '舞台の上に、東宝のマークが輝いている。\nここは夢の劇場だ！' },
+        { type: 'logo', x: 8.5, y: 0.35, w: 3, h: 2.45, logo: 'toho', lights: true, text: '舞台の上に、東宝のマークが輝いている。\nここは夢の劇場だ！' },
         { type: 'npc', id: 'toho_stagedir', x: 9, y: 9, dir: 'up', look: LK.stageDir, name: '演出家', talk: stageDirTalk },
         { type: 'npc', id: 'toho_conductor', x: 10, y: 7, dir: 'up', look: LK.conductor, name: '指揮者', talk: conductorTalk },
         { type: 'npc', id: 'toho_vocal', x: 5, y: 7, dir: 'up', look: LK.vocal, name: '歌唱指導の先生', talk: vocalTalk },
@@ -1664,14 +1719,14 @@ registerPlace({
           text: ['リハーサルを見るのが\nわしの楽しみでな。', '指揮者の先生に頼むと、\n見学させてもらえるぞい。'],
         },
       ],
-      drawUnder: goldFrames([[9, 1.15, 2, 1.7]]),
+      drawUnder: goldFrames([[8.5, 0.35, 3, 2.45]]),
       drawOver: drawSpotlight,
       onEnter: () => { resetFx(); },
     },
 
     // ---------------------------------------------------------- 怪獣映画スタジオ
     studio: {
-      floor: 'floor_studio',
+      floor: 'toho_studio_floor',
       wall: 'dark',
       bgm: 'toho_kaiju',
       tiles: [
@@ -1700,7 +1755,7 @@ registerPlace({
         C: 'toho_film_cam', Q: 'director_chair', Z: 'spotlight', F: 'toho_windfan', m: 'monitor',
         O: 'toho_swall_lo+onair', H: 'toho_kaiju_head', W: 'toho_workbench', X: 'clothes_rack', b: 'boxes', '>': 'toho_passage_studio',
       },
-      warps: [{ x: 19, y: 11, room: 'lobby', tx: 1, ty: 7, dir: 'right' }],
+      warps: [{ x: 19, y: 11, room: 'lobby', tx: 1, ty: 8, dir: 'right' }],
       entities: [
         { type: 'sign', x: 17, y: 3, text: '予備の怪獣の頭だ。\n…目が合った気がする。' },
         { type: 'sign', x: 14, y: 2, text: '赤い「本番中」ランプだ。\n光っているときは、息をひそめよう。' },
@@ -1713,7 +1768,7 @@ registerPlace({
           text: ['カメラを低〜く構えると、\n小さな街もビルの谷間みたいに\n見えるんだ。', '試写室でフィルムを見ると、\n本物の街にしか見えないよ！'],
         },
         {
-          type: 'npc', id: 'toho_art', x: 17, y: 4, dir: 'down', look: LK.art, name: '美術スタッフ',
+          type: 'npc', id: 'toho_art', x: 18, y: 5, dir: 'left', look: LK.art, name: '美術スタッフ',
           text: ['この街は、ぜんぶ手作りなんだ。\n窓のひとつひとつまで\nこだわってるよ。', 'ビルの屋上の小さな看板まで\n描きこんであるんだ。\nよーく見てごらん。'],
         },
         {
@@ -1754,7 +1809,7 @@ registerPlace({
         '=': 'toho_wall_lo', X: 'toho_stage_dark', Z: 'speaker', Q: 'toho_recliner', J: 'toho_projector',
         '<': 'toho_passage_l', P: 'plant',
       },
-      warps: [{ x: 0, y: 7, room: 'lobby', tx: 18, ty: 7, dir: 'left' }],
+      warps: [{ x: 0, y: 7, room: 'lobby', tx: 18, ty: 8, dir: 'left' }],
       entities: [
         screenProp,
         { type: 'sign', x: 7, y: 10, text: '35ミリの映写機だ。\nフィルムのリールが、カラカラと回る。' },

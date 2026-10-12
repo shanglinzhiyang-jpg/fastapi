@@ -421,6 +421,14 @@ defineTile('nhk_hallwall', {
     TR(c, 0, 13, 16, 3, '#141a33'); TR(c, 0, 13, 16, 1, '#c9a227');
   },
 });
+defineTile('nhk_hallwall_hi', {
+  solid: true,
+  draw(c) {
+    TR(c, 0, 0, 16, 16, '#1f2748'); TR(c, 0, 0, 16, 1, '#2f3a66');
+    TR(c, 7, 0, 2, 16, '#2c3660'); TP(c, 7, 9, '#c9a227'); TP(c, 8, 9, '#c9a227');
+    TR(c, 0, 4, 16, 1, '#c9a227'); TR(c, 0, 5, 16, 1, '#8a6f1a');
+  },
+});
 defineTile('nhk_hallwalltop', { solid: true, draw(c) { TR(c, 0, 0, 16, 16, '#0f1328'); TR(c, 0, 15, 16, 1, '#3a4570'); } });
 
 // ====================================================================== characters
@@ -570,8 +578,16 @@ async function walkTogether(g, id, npcSteps, playerSteps, speed = 1) {
 
 async function afterNhkJob(g) {
   if (!ensureInvite(g)) return;
+  // Show the rank-up now so it does not pop up after the whole finale.
+  if (g.pendingRankUp) {
+    const r = g.pendingRankUp;
+    g.pendingRankUp = null;
+    g.sfx('fanfare');
+    await g.say(`称号が「${r}」になった！\nもっともっと上を目指そう！`);
+  }
   g.sfx('chime');
-  await g.say(['{name}さーん！大変です！', 'プロデューサーから伝言です。年末の大型歌番組に、ぜひ{name}さんに出てほしいって！'], SP.ad);
+  await g.say(['{name}さーん！大変です！', '年末の大型歌番組のプロデューサーが、{name}さんに会いに来ています！'], SP.ad);
+  await g.say('はじめまして、番組プロデューサーです！\nずっとお会いしたかったんです！', SP.producer);
   await finaleOffer(g, SP.producer);
 }
 
@@ -779,7 +795,7 @@ async function finaleFlow(g) {
     // ---- NHKホール：舞台袖から
     SHOW.phase = 'intro';
     await g.fadeOut(16);
-    await g.goto('nhk', 'hall', 3, 4, 'right');
+    await g.goto('nhk', 'hall', 3, 5, 'right');
     g.bgm('nhk_gala');
     await g.wait(400);
     await g.say('（舞台袖から客席を見ると、ペンライトの光が波のように揺れている…！）');
@@ -919,7 +935,7 @@ function drawHallOver(ctx, g, cam) {
 
 function ledScreen() {
   return {
-    type: 'prop', id: 'nhk_screen', x: 4, y: 2, w: 14, h: 1, solid: true,
+    type: 'prop', id: 'nhk_screen', x: 4, y: 3, w: 14, h: 1, solid: true,
     text: '大きなLEDスクリーンだ。\n本番では、歌詞や映像が映し出される。',
     draw(ctx, sx, sy, g) {
       const x = sx + 4, y = sy - 7, w = 14 * 16 - 8, h = 21;
@@ -930,7 +946,7 @@ function ledScreen() {
       F(ctx, x, y, w, h, cel ? '#3a1a5a' : SHOW.on ? '#0d1a4a' : '#13285a');
       for (let yy = y; yy < y + h; yy += 2) F(ctx, x, yy, w, 1, 'rgba(255,255,255,0.05)');
       if (!SHOW.on) {
-        drawLogo(ctx, 'nhk', x + 52, y + 3, 44, 15, { board: true });
+        drawLogo(ctx, 'nhk', x + 44, y + 2, 56, 17, { board: true });
         text(ctx, 'NHKホール', x + 140, y + 4, { size: 12, align: 'center', color: '#ffffff', shadow: null });
       } else if (cel) {
         for (let i = 0; i < 6; i++) {
@@ -989,7 +1005,7 @@ async function kidsJob(g, npc) {
 async function newsJob(g, npc) {
   const s = as(npc);
   if (g.state.fame < 250) {
-    await g.say(['ニュースデスクです。原稿読みをお願いするのは、知名度★250以上の方なんです。', 'となりのベテランアナの滑舌レッスンで、まずは準備を！'], s);
+    await g.say(['夕方のニュースを担当しています。原稿読みをお願いするのは、知名度★250以上の方なんです。', 'となりのベテランアナの滑舌レッスンで、まずは準備を！'], s);
     return;
   }
   await g.say(['ちょうどいいところに！', '夕方のニュースの「街の話題」コーナー、読んでもらえませんか？難しい読みの漢字に気をつけて！'], s);
@@ -1242,8 +1258,8 @@ registerPlace({
         { x: 7, y: 2, room: 'quiz', tx: 8, ty: 10, dir: 'up' },
         { x: 12, y: 2, room: 'kids', tx: 7, ty: 9, dir: 'up' },
         { x: 17, y: 2, room: 'drama', tx: 10, ty: 12, dir: 'up' },
-        { x: 20, y: 2, room: 'hall', tx: 10, ty: 18, dir: 'up' },
-        { x: 21, y: 2, room: 'hall', tx: 11, ty: 18, dir: 'up' },
+        { x: 20, y: 2, room: 'hall', tx: 10, ty: 19, dir: 'up' },
+        { x: 21, y: 2, room: 'hall', tx: 11, ty: 19, dir: 'up' },
       ],
       entities: [
         plate(1, 1, 'ニュース'),
@@ -1462,7 +1478,7 @@ registerPlace({
         { type: 'npc', id: 'nhk_kidsdir', x: 13, y: 7, dir: 'left', look: L.kidsDir, name: '番組ディレクター', talk: kidsJob },
         {
           type: 'npc', id: 'nhk_pianist', x: 2, y: 4, dir: 'down', look: L.pianist, name: 'ピアノのおねえさん',
-          text: ['ピアノのおねえさんです♪', 'こどもたちの前で歌うときは、笑顔がいちばん大事。', 'リズムに合わせて、ボタンをポンッ！楽しく歌えば、自然と上手になりますよ。'],
+          text: ['こんにちは〜♪', 'こどもたちの前で歌うときは、笑顔がいちばん大事。', 'リズムに合わせて、ボタンをポンッ！楽しく歌えば、自然と上手になりますよ。'],
         },
         { type: 'npc', id: 'nhk_kidA', x: 5, y: 6, dir: 'up', look: L.kidA, name: 'こども', text: ['ドットン だいすきー！', 'あのね、ドットンのおなかは、ふわふわなんだよ！'] },
         { type: 'npc', id: 'nhk_kidB', x: 8, y: 6, dir: 'up', look: L.kidB, name: 'こども', text: ['おにいさん、おねえさん、だあれ？', 'いっしょに うたってくれるの？やったー！'] },
@@ -1589,7 +1605,7 @@ registerPlace({
           },
         },
         tourGuide('gallery', 7, 4, 'right'),
-        { type: 'sign', x: 3, y: 5, text: '【ラジオ】\n日本のラジオ放送は、1925年に始まりました。\n家族みんなでラジオを囲んだ時代の、なつかしいかたち。' },
+        { type: 'sign', x: 3, y: 5, text: '【ラジオ】\n日本のラジオ放送は、1925年に始まりました。\nラジオを囲んだ時代の、なつかしいかたち。' },
         { type: 'sign', x: 7, y: 5, text: '【テレビ】\n日本のテレビ放送は、1953年に始まりました。\n当時のテレビは、とても貴重なものだったそうです。' },
         { type: 'sign', x: 11, y: 5, text: '【マイク】\n昔ながらのかたちをしたマイクの展示だ。\nこれで、どんな声が届けられたんだろう。' },
         { type: 'sign', x: 15, y: 5, text: '番組で使われた小道具や台本が並んでいる。\nどれも思い出がつまっていそうだ。' },
@@ -1598,7 +1614,7 @@ registerPlace({
         { type: 'sign', x: 14, y: 2, text: '「番組づくりの裏側」のパネル。\nカメラ、照明、音声、美術…たくさんの人が一つの番組を作っている。' },
         { type: 'sign', x: 15, y: 2, text: '「番組づくりの裏側」のパネル。\nカメラ、照明、音声、美術…たくさんの人が一つの番組を作っている。' },
         {
-          type: 'npc', id: 'nhk_curator', x: 9, y: 7, dir: 'down', look: L.curator, name: '学芸員さん', wander: 1,
+          type: 'npc', id: 'nhk_curator', x: 9, y: 7, dir: 'down', look: L.curator, name: '学芸員さん',
           text: ['「放送の歴史ギャラリー」へようこそ。', '日本でラジオ放送が始まったのは1925年、テレビ放送が始まったのは1953年なんですよ。', '奥の壁には、昔のロゴといまのロゴを並べてあります。ぜひ見比べてみてください。'],
         },
         {
@@ -1617,6 +1633,7 @@ registerPlace({
       bgm: 'theater',
       tiles: [
         '######################',
+        '#UUUUUUUUUUUUUUUUUUUU#',
         '#=dVVVVVVVVVVVVVVVV==#',
         '#C,,,,,,,,,,,,,,,,,,C#',
         '#C,,,,,,,,,,,,,,,,,,C#',
@@ -1638,29 +1655,29 @@ registerPlace({
         '##########mm##########',
       ],
       legend: {
-        '#': 'nhk_hallwalltop', '=': 'nhk_hallwall', d: 'door_metal', V: 'curtain_top', C: 'curtain',
+        '#': 'nhk_hallwalltop', '=': 'nhk_hallwall', U: 'nhk_hallwall_hi', d: 'door_metal', V: 'curtain_top', C: 'curtain',
         ',': 'floor_stage', s: 'stairs_up', E: 'stage_edge', S: 'seat',
       },
       warps: [
-        { x: 10, y: 19, room: 'corridor', tx: 20, ty: 3, dir: 'down' },
-        { x: 11, y: 19, room: 'corridor', tx: 21, ty: 3, dir: 'down' },
-        { x: 2, y: 1, room: 'backstage', tx: 6, ty: 7, dir: 'up' },
+        { x: 10, y: 20, room: 'corridor', tx: 20, ty: 3, dir: 'down' },
+        { x: 11, y: 20, room: 'corridor', tx: 21, ty: 3, dir: 'down' },
+        { x: 2, y: 2, room: 'backstage', tx: 6, ty: 7, dir: 'up' },
       ],
       get hideHud() { return SHOW.on; },
       drawUnder: drawHallUnder,
       drawOver: drawHallOver,
       entities: [
         ledScreen(),
-        { type: 'npc', id: 'nhk_choir1', x: 6, y: 3, dir: 'down', look: L.choirA, name: '合唱団', cond: () => !SHOW.on, text: ['ラ〜ラ〜ラ〜♪', '本番に向けてリハーサル中です。客席の案内係さんに言えば、見学もできますよ。'] },
-        { type: 'npc', id: 'nhk_choir2', x: 8, y: 3, dir: 'down', look: L.choirB, name: '合唱団', cond: () => !SHOW.on, text: ['大きなホールで歌うときは、いちばん後ろの席まで届けるつもりで歌うんだ。'] },
-        { type: 'npc', id: 'nhk_choir3', x: 13, y: 3, dir: 'down', look: L.choirA, name: '合唱団', cond: () => !SHOW.on, text: ['ハーモニーは、まわりの声をよーく聞くのがコツなの。'] },
-        { type: 'npc', id: 'nhk_choir4', x: 15, y: 3, dir: 'down', look: L.choirB, name: '合唱団', cond: () => !SHOW.on, text: ['年末になると、このホールはペンライトの光でいっぱいになるんだよ。'] },
+        { type: 'npc', id: 'nhk_choir1', x: 6, y: 4, dir: 'down', look: L.choirA, name: '合唱団', cond: () => !SHOW.on, text: ['ラ〜ラ〜ラ〜♪', '本番に向けてリハーサル中です。客席の案内係さんに言えば、見学もできますよ。'] },
+        { type: 'npc', id: 'nhk_choir2', x: 8, y: 4, dir: 'down', look: L.choirB, name: '合唱団', cond: () => !SHOW.on, text: ['大きなホールで歌うときは、いちばん後ろの席まで届けるつもりで歌うんだ。'] },
+        { type: 'npc', id: 'nhk_choir3', x: 13, y: 4, dir: 'down', look: L.choirA, name: '合唱団', cond: () => !SHOW.on, text: ['ハーモニーは、まわりの声をよーく聞くのがコツなの。'] },
+        { type: 'npc', id: 'nhk_choir4', x: 15, y: 4, dir: 'down', look: L.choirB, name: '合唱団', cond: () => !SHOW.on, text: ['年末になると、このホールはペンライトの光でいっぱいになるんだよ。'] },
         {
-          type: 'npc', id: 'nhk_conductor', x: 10, y: 5, dir: 'up', look: L.conductor, name: '指揮者', cond: () => !SHOW.on,
+          type: 'npc', id: 'nhk_conductor', x: 10, y: 7, dir: 'up', look: L.conductor, name: '指揮者', cond: () => !SHOW.on,
           text: ['はい、もう一度サビから！…おや、見学の方ですか。', '歌は、心をこめれば必ず届きます。それは、どんなに大きな舞台でも同じです。'],
         },
         {
-          type: 'npc', id: 'nhk_stagemgr', x: 18, y: 3, dir: 'down', look: L.stageMgr, name: '舞台監督', cond: () => !SHOW.on,
+          type: 'npc', id: 'nhk_stagemgr', x: 18, y: 4, dir: 'down', look: L.stageMgr, name: '舞台監督', cond: () => !SHOW.on,
           talk: async (g, npc) => {
             const s = as(npc);
             if (finalePending(g)) { await finaleOffer(g, s); return; }
@@ -1673,26 +1690,26 @@ registerPlace({
               });
               return;
             }
-            await g.say(['舞台監督です。このステージのことなら、何でも聞いてください。', '年末には、ここから大きな歌番組が生放送されるんです。', 'その舞台に立てるのは、日本中に愛される「国民的スター」だけ…。いつか{name}さんも、ね！'], s);
+            await g.say(['このステージのことなら、何でも聞いてください。', '年末には、ここから大きな歌番組が生放送されるんです。', 'その舞台に立てるのは、日本中に愛される「国民的スター」だけ…。いつか{name}さんも、ね！'], s);
           },
         },
         {
-          type: 'npc', id: 'nhk_usher', x: 13, y: 18, dir: 'left', look: L.usher, name: '案内係さん', cond: () => !SHOW.on,
+          type: 'npc', id: 'nhk_usher', x: 13, y: 19, dir: 'left', look: L.usher, name: '案内係さん', cond: () => !SHOW.on,
           talk: async (g, npc) => watchRehearsal(g, npc),
         },
         {
-          type: 'npc', id: 'nhk_producer2', x: 13, y: 4, dir: 'left', look: L.producer, name: 'プロデューサー',
+          type: 'npc', id: 'nhk_producer2', x: 13, y: 5, dir: 'left', look: L.producer, name: 'プロデューサー',
           cond: (g) => !!g.flag('finaleDone') && !SHOW.on,
           text: ['{name}さん、あの年末のステージは、放送の歴史に残りますよ。', 'このホールは、いつでも{name}さんのために空けておきます！'],
         },
-        { type: 'npc', id: 'nhk_host1', x: 15, y: 4, dir: 'left', look: L.host1, name: '総合司会', cond: () => SHOW.on, text: 'まもなく本番です！' },
-        { type: 'npc', id: 'nhk_host2', x: 16, y: 4, dir: 'left', look: L.host2, name: '司会アナ', cond: () => SHOW.on, text: 'まもなく本番です！' },
+        { type: 'npc', id: 'nhk_host1', x: 15, y: 5, dir: 'left', look: L.host1, name: '総合司会', cond: () => SHOW.on, text: 'まもなく本番です！' },
+        { type: 'npc', id: 'nhk_host2', x: 16, y: 5, dir: 'left', look: L.host2, name: '司会アナ', cond: () => SHOW.on, text: 'まもなく本番です！' },
       ],
       onEnter: async (g) => {
         if (SHOW.on || TOUR.on) return;
         const fresh = ensureInvite(g);
         if (!finalePending(g)) return;
-        if (!fresh && g.map.player.y < 17) return;
+        if (!fresh && g.map.player.y < 18) return;
         await g.emote('nhk_stagemgr', '!');
         await g.say(['{name}さん！お待ちしていました！', '年末の大型歌番組、本番のステージはもう準備万端です！'], SP.stageMgr);
         await finaleOffer(g, SP.stageMgr);
@@ -1720,13 +1737,13 @@ registerPlace({
         k: 'makeup', o: 'table_low', F: 'flower_stand', Q: 'clothes_rack', S: 'sofa_beige', m: 'nhk_mat',
       },
       warps: [
-        { x: 6, y: 8, room: 'hall', tx: 2, ty: 2, dir: 'down' },
-        { x: 7, y: 8, room: 'hall', tx: 2, ty: 2, dir: 'down' },
+        { x: 6, y: 8, room: 'hall', tx: 2, ty: 3, dir: 'down' },
+        { x: 7, y: 8, room: 'hall', tx: 2, ty: 3, dir: 'down' },
       ],
       entities: [
         {
           type: 'npc', id: 'nhk_makeup', x: 4, y: 3, dir: 'down', look: L.makeupArtist, name: 'メイクさん',
-          text: ['メイクさんです。本番前はここで準備してくださいね。', 'ライトの下だと顔色が飛んじゃうから、テレビのメイクはしっかりめが基本なの。'],
+          text: ['本番前のメイクは、わたしにおまかせ！ここは出演者さんの楽屋です。', 'ライトの下だと顔色が飛んじゃうから、テレビのメイクはしっかりめが基本なの。'],
         },
         { type: 'npc', id: 'nhk_bs_ad', x: 6, y: 7, dir: 'up', look: L.ad, name: 'AD', cond: () => SHOW.on, text: 'まもなく本番でーす！' },
         {

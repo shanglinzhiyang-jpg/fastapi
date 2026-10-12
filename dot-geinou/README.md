@@ -141,6 +141,8 @@ registerPlace({
 | `await g.fadeOut()` / `await g.fadeIn()` / `await g.wait(ms)` | 演出 |
 | `await g.moveNpc(id, 'up up left')` / `await g.movePlayer('down')` | 移動演出（`'face:left'` で向きだけ） |
 | `await g.emote('player' \| npcId, '!')` | 吹き出し（`! ? ♪ ♥ … 💢 w`） |
+| `g.placeNpc(id, x, y, dir)` / `g.showNpc(id, bool)` / `g.placePlayer(x, y, dir)` | 瞬間移動・表示切り替え（演出用） |
+| `await g.walkNpcTo(id, x, y)` | 最短経路で NPC を歩かせる |
 | `g.npc(id)` / `g.notify(text)` / `g.sfx(name)` / `g.bgm(name)` / `g.shake()` | その他 |
 | `await g.showLogo('nhk', '説明')` | ロゴを大きく表示 |
 | `await g.goto(place, room, x, y, dir)` / `await g.exitPlace()` | 移動 |
@@ -154,7 +156,10 @@ registerPlace({
 **レッスン** `g.lesson({ title, skill, price: 2000, stamina: 10, gain: 3, minigame?, opts?, teacher })`
 
 **オーディション** `g.audition({ agency, title, minigame, opts, pass: 55, stamina: 15, requires })`
-事務所 ID：`yoshimoto` / `shochiku` / `grape` / `horipro`。
+事務所 ID：`yoshimoto` / `shochiku` / `grape` / `horipro`。所属していれば true。理由は `g.lastAudition`
+（`'passed' | 'already' | 'failed' | 'declined' | 'nostamina' | 'blocked' | 'transferDeclined'`）。
+
+`g.job` の確認画面に依頼者の顔を出すには `client: '名前', clientLook: npc.look`。
 
 **経済の目安**（ランク B 時）
 
@@ -206,7 +211,8 @@ registerMinigame('mygame', MyGame);
 - タイル：`js/engine/tiles.js`（`grass sidewalk road floor_wood floor_marble floor_carpet_red floor_stage floor_studio …`、
   壁は `wall_<テーマ>` / `walltop_<テーマ>`：white cream blue navy gray red purple wood dark orange green pink black yellow brick）。
   家具：`counter counter_white desk desk_pc chair seat sofa table plant bookshelf locker tv monitor camera mic spotlight speaker piano curtain curtain_top rope mirror makeup clothes_rack trophy director_chair green_screen set_wall stage_edge …`
-  独自タイルは各ファイルで `defineTile('<施設ID>_xxx', {...})`。
+  独自タイルは各ファイルで `defineTile('<施設ID>_xxx', {...})`。描画ヘルパー `R P pix speckle disc shadowEllipse` も tiles.js から import できます。
+  画面に収まる小さな部屋は、上の壁が HUD に隠れないよう少し下にずらして表示されます。
 - キャラ：`LOOKS.receptionist manager president staff ad director cameraman guard comedian comedian2 idol singer actor actress announcer announcerM makeup samurai ninja hero kaiju oldman oldwoman kid salaryman fan clerk chef tourist mom`。
   `{ ...LOOKS.staff, top: '#2f9a4a' }` のように上書き可。髪型：`short long bob spiky twin slick afro cap bald mage helmet`。
 - ロゴ：`yoshimoto shinkigeki bs_yoshimoto shochiku grape nhk nhk_old toei horipro toho`

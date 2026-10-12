@@ -1373,7 +1373,7 @@ registerPlace({
         sanpachi,
         npc('yoshi_surudoki', 14, 3, 'down', WHO.surudoki, { talk: surudokiTalk }),
         npc('yoshi_shabetani', 11, 6, 'down', WHO.shabetani, { talk: shabetaniTalk }),
-        npc('yoshi_kenkyusei', 7, 9, 'up', WHO.kenkyusei, {
+        npc('yoshi_kenkyusei', 8, 9, 'up', WHO.kenkyusei, {
           wander: 2,
           text: ['ぼく、養成所を出たばっかりの研究生です！', '毎日ここで先生たちにしごかれてます…。\nでも、レッスンを受けるとスキルがぐんぐん伸びるんです！', '鏡の前で、表情の練習もしてます。ニカッ！'],
         }),

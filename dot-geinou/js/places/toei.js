@@ -246,6 +246,15 @@ defineTile('toei_barrier_end', {
 });
 
 // ---------------------------------------------------------------- 江戸の町（オープンセット）
+defineTile('toei_sky', {
+  solid: true, variants: 4,
+  draw(c, r, f, v) {
+    R(c, 0, 0, 16, 16, '#8cc8f0'); R(c, 0, 0, 16, 5, '#7cbcea');
+    if (v === 1) { R(c, 2, 5, 9, 2, '#ffffff'); R(c, 4, 4, 5, 1, '#ffffff'); R(c, 3, 7, 7, 1, '#e4f2fc'); }
+    if (v === 3) { R(c, 7, 3, 7, 2, '#ffffff'); R(c, 9, 2, 3, 1, '#ffffff'); }
+    for (let x = 0; x < 16; x++) { const h = 2 + ((x * 5 + v * 3) % 3); R(c, x, 16 - h, 1, h, '#9aa6c4'); }
+  },
+});
 defineTile('toei_dirt', {
   variants: 4,
   draw(c, r, f, v) {
@@ -521,6 +530,13 @@ defineTile('toei_katana', {
 defineTile('toei_gravel', {
   variants: 3,
   draw(c, r) { R(c, 0, 0, 16, 16, '#b8ad98'); speckle(c, r, ['#a59a84', '#c9bfaa', '#968b76', '#d4cab6'], 40); },
+});
+defineTile('toei_studio_floor', {
+  variants: 14,
+  draw(c, r, f, v) {
+    R(c, 0, 0, 16, 16, '#2e3038'); speckle(c, r, ['#34363f', '#292b32'], 14);
+    if (v === 1) { R(c, 4, 7, 6, 2, '#e8c43a'); R(c, 6, 5, 2, 6, '#e8c43a'); }
+  },
 });
 defineTile('toei_green_floor', {
   draw(c, r) { R(c, 0, 0, 16, 16, '#2fae4e'); speckle(c, r, ['#2aa047', '#34b855'], 8); },
@@ -891,7 +907,7 @@ const JOBS = {
     stamina: 15, minigame: 'command', opts: { theme: 'tate', difficulty: 1 }, pay: 1000, fame: 5, skill: 'engi', gain: 1,
   },
   kirare: {
-    id: 'toei_kirare', title: '時代劇の斬られ役', desc: '主役に斬られる大事な役だ。', client: '殺陣師',
+    id: 'toei_kirare', title: '時代劇の斬られ役', desc: '主役に斬られる大事な役でござる。', client: '殺陣師',
     stamina: 20, minigame: 'command', opts: { theme: 'tate', difficulty: 2 }, pay: 4500, fame: 15, skill: 'engi', gain: 2,
     requires: { fame: 30 },
   },
@@ -908,7 +924,7 @@ const JOBS = {
     requires: { fame: 250, flag: 'toei_voice_role', flagText: 'まずは声優オーディションに合格しないと。\n音響監督さんに話しかけてみよう。' },
   },
   lead: {
-    id: 'toei_lead', title: '時代劇の主役', desc: '連続時代劇の主演に決定！', client: '監督',
+    id: 'toei_lead', title: '時代劇の主役', desc: '連続時代劇の主演をたのむぞ！', client: '監督',
     stamina: 30, minigame: 'command', opts: { theme: 'tate', difficulty: 4 }, pay: 30000, fame: 110, skill: 'engi', gain: 4,
     requires: { fame: 1000 },
   },
@@ -959,12 +975,11 @@ async function rehearsal(g, first) {
   const ronin = g.npc('toei_ronin'), waka = g.npc('toei_waka'), tate = g.npc('toei_tateshi');
   if (!ronin || !waka || !tate) return;
   const T = nm('殺陣師', LK.tateshi);
+  const RY = ronin.def.y;
   await g.fadeOut(10);
   ronin.sprite = null;
-  setPos(ronin, 10, 6, 'right');
-  setPos(waka, 15, 6, 'left');
-  setPos(tate, 12, 4, 'down');
-  placePlayer(g, 12, 8, 'up');
+  homePos(ronin); homePos(waka); homePos(tate);
+  placePlayer(g, 12, RY + 2, 'up');
   await g.fadeIn(10);
   await g.say(['それでは、殺陣のリハーサルを始めるでござる！', '本番のつもりで、気合いを入れていくでござるよ！'], T);
   g.sfx('snare');
@@ -974,14 +989,14 @@ async function rehearsal(g, first) {
   await g.emote('toei_ronin', '💢', 36);
   // 1st clash
   await Promise.all([g.moveNpc('toei_ronin', 'right', 2.6), g.moveNpc('toei_waka', 'left', 2.6)]);
-  clash(g, 13 * TILE, 6 * TILE + 2);
+  clash(g, 13 * TILE, RY * TILE + 2);
   await g.wait(300);
   await Promise.all([g.moveNpc('toei_ronin', ['left', 'face:right'], 2), g.moveNpc('toei_waka', ['right', 'face:left'], 2)]);
   await g.wait(250);
   // 2nd: a quick exchange
   await Promise.all([g.moveNpc('toei_ronin', 'right', 2.6), g.moveNpc('toei_waka', 'left', 2.6)]);
   for (let i = 0; i < 3; i++) {
-    clash(g, 13 * TILE + (i - 1) * 2, 6 * TILE - 1 + i * 3);
+    clash(g, 13 * TILE + (i - 1) * 2, RY * TILE - 1 + i * 3);
     await g.wait(170);
   }
   await g.wait(250);
@@ -990,7 +1005,7 @@ async function rehearsal(g, first) {
   await g.wait(110);
   g.sfx('sword');
   addFx(g, 'flash', 0, 0, 12, { screen: true });
-  addFx(g, 'slash', 12 * TILE + 8, 6 * TILE + 4, 18);
+  addFx(g, 'slash', 12 * TILE + 8, RY * TILE + 4, 18);
   await pass;
   await g.wait(600);
   ronin.dir = 'down';
@@ -1017,9 +1032,7 @@ async function rehearsal(g, first) {
     await g.say('本物の立ち回りを間近で見て、とても勉強になった！');
   }
   await g.fadeOut(10);
-  setPos(ronin, 10, 6, 'right');
-  setPos(waka, 15, 6, 'left');
-  setPos(tate, 12, 4, 'down');
+  homePos(ronin); homePos(waka); homePos(tate);
   await g.fadeIn(10);
   if (first) {
     await g.say(['どうでした？すごい迫力でしょう！', 'エキストラのお仕事や、殺陣のレッスンもありますよ。', 'お仕事なら僕に、レッスンなら殺陣師の先生に声をかけてくださいね！'], nm('助監督', LK.ad));
@@ -1162,22 +1175,33 @@ async function leaveCheck(g) {
 }
 
 // ---------------------------------------------------------------- gate
+const GATE_MARKS = [[2.5, '衣装部'], [5, '時代劇'], [15, '特撮'], [17.5, 'アフレコ']];
 const gate = {
   floor: 'toei_lot',
   bg: '#1c1e24',
   bgm: 'studio',
+  // 路面に白ペンキで書かれた行き先表示
+  drawUnder(ctx, g, cam) {
+    for (const [cx, label] of GATE_MARKS) {
+      const x = Math.round(cx * TILE - cam.x), y = 3 * TILE - cam.y;
+      ctx.globalAlpha = 0.8;
+      text(ctx, label, x, y + 4, { size: 10, align: 'center', color: '#f4f4ee', shadow: null });
+      for (let i = 0; i < 3; i++) F(ctx, x - 1 - i, y + 1 + i, 3 + i * 2, 1, '#f4f4ee');
+      ctx.globalAlpha = 1;
+    }
+  },
   tiles: [
     '####################',
     '#==={}=======o=====#',
     '#jda<>h======BDD=Fw#',
-    '#P.....K....K.....V#',
+    '#......K....K......#',
     '#......KKKKKK......#',
     '#..................#',
     '#..................#',
     '#..............GGZ.#',
-    '#..............G.Z.#',
+    '#P.............G.Z.#',
     '#.bb...........crc.#',
-    '#..................#',
+    '#.................V#',
     '#.................P#',
     '#y.........T-]...xX#',
     '#########MM#########',
@@ -1194,16 +1218,14 @@ const gate = {
     { x: 9, y: 13, to: 'exit', check: leaveCheck },
     { x: 10, y: 13, to: 'exit', check: leaveCheck },
     { x: 2, y: 2, room: 'costume', tx: 6, ty: 9, dir: 'up' },
-    { x: 4, y: 2, room: 'openset', tx: 12, ty: 14, dir: 'up' },
-    { x: 5, y: 2, room: 'openset', tx: 13, ty: 14, dir: 'up' },
+    { x: 4, y: 2, room: 'openset', tx: 12, ty: 15, dir: 'up' },
+    { x: 5, y: 2, room: 'openset', tx: 13, ty: 15, dir: 'up' },
     { x: 14, y: 2, room: 'tokusatsu', tx: 9, ty: 11, dir: 'up' },
     { x: 15, y: 2, room: 'tokusatsu', tx: 10, ty: 11, dir: 'up' },
     { x: 17, y: 2, room: 'afureko', tx: 7, ty: 10, dir: 'up' },
   ],
   entities: [
     { type: 'logo', x: 7.75, y: 0.2, w: 4.5, h: 2.7, logo: 'toei', lights: true },
-    plate(1.25, 1, 2.5, '衣装部'),
-    plate(3.75, 0, 2.5, '時代劇', { bg: '#5a3a20', color: '#ffe9a8', dy: 3 }),
     plate(14, 1, 2, '特撮', { bg: '#a8202c' }),
     plate(16.25, 1, 2.5, 'アフレコ', { bg: '#3a3f54' }),
     {
@@ -1257,7 +1279,7 @@ const gate = {
         F(ctx, sx - 1, sy - 2, 34, 6, '#2f4f8a'); F(ctx, sx - 1, sy + 4, 34, 1, '#1f3560'); F(ctx, sx - 1, sy - 2, 34, 1, '#4a6aa8');
         F(ctx, sx + 4, sy + 7, 24, 11, '#20232a'); F(ctx, sx + 5, sy + 8, 22, 9, '#a8dcf5'); F(ctx, sx + 6, sy + 9, 6, 2, '#e0f4ff');
         F(ctx, sx + 16, sy + 12, 8, 5, '#3b3f48'); F(ctx, sx + 17, sy + 13, 6, 3, Math.floor(g.frame / 30) % 2 ? '#5fd7ff' : '#5ee07a');
-        F(ctx, sx + 4, sy + 19, 24, 11, '#2a3560');
+        F(ctx, sx + 1, sy + 19, 30, 11, '#2a3560');
         text(ctx, '守衛所', sx + 16, sy + 19, { size: 10, align: 'center', color: '#ffffff', shadow: null });
         F(ctx, sx + 14, sy - 6, 4, 4, Math.floor(g.frame / 40) % 2 ? '#ff2b3a' : '#7a1f1f');
       },
@@ -1350,8 +1372,9 @@ const openset = {
   floor: 'toei_dirt',
   bg: '#1a120c',
   bgm: 'toei_edo',
-  entry: { x: 12, y: 14, dir: 'up' },
+  entry: { x: 12, y: 15, dir: 'up' },
   tiles: [
+    '^^^^^^^^^^^^^^^^^^^^^^^^^^',
     'AAAAAaaaaaAAAAAaaaaaAAAAAA',
     'EEEEEeeeeeEEEEEeeeeeEEEEEE',
     'LCNCLSQnQSKKXKKLLuCLSQNNQS',
@@ -1370,7 +1393,7 @@ const openset = {
     'ffffffffffffMMffffffffffff',
   ],
   legend: {
-    A: 'toei_ridge', a: 'toei_ridge2', E: 'toei_eave', e: 'toei_eave2',
+    '^': 'toei_sky', A: 'toei_ridge', a: 'toei_ridge2', E: 'toei_eave', e: 'toei_eave2',
     L: 'toei_lattice', C: 'toei_lattice+toei_chochin', N: 'toei_noren', n: 'toei_noren_red', u: 'toei_noren_brown',
     S: 'toei_shoji', Q: 'toei_shoji+toei_chochin', K: 'toei_kura', X: 'toei_kura_door',
     f: 'toei_fence', i: 'toei_andon', b: 'toei_taru', B: 'toei_engi', D: 'toei_engi_tea', T: 'toei_tensui',
@@ -1379,15 +1402,15 @@ const openset = {
     x: 'boxes', z: 'box', o: 'cone', r: 'toei_katana', v: 'vending',
   },
   warps: [
-    { x: 12, y: 15, room: 'gate', tx: 4, ty: 3, dir: 'down' },
-    { x: 13, y: 15, room: 'gate', tx: 5, ty: 3, dir: 'down' },
+    { x: 12, y: 16, room: 'gate', tx: 4, ty: 3, dir: 'down' },
+    { x: 13, y: 16, room: 'gate', tx: 5, ty: 3, dir: 'down' },
   ],
   drawOver: drawFx,
   onEnter: async () => { FX = []; },
   entities: [
     {
       // 茶屋の野点傘
-      type: 'prop', x: 8, y: 4, w: 2, h: 1, solid: false, z: 4,
+      type: 'prop', x: 8, y: 5, w: 2, h: 1, solid: false, z: 4,
       draw(ctx, sx, sy) {
         const cx = sx + 16;
         F(ctx, cx - 1, sy - 16, 2, 26, '#5a3a20');
@@ -1396,22 +1419,22 @@ const openset = {
         for (const k of [-12, -6, 0, 6, 12]) F(ctx, cx + k, sy - 20, 1, 2, '#f6e6a8');
       },
     },
-    { type: 'sign', x: 2, y: 5, text: '井戸だ。のぞきこむと…底はすぐそこ。撮影用の浅い井戸みたいだ。' },
-    { type: 'sign', x: 3, y: 8, talk: kosatsu },
-    { type: 'sign', x: 10, y: 3, text: '酒樽…に見えるけど、中は空っぽ。撮影用の小道具だ。' },
-    { type: 'sign', x: 14, y: 3, text: '樽が積まれている。軽くたたくと、ポコンと軽い音がした。' },
-    { type: 'sign', x: 9, y: 4, text: '赤い毛氈（もうせん）を敷いた縁台だ。お団子とお茶がのっている。' },
-    { type: 'sign', x: 2, y: 2, text: '呉服屋ののれん。中をのぞくと…ハリボテだ！\nセットだから、お店の中は作られていないんだ。' },
-    { type: 'sign', x: 12, y: 2, text: '立派な蔵の扉。押してもびくともしない…と思ったら、ただの板だった！' },
-    { type: 'sign', x: 18, y: 2, text: 'そば屋ののれん。いいにおい…はしない。セットだもの。' },
-    { type: 'sign', x: 23, y: 2, text: '宿屋ののれん。「お泊まりはこちら」…とあるが、ここはセット。泊まれない。' },
-    { type: 'sign', x: 23, y: 4, text: '天水桶（てんすいおけ）。江戸の町では、火事にそなえて雨水をためていたんだって。' },
-    { type: 'sign', x: 18, y: 6, text: '映画用のカメラだ。この一台で、江戸の町がスクリーンによみがえる。' },
-    { type: 'sign', x: 21, y: 7, text: '監督のイス。背もたれに「監督」と書いてある。' },
-    { type: 'sign', x: 6, y: 13, text: '撮影用の刀がずらり。本物そっくりだけど、竹光（たけみつ）だから軽いんだ。' },
+    { type: 'sign', x: 2, y: 6, text: '井戸だ。のぞきこむと…底はすぐそこ。撮影用の浅い井戸みたいだ。' },
+    { type: 'sign', x: 3, y: 9, talk: kosatsu },
+    { type: 'sign', x: 10, y: 4, text: '酒樽…に見えるけど、中は空っぽ。撮影用の小道具だ。' },
+    { type: 'sign', x: 14, y: 4, text: '樽が積まれている。軽くたたくと、ポコンと軽い音がした。' },
+    { type: 'sign', x: 9, y: 5, text: '赤い毛氈（もうせん）を敷いた縁台だ。お団子とお茶がのっている。' },
+    { type: 'sign', x: 2, y: 3, text: '呉服屋ののれん。中をのぞくと…ハリボテだ！\nセットだから、お店の中は作られていないんだ。' },
+    { type: 'sign', x: 12, y: 3, text: '立派な蔵の扉。押してもびくともしない…と思ったら、ただの板だった！' },
+    { type: 'sign', x: 18, y: 3, text: 'そば屋ののれん。いいにおい…はしない。セットだもの。' },
+    { type: 'sign', x: 23, y: 3, text: '宿屋ののれん。「お泊まりはこちら」…とあるが、ここはセット。泊まれない。' },
+    { type: 'sign', x: 23, y: 5, text: '天水桶（てんすいおけ）。江戸の町では、火事にそなえて雨水をためていたんだって。' },
+    { type: 'sign', x: 18, y: 7, text: '映画用のカメラだ。この一台で、江戸の町がスクリーンによみがえる。' },
+    { type: 'sign', x: 21, y: 8, text: '監督のイス。背もたれに「監督」と書いてある。' },
+    { type: 'sign', x: 6, y: 14, text: '撮影用の刀がずらり。本物そっくりだけど、竹光（たけみつ）だから軽いんだ。' },
 
     {
-      type: 'npc', id: 'toei_tateshi', x: 12, y: 4, dir: 'down', look: LK.tateshi, name: '殺陣師',
+      type: 'npc', id: 'toei_tateshi', x: 12, y: 5, dir: 'down', look: LK.tateshi, name: '殺陣師',
       talk: async (g, npc) => {
         const o = who(npc);
         if (costumeOf(g) === 'samurai') await g.say('おお、その侍姿、なかなか様になっておるでござる！', o);
@@ -1433,15 +1456,15 @@ const openset = {
       },
     },
     {
-      type: 'npc', id: 'toei_ronin', x: 10, y: 6, dir: 'right', look: LK.ronin, name: 'ベテラン斬られ役',
+      type: 'npc', id: 'toei_ronin', x: 10, y: 7, dir: 'right', look: LK.ronin, name: 'ベテラン斬られ役',
       text: ['斬られ役ひとすじ三十年。斬られた数なら、だれにも負けませんぜ。', 'コツはね、斬られる瞬間に「あっ、やられた」って顔をすること。', 'それから、倒れるときは受け身！ケガをしないのも、プロの仕事でさあ。'],
     },
     {
-      type: 'npc', id: 'toei_waka', x: 15, y: 6, dir: 'left', look: LK.waka, name: '若手俳優',
+      type: 'npc', id: 'toei_waka', x: 15, y: 7, dir: 'left', look: LK.waka, name: '若手俳優',
       text: ['き、緊張するなあ…今日がはじめての立ち回りなんです。', '先生に「刀は振るんじゃない、運ぶんだ」って言われました。', 'いつか、主役を張れる役者になりたいなあ。'],
     },
     {
-      type: 'npc', id: 'toei_ad', x: 11, y: 9, dir: 'down', look: LK.ad, name: '助監督',
+      type: 'npc', id: 'toei_ad', x: 11, y: 10, dir: 'down', look: LK.ad, name: '助監督',
       talk: async (g, npc) => {
         const o = who(npc);
         const i = await g.ask('助監督です！今日もバタバタです！\n何かご用ですか？', ['エキストラの仕事', 'リハーサル見学', '話を聞く', 'やめておく'], o);
@@ -1457,7 +1480,7 @@ const openset = {
       },
     },
     {
-      type: 'npc', id: 'toei_kantoku', x: 20, y: 7, dir: 'left', look: LK.kantoku, name: '監督',
+      type: 'npc', id: 'toei_kantoku', x: 20, y: 8, dir: 'left', look: LK.kantoku, name: '監督',
       talk: async (g, npc) => {
         const o = who(npc);
         const f = g.state.fame;
@@ -1481,7 +1504,7 @@ const openset = {
       },
     },
     {
-      type: 'npc', id: 'toei_musume', x: 7, y: 3, dir: 'down', look: LK.musume, name: '茶屋の看板娘',
+      type: 'npc', id: 'toei_musume', x: 7, y: 4, dir: 'down', look: LK.musume, name: '茶屋の看板娘',
       talk: async (g, npc) => {
         const o = who(npc);
         if (costumeOf(g) === 'musume') await g.say('あら、町娘さん！おそろいね〜！', o);
@@ -1491,17 +1514,17 @@ const openset = {
       },
     },
     {
-      type: 'npc', id: 'toei_chonin', x: 5, y: 7, dir: 'down', look: LK.chonin, name: '町人エキストラ', wander: 2,
+      type: 'npc', id: 'toei_chonin', x: 5, y: 8, dir: 'down', look: LK.chonin, name: '町人エキストラ', wander: 2,
       text: ['あっしは町人役のエキストラでさあ。', '立ち回りが始まったら「キャー！」って逃げるのが仕事。', '主役のジャマをしない逃げ方って、これが意外とむずかしいんですぜ。'],
     },
     {
-      type: 'npc', id: 'toei_makeup', x: 8, y: 14, dir: 'up', look: LK.makeup, name: 'メイクさん',
+      type: 'npc', id: 'toei_makeup', x: 8, y: 15, dir: 'up', look: LK.makeup, name: 'メイクさん',
       text: ['時代劇のメイクは、白ぬりやヒゲ付けなんかもあって奥が深いのよ。', '衣装部に行けば、着物やかつらを試着させてもらえるかもね。'],
     },
   ],
   events: [
     {
-      x: 12, y: 10, w: 2, on: 'step', once: 'toei_rehearsal_seen',
+      x: 12, y: 11, w: 2, on: 'step', once: 'toei_rehearsal_seen',
       run: async (g) => {
         await g.say(['あっ、見学の方ですか？ちょうどいいところに！', 'これから殺陣のリハーサルなんです。よかったら見ていってください！'], nm('助監督', LK.ad));
         await rehearsal(g, true);
@@ -1512,14 +1535,14 @@ const openset = {
 
 // ---------------------------------------------------------------- tokusatsu
 const tokusatsu = {
-  floor: 'floor_studio',
+  floor: 'toei_studio_floor',
   wall: 'dark',
   bg: '#101116',
   bgm: 'toei_hero',
   entry: { x: 9, y: 11, dir: 'up' },
   tiles: [
     '####################',
-    '#=o=ssssssss=GGGGG=#',
+    '#===ssssssssoGGGGG=#',
     '#===cccccccc=GGGGG=#',
     '#L..RR*qq*RR.ggggg.#',
     '#...RqqqqqqR.ggggg.#',
@@ -1678,24 +1701,26 @@ const afureko = {
       draw(ctx, sx, sy, g) {
         const t = g.frame;
         F(ctx, sx - 1, sy, 130, 30, '#0c0d12');
-        const x0 = sx + 2, y0 = sy + 2, w = 124, h = 22;
-        F(ctx, x0, y0, w, 8, '#ff9a5a'); F(ctx, x0, y0 + 8, w, 7, '#ffb86a'); F(ctx, x0, y0 + 15, w, 7, '#ffd08a');
-        pdisc(ctx, x0 + 22, y0 + 14, 6, '#fff2b0');
-        for (let i = 0; i < w; i += 2) F(ctx, x0 + i, y0 + 16 + Math.round(Math.sin(i / 9) * 2), 2, 6 - Math.round(Math.sin(i / 9) * 2), '#7a4a8a');
-        for (let i = 0; i < 6; i++) { const lx = (i * 23 + t * 3) % w; F(ctx, x0 + lx, y0 + 3 + (i * 7) % 14, 12, 1, 'rgba(255,255,255,0.6)'); }
+        const x0 = sx + 2, y0 = sy + 1, w = 124, h = 19;
+        F(ctx, x0, y0, w, 7, '#ff9a5a'); F(ctx, x0, y0 + 7, w, 6, '#ffb86a'); F(ctx, x0, y0 + 13, w, 6, '#ffd08a');
+        pdisc(ctx, x0 + 22, y0 + 12, 5, '#fff2b0');
+        for (let i = 0; i < w; i += 2) F(ctx, x0 + i, y0 + 14 + Math.round(Math.sin(i / 9) * 2), 2, 5 - Math.round(Math.sin(i / 9) * 2), '#7a4a8a');
+        for (let i = 0; i < 6; i++) { const lx = (i * 23 + t * 3) % (w - 12); F(ctx, x0 + lx, y0 + 2 + (i * 7) % 12, 12, 1, 'rgba(255,255,255,0.6)'); }
         const cx = x0 + 88, cy = y0 + 1;
-        F(ctx, cx - 1, cy + 3, 18, 18, '#ffe0c4');
+        F(ctx, cx - 1, cy + 3, 18, 15, '#ffe0c4');
         F(ctx, cx - 3, cy, 22, 6, '#3a6fd8'); for (let k = 0; k < 5; k++) F(ctx, cx - 3 + k * 5, cy - 2, 3, 3, '#3a6fd8');
         F(ctx, cx - 3, cy + 5, 3, 8, '#3a6fd8'); F(ctx, cx + 16, cy + 5, 3, 8, '#3a6fd8');
         F(ctx, cx + 3, cy + 9, 3, 4, '#20232a'); F(ctx, cx + 10, cy + 9, 3, 4, '#20232a');
         F(ctx, cx + 4, cy + 9, 1, 1, '#ffffff'); F(ctx, cx + 11, cy + 9, 1, 1, '#ffffff');
         const open = Math.floor(t / 8) % 3 !== 0;
-        F(ctx, cx + 6, cy + 16, 4, open ? 3 : 1, '#b8404a');
-        const sweep = (t * 1.5) % w;
+        F(ctx, cx + 6, cy + 14, 4, open ? 2 : 1, '#b8404a');
+        const sweep = (t * 1.5) % (w - 2);
         F(ctx, x0 + sweep, y0, 2, h, 'rgba(255,255,255,0.85)');
-        F(ctx, x0, y0 + h, w, 4, '#0c0d12');
+        F(ctx, x0, y0 + h, w, 10, '#0c0d12');
         const sec = Math.floor(t / 60) % 60, fr = Math.floor(t / 2) % 30;
-        text(ctx, `00:12:${String(sec).padStart(2, '0')}:${String(fr).padStart(2, '0')}`, x0 + 2, y0 + h - 6, { size: 10, color: '#5ee07a', shadow: null });
+        text(ctx, `00:12:${String(sec).padStart(2, '0')}:${String(fr).padStart(2, '0')}`, x0 + 2, y0 + h, { size: 10, color: '#5ee07a', shadow: null });
+        F(ctx, x0 + w - 22, y0 + h + 3, 4, 4, Math.floor(t / 20) % 2 ? '#ff2b3a' : '#5a1a1a');
+        text(ctx, 'REC', x0 + w - 2, y0 + h, { size: 10, align: 'right', color: '#ff5d6c', shadow: null });
       },
     },
     { type: 'sign', x: 2, y: 3, text: '大きなスピーカー。映像の音や、相手役の声がここから流れる。' },

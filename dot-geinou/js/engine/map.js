@@ -494,8 +494,16 @@ export class MapScene {
   }
 
   updateNpc(e) {
-    if (!this.visible(e)) return;
-    if (e.waitT > 0) { e.waitT--; if (e.waitT === 0 && e.path.length) this.stepPath(e); return; }
+    if (!this.visible(e)) {
+      // a hidden NPC cannot walk: finish any scripted path at once
+      if (e.path.length || e.pathDone) {
+        console.warn(`[map] moveNpc on hidden npc "${e.id}" finished immediately`);
+        e.path.length = 0;
+        if (e.pathDone) { const r = e.pathDone; e.pathDone = null; r(); }
+      }
+      return;
+    }
+    if (e.waitT > 0) { e.waitT--; if (e.waitT === 0 && e.path.length) this.tryNpcStep(e); return; }
     if (e.moving) {
       e.t += e.speed;
       e.anim += e.speed;
@@ -549,7 +557,8 @@ export class MapScene {
     const p = this.player;
     const mw = this.room.w * TILE, mh = this.room.h * TILE;
     let cx = mw <= W ? -(W - mw) / 2 : clamp(p.px + 8 - W / 2, 0, mw - W);
-    let cy = mh <= H ? -(H - mh) / 2 : clamp(p.py + 8 - H / 2, 0, mh - H);
+    // small rooms: centre, but keep the top wall clear of the HUD when there is room
+    let cy = mh <= H ? -Math.max((H - mh) / 2, Math.min(40, H - mh)) : clamp(p.py + 8 - H / 2, 0, mh - H);
     if (this.camOverride) { cx = this.camOverride.x; cy = this.camOverride.y; }
     this.cam.x = Math.round(cx);
     this.cam.y = Math.round(cy);

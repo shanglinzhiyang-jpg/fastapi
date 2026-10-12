@@ -55,13 +55,16 @@ export function wrap(ctx, str, maxW, size = 12) {
   const out = [];
   for (const para of String(str).split('\n')) {
     let line = '';
+    let hung = false;
     for (const ch of Array.from(para)) {
+      hung = false;
       const next = line + ch;
       if (line && ctx.measureText(next).width > maxW) {
         if (NO_START.has(ch)) {
           // keep punctuation on the current line (hanging)
           out.push(next);
           line = '';
+          hung = true;
           continue;
         }
         // try to break at the last space for latin text
@@ -77,7 +80,7 @@ export function wrap(ctx, str, maxW, size = 12) {
         line = next;
       }
     }
-    out.push(line);
+    if (!(hung && line === '')) out.push(line);
   }
   return out;
 }

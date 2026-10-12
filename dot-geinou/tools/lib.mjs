@@ -45,7 +45,9 @@ export async function shotCanvas(page, file) {
 }
 
 // In-page helper source: fast-forward the game n frames while letting promises settle.
+// Injecting it pauses the real-time loop, so only __ff advances the game (deterministic).
 export const PAGE_HELPERS = `
+window.__game.paused = true;
 window.__ff = async function (n) {
   const g = window.__game;
   for (let i = 0; i < n; i++) {
