@@ -10,6 +10,7 @@
                  (シャツ・アンダーシャツ・パンツ (短/長)・ソックス・スパイク・ベルト・帽子・ヘルメット)
   - 目: MakeHuman の high-poly eyes を体型に合わせて配置
 """
+import copy
 import json
 import math
 import os
@@ -1345,8 +1346,9 @@ UNDER_V = {"wrist": 0, "elbow": 1}
 parts["shoes"].uv = np.stack([parts["shoes"].pos[:, 0] * 2 + 0.5, parts["shoes"].pos[:, 1] * 2], axis=1)
 
 
-def dome_uv(p, logo_up, logo_h):
-    """帽子・ヘルメット: u = 頭のまわりの角度 (0.5 が正面, 縫い目は後ろ), v = 縁 0 → てっぺん 1 (角度)。
+def dome_uv(p, logo_up, logo_h, vs=0.0):
+    """帽子・ヘルメット: u = 頭のまわりの角度 (0.5 が正面, 縫い目は後ろ), v = 縁 vs → てっぺん 1 (角度)。
+    v 0..vs の行は、つば・ボタン・耳当ての色見本 (DOME_SWATCH) に空けておく。
     正面のマークの中心 (縁から表面に沿って logo_up [m] 上) の UV と、1m あたりの UV の変化量を返す。"""
     bnd = p.boundary()
     C = np.array([0.0, p.pos[bnd, 1].mean(), 0.5 * (p.pos[:, 2].min() + p.pos[:, 2].max())])
@@ -1360,7 +1362,7 @@ def dome_uv(p, logo_up, logo_h):
 
     def uvf(Q):
         a, f = angles(np.atleast_2d(Q))
-        return np.stack([0.5 + a / (2 * math.pi), 1 - f / pmax], axis=1)
+        return np.stack([0.5 + a / (2 * math.pi), vs + (1 - vs) * (1 - f / pmax)], axis=1)
 
     p.uv = split_seam(p, uvf(p.pos))
     # 正面の中心線 (x = 0 の断面) を縁から上へたどる
@@ -1386,8 +1388,164 @@ def dome_uv(p, logo_up, logo_h):
     return {"u": round(float(uv0[0]), 4), "v": round(float(uv0[1]), 4), "su": round(float(su), 3), "sv": round(float(sv), 3), "h": logo_h}
 
 
-CAP_LOGO = dome_uv(parts["cap"], 0.035, 0.05)
-HELMET_LOGO = dome_uv(parts["helmet"], 0.04, 0.05)
+# 帽子・ヘルメットのテクスチャのいちばん下 (v 0〜0.032) は色見本の行: u 0〜0.25 つば, 0.25〜0.5 つばの裏, 0.5〜0.75 ボタン (ヘルメットは殻の色), 0.75〜1 ヘルメットのつば。
+# 殻は v 0.04〜1。つば・ボタン・耳当ては同じメッシュ (同じテクスチャ) に入れて、描く回数を減らす
+DOME_VS = 0.04
+SW_V = 0.016
+SW_U = {"brim": 0.125, "under": 0.375, "button": 0.625, "shell": 0.625, "bill": 0.875}
+DOME_SWATCH = {"vShell": DOME_VS, "vEyelet": round(DOME_VS + (1 - DOME_VS) * 0.74, 4), "rows": [0, round(DOME_VS * 0.8, 4)], "cols": ["brim", "underBrim", "button|shell", "helmetBrim"]}
+CAP_LOGO = dome_uv(parts["cap"], 0.035, 0.05, DOME_VS)
+HELMET_LOGO = dome_uv(parts["helmet"], 0.04, 0.05, DOME_VS)
+
+
+def front_rim(cp):
+    """殻の前の縁 (頭の骨から見た x → y, z) をなめらかな関数にする"""
+    hc = J["head"]
+    rel = cp.pos[cp.boundary()] - hc
+    fr = rel[rel[:, 2] > 0.0]
+    xm = float(np.abs(fr[:, 0]).max())
+    cz = np.polyfit(fr[:, 0], fr[:, 2], 4)
+    cy = np.polyfit(fr[:, 0], fr[:, 1], 2)
+    return (lambda x: np.polyval(cy, x) + hc[1]), (lambda x: np.polyval(cz, x) + hc[2]), xm
+
+
+def grid_tris(nr, nc, off, flip=False):
+    """(nr+1) x (nc+1) の格子の三角形 (行優先の頂点番号)"""
+    out = []
+    for i in range(nr):
+        for j in range(nc):
+            a = off + i * (nc + 1) + j
+            b, c, d = a + 1, a + nc + 2, a + nc + 1
+            out += [[a, c, b], [a, d, c]] if flip else [[a, b, c], [a, c, d]]
+    return out
+
+
+def brim_piece(cp, half, depth, drop, curve, taper, thick, ns=16, nt=4, uv_top="brim", uv_bot="under"):
+    """つば: 前の縁から前へ出る、左右が下がった板 (表と裏 thick 離す + 先端と両端の縁)。s ∈ [-1,1] (横), t ∈ [0,1] (根元 → 先)"""
+    yE, zE, xm = front_rim(cp)
+    half = min(half, xm - 0.002)
+    S, Tt = np.meshgrid(np.linspace(-1, 1, ns + 1), np.linspace(0, 1, nt + 1))
+    X = half * S * (1 - taper * Tt)
+    Z = zE(half * S) + depth * Tt * (1 - 0.30 * S**2) - 0.004 * (1 - Tt)
+    Y = yE(half * S) - curve * S**2 * Tt - drop * Tt - 0.002
+    top = np.stack([X, Y, Z], -1).reshape(-1, 3)
+    bot = top - np.array([0, thick, 0])
+    n = len(top)
+    pos = [top, bot]
+    tri = grid_tris(nt, ns, 0) + grid_tris(nt, ns, n, True)
+    uv = [np.tile([SW_U[uv_top], SW_V], (n, 1)), np.tile([SW_U[uv_bot], SW_V], (n, 1))]
+    # 表は上向き・裏は下向きに
+    tri = np.array(tri, np.int64)
+    if vnormals(np.vstack(pos), tri)[:n, 1].mean() < 0:
+        tri = tri[:, [0, 2, 1]]
+    tri = tri.tolist()
+    # 先端と左右の端の縁 (表と裏をつなぐ帯)。帯ごとに外向きにそろえる
+    edges = [[nt * (ns + 1) + j for j in range(ns + 1)], [i * (ns + 1) + ns for i in range(nt + 1)], [i * (ns + 1) for i in range(nt + 1)]]
+    k = 2 * n
+    mid = top.mean(axis=0)
+    for e in edges:
+        r0, r1 = top[e], bot[e]
+        m = len(e)
+        st = []
+        for j in range(m - 1):
+            a, b, c, d = k + j, k + j + 1, k + m + j + 1, k + m + j
+            st += [[a, c, b], [a, d, c]]
+        q = np.vstack([r0, r1])
+        st = np.array(st, np.int64)
+        fn = np.cross(q[st[:, 1] - k] - q[st[:, 0] - k], q[st[:, 2] - k] - q[st[:, 0] - k])
+        if (fn * (q[st[:, 0] - k] - mid)).sum() < 0:
+            st = st[:, [0, 2, 1]]
+        tri += st.tolist()
+        pos += [r0, r1]
+        uv.append(np.tile([SW_U[uv_top], SW_V], (2 * m, 1)))
+        k += 2 * m
+    pos = np.vstack(pos)
+    tri = np.array(tri, np.int64)
+    # 面ごとに別の頂点なので、法線は表・裏・縁でそれぞれ平ら
+    nrm = vnormals(pos, tri)
+    return pos, nrm, tri, np.vstack(uv)
+
+
+def dome_piece(c, nrm_, r, h, seg=8, rings=3, uvk="button"):
+    """てっぺんのボタン: 法線 nrm_ の向きに高さ h の小さな丸い山"""
+    n = nrm_ / np.linalg.norm(nrm_)
+    e1 = np.cross(n, [1.0, 0, 0])
+    e1 /= np.linalg.norm(e1)
+    e2 = np.cross(n, e1)
+    pos = [c + n * h]
+    for k in range(1, rings + 1):
+        a = k / rings * math.pi / 2
+        for j in range(seg):
+            b = j / seg * 2 * math.pi
+            pos.append(c + n * h * math.cos(a) + (e1 * math.cos(b) + e2 * math.sin(b)) * r * math.sin(a))
+    tri = [[0, 1 + j, 1 + (j + 1) % seg] for j in range(seg)]
+    for k in range(rings - 1):
+        o0, o1 = 1 + k * seg, 1 + (k + 1) * seg
+        for j in range(seg):
+            a, b, cc, d = o0 + j, o0 + (j + 1) % seg, o1 + (j + 1) % seg, o1 + j
+            tri += [[a, d, cc], [a, cc, b]]
+    pos = np.array(pos)
+    tri = np.array(tri, np.int64)
+    nr = vnormals(pos, tri)
+    if (nr * n).sum(1).mean() < 0:
+        tri = tri[:, [0, 2, 1]]
+        nr = vnormals(pos, tri)
+    return pos, nr, tri, np.tile([SW_U[uvk], SW_V], (len(pos), 1))
+
+
+def ellipsoid_piece(c, rad, nu=12, nv=7, uvk="shell"):
+    """耳当て: 楕円体 (頭に半分埋まる)"""
+    pos = []
+    for i in range(nv + 1):
+        a = i / nv * math.pi
+        for j in range(nu):
+            b = j / nu * 2 * math.pi
+            pos.append(c + np.array([math.sin(a) * math.cos(b), math.cos(a), math.sin(a) * math.sin(b)]) * rad)
+    tri = []
+    for i in range(nv):
+        for j in range(nu):
+            a, b = i * nu + j, i * nu + (j + 1) % nu
+            cc, d = (i + 1) * nu + (j + 1) % nu, (i + 1) * nu + j
+            tri += [[a, b, cc], [a, cc, d]]
+    pos = np.array(pos)
+    tri = np.array([t for t in tri if len(set(t)) == 3 and np.linalg.norm(np.cross(pos[t[1]] - pos[t[0]], pos[t[2]] - pos[t[0]])) > 1e-12], np.int64)
+    nr = vnormals(pos, tri)
+    if ((pos - c) * nr).sum(1).mean() < 0:
+        tri = tri[:, [0, 2, 1]]
+        nr = vnormals(pos, tri)
+    return pos, nr, tri, np.tile([SW_U[uvk], SW_V], (len(pos), 1))
+
+
+def merge_pieces(cp, pieces):
+    """部品を殻のメッシュに足す (すべて頭の骨)"""
+    for pos, nrm, tri, uv in pieces:
+        n0 = len(cp.pos)
+        w = np.zeros((len(pos), cp.W.shape[1]), cp.W.dtype)
+        w[:, BI["head"]] = 1
+        cp.pos = np.vstack([cp.pos, pos])
+        cp.nrm = np.vstack([cp.nrm, nrm])
+        cp.W = np.vstack([cp.W, w])
+        cp.uv = np.vstack([cp.uv, uv])
+        cp.tri = np.vstack([cp.tri, tri + n0])
+        if cp.src is not None:
+            cp.src = np.concatenate([cp.src, np.full(len(pos), -1)])
+    cp.recompute_normals = lambda: None
+
+
+# 帽子: つば (幅 17 cm・前へ 7.3 cm、左右が 2 cm 下がる曲がったつば) と、てっぺんのボタン
+_cap = parts["cap"]
+_crel = _cap.pos - J["head"]
+_apex = int(np.argmax(np.where(np.abs(_crel[:, 0]) < 0.012, _crel[:, 1], -9)))
+_cy, _cz, _ = front_rim(_cap)
+print("cap crown above the front rim %.1f cm" % ((_cap.pos[_apex, 1] - _cy(0.0)) * 100))
+merge_pieces(_cap, [brim_piece(_cap, 0.095, 0.073, 0.013, 0.020, 0.12, 0.004), dome_piece(_cap.pos[_apex] - _cap.nrm[_apex] * 0.002, _cap.nrm[_apex], 0.009, 0.005)])
+# ヘルメット: 殻 + つば + 耳当て。右打者用 (helmetR) は投手側の左耳、左打者用 (helmetL) は右耳。捕手の後ろ向きのヘルメットは殻だけ (helmet)
+_eye = mh.joint_pos(P, VG, "joint-l-eye") - J["head"]
+for key, sg in (("helmetR", 1.0), ("helmetL", -1.0)):
+    hp = copy.deepcopy(parts["helmet"])
+    hp.name = key
+    merge_pieces(hp, [brim_piece(hp, 0.082, 0.055, 0.010, 0.010, 0.15, 0.004, uv_top="bill", uv_bot="under"), ellipsoid_piece(J["head"] + np.array([0.072 * sg, _eye[1] - 0.012, _eye[2] - 0.08]), np.array([0.0225, 0.05, 0.0525]))])
+    parts[key] = hp
 
 
 # ---------------------------------------------------------------- 環境光の遮蔽 (AO) の焼き込み
@@ -1771,10 +1929,15 @@ extra["collarBand"] = COLLAR_BAND
 extra["torsoArc"] = TORSO_ARC
 extra["capLogo"] = CAP_LOGO
 extra["helmetLogo"] = HELMET_LOGO
+# 目録 v3: 袖の v の範囲、帽子・ヘルメットの色見本の行 (帽子はつば・ボタン入り、helmetR / helmetL はつば・耳当て入り)、アンダー・ストッキングの円筒 UV
+extra["sleeveV"] = SLEEVE_V
+extra["domeSwatch"] = DOME_SWATCH
+extra["capParts"] = ["brim", "button"]
+extra["underV"] = UNDER_V
 extra["headTop"] = float(P[parts["head"].src][:, 1].max()) if parts["head"].src is not None else 1.8
 
 manifest = {
-    "version": 2,
+    "version": 3,
     "license": "Body mesh, targets, rig, weights and eye texture: MakeHuman (CC0). Built by tools/human/build_player.py",
     "bones": [{"name": b["name"], "parent": b["pi"], "pos": [round(float(x), 5) for x in b["pos"]], "tail": [round(float(x), 5) for x in tail_of(b["name"])]} for b in BONES],
     "meshes": meshes,

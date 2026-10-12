@@ -363,14 +363,25 @@
         const bp = this._bp || (this._bp = new T.Vector3(me[12], me[13], me[14]));
         this._bs = Math.hypot(me[12] - bp.x, me[14] - bp.z) / this._dt;
         bp.set(me[12], me[13], me[14]);
-        for (let i = 0; i < 3; i++) {
-          _fl[i] = fL[i];
-          _fr[i] = fR[i];
+        if (NO_PLANT[p.kind]) {
+          // スライディング・ダイビング・ジャンプは足を留めない
+          this.ft.l.lock = this.ft.r.lock = false;
+          this.ft.l.rel = this.ft.r.rel = 0;
+        } else {
+          for (let i = 0; i < 3; i++) {
+            _fl[i] = fL[i];
+            _fr[i] = fR[i];
+          }
+          tL = this.plant("l", p, tL, _tl, _fl);
+          tR = this.plant("r", p, tR, _tr, _fr);
+          fL = _fl;
+          fR = _fr;
         }
-        tL = this.plant("l", p, tL, _tl, _fl);
-        tR = this.plant("r", p, tR, _tr, _fr);
-        fL = _fl;
-        fR = _fr;
+      }
+      // 地面の高さ (マウンドなど): 足首の目標を足もとの地面の高さに合わせる (高く上げた足ほど弱く)
+      if (this.ground && Math.abs(p.tilt) < 6 && Math.abs(p.roll) < 6) {
+        tL = this.onGround(tL, _gL);
+        tR = this.onGround(tR, _gR);
       }
       this.limb(b.thigh_l, b.calf_l, b.foot_l, RIG.leg_l, this.toWorld(tL, tw), this.toWorld(p.legL.p, pw));
       this.orientFoot(b.foot_l, fL);
@@ -379,9 +390,11 @@
       // 指
       const gl = this.player.gear.glove && this.player.gear.glove.visible;
       const gh = this.player.opts.throws === "L" ? "r" : "l";
+      // バットを持つ手 (片手のときは下の手だけ)
+      const gripS = one ? (lb ? "r" : "l") : null;
       for (const s of ["l", "r"]) {
         let k = this.grip[s.toUpperCase()];
-        if (p.bat.on) k = 1;
+        if (batOn && (!gripS || s === gripS)) k = 1;
         else if (gl && s === gh) k = this.player.gear.glove.isGroup ? 0.1 : 0.5; // グラブの中では指をのばす
         this.fingers(s, k);
         // グラブをはめた手の指は中に収まるよう小さくする (外から見えない)
@@ -399,13 +412,27 @@
         if (p.bat.on) {
           if (bat.parent !== b.Root) b.Root.add(bat);
           const d = _v1.set(p.bat.d[0], p.bat.d[1], p.bat.d[2]).normalize();
-          bat.position.set(p.bat.g[0] - d.x * 0.06, p.bat.g[1] - d.y * 0.06, p.bat.g[2] - d.z * 0.06);
+          // 握りの補正をした位置 (補正なしならポーズの g と同じ)
+          const g = _gg;
+          bat.position.set(g[0] - d.x * 0.06, g[1] - d.y * 0.06, g[2] - d.z * 0.06);
           bat.quaternion.setFromUnitVectors(_v2.set(0, 1, 0), d);
         }
       }
     }
-    // 目標ポーズへばねで近づける (rate: 1/秒。ばねの固有角振動数は 2×rate で、遅れは以前の指数補間と同じくらい)
-    drive(target, dt, rate) {
+    // 足首の目標 t (キャラクター空間) に足もとの地面の高さを足す (Root の高さとの差。足首が 0.1 m より上なら弱める)
+    onGround(t, out) {
+      const M = this.b.Root.matrixWorld;
+      const w = _wf.set(t[0], t[1], t[2]).applyMatrix4(M);
+      const h = this.ground(w.x, w.z) - M.elements[13];
+      const k = clampN(1 - (t[1] - 0.1) / 0.25, 0, 1);
+      out[0] = t[0];
+      out[1] = t[1] + (Number.isFinite(h) ? h * k : 0);
+      out[2] = t[2];
+      return out;
+    }
+    // 目標ポーズへばねで近づける (rate: 1/秒。ばねの固有角振動数は 2×rate で、遅れは以前の指数補間と同じくらい)。
+    // o.speed: 試合の早送り (×2.5 など) のときにばねも同じだけ速くする
+    drive(target, dt, rate, o) {
       dt = Math.min(0.1, Math.max(0, dt || 0));
       if (!dt) return this.apply(target);
       let S = this.sp;
@@ -433,12 +460,14 @@
         tp.set(xt);
         S.src = 0;
       }
-      const om = 2 * (rate == null ? 14 : rate);
+      const om = 2 * (rate == null ? 14 : rate) * (o && o.speed > 0 ? o.speed : 1);
       springK(S.KA, om, 1, dt);
       springK(S.KB, om, 0.8, dt);
-      // 同じクリップの続きか (時刻が少しだけ進んでいる)。走り・構えの揺れ (src < 0) は位相なので幅を広く
+      // 同じクリップの続きか (時刻が少しだけ進んでいる)。走り・構えの揺れ (src < 0) は位相なので幅を広く。
+      // 登録したクリップは名前が同じなら続き (バントのように毎フレーム作り直すクリップ)
       const ds = target.st - S.st;
-      const cont = S.ok && !!target.src && target.src === S.src && ds > -1e-6 && ds < (target.src < 0 ? 2.5 : 0.25);
+      const same = (!!target.src && target.src === S.src) || (!!target.name && target.name === S.name);
+      const cont = S.ok && same && ds > -1e-6 && ds < (target.src < 0 ? 2.5 : 0.25);
       const dt2 = dt * dt;
       for (let c = 0; c < NCH; c++) {
         const d = xt[c] - tp[c];
@@ -468,6 +497,7 @@
       }
       S.src = target.src || 0;
       S.st = target.st || 0;
+      S.name = target.name || "";
       S.ok = true;
       const out = this._out || (this._out = A.basePose());
       A.unflat(x, out);
@@ -475,6 +505,8 @@
       out.src = target.src;
       out.st = target.st;
       out.kind = target.kind;
+      out.name = target.name || "";
+      out.flags = target.flags || null;
       if (this.lifeOn) this.life(out, dt);
       this._dt = dt;
       this._drv = true;
