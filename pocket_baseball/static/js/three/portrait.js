@@ -303,7 +303,29 @@ void main(){
       .then(() => {
         busy = false;
         setTimeout(pump, 16);
+        if (!queue.length && priv) idleRelease();
       });
+  }
+  // 自前のレンダラー (2 つ目の WebGL) は、しばらく使わなければ手放す (弱い端末ほどこちらを使うので、メモリを返す)
+  let idleT = 0;
+  function idleRelease() {
+    clearTimeout(idleT);
+    idleT = setTimeout(() => {
+      if (busy || queue.length || !priv) return;
+      if (stage && stageOwner === priv) {
+        scene.remove(stage.lights.key.target);
+        stage.dispose();
+        stage = null;
+        stageOwner = null;
+      }
+      priv.r.dispose();
+      try {
+        priv.r.forceContextLoss();
+      } catch (e) {
+        /* もう使わない */
+      }
+      priv = null;
+    }, 15000);
   }
 
   // 選手の切り抜き画像 (canvas) を返す。kind: "bat" | "pit" | "cat" (省略時は守備位置から)

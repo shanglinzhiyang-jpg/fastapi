@@ -65,7 +65,7 @@ void main(){
   vec3 sc = uStand * (1.0 + uSpeck * (hh(floor(d * 160.0)) - 0.5));
   c = mix(c, sc, st);
   // 地面 (芝、真下は内野の土)
-  if (y < 0.0) c = mix(uGround, uDirt, smoothstep(-0.75, -0.95, y)) * (0.9 + 0.1 * hh(floor(d * 60.0)));
+  if (y < 0.0) c = mix(uGround, uDirt, smoothstep(-0.15, -0.45, y)) * (0.9 + 0.1 * hh(floor(d * 60.0)));
   gl_FragColor = vec4(c, 1.0);
 }`;
 
@@ -120,7 +120,8 @@ void main(){
           uTop: { value: top },
           uHz: { value: hz },
           uStand: { value: stand.multiplyScalar(standK) },
-          uGround: { value: grass.clone().multiplyScalar(groundK) },
+          // 芝は少し色を抜く (黒いつばや白い服の下側が緑に染まらないよう)
+          uGround: { value: grass.clone().lerp(new T.Color().setScalar(grass.r * 0.3 + grass.g * 0.59 + grass.b * 0.11), 0.4).multiplyScalar(groundK) },
           uDirt: { value: dirt.clone().multiplyScalar(groundK * 0.8) },
           uRoof: { value: lin(o.roof || "#e6e6e0").multiplyScalar(0.42) },
           uDome: { value: dome ? 1 : 0 },
@@ -146,16 +147,13 @@ void main(){
     }
     // ドームの照明リング
     if (dome) {
-      const rm = keep(new T.MeshBasicMaterial({ color: new T.Color(1, 0.97, 0.9).multiplyScalar(9), side: T.DoubleSide }));
-      const rg = keep(new T.PlaneGeometry(1.6, 1.6));
+      // つながった光の帯にする (小さな四角を並べると、ヘルメットに点線の的のような映り込みが出る)
+      const rm = keep(new T.MeshBasicMaterial({ color: new T.Color(1, 0.97, 0.9).multiplyScalar(6), side: T.DoubleSide }));
       for (const el of [0.62, 0.95]) {
-        for (let i = 0; i < 36; i++) {
-          const a = (i / 36) * Math.PI * 2;
-          const m = new T.Mesh(rg, rm);
-          m.position.set(Math.sin(a) * Math.cos(el) * 40, Math.sin(el) * 40, Math.cos(a) * Math.cos(el) * 40);
-          m.lookAt(0, 0, 0);
-          scene.add(m);
-        }
+        const m = new T.Mesh(keep(new T.TorusGeometry(Math.cos(el) * 40, 0.9, 6, 96)), rm);
+        m.rotation.x = Math.PI / 2;
+        m.position.y = Math.sin(el) * 40;
+        scene.add(m);
       }
     }
     // 昼は太陽のまわりを少し明るく (太陽そのものは平行光源で出す)
@@ -232,6 +230,7 @@ void main(){
       dispose() {
         scene.remove(hemi, key, fill);
         if (rimL) scene.remove(rimL, rimR);
+        for (const l of [key, fill, rimL, rimR]) if (l && l.dispose) l.dispose();
         if (scene.environment === (env && env.texture)) scene.environment = null;
         if (env) env.dispose();
       },

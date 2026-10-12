@@ -41,7 +41,15 @@
 
   /* ---------- 初期化 ---------- */
   // 仕上げ処理 (MSAA 付きの RenderTarget) を使う画質では、画面のキャンバスに MSAA は要らない
-  const wantCanvasAA = (q) => !(q !== "low" && PB.Post && typeof window.WebGL2RenderingContext !== "undefined" && QS.get("post") !== "0");
+  // 仕上げ処理が使えないと分かった端末 (WebGL1・フレームバッファ未対応) では、キャンバスの MSAA に戻す
+  let postBroken = false;
+  const wantCanvasAA = (q) => postBroken || !(q !== "low" && PB.Post && typeof window.WebGL2RenderingContext !== "undefined" && QS.get("post") !== "0");
+  // 仕上げ処理を諦めたとき: MSAA なしのキャンバスのままだとギザギザなので、次のフレームでキャンバスを作り直す
+  function postFailed() {
+    if (postBroken) return;
+    postBroken = true;
+    if (!canvasAA) setTimeout(() => V3.setQuality(V3.quality), 0);
+  }
   function makeRenderer(cv, q) {
     canvasAA = wantCanvasAA(q);
     let r = null;
@@ -155,7 +163,10 @@
     post = null;
     if (q !== "low" && PB.Post && PB.Post.create && QS.get("post") !== "0") {
       post = PB.Post.create(renderer, q, { force: QS.get("post") });
-      if (!post.ok) post = null;
+      if (!post.ok) {
+        post = null;
+        postFailed();
+      }
     }
     drsReset();
     V3.resize(W, H, DPR);
@@ -186,6 +197,7 @@
       if (!post.setSize(_size.x * s, _size.y * s)) {
         post.dispose();
         post = null;
+        postFailed();
         renderer.setPixelRatio(cap * s);
         renderer.setSize(W, H, false);
       }
@@ -248,7 +260,9 @@
     DRS.poorT = DRS.scale <= DRS.min && DRS.ema > 40 ? DRS.poorT + sec : 0;
     if (DRS.poorT > 6) {
       DRS.poorT = -1e9;
-      if (V3.onPoor) V3.onPoor(V3.quality);
+      // 描画の途中でキャンバス・球場を作り直さないよう、フレームの外で知らせる
+      const q = V3.quality;
+      if (V3.onPoor) setTimeout(() => V3.onPoor(q), 0);
     }
   }
   // 選手カード (portrait.js) が同じ WebGL コンテキストで描くため

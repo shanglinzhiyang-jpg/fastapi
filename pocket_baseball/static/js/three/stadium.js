@@ -1432,7 +1432,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
           side: T.BackSide,
           depthWrite: false,
           uniforms: { uNight: { value: 1 }, uTime: { value: 0 } },
-          vertexShader: "varying vec3 vD; void main(){ vD = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w * 0.99999; }",
+          vertexShader: "varying vec3 vD; void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vD = normalize(wp.xyz - cameraPosition); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w * 0.99999; }",
           fragmentShader: `
             uniform float uNight; uniform float uTime; varying vec3 vD;
             float h(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -1713,6 +1713,8 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     };
     st.dispose = function () {
       for (const d of disposables) if (d && d.dispose) d.dispose();
+      // 平行光源の影のテクスチャ (high で 32MB) は光源の dispose でしか消えない
+      for (const k of ["key", "fill"]) if (st.lights && st.lights[k] && st.lights[k].dispose) st.lights[k].dispose();
       for (const k of Object.keys(envs)) {
         if (envs[k]) envs[k].dispose();
         delete envs[k];

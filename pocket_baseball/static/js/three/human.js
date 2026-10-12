@@ -1280,7 +1280,9 @@
     t.colorSpace = T.SRGBColorSpace;
     t.anisotropy = low ? 2 : 4;
     t.userData.shared = true;
-    pantsCache[key] = t;
+    // パンツの文字 (横浜の BAYSTARS など) も書体が読めてから共有する
+    if (!u.pantsText || !document.fonts || document.fonts.check("40px 'Graduate'")) pantsCache[key] = t;
+    else t.userData.shared = false;
     return t;
   }
   // 帽子・ヘルメットのマーク (正方形のキャンバス)。画像 / 文字 / 組み合わせ文字 (markStyle "mono")
@@ -1365,7 +1367,9 @@
     t.userData.shared = true;
     // 画像がまだ読めていないときは共有しない (次の選手で描き直す)
     const im = m.mark ? H.image(m.mark) : null;
-    if (!im || im.ok) domeCache[key] = t;
+    // 文字のマークは書体が読めてから共有する (読めないうちに焼くと代わりの書体のまま残る)
+    const fontOk = !m.markText || !document.fonts || document.fonts.check("40px '" + (m.markFont || "Graduate") + "'");
+    if ((!im || im.ok) && fontOk) domeCache[key] = t;
     else t.userData.shared = false;
     return t;
   }

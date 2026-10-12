@@ -143,8 +143,11 @@
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (j && j.data && j.data.version === 1 && (j.data.updated || 0) > (S.data.updated || 0)) {
+          // 画質 (gfx) は端末ごとの設定なので、ほかの端末の値で上書きしない
+          const localGfx = (S.data.settings && S.data.settings.gfx) || "auto";
           S.data = Object.assign(fresh(), j.data);
           S.data.settings = Object.assign({}, S.DEFAULT_SETTINGS, j.data.settings || {});
+          S.data.settings.gfx = localGfx;
           try {
             window.localStorage.setItem(S.KEY, JSON.stringify(S.data));
           } catch (e) {
@@ -157,12 +160,23 @@
       .catch(() => false);
   };
 
+  // サーバーへ送るセーブ (端末ごとの画質の設定は除く)
+  function syncJSON() {
+    const raw = S._saved || JSON.stringify(S.data);
+    try {
+      const d = JSON.parse(raw);
+      if (d.settings) delete d.settings.gfx;
+      return JSON.stringify(d);
+    } catch (e) {
+      return raw;
+    }
+  }
   S.push = function () {
     if (!S.server) return Promise.resolve(false);
     return fetch("api/saves/" + encodeURIComponent(S.slot), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: '{"data":' + (S._saved || JSON.stringify(S.data)) + "}",
+      body: '{"data":' + syncJSON() + "}",
     })
       .then((r) => r.ok)
       .catch(() => false);

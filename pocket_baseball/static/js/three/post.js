@@ -181,6 +181,9 @@ void main(){
     P.params = { bloom: 0.3, threshold: 1.0, sat: 1.08, contrast: 1.05, vignette: 0.26, split: 1, lift: 0 };
 
     function buildComp() {
+      // 定義が同じなら作り直さない (作り直すとシェーダーのコンパイルが走り、解像度の自動調整のたびにひっかかる)
+      const ckey = P.hdr + ":" + (P.samples > 0);
+      if (comp && comp.userData.key === ckey) return;
       if (comp) comp.dispose();
       const defines = { PB_BLOOM: 1 };
       if (P.hdr) defines.PB_HDR = 1;
@@ -201,6 +204,7 @@ void main(){
           uLift: { value: 0 },
         },
       });
+      comp.userData.key = ckey;
     }
     function disposeTargets() {
       if (main) main.dispose();
@@ -243,6 +247,8 @@ void main(){
           rt.dispose();
           return null;
         }
+        // MSAA の解決では深度は要らない (色だけ写し、深度は捨てる: タイル型 GPU の帯域を節約)
+        if (samples > 0 && renderer.properties) renderer.properties.get(rt).__ignoreDepthValues = true;
         P.samples = samples;
         P.hdr = hdr;
         return rt;
