@@ -4194,7 +4194,9 @@ button.rels:active {
 }
 .mgc-pic {
   grid-area: pic;
-  align-self: stretch;
+  /* 絵の縦横比 (200x240) のまま: 文の列に合わせて伸ばすと左右が切れる (ポニーテールなど) */
+  align-self: start;
+  aspect-ratio: 5 / 6;
   min-height: 0;
   border: 3px solid #1b1712;
   border-radius: 2px;
@@ -4334,6 +4336,9 @@ button.rels:active {
 .mgp-txt small {
   font-size: 11px;
   color: var(--mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .mgp-rel {
   width: 72px;
@@ -4354,6 +4359,18 @@ button.rels:active {
   display: block;
   height: 100%;
   background: #ff8fb1;
+}
+/* 狭い画面: ゲージを細くして名前と肩書きを 1 行に収める */
+@media (max-width: 340px) {
+  .mgp-rel {
+    width: 54px;
+  }
+  .mgp-txt b {
+    font-size: 15px;
+  }
+  .mgp-txt small {
+    font-size: 10px;
+  }
 }
 /* ==================== /サクセス: アニメ塗りのキャラクター ==================== */
 
