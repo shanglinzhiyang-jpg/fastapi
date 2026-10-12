@@ -12,6 +12,7 @@ import argparse
 import base64
 import json
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,8 +41,15 @@ def build(fragment: bool, lite: bool = False) -> str:
         f"/* --- {name} --- */\n" + (STATIC / name).read_text(encoding="utf-8")
         for name in scripts
     )
-    # 球団マークなどの画像は data URI にして埋め込む
-    js = re.sub(r'"(img/[^"]+\.(?:webp|png|jpg))"', lambda m: '"' + data_uri(STATIC / m.group(1)) + '"', js)
+    # 球団マークなどの画像は data URI にして埋め込む (まだない画像は警告してパスのまま残す: 使っていない別のユニフォームなど)
+    def embed(m: re.Match) -> str:
+        p = STATIC / m.group(1)
+        if not p.exists():
+            print(f"警告: 画像がありません (埋め込まない): {m.group(1)}", file=sys.stderr)
+            return m.group(0)
+        return '"' + data_uri(p) + '"'
+
+    js = re.sub(r'"(img/[^"]+\.(?:webp|png|jpg))"', embed, js)
     # </script> がスクリプト中に現れても HTML が壊れないようにする
     js = js.replace("</script", "<\\/script")
     head = (
