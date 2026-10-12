@@ -392,7 +392,9 @@ function manzaiScript(opener, bits, n) {
 const JOBS = {
   yobikomi: {
     id: 'shochiku_yobikomi', title: '劇場の呼び込み手伝い', desc: '劇場の前で、お客さんに声をかけよう！', client: '劇場支配人',
-    stamina: 15, minigame: 'talk', opts: { difficulty: 1, scenes: YOBIKOMI_SCENES }, pay: 1000, fame: 5, skill: 'talk', gain: 1,
+    stamina: 15, minigame: 'talk', pay: 1000, fame: 5, skill: 'talk', gain: 1,
+    // a caption topic keeps the street set but drops the TV travel-show framing ('ぶらっと！ご当地旅')
+    opts: { difficulty: 1, scenes: YOBIKOMI_SCENES, topic: '劇場の前で、呼び込みスタート！', show: '本日 若手ライブ', mc: '支配人', mcLook: L.shihainin },
   },
   wakate: {
     id: 'shochiku_wakate_live', title: '劇場の若手ライブ', desc: '若手ライブの舞台で漫才を披露しよう！', client: '舞台監督',
@@ -518,7 +520,7 @@ function pdisc(ctx, cx, cy, r, col, side = 0) {
 // Audience member sitting in a theater seat (seen from behind).
 function seated(ctx, x, y, g, e) {
   x = Math.round(x); y = Math.round(y);
-  const sheet = charSheet(e.look || {});
+  const sheet = e.sheet || charSheet(e.look || {});
   const img = (sheet[e.dir] || sheet.down)[0];
   ctx.drawImage(img, 0, 0, 16, 13, x, y - 3, 16, 13);
   ctx.fillStyle = '#7a1520';
@@ -557,7 +559,7 @@ async function lobbyIntro(g) {
   await g.wait(250);
   await sayAs(g, UKETSUKE, ['…もう、あの子は。', 'あっ、いらっしゃいませ！']);
   await g.showLogo('shochiku', '松竹芸能へようこそ！');
-  await sayAs(g, UKETSUKE, ['ここは大阪・なんばの芸能事務所、松竹芸能です。', 'わからんことがあったら、なんでも受付で聞いてね〜。']);
+  await sayAs(g, UKETSUKE, ['ここは大阪の芸能事務所、松竹芸能です。','わからんことがあったら、なんでも受付で聞いてね〜。']);
 }
 
 async function uketsukeTalk(g, npc) {
@@ -758,7 +760,9 @@ async function managerTalk(g, npc) {
   if (isMember(g) && !g.flag('shochiku_welcomed')) await welcome(g);
   await s(managerGreeting(g));
   const started = !!g.flag('shochiku_kanmuri_started');
-  const i = await askAs(g, npc, 'どの仕事の話にする？', ['ラジオのゲスト', '関西ローカル番組', '全国ネット番組', started ? '冠ラジオの収録' : '冠ラジオ番組', 'またにする']);
+  // the 冠番組 stays a secret (as on the whiteboard) until the player could actually get it
+  const kanLabel = started ? '冠ラジオの収録' : isMember(g) && st.fame >= 2000 ? '冠ラジオ番組' : '？？？';
+  const i = await askAs(g, npc, 'どの仕事の話にする？', ['ラジオのゲスト', '関西ローカル番組', '全国ネット番組', kanLabel, 'またにする']);
   if (i === 0) {
     const r = await g.job(JOBS.radio);
     if (r) await s('ラジオはしゃべりの修行になるやろ。リスナーさんは耳がこえとるからな！');
@@ -777,7 +781,18 @@ async function managerTalk(g, npc) {
       await g.emote('player', '!');
     }
     if (!isMember(g) && st.fame >= 2000) { await s('冠番組の話はな、うちの所属タレントにしか回されへんのや。堪忍な。'); return; }
-    const r = await g.job({ ...JOBS.kanmuri, title: started ? '冠ラジオ番組の収録' : JOBS.kanmuri.title });
+    // the player hosts their own show here, not a guest spot on the minigame's default radio show
+    const r = await g.job({
+      ...JOBS.kanmuri,
+      title: started ? '冠ラジオ番組の収録' : JOBS.kanmuri.title,
+      opts: {
+        ...JOBS.kanmuri.opts,
+        set: 'radio',
+        topic: started ? '冠ラジオ番組、今週も収録！' : '冠ラジオ番組、記念すべき初回！',
+        show: 'いっぺん聞いてみ！', // short title: the studio plate has room for ~11 characters
+        mc: 'アシスタント',
+      },
+    });
     if (!r) return;
     markToday(g, 'shochiku_kanmuri_day');
     if (!started) {
@@ -795,18 +810,18 @@ async function shinsaTalk(g, npc) {
   const st = g.state;
   const s = (t) => sayAs(g, npc, t);
   if (isMember(g)) {
-    return s(['あら、{name}さん。オーディションはもう卒業やね。', '最近の新人さんも、みんなキミにあこがれてがんばってるんよ。']);
+    if (st.fame >= 1000) return s(['あら、{name}さん。オーディションはもう卒業やね。', '最近の新人さんも、みんなキミにあこがれてがんばってるんよ。']);
+    return s(['あら、{name}さん。オーディションはもう卒業やね。', 'ここからが本番よ。劇場の若手ライブで、どんどん場数をふんでね！']);
   }
   await s([
     'オーディション担当です。松竹芸能のオーディションでは、しゃべりの腕を見させてもらいます。',
     '審査員の質問に、どう返すか。場の空気を読んで、いちばんええ返しを選んでね。',
   ]);
   if (st.agency) await s('よその事務所の人も受けられるけど、合格したら移籍の相談になるからね。');
-  const before = st.stamina;
   const ok = await g.audition(AUDITION);
   if (ok && isMember(g)) {
     await welcome(g);
-  } else if (!ok && st.stamina < before && !st.agency) {
+  } else if (g.lastAudition === 'failed') {
     await s('しゃべりは、稽古場のしゃべりレッスンで鍛えられるよ。また待ってるからね！');
   }
 }
@@ -1254,7 +1269,7 @@ async function watchShow(g, npc) {
   if (today(g, 'shochiku_watch_day')) return s('今日の公演はもう終わったで〜。また明日来てな！');
   const member = isMember(g);
   const i = await askAs(g, npc, member
-    ? ['おつかれさまです！今日の若手ライブ、袖から見ていきます？', '先輩らのネタ見るのも勉強ですよ！']
+    ? ['おつかれさまです！今日の若手ライブ、客席から見ていきます？', '先輩らのネタ見るのも勉強ですよ！']
     : ['いらっしゃい！本日の若手ライブ、まもなく開演です！', '入場料は¥500。見ていきます？'], [member ? '見ていく' : '見る（¥500）', 'やめておく']);
   if (i !== 0) return s('またいつでも来てな〜！');
   if (!member && !g.spend(500)) return s('あら、お金が足りへんみたいやね…。また今度な！');
@@ -1288,7 +1303,8 @@ async function kantokuTalk(g, npc) {
     await s('呼び込みの手伝いやったら、うしろの支配人に聞いてみ。誰でも歓迎やで。');
     return;
   }
-  await s(jobCount(g, 'shochiku_wakate_live') ? 'おっ、{name}。今日も出番いっとくか？' : ['おう、新人やな！舞台監督や。', '若手ライブは毎日やっとる。ネタができたらいつでも言うてや！']);
+  if (g.state.fame >= 1000) await s(['おっ、売れっ子の{name}やないか！', 'たまには劇場にも出てってや。お客さん、喜ぶで！']);
+  else await s(jobCount(g, 'shochiku_wakate_live') ? 'おっ、{name}。今日も出番いっとくか？' : ['おう、新人やな！舞台監督や。', '若手ライブは毎日やっとる。ネタができたらいつでも言うてや！']);
   const r = await g.job({ ...JOBS.wakate, opts: { ...JOBS.wakate.opts, ...manzaiScript('どうも〜！よろしくお願いします！', LIVE_BITS, 4) } });
   if (!r) return;
   if (r.rank === 'S' || r.rank === 'A') {
@@ -1375,7 +1391,8 @@ const THEATER = {
   entities: [
     { type: 'logo', x: 7.5, y: 1.15, w: 4, h: 1.35, logo: 'shochiku', board: true },
     {
-      type: 'prop', x: 3, y: 5, w: 1, h: 1, solid: true,
+      // stage right, clear of the path the duo walks in from the left wing
+      type: 'prop', x: 14, y: 5, w: 1, h: 1, solid: true,
       text: 'めくり（出演者の名前の札）だ。\n「まるかく」と書いてある。',
       draw(ctx, sx, sy) {
         ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(sx + 3, sy + 14, 10, 2);

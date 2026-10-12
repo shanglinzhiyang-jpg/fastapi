@@ -654,8 +654,8 @@ const JOBS = [
   {
     key: 'chotto', label: 'ちょい役で出演', mode: 'chotto',
     info: 'セリフのある小さな役で出演！\nよしもと所属 か ★100〜／体力-20',
-    // requires is "yoshimoto OR ★100" -> custom check in blockReason()
-    def: { id: 'shinkigeki_chotto', title: '新喜劇にちょい役で出演', desc: '出前持ちの役や。セリフもあるで！', client: '舞台監督', stamina: 20, minigame: 'zukko', opts: { difficulty: 2, gags: GAGS_CHOTTO, fakes: FAKES }, pay: 4500, fame: 15, skill: 'warai', gain: 2 },
+    // "yoshimoto OR ★100": blockReason() says it in the stage manager's words; requires.anyOf keeps g.job in agreement
+    def: { id: 'shinkigeki_chotto', title: '新喜劇にちょい役で出演', desc: '出前持ちの役や。セリフもあるで！', client: '舞台監督', stamina: 20, minigame: 'zukko', opts: { difficulty: 2, gags: GAGS_CHOTTO, fakes: FAKES }, pay: 4500, fame: 15, skill: 'warai', gain: 2, requires: { anyOf: [{ agency: AG }, { fame: 100 }] } },
   },
   {
     key: 'jun', label: '準レギュラー出演', mode: 'jun',
@@ -720,13 +720,13 @@ function hintFor(g, inside = false) {
   if (!st.agency) {
     return [
       inside ? 'まずは「通行人役のエキストラ」からやな。\n舞台監督に言うたら、すぐ出られるで。' : 'まずは「通行人役のエキストラ」からやな。\n楽屋口から入って、舞台監督に声をかけてみ。',
-      'よしもとに入りたいなら、舞台監督が「座員オーディション」もやってるで！',
+      'よしもとに入りたいなら、\n舞台監督が「座員オーディション」も\nやってるで！',
     ];
   }
   if (!member(g)) {
     return st.fame < 100
-      ? 'よその事務所の人も大歓迎や！\nエキストラで顔を売って、★100になったら、ちょい役で出られるで。'
-      : 'ちょい役なら、いつでも出てや！\n準レギュラーから上は、よしもと所属の座員だけなんや。';
+      ? 'よその事務所の人も大歓迎や！\nエキストラで顔を売って★100になったら、\nちょい役で出られるで。'
+      : 'ちょい役なら、いつでも出てや！\n準レギュラーから上は、\nよしもと所属の座員だけなんや。';
   }
   if (st.fame < 250) return 'ちょい役で場数を踏もう！\n★250になったら、準レギュラーの声がかかるで。';
   if (st.fame < 1000) return '準レギュラーで大活躍やな！\n★1000になったら、座長公演の大事な役をまかせたい。';
@@ -738,10 +738,10 @@ function hintFor(g, inside = false) {
 // The same advice in the front-of-house staff's polite words.
 function politeHint(g) {
   const st = g.state;
-  if (!st.agency) return ['舞台に立ってみたい方は、\n楽屋口の奥の舞台監督へどうぞ！\nエキストラなら、どなたでも出られます。', 'よしもとの「座員オーディション」も、舞台監督が受け付けていますよ♪'];
-  if (!member(g)) return st.fame < 100 ? 'エキストラで経験を積んで★100になると、\n「ちょい役」で出演できるそうですよ！' : '「ちょい役」なら出演できますよ！\n準レギュラーから上は、よしもと所属の方だけなんです。';
-  if (st.fame < 250) return 'ちょい役でたくさん出演して、★250を目指しましょう！\n準レギュラーのお声がかかりますよ♪';
-  if (st.fame < 1000) return '準レギュラーとして大活躍ですね！\n★1000になると、座長公演の大事な役が回ってきますよ。';
+  if (!st.agency) return ['舞台に立ってみたい方は、\n楽屋口の奥の舞台監督へどうぞ！\nエキストラなら、どなたでも出られます。', 'よしもとの「座員オーディション」も、\n舞台監督が受け付けていますよ♪'];
+  if (!member(g)) return st.fame < 100 ? 'エキストラで経験を積んで★100になると、\n「ちょい役」で出演できるそうですよ！' : '「ちょい役」なら出演できますよ！\n準レギュラーから上は、\nよしもと所属の方だけなんです。';
+  if (st.fame < 250) return 'ちょい役でたくさん出演して、\n★250を目指しましょう！\n準レギュラーのお声がかかりますよ♪';
+  if (st.fame < 1000) return '準レギュラーとして大活躍ですね！\n★1000になると、座長公演の\n大事な役が回ってきますよ。';
   if (st.fame < 2000) return '★2000になったら…座長に抜擢されるかもしれません！\n楽しみにしていますね♪';
   if (!g.flag('shinkigeki_zacho')) return '座長に抜擢のチャンスです！\n楽屋の座長か舞台監督に、声をかけてみてください！';
   return '座長、いつもありがとうございます！\n国民的スターまで、あと少しですね♪';
@@ -749,13 +749,21 @@ function politeHint(g) {
 
 function blockReason(g, j) {
   if (j.key === 'chotto' && !canChotto(g)) {
-    return 'ちょい役は、よしもと所属の人か、★100以上の人にお願いしてるんや。\nまずはエキストラで顔を売ろか！';
+    return 'ちょい役は、よしもと所属の人か\n★100以上の人にお願いしてるんや。\nまずはエキストラで顔を売ろか！';
   }
   if (j.key === 'zacho' && today(g, 'shinkigeki_zacho_day')) return '今日の座長公演は、もう幕が下りたで。\nまた明日な！';
+  // the engine's reasons are narration ("…のようだ。"); here the stage manager / troupe leader says them
+  const r = j.def.requires || {};
+  if (r.agency && g.state.agency !== r.agency) {
+    const next = !g.state.agency ? '「座員オーディション」に受かって、\n一座の仲間になってや！'
+      : canChotto(g) ? 'ちょい役なら、いつでも出てや！' : 'まずはエキストラで、顔を売ろか！';
+    return ['この役は、よしもと所属の座員に\nお願いしてるんや。', next];
+  }
+  if (r.fame && g.state.fame < r.fame) return `この役は★${r.fame}からやな。（いまは★${g.state.fame}）\nもうちょい顔を売ってからや！`;
   return g.checkRequires(j.def.requires);
 }
 function lockLabel(g, j) {
-  if (j.key === 'chotto') return canChotto(g) ? null : '所属か★100';
+  if (j.key === 'chotto') return canChotto(g) ? null : 'よしもとか★100';
   if (j.key === 'zacho' && today(g, 'shinkigeki_zacho_day')) return '本日終了';
   const r = j.def.requires || {};
   if (r.agency && g.state.agency !== r.agency) return 'よしもと所属';
@@ -866,7 +874,7 @@ const SKETCHES = [
       await S.walk('madonna', 14, 5);
       S.face('madonna', 'left');
       await S.emote('okami', '!');
-      await S.say('madonna', 'はじめまして。こちらに伝説の料理人がいると聞いて…。');
+      await S.say('madonna', 'はじめまして。\nこちらに伝説の料理人がいると聞いて…。');
       await S.say('okami', '伝説の料理人…？\nどん平さーん！ お客さんやでー！');
       g.sfx('door');
       S.enter('zacho', 9, 3, 'down');
@@ -1002,12 +1010,12 @@ async function watchShow(g, who) {
   await returnTo(g, origin);
   g.addSkill('warai', 1, true);
   g.sfx('good');
-  await g.say(['おもしろかった！ 思わず客席でズッコケてしまった…。', '本物のズッコケの「間」を学んだ！\n（お笑い +1・観劇は1日1回）']);
+  await g.say(['おもしろかった！\n思わず客席でズッコケてしまった…。', '本物のズッコケの「間」を学んだ！\n（お笑い +1・観劇は1日1回）']);
 }
 
 // ------------------------------------------------------------------ stage jobs
 const INTRO = {
-  extra: [['zacho', '通行人役、よろしく頼むで！\nギャグのオチでは、みんなといっしょにズッコケるんや！']],
+  extra: [['zacho', '通行人役、よろしく頼むで！\nギャグのオチでは、\nみんなといっしょにズッコケるんや！']],
   chotto: [['zacho', '今日は出前持ちの役やな。\n肩の力ぬいて、楽しんでいこ！'], ['okami', 'セリフ、とちっても大丈夫。\nうちらがフォローしたるからね！']],
   jun: [['zacho', 'おっ、準レギュラーの{name}！\n今日も頼りにしてるで！']],
   key: [['zacho', '今日の座長公演は、{name}の役が話のカギや。'], ['madonna', 'いっしょに最高の舞台にしましょうね！']],
@@ -1106,6 +1114,7 @@ async function ceremony(g) {
   await partyCard(g, '座長 就任！！', g.fmt('よしもと新喜劇 座長 {name}'));
   g.sfx('applause');
   await g.say('これは座長のしるし、金の刺しゅうの法被や。\nそれと…一座からのお祝いや！', WHO.zacho);
+  g.setFlag('shinkigeki_zacho', true); // set before the rewards so they can never be paid twice
   g.sfx('coin');
   g.giveItem('shinkigeki_happi', 1, true);
   g.addMoney(50000, true);
@@ -1122,7 +1131,6 @@ async function ceremony(g) {
   await zukkoAll(g, Z, [CAST.okami, CAST.genji, CAST.madonna, 'sk_h_koro', 'sk_h_butai'], true, CROWD.slice(0, 8));
   await g.say('なんでやねーん！！', WHO.troupe);
   g.sfx('applause');
-  g.setFlag('shinkigeki_zacho', true);
   g.sfx('fanfare');
   await g.say('{name}は「新喜劇の座長」になった！\n国民的スターへ、また一歩近づいた！');
 }
@@ -1140,7 +1148,7 @@ async function zachoFirst(g) {
   await approach(g, Z);
   await g.say([
     'ワシは、この一座の座長。\n茶谷（ちゃたに）どん平や。',
-    '新喜劇はな、ギャグのオチで、みんなそろってズッコケるのがお約束なんや。',
+    '新喜劇はな、ギャグのオチで\nみんなそろってズッコケるのが\nお約束なんや。',
     'ちょっと見とき。\n…みんな、いくでー！',
   ], WHO.zacho);
   for (const id of ['sk_madonna', 'sk_okami', 'sk_genji']) faceNpc(g, id, 'down');
@@ -1173,7 +1181,7 @@ async function zachoTalk(g) {
     await g.say(pick([
       ['ズッコケは、ギャグを最後まで聞いてから。', '早よ転んだら「フライング」や。\nオチの「間」を、体で覚えるんやで。'],
       ['ギャグに見せかけて、何も起こらへん時もある。', 'そん時は、グッとガマンや。\nひとりだけ転んだら、恥ずかしいで〜。'],
-      ['新喜劇は、お客さんと一座がひとつになる芝居や。', 'ズッコケは「みんなでそろって」がいちばん気持ちええんや。'],
+      ['新喜劇は、お客さんと一座がひとつになる芝居や。', 'ズッコケは「みんなでそろって」が\nいちばん気持ちええんや。'],
     ]), who);
   } else {
     await g.say('ほな、またな！\n笑顔で帰りや〜！', who);
@@ -1193,7 +1201,7 @@ async function jobBoard(g, who) {
 async function auditionHere(g, who) {
   const st = g.state;
   const before = st.stats.minigames;
-  const ok = await g.audition({ agency: AG, title: '新喜劇 座員オーディション', minigame: 'zukko', opts: { difficulty: 2 }, pass: 55 });
+  const ok = await g.audition({ agency: AG, title: '新喜劇 座員オーディション', minigame: 'zukko', opts: { difficulty: 2 }, pass: 55, client: who.name, clientLook: who.look });
   if (ok && g.lastAudition === 'passed') {
     g.sfx('applause');
     await g.say(['合格や！ あんたのズッコケ、ほんまもんや！', 'ようこそ、よしもとへ！\nこれからは、ちょい役でもどんどん出てや！'], who);
@@ -1209,7 +1217,7 @@ async function butaiTalk(g) {
   const pickd = choices[i];
   if (pickd === 'お仕事') await jobBoard(g, who);
   else if (pickd === 'オーディション') {
-    await g.say(['よしもとの「座員オーディション」や。', 'ギャグのオチの「ドーン！」で、ズッコケる！\n「シーン…」の時はガマンや。合格したら、よしもと所属やで！'], who);
+    await g.say(['よしもとの「座員オーディション」や。', 'オチの「ドーン！」でズッコケる！\n「シーン…」の時はガマンや。\n合格したら、よしもと所属やで！'], who);
     await auditionHere(g, who);
   } else if (pickd === '相談する') await g.say(hintFor(g, true), who);
   else await g.say('出番がほしなったら、いつでも言うてや。', who);
@@ -1234,7 +1242,7 @@ async function senseiTalk(g) {
     await g.say([
       'オチのセリフが終わって、ひと呼吸の「間」。\nそこで、ドーン！や。',
       '「シーン…」となったら、転んだらあかん。\n耳をすませて、空気を読むんや。',
-      'お笑いのスキルが上がると、タイミングもつかみやすなる。毎日コツコツやで。',
+      'お笑いのスキルが上がると、\nタイミングもつかみやすなる。\n毎日コツコツやで。',
     ], who);
   } else {
     await g.say('転んでも、また起き上がる。\nそれが芸人や！', who);
@@ -1244,7 +1252,7 @@ async function senseiTalk(g) {
 async function koroTalk(g) {
   const who = WHO.koro;
   if (g.flag('shinkigeki_zacho')) {
-    await g.say(['座長！ おつかれさまです！', 'ぼくも座長みたいに、お客さんをドッカンドッカン笑わせたいです！'], who);
+    await g.say(['座長！ おつかれさまです！', 'ぼくも座長みたいに、お客さんを\nドッカンドッカン笑わせたいです！'], who);
     return;
   }
   await g.say([
@@ -1280,7 +1288,7 @@ async function welcome(g) {
   await g.say([
     'ここでは毎日、よしもと新喜劇を上演しています！',
     '下町のお店や家族が舞台の、\n笑いあり涙ありのお芝居。\nギャグのあとは、みんなでズッコケるのがお約束！',
-    'チケットはこちらの受付で。右の赤い扉が劇場ホール、左の扉は楽屋口です！',
+    'チケットはこちらの受付で。\n右の赤い扉が劇場ホール、\n左の扉は楽屋口です！',
   ], WHO.annai);
 }
 
@@ -1290,13 +1298,13 @@ async function annaiTalk(g) {
   if (i === 0) {
     await g.say([
       '右の赤い扉は、劇場ホール。\n開演前の客席は、見学自由ですよ。',
-      '左の扉は楽屋口。舞台監督や座長、一座のみなさんがいます。\nお仕事やレッスンは、そちらで！',
-      '左手のグッズ売り場では、劇場名物のおまんじゅうも売っています♪',
+      '左の扉は楽屋口。舞台監督や座長、\n一座のみなさんがいます。\nお仕事やレッスンは、そちらで！',
+      '左手のグッズ売り場では、\n劇場名物のおまんじゅうも売っています♪',
     ], who);
   } else if (i === 1) {
     await g.say([
-      'よしもと新喜劇は、ここ大阪・なんばで上演している喜劇です。',
-      'お店や家族のドタバタを描いた、笑いあり涙ありのお芝居なんですよ。',
+      'よしもと新喜劇は、ここ大阪・なんばで\n上演している喜劇です。',
+      'お店や家族のドタバタを描いた、\n笑いあり涙ありのお芝居なんですよ。',
       'ギャグのオチで、出演者がそろってズッコケる！\nそれが新喜劇のお約束です♪',
     ], who);
   } else if (i === 2) {
@@ -1318,7 +1326,7 @@ async function goodsTalk(g) {
 async function guardTalk(g) {
   const who = WHO.guard;
   if (g.flag('shinkigeki_zacho')) {
-    await g.say(['座長、おはようございます！', '…いや、もう昼すぎか。\n劇場の世界では、いつでも「おはようございます」なんや！'], who);
+    await g.say(['座長、おはようございます！', '…いや、もう昼すぎか。\n劇場の世界では、いつでも\n「おはようございます」なんや！'], who);
   } else if (member(g)) {
     await g.say(['おっ、よしもとの座員さんやな。\nおはようございます！', '楽屋は、その扉の奥や。\n今日も、ええズッコケ見せてや！'], who);
   } else {
@@ -1334,7 +1342,7 @@ async function mogiriTalk(g) {
   }
   await g.say([
     'こちら劇場ホールの入口です。\n開演前の客席は、見学自由ですよ。',
-    '公演をご覧になるなら、まずは真ん中の受付でチケットを！\n¥1,000です。',
+    '公演をご覧になるなら、\nまずは真ん中の受付でチケットを！\n¥1,000です。',
   ], who);
 }
 
@@ -1356,8 +1364,8 @@ async function fanTalk(g) {
   }
   await g.say([
     'わたし、新喜劇が大好きで、毎週かよってるんです！',
-    'いちばん好きなのは、みんながそろってズッコケる瞬間！\nあの「ドーン！」がたまらないの。',
-    st.fame >= 500 ? '{name}さんのサイン、今日はもうもらっちゃった♪' : 'あなたも舞台に立つの？\nもし有名になったら、サインちょうだいね！',
+    'いちばん好きなのは、\nみんながそろってズッコケる瞬間！\nあの「ドーン！」がたまらないの。',
+    st.fame >= 500 ? '{name}さんのサイン、\n今日はもうもらっちゃった♪' : 'あなたも舞台に立つの？\nもし有名になったら、サインちょうだいね！',
   ], who);
 }
 
@@ -1365,7 +1373,7 @@ async function jorenTalk(g) {
   const who = WHO.joren;
   await g.say(pick([
     ['わしは子どものころから、新喜劇を見て育ったんや。', '週末の昼に、家族みんなでテレビの前で笑うてな…。\nええ思い出や。'],
-    ['新喜劇のええとこはな、笑うて、ちょっとホロッとして、最後はスカッとするとこや。', '人情があるんや、人情が。'],
+    ['新喜劇のええとこはな、笑うて、\nちょっとホロッとして、\n最後はスカッとするとこや。', '人情があるんや、人情が。'],
     ['ここのまんじゅう、食べたか？\n体力回復にもってこいやで。', 'わしは毎回、三つ買うて帰るんや。'],
   ]), who);
 }
@@ -1385,7 +1393,7 @@ async function kidTalk(g) {
 }
 
 async function photoBoard(g) {
-  const i = await g.ask('顔ハメ看板だ。座長の衣装に顔をはめて、記念撮影できるらしい。', ['撮る！', 'やめる']);
+  const i = await g.ask('顔ハメ看板だ。\n座長の衣装に顔をはめて、\n記念撮影できるらしい。', ['撮る！', 'やめる']);
   if (i !== 0) return;
   const p = g.map.player;
   await g.fadeOut(8);
@@ -1413,19 +1421,21 @@ async function shoumeiTalk(g) {
   const who = WHO.shoumei;
   const i = await g.ask('照明さんや。舞台の明かりは全部ワシの担当。\nちょっと照らしてみよか？', ['お願い！', 'またね'], who);
   if (i !== 0) { await g.say('本番中は、まぶしいくらいがちょうどええんや。', who); return; }
-  spot = { until: g.frame + 150 };
+  // The player stands by the back wall here, so the line goes in the top window
+  // (the bottom one would hide the spotlight); the light stays on until it is read.
+  spot = { until: Infinity };
   g.sfx('chime');
   await g.emote('player', '♪', 60);
-  await g.say('ほら、スターの誕生や！\nこの明かりの真ん中に立つ日が、楽しみやな。', who);
+  await g.say('ほら、スターの誕生や！\nこの明かりの真ん中に立つ日が、楽しみやな。', { ...who, top: true });
   spot = null;
 }
 
 async function sakkaTalk(g) {
   const who = WHO.sakka;
   await g.say(pick([
-    ['ぼくは新喜劇の台本を書いてる。', 'ギャグのオチは「みんなが油断した瞬間」に置くのがコツ。\nだから、ズッコケも油断は禁物！'],
+    ['ぼくは新喜劇の台本を書いてる。', 'オチは「みんなが油断した瞬間」に\n置くのがコツ。\nだから、ズッコケも油断は禁物！'],
     ['舞台のセットは、うどん屋「まんぷく亭」。', '座長は、あの店ののれんから登場するんだ。\nお客さんが待ってましたって顔になるんだよ。'],
-    ['「シーン…」のフリは、わざと入れてるんだ。', 'ひとりだけズッコケると、それはそれで笑いになるんだけどね！'],
+    ['「シーン…」のフリは、わざと入れてるんだ。', 'ひとりだけズッコケると、\nそれはそれで笑いになるんだけどね！'],
   ]), who);
 }
 
@@ -1433,7 +1443,7 @@ async function mojiTalk(g) {
   const who = WHO.moji;
   await g.say([
     '若手座員のもじ丸です！\n開演前に、舞台で立ち位置の確認中です。',
-    member(g) && g.state.fame >= 250 ? '{name}さんと同じ舞台、緊張します…！' : '舞台の右の幕のすき間から、楽屋の舞台袖に行けるんですよ。',
+    member(g) && g.state.fame >= 250 ? '{name}さんと同じ舞台、緊張します…！' : '舞台の右の幕のすき間から、\n楽屋の舞台袖に行けるんですよ。',
   ], who);
 }
 
@@ -1636,7 +1646,7 @@ registerPlace({
       events: [
         ...[7, 12].map((x) => ({
           x, y: 5, on: 'action',
-          run: async (g) => { await g.say(['受付の上で、よしもと新喜劇のロゴ看板が輝いている。', '金色の電球がピカピカ光って、見ているだけでワクワクする！']); },
+          run: async (g) => { await g.say(['受付の上で、よしもと新喜劇のロゴ看板が輝いている。', '金色の電球がピカピカ光って、\n見ているだけでワクワクする！']); },
         })),
       ],
       drawOver: (ctx, g) => {
@@ -1731,6 +1741,7 @@ registerPlace({
         },
       ],
       drawOver: hallDrawOver,
+      topPad: 26, // on the stage the camera can rise so the HUD does not hide the valance and the set sign
       onEnter: async (g) => {
         if (!show && !party && !g.flag('shinkigeki_hall_first')) {
           g.setFlag('shinkigeki_hall_first');
@@ -1784,14 +1795,14 @@ registerPlace({
           talk: (g) => castTalk(g, WHO.madonna, (gg) => [
             'マドンナ役のゆり子です。\n本番前のメイク中なの。',
             'ギャグに見せかけて「シーン…」となる時は、\nズッコケたらダメよ。ガマンが大事！',
-            gg.state.fame >= 1000 ? '次の座長公演、いっしょに出られるといいわね♪' : '舞台に立ってみたいなら、舞台監督さんに声をかけてみて。',
+            member(gg) && gg.state.fame >= 1000 ? '次の座長公演、いっしょに出られるといいわね♪' : '舞台に立ってみたいなら、\n舞台監督さんに声をかけてみて。',
           ]),
         }),
         npc('sk_okami', 13, 4, 'up', WHO.okami, {
           talk: (g) => castTalk(g, WHO.okami, (gg) => [
             'おかみ役のさち代や。\n舞台では、ツッコミもうちの担当やで。',
-            '座長がボケたら、みんなでズッコケて、うちが「なんでやねん！」。\nこれで一丁あがりや！',
-            gg.state.agency === AG ? '同じよしもとの仲間やな。\nいっしょに舞台、もり上げよな！' : 'グッズ売り場の手ぬぐいを使うと、ズッコケのキレが良うなるで。',
+            '座長がボケたら、みんなでズッコケて、\nうちが「なんでやねん！」。\nこれで一丁あがりや！',
+            gg.state.agency === AG ? '同じよしもとの仲間やな。\nいっしょに舞台、もり上げよな！' : 'グッズ売り場の手ぬぐいを使うと、\nズッコケのキレが良うなるで。',
           ]),
         }),
         npc('sk_genji', 16, 4, 'up', WHO.genji, {

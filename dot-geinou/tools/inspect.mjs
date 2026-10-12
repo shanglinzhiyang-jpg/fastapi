@@ -173,6 +173,7 @@ async function runMode(mode) {
             m.interact();
           }
           const frames = await window.__settle(9000);
+          window.__freeze();
           const where = g.map.placeId + '/' + g.map.roomId;
           g.auto = null;
           return { frames, log, firstN, where, asks };

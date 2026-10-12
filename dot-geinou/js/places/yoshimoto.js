@@ -419,7 +419,7 @@ const JOBS = [
     def: { id: 'yoshimoto_matsuri', title: 'お祭りの営業', desc: '商店街のお祭りステージを盛り上げよう！', client: '商店街の会長', stamina: 25, minigame: 'talk', opts: { difficulty: 2, ...TALK_MATSURI }, pay: 5000, fame: 12, skill: 'talk', gain: 2, requires: { agency: true } },
   },
   {
-    key: 'oogiri', label: '大喜利ライブ', venue: 'stage', mode: 'live',
+    key: 'oogiri', label: '大喜利ライブ', venue: 'stage', mode: 'oogiri',
     info: 'お題に答える劇場の大喜利ライブ。\n★250〜／体力-20',
     def: { id: 'yoshimoto_oogiri', title: '劇場の大喜利ライブ', desc: 'お題に面白い答えをズバッと返そう！', client: '舞台監督', stamina: 20, minigame: 'talk', opts: { difficulty: 3, ...TALK_OOGIRI }, pay: 10000, fame: 40, skill: 'warai', gain: 3, requires: { fame: 250 } },
   },
@@ -431,7 +431,7 @@ const JOBS = [
   {
     key: 'gp', label: 'グランプリ決勝', venue: 'stage', mode: 'gp',
     info: '笑いの祭典の決勝！（1日1回）\nよしもと所属・★2000〜／体力-30',
-    def: { id: 'yoshimoto_gp_final', title: 'お笑いグランプリ決勝', desc: '年に一度の笑いの祭典、その決勝の舞台！', client: 'マネージャー', stamina: 30, minigame: 'tsukkomi', opts: { difficulty: 5, lines: LINES_GP }, pay: 65000, fame: 220, skill: 'warai', gain: 4, requires: { agency: PID, fame: 2000 } },
+    def: { id: 'yoshimoto_gp_final', title: 'お笑いグランプリ決勝', desc: '笑いの祭典、その決勝の舞台に立とう！', client: 'マネージャー', stamina: 30, minigame: 'tsukkomi', opts: { difficulty: 5, lines: LINES_GP }, pay: 65000, fame: 220, skill: 'warai', gain: 4, requires: { agency: PID, fame: 2000 } },
   },
 ];
 const job = (key) => JOBS.find((j) => j.key === key);
@@ -467,12 +467,16 @@ function hintFor(g, byManager = false) {
       '劇場の「前説」なら、所属していなくてもOKですよ。',
     ];
   }
-  if (st.agency !== PID) return `${AGENCIES[st.agency].name}の方ですね！\nロビーにいる商店街の会長さんが、お祭りの営業を探していましたよ。`;
+  if (st.agency !== PID) {
+    const more = st.fame >= 1000 ? '★1000を超えたら、冠番組の収録も\nマネージャーに相談できますよ！'
+      : st.fame >= 250 ? '★250を超えた方は、劇場の大喜利ライブにも\n出られますよ！' : '★250になったら、劇場の大喜利ライブにも\n出られるようになりますよ。';
+    return [`${AGENCIES[st.agency].name}の方ですね！`, 'ロビーにいる商店街の会長さんが、\nお祭りの営業を探していましたよ。', more];
+  }
   if (st.fame < 250) return '劇場の若手ライブとお祭りの営業で場数を踏もう！\n★250になったら大喜利ライブにも出られます。';
   if (st.fame < 1000) return '大喜利ライブで知名度をぐんぐん上げよう！\n★1000になったら、冠番組のお話が来るかも…！';
   if (st.fame < 2000) return '冠番組の収録で、目指せ★2000！\nそうなったら、お笑いグランプリ決勝に挑戦です！';
   if (!g.flag('yoshimoto_gp_champion')) return byManager ? 'いよいよお笑いグランプリ決勝！\n「お仕事」から、いつでもエントリーできますよ！' : 'いよいよお笑いグランプリ決勝！\n事務所フロアのマネージャーに声をかけてください！';
-  return 'グランプリ王者、おめでとう！\n国民的スター（★4000）まであと少し。NHKやBSよしもとでも大活躍しよう！';
+  return 'グランプリ王者、おめでとう！\n国民的スター（★4000）まで、あと少し！\nNHKやBSよしもとでも大活躍しよう！';
 }
 
 function confirmText(def, title = def.title) {
@@ -573,7 +577,7 @@ function festivalScene(g) {
 
 // ------------------------------------------------------------------ stage shows
 async function crowdReact(g, res) {
-  const ids = ['yoshi_kyaku1', 'yoshi_kyaku2', 'yoshi_kyaku3', 'yoshi_aud1', 'yoshi_aud2', 'yoshi_aud3', 'yoshi_aud4', 'yoshi_aud5'];
+  const ids = ['yoshi_kyaku1', 'yoshi_kyaku2', 'yoshi_kyaku3', 'yoshi_aud1', 'yoshi_aud2', 'yoshi_aud3', 'yoshi_aud4', 'yoshi_aud5', 'yoshi_aud6'];
   if (res.rank === 'S' || res.rank === 'A') {
     g.sfx('laugh');
     await Promise.all(ids.map((id, i) => g.emote(id, i % 2 ? '!' : 'w', 60)));
@@ -595,8 +599,11 @@ async function showIntro(g, j) {
     await g.wait(160);
     g.sfx('drum');
     await g.say('♪〜　出囃子が鳴った！\nセンターマイクの前に立つ！', {});
+  } else if (j.mode === 'oogiri') {
+    g.sfx('drum');
+    await g.say(['さあ、大喜利ライブの始まりや！\nお題にズバッと答えてな！', 'おもろい答えには、お客さんの拍手が\nドカンと来るで！'], WHO.butai);
   } else if (j.mode === 'tv') {
-    await g.say(['今日は{name}の冠番組『{name}のわははドット！』の公開収録！', '本番いきまーす！　5秒前、4、3…'], WHO.ad);
+    await g.say(['今日は{name}さんの冠番組\n『{name}のわははドット！』の公開収録！', '本番いきまーす！\n5秒前、4、3…'], WHO.ad);
     g.sfx('chime');
   } else if (j.mode === 'gp') {
     g.sfx('fanfare');
@@ -637,6 +644,7 @@ async function runStageJob(g, j, who) {
   const origin = here(g);
   let res = null;
   show = j.mode;
+  g.setFlag('yoshimoto_theater_first'); // performed there: skip the first-visit greeting later
   try {
     await g.fadeOut();
     await g.goto(PID, 'theater', 9, 2, 'down', { fade: false });
@@ -682,7 +690,7 @@ async function runFestival(g, j, who) {
   try {
     g.sfx('drum');
     await g.say('商店街のお祭り会場にやってきた！\nちょうちんの明かりがきれいだ。');
-    await g.say('みなさーん！今日はプロの芸人さんが来てくれましたで〜！', WHO.kaichou);
+    await g.say('みなさーん！\n今日はプロの芸人さんが来てくれましたで〜！', WHO.kaichou);
     res = await g.job({ ...def, confirm: false });
     if (res) {
       const good = res.rank === 'S' || res.rank === 'A';
@@ -712,7 +720,7 @@ async function gpResult(g, res) {
   if (!win) {
     g.sfx('fail');
     await g.say('…別のコンビでした！\n{name}、惜しくも準優勝！', WHO.mc);
-    await g.say('くやしい…！でも、決勝の舞台に立てたのは大きな一歩だ。\nまた明日、挑戦しよう！');
+    await g.say('くやしい…！\nでも、決勝の舞台に立てたのは大きな一歩だ。\nまた明日、挑戦しよう！');
     return;
   }
   const first = !g.flag('yoshimoto_gp_champion');
@@ -777,15 +785,15 @@ async function managerIntro(g) {
   e.dir = dirTo(e.x, e.y, p.x, p.y);
   const who = { ...WHO.manager, top: Math.max(p.y, e.y) >= 7 };
   await g.say([
-    'はじめまして！今日から{name}さんを担当する、マネージャーの笑川（えみかわ）です！',
-    'お仕事の相談は、いつでもぼくのデスクまで来てくださいね。',
+    'はじめまして！\nマネージャーの笑川（えみかわ）です。\n今日から{name}さんを担当します！',
+    'お仕事の相談は、いつでも\nぼくのデスクまで来てくださいね。',
     'まずは劇場の「若手ライブ」で場数を踏みましょう！\n小劇場は、1階ロビーの右手の赤い扉です。',
     'それと…これ、ぼくからの入所祝いです！',
   ], who);
   g.sfx('good');
   g.giveItem('netacho', 1, true);
   await g.say('ネタ帳をもらった！', { top: who.top });
-  await g.say('使うと、次のお笑いのお仕事が少しやさしくなりますよ。\nいっしょにてっぺん目指しましょう！', who);
+  await g.say('使うと、次のお笑いのお仕事が\n少しやさしくなりますよ。\nいっしょにてっぺん目指しましょう！', who);
   await g.emote('player', '♪');
   await g.walkNpcTo('yoshi_manager', 13, 4, 2);
   resetNpc(g, 'yoshi_manager', 13, 4, 'down');
@@ -796,7 +804,7 @@ async function jobBoard(g) {
     const lock = lockLabel(g, j);
     return { label: j.label, right: lock || fmtMoney(j.def.pay) + '〜', disabled: !!lock };
   });
-  const k = await g.list({ title: 'お仕事リスト', items, x: 42, y: 30, w: 236, describe: (idx) => JOBS[idx] && JOBS[idx].info });
+  const k = await g.list({ title: 'お仕事リスト', items, x: 42, y: 44, w: 236, describe: (idx) => JOBS[idx] && JOBS[idx].info });
   if (k < 0 || !JOBS[k]) return;
   await runJob(g, JOBS[k], WHO.manager);
 }
@@ -807,13 +815,17 @@ async function managerTalk(g) {
   if (member(g) && !g.flag('yoshimoto_mgr_intro')) { await managerIntro(g); return; }
   let greet;
   if (!member(g)) {
-    greet = 'ぼくは所属タレントさんのマネージャーです。\n所属していない方には、劇場の前説を紹介していますよ。';
+    greet = 'ぼくは、よしもと所属タレントのマネージャー。\n外部の方にも、出られるお仕事を\n紹介していますよ！';
   } else if (g.flag('yoshimoto_gp_champion')) {
     greet = 'グランプリ王者！今日もお仕事が山ほど来てますよ！';
   } else if (st.fame >= 2000) {
-    greet = '{name}さん、ついにグランプリ決勝の出場権です！\n準備はいいですか？';
+    greet = g.flag('yoshimoto_gp_entries')
+      ? 'グランプリ決勝、今日も挑戦できますよ！\n優勝目指して、がんばりましょう！'
+      : '{name}さん、ついにグランプリ決勝の出場権です！\n準備はいいですか？';
   } else if (st.fame >= 1000) {
-    greet = '大変です！{name}さんの冠番組が決まりました！\n…いや、大変じゃなくて、めでたいんです！';
+    greet = st.jobs.yoshimoto_kanmuri
+      ? '冠番組、評判いいですよ！\n今週の収録もよろしくお願いします！'
+      : '大変です！{name}さんの冠番組が決まりました！\n…いや、大変じゃなくて、めでたいんです！';
   } else {
     greet = pick(['おはようございます！今日もお仕事がんばろう！', '{name}さん、最近ちょっと顔が売れてきましたね〜！']);
   }
@@ -834,13 +846,13 @@ async function scoutTalk(g) {
     g.setFlag('yoshimoto_scout_met');
     await g.say([
       'こんにちは！新人発掘担当です。\nよしもとは、いつでも新しい才能を探しています！',
-      'オーディションの内容は、漫才のツッコミ！\n相方のボケを最後まで聞いて、ここや！というところでビシッとね。',
+      'オーディションの内容は、漫才のツッコミ！\n相方のボケを最後まで聞いて、\nここや！というところでビシッとね。',
     ], who);
   }
   const other = st.agency ? `\n（合格すると${AGENCIES[st.agency].name}から移籍になります）` : '';
   const i = await g.ask('新人オーディション、受けてみる？' + other, ['受ける！', 'コツを聞く', 'やめておく'], who);
   if (i === 0) {
-    const ok = await g.audition({ agency: PID, minigame: 'tsukkomi', opts: { difficulty: 2 }, pass: 55 });
+    const ok = await g.audition({ agency: PID, minigame: 'tsukkomi', opts: { difficulty: 2 }, pass: 55, client: who.name, clientLook: who.look });
     if (ok && member(g)) {
       await g.emote('yoshi_scout', '!');
       g.sfx('applause');
@@ -849,13 +861,13 @@ async function scoutTalk(g) {
     } else if (g.lastAudition === 'transferDeclined') {
       await g.say('そっか、いまの事務所を大事にしたいんだね。\nその気持ち、すてきだと思うよ！', who);
     } else if (g.lastAudition === 'failed') {
-      await g.say('筋は悪くないよ！\n奥の稽古場でレッスンを受けて、また来てね。', who);
+      await g.say('筋は悪くないよ！\n1階の稽古場でレッスンを受けて、また来てね。', who);
     }
   } else if (i === 1) {
     await g.say([
-      'ツッコミは「早すぎず、遅すぎず」。ボケのオチを聞いてから入るのが基本だよ。',
-      'ふつうのセリフにツッコんじゃうと減点！落ち着いてね。',
-      '1階の稽古場の鋭木先生のレッスンで練習できるし、売店の「ネタ帳」を使うと少しやさしくなるよ。',
+      'ツッコミは「早すぎず、遅すぎず」。\nボケのオチを聞いてから入るのが基本だよ。',
+      'ふつうのセリフにツッコんじゃうと減点！\n落ち着いてね。',
+      '1階の稽古場で、鋭木先生に習えるよ。\n売店の「ネタ帳」を使うのもおすすめ！',
     ], who);
   } else {
     await g.say('いつでも待ってるね！', who);
@@ -935,6 +947,7 @@ async function watchManzai(g, invited = false) {
     await g.say('何度見ても笑ってしまう…！');
   }
   if (member(g)) await g.say('同じよしもとの仲間やな！\nお互い、てっぺん目指してがんばろな！', WHO.kankichi);
+  else if (g.state.agency) await g.say(`${AGENCIES[g.state.agency].name}の人なんや！\n事務所はちゃうけど、お互いがんばろな！`, WHO.kankichi);
   else await g.say('自分も、はよオーディション受けや〜！\n2階の事務所フロアで受けられるで。', WHO.kankichi);
 }
 
@@ -954,8 +967,8 @@ async function surudokiTalk(g) {
   } else if (i === 2) {
     await g.say([
       'ツッコミは「短く、強く、愛をこめて」や。',
-      'ボケのオチまでちゃんと聞く。フリの段階でツッコんだら、お客さんが置いてけぼりになるで。',
-      'あと、ぽんかんズのネタも見とき。プロの間（ま）は、見るだけでも勉強になる。',
+      'ボケのオチまでちゃんと聞く。\nフリの段階でツッコんだら、\nお客さんが置いてけぼりになるで。',
+      'あと、ぽんかんズのネタも見とき。\nプロの間（ま）は、見るだけでも勉強になる。',
     ], who);
   } else {
     await g.say('いつでも来なさい。稽古はウソつかへんで。', who);
@@ -971,8 +984,8 @@ async function shabetaniTalk(g) {
   } else if (i === 1) {
     await g.say([
       'トークのコツは、相手の言葉をよく聞くこと。\n返しは、場の空気に合わせて選ぶのよ。',
-      '前説は「お客さんを主役に」、大喜利は「意外だけど分かる」答えがウケるわ。',
-      '話題の雑誌を読んでおくと、次のトークが少しラクになるわよ。',
+      '前説は「お客さんを主役に」。\n大喜利は「意外だけど分かる」答えがウケるわ。',
+      '話題の雑誌を読んでおくと、\n次のトークが少しラクになるわよ。',
     ], who);
   } else {
     await g.say('またね♪ 今日もたくさんしゃべってらっしゃい！', who);
@@ -992,20 +1005,20 @@ async function welcome(g) {
   g.sfx('chime');
   await g.showLogo('yoshimoto', 'よしもと 東京本部');
   await g.say([
-    'よしもとは1912年に大阪で生まれた、お笑いの会社なんですよ。',
-    'エレベーターで2階に上がると事務所フロア。新人オーディションもそちらで受けられます。',
-    '奥の木の扉は稽古場、右手の赤い扉は小劇場です。\n劇場の舞台監督に声をかければ、前説のお仕事ももらえますよ！',
+    'よしもとは1912年に大阪で生まれた、\nお笑いの会社なんですよ。',
+    'エレベーターで2階に上がると事務所フロア。\n新人オーディションもそちらで受けられます。',
+    '奥の木の扉は稽古場、右手の赤い扉は小劇場です。\n劇場の舞台監督に声をかければ、\n前説のお仕事ももらえますよ！',
   ], WHO.uketsuke);
 }
 
 const TV_SHOWS = [
-  'モニターに、若手コンビの漫才が流れている。\n「もうええわ！」「どうも、ありがとうございました〜！」',
+  'モニターに、若手コンビの漫才が流れている。\n「もうええわ！」\n「どうも、ありがとうございました〜！」',
   'モニターでは、ひな壇トーク番組を放送中。\nスタジオが大爆笑に包まれている！',
   'モニターでは、大喜利の番組をやっている。\n「こんなお寿司屋さんはイヤだ」…クスッ。',
   'モニターでは、劇場からの生中継。\nお客さんの笑い声がここまで聞こえてくる！',
 ];
 const FAN_LETTERS = [
-  '「いつも元気をもらってます！これからも応援してます！」',
+  '「いつも元気をもらってます！\nこれからも応援してます！」',
   '「テレビで見て、家族みんなで大笑いしました！」',
   '「受験勉強の合間に、ネタを見て元気出してます！」',
   '「おばあちゃんがファンです。体に気をつけてね」',
@@ -1017,15 +1030,15 @@ async function uketsukeTalk(g) {
   if (i === 0) {
     await g.say([
       'エレベーターで2階へ上がると事務所フロア。\nマネージャーや新人発掘担当がいます。',
-      '奥の木の扉は稽古場。ツッコミやトークのレッスンが受けられます。',
-      '右手の赤い扉は小劇場。毎日いろんなライブをやっていますよ！',
+      '奥の木の扉は稽古場。\nツッコミやトークのレッスンが受けられます。',
+      '右手の赤い扉は小劇場。\n毎日いろんなライブをやっていますよ！',
     ], who);
   } else if (i === 1) {
     await g.say([
-      'よしもとは1912年に大阪で生まれた、お笑いの会社です。',
+      'よしもとは1912年に大阪で生まれた、\nお笑いの会社です。',
       '漫才にコント、新喜劇…。\nたくさんの笑いを届けてきました。',
-      '大阪・なんばには、よしもと新喜劇の劇場もあるんですよ。',
-      'おとなりのBSよしもとでは、テレビ番組も作っています。\nのぞいてみてくださいね！',
+      '大阪・なんばには、\nよしもと新喜劇の劇場もあるんですよ。',
+      'おとなりのBSよしもとでは、\nテレビ番組も作っています。\nのぞいてみてくださいね！',
     ], who);
   } else if (i === 2) {
     await g.say(hintFor(g), who);
@@ -1038,7 +1051,7 @@ async function madoguchiTalk(g) {
   const who = WHO.madoguchi;
   const st = g.state;
   if (st.fame < 500) {
-    await g.say(['こちらは、ファンレターと差し入れの窓口です。', '人気が出てきたら、{name}さん宛てのお手紙も届くようになりますよ。\n★500を超えたら、また来てくださいね！'], who);
+    await g.say(['こちらは、ファンレターと差し入れの窓口です。', '人気が出てきたら、{name}さん宛ての\nお手紙も届くようになりますよ。\n★500を超えたら、また来てくださいね！'], who);
     return;
   }
   if (today(g, 'yoshimoto_letter_day')) {
@@ -1058,7 +1071,7 @@ async function guardTalk(g) {
   if (st.fame >= 1000) {
     await g.say(['{name}さん！昨日もテレビで見ましたよ！', '…あ、あとで娘のぶんのサインもお願いできます？'], who);
   } else if (member(g)) {
-    await g.say(['おっ、{name}さん。おつかれさまです！', '今日も劇場、がんばってや！\n体力が少ないときは、売店の笑顔せんべいがおすすめやで。'], who);
+    await g.say(['おっ、{name}さん。おつかれさまです！', '今日も劇場、がんばってや！\n体力が少ないときは、\n売店の笑顔せんべいがおすすめやで。'], who);
   } else {
     await g.say(['おつかれさまです！', 'ロビーと劇場は、だれでも入ってええで。\n芸人さんは毎日、奥の稽古場でネタを磨いとるんや。'], who);
   }
@@ -1090,9 +1103,9 @@ async function fanTalk(g) {
     return;
   }
   await g.say([
-    'ここのモニター、ずっとお笑いが流れてるから一日いられるの！',
+    'ここのモニター、ずっとお笑いが流れてるから\n一日いられるの！',
     '劇場の若手ライブは毎日やってるんだよ。\n応援してる若手がいるんだ〜。',
-    member(g) ? 'あなたも、よしもとの芸人さん？\n舞台、見に行くね！' : 'オーディションに合格したら、あなたも劇場に出られるかもね！',
+    member(g) ? 'あなたも、よしもとの芸人さん？\n舞台、見に行くね！' : 'オーディションに合格したら、\nあなたも劇場に出られるかもね！',
   ], who);
 }
 
@@ -1101,8 +1114,8 @@ async function wakateTalk(g) {
   if (member(g)) {
     await g.say([
       'お、同じよしもとやん！よろしくな！',
-      '若手ライブは、小劇場の舞台監督さんに声かけたら出られるで。',
-      'ネタ帳は売店でも買えるで。使うと次のお笑いの仕事がちょっとだけラクになるんや。',
+      '若手ライブは、小劇場の舞台監督さんに\n声かけたら出られるで。',
+      'ネタ帳は売店でも買えるで。使うと次の\nお笑いの仕事がちょっとだけラクになるんや。',
     ], who);
   } else {
     await g.say([
@@ -1117,15 +1130,15 @@ async function kaichouTalk(g) {
   const who = WHO.kaichou;
   if (!g.state.agency) {
     await g.say([
-      '商店街の会長です。今日は、お祭りに出てくれる芸人さんを探しに来たんや。',
-      'あんたも芸人さんか？…まだ事務所に入ってへんのやな。\nほな、所属が決まったらぜひ頼むわ！',
-      'オーディションは、2階の事務所フロアで受けられるらしいで。',
+      '商店街の会長です。今日は、お祭りに\n出てくれる芸人さんを探しに来たんや。',
+      'あんたも芸人さんか？\n…まだ事務所に入ってへんのやな。\nほな、所属が決まったらぜひ頼むわ！',
+      'オーディションは、\n2階の事務所フロアで受けられるらしいで。',
     ], who);
     return;
   }
   await g.say(g.flag('yoshimoto_matsuri_met')
     ? 'おっ、また会うたな！\n今日もお祭り、盛り上げてくれへんか？'
-    : ['商店街の会長です。今日は営業のお願いに来たんや。', 'うちのお祭りで、ネタを披露してくれる芸人さんを探しててな。\n{agency}の{name}さんなら大歓迎や！'], who);
+    : ['商店街の会長です。今日は営業のお願いに来たんや。', 'うちのお祭りで、ネタを披露してくれる\n芸人さんを探しててな。\n{name}さんなら大歓迎や！'], who);
   g.setFlag('yoshimoto_matsuri_met');
   const i = await g.ask('お祭りの営業、引き受けてくれへん？', ['引き受ける', 'また今度'], who);
   if (i === 0) await runFestival(g, job('matsuri'), who);
@@ -1162,7 +1175,7 @@ function trophyCase(x, y) {
   return {
     type: 'prop', x, y, w: 1, h: 1,
     cond: (g) => !!g.flag('yoshimoto_gp_champion'),
-    text: ['ガラスケースに、お笑いグランプリのトロフィーが飾られている。', '「祝 優勝 {name}」のプレートがピカピカだ！'],
+    text: ['ガラスケースに、\nお笑いグランプリのトロフィーが飾られている。', '「祝 優勝 {name}」のプレートがピカピカだ！'],
     draw(ctx, sx, sy, g) {
       box(ctx, sx + 2, sy + 14, 12, 2, 'rgba(0,0,0,0.25)');
       box(ctx, sx + 2, sy + 8, 12, 7, '#8a5a33'); box(ctx, sx + 2, sy + 8, 12, 1, '#c48a52');
@@ -1330,6 +1343,7 @@ registerPlace({
           wander: 1,
           text: ['ぼくは構成作家。番組やライブの台本を書いてる。', '大喜利のコツは、「みんなが思いつかない、\nでも分かる」答えだね。', '★250を超えると、劇場の大喜利ライブに\n呼ばれるようになるよ。', 'NHK、BSよしもと、大阪のなんば…。\nいろんな現場で経験を積むと、芸の幅が広がるよ。'],
         }),
+        { type: 'sign', x: 6, y: 9, text: '立て看板だ。\n「よしもと 新人オーディション 受付中！」' },
         npc('yoshi_senpai', 10, 9, 'down', WHO.senpai, {
           text: ['お、新顔か。オレはこの道20年の先輩芸人や。', '売れるコツ？…体力管理やな。\n寝る、食う、笑う！これが基本や。', 'たまには大阪のなんばにも行ってみ。\n新喜劇の劇場で、ズッコケの勉強ができるで。'],
         }),
@@ -1338,8 +1352,8 @@ registerPlace({
         {
           x: 4, y: 2, w: 2, on: 'action',
           run: async (g) => {
-            if (member(g)) await g.say('ホワイトボードに今週のスケジュールが書いてある。\n「{name}：若手ライブ／営業／稽古」…自分の名前もある！');
-            else await g.say('ホワイトボードに、芸人さんたちのスケジュールがびっしり。\nいつかここに自分の名前を…！');
+            if (member(g)) await g.say('ホワイトボードに今週のスケジュールが書いてある。\n「{name}：若手ライブ／営業／稽古」\n…自分の名前もある！');
+            else await g.say('ホワイトボードに、芸人さんたちの\nスケジュールがびっしり。\nいつかここに自分の名前を…！');
           },
         },
         { x: 12, y: 2, w: 2, on: 'action', run: async (g) => { await g.say('台本やライブのDVDがずらりと並んでいる。\n笑いの歴史がつまっている…。'); } },
@@ -1347,7 +1361,7 @@ registerPlace({
           x: 14, y: 3, on: 'action',
           run: async (g) => {
             await g.say('盾やトロフィーがずらり。\n先輩たちが勝ちとった賞の数々だ。');
-            if (g.flag('yoshimoto_gp_champion')) await g.say('…その真ん中に、{name}のグランプリの写真も飾られている！');
+            if (g.flag('yoshimoto_gp_champion')) await g.say('…その真ん中に、{name}の\nグランプリの写真も飾られている！');
           },
         },
         { x: 15, y: 3, on: 'action', run: async (g) => { await g.say('コピー機だ。台本が大量に印刷されている…。\nガガガガ…ピー！'); } },
@@ -1396,7 +1410,7 @@ registerPlace({
         npc('yoshi_kenkyusei', 8, 3, 'up', WHO.kenkyusei, {
           talk: async (g) => {
             const who = WHO.kenkyusei;
-            await g.say(['ぼく、養成所を出たばっかりの研究生です！', '毎日ここで先生たちにしごかれてます…。\nでも、レッスンを受けるとスキルがぐんぐん伸びるんです！'], who);
+            await g.say(['ぼく、養成所を出たばっかりの研究生です！', '毎日ここで先生たちにしごかれてます…。\nでも、レッスンを受けると\nスキルがぐんぐん伸びるんです！'], who);
             if (g.state.fame >= 250) await g.say('★250を超えたら、鋭木先生の「応用クラス」も\n受けられるんですよね。…いいなあ！', who);
             await g.moveNpc('yoshi_kenkyusei', 'face:up');
             await g.say('いまは鏡の前で、表情の練習中です。\n見ててくださいね…ニカッ！', who);
@@ -1461,7 +1475,7 @@ registerPlace({
         }),
         npc('yoshi_kyaku1', 4, 9, 'up', WHO.obaachan, { text: ['あたしゃ、この劇場の常連でね。\n若い子たちの漫才を見るのが生きがいなのよ。', 'あんたも舞台に立つのかい？\n楽しみにしとるよ。'] }),
         npc('yoshi_kyaku2', 13, 7, 'up', WHO.student, { text: ['修学旅行で来ました！\n生でお笑いを見るの、初めてなんです！', 'ねえねえ、もしかして芸人さん？\n帰ったらみんなに自慢しよっと！'] }),
-        npc('yoshi_kyaku3', 15, 11, 'up', WHO.salaryman, { text: ['仕事帰りに、ふらっと寄るのが楽しみでね。', '思いっきり笑うと、明日もがんばろうって思えるんだよ。'] }),
+        npc('yoshi_kyaku3', 15, 11, 'up', WHO.salaryman, { text: ['仕事帰りに、ふらっと寄るのが楽しみでね。', '思いっきり笑うと、\n明日もがんばろうって思えるんだよ。'] }),
         // extra audience while a show is on
         npc('yoshi_aud1', 3, 7, 'up', { name: 'お客さん', look: LOOKS.fan }, { cond: () => !!show || party, text: 'ワクワク…！' }),
         npc('yoshi_aud2', 6, 7, 'up', { name: 'お客さん', look: LOOKS.mom }, { cond: () => !!show || party, text: '楽しみねえ！' }),

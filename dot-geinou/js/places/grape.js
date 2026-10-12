@@ -9,7 +9,7 @@
 
 import { registerPlace } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
-import { defineTile, tileImage, R, P, speckle } from '../engine/tiles.js';
+import { defineTile, tileImage, R, P, speckle, disc } from '../engine/tiles.js';
 import { registerItem, ITEMS } from '../engine/state.js';
 import { registerSong } from '../engine/audio.js';
 import { text } from '../engine/draw.js';
@@ -23,11 +23,6 @@ const PU_L = '#c3a0e6';
 const GOLD = '#ffd23f';
 const WHITE = '#faf7fd';
 
-function disc(c, cx, cy, rad, col) {
-  for (let y = -rad; y <= rad; y++) {
-    for (let x = -rad; x <= rad; x++) if (x * x + y * y <= rad * rad + rad * 0.6) P(c, cx + x, cy + y, col);
-  }
-}
 function shadowE(c, cx, cy, rx) {
   c.fillStyle = 'rgba(0,0,0,0.2)';
   c.fillRect(cx - rx, cy, rx * 2, 1);
@@ -439,7 +434,7 @@ const C = {
   producer: { name: 'テレビのプロデューサー', look: { hair: 'cap', hat: '#20232a', hairColor: 'black', skin: 'fair', top: '#ff8a3d', bottom: '#3a4a7a', glasses: 'sun' } },
   wakate: { name: '若手芸人', look: { ...LOOKS.comedian, top: PU, bottom: '#20232a' } },
   // 稽古場
-  fusano: { name: 'コント作家 房野先生', look: { hair: 'afro', hairColor: 'black', skin: 'fair', top: '#f2f2f2', bottom: '#5a4a3a', glasses: true, beard: true } },
+  fujidana: { name: 'コント作家 藤棚先生', look: { hair: 'afro', hairColor: 'black', skin: 'fair', top: '#f2f2f2', bottom: '#5a4a3a', glasses: true, beard: true } },
   tsubuta: { name: '漫才講師 粒田先生', look: { hair: 'slick', hairColor: 'silver', skin: 'tan', top: PU_D, bottom: '#20232a', jacket: true } },
   maruo: { name: 'まるお（店員役）', look: { hair: 'bald', hairColor: 'black', skin: 'fair', top: '#2f9a4a', bottom: '#3b3f48' } },
   kakuta: { name: 'かくた（客役）', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#3a4a7a', bottom: '#20232a', glasses: true } },
@@ -452,15 +447,6 @@ const ask = (g, who, t, choices, opts = {}) => g.ask(t, choices, { name: C[who].
 
 function npc(id, x, y, dir, extra = {}) {
   return { type: 'npc', id, x, y, dir, name: C[id].name, look: C[id].look, ...extra };
-}
-
-// Instantly reposition an actor (used while the screen is faded out).
-function setPos(g, id, x, y, dir) {
-  const e = id === 'player' ? g.map.player : g.npc(id);
-  if (!e) return;
-  Object.assign(e, { x, y, px: x * TILE, py: y * TILE, moving: false, t: 0 });
-  if (Array.isArray(e.path)) e.path.length = 0;
-  if (dir) e.dir = dir;
 }
 
 const isMember = (g) => g.state.agency === 'grape';
@@ -513,6 +499,21 @@ const ADV_LINES = [
   { boke: '将来の夢は、宇宙飛行士です。', punch: false },
   { boke: '高い所に慣れるため、脚立を買いました。', punch: true, tsukkomi: '低すぎるだろ！' },
 ];
+// コント scenes for the acting minigame. Beats: W 笑う / N 泣く / O 怒る / D 驚く / K キメ / T 照れる.
+const CONTE_SCENES = [
+  { title: 'コンビニの新人店員', beats: 'WDTNOWDK' },
+  { title: 'ポンコツ探偵', beats: 'KDOWNDTK' },
+  { title: '職員室の先生', beats: 'OTDWNOWK' },
+  { title: 'お見合い大作戦', beats: 'TWDTNOWK' },
+  { title: '宇宙人と遭遇', beats: 'DDOWTNWK' },
+  { title: '下町のラーメン屋', beats: 'OWDNTWOK' },
+];
+// a few random コント scenes; the minigame fills the remaining rounds with its own (shuffled) scenes
+function conteScenes(n) {
+  const a = CONTE_SCENES.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a.slice(0, n);
+}
 const PARTNER = { partner: '相方', partnerLook: { hair: 'short', hairColor: 'black', skin: 'fair', top: PU, bottom: '#20232a' } };
 
 const CHIHO_SCENES = [
@@ -561,39 +562,39 @@ const CHIHO_SCENES = [
 // ====================================================================== activities
 const JOBS = {
   store: {
-    id: 'grape_store_help', title: 'ストアの手伝い', client: '店長',
+    id: 'grape_store_help', title: 'ストアの手伝い', client: C.tencho.name, clientLook: C.tencho.look,
     desc: '店頭でノリノリの呼び込みダンス！', stamina: 15,
     minigame: 'command', opts: { theme: 'dance', difficulty: 1 },
     pay: 900, fame: 4, skill: 'uta', gain: 1,
   },
   live: {
-    id: 'grape_office_live', title: '事務所ライブ出演', client: 'マネージャー紫藤',
+    id: 'grape_office_live', title: '事務所ライブ出演', client: C.manager.name, clientLook: C.manager.look,
     desc: '所属芸人が集まるお笑いライブ！', stamina: 20,
     minigame: 'tsukkomi', opts: { difficulty: 2, lines: LIVE_LINES, ...PARTNER },
     pay: 4500, fame: 18, skill: 'warai', gain: 2, requires: { agency: 'grape' },
   },
   chiho: {
-    id: 'grape_chiho', title: '地方営業', client: '営業の房田さん',
+    id: 'grape_chiho', title: '地方営業', client: C.eigyo.name, clientLook: C.eigyo.look,
     desc: '地方のショッピングモールでトークショー！', stamina: 25,
     minigame: 'talk', opts: { difficulty: 2, topic: 'ショッピングモールでトークショー', scenes: CHIHO_SCENES },
     pay: 4000, fame: 15, skill: 'talk', gain: 2, requires: { agency: true },
   },
   conte: {
-    id: 'grape_conte_tv', title: 'コント番組', client: 'テレビのプロデューサー',
+    id: 'grape_conte_tv', title: 'コント番組', client: C.producer.name, clientLook: C.producer.look,
     desc: 'テレビのコント番組に出演！', stamina: 25,
-    minigame: 'command', opts: { theme: 'acting', difficulty: 3 },
+    minigame: 'command', get opts() { return { theme: 'acting', difficulty: 3, scenes: conteScenes(3) }; },
     pay: 12000, fame: 45, skill: 'engi', gain: 3, requires: { fame: 250 },
   },
   tour: {
-    id: 'grape_tour', title: '全国ツアー', client: '営業の房田さん',
+    id: 'grape_tour', title: '全国ツアー', client: C.eigyo.name, clientLook: C.eigyo.look,
     desc: '全国の劇場をまわるお笑いツアー！', stamina: 30,
     minigame: 'tsukkomi', opts: { difficulty: 4, lines: TOUR_LINES, ...PARTNER },
     pay: 30000, fame: 120, skill: 'warai', gain: 4, requires: { fame: 1000 },
   },
   solo: {
-    id: 'grape_solo_live', title: '単独ライブ', client: 'マネージャー紫藤',
+    id: 'grape_solo_live', title: '単独ライブ', client: C.manager.name, clientLook: C.manager.look,
     desc: '{name}の単独ライブ！大ホールが満員だ！', stamina: 30,
-    minigame: 'command', opts: { theme: 'acting', difficulty: 5 },
+    minigame: 'command', get opts() { return { theme: 'acting', difficulty: 5, scenes: conteScenes(4) }; },
     pay: 65000, fame: 250, skill: 'engi', gain: 5, requires: { agency: 'grape', fame: 2000 },
   },
 };
@@ -724,9 +725,9 @@ async function gacha(g) {
   const id = r < 0.07 ? 'grape_badge' : r < 0.45 ? 'grape_juice' : r < 0.65 ? 'netacho' : r < 0.85 ? 'daihon' : 'wadai';
   if (id === 'grape_badge') {
     g.sfx('fanfare');
-    await g.say('ガチャガチャ…ポンッ！\nなんと！レアの「金ぶどう缶バッジ」だ！');
+    await g.say('ガラガラ…ポンッ！\nなんと！レアの「金ぶどう缶バッジ」だ！');
   } else {
-    await g.say(`ガチャガチャ…ポンッ！\n「${ITEMS[id].name}」が出てきた！`);
+    await g.say(`ガラガラ…ポンッ！\n「${ITEMS[id].name}」が出てきた！`);
   }
   g.giveItem(id);
 }
@@ -735,11 +736,11 @@ async function gacha(g) {
 async function welcomeCutscene(g) {
   g.setFlag('grape_welcomed');
   await g.fadeOut();
-  setPos(g, 'player', 8, 8, 'up');
-  setPos(g, 'manager', 4, 7, 'right');
-  setPos(g, 'reception', 6, 8, 'right');
-  setPos(g, 'jimu', 10, 8, 'left');
-  setPos(g, 'wakate', 7, 9, 'up');
+  g.placePlayer(8, 8, 'up');
+  g.placeNpc('manager', 4, 7, 'right');
+  g.placeNpc('reception', 6, 8, 'right');
+  g.placeNpc('jimu', 10, 8, 'left');
+  g.placeNpc('wakate', 7, 9, 'up');
   await g.fadeIn();
   await say(g, 'manager', 'おーい！合格した新人さんって、きみ！？');
   await g.moveNpc('manager', 'right right right right face:down', 1.5);
@@ -760,19 +761,20 @@ async function welcomeCutscene(g) {
   await g.goto('grape', 'office', 12, 7, 'up');
 }
 
-async function soloCelebration(g, first) {
+async function soloCelebration(g) {
   await g.fadeOut();
   // the staff wait in an arc around the spot under the kusudama
-  setPos(g, 'player', 8, 10, 'up');
-  setPos(g, 'manager', 8, 8, 'down');
-  setPos(g, 'eigyo', 7, 8, 'down');
-  setPos(g, 'chief', 9, 8, 'down');
-  setPos(g, 'reception', 6, 9, 'right');
-  setPos(g, 'jimu', 10, 9, 'left');
-  setPos(g, 'wakate', 5, 10, 'right');
-  setPos(g, 'producer', 11, 10, 'left');
-  g.notify('その夜、事務所にて…', { color: '#fff' });
+  g.placePlayer(8, 10, 'up');
+  g.placeNpc('manager', 8, 8, 'down');
+  g.placeNpc('eigyo', 7, 8, 'down');
+  g.placeNpc('chief', 9, 8, 'down');
+  g.placeNpc('reception', 6, 9, 'right');
+  g.placeNpc('jimu', 10, 9, 'left');
+  g.placeNpc('wakate', 5, 10, 'right');
+  g.placeNpc('producer', 11, 10, 'left');
   await g.fadeIn();
+  g.notify('その夜、事務所にて…', { color: '#fff', life: 90 });
+  await g.wait(1600); // let the caption go before the banner drops
   await say(g, 'manager', 'みなさん、主役が帰ってきましたよ！\nせーの…！');
   await kusudama(g, 8, '祝単独ライブ大成功');
   for (const id of ['reception', 'jimu', 'eigyo', 'chief', 'wakate', 'producer']) g.emote(id, pick(['!', '♪', '♥']));
@@ -781,16 +783,24 @@ async function soloCelebration(g, first) {
   await say(g, 'producer', 'いやあ、笑いすぎてお腹が痛いよ。\n次はぜひ、うちの特番にも！');
   await say(g, 'chief', 'オーディションの日のこと、覚えてます？\n…立派になりましたね。');
   await g.emote('player', '♥');
-  if (first) {
-    await say(g, 'manager', 'これ、事務所のみんなからです！');
-    g.giveItem('grape_plaque');
-    g.sfx('success');
-    await g.say('「単独ライブ記念盾」をもらった！\nもちもの（メニュー）から眺められる。');
-  }
+  await say(g, 'manager', 'これ、事務所のみんなからです！');
+  g.giveItem('grape_plaque');
+  g.sfx('success');
+  await g.say('「単独ライブ記念盾」をもらった！\nもちもの（メニュー）から眺められる。');
   await say(g, 'manager', 'さあ、次はもっと大きな舞台ですよ！\n国民的スターまで、あと少し！');
   await g.fadeOut();
   fx.start = 0;
   await g.goto('grape', 'office', 8, 10, 'up');
+}
+
+// Later successful solo lives: a short celebration right at the manager's desk.
+async function soloEncore(g) {
+  await g.emote('manager', '♪');
+  await say(g, 'manager', '今日も満員御礼でしたね！\nみなさーん、せーの…！');
+  await kusudama(g, 8, '祝満員御礼');
+  for (const id of ['reception', 'jimu', 'eigyo', 'wakate']) g.emote(id, pick(['♪', '♥']));
+  await say(g, 'manager', ['{name}さんの単独ライブは、\nもう事務所の名物ですね！', '次はもっと大きな会場を押さえますよ！']);
+  fx.start = 0;
 }
 
 function advice(g) {
@@ -800,10 +810,12 @@ function advice(g) {
   else if (st.fame < 1000) tips.push('顔が売れてきましたね！\n★1000で全国ツアーの話も来ます。営業の房田さんに相談を。');
   else if (st.fame < 2000) tips.push('全国ツアーで、ファンが一気に増えましたね。\n★2000になったら…いよいよ単独ライブです！');
   else tips.push('単独ライブ、いつでもいけますよ！\n大きな会場を押さえてあります。');
-  if (st.skills.engi < 30) tips.push('稽古場の房野先生のレッスンで、演技をみがくのもおすすめです。');
+  if (st.skills.engi < 30) tips.push('稽古場の藤棚先生のレッスンで、演技をみがくのもおすすめです。');
   else if (st.skills.warai < 30) tips.push('稽古場の粒田先生の漫才レッスンで、ツッコミのキレをみがきましょう。');
   return tips;
 }
+
+const FIRST_GREET = 'さっそくですが、お仕事の話をしましょうか！\n何からいきます？';
 
 async function talkManager(g) {
   if (!isMember(g)) {
@@ -813,11 +825,15 @@ async function talkManager(g) {
     ]);
     return;
   }
-  let greet = 'おつかれさまです、{name}さん！\n今日はどうします？';
   if (!g.flag('grape_welcomed')) {
     await welcomeCutscene(g);
-    greet = 'さっそくですが、お仕事の話をしましょうか！\n何からいきます？';
+    await managerMenu(g, FIRST_GREET);
+    return;
   }
+  await managerMenu(g, 'おつかれさまです、{name}さん！\n今日はどうします？');
+}
+
+async function managerMenu(g, greet) {
   const choices = ['事務所ライブ', lockLabel(g, '単独ライブ', JOBS.solo.requires), '相談する', 'やめておく'];
   const i = await ask(g, 'manager', greet, choices);
   if (i === 0) {
@@ -827,16 +843,19 @@ async function talkManager(g) {
     const res = await g.job(JOBS.solo);
     if (!res) return;
     if (['S', 'A', 'B'].includes(res.rank)) {
-      const first = !g.flag('grape_solo_done');
-      g.setFlag('grape_solo_done');
-      await soloCelebration(g, first);
+      if (!g.flag('grape_solo_done')) {
+        g.setFlag('grape_solo_done');
+        await soloCelebration(g);
+      } else {
+        await soloEncore(g);
+      }
     } else {
       await say(g, 'manager', ['…今日はちょっと悔しかったですね。', 'でも、お客さんの拍手は温かかった。\n次はもっといいライブにしましょう！']);
     }
   } else if (i === 2) {
     await say(g, 'manager', advice(g));
   } else {
-    await say(g, 'manager', '了解です！\nお仕事したくなったら、いつでも声をかけてくださいね。');
+    await say(g, 'manager', '了解です！\nお仕事の相談は、いつでもどうぞ。');
   }
 }
 
@@ -851,19 +870,34 @@ async function talkChief(g) {
   if (i === 1) {
     await say(g, 'chief', [
       '大事なのは、あわてず正確に。\nコントは間（ま）とテンポが命です。',
-      '自信がなければ、稽古場の房野先生の\nコント演技レッスンを受けてみて。',
+      '自信がなければ、稽古場の藤棚先生の\nコント演技レッスンを受けてみて。',
       '1階のストアのTシャツを着てくると、\n役に入りやすいって評判ですよ。',
     ]);
     return;
   }
   if (i !== 0) { await say(g, 'chief', 'いつでも挑戦をお待ちしています。'); return; }
-  const ok = await g.audition({ agency: 'grape', title: 'オーディション（コント演技）', minigame: 'command', opts: { theme: 'acting', difficulty: 2 }, pass: 55, stamina: 15 });
-  if (ok && isMember(g)) {
+  // an acting audition: the 演技 skill (and the T-shirt / 台本メモ buff) helps, not the agency's default お笑い
+  await g.audition({
+    agency: 'grape', title: 'オーディション（コント演技）', minigame: 'command',
+    opts: { theme: 'acting', difficulty: 2, scenes: conteScenes(2) }, skill: 'engi', pass: 55, stamina: 15,
+    client: C.chief.name, clientLook: C.chief.look,
+  });
+  const why = g.lastAudition;
+  if (why === 'passed') {
     await g.emote('chief', '♪');
-    await say(g, 'chief', 'すばらしいコントでした！\nあなたの担当マネージャーを紹介しますね。');
-    await welcomeCutscene(g);
-  } else if (!ok) {
+    if (!g.flag('grape_welcomed')) {
+      await say(g, 'chief', 'すばらしいコントでした！\nあなたの担当マネージャーを紹介しますね。');
+      await welcomeCutscene(g);
+      await managerMenu(g, FIRST_GREET);
+    } else {
+      await say(g, 'chief', ['おかえりなさい、{name}さん！', 'マネージャーの紫藤も、きっと大喜びですよ。\nまたよろしくお願いしますね。']);
+    }
+  } else if (why === 'failed') {
     await say(g, 'chief', '惜しかったですね。\nレッスンを受けて、また来てください。');
+  } else if (why === 'nostamina') {
+    await say(g, 'chief', '今日はしっかり休んで、\n万全の状態でまた来てくださいね。');
+  } else if (why === 'declined' || why === 'transferDeclined') {
+    await say(g, 'chief', 'わかりました。\n気が変わったら、いつでもどうぞ。');
   }
 }
 
@@ -943,7 +977,7 @@ async function talkWakate(g) {
 async function scheduleBoard(g) {
   const lines = ['ホワイトボードに予定がびっしり書かれている。', '「月例コントライブ」「若手ネタ見せ会」\n「地方営業（各地）」「全国ツアー打ち合わせ」…'];
   if (isMember(g)) lines.push(g.flag('grape_solo_done') ? `すみっこに「祝！${g.state.name} 単独ライブ大成功」と書いてある。` : `すみっこに「${g.state.name}、ファイト！」と書いてある。うれしい！`);
-  else lines.push('「新人オーディション 随時開催中！」の文字も見える。');
+  else lines.push('「新人オーディション 随時開催中！」\nという文字も見える。');
   await g.say(lines);
 }
 
@@ -952,9 +986,9 @@ async function rehearsal(g) {
   const i = await ask(g, 'kakuta', ['おれたち、コンビ「まるかく」です！', '新ネタのコント、見ていきます？'], ['見学する', 'やめておく']);
   if (i !== 0) { await say(g, 'kakuta', 'また見に来てくださいね！'); return; }
   await g.fadeOut();
-  setPos(g, 'player', 3, 7, 'up');
-  setPos(g, 'maruo', 3, 3, 'down');
-  setPos(g, 'kakuta', 5, 6, 'up');
+  g.placePlayer(3, 7, 'up');
+  g.placeNpc('maruo', 3, 3, 'down');
+  g.placeNpc('kakuta', 5, 6, 'up');
   await g.fadeIn();
   await say(g, 'kakuta', 'コント「ドットマートの新人」。\nよーい…はい！');
   g.sfx('snare');
@@ -979,8 +1013,8 @@ async function rehearsal(g) {
   await Promise.all([g.emote('maruo', 'w'), g.emote('kakuta', 'w')]);
   await g.say('ふたり「どうも、ありがとうございました！」');
   g.sfx('applause');
-  await g.emote('fusano', '♪');
-  await say(g, 'fusano', 'うん、テンポはいい！\nツッコミは、もう半拍はやく入ってみよう。');
+  await g.emote('fujidana', '♪');
+  await say(g, 'fujidana', 'うん、テンポはいい！\nツッコミは、もう半拍はやく入ってみよう。');
   if (!today(g, 'grape_watch_day')) {
     g.setFlag('grape_watch_day', g.state.day);
     g.addSkill('warai', 1, true);
@@ -1014,7 +1048,7 @@ async function lessonMenu(g, who, def, adv) {
 const ENGI_LESSON = {
   title: 'コント演技レッスン', skill: 'engi', price: 3000, stamina: 12, gain: 4,
   minigame: 'command', opts: { theme: 'acting', difficulty: 1 },
-  intro: ['コント作家の房野です。', 'コントは「なりきる」ことが大事。\n動きのテンポを体にしみこませよう！'],
+  intro: ['コント作家の藤棚です。', 'コントは「なりきる」ことが大事。\n動きのテンポを体にしみこませよう！'],
   after: 'いいね、役が生きてきた！\n次のコント番組、楽しみにしてるよ。',
   afterNew: 'いいね、役が生きてきた！\nその調子でオーディションも突破だ！',
 };
@@ -1031,13 +1065,13 @@ const WARAI_ADV = { title: '漫才 上級', price: 7000, stamina: 15, gain: 6, o
 async function talkKodougu(g) {
   if (!g.flag('grape_kodougu_gift')) {
     g.setFlag('grape_kodougu_gift');
-    await say(g, 'kodougu', ['小道具の管理をしてます！', 'ピコピコハンマーに、カツラに、つけヒゲ…\nコントは小道具で笑いが変わるんですよ。', 'あ、そうだ。余ってる台本、あげます！\n読んでおくと演技のヒントになりますよ。']);
+    await say(g, 'kodougu', ['小道具の管理をしてます！', 'おもちゃのハンマーに、カツラに、つけヒゲ…\nコントは小道具で笑いが変わるんですよ。', 'あ、そうだ。余ってる台本、あげます！\n読んでおくと演技のヒントになりますよ。']);
     g.giveItem('daihon');
     return;
   }
   await say(g, 'kodougu', pick([
-    ['このカツラ、何十回もコントに出てるベテランなんです。', '…カツラなのに、すっかり貫禄が出てきました。'],
-    ['ピコピコハンマーは、音が命！', 'いい音が鳴るやつだけを選んでるんです。'],
+    ['このカツラ、何十回もコントに出てる\nベテランなんです。', '…カツラなのに、すっかり貫禄が出てきました。'],
+    ['ツッコミ用のハンマーは、音が命！', 'いい音が鳴るやつだけを選んでるんです。'],
   ]));
 }
 
@@ -1156,7 +1190,7 @@ registerPlace({
         { x: 14, y: 2, room: 'keiko', tx: 8, ty: 11, dir: 'up' },
       ],
       entities: [
-        { type: 'logo', x: 8, y: 1, w: 2, h: 2, logo: 'grape' },
+        { type: 'logo', x: 8, y: 1, w: 2, h: 2, logo: 'grape' }, // behind the reception: decoration only
         {
           type: 'prop', x: 14, y: 1, w: 1, h: 1,
           draw(ctx, sx, sy) {
@@ -1236,7 +1270,7 @@ registerPlace({
       entities: [
         npc('maruo', 3, 3, 'down', { talk: rehearsal }),
         npc('kakuta', 5, 6, 'up', { talk: rehearsal }),
-        npc('fusano', 10, 4, 'down', { talk: (g) => lessonMenu(g, 'fusano', ENGI_LESSON, ENGI_ADV) }),
+        npc('fujidana', 10, 4, 'down', { talk: (g) => lessonMenu(g, 'fujidana', ENGI_LESSON, ENGI_ADV) }),
         npc('tsubuta', 14, 4, 'down', { talk: (g) => lessonMenu(g, 'tsubuta', WARAI_LESSON, WARAI_ADV) }),
         npc('kodougu', 15, 9, 'right', { talk: talkKodougu }),
         npc('mirror', 12, 3, 'up', { talk: talkMirror }),
@@ -1245,7 +1279,7 @@ registerPlace({
         { x: 8, y: 2, on: 'action', run: (g) => g.say(['ホワイトボードに、ネタのメモが書いてある。', '「フリは丁寧に」「ツッコミは食い気味に」\n「最後まで役を生きる！」']) },
         { x: 1, y: 2, w: 6, h: 1, on: 'action', run: (g) => g.say('コント用のセットだ。\nコンビニの店内が、ベニヤ板に描かれている。') },
         { x: 9, y: 2, w: 7, h: 1, on: 'action', run: (g) => g.say('大きな鏡だ。\n自分の動きをチェックしながら稽古できる。') },
-        { x: 16, y: 8, w: 1, h: 2, on: 'action', run: (g) => g.say('小道具の箱だ。ピコピコハンマーやカツラが\nはみ出している。') },
+        { x: 16, y: 8, w: 1, h: 2, on: 'action', run: (g) => g.say('小道具の箱だ。おもちゃのハンマーやカツラが\nはみ出している。') },
         { x: 12, y: 10, on: 'action', run: (g) => g.say('小道具の台だ。帽子やカツラ、\n鼻メガネまで並んでいる。') },
         { x: 1, y: 9, w: 3, h: 1, on: 'action', run: (g) => g.say('長イスだ。ここで出番を待ちながら\nネタを確認するらしい。') },
         { x: 2, y: 4, w: 2, h: 1, on: 'action', run: (g) => g.say('コンビニのレジ…に見える、段ボール製の小道具だ。\nよく見ると、ボタンが手描きだ。') },

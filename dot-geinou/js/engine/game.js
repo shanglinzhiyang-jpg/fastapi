@@ -349,7 +349,8 @@ export class Game {
     audio.bgm(room.bgm || place.bgm || (place.kind === 'town' ? 'town' : 'office'));
     if (changedPlace && place.name) this.showBanner(place.name);
     if (fade) await this.fadeIn();
-    if (room.onEnter) await room.onEnter(this);
+    // outside a script (new game / continue / test start) run it as one so the player cannot move meanwhile
+    if (room.onEnter) await (this.busy > 0 ? room.onEnter(this) : this.run(room.onEnter));
   }
 
   enterPlace(placeId) {
@@ -648,7 +649,13 @@ export class Game {
         t: 0,
         update(gg) {
           scene.t++;
-          if (gg.auto || (scene.t > 60 * 20 && gg.input.pressed('a'))) { gg.pop(scene); resolve(); }
+          if (gg.auto || (scene.t > 60 * 20 && gg.input.pressed('a'))) {
+            // cut to black, then fade back into whatever is underneath
+            gg.fade = 1;
+            gg.pop(scene);
+            gg.fadeIn(30);
+            resolve();
+          }
         },
         draw(ctx) {
           ctx.fillStyle = '#0b0d1a';

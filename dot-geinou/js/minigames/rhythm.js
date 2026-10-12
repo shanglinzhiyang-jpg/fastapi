@@ -17,10 +17,11 @@
 // headless test bots are deterministic; the music is scheduled ahead on the
 // WebAudio clock and re-synced to the frame clock when they drift.
 //
-// Scoring: PERFECT 1 / GREAT 0.8 / GOOD 0.5 / MISS 0 per note, minus 0.3 per
-// stray press (a lane pressed with no note nearby; 0.45 with a single lane, whose
-// charts always keep a rest per bar).  score = 100 * total / notes.
-// Doing nothing scores 0; mashing is eaten by the stray penalty.
+// Scoring: PERFECT 1 / GREAT 0.8 / GOOD 0.5 / MISS 0 per note, minus a stray
+// penalty per press with no note nearby (0.5 / 0.45 / 0.35 for 1 / 2 / 4 lanes;
+// one-lane charts keep one or two rests per bar).  score = 100 * total / notes.
+// A stray also breaks the combo. Taps during the count-in are free.
+// Doing nothing scores 0; mashing or blind beat-tapping is eaten by the penalty.
 
 import { Minigame, registerMinigame, text, rect, sparkle } from '../engine/minigame.js';
 import { measure } from '../engine/draw.js';
@@ -60,7 +61,7 @@ export const RHYTHM_CONTENT = { SONG_POOL };
 const INTRO = 4; // count-in beats before the first note
 const JUDGE_OFFSET = 0.008; // input is read on the next 60fps step: compensate ~half a frame
 const VALUES = { perfect: 1, great: 0.8, good: 0.5, miss: 0 };
-const STRAY = 0.3; // per stray press (0.45 with a single lane, where timing is the whole game)
+const STRAY = { 1: 0.5, 2: 0.45, 4: 0.35 }; // per stray press, by lane count
 const WIN = {
   perfect: [0.065, 0.058, 0.052, 0.047, 0.043],
   great: [0.115, 0.105, 0.095, 0.087, 0.08],
@@ -342,7 +343,8 @@ class Rhythm extends Minigame {
     if (!o.howto) {
       const howto = [...HOWTO_LINE[this.lanes]];
       howto.push(this.doubles ? '金色のバーが来たら Aも押そう！' : 'ぴったり合うほど高得点！');
-      howto.push(`♪ 曲：「${this.songName}」`);
+      const short = [...this.songName].length > 15 ? [...this.songName].slice(0, 14).join('') + '…' : this.songName;
+      howto.push(`♪ 曲：「${short}」`);
       this.opts = { ...o, howto };
     }
   }
@@ -408,14 +410,19 @@ class Rhythm extends Minigame {
     const lanes = this.lanes;
     const bars = this.length / 4;
     const pOn = P_ON[d - 1];
-    const pOff = P_OFF[d - 1] * (lanes === 1 ? 0.85 : 1);
+    // one button only: more off-beat 8ths so the chart isn't just "tap every beat"
+    const pOff = lanes === 1 ? Math.max(0.3, P_OFF[d - 1]) : P_OFF[d - 1];
     const offOk = (s, i) => pOff > 0 && (d >= 4 || s[i - 1]) && !(d <= 2 && i === 7);
     const makeBar = () => {
       const s = new Array(8).fill(false);
       s[0] = true;
       for (const i of [2, 4, 6]) s[i] = rng() < pOn;
-      // one button only: keep a rest in every bar so tapping along blindly to the beat doesn't work
-      if (lanes === 1 && s[2] && s[4] && s[6]) s[[2, 4, 6][Math.floor(rng() * 3)]] = false;
+      // one button only: keep one or two rests in every bar so tapping along blindly to the beat doesn't work
+      if (lanes === 1) {
+        if (s[2] && s[4] && s[6]) s[[2, 4, 6][Math.floor(rng() * 3)]] = false;
+        const on = [2, 4, 6].filter((i) => s[i]);
+        if (on.length === 2 && rng() < 0.35) s[on[Math.floor(rng() * 2)]] = false;
+      }
       for (const i of [1, 3, 5, 7]) if (offOk(s, i) && rng() < pOff) s[i] = true;
       if (s.filter(Boolean).length < 2) s[4] = true;
       return s;
@@ -669,19 +676,25 @@ class Rhythm extends Minigame {
     const t = now - JUDGE_OFFSET;
     const li = k === 'a' && this.lanes > 1 ? this.lanes : this.keys.indexOf(k);
     this.beam[li] = 10;
+    // judge the nearest unjudged note of this key inside the GOOD window
     let hit = null;
+    let best = Infinity;
     for (const n of this.notes) {
       if (n.time - t > this.win.good) break;
       if (n.res || n.key !== k) continue;
-      if (Math.abs(t - n.time) <= this.win.good) { hit = n; break; }
+      const a = Math.abs(t - n.time);
+      if (a <= this.win.good && a < best) { hit = n; best = a; }
     }
     if (this.style === 'dance') {
       if (k === 'a') this.jumpT = 8;
       else { this.face = k; this.faceT = 14; }
     }
     if (!hit) {
-      this.penalty += this.lanes === 1 ? 0.45 : STRAY;
+      // tapping along with the count-in sticks is fine
+      if (t < this.notes[0].time - this.win.good - 0.15) return;
+      this.penalty += STRAY[this.lanes];
       this.strays++;
+      this.combo = 0;
       this.strayT[li] = 8;
       this.blip(240, 0.04, 0.025);
       return;
@@ -728,8 +741,8 @@ class Rhythm extends Minigame {
   finale(now) {
     this.finished = true;
     this.finT = now;
-    const full = this.counts.miss === 0;
-    const allPerfect = full && this.counts.perfect === this.notes.length;
+    const full = this.fullCombo();
+    const allPerfect = this.allPerfect();
     this.popup(allPerfect ? 'オールパーフェクト！' : full ? 'フルコンボ！' : 'フィニッシュ！', W / 2, 92, full ? '#ffd23f' : '#ffffff', 16);
     if (audio.ctx && !audio.muted) audio.sfx('applause');
     this.cheer(18, 1.0);
@@ -741,11 +754,20 @@ class Rhythm extends Minigame {
     }
   }
 
+  // no misses and no stray presses from the first note to the last
+  fullCombo() {
+    return this.counts.miss === 0 && this.maxCombo === this.notes.length;
+  }
+
+  allPerfect() {
+    return this.fullCombo() && this.counts.perfect === this.notes.length && this.strays === 0;
+  }
+
   comment() {
     const score = Math.round(this.liveScore());
     const word = this.style === 'dance' ? 'ダンス' : '歌声';
-    const full = this.counts.miss === 0;
-    if (full && this.counts.perfect === this.notes.length) return 'オールパーフェクト！伝説のステージだ！';
+    const full = this.fullCombo();
+    if (this.allPerfect()) return 'オールパーフェクト！伝説のステージだ！';
     if (full && score >= 75) return 'フルコンボ！会場が総立ちになった！';
     if (score >= 90) return `最高の${word}！アンコールが鳴りやまない！`;
     if (score >= 75) return 'ノリノリのステージ！お客さんも大満足！';
@@ -775,7 +797,9 @@ class Rhythm extends Minigame {
     this.drawLed(ctx, now, frame, pulse);
     this.drawLights(ctx, now, frame, pulse, beat);
     this.drawSpeaker(ctx, 6, 140, 28, 57, pulse, 2);
-    this.drawSpeaker(ctx, 294, 116, 24, 81, pulse, 3);
+    // with gold A bars the right-hand A tab needs room: use a slim column speaker
+    if (this.doubles) this.drawSpeaker(ctx, 307, 116, 12, 81, pulse, 4);
+    else this.drawSpeaker(ctx, 294, 116, 24, 81, pulse, 3);
     this.drawPerformer(ctx, now, pulse);
     for (const p of this.parts) {
       ctx.globalAlpha = clamp(1.4 - p.t / p.life, 0, 1);
@@ -1114,7 +1138,7 @@ class Rhythm extends Minigame {
     let name = `♪ ${this.songName}`;
     while (measure(ctx, name, 10) > 196 && name.length > 3) name = name.slice(0, -2) + '…';
     text(ctx, name, 4, 2, { size: 10, color: '#ffd23f' });
-    text(ctx, `スコア ${Math.floor(this.liveScore())}`, W - 4, 2, { size: 10, align: 'right' });
+    text(ctx, `スコア ${Math.round(this.liveScore())}`, W - 4, 2, { size: 10, align: 'right' });
     rect(ctx, 0, BAND_Y, W, H - BAND_Y, '#07050f');
     rect(ctx, 0, BAND_Y, W, 1, 'rgba(255,255,255,0.15)');
     const band = this.finished ? 'おつかれさま！ 大歓声だ！' : this.doubles ? `${this.lanes === 2 ? '← →' : '← ↓ ↑ →'} で演奏！ 金のバーは A！` : BAND_TEXT[this.lanes];
