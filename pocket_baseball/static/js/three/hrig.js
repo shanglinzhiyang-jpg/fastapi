@@ -90,6 +90,37 @@
   const _mi = new T.Matrix4();
   const _wf = new T.Vector3();
   const _cf = new T.Vector3();
+  // 握りの補正・地面の高さ・ポケットで使う作業用
+  const _gg = [0, 0, 0];
+  const _gt = [0, 0, 0];
+  const _gL = [0, 0, 0];
+  const _gR = [0, 0, 0];
+  const _sB = new T.Vector3();
+  const _sT = new T.Vector3();
+  const _mr = new T.Matrix4();
+  const _pk = new T.Vector3();
+  const NO_PLANT = { slide: 1, dive: 1, jump: 1 };
+  // 握りの補正: 手首が肩からこれより遠いときはバットごと肩の方へ寄せる (腕の長さ 0.537 m より少し短く)
+  const GRIP_MAX = 0.53;
+  // 点 v (キャラクター空間の配列) を肩 s から max 以内へ。動かした量を返す (動かさなければ 0)
+  function clampTo(v, s, max) {
+    const dx = v[0] - s.x;
+    const dy = v[1] - s.y;
+    const dz = v[2] - s.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d <= max) return 0;
+    const k = max / d;
+    v[0] = s.x + dx * k;
+    v[1] = s.y + dy * k;
+    v[2] = s.z + dz * k;
+    return d - max;
+  }
+  // グラブのポケット (標準の手の空間: 指 −Y・手のひら −X (左) / +X (右)): 手首から指に沿って 8.5 cm、手のひらから 3 cm
+  const POCKET = { l: null, r: null };
+  function pocketOff(s) {
+    if (!POCKET[s]) POCKET[s] = new T.Vector3(s === "l" ? -0.03 : 0.03, -0.085, 0).applyQuaternion(RIG["hand_" + s].clone().invert());
+    return POCKET[s];
+  }
 
   class HRig {
     constructor(player) {
@@ -115,6 +146,45 @@
       this.lk = { pos: new T.Vector3(), has: false, w: 0, y: 0, p: 0 };
       this.lf = { t: rnd() * 20, bf: 0.22 + rnd() * 0.08, ph: rnd() * 6.28, idle: 0, gy: 0, gp: 0, gT: 1 + rnd() * 3 };
       this.lifeOn = true;
+      // 地面の高さ (ワールド x, z → ワールドの高さ。null で平ら)。マウンドの上の投手など
+      this.ground = null;
+      // 握りの補正量 (m、点検用): バットを肩の方へ寄せた距離
+      this.gripFix = 0;
+    }
+    // 体の向きの基準を deg (度) 回す: 呼ぶ側はグループの向きを +deg 回し、ポーズの yaw を −deg で表す。
+    // ばねの状態も同じだけ回すので、ワールドでの向きは途切れない (足の固定はワールドなのでそのまま)
+    rebaseYaw(deg) {
+      if (!deg) return;
+      const S = this.sp;
+      if (S) {
+        S.x[3] -= deg;
+        S.tp[3] -= deg;
+      }
+      // 呼ぶ側のポーズ (クリップのキーなど) を書き換えないよう写しにする
+      if (this.cur !== this._out) this.cur = A.copyPose(this.cur);
+      this.cur.yaw -= deg;
+    }
+    // 地面の高さ: fn(wx, wz) = その点の地面のワールドの高さ。足首の目標 (と固定した足) をその高さに合わせる
+    setGround(fn) {
+      this.ground = typeof fn === "function" ? fn : null;
+    }
+    // グラブのポケット (手首 + 指 8.5 cm + 手のひら 3 cm) のワールド座標。side: 'L' | 'R' | 'glove' | 'throw'
+    pocket(side, out) {
+      const o = out || new T.Vector3();
+      let s = String(side || "glove");
+      if (s === "glove" || s === "throw") {
+        const gh = this.player.opts.throws === "L" ? "r" : "l";
+        s = s === "glove" ? gh : gh === "l" ? "r" : "l";
+      } else s = s.toLowerCase();
+      const hb = this.b["hand_" + s];
+      hb.updateWorldMatrix(true, false);
+      return o.copy(pocketOff(s)).applyMatrix4(hb.matrixWorld);
+    }
+    // 同じ点を体 (Root) の空間で (ポーズの座標と同じ)
+    pocketLocal(side, out) {
+      const o = this.pocket(side, out);
+      this.b.Root.updateWorldMatrix(true, false);
+      return o.applyMatrix4(_mr.copy(this.b.Root.matrixWorld).invert());
     }
     // 視線の目標 (ワールド座標, null で無し)、重み (0..1)、待機中の動きを付けるか (低画質では切る)
     setLook(pos, w, life) {

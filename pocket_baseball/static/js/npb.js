@@ -247,8 +247,8 @@
       under: "#1a4fa0",
       socks: "#1a4fa0",
       belt: "#1a4fa0",
-      capStyle: { crown: "#1a4fa0", brim: "#1a4fa0", button: "#1a4fa0", markText: "L", markColor: "#ffffff", markFont: "Yellowtail" },
-      helmet: { color: "#1a4fa0", markText: "L", markColor: "#ffffff", markFont: "Yellowtail" },
+      capStyle: { crown: "#2c84c6", brim: "#2c84c6", button: "#2c84c6", markText: "L", markColor: "#ffffff", markFont: "Yellowtail" },
+      helmet: { color: "#2c84c6", markText: "L", markColor: "#ffffff", markFont: "Yellowtail" },
       flag: { bg: ["#1a4fa0", "#ffffff"], logo: "img/teams/l.webp" },
     },
     {
@@ -318,7 +318,8 @@
       stadium: "大阪ドーム",
       park: { dome: true, turf: "turf", seat: "#c8102e", wall: "#0b2a5b", roof: "#e8e7e2" },
       sponsors: ["近畿日本鉄道", "近鉄百貨店", "コカ・コーラ", "サントリー", "関西テレビ", "スポーツニッポン", "大阪ガス", "関西電力", "ダイハツ", "日清食品"],
-      // 参考写真 (ローズ, 背中): 白地、背ネームと番号は濃い色。胸の "Buffaloes" (赤の筆記体に紺の縁、下に飾り線) と帽子のマークは記憶 (?)
+      // 2004 年の近鉄の写真はない。以前ここに挙げた参考写真 (ローズ, 背中 = 0ff8b2a2) は 2007〜09 年のオリックス・バファローズのものだった
+      // (ローズは 2004 年は巨人)。胸の "Buffaloes" (赤の筆記体に紺の縁、下に飾り線) と帽子のマークも含め、全体が記憶による (?)
       home: { jersey: "#f6f5f0", piping: ["#c8102e", "#0b2a5b"], pipingMm: 4, sleeveTrim: ["#c8102e", "#0b2a5b"], wordText: "Buffaloes", wordFont: "Yellowtail", wordStyle: "script", wordCm: 9, wordWidthCm: 32, wordColor: "#c8102e", wordOutline: "#0b2a5b", wordSwash: true, number: "#c8102e", numberOutline: "#0b2a5b", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#c8102e", "#0b2a5b"] },
       away: { jersey: "#0b2a5b", piping: ["#c8102e"], sleeveTrim: ["#c8102e"], wordText: "KINTETSU", wordFont: "Graduate", wordStyle: "block", wordCm: 7, wordWidthCm: 33, wordColor: "#ffffff", wordOutline: "#c8102e", number: "#ffffff", numberOutline: "#c8102e", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c3c7ce", pantsPiping: ["#c8102e"] },
       under: "#0b2a5b",
@@ -344,7 +345,8 @@
       stadium: "Yahoo! BBスタジアム",
       park: { dome: false, turf: "mlb", seat: "#2b4f8a", wall: "#123a28", skyline: false, forest: true },
       sponsors: ["オリックス", "コカ・コーラ", "ニッセイ同和損保", "神戸新聞", "サンテレビ", "Yahoo! BB", "アシックス", "UCC", "モロゾフ", "神戸製鋼"],
-      // 参考写真なし: ベスト型 (紺の袖) と左胸の小さなマーク (img/words/bs.webp の出どころは未確認。2004 年は "BlueWave" の筆記体の可能性) (?)
+      // 参考写真なし。今のベスト型 (紺の袖) と左胸の小さな "Bs" のマーク (img/words/bs.webp)・右胸の番号は 2005 年からのオリックス・バファローズのもの
+      // (写真 ec102033・0ff8b2a2 = 2007〜09)。2004 年のブルーウェーブの姿は未確認なので、確認できるまでオリックスらしく見えるこのままにする (?)
       home: { jersey: "#f6f5f0", vest: "#0b2a5b", piping: ["#0b2a5b"], pipingMm: 4, word: "img/words/bs.webp", wordSmall: true, wordCm: 8, number: "#0b2a5b", numberFont: "Graduate", frontNumber: true, frontNumberSide: "left", backName: true, numberOutline: "#e6b422", pants: "#f6f5f0", pantsPiping: ["#0b2a5b"] },
       away: { jersey: "#7f9cc8", vest: "#0b2a5b", piping: ["#0b2a5b"], pipingMm: 4, wordText: "ORIX", wordFont: "Graduate", wordStyle: "block", wordCm: 7.5, wordWidthCm: 28, wordColor: "#0b2a5b", wordOutline: "#e6b422", number: "#0b2a5b", numberOutline: "#e6b422", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c6ccd6", pantsPiping: ["#0b2a5b"] },
       under: "#0b2a5b",

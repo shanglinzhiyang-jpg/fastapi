@@ -27,11 +27,14 @@
       armR: { t: [-0.25, 0.9, 0.02], p: [-0.6, 1.1, -0.6], h: [0, 0, 0] },
       legL: { t: [0.11, 0.06, 0.0], p: [0.15, 0.5, 1], f: [0, 0, 0] },
       legR: { t: [-0.11, 0.06, 0.0], p: [-0.15, 0.5, 1], f: [0, 0, 0] },
-      bat: { g: [-0.2, 1.4, -0.05], d: [-0.2, 0.9, -0.4], on: 0 },
+      // th: 上の手の位置 (握りからバットに沿った距離 m。バントは 0.36)
+      bat: { g: [-0.2, 1.4, -0.05], d: [-0.2, 0.9, -0.4], on: 0, th: 0.085 },
       // どこから来たポーズか (sample / run / batIdle が付ける)。リグのばねが「同じ動きの続き」かを見分ける
       src: 0, // クリップの番号 (0 = なし)
       st: 0, // そのクリップの時刻 (走りは位相)
       kind: "", // "swing" / "pitch" / "throw" / "run" / "idle"
+      name: "", // 登録したクリップの名前 (A.get のクリップを sample したとき)
+      flags: null, // クリップの印 (events) で決まる切り替え (A.sample が付ける。昔のクリップは null)
     };
   }
   A.basePose = basePose;
@@ -76,10 +79,12 @@
     arr(o.bat.g, a.bat.g, b.bat.g);
     arr(o.bat.d, a.bat.d, b.bat.d);
     o.bat.on = t < 0.5 ? a.bat.on : b.bat.on;
+    o.bat.th = L(a.bat.th == null ? 0.085 : a.bat.th, b.bat.th == null ? 0.085 : b.bat.th);
     // 2 つを混ぜたポーズはどのクリップの続きでもない (コピーは元の印を引き継ぐ)
     o.src = a === b ? a.src : 0;
     o.st = a.st;
     o.kind = a === b ? a.kind : "";
+    o.name = a === b ? a.name || "" : "";
     return o;
   }
   A.lerpPose = lerpPose;
@@ -87,8 +92,8 @@
 
   /* ---------- ポーズ ⇔ 数値の並び (スプライン・ばねで使う) ----------
    * 0-2 root, 3 yaw, 4 tilt, 5 roll, 6-20 hips/spine/chest/neck/head,
-   * 21-29 armL (t,p,h), 30-38 armR, 39-47 legL (t,p,f), 48-56 legR, 57-59 bat.g, 60-62 bat.d */
-  const NCH = 63;
+   * 21-29 armL (t,p,h), 30-38 armR, 39-47 legL (t,p,f), 48-56 legR, 57-59 bat.g, 60-62 bat.d, 63 bat.th */
+  const NCH = 64;
   A.NCH = NCH;
   const SLOTS = [
     ["root", null, 0],
@@ -127,6 +132,7 @@
     a[o + 3] = p.yaw;
     a[o + 4] = p.tilt;
     a[o + 5] = p.roll;
+    a[o + 63] = p.bat.th == null ? 0.085 : p.bat.th;
     return a;
   }
   function unflat(a, p) {
@@ -140,11 +146,12 @@
     p.yaw = a[3];
     p.tilt = a[4];
     p.roll = a[5];
+    p.bat.th = a[63];
     return p;
   }
   A.flat = flat;
   A.unflat = unflat;
-  // 並びの種類: 0 = 位置 (m), 1 = 角度 (度), 2 = バットの向き (単位ベクトル)
+  // 並びの種類: 0 = 位置 (m), 1 = 角度 (度), 2 = バットの向き (単位ベクトル)。63 (上の手の位置) は 0
   A.CH_KIND = (() => {
     const k = new Uint8Array(NCH);
     for (let c = 3; c < 21; c++) k[c] = 1;
@@ -167,10 +174,12 @@
     m.armR = { t: mx(p.armL.t), p: mx(p.armL.p), h: me(p.armL.h) };
     m.legL = { t: mx(p.legR.t), p: mx(p.legR.p), f: me(p.legR.f) };
     m.legR = { t: mx(p.legL.t), p: mx(p.legL.p), f: me(p.legL.f) };
-    m.bat = { g: mx(p.bat.g), d: mx(p.bat.d), on: p.bat.on };
+    m.bat = { g: mx(p.bat.g), d: mx(p.bat.d), on: p.bat.on, th: p.bat.th == null ? 0.085 : p.bat.th };
     m.src = p.src;
     m.st = p.st;
     m.kind = p.kind;
+    m.name = p.name || "";
+    m.flags = p.flags || null;
     return m;
   }
   A.mirror = mirror;
@@ -339,9 +348,49 @@
     o.src = S.id;
     o.st = t;
     o.kind = clip.kind || "";
+    // 新しい形のクリップ (印・切り替えあり): 切り替え (events) を時刻順に重ねて flags に書く
+    if (clip.marks || clip.events || clip.name) {
+      const F = o.flags || (o.flags = newFlags());
+      resetFlags(F, clip.init);
+      const ev = clip.events;
+      if (ev) {
+        for (let i = 0; i < ev.length && ev[i].t <= t + 1e-9; i++) {
+          setFlags(F, ev[i].set);
+          if (ev[i].spawn) F.spawn = ev[i].spawn;
+          F.fired.push(i);
+        }
+      }
+      if (F.batOn != null) o.bat.on = F.batOn ? 1 : 0;
+      if (F.kind) o.kind = F.kind;
+      o.name = clip.name || "";
+    } else {
+      o.name = "";
+      if (o.flags) o.flags = null;
+    }
     return o;
   }
   A.sample = sample;
+  // flags: batOn (null = キーのまま) / batOne (下の手だけで持つ) / ballHand ('glove'|'throw'|'none') / kind / spawn / fired (起きた events の番号)
+  // effort / smile / noBlink は表情用 (第 3 段以降で使う)
+  function newFlags() {
+    return { batOn: null, batOne: 0, ballHand: "none", kind: null, spawn: null, fired: [], effort: 0, smile: 0, noBlink: false };
+  }
+  function resetFlags(F, init) {
+    F.batOn = null;
+    F.batOne = 0;
+    F.ballHand = "none";
+    F.kind = null;
+    F.spawn = null;
+    F.fired.length = 0;
+    F.effort = 0;
+    F.smile = 0;
+    F.noBlink = false;
+    if (init) setFlags(F, init);
+  }
+  function setFlags(F, s) {
+    for (const k in s) F[k] = s[k];
+  }
+  A.newFlags = newFlags;
   A.clipLength = (clip) => clip[clip.length - 1].t;
 
   /* ---------- リグ (ポーズを骨に適用) ---------- */
@@ -943,6 +992,468 @@
     legL: { t: [0.36, 0.06, 0.02] },
     legR: { t: [-0.36, 0.06, 0.0] },
   });
+
+  /* ======================================================
+   *  第 2 段: 時刻合わせ・クリップの登録・重ね合わせ・作るための道具・走り v2
+   *  (ここまでの LIB / swingClip / pitchClip / throwClip / run / batIdle は今の試合用にそのまま残す)
+   * ====================================================== */
+  const clampV = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const smooth = (a, b, x) => {
+    const u = clampV((x - a) / (b - a), 0, 1);
+    return u * u * (3 - 2 * u);
+  };
+  const nowMs = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+  // 開発時 (Node の点検 / ?dev=1) だけクリップを作るたびに点検する
+  const DEV = typeof location === "undefined" || /[?&]dev=1/.test(String(location.search || ""));
+  A.DEV = DEV;
+
+  /* ---------- 時刻合わせ ----------
+   * syncs: [[印の名前 | クリップの時刻, 試合の時刻], ...] (試合の時刻の順)。now の時のクリップの時刻を返す。
+   * 最初の合わせ目より前と最後より後は実時間、合わせ目の間は直線で伸び縮みさせる */
+  const markT = (clip, m) => (typeof m === "number" ? m : clip.marks[m]);
+  A.timeAt = function (clip, syncs, now) {
+    const n = syncs.length;
+    if (now <= syncs[0][1]) return Math.max(0, markT(clip, syncs[0][0]) - (syncs[0][1] - now));
+    for (let i = 0; i < n - 1; i++) {
+      if (now <= syncs[i + 1][1]) {
+        const e0 = syncs[i][1];
+        const l0 = markT(clip, syncs[i][0]);
+        const l1 = markT(clip, syncs[i + 1][0]);
+        return l0 + ((l1 - l0) * (now - e0)) / Math.max(1e-4, syncs[i + 1][1] - e0);
+      }
+    }
+    return markT(clip, syncs[n - 1][0]) + (now - syncs[n - 1][1]);
+  };
+  // tTrig に始めたクリップの印 mark を tMark に合わせる。間に合うなら遅れて始め (伸び縮みなし)、
+  // 足りなければ印より前を縮める (印の直前 keepReal 秒は実時間のまま)。out を渡すと配列を使い回す
+  function putSync(r, i, a, b) {
+    const e = r[i] || (r[i] = [0, 0]);
+    e[0] = a;
+    e[1] = b;
+  }
+  A.syncFrom = function (clip, mark, tTrig, tMark, opt, out) {
+    const M = clip.marks[mark];
+    const avail = tMark - tTrig;
+    const keep = (opt && opt.keepReal) || 0;
+    const r = out || [];
+    if (avail >= M) {
+      putSync(r, 0, mark, tMark);
+      r.length = 1;
+    } else if (keep > 0 && keep < M && avail > keep + 0.05) {
+      putSync(r, 0, 0, tTrig);
+      putSync(r, 1, M - keep, tMark - keep);
+      putSync(r, 2, mark, tMark);
+      r.length = 3;
+    } else {
+      putSync(r, 0, 0, tTrig);
+      putSync(r, 1, mark, tMark);
+      r.length = 2;
+    }
+    return r;
+  };
+  // 役者ごとのクリップの時刻 (戻らない): 合わせ目が後から変わっても同じクリップのあいだは時刻を減らさない。
+  // mem = {clip, local}。syncs が無ければ now をそのままクリップの時刻にする
+  A.local = function (mem, clip, syncs, now) {
+    let t = syncs && syncs.length ? A.timeAt(clip, syncs, now) : now;
+    if (mem.clip !== clip) mem.clip = clip;
+    else if (t < mem.local) t = mem.local;
+    mem.local = t;
+    return t;
+  };
+
+  /* ---------- クリップの登録 ----------
+   * A.def(name, build(params) → clip, keyFn?) で作り方を登録し、A.get(name, params) で作る (最近使った 256 個を覚える)。
+   * 鍵は params を丸めた値 (長さ 0.05 m・角度 5°・比 0.1)。作るのも丸めた値で作るので、同じ鍵なら同じクリップになる。
+   * key を持つ値 (A.style の結果) は丸めずに key で見分ける */
+  const DEFS = {};
+  const CACHE = new Map();
+  A.CACHE_MAX = 256;
+  A.stats = { hit: 0, miss: 0, ms: 0, maxMs: 0 };
+  const QANG = /^(az|below|phi|yaw|deg|ang|open|batTilt|batAz|tilt|roll|turn)$/;
+  const QRATIO = /^(power|crouch|lift|pause|uppercut|waggle|w|k|early)$/;
+  function qv(k, v, parts) {
+    if (typeof v === "number") {
+      const q = QANG.test(k) ? 5 : QRATIO.test(k) ? 0.1 : 0.05;
+      const s = (Math.round(v / q) * q).toFixed(q < 0.1 ? 2 : q < 1 ? 1 : 0);
+      parts.push(s);
+      return +s;
+    }
+    if (Array.isArray(v)) return v.map((x) => qv(k, x, parts));
+    if (v && typeof v === "object") {
+      if (v.key) {
+        parts.push(v.key);
+        return v;
+      }
+      const o = {};
+      for (const kk of Object.keys(v).sort()) {
+        parts.push(kk);
+        o[kk] = qv(kk, v[kk], parts);
+      }
+      return o;
+    }
+    parts.push(String(v));
+    return v;
+  }
+  A.def = function (name, build, keyFn) {
+    DEFS[name] = { build, keyFn: keyFn || null };
+    return name;
+  };
+  A.defined = (name) => !!DEFS[name];
+  A.clipNames = () => Object.keys(DEFS);
+  A.get = function (name, params) {
+    const D = DEFS[name];
+    if (!D) throw new Error("A.get: unknown clip " + name);
+    let p = params || {};
+    let key;
+    if (D.keyFn) key = name + "|" + D.keyFn(p);
+    else {
+      const parts = [];
+      p = qv("", p, parts);
+      key = name + "|" + parts.join(",");
+    }
+    let c = CACHE.get(key);
+    if (c) {
+      CACHE.delete(key);
+      CACHE.set(key, c);
+      A.stats.hit++;
+      return c;
+    }
+    const t0 = nowMs();
+    c = D.build(p);
+    if (!c.name) c.name = name;
+    if (!c.marks) c.marks = {};
+    c.key = key;
+    const ms = nowMs() - t0;
+    A.stats.miss++;
+    A.stats.ms += ms;
+    if (ms > A.stats.maxMs) A.stats.maxMs = ms;
+    if (DEV) A.validate(c, true);
+    CACHE.set(key, c);
+    if (CACHE.size > A.CACHE_MAX) CACHE.delete(CACHE.keys().next().value);
+    return c;
+  };
+  A.clearCache = () => CACHE.clear();
+  A.cacheSize = () => CACHE.size;
+
+  // クリップの点検: 違うポーズのキーが 0.03 秒より近い (エルミートの接線が暴れる) / 印・切り替えの時刻が範囲外 → エラー。
+  // 手首・足首の角度が 1 つのキーで 180° を超えて変わる (手首が回って見える) → 注意
+  const _va = new Float64Array(NCH);
+  const _vb = new Float64Array(NCH);
+  const EUL = [
+    ["armL", "h"],
+    ["armR", "h"],
+    ["legL", "f"],
+    ["legR", "f"],
+  ];
+  A.validate = function (clip, strict) {
+    const errors = [];
+    const warns = [];
+    const n = clip.length;
+    const end = clip[n - 1].t;
+    for (let i = 1; i < n; i++) {
+      const dt = clip[i].t - clip[i - 1].t;
+      if (dt < 0) errors.push("keys " + (i - 1) + "/" + i + " out of order");
+      flat(clip[i - 1].pose, _va);
+      flat(clip[i].pose, _vb);
+      let diff = false;
+      for (let c = 0; c < NCH; c++) if (Math.abs(_va[c] - _vb[c]) > 1e-6) diff = true;
+      if (diff && dt < 0.03) errors.push("keys " + (i - 1) + "/" + i + " differ but are " + dt.toFixed(3) + " s apart");
+      for (const [s, k] of EUL) {
+        const a = clip[i - 1].pose[s][k];
+        const b = clip[i].pose[s][k];
+        for (let j = 0; j < 3; j++) if (Math.abs(b[j] - a[j]) > 180) warns.push(s + "." + k + "[" + j + "] jumps " + Math.round(b[j] - a[j]) + "° at key " + i);
+      }
+    }
+    const M = clip.marks || {};
+    for (const m in M) if (!(M[m] >= -1e-9 && M[m] <= end + 1e-9)) errors.push("mark " + m + "=" + M[m] + " outside [0," + end + "]");
+    for (const e of clip.events || []) if (!(e.t >= -1e-9 && e.t <= end + 1e-9)) errors.push("event at " + e.t + " outside [0," + end + "]");
+    if (strict && errors.length) throw new Error((clip.name || "clip") + ": " + errors.join("; "));
+    return { errors, warns };
+  };
+
+  // 左右反転したクリップ (覚えておく)。キーは A.mirror、印・切り替え・leadZ はそのまま、名前は name+"~m"
+  const MIRC = new WeakMap();
+  const mirTarget = (g) => Object.assign({}, g, { hand: g.hand === "L" ? "R" : g.hand === "R" ? "L" : g.hand, p: [-g.p[0], g.p[1], g.p[2]] });
+  A.mirrorClip = function (clip) {
+    let m = MIRC.get(clip);
+    if (m) return m;
+    m = clip.map((k) => ({ t: k.t, pose: mirror(k.pose), e: k.e, v: k.v }));
+    for (const f of ["kind", "marks", "events", "init", "mask"]) if (clip[f] !== undefined) m[f] = clip[f];
+    if (clip.leadZ) m.leadZ = clip.leadZ.map((r) => r.slice());
+    if (clip.anchor) m.anchor = [-clip.anchor[0], clip.anchor[1], clip.anchor[2]];
+    if (clip.target) m.target = mirTarget(clip.target);
+    if (clip.bag) m.bag = [-clip.bag[0], clip.bag[1], clip.bag[2]];
+    m.name = (clip.name || "") + "~m";
+    if (clip.key) m.key = clip.key + "~m";
+    m.mirrored = !clip.mirrored;
+    MIRC.set(clip, m);
+    MIRC.set(m, clip);
+    return m;
+  };
+
+  /* ---------- 重ね合わせ ----------
+   * MASK: 数値ごとの重み。upper = 背骨 (半分)・胸・首・頭・腕・バット、lower = 腰の位置・体の向き・腰・脚 (背骨は半分)
+   * A.layer(base, layer, mask, w, out): out = base + (layer − base)·w·mask (バットの向きは長さ 1 に直す)。
+   *   バット・印・ばねの続き (src) は重みの大きい方から
+   * A.addDelta(base, pose, ref, w, out, mask?): out = base + (pose − ref)·w (バットの向きは base のまま)。ガッツポーズ・首振りなど */
+  A.MASK = (() => {
+    const full = new Float32Array(NCH).fill(1);
+    const upper = new Float32Array(NCH);
+    for (let c = 9; c < 12; c++) upper[c] = 0.5;
+    for (let c = 12; c < 39; c++) upper[c] = 1;
+    for (let c = 57; c < NCH; c++) upper[c] = 1;
+    const lower = new Float32Array(NCH);
+    for (let c = 0; c < NCH; c++) lower[c] = 1 - upper[c];
+    return { full, upper, lower };
+  })();
+  const _la = new Float64Array(NCH);
+  const _lb = new Float64Array(NCH);
+  const _lc = new Float64Array(NCH);
+  function normBat(a) {
+    const n = Math.hypot(a[60], a[61], a[62]) || 1;
+    a[60] /= n;
+    a[61] /= n;
+    a[62] /= n;
+  }
+  function tagFrom(o, s) {
+    o.src = s.src;
+    o.st = s.st;
+    o.kind = s.kind;
+    o.name = s.name || "";
+    o.flags = s.flags || null;
+  }
+  A.layer = function (base, layer, mask, w, out) {
+    const o = out || basePose();
+    const M = typeof mask === "string" ? A.MASK[mask] : mask || A.MASK.full;
+    flat(base, _la);
+    flat(layer, _lb);
+    for (let c = 0; c < NCH; c++) _la[c] += (_lb[c] - _la[c]) * w * M[c];
+    normBat(_la);
+    const on = (w * M[57] >= 0.5 ? layer : base).bat.on;
+    const dom = w >= 0.5 ? layer : base;
+    unflat(_la, o);
+    o.bat.on = on;
+    tagFrom(o, dom);
+    return o;
+  };
+  A.addDelta = function (base, pose, ref, w, out, mask) {
+    const o = out || basePose();
+    const M = typeof mask === "string" ? A.MASK[mask] : mask || A.MASK.full;
+    flat(base, _la);
+    flat(pose, _lb);
+    flat(ref, _lc);
+    for (let c = 0; c < NCH; c++) if (c < 60 || c > 62) _la[c] += (_lb[c] - _lc[c]) * w * M[c];
+    const on = base.bat.on;
+    unflat(_la, o);
+    o.bat.on = on;
+    if (o !== base) tagFrom(o, base);
+    return o;
+  };
+
+  /* ---------- クリップを作るための道具 ----------
+   * A.M(base, over): base の写しに over を深く重ねる (Object.assign では腕・脚のまとまりごと置き換わってしまう)
+   * A.seq(base, steps): steps = [{t, over | abs, e, v, name, head:[方位, 下向き]}]。各キーは 1 つ前のキーに over を重ねる
+   * A.clip(kind, keys, marks, extra): クリップにする (events は時刻順に並べ、手首・足首の角度を前のキーに続ける) */
+  function deepMerge(dst, src) {
+    for (const k in src) {
+      if (src[k] && typeof src[k] === "object" && !Array.isArray(src[k])) {
+        if (!dst[k] || typeof dst[k] !== "object") dst[k] = {};
+        deepMerge(dst[k], src[k]);
+      } else dst[k] = Array.isArray(src[k]) ? src[k].slice() : src[k];
+    }
+  }
+  A.M = function (base, over) {
+    const b = A.copyPose(base);
+    if (over) deepMerge(b, over);
+    return b;
+  };
+  A.seq = function (base, steps) {
+    const keys = [];
+    let prev = base;
+    for (const s of steps) {
+      const pose = s.abs ? A.copyPose(s.abs) : A.M(prev, s.over);
+      if (s.head) headTo(pose, s.head[0], s.head[1]);
+      const k = { t: s.t, pose };
+      if (s.e) k.e = s.e;
+      if (s.v != null) k.v = s.v;
+      if (s.name) k.name = s.name;
+      keys.push(k);
+      prev = pose;
+    }
+    return keys;
+  };
+  // 角度の組 e を前の組 prev に近い表し方にする (180° を超えて離れる成分は ±360)
+  A.unwrap = function (prev, e) {
+    for (let j = 0; j < 3; j++) {
+      while (e[j] - prev[j] > 180) e[j] -= 360;
+      while (e[j] - prev[j] < -180) e[j] += 360;
+    }
+    return e;
+  };
+  A.clip = function (kind, keys, marks, extra) {
+    const c = keys.slice();
+    c.kind = kind;
+    c.marks = marks || {};
+    if (extra) Object.assign(c, extra);
+    if (c.events) c.events = c.events.slice().sort((a, b) => a.t - b.t);
+    for (let i = 1; i < c.length; i++) {
+      if (c[i].pose === c[i - 1].pose) continue;
+      for (const [s, k] of EUL) A.unwrap(c[i - 1].pose[s][k], c[i].pose[s][k]);
+    }
+    return c;
+  };
+  const nrm = (v) => {
+    const l = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / l, v[1] / l, v[2] / l];
+  };
+  A.nrm = nrm;
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  // 手の向き (armX.h): 指を f、手のひらを n の方へ (キャラクター空間)。標準の手は指 −Y・手のひら −X (左) / +X (右)・親指 +Z
+  A.handFrame = function (side, f, n) {
+    f = nrm(f);
+    n = nrm(n);
+    const d = f[0] * n[0] + f[1] * n[1] + f[2] * n[2];
+    n = nrm([n[0] - d * f[0], n[1] - d * f[1], n[2] - d * f[2]]);
+    const f0 = new T.Vector3(0, -1, 0);
+    const n0 = new T.Vector3(side === "L" ? -1 : 1, 0, 0);
+    const f1 = new T.Vector3(f[0], f[1], f[2]);
+    const n1 = new T.Vector3(n[0], n[1], n[2]);
+    const m0 = new T.Matrix4().makeBasis(f0, n0, new T.Vector3().crossVectors(f0, n0));
+    const m1 = new T.Matrix4().makeBasis(f1, n1, new T.Vector3().crossVectors(f1, n1));
+    const e = new T.Euler().setFromRotationMatrix(m1.multiply(m0.transpose()), "YXZ");
+    return [Math.round(e.x / D2R), Math.round(e.y / D2R), Math.round(e.z / D2R)];
+  };
+  // グラブのポケット (指に沿って 8.5 cm・手のひらから 3 cm) を ball に置く手首の目標
+  A.gloveWrist = function (ball, f, n) {
+    f = nrm(f);
+    n = nrm(n);
+    return [r3(ball[0] - 0.085 * f[0] - 0.03 * n[0]), r3(ball[1] - 0.085 * f[1] - 0.03 * n[1]), r3(ball[2] - 0.085 * f[2] - 0.03 * n[2])];
+  };
+  // バットの向き: below = 水平から下へ (度、+ でヘッドが下), az = +Z から +X への方位 (度)
+  A.batDir = function (below, az) {
+    const v = below * D2R;
+    const a = az * D2R;
+    return [r3(Math.cos(v) * Math.sin(a)), r3(-Math.sin(v)), r3(Math.cos(v) * Math.cos(a))];
+  };
+  // 握り (下の手) の位置: 握りから d に along 進んだ点が S に来る (芯 = 0.65, 先 = 0.805)
+  A.gripFor = function (S, d, along) {
+    d = nrm(d);
+    return [r3(S[0] - along * d[0]), r3(S[1] - along * d[1]), r3(S[2] - along * d[2])];
+  };
+  A.BAT_SWEET = 0.65;
+  A.BAT_TIP = 0.805;
+
+  /* ---------- 走り v2 (速さで歩幅・接地の割合・腕の振り・前傾が変わる) ----------
+   * A.runCycle(mem, v, dt, opt, out): mem = {ph, accT, yawPrev, yawRate, vs} は役者ごと、v = いまの速さ (m/秒)。
+   * 歩幅 (2 歩) L = 1.1 + 0.34v (1.6〜4.0 m)、接地の割合 0.44 − 0.02v (歩きは 0.6 で両足が着く時間がある)。
+   * 走り出し 1 秒は前傾を強く歩幅を狭く、曲がるときは内側へ傾く。opt = {arms:'run'|'trot'|'walk', strideMul, reset, yaw (ラジアン)} */
+  A.RUN_L = (v) => clampV(1.1 + 0.34 * v, 1.6, 4.0);
+  const RC0 = {};
+  function runFoot2(ph, D, S, z0, lift, pk, t, f) {
+    if (ph < D) {
+      // 接地: 体の下を後ろへ (地面では止まっている)。終わりにかかとが上がる
+      const u = ph / D;
+      t[2] = z0 - u * S;
+      t[1] = 0.06 + (Math.max(0, u - 0.55) / 0.45) * (lift - 0.06);
+      f[0] = -6 + u * u * 40;
+    } else {
+      // 振り出し: かかとを引き上げて前へ、着地の前に下ろす
+      const u = (ph - D) / (1 - D);
+      const e = u * u * (3 - 2 * u);
+      t[2] = z0 - S + S * e;
+      t[1] = lift + (0.06 - lift) * u + pk * Math.sin(Math.PI * Math.pow(u, 0.75));
+      f[0] = 34 - 40 * e;
+    }
+  }
+  A.runCycle = function (mem, v, dt, opt, out) {
+    opt = opt || RC0;
+    dt = dt > 0 ? Math.min(dt, 0.1) : 0;
+    v = Math.max(0, v || 0);
+    if (mem.vs == null || opt.reset) {
+      if (mem.ph == null) mem.ph = 0;
+      mem.accT = 0;
+      mem.vs = v;
+      mem.yawPrev = null;
+      mem.yawRate = 0;
+    }
+    // 速さはなめらかに (0.1 秒)。止まりかけたら走り出しからやり直す
+    mem.vs += (v - mem.vs) * (1 - Math.exp(-dt / 0.1));
+    const vs = Math.max(0, mem.vs);
+    if (vs < 0.3) mem.accT = 0;
+    else mem.accT += dt;
+    // 向きの変わる速さ (度/秒) → 体を内側へ傾ける
+    if (opt.yaw != null) {
+      if (mem.yawPrev != null && dt > 0) {
+        const r = Math.atan2(Math.sin(opt.yaw - mem.yawPrev), Math.cos(opt.yaw - mem.yawPrev)) / dt / D2R;
+        mem.yawRate += (r - mem.yawRate) * (1 - Math.exp(-dt / 0.15));
+      }
+      mem.yawPrev = opt.yaw;
+    }
+    const k = clampV((vs - 1.5) / 7, 0, 1);
+    const kk = 0.4 + 0.6 * k;
+    const wk = 1 - smooth(1.8, 2.2, vs); // 歩き 1 → 走り 0
+    const acc = smooth(0, 0.9, mem.accT);
+    const accLean = 14 * (1 - smooth(0, 1.0, mem.accT)) * clampV((v - 2) / 3, 0, 1);
+    const L = A.RUN_L(vs) * (opt.strideMul || 1) * (0.65 + 0.35 * acc);
+    mem.ph += ((vs * dt) / L) * TAU;
+    const D = 0.6 * wk + clampV(0.44 - 0.02 * vs, 0.27, 0.42) * (1 - wk);
+    const S = D * L;
+    const z0 = S * (0.4 + 0.06 * wk);
+    const lift = 0.1 + 0.15 * k;
+    const pk = (0.12 + 0.26 * k) * (1 - 0.4 * wk);
+    const p = lerpPose(RUN_BASE, RUN_BASE, 0, out);
+    const ph = ((mem.ph / TAU) % 1 + 1) % 1;
+    runFoot2(ph, D, S, z0, lift, pk, p.legL.t, p.legL.f);
+    runFoot2((ph + 0.5) % 1, D, S, z0, lift, pk, p.legR.t, p.legR.f);
+    // a: 左脚が前で +1。腰は前の脚の側が前へ、肩は逆に回り、腕は脚と逆に振る
+    const a = Math.cos(TAU * (ph + 0.06));
+    // 上下動: 走りは接地の中ほどで低く、歩きは高い (1 周期に 2 回)
+    const bob = Math.cos(2 * TAU * (ph - D / 2)) * (1 - 2 * wk);
+    p.root[1] = -0.02 - 0.06 * k - (0.015 + 0.03 * k) * bob - 0.04 * (1 - acc) * clampV((v - 2) / 3, 0, 1);
+    p.roll = clampV(-0.12 * (mem.yawRate || 0), -12, 12);
+    p.hips[1] = -8 * kk * a;
+    p.spine[0] = 6 + 12 * k + accLean;
+    p.spine[1] = 4 * kk * a;
+    p.chest[0] = 4;
+    p.chest[1] = 8 * kk * a;
+    p.neck[1] = -2 * kk * a;
+    p.head[0] = -(4 + 12 * k + 0.8 * accLean);
+    p.head[1] = -2 * kk * a;
+    // 腕: 走りは肘を曲げて前後に、流し (トロット) は小さく低く、歩きは下ろして小さく
+    const arms = wk > 0.5 ? "walk" : opt.arms || "run";
+    let az = 0.12 + 0.22 * k;
+    let ay = 0.05 + 0.09 * k;
+    let hy = 1.0;
+    let hz = 0.06;
+    if (arms === "trot") {
+      az *= 0.7;
+      ay *= 0.7;
+      hy = 0.96;
+    } else if (arms === "walk") {
+      az = 0.1;
+      ay = 0.02;
+      hy = 0.88;
+      hz = 0.02;
+      p.armL.p[2] = p.armR.p[2] = -0.6;
+    }
+    const HL = p.armL.t;
+    const HR = p.armR.t;
+    HL[0] = 0.21;
+    HL[1] = hy - ay * a;
+    HL[2] = hz - az * a;
+    HR[0] = -0.21;
+    HR[1] = hy + ay * a;
+    HR[2] = hz + az * a;
+    p.src = -1;
+    p.st = mem.ph;
+    p.kind = "run";
+    p.name = "run.cycle";
+    if (p.flags) {
+      resetFlags(p.flags, null);
+      p.flags.kind = "run";
+    }
+    return p;
+  };
 
   PB.Anim = A;
 })((window.PB = window.PB || {}));

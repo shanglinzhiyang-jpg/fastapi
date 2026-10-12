@@ -360,8 +360,18 @@ let fullPen;
   const nGames = fullPen.schedule.reduce((a, d) => a + d.length, 0);
   // パの日程が終わったあと (セはまだ続く) のパの球団のハブ
   let afterP = false;
+  // ペナントレースの記事 (マジック・優勝・プレーオフ進出・可能性消滅) は、その日の終わりに作り直しても同じ
+  const RACE = /^(magic|clinch|po|out)$/;
+  let raceChecked = 0;
   while (!fullPen.finished) {
     playDays(H, fullPen, 1, true);
+    const d = fullPen.day - 1;
+    const want = JSON.stringify(fullPen.news.filter((n2) => n2.day === d && RACE.test(n2.kind)));
+    if (want !== "[]") {
+      const again = JSON.parse(gen(fullPen, clone(fullPen), d)).filter((n2) => RACE.test(n2.kind));
+      assert.strictEqual(JSON.stringify(again), want, Pen.dayLabel(fullPen, d) + " のペナントレースの記事が作り直すと変わる");
+      raceChecked++;
+    }
     if (!afterP && !fullPen.finished && Pen.standings(fullPen, "P").every((x) => x.rem === 0)) {
       afterP = true;
       const keep = fullPen.my;
@@ -409,15 +419,7 @@ let fullPen;
       );
     }
   assert.ok(/^\d+月\d+日\(.\)$/.test(Pen.dayLabel(fullPen, 0)), "日付の表示");
-  // ペナントレースの記事 (マジック・優勝・プレーオフ進出・可能性消滅) は同じ日を作り直しても同じ
-  const RACE = /^(magic|clinch|po|out)$/;
-  const raceDays = [...new Set(fullPen.news.filter((n2) => RACE.test(n2.kind)).map((n2) => n2.day))];
-  assert.ok(raceDays.length >= 3, "ペナントレースの記事が少ない");
-  for (const d of raceDays) {
-    const want = JSON.stringify(fullPen.news.filter((n2) => n2.day === d && RACE.test(n2.kind)));
-    const again = JSON.parse(gen(fullPen, clone(fullPen), d)).filter((n2) => RACE.test(n2.kind));
-    assert.strictEqual(JSON.stringify(again), want, Pen.dayLabel(fullPen, d) + " のペナントレースの記事が作り直すと変わる");
-  }
+  assert.ok(raceChecked >= 3, "ペナントレースの記事が少ない");
   assert.ok(
     fullPen.news.filter((n2) => n2.kind === "magic").every((n2) => /点灯|消滅/.test(n2.title)),
     "マジックの記事"
