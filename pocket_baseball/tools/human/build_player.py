@@ -1096,12 +1096,13 @@ def raycast(o, d):
     return o + d * tt[k], k
 
 
-def surface_line(pts, dirs, flip_side=None):
-    """pts を dirs の向きに体へ落とした線と、各点の UV・1 cm 横の UV の差"""
+def surface_line(pts, dirs, flip_side=None, near=None):
+    """pts を dirs の向きに体へ落とした線と、各点の UV・1 cm 横の UV の差。near: 落とした点が元の点からこれ以上離れたら捨てる
+    (袖口より先で腕の下の胴体に当たった点など)"""
     hits, tri_i = [], []
     for q, d in zip(pts, dirs):
         h, k = raycast(q - d * 0.3, d)
-        if h is not None:
+        if h is not None and (near is None or np.linalg.norm(h - q) < near):
             hits.append(h)
             tri_i.append(k)
     hits = np.array(hits)
@@ -1172,12 +1173,12 @@ for s_, sx in (("l", 1.0), ("r", -1.0)):
             d = np.array([0, -1.0, 0])
         else:
             k_ = (t_ - 0.35) / 0.65
-            q = A + ax * (0.72 * SLV_P[s_][5] * k_)
+            q = A + ax * (0.68 * SLV_P[s_][5] * k_)
             w = min(1.0, k_ * 3)
             d = -(np.array([0, 1.0, 0]) * (1 - w) + top * w)
             d /= np.linalg.norm(d)
         g.append((q, d))
-    ln = surface_line(np.array([q for q, _ in g]), np.array([d for _, d in g]))
+    ln = surface_line(np.array([q for q, _ in g]), np.array([d for _, d in g]), near=0.09)
     SHOULDER_LINE[s_] = line_uv(ln, s_, both=True)
 _sl = [r for r in SHOULDER_LINE["l"]]
 print("frontV", len(FRONT_V["l"]), FRONT_V["l"][0][:2], FRONT_V["l"][-1][:2], "shoulder line", len(_sl), "islands", sum(r[0] for r in _sl))

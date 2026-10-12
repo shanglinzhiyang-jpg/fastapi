@@ -537,7 +537,8 @@
     else head = res.winner === user ? "勝利！" : "敗戦…";
     const mvpSide = res.winner || "home";
     const mvp = Sc.mvp(g, mvpSide);
-    if (user && !res.tie) {
+    // 試合の終わりに球団の勝利の歌を流したときは、ここでは鳴らさない
+    if (user && !res.tie && !match.jingled) {
       if (res.winner === user) A.victory();
       else A.lose();
     }
@@ -567,7 +568,7 @@
           "</b>" +
           (S ? "　S <b>" + esc(S) + "</b>" : "") +
           "</p>" +
-          (mp ? '<div class="mvp' + (PB.Cards ? ' has-card"><div class="mvp-pc"></div>' : '"><canvas class="pc-face" width="72" height="72" data-face="' + esc(mp.id) + '"></canvas>') + '<div><span class="mvp-l">今日のヒーロー</span><b>' + esc(mp.full || mp.name) + "</b><small>" + esc(mline) + "</small></div></div>" : "") +
+          (mp ? '<div class="mvp res-in' + (PB.Cards ? ' has-card"><div class="mvp-pc"></div>' : '"><canvas class="pc-face" width="72" height="72" data-face="' + esc(mp.id) + '"></canvas>') + '<div><span class="mvp-l">今日のヒーロー</span><b>' + esc(mp.full || mp.name) + "</b><small>" + esc(mline) + "</small></div></div>" : "") +
           '<details class="box-det"><summary>スコアブック</summary>' +
           Sc.boxScoreHTML(g) +
           "</details>" +
@@ -833,6 +834,16 @@
             ],
             String(S.playSpeed)
           ) +
+          '<h3 class="lbl">演出（スタメン発表・選手の登場・ヒーローインタビューなど）</h3>' +
+          seg(
+            "enshutsu",
+            [
+              ["more", "多め"],
+              ["std", "標準"],
+              ["less", "少なめ"],
+            ],
+            S.enshutsu || "std"
+          ) +
           gfxBlock(S) +
           '<div class="tgs">' +
           tog("sound", "効果音") +
@@ -863,7 +874,7 @@
         if (act === "tog") {
           S[arg] = !S[arg];
           PB.main.applySettings();
-        } else if (["level", "swingMode", "assist"].indexOf(act) >= 0) S[act] = arg;
+        } else if (["level", "swingMode", "assist", "enshutsu"].indexOf(act) >= 0) S[act] = arg;
         else if (act === "playSpeed") S.playSpeed = Number(arg);
         else if (act === "gfx") {
           // 画質はすぐに反映する (タイトル画面の背景が切り替わる)

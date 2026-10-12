@@ -22,6 +22,7 @@
     playSpeed: 1,
     lefty: false,
     gfx: "auto", // 画質: auto | 2d | low | mid | high ("auto" は端末ごとに判定)
+    enshutsu: "std", // 試合の演出: more (多め) | std (標準) | less (少なめ)
   };
 
   function fresh() {

@@ -992,11 +992,27 @@
     lineupOut() {
       this.el.lu.classList.add("leave");
     }
+
+    // 3D の選手の絵を先に描いておく (攻守交代など、止まっている間に)
+    prefetch(p, team, o) {
+      const C = PB.Cards;
+      if (!C || !(PB.View3D && PB.View3D.active)) return;
+      const tt = teamOf(team);
+      const key = pkey(p, tt, o);
+      if (pcache.has(key)) return;
+      C.portraitOf(p, tt, o).then(
+        (im) => {
+          if (im) pcache.set(key, im);
+        },
+        () => {}
+      );
+    }
   }
 
   PB.TV = TV;
   PB.TV.fullName = fullName;
   PB.TV.POS_PA = POS_PA;
+  PB.TV.teamOf = teamOf;
   // 実況・解説の文を選ぶ (直近と同じ文は避ける)
   PB.TV.talk = (key, vars) => pick(PHR[key] || [key], vars);
   PB.TV.kai = (key, vars) => (KAI[key] ? pick(KAI[key], vars) : "");

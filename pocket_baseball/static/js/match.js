@@ -14,9 +14,28 @@
   const Talk = PB.Talk;
   const Cam = PB.R.Cam;
   const esc = U.esc;
+  const TV = () => PB.TV;
 
   const WINDUP = 1.0; // 投球モーション (秒)
   const RELEASE = 0.86; // モーション中のリリース位置
+  const BASE_JP = { 1: "一塁", 2: "二塁", 3: "三塁", 4: "本塁" };
+  // 演出の量 (設定「演出」。確認用に ?fx=more|std|less で上書きできる)
+  const FX_LV = { less: 0, std: 1, more: 2 };
+  function fxSetting(S) {
+    let q = null;
+    try {
+      const mm = /[?&]fx=(more|std|less)\b/.exec(window.location.search || "");
+      q = mm && mm[1];
+    } catch (e) {
+      q = null;
+    }
+    const v = FX_LV[q || S.enshutsu];
+    return v == null ? 1 : v;
+  }
+  function teamCols(t) {
+    const tt = PB.TV && PB.TV.teamOf ? PB.TV.teamOf(t) : t;
+    return [tt.main || "#d83a3a", tt.sub || "#ffe25c", "#ffffff"];
+  }
 
   class Match {
     /* opt: { game, mode:'game'|'derby'|'mini', onEnd(match), night, title,
@@ -41,6 +60,12 @@
       this.fx = [];
       this.walkAnim = 0;
       this.time = 0;
+      this.lvSet = fxSetting(this.S);
+      this.kLog = {}; // 投手ごとの今日の三振 ("S" 空振り / "L" 見逃し)
+      this.cardSeen = {}; // 打席に向かうカードを出した打者
+      this.lastPit = {}; // 側ごとに最後に紹介した投手 (交代のアナウンス用)
+      this.l7 = {};
+      this.cue = null;
       R.night = opt.night != null ? opt.night : this.S.night;
       R.bg = {};
       if (opt.season && !this.g.season) this.g.season = opt.season;
@@ -65,6 +90,50 @@
       this.t = 0;
       this.updateControls();
     }
+    // 演出の量: 0 少なめ / 1 標準 / 2 多め (サクセスの試合・ホームラン競争は少なめ、早送り中は標準まで)
+    fxLv() {
+      if (this.mode !== "game" || this.derby) return 0;
+      return this.speed > 1 ? Math.min(1, this.lvSet) : this.lvSet;
+    }
+    buzz(pattern) {
+      if (this.S.vibrate) A.vibe(pattern);
+    }
+    // 歓声を攻撃側・守備側の応援席の方から (ホームは一塁側 = 右)
+    roar(level, dur, side) {
+      A.roar(level, dur, side === "home" ? 0.3 : side === "away" ? -0.3 : 0);
+    }
+
+    /* ---------- 演出の段取り (cue): 時刻つきの段を順に実行し、終わったら end。タップで飛ばせる ---------- */
+    // c: { name, dur, steps: [[秒, fn], …], skip(), end(), cine: ゾーンなどを隠す }
+    runCue(c) {
+      c.t = 0;
+      c.i = 0;
+      this.cue = c;
+      this.enter("cue");
+    }
+    updateCue(dt) {
+      const c = this.cue;
+      if (!c) return;
+      c.t += dt;
+      while (c.steps && c.i < c.steps.length && c.steps[c.i][0] <= c.t) c.steps[c.i++][1]();
+      if (this.cue === c && c.t >= c.dur) this.endCue(false);
+    }
+    endCue(skip) {
+      const c = this.cue;
+      if (!c) return;
+      this.cue = null;
+      if (skip && c.skip) c.skip();
+      if (c.end) c.end();
+    }
+    runSeq(list, done) {
+      const next = () => {
+        const c = list.shift();
+        if (!c) return done();
+        c.end = next;
+        this.runCue(c);
+      };
+      next();
+    }
 
     say(text, cls) {
       const el = this.hud.querySelector(".talk");
@@ -75,6 +144,20 @@
         el.classList.remove("show");
       }, 2600);
       A.say(text.replace(/[！!？?]/g, "、"));
+    }
+    // 解説のひと言 (実況の下に小さく。標準では毎回は出さない)
+    kai(key, vars) {
+      const lv = this.fxLv();
+      if (lv < 1 || (lv < 2 && Math.random() < 0.45)) return;
+      const tx = TV().kai(key, vars);
+      const el = this.hud && this.hud.querySelector(".talk-sub");
+      if (!tx || !el) return;
+      clearTimeout(this.kaiTimer);
+      this.kaiTimer = setTimeout(() => {
+        el.innerHTML = "<span>解説</span>" + esc(tx);
+        el.className = "talk-sub show";
+        this.kaiTimer = setTimeout(() => el.classList.remove("show"), 2300);
+      }, 800);
     }
 
     banner(text, cls, ms) {
@@ -99,6 +182,7 @@
         this.tv.html() +
         '<button class="tv-pause" data-hud="pause" aria-label="タイム">タイム</button>' +
         '<div class="talk"></div>' +
+        '<div class="talk-sub"></div>' +
         '<div class="banner"></div>' +
         '<div class="ctrl"></div>';
       this.tv.mount(hud);
@@ -159,7 +243,7 @@
         } else {
           html = '<div class="row-r"><button class="cbtn sm" data-hud="speed">' + (this.speed > 1 ? "等速" : "早送り ≫") + "</button></div>";
         }
-      } else if (st === "paIntro" || st === "change" || st === "intro" || st === "tvscore") {
+      } else if (st === "paIntro" || st === "change" || st === "intro" || st === "tvscore" || st === "cue") {
         html = '<div class="row-r"><button class="cbtn sm" data-hud="next">次へ ▶</button></div>';
       }
       c.innerHTML = html;
@@ -201,7 +285,8 @@
           this.skipPlay = true;
           break;
         case "next":
-          this.t = 99;
+          if (st === "cue") this.endCue(true);
+          else this.t = 99;
           break;
         case "pause":
           this.pause();
@@ -235,6 +320,10 @@
       }
       if ((this.state === "change" || this.state === "paIntro" || this.state === "intro" || this.state === "tvscore") && this.t > 0.3) this.t = 99;
       if (this.state === "result" && this.t > 0.5) this.t = 99;
+      if (this.state === "cue" && this.cue && this.cue.t > 0.3) this.endCue(true);
+      // ホームランの帯が出たあとのダイヤモンド一周はタップで飛ばせる
+      const h = this.hrFx;
+      if (this.state === "inplay" && h && h.shown && this.play && this.play.t > h.at + 0.8) this.skipPlay = true;
     }
     pointerMove(e) {
       const d = this.drag;
@@ -250,7 +339,7 @@
           this.aim.z = U.clamp(this.aim.z - dy * k, 0.15, 1.4);
         }
       } else if (this.userBat()) {
-        if (this.state === "ready" || this.state === "windup" || this.state === "pitch" || this.state === "paIntro") {
+        if (this.state === "ready" || this.state === "windup" || this.state === "pitch" || this.state === "paIntro" || this.state === "cue") {
           this.cur.x = U.clamp(this.cur.x + dx * k, -0.5, 0.5);
           this.cur.z = U.clamp(this.cur.z - dy * k, 0.2, 1.35);
         }
@@ -270,10 +359,20 @@
       if (type === "walk") this.lastPAEv = { type: "BB" };
       if (type === "play") this.lastPAEv = { type: d.type, res: d };
       if (type === "pitcherChange") {
-        this.say("ピッチャー交代、" + d.p.name + "。");
-        if (this.tv && !this.derby) this.tv.pitcherIntro(d.p, d.side, "change");
+        // 前の投手の球速を新しい投手の 1 球目に出さない
+        this.lastPitch = null;
+        if (this.derby) return;
+        if (this.fxLv() >= 1) this.pendChange = Object.assign({ old: this.lastPit[d.side] }, d);
+        else {
+          this.say("ピッチャー交代、" + d.p.name + "。");
+          if (this.tv) this.tv.pitcherIntro(d.p, d.side, "change");
+        }
       }
-      if (type === "pinchHit") this.say("代打、" + this.g.P(d.id).name + "！");
+      if (type === "pinchHit") {
+        this.say("代打、" + this.g.P(d.id).name + "！");
+        // タイムで代打を出したときは、その打者の登場をやり直す
+        if (this.paused && this.fxLv() >= 1) this.pendPH = true;
+      }
     }
 
     startPA() {
@@ -294,23 +393,166 @@
         g.paBunt = !this.userBat() ? AI.wantBunt(g) : false;
       }
       this.updateHUD();
-      this.enter("paIntro");
       const bat = g.batter();
-      if (this.derby) this.banner('<small>ホームラン競争</small>' + esc(bat.name), "info", 1000);
-      else {
-        // 中継風: 先発投手の紹介 → 打者の紹介
-        this.tv.hide("tick");
-        const fs = g.fieldingSide();
-        if (this.mode === "game" && !this.tv.spShown[fs] && g.used[fs].length === 1) {
-          this.tv.spShown[fs] = true;
-          this.tv.pitcherIntro(g.pitcher(), fs, "start");
+      if (this.derby) {
+        this.enter("paIntro");
+        this.paIntroT = 1.1;
+        this.banner('<small>ホームラン競争</small>' + esc(bat.name), "info", 1000);
+        A.chant(false);
+        return;
+      }
+      this.tv.hide("tick");
+      this.chantOn();
+      const fs = g.fieldingSide();
+      const startSP = this.mode === "game" && !this.tv.spShown[fs] && g.used[fs].length === 1;
+      if (startSP) this.tv.spShown[fs] = true;
+      const chg = this.pendChange;
+      this.pendChange = null;
+      if (this.fxLv() === 0) {
+        // 少なめ: 打者の紹介だけ (先発投手はプレイボールのパネルで紹介済み)
+        this.enter("paIntro");
+        this.paIntroT = 1.1;
+        if (chg) {
+          this.say("ピッチャー交代、" + chg.p.name + "。");
+          this.tv.pitcherIntro(chg.p, chg.side, "change");
+          this.paIntroT = 2.8;
         }
         this.tv.batter();
+        return;
       }
-      A.chant(this.userBat() && !this.derby);
+      // 中継風: (先発・交代の) 投手の紹介 → 打者の登場
+      const walk = () => this.walkupCue();
+      if (chg) this.pitcherCue(chg.p, chg.side, "change", walk, chg.old);
+      else if (startSP) this.pitcherCue(g.pitcher(), fs, "start", walk);
+      else walk();
+    }
+
+    // 応援: 攻撃側の球団のリフ (相手側・観戦は小さく)。得点圏で終盤か接戦ならチャンステーマ
+    chantOn() {
+      const g = this.g;
+      const user = this.userBat();
+      if (this.derby || (!user && (this.fxLv() < 1 || this.mode !== "game"))) return A.chant(false);
+      const bs = g.battingSide();
+      const c = g.ctx(null);
+      const chance = c.risp && (g.inning >= 7 || Math.abs(g.leadOf(bs)) <= 2);
+      A.chant(true, { team: g.teams[bs].id, vol: user ? 1 : g.user ? 0.4 : 0.6, chance });
+    }
+
+    // 投手の紹介: 場内アナウンス + 下のテロップ + カード
+    pitcherCue(p, side, kind, then, oldId) {
+      const g = this.g;
+      const lv = this.fxLv();
+      const change = kind === "change";
+      const old = oldId && oldId !== p.id ? g.P(oldId) : null;
+      const txt = "ピッチャー " + (old ? old.name + "に代わりまして " : "") + p.name;
+      const bat = g.batter();
+      const side2 = P.batSide(bat, p) === "L" ? "l" : "r";
+      const first = !this.cardSeen[p.id];
+      this.cardSeen[p.id] = 1;
+      this.lastPit[side] = p.id;
+      const dur = (change ? 2.8 : 2.2) + (lv >= 2 ? 0.5 : 0);
+      this.runCue({
+        name: "pitcher",
+        dur,
+        steps: [
+          [
+            0,
+            () => {
+              A.pa(txt, true);
+              this.tv.pa(txt + (p.num != null ? "　背番号 " + p.num : ""), dur * 1000 + 300);
+              if (change) this.say(TV().talk("pchange", { p: p.name }));
+            },
+          ],
+          [0.25, () => this.tv.pitcherIntro(p, side, kind)],
+          [0.45, () => (first || lv >= 2) && this.tv.card(p, g.teams[side], { side: side2, home: side === "home", kind: "pit", tag: change ? "リリーフ" : "先発" })],
+        ],
+        skip: () => {
+          this.tv.hide("pa");
+          this.tv.hide("card");
+        },
+        end: then,
+      });
+    }
+
+    // 打者の登場: 場内アナウンス「1番 セカンド 仁志」+ 打者紹介 + (初打席・代打は) カード
+    walkupCue() {
+      const g = this.g;
+      const lv = this.fxLv();
+      const bs = g.battingSide();
+      const bat = g.batter();
+      const pit = g.pitcher();
+      const slot = (g.order[bs] || [])[g.bi[bs]];
+      const ph = !!(slot && slot.pos === "PH");
+      const pos = ph ? "PH" : g.batterPos();
+      const ord = g.bi[bs] + 1;
+      const first = !this.cardSeen[bat.id];
+      const showCard = lv >= 2 || first || ph;
+      this.cardSeen[bat.id] = 1;
+      this.lastPit[g.fieldingSide()] = pit.id;
+      const call = (ph ? "代打 " : ord + "番 " + (TV().POS_PA[pos] || "") + " ") + bat.name;
+      const dur = showCard ? (lv >= 2 ? 2.6 : 2.0) : lv >= 2 ? 1.8 : 1.3;
+      const side = P.batSide(bat, pit) === "L" ? "l" : "r";
+      this.runCue({
+        name: "walkup",
+        dur,
+        steps: [
+          [
+            0,
+            () => {
+              A.pa(call, ph);
+              this.tv.pa(call + (first && bat.num != null ? "　背番号 " + bat.num : ""), dur * 1000 + 700);
+            },
+          ],
+          [0.1, () => this.tv.batter()],
+          [0.2, () => this.chanceCheck(showCard)],
+          [0.3, () => showCard && this.tv.card(bat, g.teams[bs], { side, home: bs === "home", kind: "bat", tag: ph ? "代打" : ord + "番 " + (D.POS_JP[pos] || "") })],
+        ],
+        skip: () => {
+          this.tv.hide("pa");
+          this.tv.hide("card");
+        },
+        end: () => this.nextPitch(),
+      });
+    }
+
+    // 得点圏に走者が出たら「チャンス！」(その回で 1 度)
+    chanceCheck(cardShown) {
+      const g = this.g;
+      if (this.fxLv() < 1 || !g.ctx(null).risp) return;
+      const key = g.inning + (g.top ? "t" : "b");
+      if (this.chanceKey === key) return;
+      this.chanceKey = key;
+      const t = g.teams[g.battingSide()];
+      const col = teamCols(t)[0];
+      this.tv.later("chance", cardShown ? 1900 : 150, () => {
+        this.tv.call("チャンス！", "chance", { color: col, ms: 1300 });
+        this.kai("chance");
+      });
+    }
+
+    // CPU が投げるまでの間合い: 場面で散らす (勝負どころは長く。打者がユーザーなら 1.6 秒まで)
+    pitchDelay() {
+      const g = this.g;
+      const base = this.userBat() ? 0.9 : 0.6;
+      if (this.fxLv() < 1 || this.speed > 1) return base;
+      const c = g.ctx(null);
+      let d = base + Math.random() * 0.3;
+      if (c.runnersOn) d += 0.25;
+      if (c.clutchSpot || (g.inning >= 7 && c.risp && Math.abs(g.leadOf(g.battingSide())) <= 2)) d += 0.6;
+      if (g.balls === 3 && g.strikes === 2) d += 0.3;
+      if (g.balls === 0 && g.strikes === 0) d += 0.15;
+      return Math.min(this.userBat() ? 1.6 : 2.2, d);
     }
 
     nextPitch() {
+      // タイム中の投手交代は、次の投球の前に紹介する
+      if (this.pendChange && !this.derby) {
+        const d = this.pendChange;
+        this.pendChange = null;
+        this.pitcherCue(d.p, d.side, "change", () => this.nextPitch(), d.old);
+        return;
+      }
+      this.readyT = this.pitchDelay();
       this.sw = null;
       this.pc = null;
       this.swingT = null;
@@ -364,7 +606,7 @@
       this.sw = { swing: true, t: this.pT, cx: this.cur.x, cz: this.cur.z, user: true };
       this.swingT = 0;
       A.swing();
-      if (this.S.vibrate) A.vibrate(15);
+      this.buzz(15);
     }
 
     resolvePitch() {
@@ -379,14 +621,19 @@
       this.lastPitch = pc;
       this.tv.pitch(pc);
       if (this.derby) return this.resolveDerby(jr);
+      const T = TV();
+      const vars = { pit: g.pitcher().name, bat: g.batter().name };
       if (jr.call === "inplay") {
         const strong = jr.res.ev > 40 && jr.res.la > 15 && jr.res.la < 40;
-        A.hit(U.clamp((jr.res.ev - 20) / 28, 0.2, 1));
-        if (this.S.vibrate) A.vibrate(strong ? 60 : 30);
+        const play = g.makeBattedPlay(jr, sw, this.steal);
+        A.hit2(U.clamp((jr.res.ev - 20) / 28, 0.2, 1), play.hr);
+        this.buzz(strong ? 60 : 30);
         const bp = R.cams.bat.p(jr.res.bx, 0.3, jr.res.bz);
         if (bp) R.burst(bp.x, bp.y, "#fff3b0", strong ? 26 : 14, strong ? 260 : 160);
-        this.say(sw && sw.bunt ? "バント！" : strong ? "打ったー！！" : jr.res.la > 45 ? "打ち上げた！" : jr.res.la < -5 ? "叩きつけた！" : "打った！", strong ? "hot" : "");
-        this.startPlay(g.makeBattedPlay(jr, sw, this.steal), "batted");
+        // 本塁打でも、入ったかどうかはフェンスを越えるまで言わない
+        const key = sw && sw.bunt ? null : play.hr ? "hrGo" : strong ? "hitStrong" : jr.res.la > 45 ? "hitFly" : jr.res.la < -5 ? "hitGround" : "hit";
+        this.say(key ? T.talk(key, vars) : "バント！", strong || play.hr ? "hot" : "");
+        this.startPlay(play, "batted");
         return;
       }
       if (jr.call === "foul") {
@@ -398,22 +645,43 @@
           return;
         }
         this.foulBall = jr.res && !jr.res.tip ? F.newBall([jr.res.bx || 0, 0.4, jr.res.bz || 0.8], P.battedBall(jr.res).v) : null;
-        this.say("ファウル");
+        this.say(T.talk("foul", vars));
         this.callShow("foul");
         return;
       }
       if (jr.call === "strike") {
         A.mitt();
-        if (jr.swinging) this.say(g.strikes === 2 ? "空振り三振！" : "空振り！");
-        else this.say(g.strikes === 2 ? "見逃し三振！" : "ストライク！");
+        if (g.strikes === 2) this.kMoment(jr);
+        else if (g.strikes === 1 && Math.random() < 0.5) this.say(T.talk("twoK", vars));
+        else if (jr.swinging) this.say(T.talk("swing", vars));
+        else this.say(T.talk(g.balls === 0 && g.strikes === 0 && Math.random() < 0.5 ? "strikeFirst" : "strike", vars));
       } else if (jr.call === "ball") {
         A.mitt();
-        this.say(g.balls === 3 ? "フォアボール！" : "ボール");
+        this.say(g.balls === 3 ? T.talk("bb", vars) : g.balls === 2 && g.strikes === 2 ? T.talk("full", vars) : T.talk("ball", vars));
       } else if (jr.call === "hbp") {
         A.mitt();
-        this.say("デッドボール！");
+        this.say(T.talk("hbp", vars), "hot");
       }
       this.callShow(jr.call);
+    }
+
+    // 三振の瞬間: ズバッ + 審判の声 + 「空振り三振」の帯 + この投手の K ボード
+    kMoment(jr) {
+      const g = this.g;
+      const pit = g.pitcher();
+      const bat = g.batter();
+      const sw = !!jr.swinging;
+      const lv = this.fxLv();
+      const list = (this.kLog[pit.id] = this.kLog[pit.id] || []);
+      list.push(sw ? "S" : "L");
+      this.say(TV().talk(sw ? "kSwing" : "kLook", { pit: pit.name }), "hot");
+      this.kai("k", { pit: pit.name });
+      A.k(g.fieldingSide() === "home" ? 0.8 : 0.45);
+      if (lv >= 1) A.umpire("strike");
+      this.tv.call(sw ? "空振り三振" : "見逃し三振", "k", { ms: 1500 });
+      if (lv >= 1) this.tv.kBoard(pit, list, P.batSide(bat, pit) === "L" ? "l" : "r");
+      if (this.userPitch()) this.buzz([20, 30, 20]);
+      else if (this.userBat() && sw) this.buzz([10, 20, 10]);
     }
 
     callShow(call) {
@@ -425,15 +693,18 @@
       const g = this.g;
       const jr = this.jr;
       const key0 = this.paKey();
+      const runners = !!(g.bases[1] || g.bases[2] || g.bases[3]);
       const out = g.applyCall(jr);
-      if (out === "k") {
-        this.banner(jr.swinging ? "空振り三振" : "見逃し三振", "k", 1200);
+      // 三振は判定の瞬間 (kMoment) に済ませている。スリーバント失敗だけここで
+      if (out === "k" && jr.call === "foul") {
+        this.tv.call("スリーバント失敗", "k", { ms: 1300 });
         A.out();
-        A.cheer(this.userPitch() ? 0.7 : 0.3, 1.2);
       } else if (out === "walk") {
-        this.banner("フォアボール", "info", 1000);
+        this.tv.call("フォアボール", "info", { ms: 1200 });
+        if (runners) this.kai("bb");
       } else if (out === "hbp") {
-        this.banner("デッドボール", "info", 1000);
+        this.tv.call("デッドボール", "info", { ms: 1200 });
+        A.groan();
       }
       this.updateHUD();
       // 盗塁
@@ -491,23 +762,55 @@
     }
 
     showChange() {
-      this.tv.hide("l3");
-      this.tv.inningBoard();
-      // 今日の結果を流すぶん少し長めに
-      const n = Math.min(3, this.g.scoreLog.length);
-      this.changeT = n ? Math.min(5.2, 0.6 + 2.3 * n) : 2.4;
+      const g = this.g;
+      ["l3", "call", "k", "card", "pa"].forEach((k) => this.tv.hide(k));
+      const n = this.tv.inningBoard();
+      // 下のテロップ (その回の得点・話題) を流すぶん少し長めに
+      this.changeT = n ? Math.min(5.2, 0.6 + 2.3 * Math.min(3, n)) : 2.4;
+      if (this.fxLv() < 1 || this.mode !== "game") return;
+      // ラッキー 7: 7 回表はビジター、7 回裏はホームの応援歌とジェット風船
+      const k = g.inning + (g.top ? "t" : "b");
+      if (g.inning === 7 && !this.l7[k]) {
+        this.l7[k] = 1;
+        const t = g.teams[g.battingSide()];
+        this.tv.later("l7", 2500, () => {
+          if (this.state !== "change") return;
+          this.tv.hide("center");
+          this.tv.lucky7(t);
+          A.chant(false);
+          A.anthem(t.id);
+          A.balloons();
+          R.balloons(teamCols(t), this.fxLv() >= 2 ? 90 : 60);
+          if (g.isUser(g.battingSide())) this.buzz([8, 8, 8, 8, 8, 8]);
+        });
+        this.changeT = Math.max(this.changeT, 5.6);
+      }
+      // 次の回の打者のカードの絵を、止まっている今のうちに用意しておく
+      const bs = g.battingSide();
+      const ord = g.order[bs] || [];
+      for (let i = 0; i < 2 && ord.length; i++) {
+        const e = ord[(g.bi[bs] + i) % ord.length];
+        const p = e && g.P(e.id);
+        if (p && !this.cardSeen[p.id]) this.tv.prefetch(p, g.teams[bs], { home: bs === "home", kind: "bat" });
+      }
     }
 
     /* ---------- インプレー ---------- */
     startPlay(play, kind) {
       this.play = play;
-      if (this.tv) this.tv.hide("l3");
+      if (this.tv) ["l3", "k", "card", "pa"].forEach((k) => this.tv.hide(k));
       this.playKind = kind;
       this.evIdx = 0;
       this.skipPlay = false;
       this.camDir = 1;
+      this.hrFx = null;
+      // 本塁打: ボールがフェンスを越える時刻 (予測の軌道で最初に hr が立つ所)
+      if (play.hr && play.pred && kind !== "derby") {
+        const s = play.pred.samples.find((x) => x.hr);
+        this.hrFx = { at: s ? s.t : 0, stage: 0, shown: false };
+      }
       this.enter("inplay");
-      if (kind === "steal") this.say("ランナー走った！");
+      if (kind === "steal") this.say(TV().talk("steal"));
       A.chant(false);
     }
 
@@ -518,18 +821,114 @@
         while (!play.done && n++ < 5000) play.step(1 / 60);
         if (!play.done) play.finish();
       } else {
-        this.acc = (this.acc || 0) + dt * this.speed;
+        // 本塁打の帯を出したあとのダイヤモンド一周は少し速く (演出が少ないほど速く)
+        const h = this.hrFx;
+        const mul = h && h.shown && play.t > h.at + 1.2 ? [2.5, 1.7, 1][this.fxLv()] : 1;
+        this.acc = (this.acc || 0) + dt * this.speed * mul;
         let n = 0;
-        while (this.acc >= 1 / 60 && n++ < 30 && !play.done) {
+        while (this.acc >= 1 / 60 && n++ < 60 && !play.done) {
           play.step(1 / 60);
           this.acc -= 1 / 60;
         }
       }
+      this.hrTick();
       this.processEvents();
       if (play.done && this.playKind !== "derby") {
         this.processEvents();
         this.onPlayDone();
       }
+    }
+
+    // 本塁打の実況と帯: 打った瞬間「大きい！」→ 外野の奥で「入るか！？」→ フェンスを越えた瞬間に帯・花火 → 飛距離
+    hrTick() {
+      const h = this.hrFx;
+      const play = this.play;
+      if (!h || !play || this.skipPlay) return;
+      const b = play.ball;
+      if (h.stage === 0) {
+        if (play.t >= h.at) h.stage = 1;
+        else if (b && b.x != null && h.at - play.t > 0.5 && Math.hypot(b.x, b.y) > 0.75 * F.fenceDist(F.angle(b.x, b.y))) {
+          h.stage = 1;
+          this.say(TV().talk("hrMaybe"), "hot");
+        }
+      }
+      if (h.stage === 1 && play.t >= h.at) {
+        h.stage = 2;
+        this.hrCleared();
+      }
+      if (h.stage === 2 && play.t >= h.at + 2.9) {
+        h.stage = 3;
+        if (this.fxLv() >= 1 && h.dist) this.tv.dist(h.dist, h.where);
+      }
+    }
+
+    hrCleared() {
+      const g = this.g;
+      const play = this.play;
+      const h = this.hrFx;
+      h.shown = true;
+      const bat = g.batter();
+      const bs = g.battingSide();
+      const season = this.opt.season;
+      const no = season ? ((season[bat.id] || {}).hr || 0) + ((g.box[bat.id] || {}).hr || 0) + 1 : 0;
+      let extra = "";
+      if (g.hrRun > 0) extra = g.hrRun + 1 + "者連続";
+      else if (g.paN && g.paN[bs] === 0) extra = "先頭打者";
+      this.say(TV().talk("hrIn", { bat: bat.name, n: no || "" }), "hot");
+      this.kai("hr");
+      this.tv.homeRun({ runs: play.runners.length, type: "HR" }, bat, extra);
+      A.fanfare();
+      this.roar(1, 3, bs);
+      const cols = teamCols(g.teams[bs]);
+      const nf = this.fxLv() >= 1 ? 6 : 3;
+      for (let i = 0; i < nf; i++) setTimeout(() => !this.dead && R.firework(cols), 150 + i * 320);
+      if (this.userBat() || this.userPitch()) this.buzz([40, 60, 40, 120]);
+      // 推定飛距離と方向
+      if (play.o && play.o.ball) h.dist = Math.round(F.carry(play.o.ball.p, play.o.ball.v));
+      const phi = play.launch ? play.launch.phi : 0;
+      h.where = phi < -28 ? "レフトポール際" : phi < -14 ? "レフトスタンド" : phi < -5 ? "左中間スタンド" : phi <= 5 ? "バックスクリーン" : phi <= 14 ? "右中間スタンド" : phi <= 28 ? "ライトスタンド" : "ライトポール際";
+    }
+
+    // 好守備の判定: ダイビング・ジャンプ (捕球の高さ)・フェンス際・内野の強いライナー
+    finePlay(e) {
+      const play = this.play;
+      const ic = play.icpt || {};
+      if (!play.pred) return null;
+      const s = F.sampleAt(play.pred, play.t);
+      const r = Math.hypot(s.x, s.y);
+      if (ic.dive) return "dive";
+      if (!ic.air) return null;
+      if (s.z > 2.25) return "jump";
+      if (r > F.fenceDist(F.angle(s.x, s.y)) - 5) return "wall";
+      const L = play.launch;
+      if (L && L.la < 20 && L.ev > 40 && ["P", "1B", "2B", "3B", "SS"].indexOf(e.pos) >= 0) return "fine";
+      return null;
+    }
+
+    // きわどいアウト・セーフ (走者が塁に着くのと送球の差が 0.3 秒以内)。盗塁はいつも
+    closePlay(e) {
+      const play = this.play;
+      const b = e.base;
+      if (!play || !b || b < 1) return false;
+      if (this.playKind === "steal") return true;
+      if (this.playKind !== "batted") return false;
+      if (e.type === "out") {
+        if (e.how !== "force" && e.how !== "tag") return false;
+        const r = play.runners.find((x) => x.p.name === e.runner && x.state === "out");
+        if (!r) return false;
+        if (r.from + 1 === b) return (F.BASE_DIST - r.d) / Math.max(1, r.speed || 7) < 0.3;
+        const f = play.fielders.find((x) => x.hasBall && x.onBase === b);
+        return !!(f && f.act && f.act.k === "catch" && play.t - f.act.t < 0.3);
+      }
+      const bl = play.ball;
+      return !!(bl && bl.mode === "thrown" && bl.base === b && bl.t0 + bl.T - play.t < 0.3);
+    }
+    stamp(e, out) {
+      const g = this.g;
+      this.tv.call(BASE_JP[e.base] + (out ? (e.how === "tag" ? " タッチアウト" : " アウト") : " セーフ"), out ? "out" : "safe", { stamp: out ? "OUT" : "SAFE", ms: 1300, hold: 900 });
+      if (this.fxLv() >= 1) A.umpire(out ? "out" : "safe");
+      this.roar(0.6, 1.2, out ? g.fieldingSide() : g.battingSide());
+      if (this.userBat()) this.buzz(out ? 10 : 25);
     }
 
     processEvents() {
@@ -539,13 +938,22 @@
         if (this.skipPlay && e.type !== "end") continue;
         switch (e.type) {
           case "hr":
-            this.say("大きい！入るか！？ 入ったー！", "hot");
+            // 実況は hrTick (ボールの位置) で
             break;
-          case "catch":
+          case "catch": {
             A.catchBall();
-            if (this.play.icpt && this.play.icpt.dive) this.say("ダイビングキャッチ！！", "hot");
-            else this.say(Talk.POS[e.pos] + "、捕りました！");
+            const fine = this.finePlay(e);
+            if (fine) {
+              this.say(TV().talk(fine), "hot");
+              if (this.fxLv() >= 1 || fine === "dive") {
+                this.tv.call("ファインプレー！", "fine", { ms: 1400, hold: 900 });
+                this.roar(0.9, 1.4, this.g.fieldingSide());
+                this.kai("fine");
+              }
+              if (this.userPitch()) this.buzz([15, 40]);
+            } else this.say(Talk.POS[e.pos] + "、捕りました！");
             break;
+          }
           case "field":
             A.catchBall();
             break;
@@ -562,12 +970,16 @@
             A.out();
             if (e.how === "force" || e.how === "tag") this.say(e.base === 4 ? "ホームタッチアウト！" : "アウト！");
             if (e.how === "doubled") this.say("戻れない！ダブルプレー！");
+            if (this.closePlay(e)) this.stamp(e, true);
             break;
           case "safe":
+            if (this.closePlay(e)) this.stamp(e, false);
             break;
           case "score":
-            this.say(e.runner + "、ホームイン！", "hot");
+            this.say(TV().talk("score", { runner: e.runner }), "hot");
             A.cheer(0.6, 1.2);
+            if (this.closePlay(Object.assign({ base: 4 }, e))) this.stamp({ base: 4 }, false);
+            if (this.userBat()) this.buzz([30, 30, 30]);
             break;
           case "land":
             if (this.playKind === "batted" && !this.play.firstTouch) {
@@ -589,37 +1001,63 @@
       const res = this.play.result;
       const g = this.g;
       this.enter("result");
-      this.resultT = res.type === "HR" ? 2.6 : 1.5;
+      this.resultT = 1.5;
+      // 結果は打球や走者を隠さない右下の小さな帯で (大きな文字はホームラン・サヨナラだけ)
       if (this.playKind === "steal") {
         const s = res.steals[0];
-        this.banner(s && s.ok ? "盗塁成功！" : "盗塁失敗", s && s.ok ? "hit" : "out", 1200);
+        this.tv.call(s && s.ok ? "盗塁成功" : "盗塁失敗", s && s.ok ? "safe" : "out", { ms: 1300 });
         return;
       }
       if (this.playKind === "foul") {
-        if (res.type === "FFO") this.banner("ファウルフライ", "out", 1100);
+        if (res.type === "FFO") this.tv.call("ファウルフライ", "out", { ms: 1200 });
         return;
       }
       const desc = Talk.desc(res);
-      let cls = "out";
+      const walkoff = !g.top && g.inning >= g.innings && g.score.home + res.runs > g.score.away && g.score.home <= g.score.away && res.runs > 0;
+      const bs = g.battingSide();
+      const fs = g.fieldingSide();
       if (res.type === "HR" || res.type === "IPHR") {
-        cls = "hr";
-        A.fanfare();
-        for (let i = 0; i < 6; i++) setTimeout(() => R.firework(), 200 + i * 320);
-        this.tv.homeRun(res, g.batter());
+        if (this.hrFx && this.hrFx.shown) this.resultT = 0.9; // 帯と花火はフェンスを越えたときに出した
+        else {
+          A.fanfare();
+          const cols = teamCols(g.teams[bs]);
+          for (let i = 0; i < 6; i++) setTimeout(() => !this.dead && R.firework(cols), 200 + i * 320);
+          this.tv.homeRun(res, g.batter());
+          this.resultT = 2.6;
+        }
+      } else if (walkoff) {
+        // 結果の帯は出さず、サヨナラの帯で
       } else if (["H1", "H2", "H3"].indexOf(res.type) >= 0) {
-        cls = "hit";
-        A.cheer(res.type === "H1" ? 0.6 : 0.9, 1.6);
-        this.banner(esc(desc), cls, 1400);
+        this.roar(res.type === "H1" ? 0.6 : 0.9, 1.6, bs);
+        this.tv.call(desc, "hit", { ms: 1400 });
+        if (res.runs) this.kai("score");
+        else this.kai("hit");
       } else if (res.type === "E" || res.type === "FC") {
-        this.banner(esc(desc), "info", 1400);
+        this.tv.call(desc, "info", { ms: 1400 });
       } else {
-        if (res.type === "DP" || res.type === "DPF" || res.type === "TP") A.cheer(0.8, 1.2);
-        this.banner(esc(desc), cls, 1300);
+        if (res.type === "DP" || res.type === "DPF" || res.type === "TP") {
+          this.roar(0.8, 1.2, fs);
+          this.kai("dp");
+        }
+        this.tv.call(desc, "out", { ms: 1300 });
       }
-      if (!g.top && g.inning >= g.innings && g.score.home + res.runs > g.score.away && g.score.home <= g.score.away && res.runs > 0) {
-        setTimeout(() => this.banner("サヨナラ！！", "hr", 2400), 900);
-        this.resultT = 2.6;
-      }
+      if (walkoff) this.walkoffMoment(res);
+    }
+
+    // サヨナラ: 赤い帯 + 大歓声 (+ 紙吹雪)
+    walkoffMoment(res) {
+      const g = this.g;
+      const bat = g.batter();
+      this.walkoffBy = bat.id;
+      const t = res.type;
+      const what = t === "HR" || t === "IPHR" ? "サヨナラホームラン" : t === "H1" || t === "H2" || t === "H3" ? "サヨナラタイムリー" : t === "SF" ? "サヨナラ犠牲フライ" : "サヨナラ勝ち";
+      this.tv.walkoff(bat, what);
+      this.say(bat.name + "、" + what + "！", "hot");
+      this.roar(1, 4, "home");
+      A.cheer(1, 3);
+      if (this.fxLv() >= 1) R.confetti(teamCols(g.teams.home), this.fxLv() >= 2 ? 160 : 110);
+      if (g.isUser("home")) this.buzz([60, 40, 60, 40, 200]);
+      this.resultT = 3.0;
     }
 
     applyPlayResult() {
@@ -647,8 +1085,9 @@
     resolveDerby(jr) {
       const d = this.derby;
       if (jr.call === "inplay") {
-        A.hit(U.clamp((jr.res.ev - 20) / 28, 0.2, 1));
         const play = this.g.makeBattedPlay(jr, this.swUsed, null);
+        A.hit2(U.clamp((jr.res.ev - 20) / 28, 0.2, 1), play.hr);
+        if (play.hr) this.buzz([40, 60, 40, 120]);
         this.startPlay(play, "derby");
         return;
       }
@@ -704,7 +1143,7 @@
 
     /* ---------- タイム ---------- */
     pause() {
-      if (this.state === "inplay" || this.state === "result") return;
+      if (this.state === "inplay" || this.state === "result" || this.finished) return;
       this.paused = true;
       const g = this.g;
       const canPitch = this.userPitch() && !this.derby && this.state !== "pitch" && this.state !== "windup";
@@ -819,26 +1258,100 @@
       if (this.finished) return;
       this.finished = true;
       A.chant(false);
-      setTimeout(
-        () => {
-          // 試合終了の演出中に「やめる」を選んだときは記録しない
-          if (this.quit) return;
-          this.destroy();
-          if (this.opt.onEnd) this.opt.onEnd(this);
-        },
-        this.derby ? 1200 : this.mode === "game" ? 3000 : 1600
-      );
-      if (!this.derby && this.mode === "game") {
-        this.tv.hide("l3");
-        this.tv.hide("tick");
-        this.tv.scoreBoard("final");
-        A.whistle();
+      const done = () => {
+        // 試合終了の演出中に「やめる」を選んだときは記録しない
+        if (this.quit || this.dead) return;
+        this.destroy();
+        if (this.opt.onEnd) this.opt.onEnd(this);
+      };
+      if (this.derby || this.mode !== "game") {
+        setTimeout(done, this.derby ? 1200 : 1600);
+        return;
       }
+      // 試合終了: 最終スコア → 勝利投手・ヒーロー → ヒーローインタビュー (どれもタップで次へ)
+      const g = this.g;
+      const r = g.result || {};
+      const lv = this.fxLv();
+      ["l3", "tick", "call", "k", "card", "pa", "dist"].forEach((k) => this.tv.hide(k));
+      const user = g.user === "home" || g.user === "away" ? g.user : null;
+      const won = !!(user && r.winner === user);
+      const lost = !!(user && r.winner && r.winner !== user);
+      const heroId = r.winner ? (r.walkoff && this.walkoffBy ? this.walkoffBy : PB.Screens && PB.Screens.mvp ? PB.Screens.mvp(g, r.winner) : null) : null;
+      const cues = [];
+      cues.push({
+        name: "final",
+        cine: true,
+        dur: 3.0,
+        steps: [
+          [
+            0,
+            () => {
+              this.tv.scoreBoard("final");
+              if (r.winner) this.roar(0.9, 3, r.winner);
+              if (lv >= 1 && r.winner && !lost) {
+                A.winSong(g.teams[r.winner].id);
+                this.jingled = true;
+              } else if (lv >= 1 && lost) {
+                A.lose();
+                this.jingled = true;
+              }
+              if (won) this.buzz([50, 50, 50, 50, 300]);
+              if (lv >= 1 && r.winner && (won || (!user && !r.walkoff))) R.confetti(teamCols(g.teams[r.winner]), 90);
+            },
+          ],
+        ],
+        skip: () => this.tv.hide("center"),
+      });
+      if (lv >= 1 && r.winner) {
+        const hl = heroId ? this.heroLine(heroId) : "";
+        cues.push({ name: "wl", cine: true, dur: 3.2, steps: [[0, () => (this.tv.hide("center"), this.tv.winLoss({ hero: heroId, heroLine: hl }))]], skip: () => this.tv.hide("wl") });
+      }
+      // ヒーローインタビュー: 多めは勝てば毎回、標準はサヨナラと自分のチームが勝ったとき
+      if (heroId && (lv >= 2 || (lv >= 1 && (r.walkoff || won)))) {
+        cues.push({
+          name: "hero",
+          cine: true,
+          dur: 9.4,
+          steps: [
+            [0, () => (this.tv.hide("wl"), this.heroInterview(heroId, r.winner, !!r.walkoff))],
+            [0.4, () => this.roar(0.5, 2, r.winner)],
+            [8.3, () => this.roar(0.8, 1.8, r.winner)],
+          ],
+          skip: () => this.tv.hide("hero"),
+        });
+      }
+      this.runSeq(cues, done);
+    }
+
+    // 今日の成績のひと言 (ヒーロー・勝利投手の帯)
+    heroLine(id) {
+      const g = this.g;
+      const p = g.P(id);
+      const s = g.box[id] || {};
+      if (p.pos === "P" && (s.outs || s.np)) return U.fmtIP(s.outs || 0) + "回 " + (s.pk || 0) + "奪三振 " + (s.pr || 0) + "失点";
+      return (s.ab || 0) + "打数" + (s.h || 0) + "安打" + (s.hr ? " " + s.hr + "本塁打" : "") + (s.rbi ? " " + s.rbi + "打点" : "");
+    }
+
+    heroInterview(id, side, walkoff) {
+      const g = this.g;
+      const p = g.P(id);
+      const s = g.box[id] || {};
+      const r = g.result || {};
+      const isP = p.pos === "P" && (s.outs || s.np);
+      const kind = walkoff ? "walkoff" : isP ? (r.S === id ? "save" : "pit") : s.hr ? "hr" : "hit";
+      const chips = isP ? [U.fmtIP(s.outs || 0) + "回", (s.pk || 0) + "奪三振", (s.pr || 0) + "失点"] : [(s.ab || 0) + "打数" + (s.h || 0) + "安打"].concat(s.hr ? [s.hr + "本塁打"] : [], s.rbi ? [s.rbi + "打点"] : []);
+      if (r.W === id) chips.push("勝利投手");
+      if (r.S === id) chips.push("セーブ");
+      const home = PB.TV.teamOf(g.teams.home);
+      const last = side === "home" ? (home.stadium || "球場") + "のファンの皆さん、最高です！ありがとうございました！" : "遠くまで応援に来てくれたファンの皆さん、ありがとうございました！";
+      this.tv.hero({ p, team: g.teams[side], home: side === "home", lines: this.tv.heroLines(kind, { h: s.h || 0, k: s.pk || 0 }), chips, last, ms: 9600 });
     }
 
     destroy() {
       A.chant(false);
       A.ambient(false);
+      clearTimeout(this.kaiTimer);
+      this.cue = null;
       this.dead = true;
       if (this.tv) this.tv.destroy();
       if (this.hud) {
@@ -852,12 +1365,20 @@
     update(dt) {
       if (this.dead || this.paused) return;
       this.time += dt;
-      if (this.finished) return;
+      if (this.finished && this.state !== "cue") return;
       this.t += dt;
       const st = this.state;
       const g = this.g;
-      if (st === "intro") {
-        if (this.t < 0.05 && !this.introShown) {
+      if (st === "cue") {
+        this.updateCue(dt);
+      } else if (st === "intro") {
+        if (!this.introShown) {
+          // スタメン発表 (標準以上) → プレイボール
+          if (!this.lineupDone && this.mode === "game" && this.fxLv() >= 1) {
+            this.lineupDone = true;
+            this.runCue(this.lineupCue());
+            return;
+          }
           this.introShown = true;
           const a = g.teams.away;
           const h = g.teams.home;
@@ -866,14 +1387,30 @@
           else this.banner('<span class="vs">' + esc(a.name) + "<i>VS</i>" + esc(h.name) + "</span><small>" + esc(h.stadium || "") + "</small>", "change", 2000);
           A.cheer(0.5, 2);
         }
+        // 球審の「プレイボール」
+        if (!this.playCalled && this.t > 0.5 && this.mode === "game" && this.fxLv() >= 1) {
+          this.playCalled = true;
+          A.umpire("play");
+          this.tv.pa("プレイボール！", 1900);
+        }
         if (this.t > (this.mode === "game" && !this.derby ? 2.7 : 2.0)) {
           this.tv.hide("center");
           this.startPA();
         }
       } else if (st === "paIntro") {
-        if (this.t > 1.1) this.nextPitch();
+        if (this.t > (this.paIntroT || 1.1)) this.nextPitch();
       } else if (st === "ready") {
-        if (!this.userPitch() && this.t > (this.userBat() ? 0.9 : 0.6)) this.startWindup();
+        // タイムで代打・投手交代をしたら、その紹介から
+        if (this.pendPH) {
+          this.pendPH = false;
+          this.walkupCue();
+          return;
+        }
+        if (this.pendChange) {
+          this.nextPitch();
+          return;
+        }
+        if (!this.userPitch() && this.t > (this.readyT != null ? this.readyT : this.userBat() ? 0.9 : 0.6)) this.startWindup();
       } else if (st === "windup") {
         if (this.steal && !this.stealStarted && this.t > 0.3) {
           this.stealStarted = true;
@@ -939,9 +1476,38 @@
       } else if (st === "tvscore") {
         if (this.t > 2.3) {
           this.tv.hide("center");
+          this.tv.syncScore();
           this.afterTV(this.tvKey);
         }
       }
+    }
+
+    // スタメン発表: 両軍のカードが 1 枚ずつ返る (タップで飛ばせる)
+    lineupCue() {
+      const lv = this.fxLv();
+      const dur = lv >= 2 ? 7.4 : 5.6;
+      return {
+        name: "lineup",
+        cine: true,
+        dur,
+        steps: [
+          [
+            0,
+            () => {
+              A.paChime();
+              A.cheer(0.4, 2);
+              if (lv >= 2) setTimeout(() => A.say("本日のスターティングメンバーを発表いたします", 0.95), 760);
+            },
+          ],
+          [0.1, () => this.tv.lineup({ title: this.opt.title, ms: dur * 1000 + 600 })],
+          [dur - 0.45, () => this.tv.lineupOut()],
+        ],
+        skip: () => this.tv.hide("lu"),
+        end: () => {
+          this.tv.hide("lu");
+          this.enter("intro");
+        },
+      };
     }
 
     derbyCheck() {
@@ -1130,6 +1696,12 @@
       return new Cam().set([base.pos[0] + d.ox, base.pos[1] + d.oy, base.pos[2]], [base.target[0] + d.ox, base.target[1] + d.oy, 0], base.f * d.zoom, base.cx, base.cy);
     }
 
+    // 中継の絵だけを見せる場面 (打席のゾーン・カーソルを隠す)
+    cinematic() {
+      const st = this.state;
+      return st === "tvscore" || st === "change" || st === "intro" || st === "result" || this.finished || (st === "cue" && !!this.cue && !!this.cue.cine);
+    }
+
     runnerDir(r) {
       const a = F.BASES[Math.min(r.from, 4)];
       const b = F.BASES[Math.min(r.from + 1, 4)];
@@ -1145,8 +1717,9 @@
       if (!fieldView) {
         const bat = g.batter();
         const pit = g.pitcher();
-        if (this.state !== "inplay") R.drawZone(ctx, cam, 0.85);
-        if (this.userBat() && this.state !== "change" && this.state !== "tvscore") {
+        const cine = this.cinematic();
+        if (this.state !== "inplay" && !cine) R.drawZone(ctx, cam, 0.85);
+        if (this.userBat() && !cine) {
           const cs = P.cursor(bat, pit, g.ctx("bat"));
           R.drawCursor(ctx, cam, { x: this.cur.x, z: this.cur.z, rx: cs.rx, rz: cs.rz, bunt: this.bunt, flash: this.swingT != null && this.swingT < 0.2 });
         }
@@ -1204,10 +1777,11 @@
         t = this.swingT / 0.25;
       }
       PB.Chara.draw(ctx, fx, fy, s, { team: batTeam, face: bat.face, view: "back", pose, t, side, num: bat.num, alpha: 0.96 });
-      // ゾーン・カーソル
-      const showZone = this.state !== "inplay";
+      // ゾーン・カーソル (得点パネル・攻守交代・試合前後の演出中は出さない)
+      const cine = this.cinematic();
+      const showZone = this.state !== "inplay" && !cine;
       if (showZone) R.drawZone(ctx, cam, 0.9);
-      if (this.userBat() && this.state !== "change" && this.state !== "tvscore") {
+      if (this.userBat() && !cine) {
         const cs = P.cursor(bat, pit, g.ctx("bat"));
         R.drawCursor(ctx, cam, { x: this.cur.x, z: this.cur.z, rx: cs.rx, rz: cs.rz, bunt: this.bunt, flash: this.swingT != null && this.swingT < 0.2 });
       }

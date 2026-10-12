@@ -749,26 +749,137 @@
       R.fx.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.5, t: 0, c: color || "#ffe25c", g: 160 });
     }
   };
-  R.firework = function () {
-    const cols = ["#ff5d5d", "#ffe25c", "#7fe7ff", "#ff9ae0", "#9dff8a"];
+  // 花火: 下から打ち上がり、頂点で丸く開く (cols: 球団の色など。省略時はいろいろな色)
+  R.firework = function (cols) {
+    const list = cols && cols.length ? cols : ["#ff5d5d", "#ffe25c", "#7fe7ff", "#ff9ae0", "#9dff8a"];
     const x = U.rand(R.W * 0.15, R.W * 0.85);
-    const y = U.rand(R.H * 0.12, R.H * 0.4);
-    R.burst(x, y, U.pick(cols), 36, 170);
+    const y = U.rand(R.H * 0.12, R.H * 0.34);
+    const rise = U.rand(0.45, 0.6);
+    const y0 = Math.min(R.H * 0.62, y + 260);
+    R.fx.push({ k: "rk", x: x + U.rand(-20, 20), y: y0, vx: 0, vy: (y - y0) / rise, life: rise, t: 0, c: "#fff2c0", g: 0, tx: x, col: U.pick(list) });
+  };
+  function fwBurst(x, y, col) {
+    const n = 44;
+    const sp = U.rand(130, 170);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + U.rand(-0.05, 0.05);
+      const v = sp * U.rand(0.85, 1.05);
+      R.fx.push({ k: "fw", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: U.rand(1.0, 1.4), t: 0, c: i % 5 === 0 ? "#ffffff" : col, g: 55 });
+    }
+    // 中心の小さな光
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = U.rand(20, 60);
+      R.fx.push({ k: "fw", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.7, t: 0, c: "#fff6d8", g: 30 });
+    }
+  }
+  // ジェット風船 (ラッキー 7): 画面の下から細長い風船がくねりながら上がり、しぼんで落ちる
+  R.balloons = function (cols, n) {
+    const list = cols && cols.length ? cols : ["#ff5d5d", "#ffffff", "#ffe25c"];
+    for (let i = 0; i < (n || 60); i++) {
+      const c = Math.random() < 0.7 ? list[0] : Math.random() < 0.65 ? list[2] || "#fff" : list[1];
+      R.fx.push({ k: "bl", x: U.rand(-0.05, 1.05) * R.W, y: R.H + U.rand(0, 120), vx: U.rand(-40, 40), vy: -U.rand(330, 470), life: U.rand(2.6, 3.4), t: -U.rand(0, 0.8), c, g: 210, ph: Math.random() * 6, s: U.rand(0.8, 1.25) });
+    }
+  };
+  // 紙吹雪 (サヨナラ・勝利)
+  R.confetti = function (cols, n) {
+    const list = (cols && cols.length ? cols : ["#ff5d5d", "#ffe25c"]).concat(["#ffd84a"]);
+    for (let i = 0; i < (n || 100); i++) {
+      R.fx.push({ k: "cf", x: U.rand(0, R.W), y: U.rand(-R.H * 0.35, -10), vx: U.rand(-30, 30), vy: U.rand(70, 150), life: U.rand(3.0, 4.2), t: -U.rand(0, 0.6), c: U.pick(list), g: 0, ph: Math.random() * 6, s: U.rand(0.8, 1.3) });
+    }
   };
   R.drawFx = function (ctx, dt) {
+    const born = [];
+    ctx.save();
+    const base = ctx.getTransform ? ctx.getTransform() : null;
+    const reset = () => (base ? ctx.setTransform(base) : ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0));
     for (const p of R.fx) {
       p.t += dt;
+      if (p.t < 0) continue;
+      if (p.k === "fw") {
+        // 空気抵抗で減速し、ゆっくり落ちる
+        const d = Math.exp(-1.8 * dt);
+        p.vx *= d;
+        p.vy *= d;
+      }
+      if (p.k === "bl") {
+        // 勢いがなくなるとしぼんで落ちる
+        const d = Math.exp(-0.9 * dt);
+        p.vx = p.vx * d + Math.sin(p.t * 6 + p.ph) * 220 * dt;
+        p.vy *= d;
+      }
+      if (p.k === "cf") p.vx = Math.sin(p.t * 3 + p.ph) * 45;
+      const px = p.x;
+      const py = p.y;
       p.vy += p.g * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      const a = 1 - p.t / p.life;
-      if (a <= 0) continue;
-      ctx.globalAlpha = a;
-      ctx.fillStyle = p.c;
-      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+      const a = Math.min(1, 1 - p.t / p.life);
+      if (a <= 0) {
+        if (p.k === "rk") born.push(p);
+        continue;
+      }
+      if (p.k === "rk") {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = 0.9;
+        ctx.strokeStyle = p.c;
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 0.05, p.y - p.vy * 0.05);
+        ctx.stroke();
+      } else if (p.k === "fw") {
+        // 尾を引く光の粒 (終わりぎわはちらつく)
+        const fl = p.t > p.life * 0.65 && Math.random() < 0.35 ? 0.3 : 1;
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = a * fl;
+        ctx.strokeStyle = p.c;
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(px - p.vx * 0.05, py - p.vy * 0.05);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      } else if (p.k === "bl") {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = Math.min(1, a * 2);
+        const ang = Math.atan2(p.vy, p.vx) + Math.PI / 2;
+        const sh = Math.max(0.55, Math.min(1, -p.vy / 300 + 0.4));
+        ctx.translate(p.x, p.y);
+        ctx.rotate(ang);
+        ctx.fillStyle = p.c;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 2.6 * p.s, 9 * p.s * sh, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        ctx.fillRect(-0.9 * p.s, -6 * p.s * sh, 1.2 * p.s, 5 * p.s * sh);
+        reset();
+      } else if (p.k === "cf") {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = Math.min(1, a * 3);
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.t * 5 + p.ph);
+        ctx.scale(1, Math.cos(p.t * 7 + p.ph));
+        ctx.fillStyle = p.c;
+        ctx.fillRect(-2.5 * p.s, -4 * p.s, 5 * p.s, 8 * p.s);
+        reset();
+      } else {
+        // 打球の火花: 速さの向きに伸びた光
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = a;
+        ctx.strokeStyle = p.c;
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(px - p.vx * 0.02, py - p.vy * 0.02);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
     R.fx = R.fx.filter((p) => p.t < p.life);
+    for (const p of born) fwBurst(p.x, p.y, p.col);
   };
 
   R.viewFrom = viewFrom;
