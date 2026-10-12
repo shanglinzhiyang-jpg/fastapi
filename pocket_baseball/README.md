@@ -48,7 +48,9 @@ uvicorn pocket_baseball.server:app --host 0.0.0.0 --port 8000
 python pocket_baseball/tools/build_single.py
 ```
 
-`pocket_baseball/dist/pocket_baseball.html` ができます。スマホに送ってブラウザで開くだけで遊べます（セーブは端末内）。
+`pocket_baseball/dist/pocket_baseball.html` (約 7MB) ができます。スマホに送ってブラウザで開くだけで、3D の球場と選手のまま遊べます（セーブは端末内）。
+three.js・選手モデル・球団マーク・選手写真もすべて中に入っています。書体だけはネットから読み込み、オフラインでは代わりの書体になります。
+古い端末向けに、3D を入れない軽い版 (2D だけ、約 3MB) も作れます: `python pocket_baseball/tools/build_single.py --lite -o pocket_baseball/dist/pocket_baseball_lite.html`
 
 ### ホーム画面に追加
 

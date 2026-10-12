@@ -16,14 +16,16 @@
   H.load = function (base) {
     if (H.loading) return H.loading;
     base = base || "models/";
-    H.loading = Promise.all([fetch(base + "player.json").then((r) => r.json()), fetch(base + "player.bin").then((r) => r.arrayBuffer())])
+    // 1 ファイル版では、モデルのファイルは埋め込み (data URI) の表から引く
+    const src = (f) => (window.PB_ASSETS && window.PB_ASSETS[base + f]) || base + f;
+    H.loading = Promise.all([fetch(src("player.json")).then((r) => r.json()), fetch(src("player.bin")).then((r) => r.arrayBuffer())])
       .then(([json, bin]) => {
         asset = { json, geos: {}, bones: json.bones, extra: json.extra };
         for (const m of json.meshes) asset.geos[m.name] = buildGeometry(m, bin);
         const tl = new T.TextureLoader();
         const load = (f) =>
           new Promise((res) => {
-            tl.load(base + f, (t) => {
+            tl.load(src(f), (t) => {
               t.colorSpace = T.SRGBColorSpace;
               t.anisotropy = 4;
               res(t);
