@@ -4011,3 +4011,314 @@ input[type="range"] {
   background: radial-gradient(circle at 50% 40%, #ffffff 0%, #dfe5ee 70%, #b9c3d1 100%);
   box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.08);
 }
+
+/* ==================== サクセス: マンガ風キャラクター (js/manga.js) ==================== */
+.mg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* マンガのコマ: 白いふちで黒地から浮かせる */
+.mg-hero-pic,
+.mg-talk-pic,
+.mg-me-pic,
+.mg-make-pic,
+.mg-done-pic,
+.mgc-pic {
+  flex: none;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #f6f0e1;
+  box-shadow: 0 0 0 2px #fff, 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+/* ホーム: 監督とふきだし */
+.su-hero.mg-hero {
+  align-items: center;
+  gap: 14px;
+}
+.mg-hero-pic {
+  width: 112px;
+  height: 134px;
+  padding: 0;
+  border: 0;
+  transform: rotate(-2deg);
+  cursor: pointer;
+}
+.mg-hero .mg-say {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 2px solid #1b1712;
+  background: #fffdf5;
+  color: #1b1712;
+  font-weight: 700;
+}
+.mg-hero .mg-say::before,
+.mg-hero .mg-say::after {
+  content: "";
+  position: absolute;
+  top: 38%;
+  border-style: solid;
+}
+.mg-hero .mg-say::before {
+  left: -13px;
+  border-width: 7px 13px 7px 0;
+  border-color: transparent #1b1712 transparent transparent;
+}
+.mg-hero .mg-say::after {
+  left: -9px;
+  top: calc(38% + 2px);
+  border-width: 5px 10px 5px 0;
+  border-color: transparent #fffdf5 transparent transparent;
+}
+.mg-hero .mg-say small {
+  margin-top: 2px;
+  color: #6b625a;
+  font-weight: 700;
+}
+/* 選手をつくる・週の画面の自分 (名前の欄は残りの幅に収める) */
+.su-make .nm-in label {
+  min-width: 0;
+}
+.su-make .nm-in input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.mg-make-pic {
+  width: 110px;
+  height: 132px;
+}
+.mg-me-pic {
+  width: 84px;
+  height: 100px;
+}
+.mg-done-pic {
+  width: 150px;
+  height: 180px;
+  margin: 0 auto;
+  transform: rotate(-2deg);
+}
+/* 会話の箱 */
+.talkbox.mg-talk {
+  align-items: stretch;
+}
+.mg-talk-pic {
+  width: 92px;
+  height: 110px;
+}
+.mg-talk .tb-name {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--bn, #333);
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+  transform: skewX(-8deg);
+}
+/* 練習の手伝い・仲よしの小さな顔 */
+.helpers i.mg-i,
+.rel i.mg-i {
+  padding: 0;
+  overflow: hidden;
+  background: #f6f0e1;
+  border: 1.5px solid #fff;
+}
+.helpers i.mg-i {
+  width: 24px;
+  height: 24px;
+}
+.rel i.mg-i {
+  width: 28px;
+  height: 28px;
+  flex: none;
+}
+/* 人物紹介カード (金の額縁) */
+.modal-box.mgc-box {
+  width: min(400px, 100%);
+  padding: 14px 0 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.mgc {
+  position: relative;
+  padding: 7px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fff1a8 0%, #e7b52c 22%, #a8700c 48%, #f2cb4c 70%, #b8800f 100%);
+  box-shadow: 0 0 0 2px #5b3a05, 0 18px 40px rgba(0, 0, 0, 0.6);
+}
+.mgc-in {
+  display: grid;
+  grid-template-columns: 44% minmax(0, 1fr);
+  grid-template-areas: "pic txt" "say say";
+  gap: 12px 12px;
+  padding: 16px 12px 14px;
+  border-radius: 10px;
+  background: radial-gradient(circle, rgba(170, 130, 60, 0.16) 1px, transparent 1.5px) 0 0 / 7px 7px, #fbf5e2;
+  box-shadow: inset 0 0 0 2px #7c520a;
+  color: #1b1712;
+}
+.mgc-pic {
+  grid-area: pic;
+  align-self: start;
+  aspect-ratio: 5 / 6;
+  border: 3px solid #1b1712;
+  border-radius: 2px;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.22);
+  transform: rotate(-1.5deg);
+}
+.mgc-txt {
+  grid-area: txt;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mgc-name {
+  align-self: flex-start;
+  margin: 0;
+  padding: 5px 10px 6px;
+  border-radius: 6px;
+  background: var(--bn);
+  color: #fff;
+  font: 400 21px/1.1 var(--f-disp);
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 2.5px #fff, 0 0 0 5px var(--bn), 3px 5px 0 5px rgba(0, 0, 0, 0.18);
+  transform: rotate(-2deg);
+  margin-left: 4px;
+  margin-top: 4px;
+}
+.mgc-role {
+  margin: 4px 0 0;
+  color: var(--bn);
+  font-weight: 800;
+  font-size: 13px;
+}
+.mgc-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  font-weight: 700;
+}
+.mgc-say {
+  grid-area: say;
+  position: relative;
+  margin: 4px 0 0;
+  padding: 10px 14px;
+  border: 3px solid var(--bn);
+  border-radius: 18px;
+  background: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.mgc-say::before,
+.mgc-say::after {
+  content: "";
+  position: absolute;
+  left: 34px;
+  border-style: solid;
+}
+.mgc-say::before {
+  top: -16px;
+  border-width: 0 8px 16px 8px;
+  border-color: transparent transparent var(--bn) transparent;
+}
+.mgc-say::after {
+  top: -10px;
+  left: 37px;
+  border-width: 0 5px 11px 5px;
+  border-color: transparent transparent #fff transparent;
+}
+.mgc-close {
+  position: absolute;
+  top: -14px;
+  right: -4px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  padding: 4px 12px;
+  border-radius: 9px;
+  border: 2.5px solid #fff;
+  background: linear-gradient(180deg, #ff6b6b, #d62828);
+  color: #fff;
+  font: 400 17px/1 var(--f-disp);
+  box-shadow: 0 3px 0 #7a1010, 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+.mgc-close i {
+  font-style: normal;
+  font-size: 20px;
+  color: #5a0d0d;
+}
+/* 人物の一覧 */
+.mgp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mgp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 12px;
+  border: 2px solid var(--rule);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bn) 35%, var(--board)), var(--board) 60%);
+  color: var(--chalk);
+  text-align: left;
+}
+.mgp-row.unknown {
+  background: var(--board);
+  opacity: 0.8;
+}
+.mgp-pic {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f6f0e1;
+  box-shadow: 0 0 0 2px #fff;
+}
+.mgp-txt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mgp-txt b {
+  font: 400 16px/1.2 var(--f-disp);
+}
+.mgp-txt small {
+  font-size: 11px;
+  color: var(--mute);
+}
+.mgp-rel {
+  width: 72px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--mute);
+}
+.mgp-rel em {
+  height: 6px;
+  border-radius: 3px;
+  background: #213149;
+  overflow: hidden;
+}
+.mgp-rel em b {
+  display: block;
+  height: 100%;
+  background: #ff8fb1;
+}
+/* ==================== /サクセス: マンガ風キャラクター ==================== */

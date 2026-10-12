@@ -16,14 +16,48 @@
   const MOOD_MUL = [0.6, 0.8, 1.0, 1.2, 1.4];
   const EXP = { str: "筋力", agi: "敏捷", tec: "技術", brk: "変化球", men: "精神" };
 
-  // 仲間キャラクター (オリジナル)
+  // 仲間キャラクター (オリジナル)。絵は PB.Manga (manga.js)、desc は紹介カードの文、line は「人物」で見せる決め台詞、sig はそのときの表情
   const CAST = {
-    goda: { name: "剛田", full: "剛田 鉄平", role: "パワー自慢の先輩", face: { skin: "#e7b98c", eyes: "sharp", brow: 2 }, color: { main: "#5b6b7d", sub: "#fff", cap: "#2f3a46", mark: "G" } },
-    hayase: { name: "早瀬", full: "早瀬 ひかり", role: "チームのマネージャー", face: { skin: "#ffe1c8", eyes: "big", brow: 0, cheek: true }, color: { main: "#f28fb0", sub: "#fff", cap: "#c2416b", mark: "H" } },
-    inukai: { name: "犬飼", full: "犬飼 コーチ", role: "理論派の打撃コーチ", face: { skin: "#f2c8a2", eyes: "glasses", brow: 1 }, color: { main: "#3b5f8a", sub: "#ffd23f", cap: "#1d3557", mark: "I" } },
-    ryuzaki: { name: "竜崎", full: "竜崎 レン", role: "同期のライバル", face: { skin: "#ffd9b8", eyes: "sharp", brow: 1 }, color: { main: "#2b2d42", sub: "#ef233c", cap: "#111", mark: "R" } },
-    kanto: { name: "鬼瓦", full: "鬼瓦 監督", role: "チームの監督", face: { skin: "#d9a274", eyes: "line", brow: 2 }, color: { main: "#444", sub: "#fff", cap: "#222", mark: "K" } },
+    goda: { name: "剛田", full: "剛田 鉄平", role: "パワー自慢の先輩", banner: "#d9480f", sig: "happy", color: { main: "#5b6b7d", sub: "#fff", cap: "#2f3a46", mark: "G" }, desc: ["寮の主（ぬし）と呼ばれる、パワー自慢の先輩。", "豪快で面倒見がよく、後輩を見るとメシに誘わずにいられない。", "鼻のばんそうこうは、なぜか一年中はがれない。"], line: "腹が減っては野球はできねえ！メシ行くぞ！" },
+    hayase: { name: "早瀬", full: "早瀬 ひかり", role: "チームのマネージャー", banner: "#e8457c", sig: "happy", color: { main: "#f28fb0", sub: "#fff", cap: "#c2416b", mark: "H" }, desc: ["チームを支える元気なマネージャー。", "スコアブックとはちみつレモンは、いつも持ち歩いている。", "ちょっとおせっかいだけど、みんなの調子を一番よく知っている。"], line: "困ったことがあったら、なんでも言ってね！" },
+    inukai: { name: "犬飼", full: "犬飼 コーチ", role: "理論派の打撃コーチ", banner: "#1f7a6d", sig: "normal", color: { main: "#3b5f8a", sub: "#ffd23f", cap: "#1d3557", mark: "I" }, desc: ["データと理論で教える二軍のコーチ。", "教え方は静かだが、言うことはいつも的確。", "メガネが光ったら、本気で考えているしるしだ。"], line: "フォームには必ず理由がある。考えて振りなさい。" },
+    ryuzaki: { name: "竜崎", full: "竜崎 レン", role: "同期のライバル", banner: "#5b3fc4", sig: "normal", color: { main: "#2b2d42", sub: "#ef233c", cap: "#111", mark: "R" }, desc: ["同じ年に入団した、ドラフト1位のエリート。", "クールで口は悪いが、だれよりも遅くまで練習している。", "一軍の席をかけて争う、最大のライバル。"], line: "一軍に上がるのはオレだ。せいぜいついてこい。" },
+    kanto: { name: "鬼瓦", full: "鬼瓦 監督", role: "チームの監督", banner: "#2d3a55", sig: "normal", color: { main: "#444", sub: "#fff", cap: "#222", mark: "K" }, desc: ["二軍をあずかる鬼の監督。めったに笑わない。", "口数は少ないが、選手の努力は誰よりも見ている。", "頬の古傷は、現役時代にライナーを顔で止めた勲章らしい。"], line: "結果で見せろ。話はそれからだ。" },
   };
+  const CAST_ORDER = ["kanto", "goda", "hayase", "inukai", "ryuzaki"];
+  const MG = PB.Manga;
+
+  /* ---------- キャラクターの絵 (マンガ風) ---------- */
+  // 仲間はいま育成中の選手のチームの帽子・ユニフォーム (育成中でなければ無地の帽子)
+  function castTeam() {
+    const r = run();
+    return r ? Store.team(r.team) : null;
+  }
+  function castPic(who, ex, o) {
+    return MG.svg(who, Object.assign({ team: castTeam(), ex: ex || "normal", label: CAST[who] ? CAST[who].full : "" }, o));
+  }
+  // sil: まだ会っていない人はシルエット
+  function castIcon(who, ex, sil) {
+    return MG.icon(who, { team: castTeam(), ex, sil });
+  }
+  // 自分の顔: やる気・ケガで表情が変わる
+  function mePic(p, team, ex, o) {
+    return MG.svg("me", Object.assign({ team, ex: ex || "normal", face: p.face || {}, seed: p.id, label: p.full || "" }, o));
+  }
+  function moodFace(r) {
+    if (r.injured || r.mood <= 0) return "sad";
+    if (r.mood >= 4) return "happy";
+    return "normal";
+  }
+  // 会ったことのある人 (紹介カードを見せたか)
+  function met(r, who) {
+    return !!(r && r.met && r.met[who]);
+  }
+  function markMet(r, who) {
+    r.met = r.met || {};
+    r.met[who] = true;
+    Store.save();
+  }
 
   const PR_BAT = [
     { k: "bat", name: "打撃", exp: { tec: 9, str: 3 }, hp: 18 },
@@ -71,7 +105,7 @@
       throws: o.throws,
       bats: o.bats,
       num: o.num || 0,
-      face: { skin: o.skin, eyes: o.eyes, brow: o.brow || 0, cheek: false, hair: "#2b1b14" },
+      face: { skin: o.skin, eyes: o.eyes, brow: o.brow || 0, cheek: false, hair: "#2b1b14", hs: Number(o.hs) || 0 },
       custom: true,
       skills: [],
       traj: isPitcher ? 1 : 2,
@@ -104,6 +138,7 @@
       log: [],
       helpers: {},
       gameLog: [],
+      met: {},
     };
     Store.save();
     return Store.data.success.run;
@@ -186,8 +221,9 @@
   };
 
   /* ---------- イベント ---------- */
-  function ev(who, text, choices) {
-    return { who, text, choices };
+  // face: 表情 (省略すると台詞から決める。PB.Manga.faceOf)
+  function ev(who, text, choices, face) {
+    return { who, text, choices, face };
   }
   const RANDOM_EVENTS = [
     (r) => ev("hayase", "練習おつかれさま！はちみつレモン作ってきたよ。", [{ t: "ありがとう！", f: () => ((r.hp = Math.min(100, r.hp + 15)), (r.rel.hayase += 5), "体力+15") }]),
@@ -201,12 +237,17 @@
         { t: "行きます！", f: () => ((r.mood = Math.min(4, r.mood + 1)), (r.rel.goda += 8), (r.hp = Math.min(100, r.hp + 5)), "やる気アップ 剛田と仲良くなった") },
         { t: "今日は遠慮します", f: () => (addExp(r, { men: 6 }), "精神+6") },
       ]),
-    (r) => ev("inukai", isP(r) ? "リリースポイントがばらついているな。指先の感覚を意識してみなさい。" : "トップの位置が浅い。もう少し懐を深くしてみなさい。", [{ t: "やってみます", f: () => (addExp(r, isP(r) ? { tec: 8, brk: 4 } : { tec: 10 }), (r.rel.inukai += 5), "技術アップ") }]),
+    (r) => ev("inukai", isP(r) ? "リリースポイントがばらついているな。指先の感覚を意識してみなさい。" : "トップの位置が浅い。もう少し懐を深くしてみなさい。", [{ t: "やってみます", f: () => (addExp(r, isP(r) ? { tec: 8, brk: 4 } : { tec: 10 }), (r.rel.inukai += 5), "技術アップ") }], "serious"),
     (r) =>
-      ev("ryuzaki", "フン、まだそんなところにいるのか。一軍に上がるのはオレだ。", [
-        { t: "負けないぞ！", f: () => (addExp(r, { men: 8 }), (r.rel.ryuzaki += 7), "精神+8") },
-        { t: "……（無視する）", f: () => (addExp(r, { men: 3 }), "精神+3") },
-      ]),
+      ev(
+        "ryuzaki",
+        "フン、まだそんなところにいるのか。一軍に上がるのはオレだ。",
+        [
+          { t: "負けないぞ！", f: () => (addExp(r, { men: 8 }), (r.rel.ryuzaki += 7), "精神+8") },
+          { t: "……（無視する）", f: () => (addExp(r, { men: 3 }), "精神+3") },
+        ],
+        "normal"
+      ),
     (r) => ev(null, "大雨で練習が中止になった。部屋でゆっくり過ごした。", [{ t: "OK", f: () => ((r.hp = Math.min(100, r.hp + 20)), "体力+20") }]),
     (r) => ev(null, "ファンの子どもから手紙が届いた。『いつか一軍でホームラン見せてね！』", [{ t: "がんばるぞ！", f: () => ((r.mood = Math.min(4, r.mood + 1)), "やる気アップ") }]),
     (r) => ev("kanto", "……お前、最近どうだ。結果で見せてみろ。", [{ t: "はい！", f: () => ((r.eval += r.mood >= 3 ? 6 : 2), "監督の評価が上がった") }]),
@@ -217,7 +258,7 @@
       ]),
     (r) => ev(null, "全身がひどい筋肉痛だ…。", [{ t: "うう…", f: () => ((r.hp = Math.max(0, r.hp - 10)), "体力-10") }]),
     (r) => ev("goda", "寮の大掃除だ！新人は廊下の雑巾がけ百往復な！", [{ t: "はいっ！", f: () => (addExp(r, { agi: 6, men: 2 }), (r.hp = Math.max(0, r.hp - 6)), "敏捷+6 精神+2") }]),
-    (r) => ev("hayase", "スコアブックの付け方、教えてくれる？…わたし、もっと選手の役に立ちたいんだ。", [{ t: "一緒にやろう", f: () => ((r.rel.hayase += 8), addExp(r, { men: 4 }), "早瀬と仲良くなった") }]),
+    (r) => ev("hayase", "スコアブックの付け方、教えてくれる？…わたし、もっと選手の役に立ちたいんだ。", [{ t: "一緒にやろう", f: () => ((r.rel.hayase += 8), addExp(r, { men: 4 }), "早瀬と仲良くなった") }], "normal"),
     (r) => ev(null, "なんだか体が重い…スランプかもしれない。", [{ t: "…", f: () => ((r.mood = Math.max(0, r.mood - 1)), "やる気ダウン") }]),
   ];
 
@@ -227,19 +268,19 @@
     const defs = {
       goda: [
         { at: 40, who: "goda", text: "お前、根性あるな！オレの秘密の特訓に付き合え！タイヤ引きだ！", gain: { str: 25 }, msg: "筋力+25" },
-        { at: 80, who: "goda", text: "もう教えることはねえ。オレの全部、持っていけ！", skill: P ? "heavy" : "powerHitter" },
+        { at: 80, who: "goda", text: "もう教えることはねえ。オレの全部、持っていけ！", skill: P ? "heavy" : "powerHitter", face: "happy" },
       ],
       hayase: [
-        { at: 40, who: "hayase", text: "これ、みんなの分のお守り。…あなたのは、ちょっとだけ特別だよ。", hp: 30, mood: 4, msg: "体力回復・やる気最高" },
-        { at: 80, who: "hayase", text: "大事な場面ほど、いつものあなたでいて。わたし、ずっと見てるから。", skill: P ? "pinch" : "chance" },
+        { at: 40, who: "hayase", text: "これ、みんなの分のお守り。…あなたのは、ちょっとだけ特別だよ。", hp: 30, mood: 4, msg: "体力回復・やる気最高", face: "happy" },
+        { at: 80, who: "hayase", text: "大事な場面ほど、いつものあなたでいて。わたし、ずっと見てるから。", skill: P ? "pinch" : "chance", face: "happy" },
       ],
       inukai: [
         { at: 40, who: "inukai", text: "基本を徹底的に見直そう。今日は一日、私のメニューだ。", gain: { tec: 25 }, msg: "技術+25" },
-        { at: 80, who: "inukai", text: "君の理論はもう完成している。自信を持ちなさい。", skill: P ? "kire" : "avgHitter" },
+        { at: 80, who: "inukai", text: "君の理論はもう完成している。自信を持ちなさい。", skill: P ? "kire" : "avgHitter", face: "happy" },
       ],
       ryuzaki: [
-        { at: 40, who: "ryuzaki", text: "…悪くない。だが勝つのはオレだ。今日の居残り、付き合えよ。", gain: { str: 8, agi: 8, tec: 8, men: 8 }, msg: "経験点アップ" },
-        { at: 80, who: "ryuzaki", text: "認めてやる。お前は最高のライバルだ。一軍で待ってるぜ。", skill: P ? "k" : "spray", ev: 10 },
+        { at: 40, who: "ryuzaki", text: "…悪くない。だが勝つのはオレだ。今日の居残り、付き合えよ。", gain: { str: 8, agi: 8, tec: 8, men: 8 }, msg: "経験点アップ", face: "normal" },
+        { at: 80, who: "ryuzaki", text: "認めてやる。お前は最高のライバルだ。一軍で待ってるぜ。", skill: P ? "k" : "spray", ev: 10, face: "happy" },
       ],
     };
     for (const k in defs) {
@@ -247,22 +288,27 @@
         const flag = k + d.at;
         if (r.rel[k] >= d.at && !r.flags[flag]) {
           r.flags[flag] = true;
-          return ev(d.who, d.text, [
-            {
-              t: "ありがとうございます！",
-              f: () => {
-                if (d.gain) addExp(r, d.gain);
-                if (d.hp) r.hp = Math.min(100, r.hp + d.hp);
-                if (d.mood != null) r.mood = d.mood;
-                if (d.ev) r.eval += d.ev;
-                if (d.skill && r.player.skills.indexOf(d.skill) < 0) {
-                  r.player.skills.push(d.skill);
-                  return "特殊能力「" + D.SKILLS[d.skill].name + "」を習得！";
-                }
-                return d.msg || "";
+          return ev(
+            d.who,
+            d.text,
+            [
+              {
+                t: "ありがとうございます！",
+                f: () => {
+                  if (d.gain) addExp(r, d.gain);
+                  if (d.hp) r.hp = Math.min(100, r.hp + d.hp);
+                  if (d.mood != null) r.mood = d.mood;
+                  if (d.ev) r.eval += d.ev;
+                  if (d.skill && r.player.skills.indexOf(d.skill) < 0) {
+                    r.player.skills.push(d.skill);
+                    return "特殊能力「" + D.SKILLS[d.skill].name + "」を習得！";
+                  }
+                  return d.msg || "";
+                },
               },
-            },
-          ]);
+            ],
+            d.face
+          );
         }
       }
     }
@@ -331,7 +377,10 @@
         const list = Store.data.success.players;
         return (
           UI.header("サクセス", "back") +
-          '<div class="scr-body"><div class="su-hero"><canvas class="pc-face" width="96" height="96" data-face="cast:kanto"></canvas><p>「ドラフト最下位の新人よ。7月の一軍昇格テストまでに、結果を出してみせろ。」<small>— 鬼瓦監督</small></p></div>' +
+          // 監督の絵 (マンガ風) とふきだし。絵をタップすると紹介カード
+          '<div class="scr-body"><div class="su-hero mg-hero"><button class="mg-hero-pic" data-act="cast" data-arg="kanto" aria-label="鬼瓦監督の紹介">' +
+          castPic("kanto", "normal", { size: 140 }) +
+          '</button><p class="mg-say">「ドラフト最下位の新人よ。7月の一軍昇格テストまでに、結果を出してみせろ。」<small>— 鬼瓦監督</small></p></div>' +
           (r ? '<button class="mbtn red" data-act="continue"><b>続きから</b><small>' + esc(r.player.full) + " / " + dateText(r.turn) + "</small></button>" : "") +
           '<button class="mbtn' +
           (r ? "" : " red") +
@@ -353,14 +402,9 @@
           '</div><div class="row-btns"><button class="btn" data-act="import">パスワード入力</button></div></div>'
         );
       },
-      mount(root) {
-        UI.drawFaces(root, (id) => {
-          const c = CAST[id.split(":")[1]];
-          return c ? { p: { face: c.face }, team: c.color } : null;
-        });
-      },
       onAct(act, arg) {
         if (act === "back") return UI.go(Sc.title());
+        if (act === "cast") return Su.introCard(arg, CAST[arg].line, CAST[arg].sig);
         if (act === "continue") return UI.go(Su.turnScreen());
         if (act === "new") {
           if (run()) return UI.confirm("育成中の選手のデータは消えます。新しく始めますか？", () => UI.go(Su.create()), { yes: "始める", danger: true });
@@ -516,7 +560,7 @@
 
   /* ---------- 画面: 作成 ---------- */
   Su.create = function () {
-    const st = { name: U.pick(D.SURNAMES), given: U.pick(D.GIVEN), pos: "SS", throws: "R", bats: "R", team: "t", skin: D.SKINS[0], eyes: "round", pitch: "SL", num: U.randi(0, 99) };
+    const st = { name: U.pick(D.SURNAMES), given: U.pick(D.GIVEN), pos: "SS", throws: "R", bats: "R", team: "t", skin: D.SKINS[0], eyes: "round", hs: U.randi(0, 2), pitch: "SL", num: U.randi(0, 99) };
     const POS_OPTS = [
       ["P", "投手"],
       ["C", "捕手"],
@@ -532,7 +576,9 @@
       html() {
         return (
           UI.header("選手をつくる", "back") +
-          '<div class="scr-body"><div class="su-make"><canvas class="pc-face big" width="120" height="120" data-face="me"></canvas><div class="nm-in"><label>苗字<input id="sn" maxlength="6" value="' +
+          '<div class="scr-body"><div class="su-make"><div class="mg-make-pic">' +
+          mePic({ face: { skin: st.skin, eyes: st.eyes, hs: st.hs } }, Store.team(st.team), st.eyes === "smile" ? "happy" : "normal", { size: 120 }) +
+          '</div><div class="nm-in"><label>苗字<input id="sn" maxlength="6" value="' +
           esc(st.name) +
           '"></label><label>名前<input id="gn" maxlength="6" value="' +
           esc(st.given) +
@@ -586,14 +632,21 @@
             D.SKINS.map((c, i) => [c, ["色白", "標準", "健康的", "日焼け", "明るめ"][i]]),
             st.skin
           ) +
+          Sc.seg(
+            "hs",
+            [
+              [0, "前髪ツンツン"],
+              [1, "さっぱり短髪"],
+              [2, "長めの髪"],
+            ],
+            st.hs
+          ) +
           '<h3 class="lbl">入団するチーム</h3>' +
           Sc.teamPicker("team", st.team, null) +
           '<div class="row-btns stick"><button class="btn red big" data-act="go">入団する！</button></div></div>'
         );
       },
       mount(root) {
-        const draw = () => UI.drawFaces(root, () => ({ p: { face: { skin: st.skin, eyes: st.eyes, brow: 1 } }, team: Store.team(st.team) }));
-        draw();
         const bind = (id, key) => {
           const el = root.querySelector("#" + id);
           el.addEventListener("input", () => (st[key] = id === "num" ? U.clamp(Number(el.value) || 0, 0, 99) : el.value.trim()));
@@ -612,88 +665,156 @@
           return Su.story(
             [
               { who: "kanto", text: "お前が新人の" + st.name + "か。…ドラフト最下位、期待はしていない。" },
-              { who: "kanto", text: "7月の一軍昇格テストまでに、オレを納得させる結果を出せ。以上だ。" },
+              { who: "kanto", text: "7月の一軍昇格テストまでに、オレを納得させる結果を出せ。以上だ。", face: "serious" },
               { who: "hayase", text: "マネージャーの早瀬です！一緒にがんばろうね、" + st.name + "くん！" },
-              { who: "ryuzaki", text: "同期の竜崎だ。…一軍の席はひとつ。譲る気はない。" },
+              { who: "ryuzaki", text: "同期の竜崎だ。…一軍の席はひとつ。譲る気はない。", face: "normal" },
             ],
             () => UI.go(Su.turnScreen())
           );
         }
-        if (act in st) st[act] = arg;
+        if (act in st) st[act] = act === "hs" ? Number(arg) : arg;
         UI.refresh();
       },
     };
   };
 
   /* ---------- 会話 ---------- */
+  // 会話の箱: 左にマンガのコマ (表情つき)、右に名前と台詞
+  function talkHtml(who, text, ex) {
+    const c = who ? CAST[who] : null;
+    return (
+      '<div class="talkbox' +
+      (c ? " mg-talk" : "") +
+      '"' +
+      (c ? ' style="--bn:' + c.banner + '"' : "") +
+      ">" +
+      (c ? '<div class="mg-talk-pic">' + castPic(who, ex, { size: 96 }) + "</div>" : "") +
+      '<div class="tb-body">' +
+      (c ? '<b class="tb-name">' + esc(c.full) + "</b>" : '<b class="tb-name">イベント</b>') +
+      '<p class="tb-text">' +
+      esc(text) +
+      "</p></div></div>"
+    );
+  }
+
   Su.story = function (lines, done) {
     let i = 0;
     const r = run();
+    const next = () => {
+      i++;
+      if (i < lines.length) show();
+      else {
+        UI.closeModal();
+        done();
+      }
+    };
     const show = () => {
       const L = lines[i];
-      const c = L.who ? CAST[L.who] : null;
-      UI.modal(
-        '<div class="talkbox">' +
-          (c ? '<canvas class="pc-face" width="80" height="80" data-face="cast:' + L.who + '"></canvas>' : "") +
-          '<div class="tb-body">' +
-          (c ? '<b class="tb-name">' + esc(c.full) + "</b>" : "") +
-          '<p class="tb-text">' +
-          esc(L.text) +
-          '</p></div></div><div class="row-btns"><button class="btn primary" data-act="next">' +
-          (i < lines.length - 1 ? "▼" : "OK") +
-          "</button></div>",
-        {
-          dismiss: false,
-          mount(box) {
-            UI.drawFaces(box, (id) => {
-              const cc = CAST[id.split(":")[1]];
-              return cc ? { p: { face: cc.face }, team: r ? Object.assign({}, Store.team(r.team), cc.color) : cc.color } : null;
-            });
-          },
-          onAct() {
-            i++;
-            if (i < lines.length) show();
-            else {
-              UI.closeModal();
-              done();
-            }
-          },
-        }
-      );
+      const ex = MG.faceOf(L.text, L.face);
+      // 初めて話す人は紹介カード (最初の台詞はカードのふきだしに出す)
+      if (L.who && CAST[L.who] && r && !met(r, L.who)) {
+        markMet(r, L.who);
+        return Su.introCard(L.who, L.text, ex, next);
+      }
+      UI.modal(talkHtml(L.who, L.text, ex) + '<div class="row-btns"><button class="btn primary" data-act="next">' + (i < lines.length - 1 ? "▼" : "OK") + "</button></div>", {
+        dismiss: false,
+        onAct: next,
+      });
     };
     show();
   };
 
   Su.eventModal = function (e, done) {
     const r = run();
-    const c = e.who ? CAST[e.who] : null;
-    UI.modal(
-      '<div class="talkbox">' +
-        (c ? '<canvas class="pc-face" width="80" height="80" data-face="cast:' + e.who + '"></canvas>' : "") +
-        '<div class="tb-body">' +
-        (c ? '<b class="tb-name">' + esc(c.full) + "</b>" : '<b class="tb-name">イベント</b>') +
-        '<p class="tb-text">' +
-        esc(e.text) +
-        '</p></div></div><div class="col-btns">' +
-        e.choices.map((ch, i) => '<button class="btn" data-act="ch" data-arg="' + i + '">' + esc(ch.t) + "</button>").join("") +
-        "</div>",
-      {
+    const ex = MG.faceOf(e.text, e.face);
+    const open = () =>
+      UI.modal(talkHtml(e.who, e.text, ex) + '<div class="col-btns">' + e.choices.map((ch, i) => '<button class="btn" data-act="ch" data-arg="' + i + '">' + esc(ch.t) + "</button>").join("") + "</div>", {
         dismiss: false,
-        mount(box) {
-          UI.drawFaces(box, (id) => {
-            const cc = CAST[id.split(":")[1]];
-            return cc ? { p: { face: cc.face }, team: Object.assign({}, Store.team(r.team), cc.color) } : null;
-          });
-        },
         onAct(act, arg) {
+          if (act !== "ch") return;
           const msg = e.choices[Number(arg)].f();
           UI.closeModal();
           if (msg) UI.toast(msg, 2200);
           Store.save();
           done();
         },
+      });
+    if (e.who && CAST[e.who] && r && !met(r, e.who)) {
+      markMet(r, e.who);
+      return Su.introCard(e.who, e.text, ex, open);
+    }
+    open();
+  };
+
+  /* ---------- 人物紹介カード ---------- */
+  // 金の額縁: 左に大きな絵、右に名前の帯・紹介文、下にふきだし
+  Su.introCard = function (who, line, ex, done) {
+    const c = CAST[who];
+    if (!c) return done && done();
+    UI.modal(
+      '<div class="mgc" style="--bn:' +
+        c.banner +
+        '"><button class="mgc-close" data-act="close">閉じる<i>×</i></button>' +
+        '<div class="mgc-in"><div class="mgc-pic">' +
+        castPic(who, ex || c.sig, { size: 260 }) +
+        "</div>" +
+        '<div class="mgc-txt"><h3 class="mgc-name">' +
+        esc(c.full) +
+        '</h3><p class="mgc-role">' +
+        esc(c.role) +
+        '</p><p class="mgc-desc">' +
+        c.desc.map(esc).join("<br>") +
+        "</p></div>" +
+        '<p class="mgc-say">' +
+        esc(line) +
+        "</p></div></div>",
+      {
+        cls: "mgc-box",
+        dismiss: false,
+        onAct(act) {
+          if (act !== "close") return;
+          UI.closeModal();
+          if (done) done();
+        },
       }
     );
+  };
+
+  // 人物の一覧 (会った人だけ紹介カードを開ける)
+  Su.people = function () {
+    const r = run();
+    const rows = CAST_ORDER.map((k) => {
+      const c = CAST[k];
+      const known = met(r, k);
+      const v = k === "kanto" ? Math.min(100, Math.max(0, r.eval)) : Math.min(100, r.rel[k] || 0);
+      return (
+        '<button class="mgp-row' +
+        (known ? "" : " unknown") +
+        '" data-act="who" data-arg="' +
+        k +
+        '"' +
+        (known ? "" : " disabled") +
+        ' style="--bn:' +
+        c.banner +
+        '"><span class="mgp-pic">' +
+        castIcon(k, known ? c.sig : "normal", !known) +
+        '</span><span class="mgp-txt"><b>' +
+        (known ? esc(c.full) : "？？？") +
+        "</b><small>" +
+        (known ? esc(c.role) : "まだ出会っていない") +
+        '</small></span><span class="mgp-rel"><small>' +
+        (k === "kanto" ? "評価" : "仲よし") +
+        '</small><em><b style="width:' +
+        v +
+        '%"></b></em></span></button>'
+      );
+    }).join("");
+    UI.modal('<h3 class="modal-title">人物</h3><div class="mgp">' + rows + '</div><div class="row-btns"><button class="btn primary" data-act="close">とじる</button></div>', {
+      onAct(act, arg) {
+        if (act === "who") return Su.introCard(arg, CAST[arg].line, CAST[arg].sig, () => Su.people());
+        if (act === "close") UI.closeModal();
+      },
+    });
   };
 
   /* ---------- 画面: 週の行動 ---------- */
@@ -730,7 +851,7 @@
             '</span><span class="ph">体力-' +
             pr.hp +
             "</span>" +
-            (hs.length ? '<span class="helpers">' + hs.map((h) => '<i style="background:' + CAST[h].color.main + '">' + CAST[h].name[0] + "</i>").join("") + "</span>" : "") +
+            (hs.length ? '<span class="helpers">' + hs.map((h) => '<i class="mg-i" title="' + esc(CAST[h].name) + '">' + castIcon(h, CAST[h].sig) + "</i>").join("") + "</span>" : "") +
             "</button>"
           );
         };
@@ -740,7 +861,9 @@
           '</h2><span class="su-left">残り' +
           (TOTAL - r.turn) +
           "週</span></header>" +
-          '<div class="scr-body"><div class="su-status"><canvas class="pc-face" width="88" height="88" data-face="me"></canvas><div class="su-st"><b class="su-name">' +
+          '<div class="scr-body"><div class="su-status"><div class="mg-me-pic">' +
+          mePic(p, Store.team(r.team), moodFace(r), { size: 96 }) +
+          '</div><div class="su-st"><b class="su-name">' +
           esc(p.full) +
           ' <small>' +
           esc(D.POS_FULL[p.pos]) +
@@ -769,16 +892,13 @@
             : '<div class="row-btns"><button class="btn" data-act="pr" data-arg="rest">休む</button><button class="btn" data-act="pr" data-arg="play"' +
               (r.injured ? " disabled" : "") +
               ">遊ぶ</button></div>") +
-          '<div class="row-btns"><button class="btn primary" data-act="up">能力アップ</button><button class="btn" data-act="status">能力を見る</button></div>' +
+          '<div class="row-btns"><button class="btn primary" data-act="up">能力アップ</button><button class="btn" data-act="status">能力を見る</button><button class="btn" data-act="people">人物</button></div>' +
           '<div class="rels">' +
           ["goda", "hayase", "inukai", "ryuzaki"]
-            .map((k) => '<span class="rel"><i style="background:' + CAST[k].color.main + '">' + CAST[k].name[0] + "</i>" + esc(CAST[k].name) + '<em><b style="width:' + Math.min(100, r.rel[k]) + '%"></b></em></span>')
+            .map((k) => '<span class="rel"><i class="mg-i">' + castIcon(k, CAST[k].sig, !met(r, k)) + "</i>" + esc(CAST[k].name) + '<em><b style="width:' + Math.min(100, r.rel[k]) + '%"></b></em></span>')
             .join("") +
           "</div></div>"
         );
-      },
-      mount(root) {
-        UI.drawFaces(root, () => ({ p: r.player, team: Store.team(r.team) }));
       },
       onAct(act, arg) {
         if (act === "menu") {
@@ -786,6 +906,7 @@
           return UI.go(Su.menu());
         }
         if (act === "up") return UI.go(Su.spend(() => UI.go(Su.turnScreen())));
+        if (act === "people") return Su.people();
         if (act === "status") return UI.modal(UI.playerCard(r.player, Store.team(r.team)) + '<div class="row-btns"><button class="btn primary" data-act="x">とじる</button></div>', { cls: "wide", mount: (b) => UI.drawFaces(b, () => ({ p: r.player, team: Store.team(r.team) })), onAct: () => UI.closeModal() });
         if (act === "game") return Su.playGame();
         if (act === "pr") {
@@ -1072,14 +1193,14 @@
     if (e >= 90) {
       bonus = 120;
       lines = [
-        { who: "kanto", text: "……見事だ。文句なしの一軍昇格だ。開幕から、お前を使う。" },
+        { who: "kanto", text: "……見事だ。文句なしの一軍昇格だ。開幕から、お前を使う。", face: "happy" },
         { who: "hayase", text: "やったね！ずっと信じてたよ！" },
         { who: "ryuzaki", text: "チッ…今回は譲ってやる。だが次は負けねえ。" },
       ];
     } else if (e >= 50) {
       bonus = 70;
       lines = [
-        { who: "kanto", text: "まだ荒削りだが…一軍に上げてやる。結果を出し続けろ。" },
+        { who: "kanto", text: "まだ荒削りだが…一軍に上げてやる。結果を出し続けろ。", face: "normal" },
         { who: "hayase", text: "一軍昇格おめでとう！これからが本番だね！" },
       ];
     } else {
@@ -1116,7 +1237,7 @@
     UI.go({
       cls: "result",
       html() {
-        return '<div class="scr-body res-body"><div class="res-head win"><p class="walkoff">サクセス完了</p><h2>選手完成！</h2></div>' + UI.playerCard(p, Store.team(r.team)) + '<div class="row-btns stick"><button class="btn red" data-act="reg">チームに登録</button><button class="btn primary" data-act="done">あとで</button></div></div>';
+        return '<div class="scr-body res-body"><div class="res-head win"><p class="walkoff">サクセス完了</p><h2>選手完成！</h2></div><div class="mg-done-pic">' + mePic(p, Store.team(r.team), "happy", { size: 160 }) + "</div>" + UI.playerCard(p, Store.team(r.team)) + '<div class="row-btns stick"><button class="btn red" data-act="reg">チームに登録</button><button class="btn primary" data-act="done">あとで</button></div></div>';
       },
       mount(root) {
         UI.drawFaces(root, () => ({ p, team: Store.team(r.team) }));

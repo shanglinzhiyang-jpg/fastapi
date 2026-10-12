@@ -37,6 +37,7 @@ const ASSETS = [
   "js/screens.js",
   "js/pennant.js",
   "js/news.js",
+  "js/manga.js",
   "js/success.js",
   "js/main.js",
 ];
