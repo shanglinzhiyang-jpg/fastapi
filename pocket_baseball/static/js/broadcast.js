@@ -734,8 +734,57 @@
         row("home") +
         "</table></div></div>";
       this.flash(this.el.center, html, 2500, "center", "k-board");
-      const list = g.scoreLog.slice(-3);
+      const list = this.inningInfo();
       if (list.length) this.ticker(list, "今日の結果");
+      return list.length;
+    }
+
+    // 攻守交代の下のテロップ: その回の得点 + 回ごとに替わる話題 (投手成績・当たっている打者・次の回の先頭・安打数)
+    inningInfo() {
+      const g = this.g;
+      const endTop = !g.top;
+      const endInn = g.top ? g.inning - 1 : g.inning;
+      const out = g.scoreLog.filter((e) => e.inning === endInn && e.top === endTop).slice(-2);
+      const ab = (side) => esc(abbr(teamOf(g.teams[side])));
+      const k = (this.breakN = (this.breakN || 0) + 1);
+      const topics = [];
+      // 終わった回を投げていた投手
+      const fs = endTop ? "home" : "away";
+      const ps = g.pstate[fs];
+      if (ps) {
+        const pit = g.P(ps.id);
+        const s = g.box[ps.id] || {};
+        if (pit && (s.outs || 0) >= 6) topics.push({ label: "投手成績", html: '<span class="tk-who">(' + ab(fs) + ")</span>" + esc(pit.name) + " " + U.fmtIP(s.outs || 0) + "回 " + (s.np || 0) + "球 " + (s.pk || 0) + "奪三振 " + (s.pr || 0) + "失点" });
+      }
+      // 当たっている打者 (まだ紹介していない人)
+      this.tkShown = this.tkShown || {};
+      for (const side of ["away", "home"]) {
+        for (const e of g.order[side] || []) {
+          const s = g.box[e.id] || {};
+          const key = e.id + ":" + (s.h || 0);
+          if (((s.h || 0) >= 2 || (s.hr || 0) >= 1) && !this.tkShown[key]) {
+            const p = g.P(e.id);
+            topics.push({ label: "今日の打撃", key, html: '<span class="tk-who">(' + ab(side) + ")</span>" + esc(p.name) + " " + (s.ab || 0) + "打数" + (s.h || 0) + "安打" + (s.hr ? " " + s.hr + "本塁打" : "") + (s.rbi ? " " + s.rbi + "打点" : "") });
+            break;
+          }
+        }
+      }
+      // 次の回の先頭打者
+      const bs = g.battingSide();
+      const nb = g.batter();
+      if (nb) {
+        const ord = g.bi[bs] + 1;
+        topics.push({ label: "この回は", html: '<span class="tk-who">(' + ab(bs) + ")</span>" + ord + "番 " + esc(nb.name) + "から" + (ord >= 3 && ord <= 5 ? " クリーンアップ" : "") });
+      }
+      topics.push({ label: "ここまで", html: ab("away") + " " + g.hits.away + "安打 － " + ab("home") + " " + g.hits.home + "安打" });
+      // 回ごとに 1 つ (得点がなかった回は 2 つ)
+      const want = out.length ? 1 : 2;
+      for (let i = 0; i < Math.min(want, topics.length); i++) {
+        const t = topics[(k + i) % topics.length];
+        out.push(t);
+        if (t.key) this.tkShown[t.key] = 1;
+      }
+      return out;
     }
   }
 
