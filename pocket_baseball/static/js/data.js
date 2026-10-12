@@ -468,6 +468,16 @@
     return team;
   };
 
+  // 架空の選手を 1 人作る (ペナントの二軍など)。o = { pos, role, tier, style, used (使った姓の Set) }。id・背番号は呼ぶ側で付ける
+  D.genPlayer = function (rng, o) {
+    const opt = o || {};
+    const style = STYLE_BIAS[opt.style] ? opt.style : "contact";
+    const p = opt.pos === "P" ? genPitcher(rng, opt.role || "RP", opt.tier || "bench", style) : genBatter(rng, POS_BIAS[opt.pos] ? opt.pos : "LF", opt.tier || "bench", style);
+    Object.assign(p, nameGen(rng, opt.used || new Set()));
+    p.face = genFace(rng);
+    return p;
+  };
+
   D.batOverall = (p) => p.meet * 1.2 + p.power * 1.2 + p.speed * 0.6 + p.field * 0.4 + p.arm * 0.3 + p.catch * 0.2;
   D.pitOverall = (p) => (p.velo - 120) * 1.6 + p.control * 0.9 + p.stamina * 0.25 + p.pitches.reduce((a, b) => a + b.lv * 5, 0);
 

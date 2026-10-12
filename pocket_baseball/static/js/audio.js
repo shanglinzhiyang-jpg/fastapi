@@ -35,7 +35,7 @@
     return A.enabled && ctx && ctx.state === "running";
   }
 
-  function noise(dur, filterType, freq, q, gain, when, sweepTo) {
+  function noise(dur, filterType, freq, q, gain, when, sweepTo, dest) {
     const t = ctx.currentTime + (when || 0);
     const src = ctx.createBufferSource();
     src.buffer = noiseBuf;
@@ -50,7 +50,7 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(f);
     f.connect(g);
-    g.connect(master);
+    g.connect(dest || master);
     src.start(t, Math.random() * 1.5);
     src.stop(t + dur + 0.05);
   }
@@ -109,9 +109,10 @@
     tone(660, 0.12, "triangle", 0.2);
     tone(440, 0.18, "triangle", 0.2, 0.1);
   };
+  // 攻守交代の切り替え音 (中継のスイッチ音風に控えめな 3 音)
   A.chime = function () {
     if (!ok()) return;
-    [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.35, "triangle", 0.15, i * 0.11));
+    [523, 392, 523].forEach((f, i) => tone(f, i === 2 ? 0.32 : 0.12, "triangle", 0.08, i * 0.13));
   };
   // ニュースのジングル (オリジナルの短いフレーズ)
   A.newsJingle = function () {
