@@ -110,7 +110,8 @@ function generate() {
     // props
     fountain(8, 13),
     streetStage(6, 34, 4, { solid: false }),
-    train(45, 38),
+    train(45, 38, { text: undefined }),
+    { type: 'sign', x: 50, y: 37, text: 'フェンスの向こうに新幹線が停まっている。乗るなら駅のきっぷ売り場へ。' },
     taxi(48, 33), taxi(51, 33, '#2f9a4a'),
     busStop(55, 32),
     statue(27, 13, { text: '「笑顔は世界をつなぐ」と刻まれた像だ。' }),
