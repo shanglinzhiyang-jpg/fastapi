@@ -351,6 +351,90 @@ function checkSchedBasics(sc, label, il) {
 }
 lap("日程");
 
+/* ========== 日程の形: ホーム・ロードの並びと主催の半々 (20 seed × 全区分。試合はしない) ==========
+ * ホーム・ロードの連続は 9 試合まで、球団ごとのホーム・ロードの差と相手ごとの主催の差は 1 以内、
+ * ホームのカードのすぐ後に同じ相手とまたホームは無し、開幕から最初のホームまで 3 カード以内。
+ * ストライキの有無で変わるのは主催だけ (対戦の並びは同じ) */
+{
+  const SEEDS = 20;
+  const blockOf = (n) => {
+    const w = Sched.dow(n);
+    return n - ((w + 6) % 7) + (w >= 2 && w <= 4 ? "tt" : "fs");
+  };
+  const pairsOn = (sc) => sc.days.map((d, i) => sc.dates[i] + ":" + d.map((m) => [m.home, m.away].sort().join("-")).sort().join(","));
+  const out = [];
+  const keep = {};
+  for (const [name, o, games] of [
+    ["10試合", { len: "s10" }, { C: 10, P: 10 }],
+    ["20試合", { len: "s20" }, { C: 20, P: 20 }],
+    ["30試合", { len: "s30" }, { C: 30, P: 30 }],
+    ["ハーフ", { len: "half" }, { C: 70, P: 70 }],
+    ["フル(中止なし)", { len: "full", strike: false }, { C: 140, P: 135 }],
+    ["フル", { len: "full", strike: true }, { C: 138, P: 133 }],
+    ["交流戦", { len: "full", il: true, strike: false }, { C: 146, P: 146 }],
+    ["交流戦・中止", { len: "full", il: true, strike: true }, { C: 144, P: 144 }],
+  ]) {
+    const w = { h: 0, a: 0, diff: 0, split: 0, open: 0, ms: 0 };
+    for (let seed = 1; seed <= SEEDS; seed++) {
+      const t0 = Date.now();
+      const sc = Sched.build(Object.assign({ seed }, o), byLg);
+      w.ms += Date.now() - t0;
+      if (o.len === "full") keep[name + seed] = sc;
+      for (const id of byLg.C.concat(byLg.P)) {
+        const lb = name + " seed " + seed + " " + id + ": ";
+        // カード = 同じブロック (火〜木・金〜日) で同じ相手との続き
+        const cards = [];
+        sc.days.forEach((d, i) =>
+          d.forEach((m) => {
+            if (m.home !== id && m.away !== id) return;
+            const h = m.home === id;
+            const opp = h ? m.away : m.home;
+            const b = blockOf(sc.dates[i]);
+            const c = cards[cards.length - 1];
+            if (c && c.opp === opp && c.b === b) c.g++;
+            else cards.push({ opp, h, b, g: 1 });
+          })
+        );
+        let run = 0;
+        let home = 0;
+        const vs = {};
+        cards.forEach((c, k) => {
+          const prev = cards[k - 1];
+          run = prev && prev.h === c.h ? run + c.g : c.g;
+          w[c.h ? "h" : "a"] = Math.max(w[c.h ? "h" : "a"], run);
+          assert.ok(run <= Sched.RUN_MAX, lb + (c.h ? "ホーム" : "ロード") + "が " + run + " 試合続く");
+          assert.ok(!(prev && prev.opp === c.opp && prev.h && c.h), lb + "同じ相手と続けてホーム (" + c.opp + ")");
+          if (c.h) home += c.g;
+          const v = vs[c.opp] || (vs[c.opp] = [0, 0]);
+          v[c.h ? 0 : 1] += c.g;
+        });
+        const total = cards.reduce((s, c) => s + c.g, 0);
+        assert.strictEqual(total, games[lgOfTeam(id)], lb + "試合数");
+        w.diff = Math.max(w.diff, Math.abs(2 * home - total));
+        assert.ok(Math.abs(2 * home - total) <= 1, lb + "ホーム " + home + " / ロード " + (total - home));
+        for (const k in vs) {
+          w.split = Math.max(w.split, Math.abs(vs[k][0] - vs[k][1]));
+          assert.ok(Math.abs(vs[k][0] - vs[k][1]) <= 1, lb + k + " との主催 " + vs[k].join("/"));
+        }
+        const first = cards.findIndex((c) => c.h);
+        w.open = Math.max(w.open, first);
+        assert.ok(first >= 0 && first <= Sched.OPEN_AWAY, lb + "開幕から " + first + " カード続けてロード");
+      }
+    }
+    out.push(name + " H" + w.h + "/A" + w.a + "・差" + w.diff + "・相手" + w.split + "・開幕ロード" + w.open + "・" + (w.ms / SEEDS).toFixed(0) + "ms");
+  }
+  for (let seed = 1; seed <= SEEDS; seed++)
+    for (const [a, b] of [
+      ["フル(中止なし)", "フル"],
+      ["交流戦", "交流戦・中止"],
+    ]) {
+      const want = pairsOn(keep[a + seed]).filter((x) => !(+x.split(":")[0] >= Sched.STRIKE[0] && +x.split(":")[0] <= Sched.STRIKE[1]));
+      assert.deepStrictEqual(pairsOn(keep[b + seed]), want, b + " seed " + seed + ": ストライキで対戦の並びが変わった");
+    }
+  console.log("日程の形 (" + SEEDS + " seed の最大): 連続 H/A・差・相手ごとの差・開幕からのロード (カード)\n  " + out.join("\n  "));
+}
+lap("日程の形");
+
 /* ========== 高速シミュレーション: 1〜4 の検査を QuickGame の試合で ========== */
 {
   games = [];
@@ -444,6 +528,22 @@ let fullPen;
   );
   assert.ok(fullPen.news.length <= News.maxNews(fullPen) && News.maxNews(fullPen) >= 1500, "ニュースの上限");
   checkResults(fullPen);
+  // v3 の記録: 守備位置ごとの出場・先発・完投/完封/QS・ホールド
+  for (const lg of ["C", "P"])
+    for (const x of Pen.standings(fullPen, lg)) {
+      const ps = Pen.team(x.id).players.map((p) => fullPen.stats[p.id] || {});
+      assert.ok(ps.reduce((a, q) => a + ((q.pos || {}).C || 0), 0) >= x.g, "捕手の出場が試合数より少ない " + x.id);
+      assert.strictEqual(ps.reduce((a, q) => a + (q.gs || 0), 0), x.g, "先発の数 " + x.id);
+      for (const pos of ["1B", "2B", "3B", "SS", "LF", "CF", "RF"]) assert.ok(ps.reduce((a, q) => a + ((q.pos || {})[pos] || 0), 0) >= x.g, pos + " の出場 " + x.id);
+    }
+  let nHld = 0;
+  for (const id in fullPen.stats) {
+    const q = fullPen.stats[id];
+    assert.ok((q.sho || 0) <= (q.cg || 0) && (q.cg || 0) <= (q.gs || 0) && (q.qs || 0) <= (q.gs || 0), "完投・完封・QS の数");
+    assert.ok((q.hld || 0) <= (q.pg || 0) - (q.gs || 0) && (q.rw || 0) <= (q.w || 0), "ホールド・救援勝利の数");
+    nHld += q.hld || 0;
+  }
+  assert.ok(nHld > 50, "ホールドが少ない " + nHld);
   const json = JSON.stringify(fullPen);
   const kb = json.length / 1024;
   console.log("フル 2004 年 (高速): " + nGames + "試合 " + fullPen.regDays + "日 + ポストシーズン " + fullPen.results.filter((r) => r.ps).length + "試合 (" + (fullPen.schedule.length - fullPen.regDays) + "日) 計 " + sec.toFixed(1) + "秒 (1試合 " + ((sec * 1000) / fullPen.results.length).toFixed(1) + "ms)、セーブ " + kb.toFixed(0) + "KB、ニュース " + fullPen.news.length + "件");
@@ -858,6 +958,26 @@ let shortPen;
   // 月間 MVP: 区分 × リーグ × 打/投 で最大 1 人
   const mk = p.awards.monthly.filter((x) => !x.partial).map((x) => x.per + x.lg + x.kind);
   assert.ok(mk.length >= 2 && new Set(mk).size === mk.length, "月間 MVP の重複");
+  // 王手・逆王手の記事 (作った日本シリーズ: 3 連勝 → 3 連敗)
+  {
+    const f = clone(p);
+    const js = f.post.series.find((x) => x.id === "JS");
+    const mkG = (n, w) => {
+      const home = PP.homeOf(js, n, 2004);
+      const hiHome = home === js.hi;
+      const win = (w === "h") === hiHome;
+      return { day: 500 + n, gi: 0, n, home, away: hiHome ? js.lo : js.hi, hs: win ? 3 : 1, as: win ? 1 : 3, inn: 9 };
+    };
+    js.games = ["h", "h", "h", "l", "l", "l"].map((w, i) => mkG(i + 1, w));
+    js.win = null;
+    js.end = null;
+    f.news = [];
+    for (let d = 501; d <= 506; d++) News.postNews(f, d);
+    const tl = (d) => f.news.filter((x) => x.day === d && x.kind === "ps").map((x) => x.title).join(" / ");
+    assert.ok(/先勝/.test(tl(501)), "先勝: " + tl(501));
+    assert.ok(/日本一へ王手/.test(tl(503)), "王手: " + tl(503));
+    assert.ok(/逆王手/.test(tl(506)), "逆王手: " + tl(506));
+  }
   console.log("短期 + ポストシーズン: P1 " + s1.w.join("-") + " / P2 " + s2.w.join("-") + (s2.adv ? "(adv)" : "") + " / 日本シリーズ " + Pen.team(sj.win).short + " " + sj.w.join("-") + " / " + (p.schedule.length - p.regDays) + "日");
 }
 lap("短期 + ポストシーズン");
@@ -886,6 +1006,16 @@ lap("短期 + ポストシーズン");
   assert.strictEqual((old.awards.monthly || []).length, 0, "日付のない日程に月間 MVP");
   assert.ok(/月間MVPはありません/.test(Object.assign(PA.screen({ tab: "mon" })).html()), "月間 MVP の画面 (日付なし)");
   assert.strictEqual(Pen.dayLabel(old, old.awardsDay), "表彰式", "日付のない表彰式の日");
+  // 日付のない旧来の日程でもポストシーズン (移行した古いセーブ): 見出しは「日本シリーズ第N戦」
+  const op = Pen.create(my, 2, "normal", 9);
+  op.opts.fast = "quick";
+  op.opts.post = true;
+  Store.data.pennant = op;
+  playSeason(H, op, true);
+  assert.ok(op.finished && op.post.champs.JS && !op.dates, "日付のない日程のポストシーズン");
+  const jsDay = PP.series(op, "JS").start;
+  assert.strictEqual(Pen.dayLabel(op, jsDay), "日本シリーズ第1戦", "日付のない日のポストシーズンの見出し");
+  checkResults(op);
 }
 lap("CS・ポストシーズンなし・旧来の日程");
 

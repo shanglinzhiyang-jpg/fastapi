@@ -799,7 +799,7 @@
     const k = s.win === s.hi ? 0 : 1;
     const word = s.id === "JS" ? "日本一" : s.cel === "lg" ? "優勝" : "CS制覇";
     const head = mine ? word + "！！" : win.short + " " + word;
-    const sub = s.id === "JS" ? "日本シリーズ " : s.cel === "lg" ? LG_SHORT.P + "（プレーオフ制覇）" : LG_SHORT[s.lg] + "（日本シリーズ進出）";
+    const sub = s.id === "JS" ? "日本シリーズ " : s.cel === "lg" ? "プレーオフ " : LG_SHORT[s.lg] + " CS ";
     const mvp = pen.post.mvp && pen.post.mvp[sid];
     // 自チームが敗れた系列は残念な音、それ以外は祝福
     const A = PB.Audio;

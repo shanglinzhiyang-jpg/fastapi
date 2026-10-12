@@ -1454,7 +1454,11 @@
             block("防御率", top(qual, (x) => -(x.s.er || 0) / Math.max(1, x.s.outs || 0), (x) => U.fmtERA(x.s.er || 0, x.s.outs || 0))) +
             block("勝利", top(pits, (x) => x.s.w || 0, (x) => (x.s.w || 0) + "勝")) +
             block("奪三振", top(pits, (x) => x.s.pk || 0, (x) => (x.s.pk || 0) + "個")) +
-            block("セーブ", top(pits, (x) => x.s.sv || 0, (x) => (x.s.sv || 0) + "S"));
+            block("セーブ", top(pits, (x) => x.s.sv || 0, (x) => (x.s.sv || 0) + "S")) +
+            // 完投・ホールドは v3 から記録 (それより前のセーブは「記録なし」)
+            (pen.statsSince
+              ? block("ホールド", '<tr><td class="muted">記録なし（途中のセーブのため）</td></tr>') + block("完投", '<tr><td class="muted">記録なし（途中のセーブのため）</td></tr>')
+              : block("ホールド", top(pits.filter((x) => x.s.hld), (x) => x.s.hld || 0, (x) => (x.s.hld || 0) + "H")) + block("完投", top(pits.filter((x) => x.s.cg), (x) => (x.s.cg || 0) * 10 + (x.s.sho || 0), (x) => (x.s.cg || 0) + "完投" + (x.s.sho ? "（完封" + x.s.sho + "）" : ""))));
         }
         return (
           UI.header("個人成績", "back") +

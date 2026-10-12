@@ -182,30 +182,33 @@
     return n;
   }
 
-  // 巡 (総当たり 1 回分) の長さの並び。短い巡 (2 連戦) は間に散らし、最初と最後は長い巡に
-  // (終盤のストライキの週末に 2 連戦が当たると 2 試合とも消え、主催を半々にできない)。avoid の位置にも置かない。
-  // 開幕のブロックが短い (土曜開幕など) ときは、入る長さの巡を先頭に
-  function cycleOrder(Ls, cap0, avoid) {
+  // 巡 (総当たり 1 回分) の長さの並びの候補: 短い巡 (2 連戦など) の置き場所をすべて。
+  // 開幕のブロックが短い (土曜開幕など) ときは入る長さの巡を先頭に、そうでなければ先頭は長い巡 (開幕日を動かさない)
+  function cycleOrders(Ls, cap0) {
     const maxL = Math.max(...Ls);
-    let shorts = Ls.filter((L) => L < maxL).sort((a, b) => b - a);
-    if (!shorts.length) return Ls.slice();
-    const out = new Array(Ls.length).fill(0);
-    if (maxL > cap0) {
-      const k = shorts.findIndex((L) => L <= cap0);
-      if (k >= 0) {
-        out[0] = shorts[k];
-        shorts = shorts.filter((L, i) => i !== k);
+    const shorts = Ls.filter((L) => L < maxL).sort((a, b) => b - a);
+    if (!shorts.length) return [Ls.slice()];
+    const out = [];
+    const head = maxL > cap0 ? shorts.findIndex((L) => L <= cap0) : -1;
+    const rest = head >= 0 ? shorts.filter((L, i) => i !== head) : shorts;
+    const pos = [];
+    const pick = (from) => {
+      if (out.length >= 400) return;
+      if (pos.length === rest.length) {
+        const o = new Array(Ls.length).fill(maxL);
+        if (head >= 0) o[0] = shorts[head];
+        pos.forEach((p, i) => (o[p] = rest[i]));
+        out.push(o);
+        return;
       }
-    }
-    const room = Math.max(1, Ls.length - 2);
-    shorts.forEach((L, j) => {
-      let p = 1 + Math.floor(((j + 0.5) * room) / shorts.length);
-      while (p < out.length && (out[p] || avoid.has(p) || p === out.length - 1)) p++;
-      if (p >= out.length) p = out.findIndex((x, i) => !x && !avoid.has(i));
-      if (p < 0) p = out.indexOf(0);
-      out[p] = L;
-    });
-    return out.map((L) => L || maxL);
+      for (let p = from; p < Ls.length; p++) {
+        pos.push(p);
+        pick(p + 1);
+        pos.pop();
+      }
+    };
+    pick(1);
+    return out;
   }
 
   /* ---------- 対戦の並び (どの回にどの組が当たるか) ---------- */
@@ -284,7 +287,7 @@
    * slots[k] = { pairs: [[a, b]...] (球団の番号), le: 実際に行う試合数 (ストライキの分は除く) }
    * E[i] = 回 i の前に入る決まった試合 (交流戦): [{ side: [1 = ホーム / 0 = ロード ...], le }] (E[N] は最後の回のあと)
    * 1) 組ごとに主催の試合数を半々にした初期値を作る (奇数の組は、球団ごとの合計も半々になるよう多い側を決める)。
-   * 2) 同じ組・同じ試合数の 2 カードの主催を入れ替える (半々は崩れない) 焼きなましで、9 試合を超える連続・
+   * 2) 同じ組のカードどうしで試合数の合計が同じものの主催を入れ替える (半々は崩れない) 焼きなましで、9 試合を超える連続・
    *    開幕からの長いロードを無くし、1 カードだけの入れ替わり・4 カード以上の連続を減らす。
    * 返り値: 回ごとの向き (ビット i が 1 なら pairs[i] の b が主催) */
   // 和が t になる部分集合をランダムに 1 つ (ls: 各要素の試合数)。無ければ null
@@ -322,7 +325,7 @@
       })
     );
     const host = new Uint8Array(N * m);
-        // 組ごとの対戦 (p = 小さい番号 * n + 大きい番号)
+    // 組ごとの対戦 (p = 小さい番号 * n + 大きい番号)
     const meets = {};
     for (let q = 0; q < N * m; q++) {
       const p = Math.min(A[q], B[q]) * n + Math.max(A[q], B[q]);
@@ -373,7 +376,8 @@
       const b = p % n;
       qs.forEach((q, j) => (host[q] = (take[j] ? a : b) === A[q] ? 0 : 1));
     }
-    // 球団ごとの並び (決まった試合と対戦): Q = 対戦の番号 (決まった試合は -1)、F = 決まった側、L = 試合数
+    // 球団ごとの並び (決まった試合と対戦): Q = 対戦の番号 (決まった試合は -1)、
+    // F = 決まった側 (対戦は自分が B なら 1: host[q] === F ならホーム)、L = 試合数
     const seq = [];
     for (let x = 0; x < n; x++) seq.push({ Q: [], F: [], L: [] });
     const add = (x, q, f, l) => {
@@ -388,8 +392,13 @@
         for (let i = 0; i < m; i++) {
           const q = k * m + i;
           add(A[q], q, 0, Lq[q]);
-          add(B[q], q, 0, Lq[q]);
+          add(B[q], q, 1, Lq[q]);
         }
+    }
+    for (const x of seq) {
+      x.Q = Int16Array.from(x.Q);
+      x.F = Int8Array.from(x.F);
+      x.L = Int8Array.from(x.L);
     }
     // 球団ごとの評価: hard = 9 試合を超えた分 + 開幕からのロードの超過、soft = 形の好み (1 カードだけ・4 カード以上・開幕から 3 カードのロード)
     const HW = 20;
@@ -409,7 +418,7 @@
       let first = true;
       for (let t = 0; t <= len; t++) {
         const q = Q[t];
-        const s = t === len ? -2 : q < 0 ? F[t] : (host[q] ? B[q] : A[q]) === x ? 1 : 0;
+        const s = t === len ? -2 : q < 0 ? F[t] : host[q] === F[t] ? 1 : 0;
         if (s === side) {
           g += L[t];
           c++;
@@ -443,12 +452,12 @@
     let bestCost = hard === 0 ? total : Infinity;
     // 入れ替えられる組 (同じ試合数のカードが 2 つ以上ある組)
     const movable = plist.filter((p) => meets[p].length > 1);
-    // 9 試合以内にできないときは温度を戻してやり直す (最大 4 回)。それでも駄目なら一番ましな並び
+    // 9 試合以内にできないときは温度を戻してやり直す (最大 8 回)。それでも駄目なら一番ましな並び
     let any = host.slice();
     let anyCost = total;
     const cool = Math.pow(0.05 / 2, 1 / Math.max(1, iters));
     const cand = [];
-    for (let it = 0, temp = 2; it < iters * 4 && movable.length && !(best && it >= iters); it++, temp = it % iters ? temp * cool : 2) {
+    for (let it = 0, temp = 2; it < iters * 8 && movable.length && !(best && it >= iters); it++, temp = it % iters ? temp * cool : 2) {
       // 9 試合を超える球団があるときは、半分はその球団の組から選ぶ
       let p = movable[Math.floor(rnd() * movable.length)];
       if (hard > 0 && rnd() < 0.5) {
@@ -511,7 +520,6 @@
         if (hard === 0 && total < bestCost) {
           bestCost = total;
           best = host.slice();
-          S._bestIt = it; // DEBUG
         }
         if (!best && total < anyCost) {
           anyCost = total;
@@ -519,7 +527,6 @@
         }
       } else for (const q of cand) host[q] ^= 1;
     }
-    (S._dbg = S._dbg || []).push([N, Math.round(bestCost), S._bestIt, hard]); // DEBUG
     if (!best) best = any;
     const out = [];
     for (let k = 0; k < N; k++) {
@@ -579,8 +586,7 @@
       const raw = S.cards(perPairOf(o, lg)).map((c) => c.L);
       const cap0 = blocks.length ? blocks[0].days.length : 3;
       // 巡の長さの並び → 回ごとの長さ・休みのブロック・日付
-      const layout = (avoid) => {
-        const Ls = cycleOrder(raw, cap0, avoid);
+      const layout = (Ls) => {
         const slotL = [];
         for (const L of Ls) for (let r = 0; r < n - 1; r++) slotL.push(L);
         const bl = blocks.slice();
@@ -605,13 +611,32 @@
         }
         return { Ls, slotL, at: assign(slotL, bl, off) };
       };
-      let lay = layout(new Set());
-      // 交流戦の直前・直後の巡は 3 連戦に (2 連戦だと主催の組み合わせが決まってしまい、交流戦の前後で連続が長くなりやすい)
-      if (ilRounds.length) {
-        const i0 = lay.at.findIndex((d) => d.length && d[0] > ilRounds[0].at[0]);
-        if (i0 > 0) {
-          const avoid = new Set([Math.floor((i0 - 1) / (n - 1)), Math.floor(i0 / (n - 1))]);
-          if ([...avoid].some((c) => lay.Ls[c] < Math.max(...raw))) lay = layout(avoid);
+      // 短い巡の置き場所を選ぶ (ストライキの有無に関係なく同じ並び):
+      // 1) ストライキの週末は 3 連戦 (2 連戦だと 2 試合とも消え、主催を半々にできない)
+      // 2) 交流戦の直前・直後の巡は 3 連戦 (主催の組み合わせが決まりやすく、交流戦の前後で連続が長くなる)
+      // 3) シーズンが早く終わる 4) 短い巡どうしが離れている
+      const maxL = Math.max(...raw);
+      let lay = null;
+      let best = null;
+      for (const Ls of cycleOrders(raw, cap0)) {
+        const l = layout(Ls);
+        const cyc = (k) => Math.floor(k / (n - 1));
+        let bad = 0;
+        l.at.forEach((d, k) => {
+          if (full && Ls[cyc(k)] < maxL && d.some(inStrike)) bad += 10;
+        });
+        if (ilRounds.length) {
+          const i0 = l.at.findIndex((d) => d.length && d[0] > ilRounds[0].at[0]);
+          if (i0 > 0) for (const c of new Set([cyc(i0 - 1), cyc(i0)])) if (Ls[c] < maxL) bad++;
+        }
+        const last = Math.max(...l.at.map((d) => (d.length ? d[d.length - 1] : 0)));
+        const sp = Ls.map((L, i) => i).filter((i) => Ls[i] < maxL);
+        let gap = Ls.length;
+        for (let i = 1; i < sp.length; i++) gap = Math.min(gap, sp[i] - sp[i - 1]);
+        const sc = [bad, last, -gap];
+        if (!best || sc[0] < best[0] || (sc[0] === best[0] && (sc[1] < best[1] || (sc[1] === best[1] && sc[2] < best[2])))) {
+          best = sc;
+          lay = l;
         }
       }
       const { Ls, slotL, at } = lay;
