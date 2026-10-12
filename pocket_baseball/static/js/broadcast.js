@@ -289,8 +289,11 @@
       if (!el) return;
       clearTimeout(this.timers[key]);
       clearTimeout(this.timers[key + "x"]);
-      el.classList.remove("show", "out");
+      clearTimeout(this.timers[key + "w"]);
+      el.classList.remove("show", "out", "leave");
       el.innerHTML = "";
+      if (key === "call") clearTimeout(this.timers.callq);
+      if (key === "card") this.cardTok = (this.cardTok || 0) + 1;
       if (key === "l3") {
         this.l3q = [];
         this.l3busy = false;
@@ -786,8 +789,215 @@
       }
       return out;
     }
+
+    /* ---------- 判定・結果の小さな帯 (右下) ---------- */
+    // cls: hit | out | k | safe | info | fine | chance。o: { stamp: "SAFE" など, ms, hold: 次の帯を出すまで最低これだけ見せる (ms), color }
+    call(text, cls, o) {
+      const opt = o || {};
+      const show = () => {
+        this.callHold = performance.now() + (opt.hold || 0);
+        const html = (opt.stamp ? '<b class="cl-st">' + esc(opt.stamp) + "</b>" : "") + (text ? '<span class="cl-bar"><span class="cl-tx">' + esc(text) + "</span></span>" : "");
+        this.flash(this.el.call, html, opt.ms || 1500, "call", cls);
+        this.el.call.style.setProperty("--cc", opt.color || "");
+      };
+      const wait = (this.callHold || 0) - performance.now();
+      clearTimeout(this.timers.callq);
+      if (wait > 30) this.later("callq", wait, show);
+      else show();
+    }
+
+    /* ---------- 三振の K ボード ---------- */
+    // list: この投手の今日の三振 ("S" 空振り / "L" 見逃し = 裏返しの K)。side: 打者と反対側 "l" | "r"
+    kBoard(pit, list, side) {
+      const shown = list.slice(-12);
+      const tiles = shown.map((k, i) => '<i class="' + (k === "L" ? "rev" : "") + (i === shown.length - 1 ? " new" : "") + '">K</i>').join("");
+      const html = '<div class="kb-h"><span class="kb-n">' + esc(pit.name) + "</span><span><b>" + list.length + "</b><small>奪三振</small></span></div>" + '<div class="kb-l">' + tiles + "</div>";
+      this.flash(this.el.k, html, 2300, "k", side === "l" ? "l" : "r");
+    }
+
+    /* ---------- 場内アナウンス (字幕を 1 文字ずつ) ---------- */
+    pa(text, ms) {
+      const el = this.el.pa;
+      this.flash(el, '<span class="pa-k">場内</span><span class="pa-t"></span>', ms || 2400, "pa");
+      const t = el.querySelector(".pa-t");
+      const chars = Array.from(text);
+      let i = 0;
+      const step = () => {
+        i++;
+        t.textContent = chars.slice(0, i).join("");
+        if (i < chars.length) this.later("paT", 32, step);
+      };
+      step();
+    }
+
+    /* ---------- 打席・マウンドに向かう選手のカード ---------- */
+    // 白く光って現れ、少しして縮んで消える。o: { side: "l" | "r", home, kind, tag, fetch, wait, ms }
+    card(p, team, o) {
+      const opt = o || {};
+      const el = this.el.card;
+      const w = U.clamp(Math.round(window.innerWidth * 0.22), 72, 112);
+      const c = cardFor(p, team, { w, mini: true, home: opt.home, kind: opt.kind, fetch: opt.fetch !== false });
+      const tok = (this.cardTok = (this.cardTok || 0) + 1);
+      let done = false;
+      // 選手の画像が描けるのを少しだけ待つ (間に合わなければ今ある絵で)
+      const show = () => {
+        if (done || tok !== this.cardTok) return;
+        done = true;
+        this.flash(el, '<div class="cd-in"></div>' + (opt.tag ? '<div class="cd-tag">' + esc(opt.tag) + "</div>" : ""), opt.ms || 1700, "card", opt.side === "l" ? "l" : "r");
+        el.querySelector(".cd-in").appendChild(c.cv);
+      };
+      c.ready.then(show);
+      this.later("cardw", opt.wait != null ? opt.wait : 650, show);
+    }
+
+    /* ---------- 推定飛距離 ---------- */
+    dist(m, where) {
+      this.flash(this.el.dist, '<span class="ds-k">推定飛距離</span><b>' + m + "</b><small>m</small>" + (where ? '<span class="ds-w">' + esc(where) + "</span>" : ""), 2600, "dist");
+    }
+
+    /* ---------- ラッキー 7 ---------- */
+    lucky7(team) {
+      const t = teamOf(team);
+      const html = '<div class="l7-in" style="--c1:' + (t.main || "#c00") + ";--c2:" + (t.sub || "#fff") + '"><div class="l7-logo">' + logoImg(t, "l7-img") + '</div><div class="l7-t"><b>LUCKY 7</b><span>' + esc(t.short || t.name) + "の攻撃</span></div></div>";
+      this.flash(this.el.l7, html, 2600, "l7");
+    }
+
+    /* ---------- 勝利投手・セーブ・今日のヒーロー ---------- */
+    // o: { hero: 選手 id, heroLine, ms }
+    winLoss(o) {
+      const g = this.g;
+      const r = g.result || {};
+      if (!r.winner) return false;
+      const side = r.winner;
+      const t = g.teams[side];
+      const pl = (id) => {
+        const s = g.box[id] || {};
+        return U.fmtIP(s.outs || 0) + "回 " + (s.pr || 0) + "失点" + (s.pk ? " " + s.pk + "奪三振" : "");
+      };
+      const rows = [];
+      if (r.W) rows.push(["w", "勝利投手", g.P(r.W).name, pl(r.W)]);
+      if (r.S) rows.push(["s", "セーブ", g.P(r.S).name, pl(r.S)]);
+      if (o.hero && o.hero !== r.W) rows.push(["h", "今日のヒーロー", g.P(o.hero).name, o.heroLine || ""]);
+      const html =
+        '<div class="wl-in" style="--tc:' +
+        (teamOf(t).main || "#333") +
+        '"><div class="wl-card"></div><div class="wl-rows">' +
+        rows.map((x, i) => '<div class="wl-r ' + x[0] + '" style="--i:' + i + '"><span class="wl-k">' + esc(x[1]) + "</span><b>" + esc(x[2]) + "</b><small>" + esc(x[3]) + "</small></div>").join("") +
+        "</div></div>";
+      this.flash(this.el.wl, html, o.ms || 3000, "wl");
+      const wp = r.W ? g.P(r.W) : null;
+      if (wp) {
+        const c = cardFor(wp, t, { w: U.clamp(Math.round(window.innerWidth * 0.28), 92, 136), home: side === "home", kind: "pit", fetch: true });
+        this.el.wl.querySelector(".wl-card").appendChild(c.cv);
+      }
+      return true;
+    }
+
+    /* ---------- ヒーローインタビュー ---------- */
+    // o: { p, team, home, lines: [[質問, 答え], …], chips, last: 最後のひと言, ms }
+    hero(o) {
+      const el = this.el.hero;
+      const html =
+        '<div class="hro-bg"></div><div class="hro-tab">HERO INTERVIEW</div><div class="hro-card"></div><div class="hro-qa"></div>' +
+        '<div class="hro-l3">' +
+        this.l3html(o.team, o.p.num, fullName(o.p), '<span class="l3-ord">ヒーローインタビュー</span>', "今日のヒーロー", o.chips || [], "gold") +
+        "</div>";
+      this.flash(el, html, o.ms || 8500, "hero");
+      const c = cardFor(o.p, o.team, { w: U.clamp(Math.round(window.innerWidth * 0.4), 120, 190), home: o.home, kind: o.p.pos === "P" ? "pit" : "bat", fetch: true });
+      el.querySelector(".hro-card").appendChild(c.cv);
+      const qa = el.querySelector(".hro-qa");
+      const bubble = (cls, text, key) => {
+        const b = document.createElement("div");
+        b.className = "hro-b " + cls;
+        qa.appendChild(b);
+        const chars = Array.from(text);
+        let i = 0;
+        const step = () => {
+          i++;
+          b.textContent = chars.slice(0, i).join("");
+          if (i < chars.length) this.later(key, 34, step);
+        };
+        step();
+      };
+      let at = 600;
+      const lines = (o.lines || []).slice(0, 2);
+      lines.forEach((l, i) => {
+        this.later("hq" + i, at, () => {
+          qa.innerHTML = "";
+          bubble("q", l[0], "hqT" + i);
+        });
+        this.later("ha" + i, at + 1100, () => bubble("a", l[1], "haT" + i));
+        at += 3000;
+      });
+      if (o.last)
+        this.later("hl", at, () => {
+          qa.innerHTML = "";
+          bubble("a last", o.last, "hlT");
+        });
+    }
+    heroLines(kind, vars) {
+      const list = HERO[kind] || HERO.hit;
+      return list.map((l) => [pick([l[0]], vars), pick([l[1]], vars)]);
+    }
+
+    /* ---------- スタメン発表 ---------- */
+    // 両軍 9 人のカードが裏から 1 枚ずつ返り、下に先発投手。カードは写真・描いたことのある選手・2 頭身だけ (新しく 3D の選手は描かない)
+    lineup(o) {
+      const g = this.g;
+      const opt = o || {};
+      const rh = Math.round(U.clamp((window.innerHeight - 250) / 10.6, 22, 52));
+      const cw = Math.round(rh * 0.78);
+      const col = (side) => {
+        const t = teamOf(g.teams[side]);
+        const rows = (g.order[side] || [])
+          .map((e, i) => {
+            const p = g.P(e.id);
+            return '<div class="lu-r" style="--i:' + (i * 2 + (side === "home" ? 1 : 0)) + '"><div class="lu-c" data-k="' + side + i + '"></div><b class="lu-o">' + (i + 1) + '</b><span class="lu-p">' + esc(D.POS_JP[e.pos] || "") + '</span><span class="lu-n">' + esc(p ? p.name : "") + "</span></div>";
+          })
+          .join("");
+        return '<div class="lu-col ' + side + '" style="--tc:' + (t.main || "#334") + '"><div class="lu-th">' + logoImg(t, "lu-img") + "<b>" + esc(t.short || t.name) + "</b></div>" + rows + "</div>";
+      };
+      const sp = (side) => {
+        const p = g.P(g.pstate[side].id);
+        return '<div class="lu-s ' + side + '"><div class="lu-c" data-k="' + side + 'sp"></div><div><span class="lu-sk">先発</span><b>' + esc(p.name) + "</b></div></div>";
+      };
+      const home = teamOf(g.teams.home);
+      const away = teamOf(g.teams.away);
+      const html =
+        '<div class="lu-in" style="--rh:' +
+        rh +
+        'px"><div class="lu-head"><span class="lu-tab">スターティングメンバー</span><span class="lu-sub">' +
+        esc((opt.title ? opt.title + "　" : "") + (away.short || away.name) + " vs " + (home.short || home.name) + (home.stadium ? "　" + home.stadium : "")) +
+        '</span></div><div class="lu-cols">' +
+        col("away") +
+        col("home") +
+        '</div><div class="lu-sp">' +
+        sp("away") +
+        sp("home") +
+        "</div></div>";
+      this.flash(this.el.lu, html, opt.ms || 6000, "lu");
+      const slot = (k) => this.el.lu.querySelector('[data-k="' + k + '"]');
+      for (const side of ["away", "home"]) {
+        const t = g.teams[side];
+        (g.order[side] || []).forEach((e, i) => {
+          const p = g.P(e.id);
+          const s = slot(side + i);
+          if (p && s) s.appendChild(cardFor(p, t, { w: cw, mini: true, home: side === "home", fetch: false, pos: e.pos }).cv);
+        });
+        const s = slot(side + "sp");
+        const sp1 = g.P(g.pstate[side].id);
+        if (s && sp1) s.appendChild(cardFor(sp1, t, { w: Math.round(cw * 1.25), mini: true, home: side === "home", kind: "pit", fetch: false }).cv);
+      }
+    }
+    lineupOut() {
+      this.el.lu.classList.add("leave");
+    }
   }
 
   PB.TV = TV;
   PB.TV.fullName = fullName;
+  PB.TV.POS_PA = POS_PA;
+  // 実況・解説の文を選ぶ (直近と同じ文は避ける)
+  PB.TV.talk = (key, vars) => pick(PHR[key] || [key], vars);
+  PB.TV.kai = (key, vars) => (KAI[key] ? pick(KAI[key], vars) : "");
 })(window.PB);
