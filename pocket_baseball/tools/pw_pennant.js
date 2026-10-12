@@ -1,4 +1,4 @@
-// ペナント (日程・一括消化・順位表・日程画面・ポストシーズン・表彰式・シーズン総括) の画面確認 (Playwright・2D 表示・390px)
+// ペナント (日程・一括消化・順位表・日程画面・ポストシーズン・表彰式・シーズン総括・一軍/二軍・記録室) の画面確認 (Playwright・2D 表示・390px)
 // 使い方: node tools/pw_pennant.js [URL] [スクリーンショットの保存先]
 "use strict";
 const assert = require("assert");
@@ -62,6 +62,130 @@ const OUT = process.argv[3] || null;
   await waitHub();
   assert.strictEqual(await page.evaluate(() => PB.Store.data.pennant.results.length), 6, "旧セーブの続き");
   await shot("legacy");
+  await page.evaluate(() => {
+    PB.Store.data.pennant = null;
+    PB.Store.save();
+    PB.UI.go(PB.Screens.title());
+  });
+
+  /* ---------- L3: 選手の状態・一軍/二軍・故障者・選手モーダル・記録室 ---------- */
+  // 球団の写しのない v3 のセーブを読み込むと移行される
+  await page.evaluate(() => {
+    const p = PB.Pennant.create("t", { len: "s20", fast: "quick", seed: 71 });
+    for (const k of ["teams", "life", "fstats", "records"]) delete p[k];
+    p.v = 3;
+    PB.Store.save();
+  });
+  await page.reload();
+  await page.waitForFunction(() => window.PB && PB.UI && PB.UI.cur);
+  const mig = await page.evaluate(() => {
+    const p = PB.Store.data.pennant;
+    return { v: p.v, teams: (p.teams || []).length, gen: p.teams ? p.teams[0].players.filter((x) => x.gen).length : 0 };
+  });
+  assert.ok(mig.v === 4 && mig.teams === 12 && mig.gen > 30, "v3 のセーブが移行されない: " + JSON.stringify(mig));
+  const quick0 = await page.evaluate(() => JSON.stringify(PB.Store.team("t").lineup) + JSON.stringify(PB.Store.team("t").bench));
+  await page.click("[data-act=pennant]");
+  await waitHub();
+  await page.click('[data-act=simgo][data-arg="week"]');
+  await waitHub();
+  assert.ok(await page.locator(".pl-hub").count(), "ハブに故障者・好不調の表示がない");
+  await page.locator(".pl-hub").scrollIntoViewIfNeeded();
+  await shot("l3_hub");
+  await noHScroll("ハブ (L3)");
+  // 一軍・二軍
+  await page.click("button[data-act=roster]");
+  await page.waitForSelector(".pl-sum");
+  assert.strictEqual(await page.locator(".pl-row").count(), await page.evaluate(() => PB.PenLife.counts(PB.Pennant.team("t")).n), "一軍の行数");
+  await shot("l3_act", true);
+  await noHScroll("一軍");
+  const toast = () => page.locator("#toast").textContent();
+  // 控えの捕手は 2 人を切るので断られる
+  const cid = await page.evaluate(() => {
+    const T = PB.Pennant.team("t");
+    const cs = [...PB.PenLife.actIds(T)].map((id) => PB.Pennant.findPlayer(id).p).filter((x) => x.pos === "C");
+    return cs.length <= 2 ? cs.find((x) => T.bench.indexOf(x.id) >= 0).id : null;
+  });
+  if (cid) {
+    await page.click('[data-act=down][data-arg="' + cid + '"]');
+    await page.waitForTimeout(100);
+    assert.ok(/捕手が2人より少なく/.test(await toast()), "捕手の抹消を断らない: " + (await toast()));
+    await page.waitForTimeout(400);
+  }
+  // 控えの選手 (捕手以外) を抹消 (確認してから)
+  const pid = await page.evaluate(() => PB.Pennant.team("t").bench.find((id) => PB.Pennant.findPlayer(id).p.pos !== "C"));
+  await page.click('[data-act=down][data-arg="' + pid + '"]');
+  await page.waitForSelector(".modal-box [data-act=yes]");
+  await page.waitForTimeout(450);
+  await page.click(".modal-box [data-act=yes]");
+  await page.waitForTimeout(100);
+  assert.ok(/登録抹消しました/.test(await toast()), "抹消のトースト: " + (await toast()));
+  // 二軍のタブ: 10 日以内に登録しようとすると断られる
+  await page.click('[data-act=tab][data-arg="farm"]');
+  await page.waitForSelector('.pl-row [data-act=up][data-arg="' + pid + '"]');
+  assert.ok(/再登録まで10日/.test(await page.locator('.pl-row:has([data-arg="' + pid + '"])').textContent()), "二軍の行に 10 日の残り");
+  await page.click('.pl-row [data-act=up][data-arg="' + pid + '"]');
+  await page.waitForTimeout(100);
+  assert.ok(/10日間は再登録できません/.test(await toast()), "10 日以内の登録が断られない: " + (await toast()));
+  assert.ok(await page.evaluate((id) => !PB.PenLife.actIds(PB.Pennant.team("t")).has(id), pid), "断られたのに一軍に入った");
+  await shot("l3_farm_toast");
+  await page.locator(".pl-rule").scrollIntoViewIfNeeded();
+  await shot("l3_farm", true);
+  await noHScroll("二軍");
+  // 故障者 (いなければテスト用に 1 人ケガをさせる)
+  await page.evaluate(() => {
+    const pen = PB.Store.data.pennant;
+    const T = PB.Pennant.team(pen.my);
+    if (!T.players.some((x) => x.st && x.st.inj)) PB.PenLife.injure(pen, T, PB.Pennant.findPlayer(T.lineup.find((e) => e.pos !== "P" && e.pos !== "C").id).p, "足首のねんざ", 12, pen.day);
+  });
+  await page.click('[data-act=tab][data-arg="inj"]');
+  assert.ok((await page.locator(".pl-row.inj").count()) >= 1, "故障者のタブ");
+  await shot("l3_inj");
+  await noHScroll("故障者");
+  // 選手モーダル (状態・二軍成績・記録)
+  await page.click(".pl-row.inj .pl-nm");
+  await page.waitForSelector(".modal-box .plm");
+  await page.waitForTimeout(700);
+  assert.ok(/ケガ/.test(await page.locator(".modal-box .plm").first().textContent()), "モーダルにケガの表示");
+  await shot("l3_modal");
+  await page.waitForTimeout(100);
+  await page.click(".modal-box [data-act=close]");
+  // 自動入れ替えのオン・オフ
+  await page.click('[data-act=tab][data-arg="act"]');
+  await page.click("[data-act=auto]");
+  assert.strictEqual(await page.evaluate(() => PB.Store.data.pennant.life.auto), false, "自動入れ替えをオフにできない");
+  await page.click("[data-act=auto]");
+  await page.click("[data-act=back]");
+  await waitHub();
+  // オーダー: ペナントの一軍だけ。変えてもクイック対戦の球団は変わらない
+  await page.click("[data-act=order]");
+  await page.waitForSelector(".orow");
+  const benchN = await page.locator(".orow.bench").count();
+  assert.strictEqual(benchN, await page.evaluate(() => PB.Pennant.team("t").bench.length), "オーダーの控えがペナントの一軍と違う");
+  await page.click("[data-act=auto]");
+  await page.click("[data-act=done]");
+  await waitHub();
+  assert.strictEqual(await page.evaluate(() => JSON.stringify(PB.Store.team("t").lineup) + JSON.stringify(PB.Store.team("t").bench)), quick0, "ペナントのオーダーがクイック対戦の球団に漏れた");
+  // 記録室
+  await page.click("[data-act=records]");
+  await page.waitForSelector(".rc-body");
+  for (const tab of ["feat", "streak", "ms"]) {
+    await page.click('[data-act=tab][data-arg="' + tab + '"]');
+    await shot("l3_rec_" + tab, true);
+    await noHScroll("記録室 " + tab);
+  }
+  await page.click("[data-act=back]");
+  await waitHub();
+  // 個人成績から選手モーダル
+  await page.click("[data-act=leaders]");
+  await page.click(".ltbl tr[data-act=player]");
+  await page.waitForSelector(".modal-box .plm");
+  await page.waitForTimeout(450);
+  await page.click(".modal-box [data-act=close]");
+  await page.click("[data-act=back]");
+  await waitHub();
+  // ニュース: ケガ・登録の記事
+  const lifeNews = await page.evaluate(() => PB.Store.data.pennant.news.filter((n) => /^(inj|move)$/.test(n.kind)).length);
+  console.log("L3: 移行 v3→v4・一軍/二軍/故障者・抹消→10日以内の登録を断る・モーダル・オーダー・記録室  (ケガ・登録の記事 " + lifeNews + ")");
   await page.evaluate(() => {
     PB.Store.data.pennant = null;
     PB.Store.save();

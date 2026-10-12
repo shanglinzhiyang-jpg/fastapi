@@ -10,28 +10,46 @@
   const Sc = PB.Screens;
   const esc = U.esc;
   const Pen = {};
-  Pen.V = 3; // セーブの版
+  Pen.V = 4; // セーブの版
 
   const STAT_KEYS = ["g", "pa", "ab", "h", "d", "t", "hr", "rbi", "r", "bb", "k", "sb", "cs", "sac", "sf", "pg", "gs", "outs", "ph", "pr", "er", "pbb", "pk", "phr", "np", "w", "l", "sv", "fe"];
   Pen.STAT_KEYS = STAT_KEYS;
   const Sched = () => PB.PenSched;
 
-  /* ---------- アクセサ (今は Store の球団。L3 でペナント専用の球団に切り替える) ---------- */
-  Pen.team = (id) => Store.team(id);
-  // ペナントに参加している球団 (古いセーブは全球団)
+  /* ---------- アクセサ (ペナント専用の球団の写し pen.teams。写しのない古い形は Store の球団) ---------- */
+  // ペナントに参加している球団 (二軍・故障者を含む)
   function penTeams(pen) {
+    if (pen && Array.isArray(pen.teams)) return pen.teams;
     const all = Store.teams();
     if (!pen || !pen.ids) return all;
     return all.filter((t) => pen.ids.indexOf(t.id) >= 0);
   }
   Pen.teams = penTeams;
+  // 球団 (pen を省くと今のペナント)
+  function teamOf(pen, id) {
+    if (pen && Array.isArray(pen.teams)) return pen.teams.find((t) => t.id === id) || null;
+    return Store.team(id);
+  }
+  Pen.team = (id, pen) => teamOf(pen || Store.data.pennant, id);
   // 選手 ID → { p, team }
-  Pen.findPlayer = function (id) {
-    for (const t of penTeams(Store.data.pennant)) {
+  Pen.findPlayer = function (id, pen) {
+    for (const t of penTeams(pen || Store.data.pennant)) {
       const p = t.players.find((x) => x.id === id);
       if (p) return { p, team: t };
     }
     return null;
+  };
+  // ペナントの選手モーダル (状態・二軍成績・記録つき)
+  Pen.showPlayer = function (id) {
+    const pen = Store.data.pennant;
+    if (PB.PenLife && pen && pen.teams) return PB.PenLife.showPlayer(id);
+    return UI.showPlayer(id, pen && pen.stats ? pen.stats[id] || null : null);
+  };
+  // オーダー画面 (ペナントの球団の一軍だけ。決定したら写しに戻す)
+  Pen.orderScreen = function (onBack) {
+    const pen = Store.data.pennant;
+    if (PB.PenLife && pen && pen.teams) return PB.PenLife.orderScreen(pen, onBack);
+    return Sc.order(Pen.team(pen.my), { onBack: () => UI.go(onBack ? onBack() : Pen.hub()) });
   };
   // レギュラーシーズンの結果 (ポストシーズンの試合 ps を除く)
   Pen.regResults = function (pen) {
@@ -134,6 +152,11 @@
       // 完投・ホールド・守備位置などを記録し始めた日 (それより前の日は「記録なし」)
       if (pen.statsSince == null) pen.statsSince = pen.results.length ? pen.day + (pen.results.some((r) => r.day === pen.day) ? 1 : 0) : 0;
       pen.v = 3;
+    }
+    if (pen.v < 4 && PB.PenLife) {
+      // v4: ペナント専用の球団の写し (今の Store の球団から。rotIdx・オーダーを引き継ぐ)・二軍・選手の状態・記録
+      PB.PenLife.migrate(pen);
+      pen.v = 4;
     }
     return pen;
   };
@@ -244,6 +267,8 @@
       const L = Sched().LENS[o.len];
       if (L && typeof L.perPair === "number") p.perPair = L.perPair;
     }
+    // 球団の写し・二軍・選手の状態 (クイック対戦の球団とは別に持つ)
+    if (PB.PenLife) PB.PenLife.init(p);
     Store.data.pennant = p;
     Store.save();
     return p;
@@ -474,6 +499,8 @@
   }
 
   function nextStarter(team, pen) {
+    // 選手の状態 (L3) があれば: ローテーションの順に中4日以上あいて疲れの残っていない投手
+    if (pen && pen.teams && PB.PenLife) return PB.PenLife.starter(pen, team, pen.day);
     const tired = tiredList(pen);
     for (let i = 0; i < team.rotation.length; i++) {
       const id = team.rotation[((team.rotIdx || 0) + i) % team.rotation.length];
@@ -490,8 +517,26 @@
 
   // o.quick: 高速シミュレーション (自分が操作する試合は常に物理版)
   function makeGame(pen, m, user, o) {
-    const home = U.clone(Pen.team(m.home));
-    const away = U.clone(Pen.team(m.away));
+    // その日の編成 (ケガ人の抹消・入れ替え) を先に済ませる
+    beginDay(pen);
+    let home;
+    let away;
+    let tired;
+    let starters;
+    if (pen.teams && PB.PenLife) {
+      // 一軍のケガのない選手だけのコピー (調子を反映・投げられない救援は外す・ベンチ入り 25 人)
+      const h = PB.PenLife.gameTeam(pen, m.home, pen.day);
+      const a = PB.PenLife.gameTeam(pen, m.away, pen.day);
+      home = h.team;
+      away = a.team;
+      tired = h.tired.concat(a.tired);
+      starters = { home: h.starter, away: a.starter };
+    } else {
+      home = U.clone(teamOf(pen, m.home));
+      away = U.clone(teamOf(pen, m.away));
+      tired = tiredList(pen);
+      starters = { home: nextStarter(teamOf(pen, m.home), pen), away: nextStarter(teamOf(pen, m.away), pen) };
+    }
     const Cls = o && o.quick && !user && PB.QuickGame ? PB.QuickGame : PB.Game;
     // ポストシーズン: 延長の上限は表 (RULES_2004) から
     const ps = m.ps && pen.post ? m.ps : null;
@@ -502,8 +547,8 @@
       maxInnings: ps && PB.PenPost ? PB.PenPost.maxInnings(pen, m) : undefined,
       user,
       level: pen.level,
-      tired: tiredList(pen),
-      starters: { home: nextStarter(Pen.team(m.home), pen), away: nextStarter(Pen.team(m.away), pen) },
+      tired,
+      starters,
     });
     // 本塁打の号数はシーズン成績から数える (ポストシーズンはその系列の成績 = シリーズN号)
     g.season = ps ? postStats(pen, ps) : pen.stats;
@@ -559,9 +604,13 @@
     });
     pen.results.push(r);
     mergeStats(pen, game, ps ? postStats(pen, ps) : null);
-    for (const id of [m.home, m.away]) {
-      const t = Pen.team(id);
-      t.rotIdx = ((t.rotIdx || 0) + 1) % t.rotation.length;
+    // 次の先発: 投げた先発の次 (ローテーション外の先発が投げた日はそのまま)
+    for (const side of ["home", "away"]) {
+      const t = teamOf(pen, m[side]);
+      if (!t || !t.rotation.length) continue;
+      const i = t.rotation.indexOf(game.used[side][0]);
+      if (i >= 0) t.rotIdx = (i + 1) % t.rotation.length;
+      else if (!pen.teams) t.rotIdx = ((t.rotIdx || 0) + 1) % t.rotation.length;
     }
     runHooks("afterGame", pen, m, game, r);
   }
@@ -921,6 +970,7 @@
     const dis = () => (busy ? " disabled" : "");
     return {
       isPenHub: true,
+      pen: true,
       html() {
         const m = myMatch(pen);
         const my = Pen.team(pen.my);
@@ -983,6 +1033,7 @@
           (st.some((x) => x.g > 0) ? "<b>" + rank + "</b>位 " + recText(meRow) + myM : "<b>開幕前</b>") +
           "</div></div>" +
           today +
+          (PB.PenLife && pen.teams ? PB.PenLife.hubLine(pen) : "") +
           sims +
           (busy ? '<p class="note center">試合を消化しています…</p>' : "") +
           (PB.News ? PB.News.hubPanel(pen) : "") +
@@ -1005,6 +1056,7 @@
           ) +
           (hs.tab === "detail" ? Pen.detailHTML(pen, hs.lg) : hs.tab === "vs" ? Pen.vsHTML(pen, hs.lg) : Pen.standingsHTML(pen, hs.lg === myLg(pen) ? st : Pen.standings(pen, hs.lg), { race: true })) +
           '<div class="row-btns"><button class="btn" data-act="order">オーダー</button><button class="btn" data-act="leaders">個人成績</button><button class="btn" data-act="results">試合結果</button></div>' +
+          (PB.PenLife && pen.teams ? '<div class="row-btns"><button class="btn" data-act="roster">一軍・二軍</button><button class="btn" data-act="records">記録室</button></div>' : "") +
           '<div class="row-btns"><button class="btn" data-act="sched">日程</button>' +
           (PB.News && pen.results.length ? '<button class="btn" data-act="news" data-arg="news">スポーツニュース</button>' : "") +
           "</div>" +
@@ -1015,6 +1067,8 @@
       onAct(act, arg) {
         if (busy || dayLock) return;
         if (act === "back") return UI.go(Sc.title());
+        if (act === "roster" && PB.PenLife) return UI.go(PB.PenLife.screen());
+        if (act === "records" && PB.PenRecords) return UI.go(PB.PenRecords.screen());
         if (act === "stlg") {
           hs.lg = arg;
           return UI.refresh();
@@ -1024,7 +1078,7 @@
           return UI.refresh();
         }
         if (act === "news") return UI.go(PB.News.screen({ tab: arg || "hr" }));
-        if (act === "order") return UI.go(Sc.order(Pen.team(pen.my), { onBack: () => UI.go(Pen.hub()) }));
+        if (act === "order") return UI.go(Pen.orderScreen());
         if (act === "leaders") return UI.go(Pen.leaders());
         if (act === "results") return UI.go(Pen.results());
         if (act === "sched") return UI.go(Pen.schedule());
@@ -1433,7 +1487,7 @@
           arr
             .sort((a, b) => f(b) - f(a))
             .slice(0, n || 5)
-            .map((x, i) => '<tr><td>' + (i + 1) + "</td><th>" + UI.mark(x.t, 14) + " " + esc(x.p.name) + "</th><td>" + fmt(x) + "</td></tr>")
+            .map((x, i) => '<tr data-act="player" data-arg="' + esc(x.p.id) + '"><td>' + (i + 1) + "</td><th>" + UI.mark(x.t, 14) + " " + esc(x.p.name) + "</th><td>" + fmt(x) + "</td></tr>")
             .join("");
         const block = (title, rows) => '<div class="lead"><h4>' + title + '</h4><table class="ltbl">' + (rows || '<tr><td class="muted">記録なし</td></tr>') + "</table></div>";
         let html = "";
@@ -1486,7 +1540,7 @@
         if (act === "back") return UI.go(o && o.onBack ? o.onBack() : pen.finished ? Pen.final() : Pen.hub());
         if (act === "tab") st.tab = arg;
         if (act === "lg") st.lg = arg;
-        if (act === "player") return UI.showPlayer(arg, pen.stats[arg] || null);
+        if (act === "player") return Pen.showPlayer(arg);
         UI.refresh();
       },
     };
@@ -1623,12 +1677,14 @@
             .map((k) => '<h3 class="lbl">' + esc(D.LEAGUES[k]) + " 最終順位</h3>" + Pen.standingsHTML(pen, Pen.standings(pen, k)))
             .join("") +
           '<div class="row-btns"><button class="btn" data-act="leaders">個人成績</button>' +
+          (PB.PenRecords && pen.records ? '<button class="btn" data-act="records">記録室</button>' : "") +
           (PB.News && pen.results.length ? '<button class="btn" data-act="news">スポーツニュース</button>' : "") +
           '</div><div class="row-btns pen-sum-end"><button class="btn red" data-act="new">新しいシーズン</button><button class="btn" data-act="title">タイトルへ</button></div></div>'
         );
       },
       onAct(act) {
         const back = () => Pen.final();
+        if (act === "records" && PB.PenRecords) return UI.go(PB.PenRecords.screen({ onBack: back }));
         if (act === "awards" && PB.PenAwards) return UI.go(PB.PenAwards.screen({ onBack: back }));
         if (act === "post" && PP) return UI.go(PP.bracketScreen({ onBack: back }));
         if (act === "leaders") return UI.go(Pen.leaders({ onBack: back }));
@@ -1689,6 +1745,6 @@
   }
 
   // テスト用 (node から日程を進める)
-  Pen._internal = { finishDay, finishDayAsync, makeGame, myMatch, recordGame, hrGameStreak, closeDay, pendingGames, myRecorded, schedInfo, h2hLeft, tiredList, nextStarter, mergeStats, regDays };
+  Pen._internal = { finishDay, finishDayAsync, makeGame, myMatch, recordGame, hrGameStreak, closeDay, pendingGames, myRecorded, schedInfo, h2hLeft, tiredList, nextStarter, mergeStats, regDays, beginDay };
   PB.Pennant = Pen;
 })((window.PB = window.PB || {}));

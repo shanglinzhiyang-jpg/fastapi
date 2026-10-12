@@ -16,9 +16,9 @@
   const MOOD_MUL = [0.6, 0.8, 1.0, 1.2, 1.4];
   const EXP = { str: "筋力", agi: "敏捷", tec: "技術", brk: "変化球", men: "精神" };
 
-  // 仲間キャラクター (オリジナル)。絵は PB.Manga (manga.js)、desc は紹介カードの文、line は「人物」で見せる決め台詞、sig はそのときの表情
+  // 仲間キャラクター (オリジナル)。絵は PB.Manga (manga.js: ユーザーの絵)、desc は紹介カードの文、line は「人物」で見せる決め台詞、sig はそのときの表情
   const CAST = {
-    goda: { name: "剛田", full: "剛田 鉄平", role: "パワー自慢の先輩", banner: "#d9480f", sig: "happy", color: { main: "#5b6b7d", sub: "#fff", cap: "#2f3a46", mark: "G" }, desc: ["寮の主（ぬし）と呼ばれる、パワー自慢の先輩。", "豪快で面倒見がよく、後輩を見るとメシに誘わずにいられない。", "鼻のばんそうこうは、なぜか一年中はがれない。"], line: "腹が減っては野球はできねえ！メシ行くぞ！" },
+    goda: { name: "剛田", full: "剛田 鉄平", role: "パワー自慢の先輩", banner: "#d9480f", sig: "happy", color: { main: "#5b6b7d", sub: "#fff", cap: "#2f3a46", mark: "G" }, desc: ["寮の主（ぬし）と呼ばれる、パワー自慢の先輩。", "豪快で面倒見がよく、後輩を見るとメシに誘わずにいられない。", "首の黄色いタオルは、なぜか一年中はずさない。"], line: "腹が減っては野球はできねえ！メシ行くぞ！" },
     hayase: { name: "早瀬", full: "早瀬 ひかり", role: "チームのマネージャー", banner: "#e8457c", sig: "happy", color: { main: "#f28fb0", sub: "#fff", cap: "#c2416b", mark: "H" }, desc: ["チームを支える元気なマネージャー。", "スコアブックとはちみつレモンは、いつも持ち歩いている。", "ちょっとおせっかいだけど、みんなの調子を一番よく知っている。"], line: "困ったことがあったら、なんでも言ってね！" },
     inukai: { name: "宇佐美", full: "宇佐美 コーチ", role: "理論派の打撃コーチ", banner: "#1f7a6d", sig: "normal", color: { main: "#3b5f8a", sub: "#ffd23f", cap: "#1d3557", mark: "I" }, desc: ["データと理論で教える二軍のコーチ。", "教え方は静かだが、言うことはいつも的確。", "メガネが光ったら、本気で考えているしるしだ。"], line: "フォームには必ず理由がある。考えて振りなさい。" },
     ryuzaki: { name: "竜崎", full: "竜崎 レン", role: "同期のライバル", banner: "#5b3fc4", sig: "normal", color: { main: "#2b2d42", sub: "#ef233c", cap: "#111", mark: "R" }, desc: ["同じ年に入団した、ドラフト1位のエリート。", "クールで負けずぎらい。だれよりも遅くまで練習している。", "一軍の席をかけて争う、最大のライバル。"], line: "一軍に上がるのはオレだ。追いつけるもんなら、追いついてみな。" },
@@ -27,8 +27,8 @@
   const CAST_ORDER = ["kanto", "goda", "hayase", "inukai", "ryuzaki"];
   const MG = PB.Manga;
 
-  /* ---------- キャラクターの絵 (アニメ塗り) ---------- */
-  // 仲間はいま育成中の選手のチームの帽子・ユニフォーム (育成中でなければ無地の帽子)
+  /* ---------- キャラクターの絵 ---------- */
+  // 絵はユーザーの絵 (img/success/*.webp、服は 1 種類)。チームは絵が読めなかったときの描く絵 (帽子・ユニフォームの色) にだけ使う
   function castTeam() {
     const r = run();
     return r ? Store.team(r.team) : null;
@@ -40,7 +40,7 @@
   function castIcon(who, ex, sil) {
     return MG.icon(who, { team: castTeam(), ex, sil });
   }
-  // 自分の顔: やる気・ケガで表情が変わる
+  // 自分の絵: やる気・ケガで表情が変わる (サクセスではユーザーの絵。p.face は試合・カードの選手の顔)
   function mePic(p, team, ex, o) {
     return MG.svg("me", Object.assign({ team, ex: ex || "normal", face: p.face || {}, seed: p.id, label: p.full || "" }, o));
   }
@@ -580,7 +580,7 @@
         return (
           UI.header("選手をつくる", "back") +
           '<div class="scr-body"><div class="su-make"><div class="mg-make-pic">' +
-          mePic({ face: { skin: st.skin, eyes: st.eyes, hs: st.hs } }, Store.team(st.team), st.eyes === "smile" ? "happy" : "normal", { size: 120 }) +
+          mePic({ face: { skin: st.skin, eyes: st.eyes, hs: st.hs }, full: "自分" }, Store.team(st.team), st.eyes === "smile" ? "happy" : "normal", { size: 120 }) +
           '</div><div class="nm-in"><label>苗字<input id="sn" maxlength="6" value="' +
           esc(st.name) +
           '"></label><label>名前<input id="gn" maxlength="6" value="' +
@@ -617,7 +617,8 @@
                 st.pitch
               )
             : "") +
-          '<h3 class="lbl">顔</h3>' +
+          '<h3 class="lbl">試合での顔</h3>' +
+          '<div class="mg-face"><canvas class="mg-face-cv" width="112" height="112" aria-label="試合での顔"></canvas><p class="note">ここで選ぶ顔は、試合や選手カードの選手になります。サクセスでは上の絵で登場します。</p></div>' +
           Sc.seg(
             "eyes",
             [
@@ -657,6 +658,9 @@
         bind("sn", "name");
         bind("gn", "given");
         bind("num", "num");
+        // 試合での顔 (肌・目・髪型・チームを選ぶと変わる)
+        const cv = root.querySelector(".mg-face-cv");
+        if (cv && PB.Chara) PB.Chara.portrait(cv, { face: { skin: st.skin, eyes: st.eyes, brow: 0, cheek: false, hair: "#2b1b14", hs: st.hs } }, Store.team(st.team));
       },
       onAct(act, arg) {
         if (act === "back") return UI.go(Su.menu());

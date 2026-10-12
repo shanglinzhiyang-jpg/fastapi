@@ -699,7 +699,7 @@
         if (act === "back") return UI.go(opt.onBack ? opt.onBack() : N.final());
         if (act === "lg") st.lg = arg;
         else if (act === "tab") st.tab = arg;
-        else if (act === "player") return UI.showPlayer(arg, pen.stats[arg] || null);
+        else if (act === "player") return N.showPlayer(arg);
         UI.refresh();
       },
     };

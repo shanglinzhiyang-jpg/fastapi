@@ -98,6 +98,11 @@
     buzz(pattern) {
       if (this.S.vibrate) A.vibe(pattern);
     }
+    // 打席視点のテロップを打者と反対側に出すため: 左打者 (画面の右に立つ) なら "l"
+    batOpp() {
+      const g = this.g;
+      return P.batSide(g.batter(), g.pitcher()) === "L" ? "l" : "r";
+    }
     // 歓声を攻撃側・守備側の応援席の方から (ホームは一塁側 = 右)
     roar(level, dur, side) {
       A.roar(level, dur, side === "home" ? 0.3 : side === "away" ? -0.3 : 0);
@@ -458,6 +463,9 @@
           [
             0,
             () => {
+              // 打者紹介が残っていたら下げて、投手の紹介をすぐ出す (右上の投手名も新しい投手に)
+              this.tv.hide("l3");
+              this.updateHUD();
               A.pa(txt, true);
               this.tv.pa(txt + (p.num != null ? "　背番号 " + p.num : ""), dur * 1000 + 300);
               if (change) this.say(TV().talk("pchange", { p: p.name }));
@@ -525,7 +533,7 @@
       const t = g.teams[g.battingSide()];
       const col = teamCols(t)[0];
       this.tv.later("chance", cardShown ? 1900 : 150, () => {
-        this.tv.call("チャンス！", "chance", { color: col, ms: 1300 });
+        this.tv.call("チャンス！", "chance", { color: col, ms: 1300, side: this.batOpp() });
         this.kai("chance");
       });
     }
@@ -627,7 +635,8 @@
         const strong = jr.res.ev > 40 && jr.res.la > 15 && jr.res.la < 40;
         const play = g.makeBattedPlay(jr, sw, this.steal);
         A.hit2(U.clamp((jr.res.ev - 20) / 28, 0.2, 1), play.hr);
-        this.buzz(strong ? 60 : 30);
+        // 振動は自分が打った・打たれたときだけ (観戦中は鳴らさない)
+        if (this.userBat() || this.userPitch()) this.buzz(strong ? 60 : 30);
         const bp = R.cams.bat.p(jr.res.bx, 0.3, jr.res.bz);
         if (bp) R.burst(bp.x, bp.y, "#fff3b0", strong ? 26 : 14, strong ? 260 : 160);
         // 本塁打でも、入ったかどうかはフェンスを越えるまで言わない
@@ -678,8 +687,9 @@
       this.kai("k", { pit: pit.name });
       A.k(g.fieldingSide() === "home" ? 0.8 : 0.45);
       if (lv >= 1) A.umpire("strike");
-      this.tv.call(sw ? "空振り三振" : "見逃し三振", "k", { ms: 1500 });
-      if (lv >= 1) this.tv.kBoard(pit, list, P.batSide(bat, pit) === "L" ? "l" : "r");
+      const side = this.batOpp();
+      this.tv.call(sw ? "空振り三振" : "見逃し三振", "k", { ms: 1500, side });
+      if (lv >= 1) this.tv.kBoard(pit, list, side);
       if (this.userPitch()) this.buzz([20, 30, 20]);
       else if (this.userBat() && sw) this.buzz([10, 20, 10]);
     }
@@ -694,16 +704,17 @@
       const jr = this.jr;
       const key0 = this.paKey();
       const runners = !!(g.bases[1] || g.bases[2] || g.bases[3]);
+      const side = this.batOpp();
       const out = g.applyCall(jr);
       // 三振は判定の瞬間 (kMoment) に済ませている。スリーバント失敗だけここで
       if (out === "k" && jr.call === "foul") {
-        this.tv.call("スリーバント失敗", "k", { ms: 1300 });
+        this.tv.call("スリーバント失敗", "k", { ms: 1300, side });
         A.out();
       } else if (out === "walk") {
-        this.tv.call("フォアボール", "info", { ms: 1200 });
+        this.tv.call("フォアボール", "info", { ms: 1200, side });
         if (runners) this.kai("bb");
       } else if (out === "hbp") {
-        this.tv.call("デッドボール", "info", { ms: 1200 });
+        this.tv.call("デッドボール", "info", { ms: 1200, side });
         A.groan();
       }
       this.updateHUD();
@@ -1277,6 +1288,7 @@
       const won = !!(user && r.winner === user);
       const lost = !!(user && r.winner && r.winner !== user);
       const heroId = r.winner ? (r.walkoff && this.walkoffBy ? this.walkoffBy : PB.Screens && PB.Screens.mvp ? PB.Screens.mvp(g, r.winner) : null) : null;
+      this.heroId = heroId; // 結果画面の「今日のヒーロー」もこの選手に
       const cues = [];
       cues.push({
         name: "final",
@@ -1286,7 +1298,8 @@
           [
             0,
             () => {
-              this.tv.scoreBoard("final");
+              // 演出の段取りが消すので、時計では消さない (端末が遅くて試合の時間が遅れても空白にならない)
+              this.tv.scoreBoard("final", 60000);
               if (r.winner) this.roar(0.9, 3, r.winner);
               if (lv >= 1 && r.winner && !lost) {
                 A.winSong(g.teams[r.winner].id);
@@ -1304,7 +1317,7 @@
       });
       if (lv >= 1 && r.winner) {
         const hl = heroId ? this.heroLine(heroId) : "";
-        cues.push({ name: "wl", cine: true, dur: 3.2, steps: [[0, () => (this.tv.hide("center"), this.tv.winLoss({ hero: heroId, heroLine: hl }))]], skip: () => this.tv.hide("wl") });
+        cues.push({ name: "wl", cine: true, dur: 3.2, steps: [[0, () => (this.tv.fade("center"), this.tv.winLoss({ hero: heroId, heroLine: hl, ms: 60000 }))]], skip: () => this.tv.hide("wl") });
       }
       // ヒーローインタビュー: 多めは勝てば毎回、標準はサヨナラと自分のチームが勝ったとき
       if (heroId && (lv >= 2 || (lv >= 1 && (r.walkoff || won)))) {
@@ -1313,14 +1326,15 @@
           cine: true,
           dur: 9.4,
           steps: [
-            [0, () => (this.tv.hide("wl"), this.heroInterview(heroId, r.winner, !!r.walkoff))],
+            [0, () => (this.tv.fade("wl"), this.tv.fade("center"), this.heroInterview(heroId, r.winner, !!r.walkoff))],
             [0.4, () => this.roar(0.5, 2, r.winner)],
             [8.3, () => this.roar(0.8, 1.8, r.winner)],
           ],
           skip: () => this.tv.hide("hero"),
         });
       }
-      this.runSeq(cues, done);
+      // 最後の段は update() の中で終わるので、画面の切り替えは次のフレームの外で (描画中に試合を消さない)
+      this.runSeq(cues, () => setTimeout(done, 0));
     }
 
     // 今日の成績のひと言 (ヒーロー・勝利投手の帯)
@@ -1344,7 +1358,7 @@
       if (r.S === id) chips.push("セーブ");
       const home = PB.TV.teamOf(g.teams.home);
       const last = side === "home" ? (home.stadium || "球場") + "のファンの皆さん、最高です！ありがとうございました！" : "遠くまで応援に来てくれたファンの皆さん、ありがとうございました！";
-      this.tv.hero({ p, team: g.teams[side], home: side === "home", lines: this.tv.heroLines(kind, { h: s.h || 0, k: s.pk || 0 }), chips, last, ms: 9600 });
+      this.tv.hero({ p, team: g.teams[side], home: side === "home", lines: this.tv.heroLines(kind, { h: s.h || 0, k: s.pk || 0 }), chips, last, ms: 60000 });
     }
 
     destroy() {
@@ -1387,11 +1401,10 @@
           else this.banner('<span class="vs">' + esc(a.name) + "<i>VS</i>" + esc(h.name) + "</span><small>" + esc(h.stadium || "") + "</small>", "change", 2000);
           A.cheer(0.5, 2);
         }
-        // 球審の「プレイボール」
+        // 球審の「プレイボール」(字幕は中央のパネルが出しているので声だけ)
         if (!this.playCalled && this.t > 0.5 && this.mode === "game" && this.fxLv() >= 1) {
           this.playCalled = true;
           A.umpire("play");
-          this.tv.pa("プレイボール！", 1900);
         }
         if (this.t > (this.mode === "game" && !this.derby ? 2.7 : 2.0)) {
           this.tv.hide("center");
@@ -1471,6 +1484,7 @@
         if (this.t > (this.changeT || 2.4)) {
           R.bg = {};
           this.tv.hide("center");
+          this.tv.hide("l7");
           this.startPA();
         }
       } else if (st === "tvscore") {
@@ -1499,7 +1513,7 @@
               if (lv >= 2) setTimeout(() => A.say("本日のスターティングメンバーを発表いたします", 0.95), 760);
             },
           ],
-          [0.1, () => this.tv.lineup({ title: this.opt.title, ms: dur * 1000 + 600 })],
+          [0.1, () => this.tv.lineup({ title: this.opt.title, ms: 60000 })],
           [dur - 0.45, () => this.tv.lineupOut()],
         ],
         skip: () => this.tv.hide("lu"),

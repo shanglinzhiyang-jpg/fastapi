@@ -301,14 +301,76 @@
   }
 
   // 実在選手の能力をゲームの基準に合わせる補正 (2004 年の打高: 1 試合 4.5 点・打率 .280 前後になるよう調整)
-  D.CALIB = { meet: -5, power: 4, speed: 10, lv: -1, velo: 0, control: -7 };
+  // team: 球団の戦力差の縮め (D.teamShift)。f = 縮める割合 (0 = 名簿のまま、1 = 主力の能力の平均をリーグ平均にそろえる)。
+  //   弾道の差はパワーに (弾道 1 = パワー traj)、変化球のレベルの差はコントロールに (レベル合計 1 = コントロール lv) 換算する。
+  //   bench・relief は控えの野手・救援投手の重み (打順の野手・先発は 1)
+  D.CALIB = { meet: -5, power: 4, speed: 10, lv: -1, velo: 0, control: -7, team: { f: 0, cap: 1, traj: 9.5, lv: 6, bench: 0.1, relief: 0.4 } };
   // 補正を変えたら上げる (保存済みのチームの能力を作り直す目印)
-  D.CALIB_VER = 2;
+  D.CALIB_VER = 3;
   D.RATING_KEYS = ["meet", "power", "speed", "arm", "field", "catch", "traj", "velo", "control", "stamina", "pitches"];
+
+  // 名簿の球団の主力の能力の平均 (名簿の能力そのまま。打順の野手・先発は重み 1、控え・救援は CALIB.team の重み)
+  const nameKey = (n) => String(n || "").replace(/[ 　]/g, "");
+  function rosterMeans(ro, T) {
+    const inLineup = new Set((ro.lineup || []).map((e) => nameKey(e.name)));
+    const inRot = new Set((ro.rotation || []).map(nameKey));
+    const sum = { meet: 0, power: 0, speed: 0, traj: 0, velo: 0, control: 0, lvs: 0 };
+    const wb = { bat: 0, pit: 0 };
+    for (const r of ro.players || []) {
+      const a = r.r || {};
+      const pit = r.pos === "P";
+      const main = pit ? (inRot.size ? inRot.has(nameKey(r.name)) : r.role === "SP") : inLineup.has(nameKey(r.name));
+      const w = main ? 1 : pit ? (T.relief != null ? T.relief : 0.4) : T.bench != null ? T.bench : 0.1;
+      if (pit) {
+        wb.pit += w;
+        sum.velo += w * (a.velo || 140);
+        sum.control += w * (a.control || 50);
+        sum.lvs += w * (a.pitches || []).reduce((x, q) => x + q.lv, 0);
+      } else {
+        wb.bat += w;
+        sum.meet += w * (a.meet || 40);
+        sum.power += w * (a.power || 40);
+        sum.speed += w * (a.speed || 45);
+        sum.traj += w * (a.traj || 2);
+      }
+    }
+    const m = {};
+    for (const k in sum) m[k] = sum[k] / Math.max(1e-9, ["velo", "control", "lvs"].indexOf(k) >= 0 ? wb.pit : wb.bat);
+    return m;
+  }
+  // 球団の戦力差を縮めるために、その球団の選手全員をずらす量 { meet, power, speed, velo, control }。
+  // 能力ごとに、同じリーグの名簿の球団の平均との差 x を x × (1 - f) / (1 + |x| / (cap × σ)) に縮める
+  // (σ: 12 球団の差の大きさの平均。差が大きい球団ほど強く縮める。球団内の差・看板選手・弾道・持ち球はそのまま)
+  D.teamShift = function (id) {
+    const T = (D.CALIB && D.CALIB.team) || {};
+    const R = D.ROSTERS || {};
+    if (!R[id] || (!T.f && !T.cap)) return {};
+    const lgOf = (x) => (D.teamDef && D.teamDef(x) && D.teamDef(x).lg) || "";
+    const ids = Object.keys(R);
+    const means = {};
+    for (const x of ids) {
+      const m = rosterMeans(R[x], T);
+      // 弾道はパワーに、変化球のレベルはコントロールに換算
+      means[x] = { meet: m.meet, power: m.power + (T.traj || 0) * m.traj, speed: m.speed, velo: m.velo, control: m.control + (T.lv || 0) * m.lvs };
+    }
+    const dev = (x, k) => {
+      const same = ids.filter((y) => lgOf(y) === lgOf(x));
+      return means[x][k] - same.reduce((s, y) => s + means[y][k], 0) / same.length;
+    };
+    const out = {};
+    for (const k in means[id]) {
+      const x = dev(id, k);
+      const sig = Math.sqrt(ids.reduce((s, y) => s + dev(y, k) ** 2, 0) / ids.length) || 1;
+      const c = T.cap ? T.cap * sig : Infinity;
+      out[k] = (x * (1 - (T.f || 0))) / (1 + Math.abs(x) / c) - x;
+    }
+    return out;
+  };
 
   // 実在選手の名簿 (rosters2004.js) からチームを作る
   D.rosterTeam = function (tdef, ro) {
     const rng = U.seeded(tdef.seed || 1);
+    const sh = D.teamShift(tdef.id);
     const players = ro.players.map((r, i) => {
       const nm = String(r.name || "");
       let name = nm;
@@ -320,18 +382,18 @@
         name = parts[parts.length - 1];
         given = parts.slice(0, -1).join("・");
       }
-      // 能力の補正 (ゲームの打高・投高のバランスに合わせる)
+      // 能力の補正 (ゲームの打高・投高のバランスに合わせる) と球団の戦力差の縮め (sh)
       const C = D.CALIB || {};
       const a0 = r.r || {};
       const a = Object.assign({}, a0);
       if (r.pos !== "P") {
-        a.meet = (a0.meet || 40) + (C.meet || 0);
-        a.power = (a0.power || 40) + (C.power || 0);
-        a.speed = (a0.speed || 45) + (C.speed || 0);
+        a.meet = (a0.meet || 40) + (C.meet || 0) + (sh.meet || 0);
+        a.power = (a0.power || 40) + (C.power || 0) + (sh.power || 0);
+        a.speed = (a0.speed || 45) + (C.speed || 0) + (sh.speed || 0);
       }
       if (r.pos === "P") {
-        a.velo = (a0.velo || 140) + (C.velo || 0);
-        a.control = (a0.control || 50) + (C.control || 0);
+        a.velo = (a0.velo || 140) + (C.velo || 0) + (sh.velo || 0);
+        a.control = (a0.control || 50) + (C.control || 0) + (sh.control || 0);
         a.pitches = (a0.pitches || []).map((x) => ({ t: x.t, lv: x.lv + (C.lv || 0) }));
       }
       const p = {

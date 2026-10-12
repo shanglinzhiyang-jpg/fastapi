@@ -1,5 +1,7 @@
-/* 熱闘！ポケットベースボール — サクセスのキャラクター (今風のアニメ塗り)
- * 細く均一な焦げ茶の線・ベタ塗り + 影 1 段 (セル影)・大きめの瞳・小さな鼻・斜めの帯としぶきの背景。SVG の文字列を作って HTML に埋め込む。
+/* 熱闘！ポケットベースボール — サクセスのキャラクター
+ * ふだんはユーザーが描いた絵 (img/success/*.webp、1 人 3 表情) を SVG の <image> で出す (下の「ユーザーの絵」)。
+ * まだ会っていない人のシルエット・絵が読めなかったとき・o.draw のときは、ここで描く SVG の絵 (今風のアニメ塗り) を使う。
+ * 描く絵: 細く均一な焦げ茶の線・ベタ塗り + 影 1 段 (セル影)・大きめの瞳・小さな鼻・斜めの帯としぶきの背景。SVG の文字列を作って HTML に埋め込む。
  * 座標は 200x240 (顔の中心 x=100)。頭は少し右 (台詞の側) を向く: 顔の点は (u: 中心からの横, v: 縦, z: 奥行き) で持ち、prj() で移す。
  * 頭は首の付け根を中心に g.hk 倍に縮めて少し持ち上げる (頭のグループの transform)。帽子・服は自分のチームの色とマーク。 */
 (function (PB) {
@@ -1696,11 +1698,11 @@
     face: [44, 54, 116, 116],
   };
 
-  /* ---------- 公開: SVG の文字列 ----------
+  /* ---------- 描く絵: SVG の文字列 ----------
    * o: { team, ex (表情), crop: bust|square|face, size (表示の大きさ px、細部の量), face (自分の顔), seed, frame, sil, cls, label } */
   const cache = {};
   let seq = 0;
-  M.svg = function (who, o) {
+  function drawSvg(who, o) {
     o = o || {};
     const wk = CHARS[who] ? who : "me";
     const C = CHARS[wk];
@@ -1752,11 +1754,11 @@
       .replace("§label", escA(o.label || ""))
       .split("§")
       .join(uid);
-  };
+  }
 
-  // 小さなアイコン (顔のアップ): 文書に 1 つの SVG スプライトへ symbol を置き、<use> で参照する
+  // 描く絵の小さなアイコン (顔のアップ): 文書に 1 つの SVG スプライトへ symbol を置き、<use> で参照する
   const syms = {};
-  M.icon = function (who, o) {
+  function drawIcon(who, o) {
     o = o || {};
     const f = o.face || {};
     const ex = o.sil ? "normal" : o.ex || "normal";
@@ -1773,13 +1775,177 @@
         document.body.appendChild(sp);
       }
       id = "mgs" + (++seq).toString(36);
-      const inner = M.svg(who, Object.assign({}, o, { ex, crop: "face", size: 40, frame: false }))
+      const inner = drawSvg(who, Object.assign({}, o, { ex, crop: "face", size: 40, frame: false }))
         .replace(/^<svg[^>]*>/, "")
         .replace(/<\/svg>$/, "");
       sp.insertAdjacentHTML("beforeend", '<symbol id="' + id + '" viewBox="' + CROP.face.join(" ") + '">' + inner + "</symbol>");
       syms[key] = id;
     }
     return '<svg class="mg mg-ic ' + escA(o.cls || "") + '" viewBox="0 0 120 120" aria-hidden="true"><use href="#' + id + '" width="120" height="120"/></svg>';
+  }
+
+  /* ---------- ユーザーの絵 ----------
+   * シートから切り抜いただけ (拡大・色の変更なし、元の画素の大きさ)。服は 1 種類 (黒と黄・縦じま) なので、どのチームでも同じ絵。
+   * 値: [ファイル, 幅, 高さ, 顔の中心 x, 顔の中心 y, 顔の正方形の辺] (顔はアイコンの切り抜き)
+   * パスは "img/..." の文字列のまま書く (tools/build_single.py が 1 つずつ data URI に置きかえて埋め込む) */
+  const PIC = {
+    kanto: {
+      normal: ["img/success/kanto_normal.webp", 230, 274, 118, 122, 146],
+      happy: ["img/success/kanto_happy.webp", 230, 260, 117, 120, 146],
+      serious: ["img/success/kanto_serious.webp", 230, 262, 117, 131, 146],
+    },
+    goda: {
+      normal: ["img/success/goda_normal.webp", 237, 275, 116, 126, 146],
+      happy: ["img/success/goda_happy.webp", 237, 263, 117, 121, 146],
+      surprised: ["img/success/goda_surprised.webp", 237, 262, 114, 131, 146],
+    },
+    hayase: {
+      normal: ["img/success/hayase_normal.webp", 235, 274, 115, 139, 143],
+      happy: ["img/success/hayase_happy.webp", 235, 262, 118, 134, 143],
+      angry: ["img/success/hayase_angry.webp", 235, 262, 113, 142, 143],
+    },
+    inukai: {
+      normal: ["img/success/inukai_normal.webp", 235, 275, 115, 132, 143],
+      happy: ["img/success/inukai_happy.webp", 234, 263, 116, 124, 143],
+      serious: ["img/success/inukai_serious.webp", 234, 263, 122, 135, 143],
+    },
+    ryuzaki: {
+      normal: ["img/success/ryuzaki_normal.webp", 234, 275, 114, 142, 139],
+      happy: ["img/success/ryuzaki_happy.webp", 233, 263, 118, 136, 139],
+      angry: ["img/success/ryuzaki_angry.webp", 232, 262, 114, 145, 139],
+    },
+    me: {
+      normal: ["img/success/me_normal.webp", 233, 275, 114, 140, 139],
+      happy: ["img/success/me_happy.webp", 233, 263, 116, 134, 139],
+      sad: ["img/success/me_sad.webp", 233, 262, 115, 148, 139],
+    },
+  };
+  /* 絵のない表情は近い絵で代わりにする (表の左が頼まれた表情、中が出す絵)
+   *            ふつう  笑顔   怒り     真剣     おどろき   しょんぼり
+   * 鬼瓦監督   ふつう  笑顔   真剣     真剣     ふつう     真剣
+   * 剛田       ふつう  笑顔   ふつう   ふつう   おどろき   おどろき (汗をかいた顔)
+   * 早瀬       ふつう  笑顔   怒り     怒り     ふつう     怒り (むっとした顔)
+   * 宇佐美     ふつう  笑顔   真剣     真剣     ふつう     真剣
+   * 竜崎       ふつう  笑顔   怒り     怒り     ふつう     怒り (にらむ顔)
+   * 自分       ふつう  笑顔   しょんぼり しょんぼり ふつう   しょんぼり */
+  const ALT = {
+    kanto: { angry: "serious", surprised: "normal", sad: "serious" },
+    goda: { angry: "normal", serious: "normal", sad: "surprised" },
+    hayase: { serious: "angry", surprised: "normal", sad: "angry" },
+    inukai: { angry: "serious", surprised: "normal", sad: "serious" },
+    ryuzaki: { serious: "angry", surprised: "normal", sad: "angry" },
+    me: { angry: "sad", serious: "sad", surprised: "normal" },
+  };
+  // その人・表情で出す絵の表情 (開発ページの表にも使う)
+  M.picEx = function (who, ex) {
+    const P = PIC[who] || PIC.me;
+    if (P[ex]) return ex;
+    const a = (ALT[who] || ALT.me)[ex];
+    return a && P[a] ? a : "normal";
+  };
+  // 胸から上の切り抜きは 5:6 (箱の縦横比)。高さはその人の絵で一番低いものにそろえ、表情を変えても大きさが変わらないようにする
+  const BUST = {};
+  for (const w in PIC) {
+    const h = Math.min(...Object.values(PIC[w]).map((p) => p[2]));
+    BUST[w] = [Math.round((h * 5) / 6), h];
+  }
+  function picBox(w, P, crop) {
+    const W = P[1];
+    const H = P[2];
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    if (crop === "face") {
+      const s = Math.min(P[5], W, H);
+      return [n(clamp(P[3] - s / 2, 0, W - s)), n(clamp(P[4] - s / 2, 0, H - s)), s, s];
+    }
+    const [bw, bh] = BUST[w];
+    const x = n((W - bw) / 2);
+    if (crop === "square") return [x, n(clamp(P[4] - bw / 2, 0, H - bw)), bw, bw];
+    return [x, 0, bw, bh];
+  }
+
+  // 1 つのファイルにまとめた版では data: URI になっている。HTML に毎回長い文字列を入れないよう、最初の 1 回で blob: URL にする
+  const urls = {};
+  function src(u) {
+    if (urls[u]) return urls[u];
+    let v = u;
+    if (u.startsWith("data:") && typeof Blob !== "undefined" && typeof URL !== "undefined" && URL.createObjectURL) {
+      try {
+        const i = u.indexOf(",");
+        const bin = atob(u.slice(i + 1));
+        const a = new Uint8Array(bin.length);
+        for (let j = 0; j < bin.length; j++) a[j] = bin.charCodeAt(j);
+        v = URL.createObjectURL(new Blob([a], { type: u.slice(5, u.indexOf(";")) }));
+      } catch (e) {
+        v = u;
+      }
+    }
+    return (urls[u] = v);
+  }
+  // 読めなかった絵 (表情キー → true)。次からは描く絵にする
+  const bad = {};
+  // 最初に使うときに全員分を読んでおく (会話で表情が変わっても待たない)
+  let pre = false;
+  function preload() {
+    if (pre || typeof Image === "undefined") return;
+    pre = true;
+    for (const w in PIC) {
+      for (const e in PIC[w]) {
+        const im = new Image();
+        im.onerror = () => (bad[w + "_" + e] = true);
+        im.src = src(PIC[w][e][0]);
+      }
+    }
+  }
+  // 絵が読めなかったとき描き直すための引数 (新しいものから 256 個)
+  const args = [];
+  let argN = 0;
+  function bitmap(who, o, icon) {
+    const wk = PIC[who] ? who : "me";
+    const ex = M.picEx(wk, EXPRS.indexOf(o.ex) >= 0 ? o.ex : "normal");
+    const P = PIC[wk][ex];
+    const crop = icon ? "face" : CROP[o.crop] ? o.crop : "bust";
+    const vb = picBox(wk, P, crop);
+    preload();
+    const k = argN++;
+    args[k % 256] = [who, o, icon, k];
+    let s = '<image class="mg-bm" data-pic="' + wk + "_" + ex + '" href="' + escA(src(P[0])) + '" width="' + P[1] + '" height="' + P[2] + '" preserveAspectRatio="none"/>';
+    // 枠 (描く絵と同じ太さの割合)
+    if (!icon && o.frame !== false) {
+      const sw = n(vb[2] * (crop === "face" ? 0.026 : 0.013));
+      s += '<rect x="' + n(vb[0] + sw / 2) + '" y="' + n(vb[1] + sw / 2) + '" width="' + n(vb[2] - sw) + '" height="' + n(vb[3] - sw) + '" fill="none" stroke="' + INK + '" stroke-width="' + sw + '"/>';
+    }
+    const aria = icon || !o.label ? ' aria-hidden="true"' : ' role="img" aria-label="' + escA(o.label) + '"';
+    return '<svg class="mg ' + (icon ? "mg-ic " : "") + escA(o.cls || "") + '" viewBox="' + vb.join(" ") + '" preserveAspectRatio="xMidYMid slice"' + aria + ' data-mgk="' + k + '">' + s + "</svg>";
+  }
+  // 絵が読めなかったら (オフラインでキャッシュがない等) その場で描く絵に差しかえる。error は泡立たないので捕捉で受ける
+  if (typeof document !== "undefined") {
+    document.addEventListener(
+      "error",
+      (e) => {
+        const t = e.target;
+        if (!t || !t.classList || !t.classList.contains("mg-bm")) return;
+        bad[t.getAttribute("data-pic")] = true;
+        const sv = t.closest("svg.mg");
+        const k = sv ? Number(sv.getAttribute("data-mgk")) : -1;
+        const a = args[k % 256];
+        if (a && a[3] === k) sv.outerHTML = a[2] ? drawIcon(a[0], a[1]) : drawSvg(a[0], a[1]);
+      },
+      true
+    );
+  }
+  const usePic = (who, o) => !o.sil && !o.draw && !bad[(PIC[who] ? who : "me") + "_" + M.picEx(PIC[who] ? who : "me", o.ex)];
+
+  /* ---------- 公開 ----------
+   * M.svg(who, o): 胸から上の絵。o: { ex (表情), crop: bust|square|face, cls, label, frame (false で枠なし), sil (シルエット), draw (描く絵にする) }
+   *   描く絵だけが使うもの: team (帽子・服の色), size (細部の量), face (自分の顔: 肌・目・髪), seed
+   * M.icon(who, o): 小さな顔のアイコン (o は同じ) */
+  M.svg = function (who, o) {
+    o = o || {};
+    return usePic(who, o) ? bitmap(who, o, false) : drawSvg(who, o);
+  };
+  M.icon = function (who, o) {
+    o = o || {};
+    return usePic(who, o) ? bitmap(who, o, true) : drawIcon(who, o);
   };
 
   // 台詞から表情を決める (台詞に face があればそれを使う)

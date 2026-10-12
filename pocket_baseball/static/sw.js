@@ -1,5 +1,5 @@
 /* オフラインでも遊べるようにゲーム本体をキャッシュする (API は常にネットワーク) */
-const CACHE = "pocket-baseball-v7";
+const CACHE = "pocket-baseball-v9";
 const ASSETS = [
   "./",
   "index.html",
@@ -46,6 +46,8 @@ const ASSETS = [
   "js/quicksim.js",
   "js/pennant_post.js",
   "js/pennant_awards.js",
+  "js/pennant_life.js",
+  "js/pennant_records.js",
   "js/news.js",
   "js/manga.js",
   "js/success.js",
@@ -84,6 +86,25 @@ const ASSETS = [
   "img/words/m.webp",
   "img/words/yb_script.webp",
   "img/words/yb_sleeve.webp",
+  // サクセスの人物の絵 (manga.js)
+  "img/success/kanto_normal.webp",
+  "img/success/kanto_happy.webp",
+  "img/success/kanto_serious.webp",
+  "img/success/goda_normal.webp",
+  "img/success/goda_happy.webp",
+  "img/success/goda_surprised.webp",
+  "img/success/hayase_normal.webp",
+  "img/success/hayase_happy.webp",
+  "img/success/hayase_angry.webp",
+  "img/success/inukai_normal.webp",
+  "img/success/inukai_happy.webp",
+  "img/success/inukai_serious.webp",
+  "img/success/ryuzaki_normal.webp",
+  "img/success/ryuzaki_happy.webp",
+  "img/success/ryuzaki_angry.webp",
+  "img/success/me_normal.webp",
+  "img/success/me_happy.webp",
+  "img/success/me_sad.webp",
 ];
 
 self.addEventListener("install", (e) => {

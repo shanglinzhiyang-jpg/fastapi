@@ -536,7 +536,8 @@
     else if (!user) head = g.teams[res.winner].short + " の勝利";
     else head = res.winner === user ? "勝利！" : "敗戦…";
     const mvpSide = res.winner || "home";
-    const mvp = Sc.mvp(g, mvpSide);
+    // 試合の終わりにヒーローインタビューをした選手 (サヨナラの殊勲者など) を今日のヒーローに
+    const mvp = match.heroId || Sc.mvp(g, mvpSide);
     // 試合の終わりに球団の勝利の歌を流したときは、ここでは鳴らさない
     if (user && !res.tie && !match.jingled) {
       if (res.winner === user) A.victory();

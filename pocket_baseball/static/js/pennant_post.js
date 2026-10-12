@@ -574,6 +574,7 @@
           "</details>" +
           '<div class="row-btns"><button class="btn" data-act="order">オーダー</button><button class="btn" data-act="leaders">個人成績</button><button class="btn" data-act="results">試合結果</button></div>' +
           '<div class="row-btns">' +
+          (PB.PenLife && pen.teams ? '<button class="btn" data-act="roster">一軍・二軍</button>' : "") +
           (pen.awards && pen.awards.titles ? '<button class="btn" data-act="titles">タイトル・表彰</button>' : "") +
           (PB.News && pen.results.length ? '<button class="btn" data-act="news" data-arg="news">スポーツニュース</button>' : "") +
           "</div>" +
@@ -584,8 +585,9 @@
       onAct(act, arg) {
         if (busy || N.busy()) return;
         if (act === "back") return UI.go(Sc.title());
-        if (act === "player") return UI.showPlayer(arg, null);
-        if (act === "order") return UI.go(Sc.order(N.team(pen.my), { onBack: () => UI.go(N.hub()) }));
+        if (act === "player") return Pen().showPlayer(arg);
+        if (act === "order") return UI.go(N.orderScreen());
+        if (act === "roster" && PB.PenLife) return UI.go(PB.PenLife.screen());
         if (act === "leaders") return UI.go(N.leaders());
         if (act === "results") return UI.go(N.results());
         if (act === "titles" && PB.PenAwards) return UI.go(PB.PenAwards.screen({ onBack: () => N.hub() }));
@@ -842,7 +844,7 @@
         }
       },
       onAct(act, arg) {
-        if (act === "player") return UI.showPlayer(arg, null);
+        if (act === "player") return Pen().showPlayer(arg);
         if (act === "next") {
           pen.post.cel[sid] = 1;
           Store.save();
@@ -863,7 +865,7 @@
       },
       onAct(act, arg) {
         if (act === "back") return UI.go(o && o.onBack ? o.onBack() : Pen().hub());
-        if (act === "player") UI.showPlayer(arg, null);
+        if (act === "player") Pen().showPlayer(arg);
       },
     };
   };

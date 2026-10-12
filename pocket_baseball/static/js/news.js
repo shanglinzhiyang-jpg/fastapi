@@ -195,12 +195,14 @@
     if (e.consec >= 3) return { prio: 70, title: nm + "、" + e.consec + "打席連続本塁打" };
     if (e.game === 2) return { prio: 55, title: nm + "、1試合2本塁打" + no };
     if (e.consec === 2) return { prio: 50, title: nm + "、2打席連続本塁打" };
-    if (e.gs >= 3) return { prio: 50, title: nm + "、" + e.gs + "試合連続本塁打" + no };
+    // 5 試合連続以上・30/40/50 号は記録 (pennant_records.js) の記事で伝える
+    const rec = !!PB.PenRecords && !e.ps;
+    if (e.gs >= 3 && !(rec && e.gs >= 5)) return { prio: 50, title: nm + "、" + e.gs + "試合連続本塁打" + no };
     if (e.ph) return { prio: 45, title: e.ctx ? "代打・" + nm + "、" + e.ctx + kindShort(e) : "代打・" + nm + "が" + kindShort(e) };
     if (e.lead) return { prio: 45, title: nm + "、初回先頭打者本塁打" + no };
     if (e.extra) return { prio: 45, title: nm + "、延長" + e.inn + "回に" + (e.ctx || "") + kindShort(e) };
     if (e.both) return { prio: 45, title: nm + "、両打席本塁打" };
-    if (e.no >= 10 && e.no % 10 === 0 && !e.ps) return { prio: 40, title: nm + "、シーズン" + e.no + "号に到達" };
+    if (e.no >= 10 && e.no % 10 === 0 && !e.ps && !(rec && e.no >= 30 && e.no <= 50)) return { prio: 40, title: nm + "、シーズン" + e.no + "号に到達" };
     if (e.ctx === "逆転") return { prio: 35, title: nm + "、逆転" + kindShort(e) };
     return null;
   }
@@ -396,6 +398,9 @@
     postNews(pen, day);
     // 7) タイトル確定・月間 MVP・表彰
     awardNews(pen, day);
+    // 8) 選手の状態 (ケガ・登録/抹消) と記録 (快挙・連続記録・節目)。保存した記録から作るので作り直しても同じ
+    if (PB.PenLife) for (const it of PB.PenLife.news(pen, day)) add(pen, it);
+    if (PB.PenRecords) for (const it of PB.PenRecords.news(pen, day)) add(pen, it);
     ns.done[day] = 1;
   };
 
@@ -903,7 +908,9 @@
                   (n) =>
                     '<div class="nitem k-' +
                     n.kind +
-                    '">' +
+                    '"' +
+                    (n.pid ? ' data-act="player" data-arg="' + esc(n.pid) + '"' : "") +
+                    ">" +
                     (n.team ? '<span class="ni-logo">' + PB.UI.mark(team(n.team), 30) + "</span>" : '<span class="ni-logo ni-lg">' + (n.lg === "P" ? "パ" : n.lg === "C" ? "セ" : "★") + "</span>") +
                     '<div class="ni-txt"><b>' +
                     esc(n.title) +
@@ -951,7 +958,7 @@
           const i = days.indexOf(st.day) + (act === "prev" ? -1 : 1);
           if (i >= 0 && i < days.length) st.day = days[i];
         } else if (act === "player") {
-          return PB.UI.showPlayer(arg, pen.stats[arg] || null);
+          return PB.Pennant.showPlayer ? PB.Pennant.showPlayer(arg) : PB.UI.showPlayer(arg, pen.stats[arg] || null);
         } else if (act === "digest") {
           if (digest && digest.alive()) return;
           digest = News.digest(pen, st.day);

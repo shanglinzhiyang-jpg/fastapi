@@ -297,6 +297,9 @@
   };
 
   UI.findPlayer = function (id) {
+    // ペナントの画面 (cur.pen) ではペナントの球団の写し (二軍・状態つき) を先に見る
+    const pr = UI.cur && UI.cur.pen && PB.Pennant && PB.Pennant.findPlayer ? PB.Pennant.findPlayer(id) : null;
+    if (pr) return pr;
     for (const t of PB.Store.teams()) {
       const p = t.players.find((x) => x.id === id);
       if (p) return { p, team: t };

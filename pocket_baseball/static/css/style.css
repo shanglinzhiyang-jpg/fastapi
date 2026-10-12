@@ -4090,6 +4090,24 @@ input[type="range"] {
   width: 110px;
   height: 132px;
 }
+/* 選手をつくる: 試合での顔 (肌・目・髪型はサクセスの絵ではなく試合の選手に出る) */
+.mg-face {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mg-face-cv {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #ffffff 0%, #dfe5ee 70%, #b9c3d1 100%);
+  box-shadow: 0 0 0 2px #fff;
+}
+.mg-face .note {
+  font-size: 12px;
+  line-height: 1.5;
+}
 .mg-me-pic {
   width: 84px;
   height: 100px;
@@ -4194,7 +4212,7 @@ button.rels:active {
 }
 .mgc-pic {
   grid-area: pic;
-  /* 絵の縦横比 (200x240) のまま: 文の列に合わせて伸ばすと左右が切れる (ポニーテールなど) */
+  /* 絵の縦横比 (5:6) のまま: 文の列に合わせて伸ばすと左右が切れる (ポニーテールなど) */
   align-self: start;
   aspect-ratio: 5 / 6;
   min-height: 0;
@@ -5509,3 +5527,1542 @@ button.rels:active {
   margin-top: 4px;
 }
 /* ---------- /ペナント: ポストシーズン・表彰 (L2) ---------- */
+
+/* ---------- 演出 (E1) ---------- */
+/* 横画面でテロップが小さくなりすぎないように (縦画面は今までどおり) */
+:root {
+  --tv: clamp(0.8px, min(calc(100vw / 400), calc(100vh / 560)), 1.35px);
+}
+@media (orientation: portrait) {
+  :root {
+    --tv: min(calc(100vw / 400), calc(100vh / 720), 1.35px);
+  }
+}
+/* 解説のひと言 (実況の下に小さく) */
+.talk-sub {
+  position: absolute;
+  top: calc(54px + var(--safe-t) + var(--tv, 1px) * 100);
+  left: 50%;
+  max-width: calc(100% - 48px);
+  padding: 3px 12px 3px 4px;
+  border-radius: 999px;
+  background: rgba(14, 22, 36, 0.86);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  color: #e8edf5;
+  font: 700 12px/1.35 var(--f-tv);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+  pointer-events: none;
+}
+.talk-sub.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.talk-sub span {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #3a4a62;
+  color: #ffd84a;
+  font-size: 10px;
+  font-weight: 900;
+}
+/* 場内アナウンスの字幕 (上の中央の細い黒帯) */
+.tv-pa {
+  position: absolute;
+  left: 50%;
+  top: calc(86px + var(--safe-t) + var(--tv) * 100);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--tv) * 7);
+  max-width: calc(100vw - 20px);
+  padding: calc(var(--tv) * 3) calc(var(--tv) * 14) calc(var(--tv) * 3) calc(var(--tv) * 4);
+  border-top: 1px solid rgba(255, 255, 255, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.84) 6%, rgba(8, 10, 14, 0.9) 94%, rgba(0, 0, 0, 0));
+  color: #fff;
+  font: 800 calc(var(--tv) * 14) / 1.35 var(--f-tv);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, -6px);
+  transition:
+    opacity 0.2s,
+    transform 0.25s;
+  pointer-events: none;
+}
+.tv-pa:empty {
+  display: none;
+}
+.tv-pa.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.tv-pa.out {
+  opacity: 0;
+}
+.pa-k {
+  flex: none;
+  padding: 0 calc(var(--tv) * 6);
+  border-radius: calc(var(--tv) * 3);
+  background: linear-gradient(180deg, #5aa0ff, #1b56c6);
+  font: 900 calc(var(--tv) * 10) / 1.6 var(--f-tv);
+}
+.pa-t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 判定・結果の小さな帯 (右下、打者紹介の上) */
+.tv-call {
+  position: absolute;
+  right: calc(8px + var(--safe-r));
+  bottom: calc(140px + var(--safe-b) + var(--tv) * 96);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(var(--tv) * 2);
+  max-width: calc(100vw - 16px);
+  opacity: 0;
+  transform: translateX(26px);
+  transition:
+    opacity 0.18s,
+    transform 0.3s cubic-bezier(0.2, 1.3, 0.4, 1);
+  pointer-events: none;
+  --cl1: #5a6270;
+  --cl2: #1b1f26;
+}
+.tv-call:empty {
+  display: none;
+}
+/* 左打者のときは打者と反対の左側に */
+.tv-call.l {
+  right: auto;
+  left: calc(8px + var(--safe-l));
+  align-items: flex-start;
+  transform: translateX(-26px);
+}
+.tv-call.l .cl-bar {
+  padding: calc(var(--tv) * 4) calc(var(--tv) * 22) calc(var(--tv) * 4) calc(var(--tv) * 14);
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--tv) * 13) 100%, 0 100%);
+  border-right: none;
+  border-left: calc(var(--tv) * 5) solid var(--tv-gold);
+}
+.tv-call.show {
+  opacity: 1;
+  transform: none;
+}
+.tv-call.out {
+  opacity: 0;
+  transform: translateX(18px);
+}
+.cl-bar {
+  display: block;
+  padding: calc(var(--tv) * 4) calc(var(--tv) * 14) calc(var(--tv) * 4) calc(var(--tv) * 22);
+  clip-path: polygon(calc(var(--tv) * 13) 0, 100% 0, 100% 100%, 0 100%);
+  border-right: calc(var(--tv) * 5) solid var(--tv-gold);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 48%, rgba(0, 0, 0, 0.18) 52%),
+    linear-gradient(180deg, var(--cl1), var(--cl2));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.cl-tx {
+  display: block;
+  color: #fff;
+  font: 900 calc(var(--tv) * 19) / 1.2 var(--f-tv);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  text-shadow: 0 calc(var(--tv) * 2) 0 rgba(0, 0, 0, 0.55);
+}
+.tv-call.show .cl-tx {
+  animation: tv-chip 0.3s 0.08s ease-out both;
+}
+.tv-call.c-hit {
+  --cl1: #ff8a3c;
+  --cl2: #c42a06;
+}
+.tv-call.c-out {
+  --cl1: #4c6a9a;
+  --cl2: #142542;
+}
+.tv-call.c-k {
+  --cl1: #e8344a;
+  --cl2: #7a0614;
+}
+.tv-call.c-safe {
+  --cl1: #2fc46a;
+  --cl2: #0a5a2a;
+}
+.tv-call.c-info {
+  --cl1: #3f8fd8;
+  --cl2: #0d3a6e;
+}
+.tv-call.c-fine {
+  --cl1: #fff0a8;
+  --cl2: #c98d10;
+}
+.tv-call.c-fine .cl-tx {
+  color: #2a1800;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.tv-call.c-chance {
+  --cl1: var(--cc, #e0262e);
+  --cl2: #000;
+}
+.tv-call.c-chance .cl-bar {
+  background:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.16) 0 calc(var(--tv) * 8), rgba(255, 255, 255, 0) calc(var(--tv) * 8) calc(var(--tv) * 16)),
+    linear-gradient(180deg, var(--cc, #e0262e), #000 160%);
+}
+/* SAFE / OUT の判子 */
+.cl-st {
+  display: block;
+  margin-right: calc(var(--tv) * 4);
+  font: 400 calc(var(--tv) * 40) / 1 var(--f-tvn);
+  letter-spacing: 0.02em;
+  -webkit-text-stroke: calc(var(--tv) * 1.6) #fff;
+  filter: drop-shadow(0 calc(var(--tv) * 3) 0 rgba(0, 0, 0, 0.6));
+}
+.tv-call.c-safe .cl-st {
+  color: #19c25e;
+}
+.tv-call.c-out .cl-st {
+  color: #ec2a1c;
+}
+.tv-call.show .cl-st {
+  animation: hr-slam 0.42s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+/* 三振の K ボード (打者と反対側) */
+.tv-k {
+  position: absolute;
+  top: 31%;
+  right: calc(8px + var(--safe-r));
+  width: calc(var(--tv) * 82);
+  font-family: var(--f-tv);
+  color: #fff;
+  opacity: 0;
+  transform: translateX(22px);
+  transition:
+    opacity 0.2s,
+    transform 0.3s cubic-bezier(0.2, 1.3, 0.4, 1);
+  pointer-events: none;
+}
+.tv-k.l {
+  right: auto;
+  left: calc(8px + var(--safe-l));
+  transform: translateX(-22px);
+}
+.tv-k:empty {
+  display: none;
+}
+.tv-k.show {
+  opacity: 1;
+  transform: none;
+}
+.tv-k.out {
+  opacity: 0;
+}
+.kb-h {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--tv) * 3) calc(var(--tv) * 4) calc(var(--tv) * 2);
+  border: calc(var(--tv) * 1.5) solid var(--tv-gold);
+  border-bottom: none;
+  border-radius: calc(var(--tv) * 7) calc(var(--tv) * 7) 0 0;
+  background: linear-gradient(180deg, #55585e 0%, #1d1f23 47%, #000 53%, #17191c 100%);
+}
+.kb-n {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 900 calc(var(--tv) * 11) / 1.3 var(--f-tv);
+}
+.kb-h b {
+  font: 400 calc(var(--tv) * 24) / 1 var(--f-tvn);
+  color: #ffd84a;
+}
+.kb-h small {
+  margin-left: calc(var(--tv) * 2);
+  font: 900 calc(var(--tv) * 9) / 1 var(--f-tv);
+}
+.kb-l {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(var(--tv) * 3);
+  padding: calc(var(--tv) * 5) calc(var(--tv) * 4);
+  border: calc(var(--tv) * 1.5) solid var(--tv-gold);
+  border-top: none;
+  border-radius: 0 0 calc(var(--tv) * 7) calc(var(--tv) * 7);
+  background: rgba(0, 0, 0, 0.84);
+}
+.kb-l i {
+  display: grid;
+  place-items: center;
+  width: calc(var(--tv) * 16);
+  height: calc(var(--tv) * 20);
+  border-radius: calc(var(--tv) * 2);
+  background: #f4f4f0;
+  color: #15171b;
+  font: 400 calc(var(--tv) * 14) / 1 var(--f-tvn);
+  font-style: normal;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+}
+.kb-l i.rev {
+  transform: scaleX(-1);
+}
+.kb-l i.new {
+  background: #e01b2a;
+  color: #fff;
+  box-shadow: 0 0 calc(var(--tv) * 8) rgba(255, 60, 60, 0.85);
+}
+.tv-k.show .kb-l i.new {
+  animation: kb-drop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) 0.15s both;
+}
+.tv-k.show .kb-l i.rev.new {
+  animation-name: kb-drop-r;
+}
+@keyframes kb-drop {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--tv) * -14)) scale(1.8);
+  }
+}
+@keyframes kb-drop-r {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--tv) * -14)) scale(-1.8, 1.8);
+  }
+  to {
+    transform: scaleX(-1);
+  }
+}
+/* 打席・マウンドに向かう選手のカード (白く光って現れる) */
+.tv-card {
+  position: absolute;
+  right: calc(10px + var(--safe-r));
+  bottom: calc(140px + var(--safe-b) + var(--tv) * 100);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  perspective: 700px;
+  opacity: 0;
+  pointer-events: none;
+}
+.tv-card.l {
+  right: auto;
+  left: calc(10px + var(--safe-l));
+}
+.tv-card:empty {
+  display: none;
+}
+.tv-card.show {
+  opacity: 1;
+}
+.tv-card.out {
+  opacity: 0;
+  transform: translateY(calc(var(--tv) * 40)) scale(0.55);
+  transition:
+    opacity 0.35s,
+    transform 0.4s ease-in;
+}
+.cd-in {
+  position: relative;
+}
+.tv-card.show .cd-in {
+  animation: cd-in 0.42s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+.cd-in::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 6%/4.5%;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+.tv-card.show .cd-in::after {
+  animation: cd-flash 0.5s ease-out both;
+}
+@keyframes cd-in {
+  from {
+    opacity: 0;
+    transform: scale(1.18) rotateY(-40deg);
+  }
+}
+@keyframes cd-flash {
+  from {
+    opacity: 0.95;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.cd-tag {
+  margin-top: calc(var(--tv) * 4);
+  padding: calc(var(--tv) * 1) calc(var(--tv) * 9);
+  border-radius: calc(var(--tv) * 3);
+  background: linear-gradient(180deg, #fff0a8, #d4a224);
+  color: #1a1000;
+  font: 900 calc(var(--tv) * 11) / 1.45 var(--f-tv);
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+.tv-card.show .cd-tag {
+  animation: tv-chip 0.3s 0.25s ease-out both;
+}
+/* 推定飛距離 */
+.tv-dist {
+  position: absolute;
+  left: 50%;
+  top: calc(56% + var(--tv) * 44);
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--tv) * 4);
+  padding: calc(var(--tv) * 3) calc(var(--tv) * 14) calc(var(--tv) * 4);
+  border: calc(var(--tv) * 1.5) solid var(--tv-gold);
+  border-radius: calc(var(--tv) * 6);
+  background: linear-gradient(180deg, rgba(56, 60, 68, 0.95) 0%, rgba(14, 16, 20, 0.95) 50%, rgba(0, 0, 0, 0.95) 52%, rgba(26, 28, 32, 0.95) 100%);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+  color: #fff;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, 10px);
+  transition:
+    opacity 0.2s,
+    transform 0.3s cubic-bezier(0.2, 1.3, 0.4, 1);
+  pointer-events: none;
+}
+.tv-dist:empty {
+  display: none;
+}
+.tv-dist.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.tv-dist.out {
+  opacity: 0;
+}
+.ds-k {
+  font: 800 calc(var(--tv) * 12) / 1 var(--f-tv);
+  color: #c9d2dc;
+}
+.tv-dist b {
+  font: 400 calc(var(--tv) * 30) / 1.05 var(--f-tvn);
+  color: #fff;
+}
+.tv-dist small {
+  font: 800 calc(var(--tv) * 13) / 1 var(--f-tv);
+  color: #c9d2dc;
+}
+.ds-w {
+  margin-left: calc(var(--tv) * 6);
+  font: 900 calc(var(--tv) * 13) / 1 var(--f-tv);
+  color: #ffd84a;
+}
+/* ラッキー 7 */
+.tv-l7 {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.7);
+  transition:
+    opacity 0.25s,
+    transform 0.45s cubic-bezier(0.2, 1.5, 0.4, 1);
+  pointer-events: none;
+}
+.tv-l7:empty {
+  display: none;
+}
+.tv-l7.show {
+  opacity: 1;
+  transform: translate(-50%, -50%);
+}
+.tv-l7.out {
+  opacity: 0;
+}
+.l7-in {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--tv) * 12);
+  padding: calc(var(--tv) * 10) calc(var(--tv) * 24) calc(var(--tv) * 10) calc(var(--tv) * 10);
+  border: calc(var(--tv) * 3) solid var(--c2);
+  border-radius: calc(var(--tv) * 14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 46%, rgba(0, 0, 0, 0.3) 100%),
+    var(--c1);
+  box-shadow:
+    0 0 0 calc(var(--tv) * 2) rgba(0, 0, 0, 0.6),
+    0 6px 16px rgba(0, 0, 0, 0.55);
+  white-space: nowrap;
+}
+.l7-logo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--tv) * 60);
+  height: calc(var(--tv) * 60);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #ffffff, #dfe5ee 70%, #b9c3d1);
+  overflow: hidden;
+}
+.l7-img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+}
+.l7-logo .tv-txtlogo {
+  width: 100%;
+  height: 100%;
+}
+.l7-t b {
+  display: block;
+  font: 400 calc(var(--tv) * 40) / 1 var(--f-tvn);
+  letter-spacing: 0.02em;
+  color: #fff;
+  -webkit-text-stroke: calc(var(--tv) * 1.2) rgba(0, 0, 0, 0.65);
+  text-shadow: 0 calc(var(--tv) * 3) 0 rgba(0, 0, 0, 0.45);
+}
+.tv-l7.show .l7-t b {
+  animation: hr-slam 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) 0.15s both;
+}
+.l7-t span {
+  display: block;
+  margin-top: calc(var(--tv) * 4);
+  font: 900 calc(var(--tv) * 14) / 1.2 var(--f-tv);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+/* 勝利投手・セーブ・今日のヒーロー */
+.tv-wl {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  width: min(calc(100vw - 16px), calc(var(--tv) * 390));
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.tv-wl:empty {
+  display: none;
+}
+.tv-wl.show {
+  opacity: 1;
+}
+.tv-wl.out {
+  opacity: 0;
+  transition: opacity 0.35s;
+}
+.wl-in {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--tv) * 10);
+}
+.wl-card {
+  flex: none;
+  perspective: 800px;
+}
+.wl-card:empty {
+  display: none;
+}
+.tv-wl.show .wl-card .pbcard {
+  animation: pbcard-in 0.6s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+.wl-rows {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--tv) * 6);
+}
+.wl-r {
+  padding: calc(var(--tv) * 5) calc(var(--tv) * 10) calc(var(--tv) * 6) calc(var(--tv) * 12);
+  border: calc(var(--tv) * 1.5) solid var(--tv-gold);
+  border-left: calc(var(--tv) * 6) solid var(--tc);
+  border-radius: 0 calc(var(--tv) * 9) calc(var(--tv) * 9) 0;
+  background: linear-gradient(180deg, #55585e 0%, #1d1f23 47%, #000 53%, #17191c 100%);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-family: var(--f-tv);
+}
+.tv-wl.show .wl-r {
+  animation: wl-in 0.38s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+  animation-delay: calc(0.25s + var(--i) * 0.28s);
+}
+@keyframes wl-in {
+  from {
+    opacity: 0;
+    transform: translateX(-44px);
+  }
+}
+.wl-k {
+  display: inline-block;
+  padding: 0 calc(var(--tv) * 7);
+  border-radius: calc(var(--tv) * 3);
+  background: #d01818;
+  font: 900 calc(var(--tv) * 11) / 1.6 var(--f-tv);
+}
+.wl-r.s .wl-k {
+  background: #1a9a4a;
+}
+.wl-r.h .wl-k {
+  background: linear-gradient(180deg, #fff0a8, #d4a224);
+  color: #1a1000;
+}
+.wl-r b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 900 calc(var(--tv) * 21) / 1.25 var(--f-tv);
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 0 #000;
+}
+.wl-r small {
+  display: block;
+  font: 800 calc(var(--tv) * 12) / 1.3 var(--f-tv);
+  color: #ffe14d;
+}
+.wl-r small:empty {
+  display: none;
+}
+/* ヒーローインタビュー */
+.tv-hero {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  font-family: var(--f-tv);
+}
+.tv-hero:empty {
+  display: none;
+}
+.tv-hero.show {
+  opacity: 1;
+  transition: opacity 0.35s;
+}
+.tv-hero.out {
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.hro-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 42% at 50% 30%, rgba(255, 214, 110, 0.32), rgba(255, 214, 110, 0) 70%),
+    linear-gradient(180deg, rgba(4, 8, 16, 0.62) 0%, rgba(4, 8, 16, 0.3) 42%, rgba(4, 8, 16, 0.78) 100%);
+}
+.hro-tab {
+  position: absolute;
+  left: 50%;
+  top: calc(12px + var(--safe-t) + var(--tv) * 78);
+  padding: calc(var(--tv) * 3) calc(var(--tv) * 16) calc(var(--tv) * 2);
+  border-radius: calc(var(--tv) * 4);
+  background: linear-gradient(180deg, #fff6c8 0%, #f1c84a 48%, #c08a14 52%, #ffe08a 100%);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55);
+  color: #2a1800;
+  font: 400 calc(var(--tv) * 17) / 1.2 var(--f-tvn);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+.tv-hero.show .hro-tab {
+  animation: hro-tab 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes hro-tab {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.6);
+  }
+}
+.hro-card {
+  position: absolute;
+  left: 50%;
+  top: calc(48px + var(--safe-t) + var(--tv) * 92);
+  transform: translateX(-50%);
+  perspective: 900px;
+}
+.tv-hero.show .hro-card .pbcard {
+  animation: pbcard-in 0.7s cubic-bezier(0.2, 1.3, 0.4, 1) 0.2s both;
+}
+.hro-qa {
+  position: absolute;
+  left: calc(12px + var(--safe-l));
+  right: calc(12px + var(--safe-r));
+  bottom: calc(150px + var(--safe-b) + var(--tv) * 100);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hro-b {
+  max-width: 86%;
+  padding: 8px 13px;
+  border-radius: 16px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+  font: 800 calc(var(--tv) * 15) / 1.45 var(--f-tv);
+  animation: tv-chip 0.25s ease-out both;
+}
+.hro-b.q {
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #10203a;
+}
+.hro-b.a {
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+  background: linear-gradient(180deg, #fff8d2, #ffd84a);
+  color: #2a1800;
+}
+.hro-b.last {
+  align-self: center;
+  border-radius: 16px;
+  text-align: center;
+}
+.hro-l3 {
+  position: absolute;
+  left: calc(8px + var(--safe-l));
+  right: calc(8px + var(--safe-r));
+  bottom: calc(132px + var(--safe-b));
+  color: #fff;
+}
+.tv-hero.show .hro-l3 {
+  animation: hro-l3 0.45s cubic-bezier(0.2, 1, 0.3, 1) 0.35s both;
+}
+@keyframes hro-l3 {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+.l3-tab.gold {
+  background: linear-gradient(180deg, #fff6c8 0%, #f1c84a 47%, #c08a14 53%, #ffe08a 100%);
+  color: #2a1800;
+}
+/* スタメン発表 */
+.tv-lu {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.tv-lu:empty {
+  display: none;
+}
+.tv-lu.show {
+  opacity: 1;
+  transition: opacity 0.3s;
+}
+.tv-lu.out {
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.lu-in {
+  position: absolute;
+  left: calc(6px + var(--safe-l));
+  right: calc(6px + var(--safe-r));
+  top: calc(8px + var(--safe-t));
+  bottom: calc(76px + var(--safe-b));
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--tv) * 6);
+  padding: calc(var(--tv) * 8);
+  box-sizing: border-box;
+  border: calc(var(--tv) * 2) solid var(--tv-gold);
+  border-radius: calc(var(--tv) * 10);
+  background: linear-gradient(180deg, rgba(16, 20, 28, 0.95), rgba(2, 4, 8, 0.95));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  color: #fff;
+  font-family: var(--f-tv);
+}
+.tv-lu.show .lu-in {
+  animation: lu-in 0.4s cubic-bezier(0.2, 1, 0.3, 1) both;
+}
+.tv-lu.leave .lu-in {
+  transform: translateX(110%);
+  transition: transform 0.45s cubic-bezier(0.6, 0, 0.8, 0.4);
+}
+@keyframes lu-in {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+}
+.lu-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--tv) * 8);
+  min-width: 0;
+  /* 右上の「タイム」ボタンに掛からないように */
+  padding-right: calc(var(--tv) * 44);
+}
+.lu-tab {
+  flex: none;
+  padding: calc(var(--tv) * 3) calc(var(--tv) * 12);
+  border-radius: calc(var(--tv) * 4);
+  background: linear-gradient(180deg, #fff6c8 0%, #f1c84a 47%, #c08a14 53%, #ffe08a 100%);
+  color: #2a1800;
+  font: 900 calc(var(--tv) * 14) / 1.3 var(--f-tv);
+  white-space: nowrap;
+}
+.lu-sub {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #d6dde8;
+  font: 800 calc(var(--tv) * 12) / 1.3 var(--f-tv);
+}
+.lu-cols {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: calc(var(--tv) * 6);
+}
+.lu-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.lu-th {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--tv) * 6);
+  margin-bottom: calc(var(--tv) * 3);
+  padding: calc(var(--tv) * 3) calc(var(--tv) * 8);
+  border-radius: calc(var(--tv) * 6) calc(var(--tv) * 6) 0 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.3) 100%),
+    var(--tc);
+  font: 900 calc(var(--tv) * 14) / 1.3 var(--f-tv);
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.lu-th .lu-img,
+.lu-th .tv-txtlogo {
+  flex: none;
+  width: calc(var(--tv) * 22);
+  height: calc(var(--tv) * 22);
+  object-fit: contain;
+  font-size: calc(var(--tv) * 11);
+}
+.lu-r {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--tv) * 5);
+  height: var(--rh);
+  min-height: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.tv-lu.show .lu-r {
+  animation: tv-chip 0.3s ease-out both;
+  animation-delay: calc(0.3s + var(--i) * 0.09s);
+}
+.lu-c {
+  flex: none;
+  perspective: 500px;
+}
+.lu-c .pbcard {
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+.tv-lu.show .lu-c .pbcard {
+  animation: lu-flip 0.45s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+  animation-delay: calc(0.35s + var(--i) * 0.09s);
+}
+@keyframes lu-flip {
+  from {
+    opacity: 0;
+    transform: rotateY(90deg);
+    filter: brightness(3);
+  }
+  60% {
+    opacity: 1;
+    filter: brightness(1.6);
+  }
+}
+.lu-o {
+  flex: none;
+  width: calc(var(--tv) * 15);
+  text-align: center;
+  color: #ffd84a;
+  font: 400 calc(var(--tv) * 15) / 1 var(--f-tvn);
+}
+.lu-p {
+  flex: none;
+  min-width: calc(var(--tv) * 15);
+  color: #9fd0ff;
+  font: 900 calc(var(--tv) * 12) / 1 var(--f-tv);
+}
+.lu-n {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 900 calc(var(--tv) * 15) / 1.2 var(--f-tv);
+  letter-spacing: 0.04em;
+}
+.lu-sp {
+  flex: none;
+  display: flex;
+  gap: calc(var(--tv) * 6);
+}
+.lu-s {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--tv) * 8);
+  padding: calc(var(--tv) * 4) calc(var(--tv) * 8);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: calc(var(--tv) * 6);
+  background: rgba(255, 255, 255, 0.07);
+}
+.lu-s > div:last-child {
+  min-width: 0;
+}
+.tv-lu.show .lu-s {
+  animation: tv-chip 0.35s ease-out 1.9s both;
+}
+.tv-lu.show .lu-s .lu-c .pbcard {
+  animation-delay: 2s;
+}
+.lu-sk {
+  display: block;
+  color: #ffd84a;
+  font: 800 calc(var(--tv) * 10) / 1.3 var(--f-tv);
+}
+.lu-s b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 900 calc(var(--tv) * 16) / 1.25 var(--f-tv);
+}
+/* サヨナラの赤い帯 (ホームランの帯の色違い) */
+.tv-hr.wo .hr-bar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 45%),
+    linear-gradient(180deg, #ffd0c4 0%, #ff5a3c 22%, #c4120a 60%, #6a0400 100%);
+}
+.tv-hr.wo .hr-kind {
+  font-size: calc(var(--tv) * 16);
+  color: #fff6c8;
+  text-shadow: 0 1px 0 #4a0000;
+}
+.tv-hr.wo .hr-title span {
+  font: 900 calc(var(--tv) * 48) / 1.05 var(--f-tv);
+  letter-spacing: 0.14em;
+  -webkit-text-stroke-color: #4a0000;
+}
+/* 先制・同点・逆転・勝ち越しの判子 (得点パネルの上) */
+.sc-stamp {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--tv) * -30);
+  z-index: 3;
+  transform: translateX(-50%) rotate(-6deg);
+  pointer-events: none;
+}
+.sc-stamp span {
+  display: inline-block;
+  padding: calc(var(--tv) * 1) calc(var(--tv) * 16) calc(var(--tv) * 2);
+  border: calc(var(--tv) * 3) solid #fff2c8;
+  border-radius: calc(var(--tv) * 7);
+  background: linear-gradient(180deg, #fff3a8 0%, #f0c032 48%, #c8900c 52%, #ffd860 100%);
+  box-shadow:
+    0 0 0 calc(var(--tv) * 1.5) #4a3000,
+    0 4px 10px rgba(0, 0, 0, 0.6);
+  color: #3a1c00;
+  font: 900 calc(var(--tv) * 26) / 1.15 var(--f-tv);
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+.sc-stamp.red span {
+  background: linear-gradient(180deg, #ff8a6a 0%, #e8261a 48%, #b00c06 52%, #ff4a30 100%);
+  box-shadow:
+    0 0 0 calc(var(--tv) * 1.5) #4a0000,
+    0 4px 10px rgba(0, 0, 0, 0.6);
+  color: #fff;
+  text-shadow: 0 2px 0 #600;
+}
+.tv-center.show .sc-stamp span {
+  animation: hr-slam 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) 0.75s both;
+}
+/* 結果画面: 今日のヒーローは少し遅れて登場 */
+.mvp.res-in {
+  animation: res-in 0.5s cubic-bezier(0.2, 1.2, 0.4, 1) 0.35s both;
+}
+@keyframes res-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+}
+/* 横画面: 下のテロップは画面の 6 割まで、帯類は操作ボタンの上に */
+@media (orientation: landscape) and (max-height: 520px) {
+  .tv-l3,
+  .tv-tick {
+    right: auto;
+    width: 60vw;
+    bottom: calc(100px + var(--safe-b));
+  }
+  .tv-call {
+    bottom: calc(108px + var(--safe-b) + var(--tv) * 96);
+  }
+  .tv-card {
+    bottom: calc(108px + var(--safe-b) + var(--tv) * 96);
+  }
+  .talk-sub {
+    top: calc(100px + var(--safe-t));
+  }
+  .tv-pa {
+    top: calc(126px + var(--safe-t));
+  }
+  .tv-k {
+    top: 24%;
+  }
+  .hro-card {
+    left: calc(14px + var(--safe-l));
+    top: calc(12px + var(--safe-t));
+    transform: none;
+  }
+  .hro-tab {
+    left: 36%;
+    top: calc(14px + var(--safe-t));
+    transform: none;
+  }
+  .tv-hero.show .hro-tab {
+    animation: none;
+  }
+  .hro-qa {
+    left: 36%;
+    top: calc(60px + var(--safe-t));
+    bottom: auto;
+  }
+  .hro-l3 {
+    left: 34%;
+    bottom: calc(96px + var(--safe-b));
+  }
+  /* 横画面のスタメン: ビジター | ホーム | 先発投手 の 3 列 */
+  .lu-in {
+    bottom: calc(8px + var(--safe-b));
+    right: calc(110px + var(--safe-r));
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    grid-template-rows: auto 1fr;
+  }
+  .lu-head {
+    grid-column: 1 / -1;
+    padding-right: 0;
+  }
+  .lu-cols {
+    display: contents;
+  }
+  .lu-sp {
+    flex-direction: column;
+    justify-content: center;
+    width: calc(var(--tv) * 150);
+  }
+  .lu-s {
+    flex: none;
+  }
+}
+/* ---------- /演出 (E1) ---------- */
+
+/* ---------- ペナント: 選手の状態・二軍・記録 (L3) ---------- */
+/* 一軍・二軍・故障者の画面 */
+.pl-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--board);
+  border: 2px solid var(--rule);
+}
+.pl-sum > b {
+  font: 400 17px/1.2 var(--f-disp);
+  margin-right: auto;
+}
+.pl-cnt {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--board-2);
+  font-size: 11px;
+  color: var(--mute);
+  white-space: nowrap;
+}
+.pl-cnt b {
+  margin-left: 3px;
+  font: 400 15px/1.2 var(--f-led);
+  color: var(--chalk);
+}
+.pl-cnt.full b {
+  color: var(--led);
+}
+.pl-cnt small {
+  margin-left: 4px;
+  font-size: 10px;
+}
+.pl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pl-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 46px;
+  padding: 4px 6px 4px 8px;
+  border-radius: 10px;
+  background: var(--board);
+  border: 1px solid transparent;
+}
+.pl-row.bench,
+.pl-row.farm {
+  background: rgba(15, 28, 48, 0.75);
+}
+.pl-row.inj {
+  border-color: rgba(255, 77, 77, 0.35);
+}
+.pl-pos {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--board-2);
+  font-weight: 800;
+  font-size: 13px;
+}
+.pl-nm {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  cursor: pointer;
+}
+.pl-nm b {
+  font-weight: 800;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pl-nm small {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  font-size: 11px;
+  color: var(--mute);
+  line-height: 1.35;
+}
+.pl-f {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: #3a4f70;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  color: #cfe0ff;
+  vertical-align: 1px;
+}
+/* 調子の矢印 (絶好調 ↑ 〜 絶不調 ↓) */
+.pl-cd {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-style: normal;
+  font-weight: 900;
+  font-size: 13px;
+  line-height: 1;
+  background: #2a3a55;
+  color: #b9c6d8;
+}
+.pl-cd.c2 {
+  background: #ff5d5d;
+  color: #fff;
+}
+.pl-cd.c1 {
+  background: #ff9a3c;
+  color: #2a1400;
+}
+.pl-cd.cm1 {
+  background: #4b8fe0;
+  color: #fff;
+}
+.pl-cd.cm2 {
+  background: #6a4bd1;
+  color: #fff;
+}
+.pl-hub .pl-cd {
+  width: 17px;
+  height: 17px;
+  margin: 0 4px 0 1px;
+  font-size: 11px;
+  vertical-align: -2px;
+}
+.pl-st {
+  flex: none;
+  min-width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font: 400 12px/1.25 var(--f-led);
+  color: var(--chalk);
+  text-align: right;
+  white-space: nowrap;
+}
+.pl-st small {
+  font: 400 10px/1.2 var(--f-ui);
+  color: var(--mute);
+}
+.pl-fm {
+  margin-right: 3px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: #2c4a35;
+  font: 700 9px/1.4 var(--f-ui);
+  font-style: normal;
+  color: #b8f0c8;
+}
+.pl-left b {
+  font-size: 16px;
+  color: #ff9a9a;
+}
+.pl-btn {
+  min-height: 36px;
+  min-width: 48px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.pl-tag {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #24324a;
+  color: #cbd6e6;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.pl-tag.gold {
+  background: var(--led);
+  color: #241a00;
+}
+.pl-tag.red {
+  background: rgba(255, 77, 77, 0.25);
+  color: #ffb3b3;
+}
+.pl-tag.warm {
+  background: rgba(255, 154, 60, 0.22);
+  color: #ffd2a6;
+}
+.pl-log {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pl-log p {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(15, 28, 48, 0.75);
+  font-size: 13px;
+}
+.pl-log span {
+  width: 40px;
+  font: 400 12px/1 var(--f-led);
+  color: var(--mute);
+}
+.pl-log i {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+}
+.pl-log i.up {
+  color: #6fd497;
+}
+.pl-log i.dn {
+  color: #a9c8ff;
+}
+.pl-log i.inj {
+  color: #ff8a80;
+}
+.pl-log small {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--mute);
+  text-align: right;
+}
+/* ハブの短い表示 (故障者・好調・不調) */
+.pl-hub {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--board);
+  border: 2px solid var(--rule);
+  cursor: pointer;
+}
+.pl-hub p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.pl-hub p small {
+  font-size: 11px;
+  color: var(--mute);
+}
+.plh-k {
+  display: inline-block;
+  width: 46px;
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+.plh-k.inj {
+  background: rgba(255, 77, 77, 0.22);
+  color: #ffb3b3;
+}
+.plh-k.hot {
+  background: rgba(255, 154, 60, 0.22);
+  color: #ffd2a6;
+}
+.plh-k.cold {
+  background: rgba(75, 143, 224, 0.22);
+  color: #bcd6ff;
+}
+.pl-hub .plh-note {
+  font-size: 12px;
+  color: var(--led);
+}
+/* ペナントの選手モーダル: 状態・二軍成績・記録 */
+.plm {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--board-2);
+}
+.plm p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.plm p small {
+  font-size: 11px;
+  color: var(--mute);
+}
+.plm p.bad b {
+  color: #ff9a9a;
+}
+.plm-k {
+  flex: none;
+  width: 34px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--led);
+}
+.pl-fbar {
+  flex: none;
+  width: 90px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--sky);
+  overflow: hidden;
+}
+.pl-fbar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #3ddc84, #ffcf4a 60%, #ff4d4d);
+}
+.plm-h {
+  margin: 6px 0 2px;
+  font: 400 13px/1.3 var(--f-disp);
+  color: var(--chalk);
+}
+.plm-h small {
+  margin-left: 6px;
+  font: 400 10px/1 var(--f-ui);
+  color: var(--mute);
+}
+.plm .pc-stats span {
+  background: var(--board);
+}
+.plm-sk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.plm-sk span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--board);
+  font-size: 11px;
+  color: var(--mute);
+}
+.plm-sk b {
+  font: 400 14px/1.2 var(--f-led);
+  color: var(--chalk);
+}
+.plm-ms {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.plm-car {
+  font-family: var(--f-led);
+}
+/* ニュースの種類 */
+.nitem.k-inj {
+  border-left-color: #ff4d4d;
+}
+.nitem.k-move {
+  border-left-color: #6fd497;
+}
+.nitem.k-streak {
+  border-left-color: #ff9a3c;
+}
+.nitem.k-ms,
+.nitem.k-feat {
+  border-left-color: var(--led);
+  background: linear-gradient(90deg, rgba(216, 177, 58, 0.16), rgba(10, 20, 36, 0.85));
+}
+.nitem[data-act="player"],
+.ltbl tr[data-act="player"] {
+  cursor: pointer;
+}
+/* 記録室 */
+.rc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--board);
+}
+.rc-row.me {
+  background: rgba(255, 207, 74, 0.14);
+  box-shadow: inset 3px 0 0 var(--led);
+}
+.rc-d {
+  width: 40px;
+  font: 400 12px/1 var(--f-led);
+  color: var(--mute);
+}
+.rc-k {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #24324a;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.rc-k.k-nh,
+.rc-k.k-pg,
+.rc-k.k-nhc,
+.rc-k.k-pgc,
+.rc-k.k-cycle {
+  background: var(--led);
+  color: #241a00;
+}
+.rc-k.k-k15,
+.rc-k.k-hr3 {
+  background: var(--stitch);
+  color: #fff;
+}
+.rc-k.k-car {
+  background: #7b2cbf;
+  color: #fff;
+}
+.rc-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  cursor: pointer;
+}
+.rc-who b {
+  font-weight: 800;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.rc-who small {
+  font-size: 11px;
+  color: var(--mute);
+}
+.rc-vs {
+  flex: 1 1 100%;
+  padding-left: 48px;
+  font-size: 11px;
+  color: var(--mute);
+}
+.rc-sub {
+  margin: 6px 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mute);
+}
+.rc-sk .ltbl td small {
+  display: block;
+  font: 400 9px/1.2 var(--f-ui);
+  color: var(--mute);
+}
+.rc-sk .ltbl tr.me {
+  background: rgba(255, 207, 74, 0.14);
+  box-shadow: inset 3px 0 0 var(--led);
+}
+/* ---------- /ペナント: 選手の状態・二軍・記録 (L3) ---------- */

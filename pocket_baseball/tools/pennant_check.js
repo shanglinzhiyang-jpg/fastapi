@@ -127,7 +127,7 @@ const pen = Pen.create(my, perPair, "normal", 9);
 Store.data.pennant = pen;
 assert.strictEqual(pen.schedule[0].length, 6, "1日 6 試合 (セ・パ)");
 assert.strictEqual(pen.v, Pen.V, "版番号");
-assert.strictEqual(Pen.V, 3, "L2 の版番号");
+assert.strictEqual(Pen.V, 4, "L3 の版番号");
 for (const day of pen.schedule) {
   const seen = new Set();
   for (const m of day) {
@@ -222,9 +222,18 @@ for (let d = 0; d < pen.day; d++) {
   Store.data.pennant = pen;
 }
 
-// 8) セーブの大きさ
-const size = JSON.stringify(pen).length;
-assert.ok(size < 400000 * (pen.day / 30 + 0.2), "セーブが大きすぎる: " + size);
+// 8) セーブの大きさ (保存と同じく球団の定義の項目は除く。球団の写し (二軍・状態つき) は決まった大きさなので別に見る)
+const packedTeams = (p) => (p.teams || []).map((t) => {
+  const def = PB.D.teamDef(t.id) || {};
+  const o = {};
+  for (const k of Object.keys(t)) if (k === "id" || !(k in def)) o[k] = t[k];
+  return o;
+});
+const saveSize = (p) => JSON.stringify(Object.assign({}, p, { teams: packedTeams(p) })).length;
+const teamsSize = JSON.stringify(packedTeams(pen)).length;
+const size = saveSize(pen);
+assert.ok(teamsSize < 450000, "球団の写しが大きすぎる: " + teamsSize);
+assert.ok(size - teamsSize < 400000 * (pen.day / 30 + 0.2), "セーブが大きすぎる: " + size);
 
 const sample = pen.news.filter((n) => n.day === pen.day - 1).map((n) => "  [" + n.kind + "] " + n.title + (n.body ? " — " + n.body : ""));
 console.log(sample.join("\n"));
@@ -450,12 +459,97 @@ lap("日程の形");
 }
 lap("高速シミュレーション");
 
+/* ========== L3: 選手の状態・一軍/二軍の記録係 (フル 2004 年の 1 シーズンで毎日・毎試合調べる) ========== */
+const Life = PB.PenLife;
+const Rec = PB.PenRecords;
+const RR = PB.RULES_2004.roster;
+const l3 = {
+  pen: null,
+  viol: [],
+  injAt: {}, // 選手 → その日の始めのケガ {days, dk, at}
+  injNow: new Set(),
+  starts: {},
+  apps: {},
+  boxPA: {},
+  th: {},
+  tob: {},
+  played: {}, // 選手 → 出場した暦の日
+  days: 0,
+  ratings: null,
+};
+const ratingsOf = (p) => JSON.stringify(p.teams.map((t) => t.players.map((x) => [x.id].concat(PB.D.RATING_KEYS.map((k) => x[k])))));
+l3.start = (p) => {
+  l3.pen = p;
+  l3.ratings = ratingsOf(p);
+};
+Pen.hooks.beforeDay.push((p, day) => {
+  if (p !== l3.pen) return;
+  l3.days++;
+  const dk = Life.dk(p, day);
+  const nowInj = new Set();
+  const v = (m) => l3.viol.length < 20 && l3.viol.push(Pen.dayLabel(p, day) + " " + m);
+  for (const t of p.teams) {
+    const P = {};
+    for (const x of t.players) P[x.id] = x;
+    const act = Life.actIds(t);
+    const c = Life.counts(t);
+    if (c.n > RR.act) v(t.id + " 一軍 " + c.n + " 人");
+    if (c.f > RR.foreign || c.fp > RR.foreignP || c.fb > RR.foreignB) v(t.id + " 外国人 " + c.fp + "/" + c.fb);
+    if (t.players.length > RR.max) v(t.id + " 支配下 " + t.players.length);
+    if (c.c < RR.minC) v(t.id + " 捕手 " + c.c);
+    const lu = t.lineup.filter((e) => e.pos !== "P");
+    const ids = lu.map((e) => e.id);
+    const posSet = new Set(t.lineup.map((e) => e.pos));
+    if (t.lineup.length !== 9 || new Set(ids).size !== ids.length || posSet.size !== 9 || !lu.some((e) => e.pos === "C" && P[e.id] && P[e.id].pos === "C")) v(t.id + " 打順 " + JSON.stringify(t.lineup));
+    for (const id of ids) if (!P[id] || P[id].pos === "P" || (P[id].st && P[id].st.inj) || !act.has(id)) v(t.id + " 打順に出られない選手 " + id);
+    for (const id of t.rotation.concat(t.bullpen)) if (!P[id] || P[id].pos !== "P" || (P[id].st && P[id].st.inj)) v(t.id + " 投手陣にケガ人/野手 " + id);
+    if (t.rotation.length < 5) v(t.id + " ローテ " + t.rotation.length + " 人");
+    if (t.closer && t.bullpen.indexOf(t.closer) < 0) v(t.id + " 抑えがブルペンにいない");
+    for (const x of t.players) {
+      const s = x.st || {};
+      if (s.cond != null && (s.cond < -2 || s.cond > 2 || s.cond !== Math.round(s.cond))) v(x.id + " 調子 " + s.cond);
+      if (s.inj) {
+        nowInj.add(x.id);
+        if (act.has(x.id)) v(x.id + " ケガ人が一軍");
+        const prev = l3.injAt[x.id];
+        // ケガの日数は暦の日数で減る
+        if (prev && prev.at === s.inj.at && prev.days - s.inj.days !== dk - prev.dk) v(x.id + " ケガの日数 " + prev.days + "→" + s.inj.days + " (" + (dk - prev.dk) + "日)");
+        l3.injAt[x.id] = { days: s.inj.days, dk, at: s.inj.at };
+      } else delete l3.injAt[x.id];
+    }
+  }
+  l3.injNow = nowInj;
+});
+Pen.hooks.afterGame.push((p, m, g) => {
+  if (p !== l3.pen) return;
+  const dk = Life.dk(p, p.day);
+  for (const side of ["home", "away"]) {
+    g.used[side].forEach((id, i) => ((i === 0 ? l3.starts : l3.apps)[id] = (i === 0 ? l3.starts : l3.apps)[id] || []).push(dk));
+    for (const q of g.teams[side].players) {
+      const b = g.box[q.id];
+      if (!b) continue;
+      // その日の始めにケガをしていた選手は出られない
+      if (l3.injNow.has(q.id)) l3.viol.push(Pen.dayLabel(p, p.day) + " ケガ人が出場 " + q.id);
+      (l3.played[q.id] = l3.played[q.id] || []).push(dk);
+      if (m.ps) continue;
+      l3.boxPA[q.id] = (l3.boxPA[q.id] || 0) + (b.pa || 0);
+      // 連続試合安打・出塁の数え直し (打数 0 の試合は安打の連続を止めない)
+      if (q.pos !== "P" && b.pa) {
+        if (b.h) l3.th[q.id] = (l3.th[q.id] || 0) + 1;
+        else if (b.ab) l3.th[q.id] = 0;
+        l3.tob[q.id] = b.h + b.bb ? (l3.tob[q.id] || 0) + 1 : 0;
+      }
+    }
+  }
+});
+
 /* ========== フル 2004 年を高速で 1 シーズン ========== */
 let fullPen;
 {
   collect = false;
   const t0 = Date.now();
   fullPen = Pen.create(my, { len: "full", strike: true, fast: "quick", seed: 2004 });
+  l3.start(fullPen);
   Store.data.pennant = fullPen;
   const nGames = fullPen.schedule.reduce((a, d) => a + d.length, 0);
   // パの日程が終わったあと (セはまだ続く) のパの球団のハブ
@@ -544,7 +638,7 @@ let fullPen;
     nHld += q.hld || 0;
   }
   assert.ok(nHld > 50, "ホールドが少ない " + nHld);
-  const json = JSON.stringify(fullPen);
+  const json = JSON.stringify(Object.assign({}, fullPen, { teams: packedTeams(fullPen) }));
   const kb = json.length / 1024;
   console.log("フル 2004 年 (高速): " + nGames + "試合 " + fullPen.regDays + "日 + ポストシーズン " + fullPen.results.filter((r) => r.ps).length + "試合 (" + (fullPen.schedule.length - fullPen.regDays) + "日) 計 " + sec.toFixed(1) + "秒 (1試合 " + ((sec * 1000) / fullPen.results.length).toFixed(1) + "ms)、セーブ " + kb.toFixed(0) + "KB、ニュース " + fullPen.news.length + "件");
   const js = PB.PenPost.series(fullPen, "JS");
@@ -553,6 +647,141 @@ let fullPen;
   console.log("  セ優勝 " + champ("C") + " / パ1位 " + champ("P") + " / マジック・優勝の記事: " + fullPen.news.filter((n2) => /magic|clinch|po|out/.test(n2.kind)).map((n2) => Pen.dayLabel(fullPen, n2.day) + " " + n2.title).slice(0, 8).join("、"));
   assert.ok(json.length <= 1.5 * 1024 * 1024, "セーブが 1.5MB を超えた: " + kb.toFixed(0) + "KB");
   assert.ok(sec <= 60, "フルシーズンが遅い: " + sec + "秒");
+}
+/* ---------- L3: フル 2004 年の 1 シーズンで調べたこと ---------- */
+{
+  const p = fullPen;
+  Store.data.pennant = p;
+  assert.deepStrictEqual(l3.viol, [], "毎日の登録・打順・ローテ・ケガの規則:\n" + l3.viol.join("\n"));
+  assert.ok(l3.days === p.schedule.length, "毎日の検査の日数 " + l3.days);
+  // 疲労: 先発の間隔は中4日以上、救援は 4 日続けて投げない
+  let nStart = 0;
+  for (const id in l3.starts) {
+    const a = l3.starts[id];
+    for (let i = 1; i < a.length; i++) {
+      nStart++;
+      assert.ok(a[i] - a[i - 1] >= RR.rest, id + " の先発の間隔が中4日未満 (" + (a[i] - a[i - 1] - 1) + "日)");
+    }
+  }
+  for (const id in l3.apps) {
+    const a = [...new Set(l3.apps[id])].sort((x, y) => x - y);
+    let run = 1;
+    for (let i = 1; i < a.length; i++) {
+      run = a[i] === a[i - 1] + 1 ? run + 1 : 1;
+      assert.ok(run <= RR.relRun, id + " が " + run + " 日続けて救援");
+    }
+  }
+  // 登録・抹消の記録: 抹消 (ケガを含む) から 10 日以内に再登録しない・ケガの回復前に登録しない
+  const log = p.life.log;
+  const kinds = {};
+  let back = 0;
+  for (let i = 0; i < log.length; i++) {
+    const e = log[i];
+    kinds[e[1]] = (kinds[e[1]] || 0) + 1;
+    if (e[1] !== "u") continue;
+    let j = i - 1;
+    while (j >= 0 && !(log[j][3] === e[3] && /[dir]/.test(log[j][1]))) j--;
+    if (j < 0) continue;
+    let k = i - 1;
+    while (k >= 0 && !(log[k][3] === e[3] && /[di]/.test(log[k][1]))) k--;
+    if (k >= 0) assert.ok(Life.dk(p, e[0]) - Life.dk(p, log[k][0]) >= RR.reDays, e[3] + " が抹消から " + (Life.dk(p, e[0]) - Life.dk(p, log[k][0])) + " 日で再登録");
+    if (k >= 0 && log[k][1] === "i") {
+      assert.ok(log.slice(k, i).some((x) => x[3] === e[3] && x[1] === "r"), e[3] + " がケガの回復前に登録された");
+      back++;
+    }
+  }
+  assert.ok(kinds.i >= 24, "ケガが少なすぎる " + kinds.i);
+  assert.ok(back >= 5, "ケガから一軍に戻った選手が少ない " + back);
+  // 回復した選手がその後の試合に出ている
+  const healed = log.filter((e) => e[1] === "r").filter((e) => (l3.played[e[3]] || []).some((d) => d > Life.dk(p, e[0])));
+  assert.ok(healed.length >= 5, "ケガから回復して試合に出た選手が少ない " + healed.length);
+  // 元の能力は試合の後も変わらない (調子は試合のコピーだけ)
+  assert.strictEqual(ratingsOf(p), l3.ratings, "シーズン中に元の能力が変わった");
+  const cd = {};
+  for (const t of p.teams) for (const x of t.players) cd[(x.st && x.st.cond) || 0] = (cd[(x.st && x.st.cond) || 0] || 0) + 1;
+  // 二軍: 架空の選手 (gen)・実在の姓名と重ならない・成績は pen.stats と別
+  const real = Life.realNames();
+  const allIds = new Set();
+  let nGen = 0;
+  let farmOnly = 0;
+  for (const t of p.teams) {
+    assert.ok(t.players.length <= RR.max, t.id + " の支配下が 70 人を超える");
+    for (const x of t.players) {
+      assert.ok(!allIds.has(x.id), "選手 ID が重複 " + x.id);
+      allIds.add(x.id);
+      if (!x.real && !x.custom) {
+        assert.strictEqual(x.gen, 1, x.id + " に gen の印がない");
+        assert.ok(!real.has(x.full) && !real.has(x.name + x.given), "二軍の選手が実在の選手と同じ姓名: " + x.full);
+        nGen++;
+        if (!p.stats[x.id] && !(l3.played[x.id] || []).length) farmOnly++;
+      }
+    }
+  }
+  assert.ok(nGen >= 12 * 38, "二軍の選手が少ない " + nGen);
+  assert.ok(Object.keys(p.fstats).length >= 12 * 30, "二軍の成績がない");
+  // シーズン成績 = 一軍の試合のボックススコアの合計 (二軍の成績は混ざらない)
+  for (const id in p.stats) assert.strictEqual(p.stats[id].pa || 0, l3.boxPA[id] || 0, id + " の打席数がボックススコアの合計と違う (二軍の成績が混ざった?)");
+  assert.ok(farmOnly > 200, "二軍だけの選手 " + farmOnly);
+  // 連続記録: 試合ごとに足した値 = ボックススコアから数え直した値
+  let nh = 0;
+  for (const t of p.teams)
+    for (const x of t.players) {
+      const sk = (x.st && x.st.streaks) || {};
+      if (x.pos === "P") continue;
+      assert.strictEqual(sk.h ? sk.h[0] : 0, l3.th[x.id] || 0, x.id + " の連続試合安打 (増分 " + (sk.h && sk.h[0]) + " / 数え直し " + l3.th[x.id] + ")");
+      assert.strictEqual(sk.ob ? sk.ob[0] : 0, l3.tob[x.id] || 0, x.id + " の連続試合出塁");
+      if (sk.h) nh++;
+      // 連続試合本塁打 = 球団の試合をさかのぼって数えた数 (本塁打の「N試合連続」と同じ)
+      let n = 0;
+      const rs = Pen.regResults(p);
+      for (let i = rs.length - 1; i >= 0; i--) {
+        const r = rs[i];
+        if (r.home !== t.id && r.away !== t.id) continue;
+        if (!r.hr.some((e) => e.id === x.id)) break;
+        n++;
+      }
+      assert.strictEqual(sk.hr ? sk.hr[0] : 0, n, x.id + " の連続試合本塁打");
+    }
+  assert.ok(nh > 20, "連続試合安打の継続中が少ない " + nh);
+  // 節目・快挙の記事は 1 回だけ。作り直しても増えない
+  const rec = p.records;
+  for (const x of rec.ms) assert.strictEqual(p.news.filter((n) => n.key === "ms:" + (x.c ? "c" : x.y) + ":" + x.id + ":" + x.k + x.lv).length, 1, "節目の記事が 1 回でない " + x.id + x.k + x.lv);
+  assert.strictEqual(new Set(rec.ms.map((x) => x.id + x.k + x.lv)).size, rec.ms.length, "節目が二重に記録された");
+  for (const x of rec.ms) {
+    const sv = p.stats[x.id][x.k];
+    assert.ok(sv >= x.lv, "節目の数が成績と合わない " + x.id);
+  }
+  const n0 = p.news.length;
+  const ks = p.news.map((n) => n.key);
+  assert.strictEqual(new Set(ks).size, ks.length, "記事のキーが重複");
+  for (let d = 0; d < p.day; d++) {
+    delete p.newsState.done[d];
+    News.generate(p, d);
+  }
+  assert.strictEqual(p.news.length, n0, "記事を作り直すと増えた (" + n0 + " → " + p.news.length + ")");
+  const lk = {};
+  for (const n of p.news) lk[n.kind] = (lk[n.kind] || 0) + 1;
+  assert.ok(lk.inj >= 5 && lk.move >= 5, "ケガ・登録の記事が少ない " + JSON.stringify(lk));
+  // 自チームのケガは全員記事に
+  for (const e of log) if (e[1] === "i" && e[2] === p.my) assert.ok(p.news.some((n) => n.key === "inj:" + e[0] + ":" + e[3]), "自チームのケガの記事がない " + e[3]);
+  console.log(
+    "L3 (フル): 毎日の規則 OK・先発 " +
+      nStart +
+      "回の間隔 OK・登録/抹消/ケガ/回復 " +
+      ["u", "d", "i", "r"].map((k) => k + kinds[k]).join("/") +
+      "・ケガから復帰 " +
+      back +
+      "・調子 " +
+      JSON.stringify(cd) +
+      "・二軍 " +
+      nGen +
+      "人・節目 " +
+      rec.ms.length +
+      "・快挙 " +
+      rec.feats.length +
+      "・連続記録の記事 " +
+      (lk.streak || 0)
+  );
 }
 lap("フル 2004 年");
 
@@ -1140,6 +1369,196 @@ lap("タイトル");
   console.log("移行 (v3): 途中のセーブはポストシーズンへ・終わったセーブはそのまま");
 }
 lap("移行 (v3)");
+
+/* ========== L3: 球団の写し・移行・記録の判定・ケガ・登録/抹消・自動入れ替え・画面 ========== */
+{
+  const actOf = (t) => Life.actIds(t);
+  // 1) 写し: ペナントの球団を変えてもクイック対戦の球団 (Store.teams()) は変わらない
+  const before = JSON.stringify(Store.teams());
+  const p = Pen.create(my, { len: "s30", fast: "quick", seed: 61 });
+  Store.data.pennant = p;
+  const T = Pen.team(my);
+  assert.ok(T && T !== Store.team(my) && T.players !== Store.team(my).players, "ペナントの球団が写しになっていない");
+  [T.lineup[0], T.lineup[1]] = [T.lineup[1], T.lineup[0]];
+  T.players[0].meet = 1;
+  playDays(H, p, 3, true);
+  const view = Object.assign({}, T, { lineup: T.lineup.map((e) => Object.assign({}, e)), bench: T.bench.slice(), rotation: T.rotation.slice(), bullpen: T.bullpen.slice(), rotIdx: 1 });
+  [view.lineup[2], view.lineup[3]] = [view.lineup[3], view.lineup[2]];
+  Life.applyOrder(p, T, view);
+  assert.strictEqual(T.lineup[2].id, view.lineup[2].id, "オーダー画面の変更が写しに入らない");
+  assert.strictEqual(JSON.stringify(Store.teams()), before, "ペナントの変更がクイック対戦の球団に漏れた");
+  for (const t of p.teams) assert.ok(t.players.length <= RR.max && Life.counts(t).n <= RR.act, "作成直後の人数");
+  assert.ok(Life.counts(Pen.team("bu")).f <= RR.foreign && Life.counts(Pen.team("m")).f <= RR.foreign, "近鉄・ロッテ (外国人 5 人) が枠に収まらない");
+
+  // 2) 記録の判定 (作ったボックススコアで)
+  const mk = (box, used, o) =>
+    Object.assign(
+      {
+        innings: 9,
+        teams: { away: { players: ["a1", "a2", "a3", "ap", "ap2"].map((id) => ({ id })) }, home: { players: ["h1", "h2", "hp", "hp2"].map((id) => ({ id })) } },
+        box,
+        used,
+        hits: { away: 0, home: 0 },
+        score: { away: 0, home: 0 },
+        errors: { away: 0, home: 0 },
+      },
+      o || {}
+    );
+  const ks = (g) =>
+    Rec.gameFeats(g)
+      .map((f) => f.k + ":" + (f.id || f.ids.join("+")))
+      .sort()
+      .join(",");
+  assert.strictEqual(ks(mk({ a1: { pa: 5, ab: 5, h: 4, d: 1, t: 1, hr: 1 }, a2: { pa: 4, ab: 4, h: 3, d: 1, t: 1, hr: 1 }, ap: { pg: 1, outs: 27 }, hp: { pg: 1, outs: 24 } }, { away: ["ap"], home: ["hp"] }, { hits: { away: 7, home: 5 }, score: { away: 5, home: 3 } })), "cycle:a1", "サイクル安打 (単打がなければ違う)");
+  const nh = (o) => mk(Object.assign({ hp: { pg: 1, outs: 27, pbb: 2, pk: 9 }, a1: { pa: 15, ab: 13, bb: 2 }, a2: { pa: 14, ab: 14 }, ap: { pg: 1, outs: 24 } }, o && o.box), o && o.used ? o.used : { away: ["ap"], home: ["hp"] }, Object.assign({ hits: { away: 0, home: 4 }, score: { away: 0, home: 2 } }, o && o.g));
+  assert.strictEqual(ks(nh()), "nh:hp", "ノーヒットノーラン (四球あり)");
+  assert.strictEqual(ks(nh({ box: { hp: { pg: 1, outs: 27, pbb: 0, pk: 16 }, a1: { pa: 14, ab: 14 }, a2: { pa: 13, ab: 13 } } })), "k15:hp,pg:hp", "完全試合・15奪三振");
+  assert.strictEqual(ks(nh({ box: { hp: { pg: 1, outs: 27, pbb: 0 }, a1: { pa: 14, ab: 14 }, a2: { pa: 14, ab: 14 } }, g: { errors: { away: 0, home: 1 } } })), "nh:hp", "失策の走者がいれば完全試合ではない");
+  assert.strictEqual(ks(nh({ box: { hp: { pg: 1, outs: 21, pbb: 1 }, hp2: { pg: 1, outs: 6 } }, used: { away: ["ap"], home: ["hp", "hp2"] } })), "nhc:hp+hp2", "継投のノーヒットノーラン");
+  assert.strictEqual(ks(nh({ g: { score: { away: 1, home: 2 } } })), "", "失点があればノーヒットノーランではない");
+  assert.strictEqual(ks(nh({ box: { hp: { pg: 1, outs: 24 } } })), "", "8 回 (24 アウト) では達成にならない");
+  assert.strictEqual(ks(nh({ g: { innings: 6 } })), "", "6 回制の試合は対象外");
+
+  // 3) ペナント通算の節目 (前の年度は L4 で pen.yearly に入る): 一度だけ
+  {
+    const x = T.players.find((q) => q.pos !== "P");
+    p.yearly = { [x.id]: [{ y: 2003, s: { hr: 99, h: 999 } }] };
+    p.stats[x.id] = Object.assign({}, p.stats[x.id], { hr: 1, h: 1 });
+    const m = { home: my, away: Pen.teams(p).find((t) => t.id !== my && PB.D.teamDef(t.id).lg === PB.D.teamDef(my).lg).id };
+    const g = { teams: { home: { players: [x] }, away: { players: [] } }, box: { [x.id]: { pa: 4, ab: 4, h: 1, hr: 1 } }, used: { home: [], away: [] } };
+    assert.strictEqual(Rec.career(p, x.id).hr, 100, "ペナント通算 = 前の年度 + 今季");
+    Rec._internal.milestones(p, m, g);
+    Rec._internal.milestones(p, m, g);
+    assert.strictEqual(p.records.ms.filter((e) => e.c && e.id === x.id).length, 2, "通算 100 本塁打・1000 安打が一度ずつ: " + JSON.stringify(p.records.ms));
+    assert.ok(/ペナント通算100本塁打/.test(Rec.msTitle(p, p.records.ms.find((e) => e.c && e.k === "hr"))));
+    delete p.yearly;
+  }
+
+  // 4) ケガ: 抹消 → 暦の日数で回復 → 二軍で調整 → 抹消から 10 日で一軍に戻る (主力・自動入れ替え)
+  I.beginDay(p);
+  const reg = T.lineup.find((e) => e.pos !== "P" && e.pos !== "C");
+  const x = Pen.findPlayer(reg.id).p;
+  const d0 = Life.dk(p, p.day);
+  const pa0 = (p.stats[x.id] || {}).pa || 0;
+  Life.injure(p, T, x, "テスト用の打撲", 4, p.day);
+  assert.ok(!actOf(T).has(x.id) && !T.lineup.some((e) => e.id === x.id), "ケガ人が一軍に残った");
+  assert.strictEqual(Life.counts(T).n, RR.act, "ケガ人の代わりが補充されない");
+  assert.ok(/ケガ/.test(Life.tryPromote(p, x.id).msg), "ケガ人の登録を断る理由");
+  let rec = null;
+  let up = null;
+  for (let i = 0; i < 30 && up == null && !p.finished; i++) {
+    playDays(H, p, 1, true);
+    I.beginDay(p);
+    const dk = Life.dk(p, p.day);
+    if (x.st.inj) assert.strictEqual(x.st.inj.days, 4 - (dk - d0), "ケガの残り日数が暦の日数で減らない");
+    else if (rec == null) {
+      rec = dk;
+      const why = Life.tryPromote(p, x.id).msg;
+      assert.ok(/調整中|10日/.test(why), "回復直後の登録を断る理由: " + why);
+    }
+    if (actOf(T).has(x.id)) up = dk;
+    else assert.strictEqual((p.stats[x.id] || {}).pa || 0, pa0, "二軍・故障者の選手が一軍の試合に出た");
+  }
+  assert.ok(rec != null && rec - d0 >= 4, "回復の日 " + rec);
+  assert.ok(up != null && up - d0 >= RR.reDays, "抹消から 10 日たたずに戻った / 戻らない: " + up);
+  assert.ok(T.lineup.some((e) => e.id === x.id), "主力が打順に戻らない");
+
+  // 5) 手動の登録・抹消: 抹消すると 10 日は戻せない・一軍 28 人・捕手 2 人・外国人枠
+  const bench = T.bench.map((id) => Pen.findPlayer(id).p).find((q) => q.pos !== "C" && !q.foreign);
+  let r = Life.tryDemote(p, bench.id);
+  assert.ok(r.ok && /10日/.test(r.msg), "抹消: " + r.msg);
+  r = Life.tryPromote(p, bench.id);
+  assert.ok(!r.ok && /10日間は再登録できません/.test(r.msg), "10 日以内の再登録を断らない: " + r.msg);
+  assert.ok(/再登録まで10日/.test(Life.screen({ tab: "farm" }).html()), "二軍の画面に 10 日の残り");
+  const farmOK = T.players.filter((q) => !actOf(T).has(q.id) && !Life.upBlock(p, q, p.day) && !q.foreign);
+  r = Life.tryPromote(p, farmOK[0].id);
+  assert.ok(r.ok, "二軍の選手を登録できない: " + r.msg);
+  r = Life.tryPromote(p, farmOK[1].id);
+  assert.ok(!r.ok && /28人/.test(r.msg), "29 人目を断らない: " + r.msg);
+  const cs = [...actOf(T)].map((id) => Pen.findPlayer(id).p).filter((q) => q.pos === "C");
+  if (cs.length <= RR.minC) assert.ok(/捕手/.test(Life.tryDemote(p, cs[0].id).msg), "捕手を 2 人未満にできた");
+  {
+    // 外国人枠: 近鉄の二軍にいる外国人を 4 人目より多く登録しようとする
+    const keep = p.my;
+    p.my = "bu";
+    const B = Pen.team("bu");
+    const fx = B.players.find((q) => q.foreign && !actOf(B).has(q.id));
+    assert.ok(fx, "近鉄の外国人が二軍にいない");
+    fx.st.down = Life.dk(p, p.day) - 30;
+    const room = B.bench.map((id) => Pen.findPlayer(id).p).find((q) => !q.foreign && q.pos !== "C") || [...actOf(B)].map((id) => Pen.findPlayer(id).p).find((q) => !q.foreign && q.pos === "P");
+    assert.ok(Life.tryDemote(p, room.id).ok);
+    const rf = Life.tryPromote(p, fx.id);
+    assert.ok(!rf.ok && /外国人枠/.test(rf.msg), "外国人枠を超える登録を断らない: " + rf.msg);
+    p.my = keep;
+  }
+  // 6) 自動入れ替えオフ: ケガ人の穴は同じ種類の選手で埋めてお知らせ、主力は自動で戻さない
+  Life.setAuto(p, false);
+  I.beginDay(p);
+  const n0 = Life.counts(T).n;
+  const y = Pen.findPlayer(T.lineup.find((e) => e.pos !== "P" && e.pos !== "C" && e.id !== x.id).id).p;
+  Life.injure(p, T, y, "テスト用の打撲", 3, p.day);
+  assert.strictEqual(Life.counts(T).n, n0, "オフでも穴埋めはする");
+  assert.ok(p.life.log.some((e) => e[0] === p.day && e[1] === "u" && e[4] === "fill"), "穴埋めの記録");
+  assert.ok(/自動入れ替えはオフ/.test(Life.hubLine(p)), "ハブのお知らせ");
+  playDays(H, p, 14, true);
+  I.beginDay(p);
+  if (!y.st.inj) assert.ok(!actOf(T).has(y.id), "自動入れ替えオフなのに主力が自動で戻った");
+  Life.setAuto(p, true);
+  // 7) 画面 (一軍・二軍・故障者・記録室・ハブ・選手の状態)
+  const scr = Life.screen();
+  let h = scr.html();
+  assert.strictEqual((h.match(/class="pl-row/g) || []).length, Life.counts(T).n, "一軍の行数");
+  assert.ok(/自動入れ替え/.test(h) && /data-act="down"/.test(h), "一軍の画面");
+  scr.onAct("tab", "farm");
+  h = scr.html();
+  assert.ok(/data-act="up"/.test(h) && /簡易計算/.test(h) && /pl-fm/.test(h), "二軍の画面");
+  scr.onAct("tab", "inj");
+  assert.ok(/故障者/.test(scr.html()), "故障者の画面");
+  const hub = Pen.hub().html();
+  assert.ok(/data-act="roster"/.test(hub) && /data-act="records"/.test(hub) && /pl-hub/.test(hub), "ハブのボタン・故障者と好不調");
+  const rs = Rec.screen();
+  for (const tab of ["feat", "streak", "ms"]) {
+    rs.onAct("tab", tab);
+    assert.ok(/記録室/.test(rs.html()), "記録室 " + tab);
+  }
+  assert.ok(/data-act="player"/.test(Pen.leaders().html()), "個人成績から選手モーダル");
+  const injured = T.players.find((q) => q.st && q.st.inj) || y;
+  if (!injured.st.inj) Life.injure(p, T, injured, "テスト用の打撲", 3, p.day);
+  assert.ok(/ケガ/.test(Life.stateHTML(p, T, injured)) && /調子/.test(Life.stateHTML(p, T, injured)), "選手の状態");
+  console.log("L3: 写し・記録の判定・ケガの流れ (" + Life.farmLgName(my) + ")・手動の登録/抹消・外国人枠・自動入れ替えオフ・画面");
+
+  // 8) 移行 (v3 → v4): 写しのない旧セーブは今の Store の球団から (rotIdx・打順を引き継ぐ)
+  const ST = Store.team(my);
+  const keep = { rotIdx: ST.rotIdx, lineup: JSON.stringify(ST.lineup) };
+  const a = Pen.create(my, { len: "s20", fast: "quick", seed: 62 });
+  playDays(H, a, 3, true);
+  const raw = clone(a);
+  for (const k of ["teams", "life", "fstats", "records"]) delete raw[k];
+  raw.v = 3;
+  ST.rotIdx = 2;
+  [ST.lineup[0], ST.lineup[2]] = [ST.lineup[2], ST.lineup[0]];
+  const want = JSON.stringify(ST.lineup.map((e) => (e.pos === "P" ? "P" : e.id + e.pos)));
+  Store.data.pennant = raw;
+  Store.migrate();
+  const q = Store.data.pennant;
+  const MT = Pen.team(my);
+  assert.ok(q.v === 4 && MT && MT !== ST, "v3 → v4 の移行で写しができない");
+  assert.strictEqual(MT.rotIdx, 2, "移行で rotIdx が引き継がれない");
+  assert.strictEqual(JSON.stringify(MT.lineup.map((e) => (e.pos === "P" ? "P" : e.id + e.pos))), want, "移行で打順が引き継がれない");
+  assert.ok(MT.players.some((z) => z.gen) && q.fstats && q.records && q.life.since === 3, "移行で二軍・記録の土台ができない");
+  assert.ok(MT.players.some((z) => z.st.last != null), "移行で登板の間隔が引き継がれない");
+  ST.rotIdx = keep.rotIdx;
+  ST.lineup = JSON.parse(keep.lineup);
+  const once = JSON.stringify(q);
+  Store.migrate();
+  assert.strictEqual(JSON.stringify(q), once, "移行を二度しても変わらない");
+  playDays(H, q, 3, true);
+  assert.strictEqual(q.results.length, 36, "移行したセーブの続き");
+  assert.ok(/記録は/.test(Rec.screen().html()), "移行したセーブの記録室の注記");
+  console.log("L3 移行: rotIdx・打順を引き継いで続きから");
+  Store.data.pennant = null;
+}
+lap("L3 選手の状態・一軍/二軍");
 
 /* ========== 一括消化 (非同期) と途中の日の再開 ========== */
 async function asyncChecks() {

@@ -284,6 +284,18 @@
         });
       });
     }
+    // 退場アニメをつけて消す (演出の段取りで次へ進むとき)
+    fade(key) {
+      const el = this.el[key];
+      if (!el || !el.classList.contains("show")) return this.hide(key);
+      clearTimeout(this.timers[key]);
+      el.classList.remove("show");
+      el.classList.add("out");
+      this.later(key + "x", 450, () => {
+        el.classList.remove("out");
+        el.innerHTML = "";
+      });
+    }
     hide(key) {
       const el = this.el[key];
       if (!el) return;
@@ -545,8 +557,8 @@
     }
 
     /* ---------- 得点 (中央の大きなスコア) ---------- */
-    // kind: "score" | "final" | "open"
-    scoreBoard(kind) {
+    // kind: "score" | "final" | "open"。holdMs: 表示する長さ (演出の段取りで消すときは長めに渡す)
+    scoreBoard(kind, holdMs) {
       const g = this.g;
       const m = this.m;
       const last = g.scoreLog[g.scoreLog.length - 1];
@@ -608,7 +620,7 @@
               : "";
       // 中継の慣習どおり ホーム球団を左に
       const html = '<div class="sc-row">' + panel("home") + '<div class="sc-mid"><div class="sc-inn">' + esc(mid) + '</div><div class="sc-prog">' + PROGRAM + "</div></div>" + panel("away") + "</div>" + extra;
-      const ms = kind === "final" ? 2900 : kind === "open" ? 2600 : 2300;
+      const ms = holdMs || (kind === "final" ? 2900 : kind === "open" ? 2600 : 2300);
       this.flash(this.el.center, html, ms, "center", "k-" + kind);
       // 点が入った側の数字を差し替える (左上のカウント表示も同時に)
       if (kind === "score") {
@@ -791,13 +803,15 @@
     }
 
     /* ---------- 判定・結果の小さな帯 (右下) ---------- */
-    // cls: hit | out | k | safe | info | fine | chance。o: { stamp: "SAFE" など, ms, hold: 次の帯を出すまで最低これだけ見せる (ms), color }
+    // cls: hit | out | k | safe | info | fine | chance。o: { stamp: "SAFE" など, ms, hold: 次の帯を出すまで最低これだけ見せる (ms), color, side: "l" で左側 (左打者のとき) }
     call(text, cls, o) {
       const opt = o || {};
+      // 種類は c- を付けたクラスに (退場アニメの out や古い HUD の .info と混ざらないように)
+      const kc = "c-" + (cls || "info") + (opt.side === "l" ? " l" : "");
       const show = () => {
         this.callHold = performance.now() + (opt.hold || 0);
         const html = (opt.stamp ? '<b class="cl-st">' + esc(opt.stamp) + "</b>" : "") + (text ? '<span class="cl-bar"><span class="cl-tx">' + esc(text) + "</span></span>" : "");
-        this.flash(this.el.call, html, opt.ms || 1500, "call", cls);
+        this.flash(this.el.call, html, opt.ms || 1500, "call", kc);
         this.el.call.style.setProperty("--cc", opt.color || "");
       };
       const wait = (this.callHold || 0) - performance.now();
@@ -835,7 +849,7 @@
     card(p, team, o) {
       const opt = o || {};
       const el = this.el.card;
-      const w = U.clamp(Math.round(window.innerWidth * 0.22), 72, 112);
+      const w = U.clamp(Math.round(Math.min(window.innerWidth * 0.22, window.innerHeight * 0.2)), 64, 112);
       const c = cardFor(p, team, { w, mini: true, home: opt.home, kind: opt.kind, fetch: opt.fetch !== false });
       const tok = (this.cardTok = (this.cardTok || 0) + 1);
       let done = false;
@@ -903,7 +917,7 @@
         this.l3html(o.team, o.p.num, fullName(o.p), '<span class="l3-ord">ヒーローインタビュー</span>', "今日のヒーロー", o.chips || [], "gold") +
         "</div>";
       this.flash(el, html, o.ms || 8500, "hero");
-      const c = cardFor(o.p, o.team, { w: U.clamp(Math.round(window.innerWidth * 0.4), 120, 190), home: o.home, kind: o.p.pos === "P" ? "pit" : "bat", fetch: true });
+      const c = cardFor(o.p, o.team, { w: U.clamp(Math.round(Math.min(window.innerWidth * 0.4, window.innerHeight * 0.36)), 100, 190), home: o.home, kind: o.p.pos === "P" ? "pit" : "bat", fetch: true });
       el.querySelector(".hro-card").appendChild(c.cv);
       const qa = el.querySelector(".hro-qa");
       const bubble = (cls, text, key) => {
@@ -945,7 +959,9 @@
     lineup(o) {
       const g = this.g;
       const opt = o || {};
-      const rh = Math.round(U.clamp((window.innerHeight - 250) / 10.6, 22, 52));
+      // 1 行の高さ: 縦画面は下に先発投手の段があるぶん少なめ。横画面は 9 行 + 見出し
+      const land = window.innerWidth > window.innerHeight;
+      const rh = Math.round(U.clamp((window.innerHeight - (land ? 96 : 270)) / (land ? 9.8 : 9.4), 20, 60));
       const cw = Math.round(rh * 0.78);
       const col = (side) => {
         const t = teamOf(g.teams[side]);

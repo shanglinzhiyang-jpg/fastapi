@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Graduate&family=Archivo+Black&family=M+PLUS+1p:wght@800;900&family=M+PLUS+Rounded+1c:wght@400;700;800&family=Ultra&family=Yellowtail&display=swap">
 <link rel="stylesheet" href="css/style.css">
 <style>
-  /* ?view=big|small|me|teams|card|people|all  &team=t  &who=kanto  &ex=normal  &skin=0..4 (view=me) */
+  /* ?view=sheet|icons|big|small|me|teams|card|people|all  &team=t  &who=kanto  &ex=normal  &skin=0..4 (view=me)  &draw=1 (ユーザーの絵ではなく描く絵) */
   body.full #app { position: fixed; inset: 0; height: 100%; }
   body { margin: 0; padding: 10px; background: #0d1626; color: #eee; font: 12px sans-serif; overflow: auto; height: auto; }
   #app { position: static; height: auto; }
@@ -20,6 +20,12 @@
   .s92 .mg { width: 92px; height: 110px; }
   .s28 .mg { width: 28px; height: 28px; }
   .s24 .mg { width: 24px; height: 24px; }
+  .s52 .mg { width: 52px; height: 52px; border-radius: 8px; box-shadow: 0 0 0 2px #fff; }
+  .row.sheet { flex-wrap: nowrap; }
+  .sheet .cell { width: 132px; }
+  .sheet .cell .mg { width: 120px; height: 144px; box-shadow: 0 0 0 2px #fff; }
+  .sheet .who { width: 92px; align-self: center; font-size: 13px; font-weight: 700; color: #fff; }
+  .cell span em { color: #ffd23f; font-style: normal; }
 </style>
 </head><body>
 <div id="out"></div>
@@ -41,8 +47,31 @@ const team = () => (q.get("team") ? PB.D.teamDef(q.get("team")) : PB.D.teamDef("
 const out = document.getElementById("out");
 const M = PB.Manga;
 const who5 = ["kanto", "goda", "hayase", "inukai", "ryuzaki"];
+// &draw=1: ユーザーの絵ではなく描く絵 (前の絵・絵が読めないときの代わり)
+const DRAW = !!q.get("draw");
+if (DRAW) {
+  const sv = M.svg;
+  const ic = M.icon;
+  M.svg = (w, o) => sv(w, Object.assign({}, o, { draw: true }));
+  M.icon = (w, o) => ic(w, Object.assign({}, o, { draw: true }));
+}
+const NAME = { kanto: "鬼瓦 監督", goda: "剛田 鉄平", hayase: "早瀬 ひかり", inukai: "宇佐美 コーチ", ryuzaki: "竜崎 レン", me: "自分" };
 function cell(svg, cap, cls) { return '<div class="cell ' + cls + '">' + svg + "<span>" + cap + "</span></div>"; }
 let h = "";
+if (view === "sheet") {
+  // 6 人 × 6 表情 (いまゲームで出る絵。絵のない表情は → で代わりの絵)
+  h += "<h2>サクセスの絵 (6 人 × 6 表情)" + (DRAW ? " — 描く絵" : "") + "</h2>";
+  for (const w of who5.concat(["me"])) {
+    h += '<div class="row sheet"><span class="who">' + NAME[w] + "</span>" + M.EXPRS.map((ex) => { const pe = M.picEx(w, ex); return cell(M.svg(w, { team: team(), ex, size: 120 }), M.EX_JP[ex] + (pe !== ex && !DRAW ? " <em>→" + M.EX_JP[pe] + "</em>" : ""), ""); }).join("") + "</div>";
+  }
+}
+if (view === "icons") {
+  // 小さなアイコン (人物 52px・仲よし 28px・練習 24px) と、まだ会っていない人のシルエット
+  for (const w of who5.concat(["me"])) {
+    const sig = (PB.Success.CAST[w] && PB.Success.CAST[w].sig) || "normal";
+    h += '<div class="row"><span class="who" style="width:92px;align-self:center;font-weight:700">' + NAME[w] + "</span>" + [52, 28, 24].map((px) => cell(M.icon(w, { team: team(), ex: sig }), px + "px", "s" + px)).join("") + cell(M.icon(w, { team: team(), ex: "happy" }), "笑顔", "s52") + [52, 28, 24].map((px) => cell(M.icon(w, { team: team(), ex: "normal", sil: true }), "未 " + px, "s" + px)).join("") + "</div>";
+  }
+}
 if (view === "all" || view === "small") {
   h += "<h2>80px × 表情 / 顔 40px (アイコン) / 会話 92px / 小 28・24px</h2>";
   for (const w of who5.concat(["me"])) {
