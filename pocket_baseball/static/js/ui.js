@@ -262,9 +262,10 @@
       ";--ts:" +
       team.sub +
       '">' +
-      '<div class="pc-head"><canvas class="pc-face" width="96" height="96" data-face="' +
-      esc(p.id) +
-      '"></canvas><div class="pc-name"><span class="pc-num">' +
+      // 顔の代わりに球団マーク
+      '<div class="pc-head"><span class="pc-face pc-logo">' +
+      UI.mark(team, 52) +
+      '</span><div class="pc-name"><span class="pc-num">' +
       p.num +
       '</span><b>' +
       esc(p.full || p.name) +
