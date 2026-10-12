@@ -413,14 +413,26 @@
           body: L + " " + recOf(c.id) + (P ? "。プレーオフ第2ステージへ" : ""),
         });
       }
-      // マジック点灯 (首位が入れ替わって点き直したときも)
+      // マジックの点灯・消滅・再点灯。ns.magic[lg] は {id, m, on, off} の記録 (同じ日を作り直しても同じ記事になる)
       if (!c || c.day === day) {
         const mg = c ? null : rc.magic;
-        const prev = ns.magic[lg];
-        if (mg && (!prev || prev.id !== mg.id || prev.day === day)) {
-          add(pen, { key: "magic:" + day + ":" + lg, day, kind: "magic", lg, team: mg.id, prio: 70 + (mg.id === pen.my ? 20 : 0), title: team(mg.id).short + "に" + (P ? "1位通過" : "優勝") + "マジック" + mg.m + "が点灯", body: L + " " + recOf(mg.id) });
+        const log = Array.isArray(ns.magic[lg]) ? ns.magic[lg] : (ns.magic[lg] = []);
+        let last = log[log.length - 1];
+        if (mg && (!last || last.off != null || last.id !== mg.id) && !(last && last.on === day && last.id === mg.id)) {
+          if (last && last.off == null) last.off = day;
+          log.push((last = { id: mg.id, m: mg.m, on: day }));
+        } else if (!mg && !c && last && last.off == null) last.off = day;
+        for (let i = 0; i < log.length; i++) {
+          const e = log[i];
+          const what = (P ? "1位通過" : "優勝") + "マジック";
+          if (e.on === day) {
+            const again = log.slice(0, i).some((x) => x.id === e.id);
+            add(pen, { key: "magic:" + day + ":" + lg, day, kind: "magic", lg, team: e.id, prio: 70 + (e.id === pen.my ? 20 : 0), title: team(e.id).short + "に" + what + e.m + "が" + (again ? "再点灯" : "点灯"), body: L + " " + recOf(e.id) });
+          }
+          // 消えた (別の球団に点いた日は点灯の記事だけ)
+          if (e.off === day && !log.some((x) => x.on === day) && !c)
+            add(pen, { key: "magicoff:" + day + ":" + lg, day, kind: "magic", lg, team: e.id, prio: 55 + (e.id === pen.my ? 20 : 0), title: team(e.id).short + "の" + what + "が消滅", body: L + " " + recOf(e.id) });
         }
-        if (!c) ns.magic[lg] = mg ? { id: mg.id, m: mg.m, day: prev && prev.id === mg.id && prev.day !== day ? prev.day : day } : null;
       }
       // パ: プレーオフ進出 (3 位以内) が決まった球団
       if (P)

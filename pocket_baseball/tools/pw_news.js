@@ -31,13 +31,17 @@ const OUT = process.argv[3] || null;
   await page.reload();
   await page.waitForFunction(() => window.PB && PB.UI && PB.UI.cur);
   await page.click("[data-act=pennant]");
+  // 短期 (10 試合・毎日 12 球団が試合) で 1 週間ぶん進める
+  await page.click('[data-act=len][data-arg="s10"]');
   await page.click('[data-act=inn][data-arg="3"]');
   await page.click("[data-act=go]");
-  await page.waitForSelector("[data-act=sim5]");
+  await page.waitForSelector('[data-act=simgo][data-arg="week"]');
   assert.strictEqual(await page.locator(".newsbox").count(), 0, "試合前にニュース枠");
-  await page.click("[data-act=sim5]");
-  await page.waitForFunction(() => document.querySelector(".nb-day") && /第5戦/.test(document.querySelector(".nb-day").textContent), null, { timeout: 120000 });
-  await page.waitForSelector("[data-act=sim5]:not([disabled])");
+  await page.click('[data-act=simgo][data-arg="week"]');
+  await page.waitForFunction(() => PB.UI.cur && PB.UI.cur.isPenHub && !PB.Pennant.busy() && PB.Store.data.pennant.day >= 5 && document.querySelector(".nb-day"), null, { timeout: 120000 });
+  await page.waitForSelector("[data-act=simgo]:not([disabled])");
+  const lastLabel = await page.evaluate(() => PB.Pennant.dayLabel(PB.Store.data.pennant, PB.Store.data.pennant.day - 1));
+  assert.strictEqual(await page.locator(".nb-day").textContent(), lastLabel, "ニュース枠の日付");
   await shot("hub");
   const pen = await page.evaluate(() => {
     const p = PB.Store.data.pennant;
@@ -74,8 +78,8 @@ const OUT = process.argv[3] || null;
   // 前日・翌日
   await page.click("[data-act=prev]");
   const d4 = await page.locator(".nday b").textContent();
-  assert.strictEqual(d4, "第4戦");
-  const n4 = await page.evaluate(() => PB.News.dayHRs(PB.Store.data.pennant, 3).length);
+  assert.strictEqual(d4, await page.evaluate(() => PB.Pennant.dayLabel(PB.Store.data.pennant, PB.Store.data.pennant.day - 2)), "前日の日付");
+  const n4 = await page.evaluate(() => PB.News.dayHRs(PB.Store.data.pennant, PB.Store.data.pennant.day - 2).length);
   assert.strictEqual(await page.locator(".nhr").count(), n4, "前日の行数");
   await page.click("[data-act=next]");
   // 試合結果

@@ -108,11 +108,10 @@ const nFor = (N, ei, li) => {
   return la0 < -36 || la0 >= 48 || ei < 2 ? Math.max(4, Math.round(N / 2.5)) : N;
 };
 // 走者なしの表を作る (align: 守備位置)
-function gridCells(N, align, laMax) {
+function gridCells(N, align) {
   const out = new Array(nCells).fill("");
   for (let ei = 0; ei < EV[2]; ei++)
     for (let li = 0; li < LA[2]; li++) {
-      if (laMax != null && LA[0] + li * LA[1] >= laMax) continue;
       for (let pi = 0; pi < PH[2]; pi++) {
         const cnt = {};
         const n = nFor(N, ei, li);

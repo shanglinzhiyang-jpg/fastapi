@@ -358,7 +358,20 @@ let fullPen;
   fullPen = Pen.create(my, { len: "full", strike: true, fast: "quick", seed: 2004 });
   Store.data.pennant = fullPen;
   const nGames = fullPen.schedule.reduce((a, d) => a + d.length, 0);
-  playSeason(H, fullPen, true);
+  // パの日程が終わったあと (セはまだ続く) のパの球団のハブ
+  let afterP = false;
+  while (!fullPen.finished) {
+    playDays(H, fullPen, 1, true);
+    if (!afterP && !fullPen.finished && Pen.standings(fullPen, "P").every((x) => x.rem === 0)) {
+      afterP = true;
+      const keep = fullPen.my;
+      fullPen.my = "h";
+      const html = Pen.hub().html();
+      fullPen.my = keep;
+      assert.ok(html.indexOf("全133戦 終了") >= 0 && html.indexOf("今季の試合はすべて終わりました") >= 0 && html.indexOf('data-arg="next"') < 0, "パの日程が終わった後のハブ");
+    }
+  }
+  assert.ok(afterP, "パが先に終わる日程になっていない");
   const sec = (Date.now() - t0) / 1000;
   collect = true;
   assert.ok(fullPen.finished && fullPen.regEnd, "シーズンが終わらない");
@@ -396,6 +409,19 @@ let fullPen;
       );
     }
   assert.ok(/^\d+月\d+日\(.\)$/.test(Pen.dayLabel(fullPen, 0)), "日付の表示");
+  // ペナントレースの記事 (マジック・優勝・プレーオフ進出・可能性消滅) は同じ日を作り直しても同じ
+  const RACE = /^(magic|clinch|po|out)$/;
+  const raceDays = [...new Set(fullPen.news.filter((n2) => RACE.test(n2.kind)).map((n2) => n2.day))];
+  assert.ok(raceDays.length >= 3, "ペナントレースの記事が少ない");
+  for (const d of raceDays) {
+    const want = JSON.stringify(fullPen.news.filter((n2) => n2.day === d && RACE.test(n2.kind)));
+    const again = JSON.parse(gen(fullPen, clone(fullPen), d)).filter((n2) => RACE.test(n2.kind));
+    assert.strictEqual(JSON.stringify(again), want, Pen.dayLabel(fullPen, d) + " のペナントレースの記事が作り直すと変わる");
+  }
+  assert.ok(
+    fullPen.news.filter((n2) => n2.kind === "magic").every((n2) => /点灯|消滅/.test(n2.title)),
+    "マジックの記事"
+  );
   assert.ok(fullPen.news.length <= News.maxNews(fullPen) && News.maxNews(fullPen) >= 1500, "ニュースの上限");
   checkResults(fullPen);
   const json = JSON.stringify(fullPen);
@@ -491,7 +517,8 @@ lap("マジック");
   for (const k of ["v", "opts", "year", "seed", "regDays", "clinch", "begun", "regEnd"]) delete raw[k];
   delete raw.newsState.magic;
   delete raw.newsState.out;
-  for (const n of raw.news) assert.ok(!/magic|clinch|po|out/.test(n.kind));
+  // 旧セーブにはペナントレースの記事も無い
+  raw.news = raw.news.filter((n) => ["magic", "clinch", "po", "out"].indexOf(n.kind) < 0);
   const keep = JSON.stringify(raw.results);
   Store.data.pennant = raw;
   Store.migrate();

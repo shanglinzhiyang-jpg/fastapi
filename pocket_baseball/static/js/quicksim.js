@@ -301,9 +301,10 @@
             // 併殺: 一塁走者と打者がアウト
             forceAdv();
             nb[2] = null;
-            if (b[3] && !(b[1] && b[2]) && chance(rate("goR3", b[3]))) {
+            // 押し出されない三塁走者 (一・三塁): 表の割合で本塁へ
+            if (b[3] && !b[2] && chance(rate("goR3", b[3]))) {
               sc.push(b[3]);
-              nb[3] = b[2] && b[1] ? nb[3] : null;
+              nb[3] = null;
             }
             return this.mkRes("DP", { outsAdded: 2, scorers: sc, bases: nb, pos, at, launch, batterOut: true });
           }

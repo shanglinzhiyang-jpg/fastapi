@@ -808,9 +808,9 @@
             esc(nextGameText(pen)) +
             '</small></div><div class="row-btns"><button class="btn primary" data-act="nextday"' +
             dis() +
-            '>次の日へ</button><button class="btn" data-act="simgo" data-arg="next"' +
-            dis() +
-            ">次の試合まで</button></div>";
+            ">次の日へ</button>" +
+            (Pen.nextMyDay(pen) >= 0 ? '<button class="btn" data-act="simgo" data-arg="next"' + dis() + ">次の試合まで</button>" : "") +
+            "</div>";
         }
         const sims = '<div class="pen-sims"><span class="pen-sims-l">まとめて進める</span><div class="row-btns">' + ["week"].concat(dated ? ["month"] : [], ["season"]).map((k) => '<button class="btn sm" data-act="simgo" data-arg="' + k + '"' + dis() + ">" + SIM_LABEL[k] + "</button>").join("") + "</div></div>";
         return (
@@ -819,16 +819,10 @@
           '<div class="pen-top"><div class="pen-date"><b>' +
           esc(Pen.dayLabel(pen, pen.day)) +
           "</b><span>" +
-          (m ? "第" + gno + "戦" : "次は第" + gno + "戦") +
-          " / 全" +
-          tot +
-          "戦" +
+          (gno > tot ? "全" + tot + "戦 終了" : (m ? "第" + gno + "戦" : "次は第" + gno + "戦") + " / 全" + tot + "戦") +
           "</span></div>" +
-          '<div class="pen-rank"><b>' +
-          rank +
-          "</b>位 " +
-          recText(meRow) +
-          myM +
+          '<div class="pen-rank">' +
+          (st.some((x) => x.g > 0) ? "<b>" + rank + "</b>位 " + recText(meRow) + myM : "<b>開幕前</b>") +
           "</div></div>" +
           today +
           sims +
@@ -1227,7 +1221,9 @@
           ) +
           '<p class="note small pen-lennote">' +
           esc(lenNote()) +
-          "</p>" +
+          "。日程は2004年の暦に合わせた架空のものです（" +
+          (Sched().isShort(st.len) ? "両リーグ4月2日開幕" : "パ3月27日・セ4月2日開幕") +
+          "）</p>" +
           (st.len === "full"
             ? chk("strike", st.strike && !st.il, "9月の選手会ストライキで中止", "史実: 9月18・19日の2試合が中止・振替なし") +
               chk("il", st.il, "交流戦あり（後年ルール）", "2005年から始まった方式（このゲームの設定）。2004年にはありません")

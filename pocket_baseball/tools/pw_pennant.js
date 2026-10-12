@@ -43,6 +43,31 @@ const OUT = process.argv[3] || null;
   await page.waitForFunction(() => window.PB && PB.UI && PB.UI.cur);
   assert.ok(/12球団/.test(await page.locator("[data-act=pennant] small").textContent()), "タイトルの文言");
 
+  // 旧セーブ (日付なし・版番号なし) を読み込んで続きを遊べる
+  await page.evaluate(() => {
+    const p = PB.Pennant.create("t", 2, "normal", 3);
+    for (const k of ["v", "opts", "year", "seed", "regDays", "clinch", "begun", "regEnd", "dates"]) delete p[k];
+    delete p.newsState.magic;
+    PB.Store.save();
+  });
+  await page.reload();
+  await page.waitForFunction(() => window.PB && PB.UI && PB.UI.cur);
+  assert.strictEqual(await page.evaluate(() => PB.Store.data.pennant.v), 2, "旧セーブが移行されない");
+  assert.ok(/続きから/.test(await page.locator("[data-act=pennant] small").textContent()), "続きから");
+  await page.click("[data-act=pennant]");
+  await waitHub();
+  assert.ok(/第1日/.test(await page.locator(".pen-date b").textContent()), "旧セーブの見出し");
+  await page.click("[data-act=sim]");
+  await page.waitForFunction(() => PB.Store.data.pennant.day === 1, null, { timeout: 60000 });
+  await waitHub();
+  assert.strictEqual(await page.evaluate(() => PB.Store.data.pennant.results.length), 6, "旧セーブの続き");
+  await shot("legacy");
+  await page.evaluate(() => {
+    PB.Store.data.pennant = null;
+    PB.Store.save();
+    PB.UI.go(PB.Screens.title());
+  });
+
   // 新規作成: フル (2004 年)・他球場は高速
   await page.click("[data-act=pennant]");
   await page.waitForSelector("[data-act=len]");
@@ -61,6 +86,11 @@ const OUT = process.argv[3] || null;
   await shot("hub_off");
   await noHScroll("ハブ (休み)");
 
+  // 次の日へ (休みの日を 1 日進める)
+  await page.click("[data-act=nextday]");
+  await page.waitForFunction(() => PB.Store.data.pennant.day === 1, null, { timeout: 30000 });
+  await waitHub();
+  assert.ok(/3月28日\(日\)/.test(await page.locator(".pen-date b").textContent()), "次の日へ");
   // 次の試合まで → セの開幕日
   await page.click('[data-act=simgo][data-arg="next"]');
   await waitHub();
@@ -69,6 +99,17 @@ const OUT = process.argv[3] || null;
   assert.ok(/4月2日\(金\)/.test(await page.locator(".pen-date b").textContent()), "セの開幕日: " + (await page.locator(".pen-date b").textContent()));
   assert.ok(/第1戦/.test(await page.locator(".pen-date span").textContent()), "第1戦");
   await shot("hub_game");
+  // この試合をおまかせ (自分の試合は物理版)
+  const dg = p.day;
+  await page.click("[data-act=sim]");
+  await page.waitForFunction((d) => PB.Store.data.pennant.day === d + 1, dg, { timeout: 60000 });
+  await waitHub();
+  assert.ok(
+    await page.evaluate((d) => PB.Store.data.pennant.results.some((r) => r.day === d && (r.home === PB.Store.data.pennant.my || r.away === PB.Store.data.pennant.my)), dg),
+    "おまかせの試合が記録されていない"
+  );
+  assert.ok(/第2戦/.test(await page.locator(".pen-date span").textContent()), "第2戦");
+  p = await pen();
 
   // 1 週間
   const d0 = p.date;
