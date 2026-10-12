@@ -424,7 +424,7 @@ export class Game {
         if (prevBgm) audio.bgm(prevBgm);
         resolve(res);
       };
-      audio.bgm(Cls.bgm || 'minigame');
+      audio.bgm(Cls.bgm === undefined ? 'minigame' : Cls.bgm); // static bgm = null -> silence (play your own sounds)
       this.push(mg);
     });
   }

@@ -24,6 +24,10 @@
 //   this.pt           frames since play started
 //   this.popup(text, x, y, color)   floating text effect
 //   this.drawTimerBar(ctx, frac), this.drawScoreBox(ctx, label, value)
+//
+// Static fields: title, howto (string[]), bgm (song name; null = no BGM so you can
+// play your own beat with audio.tone / audio.sfx — note audio.ctx is null until the
+// first user gesture), skill (default skill key used for this.bonus).
 
 import { W, H, clamp } from './util.js';
 import { text, panel, rect, wrap, bar, COLORS, sparkle } from './draw.js';

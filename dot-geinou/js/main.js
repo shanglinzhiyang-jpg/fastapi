@@ -28,7 +28,7 @@ function loadingScene(msg) {
 
 function richState(st) {
   st.money = 999999;
-  st.fame = 1500;
+  st.fame = 2500;
   st.skills = { warai: 60, engi: 60, uta: 60, talk: 60 };
   st.items = { drink: 5, bento: 3, nodoame: 2 };
   return st;
