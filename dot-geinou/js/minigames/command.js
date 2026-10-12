@@ -638,6 +638,7 @@ class CommandAction extends Minigame {
     c.missT = 14;
     this.combo = 0;
     this.g.sfx('buzz');
+    this.shake(5, 1);
     const x = this.chipX(c.idx) + CHIP / 2;
     this.popup('ミス！', x, CHIP_Y - 14, COLORS.bad, 10);
     this.hook('miss', k);
@@ -1254,7 +1255,7 @@ class CommandAction extends Minigame {
     const start = L ? (e.front ? 30 : 56) : e.front ? W - 30 - 48 : W - 56 - 32;
     const near = L ? (e.front ? 92 : 106) : e.front ? 180 : 182;
     const p = this.tate_p();
-    let x = p < 0 ? lerp(start, off, -p) : lerp(start, near, p);
+    let x = e.fx ?? (p < 0 ? lerp(start, off, -p) : lerp(start, near, p));
     x += e.side * e.knock * 9;
     if (e.fallT > 0) x += e.side * Math.min(e.fallT, 10) * 0.6;
     return { x, feet, s };
@@ -1327,7 +1328,7 @@ class CommandAction extends Minigame {
     this.later(11, () => {
       this.g.sfx('hit');
       this.shake(8, 3);
-      for (const e of this.enemies) e.fallT = 1;
+      for (const e of this.enemies) { e.fx = this.tate_enemyPos(e).x; e.knock = 0; e.fallT = 1; }
       this.doShout(pickR(this.T.good, this.rng));
     });
     this.later(32, () => { this.snd('sheathe'); this.setPose('sheathe', 34); this.popup('チャキン', 196, 118, '#ffffff', 10); });
