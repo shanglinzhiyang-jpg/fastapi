@@ -391,6 +391,7 @@
     for (const k in s) F[k] = s[k];
   }
   A.newFlags = newFlags;
+  A.resetFlags = resetFlags;
   A.clipLength = (clip) => clip[clip.length - 1].t;
 
   /* ---------- リグ (ポーズを骨に適用) ---------- */
@@ -1063,7 +1064,7 @@
 
   /* ---------- クリップの登録 ----------
    * A.def(name, build(params) → clip, keyFn?) で作り方を登録し、A.get(name, params) で作る (最近使った 256 個を覚える)。
-   * 鍵は params を丸めた値 (長さ 0.05 m・角度 5°・比 0.1)。作るのも丸めた値で作るので、同じ鍵なら同じクリップになる。
+   * 鍵は params を丸めた値 (長さ 0.05 m・ボールの位置 0.02 m・角度 5°・比 0.1)。作るのも丸めた値で作るので、同じ鍵なら同じクリップになる。
    * key を持つ値 (A.style の結果) は丸めずに key で見分ける */
   const DEFS = {};
   const CACHE = new Map();
@@ -1071,9 +1072,11 @@
   A.stats = { hit: 0, miss: 0, ms: 0, maxMs: 0 };
   const QANG = /^(az|below|phi|yaw|deg|ang|open|batTilt|batAz|tilt|roll|turn)$/;
   const QRATIO = /^(power|crouch|lift|pause|uppercut|waggle|w|k|early)$/;
+  // ボール・ミートの点は 2 cm (グラブ・バットの芯がボールからずれて見えないように)
+  const QFINE = /^(S|ball|pocket|bag)$/;
   function qv(k, v, parts) {
     if (typeof v === "number") {
-      const q = QANG.test(k) ? 5 : QRATIO.test(k) ? 0.1 : 0.05;
+      const q = QANG.test(k) ? 5 : QRATIO.test(k) ? 0.1 : QFINE.test(k) ? 0.02 : 0.05;
       const s = (Math.round(v / q) * q).toFixed(q < 0.1 ? 2 : q < 1 ? 1 : 0);
       parts.push(s);
       return +s;

@@ -702,9 +702,13 @@ def lift_crown(cp, edge_y):
     edge_y: 前の縁の高さ (頭の骨から)"""
     rel = cp.pos - J["head"]
     top = rel[:, 1].max()
+    bnd = cp.boundary()
+    edge_y = max(edge_y, float(rel[bnd, 1].max()))
     front = np.clip((rel[:, 2] + 0.02) / 0.10, 0, 1)
     elev = np.clip((rel[:, 1] - edge_y) / (top - edge_y), 0, 1) ** 0.7
-    cp.pos[:, 1] += 0.034 * front**1.5 * elev + 0.012 * elev * (1 - front)
+    lift = 0.034 * front**1.5 * elev + 0.012 * elev * (1 - front)
+    lift[bnd] = 0
+    cp.pos[:, 1] += lift
     cp.smooth(iters=8, fix_boundary=True)
     cp.recompute_normals()
 
@@ -972,8 +976,6 @@ def corner_split(part, cuv):
 
 
 sh = parts["shirt"]
-_AX = section_axis(sh, BELT_Y - 0.08, J["neck_01"][1] + 0.02)
-torso_uv = cyl_uv(sh, torso_center, v0=0.3, v1=1.0, ylo=BELT_Y - 0.08, yhi=J["neck_01"][1] + 0.02)
 # 袖の三角形: 肩の付け根の面 (腕の軸を少し上へ傾けた法線、肩の関節の 1.5 cm 内側を通る) より外で、腕の重みのある所。
 # 以前は腕の重み > 0.35 の頂点で分けていたので、袖と胴の境がギザギザだった
 _tc = sh.pos[sh.tri].mean(axis=1)
@@ -986,6 +988,12 @@ for s_, sx in (("l", 1.0), ("r", -1.0)):
     nA /= np.linalg.norm(nA)
     S0 = A + np.array([-0.015 * sx, 0, 0])
     sleeve_tri |= (_tc[:, 0] * sx > 0) & ((_tc - S0) @ nA > 0) & (_tarm > 0.12)
+# 胴体の v: 裾の下 (ベルトの 8 cm 下) = 0.3 → 胴体の布のいちばん上 (首の後ろ) = 1 (以前は首の骨 + 2 cm で、上の 2% が空いていた)
+_ylo = BELT_Y - 0.08
+_yhi = float(sh.pos[np.unique(sh.tri[~sleeve_tri]), 1].max()) + 0.002
+_AX = section_axis(sh, _ylo, J["neck_01"][1] + 0.02)
+torso_uv = cyl_uv(sh, torso_center, v0=0.3, v1=1.0, ylo=_ylo, yhi=_yhi)
+print("torso v range y %.3f .. %.3f" % (_ylo, _yhi))
 # 袖の UV: 腕のまわり (継ぎ目は脇の下) × 腕に沿った長さ。肩の上 (関節より内側) から袖口までを v 0.272 → 0.025 に (以前は肩の上を v 0.28 の 1 行に詰めていた)
 SLEEVE_TOP = 0.272
 sleeve_uv = {}
@@ -1035,8 +1043,6 @@ _bv = sh.boundary()
 COLLAR_UV = [sh.uv[i].tolist() for i in _bv if sh.pos[i, 1] > J["spine_03"][1] + 0.12 and ARMW[sh.src[i]] < 0.3 and abs(sh.pos[i, 0]) < 0.1 and abs(sh.pos[i, 2] - NK[2]) < 0.12]
 COLLAR_UV.sort(key=lambda t: t[0])
 # 襟の帯をシャツに足す。テクスチャはパンツに隠れる裾の下 (v 0.283〜) に横じまの帯として描く
-_ylo = BELT_Y - 0.08
-_yhi = J["neck_01"][1] + 0.02
 VB_OUT = 0.3 + 0.7 * (0.025 / (_yhi - _ylo))  # 裾から 2.5cm (ベルトより 5.5cm 下: 必ずパンツの中)
 VB_IN = 0.283
 _c = COLLAR
