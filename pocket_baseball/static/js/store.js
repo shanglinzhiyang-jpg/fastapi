@@ -51,6 +51,37 @@
     }
   };
 
+  // 球団の定義 (名前・色・ユニフォーム・球場・ロゴ…) はセーブに入れない。
+  // 1 ファイル版では画像が data URI なので、入れると 1 回の保存が 2MB 近くになり、ペナントの途中で容量を超える。
+  // 保存では定義の項目を外し (id は残す)、読み込みでは定義の項目を今の定義から付け直す (古いセーブの data URI も消える)
+  function teamDefOf(t) {
+    return t && typeof t === "object" && Array.isArray(t.players) && PB.D && PB.D.teamDef ? PB.D.teamDef(t.id) : null;
+  }
+  function packTeam(t) {
+    const def = teamDefOf(t);
+    if (!def) return t;
+    const o = {};
+    for (const k of Object.keys(t)) if (k === "id" || !(k in def)) o[k] = t[k];
+    return o;
+  }
+  function unpackTeam(t) {
+    const def = teamDefOf(t);
+    if (def) for (const k of Object.keys(def)) t[k] = def[k];
+    return t;
+  }
+  // 球団の配列があるところ: data.teams と (球団ごとの写しを持つ場合の) data.pennant.teams
+  S.packed = function (d) {
+    const out = Object.assign({}, d);
+    if (Array.isArray(d.teams)) out.teams = d.teams.map(packTeam);
+    if (d.pennant && Array.isArray(d.pennant.teams)) out.pennant = Object.assign({}, d.pennant, { teams: d.pennant.teams.map(packTeam) });
+    return out;
+  };
+  S.unpack = function (d) {
+    if (d && Array.isArray(d.teams)) d.teams.forEach(unpackTeam);
+    if (d && d.pennant && Array.isArray(d.pennant.teams)) d.pennant.teams.forEach(unpackTeam);
+    return d;
+  };
+
   S.load = function () {
     try {
       const raw = window.localStorage.getItem(S.KEY);
@@ -59,6 +90,7 @@
         if (d && d.version === 1) {
           S.data = Object.assign(fresh(), d);
           S.data.settings = Object.assign({}, S.DEFAULT_SETTINGS, d.settings || {});
+          S.unpack(S.data);
         }
       }
     } catch (e) {
@@ -78,7 +110,7 @@
   S.save = function () {
     S.data.updated = Date.now();
     // サーバーへは保存した時点の内容を送る (日程の消化途中の状態を送らない)
-    S._saved = JSON.stringify(S.data);
+    S._saved = JSON.stringify(S.packed(S.data));
     try {
       window.localStorage.setItem(S.KEY, S._saved);
     } catch (e) {
@@ -161,9 +193,10 @@
           S.data = Object.assign(fresh(), j.data);
           S.data.settings = Object.assign({}, S.DEFAULT_SETTINGS, j.data.settings || {});
           S.data.settings.gfx = localGfx;
+          S.unpack(S.data);
           S.migrate();
           try {
-            window.localStorage.setItem(S.KEY, JSON.stringify(S.data));
+            window.localStorage.setItem(S.KEY, JSON.stringify(S.packed(S.data)));
           } catch (e) {
             /* 無視 */
           }
@@ -176,7 +209,7 @@
 
   // サーバーへ送るセーブ (端末ごとの画質の設定は除く)
   function syncJSON() {
-    const raw = S._saved || JSON.stringify(S.data);
+    const raw = S._saved || JSON.stringify(S.packed(S.data));
     try {
       const d = JSON.parse(raw);
       if (d.settings) delete d.settings.gfx;

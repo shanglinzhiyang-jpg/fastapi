@@ -180,6 +180,7 @@
       this.paN = { away: 0, home: 0 }; // チームの打席数 (先頭打者の判定)
       this.over = false;
       this.used = { away: [], home: [] };
+      this.pitLog = { away: [], home: [] }; // 投手ごとの登板時・降板時のリード (ホールドの判定)
       this.pstate = {};
       this.record = { win: {}, lose: {}, leader: null };
       this.listeners = [];
@@ -253,6 +254,12 @@
       const p = this.P(id);
       const max = 34 + p.stamina * 1.05;
       this.pstate[side] = { id, stamina: max, max, runs: 0, pitches: 0, enterLead: this.leadOf(side), enterInning: this.inning, outsAtEnter: 0 };
+      if (this.pitLog) {
+        const log = this.pitLog[side];
+        const prev = log[log.length - 1];
+        if (prev && prev.out == null) prev.out = this.leadOf(side);
+        log.push({ id, in: this.leadOf(side) });
+      }
       if (this.used[side].indexOf(id) < 0) this.used[side].push(id);
       const s = this.stat(id);
       s.pg = 1;
@@ -294,6 +301,9 @@
         c.powerBonus = lv.cpuPower;
       }
       if (forUser === "cpuPitch") c.controlBonus = lv.cpuCtl;
+      // チームの特色 (巨人: 本塁打がソロに偏る)。人もCPUも同じ。ホームラン競争など 99 回制の遊びは対象外
+      const solo = P.SOLO_HR && P.SOLO_HR[this.teams[bs].id];
+      if (solo && this.innings < 99) c.soloHR = solo;
       return c;
     }
 
@@ -540,7 +550,12 @@
       const ps = this.stat(this.pstate[fs].id);
       const desc = Talk.desc(res);
       res.desc = desc;
-      if (res.error) this.errors[fs]++;
+      if (res.error) {
+        this.errors[fs]++;
+        // 個人の失策 (失策した野手)
+        const ep = res.error.pos && this.defense(fs)[res.error.pos];
+        if (ep) this.stat(ep.id).fe = (this.stat(ep.id).fe || 0) + 1;
+      }
       // 成績
       s.pa++;
       const t = res.type;
@@ -718,6 +733,11 @@
 
     endGame(walkoff) {
       this.over = true;
+      if (this.pitLog)
+        for (const s of ["away", "home"]) {
+          const e = this.pitLog[s][this.pitLog[s].length - 1];
+          if (e && e.out == null) e.out = this.leadOf(s);
+        }
       const a = this.score.away;
       const h = this.score.home;
       const res = { walkoff: !!walkoff, tie: a === h };

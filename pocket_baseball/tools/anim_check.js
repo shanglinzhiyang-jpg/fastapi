@@ -308,6 +308,28 @@ for (const p of players) {
     styles.push({ p, s });
   }
 }
+// anim.js の骨の数値 (A.SKEL・A.bodyPts。クリップを作るときに使う) がモデルと同じか
+const skelIssues = [];
+for (const n in A.SKEL.bones) {
+  const d = REST[n].distanceTo(new T.Vector3().fromArray(A.SKEL.bones[n]));
+  if (d > 0.001) skelIssues.push(`A.SKEL.${n} differs from models/player.json by ${(d * 1000).toFixed(1)}mm`);
+}
+if (Math.abs(A.SKEL.ARM - ARM) > 0.001) skelIssues.push(`A.SKEL.ARM ${A.SKEL.ARM} vs ${ARM.toFixed(4)}`);
+if (Math.abs(A.SKEL.LEG - LEG) > 0.001) skelIssues.push(`A.SKEL.LEG ${A.SKEL.LEG} vs ${LEG.toFixed(4)}`);
+{
+  let wb = 0;
+  for (const k of A.get("pit.windup", {}).concat(A.get("fld.grounder", {}))) {
+    const p = A.copyPose(k.pose);
+    const b = A.bodyPts(p);
+    const w = fk(p, false);
+    for (const [a, c] of [[b.shL, w.shL], [b.shR, w.shR], [b.hipL, w.hipL], [b.hipR, w.hipR]]) wb = Math.max(wb, dist(a, c));
+  }
+  if (wb > 0.001) skelIssues.push(`A.bodyPts differs from this FK by ${(wb * 1000).toFixed(1)}mm`);
+}
+if (skelIssues.length) {
+  nFail++;
+  results.push({ label: "skeleton", name: "skeleton", ok: false, issues: skelIssues, worst: {}, res: {}, warns: [] });
+}
 // 名前の型が試合の選手に当たっているか
 const formHits = Object.keys(A.FORMS).filter((n) => players.some((p) => A.formFor(p) === A.FORMS[n]));
 const formMiss = Object.keys(A.FORMS).filter((n) => formHits.indexOf(n) < 0);
@@ -398,18 +420,17 @@ run("ump.safe", "ump.safe", {});
 /* ---------- 走り v2 (速さごとに 3 秒: 0 から加速、途中で曲がる) ---------- */
 const runRes = [];
 if (want("run.cycle")) {
-  for (const v of [1.4, 3.0, 6.2, 8.5, 9.2]) {
+  for (const [v, arms] of [[1.4, "run"], [3.0, "run"], [6.2, "run"], [6.2, "trot"], [8.5, "run"], [9.2, "run"]]) {
     const mem = {};
     const p = A.basePose();
-    let steps = 0;
-    let prevPh = null;
+    let ph0 = 0;
     const issues = [];
     const worst = { arm: 0, leg: 0, ground: 9, slip: 0 };
     let yaw = 0;
     for (let i = 0; i < 360; i++) {
       const dt = 1 / 120;
       if (i > 240) yaw += dt * 0.8; // 最後の 1 秒は曲がる
-      A.runCycle(mem, v, dt, { arms: "run", yaw }, p);
+      A.runCycle(mem, v, dt, { arms, yaw }, p);
       const w = fk(p, false);
       for (const s of ["L", "R"]) {
         const sh = s === "L" ? w.shL : w.shR;
@@ -417,22 +438,20 @@ if (want("run.cycle")) {
         worst.leg = Math.max(worst.leg, (dist(p["leg" + s].t, s === "L" ? w.hipL : w.hipR) - LEG) * 100);
         worst.ground = Math.min(worst.ground, p["leg" + s].t[1]);
       }
-      const ph = (((mem.ph / (Math.PI * 2)) % 1) + 1) % 1;
-      // 歩数 (半周ごと) は加速が終わった最後の 1.5 秒で数える
-      if (i >= 180 && prevPh != null && ((prevPh < 0.5 && ph >= 0.5) || ph < prevPh)) steps++;
-      prevPh = ph;
+      // 歩数 (1 周期 = 2 歩) は加速が終わった最後の 1.5 秒で数える
+      if (i === 179) ph0 = mem.ph;
     }
-    const sps = steps / 1.5;
+    const sps = ((mem.ph - ph0) / (Math.PI * 2)) * 2 / 1.5;
     const want2 = { 3.0: 2.8, 6.2: 3.9, 8.5: 4.3 }[v];
-    if (want2 && Math.abs(sps - want2) > 0.35) issues.push(`cadence ${sps.toFixed(2)} steps/s (want ${want2})`);
+    if (want2 && Math.abs(sps - want2) > 0.15) issues.push(`cadence ${sps.toFixed(2)} steps/s (want ${want2})`);
     if (worst.arm > LIM.sArm) issues.push(`arm over ${worst.arm.toFixed(1)}cm`);
     if (worst.leg > LIM.sLeg) issues.push(`leg over ${worst.leg.toFixed(1)}cm`);
     if (worst.ground < LIM.ground) issues.push(`ankle y ${worst.ground.toFixed(3)}`);
     // 接地している足は地面で止まっている: 1 歩のあいだのキャラクター空間の後ろ向きの速さ = 体の速さ
     const ok = !issues.length;
     if (!ok) nFail++;
-    runRes.push({ v, sps, worst, issues, ok });
-    results.push({ label: "run.cycle v" + v, name: "run.cycle", ok, issues, worst: { arm: worst.arm, leg: worst.leg, ground: worst.ground }, res: { sps }, warns: [] });
+    runRes.push({ v, arms, sps, worst, issues, ok });
+    results.push({ label: "run.cycle v" + v + " " + arms, name: "run.cycle", ok, issues, worst: { arm: worst.arm, leg: worst.leg, ground: worst.ground }, res: { sps }, warns: [] });
   }
 }
 
@@ -443,12 +462,13 @@ if (!opt.clip) {
   for (let rep = 0; rep < 2; rep++)
     for (const n of names) {
       const N = rep ? 40 : 5;
-      const t0 = performance.now();
+      const ms0 = A.stats.ms;
       for (let i = 0; i < N; i++) {
         A.clearCache();
         A.get(n, n === "bat.swing" ? { ct: A.swingSolve({ bz: 0.5 + i * 0.01 }) } : {});
       }
-      if (rep) speed[n] = (performance.now() - t0) / N;
+      // 作る時間だけ (Node では作るたびに点検もするが、その時間は数えない。dropRun は中で作るスイングも含む)
+      if (rep) speed[n] = (A.stats.ms - ms0) / N;
     }
 }
 const speedMax = Math.max(0, ...Object.values(speed));
@@ -504,7 +524,7 @@ if (opt.json) {
       `${n.padEnd(18)} ${String(b.n).padStart(5)} ${String(b.bad).padStart(4)}  ${b.key.toFixed(1).padStart(6)}cm  ${b.bat.toFixed(1).padStart(8)}cm  ${b.arm.toFixed(1).padStart(4)}  ${b.leg.toFixed(1).padStart(4)}  ${b.ground.toFixed(3).padStart(6)}  ${b.fix.toFixed(1).padStart(6)}cm  ${(b.err * 100).toFixed(1).padStart(6)}cm`
     );
   }
-  for (const r of runRes) console.log(`run.cycle v${r.v}: ${r.sps.toFixed(2)} steps/s, arm ${r.worst.arm.toFixed(1)}cm leg ${r.worst.leg.toFixed(1)}cm ankle ${r.worst.ground.toFixed(3)} ${r.ok ? "ok" : r.issues.join("; ")}`);
+  for (const r of runRes) console.log(`run.cycle v${r.v} ${r.arms}: ${r.sps.toFixed(2)} steps/s, arm ${r.worst.arm.toFixed(1)}cm leg ${r.worst.leg.toFixed(1)}cm ankle ${r.worst.ground.toFixed(3)} ${r.ok ? "ok" : r.issues.join("; ")}`);
   const warnSet = new Set();
   for (const r of results) for (const w of r.warns || []) warnSet.add((r.name || "") + ": " + w);
   if (warnSet.size) console.log("warnings (hand/foot euler jumps):\n  " + [...warnSet].slice(0, 20).join("\n  "));

@@ -213,9 +213,139 @@
     p.armL.t = [R3(g[0]), R3(g[1]), R3(g[2])];
     if (!one) p.armR.t = [R3(g[0] + d[0] * th), R3(g[1] + d[1] * th), R3(g[2] + d[2] * th)];
   }
-  // キーの並びをクリップにする (バットを持つキーの手をそろえる。キーの one = 片手)
+  /* ---------- 手足が届くようにする (A.bodyPts で肩・股関節を求める) ---------- */
+  const BP = { shL: [0, 0, 0], shR: [0, 0, 0], hipL: [0, 0, 0], hipR: [0, 0, 0] };
+  const REACH = A.SKEL.ARM - 0.012; // 手首の目標は腕の長さより少し手前 (ひじをわずかに曲げる)
+  const LEGR = A.SKEL.LEG - 0.006;
+  // 点 v を点 s から max 以内へ (動かした距離を返す)
+  function pull(v, s, max) {
+    const dx = v[0] - s[0];
+    const dy = v[1] - s[1];
+    const dz = v[2] - s[2];
+    const d = Math.hypot(dx, dy, dz);
+    if (d <= max) return 0;
+    const k = max / d;
+    v[0] = R3(s[0] + dx * k);
+    v[1] = R3(s[1] + dy * k);
+    v[2] = R3(s[2] + dz * k);
+    return d - max;
+  }
+  // バットを持つキー: 握りが肩から届かなければバットを肩の方へ寄せる (体は動かさない。hrig.js の握りの補正と同じ考え)
+  function fitGrip(p, one) {
+    const d = A.nrm(p.bat.d);
+    const th = p.bat.th == null ? 0.085 : p.bat.th;
+    const g = p.bat.g;
+    for (let it = 0; it < 4; it++) {
+      A.bodyPts(p, BP);
+      let mv = pull(g, BP.shL, REACH);
+      if (!one) {
+        const top = [g[0] + d[0] * th, g[1] + d[1] * th, g[2] + d[2] * th];
+        const m2 = pull(top, BP.shR, REACH);
+        if (m2) for (let i = 0; i < 3; i++) g[i] = R3(top[i] - d[i] * th);
+        mv += m2;
+      }
+      handsOnBat(p, one);
+      if (!mv) return;
+    }
+  }
+  // 脚: 足首が股関節から届かなければ足を股関節の方へ (横方向に) 寄せる
+  function fitLegs(p, known) {
+    if (!known) A.bodyPts(p, BP);
+    for (const s of ["L", "R"]) {
+      const t = p["leg" + s].t;
+      const h = s === "L" ? BP.hipL : BP.hipR;
+      const dy = t[1] - h[1];
+      const dx = t[0] - h[0];
+      const dz = t[2] - h[2];
+      const d = Math.hypot(dx, dy, dz);
+      if (d <= LEGR) continue;
+      const hz = Math.hypot(dx, dz);
+      const want = Math.sqrt(Math.max(0, LEGR * LEGR - dy * dy));
+      if (hz > 1e-4 && want > 0.02) {
+        p["leg" + s].t = [R3(h[0] + (dx * want) / hz), t[1], R3(h[2] + (dz * want) / hz)];
+      }
+    }
+  }
+  // 持っていない手: 届かない目標は肩の方へ (keep = そのままにする手 'L' / 'R')
+  function fitArms(p, keep, known) {
+    if (!known) A.bodyPts(p, BP);
+    if (keep !== "L") {
+      const t = p.armL.t.slice();
+      if (pull(t, BP.shL, A.SKEL.ARM - 0.004)) p.armL.t = t;
+    }
+    if (keep !== "R") {
+      const t = p.armR.t.slice();
+      if (pull(t, BP.shR, A.SKEL.ARM - 0.004)) p.armR.t = t;
+    }
+  }
+  // 体 (腰の位置・前かがみ) を動かして手首の目標 reqs = [['L' | 'R', [x, y, z]], ...] に届かせる。p を書き換える。
+  // lim = {x, y (下へ), z, pitch (前かがみを足す上限 度)}。届かなかった距離を返す (0 = 届いた)
+  function reachBody(p, reqs, lim) {
+    const r0 = p.root.slice();
+    const sp0 = p.spine[0];
+    let ex = 0;
+    for (let add = 0; add <= (lim.pitch || 0) + 1e-6; add += 3) {
+      p.spine = [R3(sp0 + add), p.spine[1], p.spine[2]];
+      p.root = r0.slice();
+      for (let it = 0; it < 8; it++) {
+        A.bodyPts(p, BP);
+        ex = 0;
+        let ev = null;
+        for (const [s, t] of reqs) {
+          const sh = s === "L" ? BP.shL : BP.shR;
+          const v = [t[0] - sh[0], t[1] - sh[1], t[2] - sh[2]];
+          const d = Math.hypot(v[0], v[1], v[2]);
+          if (d - REACH > ex) {
+            ex = d - REACH;
+            ev = [(v[0] * ex) / d, (v[1] * ex) / d, (v[2] * ex) / d];
+          }
+        }
+        if (ex < 0.0015) return 0;
+        const nx = clamp(p.root[0] + ev[0], r0[0] - lim.x, r0[0] + lim.x);
+        const ny = clamp(p.root[1] + Math.min(0, ev[1]), r0[1] - lim.y, r0[1]);
+        const nz = clamp(p.root[2] + ev[2], r0[2] - lim.z, r0[2] + lim.z);
+        if (Math.abs(nx - p.root[0]) + Math.abs(ny - p.root[1]) + Math.abs(nz - p.root[2]) < 1e-4) break;
+        p.root = [R3(nx), R3(ny), R3(nz)];
+      }
+    }
+    return ex;
+  }
+  // グラブのポケットを pk に (指 f・手のひら n の向き)。届かなければ体を動かし、それでも足りなければ
+  // ポケットの前後 (zr = [最小, 最大]) と左右 (xr) を肩の方へ寄せる。pk を書き換えて返す (高さは変えない)
+  function reachPocket(p, side, pk, f, n, lim, zr, xr) {
+    const arm = side === "L" ? "armL" : "armR";
+    for (let round = 0; round < 4; round++) {
+      const w = A.gloveWrist(pk, f, n);
+      p[arm].t = w;
+      const ex = reachBody(p, [[side, w]], lim);
+      if (!ex) return pk;
+      A.bodyPts(p, BP);
+      const sh = side === "L" ? BP.shL : BP.shR;
+      const v = [w[0] - sh[0], w[2] - sh[2]];
+      const h = Math.hypot(v[0], v[1]) || 1;
+      if (zr) pk[2] = R3(clamp(pk[2] - (v[1] / h) * (ex + 0.004), zr[0], zr[1]));
+      if (xr) pk[0] = R3(clamp(pk[0] - (v[0] / h) * (ex + 0.004), xr[0], xr[1]));
+    }
+    p[arm].t = A.gloveWrist(pk, f, n);
+    return pk;
+  }
+  // キーの並びをクリップにする: バットを持つキーの手をそろえ、届かない脚・手・握りを直す。
+  // キーの one = 片手で持つ、hold = 持っている手 ('L' | 'R'。グラブで捕る瞬間など、目標を動かさない)
   function mk(kind, keys, marks, extra) {
-    for (const k of keys) if (k.pose.bat.on) handsOnBat(k.pose, k.one);
+    for (const k of keys) {
+      const p = k.pose;
+      if (p.bat.on) {
+        handsOnBat(p, k.one);
+        fitLegs(p);
+        fitGrip(p, k.one);
+        if (k.one) fitArms(p, "L");
+      } else {
+        // 脚を寄せても肩は変わらないので、肩・股関節は 1 回だけ求める
+        A.bodyPts(p, BP);
+        fitLegs(p, true);
+        fitArms(p, k.hold, true);
+      }
+    }
     return A.clip(kind, keys, marks, extra);
   }
   // 目から点 S を見る頭の向き (方位, 下向き)
@@ -254,13 +384,15 @@
   const IDLE = new Map();
   A.stanceIdle = function (t, s, out) {
     s = sty(s);
+    // 型ごとの構えを数値の並びで覚えておき、毎フレーム写す (オブジェクトを作らない)
     let base = IDLE.get(s.key);
     if (!base) {
-      base = stance(s);
+      base = A.flat(stance(s), new Float64Array(A.NCH));
       IDLE.set(s.key, base);
       if (IDLE.size > 64) IDLE.delete(IDLE.keys().next().value);
     }
-    const p = A.lerpPose(base, base, 0, out);
+    const p = A.setFlat(out || A.basePose(), base);
+    p.bat.on = 1;
     const w = num(s.waggle, 0.7);
     p.bat.d[0] += Math.sin(t * 2.2) * 0.08 * w;
     p.bat.d[2] += Math.cos(t * 2.2) * 0.08 * w;
@@ -313,7 +445,8 @@
     ]);
     return mk("idle", keys, { release: 0.4, plant: 0.82 });
   }
-  const plantOf = (s) => A.copyPose(load(s)[3].pose);
+  // 着地の形 (登録した始動のクリップの最後のキー。キャッシュにあればそれを使う)
+  const plantOf = (s) => A.copyPose(A.get("bat.load", { style: s })[3].pose);
 
   // 3. スイング。ct = {S: 芯を通す点, below: ヘッドが水平から下へ (度), az: ヘッドの向き (度、+ で引っ張り)}
   // 印: contact 0.12 (= P.SWING_LAG)、finish 0.36。0.30 から kind = follow (視線が打球を追う)。片手のフィニッシュは 0.26 から上の手を離す
@@ -343,8 +476,11 @@
       legR: { t: [-0.22, 0.12, 0.06], p: [-0.05, 0.5, 1.1], f: [30, 55, 0] },
       bat: { g, d, on: 1 },
     });
+    // 両手が握りに届くように腰の位置・前かがみを動かす (外角・低めの球)
+    handsOnBat(pose);
+    reachBody(pose, [["L", pose.armL.t], ["R", pose.armR.t]], { x: 0.12, y: 0.22, z: 0.16, pitch: 30 });
     // 頭: ミートの点を目 (おおよその位置) から見る
-    const lk = lookFrom([0.12, 1.42, 0.22], ct.S);
+    const lk = lookFrom([0.12, 1.42 + pose.root[1] + 0.2, 0.22 + pose.root[2] - 0.04], ct.S);
     headTo(pose, lk[0], lk[1]);
     return pose;
   }
@@ -467,6 +603,8 @@
     headTo(sq, 86, 4);
     const low = Math.max(0, 1.0 - S[1]);
     const cp = A.M(sq, { root: [0.06, R3(-0.24 - low * 0.4), 0.08], spine: [R3(22 + low * 10), 14, 0], bat: { g: A.gripFor(S, d, BUNT_ALONG), d } });
+    handsOnBat(cp);
+    reachBody(cp, [["L", cp.armL.t], ["R", cp.armR.t]], { x: 0.12, y: 0.25, z: 0.18, pitch: 25 });
     headTo(cp, 80, 20);
     const give = A.M(cp, { bat: { g: [R3(cp.bat.g[0] - 0.05), cp.bat.g[1], R3(cp.bat.g[2] - 0.06)] } });
     const keys = [
@@ -785,7 +923,14 @@
     const f = z > 0.5 ? [0.0, 1, -0.15] : [0.35, -0.2, -0.1];
     const n = z > 0.5 ? [0, 0.1, 1] : [0, 0.45, 1];
     const ball = [-x, z, 0.42 - (give || 0)];
-    return { t: A.gloveWrist(ball, f, n), h: A.handFrame("L", f, n), ball };
+    return { t: A.gloveWrist(ball, f, n), h: A.handFrame("L", f, n), ball, f, n };
+  }
+  // ミットをポケット m.ball に (届かなければ腰を落として前かがみに。ポケットの前後は 0.30〜0.50 で合わせる)
+  const LIM_C = { x: 0.08, y: 0.18, z: 0.1, pitch: 36 };
+  function mittTo(p, m) {
+    p.armL.h = m.h;
+    reachPocket(p, "L", m.ball, m.f, m.n, LIM_C, [0.3, 0.5]);
+    return m.ball;
   }
   // 10. 捕球 (印: target = 構え, catch = 捕る, frame = 少しストライクゾーンへ寄せる)。ball / aim = [ホーム上の x, 高さ]
   function receive(ball, aim) {
@@ -795,40 +940,37 @@
     const az = aim ? aim[1] : bz;
     const base = catcherBase();
     const tg = mitt(ax, az, 0);
-    const k0 = A.M(base, { root: [R3(-ax * 0.65), base.root[1], base.root[2]], spine: [18, R3(-ax * 40), 0], armL: { t: tg.t, h: tg.h } });
+    const k0 = A.M(base, { root: [R3(-ax * 0.65), base.root[1], base.root[2]], spine: [18, R3(-ax * 40), 0] });
+    mittTo(k0, tg);
     headTo(k0, 0, -4);
-    const k1 = A.M(k0, { armL: { t: [tg.t[0], R3(tg.t[1] - 0.03), R3(tg.t[2] - 0.02)] } });
+    const k1 = A.M(k0, { armL: { t: [k0.armL.t[0], R3(k0.armL.t[1] - 0.03), R3(k0.armL.t[2] - 0.02)] } });
     const c = mitt(bx, bz, 0.05);
-    const k2 = A.M(k0, { root: [R3(-bx * 0.65), R3(base.root[1] + Math.max(-0.08, (bz - 0.7) * 0.12)), -0.06], spine: [18, R3(-bx * 40), 0], armL: { t: c.t, h: c.h } });
+    const k2 = A.M(k0, { root: [R3(-bx * 0.65), R3(base.root[1] + Math.max(-0.08, (bz - 0.7) * 0.12)), -0.06], spine: [18, R3(-bx * 40), 0] });
+    mittTo(k2, c);
     headTo(k2, Math.atan2(-bx, 0.42) / D2R, Math.atan2(1.1 - bz, 0.42) / D2R - 10);
     // フレーミング: ゾーンの中心 (x 0, 高さ 0.76) へ 4 cm 寄せる
     const fx = bx + Math.sign(-bx) * Math.min(0.04, Math.abs(bx));
     const fz = bz + Math.sign(0.76 - bz) * Math.min(0.04, Math.abs(0.76 - bz));
     const fr = mitt(fx, fz, 0.07);
-    const k3 = A.M(k2, { armL: { t: fr.t, h: fr.h } });
+    const k3 = A.M(k2, {});
+    mittTo(k3, fr);
     const keys = [
-      { t: 0, pose: k0 },
+      { t: 0, pose: k0, hold: "L" },
       { t: 0.25, pose: k1, e: "io" },
-      { t: 0.45, pose: k2, e: "in" },
-      { t: 0.55, pose: k3, e: "out" },
-      { t: 1.1, pose: A.copyPose(k3), e: "io" },
+      { t: 0.45, pose: k2, e: "in", hold: "L" },
+      { t: 0.55, pose: k3, e: "out", hold: "L" },
+      { t: 1.1, pose: A.copyPose(k3), e: "io", hold: "L" },
     ];
     return mk("idle", keys, { target: 0, track: 0.25, catch: 0.45, frame: 0.55, end: 1.1 }, { events: [{ t: 0.45, set: { ballHand: "glove" } }], target: { t: 0.45, p: c.ball, what: "pocket", hand: "L" } });
   }
   // 11. 二塁へ送球 (投げる向き +X。しゃがんだ形から立ち上がって短く投げる)
+  // 始めは捕球の形 (真ん中で捕った形) を体ごと +90° 回したもの (= 投手の方を向いたまま)。
+  // 呼ぶ側は捕球 (+Z = 投手) からこの向き (+X = 二塁) に切り替えるとき、グループの向きを −90° 回して rig.rebaseYaw(−90) を呼ぶ。
+  // そこから跳びながら右へ回って (yaw 0)、左肩を二塁へ向けて短く投げる
   function throw2B() {
-    const crouchT = P({
-      yaw: 0,
-      root: [0, -0.5, -0.04],
-      hips: [0, -88, 0],
-      spine: [18, 0, 0],
-      chest: [6, 0, 0],
-      armL: { t: [0.0, 0.85, 0.3], p: [0.4, 0.6, 0.5], h: [0, -90, 0] },
-      armR: { t: [0.0, 0.8, 0.22], p: [-0.3, 0.7, 0.6], h: [0, -90, 0] },
-      legL: { t: [0.1, 0.07, -0.3], p: [0.3, 0.4, -1], f: [12, -70, 0] },
-      legR: { t: [0.05, 0.07, 0.32], p: [0.4, 0.4, 1], f: [12, -110, 0] },
-    });
-    headTo(crouchT, 90, 4);
+    const m = mitt(0, 0.76, 0.07);
+    const crouchT = A.M(catcherBase(), { yaw: 90, armL: { t: m.t, h: m.h } });
+    headTo(crouchT, 0, -4);
     const keys = A.seq(crouchT, [
       { t: 0, over: {} },
       {
@@ -836,10 +978,11 @@
         e: "out",
         name: "transfer",
         over: {
+          yaw: 0,
           root: [0.05, -0.28, 0],
-          hips: [0, -40, 0],
-          spine: [10, -10, 0],
-          chest: [0, -10, 0],
+          hips: [0, -15, 0],
+          spine: [10, -8, 0],
+          chest: [0, -8, 0],
           legR: { t: [0.02, 0.1, 0.06], p: [-0.2, 0.5, 1], f: [0, 0, 0] },
           legL: { t: [0.32, 0.12, -0.04], p: [0.6, 0.5, 1], f: [0, 20, 0] },
           armL: { t: [0.12, 1.32, 0.16], p: [0.5, 1.0, -0.3], h: [0, 0, 60] },
@@ -922,6 +1065,8 @@
     const fg = [0.0, -0.94, 0.34]; // 指は下・前
     const ng = [0.0, 0.34, 0.94]; // ポケットはボールの方
     const wrist = A.gloveWrist(ball, fg, ng);
+    // 高く跳ねた球ほど低くかがまない
+    const hy = clamp((ball[1] - 0.04) / 0.86, 0, 1);
     const keys = A.seq(ready, [
       { t: 0, over: {} },
       {
@@ -929,8 +1074,8 @@
         e: "io",
         name: "breakdown",
         over: {
-          root: [0.02, -0.46, -0.06],
-          spine: [58, 0, 0],
+          root: [0.02, R3(-0.46 + 0.22 * hy), -0.06],
+          spine: [R3(58 - 30 * hy), 0, 0],
           chest: [12, 0, 0],
           legL: { t: [0.32, 0.06, 0.2], p: [0.8, 0.5, 1], f: [0, 15, 0] },
           legR: { t: [-0.3, 0.06, -0.08], p: [-0.8, 0.5, 1], f: [0, -25, 0] },
@@ -943,8 +1088,8 @@
         t: 0.4,
         e: "in",
         name: "field",
-        over: { root: [0.02, -0.52, -0.04], spine: [66, 0, 0], chest: [14, 0, 0], armL: { t: wrist, h: A.handFrame("L", fg, ng) }, armR: { t: [-0.03, R3(wrist[1] + 0.2), R3(wrist[2] - 0.02)] } },
-        head: [0, 58],
+        over: { root: [0.02, R3(-0.52 + 0.26 * hy), -0.04], spine: [R3(66 - 36 * hy), 0, 0], chest: [14, 0, 0], armL: { t: wrist, h: A.handFrame("L", fg, ng) }, armR: { t: [-0.03, R3(wrist[1] + 0.2), R3(wrist[2] - 0.02)] } },
+        head: [0, R3(58 - 30 * hy)],
       },
       {
         t: 0.55,
@@ -960,11 +1105,20 @@
         head: [0, 10],
       },
     ]);
+    // 捕る瞬間: グラブのポケットをボールの高さに (届かなければ腰・前かがみ、それでも足りなければポケットの前後・左右を寄せる)
+    const kf = keys[2].pose;
+    const pk = reachPocket(kf, "L", ball.slice(), fg, ng, { x: 0.12, y: 0.12, z: 0.1, pitch: 18 }, [0.3, 0.62], [-0.06, 0.45]);
+    const w = kf.armL.t;
+    kf.armR.t = [-0.03, R3(w[1] + 0.2), R3(w[2] - 0.02)];
+    const kb = keys[1].pose;
+    kb.armL.t = [R3(w[0] + 0.02), R3(w[1] + 0.12), R3(w[2] - 0.04)];
+    kb.armR.t = [-0.04, R3(w[1] + 0.28), R3(w[2] - 0.08)];
+    keys[2].hold = "L";
     const ev = [
       { t: 0.4, set: { ballHand: "glove" } },
       { t: 0.5, set: { ballHand: "throw" } },
     ];
-    return mk("field", keys, { catch: 0.4, transfer: 0.55, end: 0.55 }, { events: ev, target: { t: 0.4, p: ball.slice(), what: "pocket", hand: "L" } });
+    return mk("field", keys, { catch: 0.4, transfer: 0.55, end: 0.55 }, { events: ev, target: { t: 0.4, p: pk, what: "pocket", hand: "L" } });
   }
 
   // 13. 送球 (投げる向き +X)。variant: 'quick' (30 m 未満、ステップなし) / 'hop' (クロウホップ) / 'long' (50 m を超える: 大きく踏み出して高く)
@@ -1162,24 +1316,29 @@
     });
     headTo(set, 0, 4);
     const low = Math.max(0, 1.1 - ballZ);
+    const ln = lunge !== false;
+    // 低い球 (膝より下) はグラブを下向きにすくう
+    const dn = ballZ < 0.75;
+    const fc = dn ? [0, -0.9, 0.42] : f;
+    const nc = dn ? [0, 0.42, 0.9] : n;
+    const hc = A.handFrame("L", fc, nc);
     let pk;
     let over;
-    if (lunge !== false) {
-      pk = [R3(0.14 + side), R3(Math.max(0.3, ballZ - 0.05)), 1.02];
-      const wc = A.gloveWrist(pk, f, n);
+    if (ln) {
+      pk = [R3(0.14 + side), R3(Math.max(0.3, ballZ - 0.05)), R3(1.02 - 0.5 * Math.max(0, ballZ - 1.2))];
+      // 低い球は腰を落とすより前へ深くかがむ (ベースの上の後ろ足をのばしたまま)
       over = {
-        root: [R3(0.04 + side * 0.5), R3(-0.3 - low * 0.3), 0.34],
-        spine: [R3(30 + low * 45), R3(side * -20), 0],
+        root: [R3(0.04 + side * 0.5), R3(-0.3 - low * 0.1), R3(0.34 + 0.2 * clamp(low / 0.7, 0, 1))],
+        spine: [R3(30 + low * 60), R3(side * -20), 0],
         chest: [6, 0, 0],
         legL: { t: [R3(0.22 + side), 0.07, 1.0], p: [0.6, 0.6, 1.8], f: [0, 0, 0] },
         legR: { t: [-0.12, 0.08, -0.06], p: [-0.5, 0.5, 1], f: [16, -10, 0] },
-        armL: { t: wc, p: [0.7, 0.8, 0.4] },
-        armR: { t: [0.0, R3(wc[1] + 0.02), R3(wc[2] - 0.12)], p: [-0.7, 0.8, 0.2] },
+        armL: { p: [0.7, 0.8, 0.4], h: hc },
+        armR: { p: [-0.7, 0.8, 0.2] },
       };
     } else {
       // 踏み出さない: 胸の前で捕る (低い球は膝を曲げて前かがみ)
-      pk = [R3(0.14 + side), R3(clamp(ballZ - 0.05, 0.45, 1.75)), 0.5];
-      const wc = A.gloveWrist(pk, f, n);
+      pk = [R3(0.14 + side), R3(clamp(ballZ - 0.05, 0.3, 1.75)), 0.5];
       const lo = Math.max(0, 1.0 - ballZ);
       over = {
         root: [R3(0.02 + side * 0.3), R3(-0.14 - lo * 0.3), 0.06],
@@ -1187,8 +1346,8 @@
         chest: [4, 0, 0],
         legL: { t: [R3(0.22 + side * 0.5), 0.07, 0.3], p: [0.6, 0.6, 1.2], f: [0, 0, 0] },
         legR: { t: [-0.12, 0.07, -0.06], p: [-0.5, 0.5, 1], f: [0, -10, 0] },
-        armL: { t: wc, p: [0.7, 0.8, -0.2] },
-        armR: { t: [0.0, R3(wc[1] + 0.02), R3(wc[2] - 0.12)], p: [-0.7, 0.8, 0.0] },
+        armL: { p: [0.7, 0.8, -0.2], h: hc },
+        armR: { p: [-0.7, 0.8, 0.0] },
       };
     }
     const keys = A.seq(set, [
@@ -1202,7 +1361,13 @@
         head: [-20, 4],
       },
     ]);
-    return mk("field", keys, { catch: 0.25, end: 0.6 }, { events: [{ t: 0.25, set: { ballHand: "glove" } }], target: { t: 0.25, p: pk, what: "pocket", hand: "L" }, bag: lunge !== false ? BAG.slice() : null });
+    // 捕る瞬間のポケットを届く所に (高さはボール。前後・左右は少し寄せてよい: 置く位置はポケットを基準にする)
+    const kc = keys[1].pose;
+    reachPocket(kc, "L", pk, fc, nc, ln ? { x: 0.1, y: 0.08, z: 0.08, pitch: 24 } : { x: 0.1, y: 0.3, z: 0.1, pitch: 40 }, ln ? [0.5, 1.05] : [0.3, 0.6], [R3(pk[0] - 0.16), R3(pk[0] + 0.16)]);
+    const wc = kc.armL.t;
+    kc.armR.t = [0.0, R3(wc[1] + 0.02), R3(wc[2] - 0.12)];
+    keys[1].hold = "L";
+    return mk("field", keys, { catch: 0.25, end: 0.6 }, { events: [{ t: 0.25, set: { ballHand: "glove" } }], target: { t: 0.25, p: pk, what: "pocket", hand: "L" }, bag: ln ? BAG.slice() : null });
   }
 
   /* ======================================================

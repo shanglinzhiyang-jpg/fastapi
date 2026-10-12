@@ -1346,26 +1346,119 @@
   A.BAT_SWEET = 0.65;
   A.BAT_TIP = 0.805;
 
+  /* ---------- 体の点 (肩・股関節) ----------
+   * 骨の休止位置は models/player.json と同じ (tools/anim_check.js が一致を確かめる)。hrig.js の apply と同じ順に回す
+   * (腰 → 背骨を半分ずつ 2 本 → 胸 → 鎖骨は手の高さ・前後ですくめる)。クリップを作るときに手足が届くかを見る */
+  const SK = {
+    Root: [0, 0.0012, 0],
+    pelvis: [0, 0.9761, -0.0039],
+    spine_01: [0, 1.0644, -0.0362],
+    spine_02: [0, 1.129, -0.0274],
+    spine_03: [0, 1.1918, -0.0365],
+    clavicle_l: [0.0228, 1.4666, 0.0157],
+    upperarm_l: [0.2112, 1.4358, 0.0118],
+    thigh_l: [0.1094, 0.971, -0.0148],
+  };
+  // 腕 (上腕 + 前腕) と脚 (腿 + すね) の長さ
+  A.SKEL = { bones: SK, ARM: 0.5369, LEG: 0.9027 };
+  const _bm = [new T.Matrix4(), new T.Matrix4(), new T.Matrix4(), new T.Matrix4(), new T.Matrix4()];
+  const _bl = new T.Matrix4();
+  const _bq = new T.Quaternion();
+  const _bp = new T.Vector3();
+  const _bs = new T.Vector3(1, 1, 1);
+  const _bE = new T.Euler();
+  const _bv = new T.Vector3();
+  // 骨 a の親 b からの位置 (+ add)
+  const lc = (a, b, add) => _bp.set(SK[a][0] - SK[b][0] + (add ? add[0] : 0), SK[a][1] - SK[b][1] + (add ? add[1] : 0), SK[a][2] - SK[b][2] + (add ? add[2] : 0));
+  function bmul(dst, par, pos, e, k) {
+    if (e) _bq.setFromEuler(_bE.set(e[0] * D2R * k, e[1] * D2R * k, e[2] * D2R * k, "YXZ"));
+    else _bq.identity();
+    _bl.compose(pos, _bq, _bs);
+    return par ? dst.multiplyMatrices(par, _bl) : dst.copy(_bl);
+  }
+  const _cE = [0, 0, 0];
+  function shoulder(M3, s, t, out) {
+    // 鎖骨のすくめ (hrig.js と同じ式)
+    const lift = clampV((t[1] - 1.25) / 0.6, 0, 1);
+    const fw = clampV(t[2] / 0.5, -0.5, 1);
+    _cE[0] = -fw * 8;
+    _cE[1] = 0;
+    _cE[2] = s * lift * 16;
+    const cl = SK.clavicle_l;
+    const ua = SK.upperarm_l;
+    const sp = SK.spine_03;
+    bmul(_bm[4], M3, _bp.set(s * cl[0] - sp[0], cl[1] - sp[1], cl[2] - sp[2]), _cE, 1);
+    _bv.set(s * (ua[0] - cl[0]), ua[1] - cl[1], ua[2] - cl[2]).applyMatrix4(_bm[4]);
+    out[0] = _bv.x;
+    out[1] = _bv.y;
+    out[2] = _bv.z;
+  }
+  // out = {shL, shR, hipL, hipR} (キャラクター空間の [x, y, z])。hl / hr = 左右の手首の目標 (鎖骨のすくめに使う。省略でポーズの armX.t)
+  A.bodyPts = function (p, out, hl, hr) {
+    const o = out || { shL: [0, 0, 0], shR: [0, 0, 0], hipL: [0, 0, 0], hipR: [0, 0, 0] };
+    const M0 = bmul(_bm[0], null, lc("pelvis", "Root", p.root), p.hips, 1);
+    const M1 = bmul(_bm[1], M0, lc("spine_01", "pelvis"), p.spine, 0.5);
+    const M2 = bmul(_bm[2], M1, lc("spine_02", "spine_01"), p.spine, 0.5);
+    const M3 = bmul(_bm[3], M2, lc("spine_03", "spine_02"), p.chest, 1);
+    shoulder(M3, 1, hl || p.armL.t, o.shL);
+    shoulder(M3, -1, hr || p.armR.t, o.shR);
+    const th = SK.thigh_l;
+    const pe = SK.pelvis;
+    for (const s of [1, -1]) {
+      _bv.set(s * th[0] - pe[0], th[1] - pe[1], th[2] - pe[2]).applyMatrix4(M0);
+      const h = s > 0 ? o.hipL : o.hipR;
+      h[0] = _bv.x;
+      h[1] = _bv.y;
+      h[2] = _bv.z;
+    }
+    return o;
+  };
+
   /* ---------- 走り v2 (速さで歩幅・接地の割合・腕の振り・前傾が変わる) ----------
    * A.runCycle(mem, v, dt, opt, out): mem = {ph, accT, yawPrev, yawRate, vs} は役者ごと、v = いまの速さ (m/秒)。
    * 歩幅 (2 歩) L = 1.1 + 0.34v (1.6〜4.0 m)、接地の割合 0.44 − 0.02v (歩きは 0.6 で両足が着く時間がある)。
    * 走り出し 1 秒は前傾を強く歩幅を狭く、曲がるときは内側へ傾く。opt = {arms:'run'|'trot'|'walk', strideMul, reset, yaw (ラジアン)} */
   A.RUN_L = (v) => clampV(1.1 + 0.34 * v, 1.6, 4.0);
+  // 着地の位置 (接地の長さに対する割合)・腰の落とし方 (基本・速さ・歩き)
+  let RUN_Z = 0.36;
+  let RUN_DROP0 = 0.045;
+  let RUN_DROPK = 0.07;
+  let RUN_DROPW = 0.025;
+  A._runTune = (o) => {
+    if (o.z != null) RUN_Z = o.z;
+    if (o.d0 != null) RUN_DROP0 = o.d0;
+    if (o.dk != null) RUN_DROPK = o.dk;
+    if (o.dw != null) RUN_DROPW = o.dw;
+  };
   const RC0 = {};
-  function runFoot2(ph, D, S, z0, lift, pk, t, f) {
+  // 走りの基本形を数値の並びで持っておく (毎フレーム写すだけ。オブジェクトを作らない)
+  const RUN_FLAT = flat(RUN_BASE, new Float64Array(NCH));
+  // ポーズ p を数値の並び f の形にする (src などの印は呼ぶ側が書く)
+  A.setFlat = function (p, f) {
+    unflat(f, p);
+    p.bat.on = 0;
+    return p;
+  };
+  // 片足の目標 (ph: 0..1, 0 = 着地)。D = 接地の割合, S = 接地のあいだに体が進む距離, z0 = 着地の位置,
+  // hm = 蹴り出しでかかとを上げる角度 (度), pk = 振り出しで足を引き上げる高さ
+  const TOE = 0.14; // 足首からつま先の付け根まで
+  function runFoot2(ph, D, S, z0, hm, pk, t, f) {
     if (ph < D) {
-      // 接地: 体の下を後ろへ (地面では止まっている)。終わりにかかとが上がる
+      // 接地: 体の下を後ろへ (地面では止まっている)。後半はつま先を支点にかかとが上がる (足首が前・上へ)
       const u = ph / D;
-      t[2] = z0 - u * S;
-      t[1] = 0.06 + (Math.max(0, u - 0.55) / 0.45) * (lift - 0.06);
-      f[0] = -6 + u * u * 40;
+      const th = hm * smooth(0.35, 1, u) * D2R;
+      t[2] = z0 - u * S + TOE * (1 - Math.cos(th));
+      t[1] = 0.06 + TOE * Math.sin(th);
+      f[0] = -6 * (1 - u) + th / D2R;
     } else {
       // 振り出し: かかとを引き上げて前へ、着地の前に下ろす
       const u = (ph - D) / (1 - D);
       const e = u * u * (3 - 2 * u);
-      t[2] = z0 - S + S * e;
-      t[1] = lift + (0.06 - lift) * u + pk * Math.sin(Math.PI * Math.pow(u, 0.75));
-      f[0] = 34 - 40 * e;
+      const z1 = z0 - S + TOE * (1 - Math.cos(hm * D2R));
+      const y1 = 0.06 + TOE * Math.sin(hm * D2R);
+      t[2] = z1 + (z0 - z1) * e;
+      t[1] = y1 + (0.06 - y1) * u + pk * Math.sin(Math.PI * Math.pow(u, 0.75));
+      f[0] = hm + (-6 - hm) * e;
     }
   }
   A.runCycle = function (mem, v, dt, opt, out) {
@@ -1401,18 +1494,18 @@
     mem.ph += ((vs * dt) / L) * TAU;
     const D = 0.6 * wk + clampV(0.44 - 0.02 * vs, 0.27, 0.42) * (1 - wk);
     const S = D * L;
-    const z0 = S * (0.4 + 0.06 * wk);
-    const lift = 0.1 + 0.15 * k;
-    const pk = (0.12 + 0.26 * k) * (1 - 0.4 * wk);
-    const p = lerpPose(RUN_BASE, RUN_BASE, 0, out);
+    const z0 = S * (RUN_Z + 0.02 * wk);
+    const hm = 40 + 25 * k;
+    const pk = (0.12 + 0.26 * k) * (1 - 0.5 * wk);
+    const p = A.setFlat(out || basePose(), RUN_FLAT);
     const ph = ((mem.ph / TAU) % 1 + 1) % 1;
-    runFoot2(ph, D, S, z0, lift, pk, p.legL.t, p.legL.f);
-    runFoot2((ph + 0.5) % 1, D, S, z0, lift, pk, p.legR.t, p.legR.f);
+    runFoot2(ph, D, S, z0, hm, pk, p.legL.t, p.legL.f);
+    runFoot2((ph + 0.5) % 1, D, S, z0, hm, pk, p.legR.t, p.legR.f);
     // a: 左脚が前で +1。腰は前の脚の側が前へ、肩は逆に回り、腕は脚と逆に振る
     const a = Math.cos(TAU * (ph + 0.06));
     // 上下動: 走りは接地の中ほどで低く、歩きは高い (1 周期に 2 回)
     const bob = Math.cos(2 * TAU * (ph - D / 2)) * (1 - 2 * wk);
-    p.root[1] = -0.02 - 0.06 * k - (0.015 + 0.03 * k) * bob - 0.04 * (1 - acc) * clampV((v - 2) / 3, 0, 1);
+    p.root[1] = -RUN_DROP0 - RUN_DROPK * k - (0.015 + 0.03 * k) * bob - 0.04 * (1 - acc) * clampV((v - 2) / 3, 0, 1) - RUN_DROPW * wk;
     p.roll = clampV(-0.12 * (mem.yawRate || 0), -12, 12);
     p.hips[1] = -8 * kk * a;
     p.spine[0] = 6 + 12 * k + accLean;
@@ -1424,10 +1517,11 @@
     p.head[1] = -2 * kk * a;
     // 腕: 走りは肘を曲げて前後に、流し (トロット) は小さく低く、歩きは下ろして小さく
     const arms = wk > 0.5 ? "walk" : opt.arms || "run";
+    // 前へ振った手はあごの方へ (肘を曲げる)、後ろへ振った手は腰の横へ
     let az = 0.12 + 0.22 * k;
-    let ay = 0.05 + 0.09 * k;
-    let hy = 1.0;
-    let hz = 0.06;
+    let ay = 0.05 + 0.13 * k;
+    let hy = 1.0 + 0.06 * k;
+    let hz = 0.0;
     if (arms === "trot") {
       az *= 0.7;
       ay *= 0.7;
@@ -1439,14 +1533,21 @@
       hz = 0.02;
       p.armL.p[2] = p.armR.p[2] = -0.6;
     }
+    // 前傾した分だけ肩が前・下へ出るので、手もその分ずらす (後ろへ振った手が届かなくならない)
+    const ln = (p.spine[0] + p.chest[0]) * D2R;
+    hz += 0.4 * Math.sin(ln) - 0.03;
+    hy -= 0.4 * (1 - Math.cos(ln));
     const HL = p.armL.t;
     const HR = p.armR.t;
+    // 後ろへ振る幅は前の 7 割 (伸びきらない)
+    const bl = a > 0 ? 0.7 : 1;
+    const br = a < 0 ? 0.7 : 1;
     HL[0] = 0.21;
-    HL[1] = hy - ay * a;
-    HL[2] = hz - az * a;
+    HL[1] = hy - ay * a * bl;
+    HL[2] = hz - az * a * bl;
     HR[0] = -0.21;
-    HR[1] = hy + ay * a;
-    HR[2] = hz + az * a;
+    HR[1] = hy + ay * a * br;
+    HR[2] = hz + az * a * br;
     p.src = -1;
     p.st = mem.ph;
     p.kind = "run";

@@ -21,13 +21,13 @@
     goda: { name: "剛田", full: "剛田 鉄平", role: "パワー自慢の先輩", banner: "#d9480f", sig: "happy", color: { main: "#5b6b7d", sub: "#fff", cap: "#2f3a46", mark: "G" }, desc: ["寮の主（ぬし）と呼ばれる、パワー自慢の先輩。", "豪快で面倒見がよく、後輩を見るとメシに誘わずにいられない。", "鼻のばんそうこうは、なぜか一年中はがれない。"], line: "腹が減っては野球はできねえ！メシ行くぞ！" },
     hayase: { name: "早瀬", full: "早瀬 ひかり", role: "チームのマネージャー", banner: "#e8457c", sig: "happy", color: { main: "#f28fb0", sub: "#fff", cap: "#c2416b", mark: "H" }, desc: ["チームを支える元気なマネージャー。", "スコアブックとはちみつレモンは、いつも持ち歩いている。", "ちょっとおせっかいだけど、みんなの調子を一番よく知っている。"], line: "困ったことがあったら、なんでも言ってね！" },
     inukai: { name: "宇佐美", full: "宇佐美 コーチ", role: "理論派の打撃コーチ", banner: "#1f7a6d", sig: "normal", color: { main: "#3b5f8a", sub: "#ffd23f", cap: "#1d3557", mark: "I" }, desc: ["データと理論で教える二軍のコーチ。", "教え方は静かだが、言うことはいつも的確。", "メガネが光ったら、本気で考えているしるしだ。"], line: "フォームには必ず理由がある。考えて振りなさい。" },
-    ryuzaki: { name: "竜崎", full: "竜崎 レン", role: "同期のライバル", banner: "#5b3fc4", sig: "normal", color: { main: "#2b2d42", sub: "#ef233c", cap: "#111", mark: "R" }, desc: ["同じ年に入団した、ドラフト1位のエリート。", "クールで口は悪いが、だれよりも遅くまで練習している。", "一軍の席をかけて争う、最大のライバル。"], line: "一軍に上がるのはオレだ。せいぜいついてこい。" },
-    kanto: { name: "鬼瓦", full: "鬼瓦 監督", role: "チームの監督", banner: "#2d3a55", sig: "normal", color: { main: "#444", sub: "#fff", cap: "#222", mark: "K" }, desc: ["二軍をあずかる鬼の監督。めったに笑わない。", "口数は少ないが、選手の努力は誰よりも見ている。", "頬の古傷は、現役時代にライナーを顔で止めた勲章らしい。"], line: "結果で見せろ。話はそれからだ。" },
+    ryuzaki: { name: "竜崎", full: "竜崎 レン", role: "同期のライバル", banner: "#5b3fc4", sig: "normal", color: { main: "#2b2d42", sub: "#ef233c", cap: "#111", mark: "R" }, desc: ["同じ年に入団した、ドラフト1位のエリート。", "クールで負けずぎらい。だれよりも遅くまで練習している。", "一軍の席をかけて争う、最大のライバル。"], line: "一軍に上がるのはオレだ。追いつけるもんなら、追いついてみな。" },
+    kanto: { name: "鬼瓦", full: "鬼瓦 監督", role: "チームの監督", banner: "#2d3a55", sig: "normal", color: { main: "#444", sub: "#fff", cap: "#222", mark: "K" }, desc: ["二軍をあずかる、きびしくも情に厚い監督。", "口数は少ないが、選手の努力は誰よりも見ている。", "笑うと目じりのしわが深くなる。それを見た選手は、まだ少ない。"], line: "結果で見せてみろ。お前ならできるはずだ。" },
   };
   const CAST_ORDER = ["kanto", "goda", "hayase", "inukai", "ryuzaki"];
   const MG = PB.Manga;
 
-  /* ---------- キャラクターの絵 (マンガ風) ---------- */
+  /* ---------- キャラクターの絵 (アニメ塗り) ---------- */
   // 仲間はいま育成中の選手のチームの帽子・ユニフォーム (育成中でなければ無地の帽子)
   function castTeam() {
     const r = run();
@@ -244,7 +244,7 @@
     (r) =>
       ev(
         "ryuzaki",
-        "フン、まだそんなところにいるのか。一軍に上がるのはオレだ。",
+        "よう、調子はどうだ？…ま、一軍に上がるのはオレだけどな。",
         [
           { t: "負けないぞ！", f: () => (addExp(r, { men: 8 }), (r.rel.ryuzaki += 7), "精神+8") },
           { t: "……（無視する）", f: () => (addExp(r, { men: 3 }), "精神+3") },
@@ -253,7 +253,7 @@
       ),
     (r) => ev(null, "大雨で練習が中止になった。部屋でゆっくり過ごした。", [{ t: "OK", f: () => ((r.hp = Math.min(100, r.hp + 20)), "体力+20") }]),
     (r) => ev(null, "ファンの子どもから手紙が届いた。『いつか一軍でホームラン見せてね！』", [{ t: "がんばるぞ！", f: () => ((r.mood = Math.min(4, r.mood + 1)), "やる気アップ") }]),
-    (r) => ev("kanto", "……お前、最近どうだ。結果で見せてみろ。", [{ t: "はい！", f: () => ((r.eval += r.mood >= 3 ? 6 : 2), "監督の評価が上がった") }]),
+    (r) => ev("kanto", "……最近、よく練習しているな。その調子で、結果でも見せてみろ。", [{ t: "はい！", f: () => ((r.eval += r.mood >= 3 ? 6 : 2), "監督の評価が上がった") }], "normal"),
     (r) =>
       ev(null, "ビデオ研究室が空いている。何を見よう？", [
         { t: "自分のフォーム", f: () => (addExp(r, { tec: 7 }), "技術+7") },
@@ -380,10 +380,10 @@
         const list = Store.data.success.players;
         return (
           UI.header("サクセス", "back") +
-          // 監督の絵 (マンガ風) とふきだし。絵をタップすると紹介カード
+          // 監督の絵とふきだし。絵をタップすると紹介カード
           '<div class="scr-body"><div class="su-hero mg-hero"><button class="mg-hero-pic" data-act="cast" data-arg="kanto" aria-label="鬼瓦監督の紹介">' +
           castPic("kanto", "normal", { size: 140 }) +
-          '</button><p class="mg-say">「ドラフト最下位の新人よ。7月の一軍昇格テストまでに、結果を出してみせろ。」<small>— 鬼瓦監督</small></p></div>' +
+          '</button><p class="mg-say">「7月の一軍昇格テストまでに、結果を出してみせろ。努力はちゃんと見ているぞ。」<small>— 鬼瓦監督</small></p></div>' +
           (r ? '<button class="mbtn red" data-act="continue"><b>続きから</b><small>' + esc(r.player.full) + " / " + dateText(r.turn) + "</small></button>" : "") +
           '<button class="mbtn' +
           (r ? "" : " red") +
@@ -667,10 +667,10 @@
           Store.save();
           return Su.story(
             [
-              { who: "kanto", text: "お前が新人の" + st.name + "か。…ドラフト最下位、期待はしていない。" },
-              { who: "kanto", text: "7月の一軍昇格テストまでに、オレを納得させる結果を出せ。以上だ。", face: "serious" },
+              { who: "kanto", text: "お前が新人の" + st.name + "か。ドラフトの順位は関係ない。伸びるかどうかは、ここからのお前しだいだ。" },
+              { who: "kanto", text: "7月の一軍昇格テストまでに、オレを納得させる結果を出せ。…楽しみにしているぞ。", face: "serious" },
               { who: "hayase", text: "マネージャーの早瀬です！一緒にがんばろうね、" + st.name + "くん！" },
-              { who: "ryuzaki", text: "同期の竜崎だ。…一軍の席はひとつ。譲る気はない。", face: "normal" },
+              { who: "ryuzaki", text: "同期の竜崎だ。一軍の席はひとつ。…ま、お互い全力でいこうぜ。", face: "normal" },
             ],
             () => UI.go(Su.turnScreen())
           );
@@ -682,7 +682,7 @@
   };
 
   /* ---------- 会話 ---------- */
-  // 会話の箱: 左にマンガのコマ (表情つき)、右に名前と台詞
+  // 会話の箱: 左に絵 (表情つき)、右に名前と台詞
   function talkHtml(who, text, ex) {
     const c = who ? CAST[who] : null;
     return (
@@ -1202,18 +1202,18 @@
       lines = [
         { who: "kanto", text: "……見事だ。文句なしの一軍昇格だ。開幕から、お前を使う。", face: "happy" },
         { who: "hayase", text: "やったね！ずっと信じてたよ！" },
-        { who: "ryuzaki", text: "チッ…今回は譲ってやる。だが次は負けねえ。" },
+        { who: "ryuzaki", text: "…やるじゃないか。今回は譲ってやる。だが次は負けねえぞ。", face: "normal" },
       ];
     } else if (e >= 50) {
       bonus = 70;
       lines = [
-        { who: "kanto", text: "まだ荒削りだが…一軍に上げてやる。結果を出し続けろ。", face: "normal" },
+        { who: "kanto", text: "まだ荒削りだが…一軍に上げよう。ここからが本番だぞ。", face: "normal" },
         { who: "hayase", text: "一軍昇格おめでとう！これからが本番だね！" },
       ];
     } else {
       bonus = 30;
       lines = [
-        { who: "kanto", text: "今のお前では一軍は任せられん。二軍で鍛え直せ。" },
+        { who: "kanto", text: "今のお前に一軍はまだ早い。だが、伸びしろはある。二軍でいっしょに鍛え直そう。", face: "serious" },
         { who: "goda", text: "落ち込むな！オレだって二軍からはい上がったんだ！", face: "happy" },
       ];
     }

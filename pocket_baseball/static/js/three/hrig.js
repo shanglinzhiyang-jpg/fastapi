@@ -416,6 +416,8 @@
           const g = _gg;
           bat.position.set(g[0] - d.x * 0.06, g[1] - d.y * 0.06, g[2] - d.z * 0.06);
           bat.quaternion.setFromUnitVectors(_v2.set(0, 1, 0), d);
+          // バットのワールド行列もすぐ読めるように (手から離れるバットはこの行列から始める)
+          bat.updateMatrixWorld(true);
         }
       }
     }

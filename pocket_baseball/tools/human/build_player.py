@@ -665,7 +665,7 @@ def collar_band(part, N=64):
     src = np.concatenate([Sp] * nr + [Sp[:1]] * nr)
     ucol = np.concatenate([np.tile(np.arange(N) / N, nr), np.ones(nr)])
     print("collar band: loop %d verts, length %.3f m, profile %s mm" % (len(loop), tot, [round(x * 1000, 1) for x in plen]))
-    return {"pos": pos, "nrm": nrm, "W": W, "src": src, "tri": tri, "ucol": ucol, "plen": plen, "edge": edge, "nr": nr, "N": N}
+    return {"pos": pos, "nrm": nrm, "W": W, "src": src, "tri": tri, "ucol": ucol, "plen": plen, "edge": edge, "nr": nr, "N": N, "ring": Pp}
 
 
 COLLAR = collar_band(parts["shirt"])
@@ -687,6 +687,8 @@ def cap_part(name, offset, cut_front, cut_back, mat):
     cp = Part(name, sel, mat)
     cp.inflate(np.full(len(cp.pos), offset))
     cp.smooth(iters=12, fix_boundary=False)
+    # 縁 (面の選び方でギザギザ) を縁に沿ってならす
+    cp.smooth_boundary(12)
     ensure_outside(cp, offset * 0.8)
     cp.smooth(iters=4, fix_boundary=False)
     ensure_outside(cp, offset * 0.75)
@@ -706,7 +708,7 @@ def lift_crown(cp, edge_y):
     edge_y = max(edge_y, float(rel[bnd, 1].max()))
     front = np.clip((rel[:, 2] + 0.02) / 0.10, 0, 1)
     elev = np.clip((rel[:, 1] - edge_y) / (top - edge_y), 0, 1) ** 0.7
-    lift = 0.034 * front**1.5 * elev + 0.012 * elev * (1 - front)
+    lift = 0.045 * front**1.5 * elev + 0.015 * elev * (1 - front)
     lift[bnd] = 0
     cp.pos[:, 1] += lift
     cp.smooth(iters=8, fix_boundary=True)
@@ -715,8 +717,9 @@ def lift_crown(cp, edge_y):
 
 EYE_Y = mh.joint_pos(P, VG, "joint-l-eye")[1]
 HEAD_Y = J["head"][1]
-parts["cap"] = cap_part("cap", 0.011, EYE_Y - HEAD_Y + 0.052, EYE_Y - HEAD_Y + 0.0, "cap")
-lift_crown(parts["cap"], EYE_Y - HEAD_Y + 0.052)
+# 帽子は深めに (前の縁は目の 4 cm 上 = つばが眉のすぐ上。以前は 5.2 cm で頭に載せたように見えた)
+parts["cap"] = cap_part("cap", 0.011, EYE_Y - HEAD_Y + 0.040, EYE_Y - HEAD_Y - 0.004, "cap")
+lift_crown(parts["cap"], EYE_Y - HEAD_Y + 0.040)
 parts["helmet"] = cap_part("helmet", 0.022, EYE_Y - HEAD_Y + 0.045, EYE_Y - HEAD_Y - 0.035, "helmet")
 
 # ---------------------------------------------------------------- 目 (high-poly eyes を配置)
@@ -997,6 +1000,7 @@ print("torso v range y %.3f .. %.3f" % (_ylo, _yhi))
 # 袖の UV: 腕のまわり (継ぎ目は脇の下) × 腕に沿った長さ。肩の上 (関節より内側) から袖口までを v 0.272 → 0.025 に (以前は肩の上を v 0.28 の 1 行に詰めていた)
 SLEEVE_TOP = 0.272
 sleeve_uv = {}
+SLV_P = {}
 _sv = []
 for s_, (a0, a1) in (("l", (0.0, 0.5)), ("r", (0.5, 1.0))):
     A = J["upperarm_" + s_]
@@ -1006,10 +1010,15 @@ for s_, (a0, a1) in (("l", (0.0, 0.5)), ("r", (0.5, 1.0))):
     rel = sh.pos - A
     t = rel @ ax
     perp = rel - np.outer(t, ax)
-    # 継ぎ目は脇の下 (体の内側・下向き) に置く
-    ref = np.cross(ax, [0, 0, 1.0])
+    # 継ぎ目は脇の下 (体の内側・下向き) に置く。腕の上 (外側) で u が増える向きは、左袖は後ろへ・右袖は前へ
+    # (外から見て袖の文字が左から右へ読める)。以前は右袖の継ぎ目が腕の上にあり、左袖の文字は鏡写しだった
+    sx_ = 1.0 if s_ == "l" else -1.0
+    ref = np.array([-sx_, -1.0, 0])
+    ref -= ax * float(ref @ ax)
     ref /= np.linalg.norm(ref)
-    ref2 = np.cross(ax, ref)
+    ref2 = np.array([0, 0, sx_]) - ax * ax[2] * sx_
+    ref2 -= ref * float(ref2 @ ref)
+    ref2 /= np.linalg.norm(ref2)
     ang = np.arctan2(perp @ ref2, perp @ ref)
     lu = (ang / (2 * math.pi)) % 1.0
     mine = sleeve_tri & ((_tc[:, 0] > 0) == (s_ == "l"))
@@ -1017,6 +1026,7 @@ for s_, (a0, a1) in (("l", (0.0, 0.5)), ("r", (0.5, 1.0))):
     tmin = t[sv_].min()
     lv = SLEEVE_TOP - np.clip((t - tmin) / (0.7 * L - tmin), 0, 1) * 0.247
     sleeve_uv[s_] = (lu, lv, a0, a1)
+    SLV_P[s_] = (A, ax, ref, ref2, tmin, L, a0)
     _sv.append((SLEEVE_TOP - (0 - tmin) / (0.7 * L - tmin) * 0.247, lv[sv_].min(), tmin))
 SLEEVE_V = {"top": SLEEVE_TOP, "shoulder": round(float(np.mean([a for a, _, _ in _sv])), 4), "cuff": round(float(np.mean([b for _, b, _ in _sv])), 4)}
 print("sleeve v", SLEEVE_V, "tmin", [round(float(c_), 3) for _, _, c_ in _sv], "sleeve tris", int(sleeve_tri.sum()))
@@ -1042,6 +1052,138 @@ sh.recompute_normals = lambda: None
 _bv = sh.boundary()
 COLLAR_UV = [sh.uv[i].tolist() for i in _bv if sh.pos[i, 1] > J["spine_03"][1] + 0.12 and ARMW[sh.src[i]] < 0.3 and abs(sh.pos[i, 0]) < 0.1 and abs(sh.pos[i, 2] - NK[2]) < 0.12]
 COLLAR_UV.sort(key=lambda t: t[0])
+
+
+# ---------------------------------------------------------------- 布の上の線 (巨人の V 字のパイピング・中日の肩の帯)
+# テクスチャの u, v は首・肩の近くで大きくゆがむ (u 一定の線が肩の斜面を外へ下る) ので、線は 3D の体の上で引いて UV に写す。
+# 各点は [島 (0 胴体 / 1 袖), u, v, 1 cm 横へずらしたときの du, dv] (袖の島の点は袖の UV、肩の帯は両方の UV)
+def torso_uv_of(p):
+    cx, cz = torso_center(p)
+    u = (0.25 + np.arctan2(p[:, 0] - cx, p[:, 2] - cz) / (2 * math.pi)) % 1.0
+    return np.stack([u, 0.3 + 0.7 * np.clip((p[:, 1] - _ylo) / (_yhi - _ylo), 0, 1)], axis=1)
+
+
+def sleeve_uv_of(p, s_):
+    A, ax, ref, ref2, tmin, L, a0 = SLV_P[s_]
+    rel = p - A
+    t = rel @ ax
+    perp = rel - np.outer(t, ax)
+    lu = (np.arctan2(perp @ ref2, perp @ ref) / (2 * math.pi)) % 1.0
+    return np.stack([a0 + lu * 0.5, SLEEVE_TOP - np.clip((t - tmin) / (0.7 * L - tmin), 0, 1) * 0.247], axis=1)
+
+
+_SA, _SB, _SC = (sh.pos[sh.tri[:, k]] for k in range(3))
+_SN = np.cross(_SB - _SA, _SC - _SA)
+_SN /= np.maximum(np.linalg.norm(_SN, axis=1, keepdims=True), 1e-12)
+
+
+def raycast(o, d):
+    """シャツの面に当たる最初の点 (なければ None) と三角形の番号"""
+    e1, e2 = _SB - _SA, _SC - _SA
+    pv = np.cross(d, e2)
+    det = (e1 * pv).sum(1)
+    ok = np.abs(det) > 1e-12
+    inv = np.where(ok, 1 / np.where(ok, det, 1), 0)
+    tv = o - _SA
+    uu = (tv * pv).sum(1) * inv
+    qv = np.cross(tv, e1)
+    vv = (qv @ d) * inv
+    tt = (e2 * qv).sum(1) * inv
+    hit = ok & (uu >= 0) & (vv >= 0) & (uu + vv <= 1) & (tt > 0)
+    if not hit.any():
+        return None, -1
+    k = int(np.argmin(np.where(hit, tt, np.inf)))
+    return o + d * tt[k], k
+
+
+def surface_line(pts, dirs, flip_side=None):
+    """pts を dirs の向きに体へ落とした線と、各点の UV・1 cm 横の UV の差"""
+    hits, tri_i = [], []
+    for q, d in zip(pts, dirs):
+        h, k = raycast(q - d * 0.3, d)
+        if h is not None:
+            hits.append(h)
+            tri_i.append(k)
+    hits = np.array(hits)
+    tg = np.gradient(hits, axis=0)
+    out = []
+    for i, (h, k) in enumerate(zip(hits, tri_i)):
+        n = _SN[k] if np.dot(_SN[k], -dirs[min(i, len(dirs) - 1)]) > 0 else -_SN[k]
+        sd = np.cross(n, tg[i])
+        sd /= max(np.linalg.norm(sd), 1e-12)
+        if flip_side is not None and np.dot(sd, flip_side) < 0:
+            sd = -sd
+        out.append((h, k, sd, -n))
+    return out
+
+
+def line_uv(line, s_, both=False):
+    """線の各点の UV (島ごと) と 1 cm 横の差。both: 胴体と袖の両方の UV を持たせる (肩の帯)"""
+    rows = []
+    for h, k, sd, dn in line:
+        isl = int(sleeve_tri[k])
+        ps = h + sd * 0.01
+        h2, _ = raycast(ps - dn * 0.03, dn)
+        ps = h2 if h2 is not None else ps
+        tu = torso_uv_of(np.array([h, ps]))
+        su = sleeve_uv_of(np.array([h, ps]), s_)
+        row = [isl]
+        for uvp in ((tu, su) if both else ((su,) if isl else (tu,))):
+            d = uvp[1] - uvp[0]
+            if d[0] > 0.5:
+                d[0] -= 1
+            elif d[0] < -0.5:
+                d[0] += 1
+            row += [round(float(uvp[0][0]), 5), round(float(uvp[0][1]), 5), round(float(d[0]), 5), round(float(d[1]), 5)]
+        rows.append(row)
+    # 胴体の u は右肩で 0 / 1 をまたぐので、線に沿って続くように直す
+    for j in range(1, len(rows)):
+        if abs(rows[j][1] - rows[j - 1][1]) > 0.5:
+            rows[j][1] += 1 if rows[j][1] < rows[j - 1][1] else -1
+    return rows
+
+
+_ring = COLLAR["ring"]
+_nc = _ring.mean(axis=0)
+_cf = _ring[np.argmax(_ring[:, 2] - 3 * np.abs(_ring[:, 0]))]
+FRONT_V, SHOULDER_LINE = {}, {}
+for s_, sx in (("l", 1.0), ("r", -1.0)):
+    # V 字: 首の横 (首の中心から正面に対して 80°) → 前立ての縁 (中心から 1.75 cm) の、襟の前点の 7 cm 下。制御点は PT の真上
+    ang = np.degrees(np.arctan2(sx * (_ring[:, 0] - _nc[0]), _ring[:, 2] - _nc[2]))
+    # 襟の縁から 0.6 cm 下・少し外 (縁ちょうどだと正面からの光線が首の穴を抜けて後ろ身頃に当たる)
+    sn = _ring[np.argmin(np.abs(ang - 80))] + np.array([sx * 0.004, -0.006, 0])
+    pt = np.array([sx * 0.0175, _cf[1] - 0.07, 0.0])
+    cp = np.array([pt[0], sn[1] - 0.55 * (sn[1] - pt[1]), 0.0])
+    ts = np.linspace(0, 1, 33)[:, None]
+    bz = (1 - ts) ** 2 * np.array([sn[0], sn[1], 0]) + 2 * (1 - ts) * ts * cp + ts**2 * pt
+    bz[:, 2] = 0.4
+    ln = surface_line(bz, np.tile([0, 0, -1.0], (len(bz), 1)), flip_side=np.array([sx, 0, 0]))
+    FRONT_V[s_] = [r[1:5] for r in line_uv(ln, s_, both=True)]
+    # 肩の帯: 首の横 → 肩の上 → 腕の上 → 袖口。上 (腕では腕に垂直な上向き) から体へ落とす
+    A, ax = SLV_P[s_][0], SLV_P[s_][1]
+    top = np.array([0, 1.0, 0]) - ax * ax[1]
+    top /= np.linalg.norm(top)
+    neck = _ring[np.argmax(sx * _ring[:, 0])]
+    g = []
+    for t_ in np.linspace(0, 1, 72):
+        if t_ < 0.35:
+            q = neck + (A - neck) * (t_ / 0.35)
+            q[1] = neck[1] + (A[1] - neck[1]) * (t_ / 0.35)
+            d = np.array([0, -1.0, 0])
+        else:
+            k_ = (t_ - 0.35) / 0.65
+            q = A + ax * (0.72 * SLV_P[s_][5] * k_)
+            w = min(1.0, k_ * 3)
+            d = -(np.array([0, 1.0, 0]) * (1 - w) + top * w)
+            d /= np.linalg.norm(d)
+        g.append((q, d))
+    ln = surface_line(np.array([q for q, _ in g]), np.array([d for _, d in g]))
+    SHOULDER_LINE[s_] = line_uv(ln, s_, both=True)
+_sl = [r for r in SHOULDER_LINE["l"]]
+print("frontV", len(FRONT_V["l"]), FRONT_V["l"][0][:2], FRONT_V["l"][-1][:2], "shoulder line", len(_sl), "islands", sum(r[0] for r in _sl))
+# 脇の下の高さ (胴体の v): 袖の島のいちばん低い点。脇のパネルはここから下
+ARMPIT_V = round(float(torso_uv_of(sh.pos[np.unique(sh.tri[sleeve_tri])])[:, 1].min()), 4)
+print("armpit v", ARMPIT_V)
 # 襟の帯をシャツに足す。テクスチャはパンツに隠れる裾の下 (v 0.283〜) に横じまの帯として描く
 VB_OUT = 0.3 + 0.7 * (0.025 / (_yhi - _ylo))  # 裾から 2.5cm (ベルトより 5.5cm 下: 必ずパンツの中)
 VB_IN = 0.283
@@ -1106,7 +1248,9 @@ for key in ("pants", "pantsL"):
         cx = np.interp(pt.pos[:, 1], [J["calf_" + s_][1], J["thigh_" + s_][1]], [J["calf_" + s_][0], J["thigh_" + s_][0]])
         cz = np.interp(pt.pos[:, 1], [J["calf_" + s_][1], J["thigh_" + s_][1]], [J["calf_" + s_][2], J["thigh_" + s_][2]])
         ang = np.arctan2(pt.pos[:, 0] - cx, pt.pos[:, 2] - cz)
-        local[s_] = (0.25 + ang / (2 * math.pi)) % 1.0
+        # 右脚は向きを反転して、継ぎ目を両脚とも内側に (以前は右脚の継ぎ目が外側の脇のラインの上にあり、ラインがギザギザになった)。
+        # 左脚 u 0..0.5 / 右脚 0.5..1 とも: 内側 0 (継ぎ目), 正面 1/8, 外側 1/4, 後ろ 3/8 (脚ごとの割合)
+        local[s_] = (0.25 + (1 if s_ == "l" else -1) * ang / (2 * math.pi)) % 1.0
     vv = np.clip(pt.pos[:, 1] / (BELT_Y + 0.05), 0, 1)
     cuv = np.zeros((len(pt.tri), 3, 2))
     for ti, tri in enumerate(pt.tri):
@@ -1114,10 +1258,18 @@ for key in ("pants", "pantsL"):
         a0, a1 = (0.0, 0.5) if s_ == "l" else (0.5, 1.0)
         us = local[s_][tri].copy()
         if us.max() - us.min() > 0.5:
-            us = np.where(us < 0.5, 1.0, us) if s_ == "l" else np.where(us > 0.5, 0.0, us)
+            us = np.where(us < 0.5, 1.0, us)
         cuv[ti, :, 0] = a0 + us * (a1 - a0)
         cuv[ti, :, 1] = vv[tri]
     corner_split(pt, cuv)
+    if key == "pantsL":
+        # ベルトの正面の中央 (x = 0) の u: 左脚・右脚の UV それぞれで (バックルの位置)
+        _bm = (np.abs(pt.pos[:, 1] - BELT_Y) < 0.02) & (pt.pos[:, 2] > 0.1) & (np.abs(pt.pos[:, 0]) < 0.06)
+        BELT_FRONT_U = []
+        for lo_, hi_ in ((0.0, 0.5), (0.5, 1.0)):
+            q = _bm & (pt.uv[:, 0] >= lo_) & (pt.uv[:, 0] < hi_)
+            BELT_FRONT_U.append(round(float(np.polyval(np.polyfit(pt.pos[q, 0], pt.uv[q, 0], 1), 0.0)), 4))
+        print("belt front u", BELT_FRONT_U)
 
 # 肌 (顔・手) は アトラスに詰め直して焼き込む
 SKIN_TEX = 1024
@@ -1405,14 +1557,27 @@ HELMET_LOGO = dome_uv(parts["helmet"], 0.04, 0.05, DOME_VS)
 
 
 def front_rim(cp):
-    """殻の前の縁 (頭の骨から見た x → y, z) をなめらかな関数にする"""
+    """殻の前の縁を、頭のまわりの角度 θ (正面 0, 左 +) のなめらかな関数にする: 平面は楕円 (x = a sin θ, z = cz + c cos θ)、
+    高さは θ の 2 次式 (縁の頂点は面の選び方でギザギザなので、そのまま使うとつばの根元が波打つ)。
+    戻り値 rim(θ [度]) → (n, 3) の点 (6 mm 内側・6 mm 上へ入れて、つばの根元が殻の縁の下に隠れ、すき間が見えないように)"""
     hc = J["head"]
-    rel = cp.pos[cp.boundary()] - hc
-    fr = rel[rel[:, 2] > 0.0]
-    xm = float(np.abs(fr[:, 0]).max())
-    cz = np.polyfit(fr[:, 0], fr[:, 2], 4)
-    cy = np.polyfit(fr[:, 0], fr[:, 1], 2)
-    return (lambda x: np.polyval(cy, x) + hc[1]), (lambda x: np.polyval(cz, x) + hc[2]), xm
+    q = cp.pos[cp.boundary()]
+    cz = 0.5 * (cp.pos[:, 2].min() + cp.pos[:, 2].max())
+    th = np.arctan2(q[:, 0] - hc[0], q[:, 2] - cz)
+    m = np.abs(th) < np.radians(100)
+    th, q = th[m], q[m]
+    a = float(np.linalg.lstsq(np.sin(th)[:, None], q[:, 0] - hc[0], rcond=None)[0][0])
+    c = float(np.linalg.lstsq(np.cos(th)[:, None], q[:, 2] - cz, rcond=None)[0][0])
+    cy = np.polyfit(th, q[:, 1], 2)
+
+    def rim(deg):
+        t = np.radians(np.atleast_1d(deg))
+        p = np.stack([hc[0] + a * np.sin(t), np.polyval(cy, t), cz + c * np.cos(t)], axis=1)
+        inward = np.stack([hc[0] - p[:, 0], np.zeros(len(p)), cz - p[:, 2]], axis=1)
+        inward /= np.maximum(np.linalg.norm(inward, axis=1, keepdims=True), 1e-9)
+        return p + inward * 0.006 + np.array([0, 0.006, 0])
+
+    return rim
 
 
 def grid_tris(nr, nc, off, flip=False):
@@ -1426,14 +1591,15 @@ def grid_tris(nr, nc, off, flip=False):
     return out
 
 
-def brim_piece(cp, half, depth, drop, curve, taper, thick, ns=16, nt=4, uv_top="brim", uv_bot="under"):
-    """つば: 前の縁から前へ出る、左右が下がった板 (表と裏 thick 離す + 先端と両端の縁)。s ∈ [-1,1] (横), t ∈ [0,1] (根元 → 先)"""
-    yE, zE, xm = front_rim(cp)
-    half = min(half, xm - 0.002)
+def brim_piece(cp, deg, depth, drop, curve, taper, thick, ns=16, nt=4, uv_top="brim", uv_bot="under"):
+    """つば: 殻の前の縁 (正面から ±deg 度) から前へ出る、左右が下がった板 (表と裏 thick 離す + 先端と両端の縁)。
+    s ∈ [-1,1] (横), t ∈ [0,1] (根元 → 先)。先は taper だけ幅を詰め、左右は (1 - 0.3 s²) だけ短く、curve だけ下がる"""
+    rim = front_rim(cp)
     S, Tt = np.meshgrid(np.linspace(-1, 1, ns + 1), np.linspace(0, 1, nt + 1))
-    X = half * S * (1 - taper * Tt)
-    Z = zE(half * S) + depth * Tt * (1 - 0.30 * S**2) - 0.004 * (1 - Tt)
-    Y = yE(half * S) - curve * S**2 * Tt - drop * Tt - 0.002
+    B = rim((S * deg).ravel()).reshape(S.shape + (3,))
+    X = B[..., 0] * (1 - taper * Tt)
+    Z = B[..., 2] + depth * Tt * (1 - 0.30 * S**2)
+    Y = B[..., 1] - curve * S**2 * Tt - drop * Tt
     top = np.stack([X, Y, Z], -1).reshape(-1, 3)
     bot = top - np.array([0, thick, 0])
     n = len(top)
@@ -1499,24 +1665,38 @@ def dome_piece(c, nrm_, r, h, seg=8, rings=3, uvk="button"):
     return pos, nr, tri, np.tile([SW_U[uvk], SW_V], (len(pos), 1))
 
 
-def ellipsoid_piece(c, rad, nu=12, nv=7, uvk="shell"):
-    """耳当て: 楕円体 (頭に半分埋まる)"""
+def flap_piece(hp, sg, nphi=12, ny=6, uvk="shell"):
+    """ヘルメットの耳当て: 殻の横の下の縁から、耳を覆って下へ伸びる板 (殻と同じ楕円の、縦にまっすぐな壁)。下の縁は丸く。
+    sg: +1 = 左耳 (右打者用), -1 = 右耳"""
+    hc = J["head"]
+    rel = hp.pos - hc
+    a = float(np.abs(rel[:, 0]).max()) + 0.003
+    zc = 0.5 * (rel[:, 2].min() + rel[:, 2].max())
+    c = 0.5 * (rel[:, 2].max() - rel[:, 2].min()) + 0.003
+    # 耳の真上の殻の下の縁の高さ (横の向き ±30° の縁の頂点の平均) より 1.5 cm 上から、耳たぶの下 (目の 8.2 cm 下) まで。
+    # 横は正面から 62°〜138° (つばの端 72° と重ねて、すき間から中の髪が見えないように)
+    b = hp.boundary()
+    phi_b = np.degrees(np.arctan2(sg * rel[b, 0], rel[b, 2] - zc))
+    side = np.abs(phi_b - 100) < 30
+    y_top = float(rel[b[side], 1].mean()) + 0.015
+    y_bot = EYE_Y - HEAD_Y - 0.082
     pos = []
-    for i in range(nv + 1):
-        a = i / nv * math.pi
-        for j in range(nu):
-            b = j / nu * 2 * math.pi
-            pos.append(c + np.array([math.sin(a) * math.cos(b), math.cos(a), math.sin(a) * math.sin(b)]) * rad)
-    tri = []
-    for i in range(nv):
-        for j in range(nu):
-            a, b = i * nu + j, i * nu + (j + 1) % nu
-            cc, d = (i + 1) * nu + (j + 1) % nu, (i + 1) * nu + j
-            tri += [[a, b, cc], [a, cc, d]]
+    for i in range(nphi + 1):
+        f = -1 + 2 * i / nphi
+        ph = np.radians(100 + 38 * f)
+        # 下の縁は半楕円 (前後の端ほど短い)
+        yl = y_top - (y_top - y_bot) * math.sqrt(max(0.0, 1 - f * f) * 0.75 + 0.25)
+        for j in range(ny + 1):
+            y = y_top + (yl - y_top) * j / ny
+            # 下へ行くほど頭 (あご) に寄せる。前の端ほど強く (ほおに沿う)
+            k = 1 - (j / ny) * (0.06 + 0.10 * max(0.0, -f))
+            pos.append(hc + np.array([sg * a * k * math.sin(ph), y, zc + c * k * math.cos(ph)]))
     pos = np.array(pos)
-    tri = np.array([t for t in tri if len(set(t)) == 3 and np.linalg.norm(np.cross(pos[t[1]] - pos[t[0]], pos[t[2]] - pos[t[0]])) > 1e-12], np.int64)
+    tri = np.array(grid_tris(nphi, ny, 0), np.int64)
     nr = vnormals(pos, tri)
-    if ((pos - c) * nr).sum(1).mean() < 0:
+    out = pos - (hc + np.array([0, 0, zc]))
+    out[:, 1] = 0
+    if (nr * out).sum(1).mean() < 0:
         tri = tri[:, [0, 2, 1]]
         nr = vnormals(pos, tri)
     return pos, nr, tri, np.tile([SW_U[uvk], SW_V], (len(pos), 1))
@@ -1542,15 +1722,13 @@ def merge_pieces(cp, pieces):
 _cap = parts["cap"]
 _crel = _cap.pos - J["head"]
 _apex = int(np.argmax(np.where(np.abs(_crel[:, 0]) < 0.012, _crel[:, 1], -9)))
-_cy, _cz, _ = front_rim(_cap)
-print("cap crown above the front rim %.1f cm" % ((_cap.pos[_apex, 1] - _cy(0.0)) * 100))
-merge_pieces(_cap, [brim_piece(_cap, 0.095, 0.073, 0.013, 0.020, 0.12, 0.004), dome_piece(_cap.pos[_apex] - _cap.nrm[_apex] * 0.002, _cap.nrm[_apex], 0.009, 0.005)])
+print("cap crown above the front rim %.1f cm" % ((_cap.pos[_apex, 1] - front_rim(_cap)(0.0)[0, 1]) * 100))
+merge_pieces(_cap, [brim_piece(_cap, 80, 0.073, 0.013, 0.020, 0.12, 0.004), dome_piece(_cap.pos[_apex] - _cap.nrm[_apex] * 0.002, _cap.nrm[_apex], 0.009, 0.005)])
 # ヘルメット: 殻 + つば + 耳当て。右打者用 (helmetR) は投手側の左耳、左打者用 (helmetL) は右耳。捕手の後ろ向きのヘルメットは殻だけ (helmet)
-_eye = mh.joint_pos(P, VG, "joint-l-eye") - J["head"]
 for key, sg in (("helmetR", 1.0), ("helmetL", -1.0)):
     hp = copy.deepcopy(parts["helmet"])
     hp.name = key
-    merge_pieces(hp, [brim_piece(hp, 0.082, 0.055, 0.010, 0.010, 0.15, 0.004, uv_top="bill", uv_bot="under"), ellipsoid_piece(J["head"] + np.array([0.072 * sg, _eye[1] - 0.012, _eye[2] - 0.08]), np.array([0.0225, 0.05, 0.0525]))])
+    merge_pieces(hp, [brim_piece(hp, 72, 0.052, 0.010, 0.010, 0.15, 0.004, uv_top="bill", uv_bot="under"), flap_piece(parts["helmet"], sg)])
     parts[key] = hp
 
 
@@ -1940,6 +2118,11 @@ extra["sleeveV"] = SLEEVE_V
 extra["domeSwatch"] = DOME_SWATCH
 extra["capParts"] = ["brim", "button"]
 extra["underV"] = UNDER_V
+extra["armpitV"] = ARMPIT_V
+extra["beltFrontU"] = BELT_FRONT_U
+extra["pantsSeam"] = "inner"  # パンツの UV の継ぎ目は両脚とも内側 (v2 は右脚だけ外側)
+extra["frontV"] = FRONT_V
+extra["shoulderLine"] = SHOULDER_LINE
 extra["headTop"] = float(P[parts["head"].src][:, 1].max()) if parts["head"].src is not None else 1.8
 
 manifest = {

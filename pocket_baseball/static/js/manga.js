@@ -1,17 +1,18 @@
-/* 熱闘！ポケットベースボール — マンガ風のキャラクター (サクセス用)
- * 太い墨の輪郭・ベタの影・スクリーントーンで描く胸から上の絵。SVG の文字列を作って HTML に埋め込む。
- * 座標は 200x240 (顔の中心 x=100)。帽子・服は自分のチームの色とマーク。 */
+/* 熱闘！ポケットベースボール — サクセスのキャラクター (今風のアニメ塗り)
+ * 細く均一な焦げ茶の線・ベタ塗り + 影 1 段 (セル影)・大きめの瞳・小さな鼻・斜めの帯としぶきの背景。SVG の文字列を作って HTML に埋め込む。
+ * 座標は 200x240 (顔の中心 x=100)。頭は少し右 (台詞の側) を向く: 顔の点は (u: 中心からの横, v: 縦, z: 奥行き) で持ち、prj() で移す。
+ * 頭は首の付け根を中心に g.hk 倍に縮めて少し持ち上げる (頭のグループの transform)。帽子・服は自分のチームの色とマーク。 */
 (function (PB) {
   "use strict";
   const M = {};
-  const INK = "#161412";
+  const INK = "#2a1c18"; // 線 (黒に近い焦げ茶)
+  const INK2 = "#5a2e24"; // 顔の中の線 (鼻・下まぶた・しわ)
   const EXPRS = ["normal", "happy", "angry", "serious", "surprised", "sad"];
   M.EXPRS = EXPRS;
   M.EX_JP = { normal: "ふつう", happy: "笑顔", angry: "怒り", serious: "真剣", surprised: "おどろき", sad: "しょんぼり" };
 
   /* ---------- 小さな道具 ---------- */
   const n = (v) => Math.round(v * 10) / 10;
-  const mx = (p) => [200 - p[0], p[1], p[2]];
   function hex(c) {
     let s = String(c || "#888").replace("#", "");
     if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
@@ -34,9 +35,6 @@
     const y = hex(b);
     return Math.abs(x[0] - y[0]) + Math.abs(x[1] - y[1]) + Math.abs(x[2] - y[2]);
   }
-  // 影の色 (明るい色は暗く、暗い色は少しだけ)
-  const shadeOf = (c, k) => mix(c, "#1a1030", (k || 0.28) * (lum(c) < 0.25 ? 0.6 : 1));
-  const lightOf = (c, k) => mix(c, "#ffffff", k || 0.3);
   function rng(seed) {
     let a = seed >>> 0 || 1;
     return () => {
@@ -70,9 +68,6 @@
     }
     return d + (closed ? "Z" : "");
   }
-  // 左半分 (中心線上の点から始まり中心線上の点で終わる) から左右対称の閉じた形を作る
-  const sym = (half) => half.concat(half.slice(1, -1).reverse().map(mx));
-
   // Catmull-Rom の上の点を細かく取る
   function sample(pts, per) {
     const out = [];
@@ -97,10 +92,15 @@
     out.push(pts[m - 1].slice(0, 2));
     return out;
   }
-  // 筆の線: 入りと抜きが細くなる塗りの形。o: {s0, e0 (両端の太さの割合), a, b (細くなる長さの割合), fill}
-  function brush(pts, w, o) {
+  // 線の太さの倍率 (描いている間だけ使う。小さい絵は太く、縮めた頭の中はその分だけ太く)
+  let K = 1;
+  // 入り抜きのある線の形 (塗りの輪郭)。o: {s0, e0 (両端の太さの割合), a, b (細くなる長さの割合), per, raw (倍率をかけない)}
+  function brushD(pts, w, o) {
     o = o || {};
-    const s = sample(pts, o.per || 8);
+    if (!o.raw) w *= K;
+    let cl = 0;
+    for (let i = 1; i < pts.length; i++) cl += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    const s = sample(pts, o.per || Math.max(3, Math.min(8, Math.ceil(cl / (pts.length - 1) / 1.6))));
     const len = [0];
     for (let i = 1; i < s.length; i++) len.push(len[i - 1] + Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]));
     const tot = len[len.length - 1] || 1;
@@ -110,7 +110,7 @@
     const e0 = o.e0 == null ? 0.1 : o.e0;
     const ease = (x) => Math.sin((Math.min(1, Math.max(0, x)) * Math.PI) / 2);
     const L = [];
-    const Rr = [];
+    const R = [];
     for (let i = 0; i < s.length; i++) {
       const p = s[i];
       const q0 = s[Math.max(0, i - 1)];
@@ -125,35 +125,53 @@
       const f2 = 1 - t < b ? e0 + (1 - e0) * ease((1 - t) / b) : 1;
       const hw = (w * f1 * f2) / 2;
       L.push(n(p[0] - ty * hw) + " " + n(p[1] + tx * hw));
-      Rr.push(n(p[0] + ty * hw) + " " + n(p[1] - tx * hw));
+      R.push(n(p[0] + ty * hw) + " " + n(p[1] - tx * hw));
     }
-    return '<path d="M' + L.join("L") + "L" + Rr.reverse().join("L") + 'Z" fill="' + (o.fill || INK) + '"' + (o.op ? ' fill-opacity="' + o.op + '"' : "") + "/>";
+    return "M" + L.join(" ") + " " + R.reverse().join(" ") + "Z";
+  }
+  function brush(pts, w, o) {
+    o = o || {};
+    return '<path d="' + brushD(pts, w, o) + '" fill="' + (o.fill || INK) + '"' + (o.op ? ' fill-opacity="' + o.op + '"' : "") + "/>";
   }
   // 輪郭つきの塗り
-  function shape(d, fill, sw, extra) {
-    return '<path d="' + d + '" fill="' + (fill || "none") + '"' + (sw ? ' stroke="' + INK + '" stroke-width="' + sw + '" stroke-linejoin="round" stroke-linecap="round"' : "") + (extra || "") + "/>";
+  function shape(d, fill, sw, col) {
+    return '<path d="' + d + '" fill="' + (fill || "none") + '"' + (sw ? ' stroke="' + (col || INK) + '" stroke-width="' + n(sw * K) + '" stroke-linejoin="round" stroke-linecap="round"' : "") + "/>";
   }
   const fillP = (d, fill, op) => '<path d="' + d + '" fill="' + fill + '"' + (op != null ? ' fill-opacity="' + op + '"' : "") + "/>";
-  // 平行な斜線 (ハッチング): 線分 (x0,y0)-(x1,y1) に沿って k 本、角度 ang・長さ len
-  function hatch(x0, y0, x1, y1, k, len, ang, w, col, op) {
-    let s = "";
-    const c = Math.cos(ang);
-    const si = Math.sin(ang);
-    for (let i = 0; i < k; i++) {
-      const t = k === 1 ? 0.5 : i / (k - 1);
-      const x = x0 + (x1 - x0) * t;
-      const y = y0 + (y1 - y0) * t;
-      const l = len * (0.75 + 0.25 * Math.sin(i * 2.3 + 1));
-      s += brush(
-        [
-          [x - (c * l) / 2, y - (si * l) / 2],
-          [x + (c * l) / 2, y + (si * l) / 2],
-        ],
-        w,
-        { fill: col, op, a: 0.4, b: 0.5, s0: 0.2, e0: 0.05, per: 4 }
-      );
-    }
-    return s;
+  const poly = (pts) => "M" + pts.map((p) => n(p[0]) + " " + n(p[1])).join("L") + "Z";
+  const clipOpen = (id, d) => '<clipPath id="' + id + '"><path d="' + d + '"/></clipPath><g clip-path="url(#' + id + ')">';
+  // いくつかの形を合わせた切り抜き
+  const clipMany = (id, ds) => '<clipPath id="' + id + '">' + ds.map((d) => '<path d="' + d + '"/>').join("") + '</clipPath><g clip-path="url(#' + id + ')">';
+  // 楕円 (sw があれば輪郭、op は塗りの濃さ)
+  function ell(c, rx, ry, fill, sw, op) {
+    return '<ellipse cx="' + n(c[0]) + '" cy="' + n(c[1]) + '" rx="' + n(rx) + '" ry="' + n(ry) + '" fill="' + fill + '"' + (op != null ? ' fill-opacity="' + op + '"' : "") + (sw ? ' stroke="' + INK + '" stroke-width="' + n(sw * K) + '"' : "") + "/>";
+  }
+
+  /* ---------- 線の太さ (200 幅の座標。280px の絵で ×1.4) ---------- */
+  const LW = {
+    sil: 1.9, // 外側の輪郭
+    chin: 2.3, // あご・つばの下側 (少し重く)
+    part: 1.3, // 服・帽子・耳の中の線、毛束
+    fine: 0.85, // 髪の筋・しわ・二重
+    mouth: 1.45, // 閉じた口
+    lashM: 2.9, // 上まぶた (男)
+    lashF: 3.4, // 上まぶた (女)
+  };
+
+  /* ---------- 色 ---------- */
+  // セル影は 1 段だけ: 肌は赤みのある影、白い布は青みの灰色
+  const skinShade = (c) => mix(c, "#a9503a", 0.36);
+  const blushOf = (c) => (lum(c) < 0.72 ? "#e8706e" : lum(c) < 0.8 ? "#f47c7c" : "#ff8a8a");
+  // 黒い布はそのままだと影が見えないので少し持ち上げる
+  const clothBase = (c) => (lum(c) < 0.12 ? mix(c, "#3a3c4c", 0.55) : c);
+  const clothShade = (c) => (lum(c) > 0.8 ? mix(c, "#6d78a8", 0.26) : lum(c) < 0.2 ? mix(c, "#000000", 0.45) : mix(c, "#2a1a4a", 0.3));
+  const clothLight = (c) => (lum(c) < 0.2 ? mix(c, "#9aa4c8", 0.32) : mix(c, "#ffffff", 0.35));
+  // 髪: 地・影・つや (暗い色・青みの色は青灰色のつや、茶色は暖かいつや)
+  function hairPal(c, hl) {
+    const base = lum(c) < 0.08 ? mix(c, "#3a3a4a", 0.2) : c;
+    const [r, , b] = hex(base);
+    const cool = lum(base) < 0.1 || b > r;
+    return { base, shade: mix(base, "#120814", 0.42), hl: hl || (cool ? mix(base, "#a9b9dc", 0.42) : mix(base, "#f4d2b0", 0.45)) };
   }
 
   /* ---------- チームの見た目 ---------- */
@@ -198,446 +216,402 @@
     };
   }
   M.look = look;
+  // 差し色 (チームカラー。白・黒に近いときは黄色)
+  function accentOf(L) {
+    const l = lum(L.main);
+    return l > 0.9 || l < 0.12 ? "#ffd23f" : L.main;
+  }
+  // 小物の色 (チームの色のうち、茶色の髪の上で目立つもの。なければ黄色)
+  function accOf(L) {
+    for (const c of [L.trim, L.main, L.sub, L.piping, L.button]) if (c && lum(c) > 0.3 && lum(c) < 0.88 && dist(c, "#8c4c2c") > 160) return c;
+    return "#ffd23f";
+  }
 
-  /* ---------- 背景のコマ ---------- */
-  function panel(g) {
-    const id = g.id;
-    const ex = g.ex;
-    const bgc = { normal: "#f6f0e1", happy: "#fff3d2", angry: "#ffe2d2", serious: "#e6e9ee", surprised: "#eef3f7", sad: "#e2e7ef" }[ex] || "#f6f0e1";
-    let s = '<rect x="-20" y="-20" width="240" height="280" fill="' + bgc + '"/>';
-    if (!g.det) return s;
-    // スクリーントーン (網点) は下からぼかす
-    s += '<rect x="-20" y="-20" width="240" height="280" fill="url(#' + id + 'dot)" mask="url(#' + id + 'fm)"/>';
-    const r = rng(hash(g.who + ex));
-    if (ex === "angry") {
-      // ベタフラッシュ: 外側から黒い棘
+  /* ---------- 向きと頭の大きさ ---------- */
+  // 点 (u, v, z) を頭の座標へ。g.sa だけ右を向く
+  const prj = (g, u, v, z) => [100 + u * g.ca + (z || 0) * g.sa, v];
+  // 顔の前面の奥行き (中央が前に出た放物面)
+  const zf = (u) => 40 - 0.019 * u * u;
+  const F = (g, u, v, dz) => prj(g, u, v, zf(u) + (dz || 0));
+  // 点列を顔の面へ / 奥行きつきで移す (3 番目・4 番目が 1 なら角)
+  const mapF = (g, pts, dz) =>
+    pts.map((p) => {
+      const q = F(g, p[0], p[1], dz);
+      return p[2] ? [q[0], q[1], 1] : q;
+    });
+  const mapZ = (g, pts) =>
+    pts.map((p) => {
+      const q = prj(g, p[0], p[1], p[2]);
+      return p[3] ? [q[0], q[1], 1] : q;
+    });
+  // 頭のグループ: 首の付け根 (100, 172) を中心に g.hk 倍して g.lift だけ上げ、表情で少し傾ける
+  const headT = (g) => (g.tilt ? "rotate(" + g.tilt + " 100 158) " : "") + "translate(100 " + (172 - g.lift) + ") scale(" + g.hk + ") translate(-100 -172)";
+  function headOpen(g) {
+    g.inHead = true;
+    K = g.k0 / g.hk;
+    return '<g transform="' + headT(g) + '">';
+  }
+  function headClose(g) {
+    g.inHead = false;
+    K = g.k0;
+    return "</g>";
+  }
+  // 頭の座標 → 絵の座標 (首に落ちるあごの影に使う)
+  function h2s(g, p) {
+    let x = 100 + g.hk * (p[0] - 100);
+    let y = 172 - g.lift + g.hk * (p[1] - 172);
+    if (g.tilt) {
+      const a = (g.tilt * Math.PI) / 180;
+      const dx = x - 100;
+      const dy = y - 158;
+      x = 100 + dx * Math.cos(a) - dy * Math.sin(a);
+      y = 158 + dx * Math.sin(a) + dy * Math.cos(a);
+    }
+    return [x, y];
+  }
+  // 人物の影に使う外形を集める
+  const sil = (g, d) => g.sil.push([d, g.inHead]);
+
+  /* ---------- 背景: 斜めの帯としぶき ---------- */
+  // base: 地, a: 中くらいの帯, b: 明るい帯, c: 濃い細帯, fl: しぶきの 3 色, sh: 人物の影
+  const BG = {
+    normal: { base: "#f8fcff", a: "#1e86c8", b: "#acd8f0", c: "#1a62a8", fl: ["#ffffff", "#fff35c", "#62b0dd"], sh: "#c3cad6" },
+    happy: { base: "#fffaea", a: "#ffa22e", b: "#ffe08a", c: "#ff6a3d", fl: ["#ffffff", "#ff8fb1", "#ffd23f"], sh: "#e8d2b4" },
+    angry: { base: "#fff3ee", a: "#ff5a48", b: "#ffbca8", c: "#c4242a", fl: ["#ffffff", "#ffd84a", "#ff9a7a"], sh: "#e8c4bc" },
+    serious: { base: "#eef2fb", a: "#34508f", b: "#a8b9e2", c: "#1b2a5a", fl: ["#ffffff", "#8fb0ff", "#dfe8ff"], sh: "#c2c8da" },
+    surprised: { base: "#f0fcff", a: "#22bde6", b: "#a8efff", c: "#1689bb", fl: ["#ffffff", "#ffe14a", "#7ae0ff"], sh: "#bcd8e2" },
+    sad: { base: "#eff2f8", a: "#8797c2", b: "#cdd6ec", c: "#5a6893", fl: ["#ffffff", "#c9d6ff", "#a9b6d8"], sh: "#c8cedc" },
+  };
+  // 4 つの角のきらり (中央はへこんだ星)
+  const star = (x, y, k) => "M" + n(x) + " " + n(y - k * 1.7) + "Q" + n(x + k * 0.15) + " " + n(y - k * 0.15) + " " + n(x + k) + " " + n(y) + "Q" + n(x + k * 0.15) + " " + n(y + k * 0.15) + " " + n(x) + " " + n(y + k * 1.7) + "Q" + n(x - k * 0.15) + " " + n(y + k * 0.15) + " " + n(x - k) + " " + n(y) + "Q" + n(x - k * 0.15) + " " + n(y - k * 0.15) + " " + n(x) + " " + n(y - k * 1.7) + "Z";
+  function background(g) {
+    const p = BG[g.ex] || BG.normal;
+    const small = g.lod === 2;
+    let s = '<rect x="-20" y="-20" width="240" height="280" fill="' + p.base + '"/>';
+    const r = rng(hash(g.who + g.ex + "bg"));
+    // 帯は右上がり。回した座標で横長の四角を並べ、端はかすれ (筆の毛先) にする
+    s += '<g transform="rotate(-30 100 120)">';
+    const band = (y, h, col, x0, x1, ragL, ragR) => {
+      let out = fillP("M" + x0 + " " + y + "H" + x1 + "V" + (y + h) + "H" + x0 + "Z", col);
+      if (ragL || ragR) {
+        let k = "";
+        const m = Math.max(3, Math.round(h / 2.2));
+        for (let i = 0; i < m; i++) {
+          const yy = y + (i * h) / m;
+          const hh = (h / m) * (0.5 + r() * 0.45);
+          if (ragL) k += "M" + n(x0 + 1) + " " + n(yy) + "h-" + n(6 + r() * 26) + "l-3 " + n(hh / 2) + "l3 " + n(hh / 2) + "h" + n(6 + r() * 26) + "Z";
+          if (ragR) k += "M" + n(x1 - 1) + " " + n(yy) + "h" + n(6 + r() * 26) + "l3 " + n(hh / 2) + "l-3 " + n(hh / 2) + "h-" + n(6 + r() * 26) + "Z";
+        }
+        out += fillP(k, col);
+      }
+      return out;
+    };
+    s += band(-6, 34, p.b, -120, 340, 0, 0);
+    if (!small) s += band(31, 3, p.c, -40, 300, 1, 0);
+    s += band(108, 22, p.a, 40, 340, !small, 0);
+    if (!small) s += band(134, 5, p.b, -120, 180, 0, 1);
+    s += band(186, 40, p.b, -120, 340, 0, 0);
+    if (!small) s += band(194, 9, p.a, 70, 340, 1, 0) + band(232, 3, p.c, -120, 150, 0, 1);
+    // 帯の中の白いかすれ線 (大きい絵だけ)
+    if (g.lod === 0) {
       let d = "";
-      for (let i = 0; i < 46; i++) {
-        const a = (i / 46) * Math.PI * 2 + r() * 0.05;
-        const r0 = 92 + r() * 30;
-        const w = 0.035 + r() * 0.03;
-        const P = (aa, rr) => n(100 + Math.cos(aa) * rr) + " " + n(112 + Math.sin(aa) * rr * 1.15);
-        d += "M" + P(a - w, 190) + "L" + P(a, r0) + "L" + P(a + w, 190) + "Z";
+      for (let i = 0; i < 9; i++) {
+        const y = [111, 116, 124, 196, 199, 201, 12, 20, 210][i];
+        const x = 60 + r() * 140;
+        const w = 30 + r() * 90;
+        d += "M" + n(x) + " " + y + "h" + n(w) + "l-3 " + n(0.6 + r() * 0.8) + "h-" + n(w - 6) + "Z";
       }
-      s += fillP(d, INK, 0.9);
-    } else if (ex === "serious") {
-      // 斜めの効果線 (張りつめた空気)
-      let d = "";
-      for (let i = 0; i < 34; i++) {
-        const x = -60 + i * 9.5 + r() * 3;
-        const w = 0.6 + r() * 1.4;
-        d += "M" + n(x) + " -20l" + n(w) + " 0l-150 280l-" + n(w) + " 0Z";
+      s += fillP(d, "#ffffff", 0.75);
+    }
+    // チームの差し色の線 (ふつう・笑顔)
+    const acc = !small && (g.ex === "normal" || g.ex === "happy") ? accentOf(g.L) : null;
+    if (acc) s += band(74, 2.2, acc, 130, 340, 1, 0);
+    s += "</g>";
+    if (!small) {
+      // しぶき (絵の具の点): 帯の近くに集める
+      const d = ["", "", "", ""];
+      const dot = (k, x, y, rr) => {
+        d[k] += "M" + n(x - rr) + " " + n(y) + "a" + n(rr) + " " + n(rr) + " 0 1 0 " + n(rr * 2) + " 0a" + n(rr) + " " + n(rr) + " 0 1 0 -" + n(rr * 2) + " 0Z";
+        // 大きい点には小さな飛び散り
+        if (rr > 1.6) d[k] += "M" + n(x + rr * 1.8) + " " + n(y - rr) + "l" + n(rr * 1.6) + " -" + n(rr * 0.7) + "l-" + n(rr * 0.5) + " " + n(rr * 1.2) + "Z";
+      };
+      for (let i = 0; i < 54; i++) {
+        const x = r() * 200;
+        dot(i % 3, x, 120 - (x - 100) * 0.577 + [-70, 20, 92][i % 3] + (r() - 0.5) * 34, 0.6 + r() * r() * 3.2);
       }
-      s += fillP(d, "#2a3448", 0.45);
-      s += fillP("M-20 -20H220V70C150 40 60 40 -20 70Z", "#2a3448", 0.18);
-    } else if (ex === "surprised") {
-      // 集中線
-      let d = "";
-      for (let i = 0; i < 64; i++) {
-        const a = (i / 64) * Math.PI * 2 + r() * 0.06;
-        const r0 = 88 + r() * 34;
-        const w = 0.006 + r() * 0.01;
-        const P = (aa, rr) => n(100 + Math.cos(aa) * rr) + " " + n(112 + Math.sin(aa) * rr * 1.15);
-        d += "M" + P(a - w, 190) + "L" + P(a, r0) + "L" + P(a + w, 190) + "Z";
+      if (acc) {
+        for (let i = 0; i < 10; i++) {
+          const x = 120 + r() * 90;
+          dot(3, x, 64 - (x - 100) * 0.577 + (r() - 0.5) * 16, 0.6 + r() * r() * 2);
+        }
       }
-      s += fillP(d, INK, 0.85);
-    } else if (ex === "happy") {
-      // きらきら
-      for (let i = 0; i < 6; i++) {
-        const x = i % 2 ? 160 + r() * 30 : 8 + r() * 30;
-        const y = 20 + r() * 120;
-        const k = 4 + r() * 6;
-        s += fillP("M" + n(x) + " " + n(y - k * 1.6) + "Q" + n(x + k * 0.18) + " " + n(y - k * 0.18) + " " + n(x + k) + " " + n(y) + "Q" + n(x + k * 0.18) + " " + n(y + k * 0.18) + " " + n(x) + " " + n(y + k * 1.6) + "Q" + n(x - k * 0.18) + " " + n(y + k * 0.18) + " " + n(x - k) + " " + n(y) + "Q" + n(x - k * 0.18) + " " + n(y - k * 0.18) + " " + n(x) + " " + n(y - k * 1.6) + "Z", i % 3 ? "#ffffff" : "#ffd23f") + "";
+      s += fillP(d[0], p.fl[0]) + fillP(d[1], p.fl[1]) + fillP(d[2], p.fl[2]) + (acc ? fillP(d[3], acc) : "");
+      if (g.ex === "happy") {
+        // きらり (白 3 つと黄色 1 つ)
+        for (let i = 0; i < 4; i++) {
+          const x = i % 2 ? 166 + r() * 20 : 14 + r() * 20;
+          const y = 26 + r() * 90;
+          s += fillP(star(x, y, 3 + r() * 4), i === 3 ? "#ffd23f" : "#ffffff");
+        }
       }
-      s += fillP("M-20 -20H220V40C150 62 50 62 -20 40Z", "#ffffff", 0.35);
-    } else if (ex === "sad") {
-      // どんより縦線
-      let d = "";
-      for (let i = 0; i < 26; i++) {
-        const x = 4 + i * 7.6 + r() * 2;
-        const h = 30 + r() * 60;
-        d += "M" + n(x) + " -2h" + n(0.8 + r() * 0.9) + "V" + n(h) + "Z";
-      }
-      s += fillP(d, "#3a4660", 0.55);
     }
     return s;
   }
-  function defs(g) {
-    const id = g.id;
-    if (!g.det) return "";
-    return (
-      "<defs>" +
-      '<pattern id="' +
-      id +
-      'dot" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(30)"><circle cx="2.5" cy="2.5" r="1.15" fill="#1a2030" fill-opacity=".38"/></pattern>' +
-      '<linearGradient id="' +
-      id +
-      'fg" x1="0" y1="0" x2="0" y2="1"><stop offset=".25" stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient>' +
-      '<mask id="' +
-      id +
-      'fm"><rect x="-20" y="-20" width="240" height="280" fill="url(#' +
-      id +
-      'fg)"/></mask>' +
-      '<pattern id="' +
-      id +
-      'tone" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><circle cx="1.6" cy="1.6" r=".8" fill="#000" fill-opacity=".35"/></pattern>' +
-      "</defs>"
-    );
+  // 人物の影 (背景に落ちる平らな影)。集めた外形を右下へずらして塗る
+  function figShadow(g) {
+    let body = "";
+    let head = "";
+    for (const [d, h] of g.sil) {
+      if (h) head += '<path d="' + d + '"/>';
+      else body += '<path d="' + d + '"/>';
+    }
+    return '<g transform="translate(5.5 2.5)" fill="' + (BG[g.ex] || BG.normal).sh + '">' + body + '<g transform="' + headT(g) + '">' + head + "</g></g>";
   }
 
   /* ---------- 体・服 ---------- */
-  // 首: hw = 首の半分の幅
-  function neck(g, hw, top) {
-    const sk = g.skin;
-    const x0 = 100 - hw;
-    const x1 = 100 + hw;
-    const t = top || 140;
-    const d = "M" + x0 + " " + t + "C" + (x0 + 1) + " " + (t + 20) + " " + (x0 - 1) + " 180 " + (x0 - 3) + " 200L" + (x1 + 3) + " 200C" + (x1 + 1) + " 180 " + (x1 - 1) + " " + (t + 20) + " " + x1 + " " + t + "Z";
-    let s = shape(d, sk, 3);
-    // あごの下の影
-    s += fillP("M" + (x0 + 1) + " " + (t + 8) + "C" + (x0 + 10) + " " + (t + 30) + " " + (x1 - 10) + " " + (t + 30) + " " + (x1 - 1) + " " + (t + 8) + "V" + t + "H" + (x0 + 1) + "Z", g.skinS);
-    if (g.det && g.male) {
-      // 首すじ
-      s += brush(
-        [
-          [x0 + 4, t + 22],
-          [x0 + 9, t + 34],
-          [x0 + 13, t + 42],
-        ],
-        1.6,
-        { op: 0.8 }
-      );
-      s += brush(
-        [
-          [x1 - 4, t + 22],
-          [x1 - 9, t + 34],
-          [x1 - 13, t + 42],
-        ],
-        1.6,
-        { op: 0.8 }
-      );
-      s += hatch(x1 - 9, t + 24, x1 - 3, t + 40, 4, 8, -1.1, 1, INK, 0.6);
-    }
-    return s;
-  }
-  // 肩から下の形 (左半分の肩の線: 首の付け根 → 画面の外)
-  function torso(sh) {
-    // sh: [[首の付け根 x, y], [肩 x, y], [画面の端 x, y]]
-    const L = [[sh[2][0], 250], sh[2], sh[1], sh[0]];
-    const R = L.slice().reverse().map(mx);
-    return curve(L.concat(R), true);
-  }
+  // 肩の線 (左半分: 首の付け根 → 肩 → 画面の端)
   const SHOULDER = {
     std: [
-      [74, 170],
-      [24, 192],
-      [-6, 212],
-    ],
-    big: [
-      [66, 164],
-      [16, 182],
-      [-8, 198],
+      [81, 174],
+      [32, 191],
+      [-6, 214],
     ],
     slim: [
-      [79, 172],
-      [28, 196],
+      [83, 175],
+      [36, 193],
       [-4, 216],
     ],
+    goda: [
+      [72, 165],
+      [14, 179],
+      [-14, 197],
+    ],
     girl: [
-      [84, 168],
-      [38, 192],
-      [14, 214],
+      [86, 166],
+      [42, 186],
+      [12, 212],
     ],
   };
-  // ユニフォーム (ホームの白地にチームカラーのパイピング、アンダーシャツ)
-  function jersey(g, build, hw) {
-    const L = g.L;
-    const sh = SHOULDER[build];
-    const cid = g.id + "cl";
-    const body = torso(sh);
-    const vy = 210;
-    let s = "";
-    // アンダーシャツ (丸首)
-    s += shape("M" + (100 - hw - 4) + " 166C" + (100 - hw + 4) + " 182 " + (100 + hw - 4) + " 182 " + (100 + hw + 4) + " 166L" + (100 + hw + 12) + " 230L" + (100 - hw - 12) + " 230Z", L.under, 2.6);
-    s += brush(
-      [
-        [100 - hw + 1, 172],
-        [100, 181],
-        [100 + hw - 1, 172],
-      ],
-      1.4,
-      { fill: lum(L.under) < 0.3 ? "#ffffff" : INK, op: 0.35 }
-    );
-    // 身ごろ (V ネック)
-    const neckL = sh[0][0] - 2;
-    const d = body.replace("Z", "") + "Z";
-    s += '<clipPath id="' + cid + '"><path d="' + d + '"/></clipPath>';
-    const vd = "M" + neckL + " " + (sh[0][1] - 3) + "L100 " + vy + "L" + (200 - neckL) + " " + (sh[0][1] - 3) + "L" + (200 - neckL) + " " + (sh[0][1] - 30) + "L" + neckL + " " + (sh[0][1] - 30) + "Z";
-    s += '<g clip-path="url(#' + cid + ')">';
-    s += '<path d="M-20 140H220V260H-20Z' + vd + '" fill="' + L.jersey + '" fill-rule="evenodd"/>';
-    if (L.stripes) {
-      // ピンストライプ
-      let pd = "";
-      for (let x = -8; x < 210; x += 9) pd += "M" + x + " 150L" + (x + (x - 100) * 0.08) + " 250";
-      s += '<path d="' + pd + '" stroke="' + L.stripes + '" stroke-width="1.1" stroke-opacity=".75" fill="none"/>';
-    }
-    // 影 (右側と襟の下)
-    s += fillP("M150 170C170 190 176 220 172 250H220V160Z", shadeOf(L.jersey, 0.22));
-    s += fillP("M" + (neckL - 6) + " " + (sh[0][1] + 2) + "L100 " + (vy + 6) + "L" + (206 - neckL) + " " + (sh[0][1] + 2) + "L" + (200 - neckL) + " " + (sh[0][1] - 3) + "L100 " + vy + "L" + neckL + " " + (sh[0][1] - 3) + "Z", shadeOf(L.jersey, 0.25));
-    if (g.det) {
-      s += hatch(158, 196, 170, 236, 6, 12, -1.2, 1.1, INK, 0.45);
-      s += '<path d="M-20 200H220V260H-20Z" fill="url(#' + g.id + 'tone)" opacity=".18"/>';
-    }
-    s += "</g>";
-    // 輪郭
-    s += shape(d, "none", 3.4);
-    // V ネックの縁取り (パイピング)
-    s += brush(
-      [
-        [neckL + 1, sh[0][1] - 2],
-        [100, vy + 1],
-      ],
-      4.4,
-      { fill: L.piping, a: 0.02, b: 0.02, s0: 1, e0: 1 }
-    );
-    s += brush(
-      [
-        [100, vy + 1],
-        [199 - neckL, sh[0][1] - 2],
-      ],
-      4.4,
-      { fill: L.piping, a: 0.02, b: 0.02, s0: 1, e0: 1 }
-    );
-    s += shape("M" + neckL + " " + (sh[0][1] - 3) + "L100 " + vy + "L" + (200 - neckL) + " " + (sh[0][1] - 3), "none", 2.6);
-    // 前立て・ボタン
-    s += brush(
-      [
-        [100, vy],
-        [100, 244],
-      ],
-      3.6,
-      { fill: L.piping, a: 0.02, b: 0.02, s0: 1, e0: 1 }
-    );
-    s += shape("M97.5 " + vy + "V244M102.5 " + vy + "V244", "none", 1.2);
-    s += '<circle cx="106" cy="' + (vy + 14) + '" r="2.2" fill="#fff" stroke="' + INK + '" stroke-width="1.2"/><circle cx="106" cy="' + (vy + 28) + '" r="2.2" fill="#fff" stroke="' + INK + '" stroke-width="1.2"/>';
-    // 肩のしわ
-    s += brush(
-      [
-        [40, 196],
-        [52, 206],
-        [56, 222],
-      ],
-      1.8,
-      { op: 0.85 }
-    );
-    s += brush(
-      [
-        [160, 196],
-        [148, 206],
-        [144, 222],
-      ],
-      1.8,
-      { op: 0.85 }
-    );
+  function torso(sh) {
+    const L = [[sh[2][0], 252], sh[2], sh[1], sh[0]];
+    const R = L.slice()
+      .reverse()
+      .map((p) => [200 - p[0], p[1]]);
+    return curve(L.concat(R), true);
+  }
+  // 首 (前は少し奥行きがあるので右へずれる)。あごの影 (あごの形を下へずらす) と奥側の影
+  function neck(g, hw, top) {
+    const cx = 100 + 10 * g.sa;
+    const t = top;
+    const x0 = cx - hw;
+    const x1 = cx + hw;
+    const d = "M" + n(x0) + " " + t + "C" + n(x0 + 1) + " " + (t + 22) + " " + n(x0 - 1) + " 178 " + n(x0 - 4) + " 196L" + n(x1 + 4) + " 196C" + n(x1 + 1) + " 178 " + n(x1 - 1) + " " + (t + 22) + " " + n(x1) + " " + t + "Z";
+    sil(g, d);
+    let s = clipOpen(g.id + "nk", d) + fillP(d, g.skin);
+    const jl = g.jaw.filter((p) => p[1] > 136).map((p) => h2s(g, p));
+    s += fillP(curve(jl.map((p) => [p[0] + 3, p[1] + 9]), false) + "L" + n(x1 + 12) + " " + (t - 16) + "L" + n(x0 - 12) + " " + (t - 16) + "Z", g.skinS);
+    s += fillP("M" + n(x1 - 5) + " " + t + "C" + n(x1 - 4) + " 170 " + n(x1 - 2) + " 186 " + n(x1 + 2) + " 198H" + n(x1 + 10) + "V" + t + "Z", g.skinS);
+    s += "</g>" + shape(d, "none", LW.part);
     return s;
   }
-  // ジャンパー (立ち襟、ファスナー) — 監督
+  // ユニフォーム (ホームの白地・チームカラーのパイピング・アンダーシャツ)
+  function jersey(g, build, hw) {
+    if (g.crop === "face") return "";
+    const L = g.L;
+    const sh = SHOULDER[build];
+    const body = torso(sh);
+    sil(g, body);
+    const cx = 102;
+    const vy = 218;
+    const W = mix(L.jersey, "#ffffff", 0.4);
+    const WS = clothShade(W);
+    const y0 = sh[0][1];
+    let s = "";
+    // アンダーシャツ (丸首)
+    const ud = clothBase(L.under);
+    s += shape("M" + n(cx - hw - 3) + " " + y0 + "C" + n(cx - hw + 4) + " " + (y0 + 14) + " " + n(cx + hw - 4) + " " + (y0 + 14) + " " + n(cx + hw + 3) + " " + y0 + "L" + n(cx + hw + 14) + " 240L" + n(cx - hw - 14) + " 240Z", ud, LW.part);
+    s += fillP("M" + n(cx + 2) + " " + (y0 + 12) + "C" + n(cx + hw - 2) + " " + (y0 + 10) + " " + n(cx + hw + 2) + " " + (y0 + 4) + " " + n(cx + hw + 3) + " " + y0 + "L" + n(cx + hw + 14) + " 240H" + n(cx + 8) + "Z", clothShade(ud));
+    if (g.fine) s += brush([[cx - hw + 1, y0 + 5], [cx, y0 + 13], [cx + hw - 1, y0 + 5]], 1.1, { fill: clothLight(ud), op: 0.9 });
+    // 身ごろ (V ネック)
+    const nl = sh[0][0] - 2;
+    const vd = "M" + nl + " " + (y0 - 3) + "L" + cx + " " + vy + "L" + (204 - nl) + " " + (y0 - 3) + "L" + (204 - nl) + " " + (y0 - 30) + "L" + nl + " " + (y0 - 30) + "Z";
+    s += clipOpen(g.id + "bd", body);
+    s += '<path d="M-20 140H220V260H-20Z' + vd + '" fill="' + W + '" fill-rule="evenodd"/>';
+    if (L.stripes) {
+      let pd = "";
+      for (let x = -10; x < 214; x += 8) pd += "M" + x + " 150L" + n(x + (x - 100) * 0.07) + " 252";
+      s += '<path d="' + pd + '" stroke="' + L.stripes + '" stroke-width="' + n(0.8 * K) + '" stroke-opacity=".8" fill="none"/>';
+    }
+    // セル影: 奥側 (右)・襟の下・わき・しわ
+    s += fillP("M146 176C162 190 170 214 166 252H222V160Z", WS, 0.9);
+    s += fillP("M" + (nl - 8) + " " + (y0 + 1) + "L" + cx + " " + (vy + 9) + "L" + (212 - nl) + " " + (y0 + 1) + "L" + (204 - nl) + " " + (y0 - 3) + "L" + cx + " " + vy + "L" + nl + " " + (y0 - 3) + "Z", WS, 0.9);
+    s += fillP("M30 252C34 232 40 216 50 204C44 222 42 238 44 252Z", WS, 0.9);
+    if (g.fine) s += fillP("M58 228C66 222 72 230 72 252H66C66 240 64 234 58 228Z", WS, 0.9);
+    if (g.lod === 0) s += fillP("M128 226C138 220 144 228 144 252H139C139 238 136 232 128 226Z", WS, 0.9);
+    s += "</g>";
+    s += shape(body, "none", LW.sil);
+    // V ネックの縁取り
+    const pip = (a, b) => brush([a, b], 3.4, { fill: L.piping, a: 0.02, b: 0.02, s0: 1, e0: 1 });
+    s += pip([nl + 1, y0 - 2], [cx, vy + 1]) + pip([cx, vy + 1], [203 - nl, y0 - 2]);
+    s += shape("M" + nl + " " + (y0 - 3) + "L" + cx + " " + vy + "L" + (204 - nl) + " " + (y0 - 3), "none", LW.part);
+    if (g.fine) s += shape("M" + (nl + 3.4) + " " + (y0 + 1) + "L" + cx + " " + (vy + 5) + "L" + (200.6 - nl) + " " + (y0 + 1), "none", 0.8);
+    // 前立て・ボタン
+    s += brush([[cx, vy], [cx, 246]], 3, { fill: L.piping, a: 0.02, b: 0.02, s0: 1, e0: 1 });
+    if (g.fine) s += shape("M" + (cx - 2) + " " + vy + "V246M" + (cx + 2) + " " + vy + "V246", "none", 0.8);
+    s += ell([cx + 6, vy + 14], 1.9, 1.9, "#ffffff", 1);
+    // 肩のしわ
+    if (g.fine) s += brush([[44, 194], [52, 204], [54, 220]], 1, { op: 0.8 }) + brush([[158, 194], [150, 204], [148, 220]], 1, { op: 0.8 });
+    return s;
+  }
+  // ジャンパー (立ち襟・ファスナー) — 監督
   function jacket(g, build, hw) {
     const L = g.L;
     const sh = SHOULDER[build];
-    const col = L.jacket;
-    const cs = shadeOf(col, 0.3);
-    const hl = lightOf(col, lum(col) < 0.25 ? 0.22 : 0.35);
-    const cid = g.id + "cl";
+    const col = clothBase(L.jacket);
+    const cs = clothShade(col);
+    const hl = clothLight(col);
     const d = torso(sh);
-    let s = '<clipPath id="' + cid + '"><path d="' + d + '"/></clipPath>';
-    s += shape(d, col, 0);
-    s += '<g clip-path="url(#' + cid + ')">';
-    // 光と影
-    s += fillP("M-10 205C20 190 46 182 66 178C40 196 26 220 22 250H-10Z", hl, 0.55);
-    s += fillP("M146 176C176 188 196 204 210 214V250H160C164 224 160 196 146 176Z", cs);
+    sil(g, d);
+    const cx = 102;
+    let s = clipOpen(g.id + "bd", d) + fillP(d, col);
+    // つやと影 (くっきり)
+    s += fillP("M-10 214C14 198 40 186 62 180C40 196 28 214 24 236C14 226 4 222 -10 222Z", hl, 0.9);
+    s += fillP("M142 176C170 186 194 200 212 212V252H162C166 226 160 198 142 176Z", cs);
+    if (g.fine) s += fillP("M58 226C66 220 72 228 72 252H66C66 238 64 232 58 226Z", cs);
     // ラグラン袖の縫い目
-    s += brush(
-      [
-        [76, 178],
-        [52, 206],
-        [40, 250],
-      ],
-      1.8,
-      { op: 0.9 }
-    );
-    s += brush(
-      [
-        [124, 178],
-        [148, 206],
-        [160, 250],
-      ],
-      1.8,
-      { op: 0.9 }
-    );
-    // 胸の縁取りライン
-    s += brush(
-      [
-        [-10, 232],
-        [40, 222],
-        [70, 220],
-      ],
-      4,
-      { fill: L.trim, a: 0.05, b: 0.4, s0: 1, e0: 0.4 }
-    );
-    s += brush(
-      [
-        [210, 232],
-        [160, 222],
-        [130, 220],
-      ],
-      4,
-      { fill: L.trim, a: 0.05, b: 0.4, s0: 1, e0: 0.4 }
-    );
-    if (g.det) s += hatch(150, 200, 166, 240, 6, 12, -1.15, 1.1, lum(col) < 0.3 ? "#ffffff" : INK, 0.35);
-    s += "</g>";
-    s += shape(d, "none", 3.4);
+    if (g.fine) s += brush([[78, 178], [54, 206], [42, 252]], 1, { op: 0.9 }) + brush([[126, 178], [150, 206], [162, 252]], 1, { op: 0.9 });
+    // 胸のライン
+    s += brush([[-10, 236], [40, 226], [72, 224]], 4, { fill: L.trim, a: 0.05, b: 0.35, s0: 1, e0: 0.4 });
+    s += brush([[212, 236], [162, 226], [132, 224]], 4, { fill: mix(L.trim, "#000000", 0.18), a: 0.05, b: 0.35, s0: 1, e0: 0.4 });
+    s += "</g>" + shape(d, "none", LW.sil);
     // ファスナー
-    s += brush(
-      [
-        [100, 186],
-        [100, 246],
-      ],
-      2.4,
-      { fill: INK, a: 0.02, b: 0.02, s0: 1, e0: 1 }
-    );
-    s += brush(
-      [
-        [100, 188],
-        [100, 246],
-      ],
-      1,
-      { fill: L.trim, a: 0.02, b: 0.02, s0: 1, e0: 1 }
-    );
+    s += brush([[cx, 192], [cx, 250]], 2.2, { a: 0.02, b: 0.02, s0: 1, e0: 1 });
+    s += brush([[cx, 194], [cx, 250]], 0.8, { fill: L.trim, a: 0.02, b: 0.02, s0: 1, e0: 1 });
     // 立ち襟
-    const cl = "M" + (100 - hw - 6) + " 154C" + (100 - hw - 2) + " 170 " + (100 - 10) + " 178 100 180C" + (100 + 10) + " 178 " + (100 + hw + 2) + " 170 " + (100 + hw + 6) + " 154L" + (100 + hw + 12) + " 170C" + (100 + hw + 8) + " 188 " + (100 + 12) + " 196 100 198C" + (100 - 12) + " 196 " + (100 - hw - 8) + " 188 " + (100 - hw - 12) + " 170Z";
-    s += shape(cl, col, 3);
-    s += brush(
-      [
-        [100 - hw - 4, 160],
-        [100 - 10, 183],
-        [100, 185],
-      ],
-      2.6,
-      { fill: L.trim, a: 0.1, b: 0.05, s0: 0.5, e0: 1 }
-    );
-    s += brush(
-      [
-        [100 + hw + 4, 160],
-        [100 + 10, 183],
-        [100, 185],
-      ],
-      2.6,
-      { fill: L.trim, a: 0.1, b: 0.05, s0: 0.5, e0: 1 }
-    );
-    s += fillP("M" + (100 + hw + 6) + " 156L" + (100 + hw + 11) + " 170C" + (100 + hw + 8) + " 186 " + (100 + 12) + " 194 100 197L104 186C" + (100 + 20) + " 182 " + (100 + hw + 2) + " 172 " + (100 + hw + 6) + " 156Z", cs, 0.7);
-    s += shape("M98 182H102V190H98Z", "#c9cdd3", 1.3);
+    const cl = "M" + (cx - hw - 6) + " 156C" + (cx - hw - 2) + " 172 " + (cx - 10) + " 180 " + cx + " 182C" + (cx + 10) + " 180 " + (cx + hw + 2) + " 172 " + (cx + hw + 6) + " 156L" + (cx + hw + 12) + " 172C" + (cx + hw + 8) + " 190 " + (cx + 12) + " 198 " + cx + " 200C" + (cx - 12) + " 198 " + (cx - hw - 8) + " 190 " + (cx - hw - 12) + " 172Z";
+    sil(g, cl);
+    s += clipOpen(g.id + "cl", cl) + fillP(cl, col);
+    s += fillP("M" + (cx + 4) + " 180C" + (cx + 18) + " 178 " + (cx + hw + 4) + " 168 " + (cx + hw + 6) + " 156L" + (cx + hw + 14) + " 172V204H" + (cx + 4) + "Z", cs);
+    s += "</g>" + shape(cl, "none", LW.part);
+    s += brush([[cx - hw - 5, 162], [cx - 10, 185], [cx, 187]], 2.2, { fill: L.trim, a: 0.1, b: 0.05, s0: 0.5, e0: 1 });
+    s += brush([[cx + hw + 5, 162], [cx + 10, 185], [cx, 187]], 2.2, { fill: L.trim, a: 0.1, b: 0.05, s0: 0.5, e0: 1 });
+    s += shape("M" + (cx - 2) + " 184H" + (cx + 2) + "V192H" + (cx - 2) + "Z", "#d5d9e0", 1);
     return s;
   }
-  // ジャンパー (開いた襟、中に白い T シャツ) — マネージャー
+  // ジャージ (前を開けて白い T シャツ・胸のワッペン) — マネージャー
   function girlJacket(g) {
     const L = g.L;
     const sh = SHOULDER.girl;
-    const col = L.jacket;
-    const cs = shadeOf(col, 0.3);
-    const cid = g.id + "cl";
+    const col = clothBase(L.jacket);
+    const cs = clothShade(col);
+    const hl = clothLight(col);
     const d = torso(sh);
+    sil(g, d);
+    const cx = 102;
     let s = "";
     // T シャツ
-    s += shape("M80 166C86 180 114 180 120 166L128 250H72Z", "#fbfbf8", 2.4);
-    s += fillP("M84 176C92 186 108 186 116 176L118 186C108 192 92 192 82 186Z", "#d9dde6");
-    s += '<clipPath id="' + cid + '"><path d="' + d + '"/></clipPath>';
-    const jl = "M14 250L14 214C22 198 54 182 84 168L90 182L96 250Z";
-    const jr = "M186 250L186 214C178 198 146 182 116 168L110 182L104 250Z";
-    s += '<g clip-path="url(#' + cid + ')">';
-    s += shape(jl, col, 0) + shape(jr, col, 0);
-    s += fillP("M150 186C170 196 186 210 190 222V250H158C162 226 160 204 150 186Z", cs);
-    s += fillP("M20 214C30 200 50 190 70 182C50 200 40 222 38 250H20Z", lightOf(col, 0.3), 0.5);
-    if (g.det) s += hatch(160, 204, 172, 240, 5, 11, -1.15, 1, lum(col) < 0.3 ? "#ffffff" : INK, 0.35);
+    const tee = "M" + (cx - 20) + " 164C" + (cx - 14) + " 180 " + (cx + 14) + " 180 " + (cx + 20) + " 164L" + (cx + 28) + " 252H" + (cx - 28) + "Z";
+    s += shape(tee, "#fdfcf8", LW.part);
+    s += fillP("M" + (cx - 16) + " 174C" + (cx - 8) + " 184 " + (cx + 8) + " 184 " + (cx + 16) + " 174L" + (cx + 18) + " 184C" + (cx + 8) + " 190 " + (cx - 8) + " 190 " + (cx - 18) + " 184Z", clothShade("#fdfcf8"));
+    s += fillP("M" + (cx + 8) + " 192L" + (cx + 18) + " 188L" + (cx + 26) + " 252H" + (cx + 12) + "Z", clothShade("#fdfcf8"));
+    const jl = "M14 252L14 214C22 198 54 182 84 168L90 182L" + (cx - 4) + " 252Z";
+    const jr = "M190 252L190 214C182 198 150 182 120 168L114 182L" + (cx + 4) + " 252Z";
+    s += clipOpen(g.id + "bd", d);
+    s += fillP(jl, col) + fillP(jr, col);
+    s += fillP("M150 186C170 196 186 210 192 222V252H160C164 228 160 204 150 186Z", cs);
+    s += fillP("M18 216C28 202 48 190 68 184C50 200 40 220 38 240C30 232 24 228 18 228Z", hl, 0.9);
+    if (g.fine) s += fillP("M62 222C70 216 76 226 78 252H72C72 238 68 230 62 222Z", cs);
     s += "</g>";
-    s += shape(jl, "none", 3.2) + shape(jr, "none", 3.2);
+    s += shape(jl, "none", LW.sil) + shape(jr, "none", LW.sil);
     // 縁取り
-    s += brush(
-      [
-        [88, 180],
-        [93, 214],
-        [96, 250],
-      ],
-      3,
-      { fill: L.trim, a: 0.05, b: 0.05, s0: 1, e0: 1 }
-    );
-    s += brush(
-      [
-        [112, 180],
-        [107, 214],
-        [104, 250],
-      ],
-      3,
-      { fill: L.trim, a: 0.05, b: 0.05, s0: 1, e0: 1 }
-    );
+    s += brush([[88, 180], [94, 214], [cx - 4, 252]], 2.6, { fill: L.trim, a: 0.05, b: 0.05, s0: 1, e0: 1 });
+    s += brush([[116, 180], [110, 214], [cx + 4, 252]], 2.6, { fill: mix(L.trim, "#000000", 0.15), a: 0.05, b: 0.05, s0: 1, e0: 1 });
     // 折り返しの襟
-    s += shape("M84 166L66 186L82 200L90 182Z", col, 2.6);
-    s += shape("M116 166L134 186L118 200L110 182Z", col, 2.6);
-    s += fillP("M114 170L130 186L118 196L111 183Z", cs, 0.6);
-    s += brush(
-      [
-        [80, 172],
-        [70, 186],
-      ],
-      1.6,
-      { fill: L.trim, a: 0.05, b: 0.05, s0: 1, e0: 1 }
-    );
-    s += brush(
-      [
-        [120, 172],
-        [130, 186],
-      ],
-      1.6,
-      { fill: L.trim, a: 0.05, b: 0.05, s0: 1, e0: 1 }
-    );
+    s += shape("M84 166L66 186L82 200L90 182Z", col, LW.part);
+    s += shape("M120 166L138 186L122 200L114 182Z", col, LW.part);
+    s += fillP("M118 170L134 186L122 196L115 183Z", cs);
+    s += brush([[80, 172], [70, 186]], 1.4, { fill: L.trim, a: 0.05, b: 0.05, s0: 1, e0: 1 }) + brush([[124, 172], [134, 186]], 1.4, { fill: L.trim, a: 0.05, b: 0.05, s0: 1, e0: 1 });
     // 胸のワッペン (チームマーク)
-    s += markAt(g, 150, 222, 16, true);
+    s += markAt(g, 152, 222, 16, true);
     return s;
   }
-  // コーチのポロシャツ (チームカラー、濃い色の襟と笛)
-  function coachJacket(g, hw) {
+  // コーチのポロシャツ (チームの色、縁取りの色の襟・首から下げたストップウォッチ)
+  function coachPolo(g, hw) {
     const L = g.L;
     const sh = SHOULDER.slim;
-    const col = lum(L.main) > 0.85 ? L.jacket : L.main;
-    const cs = shadeOf(col, 0.3);
-    const collar = dist(L.jacket, col) < 90 ? "#ffffff" : L.jacket;
-    const edge = dist(collar, "#ffffff") < 90 ? col : "#ffffff";
-    const cid = g.id + "cl";
+    const col = clothBase(L.jacket);
+    const cs = clothShade(col);
+    const hl = clothLight(col);
+    const tr = L.trim;
     const d = torso(sh);
-    let s = '<clipPath id="' + cid + '"><path d="' + d + '"/></clipPath>';
-    s += shape(d, col, 0);
-    s += '<g clip-path="url(#' + cid + ')">';
-    s += fillP("M148 180C176 192 196 206 210 214V250H162C166 226 162 200 148 180Z", cs);
-    s += fillP("M-10 210C20 196 44 186 64 180C42 200 30 222 26 250H-10Z", lightOf(col, 0.3), 0.45);
-    if (g.det) s += hatch(156, 196, 170, 238, 6, 12, -1.15, 1.1, lum(col) < 0.3 ? "#ffffff" : INK, 0.35);
-    s += "</g>";
-    s += shape(d, "none", 3.4);
+    sil(g, d);
+    const cx = 102;
+    let s = clipOpen(g.id + "bd", d) + fillP(d, col);
+    s += fillP("M-10 214C14 200 40 188 62 182C40 198 28 214 24 236C14 226 4 222 -10 222Z", hl, 0.75);
+    s += fillP("M144 178C170 188 194 202 212 212V252H162C166 226 160 200 144 178Z", cs);
+    if (g.fine) s += fillP("M58 226C66 220 72 228 72 252H66C66 238 64 232 58 226Z", cs);
+    s += "</g>" + shape(d, "none", LW.sil);
     // 前立て・ボタン
-    s += shape("M95 176H105V216H95Z", col, 2.2);
-    s += '<circle cx="100" cy="194" r="2" fill="#fff" stroke="' + INK + '" stroke-width="1.1"/><circle cx="100" cy="207" r="2" fill="#fff" stroke="' + INK + '" stroke-width="1.1"/>';
+    s += shape("M" + (cx - 5) + " 180H" + (cx + 5) + "V214H" + (cx - 5) + "Z", col, LW.part);
+    s += ell([cx, 192], 1.7, 1.7, "#ffffff", 0.9) + ell([cx, 204], 1.7, 1.7, "#ffffff", 0.9);
     // 襟 (首の後ろ → 左右に倒れる)
-    s += shape("M" + (100 - hw - 4) + " 160C" + (100 - hw) + " 156 " + (100 + hw) + " 156 " + (100 + hw + 4) + " 160L" + (100 + hw + 5) + " 172L" + (100 - hw - 5) + " 172Z", shadeOf(collar, 0.35), 2.2);
+    s += shape("M" + (cx - hw - 4) + " 162C" + (cx - hw) + " 157 " + (cx + hw) + " 157 " + (cx + hw + 4) + " 162L" + (cx + hw + 5) + " 172L" + (cx - hw - 5) + " 172Z", clothShade(tr), LW.part);
     for (const sd of [-1, 1]) {
-      const X = (u) => 100 + sd * u;
-      s += shape("M" + X(hw + 4) + " 160L" + X(hw + 20) + " 194L" + X(3) + " 190L" + X(hw - 4) + " 172Z", collar, 2.6);
-      s += brush([[X(hw + 7), 166], [X(hw + 18), 191]], 1.6, { fill: edge, a: 0.05, b: 0.05, s0: 1, e0: 1 });
+      const X = (u) => cx + sd * u;
+      s += shape("M" + X(hw + 4) + " 161L" + X(hw + 12) + " 186L" + X(4) + " 183L" + X(hw - 4) + " 171Z", sd > 0 ? mix(tr, "#2a1a4a", 0.18) : tr, LW.part);
     }
-    // 笛のひも
-    const cord = L.trim === "#ffffff" ? "#d63a3a" : L.trim === col ? "#ffffff" : L.trim;
-    s += brush([[86, 182], [96, 210], [111, 228]], 1.6, { fill: cord, a: 0.05, b: 0.05, s0: 1, e0: 1 });
-    s += brush([[114, 182], [116, 210], [113, 228]], 1.6, { fill: cord, a: 0.05, b: 0.05, s0: 1, e0: 1 });
-    s += shape("M106 228h14a4 4 0 0 1 4 4v3a4 4 0 0 1-4 4h-10l-6-5z", "#c8ccd4", 1.8);
-    s += fillP("M109 230h10v2h-10z", "#ffffff", 0.8);
+    // ストラップとストップウォッチ
+    const cord = dist(tr, col) < 120 ? "#ffffff" : tr;
+    s += brush([[88, 182], [91, 202], [96, 222]], 1.8, { fill: cord, a: 0.05, b: 0.05, s0: 1, e0: 1 });
+    s += brush([[116, 182], [111, 202], [102, 222]], 1.8, { fill: mix(cord, "#2a1a4a", 0.2), a: 0.05, b: 0.05, s0: 1, e0: 1 });
+    s += shape("M97 220h4v4h-4z", "#9aa3b0", 0.9);
+    s += ell([99, 231], 7.4, 7.4, "#cfd6de", LW.part) + ell([99, 231], 5, 5, "#f4f7fa", 0.8);
+    s += fillP("M99 231l0-4.2h0.8l0 4.2z", INK) + fillP("M99 231l3-2 .4.6-3 2z", INK);
+    if (g.fine) s += fillP("M94 226a7 7 0 0 1 4-2.4l-.4 1.4a5.6 5.6 0 0 0-2.8 1.8z", "#ffffff", 0.9);
+    return s;
+  }
+  // 首にかけたタオル (チームの色に白い線) — 剛田
+  function towel(g) {
+    const L = g.L;
+    const tc = lum(L.main) > 0.85 ? L.trim : L.main;
+    const ts = clothShade(tc);
+    let s = "";
+    // 首の後ろから両肩へ、両端は胸の前に垂れる
+    const back = "M74 170C82 160 118 160 128 170L132 178C120 170 82 170 70 178Z";
+    s += shape(back, ts, LW.part);
+    const near = "M70 172C78 166 86 166 90 170C88 190 84 214 86 252H64C64 222 66 192 70 172Z";
+    const far = "M130 170C124 166 116 166 112 170C114 188 118 206 118 232L136 232C136 206 134 186 130 170Z";
+    sil(g, near);
+    sil(g, far);
+    s += shape(near, tc, LW.part) + shape(far, tc, LW.part);
+    s += fillP("M84 178C82 200 80 226 81 252H86C84 222 86 198 89 178Z", ts, 0.9);
+    s += fillP("M126 176C130 196 131 214 131 232H136C136 206 134 188 130 172Z", ts, 0.9);
+    // 白い線とふさ
+    s += brush([[65, 232], [86, 232]], 2.2, { fill: "#ffffff", a: 0.02, b: 0.02, s0: 1, e0: 1 }) + brush([[65, 238], [86, 238]], 1.4, { fill: "#ffffff", a: 0.02, b: 0.02, s0: 1, e0: 1 });
+    s += brush([[118, 220], [136, 220]], 2.2, { fill: "#ffffff", a: 0.02, b: 0.02, s0: 1, e0: 1 }) + brush([[118, 226], [136, 226]], 1.4, { fill: "#ffffff", a: 0.02, b: 0.02, s0: 1, e0: 1 });
+    if (g.fine) {
+      let d = "";
+      for (let x = 120; x < 136; x += 3.2) d += "M" + n(x) + " 232v3.4";
+      s += '<path d="' + d + '" stroke="' + INK + '" stroke-width="' + n(0.8 * K) + '" fill="none"/>';
+    }
+    return s;
+  }
+  // ねじったロープのネックレス (首の付け根) — 竜崎
+  function necklace(g) {
+    const pts = [
+      [84, 170],
+      [90, 182],
+      [101, 186.5],
+      [112, 182],
+      [118, 170],
+    ];
+    let s = brush(pts, 1.8, { fill: "#26304a", a: 0.05, b: 0.05, s0: 0.8, e0: 0.8 });
+    if (g.fine) {
+      const sp = sample(pts, 4);
+      let d = "";
+      for (let i = 1; i < sp.length - 1; i += 1) d += "M" + n(sp[i][0] - 0.6) + " " + n(sp[i][1] - 0.6) + "l1.2 1.2";
+      s += '<path d="' + d + '" stroke="#7a88b0" stroke-width="' + n(0.6 * K) + '" fill="none"/>';
+    }
     return s;
   }
 
@@ -646,7 +620,7 @@
     const L = g.L;
     let s = "";
     if (patch) {
-      s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + n(sz * 0.62) + '" fill="' + L.crown + '" stroke="' + INK + '" stroke-width="1.6"/>';
+      s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + n(sz * 0.62) + '" fill="' + L.crown + '" stroke="' + INK + '" stroke-width="' + n(1.3 * K) + '"/>';
       sz *= 0.82;
     }
     if (L.mark) {
@@ -695,926 +669,1143 @@
     } else s += st(sz * 1.05, cx, cy, txt);
     return s;
   }
-  // dy: 帽子を深くかぶる量
+  // 帽子: 山 (クラウン) は丸く、前の縫い目・マーク・つばを顔の向きへずらす。dy: 浅くかぶる量 (負で上へ)
   function cap(g, dy) {
     const L = g.L;
     const y = dy || 0;
-    const T = (s) => (y ? '<g transform="translate(0 ' + y + ')">' + s + "</g>" : s);
-    const crown = "M53 100C51 70 64 42 100 40C136 42 149 70 147 100Z";
-    const cid = g.id + "cap";
-    let s = '<clipPath id="' + cid + '"><path d="' + crown + '"/></clipPath>';
-    s += shape(crown, L.crown, 3.6);
-    s += '<g clip-path="url(#' + cid + ')">';
+    const P = (u, v, z) => prj(g, u, v + y, z);
+    const MZ = (pts) =>
+      pts.map((p) => {
+        const q = P(p[0], p[1], p[2]);
+        return p[3] ? [q[0], q[1], 1] : q;
+      });
+    const cb = clothBase(L.crown);
+    const cs = clothShade(cb);
+    const lite = lum(L.crown) > 0.8;
+    const crown = curve(
+      MZ([
+        [-46.5, 102, 2, 1],
+        [-48, 82, 4],
+        [-42, 61, 6],
+        [-25, 47.5, 8],
+        [0, 43.5, 9],
+        [25, 47.5, 8],
+        [42, 61, 6],
+        [48, 82, 4],
+        [46.5, 102, 2, 1],
+      ]),
+      true
+    );
+    sil(g, crown);
+    let s = clipOpen(g.id + "cp", crown) + fillP(crown, cb);
     if (L.stripes) {
+      // ピンストライプ (パネルに沿う)
       let d = "";
-      for (let k = -5; k <= 5; k++) d += "M100 38Q" + n(100 + k * 6.5) + " 56 " + n(100 + k * 10.5) + " 102";
-      s += '<path d="' + d + '" stroke="' + L.stripes + '" stroke-width="1.1" fill="none"/>';
+      for (let k = -6; k <= 6; k++) {
+        const t = P(k * 1.2, 45, 10);
+        const m = P(k * 6.2, 65, 34 - Math.abs(k) * 2.4);
+        const b = P(k * 9.6, 104, 40 - Math.abs(k) * 4.5);
+        d += "M" + n(t[0]) + " " + n(t[1]) + "Q" + n(m[0]) + " " + n(m[1]) + " " + n(b[0]) + " " + n(b[1]);
+      }
+      s += '<path d="' + d + '" stroke="' + L.stripes + '" stroke-width="' + n(0.6 * K) + '" stroke-opacity=".7" fill="none"/>';
     }
-    // 光沢と影
-    s += fillP("M60 90C60 64 72 48 94 43C80 52 70 66 67 92Z", "#ffffff", lum(L.crown) > 0.7 ? 0.5 : 0.28);
-    s += fillP("M147 102C150 70 138 48 112 42C130 54 140 74 138 102Z", "#000000", 0.28);
-    s += "</g>";
+    // 奥のパネルは影 (縫い目で区切る)
+    s += fillP(curve([P(0, 44.5, 10), P(15, 61, 30), P(25, 101, 38)], false) + "L160 " + n(101 + y) + "L160 " + n(30 + y) + "Z", cs);
+    // 手前のつや
+    if (!lite) s += fillP(curve([P(-31, 54, 20), P(-37, 65, 16), P(-40.5, 80, 12), P(-37.5, 81, 16), P(-34, 67, 22), P(-28, 56, 24)], true), clothLight(cb), 0.55);
+    s += "</g>" + shape(crown, "none", LW.sil);
     // 縫い目
-    s += brush(
-      [
-        [100, 42],
-        [80, 58],
-        [73, 96],
-      ],
-      1.3,
-      { fill: shadeOf(L.crown, 0.5), op: 0.8 }
-    );
-    s += brush(
-      [
-        [100, 42],
-        [120, 58],
-        [127, 96],
-      ],
-      1.3,
-      { fill: shadeOf(L.crown, 0.5), op: 0.8 }
-    );
-    s += '<ellipse cx="100" cy="41" rx="5.5" ry="2.6" fill="' + L.button + '" stroke="' + INK + '" stroke-width="1.6"/>';
+    if (g.fine) for (const k of [-1, 1]) s += brush([P(0, 45.5, 10), P(k * 15, 61, 30), P(k * 25, 99, 38)], LW.fine, { fill: lum(cb) > 0.5 ? mix(cb, INK, 0.55) : "#000000", op: 0.85, s0: 0.5, e0: 0.5 });
+    s += ell(P(0, 44.5, 9), 4.6, 2.2, L.button, LW.part);
+    // マーク (向いた分だけ横に縮める)
     g.capCol = L.crown;
-    s += markAt(g, 100, 70, 28);
-    // つば (正面から少し見上げた弧)
-    const brim = "M45 104C56 83 144 83 155 104C144 108 124 101.5 100 101.5C76 101.5 56 108 45 104Z";
-    s += shape(brim, L.brim, 3.6);
-    s += fillP("M50 101C64 88 136 88 150 101C138 95 120 91 100 91C80 91 62 95 50 101Z", "#ffffff", lum(L.brim) > 0.7 ? 0.0 : 0.22);
-    s += brush(
-      [
-        [51, 102],
-        [76, 98],
-        [100, 97.8],
-        [124, 98],
-        [149, 102],
-      ],
-      1.8,
-      { fill: lum(L.brim) > 0.6 ? INK : "#000", op: 0.6, a: 0.2, b: 0.2 }
-    );
-    // つばの下側の太い墨 (強弱)
-    s += brush(
-      [
-        [46, 104],
-        [72, 103],
-        [100, 103],
-        [128, 103],
-        [154, 104],
-      ],
-      3.4,
-      { a: 0.15, b: 0.15, s0: 0.3, e0: 0.3 }
-    );
-    return T(s);
-  }
-  // つばの影 (顔の上)
-  function brimShadow(g, dy) {
-    const y = dy || 0;
-    return fillP("M20 96H180V" + (104 + y) + "C150 " + (104 + y) + " 128 " + (111 + y) + " 100 " + (111 + y) + "C72 " + (111 + y) + " 50 " + (104 + y) + " 20 " + (104 + y) + "Z", g.skinS);
-  }
-
-  /* ---------- 顔のパーツ ---------- */
-  function ear(g, side, y0, y1, big) {
-    const s1 = side;
-    const xb = 100 + s1 * 41;
-    const w = big ? 11 : 9;
-    const P = (u, v) => [100 + s1 * u, v];
-    const d = curve([P(41, y0), P(41 + w * 0.7, y0 - 3), P(41 + w, y0 + 6), P(41 + w * 0.9, (y0 + y1) / 2 + 2), P(41 + w * 0.5, y1 - 1), P(40, y1)], false) + "Z";
-    let s = shape(d, g.skin, 3);
-    s += fillP(curve([P(42, y0 + 3), P(41 + w * 0.7, y0 + 2), P(41 + w * 0.75, y0 + 10), P(43, y1 - 6)], false) + "Z", g.skinS);
-    s += brush([P(41 + w * 0.55, y0 + 3), P(41 + w * 0.75, y0 + 9), P(41 + w * 0.5, (y0 + y1) / 2 + 3), P(43, y1 - 6)], 1.8);
-    void xb;
+    const mc = P(0, 73.5, 42);
+    s += '<g transform="translate(' + n(mc[0]) + " " + n(mc[1]) + ") scale(" + n(g.ca * 0.96) + ' 1)">' + markAt(g, 0, 0, 25) + "</g>";
+    // つば (上の面が三日月に見える)
+    const top = MZ([
+      [-49, 103.5, 4, 1],
+      [-40, 94, 28],
+      [-22, 88.5, 48],
+      [0, 87, 57],
+      [22, 88.5, 48],
+      [40, 94, 28],
+      [49, 103.5, 4, 1],
+    ]);
+    const bot = MZ([
+      [36, 104, 32],
+      [18, 103.2, 47],
+      [0, 102.8, 52],
+      [-18, 103.2, 47],
+      [-36, 104, 32],
+    ]);
+    const brim = curve(top.concat(bot), true);
+    sil(g, brim);
+    const bc = clothBase(L.brim);
+    s += clipOpen(g.id + "br", brim) + fillP(brim, bc);
+    // つばの影 (奥) と光 (手前の上)
+    s += fillP(curve(MZ([[8, 84, 60], [30, 90, 40], [52, 104, 4], [10, 106, 50]]), true), clothShade(bc));
+    if (lum(L.brim) <= 0.8) s += fillP(curve(MZ([[-40, 95.5, 28], [-24, 90.5, 46], [-8, 89, 54], [-22, 92, 46]]), true), clothLight(bc), 0.8);
+    s += "</g>" + shape(brim, "none", LW.sil);
+    // つばの下のふち (少しだけ太い)
+    s += brush(MZ([[-48, 103.6, 6], [-24, 103.4, 44], [0, 103.1, 52], [24, 103.4, 44], [48, 103.6, 6]]), LW.chin, { a: 0.2, b: 0.2, s0: 0.4, e0: 0.4 });
     return s;
   }
-
-  // 目。(cx, cy) 目の中心, s: -1 左目 / 1 右目, o: {w, h, r, lid, tilt, lash, iris, hl}
-  function eye(g, cx, cy, s, o, ex) {
-    const P = (u, v) => [cx + s * u, cy + v];
-    const w = o.w;
-    let out = "";
-    let h = o.h;
-    let tilt = o.tilt || 0;
-    let r = o.r;
-    // 黒目は上まぶたにかかる高さ (驚いたときだけ白目の真ん中)
-    let iy = -Math.max(0, h - r) * 0.55 + 0.6;
-    let iu = -0.8;
-    const style = o.style || "std";
-    if (style === "smile" && ex !== "surprised" && ex !== "angry" && ex !== "serious") ex = "happy";
-    if (style === "line" && ex !== "surprised") {
-      // 細目: 1 本の線
-      const k = ex === "angry" || ex === "serious" ? 2 : ex === "sad" ? -2 : ex === "happy" ? -1 : 0;
-      out += brush([P(-w / 2, 0.5 + k * 0.5), P(0, -2.2 - (ex === "happy" ? 2 : 0)), P(w / 2 + 1, 0.5 - k)], o.lid, { a: 0.3, b: 0.3, s0: 0.3, e0: 0.5 });
-      return out;
+  // つばの影 (顔の上): つばの下から dep だけ下まで
+  function brimShade(g, dy, dep) {
+    const pts = [];
+    for (let i = 0; i <= 8; i++) {
+      const u = -54 + i * 13.5;
+      pts.push(F(g, u, 103 + dy + dep + Math.abs(u) * 0.03, 0));
     }
-    if (ex === "happy") {
-      // 笑い目: 上に丸い弧
-      const k = o.lash ? 1.2 : 1;
-      out += brush([P(-w / 2, 1.5), P(-w * 0.18, -h * 0.55 * k), P(w * 0.22, -h * 0.55 * k), P(w / 2 + 1, 1.8)], o.lid * 1.05, { a: 0.3, b: 0.3, s0: 0.35, e0: 0.45 });
-      if (o.lash) out += brush([P(w / 2, 0.5), P(w / 2 + 4, -1.5)], 1.6, { s0: 0.8, e0: 0.1 });
-      if (g.det && !o.lash) out += brush([P(-w * 0.2, 4.2), P(w * 0.25, 4)], 1.1, { op: 0.7 });
-      return out;
-    }
-    if (ex === "angry") {
-      h *= o.lash ? 0.85 : 0.72;
-      tilt += 3;
-      r *= 0.82;
-      iu = -1.6;
-      iy = -Math.max(0, h - r) * 0.3 + 0.8;
-    } else if (ex === "serious") {
-      // 真剣: 目を細めてまっすぐ見る
-      h *= o.lash ? 0.88 : 0.78;
-      tilt += 1.5;
-      r *= 0.95;
-      iu = -1.2;
-      iy = -Math.max(0, h - r) * 0.4 + 0.6;
-    } else if (ex === "surprised") {
-      h *= 1.35;
-      r *= 0.55;
-      iu = 0;
-      iy = 0.4;
-    } else if (ex === "sad") {
-      tilt -= 3;
-      h *= 0.85;
-      iy = 2;
-    }
-    const bot = h * (o.lash ? 0.62 : 0.55) * (ex === "surprised" ? 1.3 : 1);
-    // 上まぶたの曲線 (目尻ほど tilt だけ上がる)
-    const tv = (u) => -tilt * ((u + w / 2) / w);
-    const up = [P(-w / 2, 1 + tv(-w / 2)), P(-w * 0.25, -h * 0.82 + tv(-w * 0.25)), P(w * 0.15, -h + tv(w * 0.15)), P(w / 2, -h * 0.3 + tv(w / 2) + 0.5), P(w / 2 + 2.5, 1.2 + tv(w / 2))];
-    if (ex === "angry" || ex === "serious") up[1][1] += ex === "angry" ? 1.6 : 0.9;
-    const lo = [P(w / 2 + 1, 1 + tv(w / 2) * 0.4), P(w * 0.2, bot), P(-w * 0.25, bot * 0.95), P(-w / 2, 1 + tv(-w / 2))];
-    const white = curve(up.slice(0, 4).concat(lo.slice(1)), true);
-    const eid = g.id + "e" + ++g.n;
-    out += '<clipPath id="' + eid + '"><path d="' + white + '"/></clipPath>';
-    out += fillP(white, "#ffffff");
-    // 黒目
-    const ic = P(iu, iy);
-    out += '<g clip-path="url(#' + eid + ')">';
-    if (o.iris) {
-      out += '<circle cx="' + n(ic[0]) + '" cy="' + n(ic[1]) + '" r="' + n(r) + '" fill="' + o.iris + '" stroke="' + INK + '" stroke-width="1.4"/>';
-      out += '<circle cx="' + n(ic[0]) + '" cy="' + n(ic[1] + r * 0.15) + '" r="' + n(r * 0.55) + '" fill="' + INK + '"/>';
-      out += fillP("M" + n(ic[0] - r) + " " + n(ic[1]) + "A" + n(r) + " " + n(r) + " 0 0 0 " + n(ic[0] + r) + " " + n(ic[1]) + "A" + n(r) + " " + n(r * 0.5) + " 0 0 1 " + n(ic[0] - r) + " " + n(ic[1]) + "Z", lightOf(o.iris, 0.35), 0.8);
-    } else {
-      out += '<circle cx="' + n(ic[0]) + '" cy="' + n(ic[1]) + '" r="' + n(r) + '" fill="' + INK + '"/>';
-    }
-    // まぶたの影
-    out += fillP(curve(up.slice(0, 4), false) + "L" + n(up[3][0]) + " " + n(up[3][1] + 2.4) + "L" + n(up[0][0]) + " " + n(up[0][1] + 2.4) + "Z", "#8a8fa3", 0.35);
-    out += "</g>";
-    if (ex !== "surprised" || o.lash) {
-      const hr = Math.max(1.1, r * 0.34);
-      out += '<circle cx="' + n(ic[0] - s * r * 0.3) + '" cy="' + n(ic[1] - r * 0.38) + '" r="' + n(hr) + '" fill="#fff"/>';
-      if (o.hl === 2) out += '<circle cx="' + n(ic[0] + s * r * 0.35) + '" cy="' + n(ic[1] + r * 0.4) + '" r="' + n(hr * 0.5) + '" fill="#fff"/>';
-    }
-    // 上まぶた (太い墨、目尻が太い)
-    out += brush(up, o.lid, { a: 0.35, b: 0.25, s0: 0.25, e0: 0.55 });
-    if (o.lash) {
-      // まつげ
-      out += brush([P(w / 2 - 0.5, -h * 0.3 + tv(w / 2)), P(w / 2 + 3.5, -h * 0.55 + tv(w / 2))], 2, { s0: 1, e0: 0.1, a: 0.1, b: 0.7 });
-      out += brush([P(w / 2 + 1.5, tv(w / 2) - 0.2), P(w / 2 + 5, -1.2 + tv(w / 2))], 1.8, { s0: 1, e0: 0.1, a: 0.1, b: 0.7 });
-    }
-    if (o.crease && ex !== "surprised") out += brush([P(-w * 0.15, -h - 2.6 + tv(-w * 0.15)), P(w * 0.2, -h - 3.6 + tv(w * 0.2)), P(w / 2 + 1, -h * 0.5 - 3 + tv(w / 2))], 1.3, { op: 0.85 });
-    // 下まぶた
-    out += brush(lo.slice(0, 3), o.lash ? 1.6 : 1.4, { a: 0.3, b: 0.4, s0: 0.6, e0: 0.1 });
-    if (ex === "surprised" && g.det) out += brush([P(-w * 0.1, -h - 3.5), P(w * 0.3, -h - 3)], 1, { op: 0.7 });
-    return out;
-  }
-  // 眉。cy: 基準の高さ, o: {w, t (太さ), arch, bushy}
-  function brow(g, cx, cy, s, o, ex) {
-    let a = 0;
-    let b = o.lift || 0;
-    let arch = o.arch == null ? 2 : o.arch;
-    if (ex === "angry") {
-      a = 5.5;
-      b -= 3;
-      arch = 0.2;
-    } else if (ex === "serious") {
-      a = 3.2;
-      b -= 1.5;
-      arch = 0.4;
-    } else if (ex === "surprised") {
-      a = -6;
-      b -= 4.5;
-      arch += 3;
-    } else if (ex === "sad") {
-      a = -4.5;
-      b += 3;
-      arch = 0.5;
-    } else if (ex === "happy") {
-      a = -1.5;
-      b -= 1.5;
-      arch += 1.5;
-    }
-    const P = (u, v) => [cx + s * u, cy + v];
-    const w = o.w;
-    const pts = [P(-w / 2, a), P(-w * 0.05, -arch + a * 0.5 + b * 0.3), P(w / 2 + 2, b + 1.5)];
-    const col = o.col || INK;
-    let out = brush(pts, o.t, { a: 0.12, s0: 0.75, b: 0.55, e0: 0.12, fill: col });
-    if (o.bushy && g.det) {
-      // 毛並み
-      for (let i = 0; i < 6; i++) {
-        const t = i / 5;
-        const x = -w / 2 + w * t;
-        const yy = a + (b - a) * t - arch * Math.sin(t * Math.PI) * 0.8;
-        out += brush([P(x, yy + o.t * 0.3), P(x + 4.5, yy - o.t * 0.75)], 1.4 + (i % 2) * 0.4, { fill: col, s0: 0.9, e0: 0.05 });
-      }
-      out += brush([P(-w * 0.3, a - 0.2), P(w * 0.3, (a + b) / 2 - arch * 0.8)], 1, { fill: "#9a9a9a", op: 0.9 });
-    }
-    return out;
+    return fillP(curve(pts, false) + "L" + n(pts[8][0] + 6) + " 60L" + n(pts[0][0] - 6) + " 60Z", g.skinS);
   }
 
-  /* ---------- キャラクター ---------- */
-  // 首をかしげる (あごの下を中心に回す)
-  const headOpen = (g) => (g.tilt ? '<g transform="rotate(' + g.tilt + ' 100 158)">' : "");
-  const headClose = (g) => (g.tilt ? "</g>" : "");
-  const rot = (g, str) => headOpen(g) + str + headClose(g);
-  // 顔の形 (左半分: 中心線上の点から始まり、あごの先で終わる)
+  /* ---------- 顔 ---------- */
+  // 輪郭 (手前の半分: 上の中央 → あご)。[u, v, z]
   const JAW = {
-    std: [
-      [100, 74],
-      [78, 76],
-      [62, 84],
-      [58, 98],
-      [57, 112],
-      [59, 128],
-      [63, 142],
-      [71, 155],
-      [85, 165],
-      [100, 168],
+    me: [
+      [0, 86, 30],
+      [-22, 87, 22],
+      [-35.5, 92, 10],
+      [-40, 104, 2],
+      [-40.5, 116, 0],
+      [-39.5, 128, 2],
+      [-37, 139, 6],
+      [-32, 149, 14],
+      [-24, 157.5, 24],
+      [-14, 164, 31],
+      [-6, 167.5, 35],
+      [0, 168.5, 37],
     ],
-    oni: [
-      [100, 74],
-      [76, 76],
-      [61, 84],
-      [57, 98],
-      [56, 114],
-      [57, 130],
-      [60, 145],
-      [66, 157],
-      [78, 166],
-      [90, 170],
-      [100, 171],
+    kanto: [
+      [0, 86, 30],
+      [-23, 87, 22],
+      [-37, 92, 10],
+      [-41.5, 104, 2],
+      [-42, 117, 0],
+      [-42, 130, 2],
+      [-41, 144, 6],
+      [-37.8, 155, 14],
+      [-29.6, 163, 24],
+      [-16.2, 168.2, 32],
+      [0, 169.6, 35],
     ],
     goda: [
-      [100, 38],
-      [80, 40],
-      [64, 48],
-      [56, 62],
-      [53, 82],
-      [52, 104],
-      [53, 124],
-      [56, 142],
-      [63, 157],
-      [77, 168],
-      [90, 172],
-      [100, 173],
+      [0, 58, 30],
+      [-26, 60, 22],
+      [-40, 68, 10],
+      [-45, 84, 2],
+      [-46, 102, 0],
+      [-46, 118, 1],
+      [-45, 132, 4],
+      [-42.5, 145, 9],
+      [-37, 155.5, 16],
+      [-28, 163.5, 25],
+      [-15, 168.6, 32],
+      [-7, 169.6, 35],
+      [0, 169.8, 36],
     ],
     girl: [
-      [100, 46],
-      [80, 48],
-      [66, 58],
-      [60, 74],
-      [59, 96],
-      [60, 114],
-      [62, 128],
-      [68, 142],
-      [78, 153],
-      [90, 160],
-      [100, 162],
+      [0, 52, 30],
+      [-24, 54, 22],
+      [-36, 64, 10],
+      [-39.5, 80, 2],
+      [-40, 100, 0],
+      [-39, 115, 2],
+      [-36, 128, 6],
+      [-30.5, 140, 14],
+      [-22, 150, 22],
+      [-12, 157, 30],
+      [-5, 159.6, 32],
+      [0, 160.2, 33],
     ],
-    slim: [
-      [100, 40],
-      [80, 42],
-      [66, 50],
-      [59, 66],
-      [58, 88],
-      [58, 108],
-      [60, 124],
-      [64, 138],
-      [72, 152],
-      [85, 163],
-      [100, 167],
+    inukai: [
+      [0, 56, 30],
+      [-24, 58, 22],
+      [-35, 66, 10],
+      [-38.5, 82, 2],
+      [-39, 102, 0],
+      [-38.5, 118, 1],
+      [-37, 132, 4],
+      [-33.5, 145, 10],
+      [-27, 156, 19],
+      [-18, 164.5, 28],
+      [-8, 169.5, 34],
+      [0, 170.5, 36],
     ],
-    vee: [
-      [100, 74],
-      [78, 76],
-      [62, 84],
-      [58, 98],
-      [58, 114],
-      [60, 128],
-      [65, 142],
-      [75, 154],
-      [88, 163],
-      [100, 167],
+    ryu: [
+      [0, 86, 30],
+      [-21, 87, 22],
+      [-34, 92, 10],
+      [-38, 104, 2],
+      [-38.5, 116, 0],
+      [-37.5, 128, 2],
+      [-35, 139, 6],
+      [-30, 150, 14],
+      [-22, 159, 23],
+      [-13, 165.5, 30],
+      [-5, 169.5, 35],
+      [0, 170.5, 37],
     ],
   };
-  function faceShape(g, jaw) {
-    const pts = sym(JAW[jaw]);
+  function jawPts(g, key) {
+    const h = JAW[key];
+    const full = h.concat(
+      h
+        .slice(1, -1)
+        .reverse()
+        .map((p) => [-p[0], p[1], p[2]])
+    );
+    return full.map((p) => prj(g, p[0], p[1], p[2]));
+  }
+  // 顔の塗り・セル影 (奥側の頬)・輪郭。extra は顔の形で切り抜いて描く影 (前髪・つば)
+  function face(g, key, extra) {
+    const h = JAW[key];
+    const pts = g.jaw;
     const d = curve(pts, true);
-    const fid = g.id + "fc";
     g.faceD = d;
-    let s = '<clipPath id="' + fid + '"><path d="' + d + '"/></clipPath>';
-    s += fillP(d, g.skin);
-    return s;
-  }
-  // 顔の陰 (右側・鼻の下・下くちびるの下)。clip の中で描く
-  function faceShade(g, o) {
-    let s = '<g clip-path="url(#' + g.id + 'fc)">';
-    const jaw = JAW[o.jaw];
-    // 右の頬の陰 (光は左上から)
-    const R = jaw.map(mx).filter((p) => p[1] > 92);
-    const inner = R.map((p) => [p[0] - (p[1] > 150 ? 6 : 9) + (p[1] - 100) * 0.02, p[1]]);
-    s += fillP(curve(inner, false) + "L" + n(R[R.length - 1][0] + 30) + " " + R[R.length - 1][1] + "L" + (R[0][0] + 30) + " " + R[0][1] + "Z", g.skinS);
-    if (g.det && o.hatch !== false) {
-      // 影の境目の斜線
-      for (let y = 112; y <= 150; y += 4.5) {
-        let k = 0;
-        while (k < inner.length - 2 && inner[k + 1][1] < y) k++;
-        const p0 = inner[k];
-        const p1 = inner[k + 1];
-        const t = Math.max(0, Math.min(1, (y - p0[1]) / ((p1[1] - p0[1]) || 1)));
-        const x = p0[0] + (p1[0] - p0[0]) * t;
-        s += brush([[x + 1.5, y + 2.5], [x - 5, y - 3]], 1.1, { op: 0.55, s0: 0.6, e0: 0.05, a: 0.2, b: 0.6, per: 3 });
-      }
-    }
-    // 頬骨の下のハッチング
-    if (g.det && o.cheekHatch) s += hatch(o.cheekHatch[0], o.cheekHatch[1], o.cheekHatch[0] + 4, o.cheekHatch[1] + 12, 4, 7, -1.05, 1, INK, 0.55);
-    if (o.extraShade) s += o.extraShade;
-    if (o.cap) s += brimShadow(g, o.capDy);
+    sil(g, d);
+    let s = clipOpen(g.id + "fc", d) + fillP(d, g.skin);
+    // 奥側の影: 輪郭から内へ幅 w。頬骨のところで細くなり、あごへ消える
+    const far = h.filter((p) => p[1] >= 96).map((p) => [-p[0], p[1], p[2]]);
+    const m = far.length - 1;
+    const outer = far.map((p) => prj(g, p[0], p[1], p[2]));
+    const inner = far.map((p, i) => {
+      const t = i / m;
+      let w = t < 0.62 ? 7 + 6 * (t / 0.62) : 13 * Math.pow((1 - t) / 0.38, 0.9);
+      w -= 4 * Math.exp(-Math.pow((t - 0.28) / 0.1, 2));
+      const q = prj(g, p[0], p[1], p[2]);
+      return [q[0] - Math.max(0, w), q[1] + (i === m ? 0 : 0.5)];
+    });
+    s += fillP(curve(inner, false) + "L" + n(outer[m][0] + 20) + " " + n(outer[m][1] + 6) + "L" + n(outer[0][0] + 20) + " " + n(outer[0][1] - 20) + "L" + n(inner[0][0]) + " " + n(inner[0][1] - 20) + "Z", g.skinS);
+    if (extra) s += extra;
     s += "</g>";
-    // 輪郭 (下側を太く)
-    s += shape(g.faceD, "none", 3.2);
-    const J = JAW[o.jaw];
-    const low = J.filter((p) => p[1] >= 128);
-    s += brush(low.concat(low.slice(0, -1).reverse().map(mx)), 3.4, { a: 0.25, b: 0.25, s0: 0, e0: 0, per: 6 });
+    s += shape(d, "none", LW.sil);
+    // あごの下側を少し太く (重さ)
+    const low = pts.filter((p) => p[1] >= h[h.length - 1][1] - 22);
+    low.sort((a, b) => a[0] - b[0]);
+    s += brush(low, LW.chin, { a: 0.3, b: 0.3, s0: 0.4, e0: 0.4, per: 6 });
     return s;
   }
-  // 鼻。type: std / big / broad / small / long / sharp
-  function nose(g, cy, type, ex) {
-    let s = "";
-    const sh = g.skinS;
-    if (type === "small") {
-      s += brush(
-        [
-          [102, cy - 4],
-          [103.5, cy],
-          [101, cy + 1],
-        ],
-        1.8,
-        { s0: 0.3, e0: 0.4 }
-      );
-      return s;
-    }
-    const k = type === "big" ? 1.35 : type === "broad" ? 1.25 : type === "long" ? 0.9 : 1;
-    const top = type === "long" ? cy - 22 : cy - 16;
-    // 鼻すじの影
-    s += fillP("M" + (103 + k) + " " + top + "C" + (106 + k * 2) + " " + (cy - 8) + " " + (108 + k * 3) + " " + (cy - 2) + " " + (106 + k * 2) + " " + (cy + 2) + "L" + (101 + k) + " " + (cy + 2) + "C" + (103 + k) + " " + (cy - 6) + " " + (103 + k) + " " + (cy - 10) + " " + (102 + k) + " " + top + "Z", sh);
-    s += brush(
-      [
-        [103 + k, top],
-        [106 + k * 2.2, cy - 6],
-        [107 + k * 3, cy + 1],
-      ],
-      type === "sharp" ? 2.2 : 1.8,
-      { s0: 0.1, e0: 0.8, a: 0.6, b: 0.1 }
-    );
-    // 鼻先・小鼻
-    s += brush(
-      [
-        [93 - k * 3, cy + 1],
-        [98, cy + 3.5],
-        [103, cy + 3.5],
-        [107 + k * 3, cy + 1],
-      ],
-      type === "broad" || type === "big" ? 2.4 : 2,
-      { s0: 0.4, e0: 0.7, a: 0.3, b: 0.2 }
-    );
-    if (type === "big" || type === "broad") {
-      s += brush(
-        [
-          [91 - k * 2, cy - 4],
-          [89 - k * 2, cy],
-          [92 - k * 2, cy + 2.5],
-        ],
-        2,
-        { s0: 0.3, e0: 0.8 }
-      );
-      s += brush(
-        [
-          [109 + k * 2, cy - 4],
-          [111 + k * 2, cy],
-          [108 + k * 2, cy + 2.5],
-        ],
-        2.2,
-        { s0: 0.3, e0: 0.8 }
-      );
-    }
-    s += '<ellipse cx="96" cy="' + (cy + 1.2) + '" rx="2" ry="1.1" fill="' + INK + '"/><ellipse cx="104.5" cy="' + (cy + 1.2) + '" rx="2" ry="1.1" fill="' + INK + '"/>';
-    // 鼻の下の影
-    s += fillP("M98 " + (cy + 4.5) + "C102 " + (cy + 5.5) + " 106 " + (cy + 5) + " 109 " + (cy + 3) + "C108 " + (cy + 8) + " 102 " + (cy + 9) + " 98 " + (cy + 4.5) + "Z", sh, 0.9);
-    void ex;
+  // 耳 (side -1 手前 / 1 奥)。y0〜y1 の高さで輪郭につく
+  function ear(g, side, y0, y1, w) {
+    let best = null;
+    const vm = (y0 + y1) / 2;
+    for (const p of g.jaw) if ((side < 0 ? p[0] < 100 : p[0] > 100) && (!best || Math.abs(p[1] - vm) < Math.abs(best[1] - vm))) best = p;
+    const ww = side < 0 ? w : w * 0.55;
+    const x0 = best[0] + side * 1.5;
+    const P = (u, v) => [x0 + side * u, v];
+    const d = curve([P(-1, y0 + 2), P(ww * 0.6, y0 - 2), P(ww, y0 + 5), P(ww * 0.9, vm + 2), P(ww * 0.55, y1 - 1), P(-1, y1)], false) + "Z";
+    sil(g, d);
+    let s = fillP(d, g.skin);
+    s += fillP(curve([P(1, y0 + 4), P(ww * 0.6, y0 + 2.5), P(ww * 0.72, y0 + 9), P(ww * 0.45, y1 - 6), P(1, y1 - 7)], false) + "Z", g.skinS);
+    s += shape(d, "none", LW.part);
+    if (side < 0 && g.fine) s += brush([P(ww * 0.55, y0 + 4), P(ww * 0.7, y0 + 10), P(ww * 0.42, vm + 3), P(2.5, y1 - 7)], LW.fine, { fill: INK2 });
     return s;
   }
-  // 口。o: {w, style}, ex: 表情
+
+  // 目。(u0, v0): 目の中心, s: -1 手前 (左) / 1 奥 (右)
+  // o: {w, h, iris, lash, droop (目尻の下がり), fem, crease, lift (下まぶたを上げる), lo (下まぶたの長さ), cat3 (光 3 つ), line (糸目)}
+  // mode: "" 開いた目 / "arc" 笑って閉じた目 / "squint" 笑って細めた目
+  function eye(g, u0, v0, s, o, ex, mode) {
+    const w = o.w;
+    let h = o.h;
+    const P = (x, y, c) => {
+      const q = F(g, u0 + s * x, v0 + y, 0);
+      return c ? [q[0], q[1], 1] : q;
+    };
+    const lash = ((o.lash || LW.lashM) * g.kl0) / g.hk;
+    const dr = o.droop || 0;
+    let out = "";
+    if (o.line && ex !== "surprised") {
+      // 糸目: 上へ反った 1 本の線
+      const k = ex === "happy" ? 1.5 : ex === "sad" ? 0.4 : 1;
+      const ti = ex === "angry" ? 1.4 : ex === "serious" ? 0.7 : ex === "sad" ? -0.8 : 0;
+      out += brush([P(-w / 2, 0.6 + ti), P(-0.18 * w, -1.7 * k + ti * 0.5), P(0.22 * w, -1.9 * k), P(w / 2 + 1, 0.3 + dr + (ex === "sad" ? 1.2 : 0))], lash, { raw: 1, a: 0.3, b: 0.3, s0: 0.3, e0: 0.35 });
+      return out;
+    }
+    if (o.line) h = 8;
+    if (mode === "arc") {
+      // 笑って閉じた目 (上に丸い弧)
+      out += brush([P(-w / 2, 0.12 * h), P(-0.22 * w, -0.32 * h), P(0.2 * w, -0.36 * h), P(w / 2 + 1, 0.1 * h + dr)], lash * 0.9, { raw: 1, a: 0.3, b: 0.3, s0: 0.3, e0: 0.35 });
+      if (o.fem) out += brush([P(w / 2, 0.05 * h), P(w / 2 + 3.5, -0.14 * h)], 1.6, { s0: 0.9, e0: 0.1 });
+      if (g.fine) out += brush([P(-0.12 * w, 0.42 * h), P(0.14 * w, 0.36 * h), P(0.34 * w, 0.42 * h)], 0.8, { fill: INK2, op: 0.5 });
+      return out;
+    }
+    let up;
+    let lo;
+    let loL = null;
+    let iy = 0.06 * h;
+    let ir = 1;
+    const lift = o.lift || 0;
+    if (mode === "squint") {
+      // 笑って細めた目 (下まぶたが上がる)
+      up = [P(-w / 2, 0.16 * h, 1), P(-0.3 * w, -0.36 * h), P(0.06 * w, -0.5 * h), P(0.36 * w, -0.4 * h), P(w / 2, 0.02 * h + dr, 1)];
+      lo = [P(0.34 * w, -0.06 * h), P(0.04 * w, -0.14 * h), P(-0.3 * w, -0.04 * h)];
+      iy = -0.12 * h;
+    } else {
+      let k = 1;
+      if (ex === "surprised") k = 1.15;
+      if (ex === "angry" || ex === "serious") k = 0.8;
+      if (ex === "sad") k = 0.9;
+      h *= k;
+      const tl = ex === "angry" ? 0.12 * h : ex === "sad" ? -0.1 * h : 0;
+      up = [P(-w / 2, 0.08 * h, 1), P(-0.3 * w, -0.42 * h + tl * 0.5), P(0.05 * w, -0.55 * h + tl * 0.2), P(0.36 * w, -0.47 * h - tl * 0.3), P(w / 2, -0.12 * h + dr - tl * 0.4, 1)];
+      const lf = (ex === "happy" ? 0.1 : 0) + (ex === "surprised" ? 0 : lift);
+      loL = [
+        [0.4 * w, (0.26 - lf) * h + dr * 0.5],
+        [0.08 * w, (0.45 - lf * 1.2) * h],
+        [-0.28 * w, (0.38 - lf) * h],
+      ];
+      lo = loL.map((p) => P(p[0], p[1]));
+      if (ex === "surprised") ir = 0.72;
+    }
+    const white = curve(up.concat(lo), true);
+    const eid = g.id + "e" + ++g.n;
+    out += clipOpen(eid, white) + fillP(white, "#ffffff");
+    // 黒目: カメラを見る (少し手前へ)。奥の目は横に縮む
+    const kx = Math.abs(P(0.5, 0)[0] - P(-0.5, 0)[0]);
+    const ic = P(-s * 1.2, iy);
+    const rx = 0.31 * w * kx * ir;
+    const ry = 0.58 * o.h * ir;
+    const c = o.iris;
+    const iid = eid + "i";
+    out += '<clipPath id="' + iid + '"><ellipse cx="' + n(ic[0]) + '" cy="' + n(ic[1]) + '" rx="' + n(rx) + '" ry="' + n(ry) + '"/></clipPath>';
+    out += ell(ic, rx, ry, c);
+    // 上は暗い帯、下は明るい三日月
+    out += '<g clip-path="url(#' + iid + ')">' + ell([ic[0], ic[1] - ry * 0.78], rx * 1.5, ry * 0.78, mix(c, "#1a0c08", 0.55)) + ell([ic[0], ic[1] + ry * 0.62], rx * 0.78, ry * 0.42, mix(c, "#fff3c8", 0.42), 0, 0.95) + "</g>";
+    // 瞳孔とふち
+    out += ell([ic[0], ic[1] - ry * 0.04], rx * 0.4, ry * 0.46, mix(c, "#120806", 0.8));
+    out += '<ellipse cx="' + n(ic[0]) + '" cy="' + n(ic[1]) + '" rx="' + n(rx) + '" ry="' + n(ry) + '" fill="none" stroke="' + mix(c, "#120806", 0.7) + '" stroke-width="' + n(0.8 * K) + '"/>';
+    // 上まぶたの影 (白目と黒目の上)
+    out += fillP(curve(up, false) + "L" + n(up[4][0]) + " " + n(up[4][1] + 0.24 * h) + curve(up.slice().reverse().map((p) => [p[0], p[1] + 0.26 * h]), false).replace(/^M/, "L") + "Z", "#9aa3c8", 0.4);
+    out += "</g>";
+    // ハイライト (両目とも左上と右下)
+    if (ex === "surprised") out += ell([ic[0] - rx * 0.3, ic[1] - ry * 0.3], rx * 0.3, rx * 0.3, "#ffffff");
+    else if (g.lod === 2) out += ell([ic[0] - rx * 0.34, ic[1] - ry * 0.38], rx * 0.4, ry * 0.36, "#ffffff");
+    else {
+      out += ell([ic[0] - rx * 0.36, ic[1] - ry * 0.4], rx * 0.34, ry * 0.3, "#ffffff");
+      out += ell([ic[0] + rx * 0.38, ic[1] + ry * 0.36], rx * 0.15, rx * 0.15, "#ffffff", 0, 0.95);
+      if (o.cat3) out += ell([ic[0] + rx * 0.42, ic[1] - ry * 0.48], rx * 0.1, rx * 0.1, "#ffffff");
+    }
+    // 上まぶた (太い線、目尻は少しはねる)
+    const tail = P(w / 2 + 2.2, (mode === "squint" ? 0.05 : -0.03) * h + dr * 1.3);
+    out += brush(up.concat([tail]), lash, { raw: 1, a: 0.3, b: 0.22, s0: 0.3, e0: 0.25 });
+    // 目尻の黒いくさび (上まぶたの線が下へ回りこむ)
+    if (mode !== "squint") out += fillP(curve([up[3], P(w / 2 + 1.2, -0.16 * h + dr), P(w / 2 - 0.2, 0.12 * h + dr), P(0.4 * w, 0.08 * h + dr), P(0.38 * w, -0.2 * h)], true), INK);
+    if (o.fem) {
+      // まつげ 2 本
+      out += brush([P(0.4 * w, -0.4 * h), P(0.52 * w, -0.62 * h)], 1.7, { s0: 1, e0: 0.1, a: 0.1, b: 0.7 });
+      out += brush([P(0.5 * w, -0.16 * h), P(0.66 * w, -0.3 * h)], 1.6, { s0: 1, e0: 0.1, a: 0.1, b: 0.7 });
+    }
+    // 下まぶた (外側だけ細く)
+    if (mode === "squint") {
+      out += brush([P(w / 2 - 0.2, 0.02 * h), P(0.34 * w, -0.06 * h), P(0.04 * w, -0.14 * h), P(-0.3 * w, -0.04 * h)], 1.4, { fill: INK, a: 0.25, b: 0.4, s0: 0.6, e0: 0.1 });
+      // 頬が押し上げるしわ
+      if (g.fine) out += brush([P(-0.15 * w, 0.26 * h), P(0.12 * w, 0.2 * h), P(0.32 * w, 0.24 * h)], 0.8, { fill: INK2, op: 0.5 });
+    } else {
+      const lw = o.fem ? 1.2 : ex === "happy" ? 1.3 : 1;
+      // 切れ長の目は外側 45% だけ、ふつうは 60%
+      const ll = o.lo && o.lo < 0.5 ? [[w / 2 - 0.3, 0.02 * h + dr], loL[0], [0.2 * w, (loL[0][1] + loL[1][1]) / 2 + 0.02 * h], [0.05 * w, loL[1][1] - 0.01 * h]] : [[w / 2 - 0.3, 0.02 * h + dr], loL[0], loL[1], [-0.12 * w, loL[1][1] - 0.02 * h]];
+      out += brush(
+        ll.map((p) => P(p[0], p[1])),
+        lw,
+        { fill: INK2, a: 0.3, b: 0.45, s0: 0.6, e0: 0.05 }
+      );
+      if (ex === "happy" && g.fine) out += brush([P(-0.12 * w, 0.62 * h), P(0.14 * w, 0.56 * h), P(0.34 * w, 0.6 * h)], 0.8, { fill: INK2, op: 0.45 });
+    }
+    // 二重のしわ
+    if (o.crease && mode !== "squint" && g.fine) out += brush([P(-0.1 * w, -0.72 * h), P(0.2 * w, -0.78 * h), P(0.46 * w, -0.58 * h)], LW.fine, { fill: INK2, op: 0.75 });
+    return out;
+  }
+  // 眉。(u0, v0): 中央, o: {w, t (太さ), arch, col, tip (目尻側を上げる)}
+  function brow(g, u0, v0, s, o, ex) {
+    let a = 0;
+    let b = o.tip || 0;
+    let arch = o.arch == null ? 2 : o.arch;
+    if (ex === "angry") {
+      a = 4;
+      b += -2.5;
+      arch = 0.3;
+    } else if (ex === "serious") {
+      a = 2.2;
+      b += -1;
+      arch = 0.8;
+    } else if (ex === "surprised") {
+      a = -4;
+      b += -3;
+      arch += 2.5;
+    } else if (ex === "sad") {
+      a = -3.5;
+      b += 2.5;
+      arch = 0.6;
+    } else if (ex === "happy") {
+      a = -1.2;
+      b += -0.6;
+      arch += 1;
+    }
+    const P = (x, y) => F(g, u0 + s * x, v0 + y, 2);
+    const w = o.w;
+    return brush([P(-w / 2, a), P(-w * 0.05, -arch + a * 0.4 + b * 0.3), P(w / 2, 1.5 + b)], o.t, { a: 0.12, s0: 0.75, b: 0.6, e0: 0.12, fill: o.col || INK });
+  }
+  // 鼻 (小さく: 奥側の短い線と鼻先の下の影)
+  function nose(g, cy, k) {
+    k = k || 1;
+    let s = fillP(poly([F(g, 2.2, cy - 6 * k, 6), F(g, 5.5 * k, cy - 0.5, 9), F(g, 4.2 * k, cy + 2, 9), F(g, 1, cy + 1.5, 9)]), g.skinS);
+    s += brush([F(g, 2, cy - 8 * k, 5), F(g, 4.4 * k, cy - 2, 9), F(g, 3.6 * k, cy + 0.6, 10), F(g, 1, cy + 1.4, 10)], 1.2 * Math.sqrt(k), { fill: INK2, s0: 0.1, e0: 0.5, a: 0.5, b: 0.15 });
+    return s;
+  }
+  // 口。o: {w (幅), smile, grin (笑いの大きさ), deep, teeth, smirk}
   function mouth(g, cy, o, ex) {
     const w = o.w;
-    const x0 = 100 - w / 2;
-    const x1 = 100 + w / 2;
-    const sh = g.skinS;
+    const P = (u, v) => F(g, u, v, -2);
     let s = "";
-    const lip = (yy) => brush([[100 - w * 0.22, yy], [100 + w * 0.22, yy]], 1.8, { op: 0.8, a: 0.4, b: 0.4 });
-    if (ex === "happy") {
-      // 大きく開けた笑い (上の歯と舌)
-      const dw = w * (o.grin || 1.1);
-      const a = 100 - dw / 2;
-      const b = 100 + dw / 2;
-      const dd = o.deep || 13;
-      const d = "M" + n(a) + " " + (cy - 2) + "C" + n(a + dw * 0.25) + " " + (cy + 1) + " " + n(b - dw * 0.25) + " " + (cy + 1) + " " + n(b) + " " + (cy - 2) + "C" + n(b - 2) + " " + (cy + dd * 0.8) + " " + n(100 + dw * 0.18) + " " + (cy + dd) + " 100 " + (cy + dd) + "C" + n(100 - dw * 0.18) + " " + (cy + dd) + " " + n(a + 2) + " " + (cy + dd * 0.8) + " " + n(a) + " " + (cy - 2) + "Z";
-      const mid = g.id + "m";
-      s += '<clipPath id="' + mid + '"><path d="' + d + '"/></clipPath>';
-      s += fillP(d, "#5a1416");
-      s += '<g clip-path="url(#' + mid + ')">';
-      s += '<ellipse cx="100" cy="' + (cy + dd + 1) + '" rx="' + n(dw * 0.3) + '" ry="' + n(dd * 0.45) + '" fill="#e0626a"/>';
-      if (o.teeth !== false) s += '<rect x="' + n(a) + '" y="' + (cy - 4) + '" width="' + n(dw) + '" height="' + n(dd * 0.32 + 3) + '" fill="#fff"/>';
-      s += "</g>";
-      s += shape(d, "none", 2.4);
-      // 口角のしわ
-      s += brush([[a - 1, cy - 5], [a - 2.5, cy - 1], [a - 1, cy + 2]], 1.4, { op: 0.8 });
-      s += brush([[b + 1, cy - 5], [b + 2.5, cy - 1], [b + 1, cy + 2]], 1.4, { op: 0.8 });
-      s += lip(cy + dd + 6);
+    // 下くちびるの影 (肌の影の小さなくさび)
+    const lip = (y) => fillP(curve(mapF(g, [[-3, y], [0, y + 1.4], [3.4, y - 0.2], [0, y + 0.5]], -2), true), g.skinS);
+    if (ex === "happy" || ex === "surprised") {
+      // 開いた口 (笑顔: 上は平ら、下は丸い / おどろき: 縦長の o)
+      const sur = ex === "surprised";
+      const ww = sur ? Math.max(7, w * 0.55) : w * (o.grin || 1.1);
+      const dd = sur ? Math.max(8, (o.deep || 8) * 0.9) : o.deep || 10;
+      const pts = sur ? [P(-ww / 2, cy + dd * 0.45), P(0, cy), P(ww / 2, cy + dd * 0.45), P(0, cy + dd)] : [[...P(-ww / 2, cy - 1.5), 1], P(0, cy + 0.6), [...P(ww / 2, cy - 2), 1], P(ww * 0.3, cy + dd * 0.75), P(0, cy + dd), P(-ww * 0.32, cy + dd * 0.72)];
+      const d = curve(pts, true);
+      const mid = g.id + "m" + ++g.n;
+      s += clipOpen(mid, d) + fillP(d, "#8a2a2c");
+      s += ell(P(1, cy + dd + (sur ? 0 : 1.5)), ww * (sur ? 0.36 : 0.3), dd * (sur ? 0.36 : 0.5), "#f07a7a");
+      if (o.teeth && !sur) s += '<path d="M' + n(P(-ww / 2, 0)[0]) + " " + (cy - 4) + "H" + n(P(ww / 2, 0)[0]) + "V" + n(cy + 1.8) + "C" + n(P(ww * 0.2, 0)[0]) + " " + (cy + 3.4) + " " + n(P(-ww * 0.2, 0)[0]) + " " + (cy + 3.4) + " " + n(P(-ww / 2, 0)[0]) + " " + (cy + 1.6) + 'Z" fill="#ffffff"/>';
+      s += "</g>" + shape(d, "none", LW.part);
+      // 口角
+      if (!sur && g.fine) s += brush([P(-ww / 2 - 1.6, cy - 3), P(-ww / 2 - 0.4, cy - 1)], 0.9, { fill: INK2, op: 0.8 }) + brush([P(ww / 2 + 1.6, cy - 3.4), P(ww / 2 + 0.4, cy - 1.4)], 0.9, { fill: INK2, op: 0.8 });
       return s;
     }
+    const L1 = { fill: INK, s0: 0.35, e0: 0.35, a: 0.35, b: 0.35 };
     if (ex === "angry") {
-      if (o.pout) {
-        s += brush([[100 - w * 0.45, cy + 2], [100 - w * 0.15, cy - 1], [100 + w * 0.15, cy + 1], [100 + w * 0.45, cy - 1]], 2.2, { s0: 0.5, e0: 0.5 });
-        return s + lip(cy + 6);
-      }
-      // 歯を食いしばる
-      const hw = w * 0.62;
-      const top = cy - 4;
-      const bt = cy + 7;
-      const d = "M" + n(100 - hw) + " " + (top + 2) + "Q100 " + (top - 1.5) + " " + n(100 + hw) + " " + (top + 2) + "L" + n(100 + hw - 1) + " " + (bt - 1) + "Q100 " + (bt + 2) + " " + n(100 - hw + 1) + " " + (bt - 1) + "Z";
-      s += shape(d, "#fff", 2.4);
-      s += shape("M" + n(100 - hw + 1) + " " + (cy + 1.5) + "Q100 " + (cy + 0.5) + " " + n(100 + hw - 1) + " " + (cy + 1.5), "none", 1.4);
-      let tl = "";
-      for (let i = 1; i < 6; i++) {
-        const x = 100 - hw + (hw * 2 * i) / 6;
-        tl += "M" + n(x) + " " + (top + 1) + "V" + (bt - 1);
-      }
-      s += '<path d="' + tl + '" stroke="' + INK + '" stroke-width="1" fill="none"/>';
-      s += brush([[100 - hw - 4, top + 4], [100 - hw - 1, cy + 2], [100 - hw - 3, bt + 1]], 1.4, { op: 0.8 });
-      s += brush([[100 + hw + 4, top + 4], [100 + hw + 1, cy + 2], [100 + hw + 3, bt + 1]], 1.4, { op: 0.8 });
-      return s + lip(bt + 5);
-    }
-    if (ex === "surprised") {
-      const rx = w * 0.26;
-      const ry = 7;
-      s += '<ellipse cx="100" cy="' + (cy + 3) + '" rx="' + n(rx) + '" ry="' + ry + '" fill="#5a1416" stroke="' + INK + '" stroke-width="2.4"/>';
-      s += '<ellipse cx="100" cy="' + (cy + 6.5) + '" rx="' + n(rx * 0.6) + '" ry="2.6" fill="#e0626a"/>';
-      return s + lip(cy + 14);
+      s += brush([P(-w / 2, cy + 1.6), P(-w * 0.15, cy - 0.6), P(w * 0.18, cy - 0.4), P(w / 2, cy + 1.8)], LW.mouth, L1);
+      return s + lip(cy + 4.4);
     }
     if (ex === "sad") {
-      s += brush([[x0 + 2, cy + 3], [100 - w * 0.15, cy - 0.5], [100 + w * 0.12, cy + 0.5], [x1 - 2, cy + 3.5]], 2.2, { s0: 0.4, e0: 0.3 });
-      return s + lip(cy + 7);
+      s += brush([P(-w / 2, cy + 1.6), P(-w * 0.2, cy - 0.2), P(0, cy + 0.4), P(w * 0.22, cy - 0.1), P(w / 2, cy + 1.8)], LW.mouth, L1);
+      return s + lip(cy + 4.4);
     }
-    // ふつう
-    const st = ex === "serious" ? "firm" : o.style || "flat";
-    if (st === "firm") {
-      // 口をきゅっと結ぶ
-      s += brush([[x0 - 1, cy + 2.4], [x0 + 3, cy + 0.6], [100, cy], [x1 - 3, cy + 0.6], [x1 + 1, cy + 2.4]], 2.8, { s0: 0.6, e0: 0.6 });
-    } else if (st === "smirk") {
-      s += brush([[x0 + 1, cy + 1], [100, cy + 1.2], [x1 - 1, cy - 2.5], [x1 + 2, cy - 5]], 2.4, { s0: 0.4, e0: 0.2 });
-      s += brush([[x1 + 1, cy - 2], [x1 + 3, cy + 1]], 1.4, { op: 0.8 });
-    } else if (st === "frown") {
-      s += brush([[x0 - 1, cy + 3], [x0 + 4, cy], [100, cy - 0.6], [x1 - 4, cy], [x1 + 1, cy + 3]], 2.8, { s0: 0.5, e0: 0.5 });
-    } else if (st === "grin") {
-      // 口を閉じたままにやり
-      s += brush([[x0 - 1, cy - 3], [x0 + 5, cy + 1.5], [100, cy + 2.5], [x1 - 5, cy + 1.5], [x1 + 1, cy - 3]], 2.8, { s0: 0.3, e0: 0.3 });
-      s += brush([[x0 - 2, cy - 6], [x0 - 3, cy - 2]], 1.4, { op: 0.8 });
-      s += brush([[x1 + 2, cy - 6], [x1 + 3, cy - 2]], 1.4, { op: 0.8 });
-    } else if (st === "soft") {
-      s += brush([[x0 + 1, cy - 1.5], [100, cy + 1.6], [x1 - 1, cy - 1.5]], 2.2, { s0: 0.4, e0: 0.4 });
-    } else {
-      s += brush([[x0, cy + 0.5], [100, cy - 0.3], [x1, cy + 0.8]], 2.4, { s0: 0.4, e0: 0.4 });
+    if (ex === "serious") {
+      s += brush([P(-w / 2, cy + 0.5), P(0, cy), P(w / 2, cy + 0.4)], LW.mouth, L1);
+      return s + lip(cy + 4.2);
     }
-    s += fillP("M" + (100 - w * 0.25) + " " + (cy + 6) + "Q100 " + (cy + 9) + " " + (100 + w * 0.3) + " " + (cy + 5.5) + "Q100 " + (cy + 6.5) + " " + (100 - w * 0.25) + " " + (cy + 6) + "Z", sh);
-    s += lip(cy + 6.5);
+    if (o.smirk) {
+      // にやり: 手前の口角だけ上がる (えくぼの線)
+      s += brush([P(-w / 2, cy - 2.6), P(-w * 0.2, cy + 0.2), P(w * 0.22, cy + 0.6), P(w / 2, cy - 0.2)], LW.mouth, L1);
+      s += brush([P(-w / 2 - 1.4, cy - 4.4), P(-w / 2 - 0.3, cy - 2.2)], 0.9, { fill: INK2, op: 0.85 });
+      return s + lip(cy + 4.2);
+    }
+    // ふつう: やさしい笑み (口角が上がる)
+    const k = o.smile == null ? 1 : o.smile;
+    s += brush([P(-w / 2, cy - 1.6 * k), P(-w * 0.2, cy + 0.6 * k), P(w * 0.22, cy + 0.7 * k), P(w / 2, cy - 2 * k)], LW.mouth, { fill: INK, s0: 0.25, e0: 0.25, a: 0.35, b: 0.35 });
+    return s + lip(cy + 4 + k * 0.4);
+  }
+  // ほほの赤み (楕円、笑顔は斜線 3 本)
+  function blush(g, cy, op, hatch, u) {
+    let s = "";
+    if (!op) return s;
+    for (const sd of [-1, 1]) {
+      const c = F(g, sd * (u || 25), cy, 0);
+      const kx = sd < 0 ? 1 : 0.85;
+      s += ell(c, 8.5 * kx, 3.8, g.blushC, 0, op);
+      if (hatch && g.fine) for (let i = -1; i <= 1; i++) s += brush([[c[0] + i * 3.2 * kx + 1.4, c[1] - 2], [c[0] + i * 3.2 * kx - 1.2, c[1] + 2]], 0.9, { fill: "#e05a66", op: 0.9, s0: 0.6, e0: 0.2 });
+    }
     return s;
   }
-  // 表情の効果 (血管マーク・汗・ほほの赤み)
+  // メガネの光 (平行な 2 本の白い筋)
+  function glint(c, k) {
+    return brush([[c[0] - 5 * k, c[1] + 3], [c[0] - 1 * k, c[1] - 4]], 1.5, { fill: "#ffffff", op: 0.85, s0: 0.5, e0: 0.5 }) + brush([[c[0] - 1.5 * k, c[1] + 3.5], [c[0] + 1.6 * k, c[1] - 2]], 0.8, { fill: "#ffffff", op: 0.85, s0: 0.5, e0: 0.5 });
+  }
+
+  /* ---------- 髪 ---------- */
+  // 毛束 1 本 (葉の形): 根元 (ru, rv) → 先 (tu, tv)。w: 根元の幅, bend: 途中で横へふくらむ量。顔の面に沿わせる
+  function lock(g, ru, rv, tu, tv, w, bend, dz) {
+    const ax = tu - ru;
+    const ay = tv - rv;
+    const len = Math.hypot(ax, ay) || 1;
+    const nx = -ay / len;
+    const ny = ax / len;
+    const prof = [
+      [0, 1],
+      [0.4, 0.9],
+      [0.72, 0.55],
+    ];
+    const side = (k) =>
+      prof.map(([t, wf], i) => {
+        const b = (bend || 0) * Math.sin(Math.PI * t);
+        const p = [ru + ax * t + nx * (k * w * 0.5 * wf + b), rv + ay * t + ny * (k * w * 0.5 * wf + b)];
+        if (i === 0) p.push(1);
+        return p;
+      });
+    return curve(mapF(g, side(-1).concat([[tu, tv, 1]], side(1).reverse()), dz), true);
+  }
+  // 曲がった毛束 (点列に沿って根元から先へ細くなる)
+  function sweep(g, pts, w, dz) {
+    return brushD(mapF(g, pts, dz), w, { raw: 1, s0: 1, a: 0.01, b: 0.85, e0: 0.02, per: 8 });
+  }
+  // 毛束を重ねる: back は影の色、front は地の色。L: [根元 u, v, 先 u, v, 幅, ふくらみ]
+  function locks(g, H, back, front, dz) {
+    let s = "";
+    const fd = [];
+    for (const b of back) s += shape(lock(g, b[0], b[1], b[2], b[3], b[4], b[5], dz), H.shade, LW.part);
+    for (const b of front) {
+      const d = lock(g, b[0], b[1], b[2], b[3], b[4], b[5], dz);
+      fd.push(d);
+      s += shape(d, H.base, LW.part);
+    }
+    return { s, fd };
+  }
+  // 頭の丸みに沿ったぎざぎざの光の帯 (u0〜u1, 高さ v0 + u²/curv, 太さ th)
+  function shineBand(g, u0, u1, v0, curv, th, col, dz, seed) {
+    const r = rng(seed || 7);
+    const top = [];
+    const bot = [];
+    const N = 14;
+    for (let i = 0; i <= N; i++) {
+      const u = u0 + ((u1 - u0) * i) / N;
+      const v = v0 + (u * u) / curv;
+      const e = i === 0 || i === N ? 0.2 : 1;
+      top.push([u, v - th * 0.5 * e - (i % 3 === 1 ? 1.6 * e : 0), i === 0 || i === N ? 1 : 0]);
+      // 下のふちはとがった歯 (毛の流れの向き)
+      bot.push([u + 1.2, v + th * 0.5 * e + (i % 2 ? (2.5 + r() * 4) * e : 0), i % 2 ? 1 : 0]);
+    }
+    return fillP(curve(mapF(g, top.concat(bot.reverse()), dz), true), col);
+  }
+  // 頭頂の髪の塊 (帽子なし): 外側だけ輪郭、下のふちは毛束へつなぐので線なし
+  function crownMass(g, H, outer, bottom, o) {
+    const op = mapZ(g, outer);
+    const d = curve(op.concat(mapF(g, bottom, o.dz || 3)), true);
+    sil(g, d);
+    const id = g.id + "cr" + ++g.n;
+    let s = clipOpen(id, d) + fillP(d, H.base);
+    if (o.shade) s += fillP(curve(mapZ(g, o.shade), true), H.shade);
+    if (o.shine) s += shineBand(g, o.shine[0], o.shine[1], o.shine[2], 210, 3.4, H.hl, o.dz || 3, o.shine[3]);
+    s += "</g>" + shape(curve(op, false), "none", LW.sil);
+    return { d, s };
+  }
+  // 毛先のぎざぎざの縁: 角の点 (根元のくぼみと毛先) の間に、外へふくらむ点を足す (右 → 左の順に並べる)
+  function zig(pts, k) {
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      out.push([a[0], a[1], 1]);
+      const b = pts[i + 1];
+      if (!b) break;
+      const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      out.push([(a[0] + b[0]) / 2 + (b[1] - a[1]) * (k || 0.1), (a[1] + b[1]) / 2 - (b[0] - a[0]) * (k || 0.1) + l * 0.02]);
+    }
+    return out;
+  }
+  // 毛束の間の筋 (先から根元へ細くなる)
+  function strands(g, list, dz) {
+    if (!g.fine) return "";
+    let s = "";
+    for (const l of list) s += brush(mapF(g, l, dz), LW.fine, { s0: 0.8, e0: 0.05, a: 0.1, b: 0.8, op: 0.8 });
+    return s;
+  }
+  // つやの短い筋 (帽子の下の前髪)
+  function dashes(g, list, col, dz) {
+    let s = "";
+    for (const l of list) s += brush(mapF(g, l, dz), 1.5, { fill: col, s0: 0.2, e0: 0.2, a: 0.5, b: 0.5 });
+    return s;
+  }
+  // 襟足 (首の後ろ、耳の下から外へはねる)。len: 長さを足す, sleek: 1 本にまとめる
+  function nape(g, H, len, sleek) {
+    let s = "";
+    for (const sd of [-1, 1]) {
+      const P = (u, v, c) => {
+        const q = prj(g, sd * u, v, -12);
+        return c ? [q[0], q[1], 1] : q;
+      };
+      const d = sleek ? curve([P(36, 112, 1), P(43, 118), P(45.5, 130 + len), P(44, 144 + len, 1), P(38.5, 136 + len), P(32, 124)], true) : curve([P(37, 113, 1), P(43, 117), P(45, 123 + len * 0.5), P(46, 130 + len, 1), P(42, 127 + len * 0.6), P(40.5, 134 + len, 1), P(36.5, 127 + len * 0.4), P(33, 121)], true);
+      sil(g, d);
+      s += shape(d, sd > 0 ? H.shade : H.base, LW.part);
+    }
+    return s;
+  }
+  // もみあげ・横の髪 (耳の前)。len: 下へのびる量
+  function sideHair(g, H, len, z) {
+    let s = "";
+    for (const sd of [-1, 1]) {
+      const P = (u, v, c) => {
+        const q = prj(g, sd * u, v, z == null ? 6 : z);
+        return c ? [q[0], q[1], 1] : q;
+      };
+      const d = curve([P(45, 100, 1), P(36, 101), P(35.5, 106 + len * 0.3), P(36.5, 112 + len, 1), P(39.5, 108 + len * 0.6), P(42.5, 110 + len * 0.8, 1), P(44, 106), P(46.5, 103)], true);
+      s += shape(d, sd > 0 ? H.shade : H.base, LW.part);
+      if (sd < 0 && len > 3) s += brush([P(39, 103), P(38, 104 + len * 0.6)], 1.2, { fill: H.hl });
+    }
+    return s;
+  }
+
+  /* ---------- 効果 (血管マーク・汗・おどろきの線・どんより) ---------- */
   function fx(g, ex, o) {
+    o = o || {};
     let s = "";
     if (ex === "angry" && o.vein !== false) {
-      // 怒りマーク
       const x = o.veinX || 156;
-      const y = o.veinY || 56;
+      const y = o.veinY || 52;
       const arc = (a) => {
         const c = Math.cos(a);
         const si = Math.sin(a);
         const R = (u, v) => [x + c * u - si * v, y + si * u + c * v];
-        return brush([R(3, -9), R(4, -4), R(9, -3)], 3.2, { fill: "#d42a2a", s0: 0.5, e0: 0.5, a: 0.2, b: 0.2 });
+        return brush([R(3, -9), R(4, -4), R(9, -3)], 2.8, { fill: "#e8343a", s0: 0.5, e0: 0.5, a: 0.2, b: 0.2 });
       };
       s += arc(0) + arc(Math.PI / 2) + arc(Math.PI) + arc(-Math.PI / 2);
     }
     if (ex === "surprised" || ex === "sad") {
-      // 汗
+      // 汗 (こめかみの奥側)
       const x = o.sweatX || 150;
-      const y = o.sweatY || 104;
-      s += shape("M" + x + " " + (y - 9) + "C" + (x + 6) + " " + (y - 1) + " " + (x + 6) + " " + (y + 6) + " " + x + " " + (y + 6) + "C" + (x - 6) + " " + (y + 6) + " " + (x - 6) + " " + (y - 1) + " " + x + " " + (y - 9) + "Z", "#cfe9ff", 2);
-      s += fillP("M" + (x - 2) + " " + (y + 1) + "q0 3 2 3.5q-3.5 0-2-3.5Z", "#ffffff");
+      const y = o.sweatY || 100;
+      s += shape("M" + x + " " + (y - 9) + "C" + (x + 6) + " " + (y - 1) + " " + (x + 6) + " " + (y + 6) + " " + x + " " + (y + 6) + "C" + (x - 6) + " " + (y + 6) + " " + (x - 6) + " " + (y - 1) + " " + x + " " + (y - 9) + "Z", "#cfeaff", LW.part);
+      s += fillP("M" + (x - 2.4) + " " + (y + 0.5) + "q0 3 2.2 3.8q-3.8 0-2.2-3.8Z", "#ffffff");
     }
-    if (ex === "surprised" && g.det) {
-      s += '<text x="34" y="58" font-family="\'Dela Gothic One\', sans-serif" font-size="30" fill="' + INK + '" stroke="#fff" stroke-width="5" paint-order="stroke" transform="rotate(-12 34 58)">!</text>';
-    }
-    if (ex === "sad" && g.det && o.gloomY) {
-      // おでこに縦線
-      let d = "";
-      for (let i = 0; i < 9; i++) d += "M" + (72 + i * 7) + " " + o.gloomY + "v" + (10 + (i % 3) * 4) + "h1.1v-" + (10 + (i % 3) * 4) + "Z";
-      s += '<g clip-path="url(#' + g.id + 'fc)">' + fillP(d, "#3a4660", 0.6) + "</g>";
-    }
-    return s;
-  }
-  function blush(g, cy, strong) {
-    let s = "";
-    for (const sd of [-1, 1]) {
-      const cx = 100 + sd * 26;
-      s += '<ellipse cx="' + cx + '" cy="' + cy + '" rx="9" ry="4.5" fill="#ff7a8a" fill-opacity="' + (strong ? 0.45 : 0.28) + '"/>';
-      if (strong || g.det) s += hatch(cx - 5, cy, cx + 5, cy, 4, 6, -1.15, 1.1, "#c8344a", strong ? 0.9 : 0.6);
-    }
-    return s;
-  }
-
-  /* 髪 (帽子の下から出る部分) */
-  function sideburn(g, col, len) {
-    let s = "";
-    for (const sd of [-1, 1]) {
-      const P = (u, v) => [100 + sd * u, v];
-      s += shape(curve([P(42.5, 96), P(37, 98), P(39, 106), P(40, 96 + len)], false) + "L" + n(100 + sd * 44) + " " + (96 + len - 1) + "L" + n(100 + sd * 43.5) + " 96Z", col, 2);
-    }
-    return s;
-  }
-  function capHair(g, style, col) {
-    let s = "";
-    const hl = lightOf(col, 0.25);
-    if (style === 0) {
-      // 前髪がつばの下から少し出る
-      s += sideburn(g, col, 14);
-      const d = "M72 100L76 112L82 103L90 114L95 103L102 113L107 102L114 112L118 102L126 109L128 100Z";
-      s += shape(d, col, 2.4);
-      s += brush([[86, 103], [90, 110]], 1.2, { fill: hl, op: 0.9 });
-    } else if (style === 1) {
-      // 短く刈り込む
-      s += sideburn(g, col, 10);
-    } else {
-      // 長めの横髪と襟足
-      for (const sd of [-1, 1]) {
-        const P = (u, v) => [100 + sd * u, v];
-        const d = curve([P(44, 94, 1), P(47, 108), P(46, 124), P(42, 140, 1), P(40, 128), P(34, 134, 1), P(37, 118), P(31, 116, 1), P(37, 104), P(41, 94, 1)], true);
-        s += shape(d, col, 2.4);
-        s += brush([P(43, 104), P(43, 120)], 1.2, { fill: hl });
+    if (ex === "surprised" && g.fine) {
+      // おどろきの線 (頭の上の手前側から外へ)
+      const x = o.surX || 50;
+      const y = o.surY || 50;
+      for (const a of [-1.95, -2.45, -2.95]) {
+        const c = Math.cos(a);
+        const si = Math.sin(a);
+        s += brush([[x + c * 6, y + si * 6], [x + c * 16, y + si * 16]], 2, { s0: 1, e0: 0.05, a: 0.05, b: 0.85 });
       }
-      s += shape("M78 100L84 111L92 103L100 113L108 103L116 110L122 100Z", col, 2.4);
     }
-    return s;
-  }
-  function napeHair(g, col, wide) {
-    // 襟足 (首の後ろからはみ出す毛先。つばより上に出すと耳当てに見えるので y 110 から下だけ)
-    let s = "";
-    for (const sd of [-1, 1]) {
-      const P = (u, v) => [100 + sd * u, v];
-      const d = curve([P(30, 128, 1), P(42, 120), P(46, 110, 1), P(52, 110), P(52, 130), P(44, 152, 1), P(42, 140), P(36, 150, 1), P(36, 138), P(26, 142, 1), P(32, 132)], true);
-      s += shape(d, col, 2.6);
-    }
-    void wide;
-    return s;
-  }
-
-  // 監督: 鬼瓦 (厳しい 50 代、太い眉・口ひげ・頬の古傷)
-  function drawOni(g) {
-    const ex = g.ex;
-    let s = "";
-    s += neck(g, 23, 140);
-    s += jacket(g, "std", 23);
-    s += headOpen(g);
-    s += ear(g, -1, 106, 134, true) + ear(g, 1, 106, 134, true);
-    s += faceShape(g, "oni");
-    s += faceShade(g, {
-      jaw: "oni",
-      cap: true,
-      cheekHatch: [64, 124],
-      extraShade:
-        // 目のくぼみ
-        fillP("M66 108C74 104 88 105 94 110C88 108 76 109 66 112Z", g.skinS) + fillP("M134 108C126 104 112 105 106 110C112 108 124 109 134 112Z", g.skinS),
-    });
-    // 白髪まじりのもみあげ
-    s += sideburn(g, "#8c8a88", 18);
-    const E = { w: 17, h: 5.6, r: 3.9, lid: 4.2, tilt: -0.6 };
-    s += eye(g, 81, 119, -1, E, ex) + eye(g, 119, 119, 1, E, ex);
-    // 目の下のたるみ・目尻のしわ
-    if (ex !== "happy") {
-      s += brush([[74, 126], [82, 128], [90, 126]], 1.1, { op: 0.75 });
-      s += brush([[126, 126], [118, 128], [110, 126]], 1.1, { op: 0.75 });
-    }
-    s += brush([[68, 118], [64, 120]], 1.3, { op: 0.8 }) + brush([[68, 122], [64, 125]], 1.2, { op: 0.8 });
-    s += brush([[132, 118], [136, 120]], 1.3, { op: 0.8 }) + brush([[132, 122], [136, 125]], 1.2, { op: 0.8 });
-    const B = { w: 24, t: 7.6, arch: 1.4, bushy: true, col: "#24201e" };
-    s += brow(g, 80, 108, -1, B, ex) + brow(g, 120, 108, 1, B, ex);
-    // 眉間のしわ
-    if (ex !== "happy") s += brush([[96.5, 108], [97.5, 116]], 1.4, { op: 0.85 }) + brush([[103.5, 108], [102.5, 116]], 1.4, { op: 0.85 });
-    s += nose(g, 135, "big", ex);
-    // ほうれい線
-    s += brush([[88, 134], [80, 146], [79, 158]], 1.8, { op: 0.9 }) + brush([[112, 134], [120, 146], [121, 158]], 1.8, { op: 0.9 });
-    // 口 (ひげの下)
-    const my = 155;
-    if (ex === "happy") s += mouth(g, my, { w: 24, grin: 1, deep: 9 }, ex);
-    else if (ex === "angry") {
-      // 怒鳴る
-      const d = "M84 151C92 149 108 149 116 151C117 160 110 170 100 170C90 170 83 160 84 151Z";
-      s += shape(d, "#5a1416", 2.6);
-      s += fillP("M85.5 152C92 150.5 108 150.5 114.5 152L114 156C108 155 92 155 86 156Z", "#ffffff");
-      s += '<ellipse cx="100" cy="165" rx="8" ry="3.2" fill="#e0626a"/>';
-    } else s += mouth(g, my, { w: 20, style: "frown" }, ex);
-    // 口ひげ
-    const mu = "M100 141C94 139 84 140 76 147C74 152 77 155 79 152L81 155L84 151L87 154L90 150L94 152L97 149L100 150L103 149L106 152L110 150L113 154L116 151L119 155L121 152C123 155 126 152 124 147C116 140 106 139 100 141Z";
-    s += shape(mu, "#2b2826", 2.6);
-    s += brush([[82, 146], [92, 143.5]], 1.2, { fill: "#a3a09c" }) + brush([[108, 143.5], [118, 146]], 1.2, { fill: "#a3a09c" });
-    // あごのしわ
-    s += brush([[93, 168], [100, 166.5], [107, 168]], 1.3, { op: 0.8 });
-    // 頬の古傷
-    s += brush([[64, 129], [70, 135], [75, 141]], 1.8, { fill: "#8c3c2c" });
-    if (g.det) s += brush([[65, 136], [70, 131]], 1, {}) + brush([[69, 139], [73, 134]], 1, {});
-    s += cap(g, 1);
-    s += fx(g, ex, { veinX: 158, veinY: 52 });
-    return s + headClose(g);
-  }
-
-  // 剛田: パワー自慢の先輩 (角ばったあご、丸刈り、大きな歯を見せて笑う)
-  function drawGoda(g) {
-    const ex = g.ex;
-    let s = "";
-    s += neck(g, 28, 138);
-    s += jersey(g, "big", 28);
-    s += headOpen(g);
-    s += ear(g, -1, 98, 130, true) + ear(g, 1, 98, 130, true);
-    s += faceShape(g, "goda");
-    s += faceShade(g, { jaw: "goda", cheekHatch: [62, 126] });
-    // 丸刈り
-    const hair = "M52 104C51 76 58 50 76 42C88 37 112 37 124 42C142 50 149 76 148 104L142 104C142 92 140 84 136 78C126 72 112 70 100 70C88 70 74 72 64 78C60 84 58 92 58 104Z";
-    const hid = g.id + "hr";
-    s += '<clipPath id="' + hid + '"><path d="' + hair + '"/></clipPath>';
-    s += fillP(hair, "#33343c");
-    s += '<g clip-path="url(#' + hid + ')">';
-    s += fillP("M60 62C70 48 88 42 104 42C90 48 76 58 70 74Z", "#6c7080", 0.9);
-    if (g.det) {
+    if (ex === "sad" && g.fine && o.gloomY) {
+      // どんよりの縦線 (おでこ)
       let d = "";
-      const r = rng(77);
-      for (let i = 0; i < 70; i++) {
-        const x = 54 + r() * 92;
-        const y = 40 + r() * 40;
-        d += "M" + n(x) + " " + n(y) + "h1.2v1.2h-1.2Z";
+      for (let i = 0; i < 6; i++) {
+        const p = F(g, -26 + i * 10, o.gloomY, 0);
+        d += "M" + n(p[0]) + " " + o.gloomY + "v" + (10 + (i % 3) * 3);
       }
-      s += fillP(d, "#9aa0b0", 0.7);
+      s += '<g clip-path="url(#' + g.id + 'fc)"><path d="' + d + '" stroke="#5a6893" stroke-opacity=".45" stroke-width="' + n(LW.fine * K) + '" fill="none"/></g>';
     }
-    s += "</g>";
-    s += shape("M52 104C51 76 58 50 76 42C88 37 112 37 124 42C142 50 149 76 148 104", "none", 3.4);
-    s += brush([[60, 92], [66, 78], [82, 71], [100, 70], [118, 71], [134, 78], [140, 92]], 1.6, { op: 0.75 });
-    const E = { w: 16, h: 6, r: 4.4, lid: 4.2, tilt: 1.4 };
-    s += eye(g, 80, 114, -1, E, ex) + eye(g, 120, 114, 1, E, ex);
-    const B = { w: 24, t: 7.8, arch: 0.6, lift: -1 };
-    s += brow(g, 79, 102, -1, B, ex) + brow(g, 121, 102, 1, B, ex);
-    s += nose(g, 134, "broad", ex);
-    // 鼻のばんそうこう
-    s += '<g transform="rotate(-10 100 121)"><rect x="86" y="117" width="28" height="9" rx="3" fill="#f2d7ac" stroke="' + INK + '" stroke-width="1.8"/><rect x="95" y="118.5" width="10" height="6" fill="#e3bf8a"/><circle cx="90" cy="121.5" r=".7" fill="' + INK + '"/><circle cx="110" cy="121.5" r=".7" fill="' + INK + '"/></g>';
-    // 口: ふだんからニカッと笑う
-    if (ex === "normal") s += mouth(g, 151, { w: 34, grin: 1, deep: 9 }, "happy");
-    else s += mouth(g, 151, { w: 30, grin: 1.25, deep: 16 }, ex);
-    // あごの割れ目
-    s += brush([[100, 166], [100, 171]], 1.4, { op: 0.8 });
-    if (ex === "happy" || ex === "normal") s += brush([[68, 140], [70, 150]], 1.4, { op: 0.6 }) + brush([[132, 140], [130, 150]], 1.4, { op: 0.6 });
-    s += fx(g, ex, { veinX: 152, veinY: 52, sweatX: 154, sweatY: 96, gloomY: 76 });
-    return s + headClose(g);
+    return s;
   }
 
-  // 早瀬: マネージャー (ポニーテール、大きな瞳、元気)
-  function drawHayase(g) {
-    const ex = g.ex;
-    const hc = "#5a3324";
-    const hs = shadeOf(hc, 0.35);
-    const hl = lightOf(hc, 0.35);
-    let s = headOpen(g);
-    // ポニーテール (頭の後ろから右へ)
-    s += shape(curve([[136, 50, 1], [158, 46], [176, 60], [180, 86], [172, 116, 1], [170, 100], [162, 118, 1], [160, 98], [150, 106, 1], [152, 84], [142, 70]], true), hc, 3);
-    s += brush([[148, 56], [166, 64], [172, 84]], 1.4, { fill: hl });
-    s += brush([[150, 64], [160, 78], [160, 96]], 1.2, { op: 0.7 });
-    // 後ろ髪
-    const back = curve([[100, 36], [72, 40], [54, 58], [48, 84], [50, 112], [56, 134, 1], [60, 122], [64, 140, 1], [100, 140], [136, 140, 1], [140, 122], [144, 134, 1], [150, 112], [152, 84], [146, 58], [128, 40]], true);
-    s += shape(back, hs, 3);
-    s += headClose(g);
-    s += neck(g, 13, 140);
-    s += girlJacket(g);
-    s += headOpen(g);
-    s += faceShape(g, "girl");
-    s += faceShade(g, { jaw: "girl", hatch: false });
-    // シュシュ
-    s += shape("M136 44c6-4 14-2 16 4c2 6-2 12-8 12c-6 0-10-6-8-16z", g.L.trim === "#ffffff" ? g.L.main : g.L.trim, 2.4);
-    s += brush([[140, 48], [146, 54]], 1.2, { op: 0.6 }) + brush([[146, 46], [150, 52]], 1.2, { op: 0.6 });
-    // 前髪 (ぎざぎざの束)
-    const bang = curve([[54, 110, 1], [52, 80], [62, 56], [82, 42], [104, 39], [126, 44], [142, 58], [149, 80], [147, 110, 1], [142, 90], [136, 101, 1], [128, 76], [118, 96, 1], [108, 68], [101, 90, 1], [94, 66], [84, 101, 1], [76, 74], [66, 97, 1], [60, 86]], true);
-    s += shape(bang, hc, 3.2);
-    // 天使の輪 (つや)
-    s += fillP("M64 64C78 54 94 52 104 52L102 56L106 58L98 60C86 60 74 64 66 70Z", hl, 0.95);
-    s += fillP("M112 52C124 52 134 56 140 64L134 66L130 62L124 64C120 58 116 56 112 56Z", hl, 0.95);
-    s += brush([[92, 44], [88, 66], [84, 96]], 1.2, { op: 0.6 }) + brush([[114, 44], [118, 70], [118, 92]], 1.2, { op: 0.6 }) + brush([[130, 50], [136, 72], [136, 96]], 1.1, { op: 0.5 }) + brush([[72, 52], [68, 74], [66, 92]], 1.1, { op: 0.5 });
-    // 横の髪 (耳を隠す)
-    for (const sd of [-1, 1]) {
-      const P = (u, v) => [100 + sd * u, v];
-      s += shape(curve([P(44, 84, 1), P(48, 110), P(48, 136), P(42, 156, 1), P(40, 138), P(36, 146, 1), P(38, 120), P(38, 96)], true), hc, 2.8);
-      s += brush([P(43, 100), P(44, 128)], 1.2, { fill: hl });
-    }
-    const E = { w: 19, h: 13, r: 8, lid: 4, lash: 1, iris: "#5a2c1c", hl: 2, tilt: 0.6 };
-    s += eye(g, 81.5, 117, -1, E, ex) + eye(g, 118.5, 117, 1, E, ex);
-    const B = { w: 16, t: 2.6, arch: 2.6 };
-    s += brow(g, 81, 101, -1, B, ex) + brow(g, 119, 101, 1, B, ex);
-    s += nose(g, 132, "small", ex);
-    s += blush(g, 130, ex === "happy");
-    if (ex === "happy") s += mouth(g, 142, { w: 14, grin: 1.2, deep: 10, teeth: false }, ex);
-    else if (ex === "angry") s += mouth(g, 143, { w: 14, pout: true }, ex);
-    else s += mouth(g, 142, { w: 14, style: "soft" }, ex);
-    s += fx(g, ex, { veinX: 42, veinY: 50, sweatX: 154, sweatY: 92 });
-    return s + headClose(g);
-  }
-
-  // 宇佐美 (inukai): 理論派の打撃コーチ (細面にメガネ、七三分け)
-  function drawInukai(g) {
-    const ex = g.ex;
-    const hc = "#2a2a31";
-    const grey = "#9298a4";
-    let s = "";
-    s += neck(g, 16, 140);
-    s += coachJacket(g, 16);
-    s += headOpen(g);
-    s += ear(g, -1, 104, 128) + ear(g, 1, 104, 128);
-    s += faceShape(g, "slim");
-    s += faceShade(g, { jaw: "slim", extraShade: fillP("M64 126C68 136 70 146 72 152L62 150Z", g.skinS, 0.8) });
-    // 七三分けの髪
-    const hair = curve([[52, 106, 1], [49, 84], [53, 60], [66, 44], [86, 34], [112, 31], [136, 40], [149, 60], [152, 84], [149, 106, 1], [143, 106, 1], [143, 96], [136, 88], [130, 94, 1], [128, 82], [114, 70], [98, 64], [84, 56], [78, 48, 1], [74, 60], [66, 72], [61, 86], [60, 106, 1]], true);
-    s += shape(hair, hc, 3.2);
-    s += fillP("M60 98C58 88 60 80 64 76L66 102Z", grey, 0.95) + fillP("M140 100C142 90 140 82 136 78L135 102Z", grey, 0.95);
-    s += brush([[79, 36], [79, 44], [78, 50]], 2, {});
-    s += fillP("M86 40C106 36 128 42 142 58C130 50 112 44 92 46Z", "#6a7080", 0.9);
-    s += brush([[84, 46], [104, 50], [124, 60], [138, 80]], 1.3, { fill: "#7c8190" });
-    s += brush([[86, 54], [108, 60], [126, 72], [132, 90]], 1.1, { fill: "#7c8190" });
-    s += brush([[58, 70], [66, 52], [76, 42]], 1.2, { fill: "#7c8190" });
-    const E = { w: 15, h: 5, r: 3.6, lid: 3.2, tilt: -0.4 };
-    const glare = ex === "serious";
-    if (!glare) s += eye(g, 82, 116, -1, E, ex) + eye(g, 118, 116, 1, E, ex);
-    const B = { w: 18, t: 3.2, arch: 1.2 };
-    s += brow(g, 82, 101, -1, B, ex) + brow(g, 118, 101, 1, B, ex);
-    s += nose(g, 134, "long", ex);
-    // ほほのこけた線
-    s += brush([[68, 134], [71, 146]], 1.2, { op: 0.6 }) + brush([[132, 134], [129, 146]], 1.2, { op: 0.6 });
-    if (ex === "happy") s += mouth(g, 150, { w: 16, grin: 1, deep: 8 }, ex);
-    else if (ex === "angry") s += mouth(g, 150, { w: 18, style: "frown" }, "normal");
-    else s += mouth(g, 150, { w: 18, style: "soft" }, ex);
-    // メガネ (つるは耳へ)
-    const lens = (cx) => "M" + (cx - 13) + " 110Q" + (cx - 13) + " 107 " + (cx - 10) + " 107H" + (cx + 10) + "Q" + (cx + 13) + " 107 " + (cx + 13) + " 110V119Q" + (cx + 13) + " 124 " + (cx + 8) + " 124H" + (cx - 8) + "Q" + (cx - 13) + " 124 " + (cx - 13) + " 119Z";
-    if (glare) {
-      // 光るメガネ (目が見えない)
-      s += fillP(lens(82), "#ffffff") + fillP(lens(118), "#ffffff");
-      s += fillP("M70 120L84 107H90L74 124Z", "#cfe0f5", 0.9) + fillP("M106 120L120 107H126L110 124Z", "#cfe0f5", 0.9);
-    } else {
-      s += fillP(lens(82), "#dfeaf7", 0.22) + fillP(lens(118), "#dfeaf7", 0.22);
-      s += fillP("M72 118L82 108H86L76 122Z", "#ffffff", 0.55) + fillP("M108 118L118 108H122L112 122Z", "#ffffff", 0.55);
-    }
-    s += shape(lens(82), "none", 2.4) + shape(lens(118), "none", 2.4);
-    s += shape("M95 112Q100 109 105 112", "none", 2.2);
-    s += shape("M69 110L58 108M131 110L142 108", "none", 2.2);
-    s += fx(g, ex, { vein: false, sweatX: 152, sweatY: 92, gloomY: 76 });
-    return s + headClose(g);
-  }
-
-  // 竜崎: 同期のライバル (鋭い目、つばの下から前髪、不敵な笑み)
-  function drawRyu(g) {
-    const ex = g.ex;
-    const hc = "#1f1c28";
-    const hl = "#5a6488";
-    let s = "";
-    s += rot(g, napeHair(g, hc));
-    s += neck(g, 18, 140);
-    s += jersey(g, "std", 18);
-    s += headOpen(g);
-    s += ear(g, -1, 106, 130) + ear(g, 1, 106, 130);
-    s += faceShape(g, "vee");
-    s += faceShade(g, { jaw: "vee", cap: true, capDy: 3 });
-    // 横の髪 (耳にかかる)
-    for (const sd of [-1, 1]) {
-      const P = (u, v) => [100 + sd * u, v];
-      s += shape(curve([P(44, 96, 1), P(46, 112), P(45, 128), P(41, 149, 1), P(39, 134), P(32, 140, 1), P(35, 122), P(28, 122, 1), P(35, 108), P(37, 97, 1)], true), hc, 2.6);
-      s += brush([P(41, 104), P(41, 122)], 1.2, { fill: hl });
-    }
-    const E = { w: 21, h: 7, r: 5.6, lid: 4.6, tilt: 2.8, crease: 1 };
-    s += eye(g, 80.5, 120, -1, E, ex) + eye(g, 119.5, 120, 1, E, ex);
-    const B = { w: 22, t: 3.8, arch: 1, lift: -2.5 };
-    s += brow(g, 80, 108, -1, B, ex) + brow(g, 120, 108, 1, B, ex);
-    s += nose(g, 136, "sharp", ex);
-    // ほお骨
-    s += brush([[66, 130], [70, 134]], 1.1, { op: 0.6 }) + brush([[134, 130], [130, 134]], 1.1, { op: 0.6 });
-    if (ex === "normal") s += mouth(g, 151, { w: 17, style: "smirk" }, ex);
-    else if (ex === "happy") s += mouth(g, 150, { w: 18, grin: 1.05, deep: 8 }, ex);
-    else s += mouth(g, 151, { w: 18 }, ex);
-    // 前髪 (つばの下から鋭く)
-    const bang = curve([[74, 103, 1], [77, 111], [79, 118, 1], [84, 107], [90, 127, 1], [95, 108], [103, 123, 1], [108, 107], [117, 135, 1], [118, 108], [125, 117, 1], [128, 103, 1]], true);
-    s += shape(bang, hc, 2.4);
-    s += brush([[90, 106], [92, 116]], 1.2, { fill: hl }) + brush([[110, 106], [114, 120]], 1.2, { fill: hl });
-    s += cap(g, 3);
-    s += fx(g, ex, { veinX: 160, veinY: 50, sweatX: 152, sweatY: 102 });
-    return s + headClose(g);
-  }
-
+  /* ---------- キャラクター ---------- */
   // 自分 (サクセスで作る選手): 肌の色・目の形・髪型から組み立てる
   const ME_EYES = {
-    round: { w: 17, h: 8, r: 5.4, lid: 3.8, tilt: 0 },
-    big: { w: 19, h: 11, r: 7, lid: 3.8, hl: 2, iris: "#3b2a22", tilt: 0.4 },
-    sharp: { w: 20, h: 6, r: 4.8, lid: 4.4, tilt: 2.6 },
-    smile: { w: 18, h: 7, r: 5, lid: 4, style: "smile" },
-    line: { w: 17, h: 6, r: 4.4, lid: 3.6, style: "line" },
-    glasses: { w: 16, h: 7.5, r: 4.8, lid: 3.4, tilt: 0 },
+    round: { w: 18.5, h: 12.5, lash: 3.1, iris: "#8a5230", crease: 1 },
+    big: { w: 19.5, h: 14, lash: 3, iris: "#7a4428", crease: 1, cat3: 1 },
+    sharp: { w: 18, h: 9, lash: 3.1, droop: -1, iris: "#5a3a26", lo: 0.45, crease: 1 },
+    smile: { w: 17.5, h: 10, lash: 2.9, droop: 0.6, iris: "#8a5230", smile: 1 },
+    line: { w: 17, h: 4.5, lash: 3, iris: "#5a3a26", line: 1 },
+    glasses: { w: 17.5, h: 11.5, lash: 2.9, iris: "#6a4128", crease: 1 },
   };
   M.ME_EYES = Object.keys(ME_EYES);
+  // 前髪 (帽子のつばの下から)。hs: 0 ツンツン / 1 短髪 / 2 長め
+  const ME_FRINGE = [
+    {
+      back: [
+        [-27, 98, -31, 110, 9, -1],
+        [-7, 98, -9, 112, 9, -1],
+        [13, 98, 12, 111.5, 8, 1],
+      ],
+      front: [
+        [-34, 98, -36, 107, 8, -1],
+        [-17, 98, -21, 111.5, 10, -1.5],
+        [2, 98, 0, 113, 10, -1],
+        [20, 98, 22, 110, 9, 1],
+        [32, 98, 34, 105.5, 6, 1],
+      ],
+      hl: [
+        [
+          [-18.5, 104.5],
+          [-20.2, 109],
+        ],
+        [
+          [1.4, 105],
+          [0.7, 110.5],
+        ],
+        [
+          [20.5, 104.5],
+          [21.4, 108],
+        ],
+      ],
+    },
+    null,
+    {
+      back: [
+        [-22, 98, -20, 113, 10, 1],
+        [-2, 98, 6, 115, 10, 1.5],
+        [16, 98, 26, 113, 9, 1],
+      ],
+      front: [
+        [-32, 98, -36, 111, 9, -1],
+        [-14, 98, -9, 116, 12, 1.6],
+        [4, 98, 14, 116.5, 12, 2],
+        [22, 98, 32, 112.5, 10, 1.5],
+        [34, 98, 38, 106, 6, 1],
+      ],
+      hl: [
+        [
+          [-12.5, 105],
+          [-11, 110.5],
+        ],
+        [
+          [6, 105],
+          [9, 111],
+        ],
+      ],
+    },
+  ];
   function drawMe(g) {
     const ex = g.ex;
     const f = g.face || {};
-    const hc = f.hair || "#2b1b14";
-    const hs = f.hs == null ? hash(String(g.seed || "me")) % 3 : f.hs % 3;
-    const E = ME_EYES[f.eyes] || ME_EYES.round;
+    const H = hairPal(f.hair || "#2b1b14");
+    const hs = f.hs == null || isNaN(Number(f.hs)) ? hash(String(g.seed || "me")) % 3 : ((Number(f.hs) % 3) + 3) % 3;
+    const et = ME_EYES[f.eyes] ? f.eyes : "round";
+    const E = ME_EYES[et];
+    g.jaw = jawPts(g, "me");
     let s = "";
-    if (hs === 2) s += rot(g, napeHair(g, hc));
-    s += neck(g, 19, 140);
-    s += jersey(g, "std", 19);
+    if (hs !== 1) s += headOpen(g) + nape(g, H, hs === 2 ? 12 : 0) + headClose(g);
+    s += neck(g, 16.5, 136);
+    s += jersey(g, "std", 16.5);
     s += headOpen(g);
-    s += ear(g, -1, 106, 132) + ear(g, 1, 106, 132);
-    s += faceShape(g, "std");
-    s += faceShade(g, { jaw: "std", cap: true });
-    s += capHair(g, hs, hc);
-    s += eye(g, 81, 118, -1, E, ex) + eye(g, 119, 118, 1, E, ex);
-    const B = { w: 21, t: 4.8, arch: 2 };
-    s += brow(g, 80, 106, -1, B, ex) + brow(g, 120, 106, 1, B, ex);
-    s += nose(g, 135, "std", ex);
-    if (f.eyes === "glasses") {
-      s += '<circle cx="81" cy="118" r="11" fill="#dfeaf7" fill-opacity=".2" stroke="' + INK + '" stroke-width="2.4"/><circle cx="119" cy="118" r="11" fill="#dfeaf7" fill-opacity=".2" stroke="' + INK + '" stroke-width="2.4"/>';
-      s += shape("M92 116Q100 112 108 116M70 116L58 112M130 116L142 112", "none", 2.2);
-      s += fillP("M74 122L84 110H88L78 124Z", "#ffffff", 0.5) + fillP("M112 122L122 110H126L116 124Z", "#ffffff", 0.5);
+    s += ear(g, 1, 109, 131, 8) + ear(g, -1, 109, 131, 9);
+    // 前髪とその影 (顔に落ちる)
+    const FR = ME_FRINGE[hs];
+    let hairS = "";
+    let fd = [];
+    if (FR) {
+      const L = locks(g, H, FR.back, FR.front, 3);
+      hairS = L.s;
+      fd = L.fd;
+    } else {
+      // 短髪: つばの下に生えぎわが少しだけ
+      const d = curve(mapF(g, [[-44, 97], [44, 97], [42, 108.5, 1], [30, 105], [14, 104.2], [0, 104.6], [-14, 104.2], [-30, 105], [-42, 108.5, 1]], 3), true);
+      fd = [d];
+      hairS = shape(d, H.base, LW.part);
     }
-    if (ex === "normal") s += mouth(g, 151, { w: 18, style: "soft" }, ex);
-    else s += mouth(g, 150, { w: 18, grin: 1.15, deep: 11 }, ex);
+    let sh = '<g transform="translate(2.4 4.6)">' + fd.map((d) => fillP(d, g.skinS)).join("") + "</g>";
+    sh += brimShade(g, 0, 5);
+    s += face(g, "me", sh);
+    s += sideHair(g, H, hs === 1 ? 2 : hs === 2 ? 12 : 6);
+    s += hairS;
+    // つばの影が髪にかかる (根元の帯) とつや
+    s += clipMany(g.id + "fr", fd) + fillP(curve(mapF(g, [[-46, 96], [46, 96], [46, 105.5], [0, 107], [-46, 105.5]], 3), true), H.shade) + "</g>";
+    if (FR && g.fine) s += dashes(g, FR.hl, H.hl, 3);
+    // 目・眉
+    let mode = "";
+    if (E.smile) mode = ex === "happy" ? "arc" : ex === "normal" ? "squint" : "";
+    else if (ex === "happy") mode = "squint";
+    s += eye(g, -18.5, 123, -1, E, ex, mode) + eye(g, 18.5, 123, 1, E, ex, mode);
+    const BW = { w: 16.5, t: 3, arch: 1.6, col: mix(H.base, INK, 0.55), tip: et === "sharp" ? -1.2 : 0 };
+    s += brow(g, -19, 112.6, -1, BW, ex) + brow(g, 19, 112.6, 1, BW, ex);
+    if (et === "glasses") {
+      // 丸いメガネ (細いふち)
+      for (const sd of [-1, 1]) {
+        const c = F(g, sd * 18.5, 123, 5);
+        const kx = Math.abs(F(g, sd * 18.5 + 0.5, 123, 5)[0] - F(g, sd * 18.5 - 0.5, 123, 5)[0]);
+        s += ell(c, 11.5 * kx, 10, "#dfeaf7", 1.05, 0.15);
+        if (g.fine) s += glint([c[0] + 6 * kx, c[1] - 4.5], kx * 0.55);
+      }
+      s += brush([F(g, -7.6, 121, 5), F(g, 0, 119.4, 6), F(g, 7.6, 121, 5)], 1.05, { s0: 1, e0: 1 });
+      s += brush([F(g, -29.8, 120.5, 4), prj(g, -41, 118.5, 2)], 1.05, { s0: 1, e0: 1 });
+    }
+    s += nose(g, 138, 1);
+    if (ex === "happy") s += mouth(g, 149.5, { w: 16, grin: 1.2, deep: 10.5, teeth: 1 }, ex);
+    else s += mouth(g, 151, { w: 13, smile: 1 }, ex);
+    s += blush(g, 134, ex === "happy" ? 0.4 : 0, true, 25);
     s += cap(g, 0);
-    s += fx(g, ex, { veinX: 158, veinY: 50 });
+    s += fx(g, ex, { veinX: 158, veinY: 52, sweatX: 148, sweatY: 112, gloomY: 104, surX: 48, surY: 52 });
     return s + headClose(g);
   }
 
+  // 監督: 鬼瓦 (きびしいけれどあたたかい 50 代。口ひげ・ふさふさの眉・目じりの笑いじわ)
+  function drawKanto(g) {
+    const ex = g.ex;
+    const H = hairPal("#6a645f", "#b8b2aa");
+    g.jaw = jawPts(g, "kanto");
+    let s = neck(g, 21, 136) + jacket(g, "std", 21);
+    s += headOpen(g);
+    s += ear(g, 1, 108, 133, 9) + ear(g, -1, 108, 133, 10.5);
+    // つばの影・ほうれい線のわきの影 (奥)
+    let sh = brimShade(g, -3, 5.5);
+    sh += fillP(curve(mapF(g, [[11, 138], [18, 146], [20, 156], [15.5, 150]]), true), g.skinS);
+    s += face(g, "kanto", sh);
+    // 白髪まじりのもみあげ
+    for (const sd of [-1, 1]) {
+      const P = (u, v) => prj(g, sd * u, v, 4);
+      s += shape(curve([P(46, 99, 1), P(39.5, 100, 1), P(39.5, 110), P(41, 117, 1), P(44.5, 113), P(46.5, 106)], true), sd > 0 ? H.shade : H.base, LW.part);
+      if (g.fine) s += brush([P(42.4, 102), P(42.2, 112)], 1.1, { fill: H.hl });
+    }
+    // やさしい目 (目尻が少し下がる)
+    const E = { w: 16.5, h: 8.6, iris: "#6a4026", droop: 1.2, lash: 2.7 };
+    const mode = ex === "happy" ? "arc" : "";
+    s += eye(g, -19, 121, -1, E, ex, mode) + eye(g, 19, 121, 1, E, ex, mode);
+    // 目じりの笑いじわ・目の下
+    if (g.fine) {
+      for (const sd of [-1, 1]) {
+        const P = (x, y) => F(g, sd * (19 + x), 121 + y, 0);
+        s += brush([P(10.5, -1), P(13.2, -2.6)], 0.9, { fill: INK2, op: 0.75 }) + brush([P(10.5, 1.5), P(13.2, 2.5)], 0.9, { fill: INK2, op: 0.75 });
+        if (ex !== "happy") s += brush([P(-5, 6.2), P(0, 7.4), P(5, 6.4)], 0.8, { fill: INK2, op: 0.5 });
+      }
+    }
+    // 太いげじげじ眉 (白髪まじり): 太い線 + 上へはねる毛先
+    const BW = { w: 21, t: 5.5, arch: 1.4, col: "#332d2a" };
+    s += brow(g, -19.5, 108.5, -1, BW, ex) + brow(g, 19.5, 108.5, 1, BW, ex);
+    const by = ex === "happy" ? -1 : ex === "angry" ? 1.5 : ex === "surprised" ? -3 : 0;
+    for (const sd of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        const x = 2 + i * 4.2;
+        s += brush([F(g, sd * (19.5 + x), 106.6 + by + i * 0.5, 3), F(g, sd * (21.5 + x), 103.8 + by + i * 0.7, 3)], 1.8 - i * 0.3, { fill: "#332d2a", s0: 1, e0: 0.05, a: 0.1, b: 0.7 });
+      }
+      if (g.fine) s += brush([F(g, sd * 13.5, 108 + by, 3), F(g, sd * 24, 107.2 + by, 3)], 0.9, { fill: "#a9a39c", op: 0.95 });
+    }
+    s += nose(g, 138, 1.25);
+    // ほうれい線 (短く、やさしく)
+    if (g.fine) s += brush([F(g, -12, 141, 0), F(g, -15, 148, 0), F(g, -15, 154, 0)], 0.9, { fill: INK2, op: 0.55 }) + brush([F(g, 12, 141, 0), F(g, 15, 148, 0), F(g, 15, 154, 0)], 0.9, { fill: INK2, op: 0.55 });
+    // 口 (ひげの下)。おどろき・しょんぼりはひげの下に見えるように下げる
+    if (ex === "happy") s += mouth(g, 151.5, { w: 18, grin: 1.1, deep: 9, teeth: 1 }, ex);
+    else if (ex === "surprised") s += mouth(g, 154, { w: 14, deep: 9 }, ex);
+    else if (ex === "sad" || ex === "angry") s += mouth(g, 156.2, { w: 15 }, ex);
+    else s += mouth(g, 154.4, { w: 17, smile: ex === "serious" ? 0 : 1.5 }, ex);
+    // あごのくぼみ
+    if (g.fine) s += brush([F(g, -3.5, 164.5, 0), F(g, 0, 165.3, 0), F(g, 3.5, 164.5, 0)], 0.9, { fill: INK2, op: 0.45 });
+    s += blush(g, 136, ex === "happy" ? 0.4 : 0, true, 27);
+    // 口ひげ (丸い山形、中央で分かれる。下の縁は毛先のぎざぎざ)
+    const mu = [[0, 143.2, 1], [-6, 142], [-13, 143.6], [-18, 148.2], [-19.5, 152.5, 1], [-15.5, 150.2, 1], [-13.5, 153, 1], [-10.5, 150.4, 1], [-7.5, 152.6, 1], [-4.5, 150.2, 1], [-1.6, 151.4, 1], [0, 148, 1], [1.6, 151.4, 1], [4.5, 150.2, 1], [7.5, 152.6, 1], [10.5, 150.4, 1], [13.5, 153, 1], [15.5, 150.2, 1], [19.5, 152.5, 1], [18, 148.2], [13, 143.6], [6, 142]];
+    const md = curve(
+      mu.map((p) => {
+        const q = F(g, p[0], p[1] - 1.4, 2);
+        return p[2] ? [q[0], q[1], 1] : q;
+      }),
+      true
+    );
+    s += clipOpen(g.id + "mu", md) + fillP(md, "#3c3632");
+    // 白髪の筋と奥側の影
+    if (g.fine) for (const sd of [-1, 1]) for (let i = 0; i < 3; i++) s += brush([F(g, sd * (3 + i * 4.5), 144.6 + i * 0.5, 2), F(g, sd * (5.5 + i * 4.8), 149 + i * 0.4, 2)], 1.3, { fill: "#a39b92", s0: 0.4, e0: 0.1 });
+    s += fillP(poly([F(g, 5, 139, 2), F(g, 22, 139, 2), F(g, 22, 156, 2), F(g, 9, 156, 2)]), "#140f0d", 0.4);
+    s += "</g>" + shape(md, "none", LW.part);
+    s += cap(g, -3);
+    s += fx(g, ex, { veinX: 158, veinY: 50, sweatX: 150, sweatY: 106, gloomY: 103, surX: 48, surY: 48 });
+    return s + headClose(g);
+  }
+
+  // 剛田: パワー自慢の先輩 (ブラシのような坊主頭・鼻のばんそうこう・首にタオル・いつも笑顔)
+  function drawGoda(g) {
+    const ex = g.ex;
+    const H = hairPal("#3a2a22");
+    g.jaw = jawPts(g, "goda");
+    let s = neck(g, 22, 134) + jersey(g, "goda", 22) + towel(g);
+    s += headOpen(g);
+    s += ear(g, 1, 110, 135, 9.5) + ear(g, -1, 110, 135, 11);
+    // 坊主頭: 上の輪郭は短い毛でぎざぎざ (楕円の上を交互に出す)
+    const outer = [];
+    const N = 52;
+    for (let i = 0; i <= N; i++) {
+      const a = Math.PI * (1.07 - (1.14 * i) / N);
+      const tip = i % 2 === 1 && i > 1 && i < N - 1;
+      const k = tip ? 1.022 : 1;
+      outer.push([49.5 * Math.cos(a) * k, 96 - 58 * Math.sin(a) * k, 2 + 10 * Math.max(0, Math.sin(a)), tip || (i > 1 && i < N - 1) ? 1 : 0]);
+    }
+    const bottom = [[44, 104], [41, 92], [34, 84], [24, 79.5], [12, 78.6], [0, 79.6], [-12, 78.6], [-24, 79.5], [-34, 84], [-41, 92], [-44, 104]];
+    // 顔に落ちる生えぎわの影
+    const hd = curve(mapF(g, [[-48, 70]].concat(bottom.slice().reverse(), [[48, 70]]), 2), true);
+    let sh = '<g transform="translate(2 4)">' + fillP(hd, g.skinS) + "</g>";
+    s += face(g, "goda", sh);
+    const C = crownMass(g, H, outer, bottom, { dz: 2, shade: [[14, 34, 12], [52, 70, 6], [50, 106, 2], [42, 104, 8], [38, 74, 20], [26, 48, 24]], shine: [-40, 40, 50, 23] });
+    s += C.s;
+    // 横は短く刈りあげて肌が透ける
+    s += clipOpen(g.id + "sd", C.d) + fillP(curve(mapZ(g, [[-56, 86, 4], [-36, 86, 8], [-38, 112, 4], [-56, 112, 2]]), true), g.skin, 0.45) + fillP(curve(mapZ(g, [[56, 86, 4], [37, 86, 8], [39, 112, 4], [56, 112, 2]]), true), g.skinS, 0.45) + "</g>";
+    if (g.fine) s += brush(mapF(g, bottom.slice(2, -2), 2), LW.fine, { op: 0.6, s0: 0.3, e0: 0.3 });
+    // 前の生えぎわで立った毛の束
+    const tuft = curve(mapF(g, [[-18, 74, 1], [-16, 82.5], [-15.5, 86, 1], [-11, 80.5], [-7.5, 87.5, 1], [-3, 81], [1, 87, 1], [5, 81], [8.5, 85, 1], [11, 80], [14, 74, 1], [0, 71.5]], 4), true);
+    s += shape(tuft, H.base, LW.part);
+    if (g.fine) s += dashes(g, [[[-8, 76], [-7.6, 82]], [[1, 76], [1.4, 82]]], H.hl, 4);
+    // 目 (いつも少し笑った、下まぶたの上がった目)・太い眉
+    const E = { w: 15.5, h: 9, lash: 2.8, droop: 0.6, iris: "#5a3a24", lift: 0.12 };
+    const mode = ex === "happy" ? "squint" : "";
+    s += eye(g, -19.5, 121, -1, E, ex, mode) + eye(g, 19.5, 121, 1, E, ex, mode);
+    const BW = { w: 19, t: 4.2, arch: 0.8, col: mix(H.shade, INK, 0.4), tip: -1.6 };
+    s += brow(g, -20, 108.5, -1, BW, ex) + brow(g, 20, 108.5, 1, BW, ex);
+    s += nose(g, 137, 1.15);
+    // 鼻のばんそうこう
+    const bp = F(g, 0.5, 129.5, 6);
+    s += '<g transform="rotate(-8 ' + n(bp[0]) + " " + n(bp[1]) + ')">' + shape("M" + n(bp[0] - 8) + " " + n(bp[1] - 2.5) + "h16a1.6 1.6 0 0 1 0 5h-16a1.6 1.6 0 0 1 0-5z", "#fff4e6", LW.part) + fillP("M" + n(bp[0] - 2.6) + " " + n(bp[1] - 1.8) + "h5.2v3.6h-5.2z", "#e8c49a");
+    if (g.fine) s += ell([bp[0] - 5.2, bp[1]], 0.5, 0.5, "#e8c49a") + ell([bp[0] + 5.2, bp[1]], 0.5, 0.5, "#e8c49a");
+    s += "</g>";
+    // 口: ふだんから口を閉じてにかっと笑う
+    if (ex === "happy") s += mouth(g, 150, { w: 20, grin: 1.25, deep: 13, teeth: 1 }, ex);
+    else s += mouth(g, 151.5, { w: 20, smile: 1.6 }, ex);
+    // 日焼けのほほ
+    s += blush(g, 136, ex === "happy" ? 0.4 : 0.22, ex === "happy", 27);
+    s += fx(g, ex, { veinX: 154, veinY: 50, sweatX: 152, sweatY: 100, gloomY: 84, surX: 46, surY: 50 });
+    return s + headClose(g);
+  }
+
+  // 早瀬: マネージャー (高いサイドポニーテール、横に流した前髪、チームカラーのシュシュとヘアピン)
+  function drawHayase(g) {
+    const ex = g.ex;
+    const H = hairPal("#8c4c2c");
+    const acc = accOf(g.L);
+    g.jaw = jawPts(g, "girl");
+    let s = headOpen(g);
+    // ポニーテール (頭の後ろ、奥側の高いところから下へ)
+    const pd = curve([[132, 44, 1], [154, 38], [174, 50], [182, 74], [181, 104], [174, 134], [168, 156, 1], [166, 132], [158, 146, 1], [160, 116], [150, 124, 1], [154, 92], [146, 66]], true);
+    sil(g, pd);
+    s += clipOpen(g.id + "pt", pd) + fillP(pd, H.base) + fillP("M150 124C156 100 158 74 150 56L171 58C181 84 178 120 168 156Z", H.shade) + "</g>" + shape(pd, "none", LW.sil);
+    s += brush([[152, 47], [168, 55], [176, 76]], 2, { fill: H.hl, s0: 0.1, e0: 0.1, a: 0.5, b: 0.5 });
+    if (g.fine) s += brush([[160, 62], [166, 84], [164, 110]], LW.fine, { op: 0.8 }) + brush([[170, 96], [168, 120], [164, 138]], LW.fine, { op: 0.8 });
+    // 後ろ髪 (肩の上まで、影の色)
+    const bk = curve([[100, 32], [70, 36], [52, 54], [46, 82], [48, 112], [52, 140, 1], [60, 128], [66, 148, 1], [100, 146], [136, 148, 1], [142, 128], [150, 140, 1], [154, 112], [154, 82], [148, 54], [130, 36]].map((p) => [p[0] + 3, p[1], p[2]]), true);
+    sil(g, bk);
+    s += shape(bk, H.shade, LW.part);
+    s += headClose(g);
+    s += neck(g, 12, 138);
+    s += girlJacket(g);
+    s += headOpen(g);
+    // 前髪: 手前寄りの分け目から左右へ流す (後ろの束は影の色)。長さはばらばら
+    const back = [
+      [-26, 64, -38, 100, 14, -2],
+      [-4, 66, -12, 107, 14, -2],
+      [16, 64, 18, 104, 13, 1.5],
+      [34, 62, 41, 96, 12, 2],
+    ];
+    const front = [
+      [-38, 62, -46, 97, 12, -2],
+      [-22, 60, -31, 106, 15, -2.5],
+      [-7, 62, -11, 111, 15, -2],
+      [9, 62, 9, 107.5, 14, 1.5],
+      [24, 60, 29, 102, 13, 2],
+      [40, 60, 46, 91, 11, 1.5],
+    ];
+    const fl = [];
+    for (const b of front) fl.push(lock(g, b[0], b[1], b[2], b[3], b[4], b[5], 3));
+    const sh = '<g transform="translate(2.6 4.6)">' + fl.map((d) => fillP(d, g.skinS)).join("") + "</g>";
+    s += face(g, "girl", sh);
+    for (const b of back) s += shape(lock(g, b[0], b[1], b[2], b[3], b[4], b[5], 3), H.shade, LW.part);
+    // 前の束の根元は頭頂の塊でかくす
+    for (const d of fl) s += shape(d, H.base, LW.part);
+    // 頭頂 (下のふちは線なし) と光の帯
+    const C = crownMass(g, H, [[-50, 98, 2], [-53, 76, 4], [-51, 58, 6], [-42, 42, 8], [-26, 32, 10], [-6, 28, 12], [14, 29, 12], [32, 35, 10], [46, 48, 8], [52, 66, 6], [53, 84, 4], [50, 98, 2]], [[44, 74], [30, 67], [14, 65], [0, 64], [-14, 63], [-30, 65], [-44, 72]], { dz: 3, shade: [[16, 26, 12], [44, 40, 8], [58, 70, 4], [56, 100, 2], [46, 78, 16], [36, 54, 20]], shine: [-47, 49, 44, 11] });
+    s += C.s;
+    // 前髪にもつやの帯の続き
+    if (g.fine) s += clipMany(g.id + "fl", fl) + shineBand(g, -46, 48, 66, 260, 2.6, H.hl, 3, 5) + "</g>";
+    s += strands(g, [[[-31, 102], [-27, 88]], [[-11, 106], [-8, 90]], [[9, 104], [8, 88]], [[28, 99], [25, 86]]], 3);
+    // 分け目
+    if (g.fine) s += brush([prj(g, -16, 31, 20), prj(g, -18, 40, 24), prj(g, -21, 48, 26)], LW.fine, { s0: 0.2, e0: 0.6 });
+    // 横の髪 (耳を隠して鎖骨まで)
+    for (const sd of [-1, 1]) {
+      const P = (u, v, c) => {
+        const q = prj(g, sd * u, v, sd < 0 ? 8 : 4);
+        return c ? [q[0], q[1], 1] : q;
+      };
+      const sl = curve([P(46, 70, 1), P(37, 86), P(36, 112), P(37, 138), P(41, 160, 1), P(43, 146), P(47.5, 154, 1), P(47, 122), P(49, 92)], true);
+      sil(g, sl);
+      s += clipOpen(g.id + "sl" + (sd + 1), sl) + fillP(sl, H.base) + fillP(curve([P(44, 70), P(40, 100), P(44, 150), P(52, 150), P(52, 70)], true), H.shade, sd > 0 ? 1 : 0.6) + "</g>";
+      s += shape(sl, "none", LW.part);
+      if (sd < 0) s += brush([P(40, 96), P(39.5, 122)], 1.6, { fill: H.hl, s0: 0.1, e0: 0.1, a: 0.5, b: 0.5 });
+    }
+    // シュシュ (ふりふりの輪、結び目の上)
+    const sc = [139, 47];
+    const ring = [];
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      const rr = i % 2 ? 7.2 : 9;
+      ring.push([sc[0] + Math.cos(a) * rr * 0.86, sc[1] + Math.sin(a) * rr]);
+    }
+    s += shape(curve(ring, true), acc, LW.part);
+    s += ell([sc[0] + 0.8, sc[1] + 0.6], 3.6, 4.2, clothShade(acc));
+    if (g.fine) for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + 0.3;
+      s += brush([[sc[0] + Math.cos(a) * 4.6, sc[1] + Math.sin(a) * 5.2], [sc[0] + Math.cos(a) * 7, sc[1] + Math.sin(a) * 8]], 0.7, { op: 0.55 });
+    }
+    // ヘアピン (2 本、手前の前髪に)
+    for (const dy of [0, 5]) s += shape(poly([F(g, -34, 77 + dy, 8), F(g, -22, 73 + dy, 8), F(g, -21.3, 75.6 + dy, 8), F(g, -33.3, 79.6 + dy, 8)]), acc, 0.8);
+    // 目・眉・鼻・口
+    const E = { w: 19, h: 13.5, iris: "#a8582a", fem: 1, lash: LW.lashF, crease: 1 };
+    const mode = ex === "happy" ? "arc" : "";
+    s += eye(g, -18.5, 119, -1, E, ex, mode) + eye(g, 18.5, 119, 1, E, ex, mode);
+    const BW = { w: 15, t: 1.9, arch: 2.4, col: mix(H.base, INK, 0.45) };
+    s += brow(g, -18.5, 103.5, -1, BW, ex) + brow(g, 18.5, 103.5, 1, BW, ex);
+    s += nose(g, 134, 0.8);
+    s += blush(g, 131, ex === "happy" ? 0.4 : 0.22, ex === "happy", 25);
+    if (ex === "happy") s += mouth(g, 143, { w: 12, grin: 1.2, deep: 9 }, ex);
+    else s += mouth(g, 144, { w: 10, smile: 1.1 }, ex);
+    s += fx(g, ex, { veinX: 42, veinY: 50, sweatX: 154, sweatY: 92, gloomY: 92, surX: 44, surY: 46 });
+    return s + headClose(g);
+  }
+
+  // 宇佐美 (inukai): 理論派の打撃コーチ (やわらかい横分けの髪・細い半ぶちメガネ・ストップウォッチ)
+  function drawInukai(g) {
+    const ex = g.ex;
+    const H = hairPal("#5a4636");
+    g.jaw = jawPts(g, "inukai");
+    let s = neck(g, 15.5, 138) + coachPolo(g, 15.5);
+    s += headOpen(g);
+    s += ear(g, 1, 110, 133, 8) + ear(g, -1, 110, 133, 9);
+    // 前髪: 手前の分け目から奥へ流れるやわらかい毛先 (頭頂の塊の下のふちをぎざぎざにする)
+    const edge = zig([[47, 101], [42, 98], [38, 88], [30, 97], [23, 84], [14, 92], [6, 80], [-2, 87], [-9, 75], [-15, 80], [-21, 70], [-31, 82], [-34, 77], [-42, 95], [-46, 101]], 0.12);
+    const sh = '<g transform="translate(2.4 4.4)">' + fillP(curve(mapF(g, [[50, 60]].concat(edge, [[-50, 60]]), 3), true), g.skinS) + "</g>";
+    s += face(g, "inukai", sh);
+    const C = crownMass(g, H, [[-46, 104, 2], [-49, 86, 4], [-48, 66, 6], [-40, 48, 8], [-24, 37, 10], [-4, 33, 12], [16, 34, 12], [33, 40, 10], [45, 54, 8], [50, 72, 6], [50, 90, 4], [47, 104, 2]], edge, { dz: 3, shade: [[18, 30, 12], [44, 44, 8], [58, 74, 4], [56, 106, 2], [40, 96, 10], [30, 64, 18], [22, 42, 20]], shine: [-42, 44, 46, 17] });
+    s += C.s;
+    s += strands(g, [[[38, 88], [27, 70]], [[23, 84], [13, 64]], [[6, 80], [-3, 62]], [[-9, 75], [-14, 60]], [[-34, 77], [-28, 62]]], 3);
+    // 分け目
+    if (g.fine) s += brush([prj(g, -16, 36, 22), prj(g, -18, 44, 26), prj(g, -19, 51, 28)], LW.fine, { s0: 0.2, e0: 0.6 });
+    // こめかみの白髪
+    s += brush([prj(g, -43, 86, 8), prj(g, -41, 94, 8), prj(g, -40.5, 104, 8)], 2.2, { fill: "#8f8a86", s0: 0.3, e0: 0.3 });
+    // 目 (おだやかで少し下がり目)・眉
+    const glare = ex === "serious";
+    const E = { w: 15, h: 8.4, iris: "#5a4636", droop: 1, lash: 2.5 };
+    const mode = ex === "happy" ? "arc" : "";
+    if (!glare) s += eye(g, -18.5, 120, -1, E, ex, mode) + eye(g, 18.5, 120, 1, E, ex, mode);
+    const BW = { w: 16, t: 2.2, arch: 1.1, col: mix(H.shade, INK, 0.3) };
+    s += brow(g, -19, 108.5, -1, BW, ex) + brow(g, 19, 108.5, 1, BW, ex);
+    s += nose(g, 137, 1.05);
+    if (ex === "happy") s += mouth(g, 152, { w: 11, grin: 1.1, deep: 7 }, ex);
+    else s += mouth(g, 153, { w: 12, smile: 1 }, ex);
+    s += blush(g, 134, ex === "happy" ? 0.4 : 0, true, 25);
+    // 半ぶちの四角いメガネ (上のふちだけ太い)
+    for (const sd of [-1, 1]) {
+      const u = sd * 18.5;
+      const q = mapF(g, [[u - 11.5, 113.6], [u + 11.5, 113.6], [u + 11, 125.6], [u - 11, 125.6]], 5);
+      const lens = curve([q[0], [(q[0][0] + q[1][0]) / 2, q[0][1] - 0.5], q[1], [q[1][0] + 0.3, (q[1][1] + q[2][1]) / 2], q[2], [(q[2][0] + q[3][0]) / 2, q[2][1] + 0.6], q[3], [q[3][0] - 0.3, (q[3][1] + q[0][1]) / 2]], true);
+      const kx = Math.abs(q[1][0] - q[0][0]) / 23;
+      const lc = [(q[0][0] + q[1][0]) / 2, (q[0][1] + q[2][1]) / 2];
+      if (glare) {
+        // 光って目が見えない (真剣)
+        s += fillP(lens, "#eef4fb") + clipOpen(g.id + "gl" + (sd + 1), lens) + brush([[lc[0] - 9 * kx, lc[1] + 7], [lc[0] + 1 * kx, lc[1] - 7]], 7, { fill: "#ffffff", s0: 1, e0: 1, a: 0.01, b: 0.01 }) + brush([[lc[0] + 2 * kx, lc[1] + 7], [lc[0] + 8 * kx, lc[1] - 7]], 4, { fill: "#ffffff", s0: 1, e0: 1, a: 0.01, b: 0.01 }) + "</g>";
+      } else {
+        s += fillP(lens, "#dfeaf7", 0.15);
+        if (g.fine) s += glint([lc[0] + 6.5 * kx, lc[1] + 1.5], kx * 0.6);
+      }
+      s += shape(lens, "none", 0.8, "#4a3a30");
+      s += brush([q[0], [(q[0][0] + q[1][0]) / 2, q[0][1] - 0.5], q[1]], 1.4, { fill: "#4a3a30", s0: 1, e0: 1, a: 0.02, b: 0.02 });
+    }
+    s += brush([F(g, -7, 114.4, 5), F(g, 0, 113.2, 6), F(g, 7, 114.4, 5)], 1, { fill: "#4a3a30", s0: 1, e0: 1 });
+    s += brush([F(g, -30, 114, 4), prj(g, -41, 115, 2)], 1, { fill: "#4a3a30", s0: 1, e0: 1 });
+    s += fx(g, ex, { veinX: 156, veinY: 48, sweatX: 152, sweatY: 96, gloomY: 92, surX: 46, surY: 44 });
+    return s + headClose(g);
+  }
+
+  // 竜崎: 同期のライバル (細い顔・つばの下から流れる長い前髪・グレーがかった青い目・にやりと笑う)
+  function drawRyu(g) {
+    const ex = g.ex;
+    const H = hairPal("#2a2238", mix("#2a2238", "#b8a8e0", 0.45));
+    g.jaw = jawPts(g, "ryu");
+    let s = headOpen(g) + nape(g, H, 4, true) + headClose(g);
+    s += neck(g, 15.5, 138) + jersey(g, "std", 15.5) + necklace(g);
+    s += headOpen(g);
+    s += ear(g, 1, 110, 131, 7.5) + ear(g, -1, 110, 131, 8.5);
+    // 前髪: 短い束 3 本と、手前からつばの下を通って奥の頬骨へ流れる長い 1 本
+    const back = [
+      [-30, 98, -32, 108, 8, -1],
+      [-14, 98, -12, 108, 9, 1],
+    ];
+    const front = [
+      [-34, 98, -36, 106.5, 7, -1],
+      [-24, 98, -27, 109, 8, -1],
+      [-4, 98, -2, 106, 7, 1],
+    ];
+    const long = sweep(g, [[-22, 99], [-9, 108], [6, 113.2], [22, 116], [35.5, 125]], 11, 4);
+    const sh = '<g transform="translate(2.4 4.6)">' + [long].concat(front.map((b) => lock(g, b[0], b[1], b[2], b[3], b[4], b[5], 3))).map((d) => fillP(d, g.skinS)).join("") + "</g>" + brimShade(g, -1, 3.5);
+    s += face(g, "ryu", sh);
+    // 横の髪 (手前は耳にかかって長い)
+    for (const sd of [-1, 1]) {
+      const P = (u, v, c) => {
+        const q = prj(g, sd * u, v, 6);
+        return c ? [q[0], q[1], 1] : q;
+      };
+      const d = sd < 0 ? curve([P(46, 99, 1), P(38, 101), P(36, 112), P(37.5, 126, 1), P(41, 118), P(45, 128, 1), P(46.5, 114), P(48, 104)], true) : curve([P(45, 100, 1), P(37, 101), P(36.5, 110), P(38, 118, 1), P(42, 112), P(46, 104)], true);
+      sil(g, d);
+      s += shape(d, sd > 0 ? H.shade : H.base, LW.part);
+      if (sd < 0 && g.fine) s += brush([P(40.5, 104), P(39.5, 117)], 1.3, { fill: H.hl });
+    }
+    const L = locks(g, H, back, front, 3);
+    s += L.s;
+    s += shape(long, H.base, LW.part);
+    const fd = L.fd.concat([long]);
+    s += clipMany(g.id + "fr", fd) + fillP(curve(mapF(g, [[-46, 95], [46, 95], [46, 104.5], [0, 106], [-46, 104.5]], 3), true), H.shade) + "</g>";
+    if (g.fine) s += dashes(g, [[[-25, 104], [-26, 107.5]], [[-3.6, 103.4], [-2.6, 105.6]]], H.hl, 4);
+    // 長い前髪のつや (毛の流れに沿う 2 本)
+    s += brush(mapF(g, [[-8, 109.2], [4, 112.6], [16, 114.6]], 4), 1.6, { fill: H.hl, s0: 0.2, e0: 0.1, a: 0.4, b: 0.5 });
+    if (g.fine) s += brush(mapF(g, [[12, 115], [24, 117.6], [30, 120.6]], 4), 1, { fill: H.hl, s0: 0.2, e0: 0.1, a: 0.4, b: 0.5 });
+    // 目 (切れ長、目尻が上がる)・眉
+    const E = { w: 17.5, h: 8.2, iris: "#4a6380", droop: -1.4, lash: 3, lo: 0.45, crease: 1 };
+    const mode = ex === "happy" ? "squint" : "";
+    s += eye(g, -18.5, 123, -1, E, ex, mode) + eye(g, 18.5, 123, 1, E, ex, mode);
+    const BW = { w: 17, t: 2.4, arch: 0.8, col: mix(H.base, INK, 0.4), tip: -1.4 };
+    s += brow(g, -19, 113, -1, BW, ex) + brow(g, 19, 113, 1, BW, ex);
+    // 泣きぼくろ (奥の目の下)
+    if (g.fine) s += ell(F(g, 25, 130.5, 0), 0.6, 0.6, INK);
+    s += nose(g, 139, 1);
+    if (ex === "happy") s += mouth(g, 152, { w: 14, grin: 1.15, deep: 8, teeth: 1 }, ex);
+    else if (ex === "angry") s += mouth(g, 153, { w: 12 }, "serious");
+    else s += mouth(g, 153, { w: 12, smirk: 1 }, ex);
+    s += blush(g, 134, ex === "happy" ? 0.3 : 0, false, 24);
+    s += cap(g, -1);
+    s += fx(g, ex, { veinX: 158, veinY: 50, sweatX: 148, sweatY: 112, gloomY: 104, surX: 48, surY: 50 });
+    return s + headClose(g);
+  }
+
+  // yaw: 右を向く量 (sin), hk: 頭の大きさ, tilt: 表情ごとの首のかしげ
   const CHARS = {
-    kanto: { skin: "#d9a274", male: true, draw: drawOni, tilt: { happy: -3, sad: 3 } },
-    goda: { skin: "#e2ad7e", male: true, draw: drawGoda, tilt: { normal: -3, happy: -5, sad: 4 } },
-    hayase: { skin: "#ffe2cc", male: false, draw: drawHayase, tilt: { normal: 5, happy: 6, angry: -3, sad: 4 } },
-    inukai: { skin: "#f1c8a4", male: true, draw: drawInukai, tilt: { happy: 2, sad: 3 } },
-    ryuzaki: { skin: "#ffd9b8", male: true, draw: drawRyu, tilt: { normal: -5, happy: -4, angry: 2, sad: 4 } },
-    me: { skin: "#ffd9b8", male: true, draw: drawMe, tilt: { happy: -3, angry: 2, sad: 4 } },
+    kanto: { skin: "#f0bf96", draw: drawKanto, yaw: 0.18, hk: 0.93, tilt: { happy: -3, sad: 3 } },
+    goda: { skin: "#e6b086", draw: drawGoda, yaw: 0.2, hk: 0.95, tilt: { normal: -2, happy: -4, sad: 3 } },
+    hayase: { skin: "#ffe3cf", draw: drawHayase, yaw: 0.22, hk: 0.92, tilt: { normal: 3, happy: 5, angry: -3, sad: 3 } },
+    inukai: { skin: "#fcd8b8", draw: drawInukai, yaw: 0.2, hk: 0.93, tilt: { happy: 2, sad: 2 } },
+    ryuzaki: { skin: "#ffe0c6", draw: drawRyu, yaw: 0.26, hk: 0.93, tilt: { normal: -3, happy: -3, angry: 2, sad: 3 } },
+    me: { skin: "#ffd9b8", draw: drawMe, yaw: 0.22, hk: 0.93, tilt: { happy: -3, angry: 1, sad: 3 } },
   };
   M.CHARS = Object.keys(CHARS);
 
-  // 切り抜き (viewBox)
+  // 切り抜き (viewBox)。face は M.icon の symbol にも使うので正方形
   const CROP = {
     bust: [0, 0, 200, 240],
     square: [6, 26, 188, 188],
-    face: [40, 40, 120, 120],
+    face: [44, 54, 116, 116],
   };
 
   /* ---------- 公開: SVG の文字列 ----------
-   * o: { team, ex (表情), crop: bust|square|face, size (表示の大きさ px、細部の量), face (自分の顔), seed, frame, cls } */
+   * o: { team, ex (表情), crop: bust|square|face, size (表示の大きさ px、細部の量), face (自分の顔), seed, frame, sil, cls, label } */
   const cache = {};
   let seq = 0;
   M.svg = function (who, o) {
     o = o || {};
-    const C = CHARS[who] || CHARS.me;
+    const wk = CHARS[who] ? who : "me";
+    const C = CHARS[wk];
     const ex = EXPRS.indexOf(o.ex) >= 0 ? o.ex : "normal";
     const crop = CROP[o.crop] ? o.crop : "bust";
-    const det = (o.size || 120) >= 72;
+    const size = o.size || 120;
+    // 細部の量: 0 大 (紹介カード) / 1 中 (会話・週の画面) / 2 小 (アイコン)
+    const lod = size >= 200 ? 0 : size >= 72 ? 1 : 2;
     const L = look(o.team);
     const f = o.face || {};
-    const key = [who, ex, crop, det ? 1 : 0, o.frame === false ? 0 : 1, o.sil ? 1 : 0, L.key, f.skin || "", f.eyes || "", f.hs == null ? "" : f.hs, f.hair || "", who === "me" ? o.seed || "" : ""].join("|");
+    const key = [wk, ex, crop, lod, o.frame === false ? 0 : 1, o.sil ? 1 : 0, L.key, f.skin || "", f.eyes || "", f.hs == null ? "" : f.hs, f.hair || "", wk === "me" ? o.seed || "" : ""].join("|");
     let body = cache[key];
     if (!body) {
-      const g = { id: "§", who, ex, det, L, face: f, seed: o.seed, n: 0, male: C.male, tilt: (C.tilt && C.tilt[ex]) || 0 };
-      g.skin = who === "me" ? f.skin || C.skin : C.skin;
-      g.skinS = mix(g.skin, "#9a4f3c", 0.32);
+      const g = { id: "§", who: wk, ex, lod, crop, fine: lod < 2, L, face: f, seed: o.seed, n: 0, sil: [], hk: C.hk, lift: 3, tilt: (C.tilt && C.tilt[ex]) || 0, sa: C.yaw, ca: Math.sqrt(1 - C.yaw * C.yaw) };
+      g.k0 = lod === 2 ? 1.3 : lod === 1 ? 1.15 : 1;
+      g.kl0 = lod === 2 ? 1.15 : 1;
+      g.skin = wk === "me" ? f.skin || C.skin : C.skin;
+      g.skinS = skinShade(g.skin);
+      g.blushC = blushOf(g.skin);
       const vb = CROP[crop];
-      let s = defs(g);
-      s += panel(g);
-      // sil: まだ会っていない人は黒いシルエット
+      K = g.k0;
+      let fig;
+      try {
+        fig = C.draw(g);
+      } finally {
+        K = 1;
+      }
+      let s = background(g);
       if (o.sil) {
-        s += '<filter id="§sil"><feColorMatrix type="matrix" values="0 0 0 0 .13 0 0 0 0 .15 0 0 0 0 .22 0 0 0 1 0"/></filter><g filter="url(#§sil)">' + C.draw(g) + "</g>";
-        // 小さいと灰色の丸にしか見えないので「?」を重ねる
+        // sil: まだ会っていない人は黒いシルエット
+        s += '<filter id="§sil"><feColorMatrix type="matrix" values="0 0 0 0 .13 0 0 0 0 .15 0 0 0 0 .22 0 0 0 1 0"/></filter><g filter="url(#§sil)">' + fig + "</g>";
+        // 小さいと形がわかりにくいので「?」を重ねる
         s += '<text x="' + n(vb[0] + vb[2] / 2) + '" y="' + n(vb[1] + vb[3] * 0.55) + '" font-family="\'Archivo Black\', sans-serif" font-size="' + n(vb[3] * 0.46) + '" font-weight="900" text-anchor="middle" dominant-baseline="central" fill="#ffffff" stroke="' + INK + '" stroke-width="' + n(vb[3] * 0.035) + '" paint-order="stroke" stroke-linejoin="round">?</text>';
-      } else s += C.draw(g);
+      } else {
+        // 人物の影 (中・大の胸から上の絵だけ)
+        if (lod < 2 && crop !== "face") s += figShadow(g);
+        s += fig;
+      }
       if (o.frame !== false) {
-        const sw = crop === "face" ? 4 : 3.2;
+        const sw = crop === "face" ? 3 : 2.6;
         s += '<rect x="' + (vb[0] + sw / 2) + '" y="' + (vb[1] + sw / 2) + '" width="' + (vb[2] - sw) + '" height="' + (vb[3] - sw) + '" fill="none" stroke="' + INK + '" stroke-width="' + sw + '"/>';
       }
       body = '<svg class="mg ' + "§cls" + '" viewBox="' + vb.join(" ") + '" preserveAspectRatio="xMidYMid slice" role="img" aria-label="§label">' + s + "</svg>";
@@ -1633,7 +1824,7 @@
   M.icon = function (who, o) {
     o = o || {};
     const f = o.face || {};
-    const key = [who, o.ex || "normal", o.sil ? 1 : 0, look(o.team).key, f.skin || "", f.eyes || "", f.hs == null ? "" : f.hs, o.seed || ""].join("|");
+    const key = [who, o.ex || "normal", o.sil ? 1 : 0, look(o.team).key, f.skin || "", f.eyes || "", f.hs == null ? "" : f.hs, f.hair || "", o.seed || ""].join("|");
     let id = syms[key];
     if (!id || !document.getElementById(id)) {
       let sp = document.getElementById("mg-sprite");

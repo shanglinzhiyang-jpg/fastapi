@@ -36,6 +36,10 @@
     return PB.Pennant && PB.Pennant.dayLabel ? PB.Pennant.dayLabel(pen, d) : "第" + (d + 1) + "日";
   }
   News.dayLabel = dayLabel;
+  // ポストシーズン・表彰式の日の呼び名 (日本シリーズ第3戦 など)
+  function tagOf(pen, d) {
+    return PB.Pennant && PB.Pennant.dayTag ? PB.Pennant.dayTag(pen, d) : "";
+  }
   function teamDef(id) {
     return D.teamDef ? D.teamDef(id) : null;
   }
@@ -92,9 +96,13 @@
   function innText(e) {
     return e.inn + "回" + (e.top ? "表" : "裏");
   }
+  // 号数 (ポストシーズンは「シリーズN号」= その系列の本数)
+  function noText(e) {
+    return e.no ? (e.ps ? "シリーズ" : "") + e.no + "号" : "";
+  }
   // 見出し: 鳥谷 4号先制2ラン
   function caption(e) {
-    return batName(e) + " " + (e.no ? e.no + "号" : "") + (e.ctx || "") + kindCap(e);
+    return batName(e) + " " + noText(e) + (e.ctx || "") + kindCap(e);
   }
   News.caption = caption;
 
@@ -102,6 +110,7 @@
   function hrTags(e) {
     const t = [];
     const push = (text, cls) => t.push({ text, cls: cls || "" });
+    if (e.ps) push(psTag(e.ps), "gold");
     if (e.ctx === "サヨナラ") push("サヨナラ", "hot");
     if (e.n >= 4) push("満塁", "hot");
     if (e.ctx === "逆転") push("逆転", "hot");
@@ -117,9 +126,13 @@
     if (e.gs >= 2) push(e.gs + "試合連続");
     if (e.both) push("両打席");
     if (e.open) push("開幕戦");
-    if (e.no === 1) push("今季1号", "gold");
-    if (e.no >= 10 && e.no % 10 === 0) push(e.no + "号到達", "gold");
+    if (e.no === 1 && !e.ps) push("今季1号", "gold");
+    if (e.no >= 10 && e.no % 10 === 0 && !e.ps) push(e.no + "号到達", "gold");
     return t;
+  }
+  function psTag(sid) {
+    const pen = store().data.pennant;
+    return PB.PenPost && pen ? PB.PenPost.tagOf(pen, sid) : "ポストシーズン";
   }
   News.hrTags = (e) => hrTags(e).map((x) => x.text);
   function chipsHTML(e, max) {
@@ -135,7 +148,7 @@
   }
   // 新聞の本塁打欄: 鳥谷4号②(上原)
   function hrLine(e) {
-    return esc(batName(e)) + (e.no ? e.no + "号" : "") + (e.type === "IPHR" ? "(走)" : CIRCLED[Math.min(4, e.n)]) + "(" + esc(pitName(e)) + ")";
+    return esc(batName(e)) + noText(e) + (e.type === "IPHR" ? "(走)" : CIRCLED[Math.min(4, e.n)]) + "(" + esc(pitName(e)) + ")";
   }
   News.hrLine = hrLine;
 
@@ -175,7 +188,7 @@
   // 本塁打 1 本の記事候補 (優先度の高いものから 1 つ)
   function hrHeadline(e) {
     const nm = batName(e);
-    const no = e.no ? "（" + e.no + "号）" : "";
+    const no = e.no ? "（" + noText(e) + "）" : "";
     if (e.ctx === "サヨナラ") return { prio: 90, title: nm + "、サヨナラ" + (e.n === 1 && e.type !== "IPHR" ? "本塁打" : kindCap(e)) + "！" };
     if (e.game >= 3) return { prio: 80, title: nm + "、1試合" + e.game + "本塁打の大暴れ" };
     if (e.n >= 4) return { prio: 70, title: nm + "が" + (e.ctx ? e.ctx + "の" : "") + "満塁本塁打" + no };
@@ -187,7 +200,7 @@
     if (e.lead) return { prio: 45, title: nm + "、初回先頭打者本塁打" + no };
     if (e.extra) return { prio: 45, title: nm + "、延長" + e.inn + "回に" + (e.ctx || "") + kindShort(e) };
     if (e.both) return { prio: 45, title: nm + "、両打席本塁打" };
-    if (e.no >= 10 && e.no % 10 === 0) return { prio: 40, title: nm + "、シーズン" + e.no + "号に到達" };
+    if (e.no >= 10 && e.no % 10 === 0 && !e.ps) return { prio: 40, title: nm + "、シーズン" + e.no + "号に到達" };
     if (e.ctx === "逆転") return { prio: 35, title: nm + "、逆転" + kindShort(e) };
     return null;
   }
@@ -261,8 +274,10 @@
     ns.hrTop = ns.hrTop || {};
     if (ns.done[day]) return;
     const rs = dayResults(pen, day);
-    // 1) 自チームの試合
-    const mine = rs.find((r) => r.home === pen.my || r.away === pen.my);
+    // ポストシーズン・表彰式の日 (レギュラーシーズンの後): 首位争い・本塁打王争い・マジックは作らない
+    const postDay = day >= (pen.regDays || (pen.schedule || []).length);
+    // 1) 自チームの試合 (ポストシーズンの試合は 6) で系列の記事にする)
+    const mine = rs.find((r) => !r.ps && (r.home === pen.my || r.away === pen.my));
     if (mine) {
       const isHome = mine.home === pen.my;
       const ms = isHome ? mine.hs : mine.as;
@@ -352,9 +367,9 @@
       add(pen, c);
       nItems++;
     }
-    // 4) 本塁打王争い・首位争い (リーグごと)
+    // 4) 本塁打王争い・首位争い (リーグごと・レギュラーシーズンだけ)
     for (const lg of Object.keys(D.LEAGUES || { C: 1 })) {
-      if (!Pen.lgTeams(pen, lg).length) continue;
+      if (postDay || !Pen.lgTeams(pen, lg).length) continue;
       const top = hrRanking(pen, lg).filter((x) => x.rank === 1);
       const ids = top.map((x) => x.id);
       const hr = top.length ? top[0].hr : 0;
@@ -376,9 +391,180 @@
       if (first && alone) ns.top[lg] = first.id;
     }
     // 5) ペナントレース (マジック・優勝/1 位通過・プレーオフ進出・自チームの可能性消滅)
-    raceNews(pen, day);
+    if (!postDay) raceNews(pen, day);
+    // 6) ポストシーズン (系列の開幕・各試合・勝ち抜け・優勝・日本一・系列の MVP)
+    postNews(pen, day);
+    // 7) タイトル確定・月間 MVP・表彰
+    awardNews(pen, day);
     ns.done[day] = 1;
   };
+
+  /* ---------- ポストシーズンの記事 (系列の記録から・乱数なし) ---------- */
+  const PS_PRIO = { JS: 140, P2: 115, C2: 115, P1: 100, C1: 100 };
+  function postNews(pen, day) {
+    const PP = PB.PenPost;
+    if (!PP || !pen.post || !pen.post.series) return;
+    const innings = pen.innings || 9;
+    for (const s of pen.post.series) {
+      const prio = (PS_PRIO[s.id] || 100) + (s.hi === pen.my || s.lo === pen.my ? 20 : 0);
+      const L = s.lg ? LG_SHORT[s.lg] : "";
+      if (s.start === day && s.hi && s.lo)
+        add(pen, {
+          key: "ps:start:" + s.id,
+          day,
+          kind: "ps",
+          lg: s.lg || null,
+          prio: prio - 10,
+          title: s.name + "が開幕　" + team(s.hi).short + " vs " + team(s.lo).short,
+          body: s.id === "JS" ? "7試合制・4勝で日本一" : s.max + "試合制・" + s.need + "勝で勝ち抜け" + (s.adv ? "。" + team(s.hi).short + "に1勝のアドバンテージ" : ""),
+        });
+      s.games.forEach((g, i) => {
+        if (g.day !== day) return;
+        const n = i + 1;
+        const after = PP.stateAt(s, n);
+        const before = PP.stateAt(s, n - 1);
+        const wid = g.hs > g.as ? g.home : g.as > g.hs ? g.away : null;
+        const lid = wid ? (wid === g.home ? g.away : g.home) : null;
+        const side = (id) => (id === s.hi ? 0 : 1);
+        let title;
+        let kind = "ps";
+        if (after.win) {
+          const k = side(after.win);
+          const rec = after.w[k] + "勝" + after.w[1 - k] + "敗" + (after.t ? after.t + "分" : "");
+          const nm = team(after.win).short;
+          if (s.id === "JS") title = nm + "が日本一！ " + rec + "で日本シリーズを制す";
+          else if (s.cel === "lg") title = nm + "が" + L + "優勝！ プレーオフを" + rec + "で制す";
+          else if (s.cel === "cs") title = nm + "がCS突破、日本シリーズ進出（" + rec + "）";
+          else title = nm + "が" + s.stage + "突破（" + rec + "）";
+          kind = s.id === "JS" || s.cel === "lg" ? "pswin" : "ps";
+        } else if (!wid) title = s.tag + "第" + n + "戦は" + (g.inn > innings ? "延長" + g.inn + "回" : "") + "引き分け";
+        else {
+          const ww = after.w[side(wid)];
+          const wl = after.w[side(lid)];
+          const bw = before.w[side(wid)];
+          const bl = before.w[side(lid)];
+          const how = g.wo ? "がサヨナラ勝ちで" : "が";
+          const goal = s.id === "JS" ? "日本一" : s.cel === "lg" ? "優勝" : "突破";
+          let what;
+          if (ww === s.need - 1 && wl === s.need - 1 && bl === s.need - 1) what = "逆王手";
+          else if (ww === s.need - 1) what = goal + "へ王手";
+          else if (n === 1 && !s.adv) what = "先勝";
+          else if (ww === wl && bw < bl) what = "タイに戻す";
+          else what = ww + "勝目";
+          title = team(wid).short + how + what + "（" + s.tag + "）";
+        }
+        const pit = [];
+        const r = (pen.results || []).find((x) => x.day === day && x.gi === g.gi) || {};
+        if (r.W) pit.push("勝 " + player(r.W).name);
+        if (r.L) pit.push("敗 " + player(r.L).name);
+        if (r.S) pit.push("S " + player(r.S).name);
+        const hrs = (r.hr || []).map((e) => batName(e) + noText(e)).slice(0, 4);
+        const body =
+          s.tag +
+          "第" +
+          n +
+          "戦（" +
+          (team(g.home).stadium || "") +
+          "）" +
+          team(g.away).short +
+          " " +
+          g.as +
+          "-" +
+          g.hs +
+          " " +
+          team(g.home).short +
+          (g.inn > innings ? "（延長" + g.inn + "回）" : "") +
+          (pit.length ? "。" + pit.join("、") : "") +
+          (hrs.length ? "。本塁打 " + hrs.join("、") : "") +
+          "。対戦成績 " +
+          team(s.hi).short +
+          after.w[0] +
+          "勝・" +
+          team(s.lo).short +
+          after.w[1] +
+          "勝" +
+          (after.t ? "・" + after.t + "分" : "");
+        add(pen, { key: "ps:" + s.id + ":" + n, day, kind, lg: s.lg || null, team: after.win || wid || null, prio: prio + (after.win ? 25 : 0), title, body });
+      });
+      // 系列の MVP
+      const P = pen.post;
+      if (s.win && s.end === day && P.mvp && P.mvp[s.id]) {
+        const m = P.mvp[s.id];
+        add(pen, { key: "ps:mvp:" + s.id, day, kind: "award", team: m.tid, prio: prio + 5, title: PP.mvpLabel(pen, s) + "は" + m.name + "（" + team(m.tid).short + "）", body: m.why || "" });
+        if (s.id === "JS" && P.mvp.JSf) add(pen, { key: "ps:mvp:JSf", day, kind: "award", team: P.mvp.JSf.tid, prio: prio - 5, title: "敢闘選手は" + P.mvp.JSf.name + "（" + team(P.mvp.JSf.tid).short + "）", body: P.mvp.JSf.why || "" });
+      }
+    }
+  }
+
+  /* ---------- タイトル・月間 MVP・表彰の記事 (pen.awards から) ---------- */
+  function awardNews(pen, day) {
+    const A = pen.awards;
+    if (!A) return;
+    const Aw = PB.PenAwards;
+    const lgs = Object.keys(D.LEAGUES || { C: 1 }).filter((lg) => PB.Pennant.lgTeams(pen, lg).length);
+    // タイトル確定 (リーグごとに 1 本 + 自チームの受賞者)
+    if (A.titles && A.titles.day === day)
+      for (const lg of lgs) {
+        const list = A.titles[lg] || [];
+        add(pen, {
+          key: "aw:title:" + lg,
+          day,
+          kind: "award",
+          lg,
+          prio: 95,
+          title: (LG_SHORT[lg] || "") + "の個人タイトルが確定",
+          body: list
+            .filter((x) => x.holders.length)
+            .map((x) => x.name + " " + x.holders.map((h) => h.name).join("・") + "（" + x.holders[0].v + "）")
+            .join("／"),
+        });
+        for (const x of list)
+          for (const h of x.holders)
+            if (h.tid === pen.my) add(pen, { key: "aw:title:" + x.key + ":" + h.id, day, kind: "award", team: h.tid, prio: 105, title: h.name + "が" + x.name + "を獲得" + (x.holders.length > 1 ? "（同時受賞）" : ""), body: x.name + " " + h.v });
+      }
+    // 月間 MVP (区分が終わった次の日)
+    const mon = (A.monthly || []).filter((x) => x.day === day && !x.partial);
+    const per = Aw ? Aw.PERIODS : {};
+    for (const lg of lgs) {
+      const ms = mon.filter((x) => x.lg === lg);
+      if (!ms.length) continue;
+      const k = ms[0].per;
+      const part = (kind, label) => {
+        const r = ms.find((x) => x.kind === kind);
+        return r ? label + " " + r.name + "（" + team(r.tid).short + "）" + r.why : "";
+      };
+      add(pen, {
+        key: "aw:mmvp:" + k + ":" + lg,
+        day,
+        kind: "award",
+        lg,
+        team: ms.some((x) => x.tid === pen.my) ? pen.my : null,
+        prio: 80 + (ms.some((x) => x.tid === pen.my) ? 20 : 0),
+        title: (per[k] || "") + "の月間MVP（" + (lg === "P" ? "パ" : "セ") + "）" + ms.map((x) => x.name).join("・"),
+        body: [part("bat", "打者"), part("pit", "投手")].filter(Boolean).join("／"),
+      });
+    }
+    // 年間の表彰 (表彰式の日)
+    const S = A.season;
+    if (S && S.day === day) {
+      for (const lg of lgs) {
+        const L = S[lg] || {};
+        const nm = (r) => r.name + "（" + team(r.tid).short + "）";
+        if (L.mvp) add(pen, { key: "aw:mvp:" + lg, day, kind: "award", lg, team: L.mvp.tid, prio: 130 + (L.mvp.tid === pen.my ? 20 : 0), title: (LG_SHORT[lg] || "") + "MVPは" + nm(L.mvp), body: L.mvp.why || "" });
+        if (L.roy) add(pen, { key: "aw:roy:" + lg, day, kind: "award", lg, team: L.roy.tid, prio: 110 + (L.roy.tid === pen.my ? 20 : 0), title: (LG_SHORT[lg] || "") + "の新人王は" + nm(L.roy), body: (L.roy.why || "") + "。" + (S.note || "") });
+        const b9 = L.b9 || {};
+        const b9list = ["P", "C", "1B", "2B", "3B", "SS"].map((k) => b9[k]).concat(b9.OF || [], b9.DH ? [b9.DH] : []).filter(Boolean);
+        if (b9list.length) add(pen, { key: "aw:b9:" + lg, day, kind: "award", lg, prio: 90, title: (LG_SHORT[lg] || "") + "のベストナイン発表", body: b9list.map((r) => (D.POS_JP[r.pos] || "外") + " " + nm(r)).join("、") });
+        const gg = L.gg || {};
+        const gglist = ["P", "C", "1B", "2B", "3B", "SS"].map((k) => gg[k]).concat(gg.OF || []).filter(Boolean);
+        if (gglist.length) add(pen, { key: "aw:gg:" + lg, day, kind: "award", lg, prio: 85, title: (LG_SHORT[lg] || "") + "のゴールデン・グラブ賞発表", body: gglist.map((r) => (D.POS_JP[r.pos] || "外") + " " + nm(r)).join("、") });
+      }
+      const sw = S.sawamura;
+      if (sw) add(pen, { key: "aw:saw", day, kind: "award", team: sw.none ? null : sw.tid, prio: 120, title: sw.none ? "沢村賞は該当者なし" : "沢村賞は" + sw.name + "（" + team(sw.tid).short + "）", body: sw.none ? "7項目の選考基準を多く満たした先発投手がいなかった（ゲーム内の選考）" : sw.why || "" });
+    }
+  }
+  News.postNews = postNews;
+  News.awardNews = awardNews;
 
   // 乱数を使わず、その日の終わりの順位と残り試合から決める。同じ日を作り直しても同じ記事
   function raceNews(pen, day) {
@@ -622,7 +808,7 @@
 
   function hrTab(pen, d) {
     const status = dayStatus(pen, d);
-    if (status === "empty") return '<p class="muted center nhr-none">まだ試合がありません</p>';
+    if (status === "empty") return '<p class="muted center nhr-none">' + (d >= 0 && d < pen.day ? "この日は試合がありません" : "まだ試合がありません") + "</p>";
     const hrs = dayHRs(pen, d);
     const byLg = {};
     for (const x of hrs) {
@@ -657,6 +843,8 @@
       for (const r of withHR) html += '<div class="nhr-game">' + gameHead(pen, r) + r.hr.map((e) => hrRow(e, r, i++)).join("") + "</div>";
       if (zero.length) html += '<p class="nhr-zero">本塁打なし　' + zero.map((r) => esc(teamAbbr(r.away)) + " " + r.as + "-" + r.hs + " " + esc(teamAbbr(r.home))).join("／") + "</p>";
     }
+    // ポストシーズンの日は本塁打王争い (レギュラーシーズン) を出さない
+    if (d >= (pen.regDays || pen.schedule.length)) return html + '<p class="note nhr-foot">号数はこの系列（シリーズ）での本数です。ポストシーズンの本塁打はシーズンの記録に入りません。</p>';
     // 本塁打王争い (リーグ別・上位 5 位・同数は同順位)
     const today = {};
     for (const x of hrs) today[x.e.id] = (today[x.e.id] || 0) + 1;
@@ -681,11 +869,18 @@
   }
 
   // ニュース画面 (日付を前後に移動できる)
+  // ニュースのある日 (試合のない表彰式の日も含む)
+  function newsDays(pen) {
+    return [...new Set(pen.results.map((r) => r.day).concat((pen.news || []).map((n) => n.day)))].filter((d) => d >= 0).sort((a, b) => a - b);
+  }
+  News.newsDays = newsDays;
   News.screen = function (opt) {
     const pen = store().data.pennant;
     const o = opt || {};
-    const days = [...new Set(pen.results.map((r) => r.day))].sort((a, b) => a - b);
-    const st = { day: o.day != null && days.indexOf(o.day) >= 0 ? o.day : lastPlayedDay(pen), tab: o.tab || "hr" };
+    const days = newsDays(pen);
+    const d0 = o.day != null && days.indexOf(o.day) >= 0 ? o.day : days.length ? days[days.length - 1] : -1;
+    // 試合のない日 (表彰式) はニュースのタブから
+    const st = { day: d0, tab: o.tab && (o.tab === "news" || dayResults(pen, d0).length) ? o.tab : dayResults(pen, d0).length ? "hr" : "news" };
     let digest = null;
     return {
       html() {
@@ -728,6 +923,7 @@
           (i <= 0 ? " disabled" : "") +
           '>◀ 前日</button><b>' +
           (d >= 0 ? esc(dayLabel(pen, d)) : "") +
+          (d >= 0 && tagOf(pen, d) && tagOf(pen, d) !== dayLabel(pen, d) ? "<small>" + esc(tagOf(pen, d)) + "</small>" : "") +
           '</b><button class="btn sm" data-act="next"' +
           (i < 0 || i >= days.length - 1 ? " disabled" : "") +
           ">翌日 ▶</button></div>" +
@@ -814,7 +1010,8 @@
       timer = setTimeout(next, 1800);
     };
     const endCard = () => {
-      const rankLgs = myLgFirst(pen, Object.keys(D.LEAGUES || {}).filter((k) => PB.Pennant.lgTeams(pen, k).length));
+      const post = day >= (pen.regDays || pen.schedule.length);
+      const rankLgs = post ? [] : myLgFirst(pen, Object.keys(D.LEAGUES || {}).filter((k) => PB.Pennant.lgTeams(pen, k).length));
       root.innerHTML =
         '<div class="hrdg-bg" style="--tc:#13819f"></div>' +
         '<div class="hrdg-end"><span class="hrdg-prog">今日のホームラン</span><b class="hrdg-big">本日 計' +

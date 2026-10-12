@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>動きの確認</title>
+<base href="/">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Graduate&family=Yellowtail&family=Rye&family=Ultra&family=Archivo+Black&family=Lobster&family=Oleo+Script:wght@700&family=Dela+Gothic+One&display=swap">
+<style>
+html,body{margin:0;height:100%;background:#1c2733;overflow:hidden;font:12px/1.3 system-ui,sans-serif}
+canvas{display:block;width:100%;height:100%}
+.lab{position:absolute;color:#fff;text-shadow:0 1px 2px #000,0 0 3px #000;white-space:pre;pointer-events:none}
+.ttl{position:absolute;left:6px;top:4px;color:#ffe9a8;text-shadow:0 1px 2px #000;pointer-events:none}
+</style>
+</head><body>
+<script src="vendor/three.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/npb.js"></script>
+<script src="js/rosters2004.js"></script>
+<script src="js/three/model.js"></script>
+<script src="js/three/anim.js"></script>
+<script src="js/three/clips.js"></script>
+<script src="js/three/gear.js"></script>
+<script src="js/three/human.js"></script>
+<script src="js/three/hrig.js"></script>
+<script src="js/three/look.js"></script>
+<script>
+/* 第 2 段の動き (clips.js) をコマ送りで並べて見る確認ページ
+ * ?clip=<名前>&p=<JSON の params>&times=a,b,c&cam=side|side2|front|back|top|batter&mirror=1&drive=0|1&target=1&team=g&side=home
+ *   p の solve = A.swingSolve の引数 (bat.swing の ct になる)、style = 選手の型 (一部だけでよい)、player = 選手の名前 (A.style を使う)
+ * ?run=<速さ m/秒>&arms=run|trot|walk  走り v2 (times は走り出してからの秒。省略で 2 秒後から 1 周期を 6 コマ)
+ * 最大 6 コマ。終わると window.__ready = true、window.__info に情報 */
+const q = new URLSearchParams(location.search);
+const T = THREE, A = PB.Anim, H = PB.Human;
+const W = innerWidth, Hh = innerHeight;
+const info = (window.__info = { errors: [] });
+addEventListener('error', (e) => info.errors.push(String(e.message || e)));
+const D2R = Math.PI / 180;
+const r = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setPixelRatio(1); r.setSize(W, Hh); r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap;
+r.outputColorSpace = T.SRGBColorSpace; r.toneMapping = T.ACESFilmicToneMapping;
+document.body.appendChild(r.domElement);
+const scene = new T.Scene(); scene.background = new T.Color('#3b4c5e');
+const stage = PB.Look.stage(scene, r, { kind: q.get('look') || 'day', rim: true, seat: '#2d4f86' });
+r.toneMappingExposure = stage.exposure;
+const sun = stage.lights.key;
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 30 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+scene.add(sun.target);
+// 地面・ホームベース・マウンド・ベース
+const ground = new T.Mesh(new T.PlaneGeometry(80, 80), new T.MeshStandardMaterial({ color: '#5d7d47', roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const dirt = new T.MeshStandardMaterial({ color: '#a8835a', roughness: 1 });
+const white = new T.MeshStandardMaterial({ color: '#f4f2ea', roughness: 0.7 });
+const plate = new T.Mesh(new T.CylinderGeometry(0.3, 0.3, 0.01, 5), white); plate.position.set(0, 0.005, 0); plate.rotation.y = Math.PI / 10; scene.add(plate);
+const mound = new T.Mesh(new T.CylinderGeometry(0.75, 2.7, 0.258, 32), dirt); mound.position.set(0, 0.129, -17.98); mound.receiveShadow = true; scene.add(mound);
+const rubber = new T.Mesh(new T.BoxGeometry(0.61, 0.02, 0.15), white); rubber.position.set(0, 0.262, -18.44); scene.add(rubber);
+
+const clipName = q.get('clip') || 'bat.swing';
+const runV = q.get('run') != null ? Number(q.get('run')) : null;
+let params = {};
+try { params = JSON.parse(q.get('p') || '{}'); } catch (e) { info.errors.push('bad p: ' + e.message); }
+const mirror = q.get('mirror') === '1';
+const drive = q.get('drive') === '1';
+const showTarget = q.get('target') === '1';
+const teamId = q.get('team') || 'g';
+const home = q.get('side') !== 'away';
+const camKind = q.get('cam') || (/^(bat|pit)\./.test(clipName) ? 'front' : 'front');
+
+// 選手の型: player=<名前> (2004 年の選手) か p.style
+function findPlayer(name) {
+  for (const t of PB.D.newTeams()) for (const p of t.players) if ((p.full || '') === name.replace(/ /g, '') || p.name === name) return p;
+  return null;
+}
+if (q.get('player')) {
+  const pl = findPlayer(q.get('player'));
+  if (pl) params.style = A.style(pl, mirror ? 'L' : 'R');
+  else info.errors.push('player not found: ' + q.get('player'));
+}
+if (params.solve) params.ct = A.swingSolve(params.solve);
+if (clipName === 'bat.dropRun' && params.from) params.swing = A.get(params.from.clip || 'bat.swing', params.from.p || {});
+
+let clip = null;
+if (runV == null) {
+  clip = A.get(clipName, params);
+  if (mirror) clip = A.mirrorClip(clip);
+  info.len = A.clipLength(clip);
+  info.marks = clip.marks;
+  info.kind = clip.kind;
+}
+const fam = runV != null ? 'run' : clipName.split('.')[0];
+let times = (q.get('times') || '').split(',').filter((s) => s !== '').map(Number);
+if (!times.length) {
+  if (runV != null) {
+    const L = A.RUN_L(runV);
+    times = [0, 1, 2, 3, 4, 5].map((i) => 2 + (i * L) / runV / 6);
+  } else {
+    const n = Math.min(6, clip.length);
+    times = [...Array(n)].map((_, i) => +(i * info.len / Math.max(1, n - 1)).toFixed(3));
+  }
+}
+times = times.slice(0, 6);
+
+// 置き場所 (ゲームの座標 → three: (x, 高さ, −y))。SPEC_v2 §1.3 と同じ
+function placement() {
+  const L = mirror;
+  if (fam === 'bat') return { x: L ? 0.78 : -0.78, y: 0, z: 0, yaw: L ? -Math.PI / 2 : Math.PI / 2 };
+  if (fam === 'pit') return { x: 0, y: 18.44, z: 0.258, yaw: L ? Math.PI / 2 : -Math.PI / 2 };
+  if (clipName === 'cat.receive') return { x: 0, y: -1.1, z: 0, yaw: Math.PI };
+  if (clipName === 'cat.throw2B') return { x: 0, y: -1.1, z: 0, yaw: Math.atan2(39.9, 0) };
+  if (fam === 'ump') return { x: 0, y: -2.0, z: 0, yaw: Math.PI };
+  return { x: 0, y: 6, z: 0, yaw: 0 };
+}
+const pl0 = placement();
+function spec(i) {
+  const team = PB.D.teamDef(teamId);
+  const o = { team, home, num: [25, 18, 6, 2, 7, 10][i % 6], nameEn: 'ANIM', seed: 40, bats: mirror ? 'L' : 'R', throws: mirror ? 'L' : 'R' };
+  if (fam === 'bat' || fam === 'run') o.helmet = true;
+  if (fam === 'cat') Object.assign(o, { pos: 'C', role: 'catcher' });
+  if (clipName === 'fld.firstStretch') o.pos = '1B';
+  if (fam === 'ump') return { role: 'umpire', team: { main: '#1b2230', sub: '#e9e9ee', cap: '#14171d' }, seed: 7, bats: 'R', throws: 'R' };
+  return o;
+}
+const cells = [];
+function poseAt(t, rig, pl) {
+  if (runV != null) {
+    const mem = {};
+    const p = A.basePose();
+    const steps = Math.max(1, Math.round(t * 60));
+    rig.apply(A.runCycle(mem, runV, 0, { arms: q.get('arms') || 'run' }, p));
+    for (let i = 1; i <= steps; i++) {
+      A.runCycle(mem, runV, 1 / 60, { arms: q.get('arms') || 'run' }, p);
+      if (drive) rig.drive(p, 1 / 60, 14);
+    }
+    if (!drive) rig.apply(p);
+    return p;
+  }
+  if (!drive) {
+    const p = A.sample(clip, t);
+    rig.apply(p);
+    return p;
+  }
+  // 60 Hz で 0 から t まで (最後の 1 歩はちょうど t に合わせる。スイングの芯は 1 ms で 3 cm 動く)
+  rig.apply(A.copyPose(A.sample(clip, 0)));
+  const out = A.basePose();
+  const n = Math.ceil(t * 60 - 1e-6);
+  let prev = 0;
+  for (let i = 1; i <= n; i++) {
+    const ti = Math.min(t, i / 60);
+    rig.drive(A.sample(clip, ti, out), ti - prev, Number(q.get('rate') || 14));
+    prev = ti;
+  }
+  return out;
+}
+const v3 = (a) => new T.Vector3(a[0], a[1], a[2]);
+const red = new T.MeshBasicMaterial({ color: '#ff2020' });
+function marker(pos, r0, mat) {
+  const m = new T.Mesh(new T.SphereGeometry(r0 || 0.03, 12, 8), mat || red);
+  m.position.copy(pos);
+  m.visible = false;
+  scene.add(m);
+  return m;
+}
+
+H.load('models/').then(() => H.preloadTeam(PB.D.teamDef(teamId))).then(() => document.fonts.ready).then(() => {
+  const N = times.length;
+  for (let i = 0; i < N; i++) {
+    const pl = H.createPlayer(spec(i));
+    pl.group.position.set(pl0.x, pl0.z, -pl0.y);
+    pl.group.rotation.y = pl0.yaw;
+    scene.add(pl.group);
+    if (fam === 'bat') { pl.showBat(true); pl.showGlove(false); pl.setBattingGloves(true); }
+    if (fam === 'run') pl.showGlove(false);
+    const rig = new H.Rig(pl);
+    const p = poseAt(times[i], rig, pl);
+    pl.group.updateMatrixWorld(true);
+    const c = { pl, rig, t: times[i], pose: p, marks: [] };
+    // 狙った点 (キャラクター空間 → ワールド): 芯・リリース・ポケット・ベース
+    const Rm = rig.b.Root.matrixWorld;
+    if (showTarget && clip && clip.target) c.marks.push(marker(v3(clip.target.p).applyMatrix4(Rm)));
+    if (showTarget && clip && clip.bag) {
+      const b = new T.Mesh(new T.BoxGeometry(0.38, 0.06, 0.38), white);
+      b.position.copy(v3([clip.bag[0], 0.03, clip.bag[2]]).applyMatrix4(pl.group.matrixWorld));
+      b.rotation.y = pl0.yaw; b.visible = false; scene.add(b); c.marks.push(b);
+    }
+    // 情報: 握りの補正・ポケットと狙いの差
+    let lab = 't ' + times[i].toFixed(3);
+    if (rig.gripFix > 0.002) lab += '\nfix ' + (rig.gripFix * 100).toFixed(1) + 'cm';
+    if (clip && clip.target && Math.abs(clip.target.t - times[i]) < 1e-6) {
+      let want = v3(clip.target.p).applyMatrix4(Rm);
+      let got = null;
+      // リリースは手首 (ボールより 9 cm 手前) を物理のリリース位置の手首と比べる
+      if (clip.target.what === 'release') { const w = A.PIT_REL_WRIST; want = v3([mirror ? -w[0] : w[0], w[1], w[2]]).applyMatrix4(Rm); }
+      if (clip.target.what === 'pocket') got = rig.pocket('glove', new T.Vector3());
+      if (clip.target.what === 'sweet' && pl.gear.bat) got = new T.Vector3(0, 0.06 + 0.65, 0).applyMatrix4(pl.gear.bat.matrixWorld);
+      if (clip.target.what === 'release') got = rig.b[mirror ? 'hand_l' : 'hand_r'].getWorldPosition(new T.Vector3());
+      if (got) lab += '\n' + clip.target.what + ' ' + (got.distanceTo(want) * 100).toFixed(1) + 'cm';
+    }
+    c.lab = lab;
+    cells.push(c);
+  }
+  // 骨の範囲 (全部のコマ) → カメラの向きと大きさ
+  const box = new T.Box3();
+  const pts = ['pelvis', 'head', 'hand_l', 'hand_r', 'foot_l', 'foot_r', 'calf_l', 'calf_r'];
+  for (const c of cells) {
+    for (const b of pts) box.expandByPoint(c.rig.b[b].getWorldPosition(new T.Vector3()));
+    box.expandByPoint(c.pl.group.position.clone());
+    if (c.pl.gear.bat && c.pl.gear.bat.visible) box.expandByPoint(new T.Vector3(0, 0.865, 0).applyMatrix4(c.pl.gear.bat.matrixWorld));
+    box.expandByPoint(c.rig.b.head.getWorldPosition(new T.Vector3()).add(new T.Vector3(0, 0.14, 0)));
+  }
+  const ctr = box.getCenter(new T.Vector3());
+  const size = box.getSize(new T.Vector3());
+  const cw = Math.floor(W / N);
+  const asp = cw / Hh;
+  const cam = new T.PerspectiveCamera(Number(q.get('fov') || 26), asp, 0.05, 400);
+  const yaw = pl0.yaw;
+  const rot = (v) => v.applyAxisAngle(new T.Vector3(0, 1, 0), yaw);
+  if (camKind === 'batter') {
+    // 打席カメラ (render.js R.cams.bat): (0, −4.2, 1.3) から (0, 18.44, 0.95) を向く。向きは同じまま、範囲の中心に窓をずらす
+    cam.position.set(0, 1.3, 4.2);
+    cam.lookAt(0, 0.95, -18.44);
+    cam.updateMatrixWorld(true);
+    const c = ctr.clone().applyMatrix4(cam.matrixWorldInverse);
+    const half = Math.max(size.y * 0.62, (size.x * 0.62) / asp, 0.9);
+    const n = cam.near, dz = -c.z;
+    const top = ((c.y + half) / dz) * n, bot = ((c.y - half) / dz) * n;
+    const hw = half * asp;
+    cam.projectionMatrix.makePerspective(((c.x - hw) / dz) * n, ((c.x + hw) / dz) * n, top, bot, n, cam.far);
+    cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+  } else {
+    const dirs = { side: [1, 0.12, 0], side2: [-1, 0.12, 0], front: [0, 0.12, 1], back: [0, 0.12, -1], top: [0.02, 1, 0.3], fs: [0.7, 0.12, 0.7], fs2: [-0.7, 0.12, 0.7] };
+    const d = rot(v3(dirs[camKind] || dirs.front).normalize());
+    const ext = Math.max(size.y, size.x / asp, size.z / asp, 1.9) * 0.55;
+    const dist = ext / Math.tan((cam.fov * D2R) / 2) + 0.5;
+    cam.position.copy(ctr).addScaledVector(d, dist);
+    cam.lookAt(ctr);
+  }
+  // 影は範囲の中心に
+  sun.target.position.copy(ctr);
+  const kd = new T.Vector3(-0.45, 0.8, 0.4).normalize();
+  sun.position.copy(ctr).addScaledVector(kd, 10);
+  // コマごとに、その選手だけを見せて描く
+  r.setScissorTest(true);
+  r.setClearColor(scene.background);
+  cells.forEach((c, i) => {
+    cells.forEach((o, j) => { o.pl.group.visible = i === j; for (const m of o.marks) m.visible = i === j; });
+    r.setViewport(i * cw, 0, cw, Hh);
+    r.setScissor(i * cw, 0, cw, Hh);
+    r.render(scene, cam);
+    const d = document.createElement('div');
+    d.className = 'lab'; d.style.left = i * cw + 4 + 'px'; d.style.bottom = '4px'; d.textContent = c.lab;
+    document.body.appendChild(d);
+  });
+  const ttl = document.createElement('div');
+  ttl.className = 'ttl';
+  ttl.textContent = (runV != null ? 'run.cycle v' + runV + ' ' + (q.get('arms') || 'run') : clipName + (mirror ? ' (L)' : '') + ' ' + (q.get('p') || '')) + '  cam ' + camKind + (drive ? '  drive' : '');
+  document.body.appendChild(ttl);
+  info.cells = cells.map((c) => ({ t: c.t, fix: +(c.rig.gripFix || 0).toFixed(4), lab: c.lab }));
+  info.calls = r.info.render.calls;
+  window.__ready = true;
+}).catch((e) => { info.errors.push(String(e && e.stack || e)); window.__ready = true; });
+</script></body></html>

@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Graduate&family=Archivo+Black&family=M+PLUS+1p:wght@800;900&family=M+PLUS+Rounded+1c:wght@400;700;800&family=Ultra&family=Yellowtail&display=swap">
 <link rel="stylesheet" href="css/style.css">
 <style>
-  /* ?view=big|small|me|teams|card|people|all  &team=t  &who=kanto  &ex=normal */
+  /* ?view=big|small|me|teams|card|people|all  &team=t  &who=kanto  &ex=normal  &skin=0..4 (view=me) */
   body.full #app { position: fixed; inset: 0; height: 100%; }
   body { margin: 0; padding: 10px; background: #0d1626; color: #eee; font: 12px sans-serif; overflow: auto; height: auto; }
   #app { position: static; height: auto; }
@@ -17,6 +17,9 @@
   .s280 .mg { width: 280px; height: 336px; }
   .s40 .mg { width: 40px; height: 40px; border-radius: 50%; }
   .s120 .mg { width: 120px; height: 144px; }
+  .s92 .mg { width: 92px; height: 110px; }
+  .s28 .mg { width: 28px; height: 28px; }
+  .s24 .mg { width: 24px; height: 24px; }
 </style>
 </head><body>
 <div id="out"></div>
@@ -41,9 +44,10 @@ const who5 = ["kanto", "goda", "hayase", "inukai", "ryuzaki"];
 function cell(svg, cap, cls) { return '<div class="cell ' + cls + '">' + svg + "<span>" + cap + "</span></div>"; }
 let h = "";
 if (view === "all" || view === "small") {
-  h += "<h2>80px × 表情</h2>";
+  h += "<h2>80px × 表情 / 顔 40px (アイコン) / 会話 92px / 小 28・24px</h2>";
   for (const w of who5.concat(["me"])) {
-    h += '<div class="row">' + M.EXPRS.map((ex) => cell(M.svg(w, { team: team(), ex, size: 80, face: { skin: "#ffd9b8", eyes: "round", hs: 0 } }), w + " " + ex, "s80")).join("") + M.EXPRS.slice(0, 2).map((ex) => cell(M.svg(w, { team: team(), ex, size: 40, crop: "face", face: { skin: "#ffd9b8", eyes: "round", hs: 0 } }), "face", "s40")).join("") + "</div>";
+    const fc = { skin: "#ffd9b8", eyes: "round", hs: 0 };
+    h += '<div class="row">' + M.EXPRS.map((ex) => cell(M.svg(w, { team: team(), ex, size: 80, face: fc }), w + " " + ex, "s80")).join("") + M.EXPRS.slice(0, 2).map((ex) => cell(M.svg(w, { team: team(), ex, size: 40, crop: "face", face: fc }), "face", "s40")).join("") + cell(M.svg(w, { team: team(), ex: "normal", size: 96, face: fc }), "92", "s92") + cell(M.icon(w, { team: team(), ex: "normal", face: fc }), "28", "s28") + cell(M.icon(w, { team: team(), ex: "normal", face: fc }), "24", "s24") + cell(M.icon(w, { team: team(), ex: "normal", face: fc, sil: true }), "?", "s28") + "</div>";
   }
 }
 if (view === "all" || view === "big") {
@@ -52,16 +56,28 @@ if (view === "all" || view === "big") {
   h += "<h2>280px</h2>";
   for (const w of ws) h += '<div class="row">' + exs.map((ex) => cell(M.svg(w, { team: team(), ex, size: 280 }), w + " " + ex, "s280")).join("") + "</div>";
 }
+if (view === "zoom") {
+  // 何人か × 表情を 1 行に並べる (?who=kanto,goda&ex=normal,happy&px=280)
+  const ws = (q.get("who") || "me").split(",");
+  const exs = (q.get("ex") || "normal").split(",");
+  const px = +q.get("px") || 280;
+  const fc = { skin: PB.D.SKINS[+q.get("skin") || 0], eyes: q.get("eyes") || "round", hs: +q.get("hs") || 0 };
+  h += '<div class="row">';
+  for (const w of ws) for (const ex of exs) h += '<div class="cell"><div style="width:' + px + "px;height:" + Math.round(px * 1.2) + 'px">' + M.svg(w, { team: team(), ex, size: px, face: fc }) + "</div><span>" + w + " " + ex + "</span></div>";
+  h += "</div>";
+}
 if (view === "all" || view === "me") {
   h += "<h2>自分 (肌 × 目 × 髪型)</h2>";
   const eyes = ["round", "big", "sharp", "smile", "line", "glasses"];
-  for (const skin of PB.D.SKINS) {
-    h += '<div class="row">' + eyes.map((e, i) => cell(M.svg("me", { team: team(), ex: "normal", size: 120, face: { skin, eyes: e, hs: i % 3 } }), e + " hs" + (i % 3), "s120")).join("") + "</div>";
+  const skins = q.get("skin") ? [PB.D.SKINS[+q.get("skin")]] : PB.D.SKINS;
+  for (const skin of skins) {
+    for (const hs of q.get("skin") ? [0, 1, 2] : [null]) h += '<div class="row">' + eyes.map((e, i) => cell(M.svg("me", { team: team(), ex: q.get("ex") || "normal", size: 120, face: { skin, eyes: e, hs: hs == null ? i % 3 : hs } }), e + " hs" + (hs == null ? i % 3 : hs), "s120")).join("") + "</div>";
   }
 }
 if (view === "teams") {
   h += "<h2>チーム</h2><div class=\"row\">";
-  for (const t of PB.D.TEAMS) h += cell(M.svg(q.get("who") || "ryuzaki", { team: t, ex: "normal", size: 120 }), t.short, "s120");
+  const tw = q.get("who") ? [q.get("who")] : ["ryuzaki", "hayase"];
+  for (const w of tw) for (const t of PB.D.TEAMS) h += cell(M.svg(w, { team: t, ex: "normal", size: 120, face: { skin: "#ffd9b8", eyes: "round", hs: 0 } }), t.short, "s120");
   h += "</div>";
 }
 out.innerHTML = h;

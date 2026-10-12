@@ -492,7 +492,7 @@
         seed: p.id || p.name,
         skinTone: p.foreign ? (h % 3 === 0 ? 4 : 1) : h % 3,
         race: p.foreign ? (h % 3 === 0 ? { african: 0.9 } : { caucasian: 0.85 }) : null,
-        longPants: p.longPants != null ? p.longPants : h % 5 < 2,
+        longPants: p.longPants, // 未指定なら human.js が球団の longPantsRate (既定 85%) で決める
         home,
         num: p.num,
         nameEn: D.romaji(p),

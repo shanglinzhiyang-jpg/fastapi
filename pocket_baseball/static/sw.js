@@ -1,5 +1,5 @@
 /* オフラインでも遊べるようにゲーム本体をキャッシュする (API は常にネットワーク) */
-const CACHE = "pocket-baseball-v6";
+const CACHE = "pocket-baseball-v7";
 const ASSETS = [
   "./",
   "index.html",
@@ -44,6 +44,8 @@ const ASSETS = [
   "js/pennant_sched.js",
   "js/bip_table.js",
   "js/quicksim.js",
+  "js/pennant_post.js",
+  "js/pennant_awards.js",
   "js/news.js",
   "js/manga.js",
   "js/success.js",

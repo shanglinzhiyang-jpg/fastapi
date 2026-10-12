@@ -209,7 +209,59 @@
     res.la = la;
     res.phi = phi;
     res.type = Math.abs(phi) > 45 ? "foul" : "inplay";
+    if (res.type === "inplay" && ctx && ctx.soloHR) P.soloShift(res, ctx);
     return res;
+  };
+
+  /* チームの特色: 本塁打がソロに偏る (ユーザーの要望で巨人に付けたゲーム上の味付け)
+   * 値は強さ (1 が標準)。Game.ctx が攻撃側のチームの値を ctx.soloHR に入れる。
+   * 強さ 1 で本塁打の約 9 割がソロ、本数はほぼ同じ (少し増える)。tools/solo_hr_check.js で確かめる */
+  P.SOLO_HR = { g: 1 };
+  // 強さ 1 のとき: 走者なしで柵越えまで push (m/s) 足りない打球は柵越えに、
+  // 走者ありで柵越えの余裕が pull (m/s) 未満の打球はフェンス手前に戻す
+  P.SOLO = { push: 2.6, pull: 4.5 };
+
+  // 打球速度 ev でフェンスを空中で越えるか (field.js の規則。物理版・高速版の本塁打と同じ)
+  P.clears = function (res, ev) {
+    const F = PB.F;
+    const bb = P.battedBall({ ev, la: res.la, phi: res.phi, bx: res.bx, bz: res.bz });
+    const b = F.newBall(bb.p, bb.v);
+    for (let i = 0; i < 14 / F.PRED_DT && !b.dead; i++) {
+      F.stepBall(b, F.PRED_DT);
+      if (b.hr) return true;
+      if (!b.air || b.bounces > 0 || b.fenceHit) return false;
+    }
+    return b.hr;
+  };
+
+  // lo では越えず hi では越えるとき、ちょうど越える打球速度
+  function fenceEV(res, lo, hi) {
+    while (hi - lo > 0.05) {
+      const m = (lo + hi) / 2;
+      if (P.clears(res, m)) hi = m;
+      else lo = m;
+    }
+    return hi;
+  }
+
+  /* 本塁打をソロに偏らせる: 柵越えの境目の打球だけを動かす (それ以外の打球は変えない) */
+  P.soloShift = function (res, ctx) {
+    // 柵越えの見込みがない打球 (ゴロ・ライナー・弱い当たり) はそのまま
+    if (res.ev < 34 || res.la < 12 || res.la > 72) return;
+    const K = P.SOLO;
+    const ev = res.ev;
+    if (ctx.runnersOn) {
+      // 走者あり: 文句なしの当たり以外はフェンス手前 (フェンス際の大飛球・フェンス直撃) に戻す
+      const lo = ev - K.pull * ctx.soloHR;
+      if (!P.clears(res, ev) || P.clears(res, lo)) return;
+      res.ev = fenceEV(res, lo, ev) - U.rand(0.3, 2);
+      if (P.clears(res, res.ev)) res.ev = lo;
+    } else {
+      // 走者なし: あと少しで届かない打球を柵越えに (人が打てる打球速度の上限は超えない)
+      const hi = Math.min(ev + K.push * ctx.soloHR, P.EV.maxEV);
+      if (hi <= ev || P.clears(res, ev) || !P.clears(res, hi)) return;
+      res.ev = Math.min(fenceEV(res, ev, hi) + U.rand(0.2, 1.2), hi);
+    }
   };
 
   P.bunt = function (pc, sw, batter, pitcher, ctx) {

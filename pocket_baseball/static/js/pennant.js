@@ -10,9 +10,10 @@
   const Sc = PB.Screens;
   const esc = U.esc;
   const Pen = {};
-  Pen.V = 2; // セーブの版
+  Pen.V = 3; // セーブの版
 
-  const STAT_KEYS = ["g", "pa", "ab", "h", "d", "t", "hr", "rbi", "r", "bb", "k", "sb", "cs", "sac", "sf", "pg", "gs", "outs", "ph", "pr", "er", "pbb", "pk", "phr", "np", "w", "l", "sv"];
+  const STAT_KEYS = ["g", "pa", "ab", "h", "d", "t", "hr", "rbi", "r", "bb", "k", "sb", "cs", "sac", "sf", "pg", "gs", "outs", "ph", "pr", "er", "pbb", "pk", "phr", "np", "w", "l", "sv", "fe"];
+  Pen.STAT_KEYS = STAT_KEYS;
   const Sched = () => PB.PenSched;
 
   /* ---------- アクセサ (今は Store の球団。L3 でペナント専用の球団に切り替える) ---------- */
@@ -43,11 +44,15 @@
     return pen && pen.dates && pen.dates[day] != null ? pen.dates[day] : null;
   }
   Pen.dateOf = dateOf;
-  // 見出しの日付: 4月2日(金) / 日付の無い古いセーブは 第N日
+  // ポストシーズン・表彰式の日の呼び名 (日本シリーズ第3戦 など)。それ以外の日は ""
+  Pen.dayTag = function (pen, day) {
+    return PB.PenPost && pen && day >= regDays(pen) ? PB.PenPost.dayTag(pen, day) : "";
+  };
+  // 見出しの日付: 4月2日(金) / 日付の無い古いセーブは 第N日 (ポストシーズンは 日本シリーズ第3戦 など)
   Pen.dayLabel = function (pen, day) {
     const n = dateOf(pen, day);
     if (n != null && Sched()) return Sched().label(n);
-    return "第" + (day + 1) + "日";
+    return Pen.dayTag(pen, day) || "第" + (day + 1) + "日";
   };
   Pen.dayShort = function (pen, day) {
     const n = dateOf(pen, day);
@@ -120,6 +125,16 @@
       // 日付は作らない (古いセーブは「第N日」で表示する)
       pen.v = 2;
     }
+    if (pen.v < 3) {
+      // v3: ポストシーズン・タイトル・表彰。終わっていないシーズンは 2004 年方式のポストシーズンへ進む。
+      // 終わったシーズンには何も足さない (ポストシーズン・表彰を作り話で足さない)
+      pen.opts = pen.opts || {};
+      if (!pen.finished) pen.opts.post = true;
+      else pen.legacyEnd = 1;
+      // 完投・ホールド・守備位置などを記録し始めた日 (それより前の日は「記録なし」)
+      if (pen.statsSince == null) pen.statsSince = pen.results.length ? pen.day + (pen.results.some((r) => r.day === pen.day) ? 1 : 0) : 0;
+      pen.v = 3;
+    }
     return pen;
   };
   if (Store.migrations) Store.migrations.push((data) => data && data.pennant && Pen.migrate(data.pennant));
@@ -188,6 +203,9 @@
       hrv: 1,
       hrSince: 0,
       clinch: {},
+      statsSince: 0,
+      post: null,
+      awards: null,
       finished: false,
       started: Date.now(),
     };
@@ -371,14 +389,79 @@
   };
 
   /* ---------- 試合 ---------- */
-  function mergeStats(pen, game) {
+  // ホールド (ゲームの簡易判定・要確認): 先発・最後の投手以外の救援投手で、勝利・敗戦・セーブがつかず、
+  // (a) 3 点差以内のリードで登板し 1 アウト以上取ってリードを保って降板、または (b) 同点で登板し失点せずに降板
+  function holdsOf(game, side) {
+    const log = (game.pitLog && game.pitLog[side]) || [];
+    const res = game.result || {};
+    const out = [];
+    for (let i = 1; i < log.length - 1; i++) {
+      const e = log[i];
+      const b = game.box[e.id] || {};
+      if (e.id === res.W || e.id === res.L || e.id === res.S || e.out == null) continue;
+      if ((e.in >= 1 && e.in <= 3 && e.out >= 1 && (b.outs || 0) >= 1) || (e.in === 0 && e.out >= 0 && !(b.pr || 0) && (b.outs || 0) >= 1)) out.push(e.id);
+    }
+    return out;
+  }
+  Pen.holdsOf = holdsOf;
+  // 守備位置ごとの出場 (試合開始時の打順と最後の打順から。投手は登板した全員)
+  function posPairs(game, side) {
+    const seen = {};
+    const out = [];
+    const add = (id, pos) => {
+      if (!id || !pos || pos === "PH" || seen[id + pos]) return;
+      seen[id + pos] = 1;
+      out.push([id, pos]);
+    };
+    for (const e of (game.pos0 && game.pos0[side]) || []) if (e[1] !== "P") add(e[0], e[1]);
+    for (const e of game.order[side]) if (e.pos !== "P") add(e.id, e.pos);
+    for (const id of game.used[side]) add(id, "P");
+    return out;
+  }
+  Pen.posPairs = posPairs;
+  const inc = (S, id, k) => {
+    const t = S[id] || (S[id] = {});
+    t[k] = (t[k] || 0) + 1;
+  };
+  // 試合の成績を足す (into: ポストシーズンは系列ごとの成績。省くとシーズン成績)
+  function mergeStats(pen, game, into) {
+    const S = into || pen.stats;
     for (const id in game.box) {
       const s = game.box[id];
-      const t = pen.stats[id] || (pen.stats[id] = {});
+      const t = S[id] || (S[id] = {});
       for (const k of STAT_KEYS) if (s[k]) t[k] = (t[k] || 0) + s[k];
+    }
+    // 完投・完封 (チームで投手 1 人・9 回制)、QS (6 回以上・自責 3 以内)、救援勝利、ホールド
+    const reg = (game.innings || 9) >= 9;
+    for (const side of ["away", "home"]) {
+      const used = game.used[side];
+      if (!used.length) continue;
+      const sp = used[0];
+      const b = game.box[sp] || {};
+      const opp = side === "home" ? "away" : "home";
+      if (reg && used.length === 1) {
+        inc(S, sp, "cg");
+        if (game.score[opp] === 0) inc(S, sp, "sho");
+      }
+      if (reg && (b.outs || 0) >= 18 && (b.er || 0) <= 3) inc(S, sp, "qs");
+      for (const id of used.slice(1)) if ((game.box[id] || {}).w) inc(S, id, "rw");
+      for (const id of holdsOf(game, side)) inc(S, id, "hld");
+      for (const [id, pos] of posPairs(game, side)) {
+        const t = S[id] || (S[id] = {});
+        const P = t.pos || (t.pos = {});
+        P[pos] = (P[pos] || 0) + 1;
+      }
     }
     for (const side of ["away", "home"]) for (const id of game.used[side]) pen.lastPitched[id] = { day: pen.day, np: (game.box[id] || {}).np || 0 };
   }
+  Pen.mergeStats = mergeStats;
+  // ポストシーズンの系列の成績 (pen.stats とは別)
+  function postStats(pen, sid) {
+    const P = pen.post || (pen.post = { series: [], stats: {} });
+    const st = P.stats || (P.stats = {});
+    return st[sid] || (st[sid] = {});
+  }
+  Pen.postStats = postStats;
 
   // 前日 (暦の 1 日前) に 15 球以上投げた投手
   function tiredList(pen) {
@@ -410,27 +493,34 @@
     const home = U.clone(Pen.team(m.home));
     const away = U.clone(Pen.team(m.away));
     const Cls = o && o.quick && !user && PB.QuickGame ? PB.QuickGame : PB.Game;
+    // ポストシーズン: 延長の上限は表 (RULES_2004) から
+    const ps = m.ps && pen.post ? m.ps : null;
     const g = new Cls({
       home,
       away,
       innings: pen.innings,
+      maxInnings: ps && PB.PenPost ? PB.PenPost.maxInnings(pen, m) : undefined,
       user,
       level: pen.level,
       tired: tiredList(pen),
       starters: { home: nextStarter(Pen.team(m.home), pen), away: nextStarter(Pen.team(m.away), pen) },
     });
-    // 本塁打の号数はシーズン成績から数える
-    g.season = pen.stats;
+    // 本塁打の号数はシーズン成績から数える (ポストシーズンはその系列の成績 = シリーズN号)
+    g.season = ps ? postStats(pen, ps) : pen.stats;
+    // 試合開始時の守備位置 (守備位置ごとの出場を数える)
+    g.pos0 = { away: g.order.away.map((e) => [e.id, e.pos]), home: g.order.home.map((e) => [e.id, e.pos]) };
     return g;
   }
 
   // その打者が自チームの直近の試合で続けて本塁打を打っているか (今日を含む試合数)
   // 本塁打の記録が無い古い結果に当たったら数えるのをやめる (連続記録をでっち上げない)
-  function hrGameStreak(pen, tid, id) {
+  // ps: ポストシーズンはその系列の試合だけで数える (シーズンの記録とつなげない)
+  function hrGameStreak(pen, tid, id, ps) {
     let n = 1;
     for (let i = pen.results.length - 1; i >= 0; i--) {
       const r = pen.results[i];
       if (r.home !== tid && r.away !== tid) continue;
+      if ((r.ps || null) !== (ps || null)) continue;
       if (!Array.isArray(r.hr) || !r.hr.some((e) => e.id === id)) break;
       n++;
     }
@@ -447,21 +537,28 @@
     if (res.S) r.S = res.S;
     if (res.walkoff) r.wo = 1;
     if (m.il) r.il = 1;
+    // ポストシーズンの試合 (系列 ID と第何戦か)。成績は pen.stats に足さず系列ごとに
+    const ps = m.ps || null;
+    if (ps) {
+      r.ps = ps;
+      r.gn = m.g || 0;
+    }
     // 今日のホームラン用 (試合で起きた本塁打だけ。0 本でも空の配列を残し「記録なし」と区別する)
     if (pen.hrSince == null) pen.hrSince = pen.day;
     const seen = {};
     r.hr = (game.hrLog || []).map((e) => {
       const x = Object.assign({}, e);
       if (pen.day === 0) x.open = 1;
+      if (ps) x.ps = ps;
       if (!seen[x.id]) {
         seen[x.id] = 1;
-        const gs = hrGameStreak(pen, x.tid || (x.side === "home" ? m.home : m.away), x.id);
+        const gs = hrGameStreak(pen, x.tid || (x.side === "home" ? m.home : m.away), x.id, ps);
         if (gs >= 2) x.gs = gs;
       }
       return x;
     });
     pen.results.push(r);
-    mergeStats(pen, game);
+    mergeStats(pen, game, ps ? postStats(pen, ps) : null);
     for (const id of [m.home, m.away]) {
       const t = Pen.team(id);
       t.rotIdx = ((t.rotIdx || 0) + 1) % t.rotation.length;
@@ -469,10 +566,17 @@
     runHooks("afterGame", pen, m, game, r);
   }
 
-  // 1 試合ぶん: 自分の試合は渡された試合を記録、それ以外 (自分の試合が未記録のまま再開した日を含む) はシミュレーションしてから記録
+  // 渡された試合 (自分の試合は Game、観戦した試合は { gi, game })
+  function givenGame(pen, m, gi, given) {
+    if (!given) return null;
+    if (given.box) return isMine(pen, m) ? given : null;
+    return given.gi === gi ? given.game : null;
+  }
+  // 1 試合ぶん: 渡された試合 (自分の試合・観戦した試合) は記録、それ以外 (自分の試合が未記録のまま再開した日を含む) はシミュレーションしてから記録
   function playDayGame(pen, m, gi, myGame) {
-    if (isMine(pen, m) && myGame) {
-      recordGame(pen, m, myGame, gi);
+    const gv = givenGame(pen, m, gi, myGame);
+    if (gv) {
+      recordGame(pen, m, gv, gi);
       return;
     }
     const g = makeGame(pen, m, null, { quick: useQuick(pen) });
@@ -536,7 +640,7 @@
     beginDay(pen);
     const dayNo = pen.day;
     const list = pendingGames(pen);
-    const others = list.filter((x) => !isMine(pen, x.m)).length;
+    const others = list.filter((x) => !isMine(pen, x.m) && !givenGame(pen, x.m, x.gi, myGame)).length;
     let i = 0;
     let k = 0;
     let first = true;
@@ -550,7 +654,7 @@
       while (i < list.length) {
         const x = list[i++];
         playDayGame(pen, x.m, x.gi, myGame);
-        if (isMine(pen, x.m)) Store.save();
+        if (isMine(pen, x.m) || givenGame(pen, x.m, x.gi, myGame)) Store.save();
         else {
           k++;
           if (onProgress) onProgress(k, others);
@@ -739,11 +843,65 @@
     return "次の試合 " + Pen.dayLabel(pen, d) + "　" + (m.home === pen.my ? "vs " : "@ ") + opp.short + (m.il ? "（交流戦）" : "");
   }
 
+  // 試合を画面で行う: 自分の試合を操作 (user = home|away) / 観戦 (user = null・自分の出ない試合)。
+  // 終わったらその日の残りの試合を消化して結果画面へ (ポストシーズンはシリーズの状況を添える)
+  Pen.playLive = function (pen, m, gi, user) {
+    const g = makeGame(pen, m, user);
+    UI.hideScreen();
+    PB.main.startMatch({
+      game: g,
+      season: g.season,
+      night: Store.settings().night,
+      onEnd: (match) => {
+        PB.main.stopMatch();
+        if (user) {
+          const r = Store.data.records;
+          r.games++;
+          if (g.result.tie) r.ties++;
+          else if (g.result.winner === user) r.wins++;
+          else r.losses++;
+        }
+        // 他球場の試合を消化しているあいだ集計画面を出す
+        const prog = { k: 0, n: 0 };
+        UI.go({
+          html: () => '<div class="scr-body busy-body"><p class="busy-t">他球場の試合を集計中…</p><p class="busy-n">' + prog.k + " / " + prog.n + "</p></div>",
+        });
+        const dayIdx = pen.day;
+        const toHub = () => UI.go(pen.finished ? Pen.final() : Pen.hub());
+        const started = finishDayAsync(
+          pen,
+          user ? g : { gi, game: g },
+          (k, n) => {
+            prog.k = k;
+            prog.n = n;
+            UI.refresh();
+          },
+          () => {
+            const n = PB.News ? PB.News.dayHRs(pen, dayIdx).length : 0;
+            const ser = m.ps && PB.PenPost ? PB.PenPost.statusText(pen, m.ps) : "";
+            UI.go(
+              Sc.result(match, {
+                onDone: toHub,
+                doneLabel: m.ps ? "ポストシーズンへ" : "ペナントへ",
+                extra: PB.News ? { label: (ser ? ser + "\n" : "") + "今日のホームラン（" + n + "本）", onTap: () => UI.go(PB.News.screen({ day: dayIdx, tab: "hr", onBack: () => Pen.hub() })) } : null,
+              })
+            );
+          }
+        );
+        // 消化中で受け付けられなかったとき (通常は起きない) は結果だけ出す
+        if (!started) UI.go(Sc.result(match, { onDone: () => UI.go(Pen.hub()), doneLabel: "ペナントへ" }));
+      },
+      onQuit: () => UI.go(Pen.hub()),
+    });
+  };
+
   Pen.hub = function () {
     const pen = Store.data.pennant;
     if (!pen) return Pen.setup();
     Pen.migrate(pen);
     if (pen.finished) return Pen.final();
+    // レギュラーシーズンの後 (ポストシーズン・表彰式) は専用のハブ
+    if (pen.day >= regDays(pen) && PB.PenPost) return PB.PenPost.hub();
     beginDay(pen);
     let busy = false;
     const hs = { lg: myLg(pen), tab: "st" };
@@ -884,52 +1042,7 @@
         if (act === "play") {
           const m = myMatch(pen);
           if (!m) return;
-          const user = m.home === pen.my ? "home" : "away";
-          const g = makeGame(pen, m, user);
-          UI.hideScreen();
-          PB.main.startMatch({
-            game: g,
-            season: pen.stats,
-            night: Store.settings().night,
-            onEnd: (match) => {
-              PB.main.stopMatch();
-              const r = Store.data.records;
-              r.games++;
-              if (g.result.tie) r.ties++;
-              else if (g.result.winner === user) r.wins++;
-              else r.losses++;
-              // 他球場の試合を消化しているあいだ集計画面を出す
-              const prog = { k: 0, n: 0 };
-              UI.go({
-                html: () => '<div class="scr-body busy-body"><p class="busy-t">他球場の試合を集計中…</p><p class="busy-n">' + prog.k + " / " + prog.n + "</p></div>",
-              });
-              const dayIdx = pen.day;
-              const started = finishDayAsync(
-                pen,
-                g,
-                (k, n) => {
-                  prog.k = k;
-                  prog.n = n;
-                  UI.refresh();
-                },
-                () => {
-                  const n = PB.News ? PB.News.dayHRs(pen, dayIdx).length : 0;
-                  const toHub = () => UI.go(pen.finished ? Pen.final() : Pen.hub());
-                  UI.go(
-                    Sc.result(match, {
-                      onDone: toHub,
-                      doneLabel: "ペナントへ",
-                      extra: PB.News ? { label: "今日のホームラン（" + n + "本）", onTap: () => UI.go(PB.News.screen({ day: dayIdx, tab: "hr", onBack: () => Pen.hub() })) } : null,
-                    })
-                  );
-                }
-              );
-              // 消化中で受け付けられなかったとき (通常は起きない) は結果だけ出す
-              if (!started) UI.go(Sc.result(match, { onDone: () => UI.go(Pen.hub()), doneLabel: "ペナントへ" }));
-            },
-            onQuit: () => UI.go(Pen.hub()),
-          });
-          return;
+          return Pen.playLive(pen, m, pen.schedule[pen.day].indexOf(m), m.home === pen.my ? "home" : "away");
         }
         if (act === "sim" || act === "nextday") {
           // この試合をおまかせ (物理版で精密に) / 休みの日を進める
@@ -946,6 +1059,8 @@
               !finishDayAsync(pen, g, null, () => {
                 busy = false;
                 if (pen.finished) return UI.go(Pen.final());
+                // レギュラーシーズンが終わったらポストシーズンのハブへ
+                if (pen.day >= regDays(pen)) return UI.go(Pen.hub());
                 if (UI.cur && UI.cur.isPenHub) UI.refresh();
               })
             ) {
@@ -1157,6 +1272,7 @@
               '<b class="ps-opp">' +
               esc(opp.short) +
               (x.m.il ? "<small>交流戦</small>" : "") +
+              (x.m.ps && PB.PenPost ? "<small>" + esc(PB.PenPost.tagOf(pen, x.m.ps)) + "</small>" : "") +
               "</b>" +
               right +
               "</div>"
@@ -1195,7 +1311,12 @@
 
   Pen.setup = function () {
     const S = Store.settings();
-    const st = { my: "t", len: "full", strike: true, il: false, fast: "auto", level: S.level, innings: 9 };
+    const st = { my: "t", len: "full", strike: true, il: false, post: "2004", fast: "auto", level: S.level, innings: 9 };
+    const POST_NOTE = {
+      2004: "2004年と同じ: パ・リーグはプレーオフ（第1ステージ 2位-3位・第2ステージは1位と対戦。1位が2位に5ゲーム差以上なら1位に1勝）の勝者が優勝。セ・リーグはプレーオフなし。その後に日本シリーズ（4勝先取）",
+      cs: "後年ルール（2007年〜の方式・このゲームの設定）: 両リーグでクライマックスシリーズ（ファースト 3試合制・ファイナル 6試合制で1位に1勝）。リーグ優勝はレギュラーシーズン1位。2004年にはありません",
+      none: "ポストシーズンなし。レギュラーシーズンの後にタイトル・表彰だけ行います",
+    };
     const fastOf = () => (st.fast === "auto" ? (Sched().isShort(st.len) ? "phys" : "quick") : st.fast);
     const chk = (act, on, label, sub) => '<button class="pen-chk' + (on ? " on" : "") + '" data-act="' + act + '" role="switch" aria-checked="' + (on ? "true" : "false") + '"><i></i><span>' + esc(label) + (sub ? "<small>" + esc(sub) + "</small>" : "") + "</span></button>";
     const lenNote = () => {
@@ -1231,6 +1352,19 @@
             ? chk("strike", st.strike && !st.il, "9月の選手会ストライキで中止", "史実: 9月18・19日の2試合が中止・振替なし") +
               chk("il", st.il, "交流戦あり（後年ルール）", "2005年から始まった方式（このゲームの設定）。2004年にはありません")
             : "") +
+          '<h3 class="lbl">ポストシーズン</h3>' +
+          Sc.seg(
+            "post",
+            [
+              ["2004", "2004年方式"],
+              ["cs", "CS（後年ルール）"],
+              ["none", "なし"],
+            ],
+            st.post
+          ) +
+          '<p class="note small pen-postnote">' +
+          esc(POST_NOTE[st.post]) +
+          "</p>" +
           '<h3 class="lbl">他球場の試合</h3>' +
           Sc.seg(
             "fast",
@@ -1270,11 +1404,12 @@
         else if (act === "strike") st.strike = !st.strike;
         else if (act === "il") st.il = !st.il;
         else if (act === "fast") st.fast = arg;
+        else if (act === "post") st.post = arg;
         else if (act === "inn") st.innings = Number(arg);
         else if (act === "level") st.level = arg;
         else if (act === "go") {
           const full = st.len === "full";
-          Pen.create(st.my, { len: st.len, innings: st.innings, level: st.level, strike: full && st.strike && !st.il, il: full && st.il, fast: fastOf() });
+          Pen.create(st.my, { len: st.len, innings: st.innings, level: st.level, strike: full && st.strike && !st.il, il: full && st.il, post: st.post !== "none", cs: st.post === "cs", fast: fastOf() });
           return UI.go(Pen.hub());
         }
         UI.refresh();
@@ -1282,9 +1417,10 @@
     };
   };
 
-  Pen.leaders = function () {
+  // o = { tab, lg, onBack }
+  Pen.leaders = function (o) {
     const pen = Store.data.pennant;
-    const st = { tab: "bat", lg: myLg(pen) };
+    const st = { tab: (o && o.tab) || "bat", lg: (o && o.lg) || myLg(pen) };
     const lgs = Object.keys(D.LEAGUES || {}).filter((k) => lgTeams(pen, k).length);
     return {
       html() {
@@ -1301,7 +1437,8 @@
             .join("");
         const block = (title, rows) => '<div class="lead"><h4>' + title + '</h4><table class="ltbl">' + (rows || '<tr><td class="muted">記録なし</td></tr>') + "</table></div>";
         let html = "";
-        if (st.tab === "bat") {
+        if (st.tab === "title") html = PB.PenAwards ? PB.PenAwards.raceHTML(pen, st.lg) : "";
+        else if (st.tab === "bat") {
           const qual = all.filter((x) => x.p.pos !== "P" && (x.s.pa || 0) >= Math.max(1, x.g * 3.1));
           const bats = all.filter((x) => x.p.pos !== "P");
           html =
@@ -1334,18 +1471,18 @@
             [
               ["bat", "打者"],
               ["pit", "投手"],
-            ],
+            ].concat(PB.PenAwards ? [["title", "タイトル争い"]] : []),
             st.tab
           ) +
-          '<div class="leads">' +
-          html +
-          "</div></div>"
+          (st.tab === "title" ? html : '<div class="leads">' + html + "</div>") +
+          "</div>"
         );
       },
       onAct(act, arg) {
-        if (act === "back") return UI.go(pen.finished ? Pen.final() : Pen.hub());
+        if (act === "back") return UI.go(o && o.onBack ? o.onBack() : pen.finished ? Pen.final() : Pen.hub());
         if (act === "tab") st.tab = arg;
         if (act === "lg") st.lg = arg;
+        if (act === "player") return UI.showPlayer(arg, pen.stats[arg] || null);
         UI.refresh();
       },
     };
@@ -1368,9 +1505,11 @@
                   const myScore = r.home === pen.my ? r.hs : r.as;
                   const opScore = r.home === pen.my ? r.as : r.hs;
                   const wl = myScore > opScore ? "win" : myScore < opScore ? "lose" : "tie";
+                  const tag = r.ps && PB.PenPost ? PB.PenPost.tagOf(pen, r.ps) + (r.gn ? " 第" + r.gn + "戦" : "") : "";
                   return (
                     '<div class="rrow ' +
                     wl +
+                    (tag ? " pp-rrow" : "") +
                     '"' +
                     (PB.News ? ' data-act="day" data-arg="' + r.day + '"' : "") +
                     '><span class="d' +
@@ -1385,6 +1524,7 @@
                     r.as +
                     " - " +
                     r.hs +
+                    (tag ? "<small>" + esc(tag) + "</small>" : "") +
                     "</span><b>" +
                     esc(h.short) +
                     "</b>" +
@@ -1406,8 +1546,106 @@
     };
   };
 
+  // シーズンの終わり: v3 以降はシーズン総括 (優勝・日本一・最終順位・タイトルと表彰へ)。
+  // それより前に終わった旧セーブは今までの最終画面のまま (ポストシーズン・表彰を作り話で足さない)
   Pen.final = function () {
     const pen = Store.data.pennant;
+    if (pen.legacyEnd || (!pen.post && !pen.awards)) return legacyFinal(pen);
+    return Pen.summary(pen);
+  };
+
+  // シーズン総括
+  Pen.summary = function (pen) {
+    const PP = PB.PenPost;
+    const ch = PP ? PP.champions(pen) : { lg: {}, rows: [] };
+    const js = ch.js ? Pen.team(ch.js) : null;
+    const lgs = Object.keys(D.LEAGUES || {}).filter((k) => lgTeams(pen, k).length);
+    const order = [myLg(pen)].concat(lgs.filter((k) => k !== myLg(pen)));
+    const won = ch.js === pen.my || (!ch.js && ch.lg[myLg(pen)] === pen.my);
+    if (won) setTimeout(() => PB.Audio && PB.Audio.victory && PB.Audio.victory(), 200);
+    const head = js ? (ch.js === pen.my ? "日本一！！" : esc(js.short) + " 日本一") : ch.lg[myLg(pen)] ? (ch.lg[myLg(pen)] === pen.my ? "優勝！！" : esc(Pen.team(ch.lg[myLg(pen)]).short) + " 優勝") : "シーズン終了";
+    const big = js || (ch.lg[myLg(pen)] ? Pen.team(ch.lg[myLg(pen)]) : null);
+    return {
+      cls: "result",
+      html() {
+        const st = Pen.standings(pen);
+        const me = st.find((x) => x.id === pen.my);
+        const rank = st.indexOf(me) + 1;
+        const myPost = PP ? PP.myResult(pen) : "";
+        return (
+          '<div class="scr-body res-body pen-sum"><div class="res-head ' +
+          (won ? "win" : "") +
+          '"><p class="walkoff">' +
+          (pen.year || 2004) +
+          "年シーズン 総括</p><h2>" +
+          head +
+          "</h2>" +
+          (big ? UI.mark(big, 64) : "") +
+          (ch.jsLine ? '<p class="pen-sum-sub">' + esc(ch.jsLine) + "</p>" : "") +
+          "</div>" +
+          '<div class="pen-champs n' +
+          ch.rows.filter((r) => !r.big).length +
+          '">' +
+          ch.rows
+            .map(
+              (r) =>
+                '<div class="pen-ch' +
+                (r.id === pen.my ? " me" : "") +
+                (r.big ? " big" : "") +
+                '"><span class="pen-ch-l">' +
+                esc(r.label) +
+                "</span>" +
+                (r.id ? UI.mark(Pen.team(r.id), 30) + "<b>" + esc(Pen.team(r.id).short) + "</b>" : "<b class=\"muted\">-</b>") +
+                (r.sub ? "<small>" + esc(r.sub) + "</small>" : "") +
+                "</div>"
+            )
+            .join("") +
+          "</div>" +
+          '<p class="pen-sum-me">' +
+          UI.mark(Pen.team(pen.my), 20) +
+          "<b>" +
+          esc(Pen.team(pen.my).short) +
+          "</b>" +
+          esc(D.LEAGUES[myLg(pen)] ? (myLg(pen) === "P" ? "パ・リーグ " : "セ・リーグ ") : "") +
+          rank +
+          "位 " +
+          esc(recText(me)) +
+          (myPost ? "<small>" + esc(myPost) + "</small>" : "") +
+          "</p>" +
+          '<div class="row-btns"><button class="btn primary" data-act="awards">タイトル・表彰</button>' +
+          (pen.post && pen.post.series && pen.post.series.length ? '<button class="btn" data-act="post">ポストシーズン</button>' : "") +
+          "</div>" +
+          order
+            .map((k) => '<h3 class="lbl">' + esc(D.LEAGUES[k]) + " 最終順位</h3>" + Pen.standingsHTML(pen, Pen.standings(pen, k)))
+            .join("") +
+          '<div class="row-btns"><button class="btn" data-act="leaders">個人成績</button>' +
+          (PB.News && pen.results.length ? '<button class="btn" data-act="news">スポーツニュース</button>' : "") +
+          '</div><div class="row-btns pen-sum-end"><button class="btn red" data-act="new">新しいシーズン</button><button class="btn" data-act="title">タイトルへ</button></div></div>'
+        );
+      },
+      onAct(act) {
+        const back = () => Pen.final();
+        if (act === "awards" && PB.PenAwards) return UI.go(PB.PenAwards.screen({ onBack: back }));
+        if (act === "post" && PP) return UI.go(PP.bracketScreen({ onBack: back }));
+        if (act === "leaders") return UI.go(Pen.leaders({ onBack: back }));
+        if (act === "news") return UI.go(PB.News.screen({ onBack: back }));
+        if (act === "new")
+          return UI.confirm(
+            "新しいシーズンを始めます。今のシーズンの成績は消えます。よろしいですか？",
+            () => {
+              Store.data.pennant = null;
+              Store.save();
+              UI.go(Pen.setup());
+            },
+            { yes: "始める", danger: true }
+          );
+        if (act === "title") UI.go(Sc.title());
+      },
+    };
+  };
+
+  // 旧セーブの終わったシーズン (v3 より前): 今までの最終画面
+  function legacyFinal(pen) {
     const st = Pen.standings(pen);
     const champ = Pen.team(st[0].id);
     const won = st[0].id === pen.my;
@@ -1444,9 +1682,9 @@
         UI.go(Sc.title());
       },
     };
-  };
+  }
 
   // テスト用 (node から日程を進める)
-  Pen._internal = { finishDay, finishDayAsync, makeGame, myMatch, recordGame, hrGameStreak, closeDay, pendingGames, myRecorded, schedInfo, h2hLeft, tiredList, nextStarter };
+  Pen._internal = { finishDay, finishDayAsync, makeGame, myMatch, recordGame, hrGameStreak, closeDay, pendingGames, myRecorded, schedInfo, h2hLeft, tiredList, nextStarter, mergeStats, regDays };
   PB.Pennant = Pen;
 })((window.PB = window.PB || {}));
