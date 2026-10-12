@@ -851,7 +851,7 @@
             '</span><span class="ph">体力-' +
             pr.hp +
             "</span>" +
-            (hs.length ? '<span class="helpers">' + hs.map((h) => '<i class="mg-i" title="' + esc(CAST[h].name) + '">' + castIcon(h, CAST[h].sig) + "</i>").join("") + "</span>" : "") +
+            (hs.length ? '<span class="helpers">' + hs.map((h) => '<i class="mg-i" title="' + esc(CAST[h].name) + '">' + castIcon(h, CAST[h].sig, !met(r, h)) + "</i>").join("") + "</span>" : "") +
             "</button>"
           );
         };

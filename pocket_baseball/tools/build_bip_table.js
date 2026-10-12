@@ -5,14 +5,17 @@
 //   3) 三塁走者あり (0・1 死): 外野フライでの生還 (犠飛) の割合
 //   4) ファウルフライ・送りバント・盗塁の成功率
 //   5) 物理版の試合を回して走者の進塁率 (単打で二塁から生還 など) と走力の効き
-// 使い方: node tools/build_bip_table.js [サンプルの倍率 (既定 1)] [出力先]
+// 使い方: node tools/build_bip_table.js [サンプルの倍率 (既定 1)] [出力先] [--adv]
+//   --adv: 格子の表 (1〜4) は今の bip_table.js のまま、5) の進塁率だけ測り直す
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const { loadEngine } = require("./load_engine.js");
 
-const SCALE = Number(process.argv[2] || 1);
-const OUT = process.argv[3] || path.join(__dirname, "..", "static", "js", "bip_table.js");
+const ARGS = process.argv.slice(2).filter((a) => a[0] !== "-");
+const ADV_ONLY = process.argv.indexOf("--adv") >= 0;
+const SCALE = Number(ARGS[0] || 1);
+const OUT = ARGS[1] || path.join(__dirname, "..", "static", "js", "bip_table.js");
 
 // 再現できるよう乱数を固定する
 let seed = 20040402;
@@ -24,7 +27,7 @@ Math.random = function () {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
 
-const PB = loadEngine(["util.js", "data.js", "npb.js", "rosters2004.js", "field.js", "pitch.js", "play.js", "ai.js", "game.js"]);
+const PB = loadEngine(["util.js", "data.js", "npb.js", "rosters2004.js", "field.js", "pitch.js", "play.js", "ai.js", "game.js"].concat(ADV_ONLY ? ["bip_table.js"] : []));
 const { U, D, P, Game } = PB;
 const teams = D.newTeams();
 const t0 = Date.now();
@@ -78,9 +81,26 @@ function batted(ev, la, phi, runners, outs, align, bat) {
 }
 const runnerOf = () => pick(batters);
 
+const FFO_LA = [20, 10, 6]; // 20〜80 度
+const PH_EDGES = [45, 55, 65, 80, 100, 140]; // |方向| の区切り
+const BUNT_LA = [-60, 20, 6]; // -60〜60 度
+const ST_SPD = [60, 10, 4]; // 60〜100
+const ST_ARM = [35, 15, 4]; // 35〜95
+let cells;
+let dp;
+let sf;
+let ffo;
+let bunt;
+let steal;
+if (ADV_ONLY) {
+  ({ cells, dp, sf } = PB.BIP);
+  ffo = PB.BIP.ffo.c;
+  bunt = PB.BIP.bunt.c;
+  steal = PB.BIP.steal.c;
+} else {
 /* ---------- 1) 走者なし ---------- */
 const N1 = Math.max(4, Math.round(26 * SCALE));
-const cells = new Array(nCells).fill("");
+cells = new Array(nCells).fill("");
 let hrSkip = 0;
 for (let ei = 0; ei < EV[2]; ei++)
   for (let li = 0; li < LA[2]; li++)
@@ -117,7 +137,7 @@ console.log("pass1", ((Date.now() - t0) / 1000).toFixed(1) + "s", "HR skipped", 
 
 /* ---------- 2) 一塁走者あり: ゴロの併殺・野選 ---------- */
 const N2 = Math.max(4, Math.round(16 * SCALE));
-const dp = {};
+dp = {};
 for (let ei = 0; ei < EV[2]; ei++)
   for (let li = 0; li < LA[2]; li++) {
     const la0 = LA[0] + li * LA[1];
@@ -140,7 +160,7 @@ for (let ei = 0; ei < EV[2]; ei++)
 console.log("pass2", ((Date.now() - t0) / 1000).toFixed(1) + "s");
 
 /* ---------- 3) 三塁走者あり: 外野フライの犠飛 ---------- */
-const sf = {};
+sf = {};
 for (let ei = 0; ei < EV[2]; ei++)
   for (let li = 0; li < LA[2]; li++) {
     const la0 = LA[0] + li * LA[1];
@@ -162,10 +182,8 @@ for (let ei = 0; ei < EV[2]; ei++)
 console.log("pass3", ((Date.now() - t0) / 1000).toFixed(1) + "s");
 
 /* ---------- 4a) ファウルフライ (角度 20 度以上・かすった打球以外) ---------- */
-const FFO_LA = [20, 10, 6]; // 20〜80 度
 const FFO_PH = [45, 0, 5]; // |方向| 45-55, 55-65, 65-80, 80-100, 100〜
-const PH_EDGES = [45, 55, 65, 80, 100, 140];
-const ffo = [];
+ffo = [];
 const N4 = Math.max(10, Math.round(60 * SCALE));
 for (let li = 0; li < FFO_LA[2]; li++)
   for (let pj = 0; pj < FFO_PH[2]; pj++) {
@@ -197,8 +215,7 @@ for (let li = 0; li < FFO_LA[2]; li++)
 console.log("fouls", ((Date.now() - t0) / 1000).toFixed(1) + "s");
 
 /* ---------- 4b) 送りバント (一塁走者・無死、バントシフト) ---------- */
-const BUNT_LA = [-60, 20, 6]; // -60〜60 度
-const bunt = [];
+bunt = [];
 {
   const raw = Array.from({ length: BUNT_LA[2] }, () => ({}));
   const NB = Math.max(400, Math.round(3000 * SCALE));
@@ -223,9 +240,7 @@ const bunt = [];
 console.log("bunts", ((Date.now() - t0) / 1000).toFixed(1) + "s");
 
 /* ---------- 4c) 盗塁 (走力 + 盗塁◯ × 捕手の肩 × クイック) ---------- */
-const ST_SPD = [60, 10, 4]; // 60〜100
-const ST_ARM = [35, 15, 4]; // 35〜95
-const steal = [];
+steal = [];
 {
   const NS = Math.max(20, Math.round(90 * SCALE));
   for (let from = 1; from <= 2; from++)
@@ -256,15 +271,41 @@ const steal = [];
         }
 }
 console.log("steals", ((Date.now() - t0) / 1000).toFixed(1) + "s");
+}
 
 /* ---------- 5) 物理版の試合から走者の進塁率 ---------- */
+// 走者ありの安打は、物理版では送球の間に打者が二塁へ進む (= 二塁打) ことがあるので、
+// 打球の区分の「走者なしでの単打/二塁打の割合」(w1, w2) を重みにして、単打を引いたときの割合を求める:
+//   実際の結果 y の期待値 = 単打の割合 × p + (二塁打以上なら必ず起きる分)  →  p = Σ(y - 必ず起きる分) / Σ 単打の割合
 const adv = {};
 {
   const acc = {};
-  const rec = (k, spd, ok) => (acc[k] || (acc[k] = [])).push([spd, ok ? 1 : 0]);
+  const spdOf = (p) => p.speed + (D.has(p, "baserun") ? 8 : 0);
+  // key: 割合の名前、s: 走力、y: 起きたか、w: 重み (単打を引く割合など)、off: 必ず起きる分
+  const rec = (k, s, y, w, off) => (acc[k] || (acc[k] = [])).push([s, y ? 1 : 0, w == null ? 1 : w, off || 0]);
+  const parsed = cells.map((str) => {
+    const c = { a: 0, b: 0, c: 0 };
+    const re = /([a-j])(\d)(\d+)/g;
+    let m;
+    while ((m = re.exec(str))) {
+      const n = Number(m[3]);
+      if (m[1] === "a" && Number(m[2]) >= 7) c.a += n;
+      else if (m[1] === "b") c.b += n;
+      else if (m[1] === "c" || m[1] === "d") c.c += n;
+    }
+    const tot = c.a + c.b + c.c;
+    return tot ? { w1: c.a / tot, w2: c.b / tot, w3: c.c / tot } : null;
+  });
+  const bin = (v, g) => U.clamp(Math.floor((v - g[0]) / g[1]), 0, g[2] - 1);
+  const origMk = Game.prototype.makeBattedPlay;
+  Game.prototype.makeBattedPlay = function (jr, sw, steal) {
+    this._ball = sw && sw.bunt ? null : jr.res;
+    return origMk.call(this, jr, sw, steal);
+  };
   const orig = Game.prototype.applyPlay;
   Game.prototype.applyPlay = function (res) {
     const b = this.bases.slice();
+    const bat = this.batter();
     const o2 = this.outs === 2 ? "2" : "01";
     const t = res.type;
     const where = (p) => {
@@ -272,26 +313,32 @@ const adv = {};
       for (let i = 1; i <= 3; i++) if (res.bases[i] === p) return i;
       return 0;
     };
-    const inf = ["P", "C", "1B", "2B", "3B", "SS"].indexOf(res.firstTouch) >= 0;
-    if (t === "H1" && !inf) {
-      if (b[2]) rec("h1r2_" + o2, b[2].speed, where(b[2]) === 4);
-      // 三塁が空くときだけ (前の走者が止まると進めない)
-      if (b[1] && (!b[2] || where(b[2]) === 4)) rec("h1r1_" + o2, b[1].speed, where(b[1]) >= 3);
+    const OFp = ["LF", "CF", "RF"].indexOf(res.firstTouch) >= 0;
+    const ball = this._ball;
+    this._ball = null;
+    const hit = t === "H1" || t === "H2" || t === "H3" || t === "IPHR";
+    if (hit && OFp && ball && (b[1] || b[2] || b[3])) {
+      const w = parsed[(bin(ball.ev, EV) * LA[2] + bin(ball.la, LA)) * PH[2] + bin(ball.phi, PH)];
+      if (w) {
+        const more = w.w2 + w.w3; // 二塁打以上を引けば必ず起きる
+        if (b[2]) rec("h1r2_" + o2, spdOf(b[2]), where(b[2]) === 4, w.w1, more);
+        if (b[1] && (!b[2] || where(b[2]) === 4)) rec("h1r1_" + o2, spdOf(b[1]), where(b[1]) >= 3, w.w1, more);
+        // 打者が送球の間に二塁へ (二塁が空いたときだけ)
+        if (![b[1], b[2], b[3]].some((p) => p && where(p) === 2)) rec("h1bat", spdOf(bat), (res.batterBase || 0) >= 2, w.w1, more);
+        if (b[1]) rec("h2r1_" + o2, spdOf(b[1]), where(b[1]) === 4, w.w2, w.w3);
+      }
     }
-    if (t === "H2" && b[1]) rec("h2r1_" + o2, b[1].speed, where(b[1]) === 4);
     if ((t === "GO" || t === "DP" || t === "FC") && this.outs < 2) {
-      if (b[3] && !(b[1] && b[2])) rec("goR3", b[3].speed, where(b[3]) === 4);
-      if (b[2] && !b[1] && !b[3]) rec("goR2", b[2].speed, where(b[2]) >= 3);
+      if (b[3] && !(b[1] && b[2])) rec("goR3", spdOf(b[3]), where(b[3]) === 4);
+      if (b[2] && !b[1] && !b[3]) rec("goR2", spdOf(b[2]), where(b[2]) >= 3);
     }
     if ((t === "FO" || t === "SF") && this.outs < 2) {
-      if (b[3]) rec("foR3", b[3].speed, where(b[3]) === 4);
-      if (b[2] && !b[3]) rec("foR2", b[2].speed, where(b[2]) === 3);
+      if (b[3]) rec("foR3", spdOf(b[3]), where(b[3]) === 4);
+      if (b[2] && !b[3]) rec("foR2", spdOf(b[2]), where(b[2]) === 3);
     }
-    if (t === "GO" && b[1] && this.outs < 2) rec("dpSpd", this.batter().speed, false);
-    if (t === "DP" && b[1]) rec("dpSpd", this.batter().speed, true);
     return orig.call(this, res);
   };
-  const NG = Math.max(20, Math.round(160 * SCALE));
+  const NG = Math.max(20, Math.round(200 * SCALE));
   for (let i = 0; i < NG; i++) {
     const a = teams[i % 12];
     let h = teams[(i * 5 + 1 + Math.floor(i / 12)) % 12];
@@ -300,20 +347,36 @@ const adv = {};
     g.simToEnd();
   }
   Game.prototype.applyPlay = orig;
-  // 割合と走力の傾き (最小二乗)
+  Game.prototype.makeBattedPlay = origMk;
+  // y - off = p·w + k·w·(走力 - 平均) を最小二乗で解く
   for (const k in acc) {
     const a = acc[k];
-    const n = a.length;
-    const ms = a.reduce((s, x) => s + x[0], 0) / n;
-    const my = a.reduce((s, x) => s + x[1], 0) / n;
-    let cov = 0;
-    let vs = 0;
-    for (const [s, y] of a) {
-      cov += (s - ms) * (y - my);
-      vs += (s - ms) * (s - ms);
+    const sw = a.reduce((s, x) => s + x[2], 0);
+    if (sw <= 0) continue;
+    const ms = a.reduce((s, x) => s + x[0] * x[2], 0) / sw;
+    let s11 = 0;
+    let s12 = 0;
+    let s22 = 0;
+    let t1 = 0;
+    let t2 = 0;
+    for (const [s, y, w, off] of a) {
+      const x1 = w;
+      const x2 = w * (s - ms);
+      const z = y - off;
+      s11 += x1 * x1;
+      s12 += x1 * x2;
+      s22 += x2 * x2;
+      t1 += x1 * z;
+      t2 += x2 * z;
     }
-    const slope = vs > 0 ? cov / vs : 0;
-    adv[k] = [Math.round(my * 1000) / 1000, Math.round(U.clamp(slope, -0.02, 0.02) * 10000) / 10000, Math.round(ms * 10) / 10, n];
+    const det = s11 * s22 - s12 * s12;
+    let p0 = s11 > 0 ? t1 / s11 : 0;
+    let slope = 0;
+    if (det > 1e-9) {
+      p0 = (t1 * s22 - t2 * s12) / det;
+      slope = (s11 * t2 - s12 * t1) / det;
+    }
+    adv[k] = [Math.round(U.clamp(p0, 0, 1) * 1000) / 1000, Math.round(U.clamp(slope, -0.02, 0.02) * 10000) / 10000, Math.round(ms * 10) / 10, Math.round(sw)];
   }
 }
 console.log("games", ((Date.now() - t0) / 1000).toFixed(1) + "s");
