@@ -1,0 +1,39 @@
+@font-face {
+  font-family: "DotGothic16";
+  src: url("assets/fonts/DotGothic16-Regular.ttf") format("truetype");
+  font-display: block;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; background: #0b0d1a; color: #cfd3e6;
+  font-family: "DotGothic16", monospace;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none; touch-action: none;
+}
+#app { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+#screen { display: flex; align-items: center; justify-content: center; width: 100%; flex: 1 1 auto; min-height: 0; }
+#game { display: block; image-rendering: pixelated; image-rendering: crisp-edges; background: #000;
+  box-shadow: 0 0 0 2px #2a2f55, 0 8px 30px rgba(0,0,0,.6); }
+#help { font-size: 12px; opacity: .55; padding: 0 16px 8px; text-align: center; }
+#pad { display: none; width: 100%; max-width: 520px; padding: 0 16px 16px; justify-content: space-between; align-items: center;
+  padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+body.touch #pad { display: flex; }
+body.touch #help { display: none; }
+#dpad { position: relative; width: 150px; height: 150px; border-radius: 50%; background: #1a1e3a; box-shadow: inset 0 0 0 2px #2d335f; touch-action: none; }
+#dpad .arrow { position: absolute; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;
+  color: #8d94c4; font-size: 20px; pointer-events: none; border-radius: 10px; }
+#dpad .arrow.on { background: #3b4380; color: #fff; }
+#dpad .up { left: 50px; top: 0; } #dpad .down { left: 50px; bottom: 0; }
+#dpad .left { left: 0; top: 50px; } #dpad .right { right: 0; top: 50px; }
+#sys button { font-family: inherit; font-size: 12px; color: #cfd3e6; background: #1a1e3a; border: 2px solid #2d335f; border-radius: 12px; padding: 6px 12px; touch-action: none; }
+#ab { display: flex; gap: 14px; align-items: center; transform: rotate(-15deg); }
+#ab .btn { width: 64px; height: 64px; border-radius: 50%; font-family: inherit; font-size: 22px; color: #fff; border: none; touch-action: none; }
+#ab .a { background: #d64161; box-shadow: 0 4px 0 #8e2238; margin-top: -24px; }
+#ab .b { background: #4157d6; box-shadow: 0 4px 0 #24318e; }
+#ab .btn.on, #sys button.on { transform: translateY(3px); box-shadow: none; filter: brightness(1.2); }
+@media (orientation: landscape) and (max-height: 520px) {
+  body.touch #app { flex-direction: row; gap: 0; }
+  body.touch #pad { position: fixed; inset: auto 0 0 0; max-width: none; pointer-events: none; padding: 0 12px 12px; }
+  body.touch #pad > * { pointer-events: auto; opacity: .75; }
+  body.touch #sys { position: fixed; top: 8px; right: 12px; }
+}

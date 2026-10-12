@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d1a">
+<title>ドット芸能界</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <div id="screen"><canvas id="game" width="320" height="240" aria-label="ゲーム画面"></canvas></div>
+  <div id="pad" aria-hidden="true">
+    <div id="dpad"><div class="arrow up">▲</div><div class="arrow left">◀</div><div class="arrow right">▶</div><div class="arrow down">▼</div></div>
+    <div id="sys"><button data-k="menu">MENU</button></div>
+    <div id="ab"><button class="btn b" data-k="b">B</button><button class="btn a" data-k="a">A</button></div>
+  </div>
+  <div id="help">移動: 矢印/WASD　決定: Z/Space/Enter　キャンセル・ダッシュ: X/Shift　メニュー: Esc/C　音: M</div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
