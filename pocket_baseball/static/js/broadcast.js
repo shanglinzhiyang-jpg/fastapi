@@ -47,6 +47,144 @@
   function mnum(n, metal) {
     return '<b class="mnum ' + metal + '" data-t="' + n + '">' + n + "</b>";
   }
+  // 場内アナウンスの守備位置
+  const POS_PA = { P: "ピッチャー", C: "キャッチャー", "1B": "ファースト", "2B": "セカンド", "3B": "サード", SS: "ショート", LF: "レフト", CF: "センター", RF: "ライト", DH: "指名打者", PH: "代打" };
+
+  /* ---------- 演出用の選手カード ---------- */
+  // 描けた選手の画像を覚えておく (同じ選手は次から待たずに出せる)
+  const pcache = new Map();
+  function pkey(p, team, o) {
+    const v3 = PB.View3D && PB.View3D.active;
+    return p.id + ":" + team.id + ":" + (o.kind || (p.pos === "P" ? "pit" : "bat")) + ":" + (o.home === false ? "a" : "h") + ":" + (v3 ? "3" : "2");
+  }
+  // 2 頭身のキャラ (3D の選手をまだ描いていないとき・2D 表示のとき)
+  function chibi(p, team) {
+    if (!PB.Chara) return null;
+    const cv = document.createElement("canvas");
+    cv.width = 300;
+    cv.height = 400;
+    PB.Chara.draw(cv.getContext("2d"), 150, 384, 150, { team, face: p.face, view: "front", pose: p.pos === "P" ? "throw" : "cheer", t: 0.6, num: p.num, mark: team.mark, noShadow: true });
+    return cv;
+  }
+  // カードの <canvas> と、選手の画像が載ったら解決する ready を返す。
+  // o: { w, mini, home, kind, fetch: 3D の選手を新しく描かせてよい (false なら写真・描いた画像・2 頭身だけ) }
+  function cardFor(p, team, o) {
+    const C = PB.Cards;
+    const cw = Math.round(o.w || 120);
+    const ch = Math.round(cw * (o.mini ? 1.25 : 1.333));
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(cw * dpr);
+    cv.height = Math.round(ch * dpr);
+    cv.style.width = cw + "px";
+    cv.style.height = ch + "px";
+    cv.className = "pbcard tvcard" + (o.mini ? " mini" : "");
+    if (!C) return { cv, ready: Promise.resolve() };
+    const tt = teamOf(team);
+    const key = pkey(p, tt, o);
+    let img = pcache.get(key) || null;
+    const draw = () => C.draw(cv, p, tt, img, o).catch(() => {});
+    let ready;
+    if (img) ready = draw();
+    else {
+      const v3 = PB.View3D && PB.View3D.active;
+      const photo = C.photoOf(p, tt);
+      const real = photo || !v3 || o.fetch;
+      const src = real ? C.portraitOf(p, tt, o) : Promise.resolve(chibi(p, tt));
+      draw();
+      ready = src.then(
+        (im) => {
+          if (!im) return;
+          img = im;
+          if (real) {
+            pcache.set(key, im);
+            while (pcache.size > 60) pcache.delete(pcache.keys().next().value);
+          }
+          return draw();
+        },
+        () => {}
+      );
+    }
+    // カードの書体 (その文字の分) を読み込んでから描き直す
+    const F = document.fonts;
+    if (F && F.load) {
+      const text = (p.full || p.name) + (p.given || "") + (tt.short || "") + "総合2004#" + (D.POS_JP[o.pos || p.pos] || "") + (p.num != null ? p.num : "");
+      Promise.all(['900 20px "M PLUS 1p"', '400 20px "Archivo Black"'].map((f) => F.load(f, text))).then(draw, () => {});
+    }
+    return { cv, ready };
+  }
+
+  /* ---------- 実況・解説の言い回し (同じ文が続かないように選ぶ) ---------- */
+  const PHR = {
+    strike: ["ストライク！", "見逃してストライク", "外角いっぱい、ストライク！", "ズバッと決まった！", "いいコースに来ました", "内角を突いてストライク", "低めいっぱい、ストライク"],
+    strikeFirst: ["{pit}、まずはストライク先行", "初球、ストライク！", "初球から攻めてきました"],
+    swing: ["空振り！", "バットが空を切った！", "{pit}、空振りを奪う！", "タイミングが合わない！", "振らされた！"],
+    twoK: ["追い込みました！", "{pit}、追い込んだ！", "ツーストライク！"],
+    ball: ["ボール", "外れてボール", "低めに外れました", "ボール、よく見ました", "高めに浮いた、ボール", "{bat}、見極めた"],
+    full: ["フルカウント！勝負の一球", "スリーボール・ツーストライク！"],
+    foul: ["ファウル", "ファウルボール", "{bat}、粘ります", "カットした！", "後ろへファウル"],
+    kSwing: ["空振り三振！", "{pit}、空振り三振！", "三振！バットは空を切った！", "最後は空振り！三振！"],
+    kLook: ["見逃し三振！", "手が出ない！見逃し三振！", "{pit}、最後は見逃し三振！", "ズバッと決まった！見逃し三振！"],
+    bb: ["フォアボール！", "歩かせました", "四球で出塁"],
+    hbp: ["デッドボール！", "当ててしまった！", "これは痛い、デッドボール"],
+    hitStrong: ["打ったー！！", "捉えたー！", "強烈な当たり！", "痛烈！"],
+    hitFly: ["打ち上げた！", "高く上がった！", "上がった！"],
+    hitGround: ["叩きつけた！", "転がした！", "ゴロになった！"],
+    hit: ["打った！", "弾き返した！", "合わせた！"],
+    hrGo: ["打ったー！大きい！", "いい角度で上がった！", "これは大きいぞ！", "打ったー！伸びる！"],
+    hrMaybe: ["入るか！？", "伸びる！伸びる！", "どうだ！？", "まだ伸びる！"],
+    hrIn: ["入ったー！ホームラン！", "スタンドイン！ホームラン！", "文句なし！ホームラン！", "{bat}、第{n}号ホームラン！"],
+    fine: ["好捕！", "ナイスキャッチ！", "よく捕った！", "うまい！捕った！"],
+    dive: ["ダイビングキャッチ！！", "飛びついたー！捕った！"],
+    jump: ["ジャンピングキャッチ！", "跳んだー！捕った！"],
+    wall: ["フェンス際、捕った！", "フェンスぎりぎり、よく捕った！"],
+    dp: ["ゲッツー！", "併殺完成！", "ダブルプレー！"],
+    score: ["{runner}、ホームイン！", "{runner}がかえってくる！", "{runner}、生還！"],
+    chance: ["チャンスです！", "得点圏にランナー！", "さあ、チャンス！"],
+    steal: ["ランナー走った！", "スタートを切った！"],
+    pchange: ["ピッチャー交代、{p}。", "ここでピッチャー交代、{p}がマウンドへ"],
+  };
+  const KAI = {
+    k: ["{pit}の決め球ですね", "今のは手が出ませんね", "いいボールでした", "バッテリーの勝ちですね"],
+    hr: ["あれを打たれては仕方ない", "完璧に捉えましたね", "甘いボールを逃しませんでした", "風にも乗りましたね"],
+    fine: ["今のは大きなプレーですよ", "守備で流れを変えましたね", "よく追いつきました"],
+    dp: ["ピッチャー助かりましたね", "最高の形のゲッツーです"],
+    bb: ["四球は痛いですね", "ここで歩かせたくはなかった"],
+    hit: ["うまく合わせましたね", "コースに逆らわずに打ちました", "しぶとく転がしましたね"],
+    score: ["大きな1点ですね", "これで流れが変わりますよ"],
+    chance: ["走者が溜まってきましたね", "ここは一本ほしいところです"],
+  };
+  const recent = [];
+  function pick(list, vars) {
+    const okv = (s) => !/\{n\}/.test(s) || (vars && vars.n);
+    let c = list.filter((s) => recent.indexOf(s) < 0 && okv(s));
+    if (!c.length) c = list.filter(okv);
+    if (!c.length) c = list;
+    const s = c[Math.floor(Math.random() * c.length)];
+    recent.push(s);
+    if (recent.length > 14) recent.shift();
+    return s.replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] != null ? vars[k] : ""));
+  }
+  // ヒーローインタビュー (質問と答え)
+  const HERO = {
+    walkoff: [
+      ["サヨナラの場面、どんな気持ちで打席へ？", "絶対に自分で決めてやろうと思っていました！"],
+      ["打った瞬間はいかがでしたか？", "抜けてくれ！と思いながら走りました！"],
+    ],
+    hr: [
+      ["今日の一発、振り返っていかがですか？", "打った瞬間、いったと思いました！"],
+      ["あの打席、狙い球は？", "まっすぐ一本に絞っていました！"],
+    ],
+    hit: [
+      ["今日は{h}安打の大活躍でした", "チームの勝ちに貢献できてうれしいです！"],
+      ["チャンスでの一本でした", "後ろにつなぐ気持ちで打ちました！"],
+    ],
+    pit: [
+      ["今日のピッチング、振り返っていかがですか？", "キャッチャーのリードを信じて投げました！"],
+      ["{k}個の三振を奪いました", "ストレートが走っていたので、強気に攻めました！"],
+    ],
+    save: [["最後を締めました", "いつも通り、自分のボールを投げるだけでした！"]],
+  };
 
   /* ---------- テレビ中継グラフィック ---------- */
   class TV {
@@ -56,6 +194,7 @@
       this.l3q = [];
       this.timers = {};
       this.scoreSeen = 0;
+      this.bugSeen = 0; // カウント表示に反映した得点の場面の数 (中央の得点パネルより先に数字を変えない)
       this.spShown = {};
     }
 
@@ -78,7 +217,16 @@
         '<div class="tv-l3"></div>' +
         '<div class="tv-center"></div>' +
         '<div class="tv-hr"></div>' +
-        '<div class="tv-tick"></div>'
+        '<div class="tv-tick"></div>' +
+        '<div class="tv-dist"></div>' +
+        '<div class="tv-k"></div>' +
+        '<div class="tv-pa"></div>' +
+        '<div class="tv-card"></div>' +
+        '<div class="tv-call"></div>' +
+        '<div class="tv-l7"></div>' +
+        '<div class="tv-wl"></div>' +
+        '<div class="tv-hero"></div>' +
+        '<div class="tv-lu"></div>'
       );
     }
 
@@ -97,6 +245,15 @@
         center: q(".tv-center"),
         hr: q(".tv-hr"),
         tick: q(".tv-tick"),
+        dist: q(".tv-dist"),
+        k: q(".tv-k"),
+        pa: q(".tv-pa"),
+        card: q(".tv-card"),
+        call: q(".tv-call"),
+        l7: q(".tv-l7"),
+        wl: q(".tv-wl"),
+        hero: q(".tv-hero"),
+        lu: q(".tv-lu"),
       };
     }
 
@@ -161,6 +318,8 @@
         rows[1].querySelector("b").textContent = Math.max(0, m.derby.maxOuts - m.derby.outs);
       } else {
         el.inn.textContent = g.inning + (g.top ? "表" : "裏");
+        // 点が入った場面は、中央の得点パネルが数字を変えるまでカウント表示の数字を待たせる
+        const hold = m.mode === "game" && g.scoreLog.length > this.bugSeen && !g.over;
         for (const side of ["away", "home"]) {
           const t = teamOf(g.teams[side]);
           const row = bug.querySelector('.tvb-t[data-side="' + side + '"]');
@@ -169,7 +328,7 @@
           row.querySelector(".tvb-ab").textContent = abbr(t);
           const b = row.querySelector("b");
           const v = String(g.score[side]);
-          if (b.textContent !== v) {
+          if (b.textContent !== v && !(hold && b.textContent !== "")) {
             b.textContent = v;
             b.classList.remove("pop");
             void b.offsetWidth;
@@ -339,7 +498,8 @@
     }
 
     /* ---------- ホームラン ---------- */
-    homeRun(res, bat) {
+    // extra: 「2者連続」「先頭打者」など (帯の右に小さく)
+    homeRun(res, bat, extra) {
       const g = this.g;
       const m = this.m;
       const season = m.opt.season;
@@ -348,26 +508,37 @@
       const walkoff = !g.top && g.inning >= g.innings && g.score.home + n > g.score.away && g.score.home <= g.score.away;
       let no = "";
       if (season && !m.derby) no = ((season[bat.id] || {}).hr || 0) + ((g.box[bat.id] || {}).hr || 0) + 1;
+      let kindTx = walkoff ? "サヨナラ" : no ? label : res.type === "IPHR" ? "ランニング" : "";
+      if (extra && !walkoff) kindTx = extra + (no ? " " + label : "");
       const title = n >= 4 ? "GRAND SLAM" : "HOME RUN";
+      this.band(esc(bat.name), no ? '<span class="hr-no">' + no + "<small>号</small></span>" : '<span class="hr-no lbl">' + esc(label) + "</span>", kindTx, title, 2700, res.type === "IPHR" ? "iphr" : "");
+    }
+    // 2 本のレールと帯の大きなテロップ (ホームラン・サヨナラ)
+    band(nameHtml, noHtml, kindTx, title, ms, cls) {
       const html =
         '<div class="hr-wrap">' +
         '<div class="hr-rail t"></div><div class="hr-rail b"></div>' +
         '<div class="hr-bar"><span class="hr-nm">' +
-        esc(bat.name) +
+        nameHtml +
         "</span>" +
-        (no ? '<span class="hr-no">' + no + "<small>号</small></span>" : '<span class="hr-no lbl">' + esc(label) + "</span>") +
+        noHtml +
         '<span class="hr-kind">' +
-        esc(walkoff ? "サヨナラ" : no ? label : res.type === "IPHR" ? "ランニング" : "") +
+        esc(kindTx) +
         "</span></div>" +
         '<div class="hr-title"><span data-t="' +
-        title +
+        esc(title) +
         '">' +
-        title +
+        esc(title) +
         "</span></div>" +
         '<div class="hr-shine"></div>' +
         "</div>";
       this.hide("l3");
-      this.flash(this.el.hr, html, 2700, "hr", res.type === "IPHR" ? "iphr" : "");
+      this.hide("call");
+      this.flash(this.el.hr, html, ms, "hr", cls);
+    }
+    // サヨナラの赤い帯: what = 「サヨナラタイムリー」など
+    walkoff(bat, what) {
+      this.band(esc(bat.name), "", what || "", "サヨナラ", 3400, "wo");
     }
 
     /* ---------- 得点 (中央の大きなスコア) ---------- */
@@ -422,9 +593,11 @@
           '<div class="sc-gloss"></div></div>'
         );
       };
+      // 先制・同点・逆転・勝ち越しは大きな判子で
+      const stamp = kind === "score" && last && ["先制", "同点", "逆転", "勝ち越し", "サヨナラ"].indexOf(last.ctx) >= 0 ? '<div class="sc-stamp' + (last.ctx === "逆転" || last.ctx === "サヨナラ" ? " red" : "") + '"><span>' + esc(last.ctx) + "</span></div>" : "";
       const extra =
         kind === "score" && last
-          ? '<div class="sc-ctx">' + esc(last.text) + "</div>"
+          ? stamp + '<div class="sc-ctx">' + esc(last.text) + "</div>"
           : kind === "open"
             ? '<div class="sc-ctx">' + esc(teamOf(g.teams.home).stadium || "") + "</div>"
             : kind === "final" && g.result
@@ -434,7 +607,7 @@
       const html = '<div class="sc-row">' + panel("home") + '<div class="sc-mid"><div class="sc-inn">' + esc(mid) + '</div><div class="sc-prog">' + PROGRAM + "</div></div>" + panel("away") + "</div>" + extra;
       const ms = kind === "final" ? 2900 : kind === "open" ? 2600 : 2300;
       this.flash(this.el.center, html, ms, "center", "k-" + kind);
-      // 点が入った側の数字を差し替える
+      // 点が入った側の数字を差し替える (左上のカウント表示も同時に)
       if (kind === "score") {
         this.later("scnum", 650, () => {
           this.el.center.querySelectorAll(".sc-num").forEach((e) => {
@@ -446,8 +619,15 @@
               b.classList.add("pop");
             }
           });
+          this.syncScore();
         });
-      }
+      } else this.syncScore();
+    }
+
+    // カウント表示の得点を今の数字に
+    syncScore() {
+      this.bugSeen = this.g.scoreLog.length;
+      this.update();
     }
 
     finalPitchers() {
@@ -482,13 +662,16 @@
         ")</span>"
       );
     }
+    // entries: 得点の場面 (scoreLog) または { label, html } (投手成績・次の回など)
     ticker(entries, label) {
       if (!entries.length) return;
       const el = this.el.tick;
       let i = 0;
       const per = 2300;
       const render = () => {
-        el.innerHTML = '<div class="tk-tab">' + esc(label || "今日の結果") + '</div><div class="tk-body"><div class="tk-line">' + this.tickerLine(entries[i]) + "</div></div>";
+        const e = entries[i];
+        const lb = e.html != null ? e.label : label || "今日の結果";
+        el.innerHTML = '<div class="tk-tab' + (e.cls ? " " + e.cls : "") + '">' + esc(lb) + '</div><div class="tk-body"><div class="tk-line">' + (e.html != null ? e.html : this.tickerLine(e)) + "</div></div>";
         const line = el.querySelector(".tk-line");
         const body = el.querySelector(".tk-body");
         // 長い行は横に流す
