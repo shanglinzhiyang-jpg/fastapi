@@ -175,6 +175,43 @@
   }
   A.mirror = mirror;
 
+  /* ---------- 頭の向き ----------
+   * 体幹 (腰→背→胸) がどう回っていても、首と頭で頭をキャラクター空間の (方位 yaw, 仰角 pitch) に向ける (度, 下向きが正)。
+   * 胸に対する回転を首 40%・頭 60% に分ける。胸に対して左右 ±88°・上下 -50°〜+55° まで。
+   * スイング・投球・送球のキーに使う: 体が回ってもミートの点・捕手から目を離さない (頭は体に連れ回らない) */
+  const _hq = new T.Quaternion();
+  const _hc = new T.Quaternion();
+  const _hr = new T.Quaternion();
+  const _hn = new T.Quaternion();
+  const _he = new T.Euler();
+  const _hI = new T.Quaternion();
+  const clampD = (v, a, b) => (v < a ? a : v > b ? b : v);
+  function headTo(p, yaw, pitch) {
+    const E = (v, k) => _he.set(v[0] * D2R * k, v[1] * D2R * k, v[2] * D2R * k, "YXZ");
+    // 胸の向き (リグは背骨の角度を 2 つの骨に半分ずつ掛ける)
+    _hc.setFromEuler(E(p.hips, 1));
+    _hc.multiply(_hq.setFromEuler(E(p.spine, 0.5)));
+    _hc.multiply(_hq.setFromEuler(E(p.spine, 0.5)));
+    _hc.multiply(_hq.setFromEuler(E(p.chest, 1)));
+    // 目標の向き → 胸に対する回転 (角度を制限)
+    _hq.setFromEuler(_he.set(pitch * D2R, yaw * D2R, 0, "YXZ"));
+    _hr.copy(_hc).invert().multiply(_hq);
+    _he.setFromQuaternion(_hr, "YXZ");
+    _he.x = clampD(_he.x, -50 * D2R, 55 * D2R);
+    _he.y = clampD(_he.y, -88 * D2R, 88 * D2R);
+    _he.z = clampD(_he.z, -20 * D2R, 20 * D2R);
+    _hr.setFromEuler(_he);
+    // 首 40%、残りを頭
+    _hn.copy(_hI).slerp(_hr, 0.4);
+    _he.setFromQuaternion(_hn, "YXZ");
+    p.neck = [_he.x / D2R, _he.y / D2R, _he.z / D2R];
+    _hq.copy(_hn).invert().multiply(_hr);
+    _he.setFromQuaternion(_hq, "YXZ");
+    p.head = [_he.x / D2R, _he.y / D2R, _he.z / D2R];
+    return p;
+  }
+  A.headTo = headTo;
+
   /* ---------- キーフレーム ----------
    * clip: [{t, pose, e, v}]  e = そのキーに入る区間の緩急 (lin / io / in / out), v = キーを通る速さ (省略可)
    * 各数値は前後のキーも見た 3 次エルミート補間 (単調な所ははみ出さず、折り返すキーでは止まる)。
@@ -538,15 +575,19 @@
     p.kind = "idle";
     return p;
   };
-  // 始動 (足を上げて溜める)
-  LIB.batLoad = P(
-    Object.assign({}, STANCE, {
-      root: [-0.08, -0.08, -0.02],
-      hips: [0, -14, 0],
-      chest: [4, -14, 0],
-      legL: { t: [0.22, 0.16, 0.06], p: [0.4, 0.8, 1], f: [10, -10, 0] },
-      bat: { g: [-0.25, 1.36, -0.12], d: [-0.05, 0.85, -0.52], on: 1 },
-    })
+  // 始動 (足を上げて溜める)。肩が閉じても頭は投手に向けたまま
+  LIB.batLoad = headTo(
+    P(
+      Object.assign({}, STANCE, {
+        root: [-0.08, -0.08, -0.02],
+        hips: [0, -14, 0],
+        chest: [4, -14, 0],
+        legL: { t: [0.22, 0.16, 0.06], p: [0.4, 0.8, 1], f: [10, -10, 0] },
+        bat: { g: [-0.25, 1.36, -0.12], d: [-0.05, 0.85, -0.52], on: 1 },
+      })
+    ),
+    55,
+    1
   );
 
   /* スイング: contactZ = ミートの高さ (m, 地面から), pull = 引っ張り度 (-1..1) */
@@ -590,27 +631,34 @@
       legR: { t: [-0.2, 0.14, 0.02], p: [0, 0.5, 1], f: [30, 60, 0] },
       bat: { g: [0.28, 1.42, 0.08], d: [-0.35, 0.45, -0.82], on: 1 },
     };
+    // 頭は体に連れ回らない: ミートではボール (ベースの上) を見下ろし、振り抜いたら打球の方 (引っ張ればその側) を見送る
+    const kContact = headTo(P(Object.assign({}, STANCE, contact)), 24 - pl * 6, 30 + low * 22);
+    const kFollow = headTo(P(Object.assign({}, STANCE, follow)), 80 + pl * 30, -6);
     return withKind("swing", [
       { t: 0, pose: P(STANCE) },
       { t: 0.05, pose: P(Object.assign({}, STANCE, stride)), e: "out" },
-      { t: 0.12, pose: P(Object.assign({}, STANCE, contact)), e: "in" },
-      { t: 0.3, pose: P(Object.assign({}, STANCE, follow)), e: "out" },
-      { t: 0.7, pose: P(Object.assign({}, STANCE, follow)) },
+      { t: 0.12, pose: kContact, e: "in" },
+      { t: 0.3, pose: kFollow, e: "out" },
+      { t: 0.7, pose: A.copyPose(kFollow) },
     ]);
   };
   A.SWING_CONTACT = 0.12;
 
-  LIB.bunt = P(
-    Object.assign({}, STANCE, {
-      root: [0.02, -0.22, 0.04],
-      hips: [0, 40, 0],
-      spine: [20, 20, 0],
-      chest: [6, 20, 0],
-      head: [-6, 20, 0],
-      legL: { t: [0.36, 0.06, 0.12], p: [0.6, 0.5, 1], f: [0, 20, 0] },
-      legR: { t: [-0.22, 0.06, 0.2], p: [-0.4, 0.5, 1], f: [0, 40, 0] },
-      bat: { g: [-0.12, 1.05, 0.42], d: [0.98, 0.08, 0.1], on: 1 },
-    })
+  // バント (頭は投手の方)
+  LIB.bunt = headTo(
+    P(
+      Object.assign({}, STANCE, {
+        root: [0.02, -0.22, 0.04],
+        hips: [0, 40, 0],
+        spine: [20, 20, 0],
+        chest: [6, 20, 0],
+        legL: { t: [0.36, 0.06, 0.12], p: [0.6, 0.5, 1], f: [0, 20, 0] },
+        legR: { t: [-0.22, 0.06, 0.2], p: [-0.4, 0.5, 1], f: [0, 40, 0] },
+        bat: { g: [-0.12, 1.05, 0.42], d: [0.98, 0.08, 0.1], on: 1 },
+      })
+    ),
+    86,
+    6
   );
 
   /* ---------- 投球 (右投手: 本塁方向は +X。セットポジションで横向き) ---------- */
@@ -700,6 +748,12 @@
       legL: { t: [0.86, 0.06, 0.06], f: [0, 60, 0] },
       legR: { t: [0.5, 0.06, -0.3], f: [0, 60, 0] },
     });
+    // 頭は捕手 (+X) から離さない: 足を上げて肩が閉じても首の限界まで向け、リリース〜フォローでは少し見下ろす
+    headTo(lift, 78, 2);
+    headTo(stride, 82, 6);
+    headTo(cock, 88, 8);
+    headTo(release, 92, 20);
+    headTo(follow, 94, 30);
     return withKind("pitch", [
       { t: 0, pose: P(PSET) },
       { t: 0.32, pose: lift, e: "io" },
@@ -754,6 +808,11 @@
       legL: { t: [0.62, 0.06, 0.04], f: [0, 60, 0] },
       legR: { t: [0.24, 0.22, -0.24], f: [50, 60, 0] },
     });
+    // 頭は投げる相手 (+X) に向けたまま
+    headTo(set, 72, 2);
+    headTo(back, 76, 4);
+    headTo(rel, 90, 12);
+    headTo(fol, 92, 18);
     return withKind("throw", [
       { t: 0, pose: set },
       { t: 0.14, pose: back, e: "io" },

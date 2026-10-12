@@ -5,14 +5,17 @@
   "use strict";
   const D = PB.D;
 
-  // ユニフォームの項目
-  //  jersey: 地の色, pinstripe: ピンストライプの色, piping: [前立て・襟の縁取りの色...], sleeveTrim: [袖口のライン...]
-  //  word: 胸マーク画像 (img/words/) / wordText+wordFont: 文字で描く, wordColor/wordOutline
-  //  number: 番号の色, numberOutline, numberFont, frontNumber: 胸番号の有無
-  //  backName: 背ネームの有無, sleeveText: 袖の文字, sleevePatch: 袖のワッペン画像
-  //  vneck: V ネック, vest: 袖をアンダーシャツと同じ色にする (ベスト風), sideStripes: [脇のライン...], stars: 肩の星
-  //  pants / pantsPiping / pantsPinstripe / pantsText
-  //  under: アンダーシャツ, socks: ストッキング, cap: {crown, brim, button, mark (画像) or markText, markColor, stripes}
+  // ユニフォームの項目 (寸法は cm。human.js が布の実寸表で布の上の大きさに合わせて描く)
+  //  jersey: 地の色, pinstripe: ピンストライプの色 (pinstripeCm 間隔 既定 2.2), piping: [前立て・襟の縁取りの色...], sleeveTrim: [袖口のライン...]
+  //  word: 胸マーク画像 (img/words/) / wordText+wordFont: 文字で描く。wordStyle "script" (筆記体, 右上がり) / "block" (活字体, wordArch で弧)
+  //    wordColor/wordOutline/wordOutline2 (縁取り 2 重), wordCm (大文字の高さ), wordWidthCm (最大幅), wordItalic (斜体), wordSwash (筆記体の下の飾り線)
+  //    wordMono: 組み合わせ文字を先頭に付ける (中日 "CD"+"RAGONS"), wordSmall: 左胸の小さなマーク
+  //  number: 番号の色, numberOutline, numberFont, frontNumber: 胸番号の有無, frontNumberSide "left" = 選手の右胸
+  //  backName: 背ネームの有無, sleeveText: 袖の文字, sleevePatch: 袖のワッペン画像, sleeveWord: 袖のマーク画像, sleeveMono: 袖の組み合わせ文字 (…Side "L"/"R")
+  //  vneck: V ネック [外側の色, 内側], vest: 袖をアンダーシャツと同じ色にする (ベスト風), sidePanels: 脇のパネルの色, sideStripes: [脇のライン...], stars: 肩の星
+  //  pants / pantsPiping / pantsPinstripe / pantsText, belt / buckle
+  //  under: アンダーシャツ, socks: ストッキング, capStyle: {crown, brim, button, mark (画像) or markText (markStyle "mono" で組み合わせ文字), markColor, stripes}
+  //  home/away の cap / helmet で片側だけ帽子・ヘルメットを変える (阪神のビジターの黒い帽子)。longPantsRate: 長いパンツの割合 (既定 0.85)
   const T = [
     {
       id: "g",
@@ -30,8 +33,9 @@
       stadium: "東京ドーム",
       park: { dome: true, turf: "turf", seat: "#c8102e", wall: "#0b2d6b", roof: "#ebebe6" },
       sponsors: ["読売新聞", "コカ・コーラ", "キリンビール", "日本テレビ", "報知新聞", "ENEOS", "セブン-イレブン", "三井住友銀行", "JAL", "NTTドコモ"],
-      home: { jersey: "#f6f5f0", piping: ["#f97709", "#111111", "#f97709"], sleeveTrim: ["#f97709", "#111111", "#f97709"], wordText: "GIANTS", wordFont: "Rye", wordColor: "#151515", wordOutline: "#f97709", number: "#151515", numberOutline: "#f97709", numberFont: "Rye", frontNumber: true, backName: false, sleeveText: "YOMIURI", pants: "#f6f5f0", pantsPiping: ["#f97709", "#111111"] },
-      away: { jersey: "#b7bcc3", piping: ["#f97709", "#111111", "#f97709"], sleeveTrim: ["#f97709", "#111111", "#f97709"], wordText: "YOMIURI", wordFont: "Rye", wordColor: "#151515", wordOutline: "#f97709", number: "#151515", numberOutline: "#f97709", numberFont: "Rye", frontNumber: true, backName: false, pants: "#b7bcc3", pantsPiping: ["#f97709", "#111111"] },
+      // 参考写真: 白地、前立てのパイピングは橙・黒・橙、"GIANTS" は太いスラブセリフ (黒に橙の縁取り) で袖から袖まで、左袖に "YOMIURI"
+      home: { jersey: "#f6f5f0", piping: ["#f97709", "#111111", "#f97709"], pipingMm: 4, sleeveTrim: ["#f97709", "#111111", "#f97709"], wordText: "GIANTS", wordFont: "Ultra", wordStyle: "block", wordCm: 7.8, wordWidthCm: 37, wordColor: "#15151c", wordOutline: "#f97709", number: "#15151c", numberOutline: "#f97709", numberFont: "Ultra", frontNumber: true, backName: false, sleeveText: "YOMIURI", sleeveTextSide: "L", pants: "#f6f5f0", pantsPiping: ["#f97709", "#111111"] },
+      away: { jersey: "#b7bcc3", piping: ["#f97709", "#111111", "#f97709"], pipingMm: 4, sleeveTrim: ["#f97709", "#111111", "#f97709"], wordText: "YOMIURI", wordFont: "Ultra", wordStyle: "block", wordCm: 7.4, wordWidthCm: 37, wordColor: "#15151c", wordOutline: "#f97709", number: "#15151c", numberOutline: "#f97709", numberFont: "Ultra", frontNumber: true, backName: false, pants: "#b7bcc3", pantsPiping: ["#f97709", "#111111"] },
       under: "#111111",
       socks: "#111111",
       capStyle: { crown: "#111111", brim: "#111111", button: "#f97709", mark: "img/marks/g.webp" },
@@ -54,12 +58,14 @@
       stadium: "阪神甲子園球場",
       park: { dome: false, turf: "dirt", seat: "#1f5a2c", wall: "#1d4a22", ivy: true, ginsan: true, skyline: false },
       sponsors: ["朝日新聞", "クボタ", "コカ・コーラ", "味の素", "ハウス食品", "大塚製薬", "サンテレビ", "毎日放送", "阪神電車", "グリコ"],
-      home: { jersey: "#f6f5f0", pinstripe: "#1a1a1a", wordText: "Tigers", wordFont: "Ultra", wordColor: "#161616", number: "#161616", numberFont: "Ultra", frontNumber: true, backName: true, sleevePatch: "img/teams/t.webp", pants: "#f6f5f0", pantsPinstripe: "#1a1a1a" },
-      away: { jersey: "#b9bec6", wordText: "Hanshin", wordFont: "Ultra", wordColor: "#161616", wordOutline: "#ffe100", number: "#161616", numberOutline: "#ffe100", numberFont: "Ultra", frontNumber: true, backName: true, sleevePatch: "img/teams/t.webp", pants: "#b9bec6", pantsPiping: ["#ffe100", "#111111"] },
+      // 参考写真: 白地に黒のピンストライプ、"Tigers" は黒の太い斜体セリフ (縁取りなし)、左袖に虎のワッペン。ビジターは灰色の "HANSHIN" (黒・黄の縁) とされる (?)
+      home: { jersey: "#f6f5f0", pinstripe: "#1a1a1a", wordText: "Tigers", wordFont: "Ultra", wordStyle: "block", wordItalic: 0.22, wordCm: 8.5, wordWidthCm: 30, wordColor: "#161616", number: "#161616", numberFont: "Ultra", frontNumber: true, backName: true, sleevePatch: "img/teams/t.webp", sleevePatchSide: "L", pants: "#f6f5f0", pantsPinstripe: "#1a1a1a" },
+      away: { jersey: "#b9bec6", wordText: "HANSHIN", wordFont: "Ultra", wordStyle: "block", wordCm: 7, wordWidthCm: 34, wordColor: "#161616", wordOutline: "#ffe100", wordOutlineMm: 1.8, number: "#161616", numberOutline: "#ffe100", numberOutlineMm: 1.8, numberFont: "Ultra", frontNumber: true, backName: true, sleevePatch: "img/teams/t.webp", sleevePatchSide: "L", pants: "#b9bec6", pantsPiping: ["#111111"], cap: { crown: "#111111", brim: "#111111", button: "#111111", stripes: null, markColor: "#ffe100" } },
       under: "#111111",
       socks: "#111111",
-      capStyle: { crown: "#f4f4f0", brim: "#111111", button: "#111111", stripes: "#111111", markText: "HT", markColor: "#111111", markFont: "Rye" },
-      helmet: { color: "#111111", markText: "HT", markColor: "#ffe100", markFont: "Rye" },
+      // 帽子: 白地に黒のピンストライプ、黒いつば、"HT" の組み合わせ文字 (ヘルメットは黒に黄の HT)
+      capStyle: { crown: "#f4f4f0", brim: "#111111", button: "#111111", stripes: "#111111", markText: "HT", markStyle: "mono", markColor: "#111111", markFont: "Ultra" },
+      helmet: { color: "#111111", markText: "HT", markStyle: "mono", markColor: "#ffe100", markFont: "Ultra" },
       flag: { image: "img/flags/t.webp" },
     },
     {
@@ -78,12 +84,14 @@
       stadium: "ナゴヤドーム",
       park: { dome: true, turf: "turf", seat: "#1d4fa0", wall: "#123a7a", roof: "#e9ece8" },
       sponsors: ["中日新聞", "トヨタ自動車", "コカ・コーラ", "東海テレビ", "CBC", "名古屋鉄道", "リンナイ", "ブラザー工業", "中部電力", "キリンビール"],
-      home: { jersey: "#f6f5f0", piping: ["#0050a5"], sleeveTrim: ["#0050a5", "#ffffff", "#0050a5"], word: "img/words/d.webp", wordTint: "#0050a5", number: "#0050a5", numberOutline: "#ffffff", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#0050a5"] },
-      away: { jersey: "#8fb7e3", piping: ["#0a2a6e"], sleeveTrim: ["#0a2a6e"], wordText: "CHUNICHI", wordFont: "Graduate", wordColor: "#0a2a6e", wordOutline: "#ffffff", number: "#0a2a6e", numberOutline: "#ffffff", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c5ccd6", pantsPiping: ["#0a2a6e"] },
+      // 参考写真 (2004〜2011 のホーム): 白地、"CD" の組み合わせ文字 + "RAGONS" の紺の活字体、脇に紺のパネル。
+      // ビジター: 青 (ロイヤル) 地に白の "CHUNICHI"、脇に白のパネル、左袖に CD、パンツは灰色
+      home: { jersey: "#f6f5f0", sidePanels: "#0a2a6e", wordText: "RAGONS", wordMono: "CD", wordFont: "Archivo Black", wordStyle: "block", wordCm: 6.8, wordWidthCm: 35, wordColor: "#0a2a6e", number: "#0a2a6e", numberFont: "Archivo Black", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#0a2a6e"] },
+      away: { jersey: "#1d3c9c", sidePanels: "#f4f4f2", wordText: "CHUNICHI", wordFont: "Archivo Black", wordStyle: "block", wordCm: 6.5, wordWidthCm: 34, wordColor: "#ffffff", number: "#ffffff", numberFont: "Archivo Black", frontNumber: true, backName: true, sleeveMono: "CD", sleeveMonoSide: "L", pants: "#c5ccd6", pantsPiping: ["#1d3c9c"] },
       under: "#0a2a6e",
       socks: "#0a2a6e",
-      capStyle: { crown: "#0a2a6e", brim: "#0a2a6e", button: "#0a2a6e", markText: "D", markColor: "#ffffff", markFont: "Yellowtail" },
-      helmet: { color: "#0a2a6e", markText: "D", markColor: "#ffffff", markFont: "Yellowtail" },
+      capStyle: { crown: "#0a2a6e", brim: "#0a2a6e", button: "#0a2a6e", markText: "CD", markStyle: "mono", markColor: "#ffffff", markFont: "Archivo Black" },
+      helmet: { color: "#0a2a6e", markText: "CD", markStyle: "mono", markColor: "#ffffff", markFont: "Archivo Black" },
       flag: { image: "img/flags/d.webp" },
     },
     {
@@ -102,12 +110,14 @@
       stadium: "明治神宮野球場",
       park: { dome: false, turf: "turf", seat: "#1d6a3a", wall: "#0d3a24", skyline: true },
       sponsors: ["ヤクルト", "コカ・コーラ", "サントリー", "フジテレビ", "ニッポン放送", "明治", "サンケイスポーツ", "ENEOS", "東京メトロ", "ロッテ"],
-      home: { jersey: "#f6f5f0", piping: ["#0a2a63", "#00a040"], sleeveTrim: ["#0a2a63", "#00a040"], wordText: "Swallows", wordFont: "Yellowtail", wordColor: "#0a2a63", wordOutline: "#e60012", number: "#0a2a63", numberOutline: "#e60012", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#0a2a63", "#00a040"] },
-      away: { jersey: "#7ea7d8", piping: ["#0a2a63"], sleeveTrim: ["#0a2a63"], wordText: "TOKYO", wordFont: "Graduate", wordColor: "#0a2a63", wordOutline: "#ffffff", number: "#0a2a63", numberOutline: "#ffffff", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c6ccd6", pantsPiping: ["#0a2a63"] },
+      // 参考写真: 白地に紺のピンストライプ (緑は無い)、"Swallows" は紺の筆記体に水色・赤の 2 重の縁取り、襟・袖口は紺と赤。
+      // ビジター (写真: 岩村): 紺地に白の文字 (赤の縁取り)。胸の文字が "Swallows" か "YAKULT" かは未確認 ("TOKYO" は 2006 年から)
+      home: { jersey: "#f6f5f0", pinstripe: "#0a2a63", piping: ["#0a2a63", "#e60012"], pipingMm: 4, sleeveTrim: ["#0a2a63", "#e60012"], wordText: "Swallows", wordFont: "Oleo Script", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#0a2a63", wordOutline: "#6fa8dc", wordOutlineMm: 2, wordOutline2: "#e60012", wordOutline2Mm: 2, number: "#0a2a63", numberOutline: "#e60012", numberFont: "Archivo Black", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPinstripe: "#0a2a63" },
+      away: { jersey: "#0a2a63", piping: ["#e60012"], pipingMm: 4, sleeveTrim: ["#e60012"], wordText: "Swallows", wordFont: "Oleo Script", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#ffffff", wordOutline: "#e60012", number: "#ffffff", numberOutline: "#e60012", numberFont: "Archivo Black", frontNumber: true, backName: true, pants: "#c6ccd6", pantsPiping: ["#0a2a63"] },
       under: "#0a2a63",
       socks: "#0a2a63",
-      capStyle: { crown: "#0a2a63", brim: "#0a2a63", button: "#e60012", markText: "YS", markColor: "#ffffff", markOutline: "#e60012", markFont: "Graduate" },
-      helmet: { color: "#0a2a63", markText: "YS", markColor: "#ffffff", markFont: "Graduate" },
+      capStyle: { crown: "#0a2a63", brim: "#0a2a63", button: "#e60012", markText: "YS", markStyle: "mono", markColor: "#ffffff", markOutline: "#e60012", markFont: "Archivo Black" },
+      helmet: { color: "#0a2a63", markText: "YS", markStyle: "mono", markColor: "#ffffff", markOutline: "#e60012", markFont: "Archivo Black" },
       flag: { bg: ["#0a2a63", "#00a040"], logo: "img/teams/s.webp", text: "Swallows", textFont: "Yellowtail" },
     },
     {
@@ -126,8 +136,11 @@
       stadium: "広島市民球場",
       park: { dome: false, turf: "mlb", seat: "#b51a22", wall: "#1d4a2a", skyline: true },
       sponsors: ["マツダ", "中国新聞", "コカ・コーラ", "お好みソース", "RCC", "広島銀行", "広島ガス", "エディオン", "もみじ饅頭", "アサヒビール"],
-      home: { jersey: "#f7f6f2", pinstripe: "#e3141c", word: "img/words/c.webp", number: "#e60012", numberOutline: "#ffffff", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f7f6f2", pantsPinstripe: "#e3141c" },
-      away: { jersey: "#b9bec6", wordText: "Hiroshima", wordFont: "Yellowtail", wordColor: "#e60012", wordOutline: "#ffffff", number: "#e60012", numberOutline: "#ffffff", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#b9bec6", pantsPiping: ["#e60012"] },
+      // 参考写真: 白地に赤のピンストライプ、"Carp" の赤い筆記体 (紺の縁取り, 画像)、番号は赤に紺の縁。
+      // ビジターは灰色に赤の "Hiroshima" (記憶)。ユーザー写真には赤いビジターもある (年代不明) → awayRed に用意 (away と差し替えれば切り替わる)
+      home: { jersey: "#f7f6f2", pinstripe: "#e3141c", word: "img/words/c.webp", wordWidthCm: 31, wordCm: 13, number: "#e60012", numberOutline: "#0b2240", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f7f6f2", pantsPinstripe: "#e3141c" },
+      away: { jersey: "#b9bec6", wordText: "Hiroshima", wordFont: "Lobster", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#e60012", wordOutline: "#0b2240", number: "#e60012", numberOutline: "#0b2240", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#b9bec6", pantsPiping: ["#e60012"] },
+      awayRed: { jersey: "#d7001e", wordText: "Hiroshima", wordFont: "Lobster", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#ffffff", wordOutline: "#0b2240", number: "#ffffff", numberOutline: "#0b2240", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#b9bec6", pantsPiping: ["#d7001e"] },
       under: "#e60012",
       socks: "#e60012",
       capStyle: { crown: "#e60012", brim: "#e60012", button: "#e60012", mark: "img/marks/c.webp" },
@@ -150,12 +163,17 @@
       stadium: "横浜スタジアム",
       park: { dome: false, turf: "turf", seat: "#1d5fb8", wall: "#0f3a7a", skyline: true },
       sponsors: ["TBS", "日産自動車", "コカ・コーラ", "キリンビール", "神奈川新聞", "京浜急行", "横浜銀行", "崎陽軒", "テレビ神奈川", "ノジマ"],
-      home: { jersey: "#f4f5f6", vneck: ["#0055a5", "#9ea3a8"], sideStripes: ["#0055a5", "#9ea3a8"], stars: "#9ea3a8", sleeveTrim: ["#0055a5", "#9ea3a8"], word: "img/words/yb.webp", wordSmall: true, number: "#0b2a5b", numberFont: "Graduate", frontNumber: true, frontNumberSide: "left", backName: true, pants: "#f4f5f6", pantsPiping: ["#0055a5"], pantsText: "BAYSTARS" },
-      away: { jersey: "#b6bbc3", pinstripe: "#7e848c", word: "img/words/yb_away.webp", number: "#0b2a5b", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#b6bbc3", pantsPinstripe: "#7e848c" },
+      // 参考写真 (1993〜2008 のホーム): 白地に細い青灰のピンストライプ、"Yokohama" の紺の筆記体 (青の縁取り、下に飾り線)、
+      // 青と紺の V ネック、青と紺の袖口、番号は青 (紺の縁)、左袖に "BayStars" の筆記体。星・脇のライン・"B YOKOHAMA" は 2009 年のもの
+      home: { jersey: "#f4f5f6", pinstripe: "#93a4b8", pinstripeMm: 1.2, vneck: ["#1d4fa8", "#0b2a5b"], sleeveTrim: ["#1d4fa8", "#0b2a5b"], sleeveTrimMm: [14, 8], wordText: "Yokohama", wordFont: "Lobster", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#0b2a5b", wordOutline: "#1d4fa8", wordSwash: true, number: "#1d4fa8", numberOutline: "#0b2a5b", numberOutlineMm: 1.2, numberFont: "Archivo Black", frontNumber: true, backName: true, sleeveWord: "img/words/yb_sleeve.webp", sleeveWordSide: "L", sleeveWordCm: 10, pants: "#f4f5f6", pantsPinstripe: "#93a4b8", pantsPiping: ["#1d4fa8"] },
+      // ビジター (写真): 青灰にピンストライプ、同じ "Yokohama" の筆記体 (紺に白の縁)。活字体 "YOKOHAMA" の可能性もある (?)
+      away: { jersey: "#b6bbc3", pinstripe: "#7e848c", wordText: "Yokohama", wordFont: "Lobster", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#0b2a5b", wordOutline: "#f4f5f6", wordSwash: true, number: "#0b2a5b", numberOutline: "#f4f5f6", numberOutlineMm: 1.2, numberFont: "Archivo Black", frontNumber: true, backName: true, sleeveWord: "img/words/yb_sleeve.webp", sleeveWordSide: "L", sleeveWordCm: 10, pants: "#b6bbc3", pantsPinstripe: "#7e848c", pantsPiping: ["#0b2a5b"] },
       under: "#0b2a5b",
       socks: "#0055a5",
-      capStyle: { crown: "#0b2a5b", brim: "#0b2a5b", button: "#0b2a5b", mark: "img/marks/yb.webp" },
-      helmet: { color: "#0b2a5b", mark: "img/marks/yb.webp" },
+      belt: "#0b2a5b",
+      // img/marks/yb.webp は 2009 年の星付きユニフォームの "B" なので使わず、2004 年の "YB" の組み合わせ文字を描く (?)
+      capStyle: { crown: "#0b2a5b", brim: "#0b2a5b", button: "#0b2a5b", markText: "YB", markStyle: "mono", markColor: "#ffffff", markFont: "Archivo Black" },
+      helmet: { color: "#0b2a5b", markText: "YB", markStyle: "mono", markColor: "#ffffff", markFont: "Archivo Black" },
       flag: { bg: ["#0055a5", "#ffffff"], word: "img/words/yb_script.webp", wordBg: "#ffffff" },
     },
     {
@@ -174,8 +192,9 @@
       stadium: "福岡ドーム",
       park: { dome: true, turf: "turf", seat: "#d8822a", wall: "#1a1a1a", roof: "#e6e3dc" },
       sponsors: ["ダイエー", "コカ・コーラ", "西日本新聞", "九州電力", "RKB毎日放送", "福岡銀行", "TOTO", "明太子 ふくや", "アサヒビール", "JR九州"],
-      home: { jersey: "#f6f5f0", piping: ["#111111", "#f39800"], sleeveTrim: ["#111111", "#f39800"], wordText: "Hawks", wordFont: "Yellowtail", wordColor: "#151515", wordOutline: "#f39800", number: "#151515", numberOutline: "#f39800", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#111111", "#f39800"] },
-      away: { jersey: "#262626", piping: ["#f39800"], sleeveTrim: ["#f39800"], wordText: "DAIEI", wordFont: "Graduate", wordColor: "#f39800", wordOutline: "#ffffff", number: "#f39800", numberOutline: "#ffffff", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c3c6cb", pantsPiping: ["#111111", "#f39800"] },
+      // 参考写真なし (記憶): 白地に "Hawks" の黒い筆記体 (橙の縁)、黒・橙のパイピング。ビジターは黒地に "DAIEI" (?)
+      home: { jersey: "#f6f5f0", piping: ["#111111", "#f39800"], pipingMm: 4, sleeveTrim: ["#111111", "#f39800"], wordText: "Hawks", wordFont: "Yellowtail", wordStyle: "script", wordCm: 9, wordWidthCm: 30, wordColor: "#151515", wordOutline: "#f39800", wordSwash: true, number: "#151515", numberOutline: "#f39800", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#111111", "#f39800"] },
+      away: { jersey: "#262626", piping: ["#f39800"], sleeveTrim: ["#f39800"], wordText: "DAIEI", wordFont: "Graduate", wordStyle: "block", wordCm: 7, wordWidthCm: 32, wordColor: "#f39800", wordOutline: "#ffffff", number: "#f39800", numberOutline: "#ffffff", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c3c6cb", pantsPiping: ["#111111", "#f39800"] },
       under: "#111111",
       socks: "#111111",
       capStyle: { crown: "#111111", brim: "#111111", button: "#f39800", mark: "img/marks/h.webp" },
@@ -198,10 +217,12 @@
       stadium: "西武ドーム",
       park: { dome: true, turf: "turf", seat: "#2a62b8", wall: "#123c7a", roof: "#e5e7e2", forest: true },
       sponsors: ["西武鉄道", "プリンスホテル", "コカ・コーラ", "埼玉新聞", "文化放送", "テレビ埼玉", "サッポロビール", "セブン-イレブン", "埼玉りそな銀行", "ロッテ"],
-      home: { jersey: "#f6f5f0", piping: ["#1a4fa0"], sleeveTrim: ["#1a4fa0", "#d71920"], wordText: "Lions", wordFont: "Yellowtail", wordColor: "#1a4fa0", wordOutline: "#ffffff", number: "#1a4fa0", numberOutline: "#d71920", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#1a4fa0"] },
-      away: { jersey: "#8db3e2", piping: ["#1a4fa0"], sleeveTrim: ["#1a4fa0"], wordText: "SEIBU", wordFont: "Graduate", wordColor: "#1a4fa0", wordOutline: "#ffffff", number: "#1a4fa0", numberOutline: "#ffffff", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c8ced8", pantsPiping: ["#1a4fa0"] },
+      // 参考写真 (カブレラ): 白地に "Lions" の青い筆記体 (赤の細い縁)、青の袖口、番号は青 (赤の縁)。ビジターの色 (水色か) は未確認 (?)
+      home: { jersey: "#f6f5f0", piping: ["#1a4fa0"], pipingMm: 4, sleeveTrim: ["#1a4fa0", "#d71920"], wordText: "Lions", wordFont: "Yellowtail", wordStyle: "script", wordCm: 9.5, wordWidthCm: 28, wordColor: "#1a4fa0", wordOutline: "#d71920", wordOutlineMm: 1.5, number: "#1a4fa0", numberOutline: "#d71920", numberOutlineMm: 1.8, numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#1a4fa0"] },
+      away: { jersey: "#8db3e2", piping: ["#1a4fa0"], sleeveTrim: ["#1a4fa0"], wordText: "SEIBU", wordFont: "Graduate", wordStyle: "block", wordCm: 7, wordWidthCm: 32, wordColor: "#1a4fa0", wordOutline: "#ffffff", number: "#1a4fa0", numberOutline: "#ffffff", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c8ced8", pantsPiping: ["#1a4fa0"] },
       under: "#1a4fa0",
       socks: "#1a4fa0",
+      belt: "#1a4fa0",
       capStyle: { crown: "#1a4fa0", brim: "#1a4fa0", button: "#1a4fa0", markText: "L", markColor: "#ffffff", markFont: "Yellowtail" },
       helmet: { color: "#1a4fa0", markText: "L", markColor: "#ffffff", markFont: "Yellowtail" },
       flag: { bg: ["#1a4fa0", "#ffffff"], logo: "img/teams/l.webp" },
@@ -222,10 +243,12 @@
       stadium: "札幌ドーム",
       park: { dome: true, turf: "turf", seat: "#2d3f6a", wall: "#0b2a55", roof: "#e3e6ea" },
       sponsors: ["日本ハム", "サッポロビール", "コカ・コーラ", "北海道新聞", "HTB", "JR北海道", "セイコーマート", "北洋銀行", "ほくでん", "ニトリ"],
-      home: { jersey: "#f6f5f0", piping: ["#0b2a55", "#b8a05c"], sleeveTrim: ["#0b2a55", "#b8a05c"], wordText: "FIGHTERS", wordFont: "Graduate", wordColor: "#0b2a55", wordOutline: "#b8a05c", arch: true, number: "#0b2a55", numberOutline: "#b8a05c", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#0b2a55", "#b8a05c"] },
-      away: { jersey: "#5c6f8a", piping: ["#b8a05c"], sleeveTrim: ["#b8a05c"], wordText: "HOKKAIDO", wordFont: "Graduate", wordColor: "#ffffff", wordOutline: "#0b2a55", arch: true, number: "#ffffff", numberOutline: "#0b2a55", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c3c8d0", pantsPiping: ["#0b2a55"] },
+      // 参考写真なし (記憶): 白地に弧を描く "FIGHTERS" (紺に金の縁)。ビジターは濃い紺に "HOKKAIDO" (白に金の縁) (?)
+      home: { jersey: "#f6f5f0", piping: ["#0b2a55", "#b8a05c"], pipingMm: 4, sleeveTrim: ["#0b2a55", "#b8a05c"], wordText: "FIGHTERS", wordFont: "Graduate", wordStyle: "block", wordCm: 6.5, wordWidthCm: 33, wordArch: 26, wordColor: "#0b2a55", wordOutline: "#b8a05c", number: "#0b2a55", numberOutline: "#b8a05c", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#0b2a55", "#b8a05c"] },
+      away: { jersey: "#0b2a55", piping: ["#b8a05c"], sleeveTrim: ["#b8a05c"], wordText: "HOKKAIDO", wordFont: "Graduate", wordStyle: "block", wordCm: 6.5, wordWidthCm: 33, wordArch: 26, wordColor: "#ffffff", wordOutline: "#b8a05c", number: "#ffffff", numberOutline: "#b8a05c", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c3c8d0", pantsPiping: ["#0b2a55", "#b8a05c"] },
       under: "#0b2a55",
       socks: "#0b2a55",
+      belt: "#0b2a55",
       capStyle: { crown: "#0b2a55", brim: "#0b2a55", button: "#b8a05c", markText: "F", markColor: "#ffffff", markOutline: "#b8a05c", markFont: "Graduate" },
       helmet: { color: "#0b2a55", markText: "F", markColor: "#ffffff", markFont: "Graduate" },
       flag: { image: "img/flags/f.webp" },
@@ -246,8 +269,9 @@
       stadium: "千葉マリンスタジアム",
       park: { dome: false, turf: "turf", seat: "#2c2c34", wall: "#14341f", skyline: false, sea: true },
       sponsors: ["ロッテ", "コカ・コーラ", "千葉日報", "千葉テレビ", "京葉銀行", "イオン", "サッポロビール", "ベイFM", "キッコーマン", "ENEOS"],
-      home: { jersey: "#f6f5f0", pinstripe: "#1a1a1a", word: "img/words/m.webp", number: "#151515", numberOutline: "#c0c0c0", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPinstripe: "#1a1a1a" },
-      away: { jersey: "#1d1d20", wordText: "CHIBA LOTTE", wordFont: "Graduate", wordColor: "#ffffff", wordOutline: "#8a8a8a", number: "#ffffff", numberOutline: "#8a8a8a", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#bfc2c7", pantsPiping: ["#111111"] },
+      // 参考画像: "Marines" の筆記体とカモメ (球団旗の切り抜き)。白地に黒のピンストライプ。ビジターの黒地の文字 ("CHIBA LOTTE" か "Marines") は未確認 (?)
+      home: { jersey: "#f6f5f0", pinstripe: "#1a1a1a", word: "img/words/m.webp", wordWidthCm: 31, wordCm: 14, number: "#151515", numberOutline: "#c0c0c0", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPinstripe: "#1a1a1a" },
+      away: { jersey: "#1d1d20", wordText: "CHIBA LOTTE", wordFont: "Graduate", wordStyle: "block", wordCm: 6, wordWidthCm: 34, wordColor: "#ffffff", wordOutline: "#8a8a8a", number: "#ffffff", numberOutline: "#8a8a8a", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#bfc2c7", pantsPiping: ["#111111"] },
       under: "#111111",
       socks: "#111111",
       capStyle: { crown: "#111111", brim: "#111111", button: "#111111", markText: "M", markColor: "#ffffff", markFont: "Yellowtail" },
@@ -270,12 +294,14 @@
       stadium: "大阪ドーム",
       park: { dome: true, turf: "turf", seat: "#c8102e", wall: "#0b2a5b", roof: "#e8e7e2" },
       sponsors: ["近畿日本鉄道", "近鉄百貨店", "コカ・コーラ", "サントリー", "関西テレビ", "スポーツニッポン", "大阪ガス", "関西電力", "ダイハツ", "日清食品"],
-      home: { jersey: "#f6f5f0", piping: ["#c8102e", "#0b2a5b"], sleeveTrim: ["#c8102e", "#0b2a5b"], wordText: "Buffaloes", wordFont: "Yellowtail", wordColor: "#c8102e", wordOutline: "#0b2a5b", number: "#c8102e", numberOutline: "#0b2a5b", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#c8102e", "#0b2a5b"] },
-      away: { jersey: "#0b2a5b", piping: ["#c8102e"], sleeveTrim: ["#c8102e"], wordText: "KINTETSU", wordFont: "Graduate", wordColor: "#ffffff", wordOutline: "#c8102e", number: "#ffffff", numberOutline: "#c8102e", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c3c7ce", pantsPiping: ["#c8102e"] },
+      // 参考写真 (ローズ, 背中): 白地、背ネームと番号は濃い色。胸の "Buffaloes" (赤の筆記体に紺の縁、下に飾り線) と帽子のマークは記憶 (?)
+      home: { jersey: "#f6f5f0", piping: ["#c8102e", "#0b2a5b"], pipingMm: 4, sleeveTrim: ["#c8102e", "#0b2a5b"], wordText: "Buffaloes", wordFont: "Yellowtail", wordStyle: "script", wordCm: 9, wordWidthCm: 32, wordColor: "#c8102e", wordOutline: "#0b2a5b", wordSwash: true, number: "#c8102e", numberOutline: "#0b2a5b", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#c8102e", "#0b2a5b"] },
+      away: { jersey: "#0b2a5b", piping: ["#c8102e"], sleeveTrim: ["#c8102e"], wordText: "KINTETSU", wordFont: "Graduate", wordStyle: "block", wordCm: 7, wordWidthCm: 33, wordColor: "#ffffff", wordOutline: "#c8102e", number: "#ffffff", numberOutline: "#c8102e", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c3c7ce", pantsPiping: ["#c8102e"] },
       under: "#0b2a5b",
       socks: "#c8102e",
-      capStyle: { crown: "#0b2a5b", brim: "#c8102e", button: "#c8102e", markText: "B", markColor: "#ffffff", markOutline: "#c8102e", markFont: "Rye" },
-      helmet: { color: "#0b2a5b", markText: "B", markColor: "#ffffff", markFont: "Rye" },
+      belt: "#0b2a5b",
+      capStyle: { crown: "#0b2a5b", brim: "#c8102e", button: "#c8102e", markText: "B", markColor: "#ffffff", markOutline: "#c8102e", markFont: "Ultra" },
+      helmet: { color: "#0b2a5b", markText: "B", markColor: "#ffffff", markOutline: "#c8102e", markFont: "Ultra" },
       flag: { bg: ["#0b2a5b", "#c8102e"], logo: "img/teams/bu.webp", text: "Buffaloes", textFont: "Yellowtail" },
     },
     {
@@ -294,10 +320,12 @@
       stadium: "Yahoo! BBスタジアム",
       park: { dome: false, turf: "mlb", seat: "#2b4f8a", wall: "#123a28", skyline: false, forest: true },
       sponsors: ["オリックス", "コカ・コーラ", "ニッセイ同和損保", "神戸新聞", "サンテレビ", "Yahoo! BB", "アシックス", "UCC", "モロゾフ", "神戸製鋼"],
-      home: { jersey: "#f6f5f0", vest: "#0b2a5b", piping: ["#0b2a5b"], word: "img/words/bs.webp", wordSmall: true, number: "#0b2a5b", numberFont: "Graduate", frontNumber: true, frontNumberSide: "left", backName: true, numberOutline: "#e6b422", pants: "#f6f5f0", pantsPiping: ["#0b2a5b"] },
-      away: { jersey: "#7f9cc8", vest: "#0b2a5b", piping: ["#0b2a5b"], wordText: "ORIX", wordFont: "Graduate", wordColor: "#0b2a5b", wordOutline: "#e6b422", number: "#0b2a5b", numberOutline: "#e6b422", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c6ccd6", pantsPiping: ["#0b2a5b"] },
+      // 参考写真なし: ベスト型 (紺の袖) と左胸の小さなマーク (img/words/bs.webp の出どころは未確認。2004 年は "BlueWave" の筆記体の可能性) (?)
+      home: { jersey: "#f6f5f0", vest: "#0b2a5b", piping: ["#0b2a5b"], pipingMm: 4, word: "img/words/bs.webp", wordSmall: true, wordCm: 8, number: "#0b2a5b", numberFont: "Graduate", frontNumber: true, frontNumberSide: "left", backName: true, numberOutline: "#e6b422", pants: "#f6f5f0", pantsPiping: ["#0b2a5b"] },
+      away: { jersey: "#7f9cc8", vest: "#0b2a5b", piping: ["#0b2a5b"], pipingMm: 4, wordText: "ORIX", wordFont: "Graduate", wordStyle: "block", wordCm: 7.5, wordWidthCm: 28, wordColor: "#0b2a5b", wordOutline: "#e6b422", number: "#0b2a5b", numberOutline: "#e6b422", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c6ccd6", pantsPiping: ["#0b2a5b"] },
       under: "#0b2a5b",
       socks: "#0b2a5b",
+      belt: "#0b2a5b",
       capStyle: { crown: "#0b2a5b", brim: "#0b2a5b", button: "#e6b422", markText: "BW", markColor: "#e6b422", markFont: "Graduate" },
       helmet: { color: "#0b2a5b", markText: "BW", markColor: "#e6b422", markFont: "Graduate" },
       flag: { bg: ["#0b2a5b", "#ffffff"], logo: "img/teams/bw.webp", topImage: "img/marks/orix.webp" },

@@ -313,6 +313,7 @@
   let ballShadow = null;
   let layerShadow = null;
   let batShadow = null;
+  let blobs = null; // 低画質 (影の地図なし) の選手の足元のぼかし影 (1 回の描画でまとめて置く)
   function makeBall() {
     const c = document.createElement("canvas");
     c.width = 256;
@@ -364,6 +365,57 @@
     batShadow.layers.set(1);
     batShadow.renderOrder = 1;
     scene.add(batShadow);
+    // 低画質: 影の地図が無いので、選手の足元に同じぼかしを敷いて浮いて見えないようにする
+    const bg = new T.PlaneGeometry(1, 1);
+    bg.rotateX(-Math.PI / 2);
+    blobs = new T.InstancedMesh(bg, new T.MeshBasicMaterial({ map: stex, transparent: true, depthWrite: false }), MAX_ACTORS);
+    blobs.instanceMatrix.setUsage(T.DynamicDrawUsage);
+    blobs.frustumCulled = false;
+    blobs.count = 0;
+    blobs.visible = false;
+    scene.add(blobs);
+  }
+  // 見えている選手 (打者レイヤー以外) の足元にぼかし影を置く。影の地図があるときは出さない
+  const _bm = new T.Matrix4();
+  const _bq = new T.Quaternion();
+  const _be = new T.Euler();
+  const _bp = new T.Vector3();
+  const _bf = new T.Vector3();
+  const _bg = new T.Vector3();
+  const _bs = new T.Vector3(1.4, 1, 1.0);
+  function placeBlobs() {
+    const on = !renderer.shadowMap.enabled;
+    blobs.visible = on;
+    if (!on) return;
+    let n = 0;
+    for (const a of actors.values()) {
+      if (a.used !== tick || !a.pl.group.visible || a.layer !== 0 || n >= MAX_ACTORS) continue;
+      const g = a.pl.group;
+      let cx = g.position.x;
+      let cz = g.position.z;
+      // 両足の間に置く (骨の位置は前のフレームのもの。作ったばかりで原点にあるときなどは体の位置を使う)
+      if (!a.feet) {
+        const b = a.pl.bones || {};
+        a.feet = a.pl.human ? [b.foot_l, b.foot_r] : [b["foot.L"], b["foot.R"]];
+      }
+      if (a.feet[0] && a.feet[1]) {
+        _bf.setFromMatrixPosition(a.feet[0].matrixWorld);
+        _bg.setFromMatrixPosition(a.feet[1].matrixWorld);
+        const mx = (_bf.x + _bg.x) * 0.5;
+        const mz = (_bf.z + _bg.z) * 0.5;
+        if (Math.hypot(mx - cx, mz - cz) < 1.5) {
+          cx = mx;
+          cz = mz;
+        }
+      }
+      _bp.set(cx, g.position.y + 0.012, cz);
+      _be.set(0, a.yaw, 0);
+      _bq.setFromEuler(_be);
+      _bm.compose(_bp, _bq, _bs);
+      blobs.setMatrixAt(n++, _bm);
+    }
+    blobs.count = n;
+    blobs.instanceMatrix.needsUpdate = true;
   }
   // ボールを置く (minPx: 画面上の最小直径)
   function placeBall(x, y, z, minPx, spin, dt) {
@@ -915,6 +967,7 @@
     renderer.info.reset();
     renderer.autoClear = true;
     cam.layers.set(0);
+    if (blobs) placeBlobs();
     const usePost = !!post && post.begin();
     renderer.render(scene, cam);
     if (layerUsed) {
@@ -1256,6 +1309,7 @@
 
   // 画面サイズのチェック用
   V3._actors = actors;
+  V3._blobs = () => blobs;
   // 1 フレーム分の合計 (影の地図・打者レイヤー・仕上げ処理を含む)
   V3.info = () => ({
     actors: actors.size,

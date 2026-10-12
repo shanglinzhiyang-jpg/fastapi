@@ -770,7 +770,8 @@
         .replace(/^ANGLE \(/, "")
         .replace(/\)$/, "")
         .slice(0, 40);
-      note = "この端末の判定: <b>" + GFX_NAME[a.lvl] + "</b>" + (gpu ? '<span class="gfx-gpu">（' + esc(gpu) + "）</span>" : "") + "<br>" + note;
+      // 「自動」で重すぎたときは一段下げた画質を覚えている (main.js の onPoor)
+      note = "この端末の判定: <b>" + GFX_NAME[a.lvl] + "</b>" + (gpu ? '<span class="gfx-gpu">（' + esc(gpu) + "）</span>" : "") + (a.slow ? "<br>描画が重かったので一段下げました。" : "") + "<br>" + note;
     }
     if (M.gfxLevel() !== "2d" && !V3.ok) note = "この端末では 3D 表示を使えないため、2D で表示しています。";
     return (

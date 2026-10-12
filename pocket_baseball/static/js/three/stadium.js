@@ -443,7 +443,7 @@
 uniform vec3 uGrass; uniform vec3 uGrass2; uniform vec3 uFoul; uniform vec3 uDirt; uniform vec3 uClay; uniform vec3 uTrack; uniform vec3 uLine; uniform vec3 uOut;
 uniform float uMow;
 uniform float uInfield;
-uniform float uWear; uniform float uSheen; uniform float uBump;
+uniform float uWear; uniform float uSheen; uniform float uBump; uniform float uSat;
 varying vec2 vG;
 float gh(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float gn(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f*f*(3.0-2.0*f);
@@ -494,6 +494,8 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
   float mowV = -dot(vd.xy, lean);
   float mowM = clamp(0.5 + uMow * (0.85 * mowV + 0.2 * fa * fb) * mowFade, 0.0, 1.0);
   vec3 grass = fair ? mix(uGrass, uGrass2, mowM) : mix(uFoul, uGrass2 * 0.94, mowM * 0.8);
+  // 彩度を少し落とす (緑一色のゲーム盤に見えないように。人工芝は鮮やかなまま)
+  grass = mix(vec3(dot(grass, vec3(0.3, 0.59, 0.11))), grass, uSat);
   // 大きなむら (水はけ・日当たり)・ところどころ黄ばんだ所・細かいむら
   float big = gfbm(p * 0.045);
   grass *= 0.9 + 0.2 * big;
@@ -643,6 +645,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       uWear: { value: 1 }, // 芝の傷み・黄ばみ (人工芝は 0)
       uSheen: { value: 0.28 }, // 低い角度から見た芝のつや
       uBump: { value: 1 }, // 土の凹凸
+      uSat: { value: 0.86 }, // 芝の彩度 (1 でそのまま)
     };
     const m = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0 });
     // 環境マップは控えめに (昼の青空を受けすぎると芝が水色っぽく白ける)
@@ -658,7 +661,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     };
     // 低画質は軽い版 (刈り目と土の大きな凹凸だけ)
     if (qual === "low") m.defines = { PB_LOWQ: "" };
-    m.customProgramCacheKey = () => "pb-ground-v2" + (qual === "low" ? "l" : "");
+    m.customProgramCacheKey = () => "pb-ground-v3" + (qual === "low" ? "l" : "");
     m.userData.uniforms = uniforms;
     return m;
   }
@@ -747,6 +750,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     const keep = (x) => (disposables.push(x), x);
     const st = { group, park, dome, night: o.night !== false, time: 0, exc: [0.15, 0.3, 0.3], excT: [0.15, 0.3, 0.3] };
     const emitters = []; // 自分で光る板 (スコアボード・LED・看板): 仕上げ処理があるときは HDR にして光をにじませる
+    const dayCasters = []; // 昼にグラウンドへ影を落とす物 (スタンド・フェンス・スコアボード)。影の地図があるときだけ
 
     /* 地面 */
     const gmat = keep(groundMaterial(qual));
@@ -761,6 +765,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
         U_.uMow.value = 0.5;
         U_.uWear.value = 0;
         U_.uSheen.value = 0.2;
+        U_.uSat.value = 0.95;
         U_.uDirt.value.set("#a8714a");
       } else if (park.turf === "dirt") {
         U_.uInfield.value = 2;
@@ -892,6 +897,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       g.computeVertexNormals();
       const m = new T.Mesh(g, keep(new T.MeshStandardMaterial({ map: tex, roughness: 0.85, side: T.DoubleSide })));
       m.receiveShadow = true;
+      dayCasters.push(m);
       group.add(m);
     }
     {
@@ -922,6 +928,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       tex.wrapT = T.ClampToEdgeWrapping;
       const m = new T.Mesh(g, keep(new T.MeshStandardMaterial({ map: tex, roughness: 0.8, side: T.DoubleSide })));
       m.receiveShadow = true;
+      dayCasters.push(m);
       group.add(m);
     }
     /* ダッグアウト (三塁側・一塁側) */
@@ -979,6 +986,9 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
     const seatCol = new T.Color(park.seat);
     const concrete = new T.Color("#5b5f66");
     const screenCol = new T.Color("#0f281c"); // バックスクリーンは打者が球を見やすい暗い緑
+    const screenTop = screenCol.clone().multiplyScalar(0.45); // バックスクリーンの上端 (照明が届かず暗い)
+    // 踏み面は座席の色にコンクリートを混ぜる (座席色一色の板に見えないように)
+    const treadCol = seatCol.clone().lerp(concrete, 0.3);
     const lower = { rows: 30, tread: 0.92, rise: 0.46 };
     // 上段は下段の奥の 5 列の上に張り出す (gap が負)。張り出しの下は暗い
     const upper = { rows: 18, tread: 0.95, rise: 0.62, gap: -4.6, lift: 3.6 };
@@ -1016,11 +1026,13 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       if (p.x < -6 && R() < 0.3) return 5 + Math.floor(R() * 2);
       return Math.floor(R() * 3);
     };
-    const quad = (arr, cols, nrms, idx, a, b, c, d, col, nrm) => {
+    // col2: c, d (上側の 2 頂点) の色 (省略時は col と同じ)
+    const quad = (arr, cols, nrms, idx, a, b, c, d, col, nrm, col2) => {
       const base = arr.length / 3;
       for (const v of [a, b, c, d]) arr.push(v[0], v[1], v[2]);
       for (let i = 0; i < 4; i++) {
-        cols.push(col.r, col.g, col.b);
+        const cc = i >= 2 && col2 ? col2 : col;
+        cols.push(cc.r, cc.g, cc.b);
         nrms.push(nrm[0], nrm[1], nrm[2]);
       }
       // 表の面が法線の向きになるように巻き方向をそろえる
@@ -1062,7 +1074,8 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
           const zq0 = z0Of(q);
           const zT = cfg.rows * cfg.rise + 2.4;
           const nrm = [-p.nx * 0.5, 0.86, p.ny * 0.5];
-          quad(screenPos, screenCol2, screenNrm, screenIdx, P(p, 0, zp0), P(q, 0, zq0), P(q, dT, zq0 + zT), P(p, dT, zp0 + zT), screenCol, nrm);
+          // 下は照明の照り返しで明るく、上へ行くほど暗い (打席視点の画面の上 1/3 がのっぺりしないように)
+          quad(screenPos, screenCol2, screenNrm, screenIdx, P(p, 0, zp0), P(q, 0, zq0), P(q, dT, zq0 + zT), P(p, dT, zp0 + zT), tmpC.copy(screenCol).multiplyScalar(1.25), nrm, screenTop);
           tierInfo[i] = { d: dT, z: zp0 + cfg.rows * cfg.rise };
           continue;
         }
@@ -1075,7 +1088,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
           const P = (pp, d, z) => [pp.x + pp.nx * d, z, -(pp.y + pp.ny * d)];
           const ao = scr ? 1 : rowAO(k, cfg.rows, under);
           // 踏み面
-          tmpC.copy(scr ? screenCol : seatCol).multiplyScalar(scr ? 1 : (0.55 + 0.1 * (k % 2)) * ao);
+          tmpC.copy(scr ? screenCol : treadCol).multiplyScalar(scr ? 1 : (0.6 + 0.1 * (k % 2)) * ao);
           quad(standPos, standCol, standNrm, standIdx, P(p, dp, zp), P(q, dq, zq), P(q, dq + cfg.tread, zq), P(p, dp + cfg.tread, zp), tmpC, [0, 1, 0]);
           // 蹴上げ
           tmpC.copy(scr ? screenCol : concrete).multiplyScalar(ao);
@@ -1156,6 +1169,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       liftMaterial(sm, standLift);
       const m = new T.Mesh(g, sm);
       m.receiveShadow = qual === "high";
+      dayCasters.push(m);
       group.add(m);
     }
     {
@@ -1166,6 +1180,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       g.setIndex(screenIdx);
       const m = new T.Mesh(g, keep(new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: T.DoubleSide })));
       m.receiveShadow = true;
+      dayCasters.push(m);
       group.add(m);
     }
     // 上段の手すり壁 (LED リボンボード)
@@ -1276,11 +1291,13 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       const z0 = ti.z + 1.5;
       const back = new T.Mesh(keep(new T.BoxGeometry(bw + 2, bh + 2, 1.6)), keep(new T.MeshStandardMaterial({ color: "#15181d", roughness: 0.7 })));
       back.position.copy(V(x, y + 0.9, z0 + bh / 2));
+      dayCasters.push(back);
       group.add(back);
       // 支柱
       for (const sx of [-0.35, 0.35]) {
         const leg = new T.Mesh(keep(new T.BoxGeometry(2, z0, 2)), back.material);
         leg.position.copy(V(x + sx * bw, y + 1, z0 / 2));
+        dayCasters.push(leg);
         group.add(leg);
       }
       const board = makeBoard(home, away);
@@ -1385,6 +1402,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
         const x = p.x + p.nx * dd;
         const y = p.y + p.ny * dd;
         const hgt = 30;
+        // (照明塔は昼の影を落とさない: 灯具の影だけが四角くフィールドに浮いて見える)
         const pole = new T.Mesh(keep(new T.CylinderGeometry(0.45, 0.8, zb + hgt, 8)), poleMat);
         pole.position.copy(V(x, y, (zb + hgt) / 2));
         group.add(pole);
@@ -1423,7 +1441,7 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
                          mix(mix(h(i+vec3(0,0,1)), h(i+vec3(1,0,1)), f.x), mix(h(i+vec3(0,1,1)), h(i+vec3(1,1,1)), f.x), f.y), f.z); }
             void main(){
               float y = clamp(vD.y, -0.2, 1.0);
-              vec3 dayTop = vec3(0.18, 0.42, 0.85); vec3 dayHz = vec3(0.70, 0.84, 0.96);
+              vec3 dayTop = vec3(0.18, 0.42, 0.85); vec3 dayHz = vec3(0.42, 0.60, 0.86);
               vec3 nTop = vec3(0.006, 0.012, 0.04); vec3 nHz = vec3(0.065, 0.09, 0.16);
               float k = pow(max(0.0, y), 0.45);
               vec3 day = mix(dayHz, dayTop, k);
@@ -1529,6 +1547,8 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
         const p = LK.setLights(lights, kind, env);
         st.exposure = p.exposure;
         st.post = p.post;
+        // 昼の太陽は午後の低い位置 (スタンドの影がグラウンドに伸びる) なので、地面に当たる分を少し補う
+        if (kind === "day") lights.key.intensity *= 1.15;
       } else {
         lights.hemi.color.set(dome ? "#f4f1ea" : N ? "#9fb0d0" : "#cfe4ff");
         lights.hemi.groundColor.set(dome ? "#4a4a3a" : N ? "#28361f" : "#4f5f2c");
@@ -1553,13 +1573,17 @@ float boxd(vec2 p, vec2 c, vec2 h){ vec2 q = abs(p - c) - h; return max(q.x, q.y
       if (sky) sky.material.uniforms.uNight.value = N ? 1 : 0;
       if (st.skyline) st.skyline.material.opacity = N ? 1 : 0.55;
       updateGlow();
-      st.keyDir = dome ? V(-10, -30, 120).normalize() : N ? V(-35, -70, 120).normalize() : V(70, 20, 85).normalize();
+      // 昼は一塁側スタンドの後ろの午後の太陽 (高さ約 33 度): 一塁側の上段の影がファウルゾーンに 10m ほど伸びる。夜は本塁後方の照明塔
+      st.keyDir = dome ? V(-10, -30, 120).normalize() : N ? V(-35, -70, 120).normalize() : V(70, -50, 56).normalize();
       st.fillDir = V(30, 160, 60).normalize();
       shadowBasis();
+      // 昼の屋外はスタンド・フェンス・スコアボードの影がグラウンドに落ちる (影の地図があるときだけ。夜は照明が四方からなので落とさない)
+      const dayShadow = !dome && !N && lights.key.castShadow;
+      for (const m of dayCasters) m.castShadow = dayShadow;
       // かすみの色 = 空の地平線の色 (空のシェーダーの dayHz / nHz と同じ線形の値)
       if (dome) st.fog.color.setRGB(0.1, 0.1, 0.105);
       else if (N) st.fog.color.setRGB(0.065, 0.09, 0.16);
-      else st.fog.color.setRGB(0.7, 0.84, 0.96);
+      else st.fog.color.setRGB(0.42, 0.6, 0.86);
       // 昼は球場の中は澄んでいて、遠くだけかすむ
       st.fog.density = dome ? 0.0012 : N ? 0.0017 : 0.0008;
       // 球場の外は照明が当たらないので夜は暗く

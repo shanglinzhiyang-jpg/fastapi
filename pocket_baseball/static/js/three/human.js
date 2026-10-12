@@ -33,6 +33,7 @@
           asset.skins = texs.slice(0, json.skins.length);
           asset.eye = texs[texs.length - 1];
           prepRig();
+          prepScale();
           H.ready = true;
           return H;
         });
@@ -141,155 +142,751 @@
     }
     return IMG[url];
   };
+  // ユニフォームの文字に使うフォント (Google Fonts)。読めない環境では 3 秒で待つのをやめ、代替フォントで描く
+  const FONTS = ["Graduate", "Ultra", "Yellowtail", "Archivo Black", "Lobster", "Oleo Script"];
+  const FONT_WEIGHT = { "Oleo Script": 700 };
+  let fontsP = null;
+  H.fontsReady = function () {
+    if (fontsP) return fontsP;
+    const loads = document.fonts && document.fonts.load ? FONTS.map((f) => document.fonts.load((FONT_WEIGHT[f] || 400) + " 40px '" + f + "'").catch(() => null)) : [];
+    fontsP = Promise.race([Promise.all(loads), new Promise((res) => setTimeout(res, 3000))]).then(() => null);
+    return fontsP;
+  };
   // 球団のユニフォームに使う画像とフォントを先に読み込む
   H.preloadTeam = function (team) {
     const def = (PB.D.teamDef && PB.D.teamDef(team.id)) || team;
     const urls = [];
     for (const side of ["home", "away"]) {
       const u = def[side] || {};
-      if (u.word) urls.push(u.word);
-      if (u.sleevePatch) urls.push(u.sleevePatch);
+      for (const k of ["word", "sleevePatch", "sleeveWord"]) if (u[k]) urls.push(u[k]);
+      if (u.cap && u.cap.mark) urls.push(u.cap.mark);
+      if (u.helmet && u.helmet.mark) urls.push(u.helmet.mark);
     }
     if (def.capStyle && def.capStyle.mark) urls.push(def.capStyle.mark);
     if (def.helmet && def.helmet.mark) urls.push(def.helmet.mark);
-    const fonts = ["Rye", "Ultra", "Graduate", "Yellowtail"].map((f) => (document.fonts && document.fonts.load ? document.fonts.load("40px '" + f + "'").catch(() => null) : null));
-    return Promise.all(urls.map((u) => H.image(u).p).concat(fonts));
+    return Promise.all(urls.map((u) => H.image(u).p).concat([H.fontsReady()]));
   };
 
   /* ---------- ユニフォーム (npb.js の定義から描く) ---------- */
+  // home/away の項目に球団共通の値 (under/socks/belt/capStyle/helmet) を合わせる。side.cap / side.helmet で片側だけ帽子を変えられる (阪神のビジター)
   function uniformOf(team, home) {
     const def = (PB.D.teamDef && PB.D.teamDef(team.id)) || team;
     const away = home === false;
-    const u = Object.assign({}, (away ? def.away || def.home : def.home) || {});
+    const side = (away ? def.away || def.home : def.home) || {};
+    const u = Object.assign({}, side);
     u.jersey = u.jersey || (away ? "#b9bec6" : "#f6f5f0");
     u.pants = u.pants || u.jersey;
     u.number = u.number || def.main || "#222";
     u.wordColor = u.wordColor || u.number;
-    u.under = def.under || def.cap || def.main || "#222";
-    u.socks = def.socks || u.under;
-    u.cap = Object.assign({ crown: def.cap || def.main || "#222", brim: def.cap || def.main || "#222", button: def.cap || "#222", markText: def.mark, markColor: def.sub || "#fff" }, def.capStyle || {});
-    u.helmet = Object.assign({ color: u.cap.crown, markText: def.mark, markColor: def.sub || "#fff" }, def.helmet || {});
+    u.under = side.under || def.under || def.cap || def.main || "#222";
+    u.socks = side.socks || def.socks || u.under;
+    u.belt = side.belt || def.belt || "#141414";
+    u.buckle = side.buckle || def.buckle || "#b9bcc2";
+    u.cap = Object.assign({ crown: def.cap || def.main || "#222", brim: def.cap || def.main || "#222", button: def.cap || "#222", markText: def.mark, markColor: def.sub || "#fff" }, def.capStyle || {}, side.cap || {});
+    u.helmet = Object.assign({ color: u.cap.crown, markText: def.mark, markColor: def.sub || "#fff" }, def.helmet || {}, side.helmet || {});
+    u.away = away;
     u.def = def;
     return u;
   }
-  const FONT = (f) => "'" + (f || "Graduate") + "', 'Arial Black', sans-serif";
-  function drawText(g, text, x, y, size, font, fill, outline, maxW, opts) {
-    opts = opts || {};
-    let s = size;
-    g.font = "400 " + s + "px " + FONT(font);
-    while (maxW && g.measureText(text).width > maxW && s > 8) {
-      s -= 1;
-      g.font = "400 " + s + "px " + FONT(font);
-    }
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    g.lineJoin = "round";
-    if (opts.arch) {
-      // アーチ状に文字を並べる
-      const chars = [...text];
-      const w = g.measureText(text).width;
-      const R = w * 1.25;
-      let a = -w / R / 2;
-      for (const ch of chars) {
-        const cw = g.measureText(ch).width;
-        a += cw / R / 2;
-        g.save();
-        g.translate(x + Math.sin(a) * R, y + R - Math.cos(a) * R);
-        g.rotate(a);
-        if (outline) {
-          g.lineWidth = s * 0.16;
-          g.strokeStyle = outline;
-          g.strokeText(ch, 0, 0);
+
+  /* ---------- 布の実寸表 (テクスチャ座標 ↔ cm) ----------
+   * 行 v ごとに「u を等分した各点までの布に沿った長さ (m)」を持つ。胴体は build_player.py の torsoArc、袖・パンツは読み込み時に同じ計算で作る。
+   * 胴体の u は角度で切ってあるので胸の中央と脇では 1 u あたりの長さが違う (文字を px で描くと胸で 1.3〜1.4 倍横に伸びる)。
+   * 文字や縞はこの表で cm → u に直して描く */
+  const SC = {};
+  function arcTable(geo, rows, u0, u1, nb) {
+    const pos = geo.getAttribute("position").array;
+    const uv = geo.getAttribute("uv").array;
+    const idx = geo.getIndex().array;
+    const span = u1 - u0;
+    const out = [];
+    for (const v0 of rows) {
+      const dens = new Float64Array(nb);
+      for (let t = 0; t < idx.length; t += 3) {
+        const P = [];
+        for (let e = 0; e < 3; e++) {
+          const i = idx[t + e];
+          const j = idx[t + ((e + 1) % 3)];
+          const vi = uv[i * 2 + 1];
+          const vj = uv[j * 2 + 1];
+          if ((vi - v0) * (vj - v0) < 0) {
+            const k = (v0 - vi) / (vj - vi);
+            P.push([uv[i * 2] + k * (uv[j * 2] - uv[i * 2]), pos[i * 3] + k * (pos[j * 3] - pos[i * 3]), pos[i * 3 + 1] + k * (pos[j * 3 + 1] - pos[i * 3 + 1]), pos[i * 3 + 2] + k * (pos[j * 3 + 2] - pos[i * 3 + 2])]);
+          }
         }
-        g.fillStyle = fill;
-        g.fillText(ch, 0, 0);
-        g.restore();
-        a += cw / R / 2;
+        if (P.length !== 2) continue;
+        let a = P[0];
+        let b = P[1];
+        if (b[0] < a[0]) {
+          a = P[1];
+          b = P[0];
+        }
+        const du = b[0] - a[0];
+        if (du < 1e-9 || du > 0.5 || a[0] < u0 - 1e-6 || b[0] > u1 + 1e-6) continue;
+        const seg = Math.hypot(a[1] - b[1], a[2] - b[2], a[3] - b[3]);
+        const ua = ((a[0] - u0) / span) * nb;
+        const ub = ((b[0] - u0) / span) * nb;
+        for (let k = Math.max(0, Math.floor(ua)); k <= Math.floor(ub) && k < nb; k++) {
+          const lo = Math.max(ua, k);
+          const hi = Math.min(ub, k + 1);
+          if (hi > lo) dens[k] += (seg * (hi - lo)) / (ub - ua);
+        }
       }
-      return;
+      const s = [0];
+      for (let k = 0; k < nb; k++) s.push(s[k] + dens[k]);
+      out.push(s);
     }
-    if (outline) {
-      g.lineWidth = s * 0.16;
-      g.strokeStyle = outline;
-      g.strokeText(text, x, y);
-    }
-    g.fillStyle = fill;
-    g.fillText(text, x, y);
+    return out;
   }
-  function drawImageFit(g, url, cx, cy, maxW, maxH, tint) {
+  // rows: 行の v, s: 行ごとの累積長 (m), u0..u1: 表が受け持つ u の範囲, mPerV: 縦 1 v の長さ (m)
+  function makeScale(rows, s, u0, u1, mPerV) {
+    const nb = s[0].length - 1;
+    const full = u1 - u0 > 0.999; // 胴体: 1 周つながっている
+    const total = s.map((r) => r[nb]);
+    const sc = { rows, s, u0, u1, nb, mPerV, total, full };
+    const at = (r, u) => {
+      const k = Math.min(Math.max(((u - u0) / (u1 - u0)) * nb, 0), nb);
+      const i = Math.min(nb - 1, Math.floor(k));
+      return r[i] + (r[i + 1] - r[i]) * (k - i);
+    };
+    const rowOf = (v) => {
+      const n = rows.length;
+      if (v <= rows[0]) return [0, 0, 0];
+      if (v >= rows[n - 1]) return [n - 1, n - 1, 0];
+      let i = 0;
+      while (rows[i + 1] < v) i++;
+      return [i, i + 1, (v - rows[i]) / (rows[i + 1] - rows[i])];
+    };
+    // (v, u) の布に沿った長さ (m)。胴体では u が 0..1 の外なら 1 周分を足し引きする
+    sc.arc = (v, u) => {
+      let wrap = 0;
+      if (full) {
+        while (u < u0) {
+          u += 1;
+          wrap -= 1;
+        }
+        while (u > u1) {
+          u -= 1;
+          wrap += 1;
+        }
+      }
+      const rw = rowOf(v);
+      const a = rw[0];
+      const b = rw[1];
+      const w = rw[2];
+      return at(s[a], u) * (1 - w) + at(s[b], u) * w + wrap * (total[a] * (1 - w) + total[b] * w);
+    };
+    // 長さ → u (単調増加の表を二分探索)。範囲外は胴体なら折り返し、袖・パンツなら NaN
+    const inv = (r, target) => {
+      let wrap = 0;
+      const tot = r[nb];
+      if (full && tot > 0) {
+        while (target > tot) {
+          target -= tot;
+          wrap += 1;
+        }
+        while (target < 0) {
+          target += tot;
+          wrap -= 1;
+        }
+      } else if (target < -1e-9 || target > tot + 1e-9) return NaN;
+      let lo = 0;
+      let hi = nb;
+      while (hi - lo > 1) {
+        const m = (lo + hi) >> 1;
+        if (r[m] <= target) lo = m;
+        else hi = m;
+      }
+      const f = r[hi] > r[lo] ? (target - r[lo]) / (r[hi] - r[lo]) : 0.5;
+      return u0 + ((lo + f) / nb) * (u1 - u0) + wrap;
+    };
+    // 中心 uc から布に沿って d (m) 離れた点の u (右が +)
+    sc.uAt = (v, uc, d) => {
+      const rw = rowOf(v);
+      const ua = inv(s[rw[0]], at(s[rw[0]], uc) + d);
+      if (rw[0] === rw[1]) return ua;
+      const ub = inv(s[rw[1]], at(s[rw[1]], uc) + d);
+      return ua * (1 - rw[2]) + ub * rw[2];
+    };
+    // テクスチャの幅が S px のときの、(v, u) での横方向の px/cm と縦方向の px/cm
+    sc.pxX = (v, u, S) => {
+      const e = 0.5 / nb;
+      const a = Math.max(u0, u - e);
+      const b = Math.min(u1, u + e);
+      const m = (sc.arc(v, b) - sc.arc(v, a)) / (b - a); // m per u
+      return m > 1e-6 ? S / (m * 100) : S / 50;
+    };
+    sc.pxY = (S) => S / (mPerV * 100);
+    return sc;
+  }
+  function prepScale() {
+    const shirt = asset.geos.shirt;
+    const uv = shirt.getAttribute("uv").array;
+    const pos = shirt.getAttribute("position").array;
+    const n = uv.length / 2;
+    // 胴体: build_player.py の表があればそれを使う
+    const ta = asset.extra.torsoArc;
+    let torso;
+    if (ta && ta.s && ta.s.length) torso = makeScale(ta.v, ta.s, 0, 1, (ta.y[1] - ta.y[0]) / 0.7);
+    else {
+      let lo = 9;
+      let hi = -9;
+      for (let i = 0; i < n; i++) if (uv[i * 2 + 1] > 0.335) {
+        lo = Math.min(lo, pos[i * 3 + 1]);
+        hi = Math.max(hi, pos[i * 3 + 1]);
+      }
+      const rows = [];
+      for (let v = 0.4; v < 0.96; v += 0.05) rows.push(+v.toFixed(2));
+      torso = makeScale(rows, arcTable(shirt, rows, 0, 1, 64), 0, 1, (hi - lo) / 0.66);
+    }
+    // 裾・袖口の v
+    let hemV = 1;
+    let cuffV = 1;
+    for (let i = 0; i < n; i++) {
+      const v = uv[i * 2 + 1];
+      if (v > 0.335) hemV = Math.min(hemV, v);
+      else if (v < 0.28) cuffV = Math.min(cuffV, v);
+    }
+    torso.hemV = hemV;
+    // 袖: 腕の軸に沿った v の傾きから縦の実寸を出す
+    const sleeve = {};
+    for (const side of ["l", "r"]) {
+      const A0 = RIG.B["upperarm_" + side];
+      const ax = RIG.B["lowerarm_" + side].clone().sub(A0).normalize();
+      const u0 = side === "l" ? 0 : 0.5;
+      let sx = 0;
+      let sy = 0;
+      let sxx = 0;
+      let sxy = 0;
+      let m = 0;
+      for (let i = 0; i < n; i++) {
+        const u = uv[i * 2];
+        const v = uv[i * 2 + 1];
+        if (v >= 0.28 || u < u0 || u > u0 + 0.5 || pos[i * 3] * A0.x < 0) continue;
+        const t = (pos[i * 3] - A0.x) * ax.x + (pos[i * 3 + 1] - A0.y) * ax.y + (pos[i * 3 + 2] - A0.z) * ax.z;
+        sx += t;
+        sy += v;
+        sxx += t * t;
+        sxy += t * v;
+        m++;
+      }
+      const a = m > 2 ? (m * sxy - sx * sy) / (m * sxx - sx * sx) : -1.38;
+      const rows = [];
+      for (let v = 0.04; v < 0.275; v += 0.03) rows.push(+v.toFixed(2));
+      sleeve[side] = makeScale(rows, arcTable(shirt, rows, u0, u0 + 0.5, 32), u0, u0 + 0.5, 1 / Math.max(0.2, Math.abs(a)));
+      sleeve[side].cuffV = cuffV;
+    }
+    // パンツ (長い方の形で測る。短いパンツも同じテクスチャ)
+    const pg = asset.geos.pantsL || asset.geos.pants;
+    const prow = [];
+    for (let v = 0.08; v < 0.99; v += 0.05) prow.push(+v.toFixed(2));
+    const pants = {};
+    for (const side of ["l", "r"]) {
+      const u0 = side === "l" ? 0 : 0.5;
+      pants[side] = makeScale(prow, arcTable(pg, prow, u0, u0 + 0.5, 32), u0, u0 + 0.5, asset.extra.beltY + 0.05);
+    }
+    SC.torso = torso;
+    SC.sleeve = sleeve;
+    SC.pants = pants;
+    SC.vBelt = asset.extra.beltY / (asset.extra.beltY + 0.05);
+  }
+  // 確認用: 実寸表の要約
+  H._scaleInfo = () => ({ torso: { mPerV: SC.torso.mPerV, hemV: SC.torso.hemV, circ: SC.torso.total }, sleeve: ["l", "r"].map((k) => ({ mPerV: SC.sleeve[k].mPerV, cuffV: SC.sleeve[k].cuffV, circ: SC.sleeve[k].total })), pants: ["l", "r"].map((k) => ({ mPerV: SC.pants[k].mPerV, circ: SC.pants[k].total })), vBelt: SC.vBelt });
+
+  /* ---------- 文字・画像をワッペン (ツイル) 風に描く ----------
+   * cm 単位のキャンバス (P px/cm) に描く。厚い縁取り + 縁の細い縫い目の線 + わずかな影 + 上が明るいサテンの光 */
+  const FONT = (f) => "'" + (f || "Graduate") + "', 'Arial Black', sans-serif";
+  const fontSpec = (f, px) => (FONT_WEIGHT[f] || 400) + " " + px + "px " + FONT(f);
+  const CAP = {};
+  // フォントの大文字の高さ (em に対する比)
+  function capRatio(g, font) {
+    const key = font + ":" + (document.fonts && document.fonts.check ? document.fonts.check(fontSpec(font, 40)) : "");
+    if (CAP[key] != null) return CAP[key];
+    g.save();
+    g.font = fontSpec(font, 100);
+    const m = g.measureText("H");
+    g.restore();
+    return (CAP[key] = m.actualBoundingBoxAscent ? m.actualBoundingBoxAscent / 100 : 0.72);
+  }
+  const fontPx = (g, font, capPx) => capPx / capRatio(g, font);
+  // 縫い目の色: 明るい色は暗く、暗い色は明るく
+  function stitch(col) {
+    const c = new T.Color(col);
+    const l = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+    return l > 0.45 ? "#" + c.multiplyScalar(0.62).getHexString() : "#" + c.lerp(new T.Color("#ffffff"), 0.35).getHexString();
+  }
+  // draw(mode): mode "stroke" / "fill" で同じ形を描くコールバック。st: { fill, outline, outlineMm, outline2, outline2Mm, boldMm, shadow }
+  function applique(g, P, draw, st) {
+    const mm = P / 10;
+    const bold = (st.boldMm || 0) * mm;
+    const o1 = st.outline ? (st.outlineMm || 2.5) * mm : 0;
+    const o2 = st.outline && st.outline2 ? (st.outline2Mm || 2) * mm : 0;
+    const W1 = bold + 2 * o1;
+    const W2 = W1 + 2 * o2;
+    g.lineJoin = "round";
+    g.lineCap = "round";
+    g.miterLimit = 2;
+    const stroke = (w, col) => {
+      if (w <= 0.01) return;
+      g.lineWidth = w;
+      g.strokeStyle = col;
+      draw("stroke");
+    };
+    if (st.shadow !== false) {
+      g.save();
+      g.translate(0.7 * mm, 1.1 * mm);
+      stroke(Math.max(W2, bold) + 0.5 * mm, "rgba(0,0,0,0.32)");
+      g.restore();
+    }
+    if (o2) {
+      stroke(W2 + 0.7 * mm, stitch(st.outline2));
+      stroke(W2, st.outline2);
+    }
+    if (o1) {
+      stroke(W1 + 0.7 * mm, stitch(st.outline));
+      stroke(W1, st.outline);
+    }
+    stroke(bold + 0.7 * mm, stitch(st.fill));
+    stroke(bold, st.fill);
+    g.fillStyle = st.fill;
+    draw("fill");
+  }
+  // 上が明るく下が暗いサテンの光を、描いた所 (不透明な所) にだけ重ねる
+  function sheen(g, x0, y0, w, h) {
+    g.save();
+    g.globalCompositeOperation = "source-atop";
+    const gr = g.createLinearGradient(0, y0, 0, y0 + h);
+    gr.addColorStop(0, "rgba(255,255,255,0.20)");
+    gr.addColorStop(0.45, "rgba(255,255,255,0.0)");
+    gr.addColorStop(1, "rgba(0,0,0,0.14)");
+    g.fillStyle = gr;
+    g.fillRect(x0, y0, w, h);
+    g.restore();
+  }
+  // 文字。o: { cap (大文字の高さ cm), maxW (cm), font, fill, outline, outlineMm, outline2, outline2Mm, boldMm, italic (傾き), tilt (度: 右上がりは負), arch (度: 全体の角度), condense (最小の横つぶし) }
+  function appliqueText(g, P, text, x, y, o) {
+    if (!text) return 0;
+    const sz0 = fontPx(g, o.font, o.cap * P);
+    g.font = fontSpec(o.font, sz0);
+    let m = g.measureText(text);
+    const ink = (mm) => mm.actualBoundingBoxLeft + mm.actualBoundingBoxRight || mm.width;
+    const maxW = (o.maxW || 1e9) * P;
+    let sx = 1;
+    let sz = sz0;
+    if (ink(m) > maxW) {
+      sx = maxW / ink(m);
+      const cmin = o.condense || 0.72;
+      if (sx < cmin) {
+        sz = sz0 * (sx / cmin);
+        sx = cmin;
+      }
+      g.font = fontSpec(o.font, sz);
+      m = g.measureText(text);
+    }
+    const yOff = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2; // 字面の中心を y に合わせる
+    const w = ink(m);
+    g.save();
+    g.translate(x, y);
+    if (o.tilt) g.rotate(o.tilt * D2R);
+    if (o.italic) g.transform(1, 0, -o.italic, 1, 0, 0);
+    g.scale(sx, 1);
+    g.textAlign = "center";
+    g.textBaseline = "alphabetic";
+    let draw;
+    if (o.arch) {
+      // アーチ: 文字ごとに円に沿って並べる (両端が下がる)
+      const chars = [...text];
+      const span = o.arch * D2R;
+      const adv = chars.map((ch) => g.measureText(ch).width);
+      const W = adv.reduce((a, b) => a + b, 0);
+      const R = W / span;
+      const sag = R * (1 - Math.cos(span / 2));
+      draw = (mode) => {
+        let a = -span / 2;
+        chars.forEach((ch, i) => {
+          a += (adv[i] / 2 / W) * span;
+          g.save();
+          g.translate(Math.sin(a) * R, R - Math.cos(a) * R - sag / 2);
+          g.rotate(a);
+          if (mode === "fill") g.fillText(ch, 0, yOff);
+          else g.strokeText(ch, 0, yOff);
+          g.restore();
+          a += (adv[i] / 2 / W) * span;
+        });
+      };
+    } else draw = (mode) => (mode === "fill" ? g.fillText(text, 0, yOff) : g.strokeText(text, 0, yOff));
+    applique(g, P, draw, o);
+    g.restore();
+    const hh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
+    const pad = 0.6 * P + hh * 0.3 + (Math.abs(Math.sin((o.tilt || 0) * D2R)) * w) / 2;
+    sheen(g, x - (w * sx) / 2 - pad, y - hh / 2 - pad, w * sx + 2 * pad, hh + 2 * pad);
+    return w * sx;
+  }
+  // 画像 (胸マークの写真の切り抜きなど)。cm の箱 maxW × maxH に収め、影と光を付ける
+  function appliqueImage(g, P, url, x, y, maxW, maxH, tint) {
     const e = H.image(url);
     if (!e || !e.ok) return false;
     const im = e.img;
-    const k = Math.min(maxW / im.width, maxH / im.height);
+    const k = Math.min((maxW * P) / im.width, (maxH * P) / im.height);
     const w = im.width * k;
     const h = im.height * k;
-    if (tint) {
+    const tc = (col) => {
       const c = document.createElement("canvas");
       c.width = Math.max(1, Math.round(w));
       c.height = Math.max(1, Math.round(h));
-      const x = c.getContext("2d");
-      x.drawImage(im, 0, 0, c.width, c.height);
-      x.globalCompositeOperation = "source-in";
-      x.fillStyle = tint;
-      x.fillRect(0, 0, c.width, c.height);
-      g.drawImage(c, cx - w / 2, cy - h / 2, w, h);
-    } else g.drawImage(im, cx - w / 2, cy - h / 2, w, h);
+      const x2 = c.getContext("2d");
+      x2.drawImage(im, 0, 0, c.width, c.height);
+      x2.globalCompositeOperation = "source-in";
+      x2.fillStyle = col;
+      x2.fillRect(0, 0, c.width, c.height);
+      return c;
+    };
+    g.drawImage(tc("rgba(0,0,0,0.32)"), x - w / 2 + 0.07 * P, y - h / 2 + 0.11 * P, w, h);
+    if (tint) g.drawImage(tc(tint), x - w / 2, y - h / 2, w, h);
+    else g.drawImage(im, x - w / 2, y - h / 2, w, h);
+    sheen(g, x - w / 2 - P, y - h / 2 - P, w + 2 * P, h + 2 * P);
     return true;
   }
-  function star(g, x, y, r, col) {
-    g.fillStyle = col;
-    g.beginPath();
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
-      const rr = i % 2 ? r * 0.45 : r;
-      g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-    }
-    g.closePath();
-    g.fill();
+  // 組み合わせ文字 (HT / CD / YS / YB): 1 文字目の上に 2 文字目を重ね、重なりの縁を切り抜いて組んで見せる。
+  // 配置: s2 = 2 文字目の大きさ (比), dx / dy = ずらし (1 文字目の幅・高さに対する比)
+  const MONO = { HT: { s2: 0.96, dx: 0.0, dy: -0.12 }, CD: { s2: 0.74, dx: 0.4, dy: 0.02 }, YS: { s2: 0.82, dx: 0.3, dy: 0.14 }, YB: { s2: 0.82, dx: 0.3, dy: 0.14 }, BW: { s2: 0.82, dx: 0.3, dy: 0.14 } };
+  function monogram(g, P, text, x, y, hCm, font, st) {
+    if (text === "HT") return monogramHT(g, P, x, y, hCm, st);
+    const a = text[0];
+    const b = text.slice(1);
+    const lay = MONO[text] || { s2: 0.8, dx: 0.3, dy: 0.12 };
+    const sz = fontPx(g, font, hCm * P);
+    g.font = fontSpec(font, sz);
+    const w1 = g.measureText(a).width;
+    const sz2 = sz * lay.s2;
+    g.font = fontSpec(font, sz2);
+    const w2 = g.measureText(b).width;
+    // 全体の幅の中心を x に
+    const left = -w1 / 2;
+    const right = lay.dx * w1 + w2 / 2;
+    const x1 = x - (left + right) / 2;
+    const y1 = y;
+    const x2 = x1 + lay.dx * w1;
+    const y2 = y1 + lay.dy * hCm * P;
+    g.save();
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    const yo = 0.1 * hCm * P; // middle 基準の字面のずれ
+    g.font = fontSpec(font, sz);
+    applique(g, P, (mode) => (mode === "fill" ? g.fillText(a, x1, y1 + yo) : g.strokeText(a, x1, y1 + yo)), st);
+    // 2 文字目の縁を地の色で切る
+    g.font = fontSpec(font, sz2);
+    g.globalCompositeOperation = "destination-out";
+    g.lineJoin = "round";
+    g.lineWidth = ((st.outline ? 2 * (st.outlineMm || 2.5) : 0) + (st.boldMm || 0) + 2.2) * (P / 10);
+    g.strokeStyle = "#000";
+    g.strokeText(b, x2, y2 + yo * lay.s2);
+    g.globalCompositeOperation = "source-over";
+    applique(g, P, (mode) => (mode === "fill" ? g.fillText(b, x2, y2 + yo * lay.s2) : g.strokeText(b, x2, y2 + yo * lay.s2)), st);
+    g.restore();
+    sheen(g, x - (right - left) / 2 - P, y - hCm * P * 0.8, right - left + 2 * P, hCm * P * 1.6);
+    return right - left;
   }
+  // 阪神の "HT": H の上に T を載せた角ばったマーク (フォントでは T が H を隠すので、四角の組み合わせで描く)
+  function monogramHT(g, P, x, y, hCm, st) {
+    const h = hCm * P;
+    const w = h * 1.0;
+    const x0 = x - w / 2;
+    const y0 = y - h / 2;
+    const R = (ax, ay, bx, by) => g.rect(x0 + ax * w, y0 + ay * h, (bx - ax) * w, (by - ay) * h);
+    const pathH = () => {
+      g.beginPath();
+      R(0.0, 0.0, 0.24, 1.0);
+      R(0.76, 0.0, 1.0, 1.0);
+      R(0.24, 0.42, 0.76, 0.58);
+      R(-0.07, 0.9, 0.31, 1.0);
+      R(0.69, 0.9, 1.07, 1.0);
+      R(-0.07, 0.0, 0.31, 0.1);
+      R(0.69, 0.0, 1.07, 0.1);
+    };
+    const pathT = () => {
+      g.beginPath();
+      R(-0.1, -0.02, 1.1, 0.24);
+      R(0.385, 0.24, 0.615, 0.84);
+      R(0.3, 0.76, 0.7, 0.84);
+    };
+    g.save();
+    g.lineJoin = "miter";
+    applique(g, P, (mode) => {
+      pathH();
+      if (mode === "fill") g.fill();
+      else g.stroke();
+    }, st);
+    g.globalCompositeOperation = "destination-out";
+    g.lineWidth = ((st.outline ? 2 * (st.outlineMm || 2.5) : 0) + 2.4) * (P / 10);
+    pathT();
+    g.stroke();
+    g.globalCompositeOperation = "source-over";
+    applique(g, P, (mode) => {
+      pathT();
+      if (mode === "fill") g.fill();
+      else g.stroke();
+    }, st);
+    g.restore();
+    sheen(g, x0 - 0.15 * w, y0 - 0.1 * h, 1.3 * w, 1.2 * h);
+    return w * 1.14;
+  }
+  // cm 単位の板 (P px/cm)。(ox, oy) が cm の原点
+  function newPad(x0, x1, y0, y1, P) {
+    const c = document.createElement("canvas");
+    c.width = Math.ceil((x1 - x0) * P);
+    c.height = Math.ceil((y1 - y0) * P);
+    const g = c.getContext("2d", { willReadFrequently: true });
+    return { c, g, P, ox: -x0 * P, oy: -y0 * P, X: (cm) => -x0 * P + cm * P, Y: (cm) => -y0 * P + cm * P };
+  }
+  // 板を布の実寸表に従って (uc, vc) を中心にテクスチャへ写す。縦横の比率が場所ごとに違うので 1 px ずつ写す
+  // (横は ss 回サンプル、縦はバイリニア補間だけ)。板の不透明な範囲だけを写す
+  function blitPanel(g, pad, sc, uc, vc, S, ss) {
+    const src = pad.c;
+    const W = src.width;
+    const Hh = src.height;
+    const P = pad.P;
+    const sd = pad.g.getImageData(0, 0, W, Hh).data;
+    let bx0 = W;
+    let bx1 = -1;
+    let by0 = Hh;
+    let by1 = -1;
+    for (let y = 0; y < Hh; y++) {
+      let row = false;
+      for (let x = 0, o = y * W * 4 + 3; x < W; x++, o += 4)
+        if (sd[o] > 2) {
+          if (x < bx0) bx0 = x;
+          if (x > bx1) bx1 = x;
+          row = true;
+        }
+      if (row) {
+        if (y < by0) by0 = y;
+        by1 = y;
+      }
+    }
+    if (bx1 < 0) return;
+    const mPerV = sc.mPerV;
+    const k = 100 * P; // m → 板の px
+    const vTop = vc + (pad.oy - by0 + 1) / k / mPerV;
+    const vBot = vc - (by1 + 2 - pad.oy) / k / mPerV;
+    const y0 = Math.max(0, Math.floor((1 - vTop) * S));
+    const y1 = Math.min(S, Math.ceil((1 - vBot) * S));
+    if (y1 <= y0) return;
+    const dL = (bx0 - 1 - pad.ox) / k;
+    const dR = (bx1 + 2 - pad.ox) / k;
+    let uLo = Infinity;
+    let uHi = -Infinity;
+    for (const v of [vTop, vc, vBot]) {
+      const a = sc.uAt(v, uc, dL);
+      const b = sc.uAt(v, uc, dR);
+      if (!isNaN(a)) uLo = Math.min(uLo, a);
+      if (!isNaN(b)) uHi = Math.max(uHi, b);
+    }
+    if (!(uHi > uLo)) return;
+    const x0 = Math.floor(uLo * S) - 1;
+    const x1 = Math.ceil(uHi * S) + 1;
+    if (x1 - x0 > S) return;
+    const band = g.getImageData(0, y0, S, y1 - y0);
+    const bd = band.data;
+    const nb = sc.nb;
+    const u0 = sc.u0;
+    const span = sc.u1 - sc.u0;
+    const rows = sc.rows;
+    const R = new Float64Array(nb + 1); // この行の実寸表 (行の間を補間)
+    for (let y = y0; y < y1; y++) {
+      const v = 1 - (y + 0.5) / S;
+      const py = pad.oy - (v - vc) * mPerV * k - 0.5;
+      if (py < by0 - 1 || py > by1 + 1) continue;
+      // 行の表
+      let ia = 0;
+      while (ia < rows.length - 2 && rows[ia + 1] < v) ia++;
+      const w = Math.min(1, Math.max(0, (v - rows[ia]) / (rows[ia + 1] - rows[ia])));
+      const ra = sc.s[ia];
+      const rb = sc.s[ia + 1];
+      for (let i = 0; i <= nb; i++) R[i] = ra[i] * (1 - w) + rb[i] * w;
+      const total = R[nb];
+      const arcAt = (u) => {
+        let wrap = 0;
+        if (sc.full) {
+          while (u < u0) {
+            u += 1;
+            wrap -= 1;
+          }
+          while (u > u0 + span) {
+            u -= 1;
+            wrap += 1;
+          }
+        }
+        const kk = Math.min(Math.max(((u - u0) / span) * nb, 0), nb);
+        const i = Math.min(nb - 1, Math.floor(kk));
+        return R[i] + (R[i + 1] - R[i]) * (kk - i) + wrap * total;
+      };
+      const ucArc = arcAt(uc);
+      const iy = Math.max(0, Math.min(Hh - 2, Math.floor(py)));
+      const fy = Math.min(1, Math.max(0, py - iy));
+      const rowA = iy * W * 4;
+      const rowB = rowA + W * 4;
+      for (let x = x0; x <= x1; x++) {
+        let r = 0;
+        let gg = 0;
+        let b = 0;
+        let a = 0;
+        for (let sx = 0; sx < ss; sx++) {
+          const px = pad.ox + (arcAt((x + (sx + 0.5) / ss) / S) - ucArc) * k - 0.5;
+          if (px < bx0 - 1 || px > bx1 + 1) continue;
+          const ix = Math.max(0, Math.min(W - 2, Math.floor(px)));
+          const fx = Math.min(1, Math.max(0, px - ix));
+          const o00 = rowA + ix * 4;
+          const o10 = o00 + 4;
+          const o01 = rowB + ix * 4;
+          const o11 = o01 + 4;
+          const w00 = (1 - fx) * (1 - fy);
+          const w10 = fx * (1 - fy);
+          const w01 = (1 - fx) * fy;
+          const w11 = fx * fy;
+          const a00 = (sd[o00 + 3] / 255) * w00;
+          const a10 = (sd[o10 + 3] / 255) * w10;
+          const a01 = (sd[o01 + 3] / 255) * w01;
+          const a11 = (sd[o11 + 3] / 255) * w11;
+          r += sd[o00] * a00 + sd[o10] * a10 + sd[o01] * a01 + sd[o11] * a11;
+          gg += sd[o00 + 1] * a00 + sd[o10 + 1] * a10 + sd[o01 + 1] * a01 + sd[o11 + 1] * a11;
+          b += sd[o00 + 2] * a00 + sd[o10 + 2] * a10 + sd[o01 + 2] * a01 + sd[o11 + 2] * a11;
+          a += a00 + a10 + a01 + a11;
+        }
+        if (a <= 1e-4) continue;
+        const aa = a / ss;
+        const xx = ((x % S) + S) % S;
+        const o = ((y - y0) * S + xx) * 4;
+        bd[o] = (r / a) * aa + bd[o] * (1 - aa);
+        bd[o + 1] = (gg / a) * aa + bd[o + 1] * (1 - aa);
+        bd[o + 2] = (b / a) * aa + bd[o + 2] * (1 - aa);
+      }
+    }
+    g.putImageData(band, 0, y0);
+  }
+  // 織りのむら (決まった模様なので描き直しても同じ)
+  let weave = null;
+  function weavePattern(g) {
+    if (!weave) {
+      const N = 24;
+      const c = document.createElement("canvas");
+      c.width = c.height = N;
+      const x = c.getContext("2d");
+      const r = mulberry(7);
+      for (let i = 0; i < N * N; i++) {
+        x.fillStyle = "rgba(0,0,0," + (r() * 0.045).toFixed(3) + ")";
+        x.fillRect(i % N, (i / N) | 0, 1, 1);
+      }
+      x.fillStyle = "rgba(255,255,255,0.05)";
+      for (let y = 0; y < N; y += 2) for (let xx = y % 4 ? 0 : 2; xx < N; xx += 4) x.fillRect(xx, y, 2, 1);
+      weave = c;
+    }
+    return g.createPattern(weave, "repeat");
+  }
+  // 胸マーク・番号などの既定の寸法 (cm)
+  const CM = { wordDown: 15.5, scriptCap: 9, blockCap: 7, wordWidth: 32, numDown: 10.5, numSide: 10.5, numCap: 9, backNameDown: 8.5, backNameCap: 6.5, backNumCap: 25, backWidth: 30, pinstripe: 2.2, pinstripeMm: 1.5 };
+  const isScript = (u) => u.wordStyle === "script" || (!u.wordStyle && /Yellowtail|Lobster|Oleo/.test(u.wordFont || ""));
+  // 太さの足りないフォントは縁をなぞって太らせる
+  const boldOf = (font) => (font === "Graduate" ? 1.6 : /Yellowtail|Lobster/.test(font || "") ? 1.2 : 0);
+
   // テクスチャ座標: 胴体は v=0.3..1 (キャンバスの上 70%), 袖は v=0..0.28 (下)。
-  // u: 0.25 = 胸の中央, 0.75 = 背中の中央, 0 / 0.5 = 右脇 / 左脇。袖は外側が x=S/4 (左袖), 3S/4 (右袖)
+  // u: 0.25 = 胸の中央, 0.75 = 背中の中央, 0 / 0.5 = 脇。袖は左袖 u 0..0.5 / 右袖 0.5..1、外側が x=S/4 (左袖), 3S/4 (右袖)
   function jerseyTexture(o) {
     const S = 512;
+    const ss = o.low ? 1 : 2;
     const c = document.createElement("canvas");
     c.width = c.height = S;
-    const g = c.getContext("2d");
+    const g = c.getContext("2d", { willReadFrequently: true });
     const u = o.u;
-    const TY = S * 0.7; // 胴体の下端 (キャンバス y)
+    const tor = SC.torso;
+    const slv = SC.sleeve;
     const vy = (v) => (1 - v) * S;
+    const SLV = vy(0.28); // 袖の上端 (キャンバス y)
     g.fillStyle = u.jersey;
     g.fillRect(0, 0, S, S);
-    // 生地のむら
-    for (let i = 0; i < 1600; i++) {
-      g.fillStyle = "rgba(0,0,0," + Math.random() * 0.025 + ")";
-      g.fillRect(Math.random() * S, Math.random() * S, 2, 2);
-    }
+    g.fillStyle = weavePattern(g);
+    g.fillRect(0, 0, S, S);
     // ベスト風: 袖をアンダーシャツの色に
     if (u.vest) {
       g.fillStyle = u.vest;
-      g.fillRect(0, TY + 6, S, S - TY);
+      g.fillRect(0, SLV, S, S - SLV);
     }
-    // ピンストライプ (袖は腕に沿う向き)
-    if (u.pinstripe) {
-      g.strokeStyle = u.pinstripe;
-      g.lineWidth = 1.5;
-      g.globalAlpha = 0.9;
-      for (let x = 2; x < S; x += S / 44) {
+    // uc から布に沿って d0..d1 (m, 関数でも可) の帯を v0..v1 で多角形にして塗る
+    const band = (sc, uc, d0, d1, v0, v1, col, step, vlo, vhi) => {
+      const L = [];
+      const R = [];
+      for (let v = v0; v <= v1 + 1e-6; v += step || 0.02) {
+        const vq = Math.min(Math.max(v, vlo != null ? vlo : -1), vhi != null ? vhi : 2);
+        const a = sc.uAt(vq, uc, typeof d0 === "function" ? d0(v) : d0);
+        const b = sc.uAt(vq, uc, typeof d1 === "function" ? d1(v) : d1);
+        if (isNaN(a) || isNaN(b)) continue;
+        L.push([a * S, vy(v)]);
+        R.push([b * S, vy(v)]);
+      }
+      if (L.length < 2) return;
+      g.fillStyle = col;
+      g.beginPath();
+      L.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+      R.reverse().forEach((p) => g.lineTo(p[0], p[1]));
+      g.closePath();
+      g.fill();
+    };
+    // uc を中心に sp (m) おきの縦じま (布の上で等間隔)。ua..ub の範囲だけ
+    const stripes = (sc, uc, ua, ub, sp, v0, v1, vlo, vhi) => {
+      g.save();
+      g.beginPath();
+      g.rect(ua * S, vy(v1), (ub - ua) * S, vy(v0) - vy(v1));
+      g.clip();
+      for (let k = -40; k <= 40; k++) {
         g.beginPath();
-        g.moveTo(x, 0);
-        g.lineTo(x, u.vest ? TY : S);
+        let on = false;
+        for (let v = v0; v <= v1 + 1e-6; v += 0.025) {
+          const uu = sc.uAt(Math.min(Math.max(v, vlo), vhi), uc, k * sp);
+          if (isNaN(uu) || uu < ua - 0.03 || uu > ub + 0.03) {
+            on = false;
+            continue;
+          }
+          if (on) g.lineTo(uu * S, vy(v));
+          else g.moveTo(uu * S, vy(v));
+          on = true;
+        }
         g.stroke();
+      }
+      g.restore();
+    };
+    // 脇のパネル (中日): 脇の縫い目 (u 0 / 0.5 / 1) の両側 4 cm と袖の内側
+    if (u.sidePanels) {
+      const w = (u.sidePanelCm || 7) / 200;
+      band(tor, 0.5, -w, w, 0.3, 0.8, u.sidePanels, 0.02, 0.4, 0.72);
+      band(tor, 0, 0, w, 0.3, 0.8, u.sidePanels, 0.02, 0.4, 0.72);
+      band(tor, 1, -w, 0, 0.3, 0.8, u.sidePanels, 0.02, 0.4, 0.72);
+      for (const [sc, uc, sg] of [[slv.l, 0, 1], [slv.l, 0.5, -1], [slv.r, 0.5, 1], [slv.r, 1, -1]]) band(sc, uc, sg > 0 ? 0 : -w * 0.8, sg > 0 ? w * 0.8 : 0, 0.0, 0.2, u.sidePanels, 0.02, 0.08, 0.2);
+    }
+    // ピンストライプ: 前は胸の中央、後ろは背中の中央から等間隔。袖は腕に沿う向き
+    if (u.pinstripe) {
+      const sp = (u.pinstripeCm || CM.pinstripe) / 100;
+      g.strokeStyle = u.pinstripe;
+      g.lineWidth = Math.max(0.9, ((u.pinstripeMm || CM.pinstripeMm) / 10) * tor.pxX(0.6, 0.25, S));
+      g.globalAlpha = 0.86;
+      stripes(tor, 0.25, 0, 0.5, sp, 0.3, 1.0, 0.4, 0.72);
+      stripes(tor, 0.75, 0.5, 1.0, sp, 0.3, 1.0, 0.4, 0.72);
+      if (!u.vest) {
+        stripes(slv.l, 0.25, 0, 0.5, sp, 0.0, 0.28, 0.1, 0.22);
+        stripes(slv.r, 0.75, 0.5, 1.0, sp, 0.0, 0.28, 0.1, 0.22);
       }
       g.globalAlpha = 1;
     }
-    // 脇のライン
+    // 脇のライン (横浜 2009 など)
     if (u.sideStripes) {
+      const w = (u.sideStripeCm || 1.5) / 100;
       u.sideStripes.forEach((col, i) => {
-        g.fillStyle = col;
-        for (const x of [0, S / 2, S]) g.fillRect(x - 7 + i * 7, 0, 6, S);
+        band(tor, 0.5, -w * (i + 1), -w * i, 0.3, 0.8, col, 0.02, 0.4, 0.72);
+        band(tor, 0.5, w * i, w * (i + 1), 0.3, 0.8, col, 0.02, 0.4, 0.72);
+        band(tor, 0, w * i, w * (i + 1), 0.3, 0.8, col, 0.02, 0.4, 0.72);
+        band(tor, 1, -w * (i + 1), -w * i, 0.3, 0.8, col, 0.02, 0.4, 0.72);
       });
     }
-    // 襟ぐりの点 (前立ての上端を決める)。u 順に並べて、ギザギザをならす
+    // 襟ぐりの点 (前立ての上端・背ネームの位置を決める)。u 順に並べて、ギザギザをならす
     const raw = (asset.extra.collarUV || []).filter((p) => p[1] > 0.5 && p[0] <= 1);
     raw.sort((a, b) => a[0] - b[0]);
     const col = raw.map((p, i) => {
@@ -302,110 +899,222 @@
       }
       return [p[0], Math.max(p[1], sv / n)];
     });
-    const front = col.length ? col.reduce((b, p) => (Math.abs(p[0] - 0.25) < Math.abs(b[0] - 0.25) ? p : b), col[0]) : [0.25, 0.9];
-    const frontY = vy(front[1]);
+    const nearest = (uc, dflt) => (col.length ? col.reduce((b, p) => (Math.abs(p[0] - uc) < Math.abs(b[0] - uc) ? p : b), col[0]) : dflt);
+    const front = nearest(0.25, [0.25, 0.916]);
+    const back = nearest(0.75, [0.75, 0.975]);
+    const vCF = front[1];
+    const cmV = (cm) => cm / (tor.mPerV * 100); // cm → v
+    const vDown = (cm) => vCF - cmV(cm);
     const trimCols = u.piping || (u.vneck ? u.vneck : u.sleeveTrim ? [u.sleeveTrim[0]] : null);
-    const fx = S * 0.25;
+    const fx = 0.25;
+    const hemV = tor.hemV || 0.34;
     if (u.vneck) {
-      // V ネック
+      // V ネック: 襟の前点から 7 cm 下の点へ向かう帯。外側の色から順に
+      const depth = (u.vneckCm || 7) / 100;
+      const half = 0.075;
+      const n = u.vneck.length;
+      const ww = 0.013 * 1.3; // 斜めなので横幅は広め
+      const vBot = vCF - depth / tor.mPerV;
       u.vneck.forEach((cc, i) => {
-        g.strokeStyle = cc;
-        g.lineWidth = 7;
-        g.beginPath();
-        g.moveTo(fx - 34 - i * 7, frontY + 2);
-        g.lineTo(fx, frontY + 70 + i * 6);
-        g.lineTo(fx + 34 + i * 7, frontY + 2);
-        g.stroke();
+        for (const sg of [-1, 1]) {
+          const d = (v) => sg * ((half * (v - vBot)) / (vCF - vBot) + (n - i - 1) * ww);
+          const d2 = (v) => sg * ((half * (v - vBot)) / (vCF - vBot) + (n - i) * ww);
+          band(tor, fx, sg > 0 ? d : d2, sg > 0 ? d2 : d, vBot - ww / tor.mPerV, vCF + 0.01, cc, 0.01, 0.4, 0.9);
+        }
       });
     } else {
-      // 前立て (ボタンとパイピング)
+      // 前立て (折り目の影・パイピング・ボタン)。幅 3.5 cm
+      const half = 0.0175;
+      band(tor, fx, half - 0.0015, half + 0.0008, hemV, vCF + 0.005, "rgba(0,0,0,0.16)", 0.02, 0.4, 0.9);
+      band(tor, fx, half - 0.0035, half - 0.0015, hemV, vCF + 0.005, "rgba(255,255,255,0.22)", 0.02, 0.4, 0.9);
       if (u.piping) {
-        u.piping.forEach((cc, i) => {
-          g.strokeStyle = cc;
-          g.lineWidth = 3;
-          for (const sx of [-1, 1]) {
-            g.beginPath();
-            g.moveTo(fx + sx * (9 + i * 4), frontY + 4);
-            g.lineTo(fx + sx * (9 + i * 4), TY);
-            g.stroke();
-          }
+        const w = (u.pipingMm || 5) / 1000;
+        let off = half;
+        u.piping.forEach((cc) => {
+          band(tor, fx, off, off + w, hemV, vCF + 0.005, cc, 0.02, 0.4, 0.9);
+          band(tor, fx, -off - w, -off, hemV, vCF + 0.005, cc, 0.02, 0.4, 0.9);
+          off += w;
         });
-      } else {
-        g.strokeStyle = "rgba(0,0,0,0.12)";
-        g.lineWidth = 2;
-        g.beginPath();
-        g.moveTo(fx + 7, frontY);
-        g.lineTo(fx + 7, TY);
-        g.stroke();
       }
-      g.fillStyle = "rgba(250,250,245,0.95)";
-      for (let y = frontY + 26; y < TY - 10; y += 38) {
+      // ボタン (13 mm) 襟から 4 cm 下、8.5 cm おき
+      const len = (vCF - hemV) * tor.mPerV * 100;
+      for (let cm = 4; cm < len - 3; cm += 8.5) {
+        const v = vDown(cm);
+        const y = vy(v);
+        const x = fx * S;
+        const rx = 0.65 * tor.pxX(v, fx, S);
+        const ry = 0.65 * tor.pxY(S);
         g.beginPath();
-        g.arc(fx, y, 3.2, 0, Math.PI * 2);
+        g.ellipse(x + 0.6, y + 0.9, rx, ry, 0, 0, Math.PI * 2);
+        g.fillStyle = "rgba(0,0,0,0.28)";
         g.fill();
-        g.strokeStyle = "rgba(0,0,0,0.25)";
+        g.beginPath();
+        g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+        g.fillStyle = u.buttonColor || "#f3f1ea";
+        g.fill();
         g.lineWidth = 0.8;
+        g.strokeStyle = "rgba(0,0,0,0.35)";
         g.stroke();
+        g.fillStyle = "rgba(0,0,0,0.4)";
+        for (const dx of [-0.35, 0.35]) {
+          g.beginPath();
+          g.ellipse(x + dx * rx, y, rx * 0.16, ry * 0.16, 0, 0, Math.PI * 2);
+          g.fill();
+        }
       }
     }
-    // 胸マーク
-    const chestY = frontY + 78;
-    if (u.wordSmall) {
-      // 左胸の小さなマーク (選手の左胸 = 画面では右)
-      const cx = fx + S * 0.085;
-      if (!drawImageFit(g, u.word, cx, chestY + 8, S * 0.13, S * 0.14, u.wordTint)) drawText(g, o.team.mark || "", cx, chestY, 50, u.wordFont, u.wordColor, u.wordOutline);
-    } else if (u.word) {
-      if (!drawImageFit(g, u.word, fx, chestY, S * 0.27, S * 0.13, u.wordTint)) drawText(g, o.team.en || "", fx, chestY, 50, u.wordFont, u.wordColor, u.wordOutline, S * 0.27);
-    } else if (u.wordText) {
-      const script = u.wordFont === "Yellowtail";
-      g.save();
-      if (script) {
-        g.translate(fx, chestY);
-        g.rotate(-0.1);
-        drawText(g, u.wordText, 0, 0, 64, u.wordFont, u.wordColor, u.wordOutline, S * 0.27);
-      } else drawText(g, u.wordText, fx, chestY, 44, u.wordFont, u.wordColor, u.wordOutline, S * 0.26, { arch: u.arch });
-      g.restore();
-    }
-    // 胸番号
+    /* --- 胸: マーク (画像 / 筆記体 / ブロック体 / 組み合わせ文字 + 文字) と番号を cm の板に描いて布へ写す --- */
+    const P = 8; // 板の px/cm
+    const front_ = newPad(-23, 23, -9, 19, P);
+    const fg = front_.g;
+    const script = isScript(u);
+    const wordSt = { fill: u.wordColor, outline: u.wordOutline, outlineMm: u.wordOutlineMm, outline2: u.wordOutline2, outline2Mm: u.wordOutline2Mm, boldMm: u.wordBoldMm != null ? u.wordBoldMm : boldOf(u.wordFont), font: u.wordFont || "Graduate" };
+    const wordCap = u.wordCm || (script ? CM.scriptCap : CM.blockCap);
+    const wordW = u.wordWidthCm || CM.wordWidth;
+    const numSt = { fill: u.number, outline: u.numberOutline, outlineMm: u.numberOutlineMm, outline2: u.numberOutline2, boldMm: u.numberBoldMm != null ? u.numberBoldMm : boldOf(u.numberFont || "Graduate"), font: u.numberFont || "Graduate" };
     const num = o.num != null ? String(o.num) : "";
-    if (u.frontNumber !== false && num) {
-      const side = u.frontNumberSide === "left" ? -1 : 1;
-      const nx = fx + side * S * (u.wordSmall ? 0.085 : 0.075);
-      const ny = u.wordSmall ? chestY + (side < 0 ? 4 : 58) : chestY + 52;
-      drawText(g, num, nx, ny, 38, u.numberFont, u.number, u.numberOutline);
+    const side = u.frontNumberSide === "left" ? -1 : 1; // 胸番号: 既定は選手の左胸 (テクスチャでは +u)
+    const numSide = u.frontNumberSideCm || CM.numSide;
+    if (u.wordSmall) {
+      // 小さなマークは番号の反対側の胸に (既定: 番号が選手の左、マークが右)。frontNumberSide "left" なら逆
+      const cx = front_.X(-side * numSide * 0.9);
+      if (!(u.word && appliqueImage(fg, P, u.word, cx, front_.Y(0), u.wordWidthCm || 9, u.wordCm || 8, u.wordTint))) {
+        if (u.wordMono) monogram(fg, P, u.wordMono, cx, front_.Y(0), u.wordCm || 7, wordSt.font, wordSt);
+        else appliqueText(fg, P, u.wordText || o.team.mark || "", cx, front_.Y(0), Object.assign({ cap: u.wordCm || 7, maxW: 10 }, wordSt));
+      }
+      if (u.frontNumber !== false && num) appliqueText(fg, P, num, front_.X(side * numSide * 0.9), front_.Y(0), Object.assign({ cap: u.frontNumberCm || CM.numCap, maxW: 12 }, numSt));
+    } else {
+      let drawn = false;
+      if (u.word) drawn = appliqueImage(fg, P, u.word, front_.X(0), front_.Y(0), wordW, u.wordCm || 12, u.wordTint);
+      if (!drawn) {
+        const text = u.wordText || o.team.en || "";
+        const o2 = Object.assign({ cap: wordCap, maxW: wordW, tilt: u.wordTilt != null ? u.wordTilt : script ? -7 : 0, italic: u.wordItalic || 0, arch: u.wordArch || (u.arch ? 28 : 0), condense: 0.75 }, wordSt);
+        if (u.wordMono) {
+          // 組み合わせ文字 + 続きの文字 (中日 "CD"+"RAGONS")
+          fg.font = fontSpec(wordSt.font, fontPx(fg, wordSt.font, wordCap * P));
+          const tw = Math.min(fg.measureText(text).width, (wordW - wordCap * 1.5) * P);
+          const mw = wordCap * 1.45 * P;
+          const x0 = front_.X(0) - (mw + tw) / 2;
+          monogram(fg, P, u.wordMono, x0 + mw / 2, front_.Y(-0.4), wordCap * 1.45, wordSt.font, wordSt);
+          appliqueText(fg, P, text, x0 + mw + tw / 2 + 0.2 * P, front_.Y(0), Object.assign(o2, { maxW: tw / P, tilt: 0 }));
+        } else {
+          appliqueText(fg, P, text, front_.X(0), front_.Y(0), o2);
+          if (u.wordSwash && script) swash(fg, P, front_.X(0), front_.Y(0), wordCap, wordW * 0.92, o2.tilt, wordSt);
+        }
+      }
+      // 胸番号: マークの下、左胸 (選手の左) に寄せる
+      if (u.frontNumber !== false && num) appliqueText(fg, P, num, front_.X(side * numSide), front_.Y(u.frontNumberDownCm || CM.numDown), Object.assign({ cap: u.frontNumberCm || CM.numCap, maxW: 13 }, numSt));
     }
-    // 背中
-    const bx = S * 0.75;
-    if (u.backName !== false && o.nameEn) drawText(g, o.nameEn, bx, vy(0.93) + 4, 30, u.numberFont, u.number, u.numberOutline, S * 0.3);
-    drawText(g, num, bx, vy(0.72), 140, u.numberFont, u.number, u.numberOutline, S * 0.36);
-    // 袖
-    if (u.sleeveTrim) {
-      u.sleeveTrim.forEach((cc, i) => {
-        g.fillStyle = cc;
-        g.fillRect(0, S - 22 + i * 6, S, 4);
-      });
+    const vWord = vDown(u.wordDownCm || CM.wordDown);
+    blitPanel(g, front_, tor, fx, vWord, S, ss);
+    /* --- 背中: 背ネーム (6.5 cm, ゆるいアーチ) と背番号 (25 cm) --- */
+    const bx = 0.75;
+    const back_ = newPad(-20, 20, -6, 34, P);
+    const bg = back_.g;
+    const hasName = u.backName !== false && !!o.nameEn;
+    const nameFont = u.backNameFont || numSt.font;
+    if (hasName) appliqueText(bg, P, String(o.nameEn).toUpperCase(), back_.X(0), back_.Y(0), { cap: u.backNameCm || CM.backNameCap, maxW: CM.backWidth, font: nameFont, fill: numSt.fill, outline: numSt.outline, outlineMm: 1.5, outline2: numSt.outline2, outline2Mm: 1.2, boldMm: boldOf(nameFont), arch: u.backNameArch != null ? u.backNameArch : 14, condense: 0.7 });
+    const backNum = u.backNumberCm || CM.backNumCap;
+    const numY = hasName ? (u.backNameCm || CM.backNameCap) / 2 + 2.5 + backNum / 2 : backNum / 2 - 2.5;
+    if (num) appliqueText(bg, P, num, back_.X(0), back_.Y(numY), Object.assign({ cap: backNum, maxW: CM.backWidth, condense: 0.7, outlineMm: 3, outline2Mm: 2.5 }, numSt, { boldMm: boldOf(numSt.font) * 1.5 }));
+    blitPanel(g, back_, tor, bx, back[1] - cmV(u.backNameDownCm || CM.backNameDown), S, ss);
+    /* --- 袖 --- */
+    for (const sd of ["l", "r"]) {
+      const sc = slv[sd];
+      const cx = sd === "l" ? S * 0.25 : S * 0.75;
+      const uc = sd === "l" ? 0.25 : 0.75;
+      const pxY = sc.pxY(S);
+      // 袖口のライン: 袖口から 6 mm 上に、幅 sleeveTrimMm (既定 12 mm) ずつ 4 mm あけて重ねる
+      if (u.sleeveTrim && !u.vest) {
+        let mm = 6;
+        u.sleeveTrim.forEach((cc, i) => {
+          const w = (u.sleeveTrimMm && u.sleeveTrimMm[i]) || (u.sleeveTrim.length > 2 ? 7 : 12);
+          const v0 = sc.cuffV + mm / 1000 / sc.mPerV;
+          const v1 = sc.cuffV + (mm + w) / 1000 / sc.mPerV;
+          g.fillStyle = cc;
+          g.fillRect(sd === "l" ? 0 : S / 2, vy(v1), S / 2, vy(v0) - vy(v1));
+          mm += w + 3;
+        });
+      }
+      // ワッペン・袖の文字・組み合わせ文字 (左袖が既定)
+      const want = (side_) => (side_ || "L").toUpperCase() === (sd === "l" ? "L" : "R");
+      const vPatch = 0.28 - (u.sleevePatchDownCm || 7.5) / 100 / sc.mPerV;
+      const pxX = sc.pxX(vPatch, uc, S);
+      const cy = vy(vPatch);
+      const draw = (fn) => {
+        const pad = newPad(-7, 7, -7, 7, P);
+        fn(pad);
+        g.save();
+        g.translate(cx, cy);
+        g.scale(pxX / P, pxY / P);
+        g.drawImage(pad.c, -pad.ox, -pad.oy);
+        g.restore();
+      };
+      if (u.sleevePatch && want(u.sleevePatchSide)) draw((pad) => appliqueImage(pad.g, P, u.sleevePatch, pad.X(0), pad.Y(0), u.sleevePatchCm || 8, u.sleevePatchCm || 8));
+      if (u.sleeveWord && want(u.sleeveWordSide)) draw((pad) => appliqueImage(pad.g, P, u.sleeveWord, pad.X(0), pad.Y(0), u.sleeveWordCm || 11, 6, u.sleeveWordTint));
+      if (u.sleeveMono && want(u.sleeveMonoSide)) draw((pad) => monogram(pad.g, P, u.sleeveMono, pad.X(0), pad.Y(0), u.sleeveMonoCm || 5, wordSt.font, Object.assign({}, wordSt, { boldMm: 0 })));
+      if (u.sleeveText && want(u.sleeveTextSide)) {
+        // 腕に沿って肩から袖口へ読む (左袖は時計回りに 90°)
+        const pad = newPad(-8, 8, -3, 3, P);
+        appliqueText(pad.g, P, u.sleeveText, pad.X(0), pad.Y(0), Object.assign({ cap: u.sleeveTextCm || 2.6, maxW: 15, condense: 0.8 }, wordSt, { boldMm: 0, outlineMm: 1.2 }));
+        g.save();
+        g.translate(cx, vy(0.28 - 0.09 / sc.mPerV));
+        g.rotate((sd === "l" ? 1 : -1) * Math.PI / 2);
+        g.scale(pxY / P, pxX / P);
+        g.drawImage(pad.c, -pad.ox, -pad.oy);
+        g.restore();
+      }
+      if (u.stars) {
+        g.save();
+        g.translate(cx, vy(0.262));
+        g.scale(pxX / P, pxY / P);
+        star(g, 0, 0, 2.2 * P, u.stars);
+        g.restore();
+      }
     }
-    if (u.stars) {
-      star(g, S * 0.25, TY + 30, 16, u.stars);
-      star(g, S * 0.75, TY + 30, 16, u.stars);
-    }
-    if (u.sleeveText) {
-      g.save();
-      g.translate(S * 0.25, TY + 70);
-      g.rotate(Math.PI / 2);
-      drawText(g, u.sleeveText, 0, 0, 30, u.wordFont, u.wordColor, u.wordOutline, 120);
-      g.restore();
-    }
-    if (u.sleevePatch) drawImageFit(g, u.sleevePatch, S * 0.25, TY + 52, 64, 64);
-    collarBand(g, S, u.jersey, trimCols);
+    collarBand(g, S, u.jersey, trimCols, !!u.vneck);
     const t = new T.CanvasTexture(c);
     t.colorSpace = T.SRGBColorSpace;
-    t.anisotropy = 4;
+    t.anisotropy = o.low ? 2 : 8;
     return t;
+  }
+  // 筆記体の下の飾り線 (Yokohama / Buffaloes): 最後の文字の下から左へ伸びて細くなる
+  function swash(g, P, x, y, cap, w, tilt, st) {
+    g.save();
+    g.translate(x, y);
+    g.rotate((tilt || 0) * D2R);
+    const W = w * P;
+    const y0 = cap * P * 0.62;
+    const path = () => {
+      g.beginPath();
+      g.moveTo(W * 0.48, y0 - cap * P * 0.18);
+      g.quadraticCurveTo(W * 0.46, y0 + cap * P * 0.1, W * 0.12, y0 + cap * P * 0.06);
+      g.lineTo(-W * 0.42, y0 - cap * P * 0.02);
+      g.lineTo(W * 0.12, y0 - cap * P * 0.06);
+      g.quadraticCurveTo(W * 0.36, y0 - cap * P * 0.08, W * 0.48, y0 - cap * P * 0.18);
+      g.closePath();
+    };
+    applique(g, P, (mode) => {
+      path();
+      if (mode === "fill") g.fill();
+      else g.stroke();
+    }, Object.assign({}, st, { boldMm: 0.6 }));
+    g.restore();
+  }
+  function star(g, x, y, r, col) {
+    g.fillStyle = col;
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+      const rr = i % 2 ? r * 0.45 : r;
+      g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    g.closePath();
+    g.fill();
   }
   // 襟の帯: build_player.py が襟ぐりに足した折り返しの帯 (表 → 縁 → 裏)。
   // テクスチャでは裾の下 (パンツに隠れる所) の横長の行に、縁からの距離 (mm) ごとの横じまとして描く
-  function collarBand(g, S, base, trimCols) {
+  function collarBand(g, S, base, trimCols, vneck) {
     const cb = asset.extra.collarBand;
     if (!cb) return;
     const vOf = (mm) => (mm >= 0 ? cb.vEdge + (cb.vOut - cb.vEdge) * Math.min(1.1, mm / cb.mmOut) : cb.vEdge + (cb.vIn - cb.vEdge) * Math.min(1.1, -mm / cb.mmIn));
@@ -417,7 +1126,12 @@
     };
     band(cb.mmOut * 1.1, 0, base);
     band(0, -cb.mmIn * 1.1, shade(base, 0.82)); // 裏地は少し暗く
-    if (trimCols && trimCols.length) {
+    if (vneck && trimCols && trimCols.length) {
+      // V ネックのリブ: 外側の色を広く、縁の側に 2 色目
+      band(cb.mmOut * 1.1, 5, trimCols[0]);
+      band(5, -cb.mmIn * 1.1, trimCols[1] || trimCols[0]);
+      band(cb.mmOut * 1.1 - 0.8, cb.mmOut * 1.1, shade(trimCols[0], 0.75));
+    } else if (trimCols && trimCols.length) {
       // 1 色目は縁を包むパイピング、2 色目からは外側に並ぶ細い線
       const w = trimCols.length > 1 ? 2.6 : 4.2;
       band(-3.6, 1.9 + w, trimCols[0]);
@@ -431,70 +1145,163 @@
     return "#" + new T.Color(col).multiplyScalar(k).getHexString();
   }
   const pantsCache = {};
-  // パンツ: 左脚 u=0..0.5, 右脚 0.5..1。脚ごとに 正面 = 1/8, 外側 = 1/4 (左脚) / 1/2・1 (右脚の継ぎ目)
-  function pantsTexture(u) {
-    const key = [u.pants, u.pantsPinstripe, (u.pantsPiping || []).join(), u.pantsText].join("|");
+  // パンツ: 左脚 u=0..0.5 (内側 0, 正面 1/8, 外側 1/4, 後ろ 3/8), 右脚 0.5..1 (外側 0.5 と 1, 正面 5/8, 内側 3/4, 後ろ 7/8)。
+  // 球団・ホーム/ビジターごとに共有。ベルト (バックル付き) もここに描く
+  function pantsTexture(u, low) {
+    const key = [low ? 1 : 0, u.pants, u.pantsPinstripe, u.pantsPinstripeCm, (u.pantsPiping || []).join(), u.pantsPipingMm, u.pantsText, u.number, u.belt, u.buckle].join("|");
     if (pantsCache[key]) return pantsCache[key];
-    const S = 256;
+    const S = low ? 256 : 512;
     const c = document.createElement("canvas");
     c.width = c.height = S;
     const g = c.getContext("2d");
+    const vy = (v) => (1 - v) * S;
+    const pl = SC.pants.l;
+    const pr = SC.pants.r;
     g.fillStyle = u.pants;
     g.fillRect(0, 0, S, S);
-    for (let i = 0; i < 500; i++) {
-      g.fillStyle = "rgba(0,0,0," + Math.random() * 0.03 + ")";
-      g.fillRect(Math.random() * S, Math.random() * S, 2, 2);
-    }
-    if (u.pantsPinstripe) {
-      g.strokeStyle = u.pantsPinstripe;
-      g.lineWidth = 1.1;
-      for (let x = 1; x < S; x += S / 36) {
-        g.beginPath();
-        g.moveTo(x, 0);
-        g.lineTo(x, S);
-        g.stroke();
+    g.fillStyle = weavePattern(g);
+    g.fillRect(0, 0, S, S);
+    const band = (sc, uc, d0, d1, v0, v1, col) => {
+      const L = [];
+      const R = [];
+      for (let v = v0; v <= v1 + 1e-6; v += 0.03) {
+        const vq = Math.min(Math.max(v, 0.45), 0.72);
+        const a = sc.uAt(vq, uc, d0);
+        const b = sc.uAt(vq, uc, d1);
+        if (isNaN(a) || isNaN(b)) continue;
+        L.push([a * S, vy(v)]);
+        R.push([b * S, vy(v)]);
       }
-    }
-    if (u.pantsPiping) {
-      u.pantsPiping.forEach((cc, i) => {
-        g.fillStyle = cc;
-        for (const x of [S * 0.25, S * 0.5, S]) {
-          g.fillRect(x - 3 - i * 4, 0, 3, S);
-          g.fillRect(x + 1 + i * 4, 0, 3, S);
+      if (L.length < 2) return;
+      g.fillStyle = col;
+      g.beginPath();
+      L.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+      R.reverse().forEach((p) => g.lineTo(p[0], p[1]));
+      g.closePath();
+      g.fill();
+    };
+    if (u.pantsPinstripe) {
+      const sp = (u.pantsPinstripeCm || CM.pinstripe) / 100;
+      g.strokeStyle = u.pantsPinstripe;
+      g.lineWidth = Math.max(0.9, 0.15 * pl.pxX(0.7, 0.125, S));
+      g.globalAlpha = 0.86;
+      // 脚ごとに正面と後ろの中央から等間隔。継ぎ目 (内側・外側) で切る
+      for (const [sc, cf, cb, a, m, b] of [[pl, 0.125, 0.375, 0, 0.25, 0.5], [pr, 0.625, 0.875, 0.5, 0.75, 1]]) {
+        for (const [uc, ua, ub] of [[cf, a, m], [cb, m, b]]) {
+          g.save();
+          g.beginPath();
+          g.rect(ua * S, 0, (ub - ua) * S, S);
+          g.clip();
+          for (let k = -30; k <= 30; k++) {
+            g.beginPath();
+            let on = false;
+            for (let v = 0.0; v <= 1.0; v += 0.04) {
+              const uu = sc.uAt(Math.min(Math.max(v, 0.45), 0.72), uc, k * sp);
+              if (isNaN(uu) || uu < ua - 0.03 || uu > ub + 0.03) {
+                on = false;
+                continue;
+              }
+              if (on) g.lineTo(uu * S, vy(v));
+              else g.moveTo(uu * S, vy(v));
+              on = true;
+            }
+            g.stroke();
+          }
+          g.restore();
         }
+      }
+      g.globalAlpha = 1;
+    }
+    // 脇のライン: 外側の縫い目だけ (左脚 u 0.25、右脚 u 0.5 と 1.0)
+    if (u.pantsPiping) {
+      const w = (u.pantsPipingMm || 12) / 1000;
+      let off = 0;
+      u.pantsPiping.forEach((cc) => {
+        band(pl, 0.25, off, off + w, 0, 1, cc);
+        band(pl, 0.25, -off - w, -off, 0, 1, cc);
+        band(pr, 0.5, off, off + w, 0, 1, cc);
+        band(pr, 1, -off - w, -off, 0, 1, cc);
+        off += w;
       });
     }
     if (u.pantsText) {
+      // 左脚の外側、腰の下に腕に沿う向きの小さな文字
+      const P = 8;
+      const pad = newPad(-8, 8, -2.5, 2.5, P);
+      appliqueText(pad.g, P, u.pantsText, pad.X(0), pad.Y(0), { cap: 2.5, maxW: 15, font: "Graduate", fill: u.number, boldMm: 1.2, condense: 0.8 });
       g.save();
-      g.translate(S * 0.19, S * 0.32);
-      g.rotate(Math.PI / 2);
-      drawText(g, u.pantsText, 0, 0, 16, "Graduate", u.number, null, S * 0.5);
+      g.translate(S * 0.25, vy(0.8));
+      g.rotate(-Math.PI / 2);
+      g.scale(pl.pxY(S) / P, pl.pxX(0.8, 0.25, S) / P);
+      g.drawImage(pad.c, -pad.ox, -pad.oy);
       g.restore();
     }
-    // ベルト
-    g.fillStyle = "#141414";
-    g.fillRect(0, 0, S, S * 0.045);
-    g.fillStyle = u.pants;
-    for (let x = 6; x < S; x += S / 10) g.fillRect(x, 0, 4, S * 0.05);
+    // ベルト: 4 cm 幅、上に光の線、下に影。ベルト通し (1 cm, パンツの色) と正面のバックル (3 × 3.5 cm)
+    const vB = SC.vBelt;
+    const bt = vB + 0.015 / pl.mPerV;
+    const bb = vB - 0.025 / pl.mPerV;
+    g.fillStyle = u.belt;
+    g.fillRect(0, vy(bt), S, vy(bb) - vy(bt));
+    g.fillStyle = "rgba(255,255,255,0.16)";
+    g.fillRect(0, vy(bt), S, Math.max(1, S / 256));
+    g.fillStyle = "rgba(0,0,0,0.3)";
+    g.fillRect(0, vy(bb) - Math.max(1, S / 256), S, Math.max(1, S / 256));
+    const loopCol = shade(u.pants, 0.93);
+    for (const [sc, uc] of [[pl, 0.125], [pl, 0.25], [pl, 0.375], [pr, 0.625], [pr, 0.75], [pr, 0.875]]) {
+      const a = sc.uAt(vB, uc, -0.005);
+      const b = sc.uAt(vB, uc, 0.005);
+      if (isNaN(a) || isNaN(b)) continue;
+      g.fillStyle = loopCol;
+      g.fillRect(a * S, vy(bt) - 1, (b - a) * S, vy(bb) - vy(bt) + 2);
+      g.fillStyle = "rgba(0,0,0,0.18)";
+      g.fillRect(a * S, vy(bt) - 1, 1, vy(bb) - vy(bt) + 2);
+      g.fillRect(b * S - 1, vy(bt) - 1, 1, vy(bb) - vy(bt) + 2);
+    }
+    // バックル: 左脚の内側の縫い目 (u 0) と右脚の内側 (u 0.75) にまたがる
+    const bw = 0.03;
+    const bh = 0.035;
+    const by0 = vy(vB + bh / 2 / pl.mPerV);
+    const by1 = vy(vB - bh / 2 / pl.mPerV);
+    const buckle = (x0, x1) => {
+      g.fillStyle = shade(u.buckle, 0.55);
+      g.fillRect(x0, by0, x1 - x0, by1 - by0);
+      g.fillStyle = u.buckle;
+      g.fillRect(x0 + 1, by0 + 1, x1 - x0 - 2, by1 - by0 - 2);
+      g.fillStyle = "rgba(255,255,255,0.35)";
+      g.fillRect(x0 + 1, by0 + 1, x1 - x0 - 2, 1);
+    };
+    const lb = pl.uAt(vB, 0, bw / 2);
+    const rb = pr.uAt(vB, 0.75, -bw / 2);
+    if (!isNaN(lb)) buckle(0, lb * S);
+    if (!isNaN(rb)) buckle(rb * S, 0.75 * S);
     const t = new T.CanvasTexture(c);
     t.colorSpace = T.SRGBColorSpace;
+    t.anisotropy = low ? 2 : 4;
     t.userData.shared = true;
     pantsCache[key] = t;
     return t;
   }
-  // 帽子・ヘルメットのマーク (正方形のキャンバス)
+  // 帽子・ヘルメットのマーク (正方形のキャンバス)。画像 / 文字 / 組み合わせ文字 (markStyle "mono")
   function markCanvas(m) {
     const S = 256;
     const c = document.createElement("canvas");
     c.width = c.height = S;
     const g = c.getContext("2d");
-    if (m.mark && drawImageFit(g, m.mark, S / 2, S / 2, S * 0.92, S * 0.92)) return { c, k: 1 };
+    if (m.mark) {
+      const P = S / 5.2; // 5 cm の正方形いっぱいに
+      if (appliqueImage(g, P, m.mark, S / 2, S / 2, 4.9, 4.9, m.markTint)) return { c, k: 1 };
+    }
     const txt = m.markText || "";
     if (!txt) return null;
-    drawText(g, txt, S / 2, S / 2 + 8, txt.length > 1 ? 190 : 230, m.markFont || "Graduate", m.markColor || "#fff", m.markOutline || null, S * 0.98);
+    const P = S / 5;
+    const st = { fill: m.markColor || "#fff", outline: m.markOutline || null, outlineMm: 1.6, boldMm: boldOf(m.markFont || "Graduate"), font: m.markFont || "Graduate" };
+    if (m.markStyle === "mono" && txt.length >= 2) monogram(g, P, txt, S / 2, S / 2, 3.6, st.font, st);
+    else appliqueText(g, P, txt, S / 2, S / 2, Object.assign({ cap: txt.length > 1 ? 3.0 : 3.9, maxW: 4.8, condense: 0.8 }, st));
     // 文字は四角の中で小さく見えるので、ひとまわり大きく貼る
     return { c, k: 1.25 };
   }
+  H._markCanvas = markCanvas;
+  H._dbg = { appliqueText, newPad, monogram, jerseyTexture, pantsTexture, uniformOf };
   // 帽子のクラウン・ヘルメットの殻: u = 頭のまわり (0.5 が正面), v = 縁 0 → てっぺん 1 (build_player.py の dome_uv)。
   // マークは正面のパネルに描き込む (浮いた板にしないので、浅い帽子でも形からはみ出さない)。球団ごとに共有する
   const domeCache = {};
@@ -503,7 +1310,7 @@
     // 画質 low では半分の解像度
     const W = low ? 512 : 1024;
     const Hc = W / 4;
-    const key = [kind, W, base, stripes || "", m.mark || "", m.markText || "", m.markColor || "", m.markFont || "", m.markOutline || ""].join("|");
+    const key = [kind, W, base, stripes || "", m.mark || "", m.markTint || "", m.markText || "", m.markStyle || "", m.markColor || "", m.markFont || "", m.markOutline || ""].join("|");
     if (domeCache[key]) return domeCache[key];
     const c = document.createElement("canvas");
     c.width = W;
@@ -518,7 +1325,7 @@
       for (let k = 0; k < 16; k++) g.fillRect(((0.5 + k / 16) % 1) * W - W / 170, vy(0.9), W / 85, Hc);
     }
     if (kind !== "helmet") {
-      // 6 枚はぎの縫い目 (正面の中央にも 1 本)
+      // 6 枚はぎの縫い目 (正面の中央にも 1 本) と、パネルごとの通気穴
       g.strokeStyle = "rgba(0,0,0,0.28)";
       g.lineWidth = W / 512;
       for (let k = 0; k < 6; k++) {
@@ -527,6 +1334,13 @@
         g.moveTo(x, vy(0.97));
         g.lineTo(x, Hc);
         g.stroke();
+        for (const dx of [-1 / 24, 1 / 24]) {
+          const ex = ((0.5 + k / 6 + 1 / 12 + dx) % 1) * W;
+          g.beginPath();
+          g.ellipse(ex, vy(0.74), W / 300, Hc / 60, 0, 0, Math.PI * 2);
+          g.fillStyle = "rgba(0,0,0,0.5)";
+          g.fill();
+        }
       }
       // 縁のステッチ
       g.strokeStyle = "rgba(0,0,0,0.22)";
@@ -551,6 +1365,36 @@
     const im = m.mark ? H.image(m.mark) : null;
     if (!im || im.ok) domeCache[key] = t;
     else t.userData.shared = false;
+    return t;
+  }
+  // 布の編み目 (法線マップ, 繰り返し)。遠目にはつやの違いとしてだけ見える
+  let knitTex = null;
+  function knitNormal() {
+    if (knitTex) return knitTex;
+    const N = 64;
+    const c = document.createElement("canvas");
+    c.width = c.height = N;
+    const g = c.getContext("2d");
+    const id = g.createImageData(N, N);
+    const d = id.data;
+    const h = (x, y) => 0.5 + 0.22 * Math.sin((x / N) * Math.PI * 2 * 8) * Math.sin((y / N) * Math.PI * 2 * 16) + 0.18 * Math.cos((y / N) * Math.PI * 2 * 8 + Math.sin((x / N) * Math.PI * 2 * 8));
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const dx = (h(x + 1, y) - h(x - 1, y)) * 2.5;
+        const dy = (h(x, y + 1) - h(x, y - 1)) * 2.5;
+        const l = Math.hypot(dx, dy, 1);
+        const o = (y * N + x) * 4;
+        d[o] = (-dx / l) * 127 + 128;
+        d[o + 1] = (dy / l) * 127 + 128; // キャンバスの y は下向き
+        d[o + 2] = (1 / l) * 127 + 128;
+        d[o + 3] = 255;
+      }
+    g.putImageData(id, 0, 0);
+    const t = new T.CanvasTexture(c);
+    t.wrapS = t.wrapT = T.RepeatWrapping;
+    t.repeat.set(70, 70);
+    t.userData.shared = true;
+    knitTex = t;
     return t;
   }
 
@@ -597,12 +1441,13 @@
     skinShader(matSkin, lowQ);
     // 目: つるつるにして、環境マップ・ライトのハイライト (キャッチライト) が映るように
     const matEye = new T.MeshStandardMaterial({ map: asset.eye, roughness: 0.05, envMapIntensity: 1.5 });
-    const jt = umpire ? null : jerseyTexture({ u: st, team, num: o.num, nameEn: o.nameEn });
-    // 布の頂点色 = build_player.py で焼いた環境光の遮蔽 (わき・股・襟の内側)
+    const jt = umpire ? null : jerseyTexture({ u: st, team, num: o.num, nameEn: o.nameEn, low: lowQ });
+    // 布の頂点色 = build_player.py で焼いた環境光の遮蔽 (わき・股・襟の内側)。編み目の法線は低画質では省く
     const ao = (k) => !!asset.geos[k].getAttribute("color");
-    const matShirt = new T.MeshStandardMaterial({ map: jt, color: umpire ? st.jersey : "#ffffff", roughness: 0.86, envMapIntensity: 0.5, vertexColors: ao("shirt") });
+    const knit = lowQ ? null : knitNormal();
+    const matShirt = new T.MeshStandardMaterial({ map: jt, color: umpire ? st.jersey : "#ffffff", roughness: 0.9, envMapIntensity: 0.5, vertexColors: ao("shirt"), normalMap: knit, normalScale: new T.Vector2(0.25, 0.25) });
     clothInside(matShirt);
-    const matPants = new T.MeshStandardMaterial({ map: umpire ? null : pantsTexture(st), color: umpire ? st.pants : "#ffffff", roughness: 0.88, envMapIntensity: 0.5, vertexColors: ao("pants") });
+    const matPants = new T.MeshStandardMaterial({ map: umpire ? null : pantsTexture(st, lowQ), color: umpire ? st.pants : "#ffffff", roughness: 0.9, envMapIntensity: 0.5, vertexColors: ao("pants"), normalMap: knit, normalScale: new T.Vector2(0.25, 0.25) });
     const matUnder = new T.MeshStandardMaterial({ color: st.under, roughness: 0.8, envMapIntensity: 0.5, vertexColors: ao("under") });
     const matSocks = new T.MeshStandardMaterial({ color: st.socks, roughness: 0.85, envMapIntensity: 0.5, vertexColors: ao("socks") });
     const matShoes = new T.MeshStandardMaterial({ color: st.shoes, vertexColors: true, roughness: 0.35, metalness: 0.05, envMapIntensity: 0.8 });
@@ -628,7 +1473,8 @@
       meshes[name] = m;
       return m;
     };
-    const longPants = o.longPants != null ? o.longPants : rnd() < 0.4;
+    // 2004 年はほとんどの選手が靴にかかる長いパンツ (球団の longPantsRate、既定 85%)
+    const longPants = o.longPants != null ? o.longPants : rnd() < (st.def && st.def.longPantsRate != null ? st.def.longPantsRate : 0.85);
     // 影は形の大きい部分だけが落とす (目・前腕のアンダー・小物は落とさない)
     add("head", matSkin);
     add("eyes", matEye, false);
@@ -637,7 +1483,7 @@
     add("under", matUnder, false);
     add("pants", matPants).visible = !longPants;
     add("pantsL", matPants).visible = longPants;
-    add("socks", matSocks, !longPants);
+    add("socks", matSocks, !longPants).visible = !longPants; // 長いパンツの下のストッキングは描かない
     add("shoes", matShoes);
     add("cap", matCap);
     add("helmet", matHelmet);

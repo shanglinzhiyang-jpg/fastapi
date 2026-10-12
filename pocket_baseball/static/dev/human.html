@@ -2,7 +2,7 @@
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>選手モデル確認</title>
 <base href="/">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Graduate&family=Yellowtail&family=Rye&family=Ultra&family=Dela+Gothic+One&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Graduate&family=Yellowtail&family=Rye&family=Ultra&family=Archivo+Black&family=Lobster&family=Oleo+Script:wght@700&family=Dela+Gothic+One&display=swap">
 <style>html,body{margin:0;height:100%;background:#1c2733}canvas{display:block;width:100%;height:100%}</style>
 </head><body>
 <script src="vendor/three.min.js"></script>
@@ -65,7 +65,31 @@ const tigers = PB.D.teamDef('t'), giants = PB.D.teamDef('g'), carp = PB.D.teamDe
 H.load("models/").then(() => Promise.all(PB.D.TEAMS.map((t) => H.preloadTeam(t)))).then(() => document.fonts.ready).then(() => {
   if (mode === 'teams' || mode === 'teamsback' || mode === 'away') {
     const ids = (q.get('ids') || 'g,t,d,s,c,yb').split(',');
-    ids.forEach((id, i) => addP({ team: TT(id), num: [1, 5, 7, 18, 25, 55][i % 6], nameEn: ['MATSUI', 'SHINJYO', 'TATSUNAMI', 'IWAMURA', 'MAEDA', 'KANEMOTO'][i % 6], seed: 30 + i, home: mode !== 'away', longPants: i % 2 === 0 }, -1.9 + i * 0.76, 0, mode === 'teamsback' ? Math.PI : 0, () => A.LIB.stand));
+    // 1 人だけなら中央に。長いパンツは 2004 年らしく 6/7 (?long=0 で全員短く, 1 で全員長く)
+    const lp = q.get('long');
+    ids.forEach((id, i) => addP({ team: TT(id), num: [1, 5, 7, 18, 25, 55][i % 6], nameEn: ['MATSUI', 'SHINJYO', 'TATSUNAMI', 'IWAMURA', 'MAEDA', 'KANEMOTO'][i % 6], seed: 30 + i, home: mode !== 'away', longPants: lp != null ? lp === '1' : i % 7 !== 3 }, (i - (ids.length - 1) / 2) * 0.76, 0, mode === 'teamsback' ? Math.PI : 0, () => A.LIB.stand));
+  }
+  if (mode === 'tex') {
+    // テクスチャそのものを並べて見る (?ids=g,t&side=away): ジャージ / パンツ / 帽子
+    r.domElement.style.display = 'none';
+    document.body.style.cssText = 'margin:0;background:#333;display:flex;flex-wrap:wrap;gap:6px;padding:6px;align-content:flex-start';
+    (q.get('ids') || 'g').split(',').forEach((id, i) => {
+      const p = H.createPlayer({ team: TT(id), num: [1, 5, 7, 18, 25, 55][i % 6], nameEn: ['MATSUI', 'SHINJYO', 'TATSUNAMI', 'IWAMURA', 'MAEDA', 'KANEMOTO'][i % 6], seed: 30 + i, home: q.get('side') !== 'away' });
+      for (const mk of [TT(id).capStyle, TT(id).helmet]) {
+        const r2 = mk && H._markCanvas(Object.assign({ markText: TT(id).mark, markColor: TT(id).sub }, mk));
+        if (r2) { r2.c.style.cssText = 'width:128px;height:128px;background:' + (mk.crown || mk.color); document.body.appendChild(r2.c); }
+      }
+      for (const m of [p.meshes.shirt, p.meshes.pants, p.meshes.cap, p.meshes.helmet]) {
+        const im = m.material.map && m.material.map.image;
+        if (!im) continue;
+        const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+        c.getContext('2d').drawImage(im, 0, 0);
+        const hh = Number(q.get('h') || 512) * (im.width > im.height * 2 ? 0.25 : 1);
+        c.style.cssText = 'width:' + (hh * im.width / im.height) + 'px;height:' + hh + 'px'; document.body.appendChild(c);
+      }
+    });
+    window.__ready = true;
+    return;
   }
   if (mode === 'lineup') {
     addP({ team: tigers, num: 1, nameEn: 'TORITANI', bats: 'L', throws: 'R', seed: 1, skinTone: 1 }, -1.8, 0, 0.15, () => A.LIB.stand);
