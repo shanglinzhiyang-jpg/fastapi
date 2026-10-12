@@ -156,13 +156,16 @@
       park: { dome: false, turf: "mlb", seat: "#b51a22", wall: "#1d4a2a", skyline: true },
       sponsors: ["マツダ", "中国新聞", "コカ・コーラ", "お好みソース", "RCC", "広島銀行", "広島ガス", "エディオン", "もみじ饅頭", "アサヒビール"],
       // 参考写真: 白地に赤のピンストライプ、"Carp" の赤い筆記体 (紺の縁取り, 画像)、番号は赤に紺の縁。
-      // ビジターは灰色に赤の "Hiroshima" (記憶)。ユーザー写真には赤いビジターもある (年代不明) → awayRed に用意 (away と差し替えれば切り替わる)
+      // ビジターは灰色に赤の "Hiroshima" (記憶)。赤いビジター (d4dae51c) は 2009 年以降のものなので variants.awayRed に置くだけ (2004 年は使わない)。
+      // 帽子 (83d6a143): 赤に白の C (紺の縁)、つばの裏は紺
       home: { jersey: "#f7f6f2", pinstripe: "#e3141c", word: "img/words/c.webp", wordWidthCm: 31, wordCm: 13, number: "#e60012", numberOutline: "#0b2240", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f7f6f2", pantsPinstripe: "#e3141c" },
       away: { jersey: "#b9bec6", wordText: "Hiroshima", wordFont: "Lobster", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#e60012", wordOutline: "#0b2240", number: "#e60012", numberOutline: "#0b2240", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#b9bec6", pantsPiping: ["#e60012"] },
-      awayRed: { jersey: "#d7001e", wordText: "Hiroshima", wordFont: "Lobster", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#ffffff", wordOutline: "#0b2240", number: "#ffffff", numberOutline: "#0b2240", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#b9bec6", pantsPiping: ["#d7001e"] },
+      variants: {
+        awayRed: { jersey: "#d7001e", wordText: "Hiroshima", wordFont: "Lobster", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#ffffff", wordOutline: "#0b2240", number: "#ffffff", numberOutline: "#0b2240", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#b9bec6", pantsPiping: ["#d7001e"] },
+      },
       under: "#e60012",
       socks: "#e60012",
-      capStyle: { crown: "#e60012", brim: "#e60012", button: "#e60012", mark: "img/marks/c.webp" },
+      capStyle: { crown: "#e60012", brim: "#e60012", underBrim: "#0b2240", button: "#e60012", mark: "img/marks/c.webp" },
       helmet: { color: "#e60012", mark: "img/marks/c.webp" },
       flag: { bg: ["#e60012", "#ffffff"], logo: "img/teams/c.webp", word: "img/words/c.webp" },
     },
@@ -183,16 +186,17 @@
       park: { dome: false, turf: "turf", seat: "#1d5fb8", wall: "#0f3a7a", skyline: true },
       sponsors: ["TBS", "日産自動車", "コカ・コーラ", "キリンビール", "神奈川新聞", "京浜急行", "横浜銀行", "崎陽軒", "テレビ神奈川", "ノジマ"],
       // 参考写真 (1993〜2008 のホーム): 白地に細い青灰のピンストライプ、"Yokohama" の紺の筆記体 (青の縁取り、下に飾り線)、
-      // 青と紺の V ネック、青と紺の袖口、番号は青 (紺の縁)、左袖に "BayStars" の筆記体。星・脇のライン・"B YOKOHAMA" は 2009 年のもの
-      home: { jersey: "#f4f5f6", pinstripe: "#93a4b8", pinstripeMm: 1.2, vneck: ["#1d4fa8", "#0b2a5b"], sleeveTrim: ["#1d4fa8", "#0b2a5b"], sleeveTrimMm: [14, 8], wordText: "Yokohama", wordFont: "Lobster", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#0b2a5b", wordOutline: "#1d4fa8", wordSwash: true, number: "#1d4fa8", numberOutline: "#0b2a5b", numberOutlineMm: 1.2, numberFont: "Archivo Black", frontNumber: true, backName: true, sleeveWord: "img/words/yb_sleeve.webp", sleeveWordSide: "L", sleeveWordCm: 10, pants: "#f4f5f6", pantsPinstripe: "#93a4b8", pantsPiping: ["#1d4fa8"] },
+      // 青と紺の V ネック、青と紺の袖口、番号は青 (紺の縁)、左袖に "BayStars" の筆記体。星・脇のライン・"B YOKOHAMA" は 2009 年のもの。
+      // 写真 (21770893・808c7f6b 村田): 背ネームは紺の無地、パンツに脇のラインなし、帽子とヘルメットは紺につばが青、帽子は白の筆記体の "YB"
+      home: { jersey: "#f4f5f6", pinstripe: "#93a4b8", pinstripeMm: 1.2, vneck: ["#1d4fa8", "#0b2a5b"], sleeveTrim: ["#1d4fa8", "#0b2a5b"], sleeveTrimMm: [14, 8], wordText: "Yokohama", wordFont: "Lobster", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#0b2a5b", wordOutline: "#1d4fa8", wordSwash: true, number: "#1d4fa8", numberOutline: "#0b2a5b", numberOutlineMm: 1.2, numberFont: "Archivo Black", frontNumber: true, backName: true, backNameColor: "#0b2a5b", backNameOutline: null, sleeveWord: "img/words/yb_sleeve.webp", sleeveWordSide: "L", sleeveWordCm: 10, pants: "#f4f5f6", pantsPinstripe: "#93a4b8", pantsPiping: null },
       // ビジター (写真): 青灰にピンストライプ、同じ "Yokohama" の筆記体 (紺に白の縁)。活字体 "YOKOHAMA" の可能性もある (?)
       away: { jersey: "#b6bbc3", pinstripe: "#7e848c", wordText: "Yokohama", wordFont: "Lobster", wordStyle: "script", wordCm: 8.5, wordWidthCm: 31, wordColor: "#0b2a5b", wordOutline: "#f4f5f6", wordSwash: true, number: "#0b2a5b", numberOutline: "#f4f5f6", numberOutlineMm: 1.2, numberFont: "Archivo Black", frontNumber: true, backName: true, sleeveWord: "img/words/yb_sleeve.webp", sleeveWordSide: "L", sleeveWordCm: 10, pants: "#b6bbc3", pantsPinstripe: "#7e848c", pantsPiping: ["#0b2a5b"] },
       under: "#0b2a5b",
       socks: "#0055a5",
       belt: "#0b2a5b",
-      // img/marks/yb.webp は 2009 年の星付きユニフォームの "B" なので使わず、2004 年の "YB" の組み合わせ文字を描く (?)
-      capStyle: { crown: "#0b2a5b", brim: "#0b2a5b", button: "#0b2a5b", markText: "YB", markStyle: "mono", markColor: "#ffffff", markFont: "Archivo Black" },
-      helmet: { color: "#0b2a5b", markText: "YB", markStyle: "mono", markColor: "#ffffff", markFont: "Archivo Black" },
+      // img/marks/yb.webp は 2009 年の星付きユニフォームの "B" なので使わず、2004 年の筆記体の "YB" の組み合わせ文字を描く (形は 40 px の写真の切り抜きしかない (?))
+      capStyle: { crown: "#0b2a5b", brim: "#1d4fa8", button: "#0b2a5b", markText: "YB", markStyle: "script-mono", markColor: "#ffffff", markFont: "Lobster" },
+      helmet: { color: "#0b2a5b", brim: "#1d4fa8", markText: "YB", markStyle: "script-mono", markColor: "#ffffff", markFont: "Lobster" },
       flag: { bg: ["#0055a5", "#ffffff"], word: "img/words/yb_script.webp", wordBg: "#ffffff" },
     },
     {
@@ -236,8 +240,9 @@
       stadium: "西武ドーム",
       park: { dome: true, turf: "turf", seat: "#2a62b8", wall: "#123c7a", roof: "#e5e7e2", forest: true },
       sponsors: ["西武鉄道", "プリンスホテル", "コカ・コーラ", "埼玉新聞", "文化放送", "テレビ埼玉", "サッポロビール", "セブン-イレブン", "埼玉りそな銀行", "ロッテ"],
-      // 参考写真 (カブレラ): 白地に "Lions" の青い筆記体 (赤の細い縁)、青の袖口、番号は青 (赤の縁)。ビジターの色 (水色か) は未確認 (?)
-      home: { jersey: "#f6f5f0", piping: ["#1a4fa0"], pipingMm: 4, sleeveTrim: ["#1a4fa0", "#d71920"], wordText: "Lions", wordFont: "Yellowtail", wordStyle: "script", wordCm: 9.5, wordWidthCm: 28, wordColor: "#1a4fa0", wordOutline: "#d71920", wordOutlineMm: 1.5, number: "#1a4fa0", numberOutline: "#d71920", numberOutlineMm: 1.8, numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#1a4fa0"] },
+      // 参考写真 (2002〜07 の 9dc13743 カブレラ): 白地に "Lions" の青い筆記体 (細い縁, 赤かは未確認 (?))、青の袖口、番号は青、青のベルト、パンツに赤のライン、
+      // 帽子・ヘルメットは水色の「ライオンズブルー」(照明の下で #3891bd。正確な色は未確認 (?))。ビジターの色 (水色か) は未確認 (?)
+      home: { jersey: "#f6f5f0", piping: ["#1a4fa0"], pipingMm: 4, sleeveTrim: ["#1a4fa0", "#d71920"], wordText: "Lions", wordFont: "Yellowtail", wordStyle: "script", wordCm: 9.5, wordWidthCm: 28, wordColor: "#1a4fa0", wordOutline: "#d71920", wordOutlineMm: 1.5, number: "#1a4fa0", numberOutline: "#d71920", numberOutlineMm: 1.8, numberFont: "Graduate", frontNumber: true, backName: true, pants: "#f6f5f0", pantsPiping: ["#d71920"] },
       away: { jersey: "#8db3e2", piping: ["#1a4fa0"], sleeveTrim: ["#1a4fa0"], wordText: "SEIBU", wordFont: "Graduate", wordStyle: "block", wordCm: 7, wordWidthCm: 32, wordColor: "#1a4fa0", wordOutline: "#ffffff", number: "#1a4fa0", numberOutline: "#ffffff", numberFont: "Graduate", frontNumber: true, backName: true, pants: "#c8ced8", pantsPiping: ["#1a4fa0"] },
       under: "#1a4fa0",
       socks: "#1a4fa0",
