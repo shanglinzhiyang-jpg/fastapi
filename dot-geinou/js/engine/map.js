@@ -558,7 +558,9 @@ export class MapScene {
     const mw = this.room.w * TILE, mh = this.room.h * TILE;
     let cx = mw <= W ? -(W - mw) / 2 : clamp(p.px + 8 - W / 2, 0, mw - W);
     // small rooms: centre, but keep the top wall clear of the HUD when there is room
-    let cy = mh <= H ? -Math.max((H - mh) / 2, Math.min(40, H - mh)) : clamp(p.py + 8 - H / 2, 0, mh - H);
+    // big rooms: room.def.topPad (px) lets the camera scroll above row 0 so the HUD does not hide it
+    const pad = this.room.def.topPad || 0;
+    let cy = mh <= H ? -Math.max((H - mh) / 2, Math.min(40, H - mh)) : clamp(p.py + 8 - H / 2, -pad, mh - H);
     if (this.camOverride) { cx = this.camOverride.x; cy = this.camOverride.y; }
     this.cam.x = Math.round(cx);
     this.cam.y = Math.round(cy);

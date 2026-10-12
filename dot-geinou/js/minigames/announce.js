@@ -10,7 +10,8 @@
 //   words: [{ word, reading, wrong: ['…', '…'], sentence? }]   custom pool
 //          (sentence must contain `word`; otherwise a template sentence is used.
 //           If fewer words than `count` are given, built-in words fill the rest.)
-//   count: number of words to read (default 5 + difficulty)
+//   count: number of words to read (default 5 + difficulty; with custom words: how many
+//          were given, at least 4 and at most 5 + difficulty)
 
 import { Minigame, registerMinigame, text, panel, rect, bar, COLORS, sparkle } from '../engine/minigame.js';
 import { setFont, measure, cursor as drawCursor } from '../engine/draw.js';
@@ -73,7 +74,7 @@ const BUILTIN = [
   ['桟敷', 'さじき', ['せんしき', 'さんしき'], '桟敷席から花火を楽しめます。', 2],
   ['心太', 'ところてん', ['しんた', 'しんぶと'], '夏の味覚、心太が人気です。', 2],
   ['時化', 'しけ', ['じか', 'ときばけ'], '時化のため漁を見合わせました。', 2],
-  ['白湯', 'さゆ', ['はくとう', 'しろゆ'], '朝に白湯を飲む人が増えています。', 2],
+  ['白湯', 'さゆ', ['しろゆ', 'はくゆ'], '朝に白湯を飲む人が増えています。', 2],
   ['初陣', 'ういじん', ['しょじん', 'はつじん'], '新人選手が初陣を勝利で飾りました。', 2],
   ['煮沸', 'しゃふつ', ['にふつ', 'にわき'], '使う前に容器を煮沸しましょう。', 2],
   ['杞憂', 'きゆう', ['こゆう', 'きうれい'], '心配は杞憂に終わりました。', 2],
@@ -97,7 +98,7 @@ const BUILTIN = [
   ['反故', 'ほご', ['はんこ', 'はんご'], '約束を反故にしないよう求めました。', 3],
   ['拘泥', 'こうでい', ['こうどろ', 'くでい'], '勝敗に拘泥しない姿勢が話題です。', 3],
   ['好事家', 'こうずか', ['こうしか', 'すきごとか'], '好事家に人気の古いカメラです。', 3],
-  ['言質', 'げんち', ['げんしつ', 'ごんしつ'], '交渉で相手の言質は取れませんでした。', 3],
+  ['言質', 'げんち', ['ごんち', 'ごんしつ'], '交渉で相手の言質は取れませんでした。', 3],
   ['蘊蓄', 'うんちく', ['おんちく', 'うんたく'], '店主が料理の蘊蓄を語りました。', 3],
 ].map(([word, reading, wrong, sentence, lv]) => ({ word, reading, wrong, sentence, lv }));
 
@@ -120,6 +121,20 @@ const CO = { x: 228, y: 42 };             // co-anchor, drawn 3x
 const DESK_Y = 82;
 const OPT_Y = 186;                        // first option row
 const OUT = '#22202a';
+// sentences for custom words given without one (X = the word, kept near the front)
+const FALLBACK = ['次は「X」に関するニュースです。', '続いて「X」の話題をお伝えします。', '今日のキーワードは「X」です。'];
+
+// Largest font size in maxS..minS at which s fits maxW; still too wide -> cut with '…'.
+function fitText(ctx, s, maxW, maxS, minS) {
+  let size = maxS;
+  while (size > minS && measure(ctx, s, size) > maxW) size -= 1;
+  if (measure(ctx, s, size) > maxW) {
+    const ch = Array.from(s);
+    while (ch.length > 1 && measure(ctx, ch.join('') + '…', size) > maxW) ch.pop();
+    s = ch.join('') + '…';
+  }
+  return { s, size };
+}
 
 // ------------------------------------------------------------------ cached studio art
 let ART = null;
@@ -239,7 +254,7 @@ class Announce extends Minigame {
     this.mctx = makeCanvas(4, 4)[1];
     this.items = this.pickItems();
     this.count = this.items.length;
-    this.T = Math.round(this.ease(BASE_T[this.difficulty], 0.4));
+    this.T = Math.round(this.ease(BASE_T[this.difficulty], 0.35));
     this.idx = -1;
     this.score = 0;
     this.correct = 0;
@@ -264,8 +279,11 @@ class Announce extends Minigame {
 
   // ---------------------------------------------------------------- content
   pickItems() {
-    const count = clamp(Math.round(this.opts.count ?? 5 + this.difficulty), 1, 40);
     const custom = [].concat(this.opts.words || []).map((w) => this.normalize(w)).filter(Boolean);
+    // custom words replace the built-in pool (like quiz's custom questions); built-ins only pad
+    // a very short list or an explicit larger count
+    const def = custom.length ? clamp(custom.length, 4, 5 + this.difficulty) : 5 + this.difficulty;
+    const count = clamp(Math.round(this.opts.count ?? def), 1, 40);
     let chosen = shuffle(custom, this.rng).slice(0, count);
     if (chosen.length < count) {
       const used = new Set(chosen.map((c) => c.word));
@@ -294,7 +312,8 @@ class Announce extends Minigame {
       if (wrong.length >= 2) break;
       if (b.reading !== reading && !wrong.includes(b.reading)) wrong.push(b.reading);
     }
-    const sentence = x.sentence && String(x.sentence).includes(word) ? String(x.sentence) : `次は「${word}」に関するニュースです。`;
+    const tpl = FALLBACK[Math.floor(hash2(word.length, word.charCodeAt(0), 5) * FALLBACK.length)];
+    const sentence = x.sentence && String(x.sentence).includes(word) ? String(x.sentence) : tpl.replace('X', () => word);
     return { word, reading, wrong, sentence, lv: x.lv || 2 };
   }
 
@@ -320,6 +339,8 @@ class Announce extends Minigame {
   // ---------------------------------------------------------------- flow
   nextItem() {
     this.idx++;
+    this.bubble = null; // don't leave the previous reading on screen
+    this.coEmote = null;
     this.answer = null;
     this.ok = false;
     this.rem = 1;
@@ -335,8 +356,10 @@ class Announce extends Minigame {
     const it = (this.cur = this.items[this.idx]);
     this.setLine(it.sentence, it);
     const L = this.line;
-    const fit = PR.x + PR.w - 8 - MARK - L.wordW; // keep the whole word on screen
-    this.D = Math.max(Math.min(MAX_DIST, fit), L.preW + 10, 40);
+    // start the sentence just right of the line when possible, but never let the word
+    // itself appear off the right edge (long custom sentences start partly read)
+    const fit = PR.x + PR.w - 8 - MARK - L.wordW;
+    this.D = Math.max(Math.min(Math.max(MAX_DIST, L.preW + 10), fit), 40);
     L.x = MARK + this.D - L.preW;
     this.v = this.D / this.T;
     this.choices = shuffle([it.reading, ...it.wrong.slice(0, 2)], this.rng);
@@ -501,7 +524,7 @@ class Announce extends Minigame {
     rect(ctx, 0, 0, W, H, '#0a0e22');
     ctx.save();
     if (this.stage === 'kamu' && this.st < 18) {
-      ctx.translate(Math.round((this.rng() - 0.5) * 6), Math.round((this.rng() - 0.5) * 4));
+      ctx.translate(Math.round((hash2(this.st, 1, 9) - 0.5) * 6), Math.round((hash2(this.st, 2, 9) - 0.5) * 4));
     }
     ctx.drawImage(A.bg, 0, 0);
     this.drawWall(ctx);
@@ -588,9 +611,8 @@ class Announce extends Minigame {
   drawBubble(ctx) {
     const b = this.bubble;
     if (!b || b.t > 80) return;
-    let size = 12;
-    while (size > 8 && measure(ctx, b.str, size) > 104) size -= 1;
-    const w = Math.ceil(Math.min(measure(ctx, b.str, size), 104)) + 12;
+    const { s: str, size } = fitText(ctx, b.str, 104, 12, 8);
+    const w = Math.ceil(Math.min(measure(ctx, str, size), 104)) + 12;
     const x = 118, y = 52, h = 20;
     const pop = b.t < 4 ? 2 : 0;
     rect(ctx, x - 1, y - 1 - pop, w + 2, h + 2, OUT);
@@ -600,7 +622,7 @@ class Announce extends Minigame {
     rect(ctx, x - 8, y + 12 - pop, 5, 3, OUT);
     rect(ctx, x - 3, y + 10 - pop, 4, 2, '#ffffff');
     rect(ctx, x - 7, y + 13 - pop, 4, 1, '#ffffff');
-    text(ctx, b.str, x + w / 2, y + (h - size) / 2 - pop, { size, align: 'center', color: b.color, shadow: null });
+    text(ctx, str, x + w / 2, y + (h - size) / 2 - pop, { size, align: 'center', color: b.color, shadow: null });
   }
 
   drawEmote(ctx) {
@@ -718,9 +740,8 @@ class Announce extends Minigame {
     if (!it) return;
     // left: the word + time left
     text(ctx, '読みは？', 57, 186, { size: 10, align: 'center', color: COLORS.dim });
-    let size = 20;
-    while (size > 10 && measure(ctx, it.word, size) > 96) size -= 2;
-    text(ctx, it.word, 57, 210 - size / 2, { size, align: 'center', color: COLORS.accent });
+    const wf = fitText(ctx, it.word, 94, 20, 8);
+    text(ctx, wf.s, 57, 210 - wf.size / 2, { size: wf.size, align: 'center', color: COLORS.accent });
     const rem = this.stage === 'ask' ? clamp((this.wordX() - MARK) / this.D, 0, 1) : this.rem;
     bar(ctx, 12, 225, 90, 6, rem, rem > 0.3 ? COLORS.good : COLORS.bad);
     // right: the three readings
@@ -740,9 +761,8 @@ class Announce extends Minigame {
         else if (i === this.answer) { rect(ctx, 120, y - 2, 190, 15, '#6a1e2a'); col = '#ffd0d6'; }
         else col = '#6a7090';
       }
-      let s = 12;
-      while (s > 8 && measure(ctx, ch, s) > 150) s -= 1;
-      text(ctx, ch, 136, y + (12 - s) / 2, { size: s, color: col });
+      const f = fitText(ctx, ch, 154, 12, 8);
+      text(ctx, f.s, 136, y + (12 - f.size) / 2, { size: f.size, color: col });
       if (answered && isRight) text(ctx, '○', 300, y, { size: 12, align: 'center', color: COLORS.good });
       if (answered && i === this.answer && !isRight) text(ctx, '×', 300, y, { size: 12, align: 'center', color: COLORS.bad });
     }

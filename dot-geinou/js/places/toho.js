@@ -51,9 +51,9 @@ function shadowT(c, cx, cy, rx, ry) {
 }
 
 // ---------------------------------------------------------------- items
-registerItem('toho_popcorn', { name: 'ポップコーン', price: 400, heal: 30, desc: '劇場名物、できたての塩ポップコーン。体力が30回復する。' });
+registerItem('toho_popcorn', { name: 'ポップコーン', price: 400, heal: 30, desc: '劇場名物の塩ポップコーン。体力が30回復する。' });
 registerItem('toho_soda', { name: 'メロンソーダ', price: 250, heal: 20, desc: 'シュワっと爽快！体力が20回復する。' });
-registerItem('toho_pamphlet', { name: '公演パンフ', price: 300, buff: 'uta', desc: 'ミュージカルのパンフレット。次の「歌」のミニゲームが少しやさしくなる。' });
+registerItem('toho_pamphlet', { name: '公演パンフ', price: 300, buff: 'uta', desc: 'パンフで予習！次の「歌」のゲームが少し楽になる。' });
 registerItem('toho_sofubi', {
   name: '怪獣ソフビ', price: 1500, desc: '大怪獣ガオドンのソフビ人形。使うと…？',
   use: async (g) => {
@@ -1193,10 +1193,9 @@ function resetNpc(g, id) {
 }
 function faceNpc(g, id, dir) { const e = g.npc(id); if (e) e.dir = dir; }
 
-async function tier1Ok(g) {
+async function tier1Ok(g, npc) {
   if (g.state.agency || g.state.fame >= 30) return true;
-  await g.say(`このお仕事は、事務所に所属しているか\n知名度★30以上の人にお願いしているんだ。\n（いまは★${g.state.fame}）`);
-  await g.say('まずは助監督さんのところで\nエキストラから始めてみよう！');
+  await g.say([`このお仕事は、事務所に所属しているか\n知名度★30以上の人にお願いしているんだ。\n（いまは★${g.state.fame}）`, 'まずは助監督のところで\nエキストラから始めてみよう！'], sp(npc));
   return false;
 }
 
@@ -1263,7 +1262,7 @@ async function kidTalk(g, npc) {
 }
 
 async function madamTalk(g, npc) {
-  await g.say('ミュージカルはいいわよ〜。\n歌とお芝居とダンスの総合芸術ね。', sp(npc));
+  await g.say(['ミュージカルはいいわよ〜。\n歌とお芝居とダンスの総合芸術ね。', '日比谷のあたりは、劇場や映画館が\nたくさん集まっているの。\n観劇のあとのお散歩も楽しいわよ♪'], sp(npc));
   if (g.state.fame < 250) await g.say('舞台に立ちたいなら、まずは歌を磨くこと。\n劇場の歌唱指導の先生がおすすめよ。', sp(npc));
   else if (g.state.fame < 1000) await g.say('主演を張るなら★1000は必要ね。\nそれまではアンサンブルで\n舞台の経験を積むといいわ。', sp(npc));
   else await g.say('あら、あなた最近よく見るわね。\n今度の主演、楽しみにしてるわ！', sp(npc));
@@ -1315,15 +1314,26 @@ async function conductorTalk(g, npc) {
 async function curtainCall(g) {
   await g.fadeOut(16);
   await g.goto('toho', 'theater', 9, 4, 'down', { fade: false });
+  // the cast lines up on both sides of the new star
+  g.placeNpc('toho_lead', 11, 4, 'down');
+  g.placeNpc('toho_ensemble', 7, 4, 'down');
+  g.placeNpc('toho_dancer', 13, 4, 'down');
   fx.spotX = 9.5; fx.spotY = 4.3; fx.spotTarget = 1; fx.spot = 1;
   await g.fadeIn(16);
-  g.sfx('applause');
-  await g.say('ブラボー！！\n客席から、割れんばかりの拍手！');
-  await Promise.all([g.emote('player', '♪'), g.emote('toho_lead', '♥'), g.emote('toho_ensemble', '♥'), g.emote('toho_audience', '!')]);
-  g.sfx('applause');
-  await g.say('カーテンコールで、深々とおじぎをした。\n…主役って、最高だ！');
-  await g.fadeOut(16);
-  fx.spotTarget = 0; fx.spot = 0;
+  try {
+    g.sfx('applause');
+    await g.say('ブラボー！！\n客席から、割れんばかりの拍手！');
+    await Promise.all([g.emote('player', '♪'), g.emote('toho_lead', '♥'), g.emote('toho_ensemble', '♥'), g.emote('toho_audience', '!')]);
+    await Promise.all([g.moveNpc('toho_lead', 'face:left'), g.moveNpc('toho_ensemble', 'face:right')]);
+    await g.say('最高の舞台だったよ、座長！', { name: '共演者', look: LK.lead });
+    await Promise.all([g.moveNpc('toho_lead', 'face:down'), g.moveNpc('toho_ensemble', 'face:down')]);
+    g.sfx('applause');
+    await g.say('カーテンコールで、深々とおじぎをした。\n…主役って、最高だ！');
+    await g.fadeOut(16);
+  } finally {
+    fx.spotTarget = 0; fx.spot = 0;
+    for (const id of ['toho_lead', 'toho_ensemble', 'toho_dancer']) resetNpc(g, id);
+  }
   await g.goto('toho', 'theater', 9, 10, 'up', { fade: false });
   await g.fadeIn(16);
 }
@@ -1331,10 +1341,10 @@ async function curtainCall(g) {
 async function stageDirTalk(g, npc) {
   const i = await g.ask('演出家だ。歌に芝居にダンス…\nミュージカルは総合芸術だよ。\n出演したいのかい？', ['アンサンブル', '主演に挑戦', '話を聞く', 'やめておく'], sp(npc));
   if (i === 0) {
-    const r = await g.job(JOBS.ensemble);
+    const r = await g.job({ ...JOBS.ensemble, clientLook: npc.look });
     if (r) await g.say('SA'.includes(r.rank) ? 'ブラボー！\n君の歌声、客席の奥まで届いていたよ！' : 'おつかれさま！\n次はもっと声を響かせよう。', sp(npc));
   } else if (i === 1) {
-    const r = await g.job(JOBS.lead);
+    const r = await g.job({ ...JOBS.lead, clientLook: npc.look });
     if (r) {
       await curtainCall(g);
       await g.say('最高の舞台だった！\n君こそ、この劇場の主役だ！', sp(npc));
@@ -1425,7 +1435,7 @@ async function kaijuTalk(g) {
 async function adTalk(g, npc) {
   const i = await g.ask('おつかれさまです！助監督です！\nいまエキストラを大募集中なんです！', ['エキストラ', '撮影の流れ', 'やめておく'], sp(npc));
   if (i === 0) {
-    const r = await g.job(JOBS.extra);
+    const r = await g.job({ ...JOBS.extra, clientLook: npc.look });
     if (r) await g.say('おつかれさまでした！\nスクリーンのすみっこに映るかも？', sp(npc));
   } else if (i === 1) {
     await g.say([
@@ -1441,11 +1451,11 @@ async function adTalk(g, npc) {
 async function sfxDirTalk(g, npc) {
   const i = await g.ask('特撮監督だ！ミニチュアの街と怪獣で、\n夢みたいな画をつくるのが仕事さ。', ['逃げまどう市民役', 'スーツアクター', '特撮の話', 'やめておく'], sp(npc));
   if (i === 0) {
-    if (!(await tier1Ok(g))) return;
-    const r = await g.job(JOBS.citizen);
+    if (!(await tier1Ok(g, npc))) return;
+    const r = await g.job({ ...JOBS.citizen, clientLook: npc.look });
     if (r) await g.say('いい逃げっぷりだった！\n画面のすみまで本気だったぞ！', sp(npc));
   } else if (i === 1) {
-    const r = await g.job(JOBS.suit);
+    const r = await g.job({ ...JOBS.suit, clientLook: npc.look });
     if (r) {
       g.shake(16, 2);
       g.sfx('drum');
@@ -1490,6 +1500,8 @@ async function coachTalk(g, npc) {
 }
 
 const MC = { name: '司会', look: LK.mc };
+// 完成披露試写会の最中だけ true（セーブには残さない一時的な状態）
+let premiereNow = false;
 
 async function premiere(g) {
   const first = !g.flag('toho_premiere_done');
@@ -1498,7 +1510,7 @@ async function premiere(g) {
   await g.fadeIn(12);
   await c;
   await g.fadeOut(12);
-  g.setFlag('toho_premiere_now', true);
+  premiereNow = true;
   try {
     await g.goto('toho', 'screening', 7, 5, 'down', { fade: false });
     g.bgm('toho_lobby');
@@ -1544,7 +1556,7 @@ async function premiere(g) {
     }
     await g.fadeOut(20);
   } finally {
-    g.setFlag('toho_premiere_now', false);
+    premiereNow = false;
     fx.flash = 0;
   }
   await g.goto('toho', 'screening', 11, 5, 'right', { fade: false });
@@ -1556,13 +1568,14 @@ async function producerTalk(g, npc) {
   const f = g.state.fame;
   if (f < 2000) {
     await g.say('プロデューサーだ。\n次の大作映画の主演を探していてね。', sp(npc));
+    const did = (id) => (g.state.jobs[id] || 0) > 0;
     const tip = f < 30
       ? ['まずはスタジオで\nエキストラから始めるといい。', 'どんなスターも、\n最初は通行人の役だったんだ。']
       : f < 250
         ? ['逃げまどう市民役なら、\n特撮監督が使ってくれるはずだ。', '★250を超えたら、\nスーツアクターや舞台にも挑戦だ！']
         : f < 1000
-          ? ['スーツアクターにアンサンブル…\nいい経験を積んでいるね。', '★1000になったら、\n劇場の主演も夢じゃないぞ。']
-          : ['劇場の主演、見たよ！\nいい顔をしていた。', 'スターの仲間入りをしたら、\nぜひ私の映画の主演を\nお願いしたい。'];
+          ? [did('toho_suit') || did('toho_ensemble') ? 'スーツアクターにアンサンブル…\nいい経験を積んでいるね。' : 'いまの君なら、怪獣のスーツや\nミュージカルのアンサンブルも\nこなせるはずだ。', '★1000になったら、\n劇場の主演も夢じゃないぞ。']
+          : [did('toho_musical_lead') ? '劇場の主演、見たよ！\nいい顔をしていた。' : '劇場の演出家が、\nミュージカルの主演を探していたぞ。\n挑戦してみるといい。', 'スターの仲間入りをしたら、\nぜひ私の映画の主演を\nお願いしたい。'];
     await g.say(tip, sp(npc));
     await g.say(`（大作映画の主演には★2000が必要だ。\nいまは★${f}）`);
     return;
@@ -1577,7 +1590,7 @@ async function producerTalk(g, npc) {
     return;
   }
   if (i !== 0) { await g.say('いつでも待っているよ。', sp(npc)); return; }
-  const r = await g.job(JOBS.movie);
+  const r = await g.job({ ...JOBS.movie, clientLook: npc.look });
   if (!r) return;
   await g.say('クランクアップ、おめでとう！\nさあ…次は完成披露試写会だ！', sp(npc));
   await premiere(g);
@@ -1743,7 +1756,6 @@ registerPlace({
         '#Z..C.....C.Z.F....#',
         '#.......Q..........>',
         '#..................#',
-        '#..................#',
         '####################',
       ],
       legend: {
@@ -1776,14 +1788,18 @@ registerPlace({
           text: ['ライトの当て方ひとつで、\n怪獣はこわくも、かわいくも\n見えるんだよ。'],
         },
         {
-          type: 'npc', id: 'toho_extra', x: 14, y: 13, dir: 'up', look: LK.extra, name: '新人エキストラ', wander: 2,
+          type: 'npc', id: 'toho_extra', x: 14, y: 12, dir: 'up', look: LK.extra, name: '新人エキストラ', wander: 2,
           text: ['わたしもエキストラから始めたの！\n通行人の役でも、全力で歩くのよ！', 'お仕事のあとは、\nロビーのポップコーンでひと休み♪'],
         },
       ],
-      events: [
-        { x: 17, y: 10, h: 4, on: 'step', once: 'toho_studio_intro', run: studioIntro },
-      ],
-      onEnter: () => { resetFx(); },
+      // 初めて入った時に撮影の本番に出くわす（どの道を歩いても見逃さないよう入室時に再生）
+      onEnter: async (g) => {
+        resetFx();
+        if (!g.flag('toho_studio_intro')) {
+          g.setFlag('toho_studio_intro');
+          await studioIntro(g);
+        }
+      },
     },
 
     // ---------------------------------------------------------- 試写室
@@ -1821,12 +1837,12 @@ registerPlace({
           text: ['怪獣映画は、日本が世界に誇る\n大切な文化だと思っているよ。', '演技の幅を広げたいなら、\n東映の撮影所で時代劇に挑戦するのも\nいいね。殺陣は奥が深い！'],
         },
         // 完成披露試写会の間だけ現れる人たち
-        { type: 'npc', id: 'toho_mc', x: 9, y: 5, dir: 'down', look: LK.mc, name: '司会', cond: (g) => !!g.flag('toho_premiere_now'), text: '本日はおめでとうございます！' },
-        { type: 'npc', id: 'toho_pfan1', x: 2, y: 7, dir: 'up', look: LOOKS.fan, name: 'ファン', cond: (g) => !!g.flag('toho_premiere_now'), text: 'キャー！こっち向いてー！' },
-        { type: 'npc', id: 'toho_pfan2', x: 5, y: 7, dir: 'up', look: LOOKS.idol, name: 'ファン', cond: (g) => !!g.flag('toho_premiere_now'), text: '主演、おめでとう！' },
-        { type: 'npc', id: 'toho_preporter', x: 11, y: 7, dir: 'up', look: LK.reporter, name: '記者', cond: (g) => !!g.flag('toho_premiere_now'), text: '一枚おねがいします！' },
-        { type: 'npc', id: 'toho_pfan3', x: 13, y: 7, dir: 'up', look: LOOKS.mom, name: 'ファン', cond: (g) => !!g.flag('toho_premiere_now'), text: '家族みんなで見に来ました！' },
-        { type: 'npc', id: 'toho_preporter2', x: 7, y: 9, dir: 'up', look: LOOKS.cameraman, name: 'カメラマン', cond: (g) => !!g.flag('toho_premiere_now'), text: 'いい笑顔、いただきました！' },
+        { type: 'npc', id: 'toho_mc', x: 9, y: 5, dir: 'down', look: LK.mc, name: '司会', cond: () => premiereNow, text: '本日はおめでとうございます！' },
+        { type: 'npc', id: 'toho_pfan1', x: 2, y: 7, dir: 'up', look: LOOKS.fan, name: 'ファン', cond: () => premiereNow, text: 'キャー！こっち向いてー！' },
+        { type: 'npc', id: 'toho_pfan2', x: 5, y: 7, dir: 'up', look: LOOKS.idol, name: 'ファン', cond: () => premiereNow, text: '主演、おめでとう！' },
+        { type: 'npc', id: 'toho_preporter', x: 11, y: 7, dir: 'up', look: LK.reporter, name: '記者', cond: () => premiereNow, text: '一枚おねがいします！' },
+        { type: 'npc', id: 'toho_pfan3', x: 13, y: 7, dir: 'up', look: LOOKS.mom, name: 'ファン', cond: () => premiereNow, text: '家族みんなで見に来ました！' },
+        { type: 'npc', id: 'toho_preporter2', x: 7, y: 9, dir: 'up', look: LOOKS.cameraman, name: 'カメラマン', cond: () => premiereNow, text: 'いい笑顔、いただきました！' },
       ],
       drawOver: (ctx) => drawFlash(ctx),
       onEnter: () => { resetFx(); },

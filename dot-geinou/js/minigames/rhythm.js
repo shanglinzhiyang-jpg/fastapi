@@ -18,7 +18,8 @@
 // WebAudio clock and re-synced to the frame clock when they drift.
 //
 // Scoring: PERFECT 1 / GREAT 0.8 / GOOD 0.5 / MISS 0 per note, minus 0.3 per
-// stray press (a lane pressed with no note nearby).  score = 100 * total / notes.
+// stray press (a lane pressed with no note nearby; 0.45 with a single lane, whose
+// charts always keep a rest per bar).  score = 100 * total / notes.
 // Doing nothing scores 0; mashing is eaten by the stray penalty.
 
 import { Minigame, registerMinigame, text, rect, sparkle } from '../engine/minigame.js';
@@ -59,7 +60,7 @@ export const RHYTHM_CONTENT = { SONG_POOL };
 const INTRO = 4; // count-in beats before the first note
 const JUDGE_OFFSET = 0.008; // input is read on the next 60fps step: compensate ~half a frame
 const VALUES = { perfect: 1, great: 0.8, good: 0.5, miss: 0 };
-const STRAY = 0.3;
+const STRAY = 0.3; // per stray press (0.45 with a single lane, where timing is the whole game)
 const WIN = {
   perfect: [0.065, 0.058, 0.052, 0.047, 0.043],
   great: [0.115, 0.105, 0.095, 0.087, 0.08],
@@ -67,7 +68,7 @@ const WIN = {
 };
 const LOOK_BEATS = [2.8, 2.6, 2.4, 2.2, 2.1]; // how many beats ahead notes become visible
 const P_ON = [0.7, 0.8, 0.86, 0.9, 0.94]; // chance of a note on beats 2-4 of a bar
-const P_OFF = [0, 0.14, 0.26, 0.38, 0.5]; // chance of an off-beat 8th note
+const P_OFF = [0.12, 0.14, 0.26, 0.38, 0.5]; // chance of an off-beat 8th note
 
 const LABEL = { perfect: 'PERFECT', great: 'GREAT', good: 'GOOD', miss: 'MISS' };
 const JCOLOR = { perfect: '#ffd23f', great: '#ff7eb6', good: '#5fd7ff', miss: '#8a90b0' };
@@ -341,6 +342,7 @@ class Rhythm extends Minigame {
     if (!o.howto) {
       const howto = [...HOWTO_LINE[this.lanes]];
       howto.push(this.doubles ? '金色のバーが来たら Aも押そう！' : 'ぴったり合うほど高得点！');
+      howto.push(`♪ 曲：「${this.songName}」`);
       this.opts = { ...o, howto };
     }
   }
@@ -412,6 +414,8 @@ class Rhythm extends Minigame {
       const s = new Array(8).fill(false);
       s[0] = true;
       for (const i of [2, 4, 6]) s[i] = rng() < pOn;
+      // one button only: keep a rest in every bar so tapping along blindly to the beat doesn't work
+      if (lanes === 1 && s[2] && s[4] && s[6]) s[[2, 4, 6][Math.floor(rng() * 3)]] = false;
       for (const i of [1, 3, 5, 7]) if (offOk(s, i) && rng() < pOff) s[i] = true;
       if (s.filter(Boolean).length < 2) s[4] = true;
       return s;
@@ -676,7 +680,7 @@ class Rhythm extends Minigame {
       else { this.face = k; this.faceT = 14; }
     }
     if (!hit) {
-      this.penalty += STRAY;
+      this.penalty += this.lanes === 1 ? 0.45 : STRAY;
       this.strays++;
       this.strayT[li] = 8;
       this.blip(240, 0.04, 0.025);
@@ -716,7 +720,7 @@ class Rhythm extends Minigame {
       });
     }
     if (this.combo % 10 === 0) {
-      this.popup(`${this.combo} COMBO！`, HW_CX, 60, '#ff7eb6', 12);
+      this.popup(`${this.combo} COMBO！`, PX + 24, PY - 12, '#ff7eb6', 12);
       this.cheer(8, 0.4);
     }
   }
@@ -779,7 +783,6 @@ class Rhythm extends Minigame {
     }
     ctx.globalAlpha = 1;
     this.drawHighway(ctx, now, pulse);
-    this.drawJudge(ctx);
     this.drawCrowd(ctx, now, pulse);
     for (const c of this.confetti) {
       ctx.fillStyle = c.color;
@@ -999,6 +1002,8 @@ class Rhythm extends Minigame {
         ctx.globalAlpha = 1;
       }
     }
+    // judgement text sits under the notes so it never hides an incoming one
+    this.drawJudge(ctx);
     // notes: gold bars first, then arrows
     const ymin = top - 12, ymax = HW_BOT + 12;
     for (const n of this.notes) {

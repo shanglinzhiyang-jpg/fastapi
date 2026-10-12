@@ -15,7 +15,7 @@ import { LOOKS, charSheet, drawChar } from '../engine/sprites.js';
 import { registerItem } from '../engine/state.js';
 import { registerSong } from '../engine/audio.js';
 import { text } from '../engine/draw.js';
-import { W, H, TILE, shade, pick } from '../engine/util.js';
+import { W, H, TILE, shade, pick, fmtMoney } from '../engine/util.js';
 
 // =====================================================================
 // looks
@@ -63,7 +63,7 @@ registerItem('toei_lokeben', { name: 'ロケ弁', price: 600, desc: '撮影所�
 registerItem('toei_dango', { name: 'みたらし団子', price: 250, desc: '茶屋の団子。甘じょっぱい！体力が20回復する。', heal: 20 });
 registerItem('toei_ocha', { name: '茶屋のお茶', price: 120, desc: 'ほっとひと息。体力が10回復する。', heal: 10 });
 registerItem('toei_sofubi', {
-  name: 'ヒーローのソフビ', price: 800, desc: '超光戦士ピクセリオンの人形。ながめると元気が出る。',
+  name: 'ヒーローのソフビ', price: 800, desc: '超光戦士ピクセリオンの人形。ながめるとワクワクする。',
   use: async (g) => { g.sfx('whistle'); await g.say('ピクセリオンのソフビ人形をかかげた！\n「変身！」…気分だけはヒーローだ。'); },
 });
 registerItem('toei_clapper', {
@@ -535,7 +535,9 @@ defineTile('toei_studio_floor', {
   variants: 14,
   draw(c, r, f, v) {
     R(c, 0, 0, 16, 16, '#2e3038'); speckle(c, r, ['#34363f', '#292b32'], 14);
-    if (v === 1) { R(c, 4, 7, 6, 2, '#e8c43a'); R(c, 6, 5, 2, 6, '#e8c43a'); }
+    // バミリ（立ち位置の目印テープ）
+    if (v === 1) { R(c, 4, 9, 4, 1, '#c8a83a'); R(c, 4, 9, 1, 3, '#c8a83a'); }
+    if (v === 2) { R(c, 9, 4, 3, 1, '#b8bcc8'); R(c, 11, 4, 1, 3, '#b8bcc8'); }
   },
 });
 defineTile('toei_green_floor', {
@@ -752,13 +754,35 @@ function setPos(e, x, y, dir) {
   if (dir) e.dir = dir;
 }
 function homePos(e) { if (e) setPos(e, e.def.x, e.def.y, e.def.dir || 'down'); }
-function placePlayer(g, x, y, dir) {
-  const p = g.map.player;
-  Object.assign(p, { x, y, px: x * TILE, py: y * TILE, moving: false, t: 0 });
-  if (dir) p.dir = dir;
-  g.map.updateCamera(true);
-}
 const frameOf = (e) => (e.moving ? [1, 0, 2, 0][Math.floor(e.anim / 8) % 4] : 0);
+
+// A samurai holding a (bamboo) katana: used while the rehearsal plays.
+function swordSprite(look) {
+  const sheet = charSheet(look);
+  const BL = '#eef2f8', BS = '#8e98ac', TB = '#c9a227', HD = '#2a1a10';
+  return (ctx, x, y, g, e) => {
+    const X = Math.round(x), Y = Math.round(y), d = e.dir;
+    const sword = () => {
+      if (d === 'left' || d === 'right') {
+        const s = d === 'right' ? 1 : -1, ox = d === 'right' ? 11 : 4;
+        F(ctx, ox === 11 ? X + 11 : X + 2, Y + 10, 3, 1, HD);
+        F(ctx, X + ox + s * 3, Y + 8, 1, 4, TB);
+        for (let i = 0; i < 10; i++) {
+          const bx = X + ox + s * (4 + i), by = Y + 9 - Math.floor(i / 3);
+          F(ctx, bx, by, 1, 1, BL); F(ctx, bx, by + 1, 1, 1, BS);
+        }
+      } else if (d === 'down') {
+        F(ctx, X + 12, Y + 8, 1, 3, HD); F(ctx, X + 11, Y + 11, 3, 1, TB);
+        for (let i = 0; i < 8; i++) F(ctx, X + 12 + Math.floor(i / 4), Y + 12 + i, 1, 1, i % 2 ? BS : BL);
+      } else {
+        F(ctx, X + 3, Y - 7, 1, 12, BL); F(ctx, X + 4, Y - 6, 1, 11, BS); F(ctx, X + 2, Y + 5, 4, 1, TB);
+      }
+    };
+    if (d === 'up') sword();
+    drawChar(ctx, sheet, d, frameOf(e), x, y);
+    if (d !== 'up') sword();
+  };
+}
 
 // The fallen samurai: the standing sprite rotated 90° (head to the left).
 function lyingSprite(look) {
@@ -881,18 +905,33 @@ function plate(x, y, w, label, opt = {}) {
   };
 }
 
+// 軒先に掛かったお店の看板（オープンセット用）。cx = 中心のタイル列。
+function kanban(cx, label) {
+  return {
+    type: 'prop', x: Math.floor(cx), y: 2, w: 1, h: 1, solid: false,
+    draw(ctx, sx, sy) {
+      const bw = label.length * 10 + 6, bx = Math.round(sx + (cx - Math.floor(cx)) * TILE + 8 - bw / 2), by = sy + 8;
+      F(ctx, bx + 3, by - 3, 1, 3, '#2a1c14'); F(ctx, bx + bw - 4, by - 3, 1, 3, '#2a1c14');
+      F(ctx, bx, by, bw, 13, '#2a1c14');
+      F(ctx, bx + 1, by + 1, bw - 2, 11, '#d9bf86');
+      F(ctx, bx + 1, by + 1, bw - 2, 1, '#ecd9a8');
+      text(ctx, label, bx + bw / 2, by + 1, { size: 10, align: 'center', color: '#20140c', shadow: null });
+    },
+  };
+}
+
 // =====================================================================
 // jobs & lessons
 // =====================================================================
 const VOICE_WORDS = [
-  { word: '刹那', reading: 'せつな', wrong: ['さつな', 'せつだ', 'きりな'] },
-  { word: '黄昏', reading: 'たそがれ', wrong: ['きぐれ', 'おうひ', 'こがね'] },
-  { word: '陽炎', reading: 'かげろう', wrong: ['ひかげ', 'ようか', 'ひのほ'] },
-  { word: '東雲', reading: 'しののめ', wrong: ['ひがしぐも', 'あずまぐも', 'しのぐも'] },
-  { word: '十六夜', reading: 'いざよい', wrong: ['いざなぎ', 'とおろくよ', 'いさよし'] },
-  { word: '五月雨', reading: 'さみだれ', wrong: ['ごがつう', 'さみあめ', 'いつきあめ'] },
-  { word: '狼煙', reading: 'のろし', wrong: ['おおかみび', 'ろうけむ', 'のろび'] },
-  { word: '漣', reading: 'さざなみ', wrong: ['なみだ', 'さなみ', 'ささらぎ'] },
+  { word: '刹那', reading: 'せつな', wrong: ['さつな', 'せつだ', 'きりな'], sentence: '「その刹那、光が走った――！」' },
+  { word: '黄昏', reading: 'たそがれ', wrong: ['きぐれ', 'おうひ', 'こがね'], sentence: '「黄昏の空に、約束を誓おう」' },
+  { word: '陽炎', reading: 'かげろう', wrong: ['ひかげ', 'ようか', 'ひのほ'], sentence: '「陽炎の向こうに、あいつの影が…！」' },
+  { word: '東雲', reading: 'しののめ', wrong: ['ひがしぐも', 'あずまぐも', 'しのぐも'], sentence: '「東雲の空が、旅立ちを告げている」' },
+  { word: '十六夜', reading: 'いざよい', wrong: ['いざなぎ', 'とおろくよ', 'いさよし'], sentence: '「十六夜の月が、ぼくらを照らす」' },
+  { word: '五月雨', reading: 'さみだれ', wrong: ['ごがつう', 'さみあめ', 'いつきあめ'], sentence: '「五月雨の中、二人は再会した」' },
+  { word: '狼煙', reading: 'のろし', wrong: ['おおかみび', 'ろうけむ', 'のろび'], sentence: '「反撃の狼煙を上げろ！」' },
+  { word: '漣', reading: 'さざなみ', wrong: ['なみだ', 'さなみ', 'ささらぎ'], sentence: '「漣の音が、心をしずめてくれる」' },
 ];
 const AUDITION_SCENES = [
   { prompt: '審査員「主人公の第一声。冒険の始まりを元気よく！」', answers: [{ text: '「よーし、行くぞ！」', score: 100 }, { text: '「…まあ、行くか」', score: 45 }, { text: '「家に帰りたい…」', score: 10 }] },
@@ -903,33 +942,33 @@ const AUDITION_SCENES = [
 
 const JOBS = {
   extra: {
-    id: 'toei_extra', title: '時代劇の町人エキストラ', desc: '町人役で時代劇に出演！', client: '助監督',
+    id: 'toei_extra', title: '時代劇の町人エキストラ', desc: '町人役で時代劇に出演！', client: '助監督', clientLook: LK.ad,
     stamina: 15, minigame: 'command', opts: { theme: 'tate', difficulty: 1 }, pay: 1000, fame: 5, skill: 'engi', gain: 1,
   },
   kirare: {
-    id: 'toei_kirare', title: '時代劇の斬られ役', desc: '主役に斬られる大事な役でござる。', client: '殺陣師',
+    id: 'toei_kirare', title: '時代劇の斬られ役', desc: '主役に斬られる大事な役でござる。', client: '殺陣師', clientLook: LK.tateshi,
     stamina: 20, minigame: 'command', opts: { theme: 'tate', difficulty: 2 }, pay: 4500, fame: 15, skill: 'engi', gain: 2,
     requires: { fame: 30 },
   },
   suit: {
-    id: 'toei_suit', title: '特撮ヒーローのスーツアクター', desc: 'スーツを着て大立ち回り！', client: 'アクション監督',
+    id: 'toei_suit', title: '特撮ヒーローのスーツアクター', desc: 'スーツを着て大立ち回り！', client: 'アクション監督', clientLook: LK.action,
     stamina: 25, minigame: 'command', opts: { theme: 'henshin', difficulty: 3 }, pay: 12000, fame: 45, skill: 'engi', gain: 3,
     requires: { fame: 250 },
   },
   voice: {
-    id: 'toei_voice', title: 'アニメのアフレコ出演', desc: '台本どおり、正しく読もう！', client: '音響監督',
+    id: 'toei_voice', title: 'アニメのアフレコ出演', desc: '台本どおり、正しく読もう！', client: '音響監督', clientLook: LK.onkan,
     stamina: 20, minigame: 'announce',
     opts: { difficulty: 3, words: VOICE_WORDS, count: 6, howto: ['アニメのアフレコ本番！', '台本のむずかしい言葉を、正しく読もう。読み間違えたらNGだ！'] },
     pay: 11000, fame: 40, skill: 'talk', gain: 3,
     requires: { fame: 250, flag: 'toei_voice_role', flagText: 'まずは声優オーディションに合格しないと。\n音響監督さんに話しかけてみよう。' },
   },
   lead: {
-    id: 'toei_lead', title: '時代劇の主役', desc: '連続時代劇の主演をたのむぞ！', client: '監督',
+    id: 'toei_lead', title: '時代劇の主役', desc: '連続時代劇の主演をたのむぞ！', client: '監督', clientLook: LK.kantoku,
     stamina: 30, minigame: 'command', opts: { theme: 'tate', difficulty: 4 }, pay: 30000, fame: 110, skill: 'engi', gain: 4,
     requires: { fame: 1000 },
   },
   movie: {
-    id: 'toei_movie', title: '劇場版ヒーロー映画の主演', desc: '劇場版の主演に大抜擢！', client: 'プロデューサー',
+    id: 'toei_movie', title: '劇場版ヒーロー映画の主演', desc: '劇場版の主演に大抜擢！', client: 'プロデューサー', clientLook: LK.producer,
     stamina: 30, minigame: 'command', opts: { theme: 'henshin', difficulty: 5 }, pay: 65000, fame: 220, skill: 'engi', gain: 5,
     requires: { fame: 2000 },
   },
@@ -937,6 +976,15 @@ const JOBS = {
 const LESSON_TATE = { title: '殺陣レッスン', skill: 'engi', price: 3000, stamina: 12, gain: 4, minigame: 'command', opts: { theme: 'tate', difficulty: 1 }, teacher: '殺陣師' };
 const LESSON_ACTION = { title: 'アクション講座', skill: 'engi', price: 6000, stamina: 15, gain: 5, minigame: 'command', opts: { theme: 'henshin', difficulty: 2 }, teacher: 'アクション監督' };
 const good = (res) => res && (res.rank === 'S' || res.rank === 'A');
+
+// Lessons: the teacher tells you the fee in character when you can't pay it
+// (instead of the generic engine line), otherwise gives the intro and starts.
+async function teach(g, npc, def, intro, broke) {
+  const o = who(npc);
+  if (g.state.money < def.price) { await g.say(broke(fmtMoney(def.price)), o); return null; }
+  await g.say(intro, o);
+  return g.lesson(def);
+}
 
 function nextHint(g) {
   const f = g.state.fame;
@@ -977,9 +1025,10 @@ async function rehearsal(g, first) {
   const T = nm('殺陣師', LK.tateshi);
   const RY = ronin.def.y;
   await g.fadeOut(10);
-  ronin.sprite = null;
+  ronin.sprite = swordSprite(ronin.look);
+  waka.sprite = swordSprite(waka.look);
   homePos(ronin); homePos(waka); homePos(tate);
-  placePlayer(g, 12, RY + 2, 'up');
+  g.placePlayer(12, RY + 2, 'up');
   await g.fadeIn(10);
   await g.say(['それでは、殺陣のリハーサルを始めるでござる！', '本番のつもりで、気合いを入れていくでござるよ！'], T);
   g.sfx('snare');
@@ -1020,8 +1069,9 @@ async function rehearsal(g, first) {
   await g.say('カーーット！！', T);
   g.sfx('applause');
   await g.say('見事！最高の立ち回りでござった！', T);
-  ronin.sprite = null;
-  ronin.dir = 'down';
+  ronin.sprite = swordSprite(ronin.look);
+  ronin.dir = 'left';
+  waka.dir = 'right';
   await g.emote('toei_ronin', 'w');
   await g.say(['いやあ、今日の斬られっぷり、どうでした？', '倒れるまでが、斬られ役の見せ場でさあ！'], nm('ベテラン斬られ役', LK.ronin));
   await g.emote('toei_waka', '♪');
@@ -1032,6 +1082,7 @@ async function rehearsal(g, first) {
     await g.say('本物の立ち回りを間近で見て、とても勉強になった！');
   }
   await g.fadeOut(10);
+  ronin.sprite = null; waka.sprite = null;
   homePos(ronin); homePos(waka); homePos(tate);
   await g.fadeIn(10);
   if (first) {
@@ -1046,7 +1097,7 @@ async function explosionShow(g) {
   const back = { x: p.x, y: p.y, dir: p.dir };
   await g.fadeOut(10);
   setPos(g.npc('toei_kaijin'), 7, 4, 'down');
-  placePlayer(g, 8, 8, 'up');
+  g.placePlayer(8, 8, 'up');
   await g.fadeIn(10);
   await g.say(['爆破テスト、いきまーす！', '周りの安全、よし！怪人さん、ポーズお願いしまーす！'], O);
   await g.emote('toei_kaijin', '♪', 40);
@@ -1074,7 +1125,7 @@ async function explosionShow(g) {
   await g.emote('player', '!');
   await g.say('すごい迫力だった！\n（爆発の中でもポーズをくずさない…これがプロか！）');
   await g.fadeOut(10);
-  placePlayer(g, back.x, back.y, back.dir);
+  g.placePlayer(back.x, back.y, back.dir);
   await g.fadeIn(10);
 }
 
@@ -1107,7 +1158,7 @@ async function movieCelebration(g, res) {
   await g.say('カーーット！！…OK！！', nm('アクション監督', LK.action));
   await g.fadeOut(12);
   for (const [id, [x, y, d]] of Object.entries(spots)) setPos(g.npc(id), x, y, d);
-  placePlayer(g, 7, 5, 'down');
+  g.placePlayer(7, 5, 'down');
   await g.fadeIn(12);
   await g.say('劇場版『超光戦士ピクセリオン 銀河の決戦』…\nこれにて、クランクアップです！！', PR);
   g.sfx('applause');
@@ -1130,7 +1181,7 @@ async function movieCelebration(g, res) {
   await g.showLogo('toei', '劇場版、全国の映画館で公開！');
   await g.fadeOut(12);
   for (const id of Object.keys(spots)) homePos(g.npc(id));
-  placePlayer(g, back.x, back.y, back.dir);
+  g.placePlayer(back.x, back.y, back.dir);
   await g.fadeIn(12);
 }
 
@@ -1154,7 +1205,10 @@ async function voiceAudition(g, npc) {
     scenes: AUDITION_SCENES, howto: ['審査員のお題に合わせて、', 'いちばんキャラクターらしい演じ方を選ぼう！'],
   });
   if (res.score < 55) {
-    await g.say([`うーん、おしい！（${res.score}点／合格ライン55点）`, 'キャラクターの気持ちを想像して、また明日おいで。'], o);
+    await g.say([
+      res.score >= 45 ? `うーん、おしい！（${res.score}点／合格ライン55点）` : `今回は見送りかな…。（${res.score}点／合格ライン55点）`,
+      res.score >= 45 ? 'あと一歩だよ。キャラクターの気持ちを想像して、また明日おいで。' : 'ブースのマイクで発声練習をして、また明日挑戦してね。',
+    ], o);
     return;
   }
   g.setFlag('toei_voice_role');
@@ -1378,7 +1432,7 @@ const openset = {
     'AAAAAaaaaaAAAAAaaaaaAAAAAA',
     'EEEEEeeeeeEEEEEeeeeeEEEEEE',
     'LCNCLSQnQSKKXKKLLuCLSQNNQS',
-    'f..i......b...b..i....i..f',
+    'f..i......b...b...i..i...f',
     'f.......BD.............T.f',
     'f.w......................f',
     'f.................c......f',
@@ -1408,6 +1462,7 @@ const openset = {
   drawOver: drawFx,
   onEnter: async () => { FX = []; },
   entities: [
+    kanban(2, '呉服'), kanban(7, '茶屋'), kanban(17, 'そば'), kanban(22.5, '宿'),
     {
       // 茶屋の野点傘
       type: 'prop', x: 8, y: 5, w: 2, h: 1, solid: false, z: 4,
@@ -1423,10 +1478,11 @@ const openset = {
     { type: 'sign', x: 3, y: 9, talk: kosatsu },
     { type: 'sign', x: 10, y: 4, text: '酒樽…に見えるけど、中は空っぽ。撮影用の小道具だ。' },
     { type: 'sign', x: 14, y: 4, text: '樽が積まれている。軽くたたくと、ポコンと軽い音がした。' },
+    { type: 'sign', x: 8, y: 5, text: '茶屋の縁台。赤い野点傘（のだてがさ）が、江戸の町に映える。' },
     { type: 'sign', x: 9, y: 5, text: '赤い毛氈（もうせん）を敷いた縁台だ。お団子とお茶がのっている。' },
     { type: 'sign', x: 2, y: 3, text: '呉服屋ののれん。中をのぞくと…ハリボテだ！\nセットだから、お店の中は作られていないんだ。' },
     { type: 'sign', x: 12, y: 3, text: '立派な蔵の扉。押してもびくともしない…と思ったら、ただの板だった！' },
-    { type: 'sign', x: 18, y: 3, text: 'そば屋ののれん。いいにおい…はしない。セットだもの。' },
+    { type: 'sign', x: 17, y: 3, text: 'そば屋ののれん。いいにおい…はしない。セットだもの。' },
     { type: 'sign', x: 23, y: 3, text: '宿屋ののれん。「お泊まりはこちら」…とあるが、ここはセット。泊まれない。' },
     { type: 'sign', x: 23, y: 5, text: '天水桶（てんすいおけ）。江戸の町では、火事にそなえて雨水をためていたんだって。' },
     { type: 'sign', x: 18, y: 7, text: '映画用のカメラだ。この一台で、江戸の町がスクリーンによみがえる。' },
@@ -1440,8 +1496,8 @@ const openset = {
         if (costumeOf(g) === 'samurai') await g.say('おお、その侍姿、なかなか様になっておるでござる！', o);
         const i = await g.ask('拙者は殺陣師。斬り合いの振り付けを考えるのが仕事でござる。何用かな？', ['殺陣レッスン', '斬られ役の仕事', '殺陣のコツ', 'やめておく'], o);
         if (i === 0) {
-          await g.say('よかろう。刀の握り方から、みっちり教えるでござる！', o);
-          await g.lesson(LESSON_TATE);
+          await teach(g, npc, LESSON_TATE, 'よかろう。刀の握り方から、みっちり教えるでござる！',
+            (price) => [`殺陣レッスンは、${price}でござる。`, 'まずはエキストラのお仕事で、稽古代をかせいでくるがよい。']);
         } else if (i === 1) {
           if (g.state.fame < 30) {
             await g.say(['斬られ役は、主役を引き立てる大事な役でござる。', 'まずはエキストラで場数を踏み、★30になったら来るがよい。'], o);
@@ -1497,7 +1553,8 @@ const openset = {
           await g.emote('toei_kantoku', '!');
           await g.say(['おお、君が噂の{name}くんか！', '次の連続時代劇『ドット侍 江戸日記』の主役をさがしておってな。ぜひ君に頼みたい！'], o);
         }
-        if (g.state.agency === 'horipro') await g.say('ホリプロさんの所属だったね。演技派の多い事務所だ、期待しとるよ。', o);
+        if (g.state.agency === 'horipro') await g.say('ホリプロさんの所属だったね。\nお芝居の仕事、期待しとるよ。', o);
+        else if (g.state.agency) await g.say('{agency}さんの所属じゃったな。\n時代劇にも、笑いと人情は欠かせんぞ。', o);
         if (costumeOf(g) === 'samurai') await g.say('おっ、もう衣装まで着とるのか。気合い十分じゃな！', o);
         const res = await g.job(JOBS.lead);
         if (res) await leadCelebration(g, res);
@@ -1567,6 +1624,7 @@ const tokusatsu = {
   drawOver: drawFx,
   onEnter: async () => { FX = []; },
   entities: [
+    { type: 'logo', x: 1.15, y: 0.75, w: 2.7, h: 2.1, logo: 'toei', text: '撮影所のロゴ看板だ。今日もヒーローたちの撮影を見守っている。' },
     { type: 'sign', x: 1, y: 11, text: '撮影用のヒーロースーツ（レッド）。細かい傷がいっぱい…激しいアクションの勲章だ。' },
     { type: 'sign', x: 2, y: 11, text: 'ブルーのスーツ。ヘルメットの中は、思ったよりせまい…。' },
     { type: 'sign', x: 3, y: 11, text: '悪の怪人のスーツ。ツノが立派だ。夜中に見たら、ちょっとこわい。' },
@@ -1581,8 +1639,8 @@ const tokusatsu = {
         const o = who(npc);
         const i = await g.ask('アクション監督だ！ヒーローのアクションはまかせとけ！', ['アクション講座', 'スーツアクター', '話を聞く', 'やめておく'], o);
         if (i === 0) {
-          await g.say('よし、まずは変身ポーズの基本からだ！\n指先までビシッと決めろよ！', o);
-          await g.lesson(LESSON_ACTION);
+          await teach(g, npc, LESSON_ACTION, 'よし、まずは変身ポーズの基本からだ！\n指先までビシッと決めろよ！',
+            (price) => [`アクション講座の受講料は${price}だ。`, 'オープンセットのエキストラでかせいでから、また来いよ！']);
         } else if (i === 1) {
           if (g.state.fame < 250) {
             await g.say(['スーツアクターは、顔が見えない分、体ぜんぶで芝居をする仕事だ。', '危ないアクションもあるから、★250以上の経験者にお願いしてるんだ。', 'それまでは、アクション講座で体を作っておけよ！'], o);
@@ -1723,6 +1781,7 @@ const afureko = {
         text(ctx, 'REC', x0 + w - 2, y0 + h, { size: 10, align: 'right', color: '#ff5d6c', shadow: null });
       },
     },
+    { type: 'logo', x: 1.2, y: 0.8, w: 2.6, h: 2.05, logo: 'toei', text: '撮影所のロゴ看板だ。ここでアニメのキャラクターに声が吹きこまれる。' },
     { type: 'sign', x: 2, y: 3, text: '大きなスピーカー。映像の音や、相手役の声がここから流れる。' },
 
     {

@@ -322,8 +322,8 @@ WHO.duo = { name: 'ぽんかんズ', look: WHO.ponta.look };
 const npc = (id, x, y, dir, who, extra = {}) => ({ type: 'npc', id, x, y, dir, look: who.look, name: who.name, ...extra });
 
 // ------------------------------------------------------------------ minigame content
+// (the tsukkomi minigame opens with its own "はいどうもー！" greeting, so scripts start with the first フリ)
 const LINES_LESSON = [
-  { boke: 'どうも〜、よろしくお願いします！', punch: false },
   { boke: '最近、犬を飼い始めたんですよ', punch: false },
   { boke: '名前は「ネコ」っていいます', punch: true, tsukkomi: 'ややこしいわ！' },
   { boke: '毎朝いっしょに散歩してます', punch: false },
@@ -332,13 +332,13 @@ const LINES_LESSON = [
   { boke: 'なので傘を5本持ってきました', punch: true, tsukkomi: 'なんでやねん！' },
 ];
 const LINES_WAKATE = [
-  { boke: 'どうも〜！よろしくお願いします！', punch: false },
-  { boke: 'ぼく、将来の夢がありまして', punch: false },
-  { boke: '宇宙飛行士になりたいんです', punch: false },
+  { boke: 'ぼく、将来の夢がありまして。宇宙飛行士になりたいんです', punch: false },
   { boke: 'でも高いところが苦手で', punch: true, tsukkomi: '向いてへんやろ！' },
   { boke: 'あと乗り物酔いもします', punch: true, tsukkomi: 'なおさらや！' },
   { boke: 'せやから、まずは練習で…', punch: false },
   { boke: '毎日ブランコこいでます', punch: true, tsukkomi: '地上すぎるわ！' },
+  { boke: '宇宙食の練習もばっちりです', punch: false },
+  { boke: '毎晩カップ麺を食べてます', punch: true, tsukkomi: 'ただの晩ごはんや！' },
 ];
 const LINES_KANMURI = [
   { boke: 'さあ今週も始まりました！', punch: false },
@@ -347,17 +347,20 @@ const LINES_KANMURI = [
   { boke: 'では、お料理のコーナー！', punch: false },
   { boke: '本日はゆで卵を作ります', punch: false },
   { boke: 'まずは卵を電子レンジに…', punch: true, tsukkomi: '危ない危ない！' },
+  { boke: 'ここで視聴者プレゼント！', punch: false },
+  { boke: 'ぼくのサイン入りの…石です', punch: true, tsukkomi: 'いらんわ！' },
   { boke: 'では、CMのあともお楽しみに！', punch: false },
   { boke: 'なお、CMはありません', punch: true, tsukkomi: 'ないんかい！' },
 ];
 const LINES_GP = [
-  { boke: 'どうも〜！決勝、がんばります！', punch: false },
-  { boke: 'ぼく、こう見えて実は', punch: false },
-  { boke: '忍者の子孫なんですよ', punch: false },
+  { boke: 'ぼく、こう見えて実は、忍者の子孫なんですよ', punch: false },
+  { boke: 'じいちゃんの職業は、なんと郵便局員！', punch: true, tsukkomi: '普通の人や！' },
   { boke: '得意な術は「分身の術」！', punch: false },
   { boke: '…ほら、二人になったでしょ？', punch: true, tsukkomi: 'それ相方や！' },
   { boke: 'ほな次は「変身の術」！', punch: false },
   { boke: '（メガネをかける）', punch: true, tsukkomi: '地味すぎるわ！' },
+  { boke: 'さらに「水の上を歩く術」！', punch: false },
+  { boke: '冬になって、池が凍ったら見せます', punch: true, tsukkomi: '待つんかい！' },
   { boke: '最後に「消える術」！', punch: false },
   { boke: 'ほな、さいなら〜', punch: true, tsukkomi: '帰るな！' },
 ];
@@ -441,9 +444,6 @@ let party = false;
 function here(g) {
   const p = g.map.player;
   return { room: g.map.roomId, x: p.x, y: p.y, dir: p.dir };
-}
-function placePlayer(g, x, y, dir) {
-  Object.assign(g.map.player, { x, y, px: x * 16, py: y * 16, dir, moving: false, t: 0 });
 }
 function resetNpc(g, id, x, y, dir) {
   const e = g.npc(id);
@@ -763,23 +763,31 @@ async function managerIntro(g) {
   if (!m) return;
   await g.emote('yoshi_manager', '!');
   await g.say('おーい！{name}さーん！', WHO.manager);
-  await g.moveNpc('yoshi_manager', 'right right down down left', 2);
+  // hurry over to the player (whichever free tile next to them is closest)
   const p = g.map.player;
   const e = g.npc('yoshi_manager');
+  if (Math.abs(p.x - e.x) + Math.abs(p.y - e.y) > 1) {
+    const spot = [[0, 1], [1, 0], [-1, 0], [0, -1]]
+      .map(([dx, dy]) => [p.x + dx, p.y + dy])
+      .filter(([x, y]) => !g.map.blocked(x, y, null) && !g.map.warpAt(x, y))
+      .sort((a, b) => (Math.abs(a[0] - e.x) + Math.abs(a[1] - e.y)) - (Math.abs(b[0] - e.x) + Math.abs(b[1] - e.y)))[0];
+    if (spot) await g.walkNpcTo('yoshi_manager', spot[0], spot[1], 2);
+  }
   g.facePlayer(dirTo(p.x, p.y, e.x, e.y));
   e.dir = dirTo(e.x, e.y, p.x, p.y);
+  const who = { ...WHO.manager, top: Math.max(p.y, e.y) >= 7 };
   await g.say([
     'はじめまして！今日から{name}さんを担当する、マネージャーの笑川（えみかわ）です！',
     'お仕事の相談は、いつでもぼくのデスクまで来てくださいね。',
     'まずは劇場の「若手ライブ」で場数を踏みましょう！\n小劇場は、1階ロビーの右手の赤い扉です。',
     'それと…これ、ぼくからの入所祝いです！',
-  ], WHO.manager);
+  ], who);
   g.sfx('good');
   g.giveItem('netacho', 1, true);
-  await g.say('ネタ帳をもらった！');
-  await g.say('使うと、次のお笑いのお仕事が少しやさしくなりますよ。\nいっしょにてっぺん目指しましょう！', WHO.manager);
+  await g.say('ネタ帳をもらった！', { top: who.top });
+  await g.say('使うと、次のお笑いのお仕事が少しやさしくなりますよ。\nいっしょにてっぺん目指しましょう！', who);
   await g.emote('player', '♪');
-  await g.moveNpc('yoshi_manager', 'right up up left left face:down', 2);
+  await g.walkNpcTo('yoshi_manager', 13, 4, 2);
   resetNpc(g, 'yoshi_manager', 13, 4, 'down');
 }
 
@@ -832,14 +840,15 @@ async function scoutTalk(g) {
   const other = st.agency ? `\n（合格すると${AGENCIES[st.agency].name}から移籍になります）` : '';
   const i = await g.ask('新人オーディション、受けてみる？' + other, ['受ける！', 'コツを聞く', 'やめておく'], who);
   if (i === 0) {
-    const before = st.stats.minigames;
     const ok = await g.audition({ agency: PID, minigame: 'tsukkomi', opts: { difficulty: 2 }, pass: 55 });
     if (ok && member(g)) {
       await g.emote('yoshi_scout', '!');
       g.sfx('applause');
       await g.say(['おめでとう！あなたの笑い、しっかり届いたよ！', 'ようこそ、よしもとへ！'], who);
       await managerIntro(g);
-    } else if (!ok && st.stats.minigames > before && !member(g)) {
+    } else if (g.lastAudition === 'transferDeclined') {
+      await g.say('そっか、いまの事務所を大事にしたいんだね。\nその気持ち、すてきだと思うよ！', who);
+    } else if (g.lastAudition === 'failed') {
       await g.say('筋は悪くないよ！\n奥の稽古場でレッスンを受けて、また来てね。', who);
     }
   } else if (i === 1) {
@@ -891,7 +900,7 @@ async function watchManzai(g, invited = false) {
     return;
   }
   await g.fadeOut();
-  placePlayer(g, 5, 7, 'up');
+  g.placePlayer(5, 7, 'up');
   resetNpc(g, 'yoshi_ponta', 4, 4, 'down');
   resetNpc(g, 'yoshi_kankichi', 5, 4, 'down');
   await g.fadeIn();
@@ -1106,7 +1115,18 @@ async function wakateTalk(g) {
 
 async function kaichouTalk(g) {
   const who = WHO.kaichou;
-  await g.say(['商店街の会長です。今日は営業のお願いに来たんや。', 'うちのお祭りで、ネタを披露してくれる芸人さんを探しててな。\nどこかの事務所に所属してる人なら大歓迎や！'], who);
+  if (!g.state.agency) {
+    await g.say([
+      '商店街の会長です。今日は、お祭りに出てくれる芸人さんを探しに来たんや。',
+      'あんたも芸人さんか？…まだ事務所に入ってへんのやな。\nほな、所属が決まったらぜひ頼むわ！',
+      'オーディションは、2階の事務所フロアで受けられるらしいで。',
+    ], who);
+    return;
+  }
+  await g.say(g.flag('yoshimoto_matsuri_met')
+    ? 'おっ、また会うたな！\n今日もお祭り、盛り上げてくれへんか？'
+    : ['商店街の会長です。今日は営業のお願いに来たんや。', 'うちのお祭りで、ネタを披露してくれる芸人さんを探しててな。\n{agency}の{name}さんなら大歓迎や！'], who);
+  g.setFlag('yoshimoto_matsuri_met');
   const i = await g.ask('お祭りの営業、引き受けてくれへん？', ['引き受ける', 'また今度'], who);
   if (i === 0) await runFestival(g, job('matsuri'), who);
   else await g.say('さよか。気が向いたら、いつでも声かけてや！', who);
@@ -1248,7 +1268,7 @@ registerPlace({
         npc('yoshi_shop', 17, 6, 'down', WHO.shop, { talk: shopTalk }),
         npc('yoshi_fan', 3, 6, 'up', WHO.fan, { talk: fanTalk }),
         npc('yoshi_wakate', 13, 8, 'down', WHO.wakate, { talk: wakateTalk, wander: 2 }),
-        npc('yoshi_kaichou', 6, 9, 'right', WHO.kaichou, { talk: kaichouTalk, wander: 1 }),
+        npc('yoshi_kaichou', 6, 9, 'right', WHO.kaichou, { talk: kaichouTalk }),
         trophyCase(1, 4),
         ...signs([
           [1, 2, '若手ライブのポスターだ。\n「毎日開催！当日券あり　小劇場にて」'],
@@ -1373,9 +1393,15 @@ registerPlace({
         sanpachi,
         npc('yoshi_surudoki', 14, 3, 'down', WHO.surudoki, { talk: surudokiTalk }),
         npc('yoshi_shabetani', 11, 6, 'down', WHO.shabetani, { talk: shabetaniTalk }),
-        npc('yoshi_kenkyusei', 8, 9, 'up', WHO.kenkyusei, {
-          wander: 2,
-          text: ['ぼく、養成所を出たばっかりの研究生です！', '毎日ここで先生たちにしごかれてます…。\nでも、レッスンを受けるとスキルがぐんぐん伸びるんです！', '鏡の前で、表情の練習もしてます。ニカッ！'],
+        npc('yoshi_kenkyusei', 8, 3, 'up', WHO.kenkyusei, {
+          talk: async (g) => {
+            const who = WHO.kenkyusei;
+            await g.say(['ぼく、養成所を出たばっかりの研究生です！', '毎日ここで先生たちにしごかれてます…。\nでも、レッスンを受けるとスキルがぐんぐん伸びるんです！'], who);
+            if (g.state.fame >= 250) await g.say('★250を超えたら、鋭木先生の「応用クラス」も\n受けられるんですよね。…いいなあ！', who);
+            await g.moveNpc('yoshi_kenkyusei', 'face:up');
+            await g.say('いまは鏡の前で、表情の練習中です。\n見ててくださいね…ニカッ！', who);
+            await g.emote('yoshi_kenkyusei', 'w');
+          },
         }),
       ],
       events: [

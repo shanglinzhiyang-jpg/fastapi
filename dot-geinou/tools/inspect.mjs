@@ -53,6 +53,8 @@ async function runMode(mode) {
       const enterLog = [];
       g.auto = { log: enterLog, score: 70, choice: 0 };
       await g.goto(pid, roomId, undefined, undefined, 'down', { fade: false });
+      window.__freeze = () => { for (const e of g.map.entities) if (e.type === 'npc' && e.wander) e.wander = 0; };
+      window.__freeze();
       await window.__settle(4000);
       g.auto = null;
       const m = g.map;
@@ -157,7 +159,7 @@ async function runMode(mode) {
               return choices.length - 1;
             },
           };
-          if (g.map.placeId !== pid || g.map.roomId !== roomId) await g.goto(pid, roomId, undefined, undefined, 'down', { fade: false });
+          if (g.map.placeId !== pid || g.map.roomId !== roomId) { await g.goto(pid, roomId, undefined, undefined, 'down', { fade: false }); window.__freeze(); }
           g.state.stamina = g.state.maxStamina;
           const m = g.map;
           const p = m.player;
@@ -195,7 +197,8 @@ async function runMode(mode) {
       e0 = errStart();
       const res = await page.evaluate(async ({ pid, roomId, w }) => {
         const g = window.__game;
-        g.auto = { score: 70, log: [], choice: 0 };
+        const log = [];
+        g.auto = { score: 70, log, choice: 0 };
         if (g.map.placeId !== pid || g.map.roomId !== roomId) await g.goto(pid, roomId, undefined, undefined, 'down', { fade: false });
         const m = g.map;
         const p = m.player;
@@ -206,13 +209,19 @@ async function runMode(mode) {
         const blockedArrival = g.map.blocked(g.map.player.x, g.map.player.y, null);
         g.auto = null;
         await g.goto(pid, roomId, undefined, undefined, 'down', { fade: false });
+        window.__freeze();
         await window.__settle(1000);
-        return { frames, where, blockedArrival };
+        return { frames, where, blockedArrival, log };
       }, { pid, roomId, w });
       for (const e of errSince(e0)) report.errors.push(`[${mode.name}] ${roomId} ${w.label}: ${e}`);
       if (res.frames < 0) report.issues.push(`[${mode.name}] ${roomId} ${w.label}: did not settle`);
       if (res.blockedArrival) report.issues.push(`[${mode.name}] ${roomId} ${w.label}: arrives on a blocked tile (${res.where})`);
       report.modes.push({ mode: mode.name, room: roomId, warp: w.label, to: res.where });
+      if (res.log.length) {
+        dialog.push(`### [${mode.name}] ${roomId} ${w.label} -> ${res.where}`);
+        for (const l of res.log) dialog.push(`${l.name ? l.name + '：' : ''}${l.text}${l.choices ? '  [' + l.choices.join(' / ') + ']' : ''}`);
+        dialog.push('');
+      }
     }
   }
   report.errors.push(...errors.filter((e) => !report.errors.some((r) => r.endsWith(e))).map((e) => `[${mode.name}] ${e}`));

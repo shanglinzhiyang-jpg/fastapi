@@ -2,11 +2,14 @@
 //
 // opts:
 //   lines:  [{ boke: 'セリフ', punch: true|false, tsukkomi?: 'ツッコミ' }]  custom script (played in order)
-//   rounds: number of lines (default 6..10 by difficulty; custom lines are topped up from the built-in pool)
+//   rounds: number of lines (default 6..10 by difficulty; custom lines are topped up from the built-in pool;
+//           at least 3 lines are always played)
 //   partner: partner's display name (default '相方'), partnerLook: sprite look for the partner
+//   dialect: 'kansai' | 'std' for the partner's reactions and the closing line (default: Kansai-ben,
+//            or standard Japanese when a custom script's ツッコミ contain no Kansai-ben)
 //
 // Timing: t = frames since the line finished typing.
-//   pressed while typing        -> 早すぎ (boke ruined, no points)
+//   pressed while typing        -> 早すぎ (boke ruined, small penalty)
 //   t <= winP (+4 frames grace) -> PERFECT 100%
 //   t <= winG                   -> GOOD     75%
 //   t <= winL                   -> LATE     40%
@@ -20,110 +23,132 @@ import { audio, registerSong } from '../engine/audio.js';
 import { makeCanvas, mulberry32, shuffle, clamp, mix, W, H } from '../engine/util.js';
 
 // ------------------------------------------------------------------ content
-// Each topic: a few normal setup lines (フリ) and ボケ that follow naturally from them.
-// Every ボケ also works on its own.
-const TOPICS = [
-  {
-    furi: ['最近、健康のために走ってるねん。', 'ぼく、毎朝ストレッチしてるねん。'],
-    boke: [
-      { boke: '富士山を、毎朝ジョギングで登ってるねん。', tsukkomi: 'どんな体力やねん！' },
-      { boke: '腕立て伏せは、一年に一回やってるで。', tsukkomi: '少なすぎるわ！' },
-      { boke: 'きのうは、月までスキップで行ってきた。', tsukkomi: '行けるかい！' },
-    ],
-  },
-  {
-    furi: ['ぼく、料理するのが好きやねん。', 'たこ焼きって、ほんまにおいしいよな。'],
-    boke: [
-      { boke: 'たこ焼きに、たこの代わりにたこ焼き入れた。', tsukkomi: 'ややこしいわ！' },
-      { boke: 'アイスクリームは、レンジで温める派や。', tsukkomi: '溶けてまうわ！' },
-      { boke: 'ラーメンは、ストローで一気に吸うねん。', tsukkomi: '熱いやろ！' },
-      { boke: 'きのうの晩ごはん、ドーナツの穴だけ食べた。', tsukkomi: '何も食べてへんがな！' },
-      { boke: '晩ごはん、おかずがごはんやってん。', tsukkomi: 'ごはんでごはんか！' },
-      { boke: '朝ごはんは毎日、消しゴム三個やねん。', tsukkomi: '食べもんちゃうわ！' },
-    ],
-  },
-  {
-    furi: ['最近、ペットを飼い始めてん。', 'こないだ、家族で動物園に行ってん。'],
-    boke: [
-      { boke: 'うちの金魚、九九を全部言えるねん。', tsukkomi: 'しゃべられへんやろ！' },
-      { boke: 'ペンギンに、泳ぎ方を教えてきてん。', tsukkomi: '向こうがプロや！' },
-      { boke: 'パンダの白黒、ぼくが毎年ぬってるねん。', tsukkomi: 'そんな仕事ないわ！' },
-      { boke: 'きのう、ハトと将棋さして負けてん。', tsukkomi: 'ハト強すぎやろ！' },
-      { boke: 'カバンの中で、ゾウを一頭飼ってるねん。', tsukkomi: '入るかい！' },
-    ],
-  },
-  {
-    furi: ['最近、早起きするようにしてるねん。', '休みの日は、家でゴロゴロしてるねん。'],
-    boke: [
-      { boke: '目覚まし時計は、ぼくが毎朝起こしてる。', tsukkomi: '立場が逆や！' },
-      { boke: 'きのう、冷蔵庫の中で昼寝してん。', tsukkomi: '寒いやろ！' },
-      { boke: '寝言で、毎晩落語を一席やってるらしい。', tsukkomi: '寝ながら稽古すな！' },
-      { boke: '休みの日は、自分の影と鬼ごっこしてる。', tsukkomi: '一生つかまらんわ！' },
-    ],
-  },
-  {
-    furi: ['きのう、ひさしぶりに自転車に乗ってん。', '新幹線に乗るとき、いつも駅弁買うねん。'],
-    boke: [
-      { boke: '自転車、ハンドルだけ持って走ってきた。', tsukkomi: '本体どこやねん！' },
-      { boke: '新幹線より、ぼくの方が足速いで。', tsukkomi: 'そんなわけあるかい！' },
-      { boke: '道に迷ったから、地図に道を聞いてん。', tsukkomi: '地図はしゃべらん！' },
-      { boke: 'この靴な、左右とも左足用やねん。', tsukkomi: '歩きにくいわ！' },
-    ],
-  },
-  {
-    furi: ['ぼく、雨の日も意外と好きやねん。', 'やっぱり、夏はかき氷が一番やな。'],
-    boke: [
-      { boke: '傘はな、晴れの日にだけ差すねん。', tsukkomi: '逆やろ！' },
-      { boke: 'かき氷は、温めてから食べるのが好きや。', tsukkomi: 'ただの水や！' },
-      { boke: '毎朝、太陽に「おはよう」言われるねん。', tsukkomi: '太陽しゃべらんわ！' },
-    ],
-  },
-  {
-    furi: ['週末、おばあちゃんちに遊びに行ってん。', 'お正月に、親戚がみんな集まってん。'],
-    boke: [
-      { boke: 'うちのおばあちゃん、毎朝バク転してるで。', tsukkomi: '元気すぎるやろ！' },
-      { boke: 'お年玉、親戚の犬にもあげてん。', tsukkomi: '何に使うねん！' },
-      { boke: 'サンタさんに、お歳暮を贈っといたで。', tsukkomi: '気ぃつかいすぎや！' },
-    ],
-  },
-  {
-    furi: ['ぼく、こう見えて特技があるねん。', '子どものころの夢、聞いてくれる？'],
-    boke: [
-      { boke: '特技はな、ゆで卵を生卵に戻すことや。', tsukkomi: 'ノーベル賞もんや！' },
-      { boke: '将来の夢は、信号機の青になることです。', tsukkomi: 'なられへんわ！' },
-      { boke: 'ぼく、あくびで風船ふくらませられるで。', tsukkomi: 'どんな肺活量やねん！' },
-      { boke: '前世はな、カブトムシやったらしいねん。', tsukkomi: '誰に聞いてん！' },
-    ],
-  },
-  {
-    furi: ['最近、お風呂でよく歌うねん。', '今度、みんなでカラオケ行こうや。'],
-    boke: [
-      { boke: 'カラオケで、校歌を三時間歌ってん。', tsukkomi: '愛校心すごいな！' },
-      { boke: 'お風呂は、服を着たまま入る派やねん。', tsukkomi: '派閥とかないわ！' },
-      { boke: 'ぼくが歌うと、近所の犬が全員ハモるねん。', tsukkomi: '犬の合唱団か！' },
-    ],
-  },
-  {
-    furi: ['この前、旅行で写真いっぱい撮ってん。', '最近、新しいスマホに変えてん。'],
-    boke: [
-      { boke: 'カメラ向けられたら、まばたき百回するねん。', tsukkomi: '写真ぶれるわ！' },
-      { boke: 'ぼくのスマホ、おにぎりで充電できるねん。', tsukkomi: 'できるかい！' },
-      { boke: '洗濯物、炊飯器で洗ってみてん。', tsukkomi: 'ごはん炊くやつや！' },
-    ],
-  },
+// Each bit: one normal setup line (フリ) and ボケ that follow naturally from it.
+// Every ボケ also works on its own (bits with furi: null are stand-alone ボケ).
+const BITS = [
+  { furi: '最近、健康のために走ってるねん。', boke: [
+    { boke: '富士山を、毎朝ジョギングで登ってるねん。', tsukkomi: 'どんな体力やねん！' },
+    { boke: '走りすぎて、新幹線を追い越してもうた。', tsukkomi: 'そんなわけあるかい！' },
+  ] },
+  { furi: 'ぼく、毎日筋トレしてるねん。', boke: [
+    { boke: '腕立て伏せは、一年に一回やってるで。', tsukkomi: '少なすぎるわ！' },
+    { boke: '鍛えすぎて、あくびで風船ふくらむねん。', tsukkomi: 'どんな肺活量やねん！' },
+  ] },
+  { furi: 'ぼく、料理するのが好きやねん。', boke: [
+    { boke: '得意料理は、ゆで卵を生卵に戻すことや。', tsukkomi: 'ノーベル賞もんや！' },
+    { boke: 'アイスクリームは、レンジで温める派や。', tsukkomi: '溶けてまうわ！' },
+  ] },
+  { furi: 'たこ焼きって、ほんまにおいしいよな。', boke: [
+    { boke: 'たこ焼きに、たこの代わりにたこ焼き入れた。', tsukkomi: 'ややこしいわ！' },
+    { boke: 'こないだ、たこ焼きからたこが逃げてん。', tsukkomi: '生きとったんかい！' },
+  ] },
+  { furi: 'ぼく、食べるのが大好きやねん。', boke: [
+    { boke: 'きのうの晩ごはん、ドーナツの穴だけ食べた。', tsukkomi: '何も食べてへんがな！' },
+    { boke: 'ラーメンは、ストローで一気に吸うねん。', tsukkomi: '熱いやろ！' },
+    { boke: '晩ごはん、おかずがごはんやってん。', tsukkomi: 'ごはんでごはんか！' },
+  ] },
+  { furi: '最近、ペットを飼い始めてん。', boke: [
+    { boke: 'うちの金魚、九九を全部言えるねん。', tsukkomi: 'しゃべられへんやろ！' },
+    { boke: 'カバンの中で、ゾウを一頭飼ってるねん。', tsukkomi: '入るかい！' },
+  ] },
+  { furi: 'こないだ、家族で動物園に行ってん。', boke: [
+    { boke: 'ペンギンに、泳ぎ方を教えてきてん。', tsukkomi: '向こうがプロや！' },
+    { boke: 'パンダの白黒、ぼくが毎年ぬってるねん。', tsukkomi: 'そんな仕事ないわ！' },
+  ] },
+  { furi: '最近、早起きするようにしてるねん。', boke: [
+    { boke: '目覚まし時計は、ぼくが毎朝起こしてる。', tsukkomi: '立場が逆や！' },
+    { boke: '毎朝、太陽に「おはよう」言われるねん。', tsukkomi: '太陽しゃべらんわ！' },
+  ] },
+  { furi: '休みの日は、家でゴロゴロしてるねん。', boke: [
+    { boke: 'ゴロゴロしすぎて、床に人の形の跡ついた。', tsukkomi: 'どんだけ寝とんねん！' },
+    { boke: '家では、自分の影と鬼ごっこしてるねん。', tsukkomi: '一生つかまらんわ！' },
+    { boke: '寝言で、毎晩落語を一席やってるらしい。', tsukkomi: '寝ながら稽古すな！' },
+  ] },
+  { furi: 'きのう、ひさしぶりに自転車に乗ってん。', boke: [
+    { boke: '自転車、ハンドルだけ持って走ってきた。', tsukkomi: '本体どこやねん！' },
+    { boke: '道に迷ったから、地図に道を聞いてん。', tsukkomi: '地図はしゃべらん！' },
+  ] },
+  { furi: 'この前、新しい靴を買うてん。', boke: [
+    { boke: 'この靴な、左右とも左足用やねん。', tsukkomi: '歩きにくいわ！' },
+    { boke: '大きめ買うたら、家族全員入ってん。', tsukkomi: 'それもう家や！' },
+  ] },
+  { furi: 'ぼく、雨の日も意外と好きやねん。', boke: [
+    { boke: '傘はな、晴れの日にだけ差すねん。', tsukkomi: '逆やろ！' },
+    { boke: '雨つぶを全部数えてから、家を出るねん。', tsukkomi: '一生出られへんわ！' },
+  ] },
+  { furi: 'やっぱり、夏が一番好きやねん。', boke: [
+    { boke: 'かき氷は、温めてから食べるのが好きや。', tsukkomi: 'ただの水や！' },
+    { boke: '夏休みの宿題、去年のがまだ終わらんねん。', tsukkomi: '一年遅れとるがな！' },
+    { boke: 'セミといっしょに、毎朝ミンミン鳴いてる。', tsukkomi: '近所迷惑や！' },
+  ] },
+  { furi: '週末、おばあちゃんちに遊びに行ってん。', boke: [
+    { boke: 'うちのおばあちゃん、毎朝バク転してるで。', tsukkomi: '元気すぎるやろ！' },
+    { boke: 'おばあちゃんちの庭、山がひとつあるねん。', tsukkomi: 'どんな庭やねん！' },
+  ] },
+  { furi: 'お正月に、親戚がみんな集まってん。', boke: [
+    { boke: 'お年玉、親戚の犬にもあげてん。', tsukkomi: '何に使うねん！' },
+    { boke: 'お正月に、サンタさんが来てくれてん。', tsukkomi: '一週間遅刻や！' },
+  ] },
+  { furi: 'ぼく、こう見えて特技があるねん。', boke: [
+    { boke: '百メートルを、百分で走れるねん。', tsukkomi: '遅すぎるわ！' },
+    { boke: 'ハトと将棋さして、三連敗中やねん。', tsukkomi: 'ハト強すぎやろ！' },
+  ] },
+  { furi: '子どものころの夢、聞いてくれる？', boke: [
+    { boke: '信号機の青に、なりたかってん。', tsukkomi: 'なられへんわ！' },
+    { boke: '雲の上に、家を建てたかってん。', tsukkomi: '落ちてまうわ！' },
+  ] },
+  { furi: 'ぼく、占いとか信じるタイプやねん。', boke: [
+    { boke: '前世はな、カブトムシやったらしいねん。', tsukkomi: '誰に聞いてん！' },
+    { boke: '今日のラッキーアイテム、冷蔵庫やって。', tsukkomi: '持ち歩かれへんわ！' },
+  ] },
+  { furi: '最近、お風呂でよく歌うねん。', boke: [
+    { boke: 'お風呂は、服を着たまま入る派やねん。', tsukkomi: '派閥とかないわ！' },
+    { boke: 'ぼくが歌うと、近所の犬が全員ハモるねん。', tsukkomi: '犬の合唱団か！' },
+  ] },
+  { furi: '今度、みんなでカラオケ行こうや。', boke: [
+    { boke: 'カラオケで、校歌を三時間歌ってん。', tsukkomi: '愛校心すごいな！' },
+    { boke: 'カラオケの点数、いつもマイナスやねん。', tsukkomi: 'どうやったらなるねん！' },
+  ] },
+  { furi: 'この前、旅行で写真いっぱい撮ってん。', boke: [
+    { boke: 'カメラ向けられたら、まばたき百回するねん。', tsukkomi: '目ぇつぶっとるがな！' },
+    { boke: '旅行の写真、全部ぼくの親指やってん。', tsukkomi: '景色どこやねん！' },
+  ] },
+  { furi: '最近、新しいスマホに変えてん。', boke: [
+    { boke: 'ぼくのスマホ、おにぎりで充電できるねん。', tsukkomi: 'できるかい！' },
+    { boke: '電話かけたら、自分のスマホが鳴ってん。', tsukkomi: '自分にかけとるがな！' },
+  ] },
+  { furi: null, boke: [
+    { boke: 'きのうは、月までスキップで行ってきた。', tsukkomi: '行けるかい！' },
+    { boke: 'サンタさんに、お歳暮を贈っといたで。', tsukkomi: '気ぃつかいすぎや！' },
+    { boke: 'お弁当箱あけたら、お弁当箱が入っててん。', tsukkomi: 'マトリョーシカか！' },
+  ] },
 ];
+const ALL_BOKE = BITS.flatMap((b) => b.boke);
 
-// Generic ツッコミ used when a custom line has no tsukkomi of its own.
-const TSUKKOMI = [
-  'なんでやねん！', 'どういうことやねん！', 'そんなわけあるかい！', 'おかしいやろ！',
-  'どないやねん！', 'なんでそうなるねん！', 'ありえへんやろ！', '聞いたことないわ！',
-];
-const REACT_EARLY = ['まだ途中やがな！', '最後まで聞いてや！', '話の途中やで！'];
-const REACT_FAKE = ['え、ふつうの話やで？', 'まだボケてへんで？', 'ツッコむとこちゃうで！'];
-const REACT_MISS = ['…ツッコんでや！', '…あれ？スルー？', 'いや、何か言うてや！'];
+// Partner / tsukkomi words in two flavours. Built-in material is Kansai-ben; a caller's
+// script written in standard Japanese (e.g. a Tokyo duo) gets the 'std' set automatically.
+const WORDS = {
+  kansai: {
+    tsukkomi: ['なんでやねん！', 'どういうことやねん！', 'そんなわけあるかい！', 'おかしいやろ！', 'どないやねん！', 'なんでそうなるねん！', 'ありえへんやろ！', '聞いたことないわ！'],
+    early: ['まだ途中やがな！', '最後まで聞いてや！', '話の途中やで！'],
+    fake: ['え、ふつうの話やで？', 'まだボケてへんで？', 'ツッコむとこちゃうで！'],
+    miss: ['…ツッコんでや！', '…あれ？スルー？', 'いや、何か言うてや！'],
+    closer: 'もうええわ！',
+    comments: ['劇場が大爆笑！最高の間やったで！', 'ええツッコミ！お客さんも大喜びや！', 'まずまずウケた！間をもっと磨こう！', 'ちょっとスベったかも…次こそ！', 'シーン…。ネタ合わせからやり直しや！'],
+  },
+  std: {
+    tsukkomi: ['なんでだよ！', 'どういうことだよ！', 'そんなわけないだろ！', 'おかしいだろ！', 'ありえないだろ！', '聞いたことないよ！'],
+    early: ['まだ途中だって！', '最後まで聞いてよ！', '話の途中だよ！'],
+    fake: ['え、ふつうの話だよ？', 'まだボケてないよ？', 'ツッコむとこじゃないよ！'],
+    miss: ['…ツッコんでよ！', '…あれ？スルー？', 'いや、何か言ってよ！'],
+    closer: 'いいかげんにしろ！',
+    comments: ['劇場が大爆笑！最高の間だった！', 'いいツッコミ！お客さんも大喜び！', 'まずまずウケた！間をもっと磨こう！', 'ちょっとスベったかも…次こそ！', 'シーン…。ネタ合わせからやり直し！'],
+  },
+};
+const KANSAI_RE = /やねん|ねん|へん|やろ|やない|やで|かい[！!]|がな|ちゃう|あかん|[やわ][！!？?]/;
 const CROWD = ['ワハハ', 'アハハ', 'ドッ！', 'ハハハ', 'ウフフ', 'ワハハハ'];
 
-export const TSUKKOMI_CONTENT = { TOPICS, TSUKKOMI };
+export const TSUKKOMI_CONTENT = { BITS, WORDS };
 
 // ------------------------------------------------------------------ tuning
 const DIFF = {
@@ -138,6 +163,8 @@ const DIFF = {
 const GRACE = 4; // pressing this many frames before the last character still counts as on time
 const NORMAL_W = 0.4; // weight of a フリ (letting it pass = small bonus)
 const FAKE_PENALTY = 0.5; // pressing on a フリ
+const EARLY_PENALTY = 0.25; // pressing while a ボケ is still being said (worse than letting it pass)
+const MIN_LINES = 3;
 
 // ------------------------------------------------------------------ stage layout
 const FEET_Y = 176;
@@ -233,6 +260,7 @@ class TsukkomiManzai extends Minigame {
 
     this.script = this.buildScript(d);
     if (!this.script.some((l) => l.punch)) this.script.push(this.builtin(1, 0)[0]);
+    this.words = WORDS[this.dialect] || WORDS.kansai;
     // フリ are worth a little; capped so that doing nothing never scores more than ~23
     const nBoke = this.script.filter((l) => l.punch).length;
     const nFuri = this.script.length - nBoke;
@@ -276,22 +304,26 @@ class TsukkomiManzai extends Minigame {
   // ---------------------------------------------------------------- script
   buildScript(d) {
     const custom = Array.isArray(this.opts.lines)
-      ? this.opts.lines.filter((l) => l && l.boke).map((l) => ({ text: String(l.boke), punch: !!l.punch, tsukkomi: l.tsukkomi || null }))
+      ? this.opts.lines.filter((l) => l && l.boke).map((l) => ({ text: String(l.boke), punch: !!l.punch, tsukkomi: l.tsukkomi ? String(l.tsukkomi) : null }))
       : [];
+    // dialect of the partner's reactions / the closing line: explicit opts.dialect, else
+    // standard Japanese when a custom script has its own ツッコミ and none of it is Kansai-ben
+    const std = custom.some((l) => l.tsukkomi) && !custom.some((l) => KANSAI_RE.test(l.text + (l.tsukkomi || '')));
+    this.dialect = this.opts.dialect === 'std' || this.opts.dialect === 'kansai' ? this.opts.dialect : std ? 'std' : 'kansai';
     const ratio = DIFF.fakes[d] / DIFF.rounds[d];
-    let rounds = this.opts.rounds ? clamp(Math.round(this.opts.rounds), 3, 16) : null;
+    const want = Number(this.opts.rounds);
+    let rounds = Number.isFinite(want) && want > 0 ? clamp(Math.round(want), MIN_LINES, 16) : null;
     if (custom.length) {
-      rounds = rounds ?? custom.length;
+      rounds = rounds ?? Math.max(MIN_LINES, custom.length);
       if (custom.length >= rounds) return custom.slice(0, rounds);
       const k = rounds - custom.length;
       return custom.concat(this.builtin(k, Math.floor(k * ratio)));
     }
-    rounds = rounds ?? DIFF.rounds[d];
-    const fakes = this.opts.rounds ? Math.round(rounds * ratio) : DIFF.fakes[d];
-    return this.builtin(rounds, fakes);
+    if (rounds == null) return this.builtin(DIFF.rounds[d], DIFF.fakes[d]);
+    return this.builtin(rounds, Math.round(rounds * ratio));
   }
 
-  // n lines with `fakes` フリ. A フリ is always followed by a ボケ from the same topic;
+  // n lines with `fakes` フリ. A フリ is always followed by a ボケ from the same bit;
   // the first and last lines are always ボケ.
   builtin(n, fakes) {
     const r = this.rng;
@@ -307,22 +339,22 @@ class TsukkomiManzai extends Minigame {
       if (set.size > fakeAt.size) fakeAt = set;
       if (fakeAt.size >= fakes) break;
     }
-    const topics = shuffle(TOPICS, r);
+    const bits = shuffle(BITS.filter((b) => b.furi), r);
     const used = new Set();
     const out = new Array(n).fill(null);
-    let ti = 0;
+    let bi = 0;
     for (const s of [...fakeAt].sort((a, b) => a - b)) {
-      const tp = topics[ti++ % topics.length];
-      const b = shuffle(tp.boke, r).find((x) => !used.has(x));
+      const bit = bits[bi++ % bits.length];
+      const b = shuffle(bit.boke, r).find((x) => !used.has(x));
       if (!b) continue;
       used.add(b);
-      out[s] = { text: pickFrom(tp.furi, r), punch: false, tsukkomi: null };
+      out[s] = { text: bit.furi, punch: false, tsukkomi: null };
       out[s + 1] = { text: b.boke, punch: true, tsukkomi: b.tsukkomi };
     }
-    const rest = shuffle(TOPICS.flatMap((t) => t.boke), r).filter((b) => !used.has(b));
+    const rest = shuffle(ALL_BOKE, r).filter((b) => !used.has(b));
     for (let i = 0; i < n; i++) {
       if (out[i]) continue;
-      const b = rest.pop() || pickFrom(TOPICS[0].boke, r);
+      const b = rest.pop() || pickFrom(ALL_BOKE, r);
       out[i] = { text: b.boke, punch: true, tsukkomi: b.tsukkomi };
     }
     return out;
@@ -330,7 +362,7 @@ class TsukkomiManzai extends Minigame {
 
   // Lay out a line for the speech bubble and compute when each character appears.
   prep(line) {
-    const lines = this.layout(line.text);
+    const { lines, size } = this.fit(line.text);
     const chars = lines.flatMap((l) => Array.from(l));
     const revealAt = [];
     let t = 0;
@@ -341,15 +373,23 @@ class TsukkomiManzai extends Minigame {
       else if (prev && '。！？'.includes(prev)) t += this.charF * 1.5;
       revealAt.push(t);
     });
-    return { ...line, lines, chars, revealAt, finishT: Math.ceil(t), shown: 0 };
+    return { ...line, lines, size, chars, revealAt, finishT: Math.ceil(t), shown: 0 };
+  }
+
+  // 12px text in rows of up to 196px; a long custom line that would need more than
+  // 3 rows switches to 10px so the bubble never covers the stage (the width stays
+  // clear of the judgement popups on the right).
+  fit(str) {
+    const lines = this.layout(str, 12, 196);
+    if (lines.length <= 3) return { lines, size: 12 };
+    return { lines: this.layout(str, 10, 206), size: 10 };
   }
 
   // Wrap for the bubble: phrases ending in 、。！？ are packed greedily into rows so
   // lines break at natural points (readable at speed); an over-long phrase is wrapped
   // by character. Explicit "\n" is respected.
-  layout(str) {
-    const maxW = 196;
-    const m = (x) => measure(this.mctx, x, 12);
+  layout(str, size = 12, maxW = 196) {
+    const m = (x) => measure(this.mctx, x, size);
     const out = [];
     for (const para of String(str).split('\n')) {
       const segs = para.match(/[^、。！？]+[、。！？]*|[、。！？]+/g) || [''];
@@ -358,7 +398,7 @@ class TsukkomiManzai extends Minigame {
         if (m(cur + seg) <= maxW) { cur += seg; continue; }
         if (cur) out.push(cur);
         if (m(seg) <= maxW) { cur = seg; continue; }
-        const rows = wrap(this.mctx, seg, maxW, 12);
+        const rows = wrap(this.mctx, seg, maxW, size);
         cur = rows.pop();
         out.push(...rows);
       }
@@ -367,16 +407,19 @@ class TsukkomiManzai extends Minigame {
     return out;
   }
 
-  makeBubble(textOrLines, { bar: withBar = false, tails = [PARTNER_HEAD], name = this.partnerName, cx = null } = {}) {
-    const lines = Array.isArray(textOrLines) ? textOrLines : this.layout(textOrLines);
+  makeBubble(textOrLines, { bar: withBar = false, tails = [PARTNER_HEAD], name = this.partnerName, cx = null, size = null } = {}) {
+    let lines = textOrLines;
+    if (!Array.isArray(lines)) ({ lines, size } = this.fit(textOrLines));
+    size = size || 12;
+    const lh = size + 3;
     let tw = 0;
-    for (const l of lines) tw = Math.max(tw, measure(this.mctx, l, 12));
-    const w = Math.max(withBar ? 140 : 60, Math.ceil(tw) + 20);
-    const h = 8 + lines.length * 15 + (withBar ? 12 : 0) + 3;
+    for (const l of lines) tw = Math.max(tw, measure(this.mctx, l, size));
+    const w = Math.min(W - 16, Math.max(withBar ? 140 : 60, Math.ceil(tw) + 20));
+    const h = 8 + lines.length * lh + (withBar ? 12 : 0) + 3;
     const center = cx ?? tails[0].x;
     const x = clamp(Math.round(center - w / 2), 8, W - 8 - w);
     const total = lines.reduce((k, l) => k + Array.from(l).length, 0);
-    return { lines, w, h, x, y: 28, bar: withBar, tails, name, n: Infinity, total };
+    return { lines, size, lh, w, h, x, y: 28, bar: withBar, tails, name, n: Infinity, total };
   }
 
   // ---------------------------------------------------------------- flow
@@ -422,7 +465,7 @@ class TsukkomiManzai extends Minigame {
       }
       case 'pre':
         if (this.st >= this.preF) {
-          this.bubble = this.makeBubble(this.cur.lines, { bar: true });
+          this.bubble = this.makeBubble(this.cur.lines, { bar: true, size: this.cur.size });
           this.bubble.n = 0;
           this.setState('type');
         }
@@ -479,7 +522,7 @@ class TsukkomiManzai extends Minigame {
     if (grade === 'LATE') this.combo = 0;
     else this.combo++;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
-    const phrase = c.tsukkomi || pickFrom(TSUKKOMI, this.rng);
+    const phrase = c.tsukkomi || pickFrom(this.words.tsukkomi, this.rng);
     this.burst = { text: grade === 'LATE' ? '…' + phrase : phrase, t: 0, size: grade === 'PERFECT' ? 14 : 12, weak: grade === 'LATE' };
     this.startSlap(grade === 'PERFECT' ? 2 : grade === 'GOOD' ? 1.3 : 0.7);
     this.g.sfx('hit');
@@ -499,6 +542,7 @@ class TsukkomiManzai extends Minigame {
     const c = this.cur;
     if (!c.punch) { this.pressMark = null; this.onFake(); return; }
     this.counts.early++;
+    this.earned -= EARLY_PENALTY;
     this.combo = 0;
     this.pressMark = null;
     // cut the line off where it was
@@ -510,7 +554,7 @@ class TsukkomiManzai extends Minigame {
     this.popup('早すぎ！', 274, 58, COLORS.bad, 12);
     this.later(18, () => {
       this.burst = null;
-      this.bubble = this.makeBubble(pickFrom(REACT_EARLY, this.rng));
+      this.bubble = this.makeBubble(pickFrom(this.words.early, this.rng));
       this.emote = { ch: '！', t: 0 };
       this.silenceT = 60;
       this.voice(false);
@@ -524,15 +568,15 @@ class TsukkomiManzai extends Minigame {
     this.counts.fake++;
     this.combo = 0;
     this.bubble.n = Infinity;
-    this.burst = { text: pickFrom(TSUKKOMI, this.rng), t: 0, size: 12 };
+    this.burst = { text: pickFrom(this.words.tsukkomi, this.rng), t: 0, size: 12 };
     this.startSlap(1);
     this.g.sfx('hit');
     this.voice(true);
-    this.popup('フリやで！', 274, 58, COLORS.bad, 12);
+    this.popup('それはフリ！', 274, 58, COLORS.bad, 12);
     this.later(14, () => { this.g.sfx('buzz'); this.emote = { ch: '？', t: 0 }; this.silenceT = 60; });
     this.later(26, () => {
       this.burst = null;
-      this.bubble = this.makeBubble(pickFrom(REACT_FAKE, this.rng));
+      this.bubble = this.makeBubble(pickFrom(this.words.fake, this.rng));
       this.voice(false);
     });
     this.react(90);
@@ -549,7 +593,7 @@ class TsukkomiManzai extends Minigame {
       this.silenceT = 60;
       this.later(10, () => {
         this.emote = { ch: '…', t: 0 };
-        this.bubble = this.makeBubble(pickFrom(REACT_MISS, this.rng));
+        this.bubble = this.makeBubble(pickFrom(this.words.miss, this.rng));
         this.voice(false);
       });
       this.react(78);
@@ -565,7 +609,7 @@ class TsukkomiManzai extends Minigame {
   startClosing() {
     this.setState('closing');
     this.bubble = null;
-    this.burst = { text: 'もうええわ！', t: 0, size: 14 };
+    this.burst = { text: this.words.closer, t: 0, size: 14 };
     this.startSlap(1.6);
     this.g.sfx('hit');
     this.voice(true);
@@ -583,12 +627,9 @@ class TsukkomiManzai extends Minigame {
   finalScore() { return clamp((Math.max(0, this.earned) / this.totalW) * 100, 0, 100); }
 
   comment() {
-    const s = this.finalScore();
-    if (s >= 90) return '劇場が大爆笑！最高の間やったで！';
-    if (s >= 75) return 'ええツッコミ！お客さんも大喜びや！';
-    if (s >= 55) return 'まずまずウケた！間をもっと磨こう！';
-    if (s >= 35) return 'ちょっとスベったかも…次こそ！';
-    return 'シーン…。ネタ合わせからやり直しや！';
+    const s = Math.round(this.finalScore());
+    const c = this.words.comments;
+    return c[s >= 90 ? 0 : s >= 75 ? 1 : s >= 55 ? 2 : s >= 35 ? 3 : 4];
   }
 
   // ---------------------------------------------------------------- effects
@@ -927,7 +968,7 @@ class TsukkomiManzai extends Minigame {
       const chars = Array.from(line);
       const s = left >= chars.length ? line : chars.slice(0, left).join('');
       left -= chars.length;
-      text(ctx, s, x + 10, y + 7 + i * 15, { size: 12, color: '#1a1a28', shadow: null });
+      text(ctx, s, x + 10, y + 7 + i * b.lh, { size: b.size, color: '#1a1a28', shadow: null });
     });
     if (b.bar) this.drawMaBar(ctx, x + 8, y + h - 14, w - 16);
   }
@@ -956,19 +997,36 @@ class TsukkomiManzai extends Minigame {
     }
   }
 
-  drawBurst(ctx, b) {
+  // Lay out a burst once: shrink to 11px, then wrap a long (custom) ツッコミ into rows.
+  burstLayout(ctx, b) {
+    if (b.rows) return;
+    const MAX = 132;
     let size = b.size || 12;
-    let tw = measure(ctx, b.text, size);
-    while (tw > 132 && size > 9) { size--; tw = measure(ctx, b.text, size); }
+    while (measure(ctx, b.text, size) > MAX && size > 11) size--;
+    const rows = measure(ctx, b.text, size) > MAX ? wrap(ctx, b.text, MAX, size) : [b.text];
+    let tw = 0;
+    for (const r of rows) tw = Math.max(tw, measure(ctx, r, size));
+    Object.assign(b, { rows, fs: size, tw });
+  }
+
+  drawBurst(ctx, b) {
+    this.burstLayout(ctx, b);
+    const { rows, fs: size, tw } = b;
+    const lh = size + 2;
     const pop = b.t < 6 ? 0.6 + b.t * 0.07 : 1;
     const rx = (tw / 2 + 16) * pop;
-    const ry = (b.weak ? 12 : 15) * pop;
+    const ry = ((b.weak ? 12 : 15) + (rows.length - 1) * lh * 0.6) * pop;
     const cx = Math.min(W - 6 - rx, 236);
-    const cy = 98;
+    let cy = 98;
+    // keep clear of a tall speech bubble
+    const bb = this.bubble;
+    if (bb && bb.x + bb.w > cx - rx) cy = clamp(bb.y + bb.h + ry + 3, 98, 128);
     const rot = b.t * 0.01;
     fillPoly(ctx, starPts(cx, cy, rx + 2, ry + 2, 14, 0.8, rot), INK);
     fillPoly(ctx, starPts(cx, cy, rx, ry, 14, 0.8, rot), b.weak ? '#e8e4f0' : '#fff2a0');
-    if (b.t >= 3) text(ctx, b.text, cx, cy - size / 2 - 1, { size, align: 'center', color: b.weak ? '#4a4660' : '#c0182c', shadow: null });
+    if (b.t < 5) return; // text appears once the burst has (almost) fully popped
+    const top = cy - (rows.length * lh) / 2;
+    rows.forEach((r, i) => text(ctx, r, cx, top + i * lh, { size, align: 'center', color: b.weak ? '#4a4660' : '#c0182c', shadow: null }));
   }
 
   drawEmote(ctx) {

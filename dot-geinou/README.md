@@ -90,6 +90,7 @@ registerPlace({
       warps: [ { x: 6, y: 10, to: 'exit' }, { x: 13, y: 2, room: 'studio', tx: 2, ty: 8, dir: 'up' } ],
       events: [ { x: 3, y: 4, on: 'action', run: async (g) => { ... } } ],
       onEnter: async (g) => { ... },     // 部屋に入るたびに実行
+      topPad: 24,                        // 大きい部屋：カメラが上端より少し上まで動ける（HUD対策）
       bgm: 'studio',                     // 部屋ごとに変えたい場合
     },
   },
@@ -149,13 +150,15 @@ registerPlace({
 | `await g.ending()` | エンディング（スタッフロール） |
 
 **お仕事** `g.job({ id, title, desc, client, stamina: 20, minigame, opts: { difficulty }, pay, fame, skill, gain, requires })`
-- `requires`: `{ agency: true | 'yoshimoto' | ['yoshimoto', 'grape'], fame: 250, skills: { warai: 30 }, flag, flagText }`
+- `requires`: `{ agency: true | 'yoshimoto' | ['yoshimoto', 'grape'], fame: 250, skills: { warai: 30 }, flag, flagText }`。
+  「所属 または ★30」のような条件は `{ anyOf: [{ agency: true }, { fame: 30 }] }`
 - 確認 → 体力消費 → ミニゲーム → ランク倍率（S 1.5 / A 1.2 / B 1.0 / C 0.7 / D 0.4、得意分野の事務所なら ×1.1）で
   ギャラ・知名度・スキルが入ります。
 
 **レッスン** `g.lesson({ title, skill, price: 2000, stamina: 10, gain: 3, minigame?, opts?, teacher })`
 
-**オーディション** `g.audition({ agency, title, minigame, opts, pass: 55, stamina: 15, requires })`
+**オーディション** `g.audition({ agency, title, minigame, opts, pass: 55, stamina: 15, requires, confirm, client, clientLook, beforeResult })`
+（`confirm: false` で確認を省略、`beforeResult: async (g, res, passed) => {}` で合否発表の前に演出を挟める）
 事務所 ID：`yoshimoto` / `shochiku` / `grape` / `horipro`。所属していれば true。理由は `g.lastAudition`
 （`'passed' | 'already' | 'failed' | 'declined' | 'nostamina' | 'blocked' | 'transferDeclined'`）。
 

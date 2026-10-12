@@ -725,8 +725,11 @@ async function tourScript(g) {
 }
 
 // ====================================================================== FINALE
-async function finaleOffer(g, speaker = SP.producer) {
-  const i = await g.ask([
+async function finaleOffer(g, speaker = SP.producer, inHall = false) {
+  const i = await g.ask(inHall ? [
+    '{name}さんの出番は、年末の大型歌番組の大トリです！',
+    '楽屋でメイクをしたら、すぐ本番。準備はいいですか？',
+  ] : [
     '今年の年末の大型歌番組…その大トリを、{name}さんにお願いしたいんです！',
     '本番の舞台はNHKホール。すぐに向かえますか？',
   ], ['本番へ行く', 'まだ準備する'], speaker);
@@ -734,6 +737,7 @@ async function finaleOffer(g, speaker = SP.producer) {
     await g.say(['承知しました！準備ができたら声をかけてくださいね。', 'ロビーとホールで、スタッフ一同お待ちしています！'], speaker);
     return false;
   }
+  await g.say(inHall ? 'よし、楽屋へご案内します！\n客席はもう満員ですよ！' : 'ありがとうございます！\nそれでは、NHKホールへご案内します！', speaker);
   await finaleFlow(g);
   return true;
 }
@@ -818,7 +822,7 @@ async function finaleFlow(g) {
     // ---- 本番
     SHOW.phase = 'song';
     await g.fadeOut(20);
-    const mg = g.minigame('rhythm', { difficulty: 5, lanes: 4, title: '年末の大型歌番組' });
+    const mg = g.minigame('rhythm', { difficulty: 5, lanes: 4, title: '年末の大型歌番組', song: 'ありがとう、ニッポン' });
     await g.fadeIn(10);
     const res = (await mg) || { rank: 'B', score: 60 };
 
@@ -827,12 +831,30 @@ async function finaleFlow(g) {
     SHOW.t0 = g.frame;
     g.bgm('nhk_gala');
     g.sfx('fanfare');
-    const r = REACT[res.rank] || REACT.B;
+    const rank = REACT[res.rank] ? res.rank : 'B';
+    const r = REACT[rank];
     await g.wait(600);
     g.sfx('applause');
+    if (rank === 'S') g.shake(30, 2);
     await g.say(r.text);
+    if (rank === 'C' || rank === 'D') {
+      await g.emote('player', '…');
+      g.sfx('applause');
+      await g.emote('player', '♥');
+    } else {
+      await g.emote('player', rank === 'S' ? '!' : '♪');
+    }
     await g.emote('nhk_host1', '!');
     await g.say(r.host, SP.host1);
+    if (rank === 'S') {
+      for (const d of ['right', 'down', 'up', 'left']) {
+        await g.moveNpc('nhk_host1', 'face:' + d);
+        await g.wait(220);
+      }
+      await g.emote('nhk_host1', '?', 30);
+      g.sfx('laugh');
+      await g.say('あっ…感動のあまり、台本がどこかへ行っちゃいました！', SP.host1);
+    }
     await g.emote('nhk_host2', '♥');
     await g.say(['{name}さん、ありがとうございました！', 'まさに、国民的スターの誕生です！'], SP.host2);
     g.setFlag('finaleDone', true);
@@ -866,33 +888,46 @@ const PEN = ['#ff7eb6', '#5fd7ff', '#ffd23f', '#5ee07a', '#ffffff', '#ff9a3c'];
 const HAIRS = ['#2a2430', '#6b4226', '#2a2430', '#c8ccd4', '#3a2a20', '#e8c45a'];
 const TOPS = ['#3a58a8', '#d64161', '#5a6f8a', '#2f9a4a', '#ffd23f', '#8a5ac8', '#f2f2f2'];
 
-function drawHallUnder(ctx, g, cam) {
-  if (!SHOW.on) return;
+function forSeats(g, cam, fn) {
   const room = g.map.room;
   const x0 = Math.max(0, Math.floor(cam.x / 16)), x1 = Math.min(room.w - 1, Math.floor((cam.x + W) / 16));
   const y0 = Math.max(0, Math.floor(cam.y / 16)), y1 = Math.min(room.h - 1, Math.floor((cam.y + H) / 16));
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       const cell = room.cells[y][x];
-      if (cell[cell.length - 1] !== 'seat') continue;
-      const k = hash2(x, y, 3);
-      const sx = x * 16 - cam.x, sy = y * 16 - cam.y;
-      F(ctx, sx + 3, sy + 8, 10, 6, TOPS[Math.floor(k * TOPS.length)]);
-      F(ctx, sx + 4, sy + 1, 8, 8, HAIRS[Math.floor(hash2(x, y, 5) * HAIRS.length)]);
-      F(ctx, sx + 5, sy, 6, 1, HAIRS[Math.floor(hash2(x, y, 5) * HAIRS.length)]);
-      const sw = Math.round(Math.sin(g.frame / 8 + k * 6.28) * 2);
-      const lx = sx + (k > 0.5 ? 12 : 2) + sw, ly = sy - 5;
-      const pen = PEN[Math.floor(hash2(x, y, 7) * PEN.length)];
-      F(ctx, lx - 1, ly - 1, 4, 8, 'rgba(255,255,255,0.18)');
-      F(ctx, lx, ly, 2, 6, pen);
-      F(ctx, lx, ly + 6, 2, 2, '#3b3f48');
+      if (cell[cell.length - 1] === 'seat') fn(x, y, x * 16 - cam.x, y * 16 - cam.y);
     }
   }
+}
+
+// The audience (drawn on the seats, under the entities).
+function drawHallUnder(ctx, g, cam) {
+  if (!SHOW.on) return;
+  forSeats(g, cam, (x, y, sx, sy) => {
+    const hair = HAIRS[Math.floor(hash2(x, y, 5) * HAIRS.length)];
+    F(ctx, sx + 3, sy + 8, 10, 6, TOPS[Math.floor(hash2(x, y, 3) * TOPS.length)]);
+    F(ctx, sx + 4, sy + 1, 8, 8, hair);
+    F(ctx, sx + 5, sy, 6, 1, hair);
+  });
+}
+
+// Penlights glow above the dimmed hall.
+function drawPenlights(ctx, g, cam) {
+  forSeats(g, cam, (x, y, sx, sy) => {
+    const k = hash2(x, y, 3);
+    const sw = Math.round(Math.sin(g.frame / 8 + k * 6.28) * 2);
+    const lx = sx + (k > 0.5 ? 12 : 2) + sw, ly = sy - 5;
+    const pen = PEN[Math.floor(hash2(x, y, 7) * PEN.length)];
+    F(ctx, lx - 1, ly - 1, 4, 8, 'rgba(255,255,255,0.16)');
+    F(ctx, lx, ly, 2, 6, pen);
+    F(ctx, lx, ly + 6, 2, 2, '#3b3f48');
+  });
 }
 
 function drawHallOver(ctx, g, cam) {
   if (!SHOW.on) return;
   if (SHOW.phase === 'celebrate') {
+    drawPenlights(ctx, g, cam);
     const t = g.frame - SHOW.t0;
     for (let i = 0; i < 80; i++) {
       const s1 = hash2(i, 1, 9), s2 = hash2(i, 2, 9);
@@ -914,6 +949,8 @@ function drawHallOver(ctx, g, cam) {
   ctx.fillStyle = 'rgba(6,8,28,0.55)';
   ctx.beginPath();
   ctx.rect(0, 0, W, H);
+  // keep the LED screen bright (it sits on row 3, above the spotlights)
+  ctx.rect(4 * 16 - cam.x + 2, 3 * 16 - cam.y - 9, 14 * 16 - 4, 25);
   for (const [x, y] of spots) {
     ctx.moveTo(x + 15, y + 2);
     ctx.ellipse(x, y + 2, 15, 13, 0, 0, Math.PI * 2);
@@ -931,6 +968,7 @@ function drawHallOver(ctx, g, cam) {
     ctx.fill();
   }
   ctx.restore();
+  drawPenlights(ctx, g, cam);
 }
 
 function ledScreen() {
@@ -991,7 +1029,7 @@ async function kidsJob(g, npc) {
   await g.say(['こども番組「ドットンとうたおう！」のディレクターです。', 'ドットンといっしょに歌って踊る、うたのおにいさん・おねえさんを探してるんですよ！'], s);
   const res = await g.job({
     id: 'nhk_kids_song', title: 'うたのおにいさん・おねえさん', desc: 'こども番組で歌って踊ろう！', client: npc.name,
-    stamina: 20, minigame: 'rhythm', opts: { difficulty: 1, lanes: 1 }, pay: 4500, fame: 15, skill: 'uta', gain: 2,
+    stamina: 20, minigame: 'rhythm', opts: { difficulty: 1, lanes: 1, song: 'ドットンとうたおう！' }, pay: 4500, fame: 15, skill: 'uta', gain: 2,
   });
   if (!res) return;
   g.sfx('laugh');
@@ -1680,12 +1718,12 @@ registerPlace({
           type: 'npc', id: 'nhk_stagemgr', x: 18, y: 4, dir: 'down', look: L.stageMgr, name: '舞台監督', cond: () => !SHOW.on,
           talk: async (g, npc) => {
             const s = as(npc);
-            if (finalePending(g)) { await finaleOffer(g, s); return; }
+            if (finalePending(g)) { await finaleOffer(g, s, true); return; }
             if (g.flag('finaleDone')) {
               await g.say(['{name}さん！またこのステージで歌ってくれませんか？', 'あの年末の歌声が忘れられないって、凱旋コンサートのリクエストが殺到してるんです！'], s);
               await nhkJob(g, {
                 id: 'nhk_encore', title: 'NHKホール 凱旋コンサート', desc: 'あの舞台に、もう一度！', client: npc.name,
-                stamina: 30, minigame: 'rhythm', opts: { difficulty: 5, lanes: 4 }, pay: 70000, fame: 250, skill: 'uta', gain: 5,
+                stamina: 30, minigame: 'rhythm', opts: { difficulty: 5, lanes: 4, song: 'ありがとう、ニッポン' }, pay: 70000, fame: 250, skill: 'uta', gain: 5,
                 requires: { fame: 2000 },
               });
               return;
@@ -1712,7 +1750,7 @@ registerPlace({
         if (!fresh && g.map.player.y < 18) return;
         await g.emote('nhk_stagemgr', '!');
         await g.say(['{name}さん！お待ちしていました！', '年末の大型歌番組、本番のステージはもう準備万端です！'], SP.stageMgr);
-        await finaleOffer(g, SP.stageMgr);
+        await finaleOffer(g, SP.stageMgr, true);
       },
     },
 

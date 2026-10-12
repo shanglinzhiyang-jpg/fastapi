@@ -137,10 +137,10 @@ const BANK = {
     ['時代劇で、刀を使った立ち回りの演技は？', ['殺陣（たて）', '見得（みえ）', '早替わり', '宙乗り'], 2],
     ['セリフの音声が入っていない、昔の映画は？', ['無声映画', '立体映画', '短編映画', '記録映画'], 2],
     ['映像に合わせて、あとから声を録音することは？', ['アフレコ', 'ロケ', 'リハーサル', 'テイク'], 2],
-    ['アカデミー賞の授賞式が行われる国は？', ['アメリカ', 'フランス', 'イギリス', 'イタリア'], 2],
-    ['カンヌ国際映画祭が開かれる国は？', ['フランス', 'イタリア', 'ドイツ', 'スペイン'], 2],
+    ['映像がだんだん暗くなって消えていく演出は？', ['フェードアウト', 'フェードイン', 'ズームイン', 'カットイン'], 2],
+    ['映画のセリフや場面の流れを文章で書いたものは？', ['脚本', '絵コンテ', '予告編', 'パンフレット'], 2],
     ['同じ場面を何度か撮るとき、その1回1回の撮影は？', ['テイク', 'カット', 'シーン', 'ロケ'], 3],
-    ['ベネチア国際映画祭が開かれる国は？', ['イタリア', 'フランス', 'ドイツ', 'スイス'], 3],
+    ['カメラの向きを左右にふって撮ることを何という？', ['パン', 'ティルト', 'ズーム', 'ドリー'], 3],
   ],
   music: [
     ['音楽記号「f（フォルテ）」の意味は？', ['強く', '弱く', '速く', 'ゆっくり'], 1],
@@ -187,6 +187,7 @@ const INTRO = 40; // frames: question number + question typing
 const JUDGE = 22; // frames of suspense after locking an answer
 const REVEAL_MIN = 36; // A can skip the reveal after this
 const REVEAL_MAX = 75; // auto-advance
+const REVEAL_TIMEUP = 60; // auto-advance after a time-out (nothing to celebrate, keep it moving)
 const Q_PANEL = { x: 4, y: 107, w: 312, h: 46 };
 const CELL_W = 154, CELL_H = 39;
 const cellRect = (i) => ({ x: 4 + (i % 2) * 158, y: 156 + (i >> 1) * 42, w: CELL_W, h: CELL_H });
@@ -234,6 +235,14 @@ function marks() {
   }
   MARKS = { ok: oc, ng: xc, size: S };
   return MARKS;
+}
+
+// One line of text cut with "…" so it is at most maxW wide.
+function fitLine(ctx, s, maxW, size) {
+  if (measure(ctx, s, size) <= maxW) return s;
+  const ch = Array.from(s);
+  while (ch.length > 1 && measure(ctx, ch.join('') + '…', size) > maxW) ch.pop();
+  return ch.join('') + '…';
 }
 
 // ------------------------------------------------------------------ question helpers
@@ -288,10 +297,13 @@ class Quiz extends Minigame {
     const d = this.difficulty;
     this.items = this.buildQuestions();
     this.n = this.items.length;
-    const base = [9.5, 8, 6.5, 5.5, 4.8][d - 1];
-    const sec = this.opts.time > 0 ? this.opts.time : this.ease(base, 0.25);
+    // Seconds to answer. Kept so that even a player who never answers finishes a d3 show
+    // (8 questions) in about 60-70 s, also with a maxed talk skill.
+    const base = [9.5, 8, 6.2, 5.4, 4.8][d - 1];
+    const sec = this.opts.time > 0 ? +this.opts.time : this.ease(base, 0.1);
     this.limit = Math.max(60, Math.round(sec * 60));
-    this.hints = this.opts.hints ?? ((d <= 2 ? 2 : d <= 4 ? 1 : 0) + (this.bonus >= 0.5 ? 1 : 0));
+    this.hints = Math.max(0, Math.floor(this.opts.hints ?? ((d <= 2 ? 2 : d <= 4 ? 1 : 0) + (this.bonus >= 0.5 ? 1 : 0)))) || 0;
+    this.hintsMax = this.hints;
     this.score = 0;
     this.shown = 0;
     this.correct = 0;
@@ -372,7 +384,7 @@ class Quiz extends Minigame {
         if (this.st >= JUDGE) this.resolve();
         break;
       case 'reveal':
-        if ((this.st >= REVEAL_MIN && inp.pressed('a')) || this.st >= (this.verdict === 'time' ? REVEAL_MAX - 10 : REVEAL_MAX)) this.next();
+        if ((this.st >= REVEAL_MIN && inp.pressed('a')) || this.st >= (this.verdict === 'time' ? REVEAL_TIMEUP : REVEAL_MAX)) this.next();
         break;
       case 'outro':
         if (this.st >= 60) this.finish();
@@ -439,7 +451,8 @@ class Quiz extends Minigame {
       audio.sfx('cancel');
       if (!this.hinted && this.pt - this.noHintAt > 45) {
         this.noHintAt = this.pt;
-        this.popup(nC <= 2 ? 'もう2択だよ！' : 'ヒントはもうない！', 160, 128, COLORS.cyan, 10);
+        // on the stage (where the ○/× appears later), not over the question text
+        this.popup(nC <= 2 ? 'もう2択だよ！' : this.hintsMax > 0 ? 'ヒントはもうない！' : 'ヒントなしの回だ！', 160, 58, COLORS.cyan, 10);
       }
       return;
     }
@@ -637,17 +650,26 @@ class Quiz extends Minigame {
     for (let by = y + 7; by <= y + h - 5; by += 6) bulb(x + w - 3, by);
     for (let bx = x + w - 5; bx >= x + 3; bx -= 6) bulb(bx, y + h - 3);
     for (let by = y + h - 5; by >= y + 7; by -= 6) bulb(x + 1, by);
+    // show title: 12px with the bobbing ? marks when there is room, otherwise without them,
+    // then 10px, and as a last resort cut with "…" so a long opts.show never leaves the sign.
     const show = String(this.opts.show || 'クイズ！ドット王');
-    const ts = measure(ctx, show, 12) <= w - 16 ? 12 : 10;
-    text(ctx, show, 160, y + 6, { size: ts, align: 'center', color: COLORS.accent, outline: '#5a1a00' });
+    const inner = w - 14;
+    let ts = 12, title = show, marksOn = measure(ctx, show, 12) <= w - 40;
+    if (!marksOn && measure(ctx, show, 12) > inner) {
+      ts = 10;
+      title = fitLine(ctx, show, inner, 10);
+    }
+    text(ctx, title, 160, y + 6 + (ts === 10 ? 1 : 0), { size: ts, align: 'center', color: COLORS.accent, outline: '#5a1a00' });
     const genre = this.cur && this.cur.cat ? CAT_NAMES[this.cur.cat] : String(this.opts.genre || 'スペシャル');
     let label = `ジャンル：${genre}`;
-    if (measure(ctx, label, 10) > w - 14) label = genre;
+    if (measure(ctx, label, 10) > inner) label = fitLine(ctx, genre, inner, 10);
     text(ctx, label, 160, y + 20, { size: 10, align: 'center', color: COLORS.cyan, shadow: null });
     // little ? marks on both sides of the title
-    const bob = Math.floor(t / 15) % 2;
-    text(ctx, '？', x + 7, y + 8 + bob, { size: 10, color: COLORS.pink, shadow: null });
-    text(ctx, '？', x + w - 17, y + 9 - bob, { size: 10, color: COLORS.pink, shadow: null });
+    if (marksOn) {
+      const bob = Math.floor(t / 15) % 2;
+      text(ctx, '？', x + 7, y + 8 + bob, { size: 10, color: COLORS.pink, shadow: null });
+      text(ctx, '？', x + w - 17, y + 9 - bob, { size: 10, color: COLORS.pink, shadow: null });
+    }
   }
 
   drawHost(ctx) {
@@ -927,6 +949,7 @@ class Quiz extends Minigame {
     ctx.globalAlpha = Math.min(0.55, this.st / 20);
     rect(ctx, 0, 107, W, 133, '#000000');
     ctx.restore();
+    if (this.phase === 'result') return; // the result card takes over (the banner would peek out below it)
     const k = Math.min(1, this.st / 10);
     const y = Math.round(160 + (1 - k) * 30);
     panel(ctx, 70, y, 180, 44, { edge: COLORS.accent });

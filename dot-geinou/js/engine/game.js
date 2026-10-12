@@ -477,9 +477,17 @@ export class Game {
     return new Promise((resolve) => this.push(new ShopScene(this, goods, opts, resolve)));
   }
 
+  // r: { agency: true | id | [ids], fame, skills: { k: min }, flag, flagText, anyOf: [r1, r2, ...] }
+  // Returns null when allowed, otherwise the reason to show.
   checkRequires(r) {
     const st = this.state;
     if (!r) return null;
+    if (Array.isArray(r.anyOf) && r.anyOf.length) {
+      const reasons = r.anyOf.map((alt) => this.checkRequires(alt));
+      if (!reasons.includes(null)) return r.anyOfText || reasons[0];
+      const { anyOf, anyOfText, ...rest } = r;
+      return this.checkRequires(Object.keys(rest).length ? rest : null);
+    }
     if (r.agency === true && !st.agency) return '事務所に所属していないと、このお仕事は受けられないみたいだ…。\nまずはどこかの事務所のオーディションに合格しよう。';
     if (typeof r.agency === 'string' && st.agency !== r.agency) return `${AGENCIES[r.agency]?.name || r.agency}所属のタレント限定のお仕事のようだ。`;
     if (Array.isArray(r.agency) && !r.agency.includes(st.agency)) return `${r.agency.map((a) => AGENCIES[a]?.name || a).join('か')}所属のタレント限定のお仕事のようだ。`;
@@ -534,7 +542,7 @@ export class Game {
     const stamina = def.stamina ?? 10;
     const i = await this.ask(`「${def.title || SKILLS[def.skill] + 'レッスン'}」\nレッスン料 ${fmtMoney(price)}／体力 -${stamina}`, ['受ける', 'やめておく'], { name: def.teacher });
     if (i !== 0) return null;
-    if (st.money < price) { await this.say('レッスン料が足りない…。', { name: def.teacher }); return null; }
+    if (st.money < price) { await this.say(`レッスン料（${fmtMoney(price)}）が足りない…。\nお仕事でお金をためてからにしよう。`); return null; }
     if (st.stamina < stamina) { await this.say('体力が足りない…。休んでからにしよう。'); return null; }
     st.money -= price;
     st.stamina -= stamina;
@@ -555,7 +563,8 @@ export class Game {
     return res || { score: 60, rank: 'B', success: true };
   }
 
-  // Agency audition. def: { agency, title, minigame, opts, pass=55, stamina=15, requires }
+  // Agency audition. def: { agency, title, minigame, opts, pass=55, stamina=15, requires,
+  //   confirm=true, client, clientLook, beforeResult: async (g, res, passed) => {} }
   // Returns true when the player is (now) a member. g.lastAudition tells why:
   // 'passed' | 'already' | 'failed' | 'declined' | 'nostamina' | 'blocked' | 'transferDeclined'
   async audition(def) {
@@ -567,12 +576,16 @@ export class Game {
     const why = this.checkRequires(def.requires);
     if (why) { await this.say(why); return false; }
     const stamina = def.stamina ?? 15;
-    const i = await this.ask(`「${def.title || ag.name + 'オーディション'}」\n合格すると${ag.name}所属になれる。（体力 -${stamina}）`, ['受ける', 'やめておく']);
-    if (i !== 0) { this.lastAudition = 'declined'; return false; }
+    if (def.confirm !== false) {
+      const i = await this.ask(`「${def.title || ag.name + 'オーディション'}」\n合格すると${ag.name}所属になれる。（体力 -${stamina}）`, ['受ける', 'やめておく'], { name: def.client, look: def.clientLook });
+      if (i !== 0) { this.lastAudition = 'declined'; return false; }
+    }
     if (st.stamina < stamina) { this.lastAudition = 'nostamina'; await this.say('体力が足りない…。万全の状態で挑もう。'); return false; }
     st.stamina -= stamina;
     const pass = def.pass ?? 55;
     const res = await this.minigame(def.minigame, { ...(def.opts || {}), skill: def.skill || ag.skill, title: def.title || ag.name + 'オーディション', pass });
+    this.lastAuditionResult = res;
+    if (def.beforeResult) await def.beforeResult(this, res, res.score >= pass);
     if (res.score < pass) {
       this.lastAudition = 'failed';
       await this.say(`不合格…。（${res.score}点／合格ライン${pass}点）\nレッスンで腕を磨いて、また挑戦しよう！`);
