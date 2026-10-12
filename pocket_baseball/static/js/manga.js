@@ -674,6 +674,18 @@
       '" paint-order="stroke" stroke-linejoin="round">' +
       escA(ch) +
       "</text>";
+    if (txt === "HT") {
+      // 阪神の HT: H の上に T を載せる (文字を重ねると T の縁が H の右の縦棒を消して "IT" に見える)。three/human.js の monogramHT と同じ形
+      const h = sz * 0.9;
+      const x0 = cx - h / 2;
+      const y0 = cy - h / 2;
+      const R = (ax, ay, bx, by) => "M" + n(x0 + ax * h) + " " + n(y0 + ay * h) + "H" + n(x0 + bx * h) + "V" + n(y0 + by * h) + "H" + n(x0 + ax * h) + "Z";
+      const dH = R(0, 0, 0.24, 1) + R(0.76, 0, 1, 1) + R(0.24, 0.42, 0.76, 0.58) + R(-0.07, 0.9, 0.31, 1) + R(0.69, 0.9, 1.07, 1) + R(-0.07, 0, 0.31, 0.1) + R(0.69, 0, 1.07, 0.1);
+      const dT = R(-0.1, -0.02, 1.1, 0.24) + R(0.385, 0.24, 0.615, 0.84) + R(0.3, 0.76, 0.7, 0.84);
+      s += '<path d="' + dH + '" fill="' + L.markColor + '"/>';
+      s += '<path d="' + dT + '" fill="' + L.markColor + '" stroke="' + (patch ? L.crown : g.capCol) + '" stroke-width="' + n(sz * 0.07) + '" paint-order="stroke"/>';
+      return s;
+    }
     if (L.markStyle === "mono" && txt.length >= 2) {
       // 組み合わせ文字: 2 文字を重ねる (後ろの文字を帽子の色で縁取って切り抜いたように見せる)
       s += st(sz * 0.88, cx - sz * 0.2, cy - sz * 0.04, txt[0]);
@@ -1263,11 +1275,11 @@
     return s;
   }
   function napeHair(g, col, wide) {
-    // 襟足 (首の後ろからはみ出す毛先)
+    // 襟足 (首の後ろからはみ出す毛先。つばより上に出すと耳当てに見えるので y 110 から下だけ)
     let s = "";
     for (const sd of [-1, 1]) {
       const P = (u, v) => [100 + sd * u, v];
-      const d = curve([P(30, 128, 1), P(42, 120), P(46, 98, 1), P(54, 92), P(52, 130), P(44, 152, 1), P(42, 140), P(36, 150, 1), P(36, 138), P(26, 142, 1), P(32, 132)], true);
+      const d = curve([P(30, 128, 1), P(42, 120), P(46, 110, 1), P(52, 110), P(52, 130), P(44, 152, 1), P(42, 140), P(36, 150, 1), P(36, 138), P(26, 142, 1), P(32, 132)], true);
       s += shape(d, col, 2.6);
     }
     void wide;
@@ -1429,7 +1441,7 @@
     return s + headClose(g);
   }
 
-  // 犬飼: 理論派の打撃コーチ (細面にメガネ、七三分け)
+  // 宇佐美 (inukai): 理論派の打撃コーチ (細面にメガネ、七三分け)
   function drawInukai(g) {
     const ex = g.ex;
     const hc = "#2a2a31";
@@ -1596,8 +1608,11 @@
       let s = defs(g);
       s += panel(g);
       // sil: まだ会っていない人は黒いシルエット
-      if (o.sil) s += '<filter id="§sil"><feColorMatrix type="matrix" values="0 0 0 0 .13 0 0 0 0 .15 0 0 0 0 .22 0 0 0 1 0"/></filter><g filter="url(#§sil)">' + C.draw(g) + "</g>";
-      else s += C.draw(g);
+      if (o.sil) {
+        s += '<filter id="§sil"><feColorMatrix type="matrix" values="0 0 0 0 .13 0 0 0 0 .15 0 0 0 0 .22 0 0 0 1 0"/></filter><g filter="url(#§sil)">' + C.draw(g) + "</g>";
+        // 小さいと灰色の丸にしか見えないので「?」を重ねる
+        s += '<text x="' + n(vb[0] + vb[2] / 2) + '" y="' + n(vb[1] + vb[3] * 0.55) + '" font-family="\'Archivo Black\', sans-serif" font-size="' + n(vb[3] * 0.46) + '" font-weight="900" text-anchor="middle" dominant-baseline="central" fill="#ffffff" stroke="' + INK + '" stroke-width="' + n(vb[3] * 0.035) + '" paint-order="stroke" stroke-linejoin="round">?</text>';
+      } else s += C.draw(g);
       if (o.frame !== false) {
         const sw = crop === "face" ? 4 : 3.2;
         s += '<rect x="' + (vb[0] + sw / 2) + '" y="' + (vb[1] + sw / 2) + '" width="' + (vb[2] - sw) + '" height="' + (vb[3] - sw) + '" fill="none" stroke="' + INK + '" stroke-width="' + sw + '"/>';

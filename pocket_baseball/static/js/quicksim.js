@@ -18,23 +18,26 @@
 
   // 表を使いやすい形に直す (最初に使うときに 1 回だけ)
   let T = null;
+  function parseCell(s) {
+    const list = [];
+    let tot = 0;
+    const re = /([a-j])(\d)(\d+)/g;
+    let m;
+    while ((m = re.exec(s || ""))) {
+      const n = Number(m[3]);
+      list.push({ o: m[1], pos: POS[Number(m[2]) - 1] || null, n });
+      tot += n;
+    }
+    return { list, tot };
+  }
   function table() {
     if (T) return T;
     const B = PB.BIP;
     if (!B) throw new Error("bip_table.js が読み込まれていません");
-    const cells = B.cells.map((s) => {
-      const list = [];
-      let tot = 0;
-      const re = /([a-j])(\d)(\d+)/g;
-      let m;
-      while ((m = re.exec(s))) {
-        const n = Number(m[3]);
-        list.push({ o: m[1], pos: POS[Number(m[2]) - 1] || null, n });
-        tot += n;
-      }
-      return { list, tot };
-    });
-    T = { B, cells };
+    const cells = B.cells.map(parseCell);
+    // 一塁走者がいるときの守備位置 (一塁手がベースに付く・併殺の位置)。無い区分は通常の表
+    const cells1 = B.cells.map((s, i) => (B.cells1 && B.cells1[i] ? parseCell(B.cells1[i]) : cells[i]));
+    T = { B, cells, cells1 };
     return T;
   }
 
@@ -45,8 +48,9 @@
     return (ei * B.la[2] + li) * B.ph[2] + pi;
   }
   // 空の区分 (本塁打しか出なかった など) は少し弱い打球・近い角度の区分を使う
-  function findCell(ev, la, phi) {
-    const { B, cells } = table();
+  function findCell(ev, la, phi, shifted) {
+    const { B } = table();
+    const cells = shifted ? T.cells1 : T.cells;
     const ei = binOf(ev, B.ev);
     const li = binOf(la, B.la);
     const pi = binOf(phi, B.ph);
@@ -166,7 +170,7 @@
         return this.mkRes("HR", { scorers, bases: [null, null, null, null], launch, dist: Math.round(F.carry(bb.p, bb.v)), batterBase: 4 });
       }
       const running = !!(steal && b[1] && steal[1]);
-      const found = findCell(launch.ev, launch.la, launch.phi);
+      const found = findCell(launch.ev, launch.la, launch.phi, !!b[1]);
       if (!found) {
         // 表に無い打球 (起きないはず): 方向の外野フライ
         const pos = launch.phi < -15 ? "LF" : launch.phi > 15 ? "RF" : "CF";
@@ -232,7 +236,7 @@
           else nb[2] = b[1];
         }
         // 走者がいると送球の間に打者が二塁へ進むことがある (物理版では二塁打になる)
-        if ((b[1] || b[2] || b[3]) && !nb[2] && chance(rate("h1bat", bat))) {
+        if ((b[1] || b[2] || b[3]) && !nb[2] && chance(rate("h1bat_" + (b[2] ? "2" : b[1] ? "1" : "3"), bat))) {
           nb[2] = bat;
           return this.mkRes("H2", { scorers: sc, bases: nb, pos, at: this.spot(pos, launch.phi, true), launch, batterBase: 2 });
         }
@@ -312,6 +316,10 @@
           }
           forceAdv();
           return this.mkRes("GO", { outsAdded: 1, scorers: sc, bases: nb, pos, at, launch, batterOut: true });
+        }
+        if (two && b[1] && chance(0.9)) {
+          // 2 死: 二塁で封殺して 3 アウト (打者は記録上 野選)
+          return this.mkRes("FC", { outsAdded: 1, scorers: [], bases: nb, pos, at, launch, batterBase: 1 });
         }
         if (!two) {
           // 押し出されない走者: 表の割合で進む

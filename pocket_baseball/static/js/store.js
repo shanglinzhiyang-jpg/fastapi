@@ -39,6 +39,18 @@
 
   S.data = fresh();
 
+  // セーブの移行: 各モジュールが読み込み時に fn(data) を登録する (何度呼んでも同じ結果になること)
+  S.migrations = [];
+  S.migrate = function () {
+    for (const fn of S.migrations) {
+      try {
+        fn(S.data);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
   S.load = function () {
     try {
       const raw = window.localStorage.getItem(S.KEY);
@@ -58,6 +70,7 @@
     } catch (e) {
       /* ストレージ無効 */
     }
+    S.migrate();
     return S.data;
   };
 
@@ -148,6 +161,7 @@
           S.data = Object.assign(fresh(), j.data);
           S.data.settings = Object.assign({}, S.DEFAULT_SETTINGS, j.data.settings || {});
           S.data.settings.gfx = localGfx;
+          S.migrate();
           try {
             window.localStorage.setItem(S.KEY, JSON.stringify(S.data));
           } catch (e) {

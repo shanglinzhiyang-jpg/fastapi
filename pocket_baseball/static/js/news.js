@@ -8,7 +8,8 @@
   const esc = U.esc;
   const News = {};
 
-  const MAX_NEWS = 400;
+  const MAX_NEWS = 400; // 短いシーズン
+  const MAX_NEWS_LONG = 1500; // ハーフ・フル (1 日 6〜8 本 × 約 180 日)
   const MAX_HR_ITEMS = 4; // 1 日に載せる本塁打記事の上限
   const CIRCLED = ["", "①", "②", "③", "④"];
   const LG_SHORT = { C: "セ・リーグ", P: "パ・リーグ" };
@@ -18,9 +19,23 @@
   function store() {
     return PB.Store;
   }
+  // 球団・選手はペナントのアクセサ経由 (L3 でペナント専用の球団に切り替わる)
   function team(id) {
-    return store().team(id) || { id, short: "?", name: "?", players: [] };
+    const P = PB.Pennant;
+    return (P && P.team ? P.team(id) : store().team(id)) || { id, short: "?", name: "?", players: [] };
   }
+  function allTeams() {
+    const P = PB.Pennant;
+    return P && P.teams ? P.teams(store().data.pennant) : store().teams();
+  }
+  function regResults(pen) {
+    return PB.Pennant && PB.Pennant.regResults ? PB.Pennant.regResults(pen) : pen.results;
+  }
+  // 見出しの日付 (4月2日(金) / 古いセーブは 第N日)
+  function dayLabel(pen, d) {
+    return PB.Pennant && PB.Pennant.dayLabel ? PB.Pennant.dayLabel(pen, d) : "第" + (d + 1) + "日";
+  }
+  News.dayLabel = dayLabel;
   function teamDef(id) {
     return D.teamDef ? D.teamDef(id) : null;
   }
@@ -35,7 +50,7 @@
   // 選手 ID → 選手 (登録・抹消があっても古い名前が出ないよう毎回作り直す)
   function playerMap() {
     const m = {};
-    for (const t of store().teams()) for (const p of t.players) m[p.id] = p;
+    for (const t of allTeams()) for (const p of t.players) m[p.id] = p;
     return m;
   }
   let pm = null;
@@ -144,11 +159,17 @@
   News.dayStatus = dayStatus;
 
   /* ---------- 記事の生成 (1 日ぶん・何度呼んでも同じ) ---------- */
+  function maxNews(pen) {
+    const n = pen.regDays || (pen.schedule || []).length || 0;
+    return n > 60 ? MAX_NEWS_LONG : MAX_NEWS;
+  }
+  News.maxNews = maxNews;
   function add(pen, item) {
     pen.news = pen.news || [];
     if (item.key && pen.news.some((n) => n.key === item.key)) return;
     pen.news.push(item);
-    if (pen.news.length > MAX_NEWS) pen.news.splice(0, pen.news.length - MAX_NEWS);
+    const max = maxNews(pen);
+    if (pen.news.length > max) pen.news.splice(0, pen.news.length - max);
   }
 
   // 本塁打 1 本の記事候補 (優先度の高いものから 1 つ)
@@ -178,8 +199,9 @@
   function streakOf(pen, id) {
     let n = 0;
     let kind = null;
-    for (let i = pen.results.length - 1; i >= 0; i--) {
-      const r = pen.results[i];
+    const rs = regResults(pen);
+    for (let i = rs.length - 1; i >= 0; i--) {
+      const r = rs[i];
       if (r.home !== id && r.away !== id) continue;
       const my = r.home === id ? r.hs : r.as;
       const op = r.home === id ? r.as : r.hs;
@@ -197,7 +219,7 @@
     const rows = [];
     if (day != null && day < lastPlayedDay(pen)) {
       const best = {};
-      for (const r of pen.results) {
+      for (const r of regResults(pen)) {
         if (r.day > day || lgOf(r.home) !== lg) continue;
         for (const e of r.hr || []) {
           const tid = hrTeam(r, e);
@@ -353,8 +375,78 @@
       }
       if (first && alone) ns.top[lg] = first.id;
     }
+    // 5) ペナントレース (マジック・優勝/1 位通過・プレーオフ進出・自チームの可能性消滅)
+    raceNews(pen, day);
     ns.done[day] = 1;
   };
+
+  // 乱数を使わず、その日の終わりの順位と残り試合から決める。同じ日を作り直しても同じ記事
+  function raceNews(pen, day) {
+    const Pen = PB.Pennant;
+    if (!Pen || !Pen.race) return;
+    const ns = pen.newsState;
+    ns.magic = ns.magic || {};
+    ns.out = ns.out || {};
+    const cl = pen.clinch || {};
+    const mine = lgOf(pen.my);
+    for (const lg of Object.keys(D.LEAGUES || { C: 1 })) {
+      if (!Pen.lgTeams(pen, lg).length) continue;
+      const rc = Pen.race(pen, lg);
+      const P = lg === "P";
+      const L = LG_SHORT[lg] || "";
+      const recOf = (id) => {
+        const x = rc.st.find((y) => y.id === id);
+        return x ? x.w + "勝" + x.l + "敗" + (x.d ? x.d + "分" : "") : "";
+      };
+      const c = cl[lg];
+      // 優勝 (セ) / レギュラーシーズン 1 位通過 (パ。2004 年はプレーオフの勝者がリーグ優勝)
+      if (c && c.day === day) {
+        const nm = team(c.id).short;
+        add(pen, {
+          key: "clinch:" + lg,
+          day,
+          kind: "clinch",
+          lg,
+          team: c.id,
+          prio: 120 + (c.id === pen.my ? 20 : 0),
+          title: P ? nm + "がレギュラーシーズン1位通過を決める" : nm + "が" + L + "優勝！",
+          body: L + " " + recOf(c.id) + (P ? "。プレーオフ第2ステージへ" : ""),
+        });
+      }
+      // マジック点灯 (首位が入れ替わって点き直したときも)
+      if (!c || c.day === day) {
+        const mg = c ? null : rc.magic;
+        const prev = ns.magic[lg];
+        if (mg && (!prev || prev.id !== mg.id || prev.day === day)) {
+          add(pen, { key: "magic:" + day + ":" + lg, day, kind: "magic", lg, team: mg.id, prio: 70 + (mg.id === pen.my ? 20 : 0), title: team(mg.id).short + "に" + (P ? "1位通過" : "優勝") + "マジック" + mg.m + "が点灯", body: L + " " + recOf(mg.id) });
+        }
+        if (!c) ns.magic[lg] = mg ? { id: mg.id, m: mg.m, day: prev && prev.id === mg.id && prev.day !== day ? prev.day : day } : null;
+      }
+      // パ: プレーオフ進出 (3 位以内) が決まった球団
+      if (P)
+        for (const id in cl.po || {})
+          if (cl.po[id] === day)
+            add(pen, { key: "po:" + id, day, kind: "po", lg, team: id, prio: 75 + (id === pen.my ? 30 : 0), title: team(id).short + "がプレーオフ進出を決める", body: L + " " + recOf(id) });
+      // 自チームの可能性が消えた日
+      if (lg === mine) {
+        const k1 = "1" + lg;
+        if (rc.out1.indexOf(pen.my) >= 0 && (ns.out[k1] == null || ns.out[k1] === day)) {
+          ns.out[k1] = day;
+          add(pen, { key: "out:" + k1, day, kind: "out", lg, team: pen.my, prio: 85, title: team(pen.my).short + "、" + (P ? "1位通過" : "優勝") + "の可能性が消滅", body: L + " " + recOf(pen.my) });
+        }
+        // 自力優勝 (1 位通過) の可能性が消えた (まだ可能性はある)
+        const kj = "J" + lg;
+        if (rc.noSelf.indexOf(pen.my) >= 0 && rc.out1.indexOf(pen.my) < 0 && !cl[lg] && (ns.out[kj] == null || ns.out[kj] === day)) {
+          ns.out[kj] = day;
+          add(pen, { key: "out:" + kj, day, kind: "out", lg, team: pen.my, prio: 65, title: team(pen.my).short + "、自力" + (P ? "1位通過" : "優勝") + "の可能性が消滅", body: L + " " + recOf(pen.my) });
+        }
+        if (P && rc.out3.indexOf(pen.my) >= 0 && (ns.out["3P"] == null || ns.out["3P"] === day)) {
+          ns.out["3P"] = day;
+          add(pen, { key: "out:3P", day, kind: "out", lg, team: pen.my, prio: 86, title: team(pen.my).short + "、プレーオフ進出の可能性が消滅", body: L + " " + recOf(pen.my) });
+        }
+      }
+    }
+  }
 
   /* ---------- 画面 ---------- */
   // 本塁打 1 本ぶんの行 (中継の「今日のホームラン」)
@@ -506,9 +598,9 @@
     return (
       '<div class="newsbox"><div class="nb-head"><span class="nb-prog">' +
       PROGRAM +
-      '</span><span class="nb-day">第' +
-      (d + 1) +
-      "戦</span></div>" +
+      '</span><span class="nb-day">' +
+      esc(dayLabel(pen, d)) +
+      "</span></div>" +
       heads.map((x) => '<div class="nb-line" data-act="news" data-arg="news">' + esc(x.title) + "</div>").join("") +
       '<div class="nb-hr" data-act="news" data-arg="hr"><b>今日のホームラン</b><span>' +
       (status === "nodata" ? "記録なし" : n ? n + "本" : "なし") +
@@ -623,7 +715,7 @@
           '<div class="nday"><button class="btn sm" data-act="prev"' +
           (i <= 0 ? " disabled" : "") +
           '>◀ 前日</button><b>' +
-          (d >= 0 ? "第" + (d + 1) + "戦" : "") +
+          (d >= 0 ? esc(dayLabel(pen, d)) : "") +
           '</b><button class="btn sm" data-act="next"' +
           (i < 0 || i >= days.length - 1 ? " disabled" : "") +
           ">翌日 ▶</button></div>" +
@@ -698,9 +790,9 @@
         '<div class="hrdg-bg" style="--tc:#13819f"></div>' +
         '<div class="hrdg-title"><span class="hrdg-prog">' +
         PROGRAM +
-        '</span><b class="hrdg-big">今日のホームラン</b><span class="hrdg-sub">第' +
-        (day + 1) +
-        "戦　" +
+        '</span><b class="hrdg-big">今日のホームラン</b><span class="hrdg-sub">' +
+        esc(dayLabel(pen, day)) +
+        "　" +
         (lgCount > 1 ? "セ・パ計" : "計") +
         list.length +
         "本</span></div>" +

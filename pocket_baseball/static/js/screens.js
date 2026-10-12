@@ -22,7 +22,7 @@
           '<nav class="menu">' +
           '<button class="mbtn red" data-act="exhibition"><b>クイック対戦</b><small>好きなチームで1試合</small></button>' +
           '<button class="mbtn" data-act="pennant"><b>ペナント</b><small>' +
-          (pen ? "シーズンの続きから" : "6球団でシーズンを戦う") +
+          (pen ? "シーズンの続きから" : "セ・パ12球団で2004年シーズン") +
           "</small></button>" +
           '<button class="mbtn" data-act="success"><b>サクセス</b><small>自分だけの選手を育てる</small></button>' +
           '<button class="mbtn" data-act="derby"><b>ホームラン競争</b><small>10アウトまで打ちまくれ</small></button>' +

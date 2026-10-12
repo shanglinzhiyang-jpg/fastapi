@@ -20,7 +20,7 @@
   const CAST = {
     goda: { name: "剛田", full: "剛田 鉄平", role: "パワー自慢の先輩", banner: "#d9480f", sig: "happy", color: { main: "#5b6b7d", sub: "#fff", cap: "#2f3a46", mark: "G" }, desc: ["寮の主（ぬし）と呼ばれる、パワー自慢の先輩。", "豪快で面倒見がよく、後輩を見るとメシに誘わずにいられない。", "鼻のばんそうこうは、なぜか一年中はがれない。"], line: "腹が減っては野球はできねえ！メシ行くぞ！" },
     hayase: { name: "早瀬", full: "早瀬 ひかり", role: "チームのマネージャー", banner: "#e8457c", sig: "happy", color: { main: "#f28fb0", sub: "#fff", cap: "#c2416b", mark: "H" }, desc: ["チームを支える元気なマネージャー。", "スコアブックとはちみつレモンは、いつも持ち歩いている。", "ちょっとおせっかいだけど、みんなの調子を一番よく知っている。"], line: "困ったことがあったら、なんでも言ってね！" },
-    inukai: { name: "犬飼", full: "犬飼 コーチ", role: "理論派の打撃コーチ", banner: "#1f7a6d", sig: "normal", color: { main: "#3b5f8a", sub: "#ffd23f", cap: "#1d3557", mark: "I" }, desc: ["データと理論で教える二軍のコーチ。", "教え方は静かだが、言うことはいつも的確。", "メガネが光ったら、本気で考えているしるしだ。"], line: "フォームには必ず理由がある。考えて振りなさい。" },
+    inukai: { name: "宇佐美", full: "宇佐美 コーチ", role: "理論派の打撃コーチ", banner: "#1f7a6d", sig: "normal", color: { main: "#3b5f8a", sub: "#ffd23f", cap: "#1d3557", mark: "I" }, desc: ["データと理論で教える二軍のコーチ。", "教え方は静かだが、言うことはいつも的確。", "メガネが光ったら、本気で考えているしるしだ。"], line: "フォームには必ず理由がある。考えて振りなさい。" },
     ryuzaki: { name: "竜崎", full: "竜崎 レン", role: "同期のライバル", banner: "#5b3fc4", sig: "normal", color: { main: "#2b2d42", sub: "#ef233c", cap: "#111", mark: "R" }, desc: ["同じ年に入団した、ドラフト1位のエリート。", "クールで口は悪いが、だれよりも遅くまで練習している。", "一軍の席をかけて争う、最大のライバル。"], line: "一軍に上がるのはオレだ。せいぜいついてこい。" },
     kanto: { name: "鬼瓦", full: "鬼瓦 監督", role: "チームの監督", banner: "#2d3a55", sig: "normal", color: { main: "#444", sub: "#fff", cap: "#222", mark: "K" }, desc: ["二軍をあずかる鬼の監督。めったに笑わない。", "口数は少ないが、選手の努力は誰よりも見ている。", "頬の古傷は、現役時代にライナーを顔で止めた勲章らしい。"], line: "結果で見せろ。話はそれからだ。" },
   };
@@ -49,13 +49,16 @@
     if (r.mood >= 4) return "happy";
     return "normal";
   }
-  // 会ったことのある人 (紹介カードを見せたか)
+  // 会ったことのある人 (紹介カードを見せたか)。紹介カードより前のセーブには met がないので、全員と会っている扱いにする
+  function metOf(r) {
+    if (r && !r.met) r.met = Object.fromEntries(CAST_ORDER.map((k) => [k, true]));
+    return r ? r.met : {};
+  }
   function met(r, who) {
-    return !!(r && r.met && r.met[who]);
+    return !!metOf(r)[who];
   }
   function markMet(r, who) {
-    r.met = r.met || {};
-    r.met[who] = true;
+    metOf(r)[who] = true;
     Store.save();
   }
 
@@ -739,9 +742,10 @@
           done();
         },
       });
+    // 初めての人は紹介カード (ふきだしは決め台詞。イベントの台詞は次の箱で選択肢といっしょに出す)
     if (e.who && CAST[e.who] && r && !met(r, e.who)) {
       markMet(r, e.who);
-      return Su.introCard(e.who, e.text, ex, open);
+      return Su.introCard(e.who, CAST[e.who].line, CAST[e.who].sig, open);
     }
     open();
   };
@@ -758,7 +762,9 @@
         '<div class="mgc-in"><div class="mgc-pic">' +
         castPic(who, ex || c.sig, { size: 260 }) +
         "</div>" +
-        '<div class="mgc-txt"><h3 class="mgc-name">' +
+        '<div class="mgc-txt"><h3 class="mgc-name' +
+        (c.full.length > 6 ? " long" : "") +
+        '">' +
         esc(c.full) +
         '</h3><p class="mgc-role">' +
         esc(c.role) +
@@ -892,12 +898,13 @@
             : '<div class="row-btns"><button class="btn" data-act="pr" data-arg="rest">休む</button><button class="btn" data-act="pr" data-arg="play"' +
               (r.injured ? " disabled" : "") +
               ">遊ぶ</button></div>") +
-          '<div class="row-btns"><button class="btn primary" data-act="up">能力アップ</button><button class="btn" data-act="status">能力を見る</button><button class="btn" data-act="people">人物</button></div>' +
-          '<div class="rels">' +
+          '<div class="row-btns"><button class="btn primary" data-act="up">能力アップ</button><button class="btn" data-act="status">能力を見る</button></div>' +
+          // 仲よしの欄を押すと人物の一覧 (ボタンを横に 3 つ並べると狭い画面で文字が折り返すので)
+          '<button class="rels" data-act="people"><span class="rels-h">人物・仲よし<i>›</i></span>' +
           ["goda", "hayase", "inukai", "ryuzaki"]
             .map((k) => '<span class="rel"><i class="mg-i">' + castIcon(k, CAST[k].sig, !met(r, k)) + "</i>" + esc(CAST[k].name) + '<em><b style="width:' + Math.min(100, r.rel[k]) + '%"></b></em></span>')
             .join("") +
-          "</div></div>"
+          "</button></div>"
         );
       },
       onAct(act, arg) {
@@ -1207,7 +1214,7 @@
       bonus = 30;
       lines = [
         { who: "kanto", text: "今のお前では一軍は任せられん。二軍で鍛え直せ。" },
-        { who: "goda", text: "落ち込むな！オレだって二軍からはい上がったんだ！" },
+        { who: "goda", text: "落ち込むな！オレだって二軍からはい上がったんだ！", face: "happy" },
       ];
     }
     addExp(r, { str: bonus, agi: bonus, tec: bonus, brk: isP(r) ? bonus : 0, men: bonus });
