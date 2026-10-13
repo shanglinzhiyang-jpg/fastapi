@@ -99,7 +99,7 @@ const THEMES = {
     accent: '#e8b830', chip: '#2a2342', panelBg: '#17122a', panelEdge: '#e8d8a8', bannerBg: '#2a1d3a', bannerFg: '#ffe9a8',
     legend: [[['left', 'right'], '斬る'], [['up'], '跳ぶ'], [['down'], '足払い'], [['a'], '突き'], [['b'], '受け']],
     scale: [659, 698, 880, 988, 1047, 1319, 1397, 1760],
-    good: ['成敗！', 'お見事！', '峰打ちでござる！', '一刀両断！'],
+    good: ['成敗！', 'お見事！', '峰打ちでござる！', 'まいったか！'],
     comments: ['見事な殺陣！客席から拍手喝采だ！', '迫力の立ち回り！いい太刀筋だ！', 'まずまずの立ち回り！その調子！', '動きがもたついたかも…稽古あるのみ！', 'まずは稽古からやり直しだ！'],
   },
   henshin: {
@@ -641,6 +641,7 @@ class CommandAction extends Minigame {
     const sc = clamp(0.75 + 0.25 * clamp(leftFrac / SPEED_FULL, 0, 1) - 0.12 * c.mistakes, 0.3, 1);
     const grade = c.mistakes === 0 && leftFrac >= SPEED_FULL ? 'PERFECT' : sc >= 0.85 ? 'GREAT' : 'GOOD';
     this.earned += sc;
+    this.popups = []; // hit popups would collide with the big clear shout
     this.counts[grade.toLowerCase()]++;
     this.combo++;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
@@ -655,6 +656,7 @@ class CommandAction extends Minigame {
     c.endP = 1;
     const sc = clamp((0.3 * c.idx) / c.n - 0.05 * c.mistakes, 0, 0.3);
     this.earned += sc;
+    this.popups = [];
     this.counts.miss++;
     this.combo = 0;
     this.grade = { text: 'タイムアップ…', color: COLORS.dim, pts: Math.round((sc * 100) / this.R), t: 0 };
@@ -971,8 +973,15 @@ class CommandAction extends Minigame {
     if (!b) return;
     const k = easeIO(Math.min(1, b.t / 8));
     let size = 12;
-    let tw = measure(ctx, b.text, size);
-    if (tw > 270) { size = 10; tw = measure(ctx, b.text, size); }
+    let str = b.text;
+    let tw = measure(ctx, str, size);
+    if (tw > 270) { size = 10; tw = measure(ctx, str, size); }
+    // long custom calls (opts.calls / scene titles): cut with an ellipsis so the box stays on screen
+    if (tw > W - 40) {
+      while (str.length > 1 && measure(ctx, str + '…', size) > W - 40) str = str.slice(0, -1);
+      str += '…';
+      tw = measure(ctx, str, size);
+    }
     const w = Math.ceil(tw) + 28;
     const x = Math.round(W / 2 - w / 2);
     const y = 21 - Math.round((1 - k) * 22);
@@ -980,7 +989,7 @@ class CommandAction extends Minigame {
     rect(ctx, x + 2, y + 2, w - 4, 1, 'rgba(255,255,255,0.2)');
     rect(ctx, x + 4, y + 7, 3, 3, this.T.accent);
     rect(ctx, x + w - 7, y + 7, 3, 3, this.T.accent);
-    text(ctx, b.text, W / 2, y + (size === 12 ? 3 : 4), { size, align: 'center', color: this.T.bannerFg, shadow: null });
+    text(ctx, str, W / 2, y + (size === 12 ? 3 : 4), { size, align: 'center', color: this.T.bannerFg, shadow: null });
   }
 
   drawShout(ctx) {

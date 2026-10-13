@@ -404,9 +404,9 @@ defineTile(T('mat'), {
 });
 
 // ------------------------------------------------------------------ items
-registerItem('bs_yoshimoto_imo', { name: 'ほっくり焼きいも', price: 300, desc: '体力が25回復する。ほっくり町名物の、ほっくほくの焼きいも！', heal: 25 });
-registerItem('bs_yoshimoto_hoshiimo', { name: 'ほっくり干しいも', price: 250, desc: '次の「トーク」のミニゲームが少しやさしくなる。かむほど味が出る。', buff: 'talk' });
-registerItem('bs_yoshimoto_kansha', { name: '特番の感謝状', price: 0, desc: 'BSよしもとの特番を大成功させた証。額に入れて飾りたい！' });
+registerItem('bs_yoshimoto_imo', { name: 'ほっくり焼きいも', price: 300, desc: '体力が25回復する。\nほっくり町名物の、ほっくほくの焼きいも！', heal: 25 });
+registerItem('bs_yoshimoto_hoshiimo', { name: 'ほっくり干しいも', price: 250, desc: '次の「トーク」のミニゲームが少しやさしくなる。\nかむほど味が出る、町の名物。', buff: 'talk' });
+registerItem('bs_yoshimoto_kansha', { name: '特番の感謝状', price: 0, desc: 'BSよしもとの特番を大成功させた証。\n額に入れて飾りたい！' });
 
 // ------------------------------------------------------------------ ほっくりん（ご当地キャラ）sprite
 const IMO_BODY = [
@@ -677,7 +677,7 @@ function lockLabel(g, key) {
 // Returns true when the job can be offered now (and explains why not otherwise).
 async function canDo(g, key, who) {
   if (key === 'quiz' && !quizOk(g)) {
-    await g.say(['解答者さんは、事務所に所属している人か、★30以上の人にお願いしているんです。', `（いまは★${g.state.fame}）\nまずは番組観覧で、テレビの空気に慣れてみてね！`], who);
+    await g.say(['解答者さんは、事務所に所属している人か\n★30以上の人にお願いしているんです。', `（いまは★${g.state.fame}）\nまずは番組観覧で、テレビの空気に慣れてみてね！`], who);
     return false;
   }
   const need = (JOBS[key].def.requires || {}).fame || 0;
@@ -687,7 +687,7 @@ async function canDo(g, key, who) {
     const msg = {
       loke: rough ? [`ロケのリポーターは、★${need}からお願いしてるんだ。`, `${now}\nまずはクイズ番組で、カメラに慣れてこい！`] : [`ロケのリポーターは、★${need}からお願いしています。`, `${now}\nまずはクイズ番組で、カメラに慣れてくださいね。`],
       live: rough ? [`生放送のMCは、★${need}からだな。`, `${now}\nロケで場数を踏んでから、また来てくれ！`] : [`生放送のMCは、★${need}からお願いしています。`, `${now}\nロケで場数を踏んでから、ぜひ！`],
-      special: [`特番の総合司会は、★${need}の人気者にお願いしています。`, `${now}\n生放送のMCで、腕を磨いてくださいね！`],
+      special: [`特番の総合司会は、\n★${need}の人気者にお願いしています。`, `${now}\n生放送のMCで、腕を磨いてくださいね！`],
     }[key];
     await g.say(msg, who);
     return false;
@@ -706,14 +706,14 @@ function hintFor(g, byProducer = false) {
   if (!st.agency && st.fame < 30) {
     return [
       '番組観覧なら、だれでも無料で参加できます！\nロビーの観覧受付のADさんへどうぞ。',
-      '事務所に所属するか★30になったら、ご当地クイズ番組の解答者に出られますよ。',
+      '事務所に所属するか★30になったら、\nご当地クイズ番組の解答者に出られますよ。',
     ];
   }
-  if (st.fame < 250) return 'スタジオのフロアディレクターに声をかけて、クイズ番組に出よう！\n★250になったら、副調整室のディレクターがロケを任せてくれるかも。';
-  if (st.fame < 1000) return '副調整室のディレクターに頼んで、ロケ番組で全国の魅力を伝えよう！\n★1000になったら生放送のMCも夢じゃない！';
+  if (st.fame < 250) return ['スタジオのフロアディレクターに声をかけて、\nクイズ番組の解答者に出てみよう！', '★250になったら、副調整室の\nディレクターがロケを任せてくれるかも。'];
+  if (st.fame < 1000) return '副調整室のディレクターに頼んで、\nロケ番組で全国の魅力を伝えよう！\n★1000になったら、生放送のMCも夢じゃない！';
   if (st.fame < 2000) return '生放送の情報番組MCで、原稿読みの腕を磨こう！\n★2000になったら、特番の総合司会のお話が来るはず！';
-  if (byProducer) return '特番の総合司会、いつでもお任せしたいです！\n「お仕事リスト」からどうぞ。国民的スター（★4000）まで、もうひと息ですよ！';
-  return '特番の総合司会は、副調整室のプロデューサーからいつでも！\n国民的スター（★4000）まで、もうひと息！';
+  if (byProducer) return ['特番の総合司会、いつでもお任せしたいです！\n「お仕事リスト」からどうぞ。', '国民的スター（★4000）まで、\nもうひと息ですよ！'];
+  return '特番の総合司会は、副調整室の\nプロデューサーから、いつでも！\n国民的スター（★4000）まで、もうひと息！';
 }
 
 const AUD_IDS = ['bsy_jouren', 'bsy_aud1', 'bsy_aud2', 'bsy_aud3', 'bsy_aud4', 'bsy_aud5', 'bsy_aud6', 'bsy_aud7', 'bsy_aud8', 'bsy_aud9', 'bsy_aud10', 'bsy_aud11'];
@@ -889,7 +889,7 @@ async function outroSpecial(g, res) {
   await g.moveNpc('bsy_st_hok', 'face:right');
   g.facePlayer('right');
   await Promise.all([g.emote('bsy_pd_show', '!'), g.emote('bsy_st_hok', '♥')]);
-  await g.say(good ? ['{name}さん、最高の特番でした！', '視聴者のみなさんから、もう感想がどんどん届いてますよ！'] : ['{name}さん、おつかれさまでした！', '長丁場の生特番、しっかり仕切ってくれましたね！'], WHO.producer);
+  await g.say(good ? ['{name}さん、最高の特番でした！', '視聴者のみなさんから、もう感想が\nどんどん届いてますよ！'] : ['{name}さん、おつかれさまでした！', '長丁場の生特番、しっかり仕切ってくれましたね！'], WHO.producer);
   await g.say('ほっくり町のみんなも、\nテレビの前で大よろこびだいも〜！', WHO.hokkurin);
   if (!g.flag('bs_yoshimoto_sp_star')) {
     g.setFlag('bs_yoshimoto_sp_star');
@@ -1149,7 +1149,7 @@ async function uketsukeTalk(g) {
     ], who);
   } else if (i === 1) {
     await g.say([
-      'BSよしもとは、日本全国の地域の魅力を発信するBSのテレビ局です。',
+      'BSよしもとは、日本全国の地域の魅力を\n発信する、BSのテレビ局です。',
       'もちろん、お笑いもたっぷり！\n各地の人や名物を、楽しく紹介しています。',
       'おとなりの、よしもと東京本部の芸人さんたちも、\nよく遊びに来てくれるんですよ。',
     ], who);
@@ -1161,10 +1161,10 @@ async function uketsukeTalk(g) {
 }
 
 const PROGRAMS = [
-  '『ご当地ほっこりTV』\n全国のほっこりする話題とゲストのトーク番組。スタジオで観覧できます！',
+  '『ご当地ほっこりTV』\n全国のほっこりする話題とゲストのトーク番組。\nスタジオで観覧できます！',
   '『ニッポンご当地クイズ』\n全国のご当地問題に、解答者が挑むクイズ番組です。',
   '『ふるさと ぶらり発見』\n地方の町をたずねて、魅力を伝えるロケ番組です。',
-  '『ニッポン元気ライブ』\n朝の生放送の情報番組。全国の元気な話題をお届けします。',
+  '『ニッポン元気ライブ』\n朝の生放送の情報番組。\n全国の元気な話題をお届けします。',
 ];
 async function annaiTalk(g) {
   const who = WHO.annai;
@@ -1202,7 +1202,7 @@ async function hokkurinTalk(g, e) {
   if (!g.flag('bs_yoshimoto_imo_got')) {
     g.setFlag('bs_yoshimoto_imo_got');
     await g.emote('bsy_hokkurin', '♥');
-    await g.say(['ほっくりんだいも〜！', 'ほっくり町は、焼きいもと星空と温泉がじまんの町だいも！', 'おちかづきのしるしに、これあげるいも〜！'], who);
+    await g.say(['ほっくりんだいも〜！', 'ほっくり町は、焼きいもと星空と温泉が\nじまんの町だいも！', 'おちかづきのしるしに、これあげるいも〜！'], who);
     g.sfx('good');
     g.giveItem('bs_yoshimoto_imo', 1, true);
     await g.say('「ほっくり焼きいも」をもらった！');
@@ -1264,7 +1264,7 @@ async function amaiTalk(g) {
   } else if (i === 1) {
     await g.say([
       'ほっくり町は、山あいの小さな町です。\n人口は少ないけれど、元気いっぱい！',
-      'BSよしもとさんの番組で紹介してもらえるよう、ほっくりんとPRに来ました。',
+      'BSよしもとさんの番組で紹介してもらえるよう、\nほっくりんとPRに来ました。',
       g.state.fame >= 250 ? '人気者のあなたに、ロケに来てもらえたら…！\n副調整室のディレクターさんに、ぜひ！' : '有名になったら、ぜひロケに来てくださいね！\n★250くらいになったら、お声がかかるかも？',
     ], who);
   } else {
@@ -1282,12 +1282,12 @@ async function guardTalk(g) {
 async function talentTalk(g) {
   const st = g.state;
   if (st.fame >= 2000) {
-    await g.say(['うわっ、本物の{name}さんだ…！', 'ぼくも、いつか特番の司会ができるくらいになりたいです！'], WHO.talent);
+    await g.say(['うわっ、本物の{name}さんだ…！', 'ぼくも、いつか特番の司会が\nできるくらいになりたいです！'], WHO.talent);
     return;
   }
   await g.say([
     'これから収録の待ち時間なんだ。',
-    'ここの番組は、地方の町のいいところを紹介するのが多いんだよ。\n行ったことない町にくわしくなれるんだ。',
+    'ここの番組は、地方の町のいいところを\n紹介するのが多いんだよ。\n行ったことない町にくわしくなれるんだ。',
     st.agency || st.fame >= 30 ? 'クイズ番組の解答者、受けてみたら？\nスタジオのフロアディレクターさんが受付してるよ。' : '事務所に入るか、ちょっと名前が売れたら、\nクイズ番組の解答者に呼ばれるかもね！',
   ], WHO.talent);
 }
@@ -1301,7 +1301,7 @@ async function fdTalk(g) {
   } else if (i === 1) {
     await g.say([
       '奥がセット、手前がカメラ、その後ろが観覧席。\n本番中はON AIRのランプが光ります！',
-      'クイズの解答者は右の解答者席、MCはまんなかのデスク。\nいつか、あのデスクに座れるといいですね！',
+      'クイズの解答者は右の解答者席、\nMCはまんなかのデスク。\nいつか、あのデスクに座れるといいですね！',
       '番組の企画やお仕事の相談は、左奥の扉の先、\n副調整室のプロデューサーにどうぞ。',
     ], who);
   } else {
@@ -1316,7 +1316,7 @@ async function mcTalk(g) {
   } else {
     await g.say([
       '司会の陽向です。ただいまリハーサル中。',
-      '台本どおりにいかないのが、テレビのおもしろいところでね。\nハプニングこそ、笑顔で受け止める！',
+      '台本どおりにいかないのが、\nテレビのおもしろいところでね。\nハプニングこそ、笑顔で受け止める！',
       '観覧席で、本番の空気を感じていってね。\nロビーのADさんが受付しているよ。',
     ], WHO.mc);
   }
@@ -1385,8 +1385,8 @@ async function senpaiTalk(g) {
   } else if (i === 2) {
     await g.say([
       '原稿は、まず全体を下読み。\n読めない漢字は、本番前に必ず調べること。',
-      '中継では、最初のひと言で「どこにいるか」を伝えるの。\n見ている人が迷子にならないようにね。',
-      'メイクさんにお願いすると、気持ちがシャキッとするわよ。',
+      '中継では、最初のひと言で\n「どこにいるか」を伝えるの。\n見ている人が迷子にならないようにね。',
+      'メイクさんにお願いすると、\n気持ちがシャキッとするわよ。',
     ], who);
   } else {
     await g.say('本番、がんばってね。', who);
@@ -1646,10 +1646,10 @@ registerPlace({
         npc('bsy_annai', 10, 3, 'down', WHO.annai, { talk: annaiTalk }),
         npc('bsy_kanran_ad', 16, 6, 'down', WHO.kanranAD, { talk: kanranADTalk }),
         npc('bsy_obaachan', 16, 8, 'up', WHO.obaachan, {
-          text: ['孫といっしょに、番組観覧に来たのよ。', 'テレビの中の人を、こんなに近くで見られるなんてねえ。\n長生きはするもんだわ。'],
+          text: ['孫といっしょに、番組観覧に来たのよ。', 'テレビの中の人を、\nこんなに近くで見られるなんてねえ。\n長生きはするもんだわ。'],
         }),
         npc('bsy_mago', 16, 9, 'up', WHO.mago, {
-          text: ['ぼく、ほっくりんに会いに来たんだ！', 'あっちでおどってるよ！\nほっくりんと「ほっくり体操」すると、元気になるんだ！'],
+          text: ['ぼく、ほっくりんに会いに来たんだ！', 'あっちでおどってるよ！\nほっくりんと「ほっくり体操」すると、\n元気になるんだ！'],
         }),
         npc('bsy_hokkurin', 5, 10, 'down', WHO.hokkurin, { sprite: drawMascot, wander: 1, talk: hokkurinTalk }),
         npc('bsy_amai', 3, 9, 'down', WHO.amai, { talk: amaiTalk }),
@@ -1698,7 +1698,7 @@ registerPlace({
         { x: 1, y: 2, room: 'sub', tx: 8, ty: 10, dir: 'up' },
       ],
       entities: [
-        { type: 'logo', x: 7.4, y: 0.9, w: 5.2, h: 2.05, logo: PID, board: true, lights: true, text: 'セットの真ん中に、BSよしもとのロゴがかがやいている。\nカメラに映る、番組の顔だ！' },
+        { type: 'logo', x: 7.4, y: 0.9, w: 5.2, h: 2.05, logo: PID, board: true, lights: true, text: 'セットの真ん中に、\nBSよしもとのロゴがかがやいている。\nカメラに映る、番組の顔だ！' },
         ledScreen(3.3, 0), ledScreen(13.1, 1),
         onAirLamp(2, 1.4, () => onAir),
         tally(4, 8), tally(9, 8), tally(15, 8),
@@ -1717,7 +1717,7 @@ registerPlace({
           talk: posted('up', lines(WHO.cameraman, ['カメラマンです。', '本番中は、カメラの上の赤いランプに注目！\nランプが光っているカメラが、いま放送中の画です。', 'そのカメラを見て話すと、\nテレビの前の人と目が合うんですよ。'])),
         }),
         npc('bsy_jouren', 3, 10, 'up', WHO.jouren, {
-          talk: posted('up', lines(WHO.jouren, ['わたし、ここの観覧の常連なの！', '観覧はロビーで受付してるよ。\n拍手のタイミング、ばっちり教えてあげる！', '観覧のあとって、なんだかしゃべりたくなるんだよね〜。'])),
+          talk: posted('up', lines(WHO.jouren, ['わたし、ここの観覧の常連なの！', '観覧はロビーで受付してるよ。\n拍手のタイミング、ばっちり教えてあげる！', '観覧のあとって、\nなんだかしゃべりたくなるんだよね〜。'])),
         }),
         // show crew & audience
         npc('bsy_fd2', 12, 7, 'up', WHO.fd, { cond: () => !!show, text: '本番中です…！\n（カンペを持って、出演者に合図を送っている）' }),
@@ -1781,7 +1781,7 @@ registerPlace({
         await g.say([
           'おっ、見学の方ですね？\nここがBSよしもとのメインスタジオです！',
           '奥がセット、手前がカメラ、うしろが観覧席。\n本番中は、ON AIRのランプが光りますよ！',
-          '事務所に所属しているか★30以上なら、\nクイズ番組の解答者もお願いできます。声をかけてくださいね！',
+          '事務所に所属しているか★30以上なら、\nクイズ番組の解答者もお願いできます。\n声をかけてくださいね！',
         ], WHO.fd);
       },
     },
@@ -1818,11 +1818,11 @@ registerPlace({
         bigMon(5.1, 'PGM', '#ff2b3a', 'set'),
         bigMon(7.6, 'PVW', '#2fd07a', (g) => ['field', 'mount', 'sea', 'mascot'][Math.floor(g.frame / 200) % 4]),
         npc('bsy_tk', 3, 5, 'up', WHO.tk, {
-          talk: posted('up', lines(WHO.tk, ['タイムキーパーです。番組の時間を1秒単位で管理してます。', '「CMまであと30秒！」って声をかけるのが、わたしの仕事。', '生放送は、時間との戦いなんですよ〜。'])),
+          talk: posted('up', lines(WHO.tk, ['タイムキーパーです。\n番組の時間を、1秒単位で管理してます。', '「CMまであと30秒！」って\n声をかけるのが、わたしの仕事。', '生放送は、時間との戦いなんですよ〜。'])),
         }),
         npc('bsy_director', 7, 5, 'up', WHO.director, { talk: posted('up', directorTalk) }),
         npc('bsy_td', 10, 5, 'up', WHO.td, {
-          talk: posted('up', lines(WHO.td, ['スイッチャーです。どのカメラの映像を放送するか、ここで切りかえるんだ。', 'ディレクターの「3カメ！」の声で、ポチッとね。\nタイミングが命！'])),
+          talk: posted('up', lines(WHO.td, ['スイッチャーです。\nどのカメラの映像を放送するか、\nここで切りかえるんだ。', 'ディレクターの「3カメ！」の声で、ポチッとね。\nタイミングが命！'])),
         }),
         npc('bsy_onsei', 14, 5, 'up', WHO.onsei, {
           talk: posted('up', lines(WHO.onsei, ['音声さんだよ。マイクの音量を調整してる。', '笑い声が大きすぎても、小さすぎてもダメ。\nちょうどいい音を届けるのが腕の見せどころさ。'])),
@@ -1880,7 +1880,7 @@ registerPlace({
         npc('bsy_senpai', 3, 4, 'up', WHO.senpai, { talk: posted('up', senpaiTalk) }),
         npc('bsy_make', 4, 4, 'left', WHO.make, { talk: posted('left', makeTalk) }),
         npc('bsy_geinin', 1, 7, 'right', WHO.geinin, {
-          talk: posted('right', lines(WHO.geinin, ['ロケ弁、うまっ！\n…あ、どうも。若手芸人っす。', 'BSよしもとのロケって、全国の名物が食べられるんすよ。\n役得っすね〜！', '★250くらいになったら、ロケに呼ばれるらしいっす。\nオレもはよ行きたい！'])),
+          talk: posted('right', lines(WHO.geinin, ['ロケ弁、うまっ！\n…あ、どうも。若手芸人っす。', 'BSよしもとのロケって、\n全国の名物が食べられるんすよ。\n役得っすね〜！', '★250くらいになったら、ロケに呼ばれるらしいっす。\nオレもはよ行きたい！'])),
         }),
         npc('bsy_stylist', 11, 4, 'right', WHO.stylist, {
           talk: posted('right', lines(WHO.stylist, ['スタイリストよ。衣装の準備はおまかせ！', 'ロケなら動きやすい服、生放送ならきちんと感。\n番組にあわせて衣装を選ぶのも大事なの。'])),
