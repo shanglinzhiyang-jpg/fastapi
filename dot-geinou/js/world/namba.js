@@ -1,9 +1,9 @@
-// なんばエリア (大阪): the home of comedy. Reached by shinkansen from 東京駅.
+// なんばエリア (大阪): the home of comedy. Reached from 東京駅 (shinkansen to 新大阪, then a local train).
 
 import { registerPlace } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
 import { grid, set, put, fill, border } from './townkit.js';
-import { train, fountain } from './props.js';
+import { commuterTrain, fountain } from './props.js';
 import { text } from '../engine/draw.js';
 
 // Blinking neon billboard on a pole (3x2 tiles).
@@ -75,8 +75,8 @@ function generate() {
     neon(5, 13, 'なんば', '#ff4f8b'),
     neon(24, 13, 'お笑い', '#5fd7ff'),
     neon(39, 13, 'グルメ', '#ffd23f'),
-    train(4, 34, { text: undefined }),
-    { type: 'sign', x: 8, y: 33, text: 'フェンスの向こうに新幹線が停まっている。乗るなら駅のきっぷ売り場へ。' },
+    commuterTrain(4, 34, { text: undefined }),
+    { type: 'sign', x: 8, y: 33, text: 'フェンスの向こうに、電車が停まっている。\n東京へは、駅のきっぷ売り場へ。\n（新大阪で新幹線に乗りかえ）' },
     fountain(37, 30, { text: '待ち合わせスポットの噴水だ。' }),
     { type: 'sign', x: 12, y: 15, text: 'なんば・ことぶき橋\n北：よしもと新喜劇 劇場・松竹芸能・たこ焼き屋・ホテル\n南：なんば駅' },
 
@@ -91,7 +91,7 @@ function generate() {
       }
     } },
     { type: 'npc', id: 'barker', x: 9, y: 11, dir: 'down', look: { ...LOOKS.staff, hat: '#d62f2f', top: '#d62f2f' }, name: '劇場の呼び込み', text: ['よしもと新喜劇、本日も公演中やでー！', '新喜劇といえば、みんなでそろってズッコケるのがお約束や！', 'よしもとの芸人さんなら舞台に立てるチャンスもあるらしいで。'] },
-    { type: 'npc', id: 'shochiku_young', x: 24, y: 12, dir: 'down', look: { ...LOOKS.comedian, top: '#d8101c', hairColor: 'black' }, name: '若手芸人', wander: 2, text: ['松竹芸能は大阪に本社がある老舗の芸能事務所なんや。', 'しゃべりの腕を磨きたいんやったら、オーディション受けてみたらええ。'] },
+    { type: 'npc', id: 'shochiku_young', x: 21, y: 12, dir: 'down', look: { ...LOOKS.comedian, top: '#d8101c', hairColor: 'black' }, name: '若手芸人', wander: 2, text: ['松竹芸能は大阪に本社がある老舗の芸能事務所なんや。', 'しゃべりの腕を磨きたいんやったら、オーディション受けてみたらええ。'] },
     { type: 'npc', id: 'tako_fan', x: 30, y: 11, dir: 'up', look: LOOKS.kid, name: 'こども', text: ['ここのたこ焼き、外はカリッと中はトロ〜やで！', '食べたら元気モリモリや！'] },
     { type: 'npc', id: 'namba_tourist', x: 22, y: 21, dir: 'down', look: LOOKS.tourist, name: '観光客', wander: 3, text: ['Osaka is so fun! みんな話しかけてくれるよ！', '川沿いの看板がすごくカラフルだね！'] },
     { type: 'npc', id: 'station_staff', x: 19, y: 31, dir: 'down', look: LOOKS.guard, name: '駅員さん', text: ['なんば駅へようこそ！', '東京へ戻るときは、駅の中の窓口できっぷを買ってくださいね。'] },

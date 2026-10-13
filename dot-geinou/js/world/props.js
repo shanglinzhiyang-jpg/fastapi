@@ -45,6 +45,40 @@ export function train(x, y, extra = {}) {
   };
 }
 
+// Two-car commuter train (silver body, orange stripe, flat front) for local stations.
+export function commuterTrain(x, y, extra = {}) {
+  return {
+    type: 'prop', x, y, w: 10, h: 2,
+    text: '電車がホームに停まっている。駅から乗れるぞ。',
+    draw(ctx, sx, sy) {
+      for (const [x0, len] of [[2, 77], [82, 76]]) {
+        const x1 = sx + x0;
+        R(ctx, x1, sy + 3, len, 23, '#9aa0aa');
+        R(ctx, x1 + 1, sy + 4, len - 2, 21, '#e8eaee');
+        R(ctx, x1 + 1, sy + 4, len - 2, 1, '#ffffff');
+        R(ctx, x1 + 1, sy + 16, len - 2, 3, '#ff8a3d');
+        R(ctx, x1 + 1, sy + 19, len - 2, 1, '#d62f2f');
+        R(ctx, x1 + 1, sy + 22, len - 2, 3, '#c3c8d2');
+        for (let d = 8; d < len - 8; d += 22) {
+          R(ctx, x1 + d, sy + 6, 8, 18, '#b8bcc6');
+          R(ctx, x1 + d + 1, sy + 8, 2, 6, '#3b4a6a'); R(ctx, x1 + d + 5, sy + 8, 2, 6, '#3b4a6a');
+          R(ctx, x1 + d + 4, sy + 6, 1, 18, '#8e929c');
+          if (d + 20 < len - 6) R(ctx, x1 + d + 11, sy + 8, 8, 6, '#3b4a6a');
+        }
+        R(ctx, x1 + 1, sy + 26, len - 2, 2, '#20232a');
+        R(ctx, x1 + 8, sy + 26, 8, 2, '#4a4e58'); R(ctx, x1 + len - 16, sy + 26, 8, 2, '#4a4e58');
+      }
+      // gangway between the cars
+      R(ctx, sx + 79, sy + 7, 3, 16, '#4a4e58');
+      // flat front with headlights and a destination sign
+      R(ctx, sx + 156, sy + 3, 3, 23, '#9aa0aa');
+      R(ctx, sx + 150, sy + 6, 6, 3, '#20232a'); R(ctx, sx + 151, sy + 7, 4, 1, '#ffb03a');
+      R(ctx, sx + 154, sy + 20, 2, 2, '#fff6a8');
+    },
+    ...extra,
+  };
+}
+
 export function taxi(x, y, color = '#ffd23f', extra = {}) {
   return {
     type: 'prop', x, y, w: 2, h: 1,
@@ -93,15 +127,50 @@ export function streetStage(x, y, w = 4, extra = {}) {
   };
 }
 
+// Bronze statue of a smiling figure with both arms raised, on a stone pedestal.
+const STATUE = [
+  '.bb...hhhh...bb.',
+  '.bb..hhbbbb..bb.',
+  '..bb.hdbbdb.bb..',
+  '..bb.bbbbbb.bb..',
+  '..bb.bdbbdb.bb..',
+  '...bb.bddb.bb...',
+  '...bb..bb..bb...',
+  '...bhbbbbbbbb...',
+  '....hbbbbbbb....',
+  '.....hbbbbb.....',
+  '.....hbbbbb.....',
+  '.....hbbbbb.....',
+  '.....hbbbbb.....',
+  '.....hbbbbb.....',
+  '.....hb..bb.....',
+  '.....hb..bb.....',
+  '.....hb..bb.....',
+  '.....hb..bb.....',
+  '....bbb..bbb....',
+];
 export function statue(x, y, extra = {}) {
+  const COL = { b: '#a8783a', h: '#d2a65a', d: '#5a3c18' };
   return {
     type: 'prop', x, y, w: 1, h: 1,
     draw(ctx, sx, sy) {
-      R(ctx, sx + 2, sy + 9, 12, 7, '#8e929c');
-      R(ctx, sx + 2, sy + 9, 12, 1, '#c9ccd4');
-      R(ctx, sx + 5, sy - 6, 6, 15, '#b8a06a');
-      R(ctx, sx + 5, sy - 10, 6, 5, '#c9b07a');
-      R(ctx, sx + 11, sy - 8, 3, 2, '#b8a06a');
+      // pedestal
+      R(ctx, sx + 1, sy + 15, 14, 1, 'rgba(0,0,0,0.25)');
+      R(ctx, sx + 1, sy + 8, 14, 7, '#8e929c');
+      R(ctx, sx + 1, sy + 8, 14, 1, '#c9ccd4');
+      R(ctx, sx + 4, sy + 11, 8, 2, '#c9ccd4');
+      // figure: dark outline first, then the bronze body
+      const top = sy + 8 - STATUE.length;
+      for (const pass of [0, 1]) {
+        STATUE.forEach((row, j) => {
+          for (let i = 0; i < row.length; i++) {
+            const ch = row[i];
+            if (ch === '.') continue;
+            if (pass === 0) { R(ctx, sx + i - 1, top + j, 3, 1, '#5a3c18'); R(ctx, sx + i, top + j - 1, 1, 3, '#5a3c18'); }
+            else R(ctx, sx + i, top + j, 1, 1, COL[ch]);
+          }
+        });
+      }
     },
     ...extra,
   };

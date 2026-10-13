@@ -102,7 +102,7 @@ function generate() {
     { type: 'building', x: 2, y: 25, w: 7, h: 5, door: 2, place: 'home', name: 'ドット荘', kind: 'house', wall: '#efe2bf', roof: '#8a5a33', sign: { text: 'ドット荘', bg: '#fff6e0' } },
     { type: 'building', x: 11, y: 25, w: 6, h: 4, door: 3, place: 'konbini', name: 'ドットマート', kind: 'shop', wall: '#f6f6f8', roof: '#e8eaee', stripes: ['#2f9a4a', '#ff8a3d', '#2f6fd0'], sign: { text: 'ドットマート', bg: '#ffffff', color: '#2f6fd0' } },
     { type: 'building', x: 23, y: 25, w: 8, h: 7, door: 4, place: 'yoshimoto', name: 'よしもと 東京本部', kind: 'office', wall: '#fff3e6', roof: '#e8492a', logo: 'yoshimoto', signH: 30, signW: 30 },
-    { type: 'building', x: 32, y: 25, w: 6, h: 6, door: 3, place: 'bs_yoshimoto', name: 'BSよしもと', kind: 'office', wall: '#ffffff', roof: '#ff3b1f', logo: 'bs_yoshimoto', signH: 16, signW: 80 },
+    { type: 'building', x: 32, y: 25, w: 6, h: 6, door: 3, place: 'bs_yoshimoto', name: 'BSよしもと', kind: 'office', wall: '#ffffff', roof: '#ff3b1f', logo: 'bs_yoshimoto', signH: 22, signW: 84 },
     { type: 'building', x: 24, y: 35, w: 7, h: 6, door: 3, place: 'grape', name: 'グレープカンパニー', kind: 'office', wall: '#f3eefa', roof: '#7a4fa0', logo: 'grape', signH: 34, signW: 36 },
     { type: 'building', x: 32, y: 36, w: 6, h: 5, door: 3, place: 'sento', name: '銭湯 ドットの湯', kind: 'bath', wall: '#f6e7c8', roof: '#3b4a6a', sign: { text: 'ゆ', bg: '#2a3a7a', color: '#ffffff', size: 12 } },
     { type: 'building', x: 44, y: 26, w: 12, h: 5, door: 6, place: 'station_tokyo', name: '東京駅', kind: 'station', wall: '#b8644a', roof: '#4a5a70', sign: { text: '東京駅', bg: '#ffffff' } },
@@ -118,7 +118,7 @@ function generate() {
 
     // signs
     { type: 'sign', x: 46, y: 15, text: '東映 撮影所\n本日撮影中！関係者は正面入口へどうぞ。' },
-    { type: 'sign', x: 17, y: 18, text: '↑ NHK・ホリプロ・東宝・東映\n↓ よしもと・BSよしもと・グレープカンパニー\n→ 東京駅（新幹線で大阪・なんばへ）', solid: true },
+    { type: 'sign', x: 17, y: 18, text: '↑ NHK・ホリプロ・東宝・東映\n↓ よしもと・BSよしもと・グレープカンパニー\n→ 東京駅（新幹線で大阪へ）', solid: true },
 
     // NPCs
     {
@@ -131,14 +131,14 @@ function generate() {
     },
     { type: 'npc', id: 'park_oldman', x: 12, y: 38, dir: 'left', look: LOOKS.oldman, name: 'おじいさん', wander: 2, text: ['ほっほっほ。この公園の桜は見事じゃろう。', '昔はここで若い芸人さんがよく練習しとったもんじゃ。'] },
     { type: 'npc', id: 'kid', x: 6, y: 40, dir: 'up', look: LOOKS.kid, name: 'こども', wander: 3, text: ['ねえねえ、テレビに出たことある？', 'ぼく、大きくなったら新喜劇みたいにズッコケる人になるんだ！'] },
-    { type: 'npc', id: 'scout', x: 45, y: 24, dir: 'left', look: LOOKS.manager, name: 'スカウトマン', text: ['君、いい顔してるねえ…でも残念、うちは今は募集してないんだ。', '大阪のなんばには「よしもと新喜劇」の劇場や「松竹芸能」があるよ。東京駅から新幹線ですぐさ。'] },
+    { type: 'npc', id: 'scout', x: 45, y: 24, dir: 'left', look: LOOKS.manager, name: 'スカウトマン', text: ['君、いい顔してるねえ…でも残念、うちは今は募集してないんだ。', '大阪のなんばには「よしもと新喜劇」の劇場や「松竹芸能」があるよ。', '東京駅から新幹線で新大阪へ行って、電車に乗りかえればすぐさ。'] },
     { type: 'npc', id: 'salaryman', x: 30, y: 19, dir: 'right', look: LOOKS.salaryman, name: 'サラリーマン', wander: 3, text: ['いやー、昨日のバラエティ番組は笑ったなあ。', 'お笑いの事務所に入りたいなら、よしもと、松竹芸能、グレープカンパニー…いろいろあるねえ。'] },
     { type: 'npc', id: 'fan', x: 28, y: 15, dir: 'up', look: LOOKS.fan, name: 'ファンの子', text: ['ホリプロの前で出待ちしてるの！', 'ホリプロは歌手や俳優さんが多い事務所なんだって。歌や演技に自信があるならオーディションを受けてみたら？'] },
     { type: 'npc', id: 'tourist', x: 10, y: 18, dir: 'up', look: LOOKS.tourist, name: '観光客', wander: 2, text: ['Wow! NHK! テレビ局の中、見学できるのかな？', 'ここでは毎日たくさんの番組が作られているらしいよ。'] },
     { type: 'npc', id: 'extra', x: 50, y: 13, dir: 'down', look: { ...LOOKS.samurai, top: '#8a5a33' }, name: 'エキストラさん', text: ['拙者、本日は時代劇のエキストラでござる…なんてね！', '東映の撮影所では時代劇や特撮ヒーローの撮影をしてるんだ。体力勝負だよ〜。'] },
     { type: 'npc', id: 'young_comedian', x: 29, y: 33, dir: 'left', look: LOOKS.comedian2, name: '若手芸人', text: ['よしもとのオーディション、ツッコミのタイミングが命やで。', 'ボケを最後まで聞いてから、ビシッとツッコむ！早すぎても遅すぎてもアカン。'] },
-    { type: 'npc', id: 'grape_fan', x: 33, y: 42, dir: 'up', look: { ...LOOKS.fan, hairColor: 'brown', top: '#9273bd' }, name: 'お笑いファン', wander: 2, text: ['グレープカンパニーのオフィシャルストアでグッズを買ってきたの！', 'お風呂屋さんの「ドットの湯」は、疲れがとれるって評判だよ。'] },
-    { type: 'npc', id: 'taxi_driver', x: 53, y: 34, dir: 'left', look: { ...LOOKS.guard, hat: '#3b3f48' }, name: 'タクシー運転手', text: ['お客さん、芸能人の卵？', '新幹線で大阪に行けば、お笑いの本場・なんばだよ。運賃はちと高いけどね。'] },
+    { type: 'npc', id: 'grape_fan', x: 33, y: 42, dir: 'up', look: { ...LOOKS.fan, hairColor: 'brown', top: '#9273bd' }, name: 'お笑いファン', wander: 2, text: ['グレープカンパニーの芸人さんのグッズ、買っちゃった！', 'お風呂屋さんの「ドットの湯」は、疲れがとれるって評判だよ。'] },
+    { type: 'npc', id: 'taxi_driver', x: 53, y: 34, dir: 'left', look: { ...LOOKS.guard, hat: '#3b3f48' }, name: 'タクシー運転手', text: ['お客さん、芸能人の卵？', '新幹線で大阪まで行けば、お笑いの本場・なんばもすぐそこだよ。運賃はちと高いけどね。'] },
   ];
 
   return { w: W, h: H, cells: c, entities, events: [{ x: 6, y: 34, w: 4, h: 2, on: 'action', run: streetLive }, { x: 6, y: 36, w: 4, h: 1, on: 'step', run: async (g) => { if (!g.flag('stageHint')) { g.setFlag('stageHint'); await g.say('小さなステージだ。ステージの前でAボタンを押すとパフォーマンスできそうだ。'); } } }] };

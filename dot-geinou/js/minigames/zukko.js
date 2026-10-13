@@ -8,6 +8,8 @@
 //            足りない分は組み込みのネタで補う（同じネタのくり返しを避けるため）。
 //   fakes  : [{ setup, cue }]         「シーン…」用のセリフだけを差し替えたい時（足りない分は組み込みで補う）
 //   rounds : 合計ネタ数（3〜12）。省略時は難易度で 5〜9。
+//   shop   : 舞台セットの看板の文字。省略時は「めし処 こけ屋」（新喜劇の劇場内では劇場のセット「うどん まんぷく亭」）
+//   noren  : のれんの文字。省略時は「めし」（新喜劇の劇場内では「うどん」）
 //
 // 採点：本物のオチごとに PERFECT 100 / GOOD 75 / LATE 45 / MISS 0 の平均。
 //       フライング（オチより前に押す）は -4、シーン…で押してしまうと -12。
@@ -32,20 +34,20 @@ const GAGS = [
   { setup: 'ワシ、毎朝10キロ走ってるねん。', cue: '…夢の中でな！' },
   { setup: 'この店で一番高いもん、知ってるか？', cue: '…天井や！' },
   { setup: '今日はお客さんに特別サービスや！', cue: 'お水が…おかわり自由！' },
-  { setup: 'ワシの特技、見せたろか？', cue: '３秒で寝られるんや！ …ぐう。' },
+  { setup: 'ワシの特技、見せたろか？', cue: '3秒で寝られるんや！ …ぐう。' },
   { setup: 'ワシ、実は空を飛べるんや。', cue: '…飛行機に乗ったらな！' },
   { setup: 'ちょっと聞いて！ すごい発見や！', cue: '右の靴、左にはいとった！' },
-  { setup: 'この時計、いま何時やと思う？', cue: '電池切れで、ずっと３時のおやつや！' },
-  { setup: 'この店、創業100年の老舗やで！', cue: '…ワシが来てからは、３日目や！' },
+  { setup: 'この時計、いま何時やと思う？', cue: '電池切れで、ずっと3時のおやつや！' },
+  { setup: 'この店、創業100年の老舗やで！', cue: '…ワシが来てからは、3日目や！' },
   { setup: '見てみ！ 新しいメガネ買うたんや！', cue: '…かけてへんから、何も見えへん！' },
   { setup: 'はい、いらっしゃい！ 何名さま？', cue: '…って、鏡に映ったワシやないか！' },
-  { setup: 'この店、予約がすごいんや。', cue: '３年先まで…ガラガラや！' },
-  { setup: 'ワシ、今日からダイエットするで。', cue: 'おやつは、ケーキ３こまでや！' },
+  { setup: 'この店、予約がすごいんや。', cue: '3年先まで…ガラガラや！' },
+  { setup: 'ワシ、今日からダイエットするで。', cue: 'おやつは、ケーキ3こまでや！' },
   { setup: 'よっしゃ、出前に行ってくるわ！', cue: '…どこに届けるか、聞いてへん！' },
   { setup: 'この電話、朝から全然鳴らへんなあ。', cue: '…線、つながってへんかった！' },
   { setup: '店のエアコン、新しくしたで！', cue: 'うちわに、電池つけただけや！' },
   { setup: 'お客さん、空いてる席へどうぞ！', cue: '…あ、椅子ぜんぶ修理に出してたわ！' },
-  { setup: 'ワシ、料理の天才やねん。', cue: 'ゆで卵…３回に１回は成功や！' },
+  { setup: 'ワシ、料理の天才やねん。', cue: 'ゆで卵…3回に1回は成功や！' },
   { setup: 'いらっしゃい！ 本日はお日柄もよく…', cue: '…あかん、結婚式のスピーチや！' },
   { setup: 'よーし、店の大そうじするで！', cue: '気合い入れすぎて、ほうき折れた！' },
   { setup: 'ワシな、昔はモテモテやったんや。', cue: '…公園のハトにな！' },
@@ -357,9 +359,10 @@ class Zukko extends Minigame {
       this.maxCombo = Math.max(this.maxCombo, this.combo);
     } else this.combo = 0;
     const px = clamp(this.player.x + 6, 60, 268);
-    this.popup(def.label, px, 100, def.color, 12);
-    if (extra) this.popup(extra, px, 115, '#ffffff', 10);
-    if (this.combo >= 2 && (kind === 'perfect' || kind === 'good' || kind === 'hold')) this.popup(`${this.combo}コンボ！`, px, 85, COLORS.pink, 10);
+    // just above the actors' heads (FOOT - 40), clear of the 座長's speech bubble
+    this.popup(def.label, px, FOOT - 54, def.color, 12);
+    if (extra) this.popup(extra, px, FOOT - 42, '#ffffff', 10);
+    if (this.combo >= 2 && (kind === 'perfect' || kind === 'good' || kind === 'hold')) this.popup(`${this.combo}コンボ！`, px, FOOT - 66, COLORS.pink, 10);
   }
 
   // ---------------------------------------------------------------- update
@@ -505,10 +508,31 @@ class Zukko extends Minigame {
   }
 
   // ---------------------------------------------------------------- drawing
+  // shop sign + noren text (opts.shop / opts.noren; the 新喜劇 theatre's own set by default there)
+  signs() {
+    if (!this._signs) {
+      const theatre = !!(this.g && this.g.map && this.g.map.placeId === 'shinkigeki');
+      this._signs = {
+        shop: String(this.opts.shop || (theatre ? 'うどん まんぷく亭' : 'めし処 こけ屋')),
+        noren: String(this.opts.noren || (theatre ? 'うどん' : 'めし')),
+      };
+    }
+    return this._signs;
+  }
+
+  drawSigns(ctx) {
+    const { shop, noren } = this.signs();
+    let size = 12;
+    while (size > 9 && measure(ctx, shop, size) > 98) size--;
+    text(ctx, shop, 160, 41 + Math.floor((12 - size) / 2), { size, align: 'center', color: '#fff3c4', outline: '#2a1a0c' });
+    let ns = 10;
+    while (ns > 8 && measure(ctx, noren, ns) > 50) ns--;
+    text(ctx, noren, 160, 63, { size: ns, align: 'center', color: '#ffffff', shadow: null });
+  }
+
   drawBackground(ctx) {
     ctx.drawImage(stageCache || buildStage(), 0, 0);
-    text(ctx, 'めし処 こけ屋', 160, 41, { size: 12, align: 'center', color: '#fff3c4', outline: '#2a1a0c' });
-    text(ctx, 'めし', 160, 63, { size: 10, align: 'center', color: '#ffffff', shadow: null });
+    this.drawSigns(ctx);
     this.drawLanterns(ctx, 0);
     this.drawAudience(ctx, false);
   }
@@ -550,8 +574,7 @@ class Zukko extends Minigame {
     const r = this.round;
     const t = this.rt || 0;
     ctx.drawImage(stageCache || buildStage(), 0, 0);
-    text(ctx, 'めし処 こけ屋', 160, 41, { size: 12, align: 'center', color: '#fff3c4', outline: '#2a1a0c' });
-    text(ctx, 'めし', 160, 63, { size: 10, align: 'center', color: '#ffffff', shadow: null });
+    this.drawSigns(ctx);
     this.drawLanterns(ctx, this.pt);
 
     // spotlight on the lead

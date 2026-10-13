@@ -1,10 +1,10 @@
 // 原稿読み（アナウンサー） — minigame id 'announce' (skill: talk)
 //
-// The player is the news anchor of the fictional program 「ドットニュース」.
-// A sentence scrolls through the prompter toward the red reading line. One
+// The player reads a script on a fictional program (by default the evening news
+// 「ドットニュース」). A sentence scrolls through the prompter toward the red reading line. One
 // difficult word is highlighted; pick its correct reading (↑↓ + A) before the
 // word reaches the line. Correct → smooth reading (faster answer = more points).
-// Wrong answer / time up → 「噛んだ！」.
+// Wrong answer / time up → 「噛んだ！」 (「NG！」 in the dubbing booth).
 //
 // opts:
 //   words: [{ word, reading, wrong: ['…', '…'], sentence? }]   custom pool
@@ -12,6 +12,17 @@
 //           If fewer words than `count` are given, built-in words fill the rest.)
 //   count: number of words to read (default 5 + difficulty; with custom words: how many
 //          were given, at least 4 and at most 5 + difficulty)
+//   set:   'news'    (default) evening news desk 「ドットニュース」, night skyline, ON AIR
+//          'morning' bright morning info show, sunny town on the video wall, ON AIR
+//          'afureko' anime dubbing booth: anime on the screen, stand mics + script
+//                    stands, no news desk, REC lamp, misreadings are 「NG！」
+//   show:  program name on screen (alias: program). Defaults: news 'ドットニュース',
+//          morning 'ドットモーニング', afureko 'ドット冒険記'
+//   opening / closing: first / last line read on the prompter. Defaults per set,
+//          e.g. news 'こんばんは。<show>です。' / '以上、<show>でした。',
+//          morning 'おはようございます。まずは、今朝のニュースです。' / '今朝のニュースは以上です。'
+//   partner: look of the co-host / co-star (default per set)
+// With no set/show/opening/closing/partner the game is the original evening news.
 
 import { Minigame, registerMinigame, text, panel, rect, bar, COLORS, sparkle } from '../engine/minigame.js';
 import { setFont, measure, cursor as drawCursor } from '../engine/draw.js';
@@ -103,10 +114,7 @@ const BUILTIN = [
 ].map(([word, reading, wrong, sentence, lv]) => ({ word, reading, wrong, sentence, lv }));
 
 // ------------------------------------------------------------------ layout & tuning
-const PROGRAM = 'ドットニュース';
-const OPENING = 'こんばんは。ドットニュースです。';
-const CLOSING = '以上、ドットニュースでした。';
-const PR = { x: 4, y: 132, w: 312, h: 44 }; // prompter monitor
+const PR ={ x: 4, y: 132, w: 312, h: 44 }; // prompter monitor
 const MARK = 48;                          // the red reading line
 const TEXT_Y = 154;
 const RUBY_Y = 139;
@@ -124,6 +132,56 @@ const OUT = '#22202a';
 // sentences for custom words given without one (X = the word, kept near the front)
 const FALLBACK = ['次は「X」に関するニュースです。', '続いて「X」の話題をお伝えします。', '今日のキーワードは「X」です。'];
 
+// ------------------------------------------------------------------ program sets (opts.set)
+// comments: [all correct, >=80%, >=60%, >=30%, less] — `${c}/${n}問正解` is prefixed except for the first
+const SETS = {
+  news: {
+    show: 'ドットニュース',
+    opening: (s) => `こんばんは。${s}です。`,
+    closing: (s) => `以上、${s}でした。`,
+    partner: LOOKS.announcer,
+    jacket: true,
+    desk: 'DOT NEWS',
+    lamp: 'ON AIR',
+    kamu: '噛んだ！',
+    sorry: '失礼しました！',
+    over: '放送終了',
+    fallback: FALLBACK,
+    comments: ['全問正解！噛まずに読み切った！', '！安心して聞けるニュース！', '。少し噛んだけど無事放送！', '…原稿の下読みは大事！', '…放送事故寸前！？'],
+  },
+  morning: {
+    show: 'ドットモーニング',
+    // the news corner of the show (the show itself goes on after it)
+    opening: () => 'おはようございます。まずは、今朝のニュースです。',
+    closing: () => '今朝のニュースは以上です。',
+    partner: { ...LOOKS.announcer, hair: 'long', hairColor: 'brown', top: '#ffb347', bottom: '#ffffff' },
+    jacket: true,
+    desk: 'GOOD MORNING',
+    lamp: 'ON AIR',
+    kamu: '噛んだ！',
+    sorry: '失礼しました！',
+    over: '放送終了',
+    fallback: ['続いては「X」の話題です。', '今朝のキーワードは「X」です。', '次は「X」についてお伝えします。'],
+    comments: ['全問正解！さわやかな朝をお届け！', '！朝から安心して聞ける！', '。少し噛んだけど無事放送！', '…原稿の下読みは大事！', '…放送事故寸前！？'],
+  },
+  afureko: {
+    show: 'ドット冒険記',
+    opening: () => '本番、よろしくお願いします！',
+    closing: () => 'おつかれさまでした！',
+    partner: { hair: 'spiky', hairColor: 'black', skin: 'fair', top: '#2f6fd0', bottom: '#3b3f48' },
+    jacket: false,
+    desk: null,
+    lamp: '● REC',
+    kamu: 'NG！',
+    sorry: 'すみません！',
+    over: '収録終了',
+    title: 'アフレコ',
+    howto: ['台本の黄色い漢字の読みを3つから選ぼう！', '↑↓でえらんで Aで読む！', '赤い線に届く前に答えよう。', '読み間違えたらNG！'],
+    fallback: ['「これが…X…！」', '「X――それが答えだ」', '「X、か…悪くない」'],
+    comments: ['全問正解！すべて一発OKの名演技！', '！ほぼ一発OKの名演技！', '。リテイクもあったけど無事収録！', '…台本の下読みは大事！', '…リテイクの嵐！？'],
+  },
+};
+
 // Largest font size in maxS..minS at which s fits maxW; still too wide -> cut with '…'.
 function fitText(ctx, s, maxW, maxS, minS) {
   let size = maxS;
@@ -137,10 +195,14 @@ function fitText(ctx, s, maxW, maxS, minS) {
 }
 
 // ------------------------------------------------------------------ cached studio art
-let ART = null;
-function art() {
-  if (!ART) ART = { bg: buildBg(), desk: buildDesk() };
-  return ART;
+const ART = {};
+function art(set) {
+  if (!ART[set]) {
+    if (set === 'morning') ART[set] = { bg: buildMorningBg(), desk: buildMorningDesk() };
+    else if (set === 'afureko') ART[set] = { bg: buildBoothBg(), desk: null };
+    else ART[set] = { bg: buildBg(), desk: buildDesk() };
+  }
+  return ART[set];
 }
 
 function buildBg() {
@@ -238,6 +300,150 @@ function buildDesk() {
   return cv;
 }
 
+// morning info show: bright studio, sunny town on the video wall
+function buildMorningBg() {
+  const [cv, c] = makeCanvas(W, 136);
+  const R = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+  R(0, 0, W, 136, '#f3e6cf');
+  for (let x = 0; x < W; x += 16) R(x, 0, 1, 136, 'rgba(120,80,30,0.06)');
+  R(0, 0, W, 7, '#b9bfd0');
+  for (let x = 0; x < W; x += 8) { R(x, 2, 4, 1, '#eef0f6'); R(x + 4, 4, 4, 1, '#eef0f6'); }
+  const vx = 12, vy = 10, vw = 296, vh = 72;
+  R(vx - 3, vy - 3, vw + 6, vh + 6, '#ffb347');
+  R(vx - 1, vy - 1, vw + 2, vh + 2, '#ffffff');
+  for (let y = 0; y < vh; y++) {
+    const t = y / (vh - 1);
+    R(vx, vy + y, vw, 1, t < 0.6 ? mix('#5fb4f0', '#bfe6fb', t / 0.6) : mix('#bfe6fb', '#fff0c0', (t - 0.6) / 0.4));
+  }
+  // morning sun with rays (right of the co-host)
+  const sx = vx + 280, sy = vy + 30;
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    for (let r = 11; r < 16; r++) R(Math.round(sx + Math.cos(a) * r), Math.round(sy + Math.sin(a) * r), 1, 1, '#ffd86a');
+  }
+  for (let dy = -8; dy <= 8; dy++) for (let dx = -8; dx <= 8; dx++) {
+    const d = dx * dx + dy * dy;
+    if (d <= 64 && sx + dx < vx + vw) R(sx + dx, sy + dy, 1, 1, d <= 30 ? '#fff6c8' : '#ffd23f');
+  }
+  // clouds
+  const cloud = (x, y, w) => {
+    R(x + 3, y, w - 6, 3, '#ffffff');
+    R(x, y + 3, w, 4, '#ffffff');
+    R(x + 1, y + 7, w - 2, 1, '#dcefff');
+  };
+  cloud(vx + 70, vy + 12, 22); cloud(vx + 118, vy + 30, 16); cloud(vx + 188, vy + 8, 26); cloud(vx + 22, vy + 40, 14);
+  // far hills + town
+  for (let x = vx; x < vx + vw; x++) {
+    const h = 10 + Math.round(Math.sin((x - vx) / 23) * 4 + Math.sin((x - vx) / 9) * 2);
+    R(x, vy + vh - 18 - h, 1, h, '#a8d8a0');
+  }
+  let x = vx, i = 0;
+  const pastel = ['#ffffff', '#ffe6c8', '#d8e8ff', '#ffd6dc', '#e6f2d8'];
+  while (x < vx + vw) {
+    const bw = Math.min(10 + Math.floor(hash2(i, 8, 6) * 14), vx + vw - x);
+    const bh = 10 + Math.floor(hash2(i, 9, 6) * 22);
+    const by = vy + vh - bh;
+    R(x, by, bw, bh, pastel[i % pastel.length]);
+    R(x, by, bw, 1, '#c8b8a0');
+    for (let wy = by + 3; wy < vy + vh - 4; wy += 4) {
+      for (let wx = x + 2; wx < x + bw - 2; wx += 4) R(wx, wy, 2, 2, hash2(wx, wy, 13) < 0.5 ? '#8ec8f0' : '#bcd8ec');
+    }
+    x += bw + 1; i++;
+  }
+  // street trees along the bottom
+  for (let tx = vx + 4; tx < vx + vw - 6; tx += 22) {
+    R(tx + 2, vy + vh - 4, 2, 4, '#7a5a3a');
+    R(tx, vy + vh - 9, 6, 5, '#5fbf5a');
+    R(tx + 1, vy + vh - 10, 4, 1, '#7fd77a');
+  }
+  for (let k = 1; k < 4; k++) R(vx + Math.round((vw * k) / 4), vy, 1, vh, 'rgba(255,255,255,0.35)');
+  R(0, 7, 8, 121, '#ffffff'); R(312, 7, 8, 121, '#ffffff');
+  R(4, 7, 1, 121, '#ffb347'); R(315, 7, 1, 121, '#ffb347');
+  R(0, 128, W, 8, '#d8c6a4');
+  return cv;
+}
+
+function buildMorningDesk() {
+  const [cv, c] = makeCanvas(W, 50);
+  const R = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+  for (let r = 0; r < 7; r++) R(16 - r, 2 + r, 288 + r * 2, 1, mix('#ffffff', '#e8dcc6', r / 6));
+  R(9, 9, 302, 2, '#d0a870');
+  for (let y = 11; y < 46; y++) R(10, y, 300, 1, mix('#ffb347', '#f0782a', (y - 11) / 35));
+  R(10, 17, 300, 1, 'rgba(255,255,255,0.45)');
+  R(10, 18, 300, 2, '#ffffff');
+  R(10, 20, 300, 1, 'rgba(255,255,255,0.45)');
+  R(10, 41, 300, 1, '#ffd23f');
+  for (let x = 58; x < 300; x += 48) R(x, 21, 1, 20, 'rgba(120,40,0,0.18)');
+  R(8, 46, 304, 3, '#7a3a14');
+  R(122, 23, 76, 15, '#e0a060');
+  R(123, 24, 74, 13, '#fffaf0');
+  R(72, 3, 24, 3, '#ffffff'); R(74, 6, 24, 1, '#e0d6c4');
+  R(234, 3, 22, 3, '#ffffff'); R(236, 6, 22, 1, '#e0d6c4');
+  return cv;
+}
+
+// anime dubbing booth: acoustic panels, the anime on the big screen, carpet floor
+const BOOTH_FLOOR = 92;
+function buildBoothBg() {
+  const [cv, c] = makeCanvas(W, 136);
+  const R = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+  R(0, 0, W, 136, '#2a2633');
+  for (let row = 0, y = 7; y < BOOTH_FLOOR; row++, y += 12) {
+    for (let x = row % 2 ? -6 : 0; x < W; x += 12) {
+      R(x, y, 11, 11, '#332e3e');
+      R(x, y, 11, 1, '#433c52'); R(x, y, 1, 11, '#433c52');
+      R(x, y + 10, 11, 1, '#1d1a24'); R(x + 10, y, 1, 11, '#1d1a24');
+      R(x + 4, y + 4, 3, 3, '#2c2836');
+    }
+  }
+  R(0, 0, W, 7, '#141218');
+  for (const lx of [40, 120, 200, 280]) { R(lx - 4, 5, 9, 2, '#3a3646'); R(lx - 2, 7, 5, 1, '#fff2c0'); }
+  // the screen with the anime scene
+  const vx = 24, vy = 10, vw = 272, vh = 70;
+  R(vx - 3, vy - 3, vw + 6, vh + 6, '#0c0b10');
+  R(vx - 1, vy - 1, vw + 2, vh + 2, '#4a4858');
+  for (let y = 0; y < vh; y++) {
+    const t = y / (vh - 1);
+    R(vx, vy + y, vw, 1, t < 0.5 ? mix('#26307a', '#c8508a', t / 0.5) : mix('#c8508a', '#ffc070', (t - 0.5) / 0.5));
+  }
+  // light burst behind the hero
+  const cx = vx + vw / 2, cy = vy + 44;
+  for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * Math.PI * 2;
+    for (let r = 10; r < 130; r += 1) {
+      const px = Math.round(cx + Math.cos(a) * r), py = Math.round(cy + Math.sin(a) * r * 0.6);
+      if (px >= vx && px < vx + vw && py >= vy && py < vy + vh) R(px, py, 1, 1, 'rgba(255,240,200,0.35)');
+    }
+  }
+  for (let dy = -9; dy <= 9; dy++) for (let dx = -9; dx <= 9; dx++) {
+    const d = dx * dx + dy * dy;
+    if (d <= 81) R(cx + dx, cy + dy, 1, 1, d <= 25 ? '#ffffff' : 'rgba(255,246,200,0.7)');
+  }
+  // mountains
+  for (let x = vx; x < vx + vw; x++) {
+    const h = 14 + Math.round(Math.abs(Math.sin((x - vx) / 31)) * 14 + Math.sin((x - vx) / 7) * 2);
+    R(x, vy + vh - h, 1, h, '#5a3a78');
+    R(x, vy + vh - Math.max(4, h - 10), 1, Math.max(4, h - 10), '#3a2658');
+  }
+  // the hero on a rock (silhouette with a flowing scarf)
+  const hx = cx, hy = vy + vh - 6;
+  R(hx - 14, hy, 28, 6, '#1a1430'); R(hx - 10, hy - 2, 20, 2, '#1a1430');
+  R(hx - 2, hy - 16, 5, 14, '#1a1430');   // body + legs
+  R(hx - 3, hy - 21, 7, 6, '#1a1430');    // head
+  R(hx - 2, hy - 23, 2, 2, '#1a1430'); R(hx + 2, hy - 24, 2, 3, '#1a1430'); // spiky hair
+  R(hx + 3, hy - 14, 3, 2, '#d62f2f'); R(hx + 6, hy - 15, 4, 2, '#d62f2f'); R(hx + 10, hy - 17, 3, 2, '#d62f2f');
+  R(hx - 5, hy - 13, 2, 6, '#1a1430');    // arm
+  R(hx - 3, hy - 21, 1, 6, '#ffd890');    // rim light
+  for (let y = vy; y < vy + vh; y += 2) R(vx, y, vw, 1, 'rgba(0,0,0,0.06)');
+  // carpet floor
+  R(0, BOOTH_FLOOR, W, 136 - BOOTH_FLOOR, '#3b3548');
+  R(0, BOOTH_FLOOR, W, 2, '#17151c');
+  for (let y = BOOTH_FLOOR + 4; y < 136; y += 4) {
+    for (let x = (y / 4) % 2 ? 2 : 0; x < W; x += 4) R(x, y, 1, 1, '#443d52');
+  }
+  return cv;
+}
+
 // ------------------------------------------------------------------ the game
 class Announce extends Minigame {
   static title = '原稿読み';
@@ -250,8 +456,21 @@ class Announce extends Minigame {
   static skill = 'talk';
   static bgm = 'studio';
 
+  constructor(g, opts = {}) {
+    super(g, opts);
+    // per-set title card (callers' own title / howto win)
+    const S = SETS[opts.set];
+    if (S && S.title && !opts.title) this.title = S.title;
+    if (S && S.howto && !opts.howto) this.opts = { ...opts, howto: S.howto };
+  }
+
   init() {
     this.mctx = makeCanvas(4, 4)[1];
+    this.set = SETS[this.opts.set] ? this.opts.set : 'news';
+    const S = (this.S = SETS[this.set]);
+    this.show = String(this.opts.show || this.opts.program || S.show);
+    this.opening = String(this.opts.opening || S.opening(this.show));
+    this.closing = String(this.opts.closing || S.closing(this.show));
     this.items = this.pickItems();
     this.count = this.items.length;
     this.T = Math.round(this.ease(BASE_T[this.difficulty], 0.35));
@@ -269,9 +488,9 @@ class Announce extends Minigame {
     this.bubble = null;
     this.coEmote = null;
     const look = (this.g.state && this.g.state.look) || LOOKS.player;
-    this.mainLook = { ...look, jacket: true };
-    this.coLook = LOOKS.announcer;
-    this.setLine(OPENING, null);
+    this.mainLook = S.jacket ? { ...look, jacket: true } : { ...look };
+    this.coLook = this.opts.partner && typeof this.opts.partner === 'object' ? { ...this.opts.partner } : S.partner;
+    this.setLine(this.opening, null);
     this.line.x = MARK + 4;
     this.stage = 'open';
     this.st = 0;
@@ -293,7 +512,9 @@ class Announce extends Minigame {
         return { b, k: w > 0 ? Math.pow(this.rng(), 1 / w) : this.rng() - 2 };
       });
       pool.sort((a, b) => b.k - a.k);
-      const extra = pool.slice(0, count - chosen.length).map((p) => p.b);
+      let extra = pool.slice(0, count - chosen.length).map((p) => p.b);
+      // the built-in sentences are news copy; other sets read the word in their own template
+      if (this.set === 'afureko') extra = extra.map((b) => this.normalize({ ...b, sentence: null }));
       // gentle ramp: easier built-in words first
       extra.sort((a, b) => a.lv - b.lv);
       chosen = custom.length ? shuffle(chosen.concat(extra), this.rng) : extra;
@@ -312,7 +533,8 @@ class Announce extends Minigame {
       if (wrong.length >= 2) break;
       if (b.reading !== reading && !wrong.includes(b.reading)) wrong.push(b.reading);
     }
-    const tpl = FALLBACK[Math.floor(hash2(word.length, word.charCodeAt(0), 5) * FALLBACK.length)];
+    const fb = (this.S || SETS.news).fallback;
+    const tpl = fb[Math.floor(hash2(word.length, word.charCodeAt(0), 5) * fb.length)];
     const sentence = x.sentence && String(x.sentence).includes(word) ? String(x.sentence) : tpl.replace('X', () => word);
     return { word, reading, wrong, sentence, lv: x.lv || 2 };
   }
@@ -345,7 +567,7 @@ class Announce extends Minigame {
     this.ok = false;
     this.rem = 1;
     if (this.idx >= this.count) {
-      this.setLine(CLOSING, null);
+      this.setLine(this.closing, null);
       this.line.x = MARK + 4;
       this.outroLen = Math.ceil((this.line.w + 6) / 3) + 60;
       this.g.sfx('chime');
@@ -420,7 +642,7 @@ class Announce extends Minigame {
       this.bubble = { str: this.cur.reading, color: '#1d7a3a', t: 0 };
       this.coEmote = { ch: '♪', color: COLORS.pink, t: 0 };
     } else {
-      this.bubble = { str: '失礼しました！', color: OUT, t: 0 };
+      this.bubble = { str: this.S.sorry, color: OUT, t: 0 };
     }
     this.stage = 'flow';
     this.st = 0;
@@ -429,13 +651,9 @@ class Announce extends Minigame {
   finish() {
     const c = this.correct, n = this.count;
     const r = c / n;
-    let comment;
-    if (c === n) comment = '全問正解！噛まずに読み切った！';
-    else if (r >= 0.8) comment = `${c}/${n}問正解！安心して聞けるニュース！`;
-    else if (r >= 0.6) comment = `${c}/${n}問正解。少し噛んだけど無事放送！`;
-    else if (r >= 0.3) comment = `${c}/${n}問正解…原稿の下読みは大事！`;
-    else comment = `${c}/${n}問正解…放送事故寸前！？`;
-    this.end(Math.round(this.score), comment);
+    const C = this.S.comments;
+    const k = c === n ? 0 : r >= 0.8 ? 1 : r >= 0.6 ? 2 : r >= 0.3 ? 3 : 4;
+    this.end(Math.round(this.score), k === 0 ? C[0] : `${c}/${n}問正解${C[k]}`);
   }
 
   sfxKamu() {
@@ -510,17 +728,20 @@ class Announce extends Minigame {
   }
 
   // ---------------------------------------------------------------- drawing
+  // set id usable before init() (the title card draws the background)
+  get setId() { return SETS[this.opts.set] ? this.opts.set : 'news'; }
+
   drawBackground(ctx) {
-    const A = art();
+    const A = art(this.setId);
     rect(ctx, 0, 0, W, H, '#0a0e22');
     ctx.drawImage(A.bg, 0, 0);
-    ctx.drawImage(A.desk, 0, DESK_Y);
+    if (A.desk) ctx.drawImage(A.desk, 0, DESK_Y);
     ctx.fillStyle = 'rgba(6,9,20,0.55)';
     ctx.fillRect(0, 0, W, H);
   }
 
   drawPlay(ctx) {
-    const A = art();
+    const A = art(this.set);
     rect(ctx, 0, 0, W, H, '#0a0e22');
     ctx.save();
     if (this.stage === 'kamu' && this.st < 18) {
@@ -529,8 +750,10 @@ class Announce extends Minigame {
     ctx.drawImage(A.bg, 0, 0);
     this.drawWall(ctx);
     this.drawAnchors(ctx);
-    ctx.drawImage(A.desk, 0, DESK_Y);
-    this.drawDeskLive(ctx);
+    if (A.desk) {
+      ctx.drawImage(A.desk, 0, DESK_Y);
+      this.drawDeskLive(ctx);
+    } else this.drawBooth(ctx);
     this.drawBubble(ctx);
     this.drawEmote(ctx);
     ctx.restore();
@@ -545,13 +768,30 @@ class Announce extends Minigame {
   }
 
   drawWall(ctx) {
-    // program logo board
-    rect(ctx, 110, 13, 100, 20, '#5fd7ff');
-    rect(ctx, 111, 14, 98, 18, '#0a1030');
-    rect(ctx, 111, 14, 98, 1, '#2a5a9a');
-    text(ctx, PROGRAM, 160, 17, { size: 12, align: 'center', color: '#ffffff', outline: '#1d3f8a' });
-    // tower beacon
-    if (Math.floor(this.pt / 30) % 2 === 0) rect(ctx, 225, 12, 3, 2, '#ff4d5e');
+    if (this.set === 'afureko') {
+      // the anime's title card on the screen
+      const f = fitText(ctx, `『${this.show}』`, 150, 14, 8);
+      text(ctx, f.s, 160, 14 + (14 - f.size) / 2, { size: f.size, align: 'center', color: '#fff6a8', outline: '#8a1f3a' });
+      return;
+    }
+    // program logo board (grows a little for long names)
+    const f = fitText(ctx, this.show, 136, 12, 8);
+    const bw = clamp(Math.ceil(measure(ctx, f.s, f.size)) + 14, 100, 148);
+    const bx = 160 - Math.round(bw / 2);
+    const morning = this.set === 'morning';
+    rect(ctx, bx, 13, bw, 20, morning ? '#ffd23f' : '#5fd7ff');
+    rect(ctx, bx + 1, 14, bw - 2, 18, morning ? '#ff8a3d' : '#0a1030');
+    rect(ctx, bx + 1, 14, bw - 2, 1, morning ? '#ffc070' : '#2a5a9a');
+    text(ctx, f.s, 160, 17 + (12 - f.size) / 2, { size: f.size, align: 'center', color: '#ffffff', outline: morning ? '#b8401a' : '#1d3f8a' });
+    if (morning) {
+      // studio clock in the corner of the video wall
+      const mm = String(clamp(15 + Math.floor(this.pt / 600), 15, 59)).padStart(2, '0');
+      rect(ctx, 14, 70, 34, 11, 'rgba(255,255,255,0.85)');
+      text(ctx, `7:${mm}`, 31, 71, { size: 10, align: 'center', color: '#e0603a', shadow: null });
+    } else if (bx + bw < 222 && Math.floor(this.pt / 30) % 2 === 0) {
+      // tower beacon
+      rect(ctx, 225, 12, 3, 2, '#ff4d5e');
+    }
   }
 
   drawAnchors(ctx) {
@@ -568,7 +808,9 @@ class Announce extends Minigame {
 
   drawAnchor(ctx, look, x, y, dir, mood) {
     const sheet = charSheet(look);
-    ctx.drawImage(sheet[dir][0], 0, 0, 16, 16, x, y, 48, 48);
+    // behind a desk only the top 16 rows show; in the booth they stand full-length
+    const rows = this.set === 'afureko' ? 20 : 16;
+    ctx.drawImage(sheet[dir][0], 0, 0, 16, rows, x, y, 48, rows * 3);
     if (dir !== 'down') return;
     const mouth = '#7a2a35';
     if (mood === 'panic') {
@@ -598,13 +840,34 @@ class Announce extends Minigame {
   }
 
   drawDeskLive(ctx) {
-    text(ctx, 'DOT NEWS', 160, DESK_Y + 25, { size: 10, align: 'center', color: '#1d3f8a', shadow: null });
+    text(ctx, this.S.desk, 160, DESK_Y + 25, { size: 10, align: 'center', color: this.set === 'morning' ? '#e0603a' : '#1d3f8a', shadow: null });
     // desk microphones
     for (const mx of [MAIN.x + 40, CO.x + 4]) {
       rect(ctx, mx, DESK_Y - 6, 1, 9, '#20232a');
       rect(ctx, mx - 2, DESK_Y + 2, 5, 2, '#20232a');
       rect(ctx, mx - 1, DESK_Y - 10, 3, 5, '#3b3f48');
       rect(ctx, mx - 1, DESK_Y - 10, 1, 4, '#7a8090');
+    }
+  }
+
+  // dubbing booth foreground: a script stand in front of each actor and a stand mic beside the face
+  drawBooth(ctx) {
+    const floor = BOOTH_FLOOR + 22;
+    for (const [ax, side] of [[MAIN.x, 1], [CO.x, -1]]) {
+      const cx = ax + 24;
+      rect(ctx, cx - 1, 82, 2, floor - 82, '#16151b');
+      rect(ctx, cx - 8, floor - 1, 16, 2, '#16151b');
+      rect(ctx, cx - 16, 72, 32, 11, '#2b2a33');
+      rect(ctx, cx - 15, 73, 14, 8, '#f6f3e6');
+      rect(ctx, cx + 1, 73, 14, 8, '#ebe6d4');
+      for (let ly = 75; ly < 80; ly += 2) { rect(ctx, cx - 13, ly, 10, 1, '#b8b4a8'); rect(ctx, cx + 3, ly, 10, 1, '#b8b4a8'); }
+      rect(ctx, cx - 16, 82, 32, 1, '#111016');
+      const mx = side > 0 ? ax + 46 : ax + 1;
+      rect(ctx, mx, 70, 1, floor - 70, '#20232a');
+      rect(ctx, mx - 4, floor - 1, 9, 2, '#20232a');
+      rect(ctx, mx - 1, 58, 3, 12, '#3b3f48');
+      rect(ctx, mx - 1, 58, 1, 11, '#7a8090');
+      rect(ctx, mx - 2, 68, 5, 2, '#20232a');
     }
   }
 
@@ -653,7 +916,7 @@ class Announce extends Minigame {
     rect(ctx, 250, 4, 64, 16, '#3a0a10');
     rect(ctx, 251, 5, 62, 14, mix('#8a1a24', '#ff2a3a', lit));
     rect(ctx, 252, 6, 60, 1, 'rgba(255,255,255,0.35)');
-    text(ctx, 'ON AIR', 282, 7, { size: 10, align: 'center', color: '#ffffff', shadow: '#5a0a14' });
+    text(ctx, this.S.lamp, 282, 7, { size: 10, align: 'center', color: '#ffffff', shadow: '#5a0a14' });
   }
 
   drawPrompter(ctx) {
@@ -730,7 +993,7 @@ class Announce extends Minigame {
       return;
     }
     if (this.stage === 'outro') {
-      text(ctx, '放送終了', 57, 190, { size: 10, align: 'center', color: COLORS.dim });
+      text(ctx, this.S.over, 57, 190, { size: 10, align: 'center', color: COLORS.dim });
       text(ctx, 'おつかれ！', 57, 206, { size: 12, align: 'center', color: COLORS.accent });
       text(ctx, `正解 ${this.correct}/${this.count}`, 124, 190, { size: 12 });
       text(ctx, `最大 ${this.maxCombo} れんぞく`, 124, 210, { size: 12, color: COLORS.pink });
@@ -774,7 +1037,7 @@ class Announce extends Minigame {
     ctx.save();
     ctx.translate(160, 100);
     ctx.rotate(-0.1 + Math.sin(t / 4) * 0.03);
-    text(ctx, '噛んだ！', 0, -size / 2, { size: Math.round(size), align: 'center', color: COLORS.bad, outline: '#ffffff' });
+    text(ctx, this.S.kamu, 0, -size / 2, { size: Math.round(size), align: 'center', color: COLORS.bad, outline: '#ffffff' });
     ctx.restore();
     // impact lines
     if (t < 20) {

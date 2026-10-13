@@ -647,7 +647,7 @@ async function talkGeinin(g, n) {
   const lines = ['よう。オレは売れない芸人。\nこの湯につかると、ネタが浮かぶんだ。\n…今日は浮かばなかったけど。'];
   if (!st.agency) lines.push('まずは事務所のオーディションだな。\nよしもとやグレープカンパニーは、この近所だぜ。\nなんばに行けば、松竹芸能もある。');
   else lines.push('{agency}に入ったのか！先を越された！', '所属タレントなら、おかみさんに頼めば\nここの「銭湯寄席」にも出られるぜ。');
-  lines.push('東京駅から新幹線に乗れば、大阪のなんばだ。\nたこ焼き屋のバイトは、誰でもできるらしいぜ。');
+  lines.push('東京駅から新幹線で大阪へ行けば、\nなんばは電車ですぐだ。\nたこ焼き屋のバイトは、誰でもできるらしいぜ。');
   await say(g, n, lines);
 }
 
@@ -1118,7 +1118,7 @@ const HOTEL_TV = [
   '『なんばの劇場では、今日も新喜劇が大盛況！\nお約束のズッコケに、客席も大爆笑です』',
   '『大阪の芸能事務所のオーディションでは、\nしゃべりの腕が試されるそうですよ』',
   '『大阪名物たこ焼き！外はカリッ、中はトロッ。\nお店ではアルバイトも募集中だとか』',
-  '『東京へは、なんば駅から新幹線で。\n運賃は¥3,000です。いってらっしゃい！』',
+  '『東京へは、なんば駅から電車と新幹線で。\n運賃は¥3,000です。いってらっしゃい！』',
   '『天気予報です。なんばは、あしたも\n笑顔あふれる晴れ模様でしょう』',
 ];
 let hotelTvIdx = 0;
@@ -1208,10 +1208,10 @@ async function talkFront(g) {
   if (i === 1) { await frontChat(g); return; }
   if (i !== 0) return;
   if (hotelFree(g)) {
-    await say(g, FRONT, ['いつもごひいきの{name}様は、\nご宿泊をご招待とさせていただきます！', 'いちばん眺めのいいお部屋を\nご用意いたしました。']);
+    await say(g, FRONT, ['いつもごひいきの{name}様には、\nご宿泊を無料でご招待させていただきます！', 'いちばん眺めのいいお部屋を\nご用意いたしました。']);
   } else {
     if (!g.spend(HOTEL_PRICE)) {
-      await say(g, FRONT, ['申し訳ございません。\nご宿泊は、1泊¥3,000でございます…。', 'またのお越しを、お待ちしております。']);
+      await say(g, FRONT, ['申し訳ございません。\nご宿泊は、1泊¥3,000でございます…。', canRestInBack(g) ? 'お困りでしたら、となりのたこ焼き屋の\n大将に相談なさってはいかがでしょう。\n面倒見のいい方ですよ。' : 'またのお越しを、お待ちしております。']);
       return;
     }
     g.sfx('coin');
@@ -1227,7 +1227,7 @@ async function talkConcierge(g) {
     ['新喜劇の劇場', ['よしもと新喜劇の劇場は、\nこの通りを西へまっすぐ。赤い屋根が目印です。', 'みんなでそろってズッコケるのがお約束。\nよしもと所属なら、舞台に立てる日も…！']],
     ['松竹芸能', ['松竹芸能さんの事務所は、\nたこ焼き屋さんの先、劇場のおとなりです。', 'しゃべりの腕を磨きたい方は、\nオーディションに挑戦してみては？']],
     ['たこ焼き屋', ['ホテルのおとなりのたこ焼き屋さんは、\nなんばの名物でございます。', '「たこ焼き焼きのバイト」は、\nどなたでも歓迎だそうですよ。']],
-    ['なんば駅', ['川を渡って南へ進むと、なんば駅です。', '新幹線で東京へ戻れます。\n運賃は¥3,000でございます。']],
+    ['なんば駅', ['川を渡って南へ進むと、なんば駅です。', '電車で新大阪へ出て、新幹線で東京へ戻れます。\n運賃は¥3,000でございます。']],
   ];
   const i = await ask(g, CONCIERGE, 'コンシェルジュでございます。\nどちらのご案内をいたしましょう？', [...spots.map((s) => s[0]), 'けっこうです']);
   if (i < 0 || i >= spots.length) { await say(g, CONCIERGE, 'いつでもお声がけくださいませ。'); return; }
@@ -1274,7 +1274,7 @@ async function talkHotelKid(g, n) {
 }
 
 async function talkBiz(g, n) {
-  const lines = ['東京から、新幹線で出張です。\nなんば駅まで¥3,000、あっという間ですよ。'];
+  const lines = ['東京から、新幹線と電車で出張です。\nなんばまで¥3,000、あっという間ですよ。'];
   if (g.state.fame >= 250) lines.push('…あれ？テレビで見たことあるような。\nあとで娘に自慢しよう。');
   lines.push('このホテル、朝のモーニングコールが\nとっても感じがいいんですよ。', '大阪は、ごはんがおいしくて困ります。\nとなりのたこ焼き、もう3回食べました。');
   await say(g, n, lines);
@@ -1616,7 +1616,7 @@ const TAKO_JOBS = {
   baito: {
     id: 'takoyaki_baito', title: 'たこ焼き焼きのバイト', client: TAISHO.name, clientLook: TAISHO.look,
     stamina: 20, minigame: 'rhythm', opts: { difficulty: 1, lanes: 1, song: 'くるくる！たこ焼き音頭' },
-    pay: 900, fame: 3, skill: 'talk', gain: 1,
+    pay: 900, fame: 3, skill: 'uta', gain: 1,
   },
   matsuri: {
     id: 'takoyaki_matsuri', title: '商店街の祭りの司会', client: TAISHO.name, clientLook: TAISHO.look,
@@ -1736,6 +1736,19 @@ async function taishoChat(g) {
   await say(g, TAISHO, lines);
 }
 
+// Safety net for a player stuck in Osaka without money for the hotel: a nap in the back room
+// (next day, but only 60 stamina so the hotel stays the better choice).
+const canRestInBack = (g) => g.state.money < HOTEL_PRICE && g.state.stamina < 50;
+async function restInBack(g) {
+  await say(g, TAISHO, ['なんや、顔色悪いで。\n宿代もないんか？', 'ほな、店の奥の休憩室で寝ていき！\nせまいけど、ひと晩くらいなんとかなるやろ。']);
+  const i = await ask(g, TAISHO, '休憩室で休ませてもらう？\n（次の日になります）', ['お願いします', 'だいじょうぶです']);
+  if (i !== 0) { await say(g, TAISHO, 'さよか。無理したらあかんで！'); return; }
+  await g.sleep({ save: false });
+  g.state.stamina = Math.min(g.state.maxStamina, 60);
+  g.save();
+  await say(g, TAISHO, ['おはようさん！よう眠れたか？', '休憩室やと、疲れも半分くらいしか\nとれへんやろ。', 'しっかり稼いで、次はホテルに泊まるんやで！']);
+}
+
 async function talkTaisho(g, n) {
   if (g.state.fame >= 1000 && !g.flag('takoyaki_star_done')) await starEvent(g);
   const f = g.state.fame;
@@ -1749,6 +1762,7 @@ async function talkTaisho(g, n) {
   if (tier1(g)) items.push({ label: '祭りの司会', run: () => takoJob(g, TAKO_JOBS.matsuri, ['祭り、大成功や！', '商店街のみんなも「また頼みたい」言うとったで！']) });
   if (f >= 250) items.push({ label: '食レポのロケ', run: () => takoJob(g, TAKO_JOBS.report, ['放送見たお客さんで、行列ができとる！', 'あんたの食レポ、ほんまにうまそうやったで！']) });
   if (f >= 2000) items.push({ label: '商店街のCM', run: () => takoJob(g, TAKO_JOBS.cm, ['CMソング、子どもらがみんな歌うとるで！', '商店街のスターや！おおきに！']) });
+  if (canRestInBack(g)) items.push({ label: '休ませてもらう', run: () => restInBack(g) });
   items.push({ label: '話を聞く', run: () => taishoChat(g) });
   items.push({ label: 'やめておく', run: null });
   await menu(g, n, greet, items);
