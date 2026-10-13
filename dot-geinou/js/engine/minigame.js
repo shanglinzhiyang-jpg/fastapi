@@ -149,7 +149,13 @@ export class Minigame {
       if (this.t >= 100) { this.phase = 'play'; this.t = 0; this.pt = 0; }
     } else if (this.phase === 'play') {
       this.pt++;
-      this.updatePlay(inp);
+      try {
+        this.updatePlay(inp);
+      } catch (e) {
+        // never leave the player stuck in a broken minigame
+        console.error(e);
+        this.end(50, 'トラブル発生…でもなんとか乗り切った！');
+      }
     } else if (this.phase === 'result') {
       if (this.t > 40 && inp.pressed('a')) {
         audio.sfx('ok');

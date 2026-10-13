@@ -164,6 +164,10 @@ async function runMode(mode) {
           const m = g.map;
           const p = m.player;
           Object.assign(p, { x: t.stand.x, y: t.stand.y, px: t.stand.x * 16, py: t.stand.y * 16, dir: t.stand.dir, moving: false, path: [], pathDone: null });
+          if (t.kind === 'entity' && !m.visible(m.entities[t.idx])) {
+            g.auto = null;
+            return { frames: 0, log: [{ name: '', text: '(not visible now — skipped)' }], firstN: 0, where: g.map.placeId + '/' + g.map.roomId, asks: 0 };
+          }
           if (t.kind === 'step') {
             m.onStep();
           } else if (t.kind === 'event') {

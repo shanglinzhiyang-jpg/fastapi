@@ -286,6 +286,9 @@ export class Game {
     if (!e) { console.error('placeNpc: no npc', id); return; }
     Object.assign(e, { x, y, px: x * TILE, py: y * TILE, moving: false, t: 0 });
     if (dir) e.dir = dir;
+    // cancel a scripted walk that was still running
+    e.path.length = 0;
+    if (e.pathDone) { const r = e.pathDone; e.pathDone = null; r(); }
   }
   showNpc(id, visible = true) {
     const e = this.npc(id);
@@ -584,7 +587,7 @@ export class Game {
     if (st.stamina < stamina) { this.lastAudition = 'nostamina'; await this.say('体力が足りない…。万全の状態で挑もう。'); return false; }
     st.stamina -= stamina;
     const pass = def.pass ?? 55;
-    const res = await this.minigame(def.minigame, { ...(def.opts || {}), skill: def.skill || ag.skill, title: def.title || ag.name + 'オーディション', pass });
+    const res = await this.minigame(def.minigame, { ...(def.opts || {}), skill: def.skill || (MINIGAMES[def.minigame] && MINIGAMES[def.minigame].skill) || ag.skill, title: def.title || ag.name + 'オーディション', pass });
     this.lastAuditionResult = res;
     if (def.beforeResult) await def.beforeResult(this, res, res.score >= pass);
     if (res.score < pass) {
