@@ -436,8 +436,8 @@ const C = {
   // 稽古場
   fujidana: { name: 'コント作家 藤棚先生', look: { hair: 'afro', hairColor: 'black', skin: 'fair', top: '#f2f2f2', bottom: '#5a4a3a', glasses: true, beard: true } },
   tsubuta: { name: '漫才講師 粒田先生', look: { hair: 'slick', hairColor: 'silver', skin: 'tan', top: PU_D, bottom: '#20232a', jacket: true } },
-  maruo: { name: 'まるお（店員役）', look: { hair: 'bald', hairColor: 'black', skin: 'fair', top: '#2f9a4a', bottom: '#3b3f48' } },
-  kakuta: { name: 'かくた（客役）', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#3a4a7a', bottom: '#20232a', glasses: true } },
+  maruo: { name: 'たてお（店員役）', look: { hair: 'bald', hairColor: 'black', skin: 'fair', top: '#2f9a4a', bottom: '#3b3f48' } },
+  kakuta: { name: 'よこた（客役）', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#3a4a7a', bottom: '#20232a', glasses: true } },
   kodougu: { name: '小道具さん', look: { ...LOOKS.staff, hat: GOLD, top: '#5a6f8a' } },
   mirror: { name: '若手ピン芸人', look: { hair: 'twin', hairColor: 'brown', skin: 'light', top: '#ff7eb6', bottom: '#3a4a7a' } },
 };
@@ -463,7 +463,7 @@ const LIVE_LINES = [
   { boke: '最近、料理を始めたんです。', punch: false },
   { boke: '得意料理は、氷です。', punch: true, tsukkomi: '凍らせただけだろ！' },
   { boke: '今日はお客さんがいっぱいでうれしいです！', punch: false },
-  { boke: 'ほぼ親戚ですけど。', punch: true, tsukkomi: '身内で埋めるな！' },
+  { boke: 'なんと、7人も！', punch: true, tsukkomi: 'いっぱいじゃないだろ！' },
 ];
 const TOUR_LINES = [
   { boke: '全国ツアー、ついに始まりました！', punch: false },
@@ -486,18 +486,18 @@ const LESSON_LINES = [
   { boke: '朝ごはんは、パン派なんです。', punch: false },
   { boke: 'パンに、ごはんをのせて食べます。', punch: true, tsukkomi: 'どっちかにしろ！' },
   { boke: '今日はいい天気ですね。', punch: false },
-  { boke: 'なのでカサを5本持ってきました。', punch: true, tsukkomi: '晴れてるだろ！' },
+  { boke: 'なので、てるてる坊主を逆さに吊るしてきました。', punch: true, tsukkomi: '雨を降らせる気か！' },
 ];
 const ADV_LINES = [
   { boke: '先生、ぼく最近、早起きしてるんです。', punch: false },
-  { boke: '毎朝4時に起きて、5時にまた寝ます。', punch: true, tsukkomi: '二度寝するな！' },
+  { boke: '目覚ましを10個かけて、全部止めてから寝てます。', punch: true, tsukkomi: '起きてないだろ！' },
   { boke: '休みの日は、図書館に行くんです。', punch: false },
   { boke: '本は読まずに、においだけかいで帰ります。', punch: true, tsukkomi: '読めよ！' },
   { boke: 'きのう、道で百円を拾ったんです。', punch: false },
   { boke: 'ちゃんと交番に届けました。', punch: false },
   { boke: 'お礼に、おまわりさんと記念写真を。', punch: true, tsukkomi: '観光客か！' },
-  { boke: '将来の夢は、宇宙飛行士です。', punch: false },
-  { boke: '高い所に慣れるため、脚立を買いました。', punch: true, tsukkomi: '低すぎるだろ！' },
+  { boke: '将来の夢は、パイロットです。', punch: false },
+  { boke: '練習で、紙飛行機を毎日飛ばしてます。', punch: true, tsukkomi: '規模が小さい！' },
 ];
 // コント scenes for the acting minigame. Beats: W 笑う / N 泣く / O 怒る / D 驚く / K キメ / T 照れる.
 const CONTE_SCENES = [
@@ -963,7 +963,7 @@ async function talkWakate(g) {
     await say(g, 'wakate', pick([
       ['よっ、同期！', '事務所ライブはツッコミのタイミングが命だぞ。\nボケを最後まで聞いてから、ビシッと！'],
       ['テレビのプロデューサーさん、よく事務所に来るんだ。', '★250くらい知名度があれば、\nコント番組に呼んでもらえるらしいぜ。'],
-      ['稽古場の「まるかく」のコント、見た？', 'あいつら毎日稽古してるから、\n見学するだけでも勉強になるぞ。'],
+      ['稽古場の「たてよこ」のコント、見た？', 'あいつら毎日稽古してるから、\n見学するだけでも勉強になるぞ。'],
     ]));
     return;
   }
@@ -983,7 +983,7 @@ async function scheduleBoard(g) {
 
 // ---------------------------------------------------------------- 稽古場
 async function rehearsal(g) {
-  const i = await ask(g, 'kakuta', ['おれたち、コンビ「まるかく」です！', '新ネタのコント、見ていきます？'], ['見学する', 'やめておく']);
+  const i = await ask(g, 'kakuta', ['おれたち、コンビ「たてよこ」です！', '新ネタのコント、見ていきます？'], ['見学する', 'やめておく']);
   if (i !== 0) { await say(g, 'kakuta', 'また見に来てくださいね！'); return; }
   await g.fadeOut();
   g.placePlayer(3, 7, 'up');

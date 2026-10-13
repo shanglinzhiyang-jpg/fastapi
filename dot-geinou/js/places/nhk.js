@@ -1050,7 +1050,7 @@ async function newsJob(g, npc) {
   await g.say(['ちょうどいいところに！', '夕方のニュースの「街の話題」コーナー、読んでもらえませんか？難しい読みの漢字に気をつけて！'], s);
   await nhkJob(g, {
     id: 'nhk_news', title: 'ニュース原稿読み', desc: '漢字の読みまちがいに注意！', client: npc.name, clientLook: npc.look,
-    stamina: 20, minigame: 'announce', opts: { difficulty: 3, words: NEWS_WORDS, count: 5 }, pay: 10000, fame: 40, skill: 'talk', gain: 3,
+    stamina: 20, minigame: 'announce', opts: { set: 'news', difficulty: 3, words: NEWS_WORDS, count: 5 }, pay: 10000, fame: 40, skill: 'talk', gain: 3,
     requires: { fame: 250 },
   });
 }
@@ -1119,7 +1119,7 @@ async function announceBooth(g) {
   const i = await g.ask(['アナウンサー体験コーナーへようこそ！', 'ニュース原稿を読んでみませんか？（無料・1日1回）'], ['やってみる', 'やめておく'], s);
   if (i !== 0) return;
   markToday(g, 'nhk_booth_day');
-  const res = await g.minigame('announce', { difficulty: 1, words: EASY_WORDS, count: 3, title: 'アナウンサー体験', skill: 'talk' });
+  const res = await g.minigame('announce', { set: 'news', difficulty: 1, words: EASY_WORDS, count: 3, title: 'アナウンサー体験', skill: 'talk' });
   const good = res && (res.rank === 'S' || res.rank === 'A');
   g.addSkill('talk', good ? 2 : 1, true);
   g.sfx('good');
@@ -1372,7 +1372,7 @@ registerPlace({
           talk: async (g, npc) => {
             const s = as(npc);
             await g.say(['アナウンサー歴は…ふふ、ナイショ。', 'ことばを正しく、聞きとりやすく届けるのが私たちの仕事です。'], s);
-            const res = await g.lesson({ title: '滑舌レッスン', skill: 'talk', price: 3000, stamina: 12, gain: 4, minigame: 'announce', opts: { difficulty: 1, words: EASY_WORDS, count: 3 }, teacher: npc.name });
+            const res = await g.lesson({ title: '滑舌レッスン', skill: 'talk', price: 3000, stamina: 12, gain: 4, minigame: 'announce', opts: { set: 'news', difficulty: 1, words: EASY_WORDS, count: 3 }, teacher: npc.name });
             if (!res) await g.say('「なまむぎ なまごめ なまたまご」…毎日の早口ことばも効きますよ。', s);
           },
         },

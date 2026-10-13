@@ -254,8 +254,16 @@ const LETTERS = [
   '「なんばで見かけたとき、緊張して声かけられませんでした…。大ファンです！」',
 ];
 registerItem('shochiku_fanletter', {
-  name: 'ファンレター', price: 0, desc: 'ファンからの手紙。読むと元気が出る。',
-  use: async (g) => { await g.say(['ファンレターを読んだ。', pick(LETTERS), 'よし、がんばろう！']); },
+  name: 'ファンレター', price: 0, desc: 'ファンからの手紙。1日1回読むと、体力が10回復する。',
+  use: async (g) => {
+    const read = ['ファンレターを読んだ。', pick(LETTERS)];
+    if (g.flag('shochiku_letter_day') === g.state.day) { await g.say([...read, 'よし、がんばろう！\n（今日はもう元気をもらった）']); return; }
+    if (g.state.stamina >= g.state.maxStamina) { await g.say([...read, 'よし、がんばろう！\n（体力は満タンだ）']); return; }
+    g.setFlag('shochiku_letter_day', g.state.day);
+    g.heal(10);
+    g.sfx('good');
+    await g.say([...read, '…元気が出てきた！\n体力が10回復した。']);
+  },
 });
 registerItem('shochiku_tate', {
   name: '冠番組記念の盾', price: 0, desc: '冠ラジオ番組スタートの記念の盾。ピカピカだ。',
@@ -370,16 +378,16 @@ const furi = (boke) => ({ boke, punch: false });
 const boke = (b, tsukkomi) => ({ boke: b, punch: true, tsukkomi });
 const LIVE_BITS = [
   [boke('ぼく、大阪城に住んでるんです', '住まれへんわ！')],
-  [furi('最近、料理にハマってまして'), boke('たこ焼き、タコ抜きで作りました', 'ただの焼きや！')],
+  [furi('最近、料理にハマってまして'), boke('カップラーメン、じっくり3時間煮込みました', 'のびてまうわ！')],
   [furi('お好み焼きをおかずにご飯食べます'), boke('そのご飯をおかずに、お好み焼きです', '終わらへんがな！')],
-  [furi('朝は毎日ジョギングしてます'), boke('家から駅まで、側転で通ってます', '目ぇ回るわ！')],
+  [furi('最近、通勤で体を鍛えてまして'), boke('家から駅まで、側転で通ってます', '目ぇ回るわ！')],
   [boke('通天閣、ポケットに入れてきました', '入るかい！')],
   [boke('趣味は、ハトに道を教えることです', '飛んで行けるわ！')],
   [furi('今日はお客さんがあったかいなあ'), boke('お客さん全員、ぼくの親戚です', 'そんなわけあるか！')],
 ];
 const LESSON_BITS = [
   [boke('こんにちは。今、夜の8時です', 'こんばんはや！')],
-  [furi('ぼく、犬を飼ってまして'), boke('名前は「ネコ」です', 'ややこしいわ！')],
+  [furi('この前、自転車を買いました'), boke('もったいないんで、かついで歩いてます', '乗らんかい！')],
   [furi('昨日、カレーを作りました'), boke('隠し味に、カレーを入れました', 'カレーやないか！')],
   [furi('好きな季節は夏です'), boke('理由は、冬が寒いからです', '夏の理由ちゃうやん！')],
 ];
@@ -407,7 +415,7 @@ const JOBS = {
     requires: { agency: true },
   },
   local: {
-    id: 'shochiku_kansai_local', title: '関西ローカル番組', desc: '大阪のクイズ番組に回答者で出演！', client: 'マネージャー',
+    id: 'shochiku_kansai_local', title: '関西ローカル番組', desc: '大阪のクイズ番組に解答者として出演！', client: 'マネージャー',
     stamina: 25, minigame: 'quiz', opts: { difficulty: 3, category: 'osaka', show: 'クイズ！なんばでドン！' }, pay: 12000, fame: 45, skill: 'talk', gain: 3,
     requires: { fame: 250 },
   },
@@ -1041,7 +1049,7 @@ const OFFICE = {
     { x: 10, y: 12, room: 'lobby', tx: 3, ty: 3, dir: 'down' },
   ],
   entities: [
-    { type: 'logo', x: 8.5, y: 1.05, w: 4, h: 0.9, logo: 'shochiku', board: true },
+    { type: 'logo', x: 8.5, y: 0.6, w: 4, h: 1.45, logo: 'shochiku', board: true },
     { type: 'npc', id: 'manager', x: 3, y: 3, dir: 'down', look: L.manager, name: 'マネージャー', talk: managerTalk },
     { type: 'npc', id: 'bucho', x: 10, y: 2, dir: 'down', look: L.bucho, name: '部長', talk: buchoTalk },
     { type: 'npc', id: 'shinsa', x: 16, y: 3, dir: 'down', look: L.shinsa, name: 'オーディション担当', talk: shinsaTalk },
@@ -1216,10 +1224,12 @@ const SKITS = [
   [
     [MARU, 'ぼく、ダイエット始めてん。'],
     [KAKU, 'ええこっちゃ。何してんの？'],
-    [MARU, '毎朝10キロ走ってる。…タクシーで。'],
-    [KAKU, 'それ乗ってるだけや！', true],
-    [MARU, '帰りは歩いてるで。…動く歩道で。'],
-    [KAKU, '一歩も歩いてへんやないか！もうええわ！', true],
+    [MARU, 'ごはんを、ちっちゃいお茶わんに変えてん。'],
+    [KAKU, 'おお、ええやん。'],
+    [MARU, 'そのかわり、おかわり5回してる。'],
+    [KAKU, '量おんなじやないか！', true],
+    [MARU, 'あと、エレベーターやめて階段にしたで。…下りだけ。'],
+    [KAKU, '上りもやらんかい！もうええわ！', true],
   ],
 ];
 

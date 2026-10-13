@@ -59,7 +59,7 @@ const nm = (name, look) => ({ name, look });
 // =====================================================================
 // items & music
 // =====================================================================
-registerItem('toei_lokeben', { name: 'ロケ弁', price: 600, desc: '撮影所の名物弁当。体力が45回復する。', heal: 45 });
+registerItem('toei_lokeben', { name: '撮影所のロケ弁', price: 600, desc: '撮影所の名物弁当。体力が45回復する。', heal: 45 });
 registerItem('toei_dango', { name: 'みたらし団子', price: 250, desc: '茶屋の団子。甘じょっぱい！体力が20回復する。', heal: 20 });
 registerItem('toei_ocha', { name: '茶屋のお茶', price: 120, desc: 'ほっとひと息。体力が10回復する。', heal: 10 });
 registerItem('toei_sofubi', {
@@ -67,7 +67,7 @@ registerItem('toei_sofubi', {
   use: async (g) => { g.sfx('whistle'); await g.say('ピクセリオンのソフビ人形をかかげた！\n「変身！」…気分だけはヒーローだ。'); },
 });
 registerItem('toei_clapper', {
-  name: '記念のカチンコ', price: 0, desc: '劇場版のクランクアップ記念。スタッフ全員のサイン入り。',
+  name: 'サイン入りカチンコ', price: 0, desc: '劇場版のクランクアップ記念。スタッフ全員のサイン入り。',
   use: async (g) => { g.sfx('snare'); await g.say('カチン！\nあの撮影の日々を思い出す…。'); },
 });
 
@@ -942,13 +942,14 @@ const AUDITION_SCENES = [
 
 const JOBS = {
   extra: {
-    id: 'toei_extra', title: '時代劇の町人エキストラ', desc: '町人役で時代劇に出演！', client: '助監督', clientLook: LK.ad,
+    // the 殺陣 minigame has the player fighting the villains, so the extra is a 若侍 who joins the hero's fight
+    id: 'toei_extra', title: '時代劇の立ち回りエキストラ', desc: '主役に加勢する若侍の役で出演！', client: '助監督', clientLook: LK.ad,
     stamina: 15, minigame: 'command', opts: { theme: 'tate', difficulty: 1 }, pay: 1000, fame: 5, skill: 'engi', gain: 1,
   },
   kirare: {
     id: 'toei_kirare', title: '時代劇の斬られ役', desc: '主役に斬られる大事な役でござる。', client: '殺陣師', clientLook: LK.tateshi,
     stamina: 20, minigame: 'command', opts: { theme: 'tate', difficulty: 2 }, pay: 4500, fame: 15, skill: 'engi', gain: 2,
-    requires: { fame: 30 },
+    requires: { anyOf: [{ agency: true }, { fame: 30 }] },
   },
   suit: {
     id: 'toei_suit', title: '特撮ヒーローのスーツアクター', desc: 'スーツを着て大立ち回り！', client: 'アクション監督', clientLook: LK.action,
@@ -958,7 +959,7 @@ const JOBS = {
   voice: {
     id: 'toei_voice', title: 'アニメのアフレコ出演', desc: '台本どおり、正しく読もう！', client: '音響監督', clientLook: LK.onkan,
     stamina: 20, minigame: 'announce',
-    opts: { difficulty: 3, words: VOICE_WORDS, count: 6, howto: ['アニメのアフレコ本番！', '台本のむずかしい言葉を、正しく読もう。読み間違えたらNGだ！'] },
+    opts: { set: 'afureko', show: 'ドット冒険記', difficulty: 3, words: VOICE_WORDS, count: 6, howto: ['アニメのアフレコ本番！', '台本のむずかしい言葉を、正しく読もう。読み間違えたらNGだ！'] },
     pay: 11000, fame: 40, skill: 'talk', gain: 3,
     requires: { fame: 250, flag: 'toei_voice_role', flagText: 'まずは声優オーディションに合格しないと。\n音響監督さんに話しかけてみよう。' },
   },
@@ -986,9 +987,12 @@ async function teach(g, npc, def, intro, broke) {
   return g.lesson(def);
 }
 
+// 斬られ役 (tier 1): agency members or ★30, same rule as JOBS.kirare.requires
+const kirareOk = (g) => !!g.state.agency || g.state.fame >= 30;
+
 function nextHint(g) {
   const f = g.state.fame;
-  if (f < 30) return ['まずは左奥の木戸から、時代劇のオープンセットへ行ってごらん。', '町人役のエキストラなら、だれでも出られるよ！殺陣のレッスンもあるからね。'];
+  if (f < 30 && !g.state.agency) return ['まずは左奥の木戸から、時代劇のオープンセットへ行ってごらん。', '立ち回りのエキストラなら、だれでも出られるよ！殺陣のレッスンもあるからね。'];
   if (f < 250) return ['そろそろ斬られ役の声がかかるころだね。', 'オープンセットの殺陣師さんに話しかけてごらん。'];
   if (f < 1000) return ['注目株だね！特撮スタジオのスーツアクターや、', 'アフレコスタジオの声優オーディションに挑戦できるよ。'];
   if (f < 2000) return ['オープンセットの監督が、時代劇の主役をさがしてたよ。', '今の君なら、きっと声がかかる！'];
@@ -999,8 +1003,8 @@ async function scheduleBoard(g) {
   const f = g.state.fame;
   const m = (ok) => (ok ? '◎' : '×');
   await g.say([
-    '【本日の撮影スケジュール】\n◎時代劇　町人エキストラ（どなたでも）\n◎殺陣レッスン・アクション講座',
-    `${m(f >= 30)}時代劇　斬られ役（★30〜）\n${m(f >= 250)}特撮　スーツアクター（★250〜）\n${m(f >= 250)}アニメ声優オーディション（★250〜）`,
+    '【本日の撮影スケジュール】\n◎時代劇　立ち回りエキストラ（どなたでも）\n◎殺陣レッスン・アクション講座',
+    `${m(kirareOk(g))}時代劇　斬られ役（所属か★30〜）\n${m(f >= 250)}特撮　スーツアクター（★250〜）\n${m(f >= 250)}アニメ声優オーディション（★250〜）`,
     `${m(f >= 1000)}時代劇　主役（★1000〜）\n${m(f >= 2000)}劇場版ヒーロー映画　主演（★2000〜）`,
   ]);
 }
@@ -1010,7 +1014,7 @@ async function kosatsu(g) {
   const m = (ok) => (ok ? '◎' : '×');
   await g.say([
     '高札（こうさつ）に、おふれ書きが貼ってある。',
-    `【おふれ】\n◎町人エキストラ　どなたでも\n${m(f >= 30)}斬られ役　知名度★30より`,
+    `【おふれ】\n◎立ち回りエキストラ　どなたでも\n${m(kirareOk(g))}斬られ役　事務所所属か★30より`,
     `${m(f >= 1000)}時代劇の主役　知名度★1000より\n右、助監督・殺陣師・監督まで\n申し出るべし。　撮影所`,
   ]);
 }
@@ -1286,9 +1290,9 @@ const gate = {
       // 受付カウンターの上の小さな看板
       type: 'prop', x: 7, y: 4, w: 6, h: 1, solid: false, z: -8,
       draw(ctx, sx, sy) {
-        F(ctx, sx + 33, sy + 6, 30, 9, '#20232a');
-        F(ctx, sx + 34, sy + 7, 28, 7, '#f6f6f8');
-        text(ctx, '受付', sx + 48, sy + 5, { size: 10, align: 'center', color: '#2a3560', shadow: null });
+        F(ctx, sx + 33, sy + 3, 30, 13, '#20232a');
+        F(ctx, sx + 34, sy + 4, 28, 11, '#f6f6f8');
+        text(ctx, '受付', sx + 48, sy + 4, { size: 10, align: 'center', color: '#2a3560', shadow: null });
       },
     },
     {
@@ -1359,7 +1363,7 @@ const gate = {
         if (i === 0) {
           const j = await g.ask('どちらをご案内しましょう？', ['オープンセット', '特撮スタジオ', 'アフレコスタジオ', '衣装部', 'もどる'], o);
           const info = [
-            ['左奥の木戸の先が、時代劇のオープンセットです。', '江戸の町並みを丸ごと再現してあるんですよ。殺陣のレッスンや、エキストラのお仕事もあります。'],
+            ['左奥の木戸の先が、時代劇のオープンセットです。', 'この撮影所では、江戸の町並みも特撮も\nアニメの声の収録も、ぜんぶ一か所で\n撮れるんですよ。', '殺陣のレッスンや、エキストラのお仕事もあります。'],
             ['右奥の大きな扉が、特撮スタジオです。', 'ヒーロー番組を撮影中！迫力の爆破シーンも、ここで撮るんですよ。'],
             ['右端の扉が、アフレコスタジオです。', 'アニメの映像に合わせて、声優さんがセリフを吹き込む場所です。'],
             ['左端の扉が、衣装部です。', '時代劇の着物やかつら、ヒーローのスーツまで、なんでもそろってますよ。試着もできるかも？'],
@@ -1499,8 +1503,8 @@ const openset = {
           await teach(g, npc, LESSON_TATE, 'よかろう。刀の握り方から、みっちり教えるでござる！',
             (price) => [`殺陣レッスンは、${price}でござる。`, 'まずはエキストラのお仕事で、稽古代をかせいでくるがよい。']);
         } else if (i === 1) {
-          if (g.state.fame < 30) {
-            await g.say(['斬られ役は、主役を引き立てる大事な役でござる。', 'まずはエキストラで場数を踏み、★30になったら来るがよい。'], o);
+          if (!kirareOk(g)) {
+            await g.say(['斬られ役は、主役を引き立てる大事な役でござる。', 'まずはエキストラで場数を踏み、\n事務所に所属するか★30になったら\n来るがよい。'], o);
             return;
           }
           await g.say('うむ。見事に斬られてみせよ！\n倒れ方ひとつで、場面が生きるでござる。', o);
@@ -1525,9 +1529,9 @@ const openset = {
         const o = who(npc);
         const i = await g.ask('助監督です！今日もバタバタです！\n何かご用ですか？', ['エキストラの仕事', 'リハーサル見学', '話を聞く', 'やめておく'], o);
         if (i === 0) {
-          await g.say('町人役のエキストラは、どなたでも大歓迎！\n立ち回りの後ろで、それっぽく逃げてくださいね！', o);
+          await g.say('エキストラは、どなたでも大歓迎！\n今日は、主役に加勢する若侍の役です。\n段取りどおり、悪党たちと立ち回ってくださいね！', o);
           const res = await g.job(JOBS.extra);
-          if (res) await g.say(good(res) ? 'いい逃げっぷり！監督もほめてましたよ！' : 'おつかれさまでした！またお願いします！', o);
+          if (res) await g.say(good(res) ? 'いい立ち回り！監督もほめてましたよ！' : 'おつかれさまでした！またお願いします！', o);
         } else if (i === 1) {
           await rehearsal(g, false);
         } else if (i === 2) {
@@ -1801,7 +1805,7 @@ const afureko = {
       },
     },
     {
-      type: 'npc', id: 'toei_mixer', x: 7, y: 9, dir: 'up', look: LK.mixer, name: 'ミキサーさん',
+      type: 'npc', id: 'toei_mixer', x: 9, y: 9, dir: 'up', look: LK.mixer, name: 'ミキサーさん',
       text: ['このミキサー卓で、声の大きさや音質を調整してるんです。', 'ささやき声から叫び声まで、きれいに録るのが腕の見せどころ！', 'ブースとはガラスでしきられていて、こっちの音は向こうに聞こえないんですよ。'],
     },
     {

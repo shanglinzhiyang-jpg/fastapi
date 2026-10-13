@@ -1787,7 +1787,7 @@ registerPlace({
         { x: 2, y: 2, room: 'hall', tx: 17, ty: 5, dir: 'left' },
       ],
       entities: [
-        { type: 'logo', x: 11.1, y: 1.2, w: 1.8, h: 1.45, logo: 'shinkigeki', board: true, text: '新喜劇のロゴのポスターだ。\n一座のみんなの、合言葉みたいなものらしい。' },
+        { type: 'logo', x: 11.1, y: 1.2, w: 1.8, h: 1.45, logo: 'shinkigeki', board: true, text: '新喜劇のロゴのポスターだ。\n一座のみんなの、誇りのしるしらしい。' },
         npc('sk_butai', 5, 3, 'down', WHO.butai, { talk: butaiTalk }),
         npc('sk_sensei', 2, 8, 'down', WHO.sensei, { talk: senseiTalk }),
         npc('sk_koro', 5, 7, 'down', WHO.koro, { talk: koroTalk, wander: 2 }),

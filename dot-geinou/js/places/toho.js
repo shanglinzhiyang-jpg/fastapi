@@ -72,7 +72,7 @@ registerItem('toho_sofubi', {
   },
 });
 registerItem('toho_clapper', {
-  name: '記念のカチンコ', price: 0, desc: '完成披露試写会の記念品。「主演」の文字がまぶしい。',
+  name: '試写会記念のカチンコ', price: 0, desc: '完成披露試写会の記念品。「主演」の文字がまぶしい。',
   use: async (g) => {
     g.sfx('snare');
     await g.say('カチン！\n記念のカチンコには「主演 {name}」と\n書いてある。あの日の拍手を思い出す…。');
@@ -1552,7 +1552,7 @@ async function premiere(g) {
     if (first) {
       g.setFlag('toho_premiere_done', true);
       g.giveItem('toho_clapper');
-      await g.say('記念のカチンコをもらった！\n（もちものから見られるよ）');
+      await g.say('試写会記念のカチンコをもらった！\n（もちものから見られるよ）');
     }
     await g.fadeOut(20);
   } finally {

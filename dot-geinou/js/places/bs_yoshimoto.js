@@ -647,7 +647,7 @@ const JOBS = {
   live: {
     label: '生放送の情報番組MC', mode: 'live',
     info: '朝の生放送でニュース原稿を読もう！\n★1000〜／体力-25',
-    def: { id: 'bs_yoshimoto_live', title: '生放送の情報番組MC', desc: 'やり直しのきかない生放送！', stamina: 25, minigame: 'announce', opts: { difficulty: 4, words: LIVE_WORDS }, pay: 30000, fame: 110, skill: 'talk', gain: 3, requires: { fame: 1000 } },
+    def: { id: 'bs_yoshimoto_live', title: '生放送の情報番組MC', desc: 'やり直しのきかない生放送！', stamina: 25, minigame: 'announce', opts: { difficulty: 4, words: LIVE_WORDS, set: 'morning', show: 'ニッポン元気ライブ' }, pay: 30000, fame: 110, skill: 'talk', gain: 3, requires: { fame: 1000 } },
   },
   special: {
     label: '特番の総合司会', mode: 'special',
@@ -1401,7 +1401,7 @@ async function senpaiTalk(g) {
   const st = g.state;
   const i = await g.ask('先輩アナの澄川です。\n本番前のメイク中だけど、レッスンならどうぞ。', ['原稿読み基礎', '中継トーク講座', 'コツを聞く', 'やめる'], who);
   if (i === 0) {
-    await g.lesson({ title: '原稿読み・基礎レッスン', skill: 'talk', price: 3000, stamina: 12, gain: 4, minigame: 'announce', opts: { difficulty: 1, count: 5 }, teacher: who.name });
+    await g.lesson({ title: '原稿読み・基礎レッスン', skill: 'talk', price: 3000, stamina: 12, gain: 4, minigame: 'announce', opts: { difficulty: 1, count: 5, set: 'news' }, teacher: who.name });
   } else if (i === 1) {
     if (st.fame < 250) {
       await g.say('中継トーク講座は、★250からの中級クラスよ。\nまずは原稿読みの基礎からね。', who);
@@ -1675,7 +1675,7 @@ registerPlace({
         npc('bsy_obaachan', 16, 8, 'up', WHO.obaachan, {
           text: ['孫といっしょに、番組観覧に来たのよ。', 'テレビの中の人を、\nこんなに近くで見られるなんてねえ。\n長生きはするもんだわ。'],
         }),
-        npc('bsy_mago', 16, 9, 'up', WHO.mago, {
+        npc('bsy_mago', 17, 8, 'up', WHO.mago, {
           text: ['ぼく、ほっくりんに会いに来たんだ！', 'あっちでおどってるよ！\nほっくりんと「ほっくり体操」すると、\n元気になるんだ！'],
         }),
         npc('bsy_hokkurin', 5, 10, 'down', WHO.hokkurin, { sprite: drawMascot, wander: 1, talk: hokkurinTalk }),
@@ -1916,7 +1916,7 @@ registerPlace({
           talk: async (g) => {
             await g.say('Zzz…むにゃ…カンペ…あと5枚…');
             await g.emote('bsy_sleepy', '!');
-            await g.say(['はっ！寝てません！寝てませんよ！', '…昨日、特番の準備で徹夜だったんです。\nあ、テーブルの差し入れ、よかったらどうぞ。'], WHO.sleepy);
+            await g.say(['はっ！寝てません！寝てませんよ！', '…昨日、特番の準備でちょっと夜ふかししちゃって。\nあ、テーブルの差し入れ、よかったらどうぞ。'], WHO.sleepy);
           },
         }),
       ],
