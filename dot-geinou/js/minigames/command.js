@@ -75,8 +75,8 @@ const SCENES = [
   { title: '料理コンテストの審査', beats: 'TKDWONWK' },
 ];
 
-const TATE_CALLS = ['悪党ども、かかってこい！', '囲まれた！斬り抜けろ！', '屋根から刺客が！', '一気に片づけるぞ！', '背後にも気をつけろ！', '用心棒のおでましだ！', 'まだまだ来るぞ！'];
-const HERO_CALLS = ['戦闘員がおそってきた！', 'ヒーローのアクション！', '囲まれた！切り抜けろ！', 'みんなの声援が力に！', 'ジャンプでかわせ！', 'ヒーローは負けない！'];
+const TATE_CALLS = ['悪党ども、かかってこい！', '囲まれた！斬り抜けろ！', '物陰から刺客が！', '一気に片づけるぞ！', '背後にも気をつけろ！', '用心棒のおでましだ！', 'まだまだ来るぞ！'];
+const HERO_CALLS = ['戦闘員がおそってきた！', 'ヒーローのアクション！', '囲まれた！切り抜けろ！', 'みんなの声援が力に！', 'ここが見せ場だ！', 'ヒーローは負けない！'];
 const DANCE_CALLS = ['イントロ、いくよ！', 'Aメロのステップ！', 'Bメロ！テンポアップ！', 'サビの振り付け！', '間奏でアピール！', '2番もノリノリで！', 'ラストのサビ！', 'フィニッシュポーズ！'];
 
 const BLD = {
@@ -431,7 +431,8 @@ class CommandAction extends Minigame {
   init() {
     const d = this.difficulty - 1;
     this.d = d;
-    this.R = this.opts.rounds ? clamp(Math.round(this.opts.rounds), 1, 12) : DIFF.rounds[d];
+    const rr = Number(this.opts.rounds);
+    this.R = Number.isFinite(rr) && rr >= 1 ? clamp(Math.round(rr), 1, 12) : DIFF.rounds[d];
     const st = this.g.state || {};
     this.look = st.look || LOOKS.player;
     this.parts = [];
@@ -1229,12 +1230,20 @@ class CommandAction extends Minigame {
   tate_round(i) {
     const n = this.cur.n;
     const count = n <= 4 ? 2 : n <= 6 ? 3 : 4;
+    // last round's enemies fade out instead of vanishing in one frame
+    this.tate_leave(this.enemies);
     this.enemies = [];
     for (let k = 0; k < count; k++) {
       const look = this.enemyLooks[(i * 3 + k) % this.enemyLooks.length];
       this.enemies.push({ side: k % 2 ? 1 : -1, front: k < 2, look, sheet: charSheet(look), knock: 0, fallT: 0 });
     }
     this.lastSide = 'right';
+  }
+
+  tate_leave(list) {
+    this.leaving = list.filter((e) => e.fx != null);
+    for (const e of this.leaving) e.leaving = true;
+    this.leaveT = 0;
   }
 
   tate_p() {
@@ -1251,16 +1260,19 @@ class CommandAction extends Minigame {
     const feet = e.front ? 150 : 137;
     const L = e.side < 0;
     const off = L ? -16 * s - 6 : W + 6;
-    const start = L ? (e.front ? 30 : 56) : e.front ? W - 30 - 48 : W - 56 - 32;
-    const near = L ? (e.front ? 92 : 106) : e.front ? 180 : 182;
+    // the back row (smaller, further up) stays outside the front row so the two never merge
+    const start = L ? (e.front ? 30 : 8) : e.front ? W - 30 - 48 : W - 8 - 32;
+    const near = L ? (e.front ? 92 : 58) : e.front ? 180 : 230;
     const p = this.tate_p();
     let x = e.fx ?? (p < 0 ? lerp(start, off, -p) : lerp(start, near, p));
     x += e.side * e.knock * 9;
     if (e.fallT > 0) x += e.side * Math.min(e.fallT, 10) * 0.6;
+    else if (e.leaving) x += e.side * (this.leaveT || 0) * 1.5;
     return { x, feet, s };
   }
 
   tate_tick() {
+    this.leaveT = (this.leaveT || 0) + 1;
     for (const e of this.enemies) {
       e.knock *= 0.84;
       if (e.fallT > 0) e.fallT++;
@@ -1334,12 +1346,14 @@ class CommandAction extends Minigame {
   }
 
   tate_fail() {
-    this.later(6, () => { this.g.sfx('hit'); this.shake(6, 2); this.popup('ポカッ', 160, 76, '#ffffff', 12); });
+    for (const e of this.enemies) { e.fx = this.tate_enemyPos(e).x; e.knock = 0; }
+    this.later(6, () => { this.g.sfx('hit'); this.shake(6, 2); this.popup('ポカッ', 200, 94, '#ffffff', 12); }); // beside the head, below the shout
     this.later(14, () => this.g.sfx('zukko'));
     this.later(18, () => this.doShout('まいった〜！', '#9ad0ff', 22));
   }
 
   tate_close(good) {
+    this.tate_leave(this.enemies.filter((e) => !(e.fallT > 0)));
     this.enemies = this.enemies.filter((e) => e.fallT > 0);
     this.setPose(good ? 'win' : 'sheathe', 999);
     if (good) {
@@ -1358,6 +1372,11 @@ class CommandAction extends Minigame {
     for (let i = 0; i < 5; i++) fillEllipse(ctx, -8 + i * 72 + 35, 93, 18, 16, '#ffb050');
     ctx.globalAlpha = 1;
     this.drawParts(ctx, 'back');
+    if (this.leaving && this.leaveT < 16) {
+      ctx.globalAlpha = 1 - this.leaveT / 16;
+      for (const e of this.leaving) this.tate_drawEnemy(ctx, e);
+      ctx.globalAlpha = 1;
+    }
     for (const e of this.enemies) if (!e.front) this.tate_drawEnemy(ctx, e);
     for (const e of this.enemies) if (e.front) this.tate_drawEnemy(ctx, e);
     this.tate_drawPlayer(ctx);
@@ -1366,13 +1385,14 @@ class CommandAction extends Minigame {
 
   tate_drawEnemy(ctx, e) {
     const { x, feet, s } = this.tate_enemyPos(e);
-    const face = e.side < 0 ? 'right' : 'left';
+    const face = (e.side < 0) !== (!!e.leaving && !e.fallT) ? 'right' : 'left'; // leavers turn and walk off
     let rot = 0, frame = 0, dy = 0;
     if (e.fallT > 0) rot = e.side * (Math.PI / 2) * Math.min(1, e.fallT / 8);
+    else if (e.leaving) frame = 1 + (Math.floor(this.leaveT / 5) % 2);
     else if (this.state === 'cue') frame = 1 + (Math.floor(this.st / 5) % 2);
     else if (this.state === 'fail' && this.st > 12) dy = -Math.abs(Math.round(Math.sin((this.st + e.side * 3) / 3) * 2));
     else if (this.state === 'input') frame = Math.floor((this.pt + (e.front ? 0 : 7)) / 14) % 2;
-    if (!e.fallT) shadowAt(ctx, x + 8 * s, feet - 1, 6 * s, s);
+    if (!e.fallT && !e.leaving) shadowAt(ctx, x + 8 * s, feet - 1, 6 * s, s); // shadowAt resets globalAlpha
     const fw = face === 'right';
     this.drawPerson(ctx, e.sheet, e.look, x, feet, s, { dir: face, dy }, {
       frame, rot,
@@ -1580,7 +1600,7 @@ class CommandAction extends Minigame {
       this.setPose('shrug', 60);
       this.later(14, () => this.doShout('あれっ！？', '#c8d0ff', 22));
     } else {
-      this.later(8, () => { this.g.sfx('hit'); this.shake(5, 2); this.popup('ポカッ', 160, 78, '#ffffff', 12); });
+      this.later(8, () => { this.g.sfx('hit'); this.shake(5, 2); this.popup('ポカッ', 200, 94, '#ffffff', 12); });
       this.later(14, () => this.g.sfx('zukko'));
       this.later(18, () => this.doShout('くっ…まだまだ！', '#c8d0ff', 20));
     }
@@ -1700,7 +1720,7 @@ class CommandAction extends Minigame {
   }
 
   kaiju_setup() {
-        this.kFace = 'left';
+    this.kFace = 'left';
     this.kFallT = 0;
     this.camX = 60;
     this.camFrom = 60;
@@ -1902,7 +1922,8 @@ class CommandAction extends Minigame {
     const tb = this.kaiju_target();
     if (tb && !tb.colT && (this.state === 'input' || (this.state === 'cue' && this.st > this.walkLen))) {
       const mx = tb.wx - this.camX + tb.w / 2;
-      const my = 128 - tb.h - 14 - (Math.floor(this.pt / 8) % 2) * 2;
+      // tall targets (電波塔): keep the marker below the banner instead of under the HUD
+      const my = Math.max(42, 128 - tb.h - 14) - (Math.floor(this.pt / 8) % 2) * 2;
       ctx.fillStyle = INK;
       for (let i = 0; i < 6; i++) ctx.fillRect(Math.round(mx - 6 + i), my + i - 1, 13 - i * 2, 2);
       ctx.fillStyle = '#ff5d6c';
@@ -2262,6 +2283,7 @@ class CommandAction extends Minigame {
     this.emo = null;
     this.dirSay = null;
     this.coEmote = null;
+    this.plSay = null;
     this.clapT = 0;
     this.ngT = 0;
     this.closeEmo = null;
@@ -2281,6 +2303,7 @@ class CommandAction extends Minigame {
     this.emo = null;
     this.dirSay = null;
     this.coEmote = null;
+    this.plSay = null;
     this.ngT = 0;
   }
 
@@ -2295,6 +2318,7 @@ class CommandAction extends Minigame {
     if (this.emo) this.emo.t++;
     if (this.coEmote) this.coEmote.t++;
     if (this.dirSay) this.dirSay.t++;
+    if (this.plSay && ++this.plSay.t > 40) this.plSay = null;
   }
 
   acting_dirText() {
@@ -2311,14 +2335,16 @@ class CommandAction extends Minigame {
   acting_hit(k) {
     this.emo = { key: k, t: 0 };
     this.coEmote = { ch: CO_REACT[k], t: 0 };
+    // one speech bubble that is replaced on every hit (stacked popups garbled at speed)
+    this.plSay = { text: EMO[k].say, t: 0 };
     this.snd('voice');
-    this.popup(EMO[k].say, this.cur.idx % 2 ? 184 : 214, 80, '#ffffff', 10);
     if (k === 'a') this.sparkBurst(200, 104, 5, ['#ffffff', '#fff6a8'], 1.4);
     if (k === 'left') this.shake(4, 1);
   }
 
   acting_clear() {
-    this.clapT = 1;
+    this.plSay = null;
+    this.clapT = 0; // the カット！ shout takes the clapperboard's place
     this.snd('clapper');
     this.dirSay = { text: pickR(['カット！最高！', 'OK！いい表情！', 'カット！完璧だ！'], this.rng), t: 0 };
     this.later(3, () => this.doShout('カット！', '#ffe680', 26));
@@ -2327,6 +2353,7 @@ class CommandAction extends Minigame {
   }
 
   acting_fail() {
+    this.plSay = null;
     this.ngT = 1;
     this.g.sfx('buzz');
     this.dirSay = { text: 'NG！もう一回！', t: 0 };
@@ -2388,9 +2415,12 @@ class CommandAction extends Minigame {
         c.fillStyle = '#ff3048'; c.fillRect(12, 1, 1, 3); c.fillRect(11, 2, 3, 1);
         break;
       case 'right':
-        c.fillStyle = INK; c.fillRect(4, 5, 3, 3); c.fillRect(9, 5, 3, 3);
-        c.fillStyle = '#ffffff'; c.fillRect(4, 5, 1, 1); c.fillRect(9, 5, 1, 1);
-        c.fillStyle = INK; c.fillRect(7, 8, 2, 2);
+        // wide-open eyes (whites with dot pupils), raised brows, round mouth
+        clearEyes();
+        c.fillStyle = '#ffffff'; c.fillRect(4, 5, 3, 3); c.fillRect(9, 5, 3, 3);
+        c.fillStyle = INK; c.fillRect(5, 6, 1, 1); c.fillRect(10, 6, 1, 1);
+        c.fillRect(4, 4, 3, 1); c.fillRect(9, 4, 3, 1);
+        c.fillRect(7, 8, 2, 2);
         break;
       case 'a':
         clearEyes();
@@ -2428,6 +2458,7 @@ class CommandAction extends Minigame {
       pop: e ? Math.min(1, (e.t + 1) / 3) : 1,
       over: e ? (c) => this.acting_face(c, e.key, e.t, this.look) : null,
     });
+    if (this.plSay) this.acting_say(ctx, this.plSay);
     if (e && e.key === 'a' && e.t < 30) sparkle(ctx, 184, 106, 2 + ((e.t >> 2) % 2), '#ffffff');
     if (e && e.key === 'right' && e.t < 30) {
       ctx.fillStyle = '#ffffff';
@@ -2457,6 +2488,18 @@ class CommandAction extends Minigame {
     roundBox(ctx, x, y, w, 17, '#ffffff');
     rect(ctx, 18, y + 15, 8, 1, '#ffffff');
     text(ctx, str, x + w / 2, y + 3, { size: 10, align: 'center', color: str.startsWith('NG') ? '#d6243a' : '#1a1a28', shadow: null });
+  }
+
+  // The player's line for the current emotion, in a bubble right above their head.
+  acting_say(ctx, s) {
+    const w = Math.max(30, Math.ceil(measure(ctx, s.text, 10)) + 12);
+    const x = 178, y = 56 + (s.t < 4 ? 4 - s.t : 0); // above the ！ shock lines (y 75..87)
+    roundBox(ctx, x, y, w, 16, '#ffffff');
+    rect(ctx, x + 10, y + 15, 4, 2, '#ffffff');
+    rect(ctx, x + 9, y + 15, 1, 3, INK);
+    rect(ctx, x + 10, y + 17, 2, 1, INK);
+    rect(ctx, x + 14, y + 15, 1, 2, INK);
+    text(ctx, s.text, x + w / 2, y + 3, { size: 10, align: 'center', color: '#1a1a28', shadow: null });
   }
 
   acting_pip(ctx, e) {
@@ -2561,11 +2604,12 @@ class CommandAction extends Minigame {
 
   dance_walkLen() { return 10; }
 
+  // The song in order (イントロ → Aメロ → Bメロ → サビ …), always ending on the finish pose.
   dance_call(i) {
     const L = DANCE_CALLS;
     if (i === this.R - 1) return L[L.length - 1];
-    const j = this.R > 2 ? Math.round((i * (L.length - 2)) / (this.R - 2)) : i;
-    return L[Math.min(L.length - 2, j)];
+    if (i < L.length - 1) return L[i];
+    return L[1 + ((i - 1) % (L.length - 2))];
   }
 
   dance_round() { this.screenMode = 'eq'; this.focus = 0; }
@@ -2718,9 +2762,6 @@ class CommandAction extends Minigame {
       HEART.forEach((row, yy) => { for (let xx = 0; xx < 9; xx++) if (row[xx] === 'x') rect(ctx, hx + xx * s, hy + yy * s, s - 1, s - 1, '#ff5d9c'); });
     } else if (mode === 'noise') {
       for (let yy = y0; yy < y0 + h; yy += 3) for (let xx = x0; xx < x0 + w; xx += 3) rect(ctx, xx, yy, 2, 2, hash2(xx, yy, this.pt >> 1) < 0.5 ? '#3a3a4a' : '#1a1a24');
-    } else if (mode === 'thanks') {
-      rect(ctx, x0, y0, w, h, '#1a0a2e');
-      bigText(ctx, 'ありがとう！', 160, 56, 16, (this.pt >> 3) % 2 ? '#ffd23f' : '#ff7eb6');
     } else if (mode === 'flash') {
       rect(ctx, x0, y0, w, h, (this.screenT >> 2) % 2 ? '#ffffff' : '#ff7eb6');
     } else {

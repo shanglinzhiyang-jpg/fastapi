@@ -25,7 +25,7 @@
 
 import { Minigame, registerMinigame, text, rect, sparkle } from '../engine/minigame.js';
 import { measure } from '../engine/draw.js';
-import { charSheet, LOOKS } from '../engine/sprites.js';
+import { charSheet, LOOKS, SKIN } from '../engine/sprites.js';
 import { audio } from '../engine/audio.js';
 import { makeCanvas, mulberry32, clamp, shade, mix, W, H } from '../engine/util.js';
 
@@ -367,7 +367,10 @@ class Rhythm extends Minigame {
     this.laneDefs = LANE_DEFS[this.lanes];
     this.keys = this.laneDefs.map((l) => l.key);
     if (this.doubles) this.keys.push('a');
-    this.sheet = charSheet(this.opts.look || (this.g.state && this.g.state.look) || LOOKS.player);
+    const look = this.opts.look || (this.g.state && this.g.state.look) || LOOKS.player;
+    this.sheet = charSheet(look);
+    this.skinCol = SKIN[look.skin] || look.skin || SKIN.fair;
+    this.topCol = look.top || '#d64161';
     this.performer = (this.g.state && this.g.state.name) || 'ドット';
 
     this.combo = 0;
@@ -743,7 +746,8 @@ class Rhythm extends Minigame {
     this.finT = now;
     const full = this.fullCombo();
     const allPerfect = this.allPerfect();
-    this.popup(allPerfect ? 'オールパーフェクト！' : full ? 'フルコンボ！' : 'フィニッシュ！', W / 2, 92, full ? '#ffd23f' : '#ffffff', 16);
+    // over the (now empty) note highway, clear of the LED wall's THANK YOU / ありがとう！
+    this.popup(allPerfect ? 'オールパーフェクト！' : full ? 'フルコンボ！' : 'フィニッシュ！', HW_CX, 80, full ? '#ffd23f' : '#ffffff', 16);
     if (audio.ctx && !audio.muted) audio.sfx('applause');
     this.cheer(18, 1.0);
     for (let i = 0; i < 70; i++) {
@@ -767,13 +771,14 @@ class Rhythm extends Minigame {
     const score = Math.round(this.liveScore());
     const word = this.style === 'dance' ? 'ダンス' : '歌声';
     const full = this.fullCombo();
-    if (this.allPerfect()) return 'オールパーフェクト！伝説のステージだ！';
-    if (full && score >= 75) return 'フルコンボ！会場が総立ちになった！';
-    if (score >= 90) return `最高の${word}！アンコールが鳴りやまない！`;
-    if (score >= 75) return 'ノリノリのステージ！お客さんも大満足！';
-    if (score >= 55) return 'いいステージだった！リズム感が光ったね。';
-    if (score >= 35) return 'リズムが少しずれちゃったかも…。';
-    return 'リズムに乗りきれなかった…。練習あるのみ！';
+    // two short lines each: the result card wraps at ~17 characters
+    if (this.allPerfect()) return 'オールパーフェクト！\n伝説のステージだ！';
+    if (full && score >= 75) return 'フルコンボ！\n会場が総立ちになった！';
+    if (score >= 90) return `最高の${word}！\nアンコールが鳴りやまない！`;
+    if (score >= 75) return 'ノリノリのステージ！\nお客さんも大満足！';
+    if (score >= 55) return 'いいステージだった！\nリズム感が光ったね。';
+    if (score >= 35) return 'リズムが少しずれちゃったかも…。\nノーツが線に重なる瞬間を狙おう！';
+    return 'リズムに乗りきれなかった…。\n練習あるのみ！';
   }
 
   end(score, comment) {
@@ -943,22 +948,40 @@ class Rhythm extends Minigame {
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(x + 9, PY + 58, 30, 3);
     ctx.drawImage(img, x, y, 48, 60);
-    if (this.style === 'sing' && dir === 'down') {
-      // hand-held microphone held up to the mouth (sprite pixels x3)
-      rect(ctx, x + 36, y + 32, 3, 11, '#24222c');
-      rect(ctx, x + 32, y + 22, 11, 11, '#1a1822');
-      rect(ctx, x + 33, y + 23, 9, 9, '#8a90a6');
-      rect(ctx, x + 33, y + 23, 3, 3, '#e0e4f2');
-      rect(ctx, x + 37, y + 26, 1, 1, '#5a6078');
-      rect(ctx, x + 39, y + 28, 1, 1, '#5a6078');
-      rect(ctx, x + 36, y + 29, 1, 1, '#5a6078');
-    }
+    if (this.style === 'sing' && dir === 'down') this.drawMic(ctx, x, y);
     if (this.sweatT > 0) {
       const sy = y + 4 + (30 - this.sweatT) * 0.3;
       rect(ctx, x + 45, sy, 2, 2, '#9fe3ff');
       rect(ctx, x + 44, sy + 2, 4, 3, '#5fbfff');
       rect(ctx, x + 45, sy + 5, 2, 1, '#5fbfff');
     }
+  }
+
+  // Hand-held microphone raised to the mouth (drawn over the 3x sprite).
+  drawMic(ctx, x, y) {
+    const O = '#14121a';
+    const sleeve = shade(this.topCol, -0.25);
+    // the resting hand on that side disappears into the sleeve: the arm is raised
+    rect(ctx, x + 36, y + 42, 3, 3, sleeve);
+    // bent forearm from the elbow up to the fist
+    rect(ctx, x + 37, y + 36, 8, 9, O);
+    rect(ctx, x + 38, y + 37, 6, 7, this.topCol);
+    rect(ctx, x + 38, y + 42, 6, 2, sleeve);
+    // fist around the handle
+    rect(ctx, x + 32, y + 34, 8, 7, O);
+    rect(ctx, x + 33, y + 35, 6, 5, this.skinCol);
+    rect(ctx, x + 33, y + 37, 6, 1, shade(this.skinCol, -0.18));
+    // silver handle between head and fist
+    rect(ctx, x + 34, y + 31, 4, 4, O);
+    rect(ctx, x + 35, y + 31, 2, 3, '#c8ccda');
+    // round mesh head
+    const hx = x + 36, hy = y + 28;
+    fillCircle(ctx, hx, hy, 5, O);
+    fillCircle(ctx, hx, hy, 4, '#9aa0b6');
+    ctx.fillStyle = '#626884';
+    for (const [dx, dy] of [[-1, -2], [1, -2], [-2, 0], [0, 0], [2, 0], [-1, 2], [1, 2]]) ctx.fillRect(hx + dx, hy + dy, 1, 1);
+    rect(ctx, hx - 3, hy - 3, 2, 1, '#eef0fa');
+    rect(ctx, hx - 4, hy - 2, 1, 2, '#eef0fa');
   }
 
   drawHighway(ctx, now, pulse) {
@@ -1030,15 +1053,23 @@ class Rhythm extends Minigame {
     this.drawJudge(ctx);
     // notes: gold bars first, then arrows
     const ymin = top - 12, ymax = HW_BOT + 12;
-    for (const n of this.notes) {
-      if (!n.bar) continue;
-      if (n.res && n.res !== 'miss') continue;
-      const y = Math.round(this.noteY(n.time, now));
-      if (y < ymin) break;
-      if (y > ymax || y < top - 4 || y > HW_BOT - 4) continue;
-      ctx.globalAlpha = n.res === 'miss' ? 0.3 : 1;
-      this.drawBar(ctx, y);
-      ctx.globalAlpha = 1;
+    if (this.doubles) {
+      // gold bars (and their A tabs outside the rails) enter from under the truss like the notes
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x0 - 16, top, w + 32, hh);
+      ctx.clip();
+      for (const n of this.notes) {
+        if (!n.bar) continue;
+        if (n.res && n.res !== 'miss') continue;
+        const y = Math.round(this.noteY(n.time, now));
+        if (y < ymin) break;
+        if (y > HW_BOT - 4) continue;
+        ctx.globalAlpha = n.res === 'miss' ? 0.3 : 1;
+        this.drawBar(ctx, y);
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
     }
     ctx.save();
     ctx.beginPath();
