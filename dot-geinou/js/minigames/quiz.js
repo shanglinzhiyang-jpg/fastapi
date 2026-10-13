@@ -289,7 +289,7 @@ function pickFromBank(cats, count, difficulty, rng) {
 // ------------------------------------------------------------------ the minigame
 class Quiz extends Minigame {
   static title = '4択クイズ';
-  static howto = ['4つの答えから正解を選ぼう！', '十字キーで選んで Aで回答', 'Bでヒント（2択にしぼる）', '早く正解するほど高得点！'];
+  static howto = ['4つの答えから正解を選ぼう！', '十字キーで選んで Aで答える', 'Bでヒント（2択にしぼる）', '早く正解するほど高得点！'];
   static skill = 'talk';
   static bgm = 'quiz_show';
 
