@@ -26,9 +26,9 @@ const who = (n) => ({ name: n.name, look: n.look });
 const say = (g, n, t) => g.say(t, who(n));
 const ask = (g, n, t, choices) => g.ask(t, choices, who(n));
 const tier1 = (g) => !!g.state.agency || g.state.fame >= 30;
+const TIER1 = { anyOf: [{ agency: true }, { fame: 30 }] }; // same rule as tier1(), for g.job
 const npc = (id, x, y, dir, look, name, extra = {}) => ({ type: 'npc', id, x, y, dir, look, name, ...extra });
 
-// Menu helper: items = [{ label, run }], the last item is the cancel entry (run: null).
 // For on-enter cutscenes: waits a moment, then tells whether this is still the same
 // room load and the cutscene has not been shown yet (sets the flag when it may play).
 async function firstEnter(g, flag) {
@@ -40,6 +40,7 @@ async function firstEnter(g, flag) {
   return true;
 }
 
+// Menu helper: items = [{ label, run }], the last item is the cancel entry (run: null).
 async function menu(g, n, prompt, items) {
   const i = await g.ask(prompt, items.map((it) => it.label), who(n));
   const it = items[i];
@@ -472,7 +473,7 @@ const SENTO_JOBS = {
     id: 'sento_yose', title: '銭湯寄席', client: OKAMI.name, clientLook: OKAMI.look,
     desc: '高座で、常連さんを笑わせよう！', stamina: 20,
     minigame: 'tsukkomi', opts: { difficulty: 2, lines: YOSE_LINES, rounds: 8, partner: 'ご隠居', partnerLook: GOINKYO.look },
-    pay: 3500, fame: 12, skill: 'warai', gain: 2,
+    pay: 3500, fame: 12, skill: 'warai', gain: 2, requires: TIER1,
   },
   poster: {
     id: 'sento_poster', title: '銭湯PRポスター撮影', client: OKAMI.name, clientLook: OKAMI.look,
@@ -583,15 +584,15 @@ async function taishiJob(g) {
 
 async function okamiChat(g) {
   const lines = ['ここは「ドットの湯」。\n町の人の疲れを、毎日お湯で流してるのさ。'];
-  if (!tier1(g)) lines.push('そうそう、うちでは毎月「銭湯寄席」をやってるの。\n事務所に入るか、ちょっと名前が売れたら\n出てもらおうかね！');
+  if (!tier1(g)) lines.push('そうそう、うちでは「銭湯寄席」をやってるの。\n事務所に入るか、ちょっと名前が売れたら\n出てもらおうかね！');
   else if (g.state.fame < 250) lines.push('銭湯組合で、ポスターのモデルを探してるんだって。\nもっと有名になったら、あんたにお願いしようかね。');
   else lines.push('あんたのおかげで、うちも有名になってきたよ。\nありがたいねえ。');
   lines.push('お風呂でしっかり温まって、\n家でぐっすり寝る。これが一番の体力回復だよ。');
   await say(g, OKAMI, lines);
 }
 
+// The autograph board only appears on the wall once it has been signed (flag set in the fade).
 async function signEvent(g) {
-  g.setFlag('sento_sign_done');
   const p = g.map.player;
   await g.emote('sento_okami', '!');
   await say(g, OKAMI, ['ねえ、{name}ちゃん。\nひとつ、お願いがあるんだけど…', 'うちの銭湯に、サインを飾らせてもらえないかい？']);
@@ -605,6 +606,7 @@ async function signEvent(g) {
     if (g.npc('sento_geinin')) await say(g, GEININ, '…くっそー、オレもいつか書いてやる！\nでも今日は、素直におめでとう！');
   }
   await g.fadeOut();
+  g.setFlag('sento_sign_done');
   g.sfx('applause');
   await g.wait(500);
   await g.fadeIn();
@@ -621,7 +623,8 @@ async function talkOkami(g, n) {
     : f >= 250 ? 'あら、テレビで見たよ！\n常連さんたちも自慢してるんだから。'
       : f >= 30 ? 'おや、{name}ちゃん！\n最近ちょっと名前を聞くようになったね。'
         : 'いらっしゃい！今日もおつかれさん。';
-  const bathLabel = today(g, 'sento_bath_day') ? 'お風呂（入浴済み）' : `お風呂（${bathPrice(g) ? '¥500' : '無料'}）`;
+  const bathLabel = today(g, 'sento_bath_day') ? 'お風呂（入浴済み）'
+    : today(g, 'sento_paid_day') ? 'お風呂（支払い済み）' : `お風呂（${bathPrice(g) ? '¥500' : '無料'}）`;
   const items = [
     { label: bathLabel, run: () => payBath(g) },
     { label: '牛乳を買う', run: () => milkShop(g) },
@@ -796,7 +799,7 @@ registerPlace({
         { type: 'prop', x: 6, y: 1, w: 4, h: 1, solid: false, draw: drawSentoSign },
         {
           type: 'prop', x: 2, y: 5, w: 2, h: 1,
-          text: ['小さな高座だ。紫の座布団が敷いてある。', 'めくりに「ドットの湯 寄席」と書いてある。\n毎月、ここで寄席が開かれるらしい。'],
+          text: ['小さな高座だ。紫の座布団が敷いてある。', 'めくりに「ドットの湯 寄席」と書いてある。\nここで、ときどき寄席が開かれるらしい。'],
           draw(ctx, sx, sy) {
             shadowEllipse(ctx, sx + 16, sy + 15, 15, 1);
             R(ctx, sx + 1, sy + 4, 30, 4, '#c99660'); R(ctx, sx + 1, sy + 4, 30, 1, '#e0b47c');
@@ -893,7 +896,7 @@ registerPlace({
       entities: [
         bather('sento_goinkyo', 3, 4, GOINKYO, '#ffffff', async (g, e) => {
           await g.emote(e.id, '♪');
-          const lines = ['（ふんふふ〜ん♪）\nおう、若いの。熱いのは平気かい？', 'うしろの富士山はな、「ペンキ絵」ってんだ。\n職人さんが、休みの日に一日で描き上げるんだとさ。'];
+          const lines = ['（ふんふふ〜ん♪）\nおう、若いの。熱いのは平気かい？', 'うしろの富士山はな、「ペンキ絵」ってんだ。\n銭湯がお休みの日に、職人さんが\n一日で描き上げるんだとさ。'];
           if (g.state.fame >= 250) lines.push('…ん？おまえさん、どこかで見た顔だな。\nそうだ、テレビだ！長生きはするもんだ！');
           else lines.push('昔このへんに住んでた売れない役者がな、\n今じゃ時代劇の主役だそうだ。\n人生、わからんもんだよ。');
           lines.push('芸の道は体が資本だ。\nよく食って、よく寝て、よく風呂に入るこった！');
@@ -916,7 +919,7 @@ registerPlace({
         npc('sento_waka', 7, 7, 'left', WAKA.look, WAKA.name, {
           talk: async (g, n) => {
             const lines = ['あ、どうも！おかみさんの息子です。\n毎朝、デッキブラシでピカピカにしてます！', 'お湯はちょっと熱めの42度。\n入る前に、かけ湯をしてくださいね。'];
-            if (g.state.fame < 250) lines.push('銭湯組合の人が、ポスターのモデルを探してるんです。\n名前が売れてきたら、きっと声がかかりますよ！');
+            if (g.state.fame < 250) lines.push('銭湯組合の人が、ポスターのモデルを\n探してるんです。名前が売れてきたら、\nきっと声がかかりますよ！');
             else if (!g.flag('sento_poster_done')) lines.push('そうだ！銭湯のポスターのモデルの件、\nおかみさんに話してみてください！');
             else lines.push('ポスター、評判いいですよ！\n見た人が、銭湯に来てくれるんです。');
             await say(g, n, lines);
@@ -1147,7 +1150,7 @@ const HOTEL_JOBS = {
     id: 'hotel_yokyo', title: '会社の宴会で余興', client: BANQUET.name, clientLook: BANQUET.look,
     desc: '社員旅行の宴会で、新喜劇風のコント！', stamina: 20,
     minigame: 'zukko', opts: { difficulty: 2 },
-    pay: 4000, fame: 15, skill: 'warai', gain: 2,
+    pay: 4000, fame: 15, skill: 'warai', gain: 2, requires: TIER1,
   },
   wedding: {
     id: 'hotel_wedding', title: '結婚披露宴の司会', client: BANQUET.name, clientLook: BANQUET.look,
@@ -1205,7 +1208,7 @@ async function talkFront(g) {
   if (i === 1) { await frontChat(g); return; }
   if (i !== 0) return;
   if (hotelFree(g)) {
-    await say(g, FRONT, 'スターの{name}様には、スイートルームを\nご招待でご用意いたしました！');
+    await say(g, FRONT, ['いつもごひいきの{name}様は、\nご宿泊をご招待とさせていただきます！', 'いちばん眺めのいいお部屋を\nご用意いたしました。']);
   } else {
     if (!g.spend(HOTEL_PRICE)) {
       await say(g, FRONT, ['申し訳ございません。\nご宿泊は、1泊¥3,000でございます…。', 'またのお越しを、お待ちしております。']);
@@ -1280,7 +1283,7 @@ async function talkBiz(g, n) {
 async function hotelBed(g) {
   if (g.flag('hotel_stay') !== g.state.day) {
     if (g.flag('hotel_slept') === g.state.day) { await g.say('ぐっすり眠れた！\nベッドメイクは、ホテルの人にお任せしよう。'); return; }
-    await g.say('ふかふかのツインベッドだ。\n泊まるときは、1階のフロントでチェックインしよう。');
+    await g.say('ふかふかのツインベッドだ。\n泊まるときは、1階のフロントで\nチェックインしよう。');
     return;
   }
   const i = await g.ask('ふかふかのツインベッドだ。\n眠る？（次の日になります）', ['眠る', 'まだ起きている']);
@@ -1303,8 +1306,9 @@ async function roomTv(g) {
   if (!today(g, 'hotel_tv_day')) {
     g.setFlag('hotel_tv_day', g.state.day);
     await g.say(['テレビをつけると、深夜のお笑い番組をやっていた。', 'ベテラン芸人さんの絶妙な間…\nメモメモ…勉強になる！']);
-    g.addSkill('warai', 1);
-    await g.say('お笑いが1上がった！');
+    const before = g.state.skills.warai;
+    g.addSkill('warai', 1, true);
+    if (g.state.skills.warai > before) { g.sfx('good'); await g.say('お笑いが1上がった！'); }
   } else {
     await g.say(['通販番組をやっている。', '「今ならもう1本ついてくる！」…\nそろそろ寝よう。']);
   }
@@ -1618,7 +1622,7 @@ const TAKO_JOBS = {
     id: 'takoyaki_matsuri', title: '商店街の祭りの司会', client: TAISHO.name, clientLook: TAISHO.look,
     desc: 'なにわ商店街の夏祭りを盛り上げよう！', stamina: 20,
     minigame: 'talk', opts: { difficulty: 2, topic: '商店街の夏祭り', scenes: MATSURI_SCENES },
-    pay: 4000, fame: 15, skill: 'talk', gain: 2,
+    pay: 4000, fame: 15, skill: 'talk', gain: 2, requires: TIER1,
   },
   report: {
     id: 'takoyaki_report', title: 'グルメ番組の食レポ', client: TAISHO.name, clientLook: TAISHO.look,
@@ -1693,8 +1697,8 @@ async function takoJob(g, job, after) {
   }
 }
 
+// The スター焼き poster appears at the reveal (flag set together with the fanfare).
 async function starEvent(g) {
-  g.setFlag('takoyaki_star_done');
   const p = g.map.player;
   await g.emote('takoyaki_taisho', '!');
   await say(g, TAISHO, ['おお、{name}！ちょうどええとこに来た！', 'ちょっと待っとき！']);
@@ -1703,6 +1707,7 @@ async function starEvent(g) {
   await g.emote('takoyaki_senpai', '♪');
   await g.moveNpc('takoyaki_taisho', 'face:down');
   await say(g, TAISHO, ['{name}の出世を祝うて、新メニューや！', '名付けて…「スター焼き」！\n金ごまキラッキラ、一番星の味やで！']);
+  g.setFlag('takoyaki_star_done');
   g.sfx('fanfare');
   await g.emote('player', '!');
   const ob = g.npc('takoyaki_obachan');
@@ -1752,7 +1757,7 @@ async function talkTaisho(g, n) {
 async function talkObachan(g, n) {
   if (today(g, 'takoyaki_boke_day')) { await say(g, n, ['また明日も、おもろいこと聞かせてや〜！', '大阪ではな、ふられたら返す！\nこれ、基本やで。']); return; }
   await say(g, n, g.state.fame >= 250 ? 'あんた、テレビに出とった子やろ！？' : 'あら、見ない顔やね！\nあんた、もしかして芸人さん？');
-  const i = await ask(g, n, 'ほな、なんかおもろいこと言うてみ！', ['タコだけに、タコ〜', 'たこの中身は私です', '急に言われても…']);
+  const i = await ask(g, n, 'ほな、なんかおもろいこと言うてみ！', ['タコだけに、タコ〜', 'たこ焼きの具は私です', '急に言われても…']);
   g.setFlag('takoyaki_boke_day', g.state.day);
   if (i === 0) {
     g.sfx('buzz');
@@ -1824,7 +1829,7 @@ registerPlace({
       entities: [
         { type: 'prop', x: 6, y: 1, w: 4, h: 1, solid: false, draw: drawTakoSign },
         {
-          type: 'prop', x: 3, y: 1, w: 1, h: 1, solid: false, cond: (g) => !!g.flag('takoyaki_star_done'),
+          type: 'prop', x: 4, y: 1, w: 1, h: 1, solid: false, cond: (g) => !!g.flag('takoyaki_star_done'),
           draw(ctx, sx, sy, g) {
             R(ctx, sx + 4, sy + 2, 8, 11, '#ffd23f'); R(ctx, sx + 5, sy + 3, 6, 9, '#fff6a8');
             const tw = Math.floor(g.frame / 20) % 2;

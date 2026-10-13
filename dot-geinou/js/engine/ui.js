@@ -88,11 +88,12 @@ export class MessageScene {
     const by = this.top ? 4 : BOX.y;
     const name = this.opts.name;
     if (name) {
-      const face = this.opts.look ? 18 : 0;
+      const face = this.opts.look || this.opts.face ? 18 : 0;
       const nw = Math.max(48, measure(ctx, name, 12) + 18 + face);
       const ny = this.top ? by + BOX.h - 2 : by - 18;
       panel(ctx, BOX.x, ny, nw, 20, { bg: this.opts.nameBg || '#2a3a7a' });
-      if (this.opts.look) drawFace(ctx, this.opts.look, BOX.x + 5, ny + 4, 1);
+      if (this.opts.face) this.opts.face(ctx, BOX.x + 5, ny + 4);
+      else if (this.opts.look) drawFace(ctx, this.opts.look, BOX.x + 5, ny + 4, 1);
       text(ctx, name, BOX.x + 8 + face, ny + 4, { color: this.opts.nameColor || COLORS.accent });
     }
     panel(ctx, BOX.x, by, BOX.w, BOX.h);
@@ -159,7 +160,8 @@ export class ListScene {
     if (g.auto) {
       g.auto.lists = (g.auto.lists || 0) + 1;
       g.pop(this);
-      this.resolve(n && g.auto.lists % 3 === 1 ? 0 : this.cancel);
+      const pick = typeof g.auto.list === 'function' ? g.auto.list(this.items) : (n && g.auto.lists % 3 === 1 ? 0 : this.cancel);
+      this.resolve(pick);
       return;
     }
     if (n && inp.repeat('up')) { this.idx = (this.idx + n - 1) % n; audio.sfx('cursor'); }

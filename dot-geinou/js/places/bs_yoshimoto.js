@@ -18,7 +18,7 @@ import { LOOKS, charSheet, drawChar } from '../engine/sprites.js';
 import { defineTile, tileImage, R, P, disc, shadowEllipse, pix } from '../engine/tiles.js';
 import { registerItem } from '../engine/state.js';
 import { text, panel } from '../engine/draw.js';
-import { W, H, fmtMoney, pick, shuffle, makeCanvas } from '../engine/util.js';
+import { W, H, OPP, fmtMoney, pick, shuffle, makeCanvas } from '../engine/util.js';
 
 const PID = 'bs_yoshimoto';
 const T = (k) => `${PID}_${k}`;
@@ -471,6 +471,15 @@ function mascotImg(dir, wave, step) {
 }
 // e.sprite(ctx, x, y, g, e): x,y = screen position of the tile the mascot stands on.
 function drawMascot(ctx, x, y, g, e) {
+  if (e.fallen) {
+    // lying on its side after a slapstick tumble (90° turns keep the pixels crisp)
+    ctx.save();
+    ctx.translate(Math.round(x) + 8, Math.round(y) + 7);
+    ctx.rotate(e.fallen === 'left' ? -Math.PI / 2 : Math.PI / 2);
+    ctx.drawImage(mascotImg('down', false, 0), -11, -10);
+    ctx.restore();
+    return;
+  }
   const moving = !!e.moving;
   const step = moving ? [1, 0, 2, 0][Math.floor((e.anim || 0) / 8) % 4] : 0;
   const seed = (e.home ? e.home.x * 7 : 0);
@@ -628,7 +637,7 @@ const JOBS = {
   quiz: {
     label: 'ご当地クイズの解答者', mode: 'quiz',
     info: '『ニッポンご当地クイズ』に解答者で出演！\n事務所所属か★30〜／体力-20',
-    def: { id: 'bs_yoshimoto_quiz', title: 'ご当地クイズ番組の解答者', desc: '全国のご当地問題に答える人気番組！', stamina: 20, minigame: 'quiz', opts: { category: 'japan', difficulty: 2, show: 'ニッポンご当地クイズ' }, pay: 4500, fame: 18, skill: 'talk', gain: 2 },
+    def: { id: 'bs_yoshimoto_quiz', title: 'ご当地クイズ番組の解答者', desc: '全国のご当地問題に答える人気番組！', stamina: 20, minigame: 'quiz', opts: { category: 'japan', difficulty: 2, show: 'ニッポンご当地クイズ' }, pay: 4500, fame: 18, skill: 'talk', gain: 2, requires: { anyOf: [{ agency: true }, { fame: 30 }] } },
   },
   loke: {
     label: 'ロケ番組のリポーター', mode: 'loke',
@@ -707,11 +716,12 @@ function hintFor(g, byProducer = false) {
     return [
       '番組観覧なら、だれでも無料で参加できます！\nロビーの観覧受付のADさんへどうぞ。',
       '事務所に所属するか★30になったら、\nご当地クイズ番組の解答者に出られますよ。',
+      '事務所のオーディションは、おとなりの\nよしもと東京本部などで受けられます。\n街の事務所を回ってみてくださいね！',
     ];
   }
   if (st.fame < 250) return ['スタジオのフロアディレクターに声をかけて、\nクイズ番組の解答者に出てみよう！', '★250になったら、副調整室の\nディレクターがロケを任せてくれるかも。'];
   if (st.fame < 1000) return '副調整室のディレクターに頼んで、\nロケ番組で全国の魅力を伝えよう！\n★1000になったら、生放送のMCも夢じゃない！';
-  if (st.fame < 2000) return '生放送の情報番組MCで、原稿読みの腕を磨こう！\n★2000になったら、特番の総合司会のお話が来るはず！';
+  if (st.fame < 2000) return '生放送の情報番組MCで、原稿読みの腕を磨こう！\n★2000になれば、特番の総合司会も夢じゃない！';
   if (byProducer) return ['特番の総合司会、いつでもお任せしたいです！\n「お仕事リスト」からどうぞ。', '国民的スター（★4000）まで、\nもうひと息ですよ！'];
   return '特番の総合司会は、副調整室の\nプロデューサーから、いつでも！\n国民的スター（★4000）まで、もうひと息！';
 }
@@ -999,7 +1009,7 @@ async function runLoke(g, who) {
   try {
     g.sfx('chime');
     await g.say('ロケバスにゆられて、ほっくり町にやってきた！\n空気がおいしい！');
-    await g.say(['ようこそ、ほっくり町へ！観光課の甘井です。', '今日は町のいいところ、たっぷり紹介してくださいね！'], WHO.amai);
+    await g.say(['ようこそ、ほっくり町へ！観光課の甘井です。', '町のいいところ、たっぷり紹介してくださいね！'], WHO.amai);
     await g.say('いらっしゃいだいも〜！\nほっくりんが案内するいも〜！', WHO.hokkurin);
     await g.say('はい、カメラ回りました！\nリポート、どうぞ！', WHO.director);
     res = await g.job({ ...j.def, confirm: false });
@@ -1038,6 +1048,8 @@ const AUD_QUIZ = [
 async function kanranMascot(g) {
   await g.say('今日のゲストは、ほっくり町から\nはるばる来てくれた、この方！', WHO.mc);
   g.sfx('drum');
+  g.placeNpc('bsy_st_hok', 3, 3, 'right');
+  g.showNpc('bsy_st_hok', true);
   await g.walkNpcTo('bsy_st_hok', 7, 3, 1.5);
   await g.moveNpc('bsy_st_hok', 'face:down');
   await g.say('ほっくりんだいも〜！\nみんな、よろしくいも〜！', WHO.hokkurin);
@@ -1050,10 +1062,15 @@ async function kanranMascot(g) {
   }
   await g.moveNpc('bsy_st_hok', 'right left', 1.5);
   await g.emote('bsy_st_hok', '♪', 30);
+  const hok = g.npc('bsy_st_hok');
   g.sfx('zukko');
+  if (hok) hok.fallen = 'right';
   g.shake(12, 2);
   await g.emote('bsy_st_hok', '…', 40);
   await g.say('だ、大丈夫ですか！？', WHO.coh);
+  if (hok) hok.fallen = false;
+  g.sfx('hit');
+  await g.emote('bsy_st_hok', '!', 30);
   await g.say('ほっくり町の坂道は、\nもっと急だいも〜！', WHO.hokkurin);
   g.sfx('laugh');
   await crowd(g, 'w', 50);
@@ -1086,6 +1103,7 @@ async function kanranEvent(g, who) {
   }
   const origin = await toStudio(g, 'kanran', SPOT.kanran);
   try {
+    g.showNpc('bsy_st_hok', false); // waits in the wings until the MC calls it on
     g.setFlag('bs_yoshimoto_kanran_day', st.day);
     await g.say('観覧のみなさん、本日はようこそ！\n本番前に、拍手の練習をしまーす！', WHO.fd);
     await g.say('大きな拍手、お願いしまーす！\nせーの！');
@@ -1210,6 +1228,7 @@ async function hokkurinTalk(g, e) {
   }
   const i = await g.ask(st.fame >= 250 && !st.jobs.bs_yoshimoto_loke ? 'いつかほっくり町に、ロケに来てほしいいも〜！\n（副調整室のディレクターに頼んでみて！）' : 'ほっくりんだいも〜！\nなにしてあそぶいも？', ['ほっくり体操', '町のこと', 'クイズ！', 'またね'], who);
   if (i === 0) {
+    const myDir = g.map.player.dir;
     await g.say('いっしょにやるいも！\nいち、に、さん、ほっくり！', who);
     for (const [m, p] of [['face:left', 'left'], ['face:right', 'right'], ['face:left', 'left'], ['face:right', 'right']]) {
       g.sfx('snare');
@@ -1217,8 +1236,9 @@ async function hokkurinTalk(g, e) {
       g.facePlayer(p);
       await g.wait(160);
     }
-    if (e) e.dir = 'down';
-    g.facePlayer('up');
+    // face each other again
+    g.facePlayer(myDir);
+    if (e) e.dir = OPP[myDir];
     await Promise.all([g.emote('bsy_hokkurin', '♪'), g.emote('player', '♪')]);
     if (!today(g, 'bs_yoshimoto_taiso_day')) {
       g.setFlag('bs_yoshimoto_taiso_day', st.day);
@@ -1259,8 +1279,8 @@ async function amaiTalk(g) {
   const who = WHO.amai;
   const i = await g.ask('ほっくり町 観光課の甘井です！\n町の特産品、いかがですか？', ['買い物する', '町のこと', 'またね'], who);
   if (i === 0) {
-    await g.shop(['bs_yoshimoto_imo', 'bs_yoshimoto_hoshiimo'], { title: 'ほっくり町 物産ブース', greeting: '焼きいもも干しいもも、町の自慢です！' });
-    await g.say('ありがとうございます！\nほっくり町を、よろしくお願いします！', who);
+    const bought = await g.shop(['bs_yoshimoto_imo', 'bs_yoshimoto_hoshiimo'], { title: 'ほっくり町 物産ブース', greeting: '焼きいもも干しいもも、町の自慢です！' });
+    await g.say(bought ? 'ありがとうございます！\nほっくり町を、よろしくお願いします！' : 'またいつでも、のぞいてくださいね！', who);
   } else if (i === 1) {
     await g.say([
       'ほっくり町は、山あいの小さな町です。\n人口は少ないけれど、元気いっぱい！',
@@ -1274,7 +1294,8 @@ async function amaiTalk(g) {
 
 async function guardTalk(g) {
   const st = g.state;
-  if (st.fame >= 1000) await g.say(['{name}さん！今朝の生放送、見ましたよ！', '…あ、ここだけの話、うちの家族みんなファンなんです。'], WHO.guard);
+  if (st.jobs.bs_yoshimoto_live) await g.say(['{name}さん！今朝の生放送、見ましたよ！', '…ここだけの話、家族みんなファンなんです。'], WHO.guard);
+  else if (st.fame >= 1000) await g.say(['{name}さん！テレビでよく見てますよ！', '生放送のMCも、きっと似合いますよ。\n副調整室のディレクターに聞いてみては？'], WHO.guard);
   else if (st.agency) await g.say(['おつかれさまです！', 'スタジオは右手の扉からどうぞ。\n収録中は、ON AIRのランプが目印です。'], WHO.guard);
   else await g.say(['こんにちは！ロビーはどなたでも入れますよ。', '番組観覧なら、右のADさんが受付中です。'], WHO.guard);
 }
@@ -1312,7 +1333,10 @@ async function fdTalk(g) {
 async function mcTalk(g) {
   const st = g.state;
   if (st.fame >= 1000) {
-    await g.say(['おお、{name}くん。生放送のMC、板についてきたね。', 'MCのコツはね、主役はいつも出演者と視聴者。\nわたしたちは、その橋わたしなんだよ。'], WHO.mc);
+    await g.say([
+      st.jobs.bs_yoshimoto_live ? 'おお、{name}くん。\n生放送のMC、板についてきたね。' : 'おお、{name}くん。\nそろそろ生放送のMCもいけそうだね。',
+      'MCのコツはね、主役はいつも出演者と視聴者。\nわたしたちは、その橋わたしなんだよ。',
+    ], WHO.mc);
   } else {
     await g.say([
       '司会の陽向です。ただいまリハーサル中。',
@@ -1359,10 +1383,12 @@ async function producerTalk(g) {
     await g.say([
       'はじめまして、プロデューサーです。\n番組の企画と、キャスティングを担当しています。',
       'BSよしもとは、全国の地域とお笑いをつなぐ局。\n出演者さんの「伝える力」が何より大事なんです。',
-      '{name}さんにできそうなお仕事は、\nこの「お仕事リスト」でいつでも確認してくださいね。',
+      '{name}さんにできそうなお仕事は、\nこの「お仕事リスト」で確認してくださいね。',
     ], who);
   }
-  const greet = st.fame >= 2000 ? '{name}さん！特番の総合司会、\nいつでもお願いしたいくらいです！' : st.fame >= 1000 ? '{name}さん、生放送の評判いいですよ！' : st.fame >= 250 ? '{name}さん、ロケのお話が来ていますよ。' : 'いまの{name}さんにできるお仕事を\nいっしょに探しましょう。';
+  const greet = st.fame >= 2000 ? '{name}さん！特番の総合司会、\nいつでもお願いしたいくらいです！'
+    : st.fame >= 1000 ? (st.jobs.bs_yoshimoto_live ? '{name}さん、生放送の評判いいですよ！' : '{name}さんに、生放送のMCを\nお願いしたいと思っていたんです！')
+      : st.fame >= 250 ? '{name}さん、ロケのお話が来ていますよ。' : 'いまの{name}さんにできるお仕事を\nいっしょに探しましょう。';
   const i = await g.ask(greet, ['お仕事リスト', '相談する', 'またね'], who);
   if (i === 0) await jobBoard(g, who);
   else if (i === 1) await g.say(hintFor(g, true), who);
@@ -1582,8 +1608,9 @@ function tinyText(ctx, str, x, y, col) {
   [...str].forEach((ch, i) => (GLYPH[ch] || []).forEach((row, yy) => [...row].forEach((b, xx) => { if (b === '1') box(ctx, x + i * 4 + xx, y + yy, 1, 1, col); })));
 }
 // Control room PGM / PVW monitors.
+// (PGM's hit box stops at tile 6 so tile 7 belongs to PVW only)
 const bigMon = (x, label, col, kind) => ({
-  type: 'prop', x, y: 1.1, w: 2.3, h: 1.7,
+  type: 'prop', x, y: 1.1, w: label === 'PGM' ? 1.9 : 2.3, h: 1.7,
   text: label === 'PGM' ? '「PGM」のモニター。\nいま、まさに放送されている映像だ。' : '「PVW」のモニター。\n次に切りかえる映像を、ここで確認するらしい。',
   draw(ctx, sx, sy, g) {
     const w = 34, h = 21;
@@ -1844,8 +1871,8 @@ registerPlace({
         g.setFlag('bs_yoshimoto_sub_first');
         await g.wait(200);
         await g.emote('bsy_tk', '!');
-        await g.say('あっ、お客さん？ここは副調整室、通称「サブ」です。\n番組の映像と音を、ここで仕上げてるんですよ！', WHO.tk);
-        await g.say('お仕事の相談なら、ソファのそばのプロデューサーへ。\nロケや生放送は、まんなかのディレクターが担当です。', WHO.tk);
+        await g.say('あっ、お客さん？\nここは副調整室、通称「サブ」です。\n番組の映像と音を、ここで仕上げてます！', WHO.tk);
+        await g.say(['お仕事の相談なら、\nソファのそばのプロデューサーへ。', 'ロケや生放送は、\nまんなかのディレクターが担当です。'], WHO.tk);
       },
     },
 
@@ -1880,7 +1907,7 @@ registerPlace({
         npc('bsy_senpai', 3, 4, 'up', WHO.senpai, { talk: posted('up', senpaiTalk) }),
         npc('bsy_make', 4, 4, 'left', WHO.make, { talk: posted('left', makeTalk) }),
         npc('bsy_geinin', 1, 7, 'right', WHO.geinin, {
-          talk: posted('right', lines(WHO.geinin, ['ロケ弁、うまっ！\n…あ、どうも。若手芸人っす。', 'BSよしもとのロケって、\n全国の名物が食べられるんすよ。\n役得っすね〜！', '★250くらいになったら、ロケに呼ばれるらしいっす。\nオレもはよ行きたい！'])),
+          talk: posted('right', lines(WHO.geinin, ['ロケ弁、うまっ！\n…あ、どうも。若手芸人っす。', 'BSよしもとのロケって、\n全国の名物が食べられるんすよ。\n役得っすね〜！', '★250くらいで、ロケに呼ばれるらしいっす。\nオレもはよ行きたい！'])),
         }),
         npc('bsy_stylist', 11, 4, 'right', WHO.stylist, {
           talk: posted('right', lines(WHO.stylist, ['スタイリストよ。衣装の準備はおまかせ！', 'ロケなら動きやすい服、生放送ならきちんと感。\n番組にあわせて衣装を選ぶのも大事なの。'])),

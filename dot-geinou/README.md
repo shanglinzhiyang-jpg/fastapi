@@ -125,7 +125,7 @@ registerPlace({
 
 | API | 説明 |
 | --- | --- |
-| `await g.say(text \| [pages], { name, look })` | メッセージ。`{name}` はプレイヤー名、`\n` で改行 |
+| `await g.say(text \| [pages], { name, look, face, top })` | メッセージ。`{name}` はプレイヤー名、`\n` で改行。`face(ctx, x, y)` で 16x12 の顔を自前で描ける |
 | `await g.ask(text, ['はい', 'いいえ'], { name, look, cancel })` | 選択肢。選んだ index を返す（B は最後の選択肢） |
 | `await g.list({ title, items, x, y, w })` | リスト選択（キャンセルで -1） |
 | `await g.job({...})` | お仕事（下記）。結果 or null |

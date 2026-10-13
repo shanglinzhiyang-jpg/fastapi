@@ -331,6 +331,8 @@ export class Game {
   emote(target, kind = '!', frames = 50) {
     const e = target === 'player' ? this.map.player : this.npc(target);
     if (!e) return Promise.resolve();
+    // a new emote replaces the old one: let anything waiting on the old one continue
+    if (e.emote && e.emote.resolve) e.emote.resolve();
     return new Promise((resolve) => { e.emote = { kind, t: 0, life: frames, resolve }; });
   }
 
