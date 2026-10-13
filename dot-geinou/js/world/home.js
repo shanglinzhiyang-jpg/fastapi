@@ -89,10 +89,12 @@ registerPlace({
           run: async (g) => {
             const i = await g.ask('キッチンだ。自炊する？（¥100・体力+15）', ['つくる', 'やめておく']);
             if (i !== 0) return;
+            if (g.mealsLeft() <= 0) { await g.say('おなかいっぱいだ…。\n今日はもう食べられない。'); return; }
+            if (g.state.stamina >= g.state.maxStamina) { await g.say('体力は満タンだ。\nまたおなかがすいたら作ろう。'); return; }
             if (!g.spend(100)) { await g.say('食材を買うお金もない…'); return; }
-            g.heal(15);
+            const got = g.eat(15, { silent: true });
             g.sfx('good');
-            await g.say('もやし炒めを作って食べた！体力が15回復した。');
+            await g.say(`もやし炒めを作って食べた！体力が${got}回復した。`);
           },
         },
       ],

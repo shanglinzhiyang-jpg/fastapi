@@ -17,7 +17,7 @@
 import { registerPlace } from '../engine/map.js';
 import { LOOKS, charSheet, drawFace } from '../engine/sprites.js';
 import { defineTile, R, P, disc, shadowEllipse } from '../engine/tiles.js';
-import { registerItem } from '../engine/state.js';
+import { registerItem, payText } from '../engine/state.js';
 import { registerSong } from '../engine/audio.js';
 import { text, panel } from '../engine/draw.js';
 import { W, H, fmtMoney, pick } from '../engine/util.js';
@@ -770,7 +770,7 @@ function lockLabel(g, j) {
   if (r.fame && g.state.fame < r.fame) return `★${r.fame}〜`;
   return null;
 }
-const confirmText = (def) => `${def.desc}\n「${def.title}」\nギャラ ${fmtMoney(def.pay)}〜／体力 -${def.stamina}`;
+const confirmText = (def) => `${def.desc}\n「${def.title}」\n${payText(def.pay)}／体力 -${def.stamina}`;
 
 // ------------------------------------------------------------------ confetti & celebration card
 const CONFETTI = [GOLD, RED, '#ff7eb6', '#5fd7ff', '#5ee07a', '#ffffff'];
@@ -1191,7 +1191,7 @@ async function zachoTalk(g) {
 async function jobBoard(g, who) {
   const items = JOBS.map((j) => {
     const lock = lockLabel(g, j);
-    return { label: j.label, right: lock || fmtMoney(j.def.pay) + '〜', disabled: !!lock };
+    return { label: j.label, right: lock || '目安' + fmtMoney(j.def.pay), disabled: !!lock };
   });
   const k = await g.list({ title: '新喜劇 お仕事リスト', items, x: 34, y: 24, w: 252, describe: (idx) => JOBS[idx] && JOBS[idx].info });
   if (k < 0 || !JOBS[k]) return;

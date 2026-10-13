@@ -1647,7 +1647,7 @@ async function takoShop(g) {
 
 async function baito(g) {
   const job = TAKO_JOBS.baito;
-  const i = await ask(g, TAISHO, `手伝ってくれるんか？おおきに！\n「${job.title}」\nギャラ ¥900〜／体力 -${job.stamina}`, ['やる！', 'やめておく']);
+  const i = await ask(g, TAISHO, `手伝ってくれるんか？おおきに！\n「${job.title}」\nギャラ 目安¥900（出来で変動）／体力 -${job.stamina}`, ['やる！', 'やめておく']);
   if (i !== 0) return;
   if (g.state.stamina < job.stamina) {
     await say(g, TAISHO, ['顔色悪いで！\n体力が足りひんのとちゃうか？', 'たこ焼きでも食べて、休んでからおいで。']);

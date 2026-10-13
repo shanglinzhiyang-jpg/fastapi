@@ -16,7 +16,7 @@
 import { registerPlace } from '../engine/map.js';
 import { LOOKS, charSheet, drawChar } from '../engine/sprites.js';
 import { defineTile, tileImage, R, P, disc, shadowEllipse, pix } from '../engine/tiles.js';
-import { registerItem } from '../engine/state.js';
+import { registerItem, payText } from '../engine/state.js';
 import { text, panel } from '../engine/draw.js';
 import { W, H, OPP, fmtMoney, pick, shuffle, makeCanvas } from '../engine/util.js';
 
@@ -670,7 +670,7 @@ function here(g) {
   return { room: g.map.roomId, x: p.x, y: p.y, dir: p.dir };
 }
 function confirmText(def) {
-  return `${def.desc}\n「${def.title}」\nギャラ ${fmtMoney(def.pay)}〜／体力 -${def.stamina}`;
+  return `${def.desc}\n「${def.title}」\n${payText(def.pay)}／体力 -${def.stamina}`;
 }
 const quizOk = (g) => !!g.state.agency || g.state.fame >= 30;
 
@@ -1368,7 +1368,7 @@ async function directorTalk(g) {
 async function jobBoard(g, who) {
   const items = JOB_KEYS.map((k) => {
     const lock = lockLabel(g, k);
-    return { label: JOBS[k].label, right: lock || fmtMoney(JOBS[k].def.pay) + '〜', disabled: !!lock };
+    return { label: JOBS[k].label, right: lock || '目安' + fmtMoney(JOBS[k].def.pay), disabled: !!lock };
   });
   const k = await g.list({ title: 'お仕事リスト', items, x: 36, y: 30, w: 248, describe: (idx) => JOBS[JOB_KEYS[idx]] && JOBS[JOB_KEYS[idx]].info });
   if (k < 0 || !JOB_KEYS[k]) return;

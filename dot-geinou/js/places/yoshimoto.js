@@ -10,7 +10,7 @@
 import { registerPlace } from '../engine/map.js';
 import { LOOKS, charSheet, drawChar } from '../engine/sprites.js';
 import { defineTile, tileImage, R, P } from '../engine/tiles.js';
-import { registerItem, AGENCIES } from '../engine/state.js';
+import { registerItem, AGENCIES, payText } from '../engine/state.js';
 import { registerSong } from '../engine/audio.js';
 import { text, panel } from '../engine/draw.js';
 import { W, H, fmtMoney, pick } from '../engine/util.js';
@@ -480,7 +480,7 @@ function hintFor(g, byManager = false) {
 }
 
 function confirmText(def, title = def.title) {
-  return `${def.desc}\n「${title}」\nギャラ ${fmtMoney(def.pay)}〜／体力 -${def.stamina}`;
+  return `${def.desc}\n「${title}」\n${payText(def.pay)}／体力 -${def.stamina}`;
 }
 
 // Short label of what blocks a job right now (null = available).
@@ -802,7 +802,7 @@ async function managerIntro(g) {
 async function jobBoard(g) {
   const items = JOBS.map((j) => {
     const lock = lockLabel(g, j);
-    return { label: j.label, right: lock || fmtMoney(j.def.pay) + '〜', disabled: !!lock };
+    return { label: j.label, right: lock || '目安' + fmtMoney(j.def.pay), disabled: !!lock };
   });
   const k = await g.list({ title: 'お仕事リスト', items, x: 42, y: 44, w: 236, describe: (idx) => JOBS[idx] && JOBS[idx].info });
   if (k < 0 || !JOBS[k]) return;
