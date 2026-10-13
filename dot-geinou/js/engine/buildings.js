@@ -163,7 +163,8 @@ export function drawBuilding(ctx, b, px, py, t = 0) {
     const mid = py + Math.floor(H / 2);
     R(ctx, px, mid - 2, W, 3, shade(wall, -0.3));
     R(ctx, px, mid + 1, W, 1, '#c0c4cc');
-    for (let x = px + 6; x < px + W - 10; x += 22) {
+    // 2F: door + window units (28px wide); only whole units that fit on the wall
+    for (let x = px + 6; x + 28 <= px + W - 2; x += 22) {
       doorAt(ctx, x, mid - 18, 'wood', t);
       R(ctx, x + 18, mid - 14, 10, 8, '#8fd0ff'); R(ctx, x + 17, mid - 15, 12, 1, '#f4f4f4');
     }
@@ -194,9 +195,11 @@ export function drawBuilding(ctx, b, px, py, t = 0) {
     const wy = sy + signH + 4;
     const wh = doorPy - wy + 12;
     if (wh > 6) {
-      for (let x = px + 4; x < px + W - 4; x += 16) {
+      // 14px windows; the last one is narrowed so none runs past the wall
+      for (let x = px + 4; x <= px + W - 12; x += 16) {
         if (x + 16 > doorPx && x < doorPx + 16) continue;
-        R(ctx, x, wy, 14, wh, '#f4f4f4'); R(ctx, x + 1, wy + 1, 12, wh - 2, '#a8dcf5');
+        const ww = Math.min(14, px + W - 4 - x);
+        R(ctx, x, wy, ww, wh, '#f4f4f4'); R(ctx, x + 1, wy + 1, ww - 2, wh - 2, '#a8dcf5');
         R(ctx, x + 2, wy + 2, 3, wh - 4, '#e0f4ff');
       }
     }

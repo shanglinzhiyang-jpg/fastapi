@@ -31,6 +31,8 @@ export class Input {
 
     window.addEventListener('keydown', (e) => {
       if (this.onAnyKey) this.onAnyKey();
+      // leave browser / OS shortcuts (Ctrl+S, Cmd+D, Alt+...) alone
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.code === 'KeyM' && !e.repeat) {
         if (this.onMute) this.onMute();
         return;
@@ -42,12 +44,18 @@ export class Input {
       this.press(k, 'kb:' + e.code);
     });
     window.addEventListener('keyup', (e) => {
+      // macOS sends no keyup for keys released while Cmd is held
+      if (e.key === 'Meta') { this.releaseAll(); return; }
       const k = KEYMAP[e.code];
       if (!k) return;
       e.preventDefault();
       this.release(k, 'kb:' + e.code);
     });
     window.addEventListener('blur', () => this.releaseAll());
+    // Audio may only start inside a user activation. A touch pointerdown is not
+    // one (pointerup / touchend / click are), so also unlock on those.
+    const unlock = () => { if (this.onAnyKey) this.onAnyKey(); };
+    for (const ev of ['pointerup', 'touchend', 'click']) document.addEventListener(ev, unlock, { capture: true, passive: true });
   }
 
   press(k, src) {
@@ -102,18 +110,29 @@ export class Input {
 
   // Touch controls: a circular d-pad, A/B/MENU buttons and tap-on-screen = A.
   bindTouch({ dpad, buttons, screen }) {
+    let curDir = null;
     const setDpad = (dir) => {
+      curDir = dir;
       for (const d of DIR_KEYS) {
         if (d === dir) this.press(d, 'dpad'); else this.release(d, 'dpad');
         const el = dpad.querySelector('.' + d);
         if (el) el.classList.toggle('on', d === dir);
       }
     };
+    const ANGLE = { right: 0, down: 90, left: 180, up: -90 };
     const dirFrom = (e) => {
       const r = dpad.getBoundingClientRect();
       const dx = e.clientX - (r.left + r.width / 2);
       const dy = e.clientY - (r.top + r.height / 2);
-      if (Math.hypot(dx, dy) < r.width * 0.12) return null;
+      // hysteresis: a held direction survives a slightly smaller radius and
+      // 15 degrees past its 45-degree boundary, so a sliding thumb does not
+      // flicker into a neighbouring direction
+      if (Math.hypot(dx, dy) < r.width * (curDir ? 0.12 : 0.16)) return null;
+      if (curDir) {
+        const a = Math.atan2(dy, dx) * 180 / Math.PI;
+        const diff = Math.abs(((a - ANGLE[curDir]) % 360 + 540) % 360 - 180);
+        if (diff < 60) return curDir;
+      }
       return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
     };
     let dpadPointer = null;

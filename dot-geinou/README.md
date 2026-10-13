@@ -23,10 +23,11 @@ python3 -m http.server 8765
 - **東京エリア**：NHK放送センター、ホリプロ、東宝、東映 撮影所、よしもと 東京本部、BSよしもと、
   グレープカンパニー、自宅（ドット荘）、コンビニ、銭湯、東京駅、公園
 - **なんばエリア（大阪）**：よしもと新喜劇 劇場、松竹芸能、たこ焼き屋、ホテル、なんば駅
-  （東京駅から新幹線で移動）
+  （東京駅から新幹線で新大阪へ、電車に乗りかえ）
 - 事務所のオーディションに合格すると所属タレントになれます。お仕事はミニゲーム
   （ツッコミ・ズッコケ・歌・殺陣・クイズ・原稿読み・トーク）で、結果のランクに応じてギャラと知名度が入ります。
 - 体力はお仕事やレッスンで減り、ベッド（自宅・ホテル）で寝ると回復して次の日になります。
+  食べ物・飲み物での回復は1日3回まで（メニューの「もちもの」に残り回数が出ます）。
 - 知名度で称号が上がります：無名 → 駆け出し → 若手 → 注目株 → 人気者 → 売れっ子 → スター → 国民的スター。
 
 > 実在の企業名・ロゴ（`assets/logos/`）は各社の商標・著作物です。本作は非公式のファンゲームで、
@@ -108,6 +109,7 @@ registerPlace({
 
 **エンティティ**
 - `{ type: 'npc', id, x, y, dir, look, name, text: '…' | ['…', '…'], talk: async (g, npc) => {}, wander: 2, cond: (g) => bool, fixedDir }`
+  （`wander` の NPC は、建物のドアとその前のマス、ワープの隣のマスには止まりません）
 - `{ type: 'sign', x, y, text | talk }` 見えない調べるポイント（看板タイルの上などに置く）
 - `{ type: 'prop', x, y, w, h, draw(ctx, sx, sy, g, e), solid, text | talk }` 自由描画の大きな物
 - `{ type: 'logo', x, y, w, h, logo: 'nhk', board: true, text | talk }` 壁などに掛けるロゴ看板（タイル単位、小数可）
@@ -135,7 +137,9 @@ registerPlace({
 | `await g.shop(['onigiri', { item: 'drink', price: 280 }], { title, greeting })` | お店 |
 | `await g.sleep()` | 寝る（体力全快・日付+1・セーブ） |
 | `g.addMoney(n)` / `g.spend(n)` → bool | お金 |
-| `g.addFame(n)` / `g.addSkill('warai', n)` / `g.heal(n)` / `g.useStamina(n)` → bool | 成長・体力 |
+| `g.addFame(n)` / `g.addSkill('warai', n)` / `g.heal(n)` / `g.useStamina(n)` → bool | 成長・体力（`heal` は食べ物以外：お風呂・イベントなど） |
+| `g.eat(n, { silent })` → 回復量 / `g.mealsLeft()` | 食べ物・飲み物での回復。1日3回まで（`state.flags.meal`）。食べられない時（おなかいっぱい・体力満タン）は 0 を返し、トーストで理由を出す（`silent` で出さない）。お金を取るなら先に `g.mealsLeft()` を確認 |
+| `g.payText(pay)` | ギャラの表示 `ギャラ 目安¥3,000（出来で変動）`。お仕事の告知・一覧はこれを使う（`payText` は state.js からも import 可） |
 | `g.giveItem(id)` / `g.hasItem(id)` / `g.takeItem(id)` | アイテム |
 | `g.flag(k)` / `g.setFlag(k, v)` | フラグ（キーは施設IDを接頭辞に） |
 | `g.state` | `{ name, money, fame, stamina, skills: { warai, engi, uta, talk }, agency, day, items, flags, jobs }` |
@@ -153,7 +157,7 @@ registerPlace({
 - `requires`: `{ agency: true | 'yoshimoto' | ['yoshimoto', 'grape'], fame: 250, skills: { warai: 30 }, flag, flagText }`。
   「所属 または ★30」のような条件は `{ anyOf: [{ agency: true }, { fame: 30 }] }`
 - 確認 → 体力消費 → ミニゲーム → ランク倍率（S 1.5 / A 1.2 / B 1.0 / C 0.7 / D 0.4、得意分野の事務所なら ×1.1）で
-  ギャラ・知名度・スキルが入ります。
+  ギャラ・知名度・スキルが入ります。`pay` はランク B の額なので、「¥3,000〜」とは書かず `g.payText(pay)`（目安）で見せます。
 
 **レッスン** `g.lesson({ title, skill, price: 2000, stamina: 10, gain: 3, minigame?, opts?, teacher })`
 
@@ -174,7 +178,7 @@ registerPlace({
 | 3 | ★1000 | ¥20,000〜40,000 | 80〜150 |
 | 4 | ★2000 | ¥50,000〜80,000 | 150〜300 |
 
-体力は1日100。お仕事は 15〜30、レッスンは 10〜15。レッスン料 ¥2,000〜8,000 で スキル +3〜6。
+体力は1日100（＋食事 1日3回まで）。お仕事は 15〜30、レッスンは 10〜15。レッスン料 ¥2,000〜8,000 で スキル +3〜6。
 ★4000 に達するとエンジンが NHK から電話をかけ（`flags.finaleInvited`）、NHK で最終公演 → `g.ending()`。
 
 ### ミニゲーム
@@ -216,9 +220,11 @@ registerMinigame('mygame', MyGame);
   家具：`counter counter_white desk desk_pc chair seat sofa table plant bookshelf locker tv monitor camera mic spotlight speaker piano curtain curtain_top rope mirror makeup clothes_rack trophy director_chair green_screen set_wall stage_edge …`
   独自タイルは各ファイルで `defineTile('<施設ID>_xxx', {...})`。描画ヘルパー `R P pix speckle disc shadowEllipse` も tiles.js から import できます。
   画面に収まる小さな部屋は、上の壁が HUD に隠れないよう少し下にずらして表示されます。
+  HUD は左上（日付・お金・知名度）と右上（所属・体力）の高さ 24〜36px。全画面の自作シーンは `hidesHud = true` を持たせると、開いている間 HUD を描きません。
 - キャラ：`LOOKS.receptionist manager president staff ad director cameraman guard comedian comedian2 idol singer actor actress announcer announcerM makeup samurai ninja hero kaiju oldman oldwoman kid salaryman fan clerk chef tourist mom`。
   `{ ...LOOKS.staff, top: '#2f9a4a' }` のように上書き可。髪型：`short long bob spiky twin slick afro cap bald mage helmet`。
 - ロゴ：`yoshimoto shinkigeki bs_yoshimoto shochiku grape nhk nhk_old toei horipro toho`
+  （小さく描くと、よしもと・グレープ・東宝は文字を省いたマークだけになります：logos.js の `mark`）
 - 効果音：`cursor ok cancel talk door coin success fanfare fail buzz hit good laugh applause zukko whistle drum snare shutter chime sword sleep`
 - BGM：`title town osaka office studio theater minigame night ending`（`registerSong(name, def)` で追加可）
 

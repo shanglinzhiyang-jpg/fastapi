@@ -17,9 +17,10 @@ import { MessageScene, ListScene, ShopScene, openMenu } from './ui.js';
 import { MINIGAMES } from './minigame.js';
 import { text, panel, COLORS } from './draw.js';
 import { drawLogo, LOGOS } from './logos.js';
+import { charSheet, drawChar } from './sprites.js';
 import {
-  SKILLS, SKILL_MAX, ITEMS, AGENCIES, RANKS, FINALE_FAME,
-  rankIndex, rankName, saveGame,
+  SKILLS, SKILL_MAX, ITEMS, AGENCIES, RANKS, FINALE_FAME, MEALS_PER_DAY,
+  rankIndex, rankName, saveGame, payText,
 } from './state.js';
 
 const RANK_MULT = { S: 1.5, A: 1.2, B: 1.0, C: 0.7, D: 0.4 };
@@ -52,7 +53,8 @@ export class Game {
   // ---------------------------------------------------------------- display
   resize() {
     const box = this.canvas.parentElement.getBoundingClientRect();
-    const availW = Math.max(160, box.width - 8);
+    // narrow phones: use the full width so the canvas is not drawn below 1x
+    const availW = Math.max(160, box.width < 400 ? box.width : box.width - 8);
     const availH = Math.max(120, box.height - 8);
     let s = Math.min(availW / W, availH / H);
     if (s >= 2) { const f = Math.floor(s); if (f / s > 0.85) s = f; }
@@ -404,8 +406,37 @@ export class Game {
     if (!silent && d) this.notify(`${SKILLS[key]} +${d}`, { color: COLORS.cyan });
   }
 
+  // Non-food recovery (bath, bed, events). Food goes through eat().
   heal(n) {
     this.state.stamina = clamp(this.state.stamina + n, 0, this.state.maxStamina);
+  }
+
+  // How many more food heals are allowed today (state.flags.meal = { day, n }).
+  mealsLeft() {
+    const st = this.state;
+    const m = st.flags.meal;
+    return Math.max(0, MEALS_PER_DAY - (m && m.day === st.day ? m.n : 0));
+  }
+
+  // Food / drink: heals like heal(), but only MEALS_PER_DAY times a day.
+  // Returns the stamina gained. 0 = nothing eaten (too full today, or stamina
+  // already full); a toast says why unless opts.silent.
+  eat(n, opts = {}) {
+    const st = this.state;
+    if (this.mealsLeft() <= 0) {
+      if (!opts.silent) this.notify('おなかいっぱいだ…今日はもう食べられない。', { color: '#fff' });
+      return 0;
+    }
+    if (st.stamina >= st.maxStamina) {
+      if (!opts.silent) this.notify('体力は満タンだ。', { color: '#fff' });
+      return 0;
+    }
+    const before = st.stamina;
+    this.heal(n);
+    const m = st.flags.meal && st.flags.meal.day === st.day ? st.flags.meal : { day: st.day, n: 0 };
+    m.n++;
+    st.flags.meal = m;
+    return st.stamina - before;
   }
 
   // Returns false (and changes nothing) when there is not enough stamina.
@@ -467,12 +498,19 @@ export class Game {
         return;
       }
       mg._resolve = (res) => {
-        this.pop(mg);
-        this.state.stats.minigames++;
-        const best = this.state.stats.bestRanks;
-        if (!best[id] || 'SABCD'.indexOf(res.rank) < 'SABCD'.indexOf(best[id])) best[id] = res.rank;
-        if (prevBgm) audio.bgm(prevBgm);
-        resolve(res);
+        // the waiting script must always continue, even if the bookkeeping throws
+        try {
+          const stats = this.state.stats;
+          stats.minigames = (stats.minigames || 0) + 1;
+          const best = stats.bestRanks || (stats.bestRanks = {});
+          if (!best[id] || 'SABCD'.indexOf(res.rank) < 'SABCD'.indexOf(best[id])) best[id] = res.rank;
+        } catch (e) {
+          console.error(e);
+        } finally {
+          this.pop(mg);
+          if (prevBgm) audio.bgm(prevBgm);
+          resolve(res);
+        }
       };
       audio.bgm(Cls.bgm === undefined ? 'minigame' : Cls.bgm); // static bgm = null -> silence (play your own sounds)
       this.push(mg);
@@ -507,6 +545,9 @@ export class Game {
     return null;
   }
 
+  // 'ギャラ 目安¥3,000（出来で変動）': how to advertise a job's base pay (rank B).
+  payText(pay) { return payText(pay); }
+
   // Standard paid job. Returns the minigame result or null if not done.
   // def: { id, title, desc, stamina=20, minigame, opts={}, pay=3000, fame=10, skill, gain=2, requires, confirm=true, client, clientLook }
   async job(def) {
@@ -516,7 +557,7 @@ export class Game {
     if (why) { await this.say(why); return null; }
     if (def.confirm !== false) {
       const desc = def.desc ? def.desc + '\n' : '';
-      const i = await this.ask(`${desc}「${def.title}」\nギャラ ${fmtMoney(def.pay ?? 3000)}〜／体力 -${stamina}`, ['受ける', 'やめておく'], { name: def.client, look: def.clientLook });
+      const i = await this.ask(`${desc}「${def.title}」\n${payText(def.pay ?? 3000)}／体力 -${stamina}`, ['受ける', 'やめておく'], { name: def.client, look: def.clientLook });
       if (i !== 0) return null;
     }
     if (st.stamina < stamina) {
@@ -636,7 +677,6 @@ export class Game {
         `かかった日数　${st.day}日`,
         `こなしたお仕事　${st.stats.jobs}回`,
         `知名度　★${st.fame}`,
-        `所持金　${fmtMoney(st.money)}`,
         '',
         '― お世話になった場所 ―',
         'よしもと / よしもと新喜劇 / BSよしもと',
@@ -649,12 +689,17 @@ export class Game {
         '',
         'THANK YOU FOR PLAYING!',
       ];
+      // the credits stop with the last line in the upper half, then the player takes a bow
+      const SPEED = 0.42;
+      const LAST_Y = 84;
+      const maxScroll = H + 10 + (lines.length - 1) * 20 - LAST_Y;
+      const sheet = charSheet(st.look || {});
       const scene = {
         opaque: true,
         t: 0,
         update(gg) {
           scene.t++;
-          if (gg.auto || (scene.t > 60 * 20 && gg.input.pressed('a'))) {
+          if (gg.auto || (scene.t > 60 * 20 && scene.t * SPEED >= maxScroll && gg.input.pressed('a'))) {
             // cut to black, then fade back into whatever is underneath
             gg.fade = 1;
             gg.pop(scene);
@@ -671,13 +716,33 @@ export class Game {
             ctx.fillStyle = i % 5 ? '#3a4a8a' : '#fff6a8';
             ctx.fillRect(Math.round(x), y, 1, 1);
           }
-          const scroll = scene.t * 0.35;
+          const scroll = Math.min(scene.t * SPEED, maxScroll);
           lines.forEach((l, i) => {
-            const y = H + 10 + i * 20 - scroll;
+            const y = Math.round(H + 10 + i * 20 - scroll);
             if (y < -20 || y > H + 20) return;
             text(ctx, l, W / 2, y, { align: 'center', size: i === 0 ? 20 : 12, color: i === 0 ? COLORS.accent : '#fff' });
           });
-          if (scene.t > 60 * 20) text(ctx, 'Aでつづける', W / 2, H - 24, { align: 'center', size: 10, color: COLORS.cyan });
+          const stopT = maxScroll / SPEED;
+          if (scene.t >= stopT) {
+            // spotlight + the player, 3x, hopping a little
+            const k = Math.min(1, (scene.t - stopT) / 40);
+            ctx.globalAlpha = k;
+            ctx.fillStyle = 'rgba(255,246,168,0.16)';
+            ctx.beginPath();
+            ctx.moveTo(W / 2 - 10, 100); ctx.lineTo(W / 2 + 10, 100);
+            ctx.lineTo(W / 2 + 44, 196); ctx.lineTo(W / 2 - 44, 196);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,246,168,0.3)';
+            ctx.fillRect(W / 2 - 40, 190, 80, 6);
+            const hop = Math.floor((scene.t - stopT) / 20) % 4 === 1 ? 3 : 0;
+            ctx.save();
+            ctx.translate(W / 2 - 24, 132 - hop);
+            ctx.scale(3, 3);
+            drawChar(ctx, sheet, 'down', 0, 0, 4);
+            ctx.restore();
+            ctx.globalAlpha = 1;
+          }
+          if (scene.t > 60 * 20 && scene.t >= stopT) text(ctx, 'Aでつづける', W / 2, H - 24, { align: 'center', size: 10, color: COLORS.cyan });
         },
       };
       audio.bgm('ending');

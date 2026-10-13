@@ -97,8 +97,20 @@ async function debugMenu(g) {
 
 async function boot() {
   const canvas = document.getElementById('game');
-  if (window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || params.has('touch')) document.body.classList.add('touch');
+  // On-screen pad: phones/tablets (coarse primary pointer) get it from the start.
+  // Touchscreen laptops get it on their first touch and lose it again on a key press.
+  const coarse = window.matchMedia('(pointer: coarse)').matches || params.has('touch');
+  if (coarse) document.body.classList.add('touch');
   const g = new Game(canvas);
+  if (!coarse) {
+    const setTouch = (on) => {
+      if (document.body.classList.contains('touch') === on) return;
+      document.body.classList.toggle('touch', on);
+      g.resize();
+    };
+    window.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') setTouch(true); }, true);
+    window.addEventListener('keydown', () => setTouch(false), true);
+  }
   window.__game = g;
   g.PLACES = PLACES;
   g.MINIGAMES = MINIGAMES;

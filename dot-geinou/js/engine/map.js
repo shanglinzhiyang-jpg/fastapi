@@ -309,7 +309,8 @@ export class MapScene {
   interactableAt(x, y) {
     for (const e of this.entities) {
       if (!this.visible(e)) continue;
-      if (e.type === 'npc' && e.x === x && e.y === y) return e;
+      // a walking NPC can be talked to on either tile of its step
+      if (e.type === 'npc' && ((e.x === x && e.y === y) || (e.moving && e.tx === x && e.ty === y))) return e;
     }
     for (const e of this.entities) {
       if (!this.visible(e) || !(e.talk || e.text)) continue;
@@ -335,6 +336,17 @@ export class MapScene {
 
   warpAt(x, y) {
     return this.room.warps.find((w) => w.x === x && w.y === y && (!w.cond || w.cond(this.g)));
+  }
+
+  // Tiles a wandering NPC should not stop on: building footprints (doors), the
+  // tile right in front of a building door, and tiles next to a warp, so an NPC
+  // never stands in the only way in or out.
+  keepClear(x, y) {
+    if (this.buildingAt(x, y)) return true;
+    const b = this.buildingAt(x, y - 1);
+    if (b && (b.place || b.enter) && this.isDoor(b, x, y - 1)) return true;
+    for (const [dx, dy] of Object.values(DIRS)) if (this.warpAt(x + dx, y + dy)) return true;
+    return false;
   }
 
   npc(id) { return this.entities.find((e) => e.id === id); }
@@ -452,14 +464,21 @@ export class MapScene {
     const [dx, dy] = DIRS[p.dir];
     let tx = p.x + dx, ty = p.y + dy;
     let target = this.interactableAt(tx, ty);
+    let fx = tx, fy = ty; // tile where the target was found
     if (!target) {
       const top = this.topTile(tx, ty);
       if (top && TILES[top] && TILES[top].talkThrough) {
         const behind = this.interactableAt(tx + dx, ty + dy);
-        if (behind) target = behind;
+        if (behind) { target = behind; fx = tx + dx; fy = ty + dy; }
       }
     }
     if (target) {
+      if (target.type === 'npc' && target.moving && !target.path.length && !target.pathDone) {
+        // stop a wander step on the tile the player is facing, so turning to talk never slides the NPC
+        const nx = target.tx === fx && target.ty === fy ? target.tx : target.x;
+        const ny = target.tx === fx && target.ty === fy ? target.ty : target.y;
+        Object.assign(target, { x: nx, y: ny, px: nx * TILE, py: ny * TILE, moving: false, t: 0 });
+      }
       g.run(async () => {
         if (target.type === 'npc' && !target.fixedDir) target.dir = OPP[p.dir];
         if (target.talk) await target.talk(g, target);
@@ -481,10 +500,13 @@ export class MapScene {
       g.run(async () => {
         const i = await g.ask('自動販売機だ。ジュースを買う？（¥150・体力+10）', ['買う', 'やめる'], { cancel: 1 });
         if (i !== 0) return;
+        // counts as a meal (g.eat): checked before paying
+        if (g.mealsLeft() <= 0) { await g.say('おなかいっぱいだ…\n今日はもう飲めない。'); return; }
+        if (g.state.stamina >= g.state.maxStamina) { await g.say('体力は満タンだ。\nいまはやめておこう。'); return; }
         if (!g.spend(150)) { await g.say('お金が足りない…'); return; }
         audio.sfx('coin');
-        g.heal(10);
-        await g.say('ガコン！ジュースを飲んだ。体力が10回復した。');
+        const got = g.eat(10, { silent: true });
+        await g.say(`ガコン！ジュースを飲んだ。体力が${got}回復した。`);
       });
       return;
     }
@@ -513,7 +535,8 @@ export class MapScene {
         if (e.path.length) this.tryNpcStep(e);
         else if (e.pathDone) { const r = e.pathDone; e.pathDone = null; r(); }
       } else {
-        const [dx, dy] = DIRS[e.dir];
+        // offset from the step itself (not e.dir): turning mid-step never moves the sprite
+        const dx = Math.sign(e.tx - e.x), dy = Math.sign(e.ty - e.y);
         e.px = (e.x + dx * e.t / TILE) * TILE;
         e.py = (e.y + dy * e.t / TILE) * TILE;
       }
@@ -530,7 +553,7 @@ export class MapScene {
         const nx = e.x + dx, ny = e.y + dy;
         const rad = typeof e.wander === 'number' ? e.wander : 2;
         e.dir = d;
-        if (Math.abs(nx - e.home.x) <= rad && Math.abs(ny - e.home.y) <= rad && !this.blocked(nx, ny, e) && !this.warpAt(nx, ny)) {
+        if (Math.abs(nx - e.home.x) <= rad && Math.abs(ny - e.home.y) <= rad && !this.blocked(nx, ny, e) && !this.warpAt(nx, ny) && !this.keepClear(nx, ny)) {
           e.moving = true; e.tx = nx; e.ty = ny; e.t = 0;
         }
       }
@@ -606,7 +629,8 @@ export class MapScene {
 
     if (room.def.drawOver) room.def.drawOver(ctx, g, cam);
     for (const e of [p, ...this.entities]) if (e.emote && (e === p || this.visible(e))) this.drawEmote(ctx, e);
-    if (!room.def.hideHud && !this.place.hideHud) drawHud(ctx, g);
+    // full-screen menus (shop, status) set hidesHud so no HUD bits show around them
+    if (!room.def.hideHud && !this.place.hideHud && !g.scenes.some((s) => s.hidesHud)) drawHud(ctx, g);
     drawBanner(ctx, g);
     drawToasts(ctx, g);
   }

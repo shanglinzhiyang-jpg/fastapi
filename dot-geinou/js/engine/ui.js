@@ -208,19 +208,21 @@ export function drawHud(ctx, g) {
   text(ctx, fmtMoney(st.money), 120, 5, { size: 10, align: 'right', color: COLORS.accent });
   text(ctx, `★${st.fame}`, 9, 19, { size: 10, color: COLORS.pink });
   text(ctx, rankName(st.fame), 120, 19, { size: 10, align: 'right' });
-  panel(ctx, W - 92, 2, 90, 22, { bg: 'rgba(18,26,58,0.88)' });
+  // stamina, with the agency (short name) on the same line: one row only, so wall
+  // signs just below the HUD in small rooms stay visible
+  const a = st.agency && AGENCIES[st.agency];
+  const label = a ? (a.short || a.name) : '';
+  const lw = a ? measure(ctx, label, 10) + 10 : 0;
+  const px = W - 92 - lw;
+  panel(ctx, px, 2, W - 2 - px, 22, { bg: 'rgba(18,26,58,0.88)' });
+  if (a) {
+    text(ctx, label, px + 7, 7, { size: 10, color: COLORS.dim });
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(W - 92, 7, 1, 12);
+  }
   text(ctx, '体力', W - 86, 7, { size: 10 });
   const frac = st.stamina / st.maxStamina;
   bar(ctx, W - 60, 9, 52, 7, frac, frac > 0.5 ? COLORS.good : frac > 0.2 ? COLORS.accent : COLORS.bad);
-  if (st.agency) {
-    const a = AGENCIES[st.agency];
-    if (a) {
-      const label = a.name + '所属';
-      const w = measure(ctx, label, 10) + 14;
-      panel(ctx, W - w - 2, 26, w, 16, { bg: 'rgba(18,26,58,0.88)' });
-      text(ctx, label, W - w + 5, 29, { size: 10, color: COLORS.dim });
-    }
-  }
 }
 
 export function drawToasts(ctx, g) {
@@ -250,7 +252,7 @@ export function drawBanner(ctx, g) {
 
 // ---------------------------------------------------------------- status screen
 export class StatusScene {
-  constructor(g, resolve) { this.g = g; this.resolve = resolve; this.t = 0; this.opaque = false; }
+  constructor(g, resolve) { this.g = g; this.resolve = resolve; this.t = 0; this.opaque = false; this.hidesHud = true; }
   update(g) {
     this.t++;
     if (g.auto) { g.pop(this); this.resolve(); return; }
@@ -295,6 +297,7 @@ export class ShopScene {
     this.t = 0;
     this.msg = this.opts.greeting || 'いらっしゃいませ！';
     this.bought = 0;
+    this.hidesHud = true; // MapScene skips the HUD while this is open (it has its own money panel)
   }
   price(gd) { return gd.price ?? ITEMS[gd.item]?.price ?? 0; }
   update(g) {
@@ -373,16 +376,18 @@ async function itemMenu(g) {
   for (;;) {
     const ids = Object.keys(g.state.items).filter((k) => g.state.items[k] > 0);
     const items = ids.map((id) => ({ label: ITEMS[id]?.name || id, right: '×' + g.state.items[id] }));
-    const i = await g.list({ title: 'もちもの', items, x: 8, y: 46, w: 200, describe: (k) => ITEMS[ids[k]]?.desc });
+    const i = await g.list({ title: `もちもの（食事 あと${g.mealsLeft()}回）`, items, x: 8, y: 46, w: 200, describe: (k) => ITEMS[ids[k]]?.desc });
     if (i < 0) return;
     const id = ids[i];
     const it = ITEMS[id] || {};
     if (it.heal) {
       if (g.state.stamina >= g.state.maxStamina) { await g.say('体力は満タンだ。'); continue; }
+      // food is limited per day (g.eat); a refused item is not used up
+      if (g.mealsLeft() <= 0) { await g.say('おなかいっぱいだ…\n今日はもう食べられない。\n（寝ると、また食べられるようになる）'); continue; }
       g.takeItem(id);
-      g.heal(it.heal);
+      const got = g.eat(it.heal, { silent: true });
       audio.sfx('good');
-      await g.say(`${it.name}を使った！体力が${it.heal}回復した。`);
+      await g.say(`${it.name}を使った！体力が${got}回復した。` + (g.mealsLeft() <= 0 ? '\nおなかいっぱいになった。' : ''));
     } else if (it.buff) {
       if (g.state.buffs[it.buff]) { await g.say('もう効果が出ている。'); continue; }
       g.takeItem(id);

@@ -55,6 +55,7 @@ export class TitleScene {
     this.t = 0;
     this.idx = hasSave() ? 1 : 0;
     this.opaque = true;
+    audio.bgm('title'); // only remembered until the first tap/key unlocks audio
   }
   items() { return ['はじめから', 'つづきから']; }
   update(g) {
@@ -70,7 +71,6 @@ export class TitleScene {
     }
   }
   draw(ctx, g) {
-    if (this.t === 2) audio.bgm('title');
     skyline(ctx, this.t);
     const bob = Math.round(Math.sin(this.t / 20) * 2);
     text(ctx, 'ドット芸能界', W / 2, 34 + bob, { size: 32, align: 'center', color: COLORS.accent, outline: '#3a1030' });
@@ -88,7 +88,9 @@ export class TitleScene {
       text(ctx, it, W / 2 - 30, 147 + i * 18, { color: dis ? COLORS.dim : i === this.idx ? COLORS.accent : '#fff' });
       if (i === this.idx) cursor(ctx, W / 2 - 46, 149 + i * 18, this.t);
     });
-    text(ctx, '実在の企業名・ロゴは各社の商標です（非公式ファンゲーム）', W / 2, H - 16, { size: 8, align: 'center', color: '#8a94c8' });
+    ctx.fillStyle = 'rgba(11,13,26,0.85)';
+    ctx.fillRect(0, H - 18, W, 15);
+    text(ctx, '実在の企業名・ロゴは各社の商標です（非公式ファンゲーム）', W / 2, H - 16, { size: 10, align: 'center', color: '#b8c0e8', shadow: null });
   }
 }
 

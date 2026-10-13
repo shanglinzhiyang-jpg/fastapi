@@ -1,5 +1,7 @@
 // Player progress, constants for the economy, items and save data.
 
+import { fmtMoney } from './util.js';
+
 export const SKILLS = { warai: 'お笑い', engi: '演技', uta: '歌', talk: 'トーク' };
 export const SKILL_MAX = 100;
 
@@ -24,12 +26,17 @@ export function rankIndex(fame) {
 export const rankName = (fame) => RANKS[rankIndex(fame)][1];
 
 // Agencies the player can belong to (one at a time).
+// short: compact label for the HUD.
 export const AGENCIES = {
-  yoshimoto: { name: 'よしもと', skill: 'warai' },
-  shochiku: { name: '松竹芸能', skill: 'warai' },
-  grape: { name: 'グレープカンパニー', skill: 'warai' },
-  horipro: { name: 'ホリプロ', skill: 'engi' },
+  yoshimoto: { name: 'よしもと', short: 'よしもと', skill: 'warai' },
+  shochiku: { name: '松竹芸能', short: '松竹芸能', skill: 'warai' },
+  grape: { name: 'グレープカンパニー', short: 'グレープ', skill: 'warai' },
+  horipro: { name: 'ホリプロ', short: 'ホリプロ', skill: 'engi' },
 };
+
+// Job pay depends on the result rank (see RANK_MULT in game.js), so the base
+// pay is shown as an estimate. Use this everywhere a job's pay is advertised.
+export const payText = (pay) => `ギャラ 目安${fmtMoney(pay)}（出来で変動）`;
 
 // Items. heal = stamina recovered. buff = skill that gets a bonus in the next minigame.
 // Places may add their own with registerItem().
@@ -46,6 +53,8 @@ export const ITEMS = {
 export function registerItem(id, def) { ITEMS[id] = def; }
 
 export const MAX_STAMINA = 100;
+// Food heals (items, vending machine, g.eat) allowed per day; see g.eat in game.js.
+export const MEALS_PER_DAY = 3;
 
 export function newState(name = 'ドット', look = null) {
   return {
@@ -86,8 +95,15 @@ export function loadGame() {
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (!data || !data.state) return null;
-    data.state = { ...newState(), ...data.state };
-    data.state.skills = { ...newState().skills, ...data.state.skills };
+    // merge nested objects too, so an older / partial save never lacks a field the engine reads
+    const def = newState();
+    const st = { ...def, ...data.state };
+    const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+    st.skills = { ...def.skills, ...obj(data.state.skills) };
+    st.stats = { ...def.stats, ...obj(data.state.stats) };
+    st.stats.bestRanks = { ...obj(st.stats.bestRanks) };
+    for (const k of ['items', 'buffs', 'flags', 'jobs']) st[k] = { ...obj(k in data.state ? data.state[k] : def[k]) };
+    data.state = st;
     return data;
   } catch (e) {
     return null;

@@ -7,17 +7,21 @@
 
 import { makeCanvas } from './util.js';
 
+// mark: [sx, sy, sw, sh] = the symbol alone (no small wordmark). It is used when the
+//   whole logo would be drawn shorter than markBelow px (default 56), where thin
+//   lettering only turns into broken dots.
+// tint: recolour the (single-colour) logo.
 export const LOGOS = {
-  yoshimoto: { file: 'yoshimoto.png', name: 'よしもと', bg: '#ffffff' },
+  yoshimoto: { file: 'yoshimoto.png', name: 'よしもと', bg: '#ffffff', mark: [13, 10, 228, 228] },
   shinkigeki: { file: 'shinkigeki.png', name: 'よしもと新喜劇', bg: '#fff6d0' },
   bs_yoshimoto: { file: 'bs_yoshimoto.png', name: 'BSよしもと', bg: '#ffffff' },
   shochiku: { file: 'shochiku.png', name: '松竹芸能', bg: '#d8101c' },
-  grape: { file: 'grape.png', name: 'グレープカンパニー', bg: '#ffffff' },
-  nhk: { file: 'nhk.png', name: 'NHK', bg: '#ffffff' },
+  grape: { file: 'grape.png', name: 'グレープカンパニー', bg: '#ffffff', mark: [39, 6, 222, 222], markBelow: 72 },
+  nhk: { file: 'nhk.png', name: 'NHK', bg: '#ffffff', tint: '#2a2d36' },
   nhk_old: { file: 'nhk_old.png', name: 'NHK（昔のロゴ）', bg: '#ffffff' },
   toei: { file: 'toei.png', name: '東映', bg: '#ffffff' },
   horipro: { file: 'horipro.png', name: 'ホリプロ', bg: '#ffffff' },
-  toho: { file: 'toho.png', name: '東宝', bg: '#ffffff' },
+  toho: { file: 'toho.png', name: '東宝', bg: '#ffffff', mark: [13, 0, 243, 242] },
 };
 
 const images = {};
@@ -35,8 +39,13 @@ export function loadLogos(base = 'assets/logos/') {
 }
 
 // Smoothly downsample (halving steps) then hard-threshold alpha: crisp dot look.
-function pixelate(img, w, h) {
+function pixelate(img, w, h, crop = null, tint = null) {
   let src = img, sw = img.width, sh = img.height;
+  if (crop) {
+    const [cv, c] = makeCanvas(crop[2], crop[3]);
+    c.drawImage(img, crop[0], crop[1], crop[2], crop[3], 0, 0, crop[2], crop[3]);
+    src = cv; sw = crop[2]; sh = crop[3];
+  }
   while (sw / 2 > w * 1.5 && sh / 2 > h * 1.5) {
     const [cv, c] = makeCanvas(Math.round(sw / 2), Math.round(sh / 2));
     c.imageSmoothingEnabled = true;
@@ -52,6 +61,12 @@ function pixelate(img, w, h) {
   const d = data.data;
   for (let i = 3; i < d.length; i += 4) d[i] = d[i] > 110 ? 255 : 0;
   o.putImageData(data, 0, 0);
+  if (tint) {
+    o.globalCompositeOperation = 'source-in';
+    o.fillStyle = tint;
+    o.fillRect(0, 0, w, h);
+    o.globalCompositeOperation = 'source-over';
+  }
   return out;
 }
 
@@ -59,13 +74,17 @@ function pixelate(img, w, h) {
 export function logoCanvas(id, maxW, maxH) {
   const img = images[id];
   if (!img) return null;
-  const s = Math.min(maxW / img.width, maxH / img.height);
-  const w = Math.max(1, Math.round(img.width * s));
-  const h = Math.max(1, Math.round(img.height * s));
-  const key = id + '|' + w + 'x' + h;
+  const meta = LOGOS[id] || {};
+  let crop = null;
+  if (meta.mark && img.height * Math.min(maxW / img.width, maxH / img.height) < (meta.markBelow || 56)) crop = meta.mark;
+  const cw = crop ? crop[2] : img.width, ch = crop ? crop[3] : img.height;
+  const s = Math.min(maxW / cw, maxH / ch);
+  const w = Math.max(1, Math.round(cw * s));
+  const h = Math.max(1, Math.round(ch * s));
+  const key = id + (crop ? '|mark|' : '|') + w + 'x' + h;
   let cv = fitted.get(key);
   if (!cv) {
-    cv = pixelate(img, w, h);
+    cv = pixelate(img, w, h, crop, meta.tint);
     fitted.set(key, cv);
   }
   return cv;
