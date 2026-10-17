@@ -23,7 +23,9 @@
 // flags (all prefixed machi_): machi_karaoke_day, machi_karaoke_songs (`${day}:${n}`),
 //   machi_gym_day, machi_gym_count, machi_gym_bonus, machi_styled ({ day, fame, jobs }),
 //   machi_ramen_stamps, machi_jog (`${day}:${n}`), machi_bench_day, machi_drinkbar_day,
-//   machi_met_* (first-visit lines), machi_cat_day.
+//   machi_met_* (first-visit lines), machi_cat_day, machi_gym_done (day of the counted
+//   workout), machi_treat_<drink|aroma|bathsalt> (`${day}:${n}`: paid relief fades after
+//   a couple a day), machi_intro, machi_kaicho.
 // Every person, shop and brand here is fictional.
 
 import { registerPlace } from '../engine/map.js';
@@ -31,7 +33,7 @@ import { defineTile, R, P, disc, oval, outline, inset, dither, shadowEllipse } f
 import { LOOKS } from '../engine/sprites.js';
 import { registerItem, ITEMS, SKILLS } from '../engine/state.js';
 import { registerSong } from '../engine/audio.js';
-import { registerHangout, onMorning, weekdayOf, WEEKDAYS } from '../engine/life.js';
+import { registerHangout, onMorning, weekdayOf, WEEKDAYS, HUNGRY } from '../engine/life.js';
 import { text } from '../engine/draw.js';
 import { TILE, makeCanvas, shade, fmtMoney, pick } from '../engine/util.js';
 import { grid, set, put, fill, hroad, border } from './townkit.js';
@@ -50,6 +52,15 @@ function dayCount(g, k) {
 }
 function bumpDay(g, k) { const n = dayCount(g, k) + 1; g.setFlag(k, `${g.state.day}:${n}`); return n; }
 const isWed = (g) => weekdayOf(g.state.day) === 2;
+
+// Paid treats that only relax (drinks, aroma, bath salts) work fully `full` times a day
+// (counted per kind in machi_treat_<kind>); after that a quarter of the effect, so stress
+// cannot simply be bought away and hobbies, friends and rest stay worth it.
+const TREAT_NOTE = '（今日はもう何度も気分転換した。効果は小さめ…）';
+function treat(g, kind, stress, full = 2) {
+  const n = bumpDay(g, 'machi_treat_' + kind);
+  return n <= full ? { stress, tired: false } : { stress: Math.max(1, Math.round(stress / 4)), tired: true };
+}
 
 // A short "time passes" beat.
 async function beat(g, sfx = ['drum'], ms = 300) {
@@ -84,7 +95,7 @@ async function orderMenu(g, { title, entries, host, thanks, sale = 1 }) {
   const k = await g.list({
     title: `${title}（所持金 ${fmtMoney(g.state.money)}）`,
     items: entries.map((e) => ({ label: e.name, right: fmtMoney(price(e)), disabled: g.state.money < price(e) })),
-    x: 12, y: 44, w: 360, px: true,
+    x: 12, y: 44, w: 420, px: true,
     describe: (i) => [entries[i].desc, effects(entries[i])].filter(Boolean).join('\n') + (entries[i].fill && !g.canEat() ? '\nいまはおなかいっぱい…' : ''),
   });
   if (k < 0) return null;
@@ -96,9 +107,11 @@ async function orderMenu(g, { title, entries, host, thanks, sale = 1 }) {
   g.sfx('coin');
   const a = snap(g);
   if (e.heal || e.fill) g.eat(e.heal || 0, { silent: true, fill: e.fill || 0 });
-  g.relax({ stress: e.stress || 0, clean: e.clean || 0 });
+  // a drink (nothing to eat) is a treat: full relief twice a day, then less
+  const t = e.stress && !e.fill ? treat(g, 'drink', e.stress) : { stress: e.stress || 0, tired: false };
+  g.relax({ stress: t.stress, clean: e.clean || 0 });
   const res = diffText(g, a);
-  await g.say([e.text || `${e.name}をいただいた。`, res ? `${res}` : 'ほっとひと息。'].filter(Boolean));
+  await g.say([e.text || `${e.name}をいただいた。`, (res || 'ほっとひと息。') + (t.tired ? '\n' + TREAT_NOTE : '')]);
   if (thanks && host) await g.say(thanks, who(host));
   return e;
 }
@@ -122,18 +135,22 @@ registerItem('machi_bathsalt', {
   name: '入浴剤', price: 300, desc: 'ゆずの香りの入浴剤。\n使うと ストレス -8・身だしなみ +15。',
   use: async (g) => {
     g.takeItem('machi_bathsalt');
-    g.relax({ stress: 8, clean: 15 });
+    const t = treat(g, 'bathsalt', 8, 1);
+    const a = snap(g);
+    g.relax({ stress: t.stress, clean: 15 });
     g.sfx('good');
-    await g.say('お湯に入浴剤をとかして、ゆっくりつかった。\nゆずのいい香り…。\n（ストレス -8・身だしなみ +15）');
+    await g.say(['お湯に入浴剤をとかして、ゆっくりつかった。\nゆずのいい香り…。', (diffText(g, a) || 'さっぱりした。') + (t.tired ? '\n' + TREAT_NOTE : '')]);
   },
 });
 registerItem('machi_aroma', {
-  name: 'アロマキャンドル', price: 800, desc: 'ラベンダーの香り。\n使うと ストレス -18。',
+  name: 'アロマキャンドル', price: 800, desc: 'ラベンダーの香り。\n使うと ストレス -18。（よく効くのは1日1回）',
   use: async (g) => {
     g.takeItem('machi_aroma');
-    g.relax({ stress: 18 });
+    const t = treat(g, 'aroma', 18, 1);
+    const a = snap(g);
+    g.relax({ stress: t.stress });
     g.sfx('good');
-    await g.say('アロマキャンドルに火をともした。\nやさしい香りに、心がほどけていく…。\n（ストレス -18）');
+    await g.say(['アロマキャンドルに火をともした。\nやさしい香りに、心がほどけていく…。', (diffText(g, a) || 'ほっとした。') + (t.tired ? '\n' + TREAT_NOTE : '')]);
   },
 });
 registerItem('machi_wax', {
@@ -854,7 +871,7 @@ function washers(ctx, px, py, t) {
 }
 
 // ====================================================================== town interactions
-const KAICHO = { name: '商店街の会長さん', look: { ...LOOKS.oldman, top: '#d62f2f', bottom: '#2a3560', glasses: false } };
+const KAICHO = { name: '商店街の会長', look: { hair: 'bald', hairColor: 'silver', skin: 'tan', top: '#3a58a8', bottom: '#2a2d36', glasses: true } };
 const TAIYAKI = { name: 'たい焼き屋のおやじさん', look: { hair: 'bald', hairColor: 'black', skin: 'tan', top: '#ffffff', bottom: '#2a3560', apron: '#2a3a7a' } };
 
 const NOTICES = [
@@ -923,7 +940,9 @@ async function jog(g) {
   g.addNeed('clean', -10);
   bumpDay(g, 'machi_jog');
   const line = n === 0 ? 'タッタッタッ…。\n池のまわりを、気持ちよく1周走った！' : n === 1 ? 'もう1周！\n…ちょっと息が上がってきた。' : 'ぜえ、ぜえ…。\n今日はもう、走りすぎかも…。';
-  await g.say([line, diffText(g, a) + (n >= 2 ? '\n（気分転換の効果は、1日に何周もすると小さくなる）' : '')]);
+  const pages = [line, (diffText(g, a) || 'いい汗をかいた。') + (n >= 2 ? '\n（気分転換の効果は、1日に何周もすると小さくなる）' : '')];
+  if (g.state.life.hunger < HUNGRY) pages.push('…おなかがペコペコだ。\n何か食べないと、力が出ない。');
+  await g.say(pages);
 }
 
 async function restBench(g) {
@@ -946,19 +965,26 @@ async function petCat(g) {
   await g.say(lines);
 }
 
+// The same 会長 who looks for festival acts at よしもと 東京本部 (places/yoshimoto.js):
+// same look, same Kansai voice.
 async function kaichoTalk(g, npc) {
   const o = who(npc);
   const lines = [];
+  const matsuri = Number(g.state.jobs && g.state.jobs.yoshimoto_matsuri) || 0;
   if (!g.flag('machi_kaicho')) {
     g.setFlag('machi_kaicho');
-    lines.push('おお、見ない顔じゃな。\nようこそ、ドット商店街へ！\nわしは、この商店街の会長じゃ。');
+    lines.push(g.flag('yoshimoto_matsuri_met')
+      ? 'おっ、{name}さんやないか！\nよう来てくれたな。\nここが、うちの商店街や！'
+      : 'おっ、見ん顔やな。\nようこそ、ドット商店街へ！\nわしは、この商店街の会長や。');
   }
   lines.push(
-    '食材ならスーパー、腹ごしらえはラーメン屋。\n疲れたらカフェでひと休み、\n汗を流すならジムじゃ。',
-    'お部屋さがしはドット不動産、\n家具は家具のドット。\n暮らしのことなら、なんでもそろうぞい。',
+    '食材ならスーパー、腹ごしらえはラーメン屋。\n疲れたらカフェでひと休み、\n汗を流すならジムやで。',
+    'お部屋さがしはドット不動産、\n家具ならドット家具。\n暮らしのことなら、なんでもそろうで！',
   );
-  if (g.state.fame >= 1000) lines.push('{name}くんが来てくれるおかげで、\n商店街もずいぶんにぎやかになったわい！\nほっほっほ。');
-  else lines.push('暮らしを整えるのも、芸の肥やしじゃよ。\nよく食べ、よく休み、よく笑う！');
+  if (matsuri) lines.push('夏まつりのステージ、ほんまおおきに！\n商店街のみんな、いまだに\nあの話で盛り上がっとるで。');
+  else if (g.state.agency) lines.push('ときどき、よしもと 東京本部のロビーで\nお祭りに出てくれる芸人さんを探しとるんや。\n見かけたら、声かけてや！');
+  if (g.state.fame >= 1000) lines.push('{name}さんが来てくれるおかげで、\n商店街もずいぶんにぎやかになったわ！\nわっはっは。');
+  else lines.push('暮らしを整えるのも、芸の肥やしや。\nよう食べて、よう休んで、よう笑う！\nこれがいちばんやで。');
   await g.say(lines, o);
 }
 
@@ -1059,7 +1085,7 @@ function generate() {
 
     // ---- along the main road (doors on y 13)
     { type: 'building', x: 2, y: 10, w: 5, h: 4, door: 2, place: 'fudousan', name: 'ドット不動産', kind: 'shop', wall: '#eef2f6', roof: '#2f6fd0', sign: { text: 'ドット不動産', bg: '#2f6fd0', color: '#ffffff' }, display: 'listings' },
-    { type: 'building', x: 7, y: 10, w: 6, h: 4, door: 3, place: 'kagu', name: '家具のドット', kind: 'shop', wall: '#e9dfd0', roof: '#6b4a2e', sign: { text: '家具のドット', bg: '#6b4a2e', color: '#fff3e0' }, display: 'furniture', awning: '#6b4a2e' },
+    { type: 'building', x: 7, y: 10, w: 6, h: 4, door: 3, place: 'kagu', name: 'ドット家具', kind: 'shop', wall: '#e9dfd0', roof: '#6b4a2e', sign: { text: 'ドット家具', bg: '#6b4a2e', color: '#fff3e0' }, display: 'furniture', awning: '#6b4a2e' },
     { type: 'building', x: 18, y: 10, w: 7, h: 4, door: 3, place: 'famires', name: 'ファミレス ドットキッチン', kind: 'restaurant', sign: { text: 'ドットキッチン', bg: '#ffffff', color: '#c0392b' } },
     { type: 'building', x: 25, y: 10, w: 6, h: 4, door: 3, place: 'gym', name: 'DOT GYM', kind: 'gym', sign: { text: 'DOT GYM' } },
     { type: 'building', x: 31, y: 10, w: 5, h: 4, door: 2, place: 'karaoke', name: 'カラオケ ドットボックス', kind: 'shop', wall: '#3a2a4a', roof: '#ff4f8b', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' }, display: 'karaoke', neon: '#ff7eb6' },
@@ -1075,7 +1101,7 @@ function generate() {
     // ---- props & signs
     gate(13, 13),
     { type: 'sign', x: 13, y: 13, solid: true, text: ['「ドット商店街」の入口アーチだ。', 'はなや・スーパー・ラーメン・カフェ・美容院…\nアーケードの下に、お店がずらりと並んでいる。'] },
-    { type: 'sign', x: 17, y: 13, solid: true, text: ['入口アーチの柱に、案内図が貼ってある。', '【アーケード】はなや／スーパー まるどっと／らーめん／\nCAFE ドット／hair salon／コインランドリー／たい焼き', '【大通り】ドット不動産／家具のドット／ドットキッチン／\nDOT GYM／カラオケ　【南】ドットレジデンス／ドットタワー／公園'] },
+    { type: 'sign', x: 17, y: 13, solid: true, text: ['入口アーチの柱に、案内図が貼ってある。', '【アーケード】はなや／スーパー まるどっと／らーめん／\nCAFE ドット／hair salon／コインランドリー／たい焼き', '【大通り】ドット不動産／ドット家具／ドットキッチン／\nDOT GYM／カラオケ　【南】ドットレジデンス／ドットタワー／公園'] },
     ...[3, 8, 12, 18, 23, 28, 33, 38].map((x, i) => pillar(x, 8, i)),
     cat(38, 5, { talk: petCat }),
     notice(44, 13, { talk: readNotice }),
@@ -1199,8 +1225,8 @@ async function superShop(g, key) {
   const s = SECTIONS[key];
   const sale = s.sale && isWed(g) ? 0.8 : 1;
   const list = goods(s.items, sale);
-  if (!list.length) { await g.say('（いまは品切れのようだ…）'); return; }
-  await g.shop(list, { title: s.title + (sale < 1 ? '（水曜特売 2割引）' : ''), greeting: sale < 1 ? '本日は特売日！2割引ですよ！' : GREET[key] });
+  if (!list.length) { await g.say('（いまは品切れのようだ…）'); return 0; }
+  return g.shop(list, { title: s.title + (sale < 1 ? '（水曜特売 2割引）' : ''), greeting: sale < 1 ? '本日は特売日！2割引ですよ！' : GREET[key] });
 }
 async function superClerk(g, npc) {
   const o = who(npc);
@@ -1248,7 +1274,7 @@ registerPlace({
         { type: 'sign', x: 8, y: 1, talk: async (g) => { await g.say(['特売のお知らせが貼ってある。', '「毎週水曜日は特売日！\n　食材・お惣菜 2割引」', isWed(g) ? '…今日は水曜日だ！' : `（今日は${WEEKDAYS[weekdayOf(g.state.day)]}曜日）`]); } },
         { type: 'npc', id: 'super_clerk', x: 9, y: 6, dir: 'down', look: SUPER_CLERK.look, name: SUPER_CLERK.name, talk: superClerk },
         { type: 'npc', id: 'super_deli', x: 2, y: 6, dir: 'down', look: DELI_LADY.look, name: DELI_LADY.name,
-          talk: async (g, npc) => { await superShop(g, 'deli'); await g.say('毎度ありがと！\nコロッケは、おやつにもいいわよ〜。', who(npc)); } },
+          talk: async (g, npc) => { const n = await superShop(g, 'deli'); await g.say(n ? '毎度ありがと！\nコロッケは、おやつにもいいわよ〜。' : 'また寄ってってね〜。\n揚げたては、いまだけよ！', who(npc)); } },
         { type: 'npc', id: 'super_mom', x: 12, y: 4, dir: 'left', look: { ...LOOKS.mom, top: '#5fb8a8' }, name: 'お客さん', wander: 1,
           text: ['卵と鶏肉があれば、親子丼。\nお米とお魚とみそがあれば、焼き鮭定食。', '組み合わせを考えるのが、楽しいのよね。'] },
         { type: 'npc', id: 'super_student', x: 4, y: 5, dir: 'left', look: { hair: 'short', hairColor: 'brown', skin: 'fair', top: '#2f6fd0', bottom: '#3b3f48' }, name: '一人暮らしの学生',
@@ -1284,9 +1310,7 @@ function cafeMenu(g) {
   ];
 }
 async function cafeOrder(g, npc) {
-  const o = who(npc || BARISTA);
   await orderMenu(g, { title: 'CAFE ドット メニュー', entries: cafeMenu(g), host: npc || BARISTA, thanks: pick(['ごゆっくりどうぞ。', 'またのお越しを、お待ちしております。', 'いい顔になりましたね。']) });
-  void o;
 }
 
 registerPlace({
@@ -1371,10 +1395,11 @@ async function sing(g) {
   g.relax({ stress: good ? 25 : 10 });
   const lines = [`採点結果…${res.score}点！（ランク${res.rank}）`];
   lines.push(res.rank === 'S' ? '画面に「プロ級！」の文字が光った！\n思わずガッツポーズ！' : good ? 'いい感じに歌えた！\n声を出すって、気持ちいい！' : 'うーん、音程がちょっと…。\nでも、思いきり歌ってすっきりした！');
-  let tail = diffText(g, a);
-  if (good && n <= 3) { g.addSkill('uta', 1, true); tail += `　${SKILLS.uta}+1（${g.state.skills.uta}）`; }
-  else if (good) tail += '\n（今日はたくさん歌った。歌の練習効果は、また明日）';
-  lines.push(tail);
+  const parts = [diffText(g, a)];
+  let tail = '';
+  if (good && n <= 3) { g.addSkill('uta', 1, true); parts.push(`${SKILLS.uta}+1（${g.state.skills.uta}）`); }
+  else if (good) tail = '\n（今日はたくさん歌った。歌の練習効果は、また明日）';
+  lines.push((parts.filter(Boolean).join('　') || 'すっきりした！') + tail);
   g.sfx(good ? 'applause' : 'cursor');
   await g.say(lines);
 }
@@ -1520,6 +1545,7 @@ async function workout(g, kind) {
   } else if (gymBonus(g) < 20) lines.push(`トレーニング記録：${count}日目\n（あと${5 - (count % 5)}日で、体力の最大値アップ）`);
   else lines.push(`トレーニング記録：${count}日目\n（体力アップは最大まで達した。いい体だ！）`);
   lines.push('汗をかいたら、シャワーを浴びていこう。');
+  if (g.state.life.hunger < HUNGRY) lines.push('…おなかがペコペコだ。\n何か食べないと、力が出ない。');
   await g.say(lines);
 }
 async function gymShower(g) {
@@ -1575,7 +1601,7 @@ registerPlace({
         '#..............#',
         '#.yy.yy..BB....#',
         '#..............#',
-        '#...........HH.#',
+        '#............HH#',
         '#RRR...........#',
         '#P...........WP#',
         '#######MM#######',
@@ -1605,7 +1631,7 @@ registerPlace({
         { x: 9, y: 4, w: 2, on: 'action', run: (g) => workout(g, 'bench') },
         { x: 2, y: 4, w: 2, on: 'action', run: (g) => workout(g, 'yoga') },
         { x: 5, y: 4, w: 2, on: 'action', run: (g) => workout(g, 'yoga') },
-        { x: 12, y: 6, w: 2, on: 'action', run: gymShower },
+        { x: 13, y: 6, w: 2, on: 'action', run: gymShower },
         { x: 13, y: 2, w: 2, on: 'action', run: (g) => g.say('ロッカーだ。\nだれかのタオルに「根性」と刺しゅうしてある。') },
       ],
       onEnter: (g) => firstVisit(g, 'gym', ['DOT GYMへようこそ！', `ビジター利用は1日${fmtMoney(GYM_PRICE)}。\nトレーニングを続けると、体力の最大値が上がりますよ！`], GYM_STAFF),
@@ -1620,7 +1646,7 @@ const SALON_DESK = { name: '受付さん', look: { hair: 'long', hairColor: 'bro
 const isStyled = (g) => { const s = g.flag('machi_styled'); return !!(s && typeof s === 'object'); };
 async function salonMenu(g, npc) {
   const o = who(npc || STYLIST);
-  const i = await g.ask(isStyled(g) ? 'いらっしゃいませ！\nヘアスタイル、まだばっちりキマってますよ。' : 'いらっしゃいませ！\n今日はどうなさいますか？', [`カット＆ブロー ${fmtMoney(SALON_PRICE)}`, `シャンプー ${fmtMoney(1500)}`, 'やめておく'], { ...o, cancel: 2 });
+  const i = await g.ask((isStyled(g) ? 'ヘアスタイル、まだばっちりキマってますよ。' : 'いらっしゃいませ！今日はどうなさいますか？') + '\nカット：次のお仕事の評判がアップ\nシャンプー：ヘッドスパでリラックス', [`カット＆ブロー ${fmtMoney(SALON_PRICE)}`, `シャンプー ${fmtMoney(1500)}`, 'やめておく'], { ...o, cancel: 2 });
   if (i === 2 || i < 0) { await g.say('またお待ちしてますね！', o); return; }
   const price = i === 0 ? SALON_PRICE : 1500;
   if (!g.spend(price)) { await g.say('あら…お会計が足りないみたいです。\nまたいらしてくださいね。', o); return; }
@@ -1630,16 +1656,17 @@ async function salonMenu(g, npc) {
     await g.say('かしこまりました！\nお席へどうぞ〜。', o);
     await beat(g, ['snare', 'snare', 'snare', 'chime'], 240);
     g.bathe(100, true);
-    g.relax({ stress: 10 });
-    g.setFlag('machi_styled', { day: g.state.day, fame: g.state.fame, jobs: g.state.stats.jobs || 0 });
-    await g.say(['チョキチョキ…ブォーン…。', 'はい、できあがりです！\nすっごく似合ってますよ！', '鏡の中の自分…すっきり！別人みたいだ！'].slice(0, 3), o);
+    g.relax({ stress: 15 });
+    g.setFlag('machi_styled', { day: g.state.day, fame: g.state.fame, jobs: (g.state.stats && g.state.stats.jobs) || 0 });
+    await g.say(['チョキチョキ…ブォーン…。', 'はい、できあがりです！\nすっごく似合ってますよ！'], o);
+    await g.say('鏡の中の自分…すっきり！\n別人みたいだ！');
     g.emote('player', '♪');
     await g.say([diffText(g, a), '（ヘアスタイルが決まった！\n次のお仕事の評判がアップする。\n評判は、次の朝にとどくよ）']);
   } else {
     await beat(g, ['cursor', 'cursor', 'chime'], 240);
-    g.bathe(50, true);
-    g.relax({ stress: 8 });
-    await g.say(['シャカシャカ…。\nヘッドスパつきのシャンプーで、頭がすっきり！', diffText(g, a)]);
+    g.bathe(100, true);
+    g.relax({ stress: 12 });
+    await g.say(['シャカシャカ…。\nヘッドスパつきのシャンプーで、頭がすっきり！', diffText(g, a) || 'さっぱりした。']);
   }
 }
 
@@ -1933,10 +1960,10 @@ onMorning((g) => {
     g.setFlag('machi_styled', { ...s, fame: st.fame, jobs });
   }
 });
-// Wednesday: the supermarket's sale (once the player knows the street).
+// Wednesday: the supermarket's sale (once the player has shopped there: its point card).
 onMorning((g) => {
   if (weekdayOf(g.state.day) !== 2) return;
   const v = g.state.flags.visited;
-  if (!v || !v.machi) return;
+  if (!v || !v.super) return;
   g.message({ from: 'スーパー まるどっと', kind: 'news', text: '本日水曜日は特売日！\n食材・お惣菜がぜんぶ2割引です。\nドット商店街で、お待ちしております♪' });
 });

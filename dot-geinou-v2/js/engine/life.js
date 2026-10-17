@@ -108,7 +108,8 @@ registerHangout('ramen', { name: 'ラーメン屋', price: 900, stress: 12, aff:
 registerHangout('park', { name: '公園で散歩', price: 0, stress: 10, aff: 4, lines: ['ベンチに座って、とりとめのない話をした。', '気持ちのいい風がふいている。'] });
 
 export const REGULARS = {};
-// def: { title, place, weekday (0=月), requires (g.checkRequires format), pay, fame, fans,
+// def: { title, place, weekday (0=月), medium: 'tv'|'radio'|'stage'|'event' (door prompt wording),
+//   requires (g.checkRequires format), pay, fame, fans,
 //   skill, minigame, opts, stamina (default 15), host, hostLook, desc, offer (offer message) }
 export function registerRegular(id, def) {
   REGULARS[id] = { id, stamina: 15, pay: 10000, fame: 15, fans: 60, ...def };

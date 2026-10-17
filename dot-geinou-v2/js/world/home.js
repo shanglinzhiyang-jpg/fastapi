@@ -351,7 +351,8 @@ export async function takeBath(g, opts = {}) {
   await g.fadeIn(12);
   const dc = g.bathe(100, true);
   let ds = 0;
-  if (bonus) {
+  // the daily bonus is only used up when it does something (no stress to lose and no stamina bonus: kept for later)
+  if (bonus && (opts.stamina || (stress && g.state.life.stress > 0))) {
     g.setFlag('housing_bathDay', g.state.day);
     ds = -g.addNeed('stress', -stress);
     if (opts.stamina) g.heal(opts.stamina);
@@ -381,7 +382,7 @@ export async function sleepInBed(g, opts = {}) {
 //   artH                   canvas height in px (default 64; beds 76 over a 2-tile bed)
 //   anim(ctx, x, y, g, w)  optional per-frame extras in units (x, y = canvas top-left)
 //   tall                   stands against a wall (avoids the low slots under windows)
-//   bed                    replaces the home's bed instead of taking a slot
+//   bed                    drawn over the home's bed instead of standing in a slot (still one of the slots pieces)
 //   use: async (g, def)    what A on it does in your home (default: its description)
 const furnArt = new Map();
 function furnCanvas(id, w) {
@@ -413,6 +414,8 @@ export function ownedFurniture(g) {
   const f = (g.state && g.state.furniture) || {};
   return Object.keys(f).filter((k) => f[k] && FURNITURE[k]);
 }
+// A bed piece is drawn over the home's own bed (no slot position) but, like every piece,
+// counts against housing().slots (life.js: at most slots pieces; the notebook shows n/slots).
 export const bedPiece = (g) => ownedFurniture(g).find((id) => FURNITURE[id].bed) || null;
 
 // Which owned piece stands in which slot ({ x, y, low, win }): tall pieces against the
@@ -433,7 +436,8 @@ export function arrangeFurniture(g, slots) {
 
 // Furniture bought since the last visit home: "it has arrived!" (flags.housing_delivered = [ids]).
 export async function announceDelivery(g, housingId) {
-  const ids = (g.flag('housing_delivered') || []).filter((id) => FURNITURE[id] && g.state.furniture[id]);
+  const list = g.flag('housing_delivered');
+  const ids = (Array.isArray(list) ? list : []).filter((id) => FURNITURE[id] && g.state.furniture[id]);
   if (!lives(g, housingId) || !ids.length) return;
   g.setFlag('housing_delivered', []);
   g.sfx('good');

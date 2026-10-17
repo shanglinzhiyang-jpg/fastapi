@@ -31,6 +31,7 @@ import {
   lives, onceToday, openCloset, pcMenu, cook, takeBath, sleepInBed, closetProp, announceDelivery,
   drawFurniture, furnitureProps, ownedFurniture, bedPiece, fixMaxStamina, TV_TIPS,
 } from './home.js';
+import { ITEMS } from '../engine/state.js';
 
 // ================================================================ housing
 if (!HOUSING.dotsou) registerHousing('dotsou', { name: 'ドット荘', place: 'home', rent: 8000, sleepStress: 15, kitchen: true, bath: true, slots: 4 });
@@ -51,7 +52,7 @@ registerHousing('tower', {
   rent: 150000, moveCost: 500000, requires: { fame: 1000 }, sleepStress: 30, kitchen: true, bath: true, slots: 8,
   bathStress: 10,
   desc: '街を見下ろすタワーマンションの最上階。夜景の見える大きな窓と、ジェットバスつき。',
-  perks: ['寝るとストレス -30', 'ジェットバス（1日1回ストレス -10）', '夜景を一望できる大きな窓', '家具は8つまで', 'コンシェルジュ・デリバリー'],
+  perks: ['寝るとストレス -30', 'ジェットバス（1日1回ストレス -10）', '夜景を一望できる大きな窓', '家具は8つまで', 'コンシェルジュ（食事・ギフト）'],
 });
 export const HOME_ORDER = ['dotsou', 'mansion', 'tower'];
 const reqFame = (h) => (h.requires && h.requires.fame) || 0;
@@ -405,8 +406,19 @@ const FURNITURE_LIST = [
   }],
   ['dresser', {
     name: 'ドレッサー', price: 30000, clean: 20, tall: true, artH: 64, paint: paintDresser,
-    desc: '大きな鏡のついたドレッサー。朝の身じたくがはかどる。', perk: '毎朝 身だしなみ +20・身じたくで +40',
-    use: (g) => dailyRelax(g, 'dresser', ['鏡の前で、髪をととのえた。\n…よし、今日もいい感じ！'], { clean: 40 }),
+    desc: '大きな鏡のついたドレッサー。身じたくも、表情の練習もはかどる。', perk: '毎朝 身だしなみ +20・鏡の前の練習で 演技 +1',
+    use: async (g) => {
+      // a quick brush-up any time; the expression practice (演技 +1) once a day, like the bookshelf
+      g.bathe(40, true);
+      if (g.flag('housing_use_dresser') === g.state.day) { await g.say('鏡の前で、髪をととのえた。\n…よし、今日もいい感じ！'); return; }
+      const i = await g.ask('鏡の前で、表情の練習をする？\n（体力 -5・演技 +1・1日1回）', ['練習する', 'やめておく'], { cancel: 1 });
+      if (i !== 0) { await g.say('鏡の前で、髪をととのえた。\n…よし、今日もいい感じ！'); return; }
+      if (!g.useStamina(5)) { await g.say('体力が足りない…。顔がつかれている。'); return; }
+      g.setFlag('housing_use_dresser', g.state.day);
+      g.addSkill('engi', 1, true);
+      g.sfx('good');
+      await g.say([pick(['鏡の前で、喜怒哀楽の顔を順番に作ってみた。\n…表情筋が、ぴくぴくする。', '鏡に向かって、セリフを言ってみた。\n目の動きひとつで、印象が変わるんだな。', '「おどろいた顔」を研究した。\n…自分でも、ちょっとおかしい。']), `（演技 +1：${g.state.skills.engi}）`]);
+    },
   }],
   ['kotatsu', {
     name: 'こたつ', price: 35000, stress: 3, artH: 40, paint: paintKotatsu,
@@ -419,14 +431,14 @@ const FURNITURE_LIST = [
     use: (g) => g.say('ふかふかのベッドだ。'),
   }],
   ['aquarium', {
-    name: 'アクアリウム', price: 60000, stress: 4, tall: true, artH: 64, paint: paintAquarium, anim: animAquarium,
-    desc: '熱帯魚が泳ぐ水槽。ながめているだけで癒やされる。', perk: '毎朝ストレス -4・ながめて -5',
-    use: (g) => dailyRelax(g, 'aquarium', ['水槽の中を、熱帯魚がすいすい泳いでいる。\n…ぼーっと見ていると、心がしずかになる。'], { stress: 5 }),
+    name: 'アクアリウム', price: 60000, stress: 5, tall: true, artH: 64, paint: paintAquarium, anim: animAquarium,
+    desc: '熱帯魚が泳ぐ水槽。ながめているだけで癒やされる。', perk: '毎朝ストレス -5・ながめて -6',
+    use: (g) => dailyRelax(g, 'aquarium', ['水槽の中を、熱帯魚がすいすい泳いでいる。\n…ぼーっと見ていると、心がしずかになる。'], { stress: 6 }),
   }],
   ['tv', {
-    name: '大型テレビ', price: 80000, stress: 5, tall: true, artH: 60, paint: paintTv, anim: animTv,
-    desc: '大画面のテレビ。自分の出た番組も見られる？', perk: '毎朝ストレス -5・番組を見て -6',
-    use: async (g) => { await dailyRelax(g, 'tv', ['大画面のテレビをつけた。', pick(TV_TIPS)], { stress: 6 }); },
+    name: '大型テレビ', price: 80000, stress: 6, tall: true, artH: 60, paint: paintTv, anim: animTv,
+    desc: '大画面のテレビ。自分の出た番組も見られる？', perk: '毎朝ストレス -6・番組を見て -8',
+    use: async (g) => { await dailyRelax(g, 'tv', ['大画面のテレビをつけた。', pick(TV_TIPS)], { stress: 8 }); },
   }],
   ['treadmill', {
     name: 'ランニングマシン', price: 90000, stamina: 6, artH: 52, paint: paintTreadmill,
@@ -1006,7 +1018,8 @@ class ListingCard {
     row(Y + 92, '入居条件', f ? `★${f}以上` : 'なし', f && !ok ? '#d62f2f' : '#2f9a4a');
     row(Y + 116, '家具', `${h.slots}つまで`);
     (h.perks || []).slice(0, 3).forEach((p, i) => text(ctx, '・' + p, RX, Y + 142 + i * 18, { size: 12, color: '#3b3f48', shadow: null }));
-    text(ctx, `所持金 ${fmtMoney(g.state.money)}　★${g.state.fame}`, PX - 2, Y + H - 30, { size: 12, color: '#6d7380', shadow: null });
+    // right under the floor plan (the message window's name tag covers the card's bottom-left corner)
+    text(ctx, `所持金 ${fmtMoney(g.state.money)}　★${g.state.fame}`, PX - 2, PY + 14 * S + 10, { size: 12, color: '#6d7380', shadow: null });
     if (lives(g, this.id)) {
       const sx = X + W - 120, sy = Y + H - 44;
       R(ctx, sx, sy, 104, 30, '#d62f2f'); R(ctx, sx + 2, sy + 2, 100, 26, '#fbf8f2'); R(ctx, sx + 3, sy + 3, 98, 24, '#d62f2f');
@@ -1030,20 +1043,28 @@ function sellFurniture(g, id) {
   g.addMoney(back, true);
   return back;
 }
-// Ask which piece to sell until at most `keep` pieces remain. False if cancelled.
-async function trimFurniture(g, keep, o, title = '引き取ってもらう家具') {
-  while (ownedFurniture(g).length > keep) {
-    const ids = ownedFurniture(g);
+// Ask which pieces to sell until at most `keep` pieces remain (not counting `except`, e.g. the
+// bed being traded in), then sell them all at once. False if cancelled (then nothing is sold).
+async function trimFurniture(g, keep, o, title = '引き取ってもらう家具', except = null) {
+  const picked = [];
+  for (;;) {
+    const ids = ownedFurniture(g).filter((id) => id !== except && !picked.includes(id));
+    const need = ids.length - keep;
+    if (need <= 0) break;
     const i = await g.list({
-      title: `${title}（あと${ids.length - keep}つ）`, x: 24, y: 52, w: 330, px: true,
+      title: `${title}（あと${need}つ）`, x: 24, y: 52, w: 330, px: true,
       items: ids.map((id) => ({ label: FURNITURE[id].name, right: fmtMoney(half(FURNITURE[id].price)) })),
-      describe: (k) => `${FURNITURE[ids[k]].perk || FURNITURE[ids[k]].desc}\n引き取り価格：${fmtMoney(half(FURNITURE[ids[k]].price))}（買った値段の半分）`,
+      describe: (k) => `${FURNITURE[ids[k]].perk || FURNITURE[ids[k]].desc}\n引き取り価格：${fmtMoney(half(FURNITURE[ids[k]].price))}（半額）`,
     });
-    if (i < 0) return false;
-    const back = sellFurniture(g, ids[i]);
-    g.sfx('coin');
-    await g.say(`「${FURNITURE[ids[i]].name}」を${fmtMoney(back)}で引き取ってもらった。`);
+    if (i < 0 || !ids[i]) return false;
+    picked.push(ids[i]);
   }
+  if (!picked.length) return true;
+  let total = 0;
+  for (const id of picked) total += sellFurniture(g, id);
+  g.sfx('coin');
+  const names = picked.length > 2 ? `家具${picked.length}つ` : picked.map((id) => `「${FURNITURE[id].name}」`).join('と');
+  await g.say(`${names}を、${fmtMoney(total)}で\n引き取ってもらった。`);
   return true;
 }
 
@@ -1168,9 +1189,9 @@ export async function moveTo(g, id, o = speak(AGENT)) {
     : ['ご契約、ありがとうございます！\nでは、さっそくお引っ越しです！', `家具も全部、${h.name}に運んでおきますね。`], o);
   // messages: the new home, and the landlady when leaving or coming back
   const oya = PEOPLE.oya ? { person: 'oya', from: PEOPLE.oya.name } : { from: '大家さん' };
-  if (from.id === 'dotsou') g.message({ ...oya, kind: 'chat', text: 'お引っ越しおめでとう。さみしくなるわね…。\nでも、たまには顔を見せにきてちょうだい。ドット荘はいつでもあなたの家よ。' });
-  if (id === 'dotsou') g.message({ ...oya, kind: 'chat', text: 'おかえりなさい、{name}ちゃん！\nお部屋、ちゃんとそうじしておいたわよ。' });
-  else g.message({ from: h.name, look: id === 'tower' ? CONCIERGE.look : KANRI.look, kind: 'news', text: `${h.name}へようこそ。\n家賃は毎週月曜の朝、${fmtMoney(h.rent)}をいただきます。快適な毎日を！` });
+  if (from.id === 'dotsou') g.message({ ...oya, kind: 'chat', text: 'お引っ越しおめでとう。さみしくなるわね…。でも、たまには顔を見せにきてちょうだい。ドット荘はいつでもあなたの家よ。' });
+  if (id === 'dotsou') g.message({ ...oya, kind: 'chat', text: 'おかえりなさい、{name}ちゃん！お部屋、ちゃんとそうじしておいたわよ。' });
+  else g.message({ from: h.name, look: id === 'tower' ? CONCIERGE.look : KANRI.look, kind: 'news', text: `${h.name}へようこそ。家賃は毎週月曜の朝、${fmtMoney(h.rent)}をいただきます。快適な毎日を！` });
   await movingScene(g, `「${h.name}」へ引っ越し中…`);
   await arriveHome(g, id, true); // still black: goto fades in, then the arrival lines
   g.save();
@@ -1206,7 +1227,9 @@ async function endNaiken(g) {
 // Leaving the apartment door: viewers go back to the office, residents to the lobby.
 function apartmentDoor(placeId, lx, ly) {
   return async (g) => {
-    if (naikenOf(g)) { await endNaiken(g); return; }
+    // a viewing of this very home (a stale flag from another home never sends a resident away)
+    if (naikenOf(g) === placeId && !lives(g, placeId)) { await endNaiken(g); return; }
+    if (naikenOf(g)) g.setFlag('housing_naiken', null);
     await g.goto(placeId, 'lobby', lx, ly, 'down');
   };
 }
@@ -1295,21 +1318,28 @@ export async function buyFurniture(g, id, o = speak(CLERK)) {
   const h = g.housing();
   if (!f) return false;
   if (g.furnitureOwned(id)) { await g.say(`「${f.name}」は、もうお持ちですね！\n大事に使ってくださいね。`, o); return false; }
+  // a bed replaces the one you have: the old one is taken back at half price (pay < 0: you get the difference)
   const oldBed = f.bed ? bedPiece(g) : null;
   const tradeIn = oldBed ? half(FURNITURE[oldBed].price) : 0;
   const pay = f.price - tradeIn;
-  const i = await g.ask(`「${f.name}」${fmtMoney(f.price)}\n${perkOf(f)}\n${oldBed ? `（いまの「${FURNITURE[oldBed].name}」を${fmtMoney(tradeIn)}で下取り）` : 'お買い上げになりますか？'}`, ['買う', 'やめておく'], { ...o, cancel: 1 });
+  const deal = !oldBed ? 'お買い上げになりますか？'
+    : pay >= 0 ? `（いまのベッドを下取り：お支払い${fmtMoney(pay)}）`
+      : `（いまのベッドを下取り：差額${fmtMoney(-pay)}をお返し）`;
+  if (st.money < pay) { await g.say(`「${f.name}」${fmtMoney(f.price)}\n${perkOf(f)}\nお代が、あと${fmtMoney(pay - st.money)}足りないようです…。`, o); return false; }
+  const i = await g.ask(`「${f.name}」${fmtMoney(f.price)}\n${perkOf(f)}\n${deal}`, ['買う', 'やめておく'], { ...o, cancel: 1 });
   if (i !== 0) return false;
   if (st.money < pay) { await g.say(`お客さま、お代が足りないようです…。\n（あと${fmtMoney(pay - st.money)}）`, o); return false; }
-  const count = ownedFurniture(g).length - (oldBed ? 1 : 0);
-  if (count >= h.slots) {
+  // the bed being replaced leaves with the new one coming in: it never takes part in the count
+  if (ownedFurniture(g).filter((k) => k !== oldBed).length >= h.slots) {
     await g.say(`「${h.name}」に置ける家具は${h.slots}つまで。\nいまのお部屋は、もういっぱいですね…。\nどれかを引き取りましょうか？（半額で買い取り）`, o);
-    if (!(await trimFurniture(g, h.slots - 1, o))) { await g.say('かしこまりました。\nまたのお越しをお待ちしています！', o); return false; }
+    if (!(await trimFurniture(g, h.slots - 1, o, undefined, oldBed))) { await g.say('かしこまりました。\nまたのお越しをお待ちしています！', o); return false; }
   }
-  if (oldBed) sellFurniture(g, oldBed);
-  if (!g.spend(pay)) return false;
+  if (pay > 0 && !g.spend(pay)) return false;
+  if (pay < 0) g.addMoney(-pay, true);
+  if (oldBed) delete st.furniture[oldBed];
   st.furniture[id] = true;
-  g.setFlag('housing_delivered', [...(g.flag('housing_delivered') || []).filter((k) => k !== id), id]);
+  const delivered = g.flag('housing_delivered');
+  g.setFlag('housing_delivered', [...(Array.isArray(delivered) ? delivered : []).filter((k) => k !== id), id]);
   g.sfx('coin');
   await g.say(`お買い上げありがとうございます！\n「${h.name}」に配達しておきますね。`, o);
   if (f.stamina) {
@@ -1387,8 +1417,10 @@ function display(id, x, y, w = 2, h = 1) {
     },
     talk: async (g) => {
       const f = FURNITURE[id];
-      await g.say(`【${f.name}】${fmtMoney(f.price)}\n${f.desc}\n${perkOf(f)}`);
-      if (!g.furnitureOwned(id)) await buyFurniture(g, id);
+      // the sample's description, then the clerk's offer (price + perk): nothing said twice
+      if (g.furnitureOwned(id)) { await g.say(`【${f.name}】（お持ちの家具）\n${f.desc}\n${perkOf(f)}`); return; }
+      await g.say(`【${f.name}】\n${f.desc}`);
+      await buyFurniture(g, id);
     },
   };
 }
@@ -1473,7 +1505,7 @@ registerPlace({
         display('bed_good', 9, 7, 2, 2), display('bed_king', 12, 7, 2, 2),
         { type: 'npc', id: 'mokume', x: 16, y: 6, dir: 'left', ...CLERK, talk: clerkTalk },
         { type: 'npc', id: 'kagu_couple', x: 7, y: 4, dir: 'up', look: { ...LOOKS.mom, top: '#5fd7ff' }, name: 'お客さん', wander: 1, text: ['このソファ、すわり心地がいいわねえ…。', 'でも、うちの部屋に入るかしら？\n家具は置ける数が決まってるのよね。'] },
-        { type: 'sign', x: 16, y: 3, text: '「家具はお部屋のパワーアップ！」\n毎朝の気分や、身だしなみが変わります。\n置ける数：ドット荘4・レジデンス6・タワー8' },
+        { type: 'sign', x: 16, y: 3, text: '「家具はお部屋のパワーアップ！」\n毎朝の気分や、身だしなみが変わります。\n置ける数：ドット荘4・レジデンス6・タワー8\n（ベッドも1つに数えます）' },
       ],
       events: exitEvents('kagu', [9], 11),
     },
@@ -1579,7 +1611,7 @@ registerPlace({
         { x: 1, y: 3, on: 'action', run: (g) => (lives(g, 'mansion') ? cook(g) : g.say('ピカピカのシステムキッチンだ。\n住んだら、自炊がはかどりそう！')) },
         { x: 2, y: 3, on: 'action', run: (g) => g.say(lives(g, 'mansion') ? '大きな冷蔵庫だ。\nスーパーで買った食材がしまってある。' : '大きな冷蔵庫だ。中はまだ空っぽ。') },
         { x: 4, y: 2, on: 'action', run: (g) => (lives(g, 'mansion') ? takeBath(g, { name: 'お風呂', verb: '湯船につかる', stress: HOUSING.mansion.bathStress, lines: ['ゆったり湯船につかった。\nふう…。一日の疲れがとけていく。'] }) : g.say('お風呂場だ。湯船が広い！\nここなら足をのばして入れそう。')) },
-        { x: 13, y: 8, on: 'action', run: (g) => (lives(g, 'mansion') ? pcMenu(g) : g.say('作りつけのデスクだ。\nパソコンを置けば、ここで自主練できそう。')) },
+        { x: 13, y: 8, on: 'action', run: (g) => (lives(g, 'mansion') ? pcMenu(g) : g.say('モデルルームのパソコンだ。\n住んだら、ここで自主練ができそう。')) },
       ],
       onEnter: (g) => { g.run(() => arrivalLines(g, 'mansion')); },
     },
@@ -1667,7 +1699,12 @@ registerPlace({
         { type: 'npc', id: 'concierge', x: 11, y: 3, dir: 'down', ...CONCIERGE, talk: conciergeTalk },
         { type: 'sign', x: 2, y: 2, text: '大きな絵画だ。\n夜明けの海が、やさしい色でえがかれている。' },
         { type: 'sign', x: 13, y: 2, text: '現代アートだ。\n…何をえがいたものかは、よくわからない。' },
-        { type: 'npc', id: 'tower_resident', x: 3, y: 5, dir: 'right', look: { ...LOOKS.actor, top: '#3b3f48', tie: '#c9a227' }, name: '住人さん', text: ['…おや、新しい方ですか？', 'ここの最上階からの夜景は格別ですよ。\nがんばった人へのごほうび、ですね。'] },
+        {
+          type: 'npc', id: 'tower_resident', x: 3, y: 5, dir: 'right', look: { ...LOOKS.actor, top: '#3b3f48', tie: '#c9a227' }, name: '住人さん',
+          talk: (g, npc) => g.say(lives(g, 'tower')
+            ? ['こんばんは、{name}さん。\nこの前の番組、拝見しましたよ。', '最上階からの夜景はいかがです？\nがんばった人へのごほうび、ですね。']
+            : ['…おや、見学の方ですか？', 'ここの最上階からの夜景は格別ですよ。\nがんばった人へのごほうび、ですね。'], { name: npc.name, look: npc.look }),
+        },
       ],
       warps: [
         { x: 7, y: 2, room: 'apartment', tx: 10, ty: 8, dir: 'up', sfx: 'door', check: residentsOnly('tower', CONCIERGE, towerStop()) },
@@ -1736,6 +1773,7 @@ async function towerBath(g) {
   if (!lives(g, 'tower')) { await g.say('窓ぎわのジェットバスだ。\n夜景を見ながらお風呂…ぜいたくすぎる！'); return; }
   await takeBath(g, { name: 'ジェットバス', verb: '夜景を見ながら入る', stress: HOUSING.tower.bathStress, stamina: 10, lines: ['ブクブクブク…。\n夜景をながめながら、ジェットバスでのんびり。', '体のしんまで、ぽかぽかだ。'] });
 }
+const CONCIERGE_GIFTS = ['hanataba', 'cake', 'okashi', 'tea'];
 async function conciergeTalk(g) {
   const o = speak(CONCIERGE);
   if (!lives(g, 'tower')) {
@@ -1743,7 +1781,7 @@ async function conciergeTalk(g) {
     return;
   }
   for (;;) {
-    const k = await g.ask('おかえりなさいませ、{name}さま。\nなにかご用はございますか？', ['お食事のデリバリー', 'クリーニング', 'ありがとう'], { ...o, cancel: 2 });
+    const k = await g.ask('おかえりなさいませ、{name}さま。\nなにかご用はございますか？', ['お食事のデリバリー', 'ギフトの手配', 'ありがとう'], { ...o, cancel: 2 });
     if (k === 0) {
       if (!g.canEat()) { await g.say('おなかがいっぱいのご様子ですね。\nまたのちほど、お申しつけください。', o); continue; }
       const i = await g.ask('シェフ特製の和定食を、お部屋にお届けします。\n¥3,000（体力 +50）よろしいですか？', ['お願い', 'やめておく'], { ...o, cancel: 1 });
@@ -1754,12 +1792,10 @@ async function conciergeTalk(g) {
       g.sfx('good');
       await g.say(['ほかほかの和定食がとどいた！\nだしのきいたお味噌汁が、しみる…。', `（体力 +${got}・ストレス -3）`]);
     } else if (k === 1) {
-      const i = await g.ask('衣装のクリーニングとプレスを承ります。\n¥2,000（身だしなみ +60）よろしいですか？', ['お願い', 'やめておく'], { ...o, cancel: 1 });
-      if (i !== 0) continue;
-      if (!g.spend(2000)) { await g.say('恐れ入ります、お代が足りないようです…。', o); continue; }
-      const d = g.bathe(60, true);
-      g.sfx('good');
-      await g.say(`パリッとしたシャツに着がえた！\n（身だしなみ +${d}）`, o);
+      // gifts for friends without a trip to the shopping street (same prices as はなや)
+      const goods = CONCIERGE_GIFTS.filter((id) => ITEMS[id]);
+      if (!goods.length) { await g.say('恐れ入ります、本日はギフトのお取り扱いがございません…。', o); continue; }
+      await g.shop(goods, { title: 'コンシェルジュ ギフト手配', greeting: '大切な方への贈りものを、お届けいたします。' });
     } else {
       await g.say(g.state.rent.debt ? `いってらっしゃいませ。\n…なお、お家賃の未払いが${fmtMoney(g.state.rent.debt)}ございます。\nスマホの「家計」からお願いいたします。` : 'いってらっしゃいませ、{name}さま。', o);
       return;
@@ -1777,7 +1813,7 @@ onMorning((g) => {
     g.setFlag(key, true);
     g.message({
       from: 'ドット不動産', look: AGENT.look, kind: 'news',
-      text: `${st.name}さま、ご活躍おめでとうございます！\n知名度★${reqFame(h)}を超えたので「${h.name}」（${h.plan}・家賃${fmtMoney(h.rent)}／週）にご入居いただけます。\n内見だけでもお気軽に！ドット商店街でお待ちしています。間取`,
+      text: `${st.name}さま、ご活躍おめでとうございます！知名度が★${reqFame(h)}に届いたので、「${h.name}」（${h.plan}・家賃${fmtMoney(h.rent)}／週）にご入居いただけます。内見だけでもお気軽に！ドット商店街でお待ちしています。（担当：間取）`,
     });
     break;
   }
@@ -1789,7 +1825,7 @@ onMorning((g) => {
   if (lives(g, 'dotsou') || !(st.rent && st.rent.debt) || (st.rent.late || 0) < 2) return;
   if (g.flag('housing_warnWeek') === g.week) return;
   g.setFlag('housing_warnWeek', g.week);
-  g.message({ from: 'ドット不動産', look: AGENT.look, kind: 'news', text: `${g.housing().name}の家賃が、${st.rent.late}週続けて払えていないようです…。\n無理をせず、家賃¥8,000のドット荘に戻るのも手ですよ。ご相談はドット商店街の店舗まで！` });
+  g.message({ from: 'ドット不動産', look: AGENT.look, kind: 'news', text: `${g.housing().name}の家賃が、${st.rent.late}週続けて払えていないようです…。無理をせず、家賃¥8,000のドット荘に戻るのも手ですよ。ご相談はドット商店街の店舗まで！` });
 });
 
 // ================================================================ music

@@ -185,6 +185,7 @@ function person(id, def) {
 person('oya', {
   name: '大家さん', short: '大家さん', look: LOOKS.oldwoman, kind: 'local',
   where: '東京・ドット荘の前', again: 'ほかに何かあるかしら？',
+  giftDone: ['今日はもう、いただいたわよ。', '気持ちだけで、じゅうぶんうれしいわ。'], hangDone: '今日はもう、いっしょに出かけたじゃないの。\nまた今度ね。',
   profile: 'ドット荘の大家さん。世話好きで、住人みんなのお母さんがわり。',
   loves: ['okashi', 'tea'], likes: ['hanataba', 'cake', 'book'], dislikes: ['drink', 'cd'],
   giftLines: {
@@ -354,7 +355,7 @@ person('jiro', {
     again: ['…なあ、{name}。この前の話、考えてくれた？', 'オレと、コンビ組まへんか？'],
     yes: ['ほ、ほんまか！？\nよっしゃあああ！！', 'ほな今日から、オレらは相方や！\nいつか、でっかい舞台に立とうな！'],
     no: ['…そっか。せやな、急すぎたわ。\nけど、オレはいつでも待っとるで！'],
-    taken: ['…あ、そうか。\nお前には、もう{partner}って相方がおるんやったな。', 'それでも…オレと組んでくれへんか？'],
+    taken: ['…せや、お前には、もう{partner}って\n相方がおるんやったな。\nそれでも…オレと組んでくれへんか？'],
     keep: ['…せやな。相方は大事にせなあかん。\nほな、ライバルとしてよろしくな！'],
     already: 'これからもよろしゅうな、相方！',
     bye: '新しい相方と、がんばりや。\n…けど、ライバルとしては負けへんで！',
@@ -539,6 +540,8 @@ person('haruto', {
 person('maruyama', {
   name: 'エキストラの丸山さん', short: '丸山さん', look: { ...LOOKS.samurai, top: '#8a5a33' }, kind: 'local',
   where: '東映 撮影所の前', again: 'ほかに何かござるか？',
+  giftDone: ['本日はもう、いただいたでござる！', 'お気持ちだけで、かたじけないでござる。'], hangDone: '本日はもう、たっぷり遊んだでござる！\nまたの機会に！',
+  callShy: ['もしもし、丸山でござる。', 'また今度、ゆっくり話すでござる！'], callAgain: ['本日は、よく遊んだでござるな！', 'また今度でござる！'],
   profile: '平日は会社員、休日は時代劇のエキストラ。心は少年のおじさん。',
   loves: ['plushie', 'toei_sofubi', 'manga'], likes: ['takoyaki', 'toei_dango', 'cake', 'drink'], dislikes: ['book'],
   giftLines: {
@@ -636,6 +639,7 @@ person('maruyama', {
 person('mio', {
   name: '先輩女優 虹谷ミオ', short: '虹谷さん', look: { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#ffffff', bottom: '#6b2f8e', skirt: true, jacket: true }, kind: 'actor',
   where: 'ホリプロ 1階ロビー',
+  giftDone: ['今日はもう、もらったわよ。', '…気持ちだけ、受けとっておくわ。'],
   profile: 'ホリプロの実力派女優。気が強くて、まっすぐな努力家。',
   loves: ['hanataba', 'tea'], likes: ['book', 'okashi', 'accessory'], dislikes: ['drink'],
   giftLines: {
@@ -1305,7 +1309,7 @@ person('momo', {
     again: ['{name}。この前のこと、まだ本気だよ。', 'うちと、コンビ組んでくれない？'],
     yes: ['…ほんとに！？\nやったあああ！！', 'うち、ずっとピンでいいって思ってた。\nでも、{name}となら、もっとおもしろくなれる！\nよろしくね、相方！'],
     no: ['…そっか！\nいいのいいの、急にごめんね！\nうちは、いつでも待ってるから！'],
-    taken: ['…あ、そっか。\n{name}には、もう{partner}って相方がいるんだっけ。', 'それでも…うちと組んでほしいって言ったら、\n困る？'],
+    taken: ['{name}には、もう{partner}って相方がいるんだよね。\nそれでも…うちと組んでほしいって言ったら、\n困る？'],
     keep: ['…だよね！\n相方は大事にしなきゃ！\nじゃあ、ライバルとしてよろしく！'],
     already: 'これからもよろしくね、相方！',
     bye: '新しい相方と、がんばってね。\n…でも、ライブで当たったら手かげんしないから！',
@@ -1373,6 +1377,7 @@ person('momo', {
 person('chiyo', {
   name: '茶屋の看板娘 千代', short: '千代さん', look: { hair: 'long', hairColor: 'black', skin: 'light', top: '#e86f8a', bottom: '#b84a62', skirt: true }, kind: 'actor', special: true,
   where: '東映 撮影所の茶屋', talkLabel: '茶屋で一服', again: 'ほかに何かあるかしら？',
+  giftDone: ['今日はもう、いただいたわ。', 'お気持ちだけで、じゅうぶんよ。'], hangDone: '今日はもう、いっしょに過ごしたじゃない。\nまた今度、さそってね。',
   // once you know each other, the tea house without the self-introduction
   npcTalk: async (g, npc, own) => {
     const goods = ['toei_dango', 'toei_ocha'].filter((k) => ITEMS[k]);
@@ -1609,6 +1614,8 @@ person('tamae', {
 person('takeru', {
   name: '若手芸人 タケル', short: 'タケル', look: { ...LOOKS.comedian, hair: 'short', hairColor: 'black', top: '#d8101c', bottom: '#3a4a7a' }, kind: 'comedian', canPartner: true,
   where: '松竹芸能 ロビー', polite: true,
+  giftDone: ['今日はもう、もろてますから！', 'お気持ちだけで、じゅうぶんうれしいです。'], hangDone: '今日はもう、いっしょに遊びましたやん！\nまた今度、さそてください。',
+  callShy: ['もしもし？…あ、{name}さん！', 'また今度、ゆっくりしゃべりましょ！'], callAgain: ['今日はめっちゃ遊びましたね！', 'また今度、お願いします！'],
   profile: '松竹芸能の若手ツッコミ。努力家で、夢は自分のラジオ番組。',
   loves: ['takoyaki', 'manga'], likes: ['netacho', 'bento', 'drink', 'wadai'], dislikes: ['accessory'],
   giftLines: {
@@ -1666,7 +1673,7 @@ person('takeru', {
     again: ['{name}さん。ボク、あきらめてません！', 'ボクと、コンビ組んでもらえませんか！'],
     yes: ['ほ、ほんまですか！？\nうわあ…夢みたいや！', 'ボク、ツッコミ一生けんめい磨きます！\nよろしゅうお願いします、相方！'],
     no: ['…そ、そうですよね！\n急にすんません！\nでも、ボク、ずっと待ってますから！'],
-    taken: ['あ…{name}さんには、\nもう{partner}っていう相方が\nいてはるんでしたね。', 'それでも…ボクと組んでほしいって言うたら、\nあきませんか？'],
+    taken: ['{name}さんには、もう{partner}っていう\n相方がいてはるんでしたね。\nそれでも…ボクと組んでもらえませんか？'],
     keep: ['…ですよね！\n相方は、宝物ですもんね！\nほな、ライバルとしてよろしくお願いします！'],
     already: 'これからも、よろしゅうお願いします、相方！',
     bye: '新しい相方さんと、がんばってください。\n…ボクも負けへんように、稽古します！',
@@ -1838,6 +1845,8 @@ person('korosuke', {
 person('taisho', {
   name: 'たこ焼き屋の大将', short: '大将', look: { ...LOOKS.chef, hat: '#ffffff', top: '#2a3560', bottom: '#2a3560' }, kind: 'local',
   where: 'なんばのたこ焼き屋', talkLabel: 'お店のメニュー', again: 'ほかに用はあるか？',
+  giftDone: ['今日はもう、もろたで。', '気ぃつかわんでええ。'], hangDone: '今日はもう、つきおうたやろ。\nまた今度な。',
+  callShy: ['…もしもし。大将や。', '用があったら、店に来い。'], callAgain: ['今日はもう、ようけ遊んだやろ。', 'はよ寝え。'],
   profile: 'なんばで三十五年。口は悪いが、腹ぺこの若手にはやさしい大将。',
   loves: ['cd', 'okashi'], likes: ['tea', 'hanataba', 'book'], dislikes: ['takoyaki'],
   giftLines: {

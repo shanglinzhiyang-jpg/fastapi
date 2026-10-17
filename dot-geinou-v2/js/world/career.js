@@ -101,14 +101,21 @@ registerItem('career_fan_plaque', { name: 'ファン30万人の記念盾', price
 // A regular is worth more than a normal job of its tier (pay / fame / fans) but takes
 // the weekday: be at the place that day (the engine offers the recording at the door).
 // Tiers: ★250 jobs pay ~¥12,000 / ★45 / 135 fans; ★1000 ~¥30,000 / ★110 / 330 fans.
+// Weekly TV / radio / stage exposure is where fans come from: a regular brings ~6x the
+// fans of a job (so 30,000 fans for the 冠番組 is in reach around ★2000-2500).
 const SHOW_IDS = [];
-const SHOW_META = {}; // id -> { tier (1: ★250, 2: ★1000), kansai, npc }
+const SHOW_META = {}; // id -> { tier (1: ★250, 2: ★1000), kansai, npc, medium: 'tv' | 'radio' | 'stage', voice }
+// A show you hold now (accepted, not dropped; a declined offer leaves { declined, dropped }).
+const isActive = (st, id) => !!(st.regulars[id] && !st.regulars[id].dropped && st.regulars[id].since != null);
+const activeShows = (st) => SHOW_IDS.filter((id) => isActive(st, id));
+// How the show reaches people: 'tv' | 'radio' | 'stage' ('event' for the fan meeting).
+const mediumOf = (id) => (id === 'career_kanmuri' ? 'tv' : id === 'career_fanmeet' ? 'event' : (SHOW_META[id] && SHOW_META[id].medium) || 'tv');
 
 function addShow(id, def) {
-  const { npc, fallbackLook, kansai, tier, ...rest } = def;
-  registerRegular(id, rest);
+  const { npc, fallbackLook, kansai, tier, medium, voice, ...rest } = def;
+  registerRegular(id, { ...rest, medium: medium || 'tv' });
   SHOW_IDS.push(id);
-  SHOW_META[id] = { tier, kansai: !!kansai, npc };
+  SHOW_META[id] = { tier, kansai: !!kansai, npc, medium: medium || 'tv', voice: voice || null };
   // the host's face comes from that place's NPC (places load after this module)
   Object.defineProperty(REGULARS[id], 'hostLook', { get: () => npcLook(def.place, npc, fallbackLook), enumerable: true, configurable: true });
 }
@@ -128,7 +135,7 @@ const BURARI_SCENES = [
   { prompt: '司会「最後に、この町をひと言で表すと？」', answers: [{ text: '人があったかい町！', score: 100 }, { text: '…遠い町？', score: 10 }, { text: 'また来たい町です！', score: 80 }] },
 ];
 const RADIO_SCENES = [
-  { prompt: 'パーソナリティ「今夜もはじまりました！ゲストの{name}さん、意気込みを！」', answers: [{ text: '今夜もしゃべり倒します！', score: 100 }, { text: 'ねむいです…', score: 10 }, { text: 'よろしゅうおたのもうします', score: 70 }] },
+  { prompt: 'パーソナリティ「今夜もはじまりました！相方の{name}さん、意気込みを！」', answers: [{ text: '今夜もしゃべり倒します！', score: 100 }, { text: 'ねむいです…', score: 10 }, { text: 'よろしゅうおたのもうします', score: 70 }] },
   { prompt: 'パーソナリティ「ハガキ来てます。『最近、犬が自分より早起きです』」', answers: [{ text: 'ワンダフルな朝やん！', score: 100 }, { text: 'そうですか', score: 10 }, { text: 'うちは猫が早いです', score: 60 }] },
   { prompt: 'パーソナリティ「大阪で好きな食べもんは？」', answers: [{ text: 'たこ焼き！熱々のやつ！', score: 100 }, { text: 'とくにないですね', score: 10 }, { text: '豚まんも捨てがたい！', score: 80 }] },
   { prompt: 'パーソナリティ「リスナーさんから『ぼくも芸人になりたい』て」', answers: [{ text: 'いつか一緒に舞台立とな！', score: 100 }, { text: 'やめといたほうが…', score: 10 }, { text: 'まずはネタ帳からや！', score: 70 }] },
@@ -156,7 +163,7 @@ const yoseLines = () => [{ boke: 'どうも〜！よろしくお願いします�
 addShow('career_nhk_juku', {
   title: 'なるほど！ドット塾', place: 'nhk', weekday: 0, tier: 1,
   requires: { fame: 250 },
-  pay: 16000, fame: 55, fans: 450, stamina: 20, skill: 'talk',
+  pay: 16000, fame: 55, fans: 900, stamina: 20, skill: 'talk', medium: 'tv', voice: 'hakase',
   minigame: 'quiz', opts: { category: 'general', difficulty: 3, count: 5, show: 'なるほど！ドット塾' },
   host: 'NHK 物知り博士', npc: { id: 'nhk_hakase', name: '物知り博士' }, fallbackLook: LOOKS.oldman,
   desc: 'NHKの教養クイズ番組。物知り博士の出す問題に、塾生として答える。',
@@ -165,7 +172,7 @@ addShow('career_nhk_juku', {
 addShow('career_bsy_burari', {
   title: 'ぶらり！ご当地ドット便', place: 'bs_yoshimoto', weekday: 1, tier: 1,
   requires: { fame: 250 },
-  pay: 15000, fame: 50, fans: 420, stamina: 20, skill: 'talk',
+  pay: 15000, fame: 50, fans: 850, stamina: 20, skill: 'talk', medium: 'tv',
   minigame: 'talk', opts: { difficulty: 3, topic: 'local', show: 'ぶらり！ご当地ドット便', scenes: BURARI_SCENES },
   host: 'BSよしもと 陽向さん', npc: { name: '司会の陽向さん' }, fallbackLook: LOOKS.announcerM,
   desc: 'BSよしもとの情報バラエティ。全国の町をたずねて、その魅力をリポートする。',
@@ -174,25 +181,25 @@ addShow('career_bsy_burari', {
 addShow('career_yoshimoto_yose', {
   title: '水曜ドット寄席', place: 'yoshimoto', weekday: 2, tier: 1, kansai: true,
   requires: { fame: 250, anyOf: [{ agency: 'yoshimoto' }, { skills: { warai: 40 } }], anyOfText: 'よしもと所属か、お笑いのスキル40以上が必要だ。' },
-  pay: 15000, fame: 55, fans: 420, stamina: 20, skill: 'warai',
+  pay: 15000, fame: 55, fans: 850, stamina: 20, skill: 'warai', medium: 'stage',
   minigame: 'tsukkomi', opts: { difficulty: 3, dialect: 'kansai' },
   host: 'よしもと 舞台監督', npc: { name: '舞台監督' }, fallbackLook: LOOKS.staff,
   desc: 'よしもとの劇場で毎週ひらかれる漫才ライブ。常連のお客さんも多い。',
   offer: 'よしもとの舞台監督や。毎週水曜の劇場ライブ『水曜ドット寄席』、レギュラーの枠がひとつ空いてな。\n{name}の漫才、毎週お客さんに見せたってくれへんか？',
 });
 addShow('career_shochiku_radio', {
-  title: 'なんばでしゃべらナイト', place: 'shochiku', weekday: 3, tier: 1, kansai: true,
+  title: 'なんばハガキ道場', place: 'shochiku', weekday: 3, tier: 1, kansai: true,
   requires: { fame: 250, anyOf: [{ agency: 'shochiku' }, { skills: { talk: 40 } }], anyOfText: '松竹芸能所属か、トークのスキル40以上が必要だ。' },
-  pay: 14000, fame: 50, fans: 400, stamina: 15, skill: 'talk',
-  minigame: 'talk', opts: { difficulty: 3, topic: 'radio', show: 'なんばでしゃべらナイト', scenes: RADIO_SCENES },
+  pay: 14000, fame: 50, fans: 800, stamina: 15, skill: 'talk', medium: 'radio',
+  minigame: 'talk', opts: { difficulty: 3, topic: 'radio', show: 'なんばハガキ道場', scenes: RADIO_SCENES },
   host: '松竹芸能 プロデューサー', npc: { id: 'producer', name: 'プロデューサー' }, fallbackLook: LOOKS.manager,
   desc: '大阪・なんばで公開収録している深夜ラジオ。リスナーのハガキを読む。',
-  offer: '松竹芸能のプロデューサーです。毎週木曜に公開収録しとるラジオ『なんばでしゃべらナイト』、{name}さんにパーソナリティの相方をお願いしたいんですわ。\nリスナーのハガキ、一緒に読んでくれませんか？',
+  offer: '松竹芸能のプロデューサーです。毎週木曜に公開収録しとるラジオ『なんばハガキ道場』、{name}さんにパーソナリティの相方をお願いしたいんですわ。\nリスナーのハガキ、一緒に読んでくれませんか？',
 });
 addShow('career_grape_conte', {
   title: '金曜コントクラブ', place: 'grape', weekday: 4, tier: 1,
   requires: { fame: 250, anyOf: [{ agency: 'grape' }, { skills: { engi: 40 } }], anyOfText: 'グレープカンパニー所属か、演技のスキル40以上が必要だ。' },
-  pay: 15000, fame: 55, fans: 420, stamina: 20, skill: 'engi',
+  pay: 15000, fame: 55, fans: 850, stamina: 20, skill: 'engi', medium: 'stage',
   minigame: 'command', opts: { theme: 'acting', difficulty: 3 },
   host: 'グレープ 藤棚先生', npc: { name: 'コント作家 藤棚先生' }, fallbackLook: LOOKS.director,
   desc: 'グレープカンパニーの劇場でやる、毎週新作のコントライブ。',
@@ -201,7 +208,7 @@ addShow('career_grape_conte', {
 addShow('career_toho_musical', {
   title: '星降る街のメロディ（日曜公演）', place: 'toho', weekday: 6, tier: 1,
   requires: { fame: 250, skills: { uta: 30 } },
-  pay: 15000, fame: 50, fans: 400, stamina: 20, skill: 'uta',
+  pay: 15000, fame: 50, fans: 800, stamina: 20, skill: 'uta', medium: 'stage',
   minigame: 'rhythm', opts: { difficulty: 3, lanes: 2, bpm: 120, length: 48, song: '星降る街のメロディ' },
   host: '東宝 演出家', npc: { id: 'toho_stagedir', name: '演出家' }, fallbackLook: LOOKS.director,
   desc: '東宝のミュージカルのロングラン公演。毎週日曜のステージにアンサンブルで出る。',
@@ -210,24 +217,24 @@ addShow('career_toho_musical', {
 addShow('career_horipro_music', {
   title: 'ドット・ミュージックアワー', place: 'horipro', weekday: 2, tier: 2,
   requires: { fame: 1000, anyOf: [{ agency: 'horipro' }, { skills: { uta: 50 } }], anyOfText: 'ホリプロ所属か、歌のスキル50以上が必要だ。' },
-  pay: 36000, fame: 130, fans: 1300, stamina: 25, skill: 'uta',
+  pay: 36000, fame: 130, fans: 2600, stamina: 25, skill: 'uta', medium: 'tv',
   minigame: 'rhythm', opts: { difficulty: 4, lanes: 4, song: 'きらめきプレイリスト' },
   host: 'ホリプロ 制作プロデューサー', npc: { name: '制作プロデューサー' }, fallbackLook: LOOKS.singer,
   desc: '毎週水曜に収録する音楽番組。レギュラー歌手として、新しい歌を届ける。',
   offer: 'ホリプロの制作プロデューサーです。毎週水曜に収録している音楽番組『ドット・ミュージックアワー』で、{name}さんにレギュラー歌手として出演してほしいんです。\n毎週、新しい歌を一緒に届けましょう！',
 });
 addShow('career_toei_hero', {
-  title: '超光戦士ピクセリオン', place: 'toei', weekday: 5, tier: 2,
+  title: 'ピクセリオン・ネオ', place: 'toei', weekday: 5, tier: 2,
   requires: { fame: 1000, skills: { engi: 50 } },
-  pay: 36000, fame: 130, fans: 1500, stamina: 25, skill: 'engi',
+  pay: 36000, fame: 130, fans: 2800, stamina: 25, skill: 'engi', medium: 'tv',
   minigame: 'command', opts: { theme: 'henshin', difficulty: 4 },
   host: '東映 プロデューサー', npc: { id: 'toei_producer', name: 'プロデューサー' }, fallbackLook: LOOKS.manager,
-  desc: '東映の特撮ヒーローのテレビシリーズ。新ヒーロー「ピクセリオン・ネオ」に変身する主人公の役。',
-  offer: '東映のプロデューサーです。テレビシリーズ『超光戦士ピクセリオン』の新章に、2人目のヒーロー「ピクセリオン・ネオ」が登場します。\nその主人公役を、{name}さんにお願いしたい！撮影は毎週土曜です。',
+  desc: '東映の特撮ヒーロー番組。ピクセリオンの新章で、新ヒーロー「ピクセリオン・ネオ」に変身する主人公の役。',
+  offer: '東映のプロデューサーです。ピクセリオンのテレビシリーズに新章『ピクセリオン・ネオ』が決まりました！\n新ヒーローに変身する主人公の役を、{name}さんにお願いしたい！撮影は毎週土曜です。',
 });
 // shows whose content changes each week (fresh scenes, the player's 相方 on stage)
 dyn('career_bsy_burari', { opts: () => ({ difficulty: 3, topic: 'local', show: 'ぶらり！ご当地ドット便', scenes: shuffled(BURARI_SCENES).slice(0, 5), mc: '陽向さん' }) });
-dyn('career_shochiku_radio', { opts: () => ({ difficulty: 3, topic: 'radio', show: 'なんばでしゃべらナイト', scenes: [RADIO_SCENES[0], ...shuffled(RADIO_SCENES.slice(1, -1)).slice(0, 3), RADIO_SCENES[RADIO_SCENES.length - 1]] }) });
+dyn('career_shochiku_radio', { opts: () => ({ difficulty: 3, topic: 'radio', show: 'なんばハガキ道場', scenes: [RADIO_SCENES[0], ...shuffled(RADIO_SCENES.slice(1, -1)).slice(0, 3), RADIO_SCENES[RADIO_SCENES.length - 1]] }) });
 dyn('career_yoshimoto_yose', { opts: () => ({ difficulty: 3, dialect: 'kansai', lines: yoseLines(), ...partnerOpts() }) });
 dyn('career_grape_conte', { opts: () => ({ theme: 'acting', difficulty: 3, scenes: shuffled(CONTE_CLUB).slice(0, 4) }) });
 
@@ -242,7 +249,7 @@ function partnerOpts() {
 // ======================================================================== 冠番組
 export const KAN = 'career_kanmuri';
 const KAN_KINDS = {
-  talk: { suffix: 'のしゃべり場ナイト', skill: 'talk', minigame: 'talk' },
+  talk: { suffix: 'のトークひろば', skill: 'talk', minigame: 'talk' },
   warai: { suffix: 'のドッカン笑劇場', skill: 'warai', minigame: 'tsukkomi' },
   uta: { suffix: 'のミュージック・ドット', skill: 'uta', minigame: 'rhythm' },
   engi: { suffix: '劇場', skill: 'engi', minigame: 'command' },
@@ -281,7 +288,7 @@ function kanTitle(name) {
 }
 const kanStudio = () => KAN_STUDIOS[kanCfg().studio] || KAN_STUDIOS.none;
 
-registerRegular(KAN, { title: '冠番組', place: 'bs_yoshimoto', weekday: 6, stamina: 25, pay: 90000, fame: 280, fans: 3500, minigame: 'talk', skill: 'talk', desc: '自分の名前がついた、毎週の冠番組。' });
+registerRegular(KAN, { title: '冠番組', medium: 'tv', place: 'bs_yoshimoto', weekday: 6, stamina: 25, pay: 90000, fame: 280, fans: 6000, minigame: 'talk', skill: 'talk', desc: '自分の名前がついた、毎週の冠番組。' });
 dyn(KAN, {
   title: () => kanTitle(),
   place: () => kanStudio().place,
@@ -324,7 +331,7 @@ const FM_SCENES = [
   { prompt: 'ファン「最近ハマってることは？」', answers: [{ text: 'ドッターでみんなの返信読むこと！', score: 100 }, { text: 'とくにないです', score: 10 }, { text: '自炊です！', score: 60 }] },
   { prompt: '司会「最後に、ファンのみなさんへひと言！」', answers: [{ text: 'みんな、本当にありがとう！', score: 100 }, { text: 'おつかれさまでした', score: 20 }, { text: 'また会いましょう！', score: 80 }] },
 ];
-registerRegular(FANMEET, { title: 'ファンミーティング', place: 'bs_yoshimoto', weekday: -1, stamina: 20, pay: 30000, fame: 80, fans: 2500, minigame: 'talk', skill: 'talk', host: 'ドットプロモーション', desc: 'ファンのみんなと会える、一日だけのイベント。' });
+registerRegular(FANMEET, { title: 'ファンミーティング', medium: 'event', place: 'bs_yoshimoto', weekday: -1, stamina: 20, pay: 30000, fame: 80, fans: 2500, minigame: 'talk', skill: 'talk', host: 'ドットプロモーション', desc: 'ファンのみんなと会える、一日だけのイベント。' });
 dyn(FANMEET, {
   title: () => (fmCfg() && fmCfg().big ? 'ファン感謝祭' : 'ファンミーティング'),
   place: () => (fmCfg() && fmCfg().place) || 'bs_yoshimoto',
@@ -355,9 +362,14 @@ function joinFanMeet(g) {
 const FM_VENUE = { yoshimoto: 'yoshimoto', shochiku: 'shochiku', grape: 'grape', horipro: 'horipro' };
 function scheduleFanMeet(g, big) {
   const st = g.state;
-  let day = st.day + 2;
-  while (weekdayOf(day) < 5) day++; // the next Saturday / Sunday at least 2 days away
   const place = (st.agency && FM_VENUE[st.agency] && PLACES[FM_VENUE[st.agency]] ? FM_VENUE[st.agency] : 'bs_yoshimoto');
+  // the next Saturday / Sunday at least 2 days away, not on a day one of your shows is
+  // recorded at the same venue (the door offers only one recording)
+  const held = activeShows(st).concat(isActive(st, KAN) ? [KAN] : []);
+  const clash = (d) => held.some((id) => REGULARS[id].place === place && REGULARS[id].weekday === weekdayOf(d));
+  const weekend = [];
+  for (let d = st.day + 2; d < st.day + 16; d++) if (weekdayOf(d) >= 5) weekend.push(d);
+  const day = weekend.find((d) => !clash(d)) ?? weekend[0];
   const prev = fmCfg(st);
   st.flags.career_fm = { day, place, big: !!big, state: 'planned', n: num(prev && prev.n) + 1 };
   joinFanMeet(g);
@@ -620,11 +632,50 @@ async function fanMeetParty(g) {
   });
 }
 
+// ======================================================================== missed shows (morning)
+// The engine (life.js morning) reminds you of a missed recording and drops a show missed
+// twice, in plain standard Japanese. For our shows, rewrite those messages of this morning
+// in the host's own voice, with the host's face and what it cost.
+function missLines(id, r, drop) {
+  const meta = SHOW_META[id] || {};
+  const kansai = id === KAN ? kanStudio().kansai : meta.kansai;
+  const day = mediumOf(id) === 'stage' ? '本番の日' : '収録日';
+  const what = mediumOf(id) === 'stage' ? '本番' : '収録';
+  const t = r.title;
+  if (meta.voice === 'hakase') {
+    return drop
+      ? `『${t}』を続けて休んでしまったからのう…。\n残念じゃが、塾生は卒業ということにさせてもらうぞ。またいつでも遊びに来なさい。`
+      : `{name}くん、昨日は『${t}』の収録日じゃったぞ。\n塾生が来んと、さびしいのう。来週は必ず来るんじゃぞ。`;
+  }
+  if (kansai) {
+    return drop
+      ? `『${t}』、続けて休んでもうたから、レギュラーは降板ということになってしもた…。\nまたいつか、一緒にやろな。`
+      : `{name}さん、昨日は『${t}』の${day}やったで！\nみんな心配しとったわ。来週は頼むで。`;
+  }
+  return drop
+    ? `『${t}』の${what}を続けて休んでしまったので、残念ですが、レギュラーは降板ということになりました…。\nまたいつか、一緒にお仕事しましょう。`
+    : `{name}さん、昨日は『${t}』の${day}でしたよ！\nみんな心配していました。来週は必ず来てくださいね。`;
+}
+function missMorning(g) {
+  const st = g.state;
+  for (const m of st.phone.inbox) {
+    if (m.day !== st.day) break; // newest first: only this morning's
+    if (m.kind !== 'news' || m.career || m.look) continue;
+    for (const id of [...SHOW_IDS, KAN]) {
+      const r = REGULARS[id];
+      if (!r || m.from !== (r.host || 'プロデューサー') || !String(m.text).includes(`『${r.title}』`)) continue;
+      const drop = String(m.text).includes('降板');
+      m.text = g.fmt(missLines(id, r, drop) + `\n（知名度 -${Math.round(num(r.fame) / 2)}）`);
+      m.look = r.hostLook;
+      m.career = 1;
+      break;
+    }
+  }
+}
+
 // ======================================================================== offers (morning)
 const MAX_SHOWS = 4; // regular shows held at once (the 冠番組 does not count)
-const OFFER_GAP = 28; // days before a show is offered again (declined / ignored)
-const isActive = (st, id) => !!(st.regulars[id] && !st.regulars[id].dropped && st.regulars[id].since != null);
-const activeShows = (st) => SHOW_IDS.filter((id) => isActive(st, id));
+const OFFER_GAP = 28; // days before a show is offered again (declined / ignored / dropped)
 function pendingOffer(st, id) {
   return st.phone.inbox.some((m) => m.kind === 'offer' && m.regular === id && !m.answered);
 }
@@ -652,9 +703,18 @@ function sendOffer(g, id) {
   let text;
   if (id === KAN) {
     const k = kanStudio().kansai;
-    text = k
-      ? `{name}さん、ついにこの日が来ましたで！\nあなたの名前がついた冠番組『${r.title}』を、毎週${WEEKDAYS[r.weekday]}曜にスタートさせたいんです。\n番組の顔として、引き受けてもらえませんか？`
-      : `{name}さん、ついにこの日が来ました！\nあなたの名前がついた冠番組『${r.title}』を、毎週${WEEKDAYS[r.weekday]}曜にスタートさせたいんです。\n番組の顔として、引き受けてもらえませんか？`;
+    const wd = `毎週${WEEKDAYS[r.weekday]}曜`;
+    // the agencies' own 冠 shows (よしもとの公開収録 / 松竹の冠ラジオ) may already exist
+    const again = num(st.jobs && st.jobs.yoshimoto_kanmuri) > 0 || !!st.flags.shochiku_kanmuri_started;
+    if (again) {
+      text = k
+        ? `{name}さん、また大きな話が来ましたで！\n今度はゴールデンタイムに、{name}さんの名前がついた新番組『${r.title}』を、${wd}にスタートさせたいんです。\n番組の顔として、引き受けてもらえませんか？`
+        : `{name}さん、また大きなお話です！\n今度はゴールデンタイムに、{name}さんの名前がついた新番組『${r.title}』を、${wd}にスタートさせたいんです。\n番組の顔として、引き受けてもらえませんか？`;
+    } else {
+      text = k
+        ? `{name}さん、ついにこの日が来ましたで！\nあなたの名前がついた冠番組『${r.title}』を、${wd}にスタートさせたいんです。\n番組の顔として、引き受けてもらえませんか？`
+        : `{name}さん、ついにこの日が来ました！\nあなたの名前がついた冠番組『${r.title}』を、${wd}にスタートさせたいんです。\n番組の顔として、引き受けてもらえませんか？`;
+    }
   } else text = r.offer;
   g.message({ from: r.host, look: r.hostLook, kind: 'offer', regular: id, text: g.fmt(text) });
 }
@@ -666,8 +726,20 @@ function setupKan(g) {
   const wd = [6, 5, 4, 3, 2, 1, 0].find((d) => !busy.has(d)) ?? 6;
   st.flags.career_kan = { wd, kind: bestSkill(st), studio: st.agency && KAN_STUDIOS[st.agency] ? st.agency : 'none' };
 }
+// A show you were dropped from (missed twice) counts as offered on the day it was
+// dropped: it is not offered again within OFFER_GAP days either.
+function noteDrops(g) {
+  const st = g.state;
+  const offers = obj(g, 'career_offers');
+  const drops = obj(g, 'career_drops');
+  for (const id of [...SHOW_IDS, KAN]) {
+    const s = st.regulars[id];
+    if (s && s.dropped && s.since != null && drops[id] !== s.since) { drops[id] = s.since; offers[id] = st.day; }
+  }
+}
 function offerMorning(g, out) {
   const st = g.state;
+  noteDrops(g);
   if (st.flags.career_offerWeek === g.week || out.sent >= 2) return; // a busy morning: tomorrow
   if (kanEligible(g)) {
     setupKan(g);
@@ -675,16 +747,20 @@ function offerMorning(g, out) {
     out.sent++;
     return;
   }
-  if (activeShows(st).length >= MAX_SHOWS) return;
+  // shows you hold + fresh offers you have not answered yet (older ones no longer count)
+  const fresh = st.phone.inbox.filter((m) => m.kind === 'offer' && !m.answered && SHOW_IDS.includes(m.regular) && st.day - num(m.day) < 14).length;
+  if (activeShows(st).length + fresh >= MAX_SHOWS) return;
   const cands = SHOW_IDS.filter((id) => REGULARS[id] && offerable(g, id));
   if (!cands.length) return;
-  // shows that fit you first: your agency's, your best skill's, the higher tier, then random
+  // shows that fit you first: your agency's, your best skill's, the higher tier, a free
+  // weekday, then random
   const best = bestSkill(st);
+  const busy = new Set(activeShows(st).concat(isActive(st, KAN) ? [KAN] : []).map((id) => REGULARS[id].weekday));
   const score = {};
   for (const id of cands) {
     const r = REGULARS[id];
     const ag = AGENCIES[st.agency] && r.place === st.agency ? 3 : 0;
-    score[id] = ag + (r.skill === best ? 2 : 0) + (SHOW_META[id].tier || 1) * 2 + Math.random();
+    score[id] = ag + (r.skill === best ? 2 : 0) + (SHOW_META[id].tier || 1) * 2 - (busy.has(r.weekday) ? 3 : 0) + Math.random();
   }
   cands.sort((a, b) => score[b] - score[a]);
   sendOffer(g, cands[0]);
@@ -765,10 +841,14 @@ const LETTERS = [
   { t: 'いつも全力の{name}さんを見て、わたしも、もう一度夢を追いかけることにしました。', s: '元・役者志望のサラリーマン' },
   { t: '{name}さんの笑顔を見ると、なぜか肩こりが治ります。\n医学的にはわかりませんが、本当です。', s: 'ドット整骨院の院長' },
   { t: '家族4人、好きな芸能人がバラバラなのに、{name}さんだけは全員一致です！', s: 'ドット家一同' },
-  { t: '「{title}」の称号、おめでとうございます！\nずっと前から応援してたので、自分のことみたいにうれしいです。', s: '古参ファン・ぽんず', need: (st) => st.fame >= 100 },
-  { t: '{agency}所属、おめでとうございます！\nこれからの活躍、楽しみにしています！', s: 'ドット駅前の本屋さん', need: (st) => !!st.agency },
-  { t: '『{show}』毎週見てます！\n{wd}曜日が、一週間でいちばんの楽しみです。', s: '録画もしてる・さくら', need: (st, c) => !!c.show },
-  { t: '『{show}』の{name}さん、最高でした！\n毎週、家族みんなでテレビの前に集合しています。', s: '4人家族のドット家', need: (st, c) => !!c.show },
+  // congratulations: only within a few days of the new title / joining the agency
+  { t: '「{title}」の称号、おめでとうございます！\nずっと前から応援してたので、自分のことみたいにうれしいです。', s: '古参ファン・ぽんず', need: (st, c) => st.fame >= 100 && c.newTitle },
+  { t: '{agency}所属、おめでとうございます！\nこれからの活躍、楽しみにしています！', s: 'ドット駅前の本屋さん', need: (st, c) => !!st.agency && c.newAgency },
+  { t: '『{show}』毎週見てます！\n{wd}曜日が、一週間でいちばんの楽しみです。', s: '録画もしてる・さくら', need: (st, c) => c.medium === 'tv' },
+  { t: '『{show}』の{name}さん、最高でした！\n毎週、家族みんなでテレビの前に集合しています。', s: 'テレビっ子のドット家', need: (st, c) => c.medium === 'tv' },
+  { t: '『{show}』、毎週聞いてます！\n{name}さんの声を聞くと、一週間の疲れがふっとびます。', s: 'ラジオネーム・夜ふかしの月', need: (st, c) => c.medium === 'radio' },
+  { t: '『{show}』に、はじめてハガキを出しました！\n読まれたら、家族に自慢します。', s: 'ラジオネーム・はがき職人見習い', need: (st, c) => c.medium === 'radio' },
+  { t: '『{show}』、劇場で見ました！\n生の{name}さん、本当にキラキラしてました。また見に行きます！', s: '観劇が趣味・すずらん', need: (st, c) => c.medium === 'stage' },
   { t: 'ドッターの投稿、毎日の楽しみです！\nごはんの話がいつもおいしそうで、つい夜食を食べちゃいます。', s: '夜型のくま', need: (st) => num(st.phone.posts) >= 3 },
   { t: '大阪から応援してます！\nなんばに来たら、たこ焼き食べていってや〜！', s: 'なんばのたこ焼き好き', need: (st) => !!(st.flags.visited && st.flags.visited.namba) },
   { t: '{partner}さんとのコンビ、最高です！\nふたりのかけ合いが大好き！', s: 'お笑い大好き・まめ', need: (st, c) => !!c.partner },
@@ -776,16 +856,21 @@ const LETTERS = [
 ];
 function letterMorning(g, out) {
   const st = g.state;
+  const L = obj(g, 'career_letters');
+  // remember when the title / the agency last changed (congratulation letters)
+  const rk = rankIndex(st.fame), ag = st.agency || '';
+  if (L.rank !== rk) { if (L.rank != null && rk > L.rank) L.rankDay = st.day; L.rank = rk; }
+  if (L.agency !== ag) { if (L.agency != null && ag) L.agencyDay = st.day; L.agency = ag; }
   if (out.sent >= 2 || st.fans < 50) return;
   const p = clamp(0.1 + 0.07 * Math.log10(st.fans), 0, 0.5);
   if (Math.random() >= p) return;
-  const L = obj(g, 'career_letters');
   if (L.day === st.day) return;
   const shows = activeShows(st).concat(isActive(st, KAN) ? [KAN] : []);
   const sh = shows.length ? pick(shows) : null;
   const ctx = {
-    show: sh ? REGULARS[sh].title : '', wd: sh ? WEEKDAYS[REGULARS[sh].weekday] : '',
+    show: sh ? REGULARS[sh].title : '', wd: sh ? WEEKDAYS[REGULARS[sh].weekday] : '', medium: sh ? mediumOf(sh) : '',
     partner: st.partner && PEOPLE[st.partner] ? PEOPLE[st.partner].name : '',
+    newTitle: st.day - num(L.rankDay, -99) <= 6, newAgency: st.day - num(L.agencyDay, -99) <= 6,
   };
   const recent = Array.isArray(L.recent) ? L.recent : [];
   const ok = LETTERS.map((l, i) => i).filter((i) => (!LETTERS[i].need || LETTERS[i].need(st, ctx)) && !recent.includes(i));
@@ -805,15 +890,18 @@ function letterMorning(g, out) {
 
 // ======================================================================== weekly ranking
 const RIVALS = [
-  '白鳥ルミナ', '大河原ツバサ', '桃瀬あんず', 'すずめ百貨店', '風見ケイタ', '雪村しずく', '黒潮ゴロー', '天城コハル', 'ミルクティー同盟', '夜更かしペンギン',
+  '白鳥ルミナ', '大河原ツバサ', '桃瀬あんず', 'すずめ百貨店', '風見ケイタ', '雪村しずく', '黒潮ゴロー', '天城コハル', 'ミルクティー同盟', '真夜中ペンギンズ',
   '鳴海タクト', '南野マリン', '森乃くまお', '青空ハイウェイ', '藤咲レイナ', 'こたつむり', '早乙女ジョー', '星屑シスターズ', 'ドット山ピク太', '浪花のマダム千鶴',
   '御影リョウ', 'ナポリタン親方', '小野寺みのり', 'カスタードプリンス', '真壁ソウジ', 'ゆるふわ団地', '春風ひまり', '鉄板ジュンペイ', '朝霧カオル', 'ピコピコ博士',
   '銀河ステーション', '若葉のぞみ', 'たこやきガールズ', '千本木リク', 'おかわり侍', '水無月セナ', '草野ぽぽ', '月見ボーイズ', '紅林アキラ', '七色クレヨン',
   '田中ドット', '西園寺ミレイ', '宇宙ねこ団', '一番星ヨシオ', 'くるみ割り', '柚木サラ', '三日月ポテト', '東雲ハルト', 'しらたまパフェ', '大入りガッツ',
 ];
-const RIVAL_TOP = 7600, RIVAL_STEP = 0.93;
+// No.1 is in reach late game (about ★3500 with a 冠番組, regular shows and a busy week)
+const RIVAL_TOP = 6400, RIVAL_STEP = 0.93;
 const rivalScore = (i, week) => RIVAL_TOP * RIVAL_STEP ** i * (1 + 0.07 * (hash2(i, week, 11) * 2 - 1));
-const totalRecorded = (st) => Object.keys(st.regulars).filter((id) => id !== FANMEET).reduce((a, id) => a + num(st.regulars[id] && st.regulars[id].count), 0);
+// recordings of regular shows so far (g.doRegular logs each as the job 'regular_<id>'; unlike
+// regulars[id].count this never resets when a show is joined again)
+const totalRecorded = (st) => Object.keys(st.jobs || {}).filter((k) => k.startsWith('regular_') && k !== 'regular_' + FANMEET).reduce((a, k) => a + num(st.jobs[k]), 0);
 function weekSnapshot(g) {
   const st = g.state;
   return { week: g.week, jobs: num(st.stats.jobs), posts: num(st.phone.posts), regs: totalRecorded(st) };
@@ -886,7 +974,7 @@ const DOT = {
 const TOPICS = {
   work: { label: '今日のお仕事', desc: 'お仕事の感想をつぶやこう。お仕事をした日は、ファンが多めに増える。' },
   food: { label: 'ごはん', desc: '今日食べたものを投稿しよう。' },
-  off: { label: 'オフの日', desc: 'のんびりした一日を投稿しよう。ストレスが大きく減る。' },
+  off: { label: 'オフの日', desc: 'のんびりした話を投稿しよう。お仕事のない日なら、ストレスが大きく減る。' },
   promo: { label: '告知', desc: 'レギュラー番組を宣伝しよう。ファンが大きく増える。' },
   fix: { label: '誤解をとく', desc: 'あの投稿、誤解されてる…！ちゃんと説明して、みんなを安心させよう。' },
 };
@@ -898,9 +986,26 @@ const POST_TEXT = {
     { t: '今日の「{job}」は、緊張したけど楽しかった！\n見守ってくれたスタッフさんに感謝です。', r: ['緊張してるように見えなかったよ！'] },
     { t: '「{job}」のお仕事、おわりました〜！\n帰りの電車で、もう反省会してます（笑）', r: ['反省会してるの、えらい…！', '今日はもう休んで〜！'] },
   ],
-  workShow: [
+  // a job whose name is not known (content from other modules)
+  workAny: [
+    { t: '今日のお仕事、無事に終わりました！\n現場のみなさん、ありがとうございました。' },
+    { t: 'お仕事おわり〜！\n帰りの電車で、もう反省会してます（笑）', r: ['反省会してるの、えらい…！', '今日はもう休んで〜！'] },
+  ],
+  // a regular show recorded today, by how it reaches people
+  workShow_tv: [
     { t: '『{show}』の収録でした！\nオンエア、ぜひ見てくださいね♪', r: ['録画予約しました！'] },
     { t: '『{show}』収録おわり！\n今週も、いい回になったと思います★', r: ['毎週の楽しみです！'] },
+  ],
+  workShow_radio: [
+    { t: '『{show}』の収録でした！\nオンエア、ぜひ聞いてくださいね♪', r: ['リアタイで聞きます！'] },
+    { t: '『{show}』収録おわり！\nハガキをくれたみなさん、いつもありがとう！', r: ['次こそ読まれたい…！'] },
+  ],
+  workShow_stage: [
+    { t: '『{show}』、今日の本番おわりました！\n客席のみなさん、ありがとう！', r: ['今日見に行きました！最高だった！'] },
+    { t: '『{show}』本番終了！\n毎回ちがうお客さんの笑顔が見られて、しあわせです。', r: ['次こそチケット取りたい！'] },
+  ],
+  workShow_event: [
+    { t: '{show}、来てくれたみんな、ありがとう！\n最高の一日でした！', r: ['今日、会場にいました！一生の思い出！'] },
   ],
   workNone: [
     { t: '今日はお仕事おやすみ。\n家で自主練してました！', r: ['休みの日も練習してるの、えらい！'] },
@@ -924,10 +1029,18 @@ const POST_TEXT = {
     { t: '商店街をお散歩。\nコロッケ屋さんのおばちゃんに元気をもらいました！', r: ['その商店街、わたしの地元です！'] },
     { t: '部屋の片づけをしてたら、デビュー前のネタ帳が出てきました。\n…そっと閉じました。', r: ['見たい！そのネタ帳見たい！', 'そっと閉じた（笑）'] },
   ],
-  promo: [
+  promo_tv: [
     { t: '【告知】毎週{wd}曜は『{show}』！\n今週もよろしくお願いします★' },
     { t: '今週の『{show}』、見どころいっぱいです！\nぜひチェックしてね♪' },
     { t: '{wd}曜は『{show}』の日！\nみんなの感想、待ってます。', r: ['感想送ります！'] },
+  ],
+  promo_radio: [
+    { t: '【告知】毎週{wd}曜は『{show}』！\nみんなのハガキ、待ってます★' },
+    { t: '{wd}曜は『{show}』の日！\n今週も、ゆるっとしゃべります。', r: ['ハガキ書きます！'] },
+  ],
+  promo_stage: [
+    { t: '【告知】毎週{wd}曜は『{show}』の舞台に立ってます！\n劇場でお待ちしてます★' },
+    { t: '{wd}曜は『{show}』の本番！\n今週も全力でいきます。', r: ['劇場で応援してます！'] },
   ],
 };
 const HANDLES_A = ['mikan', 'pixel', 'dotto', 'hoshi', 'neko', 'tako', 'sakura', 'momo', 'kuma', 'sora', 'yuzu', 'pon', 'mame', 'kotori', 'ichigo', 'nori'];
@@ -937,11 +1050,17 @@ const handle = () => `@${pick(HANDLES_A)}${pick(HANDLES_B)}`;
 const REPLIES = {
   any: ['いつも応援してます！', '今日も元気もらいました！', 'がんばりすぎないでね〜', '推しが今日も尊い…', 'フォローしててよかった！', 'うちの猫も画面の{name}さんにパンチしてました', '母が{name}さんのファンになりました（父は複雑）'],
   workJob: ['お仕事おつかれさまでした！', 'オンエア絶対見ます！', '{name}さんの出てる番組、家族で見てます'],
-  workShow: ['オンエア絶対見ます！', 'お仕事おつかれさまでした！'],
+  workAny: ['お仕事おつかれさまでした！', '今日もがんばったね！'],
+  workShow_tv: ['オンエア絶対見ます！', 'お仕事おつかれさまでした！'],
+  workShow_radio: ['オンエア、リアタイします！', 'お仕事おつかれさまでした！'],
+  workShow_stage: ['チケット取れたら見に行きます！', 'おつかれさまでした！'],
+  workShow_event: ['また会いたいです！', 'ありがとう〜！おつかれさま！'],
   workNone: ['努力してるの、ちゃんと見てるよ！', 'たまには休んでね〜'],
   food: ['飯テロだ…（夜中2時）', 'ごはんの投稿、毎回楽しみ！', 'ちゃんと食べてて、えらい！'],
   off: ['ゆっくり休んでね！', 'オフの日の{name}さん、レアだ…', 'いい休日！明日もがんばろうね'],
-  promo: ['録画予約しました！', '毎週の楽しみです！', '{wd}曜が待ち遠しい！', '家族にも宣伝しておきます！', '今週も絶対見る〜！'],
+  promo_tv: ['録画予約しました！', '毎週の楽しみです！', '{wd}曜が待ち遠しい！', '家族にも宣伝しておきます！', '今週も絶対見る〜！'],
+  promo_radio: ['毎週聞いてます！', '{wd}曜が待ち遠しい！', '今週もリアタイします！', '友だちにも宣伝しておきます！'],
+  promo_stage: ['チケット取れました！', '劇場で会えるの楽しみ！', '{wd}曜が待ち遠しい！', '友だちと見に行きます！'],
   fix: ['なーんだ、よかった〜！', 'まぎらわしいよ（笑）でも安心した！', '説明ありがとう！これからも推します！', '心配して損した（笑）元気ならOK！'],
 };
 // harmless misunderstandings, one per topic
@@ -985,11 +1104,12 @@ function todayJobs(g) {
   return Object.keys(st.jobs).filter((id) => num(st.jobs[id]) > num(map[id]));
 }
 const workedToday = (g) => todayJobs(g).length > 0;
+// The name of a job for a post ('' when it is not known).
 function jobLabel(id) {
-  if (id.startsWith('regular_')) { const r = REGULARS[id.slice(8)]; return r ? r.title : 'お仕事'; }
+  if (id.startsWith('regular_')) { const r = REGULARS[id.slice(8)]; return r ? r.title : ''; }
   const list = Guide.GUIDE_JOBS || [];
   const j = list.find((x) => x.ids && x.ids.includes(id));
-  return j ? j.label : 'お仕事';
+  return j ? j.label : '';
 }
 // The show to advertise: today's, else the next one this week, else any.
 function promoShow(g) {
@@ -1004,13 +1124,14 @@ function topicItems(g) {
   const items = [];
   if (enjoPending(g)) items.push({ id: 'fix', label: '誤解をとく', sub: 'あの投稿、ちゃんと説明しよう', rightColor: DOT.warn, right: '！' });
   const jobs = todayJobs(g);
-  items.push({ id: 'work', label: TOPICS.work.label, sub: jobs.length ? `「${jobLabel(jobs[jobs.length - 1])}」のこと` : 'まだお仕事してない日（自主練の話）' });
+  const jl = jobs.length ? jobLabel(jobs[jobs.length - 1]) : '';
+  items.push({ id: 'work', label: TOPICS.work.label, sub: jobs.length ? (jl ? `「${jl}」のこと` : '今日のお仕事のこと') : 'まだお仕事してない日（自主練の話）' });
   items.push({ id: 'food', label: TOPICS.food.label, sub: '今日食べたもの' });
-  items.push({ id: 'off', label: TOPICS.off.label, sub: 'のんびりした話（ストレス大きく減る）' });
+  items.push({ id: 'off', label: TOPICS.off.label, sub: jobs.length ? 'のんびりした話' : 'お休みの日（ストレス大きく減る）' });
   const sh = promoShow(g);
   items.push(sh
     ? { id: 'promo', label: TOPICS.promo.label, sub: `『${REGULARS[sh].title}』を宣伝` }
-    : { id: 'promo', label: TOPICS.promo.label, sub: 'レギュラー番組があるときだけ', disabled: true, why: 'レギュラー番組を持っていると、告知できる' });
+    : { id: 'promo', label: TOPICS.promo.label, sub: 'レギュラー番組があるときだけ', disabled: true, why: 'レギュラーを持つと告知できる' });
   return items;
 }
 function fill(g, s, c = {}) {
@@ -1029,23 +1150,26 @@ export function draftPost(g, topic) {
     const sc = ENJO[D.enjo.k] || ENJO.food;
     return { k: 'fix', x: g.fmt(sc.fix), e: 'fix', ek: D.enjo.k, c };
   }
-  // which set of texts (and replies): work splits into a show / a job / no job today
+  // which set of texts (and replies): work splits into a show / a job / no job today,
+  // shows and the promo by how the show reaches people (tv / radio / stage)
   let set = POST_TEXT[topic] ? topic : 'food';
   if (topic === 'work') {
     const shToday = jobs.map((id) => (id.startsWith('regular_') ? id.slice(8) : null)).filter((id) => id && REGULARS[id]);
-    if (shToday.length) { set = 'workShow'; c.show = REGULARS[shToday[0]].title; } else set = jobs.length ? 'workJob' : 'workNone';
-  }
+    if (shToday.length) { set = 'workShow_' + mediumOf(shToday[0]); c.show = REGULARS[shToday[0]].title; } else set = !jobs.length ? 'workNone' : c.job ? 'workJob' : 'workAny';
+  } else if (topic === 'promo') set = 'promo_' + mediumOf(shId);
+  if (!POST_TEXT[set]) set = topic === 'promo' ? 'promo_tv' : 'food';
   const v = pick(POST_TEXT[set]);
-  // a rare, harmless misunderstanding
+  // a rare, harmless misunderstanding (the work one only on a day with work)
   const lastEnjo = num(D.lastEnjo, -99);
-  if (!D.enjo && st.fans >= 1000 && num(st.phone.posts) >= 5 && st.day - lastEnjo >= 20 && Math.random() < 0.07) {
+  if (!D.enjo && ENJO[topic] && !(topic === 'work' && !jobs.length) && st.fans >= 1000 && num(st.phone.posts) >= 5 && st.day - lastEnjo >= 20 && Math.random() < 0.07) {
     return { k: topic, x: g.fmt(ENJO[topic].x), e: 'enjo', ek: topic, c };
   }
-  return { k: topic, x: fill(g, v.t, c), e: null, c, replies: [...(v.r || []), ...(REPLIES[set] || [])] };
+  // an off-day post on a real day off unwinds more
+  return { k: topic, x: fill(g, v.t, c), e: null, c, off: topic === 'off' && !jobs.length, replies: [...(v.r || []), ...(REPLIES[set] || [])] };
 }
 function fanGain(g, topic, e) {
   const st = g.state;
-  const base = 12 + st.fame * 0.5 + st.fans * 0.004;
+  const base = 12 + st.fame * 0.5 + st.fans * 0.01;
   let m = { work: 1.1, food: 1.0, off: 0.9, promo: 1.5, fix: 1.3 }[topic] || 1;
   if (workedToday(g)) m *= 1.5;
   if (e === 'enjo') m *= 0.4;
@@ -1060,7 +1184,7 @@ export function publishPost(g, draft) {
   st.phone.posts = num(st.phone.posts) + 1;
   const gain = fanGain(g, draft.k, draft.e);
   g.addFans(gain, true);
-  const stress = draft.e === 'enjo' ? 10 : draft.k === 'fix' ? -15 : draft.k === 'off' ? -10 : -5;
+  const stress = draft.e === 'enjo' ? 10 : draft.k === 'fix' ? -15 : draft.off ? -10 : -5;
   g.addNeed('stress', stress);
   const likes = Math.round(st.fans * 0.03 * rnd(0.7, 1.3) + gain * 1.5 + rnd(2, 8));
   // replies: the misunderstanding's, the follow-up's, else two that fit the post + maybe one general
@@ -1145,12 +1269,12 @@ function timelineView(g) {
     dirty: true,
     anim: null,
     headerRight: () => `♥${fansShort(g.state.fans)}`,
-    hint: () => (canPost(g) ? 'A:投稿する　↑↓:スクロール　B:もどる' : '↑↓:スクロール　B:もどる'),
+    hint: () => (canPost(g) ? 'A:投稿　↑↓:スクロール　B:もどる' : '↑↓:スクロール　B:もどる'),
     update(ph, inp) {
       if (inp.repeat('down')) this.target = Math.min(this.maxScroll || 0, this.target + 30);
       if (inp.repeat('up')) this.target = Math.max(0, this.target - 30);
       if (inp.pressed('a')) {
-        if (canPost(g)) { audio.sfx('ok'); ph.run(this, () => composeFlow(g, ph, this)); } else { audio.sfx('buzz'); ph.toast('今日はもう投稿した。また明日！', '#9aa3c7'); }
+        if (canPost(g)) { audio.sfx('ok'); ph.run(this, () => composeFlow(g, ph, this)); } else { audio.sfx('buzz'); ph.toast('投稿は1日1回。また明日！', '#9aa3c7'); }
         return;
       }
       if (inp.pressed('b')) { audio.sfx('cancel'); ph.back(-1); }
@@ -1259,7 +1383,9 @@ function drawPost(c, g, it, x, y, w, at) {
   ly += 18;
   if (!it.reps.length) return;
   const shown = at >= 9999 ? it.reps.length : clamp(Math.floor((at - 30) / 30), 0, it.reps.length);
-  const rh = it.reps.reduce((s, r) => s + 15 + r.lines.length * LINE_H + 4, 0);
+  if (!shown) return;
+  // the reply panel grows as the replies come in
+  const rh = it.reps.slice(0, shown).reduce((s, r) => s + 15 + r.lines.length * LINE_H + 4, 0);
   R(c, tx - 4, ly, w - 46, rh + 2, '#f3f0e8');
   R(c, tx - 4, ly, 2, rh + 2, DOT.light);
   let ry = ly + 2;
@@ -1294,7 +1420,7 @@ async function composeFlow(g, ph, view) {
   view.anim = { id: res.post.id, t0: ph.t };
   audio.sfx('chime');
   ph.toast(`ファン +${res.gain.toLocaleString('ja-JP')}人`, COLORS.pink);
-  if (res.post.e === 'enjo') { audio.sfx('buzz'); ph.toast('あれ…？なんだか誤解されてる…！', DOT.warn); } else if (res.post.k === 'fix') ph.toast('誤解がとけた！ストレス -15', DOT.good);
+  if (res.post.e === 'enjo') { audio.sfx('buzz'); ph.toast('あれ…？誤解されてる…！？', DOT.warn); } else if (res.post.k === 'fix') ph.toast('誤解がとけた！ストレス -15', DOT.good);
   else ph.toast(`ストレス ${res.stress}`, DOT.color);
 }
 export async function dotterApp(g) {
@@ -1373,7 +1499,7 @@ onMorning((g) => {
   // jobs done so far (ドッター knows what you did today)
   st.flags.career_today = { day: st.day, map: { ...st.jobs } };
   const out = { sent: 0 };
-  const steps = [fanMeetMorning, kanMorning, dotterMorning, offerMorning, milestoneMorning, rankingMorning, letterMorning];
+  const steps = [missMorning, fanMeetMorning, kanMorning, dotterMorning, offerMorning, milestoneMorning, rankingMorning, letterMorning];
   for (const fn of steps) {
     try { fn(g, out); } catch (e) { console.error('[career]', fn.name, e); }
   }

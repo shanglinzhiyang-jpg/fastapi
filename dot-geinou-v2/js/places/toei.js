@@ -63,7 +63,7 @@ registerItem('toei_lokeben', { name: '撮影所のロケ弁', price: 600, desc: 
 registerItem('toei_dango', { name: 'みたらし団子', price: 250, desc: '茶屋の団子。甘じょっぱい！体力が20回復する。', heal: 20 });
 registerItem('toei_ocha', { name: '茶屋のお茶', price: 120, desc: 'ほっとひと息。体力が10回復する。', heal: 10 });
 registerItem('toei_sofubi', {
-  name: 'ヒーローのソフビ', price: 800, desc: '超光戦士ピクセリオンの人形。ながめるとワクワクする。',
+  name: 'ヒーローのソフビ', price: 800, desc: '光速ヒーロー ピクセリオンの人形。ながめるとワクワクする。',
   use: async (g) => { g.sfx('whistle'); await g.say('ピクセリオンのソフビ人形をかかげた！\n「変身！」…気分だけはヒーローだ。'); },
 });
 registerItem('toei_clapper', {
@@ -1164,7 +1164,7 @@ async function movieCelebration(g, res) {
   for (const [id, [x, y, d]] of Object.entries(spots)) setPos(g.npc(id), x, y, d);
   g.placePlayer(7, 5, 'down');
   await g.fadeIn(12);
-  await g.say('劇場版『超光戦士ピクセリオン 銀河の決戦』…\nこれにて、クランクアップです！！', PR);
+  await g.say('劇場版『光速ヒーロー ピクセリオン 銀河の決戦』…\nこれにて、クランクアップです！！', PR);
   g.sfx('applause');
   addFx(g, 'confetti', 0, 0, 260, { screen: true });
   await Promise.all(Object.keys(spots).map((id) => g.emote(id, '♪', 60)));
@@ -1298,7 +1298,7 @@ const gate = {
     {
       // ヒーローの像
       type: 'prop', x: 2, y: 5, w: 2, h: 2,
-      text: ['「超光戦士ピクセリオン」の等身大フィギュアだ。', '台座に「子どもたちの夢を守れ！」と刻まれている。'],
+      text: ['「光速ヒーロー ピクセリオン」の等身大フィギュアだ。', '台座に「子どもたちの夢を守れ！」と刻まれている。'],
       draw(ctx, sx, sy, g) {
         F(ctx, sx + 3, sy + 18, 26, 13, '#8e929c'); F(ctx, sx + 3, sy + 18, 26, 2, '#c9ccd4'); F(ctx, sx + 3, sy + 29, 26, 2, '#6d7078');
         F(ctx, sx + 10, sy + 22, 12, 5, '#c9a227'); F(ctx, sx + 11, sy + 23, 10, 1, '#fff6a8');
@@ -1698,7 +1698,7 @@ const tokusatsu = {
         if (!g.flag('toei_movie_offer')) {
           g.setFlag('toei_movie_offer');
           await g.emote('toei_producer', '!');
-          await g.say(['{name}さん！待ってましたよ！', '劇場版『超光戦士ピクセリオン 銀河の決戦』…主演をお願いしたい！'], o);
+          await g.say(['{name}さん！待ってましたよ！', '劇場版『光速ヒーロー ピクセリオン 銀河の決戦』…主演をお願いしたい！'], o);
         }
         const res = await g.job(JOBS.movie);
         if (res) await movieCelebration(g, res);

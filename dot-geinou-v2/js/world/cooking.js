@@ -12,7 +12,7 @@
 import { registerItem, ITEMS } from '../engine/state.js';
 
 // ---------------------------------------------------------------- ingredients
-// section: where the supermarket shelves them (machi.js reads it).
+// section: the kind of shelf (the supermarket's sections are listed in machi.js).
 export const INGREDIENTS = {
   ing_rice: { name: 'お米', price: 120, section: 'staple', desc: '1食分のお米。炊きたてごはんは自炊の基本。' },
   ing_noodle: { name: '焼きそば麺', price: 100, section: 'staple', desc: '蒸し焼きそば麺。1玉。' },
@@ -156,9 +156,14 @@ async function cookOne(g, r) {
   // what to do with it
   let mode = 0; // 0 = eat now, 1 = lunchbox
   if (r.serves > 1) {
-    if (!hungry) { await g.say(`${r.name}は${r.serves}皿分できる料理だ。\nおなかいっぱいなので、いまはやめておこう。`); return false; }
-    const i = await g.ask(`${r.name}を作る？\n（${r.serves}皿分できる。1皿食べて、残りはお弁当に）`, ['つくる', 'やめておく'], { cancel: 1 });
-    if (i !== 0) return false;
+    if (!hungry) {
+      const i = await g.ask(`おなかいっぱいだ。\n${r.name}を作って、${r.serves}皿ともお弁当につめておく？`, ['お弁当にする', 'やめておく'], { cancel: 1 });
+      if (i !== 0) return false;
+      mode = 1;
+    } else {
+      const i = await g.ask(`${r.name}を作る？\n（${r.serves}皿分できる。1皿食べて、残りはお弁当に）`, ['つくる', 'やめておく'], { cancel: 1 });
+      if (i !== 0) return false;
+    }
   } else if (hungry && boxable) {
     const i = await g.ask(`${r.name}を作ろう。\nできたらどうする？`, ['いま食べる', 'お弁当につめる', 'やめておく'], { cancel: 2 });
     if (i === 2 || i < 0) return false;
@@ -182,9 +187,10 @@ async function cookOne(g, r) {
   pages.push(`${r.name}ができた！` + (first ? '\n（はじめて作った料理だ！レシピをおぼえた）' : ''));
   if (r.text) pages.push(r.text);
   if (mode === 1) {
-    g.giveItem(bentoId(r), 1, true);
+    const n = Math.max(1, r.serves || 1);
+    g.giveItem(bentoId(r), n, true);
     g.sfx('good');
-    pages.push(`お弁当箱につめた！\n「${ITEMS[bentoId(r)].name}」を手に入れた。\n（もちものから、いつでも食べられる）`);
+    pages.push(`お弁当箱につめた！\n「${ITEMS[bentoId(r)].name}」を${n > 1 ? n + 'つ' : ''}手に入れた。\n（もちものから、いつでも食べられる）`);
   } else {
     const res = eatDish(g, r);
     g.sfx('good');

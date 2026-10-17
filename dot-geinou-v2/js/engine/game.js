@@ -25,6 +25,13 @@ import {
 import { installLife, REGULARS, SCRUFFY } from './life.js';
 
 const RANK_MULT = { S: 1.5, A: 1.2, B: 1.0, C: 0.7, D: 0.4 };
+// Wording of the regular-show door prompt by REGULARS[id].medium.
+const SHOW_WORDS = {
+  tv: { day: '収録日', where: 'スタジオ', go: '収録へ行く' },
+  radio: { day: '収録日', where: 'ブース', go: '収録へ行く' },
+  stage: { day: '本番の日', where: '楽屋', go: '本番へ行く' },
+  event: { day: 'イベントの日', where: '会場', go: '会場へ行く' },
+};
 
 // Side bands beside an opaque v1-size scene (cached per device scale).
 let bands = null;
@@ -418,7 +425,8 @@ export class Game {
       if (due.length) {
         const ask = async () => {
           const r = REGULARS[due[0]];
-          const i = await this.ask(`今日は『${r.title}』の収録日だ！\nスタジオへ向かう？（体力 -${r.stamina}）`, ['収録へ行く', 'あとにする'], { cancel: 1 });
+          const w = SHOW_WORDS[r.medium] || SHOW_WORDS.tv;
+          const i = await this.ask(`今日は『${r.title}』の${w.day}だ！\n${w.where}へ向かう？（体力 -${r.stamina}）`, [w.go, 'あとにする'], { cancel: 1 });
           if (i === 0) await this.doRegular(due[0]);
         };
         await (this.busy > 0 ? ask() : this.run(ask));

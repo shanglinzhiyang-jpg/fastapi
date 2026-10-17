@@ -29,12 +29,27 @@ async function streetLive(g) {
   await g.job({ id: 'street_' + k.minigame, title: k.title, stamina: 10, minigame: k.minigame, opts: { difficulty: 1 }, pay: 600, fame: 4, skill: k.skill, gain: 1, confirm: false });
 }
 
+// The bus stop by the station: a bus to ドット商店街 (machi.js has the bus back).
+async function busToMachi(g) {
+  if (!PLACES.machi) { await g.say('バス停だ。時刻表を見ると…次のバスはしばらく来ないみたい。'); return; }
+  const i = await g.ask('バス停だ。\n「ドット商店街」行きのバスが来た！\n乗っていく？（¥210）', ['乗る', 'やめておく'], { cancel: 1 });
+  if (i !== 0) return;
+  if (!g.spend(210)) { await g.say('運賃が足りない…。\n歩いていこう。（大通りを西へまっすぐ）'); return; }
+  g.sfx('coin');
+  const first = !g.flag('machi_intro'); // the town's first-visit lines describe the arrival
+  await g.fadeOut(16);
+  g.sfx('door');
+  await g.wait(600);
+  await g.goto('machi', 'main', 38, 20, 'down');
+  if (!first) await g.say('ブロロロ…。\nドット商店街でバスを降りた。');
+}
+
 // Signpost by the west exit: 「← ドット商店街」 (a wooden arrow board on a post).
 function machiSignpost(x, y) {
   const F = (ctx, x0, y0, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x0, y0, w, h); };
   return {
     type: 'prop', x, y, w: 1, h: 1,
-    text: ['道しるべだ。', '← ドット商店街\n（スーパー・カフェ・ジム・カラオケ・不動産屋 など）\nこの大通りを西へまっすぐ。'],
+    text: ['道しるべだ。', '← ドット商店街\n（スーパー・カフェ・ジム・カラオケ・不動産屋 など）\nこの大通りを西へまっすぐ。', '東京駅前のバス停からは、\n商店街行きのバスも出ている。（¥210）'],
     draw(ctx, sx, sy) {
       F(ctx, sx + 3, sy + 14.5, 10, 1.5, 'rgba(0,0,0,0.22)');
       F(ctx, sx + 7, sy - 4, 2.5, 19, '#4a2e18'); F(ctx, sx + 7.5, sy - 4, 1, 19, '#8a5a33');
@@ -144,7 +159,7 @@ function generate() {
     train(45, 38, { text: undefined }),
     { type: 'sign', x: 50, y: 37, text: 'フェンスの向こうに新幹線が停まっている。乗るなら駅のきっぷ売り場へ。' },
     taxi(48, 33), taxi(51, 33, '#2f9a4a'),
-    busStop(55, 32),
+    busStop(55, 32, { text: undefined, talk: busToMachi }),
     statue(27, 13, { text: '「笑顔は世界をつなぐ」と刻まれた像だ。' }),
 
     // signs
