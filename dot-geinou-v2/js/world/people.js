@@ -19,6 +19,12 @@
 //   partnerMessages / specialMessages: phone small talk as your 相方 / 大切な人
 //   combi: { ask, again, yes, no, taken, keep, already, bye } (canPartner)
 //   confess: { ask, again, yes, no, friend, text } (special)
+//   polite: true  です・ます generic lines (again, giftDone, hangDone, phone calls)
+//   npcTalk: (g, npc, own) => …  replaces the NPC's own talk from ♥1 (no self-introductions
+//     to a friend); own is the original
+// Talking goes through phone.js's menu; this module only adds PEOPLE_UI.hooks (start: face
+// and npcTalk, before: a declined proposal asked again, after: the first phone message) and
+// PEOPLE_UI.extras (コンビを組もう / 気持ちを伝える after they asked once, 豚まん at the 大将).
 
 import { registerPerson, PEOPLE, PEOPLE_UI, HANGOUTS, heartIndex, onMorning } from '../engine/life.js';
 import { registerItem, ITEMS, RANKS, rankIndex } from '../engine/state.js';
@@ -116,7 +122,7 @@ async function combi(g, P, n, again = false) {
   if (cur === P.id) { await T(g, P, L.already); return true; }
   let i;
   if (cur && PEOPLE[cur]) {
-    i = await Q(g, P, L.taken.map((s) => s.replaceAll('{partner}', PEOPLE[cur].short || PEOPLE[cur].name)), ['組みかえる', 'いまの相方と続ける']);
+    i = await Q(g, P, L.taken.map((s) => s.replaceAll('{partner}', `「${PEOPLE[cur].short || PEOPLE[cur].name}」`)), ['組みかえる', 'いまの相方と続ける']);
   } else {
     i = await Q(g, P, again ? L.again : L.ask, ['組もう！', 'もう少し考えさせて']);
   }
@@ -155,10 +161,22 @@ async function confess(g, P, n, again = false) {
   return true;
 }
 
+// Generic lines for people who speak politely (です・ます), instead of phone.js's casual ones.
+const POLITE = {
+  again: 'ほかに、何かありますか？',
+  giftDone: ['今日はもう、いただきましたから。', 'お気持ちだけで、じゅうぶんうれしいです。'],
+  hangDone: '今日はもう、いっしょに過ごしましたから。\nまた今度、さそってくださいね。',
+  callShy: ['もしもし？…あ、{name}さん。', 'また今度、ゆっくりお話ししましょうね。'],
+  callAgain: ['今日はたくさん遊びましたね！', 'また今度、さそってください。'],
+};
+
 // Registers one of the cast (the menu prompt comes from greets / chats).
 function person(id, def) {
   // lines that phone.js sends as messages (no manual line breaks in chat bubbles)
   for (const k of ['thanks', 'declined', 'partnerText']) if (typeof def[k] === 'string') def[k] = flat(def[k]);
+  if (def.polite) for (const [k, v] of Object.entries(POLITE)) if (def[k] == null) def[k] = v;
+  // a phone call answered in their own voice
+  if (def.callYes == null && def.inviteYes) def.callYes = ['もしもし？', def.inviteYes];
   registerPerson(id, { ...def, cast: true, greet: (g) => greetFor(g, PEOPLE[id]) });
 }
 
@@ -166,7 +184,7 @@ function person(id, def) {
 // ---------------------------------------------------------------- 大家さん (in front of ドット荘)
 person('oya', {
   name: '大家さん', short: '大家さん', look: LOOKS.oldwoman, kind: 'local',
-  where: '東京・ドット荘の前',
+  where: '東京・ドット荘の前', again: 'ほかに何かあるかしら？',
   profile: 'ドット荘の大家さん。世話好きで、住人みんなのお母さんがわり。',
   loves: ['okashi', 'tea'], likes: ['hanataba', 'cake', 'book'], dislikes: ['drink', 'cd'],
   giftLines: {
@@ -405,8 +423,8 @@ person('jiro', {
 
 // ---------------------------------------------------------------- 春斗 (the ドットマート clerk) 大切な人
 person('haruto', {
-  name: '店員の春斗さん', short: '春斗さん', look: LOOKS.clerk, kind: 'local', special: true,
-  where: 'ドットマートのレジ',
+  name: '店員の春斗さん', short: '春斗さん', look: LOOKS.clerk, kind: 'local', special: true, polite: true,
+  where: 'ドットマートのレジ', talkLabel: '買い物する',
   profile: 'ドットマートで働く美大生。夜のレジで絵本の絵を描いている。',
   loves: ['manga', 'cd'], likes: ['book', 'cake', 'okashi'], dislikes: ['onigiri'],
   giftLines: {
@@ -463,7 +481,7 @@ person('haruto', {
     again: ['あの、{name}さん。', 'ぼく、やっぱり…\n{name}さんの、大切な人になりたいです。'],
     yes: ['…ほんとですか。\nよかった…ぼく、手がふるえてます。', '（春斗さんが、そっと手をにぎった。\nあたたかくて、少しふるえていた）', 'これからも、よろしくお願いします。\n…ぼくの、大切な人。'],
     no: ['…はい。\n友だちでいてくれるだけで、じゅうぶんです。\nこれからも、お店に来てくださいね。'],
-    friend: ['…でも、{name}さんには\nもう大切な人がいるんですよね。', 'だから、ぼくは…\nいちばんのファンでいさせてください。\nこの絵本、もらってくれますか。'],
+    friend: ['…でも、{name}さんには\nもう大切な人がいるんですよね。', 'だから、ぼくは…\nいちばんのファンでいさせてください。\nこの絵本の、最初の読者になってくれますか。'],
     text: '今日のこと、夢じゃないですよね。\nおやすみなさい、{name}さん。',
   },
   events: [
@@ -520,7 +538,7 @@ person('haruto', {
 // ---------------------------------------------------------------- 丸山さん (the extra in front of 東映)
 person('maruyama', {
   name: 'エキストラの丸山さん', short: '丸山さん', look: { ...LOOKS.samurai, top: '#8a5a33' }, kind: 'local',
-  where: '東映 撮影所の前',
+  where: '東映 撮影所の前', again: 'ほかに何かござるか？',
   profile: '平日は会社員、休日は時代劇のエキストラ。心は少年のおじさん。',
   loves: ['plushie', 'toei_sofubi', 'manga'], likes: ['takoyaki', 'toei_dango', 'cake', 'drink'], dislikes: ['book'],
   giftLines: {
@@ -718,7 +736,7 @@ person('mio', {
 // ---------------------------------------------------------------- 研修生ひなた (ホリプロ studio)
 person('hinata', {
   name: '研修生ひなた', short: 'ひなた', look: { hair: 'twin', hairColor: 'brown', skin: 'light', top: '#ffffff', bottom: '#ec8cae' }, kind: 'idol',
-  where: 'ホリプロ レッスン室',
+  where: 'ホリプロ 1階 レッスンスタジオ', talkLabel: '通し稽古を見る', polite: true,
   profile: 'ホリプロのアイドル研修生。元気いっぱいで、ちょっとドジ。',
   loves: ['accessory', 'cake'], likes: ['plushie', 'cd', 'nodoame'], dislikes: ['tea'],
   giftLines: {
@@ -826,7 +844,7 @@ person('hinata', {
 // ---------------------------------------------------------------- 朝霧さん (NHK news studio)
 person('asagiri', {
   name: 'アナウンサー 朝霧さん', short: '朝霧さん', look: { ...LOOKS.announcer, top: '#ffffff', bottom: '#3a58a8' }, kind: 'staff',
-  where: 'NHKニューススタジオ',
+  where: 'NHKニューススタジオ', polite: true,
   profile: 'NHKの若手アナウンサー。努力家で読書好き。すごい猫舌。',
   loves: ['book', 'tea'], likes: ['hanataba', 'okashi', 'wadai'], dislikes: ['takoyaki'],
   giftLines: {
@@ -925,7 +943,7 @@ person('asagiri', {
 // ---------------------------------------------------------------- 夜野さん (BSよしもと 控室)
 person('yoruno', {
   name: 'お疲れのAD 夜野さん', short: '夜野さん', look: { ...LOOKS.ad, hairColor: 'black', top: '#5a6f8a' }, kind: 'staff',
-  where: 'BSよしもと 控室',
+  where: 'BSよしもと 控室', polite: true,
   profile: 'BSよしもとのAD。いつも寝不足。夢はディレクター。',
   loves: ['drink', 'bento', 'toei_lokeben'], likes: ['onigiri', 'okashi', 'cake'], dislikes: ['hanataba'],
   giftLines: {
@@ -1125,7 +1143,7 @@ person('kaori', {
 // ---------------------------------------------------------------- 笑川さん (よしもと office)
 person('emikawa', {
   name: 'マネージャー 笑川', short: '笑川さん', look: { ...LOOKS.manager, tie: '#e8492a' }, kind: 'staff',
-  where: 'よしもと 事務所',
+  where: 'よしもと 2階 事務所', talkLabel: 'お仕事・相談', polite: true,
   profile: 'よしもと東京本部のマネージャー。タレントの一番近くのファン。',
   loves: ['okashi', 'drink'], likes: ['bento', 'tea', 'book'], dislikes: ['accessory'],
   giftLines: {
@@ -1217,7 +1235,7 @@ person('emikawa', {
       const mem = g.state.agency === 'yoshimoto';
       await T(g, P, mem
         ? ['{name}さん。\n担当させてもらえて、ほんとに光栄です。', 'ぼく、{name}さんが舞台でウケた日は、\n帰りの電車でこっそりガッツポーズしてるんです。']
-        : ['{name}さん。\n所属はちがいますけど…\nぼく、勝手に{name}さんのファン第一号です。', '{name}さんがテレビに出た日は、\n事務所のテレビのチャンネル、\nだれにも変えさせません。']);
+        : [g.state.agency ? '{name}さん。\n所属はちがいますけど…\nぼく、勝手に{name}さんのファン第一号です。' : '{name}さん。\nまだ担当じゃないですけど…\nぼく、勝手に{name}さんのファン第一号です。', '{name}さんがテレビに出た日は、\n事務所のテレビのチャンネル、\nだれにも変えさせません。']);
       await E(g, n, '♥', 60);
       await T(g, P, ['これからも、いちばん近くの客席から\n応援させてくださいね！', 'これ、取引先からいただいた高級お菓子。\nぼくの好物なんですけど…\n{name}さんにおすそわけです！']);
       g.giveItem('okashi');
@@ -1354,7 +1372,16 @@ person('momo', {
 // ---------------------------------------------------------------- 千代さん (東映 撮影所の茶屋) 大切な人
 person('chiyo', {
   name: '茶屋の看板娘 千代', short: '千代さん', look: { hair: 'long', hairColor: 'black', skin: 'light', top: '#e86f8a', bottom: '#b84a62', skirt: true }, kind: 'actor', special: true,
-  where: '東映 撮影所の茶屋',
+  where: '東映 撮影所の茶屋', talkLabel: '茶屋で一服', again: 'ほかに何かあるかしら？',
+  // once you know each other, the tea house without the self-introduction
+  npcTalk: async (g, npc, own) => {
+    const goods = ['toei_dango', 'toei_ocha'].filter((k) => ITEMS[k]);
+    if (!goods.length) return own(g, npc);
+    const P = PEOPLE.chiyo;
+    await T(g, P, isSpecial(g, 'chiyo') ? '…いらっしゃいまし、{name}さん。\nあなたには、いちばんいいお団子をね。' : 'いらっしゃいまし〜！\nお団子、ちょうど焼けたところよ。');
+    await g.shop(goods, { title: '茶屋', greeting: 'お団子は撮影用じゃなくて、本物よ！' });
+    await T(g, P, 'ひと休みしたら、またがんばってね！');
+  },
   profile: '時代劇で茶屋の娘役をつとめる女優。和菓子が大好き。',
   loves: ['okashi', 'hanataba'], likes: ['tea', 'book', 'plushie', 'toei_dango'], dislikes: ['drink'],
   giftLines: {
@@ -1411,7 +1438,7 @@ person('chiyo', {
     again: ['{name}さん…。', 'わたし、やっぱりあなたのことが\nいちばん大切みたい。…だめ、かしら。'],
     yes: ['…ほんとう？\nよかった…。', '（千代さんが、そっと手をとった。\nちょうちんの灯りが、ふたりをてらしている）', 'これからも、よろしくね。\n…わたしの、大切な人。'],
     no: ['…ええ、わかったわ。\nこれからも、茶屋に寄ってね。\nいちばんおいしいお茶を、いれるから。'],
-    friend: ['…でも、{name}さんには\nもう大切な人がいるのよね。', 'だから、これはただのお礼。\nあなたは、わたしのいちばんの友だちよ。\nこれからも、茶屋に寄ってね。'],
+    friend: ['…でも、{name}さんには\nもう大切な人がいるのよね。', 'ふふ、いいの。言えて、すっきりしたわ。\nあなたは、わたしのいちばんの友だちよ。\nこれからも、茶屋に寄ってね。'],
     text: 'まだ、胸がどきどきしてるの。\nおやすみなさい、{name}さん。',
   },
   events: [
@@ -1473,6 +1500,16 @@ person('chiyo', {
 person('tamae', {
   name: '大阪のおばちゃん', short: 'タマエちゃん', look: { ...LOOKS.oldwoman, top: '#ff7eb6', hairColor: 'purple' }, kind: 'local',
   where: 'なんばの川沿い',
+  // her daily candy, without "見ない顔やね" once you are friends (same once-a-day flag as namba.js)
+  npcTalk: async (g, npc) => {
+    const P = PEOPLE.tamae;
+    const key = 'ame_' + g.state.day;
+    if (g.flag(key)) { await T(g, P, ['今日のアメちゃんは、もうあげたで！', 'また明日おいで〜。']); return; }
+    g.setFlag(key);
+    await T(g, P, pick([['あんた、今日も来てくれたんか！', 'ほれ、今日のアメちゃん。\nのど、大事にしいや！'], ['がんばってる子には、毎日アメちゃんや！', 'ほい、ひとつ。…いや、おまけでもうひとつ…\nあかん、一日一個の決まりやった！']]));
+    g.giveItem('nodoame');
+    g.sfx('coin');
+  },
   profile: 'なんばの名物おばちゃん。ヒョウ柄とアメちゃんがトレードマーク。',
   loves: ['okashi', 'hanataba'], likes: ['butaman', 'takoyaki', 'cake'], dislikes: ['cd'],
   giftLines: {
@@ -1571,7 +1608,7 @@ person('tamae', {
 // ---------------------------------------------------------------- タケル (松竹芸能 lobby) 相方候補
 person('takeru', {
   name: '若手芸人 タケル', short: 'タケル', look: { ...LOOKS.comedian, hair: 'short', hairColor: 'black', top: '#d8101c', bottom: '#3a4a7a' }, kind: 'comedian', canPartner: true,
-  where: '松竹芸能 ロビー',
+  where: '松竹芸能 ロビー', polite: true,
   profile: '松竹芸能の若手ツッコミ。努力家で、夢は自分のラジオ番組。',
   loves: ['takoyaki', 'manga'], likes: ['netacho', 'bento', 'drink', 'wadai'], dislikes: ['accessory'],
   giftLines: {
@@ -1694,9 +1731,9 @@ person('takeru', {
 // ---------------------------------------------------------------- ころ助 (新喜劇 楽屋)
 person('korosuke', {
   name: '若手座員 ころ助', short: 'ころ助', look: { hair: 'short', hairColor: 'brown', skin: 'fair', top: '#f2c230', bottom: '#3b3f48' }, kind: 'comedian',
-  where: '新喜劇 劇場の楽屋',
+  where: '新喜劇 劇場の楽屋', polite: true,
   profile: '新喜劇の若手座員。毎日ズッコケの稽古で、おしりは青あざだらけ。',
-  loves: ['butaman', 'cake'], likes: ['takoyaki', 'manga', 'plushie'], dislikes: ['book'],
+  loves: ['cake', 'takoyaki'], likes: ['butaman', 'manga', 'plushie'], dislikes: ['book'],
   giftLines: {
     love: ['{item}！？\nうわあ、ぼくの大好物です！\n…うれしすぎて、ズッコケそうです！'],
     like: ['{item}、いいんですか！\nありがとうございます！'],
@@ -1800,7 +1837,7 @@ person('korosuke', {
 // ---------------------------------------------------------------- 大将 (なんばのたこ焼き屋)
 person('taisho', {
   name: 'たこ焼き屋の大将', short: '大将', look: { ...LOOKS.chef, hat: '#ffffff', top: '#2a3560', bottom: '#2a3560' }, kind: 'local',
-  where: 'なんばのたこ焼き屋',
+  where: 'なんばのたこ焼き屋', talkLabel: 'お店のメニュー', again: 'ほかに用はあるか？',
   profile: 'なんばで三十五年。口は悪いが、腹ぺこの若手にはやさしい大将。',
   loves: ['cd', 'okashi'], likes: ['tea', 'hanataba', 'book'], dislikes: ['takoyaki'],
   giftLines: {
@@ -1932,14 +1969,83 @@ async function followUp(g, P, npc) {
   return false;
 }
 
-const richTalk = PEOPLE_UI.talk;
-PEOPLE_UI.talk = async function castTalk(g, npc) {
-  const P = PEOPLE[npc && npc.person];
-  if (P && P.cast && npc.look) P.look = npc.look; // the face always matches the sprite on the map
-  if (P && P.cast && g.met(P.id) && (await followUp(g, P, npc))) { tidyInbox(g); return; }
-  await richTalk.call(this, g, npc);
-  tidyInbox(g);
-};
+// The talk menu itself is phone.js's (PEOPLE_UI.talk); the cast plugs into its hooks.
+const castOf = (id) => (PEOPLE[id] && PEOPLE[id].cast ? PEOPLE[id] : null);
+const hooks = PEOPLE_UI.hooks || (PEOPLE_UI.hooks = {});
+for (const k of ['start', 'before', 'greet', 'after']) if (!Array.isArray(hooks[k])) hooks[k] = [];
+if (!Array.isArray(PEOPLE_UI.extras)) PEOPLE_UI.extras = [];
+hooks.start.push((g, id, npc) => {
+  const P = castOf(id);
+  if (!P || !npc) return;
+  if (npc.look) P.look = npc.look; // the face always matches the sprite on the map
+  // a friendlier version of the NPC's own talk once you know each other (P.npcTalk)
+  if (P.npcTalk && typeof npc.talk === 'function' && !npc.castTalk) {
+    const own = npc.talk;
+    npc.castTalk = true;
+    npc.talk = (g2, n2) => (g2.heartLevel(id) >= 1 ? P.npcTalk(g2, n2, own) : own(g2, n2));
+  }
+});
+// a declined proposal comes up again some days later (instead of the menu)
+hooks.before.push(async (g, id, npc) => {
+  const P = castOf(id);
+  return !!P && g.met(id) && followUp(g, P, npc);
+});
+hooks.after.push((g) => tidyInbox(g));
+
+// Menu entries: you bring up the combi / your feelings yourself, after they asked once.
+PEOPLE_UI.extras.push({
+  id: 'cast_combi', label: 'コンビを組もう', order: 20,
+  cond: (g, id) => {
+    const P = castOf(id), p = g.person(id);
+    return !!(P && P.canPartner && P.combi && p && p.seen && p.seen[3] && g.heartLevel(id) >= 3 && !isPartner(g, id));
+  },
+  run: async (g, id, npc) => {
+    const P = PEOPLE[id];
+    const cur = g.state.partner && PEOPLE[g.state.partner] ? g.state.partner : null;
+    if (cur) {
+      const C = PEOPLE[cur];
+      const i = await g.ask(`いまの相方（${C.short || C.name}）とのコンビは解消になる。\n${P.short || P.name}と組みなおす？`, ['組みなおす', 'やめておく'], { cancel: 1 });
+      if (i !== 0) return;
+    }
+    await N(g, `（${P.short || P.name}に、思いきってコンビの話を切り出した）`);
+    makePartner(g, id);
+    const p = g.meet(id);
+    p.combiTries = 0;
+    g.sfx('fanfare');
+    await E(g, npc, '♥', 50);
+    await T(g, P, P.combi.yes);
+    await N(g, `${P.short || P.name}と、コンビを組んだ！\n（相方がいると、お笑いのミニゲームが少しやさしくなる）`);
+    return 'end';
+  },
+});
+PEOPLE_UI.extras.push({
+  id: 'cast_confess', label: '気持ちを伝える', order: 21,
+  cond: (g, id) => {
+    const P = castOf(id), p = g.person(id);
+    return !!(P && P.special && P.confess && p && p.seen && p.seen[4] && g.heartLevel(id) >= 4 && !p.special && !otherSpecial(g, id));
+  },
+  run: async (g, id, npc) => {
+    const P = PEOPLE[id];
+    const i = await g.ask(`${P.short || P.name}に、自分の気持ちを伝える？\n（「大切な人」になれるのは、ひとりだけ）`, ['伝える', 'やめておく'], { cancel: 1 });
+    if (i !== 0) return;
+    await N(g, `（${P.short || P.name}に、思いきって気持ちを伝えた）`);
+    makeSpecial(g, id, P.confess.text);
+    g.sfx('chime');
+    await E(g, npc, '♥', 60);
+    await T(g, P, P.confess.yes);
+    return 'end';
+  },
+});
+// The 大将 picks up 豚まん from the shop next door (the only shop that has them).
+PEOPLE_UI.extras.push({
+  id: 'cast_butaman', label: '豚まんも買う', order: 30, repeat: true,
+  cond: (g, id) => id === 'taisho' && !!ITEMS.butaman,
+  run: async (g, id, npc) => {
+    const P = PEOPLE[id];
+    await T(g, P, '豚まんか。となりの店のやつ、\nわしの晩メシのついでに仕入れとるんや。\nおみやげにちょうどええで。');
+    await g.shop(['butaman'], { title: 'おみやげの豚まん', greeting: '一個800円や。' });
+  },
+});
 
 // ---------------------------------------------------------------- the morning: friends text you
 function shuffle(a) {
@@ -1959,6 +2065,12 @@ const CHEER = {
   agency: '{agency}に入ったんだって？\nおめでとう！',
 };
 const MAX_MORNING = 2; // new people messages per morning
+// Chance that a free friend texts on a given morning: with ~5 friends, a message on
+// most days (about 3 days in 4), never more than MAX_MORNING. 相方 / 大切な人 more often.
+const TEXT_CHANCE = 0.27, CLOSE_CHANCE = 0.45;
+// The place as it reads in an invitation (「公園」に行かない？, not 「公園で散歩」に…).
+const SPOT_WORD = { park: '公園' };
+const spotWord = (id) => SPOT_WORD[id] || (HANGOUTS[id] && HANGOUTS[id].name) || id;
 
 onMorning((g) => {
   const st = g.state;
@@ -2008,11 +2120,11 @@ onMorning((g) => {
     const P = PEOPLE[id];
     const p = st.people[id];
     const close = st.partner === id || p.special;
-    if (Math.random() >= (close ? 0.35 : 0.16)) continue;
+    if (Math.random() >= (close ? CLOSE_CHANCE : TEXT_CHANCE)) continue;
     if (spots.length && P.invites.length && p.hangDay !== day && Math.random() < 0.4) {
       const own = spots.filter((s) => P.hangout && P.hangout[s]);
       const spot = pick(own.length ? own : spots);
-      send(id, { kind: 'invite', spot, text: freshLine(p, P.invites).replaceAll('{spot}', HANGOUTS[spot].name) });
+      send(id, { kind: 'invite', spot, text: freshLine(p, P.invites).replaceAll('{spot}', spotWord(spot)) });
     } else {
       let list = P.messages;
       if (st.partner === id && P.partnerMessages && Math.random() < 0.5) list = P.partnerMessages;

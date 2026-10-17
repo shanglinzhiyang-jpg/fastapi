@@ -1336,11 +1336,15 @@ class TsukkomiManzai extends Minigame {
         const body = h.row ? '#130e1e' : '#211a30';
         const rim = h.row ? '#2c2444' : '#3e3458';
         for (const sx of [-1, 1]) {
-          const px = h.x + sx * hx - 3;
-          rect(ctx, px, hy, 6, 9, body);
-          rect(ctx, px + 1, hy - 1, 4, 1, rim);
-          rect(ctx, px, hy, 1, 4, rim);
-          rect(ctx, px + 1, hy + 9, 4, 8, body);
+          // palm above the head, forearm slanting down-outward to the shoulder
+          const px = h.x + sx * hx - 4;
+          rect(ctx, px + 1, hy, 6, 7, body);
+          rect(ctx, px, hy + 1, 8, 5, body);
+          rect(ctx, px + 2, hy - 1, 4, 1, rim);
+          rect(ctx, px, hy + 1, 1, 3, rim);
+          rect(ctx, px + 2 + sx * 2, hy + 7, 4, 4, body);
+          rect(ctx, px + 2 + sx * 4, hy + 11, 4, 4, body);
+          rect(ctx, px + 2 + sx * 6, hy + 15, 4, 6, body);
         }
       }
       ctx.drawImage(h.cv, h.x - h.ox, y - h.oy);
