@@ -54,8 +54,11 @@
 //                     'brick' 'siding' 'lap' 'wood'
 //   sign              { text, bg, color, size } signboard (default text: name;
 //                     mansion / residential tower only show a sign when given).
-//                     Lettering is bold DotGothic16 at 2x; it shrinks (12 -> 10
-//                     -> 8...) to fit the board's height and squeezes to its width
+//                     Lettering is DotGothic16's exact dot bitmap scaled to 2x
+//                     with a signage bold that keeps every counter open; size
+//                     defaults to 16 on boards >= 26 units tall, 12 on >= 14, else
+//                     10, and shrinks (12 -> 10 -> 8...) to fit the board's height
+//                     and squeezes to its width
 //   signBg, signColor default signboard background / lettering colour when
 //                     `sign` gives none (signBg is also the board behind a logo)
 //   logo              company logo on the signboard (see logos.js)
@@ -188,32 +191,129 @@ function mini(str, x, y, col, ctx = null, ox = 0, oy = 0) {
   }
 }
 
-// Crisp signboard lettering: DotGothic16 rendered at the 2x scale in signage
-// bold (drawn twice, 1px apart, so every stem is an even 2px), alpha thresholded
-// (no anti-aliasing) and squeezed horizontally to fit maxW units. Returns the
-// mask and its ink box in pixels.
-function textMask(str, size, maxW) {
-  const fs = size * S;
-  const [, m] = makeCanvas(2, 2);
-  setFont(m, fs);
-  const tw = Math.max(1, Math.ceil(m.measureText(str).width)) + 1;
-  const k = maxW && tw > maxW * S ? (maxW * S) / tw : 1;
-  const w = Math.ceil(tw * k) + 4, h = Math.ceil(fs * 1.4) + 4;
-  const [cv, c] = makeCanvas(w, h);
-  setFont(c, fs);
-  c.textBaseline = 'top';
+// Crisp signboard lettering. DotGothic16 is drawn on a 16-dot em grid, but at
+// small sizes the browser hints and anti-aliases it off that grid, so we render
+// the label big (one font dot = DOT px), sample each dot's centre to get the
+// font's exact dot bitmap, and scale that bitmap to the asked size per axis by
+// area coverage (a pixel is ink when at least half of it is ink). At size 12
+// (1.5 px per dot) every stroke comes out an even 2px and every counter / gap
+// stays open (>= 1px) even in dense kanji like 駅 劇 舗; size 8 is the native
+// 1:1 bitmap and 16 exact 2x2 dots. A squeeze to fit maxW is applied to the
+// bitmap the same way (below 1x a pixel is ink when any of it is, so thin stems
+// never vanish). Finally a signage bold widens strokes by 1px right and down
+// wherever that keeps the gap behind them open.
+const DOT = 8, BIGPX = 16 * DOT, BASE = Math.round(BIGPX * 1.05);
+let gridOff = null;
+function fontGrid() {
+  if (gridOff) return gridOff;
+  const n = BIGPX + 32;
+  const [, c] = makeCanvas(n, BASE + 40);
+  setFont(c, BIGPX);
+  c.textBaseline = 'alphabetic';
   c.fillStyle = '#000';
-  for (const ox of [2, 3]) { c.setTransform(k, 0, 0, 1, ox, 2); c.fillText(str, 0, 0); }
-  c.setTransform(1, 0, 0, 1, 0, 0);
-  const img = c.getImageData(0, 0, w, h), d = img.data;
+  c.fillText('口', DOT, BASE);
+  const d = c.getImageData(0, 0, n, BASE + 40).data;
+  let x0 = n, y0 = BASE + 40;
+  for (let p = 0; p < n * (BASE + 40); p++) {
+    if (d[p * 4 + 3] < 128) continue;
+    const x = p % n, y = (p - x) / n;
+    if (x < x0) x0 = x;
+    if (y < y0) y0 = y;
+  }
+  if (y0 > BASE) { x0 = 0; y0 = 0; }
+  return (gridOff = [x0 % DOT, y0 % DOT]);
+}
+// dest index -> [src index, fraction of the dest pixel it covers, ...]
+function coverAxis(n, f, dn) {
+  const t = [];
+  for (let X = 0; X < dn; X++) {
+    const a = X / f, b = (X + 1) / f, l = [];
+    for (let i = Math.floor(a); i < Math.min(n, Math.ceil(b)); i++) {
+      const wgt = (Math.min(b, i + 1) - Math.max(a, i)) * f;
+      if (wgt > 1e-6) l.push(i, wgt);
+    }
+    t.push(l);
+  }
+  return t;
+}
+function scaleBits(src, sw, sh, fx, fy) {
+  const w = Math.max(1, Math.round(sw * fx)), h = Math.max(1, Math.round(sh * fy));
+  const ax = coverAxis(sw, fx, w), ay = coverAxis(sh, fy, h);
+  const mid = new Uint8Array(w * sh);
+  for (let y = 0; y < sh; y++) {
+    for (let X = 0; X < w; X++) {
+      const l = ax[X];
+      let cov = 0;
+      for (let k = 0; k < l.length; k += 2) if (src[y * sw + l[k]]) cov += l[k + 1];
+      mid[y * w + X] = fx >= 1 ? cov >= 0.5 - 1e-6 : cov > 0;
+    }
+  }
+  const out = new Uint8Array(w * h);
+  for (let Y = 0; Y < h; Y++) {
+    const l = ay[Y];
+    for (let X = 0; X < w; X++) {
+      let cov = 0;
+      for (let k = 0; k < l.length; k += 2) if (mid[l[k] * w + X]) cov += l[k + 1];
+      out[Y * w + X] = fy >= 1 ? cov >= 0.5 - 1e-6 : cov > 0;
+    }
+  }
+  return { out, w, h };
+}
+// Signage bold that never closes a counter: a pixel right of (dx) / below (dy)
+// ink becomes ink unless the pixel after it is ink too (it is a 1px gap).
+function embolden(src, w, h, dx, dy) {
+  const out = src.slice();
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (src[p] || x < dx || y < dy || !src[p - dy * w - dx]) continue;
+      const nx = x + dx, ny = y + dy;
+      if (nx < w && ny < h && src[ny * w + nx]) continue;
+      out[p] = 1;
+    }
+  }
+  return out;
+}
+// Returns the mask canvas, the squeeze and the ink box in pixels.
+function textMask(str, size, maxW) {
+  const [px0, py0] = fontGrid();
+  const [, m] = makeCanvas(2, 2);
+  setFont(m, BIGPX);
+  const bw = Math.ceil(m.measureText(str).width) + DOT * 3, bh = BASE + DOT * 6;
+  const [, bc] = makeCanvas(bw, bh);
+  setFont(bc, BIGPX);
+  bc.textBaseline = 'alphabetic';
+  bc.fillStyle = '#000';
+  bc.fillText(str, DOT, BASE);
+  const bd = bc.getImageData(0, 0, bw, bh).data;
+  const sw = Math.floor((bw - px0) / DOT), sh = Math.floor((bh - py0) / DOT);
+  const bits = new Uint8Array(sw * sh);
+  let c0 = sw, c1 = -1;
+  for (let j = 0; j < sh; j++) {
+    const yy = py0 + j * DOT + (DOT >> 1);
+    for (let i = 0; i < sw; i++) {
+      if (bd[(yy * bw + px0 + i * DOT + (DOT >> 1)) * 4 + 3] >= 128) {
+        bits[j * sw + i] = 1;
+        if (i < c0) c0 = i;
+        if (i > c1) c1 = i;
+      }
+    }
+  }
+  const tw = c1 >= c0 ? c1 - c0 + 1 : 1;   // ink width in dots
+  const f = (size * S) / 16;
+  const k = maxW && tw * f > maxW * S ? (maxW * S) / (tw * f) : 1;
+  const sc = scaleBits(bits, sw, sh, f * k, f);
+  const w = sc.w, h = sc.h;
+  const out = embolden(embolden(sc.out, w, h, 1, 0), w, h, 0, 1);
+  const [cv, c] = makeCanvas(w, h);
+  const img = c.createImageData(w, h), d = img.data;
   let x0 = w, y0 = h, x1 = -1, y1 = -1;
-  for (let i = 3, p = 0; i < d.length; i += 4, p++) {
-    if (d[i] >= 120) {
-      d[i] = 255;
-      const px = p % w, py = (p - px) / w;
-      if (px < x0) x0 = px; if (px > x1) x1 = px;
-      if (py < y0) y0 = py; if (py > y1) y1 = py;
-    } else d[i] = 0;
+  for (let p = 0; p < w * h; p++) {
+    if (!out[p]) continue;
+    d[p * 4 + 3] = 255;
+    const px = p % w, py = (p - px) / w;
+    if (px < x0) x0 = px; if (px > x1) x1 = px;
+    if (py < y0) y0 = py; if (py > y1) y1 = py;
   }
   c.putImageData(img, 0, 0);
   if (x1 < 0) { x0 = y0 = 0; x1 = y1 = 0; }
@@ -224,7 +324,7 @@ function textMask(str, size, maxW) {
 // squeezed below 80% (squeezing thins the stems).
 function fitText(str, size, maxW, maxH) {
   const sizes = [size];
-  for (const s of [10, 8, 7, 6, 5]) if (s < size) sizes.push(s);
+  for (const s of [12, 10, 8, 7, 6, 5]) if (s < size) sizes.push(s);
   let m = null;
   for (const s of sizes) {
     m = textMask(str, s, maxW);
@@ -458,9 +558,11 @@ function doorHD(x, y, kind, d) {
     HL(x, y + 0.5, 16, '#20140a');
     R(x + 0.5, y + 1, 15, 6, nc);
     HL(x + 0.5, y + 1, 15, shade(nc, 0.32));
-    for (const sx of [4, 8, 12]) { VL(x + sx, y + 2.5, 4.5, '#f6e7c8'); VL(x + sx - 0.5, y + 2.5, 4.5, shade(nc, -0.3)); }
-    for (const [sx, w] of [[0.5, 3], [4.5, 3], [8.5, 3], [12.5, 3]]) { HL(x + sx, y + 6.5, w, shade(nc, -0.28)); VL(x + sx + 1, y + 1.5, 4.5, shade(nc, 0.12)); }
-    if (d.kind === 'bath') {
+    // a sento's noren has a wide middle panel for its ゆ
+    const bath = d.kind === 'bath';
+    for (const sx of bath ? [4, 12] : [4, 8, 12]) { VL(x + sx, y + 2.5, 4.5, '#f6e7c8'); VL(x + sx - 0.5, y + 2.5, 4.5, shade(nc, -0.3)); }
+    for (const [sx, w] of bath ? [[0.5, 3], [4.5, 7], [12.5, 3]] : [[0.5, 3], [4.5, 3], [8.5, 3], [12.5, 3]]) { HL(x + sx, y + 6.5, w, shade(nc, -0.28)); VL(x + sx + 1, y + 1.5, 4.5, shade(nc, 0.12)); }
+    if (bath) {
       // white ゆ on the noren
       const yu = ['0001000', '1011110', '1001001', '1001001', '1011110', '0001000', '0110000'];
       yu.forEach((row, j) => { for (let i = 0; i < 7; i++) if (row[i] === '1') P(x + 6.5 + i * 0.5, y + 2 + j * 0.5, '#ffffff'); });
@@ -567,7 +669,7 @@ function signBoard(d, x, y, w, h, o = {}) {
   if (logo) {
     d.live.push((ctx, px, py) => drawLogo(ctx, logo, px + x + 2, py + y + 2, w - 4, h - 4, {}));
   } else {
-    const size = s.size || (h >= 16 ? 12 : 10);
+    const size = s.size || (h >= 26 ? 16 : h >= 14 ? 12 : 10);
     // ink kept at least a pixel clear of the 1-unit frame
     crispText(s.text || '', x + w / 2, y + h / 2, size, s.color || b.signColor || o.color || '#20232a', w - 5, h - 3, shade(bg, -0.16));
   }
@@ -796,7 +898,14 @@ function interior(type, x, y, w, h, glass) {
         VL(xx + 5, y + h - 8, 5, '#3a3f4a'); R(xx + 4, y + h - 8.5, 2, 1, '#5a5f6b');
         if (rnd() < 0.6) { R(xx + 2, y + h - 9, 1.5, 1.5, pick(['#3a2a20', '#6b4a2e', '#20232a'])); R(xx + 1.5, y + h - 7.5, 2.5, 3, pick(GOODS)); VL(xx + 2, y + h - 4.5, 1.5, '#20232a'); VL(xx + 3, y + h - 4.5, 1.5, '#20232a'); }
       }
-      for (let xx = x + 1; xx < x + w - 2; xx += 4) { HL(xx, y + 2, 3, '#5a5f6b'); R(xx, y + 1.5, 0.5, 1.5, '#20232a'); R(xx + 2.5, y + 1.5, 0.5, 1.5, '#20232a'); }
+      // dumbbell rack
+      HL(x, y + 3.5, w, '#8d939e');
+      for (let xx = x + 1, i = 0; xx + 3.5 <= x + w - 0.5; xx += 4.5, i++) {
+        const pc = i % 3 === 2 ? '#b8343a' : '#2a2d36';
+        HL(xx + 1, y + 2, 1.5, '#b4bac4');
+        R(xx, y + 1.5, 1, 1.5, pc); R(xx + 2.5, y + 1.5, 1, 1.5, pc);
+        P(xx, y + 1.5, shade(pc, 0.45)); P(xx + 2.5, y + 1.5, shade(pc, 0.45));
+      }
       break;
     }
     case 'mirrors': {
@@ -1324,11 +1433,18 @@ function paintHouse(d) {
   HL(0, 10, W, shade(wall, -0.3));
   const mid = Math.floor(H / 2);
   const hasSign = !!b.sign;
-  const sw = Math.min(W - 8, 40);
-  // 2F: doors (+ number plates) with narrow grilled kitchen windows, walkway with railing
-  const dTop = Math.max(mid - 16, hasSign ? 25 : 12), dH = mid - 2 - dTop;
+  // v1's 40-unit board, widened for a long name so it is not squeezed illegibly
+  const label = hasSign ? String(b.sign.text ?? b.name ?? '') : '';
+  let ems = 0;
+  for (const ch of label) ems += ch.charCodeAt(0) > 0xff ? 1 : 0.5;
+  const sw = Math.min(W - 8, Math.max(40, Math.ceil(ems * 10 + 8)));
+  // 2F: doors (+ number plates) with narrow grilled kitchen windows, walkway with
+  // railing; with a signboard the doors start below it, and when that leaves no
+  // room (a 4-tile house) only the doors clear of the board are drawn, full height
+  const top0 = Math.max(mid - 16, 12), topS = hasSign ? Math.max(top0, 25) : top0;
   let n = 1;
   for (let x = 6; x + 28 <= W - 2; x += 22, n++) {
+    const dTop = mid - 2 - topS >= 9 || x < 4 + sw ? topS : top0, dH = mid - 2 - dTop;
     if (dH >= 9) {
       R(x, dTop, 16, dH, '#4a2f18');
       R(x + 1, dTop + 0.5, 14, dH - 0.5, '#6b4526');
@@ -1358,7 +1474,8 @@ function paintHouse(d) {
   // 1F windows
   for (let x = 6; x < W - 10; x += 22) {
     if (Math.abs(x - dx) < 20) continue;
-    windowHD(x + 2.5, dy + 2.5, 11, 8, { glass: '#8fd0ff', frame: '#f4f4f4', wall, mullion: true, curtain: (x / 22) % 2 ? '#f2e6c8' : null });
+    const ww = Math.min(11, W - 4 - (x + 2.5));   // (v1's last window could poke past the wall)
+    if (ww >= 6) windowHD(x + 2.5, dy + 2.5, ww, 8, { glass: '#8fd0ff', frame: '#f4f4f4', wall, mullion: ww >= 9, curtain: (x / 22) % 2 ? '#f2e6c8' : null });
   }
   // outside stairs + handrail
   const s0x = W - 14, s0y = mid + 2;
@@ -1455,9 +1572,14 @@ function paintShop(d) {
   } else if (kind === 'small') {
     kawara(d, -2, 0, 5, 1.5);
     HL(-2, 4.5, W + 4, shade(roof, -0.38));
-    R(0, 5, W, 5, shade(wall, -0.08));
-    HL(0, 5, W, shade(wall, -0.3));
-    for (let x = 2; x < W; x += 4) R(x, 5.5, 1, 1, shade(wall, -0.25));
+    // fascia in the roof colour (v1's 10-unit roof band) with rafter ends
+    const fas = shade(roof, -0.1);
+    R(0, 5, W, 5, fas);
+    HL(0, 5, W, shade(fas, -0.4));
+    HL(0, 5.5, W, shade(fas, -0.2));
+    for (let x = 2; x < W; x += 4) { R(x, 6, 1, 1, shade(fas, -0.3)); P(x, 6, shade(fas, 0.2)); }
+    HL(0, 7.5, W, shade(fas, 0.16));
+    HL(0, 9.5, W, shade(fas, -0.3));
   } else {
     parapet(0, 0, W, roofH, roof, wall);
   }
@@ -1663,12 +1785,25 @@ function paintArcade(d) {
   R(0, 0.5, W, 2, '#e8f5fb');
   R(0, 6, W, 3, shade(gl, -0.1));
   HL(0, 4.5, W, shade(roof, 0.25));
-  for (let x = 4; x < W; x += 8) { R(x - 0.5, 0, 1, 9, roof); VL(x - 0.5, 0, 9, shade(roof, 0.35)); }
+  for (let x = 8; x < W; x += 8) { R(x - 0.5, 0, 1, 9, roof); VL(x - 0.5, 0, 9, shade(roof, 0.35)); }
   for (let x = 1; x < W - 1; x += 8) { P(x + 2, 1, '#ffffff'); P(x + 1.5, 1.5, '#ffffff'); }
-  R(0, 9, W, 4, roof);
-  HL(0, 9, W, shade(roof, 0.4));
-  HL(0, 9.5, W, shade(roof, 0.15));
-  R(0, 12, W, 1, shade(roof, -0.35));
+  const beam = (x0, w) => {
+    R(x0, 9, w, 4, roof);
+    HL(x0, 9, w, shade(roof, 0.4));
+    HL(x0, 9.5, w, shade(roof, 0.15));
+    R(x0, 12, w, 1, shade(roof, -0.35));
+  };
+  beam(0, W);
+  // The vault and beam run on through the side edges: each end is half of a
+  // 2px truss rib painted over the outline (after the outline pass), so two
+  // arcade shops side by side meet in one rib instead of a dark seam, whichever
+  // is drawn first; at the end of a row the rib frames the vault.
+  const truss = shade(roof, -0.2);
+  R(0, 0, 0.5, 9, truss); R(W - 0.5, 0, 0.5, 9, truss);
+  d.post.push(() => {
+    R(-0.5, 0, 0.5, 9, truss); R(W, 0, 0.5, 9, truss);
+    beam(-0.5, 0.5); beam(W, 0.5);
+  });
   for (let x = 4; x < W; x += 8) R(x - 0.5, 12.5, 1, 0.5, '#fff1b8');
   const deco = b.deco || 'flags';
   if (deco === 'flags') {
@@ -1892,7 +2027,7 @@ function fontReady() {
   if (now - fontCheckAt < 500) return false;
   fontCheckAt = now;
   try { fontOK = !document.fonts || document.fonts.check('12px "DotGothic16"'); } catch (e) { fontOK = true; }
-  if (fontOK) CACHE.clear();   // drop facades lettered with the fallback font
+  if (fontOK) { CACHE.clear(); gridOff = null; }   // drop facades lettered with the fallback font
   return fontOK;
 }
 
@@ -1965,12 +2100,18 @@ function entryFor(b) {
 
 // Draw a building with its footprint's top-left at (px, py) in world units.
 export function drawBuilding(ctx, b, px, py, t = 0) {
+  // skip buildings outside the canvas (in the current transform's units); a
+  // generous box first, so a far-away building is not even cached yet
+  const m = ctx.getTransform();
+  const vx = -m.e / m.a, vy = -m.f / m.d, vw = ctx.canvas.width / m.a, vh = ctx.canvas.height / m.d;
+  const reach = 64 + Math.max(4, b.rise ?? 0) * TILE;
+  if (px + b.w * TILE + 16 < vx || px - 16 > vx + vw || py + b.h * TILE + 16 < vy || py - reach > vy + vh) {
+    if (b.decorate) b.decorate(ctx, px, py, t);
+    return;
+  }
   const e = entryFor(b);
   const x0 = px - e.ml, y0 = py - e.mt;
-  // skip buildings outside the canvas (in the current transform's units)
-  const m = ctx.getTransform();
-  const vx = -m.e / m.a, vy = -m.f / m.d;
-  const visible = !(x0 > vx + ctx.canvas.width / m.a || x0 + e.uw < vx || y0 > vy + ctx.canvas.height / m.d || y0 + e.uh < vy);
+  const visible = !(x0 > vx + vw || x0 + e.uw < vx || y0 > vy + vh || y0 + e.uh < vy);
   if (visible) {
     ctx.drawImage(e.cv, x0, y0, e.uw, e.uh);
     for (const f of e.live) f(ctx, px, py, t);

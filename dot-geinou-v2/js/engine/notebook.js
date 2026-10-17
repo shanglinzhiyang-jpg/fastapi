@@ -328,7 +328,10 @@ function lifePage(g, ctx) {
   pg.block().head('からだと心', TABS[1].color);
   const sf = st.stamina / st.maxStamina;
   pg.row('体力', `${st.stamina}/${st.maxStamina}`, { gauge: { frac: sf, color: sf > 0.5 ? COLORS.good : sf > 0.2 ? COLORS.accent : COLORS.bad }, rc: st.stamina < 25 ? COLORS.bad : COLORS.text });
-  if (st.stamina < 25) pg.para('体力が少ない。何か食べるか、ベッドで寝て回復しよう。', { s: SMALL, c: COLORS.bad, x: 16 });
+  if (st.stamina < 25) {
+    const full = g.canEat && !g.canEat();
+    pg.para(full ? '体力が少ない。おなかいっぱいなので、ベッドで寝て回復しよう。' : '体力が少ない。何か食べるか、ベッドで寝て回復しよう。', { s: SMALL, c: COLORS.bad, x: 16 });
+  }
   else pg.para(sf >= 0.7 ? '元気いっぱい！' : 'すこし疲れてきた。お仕事は体力と相談しよう。', { s: SMALL, c: sf >= 0.7 ? COLORS.dim : COLORS.accent, x: 16 });
   const NEED_ROWS = [
     ['hunger', '満腹', (v) => `${v}%`, (v) => (v < HUNGRY ? COLORS.bad : '#ff9a3c')],

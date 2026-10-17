@@ -434,25 +434,29 @@ function waterHD(c, r, f, base, cols, wave, rim, foam, step, spots) {
     Pw(c, x + o + 1, y, foam);
   }
 }
+// Wave-mark layouts per variant, so big stretches of water do not show the
+// same marks in a grid every tile (the map hashes the variant per cell).
+const WAVES = [[[2, 6], [18, 12], [8, 22], [24, 26]], [[10, 3], [26, 9], [3, 16], [16, 25]], [[22, 4], [6, 11], [20, 19], [11, 28]]];
+const CANAL_WAVES = [[[4, 4], [20, 14], [10, 24]], [[14, 2], [2, 12], [24, 22]], [[26, 7], [12, 17], [4, 27]]];
 defineTile('water', {
-  solid: true, frames: 2, speed: 40,
+  solid: true, frames: 2, speed: 40, variants: 3,
   draw(c, r, f) {
     R(c, 0, 0, 16, 16, '#3d7fd1');
     speckle(c, r, ['#3674c2'], 10);
     const o = f * 4;
     for (const [x, y] of [[1, 3], [9, 6], [4, 11], [12, 13]]) R(c, (x + o) % 16, y, 3, 1, '#8cc2f5');
   },
-  hd(c, r, f) { waterHD(c, r, f, '#3d7fd1', ['#3674c2', '#4486d6'], '#8cc2f5', '#5f9fe6', '#d4ebff', 8, [[2, 6], [18, 12], [8, 22], [24, 26]]); },
+  hd(c, r, f, v) { waterHD(c, r, f, '#3d7fd1', ['#3674c2', '#4486d6'], '#8cc2f5', '#5f9fe6', '#d4ebff', 8, WAVES[v]); },
 });
 defineTile('canal', {
-  solid: true, frames: 2, speed: 45,
+  solid: true, frames: 2, speed: 45, variants: 3,
   draw(c, r, f) {
     R(c, 0, 0, 16, 16, '#2f5f96');
     speckle(c, r, ['#2a5688', '#36699f'], 12);
     const o = f * 5;
     for (const [x, y] of [[2, 2], [10, 7], [5, 12]]) R(c, (x + o) % 16, y, 4, 1, '#6f9fd4');
   },
-  hd(c, r, f) { waterHD(c, r, f, '#2f5f96', ['#2a5688', '#36699f'], '#6f9fd4', '#4a7cb4', '#a8c8ec', 10, [[4, 4], [20, 14], [10, 24]]); },
+  hd(c, r, f, v) { waterHD(c, r, f, '#2f5f96', ['#2a5688', '#36699f'], '#6f9fd4', '#4a7cb4', '#a8c8ec', 10, CANAL_WAVES[v]); },
 });
 // Wooden footbridge: planks across the walking direction, beams on both sides.
 function bridgeHD(c, r) {
@@ -927,13 +931,16 @@ defineTile('floor_marble', {
     let x = 2 + Math.floor(r() * 28), dir = r() < 0.5 ? 1 : -1;
     const y0 = v & 1 ? 0 : 6, y1 = v & 2 ? 32 : 26;
     let bx = -1, by = 0;
+    // a soft 2px band with a broken core reads as veining (a solid 1px dark
+    // zig-zag reads as a crack)
     for (let y = y0; y < y1; y++) {
-      P(c, x, y, '#d8d5cb'); if (y % 3 === 0) P(c, x + dir, y, '#e2dfd7');
+      P(c, x + dir, y, '#e4e1d9');
+      P(c, x, y, r() < 0.65 ? '#dad7cd' : '#e1ded5');
       if (y === 14) { bx = x; by = y; }
-      if (r() < 0.55) x += r() < 0.75 ? dir : -dir;
-      if (x < 1 || x > 30) { dir = -dir; x += dir * 2; }
+      if (r() < 0.4) x += r() < 0.8 ? dir : -dir;
+      if (x < 2 || x > 29) { dir = -dir; x += dir * 2; }
     }
-    if (bx >= 0) for (let k = 1; k < 9; k++) P(c, bx - dir * k, by + k + (k >> 2), '#e3e0d8');
+    if (bx >= 0) for (let k = 1; k < 9; k++) P(c, bx - dir * k, by + k + (k >> 2), k & 1 ? '#e3e0d8' : '#e7e5de');
     R(c, 0, 0, 31, 1, '#f8f7f3'); R(c, 0, 1, 1, 30, '#f8f7f3');
     R(c, 0, 31, 32, 1, '#d4d1c8'); R(c, 31, 0, 1, 32, '#d4d1c8'); R(c, 1, 30, 30, 1, '#e3e1da');
   },
@@ -1226,11 +1233,15 @@ defineTile('painting', {
   hd(c) {
     bevel(c, 4, 4, 24, 18, '#c9a227', '#f0d060', '#8e7018');
     R(c, 5, 5, 22, 1, '#e8c43a');
+    // the landscape is clipped to the picture so the hills never paint over the frame
+    c.save(); c.beginPath(); c.rect(6, 6, 20, 14); c.clip();
     R(c, 6, 6, 20, 14, '#8fd0ff'); R(c, 6, 6, 20, 3, '#b8e2ff');
-    oval(c, 4, 13, 14, 10, '#4a9a4a'); oval(c, 14, 14, 14, 9, '#3f8a3a');
-    R(c, 6, 17, 20, 3, '#3f8a3a'); P(c, 9, 14, '#6cbc5c'); P(c, 10, 14, '#6cbc5c');
+    oval(c, 3, 13, 15, 10, '#4a9a4a'); oval(c, 14, 14, 15, 9, '#3f8a3a');
+    R(c, 6, 18, 20, 2, '#3f8a3a'); P(c, 9, 14, '#6cbc5c'); P(c, 10, 14, '#6cbc5c'); P(c, 19, 15, '#4a9a4a');
     oval(c, 19, 8, 4, 4, '#ffd23f'); P(c, 20, 8, '#fff6a8');
     R(c, 9, 10, 5, 2, '#ffffff'); R(c, 10, 9, 2, 1, '#ffffff');
+    R(c, 6, 6, 20, 1, '#7fb8d8'); R(c, 6, 7, 1, 13, '#7fb8d8');
+    c.restore();
     outline(c);
   },
 });

@@ -792,11 +792,31 @@ export class Game {
           R(ctx, x, hem, 1, 3, '#3a0812');
         }
         R(ctx, side < 0 ? x1 - 1 : x0, 0, 1, SH - 6, '#2a0610');
-        // tie-back sash
-        const sx = side < 0 ? x1 - 22 : x0 + 6;
-        R(ctx, sx - 1, 189, 18, 9, '#22202a');
-        R(ctx, sx, 190, 16, 7, '#c9a227');
-        R(ctx, sx, 190, 16, 1, '#ffe27a');
+        // tie-back: a gold cord wrapped across the whole curtain (lit from the top), the
+        // cloth gathering under it, and a knot with a tassel at the inner edge
+        const bw = x1 - x0;
+        if (bw < 12) return;
+        R(ctx, x0, 186, bw, 1, '#22202a');
+        R(ctx, x0, 187, bw, 2, '#ffe27a');
+        R(ctx, x0, 189, bw, 3, '#c9a227');
+        R(ctx, x0, 192, bw, 2, '#8a6a1a');
+        R(ctx, x0, 194, bw, 1, '#22202a');
+        R(ctx, x0, 195, bw, 1, '#3a0812');
+        for (let x = x0 + 2; x < x1 - 1; x += 4) R(ctx, x, 188, 2, 1, '#fff6c8'); // twist of the cord
+        const tx = side < 0 ? x1 - 10 : x0 + 4; // knot + tassel, 6 px wide
+        R(ctx, tx - 1, 184, 8, 13, '#22202a');
+        R(ctx, tx, 185, 6, 11, '#c9a227');
+        R(ctx, tx, 185, 6, 1, '#ffe27a');
+        R(ctx, tx, 186, 1, 9, '#ffe27a');
+        R(ctx, tx + 5, 186, 1, 10, '#8a6a1a');
+        R(ctx, tx + 2, 197, 2, 6, '#22202a');
+        R(ctx, tx + 2, 197, 1, 6, '#c9a227');
+        R(ctx, tx - 1, 203, 8, 4, '#22202a');
+        R(ctx, tx, 204, 6, 2, '#ffe27a');
+        R(ctx, tx - 2, 207, 10, 15, '#22202a');
+        R(ctx, tx - 1, 207, 8, 14, '#c9a227');
+        R(ctx, tx - 1, 207, 8, 1, '#ffe27a');
+        for (let i = 0; i < 4; i++) R(ctx, tx + i * 2, 208, 1, 13, '#8a6a1a');
       };
       const valance = (ctx) => {
         R(ctx, 0, 0, SW, 22, '#8a1a2c');
@@ -899,7 +919,10 @@ export class Game {
             const hop = beat === 1 || beat === 7 ? 6 : beat === 2 || beat === 8 ? 2 : 0;
             const dir = beat >= 3 && beat < 5 ? 'left' : beat >= 9 && beat < 11 ? 'right' : 'down';
             const frame = beat >= 3 && beat < 5 ? [1, 2][beat % 2] : beat >= 9 && beat < 11 ? [1, 2][beat % 2] : 0;
-            R(ctx, cx - 26, FLOOR + 6, 52, 4, 'rgba(40,16,10,0.4)');
+            // soft contact shadow (a pixel ellipse) under the feet
+            ctx.globalAlpha = 0.4 * k;
+            ellipse(ctx, cx, FLOOR + 8, 30, 3, '#1c0a10');
+            ctx.globalAlpha = k;
             if (hdSheet) {
               const img = hdSheet[dir][frame] || hdSheet.down[0];
               ctx.drawImage(img, Math.round(cx - 48), Math.round(FLOOR + 8 - 117 - hop), 96, 120);

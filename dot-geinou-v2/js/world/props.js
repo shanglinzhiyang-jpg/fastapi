@@ -9,8 +9,10 @@ import { makeCanvas, shade } from '../engine/util.js';
 import { R as PR, P as PP, oval, outline, inset, dither } from '../engine/tiles.js';
 import { scale2x } from '../engine/hdify.js';
 
-// Unit-space rect (no rounding: 0.5 = one screen pixel).
+// Unit-space rect (no rounding: 0.5 = one screen pixel). Animated values must be
+// snapped with hu() first, or fillRect anti-aliases them into blended pixels.
 const R = (ctx, x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+const hu = (v) => Math.round(v * 2) / 2; // snap to the half-unit (screen pixel) grid
 
 // Cached 2x painting: `paint(c)` draws on a (w*2) x (h*2) canvas; the result is
 // drawn at (sx + ox, sy + oy) with size w x h units.
@@ -68,13 +70,13 @@ export function fountain(x, y, extra = {}) {
         const k = (f / 7 + i * 5) % 30;
         const dx = 6 + ((i * 11 + Math.floor(f / 40)) % 36), dy = 9 + (k % 13);
         if (dx + 2 > 20.5 && dx < 27.5 && dy < 19) continue; // behind the central column
-        const px = sx + dx, py = sy + dy;
+        const px = sx + dx, py = hu(sy + dy);
         R(ctx, px, py, 2, 0.5, '#8cc2f5'); R(ctx, px + 0.5, py - 0.5, 1, 0.5, '#d4ebff');
       }
       // rings where the falling water lands
       const t = (f % 40) / 40;
       for (const [cx, cy] of [[sx + 19, sy + 17.5], [sx + 29, sy + 17.5]]) {
-        const rw = 1 + t * 3;
+        const rw = hu(1 + t * 3);
         R(ctx, cx - rw, cy, rw * 2, 0.5, t < 0.6 ? '#bfe6ff' : '#8cc2f5');
       }
       // jet: a central column plus arcs of drops falling back into the bowl
@@ -84,7 +86,7 @@ export function fountain(x, y, extra = {}) {
       for (let i = 0; i < 6; i++) {
         const p = ((f / 30 + i / 6) % 1), side = i % 2 ? 1 : -1;
         const dx = side * (1 + p * 7), dy = -h - 4 + p * p * 10 + p * 2;
-        R(ctx, sx + 23.75 + dx, sy + dy - 1, 1, 1, p < 0.5 ? '#ffffff' : '#bfe6ff');
+        R(ctx, hu(sx + 23.5 + dx), hu(sy + dy - 1), 1, 1, p < 0.5 ? '#ffffff' : '#bfe6ff');
       }
       // sparkles on the basin water
       if (Math.floor(f / 18) % 3 === 0) { R(ctx, sx + 9, sy + 11, 0.5, 0.5, '#ffffff'); R(ctx, sx + 37, sy + 21, 0.5, 0.5, '#ffffff'); }

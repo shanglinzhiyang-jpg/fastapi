@@ -6,8 +6,13 @@
 // B backs out, MENU closes the whole phone.
 //
 // Also here (installed into PEOPLE_UI of life.js at load):
-//   talkPersonUI(g, npc)        talking to an NPC linked to a person: heart event first,
-//                               then (♥1+) a small menu 話す / プレゼント / さそう / またね
+//   talkPersonUI(g, npc)        talking to an NPC linked to a person: hooks.start, a heart
+//                               event first, hooks.before (may take over), then (♥1+) a
+//                               small menu 話す / プレゼント / さそう / [extras] / またね,
+//                               hooks.after. Content extends it with PEOPLE_UI.extras
+//                               ({ id, label, cond(g, id, npc), run(g, id, npc), repeat,
+//                               order }) and PEOPLE_UI.hooks — see life.js; do not replace
+//                               PEOPLE_UI.talk.
 //   hangoutUI(g, id, spotId)    an HD vignette of the hangout (g.hangout calls it)
 //
 // ---------------------------------------------------------------- for other modules
@@ -35,7 +40,8 @@
 //                        call ph.back(value) to close it (the promise gets value).
 //                        area = { x, y, w, h } in screen px (224 px wide).
 // Drawing helpers: appTile, rrect, box, drawHeart, drawHearts, drawBadge, phoneText,
-// fitText, PHONE / SCREEN (geometry), PC (the phone's colours).
+// fitText, nameFit, PHONE / SCREEN (geometry), PC (the phone's colours).
+// openPhone(g) resolves with 'menu' when the player closed it with MENU.
 
 import { SW, SH, fmtMoney, clamp, shade, mix, makeCanvas, hash2 } from './util.js';
 import { text, wrap, measure, panel, COLORS, downArrow } from './draw.js';
@@ -144,6 +150,13 @@ export function fitText(c, s, maxW, size = 12) {
   return ch.join('') + '…';
 }
 const oneLine = (s) => String(s || '').replace(/\s*\n\s*/g, ' ');
+// A person's name for a narrow spot: the full name, else def.short, else cut.
+export function nameFit(c, def, maxW, size = 14) {
+  const full = String((def && def.name) || '？？？');
+  if (measure(c, full, size) <= maxW) return full;
+  if (def && def.short && measure(c, def.short, size) <= maxW) return def.short;
+  return fitText(c, full, maxW, size);
+}
 
 const HEART = ['..oo.oo..', '.ohfoffo.', 'ohffffffo', 'offffffso', '.offffso.', '..offso..', '...ofo...', '....o....'];
 const HEART_PAL = {
@@ -590,6 +603,10 @@ export function activePhone(g) {
 export async function withPhone(g, fn) {
   const open = activePhone(g);
   if (open) return fn(open);
+  // closed with MENU and still sliding out: app code that goes on calling the
+  // helpers gets their cancel values instead of a new phone popping up
+  const gone = g.scenes.find((s) => s.isPhone && s.dismissed && !(s.closing && s.closing.done));
+  if (gone) return fn(gone);
   const ph = new PhoneScene(g);
   g.push(ph);
   try {
@@ -640,6 +657,7 @@ function homeView(g) {
       if (row >= this.top + GRID_ROWS) this.top = row - GRID_ROWS + 1;
       if (inp.pressed('a')) {
         const app = apps[this.idx];
+        if (!app || typeof app.open !== 'function') { audio.sfx('buzz'); return; }
         audio.sfx('ok');
         const p = this.iconPos(this.idx);
         ph.zoomFrom = { x: p.x, y: p.y, w: 32, h: 32 };
@@ -711,17 +729,21 @@ function todayInfo(g) {
   return out;
 }
 const daysToRent = (g) => (7 - weekdayOf(g.state.day)) % 7 || 7;
-const pendingInvites = (g) => g.state.phone.inbox.filter((m) => m.kind === 'invite' && !m.answered && m.day === g.state.day);
+const pendingInvites = (g) => g.state.phone.inbox.filter((m) => m.kind === 'invite' && !m.answered && m.day === g.state.day && !metToday(g, m));
+// An invite from someone you already spent today with (talk menu / another invite).
+const metToday = (g, m) => !!(m.person && g.state.people[m.person] && g.state.people[m.person].hangDay === g.state.day);
 const senderName = (m) => (m.person && PEOPLE[m.person] ? PEOPLE[m.person].name : m.from || '？？？');
 
-// Entry point used by the pause menu.
+// Entry point used by the pause menu. Resolves with 'menu' when the player closed
+// the phone with MENU (the pause menu then closes too), else undefined (B).
 export async function openPhone(g) {
-  if (activePhone(g)) return;
+  if (activePhone(g)) return undefined;
   audio.sfx('cursor');
   const ph = new PhoneScene(g);
   g.push(ph);
   await ph.open(homeView(g));
   await ph.close();
+  return ph.dismissed ? 'menu' : undefined;
 }
 
 // ---------------------------------------------------------------- generic list / info / confirm
@@ -908,7 +930,11 @@ export async function messagesApp(g) {
       avatar(c, x + 8, y + 8, t.look, t.kind);
       const day = `${t.last.day}日目`;
       const dw = measure(c, day, 12);
-      T(c, fitText(c, t.name, w - 60 - dw - 10, 14), x + 48, y + 5, 14, t.unread ? '#1a1a28' : PC.text);
+      // long senders: the short name (people), else the small size, else cut
+      const nw = w - 60 - dw - 4;
+      let nm = t.person ? nameFit(c, PEOPLE[t.person], nw, 14) : t.name, ns = 14;
+      if (measure(c, nm, 14) > nw) { ns = 12; nm = fitText(c, nm, nw, 12); }
+      T(c, nm, x + 48, y + (ns === 14 ? 5 : 7), ns, t.unread ? '#1a1a28' : PC.text);
       T(c, day, x + w - 8, y + 6, 12, PC.dim, 'right');
       const tag = KIND_TAG[t.last.kind] ? `【${KIND_TAG[t.last.kind]}】` : '';
       const prev = g.fmt(previewText(t.last));
@@ -918,6 +944,7 @@ export async function messagesApp(g) {
   }));
 }
 function previewText(m) {
+  if (m.answered === 'met') return '今日はもう いっしょに過ごした';
   if (m.answered === 'yes') return m.kind === 'offer' ? 'オファーを引き受けた' : '行く！と返事した';
   if (m.answered === 'no') return m.kind === 'offer' ? 'オファーをことわった' : 'ことわった';
   return oneLine(m.text);
@@ -952,13 +979,16 @@ function threadView(g, key) {
         if (m.read) seenRead = true;
         else if (this.firstUnread == null && seenRead) this.firstUnread = m.id; // divider only after older, read messages
         m.read = true;
-        if (m.kind === 'invite' && !m.answered && m.day !== g.state.day) m.answered = 'expired';
+        if (m.kind === 'invite' && !m.answered) {
+          if (m.day !== g.state.day) m.answered = 'expired';
+          else if (metToday(g, m)) m.answered = 'met';
+        }
       }
       this.dirty = true;
       this.toBottom = true;
     },
     pending() {
-      return this.msgs().find((m) => !m.answered && ((m.kind === 'invite' && m.day === g.state.day) || (m.kind === 'offer' && m.regular && REGULARS[m.regular]))) || null;
+      return this.msgs().find((m) => !m.answered && ((m.kind === 'invite' && m.day === g.state.day && !metToday(g, m)) || (m.kind === 'offer' && m.regular && REGULARS[m.regular]))) || null;
     },
     layout(c, w) {
       const items = [];
@@ -973,7 +1003,8 @@ function threadView(g, key) {
         const tag = KIND_TAG[m.kind] || '';
         const tw = Math.max(...lines.map((l) => measure(c, l, 12)), ...xl.map((l) => measure(c, l, 12)), tag ? measure(c, `【${tag}】`, 12) : 0);
         const h = (lines.length + xl.length + (tag ? 1 : 0)) * LINE + 10 + (xl.length ? 4 : 0);
-        items.push({ type: 'in', y, h, bw: Math.min(BUB_W, Math.ceil(tw)) + 14, lines, xl, tag, m });
+        // (a hanging 。」ー may stick out of BUB_W by one char: the bubble fits the lines)
+        items.push({ type: 'in', y, h, bw: Math.min(w - 56, Math.ceil(tw) + 14), lines, xl, tag, m });
         y += Math.max(h, 26) + 8;
         if (m.answered === 'yes' || m.answered === 'no') {
           const r = (REPLY[m.kind] || REPLY.invite)[m.answered];
@@ -981,8 +1012,8 @@ function threadView(g, key) {
           const rh = rl.length * LINE + 10;
           items.push({ type: 'out', y, h: rh, bw: Math.ceil(Math.max(...rl.map((l) => measure(c, l, 12)))) + 14, lines: rl });
           y += rh + 8;
-        } else if (m.answered === 'expired') {
-          items.push({ type: 'note', y, text: 'おさそいの日が過ぎてしまった' });
+        } else if (m.answered === 'expired' || m.answered === 'met') {
+          items.push({ type: 'note', y, text: m.answered === 'met' ? '今日はもう いっしょに過ごした' : 'おさそいの日が過ぎてしまった' });
           y += 20;
         }
       }
@@ -1007,8 +1038,8 @@ function threadView(g, key) {
         const def = m.person && PEOPLE[m.person];
         if (m.kind === 'invite') {
           const ok = await answerMessage(g, m, yes);
-          if (def && yes && ok) g.message({ from: def.name, person: m.person, kind: 'chat', read: true, text: lineFor(def, 'thanks') });
-          if (def && !yes) g.message({ from: def.name, person: m.person, kind: 'chat', read: true, text: lineFor(def, 'declined') });
+          if (def && yes && ok) g.message({ from: def.name, person: m.person, kind: 'chat', read: true, text: msgLine(def, 'thanks', g) });
+          if (def && !yes) g.message({ from: def.name, person: m.person, kind: 'chat', read: true, text: msgLine(def, 'declined', g) });
         } else {
           await answerMessage(g, m, yes);
           if (!yes) ph.toast('オファーをおことわりした', '#9aa3c7');
@@ -1092,11 +1123,16 @@ function msgExtra(m) {
   }
   if (m.kind === 'offer' && m.regular && REGULARS[m.regular]) {
     const r = REGULARS[m.regular];
-    return `『${r.title}』\n毎週${WEEKDAYS[r.weekday]}曜・${fmtMoney(r.pay)}\n体力 -${r.stamina}`;
+    const where = placeName(r.place);
+    const when = [showDay(r), where].filter(Boolean).join('・');
+    return `『${r.title}』\n${when ? when + '\n' : ''}ギャラ ${fmtMoney(r.pay)}\n体力 -${r.stamina}`;
   }
   return null;
 }
 
+const placeName = (id) => (id && PLACES[id] ? PLACES[id].name : '');
+// '毎週木曜' (a one-off event registered with a dynamic weekday: just the weekday)
+const showDay = (r) => (r.weekday >= 0 && r.weekday < 7 ? `毎週${WEEKDAYS[r.weekday]}曜` : '');
 // Answers an invite / offer (no dialogue of its own beyond the result). Returns
 // true when the message got answered.
 export async function answerMessage(g, m, yes) {
@@ -1105,6 +1141,7 @@ export async function answerMessage(g, m, yes) {
   if (m.kind === 'invite') {
     if (m.day !== g.state.day) { m.answered = 'expired'; return true; }
     if (!yes) { m.answered = 'no'; return true; }
+    if (metToday(g, m)) { m.answered = 'met'; return true; } // no second outing with them today
     const spot = HANGOUTS[m.spot];
     const ok = await g.hangout(m.person, m.spot);
     if (ok) m.answered = 'yes';
@@ -1115,10 +1152,13 @@ export async function answerMessage(g, m, yes) {
     const r = REGULARS[m.regular];
     if (!r) return false;
     if (yes) {
-      g.joinRegular(m.regular);
+      const cur = g.state.regulars[m.regular];
+      if (!cur || cur.dropped) g.joinRegular(m.regular); // a duplicate offer does not reset the week
       m.answered = 'yes';
       audio.sfx('fanfare');
-      await g.say(`『${r.title}』のレギュラーになった！\n毎週${WEEKDAYS[r.weekday]}曜日に、収録に行こう。`);
+      const where = placeName(r.place);
+      const day = showDay(r);
+      await g.say(`『${r.title}』のレギュラーになった！\n${day ? day + 'は、' : ''}${where ? where + 'で収録だ。' : '収録をがんばろう。'}`);
     } else {
       m.answered = 'no';
       if (!g.state.regulars[m.regular]) g.state.regulars[m.regular] = { declined: g.state.day, dropped: true, doneWeek: 0, missed: 0, count: 0 };
@@ -1140,18 +1180,24 @@ export async function readMessage(g, m) {
       m.answered = 'expired';
       return;
     }
+    if (metToday(g, m)) {
+      await g.say(m.text, opts);
+      await g.say('（今日はもう いっしょに過ごした）');
+      m.answered = 'met';
+      return;
+    }
     const i = await g.ask(m.text, ['行く！', 'ごめん、また今度'], { ...opts, cancel: 1 });
     if (i === 0) await answerMessage(g, m, true);
     else {
       m.answered = 'no';
-      await g.say(def ? lineFor(def, 'declined') : '了解！また誘うね〜。', opts);
+      await g.say(def ? lineFor(def, 'declined', g) : '了解！また誘うね〜。', opts);
     }
     return;
   }
   if (m.kind === 'offer' && m.regular && !m.answered) {
     const r = REGULARS[m.regular];
     if (!r) { await g.say(m.text, opts); return; }
-    const i = await g.ask(`${m.text}\n（毎週${WEEKDAYS[r.weekday]}曜：${r.title}／ギャラ ${fmtMoney(r.pay)}）`, ['引き受ける', 'おことわりする'], { ...opts, cancel: 1 });
+    const i = await g.ask(`${m.text}\n（${showDay(r) ? showDay(r) + '：' : ''}${r.title}／ギャラ ${fmtMoney(r.pay)}）`, ['引き受ける', 'おことわりする'], { ...opts, cancel: 1 });
     await answerMessage(g, m, i === 0);
     if (i !== 0) await g.say('今回はおことわりした。');
     return;
@@ -1162,7 +1208,8 @@ export async function readMessage(g, m) {
 // ---------------------------------------------------------------- contacts
 function contactIds(g) {
   const st = g.state;
-  const ids = Object.keys(st.people).filter((id) => PEOPLE[id] && (st.people[id].contact || st.partner === id || st.people[id].special));
+  // contact: exchanged at ♥1 (life.js addAff); older saves may lack the flag
+  const ids = Object.keys(st.people).filter((id) => PEOPLE[id] && st.people[id] && (st.people[id].contact || st.partner === id || st.people[id].special || heartIndex(st.people[id].aff || 0) >= 1));
   const rank = (id) => (st.partner === id ? 0 : st.people[id].special ? 1 : 2);
   return ids.sort((a, b) => rank(a) - rank(b) || g.aff(b) - g.aff(a));
 }
@@ -1203,11 +1250,12 @@ export async function contactsApp(g) {
     drawRow(c, id, x, y, w, rh, sel) {
       const def = PEOPLE[id];
       avatar(c, x + 8, y + 8, def.look, 'chat');
-      T(c, fitText(c, def.name, 90, 14), x + 48, y + 5, 14, PC.text);
-      drawChips(c, tagsOf(g, id), x + 52 + Math.min(90, measure(c, def.name, 14)), y + 5);
+      T(c, nameFit(c, def, w - 60, 14), x + 48, y + 4, 14, PC.text);
       const lv = g.heartLevel(id);
-      drawHearts(c, x + 48, y + 25, lv);
-      T(c, HEARTS[lv][1], x + w - 10, y + 24, 12, PC.dim, 'right');
+      drawHearts(c, x + 48, y + 26, lv);
+      const end = drawChips(c, tagsOf(g, id), x + 94, y + 23);
+      const ln = HEARTS[lv][1];
+      if (end < x + w - 14 - measure(c, ln, 12)) T(c, ln, x + w - 10, y + 24, 12, PC.dim, 'right');
     },
   }));
 }
@@ -1227,7 +1275,11 @@ function contactCardView(g, index, list) {
     idx: index,
     slide: 0,
     cancel: -1,
-    hint() { const ids = contactIds(g); return (ids.length > 1 ? '←→:となりの人　' : '') + 'A:さそう　B:もどる'; },
+    hint() {
+      const ids = contactIds(g);
+      const id = ids[clamp(this.idx, 0, Math.max(0, ids.length - 1))];
+      return (ids.length > 1 ? '←→:となりの人　' : '') + (id && inviteState(g, id).ok ? 'A:さそう　' : '') + 'B:もどる';
+    },
     headerRight() { const ids = contactIds(g); return ids.length > 1 ? `${this.idx + 1}/${ids.length}` : ''; },
     update(ph, inp) {
       const ids = contactIds(g);
@@ -1318,7 +1370,7 @@ function callView(g, def, lines) {
     cancel: false,
     line: 0,
     shown: 0,
-    lines: lines.map((l) => g.fmt(l)),
+    lines: [].concat(lines || '…').map((l) => g.fmt(String(l))),
     enter() { audio.sfx('chime'); },
     update(ph, inp) {
       if (this.t < 46) { if (this.t === 30) audio.sfx('ok'); return; }
@@ -1381,30 +1433,36 @@ export async function callPerson(g, id) {
   if (!def) { console.error('callPerson: unknown person', id); return false; }
   const p = g.meet(id);
   return withPhone(g, async (ph) => {
-    if (heartIndex(p.aff) < 2) { await ph.open(callView(g, def, lineFor(def, 'callShy'))); return false; }
-    if (p.hangDay === g.state.day) { await ph.open(callView(g, def, lineFor(def, 'callAgain'))); return false; }
+    if (heartIndex(p.aff) < 2) { await ph.open(callView(g, def, lineFor(def, 'callShy', g))); return false; }
+    if (p.hangDay === g.state.day) { await ph.open(callView(g, def, lineFor(def, 'callAgain', g))); return false; }
     const spots = Object.values(HANGOUTS);
     const k = await ph.open(listView(g, {
       title: `${def.name}をさそう`,
       color: APP_COLORS.contacts,
       hint: 'A:さそう　B:やめる',
       items: spots.map((s) => {
-        const short = g.state.money < s.price;
+        const why = spotBlock(g, s);
         return {
           label: s.name,
           right: s.price ? fmtMoney(s.price) : '無料',
-          rightColor: short ? PC.bad : PC.dim,
+          rightColor: g.state.money < s.price ? PC.bad : PC.dim,
           sub: spotEffects(s),
-          disabled: short,
-          why: 'お金が足りない…',
+          disabled: !!why,
+          why,
         };
       }),
     }));
     if (k < 0) return false;
-    const ok = await ph.open(callView(g, def, lineFor(def, 'callYes')));
+    const ok = await ph.open(callView(g, def, lineFor(def, 'callYes', g)));
     if (ok !== true) return false;
     return g.hangout(id, spots[k].id);
   });
+}
+// Why you cannot go to a spot right now (money / stamina), or null.
+function spotBlock(g, s) {
+  if (g.state.money < s.price) return 'お金が足りない…';
+  if (g.state.stamina < (s.stamina ?? 5)) return '体力が足りない…';
+  return null;
 }
 function spotEffects(s) {
   const out = [`ストレス-${s.stress}`, `体力-${s.stamina}`, `♥+${s.aff}`];
@@ -1602,7 +1660,8 @@ const LINES = {
   giftDone: ['今日はもうもらったよ！\nまた今度ね。', '今日はもうもろたで！\nまた今度な。'],
   hangDone: ['今日はもう遊んだし、また今度ね！', '今日はもう遊んだし、また今度な！'],
   inviteYes: ['いいね、行こう！', 'ええやん、行こ行こ！'],
-  callShy: [['もしもし？…あ、どうも！', 'また現場で会ったら、よろしくね。'], ['もしもし？…あ、どうも〜！', 'また現場で会うたら、よろしゅう。']],
+  callShy: [['もしもし？…あ、どうも！', 'また今度、ゆっくり話そうね。'], ['もしもし？…あ、どうも〜！', 'また今度、ゆっくりしゃべろな。']],
+  smalltalk: ['最近どう？　お仕事、がんばってる？', '最近どないや？　仕事、がんばってるか？'],
   callAgain: [['今日はもう十分遊んだね！', 'またね〜。'], ['今日はもう十分遊んだなあ！', 'ほなまたな〜。']],
   callYes: [['もしもし？…うん、行く行く！'], ['もしもし？…おっ、ええな！行く行く！']],
   thanks: ['今日はありがとう！楽しかった〜。また行こうね。', '今日はおおきに！めっちゃ楽しかったわ。また行こな！'],
@@ -1624,6 +1683,8 @@ export function lineFor(def, key, g = null) {
   return pair[isKansai(def) ? 1 : 0];
 }
 const pickOne = (v) => (Array.isArray(v) ? v[Math.floor(Math.random() * v.length)] : v);
+// A line as one chat-bubble string (phone messages).
+const msgLine = (def, key, g) => [].concat(lineFor(def, key, g)).join('\n');
 function greeting(g, def, id) {
   const lv = g.heartLevel(id);
   let v = def.greet;
@@ -1631,9 +1692,9 @@ function greeting(g, def, id) {
   else if (v && typeof v === 'object' && !Array.isArray(v)) v = v[lv] ?? v.default;
   v = pickOne(v);
   if (v) return v;
-  if (g.state.partner === id) return lineFor(def, 'greetPartner');
-  if (g.state.people[id] && g.state.people[id].special) return lineFor(def, 'greetSpecial');
-  return lineFor(def, 'greet' + clamp(lv, 1, 4));
+  if (g.state.partner === id) return lineFor(def, 'greetPartner', g);
+  if (g.state.people[id] && g.state.people[id].special) return lineFor(def, 'greetSpecial', g);
+  return lineFor(def, 'greet' + clamp(lv, 1, 4), g);
 }
 // A list of lines → g.say calls: strings are spoken by the person, lines that start
 // with '（' are narration, { text, name, look } objects pick their own speaker.
@@ -1664,9 +1725,9 @@ function giftable(g) {
 async function giftFlow(g, id, def, npc) {
   const p = g.person(id);
   const opts = { name: def.name, look: npc.look || def.look };
-  if (p.giftDay === g.state.day) { await g.say(lineFor(def, 'giftDone'), opts); return; }
+  if (p.giftDay === g.state.day) { await g.say(lineFor(def, 'giftDone', g), opts); return; }
   const ids = giftable(g);
-  if (!ids.length) { await g.say(lineFor(def, 'noGift')); return; }
+  if (!ids.length) { await g.say(lineFor(def, 'noGift', g)); return; }
   const known = p.known || {};
   const mark = { love: '♥', like: '♪', dislike: '×' };
   const i = await g.list({
@@ -1686,58 +1747,119 @@ async function giftFlow(g, id, def, npc) {
   const name = ITEMS[item] ? ITEMS[item].name : item;
   let lines = def.giftLines && (def.giftLines[item] || def.giftLines[reaction]);
   if (typeof lines === 'function') lines = lines(g, item, def);
-  if (!lines) lines = lineFor(def, reaction);
+  if (!lines) lines = lineFor(def, reaction, g);
   await g.say([].concat(lines).map((l) => String(l).replaceAll('{item}', name)), opts);
-  levelUpToast(g, id, lvBefore);
+  levelUpToast(g, id, lvBefore, false); // g.giveGift's addAff already showed the toast
 }
-function levelUpToast(g, id, before) {
+function levelUpToast(g, id, before, toast = true) {
   const lv = g.heartLevel(id);
-  if (lv > before) { audio.sfx('fanfare'); g.notify(`${PEOPLE[id].name}と「${HEARTS[lv][1]}」になった！`, { color: COLORS.pink }); }
+  if (lv > before) { audio.sfx('fanfare'); if (toast) g.notify(`${PEOPLE[id].name}と「${HEARTS[lv][1]}」になった！`, { color: COLORS.pink }); }
 }
 
 async function inviteFlow(g, id, def, npc) {
   const p = g.person(id);
   const opts = { name: def.name, look: npc.look || def.look };
-  if (p.hangDay === g.state.day) { await g.say(lineFor(def, 'hangDone'), opts); return false; }
+  if (p.hangDay === g.state.day) { await g.say(lineFor(def, 'hangDone', g), opts); return false; }
   const spots = Object.values(HANGOUTS);
   const k = await g.list({
     title: `${def.name}をどこにさそう？`,
-    items: spots.map((s) => ({ label: s.name, right: s.price ? fmtMoney(s.price) : '無料', disabled: g.state.money < s.price })),
+    items: spots.map((s) => ({ label: s.name, right: s.price ? fmtMoney(s.price) : '無料', disabled: !!spotBlock(g, s) })),
     x: 12, y: 56, w: 330, px: true,
-    describe: (j) => spotEffects(spots[j]).replaceAll(' ', '　') + (g.state.money < spots[j].price ? '\nお金が足りない…' : ''),
+    describe: (j) => spotEffects(spots[j]).replaceAll(' ', '　') + (spotBlock(g, spots[j]) ? '\n' + spotBlock(g, spots[j]) : ''),
   });
   if (k < 0) return false;
-  await sayLines(g, [].concat(lineFor(def, 'inviteYes')), { ...def, look: opts.look });
+  const why = spotBlock(g, spots[k]);
+  if (why) { await g.say(`${why}\n（${spots[k].name}は、また今度にしよう）`); return false; }
+  await sayLines(g, [].concat(lineFor(def, 'inviteYes', g)), { ...def, look: opts.look });
   return g.hangout(id, spots[k].id);
+}
+
+// Content hooks (PEOPLE_UI.hooks, documented in life.js). Errors are logged and skipped.
+function hookList(name) {
+  const h = PEOPLE_UI.hooks && PEOPLE_UI.hooks[name];
+  return Array.isArray(h) ? h : typeof h === 'function' ? [h] : [];
+}
+function runHooksSync(name, ...args) {
+  for (const fn of hookList(name)) { try { fn(...args); } catch (e) { console.error(e); } }
+}
+async function runHooks(name, ...args) {
+  for (const fn of hookList(name)) { try { await fn(...args); } catch (e) { console.error(e); } }
+}
+async function firstHook(name, ...args) {
+  for (const fn of hookList(name)) {
+    try { const v = await fn(...args); if (v) return v; } catch (e) { console.error(e); }
+  }
+  return null;
+}
+// The extra menu entries that apply now: [{ key, label, run }]. Entries are objects
+// { id, label, cond(g, id, npc), run(g, id, npc), repeat, order } (life.js); a function
+// (g, def, npc) => entry | [entries] | null is also accepted (its run gets (g, def, npc)).
+function menuExtras(g, id, def, npc, used) {
+  const out = [];
+  const add = (o, legacy, i) => {
+    if (!o || typeof o.run !== 'function') return;
+    if (!legacy && o.cond) { try { if (!o.cond(g, id, npc)) return; } catch (e) { console.error(e); return; } }
+    let label = o.label;
+    try { if (typeof label === 'function') label = label(g, id, npc); } catch (e) { console.error(e); return; }
+    if (!label) return;
+    const key = 'x:' + (o.id || label);
+    if (used.has(key) && !o.repeat) return;
+    const run = legacy ? () => o.run(g, def, npc) : () => o.run(g, id, npc);
+    out.push({ key, label: String(label), run, order: o.order ?? 50, i });
+  };
+  (PEOPLE_UI.extras || []).forEach((e, i) => {
+    if (typeof e === 'function') {
+      try { for (const o of [].concat(e(g, def, npc) || [])) add(o, true, i); } catch (err) { console.error(err); }
+    } else add(e, false, i);
+  });
+  return out.sort((a, b) => a.order - b.order || a.i - b.i);
 }
 
 // Talking to an NPC linked to a person (see g.talkPerson).
 export async function talkPersonUI(g, npc) {
-  const id = npc.person;
+  const id = npc && npc.person;
   const def = PEOPLE[id];
   if (!def) { await (npc.talk ? npc.talk(g, npc) : g.say(npc.text, { name: npc.name, look: npc.look })); return; }
   const first = !g.met(id);
-  g.meet(id);
-  const ev = g.pendingHeartEvent(id);
-  if (ev) {
-    g.person(id).seen[ev.level] = true;
-    await ev.run(g, def, npc);
-    return;
+  const rec = g.meet(id);
+  if (!rec.seen) rec.seen = {}; // records from older builds
+  if (typeof rec.aff !== 'number') rec.aff = 0;
+  runHooksSync('start', g, id, npc);
+  try {
+    const ev = g.pendingHeartEvent(id);
+    if (ev) {
+      g.person(id).seen[ev.level] = true;
+      await ev.run(g, def, npc);
+      return;
+    }
+    if (await firstHook('before', g, id, npc)) return;
+    await talkMenu(g, id, def, npc, first);
+  } finally {
+    await runHooks('after', g, id, npc);
   }
+}
+
+async function talkMenu(g, id, def, npc, first) {
   const look = npc.look || def.look;
+  let greet = null; // the menu's opening line: 話す does not repeat it
+  const chatLines = () => (Array.isArray(def.chats) ? def.chats : def.chats ? [def.chats] : [])
+    .map((l) => { try { return typeof l === 'function' ? l(g) : l; } catch (e) { console.error(e); return null; } })
+    .filter((l) => l && l !== greet);
   const chat = async () => {
     const p = g.person(id);
+    const firstToday = p.talkDay !== g.state.day;
     // one personal line on the first talk of the day (def.chats)
     let today = null;
-    if (p.talkDay !== g.state.day && heartIndex(p.aff) >= 1 && Array.isArray(def.chats) && def.chats.length) {
-      const ls = def.chats.map((l) => (typeof l === 'function' ? l(g) : l)).filter(Boolean);
-      today = ls.length ? pickOne(ls) : null;
-    }
+    if (firstToday && heartIndex(p.aff) >= 1) today = pickOne(chatLines()) || null;
     if (npc.talk) await npc.talk(g, npc);
     else if (today) { await g.say(today, { name: def.name, look }); today = null; } else if (npc.text) await g.say(npc.text, { name: npc.name || def.name, look });
-    else await sayLines(g, def.chat ? [].concat(typeof def.chat === 'function' ? def.chat(g, def) : def.chat) : ['…。'], { ...def, look });
+    else {
+      let own = typeof def.chat === 'function' ? def.chat(g, def) : def.chat;
+      if (!own || (Array.isArray(own) && !own.length)) own = pickOne(chatLines());
+      await sayLines(g, own ? [].concat(own) : [lineFor(def, 'smalltalk', g)], { ...def, look });
+    }
     if (today) await g.say(today, { name: def.name, look });
-    if (p.talkDay !== g.state.day) {
+    if (firstToday) {
       p.talkDay = g.state.day;
       const lv = g.heartLevel(id);
       g.addAff(id, 2, true);
@@ -1751,19 +1873,15 @@ export async function talkPersonUI(g, npc) {
     return;
   }
   const used = new Set();
-  let prompt = greeting(g, def, id);
-  for (;;) {
+  greet = (await firstHook('greet', g, id, npc)) || greeting(g, def, id);
+  let prompt = greet;
+  for (let turn = 0; turn < 16; turn++) {
     const lv = g.heartLevel(id);
     const opts = [];
     if (!used.has('talk')) opts.push([fitLabel(def.talkLabel || '話す'), 'talk']);
     if (!used.has('gift')) opts.push(['プレゼント', 'gift']);
     if (lv >= 2 && !used.has('invite')) opts.push(['さそう', 'invite']);
-    // extra entries from content: PEOPLE_UI.extras = [(g, def, npc) => { label, run } | [..] | null]
-    const extras = [];
-    for (const fn of PEOPLE_UI.extras || []) {
-      try { for (const o of [].concat(fn(g, def, npc) || [])) if (o && o.label && !used.has('x:' + o.label)) extras.push(o); } catch (e) { console.error(e); }
-    }
-    for (const o of extras) opts.push([fitLabel(o.label), 'x:' + o.label, o]);
+    for (const x of menuExtras(g, id, def, npc, used)) opts.push([fitLabel(x.label), x.key, x]);
     if (!opts.length) break;
     opts.push(['またね', 'bye']);
     const k = await g.ask(prompt, opts.map((o) => o[0]), { name: def.name, look, cancel: opts.length - 1 });
@@ -1772,12 +1890,15 @@ export async function talkPersonUI(g, npc) {
     used.add(act);
     if (act === 'talk') await chat();
     else if (act === 'gift') await giftFlow(g, id, def, npc);
-    else if (act === 'invite') { if (await inviteFlow(g, id, def, npc)) break; } else if (extra && (await extra.run(g, def, npc)) === 'end') break;
-    prompt = lineFor(def, 'again');
+    else if (act === 'invite') { if (await inviteFlow(g, id, def, npc)) break; } else if (extra) { let r; try { r = await extra.run(); } catch (e) { console.error(e); } if (r === 'end') break; }
+    if (!g.person(id)) break;
+    prompt = lineFor(def, 'again', g);
   }
 }
 const fitLabel = (s) => (Array.from(String(s)).length > 14 ? Array.from(String(s)).slice(0, 13).join('') + '…' : String(s));
-PEOPLE_UI.extras = PEOPLE_UI.extras || [];
+if (!Array.isArray(PEOPLE_UI.extras)) PEOPLE_UI.extras = [];
+if (!PEOPLE_UI.hooks) PEOPLE_UI.hooks = {};
+for (const k of ['start', 'before', 'greet', 'after']) if (!PEOPLE_UI.hooks[k]) PEOPLE_UI.hooks[k] = [];
 
 // ---------------------------------------------------------------- hangout vignette
 const AW = 208, AH = 108; // illustration, in art pixels (drawn at 2x)
@@ -2173,7 +2294,7 @@ export async function hangoutUI(g, id, spotId) {
     let own = def.hangout && (def.hangout[spotId] || def.hangout.default);
     if (typeof own === 'function') own = own(g, def, spotId);
     if (own && own.length) await sayLines(g, own, def);
-    else await sayLines(g, [...(spot.lines || []).map((l) => (typeof l === 'string' && !/^[（(]/.test(l) ? { text: l, narr: true } : l)), ...[].concat(lineFor(def, 'hangBye'))], def);
+    else await sayLines(g, [...(spot.lines || []).map((l) => (typeof l === 'string' && !/^[（(]/.test(l) ? { text: l, narr: true } : l)), ...[].concat(lineFor(def, 'hangBye', g))], def);
     // effects
     g.relax({ stress: spot.stress });
     if (spot.fill) g.addNeed('hunger', spot.fill);

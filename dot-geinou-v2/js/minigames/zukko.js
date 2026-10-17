@@ -13,15 +13,21 @@
 //
 // 採点：本物のオチごとに PERFECT 100 / GOOD 75 / LATE 45 / MISS 0 の平均。
 //       フライング（オチより前に押す）は -4、シーン…で押してしまうと -12。
+//
+// Drawn natively in 640x360 (static hd = true). The cast uses the 32x40 HD sprites at
+// 2 px per art pixel (64x80); the stage set, audience and effects are fillRect pixel art.
 
 import { Minigame, registerMinigame, text, wrap, COLORS } from '../engine/minigame.js';
 import { measure } from '../engine/draw.js';
-import { charSheet, LOOKS } from '../engine/sprites.js';
+import { charSheetHD, LOOKS } from '../engine/sprites.js';
 import { audio } from '../engine/audio.js';
-import { W, H, clamp, makeCanvas, shuffle } from '../engine/util.js';
+import { SW, SH, clamp, makeCanvas, shuffle } from '../engine/util.js';
 
-const FOOT = 178; // y of the cast's feet on the stage floor
-const LIE_SHIFT = 10; // a fallen member slides this far back toward the lead, so a solo fall never lands on a neighbour
+const FOOT = 270; // y of the cast's feet on the stage floor
+const LIE_SHIFT = 20; // a fallen member slides this far back toward the lead, so a solo fall never lands on a neighbour
+const CW = 64, CH = 80; // drawn size of a cast member (HD sprite 32x40 at 2x)
+const CX = SW / 2; // the lead's x, centre of the set
+const INK = '#22202a';
 
 // ---------------------------------------------------------------- built-in content (all original)
 const GAGS = [
@@ -83,13 +89,13 @@ const RES = {
   oops: { label: 'ひとりズッコケ…', color: '#ff5d6c' },
 };
 const DOT_COLORS = { perfect: '#ffd23f', good: '#5fd7ff', late: '#ff9a3c', miss: '#5a6075', fly: '#ff5d6c', oops: '#ff5d6c', hold: '#5ee07a' };
+const DOT_LIGHT = { perfect: '#fff2a8', good: '#c4f2ff', late: '#ffd09a', miss: '#8a90a8', fly: '#ffb0b8', oops: '#ffb0b8', hold: '#b8f5c4' };
 const FLY_PENALTY = 4;
 const FAKE_PENALTY = 12;
 
 const chars = (s) => Array.from(s || '');
 
-// ---------------------------------------------------------------- static stage art (cached)
-let stageCache = null;
+// ---------------------------------------------------------------- pixel helpers
 function fillDisc(c, cx, cy, r, col) {
   c.fillStyle = col;
   for (let y = -r; y <= r; y++) {
@@ -97,114 +103,460 @@ function fillDisc(c, cx, cy, r, col) {
     c.fillRect(cx - w, cy + y, w * 2 + 1, 1);
   }
 }
-function buildStage() {
-  const [cv, c] = makeCanvas(W, H);
-  const R = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
-  R(0, 0, W, H, '#140f1f');
-
-  // --- set: shop front (めし処)
-  R(20, 18, 280, 112, '#efdcb2');
-  for (let y = 40; y < 100; y += 5) for (let x = 23 + ((y / 5) % 2) * 6; x < 298; x += 13) R(x, y, 1, 1, '#e0c898');
-  // roof eave (瓦)
-  R(20, 18, 280, 13, '#3b4250');
-  for (let x = 20; x < 300; x += 8) { R(x, 18, 1, 11, '#2c323e'); R(x + 2, 26, 5, 3, '#5a6475'); R(x + 3, 27, 3, 1, '#77829a'); }
-  R(20, 29, 280, 3, '#22262e');
-  // wooden beam
-  R(20, 32, 280, 4, '#7a4e26'); R(20, 32, 280, 1, '#9a6a3a'); R(20, 36, 280, 1, '#4a2e14');
-  // lower wainscot
-  R(20, 102, 280, 28, '#8a5a2a');
-  for (let x = 20; x < 300; x += 8) R(x, 104, 1, 26, '#6b4226');
-  R(20, 101, 280, 3, '#a8743a'); R(20, 104, 280, 1, '#5a3a1a');
-  // pillars
-  for (const x of [20, 128, 186, 294]) { R(x, 32, 6, 98, '#7a4e26'); R(x + 1, 32, 1, 98, '#9a6a3a'); R(x + 5, 32, 1, 98, '#4a2e14'); }
-
-  // window (格子窓) on the left
-  R(34, 60, 66, 40, '#5a3a1a');
-  R(37, 63, 60, 34, '#2a3550');
-  R(37, 63, 60, 6, '#39507a');
-  for (let x = 37; x < 97; x += 6) R(x, 63, 2, 34, '#a8743a');
-  R(37, 79, 60, 2, '#a8743a');
-  R(32, 99, 70, 3, '#6b4226');
-  // potted plant under the window
-  R(58, 116, 18, 12, '#b0532e'); R(56, 114, 22, 3, '#c8683a'); R(60, 127, 14, 2, '#7a3a20');
-  fillDisc(c, 67, 108, 7, '#3f9a5a'); fillDisc(c, 61, 111, 4, '#2f7a44'); fillDisc(c, 73, 110, 4, '#2f7a44');
-  R(64, 104, 2, 2, '#5ee07a'); R(70, 107, 2, 2, '#5ee07a');
-
-  // sliding lattice door in the middle
-  R(134, 58, 52, 72, '#5a3a1a');
-  R(137, 62, 22, 68, '#c9dbe6'); R(161, 62, 22, 68, '#b6cad8');
-  for (let y = 62; y < 130; y += 8) { R(137, y, 22, 1, '#6b4226'); R(161, y, 22, 1, '#6b4226'); }
-  for (const x of [144, 151, 168, 175]) R(x, 62, 1, 68, '#6b4226');
-  R(159, 58, 2, 72, '#3a2512');
-  R(137, 112, 46, 18, '#7a4e26'); R(137, 112, 46, 1, '#a8743a');
-  // noren
-  R(130, 56, 60, 2, '#3a2512');
-  R(132, 58, 56, 26, '#27407a');
-  R(132, 58, 56, 2, '#1c2f5c');
-  for (const x of [150, 169]) R(x, 75, 2, 9, '#efdcb2');
-  R(132, 82, 56, 2, '#1c2f5c');
-
-  // menu strips (お品書き) on the right
-  R(220, 58, 70, 44, '#6b4226');
-  for (let i = 0; i < 5; i++) {
-    const x = 223 + i * 13;
-    R(x, 61, 11, 38, '#fbf3dc');
-    for (let y = 64; y < 90; y += 4) R(x + 4, y, 3 + ((i + y) % 3 === 0 ? 1 : 0), 2, '#3a2a20');
-    R(x + 3, 92, 5, 4, '#d62f2f');
+// Ellipse of pixel rows (rx, ry radii), centred on (cx, cy).
+function fillOval(c, cx, cy, rx, ry, col) {
+  c.fillStyle = col;
+  for (let y = -ry; y <= ry; y++) {
+    const w = Math.round(rx * Math.sqrt(Math.max(0, 1 - (y * y) / ((ry + 0.5) * (ry + 0.5)))));
+    if (w > 0) c.fillRect(cx - w, cy + y, w * 2, 1);
   }
-
-  // sign board (看板)
-  R(106, 37, 108, 20, '#3a2512');
-  R(108, 39, 104, 16, '#6b4226');
-  R(108, 39, 104, 1, '#8a5a2a');
-  R(104, 37, 2, 20, '#2a1a0c'); R(214, 37, 2, 20, '#2a1a0c');
-
-  // --- stage floor (planks, deeper = narrower spacing)
-  R(20, 130, 280, 60, '#d8a960');
-  R(20, 130, 280, 3, '#8a6a3a');
-  const lines = [133, 138, 147, 157, 168, 180, 190];
-  for (let k = 1; k < lines.length; k++) {
-    const y0 = lines[k - 1], y1 = lines[k];
-    if (y1 < 190) R(20, y1, 280, 1, '#b88a4c');
-    for (let x = 24 + ((k * 37) % 60); x < 300; x += 60) R(x, y0 + 1, 1, y1 - y0 - 1, '#c0924f');
+}
+// Box with stepped (rounded) corners: cut[i] = inset of row i from the top / bottom edge.
+function pxBox(c, x, y, w, h, col, cut = [2, 1]) {
+  c.fillStyle = col;
+  const n = cut.length;
+  for (let i = 0; i < n; i++) {
+    c.fillRect(x + cut[i], y + i, w - cut[i] * 2, 1);
+    c.fillRect(x + cut[i], y + h - 1 - i, w - cut[i] * 2, 1);
   }
-  for (let i = 0; i < 40; i++) R(22 + ((i * 53) % 276), 134 + ((i * 29) % 54), 2, 1, '#e8bc74');
-  // stage front + footlights
-  R(0, 190, W, 9, '#5a3a20'); R(0, 190, W, 2, '#ddb06e'); R(0, 192, W, 1, '#3a2512');
-  for (let x = 30; x < 296; x += 26) { R(x - 2, 193, 10, 4, '#3a2512'); R(x, 194, 6, 2, '#fff6a8'); }
-  R(0, 199, W, 41, '#0d0a16');
-
-  // --- side curtains
-  for (const side of [0, 1]) {
-    const x0 = side ? 300 : 0;
-    R(x0, 0, 20, 199, '#a51f2c');
-    for (let x = 0; x < 20; x += 5) { R(x0 + x, 0, 1, 199, '#7a1520'); R(x0 + x + 2, 0, 1, 199, '#d0404e'); }
-    R(side ? 300 : 18, 0, 2, 199, '#5a0f18');
-    R(x0, 116, 20, 5, '#e8c43a'); R(x0, 121, 20, 1, '#a07f1a');
-    R(side ? 302 : 4, 122, 3, 8, '#e8c43a'); R(side ? 312 : 13, 122, 3, 6, '#e8c43a');
-  }
-  // valance with swags + gold fringe
-  R(0, 0, W, 15, '#a51f2c');
-  for (let x = 0; x < W; x += 4) R(x, 0, 1, 13, '#8a1824');
-  for (let x = 0; x < W; x += 32) {
-    for (let i = 0; i < 32; i++) {
-      const d = Math.round(Math.sin((i / 32) * Math.PI) * 5);
-      R(x + i, 15, 1, d, '#a51f2c');
-      R(x + i, 15 + d, 1, 1, '#e8c43a');
+  c.fillRect(x, y + n, w, h - n * 2);
+}
+// Scanline polygon fill (crisp, no anti-aliasing).
+function fillPoly(c, pts) {
+  let y0 = Infinity, y1 = -Infinity;
+  for (const p of pts) { if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; }
+  const xs = [];
+  const n = pts.length;
+  for (let y = Math.floor(y0); y <= Math.ceil(y1); y++) {
+    const sy = y + 0.5;
+    xs.length = 0;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const ay = pts[j][1], by = pts[i][1];
+      if ((ay <= sy && by > sy) || (by <= sy && ay > sy)) xs.push(pts[j][0] + ((sy - ay) / (by - ay)) * (pts[i][0] - pts[j][0]));
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const a = Math.round(xs[k]), b = Math.round(xs[k + 1]);
+      if (b > a) c.fillRect(a, y, b - a, 1);
     }
   }
-  R(0, 13, W, 2, '#e8c43a');
-  for (let x = 2; x < W; x += 6) R(x, 15, 1, 2, '#c9a227');
+}
+// Paint a pixel map (array of strings) with a palette; '.' is transparent.
+function paintMap(c, map, pal, x0 = 0, y0 = 0) {
+  map.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      const col = pal[row[x]];
+      if (!col) continue;
+      c.fillStyle = col;
+      c.fillRect(x0 + x, y0 + y, 1, 1);
+    }
+  });
+}
+
+// ---------------------------------------------------------------- static stage art (cached, 640x360)
+let stageCache = null;
+function buildStage() {
+  const [cv, c] = makeCanvas(SW, SH);
+  const R = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+  R(0, 0, SW, SH, '#140f1f');
+
+  // ---- set: shop front (めし処), x 40..600
+  // roof eave (瓦): ridges of round tiles (丸瓦) over flat tiles, round tile ends along the eave
+  R(40, 24, 560, 22, '#2c323e');
+  for (let x = 40; x < 600; x += 16) {
+    R(x + 3, 24, 10, 20, '#4a5262');
+    R(x + 4, 24, 3, 20, '#6a7488');
+    R(x + 11, 24, 2, 20, '#363c4a');
+    for (let y = 29; y < 44; y += 7) { R(x + 3, y, 10, 1, '#2c323e'); R(x + 3, y + 1, 10, 1, '#5a6475'); }
+  }
+  R(40, 44, 560, 8, '#3b4250');
+  R(40, 44, 560, 1, '#5a6475');
+  for (let x = 48; x < 600; x += 16) { R(x + 2, 48, 4, 1, '#2c323e'); R(x + 6, 47, 4, 1, '#2c323e'); R(x + 10, 48, 4, 1, '#2c323e'); }
+  for (let x = 40; x < 600; x += 16) {
+    fillDisc(c, x + 8, 47, 6, '#1a1d24');
+    fillDisc(c, x + 8, 47, 5, '#5a6475');
+    fillDisc(c, x + 7, 46, 3, '#77829a');
+    R(x + 7, 46, 3, 3, '#454e5e');
+    R(x + 7, 46, 1, 1, '#8a96ae');
+  }
+  R(40, 52, 560, 2, '#1a1d24');
+  // wooden beam
+  R(40, 54, 560, 8, '#7a4e26');
+  R(40, 54, 560, 2, '#9a6a3a');
+  R(40, 61, 560, 1, '#4a2e14');
+  for (let x = 46; x < 600; x += 37) R(x, 57, 12 + (x % 3) * 4, 1, '#6b4226');
+
+  // plaster wall
+  R(40, 62, 560, 94, '#efdcb2');
+  R(40, 62, 560, 3, '#d8c298'); // shadow under the beam
+  for (let x = 40; x < 600; x += 2) if (x % 4 === 0) R(x, 65, 1, 1, '#d8c298');
+  for (let y = 70; y < 154; y += 5) {
+    for (let x = 43 + ((y / 5) % 2) * 7; x < 598; x += 14) {
+      R(x, y, 1, 1, '#e0c898');
+      if ((x + y) % 3 === 0) R(x + 1, y, 1, 1, '#e0c898');
+      if ((x * 7 + y) % 11 === 0) R(x + 4, y + 2, 1, 1, '#f8ead0');
+    }
+  }
+
+  // lower wainscot (腰板)
+  R(40, 156, 560, 40, '#8a5a2a');
+  R(40, 156, 560, 2, '#c08a4c');
+  R(40, 158, 560, 3, '#a8743a');
+  R(40, 161, 560, 1, '#5a3a1a');
+  for (let x = 40; x < 600; x += 16) {
+    R(x, 162, 1, 30, '#6b4226');
+    R(x + 1, 162, 1, 30, '#9a6a3a');
+    for (let y = 166; y < 190; y += 7) R(x + 4 + ((x + y) % 5), y, 5, 1, '#7e5026');
+  }
+  R(40, 190, 560, 6, '#5a3a1a');
+  R(40, 190, 560, 1, '#7a4e26');
+
+  // pillars
+  for (const x of [40, 254, 374, 588]) {
+    R(x, 54, 12, 142, '#7a4e26');
+    R(x + 1, 54, 2, 142, '#a8743a');
+    R(x + 3, 54, 1, 142, '#9a6a3a');
+    R(x + 10, 54, 2, 142, '#4a2e14');
+    for (let y = 70; y < 190; y += 23) R(x + 5, y, 1, 9, '#6b4226');
+    R(x - 1, 188, 14, 8, '#5a3a1a');
+    R(x - 1, 188, 14, 1, '#8a5a2a');
+  }
+
+  // window (格子窓) on the left
+  R(86, 86, 120, 66, '#3a2512');
+  R(88, 88, 116, 62, '#7a4e26');
+  R(88, 88, 116, 2, '#a8743a');
+  R(88, 88, 2, 62, '#a8743a');
+  R(94, 94, 104, 52, '#2a3550');
+  R(94, 94, 104, 12, '#39507a');
+  R(94, 106, 104, 2, '#334670');
+  for (let i = 0; i < 9; i++) R(128 + i, 120 - i, 1, 1, '#5a78a8'); // glints
+  for (let i = 0; i < 6; i++) R(160 + i, 118 - i, 1, 1, '#5a78a8');
+  for (let x = 94; x < 198; x += 10) {
+    R(x, 94, 3, 52, '#a8743a');
+    R(x, 94, 1, 52, '#c89458');
+    R(x + 3, 94, 1, 52, '#1c2338');
+  }
+  R(94, 118, 104, 3, '#a8743a');
+  R(94, 118, 104, 1, '#c89458');
+  R(94, 121, 104, 1, '#1c2338');
+  // sill
+  R(82, 148, 128, 6, '#6b4226');
+  R(82, 148, 128, 2, '#a8743a');
+  R(82, 154, 128, 2, '#3a2512');
+  // beckoning cat (招き猫) on the sill
+  paintMap(c, [
+    '...k.......k.k..',
+    '..kpk.....kpkwk.',
+    '..kwwkkkkkwwkwk.',
+    '.kwwwwwwwwwwkwk.',
+    '.kwkwwwwkwwwkwk.',
+    '.kwwwwppwwwwwwk.',
+    '..kwwwwwwwwwkk..',
+    '..krrrrrrrrrk...',
+    '..kwwwyywwwwk...',
+    '.kwwwwyywwwwwk..',
+    '.kwwwwwwwwwwwk..',
+    '.kwwkwwwwwkwwk..',
+    '..kkkkkkkkkkk...',
+  ], { k: '#3a2a20', w: '#f6f2e8', p: '#ff9aa8', r: '#d62f2f', y: '#e8c43a' }, 178, 135);
+
+  // potted plant under the window
+  R(122, 176, 40, 4, '#3a1a10');
+  R(124, 172, 36, 6, '#c8683a');
+  R(124, 172, 36, 1, '#e08a58');
+  for (let y = 178; y < 196; y++) {
+    const inset = Math.floor((y - 178) / 6);
+    R(126 + inset, y, 32 - inset * 2, 1, '#b0532e');
+    R(126 + inset, y, 2, 1, '#c8683a');
+    R(156 - inset, y, 2, 1, '#7a3a20');
+  }
+  R(128, 194, 28, 2, '#5a2a14');
+  fillDisc(c, 142, 160, 13, '#2f7a44');
+  fillDisc(c, 141, 159, 12, '#3f9a5a');
+  fillDisc(c, 129, 166, 8, '#24603a');
+  fillDisc(c, 128, 165, 7, '#2f7a44');
+  fillDisc(c, 155, 165, 8, '#24603a');
+  fillDisc(c, 154, 164, 7, '#2f7a44');
+  for (const [lx, ly] of [[136, 152], [146, 156], [139, 162], [125, 162], [151, 161], [148, 149]]) {
+    R(lx, ly, 3, 2, '#5ee07a');
+    R(lx + 1, ly + 2, 2, 1, '#4cc068');
+  }
+
+  // 日めくり calendar on the left wall
+  R(70, 72, 1, 8, '#3a2512');
+  R(68, 71, 5, 2, '#6b4226');
+  R(60, 80, 22, 6, '#6b4226');
+  R(60, 80, 22, 1, '#9a6a3a');
+  R(61, 86, 20, 26, '#fbf3dc');
+  R(61, 86, 20, 2, '#e8dcc0');
+  R(80, 86, 1, 26, '#d8ccb0');
+  paintMap(c, ['rrrrr', '....r', '....r', '.rrrr', '....r', '....r', 'rrrrr'], { r: '#d62f2f' }, 68, 92); // 「3」
+  R(64, 104, 14, 1, '#9a8a70');
+  R(64, 107, 10, 1, '#9a8a70');
+
+  // sliding lattice door in the middle
+  R(254, 92, 132, 6, '#5a3a1a');
+  R(254, 92, 132, 1, '#8a5a2a');
+  for (const [x0, glass] of [[266, '#c9dbe6'], [321, '#b6cad8']]) {
+    R(x0, 98, 53, 98, '#7a4e26');
+    R(x0, 98, 53, 2, '#a8743a');
+    R(x0, 98, 2, 98, '#a8743a');
+    R(x0 + 51, 98, 2, 98, '#4a2e14');
+    R(x0 + 4, 102, 45, 62, glass);
+    R(x0 + 4, 102, 45, 2, '#e8f0f4');
+    for (let y = 102; y < 164; y += 10) R(x0 + 4, y + 8, 45, 2, '#6b4226');
+    for (const dx of [15, 30]) { R(x0 + 4 + dx, 102, 2, 62, '#6b4226'); R(x0 + 4 + dx, 102, 1, 62, '#8a5a2a'); }
+    R(x0 + 4, 164, 45, 28, '#7a4e26');
+    R(x0 + 7, 167, 39, 22, '#6b4226');
+    R(x0 + 7, 167, 39, 1, '#4a2e14');
+    R(x0 + 7, 188, 39, 1, '#a8743a');
+  }
+  R(319, 98, 2, 98, '#3a2512');
+  // noren
+  R(250, 90, 140, 4, '#3a2512');
+  R(250, 90, 140, 1, '#6b4226');
+  R(248, 89, 4, 6, '#c9a227');
+  R(388, 89, 4, 6, '#c9a227');
+  R(258, 94, 124, 46, '#27407a');
+  R(258, 94, 124, 4, '#1c2f5c');
+  R(258, 136, 124, 4, '#1c2f5c');
+  for (const x of [298, 340]) { R(x, 122, 2, 18, '#b6cad8'); R(x, 122, 2, 2, '#1c2f5c'); }
+  for (const [a, b] of [[258, 298], [300, 340], [342, 382]]) {
+    R(a, 98, 2, 38, '#3a5596');
+    R(b - 2, 98, 2, 38, '#1a2a52');
+    R(a + 10, 124, 1, 12, '#22386c');
+    R(b - 12, 124, 1, 12, '#22386c');
+  }
+
+  // menu strips (お品書き) on the right
+  R(450, 90, 124, 64, '#4a2e14');
+  R(452, 92, 120, 60, '#6b4226');
+  R(452, 92, 120, 1, '#9a6a3a');
+  for (let i = 0; i < 5; i++) {
+    const x = 456 + i * 23;
+    R(x, 96, 20, 52, '#fbf3dc');
+    R(x + 18, 96, 2, 52, '#e2d6b8');
+    R(x, 96, 20, 1, '#ffffff');
+    let y = 100;
+    for (let k = 0; y < 132; k++) {
+      const wide = (i * 3 + k) % 4;
+      if (wide === 0) { R(x + 6, y, 3, 3, '#3a2a20'); R(x + 10, y, 3, 3, '#3a2a20'); } // two-part kanji
+      else R(x + 6 + (wide === 1 ? 1 : 0), y, wide === 1 ? 6 : 7, 3, '#3a2a20');
+      if (wide === 2) R(x + 9, y + 3, 1, 1, '#3a2a20');
+      y += 5;
+    }
+    R(x + 5, 136, 9, 8, '#d62f2f');
+    R(x + 7, 138, 5, 1, '#fbf3dc');
+    R(x + 7, 141, 5, 1, '#fbf3dc');
+  }
+
+  // wall clock (3 o'clock: おやつの時間)
+  const kx = 520, ky = 75;
+  fillDisc(c, kx, ky, 11, '#3a2512');
+  fillDisc(c, kx, ky, 10, '#7a4e26');
+  fillDisc(c, kx - 1, ky - 1, 8, '#a8743a');
+  fillDisc(c, kx, ky, 8, '#fbf3dc');
+  for (const [dx, dy] of [[0, -7], [7, 0], [0, 6], [-7, 0]]) R(kx + dx, ky + dy, 1, 2, '#3a2a20');
+  R(kx, ky - 6, 1, 7, INK);
+  R(kx, ky, 5, 1, INK);
+  R(kx - 1, ky - 1, 2, 2, '#d62f2f');
+  R(kx - 1, ky - 13, 3, 3, '#3a2512');
+
+  // sign board (看板) under the beam
+  R(220, 62, 200, 34, '#2a1a0c');
+  R(223, 65, 194, 28, '#6b4226');
+  R(223, 65, 194, 2, '#8a5a2a');
+  R(223, 65, 2, 28, '#8a5a2a');
+  R(415, 65, 2, 28, '#4a2e14');
+  R(223, 91, 194, 2, '#4a2e14');
+  for (let y = 70; y < 90; y += 5) for (let x = 230 + (y % 3) * 9; x < 410; x += 31) R(x, y, 14, 1, '#5e3a1e');
+
+  // ---- stage floor (planks, deeper = narrower spacing)
+  R(40, 196, 560, 92, '#d8a960');
+  R(40, 196, 560, 4, '#8a6a3a');
+  R(40, 200, 560, 1, '#a07c46');
+  const seams = [200, 205, 213, 224, 238, 254, 271, 288];
+  for (let k = 1; k < seams.length; k++) {
+    const y0 = seams[k - 1], y1 = seams[k];
+    if (y1 < 288) { R(40, y1, 560, 1, '#b88a4c'); R(40, y1 + 1, 560, 1, '#e8bc74'); }
+    const step = 76 + k * 6;
+    for (let x = 44 + ((k * 53) % step); x < 600; x += step) {
+      R(x, y0 + 2, 1, y1 - y0 - 2, '#b88a4c');
+      R(x + 1, y0 + 2, 1, y1 - y0 - 2, '#e8bc74');
+    }
+    for (let i = 0; i < 14; i++) { // grain
+      const gx = 44 + ((i * 97 + k * 41) % 548), gy = y0 + 2 + ((i * 7 + k) % Math.max(1, y1 - y0 - 3));
+      R(gx, gy, 6 + (i % 4) * 3, 1, '#c99a54');
+    }
+  }
+  // stage front + footlights
+  R(0, 288, SW, 14, '#5a3a20');
+  R(0, 288, SW, 2, '#ddb06e');
+  R(0, 290, SW, 1, '#f0cc8a');
+  R(0, 291, SW, 1, '#3a2512');
+  R(0, 301, SW, 1, '#2a1a0c');
+  for (let x = 64; x < 600; x += 48) {
+    R(x - 9, 292, 18, 8, '#2a1a0c');
+    R(x - 8, 293, 16, 6, '#3a2512');
+    R(x - 6, 294, 12, 4, '#fff6a8');
+    R(x - 4, 294, 6, 2, '#ffffff');
+    R(x - 10, 288, 20, 2, '#ffe9a0'); // light spill on the lip
+    R(x - 6, 286, 12, 2, '#efcf84');
+  }
+  R(0, 302, SW, SH - 302, '#0d0a16');
+
+  // ---- side curtains
+  for (const side of [0, 1]) {
+    const x0 = side ? 604 : 0;
+    R(x0, 0, 36, 302, '#a51f2c');
+    for (let x = 0; x < 36; x += 12) {
+      R(x0 + x, 0, 2, 302, '#7a1520');
+      R(x0 + x + 5, 0, 2, 302, '#c43644');
+      R(x0 + x + 7, 0, 1, 302, '#e05a66');
+      R(x0 + x + 10, 0, 1, 302, '#8e1a26');
+    }
+    R(side ? 604 : 33, 0, 3, 302, '#5a0f18');
+    // gold tieback + tassel
+    R(x0, 166, 36, 8, '#e8c43a');
+    R(x0, 166, 36, 2, '#fff0a0');
+    R(x0, 172, 36, 2, '#a07f1a');
+    const tx = side ? 610 : 20;
+    R(tx, 174, 10, 6, '#e8c43a');
+    R(tx, 174, 3, 6, '#fff0a0');
+    R(tx - 2, 180, 14, 4, '#c9a227');
+    for (let i = 0; i < 7; i++) R(tx - 2 + i * 2, 184, 1, 10 + (i % 2) * 3, '#e8c43a');
+  }
+  // valance with swags + gold fringe
+  R(0, 0, SW, 26, '#a51f2c');
+  for (let x = 0; x < SW; x += 8) { R(x, 0, 2, 22, '#8a1824'); R(x + 4, 0, 1, 22, '#c43644'); }
+  for (let x = 0; x < SW; x += 64) {
+    for (let i = 0; i < 64; i++) {
+      const d = Math.round(Math.sin((i / 64) * Math.PI) * 10);
+      R(x + i, 26, 1, d, '#a51f2c');
+      if (i % 8 === 2 || i % 8 === 3) R(x + i, 26, 1, d, '#8a1824');
+      R(x + i, 26 + d, 1, 2, '#e8c43a');
+      if (i % 3 === 0) R(x + i, 28 + d, 1, 2, '#c9a227');
+    }
+    R(x - 3, 24, 6, 8, '#e8c43a'); // tassel knot at each swag joint
+    R(x - 3, 24, 2, 8, '#fff0a0');
+    for (let i = 0; i < 4; i++) R(x - 3 + i * 2, 32, 1, 6, '#c9a227');
+  }
+  R(0, 21, SW, 4, '#e8c43a');
+  R(0, 21, SW, 1, '#fff0a0');
+  R(0, 24, SW, 1, '#a07f1a');
   stageCache = cv;
   return cv;
 }
 
-// Audience heads (fixed layout).
+// Spotlight cone on the lead + pool of light on the floor (translucent overlay).
+let coneCache = null;
+function buildCone() {
+  const [cv, c] = makeCanvas(SW, SH);
+  const y0 = 26, y1 = FOOT + 8;
+  c.fillStyle = 'rgba(255,240,190,0.10)';
+  for (let y = y0; y < y1; y++) {
+    const k = (y - y0) / (y1 - y0);
+    const xl = Math.round(CX - 24 - 52 * k), xr = Math.round(CX + 24 + 52 * k);
+    c.fillRect(xl, y, xr - xl, 1);
+  }
+  c.fillStyle = 'rgba(255,240,190,0.18)';
+  for (let y = -8; y <= 8; y++) {
+    const w = Math.round(76 * Math.sqrt(1 - (y * y) / 72.25));
+    c.fillRect(CX - w, FOOT + y, w * 2, 1);
+  }
+  coneCache = cv;
+  return cv;
+}
+
+// Audience (fixed layout, seen from behind), cached in 3 states: still / odd heads up / even heads up.
+const AUD_Y = 292; // top of the cached audience strip
 const AUDIENCE = [];
 for (let row = 0; row < 3; row++) {
-  const y = [210, 222, 236][row];
-  const r = [6, 7, 8][row];
-  for (let x = row % 2 ? 4 : 13; x < W + 10; x += 19 + row * 2) AUDIENCE.push({ x, y, r, row, i: AUDIENCE.length });
+  const y = [318, 336, 356][row];
+  const r = [10, 11, 13][row];
+  const step = [34, 37, 41][row];
+  for (let x = row % 2 ? 6 : 22; x < SW + 20; x += step) AUDIENCE.push({ x, y, r, row, i: AUDIENCE.length, style: (AUDIENCE.length * 7 + row * 3) % 6 });
+}
+let audCache = null;
+function buildAudience() {
+  const out = [];
+  for (let v = 0; v < 3; v++) {
+    const [cv, c] = makeCanvas(SW, SH - AUD_Y);
+    for (const a of AUDIENCE) {
+      const bob = v === 0 ? 0 : (a.i % 2 === (v === 1 ? 1 : 0) ? 4 : 0);
+      const body = ['#2a2244', '#211a38', '#18122a'][a.row];
+      const rim = ['#40366a', '#332a58', '#271f42'][a.row];
+      const x = a.x, y = a.y - AUD_Y - bob, r = a.r;
+      // shoulders
+      pxBox(c, x - r - 7, y + r - 3, r * 2 + 15, 40, rim, [3, 1]);
+      pxBox(c, x - r - 6, y + r - 2, r * 2 + 14, 40, body, [3, 1]);
+      // hair / head silhouettes (rim-lit from the stage on the top-left)
+      const hair = (dx, dy, rr) => { fillDisc(c, x + dx, y + dy, rr, rim); fillDisc(c, x + dx + 1, y + dy + 1, rr, body); };
+      if (a.style === 1) hair(0, -r - 1, Math.round(r * 0.45)); // bun
+      if (a.style === 3) hair(r - 2, 3, Math.round(r * 0.5)); // ponytail
+      if (a.style === 5) for (const dx of [-5, 0, 5]) hair(dx, -r + 1 - (dx ? 0 : 2), 3); // tufts
+      hair(0, 0, r);
+      if (a.style === 2) { hair(-r, 1, 2); hair(r - 1, 1, 2); } // ears
+      if (a.style === 4) { // long hair over the shoulders
+        c.fillStyle = rim; c.fillRect(x - r, y + 1, 1, r + 3);
+        c.fillStyle = body; c.fillRect(x - r + 1, y + 2, r * 2 + 1, r + 2);
+      }
+    }
+    out.push(cv);
+  }
+  audCache = out;
+  return out;
+}
+
+// Crow (flying left), two wing frames.
+const CROW = [
+  [
+    '................kk............',
+    '...............kbbk...........',
+    '..............kbhhk...........',
+    '.............kbhhk............',
+    '............kbbhk.............',
+    '....kkk....kbbbk..............',
+    '...kbbbk..kbbbbk..............',
+    '..kbbwbbkkbbbbbbkk............',
+    'kyybbbbbbbbbbbbbbbkkk......kk.',
+    '.kyybbbbbbhhhbbbbbbbbkkkkkkbbk',
+    '..kkbbbbbbbbbbbbbbbbbbbbbbbbk.',
+    '....kbbbbbbbbbbbbbbbbbkkkkbbk.',
+    '.....kkbbbbbbbbbbbbkkk....kk..',
+    '.......kkkbbbbbbkkk...........',
+    '..........kkkkkk..............',
+  ],
+  [
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '....kkk.......................',
+    '...kbbbk......................',
+    '..kbbwbbkkkkkkkkk.............',
+    'kyybbbbbbbbbbbbbbkkk.......kk.',
+    '.kyybbbbbbhhhbbbbbbbkkkkkkkbbk',
+    '..kkbbbbbbbbbbbbbbbbbbbbbbbbk.',
+    '....kbbbbbbbbbbbbbbbbbkkkkbbk.',
+    '.....kkbbbbbbbbbbbbbkk....kk..',
+    '.......kkbbbbbbbbbkk..........',
+    '..........kbbbbbbk............',
+    '...........kbbbbk.............',
+    '............kbbk..............',
+    '.............kk...............',
+  ],
+];
+let crowCache = null;
+function buildCrow() {
+  crowCache = CROW.map((map) => {
+    const [cv, c] = makeCanvas(30, 18);
+    paintMap(c, map, { k: '#0a0a10', b: '#1c1c2a', h: '#3a3a56', y: '#5a5a6e', w: '#ffffff' });
+    return cv;
+  });
+  return crowCache;
 }
 
 // ---------------------------------------------------------------- the minigame
@@ -218,6 +570,7 @@ class Zukko extends Minigame {
   ];
   static skill = 'warai';
   static bgm = 'theater';
+  static hd = true;
 
   init() {
     const i = this.difficulty - 1;
@@ -276,11 +629,11 @@ class Zukko extends Minigame {
 
     const pl = (this.g.state && this.g.state.look) || LOOKS.player;
     this.cast = [
-      { look: OKAMI, x: 72, side: -1 },
-      { look: JII, x: 116, side: -1 },
-      { look: LEAD, x: 160, side: 0, lead: true },
-      { look: pl, x: 204, side: 1, player: true },
-      { look: MADONNA, x: 248, side: 1 },
+      { look: OKAMI, x: CX - 176, side: -1 },
+      { look: JII, x: CX - 88, side: -1 },
+      { look: LEAD, x: CX, side: 0, lead: true },
+      { look: pl, x: CX + 88, side: 1, player: true },
+      { look: MADONNA, x: CX + 176, side: 1 },
     ];
     for (const m of this.cast) Object.assign(m, { fallAt: null, upAt: null, landed: true, emote: null, emoteUntil: 0 });
     this.player = this.cast[3];
@@ -358,11 +711,11 @@ class Zukko extends Minigame {
       this.combo++;
       this.maxCombo = Math.max(this.maxCombo, this.combo);
     } else this.combo = 0;
-    const px = clamp(this.player.x + 6, 60, 268);
-    // just above the actors' heads (FOOT - 40), clear of the 座長's speech bubble
-    this.popup(def.label, px, FOOT - 54, def.color, 12);
-    if (extra) this.popup(extra, px, FOOT - 42, '#ffffff', 10);
-    if (this.combo >= 2 && (kind === 'perfect' || kind === 'good' || kind === 'hold')) this.popup(`${this.combo}コンボ！`, px, FOOT - 66, COLORS.pink, 10);
+    const px = clamp(this.player.x + 12, 120, SW - 104);
+    // just above the actors' heads (FOOT - 80), clear of the 座長's speech bubble
+    this.popup(def.label, px, FOOT - 108, def.color, 18);
+    if (extra) this.popup(extra, px, FOOT - 86, '#ffffff', 14);
+    if (this.combo >= 2 && (kind === 'perfect' || kind === 'good' || kind === 'hold')) this.popup(`${this.combo}コンボ！`, px, FOOT - 130, COLORS.pink, 14);
   }
 
   // ---------------------------------------------------------------- update
@@ -398,7 +751,7 @@ class Zukko extends Minigame {
     if (r.fake && t === r.tC + 14) this.snd('crow');
     if (t > r.tC && t < this.laughUntil && t % 14 === 0) {
       const words = ['ワハハ！', 'ドッ！', 'アハハ', 'わはは'];
-      this.popup(words[Math.floor(this.rng() * words.length)], 40 + ((this.laughN++ * 97) % 240), 206, '#ffd23f', 10);
+      this.popup(words[Math.floor(this.rng() * words.length)], 80 + ((this.laughN++ * 97) % 240) * 2, 308, '#ffd23f', 14);
     }
 
     // player input
@@ -458,13 +811,13 @@ class Zukko extends Minigame {
       if (m.upAt !== null && this.pt - m.upAt >= 10) { m.fallAt = null; m.upAt = null; m.landed = true; }
       if (m.fallAt !== null && m.upAt === null && !m.landed && this.pt - m.fallAt >= 7) {
         m.landed = true;
-        const gx = m.x + m.side * (24 - LIE_SHIFT);
+        const gx = m.x + m.side * (CW / 2 + 16 - LIE_SHIFT);
         for (let k = 0; k < 7; k++) {
-          this.parts.push({ x: gx + (this.rng() * 30 - 15), y: FOOT - 2, vx: (this.rng() - 0.5) * 1.6, vy: -this.rng() * 1.2, life: 0, max: 18 + Math.floor(this.rng() * 10) });
+          this.parts.push({ x: gx + (this.rng() * 60 - 30), y: FOOT - 4, vx: (this.rng() - 0.5) * 3.2, vy: -this.rng() * 2.4, life: 0, max: 18 + Math.floor(this.rng() * 10), k });
         }
       }
     }
-    for (const p of this.parts) { p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.life++; }
+    for (const p of this.parts) { p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life++; }
     this.parts = this.parts.filter((p) => p.life < p.max);
   }
 
@@ -522,52 +875,56 @@ class Zukko extends Minigame {
 
   drawSigns(ctx) {
     const { shop, noren } = this.signs();
-    let size = 12;
-    while (size > 9 && measure(ctx, shop, size) > 98) size--;
-    text(ctx, shop, 160, 41 + Math.floor((12 - size) / 2), { size, align: 'center', color: '#fff3c4', outline: '#2a1a0c' });
-    let ns = 10;
-    while (ns > 8 && measure(ctx, noren, ns) > 50) ns--;
-    text(ctx, noren, 160, 63, { size: ns, align: 'center', color: '#ffffff', shadow: null });
+    let size = 20;
+    while (size > 14 && measure(ctx, shop, size) > 184) size--;
+    text(ctx, shop, CX, 69 + Math.floor((20 - size) / 2), { size, align: 'center', color: '#fff3c4', outline: '#2a1a0c' });
+    let ns = 18;
+    while (ns > 12 && measure(ctx, noren, ns) > 104) ns--;
+    text(ctx, noren, CX, 100 + Math.floor((18 - ns) / 2), { size: ns, align: 'center', color: '#ffffff', shadow: '#1c2f5c' });
   }
 
   drawBackground(ctx) {
     ctx.drawImage(stageCache || buildStage(), 0, 0);
     this.drawSigns(ctx);
     this.drawLanterns(ctx, 0);
+    ctx.drawImage(coneCache || buildCone(), 0, 0);
     this.drawAudience(ctx, false);
   }
 
   drawLanterns(ctx, t) {
-    for (const [i, lx] of [[0, 108], [1, 212]]) {
-      const sway = Math.round(Math.sin(t / 40 + i * 2) * 1.2);
+    const R = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
+    for (const [i, lx] of [[0, 206], [1, 434]]) {
+      const sway = Math.round(Math.sin(t / 40 + i * 2) * 2);
       const x = lx + sway;
-      ctx.fillStyle = '#2a1a0c';
-      ctx.fillRect(lx, 37, 1, 22);
-      ctx.fillStyle = '#20232a';
-      ctx.fillRect(x - 4, 58, 9, 3);
-      ctx.fillRect(x - 4, 79, 9, 3);
-      ctx.fillStyle = '#d62f2f';
-      ctx.fillRect(x - 6, 61, 13, 18);
-      ctx.fillRect(x - 7, 64, 15, 12);
-      ctx.fillStyle = '#ff5d6c';
-      ctx.fillRect(x - 5, 63, 2, 13);
-      ctx.fillStyle = '#9a1f24';
-      for (const y of [65, 69, 73]) ctx.fillRect(x - 6, y, 13, 1);
+      R(lx, 62, 2, 20, '#2a1a0c');
+      // top cap
+      R(x - 9, 82, 20, 6, '#14161c');
+      R(x - 8, 83, 18, 2, '#3a3e4a');
+      // body (paper over ribs), lit from the top-left
+      R(x - 12, 88, 26, 38, '#9a1f24');
+      R(x - 14, 92, 30, 30, '#9a1f24');
+      R(x - 11, 88, 22, 38, '#d62f2f');
+      R(x - 13, 92, 24, 30, '#d62f2f');
+      R(x - 10, 90, 4, 34, '#ff5d6c');
+      R(x - 9, 92, 2, 8, '#ffb0b0');
+      for (const y of [93, 99, 105, 111, 117]) { R(x - 13, y, 28, 1, '#9a1f24'); R(x - 11, y + 1, 6, 1, '#ff7a84'); }
+      // a big 「笑」-ish mark would be too busy: a gold band instead
+      R(x - 14, 106, 30, 2, '#e8c43a');
+      R(x - 14, 106, 8, 1, '#fff0a0');
+      // bottom cap + tassel
+      R(x - 9, 126, 20, 6, '#14161c');
+      R(x - 8, 127, 18, 2, '#3a3e4a');
+      R(x, 132, 2, 4, '#e8c43a');
+      R(x - 2, 136, 6, 6, '#e8c43a');
+      R(x - 2, 136, 2, 6, '#fff0a0');
     }
   }
 
   drawAudience(ctx, laughing) {
+    const cache = audCache || buildAudience();
     const t = this.rt || 0;
-    for (const a of AUDIENCE) {
-      const bob = laughing ? ((a.i + Math.floor(t / 5)) % 2) * 2 : 0;
-      const col = ['#2a2244', '#211a38', '#18122a'][a.row];
-      ctx.fillStyle = col;
-      ctx.fillRect(a.x - a.r - 4, a.y + a.r - 2 - bob, a.r * 2 + 9, 12);
-      for (let y = -a.r; y <= a.r; y++) {
-        const w = Math.round(Math.sqrt(a.r * a.r - y * y + a.r * 0.5));
-        ctx.fillRect(a.x - w, a.y + y - bob, w * 2 + 1, 1);
-      }
-    }
+    const v = laughing ? 1 + (Math.floor(t / 5) % 2) : 0;
+    ctx.drawImage(cache[v], 0, AUD_Y);
   }
 
   drawPlay(ctx) {
@@ -576,25 +933,21 @@ class Zukko extends Minigame {
     ctx.drawImage(stageCache || buildStage(), 0, 0);
     this.drawSigns(ctx);
     this.drawLanterns(ctx, this.pt);
-
     // spotlight on the lead
-    ctx.fillStyle = 'rgba(255,240,190,0.10)';
-    ctx.beginPath();
-    ctx.moveTo(140, 15); ctx.lineTo(180, 15); ctx.lineTo(196, FOOT + 4); ctx.lineTo(124, FOOT + 4);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,240,190,0.18)';
-    for (let y = -4; y <= 4; y++) {
-      const w = Math.round(38 * Math.sqrt(1 - (y * y) / 20.25));
-      ctx.fillRect(160 - w, FOOT + y, w * 2, 1);
-    }
+    ctx.drawImage(coneCache || buildCone(), 0, 0);
 
     if (this.cast) this.drawCast(ctx, r, t);
     for (const p of this.parts || []) {
       ctx.globalAlpha = clamp(1 - p.life / p.max, 0, 1) * 0.9;
-      ctx.fillStyle = '#efe3c8';
-      const s = p.life < 6 ? 2 : 3;
-      ctx.fillRect(Math.round(p.x), Math.round(p.y), s, s);
+      const x = Math.round(p.x), y = Math.round(p.y);
+      if (p.life < 6) {
+        ctx.fillStyle = '#fff6e0';
+        ctx.fillRect(x - 1, y - 1, 3, 3);
+      } else {
+        ctx.fillStyle = (p.k || 0) % 2 ? '#d8c8a8' : '#efe3c8';
+        ctx.fillRect(x - 2, y - 1, 5, 3);
+        ctx.fillRect(x - 1, y - 2, 3, 5);
+      }
     }
     ctx.globalAlpha = 1;
 
@@ -612,18 +965,26 @@ class Zukko extends Minigame {
     const last = this.ri === this.total - 1;
     const label = last ? 'ラストのネタ！' : `ネタ その${this.ri + 1}`;
     const k = Math.min(1, t / 6);
-    const w = last ? 124 : 104;
-    const x = 160 - w / 2;
-    const y = Math.round(70 - (1 - k) * 8);
+    const w = last ? 236 : 200, h = 44;
+    const x = CX - w / 2;
+    const y = Math.round(106 - (1 - k) * 16);
     ctx.globalAlpha = k;
-    ctx.fillStyle = '#22202a';
-    ctx.fillRect(x + 2, y + 2, w, 24);
-    ctx.fillStyle = '#fbf3dc';
-    ctx.fillRect(x, y, w, 24);
+    pxBox(ctx, x + 4, y + 4, w, h, 'rgba(10,6,16,0.55)', [2, 1]);
+    pxBox(ctx, x - 2, y - 2, w + 4, h + 4, INK, [3, 1]);
+    pxBox(ctx, x, y, w, h, '#fbf3dc', [2, 1]);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + 2, y + 1, w - 4, 1);
     ctx.fillStyle = '#d62f2f';
-    ctx.fillRect(x, y, w, 2);
-    ctx.fillRect(x, y + 22, w, 2);
-    text(ctx, label, 160, y + 5, { size: 12, align: 'center', color: '#22202a', shadow: null });
+    ctx.fillRect(x + 1, y + 3, w - 2, 4);
+    ctx.fillRect(x + 1, y + h - 7, w - 2, 4);
+    ctx.fillStyle = '#ff6a6a';
+    ctx.fillRect(x + 1, y + 3, w - 2, 1);
+    // little red diamonds on both sides of the label
+    for (const dx of [16, w - 16]) {
+      for (let i = 0; i < 4; i++) ctx.fillRect(x + dx - i, y + h / 2 - 3 + i, i * 2 + 1, 1);
+      for (let i = 0; i < 3; i++) ctx.fillRect(x + dx - 2 + i, y + h / 2 + 1 + i, 5 - i * 2, 1);
+    }
+    text(ctx, label, CX, y + 12, { size: 20, align: 'center', color: INK, shadow: null });
     ctx.globalAlpha = 1;
   }
 
@@ -636,11 +997,11 @@ class Zukko extends Minigame {
       const e = 1 - (1 - p) * (1 - p);
       const since = pt - m.fallAt;
       const flail = since > 8 && since < 46 ? 1 + (Math.floor(since / 4) % 2) : 0;
-      return { a: e * Math.PI / 2, hop: Math.sin(p * Math.PI) * 6, lying: e, frame: flail };
+      return { a: e * Math.PI / 2, hop: Math.sin(p * Math.PI) * 12, lying: e, frame: flail };
     }
     const q = clamp((pt - m.upAt) / 10, 0, 1);
     if (q >= 1) return { a: 0, hop: 0, lying: 0, frame: 0 };
-    return { a: (1 - q) * Math.PI / 2, hop: Math.sin(q * Math.PI) * 3, lying: 1 - q, frame: 0 };
+    return { a: (1 - q) * Math.PI / 2, hop: Math.sin(q * Math.PI) * 6, lying: 1 - q, frame: 0 };
   }
 
   drawCast(ctx, r, t) {
@@ -650,7 +1011,7 @@ class Zukko extends Minigame {
     const order = this.cast.filter((m) => !m.player).concat(this.player);
     for (const m of order) {
       const ps = this.poseOf(m);
-      const sheet = charSheet(m.look);
+      const sheet = charSheetHD(m.look);
       let dir = 'down';
       if (ps.lying === 0 && !m.lead) {
         // listen to the lead; face the audience once the scene has played out
@@ -658,24 +1019,26 @@ class Zukko extends Minigame {
       }
       let bob = 0;
       if (m.lead) {
-        if (talking) bob = Math.floor(t / 6) % 2;
-        if (realCue && t - r.tC < 12) bob = Math.round(Math.sin(((t - r.tC) / 12) * Math.PI) * 6);
+        if (talking) bob = (Math.floor(t / 6) % 2) * 2;
+        if (realCue && t - r.tC < 12) bob = Math.round(Math.sin(((t - r.tC) / 12) * Math.PI) * 12);
       }
       const lx = Math.round(m.x - m.side * LIE_SHIFT * ps.lying);
       // shadow
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       if (ps.lying > 0.5) {
-        const sx = m.side > 0 ? lx : lx - 40;
-        ctx.fillRect(sx + 2, FOOT - 1, 38, 3);
+        const sx = m.side > 0 ? lx : lx - CH;
+        ctx.fillRect(sx + 4, FOOT - 3, CH - 4, 5);
+        ctx.fillRect(sx + 8, FOOT + 2, CH - 12, 2);
       } else {
-        ctx.fillRect(m.x - 10, FOOT - 2, 20, 3);
-        ctx.fillRect(m.x - 7, FOOT + 1, 14, 1);
+        const sw = m.lead && bob > 4 ? 14 : 20;
+        ctx.fillRect(m.x - sw, FOOT - 3, sw * 2, 5);
+        ctx.fillRect(m.x - sw + 5, FOOT + 2, sw * 2 - 10, 2);
       }
       const img = sheet[dir][ps.frame] || sheet[dir][0];
       ctx.save();
-      ctx.translate(lx, Math.round(FOOT - ps.hop - 16 * Math.sin(ps.a) - bob));
+      ctx.translate(lx, Math.round(FOOT - ps.hop - (CW / 2) * Math.sin(ps.a) - bob));
       if (ps.a) ctx.rotate((m.side || 1) * ps.a);
-      ctx.drawImage(img, -16, -40, 32, 40);
+      ctx.drawImage(img, -CW / 2, -CH, CW, CH);
       ctx.restore();
 
       // the lead's pose sparkles after a real gag lands
@@ -683,23 +1046,31 @@ class Zukko extends Minigame {
         const k = t - r.tC;
         for (let i = 0; i < 4; i++) {
           const ang = k / 6 + i * (Math.PI / 2);
-          this.sparkleAt(ctx, m.x + Math.cos(ang) * 22, FOOT - 30 + Math.sin(ang) * 16, (k + i) % 8 < 4 ? 3 : 2, '#fff6a8');
+          this.sparkleAt(ctx, m.x + Math.cos(ang) * 46, FOOT - 56 + Math.sin(ang) * 32, (k + i) % 8 < 4 ? 6 : 4, '#fff6a8');
         }
       }
 
       // head position (for markers & emotes)
-      const hx = ps.lying > 0.5 ? lx + m.side * 32 : m.x;
-      const hy = ps.lying > 0.5 ? FOOT - 34 : FOOT - 46 - bob;
+      const hx = ps.lying > 0.5 ? lx + m.side * 64 : m.x;
+      const hy = ps.lying > 0.5 ? FOOT - 68 : FOOT - 90 - bob;
       const emote = m.emote && t < m.emoteUntil ? m.emote : null;
       if (emote) this.overlays.push(() => this.drawEmote(ctx, hx, hy, emote, t));
       // "あなた" marker (hidden while a judgement popup floats there, and mid-fall)
       if (m.player && this.pt - this.judgeAt > 46 && (ps.lying === 0 || ps.lying === 1) && (!emote || emote === 'sweat')) {
         this.overlays.push(() => {
           const blink = Math.floor(this.pt / 16) % 2;
-          const my = hy - 4;
-          text(ctx, 'あなた', hx, my - 14, { size: 10, align: 'center', color: COLORS.pink, outline: '#22202a' });
+          const my = hy - 6;
+          text(ctx, 'あなた', hx, my - 26, { size: 14, align: 'center', color: COLORS.pink, outline: INK });
+          for (let i = 0; i < 6; i++) {
+            ctx.fillStyle = INK;
+            ctx.fillRect(hx - 6 + i, my - 6 + blink * 2 + i, 13 - i * 2, 1);
+          }
+          ctx.fillStyle = INK;
+          ctx.fillRect(hx - 1, my + blink * 2, 3, 1);
           ctx.fillStyle = COLORS.pink;
-          for (let i = 0; i < 4; i++) ctx.fillRect(hx - 3 + i, my - 2 + blink + i, 7 - i * 2, 1);
+          for (let i = 0; i < 5; i++) ctx.fillRect(hx - 4 + i, my - 5 + blink * 2 + i, 9 - i * 2, 1);
+          ctx.fillStyle = '#ffc0dc';
+          ctx.fillRect(hx - 4, my - 5 + blink * 2, 3, 1);
         });
       }
     }
@@ -708,30 +1079,44 @@ class Zukko extends Minigame {
   sparkleAt(ctx, x, y, s, col) {
     x = Math.round(x); y = Math.round(y);
     ctx.fillStyle = col;
-    ctx.fillRect(x - s, y, s * 2 + 1, 1);
-    ctx.fillRect(x, y - s, 1, s * 2 + 1);
+    ctx.fillRect(x - s, y, s * 2 + 2, 2);
+    ctx.fillRect(x, y - s, 2, s * 2 + 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x - 1, y, 4, 2);
+    ctx.fillRect(x, y - 1, 2, 4);
   }
 
   drawEmote(ctx, x, y, e, t) {
     x = Math.round(x); y = Math.round(y);
     if (e === 'sweat') {
-      const dy = Math.floor(t / 10) % 3;
+      const dy = (Math.floor(t / 10) % 3) * 2;
+      const sx = x + 20, sy = y + 8 + dy;
+      ctx.fillStyle = '#1c4a7a';
+      ctx.fillRect(sx + 2, sy - 1, 2, 2);
+      ctx.fillRect(sx + 1, sy + 1, 4, 2);
+      ctx.fillRect(sx, sy + 3, 6, 5);
+      ctx.fillRect(sx + 1, sy + 8, 4, 1);
       ctx.fillStyle = '#5fd7ff';
-      ctx.fillRect(x + 10, y + 6 + dy, 3, 4);
-      ctx.fillRect(x + 11, y + 4 + dy, 1, 2);
+      ctx.fillRect(sx + 2, sy, 2, 2);
+      ctx.fillRect(sx + 1, sy + 2, 4, 6);
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x + 10, y + 7 + dy, 1, 1);
+      ctx.fillRect(sx + 2, sy + 3, 1, 3);
       return;
     }
-    const w = e.length > 1 ? 22 : 18;
-    ctx.fillStyle = '#22202a';
-    ctx.fillRect(x - w / 2 - 1, y - 17, w + 2, 15);
+    const w = e.length > 1 ? 44 : 36, h = 30;
+    const bx = x - w / 2, by = y - 36;
+    pxBox(ctx, bx - 2, by - 2, w + 4, h + 4, INK, [3, 1]);
+    pxBox(ctx, bx, by, w, h, '#ffffff', [2, 1]);
+    ctx.fillStyle = '#e4e6f0';
+    ctx.fillRect(bx + 2, by + h - 3, w - 4, 2);
+    // tail
+    ctx.fillStyle = INK;
+    ctx.fillRect(x - 4, by + h + 2, 9, 2);
+    ctx.fillRect(x - 2, by + h + 4, 5, 2);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x - w / 2, y - 16, w, 13);
-    ctx.fillRect(x - 1, y - 3, 3, 2);
-    ctx.fillStyle = '#22202a';
-    ctx.fillRect(x, y - 1, 1, 1);
-    text(ctx, e === '…' ? '…' : e, x, y - 15, { size: 10, align: 'center', color: e === '!?' ? '#d62f2f' : '#22202a', shadow: null });
+    ctx.fillRect(x - 2, by + h, 5, 2);
+    ctx.fillRect(x - 1, by + h + 2, 3, 2);
+    text(ctx, e, x, by + 6, { size: 18, align: 'center', color: e === '!?' ? '#d62f2f' : INK, shadow: null });
   }
 
   drawBubble(ctx, r, t) {
@@ -739,61 +1124,65 @@ class Zukko extends Minigame {
     if (t >= r.tS && t < r.tG && r.setup) { str = r.setup; t0 = r.tS; }
     else if (t >= r.tG && t < r.tC) { str = r.cue; t0 = r.tG; gag = true; }
     else return;
-    let size = 12, lh = 15;
-    let lines = wrap(ctx, str, 214, size);
-    if (lines.length > 2) { size = 10; lh = 12; lines = wrap(ctx, str, 214, size).slice(0, 3); }
+    let size = 18, lh = 24;
+    let lines = wrap(ctx, str, 380, size);
+    if (lines.length > 2) { size = 16; lh = 20; lines = wrap(ctx, str, 400, size).slice(0, 3); }
     let maxW = 0;
     for (const l of lines) maxW = Math.max(maxW, measure(ctx, l, size));
-    const w = clamp(Math.ceil(maxW) + 22, 120, 250);
-    const h = 12 + lines.length * lh;
-    const x = Math.round(160 - w / 2);
-    const y = Math.round(gag ? 64 : 66);
+    const w = clamp(Math.ceil(maxW) + 44, 240, 470);
+    const h = 24 + lines.length * lh;
+    const x = Math.round(CX - w / 2);
+    const y = gag ? 96 : 100;
     const bg = gag ? '#fff6c8' : '#ffffff';
-    const ink = '#22202a';
-    // body with clipped corners
-    ctx.fillStyle = ink;
-    ctx.fillRect(x + 2, y - 1, w - 4, h + 2);
-    ctx.fillRect(x - 1, y + 2, w + 2, h - 4);
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = bg;
-    ctx.fillRect(x + 2, y, w - 4, h);
-    ctx.fillRect(x, y + 2, w, h - 4);
-    ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+    const shadeCol = gag ? '#f0e2a0' : '#e4e6f0';
+    // drop shadow + body with stepped corners, 2 px ink border
+    pxBox(ctx, x + 2, y + 4, w + 4, h + 4, 'rgba(10,6,16,0.35)', [4, 2, 1, 1]);
+    pxBox(ctx, x - 2, y - 2, w + 4, h + 4, INK, [4, 2, 1, 1]);
+    pxBox(ctx, x, y, w, h, bg, [3, 1]);
+    ctx.fillStyle = shadeCol;
+    ctx.fillRect(x + 3, y + h - 3, w - 6, 2);
+    ctx.fillRect(x + w - 3, y + 3, 2, h - 6);
     // tail toward the lead's head
     const by = y + h;
-    const tipY = FOOT - 44;
-    for (let yy = by; yy < tipY; yy++) {
+    const tipY = FOOT - 86;
+    for (let yy = by + 2; yy < tipY; yy++) {
       const k = (yy - by) / (tipY - by);
-      const half = Math.max(0, Math.round(6 * (1 - k)));
-      const cx = Math.round(156 + k * 4);
-      ctx.fillStyle = ink;
-      ctx.fillRect(cx - half - 1, yy, half * 2 + 3, 1);
+      const half = Math.max(0, Math.round(11 * (1 - k)));
+      const cx = Math.round(CX - 8 + k * 8);
+      ctx.fillStyle = INK;
+      ctx.fillRect(cx - half - 2, yy, half * 2 + 5, 1);
       if (half > 0) { ctx.fillStyle = bg; ctx.fillRect(cx - half, yy, half * 2 + 1, 1); }
     }
     ctx.fillStyle = bg;
-    ctx.fillRect(150, by - 1, 13, 2);
+    ctx.fillRect(CX - 20, by - 3, 25, 5);
     // name tag
-    ctx.fillStyle = ink;
-    ctx.fillRect(x + 5, y - 9, 30, 13);
-    ctx.fillStyle = '#e8873a';
-    ctx.fillRect(x + 6, y - 8, 28, 11);
-    text(ctx, '座長', x + 20, y - 8, { size: 10, align: 'center', color: '#ffffff', shadow: null });
+    pxBox(ctx, x + 8, y - 16, 56, 24, INK, [2, 1]);
+    pxBox(ctx, x + 10, y - 14, 52, 20, '#e8873a', [1]);
+    ctx.fillStyle = '#ffb070';
+    ctx.fillRect(x + 11, y - 14, 50, 2);
+    ctx.fillStyle = '#b8601e';
+    ctx.fillRect(x + 11, y + 4, 50, 2);
+    text(ctx, '座長', x + 36, y - 12, { size: 14, align: 'center', color: '#ffffff', shadow: '#8a4010' });
     // typed text
     let n = Math.floor((t - t0) / this.spd) + 1;
     lines.forEach((l, i) => {
       const cs = chars(l);
       const s = cs.slice(0, Math.max(0, n)).join('');
       n -= cs.length;
-      if (s) text(ctx, s, x + 11, y + 7 + i * lh, { size, color: ink, shadow: null });
+      if (s) text(ctx, s, x + 22, y + 13 + i * lh, { size, color: INK, shadow: null });
     });
     if (gag) {
       // a red 「！」 badge on the corner: this is the punch line
-      const bx = x + w - 6, by2 = y - 1;
-      fillDisc(ctx, bx, by2, 7, ink);
-      fillDisc(ctx, bx, by2, 6, '#d62f2f');
+      const bx = x + w - 8, by2 = y - 2;
+      fillDisc(ctx, bx, by2, 14, INK);
+      fillDisc(ctx, bx, by2, 12, '#d62f2f');
+      fillDisc(ctx, bx - 2, by2 - 2, 8, '#ec4a4a');
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(bx - 1, by2 - 4, 3, 5);
-      ctx.fillRect(bx - 1, by2 + 2, 3, 2);
+      ctx.fillRect(bx - 2, by2 - 8, 5, 10);
+      ctx.fillRect(bx - 1, by2 + 2, 3, 1);
+      ctx.fillRect(bx - 2, by2 + 5, 5, 4);
+      ctx.fillStyle = '#ffd8d8';
+      ctx.fillRect(bx + 2, by2 - 8, 1, 9);
     }
   }
 
@@ -804,102 +1193,90 @@ class Zukko extends Minigame {
       if (k > 44) return;
       // white flash
       const fl = Math.max(0, 0.6 - k * 0.075);
-      if (fl > 0) { ctx.fillStyle = `rgba(255,255,255,${fl})`; ctx.fillRect(0, 0, W, H); }
+      if (fl > 0) { ctx.fillStyle = `rgba(255,255,255,${fl})`; ctx.fillRect(0, 0, SW, SH); }
       const fade = k > 34 ? 1 - (k - 34) / 10 : 1;
       ctx.globalAlpha = clamp(fade, 0, 1);
-      // starburst
-      const cx = 160, cy = 58;
+      // starburst with an ink outline
+      const cx = CX, cy = 104;
+      ctx.fillStyle = INK;
+      this.burst(ctx, cx, cy, 66, 37, 14, k / 30);
       ctx.fillStyle = '#ff8a3d';
       this.burst(ctx, cx, cy, 62, 34, 14, k / 30);
       ctx.fillStyle = '#ffd23f';
       this.burst(ctx, cx, cy, 52, 28, 14, k / 30 + 0.1);
-      const size = k < 4 ? 40 : 32;
+      ctx.fillStyle = '#fff2a0';
+      this.burst(ctx, cx - 6, cy - 4, 30, 18, 14, k / 30 + 0.1);
+      const size = k < 4 ? 80 : 64;
       this.bigText(ctx, 'ドーン！', cx, cy - size / 2, size, '#ffffff', '#d62f2f');
       ctx.globalAlpha = 1;
     } else {
       if (t > r.tUp) return;
       ctx.fillStyle = `rgba(16,24,72,${Math.min(0.35, k * 0.04)})`;
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, 0, SW, SH);
       const a = clamp(k / 8, 0, 1) * (t > r.tUp - 10 ? (r.tUp - t) / 10 : 1);
       ctx.globalAlpha = clamp(a, 0, 1);
-      this.bigText(ctx, 'シーン…', 114, 72 + Math.min(8, Math.floor(k * 0.12)), 24, '#dfe9ff', '#2a3a7a');
+      this.bigText(ctx, 'シーン…', CX - 92, 74 + Math.min(12, Math.floor(k * 0.18)), 48, '#dfe9ff', '#2a3a7a');
       ctx.globalAlpha = 1;
       // a crow flies across
-      const cx = Math.round(336 - k * 3.2);
-      const cy = Math.round(46 + Math.sin(k / 6) * 3);
-      if (cx > -20) {
+      const cx = Math.round(SW + 32 - k * 6.4);
+      const cy = Math.round(66 + Math.sin(k / 6) * 6);
+      if (cx > -40) {
         this.drawCrow(ctx, cx, cy, Math.floor(k / 6) % 2);
-        if (k >= 12 && k < 36) text(ctx, 'カァー', cx + 6, cy - 20, { size: 10, color: '#dfe9ff', outline: '#14182e' });
+        if (k >= 12 && k < 36) text(ctx, 'カァー', cx + 16, cy - 42, { size: 16, color: '#dfe9ff', outline: '#14182e' });
       }
     }
   }
 
   burst(ctx, cx, cy, rOut, rIn, n, rot) {
-    ctx.beginPath();
+    const pts = [];
     for (let i = 0; i < n * 2; i++) {
       const rr = i % 2 ? rIn : rOut * (i % 4 === 0 ? 1 : 0.85);
       const a = rot + (i / (n * 2)) * Math.PI * 2;
-      const x = cx + Math.cos(a) * rr * 1.5;
-      const y = cy + Math.sin(a) * rr * 0.75;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      pts.push([cx + Math.cos(a) * rr * 3, cy + Math.sin(a) * rr * 1.5]);
     }
-    ctx.closePath();
-    ctx.fill();
+    fillPoly(ctx, pts);
   }
 
   bigText(ctx, s, x, y, size, fill, edge) {
-    for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2], [-2, -2], [2, -2], [-2, 2], [2, 2], [0, 3], [2, 3], [-2, 3]]) {
+    const e = size >= 64 ? 4 : 3;
+    for (const [dx, dy] of [[-e, 0], [e, 0], [0, -e], [0, e], [-e, -e], [e, -e], [-e, e], [e, e], [0, e + 2], [e, e + 2], [-e, e + 2]]) {
       text(ctx, s, x + dx, y + dy, { size, align: 'center', color: edge, shadow: null });
     }
-    text(ctx, s, x, y, { size, align: 'center', color: fill, outline: '#22202a' });
+    text(ctx, s, x, y, { size, align: 'center', color: fill, outline: INK });
   }
 
   drawCrow(ctx, x, y, f) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(2, 2);
-    x = 0; y = 0;
-    ctx.fillStyle = '#14141c';
-    ctx.fillRect(x, y, 8, 3); // body
-    ctx.fillRect(x - 3, y - 1, 4, 3); // head
-    ctx.fillRect(x + 8, y + 1, 3, 1); // tail
-    ctx.fillStyle = '#3a3a48';
-    ctx.fillRect(x - 5, y, 2, 1); // beak
-    ctx.fillStyle = '#14141c';
-    if (f) { ctx.fillRect(x + 2, y - 4, 2, 4); ctx.fillRect(x + 4, y - 6, 2, 3); }
-    else { ctx.fillRect(x + 2, y + 3, 2, 3); ctx.fillRect(x + 4, y + 5, 2, 2); }
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x - 2, y, 1, 1); // eye
-    ctx.restore();
+    // 2 px per art pixel, like the cast
+    const img = (crowCache || buildCrow())[f ? 1 : 0];
+    ctx.drawImage(img, Math.round(x) - 8, Math.round(y) - 18, 60, 36);
   }
 
   drawHud(ctx) {
     const total = this.total || 0;
     if (!total) return;
     const cur = clamp(this.ri, 0, total - 1);
-    text(ctx, `ネタ ${cur + 1}/${total}`, 24, 2, { size: 10, color: '#ffffff', outline: '#3a0a10' });
-    const x0 = 160 - (total - 1) * 6;
+    text(ctx, `ネタ ${cur + 1}/${total}`, 48, 2, { size: 16, color: '#ffffff', outline: '#3a0a10' });
+    const x0 = CX - (total - 1) * 12;
     for (let i = 0; i < total; i++) {
-      const x = x0 + i * 12, y = 7;
+      const x = x0 + i * 24, y = 11;
       const res = this.results[i];
-      ctx.fillStyle = '#3a0a10';
-      ctx.fillRect(x - 4, y - 3, 9, 7);
-      ctx.fillRect(x - 3, y - 4, 7, 9);
-      ctx.fillStyle = res ? DOT_COLORS[res] : '#7a2a34';
-      ctx.fillRect(x - 3, y - 2, 7, 5);
-      ctx.fillRect(x - 2, y - 3, 5, 7);
+      pxBox(ctx, x - 9, y - 9, 18, 18, '#3a0a10', [3, 1]);
+      pxBox(ctx, x - 7, y - 7, 14, 14, res ? DOT_COLORS[res] : '#7a2a34', [2, 1]);
+      ctx.fillStyle = res ? DOT_LIGHT[res] : '#94404a';
+      ctx.fillRect(x - 5, y - 6, 5, 2);
+      ctx.fillRect(x - 6, y - 5, 2, 4);
       if (i === cur && !res && Math.floor(this.pt / 12) % 2 === 0) {
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(x - 1, y - 1, 3, 3);
+        ctx.fillRect(x - 3, y - 3, 6, 6);
       }
     }
     const s = this.realPts && this.realPts.length ? String(this.currentScore()) : '--';
-    text(ctx, `スコア ${s}`, 296, 2, { size: 10, align: 'right', color: '#ffd23f', outline: '#3a0a10' });
-    if (this.combo >= 2) text(ctx, `${this.combo}コンボ`, 296, 20, { size: 10, align: 'right', color: COLORS.pink, outline: '#22202a' });
+    text(ctx, `スコア ${s}`, SW - 48, 2, { size: 16, align: 'right', color: '#ffd23f', outline: '#3a0a10' });
+    if (this.combo >= 2) text(ctx, `${this.combo}コンボ`, SW - 48, 28, { size: 14, align: 'right', color: COLORS.pink, outline: INK });
     // instruction strip
     ctx.fillStyle = 'rgba(8,6,14,0.72)';
-    ctx.fillRect(0, 226, W, 14);
-    text(ctx, '「ドーン！」でA！　「シーン…」はガマン', 160, 227, { size: 10, align: 'center', color: '#ffffff', shadow: null });
+    ctx.fillRect(0, SH - 20, SW, 20);
+    text(ctx, '「ドーン！」でA！　「シーン…」はガマン', CX, SH - 18, { size: 14, align: 'center', color: '#ffffff', shadow: null });
   }
 }
 

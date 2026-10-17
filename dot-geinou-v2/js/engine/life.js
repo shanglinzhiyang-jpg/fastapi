@@ -81,7 +81,9 @@ export const PEOPLE = {};
 //   hangout[spotId] / hangout.default: lines; strings that start with '（' are narration,
 //                               { text, name, look } picks another speaker
 //   inviteYes, callYes, callShy, callAgain, thanks, declined, hangBye, giftDone,
-//   hangDone, partnerText       other single lines (string | string[] | (g, def) => …)
+//   hangDone, again (menu prompt after an action), partnerText
+//                               other single lines (string | string[] | (g, def) => …)
+//   short: 'ジロー'              shorter name, used where the full name does not fit (phone)
 export function registerPerson(id, def) {
   PEOPLE[id] = { id, likes: [], loves: [], dislikes: [], events: [], messages: [], invites: [], hangout: {}, ...def };
 }
@@ -322,11 +324,13 @@ const methods = {
     const def = PEOPLE[id], p = this.person(id);
     if (!def || !p) return null;
     const lv = heartIndex(p.aff);
+    if (!p.seen) p.seen = {}; // records from older builds
     return def.events.find((ev) => ev.level <= lv && !p.seen[ev.level]) || null;
   },
   // Talk to an NPC linked to a person (entity.person). The map calls this for such
-  // NPCs: heart event first, else the NPC's normal talk + a daily affinity bonus.
-  // Content may replace PEOPLE_UI.talk for a richer menu (gift / invite).
+  // NPCs: heart event first, else the NPC's normal talk + a daily affinity bonus,
+  // and from ♥1 the menu 話す / プレゼント / さそう / またね (phone.js). Content adds
+  // menu entries and hooks through PEOPLE_UI.extras / PEOPLE_UI.hooks (see below).
   async talkPerson(npc) {
     return PEOPLE_UI.talk(this, npc);
   },
@@ -490,8 +494,29 @@ export function onMorning(fn) { MORNING_HOOKS.push(fn); }
 
 // People interaction UI. phone.js installs the rich versions on load (talk menu
 // 話す / プレゼント / さそう / またね, the HD hangout vignette); these plain ones are
-// the fallbacks. Content may still replace them.
+// the fallbacks. Content should NOT replace talk / hangout: extend the menu with
+// `extras` and `hooks` instead (both are read by phone.js's talk menu):
+//
+//   PEOPLE_UI.extras.push({          an extra entry of the talk menu (♥1+), before またね
+//     id: 'combi',                   optional, unique (default: the label)
+//     label: 'コンビを組もう',        ≤ 14 chars, or (g, id, npc) => label
+//     cond: (g, id, npc) => bool,    optional: shown only when true
+//     run: async (g, id, npc) => …,  return 'end' to close the menu afterwards
+//     repeat: false,                 true: stays in the menu after it was used
+//     order: 50 })                   optional sort key among the extras
+//   PEOPLE_UI.hooks.start.push((g, id, npc) => {})        sync, first thing on every talk
+//   PEOPLE_UI.hooks.before.push(async (g, id, npc) => bool)
+//                                    after heart events (they come first): return true to
+//                                    take over this talk (no menu), e.g. a proposal asked again
+//   PEOPLE_UI.hooks.greet.push((g, id, npc) => string | null)
+//                                    the line that opens the menu; the first non-empty one
+//                                    wins, then def.greet, then a generic greeting
+//   PEOPLE_UI.hooks.after.push(async (g, id, npc) => {})  after every talk (event, takeover, menu)
+// (id = the person id, npc = the map entity; PEOPLE[id] is the definition.) A hook or
+// entry that throws is logged and skipped.
 export const PEOPLE_UI = {
+  extras: [],
+  hooks: { start: [], before: [], greet: [], after: [] },
   async talk(g, npc) {
     const id = npc.person;
     const def = PEOPLE[id];

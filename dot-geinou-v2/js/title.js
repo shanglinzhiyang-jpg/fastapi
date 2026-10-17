@@ -500,6 +500,44 @@ const CAST = [
   { look: LOOKS.comedian, x: 536, dance: false },
 ];
 
+// The cast's spotlights (beams from above and the pools on the floor) never move, so
+// they are rasterised once into a transparent layer instead of row by row every frame.
+// drawCastLight copies only the two strips that hold them.
+let CAST_LIGHT = null;
+function drawCastLight(ctx) {
+  const cv = castLight();
+  for (const m of CAST) {
+    const x0 = Math.max(0, m.x - 84), x1 = Math.min(SW, m.x + 84);
+    ctx.drawImage(cv, x0, 0, x1 - x0, SH, x0, 0, x1 - x0, SH);
+  }
+}
+function castLight() {
+  if (CAST_LIGHT) return CAST_LIGHT;
+  const [cv, c] = makeCanvas(SW, SH);
+  CAST.forEach((m, i) => {
+    const sx = m.x + (i ? 70 : -70), sy = -10, fy = STAGE_Y + 8;
+    const a = Math.atan2(sy - fy, sx - m.x);
+    const len = Math.hypot(sx - m.x, sy - fy);
+    beam(c, m.x, fy, a, len, 30, -0.075, '#fff2c0', 0.08);
+    beam(c, m.x, fy, a, len, 18, -0.045, '#fff2c0', 0.07);
+  });
+  c.globalAlpha = 0.22;
+  for (const m of CAST) {
+    ellipse(c, m.x, STAGE_Y + 8, 40, 6, '#fff2b0');
+    ellipse(c, m.x, STAGE_Y + 8, 26, 4, '#fff8d8');
+  }
+  c.globalAlpha = 1;
+  CAST_LIGHT = cv;
+  return cv;
+}
+
+// A soft contact shadow under a figure's feet (a pixel ellipse, not a flat bar).
+function footShadow(ctx, cx, y, rx, ry, alpha) {
+  ctx.globalAlpha = alpha;
+  ellipse(ctx, cx, y, rx, ry, '#1c0a10');
+  ctx.globalAlpha = 1;
+}
+
 export class TitleScene {
   constructor(g, resolve) {
     this.g = g;
@@ -539,20 +577,10 @@ export class TitleScene {
   draw(ctx) {
     const t = this.t;
     drawBackdrop(ctx, t);
-    // the cast on the stage, each in a spotlight from above
+    // the cast on the stage, each in a spotlight from above (cached layer)
+    drawCastLight(ctx);
     CAST.forEach((c, i) => {
-      const sx = c.x + (i ? 70 : -70), sy = -10, fy = STAGE_Y + 8;
-      const a = Math.atan2(sy - fy, sx - c.x);
-      const len = Math.hypot(sx - c.x, sy - fy);
-      beam(ctx, c.x, fy, a, len, 30, -0.075, '#fff2c0', 0.08);
-      beam(ctx, c.x, fy, a, len, 18, -0.045, '#fff2c0', 0.07);
-    });
-    CAST.forEach((c, i) => {
-      ctx.globalAlpha = 0.22;
-      ellipse(ctx, c.x, STAGE_Y + 8, 40, 6, '#fff2b0');
-      ellipse(ctx, c.x, STAGE_Y + 8, 26, 4, '#fff8d8');
-      ctx.globalAlpha = 1;
-      R(ctx, c.x - 18, STAGE_Y + 7, 36, 2, 'rgba(40,16,10,0.35)');
+      footShadow(ctx, c.x, STAGE_Y + 8, 17, 2, 0.4);
       let dir = 'down', frame = 0, hop = 0;
       const k = Math.floor((t + i * 90) / 15);
       if (c.dance) {
@@ -819,13 +847,17 @@ export class CreateScene {
 
   draw(ctx) {
     const t = this.t;
-    if (this.closet) closetBg(ctx, t);
-    else {
+    const title = this.closet ? 'クローゼットで着がえよう' : 'キャラクターをつくろう';
+    if (this.closet) {
+      // no clothes hang behind the ribbon (its band + swallow tails), so it reads cleanly
+      const half = Math.ceil(measure(ctx, title, 16) / 2) + 22 + 22 + 4;
+      closetBg(ctx, t, SW / 2 - half, SW / 2 + half);
+    } else {
       drawBackdrop(ctx, t + 500);
       ctx.fillStyle = 'rgba(6,6,20,0.42)';
       ctx.fillRect(0, 0, SW, SH);
     }
-    ribbon(ctx, this.closet ? 'クローゼットで着がえよう' : 'キャラクターをつくろう', SW / 2, 12, { size: 16, color: this.closet ? '#8a5ac8' : '#d63a4a' });
+    ribbon(ctx, title, SW / 2, 12, { size: 16, color: this.closet ? '#8a5ac8' : '#d63a4a' });
     const look = this.look();
     this.drawPreview(ctx, look);
     this.drawRows(ctx);
@@ -896,7 +928,7 @@ export class CreateScene {
       ellipse(ctx, cx, fy + 22, 48, 7, '#ffd890');
       ellipse(ctx, cx, fy + 22, 32, 4, '#fff0c8');
       ctx.globalAlpha = 1;
-      R(ctx, cx - 22, fy + 21, 44, 3, 'rgba(20,8,16,0.45)');
+      footShadow(ctx, cx, fy + 22, 24, 3, 0.45);
       drawFigure(ctx, look, cx, fy + 22, 3, dir, frame);
       // sparkle after a change
       if (this.flash > 0) {
@@ -991,7 +1023,8 @@ export class CreateScene {
 
 // Closet backdrop: the inside of a wooden wardrobe with clothes on a brass rail.
 let CLOSET = null;
-function closetBg(ctx, t) {
+// gapL..gapR: a stretch of the rail left empty (where the title ribbon hangs).
+function closetBg(ctx, t, gapL = SW, gapR = SW) {
   if (!CLOSET) {
     const [cv, c] = makeCanvas(SW, SH);
     R(c, 0, 0, SW, SH, '#5a3a20');
@@ -1019,7 +1052,9 @@ function closetBg(ctx, t) {
   ctx.drawImage(CLOSET, 0, 0);
   // hanging clothes (sway a little): T-shirts, and trousers every fourth hanger
   for (let i = 0; i < 22; i++) {
-    const x = i * 30 + 4 + Math.round(Math.sin(t / 40 + i) * 1);
+    const x0 = i * 30 + 4;
+    if (x0 + 23 > gapL && x0 - 2 < gapR) continue; // tested unswayed, so none pops in and out
+    const x = x0 + Math.round(Math.sin(t / 40 + i) * 1);
     R(ctx, x + 10, 8, 1, 4, '#d8d8e0');
     R(ctx, x + 3, 12, 15, 1, '#d8d8e0');
     R(ctx, x + 3, 12, 1, 1, '#9a9aa8'); R(ctx, x + 17, 12, 1, 1, '#9a9aa8');

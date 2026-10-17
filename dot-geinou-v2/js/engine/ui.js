@@ -445,8 +445,10 @@ export async function openMenu(g) {
     if (i >= 0) last = i;
     const act = i >= 0 && entries[i] ? entries[i][1] : 'close';
     if (act === 'debug') { await g.debugMenu(); continue; }
-    if (act === 'phone') await openPhone(g);
-    else if (act === 'status') await new Promise((r) => g.push(new StatusScene(g, r)));
+    if (act === 'phone') {
+      // MENU inside the phone goes straight back to the map (B returns here)
+      if ((await openPhone(g)) === 'menu') return;
+    } else if (act === 'status') await new Promise((r) => g.push(new StatusScene(g, r)));
     else if (act === 'items') await itemMenu(g);
     else if (act === 'notebook') await new Promise((r) => g.push(new NotebookScene(g, r)));
     else if (act === 'save') {

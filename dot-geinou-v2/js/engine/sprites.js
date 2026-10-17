@@ -12,7 +12,9 @@
 //   skirt: bool, jacket: bool, tie: color|null, glasses: false|true|'sun', beard: bool,
 //   hat: color (cap/helmet color), blush: bool, glassesColor: color,
 //   apron: true|color, kimono: true|color (crossed collar + obi of that color),
-//   ribbon: color (twin tail ties, HD), lashes: bool (HD; default: long/bob/twin hair or skirt)
+//   ribbon: color (HD hair bow: on each twin tail, or on the side of the head for
+//           short/long/bob/spiky/slick/afro hair),
+//   lashes: bool (HD; default: long/bob/twin hair or skirt, unless mage/bald hair or beard)
 // }
 
 import { makeCanvas, shade, mix } from './util.js';
@@ -310,7 +312,7 @@ export function charSheet(look = {}) {
 //     chin over the collar, hem over the trousers ...);
 //   - shades the skin right under hair and hats.
 // Optional look keys only the art reads: apron (true | colour), kimono (true |
-// obi colour), ribbon (hair tie colour), lashes (bool, default by hair style /
+// obi colour), ribbon (hair bow colour), lashes (bool, default by hair style /
 // skirt), glassesColor.
 const HW = 32, HH = 40;
 const HC = {
@@ -385,6 +387,21 @@ function ramp(c, sh, ln, hi) {
   const L = lum(c);
   return [c, shade(c, L < 0.2 ? sh * 0.75 : sh), mix(shade(c, ln), OUT, 0.25), shade(c, L < 0.2 ? hi + 0.12 : hi)];
 }
+// Lighter tone that keeps the colour's saturation (HSL lightness). shade()
+// fades toward white, which turns the shine on brown / red hair a dull grey.
+function lighten(c, amt) {
+  const n = int(c);
+  const r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let h = 0, s = 0;
+  if (d > 0) {
+    s = Math.min(1, d / (1 - Math.abs(2 * l - 1)));
+    h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  }
+  const L2 = l + (1 - l) * amt, C = (1 - Math.abs(2 * L2 - 1)) * s, X = C * (1 - Math.abs((h % 2) - 1)), m = L2 - C / 2;
+  const rgb = h < 1 ? [C, X, 0] : h < 2 ? [X, C, 0] : h < 3 ? [0, C, X] : h < 4 ? [0, X, C] : h < 5 ? [X, 0, C] : [C, 0, X];
+  return '#' + rgb.map((v) => Math.max(0, Math.min(255, Math.round((v + m) * 255))).toString(16).padStart(2, '0')).join('');
+}
 
 function hdPalette(look) {
   const skin = hex(resolve(look.skin, SKIN, SKIN.fair));
@@ -411,6 +428,8 @@ function hdPalette(look) {
     lens: ['#16161c', '#16161c', '#16161c', '#7f93b8'],
     out: [OUT],
   };
+  // hair shine keeps the hair's hue (warm brown, red ...); near-greys are unchanged
+  P.hair[3] = mix(P.hair[3], lighten(hair, lum(hair) < 0.2 ? 0.5 : 0.38), 0.7);
   // packed little-endian RGBA (ImageData as Uint32)
   const abgr = (h) => { const n = int(h); return (0xff000000 | ((n & 255) << 16) | (n & 0xff00) | (n >> 16)) >>> 0; };
   return PARTS.map((k) => Uint32Array.from([0, 1, 2, 3], (i) => abgr(P[k][i] || P[k][0])));
@@ -628,7 +647,8 @@ const BEARD_HD = {
 // --------------------------------------------------------------- hair styles
 // { down, left, up }: hair in front of the head (Z_HAIR); back: down-view hair
 // behind the body; hat: { down, left, up } (Z_HAT); skin: head-layer marks
-// (scalp shine); ears: draw ears; fem: lashes by default; face: false hides it;
+// (scalp shine); ears: draw ears; fem: lashes by default; masc: never lashes by
+// default; bow: look.ribbon draws BOW_HD; face: false hides it;
 // soft: no inner line around the hair (thin hair on a bald head).
 const UPB = [ // back of a full head of hair, rows 2..17
   '10.12h10.', '8.5h3j8h8.', '6.6h5j8hH6.', '5.8h3j9h2H5.', '5.20h2H5.', '4.22h2H4.',
@@ -661,25 +681,36 @@ const TWIN_TAILS = G(0, 8,
   '.hHH....16.....hHH.',
   '..HH....16.....HH..',
   '..H.....16......H..');
-const TWIN_BOWS = G(2, 8, 'xxX20.xxX', '.xX20.xX.');
+// hair bow in the ribbon colour (painted over the hair at Z_HAT, so finishHD
+// outlines it): two loops and a knot. at() places it on a full-width grid.
+const BOW = ['.XX.XX.', 'XxxXxxX', 'XxxXxxX', '.XX.XX.'];
+const at = (x0, y0, rows) => G(0, y0, ...rows.map((r) => '.'.repeat(x0) + r + '.'.repeat(HW - x0 - r.length)));
+// twin tails: one bow where each tail is tied (symmetric)
+const TWIN_BOWS = [at(0, 7, BOW), at(HW - 7, 7, BOW)];
+// look.ribbon on other styles: a bow on the upper side of the head
+// (from behind it sits on the other side: up mirrors down's x = 20..26)
+const BOW_HD = { down: at(20, 2, BOW), up: at(HW - 20 - BOW[0].length, 2, BOW), left: at(17, 3, BOW) };
 const TWIN_SIDE = G(0, 7, '26.4h2.', '25.6h1.', '25.hjhhhH1.', '25.hjhhh2H', '25.hjhhh2H', '25.hjhhh2H', '25.hhjhh2H', '25.hhjhh2H',
   '25.hhjh2H1.', '25.hhjh2H1.', '25.4h2H1.', '25.3h2H2.', '25.3h2H2.', '25.2h3H2.', '25.h3H3.', '26.3H3.', '26.2H4.', '26.H5.');
 const HS = {
   none: { ears: true },
   short: {
     ears: true,
+    bow: true,
     down: G(0, 2, ...FRINGE, '4.5h4.2h4.h4.2hHh4.', '4.4h16.4h4.', '4.4h16.4h4.', '4.3h18.3h4.'),
     left: G(0, 2, ...SIDE, ...SIDE_BACK),
     up: G(0, 2, ...UPB, ...NAPE),
   },
   slick: {
     ears: true,
+    bow: true,
     down: G(0, 2, '10.12h10.', '8.3h4j9h8.', '6.3h6j9h2H6.', '5.4h2j2hH6hH3h3H5.', '5.2hH3hH9hH3h2H5.', '4.2hH3hH11hH3h2H4.', '4.hH3hH13hH2h2H4.', '4.22h2H4.', '4.3h18.h2H4.', '4.2h20.hH4.', '4.2h20.hH4.', '4.h22.H4.'),
     left: G(0, 2, '10.12h10.', '8.h4j11h8.', '6.h6j2hH8h2H6.', '5.5hH4hH9h2H5.', '5.3hH4hH5hH5h2H5.', '4.H5hH10hH4h2H4.', '4.22h2H4.', '4.22h2H4.', '17.9h2H4.', '17.9h2H4.', '18.8h2H4.', '19.7h2H4.', '20.6h2H4.', '21.5h2H4.', '22.3h2H5.', '23.h2H6.'),
     up: G(0, 2, ...UPB, ...NAPE),
   },
   long: {
     fem: true,
+    bow: true,
     down: G(0, 2, ...FRINGE, '4.5h4.2h4.h3.3hHh4.', '4.5h14.5h4.', '4.hjh2h14.2h2Hh4.', '4.hjhHh14.hh2Hh4.',
       '2.2hjhHhh14.hh2H3h2.', '2.2hjhHhh14.hhH4h2.', '2.hhjhHhh14.hhHhhHh2.', '2.hhjhHhh14.hhHhhHh2.',
       '2.hhjhHhhh12.hhhHhhHh2.', '2.hhjhHhhh12.hhhHhhHh2.', '2.hhjhHhhH12.HhhHhhHh2.', '2.hhhhHhhH12.HhhHhhHh2.',
@@ -691,6 +722,7 @@ const HS = {
   },
   bob: {
     fem: true,
+    bow: true,
     down: G(0, 2, '10.12h10.', '8.4h3j9h8.', '6.4h5j10hH6.', '5.4h3j13h2H5.', '5.20h2H5.', '4.22h2H4.', '4.22h2H4.', '4.4hH6hH6hH3hHh4.', '4.4hH6hH6hH3h2H4.', '4.24h4.',
       '4.4h16.4h4.', '4.4h16.4h4.', '4.hjhh16.hhHh4.', '4.hjhh16.hhHh4.', '2.hhhjhh16.hhHhhh2.', '2.hhhjhh16.hhHhhh2.', '2.hhhjhhhh12.hhhhHhhh2.', '2.8H12.8H2.', '3.7H12.7H3.'),
     left: G(0, 2, '10.12h10.', '8.2h4j10h8.', '6.3h5j11hH6.', '5.4h4j12h2H5.', '5.20h2H5.', '4.22h2H4.', '4.hH20h2H4.', '4.3hH18h2H4.', '4.hhHhhH16h2H4.', '4.24h4.',
@@ -699,6 +731,7 @@ const HS = {
   },
   spiky: {
     ears: true,
+    bow: true,
     down: G(0, 0, ...SPIKES, '4.5h3j14h2H4.', '4.4h5j13h2H4.', '4.5h3j14h2H4.', '4.22h2H4.', '4.22h2H4.', '4.6hH6hH7hH2H4.', '4.5hH7hH6hHh2H4.',
       '4.6h2.8h2.6h4.', '4.5h4.6h4.5h4.', '4.4h6.4h6.4h4.', '4.4h16.4h4.', '4.3h18.3h4.', '4.2h20.2h4.'),
     left: G(0, 0, '.........h....h....h....h.......', '........hh...hh...hhh..hhh......', '.......hhhh.16h4.', '6.3h3j15h5.', '5.3h5j12h2H2h3.', '5.4h3j14h2H3h1.', '4.22h2H2h2.', '4.22h2Hh3.',
@@ -708,11 +741,13 @@ const HS = {
   twin: {
     fem: true,
     back: { down: TWIN_TAILS, left: TWIN_SIDE },
-    down: [G(0, 2, ...FRINGE, '4.5h4.2h4.h4.2hHh4.', '4.4h16.4h4.', '4.4h16.4h4.', '4.3h18.3h4.'), TWIN_BOWS],
-    left: [G(0, 2, ...SIDE, ...SIDE_BACK), G(24, 8, 'xxX', 'xXX')],
-    up: [G(0, 2, ...UPB, ...NAPE), TWIN_TAILS, TWIN_BOWS],
+    down: G(0, 2, ...FRINGE, '4.5h4.2h4.h4.2hHh4.', '4.4h16.4h4.', '4.4h16.4h4.', '4.3h18.3h4.'),
+    left: G(0, 2, ...SIDE, ...SIDE_BACK),
+    up: [G(0, 2, ...UPB, ...NAPE), TWIN_TAILS],
+    hat: { down: TWIN_BOWS, up: TWIN_BOWS, left: at(23, 6, BOW) },
   },
   afro: {
+    bow: true,
     down: G(0, 0,
       '7.5h.6h.5h7.', '4.5h3j16h4.', '2.5h6j15h2H2.', '1.5h7j7hH7h3H1.', '1.6h5j6hH9h3H1.', '8h3j9hH8h3H', '13hH15h3H', '1.11hH8hH6h3H1.', '7hH16hH4h3H', '3hH14hH10h3H', '1.9hH17h3H1.', '6hH14hH7h3H', '3hH4h16.4hH3H', '8h16.5h3H', '1.2hH4h16.3hHh2H1.', '1.7h16.5h2H1.', '2.H4h18.3h2H2.', '3.3H20.3H3.'),
     left: G(0, 0,
@@ -734,20 +769,22 @@ const HS = {
   bald: {
     ears: true,
     soft: true,
+    masc: true,
     skin: { down: G(10, 5, '.nnn', 'nnn.', 'nn..'), left: G(12, 5, '.nn', 'nnn', 'nn.'), up: G(11, 5, '.nnn', 'nnn.', 'nn..') },
     down: G(0, 9, '4.h22.h4.', '4.hh20.hH4.', '4.hhH18.hHH4.', '4.hhH18.hHH4.', '4.HH20.HH4.'),
     // horseshoe fringe: over the ear and round the back of the head (a band,
     // not a patch, so it never reads as an ear muff)
-    left: G(0, 10, '22.hhhhH5.', '16.hjhhhhhhHhH5.', '15.hjhhhHhhhhhH5.', '18.HhhhHhhhH5.', '21.hhHhhH5.', '22.hHhhH5.',
-      '22.hhHhH5.', '22.HhHhH5.', '23.HhHH5.', '24.HH6.'),
+    left: G(0, 10, '22.hjhhH5.', '16.hjjjhhhhhhH5.', '15.hhhhhhhhhhhH5.', '18.HHhhhhhhH5.', '21.hhhhhH5.', '22.hhHhH5.',
+      '22.hhHhH5.', '22.HhhhH5.', '23.HhhH5.', '24.HH6.'),
     up: G(0, 12, '5.2h4.2h6.2h4.2h5.', '4.24h4.', '4.5hH6hH5hH3h2H4.', '4.5hH6hH5hH3h2H4.', '5.HhhhH6hH5hH2h2H5.', '6.20H6.'),
   },
   mage: {
     ears: true,
+    masc: true,
     skin: { down: G(9, 6, 'nn', 'n.'), left: G(9, 6, 'nn', 'n.'), up: G(9, 5, 'nn', 'n.') },
     down: G(0, 0, '13.6h13.', '12.hjjhhhhH12.', '12.hjhhhhhH12.', '12.hhhhhhHH12.', '13.hhhhHH13.', '14.4H14.', '32.',
       '5.2h18.2h5.', '4.4h16.4h4.', '4.4h16.4h4.', '4.4h16.4h4.', '4.4h16.4h4.', '4.4h16.4h4.', '4.3H18.3H4.'),
-    left: G(0, 0, '10.13h9.', '9.hjjjjj7h2H8.', '9.5H8h2H8.', '17.6h2H7.', '18.5h2H7.', '20.3h2H7.', '22.3hH6.', '22.4h2H4.',
+    left: G(0, 0, '10.13h9.', '9.hjjjjj7h2H8.', '9.5H8h2H8.', '17.6h2H7.', '18.5h2H7.', '20.4h2H6.', '22.3hH6.', '22.4h2H4.',
       '18.8h2H4.', '18.8h2H4.', '16.10h2H4.', '16.10h2H4.', '18.8h2H4.', '18.8h2H4.', '20.4hH7.', '21.3h8.'),
     up: G(0, 0, '13.6h13.', '12.hhjjhhhH12.', '12.hhjhhhhH12.', '13.hhhhHH13.', '13.hhhhHH13.', '12.hhhhhhHH12.', '5.20h2H5.', '4.22h2H4.', ...UPB.slice(6), ...NAPE),
   },
@@ -783,7 +820,8 @@ function composeHD(look, view, f) {
   const face = hs.face !== false && view !== 'up';
   if (face) {
     const F = FACE_HD[view];
-    const fem = look.lashes != null ? look.lashes : !!(look.skirt || hs.fem);
+    // (a samurai's hakama is a skirt too: topknots, bald heads and beards stay masculine)
+    const fem = look.lashes != null ? !!look.lashes : !!((look.skirt || hs.fem) && !hs.masc && !look.beard);
     if (view === 'left') paint(NOSE_HD, Z_HEAD);
     paint(fem ? F.browF : F.brow, Z_HEAD);
     paint(F.eyes, Z_HEAD);
@@ -794,6 +832,7 @@ function composeHD(look, view, f) {
   }
   paint(hs[view], hs.soft ? Z_BEARD : Z_HAIR);
   if (hs.hat) paint(hs.hat[view], Z_HAT);
+  if (look.ribbon && hs.bow) paint(BOW_HD[view], Z_HAT);
   if (view === 'left') paint(ARM_HD[f], Z_ARM);
   // glasses sit on the face (a helmet hides them); from behind only the temple tips show
   if (look.glasses && hs.face !== false) paint((look.glasses === 'sun' ? SUN_HD : GLASSES_HD)[view], Z_GLASS);
