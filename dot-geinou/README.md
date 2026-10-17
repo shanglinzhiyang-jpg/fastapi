@@ -17,7 +17,7 @@ python3 -m http.server 8765
 | 移動 | 矢印キー / WASD | 十字パッド |
 | 話す・調べる・決定 | Z / Space / Enter | A ボタン（画面タップでも可） |
 | キャンセル・ダッシュ | X / Shift（押しながら移動でダッシュ） | B ボタン |
-| メニュー（ステータス・もちもの・セーブ） | Esc / C | MENU |
+| メニュー（ステータス・もちもの・てちょう・セーブ） | Esc / C | MENU |
 | 音のオン・オフ | M | メニューから |
 
 - **東京エリア**：NHK放送センター、ホリプロ、東宝、東映 撮影所、よしもと 東京本部、BSよしもと、
@@ -29,6 +29,13 @@ python3 -m http.server 8765
 - 体力はお仕事やレッスンで減り、ベッド（自宅・ホテル）で寝ると回復して次の日になります。
   食べ物・飲み物での回復は1日3回まで（メニューの「もちもの」に残り回数が出ます）。
 - 知名度で称号が上がります：無名 → 駆け出し → 若手 → 注目株 → 人気者 → 売れっ子 → スター → 国民的スター。
+- **メニュー → てちょう**：迷ったらここ。←→（十字パッドの左右）でタブを切りかえ、↑↓でスクロール、
+  A で次のページ、B でとじます。
+  - 「もくひょう」：今日の日付・体力・食事の残り回数・所持金と、いまの状況に合わせた次の目標
+    （受けられるオーディション、次の称号までの★、いまの段階のおすすめのお仕事と場所、最終公演まであと★いくつ）
+  - 「ばしょ」：行ったことのある場所と、そこでできること（オーディション・お仕事の★条件・レッスン・お店）。
+    まだ行っていない場所は「？？？」とヒントだけ表示されます
+  - 「きろく」：日数・プレイ時間・こなしたお仕事・ミニゲームの回数とベストランク・よく受けたお仕事・称号・所属
 
 > 実在の企業名・ロゴ（`assets/logos/`）は各社の商標・著作物です。本作は非公式のファンゲームで、
 > 登場人物はすべて架空です。公開・配布する場合は権利関係にご注意ください。
@@ -53,11 +60,13 @@ js/engine/            エンジン（触る前に相談）
   buildings.js        街の建物の外観
   logos.js            ロゴ看板（ドット化）
   ui.js               メッセージ・選択肢・ショップ・メニュー・HUD
+  notebook.js         メニューの「てちょう」（もくひょう／ばしょ／きろく）
   minigame.js         ミニゲームの基底クラス
   audio.js            効果音・BGM（chiptune）
   state.js            セーブデータ・称号・アイテム・事務所
   draw.js             描画ヘルパー（text, panel, bar ...）
 js/world/             街（tokyo, namba）と基本施設（home, konbini, station, misc）
+  guide.js            てちょう用の案内データ（場所ごとの要約・おもなお仕事と★条件）
 js/places/<id>.js     事務所・局・劇場など（1ファイル1施設）
 js/minigames/<id>.js  ミニゲーム（1ファイル1ゲーム）
 tools/                ヘッドレスブラウザでのテストツール
@@ -129,7 +138,7 @@ registerPlace({
 | --- | --- |
 | `await g.say(text \| [pages], { name, look, face, top })` | メッセージ。`{name}` はプレイヤー名、`\n` で改行。`face(ctx, x, y)` で 16x12 の顔を自前で描ける |
 | `await g.ask(text, ['はい', 'いいえ'], { name, look, cancel })` | 選択肢。選んだ index を返す（B は最後の選択肢） |
-| `await g.list({ title, items, x, y, w })` | リスト選択（キャンセルで -1） |
+| `await g.list({ title, items, x, y, w, index })` | リスト選択（キャンセルで -1。`index` はカーソルの初期位置） |
 | `await g.job({...})` | お仕事（下記）。結果 or null |
 | `await g.lesson({...})` | レッスン（スキルアップ） |
 | `await g.audition({...})` | 事務所オーディション（合格で所属）。true/false |
@@ -143,6 +152,7 @@ registerPlace({
 | `g.giveItem(id)` / `g.hasItem(id)` / `g.takeItem(id)` | アイテム |
 | `g.flag(k)` / `g.setFlag(k, v)` | フラグ（キーは施設IDを接頭辞に） |
 | `g.state` | `{ name, money, fame, stamina, skills: { warai, engi, uta, talk }, agency, day, items, flags, jobs }` |
+| `g.state.flags.visited` | 行ったことのある場所 `{ placeId: true }`。`g.goto` が記録する（古いセーブには無い → てちょうは施設IDで始まるフラグ・お仕事IDからも推測） |
 | `await g.fadeOut()` / `await g.fadeIn()` / `await g.wait(ms)` | 演出 |
 | `await g.moveNpc(id, 'up up left')` / `await g.movePlayer('down')` | 移動演出（`'face:left'` で向きだけ） |
 | `await g.emote('player' \| npcId, '!')` | 吹き出し（`! ? ♪ ♥ … 💢 w`） |
@@ -180,6 +190,10 @@ registerPlace({
 
 体力は1日100（＋食事 1日3回まで）。お仕事は 15〜30、レッスンは 10〜15。レッスン料 ¥2,000〜8,000 で スキル +3〜6。
 ★4000 に達するとエンジンが NHK から電話をかけ（`flags.finaleInvited`）、NHK で最終公演 → `g.ending()`。
+
+**てちょうの案内データ**：`js/world/guide.js` の `GUIDE`（場所ごとの名前・町・ヒント・要約 2〜3行）と
+`GUIDE_JOBS`（おもなお仕事の段階・条件・お仕事ID）を、メニューの「てちょう」が読みます。
+施設やお仕事・★条件を変えたら、ここも合わせて直してください（`id` は `g.job` の `id` と同じ。「よく受けたお仕事」に使います）。
 
 ### ミニゲーム
 

@@ -95,6 +95,49 @@ async function debugMenu(g) {
   }
 }
 
+// Touch devices: block what CSS (touch-action / user-select) cannot. iOS Safari
+// ignores user-scalable=no, so cancel its pinch gestures and multi-finger moves
+// (pointer events for the pad still fire), and long-press menus on the pad.
+// Desktop (no body.touch) keeps trackpad / browser zoom.
+function guardTouch() {
+  const touch = () => document.body.classList.contains('touch');
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => { if (touch()) e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchmove', (e) => { if (e.touches.length > 1 && e.cancelable && touch()) e.preventDefault(); }, { passive: false });
+  document.getElementById('pad').addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+// Small fullscreen toggle on the pad (CSS shows it only with body.fs-ok, and
+// the pad itself only on touch devices). Skipped where the API is missing
+// (e.g. iPhone Safari).
+function setupFullscreen(g) {
+  const btn = document.getElementById('fs');
+  const root = document.documentElement;
+  const canRequest = root.requestFullscreen || root.webkitRequestFullscreen;
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  if (!btn || !canRequest || !exit || !(document.fullscreenEnabled || document.webkitFullscreenEnabled)) return;
+  const current = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const sync = () => {
+    const on = !!current();
+    document.body.classList.toggle('fullscreen', on);
+    btn.setAttribute('aria-label', on ? '全画面を終了' : '全画面');
+    btn.setAttribute('aria-pressed', String(on));
+  };
+  btn.addEventListener('pointerdown', (e) => e.preventDefault()); // no focus, no text selection
+  btn.addEventListener('click', () => {
+    btn.blur();
+    try {
+      const p = current() ? exit.call(document)
+        : root.requestFullscreen ? root.requestFullscreen({ navigationUI: 'hide' }) : root.webkitRequestFullscreen();
+      if (p && p.catch) p.catch(() => {});
+    } catch (e) { /* refused: stay as is */ }
+  });
+  for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
+    document.addEventListener(ev, () => { sync(); g.resize(); setTimeout(() => g.resize(), 250); });
+  }
+  sync();
+  document.body.classList.add('fs-ok');
+}
+
 async function boot() {
   const canvas = document.getElementById('game');
   // On-screen pad: phones/tablets (coarse primary pointer) get it from the start.
@@ -118,9 +161,11 @@ async function boot() {
   g.newState = newState;
   g.input.bindTouch({
     dpad: document.getElementById('dpad'),
-    buttons: Array.from(document.querySelectorAll('#pad button')),
+    buttons: Array.from(document.querySelectorAll('#pad button[data-k]')),
     screen: canvas,
   });
+  guardTouch();
+  setupFullscreen(g);
   g.setBase(loadingScene('よみこみ中…'));
   g.start();
   try {

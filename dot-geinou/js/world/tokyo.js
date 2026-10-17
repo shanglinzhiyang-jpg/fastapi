@@ -1,12 +1,20 @@
 // 東京エリア: the main town. Most agencies and TV stations are here.
 
-import { registerPlace } from '../engine/map.js';
+import { registerPlace, PLACES } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
 import { grid, set, put, fill, hroad, vroad, border } from './townkit.js';
 import { fountain, train, taxi, busStop, streetStage, statue } from './props.js';
-
 export const TOKYO_W = 60;
 export const TOKYO_H = 46;
+
+// The landlady's talk and the apartment upgrades live in home.js, which puts the
+// talk on its place definition. Looked up when she is spoken to (no import), so a
+// broken home.js or title.js cannot take the whole town down with it.
+async function oyaTalk(g, npc) {
+  const talk = PLACES.home && PLACES.home.oyaTalk;
+  if (talk) { await talk(g, npc); return; }
+  await g.say(['あら{name}ちゃん、おでかけ？', '疲れたら部屋のベッドでゆっくり休むのよ。'], { name: npc.name, look: npc.look });
+}
 
 // Street performance in the park: available to everyone, small reward.
 async function streetLive(g) {
@@ -122,8 +130,7 @@ function generate() {
 
     // NPCs
     {
-      type: 'npc', id: 'oya', x: 6, y: 30, dir: 'down', look: LOOKS.oldwoman, name: '大家さん',
-      text: ['あら{name}ちゃん、おでかけ？', '芸能界で売れたいなら、まずは事務所に所属することね。よしもとさんとか、グレープカンパニーさんとか、ホリプロさんとか…このあたりにいっぱいあるわよ。', '疲れたら部屋のベッドでゆっくり休むのよ。'],
+      type: 'npc', id: 'oya', x: 6, y: 30, dir: 'down', look: LOOKS.oldwoman, name: '大家さん', talk: oyaTalk,
     },
     {
       type: 'npc', id: 'street_comedian', x: 10, y: 36, dir: 'down', look: LOOKS.comedian, name: 'ストリート芸人',

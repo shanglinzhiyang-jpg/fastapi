@@ -13,8 +13,11 @@
   <div id="screen"><canvas id="game" width="320" height="240" aria-label="ゲーム画面"></canvas></div>
   <div id="pad" aria-hidden="true">
     <div id="dpad"><div class="arrow up">▲</div><div class="arrow left">◀</div><div class="arrow right">▶</div><div class="arrow down">▼</div></div>
-    <div id="sys"><button data-k="menu">MENU</button></div>
-    <div id="ab"><button class="btn b" data-k="b">B</button><button class="btn a" data-k="a">A</button></div>
+    <div id="sys">
+      <button id="fs" type="button" tabindex="-1" aria-label="全画面"><svg viewBox="0 0 10 10" aria-hidden="true" fill="currentColor"><path class="fs-enter" d="M0 0h4v1H1v3H0zM6 0h4v4H9V1H6zM0 6h1v3h3v1H0zM9 6h1v4H6V9h3z"/><path class="fs-exit" d="M3 0h1v4H0V3h3zM6 0h1v3h3v1H6zM0 6h4v4H3V7H0zM6 6h4v1H7v3H6z"/></svg></button>
+      <button type="button" tabindex="-1" data-k="menu">MENU</button>
+    </div>
+    <div id="ab"><button type="button" tabindex="-1" class="btn b" data-k="b">B</button><button type="button" tabindex="-1" class="btn a" data-k="a">A</button></div>
   </div>
   <div id="help">Aボタン（決定）: Z / Space / Enter　Bボタン（キャンセル・ダッシュ）: X / Shift　移動: 矢印 / WASD　メニュー: Esc / C　音: M</div>
 </div>

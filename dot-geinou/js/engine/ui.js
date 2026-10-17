@@ -6,6 +6,7 @@ import { text, wrap, panel, cursor, downArrow, bar, measure, rect, COLORS } from
 import { drawFace } from './sprites.js';
 import { audio } from './audio.js';
 import { SKILLS, SKILL_MAX, ITEMS, AGENCIES, rankName, RANKS, rankIndex } from './state.js';
+import { NotebookScene } from './notebook.js';
 
 const BOX = { x: 4, y: 172, w: 312, h: 64 };
 const LINE_H = 17;
@@ -148,9 +149,9 @@ export class ChoiceBox {
 
 // Standalone list chooser that stays open (used by menus).
 export class ListScene {
-  constructor(g, { title, items, x = 8, y = 8, w = 180, cancel = -1, describe = null, onDraw = null }, resolve) {
+  constructor(g, { title, items, x = 8, y = 8, w = 180, cancel = -1, describe = null, onDraw = null, index = 0 }, resolve) {
     Object.assign(this, { g, title, items, x, y, w, cancel, describe, onDraw, resolve });
-    this.idx = 0;
+    this.idx = clamp(index | 0, 0, Math.max(0, items.length - 1)); // index: where the cursor starts
     this.t = 0;
   }
   update(g) {
@@ -351,21 +352,28 @@ export class ShopScene {
 
 // ---------------------------------------------------------------- pause menu
 export async function openMenu(g) {
+  let last = 0; // back from a sub-screen, the cursor stays on that entry
   for (;;) {
-    const items = ['ステータス', 'もちもの', 'セーブ', audio.muted ? '音：OFF' : '音：ON', 'とじる'];
-    if (g.debugMenu) items.push('デバッグ');
-    const i = await g.list({ items, x: W - 112, y: 46, w: 104 });
-    if (i === 5 && g.debugMenu) { await g.debugMenu(); continue; }
-    if (i === 0) await new Promise((r) => g.push(new StatusScene(g, r)));
-    else if (i === 1) await itemMenu(g);
-    else if (i === 2) {
+    const entries = [
+      ['ステータス', 'status'], ['もちもの', 'items'], ['てちょう', 'notebook'], ['セーブ', 'save'],
+      [audio.muted ? '音：OFF' : '音：ON', 'sound'], ['とじる', 'close'],
+    ];
+    if (g.debugMenu) entries.push(['デバッグ', 'debug']);
+    const i = await g.list({ items: entries.map((e) => e[0]), x: W - 112, y: 46, w: 104, index: last });
+    if (i >= 0) last = i;
+    const act = i >= 0 && entries[i] ? entries[i][1] : 'close';
+    if (act === 'debug') { await g.debugMenu(); continue; }
+    if (act === 'status') await new Promise((r) => g.push(new StatusScene(g, r)));
+    else if (act === 'items') await itemMenu(g);
+    else if (act === 'notebook') await new Promise((r) => g.push(new NotebookScene(g, r)));
+    else if (act === 'save') {
       if (g.map && g.map.place && g.map.place.noSave) {
         await g.say('ここではセーブできないみたいだ。');
       } else if (g.save()) {
         audio.sfx('success');
         await g.say('セーブしました。');
       } else await g.say('セーブできませんでした…');
-    } else if (i === 3) {
+    } else if (act === 'sound') {
       audio.unlock();
       audio.toggleMute();
     } else return;

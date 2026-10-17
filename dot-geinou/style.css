@@ -8,8 +8,11 @@ html, body {
   margin: 0; height: 100%; background: #0b0d1a; color: #cfd3e6;
   font-family: "DotGothic16", monospace;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
-  overscroll-behavior: none; touch-action: none;
+  /* no pinch / double-tap zoom, pull-to-refresh, rubber-banding or tap flashes */
+  overscroll-behavior: none; touch-action: none; -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
 }
+body.touch { overflow: hidden; }
 /* Touch control sizes (shrink on narrow phones so nothing squashes or overlaps). */
 body { --dpad: min(150px, 36vw); --btn: min(64px, 16vw); --abgap: min(14px, 3vw); }
 #app { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
@@ -30,14 +33,53 @@ body.touch #help { display: none; }
 #dpad .arrow.on { background: #3b4380; color: #fff; }
 #dpad .up { left: 33.33%; top: 0; } #dpad .down { left: 33.33%; bottom: 0; }
 #dpad .left { left: 0; top: 33.33%; } #dpad .right { right: 0; top: 33.33%; }
-#sys { grid-column: 2; justify-self: center; align-self: end; }
+#sys { grid-column: 2; justify-self: center; align-self: end; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 #sys button { font-family: inherit; font-size: 12px; color: #cfd3e6; background: #1a1e3a; border: 2px solid #2d335f; border-radius: 12px;
   min-width: 52px; min-height: 44px; padding: 0 10px; touch-action: none; }
+/* Fullscreen toggle: only shown where the Fullscreen API exists (main.js adds body.fs-ok). */
+#sys #fs { display: none; align-items: center; justify-content: center; color: #8d94c4; }
+body.fs-ok #sys #fs { display: flex; }
+#sys #fs:active { background: #3b4380; color: #fff; }
+#fs svg { width: 20px; height: 20px; shape-rendering: crispEdges; }
+#fs .fs-exit, body.fullscreen #fs .fs-enter { display: none; }
+body.fullscreen #fs .fs-exit { display: inline; }
 #ab { grid-column: 3; display: flex; gap: var(--abgap); align-items: center; transform: rotate(-15deg); }
 #ab .btn { flex: none; width: var(--btn); height: var(--btn); padding: 0; border-radius: 50%; font-family: inherit; font-size: 22px; color: #fff; border: none; touch-action: none; }
 #ab .a { background: #d64161; box-shadow: 0 4px 0 #8e2238; margin-top: -24px; }
 #ab .b { background: #4157d6; box-shadow: 0 4px 0 #24318e; }
 #ab .btn.on, #sys button.on { transform: translateY(3px); box-shadow: none; filter: brightness(1.2); }
+
+/* Phone portrait: the game screen sits at the top (below the safe area) at full
+   width, the pad directly below it, and any spare height stays at the bottom.
+   #screen gets a definite height from the viewport width (never from the
+   canvas): exactly what the engine needs for a full-width 4:3 canvas
+   (engine: width < 400 -> full width, else width - 8; height - 8 slack).
+   If the phone is too short it shrinks (flex) and the canvas fits the height. */
+@media (orientation: portrait) and (max-width: 600px) {
+  body.touch #app { justify-content: flex-start; gap: 0; }
+  body.touch #screen { flex: 0 1 auto;
+    height: calc((100vw - env(safe-area-inset-left) - env(safe-area-inset-right)) * 0.75 + 9px); }
+  body.touch #game { bottom: auto; margin: 0 auto; }
+  /* fullscreen toggle: in the spare area, just below MENU (away from A/B) */
+  body.touch #sys { position: relative; }
+  body.touch #sys #fs { position: absolute; top: calc(100% + 16px); left: 0; right: 0; }
+  /* reserve its room inside the pad, so it never ends up off-screen */
+  body.touch.fs-ok #pad { padding-bottom: calc(max(16px, env(safe-area-inset-bottom)) + 60px); }
+}
+/* 400px and wider: the engine keeps an 8px side margin (box width - 8), so the
+   box reaches 4px past each edge and the canvas still gets the full width;
+   #app clips that overflow (no sideways scroll). */
+@media (orientation: portrait) and (min-width: 400px) and (max-width: 600px) {
+  body.touch #app { overflow: hidden; overflow: clip; }
+  body.touch #screen { width: calc(100% + 8px); margin: 0 -4px; }
+}
+/* Short portrait screen (no spare room below MENU): stack the toggle above
+   MENU as on tablets (the d-pad row is taller than both), so the optional
+   button never costs the game any size. */
+@media (orientation: portrait) and (max-width: 600px) and (min-aspect-ratio: 5/7) {
+  body.touch #sys #fs { position: static; }
+  body.touch.fs-ok #pad { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
 
 /* Phone landscape: d-pad in a left column, A/B in a right column, the game
    screen in between (inside the safe area), MENU in the top-right corner. */
@@ -52,6 +94,7 @@ body.touch #help { display: none; }
     padding: 0 max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
   body.touch #pad > * { pointer-events: auto; }
   body.touch #sys { position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
+  body.touch #sys #fs { position: fixed; top: max(8px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); }
   body.touch #ab { grid-column: 3; transform: none; flex-direction: column-reverse; align-items: stretch; gap: 4px; width: calc(var(--btn) * 1.6); }
   body.touch #ab .a { margin-top: 0; align-self: flex-end; }
   body.touch #ab .b { align-self: flex-start; }

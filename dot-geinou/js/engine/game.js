@@ -348,6 +348,9 @@ export class Game {
       x = e.x; y = e.y; dir = e.dir || dir;
     }
     const changedPlace = this.map.placeId !== placeId;
+    // てちょう「ばしょ」: remember every place the player has been to (old saves simply lack it)
+    const fl = this.state && this.state.flags;
+    if (fl && !(fl.visited && fl.visited[placeId])) fl.visited = { ...(fl.visited || {}), [placeId]: true };
     if (fade && this.fade < 1) await this.fadeOut();
     this.map.load(placeId, roomId, x, y, dir);
     if (this.scenes[0] !== this.map) this.setBase(this.map);

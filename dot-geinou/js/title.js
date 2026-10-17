@@ -107,80 +107,137 @@ const SKIN_NAMES = { light: 'しろめ', fair: 'ふつう', tan: 'こむぎ', br
 const GLASSES = [false, true, 'sun'];
 const GLASSES_NAMES = ['なし', 'メガネ', 'サングラス'];
 
+// opts (all optional): { look, name, closet }
+//   new game: new CreateScene(g, resolve)  -> resolve({ name, look })
+//   closet:   new CreateScene(g, resolve, { look, name, closet: true })
+//             starts from the given look, the name row is hidden (the name stays),
+//             B or 「やめる」 cancels -> resolve(null), otherwise resolve({ name, look }).
 export class CreateScene {
-  constructor(g, resolve) {
+  constructor(g, resolve, opts = {}) {
     this.g = g;
     this.resolve = resolve;
     this.t = 0;
     this.row = 0;
     this.opaque = true;
-    this.name = NAMES[0];
+    this.closet = !!opts.closet;
+    this.name = opts.name || NAMES[0];
+    this.base = opts.look ? { ...opts.look } : null;
+    // per-scene option lists: a look the editor cannot make (special colour etc.) is kept as an extra first entry
+    this.lists = { style: STYLES.slice(), hairc: HAIRC.slice(), skin: SKINS.slice(), top: TOPS.slice(), bottom: BOTTOMS.slice(), glasses: GLASSES.slice() };
     this.v = { style: 0, hairc: 0, skin: 1, top: 0, bottom: 0, skirt: 0, glasses: 0 };
+    if (this.base) this.fromLook(this.base);
     this.naming = null;
+  }
+  fromLook(look) {
+    const at = (key, val) => {
+      const list = this.lists[key];
+      let i = list.indexOf(val);
+      if (i < 0) { list.unshift(val); i = 0; }
+      return i;
+    };
+    // defaults match the sprite palette (sprites.js) so an incomplete look keeps its appearance
+    this.v.style = at('style', look.hair || 'short');
+    this.v.hairc = at('hairc', look.hairColor || 'black');
+    this.v.skin = at('skin', look.skin || 'fair');
+    this.v.top = at('top', look.top || '#d64161');
+    this.v.bottom = at('bottom', look.bottom || '#3a4a7a');
+    this.v.skirt = look.skirt ? 1 : 0;
+    this.v.glasses = at('glasses', look.glasses || false);
+    this.top0 = this.v.top; // the hat keeps its colour until the top changes
   }
   look() {
     const v = this.v;
-    return {
-      hair: STYLES[v.style], hairColor: HAIRC[v.hairc], skin: SKINS[v.skin], top: TOPS[v.top], bottom: BOTTOMS[v.bottom],
-      skirt: v.skirt === 1, glasses: GLASSES[v.glasses], hat: TOPS[(v.top + 3) % TOPS.length],
+    const L = this.lists;
+    const look = {
+      hair: L.style[v.style], hairColor: L.hairc[v.hairc], skin: L.skin[v.skin], top: L.top[v.top], bottom: L.bottom[v.bottom],
+      skirt: v.skirt === 1, glasses: L.glasses[v.glasses],
+      // closet: the hat keeps its colour (or the sprite default when the look had none) until the top changes
+      hat: this.base && v.top === this.top0 ? this.base.hat : L.top[(v.top + 3) % L.top.length],
     };
+    if (look.hat === undefined) delete look.hat;
+    return this.base ? { ...this.base, ...look } : look;
   }
+  // [label, value, key]; key = what ◀▶ changes ('name' / a key of this.v / 'done' / 'cancel')
   rows() {
     const v = this.v;
-    return [
-      ['なまえ', this.name],
-      ['かみがた', STYLE_NAMES[STYLES[v.style]]],
-      ['かみのいろ', HAIRC_NAMES[HAIRC[v.hairc]]],
-      ['はだのいろ', SKIN_NAMES[SKINS[v.skin]]],
-      ['トップス', '■'],
-      ['ボトムス', '■'],
-      ['スカート', v.skirt ? 'あり' : 'なし'],
-      ['めがね', GLASSES_NAMES[v.glasses]],
-      ['これでけってい！', ''],
-    ];
+    const L = this.lists;
+    const rows = [];
+    if (!this.closet) rows.push(['なまえ', this.name, 'name']);
+    rows.push(
+      ['かみがた', STYLE_NAMES[L.style[v.style]] || 'いまの髪型', 'style'],
+      ['かみのいろ', HAIRC_NAMES[L.hairc[v.hairc]] || 'いまの色', 'hairc'],
+      ['はだのいろ', SKIN_NAMES[L.skin[v.skin]] || 'いまの色', 'skin'],
+      ['トップス', '■', 'top'],
+      ['ボトムス', '■', 'bottom'],
+      ['スカート', v.skirt ? 'あり' : 'なし', 'skirt'],
+      ['めがね', GLASSES_NAMES[GLASSES.indexOf(L.glasses[v.glasses])] || 'いまのメガネ', 'glasses'],
+    );
+    if (this.closet) rows.push(['これでOK！', '', 'done'], ['やめる', '', 'cancel']);
+    else rows.push(['これでけってい！', '', 'done']);
+    return rows;
   }
   change(d) {
     const v = this.v;
-    const lens = [0, STYLES.length, HAIRC.length, SKINS.length, TOPS.length, BOTTOMS.length, 2, 3];
-    const keys = [null, 'style', 'hairc', 'skin', 'top', 'bottom', 'skirt', 'glasses'];
-    const k = keys[this.row];
-    if (!k) {
-      if (this.row === 0) { const i = NAMES.indexOf(this.name); this.name = NAMES[((i < 0 ? 0 : i) + d + NAMES.length) % NAMES.length]; audio.sfx('cursor'); }
+    const k = this.rows()[this.row][2];
+    if (k === 'name') {
+      const i = NAMES.indexOf(this.name);
+      this.name = NAMES[((i < 0 ? 0 : i) + d + NAMES.length) % NAMES.length];
+      audio.sfx('cursor');
       return;
     }
-    v[k] = (v[k] + d + lens[this.row]) % lens[this.row];
+    if (!(k in v)) return;
+    const len = k === 'skirt' ? 2 : this.lists[k].length;
+    v[k] = (v[k] + d + len) % len;
     audio.sfx('cursor');
+  }
+  finish(result) {
+    this.g.pop(this);
+    this.resolve(result);
   }
   update(g) {
     this.t++;
     const inp = g.input;
-    const n = this.rows().length;
+    // headless autoplay (tests): the closet closes without changing anything
+    if (this.closet && g.auto) { this.finish(null); return; }
+    const rows = this.rows();
+    const n = rows.length;
     if (inp.repeat('up')) { this.row = (this.row + n - 1) % n; audio.sfx('cursor'); }
     if (inp.repeat('down')) { this.row = (this.row + 1) % n; audio.sfx('cursor'); }
     if (inp.repeat('left')) this.change(-1);
     if (inp.repeat('right')) this.change(1);
+    if (this.closet && inp.pressed('b') && this.t > 10) { audio.sfx('cancel'); this.finish(null); return; }
     if (inp.pressed('a') && this.t > 10) {
-      if (this.row === 0) {
+      const k = rows[this.row][2];
+      if (k === 'name') {
         audio.sfx('ok');
         let name = null;
         try { name = window.prompt('なまえを入力してください（8文字まで）', this.name); } catch (e) { name = null; }
         g.input.releaseAll();
         if (name && name.trim()) this.name = Array.from(name.trim()).slice(0, 8).join('');
-      } else if (this.row === n - 1) {
+      } else if (k === 'done') {
         audio.sfx('ok');
-        g.pop(this);
-        this.resolve({ name: this.name, look: this.look() });
+        this.finish({ name: this.name, look: this.look() });
+      } else if (k === 'cancel') {
+        audio.sfx('cancel');
+        this.finish(null);
       } else this.change(1);
     }
   }
   draw(ctx, g) {
-    skyline(ctx, this.t + 500);
-    panel(ctx, 8, 8, W - 16, H - 16);
-    text(ctx, 'キャラクターをつくろう', W / 2, 16, { size: 12, align: 'center', color: COLORS.accent });
+    if (this.closet) closetBg(ctx, this.t);
+    else skyline(ctx, this.t + 500);
+    panel(ctx, 8, 8, W - 16, H - 16, this.closet ? { bg: '#2a1f30' } : {});
+    text(ctx, this.closet ? 'クローゼットで着がえよう' : 'キャラクターをつくろう', W / 2, 16, { size: 12, align: 'center', color: COLORS.accent });
     const sheet = charSheet(this.look());
     const dirs = ['down', 'left', 'up', 'right'];
     const dir = dirs[Math.floor(this.t / 50) % 4];
     const frame = [1, 0, 2, 0][Math.floor(this.t / 10) % 4];
+    if (this.closet) {
+      // a full-length mirror behind the preview
+      ctx.fillStyle = '#c9a227'; ctx.fillRect(30, 40, 76, 104);
+      ctx.fillStyle = '#8fb8d8'; ctx.fillRect(33, 43, 70, 98);
+      ctx.fillStyle = '#b8daf0'; ctx.fillRect(37, 47, 6, 30); ctx.fillRect(45, 47, 3, 18);
+    }
     ctx.save();
     ctx.translate(36, 52);
     ctx.scale(4, 4);
@@ -190,24 +247,44 @@ export class CreateScene {
     ctx.restore();
     text(ctx, this.name, 68, 150, { align: 'center', color: COLORS.accent });
     const rows = this.rows();
-    rows.forEach(([label, value], i) => {
+    rows.forEach(([label, value, key], i) => {
       const y = 38 + i * 19;
       const sel = i === this.row;
       text(ctx, label, 140, y, { color: sel ? COLORS.accent : '#fff' });
-      if (i === 4 || i === 5) {
-        const col = i === 4 ? TOPS[this.v.top] : BOTTOMS[this.v.bottom];
+      if (key === 'top' || key === 'bottom') {
+        const col = this.lists[key][this.v[key]];
         ctx.fillStyle = '#000'; ctx.fillRect(239, y + 1, 30, 11);
         ctx.fillStyle = col; ctx.fillRect(240, y + 2, 28, 9);
       } else if (value) text(ctx, value, 254, y, { align: 'center', color: sel ? COLORS.accent : COLORS.cyan });
       if (sel) {
         cursor(ctx, 128, y + 2, this.t);
-        if (i > 0 && i < rows.length - 1) {
-          text(ctx, '◀', 214, y, { size: 10, color: COLORS.dim });
-          text(ctx, '▶', 288, y, { size: 10, color: COLORS.dim });
+        if (key in this.v) {
+          // long values (ツインテール…) push the arrows out so they never touch the text
+          const half = value && value !== '■' ? measure(ctx, value, 12) / 2 : 0;
+          text(ctx, '◀', Math.min(214, 254 - half - 12), y, { size: 10, color: COLORS.dim });
+          text(ctx, '▶', Math.max(288, 254 + half + 4), y, { size: 10, color: COLORS.dim });
         }
       }
     });
-    const help = this.row === 0 ? 'A：なまえを入力　◀▶：候補から選ぶ' : this.row === rows.length - 1 ? 'Aでゲームスタート！' : '◀▶で変更　▲▼で項目えらび';
+    const k = rows[this.row][2];
+    let help;
+    if (this.closet) help = k === 'done' ? 'Aで着がえる' : k === 'cancel' ? 'Aでやめる（もとのまま）' : '◀▶で変更　▲▼で項目えらび　Bでやめる';
+    else help = k === 'name' ? 'A：なまえを入力　◀▶：候補から選ぶ' : k === 'done' ? 'Aでゲームスタート！' : '◀▶で変更　▲▼で項目えらび';
     text(ctx, help, W / 2, H - 28, { size: 10, align: 'center', color: COLORS.dim });
+  }
+}
+
+// Closet backdrop: a wooden wardrobe with clothes on a rail.
+function closetBg(ctx, t) {
+  ctx.fillStyle = '#5a3a20';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#6e4428';
+  for (let x = 0; x < W; x += 16) ctx.fillRect(x, 0, 14, H);
+  ctx.fillStyle = '#c9a227';
+  ctx.fillRect(0, 3, W, 2);
+  for (let i = 0; i < 20; i++) {
+    const x = i * 17 + 2 + Math.round(Math.sin(t / 30 + i) * 1);
+    ctx.fillStyle = TOPS[i % TOPS.length];
+    ctx.fillRect(x, 5, 12, 3);
   }
 }
