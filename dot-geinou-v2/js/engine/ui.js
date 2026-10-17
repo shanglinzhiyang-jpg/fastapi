@@ -324,7 +324,7 @@ export class StatusScene {
     const X = 80, Y = 12, PW = SW - 160, PH = SH - 24;
     panel(ctx, X, Y, PW, PH);
     rect(ctx, X + 18, Y + 18, 76, 60, '#0b1030');
-    drawFaceHD(ctx, st.look || {}, X + 24, Y + 22, 2.25);
+    drawFaceHD(ctx, st.look || {}, X + 24, Y + 24, 2);
     text(ctx, st.name, X + 110, Y + 18, { size: 24, color: COLORS.accent });
     text(ctx, `${rankName(st.fame)}　★${st.fame}`, X + 110, Y + 50, { size: FS, color: COLORS.pink });
     const ri = rankIndex(st.fame);
