@@ -10,11 +10,13 @@
 //                                 水曜は特売日（食材・お惣菜 2割引）
 //   cafe     CAFE ドット          drinks & sweets: stress relief, a little hunger
 //   karaoke  カラオケ ドットボックス  free time ¥1,200/day → sing (the 'rhythm' minigame):
-//                                 歌 +1 (3 times a day) and stress -25 on a good rank (S/A/B)
+//                                 歌 +1 (3 times a day) and stress -25 on a good rank (S/A/B),
+//                                 fading with each song of the day (25/15/8/4, bad 10/6/3/2)
 //   gym      DOT GYM              ¥1,000 a day: workout (stress -15, hunger -10, clean -20);
 //                                 every 5 training days max stamina +2 (up to +20); shower
-//   salon    hair salon ドット     ¥4,000: clean 100 + 'styled' (the next day's work earns
-//                                 +10% fame: paid the next morning by an onMorning hook)
+//   salon    hair salon ドット     ¥4,000 cut (once every SALON_CUT_DAYS days): clean 100 +
+//                                 'styled' (the next day's work earns +10% fame, up to 300:
+//                                 paid the next morning by an onMorning hook); ¥1,500 shampoo
 //   ramen    らーめん まるどっと亭  ramen (hunger +60, stamina +30), stamp card
 //   famires  ファミレス ドットキッチン  cheap meals, drink bar
 //   hanaya   フラワー＆ギフト はなや   gifts (shared ids registered by people.js)
@@ -22,10 +24,11 @@
 //
 // flags (all prefixed machi_): machi_karaoke_day, machi_karaoke_songs (`${day}:${n}`),
 //   machi_gym_day, machi_gym_count, machi_gym_bonus, machi_styled ({ day, fame, jobs }),
+//   machi_cut_day (day of the last salon cut),
 //   machi_ramen_stamps, machi_jog (`${day}:${n}`), machi_bench_day, machi_drinkbar_day,
 //   machi_met_* (first-visit lines), machi_cat_day, machi_gym_done (day of the counted
-//   workout), machi_treat_<drink|aroma|bathsalt> (`${day}:${n}`: paid relief fades after
-//   a couple a day), machi_intro, machi_kaicho.
+//   workout), machi_treat_<drink|aroma|bathsalt|salon|laundry|shower> (`${day}:${n}`: paid
+//   relief fades after a couple a day), machi_intro, machi_kaicho.
 // Every person, shop and brand here is fictional.
 
 import { registerPlace } from '../engine/map.js';
@@ -61,6 +64,8 @@ function treat(g, kind, stress, full = 2) {
   const n = bumpDay(g, 'machi_treat_' + kind);
   return n <= full ? { stress, tired: false } : { stress: Math.max(1, Math.round(stress / 4)), tired: true };
 }
+// A small side relief (laundry, a shower) that only counts once a day.
+const onceADay = (g, kind, stress) => (bumpDay(g, 'machi_treat_' + kind) === 1 ? stress : 0);
 
 // A short "time passes" beat.
 async function beat(g, sfx = ['drum'], ms = 300) {
@@ -126,7 +131,7 @@ function goods(list, sale = 1) {
 }
 
 // ====================================================================== items
-registerItem('machi_korokke', { name: '肉屋のコロッケ', price: 100, heal: 10, fill: 18, desc: '揚げたてサクサク！\n体力が10回復する。（満腹 +18）' });
+registerItem('machi_korokke', { name: 'お惣菜コロッケ', price: 100, heal: 10, fill: 18, desc: '揚げたてサクサク！\n体力が10回復する。（満腹 +18）' });
 registerItem('machi_bento', { name: 'まるどっと弁当', price: 380, heal: 35, fill: 55, desc: 'スーパーの手作り弁当。からあげ入り。\n体力が35回復する。' });
 registerItem('machi_cupmen', { name: 'カップめん', price: 180, heal: 12, fill: 35, desc: 'お湯を入れて3分。\n体力が12回復する。（満腹 +35）' });
 registerItem('machi_banana', { name: 'バナナ', price: 60, heal: 6, fill: 12, desc: 'トレーニングのおともに。\n体力が6回復する。' });
@@ -878,7 +883,7 @@ const NOTICES = [
   '【お知らせ】毎週水曜日は「スーパー まるどっと」の特売日！\n食材とお惣菜が2割引です。',
   '【住まいのこと】家賃は毎週月曜日の朝にお支払い。\nお部屋さがしは「ドット不動産」へ。',
   '【健康づくり】DOT GYMで5日トレーニングするたびに、\n体力の最大値がアップ！（最大+20）',
-  '【気分転換】カラオケ、ジョギング、銭湯…。\nストレスがたまると、お仕事の調子も落ちますよ。',
+  '【気分転換】カラオケ、ジョギング、カフェ…。\nストレスがたまると、お仕事の調子も落ちますよ。',
   '【身だしなみ】hair salon ドットで整えた日は、\nお仕事の評判が上がるかも？',
   '【自炊のすすめ】スーパーで食材を買って、家で料理しよう。\nカレーは2皿分できて、お弁当にもなります。',
   '【迷いネコ】…ではありません。看板ネコの「コロッケ」です。\nシャッターの前で、よくひなたぼっこしています。',
@@ -896,7 +901,7 @@ async function laundry(g) {
   g.sfx('coin');
   const a = snap(g);
   await beat(g, ['cursor', 'cursor', 'cursor', 'chime'], 260);
-  g.relax({ clean: 25, stress: 3 });
+  g.relax({ clean: 25, stress: onceADay(g, 'laundry', 3) });
   await g.say(['ゴウン、ゴウン…。\n待っているあいだ、置いてあったマンガを読んだ。', `洗いたてのシャツは、お日さまのにおい！\n${diffText(g, a)}`]);
 }
 
@@ -976,12 +981,13 @@ async function kaichoTalk(g, npc) {
     lines.push(g.flag('yoshimoto_matsuri_met')
       ? 'おっ、{name}さんやないか！\nよう来てくれたな。\nここが、うちの商店街や！'
       : 'おっ、見ん顔やな。\nようこそ、ドット商店街へ！\nわしは、この商店街の会長や。');
+    lines.push('こんなしゃべり方やけど、生まれは大阪でな。\nこの商店街に来て、もう四十年や。\nすっかり東京の商店街の顔やで！');
   }
   lines.push(
     '食材ならスーパー、腹ごしらえはラーメン屋。\n疲れたらカフェでひと休み、\n汗を流すならジムやで。',
     'お部屋さがしはドット不動産、\n家具ならドット家具。\n暮らしのことなら、なんでもそろうで！',
   );
-  if (matsuri) lines.push('夏まつりのステージ、ほんまおおきに！\n商店街のみんな、いまだに\nあの話で盛り上がっとるで。');
+  if (matsuri) lines.push('お祭りのステージ、ほんまおおきに！\n商店街のみんな、いまだに\nあの話で盛り上がっとるで。');
   else if (g.state.agency) lines.push('ときどき、よしもと 東京本部のロビーで\nお祭りに出てくれる芸人さんを探しとるんや。\n見かけたら、声かけてや！');
   if (g.state.fame >= 1000) lines.push('{name}さんが来てくれるおかげで、\n商店街もずいぶんにぎやかになったわ！\nわっはっは。');
   else lines.push('暮らしを整えるのも、芸の肥やしや。\nよう食べて、よう休んで、よう笑う！\nこれがいちばんやで。');
@@ -1236,6 +1242,8 @@ async function superClerk(g, npc) {
   else if (i === 2) {
     await g.say([
       '食材をそろえて、お家のキッチンで料理すると\nお惣菜より安上がりで、体にもいいんですよ。',
+      'はじめてなら、肉野菜炒めがおすすめ！\n豚こま肉とキャベツがあれば、できますよ。\nお米と卵なら、卵かけごはんも。',
+      '食材の説明には、その食材を使う料理が\n書いてあります。お買い物の参考にどうぞ！',
       'カレーは2皿分できるから、1皿はお弁当に。\nお弁当は、お仕事の合間に食べられます。',
       '作ったことのない料理には「★」がついてます。\nいろいろ挑戦すると、料理の腕も上がりますよ！',
     ], o);
@@ -1392,13 +1400,14 @@ async function sing(g) {
   const good = 'SAB'.includes(res.rank);
   const n = bumpDay(g, 'machi_karaoke_songs');
   const a = snap(g);
-  g.relax({ stress: good ? 25 : 10 });
+  // singing song after song still feels good, but less each time (like jogging laps)
+  g.relax({ stress: (good ? [25, 15, 8, 4] : [10, 6, 3, 2])[Math.min(3, n - 1)] });
   const lines = [`採点結果…${res.score}点！（ランク${res.rank}）`];
   lines.push(res.rank === 'S' ? '画面に「プロ級！」の文字が光った！\n思わずガッツポーズ！' : good ? 'いい感じに歌えた！\n声を出すって、気持ちいい！' : 'うーん、音程がちょっと…。\nでも、思いきり歌ってすっきりした！');
   const parts = [diffText(g, a)];
-  let tail = '';
+  let tail = n >= 3 ? '\n（何曲も歌うと、気分転換の効果は小さくなる）' : '';
   if (good && n <= 3) { g.addSkill('uta', 1, true); parts.push(`${SKILLS.uta}+1（${g.state.skills.uta}）`); }
-  else if (good) tail = '\n（今日はたくさん歌った。歌の練習効果は、また明日）';
+  else if (good) tail += '\n（今日はたくさん歌った。歌の練習効果は、また明日）';
   lines.push((parts.filter(Boolean).join('　') || 'すっきりした！') + tail);
   g.sfx(good ? 'applause' : 'cursor');
   await g.say(lines);
@@ -1558,7 +1567,7 @@ async function gymShower(g) {
   const a = snap(g);
   await beat(g, ['cursor', 'cursor', 'chime'], 240);
   g.bathe(100, true);
-  g.relax({ stress: 3 });
+  g.relax({ stress: onceADay(g, 'shower', 3) });
   await g.say(['シャー…。\n熱めのシャワーで、汗を流した。', `さっぱり！\n${diffText(g, a) || 'すっきりした。'}`]);
 }
 async function gymDesk(g, npc) {
@@ -1617,7 +1626,7 @@ registerPlace({
           talk: async (g, n) => {
             const lines = ['体は資本！\nきたえた体は、ウソをつかない！'];
             if (gymBonus(g) >= 10) lines.push('おっ、いい体になってきたな！\nその調子だ！');
-            else lines.push('毎日コツコツ通うのが、いちばんの近道だ。\n5日続けると、体力がグッと上がるぞ！');
+            else lines.push('毎日コツコツ通うのが、いちばんの近道だ。\n5日通うごとに、体力がグッと上がるぞ！');
             lines.push('トレーニングのあとは、ちゃんと食べること。\n腹ペコだと、力が出ないからな！');
             await g.say(lines, who(n));
           } },
@@ -1641,13 +1650,27 @@ registerPlace({
 
 // ====================================================================== hair salon ドット
 const SALON_PRICE = 4000;
+// A cut lasts: the next one (and its fame bonus) is possible SALON_CUT_DAYS days later.
+const SALON_CUT_DAYS = 3;
+const SALON_BONUS_MAX = 300;
 const STYLIST = { name: 'スタイリストさん', look: { hair: 'bob', hairColor: 'blonde', skin: 'light', top: '#1e1e26', bottom: '#1e1e26', apron: '#5a5f6b' } };
 const SALON_DESK = { name: '受付さん', look: { hair: 'long', hairColor: 'brown', skin: 'light', top: '#f2f2f2', bottom: '#8a5ac8', skirt: true } };
 const isStyled = (g) => { const s = g.flag('machi_styled'); return !!(s && typeof s === 'object'); };
+// days until the hair has grown enough for the next cut (0 = can cut today)
+function cutWait(g) {
+  const d = g.flag('machi_cut_day');
+  if (typeof d !== 'number') return 0;
+  return Math.max(0, d + SALON_CUT_DAYS - g.state.day);
+}
 async function salonMenu(g, npc) {
   const o = who(npc || STYLIST);
   const i = await g.ask((isStyled(g) ? 'ヘアスタイル、まだばっちりキマってますよ。' : 'いらっしゃいませ！今日はどうなさいますか？') + '\nカット：次のお仕事の評判がアップ\nシャンプー：ヘッドスパでリラックス', [`カット＆ブロー ${fmtMoney(SALON_PRICE)}`, `シャンプー ${fmtMoney(1500)}`, 'やめておく'], { ...o, cancel: 2 });
   if (i === 2 || i < 0) { await g.say('またお待ちしてますね！', o); return; }
+  if (i === 0 && cutWait(g) > 0) {
+    const w = cutWait(g);
+    await g.say([`カットは、${w >= SALON_CUT_DAYS ? '今日' : 'この前'}したばかりですよ〜。\nいまの髪型、ちゃんとキマってます！`, `髪がのびたころ（${w === 1 ? 'あした' : `${w}日後`}）に、またどうぞ。\nシャンプーなら、いつでも大歓迎です！`], o);
+    return;
+  }
   const price = i === 0 ? SALON_PRICE : 1500;
   if (!g.spend(price)) { await g.say('あら…お会計が足りないみたいです。\nまたいらしてくださいね。', o); return; }
   g.sfx('coin');
@@ -1656,17 +1679,20 @@ async function salonMenu(g, npc) {
     await g.say('かしこまりました！\nお席へどうぞ〜。', o);
     await beat(g, ['snare', 'snare', 'snare', 'chime'], 240);
     g.bathe(100, true);
-    g.relax({ stress: 15 });
+    const t = treat(g, 'salon', 15, 1);
+    g.relax({ stress: t.stress });
+    g.setFlag('machi_cut_day', g.state.day);
     g.setFlag('machi_styled', { day: g.state.day, fame: g.state.fame, jobs: (g.state.stats && g.state.stats.jobs) || 0 });
     await g.say(['チョキチョキ…ブォーン…。', 'はい、できあがりです！\nすっごく似合ってますよ！'], o);
     await g.say('鏡の中の自分…すっきり！\n別人みたいだ！');
     g.emote('player', '♪');
-    await g.say([diffText(g, a), '（ヘアスタイルが決まった！\n次のお仕事の評判がアップする。\n評判は、次の朝にとどくよ）']);
+    await g.say([(diffText(g, a) || 'さっぱりした。') + (t.tired ? '\n' + TREAT_NOTE : ''), '（ヘアスタイルが決まった！\n次のお仕事の評判がアップする。\n評判は、次の朝にとどくよ）']);
   } else {
     await beat(g, ['cursor', 'cursor', 'chime'], 240);
     g.bathe(100, true);
-    g.relax({ stress: 12 });
-    await g.say(['シャカシャカ…。\nヘッドスパつきのシャンプーで、頭がすっきり！', diffText(g, a) || 'さっぱりした。']);
+    const t = treat(g, 'salon', 12, 1);
+    g.relax({ stress: t.stress });
+    await g.say(['シャカシャカ…。\nヘッドスパつきのシャンプーで、頭がすっきり！', (diffText(g, a) || 'さっぱりした。') + (t.tired ? '\n' + TREAT_NOTE : '')]);
   }
 }
 
@@ -1948,7 +1974,7 @@ onMorning((g) => {
   const jobs = st.stats.jobs || 0;
   if (jobs > (s.jobs || 0)) {
     const gained = Math.max(0, st.fame - (s.fame || 0));
-    const bonus = Math.max(1, Math.min(400, Math.round(gained * 0.1)));
+    const bonus = Math.max(1, Math.min(SALON_BONUS_MAX, Math.round(gained * 0.1)));
     g.addFame(bonus, true);
     g.addFans(bonus * 2, true);
     g.setFlag('machi_styled', null);

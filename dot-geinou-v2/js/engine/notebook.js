@@ -193,14 +193,16 @@ const daysToRent = (day) => (7 - weekdayOf(day)) % 7 || 7;
 // Short advice for each need: [text, color].
 function needAdvice(k, v) {
   if (k === 'hunger') {
-    if (v < HUNGRY) return ['おなかがペコペコ！何か食べよう。このままだと力が出ないし、よく眠れない。', COLORS.bad];
+    if (v <= 0) return ['おなかがすきすぎて力が出ない！何か食べないと、お仕事もレッスンもできない。', COLORS.bad];
+    if (v < HUNGRY) return ['おなかがペコペコ！何か食べよう。ミニゲームが難しくなり、よく眠れない。', COLORS.bad];
     if (v < 45) return ['そろそろ何か食べよう。', COLORS.accent];
     if (v >= FULL) return ['おなかいっぱい。いまは食べられない。', COLORS.dim];
+    if (v >= 65) return ['まだおなかは満たされている。いまごはんを食べても、体力はあまり回復しない。', COLORS.dim];
     return ['ちょうどいい感じ。', COLORS.dim];
   }
   if (k === 'stress') {
-    if (v >= BURNOUT) return ['もう限界！お仕事はできない。友だちと遊ぶか、趣味で気分転換しよう。', COLORS.bad];
-    if (v >= STRESSED) return ['ストレスがたまっている。友だちと遊ぶか、ゆっくり休もう。', COLORS.bad];
+    if (v >= BURNOUT) return ['もう限界！お仕事はできない。公園でジョギング（無料）やテレビ、友だちと遊んで気分転換。1日しっかり休むのも効く。', COLORS.bad];
+    if (v >= STRESSED) return ['ストレスがたまっている。ミニゲームが難しくなる。息抜きするか、1日ゆっくり休もう。', COLORS.bad];
     if (v >= 40) return ['すこし疲れぎみ。たまには息抜きを。', COLORS.accent];
     return ['リラックスしている。', COLORS.dim];
   }
@@ -235,10 +237,16 @@ function goalPage(g, ctx) {
   if (st.stamina < 25) {
     notes.push([g.canEat && !g.canEat() ? '体力が少ない。おなかいっぱいなので、ベッドで寝て回復しよう。' : '体力が少ない。何か食べるか、ベッドで寝て回復しよう。', COLORS.bad]);
   }
-  if (L.hunger < HUNGRY && st.stamina >= 25) notes.push(['おなかがペコペコ…。何か食べよう。', COLORS.bad]);
-  if (L.stress >= BURNOUT) notes.push(['ストレスが限界。お仕事の前に、遊んで気分転換しよう。', COLORS.bad]);
+  if (L.hunger < HUNGRY && st.stamina >= 25) notes.push([L.hunger <= 0 ? 'おなかがすきすぎて力が出ない！まず何か食べよう。' : 'おなかがペコペコ…。何か食べよう。', COLORS.bad]);
+  if (L.stress >= BURNOUT) notes.push(['ストレスが限界。ジョギングやテレビで気分転換するか、今日は休もう。', COLORS.bad]);
   else if (L.stress >= STRESSED) notes.push(['ストレスがたまっている。友だちと遊んで息抜きしよう。', COLORS.accent]);
   if (st.rent && st.rent.debt) notes.push([`家賃が未払い（${fmtMoney(st.rent.debt)}）。スマホの「家計」から払おう。`, COLORS.bad]);
+  else {
+    // rent coming up soon and not enough money yet (the same numbers as せいかつ)
+    const rent = (g.housing && g.housing().rent) || 0;
+    const d = daysToRent(st.day);
+    if (rent > 0 && st.money < rent && d <= 4) notes.push([`家賃（${fmtMoney(rent)}）まで${d === 1 ? 'あした' : `あと${d}日`}。あと${fmtMoney(rent - st.money)}かせごう。`, COLORS.accent]);
+  }
   if (L.clean < SCRUFFY) notes.push(['身だしなみが乱れている。お風呂に入ろう。', COLORS.accent]);
   for (const [t, c] of notes.slice(0, 4)) pg.para('・' + t, { s: SMALL, c });
   if (notes.length) pg.para('くわしくは「せいかつ」タブで。', { s: SMALL, c: COLORS.dim });

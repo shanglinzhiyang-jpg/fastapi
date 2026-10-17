@@ -15,6 +15,7 @@
 import { clamp, fmtMoney } from './util.js';
 import { COLORS } from './draw.js';
 import { audio } from './audio.js';
+import { ITEMS } from './state.js'; // runtime use only (state.js imports this module too)
 
 // ---------------------------------------------------------------- calendar
 export const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
@@ -35,21 +36,48 @@ export const HUNGRY = 20; // below: minigame penalty, poor sleep
 export const STRESSED = 70; // at or above: minigame penalty
 export const BURNOUT = 100; // at: no jobs / lessons / auditions until you unwind
 export const SCRUFFY = 30; // below: less fame from jobs, less affinity
+export const MORNING_SHOWER = 35; // 身だしなみ from the morning shower at a home with a bath
+export const REST_DAY_STRESS = 20; // stress removed the morning after a day without work
+const AWAY_SLEEP_STRESS = 12; // a night away from home (hotel, a back room)
+const AWAY_SHOWER = { hotel: 40 }; // placeId -> morning shower when sleeping there
 
 // What each activity costs. Content may call g.lifeTick(kind) or g.lifeTick({ hunger, stress, clean }).
 export const ACTIVITY = {
-  job: { hunger: -10, stress: 8, clean: -8 },
+  job: { hunger: -10, stress: 8, clean: -10 },
   lesson: { hunger: -8, stress: 5, clean: -6 },
   audition: { hunger: -8, stress: 10, clean: -6 },
   walk: { hunger: -1, clean: -1 }, // every WALK_STEPS steps
-  night: { hunger: -30, clean: -15 },
+  night: { hunger: -30, clean: -20 },
 };
 export const WALK_STEPS = 150;
+export const GIFT_REPEAT_DAYS = 7; // the same gift again within this many days: only +1
+
+// What the player is told when a need crosses a penalty line (toast once a day, the tip
+// the first time ever). Tips are one message page (3 lines of ~36 characters).
+const NEED_WARN = {
+  hunger: {
+    toast: 'おなかがペコペコ…（ミニゲーム -20%・よく眠れない）',
+    tip: '（おなかがペコペコだ…。満腹が20を切ると、\nミニゲームが難しくなり、夜もよく眠れない。\nコンビニや商店街、家のキッチンで何か食べよう）',
+  },
+  stress: {
+    toast: 'ストレスがたまってきた（ミニゲーム -15%）',
+    tip: '（ストレスがたまってきた…。70をこえると\nミニゲームが難しくなる。ジョギングやお風呂、\nカフェ、友だちと遊んで息抜きしよう）',
+  },
+  burnout: {
+    toast: 'ストレスが限界！お仕事はお休みして気分転換を',
+    tip: '（ストレスが限界だ！このままでは、お仕事も\nレッスンもできない。公園でジョギング（無料）や\n家でテレビ、カラオケで気分転換。休むのもいい）',
+  },
+  clean: {
+    toast: '身だしなみが乱れてきた（知名度・好感度が上がりにくい）',
+    tip: '（身だしなみが乱れてきた…。30を切ると、\nお仕事の評価や人の好感度が上がりにくくなる。\n家のお風呂や銭湯で、さっぱりしよう）',
+  },
+};
+const ITEM_HEALS = (k) => !!(ITEMS[k] && ITEMS[k].heal > 0);
 
 // ---------------------------------------------------------------- registries
 export const HOUSING = {};
 // def: { name, place, room?, rent (per week), sleepStress (stress removed per night),
-//   kitchen: bool, bath: bool (morning shower: 身だしなみ +50), requires: { fame }, moveCost, desc,
+//   kitchen: bool, bath: bool (morning shower: 身だしなみ +MORNING_SHOWER), requires: { fame }, moveCost, desc,
 //   slots (furniture) }
 export function registerHousing(id, def) {
   HOUSING[id] = { id, rent: 0, sleepStress: 15, kitchen: false, bath: false, slots: 4, moveCost: 0, ...def };
@@ -72,9 +100,10 @@ export const PEOPLE = {};
 // generic line (standard Japanese, or Kansai-ben when isKansai(def)):
 //   dialect: 'kansai'           Kansai generic lines (also when `where` mentions なんば / 大阪)
 //   greet: '…' | ['…', '…'] (one picked at random) | { 1: '…', 2: '…', default } | (g, level, def) => …
-//                               greeting that opens the menu (♥1+)
+//                               greeting that opens the menu (from the second talk)
 //   talkLabel: '買い物する'      label of 話す (e.g. shop NPCs)
-//   chats: ['…' | (g) => '…']   one personal line on the first talk of a day (♥1+)
+//   chats: ['…' | (g) => '…']   one personal line on the first talk of a day (♥1+; before
+//                               that, what a known NPC without its own talk says)
 //   chat: ['…']                 what 話す says when the NPC entity has no talk / text
 //   yes / inviteYes             reply when you invite them face to face
 //   giftLines: { love, like, neutral, dislike, [itemId]: … }   reactions ({item} = item name)
@@ -161,12 +190,34 @@ const methods = {
     L[k] = clamp(Math.round(before + n), 0, 100);
     const d = L[k] - before;
     if (!silent && d) this.notify(`${NEEDS[k].name} ${d > 0 ? '+' : ''}${d}`, { color: '#fff' });
+    if (d) this.needWarn(k, before, L[k]);
     return d;
   },
+  // A need crossed a penalty line: a toast (once a day per line) and, the very first
+  // time, a short explanation shown when the current script ends (g.pendingTips).
+  needWarn(k, a, b) {
+    let key = null;
+    if (k === 'hunger' && b < HUNGRY && a >= HUNGRY) key = 'hunger';
+    else if (k === 'stress' && b >= BURNOUT && a < BURNOUT) key = 'burnout';
+    else if (k === 'stress' && b >= STRESSED && a < STRESSED) key = 'stress';
+    else if (k === 'clean' && b < SCRUFFY && a >= SCRUFFY) key = 'clean';
+    if (!key || !NEED_WARN[key]) return;
+    const L = this.state.life;
+    const w = L.warned && typeof L.warned === 'object' ? L.warned : (L.warned = {});
+    if (w[key] === this.state.day) return;
+    w[key] = this.state.day;
+    this.notify(NEED_WARN[key].toast, { color: COLORS.bad, life: 200 });
+    if (!w['tip_' + key]) {
+      w['tip_' + key] = true;
+      (this.pendingTips || (this.pendingTips = [])).push(NEED_WARN[key].tip);
+    }
+  },
   // Apply an activity's need changes: kind = 'job' | 'lesson' | ... or { hunger, stress, clean }.
+  // Anything that adds stress counts as work for the day (no rest-day bonus next morning).
   lifeTick(kind) {
     const d = typeof kind === 'string' ? ACTIVITY[kind] : kind;
     if (!d) return;
+    if ((d.stress || 0) > 0) this.state.life.workDay = this.state.day;
     for (const k of Object.keys(NEEDS)) if (d[k]) this.addNeed(k, d[k]);
   },
   // Overall condition, used for minigame bonus and status text.
@@ -181,18 +232,27 @@ const methods = {
     return 'normal';
   },
   // Added to the skill bonus of every minigame (can be negative).
-  lifeBonus(skill) {
+  lifeBonus(skill) { return this.lifeBonusParts(skill).reduce((a, p) => a + p.v, 0); },
+  // The same, item by item, for the minigame's intro card: [{ label, v }].
+  lifeBonusParts(skill) {
     const L = this.state.life;
-    let b = 0;
-    if (L.hunger < HUNGRY) b -= 0.2;
-    if (L.stress >= STRESSED) b -= 0.15;
-    if (L.hunger >= 50 && L.stress <= 30 && L.clean >= 70) b += 0.1;
-    if (skill === 'warai' && this.state.partner) b += 0.1;
-    return b;
+    const out = [];
+    if (L.hunger < HUNGRY) out.push({ label: 'はらぺこ', v: -0.2 });
+    if (L.stress >= STRESSED) out.push({ label: 'ストレス', v: -0.15 });
+    if (L.hunger >= 50 && L.stress <= 30 && L.clean >= 70) out.push({ label: '絶好調', v: 0.1 });
+    if (skill === 'warai' && this.state.partner) out.push({ label: '相方', v: 0.1 });
+    return out;
   },
   // Reason a demanding activity is refused, or null.
   lifeRefusal() {
-    if (this.state.life.stress >= BURNOUT) return 'もう心も体もヘトヘトだ…。\n今日はお仕事どころじゃない。\n（ストレスが限界。趣味や友だちと遊んで気分転換しよう）';
+    const st = this.state;
+    if (st.life.stress >= BURNOUT) {
+      return ['もう心も体もヘトヘトだ…。\n今日はお仕事どころじゃない。',
+        '（ストレスが限界！気分転換しよう。\n商店街の公園でジョギング（無料）、家でテレビ、\nカフェやカラオケ、友だちと遊ぶ。今日は休むのもいい）'];
+    }
+    // starving: no strength left (unless there is no way to buy food: then work is the way out)
+    const canFeed = st.money >= 100 || Object.keys(st.items || {}).some((k) => st.items[k] > 0 && ITEM_HEALS(k));
+    if (st.life.hunger <= 0 && canFeed) return 'おなかがすきすぎて、力が出ない…。\n（なにか食べてからにしよう）';
     return null;
   },
 
@@ -200,17 +260,27 @@ const methods = {
   // g.ateLast (false when too full to eat). opts: { fill (hunger, default 1.5x), silent }
   canEat() { return this.state.life.hunger < FULL; },
   mealsLeft() { return this.canEat() ? Math.max(1, Math.ceil((FULL - this.state.life.hunger) / 25)) : 0; },
+  // The heal scales with the hunger actually absorbed: on a nearly full stomach most of
+  // it is wasted (g.lastEatRatio, 0..1, tells how much counted, e.g. for a dish's stress
+  // relief). Every food fills at least 3/4 of its heal, so eating can never pay for more
+  // work than the hunger that work costs.
   eat(n, opts = {}) {
     const st = this.state;
     this.ateLast = false;
+    this.lastEatRatio = 0;
     if (!this.canEat()) {
       if (!opts.silent) this.notify('おなかいっぱいだ…。いまは食べられない。', { color: '#fff' });
       return 0;
     }
     const before = st.stamina;
-    this.heal(n);
-    this.addNeed('hunger', opts.fill ?? Math.max(8, Math.round(n * 1.5)));
+    const heal = Math.max(0, n || 0);
+    let fill = Math.max(0, opts.fill ?? Math.max(8, Math.round(heal * 1.5)));
+    if (heal > 0) fill = Math.max(fill, Math.ceil(heal * 0.75));
+    const k = fill > 0 ? clamp((100 - st.life.hunger) / fill, 0, 1) : 1;
+    this.heal(Math.round(heal * k));
+    this.addNeed('hunger', fill);
     this.ateLast = true;
+    this.lastEatRatio = k;
     return st.stamina - before;
   },
   // Washing up: shower, bath, salon. Returns the change.
@@ -244,38 +314,47 @@ const methods = {
     return sum;
   },
   rentDue() { return this.housing().rent + (this.state.rent.debt || 0); },
-  // Pays this week's rent (+ any debt). Returns true when paid.
+  // Pays this week's rent (+ any debt), as much as the money allows; the rest stays as
+  // debt. Returns true when everything is paid. The result is also a morning note.
   chargeRent() {
     const st = this.state;
     const h = this.housing();
     const due = h.rent + (st.rent.debt || 0);
     st.rent.paidWeek = this.week;
     if (due <= 0) return true;
-    if (st.money >= due) {
-      st.money -= due;
+    const paid = Math.min(Math.max(0, st.money), due);
+    st.money -= paid;
+    const left = due - paid;
+    const notes = this.morningNotes || (this.morningNotes = []);
+    if (!left) {
       st.rent.debt = 0;
       st.rent.late = 0;
       this.message({ from: h.name, text: `今週の家賃 ${fmtMoney(due)} をお支払いいただきました。いつもありがとうございます。`, kind: 'bill' });
-      this.notify(`家賃 -${fmtMoney(due)}`, { color: COLORS.accent });
+      notes.push(`（家賃 ${fmtMoney(due)} を払った。のこり ${fmtMoney(st.money)}）`);
       return true;
     }
-    st.rent.debt = due;
+    st.rent.debt = left;
     st.rent.late = (st.rent.late || 0) + 1;
     this.addNeed('stress', 10);
-    this.message({ from: h.name, text: `今週の家賃が払えていません。（未払い ${fmtMoney(due)}）\nお金ができたら、スマホの「家計」から払ってください。`, kind: 'bill' });
-    this.notify('家賃が払えなかった…', { color: COLORS.bad });
+    this.message({ from: h.name, text: `${paid ? `家賃の一部 ${fmtMoney(paid)} をお支払いいただきました。` : '今週の家賃が払えていません。'}（未払い ${fmtMoney(left)}）\nお金ができたら、スマホの「家計」から払ってください。`, kind: 'bill' });
+    notes.push(`（家賃が${paid ? `全部は` : ''}払えなかった…。未払い ${fmtMoney(left)}\nお金ができたら、スマホの「家計」から払おう）`);
     return false;
   },
-  // Pays outstanding rent now (phone / landlord). Returns true when cleared.
-  payDebt() {
+  // Pays outstanding rent now (phone / landlord). Returns true when cleared. With
+  // partial: true it pays what the money allows (g.lastDebtPaid = the amount paid).
+  payDebt(partial = false) {
     const st = this.state;
     const d = st.rent.debt || 0;
+    this.lastDebtPaid = 0;
     if (!d) return true;
-    if (st.money < d) return false;
-    st.money -= d;
-    st.rent.debt = 0;
-    st.rent.late = 0;
+    const pay = Math.min(Math.max(0, st.money), d);
+    if (pay < d && (!partial || pay <= 0)) return false;
+    st.money -= pay;
+    st.rent.debt = d - pay;
+    this.lastDebtPaid = pay;
     audio.sfx('coin');
+    if (st.rent.debt > 0) return false;
+    st.rent.late = 0;
     return true;
   },
   // Move to another housing (no checks; the real estate agent asks first).
@@ -330,21 +409,31 @@ const methods = {
   },
   // Talk to an NPC linked to a person (entity.person). The map calls this for such
   // NPCs: heart event first, else the NPC's normal talk + a daily affinity bonus,
-  // and from ♥1 the menu 話す / プレゼント / さそう / またね (phone.js). Content adds
+  // and from the second talk the menu 話す / プレゼント / さそう (♥2) / またね (phone.js). Content adds
   // menu entries and hooks through PEOPLE_UI.extras / PEOPLE_UI.hooks (see below).
   async talkPerson(npc) {
     return PEOPLE_UI.talk(this, npc);
   },
-  // A gift: def.loves +8, likes +5, dislikes -3, else +2. Once a day. Returns the change.
+  // A gift: def.loves +6, likes +4, dislikes -3, else +2; the same item again within
+  // GIFT_REPEAT_DAYS days only +1. Once a day. Returns the change.
   giveGift(id, itemId) {
     const def = PEOPLE[id];
     const p = this.meet(id);
     if (!def || !p) return 0;
+    const repeat = this.giftRepeat(id, itemId);
     if (!this.takeItem(itemId)) return 0;
     p.giftDay = this.state.day;
     p.known = { ...(p.known || {}), [itemId]: this.giftReaction(id, itemId) }; // the phone's contact card lists what they like
-    const n = def.loves.includes(itemId) ? 8 : def.likes.includes(itemId) ? 5 : def.dislikes.includes(itemId) ? -3 : 2;
+    p.gifted = { ...(p.gifted && typeof p.gifted === 'object' ? p.gifted : {}), [itemId]: this.state.day };
+    let n = def.loves.includes(itemId) ? 6 : def.likes.includes(itemId) ? 4 : def.dislikes.includes(itemId) ? -3 : 2;
+    if (repeat && n > 1) n = 1;
     return this.addAff(id, n);
+  },
+  // True when this person got the same item in the last GIFT_REPEAT_DAYS days.
+  giftRepeat(id, itemId) {
+    const p = this.person(id);
+    const d = p && p.gifted && p.gifted[itemId];
+    return typeof d === 'number' && this.state.day - d < GIFT_REPEAT_DAYS;
   },
   giftReaction(id, itemId) {
     const def = PEOPLE[id];
@@ -411,6 +500,8 @@ const methods = {
 
   // --- regular shows
   regular(id) { return this.state.regulars[id] || null; },
+  // Joined on the show's own weekday, it can be recorded today, but staying away that
+  // day does not count as a miss (see morning()).
   joinRegular(id) {
     if (!REGULARS[id]) return;
     this.state.regulars[id] = { since: this.state.day, doneWeek: this.week - (weekdayOf(this.state.day) > REGULARS[id].weekday ? 0 : 1), missed: 0, count: 0 };
@@ -419,7 +510,7 @@ const methods = {
   regularsToday(placeId) {
     return Object.keys(this.state.regulars).filter((id) => {
       const r = REGULARS[id], s = this.state.regulars[id];
-      return r && !s.dropped && r.weekday === this.weekday && s.doneWeek < this.week && (!placeId || r.place === placeId);
+      return r && s && !s.dropped && r.weekday === this.weekday && (s.doneWeek || 0) < this.week && (!placeId || r.place === placeId);
     });
   },
   // Record a regular show (like a job, no confirm). Returns the minigame result or null.
@@ -433,7 +524,7 @@ const methods = {
       id: 'regular_' + id, title: r.title, minigame: r.minigame, opts: r.opts, skill: r.skill,
       pay: r.pay, fame: r.fame, fans: r.fans, stamina: r.stamina, confirm: false,
     });
-    if (res) { s.doneWeek = this.week; s.count++; s.missed = 0; }
+    if (res) { s.doneWeek = this.week; s.count = (s.count || 0) + 1; s.missed = 0; }
     return res;
   },
 
@@ -450,30 +541,47 @@ const methods = {
 
   // --- the morning after g.sleep()
   // hungerAtNight: hunger when going to bed (low = poor sleep).
-  async morning(hungerAtNight) {
+  // opts.away: slept away from home (hotel, a back room): no home perks (shower,
+  // furniture, the home's sleep quality); opts.shower / opts.sleepStress override.
+  // Notes worth a line in the morning message (rent, a poor night, a day off) are
+  // collected in g.morningNotes (g.sleep shows them); g.lastMorning has the changes.
+  async morning(hungerAtNight, opts = {}) {
     const st = this.state;
     const L = st.life;
     const h = this.housing();
-    const fx = this.furnitureEffects();
+    const away = !!opts.away;
+    const fx = away ? { sleepStress: 0, stamina: 0, clean: 0, stress: 0 } : this.furnitureEffects();
+    const notes = this.morningNotes = [];
+    const before = { hunger: L.hunger, stress: L.stress, clean: L.clean };
     this.lifeTick('night');
-    if (h.bath) this.addNeed('clean', 50); // morning shower at home
-    this.addNeed('stress', -(h.sleepStress + fx.sleepStress + fx.stress));
+    const shower = away ? (opts.shower ?? AWAY_SHOWER[opts.place] ?? 0) : (h.bath ? MORNING_SHOWER : 0);
+    if (shower) this.addNeed('clean', shower); // morning shower
+    this.addNeed('stress', -((away ? (opts.sleepStress ?? AWAY_SLEEP_STRESS) : h.sleepStress) + fx.sleepStress + fx.stress));
     if (fx.clean) this.addNeed('clean', fx.clean);
+    // a day without work (no job, lesson or audition yesterday) clears the head
+    const rested = (L.workDay || 0) < st.day - 1 && L.stress > 0;
+    if (rested) {
+      const d = -this.addNeed('stress', -REST_DAY_STRESS);
+      if (d >= 5) notes.push(`（きのうはゆっくり休めた。気持ちが軽い！ストレス -${d}）`);
+    }
     if (hungerAtNight < HUNGRY) {
       st.stamina = Math.round(st.maxStamina * 0.75);
-      this.notify('おなかがすいて、よく眠れなかった…', { color: '#fff' });
+      this.addNeed('stress', 5);
+      notes.push('（おなかがすいて、よく眠れなかった…。\n体力が回復しきっていない。ストレス +5）');
     }
-    if (st.rent.debt && this.weekday !== 0) this.addNeed('stress', 3);
+    if (st.rent.debt && this.weekday !== 0) this.addNeed('stress', Math.min(9, 3 * Math.max(1, st.rent.late || 1)));
     // rent every Monday
     if (this.weekday === 0 && st.rent.paidWeek < this.week) this.chargeRent();
+    this.lastMorning = { hunger: L.hunger - before.hunger, stress: L.stress - before.stress, clean: L.clean - before.clean, shower, rested, away };
     // regular shows missed yesterday
     const yesterday = weekdayOf(st.day - 1);
     const yWeek = weekOf(st.day - 1);
     for (const id of Object.keys(st.regulars)) {
       const r = REGULARS[id], s = st.regulars[id];
-      if (!r || s.dropped || r.weekday !== yesterday || s.doneWeek >= yWeek) continue;
-      s.missed++;
+      if (!r || !s || s.dropped || r.weekday !== yesterday || (s.doneWeek || 0) >= yWeek) continue;
       s.doneWeek = yWeek;
+      if (s.since === st.day - 1) continue; // accepted on the show day itself: no miss, it starts next week
+      s.missed = (s.missed || 0) + 1;
       this.addNeed('stress', 8);
       this.addFame(-Math.round(r.fame / 2), true);
       if (s.missed >= 2) {
@@ -498,7 +606,7 @@ export function onMorning(fn) { MORNING_HOOKS.push(fn); }
 // the fallbacks. Content should NOT replace talk / hangout: extend the menu with
 // `extras` and `hooks` instead (both are read by phone.js's talk menu):
 //
-//   PEOPLE_UI.extras.push({          an extra entry of the talk menu (♥1+), before またね
+//   PEOPLE_UI.extras.push({          an extra entry of the talk menu, before またね
 //     id: 'combi',                   optional, unique (default: the label)
 //     label: 'コンビを組もう',        ≤ 14 chars, or (g, id, npc) => label
 //     cond: (g, id, npc) => bool,    optional: shown only when true

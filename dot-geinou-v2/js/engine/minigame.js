@@ -18,7 +18,8 @@
 //   this.g            the Game (this.g.state, this.g.sfx(...))
 //   this.opts         options passed by the caller (difficulty, skill, title, custom content...)
 //   this.difficulty   1..5
-//   this.bonus        0..~1.3, bigger = player is more skilled -> make it easier
+//   this.bonus        -0.35..~1.4, bigger = player is more skilled / in better shape -> make
+//                     it easier (negative: hungry or stressed -> a little harder)
 //   this.ease(v, k)   v scaled by (1 + bonus * k)   e.g. timing windows
 //   this.rng()        random 0..1
 //   this.pt           frames since play started
@@ -33,7 +34,7 @@
 // the intro, countdown, popups, result, timer bar and score box for both.
 
 import { W, H, SW, SH, clamp } from './util.js';
-import { text, panel, rect, wrap, bar, COLORS, sparkle } from './draw.js';
+import { text, panel, rect, wrap, bar, measure, COLORS, sparkle } from './draw.js';
 import { audio } from './audio.js';
 
 export const MINIGAMES = {};
@@ -70,7 +71,9 @@ export class Minigame {
     this.W = this.hd ? SW : W;
     this.H = this.hd ? SH : H;
     this.difficulty = clamp(Math.round(opts.difficulty ?? 1), 1, 5);
-    this.bonus = Math.max(0, opts.bonus ?? 0);
+    this.bonus = Math.max(-0.35, opts.bonus ?? 0);
+    // { skill, parts: [{ label, v }] } from g.minigame: what the bonus is made of (intro card)
+    this.bonusInfo = opts.bonusInfo || null;
     this.phase = 'intro';
     this.t = 0;
     this.pt = 0;
@@ -216,7 +219,7 @@ export class Minigame {
         y += 16;
       }
     }
-    if (this.bonus > 0.05) text(ctx, `スキルボーナス +${Math.round(this.bonus * 100)}%`, W / 2, H - 70, { size: 10, align: 'center', color: COLORS.good });
+    this.drawBonusLine(ctx, W / 2, H - 70, 10);
     if (Math.floor(this.t / 20) % 2 === 0) text(ctx, 'Aでスタート！', W / 2, H - 52, { align: 'center', color: COLORS.cyan });
   }
 
@@ -234,8 +237,25 @@ export class Minigame {
         y += 24;
       }
     }
-    if (this.bonus > 0.05) text(ctx, `スキルボーナス +${Math.round(this.bonus * 100)}%`, SW / 2, SH - 92, { size: 14, align: 'center', color: COLORS.good });
+    this.drawBonusLine(ctx, SW / 2, SH - 92, 14);
     if (Math.floor(this.t / 20) % 2 === 0) text(ctx, 'Aでスタート！', SW / 2, SH - 66, { size: 16, align: 'center', color: COLORS.cyan });
+  }
+
+  // 「スキル +12%　絶好調 +10%　はらぺこ -20%」 centred at cx: what makes this round
+  // easier (green) or harder (red).
+  drawBonusLine(ctx, cx, y, size) {
+    const pct = (v) => `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`;
+    const segs = [];
+    const info = this.bonusInfo;
+    if (info) {
+      if (info.skill > 0.05) segs.push([`スキル ${pct(info.skill)}`, COLORS.good]);
+      for (const p of info.parts || []) if (p && p.v) segs.push([`${p.label} ${pct(p.v)}`, p.v > 0 ? COLORS.good : COLORS.bad]);
+    } else if (Math.abs(this.bonus) > 0.05) segs.push([`${this.bonus > 0 ? 'ボーナス' : '不調'} ${pct(this.bonus)}`, this.bonus > 0 ? COLORS.good : COLORS.bad]);
+    if (!segs.length) return;
+    const gap = size;
+    const widths = segs.map(([t]) => measure(ctx, t, size));
+    let x = Math.round(cx - (widths.reduce((a, w) => a + w, 0) + gap * (segs.length - 1)) / 2);
+    segs.forEach(([t, c], i) => { text(ctx, t, x, y, { size, color: c }); x += widths[i] + gap; });
   }
 
   drawResult(ctx) {

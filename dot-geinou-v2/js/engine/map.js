@@ -512,7 +512,7 @@ export class MapScene {
         if (!g.canEat()) { await g.say('おなかいっぱいだ…\nいまはもう飲めない。'); return; }
         if (!g.spend(150)) { await g.say('お金が足りない…'); return; }
         audio.sfx('coin');
-        const got = g.eat(10, { silent: true, fill: 5 });
+        const got = g.eat(10, { silent: true, fill: 8 });
         await g.say('ガコン！ジュースを飲んだ。' + (got > 0 ? `体力が${got}回復した。` : 'のどがうるおった。'));
       });
       return;

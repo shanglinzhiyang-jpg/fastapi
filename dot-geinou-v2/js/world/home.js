@@ -6,7 +6,8 @@
 // flags: home_level (0..3, bought upgrades), home_seen (last level shown on entering),
 //        home_called (level she called out about), home_told (level she hinted at),
 //        home_pitched (level she made the full offer for), home_coachDay (day of the last premium coaching),
-//        home_v2told (she explained the v2 life), home_tvDay (day the TV last relaxed you),
+//        home_v2told (she explained the v2 life), home_v2called (she called from the door about it),
+//        home_tvDay (day the TV last relaxed you), home_practice { day, n } (PC self-practice today),
 //        housing_bathDay (day of the last bath bonus), housing_use_<furnitureId> (day it was last used),
 //        housing_fit { furnitureId: max stamina it gave } (fitness furniture, given once).
 
@@ -17,19 +18,20 @@ import { drawFaceHD, LOOKS } from '../engine/sprites.js';
 import { makeCanvas, fmtMoney, pick, shade } from '../engine/util.js';
 import { FURNITURE, HOUSING } from '../engine/life.js';
 
+// Two lines at most (watchTv adds a third), broken at phrase boundaries.
 export const TV_TIPS = [
-  '『芸能ニュースです。よしもとのオーディションでは、ツッコミのタイミングが大切だそうです』',
-  '『大阪・なんばの「よしもと新喜劇」では、今日も満員御礼！お約束のズッコケに大爆笑！』',
-  '『NHKでは、アナウンサーの原稿読みも見どころ。難しい漢字の読みに注目です』',
-  '『東映の撮影所では時代劇の殺陣（たて）の撮影が行われています。決めポーズがかっこいい！』',
-  '『東宝のスタジオでは大迫力の怪獣映画を撮影中。ミュージカルの公演も好評です』',
-  '『ホリプロ所属の新人歌手がデビュー！レッスンの積み重ねが実を結びました』',
-  '『グレープカンパニーの芸人さんのグッズ、身につけると気合いが入ると評判です』',
-  '『松竹芸能の若手芸人さんたち、大阪の劇場で腕を磨いているそうです』',
+  '『芸能ニュースです。よしもとのオーディションでは、\nツッコミのタイミングが大切だそうです』',
+  '『大阪・なんばの「よしもと新喜劇」では、今日も満員御礼！\nお約束のズッコケに大爆笑！』',
+  '『NHKでは、アナウンサーの原稿読みも見どころ。\n難しい漢字の読みに注目です』',
+  '『東映の撮影所では、時代劇の殺陣（たて）を撮影中。\n決めポーズがかっこいい！』',
+  '『東宝のスタジオでは、大迫力の怪獣映画を撮影中。\nミュージカルの公演も好評です』',
+  '『ホリプロ所属の新人歌手がデビュー！\nレッスンの積み重ねが実を結びました』',
+  '『グレープカンパニーの芸人さんのグッズ、\n身につけると気合いが入ると評判です』',
+  '『松竹芸能の若手芸人さんたち、\n大阪の劇場で腕を磨いているそうです』',
   '『BSよしもとでは、地域の魅力を伝える番組を放送中です』',
-  '『疲れたときは、銭湯でひとっ風呂！コンビニのお弁当で体力回復もおすすめです』',
-  '『ドット商店街の特集です。スーパーの食材で自炊すれば、おなかも心も満たされますね』',
-  '『ストレスをためこまないコツは、好きなことをする時間を作ること。友だちとのおでかけも効果的です』',
+  '『疲れたときは、銭湯でひとっ風呂！\nコンビニのお弁当で体力回復もおすすめです』',
+  '『ドット商店街の特集です。スーパーの食材で自炊すれば、\nおなかも心も満たされますね』',
+  '『ストレスをためないコツは、好きなことをする時間を作ること。\n友だちとのおでかけも効果的です』',
 ];
 
 // Modules owned by others, loaded on the side so a broken one cannot take the home down
@@ -103,7 +105,9 @@ export function fixMaxStamina(g) {
 function oyaSmallTalk(g) {
   const st = g.state;
   if (!st.agency && st.fame < 30) {
-    return ['あら{name}ちゃん、おでかけ？', '芸能界で売れたいなら、\nまずは事務所に所属することね。', 'よしもとさん、グレープカンパニーさん、\nホリプロさん…\nこのあたりにいっぱいあるわよ。', '疲れたら部屋のベッドでゆっくり休むのよ。'];
+    // one line pointing at the next step (the full advice was in her first talk)
+    if (!(st.stats && st.stats.jobs)) return ['あら{name}ちゃん、おでかけ？\nすぐそこの公園のステージなら、事務所に入ってなくても\n歌や漫才で投げ銭がもらえるわよ。'];
+    return ['あら{name}ちゃん、おでかけ？\n事務所のオーディションには、もう行ってみた？\n所属できたら、お仕事がぐんと増えるわよ。'];
   }
   if (st.fame < 250) return ['あら{name}ちゃん、お仕事がんばってるみたいね。', 'ちゃんとごはん食べてる？\n体が資本なんだから、無理しちゃだめよ。'];
   if (st.fame < 1000) return ['この前、テレビで{name}ちゃんを見たわよ！\nご近所さんに自慢しちゃった。'];
@@ -111,14 +115,19 @@ function oyaSmallTalk(g) {
   return ['すっかりスターねえ。\nでも、ここが{name}ちゃんの家なのは変わらないわよ。'];
 }
 
-// The v2 life in her words (once), shorter reminders afterwards.
-const OYA_LIFE = [
-  'そうそう、暮らしのことで大事なお話。\nおなか（満腹）、ストレス、身だしなみ…\nこの3つは毎日気にかけるのよ。',
-  'ごはんを食べて、お風呂に入って、\nたまには遊んで息抜きすること。\nストレスがたまりすぎると、お仕事どころじゃなくなるわ。',
-  'お家賃は毎週月曜の朝に¥8,000。\n払えないときは、スマホの「家計」からあとで払えばいいの。\nうちはね、だれも追い出したりしないから。',
-  'スマホは、メニューから開けるわよ。\nお友だちからの連絡も、そこに届くの。',
-  '西の「ドット商店街」には、スーパーやお花屋さん、\n家具屋さんに不動産屋さんもあるわ。\n一度のぞいてごらんなさい。',
-];
+// Her first talk: the v2 life in her words (the intro only names the gauges), once.
+function oyaLife(g) {
+  const lines = [
+    'あら{name}ちゃん、おでかけ？\nちょうどよかった。暮らしのことで、大事なお話。',
+    'おなか（満腹）、ストレス、身だしなみ…\nこの3つは毎日気にかけるのよ。\nごはんを食べて、お風呂に入って、たまには息抜き。',
+    'ストレスがたまりすぎると、お仕事どころじゃなくなるわ。\n疲れたら、部屋のベッドでゆっくり休むこと。\nキッチンで自炊、ユニットバスでシャワーもできるわよ。',
+    `お家賃は毎週月曜の朝に${fmtMoney((HOUSING.dotsou && HOUSING.dotsou.rent) || 8000)}。\n払えないときは、スマホの「家計」からあとで払えばいいの。\nうちはね、だれも追い出したりしないから。`,
+    'スマホは、メニューから開けるわよ。\nお友だちからの連絡も、そこに届くの。',
+    '西の「ドット商店街」には、スーパーやお花屋さん、\n家具屋さんに不動産屋さんもあるわ。\n一度のぞいてごらんなさい。',
+  ];
+  if (!g.state.agency) lines.push('それから、お仕事ね。まずは事務所のオーディション！\nよしもとさん、グレープカンパニーさん、ホリプロさん…\nこのあたりにいっぱいあるわよ。');
+  return lines;
+}
 
 async function buildUpgrade(g, up, o) {
   const st = g.state;
@@ -157,8 +166,8 @@ export async function oyaTalk(g, npc) {
   }
   if (!g.flag('home_v2told')) {
     g.setFlag('home_v2told');
-    await g.say(oyaSmallTalk(g), o);
-    await g.say(OYA_LIFE, o);
+    g.setFlag('home_v2called'); // told in person: no call from the door
+    await g.say(oyaLife(g), o);
     return;
   }
   if (debt > 0) {
@@ -203,6 +212,11 @@ export async function oyaTalk(g, npc) {
 // Leaving the room with enough money for the next level: she calls out once per level.
 async function oyaCall(g) {
   if (!lives(g, 'dotsou')) return;
+  if (!g.flag('home_v2told') && !g.flag('home_v2called')) {
+    g.setFlag('home_v2called');
+    await g.say('（ドアの外から、大家さんの声がする…）\n「{name}ちゃーん、おでかけ？\nちょっといいかしら〜？」');
+    return;
+  }
   const up = HOME_UPGRADES[homeLevel(g)];
   if (!up || g.state.money < up.price || g.flag('home_called') === up.level) return;
   g.setFlag('home_called', up.level);
@@ -219,13 +233,8 @@ async function intro(g) {
     '【あそびかた】\n移動：矢印キー／WASD（スマホは十字パッド）\n話す・調べる・決定：Aボタン（Z / スペース / Enter）',
     'ダッシュ：Bボタン（X / Shift）を押しながら移動\nメニュー：Esc / C（スマホはMENUボタン）',
     'お仕事やレッスンをすると体力が減る。\nベッドで寝ると体力が回復して、次の日になるよ。',
-    'お仕事で知名度を上げて、称号をランクアップさせよう！\n部屋の外に出たら、街の人に話を聞いてみよう。',
-  ]);
-  await g.say([
-    '【くらし】右上のゲージは「満腹」「ストレス」「身だしなみ」。\n食べる・遊ぶ・お風呂で、毎日ととのえよう。',
-    'ストレスが限界になると、お仕事ができなくなる。\nこの部屋のキッチンで自炊、ユニットバスでシャワーもできるよ。',
-    '家賃は毎週月曜の朝に¥8,000。\nメニュー→スマホで、連絡や家計をチェックしよう。',
-    '東京エリアの西には「ドット商店街」。\n買い物はもちろん、家具や引っ越し先も探せるよ。',
+    'お仕事で知名度を上げて、称号をランクアップさせよう！\n部屋を出たら、まずはアパートの前の大家さんにあいさつ。\n街の人の話も聞いてみよう。',
+    '【くらし】右上のゲージは「満腹」「ストレス」「身だしなみ」。\n食べる・遊ぶ・お風呂で、毎日ととのえよう。\n困ったら メニュー→てちょうの「せいかつ」を見てね。',
   ]);
 }
 
@@ -262,12 +271,24 @@ async function trophyTalk(g) {
   ]);
 }
 
+// Free practice at home (PC, 防音ブース): a little hunger, stress and sweat, like a light lesson.
+export const SELF_PRACTICE_TICK = { hunger: -4, stress: 2, clean: -2 };
+const PRACTICE_PER_DAY = 3;
+const practiceToday = (g) => {
+  const f = g.flag('home_practice');
+  return f && typeof f === 'object' && f.day === g.state.day ? Number(f.n) || 0 : 0;
+};
+
 export async function selfPractice(g) {
+  const done = practiceToday(g);
+  if (done >= PRACTICE_PER_DAY) { await g.say(`今日の自主練は、もう${PRACTICE_PER_DAY}回やった。\n集中力が続かない…。また明日にしよう。`); return; }
   const keys = Object.keys(SKILLS);
-  const i = await g.ask('パソコンで動画を見ながら自主練しよう。\n（無料・体力 -10・スキル +1）', [...keys.map((k) => SKILLS[k] + 'の練習'), 'やめておく']);
+  const i = await g.ask(`パソコンで動画を見ながら自主練しよう。\n（無料・体力 -10・スキル +1・今日あと${PRACTICE_PER_DAY - done}回）`, [...keys.map((k) => SKILLS[k] + 'の練習'), 'やめておく']);
   if (i < 0 || i >= keys.length) return;
   if (g.state.skills[keys[i]] >= SKILL_MAX) { await g.say(`${SKILLS[keys[i]]}はもう極めている！\nほかのスキルをみがこう。`); return; }
   if (!g.useStamina(10)) { await g.say('体力が足りない…。今日はもう休もう。'); return; }
+  g.setFlag('home_practice', { day: g.state.day, n: done + 1 });
+  g.lifeTick(SELF_PRACTICE_TICK);
   await g.fadeOut(10);
   g.sfx('drum');
   await g.wait(400);
@@ -299,6 +320,8 @@ export async function coaching(g) {
   if (st.skills[k] >= SKILL_MAX) { await g.say(`${SKILLS[k]}はもう極めている！\nほかのスキルをみがこう。`); return; }
   if (st.money < COACH.price) { await g.say(`受講料（${fmtMoney(COACH.price)}）が足りない…。\nお仕事でかせいでからにしよう。`); return; }
   if (st.stamina < COACH.stamina) { await g.say('体力が足りない…。\n休んでからにしよう。'); return; }
+  const tired = g.lifeRefusal();
+  if (tired) { await g.say(tired); return; }
   const room = SKILL_MAX - st.skills[k];
   if (room < COACH.gain) {
     const j = await g.ask(`${SKILLS[k]}は、あと${room}で極められる。\n受講料は${fmtMoney(COACH.price)}のまま。受ける？`, ['受ける', 'やめておく']);
@@ -307,6 +330,8 @@ export async function coaching(g) {
   g.spend(COACH.price);
   g.useStamina(COACH.stamina);
   g.setFlag('home_coachDay', st.day);
+  st.life.workDay = st.day; // a lesson like g.lesson: no day off, and the same toll on the needs
+  g.lifeTick('lesson');
   await g.say(COACH_LINES[k], COACH_NPC);
   await g.fadeOut(10);
   g.sfx('drum');
@@ -695,8 +720,7 @@ registerPlace({
         fixMaxStamina(g);
         if (!g.flag('intro')) {
           g.setFlag('intro');
-          g.setFlag('home_v2told'); // the intro already explained the life basics
-          await intro(g);
+          await intro(g); // the landlady explains the life basics on the first talk (home_v2told)
         }
         if (!mine(g)) return;
         await announceDelivery(g, 'dotsou');

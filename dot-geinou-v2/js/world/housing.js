@@ -29,9 +29,9 @@ import { registerSong } from '../engine/audio.js';
 import { HOUSING, FURNITURE, PEOPLE, registerHousing, registerFurniture, onMorning } from '../engine/life.js';
 import {
   lives, onceToday, openCloset, pcMenu, cook, takeBath, sleepInBed, closetProp, announceDelivery,
-  drawFurniture, furnitureProps, ownedFurniture, bedPiece, fixMaxStamina, TV_TIPS,
+  drawFurniture, furnitureProps, ownedFurniture, bedPiece, fixMaxStamina, TV_TIPS, SELF_PRACTICE_TICK,
 } from './home.js';
-import { ITEMS } from '../engine/state.js';
+import { ITEMS, SKILL_MAX } from '../engine/state.js';
 
 // ================================================================ housing
 if (!HOUSING.dotsou) registerHousing('dotsou', { name: 'ドット荘', place: 'home', rent: 8000, sleepStress: 15, kitchen: true, bath: true, slots: 4 });
@@ -42,16 +42,16 @@ Object.assign(HOUSING.dotsou, {
 });
 registerHousing('mansion', {
   name: 'ドットレジデンス', short: 'レジデンス', place: 'mansion', room: 'apartment', plan: '1LDK・7階',
-  rent: 45000, moveCost: 120000, requires: { fame: 250 }, sleepStress: 22, kitchen: true, bath: true, slots: 6,
+  rent: 30000, moveCost: 60000, requires: { fame: 250 }, sleepStress: 22, kitchen: true, bath: true, slots: 6,
   bathStress: 6,
-  desc: '商店街のそばの、明るい1LDKマンション。湯船につかれるお風呂と、広いキッチンつき。',
+  desc: '商店街のそばの、明るい1LDKマンション。\n湯船につかれるお風呂と、広いキッチンつき。',
   perks: ['寝るとストレス -22', 'お風呂（1日1回ストレス -6）', 'システムキッチン', '家具は6つまで', 'オートロック・管理人さん'],
 });
 registerHousing('tower', {
   name: 'ドットタワー', short: 'タワー', place: 'tower', room: 'apartment', plan: '2LDK・52階',
-  rent: 150000, moveCost: 500000, requires: { fame: 1000 }, sleepStress: 30, kitchen: true, bath: true, slots: 8,
+  rent: 90000, moveCost: 250000, requires: { fame: 1000 }, sleepStress: 30, kitchen: true, bath: true, slots: 8,
   bathStress: 10,
-  desc: '街を見下ろすタワーマンションの最上階。夜景の見える大きな窓と、ジェットバスつき。',
+  desc: '街を見下ろすタワーマンションの最上階。\n夜景の見える大きな窓と、ジェットバスつき。',
   perks: ['寝るとストレス -30', 'ジェットバス（1日1回ストレス -10）', '夜景を一望できる大きな窓', '家具は8つまで', 'コンシェルジュ（食事・ギフト）'],
 });
 export const HOME_ORDER = ['dotsou', 'mansion', 'tower'];
@@ -374,6 +374,8 @@ async function dailyRelax(g, id, lines, gains = {}) {
   await g.say([...lines, today ? `（${what}）` : '（今日はもう十分。また明日にしよう）']);
 }
 
+const BOOTH_GAIN = 3;
+
 const FURNITURE_LIST = [
   ['plant', {
     name: '観葉植物セット', price: 5000, stress: 1, tall: true, artH: 64, paint: paintPlantSet,
@@ -382,7 +384,7 @@ const FURNITURE_LIST = [
   }],
   ['yogamat', {
     name: 'ストレッチマット', price: 8000, stamina: 2, artH: 32, paint: paintYogaMat,
-    desc: 'ストレッチと筋トレのセット。毎日続ければ体力がつく。', perk: '体力の最大値 +2（一度だけ）',
+    desc: 'ストレッチと筋トレのセット。体がほぐれて、体力もつく。', perk: '体力の最大値 +2（一度だけ）',
     use: (g) => dailyRelax(g, 'yogamat', ['マットの上で、じっくりストレッチ。\n体がのびて、頭もすっきりした。'], { stress: 4 }),
   }],
   ['bookshelf', {
@@ -461,18 +463,23 @@ const FURNITURE_LIST = [
   }],
   ['booth', {
     name: '防音ブース', price: 180000, tall: true, artH: 64, paint: paintBooth, anim: animBooth,
-    desc: '家で思いきり歌える防音室。何度でも練習できる。', perk: '歌の自主練：体力 -10で 歌 +2',
+    desc: '家で思いきり歌える防音室。夜でも気がねなく練習できる。', perk: '1日1回 歌の自主練で 歌 +3（体力 -10）',
+    // once a day like the bookshelf and dresser (lessons and coaching stay the main way to grow)
     use: async (g) => {
-      const i = await g.ask('防音ブースだ。思いきり歌の練習をする？\n（無料・体力 -10・歌 +2）', ['練習する', 'やめておく'], { cancel: 1 });
+      if (g.flag('housing_use_booth') === g.state.day) { await g.say('防音ブースだ。\n今日はもうたっぷり歌った。のどを休めよう。'); return; }
+      if (g.state.skills.uta >= SKILL_MAX) { await g.say('防音ブースだ。\n歌はもう極めている！'); return; }
+      const i = await g.ask(`防音ブースだ。思いきり歌の練習をする？\n（無料・体力 -10・歌 +${BOOTH_GAIN}・1日1回）`, ['練習する', 'やめておく'], { cancel: 1 });
       if (i !== 0) return;
-      if (g.state.skills.uta >= 100) { await g.say('歌はもう極めている！'); return; }
       if (!g.useStamina(10)) { await g.say('体力が足りない…。のどを休めよう。'); return; }
+      g.setFlag('housing_use_booth', g.state.day);
+      g.lifeTick(SELF_PRACTICE_TICK);
       await g.fadeOut(10);
       g.sfx('success');
       await g.wait(500);
       await g.fadeIn(10);
-      g.addSkill('uta', 2, true);
-      await g.say(`ブースの中で、思いっきり歌った！\n歌が2上がった。（${g.state.skills.uta}）`);
+      const before = g.state.skills.uta;
+      g.addSkill('uta', BOOTH_GAIN, true);
+      await g.say(`ブースの中で、思いっきり歌った！\n歌が${g.state.skills.uta - before}上がった。（${g.state.skills.uta}）`);
     },
   }],
   ['bed_king', {
@@ -1312,6 +1319,12 @@ async function rentTalk(g, o) {
 
 // ---------------------------------------------------------------- the furniture store
 const perkOf = (f) => f.perk || f.desc || '';
+// A bed that is a step down from the one you have (it would trade the better bed in).
+function downgrade(g, id) {
+  const f = FURNITURE[id];
+  const cur = f && f.bed ? bedPiece(g) : null;
+  return !!(cur && cur !== id && FURNITURE[cur].price > f.price);
+}
 export async function buyFurniture(g, id, o = speak(CLERK)) {
   const st = g.state;
   const f = FURNITURE[id];
@@ -1328,6 +1341,10 @@ export async function buyFurniture(g, id, o = speak(CLERK)) {
   if (st.money < pay) { await g.say(`「${f.name}」${fmtMoney(f.price)}\n${perkOf(f)}\nお代が、あと${fmtMoney(pay - st.money)}足りないようです…。`, o); return false; }
   const i = await g.ask(`「${f.name}」${fmtMoney(f.price)}\n${perkOf(f)}\n${deal}`, ['買う', 'やめておく'], { ...o, cancel: 1 });
   if (i !== 0) return false;
+  if (downgrade(g, id)) {
+    const j = await g.ask(`いまの「${FURNITURE[oldBed].name}」のほうが\n上等なベッドですが…\n本当に入れかえますか？`, ['入れかえる', 'やめておく'], { ...o, cancel: 1 });
+    if (j !== 0) { await g.say('かしこまりました。\nいまのベッドを、大事に使ってくださいね。', o); return false; }
+  }
   if (st.money < pay) { await g.say(`お客さま、お代が足りないようです…。\n（あと${fmtMoney(pay - st.money)}）`, o); return false; }
   // the bed being replaced leaves with the new one coming in: it never takes part in the count
   if (ownedFurniture(g).filter((k) => k !== oldBed).length >= h.slots) {
@@ -1364,8 +1381,8 @@ async function catalog(g, o) {
     const n = ownedFurniture(g).length;
     const i = await g.list({
       title: `家具カタログ（お部屋の家具 ${n}/${h.slots}）`, x: 24, y: 52, w: 420, px: true, index,
-      items: ids.map((id) => ({ label: FURNITURE[id].name, right: g.furnitureOwned(id) ? '持っている' : fmtMoney(FURNITURE[id].price), disabled: g.furnitureOwned(id) })),
-      describe: (k) => `${perkOf(FURNITURE[ids[k]])}\n${FURNITURE[ids[k]].desc || ''}`,
+      items: ids.map((id) => ({ label: FURNITURE[id].name + (downgrade(g, id) ? '（ランク下）' : ''), right: g.furnitureOwned(id) ? '持っている' : fmtMoney(FURNITURE[id].price), disabled: g.furnitureOwned(id) })),
+      describe: (k) => `${perkOf(FURNITURE[ids[k]])}\n${downgrade(g, ids[k]) ? 'いまのベッドより下のランクです' : FURNITURE[ids[k]].desc || ''}`,
     });
     if (i < 0) return;
     index = i;
@@ -1505,7 +1522,7 @@ registerPlace({
         display('bed_good', 9, 7, 2, 2), display('bed_king', 12, 7, 2, 2),
         { type: 'npc', id: 'mokume', x: 16, y: 6, dir: 'left', ...CLERK, talk: clerkTalk },
         { type: 'npc', id: 'kagu_couple', x: 7, y: 4, dir: 'up', look: { ...LOOKS.mom, top: '#5fd7ff' }, name: 'お客さん', wander: 1, text: ['このソファ、すわり心地がいいわねえ…。', 'でも、うちの部屋に入るかしら？\n家具は置ける数が決まってるのよね。'] },
-        { type: 'sign', x: 16, y: 3, text: '「家具はお部屋のパワーアップ！」\n毎朝の気分や、身だしなみが変わります。\n置ける数：ドット荘4・レジデンス6・タワー8\n（ベッドも1つに数えます）' },
+        { type: 'sign', x: 16, y: 3, text: ['「家具はお部屋のパワーアップ！」\n毎朝の気分や、身だしなみが変わります。', '置ける数：ドット荘4・レジデンス6・タワー8\n（ベッドも1つに数えます）'] },
       ],
       events: exitEvents('kagu', [9], 11),
     },

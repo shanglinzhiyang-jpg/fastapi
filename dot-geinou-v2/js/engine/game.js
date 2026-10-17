@@ -22,9 +22,13 @@ import {
   SKILLS, SKILL_MAX, ITEMS, AGENCIES, RANKS, FINALE_FAME,
   rankIndex, rankName, saveGame, payText,
 } from './state.js';
-import { installLife, REGULARS, SCRUFFY } from './life.js';
+import { installLife, REGULARS, SCRUFFY, ACTIVITY } from './life.js';
 
 const RANK_MULT = { S: 1.5, A: 1.2, B: 1.0, C: 0.7, D: 0.4 };
+// A job's mood swing on top of ACTIVITY.job.stress: a great result lifts it, a bad one weighs.
+const RANK_STRESS = { S: -4, D: 3 };
+// The minigame bonus (skill + condition) never goes below this (a hungry, stressed beginner).
+const MIN_BONUS = -0.35;
 // Wording of the regular-show door prompt by REGULARS[id].medium.
 const SHOW_WORDS = {
   tv: { day: '収録日', where: 'スタジオ', go: '収録へ行く' },
@@ -158,6 +162,8 @@ export class Game {
     this.toasts = this.toasts.filter((t) => t.t < t.life);
     if (this.banner && ++this.banner.t > this.banner.life) this.banner = null;
     if (this.shakeT > 0) this.shakeT--;
+    // a need crossed a line while walking: explain it as soon as the player is free
+    if (this.pendingTips && this.pendingTips.length && !this.busy && this.state && this.top === this.map && this.map.place) this.afterScript();
     this.input.update();
   }
 
@@ -220,6 +226,11 @@ export class Game {
   }
 
   afterScript() {
+    if (this.pendingTips && this.pendingTips.length) {
+      const tips = this.pendingTips.splice(0);
+      this.run(async () => { for (const t of tips) await this.say(t); });
+      return;
+    }
     if (this.pendingRankUp) {
       const r = this.pendingRankUp;
       this.pendingRankUp = null;
@@ -419,18 +430,22 @@ export class Game {
     if (fade) await this.fadeIn();
     // outside a script (new game / continue / test start) run it as one so the player cannot move meanwhile
     if (room.onEnter) await (this.busy > 0 ? room.onEnter(this) : this.run(room.onEnter));
-    // a regular show recorded here today: offer to go straight to the studio
-    if (changedPlace && this.state && roomId === place.start.room) {
-      const due = this.regularsToday(placeId);
-      if (due.length) {
-        const ask = async () => {
-          const r = REGULARS[due[0]];
+    // regular shows recorded here today: offer to go straight to the studio (one after
+    // the other when two fall on the same day; あとにする stops asking)
+    if (changedPlace && this.state && roomId === place.start.room && this.regularsToday(placeId).length) {
+      const ask = async () => {
+        const asked = new Set();
+        for (;;) {
+          const id = this.regularsToday(placeId).find((x) => !asked.has(x));
+          if (!id) return;
+          asked.add(id);
+          const r = REGULARS[id];
           const w = SHOW_WORDS[r.medium] || SHOW_WORDS.tv;
           const i = await this.ask(`今日は『${r.title}』の${w.day}だ！\n${w.where}へ向かう？（体力 -${r.stamina}）`, [w.go, 'あとにする'], { cancel: 1 });
-          if (i === 0) await this.doRegular(due[0]);
-        };
-        await (this.busy > 0 ? ask() : this.run(ask));
-      }
+          if (i !== 0 || !(await this.doRegular(id))) return;
+        }
+      };
+      await (this.busy > 0 ? ask() : this.run(ask));
     }
   }
 
@@ -464,12 +479,18 @@ export class Game {
     return true;
   }
 
+  // A new title is announced once: dropping below it (a missed show) and climbing back
+  // does not announce it again (stats.bestRank = the highest title reached).
   addFame(n, silent = false) {
-    const before = rankIndex(this.state.fame);
-    this.state.fame = Math.max(0, this.state.fame + Math.round(n));
+    const st = this.state;
+    const stats = st.stats || (st.stats = {});
+    const before = rankIndex(st.fame);
+    const best = Math.max(before, Number.isFinite(stats.bestRank) ? stats.bestRank : before);
+    st.fame = Math.max(0, st.fame + Math.round(n));
     if (!silent && n) this.notify(`知名度 ${n > 0 ? '+' : ''}${Math.round(n)}`, { color: COLORS.pink });
-    const after = rankIndex(this.state.fame);
-    if (after > before) this.pendingRankUp = RANKS[after][1];
+    const after = rankIndex(st.fame);
+    stats.bestRank = Math.max(best, after);
+    if (after > best) this.pendingRankUp = RANKS[after][1];
   }
 
   addSkill(key, n, silent = false) {
@@ -536,11 +557,19 @@ export class Game {
     }
     const prevBgm = audio.current ? audio.current.name : (audio.wanted || null);
     const skill = opts.skill || Cls.skill;
-    const bonus = opts.bonus ?? Math.max(0, this.skillBonus(skill) + (this.state ? this.lifeBonus(skill) : 0));
+    // skill (+ a buff item) and the player's condition, shown apart on the intro card
+    let bonus = opts.bonus;
+    let bonusInfo = opts.bonusInfo || null;
+    if (bonus == null) {
+      const sb = this.skillBonus(skill);
+      const parts = this.state ? this.lifeBonusParts(skill) : [];
+      bonus = Math.max(MIN_BONUS, sb + parts.reduce((a, p) => a + p.v, 0));
+      bonusInfo = { skill: sb, parts };
+    }
     return new Promise((resolve) => {
       let mg;
       try {
-        mg = new Cls(this, { ...opts, bonus });
+        mg = new Cls(this, { ...opts, bonus, bonusInfo });
       } catch (e) {
         console.error(e);
         resolve({ score: 50, rank: 'C', success: true, comment: '' });
@@ -607,7 +636,7 @@ export class Game {
     if (why) { await this.say(why); return null; }
     if (def.confirm !== false) {
       const desc = def.desc ? def.desc + '\n' : '';
-      const i = await this.ask(`${desc}「${def.title}」\n${payText(def.pay ?? 3000)}／体力 -${stamina}`, ['受ける', 'やめておく'], { name: def.client, look: def.clientLook });
+      const i = await this.ask(`${desc}「${def.title}」\n${payText(def.pay ?? 3000)}／体力 -${stamina}・ストレス +${ACTIVITY.job.stress}`, ['受ける', 'やめておく'], { name: def.client, look: def.clientLook });
       if (i !== 0) return null;
     }
     if (st.stamina < stamina) {
@@ -615,6 +644,7 @@ export class Game {
       return null;
     }
     st.stamina -= stamina;
+    st.life.workDay = st.day;
     const res = await this.minigame(def.minigame, { ...(def.opts || {}), skill: def.skill, title: def.title });
     const agencyBonus = st.agency && AGENCIES[st.agency] && AGENCIES[st.agency].skill === def.skill ? 1.1 : 1;
     const mult = RANK_MULT[res.rank] * agencyBonus;
@@ -629,12 +659,16 @@ export class Game {
     this.addFame(fame, true);
     this.addFans(fans, true);
     if (def.skill) this.addSkill(def.skill, gain, true);
+    const L = st.life;
+    const was = { hunger: L.hunger, stress: L.stress, clean: L.clean };
     this.lifeTick('job');
     // a great result lifts the mood, a bad one weighs on it
-    if (res.rank === 'S') this.addNeed('stress', -10);
-    else if (res.rank === 'D') this.addNeed('stress', 6);
+    if (RANK_STRESS[res.rank]) this.addNeed('stress', RANK_STRESS[res.rank]);
     audio.sfx('coin');
-    const lines = [`お仕事終了！ランク${res.rank}`, `ギャラ ${fmtMoney(pay)}　知名度 +${fame}　ファン +${fans}` + (def.skill ? `\n${SKILLS[def.skill]} +${gain}` : '')];
+    const sign = (v) => (v > 0 ? '+' : '') + v;
+    const needs = [['満腹', L.hunger - was.hunger], ['ストレス', L.stress - was.stress], ['身だしなみ', L.clean - was.clean]].filter(([, v]) => v).map(([k, v]) => `${k} ${sign(v)}`).join('・');
+    const lines = [`お仕事終了！ランク${res.rank}` + (def.skill ? `　${SKILLS[def.skill]} +${gain}` : ''), `ギャラ ${fmtMoney(pay)}　知名度 +${fame}　ファン +${fans}`];
+    if (needs) lines.push(`（${needs}）`);
     if (scruffy) lines.push('（身だしなみが乱れていて、少し評価が下がった…）');
     await this.say(lines.join('\n'));
     return res;
@@ -653,6 +687,7 @@ export class Game {
     if (tired) { await this.say(tired); return null; }
     st.money -= price;
     st.stamina -= stamina;
+    st.life.workDay = st.day;
     this.lifeTick('lesson');
     let gain = def.gain ?? 3;
     let res = null;
@@ -692,6 +727,7 @@ export class Game {
     const tired = this.lifeRefusal();
     if (tired) { this.lastAudition = 'nostamina'; await this.say(tired); return false; }
     st.stamina -= stamina;
+    st.life.workDay = st.day;
     this.lifeTick('audition');
     const pass = def.pass ?? 55;
     const res = await this.minigame(def.minigame, { ...(def.opts || {}), skill: def.skill || (MINIGAMES[def.minigame] && MINIGAMES[def.minigame].skill) || ag.skill, title: def.title || ag.name + 'オーディション', pass });
@@ -717,17 +753,35 @@ export class Game {
   }
 
   // Sleep: restores stamina, advances the day, runs the morning (needs, rent,
-  // messages: see life.js), autosaves.
+  // messages: see life.js), shows the morning notes (rent paid, a poor night…), autosaves.
+  // opts: { save, away (default: when not in your own home's place), shower, sleepStress,
+  //   notes: false (do not show the notes; they stay in g.morningNotes) }
   async sleep(opts = {}) {
     const hungerAtNight = this.state.life.hunger;
+    const placeId = this.map && this.map.placeId;
+    const home = this.housing().place;
+    const away = opts.away ?? !!(placeId && home && placeId !== home && PLACES[placeId]);
     await this.fadeOut(20);
     audio.sfx('sleep');
     await this.wait(1200);
     this.state.day++;
     this.state.stamina = this.state.maxStamina;
-    await this.morning(hungerAtNight);
+    await this.morning(hungerAtNight, { away, place: placeId, shower: opts.shower, sleepStress: opts.sleepStress });
     await this.fadeIn(20);
     this.notify(`${this.dayLabel()}の朝`, { color: '#fff' });
+    // what the night did to the needs (the stress part is in the bed's own message)
+    const m = this.lastMorning;
+    if (m) {
+      const sign = (v) => (v > 0 ? '+' : '') + v;
+      const bits = [];
+      if (m.hunger) bits.push(`満腹 ${sign(m.hunger)}`);
+      if (m.clean || m.shower) bits.push(`身だしなみ ${sign(m.clean)}${m.shower ? '（朝シャワー）' : ''}`);
+      if (bits.length) this.notify(bits.join('　'), { color: '#fff', life: 200 });
+    }
+    if (opts.notes !== false && this.morningNotes && this.morningNotes.length) {
+      const notes = this.morningNotes.splice(0);
+      await this.say(notes); // one page each
+    }
     if (opts.save !== false) this.save();
   }
 

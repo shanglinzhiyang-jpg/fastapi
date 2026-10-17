@@ -7,8 +7,9 @@
 //
 // Also here (installed into PEOPLE_UI of life.js at load):
 //   talkPersonUI(g, npc)        talking to an NPC linked to a person: hooks.start, a heart
-//                               event first, hooks.before (may take over), then (♥1+) a
-//                               small menu 話す / プレゼント / さそう / [extras] / またね,
+//                               event first, hooks.before (may take over), then (from the
+//                               second talk; the first is their own introduction) a small
+//                               menu 話す / プレゼント / さそう (♥2) / [extras] / またね,
 //                               hooks.after. Content extends it with PEOPLE_UI.extras
 //                               ({ id, label, cond(g, id, npc), run(g, id, npc), repeat,
 //                               order }) and PEOPLE_UI.hooks — see life.js; do not replace
@@ -705,7 +706,10 @@ function homeView(g) {
         try { n = app.badge ? app.badge(g) | 0 : 0; } catch (e) { n = 0; }
         if (n > 0) drawBadge(c, ix + 31, iy + 1, n);
         const label = fitText(c, app.name || app.id, CELL_W + 6, 12);
-        text(c, label, ix + 16, p.y + 37, { size: 12, align: 'center', color: sel ? COLORS.accent : '#ffffff', shadow: '#0a0b18' });
+        // keep long names (メッセージ) inside the screen's edges
+        const lw = measure(c, label, 12);
+        const lx = clamp(ix + 16, SCREEN.x + lw / 2 + 3, SCREEN.x + SCREEN.w - lw / 2 - 3);
+        text(c, label, lx, p.y + 37, { size: 12, align: 'center', color: sel ? COLORS.accent : '#ffffff', shadow: '#0a0b18' });
       }
       const rows = Math.ceil(apps.length / COLS);
       if (rows > GRID_ROWS) {
@@ -725,7 +729,7 @@ function todayInfo(g) {
   const unread = g.unread();
   if (unread && out.length < 2) out.push([`未読メッセージ ${unread}件`, PC.text]);
   const d = daysToRent(g);
-  out.push([`家賃まで あと${d}日（${fmtMoney(g.housing().rent)}）`, PC.dim]);
+  out.push([`家賃まで ${d === 1 ? 'あした' : `あと${d}日`}（${fmtMoney(g.housing().rent)}）`, PC.dim]);
   return out;
 }
 const daysToRent = (g) => (7 - weekdayOf(g.state.day)) % 7 || 7;
@@ -1158,7 +1162,8 @@ export async function answerMessage(g, m, yes) {
       audio.sfx('fanfare');
       const where = placeName(r.place);
       const day = showDay(r);
-      await g.say(`『${r.title}』のレギュラーになった！\n${day ? day + 'は、' : ''}${where ? where + 'で収録だ。' : '収録をがんばろう。'}`);
+      const now = g.regularsToday().includes(m.regular);
+      await g.say(`『${r.title}』のレギュラーになった！\n${day ? day + 'は、' : ''}${where ? where + 'で収録だ。' : '収録をがんばろう。'}` + (now ? '\n（さっそく今日も収録がある。今週は休んでもだいじょうぶ）' : ''));
     } else {
       m.answered = 'no';
       if (!g.state.regulars[m.regular]) g.state.regulars[m.regular] = { declined: g.state.day, dropped: true, doneWeek: 0, missed: 0, count: 0 };
@@ -1576,18 +1581,29 @@ function moneyView(g) {
     color: APP_COLORS.money,
     cancel: -1,
     flash: 0,
-    hint() { return g.state.rent.debt ? 'A:未払いを払う　B:もどる' : 'B:もどる'; },
+    hint() {
+      const st = g.state;
+      if (!st.rent.debt) return 'B:もどる';
+      return st.money >= st.rent.debt ? 'A:未払いを払う　B:もどる' : st.money > 0 ? 'A:払えるだけ払う　B:もどる' : 'B:もどる';
+    },
     update(ph, inp) {
       if (this.flash > 0) this.flash--;
       const st = g.state;
       if (inp.pressed('a') && st.rent.debt) {
         const d = st.rent.debt;
         const h = g.housing();
-        if (g.payDebt()) {
-          this.flash = 40;
+        if (st.money <= 0) { audio.sfx('buzz'); ph.toast(`お金が足りない…（未払い ${fmtMoney(d)}）`, '#ff5d6c'); return; }
+        // as much as the money allows: the rest stays as debt
+        const cleared = g.payDebt(true);
+        const paid = g.lastDebtPaid || 0;
+        this.flash = 40;
+        if (cleared) {
           g.message({ from: h.name, kind: 'bill', read: true, text: `未払いの家賃 ${fmtMoney(d)} をお支払いいただきました。ありがとうございました。` });
           ph.toast(`家賃 -${fmtMoney(d)}　ほっとした…`, '#8a5ac8');
-        } else { audio.sfx('buzz'); ph.toast(`お金が足りない…（あと${fmtMoney(d - st.money)}）`, '#ff5d6c'); }
+        } else {
+          g.message({ from: h.name, kind: 'bill', read: true, text: `未払い分 ${fmtMoney(paid)} をお支払いいただきました。（のこり ${fmtMoney(st.rent.debt)}）` });
+          ph.toast(`家賃 -${fmtMoney(paid)}（のこり ${fmtMoney(st.rent.debt)}）`, '#8a5ac8');
+        }
         return;
       }
       if (inp.pressed('b') || inp.pressed('a')) { audio.sfx('cancel'); ph.back(-1); }
@@ -1619,10 +1635,10 @@ function moneyView(g) {
         box(c, a.x + 8, y, a.w - 16, 40, 5, '#fff0f0', col);
         T(c, '未払いの家賃', a.x + 16, y + 5, 12, col);
         text(c, fmtMoney(st.rent.debt), a.x + 16, y + 19, { size: 16, color: col, shadow: null });
-        const ok = st.money >= st.rent.debt;
+        const ok = st.money > 0;
         const bc = ok ? APP_COLORS.money : '#c8c2b4';
         box(c, a.x + a.w - 78, y + 9, 62, 22, 5, bc, shade(bc, -0.5), { lo: shade(bc, -0.2) });
-        T(c, '払う(A)', a.x + a.w - 47, y + 13, 12, ok ? '#ffffff' : '#6a6878', 'center');
+        T(c, st.money >= st.rent.debt || !ok ? '払う(A)' : '一部払う', a.x + a.w - 47, y + 13, 12, ok ? '#ffffff' : '#6a6878', 'center');
       } else {
         box(c, a.x + 8, y, a.w - 16, 24, 5, this.flash ? '#e8ffe0' : '#f0f8ea', PC.good);
         miniIcon(c, a.x + 14, y + 6, 'done');
@@ -1719,8 +1735,13 @@ async function sayLines(g, lines, def) {
 // (price 0 without an effect) and key items stay out.
 function giftable(g) {
   const ids = Object.keys(g.state.items).filter((k) => g.state.items[k] > 0 && ITEMS[k] && !ITEMS[k].key && (ITEMS[k].gift || ITEMS[k].heal || ITEMS[k].buff || ITEMS[k].price > 0));
-  return ids.sort((a, b) => (ITEMS[b].gift ? 1 : 0) - (ITEMS[a].gift ? 1 : 0));
+  // real gifts first, then food, other things, and cooking ingredients last
+  const order = (k) => (ITEMS[k].gift ? 0 : isIngredient(k) ? 3 : ITEMS[k].heal ? 1 : 2);
+  return ids.sort((a, b) => order(a) - order(b));
 }
+const isIngredient = (k) => /^ing_/.test(k);
+// An item's description in the gift list (without the "give it to someone" hint).
+const giftDesc = (k) => String((ITEMS[k] && ITEMS[k].desc) || '').replace(/\n?（人に話しかけて「プレゼント」でわたそう）\s*$/, '');
 
 async function giftFlow(g, id, def, npc) {
   const p = g.person(id);
@@ -1732,23 +1753,26 @@ async function giftFlow(g, id, def, npc) {
   const mark = { love: '♥', like: '♪', dislike: '×' };
   const i = await g.list({
     title: `${def.name}へのプレゼント`,
-    items: ids.map((k) => ({ label: (mark[known[k]] ? mark[known[k]] + ' ' : '') + ITEMS[k].name, right: '×' + g.state.items[k] })),
+    items: ids.map((k) => ({ label: (mark[known[k]] ? mark[known[k]] + ' ' : '') + (isIngredient(k) ? '（食材）' : '') + ITEMS[k].name, right: '×' + g.state.items[k] })),
     x: 12, y: 56, w: 330, px: true,
-    describe: (k) => ITEMS[ids[k]].desc || '',
+    describe: (k) => giftDesc(ids[k]) + (g.giftRepeat && g.giftRepeat(id, ids[k]) ? '\n（このあいだも同じものをあげた）' : ''),
   });
   if (i < 0) return;
   const item = ids[i];
   const reaction = g.giftReaction(id, item);
+  const repeat = !!(g.giftRepeat && g.giftRepeat(id, item)) && (reaction === 'love' || reaction === 'like');
   const lvBefore = g.heartLevel(id);
   g.giveGift(id, item); // also records the reaction in p.known (contact card)
-  const emo = { love: '♥', like: '♪', neutral: '!', dislike: '…' }[reaction];
+  const shown = repeat ? 'neutral' : reaction; // the same favourite again: a polite thank-you
+  const emo = { love: '♥', like: '♪', neutral: '!', dislike: '…' }[shown];
   if (npc.id) g.emote(npc.id, emo, 60);
-  audio.sfx(reaction === 'love' ? 'success' : reaction === 'like' ? 'good' : reaction === 'dislike' ? 'cancel' : 'ok');
+  audio.sfx(shown === 'love' ? 'success' : shown === 'like' ? 'good' : shown === 'dislike' ? 'cancel' : 'ok');
   const name = ITEMS[item] ? ITEMS[item].name : item;
-  let lines = def.giftLines && (def.giftLines[item] || def.giftLines[reaction]);
+  let lines = repeat ? (def.giftLines && def.giftLines.repeat) : def.giftLines && (def.giftLines[item] || def.giftLines[reaction]);
   if (typeof lines === 'function') lines = lines(g, item, def);
-  if (!lines) lines = lineFor(def, reaction, g);
+  if (!lines) lines = lineFor(def, shown, g);
   await g.say([].concat(lines).map((l) => String(l).replaceAll('{item}', name)), opts);
+  if (repeat) await g.say('（このあいだと同じプレゼントだったからか、\n前ほどは喜んでいないみたいだ。ちがう物も選んでみよう）');
   levelUpToast(g, id, lvBefore, false); // g.giveGift's addAff already showed the toast
 }
 function levelUpToast(g, id, before, toast = true) {
@@ -1839,12 +1863,16 @@ export async function talkPersonUI(g, npc) {
   }
 }
 
+// Daily affinity from the first talk of a day: a little more while you are still strangers.
+const TALK_AFF = 2, TALK_AFF_NEW = 3;
 async function talkMenu(g, id, def, npc, first) {
   const look = npc.look || def.look;
   let greet = null; // the menu's opening line: 話す does not repeat it
   const chatLines = () => (Array.isArray(def.chats) ? def.chats : def.chats ? [def.chats] : [])
     .map((l) => { try { return typeof l === 'function' ? l(g) : l; } catch (e) { console.error(e); return null; } })
     .filter((l) => l && l !== greet);
+  // the very first talk: their own introduction (the NPC's talk / text), no menu yet
+  const newFace = first || !g.person(id).talkDay;
   const chat = async () => {
     const p = g.person(id);
     const firstToday = p.talkDay !== g.state.day;
@@ -1852,8 +1880,9 @@ async function talkMenu(g, id, def, npc, first) {
     let today = null;
     if (firstToday && heartIndex(p.aff) >= 1) today = pickOne(chatLines()) || null;
     if (npc.talk) await npc.talk(g, npc);
-    else if (today) { await g.say(today, { name: def.name, look }); today = null; } else if (npc.text) await g.say(npc.text, { name: npc.name || def.name, look });
+    else if (today) { await g.say(today, { name: def.name, look }); today = null; } else if (npc.text && newFace) await g.say(npc.text, { name: npc.name || def.name, look });
     else {
+      // known faces do not introduce themselves again: one of their own lines
       let own = typeof def.chat === 'function' ? def.chat(g, def) : def.chat;
       if (!own || (Array.isArray(own) && !own.length)) own = pickOne(chatLines());
       await sayLines(g, own ? [].concat(own) : [lineFor(def, 'smalltalk', g)], { ...def, look });
@@ -1862,12 +1891,21 @@ async function talkMenu(g, id, def, npc, first) {
     if (firstToday) {
       p.talkDay = g.state.day;
       const lv = g.heartLevel(id);
-      g.addAff(id, 2, true);
+      g.addAff(id, lv < 1 ? TALK_AFF_NEW : TALK_AFF, true);
       if (npc.id) g.emote(npc.id, '♥', 40);
       levelUpToast(g, id, lv);
+      // still strangers: show how close the next step is
+      // (the very first acquaintance also explains how friendships grow)
+      if (g.heartLevel(id) < 1 && (!newFace || !g.flag('people_tip'))) {
+        const short = def.short || def.name;
+        await g.say(newFace
+          ? `（${short}と知り合った！毎日話しかけたり、\nプレゼントをわたしたりすると、仲良くなれる。♥ ${g.aff(id)}/${HEARTS[1][0]}）`
+          : `（${short}と、すこし打ち解けた気がする。♥ ${g.aff(id)}/${HEARTS[1][0]}）`);
+        if (newFace) g.setFlag('people_tip', true);
+      }
     }
   };
-  if (g.heartLevel(id) < 1) {
+  if (newFace && g.heartLevel(id) < 1) {
     await chat();
     if (first) g.notify(`${def.name}と知り合った`, { color: COLORS.pink });
     return;

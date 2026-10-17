@@ -182,6 +182,25 @@ function setupFullscreen(g) {
   document.body.classList.add('fs-ok');
 }
 
+// Portrait phones: a hint to turn the phone (CSS shows it), dismissed by a tap for
+// the rest of the session.
+function setupRotateHint(g) {
+  const el = document.getElementById('rotate');
+  if (!el) return;
+  let off = false;
+  try { off = sessionStorage.getItem('dotgeinou_rotate_off') === '1'; } catch (e) { off = false; }
+  const hide = () => {
+    document.body.classList.add('rotate-off');
+    try { sessionStorage.setItem('dotgeinou_rotate_off', '1'); } catch (e) { /* private mode */ }
+    g.resize();
+    setTimeout(() => g.resize(), 50);
+  };
+  if (off) document.body.classList.add('rotate-off');
+  el.addEventListener('click', hide);
+  // turning the phone counts as having read it
+  window.addEventListener('orientationchange', () => setTimeout(() => { if (window.matchMedia('(orientation: landscape)').matches) hide(); }, 300));
+}
+
 async function boot() {
   const canvas = document.getElementById('game');
   // On-screen pad: phones/tablets (coarse primary pointer) get it from the start.
@@ -210,6 +229,7 @@ async function boot() {
   });
   guardTouch();
   setupFullscreen(g);
+  setupRotateHint(g);
   g.setBase(loadingScene('よみこみ中…'));
   g.start();
   try {

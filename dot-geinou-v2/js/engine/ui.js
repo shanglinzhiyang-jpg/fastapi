@@ -190,12 +190,16 @@ export class ListScene {
     if (inp.pressed('b') || inp.pressed('menu')) { audio.sfx('cancel'); g.pop(this); this.resolve(this.cancel); }
   }
   draw(ctx) {
+    const g = this.g;
     const head = this.title ? 34 : 14;
     const bottom = this.describe ? BOX.y + 10 - 6 : SH - 6;
-    const y = Math.min(this.y, Math.max(4, bottom - head - Math.min(9, this.items.length || 1) * ROW));
+    // a long list is pulled up to show more rows, but never over the map's HUD (it shows fewer rows instead)
+    const hud = g && g.map && g.scenes[0] === g.map && g.state && !g.scenes.some((s) => s.hidesHud) ? HUD_H + 4 : 4;
+    const y = Math.max(hud, Math.min(this.y, bottom - head - Math.min(9, this.items.length || 1) * ROW));
     const rows = Math.max(1, Math.min(9, this.items.length || 1, Math.floor((bottom - y - head) / ROW)));
     const top = Math.max(0, Math.min(this.idx - rows + 1, this.items.length - rows));
     const h = rows * ROW + head;
+    const more = top + rows < this.items.length || top > 0; // scroll arrows at the right edge
     panel(ctx, this.x, y, this.w, h);
     let yy = y + 8;
     if (this.title) { text(ctx, this.title, this.x + 14, yy, { size: FS, color: COLORS.cyan }); yy += 26; }
@@ -207,7 +211,7 @@ export class ListScene {
       const sel = i === this.idx;
       const dim = typeof it !== 'string' && it.disabled;
       text(ctx, label, this.x + 28, yy, { size: FS, color: sel ? COLORS.accent : dim ? COLORS.dim : COLORS.text });
-      if (right) text(ctx, right, this.x + this.w - 14, yy, { size: FS, align: 'right', color: sel ? COLORS.accent : COLORS.text });
+      if (right) text(ctx, right, this.x + this.w - (more ? 30 : 14), yy, { size: FS, align: 'right', color: sel ? COLORS.accent : COLORS.text });
       if (sel) cursor(ctx, this.x + 12, yy + 4, this.t);
       yy += ROW;
     }
@@ -256,30 +260,22 @@ export function drawHud(ctx, g) {
   text(ctx, '体力', px + 134, 9, { size: 12 });
   const frac = st.stamina / st.maxStamina;
   bar(ctx, px + 164, 12, pw - 176, 9, frac, frac > 0.5 ? COLORS.good : frac > 0.2 ? COLORS.accent : COLORS.bad);
+  // the three needs: a short label (red and blinking past its penalty line) and a bar
   const L = st.life;
   const warn = Math.floor(g.frame / 20) % 2 === 0;
-  needGauge(ctx, px + 12, 27, 'hunger', L.hunger / 100, '#ff9a3c', L.hunger < HUNGRY && warn);
-  needGauge(ctx, px + 92, 27, 'stress', L.stress / 100, L.stress >= STRESSED ? COLORS.bad : L.stress >= 40 ? COLORS.accent : '#b48cff', L.stress >= STRESSED && warn);
-  needGauge(ctx, px + 172, 27, 'clean', L.clean / 100, COLORS.cyan, L.clean < SCRUFFY && warn);
+  let nx = px + 10;
+  nx = needGauge(ctx, nx, 26, '満腹', L.hunger / 100, '#ff9a3c', L.hunger < HUNGRY, warn);
+  nx = needGauge(ctx, nx, 26, 'ストレス', L.stress / 100, L.stress >= STRESSED ? COLORS.bad : L.stress >= 40 ? COLORS.accent : '#b48cff', L.stress >= STRESSED, warn);
+  needGauge(ctx, nx, 26, '身なり', L.clean / 100, COLORS.cyan, L.clean < SCRUFFY, warn);
 }
 
-// 12x12 pixel icons for the needs.
-const NEED_ICONS = {
-  hunger: ['....##....', '...#ww#...', '..#wwww#..', '.#wwwwww#.', '#wwwwwwww#', '#wkkkkkkw#', '#kkkkkkkk#', '.########.'],
-  stress: ['.r......r.', 'rr.r..r.rr', '.r.r..r.r.', '..........', '..........', '.r.r..r.r.', 'rr.r..r.rr', '.r......r.'],
-  clean: ['....c.....', '....c.....', '...ccc....', 'ccccwcccc.', '...ccc....', '....c...c.', '....c..ccc', '........c.'],
-};
-const ICON_PAL = { '#': '#22202a', w: '#ffffff', k: '#1f3b2a', r: '#ff5d6c', c: '#5fd7ff' };
-function needGauge(ctx, x, y, kind, frac, color, alert) {
-  const rows = NEED_ICONS[kind];
-  for (let j = 0; j < rows.length; j++) {
-    for (let i = 0; i < rows[j].length; i++) {
-      const ch = rows[j][i];
-      if (ch !== '.') rect(ctx, x + i, y + 1 + j, 1, 1, ICON_PAL[ch]);
-    }
-  }
-  bar(ctx, x + 14, y + 1, 50, 9, frac, color);
-  if (alert) text(ctx, '!', x + 67, y - 3, { size: 12, color: COLORS.bad });
+// One need on the HUD; returns the x where the next one starts.
+const NEED_BAR_W = 32;
+function needGauge(ctx, x, y, label, frac, color, alert, blink) {
+  const lw = measure(ctx, label, 12);
+  text(ctx, label, x, y, { size: 12, color: alert ? (blink ? COLORS.bad : '#ffffff') : COLORS.dim });
+  bar(ctx, x + lw + 3, y + 3, NEED_BAR_W, 9, frac, color);
+  return x + lw + 3 + NEED_BAR_W + 8;
 }
 
 export function drawToasts(ctx, g) {
@@ -301,7 +297,7 @@ export function drawBanner(ctx, g) {
   if (!b) return;
   const slide = b.t < 12 ? (12 - b.t) * 24 : b.life - b.t < 12 ? (12 - (b.life - b.t)) * 24 : 0;
   const w = Math.max(200, measure(ctx, b.text, FS) + 44);
-  const x = SW - w - 8 + slide;
+  const x = SW - w - 12 + slide; // right edge in line with the message window
   const y = SH - 44;
   panel(ctx, x, y, w, 34, { bg: '#1d2a5e' });
   text(ctx, b.text, x + w / 2, y + 9, { size: FS, align: 'center', color: '#fff' });
@@ -329,7 +325,7 @@ export class StatusScene {
     text(ctx, `${rankName(st.fame)}　★${st.fame}`, X + 110, Y + 50, { size: FS, color: COLORS.pink });
     const ri = rankIndex(st.fame);
     const next = RANKS[ri + 1];
-    text(ctx, next ? `次の称号「${next[1]}」まで ★${next[0] - st.fame}` : '頂点に立った！', X + 110, Y + 72, { size: 12, color: COLORS.dim });
+    text(ctx, next ? `次の称号「${next[1]}」まで あと★${next[0] - st.fame}` : '頂点に立った！', X + 110, Y + 72, { size: 12, color: COLORS.dim });
     const c2 = X + PW / 2 + 10;
     text(ctx, `所属：${st.agency ? AGENCIES[st.agency].name : 'フリー（未所属）'}`, X + 24, Y + 100, { size: FS });
     text(ctx, `体力：${st.stamina}/${st.maxStamina}`, c2, Y + 100, { size: FS });
@@ -414,7 +410,7 @@ export class ShopScene {
         const gd = this.goods[i];
         const it = ITEMS[gd.item] || { name: gd.item };
         text(ctx, it.name, x + 28, ry, { size: FS, color: sel ? COLORS.accent : COLORS.text });
-        text(ctx, fmtMoney(this.price(gd)), x + w - 14, ry + 2, { align: 'right', size: 14, color: sel ? COLORS.accent : COLORS.dim });
+        text(ctx, fmtMoney(this.price(gd)), x + w - (rows < n ? 30 : 14), ry + 2, { align: 'right', size: 14, color: sel ? COLORS.accent : COLORS.dim });
       }
       if (sel) cursor(ctx, x + 12, ry + 4, this.t);
     }
@@ -479,7 +475,8 @@ async function itemMenu(g) {
       g.takeItem(id);
       const got = g.eat(it.heal, { silent: true, fill: it.fill });
       audio.sfx('good');
-      await g.say(`${it.name}を食べた！` + (got > 0 ? `体力が${got}回復した。` : 'おなかが満たされた。') + (!g.canEat() ? '\nおなかいっぱいになった。' : ''));
+      const half = got > 0 && g.lastEatRatio < 0.75; // a nearly full stomach wastes most of it
+      await g.say(`${it.name}を食べた！` + (got > 0 ? `体力が${got}回復した。` : 'おなかが満たされた。') + (half ? '\n（おなかがいっぱい気味で、あまり回復しなかった）' : !g.canEat() ? '\nおなかいっぱいになった。' : ''));
     } else if (it.buff) {
       if (g.state.buffs[it.buff]) { await g.say('もう効果が出ている。'); continue; }
       g.takeItem(id);

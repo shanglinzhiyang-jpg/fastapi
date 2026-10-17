@@ -24,11 +24,8 @@ export const INGREDIENTS = {
   ing_chicken: { name: '鶏もも肉', price: 240, section: 'meat', desc: 'ジューシーな鶏もも肉。' },
   ing_fish: { name: '鮭の切り身', price: 230, section: 'meat', desc: '脂ののった鮭。焼くだけでごちそう。' },
   ing_cabbage: { name: 'キャベツ', price: 150, section: 'veg', desc: 'シャキシャキのキャベツ（1/4玉）。' },
-  ing_veg: { name: '野菜セット', price: 160, section: 'veg', desc: 'にんじん・玉ねぎ・じゃがいも。カレーや炒め物に。' },
+  ing_veg: { name: '野菜セット', price: 160, section: 'veg', desc: 'にんじん・玉ねぎ・じゃがいも。カレーの具に。' },
 };
-for (const [id, def] of Object.entries(INGREDIENTS)) {
-  registerItem(id, { ...def, desc: def.desc + '\n（家のキッチンで料理に使う食材）', ingredient: true });
-}
 
 // ---------------------------------------------------------------- recipes
 // heal: stamina, fill: hunger, stress: stress removed. serves: dishes made at once
@@ -58,6 +55,15 @@ export const RECIPES = [
     text: 'コトコト煮こんだ、具だくさんのカレー！\n部屋じゅうに、いいにおいが広がる。' },
 ];
 export const RECIPE = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
+
+// Ingredients are registered after the recipes, so the shop can say what each one is for:
+// "（つかう料理：肉野菜炒め・マーボー豆腐・ソース焼きそば ほか）" (the simplest 3 first).
+export function usedIn(id) { return RECIPES.filter((r) => r.needs[id]).map((r) => r.name); }
+for (const [id, def] of Object.entries(INGREDIENTS)) {
+  const names = usedIn(id);
+  const tail = names.length ? `（つかう料理：${names.slice(0, 3).join('・')}${names.length > 3 ? ' ほか' : ''}）` : '（家のキッチンで料理に使う食材）';
+  registerItem(id, { ...def, desc: def.desc + '\n' + tail, ingredient: true });
+}
 
 // The fallback: no ingredients needed, always affordable for ¥100.
 const MOYASHI = { id: 'moyashi', name: 'もやし炒め', price: 100, needs: {}, heal: 15, fill: 30, stress: 2, box: false,
