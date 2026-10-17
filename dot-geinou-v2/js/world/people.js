@@ -21,7 +21,8 @@
 //   confess: { ask, again, yes, no, friend, text } (special)
 //   polite: true  です・ます generic lines (again, giftDone, hangDone, phone calls)
 //   npcTalk: (g, npc, own) => …  replaces the NPC's own talk from ♥1 (no self-introductions
-//     to a friend); own is the original
+//     to a friend); own is the original. npcTalkFrom: 0 uses it from the first meeting
+//     (when the place's own lines do not match the person's voice)
 // Talking goes through phone.js's menu; this module only adds PEOPLE_UI.hooks (start: face
 // and npcTalk, before: a declined proposal asked again, after: the first phone message) and
 // PEOPLE_UI.extras (コンビを組もう / 気持ちを伝える after they asked once, 豚まん at the 大将).
@@ -1743,11 +1744,14 @@ person('korosuke', {
   where: '新喜劇 劇場の楽屋', polite: true, again: 'ほかに、なんかありますか？',
   giftDone: ['今日はもう、もろたとこですやん！', 'お気持ちだけで、じゅうぶんです！'], hangDone: '今日はもう、いっぱい遊んでもらいました！\nまた今度、さそてください！',
   callShy: ['もしもし、ころ助です！…あ、{name}さん！', 'また今度、楽屋でしゃべりましょ！'], callAgain: ['今日は、めっちゃ遊びましたね！', 'また今度、よろしゅうお願いします！'],
-  // once you know each other, his talk without the self-introduction (the 座長 line stays his own)
+  // his talk in his own (polite Kansai) voice from the first meeting; once you know each
+  // other, without the self-introduction (the 座長 line stays the theater's own)
+  npcTalkFrom: 0,
   npcTalk: async (g, npc, own) => {
     if (g.flag('shinkigeki_zacho')) return own(g, npc);
     const P = PEOPLE.korosuke;
-    await T(g, P, ['あっ、{name}さん！\n今日もここで、転ぶ練習してます！', g.state.agency === 'yoshimoto'
+    await T(g, P, [g.heartLevel('korosuke') >= 1 ? 'あっ、{name}さん！\n今日もここで、転ぶ練習してます！'
+      : '若手座員のころ助です！\n毎日、ここで転ぶ練習してますねん！', g.state.agency === 'yoshimoto'
       ? '同じよしもとの仲間ですやん！\nいつか同じ舞台に立ちましょな！'
       : 'エキストラやったら、だれでも舞台に立てますよ。\n舞台監督さんに言うてみてください！']);
   },
@@ -2005,7 +2009,8 @@ hooks.start.push((g, id, npc) => {
   if (P.npcTalk && typeof npc.talk === 'function' && !npc.castTalk) {
     const own = npc.talk;
     npc.castTalk = true;
-    npc.talk = (g2, n2) => (g2.heartLevel(id) >= 1 ? P.npcTalk(g2, n2, own) : own(g2, n2));
+    const from = P.npcTalkFrom ?? 1;
+    npc.talk = (g2, n2) => (g2.heartLevel(id) >= from ? P.npcTalk(g2, n2, own) : own(g2, n2));
   }
 });
 // a declined proposal comes up again some days later (instead of the menu)
