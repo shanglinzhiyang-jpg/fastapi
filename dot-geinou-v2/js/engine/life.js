@@ -114,7 +114,7 @@ export function newLifeState() {
     life: { hunger: 70, stress: 10, clean: 90, steps: 0 },
     housing: 'dotsou',
     rent: { paidWeek: 1, debt: 0, late: 0 },
-    furniture: {}, // furnitureId -> true (owned and placed at the current home)
+    furniture: {}, // furnitureId -> true (owned; at most housing().slots pieces)
     people: {}, // personId -> { aff, met, talkDay, giftDay, hangDay, seen: {level: true}, partner, special }
     partner: null,
     fans: 0,
@@ -258,10 +258,10 @@ const methods = {
     return true;
   },
   // Move to another housing (no checks; the real estate agent asks first).
+  // Owned furniture moves along (its perks apply wherever you live).
   moveHousing(id) {
     if (!HOUSING[id]) { console.error('moveHousing: unknown housing', id); return false; }
     this.state.housing = id;
-    this.state.furniture = {};
     return true;
   },
 

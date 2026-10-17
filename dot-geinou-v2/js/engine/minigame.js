@@ -27,9 +27,12 @@
 //
 // Static fields: title, howto (string[]), bgm (song name; null = no BGM so you can
 // play your own beat with audio.tone / audio.sfx — note audio.ctx is null until the
-// first user gesture), skill (default skill key used for this.bonus).
+// first user gesture), skill (default skill key used for this.bonus),
+// hd (true: the minigame draws in 640x360 screen pixels; false: the v1 320x240 space,
+// shown 1.5x). this.W / this.H are the drawing size either way; the base class draws
+// the intro, countdown, popups, result, timer bar and score box for both.
 
-import { W, H, clamp } from './util.js';
+import { W, H, SW, SH, clamp } from './util.js';
 import { text, panel, rect, wrap, bar, COLORS, sparkle } from './draw.js';
 import { audio } from './audio.js';
 
@@ -57,11 +60,15 @@ export class Minigame {
   static title = 'ミニゲーム';
   static howto = ['Aボタンであそぶ'];
   static bgm = 'minigame';
+  static hd = false;
 
   constructor(g, opts = {}) {
     this.g = g;
     this.opts = opts;
     this.opaque = true;
+    this.hd = !!this.constructor.hd;
+    this.W = this.hd ? SW : W;
+    this.H = this.hd ? SH : H;
     this.difficulty = clamp(Math.round(opts.difficulty ?? 1), 1, 5);
     this.bonus = Math.max(0, opts.bonus ?? 0);
     this.phase = 'intro';
@@ -78,24 +85,31 @@ export class Minigame {
   updatePlay(input) {}
   drawPlay(ctx) {}
   drawBackground(ctx) {
-    for (let y = 0; y < H; y += 8) {
-      ctx.fillStyle = y % 16 ? '#1b2350' : '#1e2758';
-      ctx.fillRect(0, y, W, 8);
+    const step = this.hd ? 12 : 8;
+    for (let y = 0; y < this.H; y += step) {
+      ctx.fillStyle = (y / step) % 2 ? '#1b2350' : '#1e2758';
+      ctx.fillRect(0, y, this.W, step);
     }
   }
 
   // ------------------------------------------------ helpers
   ease(v, k = 0.5) { return v * (1 + this.bonus * k); }
 
-  popup(str, x, y, color = COLORS.accent, size = 12) {
+  popup(str, x, y, color = COLORS.accent, size = this.hd ? 18 : 12) {
     this.popups.push({ str, x, y, color, size, t: 0 });
   }
 
-  drawTimerBar(ctx, frac, y = 4) {
-    bar(ctx, 60, y, W - 120, 8, frac, frac > 0.3 ? COLORS.good : COLORS.bad);
+  drawTimerBar(ctx, frac, y = this.hd ? 8 : 4) {
+    if (this.hd) bar(ctx, 140, y, SW - 280, 12, frac, frac > 0.3 ? COLORS.good : COLORS.bad);
+    else bar(ctx, 60, y, W - 120, 8, frac, frac > 0.3 ? COLORS.good : COLORS.bad);
   }
 
-  drawScoreBox(ctx, label, value, x = 4, y = 4) {
+  drawScoreBox(ctx, label, value, x = this.hd ? 8 : 4, y = this.hd ? 8 : 4) {
+    if (this.hd) {
+      panel(ctx, x, y, 124, 32);
+      text(ctx, `${label} ${value}`, x + 12, y + 8, { size: 14 });
+      return;
+    }
     panel(ctx, x, y, 72, 22);
     text(ctx, `${label} ${value}`, x + 8, y + 5, { size: 10 });
   }
@@ -171,22 +185,24 @@ export class Minigame {
       return;
     }
     try { this.drawPlay(ctx); } catch (e) { console.error(e); this.drawBackground(ctx); }
+    const k = this.hd ? 2 : 1;
     for (const p of this.popups) {
       ctx.globalAlpha = clamp(1 - p.t / 50, 0, 1);
-      text(ctx, p.str, p.x, p.y - p.t * 0.4, { size: p.size, align: 'center', color: p.color, outline: '#000' });
+      text(ctx, p.str, p.x, p.y - p.t * 0.4 * k, { size: p.size, align: 'center', color: p.color, outline: '#000' });
       ctx.globalAlpha = 1;
     }
     if (this.phase === 'count') {
       const n = 3 - Math.floor(this.t / 30);
       const label = n > 0 ? String(n) : 'スタート！';
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(0, 0, W, H);
-      text(ctx, label, W / 2, H / 2 - 16, { size: n > 0 ? 32 : 24, align: 'center', color: COLORS.accent, outline: '#000' });
+      ctx.fillRect(0, 0, this.W, this.H);
+      text(ctx, label, this.W / 2, this.H / 2 - 16 * k, { size: (n > 0 ? 32 : 24) * k, align: 'center', color: COLORS.accent, outline: '#000' });
     }
     if (this.phase === 'result') this.drawResult(ctx);
   }
 
   drawIntro(ctx) {
+    if (this.hd) { this.drawIntroHD(ctx); return; }
     panel(ctx, 24, 24, W - 48, H - 48);
     text(ctx, this.title, W / 2, 38, { size: 16, align: 'center', color: COLORS.accent });
     let stars = '';
@@ -204,7 +220,26 @@ export class Minigame {
     if (Math.floor(this.t / 20) % 2 === 0) text(ctx, 'Aでスタート！', W / 2, H - 52, { align: 'center', color: COLORS.cyan });
   }
 
+  drawIntroHD(ctx) {
+    panel(ctx, 80, 24, SW - 160, SH - 48);
+    text(ctx, this.title, SW / 2, 44, { size: 24, align: 'center', color: COLORS.accent });
+    let stars = '';
+    for (let i = 1; i <= 5; i++) stars += i <= this.difficulty ? '★' : '☆';
+    text(ctx, `むずかしさ ${stars}`, SW / 2, 80, { size: 14, align: 'center', color: COLORS.pink });
+    const howto = [].concat(this.opts.howto || this.constructor.howto);
+    let y = 114;
+    for (const line of howto) {
+      for (const l of wrap(ctx, line, SW - 240, 16)) {
+        text(ctx, l, 120, y, { size: 16 });
+        y += 24;
+      }
+    }
+    if (this.bonus > 0.05) text(ctx, `スキルボーナス +${Math.round(this.bonus * 100)}%`, SW / 2, SH - 92, { size: 14, align: 'center', color: COLORS.good });
+    if (Math.floor(this.t / 20) % 2 === 0) text(ctx, 'Aでスタート！', SW / 2, SH - 66, { size: 16, align: 'center', color: COLORS.cyan });
+  }
+
   drawResult(ctx) {
+    if (this.hd) { this.drawResultHD(ctx); return; }
     const r = this.result;
     const k = Math.min(1, this.t / 15);
     ctx.fillStyle = `rgba(0,0,0,${0.5 * k})`;
@@ -218,6 +253,22 @@ export class Minigame {
     text(ctx, `スコア ${r.score}点`, W / 2, y + 80, { align: 'center', color: COLORS.accent });
     wrap(ctx, r.comment, W - 110, 12).slice(0, 2).forEach((l, i) => text(ctx, l, W / 2, y + 100 + i * 16, { align: 'center' }));
     if (this.t > 40 && Math.floor(this.t / 20) % 2 === 0) text(ctx, 'Aで次へ', W / 2, y + 134, { align: 'center', size: 10, color: COLORS.cyan });
+  }
+
+  drawResultHD(ctx) {
+    const r = this.result;
+    const k = Math.min(1, this.t / 15);
+    ctx.fillStyle = `rgba(0,0,0,${0.5 * k})`;
+    ctx.fillRect(0, 0, SW, SH);
+    const y = Math.round(56 + (1 - k) * 60);
+    panel(ctx, 140, y, SW - 280, 236);
+    text(ctx, this.title, SW / 2, y + 16, { align: 'center', color: COLORS.dim, size: 14 });
+    text(ctx, 'ランク', SW / 2 - 70, y + 66, { align: 'center', size: 20 });
+    text(ctx, r.rank, SW / 2 + 36, y + 40, { size: 72, align: 'center', color: RANK_COLORS[r.rank], outline: '#000' });
+    if (r.rank === 'S') for (let i = 0; i < 6; i++) sparkle(ctx, SW / 2 + 36 + Math.cos(this.t / 10 + i * 1.05) * 56, y + 78 + Math.sin(this.t / 10 + i * 1.05) * 40, 4, '#fff6a8');
+    text(ctx, `スコア ${r.score}点`, SW / 2, y + 126, { align: 'center', color: COLORS.accent, size: 18 });
+    wrap(ctx, r.comment, SW - 330, 16).slice(0, 2).forEach((l, i) => text(ctx, l, SW / 2, y + 156 + i * 22, { align: 'center', size: 16 }));
+    if (this.t > 40 && Math.floor(this.t / 20) % 2 === 0) text(ctx, 'Aで次へ', SW / 2, y + 206, { align: 'center', size: 14, color: COLORS.cyan });
   }
 }
 
