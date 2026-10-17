@@ -1851,7 +1851,7 @@ registerPlace({
             if (tw) { P(ctx, sx + 3, sy + 1, '#ffffff'); P(ctx, sx + 12, sy + 11, '#ffffff'); }
           },
         },
-        npc('takoyaki_taisho', 4, 2, 'down', TAISHO.look, TAISHO.name, { talk: talkTaisho }),
+        npc('takoyaki_taisho', 4, 2, 'down', TAISHO.look, TAISHO.name, { talk: talkTaisho, person: 'taisho' }),
         npc('takoyaki_senpai', 8, 2, 'down', SENPAI.look, SENPAI.name, {
           talk: async (g, n) => {
             await g.emote(n.id, '♪');

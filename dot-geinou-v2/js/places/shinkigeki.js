@@ -1790,7 +1790,7 @@ registerPlace({
         { type: 'logo', x: 11.1, y: 1.2, w: 1.8, h: 1.45, logo: 'shinkigeki', board: true, text: '新喜劇のロゴのポスターだ。\n一座のみんなの、誇りのしるしらしい。' },
         npc('sk_butai', 5, 3, 'down', WHO.butai, { talk: butaiTalk }),
         npc('sk_sensei', 2, 8, 'down', WHO.sensei, { talk: senseiTalk }),
-        npc('sk_koro', 5, 7, 'down', WHO.koro, { talk: koroTalk, wander: 2 }),
+        npc('sk_koro', 5, 7, 'down', WHO.koro, { talk: koroTalk, wander: 2, person: 'korosuke' }),
         npc('sk_madonna', 10, 4, 'up', WHO.madonna, {
           talk: (g) => castTalk(g, WHO.madonna, (gg) => [
             'マドンナ役のゆり子です。\n本番前のメイク中なの。',

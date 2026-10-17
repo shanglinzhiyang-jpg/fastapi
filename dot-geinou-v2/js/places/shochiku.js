@@ -685,7 +685,7 @@ const LOBBY = {
     { type: 'npc', id: 'uketsuke', x: 10, y: 3, dir: 'down', look: L.uketsuke, name: '受付さん', talk: uketsukeTalk },
     { type: 'npc', id: 'annai', x: 11, y: 3, dir: 'down', look: L.annai, name: '案内係', talk: annaiTalk },
     { type: 'npc', id: 'guard', x: 13, y: 11, dir: 'left', look: L.guard, name: '警備員さん', talk: guardTalk },
-    { type: 'npc', id: 'wakate', x: 5, y: 8, dir: 'left', look: L.wakate, name: '若手芸人', talk: wakateTalk },
+    { type: 'npc', id: 'wakate', x: 5, y: 8, dir: 'left', look: L.wakate, name: '若手芸人', talk: wakateTalk, person: 'takeru' },
     { type: 'npc', id: 'fan', x: 14, y: 9, dir: 'up', look: L.fan, name: 'ファンのおばちゃん', talk: fanTalk },
     { type: 'npc', id: 'chikoku', x: 11, y: 12, dir: 'up', look: L.chikoku, name: '新人芸人', hidden: true, text: '…' },
     { type: 'sign', x: 4, y: 2, text: '若手ライブのポスターだ。\n「毎日公演！笑いの本場で腕だめし」と書いてある。' },

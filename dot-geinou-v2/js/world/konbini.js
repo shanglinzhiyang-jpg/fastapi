@@ -36,7 +36,7 @@ registerPlace({
       warps: [{ x: 4, y: 7, to: 'exit' }],
       entities: [
         {
-          type: 'npc', id: 'clerk', x: 7, y: 4, dir: 'down', look: LOOKS.clerk, name: '店員さん',
+          type: 'npc', id: 'clerk', x: 7, y: 4, dir: 'down', look: LOOKS.clerk, name: '店員さん', person: 'haruto',
           talk: async (g, npc) => {
             await g.shop(['onigiri', 'bento', 'drink', 'nodoame', 'netacho', 'daihon', 'wadai'], { title: 'ドットマート', greeting: 'いらっしゃいませ〜！' });
             await g.say('ありがとうございました〜！', { name: npc.name, look: npc.look });

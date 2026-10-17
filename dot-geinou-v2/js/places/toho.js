@@ -1720,7 +1720,7 @@ registerPlace({
           text: ['やあ、舞台の上へようこそ。\nここから見る客席は格別だろう？', 'リズムに乗るコツは、\n音をよく聴いて、体で感じること！'],
         },
         {
-          type: 'npc', id: 'toho_ensemble', x: 6, y: 4, dir: 'down', look: LK.ensemble, name: 'アンサンブル',
+          type: 'npc', id: 'toho_ensemble', x: 6, y: 4, dir: 'down', look: LK.ensemble, name: 'アンサンブル', person: 'kaori',
           text: ['アンサンブルは、みんなで\n舞台をいろどる大切な役なの。', '★250を超えたら、\n客席にいる演出家の先生に\n声をかけてみて！'],
         },
         {

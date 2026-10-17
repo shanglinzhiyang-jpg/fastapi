@@ -1398,7 +1398,7 @@ registerPlace({
         npc('yume', 16, 5, 'up', { talk: talkYume }),
         npc('mom', 5, 8, 'left', { talk: talkMom }),
         npc('kid', 6, 9, 'up', { wander: 1, talk: talkKid }),
-        npc('mio', 14, 11, 'left', { talk: talkMio }),
+        npc('mio', 14, 11, 'left', { talk: talkMio, person: 'mio' }),
         npc('guard', 8, 12, 'down', { talk: talkGuard }),
       ],
       events: [
@@ -1513,7 +1513,7 @@ registerPlace({
         npc('vocal', 3, 5, 'down', { talk: talkVocal }),
         npc('dance', 10, 3, 'down', { talk: talkDance }),
         npc('acting', 16, 8, 'down', { talk: talkActing }),
-        npc('ken1', 8, 6, 'up', { talk: (g) => watchRehearsal(g, 'ken1') }),
+        npc('ken1', 8, 6, 'up', { talk: (g) => watchRehearsal(g, 'ken1'), person: 'hinata' }),
         npc('ken2', 10, 6, 'up', { talk: (g) => watchRehearsal(g, 'ken2') }),
         npc('ken3', 12, 6, 'up', { talk: (g) => watchRehearsal(g, 'ken3') }),
       ],

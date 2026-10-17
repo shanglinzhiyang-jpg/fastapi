@@ -728,38 +728,122 @@ export class Game {
     return new Promise((resolve) => {
       const g = this;
       const st = g.state;
-      const lines = [
-        'ドット芸能界',
-        '',
-        `${st.name}は ついに`,
-        '国民的スターになった！',
-        '',
-        `かかった日数　${st.day}日`,
-        `こなしたお仕事　${st.stats.jobs}回`,
-        `知名度　★${st.fame}`,
-        '',
-        '― お世話になった場所 ―',
-        'よしもと / よしもと新喜劇 / BSよしもと',
-        '松竹芸能 / グレープカンパニー',
-        'NHK / 東映 / ホリプロ / 東宝',
-        '',
-        '※実在の企業名・ロゴは',
-        'それぞれの権利者に帰属します。',
-        '登場人物はすべて架空です。',
-        '',
-        'THANK YOU FOR PLAYING!',
-      ];
-      // the credits stop with the last line in the upper half, then the player takes a bow
-      const SPEED = 0.42;
-      const LAST_Y = 84;
-      const maxScroll = H + 10 + (lines.length - 1) * 20 - LAST_Y;
+      const C = COLORS;
+      // HD art helpers are loaded lazily so a broken title.js never blocks the ending
+      let logoFn = null, hdSheet = null;
+      import('../title.js').then((m) => { logoFn = m.drawTitleLogo || null; }).catch(() => {});
+      import('./sprites.js').then((m) => { hdSheet = m.charSheetHD ? m.charSheetHD(st.look || {}) : null; }).catch(() => {});
       const sheet = charSheet(st.look || {});
+      const fans = Math.max(0, Math.round(st.fans || 0));
+      let friends = 0;
+      try { friends = this.friends ? this.friends(2).length : 0; } catch (e) { friends = 0; }
+      const gap = (h) => ({ h });
+      const items = [
+        { logo: true, h: 104 },
+        gap(16),
+        { t: `${st.name}は ついに`, h: 28 },
+        { t: '国民的スターになった！', size: 24, c: C.accent, h: 34 },
+        gap(30),
+        { t: `かかった日数　${st.day}日` },
+        { t: `こなしたお仕事　${st.stats.jobs}回` },
+        { t: `知名度　★${st.fame}` },
+        fans ? { t: `ファン　${fans.toLocaleString('ja-JP')}人` } : null,
+        friends ? { t: `なかよしの仲間　${friends}人` } : null,
+        gap(30),
+        { t: '― お世話になった場所 ―', c: C.cyan, h: 34 },
+        { logos: ['yoshimoto', 'shinkigeki', 'bs_yoshimoto', 'shochiku', 'grape'], h: 54 },
+        { logos: ['nhk', 'toei', 'horipro', 'toho'], h: 60 },
+        { t: 'よしもと / よしもと新喜劇 / BSよしもと', size: 14, h: 22 },
+        { t: '松竹芸能 / グレープカンパニー', size: 14, h: 22 },
+        { t: 'NHK / 東映 / ホリプロ / 東宝', size: 14, h: 22 },
+        gap(30),
+        { t: '※実在の企業名・ロゴは', size: 14, c: C.dim, h: 22 },
+        { t: 'それぞれの権利者に帰属します。', size: 14, c: C.dim, h: 22 },
+        { t: '登場人物はすべて架空です。', size: 14, c: C.dim, h: 22 },
+        gap(44),
+        { t: 'THANK YOU FOR PLAYING!', size: 24, c: C.accent, h: 34, last: true },
+      ].filter(Boolean);
+      let acc = 0;
+      for (const it of items) { it.y = acc; acc += it.h || 26; }
+      const lastItem = items[items.length - 1];
+      // the credits stop with the last line near the top, then the player takes a bow on a stage
+      const SPEED = 0.6;
+      const LAST_Y = 76;
+      const maxScroll = SH + 10 + lastItem.y - LAST_Y;
+      const stopT = maxScroll / SPEED;
+      const R = (ctx, x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+      const hash = (i, k) => { let h = Math.imul(i + 1, 374761393) ^ Math.imul(k + 7, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+      const ellipse = (ctx, cx, cy, rx, ry, col) => {
+        ctx.fillStyle = col;
+        for (let dy = -ry; dy <= ry; dy++) {
+          const w = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy / (ry + 0.5)) ** 2)));
+          if (w > 0) ctx.fillRect(Math.round(cx - w), Math.round(cy + dy), w * 2, 1);
+        }
+      };
+      const FLOOR = 312; // top of the stage floor
+      // red curtains: vertical folds in three tones, a scalloped valance with a gold fringe
+      const curtain = (ctx, x0, x1, side) => {
+        const TONES = ['#5a0e1e', '#8a1a2c', '#b02a3a', '#d04454', '#b02a3a', '#8a1a2c'];
+        for (let x = x0; x < x1; x++) {
+          const f = Math.floor(((x - x0) * (side < 0 ? 1 : -1) + 400) / 4) % TONES.length;
+          const edge = side < 0 ? x1 - 1 - x : x - x0;
+          const hem = SH - 8 + (edge < 6 ? -2 : 0);
+          R(ctx, x, 0, 1, hem, TONES[f]);
+          R(ctx, x, hem, 1, 3, '#3a0812');
+        }
+        R(ctx, side < 0 ? x1 - 1 : x0, 0, 1, SH - 6, '#2a0610');
+        // tie-back sash
+        const sx = side < 0 ? x1 - 22 : x0 + 6;
+        R(ctx, sx - 1, 189, 18, 9, '#22202a');
+        R(ctx, sx, 190, 16, 7, '#c9a227');
+        R(ctx, sx, 190, 16, 1, '#ffe27a');
+      };
+      const valance = (ctx) => {
+        R(ctx, 0, 0, SW, 22, '#8a1a2c');
+        R(ctx, 0, 0, SW, 3, '#5a0e1e');
+        R(ctx, 0, 8, SW, 2, '#b02a3a');
+        for (let x = 0; x < SW; x += 40) {
+          ellipse(ctx, x + 20, 22, 20, 8, '#8a1a2c');
+          R(ctx, x + 6, 24, 28, 2, '#b02a3a');
+          R(ctx, x, 22, 1, 4, '#5a0e1e');
+        }
+        ctx.fillStyle = '#c9a227';
+        for (let x = 0; x < SW; x += 3) ctx.fillRect(x, 30 - Math.round(Math.abs(((x % 40) - 20) / 20) * 6), 1, 3);
+      };
+      // the scrolling credits; the last line is drawn over the stage, the others fade out
+      const drawCredits = (ctx, t, k, last) => {
+        const scroll = Math.min(t * SPEED, maxScroll);
+        if (!last && k >= 1) return;
+        ctx.globalAlpha = last ? 1 : 1 - k;
+        for (const it of items) {
+          if (!!it.last !== last) continue;
+          const y = Math.round(SH + 10 + it.y - scroll);
+          if (y < -110 || y > SH + 20) continue;
+          if (it.logo) {
+            if (logoFn) logoFn(ctx, SW / 2, y, t);
+            else text(ctx, 'ドット芸能界', SW / 2, y + 20, { align: 'center', size: 40, color: C.accent, outline: '#3a1030' });
+          } else if (it.logos) {
+            const BW = 76, BH = 42, GAPX = 10;
+            const x0 = Math.round(SW / 2 - (it.logos.length * BW + (it.logos.length - 1) * GAPX) / 2);
+            it.logos.forEach((id, i) => {
+              const x = x0 + i * (BW + GAPX);
+              R(ctx, x + 2, y + 2, BW, BH, 'rgba(0,0,0,0.5)');
+              drawLogo(ctx, id, x, y, BW, BH, { board: true, pad: 3, frame: '#22202a' });
+            });
+          } else if (it.t) {
+            text(ctx, it.t, SW / 2, y, { align: 'center', size: it.size || 16, color: it.c || '#ffffff', shadow: '#000000' });
+          }
+        }
+        ctx.globalAlpha = 1;
+      };
+      const CONF = ['#ff5d8f', '#ffd23f', '#5fd7ff', '#5ee07a', '#ffffff', '#b48cff', '#ff8a3d'];
       const scene = {
         opaque: true,
+        hd: true,
         t: 0,
         update(gg) {
           scene.t++;
-          if (gg.auto || (scene.t > 60 * 20 && scene.t * SPEED >= maxScroll && gg.input.pressed('a'))) {
+          if (gg.auto || (scene.t > 60 * 20 && scene.t >= stopT && gg.input.pressed('a'))) {
             // cut to black, then fade back into whatever is underneath
             gg.fade = 1;
             gg.pop(scene);
@@ -768,41 +852,99 @@ export class Game {
           }
         },
         draw(ctx) {
-          ctx.fillStyle = '#0b0d1a';
-          ctx.fillRect(0, 0, W, H);
-          for (let i = 0; i < 40; i++) {
-            const x = (i * 97 + scene.t * (0.2 + (i % 3) * 0.1)) % W;
-            const y = (i * 53) % H;
-            ctx.fillStyle = i % 5 ? '#3a4a8a' : '#fff6a8';
-            ctx.fillRect(Math.round(x), y, 1, 1);
+          const t = scene.t;
+          R(ctx, 0, 0, SW, SH, '#0b0d1a');
+          // stars drifting slowly, three layers
+          for (let i = 0; i < 90; i++) {
+            const layer = i % 3;
+            const x = ((hash(i, 1) * SW - t * (0.08 + layer * 0.08)) % SW + SW) % SW;
+            const y = Math.floor(hash(i, 2) * SH);
+            if ((i * 5 + Math.floor(t / 10)) % 19 === 0) continue;
+            const col = layer === 2 ? (i % 4 ? '#c8ccff' : '#fff6a8') : layer === 1 ? '#6a74b8' : '#3a4a8a';
+            R(ctx, x, y, 1, 1, col);
+            if (layer === 2 && i % 9 === 0 && (t >> 4) % 3 === 0) { R(ctx, x - 1, y, 3, 1, col); R(ctx, x, y - 1, 1, 3, col); }
           }
-          const scroll = Math.min(scene.t * SPEED, maxScroll);
-          lines.forEach((l, i) => {
-            const y = Math.round(H + 10 + i * 20 - scroll);
-            if (y < -20 || y > H + 20) return;
-            text(ctx, l, W / 2, y, { align: 'center', size: i === 0 ? 20 : 12, color: i === 0 ? COLORS.accent : '#fff' });
-          });
-          const stopT = maxScroll / SPEED;
-          if (scene.t >= stopT) {
-            // spotlight + the player, 3x, hopping a little
-            const k = Math.min(1, (scene.t - stopT) / 40);
+          const k = t >= stopT ? Math.min(1, (t - stopT) / 50) : 0;
+          drawCredits(ctx, t, k, false);
+          // the stage appears once the credits stop
+          if (k > 0) {
             ctx.globalAlpha = k;
-            ctx.fillStyle = 'rgba(255,246,168,0.16)';
-            ctx.beginPath();
-            ctx.moveTo(W / 2 - 10, 100); ctx.lineTo(W / 2 + 10, 100);
-            ctx.lineTo(W / 2 + 44, 196); ctx.lineTo(W / 2 - 44, 196);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255,246,168,0.3)';
-            ctx.fillRect(W / 2 - 40, 190, 80, 6);
-            const hop = Math.floor((scene.t - stopT) / 20) % 4 === 1 ? 3 : 0;
-            ctx.save();
-            ctx.translate(W / 2 - 24, 132 - hop);
-            ctx.scale(3, 3);
-            drawChar(ctx, sheet, 'down', 0, 0, 4);
-            ctx.restore();
+            // floor
+            R(ctx, 0, FLOOR - 1, SW, 1, '#2a140c');
+            R(ctx, 0, FLOOR, SW, SH - FLOOR, '#7a4824');
+            R(ctx, 0, FLOOR, SW, 1, '#d09858');
+            R(ctx, 0, FLOOR + 1, SW, 9, '#a86a38');
+            R(ctx, 0, FLOOR + 10, SW, 1, '#6a3c1c');
+            for (let x = 0; x < SW; x += 52) { R(ctx, x, FLOOR + 1, 1, 9, '#8a5428'); R(ctx, x + 26, FLOOR + 11, 1, SH - FLOOR - 11, '#64381a'); }
+            R(ctx, 0, FLOOR + 22, SW, 1, '#6a3c1c');
+            // spotlight beam from the lamp under the valance (row by row: a wide
+            // outer cone and a brighter core) and its pool
+            const cx = SW / 2;
+            const LAMP_Y = 40;
+            for (const [w0, kk, col, a] of [[12, 0.36, '#fff2c0', 0.08], [6, 0.2, '#fff6d8', 0.08]]) {
+              ctx.globalAlpha = a * k;
+              ctx.fillStyle = col;
+              for (let y = LAMP_Y; y < FLOOR + 10; y++) {
+                const hw = Math.round(w0 + (y - LAMP_Y) * kk);
+                ctx.fillRect(Math.round(cx - hw), y, hw * 2, 1);
+              }
+            }
+            ctx.globalAlpha = 0.3 * k;
+            ellipse(ctx, cx, FLOOR + 8, 104, 10, '#fff2b0');
+            ellipse(ctx, cx, FLOOR + 8, 64, 6, '#fffbe0');
+            ctx.globalAlpha = k;
+            // the player, 3x, hopping and turning to the audience
+            const tt = t - stopT;
+            const beat = Math.floor(tt / 20) % 12;
+            const hop = beat === 1 || beat === 7 ? 6 : beat === 2 || beat === 8 ? 2 : 0;
+            const dir = beat >= 3 && beat < 5 ? 'left' : beat >= 9 && beat < 11 ? 'right' : 'down';
+            const frame = beat >= 3 && beat < 5 ? [1, 2][beat % 2] : beat >= 9 && beat < 11 ? [1, 2][beat % 2] : 0;
+            R(ctx, cx - 26, FLOOR + 6, 52, 4, 'rgba(40,16,10,0.4)');
+            if (hdSheet) {
+              const img = hdSheet[dir][frame] || hdSheet.down[0];
+              ctx.drawImage(img, Math.round(cx - 48), Math.round(FLOOR + 8 - 117 - hop), 96, 120);
+            } else {
+              ctx.save();
+              ctx.translate(Math.round(cx - 48), Math.round(FLOOR + 8 - 120 - hop));
+              ctx.scale(6, 6);
+              drawChar(ctx, sheet, dir, frame, 0, 4);
+              ctx.restore();
+            }
+            // curtains slide in from the sides
+            const cw = Math.round(80 * k);
+            curtain(ctx, 0, cw, -1);
+            curtain(ctx, SW - cw, SW, 1);
+            valance(ctx);
+            // the lamp: bracket, housing (lit from the top-left) and the glowing lens
+            R(ctx, cx - 1, 26, 2, 6, '#22202a');
+            R(ctx, cx - 11, 31, 22, 10, '#22202a');
+            R(ctx, cx - 10, 32, 20, 7, '#4a4858');
+            R(ctx, cx - 10, 32, 20, 1, '#8a889c');
+            R(ctx, cx - 10, 33, 1, 5, '#6a687c');
+            R(ctx, cx + 7, 33, 3, 6, '#38364a');
+            R(ctx, cx - 8, 39, 16, 2, '#fff6c8');
+            R(ctx, cx - 6, 39, 6, 1, '#ffffff');
             ctx.globalAlpha = 1;
+            // confetti
+            if (tt > 30) {
+              for (let i = 0; i < 70; i++) {
+                const sp = 0.6 + hash(i, 3) * 0.9;
+                const fall = (tt - 30) * sp - hash(i, 4) * 420; // staggered starts from the top
+                if (fall < 0) continue;
+                const y = (fall % 400) - 12;
+                const x = Math.round(hash(i, 5) * SW + Math.sin((tt + i * 20) / 24) * 6);
+                const flip = Math.floor((tt + i * 7) / 8) % 2;
+                R(ctx, x, y, flip ? 3 : 2, flip ? 2 : 3, CONF[i % CONF.length]);
+              }
+            }
           }
-          if (scene.t > 60 * 20 && scene.t >= stopT) text(ctx, 'Aでつづける', W / 2, H - 24, { align: 'center', size: 10, color: COLORS.cyan });
+          drawCredits(ctx, t, k, true);
+          if (t > 60 * 20 && t >= stopT) {
+            const blink = Math.floor(t / 30) % 2;
+            const w = 132;
+            R(ctx, SW / 2 - w / 2, SH - 30, w, 22, 'rgba(10,6,4,0.7)');
+            text(ctx, 'Aでつづける', SW / 2, SH - 27, { align: 'center', size: 14, color: blink ? C.cyan : '#ffffff', shadow: null });
+          }
         },
       };
       audio.bgm('ending');

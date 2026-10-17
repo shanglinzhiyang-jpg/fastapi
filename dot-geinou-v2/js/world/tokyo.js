@@ -4,6 +4,7 @@ import { registerPlace, PLACES } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
 import { grid, set, put, fill, hroad, vroad, border } from './townkit.js';
 import { fountain, train, taxi, busStop, streetStage, statue } from './props.js';
+import { text } from '../engine/draw.js';
 export const TOKYO_W = 60;
 export const TOKYO_H = 46;
 
@@ -28,6 +29,26 @@ async function streetLive(g) {
   await g.job({ id: 'street_' + k.minigame, title: k.title, stamina: 10, minigame: k.minigame, opts: { difficulty: 1 }, pay: 600, fame: 4, skill: k.skill, gain: 1, confirm: false });
 }
 
+// Signpost by the west exit: 「← ドット商店街」 (a wooden arrow board on a post).
+function machiSignpost(x, y) {
+  const F = (ctx, x0, y0, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x0, y0, w, h); };
+  return {
+    type: 'prop', x, y, w: 1, h: 1,
+    text: ['道しるべだ。', '← ドット商店街\n（スーパー・カフェ・ジム・カラオケ・不動産屋 など）\nこの大通りを西へまっすぐ。'],
+    draw(ctx, sx, sy) {
+      F(ctx, sx + 3, sy + 14.5, 10, 1.5, 'rgba(0,0,0,0.22)');
+      F(ctx, sx + 7, sy - 4, 2.5, 19, '#4a2e18'); F(ctx, sx + 7.5, sy - 4, 1, 19, '#8a5a33');
+      // arrow board pointing west (outline, wood, light edge)
+      F(ctx, sx - 6.5, sy - 9.5, 28, 9, '#3a2512');
+      for (let k = 0; k < 4; k++) F(ctx, sx - 10.5 + k, sy - 5.5 - k, 1, 1 + k * 2, '#3a2512');
+      F(ctx, sx - 6, sy - 9, 27, 8, '#c48a52'); F(ctx, sx - 6, sy - 9, 27, 1, '#e0b07a');
+      for (let k = 0; k < 4; k++) F(ctx, sx - 10 + k, sy - 5 - k + 0.5, 1, k * 2, '#c48a52');
+      F(ctx, sx - 6, sy - 1.5, 27, 0.5, '#8a5a33');
+      text(ctx, 'ドット商店街', sx + 7, sy - 7.5, { size: 4, align: 'center', color: '#fff6e0', shadow: '#3a2512' });
+    },
+  };
+}
+
 function generate() {
   const W = TOKYO_W, H = TOKYO_H;
   const c = grid(W, H, 'grass');
@@ -39,6 +60,8 @@ function generate() {
   for (const x of [17, 23, 37, 43]) for (let y = 20; y <= 22; y++) set(c, x, y, 'crosswalk_h');
   for (const y of [17, 25]) for (const x0 of [19, 39]) for (let x = x0; x < x0 + 3; x++) set(c, x, y, 'crosswalk_v');
   border(c, 'tree');
+  // ---- west exit: the main road continues to ドット商店街 (machi.js; warps below)
+  for (let y = 19; y <= 23; y++) set(c, 0, y, y === 19 || y === 23 ? 'sidewalk' : 'road');
 
   // ---- block TL: NHK plaza
   fill(c, 2, 11, 15, 7, 'stone');
@@ -130,10 +153,10 @@ function generate() {
 
     // NPCs
     {
-      type: 'npc', id: 'oya', x: 6, y: 30, dir: 'down', look: LOOKS.oldwoman, name: '大家さん', talk: oyaTalk,
+      type: 'npc', id: 'oya', x: 6, y: 30, dir: 'down', look: LOOKS.oldwoman, name: '大家さん', talk: oyaTalk, person: 'oya',
     },
     {
-      type: 'npc', id: 'street_comedian', x: 10, y: 36, dir: 'down', look: LOOKS.comedian, name: 'ストリート芸人',
+      type: 'npc', id: 'street_comedian', x: 10, y: 36, dir: 'down', look: LOOKS.comedian, name: 'ストリート芸人', person: 'jiro',
       text: ['よう！ここのステージ、だれでも使ってええんやで。', '事務所に入ってなくても、路上で漫才や歌を披露すれば投げ銭がもらえるんや。', '腕も上がるし、ちょっとずつ顔も売れるで！'],
     },
     { type: 'npc', id: 'park_oldman', x: 12, y: 38, dir: 'left', look: LOOKS.oldman, name: 'おじいさん', wander: 2, text: ['ほっほっほ。この公園の桜は見事じゃろう。', '昔はここで若い芸人さんがよく練習しとったもんじゃ。'] },
@@ -142,13 +165,17 @@ function generate() {
     { type: 'npc', id: 'salaryman', x: 30, y: 19, dir: 'right', look: LOOKS.salaryman, name: 'サラリーマン', wander: 3, text: ['いやー、昨日のバラエティ番組は笑ったなあ。', 'お笑いの事務所に入りたいなら、よしもと、松竹芸能、グレープカンパニー…いろいろあるねえ。'] },
     { type: 'npc', id: 'fan', x: 28, y: 15, dir: 'up', look: LOOKS.fan, name: 'ファンの子', text: ['ホリプロの前で出待ちしてるの！', 'ホリプロは歌手や俳優さんが多い事務所なんだって。歌や演技に自信があるならオーディションを受けてみたら？'] },
     { type: 'npc', id: 'tourist', x: 10, y: 18, dir: 'up', look: LOOKS.tourist, name: '観光客', wander: 2, text: ['Wow! NHK! テレビ局の中、見学できるのかな？', 'ここでは毎日たくさんの番組が作られているらしいよ。'] },
-    { type: 'npc', id: 'extra', x: 50, y: 13, dir: 'down', look: { ...LOOKS.samurai, top: '#8a5a33' }, name: 'エキストラさん', text: ['拙者、本日は時代劇のエキストラでござる…なんてね！', '東映の撮影所では時代劇や特撮ヒーローの撮影をしてるんだ。体力勝負だよ〜。'] },
+    { type: 'npc', id: 'extra', x: 50, y: 13, dir: 'down', look: { ...LOOKS.samurai, top: '#8a5a33' }, name: 'エキストラさん', person: 'maruyama', text: ['拙者、本日は時代劇のエキストラでござる…なんてね！', '東映の撮影所では時代劇や特撮ヒーローの撮影をしてるんだ。体力勝負だよ〜。'] },
     { type: 'npc', id: 'young_comedian', x: 29, y: 33, dir: 'left', look: LOOKS.comedian2, name: '若手芸人', text: ['よしもとのオーディション、ツッコミのタイミングが命やで。', 'ボケを最後まで聞いてから、ビシッとツッコむ！早すぎても遅すぎてもアカン。'] },
     { type: 'npc', id: 'grape_fan', x: 33, y: 42, dir: 'up', look: { ...LOOKS.fan, hairColor: 'brown', top: '#9273bd' }, name: 'お笑いファン', wander: 2, text: ['グレープカンパニーの芸人さんのグッズ、買っちゃった！', 'お風呂屋さんの「ドットの湯」は、疲れがとれるって評判だよ。'] },
     { type: 'npc', id: 'taxi_driver', x: 53, y: 34, dir: 'left', look: { ...LOOKS.guard, hat: '#3b3f48' }, name: 'タクシー運転手', text: ['お客さん、芸能人の卵？', '新幹線で大阪まで行けば、お笑いの本場・なんばもすぐそこだよ。運賃はちと高いけどね。'] },
   ];
 
-  return { w: W, h: H, cells: c, entities, events: [{ x: 6, y: 34, w: 4, h: 2, on: 'action', run: streetLive }, { x: 6, y: 36, w: 4, h: 1, on: 'step', run: async (g) => { if (!g.flag('stageHint')) { g.setFlag('stageHint'); await g.say('小さなステージだ。ステージの前でAボタンを押すとパフォーマンスできそうだ。'); } } }] };
+  entities.push(machiSignpost(2, 18));
+  const warps = [];
+  for (let y = 19; y <= 23; y++) warps.push({ x: 0, y, place: 'machi', room: 'main', tx: 46, ty: y - 3, dir: 'left' }); // machi's road: rows 16..20
+
+  return { w: W, h: H, cells: c, entities, warps, events: [{ x: 6, y: 34, w: 4, h: 2, on: 'action', run: streetLive }, { x: 6, y: 36, w: 4, h: 1, on: 'step', run: async (g) => { if (!g.flag('stageHint')) { g.setFlag('stageHint'); await g.say('小さなステージだ。ステージの前でAボタンを押すとパフォーマンスできそうだ。'); } } }] };
 }
 
 registerPlace({

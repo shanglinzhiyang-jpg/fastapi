@@ -1,22 +1,27 @@
-// てちょう（メニュー → てちょう）: a notebook with three tabs.
+// てちょう（メニュー → てちょう）: a notebook with four tabs (HD scene, 640x360).
 //
-//   もくひょう  today's numbers and a concrete next goal computed from the state
+//   もくひょう  today's numbers, what needs attention and a concrete next goal
+//   せいかつ    the day of the week, needs with advice, housing and rent, this week's
+//               regular shows, friends (hearts) and fans
 //   ばしょ      places the player has been to (state.flags.visited, set by g.goto)
 //               with a short guide from js/world/guide.js; others are 「？？？」 + a hint
 //   きろく      days, jobs, minigames and their best ranks, title, agency
 //
 // Controls: ←→ tabs, ↑↓ scroll, A next page, B / MENU close. Everything is wrapped
-// to the 320x240 screen, so long text never runs off the panel.
+// to the page, so long text never runs off it. The life registries (PEOPLE,
+// REGULARS, HOUSING) are read when the notebook opens and may be empty.
 
-import { W, H, fmtMoney, clamp } from './util.js';
+import { SW, SH, fmtMoney, clamp, shade } from './util.js';
 import { text, wrap, panel, measure, rect, downArrow, COLORS } from './draw.js';
 import { audio } from './audio.js';
 import { SKILLS, AGENCIES, RANKS, FINALE_FAME, rankIndex, rankName } from './state.js';
 import { MINIGAMES } from './minigame.js';
 import { GUIDE, GUIDE_ORDER, TOWNS, AUDITIONS, GUIDE_JOBS, TIER_FAME, jobOpen } from '../world/guide.js';
+import { PEOPLE, HEARTS, heartIndex, REGULARS, FURNITURE, WEEKDAYS, weekdayOf, weekOf, HUNGRY, STRESSED, SCRUFFY, BURNOUT, FULL } from './life.js';
 
 const TABS = [
   { label: 'もくひょう', color: '#ff8a3d' },
+  { label: 'せいかつ', color: '#e2569a' },
   { label: 'ばしょ', color: '#3fb85f' },
   { label: 'きろく', color: '#3a9fd8' },
 ];
@@ -24,49 +29,59 @@ const TOWN_BG = { tokyo: '#2f5fb8', namba: '#c23a3a' };
 const RANK_COLOR = { S: COLORS.accent, A: COLORS.pink, B: COLORS.cyan, C: COLORS.text, D: COLORS.dim };
 const MG_ORDER = ['tsukkomi', 'zukko', 'rhythm', 'command', 'quiz', 'announce', 'talk'];
 
-// layout (logical pixels)
-const PX = 4, PY = 4, PW = W - 8, PH = H - 8;
-const TAB_W = 84, TAB_GAP = 4, TAB_Y = 9, TAB_H = 19;
-const VX = 16, VY = 36, VW = 275, VH = 176; // text area; the scrollbar sits right of it
-const SB_X = VX + VW + 8;
+// text sizes and line heights (screen pixels)
+const BODY = 16, SMALL = 13;
+const LH = { [BODY]: 21, [SMALL]: 18 };
+
+// layout
+const COVER = { x: 4, y: 4, w: SW - 8, h: SH - 8 };
+const PX = 14, PY = 36, PW = SW - 28, PH = SH - 46; // the page
+const TAB_W = 128, TAB_GAP = 6, TAB_Y = 10, TAB_H = 28;
+const VX = PX + 22, VY = PY + 16, VW = 556, VH = PH - 16 - 36; // text area; the scrollbar sits right of it
+const SB_X = VX + VW + 12;
+const GAUGE_X = 132, GAUGE_W = 210; // need gauges (x relative to VX)
+const HEART_X = 236; // friends' hearts (x relative to VX)
+const HEART_N = Math.max(1, Math.min(6, HEARTS.length - 1)); // one heart per level above 知り合い
 
 let lastTab = 0; // reopen on the tab the player looked at last
 
 // ---------------------------------------------------------------- content builder
 // A page is a list of blocks (scroll unit); a block is a list of lines.
-// line: { t, s: 12|10, c, x, h, r, rs, rc, tag: { t, bg }, badge: { t, c }, mark }
+// line: { t, s: BODY|SMALL, c, x, h, r, rs, rc, tag: { t, bg }, badge: { t, c }, mark,
+//         head: color, gauge: { frac, color }, hearts: level }
 class Page {
   constructor(ctx) { this.ctx = ctx; this.blocks = []; this.b = null; }
 
-  block(gap = 7) { this.b = { lines: [], h: 0, gap }; this.blocks.push(this.b); return this; }
+  block(gap = 8) { this.b = { lines: [], h: 0, gap }; this.blocks.push(this.b); return this; }
 
   line(l) {
     if (!this.b) this.block();
-    l.s = l.s || 12;
-    l.h = l.h || (l.s === 10 ? 13 : 16);
+    l.s = l.s || BODY;
+    l.h = l.h || LH[l.s] || 21;
     this.b.lines.push(l);
     this.b.h += l.h;
     return this;
   }
 
-  head(t, c = COLORS.cyan) { return this.line({ t, c, h: 18 }); }
+  head(t, c = COLORS.cyan) { return this.line({ t, c, h: 26, head: c }); }
 
   // wrapped paragraph
-  para(t, { c = COLORS.text, s = 12, x = 0, mark } = {}) {
+  para(t, { c = COLORS.text, s = BODY, x = 0, mark } = {}) {
     for (const ln of wrap(this.ctx, t, VW - x, s)) this.line({ t: ln, c, s, x, mark });
     return this;
   }
 
   // left text (optionally after a small tag) with right-aligned text; falls back to
   // two lines when both do not fit side by side
-  row(t, r, { c = COLORS.text, s = 12, x = 0, rc = COLORS.text, rs = s, tag, mark } = {}) {
-    const tagW = tag ? measure(this.ctx, tag.t, 10) + 10 : 0;
+  row(t, r, { c = COLORS.text, s = BODY, x = 0, rc = COLORS.text, rs = s, tag, mark, gauge, hearts } = {}) {
+    const tagW = tag ? measure(this.ctx, tag.t, 12) + 12 : 0;
     const lw = tagW + measure(this.ctx, t, s);
     const rw = r ? measure(this.ctx, r, rs) : 0;
-    if (!r || x + lw + rw + 10 <= VW) return this.line({ t, s, c, x, r, rs, rc, tag, mark });
+    const extra = gauge ? GAUGE_W + 16 : hearts != null ? HEART_N * 16 + 16 : 0;
+    if (!r || x + lw + rw + extra + 14 <= VW) return this.line({ t, s, c, x, r, rs, rc, tag, mark, gauge, hearts });
     const lines = wrap(this.ctx, t, VW - x - tagW, s);
     lines.forEach((ln, i) => this.line({ t: ln, s, c, x: i ? x + tagW : x, tag: i ? null : tag, mark }));
-    return this.line({ t: '', s: rs, r, rs, rc, mark });
+    return this.line({ t: '', s: rs, r, rs, rc, mark, gauge, hearts });
   }
 
   // Scroll stops (pixel offsets): every block start up to the last stop, from which the
@@ -89,7 +104,7 @@ class Page {
     // last screen never begins with a heading-less line), else the first line that fits
     const minO = total - VH;
     const lastBlock = starts.find((s) => s >= minO);
-    const last = lastBlock != null && lastBlock - minO <= 64 ? lastBlock : tops.find((l) => l.y >= minO).y;
+    const last = lastBlock != null && lastBlock - minO <= 84 ? lastBlock : tops.find((l) => l.y >= minO).y;
     // top of the first line that does not fit entirely when scrolled to o
     const cut = (o) => { const l = tops.find((t) => t.y + t.h > o + VH); return l ? l.y : Infinity; };
     const out = [];
@@ -142,45 +157,115 @@ export function suggestJobs(st, visited = {}, town = 'tokyo', n = 3) {
 
 const placeName = (id) => (GUIDE[id] ? GUIDE[id].name : id);
 const townTag = (id) => (GUIDE[id] ? { t: TOWNS[GUIDE[id].town], bg: TOWN_BG[GUIDE[id].town] } : null);
+// any registered place (regular shows can be anywhere): guide name, place name, else nothing
+const anyPlaceName = (g, id) => (!id ? '' : GUIDE[id] ? GUIDE[id].name : g.PLACES && g.PLACES[id] ? g.PLACES[id].name || '' : '');
+
+const L0 = { hunger: 70, stress: 10, clean: 90 };
+const lifeOf = (st) => ({ ...L0, ...(st.life || {}) });
+
+// The player's regular shows (joined, known to the registry), by weekday.
+function myRegulars(st) {
+  const regs = st.regulars || {};
+  return Object.keys(regs)
+    .filter((id) => REGULARS[id] && regs[id] && !regs[id].declined && regs[id].since != null)
+    .sort((a, b) => (REGULARS[a].weekday || 0) - (REGULARS[b].weekday || 0));
+}
+
+// This week's state of a regular show: [label, color].
+function regularStatus(g, id) {
+  const st = g.state;
+  const r = REGULARS[id], s = st.regulars[id];
+  const wk = weekOf(st.day), today = weekdayOf(st.day);
+  if (s.dropped) return ['降板', COLORS.dim];
+  if ((s.doneWeek || 0) >= wk) {
+    if (s.missed > 0) return ['休んでしまった…', COLORS.bad];
+    if (weekOf(s.since) === wk && weekdayOf(s.since) > r.weekday) return ['来週から', COLORS.dim];
+    return ['収録ずみ', COLORS.good];
+  }
+  if (r.weekday === today) return ['きょう収録！', COLORS.accent];
+  if (r.weekday > today) return [`あと${r.weekday - today}日`, COLORS.text];
+  return ['今週は終わった', COLORS.dim]; // the day passed without a recording (not counted yet)
+}
+
+// Days until the next Monday (rent day); Monday itself counts as 7 (paid this morning).
+const daysToRent = (day) => (7 - weekdayOf(day)) % 7 || 7;
+
+// Short advice for each need: [text, color].
+function needAdvice(k, v) {
+  if (k === 'hunger') {
+    if (v < HUNGRY) return ['おなかがペコペコ！何か食べよう。このままだと力が出ないし、よく眠れない。', COLORS.bad];
+    if (v < 45) return ['そろそろ何か食べよう。', COLORS.accent];
+    if (v >= FULL) return ['おなかいっぱい。いまは食べられない。', COLORS.dim];
+    return ['ちょうどいい感じ。', COLORS.dim];
+  }
+  if (k === 'stress') {
+    if (v >= BURNOUT) return ['もう限界！お仕事はできない。友だちと遊ぶか、趣味で気分転換しよう。', COLORS.bad];
+    if (v >= STRESSED) return ['ストレスがたまっている。友だちと遊ぶか、ゆっくり休もう。', COLORS.bad];
+    if (v >= 40) return ['すこし疲れぎみ。たまには息抜きを。', COLORS.accent];
+    return ['リラックスしている。', COLORS.dim];
+  }
+  if (v < SCRUFFY) return ['身だしなみが乱れている。お風呂に入ろう。（知名度や好感度が上がりにくい）', COLORS.bad];
+  if (v < 60) return ['そろそろお風呂に入りたい。', COLORS.accent];
+  return ['さっぱりしている。', COLORS.dim];
+}
+
+const COND = {
+  great: ['絶好調！', COLORS.good], normal: ['ふつう', COLORS.text], hungry: ['はらぺこ…', COLORS.bad],
+  stressed: ['ストレスぎみ…', COLORS.bad], scruffy: ['身だしなみが乱れている', COLORS.accent], burnout: ['燃え尽き寸前！', COLORS.bad],
+};
 
 // ---------------------------------------------------------------- tab: もくひょう
 function goalPage(g, ctx) {
   const st = g.state;
   const fl = st.flags || {};
+  const L = lifeOf(st);
   const pg = new Page(ctx);
   const visited = visitedPlaces(g);
 
   pg.block().head('きょうのようす');
-  pg.row(`${st.day}日目`, `所持金 ${fmtMoney(st.money)}`, { rc: COLORS.accent });
+  pg.row(g.dayLabel ? g.dayLabel() : `${st.day}日目`, `所持金 ${fmtMoney(st.money)}`, { rc: COLORS.accent });
   const sc = st.stamina / st.maxStamina > 0.5 ? COLORS.good : st.stamina / st.maxStamina > 0.2 ? COLORS.accent : COLORS.bad;
-  pg.row(`体力 ${st.stamina}/${st.maxStamina}`, `満腹 ${st.life.hunger}%`, { c: sc });
+  pg.row(`体力 ${st.stamina}/${st.maxStamina}`, `満腹 ${L.hunger}%`, { c: sc, rc: L.hunger < HUNGRY ? COLORS.bad : COLORS.text });
+  // what needs attention today (the details are in せいかつ); a recording today comes
+  // first, since it cannot wait, then the needs from the most to the least pressing
+  const notes = [];
+  try {
+    for (const id of g.regularsToday ? g.regularsToday() : []) notes.push([`きょうは『${REGULARS[id].title}』の収録日！`, COLORS.accent]);
+  } catch (e) { /* registry changed under us */ }
   if (st.stamina < 25) {
-    pg.para(g.canEat() ? '体力が少ない。何か食べるか、ベッドで寝て回復しよう。' : '体力が少ない。おなかいっぱいなので、\nベッドで寝て回復しよう。', { s: 10, c: COLORS.bad });
+    notes.push([g.canEat && !g.canEat() ? '体力が少ない。おなかいっぱいなので、ベッドで寝て回復しよう。' : '体力が少ない。何か食べるか、ベッドで寝て回復しよう。', COLORS.bad]);
   }
+  if (L.hunger < HUNGRY && st.stamina >= 25) notes.push(['おなかがペコペコ…。何か食べよう。', COLORS.bad]);
+  if (L.stress >= BURNOUT) notes.push(['ストレスが限界。お仕事の前に、遊んで気分転換しよう。', COLORS.bad]);
+  else if (L.stress >= STRESSED) notes.push(['ストレスがたまっている。友だちと遊んで息抜きしよう。', COLORS.accent]);
+  if (st.rent && st.rent.debt) notes.push([`家賃が未払い（${fmtMoney(st.rent.debt)}）。スマホの「家計」から払おう。`, COLORS.bad]);
+  if (L.clean < SCRUFFY) notes.push(['身だしなみが乱れている。お風呂に入ろう。', COLORS.accent]);
+  for (const [t, c] of notes.slice(0, 4)) pg.para('・' + t, { s: SMALL, c });
+  if (notes.length) pg.para('くわしくは「せいかつ」タブで。', { s: SMALL, c: COLORS.dim });
 
   // the one most important next step
   pg.block().head('つぎの目標', COLORS.accent);
   if (fl.finaleDone) {
     pg.para('国民的スターになった！おめでとう！');
-    pg.para('NHKホールの凱旋コンサートや、\n大きなお仕事で活躍を続けよう。', { s: 10, c: COLORS.dim });
+    pg.para('NHKホールの凱旋コンサートや、大きなお仕事で活躍を続けよう。', { s: SMALL, c: COLORS.dim });
   } else if (st.fame >= FINALE_FAME && fl.finaleInvited) {
     pg.para(g.map && g.map.placeId === 'nhk' ? 'プロデューサーに会いに行こう！' : 'NHK放送センターへ行こう！');
-    pg.para('年末の大型歌番組のプロデューサーが、\n入り口の近くで待っている。', { s: 10, c: COLORS.dim });
+    pg.para('年末の大型歌番組のプロデューサーが、入り口の近くで待っている。', { s: SMALL, c: COLORS.dim });
   } else if (st.fame >= FINALE_FAME) {
     pg.para(`★${FINALE_FAME}に届いた！`);
-    pg.para('街に出ると、NHKから大事な電話がかかってくるはず。', { s: 10, c: COLORS.dim });
+    pg.para('街に出ると、NHKから大事な電話がかかってくるはず。', { s: SMALL, c: COLORS.dim });
   } else if (!st.agency) {
-    pg.para('事務所のオーディションに合格して、\n所属タレントになろう。');
-    pg.para('レッスンや自主練でスキルを上げると、合格しやすくなる。', { s: 10, c: COLORS.dim });
+    pg.para('事務所のオーディションに合格して、所属タレントになろう。');
+    pg.para('レッスンや自主練でスキルを上げると、合格しやすくなる。ごはんをしっかり食べて、ストレスをためないのも大事。', { s: SMALL, c: COLORS.dim });
   } else {
     const next = TIER_FAME.find((f) => f > st.fame && f > 30) || FINALE_FAME;
     pg.para(`お仕事で知名度を上げて、★${next}をめざそう。`);
-    pg.para(`あと★${next - st.fame}。おすすめのお仕事は下のとおり。`, { s: 10, c: COLORS.dim });
+    pg.para(`あと★${next - st.fame}。おすすめのお仕事は下のとおり。`, { s: SMALL, c: COLORS.dim });
   }
 
   if (!st.agency && !fl.finaleDone) {
     pg.block().head('オーディション（合格で所属）');
-    for (const a of AUDITIONS) pg.row(placeName(a.place), a.how, { tag: townTag(a.place), rs: 10, rc: COLORS.dim });
+    for (const a of AUDITIONS) pg.row(placeName(a.place), a.how, { tag: townTag(a.place), rs: SMALL, rc: COLORS.dim });
   }
 
   // title
@@ -188,29 +273,143 @@ function goalPage(g, ctx) {
   const nextRank = RANKS[ri + 1];
   pg.block().head('称号');
   pg.row(`いまは「${rankName(st.fame)}」`, `★${st.fame}`, { rc: COLORS.pink });
-  if (nextRank) pg.para(`次の「${nextRank[1]}」まで あと★${nextRank[0] - st.fame}`, { s: 10, c: COLORS.dim });
+  if (nextRank) pg.para(`次の「${nextRank[1]}」まで あと★${nextRank[0] - st.fame}`, { s: SMALL, c: COLORS.dim });
 
   // jobs
   const here = g.map && GUIDE[g.map.placeId];
   const jobs = suggestJobs(st, visited, here ? here.town : 'tokyo');
   if (jobs.length) {
     pg.block().head('おすすめのお仕事');
-    for (const j of jobs) pg.row('・' + j.label, GUIDE[j.place] ? GUIDE[j.place].short : j.place, { rs: 10, rc: COLORS.dim });
+    for (const j of jobs) pg.row('・' + j.label, GUIDE[j.place] ? GUIDE[j.place].short : j.place, { rs: SMALL, rc: COLORS.dim });
   }
   const nextTier = TIER_FAME.find((f) => f > st.fame && !(f === 30 && st.agency));
   // (with an agency the next ★ line is already the main goal above)
-  if (nextTier === 30) pg.para('所属するか★30になると、受けられるお仕事が増える。', { s: 10, c: COLORS.dim });
-  else if (nextTier && (!st.agency || fl.finaleDone)) pg.para(`★${nextTier}で、もっと大きなお仕事が増える（あと★${nextTier - st.fame}）。`, { s: 10, c: COLORS.dim });
+  if (nextTier === 30) pg.para('所属するか★30になると、受けられるお仕事が増える。', { s: SMALL, c: COLORS.dim });
+  else if (nextTier && (!st.agency || fl.finaleDone)) pg.para(`★${nextTier}で、もっと大きなお仕事が増える（あと★${nextTier - st.fame}）。`, { s: SMALL, c: COLORS.dim });
   if (st.agency && AGENCIES[st.agency]) {
     const sk = SKILLS[AGENCIES[st.agency].skill];
-    pg.para(`${AGENCIES[st.agency].name}の得意分野は「${sk}」。\n${sk}のお仕事は、ギャラと知名度が1.1倍！`, { s: 10, c: COLORS.dim });
+    pg.para(`${AGENCIES[st.agency].name}の得意分野は「${sk}」。${sk}のお仕事は、ギャラと知名度が1.1倍！`, { s: SMALL, c: COLORS.dim });
   }
 
   if (!fl.finaleDone && st.fame < FINALE_FAME) {
     pg.block().head('さいごの目標');
-    pg.para(`★${FINALE_FAME}で、NHKから年末の大舞台の声がかかる。`, { s: 10 });
-    pg.para(`（あと★${FINALE_FAME - st.fame}）`, { s: 10, c: COLORS.dim });
+    pg.para(`★${FINALE_FAME}で、NHKから年末の大舞台の声がかかる。`, { s: SMALL });
+    pg.para(`（あと★${FINALE_FAME - st.fame}）`, { s: SMALL, c: COLORS.dim });
   }
+  return pg;
+}
+
+// ---------------------------------------------------------------- tab: せいかつ
+function lifePage(g, ctx) {
+  const st = g.state;
+  const L = lifeOf(st);
+  const pg = new Page(ctx);
+  const day = st.day || 1;
+  const wd = weekdayOf(day);
+
+  // today
+  pg.block().head('きょう', TABS[1].color);
+  pg.row(`${day}日目　${WEEKDAYS[wd]}曜日`, `第${weekOf(day)}週`, { c: COLORS.accent, rc: COLORS.dim, rs: SMALL });
+  if (g.condition) {
+    const [cl, cc] = COND[g.condition()] || COND.normal;
+    pg.row('調子', cl, { rc: cc });
+  }
+  try {
+    for (const id of g.regularsToday ? g.regularsToday() : []) {
+      const r = REGULARS[id];
+      const where = anyPlaceName(g, r.place);
+      pg.para(`きょうは『${r.title}』の収録日！${where ? `（${where}）` : ''}`, { s: SMALL, c: COLORS.accent });
+    }
+  } catch (e) { /* ignore */ }
+  const unread = g.unread ? g.unread() : 0;
+  if (unread) pg.para(`スマホに未読のメッセージが${unread}件あるよ。`, { s: SMALL, c: COLORS.cyan });
+
+  // needs
+  pg.block().head('からだと心', TABS[1].color);
+  const sf = st.stamina / st.maxStamina;
+  pg.row('体力', `${st.stamina}/${st.maxStamina}`, { gauge: { frac: sf, color: sf > 0.5 ? COLORS.good : sf > 0.2 ? COLORS.accent : COLORS.bad }, rc: st.stamina < 25 ? COLORS.bad : COLORS.text });
+  if (st.stamina < 25) pg.para('体力が少ない。何か食べるか、ベッドで寝て回復しよう。', { s: SMALL, c: COLORS.bad, x: 16 });
+  else pg.para(sf >= 0.7 ? '元気いっぱい！' : 'すこし疲れてきた。お仕事は体力と相談しよう。', { s: SMALL, c: sf >= 0.7 ? COLORS.dim : COLORS.accent, x: 16 });
+  const NEED_ROWS = [
+    ['hunger', '満腹', (v) => `${v}%`, (v) => (v < HUNGRY ? COLORS.bad : '#ff9a3c')],
+    ['stress', 'ストレス', (v) => String(v), (v) => (v >= STRESSED ? COLORS.bad : v >= 40 ? COLORS.accent : '#b48cff')],
+    ['clean', '身だしなみ', (v) => String(v), (v) => (v < SCRUFFY ? COLORS.bad : COLORS.cyan)],
+  ];
+  for (const [k, name, fmt, col] of NEED_ROWS) {
+    const v = clamp(Math.round(L[k] || 0), 0, 100);
+    const [adv, ac] = needAdvice(k, v);
+    pg.row(name, fmt(v), { gauge: { frac: v / 100, color: col(v) }, rc: ac === COLORS.bad ? COLORS.bad : COLORS.text });
+    pg.para(adv, { s: SMALL, c: ac, x: 16 });
+  }
+
+  // housing & rent
+  pg.block().head('すまい', TABS[1].color);
+  const h = g.housing ? g.housing() : null;
+  if (h) {
+    pg.row(h.name || 'すまい', `家賃 ${fmtMoney(h.rent || 0)}／週`, { c: COLORS.accent, rs: SMALL, rc: COLORS.text });
+    if (h.desc) pg.para(h.desc, { s: SMALL, c: COLORS.dim, x: 16 });
+    const perks = [h.kitchen && 'キッチン', h.bath && 'お風呂'].filter(Boolean);
+    const owned = Object.keys(st.furniture || {}).filter((k) => st.furniture[k] && FURNITURE[k]).length;
+    pg.row(`設備：${perks.length ? perks.join('・') : 'なし'}`, `家具 ${owned}/${h.slots ?? 4}`, { s: SMALL, rs: SMALL, x: 16, rc: COLORS.dim });
+    const rent = st.rent || {};
+    const d = daysToRent(day);
+    const rentful = (h.rent || 0) > 0;
+    if (rentful) pg.row('次の家賃', `月曜日（${d === 1 ? 'あした' : `あと${d}日`}）`, { rc: d <= 2 ? COLORS.accent : COLORS.text });
+    // unpaid rent is shown even after moving somewhere rent-free
+    if (rent.debt) {
+      pg.row('未払い', fmtMoney(rent.debt), { c: COLORS.bad, rc: COLORS.bad });
+      pg.para('お金ができたら、スマホの「家計」から払おう。払うまで、ストレスがたまっていく。', { s: SMALL, c: COLORS.bad, x: 16 });
+    } else if (rentful && st.money < h.rent) {
+      pg.para(`いまの所持金では家賃が足りない！月曜日までに、あと${fmtMoney(h.rent - st.money)}かせごう。`, { s: SMALL, c: COLORS.accent, x: 16 });
+    } else if (rentful) pg.para('家賃は毎週月曜日の朝に、所持金から自動で支払われる。', { s: SMALL, c: COLORS.dim, x: 16 });
+    if (!rentful) pg.para('家賃はかからない。', { s: SMALL, c: COLORS.dim, x: 16 });
+  }
+
+  // regular shows this week
+  pg.block().head('レギュラー番組（今週）', TABS[1].color);
+  const regs = myRegulars(st);
+  if (!regs.length) {
+    pg.para('まだレギュラー番組はない。知名度が上がると、番組からオファーが届くかも。', { s: SMALL, c: COLORS.dim });
+  } else {
+    for (const id of regs) {
+      const r = REGULARS[id], s = st.regulars[id];
+      const [label, color] = regularStatus(g, id);
+      const wdName = WEEKDAYS[clamp(r.weekday | 0, 0, 6)] + '曜';
+      pg.row(`『${r.title || id}』`, label, { rc: color, tag: { t: wdName, bg: r.weekday === wd ? '#c87a1a' : '#5a4a8a' }, c: s.dropped ? COLORS.dim : COLORS.text });
+      const where = anyPlaceName(g, r.place);
+      pg.para(`${where ? where + '・' : ''}出演 ${s.count || 0}回${s.missed && !s.dropped ? `・お休み ${s.missed}回` : ''}`, { s: SMALL, c: COLORS.dim, x: 16 });
+    }
+    pg.para('収録日に現場へ行けば出演できる。続けて2回休むと降板…。', { s: SMALL, c: COLORS.dim });
+  }
+
+  // friends
+  pg.block().head('なかま', TABS[1].color);
+  const people = Object.keys(st.people || {}).filter((id) => PEOPLE[id] && st.people[id]);
+  if (!people.length) {
+    pg.para('まだ知り合いはいない。事務所や街の人に話しかけてみよう。', { s: SMALL, c: COLORS.dim });
+  } else {
+    const aff = (id) => Number(st.people[id].aff) || 0;
+    people.sort((a, b) => aff(b) - aff(a));
+    const friends = people.filter((id) => heartIndex(aff(id)) >= 2).length;
+    pg.row(`知り合い ${people.length}人`, `友だち以上 ${friends}人`, { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.pink });
+    for (const id of people) {
+      const p = st.people[id];
+      const lv = heartIndex(aff(id));
+      const tag = st.partner === id || p.partner ? { t: '相方', bg: '#c87a1a' } : p.special ? { t: '大切な人', bg: '#c2407a' } : null;
+      pg.row(PEOPLE[id].name || id, (HEARTS[lv] && HEARTS[lv][1]) || '', { tag, hearts: lv, rc: lv >= 3 ? COLORS.pink : lv >= 2 ? COLORS.text : COLORS.dim, rs: SMALL });
+    }
+  }
+
+  // fans
+  pg.block().head('ファン', TABS[1].color);
+  const fans = Math.max(0, Math.round(st.fans || 0));
+  pg.row(`ファン ${fans.toLocaleString('ja-JP')}人`, '', { c: COLORS.pink });
+  const fanNote = fans === 0 ? 'まだファンはいない。テレビや舞台のお仕事で、名前を覚えてもらおう。'
+    : fans < 100 ? 'ファンが少しずつ増えてきた！'
+      : fans < 1000 ? '応援してくれるファンが増えてきた。レギュラー番組でもっと増える。'
+        : fans < 10000 ? 'たくさんのファンが応援してくれている！'
+          : '日本中にファンがいる！国民的スターはもうすぐ。';
+  pg.para(fanNote, { s: SMALL, c: COLORS.dim });
   return pg;
 }
 
@@ -221,19 +420,19 @@ function placesPage(g, ctx) {
   const here = g.map && g.map.placeId;
   const ids = GUIDE_ORDER.filter((id) => GUIDE[id]);
   const count = (town) => ids.filter((id) => GUIDE[id].town === town && visited[id]).length + '/' + ids.filter((id) => GUIDE[id].town === town).length;
-  pg.block(5).row(`行った場所 ${ids.filter((id) => visited[id]).length}/${ids.length}`, `東京 ${count('tokyo')}・なんば ${count('namba')}`, { c: COLORS.accent, rs: 10, rc: COLORS.dim });
+  pg.block(6).row(`行った場所 ${ids.filter((id) => visited[id]).length}/${ids.length}`, `東京 ${count('tokyo')}・なんば ${count('namba')}`, { c: COLORS.accent, rs: SMALL, rc: COLORS.dim });
   for (const id of ids) {
     const p = GUIDE[id];
     const tag = { t: TOWNS[p.town], bg: TOWN_BG[p.town] };
-    pg.block(6);
+    pg.block(7);
     if (!visited[id]) {
       pg.line({ t: '？？？', c: COLORS.dim, tag });
-      pg.para('ヒント：' + (p.hint || '街を歩いてさがしてみよう'), { s: 10, c: COLORS.dim, x: 8 });
+      pg.para('ヒント：' + (p.hint || '街を歩いてさがしてみよう'), { s: SMALL, c: COLORS.dim, x: 12 });
       continue;
     }
     const mark = id === here;
     pg.line({ t: p.name, c: mark ? COLORS.accent : COLORS.text, tag, mark, badge: p.audition ? { t: 'オーディション', c: COLORS.pink } : mark ? { t: 'いまここ', c: COLORS.accent } : null });
-    for (const l of p.lines) pg.para(l, { s: 10, x: 8, mark });
+    for (const l of p.lines || []) pg.para(l, { s: SMALL, x: 12, mark });
   }
   return pg;
 }
@@ -249,13 +448,20 @@ function recordPage(g, ctx) {
   pg.block().row(st.name, `${rankName(st.fame)}　★${st.fame}`, { c: COLORS.accent, rc: COLORS.pink });
   pg.row('所属', st.agency && AGENCIES[st.agency] ? AGENCIES[st.agency].name : 'フリー（未所属）');
   const pm = st.playMinutes || 0;
-  pg.row('日数', `${st.day}日目`);
+  pg.row('日数', g.dayLabel ? g.dayLabel() : `${st.day}日目`);
   pg.row('プレイ時間', pm >= 60 ? `${Math.floor(pm / 60)}時間${pm % 60}分` : `${pm}分`);
 
   pg.block().head('あゆみ');
   pg.row('こなしたお仕事', `${stats.jobs || 0}回`);
   pg.row('ミニゲーム', `${stats.minigames || 0}回`);
   pg.row('行った場所', `${ids.filter((id) => visited[id]).length}/${ids.length}`);
+  pg.row('ファン', `${Math.max(0, Math.round(st.fans || 0)).toLocaleString('ja-JP')}人`, { rc: COLORS.pink });
+  const people = Object.keys(st.people || {}).filter((id) => PEOPLE[id] && st.people[id]);
+  if (people.length) pg.row('知り合い', `${people.length}人（友だち以上 ${people.filter((id) => heartIndex(Number(st.people[id].aff) || 0) >= 2).length}人）`);
+  if (st.partner && PEOPLE[st.partner]) pg.row('相方', PEOPLE[st.partner].name, { rc: COLORS.accent });
+  const regCount = Object.keys(st.regulars || {}).reduce((a, id) => a + (Number(st.regulars[id] && st.regulars[id].count) || 0), 0);
+  if (regCount) pg.row('レギュラー番組の出演', `${regCount}回`);
+  if (g.housing) pg.row('住まい', g.housing().name || '');
   if (st.flags && st.flags.finaleDone) pg.row('年末の大型歌番組', '出演！', { rc: COLORS.accent });
 
   pg.block().head('ミニゲームのベストランク');
@@ -282,7 +488,7 @@ function recordPage(g, ctx) {
   return pg;
 }
 
-const BUILDERS = [goalPage, placesPage, recordPage];
+const BUILDERS = [goalPage, lifePage, placesPage, recordPage];
 
 // ---------------------------------------------------------------- scene
 export class NotebookScene {
@@ -290,13 +496,15 @@ export class NotebookScene {
     this.g = g;
     this.resolve = resolve;
     this.t = 0;
+    this.hd = true;
+    this.opaque = true; // covers the whole screen
     this.hidesHud = true; // MapScene skips the HUD while this is open
-    this.tab = lastTab;
+    this.tab = clamp(lastTab, 0, TABS.length - 1);
     this.pages = BUILDERS.map((b) => {
       try { return b(g, g.ctx); } catch (e) { console.error(e); return new Page(g.ctx).block().para('（読み込めませんでした）'); }
     });
     for (const p of this.pages) void p.stops; // lay out once
-    this.scroll = [0, 0, 0]; // index into page.stops per tab
+    this.scroll = TABS.map(() => 0); // index into page.stops per tab
     this.shown = 0; // drawn pixel offset (eases toward the target)
   }
 
@@ -355,13 +563,13 @@ export class NotebookScene {
   }
 
   draw(ctx) {
-    // cover the whole screen: the 4px margin would otherwise show slivers of the map,
-    // its place banner and toasts around the panel
-    rect(ctx, 0, 0, W, H, '#000');
-    panel(ctx, PX, PY, PW, PH);
-    this.drawTabs(ctx);
+    drawCover(ctx);
     const color = TABS[this.tab].color;
-    rect(ctx, PX + 5, VY - 6, PW - 10, 1, color);
+    this.drawTabs(ctx, false);
+    panel(ctx, PX, PY, PW, PH);
+    this.drawTabs(ctx, true);
+    rect(ctx, PX + 6, PY + 6, PW - 12, 2, color);
+    rect(ctx, PX + 6, PY + 8, PW - 12, 1, shade(color, -0.45));
 
     // text area (clipped; at rest only whole lines are drawn)
     const pg = this.page;
@@ -369,15 +577,17 @@ export class NotebookScene {
     const settled = off === Math.round(this.offsetOf(this.scroll[this.tab]));
     ctx.save();
     ctx.beginPath();
-    ctx.rect(VX - 8, VY - 2, VW + 10, VH + 2);
+    ctx.rect(VX - 12, VY - 2, VW + 14, VH + 3);
     ctx.clip();
     let y = VY - off;
     for (const b of pg.blocks) {
       if (y > VY + VH) break;
-      for (const l of b.lines) {
-        if (y + l.h > VY - 2 && y < VY + VH && !(settled && (y < VY - 1 || y + l.h > VY + VH + 2))) drawLine(ctx, l, y);
+      b.lines.forEach((l, i) => {
+        // at rest a heading is not left alone at the bottom without its first line
+        const after = l.head && b.lines[i + 1] ? b.lines[i + 1].h : 0;
+        if (y + l.h > VY - 2 && y < VY + VH && !(settled && (y < VY - 1 || y + l.h + after > VY + VH + 2))) drawLine(ctx, l, y);
         y += l.h;
-      }
+      });
       y += b.gap;
     }
     ctx.restore();
@@ -386,38 +596,74 @@ export class NotebookScene {
     const max = this.maxScroll();
     if (max > 0) {
       // track between the ▲ / ▼ marks
-      const TY = VY + 9, TH = VH - 18;
+      const TY = VY + 12, TH = VH - 24;
       const total = this.offsetOf(max) + VH;
-      const th = Math.max(10, Math.round((TH * VH) / total));
+      const th = Math.max(14, Math.round((TH * VH) / total));
       const ty = TY + Math.round(((TH - th) * clamp(this.shown, 0, this.offsetOf(max))) / this.offsetOf(max));
-      rect(ctx, SB_X, TY, 3, TH, '#2a2f55');
-      rect(ctx, SB_X, ty, 3, th, color);
+      rect(ctx, SB_X, TY, 4, TH, '#2a2f55');
+      rect(ctx, SB_X, ty, 4, th, color);
+      rect(ctx, SB_X, ty, 1, th, shade(color, 0.35));
       const s = this.scroll[this.tab];
       if (s > 0) upArrow(ctx, SB_X - 2, VY, this.t);
-      if (s < max) downArrow(ctx, SB_X - 2, VY + VH - 6, this.t, '#fff');
+      if (s < max) downArrow(ctx, SB_X - 2, VY + VH - 8, this.t, '#fff');
     }
 
-    text(ctx, '←→ タブ　↑↓ スクロール　A つぎへ　B とじる', W / 2, H - 22, { size: 10, align: 'center', color: COLORS.dim });
+    text(ctx, '←→ タブ　↑↓ スクロール　A つぎへ　B とじる', SW / 2, PY + PH - 27, { size: SMALL, align: 'center', color: COLORS.dim });
   }
 
-  drawTabs(ctx) {
-    const x0 = Math.round((W - (TAB_W * TABS.length + TAB_GAP * (TABS.length - 1))) / 2);
+  // selected = false: the tabs behind the page; true: the open tab, joined to the page
+  drawTabs(ctx, selected) {
+    const x0 = Math.round((SW - (TAB_W * TABS.length + TAB_GAP * (TABS.length - 1))) / 2);
     TABS.forEach((tb, i) => {
-      const x = x0 + i * (TAB_W + TAB_GAP);
       const sel = i === this.tab;
-      rect(ctx, x, TAB_Y, TAB_W, TAB_H, sel ? tb.color : '#0d1330');
-      rect(ctx, x, TAB_Y, TAB_W, 1, sel ? '#ffffff' : tb.color);
-      if (!sel) rect(ctx, x, TAB_Y + TAB_H - 1, TAB_W, 1, '#2a2f55');
-      text(ctx, tb.label, x + TAB_W / 2, TAB_Y + 4, { align: 'center', color: sel ? '#ffffff' : COLORS.dim, shadow: sel ? 'rgba(0,0,0,0.45)' : null });
+      if (sel !== selected) return;
+      const x = x0 + i * (TAB_W + TAB_GAP);
+      const y = sel ? TAB_Y - 2 : TAB_Y;
+      const h = sel ? PY - y + 6 : PY - y + 1;
+      rect(ctx, x - 1, y - 1, TAB_W + 2, h + 1, '#0a0c18');
+      rect(ctx, x, y, TAB_W, h, sel ? tb.color : '#141b3e');
+      rect(ctx, x, y, TAB_W, 1, sel ? shade(tb.color, 0.45) : tb.color);
+      rect(ctx, x, y + 1, TAB_W, 1, sel ? shade(tb.color, 0.2) : shade(tb.color, -0.4));
+      if (sel) rect(ctx, x + TAB_W - 2, y + 2, 2, h - 2, shade(tb.color, -0.2));
+      text(ctx, tb.label, x + TAB_W / 2, y + 6, { size: BODY, align: 'center', color: sel ? '#ffffff' : COLORS.dim, shadow: sel ? shade(tb.color, -0.5) : null });
     });
+    if (selected) return;
     // ◀ ▶ hints that left / right switch tabs
     const bl = Math.floor(this.t / 20) % 2 ? 1 : 0;
     ctx.fillStyle = COLORS.accent;
-    for (let i = 0; i < 4; i++) {
-      ctx.fillRect(x0 - 10 - bl + i, TAB_Y + 9 - i, 1, i * 2 + 1);
-      ctx.fillRect(W - x0 + 9 + bl - i, TAB_Y + 9 - i, 1, i * 2 + 1);
+    const cy = TAB_Y + 13;
+    for (let i = 0; i < 5; i++) {
+      ctx.fillRect(x0 - 14 - bl + i, cy - i, 1, i * 2 + 1);
+      ctx.fillRect(SW - x0 + 13 + bl - i, cy - i, 1, i * 2 + 1);
     }
   }
+}
+
+// The notebook's leather cover with stitching (the page panel sits on it), drawn
+// once into an offscreen canvas at 1 logical pixel per pixel.
+let coverCv = null;
+function drawCover(ctx) {
+  if (!coverCv) {
+    coverCv = document.createElement('canvas');
+    coverCv.width = SW;
+    coverCv.height = SH;
+    const c = coverCv.getContext('2d');
+    rect(c, 0, 0, SW, SH, '#0b0d1a');
+    const { x, y, w, h } = COVER;
+    rect(c, x - 1, y - 1, w + 2, h + 2, '#22202a');
+    rect(c, x, y, w, h, '#5a2e3a');
+    rect(c, x, y, w, 1, '#84505c');
+    rect(c, x, y, 1, h, '#84505c');
+    rect(c, x, y + h - 2, w, 2, '#3e1e28');
+    rect(c, x + w - 2, y, 2, h, '#3e1e28');
+    c.fillStyle = '#663644';
+    for (let yy = y + 3; yy < y + h - 3; yy += 3) for (let xx = x + 3 + ((yy * 7) % 5); xx < x + w - 3; xx += 9) c.fillRect(xx, yy, 1, 1);
+    // stitching
+    c.fillStyle = '#c8907e';
+    for (let xx = x + 6; xx < x + w - 8; xx += 7) { c.fillRect(xx, y + 4, 4, 1); c.fillRect(xx, y + h - 6, 4, 1); }
+    for (let yy = y + 6; yy < y + h - 8; yy += 7) { c.fillRect(x + 4, yy, 1, 4); c.fillRect(x + w - 6, yy, 1, 4); }
+  }
+  ctx.drawImage(coverCv, 0, 0, SW, SH);
 }
 
 function upArrow(ctx, x, y, t = 0, color = '#fff') {
@@ -426,22 +672,83 @@ function upArrow(ctx, x, y, t = 0, color = '#fff') {
   for (let i = 0; i < 4; i++) ctx.fillRect(x + 3 - i, y + 3 - o + i, i * 2 + 1, 1);
 }
 
+// 13x11 heart (filled or empty).
+const HEART = [
+  '..ooo...ooo..',
+  '.ohhfo.offfo.',
+  'ohhfffofffffo',
+  'ohfffffffffso',
+  'offffffffffso',
+  '.offffffffso.',
+  '..offffffso..',
+  '...offffso...',
+  '....offso....',
+  '.....oso.....',
+  '......o......',
+];
+const HEART_PAL = {
+  full: { o: '#5a1430', h: '#ffd0e4', f: '#ff5f9e', s: '#d63a7a' },
+  empty: { o: '#555a80', h: '#2e3460', f: '#232a52', s: '#1e2448' },
+};
+function heart(ctx, x, y, full) {
+  const pal = HEART_PAL[full ? 'full' : 'empty'];
+  for (let j = 0; j < HEART.length; j++) {
+    for (let i = 0; i < HEART[j].length; i++) {
+      const ch = HEART[j][i];
+      if (ch !== '.') { ctx.fillStyle = pal[ch]; ctx.fillRect(x + i, y + j, 1, 1); }
+    }
+  }
+}
+
 function drawLine(ctx, l, y) {
   let x = VX + (l.x || 0);
-  if (l.mark) rect(ctx, VX - 7, y, 2, l.h, COLORS.accent);
+  if (l.mark) rect(ctx, VX - 10, y + 1, 3, l.h - 2, COLORS.accent);
   const dy = 1;
+  if (l.head) {
+    // section heading: a small diamond, the title and a dotted rule to the right edge
+    const c = l.head;
+    rect(ctx, x, y + 9, 6, 6, shade(c, -0.35));
+    rect(ctx, x + 1, y + 10, 4, 4, c);
+    rect(ctx, x + 1, y + 10, 2, 1, shade(c, 0.5));
+    text(ctx, l.t, x + 12, y + 3, { size: BODY, color: c });
+    const tw = measure(ctx, l.t, BODY);
+    ctx.fillStyle = shade(c, -0.55);
+    for (let xx = Math.round(x + 22 + tw); xx < VX + VW; xx += 4) ctx.fillRect(xx, y + 12, 2, 1);
+    return;
+  }
   if (l.tag) {
-    const tw = measure(ctx, l.tag.t, 10) + 6;
-    rect(ctx, x, y + 2, tw, 12, l.tag.bg);
-    text(ctx, l.tag.t, x + 3, y + 3, { size: 10, color: '#ffffff', shadow: null });
-    x += tw + 4;
+    const tw = Math.round(measure(ctx, l.tag.t, 12) + 8);
+    const ty = y + (l.s === SMALL ? 1 : 2);
+    rect(ctx, x, ty, tw, 16, l.tag.bg);
+    rect(ctx, x, ty, tw, 1, shade(l.tag.bg, 0.3));
+    rect(ctx, x, ty + 15, tw, 1, shade(l.tag.bg, -0.3));
+    text(ctx, l.tag.t, x + 4, ty + 2, { size: 12, color: '#ffffff', shadow: null });
+    x += tw + 6;
   }
   if (l.t) text(ctx, l.t, x, y + dy, { size: l.s, color: l.c || COLORS.text });
-  if (l.badge) {
-    const bw = measure(ctx, l.badge.t, 10) + 8;
-    const bx = VX + VW - bw;
-    rect(ctx, bx, y + 2, bw, 12, l.badge.c);
-    text(ctx, l.badge.t, bx + 4, y + 3, { size: 10, color: '#20232a', shadow: null });
+  const textEnd = l.t ? x + measure(ctx, l.t, l.s) : x;
+  if (l.gauge) {
+    const gx = VX + GAUGE_X, gy = y + 5, gw = GAUGE_W;
+    rect(ctx, gx, gy, gw, 11, '#06081a');
+    rect(ctx, gx + 1, gy + 1, gw - 2, 9, '#2a2f55');
+    const fw = Math.round(clamp(l.gauge.frac, 0, 1) * (gw - 2));
+    if (fw > 0) {
+      rect(ctx, gx + 1, gy + 1, fw, 9, l.gauge.color);
+      rect(ctx, gx + 1, gy + 1, fw, 2, shade(l.gauge.color, 0.35));
+      rect(ctx, gx + 1, gy + 8, fw, 2, shade(l.gauge.color, -0.25));
+    }
+    for (let i = 1; i < 4; i++) rect(ctx, gx + Math.round((gw * i) / 4), gy + 1, 1, 2, 'rgba(255,255,255,0.25)');
   }
-  if (l.r) text(ctx, l.r, VX + VW, y + dy + (l.rs === 10 && l.s === 12 ? 2 : 0), { size: l.rs || l.s, align: 'right', color: l.rc || COLORS.text });
+  if (l.hearts != null) {
+    const hx = Math.round(Math.max(VX + HEART_X, textEnd + 14));
+    for (let i = 0; i < HEART_N; i++) heart(ctx, hx + i * 16, y + 5, i < l.hearts);
+  }
+  if (l.badge) {
+    const bw = Math.round(measure(ctx, l.badge.t, 12) + 10);
+    const bx = VX + VW - bw;
+    rect(ctx, bx, y + 2, bw, 16, l.badge.c);
+    rect(ctx, bx, y + 2, bw, 1, shade(l.badge.c, 0.35));
+    text(ctx, l.badge.t, bx + 5, y + 4, { size: 12, color: '#20232a', shadow: null });
+  }
+  if (l.r) text(ctx, l.r, VX + VW, y + dy + (l.rs === SMALL && l.s === BODY ? 3 : 0), { size: l.rs || l.s, align: 'right', color: l.rc || COLORS.text });
 }

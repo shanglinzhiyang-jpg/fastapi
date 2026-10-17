@@ -13,17 +13,60 @@ import { loadAll } from './registry.js';
 import { newState, loadGame, hasSave, deleteSave, AGENCIES } from './engine/state.js';
 import { PLACES } from './engine/map.js';
 import { MINIGAMES } from './engine/minigame.js';
-import { TitleScene, CreateScene } from './title.js';
-import { W, H } from './engine/util.js';
-import { text, COLORS } from './engine/draw.js';
+import { TitleScene, CreateScene, drawTitleBackdrop } from './title.js';
+import { SW, SH, hash2 } from './engine/util.js';
+import { text, panel, measure, COLORS } from './engine/draw.js';
 import { audio } from './engine/audio.js';
 import * as ui from './engine/ui.js';
 import { TILES } from './engine/tiles.js';
 
 const params = new URLSearchParams(location.search);
 
-function loadingScene(msg) {
-  return { opaque: true, update() {}, draw(ctx) { ctx.fillStyle = '#0b0d1a'; ctx.fillRect(0, 0, W, H); text(ctx, msg, W / 2, H / 2 - 6, { align: 'center', color: '#fff' }); } };
+// Plain HD backdrop with an optional message: 'よみこみ中…' at boot (with bouncing
+// dots), an empty base under dialogs, or an error ({ error: true, detail }).
+// opts.title: the dimmed title backdrop instead of the starfield (title-flow dialogs).
+function loadingScene(msg, opts = {}) {
+  return {
+    opaque: true,
+    hd: true,
+    t: 0,
+    update() { this.t++; },
+    draw(ctx) {
+      const t = this.t;
+      let drawn = false;
+      if (opts.title) {
+        try { drawTitleBackdrop(ctx, t + 500); drawn = true; } catch (e) { drawn = false; }
+      }
+      if (!drawn) {
+        ctx.fillStyle = '#0b0d1a';
+        ctx.fillRect(0, 0, SW, SH);
+        for (let i = 0; i < 60; i++) {
+          if ((i * 7 + Math.floor(t / 12)) % 17 === 0) continue;
+          ctx.fillStyle = i % 5 ? '#2a3366' : '#5a64a8';
+          ctx.fillRect(Math.floor(hash2(i, 1, 9) * SW), Math.floor(hash2(i, 2, 9) * SH), 1, 1);
+        }
+      }
+      if (!msg) return;
+      if (opts.error) {
+        const lines = [msg, opts.detail].filter(Boolean);
+        const w = Math.min(SW - 40, 64 + Math.max(...lines.map((l, i) => measure(ctx, l, i ? 13 : 16))));
+        const h = 34 + lines.length * 24;
+        panel(ctx, Math.round((SW - w) / 2), Math.round((SH - h) / 2), w, h, { bg: '#3a1424' });
+        lines.forEach((l, i) => text(ctx, l, SW / 2, (SH - h) / 2 + 17 + i * 24, { size: i ? 13 : 16, align: 'center', color: i ? '#f0c8d0' : COLORS.bad }));
+        return;
+      }
+      text(ctx, msg, SW / 2, SH / 2 - 14, { size: 16, align: 'center', color: '#ffffff' });
+      for (let i = 0; i < 3; i++) {
+        const hop = Math.floor(t / 8 + 6 - i * 2) % 6 === 0 ? 3 : 0;
+        ctx.fillStyle = [COLORS.pink, COLORS.accent, COLORS.cyan][i];
+        ctx.fillRect(SW / 2 - 14 + i * 12, SH / 2 + 14 - hop, 4, 4);
+      }
+    },
+  };
+}
+
+function showBootError(g, msg, detail) {
+  try { if (g) g.setBase(loadingScene(msg, { error: true, detail })); } catch (e) { /* nothing left to show it with */ }
 }
 
 function richState(st) {
@@ -53,11 +96,12 @@ async function titleFlow(g) {
         g.notify('つづきから再開しました', { color: '#fff' });
         return;
       }
+      g.setBase(loadingScene('', { title: true }));
       await g.say('セーブデータを読み込めませんでした。');
       continue;
     }
     if (hasSave()) {
-      g.setBase(loadingScene(''));
+      g.setBase(loadingScene('', { title: true }));
       const i = await g.ask('セーブデータがあります。\nはじめから遊ぶと上書きされます。いいですか？', ['はじめから遊ぶ', 'もどる'], { cancel: 1 });
       if (i !== 0) continue;
       deleteSave();
@@ -194,7 +238,7 @@ async function boot() {
     if (params.get('agency')) g.state.agency = params.get('agency');
     const place = params.get('place') || 'tokyo';
     const p = PLACES[place];
-    if (!p) { console.error('unknown place', place); return; }
+    if (!p) { console.error('unknown place', place); showBootError(g, `場所「${place}」が見つかりません`, 'URLの place= を確かめてください'); return; }
     const room = params.get('room') || p.start.room;
     const x = params.has('x') ? +params.get('x') : (room === p.start.room ? p.start.x : undefined);
     const y = params.has('y') ? +params.get('y') : (room === p.start.room ? p.start.y : undefined);
@@ -204,4 +248,7 @@ async function boot() {
   await titleFlow(g);
 }
 
-boot().catch((e) => console.error(e));
+boot().catch((e) => {
+  console.error(e);
+  showBootError(window.__game, 'ゲームを読み込めませんでした…', 'ページを再読み込みしてください');
+});

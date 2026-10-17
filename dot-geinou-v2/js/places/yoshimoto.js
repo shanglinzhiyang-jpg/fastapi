@@ -1331,7 +1331,7 @@ registerPlace({
       ],
       entities: [
         { type: 'logo', x: 8.25, y: 1.125, w: 1.5, h: 1.75, logo: 'yoshimoto', board: true, text: 'よしもとのロゴだ。\n笑顔のマークを見ると、こっちまで笑顔になる。' },
-        npc('yoshi_manager', 13, 4, 'down', WHO.manager, { talk: managerTalk }),
+        npc('yoshi_manager', 13, 4, 'down', WHO.manager, { talk: managerTalk, person: 'emikawa' }),
         npc('yoshi_scout', 4, 7, 'down', WHO.scout, { talk: scoutTalk }),
         npc('yoshi_jimuin', 5, 5, 'up', WHO.jimuin, {
           talk: async (g) => {

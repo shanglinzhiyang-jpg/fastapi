@@ -1273,7 +1273,7 @@ registerPlace({
         npc('fujidana', 10, 4, 'down', { talk: (g) => lessonMenu(g, 'fujidana', ENGI_LESSON, ENGI_ADV) }),
         npc('tsubuta', 14, 4, 'down', { talk: (g) => lessonMenu(g, 'tsubuta', WARAI_LESSON, WARAI_ADV) }),
         npc('kodougu', 15, 9, 'right', { talk: talkKodougu }),
-        npc('mirror', 12, 3, 'up', { talk: talkMirror }),
+        npc('mirror', 12, 3, 'up', { talk: talkMirror, person: 'momo' }),
       ],
       events: [
         { x: 8, y: 2, on: 'action', run: (g) => g.say(['ホワイトボードに、ネタのメモが書いてある。', '「フリは丁寧に」「ツッコミは食い気味に」\n「最後まで役を生きる！」']) },

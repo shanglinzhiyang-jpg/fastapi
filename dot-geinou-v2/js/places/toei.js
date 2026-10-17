@@ -1565,7 +1565,7 @@ const openset = {
       },
     },
     {
-      type: 'npc', id: 'toei_musume', x: 7, y: 4, dir: 'down', look: LK.musume, name: '茶屋の看板娘',
+      type: 'npc', id: 'toei_musume', x: 7, y: 4, dir: 'down', look: LK.musume, name: '茶屋の看板娘', person: 'chiyo',
       talk: async (g, npc) => {
         const o = who(npc);
         if (costumeOf(g) === 'musume') await g.say('あら、町娘さん！おそろいね〜！', o);

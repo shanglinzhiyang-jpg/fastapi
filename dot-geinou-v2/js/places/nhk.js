@@ -1359,7 +1359,7 @@ registerPlace({
         { type: 'sign', x: 13, y: 1, text: 'ガラスの向こうは副調整室（サブ）。\nスタッフさんが映像や音声を切りかえている。' },
         { type: 'sign', x: 14, y: 1, text: 'ガラスの向こうは副調整室（サブ）。\nスタッフさんが映像や音声を切りかえている。' },
         {
-          type: 'npc', id: 'nhk_anchorF', x: 6, y: 2, dir: 'down', look: L.anchorF, name: 'アナウンサー',
+          type: 'npc', id: 'nhk_anchorF', x: 6, y: 2, dir: 'down', look: L.anchorF, name: 'アナウンサー', person: 'asagiri',
           text: ['こんにちは！ニュースは、まっすぐカメラを見て、はっきり、ゆっくり読むのがコツです。', '難しい漢字の読み方は、毎日の積み重ねですね。'],
         },
         {

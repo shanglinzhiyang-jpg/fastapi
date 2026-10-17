@@ -68,8 +68,26 @@ export const PEOPLE = {};
 //   messages: ['…'] phone small talk, invites: ['…'] phone invitation lines,
 //   hangout: { [spotId]: ['…'] } lines during a hangout (default: generic lines),
 //   canPartner: bool (can become your 相方), special: bool (can become 大切な人) }
+// Optional, used by the talk menu / phone / hangouts (phone.js), each falls back to a
+// generic line (standard Japanese, or Kansai-ben when isKansai(def)):
+//   dialect: 'kansai'           Kansai generic lines (also when `where` mentions なんば / 大阪)
+//   greet: '…' | ['…', '…'] (one picked at random) | { 1: '…', 2: '…', default } | (g, level, def) => …
+//                               greeting that opens the menu (♥1+)
+//   talkLabel: '買い物する'      label of 話す (e.g. shop NPCs)
+//   chats: ['…' | (g) => '…']   one personal line on the first talk of a day (♥1+)
+//   chat: ['…']                 what 話す says when the NPC entity has no talk / text
+//   yes / inviteYes             reply when you invite them face to face
+//   giftLines: { love, like, neutral, dislike, [itemId]: … }   reactions ({item} = item name)
+//   hangout[spotId] / hangout.default: lines; strings that start with '（' are narration,
+//                               { text, name, look } picks another speaker
+//   inviteYes, callYes, callShy, callAgain, thanks, declined, hangBye, giftDone,
+//   hangDone, partnerText       other single lines (string | string[] | (g, def) => …)
 export function registerPerson(id, def) {
   PEOPLE[id] = { id, likes: [], loves: [], dislikes: [], events: [], messages: [], invites: [], hangout: {}, ...def };
+}
+// Whether a person speaks Kansai-ben in the generic lines.
+export function isKansai(def) {
+  return !!def && (def.dialect === 'kansai' || def.kansai === true || (!def.dialect && /なんば|大阪|新喜劇|松竹/.test(def.where || '')));
 }
 export const HEARTS = [[0, '知り合い'], [15, '顔見知り'], [35, '友だち'], [60, '仲良し'], [85, '親友']];
 export function heartIndex(aff) {
@@ -319,6 +337,7 @@ const methods = {
     if (!def || !p) return 0;
     if (!this.takeItem(itemId)) return 0;
     p.giftDay = this.state.day;
+    p.known = { ...(p.known || {}), [itemId]: this.giftReaction(id, itemId) }; // the phone's contact card lists what they like
     const n = def.loves.includes(itemId) ? 8 : def.likes.includes(itemId) ? 5 : def.dislikes.includes(itemId) ? -3 : 2;
     return this.addAff(id, n);
   },
@@ -334,6 +353,47 @@ const methods = {
   friends(minLevel = 2) {
     return Object.keys(this.state.people).filter((id) => PEOPLE[id] && this.heartLevel(id) >= minLevel);
   },
+  // Make someone your 相方 (comedy partner; null = none). Shows a toast and sends a
+  // phone message unless opts.silent; opts.text overrides the message.
+  setPartner(id, opts = {}) {
+    const st = this.state;
+    if (id && !PEOPLE[id]) { console.error('setPartner: unknown person', id); return false; }
+    const prev = st.partner;
+    if (prev && st.people[prev]) st.people[prev].partner = false;
+    st.partner = id || null;
+    if (!id) return true;
+    const p = this.meet(id);
+    p.partner = true;
+    p.contact = true;
+    if (!opts.silent) {
+      const def = PEOPLE[id];
+      const k = isKansai(def);
+      const text = opts.text || def.partnerText || (k ? '今日から正式に相方やな。\nふたりで、てっぺん目指そな！' : '今日から正式に相方だね。\nふたりで、てっぺん目指そう！');
+      this.notify(`${def.name}と相方になった！`, { color: COLORS.accent });
+      this.message({ from: def.name, person: id, text, kind: 'chat' });
+    }
+    return true;
+  },
+  // Mark someone as your 大切な人 (one at a time unless opts.exclusive === false;
+  // null clears it). opts: { silent, text (a phone message from them) }.
+  setSpecial(id, opts = {}) {
+    const st = this.state;
+    if (id && !PEOPLE[id]) { console.error('setSpecial: unknown person', id); return false; }
+    if (!id || opts.exclusive !== false) {
+      for (const k of Object.keys(st.people)) if (k !== id && st.people[k].special) st.people[k].special = false;
+    }
+    if (!id) return true;
+    const p = this.meet(id);
+    p.special = true;
+    p.contact = true;
+    if (!opts.silent) {
+      this.notify(`${PEOPLE[id].name}が「大切な人」になった`, { color: COLORS.pink });
+      if (opts.text) this.message({ from: PEOPLE[id].name, person: id, text: opts.text, kind: 'chat' });
+    }
+    return true;
+  },
+  isPartner(id) { return !!id && this.state.partner === id; },
+  isSpecial(id) { return !!(this.state.people[id] && this.state.people[id].special); },
 
   // --- fans
   addFans(n, silent = false) {
@@ -428,7 +488,9 @@ const methods = {
 export const MORNING_HOOKS = [];
 export function onMorning(fn) { MORNING_HOOKS.push(fn); }
 
-// People interaction UI. phone.js / content may replace these with richer versions.
+// People interaction UI. phone.js installs the rich versions on load (talk menu
+// 話す / プレゼント / さそう / またね, the HD hangout vignette); these plain ones are
+// the fallbacks. Content may still replace them.
 export const PEOPLE_UI = {
   async talk(g, npc) {
     const id = npc.person;

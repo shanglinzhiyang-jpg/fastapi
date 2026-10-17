@@ -80,7 +80,7 @@ function generate() {
     fountain(37, 30, { text: '待ち合わせスポットの噴水だ。' }),
     { type: 'sign', x: 12, y: 15, text: 'なんば・ことぶき橋\n北：よしもと新喜劇 劇場・松竹芸能・たこ焼き屋・ホテル\n南：なんば駅' },
 
-    { type: 'npc', id: 'obachan', x: 12, y: 21, dir: 'down', look: { ...LOOKS.oldwoman, top: '#ff7eb6', hairColor: 'purple' }, name: '大阪のおばちゃん', talk: async (g, npc) => {
+    { type: 'npc', id: 'obachan', x: 12, y: 21, dir: 'down', look: { ...LOOKS.oldwoman, top: '#ff7eb6', hairColor: 'purple' }, name: '大阪のおばちゃん', person: 'tamae', talk: async (g, npc) => {
       if (!g.flag('ame_' + g.state.day)) {
         g.setFlag('ame_' + g.state.day);
         await g.say(['あら、あんた見ない顔やね！東京から来たん？', 'ほな、アメちゃんあげるわ！のどにええで〜。'], { name: npc.name, look: npc.look });

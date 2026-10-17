@@ -1913,6 +1913,7 @@ registerPlace({
           talk: posted('right', lines(WHO.stylist, ['スタイリストよ。衣装の準備はおまかせ！', 'ロケなら動きやすい服、生放送ならきちんと感。\n番組にあわせて衣装を選ぶのも大事なの。'])),
         }),
         npc('bsy_sleepy', 9, 5, 'down', WHO.sleepy, {
+          person: 'yoruno',
           talk: async (g) => {
             await g.say('Zzz…むにゃ…カンペ…あと5枚…');
             await g.emote('bsy_sleepy', '!');
