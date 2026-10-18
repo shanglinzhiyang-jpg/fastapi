@@ -18,7 +18,7 @@
 // Places entered from here (other modules): kokkai, kantei, jimin_hq, minshu_hq, yato_hq,
 // myparty_hq (parties.js), keisatsu, kensatsu, saibansho. A place that is not registered yet
 // is simply closed (no error).
-// flags (prefix nagatacho_): nagatacho_intro, nagatacho_door (中央玄関の案内), nagatacho_hatsutoin_<day>,
+// flags (prefix nagatacho_): nagatacho_intro, nagatacho_door (中央玄関の案内),
 //   nagatacho_burasagari (day of the last doorstep interview), nagatacho_speech_day.
 // Facts (checked 2026-10): 国会議事堂 1920年1月着工・1936年（昭和11年）11月完成、中央塔 65.45m、
 //   正面から見て左が衆議院・右が参議院。中央玄関はふだん閉じていて、開会式・選挙後の召集日・
@@ -34,13 +34,13 @@
 // described only with the neutral facts of politics.js (PARTY_DEFS).
 
 import { registerPlace, PLACES } from '../engine/map.js';
-import { defineTile, R, P, Rw, Pw, disc, oval, line, outline, dither, shadowEllipse, blobs, speckle } from '../engine/tiles.js';
+import { defineTile, R, P, Rw, disc, oval, outline, shadowEllipse, blobs, speckle } from '../engine/tiles.js';
 import { LOOKS, drawChar } from '../engine/sprites.js';
 import { text } from '../engine/draw.js';
 import { makeCanvas, shade, VIEW_W, TILE } from '../engine/util.js';
 import { grid, set, put, fill, hroad, vroad, border } from './townkit.js';
 import { busStop, fountain } from './props.js';
-import { cabinetPosts, postName, POLICIES, POLICY_ORDER, SEGMENTS } from '../engine/politics.js';
+import { cabinetPosts, postName, POLICIES, POLICY_ORDER, SEGMENTS, votingAge } from '../engine/politics.js';
 import { registerSmokingRule, lawDate } from '../engine/crime.js';
 
 export const NAGA_W = 80;
@@ -55,7 +55,6 @@ const BUS = { x: 44, y: 50, arrive: [45, 51] };
 // ====================================================================== helpers
 const who = (n) => ({ name: n.name, look: n.look });
 const U = (ctx, x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
-const hu = (v) => Math.round(v * 2) / 2;
 let G = null; // the running game (set whenever a script / cond of this town runs)
 const game = () => G || (typeof window !== 'undefined' ? window.__game : null) || null;
 function pol(g) {
@@ -212,12 +211,12 @@ tile('nagatacho_pine', { solid: true, obj: true, variants: 2 }, (c, r, f, v) => 
 });
 // ---- ginkgo (霞が関のイチョウ並木)
 tile('nagatacho_ginkgo', { solid: true, obj: true }, (c, r) => {
-  shadowEllipse(c, 16, 29, 9, 3);
-  R(c, 14, 18, 4, 11, '#6a4a2c'); R(c, 14, 18, 1, 11, '#8a6440'); R(c, 17, 18, 1, 11, '#4a321c');
-  const pal = ['#3f6a1e', '#5f8f2a', '#86b83a', '#aed456', '#d8ef8a'];
-  blobs(c, [[16, 3.5, 3.5], [13, 7, 4.5], [19, 7, 4.5], [16, 10, 5.5], [11, 13, 5], [21, 13, 5], [16, 15, 6]], pal, { bias: -0.03 });
+  shadowEllipse(c, 16, 29, 11, 3);
+  R(c, 14, 20, 4, 9, '#6a4a2c'); R(c, 14, 20, 1, 9, '#8a6440'); R(c, 17, 20, 1, 9, '#4a321c'); R(c, 12, 27, 8, 2, '#5a3e24');
+  const pal = ['#2f5a18', '#4a7f22', '#6fa632', '#98c84a', '#c8e47a'];
+  blobs(c, [[16, 4, 4.5], [12, 8, 5.5], [20, 8, 5.5], [16, 10, 7], [9, 14, 6], [23, 14, 6], [16, 16, 8], [11, 19, 5], [21, 19, 5]], pal, { bias: -0.02 });
   outline(c);
-  for (let i = 0; i < 6; i++) { const x = 10 + RND(r, 12), y = 3 + RND(r, 14); P(c, x, y, pal[4]); }
+  for (let i = 0; i < 9; i++) { const x = 6 + RND(r, 20), y = 2 + RND(r, 18); P(c, x, y, pal[4]); P(c, x + 1, y + 1, pal[3]); }
 });
 // ---- bamboo (官邸の竹の庭)
 tile('nagatacho_bamboo', { solid: true, obj: true, variants: 2 }, (c, r, f, v) => {
@@ -472,7 +471,8 @@ function bannerProp(x, y, w, side) {
       U(ctx, bx + 0.5, by + 0.5, W - 1, 9, side === 'no' ? '#fff4e8' : '#eef6ff');
       U(ctx, bx + 0.5, by + 0.5, W - 1, 1, side === 'no' ? '#d84a3a' : '#2f6fd0');
       U(ctx, bx + 0.5, by + 8.5, W - 1, 1, side === 'no' ? '#d84a3a' : '#2f6fd0');
-      text(ctx, label, bx + W / 2, by + 1.8, { size: 6, align: 'center', color: side === 'no' ? '#b8281c' : '#1f4fa0', shadow: null });
+      const size = Math.max(4, Math.min(6, Math.floor((W - 4) / Math.max(1, Array.from(label).length) * 2) / 2));
+      text(ctx, label, bx + W / 2, by + 5 - size / 2, { size, align: 'center', color: side === 'no' ? '#b8281c' : '#1f4fa0', shadow: null });
     },
   };
 }
@@ -507,10 +507,10 @@ function speechStand(x, y) {
 // Demonstrators on both sides: the pending bill (cabinet bills first), else a policy from the
 // hottest issue. Cached per day: { policy, short, bill }.
 const demoCache = { key: '', topic: null };
-const shortName = (s) => { const t = String(s || '').replace(/（[^）]*）/g, '').replace(/「|」/g, '').trim(); return Array.from(t).length > 11 ? Array.from(t).slice(0, 10).join('') + '…' : t; };
+const shortName = (s) => { const t = String(s || '').replace(/（[^）]*）/g, '').replace(/「|」/g, '').trim(); return Array.from(t).length > 14 ? Array.from(t).slice(0, 13).join('') + '…' : t; };
 function demoTopic(g) {
   if (!g || !g.state) return null;
-  const key = `${g.state.day}|${g.frame >> 9}`;
+  const key = `${g.state.day}`;
   if (demoCache.key === key) return demoCache.topic;
   let topic = null;
   try {
@@ -565,6 +565,8 @@ async function demoYes(g, npc) {
 }
 
 // ====================================================================== scripts
+// The effect part of an activity result ('委員会で質問をした。評判 +2・…' -> '（評判 +2・…）').
+const effects = (r) => { const [first, ...rest] = String((r && r.text) || '').split('\n'); const t = first.replace(/^[^。]*をした。/, '').trim(); return (t ? `（${t}）` : '') + (rest.length ? `\n${rest.join('\n')}` : ''); };
 // Camera pan over the Diet (the facade is taller than the screen around the player).
 async function panDiet(g, lines = null) {
   G = g;
@@ -609,7 +611,8 @@ async function plaqueTalk(g) {
   if (i === 0) await panDiet(g, dietLines(g));
 }
 
-// The Diet's central entrance (step event on the door tile).
+// The Diet's central entrance (step event on the door tile). The kokkai place itself handles
+// the 初登院 (its 'elected' hook); here only the first visit gets a word about the closed door.
 async function enterDiet(g) {
   G = g;
   if (!PLACES.kokkai) {
@@ -617,17 +620,9 @@ async function enterDiet(g) {
     await g.movePlayer('down');
     return;
   }
-  const p = pol(g);
-  const s = p && p.diet && p.diet.session;
-  const member = isDietMember(g);
-  const hatsu = member && s && /特別国会/.test(s.kind || '') && g.state.day - (s.start || 0) <= 1;
-  if (hatsu && !g.flag(`nagatacho_hatsutoin_${s.start}`)) {
-    g.setFlag(`nagatacho_hatsutoin_${s.start}`, true);
-    g.sfx('fanfare');
-    await g.say(['今日は選挙のあとの国会の召集日。\nふだん閉じている中央玄関が、開いている！', '「あかずの扉」をくぐって、初登院だ。\n議員バッジを胸に、背すじがのびる。']);
-  } else if (!g.flag('nagatacho_door')) {
+  if (!g.flag('nagatacho_door') && !g.flag('kokkai_firstday')) {
     g.setFlag('nagatacho_door', true);
-    await g.say(['中央玄関の扉は、ふだん閉じている「あかずの扉」。', `${member ? '衛視さんに会釈して、議員の入口から中へ入った。' : '衛視さんに、見学（参観）の入口へ案内してもらった。'}`]);
+    await g.say(['中央玄関の扉は、ふだん閉じている「あかずの扉」。', `${isDietMember(g) ? '衛視さんに会釈して、議員の入口から中へ入った。' : '衛視さんに、見学（参観）の入口へ案内してもらった。'}`]);
   }
   await g.enterPlace('kokkai');
 }
@@ -639,25 +634,32 @@ const enterIf = (pid, closed) => async (g) => {
   await g.enterPlace(pid);
 };
 
-// 議員会館: the Diet place's 議員会館 room when it has one.
+// 議員会館: a Diet member's office is the kokkai place's 議員会館 room (when it has one).
 function kaikanRoom() {
   const k = PLACES.kokkai;
   if (!k || !k.rooms) return null;
-  return Object.keys(k.rooms).find((id) => /kaikan|giin_?office|office/i.test(id)) || null;
+  return Object.keys(k.rooms).find((id) => /kaikan/i.test(id)) || null;
 }
-async function enterKaikan(g) {
+const enterKaikan = (house) => async (g) => {
   G = g;
+  const m = me(g);
   const room = kaikanRoom();
-  if (!isPolitician(g) && !g.flag('nagatacho_kaikan_guest')) {
-    await g.say(['議員会館の受付だ。', '「議員とのお約束はありますか？\n　面会のかたは、こちらで手続きをお願いします」']);
-    if (!room) { await g.movePlayer('down'); return; }
-    const i = await g.ask('どうする？', ['見学したいと言う', 'やめておく'], { cancel: 1 });
-    if (i !== 0) { await g.movePlayer('down'); return; }
-    await g.say('「では、面会票に記入を…はい、どうぞ。\n　ロビーまでですよ」');
+  const S = { name: '会館の受付', look: { ...LOOKS.receptionist, top: '#3a4a6a' } };
+  if (m && m.office === house && room) {
+    await g.say(house === 'shugi' ? '（衆議院の議員会館。自分の事務所へ向かった）' : '（参議院議員会館。自分の事務所へ向かった）');
+    await g.goto('kokkai', room, 8, 8, 'up');
+    return;
   }
-  if (!room) { await g.say(['議員会館には、国会議員ひとりひとりの事務所がある。', '（中は、いまは入れないようだ）']); await g.movePlayer('down'); return; }
-  await g.goto('kokkai', room);
-}
+  if (m && (m.office === 'shugi' || m.office === 'sangi')) {
+    await g.say([`先生の事務所は、${m.office === 'shugi' ? '衆議院の第一・第二議員会館' : '参議院議員会館'}ですよ。`, '（となりの建物だった）'], S);
+    await g.movePlayer('down');
+    return;
+  }
+  await g.say('議員会館の受付だ。');
+  await g.say('議員とのお約束はありますか？\n面会のかたは、議員の事務所の確認がとれてから\nお通しします。', S);
+  await g.say('（国会議員の事務所が入る建物だ。\n　議員になれば、ここに自分の事務所を持てる）');
+  await g.movePlayer('down');
+};
 
 // 首相官邸: guarded. Politicians, and stars invited for a courtesy call (★2000).
 async function enterKantei(g) {
@@ -700,7 +702,7 @@ async function speechSpot(g) {
     const i = await g.ask(['駅前の演説スポットだ。\n人通りが多い。'], ['街頭演説をする', 'やめておく'], { cancel: 1 });
     if (i !== 0) return;
     const r = await g.campaign('街頭演説', { electionId: e.id });
-    await g.say(r && r.ok ? r.text : (r && r.why) || 'いまは演説できない。');
+    await g.say(r && r.ok ? ['ビールケースの上に立って、マイクを握った。', `足を止めて聞いてくれる人がいた。\n${effects(r)}`] : (r && r.why) || 'いまは演説できない。');
     return;
   }
   const pt = yatoPartyOf(g);
@@ -725,7 +727,7 @@ async function reporterTalk(g, npc) {
   if (i === 2) { await g.say('「ノーコメントです」\n…記者たちは、少し不満そうだ。', S); return; }
   const score = i === 0 ? 45 + (g.state.skills.talk || 0) * 0.5 : 55;
   const r = g.activity('記者会見', { score });
-  await g.say(r && r.ok ? (i === 0 ? ['質問のひとつひとつに、言葉を選んで答えた。', r.text] : ['要点だけ、短く答えた。', r.text]) : (r && r.why) || '今日はもう十分話した。');
+  await g.say(r && r.ok ? (i === 0 ? `質問のひとつひとつに、言葉を選んで答えた。\n${effects(r)}` : `要点だけ、短く答えた。\n${effects(r)}`) : (r && r.why) || '今日はもう十分話した。');
 }
 
 // The ministries row: names by year from the cabinet posts (politics.js).
@@ -885,6 +887,13 @@ function generate() {
   for (const x of [4, 8, 12]) P2(x, 52, 'nagatacho_ginkgo');
   for (const x of [24, 32, 50, 54, 68, 72]) P2(x, 53, 'bench');
   P2(29, 49, 'nagatacho_barrier');
+  // a green strip along the south edge, planters along the party HQ fronts
+  for (let x = 1; x <= 78; x++) {
+    if ((x >= 16 && x <= 20) || (x >= 36 && x <= 44) || (x >= 59 && x <= 63)) continue;
+    if (x % 5 === 0) set(c, x, 54, 'grass', 'bush'); else set(c, x, 54, x % 3 === 1 ? 'flowers' : 'grass');
+  }
+  for (const x of [23, 29, 46, 56]) P2(x, 36, 'planter');
+  for (const x of [5, 11]) P2(x, 51, 'planter');
   P2(21, 50, 'vending'); P2(58, 50, 'trash');
 
   // ---- street lamps
@@ -895,21 +904,21 @@ function generate() {
   // ================================================================ entities
   const kanteiOld = (g) => yearOf(g) < 2002;
   const kaikanNew = (g) => yearOf(g) >= 2010;
-  const KAIKAN = (x, label, full) => [false, true].map((isNew) => ({
+  const KAIKAN = (x, label, full, house) => [false, true].map((isNew) => ({
     type: 'building', x, y: 3, w: 4, h: 6, door: 2, place: null, name: full, kind: 'office', rise: isNew ? 3 : 1,
     wall: isNew ? '#d8d5cc' : '#cfc6b4', roof: isNew ? '#4a5260' : '#6a6458', glass: isNew ? '#7fa6c8' : '#8fb0c8', texture: isNew ? 'stone' : 'tile', signH: 14,
     sign: { text: label, bg: '#f4f2ec', color: '#2a2d36' },
     cond: (g) => { G = g; return kaikanNew(g) === isNew; },
-    enter: enterKaikan,
+    enter: enterKaikan(house),
     talk: async (g) => { G = g; await g.say([`${full}だ。`, '国会議員ひとりひとりの事務所が入っている。\n入口は建物の正面だ。']); },
   }));
   const entities = [
     dietProp(),
     { type: 'building', x: DOOR.x, y: DOOR.y, w: 1, h: 1, door: 0, place: 'kokkai', name: '国会議事堂', hidden: true },
     // ---- 議員会館 (the building entity needs a place for its door to work: enter() decides)
-    ...KAIKAN(1, '第一議員会館', '衆議院第一議員会館').map((b) => ({ ...b, place: 'kokkai_kaikan1' })),
-    ...KAIKAN(6, '第二議員会館', '衆議院第二議員会館').map((b) => ({ ...b, place: 'kokkai_kaikan2' })),
-    ...KAIKAN(11, '参議院議員会館', '参議院議員会館').map((b) => ({ ...b, place: 'kokkai_kaikan3' })),
+    ...KAIKAN(1, '第一議員会館', '衆議院第一議員会館', 'shugi').map((b) => ({ ...b, place: 'kokkai_kaikan1' })),
+    ...KAIKAN(6, '第二議員会館', '衆議院第二議員会館', 'shugi').map((b) => ({ ...b, place: 'kokkai_kaikan2' })),
+    ...KAIKAN(11, '参議院議員会館', '参議院議員会館', 'sangi').map((b) => ({ ...b, place: 'kokkai_kaikan3' })),
     { type: 'building', x: 2, y: 12, w: 7, h: 5, door: 3, name: '国会記者会館', kind: 'office', wall: '#e6e2d8', roof: '#5a6070', sign: { text: '国会記者会館', bg: '#ffffff', color: '#2a2d36' }, signH: 14,
       text: ['国会記者会館だ。', '新聞社やテレビ局の政治部の記者が、\nここを拠点に国会を取材している。'] },
     { type: 'building', x: 65, y: 3, w: 12, h: 6, door: 6, name: '国立国会図書館', kind: 'office', wall: '#d8d2c4', roof: '#4a4e58', glass: '#6f8aa8', texture: 'tile', sign: { text: '国立国会図書館', bg: '#f4f2ec', color: '#2a2d36' }, signH: 16, signW: 96,
@@ -972,16 +981,16 @@ function generate() {
     { type: 'npc', id: 'naga_student', x: 30, y: 13, dir: 'up', look: { ...LOOKS.kid, top: '#2a3560', bottom: '#2a3560' }, name: '修学旅行の生徒', wander: 2,
       text: ['修学旅行で、国会の見学に来ました！', '本会議場の天井、すっごく高いんだって！\n…先生、まだかなあ。'] },
     { type: 'npc', id: 'naga_teacher', x: 32, y: 13, dir: 'left', look: { ...LOOKS.salaryman, top: '#5a4a3a', bottom: '#3b3f48', tie: '#8a3a2a', glasses: true }, name: '引率の先生',
-      text: ['はい、みんな集まってー！\n…あ、すみません。', '国会の見学は、修学旅行の定番なんです。\n18歳になれば、みんなも投票できるからね。'] },
+      talk: async (g, npc) => { G = g; const p = pol(g); let age = 18; try { age = votingAge(yearOf(g), (p && p.flags) || {}); } catch (e) { age = 18; } await g.say(['はい、みんな集まってー！\n…あ、すみません。', `国会の見学は、修学旅行の定番なんです。\n${age}歳になれば、みんなも投票できるからね。`], who(npc)); } },
     // ---- people: 国会前の歩道
     { type: 'npc', id: 'naga_demo_no1', x: 25, y: 25, dir: 'down', look: { hair: 'short', hairColor: 'gray', skin: 'fair', top: '#7a5a3a', bottom: '#3b3f48', glasses: true }, name: '集会の参加者', talk: demoNo },
     { type: 'npc', id: 'naga_demo_no2', x: 30, y: 25, dir: 'down', look: { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#d86a4a', bottom: '#3a4a7a' }, name: '集会の参加者', talk: demoNo },
-    { type: 'npc', id: 'naga_demo_no3', x: 27, y: 24, dir: 'down', look: { hair: 'long', hairColor: 'black', skin: 'light', top: '#8a5ac8', bottom: '#2a2d36' }, name: '集会の参加者', talk: demoNo, sprite: placardSprite('反対', '#c8281c') },
+    { type: 'npc', id: 'naga_demo_no3', x: 23, y: 24, dir: 'down', look: { hair: 'long', hairColor: 'black', skin: 'light', top: '#8a5ac8', bottom: '#2a2d36' }, name: '集会の参加者', talk: demoNo, sprite: placardSprite('反対', '#c8281c') },
     { type: 'npc', id: 'naga_demo_no4', x: 33, y: 24, dir: 'down', look: { hair: 'short', hairColor: 'black', skin: 'tan', top: '#3a7a5a', bottom: '#2a2d36' }, name: '集会の参加者', sprite: placardSprite('反対', '#c8281c'),
       text: ['デモや集会は、憲法で保障された表現の自由。', 'ルールを守って、平和的にやる。\nそれがいちばん大事なんです。'] },
     { type: 'npc', id: 'naga_demo_yes1', x: 47, y: 25, dir: 'down', look: { hair: 'slick', hairColor: 'black', skin: 'fair', top: '#3a4a6a', bottom: '#2a2d36', jacket: true, tie: '#2f6fd0' }, name: '集会の参加者', talk: demoYes },
     { type: 'npc', id: 'naga_demo_yes2', x: 52, y: 25, dir: 'down', look: { hair: 'bob', hairColor: 'black', skin: 'fair', top: '#5fa8d8', bottom: '#3b3f48', skirt: true }, name: '集会の参加者', talk: demoYes },
-    { type: 'npc', id: 'naga_demo_yes3', x: 49, y: 24, dir: 'down', look: { hair: 'short', hairColor: 'brown', skin: 'light', top: '#e8b84a', bottom: '#3a4a7a' }, name: '集会の参加者', talk: demoYes, sprite: placardSprite('賛成', '#1f4fa0') },
+    { type: 'npc', id: 'naga_demo_yes3', x: 45, y: 24, dir: 'down', look: { hair: 'short', hairColor: 'brown', skin: 'light', top: '#e8b84a', bottom: '#3a4a7a' }, name: '集会の参加者', talk: demoYes, sprite: placardSprite('賛成', '#1f4fa0') },
     { type: 'npc', id: 'naga_demo_yes4', x: 55, y: 24, dir: 'down', look: { hair: 'bald', hairColor: 'gray', skin: 'tan', top: '#6a7a8a', bottom: '#3b3f48' }, name: '集会の参加者', sprite: placardSprite('賛成', '#1f4fa0'),
       text: ['向こうの人たちとは、意見がちがう。\nでも、言いたいことがあるのはお互いさまだ。', '決めるのは国会。\n選ぶのは、わたしたち有権者だよ。'] },
     { type: 'npc', id: 'naga_police1', x: 37, y: 24, dir: 'left', look: POLICE, name: '警察官',
@@ -1069,4 +1078,3 @@ registerPlace({
   },
 });
 
-void hu; void oval; void line; void dither; void Pw; void Rw;

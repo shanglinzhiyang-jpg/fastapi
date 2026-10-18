@@ -1,18 +1,26 @@
-// てちょう（メニュー → てちょう）: a notebook with four tabs (HD scene, 640x360).
+// てちょう（メニュー → てちょう）: a notebook with six tabs (HD scene, 640x360).
 //
 //   もくひょう  today's numbers, what needs attention and a concrete next goal
 //   せいかつ    the day of the week, needs with advice, housing and rent, this week's
 //               regular shows, friends (hearts) and fans
+//   くらしと法  the justice state (js/engine/crime.js): 前科, 執行猶予・保護観察, 公民権停止,
+//               open cases, loans (消費者金融・闇金) with warnings, 自己破産, smoking / drinking
+//               (20歳から) and where to get help
+//   政治        the politics state (js/engine/politics.js): office, party, eligibility, the
+//               next elections, the Diet session and the player's bills, the cabinet,
+//               party support, the economy and political money (裏金 warning)
 //   ばしょ      places the player has been to (state.flags.visited, set by g.goto)
 //               with a short guide from js/world/guide.js; others are 「？？？」 + a hint
 //   きろく      the profile (name, age, hometown, personality, era) and family, days, jobs,
 //               minigames and their best ranks, title, agency
 //
+// The two cores are read only through their g.* methods (g.pol / g.politicsSummary / g.jus /
+// g.justiceStatus …), each call guarded: a save from before them simply gets their defaults.
 // Controls: ←→ tabs, ↑↓ scroll, A next page, B / MENU close. Everything is wrapped
 // to the page, so long text never runs off it. The life registries (PEOPLE,
 // REGULARS, HOUSING) are read when the notebook opens and may be empty.
 
-import { SW, SH, fmtMoney, yenText, clamp, shade } from './util.js';
+import { SW, SH, fmtMoney, yenText, clamp, shade, YEN_MARK } from './util.js';
 import { text, wrap, panel, measure, rect, downArrow, COLORS } from './draw.js';
 import { audio } from './audio.js';
 import { SKILLS, AGENCIES, RANKS, FINALE_FAME, CAREER, rankIndex, rankName, nextRank as nextTitle } from './state.js';
@@ -20,14 +28,19 @@ import { MINIGAMES } from './minigame.js';
 import { eraOf, fullName, ageOf, prefecture, regionOf, GENDERS, PERSONALITIES, RELATIONS, CAUSES, isBirthday, daysToBirthday, personalityEffects, sortFamily } from './profile.js';
 import { GUIDE, GUIDE_ORDER, TOWNS, AUDITIONS, GUIDE_JOBS, TIER_FAME, jobOpen } from '../world/guide.js';
 import { PEOPLE, HEARTS, heartIndex, REGULARS, FURNITURE, WEEKDAYS, weekdayOf, weekOf, HUNGRY, STRESSED, SCRUFFY, BURNOUT, FULL, showWords } from './life.js';
+// read lazily at run time (both cores import modules that end up importing this one)
+import * as POL from './politics.js';
+import * as JUS from './crime.js';
 
 const TABS = [
   { label: 'もくひょう', color: '#ff8a3d' },
   { label: 'せいかつ', color: '#e2569a' },
+  { label: 'くらしと法', color: '#c8743a' },
+  { label: '政治', color: '#8a6ad8' },
   { label: 'ばしょ', color: '#3fb85f' },
   { label: 'きろく', color: '#3a9fd8' },
 ];
-const TOWN_BG = { tokyo: '#2f5fb8', namba: '#c23a3a' };
+const TOWN_BG = { tokyo: '#2f5fb8', namba: '#c23a3a', nagatacho: '#4a5a7a', kanraku: '#a0368a' };
 const RANK_COLOR = { S: COLORS.accent, A: COLORS.pink, B: COLORS.cyan, C: COLORS.text, D: COLORS.dim };
 const MG_ORDER = ['tsukkomi', 'zukko', 'rhythm', 'command', 'quiz', 'announce', 'talk'];
 
@@ -38,7 +51,7 @@ const LH = { [BODY]: 21, [SMALL]: 18 };
 // layout
 const COVER = { x: 4, y: 4, w: SW - 8, h: SH - 8 };
 const PX = 14, PY = 36, PW = SW - 28, PH = SH - 46; // the page
-const TAB_W = 128, TAB_GAP = 6, TAB_Y = 10, TAB_H = 28;
+const TAB_W = 94, TAB_GAP = 4, TAB_Y = 10, TAB_H = 28;
 const VX = PX + 22, VY = PY + 16, VW = 556, VH = PH - 16 - 36; // text area; the scrollbar sits right of it
 const SB_X = VX + VW + 12;
 const GAUGE_X = 132, GAUGE_W = 210; // need gauges (x relative to VX)
@@ -276,8 +289,14 @@ function goalPage(g, ctx) {
     if (rent > 0 && st.money < rent && d <= 4) notes.push([`家賃（${fmtMoney(rent)}）まで${d === 1 ? 'あした' : `あと${d}日`}。あと${fmtMoney(rent - st.money)}かせごう。`, COLORS.accent]);
   }
   if (L.clean < SCRUFFY) notes.push(['身だしなみが乱れている。お風呂に入ろう。', COLORS.accent]);
-  for (const [t, c] of notes.slice(0, 4)) pg.para('・' + t, { s: SMALL, c });
-  if (notes.length) pg.para('くわしくは「せいかつ」タブで。', { s: SMALL, c: COLORS.dim });
+  // politics and justice (a court date, an election, 闇金) come right after a recording today
+  const urgent = urgentNotes(g);
+  const recN = notes.filter(([t]) => t.startsWith('きょうは『')).length;
+  notes.splice(recN, 0, ...urgent);
+  const shown = notes.slice(0, 4);
+  for (const [t, c] of shown) pg.para('・' + t, { s: SMALL, c });
+  const tabs = [...new Set(shown.map((n) => ({ law: '「くらしと法」', politics: '「政治」' }[n[2]] || '「せいかつ」')))];
+  if (tabs.length) pg.para(`くわしくは${tabs.join('')}タブで。`, { s: SMALL, c: COLORS.dim });
 
   // the one most important next step
   pg.block().head('つぎの目標', COLORS.accent);
@@ -304,6 +323,14 @@ function goalPage(g, ctx) {
     const next = TIER_FAME.find((f) => f > st.fame && f > 30) || FINALE_FAME;
     pg.para(`お仕事で知名度を上げて、★${next}をめざそう。`);
     pg.para(`あと★${next - st.fame}。おすすめのお仕事は下のとおり。`, { s: SMALL, c: COLORS.dim });
+  }
+
+  // the political path (only once the player has stepped onto it)
+  const polGoal = politicsGoal(g);
+  if (polGoal) {
+    pg.block().head('政治の道', TABS[3].color);
+    pg.para(polGoal[0]);
+    if (polGoal[1]) pg.para(polGoal[1], { s: SMALL, c: COLORS.dim });
   }
 
   if (!st.agency && !fl.finaleDone) {
@@ -474,6 +501,354 @@ function lifePage(g, ctx) {
   return pg;
 }
 
+// ---------------------------------------------------------------- the two cores (guarded)
+// Every read of politics / justice goes through here: a missing method or a broken
+// state never breaks the notebook (the page just leaves that part out).
+function safe(f, d = null) {
+  try { const v = f(); return v === undefined ? d : v; } catch (e) { console.error('[notebook]', e); return d; }
+}
+const hasPolitics = (g) => typeof g.pol === 'function' && typeof g.politicsSummary === 'function';
+const hasJustice = (g) => typeof g.jus === 'function' && typeof g.justiceStatus === 'function';
+const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+const inDays = (n) => (n <= 0 ? 'きょう' : n === 1 ? 'あした' : `あと${n}日`);
+// a literal yen amount that is not money (exchange rate, stock index): never era-converted
+const plainYen = (n) => `${YEN_MARK}${Math.round(num(n)).toLocaleString('ja-JP')}円`;
+const pctText = (v) => `${Math.round(num(v) * 10) / 10}%`;
+
+const BILL_STAGE = {
+  draft: ['準備中', COLORS.dim], committee: ['委員会で審議中', COLORS.cyan], shugi: ['衆議院で審議中', COLORS.cyan],
+  sangi: ['参議院で審議中', COLORS.cyan], referendum: ['国民投票へ', COLORS.accent], enacted: ['成立！', COLORS.good],
+  rejected: ['否決', COLORS.bad], shelved: ['廃案', COLORS.dim],
+};
+
+// Short summaries for the もくひょう notes: what cannot wait in politics / justice.
+function urgentNotes(g) {
+  const out = [];
+  const st = g.state;
+  const day = st.day;
+  if (hasJustice(g)) {
+    const js = safe(() => g.justiceStatus());
+    if (js) {
+      const yami = (js.loans || []).filter((l) => l.lender === 'yamikin');
+      if (yami.length) out.push(['闇金から借りている。払い続ける前に、警察や弁護士に相談しよう。', COLORS.bad, 'law']);
+      const late = (js.loans || []).find((l) => l.lender !== 'yamikin' && num(l.due) - day <= 2 && l.status !== 'frozen');
+      if (late) out.push([`${late.company || '借入れ'}の返済日が${inDays(num(late.due) - day)}。`, COLORS.accent, 'law']);
+      const c = (js.cases || [])[0];
+      if (c && c.next && c.next >= day) out.push([`${JUS.CRIMES && JUS.CRIMES[c.crime] ? JUS.CRIMES[c.crime].name : '事件'}の手続きがある（${inDays(c.next - day)}）。`, COLORS.bad, 'law']);
+    }
+  }
+  if (hasPolitics(g)) {
+    const e = safe(() => g.myElection());
+    if (e && num(e.day) >= day) out.push([`${e.label || '選挙'}の投票日まで${inDays(num(e.day) - day)}。選挙運動をしよう！`, COLORS.accent, 'politics']);
+  }
+  return out;
+}
+
+// The next step on the political path for もくひょう: [text, small note] or null while the
+// player has not started (no office, party, candidacy or political history).
+function politicsGoal(g) {
+  if (!hasPolitics(g) || !g.state.politics) return null;
+  const p = safe(() => g.pol());
+  const me = p && p.me;
+  if (!me || !(me.office || me.party || me.candidacy || num(me.wins) || num(me.losses))) return null;
+  const posts = Array.isArray(me.posts) ? me.posts : [];
+  const lvl = me.office && POL.OFFICES && POL.OFFICES[me.office] ? POL.OFFICES[me.office].level : null;
+  if (safe(() => g.myElection())) return null; // the election countdown is already in the notes above
+  if (posts.includes('pm')) {
+    const ap = Math.round(num(safe(() => g.approval(), 0)));
+    return ['総理大臣として、政策を実現しよう。', `内閣支持率 ${ap}%。支持率が下がると、次の選挙で苦しくなる。`];
+  }
+  if (posts.some((x) => x === 'kanbo' || /^minister_/.test(x))) return ['大臣として、閣議と国会の答弁をこなそう。', '総理大臣は、国会が国会議員の中から指名する。党首になれば、その道がひらける。'];
+  if (lvl === 'national') return ['国会に出席して、委員会で質問しよう。', '評判と党内の評価が上がると、入閣や党の役職の打診が来ることがある。'];
+  if (lvl === 'local' || lvl === 'exec') return ['地元で実績を積もう（議会で質問・陳情・地元回り）。', '地元の支持が固まったら、国政（衆議院・参議院）への挑戦も。'];
+  if (me.party) return ['党の公認をもらって、次の選挙に立候補しよう。', '公認の申請は、党本部の選挙対策本部か、スマホの「政治」から。'];
+  return ['次の選挙に、もう一度挑戦しよう。', '地元回りや後援会づくりで、ふだんから支持を広げておこう。'];
+}
+
+// ---------------------------------------------------------------- tab: くらしと法
+const STATUS_WORD = {
+  free: ['ふつうに暮らしている', COLORS.good], detained: ['身柄を拘束されている', COLORS.bad], trial: ['裁判中', COLORS.bad],
+  prison: ['刑務所で服役中', COLORS.bad], probation: ['執行猶予中', COLORS.accent],
+};
+const CASE_STAGE = {
+  zaitaku: '在宅で捜査中', arrest: '逮捕された', police: '警察で取調べ中', kouryu: '勾留中', kyodaku: '逮捕許諾の請求中',
+  indicted: '起訴された', trial: '裁判中', verdict_wait: '判決待ち', appeal_wait: '控訴中', final: '確定',
+};
+const RECORD_WORD = {
+  fine: '罰金・科料', suspended: '執行猶予つき有罪', prison: '実刑', acquitted: '無罪', not_indicted: '不起訴', bizai: '微罪処分',
+  hodo: '補導', warning: '警告・指導', kare: '過料', zoun: '増運賃', hogo: '保護', tax_admin: '修正申告',
+  juvenile_fusho: '少年審判：不処分', juvenile_hogo: '少年審判：保護観察', juvenile_in: '少年院送致', juvenile_kan: '簡易送致',
+};
+const CONVICTION = new Set(['fine', 'suspended', 'prison']);
+const BANKRUPT_KIND = { doji: '同時廃止', kanzai: '管財事件' };
+
+function lawPage(g, ctx) {
+  const st = g.state;
+  const pg = new Page(ctx);
+  const C = TABS[2].color;
+  const day = st.day || 1;
+  if (!hasJustice(g)) {
+    pg.block().head('くらしと法', C).para('（法律のしくみを読み込めませんでした）', { s: SMALL, c: COLORS.dim });
+    return pg;
+  }
+  const j = safe(() => g.jus(), null);
+  const s = safe(() => g.justiceStatus(), null);
+  if (!j || !s) {
+    pg.block().head('くらしと法', C).para('（いまの状態を読み込めませんでした）', { s: SMALL, c: COLORS.dim });
+    return pg;
+  }
+  const CR = JUS.CRIMES || {};
+  const crimeName = (id) => (CR[id] && CR[id].name) || id || '';
+
+  // ---- now
+  pg.block().head('いまの状態', C);
+  const open = (s.cases || []).length > 0;
+  const [sw, sc] = s.status === 'free' && open ? ['事件の手続きが続いている', COLORS.accent] : STATUS_WORD[s.status] || STATUS_WORD.free;
+  pg.row('くらし', sw, { rc: sc });
+  const record = Array.isArray(s.record) ? s.record : [];
+  const convicted = !!s.hasRecord;
+  pg.row('前科', convicted ? `あり（${record.filter((r) => CONVICTION.has(r.outcome) && !r.juvenile).length}件）` : 'なし', { rc: convicted ? COLORS.bad : COLORS.good });
+  if (convicted) pg.para('前科は記録に残る。仕事や立候補、家族や仲間の見る目にも影を落とす。', { s: SMALL, c: COLORS.dim, x: 16 });
+  if (s.prisonUntil && s.status === 'prison') pg.row('刑期の終わり', `${s.prisonUntil}日目（${inDays(s.prisonUntil - day)}）`, { rc: COLORS.bad, rs: SMALL });
+  if (s.suspendUntil) {
+    pg.row(`執行猶予${j.supervision ? '（保護観察つき）' : ''}`, inDays(s.suspendUntil - day), { rc: COLORS.accent });
+    pg.para('猶予中にまた罪を犯して実刑になると、猶予が取り消され、前の刑も受けることになる。\n猶予の期間を無事に過ごせば、刑の言い渡しは効力を失う。', { s: SMALL, c: COLORS.accent, x: 16 });
+  }
+  if (s.probationUntil) pg.row('保護観察', inDays(s.probationUntil - day), { rc: COLORS.accent, rs: SMALL });
+  const civic = safe(() => g.civicBanReason('vote'));
+  const cand = safe(() => g.civicBanReason('candidacy'));
+  if (civic) pg.para('選挙権がない：' + civic, { s: SMALL, c: COLORS.bad });
+  else if (cand) pg.para('立候補できない：' + cand, { s: SMALL, c: COLORS.bad });
+  else pg.row('選挙権・被選挙権', 'あり', { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.good });
+  if (s.kinshinUntil) pg.row('活動自粛', inDays(s.kinshinUntil - day), { rc: COLORS.bad, rs: SMALL });
+  if (s.tvBanUntil) pg.row('テレビの起用見送り', inDays(s.tvBanUntil - day), { rc: COLORS.accent, rs: SMALL });
+  if (s.agencyBanUntil) pg.row('事務所との契約', `できない（${inDays(s.agencyBanUntil - day)}）`, { rc: COLORS.accent, rs: SMALL });
+  for (const c of s.cases || []) {
+    pg.row(`事件：${crimeName(c.crime)}`, `${CASE_STAGE[c.stage] || c.stage || ''}${c.bail ? '・保釈中' : ''}`, { rc: COLORS.bad, rs: SMALL });
+    if (c.next && c.next >= day) pg.para(`次の手続き：${c.next}日目（${inDays(c.next - day)}）`, { s: SMALL, c: COLORS.dim, x: 16 });
+  }
+
+  // ---- record
+  if (record.length) {
+    pg.block().head('記録', C);
+    for (const r of record.slice(-6).reverse()) {
+      const conv = CONVICTION.has(r.outcome) && !r.juvenile;
+      pg.row(`${r.day || '?'}日目　${crimeName(r.crime)}`, r.label || RECORD_WORD[r.outcome] || r.outcome || '', { s: SMALL, rs: SMALL, rc: conv ? COLORS.bad : COLORS.dim });
+    }
+    if (record.length > 6) pg.para(`ほか${record.length - 6}件。くわしくは、スマホの「借入・返済」→「記録と手続き」で。`, { s: SMALL, c: COLORS.dim });
+  }
+
+  // ---- money
+  pg.block().head('お金の借り入れ', C);
+  const loans = Array.isArray(s.loans) ? s.loans : [];
+  const LND = JUS.LENDERS || {};
+  if (!loans.length) pg.para('借金はない。', { s: SMALL, c: COLORS.dim });
+  for (const l of loans) {
+    const yami = l.lender === 'yamikin';
+    const rate = yami ? 'トイチ' : `年${pctText(num(l.rate) * 100)}`;
+    pg.row(`${l.company || (LND[l.lender] && LND[l.lender].name) || '借入れ'}`, fmtMoney(num(l.balance)), { tag: { t: (LND[l.lender] && LND[l.lender].name) || '借入れ', bg: yami ? '#8a1a2a' : '#5a4a2a' }, rc: yami ? COLORS.bad : COLORS.text });
+    const due = num(l.due) - day;
+    pg.para(`${rate}・${l.status === 'frozen' ? '返済は止まっている' : `返済日 ${inDays(due)}`}${l.missed ? `・延滞${l.missed}回` : ''}`, { s: SMALL, c: l.missed ? COLORS.bad : COLORS.dim, x: 16 });
+  }
+  if (loans.length > 1) pg.row('合計', fmtMoney(num(s.debt)), { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.accent });
+  if (loans.some((l) => l.lender === 'yamikin')) {
+    pg.para('闇金は違法な貸金業者。トイチ（10日で1割）のような利息は法律で認められていない。ひとりで払い続けず、警察の相談窓口や弁護士に相談しよう。', { s: SMALL, c: COLORS.bad });
+  }
+  if (loans.some((l) => l.missed && l.lender !== 'yamikin')) pg.para('返済が遅れると、信用情報に事故の記録が残る。新しい借入れやローンが組めなくなる。', { s: SMALL, c: COLORS.accent });
+  const rateText = safe(() => (JUS.rateLawText ? JUS.rateLawText(g) : ''), '');
+  if (rateText) pg.para(rateText + '。', { s: SMALL, c: COLORS.dim });
+  if (j.unpaid) pg.row('未納（過料・税など）', fmtMoney(num(j.unpaid)), { s: SMALL, rs: SMALL, rc: COLORS.bad });
+  if (s.garnish) pg.para(`給料の差押え中（${s.garnish.by || '債権者'}）：収入の一部が差し引かれる。`, { s: SMALL, c: COLORS.bad });
+  const b = s.bankrupt;
+  if (b) {
+    const kind = BANKRUPT_KIND[b.kind] ? `（${BANKRUPT_KIND[b.kind]}）` : '';
+    const word = b.discharged ? ['免責が決まった', COLORS.good] : b.closed ? ['免責は認められなかった', COLORS.bad] : ['手続き中', COLORS.accent];
+    pg.row(`自己破産${kind}`, word[0], { rc: word[1], rs: SMALL });
+    pg.para(b.discharged ? '借金の返済は免除された。ただし、しばらくは新しい借入れやローンができない。' : '裁判所の手続きが進んでいる。審尋の日は裁判所へ。', { s: SMALL, c: COLORS.dim, x: 16 });
+  }
+  if (s.creditBlackUntil) pg.row('信用情報の事故記録', inDays(s.creditBlackUntil - day), { s: SMALL, rs: SMALL, rc: COLORS.accent });
+
+  // ---- tobacco and alcohol
+  pg.block().head('タバコとお酒', C);
+  const minor = !safe(() => g.canSmoke(), true);
+  if (minor) pg.para('20歳未満なので、タバコもお酒も法律で禁止。見つかると補導される。', { s: SMALL, c: COLORS.accent });
+  const habit = Math.round(num(s.smoker));
+  if (habit > 0) {
+    const sc2 = habit >= 60 ? COLORS.bad : habit >= 20 ? COLORS.accent : COLORS.text;
+    pg.row('タバコの習慣', String(habit), { gauge: { frac: clamp(habit / 100, 0, 1), color: sc2 }, rc: sc2 });
+    if (num(s.lostStamina)) pg.para(`吸いすぎで、体力の最大値が${num(s.lostStamina)}下がっている。`, { s: SMALL, c: COLORS.bad, x: 16 });
+    pg.para('路上喫煙は条例で禁止の地区があり、過料をとられることも。吸うなら喫煙所で。', { s: SMALL, c: COLORS.dim, x: 16 });
+  } else if (!minor) pg.para('タバコは吸っていない。お酒は飲みすぎず、飲んだら運転しない。', { s: SMALL, c: COLORS.dim });
+  if (!minor) {
+    const here = safe(() => g.canSmokeHere());
+    // (a 過料 is a nominal amount fixed by the ordinance: shown as is in every era)
+    if (here && g.map && g.map.placeId) pg.row('いまいる場所', here.ok ? 'タバコを吸える' : here.smokingArea ? '禁煙（喫煙所なら吸える）' : `禁煙${num(here.fine) ? `（過料${plainYen(here.fine)}）` : ''}`, { s: SMALL, rs: SMALL, c: COLORS.dim, rc: here.ok ? COLORS.text : COLORS.accent });
+  }
+
+  // ---- where to get help
+  pg.block().head('困ったときは', C);
+  pg.para('・借金：スマホの「借入・返済」の法律相談、ドット区役所の生活・多重債務相談', { s: SMALL });
+  pg.para('・闇金・ストーカー・詐欺：警視庁（永田町）の相談室', { s: SMALL });
+  pg.para('・自己破産：裁判所（永田町）の破産係', { s: SMALL });
+  pg.para('罪をおかせば、逮捕・裁判・刑罰がある。現実と同じように、取り返しのつかないこともある。', { s: SMALL, c: COLORS.dim });
+  return pg;
+}
+
+// ---------------------------------------------------------------- tab: 政治
+function politicsPage(g, ctx) {
+  const st = g.state;
+  const pg = new Page(ctx);
+  const C = TABS[3].color;
+  const day = st.day || 1;
+  if (!hasPolitics(g)) {
+    pg.block().head('政治', C).para('（政治のしくみを読み込めませんでした）', { s: SMALL, c: COLORS.dim });
+    return pg;
+  }
+  const p = safe(() => g.pol(), null);
+  const s = safe(() => g.politicsSummary(), null);
+  if (!p || !s) {
+    pg.block().head('政治', C).para('（政治のようすを読み込めませんでした）', { s: SMALL, c: COLORS.dim });
+    return pg;
+  }
+  const me = p.me || {};
+  const O = POL.OFFICES || {};
+  const office = me.office && O[me.office];
+  const age = ageOf(st);
+
+  // ---- you
+  pg.block().head('あなたと政治', C);
+  if (s.date && s.date.label) pg.row('いま', s.date.label, { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.dim });
+  if (office) {
+    pg.row(office.label || office.name, me.district || '', { c: COLORS.accent, rs: SMALL, rc: COLORS.dim });
+    pg.row('所属', (s.me && s.me.partyName) || '無所属');
+    const posts = (s.me && s.me.posts) || [];
+    if (posts.length) pg.row('役職', posts.join('・'), { rs: SMALL, rc: COLORS.accent });
+    const fac = me.faction && Object.values(p.parties || {}).flatMap((pt) => pt.factions || []).find((f) => f.id === me.faction);
+    if (fac) pg.row('派閥・グループ', fac.name, { s: SMALL, rs: SMALL, c: COLORS.dim });
+    pg.row(`当選 ${num(me.wins)}回・落選 ${num(me.losses)}回`, me.termEnd ? `任期満了まで ${inDays(num(me.termEnd) - day)}` : '', { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.dim });
+    const rep = clamp(Math.round(num(me.reputation)), -100, 100);
+    pg.row('評判', String(rep), { gauge: { frac: (rep + 100) / 200, color: rep < 0 ? COLORS.bad : COLORS.good } });
+    const ls = clamp(Math.round(num(me.localSupport)), 0, 100);
+    pg.row('地元の支持', String(ls), { gauge: { frac: ls / 100, color: COLORS.cyan } });
+    if (me.party) {
+      const sd = clamp(Math.round(num(me.standing)), 0, 100);
+      pg.row('党内の評価', String(sd), { gauge: { frac: sd / 100, color: '#b48cff' } });
+    }
+  } else {
+    pg.row('いまは', '民間人', { rc: COLORS.dim });
+    if (me.party) pg.row('党員', safe(() => g.partyName(me.party), '') || '');
+    pg.para('立候補は、スマホの「政治」、永田町の党本部（選挙対策本部）、ドット区役所の選挙管理委員会から。', { s: SMALL, c: COLORS.dim });
+  }
+  // eligibility (age on today's date; the core checks the exact election day)
+  const ban = safe(() => g.civicBanReason && g.civicBanReason('candidacy'));
+  if (ban) pg.para('立候補できない：' + ban, { s: SMALL, c: COLORS.bad });
+  else {
+    const can = Object.values(O).filter((o) => age >= num(o.ageMin)).map((o) => o.short || o.name);
+    const later = Object.values(O).filter((o) => age < num(o.ageMin));
+    if (can.length) pg.para(`被選挙権：${can.join('・')}`, { s: SMALL, c: COLORS.text });
+    if (later.length) {
+      const ages = [...new Set(later.map((o) => num(o.ageMin)))].sort((a, b) => a - b);
+      for (const a of ages) pg.para(`${a}歳から：${later.filter((o) => num(o.ageMin) === a).map((o) => o.short || o.name).join('・')}（あと${a - age}年）`, { s: SMALL, c: COLORS.dim });
+    }
+  }
+  const va = safe(() => (POL.votingAge ? POL.votingAge(s.date.year, p.flags) : 20), 20);
+  const voteBan = safe(() => g.civicBanReason && g.civicBanReason('vote'));
+  pg.row('選挙権（投票）', voteBan ? 'いまはない' : age >= va ? 'あり' : `${va}歳から`, { s: SMALL, rs: SMALL, c: COLORS.dim, rc: voteBan ? COLORS.bad : age >= va ? COLORS.good : COLORS.dim });
+
+  // ---- elections
+  const ups = (safe(() => g.upcomingElections(), []) || []).filter((e) => e && num(e.day) >= day).sort((a, b) => num(a.day) - num(b.day));
+  pg.block().head('選挙', C);
+  const mine = ups.find((e) => e.declared);
+  if (mine) {
+    pg.row(`立候補中：${mine.label}`, `投票 ${inDays(num(mine.day) - day)}`, { c: COLORS.good, rc: COLORS.accent, rs: SMALL });
+    const f = safe(() => g.electionForecast(mine.id));
+    if (f && f.chance != null) {
+      const ch = num(f.chance);
+      const word = ch >= 0.7 ? ['優勢', COLORS.good] : ch >= 0.4 ? ['接戦', COLORS.accent] : ['劣勢', COLORS.bad];
+      pg.row('情勢', word[0], { s: SMALL, rs: SMALL, c: COLORS.dim, rc: word[1] });
+    }
+    pg.para(day < num(mine.koji) ? `${mine.kojiDate || ''}の公示・告示までは「政治活動」だけ。` : '選挙運動の期間中。街頭演説や握手で支持を広げよう。', { s: SMALL, c: COLORS.dim, x: 16 });
+  }
+  const list = ups.filter((e) => e !== mine).slice(0, 4);
+  if (!list.length && !mine) pg.para('予定されている選挙はない。', { s: SMALL, c: COLORS.dim });
+  for (const e of list) {
+    pg.row(e.label || '', e.date || `${e.day}日目`, { s: SMALL, rs: SMALL, c: e.newsOnly ? COLORS.dim : COLORS.text, rc: COLORS.dim, tag: e.newsOnly ? { t: 'ニュース', bg: '#4a4a6a' } : num(e.koji) <= day ? { t: '選挙中', bg: '#c87a1a' } : null });
+  }
+
+  // ---- the Diet
+  pg.block().head('国会', C);
+  const ses = s.diet && s.diet.session;
+  if (ses) pg.row(`${ses.kind || '国会'}の会期中`, ses.end ? `会期末まで ${inDays(num(ses.end) - day)}` : '', { c: COLORS.accent, rs: SMALL, rc: COLORS.dim });
+  else pg.row('国会は閉会中', '', { c: COLORS.dim });
+  if (s.diet && s.diet.shugi && s.diet.shugi.dissolved) pg.para('衆議院は解散中。総選挙で新しい議員が決まる。', { s: SMALL, c: COLORS.accent });
+  if (s.diet && s.diet.nejire) pg.para('ねじれ国会：衆議院と参議院で多数派がちがう。', { s: SMALL, c: COLORS.dim });
+  for (const h of ['shugi', 'sangi']) {
+    const H = s.diet && s.diet[h];
+    if (!H || !Array.isArray(H.seats)) continue;
+    const top = H.seats.slice(0, 3).map((x) => `${x.name}${x.n}`).join('・');
+    pg.row(`${h === 'shugi' ? '衆議院' : '参議院'}（${num(H.total)}）`, top, { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.text });
+  }
+  const bills = (safe(() => g.billsList({ mine: true }), []) || []).slice(-5).reverse();
+  if (bills.length) {
+    pg.para('あなたの法案', { s: SMALL, c: COLORS.cyan });
+    for (const b of bills) {
+      const [w, c] = BILL_STAGE[b.stage] || [b.stage || '', COLORS.dim];
+      pg.row(`「${b.title || ''}」`, w, { s: SMALL, rs: SMALL, rc: c, x: 8 });
+    }
+  } else if (office && office.level === 'national') pg.para('議員立法は、スマホの「政治」の「政策・法案」から。', { s: SMALL, c: COLORS.dim });
+  if (office && office.level === 'national') {
+    const today = safe(() => g.billsList({ house: me.office, today: true }), []) || [];
+    if (today.length) pg.para(`きょうの本会議・委員会：${today.length}本。国会に出席しよう。`, { s: SMALL, c: COLORS.accent });
+  }
+
+  // ---- the cabinet
+  pg.block().head('内閣', C);
+  const cab = s.cabinet || {};
+  if (cab.pm) {
+    const ap = clamp(num(cab.approval), 0, 100);
+    pg.row(`${cab.pm === 'player' ? 'あなた' : cab.pmName || '？'}の内閣`, `支持率 ${ap}%`, { c: cab.pm === 'player' ? COLORS.accent : COLORS.text, rc: ap < 30 ? COLORS.bad : ap >= 50 ? COLORS.good : COLORS.text });
+    if ((cab.parties || []).length) pg.para(`与党：${cab.parties.join('・')}`, { s: SMALL, c: COLORS.dim });
+    const myPost = (cab.ministers || []).find((m) => m.who === 'player');
+    if (myPost) pg.para(`あなたは「${myPost.name}」。閣議は官邸で（火曜・金曜）。`, { s: SMALL, c: COLORS.accent });
+  } else pg.para('総理大臣が決まっていない（首班指名を待っている）。', { s: SMALL, c: COLORS.dim });
+
+  // ---- party support
+  const sup = (s.support || []).filter((x) => num(x.pct) > 0).slice(0, 5);
+  if (sup.length) {
+    pg.block().head('政党の支持率', C);
+    for (const x of sup) {
+      const col = (p.parties && p.parties[x.id] && p.parties[x.id].color) || '#8a90a6';
+      const full = (p.parties && p.parties[x.id] && p.parties[x.id].name) || x.name || '';
+      const nm = Array.from(String(full)).length > 9 ? Array.from(String(full)).slice(0, 8).join('') + '…' : String(full);
+      pg.row(nm, `${pctText(x.pct)}`, { s: SMALL, rs: SMALL, gauge: { frac: clamp(num(x.pct) / 50, 0, 1), color: col }, c: x.id === me.party ? COLORS.accent : COLORS.text });
+    }
+    pg.para('支持率は世論調査のしくみをまねた、ゲームの中の数字。', { s: SMALL, c: COLORS.dim });
+  }
+
+  // ---- the economy
+  const E = s.economy;
+  if (E) {
+    pg.block().head('経済', C);
+    pg.row('経済成長率', pctText(E.growth), { s: SMALL, rs: SMALL, rc: num(E.growth) < 0 ? COLORS.bad : COLORS.text });
+    pg.row('物価の上がり方', pctText(E.inflation), { s: SMALL, rs: SMALL });
+    pg.row('失業率', pctText(E.unemployment), { s: SMALL, rs: SMALL });
+    pg.row('円相場・日経平均', `1ドル＝${plainYen(E.yen)}・${plainYen(E.nikkei)}`, { s: SMALL, rs: SMALL });
+    pg.row('政府の借金（GDP比）', `${Math.round(num(E.debtRatio))}%`, { s: SMALL, rs: SMALL, rc: num(E.debtRatio) >= 200 ? COLORS.accent : COLORS.text });
+  }
+
+  // ---- money
+  if (office || num(me.funds) || num(me.secret) || me.formerOffice) {
+    pg.block().head('政治とお金', C);
+    pg.row('政治資金', fmtMoney(num(me.funds)), { rc: COLORS.accent });
+    pg.para('政治資金は自分のお金とは別。毎年、収支報告書に正しく書いて出すのがルール（政治資金規正法）。', { s: SMALL, c: COLORS.dim, x: 16 });
+    if (num(me.secret) > 0) {
+      pg.row('帳簿にないお金（裏金）', fmtMoney(num(me.secret)), { c: COLORS.bad, rc: COLORS.bad });
+      pg.para('収支報告書に書かないお金は政治資金規正法違反（不記載）。見つかれば捜査を受け、有罪になると公民権停止で議員の職を失うこともある。', { s: SMALL, c: COLORS.bad, x: 16 });
+    }
+  }
+  return pg;
+}
+
 // ---------------------------------------------------------------- tab: ばしょ
 function placesPage(g, ctx) {
   const pg = new Page(ctx);
@@ -481,10 +856,11 @@ function placesPage(g, ctx) {
   const here = g.map && g.map.placeId;
   const ids = GUIDE_ORDER.filter((id) => GUIDE[id]);
   const count = (town) => ids.filter((id) => GUIDE[id].town === town && visited[id]).length + '/' + ids.filter((id) => GUIDE[id].town === town).length;
-  pg.block(6).row(`行った場所 ${ids.filter((id) => visited[id]).length}/${ids.length}`, `東京 ${count('tokyo')}・なんば ${count('namba')}`, { c: COLORS.accent, rs: SMALL, rc: COLORS.dim });
+  const towns = Object.keys(TOWNS).filter((t) => ids.some((id) => GUIDE[id].town === t));
+  pg.block(6).row(`行った場所 ${ids.filter((id) => visited[id]).length}/${ids.length}`, towns.map((t) => `${TOWNS[t]} ${count(t)}`).join('・'), { c: COLORS.accent, rs: SMALL, rc: COLORS.dim });
   for (const id of ids) {
     const p = GUIDE[id];
-    const tag = { t: TOWNS[p.town], bg: TOWN_BG[p.town] };
+    const tag = { t: p.tag || TOWNS[p.town], bg: p.tagBg || TOWN_BG[p.town] };
     pg.block(7);
     if (!visited[id]) {
       pg.line({ t: '？？？', c: COLORS.dim, tag });
@@ -583,7 +959,7 @@ function recordPage(g, ctx) {
   return pg;
 }
 
-const BUILDERS = [goalPage, lifePage, placesPage, recordPage];
+const BUILDERS = [goalPage, lifePage, lawPage, politicsPage, placesPage, recordPage];
 
 // ---------------------------------------------------------------- scene
 export class NotebookScene {

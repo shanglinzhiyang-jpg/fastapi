@@ -118,35 +118,85 @@ function ribbon(ctx, label, cx, y, opt = {}) {
   text(ctx, label, cx, y + 5, { size, align: 'center', color: '#ffffff', shadow: darker });
 }
 
+// The 「ライフスペシャル」 ribbon under the title logo: the red banner with a gold trim
+// line and a twinkling gold star at each end of the band.
+function specialRibbon(ctx, cx, y, t = 0) {
+  const label = 'ライフスペシャル';
+  const size = 16;
+  const tw = Math.ceil(measure(ctx, label, size));
+  // ribbon() makes the band tw + 44 wide: pad the label with spaces for the stars
+  const padded = `　　${label}　　`;
+  ribbon(ctx, padded, cx, y, { size, color: '#d63a4a' });
+  const w = Math.ceil(measure(ctx, padded, size)) + 44, h = size + 10;
+  const x = Math.round(cx - w / 2);
+  // gold trim just inside the stitching
+  R(ctx, x + 2, y + 1, w - 4, 1, '#ffd86a');
+  R(ctx, x + 2, y + h - 2, w - 4, 1, '#c8902a');
+  const tw2 = Math.round(tw / 2);
+  for (const side of [-1, 1]) {
+    const sx = Math.round(cx + side * (tw2 + 22));
+    const lit = Math.floor((t + (side > 0 ? 20 : 0)) / 20) % 3 === 0;
+    text(ctx, '★', sx, y + 5, { size, align: 'center', color: lit ? '#fff6c8' : '#ffd23f', shadow: '#7a1a22' });
+    if (lit) sparkle(ctx, sx + 7, y + 4, 1, '#ffffff');
+  }
+}
+
 // ------------------------------------------------------------------ the logo
-// 「ドット芸能界」 lettering built from the pixel font: a two-colour fill with banded
-// shading, a white rim, a 3D extrusion and a dark outline. Built once the font is ready.
+// 「ドット芸能界&政治界」 lettering built from the pixel font: each part has its own fill
+// ramp with banded shading, a white rim, a 3D extrusion and a dark outline. Sizes are
+// multiples of the font's 16px grid so every stroke stays crisp. Built once the font is ready.
+//   ドット (pink, 48px, on the baseline) 芸能界 (gold, 64px) & (red, 48px) 政治界 (blue, 64px)
+export const GAME_TITLE = 'ドット芸能界&政治界　ライフスペシャル';
 const LOGO_SIZE = 64;
+const LOGO_PARTS = [
+  { s: 'ドット', ramp: 'pink', size: 48, dy: 8 },
+  { s: '芸能界', ramp: 'gold', size: 64, gap: 2 },
+  { s: '&', ramp: 'red', size: 48, gap: 2, dy: 4 },
+  { s: '政治界', ramp: 'blue', size: 64, gap: 2 },
+];
 let LOGO = null;
 
 function fontReady() {
   try { return !document.fonts || document.fonts.check(`${LOGO_SIZE}px "DotGothic16"`); } catch (e) { return true; }
 }
 
-// fill bands (top to bottom), bottom edge, gap colour, gap shadow
+// fill bands (top to bottom), bottom edge, gap colour, gap shadow; ext: the extrusion (near → far)
 const RAMPS = {
   pink: ['#ffc8e2', '#ff8fc2', '#ff62a6', '#ea4890', '#b8306e', '#7a2a64', '#5a1c4c'],
   gold: ['#fff2a8', '#ffdb4c', '#ffb92e', '#f59a22', '#c8641a', '#8a3a1c', '#682812'],
+  blue: ['#d6f4ff', '#8fd8ff', '#5ab4f4', '#3a8ae0', '#2456b0', '#1c2c72', '#141e54'],
+  cream: ['#ffffff', '#fff6dc', '#ffe6a8', '#ffd27a', '#c89a3a', '#6a4a2a', '#4a321c'],
+  red: ['#ffd6d0', '#ff8f86', '#f25a5a', '#d63a4a', '#a02434', '#6a1a2a', '#4a1220'],
+};
+const EXT_COL = {
+  pink: ['#8a2a6e', '#6e1f5a', '#521845'],
+  gold: ['#a8401e', '#862f16', '#62220f'],
+  blue: ['#25418e', '#1c3170', '#132252'],
+  cream: ['#8a6a3a', '#6e522c', '#4e3a20'],
+  red: ['#8a1e2c', '#6e1624', '#50101a'],
 };
 
-function buildLogo() {
-  const parts = [['ドット', 'pink'], ['芸能界', 'gold']];
+export function buildLogo(parts = LOGO_PARTS) {
   const mx = makeCanvas(4, 4)[1];
-  const widths = parts.map(([s]) => Math.ceil(measure(mx, s, LOGO_SIZE)));
-  const GAP = 10, PAD = 12;
-  const W = widths[0] + GAP + widths[1] + PAD * 2;
-  const H = LOGO_SIZE + PAD * 2 + 8;
+  const widths = parts.map((p) => Math.ceil(measure(mx, p.s, p.size)));
+  const PAD = 12;
+  const big = Math.max(...parts.map((p) => p.size));
+  const xs = [];
+  let cx = PAD;
+  parts.forEach((p, i) => { if (i) cx += p.gap || 0; xs.push(cx); cx += widths[i]; });
+  const W = cx + PAD;
+  const H = big + PAD * 2 + 8;
   const tx = makeCanvas(W, H)[1];
-  tx.font = `${LOGO_SIZE}px "DotGothic16", monospace`;
   tx.textBaseline = 'top';
   tx.fillStyle = '#fff';
-  tx.fillText(parts[0][0], PAD, PAD);
-  tx.fillText(parts[1][0], PAD + widths[0] + GAP, PAD);
+  parts.forEach((p, i) => {
+    tx.font = `${p.size}px "DotGothic16", monospace`;
+    // smaller parts sit on the optical centre line of the big ones
+    tx.fillText(p.s, xs[i], PAD + Math.round((big - p.size) / 2) + (p.dy || 0));
+  });
+  // which part a column belongs to: split half way across each gap
+  const bounds = parts.slice(1).map((p, i) => Math.round(xs[i + 1] - (p.gap || 0) / 2));
+  const partAt = (x) => { let k = 0; while (k < bounds.length && x >= bounds[k]) k++; return k; };
   const src = tx.getImageData(0, 0, W, H).data;
   const N = W * H;
   const M = new Uint8Array(N);
@@ -161,7 +211,8 @@ function buildLogo() {
   }
   const at = (a, x, y) => (x >= 0 && y >= 0 && x < W && y < H ? a[y * W + x] : 0);
   // bold: thicken every stroke by one pixel to the right and down
-  for (let y = H - 1; y > 0; y--) for (let x = W - 1; x > 0; x--) if (!M[y * W + x] && (M[y * W + x - 1] === 1 || M[(y - 1) * W + x] === 1)) M[y * W + x] = 2;
+  const boldAt = parts.map((p) => p.bold !== false);
+  for (let y = H - 1; y > 0; y--) for (let x = W - 1; x > 0; x--) if (boldAt[partAt(x)] && !M[y * W + x] && (M[y * W + x - 1] === 1 || M[(y - 1) * W + x] === 1)) M[y * W + x] = 2;
   for (let i = 0; i < N; i++) if (M[i]) M[i] = 1;
   // rim: rounded 2px dilation
   const RIM = new Uint8Array(N);
@@ -174,19 +225,18 @@ function buildLogo() {
     RIM[y * W + x] = on;
   }
   // extrusion: the rim pushed down 1..6 px
-  const EXT = new Uint8Array(N);
+  const EXD = new Uint8Array(N);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     if (RIM[y * W + x]) continue;
-    for (let d = 1; d <= 6; d++) if (at(RIM, x, y - d)) { EXT[y * W + x] = d; break; }
+    for (let d = 1; d <= 6; d++) if (at(RIM, x, y - d)) { EXD[y * W + x] = d; break; }
   }
   // outer outline
   const OUT = new Uint8Array(N);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const k = y * W + x;
-    if (RIM[k] || EXT[k]) continue;
-    if (at(RIM, x - 1, y) || at(RIM, x + 1, y) || at(RIM, x, y - 1) || at(RIM, x, y + 1) || at(EXT, x - 1, y) || at(EXT, x + 1, y) || at(EXT, x, y - 1) || at(EXT, x, y + 1)) OUT[k] = 1;
+    if (RIM[k] || EXD[k]) continue;
+    if (at(RIM, x - 1, y) || at(RIM, x + 1, y) || at(RIM, x, y - 1) || at(RIM, x, y + 1) || at(EXD, x - 1, y) || at(EXD, x + 1, y) || at(EXD, x, y - 1) || at(EXD, x, y + 1)) OUT[k] = 1;
   }
-  const split = PAD + widths[0] + GAP / 2;
   // a rim pixel between two strokes (a counter / gap inside a glyph) is painted dark,
   // so the dense kanji keep their shape instead of melting into the white rim
   const near = (x, y, dx, dy) => { for (let d = 1; d <= 5; d++) if (at(M, x + dx * d, y + dy * d)) return true; return false; };
@@ -201,10 +251,13 @@ function buildLogo() {
     return (cache[hex] = (0xff000000 | ((n & 255) << 16) | (n & 0xff00) | (n >> 16)) >>> 0);
   };
   const gh = Math.max(1, bot - top + 1);
+  const colRamp = [];
+  for (let x = 0; x < W; x++) colRamp.push(parts[partAt(x)].ramp);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const k = y * W + x;
-    const left = x < split;
-    const ramp = RAMPS[left ? 'pink' : 'gold'];
+    const rk = colRamp[x];
+    const ramp = RAMPS[rk];
+    const ext = EXT_COL[rk];
     let col = null;
     if (M[k]) {
       const f = (y - top) / gh;
@@ -218,8 +271,8 @@ function buildLogo() {
         col = (y - top) / gh < 0.62 ? '#fffaf0' : '#f2d8d0';
         if (!at(RIM, x, y + 1)) col = '#d8b4b8';
       }
-    } else if (EXT[k]) {
-      col = EXT[k] <= 2 ? (left ? '#8a2a6e' : '#a8401e') : EXT[k] <= 4 ? (left ? '#6e1f5a' : '#862f16') : (left ? '#521845' : '#62220f');
+    } else if (EXD[k]) {
+      col = EXD[k] <= 2 ? ext[0] : EXD[k] <= 4 ? ext[1] : ext[2];
     } else if (OUT[k]) col = '#1c0c22';
     if (col) d32[k] = px(col);
   }
@@ -231,7 +284,7 @@ function buildLogo() {
   for (let k = 0; k < N; k++) if (M[k]) s32[k] = 0xffffffff;
   sx.putImageData(simg, 0, 0);
   const [bc, bx] = makeCanvas(W, H);
-  return { cv: lc, shine: sc, tmp: bc, tctx: bx, w: W, h: H, top, bot, split };
+  return { cv: lc, shine: sc, tmp: bc, tctx: bx, w: W, h: H, top, bot };
 }
 
 function getLogo() {
@@ -245,7 +298,7 @@ function getLogo() {
 export function drawTitleLogo(ctx, cx, y, t = 0) {
   const L = getLogo();
   if (!L) {
-    text(ctx, 'ドット芸能界', cx, y + 10, { size: 48, align: 'center', color: COLORS.accent, outline: '#3a1030' });
+    text(ctx, 'ドット芸能界&政治界', cx, y + 16, { size: 32, align: 'center', color: COLORS.accent, outline: '#3a1030' });
     return;
   }
   const x = Math.round(cx - L.w / 2);
@@ -300,7 +353,7 @@ function buildBackdrop() {
     for (let x = 0; x < SW; x++) if (BAYER[y & 1][x & 1] < k) s.fillRect(x, y, 1, 1);
   }
   // moon with a soft dithered halo
-  const MX = 74, MY = 58;
+  const MX = 548, MY = 134; // low on the right, by the tower: clear of the wide title logo
   s.fillStyle = '#3e2a6a';
   for (let dy = -22; dy <= 22; dy++) for (let dx = -22; dx <= 22; dx++) {
     const d = Math.sqrt(dx * dx + dy * dy);
@@ -573,11 +626,19 @@ export class TitleScene {
   update(g) {
     this.t++;
     const inp = g.input;
+    // the notice before a new game: A goes on to the character creator, B back to the menu
+    if (this.notice) {
+      this.notice.t++;
+      if (this.notice.t > 10 && inp.pressed('a')) { audio.sfx('ok'); g.pop(this); this.resolve('new'); }
+      else if (this.notice.t > 3 && (inp.pressed('b') || inp.pressed('menu'))) { audio.sfx('cancel'); this.notice = null; }
+      return;
+    }
     if (inp.repeat('up') || inp.repeat('down')) { this.idx = 1 - this.idx; audio.sfx('cursor'); }
     if (inp.pressed('a') && this.t > 20) {
       if (this.idx === 1 && !hasSave()) { audio.sfx('buzz'); return; }
       audio.unlock();
       audio.sfx('ok');
+      if (this.idx === 0 && !g.auto) { this.notice = { t: 0 }; return; }
       g.pop(this);
       this.resolve(this.idx === 0 ? 'new' : 'continue');
     }
@@ -608,18 +669,18 @@ export class TitleScene {
 
     // logo: drops in, then a shine sweeps across now and then
     const drop = t < 36 ? Math.round(-120 * (1 - t / 36) ** 2) + (t > 26 ? Math.round(Math.sin(((t - 26) / 10) * Math.PI) * -4) : 0) : 0;
-    drawTitleLogo(ctx, SW / 2, 14 + drop, t);
+    drawTitleLogo(ctx, SW / 2, 8 + drop, t);
     if (t > 30) {
       for (let i = 0; i < 4; i++) {
         const p = (t + i * 47) % 120;
         if (p > 24) continue;
         const r = p < 6 || p > 18 ? 1 : p < 10 || p > 14 ? 2 : 3;
-        const sx = Math.round(SW / 2 - 180 + hash2(i, Math.floor((t + i * 47) / 120), 5) * 360);
-        const sy = Math.round(22 + hash2(i, Math.floor((t + i * 47) / 120), 6) * 70);
+        const sx = Math.round(SW / 2 - 240 + hash2(i, Math.floor((t + i * 47) / 120), 5) * 480);
+        const sy = Math.round(20 + hash2(i, Math.floor((t + i * 47) / 120), 6) * 64);
         sparkle(ctx, sx, sy, r, '#ffffff');
       }
     }
-    if (t > 20) ribbon(ctx, 'めざせ！国民的スター', SW / 2, 110, { size: 16 });
+    if (t > 20) specialRibbon(ctx, SW / 2, 104, t);
 
     // logo parade: the companies you can visit
     const n = LOGO_PARADE.length, SP = 80, BW = 66, BH = 38;
@@ -649,8 +710,46 @@ export class TitleScene {
     });
     if (this.saveInfo) text(ctx, this.saveInfo, SW / 2, py + 64, { size: 12, align: 'center', color: this.idx === 1 ? COLORS.cyan : COLORS.dim, shadow: null });
 
-    text(ctx, '実在の企業名・ロゴは各社の商標です（非公式ファンゲーム）', SW / 2, SH - 18, { size: 12, align: 'center', color: '#c8a8a0', shadow: '#1a0c10' });
+    text(ctx, 'この物語はフィクションです・実在の企業名とロゴは各社の商標です（非公式ファンゲーム）', SW / 2, SH - 18, { size: 12, align: 'center', color: '#c8a8a0', shadow: '#1a0c10' });
+    if (this.notice) drawNotice(ctx, this.notice.t);
   }
+}
+
+// ------------------------------------------------------------------ the notice before a new game
+// A short card after 「はじめから」: fiction, real companies / parties only as places, no real
+// politicians, crimes are not encouraged and have consequences, 20+ for drinking and smoking.
+const NOTICE_TITLE = 'はじめる前に';
+const NOTICE = [
+  'この物語はフィクションです。人物・団体・事件はすべて架空です。',
+  '実在の企業・番組・政党（自由民主党・民主党）は、場所や名前として\n出てくるだけです。実在の政治家は登場しません。',
+  '政策や選挙の結果は、どの考え方が正しいかを示すものではありません。',
+  '犯罪も選べますが、決してすすめるものではありません。\n現実と同じように、逮捕・裁判・刑罰などの重い結果が待っています。',
+  'お酒とタバコは20歳になってから。',
+];
+function drawNotice(ctx, t) {
+  ctx.fillStyle = 'rgba(6,4,18,0.72)';
+  ctx.fillRect(0, 0, SW, SH);
+  const W = 600, TW = W - 60, SIZE = 16, LH = 21;
+  const blocks = NOTICE.map((l) => wrap(ctx, l, TW, SIZE));
+  const lines = blocks.reduce((a, b) => a + b.length, 0);
+  const H = 54 + lines * LH + (blocks.length - 1) * 6 + 34;
+  const x = Math.round((SW - W) / 2), y = Math.round((SH - H) / 2) + 4;
+  const k = Math.min(1, t / 8);
+  const yy = y + Math.round((1 - k) * 10);
+  ctx.globalAlpha = k;
+  panel(ctx, x, yy, W, H);
+  ribbon(ctx, NOTICE_TITLE, SW / 2, yy - 10, { size: 16, color: STEP_COLORS.profile });
+  let ly = yy + 34;
+  blocks.forEach((b, i) => {
+    // a small diamond bullet, the fourth (crime) in red
+    const col = i === 3 ? '#ff8a8a' : '#ffd23f';
+    R(ctx, x + 20, ly + 7, 6, 6, shade(col, -0.4));
+    R(ctx, x + 21, ly + 8, 4, 4, col);
+    b.forEach((l, j) => text(ctx, l, x + 34, ly + j * LH, { size: SIZE, color: i === 3 ? '#ffd0d0' : '#ffffff' }));
+    ly += b.length * LH + 6;
+  });
+  if (t > 10) text(ctx, 'A：つぎへ　B：もどる', SW / 2, yy + H - 30, { size: 14, align: 'center', color: Math.floor(t / 30) % 2 === 0 ? COLORS.accent : '#c8b070' });
+  ctx.globalAlpha = 1;
 }
 
 // ------------------------------------------------------------------ character creation

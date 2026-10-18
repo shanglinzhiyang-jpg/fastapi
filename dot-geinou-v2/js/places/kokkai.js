@@ -520,6 +520,8 @@ function ministerFor(g, b, area) {
   if (id === 'player') return null;
   return { post, id, name: npcName(g, id), look: npcLook(g, id), label };
 }
+// politics.js activity() reports "<kind>をした。…": smooth the wording of a few kinds
+const actText = (r) => (r && r.ok ? String(r.text || '').replace('陳情を受けるをした', '陳情を受けた').replace('議会で質問をした', '議会で質問した').replace('委員会で質問をした', '委員会で質問した').replace('国会で答弁をした', '国会で答弁した').replace('予算編成をした', '予算案をまとめた') : `（${(r && r.why) || 'できなかった'}）`);
 const shortPost = (label) => String(label || '').replace(/^内閣/, '').replace('国家公安委員会委員長', '国家公安委員長');
 
 // ------------------------------------------------------------------ people (fictional staff)
@@ -682,17 +684,26 @@ function memberLooks(i) {
 
 // The baked seats of a chamber (map scale: one tile = 32 px), redrawn when the seats change.
 const chamberCache = {};
+// A cheap key for "the seats changed": the seat table, the coalition and the colours.
+function seatKey(g, house, local = false) {
+  const p = pol(g);
+  if (!p) return '';
+  const t = local ? p.local && p.local.kugi && p.local.kugi.seats : p.diet && p.diet[house] && p.diet[house].seats;
+  let k = (p.cabinet && (p.cabinet.partyIds || []).join(',')) || '';
+  for (const id of Object.keys(t || {})) k += `|${id}:${t[id]}:${partyColor(g, id)}`;
+  return k;
+}
 function bakeChamber(g, house) {
   const seats = MAP_SEATS[house];
   const S = sessionOf(g);
   const mineHere = myHouse(g) === house;
+  const key = `${house}|${S ? 1 : 0}|${mineHere ? 1 : 0}|${today(g)}|${seatKey(g, house)}`;
+  const cached = chamberCache[house];
+  if (cached && cached.key === key) return cached.cv;
   const { list } = seatParties(g, house, seats.length);
   const order = seats.map((s, i) => i).sort((a, b) => seats[b].th - seats[a].th);
   const party = new Array(seats.length);
   order.forEach((si, k) => { party[si] = list[k]; });
-  const key = `${house}|${S ? 1 : 0}|${mineHere ? 1 : 0}|${list.join(',')}`;
-  const cached = chamberCache[house];
-  if (cached && cached.key === key) return cached.cv;
   const [cv, c] = makeCanvas(CH_W * 32, CH_H * 32);
   seats.forEach((s, i) => {
     const lk = memberLooks(i);
@@ -764,23 +775,24 @@ const VOTE_SEATS = schematicLayout(VOTE_GEO.cx, VOTE_GEO.cy + 16, VOTE_GEO.r0, V
 class VoteScene {
   constructor(g, o) {
     Object.assign(this, { g, t: 0, hd: true, opaque: true, hidesHud: true, prog: 0, phase: 'intro' }, o);
-    const n = VOTE_SEATS.length;
-    const { list } = seatParties(g, o.house, n);
-    const order = VOTE_SEATS.map((s, i) => i).sort((a, b) => VOTE_SEATS[b].th - VOTE_SEATS[a].th);
+    const SEATS = this.seats = o.seats || VOTE_SEATS;
+    const n = SEATS.length;
+    const { list } = seatParties(g, o.house, n, !!o.local);
+    const order = SEATS.map((s, i) => i).sort((a, b) => SEATS[b].th - SEATS[a].th);
     this.parties = new Array(n);
     order.forEach((si, k) => { this.parties[si] = list[k]; });
     // the player's seat: right of the centre aisle, middle rows
     let best = -1, bd = 1e9;
-    VOTE_SEATS.forEach((s, i) => { const d = Math.hypot(s.x - 300, s.y - 190); if (d < bd) { bd = d; best = i; } });
+    SEATS.forEach((s, i) => { const d = Math.hypot(s.x - (o.mineAt ? o.mineAt[0] : 300), s.y - (o.mineAt ? o.mineAt[1] : 190)); if (d < bd) { bd = d; best = i; } });
     this.mineIdx = o.member ? best : -1;
     // who votes how: scale each party's line to the real totals
     this.votes = new Array(n).fill(null);
     if (o.v) {
       const tot = Math.max(1, o.v.yes + o.v.no + num(o.v.absent));
       const wantYes = Math.round((o.v.yes / tot) * n), wantAbs = Math.round((num(o.v.absent) / tot) * n);
-      const idx = VOTE_SEATS.map((s, i) => i).filter((i) => i !== this.mineIdx);
+      const idx = SEATS.map((s, i) => i).filter((i) => i !== this.mineIdx);
       const lineOf = {};
-      for (const pid of new Set(this.parties)) lineOf[pid] = partyLine(g, pid, o.bill);
+      for (const pid of new Set(this.parties)) lineOf[pid] = o.lineOf ? o.lineOf(pid) : partyLine(g, pid, o.bill);
       idx.sort((a, b) => (lineOf[this.parties[a]] === 'yes' ? 0 : 1) - (lineOf[this.parties[b]] === 'yes' ? 0 : 1) || hash2(a, 2, 3) - hash2(b, 2, 3));
       idx.forEach((i, k) => { this.votes[i] = k < wantYes ? 'yes' : 'no'; });
       idx.slice().sort((a, b) => hash2(a, 9, 1) - hash2(b, 9, 1)).slice(0, wantAbs).forEach((i) => { this.votes[i] = null; this.absent = this.absent || new Set(); this.absent.add(i); });
@@ -792,18 +804,18 @@ class VoteScene {
     const g = this.g;
     R(ctx, 0, 0, SW, SH, '#1a1210');
     paintChamberSchematic(ctx, g, {
-      x0: 0, y0: 0, w: SW, h: SH, cx: VOTE_GEO.cx, cy: VOTE_GEO.cy, house: this.house, seats: VOTE_SEATS, parties: this.parties,
+      x0: 0, y0: 0, w: SW, h: SH, cx: VOTE_GEO.cx, cy: VOTE_GEO.cy, house: this.house, seats: this.seats, parties: this.parties,
       votes: this.phase === 'intro' ? null : this.votes, prog: this.prog, method: this.method, mineIdx: this.mineIdx,
       present: (i) => !(this.absent && this.absent.has(i)) || this.phase === 'intro',
     });
     if (this.mineIdx >= 0) {
-      const s = VOTE_SEATS[this.mineIdx];
+      const s = this.seats[this.mineIdx];
       const bob = Math.floor(this.t / 12) % 2;
       text(ctx, '▼あなた', Math.round(s.x) - 2, Math.round(s.y) - 30 - bob, { size: 12, align: 'center', color: COLORS.accent, outline: '#000' });
     }
     // title card
     panel(ctx, 8, 8, 236, 58, { bg: '#1c1a2a' });
-    text(ctx, `${houseName(this.house)}本会議`, 20, 14, { size: 16, color: COLORS.accent });
+    text(ctx, this.title || `${houseName(this.house)}本会議`, 20, 14, { size: 16, color: COLORS.accent });
     text(ctx, METHOD_NAME[this.method] || '', 232, 16, { size: 12, align: 'right', color: COLORS.cyan });
     const title = billLabel(this.bill);
     text(ctx, title.length > 17 ? title.slice(0, 16) + '…' : title, 20, 40, { size: 14 });
@@ -900,7 +912,7 @@ async function showVote(g, house, b, v, o = {}) {
     : b.kind === 'budget'
       ? [`${nth}、${billLabel(b)}を議題といたします。`, '委員長の報告を求めます。']
       : o.revote
-        ? [`${billLabel(b)}は、参議院で否決されました。`, '憲法第59条第2項により、本院の議決を再議に付します。出席議員の3分の2以上の多数が必要です。']
+        ? [`${billLabel(b)}は、参議院で否決されました。`, '憲法第59条第2項により、本院の議決を再議に付します。\n出席議員の3分の2以上の多数が必要です。']
         : [`${nth}、${billLabel(b)}（${sponsorLabel(g, b)}）を議題といたします。`, '委員長の報告を求めます。'];
   await speak(g, house, intro);
   if (!isNc && !o.revote) await g.say(['ただいま議題となりました案件につきまして、\n委員会における審査の経過と結果を報告いたします。', b.committeeNo ? '採決の結果、本案は否決すべきものと決しました。以上、報告いたします。' : '採決の結果、本案は可決すべきものと決しました。以上、報告いたします。'], { name: '委員長', look: npcLook(g, p && p.flags && p.flags.chair_budget) });
@@ -1012,6 +1024,7 @@ async function bochoWatch(g, house) {
   const S = sessionOf(g);
   if (!S) { await g.say(['議場は静まりかえっている。', '（いまは国会の閉会中。本会議は開かれていない）']); return; }
   await g.say(['（傍聴席に腰をおろした。下に議場が見える）', '（傍聴席では、拍手・発言・撮影・録音は禁止。\n静かに見守ろう）']);
+  if (myHouse(g) === house && plenaryBills(g, house).length) { await g.say('（…いや、自分はこの院の議員だ。\n採決には、議場の自分の議席で加わろう）'); return; }
   const n = await runPlenary(g, house, { member: false, max: 2 });
   if (n) { await speak(g, house, '本日は、これにて散会いたします。'); g.relax({ stress: 2 }); await g.say('（国会で法案が採決される瞬間を、この目で見た…）'); return; }
   const p = pol(g);
@@ -1043,7 +1056,7 @@ class Caption {
 }
 const Q_ROUNDS = [
   [['数字を示して聞く', 34, '{t}について伺います。昨年度の実績と今年度の目標を、\n数字でお示しください。'], ['現場の声を伝える', 30, '地元で、{t}について多くの声を聞いてきました。\n現場は、いまも困っています。'], ['大臣の資質を問う', 8, 'そもそも大臣に、この問題を担う資格があるのですか！']],
-  [['具体的に、と迫る', 32, '「適切に」では分かりません。いつまでに、何を、\nどれだけやるのか。具体的にお答えください。'], ['資料を示す', 30, 'お手元の資料をご覧ください。\nこの数字を見れば、対策の遅れは明らかです。'], ['ヤジに言い返す', 4, '（与党席のヤジに、大声で言い返した）']],
+  [['具体的に、と迫る', 32, '抽象的な答弁では分かりません。いつまでに、何を、\nどれだけやるのか。具体的にお答えください。'], ['資料を示す', 30, 'お手元の資料をご覧ください。\nこの数字を見れば、対策の遅れは明らかです。'], ['ヤジに言い返す', 4, '（与党席のヤジに、大声で言い返した）']],
   [['提案して締める', 34, 'では、こう提案します。対象を広げ、手続きを簡単に。\n前向きにご検討いただけますか。'], ['答弁を確認する', 30, 'いまの「年内をめどに」という答弁、\n議事録に残ります。よろしいですね。'], ['時間いっぱい演説', 10, '（持論を語り続けているうちに、時間が来てしまった…）']],
 ];
 const A_ROUNDS = [
@@ -1113,7 +1126,7 @@ async function shitsugi(g) {
   });
   const r = g.activity('委員会で質問', { score });
   if (minister) minister.hidden = true;
-  await g.say([r.ok ? r.text : `（${r.why}）`, score >= 75 ? '（鋭い質疑だった。ニュースでも取り上げられそうだ）' : score >= 50 ? '（まずまずの質疑だった）' : '（空回りしてしまった…次は準備をしっかりしよう）']);
+  await g.say([actText(r), score >= 75 ? '（鋭い質疑だった。ニュースでも取り上げられそうだ）' : score >= 50 ? '（まずまずの質疑だった）' : '（空回りしてしまった…次は準備をしっかりしよう）']);
 }
 async function toben(g) {
   const m = me(g);
@@ -1122,7 +1135,8 @@ async function toben(g) {
   if (m.lastAct && m.lastAct['国会で答弁'] === today(g)) { await g.say('（今日の答弁はもう終えた）'); return; }
   const p = pol(g);
   const opp = Object.values(p.npcs || {}).find((n) => n && n.party && !ruling(p, n.party) && (n.office === 'shugi' || n.office === 'sangi'));
-  const qname = opp ? `${surname(opp.name)}委員（${partyName(g, opp.party, true)}）` : '委員';
+  const qsur = opp ? surname(opp.name) : '';
+  const qname = opp ? `${qsur}委員（${partyName(g, opp.party, true)}）` : '委員';
   const qwho = { name: qname, look: opp ? opp.look : LOOKS.salaryman };
   const myPost = (m.posts || []).find((x) => POL.POSTS && POL.POSTS[x] && POL.POSTS[x].kind === 'cabinet');
   let label = '大臣';
@@ -1130,8 +1144,10 @@ async function toben(g) {
   const area = myPost && POL.POSTS[myPost].areas ? POL.POSTS[myPost].areas[0] : null;
   const topic = area && POL.POLICY_AREAS[area] ? POL.POLICY_AREAS[area].name : '政府の方針';
   g.placePlayer(6, 6, 'right');
+  const asker = g.npc('kokkai_answer');
+  if (asker) { asker.look = qwho.look; asker.sheet = charSheetHD(qwho.look); asker.hidden = false; g.placeNpc('kokkai_answer', 14, 6, 'left'); }
   const chair = { name: '委員長', look: npcLook(g, p.flags.chair_budget) };
-  await g.say(`${surname(qname)}君の質疑に入ります。`, chair);
+  await g.say(qsur ? `${qsur}君の質疑に入ります。` : '質疑に入ります。', chair);
   const score = await exchange(g, A_ROUNDS, {
     title: '委員会　答弁', sub: `答弁：${g.state.name}${label}`, topic,
     prompt: ['（どう答える…？）', '（追及が厳しい…）', '（最後の答弁だ）'],
@@ -1143,7 +1159,8 @@ async function toben(g) {
     ],
   });
   const r = g.activity('国会で答弁', { score });
-  await g.say([r.ok ? r.text : `（${r.why}）`]);
+  if (asker) { asker.hidden = true; g.placeNpc('kokkai_answer', 6, 6, 'right'); }
+  await g.say([actText(r)]);
 }
 
 // ------------------------------------------------------------------ 議員会館：秘書・帳簿・陳情
@@ -1272,7 +1289,7 @@ async function chinjoTalk(g) {
   if (k === 2) { await g.say('…そうですか。また参ります。', w); return; }
   const r = g.activity('陳情を受ける', { score: k === 0 ? 80 : 55 });
   await g.say(k === 0 ? 'ありがとうございます！\n先生に話を聞いてもらえて、ほっとしました。' : 'よろしくお願いいたします。', w);
-  await g.say(r && r.ok ? r.text : `（${(r && r.why) || '今日はもう陳情を受けた'}）`);
+  await g.say(actText(r));
 }
 // The "favour" visitor: a bribe offer. The lawful answer comes first.
 const BRIBER = { name: '建設会社の社長', look: { hair: 'slick', hairColor: 'black', skin: 'tan', top: '#3a3436', bottom: '#2a2d36', jacket: true, tie: '#c9a227' } };
@@ -1479,8 +1496,15 @@ function paintHallFx(c) {
 function hallUnder(ctx, g, cam) {
   if (!hallFx) { const [cv, c] = makeCanvas(320, 224); paintHallFx(c); hallFx = cv; }
   const x = 12 * 16 - 80 - cam.x, y = 8 * 16 - 56 - cam.y;
-  ctx.globalAlpha = 1;
   ctx.drawImage(hallFx, Math.round(x), Math.round(y), 160, 112);
+  if (g.flag('kokkai_firsted') === today(g)) {
+    // the day of the first attendance: the bronze doors stand open, a red carpet leads in
+    const dx = 10 * 16 - cam.x, dy = 15 * 16 - cam.y;
+    R(ctx, dx + 2, dy, 60, 16, '#f6eed8'); R(ctx, dx + 2, dy, 60, 2, '#ffffff');
+    R(ctx, dx, dy, 3, 16, BRZD); R(ctx, dx + 61, dy, 3, 16, BRZD);
+    R(ctx, dx + 20, 9 * 16 - cam.y, 24, dy - (9 * 16 - cam.y) + 16, RED);
+    R(ctx, dx + 20, 9 * 16 - cam.y, 1, dy - (9 * 16 - cam.y) + 16, GOLDD); R(ctx, dx + 43, 9 * 16 - cam.y, 1, dy - (9 * 16 - cam.y) + 16, GOLDD);
+  }
 }
 
 // ------------------------------------------------------------------ gallery view
@@ -1489,10 +1513,10 @@ const galleryCache = {};
 function galleryUnder(house) {
   return (ctx, g, cam) => {
     const S = sessionOf(g);
-    const { list } = seatParties(g, house, GAL_SEATS.length);
-    const key = `${house}|${S ? 1 : 0}|${list.join(',')}`;
+    const key = `${house}|${S ? 1 : 0}|${today(g)}|${seatKey(g, house)}`;
     let c0 = galleryCache[house];
     if (!c0 || c0.key !== key) {
+      const { list } = seatParties(g, house, GAL_SEATS.length);
       const [cv, c] = makeCanvas(18 * 32, 6 * 32);
       const order = GAL_SEATS.map((s, i) => i).sort((a, b) => GAL_SEATS[b].th - GAL_SEATS[a].th);
       const parties = new Array(GAL_SEATS.length);
@@ -1505,29 +1529,32 @@ function galleryUnder(house) {
 }
 
 // ------------------------------------------------------------------ access rules
-async function stopHere(g, lines, who = WHO.guard) {
+// A refused warp walks the player back the opposite way of `dir` (the way they came in).
+async function stopHere(g, lines, who = WHO.guard, dir = null) {
   await g.say(lines, say(who));
+  if (dir && g.map && g.map.player) g.map.player.dir = dir;
   return false;
 }
 async function intoHall(g) {
   if (myHouse(g) || g.flag('kokkai_touring')) return true;
-  return stopHere(g, ['ここから先は、議員と許可のある方だけです。', '国会見学でしたら、左の参観受付へどうぞ。\n本会議の傍聴は、右の傍聴人受付です。']);
+  return stopHere(g, ['ここから先は、議員と許可のある方だけです。', '国会見学でしたら、左の参観受付へどうぞ。\n本会議の傍聴は、右の傍聴人受付です。'], WHO.guard, 'up');
 }
 function intoChamber(house) {
+  const dir = house === 'shugi' ? 'left' : 'right';
   return async (g) => {
     const h = myHouse(g);
     if (h === house) return true;
-    if (h) return stopHere(g, [`${houseName(house)}の議場です。`, `${houseName(h)}の議員の方は、こちらの議席には入れません。\n傍聴席からご覧ください。`]);
-    return stopHere(g, ['議場に入れるのは、議員だけです。', '議場は、傍聴席からご覧いただけます。']);
+    if (h) return stopHere(g, [`${houseName(house)}の議場です。`, `${houseName(h)}の議員の方は、こちらの議席には入れません。\n傍聴席からご覧ください。`], WHO.guard, dir);
+    return stopHere(g, ['議場に入れるのは、議員だけです。', '議場は、傍聴席からご覧いただけます。'], WHO.guard, dir);
   };
 }
 async function intoIinkai(g) {
   if (myHouse(g)) return true;
-  return stopHere(g, ['委員会室です。', '委員会の傍聴には、議員の紹介と委員長の許可が必要です。']);
+  return stopHere(g, ['委員会室です。', '委員会の傍聴には、議員の紹介と委員長の許可が必要です。'], WHO.guard, 'up');
 }
 async function intoKaikan(g) {
   if (myHouse(g)) return true;
-  return stopHere(g, ['議員会館への通用口です。', '会館に入るには、議員との面会の約束と、\n受付での手続きが必要です。']);
+  return stopHere(g, ['議員会館への通用口です。', '会館に入るには、議員との面会の約束と、\n受付での手続きが必要です。'], WHO.guard, 'down');
 }
 
 // ------------------------------------------------------------------ 初登院 (after winning a national seat)
@@ -1645,9 +1672,9 @@ function galleryRoom(house) {
       '#VVVVVVVVVVVVVVVVVV#',
       '#VVVVVVVVVVVVVVVVVV#',
       '#rrrrrrrrrrrrrrrrrr#',
-      '#bbbbb.bbbbbb.bbbbb#',
+      '#bbbbbbbb..bbbbbbbb#',
       '#..................#',
-      '#bbbbb.bbbbbb.bbbbb#',
+      '#bbbbbbbb..bbbbbbbb#',
       '#########MM#########',
     ],
     legend: { '#': T('walltop'), V: T('view'), r: T('rail'), b: T('gbench'), M: T('mat') },
@@ -1705,7 +1732,7 @@ registerPlace({
       ],
       entities: [
         npc('kokkai_guide', 3, 2, 'down', WHO.guide, { talk: guideTalk }),
-        npc('kokkai_lobby_eishi', 13, 2, 'left', WHO.guard, {
+        npc('kokkai_lobby_eishi', 13, 3, 'left', WHO.guard, {
           talk: async (g) => {
             if (myHouse(g)) { await g.say(['お疲れさまです、先生。どうぞお通りください。', '議員会館へは、うしろの通用口からどうぞ。'], say(WHO.guard)); return; }
             await g.say(['ここから先は院内です。議員と許可のある方だけが入れます。', '見学は参観受付、本会議の傍聴は傍聴人受付へ。'], say(WHO.guard));
@@ -1736,6 +1763,7 @@ registerPlace({
         if (g.flag('kokkai_firstday') && myHouse(g)) { await firstDay(g); return; }
         if (!g.flag('kokkai_welcome')) {
           g.setFlag('kokkai_welcome');
+          await g.wait(200);
           await g.say(['国会議事堂の、参観ロビーに入った。', '左は国会見学（参観）の受付、右は本会議の傍聴人受付。\n正面の扉の先が、院内だ。']);
         }
       },
@@ -1916,8 +1944,12 @@ registerPlace({
       onEnter: async (g) => {
         if (!myHouse(g) || g.flag('kokkai_kaikan_intro')) return;
         g.setFlag('kokkai_kaikan_intro');
+        await g.wait(200);
         await g.say([`先生、${houseName(myHouse(g))}議員会館の事務所へようこそ。`, '公設秘書は3人、国費で雇われています。\n政策担当秘書の白石です。よろしくお願いします。', '帳簿、収支報告、献金、陳情…なんでもご相談ください。'], say(WHO.hisho));
       },
     },
   },
 });
+
+// Shared with the ドット区役所 (区議会): the seat painter, the vote scene and the question exchange.
+export { VoteScene, VOTE_GEO, seatKey, paintSeat, ZL, ZS, schematicLayout, seatParties, chairColor, memberLooks, exchange, Caption, Q_ROUNDS, actText, partyLine };

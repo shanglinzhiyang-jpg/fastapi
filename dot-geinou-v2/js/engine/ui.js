@@ -307,8 +307,47 @@ export function drawBanner(ctx, g) {
 }
 
 // ---------------------------------------------------------------- status screen
+// The compact 政治 / 法 line of the status screen: [label, text, color] pairs, only when they
+// matter (an office, a party or a candidacy; a record, a sentence, a case). Read once when the
+// screen opens; each core is optional (an old save simply has nothing to show).
+function civicLines(g) {
+  const out = [];
+  const st = g.state || {};
+  try {
+    const p = st.politics;
+    const me = p && p.me;
+    if (me && (me.office || me.party || me.candidacy) && typeof g.partyName === 'function') {
+      const OFFICE = { kugi: '区議会議員', togi: '都議会議員', shicho: '区長', chiji: '都知事', shugi: '衆議院議員', sangi: '参議院議員' };
+      const posts = Array.isArray(me.posts) ? me.posts : [];
+      // the highest post first: 総理 → 大臣・官房長官 → 党首
+      const cab = posts.includes('pm') ? 'pm' : posts.find((x) => x === 'kanbo' || /^minister_/.test(x)) || (posts.includes('party_leader') ? 'party_leader' : null);
+      const top = cab && typeof g.postLabel === 'function' ? g.postLabel(cab) : null;
+      const office = top || (me.office ? OFFICE[me.office] || me.office : me.candidacy ? '立候補中' : '党員');
+      const party = me.party ? g.partyName(me.party, true) : '無所属';
+      out.push(['政治', `${office}・${party}`, COLORS.cyan]);
+    }
+  } catch (e) { console.error('[status] politics', e); }
+  try {
+    const j = st.justice;
+    if (j && typeof g.justiceStatus === 'function') {
+      const s = g.justiceStatus();
+      const day = st.day;
+      const left = (d) => (d > day ? `（あと${d - day}日）` : '');
+      let t = null, c = COLORS.accent;
+      if (s.status === 'prison') { t = `服役中${left(s.prisonUntil)}`; c = COLORS.bad; }
+      else if (s.status === 'detained') { t = '身柄拘束中'; c = COLORS.bad; }
+      else if (s.status === 'trial' || (s.cases && s.cases.length)) { t = '事件の手続き中'; c = COLORS.bad; }
+      else if (s.suspendUntil) t = `執行猶予中${left(s.suspendUntil)}`;
+      else if (s.hasRecord) t = '前科あり';
+      else if (s.civicBanUntil) t = `公民権停止${left(s.civicBanUntil)}`;
+      if (t) out.push(['法', t, c]);
+    }
+  } catch (e) { console.error('[status] justice', e); }
+  return out;
+}
+
 export class StatusScene {
-  constructor(g, resolve) { this.g = g; this.resolve = resolve; this.t = 0; this.opaque = false; this.hidesHud = true; this.hd = true; }
+  constructor(g, resolve) { this.g = g; this.resolve = resolve; this.t = 0; this.opaque = false; this.hidesHud = true; this.hd = true; this.civic = civicLines(g); }
   update(g) {
     this.t++;
     if (g.auto) { g.pop(this); this.resolve(); return; }
@@ -373,7 +412,15 @@ export class StatusScene {
       bar(ctx, nx + 86, Y + 215 + i * 26, 80, 10, v / 100, col);
       text(ctx, String(v), nx + 196, Y + 212 + i * 26, { size: 14, align: 'right', color: COLORS.dim });
     });
-    text(ctx, 'Aでもどる', X + PW - 18, Y + PH - 26, { align: 'right', size: 12, color: COLORS.dim });
+    // 政治 / 法 (only when relevant): one compact row under the skills
+    this.civic.slice(0, 2).forEach(([label, v, col], i) => {
+      const x = i ? c2 : X + 24, w = i ? X + PW - 24 - c2 : c2 - 24 - (X + 24);
+      let s = v;
+      while (s.length > 1 && measure(ctx, `${label}：${s}`, 14) > w) s = s.slice(0, -2) + '…';
+      text(ctx, `${label}：`, x, Y + 296, { size: 14, color: COLORS.dim });
+      text(ctx, s, x + measure(ctx, `${label}：`, 14), Y + 296, { size: 14, color: col });
+    });
+    text(ctx, 'Aでもどる', X + PW - 18, Y + PH - (this.civic.length > 1 ? 20 : 26), { align: 'right', size: 12, color: COLORS.dim });
   }
 }
 

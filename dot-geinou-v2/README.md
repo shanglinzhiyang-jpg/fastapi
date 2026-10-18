@@ -1,7 +1,11 @@
-# ドット芸能界 〜めざせ！国民的スター〜（v2）
+# ドット芸能界&政治界　ライフスペシャル
 
-事務所やテレビ局、劇場、撮影所でお仕事・レッスン・オーディションをこなしながら、
-「国民的スター」を目指す 2D ドット絵 RPG です。ブラウザだけで動きます（ビルド不要）。
+（旧タイトル：ドット芸能界 〜めざせ！国民的スター〜（v2））
+
+事務所やテレビ局、劇場、撮影所でお仕事・レッスン・オーディションをこなしながら「国民的スター」を目指し、
+選挙に立って **政治家** にもなれる 2D ドット絵 RPG です。暮らし・人間関係・家族に加えて、日本の社会の
+**表と裏**（借金と闇金、反社会的勢力、スキャンダル、裏金と、その先の警察・検察・裁判・刑務所）までを描きます。
+ブラウザだけで動きます（ビルド不要）。
 
 v2 では、画面が **640×360 の高解像度ドット絵** になり、芸能活動に **暮らし（ライフシミュレーション）** が加わりました。
 
@@ -9,7 +13,11 @@ v2 では、画面が **640×360 の高解像度ドット絵** になり、芸�
 - **暮らしとキャリア**：曜日つきの日付、毎週月曜の家賃、引っ越しと家具、自炊、ドット商店街での買い物と趣味。
   ファン、SNS「ドッター」、レギュラー番組、自分の冠番組、毎週の好感度ランキング
 - **人間関係**：16人の仲間と、話す・プレゼント・おでかけで仲良くなれます。ハートイベント、相方、「大切な人」も
-- **スマホ**：メッセージ・連絡先・予定・家計・ドッター
+- **スマホ**：メッセージ・連絡先・予定・家計・ドッター・家族・「政治」・「借入・返済」
+- **政治界**：区議会・都議会・区長・都知事・衆議院・参議院の選挙、政党（自由民主党・民主党と架空の政党、自分の新党）、
+  国会と法案、内閣と総理大臣、政策と経済、政治とお金。舞台は東京の北の「永田町・霞が関」（下記「政治の遊び方」）
+- **社会の裏側と法**：犯罪を選べば、現実と同じように逮捕・起訴・裁判・刑務所と前科。消費者金融と闇金、自己破産、
+  反社会的勢力、喫煙・飲酒のルール。舞台は東京の南の「ネオン街」と、永田町の警視庁・検察庁・裁判所（下記「社会の裏側と法」）
 
 時間帯や季節はありません。ベッドで寝るまでが「その日」で、寝ると次の日（曜日がひとつ進む）になります。
 
@@ -50,9 +58,11 @@ ES モジュールを使っているので、`index.html` をファイルのま�
 - **右上**：所属事務所・未読メッセージ（封筒マーク）・体力・満腹／ストレス／身なり（身だしなみ）のゲージ。
   ゲージがペナルティの線をこえると、名前が赤く点滅します
 
-> 実在の企業名・ロゴ（`assets/logos/`）は各社の商標・著作物です。本作は非公式のファンゲームで、
-> 登場人物・お店はすべて架空です。テレビ局の受付に並ぶ番組名だけは実在の番組（下記「実在のテレビ番組」）で、
-> 出演者・司会者は登場しません。公開・配布する場合は権利関係にご注意ください。
+> この物語はフィクションです。実在の企業名・ロゴ（`assets/logos/`）は各社の商標・著作物です。本作は非公式のファンゲームで、
+> 登場人物・お店・事件はすべて架空です。テレビ局の受付に並ぶ番組名だけは実在の番組（下記「実在のテレビ番組」）で、
+> 出演者・司会者は登場しません。実在の政党（自由民主党・民主党）は党本部と事実の説明として登場するだけで、
+> 実在の政治家は登場しません（下記「実在の政党の扱い」）。作中の犯罪は選べても、すすめるものではありません。
+> 新しくはじめると、最初にこの注意のカードが出ます。公開・配布する場合は権利関係にご注意ください。
 > フォント：DotGothic16（SIL Open Font License 1.1, `assets/fonts/OFL.txt`）。
 
 ---
@@ -76,12 +86,18 @@ NHK放送センターで年末の大型歌番組に出演。これは大きな�
 レギュラー番組の収録、冠番組）で 大賞／最優秀タレント賞／優秀タレント賞／話題賞／新人賞（最初の年だけ）が決まり、
 賞金・ファンのほか、授賞式のお祝いがあります。発表の1週間前にニュースでお知らせ。大賞を3回とると **殿堂入り**。
 
+芸能の道とならんで、**政治の道** もあります。25歳（参議院・知事は30歳）から選挙に立候補でき、議員・大臣、
+そして総理大臣をめざせます（下記「政治の遊び方」）。どちらの道も、まっとうに歩くのも、危ない近道に手を出すのも自由ですが、
+近道の先には現実と同じ結末が待っています（下記「社会の裏側と法」）。
+
 はじめは所持金 ¥3,000・おにぎり2個。ドット荘（自宅）の部屋からスタートします。
 部屋の前にいる大家さんに話しかけると、暮らしの基本を教えてくれます。
 
 ### はじめに：キャラクターをつくる
 
-「はじめから」を選ぶと、4ページのキャラクター作成になります（右上の 1〜4 が今のページ。B でひとつ前のページへ）。
+「はじめから」を選ぶと、まず「はじめる前に」のカード（フィクションであること、実在の企業・政党は場所や名前として登場するだけで
+実在の政治家は出ないこと、犯罪はすすめるものではなく重い結果があること、お酒とタバコは20歳から）が出ます。A でつぎへ、B でタイトルにもどります。
+つづいて、4ページのキャラクター作成になります（右上の 1〜4 が今のページ。B でひとつ前のページへ）。
 
 1. **見た目**：髪型・髪の色・肌の色・トップス・ボトムス・スカート・めがね（家のクローゼットでもあとから着がえられます）
 2. **プロフィール**
@@ -136,6 +152,12 @@ NHK放送センターで年末の大型歌番組に出演。これは大きな�
 - **なんばエリア（大阪）**：よしもと新喜劇 劇場、松竹芸能、たこ焼き屋、ホテル、なんば駅、
   東の川ぞいの「テレビ局通り」に MBS毎日放送・関西テレビ、いか焼きとミックスジュースの屋台、おうぎの森公園
   （東京駅から新幹線と電車で ¥3,000。帰りの運賃も残しておくと安心）
+- **永田町・霞が関**（東京の中央の通りを北へまっすぐ。東京駅前からバス ¥210）：国会議事堂、首相官邸、自由民主党本部、
+  民主党本部（1998〜2016年の時代だけ）、野党の党本部、自分の党の本部（結党後）、警視庁、検察庁、裁判所、霞が関の役所、
+  議員会館、国会図書館、国会前の歩道（集会・番記者・街頭演説）
+- **ネオン街**（東京の中央の通りを南へまっすぐ）：架空の夜の街。カプセルホテル、牛丼屋、居酒屋、喫煙所、交番、
+  ゲームセンター、CLUB ステラ（20歳から）、消費者金融「ドットローン」、闇金「クイック融資」、裏通りの組事務所、ネオン公園
+- **ドット区役所**（商店街の北東）：住民票・税の窓口、選挙管理委員会（立候補の届出・期日前投票）、区民相談室、区議会
 
 ### 事務所とオーディション
 
@@ -388,6 +410,8 @@ NHK放送センターで年末の大型歌番組に出演。これは大きな�
 | 家計 | 所持金、家賃、レギュラー番組の週のギャラ、未払いの家賃の支払い、明細 |
 | ドッター | SNS。1日1回投稿できる（下記） |
 | 家族 | 家族に電話・送金（実家への仕送り）、亡くなった家族の思い出、帰省のこと（上記） |
+| 政治 | 政治のダッシュボード：選挙と立候補・選挙運動、政党、政策と法案、国会、内閣、党内、政治資金と活動、ニュース（下記「政治の遊び方」） |
+| 借入・返済 | 借金の一覧と返済、法律相談、前科・執行猶予・公民権・信用情報などの記録（下記「社会の裏側と法」） |
 
 ### ファンとドッター
 
@@ -501,14 +525,138 @@ NHK放送センターで年末の大型歌番組に出演。これは大きな�
 `programsAt(stationId, era)`、`programOpts(p)`、`PROGRAM_SHOW_IDS`（レギュラーの ID `prog_<id>`）、`programShowsHeld(state)`。
 状態は `g.state.flags.programs`、ゲスト出演のお仕事 ID は `prog_<id>`。
 
+### 政治の遊び方
+
+芸能人のまま、選挙に立って **政治家** にもなれます。中身は `js/engine/politics.js` のシミュレーションで、
+選挙制度・議席の数・供託金・省庁の名前などは、えらんだ時代とゲームの中の年に合わせて変わります
+（政治の1年 ＝ ゲームの120日、1か月 ＝ 10日）。入口は **スマホの「政治」アプリ**（ダッシュボード）と、
+東京の北の **永田町・霞が関**（国会議事堂・首相官邸・党本部）、商店街の **ドット区役所**（選挙管理委員会）です。
+
+#### 1. 立候補まで
+
+- **被選挙権**：区議会議員・都議会議員・区長・衆議院議員は25歳から、参議院議員・都知事は30歳から。
+  **選挙権**（投票）は20歳から（2016年からは18歳から）。公民権停止中や刑の執行中は、立候補も投票もできません
+- **政党**：党本部の受付で入党すると、2階の選挙対策本部で **公認**（党の候補者）を申請できます。
+  議席を持つ現職がいる選挙区は、その人が優先。参議院の比例代表は、知名度のある人にとって入りやすい入口です。
+  無所属でも立候補できます（党の組織票はないが、しがらみもない）
+- **新党**：永田町の貸しオフィス（不動産会社の人）かスマホの「政治」アプリで、党名・略称・色・エンブレム・公約を決めて結党できます。
+  法律の上で「政党」と認められる（政党交付金が出る）のは、国会議員5人以上か、国会議員1人以上で直近の国政選挙の得票率2%以上のとき
+- **立候補の届出**：「政治」アプリの選挙、党本部の選挙対策本部、区役所の選挙管理委員会から。
+  **供託金**（衆院小選挙区・参院選挙区・知事 300万円、比例代表 600万円、区長 100万円、都議 60万円、区議 30万円 など。
+  時代によって変わる）を政治資金から、足りなければ所持金から納めます。得票が少ないと没収されます
+- 議員がほかの選挙に立候補すると、届出の日に今の職を辞めたことになります（公職選挙法90条）
+
+#### 2. 選挙
+
+- 衆院選・参院選は「公示」、ほかの選挙は「告示」の日から選挙運動ができます（衆院12日、参院・知事17日、区長・区議7日 など）。
+  それより前は「政治活動」（地元回り・後援会・街頭演説など）だけで、効果は半分
+- **選挙運動**：街頭演説・ポスター・選挙カー・討論会・SNS（ネット選挙は2013年から）・握手・後援会・政党のネット広告・献金集め。
+  体力とお金を使い、トークの力と知名度・地元の支持が効きます。永田町の駅前の演説スポットでも演説できます
+- **買収**（票をお金で買う）と **戸別訪問** は公職選挙法違反です。選ぶこともできますが、捕まれば逮捕・裁判。
+  有罪になれば公民権停止で、何年も選挙に出られなくなります
+- **情勢調査** で見込みがわかります。投票日の翌朝に開票速報と結果が出ます。衆院の重複立候補なら、小選挙区で負けても比例で復活当選することも
+
+#### 3. 議員生活
+
+- **歳費・報酬**：毎月（10日ごと）所持金に入ります。調査研究広報滞在費・政務活動費などは **政治資金**（自分のお金とは別）へ。
+  事務所の経費と私設秘書の給料は政治資金から出ていきます
+- **国会**：通常国会は毎年1月から150日。会期中は国会議事堂に出席して、本会議で法案に賛成・反対（党の方針に背くと党内の評価が下がる）、
+  委員会で質問（トークの力しだい）。長く欠席すると批判されます。国会見学と本会議の傍聴は、だれでもできます
+- **地元と評判**：地元回り・陳情・後援会づくり・記者会見（失言に注意）・視察。評判・地元の支持・党内の評価が次の選挙と出世を決めます
+- **政治とお金**：政治資金パーティー・寄付で資金を集め、毎年 **収支報告書** を出します。報告書に載せないお金（**裏金**）は
+  政治資金規正法違反。見つかれば特捜部の捜査・起訴、有罪なら公民権停止で失職することもあります。
+  業者の「お願い」に応じてお金を受け取るのは収賄です
+- 任期（衆院4年・参院6年・地方4年）が終わると選挙。衆議院は解散されることもあります
+
+#### 4. 党・政策・内閣
+
+- **政策**：20の分野・85の政策（消費税率・年金・子育て・防衛・エネルギー・憲法 など）。どの政策も、得をする人と負担する人がいる
+  「トレードオフ」で、若者・高齢者・会社員・自営業・農林漁業・都市・地方・無党派層 など11の層の支持と、経済（成長率・物価・失業率・
+  財政・円相場・株価）に効きます。どれが正しいかは、ゲームは決めません
+- **法案**：議員立法は賛成者（衆院20人・予算を伴えば50人、参院10人・同20人）を集めて提出 → 委員会 → 衆議院 → 参議院で可決して成立。
+  閣僚になると内閣提出法案（閣法）も出せます。ねじれ国会、衆院の再可決（3分の2）、予算の自然成立もあります
+- **党内**：派閥・グループに入る、党役員（幹事長・政調会長 など）の打診、党首選。自分の党なら党首室で運営・議員の勧誘・公約の見直し
+- **内閣**：総理や党首から **入閣の打診** が来ることがあります（スマホに届く）。閣僚は閣議（官邸、火・金）と国会での答弁。
+  **総理大臣** は国会議員の中から国会が指名し、組閣・内閣改造・連立協議・予算編成・衆議院の解散・総辞職・外遊を決めます。
+  内閣不信任案が可決されたら、10日以内に解散か総辞職です
+- 支持率は世論とともに動き、大地震・台風・景気後退・円高・円安などの出来事でも変わります。人気のない内閣が続けば政権交代も起こります
+
+### 社会の裏側と法
+
+ゲームの中では、犯罪や危ない誘いを「選ぶ」こともできます。でも、それは **すすめるものではありません**。
+日本の現実と同じように、捕まれば警察・検察・裁判所・刑務所へ進み、仕事も家族の気持ちも失いかねません。
+手口のくわしい描写はなく、選んだ結果だけが描かれます。テロや要人の暗殺は、プレイヤーが選べる行動には **ありません**。
+
+#### 犯罪と処罰
+
+- 罪は実際の罪名・条文・法定刑で扱います（その時代の法律。2025年6月からは懲役・禁錮が「拘禁刑」に）。
+  万引き・無賃乗車・暴行・傷害・強盗・飲酒運転・賭博・特殊詐欺の受け子・口座の売却・脱税・裏金（不記載）・収賄・贈賄・
+  口利き・選挙の買収・戸別訪問・証拠隠滅 など
+- その場で捕まらなくても、防犯カメラ・被害届・税務調査・告発・週刊誌から、あとで発覚することがあります
+- 流れ：逮捕（48時間）→ 送検（24時間）→ 勾留（10日＋延長10日）→ 起訴／不起訴／略式起訴（罰金）→ 公判 → 判決
+  （罰金・執行猶予・実刑・無罪）→ 控訴・上告 → 刑務所（刑務作業・面会・仮釈放）。軽いものは微罪処分や過料・補導で終わります
+- **結末**：前科がつく、事務所の契約が切られる、レギュラー番組を降板、活動自粛やテレビの起用見送り、ファンが減る。
+  議員は禁錮（拘禁刑）以上の実刑や、公民権停止（選挙・政治資金の罪、在職中の収賄）で失職します。**執行猶予中** にまた罪を犯して実刑になると、猶予が取り消されます
+- 警視庁で自首、検察庁や裁判所で手続き、裁判の傍聴もできます。てちょうの「くらしと法」で、いまの状態と記録が見られます
+
+#### 借金と破産
+
+- **消費者金融**（ネオン街のドットローンなど、架空の会社）と **銀行カードローン** は合法の貸し手。審査があり、利息は法律の上限まで
+  （2010年6月からは利息制限法の15〜20%、借入れは「総量規制」で年収の3分の1まで。それより前の時代は「グレーゾーン金利」の時代）
+- **闇金** は違法な業者。トイチ（10日で1割）の利息と取り立てで、暮らしがこわれます。借りてしまったら、ひとりで払い続けず、
+  警視庁の相談室や弁護士（スマホの「借入・返済」→ 法律相談）、区役所の多重債務相談へ
+- 返済が遅れると信用情報に事故の記録が残り、しばらく借りられなくなります。どうにもならなければ **任意整理・個人再生・自己破産**
+  （裁判所の破産係。免責が決まれば返済は免除されるが、その後しばらく新しい借入れはできない）
+
+#### 反社会的勢力
+
+- ネオン街の裏通りには **鬼灯組**（架空の暴力団）の事務所があります。甘い話や「お礼」を受け取れば、それが弱みになります。2011年10月までに全国でそろった
+  **暴力団排除条例** のもと、反社会的勢力との交際がわかれば、芸能人は契約解除や引退、政治家は離党や辞職に追いこまれます
+- 困ったときは警察へ。断る勇気が、いちばんの身の守り方です
+
+#### 思わぬ出来事
+
+暮らしていると、ときどき社会の裏側の出来事が向こうからやってきます（はじめの数日はなし。危ない借金・前科・夜の街通い・
+裏金などがあるほど起きやすく、それでも数日に1回まで）。どの出来事でも、いちばん上の選択肢がまっとうな道です。
+
+- **事故**：交差点や自転車での事故、舞台や収録の事故（救護・届け出・保険・賠償）
+- **事件**：特殊詐欺の電話、空き巣、ストーカー（警察に相談）、ひったくりの目撃と裁判での証言
+- **週刊誌のスクープ**：夜遊び、もみ消し、反社との写真、裏金。謝罪会見で何を言うか
+- **政治家への誘い**：料亭の接待、口利きの依頼、派閥のパーティー券のキックバック（架空の政党だけ。実在の政党が悪事をする場面はない）
+- **反社会的勢力**：闇営業の誘い、闇バイトの勧誘、恐喝。断って、警察へ
+- **脅迫と警備**：脅迫状や、未遂に終わる襲撃（架空の単独の人物。けがで入院することも）。プレイヤーは守られる側で、
+  総理や大臣なら危機への対応を決めます。テロや暗殺をプレイヤーが起こすことはありません
+- **借金の取り立て**：家族や職場に及ぶ闇金の取り立て（貸金業法は、正当な理由のない夜9時〜朝8時の取り立てや勤務先への連絡を禁じている）
+
+#### 喫煙・飲酒
+
+- タバコとお酒は **20歳から**（成年年齢が18歳になった2022年4月以降も、20歳のまま）。20歳未満は補導されます。
+  タバコはお店で年齢を確認されて買います
+- 吸える場所には決まりがあります：路上喫煙を条例で禁止する地区（千代田区は過料2,000円）、駅の構内、2020年4月からの原則屋内禁煙
+  （改正健康増進法）。吸うなら喫煙所で。吸いすぎると習慣になり、体力の最大値が下がります
+- お酒は飲みすぎると泥酔・迷惑行為に。飲んだら運転してはいけません（飲酒運転）
+
+### 実在の政党の扱い
+
+- 実在の政党として登場するのは **自由民主党**（1955年11月15日結党。すべての時代）と **民主党**（1998年4月27日結成〜2016年3月27日に他党と合流。
+  その時代だけ）の2つだけです。党本部の場所・ロゴの看板・結党の経緯・党首の呼び名（総裁・代表）など、確かめられる事実だけを中立に書いています
+- **実在の政治家は登場しません**。総裁・代表・幹事長・大臣・議員は、すべてゲームが作る架空の人物です。実在の政党や人物の不祥事を描くことはありません
+  （ゲームの中のスキャンダルは、架空の人物とプレイヤー自身に起きる出来事です）
+- ほかの政党（ともしび党・青空党・日輪党・にじいろ党・田園党・かけはし党）は架空で、実在の党をまねていません。プレイヤーの新党の名前も、実在の党に似せたものはつけられません
+- 議席・支持率・政権の行方はシミュレーションで、史実どおりには進みません。政策の効果は、どの立場にも得と損があるように作ってあります
+
 ### てちょう
 
-メニュー → てちょう。←→ でタブ、↑↓ でスクロール、A で次のページ、B でとじます。
+メニュー → てちょう。←→ でタブ（6つ）、↑↓ でスクロール、A で次のページ、B でとじます。
 
-- **もくひょう**：今日の数字、気をつけること（体力・おなか・ストレス・家賃）、次の目標、受けられるオーディション、称号、おすすめのお仕事
+- **もくひょう**：今日の数字、気をつけること（体力・おなか・ストレス・家賃、裁判や返済の日、闇金、選挙の投票日）、次の目標、政治の道（党員・候補者・議員になってから）、受けられるオーディション、称号、おすすめのお仕事
 - **せいかつ**：曜日と調子、ゲージごとの助言、住まいと家賃、今週のレギュラー番組、仲間のハート、ファン
-- **ばしょ**：行ったことのある場所と、そこでできること。まだの場所は「？？？」とヒントだけ
+- **くらしと法**：いまの状態（前科・執行猶予・保護観察・公民権停止・活動自粛・事件の手続き）、記録、借入れ（闇金の注意・信用情報・自己破産）、タバコとお酒、困ったときの相談先
+- **政治**：あなたの公職と党・評判、被選挙権と選挙権、立候補中の選挙と情勢、次の選挙、国会の会期とあなたの法案、内閣と支持率、政党の支持率、経済、政治資金と裏金の注意
+- **ばしょ**：行ったことのある場所と、そこでできること（東京・なんば・永田町・ネオン街）。まだの場所は「？？？」とヒントだけ
 - **きろく**：氏名・日数・プレイ時間、プロフィール（年齢と次の誕生日・性別・出身・性格・時代）と家族、お仕事とミニゲームの回数・ベストランク・よく受けたお仕事・相方・住まい
+
+ステータス画面にも、政治家や党員なら「政治：衆議院議員・自民」、前科や執行猶予があれば「法：執行猶予中（あと40日）」のような1行が出ます。
 
 ### セーブ
 
@@ -524,7 +672,7 @@ NHK放送センターで年末の大型歌番組に出演。これは大きな�
 ```
 index.html / style.css   キャンバス 640x360・タッチ用パッド
 js/main.js            起動・タイトルへの流れ・テスト用URLパラメータ・デバッグメニュー
-js/title.js           タイトル画面・キャラクター作成（家のクローゼットでも使う）
+js/title.js           タイトル画面（ロゴ「ドット芸能界&政治界」・はじめる前の注意）・キャラクター作成（家のクローゼットでも使う）・時代のオープニング
 js/registry.js        読み込むコンテンツモジュールの一覧（1つ壊れても他は動く）
 js/engine/            エンジン
   game.js             ゲーム本体・シーン管理・描画（HD / v1 互換）・スクリプトAPI（g.say など）
@@ -537,7 +685,10 @@ js/engine/            エンジン
   buildings.js        街の建物の外観（HD）
   logos.js            ロゴ看板（その時の表示倍率でドット化）
   ui.js               メッセージ・選択肢・リスト・ショップ・メニュー・ステータス・HUD
-  notebook.js         てちょう（もくひょう／せいかつ／ばしょ／きろく）
+  notebook.js         てちょう（もくひょう／せいかつ／くらしと法／政治／ばしょ／きろく）
+  politics.js         政治のコア：公職・選挙・政党・国会・内閣・政策と法案・世論・経済・政治資金（g.pol など）
+  politics_ui.js      政治の HD 画面（ダッシュボード・立候補・選挙運動・開票速報・採決・組閣…、スマホの「政治」）
+  crime.js            犯罪・司法・借金のコア：罪と手続き・前科・罰金・借入れと闇金・自己破産・喫煙と飲酒（g.jus など）
   minigame.js         ミニゲームの基底クラス
   audio.js            効果音・BGM（chiptune、registerSong で追加）
   state.js            セーブデータ・称号・アイテム・事務所
@@ -554,7 +705,11 @@ js/world/             街と暮らし
   cooking.js          自炊（食材・レシピ・お弁当）
   career.js           ファン・ドッター・レギュラー番組・冠番組・ファンミーティング・ランキング
   guide.js            てちょう用の案内データ（場所ごとの要約・おもなお仕事と★条件）
-js/places/<id>.js     事務所・局・劇場など（1ファイル1施設）
+  nagatacho.js        永田町・霞が関（東京の北：国会・官邸・党本部・警視庁・検察庁・裁判所の建物）
+  kanraku.js          ネオン街（東京の南：夜の街・交番・クラブ・消費者金融・闇金・組事務所・ゲームセンター）
+  darkside.js         社会の裏側の出来事（事故・事件・週刊誌・政治家への誘い・反社・脅迫と警備・取り立て。数日に1回まで）
+js/places/<id>.js     事務所・局・劇場など（1ファイル1施設）。政治と司法：kokkai.js kantei.js parties.js（党本部4つ）
+                      kuyakusho.js justice.js（警視庁・検察庁・裁判所・刑務所）
 js/minigames/<id>.js  ミニゲーム（1ファイル1ゲーム）
 tools/                ヘッドレスブラウザでのテストツール
 ```
@@ -843,13 +998,136 @@ PEOPLE_UI.hooks.greet.push((g, id, npc) => (g.isPartner(id) ? '相方！今日�
   会話メニューには「ごはんにする」「思い出話をする」（`PEOPLE_UI.extras`）。独自タイル `jikka_*`（畳・障子・写真・仏壇・飾り棚・たんす・ちゃぶ台・座布団・布団・縁側・物干し・畑・門柱・食器棚）
 - 駅：`station.js` の `STATION_TICKETS[stationId]` にきっぷ売り場の選択肢を足せます（`{ label, cond, run(g, npc) }`）。移動の演出は `travelScene(g, { to, via, vehicle, scenery })`（HD）
 
+### 政治の API（`js/engine/politics.js`）
+
+政治のすべて（公職・選挙・政党・国会・内閣・政策と法案・世論・経済・政治資金）のシミュレーション。
+`game.js` が `installPolitics(Game.prototype)` で `g.*` を足し、`politicsTick` は `onMorning` で毎朝動きます。
+画面（`politics_ui.js`）と場所（国会・官邸・党本部・区役所）は、この API と `g.state.politics` だけを使います。
+くわしい一覧と事実の出典はファイル先頭のコメントと `g.* API` のブロックにあります。
+
+**原則**：時代と年に合わせた制度（昭和は中選挙区制、1996年から小選挙区比例代表並立制。衆参の定数、2001年の省庁再編、供託金、
+被選挙権の年齢、2016年の18歳選挙権、1995年からの政党交付金、2013年のネット選挙）。実在の政党は `jimin`（全時代、ロゴ `jimin`）と
+`minshu`（1998〜2016年だけ、ロゴ `minshu`）の2つで、事実だけを中立に。政治家の NPC はすべて架空（生成した名前）。
+政策の効果は層ごとの得と損のトレードオフで、どの立場も「正解」にしない。時間：政治の1年＝`YEAR_DAYS`（120日）、1か月＝`MONTH_DAYS`（10日）。
+
+**状態** `g.state.politics`：`{ v, era, cal, me, parties, diet: { shugi, sangi, session, bills }, cabinet, laws, economy, opinion, elections: { upcoming, history }, npcs, flags, local, polls, news, support }`。
+`me` は `{ office, district, party, termEnd, posts, faction, wins, losses, funds（政治資金）, secret（裏金）, staff, reputation, localSupport,
+standing（党内の評価）, kouenkai, candidacy, campaign, votes, offers, ledger, reported, exposed, formerOffice, sangiClass, prElected, history … }`。
+古いセーブは `g.pol()` が初めて呼ばれた時に作られ、足りない項目は補われます。
+
+**登録データ（export）**
+
+| 名前 | 中身 |
+| --- | --- |
+| `OFFICES` | `kugi`（ドット区議会議員）`togi`（都議）`shicho`（区長）`chiji`（都知事）`shugi` `sangi`：`{ name, label, short, house?, ageMin, deposit, depositPR?, termYears, salary（月）, level, seats?, campaignDays, allowance, allowanceName? }` |
+| `ELECTION_KINDS` | `shugi sangi chiji shicho kugi togi hosen（補選） sosaisen（党首選） touitsu（ニュースだけ）` |
+| `PARTY_DEFS` / `partyExistsIn(id, fy)` / `platformFor(id, year)` | 政党：`jimin` `minshu`（実在）、`tomoshibi` `aozora` `nichirin` `nijiiro` `denen` `kakehashi`（架空） |
+| `POLICY_AREAS`（20）`AREA_ORDER` / `POLICIES`（85）`POLICY_ORDER` | 政策：`{ area, name, desc, kind: 'law'\|'amendment', params, cost, costOf, effects(params, era, ctx) → { segments, economy }, ideo, ministry, eras, check?, apply? }` |
+| `SEGMENTS`（11）`SEGMENT_ORDER` `segWeights(year)` | 有権者の層（若者・子育て世帯・高齢者・会社員・自営業・企業経営者・農林漁業・労働組合・都市住民・地方住民・無党派層） |
+| `POSTS` `CABINET_ORDER` `PARTY_POST_ORDER` `postExists` `postName(id, fy, party)` `cabinetPosts(fy, flags)` | 内閣・党・国会の役職（時代ごとの省庁名） |
+| `CAMPAIGN_ACTIONS` / `ILLEGAL_CAMPAIGN` | 選挙運動（街頭演説・ポスター・選挙カー・討論会・SNS・握手・後援会・ネット広告・献金集め）／違法（買収・戸別訪問 → `crime.js`） |
+| `ACTIVITIES` | 議員の活動（委員会で質問・地元回り・後援会づくり・陳情・勉強会・派閥の会合・記者会見・視察・議会で質問・予算編成・閣議・答弁・外遊） |
+| `SCANDALS` `SHOCKS` `FISCAL_BURDEN` | スキャンダル（裏金・収賄・買収・流用・反社・失言・私生活・欠席）、出来事（地震・台風・景気後退・好景気・円高・円安・資源高） |
+| ヘルパー | `ERA_POLITICS` `eraPolitics(era)` `wareki` `shugiRules(year)` `sangiRules(year)` `prBlocks` `votingAge` `netCampaignOK` `subsidyExists` `depositFor(office, year, { pr })` `forfeitShare` `polDate(g, day)` `calYear` `dateLabel` `dhondt` `fmtCho` `onPolitics(event, fn)` |
+
+**g.* メソッド**（失敗すると理由の文字列を返すか、`null` を返して `g.lastPoliticsError` に理由）
+
+| 分類 | メソッド |
+| --- | --- |
+| 状態と時間 | `pol()` `polDate(day?)` `gameDate(day?)`（`crime.js` の `lawDate` が使う）`politicsTick()` `politicsSummary()`（画面用のまとめ） `onPolitics(event, fn)` |
+| 選挙 | `upcomingElections()` `myElection()` `eligible(officeId, { day?, noMoney? })` `depositInternal(officeId, { pr })` `requestNomination(electionId, { proportional?, hometown? })` → `{ ok, why?, kind: '公認'\|'推薦', party, score, need }` `declareCandidacy(electionId, { party?, proportional?: true\|'only', hometown?, district? })` `withdrawCandidacy()` `await campaign(action, { electionId?, score? })` `electionForecast(id)` `castVote(id, choice)` `runElection(id)` → RESULT |
+| 政党 | `joinParty(id)` `leaveParty(opts?)` `foundParty({ name, short, color, emblem, ideology?, platform, desc })`（実在の党とまぎらわしい名前は不可） `partyStatus(id?)` `recruitMembers()` `joinFaction(id)` `leaveFaction()` `appointPartyPost(post, who)` `transferPartyFunds(n)` `setCoalitionStance()` `joinCoalition()` `leaveCoalition()` |
+| 国会 | `billsList({ house?, mine?, pending?, today? })` `policyBlock(id, params?)` `policyPreview(id, params?)` `proposeBill({ policy, params?, title? })`（閣僚なら閣法） `gatherSupporters(billId)` `vote(billId, 'yes'\|'no'\|'abstain')` `attendDiet()` `advanceBills()` `noConfidence({ rebel? })` |
+| 内閣 | `approval()` `partySupport(id)` `electPM()`（国会議員だけ・憲法67条） `formCabinet({ partners?, ministers? })` `reshuffle()` `dissolve(reason?)` `resignPM(reason?)` `respondOffer(offerId, yes)` `resignPost(post)` `resignOffice(reason)` `loseOffice(reason, opts?)` |
+| 活動とお金 | `activity(kind, { score? })` `holdFundraiser({ unreported: 0..0.5 })` `collectDonations()` `hireStaff(±1)` `addSecretFunds(n, source)` `reportFunds({ includeSecret?, year? })` `politicalScandal(kind, { who?, amount?, severity? })`（実在の党の NPC なら、その人が身を引くだけ） |
+| その他 | `npcName(id)` `partyName(id, short?)` `postLabel(post)` `triggerShock(kind)` `politicsMenu()`（`politics_ui.js` が HD の画面に置きかえ） |
+
+フックのイベント：`elected lost enacted cabinet scandal dissolve resign election session bill poll shock party offer payday`。
+スマホのアプリ `politics`（「政治」、order 60）。デバッグメニューの「政治（デバッグ）」で、30歳・資金1億円／衆院議員にする／総理にする／30日すすめる。
+
+### 政治の画面（`js/engine/politics_ui.js`）
+
+`politics.js` の HD のフロントエンド（640×360、十字キーと A/B だけ）。コアの `g.*` を呼び、`g.state.politics` を読むだけです。
+
+- `await g.politicsMenu()`：ダッシュボード（スマホの「政治」アプリも同じ）。タブ：選挙・政党・政策・法案・国会・内閣・党内・資金・活動・ニュース
+- `await g.politicsScreen(name, opts)`：場所から1画面を直接開く。`'dashboard' 'elections' 'candidacy' { electionId } 'campaign' { electionId } 'parties' 'found' 'policy' 'bills' 'diet' 'cabinet' 'budget' 'formation' 'coalition' 'amendment' 'party' 'money' 'activities' 'news' 'results' 'night' { resultId }（開票速報） 'vote' { billId, house }（本会議の採決）`
+- `await g.politicsEvents()`：ひと晩の出来事（開票・首班指名・打診・不信任・採決）。`g.sleep` のあとに自動で出ます
+- `import { openPolitics, politicsScreen, drawEmblem, drawPartyMark } from '../engine/politics_ui.js'`：`drawEmblem(ctx, emblem, x, y, size)`（プレイヤーの党章）、
+  `drawPartyMark(ctx, g, partyId, x, y, size)`（ロゴ・党章・色）
+- UI だけのデータは `g.state.flags.polui`（経済のグラフ・情勢調査の履歴・夜の出来事の列）。予算編成（`applyBudget`）と民間人閣僚（`ensureCivilian`）だけは状態に直接書きます
+- テスト：`g.auto` の間は画面を開かず（`openPolitics` が `null`）、夜の列も捨てます。キーで操作したいときは `g.auto.polui = true`
+
+### 犯罪・司法・借金の API（`js/engine/crime.js`）
+
+犯罪・お金のトラブル・司法（警察・検察・裁判所・刑務所）のシミュレーション。`installJustice(Game.prototype)`、`justiceTick` は `onMorning`。
+くわしい一覧と法律の出典はファイル先頭のコメントにあります（`test-output/api_justice.txt` にも要約）。
+
+**原則**：実際の罪名・条文・法定刑・検挙の見込み・手続きを、その日の法律で（`lawDate(g)`：時代の基準年＋経過年、政治のコアがあれば `g.gameDate()`）。
+2025年6月から拘禁刑、2006年の窃盗罪の罰金、2007年の飲酒運転の厳罰化、2010年の総量規制 などが日付で切りかわります。
+手口の描写はしない（選択と結果だけ）。テロ・暗殺はプレイヤーの行動にしない（架空の相手が起こす出来事として扱うだけ）。
+時間：法律上の短い日数（逮捕48時間＝2日、勾留10日）は1：1、長い日数は `realToGameDays()` で縮め、月と年はゲームの暦（1年＝120日・1か月＝10日）。
+
+**状態** `g.state.justice`：`{ v, status: 'free'|'detained'|'trial'|'prison'|'probation', record[{ crime, day, outcome, months?, fine?, suspend?, label, juvenile? }], heat, custody, prison,
+probationUntil, civicBanUntil, candidacyBanUntil, loans[], bankrupt, smoker, flags, cases[], queue[], career{ kinshinUntil, tvBanUntil, agencyBanUntil }, credit{ blackUntil },
+income[], garnish, unpaid, suspendUntil, supervision, smoke{} }`。`outcome`：`fine suspended prison acquitted not_indicted bizai hodo warning kare zoun hogo tax_admin juvenile_*`
+（前科になるのは `fine` `suspended` `prison`）。
+
+**登録データ（export）**
+
+| 名前 | 中身 |
+| --- | --- |
+| `CRIMES` / `CRIME_ORDER` | `{ id, name, short, law(g, ctx), severity 1..5, kind: 'crime'\|'admin'\|'hodo'\|'career', detect, later, hotDays, victim, political, civicBan, penalty(g, ctx), facts, typical }`。ID：`shoplifting robbery fare_evasion assault tax_evasion slush_fund bribery_take bribery_give vote_buying door_to_door underage_smoking underage_drinking street_smoking antisocial_ties drunk gambling drunk_driving traffic_injury account_sale fraud_courier stolen_goods cover_up assen` |
+| `crimeLaw(g, id, ctx)` `penaltyOf` `limitYears`（公訴時効） `sentenceText` `fmtTerm` `kokinEra` `ryakushikiCap` `legalYen(g, nominal)` | 条文と法定刑の文、法律で決まった金額を内部の金額に（どの時代も同じ額で表示） |
+| `LENDERS`（`shohisha` `bank` `yamikin`、会社名は架空）`lenderRate` `rateLawText(g)` `loanBalance` `LABOR_YEN` `CIG_PRICE` | 借入れ・時代ごとの上限金利の説明 |
+| `SMOKING_RULES` / `registerSmokingRule(placeId, rule \| (g, def) => rule)` | 場所ごとの喫煙のルール `{ ok, area, law, fine（過料）, patrol, smokingArea, indoor, private }`。場所の定義に `smoking: rule` でも可 |
+| `JUSTICE_PLACES` | `police` → `keisatsu`、`prosecutor` → `kensatsu`、`court` → `saibansho`、`prison` → `keimusho`。`rooms[stage]`（`torishirabe ryuchi kouban kensatsu houtei kasai hearing keimusho gate`）を場所が設定すると、手続きの流れがそこへ移動。ない場面は HD のオーバーレイ（`StageScene`） |
+| `careerSanction(g, level, info)` | 1 小騒ぎ／2 スキャンダル／3 逮捕／4 執行猶予／5 実刑：ファン・★の減少、番組降板、事務所の契約解除、活動自粛、テレビの起用見送り |
+| `onJustice(event, fn)` | `arrested convicted released acquitted bankrupt caught exposed fined jailed probation_end hodo scandal loan loan_missed harassment discharged lost_office not_indicted` |
+
+**g.* メソッド**
+
+| 分類 | メソッド |
+| --- | --- |
+| 犯罪と手続き | `await commitCrime(id, ctx)` → `{ caught, report, outcome }`（何も聞かずに判定し、捕まればその流れを自分で進める。ctx：`amount where injury request gain detect risk forceCaught neverCaught handle:false rule private`）・`await arrest(id, ctx)` `await trial(caseOrId)` `await serveSentence()` `await investigate(id, { amount, now })` `await coverUp(id, ctx)` `await justiceEvents()` |
+| 状態 | `jus()` `hasRecord()`（前科） `hasHistory()` `isFree()` `civicBanned(kind?)` `civicBanReason(kind?)`（`'candidacy'`（既定）か `'vote'`） `justiceRefusal(kind, def)` `justiceStatus()`（画面用のまとめ） `justiceLines()`（文の一覧） `lawDate()` `lawYear()` `crimeLaw(id, ctx)` |
+| 罰金 | `await fine(amount, reason, { kind: 'bakkin'\|'karyo'\|'kare'\|'tsuicho'\|'tax'\|'civil' })` → `{ paid, labor, unpaid }`（払えない罰金は家族か労役場） |
+| 借金 | `borrow(lender, amount)` `repay(loanIndex \| loan \| { id }, amount)` `loanTick()` `loanTotal(lender?)` `loanLimit(lender)` `annualIncome()` `creditBlacklisted(lender)` `await loanCounter(lender)`（お店の窓口の画面） |
+| 相談と債務整理 | `await consultLawyer('debt'\|'yamikin')` `await debtRelief('nini'\|'saisei'\|'hasan')` `await fileBankruptcy({ force })` `await policeConsult(topic)` |
+| タバコとお酒 | `await smoke({ place, anyway, smokingArea, silent })` `canSmokeHere(place?)` `buyCigarettes(n, { counter })`（お店は `g.shop(['tabako'])` ではなくこれを使う） `canSmoke()` `canDrink()`（20歳から） `await drinkAlcohol({ private, heavy, relief, where })` |
+
+ラップしているメソッド：`g.job` `g.audition` `g.doRegular`（謹慎・テレビの起用見送り中は断る。アルバイトは可）、`g.sleep`（起きたあとに予定の手続きを実行）、
+`g.addMoney`（年収の記録と差押え）。スマホのアプリ `justice`（「借入・返済」、order 47）。デバッグメニューの「司法・借金（デバッグ）」。
+
+### 永田町・ネオン街と新しい場所
+
+| 町・場所 | ファイル | 中身 |
+| --- | --- | --- |
+| `nagatacho` 永田町・霞が関 | `js/world/nagatacho.js` | 東京の北（中央の通りがそのまま続く、80×56）。国会議事堂（正面）・議員会館・国会記者会館・国会図書館・国会前の歩道（集会・番記者・街頭演説）・官邸・党本部・警視庁・検察庁・裁判所・霞が関の省庁（年代の省庁名）・バス停。千代田区の路上喫煙のルール |
+| `kokkai` 国会議事堂 | `js/places/kokkai.js` | 参観ロビー（見学・傍聴券）・中央広間・衆議院／参議院の本会議場（採決は `advanceBills` の結果を起立・記名・押しボタンで見せる）・傍聴席・委員会室・議員会館（秘書・陳情・政治資金・打診） |
+| `kantei` 首相官邸 | `js/places/kantei.js` | 正面玄関ホール（政治家と★2000の表敬訪問だけ）・記者会見室・閣議室（火・金）・総理執務室・危機管理センター |
+| `jimin_hq` `minshu_hq` `yato_hq` `myparty_hq` | `js/places/parties.js` | 同じ5部屋のつくり：受付（入党・離党・寄付）・記者会見室・選挙対策本部（公認・届出）・政務（政策）調査会・幹部室／党首室。民主党本部はその時代だけ（ほかの時代は別の会社）、`yato_hq` はその時いちばん大きい架空の野党、`myparty_hq` は結党までテナント募集 |
+| `kuyakusho` ドット区役所 | `js/places/kuyakusho.js`（商店街の北東） | 総合窓口（住民票・税・確定申告の相談）・選挙管理委員会（選挙の説明・立候補の届出・期日前投票・投票所）・区民相談室（多重債務・闇金・生活）・区議会（傍聴・区議の質問と採決） |
+| `keisatsu` `kensatsu` `saibansho` `keimusho` | `js/places/justice.js` | 警視庁（受付・遺失物・自首・相談室・取調室・留置場）、検察庁（検事室・特捜部）、裁判所（地裁・裁判員法廷・高裁・最高裁・勾留質問室・破産係・審尋室）、刑務所（地図にない：正門・居室・工場・運動場・教室・面会室・面接室・拘置所）。`JUSTICE_PLACES` の部屋をゲッターで指定 |
+| `kanraku` ネオン街 | `js/world/kanraku.js` | 東京の南（中央の通りがそのまま続く、70×50）。すべて架空の夜の街：カプセルホテル・牛丼屋・居酒屋・喫煙所・バス停・パチンコ店・スナック横丁・映画館・ネオン公園。中の場所は `koban`（交番）`kyabakura`（CLUB ステラ：20歳から・会話とお酒だけ）`shohisha`（ドットローン）`yamikin`（クイック融資）`kumi`（鬼灯興業＝架空の組事務所）`gamecen`（ゲームセンター）。ほかのお店向けに `PLACES.kanraku.api`（`shoplift` `tobaccoCounter` `fareEvasion`） |
+
+### 社会の裏側の出来事（`js/world/darkside.js`）
+
+ランダムと続きものの出来事 `DARK.EVENTS`（`acc_*` 事故、`inc_*` 事件、`scoop_*` 週刊誌、`pol_*` 政治家への誘い、`hansha_*` 反社、
+`threat_*` `crisis_*` 脅迫と危機管理、`debt_*` 取り立て）。毎朝 `decide()` が、プレイヤーの危うさ（`DARK.risk(g)`：闇金・延滞・前科と発覚前の罪・
+ネオン街・反社・裏金・知名度・公職）から間隔（3〜9日）と確率（6〜40%）を決め、多くても数日に1つ。最初の6日はなし。選ばれた出来事は
+`flags.darkside.pending` で、スクリプトが終わったとき・町を歩いたとき・家に帰ったとき・決まった場所に入ったときを待って始まります。
+犯罪は `g.commitCrime` / `g.coverUp` / `g.investigate` など司法のコアを通し、どの出来事もまっとうな選択肢が先頭（B と `g.auto` の既定）。
+API：`import { DARK } from './darkside.js'`（`window.__dark` も）`DARK.decide(g, { force, only })` `DARK.run(g, id, { data })`（`g.run` の中で）
+`DARK.flush(g)` `DARK.schedule(g, id, inDays, data)` `DARK.state(g)` `DARK.risk(g)`。状態は `g.state.flags.darkside`。
+
 ### 追加のしかた
 
 **場所**
 1. `js/places/<id>.js` に `registerPlace({...})`（上の例）。独自のタイル・アイテム・BGM もこのファイルで
 2. `js/registry.js` の `MODULES` に追加
-3. 町（`tokyo.js` / `namba.js` / `machi.js` / `minato.js`）に `{ type: 'building', place: '<id>', ... }` を置く
-4. `js/world/guide.js` の `GUIDE` / `GUIDE_ORDER`（お仕事があれば `GUIDE_JOBS`、オーディションなら `AUDITIONS`）に追加
+3. 町（`tokyo.js` / `namba.js` / `machi.js` / `minato.js` / `nagatacho.js` / `kanraku.js`）に `{ type: 'building', place: '<id>', ... }` を置く
+4. `js/world/guide.js` の `GUIDE` / `GUIDE_ORDER`（お仕事があれば `GUIDE_JOBS`、オーディションなら `AUDITIONS`）に追加。
+   町は `town: 'tokyo' | 'namba' | 'nagatacho' | 'kanraku'`（`TOWNS`。てちょうのタグの色は `notebook.js` の `TOWN_BG`）
 5. `node tools/inspect.mjs <id> --out test-output/<id>` で確認
 
 **タイル**：`defineTile('<施設ID>_xxx', { solid, obj, draw, hd })`。新しいタイルには `hd()` を書きます（なければ Scale2x）。
@@ -918,13 +1196,17 @@ registerMinigame('mygame', MyGame);
 - タイル：`js/engine/tiles.js`（`grass sidewalk road floor_wood floor_marble floor_carpet_red floor_stage floor_studio …`、
   壁は `wall_<テーマ>` / `walltop_<テーマ>`：white cream blue navy gray red purple wood dark orange green pink black yellow brick）。
   家具：`counter counter_white desk desk_pc chair seat sofa table plant bookshelf locker tv monitor camera mic spotlight speaker piano curtain curtain_top rope mirror makeup clothes_rack trophy director_chair green_screen set_wall stage_edge …`
-- ロゴ：`yoshimoto shinkigeki bs_yoshimoto shochiku grape nhk nhk_old toei horipro toho`
+- ロゴ：`yoshimoto shinkigeki bs_yoshimoto shochiku grape nhk nhk_old toei horipro toho lawson ntv tbs tvasahi jimin minshu`
+  （`jimin` `minshu` は党本部の看板と政治の画面だけ。タイトル画面のロゴの行列には出しません）
   （小さく描くと、よしもと・グレープ・東宝は文字を省いたマークだけになります：logos.js の `mark`）
 - 効果音：`cursor ok cancel talk door coin success fanfare fail buzz hit good laugh applause zukko whistle drum snare shutter chime sword sleep`
 - BGM：`title town osaka office studio theater minigame night ending`（各モジュールが `registerSong(name, def)` で追加：
   `machi_shop machi_cafe machi_gym lounge sento_yu` など）
 - 文章：メッセージは1ページ 全角約36文字×3行、選択肢は14文字まで。大阪の人は関西弁。実在の人物・実在の番組名やキャラクター名（似せたものも）は出さない（例外：`js/world/programs.js` の実在番組のタイトルだけ。司会者・出演者は描かず、名前もセリフも出さない）。
-  恋愛は「大切な人」までの全年齢向け
+  恋愛は「大切な人」までの全年齢向け。
+  政治：実在の政党は自由民主党・民主党だけで、事実だけを中立に。実在の政治家（似せた名前も）は出さない。架空の政党は実在の党をまねない。
+  政策の効果はどの立場にも得と損を。犯罪：手口の描写はせず選択と結果だけ。テロ・暗殺はプレイヤーの行動にしない。
+  キャバクラなどは会話とお酒だけ（性的な描写なし）。タバコとお酒は20歳から
 
 ### テスト
 
@@ -940,7 +1222,7 @@ node dot-geinou-v2/tools/minigame.mjs quiz --difficulty 1,3,5 --out test-output 
 
 **URL パラメータ**：`?test=1&place=nhk&room=studio&x=5&y=6&dir=up`（タイトルを飛ばして直接開始）、`&rich=1`（お金・知名度・スキル多め）、
 `&agency=yoshimoto`、`&name=…`、`&intro`（最初の説明も見る）、`&touch`（画面パッドを出す）、
-`?minigame=quiz&difficulty=3&skill=talk`（ミニゲーム単体）、`?debug=1`（メニューにデバッグ：ワープ・お金・知名度・スキル・体力・所属）。
+`?minigame=quiz&difficulty=3&skill=talk`（ミニゲーム単体）、`?debug=1`（メニューにデバッグ：ワープ・お金・知名度・スキル・体力・所属・政治・司法と借金）。
 
 **自作の Playwright スクリプト**（Playwright と Chromium が必要。import のパスはスクリプトの場所に合わせる）：`tools/lib.mjs` の `openGame(query)`（ビューポート 1300x800、`{ browser, page, errors }`）、
 `shotCanvas(page, file)`、`PAGE_HELPERS`、`loadPlaywright()`。`PAGE_HELPERS` を入れるとリアルタイムのループが止まり、

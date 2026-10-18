@@ -1097,6 +1097,10 @@ function generate() {
     { type: 'building', x: 25, y: 10, w: 6, h: 4, door: 3, place: 'gym', name: 'DOT GYM', kind: 'gym', sign: { text: 'DOT GYM' } },
     { type: 'building', x: 31, y: 10, w: 5, h: 4, door: 2, place: 'karaoke', name: 'カラオケ ドットボックス', kind: 'shop', wall: '#3a2a4a', roof: '#ff4f8b', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' }, display: 'karaoke', neon: '#ff7eb6' },
 
+    // ---- ドット区役所 (js/places/kuyakusho.js): the north-east corner beyond the arcade
+    { type: 'building', x: 43, y: 2, w: 4, h: 3, door: 2, place: 'kuyakusho', name: 'ドット区役所', kind: 'office', rise: 0, wall: '#e4e2d8', roof: '#5a6a7a', canopy: '#2a5088', plants: true, sign: { text: 'ドット区役所', bg: '#2a3a5a', color: '#ffffff' } },
+    { type: 'sign', x: 44, y: 4, text: ['「ドット区役所」の案内板だ。', '1階：住民課・税務課（確定申告の相談）\n2階：選挙管理委員会・期日前投票所', '3階：区民相談室（暮らしやお金の相談）\n5階：区議会'] },
+
     // ---- residential side (doors on y 27) and neighbours' houses
     { type: 'building', x: 2, y: 22, w: 8, h: 6, door: 4, place: 'mansion', name: 'ドットレジデンス', kind: 'mansion', sign: { text: 'ドットレジデンス' } },
     { type: 'building', x: 12, y: 23, w: 6, h: 5, door: 3, place: 'tower', name: 'ドットタワー', kind: 'tower', style: 'residential', rise: 3, sign: { text: 'DOT TOWER' } },

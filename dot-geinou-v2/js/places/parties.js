@@ -20,12 +20,14 @@
 // flags (prefix parties_): parties_don_<party>_<year> (nominal yen given that year),
 //   parties_teigen (day), parties_welcome_<hq>.
 
-import { registerPlace, doorIndexFor } from '../engine/map.js';
+import { registerPlace, doorIndexFor, PLACES } from '../engine/map.js';
+import { askText } from '../engine/textinput.js';
 import { LOOKS } from '../engine/sprites.js';
-import { defineTile, R, P, disc, oval, outline, speckle, shadowEllipse } from '../engine/tiles.js';
+import { defineTile, R, disc, oval, outline, speckle, shadowEllipse } from '../engine/tiles.js';
 import { text } from '../engine/draw.js';
 import { drawLogo } from '../engine/logos.js';
 import { makeCanvas, clamp, fmtMoney, display } from '../engine/util.js';
+import { eraOf } from '../engine/profile.js';
 import { PARTY_DEFS, POLICIES, POLICY_ORDER, POLICY_AREAS, AREA_ORDER, SEGMENTS, POSTS, PARTY_POST_ORDER, postName, fmtCho, shugiRules } from '../engine/politics.js';
 
 let G = null;
@@ -73,6 +75,7 @@ const seichoName = (g, pt) => (pt && pt.id === 'jimin' ? '政務調査会' : '�
 const kanbuName = (pt) => (pt && pt.isPlayers ? '党首室' : '幹部室');
 const today = (g, k) => g.flag(k) === g.state.day;
 const rate = () => display.priceRate || 1;
+const device = (g) => { try { return eraOf(g.state).deviceShort || 'スマホ'; } catch (e) { return 'スマホ'; } };
 const nominal = (n) => Math.round(n * rate());
 
 // Split a long text into pages of up to 3 lines of about 34 characters.
@@ -87,6 +90,9 @@ function paged(str, width = 34) {
   for (let i = 0; i < lines.length; i += 3) pages.push(lines.slice(i, i + 3).join('\n'));
   return pages;
 }
+
+// The effect part of an activity result ('委員会で質問をした。評判 +2・…' -> '（評判 +2・…）').
+const effects = (r) => { const [first, ...rest] = String((r && r.text) || '').split('\n'); const t = first.replace(/^[^。]*をした。/, '').trim(); return (t ? `（${t}）` : '') + (rest.length ? `\n${rest.join('\n')}` : ''); };
 
 // ------------------------------------------------------------------ tiles (native HD)
 function tile(k, def) {
@@ -374,7 +380,8 @@ async function joinParty(g, pt) {
   await say(g, [`${pt.name}に入党した！`, '党員証を受け取った。\n公認の申請は2階の選挙対策本部へ。'], null);
 }
 async function leaveParty(g, pt) {
-  const i = await g.ask([`${pt.name}を離党しますか？`, '（党の役職や、閣僚のポストを失うことがあります）'], ['離党する', 'やめておく'], { cancel: 1, ...who(STAFF.recep) });
+  const lead = isLeader(g, pt);
+  const i = await g.ask([`${pt.name}を離党しますか？`, lead ? '（党首が離党すると、党はほかの議員に引き継がれるか、\n　だれもいなければ解散することになります）' : '（党の役職や、閣僚のポストを失うことがあります）'], ['離党する', 'やめておく'], { cancel: 1, ...who(STAFF.recep) });
   if (i !== 0) return;
   const w = g.leaveParty();
   await say(g, w || `${pt.name}を離党した。`, null);
@@ -418,14 +425,15 @@ async function agentTalk(g, npc) {
   await foundFlow(g, cost);
 }
 async function askName(g, title, value, max) {
-  try { const m = await import('../engine/textinput.js'); return await m.askText(g, { title, value, max }); } catch (e) { return value; }
+  try { return await askText(g, { title, value, max }); } catch (e) { console.error(e); return value; }
 }
 async function foundFlow(g, cost) {
   const S = STAFF.agent;
   if (g.state.money + (pol(g) ? pol(g).me.funds : 0) < cost) { await say(g, [`結党には${fmtMoney(cost)}ほど必要です（目安）。`, '資金をためてから、また来てくださいね。'], S); return; }
   const name = await askName(g, '党の名前（12文字まで）', 'ドット未来党', 12);
   if (!name) return;
-  const short = await askName(g, '略称（4文字まで）', name.replace(/党$/, '').slice(0, 4) || name.slice(0, 2), 4);
+  const base = Array.from(name.replace(/党$/, ''));
+  const short = await askName(g, '略称（4文字まで）', (base.length <= 4 ? base.join('') : base.slice(-2).join('')) || Array.from(name).slice(0, 2).join(''), 4);
   if (!short) return;
   const ci = await g.list({ title: '党のイメージカラー', items: COLORS.map((c) => c[0]), x: 16, y: 56, w: 200, px: true });
   if (ci < 0) return;
@@ -438,7 +446,8 @@ async function foundFlow(g, cost) {
     if (g.auto) break;
   }
   const desc = `${g.state.name}が立ち上げた政党。${platform.length ? `${POLICIES[platform[0]].name.replace(/（[^）]*）/g, '')}などをかかげる。` : ''}`;
-  const ok = await g.ask([`「${name}」（${short}）を結成する？\n費用 ${fmtMoney(cost)}（目安）`, '（いまの党は離党することになる）'], ['結成する', 'やめておく'], { cancel: 1 });
+  const cur = pol(g) && pol(g).me.party ? g.partyName(pol(g).me.party) : null;
+  const ok = await g.ask([`「${name}」（${short}）を結成する？\n費用 ${fmtMoney(cost)}（目安）`, ...(cur ? [`（いまの「${cur}」は離党することになる）`] : [])], ['結成する', 'やめておく'], { cancel: 1 });
   if (ok !== 0) return;
   const id = g.foundParty({ name, short, color: COLORS[ci][1], platform, desc });
   if (!id) { await say(g, g.lastPoliticsError || '結成できなかった。', null); return; }
@@ -486,7 +495,7 @@ async function sentaiTalk(g, npc, hq) {
   if (e.declared) {
     let f = null;
     try { f = g.electionForecast(e.id); } catch (err) { f = null; }
-    await g.say([`${e.label}、いよいよですね。`, f ? `うちの情勢調査では、当選の見込みは${Math.round(f.chance * 100)}%。\n${f.rank}位前後（定数${f.seats}）です。` : '比例は、党全体の票しだいです。\n全国で党の名前を売りましょう！', '街頭演説、ポスター、握手…\n選挙運動は、スマホの「政治」からもできます。'], S);
+    await g.say([`${e.label}、いよいよですね。`, f ? `うちの情勢調査では、当選の見込みは${Math.round(f.chance * 100)}%。\n${f.rank}位前後（定数${f.seats}）です。` : '比例は、党全体の票しだいです。\n全国で党の名前を売りましょう！', `街頭演説、ポスター、握手…\n選挙運動は、${device(g)}の「政治」からもできます。`], S);
     return;
   }
   const r = g.requestNomination(e.id);
@@ -514,7 +523,7 @@ async function phoneBank(g) {
   const i = await g.ask('ボランティアといっしょに、支援を呼びかける？', ['後援会に電話する', 'やめておく'], { cancel: 1 });
   if (i !== 0) return;
   const r = await g.campaign('後援会', { electionId: e.id });
-  await g.say(r && r.ok ? r.text : (r && r.why) || 'いまはできない。');
+  await g.say(r && r.ok ? ['ボランティアといっしょに、後援会の名簿に電話をかけた。', `「よろしくお願いします！」…手ごたえはあった。\n${effects(r)}`] : (r && r.why) || 'いまはできない。');
 }
 
 // ------------------------------------------------------------------ 政務（政策）調査会
@@ -535,7 +544,7 @@ async function seichoTalk(g, npc, hq) {
     else if (i === 2) {
       if (!isMember(g, pt) || !isNational(g)) { await g.say('勉強会は、党所属の国会議員の集まりです。', S); continue; }
       const r = g.activity('勉強会');
-      await g.say(r && r.ok ? r.text : (r && r.why) || 'いまは出られない。');
+      await g.say(r && r.ok ? ['部会の勉強会に出た。', `役所の担当者から説明を聞き、質問もした。\n${effects(r)}`] : (r && r.why) || 'いまは出られない。');
     } else return;
     if (g.auto) return;
   }
@@ -552,7 +561,7 @@ async function proposePolicy(g, pt, S) {
     const j = await g.ask('議員立法として、法案にまとめる？', ['法案にする', 'やめておく'], { cancel: 1, ...S });
     if (j !== 0) return;
     const bill = g.proposeBill({ policy: id });
-    await g.say(bill ? ['法案の原案をまとめた。', '賛成者が集まれば、国会に提出できる。\n（スマホの「政治」→ 国会 から声をかけよう）'] : (g.lastPoliticsError || 'まとめられなかった。'), S);
+    await g.say(bill ? ['法案の原案をまとめた。', `賛成者が集まれば、国会に提出できる。\n（${device(g)}の「政治」→ 国会 から声をかけよう）`] : (g.lastPoliticsError || 'まとめられなかった。'), S);
     return;
   }
   if (today(g, 'parties_teigen')) { await g.say('今日の提言は、もう受け取りました。', S); return; }
@@ -697,18 +706,15 @@ async function podiumTalk(g, hq) {
   const i = await g.ask(`${pt.name}の${isLeader(g, pt) ? '党首' : '議員'}として、記者会見を開く？`, ['会見を開く', 'やめておく'], { cancel: 1 });
   if (i !== 0) return;
   g.setFlag('parties_press', g.state.day);
-  try {
-    const m = await import('./kantei.js');
-    await m.pressConference(g, { where: 'party', open: ['（党本部の会見室に、記者たちが集まった）', `「${pt.name}の記者会見を始めます」`] });
-  } catch (e) {
-    console.error(e);
-    const r = g.activity('記者会見', { score: 60 });
-    await g.say(r && r.ok ? r.text : (r && r.why) || '会見を開いた。');
-  }
+  if (g.map && g.map.roomId === 'press') g.placePlayer(9, 3, 'down');
+  // the press conference lives in kantei.js (looked up at run time, so either file can load alone)
+  const press = PLACES.kantei && PLACES.kantei.pressConference;
+  if (press) { await press(g, { where: 'party', open: ['（党本部の会見室に、記者たちが集まった）', `「${pt.name}の記者会見を始めます」`] }); return; }
+  const r = g.activity('記者会見', { score: 60 });
+  await g.say(r && r.ok ? `会見を開いた。\n${effects(r)}` : (r && r.why) || '会見を開いた。');
 }
 
 // ------------------------------------------------------------------ floors & exits
-const ROOMS = { sentai: '2階　選挙対策本部', seicho: '3階　政策の部屋', kanbu: '4階　幹部室' };
 const ROOM_SPOT = { lobby: [16, 3, 'down'], sentai: [9, 8, 'up'], seicho: [9, 8, 'up'], kanbu: [8, 8, 'up'], press: [8, 8, 'up'] };
 function elevatorFor(hq) {
   return async (g) => {
@@ -727,15 +733,20 @@ function elevatorFor(hq) {
     await g.goto(hq, floors[i][0], s[0], s[1], s[2]);
   };
 }
+// doorIndexFor builds every town; a broken town module elsewhere must not trap the player here.
+let doorWarned = false;
+function doorOf(pid) {
+  try { return doorIndexFor(pid); } catch (e) { if (!doorWarned) { doorWarned = true; console.warn('[parties] door index failed', e); } return null; }
+}
 function streetSpot(hq) {
-  const d = doorIndexFor(hq);
+  const d = doorOf(hq);
   return d || { town: 'tokyo', room: 'main', x: 40, y: 3 };
 }
 function exitWarps(hq, xs, y) {
   const out = [];
   for (const x of xs) {
-    out.push({ x, y, to: 'exit', cond: () => !!doorIndexFor(hq) });
-    out.push({ x, y, dir: 'down', cond: () => !doorIndexFor(hq), get place() { return streetSpot(hq).town; }, get room() { return streetSpot(hq).room; }, get tx() { return streetSpot(hq).x; }, get ty() { return streetSpot(hq).y; } });
+    out.push({ x, y, to: 'exit', cond: () => !!doorOf(hq) });
+    out.push({ x, y, dir: 'down', cond: () => !doorOf(hq), get place() { return streetSpot(hq).town; }, get room() { return streetSpot(hq).room; }, get tx() { return streetSpot(hq).x; }, get ty() { return streetSpot(hq).y; } });
   }
   return out;
 }
@@ -819,21 +830,21 @@ function buildHQ(hq) {
           '##################',
           '#UUUUBBBBBBBBUUUU#',
           '#====bbbbbbbb====#',
-          '#........p.......#',
           '#................#',
-          '#.ccc.ccc.ccc....#',
+          '#........p.......#',
           '#................#',
           '#.ccc.ccc.ccc.KK.#',
           '#................#',
+          '#.ccc......ccc...#',
           '########dd########',
         ],
         legend: { B: 'parties_panel_u', b: 'parties_panel', p: 'parties_podium', c: 'parties_chair', K: 'camera', d: 'stairs_up' },
         warps: backPress(hq, [8, 9], 9),
         entities: [
           partyBoard(hq, 5, 1, 8, 2, 'backdrop'),
-          staffNpc(`${hq}_pk1`, STAFF.kisha, 2, 4, 'up', { cond: open, text: ['党の会見は、党首の言葉がそのまま見出しになる。', '…ひと言の重みが、ちがうのよ。'] }),
+          staffNpc(`${hq}_pk1`, STAFF.kisha, 2, 5, 'up', { cond: open, text: ['党の会見は、党首の言葉がそのまま見出しになる。', '…ひと言の重みが、ちがうのよ。'] }),
           staffNpc(`${hq}_pk2`, STAFF.kisha2, 11, 6, 'up', { cond: open, text: ['選挙が近いと、会見の数も増えるんだ。', '公認の発表、公約の発表、連立の話…\nネタには事欠かないね。'] }),
-          { type: 'sign', x: 9, y: 3, talk: (g) => podiumTalk(g, hq) },
+          { type: 'sign', x: 9, y: 4, talk: (g) => podiumTalk(g, hq) },
         ],
       },
       // ---------------------------------------------------------- 2階 選挙対策本部
@@ -942,4 +953,3 @@ function boxesDraw(ctx, sx, sy) {
 
 for (const hq of Object.keys(HQS)) registerPlace(buildHQ(hq));
 
-void P; void speckle; void INK;

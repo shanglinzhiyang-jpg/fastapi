@@ -79,10 +79,10 @@ function nagatachoSignpost(x, y) {
     draw(ctx, sx, sy) {
       F(ctx, sx + 3, sy + 14.5, 10, 1.5, 'rgba(0,0,0,0.22)');
       F(ctx, sx + 6.5, sy - 4, 2.5, 19, '#4a2e18'); F(ctx, sx + 7, sy - 4, 1, 19, '#8a5a33');
-      F(ctx, sx - 7.5, sy - 10.5, 31, 10, '#3a2512');
-      F(ctx, sx - 7, sy - 10, 30, 9, '#c48a52'); F(ctx, sx - 7, sy - 10, 30, 1, '#e0b07a');
-      F(ctx, sx - 7, sy - 2, 30, 0.5, '#8a5a33');
-      text(ctx, '↑永田町', sx + 8, sy - 8.5, { size: 5, align: 'center', color: '#fff6e0', shadow: '#3a2512' });
+      F(ctx, sx - 15.5, sy - 10.5, 31, 10, '#3a2512');
+      F(ctx, sx - 15, sy - 10, 30, 9, '#c48a52'); F(ctx, sx - 15, sy - 10, 30, 1, '#e0b07a');
+      F(ctx, sx - 15, sy - 2, 30, 0.5, '#8a5a33');
+      text(ctx, '↑永田町', sx, sy - 8.5, { size: 5, align: 'center', color: '#fff6e0', shadow: '#3a2512' });
     },
   };
 }
@@ -256,7 +256,7 @@ function generate() {
 
   entities.push(machiSignpost(2, 18));
   entities.push(minatoSignpost(W - 2, 18));
-  if (PLACES.nagatacho) entities.push(nagatachoSignpost(43, 1));
+  if (PLACES.nagatacho) entities.push(nagatachoSignpost(43, 3));
   const warps = [];
   for (let y = 19; y <= 23; y++) warps.push({ x: 0, y, place: 'machi', room: 'main', tx: 46, ty: y - 3, dir: 'left' }); // machi's road: rows 16..20
   for (let y = 19; y <= 23; y++) warps.push({ x: W - 1, y, place: 'minato', room: 'main', tx: 1, ty: y + 5, dir: 'right' }); // minato's road: rows 24..28

@@ -118,24 +118,32 @@ function closeFriend(g, minLevel = 2) {
 // ---------------------------------------------------------------- flow markers
 // A getter below runs right before the core's Flow teleports. It remembers which room the flow is going to,
 // so that room shows the flow's people (and its onEnter knows it was entered by a flow, not by walking in).
-const ACTIVE = { room: null, place: null, stage: null, caseId: null, day: -1, frame: -1, fresh: false };
+const ACTIVE = { room: null, place: null, stage: null, caseId: null, day: -1, frame: -1, fresh: false, loaded: false };
 function mark(g, place, room, stage, cs) {
   if (!g || !g.state) return room;
-  Object.assign(ACTIVE, { room, place, stage, caseId: cs ? cs.id : null, day: day(g), frame: g.frame || 0, fresh: true });
+  const here = !!(g.map && g.map.placeId === place && g.map.roomId === room); // no teleport: the room is already up
+  Object.assign(ACTIVE, { room, place, stage, caseId: cs ? cs.id : null, day: day(g), frame: g.frame || 0, fresh: !here, loaded: here });
   return room;
+}
+// The room's entry / start getter: g.goto consults it only for a teleport without a spot (the flow's), so this is
+// where a flow's arrival is confirmed (a later walk-in never shows a stale lineup).
+function flowEntry(place, room) {
+  const ok = ACTIVE.fresh && ACTIVE.place === place && ACTIVE.room === room;
+  if (ok) ACTIVE.loaded = true;
+  return ok;
 }
 // A flow is running in this room right now (scripts keep g.busy > 0 for the whole flow).
 function flowIn(g, place, room) {
   if (!ACTIVE.room) return false;
-  if (!g || g.busy === 0 || ACTIVE.day !== day(g)) { ACTIVE.room = null; return false; }
-  return ACTIVE.place === place && ACTIVE.room === room;
+  if (!g || g.busy === 0) { ACTIVE.room = null; ACTIVE.loaded = false; return false; }
+  return ACTIVE.loaded && ACTIVE.place === place && ACTIVE.room === room;
 }
 // onEnter: was this entry the flow's teleport? (consumes the mark); a walk-in clears any stale mark.
 function enteredByFlow(g, place, room) {
   GAME = g;
-  const ok = ACTIVE.fresh && ACTIVE.place === place && ACTIVE.room === room && ACTIVE.day === day(g) && (g.frame || 0) - ACTIVE.frame < 240;
+  const ok = ACTIVE.fresh && ACTIVE.loaded && ACTIVE.place === place && ACTIVE.room === room && (g.frame || 0) - ACTIVE.frame < 600;
   if (ok) ACTIVE.fresh = false;
-  else if (!(ACTIVE.place === place && ACTIVE.room === room)) { ACTIVE.room = null; ACTIVE.fresh = false; }
+  else { ACTIVE.room = null; ACTIVE.fresh = false; ACTIVE.loaded = false; }
   return ok;
 }
 const activeCase = (g) => { const j = jus(g); return j && ACTIVE.caseId != null ? (j.cases || []).find((c) => c.id === ACTIVE.caseId) || curCase(g) : curCase(g); };
@@ -163,6 +171,7 @@ function prisonRoom(g) {
   PSEEN.n++;
   const k = prisonEventIndex(g, pr);
   if (k < 0 || PSEEN.n > 1) return 'kyoshitsu';
+  if ((k === 3 || k === 4) && visitDue(g, pr)) return 'menkai'; // a friend comes on a letter / reflection day
   return PRISON_EVENT_ROOMS[k % PRISON_EVENT_ROOMS.length];
 }
 // A 交番 of another module (ネオン街): small police matters stay there as an overlay.
@@ -201,6 +210,7 @@ function installRouting() {
       const here = g && g.map && g.map.placeId === KEI && PLACES[KEI] && PLACES[KEI].rooms[g.map.roomId] ? g.map.roomId : 'sodan';
       return mark(g, KEI, here, 'kouban', curCase(g));
     },
+    set torishirabe(v) { /* routed by this module */ }, set ryuchi(v) { /* routed */ }, set kouban(v) { /* routed */ },
   };
   // 検察: 検事室, or the 特捜部 for political money and big tax cases.
   P.prosecutor.rooms = {
@@ -209,6 +219,7 @@ function installRouting() {
       if (cs && cs.juvenile) JUV_SENT.add(cs.id);
       return mark(g, KEN, tokusoCase(cs) ? 'tokuso' : 'kenjishitsu', 'kensatsu', cs);
     },
+    set kensatsu(v) { /* routed by this module */ },
   };
   // 裁判所: trials by court, 勾留質問, 破産・個人再生; a parole hearing is held at the prison.
   Object.defineProperty(P.court, 'place', {
@@ -238,6 +249,7 @@ function installRouting() {
       return mark(g, SAI, 'shinjin', 'hearing', cs);
     },
     get kasai() { return undefined; },
+    set houtei(v) { /* routed by this module */ }, set hearing(v) { /* routed */ }, set kasai(v) { /* routed */ },
   };
   // 刑務所: the gate, the cell / the factory / the yard / the classroom by the day of the term.
   Object.defineProperty(P.prison, 'place', {
@@ -255,6 +267,7 @@ function installRouting() {
   P.prison.rooms = {
     get keimusho() { const g = G(); return mark(g, MU, prisonRoom(g), 'keimusho', null); },
     get gate() { const g = G(); return mark(g, MU, 'mon', 'gate', null); },
+    set keimusho(v) { /* routed by this module */ }, set gate(v) { /* routed */ }, set menkai(v) { /* the core keeps 面会 as an overlay */ },
   };
 }
 installRouting();
@@ -592,6 +605,8 @@ tile('saibansho_bench', { // the front of the 法壇
   },
 });
 tile('saibansho_floor', { variants: 3, hd(c, r) { R(c, 0, 0, 32, 32, PC.carpet); speckle(c, r, [PC.carpetD, PC.carpetL], 80); R(c, 0, 31, 32, 1, PC.carpetD); } });
+tile('saibansho_floor_hi', { variants: 3, hd(c, r) { R(c, 0, 0, 32, 32, '#3e4858'); speckle(c, r, ['#363f4e', '#465163'], 80); R(c, 0, 31, 32, 1, '#343c4a'); } });
+tile('saibansho_floor_sup', { variants: 3, hd(c, r) { R(c, 0, 0, 32, 32, '#5a2a2c'); speckle(c, r, ['#4e2426', '#683234'], 80); for (let i = 0; i < 32; i += 16) { R(c, i + 7, 7, 2, 2, '#7a4a3a'); R(c, i + 15, 23, 2, 2, '#7a4a3a'); } } });
 tile('saibansho_woodfloor', { variants: 2, hd(c, r) { R(c, 0, 0, 32, 32, '#9a7650'); for (let y = 0; y < 32; y += 8) { R(c, 0, y, 32, 1, '#7e5e3e'); R(c, (y * 5 + 7) % 32, y, 1, 8, '#7e5e3e'); } speckle(c, r, ['#a8845c', '#8e6c48'], 30); } });
 tile('saibansho_stone', { variants: 3, hd(c, r) { linoleum(c, r, '#cfc9bc', '#bfb9ab', '#ddd7cb', 30); } });
 tile('saibansho_table', { // counsel table (stacked vertically along the side)
@@ -719,7 +734,6 @@ tile('keimusho_sink', { solid: true, obj: true, hd(c) { R(c, 6, 10, 20, 12, '#c8
 tile('keimusho_window', { obj: true, hd(c) { windowBarred(c, '#7a8474', '#b8cad8', '#d4e0e8'); } });
 tile('keimusho_tv', { solid: true, obj: true, hd(c) { R(c, 4, 22, 24, 6, '#8a7a5a'); R(c, 6, 8, 20, 14, '#2a2e36'); R(c, 8, 10, 16, 10, '#4a6a5a'); R(c, 9, 11, 6, 2, '#8ab0a0'); outline(c); } });
 tile('keimusho_celldoor', { // a heavy cell door in the wall, with a small window and a food slot
-  solid: true,
   hd(c) {
     R(c, 0, 0, 32, 32, PP.wall); R(c, 0, 16, 32, 12, PP.wallLo);
     R(c, 6, 1, 20, 31, '#5e6a5a'); R(c, 8, 3, 16, 29, '#7a8874'); R(c, 8, 3, 16, 1, '#93a08c');
@@ -950,7 +964,7 @@ function deskProp(x, y, w, style = 'wood', opts = {}) {
       if (W > 20 && !opts.closed) for (let i = 0; i < w; i++) { B(ctx, sx + i * 16 + 3, top + 6, 10, H - 9, shade(pal[2], 0.07)); B(ctx, sx + i * 16 + 3, top + 6, 10, 0.5, shade(pal[2], -0.2)); }
       B(ctx, sx + 0.5, top + H - 0.5, W - 1, 0.5, pal[3]);
       if (opts.papers) for (const k of opts.papers) { B(ctx, sx + k * 16 + 4, top + 0.5, 6, 2, '#f4f0e4'); B(ctx, sx + k * 16 + 5, top + 1, 4, 0.5, '#9a9a9a'); }
-      if (opts.mons) for (const k of opts.mons) { B(ctx, sx + k * 16 + 4, top - 5, 8, 5.5, '#2a2e36'); B(ctx, sx + k * 16 + 4.5, top - 4.5, 7, 4, '#7a9ab8'); }
+      if (opts.mons) for (const k of opts.mons) { B(ctx, sx + k * 16 + 3.5, top - 2.5, 9, 3, '#2a2e36'); B(ctx, sx + k * 16 + 4, top - 2, 8, 2, '#7a9ab8'); B(ctx, sx + k * 16 + 4.5, top - 2, 3, 0.5, '#c8dcea'); }
       if (opts.plates) for (const k of opts.plates) { B(ctx, sx + k * 16 + 5, top + 4.5, 6, 2, '#d8c060'); }
       if (opts.mic) for (const k of opts.mic) { B(ctx, sx + k * 16 + 11, top - 4, 0.5, 4, '#3a3a3a'); B(ctx, sx + k * 16 + 10.5, top - 5, 1.5, 1.5, '#1a1a1a'); }
       outlineRect(ctx, sx, top, W, H);
@@ -1055,7 +1069,7 @@ async function consultYamikin(g, who) {
   const pages = [];
   if (since(g, 2008, 6)) pages.push('登録のない業者や、法律の上限をこえる利息で貸す\n「闇金」は犯罪です。年109.5%をこえる契約は無効で、\n最高裁は、元本も返さなくてよいとしています。');
   else pages.push('登録のない業者や、出資法の上限をこえる利息で\n貸すのは犯罪です。そういう契約の利息は、\n払う必要がありません。');
-  pages.push(since(g, 1984, 1) ? '貸金業者でも、夜9時から朝8時までの取り立てや、\n職場・家族への取り立ては法律で禁止されています。' : '取り立てで脅したり、家族や職場に押しかけるのは\n許されません。');
+  pages.push(since(g, 1983, 11) ? '貸金業者でも、夜9時から朝8時までの取り立てや、\n職場・家族への取り立ては法律で禁止されています。' : '取り立てで脅したり、家族や職場に押しかけるのは\n許されません。');
   pages.push('「口座を売れば借金をチャラに」という話は、\nあなたが犯罪者にされる罠です。絶対に応じないで。');
   pages.push(soudanNumber(g));
   await say(g, who, pages);
@@ -1354,7 +1368,7 @@ registerPlace({
         '######MM######',
       ],
       legend: { w: 'keisatsu_wall+window', c: 'keisatsu_wall+clock', '|': 'keisatsu_partition', T: 'keisatsu_table', R: 'keisatsu_rack', P: 'plant' },
-      get entry() { return ACTIVE.fresh && ACTIVE.place === KEI && ACTIVE.room === 'sodan' ? { x: 6, y: 4, dir: 'up' } : { x: 6, y: 7, dir: 'up' }; },
+      get entry() { return flowEntry(KEI, 'sodan') ? { x: 6, y: 4, dir: 'up' } : { x: 6, y: 7, dir: 'up' }; },
       warps: [
         { x: 6, y: 8, room: 'lobby', tx: 6, ty: 2, dir: 'down' },
         { x: 7, y: 8, room: 'lobby', tx: 6, ty: 2, dir: 'down' },
@@ -1389,7 +1403,7 @@ registerPlace({
         '####M#####',
       ],
       legend: { w: 'keisatsu_wall+keisatsu_winbar', c: 'keisatsu_wall+clock' },
-      get entry() { return ACTIVE.fresh && ACTIVE.place === KEI && ACTIVE.room === 'torishirabe' ? { x: 4, y: 3, dir: 'up' } : { x: 4, y: 6, dir: 'up' }; },
+      get entry() { return flowEntry(KEI, 'torishirabe') ? { x: 4, y: 4, dir: 'up' } : { x: 4, y: 6, dir: 'up' }; },
       warps: [{ x: 4, y: 7, room: 'lobby', tx: 13, ty: 2, dir: 'down', check: heldCheck('（取調べの途中だ。席を立つことはできない…）') }],
       entities: [
         npc('kei_keiji', 4, 2, 'down', WHO.keiji, { talk: posted('down', (g) => (inCustody(g) ? say(g, WHO.keiji, '…座れ。話の続きだ。') : torishirabeFree(g))) }),
@@ -1429,7 +1443,7 @@ registerPlace({
         w: 'keisatsu_wall+keisatsu_winbar', t: 'keisatsu_cellfloor', W: 'keisatsu_cellfloor+keisatsu_wc', f: 'keisatsu_cellfloor+keisatsu_futon',
         B: 'keisatsu_cellfloor+keisatsu_bars', D: 'keisatsu_cellfloor+keisatsu_bardoor', d: 'keisatsu_deskpc',
       },
-      get entry() { return ACTIVE.fresh && ACTIVE.place === KEI && ACTIVE.room === 'ryuchi' ? { x: 6, y: 3, dir: 'down' } : { x: 7, y: 7, dir: 'up' }; },
+      get entry() { return flowEntry(KEI, 'ryuchi') ? { x: 6, y: 3, dir: 'down' } : { x: 7, y: 7, dir: 'up' }; },
       warps: [{ x: 7, y: 8, room: 'lobby', tx: 13, ty: 2, dir: 'down', check: heldCheck('（留置場の扉は、外からしか開かない…）') }],
       entities: [
         npc('kei_ryuchi', 14, 5, 'left', WHO.ryuchi, { talk: posted('left', (g) => (inCustody(g) ? say(g, WHO.ryuchi, ['〇番、静かにしなさい。', '…消灯は夜9時だ。体を休めておけ。']) : ryuchiFree(g))) }),
@@ -1488,7 +1502,6 @@ async function tokusoFree(g) {
   await say(g, who, pages);
 }
 const kenElevatorCheck = async (g) => {
-  if (ACTIVE.fresh) return true;
   const k = await ask(g, WHO.guard, 'ここから先は、呼び出しを受けた方と\n案内のある見学の方だけです。', ['見学させてもらう', 'やめておく'], { cancel: 1 });
   if (k !== 0) return false;
   await narrate(g, '（広報の職員が付き添ってくれることになった）');
@@ -1557,7 +1570,7 @@ registerPlace({
         '#####MM#####',
       ],
       legend: { w: 'kensatsu_wall+kensatsu_blind', H: 'kensatsu_shelf', s: 'kensatsu_sofa' },
-      get entry() { return ACTIVE.fresh && ACTIVE.place === KEN && ACTIVE.room === 'kenjishitsu' ? { x: 5, y: 3, dir: 'up' } : { x: 5, y: 7, dir: 'up' }; },
+      get entry() { return flowEntry(KEN, 'kenjishitsu') ? { x: 5, y: 4, dir: 'up' } : { x: 5, y: 7, dir: 'up' }; },
       warps: [
         { x: 5, y: 8, room: 'lobby', tx: 5, ty: 2, dir: 'down', check: heldCheck('（取調べの途中だ…）') },
         { x: 6, y: 8, room: 'lobby', tx: 5, ty: 2, dir: 'down', check: heldCheck('（取調べの途中だ…）') },
@@ -1570,8 +1583,8 @@ registerPlace({
           talk: posted('down', lines(WHO.jimukan, ['検察事務官です。取調べに立ち会って、\n供述を記録します。', '検察官が決める処分は、大きく分けて3つ。\n公判請求（正式な裁判）、略式起訴（罰金）、不起訴です。'])),
         }),
         deskProp(8, 3, 2, 'wood', { mons: [1], lip: 7 }),
-        npc('ken_escort1', 4, 4, 'up', { name: '護送の警察官', look: LK.police }, { cond: (g) => kenEscort(g, 'kenjishitsu'), text: '（無言で、うしろに控えている）' }),
-        npc('ken_escort2', 6, 4, 'up', { name: '護送の警察官', look: LK.police }, { cond: (g) => kenEscort(g, 'kenjishitsu'), text: '（無言で、うしろに控えている）' }),
+        npc('ken_escort1', 4, 5, 'up', { name: '護送の警察官', look: LK.police }, { cond: (g) => kenEscort(g, 'kenjishitsu'), text: '（無言で、うしろに控えている）' }),
+        npc('ken_escort2', 6, 5, 'up', { name: '護送の警察官', look: LK.police }, { cond: (g) => kenEscort(g, 'kenjishitsu'), text: '（無言で、うしろに控えている）' }),
         { type: 'sign', x: 1, y: 2, text: '法律書がぎっしり。\n六法、判例集、注釈書…背表紙だけで目がまわりそうだ。' },
         { type: 'sign', x: 1, y: 6, text: '応接のソファ。\n参考人が、呼ばれるのを待っている。' },
       ],
@@ -1596,11 +1609,11 @@ registerPlace({
         '#...........|......#',
         '#xx.........|......#',
         '#..................#',
-        '#P................P#',
+        '#p................p#',
         '#########MM#########',
       ],
-      legend: { w: 'kensatsu_wall+kensatsu_blind', b: 'kensatsu_wall+kensatsu_board', x: 'kensatsu_boxes', P: 'kensatsu_papers', '|': 'keisatsu_partition', '+': 'kensatsu_floor' },
-      get entry() { return ACTIVE.fresh && ACTIVE.place === KEN && ACTIVE.room === 'tokuso' ? { x: 15, y: 4, dir: 'up' } : { x: 9, y: 9, dir: 'up' }; },
+      legend: { w: 'kensatsu_wall+kensatsu_blind', b: 'kensatsu_wall+kensatsu_board', x: 'kensatsu_boxes', P: 'kensatsu_papers', '|': 'keisatsu_partition', '+': 'kensatsu_floor', p: 'plant' },
+      get entry() { return flowEntry(KEN, 'tokuso') ? { x: 15, y: 5, dir: 'up' } : { x: 9, y: 9, dir: 'up' }; },
       warps: [
         { x: 9, y: 10, room: 'lobby', tx: 9, ty: 2, dir: 'down', check: heldCheck('（取調べの途中だ…）') },
         { x: 10, y: 10, room: 'lobby', tx: 9, ty: 2, dir: 'down', check: heldCheck('（取調べの途中だ…）') },
@@ -1615,7 +1628,7 @@ registerPlace({
         npc('ken_t2', 7, 4, 'up', { name: '事務官', look: LK.jimukanM }, { text: '（通帳の入出金を、表計算ソフトに打ちこんでいる）' }),
         npc('ken_t3', 4, 6, 'up', { name: '検察官', look: LK.kenjiW }, { text: ['…この金の流れ、裏づけが足りない。', '関係者全員の話を、もう一度聞き直そう。'] }),
         npc('ken_t4', 8, 6, 'up', { name: '事務官', look: LK.jimukan }, { text: '（段ボールの中身を、番号順に並べている）' }),
-        npc('ken_tescort', 15, 6, 'up', { name: '護送の拘置所職員', look: LK.keimukan }, { cond: (g) => kenEscort(g, 'tokuso'), text: '（無言で、うしろに控えている）' }),
+        npc('ken_tescort', 15, 7, 'up', { name: '護送の警察官', look: LK.police }, { cond: (g) => kenEscort(g, 'tokuso'), text: '（無言で、うしろに控えている）' }),
         { type: 'sign', x: 4, y: 1, text: 'ホワイトボードに、人の名前のかわりに\nアルファベットと矢印が書きこまれている。\n…お金の流れを整理した図らしい。' },
         { type: 'sign', x: 6, y: 1, text: '「押収品目録」の紙が貼ってある。\n帳簿、通帳、手帳、パソコン…\n番号がどこまでも続いている。' },
         { type: 'sign', x: 1, y: 2, text: '押収した資料の段ボール箱が、天井近くまで\n積み上がっている。' },
@@ -1869,8 +1882,8 @@ function courtroom(cfg) {
     '#ddddddddddddddddd#',
     '#bbbbbbbbbbbbbbbbb#',
     '#.................#',
-    cfg.saibanin ? '#.t......W......t.#' : '#.T......W....D.T.#',
-    cfg.saibanin ? '#.t.............t.#' : '#.T...........D.T.#',
+    cfg.saibanin ? '#.t......W......t.#' : cfg.noDock ? '#.T.............T.#' : '#.T......W....D.T.#',
+    cfg.saibanin ? '#.t.............t.#' : cfg.noDock ? '#.T.............T.#' : '#.T...........D.T.#',
     '#.................#',
     '#.................#',
     '#rrrrrrrrGrrrrrrrr#',
@@ -1931,10 +1944,10 @@ function courtroom(cfg) {
     r: 'saibansho_bar', G: 'saibansho_bargate', g: 'saibansho_gallery',
   };
   return {
-    floor: 'saibansho_floor',
+    floor: cfg.floor || 'saibansho_floor',
     tiles,
     legend,
-    get entry() { return ACTIVE.fresh && ACTIVE.place === SAI && ACTIVE.room === room ? (cfg.gallerySeat ? { x: 9, y: 10, dir: 'up' } : { x: 9, y: 6, dir: 'up' }) : { x: 9, y: 11, dir: 'up' }; },
+    get entry() { return flowEntry(SAI, room) ? (cfg.gallerySeat ? { x: 9, y: 10, dir: 'up' } : { x: 9, y: 6, dir: 'up' }) : { x: 9, y: 11, dir: 'up' }; },
     warps: cfg.warps,
     entities: ents,
     events: [
@@ -2005,12 +2018,12 @@ async function supremeTour(g) {
   if (k !== 0) return;
   await narrate(g, '（見学ツアーに申しこんで、最高裁判所へ向かった）');
   await g.goto(SAI, 'daihotei', 10, 11, 'up');
-  await say(g, WHO.tour, ['ここが大法廷です。正面の法壇には、\n最高裁判所の裁判官15人全員が座ります。', '大法廷が開かれるのは、法律が憲法に違反するかどうか\nを判断するときや、これまでの判例を変えるときなど、\nかぎられた場合だけです。']);
+  await say(g, WHO.tour, ['ここが大法廷です。正面の法壇には、\n最高裁判所の裁判官15人全員が座ります。', '大法廷が開かれるのは、法律などが憲法に合っているかを\n新しく判断するときや、これまでの判例を変えるときなど、\nかぎられた場合だけです。']);
 }
 async function tourGuideTalk(g) {
   const who = WHO.tour;
   const k = await ask(g, who, '見学の案内です。', ['大法廷について', '小法廷を見る', '上告ってなに？', '見学を終える'], { cancel: 3 });
-  if (k === 0) await say(g, who, ['最高裁判所には、15人の裁判官がいます。\nふだんは5人ずつ、3つの小法廷に分かれて審理します。', '大法廷は15人全員で開かれます。\n法律が憲法に違反しているかどうかを決めるのは、\nここだけなんです。']);
+  if (k === 0) await say(g, who, ['最高裁判所には、15人の裁判官がいます。\nふだんは5人ずつ、3つの小法廷に分かれて審理します。', '大法廷は15人全員で開かれます。\n法律が憲法に違反すると判断できるのは、\nこの大法廷だけなんです。']);
   else if (k === 1) { await g.goto(SAI, 'shohotei', 9, 10, 'up'); await say(g, who, ['こちらが小法廷です。\n上告された事件のほとんどは、ここで審理されます。', '上告審は書面での審理が中心で、\n多くの事件は法廷を開かずに結論が出ます。']); }
   else if (k === 2) await say(g, who, ['高等裁判所の判決に不服があるとき、\n最高裁判所に申し立てるのが「上告」です。', 'ただし、刑事事件で上告できる理由は、\n憲法違反や判例違反などに限られています。\n「刑が重すぎる」だけでは、上告の理由になりません。']);
   else { await narrate(g, '（見学を終えて、霞が関の裁判所に戻った）'); await g.goto(SAI, 'lobby', 9, 8, 'up'); }
@@ -2100,7 +2113,7 @@ registerPlace({
         '#..................#',
         '#########MM#########',
       ],
-      legend: { D: 'saibansho_wall+door_wood', k: 'saibansho_wall+saibansho_board', w: 'saibansho_wall+window', q: 'keisatsu_bench', K: 'saibansho_counter', P: 'plant' },
+      legend: { D: 'door_wood', k: 'saibansho_wall+saibansho_board', w: 'saibansho_wall+window', q: 'keisatsu_bench', K: 'saibansho_counter', P: 'plant' },
       warps: [
         ...exitWarps(SAI, [9, 10], 9),
         { x: 3, y: 1, room: 'chisai', tx: 9, ty: 11, dir: 'up' },
@@ -2149,12 +2162,12 @@ registerPlace({
       warps: courtExit(6),
     }),
     kousai: courtroom({
-      room: 'kousai', seats: [8, 9, 10], chief: 9,
+      room: 'kousai', seats: [8, 9, 10], chief: 9, floor: 'saibansho_floor_hi',
       judges: () => [8, 9, 10],
       warps: courtExit(9),
     }),
     shohotei: courtroom({
-      room: 'shohotei', seats: [7, 8, 9, 10, 11], chief: 9, gallerySeat: true,
+      room: 'shohotei', seats: [7, 8, 9, 10, 11], chief: 9, gallerySeat: true, noDock: true, floor: 'saibansho_floor_sup',
       judges: () => [7, 8, 9, 10, 11],
       warps: [{ x: 9, y: 12, room: 'daihotei', tx: 10, ty: 11, dir: 'up' }],
     }),
@@ -2173,7 +2186,7 @@ registerPlace({
         '####M#####',
       ],
       legend: { k: 'saibansho_wall+saibansho_clock' },
-      get entry() { return ACTIVE.fresh && ACTIVE.place === SAI && ACTIVE.room === 'kouryu' ? { x: 4, y: 3, dir: 'up' } : { x: 4, y: 6, dir: 'up' }; },
+      get entry() { return flowEntry(SAI, 'kouryu') ? { x: 4, y: 4, dir: 'up' } : { x: 4, y: 6, dir: 'up' }; },
       warps: [{ x: 4, y: 7, room: 'lobby', tx: 3, ty: 2, dir: 'down', check: heldCheck('（勾留質問の途中だ…）') }],
       entities: [
         plate(4.5, 1, '勾留質問室', 3, '#4e3420'),
@@ -2183,8 +2196,8 @@ registerPlace({
           talk: posted('down', lines(WHO.clerk, ['勾留質問室です。検察官が勾留を請求すると、\n裁判官がここで被疑者から直接話を聞きます。', '逃げたり、証拠を隠したりするおそれがあると\n認められれば、まず10日間の勾留が決まります。\nさらに10日まで延長されることがあります。'])),
         }),
         deskProp(7, 2, 1, 'light', { lip: 7 }),
-        person(3, 4, 'up', LK.police, (g) => flowIn(g, SAI, 'kouryu')),
-        person(5, 4, 'up', LK.police, (g) => flowIn(g, SAI, 'kouryu')),
+        person(3, 5, 'up', LK.police, (g) => flowIn(g, SAI, 'kouryu')),
+        person(5, 5, 'up', LK.police, (g) => flowIn(g, SAI, 'kouryu')),
       ],
       onEnter: (g) => { enteredByFlow(g, SAI, 'kouryu'); },
     },
@@ -2248,7 +2261,7 @@ registerPlace({
         '#####M#####',
       ],
       legend: { w: 'saibansho_wall+window', k: 'saibansho_wall+saibansho_clock' },
-      get entry() { return ACTIVE.fresh && ACTIVE.place === SAI && ACTIVE.room === 'shinjin' ? { x: 5, y: 3, dir: 'up' } : { x: 5, y: 6, dir: 'up' }; },
+      get entry() { return flowEntry(SAI, 'shinjin') ? { x: 5, y: 4, dir: 'up' } : { x: 5, y: 6, dir: 'up' }; },
       warps: [{ x: 5, y: 7, room: 'minji', tx: 9, ty: 2, dir: 'down' }],
       entities: [
         plate(4, 1, '審尋室', 3, '#4e3420'),
@@ -2257,8 +2270,8 @@ registerPlace({
         npc('sai_shinjin_clerk', 8, 2, 'down', WHO.clerk, {
           talk: posted('down', lines(WHO.clerk, ['審尋室です。破産の申立てをした人に、\n裁判官が借金のいきさつや、いまの暮らしを聞きます。', '正直に話して、生活を立て直す気持ちを伝えることが\nいちばん大切です。'])),
         }),
-        person(7, 3, 'up', caseLawyer, bankruptFlow),
-        person(3, 3, 'up', LK.shisen, (g) => bankruptFlow(g) && !!(jus(g) && jus(g).bankrupt && jus(g).bankrupt.kind === 'kanzai')),
+        person(7, 4, 'up', caseLawyer, bankruptFlow),
+        person(3, 4, 'up', LK.shisen, (g) => bankruptFlow(g) && !!(jus(g) && jus(g).bankrupt && jus(g).bankrupt.kind === 'kanzai')),
       ],
       onEnter: async (g) => {
         if (!enteredByFlow(g, SAI, 'shinjin')) return;
@@ -2273,7 +2286,7 @@ registerPlace({
 
     // -------------------------------------------------------------- 最高裁判所 大法廷（見学）
     daihotei: {
-      floor: 'saibansho_floor',
+      floor: 'saibansho_floor_sup',
       topPad: 16,
       tiles: [
         '#####################',
@@ -2311,3 +2324,593 @@ registerPlace({
     },
   },
 });
+
+// ======================================================================== 刑務所
+const serving = (g) => { const j = jus(g); return !!(j && j.prison); };
+const servingKind = (g) => { const j = jus(g); return j && j.prison ? j.prison.kind : null; };
+const prisonName = () => (PLACES[MU] && PLACES[MU].name) || '刑務所';
+// The prison uniform (受刑者の衣類), worn from 入所 to 出所. The player's own look is kept and put back at the gate.
+function wearUniform(g) {
+  const f = fl(g);
+  if (f.lookSaved) return;
+  const lk = g.state.look || LOOKS.player;
+  f.lookSaved = JSON.parse(JSON.stringify(lk));
+  const u = { ...lk, top: PP.uniform, bottom: PP.uniformD };
+  for (const k of ['jacket', 'tie', 'skirt', 'apron', 'kimono', 'ribbon', 'hat']) delete u[k];
+  if (u.hair === 'cap' || u.hair === 'helmet') u.hair = 'short';
+  if (u.glasses === 'sun') u.glasses = true;
+  g.state.look = u;
+}
+function ownClothes(g) {
+  const f = g.state && g.state.flags && g.state.flags.jpl;
+  if (!f || !f.lookSaved) return false;
+  g.state.look = f.lookSaved;
+  delete f.lookSaved;
+  return true;
+}
+onMorning((g) => { try { if (g.state && !serving(g)) ownClothes(g); } catch (e) { console.error(e); } });
+const inmateNo = (g, pr) => 1000 + ((((pr.start || 1) * 37 + (pr.caseId || 3) * 101) % 8999) + 8999) % 8999;
+const callName = (g) => (since(g, 2024, 4) ? `${(g.state.profile && g.state.profile.familyName) || g.state.name}さん` : null);
+
+// ---------------------------------------------------------------- 入所 / 出所 (the gate)
+async function nyusho(g, pr) {
+  const f = fl(g);
+  if (f.nyusho === pr.start) return;
+  f.nyusho = pr.start;
+  f.visitStart = pr.start; f.visits = 0; f.visited = [];
+  if (pr.kind === 'roueki') return;
+  wearUniform(g);
+  const no = inmateNo(g, pr);
+  await narrate(g, ['（護送車を降りると、そこは高い塀の内側だった）', '（所持品をすべて預け、身体検査を受けた。\n私服をぬいで、受刑者の服に着替えた）']);
+  const cn = callName(g);
+  await say(g, WHO.keimukan, cn
+    ? [`あなたの称呼番号は${no}番です。`, `ただ、ふだんは名前に「さん」をつけて呼びます。\n${cn}、ここでの規則を、しっかり覚えてください。`]
+    : [`今日から、おまえの称呼番号は${no}番だ。\nここでは、この番号で呼ばれる。`, '規則を守って、まじめに務めること。']);
+  await narrate(g, since(g, 2006, 5)
+    ? '（はじめの2週間ほどは、生活の決まりや作業のしかたを\n学ぶ「刑執行開始時の指導」を受ける）'
+    : '（はじめのしばらくは「考査」の期間。\n規則と作業のしかたをたたきこまれる）');
+}
+async function shusho(g) {
+  const f = fl(g);
+  const wore = ownClothes(g);
+  const w = f.work;
+  const pages = [];
+  if (wore) pages.push('（預けていた私服に着替えた。\n袖を通すと、少しだけ大きく感じた）');
+  if (w && w.xp > 0 && w.start === f.nyusho) pages.push(`（工場で覚えた${WORK[w.line].name}の腕前は「${workRank(w.xp)}」。\n…この手で、もう一度やり直そう）`);
+  if (pages.length) await narrate(g, pages);
+}
+onJustice('released', (g, info) => {
+  try {
+    if (!info || !info.prison) return;
+    ownClothes(g);
+    if (family(g).length) return;
+    const id = closeFriend(g, 2)[0];
+    const def = id && PEOPLE[id];
+    if (!def) return;
+    const k = def.dialect === 'kansai';
+    g.message({ from: def.name, person: id, kind: 'chat', text: k ? '出てきたって聞いたで。…おかえり。\n落ち着いたら、ごはん行こ。いつでも連絡してな。' : '出所したって聞いた。…おかえり。\n落ち着いたら、ごはん行こう。いつでも連絡して。' });
+  } catch (e) { console.error(e); }
+});
+
+// ---------------------------------------------------------------- 刑務作業 (a small skill / stress loop)
+const WORK = {
+  mokko: {
+    name: '木工', spot: [3, 5],
+    steps: [
+      ['かんなで板を削る作業だ。', ['木目にそって、ていねいに', '力まかせに早く']],
+      ['椅子の脚を組む「ほぞ組み」だ。', ['寸法を何度も測る', '目分量で切る']],
+      ['仕上げの塗装だ。', ['うすく何度も重ねる', '一度で厚く塗る']],
+    ],
+    made: ['折りたたみ椅子', 'ひのきのまな板', '小さな本棚'],
+  },
+  insatsu: {
+    name: '印刷', spot: [9, 5],
+    steps: [
+      ['版の位置合わせだ。', ['見本と1枚ずつ見くらべる', 'だいたいで刷り始める']],
+      ['インクの量の調整だ。', ['少しずつ足していく', 'まとめてたっぷり入れる']],
+      ['刷り上がりの検品だ。', ['1枚ずつ光にかざす', 'ぱらぱらめくって終える']],
+    ],
+    made: ['役所の伝票', '封筒', '来年のカレンダー'],
+  },
+  yosai: {
+    name: '洋裁', spot: [15, 5],
+    steps: [
+      ['ミシンの直線縫いだ。', ['布を手でまっすぐ送る', 'スピードを上げる']],
+      ['ボタンつけだ。', ['糸を3回通して固める', '1回でとめる']],
+      ['仕上げのアイロンだ。', ['縫い目にそって押さえる', 'ざっとかける']],
+    ],
+    made: ['作業着', 'エプロン', '帆布のトートバッグ'],
+  },
+};
+const WORK_RANKS = [[0, '見習い'], [3, '一人前'], [7, '熟練'], [12, '班のまとめ役']];
+const workRank = (xp) => WORK_RANKS.reduce((a, [n, name]) => (xp >= n ? name : a), '見習い');
+const myWorkSpot = (g) => { const w = fl(g).work; return w && serving(g) && WORK[w.line] ? WORK[w.line].spot : null; };
+async function factoryWork(g, pr) {
+  const f = fl(g);
+  if (pr.kind === 'roueki') {
+    await narrate(g, '（労役場の作業は、紙袋の組み立てだった。\n1日に何百枚も、同じ形に折っていく…）');
+    return;
+  }
+  if (pr.kind === 'kinko' && !pr.petition && !(f.work && f.work.start === pr.start)) return; // 禁錮: work only on request (the core asks)
+  if (!f.work || f.work.start !== pr.start) {
+    const ks = Object.keys(WORK);
+    const k = await ask(g, WHO.keimukan, kokin(g)
+      ? ['今日から工場に出てもらう。拘禁刑では、作業も\n立ち直りのための大事な時間だ。', '本人の希望と向き不向きも考えて決める。\nやってみたい作業はあるか？']
+      : ['今日から、この工場に出役だ。', '空いている作業の中から、希望を聞いておく。'], ks.map((x) => WORK[x].name));
+    f.work = { line: ks[clamp(k, 0, ks.length - 1)], xp: 0, start: pr.start, made: 0 };
+    const sp = WORK[f.work.line].spot;
+    if (g.map.placeId === MU && g.map.roomId === 'kojo') g.placePlayer(sp[0], sp[1], 'up');
+    await narrate(g, `（${WORK[f.work.line].name}の班に入った。\n先輩の受刑者が、だまって道具の使い方を見せてくれた）`);
+  }
+  const w = f.work;
+  const L = WORK[w.line];
+  const [what, opts] = L.steps[w.made % L.steps.length];
+  const before = workRank(w.xp);
+  const c = await ask(g, null, `（${what}）`, opts);
+  if (c === 0) { w.xp += 2; g.addNeed('stress', -4); await narrate(g, '（手を動かしているあいだは、よけいなことを考えずにすむ。\n仕上がりを見て、担当の刑務官が小さくうなずいた）'); }
+  else { w.xp += 1; g.addNeed('stress', 2); await narrate(g, '（検品で、やり直しを命じられた。\n…あせっても、いいことはひとつもない）'); }
+  w.made += 1;
+  const after = workRank(w.xp);
+  if (after !== before) await narrate(g, `（${L.name}の腕前が「${after}」になった。\nこの工場で作った${L.made[w.made % L.made.length]}は、刑務所作業製品として\n一般の人に売られるらしい）`);
+}
+
+// ---------------------------------------------------------------- 改善指導・教科指導 (the classroom)
+async function classProgram(g, pr) {
+  const f = fl(g);
+  const cs = (jus(g).record || []).slice().reverse().find((r) => r.outcome === 'prison') || {};
+  const crime = cs.crime || '';
+  if (!since(g, 2006, 5)) {
+    const k = await ask(g, WHO.kyouiku, '今日は、どの時間に出る？', ['教誨（宗教家との面談）', '読み書きの勉強', '何もしない']);
+    if (k === 0) await narrate(g, '（ボランティアの宗教家が、静かに話を聞いてくれた。\n「あなたは、やり直せる」――その言葉が、残った）');
+    else if (k === 1) await narrate(g, '（漢字の書き取りと、手紙の書き方を習った。\n家族に出す手紙が、少しうまく書けた）');
+    if (k !== 2) g.addNeed('stress', -5);
+    return;
+  }
+  const items = [];
+  if (VICTIM_CRIMES.has(crime)) items.push(['被害者の視点を取り入れた教育', 'victim']);
+  if (['drunk_driving', 'traffic_injury'].includes(crime)) items.push(['交通安全指導', 'traffic']);
+  items.push(['就労支援指導', 'job'], ['一般改善指導', 'general']);
+  const k = await ask(g, WHO.kyouiku, kokin(g)
+    ? ['教育専門官です。拘禁刑では、一人ひとりに合わせて\n作業と指導を組み合わせます。', '今日のプログラムを選んでください。']
+    : '教育専門官です。今日のプログラムを選んでください。', items.map((x) => x[0]));
+  const kind = (items[k] || items[items.length - 1])[1];
+  if (kind === 'victim') await narrate(g, ['（被害にあった人や遺族の手記を読み、\nグループで話し合った）', '（「あの日から、夜道が歩けなくなった」――\n自分のしたことの重さが、少しずつ見えてくる）']);
+  else if (kind === 'traffic') await narrate(g, ['（交通事故の被害者の話を聞き、飲酒運転の\nおそろしさを数字と映像で学んだ）', '（ハンドルを握る資格が、自分にあったのか…）']);
+  else if (kind === 'job') await narrate(g, ['（履歴書の書き方、面接の受け答えを練習した。\n「前科のことを、どう話すか」も）', '（出所したら、ハローワークや保護観察所が\n仕事さがしを手伝ってくれるという）']);
+  else await narrate(g, ['（お金の使い方、怒りとのつきあい方、人に頼ること…。\nグループで、自分の考え方のくせを見つめ直した）', '（「困ったときに、だれに相談できるか」――\n紙に書けた名前は、思ったより少なかった）']);
+  f.programs = (f.programs || 0) + 1;
+  g.addNeed('stress', -6);
+}
+
+// ---------------------------------------------------------------- extra visits (friends, the partner, the special one)
+const VISIT = { look: null, name: '', on: false };
+function nextVisitor(g, pr) {
+  const f = fl(g);
+  if (f.visitStart !== pr.start) return closeFriend(g, 1)[0] || null;
+  if ((f.visits || 0) >= 2) return null;
+  const done = new Set(f.visited || []);
+  return closeFriend(g, 1).find((x) => !done.has(x)) || null;
+}
+function visitDue(g, pr) { try { return !!g && !!pr && pr.kind !== 'roueki' && pr.kind !== 'shonenin' && !!nextVisitor(g, pr); } catch (e) { return false; } }
+async function friendVisit(g, pr) {
+  const f = fl(g);
+  if (f.visitStart !== pr.start) { f.visitStart = pr.start; f.visits = 0; f.visited = []; }
+  if (f.visits >= 2 || VISIT.on) return;
+  const id = nextVisitor(g, pr);
+  const def = id && PEOPLE[id];
+  if (!def) return;
+  const aff = typeof g.aff === 'function' ? g.aff(id) : 40;
+  const k = def.dialect === 'kansai';
+  const partner = g.state.partner === id;
+  const special = !!(g.state.people[id] && g.state.people[id].special);
+  let pages;
+  if (partner) pages = k ? ['…なんや、やせたな。ちゃんと食うとるか。', 'コンビは解散せえへんで。\nネタ、ノートに書きためとるからな。\n出てきたら、いちばんに舞台や。'] : ['…やせたな。ちゃんと食べてるか。', 'コンビは解散しないからな。\nネタ、ノートに書きためてる。\n出てきたら、いちばんに舞台だ。'];
+  else if (special) pages = ['…ずっと、来ようか迷ってた。', 'でも、顔を見たら安心した。\n手紙、毎週書くね。…待ってるから。'];
+  else if (aff >= 35) pages = k ? ['差し入れ、本とお菓子入れといたで。', 'みんな心配しとる。\n出てきたら、またアホな話しよな。'] : ['差し入れ、本とお菓子を入れておいたよ。', 'みんな心配してる。\n出てきたら、また一緒にごはん行こう。'];
+  else pages = ['…正直、まだ気持ちの整理はついてない。\nでも、顔くらいは見ておこうと思って。', 'ちゃんと、ここで向き合ってほしい。\n…それだけ言いに来た。'];
+  f.visits += 1;
+  (f.visited = f.visited || []).push(id);
+  VISIT.on = true; VISIT.look = def.look; VISIT.name = def.name;
+  try {
+    if (g.map.placeId !== MU || g.map.roomId !== 'menkai') await g.goto(MU, 'menkai', 5, 3, 'down');
+    else g.placePlayer(5, 3, 'down');
+    await narrate(g, `（面会室に呼ばれた。アクリル板の向こうに、\n${def.name}が座っていた）`);
+    await say(g, { name: def.name, look: def.look }, pages);
+    await narrate(g, '（面会の時間は、あっというまに終わった。\nそばで聞いていた刑務官が、そっと時計を見た）');
+    g.addNeed('stress', aff >= 35 ? -12 : -4);
+    if (aff >= 15) g.addAff(id, 2, true);
+    await g.goto(MU, 'kyoshitsu', 5, 5, 'down');
+  } finally { VISIT.on = false; }
+}
+
+// ---------------------------------------------------------------- the tour (刑務所の参観) for visitors
+async function tourKeimusho(g) {
+  const k = await ask(g, WHO.keimukan, ['刑務所の参観ですね。学生や地域の方の見学を、\n受け付けることがあります。', '受刑者のプライバシーのため、話しかけたり、\nじろじろ見たりしないでください。'], ['参観する', 'やめておく'], { cancel: 1 });
+  if (k !== 0) return;
+  await g.goto(MU, 'kojo', 18, 2, 'down');
+  await say(g, WHO.keimukan, ['ここは工場です。木工、印刷、洋裁…\n作業の時間は、だいたい朝から夕方まで。', '作業の報奨金は、ひと月に数千円ほど。\n出所するときの、生活の元手になります。']);
+}
+const exitToGate = (g) => g.goto(MU, 'mon', 9, 10, 'up');
+function innerExit(x, y) {
+  return { x, y, dir: 'down', check: heldCheck('（勝手に出歩くことはできない…）'), place: MU, room: 'mon', tx: 9, ty: 10 };
+}
+// the street in front of the gate leads home
+function homeSpot(g) {
+  try { const h = g.housing(); if (h && PLACES[h.place]) return { place: h.place, room: h.room }; } catch (e) { /* no life */ }
+  return { place: PLACES.home ? 'home' : 'tokyo', room: undefined };
+}
+function gateExit(x, y) {
+  return {
+    x, y, dir: 'down', check: heldCheck('（ここから出ることはできない…）'),
+    get place() { const g = G(); return g ? homeSpot(g).place : 'tokyo'; },
+    get room() { const g = G(); return g ? homeSpot(g).room : undefined; },
+  };
+}
+
+// ---------------------------------------------------------------- 作業製品
+registerItem('keimusho_soap', {
+  name: 'ひのき石けん（刑務所作業製品）', price: 400,
+  desc: '刑務所の工場で作られた石けん。使うと身だしなみ +15。',
+  use: async (g) => { g.takeItem('keimusho_soap'); g.bathe(15, true); await g.say('ひのきの香りの石けんで、手と顔を洗った。\n身だしなみ +15'); },
+});
+registerItem('keimusho_board', { name: 'ひのきのまな板（刑務所作業製品）', price: 2500, desc: '受刑者が工場で仕上げた、木工のまな板。しっかりとした作り。' });
+registerItem('keimusho_bag', { name: '帆布のトートバッグ（刑務所作業製品）', price: 1800, desc: '洋裁の工場で縫われた、じょうぶなトートバッグ。' });
+async function shopTalk(g) {
+  await say(g, WHO.shop, ['刑務所作業製品の展示販売です。\n受刑者が工場で作った品物を、どなたでも買えますよ。', '売り上げは国の収入になりますが、作業に打ちこむことは、\n受刑者が社会に戻る力になります。']);
+  await g.shop(['keimusho_soap', 'keimusho_board', 'keimusho_bag'], { title: '刑務所作業製品', greeting: 'どれも、ていねいに作られています。' });
+}
+async function gateGuardTalk(g) {
+  const who = WHO.keimukan;
+  const k = await ask(g, who, `${prisonName()}の正門です。ご用件は？`, ['面会のきまり', '刑務所のこと', '参観（見学）', 'やめる'], { cancel: 3 });
+  if (k === 0) await say(g, who, ['面会できるのは、家族や、仕事・生活の再建に\n必要な用事のある人などです。', '面会は平日の決まった時間に、回数の上限があります。\n刑務官が立ち会い、話の内容も聞いています。', '差し入れは、受付で決められた物だけ。\n手紙は、だれでも出すことができます。']);
+  else if (k === 1) await say(g, who, [kokin(g) ? '2025年6月から、懲役と禁錮は「拘禁刑」になりました。\n罰を与えるだけでなく、立ち直りのための作業や指導を\n一人ひとりに合わせて行います。' : '刑務所は、罰を受ける場所であると同時に、\n社会に戻るための準備をする場所でもあります。', '刑期の3分の1をすぎれば、仮釈放の対象になります。\nただ、実際に認められるのは、まじめに過ごし、\n帰る場所や仕事の見通しがある人です。']);
+  else if (k === 2) await tourKeimusho(g);
+}
+
+// ---------------------------------------------------------------- the rooms of the prison
+const flowHere = (g, room) => flowIn(g, MU, room);
+const inmateLooks = [LK.inmate, LK.inmate2, LK.inmate3, LK.inmate4, LK.inmate5];
+const WORKERS = [];
+for (const y of [5, 7, 9]) for (const x of [2, 3, 4, 8, 9, 10, 14, 15, 16]) WORKERS.push([x, y]);
+const CELLMATES = [[3, 4, 'right'], [8, 4, 'left'], [3, 6, 'right'], [8, 6, 'left'], [6, 7, 'up']];
+const YARD = [[4, 4], [12, 5], [15, 8], [7, 8]];
+const STUDENTS = [[3, 4], [4, 4], [6, 4], [9, 4], [10, 4], [3, 6], [6, 6], [7, 6], [10, 6]];
+registerPlace({
+  id: MU,
+  name: 'ドット刑務所',
+  kind: 'building',
+  bgm: 'office',
+  // the gate is also the start room: g.goto reads place.start for it, so the flow's spot is decided here
+  get start() {
+    if (flowEntry(MU, 'mon')) return serving(G()) ? { room: 'mon', x: 9, y: 3, dir: 'up' } : { room: 'mon', x: 9, y: 6, dir: 'down' };
+    return { room: 'mon', x: 9, y: 11, dir: 'up' };
+  },
+  legend: { '#': 'keimusho_walltop', '=': 'keimusho_wall', M: 'exit_mat' },
+  rooms: {
+    // -------------------------------------------------------------- 正門（入所・出所・面会受付・作業製品の販売）
+    mon: {
+      floor: 'sidewalk',
+      tiles: [
+        '####################',
+        '#==w==w==Dw==w==w==#',
+        '#cccccccccccccccccc#',
+        '#cccccccccccccccccc#',
+        'TTTTTTTTTGGTTTTTTTTT',
+        'WWWWWWWWWggWWWWWWWWW',
+        'h..........B.......h',
+        'h.KKK..............h',
+        'h..................h',
+        'h...pp........pp...h',
+        'h..................h',
+        'h..................h',
+        'hhhhhhhhh..hhhhhhhhh',
+      ],
+      legend: {
+        D: 'keimusho_celldoor', c: 'keimusho_conc', T: 'keimusho_wallout_top', W: 'keimusho_wallout', G: 'keimusho_wallout_top', g: 'keimusho_gate',
+        h: 'hedge', B: 'keimusho_guardbox', K: 'keimusho_kiosk', p: 'keimusho_planter', w: 'keimusho_wall+keimusho_window',
+      },
+      get entry() {
+        if (!(flowEntry(MU, 'mon'))) return { x: 9, y: 11, dir: 'up' };
+        const g = G();
+        return serving(g) ? { x: 9, y: 3, dir: 'up' } : { x: 9, y: 6, dir: 'down' };
+      },
+      warps: [gateExit(9, 12), gateExit(10, 12)],
+      entities: [
+        plate(4, 5, prisonName, 4, '#3a4a3a'),
+        busProp(13, 2, (g) => serving(g) && flowHere(g, 'mon')),
+        person(8, 3, 'right', LK.keimukan, (g) => serving(g) && flowHere(g, 'mon')),
+        person(10, 2, 'down', LK.keimukanW, (g) => serving(g) && flowHere(g, 'mon')),
+        person(9, 8, 'up', (g) => { const m = family(g)[0]; return m ? famLook(g, m) : null; }, (g) => !serving(g) && flowHere(g, 'mon') && family(g).length > 0),
+        npc('mu_gate', 12, 6, 'down', WHO.keimukan, { talk: posted('down', gateGuardTalk) }),
+        npc('mu_shop', 3, 6, 'down', WHO.shop, { talk: posted('down', shopTalk) }),
+        npc('mu_visitor', 6, 9, 'up', { name: '面会に来た女性', look: LOOKS.oldwoman }, {
+          text: ['息子の面会に来たんです。月に一度、電車を乗りついで。', '会えるのは、ほんの少しの時間。\nでも、顔を見ると、来てよかったって思うんです。'],
+        }),
+        npc('mu_hogo', 15, 10, 'left', { name: '更生保護施設の職員', look: LK.citizens[0] }, {
+          text: ['出所する人を迎えに来ました。帰る家のない人が、\nしばらく暮らしながら仕事をさがす施設の者です。', 'まわりに頼れる人がいるかどうかで、\n再犯するかどうかは大きく変わるんですよ。'],
+        }),
+        { type: 'sign', x: 10, y: 5, text: '高い塀に、鉄の門。\n…中の様子は、まったく見えない。' },
+      ],
+      onEnter: async (g) => {
+        if (!enteredByFlow(g, MU, 'mon')) { if (!serving(g)) ownClothes(g); return; }
+        const j = jus(g);
+        if (j && j.prison) await nyusho(g, j.prison);
+        else await shusho(g);
+      },
+    },
+
+    // -------------------------------------------------------------- 居室（共同室）
+    kyoshitsu: {
+      floor: 'keimusho_tatami',
+      tiles: [
+        '############',
+        '#==ww===D==#',
+        '#Stttttttts#',
+        '#Ftttttttvt#',
+        '#tttttTtttt#',
+        '#tttttttttt#',
+        '#tttttttttt#',
+        '#tttttttttt#',
+        '############',
+      ],
+      legend: { w: 'keimusho_wall+keimusho_window', D: 'keimusho_celldoor', S: 'keimusho_tatami+keimusho_shelf', s: 'keimusho_tatami+keimusho_wc', F: 'keimusho_tatami+keimusho_futon', v: 'keimusho_tatami+keimusho_tv', T: 'keimusho_tatami+keimusho_table', t: 'keimusho_tatami' },
+      get entry() { return flowEntry(MU, 'kyoshitsu') ? { x: 5, y: 5, dir: 'down' } : { x: 8, y: 2, dir: 'down' }; },
+      warps: [innerExit(8, 1)],
+      entities: [
+        ...CELLMATES.map(([x, y, d], i) => person(x, y, d, inmateLooks[i % inmateLooks.length], serving)),
+        npc('mu_cell_guide', 7, 2, 'down', WHO.keimukanW, {
+          cond: (g) => !serving(g),
+          talk: posted('down', lines(WHO.keimukanW, ['ここは6人が暮らす共同室です。食事も、ここでとります。', '朝は早く起きて布団をたたみ、点検。\n昼間は工場で作業、夕方に戻って自由時間があり、\n夜9時ごろには消灯です。', 'ひとりになれる時間は、ほとんどありません。\n人との距離のとり方も、ここで学ぶことのひとつです。'])),
+        }),
+        { type: 'sign', x: 3, y: 1, text: '鉄格子のはまった窓。\n空が、四角く切りとられて見える。' },
+        { type: 'sign', x: 1, y: 2, text: '私物を置くたな。\n手紙と本、洗面用具…持てる物は決められている。' },
+      ],
+      onEnter: async (g) => {
+        if (!enteredByFlow(g, MU, 'kyoshitsu') || VISIT.on) return;
+        const j = jus(g);
+        const pr = j && j.prison;
+        if (!pr) return;
+        const f = fl(g);
+        if (f.cellIntro !== pr.start) {
+          f.cellIntro = pr.start;
+          await narrate(g, ['（共同室には、ほかに5人の受刑者がいた。\nだれも、こちらの事件のことは聞いてこない）', '（朝は早く起きて布団をたたみ、点検。\n昼は工場、夕方に戻って、夜9時ごろに消灯…）']);
+          return;
+        }
+      },
+    },
+
+    // -------------------------------------------------------------- 工場（刑務作業）
+    kojo: {
+      floor: 'keimusho_floor',
+      tiles: [
+        '####################',
+        '#==w==w==w==w==w==D#',
+        '#LL.............xx.#',
+        '#..................#',
+        '#.BBB...PPP...SSS..#',
+        '#..................#',
+        '#.BBB...PPP...SSS..#',
+        '#..................#',
+        '#.BBB...PPP...SSS..#',
+        '#..................#',
+        '#p.................#',
+        '####################',
+      ],
+      legend: { w: 'keimusho_wall+keimusho_window', D: 'keimusho_celldoor', L: 'keimusho_lumber', x: 'boxes', B: 'keimusho_bench', P: 'keimusho_press', S: 'keimusho_sewing', p: 'plant' },
+      get entry() {
+        if (!(flowEntry(MU, 'kojo'))) return { x: 18, y: 2, dir: 'down' };
+        const g = G();
+        const s = g && myWorkSpot(g);
+        return s ? { x: s[0], y: s[1], dir: 'up' } : { x: 3, y: 5, dir: 'up' };
+      },
+      warps: [innerExit(18, 1)],
+      entities: [
+        plate(1, 1, '木工', 3, '#3a4a3a'), plate(7, 1, '印刷', 3, '#3a4a3a'), plate(13, 1, '洋裁', 3, '#3a4a3a'),
+        person(9, 2, 'down', LK.keimukan, null),
+        deskProp(8, 2, 3, 'grey', { lip: 8, papers: [0], drop: 6 }),
+        ...WORKERS.map(([x, y], i) => person(x, y, 'up', inmateLooks[(i * 3) % inmateLooks.length], (g) => { const s = myWorkSpot(g); return !(s && s[0] === x && s[1] === y); }, { frame: false })),
+        npc('mu_kojo_guide', 17, 3, 'left', WHO.keimukanW, {
+          cond: (g) => !serving(g),
+          talk: posted('left', async (g) => {
+            await say(g, WHO.keimukanW, ['工場では、会話は必要なときだけ。\n担当の刑務官が、あの台から全体を見ています。', '作った製品は、刑務所作業製品として販売されたり、\n役所の備品になったりします。', since(g, 2025, 6) ? '拘禁刑になってから、作業は「義務」から、\n立ち直りのための「指導」の一部になりました。' : '作業を通じて、働く習慣と技術を身につける――\nそれが出所後の暮らしにつながります。']);
+            const k = await ask(g, WHO.keimukanW, 'ほかの場所も見ますか？', ['居室', '運動場', '教室', '面会室', '参観を終える'], { cancel: 4 });
+            if (k === 0) await g.goto(MU, 'kyoshitsu', 8, 2, 'down');
+            else if (k === 1) await g.goto(MU, 'undojo', 9, 2, 'down');
+            else if (k === 2) await g.goto(MU, 'kyoiku', 12, 2, 'down');
+            else if (k === 3) await g.goto(MU, 'menkai', 5, 6, 'up');
+            else await exitToGate(g);
+          }),
+        }),
+        { type: 'sign', x: 1, y: 2, text: '木工用の材木が積まれている。\nひのきの香りがする。' },
+      ],
+      onEnter: async (g) => {
+        if (!enteredByFlow(g, MU, 'kojo')) return;
+        const j = jus(g);
+        if (j && j.prison) await factoryWork(g, j.prison);
+      },
+    },
+
+    // -------------------------------------------------------------- 運動場
+    undojo: {
+      floor: 'keimusho_ground',
+      tiles: [
+        '####################',
+        '#==w==w==D==w==w===#',
+        'f..................f',
+        'f.lllllllllllllll..f',
+        'f..................f',
+        'f..................f',
+        'f..................f',
+        'f..................f',
+        'f.lllllllllllllll..f',
+        'f..................f',
+        'ffffffffffffffffffff',
+      ],
+      legend: { w: 'keimusho_wall+keimusho_window', D: 'keimusho_celldoor', f: 'keimusho_fence', l: 'keimusho_lane' },
+      get entry() { return flowEntry(MU, 'undojo') ? { x: 9, y: 5, dir: 'down' } : { x: 9, y: 2, dir: 'down' }; },
+      warps: [innerExit(9, 1)],
+      entities: [
+        person(2, 2, 'down', LK.keimukan, null),
+        ...YARD.map(([x, y], i) => person(x, y, ['right', 'left', 'up', 'down'][i % 4], inmateLooks[(i + 2) % inmateLooks.length], null)),
+        npc('mu_yard_runner', 11, 3, 'right', { name: '走っている受刑者', look: LK.inmate5 }, { wander: 3, cond: (g) => serving(g), text: '（黙々と、線の上を走っている）' }),
+        npc('mu_yard_guide', 16, 2, 'down', WHO.keimukan, {
+          cond: (g) => !serving(g),
+          talk: posted('down', lines(WHO.keimukan, ['運動場です。運動の時間は、1日30分ほど。\n雨の日は、体育館や屋内でします。', '走る人、体操をする人、ただ空を見ている人…\n外の空気を吸える、貴重な時間です。'])),
+        }),
+      ],
+      onEnter: async (g) => {
+        if (!enteredByFlow(g, MU, 'undojo')) return;
+        if (serving(g)) await narrate(g, '（運動の時間。高いフェンスの向こうに、\n冬の木がかすかに見える。…外の空気だ）');
+      },
+    },
+
+    // -------------------------------------------------------------- 教室（改善指導・教科指導）
+    kyoiku: {
+      floor: 'keimusho_floor',
+      tiles: [
+        '##############',
+        '#==w=BBBB=w=D#',
+        '#............#',
+        '#..dd.dd.dd..#',
+        '#............#',
+        '#..dd.dd.dd..#',
+        '#............#',
+        '#............#',
+        '##############',
+      ],
+      legend: { w: 'keimusho_wall+keimusho_window', B: 'keimusho_wall+keimusho_blackboard', D: 'keimusho_celldoor', d: 'keimusho_desk' },
+      get entry() { return flowEntry(MU, 'kyoiku') ? { x: 7, y: 4, dir: 'up' } : { x: 12, y: 2, dir: 'down' }; },
+      warps: [innerExit(12, 1)],
+      entities: [
+        npc('mu_kyouiku', 6, 2, 'down', WHO.kyouiku, {
+          talk: posted('down', async (g) => {
+            if (serving(g)) { await say(g, WHO.kyouiku, '今日のプログラムを、しっかり受けてくださいね。'); return; }
+            await say(g, WHO.kyouiku, since(g, 2006, 5)
+              ? ['教育専門官です。ここでは「改善指導」をしています。', '被害者の気持ちを考える教育、薬物やアルコールの問題、\n仕事に就くための指導…。\n事件の背景に合わせて、受けるプログラムが決まります。', '中学の勉強をやり直す「教科指導」もあります。\n出所までに、資格をとる人もいるんですよ。']
+              : ['教育の担当です。読み書きの勉強や、\n宗教家との面談（教誨）などをしています。']);
+          }),
+        }),
+        ...STUDENTS.map(([x, y], i) => person(x, y, 'up', inmateLooks[(i + 1) % inmateLooks.length], (g) => serving(g) || flowHere(g, 'kyoiku'))),
+        { type: 'sign', x: 7, y: 1, talk: async (g) => { await narrate(g, since(g, 2006, 5) ? '黒板に「被害者の手紙を読んで、感じたこと」\nと書いてある。' : '黒板に、漢字の書き取りの問題が書いてある。'); } },
+      ],
+      onEnter: async (g) => {
+        if (!enteredByFlow(g, MU, 'kyoiku')) return;
+        const j = jus(g);
+        if (j && j.prison && j.prison.kind !== 'roueki') await classProgram(g, j.prison);
+      },
+    },
+
+    // -------------------------------------------------------------- 面会室
+    menkai: {
+      floor: 'keimusho_floor',
+      tiles: [
+        '############',
+        '#====c=====#',
+        '#..........#',
+        '#...ssss...#',
+        '#AAAAAAAAAA#',
+        '#...ssss...#',
+        '#..........#',
+        '#####MM#####',
+      ],
+      legend: { c: 'keimusho_wall+clock', s: 'keimusho_stool', A: 'keimusho_acrylic' },
+      get entry() { return VISIT.on || (flowEntry(MU, 'menkai') && serving(G())) ? { x: 5, y: 3, dir: 'down' } : { x: 5, y: 6, dir: 'up' }; },
+      warps: [
+        { x: 5, y: 7, place: MU, room: 'mon', tx: 9, ty: 10, dir: 'down', check: heldCheck() },
+        { x: 6, y: 7, place: MU, room: 'mon', tx: 9, ty: 10, dir: 'down', check: heldCheck() },
+      ],
+      entities: [
+        person(9, 2, 'down', LK.keimukan, (g) => VISIT.on),
+        deskProp(9, 2, 1, 'grey', { lip: 7 }),
+        person(5, 5, 'up', () => VISIT.look, () => VISIT.on && !!VISIT.look, { solid: false }),
+        npc('mu_menkai_staff', 9, 5, 'left', WHO.menkaiUke, {
+          cond: () => !VISIT.on,
+          talk: posted('left', lines(WHO.menkaiUke, ['面会室です。受刑者と面会する人は、\nアクリル板ごしに話します。', '刑務官が立ち会い、話の内容を記録します。\n事件のことや、逃げる相談などはできません。', '短い時間ですが、家族の顔を見ることが、\nなによりの支えになる人も多いんです。'])),
+        }),
+        { type: 'sign', x: 2, y: 4, text: 'アクリル板に、話すための小さな穴が\nいくつも開いている。' },
+      ],
+      onEnter: async (g) => {
+        if (!enteredByFlow(g, MU, 'menkai') || VISIT.on) return;
+        const j = jus(g);
+        if (j && j.prison) await friendVisit(g, j.prison);
+      },
+    },
+
+    // -------------------------------------------------------------- 面接室（仮釈放の審理）
+    shinri: {
+      floor: 'keimusho_floor',
+      tiles: [
+        '##########',
+        '#=w====w=#',
+        '#........#',
+        '#........#',
+        '#........#',
+        '#........#',
+        '#........#',
+        '####M#####',
+      ],
+      legend: { w: 'keimusho_wall+keimusho_window' },
+      get entry() { return flowEntry(MU, 'shinri') ? { x: 4, y: 4, dir: 'up' } : { x: 4, y: 6, dir: 'up' }; },
+      warps: [innerExit(4, 7)],
+      entities: [
+        person(4, 2, 'down', LK.iin, (g) => flowHere(g, 'shinri')),
+        person(5, 2, 'down', LK.iin2, (g) => flowHere(g, 'shinri')),
+        deskProp(3, 2, 4, 'wood', { lip: 7, papers: [0, 3] }),
+        person(7, 4, 'left', LK.keimukan, (g) => flowHere(g, 'shinri')),
+        npc('mu_shinri_staff', 7, 3, 'left', WHO.keimukan, {
+          cond: (g) => !flowHere(g, 'shinri'),
+          talk: posted('left', lines(WHO.keimukan, ['仮釈放の面接に使う部屋です。\n地方更生保護委員会の委員が来て、本人と話します。', '刑務所での生活ぶり、反省の深さ、\n出たあとに帰る場所と、見守ってくれる人…。\nそれを見て、仮釈放を認めるかどうかが決まります。', '仮釈放のあとは、残りの刑期のあいだ保護観察。\n保護司と面接しながら、社会で暮らします。'])),
+        }),
+      ],
+      onEnter: async (g) => {
+        if (!enteredByFlow(g, MU, 'shinri')) return;
+        const f = fl(g);
+        const j = jus(g);
+        const pr = j && j.prison;
+        if (pr && f.shinriSeen !== pr.start) {
+          f.shinriSeen = pr.start;
+          await narrate(g, '（面接室に呼ばれた。机の向こうに、\n地方更生保護委員会の委員が2人座っている）');
+        }
+      },
+    },
+
+    // -------------------------------------------------------------- 拘置所の単独室（起訴後の勾留）
+    kochi: {
+      floor: 'keimusho_tatami',
+      tiles: [
+        '########',
+        '#=ww=D=#',
+        '#ttttts#',
+        '#ttttta#',
+        '#Ftttt.#',
+        '#tTtttt#',
+        '########',
+      ],
+      legend: { w: 'keimusho_wall+keimusho_window', D: 'keimusho_celldoor', s: 'keimusho_tatami+keimusho_sink', a: 'keimusho_tatami+keimusho_wc', F: 'keimusho_tatami+keimusho_futon', T: 'keimusho_tatami+keimusho_table', t: 'keimusho_tatami', '.': 'keimusho_tatami' },
+      get entry() { return flowEntry(MU, 'kochi') ? { x: 3, y: 3, dir: 'down' } : { x: 5, y: 2, dir: 'down' }; },
+      warps: [innerExit(5, 1)],
+      entities: [
+        npc('mu_kochi_staff', 4, 2, 'down', WHO.keimukanW, {
+          cond: (g) => !flowHere(g, 'kochi') && !serving(g) && !inCustody(g),
+          talk: posted('down', lines(WHO.keimukanW, ['ここは拘置所の単独室です。起訴されたあと、\n判決が出るまでの「未決」の人が過ごします。', '刑が決まっていないので、作業の義務はありません。\n服も私服でかまいません。', '家族の面会は平日に。弁護士との面会（接見）は、\n職員の立会いなしでできます。'])),
+        }),
+      ],
+      onEnter: async (g) => {
+        if (!enteredByFlow(g, MU, 'kochi')) return;
+        const cs = activeCase(g);
+        const f = fl(g);
+        if (cs && f.kochiSeen !== cs.id) {
+          f.kochiSeen = cs.id;
+          await narrate(g, ['（拘置所の単独室。3畳ほどの部屋に、\n小さな机と洗面台、トイレがある）', '（判決が出るまでは「未決」。作業はなく、\n一日じゅう、自分の事件のことを考えてしまう…）']);
+        }
+      },
+    },
+  },
+});
+
+// ---------------------------------------------------------------- the HUD steps aside during scenes in the inner rooms
+// (tall rooms: the bench / the officer's desk would sit under the HUD while people talk)
+const hudOff = () => { const g = G(); return !!(g && g.busy > 0); };
+for (const [pid, rooms] of [[KEI, ['sodan', 'torishirabe', 'ryuchi']], [KEN, ['kenjishitsu', 'tokuso']], [SAI, ['chisai', 'saibanin', 'kousai', 'shohotei', 'daihotei', 'kouryu', 'shinjin', 'minji']], [MU, ['mon', 'kyoshitsu', 'kojo', 'undojo', 'kyoiku', 'menkai', 'shinri', 'kochi']]]) {
+  for (const r of rooms) { const def = PLACES[pid] && PLACES[pid].rooms[r]; if (def) Object.defineProperty(def, 'hideHud', { configurable: true, enumerable: true, get: hudOff }); }
+}

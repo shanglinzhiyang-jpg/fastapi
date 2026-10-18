@@ -16,8 +16,11 @@
 //   drawEmblem(ctx, emblem, x, y, size)    the player's party emblem (party.emblem from 党を立ち上げる)
 //   drawPartyMark(ctx, g, partyId, x, y, size)   logo (自民・民主) / emblem / colour mark of any party
 // UI-only data lives in g.state.flags.polui (economy history for the sparklines, 情勢調査 history,
-// the overnight queue). The one place that writes to the simulation without a g.* call is the
-// 予算編成 screen (see budgetScreen): the core has no budget API yet.
+// the overnight queue). The places that write to the simulation without a g.* call: the 予算編成
+// screen (applyBudget: the core has no budget API yet) and 民間人閣僚 (ensureCivilian adds an NPC
+// record for a friend so g.formCabinet accepts them).
+// Headless: under g.auto the screens do not open (openPolitics returns null) and the overnight
+// queue is dropped; set g.auto.polui = true to drive them with keys in a test.
 
 import { Game } from './game.js';
 import * as POL from './politics.js';
@@ -1028,7 +1031,7 @@ function systemTip(g, e) {
   const y = e.year || yearOf(g);
   switch (e.kind) {
     case 'shugi': return shugiRules(y, p.flags).system === 'chusenkyoku' ? '中選挙区制：1つの選挙区から原則3〜5人が当選する（1993年まで）' : '小選挙区は1位だけが当選。比例代表はドント方式で議席を配分';
-    case 'sangi': return sangiRules(y).list === 'hikousoku' ? '参院の比例は非拘束名簿式：個人名の票が多い順に当選（2001年から）' : '参院の比例は拘束名簿式：政党が決めた名簿の順に当選（1983〜1998年）';
+    case 'sangi': return sangiRules(y).list === 'hikousoku' ? '参院の比例は非拘束名簿式：党の議席の中で個人名の票が多い順に当選' : '参院の比例は拘束名簿式：政党が決めた名簿の順に当選（1983〜1998年）';
     case 'kugi': return '区議選：区全体が1つの選挙区。得票の多い順に定数まで当選';
     case 'togi': return '都議選：ドット区選挙区は定数3。得票の多い順に当選';
     case 'shicho': case 'chiji': return '首長選：得票1位が当選。任期は4年';
@@ -1069,6 +1072,7 @@ function eligibilityChecks(g, e) {
     { ok: today(g) <= e.koji, text: `届出は${kojiWord(e.kind)}日（${dateLabel(g, e.koji)}）まで` },
   ];
 }
+const declWord = (d) => (!d ? '' : d.pr ? '比例代表' : d.prOnly ? '比例単独' : d.proportional ? '選挙区と比例に重複' : '選挙区');
 function checkRow(c, ok, s, x, y, w) {
   R(c, x, y + 2, 11, 11, ok ? '#1f5a34' : '#5a1f2a');
   T(c, ok ? '✓' : '✕', x + 5, y, 12, ok ? C.good : C.bad, 'center');
@@ -1117,7 +1121,7 @@ function drawElectionDetail(c, g, e, r) {
   if (d) {
     R(c, x - 4, y - 2, w + 8, 1, C.edge);
     y += 4;
-    T(c, fit(c, `あなた：${d.district || ''}・${partyFull(g, d.party)}${d.proportional ? '・比例と重複' : d.prOnly || d.pr ? '・比例代表' : ''}`, w, 12), x, y, 12, C.good); y += 16;
+    T(c, fit(c, `あなた：${d.district || ''}・${partyFull(g, d.party)}・${declWord(d)}`, w, 12), x, y, 12, C.good); y += 16;
     const camp = p.me.campaign && p.me.campaign.election === e.id ? p.me.campaign : null;
     T(c, `選挙運動の手ごたえ ${camp ? Math.round(camp.points * 10) / 10 : 0}`, x, y, 12, C.text); y += 16;
     const fc = (uiData(g).fc[e.id] || []).slice(-1)[0];
@@ -1230,7 +1234,7 @@ async function candidacyFlow(ui, eid) {
   const home = g.state.profile && g.state.profile.hometown;
   if (home && home !== 'tokyo' && PREFECTURES[home] && ((e.kind === 'shugi' && proportional !== 'only') || (e.kind === 'sangi' && !proportional))) {
     const pref = PREFECTURES[home].name;
-    const k = await ui.confirm({ title: '地元はどこにする？', text: `出身地の${pref}から出ることもできる。ふるさとの人たちは、知っている名前に票を入れてくれやすい。`, choices: ['東京（ドット区）から出る', `${pref}から出る`], tip: '国政選挙は、住んでいる所と違う選挙区からも立候補できる' });
+    const k = await ui.confirm({ title: '地元はどこにする？', text: `出身地の${pref}から出ることもできる。ふるさとの人たちは、知っている名前に票を入れてくれやすい。`, choices: ['東京（ドット区）から出る', `${pref}から出る`], cancel: -1, tip: '国政選挙は、住んでいる所と違う選挙区からも立候補できる' });
     if (k < 0) return;
     hometown = k === 1;
   }
@@ -1475,7 +1479,7 @@ function drawCampaign(c, g, ui, v, e) {
   T(c, fit(c, `${d.district || districtText(g, e)}`, 210, 14), 14, 34, 14, '#ffffff');
   let px = 14;
   px += partyChip(c, g, d.party, px, 50) + 6;
-  T(c, fit(c, d.proportional ? '比例と重複' : d.prOnly || d.pr ? '比例代表' : '選挙区', 80, 12), px, 51, 12, C.dim);
+  T(c, fit(c, declWord(d), 120, 12), px, 51, 12, C.dim);
   // day strip
   const days = [];
   for (let k = day; k <= e.day && days.length < 12; k++) days.push(k);
@@ -1886,7 +1890,7 @@ function resultCardView(g, res) {
   const v = {
     noChrome: true, modal: false,
     hint: 'A:とじる',
-    tip: () => (my && my.revived ? '比例復活：小選挙区で負けても、重複立候補なら比例で当選することがある' : my && my.depositLost ? '供託金の没収は、立候補の乱立を防ぐための仕組み' : '選挙の結果は、選挙管理委員会が確定させる'),
+    tip: () => (my && my.revived ? '比例復活：小選挙区で負けても、重複立候補なら比例で当選することがある' : my && my.depositLost ? '供託金の没収は、立候補の乱立を防ぐための仕組み' : '当選人は、開票のあとの選挙会で選挙長が決める'),
     update(ui, inp) { if (g.auto || (v.t > 20 && (inp.pressed('a') || inp.pressed('b')))) { sfx('ok'); ui.done(v, true); } },
     draw(c, ui) {
       tvBg(c, v.t);
@@ -1906,7 +1910,7 @@ function resultCardView(g, res) {
           yy = para(c, `${res.label}は、残念ながら落選となりました。`, x + 30, yy, w - 60, 14, ink, 20, 3) + 8;
         }
         const lines = [];
-        if (my.votes) lines.push(`得票　${fmtNum(my.votes)}票${my.rank ? `（${my.rank}位）` : ''}${my.share ? `・得票率 ${(num(my.share) * 100).toFixed(1)}%` : ''}`);
+        if (my.votes) lines.push(`得票　${fmtNum(my.votes)}票${my.rank && !my.pr ? `（${my.rank}位）` : ''}${my.share && !my.pr ? `・得票率 ${(num(my.share) * 100).toFixed(1)}%` : ''}`);
         if (my.revived && res.candidates && res.candidates[0]) lines.push(`惜敗率　${((num(my.votes) / Math.max(1, num(res.candidates[0].votes))) * 100).toFixed(1)}%`);
         if (my.pr && my.rank) lines.push(`比例名簿・個人票の順位　${my.rank}位`);
         if (res.turnout) lines.push(`投票率　${num(res.turnout).toFixed(1)}%`);
@@ -2085,7 +2089,7 @@ function referendumView(g, b) {
   const R0 = (b.votes && b.votes.referendum) || { yes: 50, passed: false };
   const v = {
     title: '国民投票', hint: 'A:すすめる',
-    tip: () => '憲法改正は、国民投票で有効投票の過半数の賛成が必要（憲法96条）',
+    tip: () => '国民投票は、賛成が投票総数（賛成と反対の合計）の過半数なら承認',
     update(ui, inp) { if (g.auto || (v.t > 30 && (inp.pressed('a') || inp.pressed('b')))) { if (v.t < 200) { v.t = 200; return; } sfx('ok'); ui.done(v, true); } },
     draw(c, ui) {
       const k = ease(clamp(v.t / 180, 0, 1));
@@ -2912,7 +2916,7 @@ async function dietCommand(ui, g, id) {
   } else if (id === 'nc') {
     const me = p.me;
     const ruling = me.party && isRuling(p, me.party);
-    const k = await ui.confirm({ title: '内閣不信任決議案', danger: !!ruling, w: 460, text: `内閣不信任決議案を提出する？\n可決されれば、内閣は10日以内に衆議院を解散するか総辞職しなければならない（憲法69条）。${ruling ? '\n⚠ あなたは与党の議員。賛成すれば党を割る覚悟がいる（除名もありうる）。' : ''}`, choices: ['提出する', 'やめておく'], tip: '不信任案は、野党が内閣への反対の意思を示す最大の手段' });
+    const k = await ui.confirm({ title: '内閣不信任決議案', danger: !!ruling, w: 460, text: `内閣不信任決議案を提出する？\n可決されれば、内閣は10日以内に衆議院を解散するか総辞職しなければならない（憲法69条）。${ruling ? '\n⚠ あなたは与党の議員。賛成すれば党を割る覚悟がいる（除名もありうる）。' : ''}`, choices: ['提出する', 'やめておく'], tip: '不信任決議は、衆議院が内閣を信任しないという意思を示すもの' });
     if (k !== 0) return;
     const r = g.noConfidence({ rebel: !!ruling });
     if (!r.ok) { await ui.alert('提出できない', r.why); return; }
@@ -2955,7 +2959,7 @@ function cabinetView(g) {
   const v = {
     title: '内閣', focus: 'cmd',
     hint: () => (v.focus === 'list' ? '↑↓ ←:もどす B:もどる' : '↑↓ →:閣僚名簿 A:けってい B:もどる'),
-    tip: () => (v.focus === 'list' ? '国務大臣の過半数は、国会議員から選ばれる（憲法68条）' : ({ formation: '総理大臣は国務大臣を任命し、いつでも罷免できる（憲法68条）', coalition: '1つの党で過半数に届かないとき、複数の党で連立政権をつくる', budget: '予算は内閣がつくり、国会の議決で成立する（衆議院が先に審議）', dissolve: '衆議院の解散は、内閣の助言と承認による天皇の国事行為（憲法7条）', resign: '総辞職すると、国会で新しい総理大臣が指名される', amend: '憲法改正の発議は国会が行う。内閣は改正案を出さない', chart: '内閣支持率は、新聞社やテレビ局の世論調査で毎月のように測られる' }[(v.lb.current() || {}).id] || '内閣は、総理大臣と国務大臣でつくる')),
+    tip: () => (v.focus === 'list' ? '国務大臣の過半数は、国会議員から選ばれる（憲法68条）' : ({ formation: '総理大臣は国務大臣を任命し、いつでも罷免できる（憲法68条）', coalition: '1つの党で過半数に届かないとき、複数の党で連立政権をつくる', budget: '予算は内閣がつくり、国会の議決で成立する（衆議院が先に審議）', dissolve: '衆議院の解散は、内閣の助言と承認による天皇の国事行為（憲法7条）', resign: '総辞職すると、国会で新しい総理大臣が指名される', amend: '憲法改正原案は、国会議員が提出する（国会法68条の2）', chart: '内閣支持率は、新聞社やテレビ局の世論調査で毎月のように測られる' }[(v.lb.current() || {}).id] || '内閣は、総理大臣と国務大臣でつくる')),
     sum: null, sumT: -99,
     summary(ui) { if (!v.sum || !ui || ui.t - v.sumT > 15) { v.sum = g.politicsSummary(); v.sumT = ui ? ui.t : 0; } return v.sum; },
     enter(ui) {
@@ -3044,7 +3048,7 @@ async function cabinetCommand(ui, g, id) {
     const k = await ui.confirm({ title: '連立離脱', danger: true, text: '連立政権から離れて野党になる？', choices: ['離れない', '離れる'], index: 0, cancel: 0 });
     if (k === 1) { const why = g.leaveCoalition(); await ui.alert('連立', why || '連立から離脱した。'); }
   } else if (id === 'stance') {
-    const k = await ui.confirm({ title: '首班指名での方針', text: '選挙のあと、総理を選ぶときに連立の誘いを受ける？', choices: ['おまかせ（政策が近ければ）', '連立に前向き', '連立はしない'], tip: '連立には、政策の合意（連立合意）が欠かせない' });
+    const k = await ui.confirm({ title: '首班指名での方針', text: '選挙のあと、総理を選ぶときに連立の誘いを受ける？', choices: ['おまかせ（政策が近ければ）', '連立に前向き', '連立はしない', 'やめておく'], tip: '連立には、政策の合意（連立合意）が欠かせない' });
     if (k >= 0 && k <= 2) { g.setCoalitionStance(['auto', 'accept', 'refuse'][k]); ui.toast('方針を決めた', C.good); }
   }
 }
@@ -3529,7 +3533,11 @@ SECTIONS.money = async (ui) => {
     } else if (id === 'report') {
       const me2 = polOf(g).me;
       let inc = false;
-      if (me2.secret > 0) inc = (await ui.confirm({ title: '収支報告書', text: `帳簿にないお金 ${fmtMoney(me2.secret)} がある。正直に書く？`, choices: ['正直に書く（評判は少し下がる）', '書かない'], tip: '虚偽の記載や不記載は、政治資金規正法で罰せられる' })) === 0;
+      if (me2.secret > 0) {
+        const k = await ui.confirm({ title: '収支報告書', text: `帳簿にないお金 ${fmtMoney(me2.secret)} がある。正直に書く？`, choices: ['正直に書く（評判↓）', '書かない（違法）', 'やめておく'], tip: '虚偽の記載や不記載は、政治資金規正法で罰せられる' });
+        if (k < 0 || k === 2) continue;
+        inc = k === 0;
+      }
       const r = g.reportFunds({ includeSecret: inc });
       await ui.alert('収支報告書', r.ok ? r.text : r.why);
     } else if (id === 'hire' || id === 'fire') {
