@@ -97,14 +97,20 @@
 //   careerSanction(g, level 1..5, info), sentenceText(g, sentence), onJustice(event, fn), justiceTick(g),
 //   newJusticeState(), installJustice(proto), lawDate(g, day?), lawYear(g), wareki(year, month), kokinEra(g),
 //   fmtTerm(months), realToGameDays(d), years(n), monthsToDays(n), MONTH_DAYS, ERA_BASE_YEAR, isPolitician(g),
-//   isDietMember(g), JUSTICE_CONTRACT_VERSION.
+//   isDietMember(g), JUSTICE_CONTRACT_VERSION, ryakushikiCap(g) (略式命令の上限 of the date), legalYen(g, nominal)
+//   (a statutory / court amount in that year's yen → internal money, shown back as the same amount).
+//   CRIMES[id].law / .detect / .penalty are functions of (g, ctx) and also read as the contract describes for
+//   the running game: `${CRIMES[id].law}` = the law text, Number(CRIMES[id].detect) = the base chance,
+//   String(CRIMES[id].penalty) / .penalty.prison|fine|labor|text = the 法定刑.
 // g.* (all from installJustice):
 //   jus() · commitCrime(id, ctx) → { caught, report, outcome } (ctx: amount, where, injury, request, gain:
 //   { money, item }, detect, risk, forceCaught, neverCaught, handle:false, rule, private) · arrest(id, ctx) → case
 //   (ctx: via 'genkouhan'|'warrant', evidence, amount, plea, caseId) · trial(caseOrId, opts) · serveSentence() ·
-//   hasRecord() (前科) · hasHistory() · isFree() · civicBanned() · civicBanReason() · fine(amount, reason,
+//   hasRecord() (前科) · hasHistory() · isFree() · civicBanned(kind?) · civicBanReason(kind?) (kind 'candidacy'
+//   (default: 被選挙権, incl. 公選法11条の2's candidacyBanUntil) | 'vote') · fine(amount, reason,
 //   { kind: 'bakkin'|'karyo'|'kare'|'tsuicho'|'tax'|'civil' }) → { paid, labor, unpaid } · borrow(lender, amount)
-//   → { ok, reason, loan, received } · repay(loanIndex|id|loan, amount) → { paid, left, cleared } · loanTick() ·
+//   → { ok, reason, loan, received } · repay(loanIndex | loan | { id }, amount) → { paid, left, cleared } (a number
+//   is the index in g.jus().loans, as in the contract; a string is an id) · loanTick() ·
 //   loanTotal(lender?) · loanLimit(lender) · annualIncome() · creditBlacklisted(lender) · loanCounter(lender) ·
 //   consultLawyer(topic 'debt'|'yamikin') · debtRelief('nini'|'saisei'|'hasan') · fileBankruptcy({ force }) ·
 //   policeConsult(topic) · smoke({ place, anyway, smokingArea, silent }) · canSmokeHere(place?) ·
@@ -114,6 +120,10 @@
 //   justiceStatus() · justiceLines() · lawDate() · lawYear() · crimeLaw(id, ctx).
 // Wrapped (behaviour kept): g.job / g.audition / g.doRegular refuse during 謹慎 / TV ban; g.sleep runs the
 // queued events after waking; g.addMoney records income (年収) and takes 差押え.
+// Status: 'prison' only while serving a sentence (実刑・少年院); 労役場留置 (an unpaid fine) is 'detained' — it
+// is not a 禁錮以上 sentence, so a politician keeps the office and nobody loses the vote. commitCrime(
+// 'loan_shark_use') answers { caught: false, report: { none: true } } (borrowing from 闇金 is not a crime).
+// A save made in the middle of a term / case resumes it on the next wake-up (recoverInterrupted).
 // Shops selling cigarettes should call g.buyCigarettes() (age checks), not g.shop(['tabako']).
 //
 // Sources checked (2026-10, WebSearch; amounts/dates as encoded below):
@@ -122,7 +132,8 @@
 //   窃盗罪の罰金刑（50万円以下）新設: 2006年改正（moj.go.jp/content/000008292.pdf; 略式命令の上限100万円も同改正）
 //   逮捕48時間・送致後24時間（通算72時間）・勾留10日＋延長10日: 刑訴法203・205・208条（law-lib.jp, daylight-law.jp）
 //   保釈は起訴後のみ（207条1項）・権利保釈89条・保証金の相場150〜300万円（daylight-law.jp, mc-law.jp）
-//   略式命令: 100万円以下の罰金・科料、被疑者の同意（刑訴法461条・462条; daylight-law.jp）
+//   略式命令: 100万円以下の罰金・科料、被疑者の同意（刑訴法461条・462条; daylight-law.jp）。上限は 1991年5月7日に
+//     50万円、2006年5月28日に100万円（平成18年版犯罪白書 第6編/第3章/第3節/3; ja.wikipedia 略式手続）→ ryakushikiCap()
 //   被疑者国選: 2006年10月（重大事件）→2009年5月（長期3年超）→2018年6月1日 勾留全事件（moj.go.jp 000115559.pdf ほか）
 //   執行猶予: 3年以下の拘禁刑又は50万円以下の罰金、1年以上5年以下（刑法25条; wikibooks 刑法25条, daylight-law.jp）
 //   仮釈放: 有期刑は刑期の3分の1経過後（刑法28条）、実務では刑期の8割以上が多い（令和6年版犯罪白書 via wikibooks 刑法28条）
@@ -147,7 +158,7 @@
 //     信用情報 CIC・JICC 約5年、KSC 7年（2022年11月に10年→7年）（pay-route.co.jp ほか）
 //   喫煙: 二十歳未満ノ者ノ喫煙ノ禁止ニ関スル法律（本人に罰則なし・没収、親権者は科料、販売者50万円以下）（hourei.net）;
 //     改正健康増進法 2020年4月1日全面施行・原則屋内禁煙（mhlw 受動喫煙サイトほか）; taspo 2008年導入
-//     （j-cast.com 2008-05）; 千代田区 2002年10月から・過料2,000円・2010年4月から区内全域（media.monex.co.jp）;
+//     （j-cast.com 2008-05）→ 2026年3月31日に終了（itmedia.co.jp taspo, dime.jp 1986740）; 千代田区 2002年10月から・過料2,000円・2010年4月から区内全域（media.monex.co.jp）;
 //     大阪市 2025年1月27日から市内全域禁止・過料1,000円（city.osaka.lg.jp）; 港区は禁止だが過料なし（city.minato.tokyo.jp）
 //   暴力団排除条例: 2011年10月1日 東京都・沖縄県で施行し47都道府県で出そろう（toyokeizai.net, city.shinjuku.lg.jp）
 //   特定少年（18・19歳）: 2022年4月1日改正少年法、短期1年以上の罪（強盗等）は原則逆送、起訴後は実名報道可（moj.go.jp）
@@ -157,14 +168,26 @@
 //   賭博罪 50万円以下の罰金又は科料・常習賭博3年以下（刑法185・186条; wikibooks）
 //   証拠隠滅等罪 3年以下又は30万円以下（旧2年以下又は20万円以下）（刑法104条; law-lib.jp, kotobank）
 //   預貯金通帳等の不正譲渡: 2026年7月10日から3年以下又は500万円以下（それまで1年以下又は100万円以下）（犯収法; miyake.gr.jp, shinkin.co.jp）
+//   --- review pass (2026-10, WebSearch) ---
+//   鉄道営業法の不正乗車罪は親告罪（30条の2）・増運賃は運賃の2倍以内（18条2項）（office.vbest.jp 4902, keiji-bengosi.com）
+//   再度の執行猶予: 2025年6月から「2年以下」・保護観察付き猶予中でも情状により可（それまで1年以下・保護観察中は不可）
+//     （daylight-law.jp shikkoyuyo/qa4, moj.go.jp 法制審資料）
+//   公選法11条1項2・3号は拘禁刑の施行後「拘禁刑以上の刑」（da.lib.kobe-u.ac.jp 0100496595）; 11条1項4号・11条の2
+//     （在職中の収賄・あっせん利得: 実刑は執行終了から5年、被選挙権はさらに5年）（shugiin.go.jp 145回 h145122）
+//   政治資金規正法 2024年改正の「確認書」は2026年1月1日施行・令和8年分の報告書から（pref.ibaraki.jp kaiseiseizisikinkiseihou）
+//   taspo は2026年3月31日に終了（itmedia.co.jp kw/taspo, dime.jp 1986740）; たばこの値段 1998年220→250円、2010年10月410円
+//     （kochi-tech.ac.jp a1150477.pdf, j-cast.com 2010/04/28）
+//   KSC（全銀協）の官報情報は2022年11月に10年→7年（soico.jp cardloan/13610, mizuhobank.co.jp teikyo_riyo）
+//   自由財産の現金99万円は2005年施行の破産法34条3項（民事執行法131条3号の66万円×3/2）（moj.go.jp minji07_00189,
+//     kansai-u.repo KU-1100-20140310-06）; それ以前の額（21万円）は目安
 
-import { SW, SH, clamp, fmtMoney, makeCanvas, hash2, mulberry32 } from './util.js';
+import { SW, SH, clamp, fmtMoney, makeCanvas, hash2, mulberry32, YEN_MARK } from './util.js';
 import { text, wrap, panel, measure, rect, COLORS } from './draw.js';
 import { audio } from './audio.js';
 import { ITEMS, AGENCIES, registerItem } from './state.js';
 import { PLACES } from './map.js';
 import { onMorning, PEOPLE, REGULARS, HOUSING, registerPhoneApp, PHONE_APPS, weekOf } from './life.js';
-import { ageOf, eraOf, YEAR_DAYS, isBirthday, birthdayFlag, RELATIONS, sortFamily, familyLook, regionOf, fullName } from './profile.js';
+import { ageOf, eraOf, YEAR_DAYS, isBirthday, birthdayFlag, RELATIONS, sortFamily, familyLook, regionOf, fullName, ERAS } from './profile.js';
 import { charSheetHD, LOOKS } from './sprites.js';
 import { phoneList, phoneInfo, phoneConfirm } from './phone.js';
 import * as POL from './politics.js'; // read lazily (OFFICES); politics may import this module too
@@ -223,11 +246,18 @@ export function fmtTerm(months) {
   return (y ? `${y}年` : '') + (m ? `${m}月` : '') || '0月';
 }
 const pct = (v) => `${Math.round(v * 1000) / 10}%`;
-const man = (yen) => (yen >= 10000 && yen % 10000 === 0 ? `${(yen / 10000).toLocaleString('ja-JP')}万円` : `${yen.toLocaleString('ja-JP')}円`);
+// a nominal amount written in a law ("2,000円"): YEN_MARK keeps yenText() from scaling it to era prices
+const man = (yen) => (yen >= 10000 && yen % 10000 === 0 ? `${(yen / 10000).toLocaleString('ja-JP')}万円` : `${YEN_MARK}${yen.toLocaleString('ja-JP')}円`);
 const rnd = (g) => (g && g._jusRng ? g._jusRng() : Math.random());
 const roll = (g, p) => rnd(g) < p;
 const pickR = (g, arr) => arr[Math.floor(rnd(g) * arr.length)];
 const num = (v, d = 0) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : d);
+// Money in the game is internal (shown × the era's priceRate). Amounts fixed by a law or a court
+// (罰金・科料・過料, 労役場の1日5000円, 刑事補償, 略式の上限, 自由財産…) are nominal yen of that year,
+// so they are converted: legalYen(g, 2000) is shown as ¥2,000 in every era.
+const rateOf = (g) => { const e = ERAS[(g && g.state && g.state.profile && g.state.profile.era) || 'reiwa']; return (e && e.priceRate) || 1; };
+export const legalYen = (g, nominal) => Math.round(num(nominal) / rateOf(g));
+const nominalOf = (g, internal) => Math.round(num(internal) * rateOf(g));
 
 // ======================================================================== crimes
 // def: {
@@ -309,7 +339,7 @@ export const CRIMES = {
   }),
   slush_fund: T({
     name: '裏金（不記載）', short: '政治資金規正法違反',
-    law: (g) => `政治資金規正法違反（収支報告書の不記載・虚偽記入・25条）：5年以下の${laborWord(g, 'kinko')}又は100万円以下の罰金。刑に処せられると公民権停止（28条）${since(g, 2024, 7) ? '。2024年改正で、議員本人の「確認書」の責任も問われる' : ''}`,
+    law: (g) => `政治資金規正法違反（収支報告書の不記載・虚偽記入・25条）：5年以下の${laborWord(g, 'kinko')}又は100万円以下の罰金。刑に処せられると公民権停止（28条）${since(g, 2026, 1) ? '。2024年改正（2026年1月施行）で、国会議員関係政治団体の代表者である議員に「確認書」が義務づけられた' : since(g, 2024, 7) ? '。2024年の改正で、議員本人に「確認書」を義務づけることが決まった（2026年施行）' : ''}`,
     severity: 3, kind: 'crime', political: true, civicBan: true, hotDays: 360,
     detect: () => 0,
     later: (g, h) => clamp(0.002 * (1 + Math.log10(1 + (h.amount || 0) / 1000000)) * famous(g, 0.5) * (isPolitician(g) ? 1.3 : 1), 0, 0.03),
@@ -430,9 +460,9 @@ export const CRIMES = {
     law: (g) => (since(g, 2014, 5) ? `過失運転致死傷罪（自動車運転死傷処罰法5条）：7年以下の${laborWord(g, 'both')}又は100万円以下の罰金`
       : since(g, 2007, 6) ? '自動車運転過失致死傷罪（刑法211条2項）：7年以下の懲役若しくは禁錮又は100万円以下の罰金'
         : `業務上過失致死傷罪（刑法211条）：5年以下の懲役若しくは禁錮又は${since(g, 2006, 5) ? '100万円' : eraKey(g) === 'showa' ? '' : '50万円'}以下の罰金`.replace('又は以下の罰金', '又は罰金')),
-    severity: 2, kind: 'crime', hotDays: 0, victim: true,
+    severity: 2, kind: 'crime', hotDays: 30, victim: true,
     detect: () => 0.95,
-    later: () => 0,
+    later: () => 0.03, // driving off: witnesses and the car's parts left behind usually find the driver later
     penalty: (g) => ({ prison: [1, since(g, 2007, 6) ? 84 : 60], labor: 'both', fine: [10000, since(g, 2006, 5) ? 1000000 : 500000] }),
     facts: () => '自動車を運転中、前方の確認を怠って歩行者に衝突し、けがを負わせた',
     typical: (g, cs) => (cs.priors ? { charge: 0.9, months: 12, suspendOk: true, labor: 'kinko' } : { charge: 0.5, fine: 400000 }),
@@ -485,7 +515,8 @@ export const CRIMES = {
     name: '口利き（あっせん利得）', short: 'あっせん利得処罰法違反',
     law: (g) => `あっせん利得処罰法（2001年施行）：議員が公務員への口利きの見返りに報酬を受けると3年以下の${laborWord(g, 'choeki')}。報酬は没収・追徴`,
     exists: (g) => since(g, 2001, 3),
-    severity: 3, kind: 'crime', political: true, hotDays: 300,
+    // あっせん利得罪 in office is one of the crimes of 公選法11条1項4号 (like 収賄): see applyCivicBan
+    severity: 3, kind: 'crime', political: true, bribery: true, civicBan: true, hotDays: 300,
     detect: () => 0,
     later: (g, h) => clamp(0.002 * (1 + Math.log10(1 + (h.amount || 0) / 1000000)), 0, 0.02),
     penalty: () => ({ prison: [1, 36], labor: 'choeki', fine: null }),
@@ -495,6 +526,33 @@ export const CRIMES = {
 };
 export const CRIME_ORDER = Object.keys(CRIMES);
 for (const [id, def] of Object.entries(CRIMES)) def.id = id;
+// The lead's contract describes law as text, penalty as "text + numbers" and detect as a base chance.
+// They stay functions of (g, ctx) here (era-aware), and also read as the contract says for the game
+// that is running: `${CRIMES.robbery.law}` is the law text, Number(CRIMES.assault.detect) the base
+// chance, String(CRIMES.robbery.penalty) / CRIMES.robbery.penalty.prison the 法定刑.
+function penaltyText(g, id) {
+  const p = penaltyOf(g, id);
+  const yrs = (mo) => (mo % 12 ? fmtTerm(mo) : `${mo / 12}年`);
+  const parts = [];
+  if (p.prison) parts.push(p.prison[0] >= 12 ? `${yrs(p.prison[0])}以上${yrs(p.prison[1])}以下の${laborWord(g, p.labor)}` : `${yrs(p.prison[1])}以下の${laborWord(g, p.labor)}`);
+  if (p.fine) parts.push(`${man(p.fine[1])}以下の罰金`);
+  if (p.kouryu) parts.push('拘留');
+  if (p.karyo) parts.push('科料');
+  if (p.kare) parts.push(`過料${man(p.kare)}`);
+  if (!parts.length) return '刑罰はない';
+  return parts.join(p.both ? '及び' : '又は');
+}
+const safely = (fn, d) => { try { return fn(); } catch (e) { return d; } };
+for (const [id, def] of Object.entries(CRIMES)) {
+  const { law, detect, penalty } = def;
+  law[Symbol.toPrimitive] = () => safely(() => law(GAME, {}), def.short);
+  law.toString = () => String(law[Symbol.toPrimitive]('string'));
+  detect[Symbol.toPrimitive] = (hint) => { const p = safely(() => detect(GAME, { n: 0 }), 0); return hint === 'string' ? `${Math.round(p * 100)}%` : p; };
+  penalty[Symbol.toPrimitive] = (hint) => (hint === 'number' ? NaN : safely(() => penaltyText(GAME, id), ''));
+  penalty.toString = () => String(penalty[Symbol.toPrimitive]('string'));
+  for (const k of ['prison', 'fine', 'labor', 'kouryu', 'karyo', 'kare']) Object.defineProperty(penalty, k, { get: () => safely(() => penalty(GAME, {})[k], undefined), configurable: true });
+  Object.defineProperty(penalty, 'text', { get: () => safely(() => penaltyText(GAME, id), ''), configurable: true });
+}
 
 // Text of the law in force (罪名・条文・法定刑).
 export function crimeLaw(g, id, ctx) {
@@ -532,6 +590,7 @@ export function newJusticeState() {
     prison: null, // { until, place, work, parole, start, days, behaviour, reward, kind, caseId }
     probationUntil: null,
     civicBanUntil: null,
+    candidacyBanUntil: null, // 被選挙権 only (公選法11条の2: 在職中の収賄で実刑 → さらに5年)
     loans: [], // { id, lender, company, principal, interest, rate, due, missed, borrowed, cycle, status, harass, late }
     bankrupt: null, // { filed, discharged, until, stage, next, kind }
     smoker: 0, // habit 0..100
@@ -575,10 +634,54 @@ function normalizeJustice(j) {
   j.unpaid = Math.max(0, num(j.unpaid));
   j.nextId = Math.max(1, num(j.nextId, 1), ...j.loans.map((l) => num(l.id) + 1), ...j.cases.map((c) => num(c.id) + 1));
   if (!['free', 'detained', 'trial', 'prison', 'probation'].includes(j.status)) j.status = 'free';
-  // a save made in the middle of a custody flow (should not happen: flows do not save) is released
-  if ((j.status === 'detained' || j.status === 'trial') && !j.cases.some((c) => c.bail)) { j.status = 'free'; j.custody = null; }
-  if (j.status === 'prison' && !j.prison) j.status = 'free';
+  recoverInterrupted(j);
   return j;
+}
+// A save made in the middle of a flow (flows do not save, but a place's own code might) must
+// not leave the player stuck: a prison term (or 労役場) resumes on the next wake-up (runEvents),
+// and a case whose flow was cut off continues as a 在宅 case (the next step is queued).
+function recoverInterrupted(j) {
+  if (j.prison && typeof j.prison === 'object' && num(j.prison.until) > 0) {
+    j.status = j.prison.kind === 'roueki' ? 'detained' : 'prison';
+    j.flags.resumeCustody = true;
+  } else {
+    j.prison = null;
+    if (j.status === 'prison') j.status = 'free';
+  }
+  j.custody = null;
+  const queued = new Set(j.queue.map((e) => e.caseId).filter(Boolean));
+  for (const cs of j.cases) {
+    if (cs.stage === 'final') cs.closed = true; // the judgment was already recorded
+    if (cs.closed || queued.has(cs.id)) continue;
+    const next = { police: 'decision', arrest: 'decision', kouryu: 'decision', zaitaku: 'decision', kyodaku: 'arrest', indicted: 'trial', trial: 'trial', verdict_wait: 'verdict', appeal_wait: 'appeal' }[cs.stage];
+    if (!next) continue;
+    cs.detained = false;
+    if (next === 'decision') cs.stage = 'zaitaku';
+    j.queue.push({ type: next, caseId: cs.id, crime: cs.crime, day: 0, level: cs.appealLevel || 'koso', via: 'warrant', recovered: true });
+  }
+  j.cases = j.cases.filter((c) => !c.closed);
+  if (!j.prison && j.status === 'detained') j.status = 'free';
+  if (j.status === 'trial' && !j.cases.length) j.status = 'free';
+}
+// The rest of a term cut off by a reload (see recoverInterrupted).
+async function resumeCustody(g) {
+  const j = J(g), st = g.state, pr = j.prison;
+  delete j.flags.resumeCustody;
+  if (!pr) { j.status = statusNow(g); return; }
+  if (pr.kind === 'roueki') {
+    const flow = new Flow(g);
+    const left = Math.max(0, pr.until - st.day);
+    await flow.show('keimusho', { title: '労役場（刑事施設）', sub: '留置の続き' });
+    if (left) await passDays(g, left, { mode: 'prison', label: `― ${left}日後 ―`, sub: '労役場留置の満了' });
+    j.prison = null;
+    j.status = statusNow(g);
+    await narrate(g, '（労役場を出た。罰金は、これで納めたことになる）');
+    await flow.end({ home: true });
+    return;
+  }
+  pr.start = num(pr.start, st.day);
+  pr.days = Math.max(1, num(pr.days, pr.until - pr.start));
+  await serveSentenceFlow(g, null, { resumed: true });
 }
 let polHooked = false;
 function hookPolitics() {
@@ -598,6 +701,7 @@ function hookPolitics() {
 }
 function J(g) {
   hookPolitics();
+  GAME = g;
   const st = g.state;
   if (!st.justice || typeof st.justice !== 'object') st.justice = newJusticeState();
   if (!normalized.has(st.justice)) { normalizeJustice(st.justice); normalized.add(st.justice); }
@@ -1130,6 +1234,9 @@ async function custodyDay(g, mode = 'detained') {
   if (mode === 'prison') st.rent.paidWeek = weekOf(st.day);
   else if (((st.day - 1) % 7) === 0 && st.rent.paidWeek < weekOf(st.day)) { try { g.chargeRent(); } catch (e) { console.error(e); } }
   if (mode === 'prison' && st.fans > 0) st.fans = Math.max(0, st.fans - Math.ceil(st.fans * 0.001));
+  // prison.work (contract): days of 刑務作業 / 労役 (禁錮 only with 請願作業)
+  const pr = j.prison;
+  if (mode === 'prison' && pr && (pr.kind !== 'kinko' || pr.petition)) pr.work = num(pr.work) + 1;
   loanTick(g, { inside: true });
   heatCool(g);
   if (typeof g.politicsTick === 'function') {
@@ -1240,7 +1347,11 @@ function computeSentence(g, cs) {
   let suspend = 0, supervision = false;
   if (months) {
     const again = inSuspension(g);
-    const ok = months <= 36 && t.suspendOk !== false && !recentPrison(g, 5) && (!again || (months <= (kokinEra(g) ? 24 : 12) && m >= 1));
+    // 再度の執行猶予（刑法25条2項）: 1年以下（2025年6月から2年以下）の刑で、情状に特に酌量すべきもの。
+    // 保護観察付きの猶予中の再犯は、2025年6月の改正までは再度の猶予ができなかった（同項ただし書）。
+    const supervised = again && !!J(g).supervision;
+    const againOk = !again || (months <= (kokinEra(g) ? 24 : 12) && (supervised ? kokinEra(g) && m >= 1.5 : m >= 1));
+    const ok = months <= 36 && t.suspendOk !== false && !recentPrison(g, 5) && againOk;
     const p = ok ? clamp(0.55 + 0.15 * m - (t.hard ? 0.35 : 0) - 0.12 * cs.priors, 0.02, 0.97) : 0;
     if (roll(g, p)) {
       suspend = months <= 12 ? 3 : months <= 24 ? 4 : 5;
@@ -1248,12 +1359,18 @@ function computeSentence(g, cs) {
     }
   }
   const extraFine = months && t.extraFine && pen.fine ? clamp(round1(t.extraFine), pen.fine[0], Math.max(pen.fine[1], t.extraFine)) : 0;
-  const labor = t.labor || pen.labor || 'choeki';
+  // a judgment names one kind of term: where the statute allows 懲役若しくは禁錮, intentional crimes get 懲役
+  // and negligence (過失運転致傷) gets 禁錮 (until both became 拘禁刑 in 2025-06)
+  let labor = t.labor || pen.labor || 'choeki';
+  if (labor === 'both') labor = cs.crime === 'traffic_injury' ? 'kinko' : 'choeki';
   const kind = months ? (suspend ? 'suspended' : 'prison') : 'fine';
-  return { kind, months, fine: months ? 0 : fineAmt, extraFine, suspend, supervision, tsuicho: t.tsuicho || 0, labor, karyo: !months && fineAmt < 10000, label: t.label || null };
+  // fines are worked out in nominal yen of the time (the statute's amounts) and kept as internal money
+  const nominal = months ? 0 : fineAmt;
+  return { kind, months, fine: legalYen(g, nominal), nominal, extraFine: legalYen(g, extraFine), extraNominal: extraFine, suspend, supervision, tsuicho: t.tsuicho || 0, labor, karyo: !months && fineAmt < 10000, label: t.label || null };
 }
+const fineNominal = (g, sen) => (sen.nominal != null ? sen.nominal : nominalOf(g, sen.fine));
 function demandOf(g, sen) {
-  if (sen.kind === 'fine') return `罰金${fmtMoney(round1(sen.fine * 1.2, sen.fine < 10000 ? 1000 : 10000))}`;
+  if (sen.kind === 'fine') { const n = fineNominal(g, sen); return `${n < 10000 ? '科料' : '罰金'}${fmtMoney(legalYen(g, round1(n * 1.2, n < 10000 ? 1000 : 10000)))}`; }
   return `${laborWord(g, sen.labor)}${fmtTerm(Math.round((sen.months * 1.25) / 2) * 2)}`;
 }
 export function sentenceText(g, sen) {
@@ -1267,6 +1384,7 @@ export function sentenceText(g, sen) {
 function addRecord(g, cs, outcome, extra = {}) {
   const j = J(g);
   const rec = { crime: cs.crime, day: g.state.day, outcome, court: cs.court || null, juvenile: !!extra.juvenile, ...extra };
+  if (extra.months) rec.years = Math.round((extra.months / 12) * 100) / 100; // contract field (years?)
   j.record.push(rec);
   if (j.record.length > 60) j.record.splice(0, j.record.length - 60);
   return rec;
@@ -1344,9 +1462,10 @@ function careerRecover(g, k = 0.3) {
 function arrestFallout(g, cs) {
   const st = g.state;
   emit(g, 'arrested', { crime: cs.crime, caseId: cs.id, day: st.day });
-  if (cs.juvenile && !cs.specific) {
-    // 少年法61条: no names in the news (the agency still hears of it)
-    if (knownFigure(g)) news(g, `${CRIMES[cs.crime].short}の疑いで、${cs.age}歳の少年を逮捕。（少年のため氏名は報じられない）`);
+  if (cs.juvenile) {
+    // 少年法61条: no names in the news (the agency still hears of it). 特定少年 (18・19歳, 2022-04〜)
+    // may be named only once they are indicted (少年法68条) — see indictStage after 逆送.
+    if (knownFigure(g)) news(g, `${CRIMES[cs.crime].short}の疑いで、${cs.age}歳の少年を逮捕。（少年のため氏名は報じられない${cs.specific ? '。特定少年は、起訴されれば実名で報道されうる' : ''}）`);
     careerSanction(g, 2, { crime: cs.crime, soft: true });
   } else if (knownFigure(g)) {
     news(g, `【速報】${whoInNews(g)}を、${CRIMES[cs.crime].short}の疑いで逮捕。`);
@@ -1382,7 +1501,8 @@ async function storeCaught(g, c) {
   const age = ageOf(st);
   await flow.show('kouban', { title: policeName(g), sub: '事情聴取' });
   await say(g, SP.police, `${policeName(g)}の者です。\nお店の方から事情は聞きました。話を聞かせてもらいます。`);
-  if (!history && amount <= 10000 && plea === 'admit' && c.paidBack !== false && age >= 20) {
+  // 微罪処分（刑訴法246条ただし書・犯罪捜査規範198条）: 被害が少なく、被害の回復があり、初めてで、反省している成人
+  if (!history && amount <= 10000 && plea === 'admit' && c.paidBack && age >= 20) {
     await say(g, SP.police, ['被害が少なく、初めてで、反省もしている。\nお店も代金を受け取った。', '今回は「微罪処分」にします。\n検察には送らず、警察で手続きを終わらせます。', '前科にはならないが、記録は残る。\n二度とやるんじゃないぞ。']);
     const m = family(g)[0];
     if (m) await narrate(g, `（身元引受人として、${RELATIONS[m.rel].call}が迎えに来てくれた。\n帰り道、ほとんど話はしなかった…）`);
@@ -1455,8 +1575,8 @@ async function streetSmokingCaught(g, c) {
   await flow.show('street', { title: '路上喫煙禁止地区', sub: rule.area || '', officer: SP.shidoin.look });
   if (rule.fine) {
     await say(g, SP.shidoin, [`ここは路上喫煙禁止地区です。\n${rule.law || '条例'}により、過料${man(rule.fine)}をお支払いいただきます。`, '（過料は行政上の罰で、前科にはなりません）']);
-    await g.fine(rule.fine, '路上喫煙の過料', { kind: 'kare', quiet: true });
-    addRecord(g, { crime: 'street_smoking' }, 'kare', { fine: rule.fine, label: '過料' });
+    await g.fine(legalYen(g, rule.fine), '路上喫煙の過料', { kind: 'kare', quiet: true });
+    addRecord(g, { crime: 'street_smoking' }, 'kare', { fine: legalYen(g, rule.fine), label: '過料' });
   } else {
     await say(g, SP.shidoin, `ここは路上喫煙禁止です。\n${rule.smokingArea ? '喫煙所をご利用ください。' : 'ご協力をお願いします。'}`);
     addRecord(g, { crime: 'street_smoking' }, 'warning', { label: '指導' });
@@ -1506,7 +1626,9 @@ async function drunkFlow(g, c) {
 const rint = (g, a, b) => a + Math.floor(rnd(g) * (b - a + 1));
 function statusNow(g) {
   const j = J(g), d = g.state.day;
-  if (j.prison) return 'prison';
+  // 労役場留置 is the way an unpaid fine is served, not a 禁錮以上 sentence: the person is held
+  // ('detained') but keeps the vote and any office (公職選挙法11条 lists only 禁錮以上 / 拘禁刑以上)
+  if (j.prison) return j.prison.kind === 'roueki' ? 'detained' : 'prison';
   if (j.custody) return 'detained';
   if (j.cases.some((c) => !c.closed && (c.bail || ['indicted', 'verdict_wait', 'appeal_wait'].includes(c.stage)))) return 'trial';
   if (num(j.probationUntil) > d || num(j.suspendUntil) > d) return 'probation';
@@ -1533,6 +1655,7 @@ const caseById = (g, id) => J(g).cases.find((c) => c.id === id && !c.closed) || 
 async function arrestFlow(g, id, ctx = {}) {
   const st = g.state, j = J(g), def = CRIMES[id];
   if (!def) { console.error('arrest: unknown crime', id); return null; }
+  if (def.exists && !def.exists(g)) return null; // not an offence yet at this date
   if (j.status === 'detained' || j.status === 'prison') return null;
   let cs = ctx.caseId ? caseById(g, ctx.caseId) : null;
   if (!cs) cs = newCase(g, id, ctx);
@@ -1643,10 +1766,13 @@ async function chooseLawyer(g, cs, phase) {
   if (phase === 'kouryu' && suspectKokusen(g, cs)) items.push(['国選弁護人をつける（無料）', 'kokusen']);
   if (phase === 'court') items.push(['国選弁護人をつける（無料）', 'kokusen']);
   items.push(['いまは頼まない', null]);
-  items.push([`私選弁護人に頼む（約${fmtMoney(fee)}）`, 'shisen']);
-  if (st.money >= yfee || st.fame >= 2000) items.push([`元検事の弁護士（約${fmtMoney(yfee)}）`, 'yameken']);
+  // choices stay within 14 characters: the fees are in the question
+  items.push(['私選弁護人に頼む', 'shisen']);
+  const yame = st.money >= yfee || st.fame >= 2000;
+  if (yame) items.push(['元検事の弁護士に頼む', 'yameken']);
   if (items.length <= 1) return null;
-  const q = phase === 'court' ? '（裁判では、弁護人がつく。\nどうしよう…）' : phase === 'kouryu' ? '（勾留が決まると、国選弁護人をつけてもらえる。）' : '（弁護士を頼もうか…）';
+  const q0 = phase === 'court' ? '（裁判では、弁護人がつく。どうしよう…）' : phase === 'kouryu' ? '（勾留が決まると、国選弁護人をつけてもらえる）' : '（弁護士を頼もうか…）';
+  const q = `${q0}\n（私選は着手金だけで約${fmtMoney(fee)}${yame ? `、\n元検事の弁護士は約${fmtMoney(yfee)}` : ''}）`;
   const k = await ask(g, null, q, items.map((x) => x[0]), { cancel: items.findIndex((x) => x[1] === null) });
   const pick = items[k] ? items[k][1] : null;
   if (pick === 'shisen' || pick === 'yameken') {
@@ -1789,9 +1915,13 @@ function decide(g, cs) {
   if (def.political && cs.politician) p = Math.max(p, 0.97); // 候補者・議員本人の選挙違反・政治資金事件
   if (!roll(g, clamp(p, 0.02, 1))) return 'yuyo';
   const sen = computeSentence(g, cs);
-  if (sen.kind === 'fine' && sen.fine <= 1000000 && !cs.wantsTrial) { cs.sentence = sen; return 'ryakushiki'; }
+  if (sen.kind === 'fine' && fineNominal(g, sen) <= ryakushikiCap(g) && !cs.wantsTrial) { cs.sentence = sen; return 'ryakushiki'; }
   return 'kohan';
 }
+// 略式命令で科せる罰金の上限（刑訴法461条）: 100万円 (2006年5月28日〜, 平成18年法律第36号) / 50万円
+// (1991年5月7日〜) / それより前は20万円（目安）. Sources: 平成18年版犯罪白書 第6編第3章第3節,
+// ja.wikipedia.org 略式手続（沿革）. A heavier fine needs a public trial (公判請求).
+export function ryakushikiCap(g) { return since(g, 2006, 5) ? 1000000 : since(g, 1991, 5) ? 500000 : 200000; }
 async function decisionStage(g, flow, cs, opts = {}) {
   if (!cs.detained) await jidanOffer(g, flow, cs, 'office');
   const kind = decide(g, cs);
@@ -2003,7 +2133,8 @@ async function trialFlow(g, cs, opts = {}) {
   cs.court = cs.court || `${courtCity(g)}地方裁判所`;
   const pen = penaltyOf(g, cs.crime, cs);
   if (!cs.lawyer && pen.prison && pen.prison[1] > 36) cs.lawyer = 'kokusen'; // 必要的弁護事件（刑訴法289条）
-  const judges = def.severity >= 5 ? 3 : 1; // 法定合議（短期1年以上の罪）
+  // 重い事件は3人の裁判官（強盗罪は裁判所法26条2項2号で法定合議から外れているが、実務では裁定合議が多い）
+  const judges = def.severity >= 5 ? 3 : 1;
   const chief = judges === 3 ? SP.chief : SP.judge;
   const d = lawDate(g, cs.day);
   await flow.show('houtei', { title: `${cs.court}　第1回公判`, sub: knownFigure(g) ? '傍聴券を求めて長い列ができた' : '刑事法廷', judges, lawyer: lawyerLook(cs) });
@@ -2056,7 +2187,7 @@ function verdictLines(g, cs, sen) {
   const out = [];
   if (sen.kind === 'fine') {
     out.push(`主文。被告人を${sentenceText(g, sen)}に処する。`);
-    out.push(`その${sen.karyo ? '科料' : '罰金'}を完納することができないときは、\n金${fmtMoney(LABOR_YEN)}を1日に換算した期間、\n被告人を労役場に留置する。`);
+    out.push(`その${sen.karyo ? '科料' : '罰金'}を完納することができないときは、\n金${fmtMoney(legalYen(g, LABOR_YEN))}を1日に換算した期間、\n被告人を労役場に留置する。`);
   } else {
     out.push(`主文。被告人を${laborWord(g, sen.labor)}${fmtTerm(sen.months)}に処する。`);
     const credit = sen.kind === 'prison' ? creditDays(cs) : 0;
@@ -2094,7 +2225,7 @@ async function acquitFlow(g, flow, cs, chief) {
   emit(g, 'acquitted', { crime: cs.crime, caseId: cs.id });
   careerRecover(g, 0.6);
   if (cs.custodyDays > 0) {
-    const comp = cs.custodyDays * 10000;
+    const comp = legalYen(g, cs.custodyDays * 10000); // 刑事補償法4条: 1日1000円以上12500円以下
     st.money += comp;
     await narrate(g, `（勾留されていた${cs.custodyDays}日分について、\n刑事補償として${fmtMoney(comp)}が支払われることになった）`);
   }
@@ -2145,7 +2276,7 @@ async function appealHearing(g, flow, cs, level) {
     const s2 = { ...sen };
     if (s2.kind === 'prison' && s2.months <= 36) { s2.kind = 'suspended'; s2.suspend = 4; }
     else if (s2.kind !== 'fine') s2.months = Math.max(1, Math.round(s2.months * 0.8));
-    else s2.fine = round1(s2.fine * 0.8, s2.fine < 10000 ? 1000 : 10000);
+    else { const n = fineNominal(g, s2); s2.nominal = round1(n * 0.8, n < 10000 ? 1000 : 10000); s2.fine = legalYen(g, s2.nominal); }
     await say(g, SP.chief, ['主文。原判決を破棄する。', `被告人を${sentenceText(g, s2)}に処する。`, '原判決の量刑は、その後の事情も考えると、重すぎる。']);
     cs.sentence = s2;
   } else {
@@ -2161,28 +2292,38 @@ async function appealHearing(g, flow, cs, level) {
   return finalize(g, flow, cs, cs.sentence);
 }
 // The judgment becomes final (確定): the record, the consequences, then the sentence is carried out.
+// 公民権 after a final judgment:
+//   公選法252条 (買収・戸別訪問など) / 政治資金規正法28条 (不記載など): 罰金 → 5年, 禁錮以上 → 刑の執行を
+//     終わるまで＋5年, 執行猶予 → 猶予期間中.
+//   公選法11条1項4号: 公職にある間に犯した収賄罪（刑法197条〜197条の4）・あっせん利得罪 → 実刑は執行終了から
+//     5年, 執行猶予は猶予期間中; 11条の2: その実刑なら被選挙権はさらに5年（合わせて10年）.
+//   公選法11条1項2号: 禁錮以上（2025年6月から拘禁刑以上）の刑の執行を終わるまで（執行猶予中を除く: 3号）.
+//   (sources: soumu.go.jp なるほど!選挙, sn-hoki.co.jp 公選法11条, da.lib.kobe-u.ac.jp 0100496595
+//    「拘禁刑以上の刑に処せられ…」— 令和4年法律第68号による読み替え)
 function applyCivicBan(g, cs, sen, prisonDays) {
   const j = J(g), def = CRIMES[cs.crime], day = g.state.day;
-  let until = 0, why = '';
+  let until = 0, why = '', cand = 0;
   const termDays = sen.kind === 'prison' ? Math.max(1, prisonDays) : 0; // 刑期の満了まで（仮釈放中も刑の執行中）
-  if (def.political && def.civicBan) {
+  if (def.bribery && cs.politician) {
+    why = `公職にある間に犯した${def.short}の罪の刑に処せられたため（公職選挙法11条1項4号）`;
+    if (sen.kind === 'suspended') until = day + years(sen.suspend);
+    else if (sen.kind === 'prison') { until = day + termDays + years(5); cand = until + years(5); }
+  } else if (def.political && def.civicBan && !def.bribery) {
     why = `${def.short}の刑に処せられたため（${cs.crime === 'slush_fund' ? '政治資金規正法28条' : '公職選挙法252条'}）`;
     until = sen.kind === 'fine' ? day + years(5) : sen.kind === 'suspended' ? day + years(sen.suspend) : day + termDays + years(5);
-  } else if (def.bribery && cs.politician) {
-    why = '公職にある間に犯した収賄罪の刑に処せられたため（公職選挙法11条1項4号）';
-    until = sen.kind === 'suspended' ? day + years(sen.suspend) : sen.kind === 'prison' ? day + termDays + years(5) : 0;
   } else if (sen.kind === 'prison') {
-    why = '禁錮以上の刑の執行を終わるまで（公職選挙法11条1項2号）';
+    why = `${kokinEra(g) ? '拘禁刑' : '禁錮'}以上の刑の執行を終わるまで（公職選挙法11条1項2号）`;
     until = day + termDays;
   }
   if (until > num(j.civicBanUntil)) { j.civicBanUntil = until; j.civicBanWhy = why; }
+  if (cand > num(j.candidacyBanUntil)) j.candidacyBanUntil = cand;
   return until;
 }
 async function politicsAfterConviction(g, cs, sen) {
   if (!isPolitician(g)) return;
   const j = J(g);
   if (num(j.civicBanUntil) > g.state.day) { loseOffice(g, `公民権停止：${j.civicBanWhy || '被選挙権を失ったため'}`); return; }
-  if (sen.kind === 'prison') { loseOffice(g, '禁錮以上の実刑判決が確定したため'); return; }
+  if (sen.kind === 'prison') { loseOffice(g, `${kokinEra(g) ? '拘禁刑' : '禁錮'}以上の実刑判決が確定したため`); return; }
   const k = await ask(g, null, '（法律の上では、議員を続けることができる。\nでも、世間の目は厳しい…）', ['議員を続ける', '議員辞職する']);
   if (k === 1) loseOffice(g, '議員辞職'); else politicalHit(g, sen.kind === 'suspended' ? 30 : 15, 15);
 }
@@ -2212,8 +2353,10 @@ async function finalize(g, flow, cs, sen) {
   }
   if (sen.extraFine) await fineImpl(g, sen.extraFine, '罰金', { kind: 'bakkin', flow });
   if (sen.kind === 'suspended') {
-    j.suspendUntil = st.day + years(sen.suspend);
-    j.suspended = { months: sen.months, labor: sen.labor, crime: cs.crime };
+    // 再度の執行猶予: the earlier suspended term stays revocable too (both are served if a later 実刑 comes)
+    const prev = inSuspension(g) && j.suspended ? j.suspended : null;
+    j.suspendUntil = Math.max(num(j.suspendUntil), st.day + years(sen.suspend));
+    j.suspended = { months: sen.months + (prev ? num(prev.months) : 0), labor: sen.labor, crime: cs.crime };
     j.supervision = !!sen.supervision;
     if (sen.supervision) j.probationUntil = Math.max(num(j.probationUntil), j.suspendUntil);
     await narrate(g, `（執行猶予${sen.suspend}年。この間にまた罪を犯せば、\n猶予は取り消され、刑務所に入ることになる）`);
@@ -2290,25 +2433,30 @@ async function prisonEvent(g, flow, pr, k, place) {
   }
   pr.behaviour = clamp(pr.behaviour, 0, 100);
 }
-async function serveSentenceFlow(g, flow) {
+async function serveSentenceFlow(g, flow, opts = {}) {
   const st = g.state, j = J(g);
   const pr = j.prison;
   if (!pr) return null;
+  if (pr.kind === 'roueki') return resumeCustody(g);
   flow = flow || new Flow(g);
   j.status = 'prison';
   j.custody = null;
+  pr.work = num(pr.work);
   const juvenile = pr.kind === 'shonenin';
   const place = juvenile ? '少年院' : prisonName(g);
-  emit(g, 'jailed', { days: pr.days, kind: pr.kind });
-  await flow.show('gate', { title: place, sub: juvenile ? '入院' : '入所' });
-  await narrate(g, juvenile
+  if (opts.resumed) {
+    await flow.show('keimusho', { title: place, sub: '刑期の続き' });
+    await narrate(g, `（${place}での日々が続いている。残りの刑期は${Math.max(0, pr.until - st.day)}日――）`);
+  } else emit(g, 'jailed', { days: pr.days, kind: pr.kind });
+  if (!opts.resumed) await flow.show('gate', { title: place, sub: juvenile ? '入院' : '入所' });
+  if (!opts.resumed) await narrate(g, juvenile
     ? ['（少年院に入った。規則正しい生活、授業、\n職業指導、そして自分と向き合う時間…）']
     : [`（${place}に入所した。番号で呼ばれ、灰色の服に着替えた）`, pr.kind === 'kokin' ? '（2025年から、懲役と禁錮は「拘禁刑」になった。\n作業だけでなく、立ち直るための指導も受ける）' : pr.kind === 'kinko' ? '（禁錮刑には、作業の義務がない）' : '（懲役刑には、刑務作業が義務づけられている）']);
-  if (housingOnEntry(g, pr)) await narrate(g, family(g).length ? '（長い刑期のあいだに、部屋は解約された。\n荷物は家族が引き取ってくれた）' : '（長い刑期のあいだに、部屋は解約された。\n大家さんが、荷物を預かってくれるという）');
+  if (!opts.resumed && housingOnEntry(g, pr)) await narrate(g, family(g).length ? '（長い刑期のあいだに、部屋は解約された。\n荷物は家族が引き取ってくれた）' : '（長い刑期のあいだに、部屋は解約された。\n大家さんが、荷物を預かってくれるという）');
   const total = Math.max(0, pr.until - st.day);
   const nScenes = clamp(Math.round(total / (MONTH_DAYS * 3)), 1, 7);
   const sceneDays = [];
-  for (let i = 1; i <= nScenes; i++) sceneDays.push(pr.start + Math.round((total * i) / (nScenes + 1)));
+  for (let i = 1; i <= nScenes; i++) sceneDays.push(st.day + Math.round((total * i) / (nScenes + 1)));
   const legalMin = pr.start + Math.ceil(pr.days / 3); // 刑法28条（少年院の仮退院も同様に扱う）
   const reviews = [[Math.max(legalMin, pr.start + Math.ceil(pr.days * (juvenile ? 0.5 : 2 / 3))), 75], [pr.start + Math.ceil(pr.days * 0.8), 55]];
   let k = 0;
@@ -2336,7 +2484,7 @@ async function prisonRelease(g, flow, pr, place) {
   const st = g.state, j = J(g);
   const parole = !!pr.parole && pr.parole < pr.until;
   // 作業報奨金: a few thousand yen a month for the months worked (禁錮 only with 請願作業)
-  const worked = Math.floor(Math.max(0, st.day - pr.start) / MONTH_DAYS);
+  const worked = Math.floor(num(pr.work, Math.max(0, st.day - pr.start)) / MONTH_DAYS);
   if (pr.kind !== 'shonenin' && pr.kind !== 'roueki' && (pr.kind !== 'kinko' || pr.petition)) pr.reward = Math.max(pr.reward || 0, worked * (pr.diligent === false ? 2500 : 4500));
   j.prison = null;
   if (parole) { j.probationUntil = Math.max(num(j.probationUntil), pr.until); j.supervision = true; }
@@ -2394,7 +2542,7 @@ async function fineImpl(g, amount, reason, opts = {}) {
     }
     let realDays = 0;
     if (rest > 0) {
-      realDays = Math.min(kind === 'karyo' ? 30 : 730, Math.ceil(rest / LABOR_YEN)); // 刑法18条
+      realDays = Math.min(kind === 'karyo' ? 30 : 730, Math.ceil(rest / legalYen(g, LABOR_YEN))); // 刑法18条
       await laborFlow(g, opts.flow, realToGameDays(realDays), realDays, word);
     }
     emit(g, 'fined', { amount, reason, kind, paid, labor: realDays });
@@ -2408,10 +2556,10 @@ async function fineImpl(g, amount, reason, opts = {}) {
 async function laborFlow(g, outer, gameDays, realDays, word) {
   const st = g.state, j = J(g);
   const flow = outer || new Flow(g);
-  j.prison = { kind: 'roueki', place: 'rouekijo', start: st.day, days: gameDays, until: st.day + gameDays, behaviour: 60, reward: 0, parole: null };
-  j.status = 'prison';
+  j.prison = { kind: 'roueki', place: 'rouekijo', start: st.day, days: gameDays, until: st.day + gameDays, behaviour: 60, reward: 0, parole: null, work: 0 };
+  j.status = 'detained'; // held, but not a 禁錮以上 sentence (see statusNow)
   await flow.show('keimusho', { title: '労役場（刑事施設）', sub: `${word}が払えなかった` });
-  await narrate(g, [`（${word}が払えない分は、労役場で働くことになる。\n1日${fmtMoney(LABOR_YEN)}の換算で、${realDays}日分――）`, '（刑事施設の中で、受刑者と同じように作業をする…）']);
+  await narrate(g, [`（${word}が払えない分は、労役場で働くことになる。\n1日${fmtMoney(legalYen(g, LABOR_YEN))}の換算で、${realDays}日分――）`, '（刑事施設の中で、受刑者と同じように作業をする…）']);
   await passDays(g, gameDays, { mode: 'prison', label: `― ${gameDays}日後 ―`, sub: '労役場留置の満了' });
   j.prison = null;
   j.status = statusNow(g);
@@ -2424,7 +2572,7 @@ async function laborFlow(g, outer, gameDays, realDays, word) {
 // 総量規制), 闇金 (illegal: トイチ = 10% every 10 days, 先引き, harassment; the contract is void and even
 // the principal need not be repaid: 貸金業法42条・最高裁平成20年6月10日).
 export const LENDERS = {
-  shohisha: { name: '消費者金融', legal: true, cycle: MONTH_DAYS, companies: ['ドットローン', 'まねきキャッシング', 'すまいるクレジット', 'ひまわりファイナンス', 'あおぞらローン'] },
+  shohisha: { name: '消費者金融', legal: true, cycle: MONTH_DAYS, companies: ['ドットローン', 'まねきキャッシング', 'すまいるクレジット', 'こもれびファイナンス', 'そよかぜローン'] }, // fictional names (no real lender)
   bank: { name: '銀行カードローン', legal: true, cycle: MONTH_DAYS, companies: ['ドット銀行カードローン'] },
   yamikin: { name: '闇金', legal: false, cycle: 10, companies: ['090金融', 'ドット商事', 'クイック融資'] },
 };
@@ -2519,7 +2667,10 @@ function borrowImpl(g, lender, amount, opts = {}) {
 }
 function repayImpl(g, which, amount) {
   const st = g.state, j = J(g);
-  const loan = typeof which === 'object' ? which : j.loans.find((l) => l.id === which) || j.loans[which];
+  // contract: repay(loanIndex, amount) — a number is the index in g.jus().loans; pass the loan object
+  // (or { id }) to pick one by its id
+  const loan = which && typeof which === 'object' ? (j.loans.includes(which) ? which : j.loans.find((l) => l.id === which.id)) || (which.lender ? which : null)
+    : typeof which === 'number' ? j.loans[which] : j.loans.find((l) => String(l.id) === String(which));
   if (!loan || loan.status === 'void' || loan.status === 'paid') return { paid: 0, left: 0, cleared: true };
   const bal = loanBalance(loan);
   const pay = Math.max(0, Math.min(Math.round(num(amount, bal)), bal, st.money));
@@ -2787,7 +2938,10 @@ async function debtReliefImpl(g, kind) {
   if (!free && st.money < fee) { await say(g, sp, `弁護士費用${fmtMoney(fee)}が必要です…。`); await flow.end(); return null; }
   if (free) j.unpaid += fee; else st.money -= fee;
   await flow.show('hearing', { title: `${courtCity(g)}地方裁判所`, sub: '再生計画の認可', judge: LK.judge3, lawyer: LK.shisen });
-  const reduced = total <= 1000000 ? total : total <= 5000000 ? 1000000 : Math.max(1000000, Math.round(total / 5));
+  // 最低弁済額（民事再生法231条2項3号・4号）: 100万円未満は全額、500万円以下は100万円、1500万円以下は5分の1、
+  // 3000万円以下は300万円、5000万円以下は10分の1（無担保の債務が5000万円を超えると使えない）
+  if (total > 50000000) { await say(g, sp, '借金が5000万円を超えると、個人再生は使えません…。\n自己破産を考えましょう。'); await flow.end(); return null; }
+  const reduced = total < 1000000 ? total : total <= 5000000 ? 1000000 : total <= 15000000 ? Math.round(total / 5) : total <= 30000000 ? 3000000 : Math.round(total / 10);
   await say(g, SP.hasan, ['再生計画を認可します。', `借金${fmtMoney(total)}のうち、${fmtMoney(reduced)}を\n3年かけて返済してください。`]);
   const keep = legal[0];
   j.loans = j.loans.filter((l) => !legal.includes(l) || l === keep);
@@ -2800,6 +2954,11 @@ async function debtReliefImpl(g, kind) {
   return 'saisei';
 }
 // 自己破産: 申立て → 破産手続開始決定（同時廃止 / 少額管財）→ 免責審尋 → 免責許可決定.
+// The cash a bankrupt keeps (自由財産): 99万円 under the 破産法 in force from 2005-01-01 (34条3項:
+// 民事執行法131条3号の額66万円 × 3/2; moj.go.jp, kansai-u.repo KU-1100-20140310-06). Before that only
+// the 差押禁止の金銭 itself (66万円 from 2004-04 after the 2003 民事執行法 revision; 21万円 before: 目安).
+// 少額管財 (予納金20万円) began at the Tokyo District Court in 1999; before, 管財事件の予納金 was 50万円〜.
+function freeCash(g) { return since(g, 2005, 1) ? 990000 : since(g, 2004, 4) ? 660000 : 210000; }
 async function fileBankruptcyImpl(g, opts = {}) {
   const st = g.state, j = J(g);
   const debts = loanTotalImpl(g) + (st.rent.debt || 0);
@@ -2810,15 +2969,20 @@ async function fileBankruptcyImpl(g, opts = {}) {
   if (debts <= 0) { await say(g, sp, '借金はないようですね。'); await flow.end(); return null; }
   const inc = annualIncomeImpl(g);
   const insolvent = debts > st.money + inc; // 支払不能: about three years of a third of the income cannot cover it
-  await say(g, sp, ['自己破産は、裁判所に「支払不能」と認めてもらい、\n借金の支払いを免除してもらう（免責）手続きです。', '現金は99万円まで手元に残せます。\nただし、税金や罰金は免責されません。', '手続き中は、一部の仕事（警備員など）に就けません。\n官報に名前がのり、信用情報にも記録が残ります。']);
+  await say(g, sp, ['自己破産は、裁判所に「支払不能」と認めてもらい、\n借金の支払いを免除してもらう（免責）手続きです。', since(g, 2005, 1) ? '現金は99万円まで手元に残せます。\nただし、税金や罰金は免責されません。' : `手元に残せる現金は${man(freeCash(g))}ほど。ほかの財産は配当に回ります。\nただし、税金や罰金は免責されません。`, '手続き中は、一部の仕事（警備員など）に就けません。\n官報に名前がのり、信用情報にも記録が残ります。']);
   if (!insolvent && !opts.force) { await say(g, sp, `収入から見ると、返せない額ではありません。\n（借金${fmtMoney(debts)}・年収${fmtMoney(inc)}）任意整理を考えましょう。`); await flow.end(); return null; }
-  const kanzai = st.money > 990000;
-  const fee = kanzai ? 500000 + 200000 : 300000; // 弁護士費用（＋少額管財の予納金20万円）
+  // 弁護士費用 is paid first (or lent by 法テラス). A 破産管財人 is appointed only when the estate can pay
+  // the 予納金 (20万円 少額管財 from 1999; 50万円〜 before); otherwise 同時廃止（破産法216条）.
+  const keep = legalYen(g, freeCash(g));
+  const fee = st.money > keep ? 500000 : 300000;
+  const yonokin = since(g, 1999, 4) ? 200000 : 500000;
   const terasu = since(g, 2006, 10) && inc < 3000000;
-  const k = await ask(g, sp, `費用は${fmtMoney(fee)}ほど${terasu ? '。法テラスの立替制度も使えます' : ''}。\n申し立てますか？`, ['申し立てる', 'やめておく']);
+  const k = await ask(g, sp, [`弁護士費用は${fmtMoney(fee)}ほど${terasu ? '。法テラスの立替制度も使えます' : ''}。`, `財産が多ければ管財事件になり、予納金${fmtMoney(yonokin)}ほどを\n財産から納めます。申し立てますか？`], ['申し立てる', 'やめておく']);
   if (k !== 0) { await flow.end(); return null; }
   if (!terasu && st.money < fee) { await say(g, sp, 'まず費用を用意しないと…。\n（自分で申し立てることもできるが、手続きは大変だ）'); await flow.end(); return null; }
   if (terasu && st.money < fee) j.unpaid += fee; else st.money -= fee;
+  const kanzai = st.money - keep >= yonokin;
+  if (kanzai) st.money -= yonokin;
   await flow.show('hearing', { title: `${courtCity(g)}地方裁判所　破産係`, sub: '破産手続開始の決定', judge: LK.judge3, lawyer: LK.shisen });
   await say(g, SP.hasan, ['あなたについて、破産手続の開始を決定します。', kanzai ? '財産があるため、破産管財人を選任します（管財事件）。' : '配当できる財産がないため、同時に破産手続を終わらせます（同時廃止）。', 'このあと、免責について審尋を行います。']);
   for (const l of activeLoans(g)) { l.status = l.lender === 'yamikin' ? 'void' : 'frozen'; l.stopped = true; }
@@ -2842,8 +3006,9 @@ async function bankruptcyStep(g, ev) {
   const flow = new Flow(g);
   await flow.show('hearing', { title: `${courtCity(g)}地方裁判所`, sub: b.kind === 'kanzai' ? '債権者集会・免責審尋' : '免責審尋', judge: LK.judge3, lawyer: LK.shisen, second: b.kind === 'kanzai' ? LK.shisen : null });
   if (b.kind === 'kanzai') {
-    const take = Math.max(0, st.money - 990000);
-    if (take > 0) { st.money -= take; await say(g, SP.kanzai, `破産管財人です。99万円を超える財産${fmtMoney(take)}は、\n換価して債権者への配当にあてました。`); }
+    const keep = legalYen(g, freeCash(g));
+    const take = Math.max(0, st.money - keep);
+    if (take > 0) { st.money -= take; await say(g, SP.kanzai, `破産管財人です。手元に残せる${man(freeCash(g))}を超える財産${fmtMoney(take)}は、\n換価して債権者への配当にあてました。`); }
   }
   const k = await ask(g, SP.hasan, '借金が増えた理由を、話してください。', ['正直に話して反省を伝える', 'ごまかす']);
   const gamble = (j.stats.committed.gambling || 0) > 0;
@@ -2876,9 +3041,14 @@ async function bankruptcyStep(g, ev) {
 
 // ======================================================================== smoking (and drinking)
 let GAME = null; // the running game (item prices by era)
-// A pack of 20 by era, in internal yen (shown ×priceRate: 昭和 ¥220, 平成90s ¥250, 平成00s ¥300, 令和 ¥600).
-export const CIG_PRICE = { showa: 370, heisei_early: 335, heisei: 355, reiwa: 600 };
-const cigPrice = (g) => CIG_PRICE[eraKey(g)] || 600;
+// A pack of 20 (the best-selling brand) in the yen of the time: ¥220 → ¥250 (1998-12) → ¥270 (2003-07)
+// → ¥300 (2006-07) → ¥410 (2010-10) (kochi-tech.ac.jp a1150477.pdf, j-cast.com 2010-04-28) → later rises
+// with the tax (目安) → ¥600 (令和8年). cigPrice() is internal money (shown back as that price).
+const CIG_STEPS = [[2026, 4, 600], [2021, 10, 580], [2020, 10, 540], [2018, 10, 480], [2014, 4, 430], [2010, 10, 410], [2006, 7, 300], [2003, 7, 270], [1998, 12, 250]];
+function cigNominal(g) { for (const [y, m, yen] of CIG_STEPS) if (since(g, y, m)) return yen; return 220; }
+// internal price at the start of each era (kept for the export's shape)
+export const CIG_PRICE = { showa: 367, heisei_early: 293, heisei: 318, reiwa: 600 };
+const cigPrice = (g) => legalYen(g, cigNominal(g));
 registerItem('tabako', {
   name: 'タバコ（20本入り）',
   get price() { return GAME ? cigPrice(GAME) : 600; },
@@ -2979,6 +3149,8 @@ function buyCigarettesImpl(g, n = 1, opts = {}) {
   n = Math.max(1, Math.round(n));
   const price = cigPrice(g) * n;
   if (ageOf(st) < 20) {
+    // taspo: 2008年7月に全国で導入、2026年3月31日に終了（3G回線の終了）。その後は免許証などで年齢を確かめる自販機だけ
+    if (since(g, 2026, 4)) return { ok: false, reason: '年齢確認で断られた…。\n（二十歳未満には売れない。自販機も、免許証などで年齢を確かめないと買えない）' };
     if (since(g, 2008, 7)) return { ok: false, reason: '年齢確認で断られた…。\n（二十歳未満には売れない。自販機もtaspoがないと買えない）' };
     if (opts.counter) return { ok: false, reason: '「未成年には売れないよ」と断られた。' };
   }
@@ -3038,7 +3210,9 @@ function applyGain(g, gain = {}) {
 async function commitCrimeImpl(g, id, ctx = {}) {
   const st = g.state, j = J(g), def = CRIMES[id];
   GAME = g;
-  if (!def) { console.error('commitCrime: unknown crime', id); return { caught: false, report: null }; }
+  // 闇金から借りること自体は犯罪ではない（処罰されるのは貸した側: 出資法・貸金業法違反）: the contract's optional id
+  if (id === 'loan_shark_use') return { caught: false, report: { crime: id, none: true, text: '闇金から借りること自体は犯罪ではない（処罰されるのは、法外な利息で貸した業者のほう）' } };
+  if (!def) { console.error('commitCrime: unknown crime', id); return { caught: false, report: { crime: id, none: true, text: 'そのような罪はない' } }; }
   if (def.exists && !def.exists(g)) return { caught: false, report: { crime: id, none: true, text: 'この時代には、まだその罪はない' } };
   if (j.status === 'detained' || j.status === 'prison') return { caught: false, report: { crime: id, none: true, text: 'いまはできない' } };
   const prev = num(j.stats.committed[id]);
@@ -3092,7 +3266,7 @@ const SOURCES = {
   shoplifting: ['防犯カメラの映像'], robbery: ['防犯カメラの映像', '目撃証言'], assault: ['被害届', '目撃証言'],
   fare_evasion: ['改札の記録'], slush_fund: ['市民団体の告発', '元秘書の内部告発'], bribery_take: ['業者の供述'], bribery_give: ['業者の帳簿'],
   vote_buying: ['陣営関係者の証言'], door_to_door: ['対立陣営の通報'], fraud_courier: ['防犯カメラの映像', '共犯者の供述'],
-  account_sale: ['口座の不正利用の捜査'], stolen_goods: ['共犯者の供述'], gambling: ['違法賭博店の摘発'], cover_up: ['関係者の供述'], assen: ['関係者の供述'],
+  account_sale: ['口座の不正利用の捜査'], traffic_injury: ['目撃証言', '現場に残った車の部品'], stolen_goods: ['共犯者の供述'], gambling: ['違法賭博店の摘発'], cover_up: ['関係者の供述'], assen: ['関係者の供述'],
 };
 function planSurface(g, id, h) {
   const st = g.state, def = CRIMES[id];
@@ -3233,7 +3407,11 @@ export async function justiceTick(g) {
   const notes = g.morningNotes || (g.morningNotes = []);
   if (j.suspendUntil && j.suspendUntil <= day) { j.suspendUntil = 0; j.suspended = null; notes.push('（執行猶予の期間が、何ごともなく満了した。\n刑の言渡しは効力を失った――刑法27条）'); }
   if (j.probationUntil && j.probationUntil <= day) { j.probationUntil = null; j.supervision = false; notes.push('（保護観察の期間が終わった）'); emit(g, 'probation_end', { day }); }
-  if (j.civicBanUntil && j.civicBanUntil <= day) { j.civicBanUntil = null; j.civicBanWhy = null; notes.push('（公民権停止の期間が終わった。選挙権と被選挙権が戻った）'); }
+  if (j.civicBanUntil && j.civicBanUntil <= day) {
+    j.civicBanUntil = null; j.civicBanWhy = null;
+    notes.push(num(j.candidacyBanUntil) > day ? '（公民権停止の期間が終わり、選挙権が戻った。\n被選挙権は、まだ戻らない――公職選挙法11条の2）' : '（公民権停止の期間が終わった。選挙権と被選挙権が戻った）');
+  }
+  if (j.candidacyBanUntil && j.candidacyBanUntil <= day) { j.candidacyBanUntil = null; notes.push('（被選挙権が戻った。また選挙に立候補できる）'); }
   if (j.career.kinshinUntil && j.career.kinshinUntil === day) g.message({ from: st.agency ? AGENCIES[st.agency].name : 'マネージャー', kind: 'chat', text: '活動自粛の期間が明けました。\nまずは小さな舞台から、少しずつ信頼を取り戻していきましょう。' });
   if (j.supervision && j.probationUntil && (j.probationUntil - day) % (MONTH_DAYS * 3) === 0) g.message({ from: '保護司', kind: 'chat', text: g.fmt('{name}さん、変わりはないですか。\n今月の面接の日は、また連絡しますね。') });
   if (j.status !== 'detained' && j.status !== 'prison') j.status = statusNow(g);
@@ -3256,6 +3434,7 @@ async function runEvents(g) {
   const j = J(g);
   g._jusRunning = true;
   try {
+    if (j.flags.resumeCustody) { try { await resumeCustody(g); } catch (e) { console.error(e); delete j.flags.resumeCustody; } }
     for (let guard = 0; guard < 8; guard++) {
       if (j.status === 'detained' || j.status === 'prison') break;
       const i = j.queue.findIndex((e) => e.day <= st.day);
@@ -3308,14 +3487,24 @@ function refusalImpl(g, kind = 'job', def = {}) {
     if (j.career.kinshinUntil > day) return `いまは活動自粛中だ…。（あと${j.career.kinshinUntil - day}日）`;
     if (j.career.agencyBanUntil > day) return ['事件のことがあって、どこの事務所も、いまは契約に慎重なようだ…。', `（あと${j.career.agencyBanUntil - day}日ほど）`];
   }
-  if ((kind === 'candidacy' || kind === 'vote') && civicBannedImpl(g)) return civicReasonImpl(g);
+  if ((kind === 'candidacy' || kind === 'vote') && civicBannedImpl(g, kind)) return civicReasonImpl(g, kind);
   return null;
 }
-function civicBannedImpl(g) { const j = J(g); return num(j.civicBanUntil) > g.state.day || j.status === 'prison'; }
-function civicReasonImpl(g) {
+// Serving a 禁錮以上 (拘禁刑) sentence. 労役場留置 (an unpaid fine) and 少年院 (a 保護処分, not a
+// penalty) are custody too, but they do not take away the vote or the right to run.
+const servingSentence = (j) => !!(j.prison && !['roueki', 'shonenin'].includes(j.prison.kind));
+// kind: 'candidacy' (default: 被選挙権, what the politics core asks) | 'vote' (選挙権 only).
+// 公選法11条の2 keeps 被選挙権 away 5 more years after a 実刑 for 収賄 in office (candidacyBanUntil).
+function civicBannedImpl(g, kind = 'candidacy') {
   const j = J(g), day = g.state.day;
-  if (j.status === 'prison') return '刑の執行中は、選挙権も被選挙権もない（公職選挙法11条）。';
+  if (num(j.civicBanUntil) > day || servingSentence(j)) return true;
+  return kind !== 'vote' && num(j.candidacyBanUntil) > day;
+}
+function civicReasonImpl(g, kind = 'candidacy') {
+  const j = J(g), day = g.state.day;
+  if (servingSentence(j)) return `${kokinEra(g) ? '拘禁刑' : '禁錮'}以上の刑の執行中は、選挙権も被選挙権もない（公職選挙法11条1項2号）。`;
   if (num(j.civicBanUntil) > day) return `公民権停止中（あと${j.civicBanUntil - day}日）：${j.civicBanWhy || '選挙権・被選挙権がない'}`;
+  if (kind !== 'vote' && num(j.candidacyBanUntil) > day) return `被選挙権がない（あと${j.candidacyBanUntil - day}日）：公職にある間の収賄で実刑となった人は、刑の執行が終わってから10年間は立候補できない（公職選挙法11条の2）`;
   return null;
 }
 function statusImpl(g) {
@@ -3417,8 +3606,8 @@ const methods = {
   hasRecord() { return J(this).record.some((r) => ['fine', 'suspended', 'prison'].includes(r.outcome) && !r.juvenile); },
   hasHistory() { return J(this).record.length > 0; },
   isFree() { const s = J(this).status; return s !== 'detained' && s !== 'prison'; },
-  civicBanned() { return civicBannedImpl(this); },
-  civicBanReason() { return civicReasonImpl(this); },
+  civicBanned(kind) { return civicBannedImpl(this, kind); },
+  civicBanReason(kind) { return civicReasonImpl(this, kind); },
   fine(amount, reason, opts) { return fineImpl(this, amount, reason, opts); },
   borrow(lender, amount, opts) { return borrowImpl(this, lender, amount, opts); },
   repay(loanIndex, amount) { return repayImpl(this, loanIndex, amount); },

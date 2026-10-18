@@ -203,12 +203,19 @@ async function politicsDebug(g) {
   else if (i === 1) { st.profile.age = Math.max(st.profile.age, 30 - Math.floor((st.day - 1) / 120)); g.addMoney(100000000); p.me.funds += 10000000; }
   else if (i === 2) {
     if (p.parties.jimin && p.me.party !== 'jimin') g.joinParty('jimin');
-    if (p.me.office !== 'shugi') { p.me.office = 'shugi'; p.me.district = '東京ドット区'; p.me.termEnd = st.day + 480; p.me.wins++; p.me.nationalWins += 3; p.me.standing = 80; p.diet.shugi.seats[p.me.party || 'ind'] = (p.diet.shugi.seats[p.me.party || 'ind'] || 0) + 1; p.diet.shugi.total++; }
+    if (p.me.office !== 'shugi') {
+      p.me.office = 'shugi'; p.me.district = '東京ドット区'; p.me.termEnd = st.day + 480; p.me.wins++; p.me.nationalWins += 3; p.me.standing = 80; p.me.prElected = null;
+      p.diet.shugi.seats[p.me.party || 'ind'] = (p.diet.shugi.seats[p.me.party || 'ind'] || 0) + 1; p.diet.shugi.total++;
+      // the player is now the district's sitting member (現職)
+      (p.flags.smdHolders || (p.flags.smdHolders = {})).home = { party: p.me.party || 'ind', npc: 'player', open: false };
+      p.flags.homeIncumbent = 'player';
+    }
     g.notify('衆議院議員になった（デバッグ）', { color: '#fff' });
   } else if (i === 3) {
     const pt = p.parties[p.me.party];
-    if (pt && p.me.office) { pt.leader = 'player'; if (!p.me.posts.includes('party_leader')) p.me.posts.push('party_leader'); const r = g.electPM(); g.notify(`首班指名：${r.name}`, { color: '#fff' }); }
-    else g.notify('先に「衆院議員にする」', { color: '#fff' });
+    // 憲法67条: the PM is a Diet member
+    if (pt && (p.me.office === 'shugi' || p.me.office === 'sangi')) { pt.leader = 'player'; p.flags.skipPlayerPM = false; if (!p.me.posts.includes('party_leader')) p.me.posts.push('party_leader'); const r = g.electPM(); g.notify(`首班指名：${r.name}`, { color: '#fff' }); }
+    else g.notify('先に「衆院議員にする」（総理は国会議員から）', { color: '#fff' });
   } else if (i === 4) {
     for (let k = 0; k < 30; k++) { st.day++; await g.politicsTick(); }
     g.notify(`${g.polDate().label} になった`, { color: '#fff' });
