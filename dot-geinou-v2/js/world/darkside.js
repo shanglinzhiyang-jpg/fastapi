@@ -1208,18 +1208,20 @@ const EV = {
     ok: (g, c) => !!(c.heat && c.heat.antisocial_ties && !c.heat.antisocial_ties.queued) && (c.fame >= 250 || !!c.office),
     async run(g, c, data, open) {
       const M = managerOf(c);
-      const S = open('magazine', { title: MAG, sub: '来週号のゲラ', headline: '{familyname}\n反社の宴に出演', other: LK.boss, stamp: '独占' });
-      await say(g, M, [`${MAG}が、反社会的勢力の宴会に出ていた写真を\n持っているそうです。`, c.office ? '先生、どう説明なさいますか…。' : '本当なんですか…？ どうするか、決めてください。']);
+      const src = hanshaSource(g, c);
+      const S = open('magazine', { title: MAG, sub: '来週号のゲラ', headline: `{familyname}${c.office ? '議員' : ''}\n${src.head}`, other: src.other, stamp: '独占' });
+      await say(g, M, [`${MAG}が、${src.photo}を\n持っているそうです。`, c.office ? '先生、どう説明なさいますか…。' : '本当なんですか…？ どうするか、決めてください。']);
       const k = await ask(g, null, '（どうする…？）', ['自分から公表して謝る', '弁護士に相談する', 'もみ消しを頼む', '取材には応じない']);
-      let res = { pick: ['admit', 'lawyer', 'momikeshi', 'silent'][k] };
+      const res = { pick: ['admit', 'lawyer', 'momikeshi', 'silent'][k], src: src.id };
+      let admit = k === 0;
       if (k === 2) {
         S.hide();
         let ok = false;
         try { ok = await g.coverUp('antisocial_ties', { where: '都内の喫茶店' }); } catch (e) { console.error(e); }
+        if (!free(g)) return res;
         S.ensure();
         if (ok) { await narr(g, '（記事は、出なかった。\n…今のところは）'); return { ...res, covered: true }; }
-        if (!free(g)) return res;
-        await narr(g, '（もみ消しは、うまくいかなかった…）');
+        await narr(g, '（記事を止めることは、できなかった…）');
       }
       if (k === 1) {
         S.set('phone', { title: '弁護士事務所', who: LK.lawyer, rightBg: '#e8e0d0', rightFloor: '#5a4a3a' });
@@ -1229,11 +1231,10 @@ const EV = {
           money(g, 300000);
           schedule(g, 'scoop_suit', rint(15, 25), { truth: true });
           res.sued = true;
-        }
+        } else admit = true;
       }
       if (k === 0) await narr(g, '（自分から事務所と世間に、すべて話すことにした）');
-      S.hide();
-      try { await g.investigate('antisocial_ties', { now: true }); } catch (e) { console.error(e); }
+      await hanshaExposed(g, c, S, { admit, src });
       if (c.office && free(g)) {
         scandalPol(g, 'antisocial', {});
         await politicianResign(g, c, open, '反社会的勢力との交際');
@@ -1800,6 +1801,35 @@ const EV = {
     },
   },
 };
+// What the 週刊誌 has on the player: the 闇営業 party, visits to the 組事務所 (kanraku.js), or a meeting
+// with someone from that world (the fixer of a もみ消し).
+function hanshaSource(g, c) {
+  const kan = (c.st.flags && c.st.flags.kanraku) || {};
+  if (c.d.story.hanshaDeal) return { id: 'party', head: '反社の宴に出演', photo: '反社会的勢力の宴会に出ていた写真', news: '反社会的勢力の宴会に出演していた', other: LK.boss };
+  if (kan.kumiTies) return { id: 'kumi', head: '暴力団事務所に出入り', photo: '暴力団の事務所に出入りする写真', news: '暴力団の事務所に出入りしていた', other: LK.chinpira2 };
+  return { id: 'meet', head: '反社の男と密会', photo: '反社会的勢力の人物と会っている写真', news: '反社会的勢力の人物と会っていた', other: LK.broker };
+}
+// The 反社 story is out. The career consequence goes through the justice core's careerSanction (the
+// agency ends the contract, TV drops the player; softer for one who told it first), and the case is
+// settled as the core's own 週刊誌 round would settle it — without asking the same question twice.
+async function hanshaExposed(g, c, S, { admit, src }) {
+  if (!free(g)) return;
+  if (admit) {
+    S.core('press', { title: '記者会見', sub: '', banner: 'おわびの会見' });
+    await narr(g, ['（「反社会的勢力の関係者だと知らずに、とは言いません。\n軽率でした」と、深く頭を下げた）', '（フラッシュの光が、いつまでも止まなかった）']);
+  } else {
+    S.set('magazine', { title: MAG, sub: '発売', headline: `{familyname}${c.office ? '議員' : ''}\n${src.head}`, other: src.other, stamp: '発売' });
+    await narr(g, '（記事が出た。…説明を求める声が、日に日に大きくなった）');
+  }
+  news(g, `【${MAG}】${whoIs(g, c)}が、${src.news}ことがわかった。`);
+  sanction(g, 3, { crime: 'antisocial_ties', soft: !!admit, force: true });
+  try {
+    const j = g.jus();
+    if (j.heat) delete j.heat.antisocial_ties;
+    j.queue = (j.queue || []).filter((e) => !(e && e.crime === 'antisocial_ties' && e.type === 'weekly'));
+  } catch (e) { console.error(e); }
+  if (c.anyFam) famMsg(g, c.anyFam, admit ? '会見、見た{yo}。正直に話したの{ne}。\nつらいだろうけど、いちからやり直そう{ne}。' : '週刊誌のこと、本当な{no}？\n{you}の口から、ちゃんと聞かせて{ne}。');
+}
 // What the secretary would take to the prosecutors: 裏金, or the contractor's money (収賄・あっせん利得).
 function naibuCrime(g, c) {
   if (c.secret > 0 && !caseOpen(g, 'slush_fund', true)) return 'slush_fund';

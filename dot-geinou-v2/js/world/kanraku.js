@@ -1489,9 +1489,27 @@ const VBG = {
     if (o.kisha) fig(c, { hair: 'cap', hat: '#5a4a3a', hairColor: 'brown', skin: 'tan', top: '#8a7a5a', bottom: '#4a4038' }, 520, 170, 'left');
   },
   gamefight(c, t, g, o) {
+    // the arcade floor: a neon strip, a row of cabinets, the patterned carpet
     R(c, 0, 0, SW, SH, '#120e24');
-    for (let x = 0; x < SW; x += 80) { R(c, x + 6, 40, 68, 130, '#2a2448'); R(c, x + 12, 50, 56, 40, ['#4fe0ff', '#ff4fa0', '#ffd23f'][(x / 80) % 3 | 0]); }
-    R(c, 0, 190, SW, SH - 190, '#2a2238');
+    R(c, 0, 0, SW, 40, '#1a1630'); R(c, 0, 34, SW, 3, NEON.pink); R(c, 0, 37, SW, 1, '#ff9ac8');
+    for (let x = 0; x < SW; x += 80) {
+      const k = (x / 80) % 3 | 0;
+      R(c, x + 8, 44, 64, 142, '#2a2448'); R(c, x + 8, 44, 64, 3, '#5a4ab0'); R(c, x + 68, 44, 4, 142, '#1a1630');
+      R(c, x + 12, 50, 56, 12, ['#ffd23f', '#ff4fa0', '#4fe0ff'][k]); R(c, x + 12, 50, 56, 2, '#ffffff');
+      R(c, x + 14, 68, 52, 40, '#0a0a14'); R(c, x + 16, 70, 48, 36, ['#3a5ab0', '#5a3a8a', '#2a6a5a'][k]);
+      R(c, x + 16, 96, 48, 10, '#4a7a4a');
+      const s = (t >> 3) % 4;
+      R(c, x + 24 + s, 82, 6, 14, '#ff8a3c'); R(c, x + 50 - s, 82, 6, 14, '#4fe0ff');
+      R(c, x + 18, 74, 18, 2, '#ffd23f'); R(c, x + 44, 74, 18, 2, '#ffd23f');
+      R(c, x + 10, 112, 60, 14, '#3a3460'); R(c, x + 10, 112, 60, 2, '#6a5ac0');
+      disc(c, x + 22, 119, 3, '#ff3a3a'); disc(c, x + 44, 119, 3, '#ffd23f'); disc(c, x + 54, 119, 3, '#4fe0ff');
+      R(c, x + 14, 130, 52, 54, '#221e3e');
+    }
+    R(c, 0, 186, SW, SH - 186, '#1c1838');
+    for (let y = 192, row = 0; y < SH; y += 24, row++) for (let x = (row % 2) * 24; x < SW; x += 48) {
+      const col = ['#5a2a52', '#2a4a62', '#5a5230'][(x / 48 + row) % 3 | 0];
+      if ((x / 48 + row) % 2) { line(c, x, y + 6, x + 6, y, col); line(c, x + 6, y, x + 12, y + 6, col); } else disc(c, x + 6, y + 4, 3, col);
+    }
     const y1 = { hair: 'spiky', hairColor: 'blonde', skin: 'fair', top: '#5a2a8a', bottom: '#1e1e26' };
     const y2 = { hair: 'slick', hairColor: 'brown', skin: 'tan', top: '#1e1e26', bottom: '#3a3a44', glasses: 'sun' };
     fig(c, y1, 330, 140, 'left'); fig(c, y2, 400, 130, 'left');
