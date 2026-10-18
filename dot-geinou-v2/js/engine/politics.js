@@ -5046,7 +5046,7 @@ const methods = {
       }
       const b = addBill(p, { title, policy: pl.id, params, sponsor: 'cabinet', by: 'player', party: pmParty, house: 'shugi', day, ministry: post, cost, stage: session ? 'committee' : 'draft', delay: irnd(3, 6) });
       if (!session) b.ready = true;
-      b.log.push({ day, text: session ? '内閣が国会に提出（閣法）' : '閣議決定（次の国会に提出）' });
+      b.log.push({ day, text: session ? (b.kind === 'budget' ? '内閣が国会に提出（予算案）' : '内閣が国会に提出（閣法）') : '閣議決定（次の国会に提出）' });
       news(p, this, `内閣が「${title}」を${session ? '国会に提出' : '閣議決定'}`);
       return b.id;
     }

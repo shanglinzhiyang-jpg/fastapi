@@ -73,7 +73,7 @@ const kansai = (g) => { try { return regionOf(g.state.profile.hometown).dialect 
 const pickBy = (arr, k) => arr[((Math.round(k) % arr.length) + arr.length) % arr.length];
 const day = (g) => (g && g.state ? g.state.day : 1);
 const crimeName = (id) => (CRIMES[id] ? CRIMES[id].name : id);
-const POLITICAL_MONEY = new Set(['slush_fund', 'bribery_take', 'bribery_give', 'assen', 'tax_evasion']);
+const POLITICAL_MONEY = new Set(['slush_fund', 'bribery_take', 'bribery_give', 'assen', 'assen_shuwai', 'tax_evasion']);
 const POST_INDICT = new Set(['indicted', 'trial', 'verdict_wait', 'appeal_wait', 'final']);
 const VICTIM_CRIMES = new Set(['shoplifting', 'robbery', 'assault', 'fraud_courier', 'traffic_injury', 'stolen_goods']);
 
@@ -1116,7 +1116,7 @@ const heldCheck = (msg) => async (g) => {
 
 // ======================================================================== 警視庁
 // ---------------------------------------------------------------- 相談（生活安全課）
-const lawyerPlace = (g) => (since(g, 2006, 10) ? '法テラス（日本司法支援センター）や弁護士会' : '弁護士会の法律相談センター');
+const lawyerPlace = (g) => (since(g, 2006, 10) ? '法テラス（日本司法支援センター）や弁護士会' : since(g, 2000, 10) ? '弁護士会の法律相談センターや法律扶助協会' : '弁護士会の法律相談センター');
 function soudanNumber(g) {
   if (since(g, 2009, 1)) return '緊急のときは110番。相談だけなら、\n警察の相談専用電話「#9110」でも受け付けています。';
   return '緊急のときは、ためらわずに110番を。\n相談は、警察署の窓口でいつでも受け付けています。';
@@ -2129,6 +2129,15 @@ async function hasanTalk(g) {
     await say(g, who, ['破産手続は、いま進んでいます。', '免責審尋の日には、かならず出頭してください。\n…呼出状がとどきますからね。']);
     return;
   }
+  // a 本人申立て waiting for its 予納金: how far the savings are, then the counter (pay / ask the family)
+  const prep = hasanPrepOf(g);
+  if (prep && !prep.paid) {
+    const cost = Number(prep.cost) || 0, saved = Math.min(cost, Number(prep.saved) || 0);
+    const k = await ask(g, who, [`本人申立ての予納金は${fmtMoney(cost)}です。\nいままでに積み立てたのは${fmtMoney(saved)}。`, 'そろったら、こちらで受け取ります。\nそれまで、借金の返済は止めておいてくださいね。'], ['いま納める・相談する', 'また来ます'], { cancel: 1 });
+    if (k === 0 && typeof g.fileBankruptcy === 'function') await g.fileBankruptcy();
+    return;
+  }
+  if (prep && prep.paid) { await say(g, who, ['予納金は、もう納めていただいています。', '裁判官の決定を待ってください。']); return; }
   const k = await ask(g, who, '破産係です。自己破産や個人再生の申立ては\nこちらで受け付けています。', ['自己破産の流れ', '申し立てたい', 'やめる'], { cancel: 2 });
   if (k === 0) {
     await say(g, who, ['①申立て：申立書と、借金や財産の一覧を出します。\n弁護士に頼むのが一般的です。', '②破産手続開始の決定：財産がなければ、その場で手続を\n終える「同時廃止」。財産があれば、破産管財人が\nお金に換えて債権者に分けます。', '③免責審尋：裁判官が、借金の理由などを聞きます。\n④免責許可の決定：借金の支払い義務がなくなります。', '税金や罰金は免責されません。ギャンブルや浪費が\n原因でも、反省していれば裁量で免責されることが\n多いですね。手続き中は一部の仕事に就けません。']);
@@ -2136,8 +2145,18 @@ async function hasanTalk(g) {
   }
   if (k !== 1) return;
   if (debts <= 0) { await say(g, who, '…借入れはないようですね。\n破産の申立ては、借金を返せなくなった人のための手続きです。'); return; }
-  await say(g, who, ['申立書の書き方や、財産の調べ方には、\n専門的な知識がいります。', since(g, 2006, 10) ? 'まず法テラスか弁護士に相談しましょう。\n手続きの準備を手伝ってもらえます。' : 'まず弁護士会の法律相談に行きましょう。\n手続きの準備を手伝ってもらえます。']);
-  if (typeof g.fileBankruptcy === 'function') await g.fileBankruptcy();
+  if (typeof g.fileBankruptcy !== 'function') { await say(g, who, ['申立書の書き方や、財産の調べ方には、\n専門的な知識がいります。', `まず${lawyerPlace(g)}に相談しましょう。`]); return; }
+  // a lawyer (民事法律扶助 by era: 法律扶助協会 from 2000-10, 法テラス from 2006-10), or 本人申立て (every era)
+  const aid = since(g, 2006, 10) ? '収入が少なければ、法テラスが弁護士費用を\n立て替える制度もあります。' : since(g, 2000, 10) ? '収入が少なければ、法律扶助協会が弁護士費用を\n立て替える制度もあります。' : 'まず、弁護士会の法律相談に行くといいでしょう。';
+  const c = await ask(g, who, ['申立書の書き方や、財産の調べ方には、\n専門的な知識がいります。弁護士に頼むのが一般的です。', aid, '自分で書いて出す「本人申立て」もできます。\n書式と書き方は、この窓口で案内しますよ。'], ['弁護士に相談する', '自分で申し立てる（本人申立て）', 'やめる'], { cancel: 2 });
+  if (c === 0) await g.fileBankruptcy();
+  else if (c === 1) await g.fileBankruptcy({ honnin: true });
+}
+// crime.js hasanPrep: a 本人申立て waiting for its 予納金 ({ day, cost, saved, debts, paid? }), or null
+function hasanPrepOf(g) {
+  try { const s = typeof g.justiceStatus === 'function' ? g.justiceStatus() : null; if (s && s.hasanPrep) return s.hasanPrep; } catch (e) { console.error(e); }
+  const j = jus(g);
+  return (j && j.hasanPrep) || null;
 }
 async function minjiUkeTalk(g) {
   const who = WHO.minjiClerk;
@@ -2360,7 +2379,9 @@ registerPlace({
         npc('sai_shinjin_clerk', 8, 2, 'down', WHO.clerk, {
           talk: posted('down', lines(WHO.clerk, ['審尋室です。破産の申立てをした人に、\n裁判官が借金のいきさつや、いまの暮らしを聞きます。', '正直に話して、生活を立て直す気持ちを伝えることが\nいちばん大切です。'])),
         }),
-        person(7, 4, 'up', caseLawyer, bankruptFlow),
+        // the lawyer sits beside the player, except for a 本人申立て (crime.js j.bankrupt.honnin; before the
+        // 開始決定 is written, a paid 予納金 waiting in j.hasanPrep)
+        person(7, 4, 'up', caseLawyer, (g) => { const j = jus(g); return bankruptFlow(g) && !(j && (j.hasanPrep || (j.bankrupt && !j.bankrupt.discharged && !j.bankrupt.closed && j.bankrupt.honnin))); }),
         person(3, 4, 'up', LK.shisen, (g) => bankruptFlow(g) && !!(jus(g) && jus(g).bankrupt && jus(g).bankrupt.kind === 'kanzai')),
       ],
       onEnter: async (g) => {

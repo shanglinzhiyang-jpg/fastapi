@@ -708,12 +708,14 @@ function lawPage(g, ctx) {
   const loans = Array.isArray(s.loans) ? s.loans : [];
   const LND = JUS.LENDERS || {};
   if (!loans.length) pg.para('借金はない。', { s: SMALL, c: COLORS.dim });
+  // a 本人申立て waiting for its 予納金 stops the repayments to the legal lenders (crime.js honninPay)
+  const stopped = !!(s.hasanPrep && !s.bankrupt);
   for (const l of loans) {
     const yami = l.lender === 'yamikin';
     const rate = yami ? 'トイチ' : `年${pctText(num(l.rate) * 100)}`;
     pg.row(`${l.company || (LND[l.lender] && LND[l.lender].name) || '借入れ'}`, fmtMoney(num(l.balance)), { tag: { t: (LND[l.lender] && LND[l.lender].name) || '借入れ', bg: yami ? '#8a1a2a' : '#5a4a2a' }, rc: yami ? COLORS.bad : COLORS.text });
     const due = num(l.due) - day;
-    pg.para(`${rate}・${l.status === 'frozen' ? '返済は止まっている' : due < 0 ? '返済日を過ぎている' : `返済日 ${inDays(due)}`}${l.missed ? `・延滞${l.missed}回` : ''}`, { s: SMALL, c: l.missed ? COLORS.bad : COLORS.dim, x: 16 });
+    pg.para(`${rate}・${l.status === 'frozen' ? '返済は止まっている' : stopped && !yami ? '返済は止めている（自己破産の申立て中）' : due < 0 ? '返済日を過ぎている' : `返済日 ${inDays(due)}`}${l.missed ? `・延滞${l.missed}回` : ''}`, { s: SMALL, c: l.missed ? COLORS.bad : COLORS.dim, x: 16 });
   }
   if (loans.length > 1) pg.row('合計', fmtMoney(num(s.debt)), { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.accent });
   if (loans.some((l) => l.lender === 'yamikin')) {
@@ -728,8 +730,16 @@ function lawPage(g, ctx) {
   if (b) {
     const kind = BANKRUPT_KIND[b.kind] ? `（${BANKRUPT_KIND[b.kind]}）` : '';
     const word = b.discharged ? ['免責が決まった', COLORS.good] : b.closed ? ['免責は認められなかった', COLORS.bad] : ['手続き中', COLORS.accent];
-    pg.row(`自己破産${kind}`, word[0], { rc: word[1], rs: SMALL });
+    pg.row(`自己破産${kind}${b.honnin ? '・本人申立て' : ''}`, word[0], { rc: word[1], rs: SMALL });
     pg.para(b.discharged ? '借金の返済は免除された。ただし、しばらくは新しい借入れやローンができない。' : '裁判所の手続きが進んでいる。審尋の日は裁判所へ。', { s: SMALL, c: COLORS.dim, x: 16 });
+  }
+  // a 本人申立て waiting for its 予納金 (crime.js hasanPrep): the savings so far
+  const prep = !b && s.hasanPrep && num(s.hasanPrep.cost) > 0 ? s.hasanPrep : null;
+  if (prep) {
+    const cost = num(prep.cost), saved = Math.min(cost, num(prep.saved));
+    pg.row('自己破産（本人申立て）', prep.paid ? '予納金を納めた' : '予納金をためている', { rc: COLORS.accent, rs: SMALL });
+    pg.row('予納金の積立', `${fmtMoney(saved)} / ${fmtMoney(cost)}`, { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.accent, gauge: { frac: cost ? clamp(saved / cost, 0, 1) : 0, color: COLORS.accent } });
+    pg.para(prep.paid ? '予納金を納めた。裁判所の決定を待っている。' : '返済を止めて、入ったお金の半分をためている。そろった朝に裁判所に納める（家族に頼むこともできる）。', { s: SMALL, c: COLORS.dim, x: 16 });
   }
   if (s.creditBlackUntil) pg.row('信用情報の事故記録', inDays(s.creditBlackUntil - day), { s: SMALL, rs: SMALL, rc: COLORS.accent });
 
@@ -756,12 +766,12 @@ function lawPage(g, ctx) {
     // 多重債務の相談窓口 2007年4月〜 (多重債務問題改善プログラム), 法テラス 2006年10月〜
     const app = PHONE_APPS.justice ? 'スマホの「借入・返済」の法律相談、' : ''; // (スマホ → the era's word: eraText)
     const ward = sinceYM(g, 2007, 4) ? 'ドット区役所3階の多重債務相談' : 'ドット区役所3階の区民相談室';
-    const terrace = sinceYM(g, 2006, 10) ? '、法テラス' : '、弁護士会の法律相談';
+    const terrace = sinceYM(g, 2006, 10) ? '、法テラス' : sinceYM(g, 2000, 10) ? '、弁護士会の法律相談・法律扶助協会' : '、弁護士会の法律相談';
     pg.para(`・借金：${app}${ward}${terrace}`, { s: SMALL });
     if (!PHONE_APPS.justice) pg.para('（お金を借りると、スマホに「借入・返済」が出る）', { s: SMALL, c: COLORS.dim, x: 16 });
   }
   pg.para(`・闇金・ストーカー・詐欺：警視庁（永田町）の相談室${PLACES.koban ? '、ネオン街の交番' : ''}`, { s: SMALL });
-  pg.para('・自己破産：裁判所（永田町）の破産係', { s: SMALL });
+  pg.para('・自己破産：裁判所（永田町）の破産係（弁護士に頼めなくても、本人申立てができる）', { s: SMALL });
   pg.para('罪をおかせば、逮捕・裁判・刑罰がある。現実と同じように、取り返しのつかないこともある。', { s: SMALL, c: COLORS.dim });
   return pg;
 }

@@ -1818,7 +1818,8 @@ const EV = {
   },
   debt_yamikin_family: {
     name: '闇金が家族に', cat: 'debt', where: 'any', noJikka: true, weight: 2, cool: 15,
-    ok: (g, c) => !!c.anyFam && c.yami.some((l) => num(l.harass) >= 2),
+    // (the 闇金 lie low for 30 days after the police stepped in: crime.js j.flags.yamiPolice)
+    ok: (g, c) => !!c.anyFam && c.yami.some((l) => num(l.harass) >= 2) && !(c.j && c.j.flags && c.day - num(c.j.flags.yamiPolice, -1e9) < 30),
     async run(g, c, data, open) {
       const M = c.elder || c.anyFam;
       const S = open('phone', { title: `${M.call}からの電話`, who: M.look, rightLabel: M.call });

@@ -3453,6 +3453,9 @@ async function fileBankruptcyImpl(g, opts = {}) {
 async function openBankruptcy(g, flow, { kanzai = false, honnin = false } = {}) {
   const st = g.state, j = J(g);
   const debts = loanTotalImpl(g) + (st.rent.debt || 0);
+  // the place's 審尋室 tells a 本人申立て by j.hasanPrep until j.bankrupt is written below: keep a paid marker
+  // through the 開始決定 scene (cleared right after it)
+  if (honnin) j.hasanPrep = { day: st.day, cost: HONNIN_COST, saved: HONNIN_COST, debts, ...(j.hasanPrep || {}), paid: st.day };
   await flow.show('hearing', { title: `${courtCity(g)}地方裁判所　破産係`, sub: '破産手続開始の決定', judge: LK.judge3, lawyer: honnin ? null : LK.shisen });
   await say(g, SP.hasan, ['あなたについて、破産手続の開始を決定します。', kanzai ? '財産があるため、破産管財人を選任します（管財事件）。' : '配当できる財産がないため、同時に破産手続を終わらせます（同時廃止）。', 'このあと、免責について審尋を行います。']);
   for (const l of activeLoans(g)) { l.status = l.lender === 'yamikin' ? 'void' : 'frozen'; l.stopped = true; }
