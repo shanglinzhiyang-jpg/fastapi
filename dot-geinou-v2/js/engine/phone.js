@@ -24,6 +24,10 @@
 //   readMessage(g, m)             read one message as dialogue and answer it (invite / offer)
 //   answerMessage(g, m, yes)      answer an invite / offer without any dialogue of its own
 //   callPerson(g, id)             phone someone (invite them out when ♥2+, once a day)
+//                                 A person def may take over its calls: onCall: async (g, id)
+//                                 (runs inside withPhone; the contact card's A button is then
+//                                 always on, labelled def.callLabel || '電話する'). kind 'family'
+//                                 shows a 家族 chip; noInvite: true hides さそう in the talk menu.
 //
 // Apps registered with registerPhoneApp(id, { name, color, order, icon, badge, open })
 // show on the home screen. name: short (≤5 chars). icon(ctx, x, y): a 24x24 glyph drawn
@@ -72,7 +76,7 @@ export const PC = {
 const APP_COLORS = { messages: '#43b65d', contacts: '#ff8a3d', schedule: '#4a78d8', money: '#8a5ac8' };
 const KIND_TAG = { invite: 'おさそい', offer: 'オファー', bill: '家計', fan: 'ファン', news: 'おしらせ' };
 const KIND_COLOR = { invite: '#43b65d', offer: '#e07a1f', bill: '#8a5ac8', fan: '#ff5d8f', news: '#4a78d8', chat: '#8a8a9a' };
-const PERSON_KIND = { comedian: '芸人', idol: 'アイドル', actor: '俳優', singer: '歌手', staff: 'スタッフ', local: 'ご近所さん' };
+const PERSON_KIND = { comedian: '芸人', idol: 'アイドル', actor: '俳優', singer: '歌手', staff: 'スタッフ', local: 'ご近所さん', family: '家族' };
 
 const ease = (k) => 1 - (1 - clamp(k, 0, 1)) ** 3;
 
@@ -1235,6 +1239,7 @@ function tagsOf(g, id) {
   const out = [];
   if (g.state.partner === id) out.push(['相方', '#e07a1f']);
   if (g.state.people[id] && g.state.people[id].special) out.push(['大切な人', '#ff5d8f']);
+  if (PEOPLE[id] && PEOPLE[id].kind === 'family') out.push(['家族', '#c0703a']);
   return out;
 }
 function drawChips(c, tags, x, y, align = 'left') {
@@ -1279,6 +1284,9 @@ export async function contactsApp(g) {
 }
 
 function inviteState(g, id) {
+  // a person with their own call (family: def.onCall) can always be called
+  const def = PEOPLE[id];
+  if (def && typeof def.onCall === 'function') return { ok: true, call: true, label: def.callLabel || '電話する' };
   const p = g.person(id);
   if (!p) return { ok: false, why: 'まだ知り合っていない' };
   if (heartIndex(p.aff) < 2) return { ok: false, why: '♥♥「友だち」から さそえる' };
@@ -1296,7 +1304,7 @@ function contactCardView(g, index, list) {
     hint() {
       const ids = contactIds(g);
       const id = ids[clamp(this.idx, 0, Math.max(0, ids.length - 1))];
-      return (ids.length > 1 ? '←→:となりの人　' : '') + (id && inviteState(g, id).ok ? 'A:さそう　' : '') + 'B:もどる';
+      return (ids.length > 1 ? '←→:となりの人　' : '') + (id && inviteState(g, id).ok ? `A:${inviteState(g, id).label || 'さそう'}　` : '') + 'B:もどる';
     },
     headerRight() { const ids = contactIds(g); return ids.length > 1 ? `${this.idx + 1}/${ids.length}` : ''; },
     update(ph, inp) {
@@ -1340,7 +1348,7 @@ function contactCardView(g, index, list) {
       drawFaceHD(c, def.look || {}, cx - 32, a.y + 10, 2);
       T(c, def.name, cx, a.y + 64, 16, PC.text, 'center');
       const tags = tagsOf(g, id);
-      const kind = PERSON_KIND[def.kind] || '';
+      const kind = def.kind === 'family' ? '' : PERSON_KIND[def.kind] || ''; // family: the 家族 tag already says it
       let y = a.y + 83;
       if (tags.length || kind) {
         drawChips(c, kind ? [[kind, '#8a8a9a'], ...tags] : tags, cx, y, 'center');
@@ -1374,7 +1382,7 @@ function contactCardView(g, index, list) {
       const s = inviteState(g, id);
       const col = s.ok ? APP_COLORS.messages : '#c8c2b4';
       box(c, a.x + 16, btnY, a.w - 32, 22, 6, col, shade(col, -0.45), { lo: shade(col, -0.15) });
-      T(c, s.ok ? 'さそう（A）' : fitText(c, s.why, a.w - 44, 12), a.x + a.w / 2, btnY + (s.ok ? 4 : 5), s.ok ? 14 : 12, s.ok ? '#ffffff' : '#6a6878', 'center');
+      T(c, s.ok ? `${s.label || 'さそう'}（A）` : fitText(c, s.why, a.w - 44, 12), a.x + a.w / 2, btnY + (s.ok ? 4 : 5), s.ok ? 14 : 12, s.ok ? '#ffffff' : '#6a6878', 'center');
     },
   };
 }
@@ -1451,6 +1459,7 @@ function callView(g, def, lines) {
 export async function callPerson(g, id) {
   const def = PEOPLE[id];
   if (!def) { console.error('callPerson: unknown person', id); return false; }
+  if (typeof def.onCall === 'function') return withPhone(g, () => def.onCall(g, id));
   const p = g.meet(id);
   return withPhone(g, async (ph) => {
     if (heartIndex(p.aff) < 2) { await ph.open(callView(g, def, lineFor(def, 'callShy', g))); return false; }
@@ -1941,7 +1950,7 @@ async function talkMenu(g, id, def, npc, first) {
     const opts = [];
     if (!used.has('talk')) opts.push([fitLabel(def.talkLabel || '話す'), 'talk']);
     if (!used.has('gift')) opts.push(['プレゼント', 'gift']);
-    if (lv >= 2 && !used.has('invite')) opts.push(['さそう', 'invite']);
+    if (lv >= 2 && !used.has('invite') && !def.noInvite) opts.push(['さそう', 'invite']);
     for (const x of menuExtras(g, id, def, npc, used)) opts.push([fitLabel(x.label), x.key, x]);
     if (!opts.length) break;
     opts.push(['またね', 'bye']);
