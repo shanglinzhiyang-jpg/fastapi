@@ -109,7 +109,7 @@ onMorning((g) => {
   const text = younger
     ? (kansai ? `{name}、誕生日おめでとう！もう${age}さいなんや。\nテレビで見るの、いつも楽しみにしてるで！` : `{name}、誕生日おめでとう！もう${age}さいだね。\nテレビで見るの、いつも楽しみにしてるよ！`)
     : (kansai ? `{name}、誕生日おめでとう。もう${age}さいかぁ。\n体に気ぃつけて、お仕事がんばりや。いつでも帰っておいで。` : `{name}、誕生日おめでとう。もう${age}さいなんだね。\n体に気をつけて、お仕事がんばってね。いつでも帰っておいで。`);
-  g.message({ from: PEOPLE[m.id] ? PEOPLE[m.id].name : `${RELATIONS[m.rel].call}`, person: PEOPLE[m.id] ? m.id : undefined, family: m.id, look: PEOPLE[m.id] ? PEOPLE[m.id].look : familyLook(m, st.look), kind: 'chat', text });
+  g.message({ from: PEOPLE[m.id] ? PEOPLE[m.id].name : `${RELATIONS[m.rel].call}`, person: PEOPLE[m.id] ? m.id : undefined, family: m.id, look: PEOPLE[m.id] ? PEOPLE[m.id].look : familyLook(m, st.look), kind: 'chat', text: g.fmt(text) });
 });
 
 async function titleFlow(g) {
