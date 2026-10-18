@@ -2075,3 +2075,239 @@ function roundTableProp(x, y) {
 }
 const caseLawyer = (g) => { const cs = curCase(g); return lawyerLook(cs) || LK.shisen; };
 const bankruptFlow = (g) => flowIn(g, SAI, 'shinjin');
+
+const courtExit = (tx) => [{ x: 9, y: 12, room: 'lobby', tx, ty: 2, dir: 'down', check: heldCheck('（審理の途中だ。勝手に法廷を出ることはできない…）') }];
+registerPlace({
+  id: SAI,
+  name: '裁判所',
+  kind: 'building',
+  bgm: 'office',
+  start: { room: 'lobby', x: 9, y: 8, dir: 'up' },
+  legend: { '#': 'saibansho_walltop', '=': 'saibansho_wall', U: 'saibansho_wall_u', M: 'exit_mat' },
+  rooms: {
+    // -------------------------------------------------------------- 1階ロビー
+    lobby: {
+      floor: 'saibansho_stone',
+      tiles: [
+        '####################',
+        '#==D==D==D==D==k=w=#',
+        '#..................#',
+        '#..................#',
+        '#.qqq.........KKK..#',
+        '#..................#',
+        '#..................#',
+        '#P................P#',
+        '#..................#',
+        '#########MM#########',
+      ],
+      legend: { D: 'saibansho_wall+door_wood', k: 'saibansho_wall+saibansho_board', w: 'saibansho_wall+window', q: 'keisatsu_bench', K: 'saibansho_counter', P: 'plant' },
+      warps: [
+        ...exitWarps(SAI, [9, 10], 9),
+        { x: 3, y: 1, room: 'chisai', tx: 9, ty: 11, dir: 'up' },
+        { x: 6, y: 1, room: 'saibanin', tx: 9, ty: 11, dir: 'up' },
+        { x: 9, y: 1, room: 'kousai', tx: 9, ty: 11, dir: 'up' },
+        { x: 12, y: 1, room: 'minji', tx: 9, ty: 9, dir: 'up' },
+      ],
+      entities: [
+        plate(2, 1, '地裁 刑事', 3, '#4e3420'),
+        plate(5, 1, (g) => (g && since(g, 2009, 6) ? '裁判員法廷' : '刑事大法廷'), 3, '#4e3420'),
+        plate(8, 1, '高裁', 3, '#4e3420'),
+        plate(11, 1, '民事・破産', 3, '#4e3420'),
+        npc('sai_annai', 15, 3, 'down', WHO.saiAnnai, { talk: posted('down', saiAnnaiTalk) }),
+        npc('sai_tour', 17, 4, 'left', WHO.tour, { talk: posted('left', supremeTour) }),
+        npc('sai_mania', 3, 5, 'up', { name: '傍聴が趣味の人', look: LK.citizens[2] }, {
+          text: ['裁判の傍聴は、だれでも、ただでできるんですよ。\nわたしはもう、10年も通っています。', 'ドラマより、ずっと静かで地味。\nでも、人の人生がそのまま出てくるんです。'],
+        }),
+        npc('sai_student', 6, 6, 'left', { name: '法学部の学生', look: LK.citizens[7] }, {
+          wander: 1,
+          text: ['ゼミの課題で、傍聴に来ました。', '刑事裁判の流れは、人定質問、起訴状朗読、\n黙秘権の告知、罪状認否、冒頭陳述、証拠調べ…\n最後が判決。教科書どおりでした！'],
+        }),
+        npc('sai_kisha', 13, 6, 'up', { name: '司法記者', look: LK.kisha2 }, {
+          cond: (g) => lawYear(g) >= 1990,
+          text: ['司法記者クラブの記者です。\n注目の裁判は、判決の日に傍聴券の抽選があって、\n何百人も並ぶことがあります。'],
+        }),
+        npc('sai_guard', 11, 7, 'left', WHO.guard, { cond: (g) => since(g, 2019, 4), talk: posted('left', lines(WHO.guard, ['入口で、手荷物検査にご協力をお願いしています。', '危ない物を持ちこまれないようにするためです。'])) }),
+        { type: 'prop', x: 9, y: 7, w: 2, h: 1, solid: false, cond: (g) => since(g, 2019, 4), draw(ctx, sx, sy) { for (const dx of [0, 16]) { B(ctx, sx + dx + 1, sy - 8, 2, 22, '#9aa0aa'); B(ctx, sx + dx + 13, sy - 8, 2, 22, '#9aa0aa'); B(ctx, sx + dx + 1, sy - 9, 14, 2, '#c4cad4'); B(ctx, sx + dx + 6, sy - 9, 4, 1, '#3cff7a'); } } },
+        { type: 'sign', x: 15, y: 1, talk: kaiteihyo },
+      ],
+      events: [
+        { x: 9, y: 7, w: 2, on: 'step', cond: (g) => since(g, 2019, 4) && fl(g).gate !== day(g), run: async (g) => { fl(g).gate = day(g); await narrate(g, '（入口で、手荷物のX線検査と金属探知機の\nゲートをくぐった）'); } },
+        { x: 2, y: 4, w: 3, on: 'action', run: async (g) => { await narrate(g, '待合のベンチ。\n法廷の開くのを待つ人たちが座っている。'); } },
+      ],
+      onEnter: (g) => { enteredByFlow(g, SAI, 'lobby'); },
+    },
+
+    // -------------------------------------------------------------- 法廷
+    chisai: courtroom({
+      room: 'chisai', seats: [8, 9, 10], chief: 9,
+      judges: (g) => { const cs = flowCase(g, 'chisai'); return cs && caseSev(cs) >= 5 ? [8, 9, 10] : [9]; },
+      warps: courtExit(3),
+    }),
+    saibanin: courtroom({
+      room: 'saibanin', seats: [5, 6, 7, 8, 9, 10, 11, 12, 13], chief: 9, saibanin: true, saibaninSeats: [5, 6, 7, 11, 12, 13], mons: [2, 3, 15, 16],
+      judges: () => [8, 9, 10],
+      warps: courtExit(6),
+    }),
+    kousai: courtroom({
+      room: 'kousai', seats: [8, 9, 10], chief: 9,
+      judges: () => [8, 9, 10],
+      warps: courtExit(9),
+    }),
+    shohotei: courtroom({
+      room: 'shohotei', seats: [7, 8, 9, 10, 11], chief: 9, gallerySeat: true,
+      judges: () => [7, 8, 9, 10, 11],
+      warps: [{ x: 9, y: 12, room: 'daihotei', tx: 10, ty: 11, dir: 'up' }],
+    }),
+
+    // -------------------------------------------------------------- 勾留質問室
+    kouryu: {
+      floor: 'saibansho_floor',
+      tiles: [
+        '##########',
+        '#==k=====#',
+        '#........#',
+        '#........#',
+        '#........#',
+        '#........#',
+        '#........#',
+        '####M#####',
+      ],
+      legend: { k: 'saibansho_wall+saibansho_clock' },
+      get entry() { return ACTIVE.fresh && ACTIVE.place === SAI && ACTIVE.room === 'kouryu' ? { x: 4, y: 3, dir: 'up' } : { x: 4, y: 6, dir: 'up' }; },
+      warps: [{ x: 4, y: 7, room: 'lobby', tx: 3, ty: 2, dir: 'down', check: heldCheck('（勾留質問の途中だ…）') }],
+      entities: [
+        plate(4.5, 1, '勾留質問室', 3, '#4e3420'),
+        person(4, 2, 'down', LK.judge, (g) => flowIn(g, SAI, 'kouryu')),
+        deskProp(3, 2, 3, 'light', { lip: 7, papers: [1] }),
+        npc('sai_kouryu_clerk', 7, 2, 'down', WHO.clerk, {
+          talk: posted('down', lines(WHO.clerk, ['勾留質問室です。検察官が勾留を請求すると、\n裁判官がここで被疑者から直接話を聞きます。', '逃げたり、証拠を隠したりするおそれがあると\n認められれば、まず10日間の勾留が決まります。\nさらに10日まで延長されることがあります。'])),
+        }),
+        deskProp(7, 2, 1, 'light', { lip: 7 }),
+        person(3, 4, 'up', LK.police, (g) => flowIn(g, SAI, 'kouryu')),
+        person(5, 4, 'up', LK.police, (g) => flowIn(g, SAI, 'kouryu')),
+      ],
+      onEnter: (g) => { enteredByFlow(g, SAI, 'kouryu'); },
+    },
+
+    // -------------------------------------------------------------- 民事・破産のフロア
+    minji: {
+      floor: 'saibansho_stone',
+      tiles: [
+        '####################',
+        '#=w===w==d===w===w=#',
+        '#..................#',
+        '#KKK..KKK..........#',
+        '#..................#',
+        '#..........,,,,,,,.#',
+        '#.qq.qq....,,,,,,,.#',
+        '#..........,,,,,,,.#',
+        '#..........,,,,,,,.#',
+        '#P........,,,,,,,,P#',
+        '#########MM#########',
+      ],
+      legend: { w: 'saibansho_wall+window', d: 'saibansho_wall+door_wood', K: 'saibansho_counter', q: 'keisatsu_bench', ',': 'saibansho_woodfloor', P: 'plant' },
+      warps: [
+        { x: 9, y: 10, room: 'lobby', tx: 12, ty: 2, dir: 'down' },
+        { x: 10, y: 10, room: 'lobby', tx: 12, ty: 2, dir: 'down' },
+      ],
+      entities: [
+        plate(1, 1, '破産係', 3, '#4e3420'),
+        plate(6, 1, '民事受付', 3, '#4e3420'),
+        plate(12.5, 1, (g) => (g && since(g, 1998, 1) ? 'ラウンドテーブル法廷' : '調停室'), 5, '#4e3420'),
+        npc('sai_hasan', 2, 2, 'down', WHO.hasanClerk, { talk: posted('down', hasanTalk) }),
+        npc('sai_minji', 7, 2, 'down', WHO.minjiClerk, { talk: posted('down', minjiUkeTalk) }),
+        roundTableProp(13, 6),
+        person(14, 5, 'down', LK.judge2, null),
+        person(12, 6, 'right', LK.citizens[2], null),
+        person(16, 6, 'left', LK.clerk, null),
+        person(13, 8, 'up', LK.citizens[3], null),
+        person(15, 8, 'up', LK.citizens[4], null),
+        npc('sai_saimusha', 3, 7, 'up', { name: '申立ての相談に来た人', look: LK.citizens[0] }, {
+          text: ['カードローンを、5社から借りてしまって…。\n弁護士さんに付き添ってもらって、\n破産の申立てに来たんです。', '恥ずかしいけど、やり直すための手続きだって\n言われて。少し、気が楽になりました。'],
+        }),
+        { type: 'sign', x: 9, y: 1, text: '扉に「審尋室」の札。\n破産や個人再生の申立てをした人から、\n裁判官が事情を聞く部屋だ。' },
+      ],
+      events: [
+        { x: 13, y: 6, w: 3, h: 2, on: 'action', run: smallClaim },
+        { x: 14, y: 8, on: 'action', run: smallClaim },
+      ],
+      onEnter: (g) => { enteredByFlow(g, SAI, 'minji'); },
+    },
+
+    // -------------------------------------------------------------- 審尋室（破産・個人再生）
+    shinjin: {
+      floor: 'saibansho_floor',
+      tiles: [
+        '###########',
+        '#=w==k==w=#',
+        '#.........#',
+        '#.........#',
+        '#.........#',
+        '#.........#',
+        '#.........#',
+        '#####M#####',
+      ],
+      legend: { w: 'saibansho_wall+window', k: 'saibansho_wall+saibansho_clock' },
+      get entry() { return ACTIVE.fresh && ACTIVE.place === SAI && ACTIVE.room === 'shinjin' ? { x: 5, y: 3, dir: 'up' } : { x: 5, y: 6, dir: 'up' }; },
+      warps: [{ x: 5, y: 7, room: 'minji', tx: 9, ty: 2, dir: 'down' }],
+      entities: [
+        plate(4, 1, '審尋室', 3, '#4e3420'),
+        person(5, 2, 'down', LK.judge3, bankruptFlow),
+        deskProp(3, 2, 5, 'light', { lip: 7, papers: [0, 2, 4] }),
+        npc('sai_shinjin_clerk', 8, 2, 'down', WHO.clerk, {
+          talk: posted('down', lines(WHO.clerk, ['審尋室です。破産の申立てをした人に、\n裁判官が借金のいきさつや、いまの暮らしを聞きます。', '正直に話して、生活を立て直す気持ちを伝えることが\nいちばん大切です。'])),
+        }),
+        person(7, 3, 'up', caseLawyer, bankruptFlow),
+        person(3, 3, 'up', LK.shisen, (g) => bankruptFlow(g) && !!(jus(g) && jus(g).bankrupt && jus(g).bankrupt.kind === 'kanzai')),
+      ],
+      onEnter: async (g) => {
+        if (!enteredByFlow(g, SAI, 'shinjin')) return;
+        const j = jus(g);
+        const f = fl(g);
+        const stage = j && j.bankrupt ? `${j.bankrupt.filed}:${j.bankrupt.stage}` : 'none';
+        if (f.shinjinSeen === stage) return;
+        f.shinjinSeen = stage;
+        await narrate(g, j && j.bankrupt ? '（審尋室。小さな部屋で、裁判官と机をはさんで座った。\n…あのときは、こんな日が来るとは思わなかった）' : '（審尋室。小さな部屋で、裁判官と机をはさんで座った）');
+      },
+    },
+
+    // -------------------------------------------------------------- 最高裁判所 大法廷（見学）
+    daihotei: {
+      floor: 'saibansho_floor',
+      topPad: 16,
+      tiles: [
+        '#####################',
+        '#UU=jjjjjjjJjjjjjjj=#',
+        '#ddddddddddddddddddd#',
+        '#bbbbbbbbbbbbbbbbbbb#',
+        '#...................#',
+        '#.T.......W.......T.#',
+        '#.T...............T.#',
+        '#...................#',
+        '#rrrrrrrrrGrrrrrrrrr#',
+        '#.ggggggg...ggggggg.#',
+        '#.ggggggg...ggggggg.#',
+        '#.ggggggg...ggggggg.#',
+        '##########M##########',
+      ],
+      legend: {
+        j: 'saibansho_chairback', J: 'saibansho_chairback_c', d: 'saibansho_dais', b: 'saibansho_bench', T: 'saibansho_table', W: 'saibansho_witness',
+        r: 'saibansho_bar', G: 'saibansho_bargate', g: 'saibansho_gallery',
+      },
+      entry: { x: 10, y: 11, dir: 'up' },
+      warps: [{ x: 10, y: 12, room: 'lobby', tx: 9, ty: 8, dir: 'up' }],
+      entities: [
+        plate(7.5, 0.6, '最高裁判所 大法廷', 6, '#2a1e16', '#e8d8a8'),
+        deskProp(1, 2, 19, 'bench', { lip: 7, drop: 0, closed: true, solid: false }),
+        npc('sai_tourguide', 11, 9, 'down', WHO.tour, { talk: posted('down', tourGuideTalk) }),
+        npc('sai_tourist1', 9, 10, 'up', { name: '見学の高校生', look: LOOKS.kid }, { text: ['うわ、天井が高い…！', '15人の裁判官が並ぶところ、見てみたいな。'] }),
+        backrestProp(2, 9, 7), backrestProp(12, 9, 7), backrestProp(2, 10, 7), backrestProp(12, 10, 7), backrestProp(2, 11, 7), backrestProp(12, 11, 7),
+      ],
+      events: [
+        { x: 2, y: 9, w: 7, h: 3, on: 'action', run: async (g) => { await narrate(g, '傍聴席だ。大法廷の判決の日には、\nここが記者と傍聴人でいっぱいになるという。'); } },
+        { x: 12, y: 9, w: 7, h: 3, on: 'action', run: async (g) => { await narrate(g, '傍聴席だ。正面の法壇が、はるか遠くに見える。'); } },
+      ],
+      onEnter: (g) => { enteredByFlow(g, SAI, 'daihotei'); },
+    },
+  },
+});

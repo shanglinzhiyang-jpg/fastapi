@@ -336,25 +336,29 @@ class PolScene {
     for (const t of this.toasts) t.t++;
     this.toasts = this.toasts.filter((t) => t.t < t.life);
     const v = this.top();
+    if (v && !v.modal && !(v._busy > 0)) this.backdrop = null;
     if (!v || v._busy > 0) return;
     v.t = (v.t || 0) + 1;
     if (v.t < 3) return;
     try { v.update(this, g.input, g); } catch (e) { console.error(e); }
   }
   draw(c, g) {
-    let from = -1;
-    for (let i = this.views.length - 1; i >= 0; i--) if (!this.views[i].modal) { from = i; break; }
-    const base = from >= 0 ? this.views[from] : null;
-    from = Math.max(0, from);
-    if (!base || !base.ownBg) drawBg(c, this.t);
-    for (let i = from; i < this.views.length; i++) {
-      const v = this.views[i];
-      if (v.modal) { c.globalAlpha = 0.62; R(c, 0, 0, SW, SH, '#03050f'); c.globalAlpha = 1; }
-      try { v.draw(c, this, g); } catch (e) { console.error(e); }
-      if (!v.modal && !v.noChrome) chrome(c, g, this, v);
-    }
-    if (!base) chrome(c, g, this, { title: '政治' });
+    let baseIdx = -1;
+    for (let i = this.views.length - 1; i >= 0; i--) if (!this.views[i].modal) { baseIdx = i; break; }
     const top = this.top();
+    // a dialog that follows a list keeps that list on screen behind it (the list already closed)
+    const useBack = !!(this.backdrop && top && top.modal && this.backdropDepth > baseIdx);
+    const base = useBack ? this.backdrop : baseIdx >= 0 ? this.views[baseIdx] : null;
+    if (!base || !base.ownBg) drawBg(c, this.t);
+    if (base) {
+      try { base.draw(c, this, g); } catch (e) { console.error(e); }
+      if (!base.noChrome) chrome(c, g, this, base);
+    } else chrome(c, g, this, { title: '政治' });
+    for (let i = baseIdx + 1; i < this.views.length; i++) {
+      const v = this.views[i];
+      c.globalAlpha = 0.62; R(c, 0, 0, SW, SH, '#03050f'); c.globalAlpha = 1;
+      try { v.draw(c, this, g); } catch (e) { console.error(e); }
+    }
     if (top && top.modal && base && !base.noChrome) footer(c, this, top);
     let ty = SH - 52;
     for (const t of this.toasts) {
@@ -368,11 +372,13 @@ class PolScene {
     }
   }
   open(view) {
+    if (!view.modal) this.backdrop = null;
     return new Promise((res) => { view._res = res; view.t = 0; this.views.push(view); if (view.enter) view.enter(this); });
   }
   done(view, value) {
     const i = this.views.lastIndexOf(view);
     if (i < 0) return;
+    if (!view.modal && view.isMenu && value !== -1 && value != null) { this.backdrop = view; this.backdropDepth = i; }
     this.views.splice(i, 1);
     this.g.input.consume();
     if (view.leave) view.leave(this);
@@ -501,7 +507,7 @@ class ListBox {
 function menuView(o) {
   const lb = new ListBox({ items: o.items, index: o.index, rowH: o.rowH || 24, empty: o.empty, drawRow: o.drawRow });
   return {
-    title: o.title, lb,
+    title: o.title, lb, isMenu: true,
     hint: o.hint || '↑↓ A:けってい B:もどる',
     tip: () => (o.tip ? o.tip(lb.current(), lb.idx) : ''),
     update(ui, inp) {
@@ -2116,9 +2122,12 @@ SECTIONS.pmCeremony = async (ui) => {
   const H = p.diet.shugi;
   const mine = (p.cabinet.partyIds || []).reduce((a, id) => a + num(H.seats[id]), 0);
   const opp = Object.keys(p.parties).filter((id) => !isRuling(p, id) && num(H.seats[id]) > 0).sort((a, b) => H.seats[b] - H.seats[a]);
+  // each opposition party votes for its own leader; the independents and small parties are shown together
   const rows = [{ name: playerName(g), party: p.me.party, votes: mine, me: true }];
-  let rest = H.total - mine;
-  opp.slice(0, 2).forEach((id, i) => { const n = i === 1 ? Math.max(0, rest) : Math.min(rest, num(H.seats[id]) + Math.round(num(H.seats[IND]) * 0.3)); rows.push({ name: g.npcName(p.parties[id].leader) || '（不明）', party: id, votes: n }); rest -= n; });
+  for (const id of opp.slice(0, 3)) rows.push({ name: g.npcName(p.parties[id].leader) || '（不明）', party: id, votes: num(H.seats[id]) });
+  const others = H.total - rows.reduce((a, r) => a + r.votes, 0);
+  if (others > 0) rows.push({ name: 'その他・無効など', party: IND, votes: others });
+  rows.sort((a, b) => b.votes - a.votes);
   const pmNo = num(p.flags.pmNo, 100);
   const v = {
     title: '内閣総理大臣指名選挙（衆議院）', hint: 'A:すすめる',

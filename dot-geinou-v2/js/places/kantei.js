@@ -335,6 +335,9 @@ function nudge(g, { mood = 0, rep = 0 } = {}) {
   if (mood && p.cabinet && typeof p.cabinet.mood === 'number') p.cabinet.mood = clamp(p.cabinet.mood + mood, -20, 20);
   if (rep && p.me && typeof p.me.reputation === 'number') p.me.reputation = clamp(p.me.reputation + rep, -100, 100);
 }
+// Crisis names as nouns (「〜について」「〜への対応」)
+const CRISIS_NAMES = { quake: '大地震', storm: '台風・豪雨の被害', recession: '世界的な景気後退', boom: '株価の急上昇', yen_high: '急激な円高', yen_low: '急激な円安', energy: '資源価格の高騰' };
+const shortTitle = (s) => { const t = String(s || '').replace(/（[^）]*）/g, '').trim(); return Array.from(t).length > 14 ? Array.from(t).slice(0, 13).join('') + '…' : t; };
 // The crisis of the moment: an active shock (disasters first) -> { key, name, disaster, kind } | null
 export function activeCrisis(g) {
   const p = pol(g);
@@ -343,7 +346,7 @@ export function activeCrisis(g) {
   const live = p.economy.shocks.filter((s) => s && SHOCKS[s.kind] && abs < s.until && abs >= s.until - s.len && abs - (s.until - s.len) <= 30);
   live.sort((a, b) => (SHOCKS[b.kind].disaster ? 1 : 0) - (SHOCKS[a.kind].disaster ? 1 : 0) || b.until - a.until);
   const s = live[0];
-  return s ? { key: `${s.kind}_${s.until}`, name: s.name || SHOCKS[s.kind].name, disaster: !!SHOCKS[s.kind].disaster, kind: s.kind } : null;
+  return s ? { key: `${s.kind}_${s.until}`, name: CRISIS_NAMES[s.kind] || String(s.name || SHOCKS[s.kind].name).replace(/が発生$/, ''), disaster: !!SHOCKS[s.kind].disaster, kind: s.kind } : null;
 }
 
 // ------------------------------------------------------------------ people
@@ -411,7 +414,7 @@ function pressQuestions(g, opts = {}) {
   const bills = (() => { try { return g.billsList({ pending: true }).filter((b) => b.policy && POLICIES[b.policy]); } catch (e) { return []; } })();
   if (bills.length) {
     const b = bills.find((x) => x.by === 'player') || bills[0];
-    qs.push({ q: `「${String(b.title).slice(0, 18)}」の見通しは？`, a: [['必要性を丁寧に説明', 80, '法案が必要な理由と、反対の声への考えを、丁寧に話した。'], ['国会の審議にゆだねる', 55, '「国会での審議にゆだねます」と答えた。'], ['数の力で通す', 20, '「必ず成立させます」…強い言い方が、少し波紋を呼びそうだ。']] });
+    qs.push({ q: `『${shortTitle(POLICIES[b.policy].name)}』の法案、成立の見通しは？`, a: [['必要性を丁寧に説明', 80, '法案が必要な理由と、反対の声への考えを、丁寧に話した。'], ['国会の審議にゆだねる', 55, '「国会での審議にゆだねます」と答えた。'], ['数の力で通す', 20, '「必ず成立させます」…強い言い方が、少し波紋を呼びそうだ。']] });
   }
   if (E) {
     if (E.inflation > 2) qs.push({ q: '物価の上昇が続いています。暮らしへの対策は？', a: [['具体策を示す', 80, '電気代や食料品など、具体的な対策をあげて答えた。'], ['賃上げに期待と言う', 50, '「賃上げの流れを後押しします」と答えた。'], ['様子を見ると言う', 25, '「推移を注視します」…少し他人事に聞こえたかもしれない。']] });
@@ -477,7 +480,7 @@ async function recepTalk(g, npc) {
   const yr = yearOf(g);
   if (isPolitician(g)) {
     const post = myCabinetPost(g);
-    const lines = [post ? `${postLabel(g, post)}、おはようございます。` : '{name}先生、ようこそ官邸へ。'];
+    const lines = [post ? `${post === 'pm' ? '総理' : postLabel(g, post)}、おはようございます。` : '{name}先生、ようこそ官邸へ。'];
     lines.push(kakugiDay(g) ? '本日は定例閣議の日です。\n閣僚のみなさまは、4階の閣僚応接室へどうぞ。' : '定例閣議は、原則として火曜日と金曜日です。');
     lines.push('5階が総理の執務室、4階が閣議室。\n1階に記者会見室、地下に危機管理センターがございます。');
     await g.say(lines, S);

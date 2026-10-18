@@ -653,13 +653,15 @@ function paintSeat(c, x0, y0, z, s) {
   const hw = (w) => Math.floor(w / 2);
   R(c, x - hw(z.dw), y - z.dy, z.dw, z.dh, WD); R(c, x - hw(z.dw), y - z.dy, z.dw, 1, WDL); R(c, x - hw(z.dw), y - z.dy + z.dh - 1, z.dw, 1, WDX);
   if (z.plate) { R(c, x + hw(z.dw) - 4, y - z.dy - 4, 2, 5, s.mine ? GOLD : '#141414'); if (s.mine) P(c, x + hw(z.dw) - 4, y - z.dy - 4, GOLDL); }
-  if (s.lamp) R(c, x - hw(z.dw) + 1, y - z.dy - (z.plate ? 2 : 1), z.plate ? 3 : 2, z.plate ? 2 : 1, s.lamp);
+  if (s.lamp) { R(c, x - 2, y - z.dy - 3, 4, 3, s.lamp); R(c, x - 2, y - z.dy - 3, 4, 1, '#ffffff'); }
   if (s.member) {
     const up = s.stand ? z.rise : 0;
-    R(c, x - hw(z.sw), y - z.sy - up, z.sw, z.sh + up, s.suit);
-    R(c, x - hw(z.sw), y - z.sy - up, z.sw, 1, shade(s.suit, 0.18));
+    const suit = s.dim ? shade(s.suit, -0.45) : s.suit, hair = s.dim ? shade(s.hair, -0.45) : s.hair;
+    R(c, x - hw(z.sw), y - z.sy - up, z.sw, z.sh + up, suit);
+    R(c, x - hw(z.sw), y - z.sy - up, z.sw, 1, shade(suit, s.stand ? 0.4 : 0.18));
+    if (s.stand) { R(c, x - 1, y - z.sy - up, 2, 1, '#f4f4f4'); R(c, x - hw(z.sw) - 1, y - z.sy - up + 1, 1, z.sh + up - 1, shade(suit, 0.3)); }
     const hx = x - hw(z.hs), hy = y - z.hy - up;
-    R(c, hx, hy, z.hs, z.hs, s.hair);
+    R(c, hx, hy, z.hs, z.hs, hair);
     R(c, hx + 1, hy, z.hs - 2, 1, shade(s.hair, 0.25));
     if (z.hs >= 6) { P(c, hx - 1, hy + 3, s.skin); P(c, hx + z.hs, hy + 3, s.skin); R(c, hx + 1, hy + z.hs, z.hs - 2, 1, s.skin); }
     else R(c, hx, hy + z.hs, z.hs, 1, s.skin);
@@ -739,10 +741,11 @@ function paintChamberSchematic(ctx, g, o) {
     const v = o.votes ? o.votes[i] : null;
     let stand = false, lamp = null, ballot = null;
     if (v && o.method === 'kiritsu') stand = v === 'yes' && o.prog > (hash2(i, 5, 9) * 0.6);
+    const dim = !!(o.votes && o.method === 'kiritsu' && o.prog > 0.6 && !stand);
     if (v && o.method === 'button' && o.prog > hash2(i, 5, 9) * 0.8) lamp = v === 'yes' ? '#f4f4f4' : v === 'no' ? '#3a7ad8' : null;
     if (v && o.method === 'kimei' && o.prog > hash2(i, 5, 9) * 0.9) ballot = v === 'yes' ? '#f4f4f4' : v === 'no' ? '#3a7ad8' : null;
     const present = o.present ? o.present(i) : true;
-    paintSeat(ctx, s.x, s.y, z, { color: chairColor(g, pid), member: present, ...memberLooks(i), stand, lamp, ballot, mine: i === o.mineIdx, markMine: i === o.mineIdx });
+    paintSeat(ctx, s.x, s.y, z, { color: chairColor(g, pid), member: present, ...memberLooks(i), stand, dim, lamp, ballot, mine: i === o.mineIdx, markMine: i === o.mineIdx });
   });
 }
 
@@ -865,7 +868,7 @@ async function runPlenary(g, house, { member = false, max = 3 } = {}) {
   const bills = plenaryBills(g, house).slice(0, max);
   if (!bills.length) return 0;
   let shown = 0;
-  for (const b of bills) {
+  for (const [n, b] of bills.entries()) {
     const key = house + (b.revote ? '_revote' : '');
     const before = b.votes ? b.votes[key] : null;
     let mine = null;
@@ -880,7 +883,7 @@ async function runPlenary(g, house, { member = false, max = 3 } = {}) {
       await g.say(`（「${billLabel(b)}」の採決は、次の本会議に持ち越された）`);
       continue;
     }
-    await showVote(g, house, b, v, { mine, member, revote: key.endsWith('_revote') });
+    await showVote(g, house, b, v, { mine, member, revote: key.endsWith('_revote'), no: n });
     shown++;
   }
   return shown;
@@ -891,13 +894,14 @@ async function showVote(g, house, b, v, o = {}) {
   g.push(sc);
   const p = pol(g);
   const isNc = b.kind === 'noconfidence';
+  const nth = `日程第${'一二三四五'[o.no || 0] || '一'}`;
   const intro = isNc
     ? [`${partyName(g, b.party)}ほか提出、内閣不信任決議案を議題といたします。`, '提出者の趣旨弁明、討論ののち、採決に入ります。']
     : b.kind === 'budget'
-      ? [`日程第一、${billLabel(b)}を議題といたします。`, '委員長の報告を求めます。']
+      ? [`${nth}、${billLabel(b)}を議題といたします。`, '委員長の報告を求めます。']
       : o.revote
         ? [`${billLabel(b)}は、参議院で否決されました。`, '憲法第59条第2項により、本院の議決を再議に付します。出席議員の3分の2以上の多数が必要です。']
-        : [`日程第一、${billLabel(b)}（${sponsorLabel(g, b)}）を議題といたします。`, '委員長の報告を求めます。'];
+        : [`${nth}、${billLabel(b)}（${sponsorLabel(g, b)}）を議題といたします。`, '委員長の報告を求めます。'];
   await speak(g, house, intro);
   if (!isNc && !o.revote) await g.say(['ただいま議題となりました案件につきまして、\n委員会における審査の経過と結果を報告いたします。', b.committeeNo ? '採決の結果、本案は否決すべきものと決しました。以上、報告いたします。' : '採決の結果、本案は可決すべきものと決しました。以上、報告いたします。'], { name: '委員長', look: npcLook(g, p && p.flags && p.flags.chair_budget) });
   sc.phase = 'vote';
@@ -910,6 +914,7 @@ async function showVote(g, house, b, v, o = {}) {
   await g.waitFrames(method === 'igi' ? 30 : 90);
   sc.prog = 1;
   sc.phase = 'result';
+  await g.waitFrames(24);
   const passed = !!v.passed;
   if (method === 'kiritsu') await speak(g, house, passed ? '起立多数。よって、本案は可決いたしました。' : '起立少数。よって、本案は否決されました。');
   else if (method === 'igi') { await g.say('「異議なし」（と呼ぶ者あり）'); await speak(g, house, '御異議なしと認めます。よって、本案は可決いたしました。'); }
@@ -1008,7 +1013,7 @@ async function bochoWatch(g, house) {
   if (!S) { await g.say(['議場は静まりかえっている。', '（いまは国会の閉会中。本会議は開かれていない）']); return; }
   await g.say(['（傍聴席に腰をおろした。下に議場が見える）', '（傍聴席では、拍手・発言・撮影・録音は禁止。\n静かに見守ろう）']);
   const n = await runPlenary(g, house, { member: false, max: 2 });
-  if (n) { await speak(g, house, '本日は、これにて散会いたします。'); g.relax({ stress: 2 }); await g.say('（国の法律が決まる瞬間を、この目で見た…）'); return; }
+  if (n) { await speak(g, house, '本日は、これにて散会いたします。'); g.relax({ stress: 2 }); await g.say('（国会で法案が採決される瞬間を、この目で見た…）'); return; }
   const p = pol(g);
   const pmName = surname(npcName(g, p && p.cabinet && p.cabinet.pm));
   if (today(g) - num(S.start) <= 2 && S.kind !== '特別国会') {
