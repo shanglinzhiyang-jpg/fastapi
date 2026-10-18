@@ -1246,8 +1246,9 @@ async function fundsReport(g) {
   g.addNeed('stress', 8);
 }
 async function fundraiser(g) {
+  // the buyers' disclosure rule (政治資金規正法, 1992年改正): none before 1993 (the core answers null)
   const thr = typeof POL.partyTicketDisclosure === 'function' ? POL.partyTicketDisclosure(yearOf(g)) : 200000;
-  const lines = ['政治資金パーティーですね。会費は1枚2万円くらいが相場です。', `券を1人で${Math.round(thr / 10000)}万円を超えて買った人の名前は、\n収支報告書で公開されます。`];
+  const lines = ['政治資金パーティーですね。会費は1枚2万円くらいが相場です。', thr ? `券を1人で${Math.round(thr / 10000)}万円を超えて買った人の名前は、\n収支報告書で公開されます。` : '集めたお金は政治資金です。\n収入として、収支報告書にきちんと載せます。'];
   const k = await g.ask(lines, ['きちんと開く', '一部を記載しない', 'やめておく'], { ...say(WHO.hisho), cancel: 2 });
   if (k === 2) return;
   let unreported = 0;
@@ -1275,9 +1276,15 @@ async function hishoTalk(g) {
   if (!myHouse(g)) { await g.say('こちらは議員の事務所です。\nお約束のある方ですか？', say(WHO.hisho)); return; }
   if (await respondOffers(g)) return;
   const items = ['今日の予定', '帳簿を見せて', '収支報告書を出す', '献金を集める', 'パーティーを開く', '秘書を雇う'];
+  // 議員辞職 / 政界引退: the politics UI's 進退 screen (sitting Diet members only: myHouse above)
+  if (typeof g.politicsScreen === 'function') items.push('進退（辞職・引退）');
   const k = await g.list({ title: '秘書に頼む', items: [...items, 'なんでもない'], x: 200, y: 60, w: 260, px: true });
   const pick = items[k];
-  if (pick === '今日の予定') await briefing(g);
+  if (pick === '進退（辞職・引退）') {
+    await g.say(['先生…進退のことですね。', '議員辞職も、引退の表明も、\n最後は先生ご自身が決めることです。'], say(WHO.hisho));
+    await g.politicsScreen('retire');
+    if (!myHouse(g)) await g.say('先生、本当にお疲れさまでした。\n事務所の片づけは、私たちでやっておきます。', say(WHO.hisho));
+  } else if (pick === '今日の予定') await briefing(g);
   else if (pick === '帳簿を見せて') await g.say(ledgerPages(g), say(WHO.hisho));
   else if (pick === '収支報告書を出す') await fundsReport(g);
   else if (pick === '献金を集める') {

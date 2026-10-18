@@ -56,7 +56,7 @@ import { ITEMS } from './state.js';
 import { PLACES } from './map.js';
 import {
   PEOPLE, HEARTS, HANGOUTS, REGULARS, PHONE_APPS, PEOPLE_UI, WEEKDAYS,
-  heartIndex, weekdayOf, weekdayName, isKansai, showWords, hangoutMeal,
+  heartIndex, weekdayOf, weekdayName, isKansai, showWords, hangoutMeal, OFFER_DAYS,
 } from './life.js';
 import { eraOf } from './profile.js';
 
@@ -1158,6 +1158,24 @@ function msgExtra(m) {
 const placeName = (id) => (id && PLACES[id] ? PLACES[id].name : '');
 // '毎週木曜' (a one-off event registered with a dynamic weekday: just the weekday)
 const showDay = (r) => (r.weekday >= 0 && r.weekday < 7 ? `毎週${WEEKDAYS[r.weekday]}曜` : '');
+// Why an offered show cannot be taken now (null: it can). The cores are asked what the recording itself
+// would ask: the justice core (custody, 活動自粛, a TV ban — stage and event work still comes) and the
+// politics core (an official campaign or a cabinet post keep the player off TV / radio). As programs.js
+// showOfferRefusal, the politics core gets 'offer_<id>', so asking never touches the show's week.
+function offerRefusal(g, id, r) {
+  const medium = (r && r.medium) || 'tv';
+  try {
+    if (typeof g.justiceRefusal === 'function') {
+      const why = g.justiceRefusal('regular', { id: 'regular_' + id, medium });
+      if (why) return why;
+    }
+    if (typeof g.politicsRefusal === 'function') {
+      const why = g.politicsRefusal('regular', { id: 'offer_' + id, medium });
+      if (why) return why;
+    }
+  } catch (e) { console.error('[phone] offerRefusal', e); }
+  return null;
+}
 // Answers an invite / offer (no dialogue of its own beyond the result). Returns
 // true when the message got answered.
 export async function answerMessage(g, m, yes) {
@@ -1180,6 +1198,15 @@ export async function answerMessage(g, m, yes) {
       // an old offer (OFFER_DAYS) or one whose conditions no longer hold (agency changed…)
       const why = !g.offerOpen(m) ? 'このオファーは、返事の期限が過ぎてしまった…。' : g.checkRequires(r.requires) ? 'このオファーは、条件が合わなくなってしまった…。' : null;
       if (why) { m.answered = 'expired'; await g.say(`（${why}）`); return true; }
+      // an offer that came before a ban (活動自粛, a TV ban, custody, a campaign, a cabinet post) cannot be
+      // taken during it: the reason, and the offer stays open until its deadline
+      const ban = offerRefusal(g, m.regular, r);
+      if (ban) {
+        audio.sfx('buzz');
+        const left = OFFER_DAYS - (g.state.day - (Number(m.day) || 0));
+        await g.say([...(Array.isArray(ban) ? ban : [ban]), `（『${r.title}』は、\nいまは引き受けられない。${left > 0 ? `返事の期限まで、あと${left}日）` : '）'}`]);
+        return false;
+      }
       const cur = g.state.regulars[m.regular];
       if (!cur || cur.dropped) g.joinRegular(m.regular); // a duplicate offer does not reset the week
       m.answered = 'yes';

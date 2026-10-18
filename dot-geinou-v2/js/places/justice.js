@@ -1581,6 +1581,15 @@ const kenElevatorCheck = async (g) => {
   return true;
 };
 const kenEscort = (g, room) => { const j = jus(g); const cs = curCase(g); return !!(j && j.custody && cs && cs.detained && flowIn(g, KEN, room)); };
+// Who brings a held suspect to the 検察庁: the police for a case they sent (送致); in a 特捜部 case the
+// prosecutors arrested the player themselves (a 検察事務官 on the day of the arrest) and hold them at the
+// 拘置所, so from then on the 拘置所's 刑務官 bring them in (crime.js tokusoStage). One NPC per kind, shown by
+// cond (read every frame: the room stays loaded from one day of questioning to the next).
+const escortKind = (g) => { const cs = curCase(g); return !tokusoCase(cs) ? 'police' : (Number(cs.custodyDays) || 0) >= 1 ? 'kochi' : 'jimukan'; };
+function escortNpcs(id, x, y, room) {
+  const who = { police: { name: '護送の警察官', look: LK.police }, jimukan: WHO.jimukanM, kochi: { name: '拘置所の刑務官', look: LK.keimukan } };
+  return Object.keys(who).map((k) => npc(k === 'police' ? id : `${id}_${k}`, x, y, 'up', who[k], { cond: (g) => kenEscort(g, room) && escortKind(g) === k, text: '（無言で、うしろに控えている）' }));
+}
 
 registerPlace({
   id: KEN,
@@ -1656,8 +1665,8 @@ registerPlace({
           talk: posted('down', lines(WHO.jimukan, ['検察事務官です。取調べに立ち会って、\n供述を記録します。', '検察官が決める処分は、大きく分けて3つ。\n公判請求（正式な裁判）、略式起訴（罰金）、不起訴です。'])),
         }),
         deskProp(8, 3, 2, 'wood', { mons: [1], lip: 7 }),
-        npc('ken_escort1', 4, 5, 'up', { name: '護送の警察官', look: LK.police }, { cond: (g) => kenEscort(g, 'kenjishitsu'), text: '（無言で、うしろに控えている）' }),
-        npc('ken_escort2', 6, 5, 'up', { name: '護送の警察官', look: LK.police }, { cond: (g) => kenEscort(g, 'kenjishitsu'), text: '（無言で、うしろに控えている）' }),
+        ...escortNpcs('ken_escort1', 4, 5, 'kenjishitsu'),
+        ...escortNpcs('ken_escort2', 6, 5, 'kenjishitsu'),
         { type: 'sign', x: 1, y: 2, text: '法律書がぎっしり。\n六法、判例集、注釈書…背表紙だけで目がまわりそうだ。' },
         { type: 'sign', x: 1, y: 6, text: '応接のソファ。\n参考人が、呼ばれるのを待っている。' },
       ],
@@ -1699,7 +1708,7 @@ registerPlace({
         npc('ken_t2', 7, 4, 'up', { name: '事務官', look: LK.jimukanM }, { text: '（通帳の入出金を、表計算ソフトに打ちこんでいる）' }),
         npc('ken_t3', 4, 6, 'up', { name: '検察官', look: LK.kenjiW }, { text: ['…この金の流れ、裏づけが足りない。', '関係者全員の話を、もう一度聞き直そう。'] }),
         npc('ken_t4', 8, 6, 'up', { name: '事務官', look: LK.jimukan }, { text: '（段ボールの中身を、番号順に並べている）' }),
-        npc('ken_tescort', 15, 7, 'up', { name: '護送の警察官', look: LK.police }, { cond: (g) => kenEscort(g, 'tokuso'), text: '（無言で、うしろに控えている）' }),
+        ...escortNpcs('ken_tescort', 15, 7, 'tokuso'),
         { type: 'sign', x: 4, y: 1, text: 'ホワイトボードに、人の名前のかわりに\nアルファベットと矢印が書きこまれている。\n…お金の流れを整理した図らしい。' },
         { type: 'sign', x: 6, y: 1, text: '「押収品目録」の紙が貼ってある。\n帳簿、通帳、手帳、パソコン…\n番号がどこまでも続いている。' },
         { type: 'sign', x: 1, y: 2, text: '押収した資料の段ボール箱が、天井近くまで\n積み上がっている。' },

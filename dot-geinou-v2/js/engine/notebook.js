@@ -554,6 +554,13 @@ function sinceYM(g, year, month = 1) {
 // a literal yen amount that is not money (exchange rate, stock index): never era-converted
 const plainYen = (n) => `${YEN_MARK}${Math.round(num(n)).toLocaleString('ja-JP')}円`;
 const pctText = (v) => `${Math.round(num(v) * 10) / 10}%`;
+// a span of game days as years / months (1年＝YEAR_DAYS日, as politics_ui.js spanText)
+function spanText(n) {
+  n = Math.max(0, Math.round(num(n)));
+  const ml = YEAR_DAYS / 12;
+  const y = Math.floor(n / YEAR_DAYS), m = Math.floor((n % YEAR_DAYS) / ml);
+  return y ? `${y}年${m ? `${m}か月` : ''}` : `${Math.max(1, m)}か月`;
+}
 
 const BILL_STAGE = {
   draft: ['準備中', COLORS.dim], committee: ['委員会で審議中', COLORS.cyan], shugi: ['衆議院で審議中', COLORS.cyan],
@@ -779,6 +786,11 @@ function politicsPage(g, ctx) {
   const O = POL.OFFICES || {};
   const office = me.office && O[me.office];
   const age = ageOf(st);
+  // the politics UI's own records (politics_ui.js flags.polui): an announced / finished retirement and
+  // the career records written at each retirement (newest first)
+  const polui = st.flags && st.flags.polui && typeof st.flags.polui === 'object' ? st.flags.polui : {};
+  const retire = polui.retire && typeof polui.retire === 'object' ? polui.retire : null;
+  const career = Array.isArray(polui.career) ? polui.career.filter((r) => r && typeof r === 'object') : [];
 
   // ---- you
   pg.block().head('あなたと政治', C);
@@ -799,9 +811,10 @@ function politicsPage(g, ctx) {
       const sd = clamp(Math.round(num(me.standing)), 0, 100);
       pg.row('党内の評価', String(sd), { gauge: { frac: sd / 100, color: '#b48cff' } });
     }
+    if (retire && !retire.done) pg.para('政界引退を表明している（任期の終わりまで務める）。', { s: SMALL, c: COLORS.accent });
   } else {
     const running = !!safe(() => g.myElection());
-    pg.row('いまは', running ? '民間人（立候補中）' : '民間人', { rc: running ? COLORS.good : COLORS.dim });
+    pg.row('いまは', running ? '民間人（立候補中）' : retire && retire.done ? '民間人（政界を引退）' : '民間人', { rc: running ? COLORS.good : COLORS.dim });
     if (me.party) pg.row('党員', safe(() => g.partyName(me.party), '') || '');
     if (!running) pg.para('立候補は、スマホの「政治」、永田町の党本部（選挙対策本部）、ドット区役所の選挙管理委員会から。', { s: SMALL, c: COLORS.dim });
   }
@@ -820,6 +833,25 @@ function politicsPage(g, ctx) {
   const va = votingAgeNow(g);
   const voteBan = safe(() => g.civicBanReason && g.civicBanReason('vote'));
   pg.row('選挙権（投票）', voteBan ? 'いまはない' : age >= va ? 'あり' : `${va}歳から`, { s: SMALL, rs: SMALL, c: COLORS.dim, rc: voteBan ? COLORS.bad : age >= va ? COLORS.good : COLORS.dim });
+
+  // ---- the career record (written when the player leaves politics: the latest one)
+  if (career.length) {
+    const r = career[0];
+    const sm = { s: SMALL, rs: SMALL, c: COLORS.dim };
+    pg.block().head('政治家としての歩み', C);
+    pg.row(String(r.how || '政界引退'), String(r.date || ''), { c: COLORS.accent, rs: SMALL, rc: COLORS.dim });
+    pg.row('最後の職', `${r.office || 'なし'}（${r.party || '無所属'}）`, sm);
+    pg.row('政治家として', r.since ? `${r.since}の当選から${spanText(r.span)}` : '当選の経験はない', sm);
+    pg.row('選挙', `当選${num(r.wins)}回${num(r.nationalWins) ? `（うち国政${num(r.nationalWins)}回）` : ''}・落選${num(r.losses)}回`, sm);
+    if (num(r.pmDays)) pg.row('内閣総理大臣', spanText(r.pmDays), { ...sm, rc: COLORS.accent });
+    if (num(r.ministerDays)) pg.row('国務大臣', spanText(r.ministerDays), sm);
+    const posts = Array.isArray(r.posts) ? r.posts.slice(0, 3) : [];
+    if (posts.length) pg.para(`主な役職：${posts.join('・')}${r.posts.length > 3 ? 'など' : ''}`, { s: SMALL, x: 16 });
+    const titles = Array.isArray(r.lawTitles) ? r.lawTitles.slice(0, 2) : [];
+    pg.para(`成立させた法律：${num(r.laws) ? `${num(r.laws)}本${titles.length ? `（${titles.map((t) => `「${t}」`).join('')}${num(r.laws) > titles.length ? 'など' : ''}）` : ''}` : 'なし'}`, { s: SMALL, x: 16 });
+    if (r.einen) pg.para(`永年在職議員表彰（${r.einen}）`, { s: SMALL, c: COLORS.accent, x: 16 });
+    pg.para(`${career.length > 1 ? `ほかに${career.length - 1}件の記録。` : ''}くわしくは、スマホの「政治」の「資金・活動」→「進退」で。引退しても、また立候補できる（政界復帰）。`, { s: SMALL, c: COLORS.dim });
+  }
 
   // ---- elections
   const ups = (safe(() => g.upcomingElections(), []) || []).filter((e) => e && num(e.day) >= day).sort((a, b) => num(a.day) - num(b.day));

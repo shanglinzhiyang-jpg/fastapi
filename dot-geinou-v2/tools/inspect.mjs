@@ -2,12 +2,20 @@
 // Inspect one place end-to-end in a headless browser.
 //
 //   node tools/inspect.mjs <placeId> [--out DIR] [--agency yoshimoto] [--quick]
+//   node tools/inspect.mjs <placeId|towns> --doors [--out DIR]
 //
 // For every room it: screenshots the room, checks reachability of warps and
 // interactables from the arrival points, talks to every NPC / sign / action
 // event with the autopilot (exploring different first choices), steps on every
 // warp, and reports console errors, scripts that never finish, unreachable
 // things and the full dialogue log (DIR/<place>_dialog.txt).
+//
+// In a town it also checks every building door and town exit (regression): the
+// door cell must not be solid or covered, must be reachable, the spot in front of
+// the main door (where the player comes out) must be free, the door must lead to a
+// registered place, and no exit warp may sit on a solid tile.
+// --doors runs only these structural checks (no talking, no warping); 'towns'
+// checks every registered town.
 //
 // Requires a static server for the game (default http://localhost:8765/):
 //   python3 -m http.server 8765 --directory dot-geinou
@@ -17,16 +25,18 @@ import path from 'node:path';
 import { openGame, shotCanvas, PAGE_HELPERS } from './lib.mjs';
 
 const args = process.argv.slice(2);
-const pid = args[0];
-if (!pid) { console.error('usage: inspect.mjs <placeId> [--out DIR] [--agency ID] [--quick]'); process.exit(2); }
+const pidArg = args[0];
+if (!pidArg || pidArg.startsWith('--')) { console.error('usage: inspect.mjs <placeId|towns> [--out DIR] [--agency ID] [--quick] [--doors]'); process.exit(2); }
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const OUT = opt('--out', 'test-output');
 const AGENCY = opt('--agency', '');
 const QUICK = args.includes('--quick');
+const DOORS = args.includes('--doors');
 fs.mkdirSync(OUT, { recursive: true });
 
-const report = { place: pid, modes: [], errors: [], issues: [], screenshots: [] };
-const dialog = [];
+let pid = pidArg;
+let report = null;
+let dialog = [];
 
 async function runMode(mode) {
   const q = `?test=1&place=${pid}` + (mode.rich ? '&rich=1' : '') + (mode.agency ? `&agency=${mode.agency}` : '');
@@ -91,6 +101,30 @@ async function runMode(mode) {
         }
       }
       const reachable = (x, y) => seen.has(key(x, y));
+      // towns: building doors and exits (map.js buildingDoors / isDoor / doorIndexFor / exitPlace)
+      const doorIssues = [];
+      let doorCount = 0, exitCount = 0;
+      if (place.kind === 'town') {
+        const doorsOf = (b) => { if (b.doors) return b.doors; const d = b.door ?? Math.floor(b.w / 2); return b.kind === 'theater' || b.kind === 'station' ? [d - 1, d, d + 1] : [d]; };
+        const cellText = (x, y) => (m.inBounds(x, y) ? m.room.cells[y][x].join('+') : 'off the map');
+        for (const e of m.entities) {
+          if (e.type !== 'building' || !e.place || !m.visible(e)) continue;
+          if (!g.PLACES[e.place] && !e.enter) doorIssues.push(`door of ${e.place} at ${e.x},${e.y}: leads to a place that is not registered`);
+          for (const dx of doorsOf(e)) {
+            const x = e.x + dx, y = e.y + e.h - 1;
+            doorCount++;
+            if (m.tileSolid(x, y)) doorIssues.push(`door of ${e.place} at ${x},${y} is on a solid tile (${cellText(x, y)})`);
+            else if (m.blocked(x, y, null)) doorIssues.push(`door of ${e.place} at ${x},${y} is covered by an entity`);
+            else if (!reachable(x, y)) doorIssues.push(`door of ${e.place} at ${x},${y} cannot be reached`);
+          }
+          // the player comes out in front of the main door (doorIndexFor)
+          const fx = e.x + (e.door ?? Math.floor(e.w / 2)), fy = e.y + e.h;
+          if (m.tileSolid(fx, fy)) doorIssues.push(`the spot in front of ${e.place}'s door (${fx},${fy}), where the player comes out, is solid (${cellText(fx, fy)})`);
+          else if (m.blocked(fx, fy, null)) doorIssues.push(`the spot in front of ${e.place}'s door (${fx},${fy}), where the player comes out, is covered by an entity`);
+        }
+        exitCount = m.room.warps.length;
+        for (const w of m.room.warps) if (m.tileSolid(w.x, w.y)) doorIssues.push(`exit warp@${w.x},${w.y}->${w.to || (w.place || '') + '/' + (w.room || '')} is on a solid tile (${cellText(w.x, w.y)})`);
+      }
       const DIR = { '1,0': 'right', '-1,0': 'left', '0,1': 'down', '0,-1': 'up' };
       const standFor = (cells) => {
         for (const [tx, ty] of cells) {
@@ -122,7 +156,7 @@ async function runMode(mode) {
         else targets.push({ kind: 'step', idx: i, label: `event:step@${ev.x},${ev.y}`, stand: cells.find(([x, y]) => reachable(x, y)) ? { x: cells.find(([x, y]) => reachable(x, y))[0], y: cells.find(([x, y]) => reachable(x, y))[1], dir: 'down' } : null });
       });
       const warps = m.room.warps.map((w, i) => ({ idx: i, label: `warp@${w.x},${w.y}->${w.to || (w.place || '') + '/' + (w.room || '')}`, reachable: reachable(w.x, w.y), x: w.x, y: w.y }));
-      return { w: W, h: H, arrivals, badArrivals, targets, warps, reachableCount: seen.size, enterLog };
+      return { w: W, h: H, arrivals, badArrivals, targets, warps, reachableCount: seen.size, enterLog, doorIssues, doorCount, exitCount, town: place.kind === 'town' };
     }, { pid, roomId });
 
     if (mode.shots) report.screenshots.push(await shotCanvas(page, path.join(OUT, `${pid}_${roomId}.png`)));
@@ -135,6 +169,9 @@ async function runMode(mode) {
     for (const a of info.badArrivals) report.issues.push(`[${mode.name}] ${roomId}: arrival point ${a} is blocked`);
     for (const w of info.warps) if (!w.reachable) report.issues.push(`[${mode.name}] ${roomId}: ${w.label} is not reachable`);
     for (const t of info.targets) if (!t.stand) report.issues.push(`[${mode.name}] ${roomId}: ${t.label} cannot be reached/talked to`);
+    for (const d of info.doorIssues) report.issues.push(`[${mode.name}] ${roomId}: ${d}`);
+    if (info.town) { report.doorChecks = (report.doorChecks || 0) + 1; report.doorsChecked = (report.doorsChecked || 0) + info.doorCount; report.exitsChecked = (report.exitsChecked || 0) + info.exitCount; }
+    if (DOORS) continue; // structural checks only
 
     // ---- interactions
     for (const t of info.targets) {
@@ -233,20 +270,38 @@ async function runMode(mode) {
   await browser.close();
 }
 
-const modes = [{ name: 'fresh', rich: false, shots: true }];
+const modes = [{ name: 'fresh', rich: false, shots: !DOORS }];
 if (!QUICK) modes.push({ name: 'rich', rich: true, agency: AGENCY || undefined, shots: false });
-for (const m of modes) await runMode(m);
 
+// 'towns': every registered town (read from the game itself)
+let pids = [pidArg];
+if (pidArg === 'towns') {
+  const { browser, page } = await openGame('?test=1&place=tokyo');
+  pids = await page.evaluate(() => Object.values(window.__game.PLACES).filter((p) => p.kind === 'town').map((p) => p.id));
+  await browser.close();
+}
 const uniq = (a) => [...new Set(a)];
-report.errors = uniq(report.errors);
-report.issues = uniq(report.issues);
-fs.writeFileSync(path.join(OUT, `${pid}_report.json`), JSON.stringify(report, null, 2));
-fs.writeFileSync(path.join(OUT, `${pid}_dialog.txt`), dialog.join('\n'));
-console.log(`== inspect ${pid} ==`);
-console.log(`screenshots: ${report.screenshots.join(', ')}`);
-console.log(`dialogue log: ${path.join(OUT, `${pid}_dialog.txt`)}`);
-console.log(`errors (${report.errors.length}):`);
-for (const e of report.errors.slice(0, 60)) console.log('  ' + e.split('\n')[0]);
-console.log(`issues (${report.issues.length}):`);
-for (const e of report.issues.slice(0, 60)) console.log('  ' + e);
-process.exit(report.errors.length ? 1 : 0);
+let failed = false;
+for (const id of pids) {
+  pid = id;
+  report = { place: pid, modes: [], errors: [], issues: [], screenshots: [] };
+  dialog = [];
+  for (const m of modes) await runMode(m);
+  report.errors = uniq(report.errors);
+  report.issues = uniq(report.issues);
+  const suffix = DOORS ? '_doors' : '';
+  fs.writeFileSync(path.join(OUT, `${pid}${suffix}_report.json`), JSON.stringify(report, null, 2));
+  if (!DOORS) fs.writeFileSync(path.join(OUT, `${pid}_dialog.txt`), dialog.join('\n'));
+  console.log(`== inspect ${pid}${DOORS ? ' (doors and exits only)' : ''} ==`);
+  if (!DOORS) {
+    console.log(`screenshots: ${report.screenshots.join(', ')}`);
+    console.log(`dialogue log: ${path.join(OUT, `${pid}_dialog.txt`)}`);
+  }
+  if (report.doorChecks) console.log(`town doors and exits: ${report.doorsChecked} door cells and ${report.exitsChecked} exit cells checked (${report.doorChecks} room loads)`);
+  console.log(`errors (${report.errors.length}):`);
+  for (const e of report.errors.slice(0, 60)) console.log('  ' + e.split('\n')[0]);
+  console.log(`issues (${report.issues.length}):`);
+  for (const e of report.issues.slice(0, 60)) console.log('  ' + e);
+  if (report.errors.length || (DOORS && report.issues.length)) failed = true;
+}
+process.exit(failed ? 1 : 0);

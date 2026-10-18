@@ -158,6 +158,16 @@ function ctxOf(g) {
     guarded: num(d.guard) > day || (!!office && (pm || cabinet.length > 0)),
   };
 }
+// 口利き for money: the あっせん利得処罰法 from 2001-03 (crime.js 'assen'); before it, a word to an official
+// to favour one company is あっせん収賄 (刑法197条の4: 'assen_shuwai' once the justice core has it), else
+// the plain 収賄 entry.
+const BRIBE_IDS = ['bribery_take', 'assen', 'assen_shuwai'];
+function kuchikiCrime(g) {
+  const ok = (id) => { const C = CRIMES[id]; try { return !!C && (!C.exists || !!C.exists(g)); } catch (e) { return false; } };
+  if (ok('assen')) return 'assen';
+  if (ok('assen_shuwai')) return 'assen_shuwai';
+  return 'bribery_take';
+}
 // The part of the risk that comes with the player's position (fame, a seat, a cabinet post), not
 // with their choices.
 function posRisk(c) {
@@ -178,7 +188,7 @@ function riskOf(g, c = ctxOf(g)) {
   if (seenWithin(d, ['kumi'], day, 30)) r += 1;
   if (d.story.hanshaDeal && (recent(d.story.hanshaDeal) || c.heat.antisocial_ties)) r += 2;
   if (c.secret > 0) r += 1 + clamp(Math.log10(c.secret / 1e6 + 1) * 1.5, 0, 2);
-  if (d.story.bribe && (recent(d.story.bribe) || c.heat.bribery_take || c.heat.assen)) r += 2;
+  if (d.story.bribe && (recent(d.story.bribe) || BRIBE_IDS.some((id) => c.heat[id]))) r += 2;
   if (c.j && num(c.j.smoker) > 50) r += 0.5;
   r += posRisk(c);
   return Math.round(r * 10) / 10;
@@ -748,6 +758,15 @@ const stalkerLaw = (c) => c.year > 2000 || (c.year === 2000 && c.month >= 11);
 const directOrder = (c) => c.year > 2017 || (c.year === 2017 && c.month >= 6);
 
 // Regular shows on the days in hospital are put on hold (the shows wait; they are not "missed").
+// The note for a show the player misses in hospital, in words that fit the kind of work: a TV / radio
+// programme, a stage, an event, or the one-day fan meeting (career.js postpones it: fanMeetMorning).
+function excuseLine(id, r) {
+  const t = r.title;
+  if (id === 'career_fanmeet' || /ファンミーティング|ファン感謝祭/.test(String(t))) return `（『${t}』は、主催者の配慮で延期になった）`;
+  if (r.medium === 'stage') return `（『${t}』は、劇場の配慮で今週のステージはお休み扱いになった）`;
+  if (r.medium === 'event') return `（『${t}』は、主催者の配慮で今週のイベントはお休み扱いになった）`;
+  return `（『${t}』は、番組の配慮で今週はお休み扱いになった）`;
+}
 function excuseRegulars(g, notes) {
   const st = g.state;
   const wd = weekdayOf(st.day), wk = weekOf(st.day);
@@ -755,7 +774,7 @@ function excuseRegulars(g, notes) {
     const r = REGULARS[id], s = st.regulars[id];
     if (!r || !s || s.dropped || s.since == null || r.weekday !== wd || num(s.doneWeek) >= wk) continue;
     s.doneWeek = wk;
-    const m = `（『${r.title}』は、番組の配慮で今週はお休み扱いになった）`;
+    const m = excuseLine(id, r);
     if (!notes.includes(m)) notes.push(m);
   }
 }
@@ -1343,7 +1362,7 @@ const EV = {
         return { pick: 'take', caught: !!r.caught };
       }
       const amt = 500000;
-      const crime = CRIMES.assen && (!CRIMES.assen.exists || CRIMES.assen.exists(g)) ? 'assen' : 'bribery_take';
+      const crime = kuchikiCrime(g);
       const S = open('office', { title: '事務所', sub: '後援会の有力者が来た', who: LOOKS.oldman });
       await say(g, WHO.koenkai, ['いつも応援してるんだからさ。', '区の仕事が、うちの会社に回るよう、\n役所に口をきいてくれないか。お礼はするよ。']);
       const k = await ask(g, null, '（口利きの見返りにお金をもらうのは、犯罪だ）', ['口利きは断る', '引き受ける']);
@@ -1372,7 +1391,7 @@ const EV = {
         g.addNeed('stress', 10);
         return { pick: 'refuse' };
       }
-      const crime = CRIMES.assen && (!CRIMES.assen.exists || CRIMES.assen.exists(g)) ? 'assen' : 'bribery_take';
+      const crime = kuchikiCrime(g);
       const fee = 1000000;
       const r = await commit(g, crime, { amount: fee, request: true, gain: { money: fee }, where: '議員会館' });
       if (!r.caught) await narr(g, `（役所の幹部に電話を一本かけた。\n…数日後、「成功報酬」として${fmtMoney(fee)}が届いた）`);
@@ -1861,7 +1880,7 @@ function secretFromParty(c) {
 function naibuCrime(g, c) {
   if (c.secret > 0 && !caseOpen(g, 'slush_fund', true)) return 'slush_fund';
   if (!c.d.story.bribe || !c.heat) return null;
-  for (const id of ['bribery_take', 'assen']) if (c.heat[id] && !caseOpen(g, id, true)) return id;
+  for (const id of BRIBE_IDS) if (c.heat[id] && !caseOpen(g, id, true)) return id;
   return null;
 }
 // A politician at the center of a 反社 scandal decides whether to stay.
