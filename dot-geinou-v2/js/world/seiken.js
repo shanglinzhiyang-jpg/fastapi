@@ -187,7 +187,7 @@ const say = (g, lines, who) => g.say(lines, who ? { name: who } : {});
 function ministersLines(g, to, max = 3) {
   const list = (to.ministers || []).filter((m) => m.post !== 'pm');
   const mine = list.find((m) => m.who === 'player');
-  const pick = [list.find((m) => m.post === 'kanbo'), list.find((m) => m.post === 'minister_finance'), list.find((m) => m.post === 'minister_foreign'), mine].filter((m, i, a) => m && a.indexOf(m) === i).slice(0, max + (mine ? 1 : 0));
+  const pick = [list.find((m) => m.post === 'kanbo'), mine, list.find((m) => m.post === 'minister_finance'), list.find((m) => m.post === 'minister_foreign')].filter((m, i, a) => m && a.indexOf(m) === i).slice(0, max);
   return pick.map((m) => `${m.title}　${m.who === 'player' ? `${g.state.name}（あなた）` : m.name}`);
 }
 async function playNew(g, rec, full) {
@@ -219,7 +219,10 @@ async function playNew(g, rec, full) {
     S.set('kakugi', { title: '組閣', sub: '閣僚の名簿の発表' });
     const ml = ministersLines(g, to);
     await say(g, ['新しい官房長官が、閣僚の名簿を読み上げた。', ...(ml.length ? [ml.join('\n')] : []), '皇居での親任式・認証式を経て、新しい内閣が正式に発足した。']);
-    S.set('hinadan', { title: '記念撮影', sub: '官邸の階段', figs: (to.ministers || []).slice(0, 6).map((m, i) => ({ look: lookOf(g, m.who), x: 120 + (i % 3) * 140, y: i < 3 ? 70 : 150, s: 2 })).concat([{ look: lookOf(g, to.pm), x: SW / 2 - 32, y: 220 }]) });
+    const row = (to.ministers || []).filter((m) => m.post !== 'pm').slice(0, 9);
+    const top = row.slice(0, 5).map((m, i) => ({ look: lookOf(g, m.who), x: 104 + i * 92, y: 98, s: 1.5 }));
+    const low = row.slice(5, 9).map((m, i) => ({ look: lookOf(g, m.who), x: [130, 210, 382, 462][i], y: 172, s: 1.5 }));
+    S.set('hinadan', { title: '記念撮影', sub: '官邸の階段', figs: [...top, ...low, { look: lookOf(g, to.pm), x: SW / 2 - 32, y: 166, s: 2 }] });
     await say(g, ['新しい閣僚がそろって、官邸の階段で記念撮影。']);
     S.set('kaiken', { title: '総理大臣 記者会見', sub: '就任会見', figs: [{ look: lookOf(g, to.pm), x: SW / 2 - 32, y: 90 }] });
     if (to.pm === 'player') {
@@ -280,8 +283,8 @@ async function playDemo(g, demo, role) {
   if (!demo) return;
   const S = stage(g);
   try {
-    S.set('demo', { title: demo.stance === 'rally' ? '集会' : 'デモ', sub: demo.place, place: demo.place, sign: demo.stance === 'rally' ? '応援' : '反対', figs: role ? [{ look: (g.state && g.state.look) || LOOKS.player, x: SW / 2 - 32, y: 230 }] : [] });
-    const lines = [`${demo.place}。「${demo.cause}」に、約${num(demo.size).toLocaleString('ja-JP')}人が集まっている（主催：${demo.organiser}）。`];
+    S.set('demo', { title: demo.stance === 'rally' ? '集会' : 'デモ', sub: demo.place, place: demo.place, sign: demo.stance === 'rally' ? '応援' : '反対', figs: role ? [{ look: (g.state && g.state.look) || LOOKS.player, x: SW / 2 - 32, y: 168, dir: role === 'speaker' ? 'down' : 'up' }] : [] });
+    const lines = [`${demo.place}。${/^「/.test(demo.cause) ? demo.cause : `「${demo.cause}」`}に、約${num(demo.size).toLocaleString('ja-JP')}人が集まっている（主催：${demo.organiser}）。`];
     if (role === 'speaker') lines.push('マイクを握り、自分の言葉で思いを語った。拍手と、静かに見守る人たち。');
     else if (role) lines.push('プラカードを手に、列に加わった。');
     lines.push('警察が交通整理をする中、平和的に行われている（憲法21条：集会・表現の自由）。');

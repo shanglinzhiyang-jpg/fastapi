@@ -192,7 +192,7 @@ function emit(g, event, data) {
 // seg: support shift per +1 unit (the scale politics.js uses for law effects: -10..10 per law); eco: per +1 unit.
 export const TAXES = {
   shohi: {
-    id: 'shohi', name: '消費税', short: '消費税', unit: '%', step: 1, min: 0, max: 25, kind: '間接税（国税＋地方消費税）', owner: 'politics',
+    id: 'shohi', maxStep: 3, name: '消費税', short: '消費税', unit: '%', step: 1, min: 0, max: 25, kind: '間接税（国税＋地方消費税）', owner: 'politics',
     hist: [[1989, 4, 3], [1997, 4, 5, { law: 1994 }], [2014, 4, 8, { law: 2012 }], [2019, 10, 10, { law: 2012 }]], before: 0,
     law: '消費税法（1988年12月成立、1989年4月施行）',
     explain: (y) => (y < 1989 ? 'ものやサービスを買うときに広くかかる税（大型間接税）。いまの日本にはまだない。導入するかどうかが大きな争点になっている。'
@@ -203,7 +203,7 @@ export const TAXES = {
     eco: { growth: -0.12, inflation: 0.45 }, coef: 2.6,
   },
   shotoku: {
-    id: 'shotoku', name: '所得税（最高税率）', short: '所得税', unit: '%', step: 1, min: 10, max: 75, kind: '直接税（国税・累進課税）',
+    id: 'shotoku', maxStep: 15, name: '所得税（最高税率）', short: '所得税', unit: '%', step: 1, min: 10, max: 75, kind: '直接税（国税・累進課税）',
     hist: [[1984, 1, 70], [1987, 1, 60], [1989, 1, 50], [1999, 1, 37], [2007, 1, 40], [2015, 1, 45]],
     law: '所得税法', note: (y) => (y >= 2013 ? '2013年から2037年までは復興特別所得税（所得税額の2.1%）が上乗せされる' : ''),
     explain: '個人の所得にかかる国の税。所得が多いほど高い税率がかかる累進課税で、ここでは一番上の段階（最高税率）を扱う。',
@@ -213,7 +213,7 @@ export const TAXES = {
     eco: { growth: -0.006 }, coef: 0.10,
   },
   jumin: {
-    id: 'jumin', name: '住民税（所得割の最高税率）', short: '住民税', unit: '%', step: 1, min: 5, max: 20, kind: '地方税（都道府県民税＋市区町村民税）', local: true,
+    id: 'jumin', maxStep: 5, name: '住民税（所得割の最高税率）', short: '住民税', unit: '%', step: 1, min: 5, max: 20, kind: '地方税（都道府県民税＋市区町村民税）', local: true,
     hist: [[1986, 6, 18], [1988, 6, 16, { est: true }], [1989, 6, 15, { est: true }], [1999, 6, 13, { est: true }], [2007, 6, 10]],
     law: '地方税法', note: (y) => `${y >= 2007 ? '2007年度から10%の比例税率（道府県民税4%＋市町村民税6%）。' : ''}地方の財源なので、国の一般会計には入らない`,
     explain: (y) => `住んでいる都道府県と市区町村に納める税。税率は地方税法で決まる。${y < 1988 ? 'いまは14段階（最高18%）。' : y < 2007 ? '所得に応じた段階的な税率（累進）。' : '1987年度は14段階（最高18%）、平成18年度までは5・10・13%の3段階、2007年度からは一律10%。'}`,
@@ -223,7 +223,7 @@ export const TAXES = {
     eco: { growth: -0.02 }, coef: 0, localCoef: 1.2,
   },
   hojin: {
-    id: 'hojin', name: '法人税（基本税率）', short: '法人税', unit: '%', step: 0.1, min: 10, max: 50, kind: '直接税（国税）',
+    id: 'hojin', maxStep: 8, name: '法人税（基本税率）', short: '法人税', unit: '%', step: 0.1, min: 10, max: 50, kind: '直接税（国税）',
     hist: [[1984, 4, 43.3], [1987, 4, 42], [1989, 4, 40], [1990, 4, 37.5], [1998, 4, 34.5], [1999, 4, 30], [2012, 4, 25.5], [2015, 4, 23.9], [2016, 4, 23.4], [2018, 4, 23.2]],
     law: '法人税法', note: (y) => `中小法人の一定以下の所得には軽減税率がある。${y >= 2026 ? '2026年度から防衛特別法人税が上乗せされる' : ''}`,
     explain: '会社などの法人の所得（もうけ）にかかる国の税。ここでは普通法人の基本税率を扱う。',
@@ -233,7 +233,7 @@ export const TAXES = {
     eco: { growth: -0.03, nikkei: -0.8, unemployment: 0.02 }, coef: 0.5,
   },
   sozoku: {
-    id: 'sozoku', name: '相続税（最高税率）', short: '相続税', unit: '%', step: 1, min: 10, max: 80, kind: '直接税（国税）',
+    id: 'sozoku', maxStep: 20, name: '相続税（最高税率）', short: '相続税', unit: '%', step: 1, min: 10, max: 80, kind: '直接税（国税）',
     hist: [[1975, 1, 75], [1988, 1, 70], [2003, 1, 50], [2015, 1, 55]],
     law: '相続税法',
     explain: '亡くなった人から財産を受け継いだときにかかる税。財産が大きいほど税率が高い。',
@@ -243,7 +243,7 @@ export const TAXES = {
     eco: {}, coef: 0.05,
   },
   kihatsu: {
-    id: 'kihatsu', name: 'ガソリン税（揮発油税＋地方揮発油税）', short: 'ガソリン税', unit: '円/L', step: 0.1, min: 0, max: 80, kind: '間接税（国税）',
+    id: 'kihatsu', maxStep: 25.1, name: 'ガソリン税（揮発油税＋地方揮発油税）', short: 'ガソリン税', unit: '円/L', step: 0.1, min: 0, max: 80, kind: '間接税（国税）',
     hist: [[1974, 4, 34.5], [1976, 7, 43.1], [1979, 6, 53.8], [2008, 4, 28.7], [2008, 5, 53.8], [2026, 1, 28.7, { law: 2025 }]],
     law: '揮発油税法など（暫定税率は租税特別措置法）', note: (y) => (y >= 2026 ? '本則28.7円に上乗せされていた「暫定税率」25.1円は、2025年12月31日に廃止された' : '本則28.7円に、1974年からの「暫定税率」25.1円が上乗せされて53.8円'),
     explain: (y) => `ガソリン1リットルにかかる税。${y >= 2009 ? 'もとは道路を整備するための財源だった（2009年度から一般財源）。' : '道路を整備するための財源（道路特定財源）。'}`,
@@ -253,7 +253,7 @@ export const TAXES = {
     eco: { inflation: 0.006, growth: -0.002 }, coef: 0.06,
   },
   sake: {
-    id: 'sake', name: '酒税（ビール350ml缶あたり）', short: '酒税', unit: '円', step: 0.01, min: 0, max: 150, kind: '間接税（国税）',
+    id: 'sake', maxStep: 25, name: '酒税（ビール350ml缶あたり）', short: '酒税', unit: '円', step: 0.01, min: 0, max: 150, kind: '間接税（国税）',
     hist: [[1987, 1, 84, { est: true }], [1989, 4, 73, { est: true }], [1994, 5, 77], [2020, 10, 70, { law: 2017 }], [2023, 10, 63.35, { law: 2017 }], [2026, 10, 54.25, { law: 2017 }]],
     law: '酒税法', note: (y) => (y >= 2017 ? '2017年の改正で、ビール・発泡酒・新ジャンルの税は2026年10月に一本化（350mlあたり54.25円）' : ''),
     explain: (y) => `お酒にかかる税。ビールは昔から税が重い。${y >= 2017 ? '発泡酒などとの差をなくす改正が段階的に進められた。' : ''}`,
@@ -1000,8 +1000,8 @@ function taxLawEnacted(g, prm) {
     s.taxPlan.push({ id: it.id, rate: it.rate, year: at.year, month: at.month, law: d.year, by: prm.by || 'cabinet', why: prm.why || '税制改正', title: prm.title || '' });
   }
   const R = s.taxReform;
-  R.stage = 'enacted';
-  R.log.push({ day: today(g), text: '税制改正法案が成立した' });
+  if (!prm.urgent) R.stage = 'enacted';
+  R.log.push({ day: today(g), text: prm.urgent ? '臨時の税制改正法案が成立した' : '税制改正法案が成立した' });
   const lines = sched.map((it) => `${TAXES[it.id].short} ${it.rate}${TAXES[it.id].unit}（${dateText(inForceDate(g, it.year, it.month).year, inForceDate(g, it.year, it.month).month)}から）`);
   govtNews(g, s, `税制改正法案が成立。${lines.join('・')}`);
   emit(g, 'taxReform', { stage: 'enacted', schedule: sched });
@@ -1009,6 +1009,10 @@ function taxLawEnacted(g, prm) {
 // Apply the tax changes whose date has come.
 function taxInForce(g, s) {
   const now = nowYM(g);
+  // a 消費税 change made by the politics core (its laws, or a rate already set by law: taxPlan) joins the history
+  const sh = shohiRate(g);
+  if (s.lastShohi != null && sh !== s.lastShohi && pol(g)) { const d = gdate(g); s.taxHistory.unshift({ day: today(g), id: 'shohi', from: s.lastShohi, to: sh, why: '法律による改正', year: d.year, month: d.month }); }
+  s.lastShohi = sh;
   for (const it of s.taxPlan) {
     if (it.done || ym(it.year, it.month) > now) continue;
     it.done = today(g);
@@ -1048,7 +1052,7 @@ function applyTaxChange(g, s, id, rate, why, opts = {}) {
   const up = rate > before;
   const text = `${dateText(d.year, d.month)}から${T.name}が${before}${T.unit}→${rate}${T.unit}になった（${why}）`;
   govtNews(g, s, text, { phone: opts.phone && (id === 'shohi' || id === 'sake' || id === 'kihatsu') ? `【税金】${dateText(d.year, d.month)}から、${T.short}が${before}${T.unit}から${rate}${T.unit}になりました。` : false, from: 'ドット新聞 経済部' });
-  if (id === 'shohi' && p) ledgerAdd(g, s, 'tax', { mood: -(rate - before) * 0.8, text: `${T.short}の${up ? '引き上げ' : '引き下げ'}` });
+  if (id === 'shohi' && p) { s.lastShohi = rate; ledgerAdd(g, s, 'tax', { mood: -(rate - before) * 0.8, text: `${T.short}の${up ? '引き上げ' : '引き下げ'}` }); }
   addEvent(g, s, up ? 'tax_up' : 'tax_down', `${T.short} ${before}${T.unit}→${rate}${T.unit}`, { segs: scaleSegs(T.seg, rate - before) });
   emit(g, 'tax', { id, from: before, to: rate, why });
 }
@@ -1107,9 +1111,9 @@ function zeichoAccepts(g, s, id, rate) {
   if (redistributive && raise && econ > 0.5) conflict = 0.15 * econ;
   if (redistributive && !raise && econ < -0.5) conflict = 0.15 * -econ;
   if (id === 'shohi' && raise) conflict += 0.1;
-  const size = Math.abs(rate - before) / Math.max(1, Math.abs(before) * 0.25 || 1);
+  const size = Math.abs(rate - before) / Math.max(0.5, num(TAXES[id].maxStep, 5));
   const leader = pt && pt.leader === 'player';
-  let pr = 0.5 + (isPMg(p) ? 0.25 : financeMinister(p) ? 0.15 : 0.05) + num(p && p.me && p.me.standing) / 400 + num(s.taxReform.zeichoBonus) - conflict - Math.min(0.3, size * 0.1);
+  let pr = 0.5 + (isPMg(p) ? 0.25 : financeMinister(p) ? 0.15 : 0.05) + num(p && p.me && p.me.standing) / 400 + num(s.taxReform.zeichoBonus) - conflict - Math.min(0.35, size * 0.3);
   if (leader && pt.isPlayers) pr = 0.97;
   return Math.random() < clamp(pr, 0.08, 0.95);
 }
@@ -2274,6 +2278,7 @@ function generalVoices(g, s, n = 4) {
 // ================================================================ DEMOS
 const DEMO_SIZE = { small: [500, 3000], medium: [5000, 20000], large: [30000, 80000] };
 const ORGANISERS = (year) => ['市民団体（架空）', '労働組合の連合体（架空）', '学生のグループ（架空）', '子育て世代の会（架空）', ...(year >= 2010 ? ['SNSで呼びかけた有志'] : ['地域の住民の会（架空）'])];
+const qd = (c) => (/^「/.test(String(c)) ? String(c) : `「${c}」`);
 function demoLabel(def, against) {
   const C = DEMO_CAUSES[against] || DEMO_CAUSES.other;
   let cause = def.cause ? String(def.cause) : '';
@@ -2304,7 +2309,7 @@ function spawnDemoImpl(g, s, def = {}) {
   return d;
 }
 function demoStarted(g, s, d) {
-  govtNews(g, s, `${d.place}で「${d.cause}」（主催：${d.organiser}、約${d.size.toLocaleString('ja-JP')}人）`, { politics: d.size >= 3000 });
+  govtNews(g, s, `${d.place}で${qd(d.cause)}（主催：${d.organiser}、約${d.size.toLocaleString('ja-JP')}人）`, { politics: d.size >= 3000 });
   const segs = { [d.segment]: d.stance === 'rally' ? -0.5 : 1.5, floating: d.stance === 'rally' ? -0.3 : 0.3, business: -0.4 };
   addEvent(g, s, d.stance === 'rally' ? 'rally' : 'demo', d.cause, { segs, data: { title: d.cause } });
 }
@@ -2334,7 +2339,7 @@ function demoTick(g, s) {
       d.status = 'ended';
       d.ended = day;
       d.log.push({ day, text: `終わった（最大 約${d.peak.toLocaleString('ja-JP')}人）` });
-      if (d.peak >= 5000) govtNews(g, s, `「${d.cause}」は${d.place}などで続き、最大で約${d.peak.toLocaleString('ja-JP')}人が参加した（主催者発表をもとにした推計）`, { politics: d.peak >= 20000 });
+      if (d.peak >= 5000) govtNews(g, s, `${qd(d.cause)}は${d.place}などで続き、最大で約${d.peak.toLocaleString('ja-JP')}人が参加した（主催者発表をもとにした推計）`, { politics: d.peak >= 20000 });
       emit(g, 'demo', { stage: 'end', demo: d });
     }
   }
@@ -2389,7 +2394,7 @@ function joinDemoImpl(g, s, id, opts = {}) {
     try { if (typeof g.addFans === 'function') g.addFans(gain - lost, true); } catch (e) { /* */ }
     out.push(`スピーチが報じられた（知名度アップ。ファン ${gain >= lost ? '+' : ''}${gain - lost}人）`);
     if (fame >= 2000) { st.flags = st.flags || {}; st.flags.govtSponsorWorry = day; out.push('スポンサーや事務所からは「政治的な発言には気をつけて」と言われた'); }
-    addEvent(g, s, 'demo_celeb', `${st.name}さんが「${d.cause}」でスピーチ`, { n: 4 });
+    addEvent(g, s, 'demo_celeb', `${st.name}さんが${qd(d.cause)}でスピーチ`, { n: 4 });
   }
   if (p && p.me && p.me.party && p.me.office) {
     const ruling = isRulingParty(p, p.me.party);
@@ -2399,7 +2404,7 @@ function joinDemoImpl(g, s, id, opts = {}) {
   }
   try { if (typeof g.addNeed === 'function') g.addNeed('stress', -3); } catch (e) { /* */ }
   emit(g, 'demo', { stage: 'joined', demo: d, role });
-  return { ok: true, role, size: d.size, text: `${d.place}の「${d.cause}」に${role === 'speaker' ? 'スピーチで' : '一人の参加者として'}加わった（憲法21条：集会・表現の自由）。${out.join('。')}` };
+  return { ok: true, role, size: d.size, text: `${d.place}の${qd(d.cause)}に${role === 'speaker' ? 'スピーチで' : '一人の参加者として'}加わった（憲法21条：集会・表現の自由）。${out.join('。')}` };
 }
 function organizeDemoImpl(g, s, def = {}) {
   const st = g.state;
@@ -2416,7 +2421,7 @@ function organizeDemoImpl(g, s, def = {}) {
   const d = spawnDemoImpl(g, s, { ...def, against, size, start: day + 1, by: 'player', organiser: `${st.name}さんの呼びかけ`, permit: true });
   d.log.push({ day, text: '公安委員会に集団示威運動の許可を申請し、許可を得た（道路を使う日時・経路の条件つき）' });
   if (fame >= 2000) { st.flags = st.flags || {}; st.flags.govtSponsorWorry = day; }
-  return { ok: true, demo: d, text: `「${d.cause}」を呼びかけた。開催は${dLabel(g, d.start)}、場所は${d.place}。東京都の公安条例にもとづき公安委員会に許可を申請した（多くの県の条例では72時間前までの申請）。暴力や施設の占拠はしない、平和的な集会にする。` };
+  return { ok: true, demo: d, text: `${qd(d.cause)}を呼びかけた。開催は${dLabel(g, d.start)}、場所は${d.place}。東京都の公安条例にもとづき公安委員会に許可を申請した（多くの県の条例では72時間前までの申請）。暴力や施設の占拠はしない、平和的な集会にする。` };
 }
 function respondBlock(g, s, d, how) {
   const R = DEMO_RESPONSES[how];
@@ -2452,7 +2457,7 @@ Object.assign(DEMO_RESPONSES, {
       d.momentum = num(d.momentum, 1) * 0.8;
       shiftSupport(p, { [d.segment]: 1, floating: 0.5 }, 0.004);
       ledgerAdd(g, s, 'demo', { mood: demoPopularity(g, s, d) > 0 ? 1 : 0.3, text: 'デモの代表と面会' });
-      govtNews(g, s, `政府が「${d.cause}」の代表者と面会し、要望書を受け取った`);
+      govtNews(g, s, `政府が${qd(d.cause)}の代表者と面会し、要望書を受け取った`);
       return { text: '主催者の代表と面会し、要望を直接聞いた。すぐに答えは出せないが、「話を聞く政府」と受けとめる声もある。' };
     },
   },
@@ -2473,7 +2478,7 @@ Object.assign(DEMO_RESPONSES, {
       d.momentum = num(d.momentum, 1) * 0.85;
       d.size = Math.round(d.size * 0.9);
       ledgerAdd(g, s, 'demo', { mood: demoPopularity(g, s, d) > 0.2 ? -0.6 : 0, text: 'デモの規制' });
-      addEvent(g, s, 'demo', `「${d.cause}」への規制の強化`, { segs: { elderly: 0.5, business: 0.4, young: -0.6, urban: -0.4 }, n: 2 });
+      addEvent(g, s, 'demo', `${qd(d.cause)}への規制の強化`, { segs: { elderly: 0.5, business: 0.4, young: -0.6, urban: -0.4 }, n: 2 });
       return { text: '警察に、許可の条件の範囲で警備と交通規制を強めるよう要請した。「過剰な警備だ」との声も一部にある。' };
     },
   },
@@ -2485,8 +2490,8 @@ Object.assign(DEMO_RESPONSES, {
       d.momentum = num(d.momentum, 1) * 1.25;
       d.until += 2;
       ledgerAdd(g, s, 'demo', { mood: -rnd(4, 7), text: 'デモの強制排除への批判' });
-      govtNews(g, s, `「${d.cause}」の参加者の一部を警察が排除した。強引な対応だとして、政府への批判が広がっている`, { phone: true, head: 'デモ' });
-      addEvent(g, s, 'demo', `「${d.cause}」の強制排除`, { segs: { young: -2, urban: -1.5, floating: -1.5, elderly: 0.4, business: 0.3 } });
+      govtNews(g, s, `${qd(d.cause)}の参加者の一部を警察が排除した。強引な対応だとして、政府への批判が広がっている`, { phone: true, head: 'デモ' });
+      addEvent(g, s, 'demo', `${qd(d.cause)}の強制排除`, { segs: { young: -2, urban: -1.5, floating: -1.5, elderly: 0.4, business: 0.3 } });
       return { text: '座り込みの排除を求めた。現場は一時混乱し、「表現の自由への介入だ」という強い批判が起き、参加者はかえって増えている。' };
     },
   },
@@ -2679,9 +2684,24 @@ function onEnacted(g, s, d) {
       s.taxHistory.unshift({ day: today(g), id, from: r2(t.rate - dv), to: t.rate, why: L.title, year: yr.year, month: yr.month });
     }
   }
-  if (/^shohizei_/.test(L.policy)) {
-    s.taxHistory.unshift({ day: today(g), id: 'shohi', from: null, to: p ? p.economy.taxRate : null, why: L.title, year: yr.year, month: yr.month });
+  if (/^shohizei_/.test(L.policy) && p) {
     s.taxPlan = s.taxPlan.filter((x) => !(x.id === 'shohi' && !x.done));
+    const before = num(s.lastShohi, 0);
+    const after = num(p.economy.taxRate);
+    // a rise takes effect on the date the law sets, not on the day it passes: 導入 next April (1988-12 → 1989-04), a rise
+    // about 1.5-2 years later (2012-08 → 2014-04; 目安). The politics core's taxPlan carries a rise; our plan the 導入.
+    if (after > before && /^shohizei_(intro|up)$/.test(L.policy)) {
+      const intro = before <= 0;
+      const y = intro ? (yr.month >= 4 ? yr.year + 1 : yr.year) : (yr.month >= 7 ? yr.year + 2 : yr.year + 1);
+      p.economy.taxRate = before;
+      if (!intro && !(p.flags.taxPlan && !p.flags.taxPlan.done)) p.flags.taxPlan = { rate: after, year: y, month: 4, law: yr.year };
+      else s.taxPlan.push({ id: 'shohi', rate: after, year: y, month: 4, law: yr.year, by: 'law', why: L.title });
+      govtNews(g, s, `${L.title.replace(/に関する法律案$/, '')}：新しい税率${after}%は${y}年4月から（法律で定める日）`, { phone: `【消費税】新しい税率（${after}%）が適用されるのは${y}年4月からです（法律で定めた日）。それまでは${before ? `${before}%` : '消費税はかかりません'}。`, from: 'ドット新聞 経済部' });
+      s.taxHistory.unshift({ day: today(g), id: 'shohi', from: before, to: after, why: `${L.title}（成立。${y}年4月から）`, year: yr.year, month: yr.month, law: true });
+    } else {
+      s.taxHistory.unshift({ day: today(g), id: 'shohi', from: before, to: after, why: L.title, year: yr.year, month: yr.month });
+      s.lastShohi = after;
+    }
   }
   if (L.policy === 'postal_privatization' && !s.postal.law) {
     s.postal.law = { day: today(g), year: yr.year, month: yr.month };
@@ -2775,6 +2795,7 @@ function taxBlock(g, s, id, v, opts = {}) {
     const cur = rateNow(g, s, id);
     if (Math.abs(stepRate(id, val) - cur) < 1e-6) return `いまの税率（${cur}${T.unit}）と同じ`;
     if (s.taxPlan.some((x) => x.id === id && !x.done)) return `${T.short}は、すでに改正が決まって施行を待っている`;
+    if (Math.abs(stepRate(id, val) - cur) > num(T.maxStep, 99) + 1e-6) return `一度に変えられる幅は${T.maxStep}${T.unit}くらいまで（与党の税制調査会は段階的な見直しを求める）`;
     if (id === 'shohi') {
       const TP = p.flags && p.flags.taxPlan;
       if (TP && !TP.done) return `すでに決まっている（${TP.law}年の法律で、${TP.year}年${TP.month}月から${TP.rate}%）`;
@@ -2928,7 +2949,7 @@ function setTaxRateImpl(g, s, id, v, opts = {}) {
     if (!zeichoAccepts(g, s, id, val)) { R.rejected[id] = val; return { ok: false, why: '与党の税制調査会が了承しなかった（党内の理解が得られなかった）', stage: 'rejected' }; }
     const at = d.month >= 1 && d.month <= 3 ? { year: d.year, month: 4 } : { year: d.month === 12 ? d.year + 1 : d.year, month: d.month === 12 ? 1 : d.month + 1 };
     const schedule = [{ id, rate: val, year: at.year, month: at.month, player: true }];
-    const b = addCabinetBill(g, p, { title: `${T.short}の税率を改める法律案（臨時の税制改正）`, policy: 'zeisei_kaisei', params: { changes: { [id]: val }, from: { [id]: rateNow(g, s, id) }, schedule, why: '臨時の税制改正', year: at.year, title: '臨時の税制改正' }, ministry: 'minister_finance' });
+    const b = addCabinetBill(g, p, { title: `${T.short}の税率を改める法律案（臨時の税制改正）`, policy: 'zeisei_kaisei', params: { changes: { [id]: val }, from: { [id]: rateNow(g, s, id) }, schedule, why: '臨時の税制改正', year: at.year, title: '臨時の税制改正', urgent: true }, ministry: 'minister_finance' });
     R.urgent = b.id;
     govtNews(g, s, `内閣が臨時の税制改正法案（${T.short} ${rateNow(g, s, id)}→${val}${T.unit}）を国会に提出した`);
     emit(g, 'taxReform', { stage: 'urgent', billId: b.id, id, rate: val });
@@ -3006,7 +3027,7 @@ function setBudgetImpl(g, s, item, v) {
   const val = r2(num(v, NaN));
   if (!Number.isFinite(val)) return { ok: false, why: '金額（兆円）を数で' };
   const lo = it.abs ? it.min : pv * (1 + it.min), hi = it.abs ? it.max : pv * (1 + it.max);
-  if (val < lo - 1e-6 || val > hi + 1e-6) {
+  if (val < lo - 0.006 || val > hi + 0.006) {
     const reason = it.fixed === 'formula' ? '（地方交付税は国税の一定割合で決まる。大きく変えるには地方交付税法の改正がいる）' : it.fixed === 'entitlement' ? '（年金・医療などの給付は法律で決まっていて、自然増は削りきれない）' : '';
     return { ok: false, why: `${it.name}は${r2(lo)}〜${r2(hi)}兆円の範囲で${reason}` };
   }
@@ -3122,7 +3143,7 @@ const methods = {
     const why = budgetBlock(this, s);
     if (!why) alerts.push({ kind: 'budget', text: `${s.budget.draft.fy}年度予算の配分を決められる（12月下旬の閣議決定まで）` });
     for (const [id, K] of Object.entries(s.keyBills)) if (K.offer && !K.dissolved && today(this) - K.rejected <= 30) alerts.push({ kind: 'keyBill', id, text: `最重要法案「${K.title}」が参院で否決。衆議院を解散して信を問える` });
-    for (const d of s.demos.list) if (d.status === 'active' && p && (isPMg(p) || postOf(p, 'kanbo')) && !d.responses.length && d.stance === 'protest') alerts.push({ kind: 'demo', id: d.id, text: `「${d.cause}」（約${d.size.toLocaleString('ja-JP')}人）への政府の対応` });
+    for (const d of s.demos.list) if (d.status === 'active' && p && (isPMg(p) || postOf(p, 'kanbo')) && !d.responses.length && d.stance === 'protest') alerts.push({ kind: 'demo', id: d.id, text: `${qd(d.cause)}（約${d.size.toLocaleString('ja-JP')}人）への政府の対応` });
     for (const q of s.opposition.questions) if (q.answered && today(this) - q.answered <= 2) alerts.push({ kind: 'answer', id: q.id, text: `答弁書が届いた：「${q.title}」` });
     if (s.taxReform.stage === 'chosakai') alerts.push({ kind: 'taxReform', text: `与党の税制調査会が${s.taxReform.year}年度の税制改正を議論中（12月中旬に大綱）` });
     return {
