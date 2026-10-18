@@ -23,6 +23,9 @@ export const LOGOS = {
   horipro: { file: 'horipro.png', name: 'ホリプロ', bg: '#ffffff' },
   toho: { file: 'toho.png', name: '東宝', bg: '#ffffff', mark: [13, 0, 243, 242] },
   lawson: { file: 'lawson.png', name: 'ローソン', bg: '#ffffff' },
+  ntv: { file: 'ntv.png', name: '日本テレビ', bg: '#ffffff' },
+  tbs: { file: 'tbs.png', name: 'TBS', bg: '#ffffff' },
+  tvasahi: { file: 'tvasahi.png', name: 'テレビ朝日', bg: '#ffffff' },
 };
 
 const images = {};

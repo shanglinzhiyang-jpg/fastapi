@@ -16,6 +16,8 @@ export const MODULES = [
   './world/housing.js',
   './world/machi.js',
   './world/career.js',
+  './world/programs.js',
+  './world/minato.js',
   // companies / venues
   './places/yoshimoto.js',
   './places/shinkigeki.js',
@@ -26,6 +28,12 @@ export const MODULES = [
   './places/toei.js',
   './places/horipro.js',
   './places/toho.js',
+  './places/ntv.js',
+  './places/tbs.js',
+  './places/tvasahi.js',
+  './places/fujitv.js',
+  './places/tvtokyo.js',
+  './places/osaka_tv.js',
   // minigames
   './minigames/tsukkomi.js',
   './minigames/zukko.js',
