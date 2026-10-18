@@ -24,6 +24,8 @@ import {
 } from './state.js';
 import { installLife, REGULARS, SCRUFFY, ACTIVITY, showWords } from './life.js';
 import { eraOf, fullName, personalityMult } from './profile.js';
+import { installJustice } from './crime.js';
+import { installPolitics } from './politics.js';
 
 const RANK_MULT = { S: 1.5, A: 1.2, B: 1.0, C: 0.7, D: 0.4 };
 // A job's mood swing on top of ACTIVITY.job.stress: a great result lifts it, a bad one weighs.
@@ -1059,3 +1061,5 @@ export class Game {
 }
 
 installLife(Game.prototype);
+installJustice(Game.prototype);
+installPolitics(Game.prototype);

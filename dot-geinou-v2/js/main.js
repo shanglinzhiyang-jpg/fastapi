@@ -152,7 +152,8 @@ async function minigameLab(g, id) {
 
 async function debugMenu(g) {
   const ids = Object.keys(PLACES);
-  const i = await g.list({ title: 'デバッグ', items: ['場所へワープ', 'お金+10万', '知名度+500', 'スキル+20', '体力全快', '所属を変える'], x: 8, y: 8, w: 160 });
+  const i = await g.list({ title: 'デバッグ', items: ['場所へワープ', 'お金+10万', '知名度+500', 'スキル+20', '体力全快', '所属を変える', '政治（デバッグ）'], x: 8, y: 8, w: 160 });
+  if (i === 6 && typeof g.pol === 'function') { await politicsDebug(g); return; }
   const st = g.state;
   if (i === 0) {
     const j = await g.list({ title: 'ワープ先', items: ids, x: 8, y: 8, w: 200 });
@@ -166,6 +167,35 @@ async function debugMenu(g) {
     const j = await g.list({ title: '所属', items: ag.map((a) => (a ? AGENCIES[a].name : 'フリー')), x: 8, y: 8, w: 200 });
     if (j >= 0) st.agency = ag[j];
   }
+}
+
+// Politics debug (js/engine/politics.js): the text menu, a quick start as a politician,
+// fast-forwarding the political calendar, and a few events.
+async function politicsDebug(g) {
+  const items = ['政治メニュー', '30歳・資金1億円', '衆院議員にする（自民）', '総理大臣にする', '30日すすめる', '衆院を解散', '大地震（ショック）'];
+  const i = await g.list({ title: '政治（デバッグ）', items, x: 8, y: 8, w: 180 });
+  const st = g.state;
+  const p = g.pol();
+  if (i === 0) await g.politicsMenu();
+  else if (i === 1) { st.profile.age = Math.max(st.profile.age, 30 - Math.floor((st.day - 1) / 120)); g.addMoney(100000000); p.me.funds += 10000000; }
+  else if (i === 2) {
+    if (p.parties.jimin && p.me.party !== 'jimin') g.joinParty('jimin');
+    if (p.me.office !== 'shugi') { p.me.office = 'shugi'; p.me.district = '東京ドット区'; p.me.termEnd = st.day + 480; p.me.wins++; p.me.nationalWins += 3; p.me.standing = 80; p.diet.shugi.seats[p.me.party || 'ind'] = (p.diet.shugi.seats[p.me.party || 'ind'] || 0) + 1; p.diet.shugi.total++; }
+    g.notify('衆議院議員になった（デバッグ）', { color: '#fff' });
+  } else if (i === 3) {
+    const pt = p.parties[p.me.party];
+    if (pt && p.me.office) { pt.leader = 'player'; if (!p.me.posts.includes('party_leader')) p.me.posts.push('party_leader'); const r = g.electPM(); g.notify(`首班指名：${r.name}`, { color: '#fff' }); }
+    else g.notify('先に「衆院議員にする」', { color: '#fff' });
+  } else if (i === 4) {
+    for (let k = 0; k < 30; k++) { st.day++; await g.politicsTick(); }
+    g.notify(`${g.polDate().label} になった`, { color: '#fff' });
+  } else if (i === 5) {
+    const was = p.cabinet.pm;
+    p.cabinet.pm = 'player';
+    const id = g.dissolve('デバッグ');
+    p.cabinet.pm = was;
+    g.notify(id ? '衆議院を解散した' : g.lastPoliticsError, { color: '#fff' });
+  } else if (i === 6) g.triggerShock('quake');
 }
 
 // Touch devices: block what CSS (touch-action / user-select) cannot. iOS Safari
