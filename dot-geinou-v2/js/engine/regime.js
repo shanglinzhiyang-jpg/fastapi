@@ -297,12 +297,20 @@ function isRealParty(p, id) {
 }
 function partyName(p, id) { const pt = p && p.parties && p.parties[id]; return (pt && pt.name) || (POL && POL.PARTY_DEFS && POL.PARTY_DEFS[id] && POL.PARTY_DEFS[id].name) || id; }
 // Cabinet approval: an immediate change (and a lasting modifier read by the weekly poll hook).
-function bumpApproval(g, d, lasting = 0) {
+// reason: 'disaster' | 'regime' (govt.js g.approvalNote labels the breakdown 災害への対応 / 体制・安全保障など).
+function bumpApproval(g, d, lasting = 0, reason = 'regime', text = '') {
   const p = pol(g);
   const r = R(g);
   if (lasting) r.approvalMod = clamp(r.approvalMod + lasting, -40, 15);
   if (!p || !p.cabinet) return;
-  p.cabinet.approval = clamp(num(p.cabinet.approval, 40) + d, 3, 90);
+  const before = num(p.cabinet.approval, 40);
+  p.cabinet.approval = clamp(before + d, 3, 90);
+  noteApproval(g, reason, p.cabinet.approval - before, text);
+}
+// Record an approval change already applied, so govt.js's breakdown shows it under its reason (feature-detected).
+function noteApproval(g, reason, delta, text) {
+  if (!delta || typeof g.approvalNote !== 'function') return;
+  try { g.approvalNote(reason, Math.round(delta * 100) / 100, text || (reason === 'disaster' ? '災害への対応' : '体制・安全保障'), { applied: true }); } catch (e) { console.error(e); }
 }
 const approvalOf = (g) => { const p = pol(g); return p && p.cabinet ? num(p.cabinet.approval, 40) : 40; };
 // Members of the player's party leave over a step (造反・離党). Seats move to 無所属.
@@ -419,7 +427,7 @@ function realPartnersLeave(g, what) {
 function backlash(g, step, size, opts = {}) {
   const r = R(g);
   const demo = r.id === 'democracy';
-  bumpApproval(g, -(3 + size * 3) * (demo ? 1 : 0.6), -(1 + size * 1.5));
+  bumpApproval(g, -(3 + size * 3) * (demo ? 1 : 0.6), -(1 + size * 1.5), 'regime', step);
   r.unrest = clamp(r.unrest + size * (demo ? 2 : 3) + (opts.unrest || 0), 0, 100);
   raiseIntl(g, size * (demo ? 2 : 4) + (opts.intl || 0), step);
   if (opts.defect !== false && r.id !== 'dictatorship') defect(g, (partyOf(g) && partyOf(g).own ? 0.02 : 0.05) * size, step);
@@ -682,7 +690,7 @@ export const REGIME_STEPS = {
     run(g) {
       const r = R(g);
       restoreDemocracy(g, '緊急事態の解除');
-      bumpApproval(g, 4, 3);
+      bumpApproval(g, 4, 3, 'regime', '緊急事態の解除');
       r.unrest = Math.max(0, r.unrest - 15);
       r.intl = Math.max(0, r.intl - 10);
       return { ok: true, text: '緊急事態を解除した。選挙と国会は元に戻る。' };
@@ -766,7 +774,7 @@ function runReferendum(g) {
     r.steps.clauseDay = today(g);
     raiseIntl(g, 8, '強権型の緊急事態条項');
   } else {
-    bumpApproval(g, -6, -3);
+    bumpApproval(g, -6, -3, 'regime', '国民投票での否決');
   }
   queueScene(g, 'referendum', { yes: A.result.yes, passed, turnout, bySeg });
   emit(g, 'step', { kind: 'referendum', passed });
@@ -799,7 +807,7 @@ function answerCourt(g, step, comply) {
     if (step === 'ban_opposition') r.steps.opposition = false;
     if (step === 'sns_bill') { r.press.bill = null; r.press.offset += 6; }
     if (step === 'censor') r.steps.censor = false;
-    bumpApproval(g, 2, 1);
+    bumpApproval(g, 2, 1, 'regime', '最高裁判決に従った');
     r.unrest = Math.max(0, r.unrest - 6);
     news(g, `政府は最高裁の判決に従い、「${{ suspend_elections: '選挙の停止', suspend_diet: '国会の停止', ban_opposition: '野党の禁止', sns_bill: '規制法', censor: '検閲' }[step] || step}」を取り消した`);
     return '判決に従った。';
@@ -849,7 +857,7 @@ export const PRESS_ACTIONS = {
     desc: '国会で、放送局が政治的公平（放送法4条）に反すれば電波法76条で電波を止めることもありうる、と言及する。',
     run(g) {
       press(g, -6, '電波停止への言及');
-      bumpApproval(g, -3, -1);
+      bumpApproval(g, -3, -1, 'regime', '電波停止への言及');
       const me = meOf(g);
       if (me) me.standing = clamp(num(me.standing) - 4, 0, 100);
       news(g, `${g.state.name}${isPM(g) ? '総理' : '大臣'}が国会で「電波停止」に言及。放送界や弁護士会から「表現の自由への威嚇だ」と抗議`);
@@ -862,7 +870,7 @@ export const PRESS_ACTIONS = {
     desc: '記者会見で、批判的な記者の質問を受けつけないようにする。',
     run(g) {
       press(g, -4, '記者の排除');
-      bumpApproval(g, -2, -1);
+      bumpApproval(g, -2, -1, 'regime', '記者の排除');
       news(g, '首相官邸の記者会見で特定の記者の質問が打ち切られ、記者クラブが抗議文を出した');
       return '批判的な記者の質問を受けつけないようにした。記者クラブが抗議している。';
     },
@@ -872,9 +880,9 @@ export const PRESS_ACTIONS = {
     desc: '政権に批判的な番組について、放送局の幹部に「公平な報道」を求める文書を送る。',
     run(g) {
       press(g, -7, '放送局への圧力');
-      bumpApproval(g, -2, -1);
+      bumpApproval(g, -2, -1, 'regime', '放送局への圧力');
       if (roll(0.5)) {
-        bumpApproval(g, -5, -2);
+        bumpApproval(g, -5, -2, 'regime', '放送局への要請文書の発覚');
         news(g, `放送局への「要請文書」が明らかに。${g.state.name}政権に「報道への介入だ」と批判が集まる`);
         defect(g, 0.02, '報道への圧力');
         spawnDemo(g, { cause: '報道への介入', size: 'medium', segment: 'urban', against: 'speech' });
@@ -889,7 +897,7 @@ export const PRESS_ACTIONS = {
     desc: '政府の文書の開示請求を、理由を示さずに拒む。',
     run(g) {
       press(g, -3, '情報公開の拒否');
-      bumpApproval(g, -1, -1);
+      bumpApproval(g, -1, -1, 'regime', '情報公開の拒否');
       if (since(g, 2001, 4)) {
         courtChallenge(g, 'disclosure', '文書の不開示');
         news(g, '政府が文書の開示を拒否。市民団体が情報公開法にもとづき不開示の取り消しを求めて提訴');
@@ -906,7 +914,7 @@ export const PRESS_ACTIONS = {
     run(g) {
       const r = R(g);
       press(g, -10, '言論規制法案');
-      bumpApproval(g, -8, -3);
+      bumpApproval(g, -8, -3, 'regime', '言論規制法案');
       defect(g, 0.04, '言論規制法案');
       spawnDemo(g, { cause: '言論規制法案', size: 'large', segment: 'young', against: 'speech' });
       const p = pol(g);
@@ -1089,7 +1097,7 @@ export const SDF_ORDERS = {
       const r = R(g), h = r.sdf.haken;
       const early = r.disaster && r.disaster.phase === 'hinan';
       r.sdf.haken = null;
-      if (early) { bumpApproval(g, -4, -1); news(g, `${h.where}から自衛隊が撤収。被災地からは「早すぎる」との声`); }
+      if (early) { bumpApproval(g, -4, -1, 'disaster', '自衛隊の早すぎる撤収'); news(g, `${h.where}から自衛隊が撤収。被災地からは「早すぎる」との声`); }
       else news(g, `${h.where}での災害派遣を終え、自衛隊が撤収した`);
       return { ok: true, text: early ? '撤収させたが、避難生活が続くなかで「早すぎる」と批判された。' : '撤収させた。' };
     },
@@ -1111,7 +1119,7 @@ export const SDF_ORDERS = {
       r.sdf.pkoOffer = null;
       const dep = { id: 'pko' + today(g), kind: 'pko', where: o.where, mission: o.mission, personnel: o.personnel, start: today(g), end: today(g) + YEAR_DAYS };
       r.sdf.deployments.push(dep);
-      bumpApproval(g, 1);
+      bumpApproval(g, 1, 0, 'regime', 'PKOへの派遣');
       news(g, `政府は${o.mission}への自衛隊の派遣（約${n0(o.personnel)}人）を閣議決定した（PKO参加5原則）`);
       queueScene(g, 'pko', { where: o.where, mission: o.mission, personnel: o.personnel });
       emit(g, 'sdf', { kind: 'pko', dep });
@@ -1141,7 +1149,7 @@ export const SDF_ORDERS = {
       k.done = 'kaijo';
       const ok = roll(0.75);
       news(g, `${FICTIONAL_NATIONS[k.nation].short}籍とみられる不審船に海上警備行動が発令された（自衛隊法82条）。${ok ? '不審船は領海の外へ去った' : '不審船は見失われた'}`);
-      bumpApproval(g, ok ? 2 : -1);
+      bumpApproval(g, ok ? 2 : -1, 0, 'regime', '海上警備行動');
       return { ok: true, text: ok ? '海上警備行動を発令した。不審船は領海の外へ去った。' : '海上警備行動を発令したが、不審船は見失われた。' };
     },
   },
@@ -1181,7 +1189,7 @@ function dispatchSDF(g, d, by) {
   d.done.haken = today(g);
   d.log.push({ day: today(g), text: `自衛隊の災害派遣（約${n0(personnel)}人）` });
   const quick = today(g) - d.start <= 1;
-  if (by === 'pm' || by === 'defmin') bumpApproval(g, quick ? 3 : 1);
+  if (by === 'pm' || by === 'defmin') bumpApproval(g, quick ? 3 : 1, 0, 'disaster', '自衛隊の災害派遣');
   news(g, `${d.name}で自衛隊の災害派遣。約${n0(personnel)}人が救助・物資輸送にあたる（自衛隊法83条）`);
   emit(g, 'sdf', { kind: 'haken', personnel });
   return `自衛隊の部隊（約${n0(personnel)}人）が被災地に向かった。救助と物資の輸送にあたる。`;
@@ -1305,7 +1313,7 @@ export const DISASTER_ACTIONS = {
       d.done.honbu = today(g);
       const quick = today(g) - d.start <= 0;
       d.score += quick ? 2 : 0;
-      bumpApproval(g, quick ? 2 : 0);
+      bumpApproval(g, quick ? 2 : 0, 0, 'disaster', '非常災害対策本部の設置');
       d.log.push({ day: today(g), text: `非常災害対策本部（本部長：${honbuChief(g, 'hijo')}）` });
       news(g, `政府が${d.name}の非常災害対策本部を設置（本部長：${honbuChief(g, 'hijo')}）`);
       return `非常災害対策本部を設置した（本部長：${honbuChief(g, 'hijo')}）。各省庁の応急対策をまとめる。`;
@@ -1324,7 +1332,7 @@ export const DISASTER_ACTIONS = {
       d.done.honbu = today(g);
       const quick = today(g) - d.start <= 0;
       d.score += quick ? 3 : 1;
-      bumpApproval(g, quick ? 4 : 1);
+      bumpApproval(g, quick ? 4 : 1, 0, 'disaster', '緊急災害対策本部の設置');
       d.log.push({ day: today(g), text: '緊急災害対策本部（本部長：内閣総理大臣）' });
       news(g, `政府が${d.name}の緊急災害対策本部を設置（本部長：内閣総理大臣、全閣僚が本部員）`);
       return '閣議決定で緊急災害対策本部を設置した。本部長として、全閣僚に応急対策を指示した。';
@@ -1337,7 +1345,7 @@ export const DISASTER_ACTIONS = {
     run(g, d) {
       d.done.fukoku = today(g);
       d.score += 1;
-      bumpApproval(g, 1);
+      bumpApproval(g, 1, 0, 'disaster', '災害緊急事態の布告');
       if (d.honbu !== 'kinkyu') { d.honbu = 'kinkyu'; d.done.honbu = d.done.honbu || today(g); }
       news(g, `政府が${d.name}について災害緊急事態を布告した（災害対策基本法105条）`);
       return '閣議にかけて、災害緊急事態を布告した。緊急災害対策本部のもとで、生活必需品の買い占めや値上がりを抑える準備に入った。';
@@ -1411,8 +1419,8 @@ export const DISASTER_ACTIONS = {
       d.done.shisatsu = today(g);
       g.state.stamina = Math.max(0, num(g.state.stamina) - 20);
       const early = today(g) - d.start <= 1 && d.tier >= 2;
-      if (early) { bumpApproval(g, -2); news(g, `${g.state.name}氏が${d.name}の被災地を視察。「救助の最中に」と批判も`); return '被災地を視察したが、救助活動の最中だったため「現場の負担になる」と批判された。'; }
-      bumpApproval(g, 1);
+      if (early) { bumpApproval(g, -2, 0, 'disaster', '救助の最中の視察'); news(g, `${g.state.name}氏が${d.name}の被災地を視察。「救助の最中に」と批判も`); return '被災地を視察したが、救助活動の最中だったため「現場の負担になる」と批判された。'; }
+      bumpApproval(g, 1, 0, 'disaster', '被災地の視察');
       const me = meOf(g);
       if (me) me.reputation = clamp(num(me.reputation) + 3, -100, 100);
       news(g, `${g.state.name}氏が${d.name}の被災地を視察し、被災者の声を聞いた`);
@@ -1426,7 +1434,7 @@ export const DISASTER_ACTIONS = {
     run(g, d) {
       d.done.gekijin = today(g);
       d.score += 2;
-      bumpApproval(g, 2);
+      bumpApproval(g, 2, 0, 'disaster', '激甚災害の指定');
       news(g, `政府は${d.name}を激甚災害に指定する政令を閣議決定した（本激）`);
       queueScene(g, 'cabinet', { what: 'gekijin' }, { front: true });
       return '激甚災害の指定を閣議決定した。復旧事業の国の補助がかさ上げされる。';
@@ -1470,7 +1478,7 @@ export const DISASTER_ACTIONS = {
     run(g, d) {
       d.done.plan = today(g);
       d.score += 2;
-      bumpApproval(g, 2);
+      bumpApproval(g, 2, 0, 'disaster', '復興の基本方針');
       news(g, `政府が${d.name}からの復興の基本方針を閣議決定した`);
       queueScene(g, 'fukko', {}, { front: true });
       return '復興の基本方針を閣議決定した。住まいと仕事、道路や学校の再建に予算を集める。';
@@ -1561,7 +1569,7 @@ function npcDisaster(g, d) {
     if (days >= 0) { d.done.request = today(g); dispatchSDF(g, d, 'npc'); }
   }
   // the player is the one who decides, but did not: a nudge (and the cost of waiting)
-  if (roles.includes('pm') && d.tier >= 2 && !d.honbu && days >= 1 && !d.flags_honbuLate) { d.flags_honbuLate = true; bumpApproval(g, -4); news(g, `${d.name}で政府の対策本部の設置が遅れていると批判が出ている`); }
+  if (roles.includes('pm') && d.tier >= 2 && !d.honbu && days >= 1 && !d.flags_honbuLate) { d.flags_honbuLate = true; bumpApproval(g, -4, 0, 'disaster', '対策本部の設置の遅れ'); news(g, `${d.name}で政府の対策本部の設置が遅れていると批判が出ている`); }
   if (roles.includes('chiji') && d.home && !d.done.haken && days >= 1 && !d.flags_reqLate) { d.flags_reqLate = true; const me = meOf(g); if (me) me.reputation = clamp(num(me.reputation) - 4, -100, 100); news(g, '東京都の自衛隊への派遣要請が遅れたとの指摘'); }
   if (!d.done.gekijin && d.tier >= 2 && days >= rint(6, 12) && !roles.includes('pm')) { d.done.gekijin = today(g); news(g, `政府は${d.name}を激甚災害に指定した（政令・閣議決定）`); }
   if (!d.done.hosei && d.tier >= 2 && days >= 10 && !roles.includes('pm') && !roles.includes('finmin')) {
@@ -1596,7 +1604,7 @@ function disasterTick(g) {
     if (d.phase === 'fukko' && d.tier >= 2) queueScene(g, 'disaster', { phase: 'fukko' });
     if (d.phase === 'done') {
       const evalText = d.tier >= 2 && roleOf(g).includes('pm') ? (d.score >= 7 ? '政府の対応は、おおむね評価された' : d.score >= 4 ? '政府の対応には、評価と批判が相半ばした' : '政府の対応の遅れが批判された') : '';
-      if (evalText) bumpApproval(g, d.score >= 7 ? 3 : d.score >= 4 ? 0 : -4);
+      if (evalText) bumpApproval(g, d.score >= 7 ? 3 : d.score >= 4 ? 0 : -4, 0, 'disaster', '災害対応の評価');
       r.disasters.unshift({ id: d.id, name: d.name, kind: d.kind, tier: d.tier, start: d.start, end: today(g), dead: d.plan.dead, missing: d.plan.missing, evac: d.plan.evac, score: d.score, donated: num(d.donated), raised: num(d.raised) });
       if (r.disasters.length > 20) r.disasters.length = 20;
       news(g, `${d.name}の被災地で、避難所がすべて閉じられた${evalText ? `。${evalText}` : ''}`);
@@ -1713,7 +1721,7 @@ function warOrder(g, kind, opts = {}) {
     fictionNotice(g);
     raiseIntl(g, 25, `${FICTIONAL_NATIONS[target].name}への宣戦`);
     r.unrest = clamp(r.unrest + 8, 0, 100);
-    bumpApproval(g, -6, -4);
+    bumpApproval(g, -6, -4, 'regime', '宣戦（もしも）');
     ecoShock(g, '戦争', { growth: -2.5, inflation: 2.5, yen: 15, len: 360, nikkei: -12 });
     news(g, `【もしも】政府は${DISPUTED_AREA.name}をめぐり、${FICTIONAL_NATIONS[target].name}（架空の国）に宣戦した`);
     spawnDemo(g, { label: '戦争に反対するデモ', size: 'large', segment: 'young', against: 'war' });
@@ -2235,8 +2243,10 @@ function hookPolitics() {
       const r = R(g);
       const p = pol(g);
       if (!p || !r.approvalMod) return;
-      p.cabinet.approval = clamp(num(p.cabinet.approval) + r.approvalMod * 0.4, 3, 90);
+      const before = num(p.cabinet.approval);
+      p.cabinet.approval = clamp(before + r.approvalMod * 0.4, 3, 90);
       if (poll) poll.approval = Math.round(p.cabinet.approval * 10) / 10;
+      noteApproval(g, 'regime', p.cabinet.approval - before, '体制の変化の影響（つづいている）');
     } catch (e) { console.error(e); }
   });
   POL.onPolitics('enacted', (g, info) => {
@@ -2275,7 +2285,7 @@ function extendDemoResponses() {
       r.unrest = clamp(r.unrest + 18, 0, 100);
       raiseIntl(g, 15, 'デモの弾圧');
       press(g, -5, 'デモの弾圧');
-      bumpApproval(g, -8, -4);
+      bumpApproval(g, -8, -4, 'regime', 'デモの弾圧（もしも）');
       r.record.steps.push({ day: today(g), step: 'デモの弾圧' });
       news(g, '【もしも】治安部隊がデモを強制的に解散させた。多数のけが人と拘束者が出たと伝えられる。各国が強く非難している');
       return { ok: true, text: '治安部隊がデモを解散させた。国内外の怒りは、かえって大きくなった。' };
