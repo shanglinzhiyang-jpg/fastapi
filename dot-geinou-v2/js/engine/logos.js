@@ -26,6 +26,8 @@ export const LOGOS = {
   ntv: { file: 'ntv.png', name: '日本テレビ', bg: '#ffffff' },
   tbs: { file: 'tbs.png', name: 'TBS', bg: '#ffffff' },
   tvasahi: { file: 'tvasahi.png', name: 'テレビ朝日', bg: '#ffffff' },
+  jimin: { file: 'jimin.png', name: '自由民主党', bg: '#ffffff' },
+  minshu: { file: 'minshu.png', name: '民主党', bg: '#ffffff' },
 };
 
 const images = {};

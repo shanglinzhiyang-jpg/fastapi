@@ -18,6 +18,10 @@ export const MODULES = [
   './world/career.js',
   './world/programs.js',
   './world/minato.js',
+  './engine/politics_ui.js',
+  './world/nagatacho.js',
+  './world/kanraku.js',
+  './world/darkside.js',
   // companies / venues
   './places/yoshimoto.js',
   './places/shinkigeki.js',
@@ -34,6 +38,11 @@ export const MODULES = [
   './places/fujitv.js',
   './places/tvtokyo.js',
   './places/osaka_tv.js',
+  './places/kokkai.js',
+  './places/kantei.js',
+  './places/parties.js',
+  './places/kuyakusho.js',
+  './places/justice.js',
   // minigames
   './minigames/tsukkomi.js',
   './minigames/zukko.js',
