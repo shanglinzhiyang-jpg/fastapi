@@ -2719,7 +2719,8 @@ function partyStance(p, partyId, bill) {
     if (bloc[partyId] == null) bloc[partyId] = Math.random() < 1 / (1 + Math.exp(-(al - 0.64) * 18)) ? 1 : 0;
     return bloc[partyId] ? 0.93 : 0.04;
   }
-  if (bill.sponsor === 'cabinet') return clamp(0.93 + al * 0.07, 0, 1);
+  // ext (hook for govt.js, A1): bill.rebel { partyId: share } = members of a ruling party voting against a divisive cabinet bill (造反)
+  if (bill.sponsor === 'cabinet') return clamp(0.93 + al * 0.07 - num(bill.rebel && bill.rebel[partyId]), 0, 1);
   if (bill.party === partyId) return 0.97;
   if (bill.kind === 'amendment') return al >= 0.6 ? 0.95 : al >= 0.5 ? 0.4 : 0.03;
   if (ruling) return al >= 0.75 ? 0.9 : al >= 0.6 ? 0.45 : 0.05;
@@ -3308,14 +3309,18 @@ function weeklyPoll(g, p) {
   const eco = 2.5 * (E.growth - T.growth) - 2.0 * Math.max(0, E.inflation - 2.5) - 3 * (E.unemployment - T.unemployment);
   const fatigue = -Math.min(14, days / 40);
   const deficit = -clamp(deficitRatio(E) - 9, 0, 10) * 0.4; // 「ばらまき」批判 when the deficit balloons
-  const target = 38 + honey + eco + num(C.mood) + num(C.scandal) + fatigue + deficit + pmQuality(g, p) + (p.flags.nejire ? -2 : 0);
+  const pmq = pmQuality(g, p);
+  const target = 38 + honey + eco + num(C.mood) + num(C.scandal) + fatigue + deficit + pmq + (p.flags.nejire ? -2 : 0);
+  // ext (hook for govt.js, A1): the parts of this week's target, read by g.approvalBreakdown()
+  const r1 = (v) => Math.round(num(v) * 10) / 10;
+  C.parts = { base: 38, honeymoon: r1(honey), economy: r1(eco), policy: r1(C.mood), scandal: r1(C.scandal), fatigue: r1(fatigue), deficit: r1(deficit), pm: r1(pmq), nejire: p.flags.nejire ? -2 : 0, target: r1(target) };
   C.approval = clamp(num(C.approval, 45) * 0.6 + target * 0.4 + gauss() * 2.5, 3, 90);
   C.mood = num(C.mood) * 0.85;
   C.scandal = num(C.scandal) * 0.8;
   const support = {};
   for (const id of Object.keys(p.parties)) support[id] = Math.round(natSupport(p, id, fy) * 1000) / 10;
   const none = Math.round(SEGMENT_ORDER.reduce((a, s) => a + segWeights(Math.floor(fy))[s] * num(p.opinion[s] && p.opinion[s].none), 0) * 1000) / 10;
-  const poll = { day, approval: Math.round(C.approval * 10) / 10, support, none };
+  const poll = { day, approval: Math.round(C.approval * 10) / 10, support, none, parts: { ...C.parts } };
   p.polls.push(poll);
   if (p.polls.length > 60) p.polls.splice(0, p.polls.length - 60);
   C.lowWeeks = C.approval < 20 ? num(C.lowWeeks) + 1 : 0;
@@ -3998,6 +4003,10 @@ function sendElectionNotices(g, p, notices, reminders) {
   }
   phoneNews(g, parts.join('\n\n'), 'ドット区 選挙管理委員会');
 }
+// ext (regime.js, 体制): g.regimeHold('diet') → true while the Diet is suspended (国会の停止: no session
+// opens); g.regimeHold('election', e, day) → true while elections are suspended (選挙の停止: the hook moves
+// e.day / e.koji later and the election is skipped today). Without regime.js both are false.
+const regimeHold = (g, kind, ...a) => { try { return typeof g.regimeHold === 'function' && !!g.regimeHold(kind, ...a); } catch (e) { console.error(e); return false; } };
 function tickDay(g, p, day, abs) {
   const fy = fyOfAbs(p, abs);
   const year = yearOfAbs(p, abs);
@@ -4040,8 +4049,8 @@ function tickDay(g, p, day, abs) {
     if ([30, 60, 90, 110].includes(mDoy)) for (const pt of Object.values(p.parties)) if (pt.subsidy > 0) pt.funds = num(pt.funds) + Math.round(pt.subsidy / 4);
     payday(g, p, mDoy, yearOfAbs(p, mAbs));
   }
-  // --- sessions
-  const S = p.diet.session;
+  // --- sessions (ext regime.js: no session opens while the Diet is suspended — 国会の停止, g.regimeHold('diet'))
+  const S = p.diet.session || regimeHold(g, 'diet');
   const shugiSoon = p.elections.upcoming.some((e) => e.kind === 'shugi' && e.day - day < 15);
   if (!S && doy >= 2 && doy < 20 && num(p.flags.ordinaryYear) < year && !p.diet.shugi.dissolved && !shugiSoon) {
     p.flags.ordinaryYear = year;
@@ -4091,6 +4100,7 @@ function tickDay(g, p, day, abs) {
   const notices = [], reminders = [];
   for (const e of p.elections.upcoming.slice()) {
     if (e.status === 'done') continue;
+    if (regimeHold(g, 'election', e, day)) continue; // ext regime.js: 選挙の停止 (the hook postpones e.day / e.koji)
     if (!e.announced && e.day - day <= 30 && !ELECTION_KINDS[e.kind].newsOnly) {
       e.announced = true;
       if (PUBLIC_KINDS.includes(e.kind)) news(p, g, `${e.label}：${dateLabel(g, e.koji)}${kojiWord(e)}、${dateLabel(g, e.day)}投票`);
@@ -5155,6 +5165,9 @@ const methods = {
     return e ? e.id : null;
   },
   // ext: the player PM resigns (内閣総辞職).
+  // ext (hook for govt.js, A1): an NPC PM dissolves the 衆院 (憲法7条), e.g. after a key cabinet bill was voted down in the
+  // 参院. -> election id | null (refused for a player PM, a caretaker cabinet, a dissolved house, before the 特別国会)
+  npcDissolve(reason = '') { const p = ensurePol(this); if (p.cabinet.pm === 'player' || !p.cabinet.pm || p.cabinet.resigned || p.diet.shugi.dissolved || (p.cabinet.pending && p.cabinet.pending.kind === 'special')) return null; const e = dissolveImpl(this, p, reason || '総理大臣の判断'); return e ? e.id : null; },
   resignPM(reason = '') { const p = ensurePol(this); if (p.cabinet.pm !== 'player') return '総理大臣ではない'; if (p.cabinet.resigned) return 'すでに総辞職を決めている'; if (p.cabinet.pending && p.cabinet.pending.kind === 'ncDeadline') p.cabinet.pending = null; resignCabinet(this, p, reason || '総理の決断'); return null; },
   electPM() { const p = ensurePol(this); const r = electPMImpl(this, p); return r; },
   formCabinet(choices = {}) {

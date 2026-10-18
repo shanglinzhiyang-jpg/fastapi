@@ -30,8 +30,19 @@
 //                                 shows a 家族 chip; noInvite: true hides さそう in the talk menu.
 //
 // Apps registered with registerPhoneApp(id, { name, color, order, icon, badge, open })
-// show on the home screen. name: short (≤5 chars). icon(ctx, x, y): a 24x24 glyph drawn
-// on a 32x32 tile of `color` (or iconHD(ctx, x, y) for the whole 32x32 icon).
+// show on the home screen. name: short (≤5 chars), or (g) => name (e.g. by era: appName(app, g)).
+// icon(ctx, x, y, g): a 24x24 glyph drawn on a 32x32 tile of `color` (or iconHD(ctx, x, y, g)
+// for the whole 32x32 icon). cond(g) → false hides the app for now. badge(g) → a count.
+// The home screen has pages of 12 icons (←→ at a row's edge turns the page; dots and ‹ ›);
+// the order is `order` (low first) unless the player reordered (設定 app, phone_apps.js):
+// phoneApps(g) is the list as shown, appOrder(g) / setAppOrder(g, ids) the saved order
+// (state.phone.appOrder). Open phone_apps.js's apps add マップ, 出前, 通販, 銀行, お仕事, ニュース,
+// カメラ and 設定 (see test-output/api_phone.txt).
+// Touch / mouse: a tap is an A press (input.js); the phone turns it into what was tapped —
+// the home button / the header's ‹ are B; a view may define tap(ph, x, y, g) → true (keep
+// the A: the tapped row / button is chosen) or false (drop it); without one a tap is A.
+// Leaving the phone from an app (a trip, the camera): closePhoneThen(g, fn) puts it away and
+// runs fn as a script; phoneOverMapOnly(g) tells whether only the phone is open over the map.
 // open(g) is async; g.say / g.list work as usual (drawn over the phone), or render
 // inside the phone frame with these helpers (all resolve when the player is done):
 //   await phoneList(g, { title, color, items: [{ label, sub, right, look, icon(ctx, x, y),
@@ -252,14 +263,14 @@ const GLYPHS = {
     art(c, 14, 13, YEN, { '#': '#8a5a10' });
   },
 };
-// Draws an app's 32x32 icon at (x, y).
-export function drawAppIcon(c, x, y, app) {
+// Draws an app's 32x32 icon at (x, y). iconHD / icon also get the game (era-dependent art).
+export function drawAppIcon(c, x, y, app, g = null) {
   try {
     if (app.glyph && GLYPHS[app.glyph]) { c.drawImage(cached('icon_' + app.glyph, 32, 32, GLYPHS[app.glyph]), x, y); return; }
-    if (app.iconHD) { app.iconHD(c, x, y); return; }
+    if (app.iconHD) { app.iconHD(c, x, y, g); return; }
     appTile(c, x, y, app.color || '#5a6fd8');
-    if (app.icon) app.icon(c, x + 4, y + 4);
-    else text(c, Array.from(app.name || '?')[0], x + 16, y + 8, { size: 16, align: 'center', color: '#fff' });
+    if (app.icon) app.icon(c, x + 4, y + 4, g);
+    else text(c, Array.from(appName(app, g) || '?')[0], x + 16, y + 8, { size: 16, align: 'center', color: '#fff' });
   } catch (e) {
     console.error(e);
   }
@@ -335,8 +346,24 @@ function wallpaper() {
 }
 
 // ---------------------------------------------------------------- the phone scene
+// Taps on the canvas (touch play, or a mouse), in screen px (SW x SH), for the open phone.
+let tapBound = null;
+function bindTap(g) {
+  const cv = g && g.canvas;
+  if (!cv || tapBound === cv || typeof cv.addEventListener !== 'function') return;
+  tapBound = cv;
+  cv.addEventListener('pointerdown', (e) => {
+    const ph = activePhone(g);
+    if (!ph) return;
+    const r = cv.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    ph.tapAt = { x: ((e.clientX - r.left) * SW) / r.width, y: ((e.clientY - r.top) * SH) / r.height };
+  }, { passive: true });
+}
+
 class PhoneScene {
   constructor(g) {
+    bindTap(g);
     this.g = g;
     this.hd = true;
     this.hidesHud = true;
@@ -424,13 +451,37 @@ class PhoneScene {
     if (this.openT < OPEN_F) this.openT++;
     if (this.trans && ++this.trans.t >= TRANS_F) this.trans = null;
     const v = this.view;
+    const tap = this.tapAt;
+    this.tapAt = null;
     if (!v || v.waiting) return;
     if (g.auto) { this.back(v.cancel ?? -1); return; }
     v.t++;
     if (g.input.pressed('menu')) { audio.sfx('cancel'); this.dismiss(); return; }
+    if (tap && this.openT >= 4 && !this.trans) this.handleTap(tap, v, g);
     if (g.input.pressed('b')) this.pressB = 8;
     if (this.openT < 4) return;
     try { v.update(this, g.input, g); } catch (e) { console.error(e); this.back(v.cancel ?? -1, v); }
+  }
+
+  // Touch / mouse: a tap on the canvas is also an A press (input.js). Here it becomes what was
+  // tapped: the home button or the header's ‹ = B; inside the screen a view with tap(ph, x, y, g)
+  // decides (true: the A goes on, e.g. the tapped row is picked; false: the A is dropped);
+  // a view without one keeps the plain A (next / back). Outside the phone nothing happens.
+  handleTap(tap, v, g) {
+    const inp = g.input;
+    const { x, y } = tap;
+    const now = inp.pressedNow || {};
+    const asB = () => { now.a = false; now.b = true; };
+    const hx = PHONE.x + PHONE.w / 2, hy = SCREEN.y + SCREEN.h + 16;
+    if (Math.hypot(x - hx, y - hy) <= 14) { asB(); return; }
+    const inScreen = x >= SCREEN.x && x < SCREEN.x + SCREEN.w && y >= SCREEN.y && y < SCREEN.y + SCREEN.h;
+    if (!inScreen) { now.a = false; return; }
+    if (!v.noHeader && y >= SCREEN.y + STATUS_H && y < SCREEN.y + STATUS_H + HEADER_H && x < SCREEN.x + 34) { asB(); return; }
+    if (y >= SCREEN.y + SCREEN.h - FOOTER_H && !v.noFooter && typeof v.tap === 'function') { now.a = false; return; }
+    if (typeof v.tap !== 'function') return;
+    let ok = false;
+    try { ok = !!v.tap(this, x, y, g); } catch (e) { console.error(e); }
+    if (!ok) now.a = false;
   }
 
   draw(ctx, g) {
@@ -637,6 +688,27 @@ export async function withPhone(g, fn) {
 // A custom screen inside the phone (see the header).
 export function phoneView(g, view) { return withPhone(g, (ph) => ph.open(view)); }
 
+// Put the phone away (every open app resolves with its cancel value, as with MENU), then run
+// fn(g) as a script once it has slid out — for an app that leaves the phone: a trip
+// (map, g.goto), the camera's viewfinder, a delivery at the door. The script holds g.busy from
+// the call on, so the player never gets control in between. Resolves with fn's result.
+export function closePhoneThen(g, fn) {
+  return g.run(async () => {
+    const ph = g.scenes.find((s) => s.isPhone && !(s.closing && s.closing.done));
+    if (ph) {
+      if (!ph.dismissed) ph.dismiss();
+      await ph.close();
+    }
+    return fn(g);
+  });
+}
+// Whether the phone is the only thing open over the map (no dialogue, cutscene, minigame or
+// menu under it): an app may then leave the phone (closePhoneThen) to change place.
+export function phoneOverMapOnly(g) {
+  if (!g || !g.map || !g.scenes.length || g.scenes[0] !== g.map) return false;
+  return g.scenes.slice(1).every((s) => s.isPhone);
+}
+
 // ---------------------------------------------------------------- home screen
 const BUILTIN_APPS = [
   { id: 'messages', name: 'メッセージ', order: 10, color: APP_COLORS.messages, glyph: 'messages', badge: (g) => g.unread(), open: (g) => messagesApp(g) },
@@ -644,12 +716,46 @@ const BUILTIN_APPS = [
   { id: 'schedule', name: '予定', order: 30, color: APP_COLORS.schedule, glyph: 'schedule', badge: (g) => g.regularsToday().length, open: (g) => scheduleApp(g) },
   { id: 'money', name: '家計', order: 40, color: APP_COLORS.money, glyph: 'money', badge: (g) => (g.state.rent.debt ? 1 : 0), open: (g) => moneyApp(g) },
 ];
-function phoneApps() {
+// An app's label: def.name may be a string, a getter, or (g) => string (e.g. by era).
+export function appName(app, g) {
+  try {
+    const n = typeof app.name === 'function' ? app.name(g) : app.name;
+    return String(n || app.id);
+  } catch (e) { console.error(e); return String(app.id); }
+}
+// def.cond(g) false hides an app from the home screen (e.g. only once it means something).
+function appShown(app, g) {
+  if (!g || typeof app.cond !== 'function') return true;
+  try { return !!app.cond(g); } catch (e) { console.error(e); return false; }
+}
+// The player's own order of the home screen (設定 → アプリの並べかえ): state.phone.appOrder, a
+// list of app ids (old saves and players who never reordered: none, the apps' `order`).
+export function appOrder(g) {
+  const ph = g && g.state && g.state.phone;
+  return ph && Array.isArray(ph.appOrder) ? ph.appOrder.filter((x) => typeof x === 'string') : [];
+}
+export function setAppOrder(g, ids) {
+  if (!g || !g.state || !g.state.phone) return;
+  if (!ids || !ids.length) delete g.state.phone.appOrder;
+  else g.state.phone.appOrder = ids.slice();
+}
+// Every app on the home screen, in order: the saved order first, then any app it does not
+// list yet (new apps, apps that just appeared) by their `order`.
+export function phoneApps(g = null) {
   const reg = Object.values(PHONE_APPS);
   const ids = new Set(reg.map((a) => a.id));
-  return [...BUILTIN_APPS.filter((a) => !ids.has(a.id)), ...reg].sort((a, b) => (a.order ?? 50) - (b.order ?? 50));
+  const all = [...BUILTIN_APPS.filter((a) => !ids.has(a.id)), ...reg].filter((a) => appShown(a, g));
+  all.sort((a, b) => (a.order ?? 50) - (b.order ?? 50));
+  const saved = appOrder(g);
+  if (!saved.length) return all;
+  const rank = new Map(saved.map((id, i) => [id, i]));
+  const inList = all.filter((a) => rank.has(a.id)).sort((a, b) => rank.get(a.id) - rank.get(b.id));
+  return [...inList, ...all.filter((a) => !rank.has(a.id))];
 }
-const COLS = 4, CELL_W = 56, CELL_H = 58, GRID_Y = 84, GRID_ROWS = 3;
+// Home screen: pages of COLS x GRID_ROWS icons under the widget; ←→ at a row's edge turns
+// the page (page dots and ‹ › at the bottom; both can be tapped).
+const COLS = 4, CELL_W = 56, CELL_H = 58, GRID_Y = 84, GRID_ROWS = 3, PER_PAGE = COLS * GRID_ROWS;
+const DOTS_Y = 262;
 
 function homeView(g) {
   return {
@@ -657,23 +763,51 @@ function homeView(g) {
     noHeader: true,
     underStatus: true,
     idx: 0,
-    top: 0,
+    page: 0,
+    slide: 0,
     cancel: undefined,
-    hint: 'A:ひらく　B:とじる',
+    hint() {
+      const n = phoneApps(g).length;
+      return n > PER_PAGE ? 'A:ひらく　←→:ページ　B:とじる' : 'A:ひらく　B:とじる';
+    },
+    pages(n) { return Math.max(1, Math.ceil(n / PER_PAGE)); },
+    // turn to page p (dir: +1 from the right, -1 from the left), keeping the row when possible
+    turn(n, p, dir, row = 0, col = 0) {
+      const pages = this.pages(n);
+      p = ((p % pages) + pages) % pages;
+      const onPage = Math.min(PER_PAGE, n - p * PER_PAGE);
+      const rows = Math.ceil(onPage / COLS);
+      const r = Math.min(row, rows - 1);
+      this.idx = Math.min(p * PER_PAGE + r * COLS + col, p * PER_PAGE + onPage - 1);
+      if (p !== this.page) { this.slide = dir * 64; this.page = p; }
+    },
     update(ph, inp) {
-      const apps = phoneApps(), n = apps.length;
+      const apps = phoneApps(g), n = apps.length;
+      if (this.slide) this.slide -= Math.sign(this.slide) * Math.max(1, Math.ceil(Math.abs(this.slide) * 0.3));
       if (inp.pressed('b')) { audio.sfx('cancel'); ph.back(undefined); return; }
       if (!n) return;
-      let i = clamp(this.idx, 0, n - 1);
-      const rows = Math.ceil(n / COLS), r = Math.floor(i / COLS), col = i % COLS;
-      if (inp.repeat('left')) i = (i + n - 1) % n;
-      else if (inp.repeat('right')) i = (i + 1) % n;
-      else if (inp.repeat('up')) i = r > 0 ? i - COLS : Math.min(n - 1, (rows - 1) * COLS + col);
-      else if (inp.repeat('down')) i = r < rows - 1 ? Math.min(n - 1, i + COLS) : col;
-      if (i !== this.idx) { this.idx = i; audio.sfx('cursor'); }
-      const row = Math.floor(this.idx / COLS);
-      if (row < this.top) this.top = row;
-      if (row >= this.top + GRID_ROWS) this.top = row - GRID_ROWS + 1;
+      const before = this.idx;
+      const i = clamp(this.idx, 0, n - 1);
+      const pages = this.pages(n);
+      const pg = Math.floor(i / PER_PAGE), k = i % PER_PAGE, r = Math.floor(k / COLS), col = k % COLS;
+      const onPage = Math.min(PER_PAGE, n - pg * PER_PAGE), rows = Math.ceil(onPage / COLS);
+      const rowEnd = Math.min(pg * PER_PAGE + r * COLS + COLS - 1, pg * PER_PAGE + onPage - 1);
+      this.idx = i;
+      if (inp.repeat('left')) {
+        if (col > 0) this.idx = i - 1;
+        else if (pages > 1) this.turn(n, pg - 1, -1, r, COLS - 1);
+        else this.idx = rowEnd;
+      } else if (inp.repeat('right')) {
+        if (i < rowEnd) this.idx = i + 1;
+        else if (pages > 1) this.turn(n, pg + 1, 1, r, 0);
+        else this.idx = pg * PER_PAGE + r * COLS;
+      } else if (inp.repeat('up')) {
+        this.idx = Math.min(pg * PER_PAGE + ((r + rows - 1) % rows) * COLS + col, pg * PER_PAGE + onPage - 1);
+      } else if (inp.repeat('down')) {
+        this.idx = Math.min(pg * PER_PAGE + ((r + 1) % rows) * COLS + col, pg * PER_PAGE + onPage - 1);
+      }
+      this.page = Math.floor(this.idx / PER_PAGE);
+      if (this.idx !== before) audio.sfx('cursor');
       if (inp.pressed('a')) {
         const app = apps[this.idx];
         if (!app || typeof app.open !== 'function') { audio.sfx('buzz'); return; }
@@ -687,8 +821,29 @@ function homeView(g) {
       }
     },
     iconPos(i) {
-      const r = Math.floor(i / COLS) - this.top, col = i % COLS;
+      const k = i % PER_PAGE;
+      const r = Math.floor(k / COLS), col = k % COLS;
       return { x: SCREEN.x + col * CELL_W + 12, y: SCREEN.y + GRID_Y + r * CELL_H + 4 };
+    },
+    // a tap: an icon selects and opens it (A); the ‹ › arrows and the dots turn the page
+    tap(ph, x, y) {
+      const n = phoneApps(g).length;
+      if (!n) return false;
+      const pages = this.pages(n);
+      if (pages > 1 && y >= SCREEN.y + DOTS_Y - 12 && y < SCREEN.y + DOTS_Y + 14) {
+        if (x < SCREEN.x + 40) { this.turn(n, this.page - 1, -1); audio.sfx('cursor'); return false; }
+        if (x >= SCREEN.x + SCREEN.w - 40) { this.turn(n, this.page + 1, 1); audio.sfx('cursor'); return false; }
+        const d0 = SCREEN.x + SCREEN.w / 2 - (pages * 10) / 2;
+        const p = Math.floor((x - d0) / 10);
+        if (p >= 0 && p < pages && p !== this.page) { this.turn(n, p, p > this.page ? 1 : -1); audio.sfx('cursor'); }
+        return false;
+      }
+      const first = this.page * PER_PAGE, last = Math.min(n, first + PER_PAGE);
+      for (let i = first; i < last; i++) {
+        const p = this.iconPos(i);
+        if (x >= p.x - 10 && x < p.x + 42 && y >= p.y - 4 && y < p.y + 50) { this.idx = i; return true; }
+      }
+      return false;
     },
     draw(c, ph, a) {
       c.drawImage(wallpaper(), a.x, SCREEN.y);
@@ -705,33 +860,52 @@ function homeView(g) {
       T(c, `第${g.week}週`, wx + ww - 10, wy + 8, 12, PC.dim, 'right');
       const info = todayInfo(g);
       info.slice(0, 2).forEach(([s, col], i) => T(c, fitText(c, s, ww - 20, 12), wx + 10, wy + 26 + i * 14, 12, col));
-      // app grid
-      const apps = phoneApps();
-      const first = this.top * COLS, last = Math.min(apps.length, first + GRID_ROWS * COLS);
+      // app grid (this page; a page that was just turned slides in)
+      const apps = phoneApps(g);
+      if (!apps.length) return;
+      this.idx = clamp(this.idx, 0, apps.length - 1);
+      this.page = Math.floor(this.idx / PER_PAGE);
+      const first = this.page * PER_PAGE, last = Math.min(apps.length, first + PER_PAGE);
+      const dx = Math.round(this.slide) + (a.x - SCREEN.x);
+      c.save();
+      c.beginPath();
+      c.rect(a.x, SCREEN.y + GRID_Y - 6, a.w, GRID_ROWS * CELL_H + 4);
+      c.clip();
+      if (this.slide) c.globalAlpha = clamp(1 - Math.abs(this.slide) / 80, 0.3, 1);
       for (let i = first; i < last; i++) {
         const app = apps[i];
         const p = this.iconPos(i);
         const sel = i === this.idx;
         const lift = sel ? -2 : 0;
-        const ix = p.x + (a.x - SCREEN.x), iy = p.y + lift;
+        const ix = p.x + dx, iy = p.y + lift;
         if (sel) {
           R(c, ix + 2, iy + 34 - lift, 30, 2, 'rgba(0,0,0,0.35)');
           rrect(c, ix - 3, iy - 3, 38, 38, 9, '#ffffff');
           rrect(c, ix - 2, iy - 2, 36, 36, 8, shade(app.color || '#5a6fd8', -0.6));
         }
-        drawAppIcon(c, ix, iy, app);
+        drawAppIcon(c, ix, iy, app, g);
         let n = 0;
         try { n = app.badge ? app.badge(g) | 0 : 0; } catch (e) { n = 0; }
         if (n > 0) drawBadge(c, ix + 31, iy + 1, n);
-        const label = fitText(c, app.name || app.id, CELL_W + 6, 12);
+        const label = fitText(c, appName(app, g), CELL_W + 6, 12);
         // keep long names (メッセージ) inside the screen's edges
         const lw = measure(c, label, 12);
-        const lx = clamp(ix + 16, SCREEN.x + lw / 2 + 3, SCREEN.x + SCREEN.w - lw / 2 - 3);
+        const lx = clamp(ix + 16, SCREEN.x + dx + lw / 2 + 3, SCREEN.x + dx + SCREEN.w - lw / 2 - 3);
         text(c, label, lx, p.y + 37, { size: 12, align: 'center', color: sel ? COLORS.accent : '#ffffff', shadow: '#0a0b18' });
       }
-      const rows = Math.ceil(apps.length / COLS);
-      if (rows > GRID_ROWS) {
-        for (let r = 0; r < rows - GRID_ROWS + 1; r++) R(c, a.x + a.w / 2 - (rows - GRID_ROWS) * 4 + r * 8, SCREEN.y + 262, 4, 4, r === this.top ? '#ffffff' : '#6a6aa0');
+      c.globalAlpha = 1;
+      c.restore();
+      // page dots, with ‹ › (tap targets) on both sides
+      const pages = this.pages(apps.length);
+      if (pages > 1) {
+        const d0 = a.x + a.w / 2 - (pages * 10) / 2;
+        for (let p = 0; p < pages; p++) {
+          const on = p === this.page;
+          rrect(c, d0 + p * 10 + 2, SCREEN.y + DOTS_Y - (on ? 1 : 0), on ? 6 : 5, on ? 6 : 5, 2, on ? '#ffffff' : '#7a7ab0');
+        }
+        const arrow = (x, flip) => art(c, x, SCREEN.y + DOTS_Y - 4, flip ? ['#...', '##..', '###.', '##..', '#...'] : ['...#', '..##', '.###', '..##', '...#'], { '#': '#c8ccf0' }, 2);
+        arrow(a.x + 12, false);
+        arrow(a.x + a.w - 20, true);
       }
     },
   };
@@ -801,10 +975,21 @@ function listView(g, o) {
       }
       if (inp.pressed('b')) { audio.sfx('cancel'); ph.back(-1); }
     },
+    // a tapped row is picked (like moving to it and pressing A)
+    tap(ph, x, y) {
+      const L = this.lay;
+      if (!L || y < L.y || y >= L.y + L.h) return false;
+      const rows = this.rows();
+      const i = Math.floor((y - L.y + L.sy) / L.rh);
+      if (i < 0 || i >= rows.length) return false;
+      this.idx = i;
+      return true;
+    },
     draw(c, ph, a) {
       const rows = this.rows();
       const descH = o.describe && rows.length ? 40 : 0;
       const lh = a.h - descH;
+      this.lay = null;
       if (!rows.length) {
         const lines = wrap(c, o.empty || '（なし）', a.w - 32, 12);
         lines.forEach((l, i) => T(c, l, a.x + a.w / 2, a.y + a.h / 2 - lines.length * 8 + i * 16, 12, PC.dim, 'center'));
@@ -821,6 +1006,7 @@ function listView(g, o) {
       this.topRow = top;
       const target = top * rh;
       this.sy = this.sy == null ? target : Math.abs(target - this.sy) < 1 ? target : this.sy + (target - this.sy) * 0.4;
+      this.lay = { y: a.y, h: lh, rh, sy: this.sy };
       c.save();
       c.beginPath();
       c.rect(a.x, a.y, a.w, lh);
@@ -904,9 +1090,21 @@ function confirmView(g, o) {
       if (inp.repeat('down') || inp.repeat('right')) { this.idx = (this.idx + 1) % n; audio.sfx('cursor'); }
       if (inp.pressed('a')) { audio.sfx('ok'); ph.back(this.idx); } else if (inp.pressed('b')) { audio.sfx('cancel'); ph.back(n - 1); }
     },
+    tap(ph, x, y) {
+      const a = this.area;
+      if (!a) return false;
+      for (let i = 0; i < choices.length; i++) {
+        const by = a.y + a.h - (choices.length - i) * 30 - 4;
+        if (x >= a.x + 16 && x < a.x + a.w - 16 && y >= by - 2 && y < by + 28) { this.idx = i; return true; }
+      }
+      return false;
+    },
     draw(c, ph, a) {
+      this.area = a;
       const lines = wrap(c, g.fmt(o.text || ''), a.w - 20, 12);
-      lines.slice(0, 9).forEach((l, i) => T(c, l, a.x + 10, a.y + 10 + i * 16, 12, PC.text));
+      // as many lines as fit above the buttons
+      const fitN = Math.max(1, Math.floor((a.h - choices.length * 30 - 18) / 16));
+      lines.slice(0, fitN).forEach((l, i) => T(c, l, a.x + 10, a.y + 10 + i * 16, 12, PC.text));
       choices.forEach((ch, i) => {
         const y = a.y + a.h - (choices.length - i) * 30 - 4;
         const sel = i === this.idx;
@@ -1058,6 +1256,20 @@ function threadView(g, key) {
       if (!p && inp.pressed('a')) { this.target = this.maxScroll || 0; }
       if (inp.pressed('b')) { audio.sfx('cancel'); ph.back(-1); }
     },
+    // the reply buttons; elsewhere a tap scrolls (upper half: up, lower half: down)
+    tap(ph, x, y) {
+      const a = this.area;
+      if (!a) return false;
+      if (this.pending() && this.barY != null && y >= this.barY) {
+        const bw = (a.w - 24) / 2;
+        const i = x < a.x + 8 + bw + 4 ? 0 : 1;
+        this.sel = i;
+        return true;
+      }
+      const mid = a.y + (this.barY != null ? this.barY - a.y : a.h) / 2;
+      this.target = clamp(this.target + (y < mid ? -54 : 54), 0, this.maxScroll || 0);
+      return false;
+    },
     answer(ph, m, yes) {
       ph.run(this, async () => {
         const def = m.person && PEOPLE[m.person];
@@ -1079,6 +1291,8 @@ function threadView(g, key) {
       const p = this.pending();
       const barH = p ? 40 : 0;
       const vh = a.h - barH;
+      this.area = a;
+      this.barY = p ? a.y + vh : null;
       this.maxScroll = Math.max(0, this.totalH - vh);
       if (this.toBottom) { this.target = this.maxScroll; this.scroll = this.scroll || this.maxScroll; this.toBottom = false; }
       this.target = clamp(this.target, 0, this.maxScroll);
@@ -1370,7 +1584,23 @@ function contactCardView(g, index, list) {
       }
       if (inp.pressed('b')) { audio.sfx('cancel'); ph.back(-1); }
     },
+    // the ‹ › on the band turn the card; the button at the bottom calls (A)
+    tap(ph, x, y) {
+      const a = this.area;
+      if (!a) return false;
+      const ids = contactIds(g);
+      if (y >= a.y && y < a.y + 42 && ids.length > 1 && (x < a.x + 40 || x >= a.x + a.w - 40)) {
+        const d = x < a.x + 40 ? -1 : 1;
+        this.idx = (this.idx + d + ids.length) % ids.length;
+        this.slide = d * 14;
+        if (list) list.idx = this.idx;
+        audio.sfx('cursor');
+        return false;
+      }
+      return y >= a.y + a.h - 30;
+    },
     draw(c, ph, a) {
+      this.area = a;
       const ids = contactIds(g);
       if (!ids.length) return;
       const id = ids[clamp(this.idx, 0, ids.length - 1)];
@@ -1558,6 +1788,16 @@ function scheduleView(g) {
       if (inp.repeat('right')) { this.sel = (this.sel + 1) % 7; audio.sfx('cursor'); }
       if (inp.pressed('b') || inp.pressed('a')) { audio.sfx('cancel'); ph.back(-1); }
     },
+    // a tapped day is shown (the A of the tap would close the app: dropped)
+    tap(ph, x, y) {
+      const a = this.area;
+      if (!a) return false;
+      if (y >= a.y + 20 && y < a.y + 90) {
+        const i = Math.floor((x - (a.x + 7)) / 30);
+        if (i >= 0 && i < 7 && i !== this.sel) { this.sel = i; audio.sfx('cursor'); }
+      }
+      return false;
+    },
     regularsOn(i) {
       const st = g.state;
       return Object.keys(st.regulars).filter((id) => REGULARS[id] && !st.regulars[id].dropped && REGULARS[id].weekday === i);
@@ -1594,6 +1834,7 @@ function scheduleView(g) {
       return out;
     },
     draw(c, ph, a) {
+      this.area = a;
       const st = g.state;
       const wd = weekdayOf(st.day);
       const monday = st.day - wd;
@@ -1674,9 +1915,15 @@ function moneyView(g) {
       }
       if (inp.pressed('b') || inp.pressed('a')) { audio.sfx('cancel'); ph.back(-1); }
     },
+    // only the 払う button pays (a tap elsewhere does nothing)
+    tap(ph, x, y) {
+      const b = this.payBtn;
+      return !!(b && x >= b.x - 4 && x < b.x + b.w + 4 && y >= b.y - 4 && y < b.y + b.h + 4);
+    },
     draw(c, ph, a) {
       const st = g.state;
       const h = g.housing();
+      this.payBtn = null;
       // money card
       const cx = a.x + 8, cy = a.y + 8, cw = a.w - 16;
       box(c, cx, cy, cw, 50, 6, '#2c2f52', '#0c0e1e', { hi: '#4a4e7a', lo: '#1e2040' });
@@ -1705,6 +1952,7 @@ function moneyView(g) {
         const ok = st.money > 0;
         const bc = ok ? APP_COLORS.money : '#c8c2b4';
         box(c, a.x + a.w - 78, y + 9, 62, 22, 5, bc, shade(bc, -0.5), { lo: shade(bc, -0.2) });
+        this.payBtn = { x: a.x + a.w - 78, y: y + 9, w: 62, h: 22 };
         T(c, st.money >= st.rent.debt || !ok ? '払う(A)' : '一部払う', a.x + a.w - 47, y + 13, 12, ok ? '#ffffff' : '#6a6878', 'center');
       } else {
         box(c, a.x + 8, y, a.w - 16, 24, 5, this.flash ? '#e8ffe0' : '#f0f8ea', PC.good);

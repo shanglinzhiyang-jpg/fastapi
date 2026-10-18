@@ -44,6 +44,9 @@ export const MODULES = [
   './places/parties.js',
   './places/kuyakusho.js',
   './places/justice.js',
+  // regime & security core (体制・自衛隊・震災対応・報道の自由・もしもの戦争) and its scenes + phone app 危機管理
+  './engine/regime.js',
+  './world/kiki.js',
   // minigames
   './minigames/tsukkomi.js',
   './minigames/zukko.js',
