@@ -30,6 +30,7 @@
 // and .posts (life fields), g.state.regulars (engine). All names are fictional.
 
 import { registerRegular, REGULARS, onMorning, registerPhoneApp, PHONE_APPS, weekdayOf, weekOf, WEEKDAYS, PEOPLE, isKansai, OFFER_DAYS } from '../engine/life.js';
+import { programShowsHeld, PROGRAM_SHOW_IDS } from './programs.js';
 import { registerItem, ITEMS, RANKS, rankIndex, AGENCIES, CAREER } from '../engine/state.js';
 import { PLACES } from '../engine/map.js';
 import { LOOKS, charSheetHD, drawFaceHD } from '../engine/sprites.js';
@@ -836,7 +837,9 @@ function offerMorning(g, out) {
   if (st.day - num(st.flags.career_offerDay, -99) < OFFER_EVERY) return;
   // shows you hold + fresh offers you have not answered yet (older ones no longer count)
   const fresh = st.phone.inbox.filter((m) => openOffer(st, m) && SHOW_IDS.includes(m.regular)).length;
-  if (activeShows(st).length + fresh >= MAX_SHOWS) return;
+  // real-program regulars (programs.js) share the same limit
+  const progFresh = st.phone.inbox.filter((m) => openOffer(st, m) && PROGRAM_SHOW_IDS.includes(m.regular)).length;
+  if (activeShows(st).length + fresh + programShowsHeld(st) + progFresh >= MAX_SHOWS) return;
   const cands = SHOW_IDS.filter((id) => REGULARS[id] && offerable(g, id));
   if (!cands.length) return;
   // shows that fit you first: your agency's, your best skill's, the higher tier, a free

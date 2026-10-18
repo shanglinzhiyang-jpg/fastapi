@@ -22,6 +22,7 @@ import { ACTIVITY } from '../engine/life.js';
 import { registerSong } from '../engine/audio.js';
 import { text, measure } from '../engine/draw.js';
 import { drawLogo } from '../engine/logos.js';
+import { programDesk, programsAt, eraKey } from '../world/programs.js';
 import { W, H, SW, SH, shade, mix, hash2 } from '../engine/util.js';
 
 // ====================================================================== shared state (not saved)
@@ -1322,6 +1323,11 @@ registerPlace({
             if (finalePending(g)) { await g.say(['{name}さん！プロデューサーがお待ちかねですよ。', '入り口の近くにいらっしゃいます！'], s); return; }
             if (g.flag('finaleDone')) { await g.say(['あっ、{name}さん！', '年末の歌番組、受付のみんなで見ていました。本当に感動しました…！'], s); return; }
             await g.say(['ようこそ、NHK放送センターへ！', '左のドアは「放送の歴史ギャラリー」、右のドアはスタジオ棟とNHKホールにつながっています。', 'お仕事のことは、となりの「お仕事案内」にどうぞ。'], s);
+            // real programs of this era (programs.js): the reception takes appearance requests
+            if (programsAt('nhk', eraKey(g.state)).length) {
+              const i = await g.ask('番組への出演の相談もできますよ。', ['番組の相談をする', 'またこんど'], { ...s, cancel: 1 });
+              if (i === 0) await programDesk(g, 'nhk', npc);
+            }
           },
         },
         { type: 'npc', id: 'nhk_info', x: 11, y: 3, dir: 'down', look: L.recep2, name: 'お仕事案内', talk: jobGuide },

@@ -143,7 +143,17 @@ Object.assign(ERAS.reiwa, {
   intro: ['令和。', 'スマホひとつで、だれでも発信できる時代。', 'それでも、本物のステージに立ちたくて――上京の日がやってきた。'],
   snsShort: 'ドッター',
 });
-export const ERA_ORDER = ['showa', 'heisei', 'reiwa'];
+// 平成のはじめ（1990年代）: between 昭和 and 平成なかごろ (the TV programs of js/world/programs.js
+// are chosen by era: showa 1980-89, heisei_early 1990-99, heisei 2000-09, reiwa 2019-).
+// The phone is a 手帳 (システム手帳 + ポケベル + 家の電話), like 昭和's leather case.
+ERAS.heisei_early = {
+  name: '平成', label: '平成（1990年代）', year: '平成のはじめ', priceRate: 0.75,
+  device: '手帳とポケベル', deviceShort: '手帳', sns: 'ファンクラブ会報', tv: 'ブラウン管',
+  desc: 'ポケベルと家の電話、ブラウン管の時代。\nお金の表示は当時の物価に（¥⁠1,000→¥⁠750）。',
+  intro: ['平成のはじめ。', 'ポケベルが鳴るたびに、公衆電話へ走った。', '手帳に夢を書きこんで、上京の日がやってきた。'],
+  snsShort: '会報',
+};
+export const ERA_ORDER = ['showa', 'heisei_early', 'heisei', 'reiwa'];
 
 // The region order for the creator's quick jump (北海道 → 九州・沖縄).
 export const REGION_ORDER = ['hokkaido', 'tohoku', 'kanto', 'chubu', 'kansai', 'chugoku', 'shikoku', 'kyushu'];
