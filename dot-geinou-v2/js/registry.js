@@ -19,6 +19,7 @@ export const MODULES = [
   './world/programs.js',
   './world/minato.js',
   './engine/politics_ui.js',
+  './engine/ideology.js', // ideology core (思想): encyclopedia, player ideology, 思想診断, classifyRegime
   './world/nagatacho.js',
   './world/kanraku.js',
   './world/darkside.js',
