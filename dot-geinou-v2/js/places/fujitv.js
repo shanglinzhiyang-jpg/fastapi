@@ -728,8 +728,8 @@ registerPlace({
       topPad: 24,
       tiles: [
         '####################',
-        '#uuuuuABCDEFGHuuuuu#',
-        '#=O===abcdefgh===O=#',
+        '#uuuuu01234567uuuuu#',
+        '#=O===abcdfghi===O=#',
         '#....,,,,,,,,,,....#',
         '#....,J,,,,,,X,....#',
         '#....eeeeeeeeee....#',
@@ -742,7 +742,7 @@ registerPlace({
       ],
       legend: {
         '#': T('walltop'), u: T('swall_u'), '=': T('swall'), O: `${T('swall')}+onair`,
-        ...bigLegend('konto', ['ABCDEFGH', 'abcdefgh']),
+        ...bigLegend('konto', ['01234567', 'abcdfghi']),
         ',': 'floor_stage', J: 'floor_stage+bench', X: 'floor_stage+lamp', e: 'stage_edge',
         C: 'camera', S: 'seat', M: 'exit_mat',
       },
@@ -785,14 +785,14 @@ registerPlace({
         '#..............#',
         '#.oro......oro.#',
         '#..............#',
-        '##..........KK##',
+        '##..........ZZ##',
         '###..........###',
         '#######MM#######',
       ],
       legend: {
         '#': T('walltop'), '(': T('corner_tl'), ')': T('corner_tr'), '[': T('side_l'), ']': T('side_r'),
         ...bigLegend('view', ['ABCDEFGHIJKL', 'abcdefghijkl']),
-        T: T('scope'), o: T('pod'), r: T('rtable'), K: T('counter'), M: 'exit_mat',
+        T: T('scope'), o: T('pod'), r: T('rtable'), Z: T('counter'), M: 'exit_mat',
       },
       warps: [
         { x: 7, y: 10, room: 'corridor', tx: 16, ty: 3, dir: 'down' },

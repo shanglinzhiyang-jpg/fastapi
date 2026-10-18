@@ -1274,7 +1274,7 @@ function studioRoom(C) {
     ],
     entities: [
       emblem(C, 9, 0.35),
-      sign(2.2, 0.55, 5.6, 0.9, `${pid}_studio_banner`, (c, Wd, Hd) => {
+      sign(2.2, 1.4, 5.6, 0.9, `${pid}_studio_banner`, (c, Wd, Hd) => {
         R(c, 0, 0, Wd, Hd, '#2a1a3a'); R(c, 2, 2, Wd - 4, Hd - 4, '#d62f2f'); R(c, 2, 2, Wd - 4, 2, '#ff6a6a');
         bold(c, mbs ? 'わいわい！関西ノリ全開！' : 'まいど！笑いの本場から！', Wd / 2, 6, { size: 16, align: 'center', color: '#fff6a8' });
       }),
