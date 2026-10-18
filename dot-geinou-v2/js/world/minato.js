@@ -1076,7 +1076,7 @@ function generate() {
   const W = MINATO_W, H = MINATO_H;
   const c = grid(W, H, 'grass');
   const P2 = (x, y, obj) => put(c, x, y, obj);
-  const trees = (x0, y0, x1, y1, k = 0) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) P2(x, y, (x * 3 + y * 5 + k) % 4 === 0 ? 'bush' : 'tree'); };
+  const trees = (x0, y0, x1, y1, k = 0) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(c, x, y, 'grass', (x * 3 + y * 5 + k) % 4 === 0 ? 'bush' : 'tree'); };
 
   // ---- back rows (rooftops / trees beyond the north edge)
   trees(1, 1, W - 2, 2);

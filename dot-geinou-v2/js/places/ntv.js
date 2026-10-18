@@ -133,12 +133,11 @@ tile('setmark', {
     R(c, 10, 15, 12, 3, RED); R(c, 15, 10, 3, 12, RED); R(c, 10, 15, 12, 1, REDL); R(c, 15, 10, 3, 1, REDL);
   },
 });
-// studio floor (dark, matte); v0 = a yellow gaffer-tape mark (rare)
+// studio floor (dark, matte) with a few scuffs
 tile('sfloor', {
   variants: 24,
   hd(c, r, f, v) {
     R(c, 0, 0, 32, 32, '#2e3038'); speckle(c, r, ['#34363f', '#292b32', '#31333b'], 60);
-    if (v === 0) { R(c, 6, 14, 12, 4, '#e8c43a'); R(c, 10, 10, 4, 12, '#e8c43a'); R(c, 6, 14, 12, 1, '#f6dc6a'); R(c, 10, 10, 4, 1, '#f6dc6a'); }
     if (v === 3) { line(c, 4, 26, 26, 20, '#3a3c46'); line(c, 4, 27, 26, 21, '#25272e'); }
   },
 });
@@ -656,11 +655,14 @@ async function toStudio(g, mode, x, y, dir) {
   onAir = false;
   await g.fadeOut();
   await g.goto(PID, 'studio', x, y, dir, { fade: false });
+  // frame the whole set and the front rows of the audience while the show runs
+  if (g.map.roomId === 'studio') g.map.camOverride = { x: 16, y: -4 };
   await g.fadeIn();
   return origin;
 }
 async function backFrom(g, origin) {
   await g.fadeOut();
+  g.map.camOverride = null;
   show = null;
   onAir = false;
   await g.goto(PID, origin.room, origin.x, origin.y, origin.dir, { fade: false });
@@ -1268,7 +1270,7 @@ registerPlace({
       ],
       entities: [
         { type: 'logo', x: 2.2, y: 0.55, w: 3.2, h: 1.35, logo: PID, board: true, lights: true },
-        onAirLamp(17.3, 0.6, () => !!onAir),
+        onAirLamp(17.3, 1.3, () => !!onAir),
         // regular crew (when no show is running)
         npc('ntv_fd', 13, 7, 'left', WHO.fd, { talk: fdTalk, cond: () => !show }),
         npc('ntv_director', 19, 9, 'down', WHO.director, { talk: directorTalk, cond: () => !show }),

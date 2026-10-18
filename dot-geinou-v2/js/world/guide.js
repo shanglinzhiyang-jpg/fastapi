@@ -1,7 +1,8 @@
 // てちょう（メニュー → てちょう）で使う案内データ。js/engine/notebook.js が読みます。
 //
 //   GUIDE[placeId]  { town, name, short, hint, lines, audition }
-//     town      'tokyo' | 'namba'（ドット商店街 'machi' の場所も 'tokyo'：てちょうの色分けは2つの町だけ）
+//     town      'tokyo' | 'namba'（ドット商店街 'machi'・テレビ局エリア 'minato' の場所も 'tokyo'：
+//               てちょうの色分けは2つの町だけ）
 //     name      てちょうに出す名前（行ったことのある場所だけ表示）
 //     short     おすすめのお仕事の横に出す短い名前
 //     hint      まだ行っていない時の一行ヒント（「？？？」の下に出る）
@@ -24,7 +25,7 @@ export const GUIDE = {
   tokyo: {
     town: 'tokyo', name: '東京エリアの街', short: '公園',
     hint: '',
-    lines: ['公園のステージで路上漫才・路上ライブ（だれでも）', '街の人の話に、事務所やお仕事のヒントがいっぱい', '大通りを西へ行くと「ドット商店街」（駅前からバスも）'],
+    lines: ['公園のステージで路上漫才・路上ライブ（だれでも）', '街の人の話に、事務所やお仕事のヒントがいっぱい', '大通りを西へ「ドット商店街」、東へ「テレビ局エリア」'],
   },
   home: {
     town: 'tokyo', name: 'ドット荘（自宅）', short: '自宅',
@@ -43,7 +44,7 @@ export const GUIDE = {
   },
   station_tokyo: {
     town: 'tokyo', name: '東京駅', short: '東京駅',
-    hint: '東京の南東（右下）の大きな駅',
+    hint: '東京の南東、線路ぞいの大きな駅（バス停も）',
     lines: ['新幹線と電車で大阪・なんばへ（¥3,000）', '帰りの運賃も残しておくと安心'],
   },
   nhk: {
@@ -63,7 +64,7 @@ export const GUIDE = {
   },
   toei: {
     town: 'tokyo', name: '東映 撮影所', short: '東映',
-    hint: '東京の北東（右上）の撮影所',
+    hint: '東京の北東の撮影所',
     lines: ['時代劇エキストラ（だれでも）・斬られ役（所属か★30）', 'ヒーローのスーツアクター★250・声優オーディション', '時代劇の主役★1000・ヒーロー映画★2000／殺陣の稽古'],
   },
   yoshimoto: {
@@ -147,11 +148,52 @@ export const GUIDE = {
     hint: '商店街の南の住宅街、ガラス張りの高いビル',
     lines: ['★1000で住める2LDK（家賃¥90,000／週）', 'よく眠れる（ストレス-30）・ジェットバス・家具は8つまで'],
   },
+  // ---------------------------------------------------------------- テレビ局エリア（東京の東）
+  minato: {
+    town: 'tokyo', name: 'テレビ局エリア', short: 'テレビ局エリア',
+    hint: '東京の大通りを東のはしまで（東京駅前からバスも）',
+    lines: ['5つのテレビ局が集まる、とても広い街', 'キッチンカー・観覧車・大道芸・からくり時計でひと息', 'ベイライン（¥190）で広場⇔埠頭・バスで東京駅前へ'],
+  },
+  ntv: {
+    town: 'tokyo', name: '日本テレビ', short: '日本テレビ',
+    hint: 'テレビ局エリアの南西、しおさい広場のタワー',
+    lines: ['受付で番組のゲスト出演（★の条件あり）・番組観覧', '前説（だれでも）・ひな壇ゲスト（所属か★30）', '社員食堂で安くおなかいっぱい・楽屋でひと休み'],
+  },
+  tbs: {
+    town: 'tokyo', name: 'TBS', short: 'TBS',
+    hint: 'テレビ局エリアの北西、あかね坂の上',
+    lines: ['坂の上のテレビ局。ドラマや音楽番組でおなじみ', '受付で番組のゲスト出演（★の条件あり）'],
+  },
+  tvasahi: {
+    town: 'tokyo', name: 'テレビ朝日', short: 'テレビ朝日',
+    hint: 'テレビ局エリアの北、スターヒル広場の正面',
+    lines: ['受付で番組のゲスト出演（★の条件あり）・番組観覧', '前説（だれでも）・クイズ解答者とひな壇（所属か★30）', '楽屋の鏡で身だしなみ・畳でひと休み'],
+  },
+  fujitv: {
+    town: 'tokyo', name: 'フジテレビ', short: 'フジテレビ',
+    hint: 'テレビ局エリアの南東、海ぞいの球体のビル',
+    lines: ['受付で番組のゲスト出演（★の条件あり）・番組観覧', 'コントの通行人役（だれでも）・ツッコミ役（所属か★30）', '球体ラウンジで海の景色とコーヒー'],
+  },
+  tvtokyo: {
+    town: 'tokyo', name: 'テレビ東京', short: 'テレビ東京',
+    hint: 'テレビ局エリアの北東、電波塔の近く',
+    lines: ['受付で番組のゲスト出演（★の条件あり）・番組観覧', 'ロケのお手伝い（だれでも）・ワイプ出演（所属か★30）', 'ご当地グルメロケのリポーター★250'],
+  },
   // ---------------------------------------------------------------- なんば
   namba: {
     town: 'namba', name: 'なんばエリアの街', short: 'なんば',
     hint: '東京駅から新幹線と電車で行ける',
-    lines: ['お笑いの本場・大阪。劇場や事務所が集まる街', '大阪のおばちゃんが1日1回アメちゃんをくれる'],
+    lines: ['お笑いの本場・大阪。劇場や事務所が集まる街', '大阪のおばちゃんが1日1回アメちゃんをくれる', '東の川ぞいに MBS毎日放送・関西テレビ・屋台'],
+  },
+  mbs: {
+    town: 'namba', name: 'MBS毎日放送', short: 'MBS',
+    hint: 'なんばの東、川の北岸の青いビル',
+    lines: ['受付で番組のゲスト出演・前説と観覧の盛り上げ役', '商店街ロケのお手伝い（だれでも）', 'ラジオのお便り紹介（所属か★30）'],
+  },
+  ktv: {
+    town: 'namba', name: '関西テレビ', short: '関西テレビ',
+    hint: 'なんばの東、川の北岸のオレンジの看板',
+    lines: ['受付で番組のゲスト出演・前説と観覧の盛り上げ役', '商店街ロケのお手伝い（だれでも）', '若手漫才コンテストのネタ見せ（所属か★30）'],
   },
   station_namba: {
     town: 'namba', name: 'なんば駅', short: 'なんば駅',
@@ -180,7 +222,7 @@ export const GUIDE = {
   },
   hotel: {
     town: 'namba', name: 'ドットホテル なんば', short: 'ホテル',
-    hint: 'なんばの北東（右上）の高い建物',
+    hint: 'なんばの北、たこ焼き屋のとなりの高い建物',
     lines: ['1泊¥3,000で体力が全快して次の日に（セーブも）', '宴会の余興（所属か★30）・披露宴の司会★250', 'ディナーショー★1000・★2000で宿泊ご招待'],
   },
 };
@@ -189,7 +231,8 @@ export const GUIDE_ORDER = [
   'tokyo', 'home', 'konbini', 'sento', 'station_tokyo',
   'yoshimoto', 'bs_yoshimoto', 'grape', 'horipro', 'toho', 'toei', 'nhk',
   'machi', 'super', 'hanaya', 'ramen', 'cafe', 'salon', 'famires', 'gym', 'karaoke', 'fudousan', 'kagu', 'mansion', 'tower',
-  'namba', 'station_namba', 'shinkigeki', 'shochiku', 'takoyaki', 'hotel', 'jikka',
+  'minato', 'ntv', 'tbs', 'tvasahi', 'fujitv', 'tvtokyo',
+  'namba', 'station_namba', 'shinkigeki', 'shochiku', 'takoyaki', 'hotel', 'mbs', 'ktv', 'jikka',
 ];
 
 // how: what the audition is (shown in もくひょう while the player has no agency)
@@ -215,6 +258,16 @@ export const GUIDE_JOBS = [
   { place: 'toho', label: '映画のエキストラ', ids: ['toho_extra'], tier: 0, skill: 'engi' },
   { place: 'nhk', label: 'クイズ番組の予選', ids: ['nhk_quiz_yosen'], tier: 0, skill: 'talk' },
   { place: 'takoyaki', label: 'たこ焼きのバイト', ids: ['takoyaki_baito'], tier: 0, skill: 'uta' },
+  { place: 'ntv', label: '前説', ids: ['ntv_maesetsu'], tier: 0, skill: 'warai' },
+  { place: 'tvasahi', label: 'トーク番組の前説', ids: ['tvasahi_maesetsu'], tier: 0, skill: 'talk' },
+  { place: 'fujitv', label: 'コントの通行人役', ids: ['fujitv_tsukonin'], tier: 0, skill: 'engi' },
+  { place: 'tvtokyo', label: 'ロケのお手伝い', ids: ['tvtokyo_kosho'], tier: 0, skill: 'talk' },
+  { place: 'mbs', label: '収録前の前説', ids: ['mbs_maesetsu'], tier: 0, skill: 'talk' },
+  { place: 'mbs', label: '観覧の盛り上げ役', ids: ['mbs_kanran'], tier: 0, skill: 'warai' },
+  { place: 'mbs', label: '商店街ロケのお手伝い', ids: ['mbs_loke'], tier: 0, skill: 'talk' },
+  { place: 'ktv', label: '収録前の前説', ids: ['ktv_maesetsu'], tier: 0, skill: 'talk' },
+  { place: 'ktv', label: '観覧の盛り上げ役', ids: ['ktv_kanran'], tier: 0, skill: 'warai' },
+  { place: 'ktv', label: '商店街ロケのお手伝い', ids: ['ktv_loke'], tier: 0, skill: 'talk' },
   // tier 1: 所属 または ★30
   { place: 'yoshimoto', label: '若手ライブ出演', ids: ['yoshimoto_wakate_live'], tier: 1, need: 'yoshimoto', skill: 'warai' },
   { place: 'yoshimoto', label: 'お祭りの営業', ids: ['yoshimoto_matsuri'], tier: 1, need: 'agency', skill: 'talk' },
@@ -231,6 +284,13 @@ export const GUIDE_JOBS = [
   { place: 'sento', label: '銭湯寄席', ids: ['sento_yose'], tier: 1, ...T1, skill: 'warai' },
   { place: 'hotel', label: '宴会の余興', ids: ['hotel_yokyo'], tier: 1, ...T1, skill: 'warai' },
   { place: 'takoyaki', label: '商店街の祭りの司会', ids: ['takoyaki_matsuri'], tier: 1, ...T1, skill: 'talk' },
+  { place: 'ntv', label: 'バラエティのひな壇ゲスト', ids: ['ntv_hinadan'], tier: 1, ...T1, skill: 'talk' },
+  { place: 'tvasahi', label: 'クイズ番組の解答者', ids: ['tvasahi_quiz'], tier: 1, ...T1, skill: 'talk' },
+  { place: 'tvasahi', label: 'トーク番組のひな壇ゲスト', ids: ['tvasahi_hinadan'], tier: 1, ...T1, skill: 'talk' },
+  { place: 'fujitv', label: 'コント番組のツッコミ役', ids: ['fujitv_tsukkomi'], tier: 1, ...T1, skill: 'warai' },
+  { place: 'tvtokyo', label: 'VTRのワイプ出演', ids: ['tvtokyo_wipe'], tier: 1, ...T1, skill: 'talk' },
+  { place: 'mbs', label: 'ラジオのお便り紹介', ids: ['mbs_radio'], tier: 1, ...T1, skill: 'talk' },
+  { place: 'ktv', label: '若手漫才コンテストのネタ見せ', ids: ['ktv_manzai'], tier: 1, ...T1, skill: 'warai' },
   // tier 2: ★250
   { place: 'yoshimoto', label: '劇場の大喜利ライブ', ids: ['yoshimoto_oogiri'], tier: 2, fame: 250, skill: 'warai' },
   { place: 'shinkigeki', label: '新喜劇 準レギュラー', ids: ['shinkigeki_jun'], tier: 2, need: 'yoshimoto', fame: 250, skill: 'warai' },
@@ -248,6 +308,7 @@ export const GUIDE_JOBS = [
   { place: 'sento', label: '銭湯のPRポスター', ids: ['sento_poster'], tier: 2, fame: 250, skill: 'engi' },
   { place: 'hotel', label: '披露宴の司会', ids: ['hotel_wedding'], tier: 2, fame: 250, skill: 'talk' },
   { place: 'takoyaki', label: 'グルメ番組の食レポ', ids: ['takoyaki_report'], tier: 2, fame: 250, skill: 'talk' },
+  { place: 'tvtokyo', label: 'ご当地グルメロケのリポーター', ids: ['tvtokyo_loke'], tier: 2, fame: 250, skill: 'talk' },
   // tier 3: ★1000
   { place: 'yoshimoto', label: '冠番組の収録', ids: ['yoshimoto_kanmuri'], tier: 3, fame: 1000, skill: 'warai' },
   { place: 'shinkigeki', label: '座長公演の重要な役', ids: ['shinkigeki_key'], tier: 3, need: 'yoshimoto', fame: 1000, skill: 'warai' },

@@ -154,6 +154,7 @@ function generate() {
     { type: 'building', x: 49, y: 23, w: 4, h: 3, door: 2, name: 'ミックスジュース', kind: 'small', wall: '#fff6e0', roof: '#ff8a3d', sign: { text: 'ジュース', bg: '#ffd23f', color: '#d62f2f' }, talk: mixJuice },
     streetStage(62, 24, 4, { z: -40 }),
     riverBoat(33, 58, 16),
+    neon(59, 12, 'テレビ', '#ffa860'),
     { type: 'sign', x: 58, y: 15, solid: true, text: ['テレビ局通り', '北：MBS毎日放送・関西テレビ\n南：いか焼き・ミックスジュース・おうぎの森公園\n西：よしもと新喜劇 劇場・松竹芸能・なんば駅'] },
     { type: 'building', x: 36, y: 23, w: 6, h: 4, door: 3, name: 'おみやげ屋', kind: 'shop', wall: '#ffffff', roof: '#ffd23f', stripes: ['#d62f2f', '#ffd23f'], sign: { text: 'おみやげ', bg: '#ffffff', color: '#d62f2f' }, text: '「ただいま棚卸し中」の札がかかっている。' },
     neon(5, 13, 'なんば', '#ff4f8b'),
