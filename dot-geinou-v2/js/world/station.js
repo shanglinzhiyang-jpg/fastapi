@@ -245,7 +245,7 @@ function makeStation({ id, name, wall, floor, destPlace, destName, bgm, transfer
     const k = await g.ask(gateText, ['もどる', 'きっぷなしで通る…'], { cancel: 0 });
     if (k !== 1) return;
     await api.fareEvasion(g, {
-      fare: FARE, dest: destName,
+      fare: FARE, dest: destName, inspected: true, // the 新幹線: the conductor checks tickets
       ride: async () => {
         await g.fadeOut();
         const ride = travelScene(g, { to: destName, via, vehicle: 'shinkansen', scenery });
