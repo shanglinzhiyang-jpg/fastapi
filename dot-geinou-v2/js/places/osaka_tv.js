@@ -952,7 +952,7 @@ function lobbyRoom(C) {
     tiles: [
       '####################',
       '#UAUUUUUUUUUUUUSTUR#',
-      '#=a=mm=======mmst=r#',
+      mbs ? '#=a=mm=======mmst=r#' : '#=a=mm=======llst=r#',
       '#P...............P.#',
       '#......KKKKKK......#',
       '#........[]........#',
@@ -967,7 +967,7 @@ function lobbyRoom(C) {
     legend: {
       '#': t('walltop'), U: t('wall_u'), '=': t('wall_lo'),
       A: t('door_u'), a: t('door'), S: t('sdoor_ul'), T: t('sdoor_ur'), s: t('sdoor_l'), t: t('sdoor_r'), R: t('mdoor_u'), r: t('mdoor'),
-      m: `${t('wall_lo')}+${t('mon')}`,
+      m: `${t('wall_lo')}+${t('mon')}`, l: `${t('wall_lo')}+lantern`,
       K: t('counter'), '[': t('run_l'), ']': t('run_r'), M: t('mat'),
       F: t('sofa'), f: t('sofa_up'), n: 'table_low', H: t('photo'), V: 'vending', Y: 'flower_stand', P: 'plant',
     },
@@ -999,7 +999,7 @@ function lobbyRoom(C) {
     ],
     events: [
       { x: 4, y: 2, w: 2, on: 'action', run: screens },
-      { x: 13, y: 2, w: 2, on: 'action', run: screens },
+      { x: 13, y: 2, w: 2, on: 'action', run: mbs ? screens : async (g) => g.say('赤いちょうちんだ。\n「笑」の一文字が、でかでかと書いてある。') },
       { x: 7, y: 2, w: 2, on: 'action', run: async (g) => g.say(mbs ? `「MBS 毎日放送」の大きな看板だ。\nチャンネルは${C.ch}。テレビとラジオ、両方の放送局らしい。` : `「関西テレビ」の大きな看板だ。\nチャンネルは${C.ch}。地元では「カンテレ」と呼ばれて親しまれている。`) },
       { x: 2, y: 6, w: 3, on: 'action', run: async (g) => g.say('待合のソファだ。\n出演者や観覧のお客さんが、ここで呼ばれるのを待つ。') },
       { x: 2, y: 8, w: 3, on: 'action', run: async (g) => g.say('ソファのせもたれに、番組のステッカーが\nこっそり貼ってある。') },
@@ -1274,9 +1274,9 @@ function studioRoom(C) {
     ],
     entities: [
       emblem(C, 9, 0.35),
-      sign(2.2, 1.4, 5.6, 0.9, `${pid}_studio_banner`, (c, Wd, Hd) => {
+      sign(1.8, 1.4, 6.2, 0.9, `${pid}_studio_banner`, (c, Wd, Hd) => {
         R(c, 0, 0, Wd, Hd, '#2a1a3a'); R(c, 2, 2, Wd - 4, Hd - 4, '#d62f2f'); R(c, 2, 2, Wd - 4, 2, '#ff6a6a');
-        bold(c, mbs ? 'わいわい！関西ノリ全開！' : 'まいど！笑いの本場から！', Wd / 2, 6, { size: 16, align: 'center', color: '#fff6a8' });
+        bold(c, mbs ? 'わいわい！関西ノリ全開！' : 'まいど！笑いの本場から！', Wd / 2, 7, { size: 14, align: 'center', color: '#fff6a8' });
       }),
       // regular cast & crew
       npc(id('mc'), X.mc, 3, 'down', W.mc, { talk: posted('down', lines(W.mc, mcLines)) }),
@@ -1511,7 +1511,7 @@ const SKITS = [
 const KTV_AUD = [
   ['k1', 4, 10, { ...LOOKS.fan, hairColor: 'brown', top: '#ff6fae' }, 'お客さん', 'ねぎ焼きボーイズ、応援してんねん！', true],
   ['k2', 8, 10, LOOKS.salaryman, 'お客さん', '若手の漫才はな、荒けずりなとこがええねん。', true],
-  ['k3', 13, 10, { hair: 'twin', hairColor: 'black', skin: 'light', top: '#2a3560', bottom: '#2a3560', skirt: true, tie: '#d62f2f' }, '学生さん', '学校帰りに来てん！今日はどこが勝つやろ？', true],
+  ['k3', 12, 10, { hair: 'twin', hairColor: 'black', skin: 'light', top: '#2a3560', bottom: '#2a3560', skirt: true, tie: '#d62f2f' }, '学生さん', '学校帰りに来てん！今日はどこが勝つやろ？', true],
   ['k4', 15, 11, LOOKS.oldman, 'おじいちゃん', 'わしは六十年、漫才を見てきた。\n…最近の子も、ようやっとる。', true],
   ['k5', 5, 11, LOOKS.mom, 'お客さん', 'わくわくするわ〜！', false],
   ['k6', 11, 11, LOOKS.tourist, 'お客さん', 'これが本場の漫才…！', false],
@@ -1600,8 +1600,8 @@ function manzaiRoom() {
         await sayK(g, 'kyaku', 'うちは好きやったで！\n…でも、ツッコミはもうちょい早よ入れてな！');
       }
     } else if (i === 1) {
-      if (today(g, 'ktv_watch_day')) { await say(g, npc, '今日の収録はもう終わったで。\nまた明日も見においでや！'); return; }
-      markToday(g, 'ktv_watch_day');
+      if (today(g, 'ktv_contest_day')) { await say(g, npc, '今日の収録はもう終わったで。\nまた明日も見においでや！'); return; }
+      markToday(g, 'ktv_contest_day');
       await say(g, npc, 'ほな客席へどうぞ！次は、ねぎ焼きボーイズや！');
       await perform(g);
     } else {
