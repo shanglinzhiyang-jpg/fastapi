@@ -803,6 +803,9 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- ending
+  // Credits (staff roll). The game itself no longer calls this: the ★4000 year-end show
+  // (nhk.js) is a milestone and the career goes on (higher titles, the yearly award…).
+  // Kept, harmless, for screenshots / old test scripts.
   ending() {
     return new Promise((resolve) => {
       const g = this;

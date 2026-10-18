@@ -15,7 +15,7 @@
 import { SW, SH, fmtMoney, yenText, clamp, shade } from './util.js';
 import { text, wrap, panel, measure, rect, downArrow, COLORS } from './draw.js';
 import { audio } from './audio.js';
-import { SKILLS, AGENCIES, RANKS, FINALE_FAME, rankIndex, rankName } from './state.js';
+import { SKILLS, AGENCIES, RANKS, FINALE_FAME, CAREER, rankIndex, rankName, nextRank as nextTitle } from './state.js';
 import { MINIGAMES } from './minigame.js';
 import { eraOf, fullName, ageOf, prefecture, regionOf, GENDERS, PERSONALITIES, RELATIONS, CAUSES, isBirthday, daysToBirthday, personalityEffects, sortFamily } from './profile.js';
 import { GUIDE, GUIDE_ORDER, TOWNS, AUDITIONS, GUIDE_JOBS, TIER_FAME, jobOpen } from '../world/guide.js';
@@ -282,8 +282,15 @@ function goalPage(g, ctx) {
   // the one most important next step
   pg.block().head('つぎの目標', COLORS.accent);
   if (fl.finaleDone) {
-    pg.para('国民的スターになった！おめでとう！');
-    pg.para('NHKホールの凱旋コンサートや、大きなお仕事で活躍を続けよう。', { s: SMALL, c: COLORS.dim });
+    // the year-end show was a milestone: the next title is the goal now
+    const nr = nextTitle(st.fame);
+    if (nr) {
+      pg.para(`次の称号「${nr[1]}」をめざそう！（あと★${nr[0] - st.fame}）`);
+      pg.para('国民的スターになっても、芸能人生はまだまだ続く。大きなお仕事やレギュラー番組、NHKホールの凱旋コンサートで活躍しよう。', { s: SMALL, c: COLORS.dim });
+    } else {
+      pg.para(`最高の称号「${rankName(st.fame)}」！`);
+      pg.para('ドット芸能大賞の殿堂入りや、ファン100万人など、下の「キャリアの目標」をぜんぶ達成しよう。', { s: SMALL, c: COLORS.dim });
+    }
   } else if (st.fame >= FINALE_FAME && fl.finaleInvited) {
     pg.para(g.map && g.map.placeId === 'nhk' ? 'プロデューサーに会いに行こう！' : 'NHK放送センターへ行こう！');
     pg.para('年末の大型歌番組のプロデューサーが、入り口の近くで待っている。', { s: SMALL, c: COLORS.dim });
@@ -309,7 +316,22 @@ function goalPage(g, ctx) {
   const nextRank = RANKS[ri + 1];
   pg.block().head('称号');
   pg.row(`いまは「${rankName(st.fame)}」`, `★${st.fame}`, { rc: COLORS.pink });
-  if (nextRank) pg.para(`次の「${nextRank[1]}」まで あと★${nextRank[0] - st.fame}`, { s: SMALL, c: COLORS.dim });
+  // (after the year-end show the next title is already the main goal above)
+  if (nextRank && !fl.finaleDone) pg.para(`次の「${nextRank[1]}」まで あと★${nextRank[0] - st.fame}`, { s: SMALL, c: COLORS.dim });
+  else if (!nextRank) pg.para('最高の称号に到達！', { s: SMALL, c: COLORS.accent });
+
+  // long-term career goals (career.js), after the year-end show: always a next step
+  if (fl.finaleDone && CAREER.goals) {
+    let rows = [];
+    try { rows = CAREER.goals(g) || []; } catch (e) { console.error('[notebook] career goals', e); }
+    if (rows.length) {
+      pg.block().head('キャリアの目標', COLORS.accent);
+      for (const r of rows) {
+        pg.row((r.done ? '◎ ' : '・') + r.label, r.value || '', { rs: SMALL, rc: r.done ? COLORS.good : COLORS.accent });
+        if (r.note) pg.para(r.note, { s: SMALL, c: COLORS.dim, x: 16 });
+      }
+    }
+  }
 
   // jobs
   const here = g.map && GUIDE[g.map.placeId];
@@ -328,7 +350,7 @@ function goalPage(g, ctx) {
   }
 
   if (!fl.finaleDone && st.fame < FINALE_FAME) {
-    pg.block().head('さいごの目標');
+    pg.block().head('大きな目標');
     pg.para(`★${FINALE_FAME}で、NHKから年末の大舞台の声がかかる。`, { s: SMALL });
     pg.para(`（あと★${FINALE_FAME - st.fame}）`, { s: SMALL, c: COLORS.dim });
   }
@@ -531,6 +553,11 @@ function recordPage(g, ctx) {
   if (regCount) pg.row('レギュラー番組の出演', `${regCount}回`);
   if (g.housing) pg.row('住まい', g.housing().name || '');
   if (st.flags && st.flags.finaleDone) pg.row('年末の大型歌番組', '出演！', { rc: COLORS.accent });
+  const aw = st.flags && st.flags.career_award && st.flags.career_award.wins;
+  const grand = aw ? Number(aw.grand) || 0 : 0;
+  const prizes = aw ? Object.values(aw).reduce((a, v) => a + (Number(v) || 0), 0) : 0;
+  if (prizes) pg.row('ドット芸能大賞', `${grand ? `大賞${grand}回` : `受賞${prizes}回`}${st.flags.career_award.hof ? '・殿堂入り' : ''}`, { rc: COLORS.accent });
+  if (st.flags && Number(st.flags.career_no1Weeks)) pg.row('好感度ランキング1位', `通算${Number(st.flags.career_no1Weeks)}週`, { rc: COLORS.pink });
 
   pg.block().head('ミニゲームのベストランク');
   const best = stats.bestRanks || {};

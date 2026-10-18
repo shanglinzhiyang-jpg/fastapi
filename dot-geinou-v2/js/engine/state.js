@@ -7,7 +7,10 @@ import { defaultProfile, normalizeProfile, PERSONALITIES } from './profile.js';
 export const SKILLS = { warai: 'お笑い', engi: '演技', uta: '歌', talk: 'トーク' };
 export const SKILL_MAX = 100;
 
-// Fame thresholds -> title shown in the HUD / status.
+// Fame thresholds -> title shown in the HUD / status. ★4000 (FINALE_FAME) is the big
+// milestone (the NHK year-end show), not the end: the titles above it keep the career
+// going. Top-tier jobs bring about ★200-350 each, so a busy day is ★300-1000; the gaps
+// grow so each title after the finale takes a few more weeks than the last.
 export const RANKS = [
   [0, '無名'],
   [30, '駆け出し'],
@@ -17,8 +20,20 @@ export const RANKS = [
   [1000, '売れっ子'],
   [2000, 'スター'],
   [4000, '国民的スター'],
+  [7000, '大スター'],
+  [12000, '大御所'],
+  [20000, 'レジェンド'],
+  [35000, '芸能界の宝'],
+  [60000, '永遠のスター'],
 ];
 export const FINALE_FAME = 4000;
+
+// The next title above fame ([min, name]), or null at the top.
+export const nextRank = (fame) => RANKS[rankIndex(fame) + 1] || null;
+
+// Hooks content modules fill in for the engine's screens (they load after the engine):
+// CAREER.goals(g) -> [{ label, value, goal, note, done }] for the notebook's もくひょう.
+export const CAREER = {};
 
 export function rankIndex(fame) {
   let idx = 0;

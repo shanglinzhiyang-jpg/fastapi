@@ -11,17 +11,18 @@
 //   ★250  ニュース原稿読み（announce d3）、クイズ番組の解答者（quiz d3）
 //   ★1000 朝の連続ドラマに出演（command acting d4）
 //   ★2000 日曜夜の歴史ドラマで主演（command tate d5）
-//   ★4000 年末の大型歌番組（最終公演 → g.ending()）。その後は凱旋コンサートを何度でも。
+//   ★4000 年末の大型歌番組（大きな節目のお祝い。エンディングはなく、芸能人生はそのまま続く）。
+//        その後は凱旋コンサートを何度でも。
 
 import { registerPlace } from '../engine/map.js';
-import { LOOKS, charSheet, drawChar } from '../engine/sprites.js';
+import { LOOKS, charSheet, drawChar, charSheetHD } from '../engine/sprites.js';
 import { defineTile, R as TR, P as TP, speckle, pix } from '../engine/tiles.js';
-import { registerItem, FINALE_FAME } from '../engine/state.js';
+import { registerItem, FINALE_FAME, nextRank, rankName } from '../engine/state.js';
 import { ACTIVITY } from '../engine/life.js';
 import { registerSong } from '../engine/audio.js';
 import { text, measure } from '../engine/draw.js';
 import { drawLogo } from '../engine/logos.js';
-import { W, H, shade, mix, hash2 } from '../engine/util.js';
+import { W, H, SW, SH, shade, mix, hash2 } from '../engine/util.js';
 
 // ====================================================================== shared state (not saved)
 const TOUR = { on: false, stop: '' };
@@ -865,13 +866,13 @@ async function finaleFlow(g) {
     await g.say(`出演料 ¥${r.pay.toLocaleString()}　知名度 +${r.fame}`);
     await g.say('（その夜、日本中が{name}の歌で笑顔になった――）');
 
-    // ---- エンディング
+    // ---- 節目のお祝い（エンディングはない：芸能人生はここからも続く）
     await g.fadeOut(40);
     SHOW.on = false;
     SHOW.phase = '';
-    const end = g.ending();
+    const card = milestoneCard(g);
     await g.fadeIn(20);
-    await end;
+    await card;
   } finally {
     SHOW.on = false;
     SHOW.phase = '';
@@ -880,8 +881,110 @@ async function finaleFlow(g) {
   await g.wait(300);
   await g.emote('nhk_producer2', '♪');
   await g.say(['{name}さん、本当にお疲れさまでした！', 'このNHKホールは、これからも{name}さんのステージです。またいつでも歌いに来てください！'], SP.producer);
-  await g.say(['エンディングを迎えました！おめでとう！', 'このあとも、{name}の芸能活動は続きます。お仕事やレッスンで、もっと上を目指そう！']);
+  await g.say('来年の「ドット芸能大賞」も、{name}さんの話題で持ちきりになりますよ！\nこれからの活躍、楽しみにしています！', SP.producer);
+  g.sfx('fanfare');
+  await g.say(['国民的スターになった！', 'でも、芸能人生はまだまだ続く――。']);
+  const nr = nextRank(g.state.fame);
+  await g.say([
+    nr ? `次の目標は、称号「${nr[1]}」（★${nr[0]}）！` : `いまの称号は「${rankName(g.state.fame)}」。ここからは、自分だけの記録をつくろう！`,
+    'てちょうの「もくひょう」に、新しい「キャリアの目標」が増えた！\n冠番組、レギュラー番組、ファン100万人、ドット芸能大賞…まだまだ上をめざそう！',
+  ]);
   g.save();
+}
+
+// The year-end show is a milestone, not the end: a short card with the numbers so far
+// and the next goal, then the game goes on (A, or the autopilot, closes it).
+const CARD_CONF = ['#ff5d8f', '#ffd23f', '#5fd7ff', '#5ee07a', '#ffffff', '#b48cff', '#ff8a3d'];
+function milestoneCard(g) {
+  return new Promise((resolve) => {
+    const st = g.state;
+    const fans = Math.max(0, Math.round(st.fans || 0));
+    let friends = 0;
+    try { friends = g.friends ? g.friends(2).length : 0; } catch (e) { friends = 0; }
+    const nr = nextRank(st.fame);
+    const stats = [
+      `芸能生活 ${st.day}日目`,
+      `こなしたお仕事 ${(st.stats && st.stats.jobs) || 0}回`,
+      `知名度 ★${st.fame}`,
+      fans ? `ファン ${fans.toLocaleString('ja-JP')}人` : null,
+      friends ? `なかよしの仲間 ${friends}人` : null,
+    ].filter(Boolean);
+    let hd = null;
+    try { hd = charSheetHD(st.look || {}); } catch (e) { hd = null; }
+    const RR = (ctx, x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+    const alpha = (t, at) => Math.max(0, Math.min(1, (t - at) / 30));
+    const CONT_T = 60 * 4; // 「まだまだ続く」 appears
+    const scene = {
+      milestone: true,
+      opaque: true,
+      hd: true,
+      hidesHud: true,
+      t: 0,
+      update(gg) {
+        scene.t++;
+        if ((gg.auto && scene.t > 90) || (scene.t > CONT_T + 40 && gg.input.pressed('a'))) {
+          gg.fade = 1;
+          gg.pop(scene);
+          gg.fadeIn(30);
+          resolve();
+        }
+      },
+      draw(ctx) {
+        const t = scene.t;
+        RR(ctx, 0, 0, SW, SH, '#141032');
+        // stars and falling confetti (stateless: functions of time)
+        for (let i = 0; i < 70; i++) {
+          const x = Math.floor(hash2(i, 1, 4) * SW), y = Math.floor(hash2(i, 2, 4) * SH);
+          if ((i + (t >> 4)) % 9) RR(ctx, x, y, 1, 1, i % 3 ? '#4a4a8a' : '#c8ccff');
+        }
+        for (let i = 0; i < 60; i++) {
+          const sp = 0.6 + hash2(i, 3, 4) * 0.8;
+          const y = ((t * sp + hash2(i, 4, 4) * 400) % (SH + 20)) - 10;
+          const x = (hash2(i, 5, 4) * SW + Math.sin((t + i * 11) / 16) * 6 + SW) % SW;
+          const flip = Math.floor((t + i * 5) / 8) % 2;
+          RR(ctx, x, y, flip ? 4 : 2, flip ? 2 : 4, CARD_CONF[i % CARD_CONF.length]);
+        }
+        // the stage floor, a spotlight and its pool of light, the player hopping in it
+        const cx = SW / 2;
+        RR(ctx, 0, 296, SW, SH - 296, '#3a2418');
+        RR(ctx, 0, 296, SW, 2, '#8a5a32');
+        for (let x = 0; x < SW; x += 48) RR(ctx, x, 298, 1, SH - 298, '#2a1810');
+        ctx.globalAlpha = 0.16;
+        for (let y = 0; y < 300; y += 2) { const w = 30 + y * 0.35; RR(ctx, cx - w, y, w * 2, 2, '#fff2c0'); }
+        ctx.globalAlpha = 0.22;
+        for (let dy = -8; dy <= 8; dy++) { const w = Math.round(140 * Math.sqrt(1 - (dy / 9) ** 2)); RR(ctx, cx - w, 300 + dy, w * 2, 1, '#fff2c0'); }
+        ctx.globalAlpha = 1;
+        if (hd) {
+          const hop = Math.floor(t / 20) % 4 === 1 ? 6 : 0;
+          RR(ctx, cx - 22, 294, 44, 4, 'rgba(0,0,0,0.35)');
+          const im = (hd.down || [])[0];
+          if (im) ctx.drawImage(im, 0, 0, im.width, im.height, cx - 32, 214 - hop, 64, 80);
+        }
+        // the numbers so far
+        ctx.globalAlpha = alpha(t, 0);
+        text(ctx, '国民的スター誕生！', cx, 22, { size: 32, align: 'center', color: '#ffd23f', outline: '#3a1030' });
+        text(ctx, st.name, cx, 66, { size: 18, align: 'center', color: '#ffffff', shadow: '#000000' });
+        stats.forEach((l, i) => {
+          ctx.globalAlpha = alpha(t, 30 + i * 18);
+          const col = i % 2 ? 82 : -82;
+          const row = Math.floor(i / 2);
+          const x = stats.length % 2 && i === stats.length - 1 ? cx : cx + col;
+          text(ctx, l, x, 98 + row * 22, { size: 14, align: 'center', color: '#e8e8ff', shadow: '#000000' });
+        });
+        // …and the road ahead
+        ctx.globalAlpha = alpha(t, CONT_T);
+        text(ctx, 'でも、芸能人生はまだまだ続く――', cx, 168, { size: 20, align: 'center', color: '#ff9ad0', shadow: '#000000' });
+        if (nr) text(ctx, `次の目標：称号「${nr[1]}」（★${nr[0]}）`, cx, 196, { size: 14, align: 'center', color: '#5fd7ff', shadow: '#000000' });
+        ctx.globalAlpha = 1;
+        if (t > CONT_T + 40) {
+          const blink = Math.floor(t / 30) % 2;
+          RR(ctx, SW - 140, SH - 30, 128, 22, 'rgba(10,6,4,0.7)');
+          text(ctx, 'Aでつづける', SW - 76, SH - 27, { size: 14, align: 'center', color: blink ? '#5fd7ff' : '#ffffff', shadow: null });
+        }
+      },
+    };
+    g.push(scene);
+  });
 }
 
 // ---- hall drawing (crowd / lights / confetti)

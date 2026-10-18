@@ -6,23 +6,31 @@
 //                   met. A declined show is not offered again within 4 weeks (an unanswered
 //                   offer can still be accepted for OFFER_DAYS = 14 days, then it expires).
 //   冠番組          at ★1200 and 8,000+ fans: your own weekly show ('career_kanmuri'), so it
-//                   has a few weeks to run before the ★4000 finale. Its title, studio, weekday
+//                   has a few weeks to run before the ★4000 milestone. Its title, studio, weekday
 //                   and minigame follow the player (agency, best skill) and are fixed when the
 //                   offer is made (flags.career_kan). Declined, it is offered again a week
-//                   later. The first recording ends with a celebration.
-//   Fans            milestones 1,000 … 300,000 (phone messages + small gifts), fan letters
+//                   later. The first recording ends with a celebration; the 10th / 30th /
+//                   50th / 100th broadcasts are news (KAN_MS).
+//   Fans            milestones 1,000 … 1,000,000 (phone messages + small gifts), fan letters
 //                   (at most one per morning), a fan meeting at 20,000 fans and a bigger
 //                   ファン感謝祭 at 100,000 (a one-day "regular" at a venue, see FANMEET).
 //   ドッター        phone app: one post a day (今日のお仕事 / ごはん / オフの日 / 告知) → some
 //                   fans (at most 40% of what your best show brings), stress -5; a timeline with fan replies; now and then a harmless
 //                   misunderstanding (炎上しかけ) that a follow-up post clears up.
-//   Ranking         every Monday morning: 「今週のタレント好感度ランキング」 (news).
+//   Ranking         every Monday morning: 「今週のタレント好感度ランキング」 (news); weeks
+//                   at No.1 are counted (flags.career_no1Weeks, news at 5 / 10 / 25 / 50).
+//   ドット芸能大賞  every AWARD_EVERY = 120 days (days 121, 241, …): the year's award from
+//                   the fame / fans / shows of those 120 days (大賞 … 新人賞), a short
+//                   ceremony, and 殿堂入り after AWARD_HOF 大賞 (flags.career_award).
+//   Goals           CAREER.goals(g) (state.js) lists the long-term goals for the notebook.
+//
+// ★4000 (the NHK year-end show) is a milestone, not the end: everything keeps going.
 //
 // State: g.state.flags career_* / dotter (old saves simply lack them), g.state.phone.lastPost
 // and .posts (life fields), g.state.regulars (engine). All names are fictional.
 
 import { registerRegular, REGULARS, onMorning, registerPhoneApp, PHONE_APPS, weekdayOf, weekOf, WEEKDAYS, PEOPLE, isKansai, OFFER_DAYS } from '../engine/life.js';
-import { registerItem, ITEMS, RANKS, rankIndex, AGENCIES } from '../engine/state.js';
+import { registerItem, ITEMS, RANKS, rankIndex, AGENCIES, CAREER } from '../engine/state.js';
 import { PLACES } from '../engine/map.js';
 import { LOOKS, charSheetHD, drawFaceHD } from '../engine/sprites.js';
 import { text, wrap, measure, COLORS } from '../engine/draw.js';
@@ -102,6 +110,10 @@ registerItem('career_kan_trophy', { name: '冠番組の記念トロフィー', p
 registerItem('career_fm_photo', { name: 'ファンミの集合写真', price: 0, desc: 'ファンミーティングの最後に、会場のみんなと撮った写真。\n宝物だ。' });
 registerItem('career_no1_badge', { name: '好感度No.1の記念バッジ', price: 0, desc: 'タレント好感度ランキングで1位になった記念。\nキラキラ光る金のバッジ。' });
 registerItem('career_fan_plaque', { name: 'ファン30万人の記念盾', price: 0, desc: 'ファンが30万人をこえた記念に、ファンクラブから贈られた盾。' });
+registerItem('career_fan_gold', { name: 'ファン100万人の金の盾', price: 0, desc: 'ファンが100万人をこえた記念の、金色にかがやく盾。\n日本中に、仲間がいる。' });
+registerItem('career_kan100', { name: '冠番組100回記念の台本', price: 0, desc: '冠番組の放送100回を記念して、スタッフ全員がサインした台本。' });
+registerItem('career_award_trophy', { name: 'ドット芸能大賞のトロフィー', price: 0, desc: 'その年いちばん活躍した芸能人に贈られる、金色のトロフィー。' });
+registerItem('career_hof_medal', { name: '殿堂入りの記念メダル', price: 0, desc: 'ドット芸能大賞の殿堂入りを記念したメダル。\n芸能界の歴史に、名前がきざまれた。' });
 
 // ======================================================================== regular shows
 // A regular pays more than a normal job of its tier and brings far more fans, but takes
@@ -460,7 +472,7 @@ const AW = 320, AH = 180; // art pixels, shown 2x
 class CelebrationScene {
   constructor(g, o) {
     this.g = g;
-    this.o = o; // { kind: 'kanmuri' | 'fanmeet', title, host, hostLook }
+    this.o = o; // { kind: 'kanmuri' | 'fanmeet' | 'award', title, host, hostLook, big, no, prize, hof }
     this.hd = true;
     this.opaque = true;
     this.hidesHud = true;
@@ -494,6 +506,14 @@ class CelebrationScene {
       // handheld mic
       R(c, 174, 72 - h, 2, 6, '#3a3a44'); R(c, 173, 69 - h, 4, 3, '#20232a'); R(c, 174, 69 - h, 1, 1, '#8a8a9a');
       paintCrowd(c, t);
+    } else if (this.o.kind === 'award') {
+      // the award stage: the MC, you with the trophy, presenters clapping; a camera
+      this.shadow(c, 84, 82); this.stand(c, FM_MC, 84, 82, 'right', 0);
+      this.shadow(c, 150, 80); this.stand(c, me, 150, 80, 'down', hop(0) > 2 ? 1 : 0);
+      paintTrophy(c, 159, 97 - (hop(0) > 2 ? 1 : 0));
+      this.shadow(c, 200, 82); this.stand(c, LOOKS.announcerM, 200, 82, 'left', hop(2));
+      this.shadow(c, 236, 84); this.stand(c, LOOKS.actress, 236, 84, 'left', hop(3));
+      paintCamera(c, 40, 94);
     } else {
       this.shadow(c, 70, 84); this.stand(c, LOOKS.ad, 70, 84, 'right', hop(1));
       this.shadow(c, 112, 82); this.stand(c, this.o.hostLook || LOOKS.manager, 112, 82, 'down', hop(2));
@@ -518,6 +538,13 @@ class CelebrationScene {
     this.drawText(ctx, g, t);
   }
   drawText(ctx, g, t) {
+    if (this.o.kind === 'award') {
+      ['祝', '受', '賞'].forEach((ch, i) => text(ctx, ch, 72, 40 + i * 18, { size: 16, align: 'center', color: '#c8102e', shadow: null }));
+      text(ctx, `第${this.o.no}回 ドット芸能大賞`, 380, 50, { size: 20, align: 'center', color: '#fff6a8', shadow: '#1a1040' });
+      const blink = Math.floor(t / 30) % 2 === 0;
+      text(ctx, this.o.hof ? `${this.o.prize}・殿堂入り！` : `${this.o.prize} 受賞！`, 380, 82, { size: 16, align: 'center', color: blink ? '#ffffff' : '#ffd6e4', shadow: '#1a1040' });
+      return;
+    }
     if (this.o.kind === 'fanmeet') {
       const s = this.o.big ? 'ファン感謝祭' : 'ファンミーティング';
       text(ctx, `${g.state.name}`, SW / 2, 22, { size: 16, align: 'center', color: '#fff6a8', shadow: '#3a1048' });
@@ -606,6 +633,13 @@ function paintCamera(c, x, y) {
   R(c, x, y, 16, 10, '#20232a'); R(c, x + 1, y + 1, 14, 3, '#4a4e5a'); R(c, x - 6, y + 3, 7, 5, '#20232a'); R(c, x - 6, y + 4, 2, 3, '#5fd7ff');
   R(c, x + 7, y + 10, 2, 16, '#3a3a44'); R(c, x + 1, y + 26, 14, 2, '#3a3a44');
   R(c, x + 12, y + 2, 2, 2, '#ff3b4f');
+}
+// A gold trophy held in front of the player (x, y: the player's sprite top-left + offset).
+function paintTrophy(c, x, y) {
+  R(c, x + 2, y + 10, 10, 1, '#5a4210');
+  R(c, x + 1, y + 1, 12, 8, '#8a6a10'); R(c, x + 2, y + 1, 10, 8, '#ffd23f'); R(c, x + 3, y + 2, 2, 5, '#fff6a8');
+  R(c, x - 1, y + 2, 2, 4, '#c9a227'); R(c, x + 13, y + 2, 2, 4, '#c9a227');
+  R(c, x + 5, y + 9, 4, 3, '#c9a227'); R(c, x + 3, y + 12, 8, 3, '#8a6a10'); R(c, x + 4, y + 12, 6, 2, '#ffd23f');
 }
 function paintCake(c, x, y, t) {
   R(c, x - 2, y + 14, 28, 2, '#8a8a9a');
@@ -823,7 +857,7 @@ function offerMorning(g, out) {
 }
 
 // ======================================================================== fans: milestones, letters, fan meeting
-const MILESTONES = [1000, 5000, 20000, 50000, 100000, 300000];
+const MILESTONES = [1000, 5000, 20000, 50000, 100000, 300000, 500000, 1000000];
 function giftIf(g, id, n = 1) {
   if (!ITEMS[id]) return '';
   g.giveItem(id, n, true);
@@ -879,6 +913,17 @@ function sendMilestone(g, m) {
     g.giveItem('career_fan_plaque', 1, true);
     g.message({ from: 'ドット芸能ニュース', kind: 'news', text: g.fmt(`【ファン30万人突破】\n{name}さんのファンが30万人をこえ、社会現象に！\nファンクラブからは記念の盾が贈られました。\n（ファン30万人の記念盾と¥300,000をもらった）`) });
     g.notify('ファン30万人突破！', { color: COLORS.pink });
+  } else if (m === 500000) {
+    g.addMoney(500000, true);
+    const a = giftIf(g, 'hanataba');
+    g.message({ from: club, kind: 'fan', look: fanLook, text: g.fmt(`ファン50万人突破、おめでとうございます！\n全国47都道府県すべてに、ファンクラブの支部ができました。\n支部のみんなから、お祝いが届いています。\n（¥500,000${a ? `と${a}` : ''}をもらった）`) });
+    g.notify('ファン50万人突破！ +¥500,000', { color: COLORS.pink });
+  } else if (m === 1000000) {
+    g.addMoney(1000000, true);
+    g.giveItem('career_fan_gold', 1, true);
+    g.addNeed('stress', -30);
+    g.message({ from: 'ドット芸能ニュース', kind: 'news', text: g.fmt(`【ファン100万人突破】\n{name}さんのファンが、ついに100万人に！\n街の声「家族みんなで応援してる」「元気の源です」\nファンクラブからは金の盾が贈られました。\n（ファン100万人の金の盾と¥1,000,000をもらった）`) });
+    g.notify('ファン100万人突破！', { color: COLORS.accent });
   }
 }
 
@@ -1040,7 +1085,16 @@ function rankingMorning(g, out) {
     fl.career_top10 = st.day;
     g.message({ from: 'ファンレター', kind: 'fan', text: g.fmt(`ランキング${rank}位、見ました！トップ10入り、おめでとう！\n次はてっぺんだね！\n― ファン一同`) });
   }
+  // weeks at No.1 (a long reign is news of its own)
+  if (rank === 1) {
+    const w = (fl.career_no1Weeks = num(fl.career_no1Weeks) + 1);
+    if (NO1_MS.includes(w)) {
+      g.addFans(Math.round(st.fans * 0.02), true);
+      g.message({ from: 'ドット芸能ニュース', kind: 'news', text: g.fmt(`【好感度ランキング】{name}さん、通算${w}週目の1位！\n「${w >= 25 ? '国民みんなの顔' : w >= 10 ? '不動の人気者' : '安定の人気'}」と話題に。\n次の記録にも期待が集まっています。`) });
+    }
+  }
 }
+const NO1_MS = [5, 10, 25, 50];
 
 // ======================================================================== SNS app ドッター
 const DOT = {
@@ -1553,7 +1607,26 @@ function kanMorning(g, out) {
     g.addFans(Math.round(r.fans * 0.5), true);
     out.sent++;
   }
+  // broadcast milestones (recordings of the 冠番組 so far; a save that is already past some
+  // of them only hears about the highest one)
+  const n = kanCount(st);
+  const ms = obj(g, 'career_kanMs');
+  if (!ms.init) { ms.init = st.day; KAN_MS.filter((m) => n >= m).slice(0, -1).forEach((m) => { ms[m] = st.day; }); }
+  const m = KAN_MS.find((x) => n >= x && !ms[x]);
+  if (m && out.sent < 2) {
+    ms[m] = st.day;
+    const rate = (12 + Math.min(10, m / 10) + Math.random() * 4).toFixed(1);
+    g.addFans(Math.round(r.fans * (m >= 100 ? 3 : m >= 50 ? 2 : 1)), true);
+    g.addFame(m >= 100 ? 300 : m >= 50 ? 150 : 80, true);
+    const gift = m >= 100 ? giftIf(g, 'career_kan100') : '';
+    g.message({ from: 'ドット芸能ニュース', kind: 'news', text: g.fmt(`【祝・放送${m}回】{name}さんの冠番組『${r.title}』が、放送${m}回をむかえました！\n記念回の視聴率は${rate}%。${m >= 100 ? '\n「もはや国民的番組」の声も。' : '\nこれからも毎週、目がはなせません。'}${gift ? `\n（${gift}をもらった）` : ''}`) });
+    g.notify(`冠番組 放送${m}回！`, { color: COLORS.accent });
+    out.sent++;
+  }
 }
+const KAN_MS = [10, 30, 50, 100];
+// recordings of the 冠番組 so far (never reset, unlike regulars[KAN].count)
+const kanCount = (st) => num(st.jobs && st.jobs['regular_' + KAN]);
 
 // ======================================================================== fan meeting: the morning after
 function fanMeetMorning(g, out) {
@@ -1584,6 +1657,185 @@ function fanMeetMorning(g, out) {
   }
 }
 
+// ======================================================================== ドット芸能大賞 (every 120 days)
+// The "year" is AWARD_EVERY days: on the mornings of days 121, 241, … the year's work is
+// judged (fame and fans gained, regular-show recordings, the 冠番組 on air). The prize is
+// news on the phone at once, then a short ceremony when the player is free. Winning the
+// 大賞 AWARD_HOF times is 殿堂入り; the awards go on after it. A save from before this
+// system is judged on everything so far at its first ceremony. (All names are fictional.)
+export const AWARD_EVERY = 120;
+export const AWARD_HOF = 3;
+const AWARD_TIERS = [
+  { id: 'grand', name: '大賞', min: 25000, money: 1000000, fans: 0.06 },
+  { id: 'best', name: '最優秀タレント賞', min: 12000, money: 500000, fans: 0.04 },
+  { id: 'good', name: '優秀タレント賞', min: 5000, money: 200000, fans: 0.03 },
+  { id: 'wadai', name: '話題賞', min: 1500, money: 100000, fans: 0.02 },
+  { id: 'new', name: '新人賞', min: 200, money: 50000, fans: 0.02, first: true },
+];
+const awardOf = (id) => AWARD_TIERS.find((a) => a.id === id) || null;
+const awardPeriod = (day) => Math.floor((Math.max(1, day) - 1) / AWARD_EVERY);
+export const nextAwardDay = (day) => (awardPeriod(day) + 1) * AWARD_EVERY + 1;
+function awardRec(g) {
+  const st = g.state;
+  const a = obj(g, 'career_award');
+  if (a.k == null) {
+    a.k = awardPeriod(st.day);
+    a.snap = { fame: 0, fans: 0, regs: 0 }; // first ceremony: everything so far
+    a.wins = {};
+    a.n = 0; // ceremonies held
+  }
+  if (!a.wins || typeof a.wins !== 'object') a.wins = {};
+  if (!a.snap || typeof a.snap !== 'object') a.snap = { fame: 0, fans: 0, regs: 0 };
+  return a;
+}
+const awardSnap = (st) => ({ fame: num(st.fame), fans: num(st.fans), regs: totalRecorded(st) });
+function awardScore(g, a) {
+  const st = g.state;
+  const now = awardSnap(st);
+  return Math.max(0, now.fame - num(a.snap.fame)) + Math.max(0, now.fans - num(a.snap.fans)) / 100
+    + Math.max(0, now.regs - num(a.snap.regs)) * 40 + (aired(st, KAN) ? 1000 : 0);
+}
+function awardMorning(g, out) {
+  const st = g.state;
+  const a = awardRec(g);
+  const k = awardPeriod(st.day);
+  // a reminder a week before the ceremony
+  const nd = nextAwardDay(st.day);
+  if (nd - st.day === 7 && a.noticed !== nd && out.sent < 2) {
+    a.noticed = nd;
+    g.message({ from: 'ドット芸能ニュース', kind: 'news', text: g.fmt(`【まもなく発表】第${num(a.n) + 1}回 ドット芸能大賞は${nd}日目の朝に発表！\nこの一年でいちばん活躍したのはだれ？\n残り1週間の活躍にも注目です。`) });
+    out.sent++;
+  }
+  if (k <= num(a.k)) return;
+  // the ceremony (one per morning even when a save skipped several years)
+  const score = awardScore(g, a);
+  const first = num(a.n) === 0 && st.day <= AWARD_EVERY + 1;
+  const tier = AWARD_TIERS.find((t) => score >= t.min && (!t.first || first)) || null;
+  a.k = k;
+  a.snap = awardSnap(st);
+  a.n = num(a.n) + 1;
+  const no = a.n;
+  if (!tier) {
+    a.last = { no, day: st.day, prize: null };
+    g.message({ from: 'ドット芸能ニュース', kind: 'news', text: g.fmt(`【第${no}回 ドット芸能大賞】受賞者が発表されました。\n{name}さんは、今回は惜しくも受賞ならず…。\n来年こそ！お仕事やレギュラー番組で、たくさん活躍しよう。`) });
+    out.sent++;
+    return;
+  }
+  a.wins[tier.id] = num(a.wins[tier.id]) + 1;
+  const hof = tier.id === 'grand' && a.wins.grand >= AWARD_HOF && !a.hof;
+  if (hof) a.hof = st.day;
+  a.last = { no, day: st.day, prize: tier.id, hof: !!hof, party: false };
+  g.addMoney(tier.money, true);
+  g.addFans(Math.max(100, Math.round(st.fans * tier.fans)), true);
+  if (tier.id === 'grand') g.giveItem('career_award_trophy', 1, true);
+  if (hof) g.giveItem('career_hof_medal', 1, true);
+  const yen = `¥${tier.money.toLocaleString('ja-JP')}`;
+  const lines = [`【第${no}回 ドット芸能大賞】`, `${tier.name}は…{name}さん！`];
+  if (hof) lines.push(`大賞は通算${a.wins.grand}回目！ついに「殿堂入り」をはたしました！`);
+  else if (tier.id === 'grand') lines.push(a.wins.grand > 1 ? `大賞は通算${a.wins.grand}回目！` : 'この一年、日本中を笑顔にした活躍が評価されました。');
+  else lines.push('この一年の活躍が評価されました。');
+  lines.push(`（賞金${yen}${tier.id === 'grand' ? 'とトロフィー' : ''}${hof ? '、殿堂入りの記念メダル' : ''}をもらった）`);
+  g.message({ from: 'ドット芸能ニュース', kind: 'news', text: g.fmt(lines.join('\n')) });
+  g.notify(`ドット芸能大賞 ${tier.name}！`, { color: COLORS.accent });
+  (g.morningNotes || (g.morningNotes = [])).push(`（スマホに大ニュース！\n第${no}回 ドット芸能大賞で「${tier.name}」を受賞した！）`);
+  out.sent++;
+  awardPartyWhenFree(g);
+}
+// The ceremony runs as its own script once the morning is over and the player is free.
+let awardWaiting = false;
+function awardPartyWhenFree(g) {
+  if (awardWaiting) return;
+  awardWaiting = true;
+  const start = g.frame;
+  (async () => {
+    try {
+      while (g.busy > 0 || g.top !== g.map || g.fade > 0 || !g.map.place) {
+        await g.waitFrames(6);
+        if (g.frame - start > 60 * 60 * 20) return;
+      }
+      await g.run((gg) => awardParty(gg));
+    } finally {
+      awardWaiting = false;
+    }
+  })();
+}
+async function awardParty(g) {
+  const a = g.state.flags.career_award;
+  const L = a && a.last;
+  if (!L || !L.prize || L.party || L.day !== g.state.day) return;
+  L.party = true;
+  const tier = awardOf(L.prize);
+  const mc = { name: '授賞式の司会', look: FM_MC };
+  await withCelebration(g, { kind: 'award', no: L.no, prize: tier.name, hof: !!L.hof }, async () => {
+    await g.say([`第${L.no}回 ドット芸能大賞！`, `${tier.name}は…{name}さんです！おめでとうございます！`], mc);
+    audio.sfx('applause');
+    const i = await g.ask('{name}さん、受賞のひと言をどうぞ！', ['みんなのおかげです！', 'まだまだ、これから！', 'おなかがすきました'], mc);
+    if (i === 0) await g.say('（会場から、あたたかい拍手がわき起こった）');
+    else if (i === 1) await g.say('（「おおー！」と会場がどよめいた。来年も楽しみだ！）');
+    else { audio.sfx('laugh'); await g.say('（会場が大爆笑！司会者も笑いをこらえている）'); }
+    if (L.hof) {
+      g.shake && g.shake(20, 2);
+      await g.say([`そして…大賞、通算${num(a.wins.grand)}回目！`, '{name}さんは、ドット芸能大賞の「殿堂入り」です！'], mc);
+      await g.say('（芸能界の歴史に、自分の名前がきざまれた――。\nでも、まだまだ見たことのない景色がありそうだ）');
+    }
+    g.addNeed('stress', -30);
+  });
+}
+
+// ======================================================================== long-term goals (notebook)
+// Rows for the notebook's もくひょう tab: { label, value, note, done }. Every goal has a
+// next step, so there is always something to aim for.
+const FRIEND_GOALS = [3, 6, 10, 16];
+const NO1_GOALS = [1, ...NO1_MS];
+const nextOf = (list, v) => list.find((x) => x > v);
+CAREER.goals = (g) => {
+  const st = g.state;
+  const fl = st.flags || {};
+  const rows = [];
+  const yen = (n) => n.toLocaleString('ja-JP');
+  // fans
+  const fm = nextOf(MILESTONES, num(st.fans));
+  rows.push(fm
+    ? { label: `ファン ${fansShort(st.fans)}人`, value: `めざせ${fansShort(fm)}人`, note: `あと${yen(fm - Math.round(num(st.fans)))}人` }
+    : { label: `ファン ${fansShort(st.fans)}人`, value: '100万人達成！', done: true });
+  // the 冠番組
+  const n = kanCount(st);
+  if (isActive(st, KAN) || n > 0) {
+    const km = nextOf(KAN_MS, n);
+    rows.push(km
+      ? { label: `冠番組 放送${n}回`, value: `めざせ${km}回`, note: isActive(st, KAN) ? `『${REGULARS[KAN].title}』 毎週${WEEKDAYS[REGULARS[KAN].weekday]}曜` : '冠番組は休止中…また声がかかるかも' }
+      : { label: `冠番組 放送${n}回`, value: '100回達成！', done: true });
+  } else {
+    rows.push({ label: '自分の冠番組をもつ', value: '', note: `★${KAN_FAME}・ファン${yen(KAN_FANS)}人で、声がかかる` });
+  }
+  // regular shows held at once
+  const held = activeShows(st).length;
+  rows.push({ label: `レギュラー番組 ${held}本`, value: held >= MAX_SHOWS ? '最大！' : `めざせ${MAX_SHOWS}本`, done: held >= MAX_SHOWS, note: held >= MAX_SHOWS ? '' : 'オファーは電話で届く（★250から）' });
+  // the yearly award
+  const a = fl.career_award && typeof fl.career_award === 'object' ? fl.career_award : {};
+  const w = a.wins || {};
+  const grand = num(w.grand);
+  const nd = nextAwardDay(st.day);
+  const won = AWARD_TIERS.filter((t) => t.id !== 'grand' && num(w[t.id])).map((t) => `${t.name}${num(w[t.id]) > 1 ? `×${num(w[t.id])}` : ''}`).join('・');
+  rows.push(a.hof
+    ? { label: 'ドット芸能大賞 殿堂入り', value: `大賞${grand}回`, done: true, note: `次の発表は${nd}日目（あと${nd - st.day}日）` }
+    : { label: `ドット芸能大賞 ${grand ? `大賞${grand}回` : won ? '大賞はまだ' : 'まだ受賞なし'}`, value: `殿堂入りまで大賞あと${AWARD_HOF - grand}回`, note: `次の発表は${nd}日目（あと${nd - st.day}日）${won ? `　これまで：${won}` : ''}` });
+  // weekly ranking: weeks at No.1
+  const wk = num(fl.career_no1Weeks);
+  const best = fl.career_rank && num(fl.career_rank.best);
+  const wn = nextOf(NO1_GOALS, wk);
+  rows.push(wk
+    ? { label: `好感度ランキング1位 通算${wk}週`, value: wn ? `めざせ${wn}週` : '大記録！', done: !wn }
+    : { label: '好感度ランキング1位', value: best ? `最高${best}位` : '', note: '毎週月曜に発表' });
+  // friends
+  let fr = 0;
+  try { fr = g.friends ? g.friends(2).length : 0; } catch (e) { fr = 0; }
+  const total = Object.keys(PEOPLE).filter((id) => PEOPLE[id] && PEOPLE[id].kind !== 'family').length;
+  const fg = nextOf(FRIEND_GOALS.filter((x) => x <= Math.max(3, total)), fr);
+  rows.push({ label: `なかよしの仲間 ${fr}人`, value: fg ? `めざせ${fg}人` : 'みんな仲よし！', done: !fg });
+  return rows;
+};
+
 // ======================================================================== the morning hook
 onMorning((g) => {
   const st = g.state;
@@ -1591,7 +1843,7 @@ onMorning((g) => {
   // jobs done so far (ドッター knows what you did today)
   st.flags.career_today = { day: st.day, map: { ...st.jobs } };
   const out = { sent: 0 };
-  const steps = [missMorning, fanMeetMorning, kanMorning, dotterMorning, offerMorning, milestoneMorning, rankingMorning, letterMorning];
+  const steps = [missMorning, fanMeetMorning, kanMorning, dotterMorning, awardMorning, offerMorning, milestoneMorning, rankingMorning, letterMorning];
   for (const fn of steps) {
     try { fn(g, out); } catch (e) { console.error('[career]', fn.name, e); }
   }
