@@ -35,10 +35,10 @@ import { makeCanvas, shade, mix, fmtMoney, clamp, hash2 } from '../engine/util.j
 import { registerSong } from '../engine/audio.js';
 import { registerItem } from '../engine/state.js';
 import { onMorning } from '../engine/life.js';
-import { YEAR_DAYS } from '../engine/profile.js';
+import { YEAR_DAYS, ageOf } from '../engine/profile.js';
 import * as POL from '../engine/politics.js';
 import * as JUS from '../engine/crime.js';
-import { VoteScene, seatKey, paintSeat, ZL, schematicLayout, seatParties, chairColor, memberLooks, exchange, Q_ROUNDS, actText } from './kokkai.js';
+import { VoteScene, seatKey, paintSeat, ZL, schematicLayout, seatParties, chairColor, memberLooks, exchange, LOCAL_Q_ROUNDS, actText, fitPages } from './kokkai.js';
 
 const PID = 'kuyakusho';
 const T = (k) => `${PID}_${k}`;
@@ -278,6 +278,7 @@ const WHO = {
   student: { name: '大学生', look: { hair: 'short', hairColor: 'brown', skin: 'fair', top: '#5fa8a0', bottom: '#3b3f48' } },
 };
 const say = (w) => ({ name: w.name, look: w.look });
+const famName = (g) => (g.state.profile && g.state.profile.familyName) || g.state.name;
 function npc(id, x, y, dir, w, extra = {}) { return { type: 'npc', id, x, y, dir, name: w.name, look: w.look, ...extra }; }
 // A hanging sign over a counter (world units), drawn live so its text can change.
 function plate(x, y, w, label, colors = ['#2a3a5a', '#ffffff']) {
@@ -417,7 +418,7 @@ async function shinkokuTalk(g) {
   let hidden = 0;
   if (k === 1) {
     const law = typeof g.crimeLaw === 'function' ? g.crimeLaw('tax_evasion', {}) : '所得税法違反（ほ脱）';
-    const c = await g.ask(['（収入の一部を書かずに申告すれば、税金は安くなる。\n…でもそれは「脱税」だ）', law, '税務署は、取引先の支払調書や銀行口座とも突き合わせる。'], ['やっぱり正直に書く', '3割少なく書く', '半分しか書かない'], { cancel: 0 });
+    const c = await g.ask(['（収入の一部を書かずに申告すれば、税金は安くなる。\n…でもそれは「脱税」だ）', ...fitPages(g, law), '税務署は、取引先の支払調書や銀行口座とも突き合わせる。'], ['やっぱり正直に書く', '3割少なく書く', '半分しか書かない'], { cancel: 0 });
     hidden = c === 1 ? 0.3 : c === 2 ? 0.5 : 0;
   }
   const rep = incomeTax(g, y, income * (1 - hidden));
@@ -489,36 +490,61 @@ async function rikkouho(g) {
   const e = list[k];
   if (!e) return;
   const note = OFFICE_NOTE[e.office] || { age: 25 };
-  const why = g.eligible(e.office);
-  if (why) { await g.say([`${officeName(e.office)}の被選挙権は、満${note.age}歳以上です。`, `申し訳ありません。${why}`], w); return; }
+  // 被選挙権 first: the age on 投票日 (公選法10条2項), 公民権. The deposit is checked when filing.
+  const why = g.eligible(e.office, { day: e.day, noMoney: true });
+  if (why) {
+    await g.say(/歳/.test(why) ? [`${officeName(e.office)}の被選挙権は、投票日に満${note.age}歳以上であることです。`, `申し訳ありません。\n（${why}）`] : [`申し訳ありません。届出は受け付けられません。\n（${why}）`], w);
+    return;
+  }
   const opts = {};
   const m = me(g);
-  // 公認 / 推薦
-  if (m && m.party) {
-    const pn = g.partyName(m.party);
-    const c = await g.ask([`${pn}の党員ですね。`, `党の${e.office === 'shicho' || e.office === 'chiji' ? '推薦' : '公認'}を申請しますか？\n（党の選考に通らなければ、無所属で出ることになります）`], ['申請する', '無所属で出る'], { ...w, cancel: 1 });
-    if (c === 0) {
-      const r = g.requestNomination(e.id);
-      if (r && r.ok) { opts.party = m.party; await g.say(`（${pn}の${r.kind}が決まった！）`); }
-      else { opts.party = null; await g.say([`（${(r && r.why) || '党の選考で見送られた'}）`, '（無所属で立候補することにした）']); }
-    } else opts.party = null;
-  }
-  // 衆院・参院: 比例代表の扱い / ふるさと
-  if (e.office === 'shugi' && opts.party) {
-    const c = await g.ask(['衆議院は、小選挙区と比例代表の並立制です（1996年から）。\n小選挙区で落選しても、比例で復活できる「重複立候補」も。'], ['小選挙区だけ', '重複立候補', '比例代表だけ'], { ...w, cancel: 0 });
-    if (c === 1) opts.proportional = true;
-    if (c === 2) opts.proportional = 'only';
-  } else if (e.office === 'sangi' && opts.party) {
-    const c = await g.ask(['参議院は、選挙区と全国比例のどちらかで立候補します。'], ['選挙区', '全国比例'], { ...w, cancel: 0 });
-    if (c === 1) opts.proportional = true;
-  }
+  const p = pol(g);
+  const ey = date(g, e.day).year;
+  // 1996年までの衆院は中選挙区制（比例代表はない）
+  const chu = e.office === 'shugi' && typeof POL.shugiRules === 'function' && POL.shugiRules(ey, (p && p.flags) || {}).system === 'chusenkyoku';
   const home = g.state.profile && g.state.profile.hometown;
-  if ((e.office === 'shugi' || e.office === 'sangi') && home && home !== 'tokyo' && opts.proportional !== 'only' && !(e.office === 'sangi' && opts.proportional)) {
+  let askedHome = false;
+  const askHome = async () => {
+    askedHome = true;
+    if (!(e.kind === 'shugi' || e.kind === 'sangi') || !home || home === 'tokyo' || opts.proportional === 'only' || (e.kind === 'sangi' && opts.proportional)) return;
     const c = await g.ask('ふるさとの選挙区から立候補することもできます。\n（地元の知名度が生きるかもしれません）', ['東京から出る', 'ふるさとから出る'], { ...w, cancel: 0 });
     if (c === 1) opts.hometown = true;
+  };
+  // 公認・推薦: how the player runs is chosen first (a 比例 nomination is easier to get)
+  if (m && m.party) {
+    const pn = g.partyName(m.party);
+    const kind = e.office === 'shicho' || e.office === 'chiji' ? '推薦' : '公認';
+    const c = await g.ask([`${pn}の党員ですね。`, `党の${kind}を申請しますか？\n（党の選考に通らなければ、無所属で出ることになります）`], ['申請する', '無所属で出る'], { ...w, cancel: 1 });
+    if (c === 0) {
+      if (e.kind === 'shugi' && !chu) {
+        const c2 = await g.ask(['衆議院は、小選挙区と比例代表の並立制です（1996年から）。\n小選挙区で落選しても、比例で復活できる「重複立候補」も。'], ['小選挙区だけ', '重複立候補', '比例代表だけ'], { ...w, cancel: 0 });
+        if (c2 === 1) opts.proportional = true;
+        if (c2 === 2) opts.proportional = 'only';
+      } else if (e.kind === 'sangi') {
+        const c2 = await g.ask(['参議院は、選挙区と比例代表のどちらかで立候補します。\n（比例代表は、全国が一つの選挙区。政党の名簿にのります）'], ['選挙区', '全国比例'], { ...w, cancel: 0 });
+        if (c2 === 1) opts.proportional = true;
+      }
+      await askHome();
+      const r = g.requestNomination(e.id, { proportional: opts.proportional, hometown: opts.hometown });
+      if (r && r.ok) { opts.party = m.party; await g.say(`（${pn}の${r.kind || kind}が決まった！）`); }
+      else {
+        opts.party = null;
+        const pr = !!opts.proportional;
+        delete opts.proportional;
+        await g.say([`（${(r && r.why) || '党の選考で見送られた'}）`, pr ? '（比例代表は政党の候補だけ。無所属で、選挙区から立候補することにした）' : '（無所属で立候補することにした）']);
+        if (pr) askedHome = false;
+      }
+    } else opts.party = null;
   }
-  const dep = typeof g.depositInternal === 'function' ? g.depositInternal(e.office, { pr: opts.proportional === 'only' }) : 0;
-  const c = await g.ask([`${e.label}に立候補します。`, `供託金は${fmtMoney(dep)}。政治資金から、足りなければ所持金から納めます。${note.home ? '\n（この選挙は、その地域に3か月以上住んでいることも条件です）' : ''}`], ['届け出る', 'やめておく'], { ...w, cancel: 1 });
+  if (!askedHome) await askHome();
+  // 供託金: 比例代表の分は、名簿を届け出る政党が納める
+  const partyPays = !!opts.party && ((e.office === 'sangi' && opts.proportional) || opts.proportional === 'only');
+  const dep = partyPays ? 0 : (typeof g.depositInternal === 'function' ? g.depositInternal(e.office) : 0);
+  const prMan = typeof POL.depositFor === 'function' ? `${Math.round(POL.depositFor(e.office, ey, { pr: true }) / 10000)}万円` : '';
+  const depLine = partyPays
+    ? `比例代表の供託金（1人${prMan}）は、名簿を届け出る政党が納めます。`
+    : `供託金は${fmtMoney(dep)}。政治資金から、足りなければ所持金から納めます。${opts.proportional === true && e.office === 'shugi' ? '\n（比例代表の分は、政党が納めます）' : ''}`;
+  const c = await g.ask([`${e.label}に立候補します。`, `${depLine}${note.home ? '\n（この選挙は、その地域に3か月以上住んでいることも条件です）' : ''}`], ['届け出る', 'やめておく'], { ...w, cancel: 1 });
   if (c !== 0) return;
   const r = g.declareCandidacy(e.id, opts);
   if (r) { await g.say(`申し訳ありません。届出を受理できませんでした。\n（${r}）`, w); return; }
@@ -539,12 +565,16 @@ async function eligibilityInfo(g) {
   const w = say(WHO.senkan);
   const y = yearOf(g);
   const dep = (off) => (typeof POL.depositFor === 'function' ? `${Math.round(POL.depositFor(off, y) / 10000)}万円` : '');
+  const p = pol(g);
+  const chu = typeof POL.shugiRules === 'function' && POL.shugiRules(y, (p && p.flags) || {}).system === 'chusenkyoku';
   await g.say([
     '【被選挙権（立候補できる年齢）】\n区議・区長・都議・衆議院議員：満25歳以上\n知事・参議院議員：満30歳以上',
-    `【選挙権】満${y >= 2016 ? 18 : 20}歳以上（2016年から18歳）。\n区議・区長の選挙は、区に引き続き3か月以上住んでいる人。`,
-    `【供託金（${y}年）】区議${dep('kugi')}・区長${dep('shicho')}・都議${dep('togi')}\n知事${dep('chiji')}・衆院小選挙区${dep('shugi')}・参院選挙区${dep('sangi')}`,
-    '得票が一定に届かないと、供託金は没収されます。\n（区議は有効投票÷定数の10分の1、区長・知事・衆院小選挙区は\n有効投票の10分の1など）',
-    '禁錮以上の刑の執行中や、選挙違反などで\n公民権が停止されている間は、立候補も投票もできません。',
+    `【選挙権】満${y >= 2016 ? 18 : 20}歳以上${y >= 2016 ? '（2016年から18歳）' : ''}。\n区議・区長の選挙は、区に引き続き3か月以上住んでいる人。`,
+    `【供託金（${y}年）】区議${dep('kugi')}・区長${dep('shicho')}・都議${dep('togi')}\n知事${dep('chiji')}・衆議院${chu ? '' : '小選挙区'}${dep('shugi')}・参院選挙区${dep('sangi')}`,
+    chu
+      ? '得票が一定に届かないと、供託金は没収されます。\n（区議は有効投票÷定数の10分の1、衆議院（中選挙区）は\n5分の1、区長・知事は有効投票の10分の1など）'
+      : '得票が一定に届かないと、供託金は没収されます。\n（区議は有効投票÷定数の10分の1、区長・知事・衆院小選挙区は\n有効投票の10分の1など）',
+    `${y > 2025 || (y === 2025 && date(g).month >= 6) ? '拘禁刑' : '禁錮'}以上の刑の執行中や、選挙違反などで\n公民権が停止されている間は、立候補も投票もできません。`,
   ], w);
 }
 async function campaignRules(g) {
@@ -554,7 +584,7 @@ async function campaignRules(g) {
     '選挙運動ができるのは、告示（公示）日に届け出てから\n投票日の前日まで。それより前は「事前運動」として禁止です。',
     'できること：街頭演説・選挙カー・公営掲示場のポスター・\n個人演説会・決められた枚数のビラやはがき。',
     y >= 2013 ? 'インターネットでの選挙運動も、2013年から認められています。\n（候補者個人の有料ネット広告は禁止）' : 'インターネットを使った選挙運動は、まだ認められていません。',
-    'してはいけないこと：戸別訪問、お金や物を配る買収、\n18歳未満の選挙運動。違反すると罰則と公民権停止。',
+    `してはいけないこと：戸別訪問、お金や物を配る買収、\n${y >= 2016 ? 18 : 20}歳未満の選挙運動。違反すると罰則と公民権停止。`,
   ], w);
 }
 
@@ -575,8 +605,14 @@ async function kijitsuTalk(g) {
     await g.say([`${name}の投票所です。`, next ? `次の選挙は「${next.label}」。\n${name}ができるのは、公示・告示の翌日から投票日の前日までです。` : 'いまは、投票できる選挙はありません。'], w);
     return;
   }
-  if (typeof g.civicBanned === 'function' && g.civicBanned()) { await g.say(['申し訳ありません。公民権が停止されている間は、\n投票できません。'], w); return; }
-  const e = list[0];
+  if (typeof g.civicBanned === 'function' && g.civicBanned('vote')) { await g.say(['申し訳ありません。公民権が停止されている間は、\n投票できません。'], w); return; }
+  // checked before the 宣誓書 (castVote checks again): one ballot per election, the age on 投票日
+  const p0 = pol(g);
+  const recOf = (x) => (p0 && p0.elections && (p0.elections.upcoming || []).find((r) => r.id === x.id)) || {};
+  const e = list.find((x) => !recOf(x).voted);
+  if (!e) { await g.say([`「${list[0].label}」には、もう投票されていますね。`, '投票は、おひとり1回だけです。'], w); return; }
+  const vAge = typeof POL.votingAge === 'function' ? POL.votingAge(date(g, e.day).year, (p0 && p0.flags) || {}) : 20;
+  if (ageOf({ ...g.state, day: e.day }) < vAge) { await g.say([`選挙権は、投票日に満${vAge}歳以上の方にあります。`, '（まだ投票できない。次の選挙を楽しみに待とう）'], w); return; }
   const onDay = today(g) === e.day;
   await g.say(onDay ? [`今日は「${e.label}」の投票日です。`, 'この区役所も、当日の投票所になっています。\n入場券をお持ちですか？'] : [`「${e.label}」の${name}ですね。`, name === '期日前投票' ? '投票日に仕事や用事で投票所に行けない見込みであることを、\nこの宣誓書に書いてください。' : '投票日に行けない理由を書いて、投票用紙を受け取ります。\n用紙は封筒に入れて、投票日まで保管されます。'], w);
   if (!onDay) {
@@ -624,14 +660,18 @@ async function soudanTalk(g) {
     return;
   }
   if (pick === '闇金に困っている') {
-    await g.say(['登録のない業者が、法律の上限をはるかに超える利息で\n貸すのが「闇金」。トイチ（10日で1割）などは違法です。', '闇金との契約は無効で、元金も含めて返す必要はないとされて\nいます（最高裁 平成20年）。脅しの取り立ても犯罪です。', 'すぐに警察の生活安全課か、弁護士に相談してください。'], w);
+    const y = yearOf(g);
+    await g.say(['登録のない業者が、法律の上限をはるかに超える利息で\n貸すのが「闇金」。トイチ（10日で1割）などは違法です。',
+      y >= 2008 ? '闇金との契約は無効で、元金も含めて返す必要はないとされて\nいます（最高裁 平成20年）。脅しの取り立ても犯罪です。'
+        : '法律の上限を超える利息は、払う必要がありません。\n脅しや夜中の取り立ては、それ自体が犯罪です。',
+      'すぐに警察の生活安全課か、弁護士に相談してください。'], w);
     const c = await g.ask('どこに相談しますか？', ['弁護士に相談', '警察に相談', 'いまはいい'], { ...w, cancel: 2 });
     if (c === 0 && typeof g.consultLawyer === 'function') await g.consultLawyer('yamikin');
     else if (c === 1 && typeof g.policeConsult === 'function') await g.policeConsult('yamikin');
     return;
   }
   if (pick === '自己破産のこと') {
-    await g.say(['自己破産は、裁判所に「支払えない」と認めてもらい、\n借金の支払いを免除してもらう（免責）手続きです。', '生活に必要な財産は残せます。ただ、税金や罰金は\n免除されず、信用情報に記録が残り、官報にも載ります。', 'ほかに、利息をカットする任意整理、借金を減らして\n3年で返す個人再生（2001年から）もあります。'], w);
+    await g.say(['自己破産は、裁判所に「支払えない」と認めてもらい、\n借金の支払いを免除してもらう（免責）手続きです。', '生活に必要な財産は残せます。ただ、税金や罰金は\n免除されず、信用情報に記録が残り、官報にも載ります。', yearOf(g) >= 2001 ? 'ほかに、利息をカットする任意整理、借金を減らして\n3年で返す個人再生（2001年から）もあります。' : 'ほかに、弁護士が貸し手と話し合って、利息をカットし\n分割で返す任意整理という方法もあります。'], w);
     if (loans > 0) {
       const c = await g.ask('裁判所での手続きを、弁護士と進めますか？', ['まだ考える', '手続きを進める'], { ...w, cancel: 0 });
       if (c === 1 && typeof g.fileBankruptcy === 'function') await g.fileBankruptcy();
@@ -646,7 +686,7 @@ async function soudanTalk(g) {
 }
 async function fukushiTalk(g) {
   const w = say(WHO.fukushi);
-  await g.say(['福祉事務所のケースワーカーです。', '仕事を失った、病気で働けない…そんなときは、\n生活保護や、住まいの給付金などの制度があります。', '「恥ずかしい」と思わずに、まず相談してください。\n生活に困ったときに助け合うための、社会のしくみです。'], w);
+  await g.say(['福祉事務所のケースワーカーです。', `仕事を失った、病気で働けない…そんなときは、\n生活保護${yearOf(g) >= 2009 ? 'や、家賃を助ける給付金' : ''}などの制度があります。`, '「恥ずかしい」と思わずに、まず相談してください。\n生活に困ったときに助け合うための、社会のしくみです。'], w);
 }
 
 // ------------------------------------------------------------------ 区議会
@@ -660,7 +700,7 @@ const isKucho = (g) => { const m = me(g); return !!(m && m.office === 'shicho');
 function kuchoName(g) {
   const p = pol(g);
   const id = p && p.local && p.local.kucho && p.local.kucho.holder;
-  if (id === 'player') return g.state.name;
+  if (id === 'player') return famName(g);
   try { return String(g.npcName(id) || '区長').split(' ')[0]; } catch (e) { return '区長'; }
 }
 function kuchoLook(g) {
@@ -724,9 +764,9 @@ async function ippanShitsumon(g) {
   const kucho = { name: `${kuchoName(g)}区長`, look: kuchoLook(g) };
   const gw = say(WHO.gicho);
   g.placePlayer(10, 6, 'up');
-  await g.say(`一般質問を行います。${(g.state.profile && g.state.profile.familyName) || g.state.name}議員。`, gw);
-  const score = await exchange(g, Q_ROUNDS, {
-    title: 'ドット区議会　一般質問', sub: `質問：${g.state.name}議員`, topic,
+  await g.say(`一般質問を行います。${famName(g)}議員。`, gw);
+  const score = await exchange(g, LOCAL_Q_ROUNDS, {
+    title: 'ドット区議会　一般質問', sub: `質問：${famName(g)}議員`, topic,
     prompt: ['（最初の質問は…）', '（区長の答弁は、まだ具体的ではない…）', '（残り時間で、どう締める？）'],
     selfSay: { name: g.state.name, look: g.state.look },
     after: [
@@ -760,6 +800,7 @@ async function seatEvent(g) {
 }
 async function kuchoSeat(g) {
   if (!isKucho(g)) {
+    if (!teireikai(g)) { await g.say(['執行部の席だ。', '（定例会の会期中は、区長・副区長・部長たちがここに並び、\n議員の質問に答える）']); return; }
     await g.say([`区長の${kuchoName(g)}です。`, '執行部の席には、区長・副区長・部長たちが並びます。\n議会の質問に答えるのは、わたしたち執行部の役目です。'], { name: '区長', look: kuchoLook(g) });
     return;
   }
@@ -767,7 +808,7 @@ async function kuchoSeat(g) {
   if (!t) { await g.say('（いまは定例会の会期外だ。区長室で予算の準備を進めよう）'); return; }
   const k = await g.ask(`${t.month}月定例会。区長として、議会に臨む。`, [t.month === 2 ? '予算案を説明する' : '議会に説明する', 'やめる'], { cancel: 1 });
   if (k !== 0) return;
-  await g.say(['区長の施政方針と、予算案の説明をいたします。', '子育て、防災、高齢者の暮らし。\n区民の皆さまの声に応える予算を編成しました。'], { name: `${g.state.name}区長`, look: g.state.look });
+  await g.say([t.month === 2 ? '区長の施政方針と、予算案の説明をいたします。' : '本定例会に提出した議案について、説明いたします。', '子育て、防災、高齢者の暮らし。\n区民の皆さまの声に応える区政を進めてまいります。'], { name: `${famName(g)}区長`, look: g.state.look });
   const r = g.activity('予算編成', {});
   await g.say(actText(r));
 }

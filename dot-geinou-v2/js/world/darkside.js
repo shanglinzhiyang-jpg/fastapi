@@ -20,8 +20,10 @@
 //   moment: 'any' when a script ends (usually right after waking), 'town' after some steps in a town
 //   (onWalkStep), 'home_return' when coming home, { places } inside those places. Unfired events of
 //   yesterday are dropped (follow-ups are retried).
-// - Moments: after a job in a venue (収録・舞台の事故) and after a 街頭演説 (a foiled attack, rare).
-// - Hooks: onJustice('harassment' | 'loan_missed' | 'arrested'), onPolitics('elected' | 'resign');
+// - Moments: after a job in a venue (収録・舞台の事故) and after a 街頭演説 / 地元回り / 視察 (g.campaign /
+//   g.activity of the politics core: a foiled attack, rare).
+// - Hooks: onJustice('harassment' | 'loan_missed' | 'arrested'), onPolitics('elected' | 'scandal' | 'resign')
+//   (a serious 裏金・収賄 scandal may bring a 家宅捜索: pol_tokuso → g.investigate);
 //   the morning check assigns / removes SP for ministers.
 // - Passive follow-ups (news only: an arrest, a court ruling) arrive in the morning without a slot.
 //
@@ -43,7 +45,8 @@
 //   刑事訴訟法150条（証人の不出頭: 10万円以下の過料）・151条（1年以下の拘禁刑又は30万円以下の罰金）
 //     （ja.wikibooks 刑事訴訟法第151条）; 証人には旅費・日当が支給される
 //   自賠責保険 傷害の限度額 120万円、慰謝料 1日4,300円（2020年4月以降の事故）（mlit.go.jp jibaiseki）
-//   オレオレ詐欺（2003年に社会問題化）→ 2004年12月に「振り込め詐欺」→ 現在は「特殊詐欺」（警察庁; ja.wikid.org）
+//   オレオレ詐欺（2003年に社会問題化）→ 2004年12月に警察庁が「振り込め詐欺」と統一→ 2011年ごろから総称の「特殊詐欺」
+//     （警察庁 白書 h26 qf130000; ja.wikid.org 特殊詐欺）。報道で広く使われるのは2013年ごろからとした
 //   政治家個人（資金管理団体）への企業・団体献金は2000年1月から禁止（政党・政党支部へは可）（imidas C-103-0010）
 //   貸金業法21条: 正当な理由なく午後9時〜午前8時の取立て・勤務先への電話や訪問は禁止（fsa.go.jp yami_leaf）
 //   SP（警視庁警備部警護課）の警護対象: 内閣総理大臣・国務大臣・衆参両院議長・政党要人など（agora-web.jp 16128）
@@ -411,17 +414,21 @@ const SCN = {
     for (let y = 0; y < SH; y += 12) R(c, 0, y, SW, 1, '#33261e');
     R(c, 70, 18, 500, 238, '#00000060');
     R(c, 64, 12, 250, 236, '#f6f2e8'); R(c, 316, 12, 250, 236, '#f2eee2'); R(c, 314, 12, 2, 236, '#c8c0b0');
-    R(c, 76, 22, 120, 22, '#c8202a'); text(c, MAG, 86, 26, { size: 14, color: '#ffffff', shadow: null });
+    // the masthead sits below the scene's title panel
+    R(c, 84, 66, 120, 22, '#c8202a'); text(c, MAG, 94, 70, { size: 14, color: '#ffffff', shadow: null });
     const lines = String(g.fmt(o.headline || 'スクープ')).split('\n');
-    lines.forEach((l, i) => text(c, l, 84, 62 + i * 34, { size: 24, color: i ? '#c8202a' : '#1a1a1a', shadow: null }));
-    for (let i = 0; i < 6; i++) R(c, 84, 150 + i * 14, 210 - (i % 3) * 30, 6, '#b8b2a4');
-    R(c, 330, 30, 222, 160, '#5a5a62');
-    for (let y = 30; y < 190; y += 4) for (let x = 330 + ((y >> 2) % 2) * 2; x < 552; x += 4) R(c, x, y, 2, 2, '#6a6a72');
-    fig(c, { ...playerLook(g), top: '#3a3a44', bottom: '#2a2a34' }, 380, 90, 'down');
-    if (o.other) fig(c, o.other, 450, 94, 'left');
-    R(c, 330, 196, 222, 40, '#f2eee2');
-    for (let i = 0; i < 2; i++) R(c, 336, 202 + i * 14, 200 - i * 50, 6, '#b8b2a4');
-    if (o.stamp) { R(c, 470, 40, 76, 28, '#c8202a'); text(c, o.stamp, 508, 45, { size: 16, color: '#ffffff', align: 'center', shadow: null }); }
+    lines.forEach((l, i) => {
+      const size = Math.max(14, Math.min(24, Math.floor((24 * 212) / Math.max(1, measure(c, l, 24)))));
+      text(c, l, 84, 98 + i * 34, { size, color: i ? '#c8202a' : '#1a1a1a', shadow: null });
+    });
+    for (let i = 0; i < 6; i++) R(c, 84, 174 + i * 11, 210 - (i % 3) * 30, 5, '#b8b2a4');
+    R(c, 330, 42, 222, 150, '#5a5a62');
+    for (let y = 42; y < 192; y += 4) for (let x = 330 + ((y >> 2) % 2) * 2; x < 552; x += 4) R(c, x, y, 2, 2, '#6a6a72');
+    fig(c, { ...playerLook(g), top: '#3a3a44', bottom: '#2a2a34' }, 380, 98, 'down');
+    if (o.other) fig(c, o.other, 450, 102, 'left');
+    R(c, 330, 198, 222, 40, '#f2eee2');
+    for (let i = 0; i < 2; i++) R(c, 336, 206 + i * 14, 200 - i * 50, 6, '#b8b2a4');
+    if (o.stamp) { R(c, 470, 52, 76, 28, '#c8202a'); text(c, o.stamp, 508, 57, { size: 16, color: '#ffffff', align: 'center', shadow: null }); }
   },
   ryotei(c, t, g, o) {
     R(c, 0, 0, SW, FLOOR_Y, '#e8dfc8');
@@ -442,10 +449,10 @@ const SCN = {
     R(c, 20, 30, 150, 132, '#5a3e26');
     const cols = ['#8a2f2f', '#2f4a8a', '#3a6a3a', '#7a6a3a'];
     for (let r = 0; r < 5; r++) { R(c, 24, 34 + r * 26, 142, 22, '#3a2818'); for (let bx = 26; bx < 160; bx += 7) R(c, bx, 37 + r * 26, 6, 18, cols[(bx + r) % 4]); }
-    R(c, 400, 30, 90, 110, '#f8f6f0'); R(c, 400, 30, 90, 16, '#c8202a');
-    text(c, g.fmt(o.poster || '{familyname}'), 445, 60, { size: 16, color: '#1a1a1a', align: 'center', shadow: null });
-    text(c, 'かならず、やりとげる。', 445, 100, { size: 12, color: '#3a3a3a', align: 'center', shadow: null });
-    R(c, 510, 40, 100, 70, '#e8e8e0'); for (let i = 0; i < 5; i++) R(c, 516, 56 + i * 10, 88, 1, '#b8b8b0');
+    R(c, 372, 30, 144, 110, '#f8f6f0'); R(c, 372, 30, 144, 16, '#c8202a');
+    text(c, g.fmt(o.poster || '{familyname}'), 444, 60, { size: 16, color: '#1a1a1a', align: 'center', shadow: null });
+    text(c, 'かならず、やりとげる。', 444, 100, { size: 12, color: '#3a3a3a', align: 'center', shadow: null });
+    R(c, 528, 40, 92, 70, '#e8e8e0'); for (let i = 0; i < 5; i++) R(c, 534, 56 + i * 10, 80, 1, '#b8b8b0');
     R(c, 200, 150, 240, 40, '#6a4a2a'); R(c, 200, 150, 240, 6, '#8a6a44');
     for (let i = 0; i < 3; i++) R(c, 230 + i * 26, 138 - i * 4, 22, 14 + i * 4, '#f4f2ea');
     fig(c, o.who || LK.secretary, 290, 70, 'down');
@@ -484,14 +491,31 @@ const SCN = {
   letter(c, t, g, o) {
     R(c, 0, 0, SW, SH, '#5a3e26');
     for (let y = 0; y < SH; y += 18) R(c, 0, y, SW, 2, '#4e3420');
-    R(c, 110, 30, 200, 120, '#e8e0cc'); R(c, 110, 30, 200, 4, '#d0c8b4');
-    c.fillStyle = '#c8bea8'; c.beginPath(); c.moveTo(110, 34); c.lineTo(210, 96); c.lineTo(310, 34); c.closePath(); c.fill();
-    c.save(); c.translate(380, 40); c.rotate(0.06);
-    R(c, 0, 0, 200, 210, '#f8f6f0');
-    for (let y = 30; y < 200; y += 22) R(c, 14, y, 172, 1, '#c8d0e0');
     const words = String(o.words || '').split('\n');
-    words.forEach((w, i) => text(c, w, 100, 50 + i * 40, { size: 22, align: 'center', color: '#2a1a1a', shadow: null }));
-    c.restore();
+    if (o.screen) {
+      // a phone: the same sender, again and again
+      const x = 210, y = 44;
+      R(c, x - 6, y - 6, 192, 246, '#101018'); R(c, x, y + 10, 180, 226, '#eef2f8'); R(c, x + 70, y - 1, 40, 4, '#3a3a48');
+      R(c, x, y + 10, 180, 24, o.bar || '#3a6ab8'); text(c, o.screen, x + 90, y + 15, { size: 12, align: 'center', color: '#ffffff', shadow: null });
+      for (let i = 0; i < 3; i++) { R(c, x + 10, y + 42 + i * 26, 110 - i * 14, 18, '#d4dae6'); R(c, x + 18, y + 49 + i * 26, 80 - i * 14, 4, '#9aa4b8'); }
+      words.forEach((w, i) => { const bw = measure(c, w, 16) + 20; R(c, x + 10, y + 124 + i * 34, bw, 28, '#ffffff'); R(c, x + 10, y + 124 + i * 34, 3, 28, '#c8202a'); text(c, w, x + 20, y + 130 + i * 34, { size: 16, color: '#2a1a1a', shadow: null }); });
+    } else if (o.tv) {
+      // the news on TV
+      R(c, 300, 26, 300, 196, '#1a1a1e'); R(c, 312, 38, 276, 160, '#3a4a6a');
+      for (let i = 0; i < 4; i++) R(c, 330 + i * 64, 70 - (i % 2) * 10, 50, 80 + (i % 2) * 10, '#5a6a8a');
+      R(c, 312, 38, 64, 20, '#c8202a'); text(c, 'NEWS', 344, 41, { size: 12, align: 'center', color: '#ffffff', shadow: null });
+      R(c, 312, 150, 276, 48, '#f4f4f0');
+      words.forEach((w, i) => text(c, w, 450, 153 + i * 22, { size: 16, align: 'center', color: '#1a1a2a', shadow: null }));
+      R(c, 420, 222, 60, 8, '#2a2a30'); R(c, 400, 230, 100, 6, '#2a2a30');
+    } else {
+      R(c, 110, 30, 200, 120, '#e8e0cc'); R(c, 110, 30, 200, 4, '#d0c8b4');
+      c.fillStyle = '#c8bea8'; c.beginPath(); c.moveTo(110, 34); c.lineTo(210, 96); c.lineTo(310, 34); c.closePath(); c.fill();
+      c.save(); c.translate(380, 40); c.rotate(0.06);
+      R(c, 0, 0, 200, 210, '#f8f6f0');
+      for (let y = 30; y < 200; y += 22) R(c, 14, y, 172, 1, '#c8d0e0');
+      words.forEach((w, i) => text(c, w, 100, 50 + i * 40, { size: 22, align: 'center', color: '#2a1a1a', shadow: null }));
+      c.restore();
+    }
     fig(c, playerLook(g), 60, 170, 'up');
   },
   speech(c, t, g, o) {
@@ -618,7 +642,7 @@ function polNudge(g, { rep = 0, local = 0, mood = 0, standing = 0 } = {}) {
   if (rep) me.reputation = clamp(num(me.reputation) + rep, -100, 100);
   if (local) me.localSupport = clamp(num(me.localSupport) + local, 0, 100);
   if (standing) me.standing = clamp(num(me.standing) + standing, 0, 100);
-  if (mood && p.cabinet && typeof p.cabinet.mood === 'number') p.cabinet.mood = clamp(p.cabinet.mood + mood, -20, 20);
+  if (mood && p.cabinet) p.cabinet.mood = clamp(num(p.cabinet.mood) + mood, -20, 20);
 }
 // 裏金 that surfaces: what the core's own exposure check does (exposed += secret; secret = 0; scandal).
 function exposeSecret(g, severity = 4) {
@@ -648,10 +672,20 @@ function sanction(g, level, info = {}) { try { return g.careerSanction(level, in
 async function commit(g, id, ctx = {}) {
   try { return await g.commitCrime(id, ctx); } catch (e) { console.error(e); return { caught: false, report: { none: true } }; }
 }
+// A crime that is already public (自首, a search, a report already in the news) goes straight to the
+// investigators: the core's 週刊誌 round (heat.weekly) is marked as done first.
+async function prosecute(g, crime, ctx = {}) {
+  try {
+    const j = g.jus();
+    const h = j && j.heat && j.heat[crime];
+    if (h) h.weekly = true;
+    return await g.investigate(crime, ctx);
+  } catch (e) { console.error(e); return null; }
+}
 function caughtCount(g, id) { try { const j = g.jus(); return num(j && j.stats && j.stats.caught && j.stats.caught[id]); } catch (e) { return 0; } }
 function money(g, n) { const st = g.state; const t = Math.min(Math.max(0, Math.round(n)), st.money); st.money -= t; return t; }
 function schedule(g, id, inDays, data = {}) { const d = D(g); d.follow.push({ id, day: g.state.day + Math.max(1, Math.round(inDays)), data, tries: 0 }); }
-const sagiWord = (y) => (y < 2005 ? 'オレオレ詐欺' : y < 2015 ? '振り込め詐欺' : '特殊詐欺');
+const sagiWord = (y) => (y < 2005 ? 'オレオレ詐欺' : y < 2013 ? '振り込め詐欺' : '特殊詐欺');
 
 // Regular shows on the days in hospital are put on hold (the shows wait; they are not "missed").
 function excuseRegulars(g, notes) {
@@ -676,8 +710,8 @@ async function goHome(g) {
 // on hold; afterwards the body is still weak. o: { injury, cost, sub, doctor, home, weak }
 async function hospitalStay(g, S, days, o = {}) {
   const st = g.state, d = D(g);
-  S.set('hospital', { title: HOSPITAL, sub: o.sub || `入院（${days}日）`, visitor: o.visitor });
-  await say(g, WHO.doctor, o.doctor || [`${o.injury || 'けが'}です。\n${days}日ほど、入院して安静にしてください。`, '無理に動くと、治りが遅くなりますからね。']);
+  S.set('hospital', { title: HOSPITAL, sub: o.sub || `入院（${days}日）`, visitor: o.visitor || LK.doctor });
+  await say(g, WHO.doctor, o.doctor || [`${o.injury || 'けがをしています'}。\n${days}日ほど、入院して安静にしてください。`, '無理に動くと、治りが遅くなりますからね。']);
   d.hospUntil = st.day + days;
   const notes = [];
   try {
@@ -722,9 +756,9 @@ const EV = {
         report = 'late';
         mult = 0.5;
         if (sev < 3 && roll(0.5)) sev++;
-        await narr(g, ['（「大丈夫です」と言って、その場を離れた…）', '（その夜、足がひどく腫れて、痛みで眠れなかった。\n事故の直後は、興奮で痛みを感じにくいことがある）']);
+        await narr(g, ['（「大丈夫です」と言って、その場を離れた…）', '（しばらくすると、足がひどく腫れてきた。\n事故の直後は、興奮で痛みを感じにくいことがある）']);
         g.addNeed('stress', 10);
-        await narr(g, '（翌日になって病院へ行き、警察にも届け出た。\nあとからの届け出は、手続きに手間がかかる…）');
+        await narr(g, '（あわてて病院へ行き、警察にも届け出た。\nあとからの届け出は、手続きに手間がかかる…）');
       } else {
         await say(g, WHO.medic, ['救急隊です。痛むところは、どこですか？', '動かないで。このまま病院へ運びます。']);
         S.set('crossing', { title: '交差点', sub: '実況見分', police: true });
@@ -742,7 +776,7 @@ const EV = {
         try { g.useStamina(Math.round(st.maxStamina * 0.3)); } catch (e) { /* ignore */ }
         g.addNeed('stress', 8);
       } else {
-        await hospitalStay(g, S, sev === 2 ? rint(3, 4) : rint(6, 8), { injury: sev === 2 ? '足の骨にひびが入っています' : '足の骨折です' });
+        await hospitalStay(g, S, sev === 2 ? rint(3, 4) : rint(6, 8), { injury: sev === 2 ? '足の骨にひびが入っています' : '足を骨折しています' });
       }
       const base = [0, 60000, 250000, 800000][sev];
       let offer = round1000(base * mult);
@@ -753,9 +787,14 @@ const EV = {
       if (k3 === 0) {
         const more = round1000(offer * 1.6);
         const fee = round1000(Math.max(50000, (more - offer) * 0.3));
-        await say(g, WHO.lawyer, ['保険会社の最初の提示は、低めのことが多いんです。', '裁判で使われる基準で、交渉してみましょう。']);
-        await narr(g, `（数週間後、示談がまとまった。\n${fmtMoney(more)}から弁護士費用${fmtMoney(fee)}を引いた額を受け取った）`);
-        offer = Math.max(offer, more - fee);
+        if (more - fee <= offer) {
+          await say(g, WHO.lawyer, ['この金額だと、弁護士費用のほうが高くついてしまいます。', '今回は、提示どおりで示談するのがいいでしょう。\n示談書の中身は、よく読んでからサインしてくださいね。']);
+          await narr(g, '（相談して納得したうえで、示談書にサインした）');
+        } else {
+          await say(g, WHO.lawyer, ['保険会社の最初の提示は、低めのことが多いんです。', '裁判で使われる基準で、交渉してみましょう。']);
+          await narr(g, `（数週間後、示談がまとまった。\n${fmtMoney(more)}から弁護士費用${fmtMoney(fee)}を引いた額を受け取った）`);
+          offer = more - fee;
+        }
       } else await narr(g, '（示談書にサインした。\n…一度サインすると、あとからやり直すのは難しい）');
       g.addMoney(offer);
       if (c.fame >= 250 || c.office) {
@@ -834,7 +873,8 @@ const EV = {
       S.set('hospital', { title: HOSPITAL, sub: 'お見舞い', visitor: LOOKS.manager });
       await say(g, WHO.producer, ['このたびは、本当に申し訳ありませんでした。', '治療費は、制作会社の保険でお支払いします。\nセットの安全点検も、すべてやり直しています。']);
       if (c.year >= 2021 && c.month >= 4 || c.year >= 2022) await narr(g, '（芸能の仕事をする人も、2021年4月から\n労災保険に「特別加入」できるようになった）');
-      g.addMoney(50000);
+      g.addMoney(50000, true);
+      await narr(g, `（制作会社から、お見舞金${fmtMoney(50000)}を受け取った）`);
       if (c.fame >= 250) {
         news(g, `${tv ? '収録' : '公演'}中の事故で、${whoIs(g, c)}がけが。制作側は安全管理を見直すと発表。`);
         const back = Math.round(num(st.fans) * 0.01);
@@ -848,7 +888,7 @@ const EV = {
   // ---------------------------------------------------------------- 事件（被害・目撃）
   inc_sagi_warn: {
     name: '詐欺の注意（家族へ）', cat: 'incident', where: 'any', weight: 0.5, cool: 90,
-    ok: (g, c) => c.year >= 2003 && !!c.elder && c.day - num(c.d.famWarned) > 60,
+    ok: (g, c) => c.year >= 2003 && !!c.elder && (!c.d.famWarned || c.day - num(c.d.famWarned) > 60),
     async run(g, c, data, open) {
       const M = c.elder;
       const S = open('phone', { title: 'ニュース', sub: sagiWord(c.year), who: M.look, rightLabel: M.call });
@@ -880,7 +920,7 @@ const EV = {
         return { prevented: true, warned: true };
       }
       const amt = 3000000;
-      await famSay(g, M, ['{you}！ 声がちょっと変{dane}…風邪ひいた{no}？', `さっきの電話で、「会社のお金をなくした、\n今日中に${fmtMoney(amt)}いる」って言ってたでしょ。`, 'いまから、言われた人にお金を渡しに行く{nda}。']);
+      await famSay(g, M, ['{you}！ さっきの電話、風邪で声が変だった{ne}…。\nもう具合はいい{no}？', `それで、「会社のお金をなくした、\n今日中に${fmtMoney(amt)}いる」って言ってたでしょ。`, 'いまから、言われた人にお金を渡しに行く{nda}。']);
       const k = await ask(g, null, '（そんな電話、していない…！）', ['それは詐欺だと止める', 'いまは忙しいと切る']);
       if (k === 0) {
         await narr(g, ['（「それは詐欺だよ！ 自分はかけていない！」と伝えた。\n家族を落ち着かせて、すぐ110番してもらった）', '（警察が待ちかまえ、お金を受け取りに来た男が逮捕された）']);
@@ -938,7 +978,7 @@ const EV = {
     async run(g, c, data, open) {
       const st = g.state, d = c.d;
       const how = c.year < 2005 ? '同じ人物から、手紙が毎日のように届く' : c.year < 2015 ? 'ブログのコメント欄に、同じ人物の書きこみが続く' : 'ドッターのDMに、同じ人物から何十通もメッセージが届く';
-      const S = open('letter', { title: '届いたメッセージ', sub: 'このところ毎日…', words: 'きょうの帰り道\nすてきでした' });
+      const S = open('letter', { title: '届いたメッセージ', sub: 'このところ毎日…', words: 'きょうの帰り道\nすてきでした', screen: c.year < 2005 ? null : c.year < 2015 ? 'ブログのコメント' : g.fmt('ドッター　DM') });
       await narr(g, [`（このところ、${how}）`, '（「今日の帰り道、すてきでした」――\n…どうして、帰り道を知っているんだろう）']);
       const law = c.year > 2000 || (c.year === 2000 && c.month >= 11);
       const k = await ask(g, null, '（どうしよう…）', ['事務所と警察に相談', 'しばらく様子を見る', '返事をしてみる']);
@@ -1057,7 +1097,7 @@ const EV = {
       const M = managerOf(c);
       const head = c.office ? '{familyname}議員\n深夜のネオン街' : '{fullname}\n夜の街で豪遊';
       const S = open('magazine', { title: MAG, sub: '来週号のゲラ', headline: head, stamp: '独占' });
-      await say(g, M, [`${MAG}が、キャバクラから出てくる写真を\n来週号に載せるそうです。`, c.office ? '国会の会期中だということも、書かれています…。' : 'どう対応するか、決めてください。']);
+      await say(g, M, [`${MAG}が、キャバクラから出てくる写真を\n来週号に載せるそうです。`, c.national && c.p && c.p.diet && c.p.diet.session && num(c.p.diet.session.end) >= c.day ? '国会の会期中だということも、書かれています…。' : c.office ? '有権者に、どう説明なさいますか…。' : 'どう対応するか、決めてください。']);
       return scoopChoice(g, c, S, { topic: 'kyaba', truth: true, label: 'キャバクラ通い' });
     },
   },
@@ -1210,7 +1250,7 @@ const EV = {
         await narr(g, `（テーブルの上に、紙袋が置かれた。\n中には、現金${fmtMoney(amt)}…）`);
         const k = await ask(g, null, `（受け取れば、収賄だ。\n${CRIMES.bribery_take.law(g).split('：')[0]}…）`, ['きっぱり断る', '受け取る']);
         if (k === 0) {
-          await narr(g, ['（紙袋を押し返した。社長の顔から、笑みが消えた）', '（紹介してくれた党の先輩の顔をつぶした形だ。\n地元の業者の一部は、対立候補の応援に回るだろう）']);
+          await narr(g, ['（紙袋を押し返した。社長の顔から、笑みが消えた）', '（席を用意した地元の有力者の顔をつぶした形だ。\n地元の業者の一部は、対立候補の応援に回るだろう）']);
           polNudge(g, { local: -3, standing: -2, rep: 1 });
           d.story.refused = (d.story.refused || 0) + 1;
           return { pick: 'refuse' };
@@ -1309,7 +1349,7 @@ const EV = {
         }
         await narr(g, '（弁護士とともに検察庁へ出向き、\nすべてを話すことにした…）');
         S.hide();
-        try { await g.investigate(crime, { now: true }); } catch (e) { console.error(e); }
+        await prosecute(g, crime, { now: true });
         return { pick: 'confess', crime };
       }
       if (k === 1) {
@@ -1324,7 +1364,7 @@ const EV = {
         S.hide();
         if (crime === 'slush_fund') exposeSecret(g, 4);
         else scandalPol(g, 'bribery', { amount: num(c.heat[crime] && c.heat[crime].amount) });
-        try { await g.investigate(crime, {}); } catch (e) { console.error(e); }
+        await prosecute(g, crime, {});
         return { pick: 'hush', crime, covered: false };
       }
       try { if (num(c.me && c.me.staff) > 0) g.hireStaff(-1); } catch (e) { console.error(e); }
@@ -1332,8 +1372,34 @@ const EV = {
       S.hide();
       if (crime === 'slush_fund') exposeSecret(g, 4);
       else scandalPol(g, 'bribery', { amount: num(c.heat[crime] && c.heat[crime].amount) });
-      try { await g.investigate(crime, {}); } catch (e) { console.error(e); }
+      await prosecute(g, crime, {});
       return { pick: 'fire', crime };
+    },
+  },
+  pol_tokuso: {
+    name: '家宅捜索', cat: 'corruption', where: 'any', story: true,
+    ok: (g, c, data) => !!c.office && !!(c.heat && c.heat[data.crime || 'slush_fund'] && !c.heat[data.crime || 'slush_fund'].queued),
+    async run(g, c, data, open) {
+      const crime = data.crime && CRIMES[data.crime] ? data.crime : 'slush_fund';
+      const tokuso = c.national || c.level === 'exec';
+      const who = tokuso ? { name: '東京地検特捜部の検事', look: WHO.kenji.look } : { name: '警視庁捜査二課の刑事', look: LK.keiji };
+      const S = open('office', { title: '事務所', sub: '朝早く、事務所に…', who: who.look });
+      g.sfx('buzz');
+      await narr(g, ['（朝早く、事務所に段ボール箱を抱えた人たちが\n次々と入ってきた）', `（${tokuso ? '東京地検特捜部' : '警視庁'}の家宅捜索だ――）`]);
+      await say(g, who, [`${CRIMES[crime].short}の疑いで、捜索します。`, '帳簿とパソコン、手帳を押収させていただきます。']);
+      const k = await ask(g, null, '（どうする…？）', ['捜査に協力する', '弁護士を呼ぶ', '書類を処分させる']);
+      if (k === 2) {
+        await narr(g, '（秘書に目くばせした…。\n秘書は、首を横にふった）');
+        await say(g, WHO.secretary, '先生…それだけは、できません。\n証拠を隠せば、罪がもっと重くなります。');
+        await narr(g, '（証拠を隠すよう頼むことも、罪になりうる。\n…捜査員の目つきが、いっそう厳しくなった）');
+        polNudge(g, { standing: -3 });
+      } else if (k === 1) await say(g, WHO.lawyer, ['取り調べには、事実だけを話してください。', '黙秘する権利もあります。\n迷ったら、まず私に相談してください。']);
+      else await narr(g, '（「すべて、ありのままにお見せします」と答えた）');
+      news(g, `${tokuso ? '東京地検特捜部' : '警視庁'}が、${whoIs(g, c)}の事務所を${CRIMES[crime].short}の疑いで家宅捜索。`);
+      polNudge(g, { rep: -4, local: -3 });
+      S.hide();
+      await prosecute(g, crime, { now: true, amount: num(data.amount) || undefined });
+      return { pick: ['cooperate', 'lawyer', 'destroy'][k], crime };
     },
   },
 
@@ -1377,7 +1443,7 @@ const EV = {
     name: '闇営業の発覚', cat: 'hansha', where: 'any', story: true,
     async run(g, c, data, open) {
       news(g, '特殊詐欺グループを摘発。グループの「会長」が開いた宴会には、芸能人も出ていたとみられる。');
-      const S = open('letter', { title: 'ニュース', sub: '摘発', words: '詐欺グループ\n摘発' });
+      const S = open('letter', { title: 'ニュース', sub: '摘発', words: '詐欺グループを摘発\n「会長」ら逮捕', tv: true });
       await narr(g, ['（ニュースを見て、血の気が引いた。\nあの「感謝の宴」の会長だ…）', '（あの会社は、詐欺グループの隠れみのだった）']);
       const c2 = ctxOf(g);
       if ((data.photo || roll(0.5)) && (c2.fame >= 250 || c2.office)) {
@@ -1459,7 +1525,7 @@ const EV = {
     async run(g, c, data, open) {
       const st = g.state, d = c.d;
       const net = !c.office && c.year >= 2005;
-      const S = open('letter', { title: c.office ? '事務所に届いた手紙' : net ? 'ネットの書きこみ' : '事務所に届いた手紙', sub: '差出人はない', words: 'おまえを\nゆるさない' });
+      const S = open('letter', { title: c.office ? '事務所に届いた手紙' : net ? 'ネットの書きこみ' : '事務所に届いた手紙', sub: net && !c.office ? '名指しの投稿' : '差出人はない', words: 'おまえを\nゆるさない', screen: net && !c.office ? '匿名の掲示板' : null, bar: '#5a5a66' });
       await narr(g, c.office ? '（事務所に、差出人のない封筒が届いた。\n中には、短い一文だけ――）' : net ? '（ネットに、名指しで危害をくわえると\nほのめかす書きこみがあった――）' : '（事務所に、差出人のない手紙が届いた――）');
       g.addNeed('stress', 6);
       const k = await ask(g, null, '（どうする…？）', ['警察に相談する', '事務所で様子を見る', '気にしない']);
@@ -1493,21 +1559,23 @@ const EV = {
     async run(g, c, data, open) {
       const st = g.state, d = c.d;
       const guard = c.guarded || num(d.guard) > st.day;
-      const S = open('speech', { title: '駅前', sub: '街頭演説', sp: guard });
-      await narr(g, '（駅前で、街頭演説をしていたときだった）');
-      S.set('speech', { title: '駅前', sub: '街頭演説', sp: guard, rush: true });
+      const kind = data.kind || d.speechKind || '街頭演説';
+      const where = kind === '視察' ? '視察先' : '駅前';
+      const S = open('speech', { title: where, sub: kind, sp: guard });
+      await narr(g, kind === '地元回り' ? '（駅前で、地元の人たちにあいさつをしていたときだった）' : kind === '視察' ? '（視察先で、集まった人たちにあいさつをしていたときだった）' : '（駅前で、街頭演説をしていたときだった）');
+      S.set('speech', { title: where, sub: kind, sp: guard, rush: true });
       g.sfx('buzz'); g.shake(16, 3);
       await narr(g, '（聴衆の中から、男が突然こちらへ駆け寄ってきた――）');
       if (guard) await say(g, WHO.sp, '下がってください！');
       const k = await ask(g, null, '（どうする…！？）', [guard ? 'SPの指示で身を伏せる' : '身を低くして離れる', '聴衆に避難を呼びかける']);
       const injured = data.injured ?? roll((guard ? 0.1 : 0.45) + (k === 1 ? 0.15 : 0));
-      await narr(g, guard ? '（SPがすぐに間に入り、男はその場で取り押さえられた）' : '（スタッフと警察官が、男を取り押さえた。\nもみ合いの中で、こちらも突き飛ばされて倒れた…）');
+      await narr(g, guard ? `（SPがすぐに間に入り、男はその場で取り押さえられた）${injured ? '\n（もみ合いの中で、こちらも倒れて体を打った…）' : ''}` : injured ? '（スタッフと警察官が、男を取り押さえた。\nもみ合いの中で、こちらも突き飛ばされて倒れた…）' : '（スタッフと警察官が、すぐに男を取り押さえた）');
       await say(g, WHO.police, ['男はその場で、現行犯逮捕しました。', '動機などについて、くわしく調べています。']);
       const title = c.office && OFFICES[c.office] ? `${OFFICES[c.office].short || '議員'}の` : '立候補している';
-      news(g, `【速報】${title}{fullname}氏の街頭演説中、男が駆け寄り取り押さえられた。${injured ? '{fullname}氏は軽いけが。' : 'けが人はいない。'}警察が動機を調べている。`);
-      if (injured) await hospitalStay(g, S, 2, { injury: '腕と背中の打撲', home: false });
+      news(g, `【速報】${title}{fullname}氏の${kind === '街頭演説' ? '街頭演説中' : kind === '視察' ? '視察中' : '地元回りの最中'}、男が駆け寄り取り押さえられた。${injured ? '{fullname}氏は軽いけが。' : 'けが人はいない。'}警察が動機を調べている。`);
+      if (injured) await hospitalStay(g, S, 2, { injury: '腕と背中を強く打っています', home: false });
       S.core('press', { title: '記者会見', sub: '', banner: '会見' });
-      await narr(g, ['（「巻きこまれた方がいなかったことに、まず安堵しています」）', '（「選挙は、民主主義の土台です。\n暴力で言論を封じることは、決して許されません」）']);
+      await narr(g, ['（「巻きこまれた方がいなかったことに、まず安堵しています」）', '（「言論の場は、民主主義の土台です。\n暴力で言論を封じることは、決して許されません」）']);
       const k2 = await ask(g, null, '（これからの活動は…）', ['暴力に屈しないと誓う', 'しばらく活動を控える']);
       await narr(g, k2 === 0 ? '（警備を見直したうえで、演説を続けると表明した）' : '（安全が確認できるまで、街頭での活動を控えると表明した）');
       polNudge(g, { rep: k2 === 0 ? 6 : 4, local: 5, mood: c.pm ? 2 : c.minister ? 1 : 0.5 });
@@ -1891,7 +1959,7 @@ function momentChecks(g) {
     const c = ctxOf(g);
     if (slotFree(g)) {
       const threat = d.threat && st.day - num(d.threat.day) <= 60;
-      let p = 0.012 * (c.pm ? 3 : c.minister ? 2 : 1) * (threat ? 3 : 1) * (threat && d.threat.ignored ? 2 : 1) * (c.guarded ? 0.5 : 1);
+      let p = 0.012 * (d.speechKind && d.speechKind !== '街頭演説' ? 0.5 : 1) * (c.pm ? 3 : c.minister ? 2 : 1) * (threat ? 3 : 1) * (threat && d.threat.ignored ? 2 : 1) * (c.guarded ? 0.5 : 1);
       if (roll(p) && startMoment(g, 'threat_attempt')) return true;
     }
   }
@@ -1952,8 +2020,17 @@ function waitFree(g, tries) {
 // A 街頭演説 (politics core) is a moment the player stands in front of a crowd.
 wrap('campaign', (orig) => async function (action, opts) {
   const r = await orig.call(this, action, opts);
-  try { if (r && r.ok && action === '街頭演説' && this.state) D(this).speech = this.state.day; } catch (e) { console.error(e); }
+  try { if (r && r.ok && action === '街頭演説' && this.state) { const d = D(this); d.speech = this.state.day; d.speechKind = action; } } catch (e) { console.error(e); }
   return r;
+});
+// Outside an election, a politician also stands in front of people: 地元回り and 視察 (politics core activities).
+wrap('activity', (orig) => function (kind, opts) {
+  const r = orig.call(this, kind, opts);
+  const mark = (res) => {
+    try { if (res && res.ok && (kind === '地元回り' || kind === '視察') && this.state) { const d = D(this); d.speech = this.state.day; d.speechKind = kind; } } catch (e) { console.error(e); }
+    return res;
+  };
+  return r && typeof r.then === 'function' ? r.then(mark) : mark(r);
 });
 
 onMorning((g) => {
@@ -1998,6 +2075,17 @@ onPolitics('elected', (g, info) => {
   try {
     if (!g || !g.state || !info || !info.office || info.office === 'party_leader') return;
     if (roll(0.5)) D(g).follow.push({ id: 'pol_offer', day: g.state.day + rint(6, 14), data: {}, tries: 0 });
+  } catch (e) { console.error(e); }
+});
+// A serious money scandal of the player (裏金・収賄が表に出た) may bring a search of the office.
+onPolitics('scandal', (g, info) => {
+  try {
+    if (!g || !g.state || !info || info.who !== 'player' || num(info.severity) < 4) return;
+    const crime = info.kind === 'slush_fund' ? 'slush_fund' : info.kind === 'bribery' ? 'bribery_take' : null;
+    if (!crime) return;
+    const d = D(g), day = g.state.day;
+    if (d.follow.some((f) => f.id === 'pol_tokuso') || (d.lastId.pol_tokuso && day - d.lastId.pol_tokuso < 60)) return;
+    if (roll(0.5)) d.follow.push({ id: 'pol_tokuso', day: day + rint(4, 10), data: { crime, amount: num(info.amount) }, tries: 0 });
   } catch (e) { console.error(e); }
 });
 onPolitics('resign', (g, info) => {

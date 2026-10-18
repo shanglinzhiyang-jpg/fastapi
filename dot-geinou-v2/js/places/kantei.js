@@ -19,7 +19,8 @@
 //   内閣危機管理監は1998年4月1日に設置。2002年より前（旧官邸）の場面では、階の説明や会見の回数は言わない。
 // flags (prefix kantei_): kantei_guest (day of the courtesy call invitation), kantei_visit (day
 //   of the last 表敬訪問), kantei_photo_<formed>, kantei_kakugi (day), kantei_press (day),
-//   kantei_crisis_<key>, kantei_brief (day), kantei_hall_hello.
+//   kantei_crisis_<key>, kantei_brief (day), kantei_hall_hello, kantei_mood_day (day the cabinet's
+//   mood last moved with a press conference).
 
 import { registerPlace, doorIndexFor } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
@@ -290,14 +291,16 @@ function pmDesk(x, y, talk) {
   return { type: 'prop', x, y, w: 5, h: 1, talk, draw(ctx, sx, sy) { blit(ctx, bake('pmdesk', 80, 22, paintDesk), sx, sy - 6); } };
 }
 // name plates on the wall
+// label: a string or (g) => string (e.g. by era)
 function plate(x, y, label, w = 3) {
   return {
     type: 'prop', x, y, w, h: 1, solid: false,
-    draw(ctx, sx, sy) {
+    draw(ctx, sx, sy, g) {
       const tw = w * 16 - 6;
+      const t = typeof label === 'function' ? label(g || game()) : label;
       box(ctx, sx + 3, sy + 4, tw, 10, '#3a2a1a');
       box(ctx, sx + 3.5, sy + 4.5, tw - 1, 9, '#f4ead4');
-      text(ctx, label, sx + 3 + tw / 2, sy + 5, { size: 7, align: 'center', color: '#3a2a1a', shadow: null });
+      text(ctx, t, sx + 3 + tw / 2, sy + 5, { size: 7, align: 'center', color: '#3a2a1a', shadow: null });
     },
   };
 }
@@ -334,6 +337,8 @@ function nudge(g, { mood = 0, rep = 0 } = {}) {
   if (mood && p.cabinet && typeof p.cabinet.mood === 'number') p.cabinet.mood = clamp(p.cabinet.mood + mood, -20, 20);
   if (rep && p.me && typeof p.me.reputation === 'number') p.me.reputation = clamp(p.me.reputation + rep, -100, 100);
 }
+// Shocks that are not crises (a stock boom needs no 危機管理センター).
+const NOT_CRISIS = new Set(['boom']);
 // Crisis names as nouns (「〜について」「〜への対応」)
 const CRISIS_NAMES = { quake: '大地震', storm: '台風・豪雨の被害', recession: '世界的な景気後退', boom: '株価の急上昇', yen_high: '急激な円高', yen_low: '急激な円安', energy: '資源価格の高騰' };
 const shortTitle = (s) => { const t = String(s || '').replace(/（[^）]*）/g, '').trim(); return Array.from(t).length > 14 ? Array.from(t).slice(0, 13).join('') + '…' : t; };
@@ -342,7 +347,7 @@ export function activeCrisis(g) {
   const p = pol(g);
   if (!p || !p.economy || !Array.isArray(p.economy.shocks)) return null;
   const abs = g.state.day - 1 + (((p.cal && p.cal.month) || 4) - 1) * 10;
-  const live = p.economy.shocks.filter((s) => s && SHOCKS[s.kind] && abs < s.until && abs >= s.until - s.len && abs - (s.until - s.len) <= 30);
+  const live = p.economy.shocks.filter((s) => s && SHOCKS[s.kind] && !NOT_CRISIS.has(s.kind) && abs < s.until && abs >= s.until - s.len && abs - (s.until - s.len) <= 30);
   live.sort((a, b) => (SHOCKS[b.kind].disaster ? 1 : 0) - (SHOCKS[a.kind].disaster ? 1 : 0) || b.until - a.until);
   const s = live[0];
   return s ? { key: `${s.kind}_${s.until}`, name: CRISIS_NAMES[s.kind] || String(s.name || SHOCKS[s.kind].name).replace(/が発生$/, ''), disaster: !!SHOCKS[s.kind].disaster, kind: s.kind } : null;
@@ -360,12 +365,13 @@ const WHO = {
   kisha2: { name: '新聞社の記者', look: { hair: 'short', hairColor: 'brown', skin: 'fair', top: '#5a6f8a', bottom: '#2a2d36', jacket: true, glasses: true } },
   kisha3: { name: 'テレビ局の記者', look: { hair: 'long', hairColor: 'brown', skin: 'light', top: '#f2f2f2', bottom: '#2a3560', jacket: true } },
   camera: { name: 'カメラマン', look: LOOKS.cameraman },
-  koho: { name: '内閣広報室の職員', look: { ...LOOKS.salaryman, top: '#2f3442', tie: '#8a3a2a' } },
+  koho: { name: '官邸の広報担当', look: { ...LOOKS.salaryman, top: '#2f3442', tie: '#8a3a2a' } },
+  partyKoho: { name: '党の広報担当', look: { ...LOOKS.salaryman, top: '#3a3f4a', tie: '#5a6a8a' } },
   hisho: { name: '総理秘書官', look: { hair: 'slick', hairColor: 'black', skin: 'fair', top: '#2a2d3a', bottom: '#2a2d3a', jacket: true, tie: '#3a6fd8', glasses: true } },
   fuku: { name: '内閣官房の職員', look: { hair: 'short', hairColor: 'gray', skin: 'fair', top: '#3a3f4a', bottom: '#3a3f4a', jacket: true, tie: '#5a5a2a' } },
   kanshi: { name: '危機管理の担当官', look: { hair: 'short', hairColor: 'silver', skin: 'tan', top: '#2a3040', bottom: '#2a3040', jacket: true, tie: '#7a1a20' } },
-  op1: { name: 'センターの職員', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#e8eaee', bottom: '#3a3f4a', tie: '#2a3560' } },
-  op2: { name: 'センターの職員', look: { hair: 'bob', hairColor: 'black', skin: 'light', top: '#e8eaee', bottom: '#3a3f4a' } },
+  op1: { name: '当番の職員', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#e8eaee', bottom: '#3a3f4a', tie: '#2a3560' } },
+  op2: { name: '当番の職員', look: { hair: 'bob', hairColor: 'black', skin: 'light', top: '#e8eaee', bottom: '#3a3f4a' } },
 };
 const say = (w) => ({ name: w.name, look: w.look });
 const npc = (id, x, y, dir, w, extra = {}) => ({ type: 'npc', id, x, y, dir, look: w.look, name: w.name, ...extra });
@@ -414,7 +420,10 @@ function pressQuestions(g, opts = {}) {
   const E = p && p.economy;
   const crisis = activeCrisis(g);
   const me = p && p.me;
-  if (crisis) qs.push({ q: `${crisis.name}について、政府の対応は？`, a: [['被害と対応を説明', 90, '把握している状況と、いまやっていることを順に説明した。'], ['全力を尽くすと言う', 60, '「政府一丸となって、全力で取り組みます」と答えた。'], ['情報を精査中と言う', 30, '「詳細は精査中です」…記者たちは物足りなそうだ。']] });
+  if (crisis) {
+    const gov = isMinister(g);
+    qs.push({ q: `${crisis.name}について、${gov ? '政府の対応は？' : '党としての考えは？'}`, a: [[crisis.disaster ? '被害と対応を説明' : '影響と対応を説明', 90, gov ? '把握している状況と、いまやっていることを順に説明した。' : '現地や関係者から聞いた状況と、党としての提案を順に説明した。'], ['全力を尽くすと言う', 60, gov ? '「政府一丸となって、全力で取り組みます」と答えた。' : '「与野党の立場をこえて、全力で取り組みます」と答えた。'], ['情報を精査中と言う', 30, '「詳細は精査中です」…記者たちは物足りなそうだ。']] });
+  }
   if (me && (me.secret > 0 || (me.scandalDay && g.state.day - me.scandalDay < 60))) qs.push({ q: '政治資金をめぐる報道について、説明を。', a: [['事実を説明し謝罪', 75, '事実関係を説明し、頭を下げた。…厳しい質問は続いたが、逃げなかった。'], ['コメントを控える', 25, '「捜査や調査に関わることは控えます」…記者席がざわついた。'], ['報道は事実無根だ', 15, '「事実無根です」と言い切った。…本当に、それで大丈夫だろうか。']] });
   const bills = (() => { try { return g.billsList({ pending: true }).filter((b) => b.policy && POLICIES[b.policy]); } catch (e) { return []; } })();
   if (bills.length) {
@@ -439,9 +448,11 @@ export async function pressConference(g, opts = {}) {
   const qs = pressQuestions(g, opts);
   const talk = Number((g.state.skills && g.state.skills.talk) || 0);
   let sum = 0;
-  const reporters = [WHO.kisha1, WHO.kisha2, WHO.kisha3];
+  // at a party headquarters the host is the party's press officer and the reporters are not the 官邸's
+  const atParty = opts.where === 'party';
+  const reporters = atParty ? [{ ...WHO.kisha1, name: '新聞社の記者' }, { ...WHO.kisha2, name: '通信社の記者' }, WHO.kisha3] : [WHO.kisha1, WHO.kisha2, WHO.kisha3];
   g.sfx('shutter');
-  await g.say(opts.open || ['（カメラのフラッシュがいっせいに光った）', '「それでは、記者会見を始めます」'], say(WHO.koho));
+  await g.say(opts.open || ['（カメラのフラッシュがいっせいに光った）', '「それでは、記者会見を始めます」'], say(atParty ? WHO.partyKoho : WHO.koho));
   for (let k = 0; k < qs.length; k++) {
     const q = qs[k];
     const r = reporters[k % reporters.length];
@@ -453,9 +464,12 @@ export async function pressConference(g, opts = {}) {
   const score = clamp(Math.round(sum / Math.max(1, qs.length) * 0.75 + talk * 0.3), 0, 100);
   const r = g.activity('記者会見', { score });
   const lines = [];
-  lines.push(r && r.ok && effects(r) ? `会見を終えた。\n${effects(r)}` : '会見を終えた。');
-  if (isPM(g) || myCabinetPost(g) === 'kanbo') { nudge(g, { mood: (score - 55) / 12 }); lines.push(score >= 70 ? '（会見の評判は上々だ。支持率にも追い風になりそうだ）' : score < 45 ? '（会見の評判は、いまひとつだった…）' : '（無難な会見だった）'); }
-  else if (isMinister(g)) nudge(g, { mood: (score - 55) / 30 });
+  lines.push(r && r.ok && effects(r) ? `会見を終えた。\n${effects(r)}` : r && !r.ok && r.why === '今日はもうやった' ? '会見を終えた。\n（今日はもう取材に答えているので、評判は動かなかった）' : '会見を終えた。');
+  // the cabinet's mood moves once a day at most (官邸・党本部・緊急会見のどこで開いても)
+  const moodOk = g.flag('kantei_mood_day') !== g.state.day;
+  if (isPM(g) || myCabinetPost(g) === 'kanbo') { if (moodOk) nudge(g, { mood: (score - 55) / 12 }); lines.push(score >= 70 ? '（会見の評判は上々だ。支持率にも追い風になりそうだ）' : score < 45 ? '（会見の評判は、いまひとつだった…）' : '（無難な会見だった）'); }
+  else if (isMinister(g) && moodOk) nudge(g, { mood: (score - 55) / 30 });
+  if (isMinister(g)) g.setFlag('kantei_mood_day', g.state.day);
   await g.say(lines);
   return score;
 }
@@ -484,7 +498,7 @@ async function recepTalk(g, npc) {
   const yr = yearOf(g);
   if (isPolitician(g)) {
     const post = myCabinetPost(g);
-    const lines = [post ? `${post === 'pm' ? '総理' : postLabel(g, post)}、おはようございます。` : '{name}先生、ようこそ官邸へ。'];
+    const lines = [post ? `${post === 'pm' ? '総理' : postLabel(g, post)}、おはようございます。` : '{familyname}先生、ようこそ官邸へ。'];
     lines.push(kakugiDay(g) ? `本日は定例閣議の日です。\n閣僚のみなさまは、${newKantei(g) ? '4階の' : ''}閣僚応接室へどうぞ。` : '定例閣議は、原則として火曜日と金曜日です。');
     if (newKantei(g)) lines.push('5階が総理の執務室、4階が閣議室。\n1階に記者会見室、地下に危機管理センターがございます。');
     await g.say(lines, S);
@@ -596,9 +610,10 @@ async function kakugiTable(g) {
 }
 async function ministerChat(g, npc) {
   G = g;
-  const lines = kakugiDay(g)
-    ? ['閣議の前は、ここ閣僚応接室に集まるんだ。\nテレビでよく映る、あのソファの部屋だよ。', '閣議そのものは非公開。\n記者が見られるのは、この部屋までなんだ。']
-    : ['今日は閣議がない日でね。\n書類を取りに寄っただけさ。'];
+  const atTable = /^kantei_seat/.test(npc.id || '');
+  const lines = !kakugiDay(g) ? ['今日は閣議がない日でね。\n書類を取りに寄っただけさ。']
+    : atTable ? ['まもなく閣議だ。\n配られた閣議書に、ひとつずつ花押を書いていくんだ。', '閣議の中身は非公開。\n終わったら、官房長官が記者会見で発表するよ。']
+      : ['閣議の前は、ここ閣僚応接室に集まるんだ。\nテレビでよく映る、あのソファの部屋だよ。', '閣議そのものは非公開。\n記者が見られるのは、この部屋までなんだ。'];
   await g.say(lines, { name: npc.name, look: npc.look });
 }
 
@@ -616,7 +631,7 @@ async function pmDeskTalk(g) {
     else if (i === 1) { try { await g.politicsMenu(); } catch (e) { console.error(e); } }
     else if (i === 2) {
       const r = g.activity('外遊');
-      await g.say(r && r.ok ? ['政府専用機で、首脳会談に出かけた。', `各国の首脳と、握手をかわした。\n${effects(r)}`] : (r && r.why) || '外遊はできない。');
+      await g.say(r && r.ok ? [`${yearOf(g) >= 1993 ? '政府専用機' : '日本航空の特別機'}で、首脳会談に出かけた。`, `各国の首脳と、握手をかわした。\n${effects(r)}`] : (r && r.why) || '外遊はできない。');
     } else if (i === 3) { await gotoRoom(g, 'crisis'); return; }
     else return;
     if (g.auto) return;
@@ -692,12 +707,20 @@ async function crisisTalk(g, npc) {
   } else await g.say(o[1]);
   nudge(g, o[2]);
   const j = await g.ask('国民に向けて、緊急の記者会見を開く？', ['会見を開く', 'あとにする'], { cancel: 1 });
-  if (j === 0) { g.setFlag('kantei_press', g.state.day); await pressConference(g, { where: 'crisis', open: ['（緊急の記者会見。会見室は記者でいっぱいだ）', '「総理から、国民のみなさまへのご説明です」'] }); }
+  if (j === 0) {
+    g.setFlag('kantei_press', g.state.day);
+    // to the press room (1階): the podium faces the reporters
+    if (g.map && g.map.placeId === PID) { g.sfx('door'); await g.goto(PID, 'press', 10, 3, 'down'); }
+    await pressConference(g, { where: 'crisis', open: ['（緊急の記者会見。会見室は記者でいっぱいだ）', '「総理から、国民のみなさまへのご説明です」'] });
+  }
 }
 async function opTalk(g, npc) {
   G = g;
   const c = activeCrisis(g);
-  await g.say(c ? [`${c.name}の情報が、次々に入ってきます！`, '各地の被害、交通、電気、通信…\nすべてこの画面に集まるんです。'] : ['モニターで、全国の状況を見守っています。', 'なにもない日も、気は抜けません。'], { name: npc.name, look: npc.look });
+  const lines = !c ? ['モニターで、全国の状況を見守っています。', 'なにもない日も、気は抜けません。']
+    : c.disaster ? [`${c.name}の情報が、次々に入ってきます！`, '各地の被害、交通、電気、通信…\nすべてこの画面に集まるんです。']
+      : [`${c.name}への対応で、各省から報告が入ってきます。`, '市場の動き、企業や家計への影響…\n数字を、一つずつ確かめています。'];
+  await g.say(lines, { name: npc.name, look: npc.look });
 }
 
 // ------------------------------------------------------------------ dynamic NPCs (cabinet members)
@@ -775,19 +798,23 @@ registerPlace({
         { x: 19, y: 2, room: 'press', tx: 10, ty: 10, dir: 'up' },
       ],
       entities: [
-        plate(7, 0.9, '竹の庭', 7),
+        plate(7, 0.9, (g) => (g && !newKantei(g) ? '中庭' : '竹の庭'), 7),
         npc('kantei_recep', 10, 3, 'down', WHO.recep, { talk: posted('down', recepTalk) }),
         npc('kantei_guard', 15, 5, 'down', WHO.guard, { text: ['（警備の警察官が、ゲートの前に立っている）', '「入館証を、見えるところにお付けください」'] }),
         npc('kantei_staff', 7, 7, 'right', WHO.staff, {
           wander: 2,
-          talk: async (g) => { G = g; await g.say(['官邸では、総理を支える内閣官房の職員が働いています。', newKantei(g) ? '正面玄関は3階なんです。\n官邸は坂に建っているので、1階と2階は半地下なんですよ。' : 'この官邸は、1929年（昭和4年）に建てられた建物です。\n古いけれど、いまも総理の仕事場なんですよ。'], say(WHO.staff)); },
+          talk: async (g) => { G = g; await g.say(['官邸では、総理を支える内閣官房の職員が働いています。', newKantei(g) ? '正面玄関は3階なんです。\n官邸は坂の途中に建っていて、表の通りと同じ高さが\n3階なんですよ。' : 'この官邸は、1929年（昭和4年）に建てられた建物です。\n古いけれど、いまも総理の仕事場なんですよ。'], say(WHO.staff)); },
         }),
         npc('kantei_kisha1', 18, 8, 'left', WHO.kisha1, { text: ['内閣記者会の記者です。', '閣僚が出入りするたびに、\nこのホールで「ひと言」を聞くんです。'] }),
         npc('kantei_kisha2', 18, 9, 'left', WHO.kisha2, {
-          talk: async (g, n) => { G = g; await g.say([`いまの総理は${pmName(g)}さん。`, `支持率は${g.approval()}%…\n数字は、毎週の調査で動くからね。`], say(WHO.kisha2)); },
+          talk: async (g, n) => {
+            G = g;
+            if (isPM(g)) { await g.say(['総理、ひと言お願いします！', `支持率は${g.approval()}%。\n…数字は、毎週の調査で動きますからね。`], say(WHO.kisha2)); return; }
+            await g.say([`いまの総理は${pmName(g)}さん。`, `支持率は${g.approval()}%…\n数字は、毎週の調査で動くからね。`], say(WHO.kisha2));
+          },
         }),
         { type: 'sign', x: 3, y: 3, talk: photoStairs },
-        { type: 'sign', x: 8, y: 2, text: ['ガラスの向こうに、竹の庭が見える。', '風が吹くたびに、笹の葉がさらさらと揺れている。'] },
+        { type: 'sign', x: 8, y: 2, talk: async (g) => { G = g; await g.say(newKantei(g) ? ['ガラスの向こうに、竹の庭が見える。', '風が吹くたびに、笹の葉がさらさらと揺れている。'] : ['ガラスの向こうに、中庭の植えこみが見える。', '昭和のはじめから、歴代の総理がながめてきた庭だ。']); } },
       ],
       events: [
         { x: 17, y: 2, on: 'step', run: elevator },
@@ -852,7 +879,7 @@ registerPlace({
         plate(14, 0.9, '閣議室', 5),
         roundTable(14, 4, kakugiTable),
         npc('kantei_fuku', 21, 9, 'left', WHO.fuku, {
-          text: ['閣議の段取りは、内閣官房が整えます。', '閣議の案件は、ふつう前もって各省の間で\n調整されているんですよ。'],
+          text: ['閣議の段取りは、内閣官房が整えます。', '閣議の案件は、ふつう前もって各省の間で\n調整されているんですよ。', '国会の会期中は、朝9時から国会議事堂の中の\n閣議室で開くことが多いんです。\nふだんは官邸のここで、朝10時からですね。'],
         }),
         // 閣僚応接室: ministers wait on the sofas before the 閣議 (閣議の日だけ)
         ministerSeat('kantei_wait1', 0, 5, 3, 'left', kakugiDay),
@@ -942,7 +969,7 @@ registerPlace({
 // A minister / the PM hears about a crisis on the phone (politics 'shock' hook).
 onPolitics('shock', (g, s) => {
   try {
-    if (!g || !g.state || !isMinister(g) || !s) return;
+    if (!g || !g.state || !isMinister(g) || !s || NOT_CRISIS.has(s.kind)) return;
     if (typeof g.message === 'function') g.message({ from: '内閣官房', kind: 'news', text: `【至急】${s.name}。\n${isPM(g) ? '総理、' : ''}官邸の${newKantei(g) ? '危機管理センター（地下）' : '危機管理の部屋'}で対応にあたってください。` });
   } catch (e) { console.error(e); }
 });

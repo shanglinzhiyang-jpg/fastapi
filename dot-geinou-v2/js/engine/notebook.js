@@ -31,6 +31,7 @@ import { PEOPLE, HEARTS, heartIndex, REGULARS, FURNITURE, WEEKDAYS, weekdayOf, w
 // read lazily at run time (both cores import modules that end up importing this one)
 import * as POL from './politics.js';
 import * as JUS from './crime.js';
+import { PLACES } from './map.js'; // (also a cycle through ui.js: read only at run time)
 
 const TABS = [
   { label: 'もくひょう', color: '#ff8a3d' },
@@ -70,6 +71,8 @@ const eraText = (t) => {
   return yenText(s);
 };
 
+const NO_LINE_START = /^[、。，．）」』】〕〉》？！]/;
+
 // ---------------------------------------------------------------- content builder
 // A page is a list of blocks (scroll unit); a block is a list of lines.
 // line: { t, s: BODY|SMALL, c, x, h, r, rs, rc, tag: { t, bg }, badge: { t, c }, mark,
@@ -95,7 +98,11 @@ class Page {
   // wrapped paragraph
   para(t, { c = COLORS.text, s = BODY, x = 0, mark } = {}) {
     t = eraText(t);
-    for (const ln of wrap(this.ctx, t, VW - x, s)) this.line({ t: ln, c, s, x, mark });
+    // wrap() hangs one closing mark past the edge; with two in a row (「…号）。」) the second
+    // would start a line on its own, so wrap a little narrower until no line starts with one
+    let lines = wrap(this.ctx, t, VW - x, s);
+    for (let k = 1; k <= 3 && lines.some((ln, i) => i && NO_LINE_START.test(ln)); k++) lines = wrap(this.ctx, t, VW - x - k * s, s);
+    for (const ln of lines) this.line({ t: ln, c, s, x, mark });
     return this;
   }
 
@@ -152,9 +159,13 @@ export function visitedPlaces(g) {
   const st = g.state;
   const fl = st.flags || {};
   const v = { tokyo: true, home: true, ...(fl.visited || {}) };
-  // saves from before flags.visited: guess from the place-prefixed flags and job ids
+  // saves from before flags.visited: guess from the place-prefixed flags and job ids. Only for
+  // the older places: 永田町・ネオン街・区役所・刑務所 came after flags.visited, and some of their
+  // flags are set before a visit (kantei_guest is the invitation)
   const keys = [...Object.keys(fl), ...Object.keys(st.jobs || {})];
   for (const id of GUIDE_ORDER) {
+    const G = GUIDE[id];
+    if (!G || G.town === 'nagatacho' || G.town === 'kanraku' || id === 'kuyakusho' || G.secret) continue;
     if (!v[id] && keys.some((k) => k.startsWith(id + '_'))) v[id] = true;
   }
   if (g.map && g.map.placeId) v[g.map.placeId] = true;
@@ -534,7 +545,9 @@ function urgentNotes(g) {
       const late = (js.loans || []).find((l) => l.lender !== 'yamikin' && num(l.due) - day <= 2 && l.status !== 'frozen');
       if (late) out.push([`${late.company || '借入れ'}の返済日が${inDays(num(late.due) - day)}。`, COLORS.accent, 'law']);
       const c = (js.cases || [])[0];
-      if (c && c.next && c.next >= day) out.push([`${JUS.CRIMES && JUS.CRIMES[c.crime] ? JUS.CRIMES[c.crime].name : '事件'}の手続きがある（${inDays(c.next - day)}）。`, COLORS.bad, 'law']);
+      const cname = c && JUS.CRIMES && JUS.CRIMES[c.crime] ? JUS.CRIMES[c.crime].name : '';
+      if (c && c.next && c.next >= day) out.push([`${cname || '事件'}の手続きがある（${inDays(c.next - day)}）。`, COLORS.bad, 'law']);
+      else if (c) out.push([`${cname ? cname + 'の' : ''}事件の捜査・手続きが続いている。`, COLORS.bad, 'law']);
     }
   }
   if (hasPolitics(g)) {
@@ -617,9 +630,12 @@ function lawPage(g, ctx) {
   if (s.probationUntil) pg.row('保護観察', inDays(s.probationUntil - day), { rc: COLORS.accent, rs: SMALL });
   const civic = safe(() => g.civicBanReason('vote'));
   const cand = safe(() => g.civicBanReason('candidacy'));
-  if (civic) pg.para('選挙権がない：' + civic, { s: SMALL, c: COLORS.bad });
-  else if (cand) pg.para('立候補できない：' + cand, { s: SMALL, c: COLORS.bad });
-  else pg.row('選挙権・被選挙権', 'あり', { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.good });
+  if (civic || cand) {
+    // no vote implies no candidacy; 公職選挙法11条の2 can take only the candidacy
+    pg.row('選挙権（投票）', civic ? 'なし' : 'あり', { s: SMALL, rs: SMALL, c: COLORS.dim, rc: civic ? COLORS.bad : COLORS.good });
+    pg.row('被選挙権（立候補）', 'なし', { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.bad });
+    pg.para(civic || cand, { s: SMALL, c: COLORS.bad, x: 16 });
+  } else pg.row('選挙権・被選挙権', 'あり', { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.good });
   if (s.kinshinUntil) pg.row('活動自粛', inDays(s.kinshinUntil - day), { rc: COLORS.bad, rs: SMALL });
   if (s.tvBanUntil) pg.row('テレビの起用見送り', inDays(s.tvBanUntil - day), { rc: COLORS.accent, rs: SMALL });
   if (s.agencyBanUntil) pg.row('事務所との契約', `できない（${inDays(s.agencyBanUntil - day)}）`, { rc: COLORS.accent, rs: SMALL });
@@ -735,9 +751,10 @@ function politicsPage(g, ctx) {
       pg.row('党内の評価', String(sd), { gauge: { frac: sd / 100, color: '#b48cff' } });
     }
   } else {
-    pg.row('いまは', '民間人', { rc: COLORS.dim });
+    const running = !!safe(() => g.myElection());
+    pg.row('いまは', running ? '民間人（立候補中）' : '民間人', { rc: running ? COLORS.good : COLORS.dim });
     if (me.party) pg.row('党員', safe(() => g.partyName(me.party), '') || '');
-    pg.para('立候補は、スマホの「政治」、永田町の党本部（選挙対策本部）、ドット区役所の選挙管理委員会から。', { s: SMALL, c: COLORS.dim });
+    if (!running) pg.para('立候補は、スマホの「政治」、永田町の党本部（選挙対策本部）、ドット区役所の選挙管理委員会から。', { s: SMALL, c: COLORS.dim });
   }
   // eligibility (age on today's date; the core checks the exact election day)
   const ban = safe(() => g.civicBanReason && g.civicBanReason('candidacy'));
@@ -767,12 +784,19 @@ function politicsPage(g, ctx) {
       const word = ch >= 0.7 ? ['優勢', COLORS.good] : ch >= 0.4 ? ['接戦', COLORS.accent] : ['劣勢', COLORS.bad];
       pg.row('情勢', word[0], { s: SMALL, rs: SMALL, c: COLORS.dim, rc: word[1] });
     }
-    pg.para(day < num(mine.koji) ? `${mine.kojiDate || ''}の公示・告示までは「政治活動」だけ。` : '選挙運動の期間中。街頭演説や握手で支持を広げよう。', { s: SMALL, c: COLORS.dim, x: 16 });
+    // 公示 is only for the general elections of the two houses; every other election is 告示
+    const kw = mine.kind === 'shugi' || mine.kind === 'sangi' ? '公示' : '告示';
+    pg.para(day < num(mine.koji) ? `${kw}（${mine.kojiDate || ''}・${inDays(num(mine.koji) - day)}）までは「政治活動」だけ。` : '選挙運動の期間中。街頭演説や握手で支持を広げよう。', { s: SMALL, c: COLORS.dim, x: 16 });
   }
-  const list = ups.filter((e) => e !== mine).slice(0, 4);
+  // public elections first; another party's leadership race is only news (your own party's
+  // race stays with the others, since you can stand in it)
+  const otherRace = (e) => e.kind === 'sosaisen' && e.party !== me.party;
+  const list = ups.filter((e) => e !== mine && !otherRace(e)).slice(0, 4);
+  list.push(...ups.filter((e) => e !== mine && otherRace(e)).slice(0, Math.max(0, 5 - list.length)));
   if (!list.length && !mine) pg.para('予定されている選挙はない。', { s: SMALL, c: COLORS.dim });
   for (const e of list) {
-    pg.row(e.label || '', e.date || `${e.day}日目`, { s: SMALL, rs: SMALL, c: e.newsOnly ? COLORS.dim : COLORS.text, rc: COLORS.dim, tag: e.newsOnly ? { t: 'ニュース', bg: '#4a4a6a' } : num(e.koji) <= day ? { t: '選挙中', bg: '#c87a1a' } : null });
+    const news = e.newsOnly || otherRace(e);
+    pg.row(e.label || '', e.date || `${e.day}日目`, { s: SMALL, rs: SMALL, c: news ? COLORS.dim : COLORS.text, rc: COLORS.dim, tag: news ? { t: e.newsOnly ? 'ニュース' : '他党', bg: '#4a4a6a' } : num(e.koji) <= day ? { t: '選挙中', bg: '#c87a1a' } : null });
   }
 
   // ---- the Diet
@@ -854,10 +878,17 @@ function placesPage(g, ctx) {
   const pg = new Page(ctx);
   const visited = visitedPlaces(g);
   const here = g.map && g.map.placeId;
-  const ids = GUIDE_ORDER.filter((id) => GUIDE[id]);
-  const count = (town) => ids.filter((id) => GUIDE[id].town === town && visited[id]).length + '/' + ids.filter((id) => GUIDE[id].town === town).length;
+  // a party's headquarters only while the party exists (民主党 1998〜2016), the prison only once
+  // the player has been there, and no place whose module is not registered (not built yet, or
+  // failed to load); a place already visited always stays listed
+  const parties = safe(() => (hasPolitics(g) ? g.pol().parties : null), null) || {};
+  const built = (id) => !PLACES.tokyo || !!PLACES[id];
+  const shown = (id) => visited[id] || (built(id) && !GUIDE[id].secret && (!GUIDE[id].party || !!parties[GUIDE[id].party]));
+  const ids = GUIDE_ORDER.filter((id) => GUIDE[id] && shown(id));
+  const counted = ids.filter((id) => !GUIDE[id].secret);
+  const count = (town) => counted.filter((id) => GUIDE[id].town === town && visited[id]).length + '/' + counted.filter((id) => GUIDE[id].town === town).length;
   const towns = Object.keys(TOWNS).filter((t) => ids.some((id) => GUIDE[id].town === t));
-  pg.block(6).row(`行った場所 ${ids.filter((id) => visited[id]).length}/${ids.length}`, towns.map((t) => `${TOWNS[t]} ${count(t)}`).join('・'), { c: COLORS.accent, rs: SMALL, rc: COLORS.dim });
+  pg.block(6).row(`行った場所 ${counted.filter((id) => visited[id]).length}/${counted.length}`, towns.map((t) => `${TOWNS[t]} ${count(t)}`).join('・'), { c: COLORS.accent, rs: SMALL, rc: COLORS.dim });
   for (const id of ids) {
     const p = GUIDE[id];
     const tag = { t: p.tag || TOWNS[p.town], bg: p.tagBg || TOWN_BG[p.town] };

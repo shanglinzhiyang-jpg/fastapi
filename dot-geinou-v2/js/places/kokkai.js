@@ -52,7 +52,7 @@
 import { registerPlace } from '../engine/map.js';
 import { LOOKS, charSheetHD } from '../engine/sprites.js';
 import { defineTile, R, P, Rw, disc, oval, line, bevel, inset, grain, outline, shadowEllipse, speckle, dither } from '../engine/tiles.js';
-import { text, panel, measure, COLORS } from '../engine/draw.js';
+import { text, panel, measure, wrap, COLORS } from '../engine/draw.js';
 import { SW, SH, makeCanvas, shade, mix, fmtMoney, clamp, hash2 } from '../engine/util.js';
 import { registerSong } from '../engine/audio.js';
 import { registerItem } from '../engine/state.js';
@@ -523,6 +523,19 @@ function ministerFor(g, b, area) {
 // politics.js activity() reports "<kind>をした。…": smooth the wording of a few kinds
 const actText = (r) => (r && r.ok ? String(r.text || '').replace('陳情を受けるをした', '陳情を受けた').replace('議会で質問をした', '議会で質問した').replace('委員会で質問をした', '委員会で質問した').replace('国会で答弁をした', '国会で答弁した').replace('予算編成をした', '予算案をまとめた') : `（${(r && r.why) || 'できなかった'}）`);
 const shortPost = (label) => String(label || '').replace(/^内閣/, '').replace('国家公安委員会委員長', '国家公安委員長');
+// A long text (a statute from crime.js) as message pages that break between sentences: sentences
+// are grouped greedily into pages of at most 3 wrapped lines of the message window (576px, 16px).
+function fitPages(g, str) {
+  const parts = String(str || '').split(/(?<=。)/).map((s) => s.trim()).filter(Boolean);
+  const lines = (s) => { try { return wrap(g.ctx, s, 576, 16).length; } catch (e) { return Math.ceil(Array.from(s).length / 34); } };
+  const out = [];
+  for (const s of parts) {
+    const last = out.length ? out[out.length - 1] : null;
+    if (last != null && lines(last + s) <= 3) out[out.length - 1] = last + s;
+    else out.push(s);
+  }
+  return out.length ? out : [''];
+}
 
 // ------------------------------------------------------------------ people (fictional staff)
 const WHO = {
@@ -531,7 +544,8 @@ const WHO = {
   bocho: { name: '傍聴人受付の係員', look: { hair: 'bob', hairColor: 'black', skin: 'light', top: '#2a3560', bottom: '#2a3560', jacket: true } },
   jimu: { name: '事務総長', look: { hair: 'slick', hairColor: 'gray', skin: 'fair', top: '#1f2230', bottom: '#1f2230', jacket: true, tie: '#3a3a5a', glasses: true } },
   iinbu: { name: '委員部の職員', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#2f3a4f', bottom: '#2f3a4f', jacket: true, tie: '#5a6a8a' } },
-  hisho: { name: '政策担当秘書の白石', look: { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#3a4256', bottom: '#2a2d36', jacket: true, skirt: true, glasses: true } },
+  // the 政策担当秘書 (a third 公設秘書) exists since the 1993 国会法 amendment; before that, 2 公設秘書
+  hisho: { get name() { const g = GG(); return !g || yearOf(g) >= 1994 ? '政策担当秘書の白石' : '公設第一秘書の白石'; }, look: { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#3a4256', bottom: '#2a2d36', jacket: true, skirt: true, glasses: true } },
   shisetsu: { name: '私設秘書の小野', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#3b3f48', bottom: '#2a2d36', jacket: true, tie: '#2f6fd0' } },
   press: { name: '国会記者', look: { hair: 'short', hairColor: 'brown', skin: 'fair', top: '#5a6f8a', bottom: '#3b3f48', jacket: true } },
   visitor: { name: '見学の高校生', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#1f2a44', bottom: '#1f2a44' } },
@@ -727,12 +741,13 @@ function paintChamberSchematic(ctx, g, o) {
   const { cx, cy } = o;
   const k = o.scale || 1;
   const Q = (x, y, w, h, col) => R(ctx, Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)), col);
-  // floor & back wall
-  Q(o.x0, o.y0, o.w, o.h, '#5e1a1c');
-  dither(ctx, o.x0, o.y0, o.w, o.h, '#6a2224', 0);
-  Q(o.x0, o.y0, o.w, 26 * k, WD);
-  Q(o.x0, o.y0 + 26 * k, o.w, 2, GOLDD);
-  for (let x = o.x0 + 8; x < o.x0 + o.w; x += Math.round(40 * k)) Q(x, o.y0, 3, 26 * k, WDL);
+  // floor & back wall (the ward assembly: teal carpet and light wood, as in its chamber)
+  const L = !!o.local;
+  Q(o.x0, o.y0, o.w, o.h, L ? '#2f5664' : '#5e1a1c');
+  dither(ctx, o.x0, o.y0, o.w, o.h, L ? '#386474' : '#6a2224', 0);
+  Q(o.x0, o.y0, o.w, 26 * k, L ? '#a8784a' : WD);
+  Q(o.x0, o.y0 + 26 * k, o.w, 2, L ? '#7a5434' : GOLDD);
+  for (let x = o.x0 + 8; x < o.x0 + o.w; x += Math.round(40 * k)) Q(x, o.y0, 3, 26 * k, L ? '#c8986a' : WDL);
   if (o.house === 'sangi') { Q(cx - 12 * k, o.y0 + 2, 24 * k, 20 * k, GOLD); Q(cx - 9 * k, o.y0 + 4, 18 * k, 16 * k, '#7a1a20'); Q(cx - 4 * k, o.y0 + 8, 8 * k, 8 * k, GOLDD); }
   // 国務大臣席 (two rows each side), 議長席 with the 議長, 事務総長, 演壇
   for (const sgn of [-1, 1]) {
@@ -804,7 +819,7 @@ class VoteScene {
     const g = this.g;
     R(ctx, 0, 0, SW, SH, '#1a1210');
     paintChamberSchematic(ctx, g, {
-      x0: 0, y0: 0, w: SW, h: SH, cx: VOTE_GEO.cx, cy: VOTE_GEO.cy, house: this.house, seats: this.seats, parties: this.parties,
+      x0: 0, y0: 0, w: SW, h: SH, cx: VOTE_GEO.cx, cy: VOTE_GEO.cy, house: this.house, local: !!this.local, seats: this.seats, parties: this.parties,
       votes: this.phase === 'intro' ? null : this.votes, prog: this.prog, method: this.method, mineIdx: this.mineIdx,
       present: (i) => !(this.absent && this.absent.has(i)) || this.phase === 'intro',
     });
@@ -813,20 +828,28 @@ class VoteScene {
       const bob = Math.floor(this.t / 12) % 2;
       text(ctx, '▼あなた', Math.round(s.x) - 2, Math.round(s.y) - 30 - bob, { size: 12, align: 'center', color: COLORS.accent, outline: '#000' });
     }
-    // title card
-    panel(ctx, 8, 8, 236, 58, { bg: '#1c1a2a' });
+    // title card: the bill's name on up to two lines
+    if (!this.titleLines) {
+      const t = billLabel(this.bill);
+      let ls = [t];
+      try { ls = wrap(ctx, t, 272, 14); } catch (e) { /* keep */ }
+      if (ls.length > 2) ls = [ls[0], `${Array.from(ls[1]).slice(0, -1).join('')}…`];
+      this.titleLines = ls;
+    }
+    const th = 44 + this.titleLines.length * 18;
+    panel(ctx, 8, 8, 300, th, { bg: '#1c1a2a' });
     text(ctx, this.title || `${houseName(this.house)}本会議`, 20, 14, { size: 16, color: COLORS.accent });
-    text(ctx, METHOD_NAME[this.method] || '', 232, 16, { size: 12, align: 'right', color: COLORS.cyan });
-    const title = billLabel(this.bill);
-    text(ctx, title.length > 17 ? title.slice(0, 16) + '…' : title, 20, 40, { size: 14 });
+    text(ctx, METHOD_NAME[this.method] || '', 296, 16, { size: 12, align: 'right', color: COLORS.cyan });
+    this.titleLines.forEach((l, i) => text(ctx, l, 20, 40 + i * 18, { size: 14 }));
     // tally board
     if (this.method === 'kimei' || this.method === 'button') {
       const k = this.phase === 'intro' ? 0 : this.prog;
       const yes = Math.round(num(this.v && this.v.yes) * k), no = Math.round(num(this.v && this.v.no) * k);
       panel(ctx, SW - 172, 8, 164, 76, { bg: '#10141c' });
-      text(ctx, this.method === 'kimei' ? '白票（賛成）' : '賛成', SW - 160, 16, { size: 14, color: '#f4f4f4' });
+      const sg = this.house === 'sangi' ? '色' : '';
+      text(ctx, this.method === 'kimei' ? `白${sg}票（賛成）` : '賛成', SW - 160, 16, { size: 14, color: '#f4f4f4' });
       text(ctx, String(yes), SW - 20, 16, { size: 16, align: 'right', color: '#f4f4f4' });
-      text(ctx, this.method === 'kimei' ? '青票（反対）' : '反対', SW - 160, 40, { size: 14, color: '#7fb0ff' });
+      text(ctx, this.method === 'kimei' ? `青${sg}票（反対）` : '反対', SW - 160, 40, { size: 14, color: '#7fb0ff' });
       text(ctx, String(no), SW - 20, 40, { size: 16, align: 'right', color: '#7fb0ff' });
       if (this.phase === 'result') text(ctx, this.v && this.v.passed ? '可決' : '否決', SW - 90, 62, { size: 14, align: 'center', color: this.v && this.v.passed ? COLORS.good : COLORS.bad });
     } else if (this.phase === 'result') {
@@ -835,7 +858,7 @@ class VoteScene {
     }
     if (this.mine) {
       const w = { yes: '賛成', no: '反対', abstain: '棄権' }[this.mine] || '';
-      if (w) { panel(ctx, 8, 70, 120, 30, { bg: '#2a2410' }); text(ctx, `あなた：${w}`, 20, 77, { size: 14, color: COLORS.accent }); }
+      if (w) { panel(ctx, 8, th + 12, 120, 30, { bg: '#2a2410' }); text(ctx, `あなた：${w}`, 20, th + 19, { size: 14, color: COLORS.accent }); }
     }
   }
 }
@@ -919,6 +942,7 @@ async function showVote(g, house, b, v, o = {}) {
   sc.phase = 'vote';
   if (method === 'kiritsu') await speak(g, house, ['これより採決いたします。', '本案に賛成の諸君の起立を求めます。']);
   else if (method === 'igi') await speak(g, house, ['これより採決いたします。', '本案を委員長報告のとおり決するに、御異議ありませんか。']);
+  else if (method === 'kimei' && house === 'sangi') await speak(g, house, ['これより採決をいたします。表決は記名投票をもって行います。', '本案に賛成の諸君は白色票を、反対の諸君は青色票を、\n御登壇の上、御投票を願います。', '――議場の閉鎖を命じます。氏名点呼を行います。']);
   else if (method === 'kimei') await speak(g, house, ['これより記名投票をもって採決いたします。', '本案に賛成の諸君は白票、反対の諸君は青票を持参されることを望みます。', '――議場閉鎖。氏名点呼を命じます。']);
   else await speak(g, house, ['これより採決をいたします。', '本案の賛否について、投票ボタンをお押し願います。']);
   sc.phase = 'count';
@@ -930,7 +954,9 @@ async function showVote(g, house, b, v, o = {}) {
   const passed = !!v.passed;
   if (method === 'kiritsu') await speak(g, house, passed ? '起立多数。よって、本案は可決いたしました。' : '起立少数。よって、本案は否決されました。');
   else if (method === 'igi') { await g.say('「異議なし」（と呼ぶ者あり）'); await speak(g, house, '御異議なしと認めます。よって、本案は可決いたしました。'); }
-  else if (method === 'kimei') {
+  else if (method === 'kimei' && house === 'sangi') {
+    await speak(g, house, ['投票漏れはございませんか。――投票漏れなしと認めます。\n投票箱閉鎖。――議場の閉鎖を解きます。', `投票の結果を報告いたします。\n投票総数${v.yes + v.no}　賛成（白色票）${v.yes}　反対（青色票）${v.no}`, passed ? 'よって、本案は可決されました。' : 'よって、本案は否決されました。']);
+  } else if (method === 'kimei') {
     await speak(g, house, ['投票漏れはありませんか。――投票漏れなしと認めます。', '投票箱閉鎖。開票。――議場開鎖。', '投票の結果を事務総長から報告させます。']);
     await speak(g, house, `投票総数${v.yes + v.no}\n　可とする者（白票）${v.yes}\n　否とする者（青票）${v.no}`, 'jimu');
     await speak(g, house, passed ? '右の結果、本案は可決いたしました。' : '右の結果、本案は否決されました。');
@@ -1028,8 +1054,9 @@ async function bochoWatch(g, house) {
   const n = await runPlenary(g, house, { member: false, max: 2 });
   if (n) { await speak(g, house, '本日は、これにて散会いたします。'); g.relax({ stress: 2 }); await g.say('（国会で法案が採決される瞬間を、この目で見た…）'); return; }
   const p = pol(g);
-  const pmName = surname(npcName(g, p && p.cabinet && p.cabinet.pm));
-  if (today(g) - num(S.start) <= 2 && S.kind !== '特別国会') {
+  const pmId = p && p.cabinet && p.cabinet.pm;
+  const pmName = pmId === 'player' ? myFamilyName(g) : surname(npcName(g, pmId));
+  if (today(g) - num(S.start) <= 2 && S.kind !== '特別国会' && pmId && pmId !== 'player') {
     const speech = S.kind === '通常国会' ? '施政方針演説' : '所信表明演説';
     await g.say([`今日は、総理大臣の${speech}の日だ。`, `${pmName}総理「暮らしの安心と、経済の力強さ。その両方を、\n国民の皆さまとともに築いてまいります」`, '（演説のあと、各会派の代表が質問に立つ。\n国会の論戦が、ここから始まる）'], { name: '' });
     return;
@@ -1056,9 +1083,11 @@ class Caption {
 }
 const Q_ROUNDS = [
   [['数字を示して聞く', 34, '{t}について伺います。昨年度の実績と今年度の目標を、\n数字でお示しください。'], ['現場の声を伝える', 30, '地元で、{t}について多くの声を聞いてきました。\n現場は、いまも困っています。'], ['大臣の資質を問う', 8, 'そもそも大臣に、この問題を担う資格があるのですか！']],
-  [['具体的に、と迫る', 32, '抽象的な答弁では分かりません。いつまでに、何を、\nどれだけやるのか。具体的にお答えください。'], ['資料を示す', 30, 'お手元の資料をご覧ください。\nこの数字を見れば、対策の遅れは明らかです。'], ['ヤジに言い返す', 4, '（与党席のヤジに、大声で言い返した）']],
-  [['提案して締める', 34, 'では、こう提案します。対象を広げ、手続きを簡単に。\n前向きにご検討いただけますか。'], ['答弁を確認する', 30, 'いまの「年内をめどに」という答弁、\n議事録に残ります。よろしいですね。'], ['時間いっぱい演説', 10, '（持論を語り続けているうちに、時間が来てしまった…）']],
+  [['具体的に、と迫る', 32, '抽象的な答弁では分かりません。いつまでに、何を、\nどれだけやるのか。具体的にお答えください。'], ['資料を示す', 30, 'お手元の資料をご覧ください。\nこの数字を見れば、対策の遅れは明らかです。'], ['ヤジに言い返す', 4, '（席から飛んだヤジに、大声で言い返した）']],
+  [['提案して締める', 34, 'では、こう提案します。対象を広げ、手続きを簡単に。\n前向きにご検討いただけますか。'], ['答弁を確認する', 30, 'いまの答弁は、議事録に残ります。\n言葉どおりに進めていただけますね。'], ['時間いっぱい演説', 10, '（持論を語り続けているうちに、時間が来てしまった…）']],
 ];
+// The same rounds in a local assembly (the 区長 answers, not a minister).
+const LOCAL_Q_ROUNDS = Q_ROUNDS.map((r) => r.map(([label, s, line]) => [label.replace('大臣', '区長'), s, line.replace('大臣', '区長')]));
 const A_ROUNDS = [
   [['事実を正直に話す', 34, 'ご指摘の点は、事実として受け止めております。\n現状を率直に申し上げます。'], ['データで説明する', 30, 'お配りした資料のとおり、\n件数は前年より改善しております。'], ['答弁を控える', 14, '個別の案件については、お答えを差し控えます。']],
   [['改善策を約束する', 32, '年内をめどに具体策を取りまとめ、\n委員会にも報告いたします。'], ['経緯を説明する', 26, 'これまでの経緯を、順を追って説明いたします。'], ['強い言葉で反論', 4, 'ご質問は的外れです！\n（言いすぎた…議場がざわついている）']],
@@ -1095,6 +1124,8 @@ async function exchange(g, rounds, o) {
   const skill = num(g.state.skills && g.state.skills.talk);
   return clamp(Math.round(score + skill / 12), 0, 100);
 }
+// 質問通告: the 前々日正午 rule is the 1999 agreement (国会審議活性化); before that, a custom.
+const noticeRule = (g) => (yearOf(g) >= 1999 ? '質問の趣旨は、原則として前々日の正午までに通告する決まり（申し合わせ）。' : '質問の趣旨は、前もって政府側に伝えておくのが慣例。答弁の準備のためだ。');
 async function shitsugi(g) {
   const m = me(g);
   const house = myHouse(g);
@@ -1103,7 +1134,7 @@ async function shitsugi(g) {
   if (m.lastAct && m.lastAct['委員会で質問'] === today(g)) { await g.say('（今日の質疑はもう終えた。持ち時間は会派ごとに割り当てられている）'); return; }
   const topics = topicsFor(g, house);
   if (!topics.length) { await g.say('（今日は質疑の機会がないようだ）'); return; }
-  const k = await g.list({ title: '質問の通告（テーマ）', items: [...topics.map((t) => t.label.length > 18 ? t.label.slice(0, 17) + '…' : t.label), 'やめる'], x: 120, y: 60, w: 400, px: true, describe: (i) => (i < topics.length ? '質問の趣旨は、原則として前々日の正午までに通告する決まり（申し合わせ）。' : 'またにしよう。') });
+  const k = await g.list({ title: '質問の通告（テーマ）', items: [...topics.map((t) => t.label.length > 18 ? t.label.slice(0, 17) + '…' : t.label), 'やめる'], x: 120, y: 60, w: 400, px: true, describe: (i) => (i < topics.length ? noticeRule(g) : 'またにしよう。') });
   if (k < 0 || k >= topics.length) return;
   const tp = topics[k];
   const mi = ministerFor(g, tp.bill, tp.area);
@@ -1115,7 +1146,7 @@ async function shitsugi(g) {
   const chair = { name: '委員長', look: npcLook(g, pol(g).flags.chair_budget) };
   await g.say(`質疑の申し出があります。順次これを許します。\n${myFamilyName(g)}君。`, chair);
   const score = await exchange(g, Q_ROUNDS, {
-    title: `${houseName(house)}　委員会`, sub: `質疑：${g.state.name}（${partyName(g, m.party, true)}）`, topic: tp.t,
+    title: `${houseName(house)}　委員会`, sub: `質疑：${myFamilyName(g)}委員（${partyName(g, m.party, true)}）`, topic: tp.t,
     prompt: ['（最初の質問は…）', '（大臣の答弁は、はぐらかしているようだ…）', '（持ち時間が少なくなってきた。どう締める？）'],
     selfSay: { name: g.state.name, look: g.state.look },
     after: [
@@ -1134,7 +1165,8 @@ async function toben(g) {
   if (!sessionOf(g)) { await g.say('（国会は閉会中。委員会は開かれていない）'); return; }
   if (m.lastAct && m.lastAct['国会で答弁'] === today(g)) { await g.say('（今日の答弁はもう終えた）'); return; }
   const p = pol(g);
-  const opp = Object.values(p.npcs || {}).find((n) => n && n.party && !ruling(p, n.party) && (n.office === 'shugi' || n.office === 'sangi'));
+  const opps = Object.values(p.npcs || {}).filter((n) => n && n.party && !ruling(p, n.party) && (n.office === 'shugi' || n.office === 'sangi'));
+  const opp = opps.length ? opps[Math.floor(hash2(today(g), 3, 61) * opps.length)] : null;
   const qsur = opp ? surname(opp.name) : '';
   const qname = opp ? `${qsur}委員（${partyName(g, opp.party, true)}）` : '委員';
   const qwho = { name: qname, look: opp ? opp.look : LOOKS.salaryman };
@@ -1147,11 +1179,11 @@ async function toben(g) {
   const asker = g.npc('kokkai_answer');
   if (asker) { asker.look = qwho.look; asker.sheet = charSheetHD(qwho.look); asker.hidden = false; g.placeNpc('kokkai_answer', 14, 6, 'left'); }
   const chair = { name: '委員長', look: npcLook(g, p.flags.chair_budget) };
-  await g.say(qsur ? `${qsur}君の質疑に入ります。` : '質疑に入ります。', chair);
+  await g.say(qsur ? `質疑の申し出があります。これを許します。\n${qsur}君。` : '質疑に入ります。', chair);
   const score = await exchange(g, A_ROUNDS, {
-    title: '委員会　答弁', sub: `答弁：${g.state.name}${label}`, topic,
+    title: '委員会　答弁', sub: `答弁：${myFamilyName(g)}${label}`, topic,
     prompt: ['（どう答える…？）', '（追及が厳しい…）', '（最後の答弁だ）'],
-    selfSay: { name: `${g.state.name}${label}`, look: g.state.look },
+    selfSay: { name: `${myFamilyName(g)}${label}`, look: g.state.look },
     before: [
       async () => { await g.say(`${topic}の対応について、大臣に伺います。\n国民の不安に、どう応えるのですか。`, qwho); },
       async () => { await g.say('それでは答えになっていません！\nいつまでに、何をするのか。', qwho); },
@@ -1175,7 +1207,7 @@ function ledgerPages(g) {
     const rep = m.reported && m.reported[yy];
     pages.push(`【${yy}年の帳簿】収入 ${fmtMoney(num(l.income))}（寄付 ${fmtMoney(num(l.donations))}・パーティー${num(l.parties)}回）\n支出 ${fmtMoney(num(l.expense))}${rep ? `\n収支報告書：提出ずみ${rep.auto ? '（会計責任者）' : ''}${rep.secretIncluded ? '・訂正あり' : ''}` : ''}`);
   }
-  pages.push(`政治資金の残高：${fmtMoney(num(m.funds))}\n秘書：公設3人（国費）＋私設${num(m.staff)}人`);
+  pages.push(`政治資金の残高：${fmtMoney(num(m.funds))}\n秘書：公設${yearOf(g) >= 1994 ? 3 : 2}人（国費）＋私設${num(m.staff)}人`);
   if (num(m.secret) > 0) pages.push(`……帳簿にのっていないお金がある。${fmtMoney(num(m.secret))}。\n収支報告書に書かなければ「裏金」だ。`);
   return pages;
 }
@@ -1184,7 +1216,8 @@ async function fundsReport(g) {
   const y = yearOf(g) - 1;
   const rep = m.reported && m.reported[y];
   if (rep && !rep.auto) { await g.say(`${y}年分の収支報告書は、もう提出しました。`, say(WHO.hisho)); return; }
-  const lines = [`${y}年分の政治資金収支報告書ですね。\n期限は翌年の3月末、国会議員の政治団体は5月末です。`];
+  // 国会議員関係政治団体 (and its 5月末 deadline, 政治資金監査) come with the 2007 amendment, from 2009
+  const lines = [`${y}年分の政治資金収支報告書ですね。\n${y >= 2009 ? '期限は翌年の3月末、国会議員の政治団体は5月末です。' : '期限は翌年の3月末です。'}`];
   if (rep && rep.auto) lines.push('（会計責任者が期限までに出した分を、訂正して出し直すこともできる）');
   const secret = num(m.secret);
   if (secret <= 0) {
@@ -1203,11 +1236,13 @@ async function fundsReport(g) {
     return;
   }
   const law = typeof g.crimeLaw === 'function' ? g.crimeLaw('slush_fund', { amount: secret }) : '政治資金規正法違反（不記載・虚偽記入）';
-  const c = await g.ask(['先生…本当にいいんですか。', law, '発覚すれば、議員の職も公民権も失いかねません。'], ['やっぱり正直に書く', 'このまま出す'], { ...say(WHO.hisho), cancel: 0 });
+  const c = await g.ask(['先生…本当にいいんですか。', ...fitPages(g, law), '発覚すれば、議員の職も公民権も失いかねません。'], ['やっぱり正直に書く', 'このまま出す'], { ...say(WHO.hisho), cancel: 0 });
   if (c === 0) { const r = g.reportFunds({ includeSecret: true, year: y }); await g.say(r && r.ok ? r.text : `（${(r && r.why) || '提出できなかった'}）`); return; }
   const r = g.reportFunds({ includeSecret: false, year: y });
   await g.say(r && r.ok ? `${r.text}\n（裏金は書かなかった…）` : `（${(r && r.why) || '提出できなかった'}）`);
-  if (typeof g.commitCrime === 'function') await g.commitCrime('slush_fund', { amount: secret, where: '議員会館' });
+  // The false report is the offence. The money itself is already tracked by the justice core (crime.js
+  // syncPoliticsHeat follows pol().me.secret every morning), so the amount is not added a second time.
+  if (typeof g.commitCrime === 'function') await g.commitCrime('slush_fund', { amount: 0, where: '議員会館' });
   g.addNeed('stress', 8);
 }
 async function fundraiser(g) {
@@ -1218,7 +1253,7 @@ async function fundraiser(g) {
   let unreported = 0;
   if (k === 1) {
     const law = typeof g.crimeLaw === 'function' ? g.crimeLaw('slush_fund', {}) : '政治資金規正法違反';
-    const c = await g.ask(['先生、それは「裏金」です。', law], ['きちんと開く', 'それでもやる'], { ...say(WHO.hisho), cancel: 0 });
+    const c = await g.ask(['先生、それは「裏金」です。', ...fitPages(g, law)], ['きちんと開く', 'それでもやる'], { ...say(WHO.hisho), cancel: 0 });
     if (c === 1) unreported = 0.3;
   }
   const r = g.holdFundraiser({ unreported });
@@ -1264,7 +1299,7 @@ async function briefing(g) {
   const lines = [];
   lines.push(S ? `いまは${S.kind}の会期中です。\n本会議の議事日程は${plenaryBills(g, house).length}件、委員会で審査中が${billsInCommittee(g, house).length}件。` : 'いまは国会の閉会中です。地元を回るなら今のうちですね。');
   if (S && !(m.attend && m.attend.last === today(g))) lines.push('今日はまだ登院されていません。\n欠席が続くと、記者に書かれますよ。');
-  const ups = (typeof g.upcomingElections === 'function' ? g.upcomingElections() : []).filter((e) => !e.newsOnly).slice(0, 2);
+  const ups = (typeof g.upcomingElections === 'function' ? g.upcomingElections() : []).filter((e) => !e.newsOnly && (e.kind !== 'sosaisen' || e.party === m.party)).slice(0, 2);
   if (ups.length) lines.push(`選挙の予定：\n${ups.map((e) => `${e.label}（${e.date}）`).join('\n')}`);
   lines.push(`評判 ${Math.round(num(m.reputation))}・地元の支持 ${Math.round(num(m.localSupport))}・党内の評価 ${Math.round(num(m.standing))}`);
   if (p && p.cabinet) lines.push(`内閣支持率は${Math.round(num(p.cabinet.approval))}%です。`);
@@ -1291,7 +1326,9 @@ async function chinjoTalk(g) {
   await g.say(k === 0 ? 'ありがとうございます！\n先生に話を聞いてもらえて、ほっとしました。' : 'よろしくお願いいたします。', w);
   await g.say(actText(r));
 }
-// The "favour" visitor: a bribe offer. The lawful answer comes first.
+// The "favour" visitor: a bribe offer. The lawful answer comes first. The request is about the
+// member's own duties (questions in a committee), so taking the money is 受託収賄 (刑法197条1項後段);
+// lobbying other officials for a contract would be あっせん収賄・あっせん利得 instead.
 const BRIBER = { name: '建設会社の社長', look: { hair: 'slick', hairColor: 'black', skin: 'tan', top: '#3a3436', bottom: '#2a2d36', jacket: true, tie: '#c9a227' } };
 function briberToday(g) {
   const m = me(g);
@@ -1302,7 +1339,7 @@ function briberToday(g) {
 async function briberTalk(g) {
   g.setFlag('kokkai_bribe_day', today(g));
   const amount = 3000000;
-  await g.say(['先生、いつもお世話になっております。', '例の地元の工事の件、うちが取れるよう、\nひとつ口添えを…。', `（菓子折りの下に、厚い封筒がのぞいている。\n${fmtMoney(amount)}はありそうだ）`], BRIBER);
+  await g.say(['先生、いつもお世話になっております。', '今度の委員会で、公共工事の入札の決まりを、\nうちのような会社に有利になるよう取り上げていただけませんか。', `（菓子折りの下に、厚い封筒がのぞいている。\n${fmtMoney(amount)}はありそうだ）`], BRIBER);
   const k = await g.ask('（どうする…？）', ['きっぱり断る', '受け取る'], { cancel: 0 });
   if (k === 0) {
     await g.say(['こういうものは受け取れません。\nお引き取りください。', '（社長は気まずそうに帰っていった）'], { name: g.state.name, look: g.state.look });
@@ -1310,7 +1347,7 @@ async function briberTalk(g) {
     return;
   }
   const law = typeof g.crimeLaw === 'function' ? g.crimeLaw('bribery_take', { request: true, amount }) : '受託収賄罪（刑法197条）';
-  const c = await g.ask(['（職務に関して、頼まれごとと一緒にお金を受け取れば…）', law], ['やっぱり断る', 'それでも受け取る'], { cancel: 0 });
+  const c = await g.ask(['（国会での質問は、議員の職務そのものだ。\n頼まれごとと一緒にお金を受け取れば…）', ...fitPages(g, law)], ['やっぱり断る', 'それでも受け取る'], { cancel: 0 });
   if (c === 0) { await g.say('（封筒を押し返した）'); return; }
   if (typeof g.commitCrime === 'function') await g.commitCrime('bribery_take', { amount, request: true, gain: { money: amount }, where: '議員会館' });
   g.addNeed('stress', 10);
@@ -1363,7 +1400,7 @@ async function bochoDesk(g) {
   g.setFlag('kokkai_ticket', { day: today(g), house });
   if (!g.hasItem('kokkai_ticket')) g.giveItem('kokkai_ticket', 1, true);
   g.sfx('ok');
-  await g.say(['傍聴券をどうぞ。手荷物はロッカーに預けてください。', '傍聴席では、拍手や声を出すこと、撮影・録音はできません。\n携帯電話の電源もお切りください。', '右の階段から傍聴席へどうぞ。'], w);
+  await g.say(['傍聴券をどうぞ。手荷物はロッカーに預けてください。', `傍聴席では、拍手や声を出すこと、撮影・録音はできません。${yearOf(g) >= 1995 ? '\n携帯電話の電源もお切りください。' : ''}`, '右の階段から傍聴席へどうぞ。'], w);
 }
 async function stairsToGallery(g) {
   const t = g.flag('kokkai_ticket');
@@ -1380,7 +1417,7 @@ const PANELS = [
   { title: '国会のあゆみ', lines: ['【国会のあゆみ】', '1890年（明治23年）、第1回帝国議会が開かれた。', '1947年（昭和22年）5月3日、日本国憲法の施行で、\n国会は衆議院と参議院の二院制になった。', '憲法41条：「国会は、国権の最高機関であつて、\n国の唯一の立法機関である」'] },
   { title: '衆議院と参議院', lines: ['【衆議院と参議院】', '衆議院：任期4年。解散がある。\n参議院：任期6年。3年ごとに半数を選ぶ。解散はない。', '法律案・予算・条約・総理大臣の指名では\n衆議院の議決が優先される（衆議院の優越）。', '内閣不信任の決議ができるのは、衆議院だけ。'] },
   { title: '法律ができるまで', lines: ['【法律ができるまで】', '内閣か議員が法律案を出す。議員が出すには\n衆議院で20人以上（予算を伴えば50人）の賛成者。', '委員会で審査・採決 → 本会議で採決 → もう一方の院へ。\n両院で可決すると、法律になる。', '参議院で否決されても、衆議院が出席議員の\n3分の2以上で再び可決すれば、法律になる（憲法59条）。'] },
-  { title: '国会の種類', lines: ['【国会の種類】', '常会（通常国会）：毎年1月に召集。会期150日。\n予算を審議する。', '臨時会（臨時国会）：必要なときに召集。\n特別会（特別国会）：総選挙から30日以内に召集し、\n総理大臣を指名する。', '衆議院の解散中に緊急の必要があるときは、\n参議院の緊急集会が開かれる。'] },
+  { title: '国会の種類', lines: ['【国会の種類】', '常会（通常国会）：毎年1月に召集（1991年までは12月）。\n会期150日。予算を審議する。', '臨時会（臨時国会）：必要なときに召集。\n特別会（特別国会）：総選挙から30日以内に召集し、\n総理大臣を指名する。', '衆議院の解散中に緊急の必要があるときは、\n参議院の緊急集会が開かれる。'] },
 ];
 function todayBoard(g) {
   const p = pol(g);
@@ -1603,7 +1640,12 @@ function chamberRoom(house) {
       },
       npc(`kokkai_jimu_${house}`, 17, 2, 'down', WHO.jimu, {
         fixedDir: true, cond: (g) => !!sessionOf(g),
-        text: ['事務総長です。議長の議事の進行を補佐しています。', house === 'sangi' ? '参議院では、1998年から押しボタン式投票を\n取り入れています。結果は議場の表示で一目で分かります。' : '衆議院の記名投票では、議員が白票か青票を持って\n演壇の投票箱に入れます。時間がかかるんですよ。'],
+        talk: async (g) => {
+          const line = house !== 'sangi' ? '衆議院の記名投票では、議員が白票か青票を持って\n演壇の投票箱に入れます。時間がかかるんですよ。'
+            : yearOf(g) >= 1998 ? '参議院では、1998年から押しボタン式投票を\n取り入れています。結果は議場の表示で一目で分かります。'
+              : '記名投票では、議員が白と青の木札を持って\n演壇の投票箱に入れます。時間がかかるんですよ。';
+          await g.say(['事務総長です。議長の議事の進行を補佐しています。', line], say(WHO.jimu));
+        },
       }),
       ...[[9, 'pm'], [8, 'kanbo'], [21, 'minister_finance'], [22, 'minister_foreign']].map(([x, post]) => ({
         type: 'npc', id: `kokkai_min_${house}_${post}`, x, y: 2, dir: 'down', fixedDir: true,
@@ -1869,7 +1911,7 @@ registerPlace({
         },
         npc('kokkai_iinbu', 12, 2, 'down', WHO.iinbu, {
           fixedDir: true,
-          text: ['委員部の職員です。質問の通告は、原則として\n前々日の正午までにお願いしています。', '通告があると、各省庁が答弁を準備します。\n夜遅くまでかかることも多いんです…。'],
+          talk: async (g) => { await g.say([yearOf(g) >= 1999 ? '委員部の職員です。質問の通告は、原則として\n前々日の正午までにお願いしています。' : '委員部の職員です。質問の内容は、\nできるだけ早めに政府側へ伝えてください。', '通告があると、各省庁が答弁を準備します。\n夜遅くまでかかることも多いんです…。'], say(WHO.iinbu)); },
         }),
         ...[[5, 'kanbo'], [6, 'minister_finance'], [7, 'minister_health']].map(([y, post]) => ({
           type: 'npc', id: `kokkai_gov_${post}`, x: 1, y, dir: 'right', fixedDir: true,
@@ -1945,11 +1987,12 @@ registerPlace({
         if (!myHouse(g) || g.flag('kokkai_kaikan_intro')) return;
         g.setFlag('kokkai_kaikan_intro');
         await g.wait(200);
-        await g.say([`先生、${houseName(myHouse(g))}議員会館の事務所へようこそ。`, '公設秘書は3人、国費で雇われています。\n政策担当秘書の白石です。よろしくお願いします。', '帳簿、収支報告、献金、陳情…なんでもご相談ください。'], say(WHO.hisho));
+        const newer = yearOf(g) >= 1994;
+    await g.say([`先生、${houseName(myHouse(g))}議員会館の事務所へようこそ。`, newer ? '公設秘書は3人、国費で雇われています。\n政策担当秘書の白石です。よろしくお願いします。' : '公設秘書は2人、国費で雇われています。\n第一秘書の白石です。よろしくお願いします。', '帳簿、収支報告、献金、陳情…なんでもご相談ください。'], say(WHO.hisho));
       },
     },
   },
 });
 
 // Shared with the ドット区役所 (区議会): the seat painter, the vote scene and the question exchange.
-export { VoteScene, VOTE_GEO, seatKey, paintSeat, ZL, ZS, schematicLayout, seatParties, chairColor, memberLooks, exchange, Caption, Q_ROUNDS, actText, partyLine };
+export { VoteScene, VOTE_GEO, seatKey, paintSeat, ZL, ZS, schematicLayout, seatParties, chairColor, memberLooks, exchange, Caption, Q_ROUNDS, LOCAL_Q_ROUNDS, actText, partyLine, fitPages };

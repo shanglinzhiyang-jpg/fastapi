@@ -16,9 +16,13 @@
 // (PARTY_DEFS: 結党の日と経緯、党首の呼び名). Every person here is fictional: the party officers
 // are the politics core's generated NPCs, the staff are made up. No real slogan is quoted.
 // Facts (checked 2026-10): 政治資金規正法 — 個人が政党・政治資金団体にする寄附は年2,000万円まで、
-//   年5万円をこえる寄附は寄附した人の氏名などが収支報告書で公開される。
+//   年5万円をこえる寄附は寄附した人の氏名などが収支報告書で公開される（いまの基準。1994年の政治改革より
+//   前の基準額は確かめられなかったので、その時代は金額を言わない）。政党交付金（政党助成法）は1995年から。
+//   自民党の一般党員の党費は年4,000円。都知事・区長の選挙では、政党は「公認」ではなく「推薦」が多い。
+//   必勝だるま: 願をかけて片目を入れ、当選したらもう片方の目を入れる。
 // flags (prefix parties_): parties_don_<party>_<year> (nominal yen given that year),
-//   parties_teigen (day), parties_welcome_<hq>.
+//   parties_don_bonus_<party>_<year>, parties_teigen (day of the last proposal), parties_press (day),
+//   parties_welcome_<hq>.
 
 import { registerPlace, doorIndexFor, PLACES } from '../engine/map.js';
 import { askText } from '../engine/textinput.js';
@@ -28,7 +32,7 @@ import { text } from '../engine/draw.js';
 import { drawLogo } from '../engine/logos.js';
 import { makeCanvas, clamp, fmtMoney, display } from '../engine/util.js';
 import { eraOf } from '../engine/profile.js';
-import { PARTY_DEFS, POLICIES, POLICY_ORDER, POLICY_AREAS, AREA_ORDER, SEGMENTS, POSTS, PARTY_POST_ORDER, postName, fmtCho, shugiRules } from '../engine/politics.js';
+import { PARTY_DEFS, POLICIES, POLICY_ORDER, POLICY_AREAS, AREA_ORDER, SEGMENTS, POSTS, PARTY_POST_ORDER, OFFICES, postName, fmtCho, shugiRules, subsidyExists } from '../engine/politics.js';
 
 let G = null;
 const game = () => G || (typeof window !== 'undefined' ? window.__game : null) || null;
@@ -76,7 +80,6 @@ const kanbuName = (pt) => (pt && pt.isPlayers ? '党首室' : '幹部室');
 const today = (g, k) => g.flag(k) === g.state.day;
 const rate = () => display.priceRate || 1;
 const device = (g) => { try { return eraOf(g.state).deviceShort || 'スマホ'; } catch (e) { return 'スマホ'; } };
-const nominal = (n) => Math.round(n * rate());
 
 // Split a long text into pages of up to 3 lines of about 34 characters.
 function paged(str, width = 34) {
@@ -372,7 +375,8 @@ async function joinParty(g, pt) {
   if (pt.isPlayers || /^my\d+$/.test(pt.id)) { await say(g, 'この党への入党は、党首の承認が必要です。', STAFF.recep); return; }
   const p = pol(g);
   const cur = p && p.me.party ? g.partyName(p.me.party) : null;
-  const i = await g.ask([`${pt.name}に入党しますか？\n党費は年${fmtMoney(4000)}ほど（目安）です。`, cur ? `（いまの「${cur}」は離党することになります）` : '（党員になると、選挙の公認を申請できます）'], ['入党する', 'やめておく'], { cancel: 1, ...who(STAFF.recep) });
+  const fee = pt.id === 'jimin' ? `一般党員の党費は年${fmtMoney(Math.round(4000 / rate()))}です。` : pt.real ? '党費は、党の規約で決まっています。' : `党費は年${fmtMoney(Math.round(4000 / rate()))}ほど（目安）です。`;
+  const i = await g.ask([`${pt.name}に入党しますか？\n${fee}`, cur ? `（いまの「${cur}」は離党することになります）` : '（党員になると、選挙の公認を申請できます）'], ['入党する', 'やめておく'], { cancel: 1, ...who(STAFF.recep) });
   if (i !== 0) return;
   const w = g.joinParty(pt.id);
   if (w) { await say(g, w, STAFF.recep); return; }
@@ -393,19 +397,25 @@ async function donateTalk(g, npc, hq) {
   if (!pt) { await say(g, '（窓口は閉まっている）', null); return; }
   const yr = yearOf(g);
   const key = `parties_don_${pt.id}_${yr}`;
-  const given = Number(g.flag(key) || 0);
-  const amounts = [10000, 50000, 100000];
-  const i = await g.ask([`${pt.name}への寄付の窓口です。`, '個人の政党への寄付は、法律で年2,000万円まで。\n年5万円をこえる寄付は、寄付した人の名前が\n政治資金収支報告書で公開されます。'], [...amounts.map((a) => fmtMoney(a)), 'やめておく'], { cancel: amounts.length, ...who(STAFF.donate) });
+  const given = Number(g.flag(key) || 0); // nominal yen of that year
+  // amounts in that year's yen (1万・5万・10万円); internal money = nominal / the era's price rate
+  const noms = [10000, 50000, 100000];
+  const amounts = noms.map((n) => Math.round(n / rate()));
+  const disclose = yr >= 1995; // 年5万円超の公開基準 (verified for the present rules only)
+  const i = await g.ask([`${pt.name}への寄付の窓口です。`, `個人の政党への寄付は、法律で年2,000万円まで。\n${disclose ? '年5万円をこえる寄付は、寄付した人の名前が\n政治資金収支報告書で公開されます。' : '一定の額をこえる寄付は、寄付した人の名前が\n収支報告書で公開されます。'}`], [...amounts.map((a) => fmtMoney(a)), 'やめておく'], { cancel: amounts.length, ...who(STAFF.donate) });
   if (i < 0 || i >= amounts.length) return;
   const amt = amounts[i];
-  if (given + nominal(amt) > 20000000) { await say(g, '今年の寄付は、法律の上限に達してしまいます。\nお気持ちだけ、ありがたく。', STAFF.donate); return; }
+  if (given + noms[i] > 20000000) { await say(g, '今年の寄付は、法律の上限に達してしまいます。\nお気持ちだけ、ありがたく。', STAFF.donate); return; }
   if (!g.spend(amt)) { await say(g, 'お金が足りない…。', null); return; }
   g.sfx('coin');
-  g.setFlag(key, given + nominal(amt));
+  g.setFlag(key, given + noms[i]);
   pt.funds = (Number(pt.funds) || 0) + amt;
   const p = pol(g);
-  if (p && isMember(g, pt) && !today(g, 'parties_don_day')) { g.setFlag('parties_don_day', g.state.day); p.me.standing = clamp((Number(p.me.standing) || 0) + 1, 0, 100); }
-  await say(g, [`${fmtMoney(amt)}を寄付した。`, `領収書をお渡しします。ありがとうございました。${given + nominal(amt) > 50000 ? '\n（今年の合計が年5万円をこえたので、名前が公開されます）' : ''}`], STAFF.donate);
+  // a member's donation is noticed once a year (money must not buy a nomination)
+  const bonusKey = `parties_don_bonus_${pt.id}_${yr}`;
+  if (p && isMember(g, pt) && !g.flag(bonusKey)) { g.setFlag(bonusKey, true); p.me.standing = clamp((Number(p.me.standing) || 0) + 1, 0, 100); }
+  const crossed = disclose && given <= 50000 && given + noms[i] > 50000;
+  await say(g, [`${fmtMoney(amt)}を寄付した。`, `領収書をお渡しします。ありがとうございました。${crossed ? '\n（今年の合計が年5万円をこえたので、名前が公開されます）' : ''}`], STAFF.donate);
 }
 
 // ------------------------------------------------------------------ the vacant office / founding
@@ -418,7 +428,9 @@ async function agentTalk(g, npc) {
   const cost = Math.round(5000000 / rate());
   const i = await g.ask(['いらっしゃいませ。このビル、まるごと空き物件なんです。', '新しい政党の事務所にぴったりですよ。\n…ひょっとして、党を立ち上げるおつもりで？'], ['新党を立ち上げる', '話を聞く', 'やめておく'], { cancel: 2, ...who(S) });
   if (i === 1) {
-    await g.say([`党をつくるには、事務所や届け出、印刷物などで\n${fmtMoney(cost)}くらいかかります（目安）。`, '法律の上で「政党」と認められるには、\n国会議員5人以上か、国会議員がいて\n選挙の得票率が2%以上あることが条件です。', 'そうなれば、国から政党交付金も出ます。\n…まずは、仲間と支持を集めることですね。'], who(S));
+    await g.say(subsidyExists(yearOf(g))
+      ? [`党をつくるには、事務所や届け出、印刷物などで\n${fmtMoney(cost)}くらいかかります（目安）。`, '法律の上で「政党」と認められるには、\n国会議員5人以上か、国会議員がいて\n選挙の得票率が2%以上あることが条件です。', 'そうなれば、国から政党交付金も出ます。\n…まずは、仲間と支持を集めることですね。']
+      : [`党をつくるには、事務所や届け出、印刷物などで\n${fmtMoney(cost)}くらいかかります（目安）。`, 'いまは国から政党にお金が出る制度はありません。\n党の資金は、党費と寄付と事業で集めるんです。', '国会で力を持つには、議員の数がすべて。\n…まずは、仲間と支持を集めることですね。'], who(S));
     return;
   }
   if (i !== 0) return;
@@ -452,7 +464,7 @@ async function foundFlow(g, cost) {
   const id = g.foundParty({ name, short, color: COLORS[ci][1], platform, desc });
   if (!id) { await say(g, g.lastPoliticsError || '結成できなかった。', null); return; }
   g.sfx('fanfare');
-  await g.say([`新党「${name}」を結成した！`, 'このビルが、あなたの党の本部になった。\n4階の党首室で、党の運営ができる。', '政党要件（国会議員5人以上など）を満たすには、\n選挙で勝つか、議員を仲間に引き入れよう。']);
+  await g.say([`新党「${name}」を結成した！`, 'このビルが、あなたの党の本部になった。\n4階の党首室で、党の運営ができる。', subsidyExists(yearOf(g)) ? '政党要件（国会議員5人以上など）を満たすには、\n選挙で勝つか、議員を仲間に引き入れよう。' : '党を大きくするには、選挙で勝つか、\n議員を仲間に引き入れよう。']);
 }
 
 // ------------------------------------------------------------------ policy picker
@@ -498,22 +510,38 @@ async function sentaiTalk(g, npc, hq) {
     await g.say([`${e.label}、いよいよですね。`, f ? `うちの情勢調査では、当選の見込みは${Math.round(f.chance * 100)}%。\n${f.rank}位前後（定数${f.seats}）です。` : '比例は、党全体の票しだいです。\n全国で党の名前を売りましょう！', `街頭演説、ポスター、握手…\n選挙運動は、${device(g)}の「政治」からもできます。`], S);
     return;
   }
-  const r = g.requestNomination(e.id);
+  const p = pol(g);
+  // The route comes first: a 比例 nomination is decided separately (and for a famous person it is
+  // the easier door: 参院の比例代表, 衆院の比例単独).
+  let route = false; // false: 選挙区 / true: 参院の比例代表 / 'only': 衆院の比例単独
+  let sys = 'heiritsu';
+  if (e.kind === 'shugi') { try { sys = shugiRules(yearOf(g), (p && p.flags) || {}).system; } catch (err) { sys = 'heiritsu'; } }
+  if (e.kind === 'sangi') {
+    const k = await g.ask(['どちらで公認を申請しますか？', '（比例代表は党の名簿で全国から選ばれる。\n　知名度のある人には、入りやすい入口だ）'], ['選挙区で', '比例代表で', 'やめておく'], { cancel: 2, ...S });
+    if (k < 0 || k > 1) return;
+    route = k === 1;
+  } else if (e.kind === 'shugi' && sys !== 'chusenkyoku') {
+    const k = await g.ask(['どちらで公認を申請しますか？', '（小選挙区の候補は、比例代表との重複立候補もできる。\n　比例代表だけで出る「比例単独」の枠は少ない）'], ['小選挙区で', '比例代表だけで', 'やめておく'], { cancel: 2, ...S });
+    if (k < 0 || k > 1) return;
+    route = k === 1 ? 'only' : false;
+  }
+  const r = g.requestNomination(e.id, route ? { proportional: route } : {});
   if (!r || !r.ok) { await g.say([`${e.label}の${r && r.kind ? r.kind : '公認'}ですが…`, (r && r.why) || '今回は見送りです。', '党内の評価、地元の支持、知名度。\nどれかを伸ばしてから、また来てください。'], S); return; }
+  const suisen = r.kind === '推薦';
   g.sfx('success');
   await g.say([`${e.label}、${pt.name}の${r.kind}が決まりました！`, '必勝だるまに、片目を入れておきますね。'], S);
   const why = g.eligible(e.office);
   if (why) { await g.say(['ただ、立候補の届出の前に…', why], S); return; }
-  const j = await g.ask('このまま、立候補を届け出ますか？\n（供託金が必要です）', ['届け出る', 'あとにする'], { cancel: 1, ...S });
+  // 公職選挙法90条: an office holder who files for another office loses the present one
+  const cur = p && p.me.office && OFFICES[p.me.office] && p.me.office !== e.office ? OFFICES[p.me.office].label : null;
+  const j = await g.ask([`このまま、立候補を届け出ますか？\n${route ? '（比例代表の供託金は、党が納めます）' : '（供託金が必要です）'}`, ...(cur ? [`（いまの${cur}の職は、${['shugi', 'sangi'].includes(e.kind) ? '公示' : '告示'}の日に\n　辞めたことになります。公職選挙法90条）`] : [])], ['届け出る', 'あとにする'], { cancel: 1, ...S });
   if (j !== 0) return;
-  let proportional = false;
-  const p = pol(g);
-  if (e.kind === 'shugi') { let sys = 'heiritsu'; try { sys = shugiRules(yearOf(g), (p && p.flags) || {}).system; } catch (err) { sys = 'heiritsu'; } if (sys !== 'chusenkyoku') proportional = (await g.ask('比例代表にも重複して立候補しますか？', ['重複する', '小選挙区だけ'], { cancel: 1, ...S })) === 0; }
-  if (e.kind === 'sangi') proportional = (await g.ask('どちらで立候補しますか？', ['選挙区', '比例代表'], { cancel: 0, ...S })) === 1;
+  let proportional = route;
+  if (e.kind === 'shugi' && sys !== 'chusenkyoku' && !route) proportional = (await g.ask('比例代表にも重複して立候補しますか？', ['重複する', '小選挙区だけ'], { cancel: 1, ...S })) === 0;
   const w = g.declareCandidacy(e.id, { party: pt.id, proportional });
   if (w) { await g.say(w, S); return; }
   g.sfx('fanfare');
-  await g.say([`${e.label}に、${pt.name}の公認で立候補した！`, `${e.kojiDate}の${['shugi', 'sangi'].includes(e.kind) ? '公示' : '告示'}から、本格的な選挙運動だ。`]);
+  await g.say([`${e.label}に、${pt.name}の${suisen ? '推薦を受けて' : '公認で'}立候補した！`, `${e.kojiDate}の${['shugi', 'sangi'].includes(e.kind) ? '公示' : '告示'}から、本格的な選挙運動だ。`]);
 }
 async function phoneBank(g) {
   G = g;
@@ -564,7 +592,9 @@ async function proposePolicy(g, pt, S) {
     await g.say(bill ? ['法案の原案をまとめた。', `賛成者が集まれば、国会に提出できる。\n（${device(g)}の「政治」→ 国会 から声をかけよう）`] : (g.lastPoliticsError || 'まとめられなかった。'), S);
     return;
   }
-  if (today(g, 'parties_teigen')) { await g.say('今日の提言は、もう受け取りました。', S); return; }
+  // a member's proposal is taken up at most once a month (10 days)
+  const last = Number(g.flag('parties_teigen'));
+  if (Number.isFinite(last) && g.flag('parties_teigen') != null && g.state.day - last < 10) { await g.say(['先日の提言は、いま部会で検討しているところです。', 'またしばらくしたら、聞かせてください。'], S); return; }
   g.setFlag('parties_teigen', g.state.day);
   const p = pol(g);
   if (p) p.me.standing = clamp((Number(p.me.standing) || 0) + 1, 0, 100);
@@ -630,18 +660,28 @@ async function leaderDesk(g, hq) {
   G = g;
   const pt = partyOf(hq, g);
   if (!pt || !isLeader(g, pt)) {
-    await g.say(pt ? [`${pt.name}の党首の机だ。`, '（いまの党首は、あなたではない）'] : '（空っぽの机だ）');
+    await g.say(pt ? [`${pt.name}の${leaderTitle(pt)}の机だ。`, '書類がきちんと積まれている。\n…勝手にさわってはいけない。'] : '（空っぽの机だ）');
     return;
   }
   const p = pol(g);
   for (let guard = 0; guard < 8; guard++) {
+    // the leader's own re-election (党首選) when one is scheduled
+    const sosai = (() => { try { return g.upcomingElections().find((e) => e.kind === 'sosaisen' && e.party === pt.id && !e.declared); } catch (e) { return null; } })();
     const items = ['党の状況', '議員を勧誘する', '党役員を任命', '党の資金', '公約を見直す', '連立の方針', 'もどる'];
-    const i = await g.ask(`${pt.name}の党首室。\n党首として、何をする？`, items, { cancel: items.length - 1 });
+    if (sosai) items.splice(6, 0, `${leaderTitle(pt)}選に出る`);
+    const i = await g.ask(`${pt.name}の${pt.isPlayers ? '党首室' : `${leaderTitle(pt)}の机`}。\n${leaderTitle(pt)}として、何をする？`, items, { cancel: items.length - 1 });
+    if (sosai && i === 6) {
+      const w = g.declareCandidacy(sosai.id, {});
+      await g.say(w || [`${leaderTitle(pt)}選に立候補した！`, `${sosai.date}の投票で決まる。\n議員と党員の票を集めよう。`]);
+      if (g.auto) return;
+      continue;
+    }
+    if (i === items.length - 1) return;
     if (i === 0) {
       const s = g.partyStatus(pt.id);
       await g.say([`衆議院${s.shugi}人・参議院${s.sangi}人・党員${Number(s.members).toLocaleString('ja-JP')}人`, `政党要件：${s.official ? '満たしている' : `まだ（${s.reason}）`}\n政党交付金：${s.subsidy ? `年${fmtMoney(s.subsidy)}` : 'なし'}`, `党の資金 ${fmtMoney(s.funds)}・得票率 ${Math.round((s.voteShare || 0) * 1000) / 10}%`]);
     } else if (i === 1) {
-      const offers = [0, 1000000, 5000000];
+      const offers = [0, 1000000, 5000000].map((n) => Math.round(n / rate())); // 0・100万・500万円 (that year's yen)
       const j = await g.ask(['ほかの党や無所属の議員に、入党を呼びかける。', '活動資金の支援を約束すると、話が早いかもしれない。\n（党の資金・政治資金から出す）'], [...offers.map((o) => (o ? `${fmtMoney(o)}を約束` : '資金なしで')), 'やめておく'], { cancel: offers.length });
       if (j < 0 || j >= offers.length) continue;
       const r = g.recruitMembers({ funds: offers[j] });
@@ -655,6 +695,7 @@ async function leaderDesk(g, hq) {
       await g.say(w || `${fmtMoney(Math.round(1000000 / rate()))}を政治資金に移した。`);
     } else if (i === 4) await platformMenu(g, pt);
     else if (i === 5) {
+      if ((p.cabinet.partyIds || [])[0] === pt.id) { await g.say(['あなたの党が、いまの政権の中心だ。', '連立の相手は、総理が組閣や内閣改造のときに決める。']); if (g.auto) return; continue; }
       const ruling = (p.cabinet.partyIds || []).includes(pt.id);
       const j = await g.ask(ruling ? 'いまは連立与党だ。どうする？' : '連立政権について、どうする？', ruling ? ['連立を離脱する', '方針を変えない'] : ['連立に加わる', '連立の誘いを断る', '状況しだい', 'もどる'], { cancel: ruling ? 1 : 3 });
       let w = null;
@@ -797,7 +838,8 @@ function buildHQ(hq) {
         legend: { L: 'parties_panel_u', l: 'parties_panel', p: 'parties_wall', K: 'counter_white', D: 'counter_white', S: 'sofa_blue', t: 'table_low', e: 'elevator', d: 'door_wood', '[': 'floor_carpet_gray', ']': 'floor_carpet_gray' },
         warps: [
           ...exitWarps(hq, [9, 10], 10),
-          { x: 18, y: 2, room: 'press', tx: 8, ty: 8, dir: 'up' },
+          // the press room belongs to the party (a tenant / the vacant floor keeps it locked)
+          { x: 18, y: 2, room: 'press', tx: 8, ty: 8, dir: 'up', check: async (g) => { G = g; if (partyOf(hq, g)) return true; await g.say(H.mine ? '（奥の会議室は、がらんとしている。\n　党ができたら、ここが記者会見室になりそうだ）' : '（奥は、テナントの会社の会議室だ。\n　関係者以外は入れない）'); return false; } },
         ],
         entities: [
           partyBoard(hq, 7, 1, 6, 2, 'board'),
@@ -869,7 +911,7 @@ function buildHQ(hq) {
           staffNpc(`${hq}_sentai_stand`, STAFF.staff, 17, 3, 'down', { cond: (g) => open(g) && !OF.sentai.present(g), talk: posted('down', (g, e) => sentaiTalk(g, { name: '選挙対策本部の職員', look: STAFF.staff.look }, hq)) }),
           staffNpc(`${hq}_vol1`, STAFF.volunteer, 3, 5, 'up', { cond: open, text: ['電話作戦のボランティアです。', '「〇〇候補をよろしくお願いします」…\n一日に何百本もかけるんですよ。'] }),
           staffNpc(`${hq}_vol2`, STAFF.staff2, 13, 7, 'up', { cond: open, text: ['あの名札のバラ、見えます？', '選挙の夜、当選が決まった候補者の名前に\nひとつずつ、バラの花をつけていくんです。'] }),
-          { type: 'sign', x: 16, y: 2, text: ['必勝だるまだ。', '公認が決まると片目を入れ、\n当選したら、もう片方の目を入れるのが習わしだ。'] },
+          { type: 'sign', x: 16, y: 2, text: ['必勝だるまだ。', '必勝を願って片目を入れ、\n当選したら、もう片方の目を入れるのが習わしだ。'] },
           { type: 'sign', x: 10, y: 2, text: ['候補者の名札が並んだボードだ。', '当選した人の名前には、赤いバラがついている。'] },
           { type: 'sign', x: 4, y: 2, text: ['選挙区の地図だ。', '赤いピンは、重点区。\n候補者の街頭演説の予定が、びっしり書きこまれている。'] },
           ...[[2, 4], [7, 4], [12, 4], [2, 6], [7, 6], [12, 6]].map(([x, y]) => ({ type: 'sign', x, y, talk: phoneBank })),
@@ -922,7 +964,7 @@ function buildHQ(hq) {
           offNpc(`${hq}_kanjicho`, OF.kanjicho, 13, 4, 'left', kanbuTalk, { cond: nonLeader }),
           staffNpc(`${hq}_jimu`, STAFF.secretary, 13, 4, 'left', {
             cond: (g) => { G = g; const pt = partyOf(hq, g); return !!pt && isLeader(g, pt); },
-            talk: posted('left', async (g) => { const pt = partyOf(hq, g); await g.say([`党首、お疲れさまです。${pt ? pt.name : '党'}の事務局長です。`, '党の運営は、机のメニューからどうぞ。\n議員の勧誘、役員の任命、公約、連立…なんでも。'], who(STAFF.secretary)); }),
+            talk: posted('left', async (g) => { const pt = partyOf(hq, g); await g.say([`${leaderTitle(pt)}、お疲れさまです。${pt ? pt.name : '党'}の事務局長です。`, '党の運営は、机のメニューからどうぞ。\n議員の勧誘、役員の任命、公約、連立…なんでも。'], who(STAFF.secretary)); }),
           }),
           { type: 'sign', x: 6, y: 2, text: ['窓の外に、国会議事堂の塔が見える。'] },
         ],

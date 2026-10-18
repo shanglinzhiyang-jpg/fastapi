@@ -29,7 +29,8 @@
 //   → 24.3900m（2011年の東北地方太平洋沖地震のあと改定）。
 //   警視庁本部庁舎 1980年竣工、皇居の桜田門の前で「桜田門」とも呼ばれる。
 //   議員会館は2010年に新しい建物に（衆議院第一・第二議員会館、参議院議員会館）。
-//   千代田区 生活環境条例: 2002年10月施行、路上禁煙地区での喫煙は過料2,000円。
+//   千代田区 生活環境条例: 2002年10月施行、翌11月から路上禁煙地区での喫煙に過料2,000円（全国で初めての罰則）。
+//   首相官邸の新しい建物の運用は2002年4月から。
 // Every politician, demonstrator, reporter and guard here is fictional. 自由民主党 / 民主党 are
 // described only with the neutral facts of politics.js (PARTY_DEFS).
 
@@ -83,6 +84,9 @@ const isDietMember = (g) => { const m = me(g); return !!(m && (m.office === 'shu
 const isPolitician = (g) => { const m = me(g); return !!(m && (m.office || (m.posts && m.posts.length))); };
 const inCabinet = (g) => { const p = pol(g); return !!(p && (p.cabinet.pm === 'player' || Object.values(p.cabinet.ministers || {}).includes('player'))); };
 const today = (g, k) => g.flag(k) === g.state.day;
+// How reporters address the player: 姓 + 議員 / 区長 / 知事 (先生 for a party post only).
+const TITLE_OF = { shugi: '議員', sangi: '議員', kugi: '議員', togi: '議員', shicho: '区長', chiji: '知事' };
+const honor = (g) => { const m = me(g); return `{familyname}${(m && TITLE_OF[m.office]) || '先生'}`; };
 
 // The party in the player's own office building: the one the player founded (isPlayers)
 // or, after the founder left, the last party founded by the player ('my<n>' ids).
@@ -541,6 +545,8 @@ function sides(g, policyId) {
   const lose = segs.filter(([, v]) => v < 0).sort((a, b) => a[1] - b[1]).slice(0, 2).map(([s]) => SEGMENTS[s].name);
   return { win, lose, cost: pv ? pv.cost : 0 };
 }
+// The title on a line of its own (a long bill title would wrap in the message window).
+const demoTitle = (t) => (Array.from(t.title || '').length > 32 ? t.short : t.title);
 async function demoNo(g, npc) {
   G = g;
   const t = demoTopic(g);
@@ -548,7 +554,7 @@ async function demoNo(g, npc) {
   const s = sides(g, t.policy);
   const worry = s.lose.length ? `${s.lose.join('や')}の負担が重くなると思うんです。` : s.cost > 0 ? '財源をどうするのか、まだ説明が足りないと思うんです。' : '進め方が急すぎると思うんです。';
   await g.say([
-    `「${t.title}」に反対しています。\n${worry}`,
+    `「${demoTitle(t)}」\n${t.bill ? 'いま国会で審議中のこの法案に' : 'この政策に'}、反対しています。\n${worry}`,
     '賛成の人たちの言い分も、わからなくはない。\nだからこそ、国会でちゃんと議論してほしいんです。',
   ], who(npc));
 }
@@ -559,7 +565,7 @@ async function demoYes(g, npc) {
   const s = sides(g, t.policy);
   const good = s.win.length ? `${s.win.join('や')}にとって、必要な政策だと思います。` : 'この国の将来のために、必要だと思います。';
   await g.say([
-    `「${t.title}」${t.bill ? 'の早期成立' : 'の実現'}を求めています。\n${good}`,
+    `「${demoTitle(t)}」\n${t.bill ? 'この法案の早期成立' : 'この政策の実現'}を求めています。\n${good}`,
     '反対する人たちの心配も、わかります。\nよりよい形で決めてほしいですね。',
   ], who(npc));
 }
@@ -646,7 +652,7 @@ const enterKaikan = (house) => async (g) => {
   const room = kaikanRoom();
   const S = { name: '会館の受付', look: { ...LOOKS.receptionist, top: '#3a4a6a' } };
   if (m && m.office === house && room) {
-    await g.say(house === 'shugi' ? '（衆議院の議員会館。自分の事務所へ向かった）' : '（参議院議員会館。自分の事務所へ向かった）');
+    await g.say(`（${house === 'shugi' ? '衆議院の議員会館' : '参議院議員会館'}。自分の事務所へ向かった。\n　会館と議事堂は、地下の通路でつながっている）`);
     await g.goto('kokkai', room, 8, 8, 'up');
     return;
   }
@@ -680,18 +686,20 @@ async function enterKantei(g) {
 async function takeBus(g) {
   G = g;
   const dests = [{ label: '東京駅前', place: 'tokyo', x: 53, y: 31 }];
-  if (PLACES.machi) dests.push({ label: 'ドット商店街', place: 'machi', x: 38, y: 20 });
-  if (PLACES.minato) dests.push({ label: 'テレビ局エリア', place: 'minato', x: 35, y: 28 });
+  if (PLACES.machi) dests.push({ label: 'ドット商店街', place: 'machi', x: 38, y: 20, flag: 'machi_intro' });
+  if (PLACES.minato) dests.push({ label: 'テレビ局エリア', place: 'minato', x: 35, y: 28, flag: 'minato_intro' });
+  if (PLACES.kanraku) dests.push({ label: 'ネオン街', place: 'kanraku', x: 35, y: 9, flag: 'kanraku_intro' }); // same stop as tokyo.js's bus
   const i = await g.ask('バス停だ。\nどこ行きのバスに乗る？（¥210）', [...dests.map((d) => d.label), 'やめておく'], { cancel: dests.length });
   if (i < 0 || i >= dests.length) return;
   const d = dests[i];
   if (!g.spend(210)) { await g.say('運賃が足りない…。\n歩いていこう。（中央の通りを南へ行けば東京エリア）'); return; }
   g.sfx('coin');
+  const first = d.flag && !g.flag(d.flag); // that town's first-visit lines describe the arrival
   await g.fadeOut(16);
   g.sfx('door');
   await g.wait(600);
   await g.goto(d.place, 'main', d.x, d.y, 'down');
-  await g.say(`ブロロロ…。\n${d.label}でバスを降りた。`);
+  if (!first) await g.say(`ブロロロ…。\n${d.label}でバスを降りた。`);
 }
 
 // 街頭演説: the player's own speech when running in an election, else a fictional member's.
@@ -722,7 +730,7 @@ async function reporterTalk(g, npc) {
     return;
   }
   if (today(g, 'nagatacho_burasagari')) { await g.say('先ほどはありがとうございました！\nまたお話、聞かせてください。', S); return; }
-  const i = await g.ask(['{name}議員、ひと言お願いします！\n（記者たちが集まってきた。ぶら下がり取材だ）'], ['丁寧に答える', '短く答える', 'ノーコメント'], { cancel: 2, ...S });
+  const i = await g.ask([`${honor(g)}、ひと言お願いします！\n（記者たちが集まってきた。ぶら下がり取材だ）`], ['丁寧に答える', '短く答える', 'ノーコメント'], { cancel: 2, ...S });
   g.setFlag('nagatacho_burasagari', g.state.day);
   if (i === 2) { await g.say('「ノーコメントです」\n…記者たちは、少し不満そうだ。', S); return; }
   const score = i === 0 ? 45 + (g.state.skills.talk || 0) * 0.5 : 55;
@@ -902,7 +910,8 @@ function generate() {
   for (const y of [6, 30, 46]) { P2(16, y, 'lamp'); P2(63, y, 'lamp'); }
 
   // ================================================================ entities
-  const kanteiOld = (g) => yearOf(g) < 2002;
+  // the present 官邸 is used from April 2002 (pdate gives the month)
+  const kanteiOld = (g) => { const d = pdate(g); return d.year < 2002 || (d.year === 2002 && (d.month || 4) < 4); };
   const kaikanNew = (g) => yearOf(g) >= 2010;
   const KAIKAN = (x, label, full, house) => [false, true].map((isNew) => ({
     type: 'building', x, y: 3, w: 4, h: 6, door: 2, place: null, name: full, kind: 'office', rise: isNew ? 3 : 1,
@@ -1007,7 +1016,11 @@ function generate() {
       talk: async (g, npc) => {
         G = g;
         const p = pol(g);
-        const pm = p ? (p.cabinet.pm === 'player' ? g.state.name : g.npcName(p.cabinet.pm)) : '';
+        if (p && p.cabinet.pm === 'player') {
+          await g.say(['あっ、総理！　おはようございます！', `内閣支持率は${g.approval()}%。\n…今日のご予定、少しだけ教えていただけませんか？`, '（記者たちが、ぞろぞろとついてきた）'], who(npc));
+          return;
+        }
+        const pm = p && p.cabinet.pm ? String(g.npcName(p.cabinet.pm) || '').split(' ')[0] : '';
         await g.say([`総理の一日の動きを追いかける「総理番」です。`, pm ? `${pm}総理、今日は朝から官邸に缶づめ。\n内閣支持率は${g.approval()}%…さて、どうなるかな。` : '今日の総理の日程は…ひみつです。', 'あそこのスーツの人たちはSP。\n要人を守る、警視庁の警察官なんですよ。'], who(npc));
       } },
     // ---- people: party HQs
@@ -1027,7 +1040,7 @@ function generate() {
         G = g;
         const m = me(g);
         const lines = ['検察庁の前で、張りこみ中なんだ。', '東京地検には「特捜部」があってね。\n汚職や大きな経済事件を、独自に捜査するんだよ。'];
-        if (m && m.secret > 0 && isPolitician(g)) lines.push('…あなた、{name}議員ですよね？\n最近、いろいろうわさを聞くもので。…いえ、べつに。');
+        if (m && m.secret > 0 && isPolitician(g)) lines.push(`…あなた、${honor(g)}ですよね？\n最近、いろいろうわさを聞くもので。…いえ、べつに。`);
         await g.say(lines, who(npc));
       } },
     { type: 'npc', id: 'naga_mpd', x: 9, y: 50, dir: 'down', look: POLICE, name: '警察官',
@@ -1050,8 +1063,8 @@ function generate() {
   return { w: W, h: H, cells: c, entities, warps, events };
 }
 
-// Smoking: 千代田区の生活環境条例 (2002年10月から、路上禁煙地区での喫煙は過料2,000円).
-registerSmokingRule('nagatacho', (g) => (lawDate(g).ym >= 200210
+// Smoking: 千代田区の生活環境条例 (2002年10月施行、11月から路上禁煙地区での喫煙に過料2,000円).
+registerSmokingRule('nagatacho', (g) => (lawDate(g).ym >= 200211
   ? { ok: false, area: '千代田区（永田町・霞が関）', law: '千代田区生活環境条例', fine: 2000, patrol: 0.4, smokingArea: true }
   : { ok: true, area: '永田町' }));
 

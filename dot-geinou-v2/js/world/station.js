@@ -8,7 +8,7 @@
 //   await travelScene(g, { to, via, vehicle, scenery })   the HD ride cutscene
 //       vehicle: 'shinkansen' | 'local' | 'plane'; scenery: 'fuji' | 'mountains' | 'fields' | 'sea' | 'city'
 
-import { registerPlace } from '../engine/map.js';
+import { registerPlace, PLACES } from '../engine/map.js';
 import { defineTile, R as TR, P as TP } from '../engine/tiles.js';
 import { LOOKS } from '../engine/sprites.js';
 import { SW, SH, fmtMoney } from '../engine/util.js';
@@ -237,6 +237,25 @@ function makeStation({ id, name, wall, floor, destPlace, destName, bgm, transfer
     await g.goto(destPlace, 'concourse', 10, 3, 'down');
     await g.say(`${destName}に到着した！`);
   }
+  // The ticket gate. 無賃乗車 goes through ネオン街's shared api (js/world/kanraku.js, looked up when
+  // used): a clear warning, the ride, then the arrival gate decides (g.commitCrime('fare_evasion')).
+  async function gate(g) {
+    const api = PLACES.kanraku && PLACES.kanraku.api;
+    if (!api) { await g.say(gateText); return; }
+    const k = await g.ask(gateText, ['もどる', 'きっぷなしで通る…'], { cancel: 0 });
+    if (k !== 1) return;
+    await api.fareEvasion(g, {
+      fare: FARE, dest: destName,
+      ride: async () => {
+        await g.fadeOut();
+        const ride = travelScene(g, { to: destName, via, vehicle: 'shinkansen', scenery });
+        await g.fadeIn();
+        await ride;
+        await g.fadeOut();
+        await g.goto(destPlace, 'concourse', 10, 3, 'down');
+      },
+    });
+  }
   registerPlace({
     id,
     name,
@@ -277,7 +296,7 @@ function makeStation({ id, name, wall, floor, destPlace, destName, bgm, transfer
             },
           },
           { type: 'npc', id: 'traveler', x: 9, y: 6, dir: 'left', look: LOOKS.tourist, name: '旅行客', wander: 2, text: traveler },
-          ...[8, 9, 10, 11, 12].map((x) => ({ type: 'sign', x, y: 2, text: gateText })),
+          ...[8, 9, 10, 11, 12].map((x) => ({ type: 'sign', x, y: 2, talk: gate })),
           ...extraEntities,
         ],
       },

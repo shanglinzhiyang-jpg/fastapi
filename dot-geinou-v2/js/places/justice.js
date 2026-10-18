@@ -38,12 +38,19 @@
 //   npa.go.jp hakusyo r03（録音・録画 2019年6月1日・対象）; city.meguro（裁判員 6人＋3人・強盗致傷など）;
 //   courts.go.jp minzi_25_02, kotobank 少額訴訟（1回の期日・ラウンドテーブル・60万円）; moj.go.jp kyousei（作業の種類）;
 //   courts.go.jp kyoto 所持品検査（2019年4月）.
+// Review pass (2026-10): moj.go.jp minji68-2（少額訴訟は簡易裁判所・60万円以下）; fsa.go.jp yami_leaf / j-fsa 白書 h21
+//   （取立ての時間帯・勤務先・第三者への請求の明記はヤミ金融対策法、2004年1月施行）; moj.go.jp 更生保護（仮釈放の審理は
+//   委員の面接と保護観察官の調査）; courts.go.jp saibanin（強盗致傷は裁判員裁判の対象、強盗罪だけなら対象外）.
+//
+// 強盗致傷: the core models every robbery as 強盗（刑法236条）. A robbery in which the victim was hurt (case.injury) is
+// 強盗致傷（刑法240条）, the 裁判員裁判 case this module seats in the 裁判員法廷, so while such a case is open its 罪名・
+// 罰条・公訴事実 read as 強盗致傷 (installRobberyInjury; nothing changes once the core says so itself).
 
 import { registerPlace, PLACES, doorIndexFor } from '../engine/map.js';
-import { defineTile, R, P, Rw, Pw, disc, oval, line, bevel, inset, dither, grain, outline, shadowEllipse, speckle } from '../engine/tiles.js';
+import { defineTile, R, P, Rw, Pw, disc, oval, line, bevel, inset, dither, grain, outline, shadowEllipse, speckle, tileImageHD } from '../engine/tiles.js';
 import { LOOKS, charSheetHD, drawChar, drawShadow } from '../engine/sprites.js';
 import { text, measure } from '../engine/draw.js';
-import { shade, makeCanvas, fmtMoney, clamp } from '../engine/util.js';
+import { shade, makeCanvas, fmtMoney, clamp, TILE, VIEW_W } from '../engine/util.js';
 import { onMorning, PEOPLE } from '../engine/life.js';
 import { RELATIONS, sortFamily, familyLook, regionOf, ageOf, fullName } from '../engine/profile.js';
 import { registerItem, AGENCIES } from '../engine/state.js';
@@ -118,32 +125,37 @@ function closeFriend(g, minLevel = 2) {
 // ---------------------------------------------------------------- flow markers
 // A getter below runs right before the core's Flow teleports. It remembers which room the flow is going to,
 // so that room shows the flow's people (and its onEnter knows it was entered by a flow, not by walking in).
-const ACTIVE = { room: null, place: null, stage: null, caseId: null, day: -1, frame: -1, fresh: false, loaded: false };
+const ACTIVE = { room: null, place: null, stage: null, caseId: null, day: -1, frame: -1, fresh: false, loaded: false, prev: null };
 function mark(g, place, room, stage, cs) {
   if (!g || !g.state) return room;
   const here = !!(g.map && g.map.placeId === place && g.map.roomId === room); // no teleport: the room is already up
-  Object.assign(ACTIVE, { room, place, stage, caseId: cs ? cs.id : null, day: day(g), frame: g.frame || 0, fresh: !here, loaded: here });
+  // The room the flow is leaving keeps its people until the map really changes (the fade-out comes after this getter).
+  const leaving = !here && ACTIVE.room && ACTIVE.loaded && g.map && g.map.placeId === ACTIVE.place && g.map.roomId === ACTIVE.room;
+  const prev = leaving ? { place: ACTIVE.place, room: ACTIVE.room } : null;
+  Object.assign(ACTIVE, { room, place, stage, caseId: cs ? cs.id : null, day: day(g), frame: g.frame || 0, fresh: !here, loaded: here, prev });
   return room;
 }
 // The room's entry / start getter: g.goto consults it only for a teleport without a spot (the flow's), so this is
 // where a flow's arrival is confirmed (a later walk-in never shows a stale lineup).
 function flowEntry(place, room) {
   const ok = ACTIVE.fresh && ACTIVE.place === place && ACTIVE.room === room;
-  if (ok) ACTIVE.loaded = true;
+  if (ok) ACTIVE.loaded = true; // (read before the fade-out: the room being left keeps its people through ACTIVE.prev)
   return ok;
 }
 // A flow is running in this room right now (scripts keep g.busy > 0 for the whole flow).
 function flowIn(g, place, room) {
   if (!ACTIVE.room) return false;
-  if (!g || g.busy === 0) { ACTIVE.room = null; ACTIVE.loaded = false; return false; }
-  return ACTIVE.loaded && ACTIVE.place === place && ACTIVE.room === room;
+  if (!g || g.busy === 0) { ACTIVE.room = null; ACTIVE.loaded = false; ACTIVE.prev = null; return false; }
+  if (ACTIVE.loaded && ACTIVE.place === place && ACTIVE.room === room) return true;
+  const p = ACTIVE.prev;
+  return !!(p && p.place === place && p.room === room && g.map && g.map.placeId === place && g.map.roomId === room);
 }
 // onEnter: was this entry the flow's teleport? (consumes the mark); a walk-in clears any stale mark.
 function enteredByFlow(g, place, room) {
   GAME = g;
   const ok = ACTIVE.fresh && ACTIVE.loaded && ACTIVE.place === place && ACTIVE.room === room && (g.frame || 0) - ACTIVE.frame < 600;
   if (ok) ACTIVE.fresh = false;
-  else { ACTIVE.room = null; ACTIVE.fresh = false; ACTIVE.loaded = false; }
+  else { ACTIVE.room = null; ACTIVE.fresh = false; ACTIVE.loaded = false; ACTIVE.prev = null; }
   return ok;
 }
 const activeCase = (g) => { const j = jus(g); return j && ACTIVE.caseId != null ? (j.cases || []).find((c) => c.id === ACTIVE.caseId) || curCase(g) : curCase(g); };
@@ -154,12 +166,18 @@ const JUV_SENT = new Set();
 // The last prison term seen (the release gate comes after j.prison is cleared).
 let lastPrison = null;
 // Prison event days (the core's serveSentence: scenes spread over the term, cycling 作業・面会・トラブル・手紙・内省・訓練・面会).
-const PRISON_EVENT_ROOMS = ['kojo', 'kyoshitsu', 'undojo', 'kyoshitsu', 'kyoshitsu', 'kyoiku', 'kyoshitsu'];
+// 作業 and トラブル (the core's 「同じ工場の受刑者」) are in the factory, so the work loop comes back; 内省 is in the yard;
+// 訓練 in the classroom. A term's first 改善指導 comes on the evening of the first factory day (kyoshitsu onEnter).
+const PRISON_EVENT_ROOMS = ['kojo', 'kyoshitsu', 'kojo', 'kyoshitsu', 'undojo', 'kyoiku', 'kyoshitsu'];
 const PSEEN = { day: -1, n: 0 };
+// The core spreads the scenes over the days left when its loop starts: the 入所 day, or the day a term cut off by a
+// reload resumes. The first prison show of a term in this session is that day.
+const TERM = { start: null, from: null };
 function prisonEventIndex(g, pr) {
-  const total = Math.max(0, (pr.until || 0) - (pr.start || 0));
+  const from = TERM.start === pr.start && TERM.from != null ? TERM.from : (pr.start || 0);
+  const total = Math.max(0, (pr.until || 0) - from);
   const n = clamp(Math.round(total / (MONTH_DAYS * 3)), 1, 7);
-  for (let i = 1; i <= n; i++) if ((pr.start || 0) + Math.round((total * i) / (n + 1)) === day(g)) return i - 1;
+  for (let i = 1; i <= n; i++) if (from + Math.round((total * i) / (n + 1)) === day(g)) return i - 1;
   return -1;
 }
 function prisonRoom(g) {
@@ -167,6 +185,8 @@ function prisonRoom(g) {
   const pr = j && j.prison;
   if (!pr) return 'kyoshitsu';
   if (pr.kind === 'roueki') return 'kojo';
+  if (TERM.start !== pr.start) { TERM.start = pr.start; TERM.from = day(g); }
+  ensureInmate(g, pr);
   if (PSEEN.day !== day(g)) { PSEEN.day = day(g); PSEEN.n = 0; }
   PSEEN.n++;
   const k = prisonEventIndex(g, pr);
@@ -271,6 +291,46 @@ function installRouting() {
   };
 }
 installRouting();
+
+// 強盗致傷（刑法240条）: see the header. Only while an open case is a robbery in which the victim was hurt, and only
+// where the core's own text does not already say 致傷 / 240条. Its 法定刑 is 無期 or 6年以上 (7年以上 before 2005),
+// so the prosecutors' starting point is a year heavier than for 強盗.
+function installRobberyInjury() {
+  const def = CRIMES.robbery;
+  if (!def || def.__jplInjury) return;
+  Object.defineProperty(def, '__jplInjury', { value: true });
+  const hurt = (cs) => !!(cs && cs.crime === 'robbery' && cs.injury);
+  const openHurt = () => { try { const g = G(); return !!(g && g.state && hurt(curCase(g))); } catch (e) { return false; } };
+  const said = (t) => /致傷|240条/.test(String(t || ''));
+  const { law, facts, typical } = def;
+  if (typeof law === 'function') {
+    const law2 = function (g, ctx = {}) {
+      const t = law.call(this, g, ctx);
+      if (!((ctx && ctx.injury) || openHurt()) || said(t)) return t;
+      return `強盗致傷罪（刑法240条）：無期又は${since(g, 2005, 1) ? 6 : 7}年以上の${laborWord(g)}`;
+    };
+    for (const k of [Symbol.toPrimitive, 'toString']) if (law[k]) law2[k] = law[k];
+    def.law = law2;
+  }
+  if (typeof facts === 'function') {
+    def.facts = function (cs, g) {
+      const t = facts.call(this, cs, g);
+      return hurt(cs) && !/けが|傷/.test(t) ? `${t.replace(/した$/, 'し')}、その際、店員に全治約2週間のけがを負わせた` : t;
+    };
+  }
+  if (typeof typical === 'function') {
+    def.typical = function (g, cs) {
+      const r = typical.call(this, g, cs);
+      return r && hurt(cs) && !said(law.call(this, g, { injury: true })) ? { ...r, months: (r.months || 0) + 12 } : r;
+    };
+  }
+  const d = Object.getOwnPropertyDescriptor(def, 'short');
+  if (d && 'value' in d && d.configurable !== false) {
+    let base = d.value;
+    Object.defineProperty(def, 'short', { configurable: true, enumerable: true, get() { return openHurt() && !said(base) ? '強盗致傷' : base; }, set(v) { base = v; } });
+  }
+}
+installRobberyInjury();
 
 // ======================================================================== tiles (native 32x32 HD; 16px draw = the same art halved)
 function tile(id, def) {
@@ -910,7 +970,7 @@ const WHO = {
   clerkM: { name: '裁判所書記官', look: LK.clerkM },
   saiAnnai: { name: '裁判所の案内係', look: LK.annai },
   hasanClerk: { name: '破産係の書記官', look: LK.clerk },
-  minjiClerk: { name: '民事受付の書記官', look: LK.clerkM },
+  minjiClerk: { name: '簡裁の民事受付', look: LK.clerkM },
   tour: { name: '見学の案内係', look: LK.annai },
   prosecutor: { name: '検察官', look: LK.kenjiW },
   bengo: { name: '弁護人', look: LK.bengo },
@@ -964,7 +1024,8 @@ function deskProp(x, y, w, style = 'wood', opts = {}) {
       if (W > 20 && !opts.closed) for (let i = 0; i < w; i++) { B(ctx, sx + i * 16 + 3, top + 6, 10, H - 9, shade(pal[2], 0.07)); B(ctx, sx + i * 16 + 3, top + 6, 10, 0.5, shade(pal[2], -0.2)); }
       B(ctx, sx + 0.5, top + H - 0.5, W - 1, 0.5, pal[3]);
       if (opts.papers) for (const k of opts.papers) { B(ctx, sx + k * 16 + 4, top + 0.5, 6, 2, '#f4f0e4'); B(ctx, sx + k * 16 + 5, top + 1, 4, 0.5, '#9a9a9a'); }
-      if (opts.mons) for (const k of opts.mons) { B(ctx, sx + k * 16 + 3.5, top - 2.5, 9, 3, '#2a2e36'); B(ctx, sx + k * 16 + 4, top - 2, 8, 2, '#7a9ab8'); B(ctx, sx + k * 16 + 4.5, top - 2, 3, 0.5, '#c8dcea'); }
+      const mons = typeof opts.mons === 'function' ? opts.mons(g) : opts.mons;
+      if (mons) for (const k of mons) { B(ctx, sx + k * 16 + 3.5, top - 2.5, 9, 3, '#2a2e36'); B(ctx, sx + k * 16 + 4, top - 2, 8, 2, '#7a9ab8'); B(ctx, sx + k * 16 + 4.5, top - 2, 3, 0.5, '#c8dcea'); }
       if (opts.plates) for (const k of opts.plates) { B(ctx, sx + k * 16 + 5, top + 4.5, 6, 2, '#d8c060'); }
       if (opts.mic) for (const k of opts.mic) { B(ctx, sx + k * 16 + 11, top - 4, 0.5, 4, '#3a3a3a'); B(ctx, sx + k * 16 + 10.5, top - 5, 1.5, 1.5, '#1a1a1a'); }
       outlineRect(ctx, sx, top, W, H);
@@ -1069,7 +1130,7 @@ async function consultYamikin(g, who) {
   const pages = [];
   if (since(g, 2008, 6)) pages.push('登録のない業者や、法律の上限をこえる利息で貸す\n「闇金」は犯罪です。年109.5%をこえる契約は無効で、\n最高裁は、元本も返さなくてよいとしています。');
   else pages.push('登録のない業者や、出資法の上限をこえる利息で\n貸すのは犯罪です。そういう契約の利息は、\n払う必要がありません。');
-  pages.push(since(g, 1983, 11) ? '貸金業者でも、夜9時から朝8時までの取り立てや、\n職場・家族への取り立ては法律で禁止されています。' : '取り立てで脅したり、家族や職場に押しかけるのは\n許されません。');
+  pages.push(since(g, 2004, 1) ? '貸金業者でも、夜9時から朝8時までの取り立てや、\n職場への押しかけ、家族に返済を迫ることは\n法律で禁止されています。' : since(g, 1983, 11) ? '貸金業者でも、脅したり、夜中に押しかけたりして\n取り立てることは、法律で禁止されています。' : '取り立てで脅したり、家族や職場に押しかけるのは\n許されません。');
   pages.push('「口座を売れば借金をチャラに」という話は、\nあなたが犯罪者にされる罠です。絶対に応じないで。');
   pages.push(soudanNumber(g));
   await say(g, who, pages);
@@ -1274,7 +1335,13 @@ async function ryuchiFree(g) {
   await say(g, WHO.ryuchi, '関係者以外は入れない場所です。\n…ロビーまでお送りしますね。');
   await g.goto(KEI, 'lobby', 13, 2, 'down');
 }
-const KEI_CELLMATES = [[3, 4, LK.inmate5], [10, 4, LK.defendant2], [11, 3, LK.inmate3]];
+// 留置場では私服（ひものない服や、貸与のスウェット）のまま
+const KEI_CELLMATES = [
+  [3, 4, { hair: 'short', hairColor: 'brown', skin: 'light', top: '#5a6070', bottom: '#3a3e48' }],
+  [10, 4, LK.defendant2],
+  [11, 3, { hair: 'short', hairColor: 'silver', skin: 'fair', top: '#7a6a5a', bottom: '#4a4a52', glasses: true }],
+];
+const ryuchiNo = (g) => { const cs = activeCase(g); return 10 + (((cs && Number(cs.id)) || 7) * 7) % 40; };
 const inCustody = (g) => { const j = jus(g); return !!(j && (j.custody || j.status === 'detained')); };
 
 registerPlace({
@@ -1344,6 +1411,10 @@ registerPlace({
           },
         },
         { type: 'sign', x: 13, y: 1, text: '扉に「関係者以外立入禁止」の札。\nこの奥に、取調室や留置場があるらしい。' },
+        { // a wallet left on the bench (the 遺失物 event below)
+          type: 'prop', x: 16, y: 6, w: 1, h: 1, z: 4, solid: false, cond: walletHere,
+          draw(ctx, sx, sy) { B(ctx, sx + 4, sy + 5, 8, 5, '#26242c'); B(ctx, sx + 4, sy + 5, 8, 1, '#4a4652'); B(ctx, sx + 10, sy + 7, 2, 1.5, '#c9a227'); outlineRect(ctx, sx + 4, sy + 5, 8, 5); },
+        },
         { type: 'sign', x: 1, y: 8, talk: async (g) => { await narrate(g, since(g, 2009, 1) ? 'パンフレットが並んでいる。\n「警察相談専用電話 #9110」「闇金融に注意」\n「ストーカー被害の相談」…' : 'パンフレットが並んでいる。\n「悪質商法に注意」「街金・サラ金の相談」…'); } },
       ],
       events: [
@@ -1446,7 +1517,7 @@ registerPlace({
       get entry() { return flowEntry(KEI, 'ryuchi') ? { x: 6, y: 3, dir: 'down' } : { x: 7, y: 7, dir: 'up' }; },
       warps: [{ x: 7, y: 8, room: 'lobby', tx: 13, ty: 2, dir: 'down', check: heldCheck('（留置場の扉は、外からしか開かない…）') }],
       entities: [
-        npc('kei_ryuchi', 14, 5, 'left', WHO.ryuchi, { talk: posted('left', (g) => (inCustody(g) ? say(g, WHO.ryuchi, ['〇番、静かにしなさい。', '…消灯は夜9時だ。体を休めておけ。']) : ryuchiFree(g))) }),
+        npc('kei_ryuchi', 14, 5, 'left', WHO.ryuchi, { talk: posted('left', (g) => (inCustody(g) ? say(g, WHO.ryuchi, [`${ryuchiNo(g)}番、静かにしなさい。`, '…消灯は夜9時だ。体を休めておけ。']) : ryuchiFree(g))) }),
         ...KEI_CELLMATES.map(([x, y, look], i) => npc(`kei_cellmate${i}`, x, y, i === 0 ? 'right' : 'down', { name: '同じ留置場の人', look }, {
           cond: (g) => inCustody(g) || flowIn(g, KEI, 'ryuchi'),
           text: pickBy([['…あんたも、初めてか。', '朝が早いぞ。点呼に遅れんようにな。'], ['（壁にもたれて、じっと目を閉じている）'], ['…弁護士さん、いつ来てくれるんだろうな。']], i),
@@ -1588,11 +1659,9 @@ registerPlace({
         { type: 'sign', x: 1, y: 2, text: '法律書がぎっしり。\n六法、判例集、注釈書…背表紙だけで目がまわりそうだ。' },
         { type: 'sign', x: 1, y: 6, text: '応接のソファ。\n参考人が、呼ばれるのを待っている。' },
       ],
-      onEnter: async (g) => {
-        if (!enteredByFlow(g, KEN, 'kenjishitsu')) return;
-        const cs = activeCase(g);
-        if (cs && cs.detained) await narrate(g, '（手錠と腰縄をはずされ、検察官の机の前の\nいすに座らされた。うしろには護送の警察官）');
-      },
+      // (no narration here: the core's own line about the 護送 and the waiting room comes right after the arrival;
+      // the escorts stand behind the player while the case is in custody)
+      onEnter: (g) => { enteredByFlow(g, KEN, 'kenjishitsu'); },
     },
 
     // -------------------------------------------------------------- 特別捜査部
@@ -1808,23 +1877,27 @@ async function watchTrial(g, room) {
   WATCH.room = room;
   WATCH.witness = !!tc.witness;
   g.placePlayer(7, 10, 'up');
+  // the camera stays on the well of the court (the bench, both counsel and the 証言台), not on the gallery seat
+  const mw = g.map.room.w * TILE;
+  g.map.camOverride = { x: mw <= VIEW_W ? -Math.round((VIEW_W - mw) / 2) : Math.round((mw - VIEW_W) / 2), y: 14 };
   const defId = `sai_${room}_def`, witId = `sai_${room}_wit`;
   try {
-  for (const st of tc.steps) {
-    if (st.cap) { g.showBanner(`【${st.cap}】`); continue; }
-    if (st.stand) { const id = st.stand === 'def' ? defId : witId; const [x, y, d] = SAI_SPOTS[st.stand]; await walkTo(g, id, x + (st.stand === 'wit' ? 1 : 0), y, d); continue; }
-    if (st.sit) { const id = st.sit === 'def' ? defId : witId; const [x, y, d] = seatOf(room, st.sit); await walkTo(g, id, x, y, d); continue; }
-    if (st.pause) { await g.fadeOut(10); await g.wait(250); g.showBanner(st.pause); await g.fadeIn(10); continue; }
-    if (st.note) { await narrate(g, st.note); continue; }
-    const who = SPK[st.who] || null;
-    const spk = who && tc.judges === 1 && st.who === 'chief' ? WHO.judge : who;
-    await say(g, spk, st.text);
-  }
+    for (const st of tc.steps) {
+      if (st.cap) { g.showBanner(`【${st.cap}】`); continue; }
+      if (st.stand) { const id = st.stand === 'def' ? defId : witId; const [x, y, d] = SAI_SPOTS[st.stand]; await walkTo(g, id, x + (st.stand === 'wit' ? 1 : 0), y, d); continue; }
+      if (st.sit) { const id = st.sit === 'def' ? defId : witId; const [x, y, d] = seatOf(room, st.sit); await walkTo(g, id, x, y, d); continue; }
+      if (st.pause) { await g.fadeOut(10); await g.wait(250); g.showBanner(st.pause); await g.fadeIn(10); continue; }
+      if (st.note) { await narrate(g, st.note); continue; }
+      const who = SPK[st.who] || null;
+      const spk = who && tc.judges === 1 && st.who === 'chief' ? WHO.judge : who;
+      await say(g, spk, st.text);
+    }
+    await g.fadeOut(10);
   } finally {
     WATCH.room = null;
     WATCH.witness = false;
+    g.map.camOverride = null;
   }
-  await g.fadeOut(10);
   g.placePlayer(back.x, back.y, back.dir);
   const ds = seatOf(room, 'def');
   const e = g.npc(defId); if (e) g.placeNpc(defId, ds[0], ds[1], ds[2]);
@@ -1834,7 +1907,7 @@ async function watchTrial(g, room) {
   f.watched = f.watched || {};
   f.watched[room] = (f.watched[room] || 0) + 1;
   g.addNeed('stress', -3);
-  await narrate(g, '（法廷を出ると、廊下の空気がやけに軽く感じた。\n…いろいろなことを考えさせられた）');
+  await narrate(g, '（審理が終わった。張りつめていた傍聴席の空気が、\nふっとゆるんだ。…いろいろなことを考えさせられた）');
 }
 
 // ---------------------------------------------------------------- people drawn as props
@@ -1905,7 +1978,7 @@ function courtroom(cfg) {
     const look = cfg.saibaninSeats && cfg.saibaninSeats.includes(x) ? LK.citizens[(i * 3) % LK.citizens.length] : x === cfg.chief ? LK.judge : JUDGE_LOOKS[i % JUDGE_LOOKS.length];
     ents.push(person(x, 2, 'down', look, isJ));
   });
-  ents.push(deskProp(1, 2, 17, 'bench', { lip: 7, drop: 0, closed: true, solid: false, mons: cfg.saibanin ? cfg.seats.map((x) => x - 1) : null }));
+  ents.push(deskProp(1, 2, 17, 'bench', { lip: 7, drop: 0, closed: true, solid: false, mons: cfg.saibanin ? (g) => (since(g, 2009, 5) ? cfg.seats.map((x) => x - 1) : null) : null }));
   // the clerk below the bench
   ents.push(person(9, 4, 'down', (g) => (inFlow(g) ? LK.clerk : LK.clerkM), active));
   ents.push(deskProp(7, 4, 5, 'bench', { lip: 7, drop: 5, papers: [1, 3] }));
@@ -1937,9 +2010,13 @@ function courtroom(cfg) {
       await say(g, { name: '廷吏', look: LK.clerkM }, tc ? [`いま、この法廷では${tc.title}の審理中です。\n傍聴席は自由に使えます。`, '私語や、録音・撮影は禁止です。\n帽子もとってくださいね。'] : ['この法廷の今日の審理は、終わりました。', 'ロビーの開廷表で、ほかの法廷の予定を\n確かめてみてください。']);
     }),
   }));
+  // the big wall monitors of a 裁判員法廷 (the room is a plain 刑事大法廷 before 2009)
+  for (const x of cfg.mons || []) {
+    ents.push({ type: 'prop', x, y: 1, w: 1, h: 1, solid: false, cond: (g) => since(g, 2009, 5), draw(ctx, sx, sy) { ctx.drawImage(tileImageHD('saibansho_bigmon'), sx, sy, TILE, TILE); } });
+  }
   ents.push(...(cfg.extra || []));
   const legend = {
-    j: 'saibansho_chairback', J: 'saibansho_chairback_c', m: 'saibansho_wall+saibansho_bigmon', k: 'saibansho_wall+saibansho_clock',
+    j: 'saibansho_chairback', J: 'saibansho_chairback_c', m: 'saibansho_wall', k: 'saibansho_wall+saibansho_clock',
     d: 'saibansho_dais', b: 'saibansho_bench', T: 'saibansho_table', t: 'saibansho_table_mon', W: 'saibansho_witness', D: 'saibansho_dbench',
     r: 'saibansho_bar', G: 'saibansho_bargate', g: 'saibansho_gallery',
   };
@@ -1975,7 +2052,7 @@ async function courtArrival(g, room, cfg) {
     await narrate(g, pages);
     return;
   }
-  if (cs.detained) pages.push('（法廷に入る前に、手錠と腰縄がはずされた。\n法廷では、被告人の体を拘束してはいけない決まりだ）');
+  if (cs.detained) pages.push('（裁判官が入ってくる前に、手錠と腰縄がはずされた。\n公判廷では、被告人の体を拘束してはいけない決まりだ）');
   if (room === 'saibanin') pages.push('（法壇には、裁判官3人と、くじで選ばれた市民の\n裁判員6人が並んでいる。この事件は「裁判員裁判」だ）', '（裁判員は、有罪か無罪か、刑の重さを、\n裁判官と同じ一票で話し合って決める）');
   if (room === 'kousai') pages.push('（高等裁判所の法廷。控訴審では、3人の裁判官が\n1審の判決にまちがいがなかったかを審理する）');
   if (famous(g)) pages.push('（傍聴席は満席だった。傍聴券の抽選に、\n長い列ができたらしい。記者席ではペンが走っている）');
@@ -1995,7 +2072,7 @@ async function saiAnnaiTalk(g) {
     await say(g, who, ['裁判は、だれでも傍聴できます。手続きはいりません。\n開廷中の法廷に、静かに入って座ってください。', '注目される裁判では、傍聴券の抽選になることも\nあります。録音・撮影は禁止です。', '左の扉から、地方裁判所の刑事法廷、' + (since(g, 2009, 6) ? '裁判員法廷、' : '') + '\n高等裁判所の法廷、民事のフロアの順です。']);
   } else if (pick === '開廷表を見る') await kaiteihyo(g);
   else if (pick === '最高裁判所の見学') await supremeTour(g);
-  else if (pick === '民事・破産の窓口') await say(g, who, ['お金の貸し借りや敷金などのもめごと、\n自己破産や個人再生の申立ては、\n右手の「民事・破産」の扉の先です。']);
+  else if (pick === '民事・破産の窓口') await say(g, who, ['自己破産や個人再生の申立て（地方裁判所）と、\n敷金などの少額のもめごと（簡易裁判所）は、\n右手の「民事・破産」の扉の先です。']);
   else if (pick === '法律の相談先') await say(g, who, ['裁判所では、個別の法律相談には答えられないんです。', '「法テラス（日本司法支援センター）」に問い合わせれば、\n相談できる窓口や、無料の法律相談を案内してくれます。\n収入が少ない方は、弁護士費用の立て替えも。']);
   else if (pick === '検察審査会') await say(g, who, ['検察官が起訴しなかった事件について、\n不服がある被害者などは、検察審査会に申し立てられます。', 'くじで選ばれた市民11人が審査します。\n事務局は、この建物の中にあります。']);
   else await say(g, who, 'お気をつけて。');
@@ -2051,10 +2128,10 @@ async function hasanTalk(g) {
 }
 async function minjiUkeTalk(g) {
   const who = WHO.minjiClerk;
-  const k = await ask(g, who, '民事受付です。', [since(g, 1998, 1) ? '少額訴訟とは' : '民事調停とは', '支払督促とは', 'やめる'], { cancel: 2 });
-  if (k === 0 && since(g, 1998, 1)) await say(g, who, [`${since(g, 2004, 4) ? '60万円' : '30万円'}以下のお金の請求なら、「少額訴訟」が使えます。\n原則として1回の期日で審理を終えて、\nその日のうちに判決が出ます。`, '裁判官と当事者が、丸いテーブルを囲んで話します。\n貸したお金や敷金、未払いの給料など、\n身近なもめごとが多いですよ。']);
+  const k = await ask(g, who, '簡易裁判所の民事受付です。\n身近なお金のもめごとの手続きを受け付けています。', [since(g, 1998, 1) ? '少額訴訟とは' : '民事調停とは', '支払督促とは', 'やめる'], { cancel: 2 });
+  if (k === 0 && since(g, 1998, 1)) await say(g, who, [`${since(g, 2004, 4) ? '60万円' : '30万円'}以下のお金の請求なら、簡易裁判所の\n「少額訴訟」が使えます。原則として1回の期日で\n審理を終えて、その日のうちに判決が出ます。`, '裁判官と当事者が、丸いテーブルを囲んで話します。\n貸したお金や敷金、未払いの給料など、\n身近なもめごとが多いですよ。']);
   else if (k === 0) await say(g, who, ['「民事調停」は、裁判官と、市民から選ばれた\n調停委員が間に入って、話し合いで解決する手続きです。', '費用も安く、非公開なので、\nご近所や家族のもめごとにも使われます。']);
-  else if (k === 1) await say(g, who, ['「支払督促」は、書類だけでお金の支払いを求める手続きです。\n相手が2週間以内に異議を出さなければ、\n差押えなどの強制執行ができるようになります。', '借金を延滞すると、貸金業者がこの手続きを\nとることもあります。届いたら、放っておかないで。']);
+  else if (k === 1) await say(g, who, ['「支払督促」は、簡易裁判所の書記官が書類だけで\n支払いを命じる手続きです。相手が2週間以内に異議を\n出さなければ、差押えなどができるようになります。', '借金を延滞すると、貸金業者がこの手続きを\nとることもあります。届いたら、放っておかないで。']);
 }
 async function smallClaim(g) {
   if (!since(g, 1998, 1)) {
@@ -2071,7 +2148,7 @@ async function smallClaim(g) {
   await say(g, iin, ['ふつうに使って古くなった分の修繕費は、\n原則として貸す側の負担です。', 'ただ、ゆかの傷の分は、借り主の負担になりうる。\n…12万円を返す、ということでどうでしょう。']);
   await say(g, d, '…まあ、それなら。');
   await say(g, judge, 'では、和解が成立しました。\n被告は原告に、12万円を支払ってください。');
-  await narrate(g, '（少額訴訟では、判決ではなく、こうして話し合いで\n解決する「和解」も多い。司法委員は、市民から\n選ばれて、裁判官を手伝う人だ）');
+  await narrate(g, '（簡易裁判所の少額訴訟では、こうして話し合いで\n解決する「和解」も多い。司法委員は、市民から\n選ばれて、裁判官を手伝う人だ）');
   g.addNeed('stress', -2);
 }
 function roundTableProp(x, y) {
@@ -2207,7 +2284,7 @@ registerPlace({
       floor: 'saibansho_stone',
       tiles: [
         '####################',
-        '#=w===w==d===w===w=#',
+        '#===w====dw========#',
         '#..................#',
         '#KKK..KKK..........#',
         '#..................#',
@@ -2226,7 +2303,7 @@ registerPlace({
       entities: [
         plate(1, 1, '破産係', 3, '#4e3420'),
         plate(6, 1, '民事受付', 3, '#4e3420'),
-        plate(12.5, 1, (g) => (g && since(g, 1998, 1) ? 'ラウンドテーブル法廷' : '調停室'), 5, '#4e3420'),
+        plate(12.5, 1, (g) => (g && since(g, 1998, 1) ? '簡裁 ラウンドテーブル法廷' : '簡裁 調停室'), 5, '#4e3420'),
         npc('sai_hasan', 2, 2, 'down', WHO.hasanClerk, { talk: posted('down', hasanTalk) }),
         npc('sai_minji', 7, 2, 'down', WHO.minjiClerk, { talk: posted('down', minjiUkeTalk) }),
         roundTableProp(13, 6),
@@ -2280,7 +2357,8 @@ registerPlace({
         const stage = j && j.bankrupt ? `${j.bankrupt.filed}:${j.bankrupt.stage}` : 'none';
         if (f.shinjinSeen === stage) return;
         f.shinjinSeen = stage;
-        await narrate(g, j && j.bankrupt ? '（審尋室。小さな部屋で、裁判官と机をはさんで座った。\n…あのときは、こんな日が来るとは思わなかった）' : '（審尋室。小さな部屋で、裁判官と机をはさんで座った）');
+        const again = !!(j && j.bankrupt && j.bankrupt.stage === 'opened' && !j.bankrupt.discharged); // the 免責審尋
+        await narrate(g, again ? '（また審尋室に呼ばれた。今日は免責審尋の日だ。\n…借りはじめたころは、こんな日が来るとは思わなかった）' : '（審尋室。小さな部屋で、裁判官と机をはさんで座った）');
       },
     },
 
@@ -2308,7 +2386,7 @@ registerPlace({
         r: 'saibansho_bar', G: 'saibansho_bargate', g: 'saibansho_gallery',
       },
       entry: { x: 10, y: 11, dir: 'up' },
-      warps: [{ x: 10, y: 12, room: 'lobby', tx: 9, ty: 8, dir: 'up' }],
+      warps: [{ x: 10, y: 12, room: 'lobby', tx: 9, ty: 8, dir: 'up', check: async (g) => { await narrate(g, '（見学を終えて、霞が関の裁判所に戻った）'); return true; } }],
       entities: [
         plate(7.5, 0.6, '最高裁判所 大法廷', 6, '#2a1e16', '#e8d8a8'),
         deskProp(1, 2, 19, 'bench', { lip: 7, drop: 0, closed: true, solid: false }),
@@ -2349,6 +2427,15 @@ function ownClothes(g) {
   return true;
 }
 onMorning((g) => { try { if (g.state && !serving(g)) ownClothes(g); } catch (e) { console.error(e); } });
+// Any day of a term, also one resumed from an old save that never saw the 入所 scene: the inmate's clothes, this
+// term's visit counter, and the days worked so far (the factory rank grows with them).
+function ensureInmate(g, pr) {
+  if (!g || !g.state || !pr || pr.kind === 'roueki' || pr.kind === 'shonenin') return;
+  const f = fl(g);
+  if (f.visitStart !== pr.start) { f.visitStart = pr.start; f.visits = 0; f.visited = []; }
+  wearUniform(g);
+  if (f.work && f.work.start === pr.start) f.work.days = Math.max(f.work.days || 0, Number(pr.work) || 0);
+}
 const inmateNo = (g, pr) => 1000 + ((((pr.start || 1) * 37 + (pr.caseId || 3) * 101) % 8999) + 8999) % 8999;
 const callName = (g) => (since(g, 2024, 4) ? `${(g.state.profile && g.state.profile.familyName) || g.state.name}さん` : null);
 
@@ -2361,10 +2448,10 @@ async function nyusho(g, pr) {
   if (pr.kind === 'roueki') return;
   wearUniform(g);
   const no = inmateNo(g, pr);
-  await narrate(g, ['（護送車を降りると、そこは高い塀の内側だった）', '（所持品をすべて預け、身体検査を受けた。\n私服をぬいで、受刑者の服に着替えた）']);
+  await narrate(g, ['（護送車を降りると、そこは高い塀の内側だった）', '（所持品をすべて預け、身体検査を受けた。\n私物は出所の日まで、ここで保管される）']);
   const cn = callName(g);
   await say(g, WHO.keimukan, cn
-    ? [`あなたの称呼番号は${no}番です。`, `ただ、ふだんは名前に「さん」をつけて呼びます。\n${cn}、ここでの規則を、しっかり覚えてください。`]
+    ? [`あなたの称呼番号は${no}番です。\n点呼や書類では、この番号を使います。`, `ただ、ふだんは名前に「さん」をつけて呼びます。\n${cn}、ここでの規則を、しっかり覚えてください。`]
     : [`今日から、おまえの称呼番号は${no}番だ。\nここでは、この番号で呼ばれる。`, '規則を守って、まじめに務めること。']);
   await narrate(g, since(g, 2006, 5)
     ? '（はじめの2週間ほどは、生活の決まりや作業のしかたを\n学ぶ「刑執行開始時の指導」を受ける）'
@@ -2376,7 +2463,7 @@ async function shusho(g) {
   const w = f.work;
   const pages = [];
   if (wore) pages.push('（預けていた私服に着替えた。\n袖を通すと、少しだけ大きく感じた）');
-  if (w && w.xp > 0 && w.start === f.nyusho) pages.push(`（工場で覚えた${WORK[w.line].name}の腕前は「${workRank(w.xp)}」。\n…この手で、もう一度やり直そう）`);
+  if (w && w.xp > 0 && WORK[w.line] && w.start === (lastPrison && lastPrison.start)) pages.push(`（工場で覚えた${WORK[w.line].name}の腕前は「${workRank(workSkill(w))}」。\n…この手で、もう一度やり直そう）`);
   if (pages.length) await narrate(g, pages);
 }
 onJustice('released', (g, info) => {
@@ -2424,6 +2511,8 @@ const WORK = {
 };
 const WORK_RANKS = [[0, '見習い'], [3, '一人前'], [7, '熟練'], [12, '班のまとめ役']];
 const workRank = (xp) => WORK_RANKS.reduce((a, [n, name]) => (xp >= n ? name : a), '見習い');
+// The skill is the care taken in the factory scenes plus the months of work (about one step per half a year worked).
+const workSkill = (w) => (w ? (w.xp || 0) + Math.floor(Math.max(0, (w.days || 0) - (w.days0 || 0)) / (MONTH_DAYS * 6)) : 0);
 const myWorkSpot = (g) => { const w = fl(g).work; return w && serving(g) && WORK[w.line] ? WORK[w.line].spot : null; };
 async function factoryWork(g, pr) {
   const f = fl(g);
@@ -2434,10 +2523,11 @@ async function factoryWork(g, pr) {
   if (pr.kind === 'kinko' && !pr.petition && !(f.work && f.work.start === pr.start)) return; // 禁錮: work only on request (the core asks)
   if (!f.work || f.work.start !== pr.start) {
     const ks = Object.keys(WORK);
+    // (the core's own line follows: 「今日から、この工場で作業をしてもらう」)
     const k = await ask(g, WHO.keimukan, kokin(g)
-      ? ['今日から工場に出てもらう。拘禁刑では、作業も\n立ち直りのための大事な時間だ。', '本人の希望と向き不向きも考えて決める。\nやってみたい作業はあるか？']
-      : ['今日から、この工場に出役だ。', '空いている作業の中から、希望を聞いておく。'], ks.map((x) => WORK[x].name));
-    f.work = { line: ks[clamp(k, 0, ks.length - 1)], xp: 0, start: pr.start, made: 0 };
+      ? ['工場の担当だ。拘禁刑では、作業も\n立ち直りのための大事な時間になる。', '本人の希望と向き不向きも考えて決める。\nやってみたい作業はあるか？']
+      : ['工場の担当だ。', '空いている作業の中から、希望を聞いておく。'], ks.map((x) => WORK[x].name));
+    f.work = { line: ks[clamp(k, 0, ks.length - 1)], xp: 0, start: pr.start, made: 0, days: Number(pr.work) || 0, days0: Number(pr.work) || 0 };
     const sp = WORK[f.work.line].spot;
     if (g.map.placeId === MU && g.map.roomId === 'kojo') g.placePlayer(sp[0], sp[1], 'up');
     await narrate(g, `（${WORK[f.work.line].name}の班に入った。\n先輩の受刑者が、だまって道具の使い方を見せてくれた）`);
@@ -2445,18 +2535,30 @@ async function factoryWork(g, pr) {
   const w = f.work;
   const L = WORK[w.line];
   const [what, opts] = L.steps[w.made % L.steps.length];
-  const before = workRank(w.xp);
+  const before = workRank(workSkill(w));
   const c = await ask(g, null, `（${what}）`, opts);
   if (c === 0) { w.xp += 2; g.addNeed('stress', -4); await narrate(g, '（手を動かしているあいだは、よけいなことを考えずにすむ。\n仕上がりを見て、担当の刑務官が小さくうなずいた）'); }
   else { w.xp += 1; g.addNeed('stress', 2); await narrate(g, '（検品で、やり直しを命じられた。\n…あせっても、いいことはひとつもない）'); }
   w.made += 1;
-  const after = workRank(w.xp);
+  const after = workRank(workSkill(w));
   if (after !== before) await narrate(g, `（${L.name}の腕前が「${after}」になった。\nこの工場で作った${L.made[w.made % L.made.length]}は、刑務所作業製品として\n一般の人に売られるらしい）`);
 }
 
 // ---------------------------------------------------------------- 改善指導・教科指導 (the classroom)
+// The term's first program: the evening of the first factory day, in the classroom, then back to the cell.
+async function firstProgram(g, pr) {
+  const f = fl(g);
+  f.progStart = pr.start;
+  await narrate(g, since(g, 2006, 5)
+    ? '（夕方、教室に呼ばれた。作業のあいまに、\n立ち直りのための「改善指導」を受けることになる）'
+    : '（夕方、教室に呼ばれた。週に何度か、\n教育の時間があるという）');
+  await g.goto(MU, 'kyoiku', 7, 4, 'up');
+  await classProgram(g, pr);
+  await g.goto(MU, 'kyoshitsu', 5, 5, 'down');
+}
 async function classProgram(g, pr) {
   const f = fl(g);
+  f.progStart = pr.start;
   const cs = (jus(g).record || []).slice().reverse().find((r) => r.outcome === 'prison') || {};
   const crime = cs.crime || '';
   if (!since(g, 2006, 5)) {
@@ -2673,9 +2775,12 @@ registerPlace({
         const f = fl(g);
         if (f.cellIntro !== pr.start) {
           f.cellIntro = pr.start;
-          await narrate(g, ['（共同室には、ほかに5人の受刑者がいた。\nだれも、こちらの事件のことは聞いてこない）', '（朝は早く起きて布団をたたみ、点検。\n昼は工場、夕方に戻って、夜9時ごろに消灯…）']);
+          // (a term resumed from an old save is already under way: no first-day scene)
+          if (day(g) - pr.start <= 2) await narrate(g, ['（共同室には、ほかに5人の受刑者がいた。\nだれも、こちらの事件のことは聞いてこない）', '（朝は早く起きて布団をたたみ、点検。\n昼は工場、夕方に戻って、夜9時ごろに消灯…）']);
           return;
         }
+        // the term's first 改善指導: the evening of the first factory day (a resumed term: a while after the cell)
+        if (pr.kind !== 'roueki' && f.progStart !== pr.start && (f.kojoSeen === pr.start || day(g) - pr.start >= MONTH_DAYS * 2)) await firstProgram(g, pr);
       },
     },
 
@@ -2726,7 +2831,9 @@ registerPlace({
       onEnter: async (g) => {
         if (!enteredByFlow(g, MU, 'kojo')) return;
         const j = jus(g);
-        if (j && j.prison) await factoryWork(g, j.prison);
+        if (!j || !j.prison) return;
+        fl(g).kojoSeen = j.prison.start;
+        await factoryWork(g, j.prison);
       },
     },
 
@@ -2760,7 +2867,7 @@ registerPlace({
       ],
       onEnter: async (g) => {
         if (!enteredByFlow(g, MU, 'undojo')) return;
-        if (serving(g)) await narrate(g, '（運動の時間。高いフェンスの向こうに、\n冬の木がかすかに見える。…外の空気だ）');
+        if (serving(g)) await narrate(g, '（運動の時間。高いフェンスの向こうに、\n木々のこずえがかすかに見える。…外の空気だ）');
       },
     },
 
@@ -2869,7 +2976,7 @@ registerPlace({
         const pr = j && j.prison;
         if (pr && f.shinriSeen !== pr.start) {
           f.shinriSeen = pr.start;
-          await narrate(g, '（面接室に呼ばれた。机の向こうに、\n地方更生保護委員会の委員が2人座っている）');
+          await narrate(g, '（面接室に呼ばれた。机の向こうに、\n地方更生保護委員会の委員と、保護観察官が座っている）');
         }
       },
     },

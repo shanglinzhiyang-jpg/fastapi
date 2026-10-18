@@ -31,7 +31,7 @@
 //   relief fades after a couple a day), machi_intro, machi_kaicho.
 // Every person, shop and brand here is fictional.
 
-import { registerPlace } from '../engine/map.js';
+import { registerPlace, PLACES } from '../engine/map.js';
 import { defineTile, R, P, disc, oval, outline, inset, dither, shadowEllipse } from '../engine/tiles.js';
 import { LOOKS } from '../engine/sprites.js';
 import { registerItem, ITEMS, SKILLS } from '../engine/state.js';
@@ -1002,6 +1002,12 @@ export const MACHI_W = 48;
 export const MACHI_H = 36;
 export const MACHI_TOP = 2;
 
+function machiSmoking() {
+  const api = PLACES.kanraku && PLACES.kanraku.api;
+  if (!api || !api.smokingSpot) return [];
+  return [api.smokingSpot(36, 12, { town: 'machi' }), api.smokingPost(20, 18, { town: 'machi' }), api.smokingPost(12, 14, { town: 'machi' })];
+}
+
 function generate() {
   const W = MACHI_W, H = MACHI_H;
   const c = grid(W, H, 'grass');
@@ -1099,7 +1105,7 @@ function generate() {
 
     // ---- ドット区役所 (js/places/kuyakusho.js): the north-east corner beyond the arcade
     { type: 'building', x: 43, y: 2, w: 4, h: 3, door: 2, place: 'kuyakusho', name: 'ドット区役所', kind: 'office', rise: 0, wall: '#e4e2d8', roof: '#5a6a7a', canopy: '#2a5088', plants: true, sign: { text: 'ドット区役所', bg: '#2a3a5a', color: '#ffffff' } },
-    { type: 'sign', x: 44, y: 4, text: ['「ドット区役所」の案内板だ。', '1階：住民課・税務課（確定申告の相談）\n2階：選挙管理委員会・期日前投票所', '3階：区民相談室（暮らしやお金の相談）\n5階：区議会'] },
+    { type: 'sign', x: 44, y: 4, text: ['入口のわきに「ドット区役所」の各階の案内が掲げてある。', '1階：住民課・税務課（確定申告の相談）\n2階：選挙管理委員会・期日前投票所', '3階：区民相談室（暮らしやお金の相談）\n5階：区議会'] },
 
     // ---- residential side (doors on y 27) and neighbours' houses
     { type: 'building', x: 2, y: 22, w: 8, h: 6, door: 4, place: 'mansion', name: 'ドットレジデンス', kind: 'mansion', sign: { text: 'ドットレジデンス' } },
@@ -1109,6 +1115,9 @@ function generate() {
     { type: 'building', x: 9, y: 30, w: 6, h: 4, door: 3, name: 'ハイツこもれび', kind: 'house', wall: '#e6eef2', roof: '#8a5a33', sign: { text: 'ハイツこもれび', bg: '#ffffff' },
       text: ['アパート「ハイツこもれび」。', 'どこかの部屋から、ギターの練習の音が聞こえる。\n…同じフレーズばかりだ。'] },
 
+    // ---- 喫煙所 by the bicycle parking and 路上喫煙禁止 plates (ネオン街's shared props, js/world/kanraku.js;
+    // the rule itself is the justice core's 'machi' smoking rule: the street is no-smoking from 2020-04)
+    ...machiSmoking(),
     // ---- props & signs
     gate(13, 13),
     { type: 'sign', x: 13, y: 13, solid: true, text: ['「ドット商店街」の入口アーチだ。', 'はなや・スーパー・ラーメン・カフェ・美容院…\nアーケードの下に、お店がずらりと並んでいる。'] },
@@ -1239,6 +1248,16 @@ async function superShop(g, key) {
   if (!list.length) { await g.say('（いまは品切れのようだ…）'); return 0; }
   return g.shop(list, { title: s.title + (sale < 1 ? '（水曜特売 2割引）' : ''), greeting: sale < 1 ? '本日は特売日！2割引ですよ！' : GREET[key] });
 }
+// The daily-goods shelf: shopping, or 「万引きする…？」 (a clear warning first, then
+// g.commitCrime('shoplifting') — ネオン街's shared api, looked up when used).
+async function superDaily(g) {
+  const api = PLACES.kanraku && PLACES.kanraku.api;
+  if (!api) return superShop(g, 'daily');
+  const k = await g.ask('日用品やインスタント食品の棚だ。', ['買い物する', 'ながめるだけ', '万引きする…？'], { cancel: 1 });
+  if (k === 0) return superShop(g, 'daily');
+  if (k === 2) return api.shoplift(g, { where: 'スーパー まるどっと', items: ['machi_cupmen', 'machi_bathsalt', 'machi_wax'] });
+  return 0;
+}
 async function superClerk(g, npc) {
   const o = who(npc);
   const i = await g.ask(isWed(g) ? 'いらっしゃいませ！\n本日水曜日は特売日、\n食材とお惣菜が2割引です！' : 'いらっしゃいませ！\n毎週水曜日は特売日ですよ〜。', ['食材をまとめて買う', 'おすすめレシピ', '自炊のコツ', 'なんでもない'], { ...o, cancel: 3 });
@@ -1299,7 +1318,7 @@ registerPlace({
         { x: 9, y: 2, w: 2, on: 'action', run: (g) => superShop(g, 'staple') },
         { x: 6, y: 4, w: 2, h: 2, on: 'action', run: (g) => superShop(g, 'staple') },
         { x: 2, y: 4, w: 2, h: 2, on: 'action', run: (g) => superShop(g, 'veg') },
-        { x: 10, y: 4, w: 2, h: 2, on: 'action', run: (g) => superShop(g, 'daily') },
+        { x: 10, y: 4, w: 2, h: 2, on: 'action', run: superDaily },
         { x: 12, y: 2, w: 3, on: 'action', run: (g) => superShop(g, 'books') },
         { x: 12, y: 7, w: 2, on: 'action', run: (g) => g.say('買い物かごが積んである。\n…今日は何を作ろうかな？') },
       ],

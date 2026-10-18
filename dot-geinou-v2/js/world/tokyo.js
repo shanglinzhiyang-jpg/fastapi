@@ -36,6 +36,7 @@ async function busToMachi(g) {
   if (PLACES.machi) dests.push({ label: 'ドット商店街', place: 'machi', x: 38, y: 20, flag: 'machi_intro', walk: '大通りを西へまっすぐ' });
   if (PLACES.minato) dests.push({ label: 'テレビ局エリア', place: 'minato', x: 35, y: 28, flag: 'minato_intro', walk: '大通りを東へまっすぐ' });
   if (PLACES.nagatacho) dests.push({ label: '永田町・霞が関', place: 'nagatacho', x: 45, y: 51, flag: 'nagatacho_intro', walk: 'まん中の通りを北へまっすぐ' });
+  if (PLACES.kanraku) dests.push({ label: 'ネオン街', place: 'kanraku', x: 35, y: 9, flag: 'kanraku_intro', walk: 'まん中の通りを南へまっすぐ' });
   if (!dests.length) { await g.say('バス停だ。時刻表を見ると…次のバスはしばらく来ないみたい。'); return; }
   const i = await g.ask('バス停だ。\nどこ行きのバスに乗る？（¥210）', [...dests.map((d) => d.label), 'やめておく'], { cancel: dests.length });
   if (i < 0 || i >= dests.length) return;
@@ -107,6 +108,23 @@ function machiSignpost(x, y) {
   };
 }
 
+// Signpost by the south exit: 「↓ ネオン街」 (kanraku.js; an arrow board pointing down).
+function kanrakuSignpost(x, y) {
+  const F = (ctx, x0, y0, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x0, y0, w, h); };
+  return {
+    type: 'prop', x, y, w: 1, h: 1,
+    text: ['道しるべだ。', '↓ ネオン街\n（居酒屋・ゲームセンター・カプセルホテル・交番 など）\nこのまん中の通りを南へまっすぐ。', '夜の繁華街だ。客引きや「うまい話」には気をつけよう。\n東京駅前のバス停からは、ネオン街行きのバスも出ている。（¥210）'],
+    draw(ctx, sx, sy) {
+      F(ctx, sx + 3, sy + 14.5, 10, 1.5, 'rgba(0,0,0,0.22)');
+      F(ctx, sx + 6.5, sy - 4, 2.5, 19, '#4a2e18'); F(ctx, sx + 7, sy - 4, 1, 19, '#8a5a33');
+      F(ctx, sx - 15.5, sy - 10.5, 31, 10, '#3a2512');
+      F(ctx, sx - 15, sy - 10, 30, 9, '#c48a52'); F(ctx, sx - 15, sy - 10, 30, 1, '#e0b07a');
+      F(ctx, sx - 15, sy - 2, 30, 0.5, '#8a5a33');
+      text(ctx, '↓ネオン街', sx, sy - 8.5, { size: 5, align: 'center', color: '#fff6e0', shadow: '#3a2512' });
+    },
+  };
+}
+
 function generate() {
   const W = TOKYO_W, H = TOKYO_H;
   const c = grid(W, H, 'grass');
@@ -125,6 +143,8 @@ function generate() {
   for (let y = 19; y <= 23; y++) set(c, 0, y, y === 19 || y === 23 ? 'sidewalk' : 'road');
   // ---- north exit: the center avenue continues to 永田町・霞が関 (nagatacho.js; warps below)
   if (PLACES.nagatacho) for (let x = 38; x <= 42; x++) set(c, x, 0, x === 38 || x === 42 ? 'sidewalk' : x === 40 ? 'road_line_v' : 'road');
+  // ---- south exit: the center avenue continues to ネオン街 (kanraku.js; warps below)
+  if (PLACES.kanraku) for (let x = 38; x <= 42; x++) set(c, x, H - 1, x === 38 || x === 42 ? 'sidewalk' : x === 40 ? 'road_line_v' : 'road');
 
   // ---- block TL: NHK plaza
   fill(c, 2, 11, 15, 7, 'stone');
@@ -257,10 +277,12 @@ function generate() {
   entities.push(machiSignpost(2, 18));
   entities.push(minatoSignpost(W - 2, 18));
   if (PLACES.nagatacho) entities.push(nagatachoSignpost(43, 3));
+  if (PLACES.kanraku) entities.push(kanrakuSignpost(43, 43));
   const warps = [];
   for (let y = 19; y <= 23; y++) warps.push({ x: 0, y, place: 'machi', room: 'main', tx: 46, ty: y - 3, dir: 'left' }); // machi's road: rows 16..20
   for (let y = 19; y <= 23; y++) warps.push({ x: W - 1, y, place: 'minato', room: 'main', tx: 1, ty: y + 5, dir: 'right' }); // minato's road: rows 24..28
   if (PLACES.nagatacho) for (let x = 38; x <= 42; x++) warps.push({ x, y: 0, place: 'nagatacho', room: 'main', tx: x, ty: 54, dir: 'up' }); // nagatacho's south exit: same columns
+  if (PLACES.kanraku) for (let x = 38; x <= 42; x++) warps.push({ x, y: H - 1, place: 'kanraku', room: 'main', tx: x, ty: 1, dir: 'down' }); // kanraku's north edge: same columns
 
   return { w: W, h: H, cells: c, entities, warps, events: [{ x: 6, y: 34, w: 4, h: 2, on: 'action', run: streetLive }, { x: 6, y: 36, w: 4, h: 1, on: 'step', run: async (g) => { if (!g.flag('stageHint')) { g.setFlag('stageHint'); await g.say('小さなステージだ。ステージの前でAボタンを押すとパフォーマンスできそうだ。'); } } }] };
 }

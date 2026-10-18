@@ -145,14 +145,18 @@ function specialRibbon(ctx, cx, y, t = 0) {
 // 「ドット芸能界&政治界」 lettering built from the pixel font: each part has its own fill
 // ramp with banded shading, a white rim, a 3D extrusion and a dark outline. Sizes are
 // multiples of the font's 16px grid so every stroke stays crisp. Built once the font is ready.
-//   ドット (pink, 48px, on the baseline) 芸能界 (gold, 64px) & (red, 48px) 政治界 (blue, 64px)
+//   ドット (pink, 48px, on the baseline) 芸能界 (gold, 64px) ＆ (red, 64px) 政治界 (blue, 64px)
+// (a part can also be a hand-drawn mask: { mask: ['.#.', …], cell } instead of s / size)
 export const GAME_TITLE = 'ドット芸能界&政治界　ライフスペシャル';
 const LOGO_SIZE = 64;
 const LOGO_PARTS = [
   { s: 'ドット', ramp: 'pink', size: 48, dy: 8 },
   { s: '芸能界', ramp: 'gold', size: 64, gap: 2 },
-  { s: '&', ramp: 'red', size: 48, gap: 2, dy: 4 },
-  { s: '政治界', ramp: 'blue', size: 64, gap: 2 },
+  // the full-width ampersand at the kanji size, thin (no bold): its two loops stay open and
+  // it reads as 「＆」 at a glance (the half-width 48px one filled in to a red blob). The
+  // glyph's own side bearings give it room, so no extra gap
+  { s: '＆', ramp: 'red', size: 64, gap: 0, bold: false },
+  { s: '政治界', ramp: 'blue', size: 64, gap: 0 },
 ];
 let LOGO = null;
 
@@ -178,9 +182,10 @@ const EXT_COL = {
 
 export function buildLogo(parts = LOGO_PARTS) {
   const mx = makeCanvas(4, 4)[1];
-  const widths = parts.map((p) => Math.ceil(measure(mx, p.s, p.size)));
+  // a part may be a hand-drawn pixel mask (rows of '#' / '.', cell px per dot) instead of text
+  const widths = parts.map((p) => (p.mask ? p.mask[0].length * (p.cell || 4) : Math.ceil(measure(mx, p.s, p.size))));
   const PAD = 12;
-  const big = Math.max(...parts.map((p) => p.size));
+  const big = Math.max(...parts.map((p) => p.size || (p.mask ? p.mask.length * (p.cell || 4) : 0)));
   const xs = [];
   let cx = PAD;
   parts.forEach((p, i) => { if (i) cx += p.gap || 0; xs.push(cx); cx += widths[i]; });
@@ -190,6 +195,12 @@ export function buildLogo(parts = LOGO_PARTS) {
   tx.textBaseline = 'top';
   tx.fillStyle = '#fff';
   parts.forEach((p, i) => {
+    if (p.mask) {
+      const c = p.cell || 4;
+      const y0 = PAD + Math.round((big - p.mask.length * c) / 2) + (p.dy || 0);
+      p.mask.forEach((row, r) => { for (let k = 0; k < row.length; k++) if (row[k] === '#') tx.fillRect(xs[i] + k * c, y0 + r * c, c, c); });
+      return;
+    }
     tx.font = `${p.size}px "DotGothic16", monospace`;
     // smaller parts sit on the optical centre line of the big ones
     tx.fillText(p.s, xs[i], PAD + Math.round((big - p.size) / 2) + (p.dy || 0));

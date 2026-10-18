@@ -17,7 +17,9 @@
 // kanraku.js cannot take a shop down):
 //   api.shoplift(g, { where, items: [itemId...] })   「万引きする…？」 with a warning → g.commitCrime('shoplifting')
 //   api.tobaccoCounter(g, npc, { where })           タバコ / お酒 at a counter: age check (ageOf) → g.buyCigarettes / beer
-//   api.fareEvasion(g, { fare, where, dest })       無賃乗車 → g.commitCrime('fare_evasion'); resolves { ok, caught }
+//   api.fareEvasion(g, { fare, where, dest, ride })  無賃乗車 → (ride) → g.commitCrime('fare_evasion'); { ok, caught }
+//   api.smokingSpot(x, y, { town }) / api.smokingPost(x, y, { town })   a 喫煙所 prop (3x2) / a 路上喫煙禁止
+//                                                   plate (only while the town's rule bans the street)
 //
 // Everything is fictional: the district, the shops, the 鬼灯組 (no real group), the lenders (the core's
 // fictional brands), every person. Crimes are abstract choices routed through the justice core
@@ -49,7 +51,7 @@ import { makeCanvas, shade, mix, fmtMoney, clamp, SW, SH, TILE, VIEW_W, VIEW_H, 
 import { registerItem, ITEMS, AGENCIES } from '../engine/state.js';
 import { onMorning } from '../engine/life.js';
 import { ageOf } from '../engine/profile.js';
-import { audio } from '../engine/audio.js';
+import { audio, registerSong } from '../engine/audio.js';
 import { lawDate, registerSmokingRule, LENDERS, lenderRate, rateLawText, loanBalance, MONTH_DAYS, CRIMES, isPolitician } from '../engine/crime.js';
 import { busStop } from './props.js';
 import { grid, set, put, fill } from './townkit.js';
@@ -836,8 +838,8 @@ const FACADES = {
     const gy = H - 46;
     R(c, 0, gy, W, 46, '#46484e'); R(c, 0, gy, W, 3, '#2a2c32');
     doorway(c, dx, H, 'heavy');
-    R(c, dx + 36, H - 36, 22, 14, '#c9a86a'); R(c, dx + 37, H - 35, 20, 12, '#e8d8a8');
-    sign(c, '鬼灯興業', dx + 47, H - 29, 6, '#3a2a10', { bold: false });
+    R(c, dx + 36, H - 40, 52, 20, '#c9a86a'); R(c, dx + 38, H - 38, 48, 16, '#e8d8a8');
+    sign(c, '鬼灯興業', dx + 62, H - 30, 11, '#3a2a10', { maxW: 44 });
     R(c, dx + 10, H - 46, 12, 4, '#2a2a30');
     live.push({ kind: 'lamp', x: dx + 11, y: H - 43, w: 10, h: 2, col: '#e8b86a', mode: 'flicker' });
     glows.push({ x: (dx + 16) / 2, y: (H - 40) / 2, col: '#c8904a', r: 12 });
@@ -946,15 +948,30 @@ function paintGate(c) {
   sign(c, 'ネオン街一番通り', 7 * 16, 28, 16, '#fff6c8', { shadow: '#5a0018', maxW: 7 * 32 - 30 });
   R(c, 4, 0, 7 * 32 - 8, 6, '#2a2632');
 }
-// 喫煙所: a partitioned smoking booth (from 2005), before that an ashtray stand
-function smokingSpot(x, y) {
+// 喫煙所: a partitioned smoking booth where the street is a 路上喫煙禁止地区 (here from 2005-08; any
+// town with a smoking rule: opts.town), before that an ashtray stand. Also used by machi.js
+// through PLACES.kanraku.api.smokingSpot.
+const smokeRule = (g, town) => { try { return typeof g.canSmokeHere === 'function' ? g.canSmokeHere(town) : null; } catch (e) { console.error(e); return null; } };
+const boothNow = (g, town) => { const r = smokeRule(g, town); return !!(r && !r.ok); };
+function smokingSpot(x, y, opts = {}) {
+  const town = opts.town || 'kanraku';
   return {
     type: 'prop', x, y, w: 3, h: 2, solid: true,
-    talk: (g) => smokingSpotTalk(g),
+    talk: (g) => smokingSpotTalk(g, town),
     draw(ctx, sx, sy, g) {
-      const booth = since(g, 2005, 8);
+      const booth = boothNow(g, town);
       blit(ctx, bake(booth ? 'kitsuen' : 'haizara', 3 * 32, 2 * 32 + 30, booth ? paintBooth : paintAshtray), sx, sy - 15);
     },
+  };
+}
+// a 路上喫煙禁止 plate on a post, shown only while the town's rule bans smoking on the street
+function smokingPost(x, y, opts = {}) {
+  const town = opts.town || 'kanraku';
+  return {
+    type: 'prop', x, y, w: 1, h: 1, solid: true,
+    cond: (g) => boothNow(g, town),
+    talk: (g) => noSmokingSign(g, town),
+    draw(ctx, sx, sy) { ctx.drawImage(tileImageHD('kanraku_nosmoke'), sx, sy, 16, 16); },
   };
 }
 function paintBooth(c) {
@@ -1102,7 +1119,9 @@ async function tobaccoCounter(g, npc, opts = {}) {
   const k = await g.ask('レジの後ろに、タバコとお酒が並んでいる。\n「二十歳未満の方には販売できません」', ['やめておく', 'タバコ（1箱）', 'お酒（缶ビール）'], { cancel: 0 });
   if (k <= 0) return null;
   const minor = age(g) < 20;
-  if (since(g, 2000)) await g.say(minor ? 'いらっしゃいませ。\n…恐れ入ります、年齢確認のため\n身分証を見せていただけますか？' : '年齢確認のため、\n画面の「はい」を押してください。', o);
+  // 身分証での年齢確認は2001年12月の通知から徹底、レジ画面のタッチ確認は2010年代はじめから広まった
+  if (minor) await g.say(since(g, 2001, 12) ? 'いらっしゃいませ。\n…恐れ入ります、年齢確認のため\n身分証を見せていただけますか？' : '…ずいぶん若く見えるねえ。\nいくつ？ 学生さん？', o);
+  else if (since(g, 2012)) await g.say('年齢確認のため、\n画面の「はい」を押してください。', o);
   if (k === 1) {
     if (typeof g.buyCigarettes !== 'function') return null;
     const r = g.buyCigarettes(1, { counter: true });
@@ -1146,7 +1165,9 @@ async function fareEvasion(g, opts = {}) {
   }
   return { ok: true, caught: !!res.caught, res };
 }
-export const KANRAKU_API = { shoplift, tobaccoCounter, fareEvasion };
+// smokingSpot(x, y, { town }) / smokingPost(x, y, { town }): a 喫煙所 prop (3x2) and a 路上喫煙禁止
+// plate (shown only while the town's smoking rule bans the street) for other towns.
+export const KANRAKU_API = { shoplift, tobaccoCounter, fareEvasion, smokingSpot, smokingPost };
 
 registerItem('kanraku_beer', {
   name: '缶ビール', price: 250,
@@ -1182,10 +1203,10 @@ function playerCall(g) { const x = g.state.profile && g.state.profile.gender; re
 function phone110(g) { return eraKey(g) === 'reiwa' ? 'スマホで110番した' : since(g, 1999) ? 'ケータイで110番した' : '近くの公衆電話に走って、110番した'; }
 
 // ====================================================================== town scripts
-async function smokingSpotTalk(g) {
+async function smokingSpotTalk(g, town = 'kanraku') {
   const j = jus(g);
   const has = g.hasItem('tabako') || !!(j && j.smoke && j.smoke.cigs > 0);
-  const booth = since(g, 2005, 8);
+  const booth = boothNow(g, town);
   if (!has) {
     await g.say(booth ? ['仕切りで囲まれた「喫煙所」だ。', 'このあたりは路上喫煙禁止地区。\nタバコを吸う人は、ここで吸うことになっている。'] : ['大きな灰皿が置いてある。', '通りがかりの人が、ここで一服していく。']);
     return;
@@ -1193,12 +1214,13 @@ async function smokingSpotTalk(g) {
   const minor = age(g) < 20;
   const k = await g.ask(minor ? '（タバコを持っている…。\nでも、二十歳未満の喫煙は法律で禁止されている）' : booth ? '喫煙所だ。一服していく？' : '灰皿だ。一服していく？', ['やめておく', minor ? '吸う…' : '一服する'], { cancel: 0 });
   if (k !== 1) return;
-  if (typeof g.smoke === 'function') await g.smoke({ place: 'kanraku_kitsuen' });
+  if (typeof g.smoke === 'function') await g.smoke({ place: 'kitsuenjo' });
 }
-async function noSmokingSign(g) {
-  const rule = typeof g.canSmokeHere === 'function' ? g.canSmokeHere('kanraku') : null;
+async function noSmokingSign(g, town = 'kanraku') {
+  const rule = smokeRule(g, town);
   if (!rule || rule.ok) { await g.say('「吸い殻のポイ捨てはやめましょう」と書いてある。'); return; }
-  await g.say([`「路上喫煙禁止地区」\n${rule.law || '区の条例'}`, rule.fine ? `違反すると、過料${YEN_MARK}${Number(rule.fine).toLocaleString('ja-JP')}円。\nタバコは、大通りの「喫煙所」で。` : 'タバコは、指定の喫煙所で。']);
+  const fine = rule.fine ? `違反すると、過料${YEN_MARK}${Number(rule.fine).toLocaleString('ja-JP')}円。\n` : '';
+  await g.say([`「路上喫煙禁止地区」\n${rule.law || '区の条例'}`, `${fine}タバコは、指定の「喫煙所」で。`]);
 }
 async function busKanraku(g) {
   const dests = [{ label: '東京駅前', place: 'tokyo', x: 53, y: 31 }];
@@ -1791,6 +1813,8 @@ registerSmokingRule('kanraku', (g) => (since(g, 2005, 8)
   ? { ok: false, area: 'ネオン街（路上喫煙禁止地区）', law: '（架空の）ドット区路上喫煙防止条例', fine: 2000, patrol: 0.3, smokingArea: true }
   : { ok: true, area: 'ネオン街' }));
 registerSmokingRule('kanraku_kitsuen', (g) => ({ ok: true, area: since(g, 2005, 8) ? 'ネオン街の指定喫煙所' : 'ネオン街の灰皿の前' }));
+// any 喫煙所 / 灰皿 prop made by smokingSpot (kanraku, machi …)
+registerSmokingRule('kitsuenjo', { ok: true, area: '指定の喫煙所' });
 
 // ====================================================================== interiors: shared bits
 const exitRow = (n) => '#'.repeat(n);
@@ -2249,6 +2273,12 @@ async function paparazzi(g, cast) {
     await g.say(['（店を出たとたん、フラッシュが光った！）', '週刊ドットです！\nいまのお店、常連なんですか？'], { name: '週刊誌のカメラマン', look: { hair: 'cap', hat: '#5a4a3a', hairColor: 'brown', skin: 'tan', top: '#8a7a5a', bottom: '#4a4038' } });
     await narrate(g, '（顔をそむけたが、何枚も撮られてしまった…）');
   });
+  // The article (and how the player answers it) is darkside.js's 'scoop_kyaba' when that module is
+  // loaded: it arrives as a follow-up a few days later, so the sanction is not applied twice.
+  const dark = typeof window !== 'undefined' ? window.__dark : null;
+  if (dark && dark.EVENTS && dark.EVENTS.scoop_kyaba && typeof dark.schedule === 'function') {
+    try { dark.schedule(g, 'scoop_kyaba', 2 + Math.floor(rnd() * 3), {}); f.photoScoop = today(g); return; } catch (e) { console.error(e); }
+  }
   if (pol && typeof g.politicalScandal === 'function') {
     try { g.politicalScandal('private', { name: 'キャバクラ通い', severity: 2 }); } catch (e) { console.error(e); }
   } else if (typeof g.careerSanction === 'function') {
@@ -2478,6 +2508,918 @@ registerPlace({
         { type: 'sign', x: 10, y: 6, text: '番号札の発券機だ。\n「ご相談の方は、番号札をお取りください」' },
       ],
       onEnter: (g) => firstVisit(g, 'shohisha', ['いらっしゃいませ。ドットローンです。', 'ご相談は、カウンターへどうぞ。'], LOAN_STAFF),
+    },
+  },
+});
+
+// ====================================================================== music (the interiors)
+registerSong('kan_arcade', {
+  bpm: 152, step: 0.5,
+  tracks: [
+    { wave: 'square', vol: 0.035, notes: 'E5 G5 B5 E6 D6 B5 G5 B5 | C5 E5 G5 C6 B5 G5 E5 G5 | D5 F#5 A5 D6 C6 A5 F#5 A5 | B4 D#5 F#5 B5 A5 F#5 D#5 F#5 | E5 . E5 G5 . B5 A5 G5 | C6 . B5 A5 G5 . E5 . | D5 . F#5 A5 . D6 C6 A5 | B5 - - . D#5 . F#5 .' },
+    { wave: 'triangle', vol: 0.12, notes: 'E2 E3 E2 E3 E2 E3 E2 E3 | C2 C3 C2 C3 C2 C3 C2 C3 | D2 D3 D2 D3 D2 D3 D2 D3 | B1 B2 B1 B2 B1 B2 D#2 F#2' },
+    { wave: 'drum', vol: 0.1, notes: 'k h s h k k s h | k h s h k h s s' },
+  ],
+});
+registerSong('kan_shady', {
+  bpm: 70, step: 0.5,
+  tracks: [
+    { wave: 'triangle', vol: 0.1, notes: 'A2 . . A2 . . A2 . | G#2 . . G#2 . . G#2 . | G2 . . G2 . . G2 . | F#2 . . F2 . . E2 .' },
+    { wave: 'square', vol: 0.016, notes: 'A3 . C4 . E4 . . . | . . . . D#4 . . . | . . . . E4 . C4 . | B3 - - - . . . .' },
+    { wave: 'drum', vol: 0.04, notes: 'k . . . h . . . | k . . k h . . .' },
+  ],
+});
+
+// ====================================================================== クイック融資 ('yamikin': 闇金, illegal)
+// A cramped office on the 3rd floor of an old 雑居ビル; no 貸金業の登録番号 anywhere. Borrowing is
+// g.borrow('yamikin') after a strong warning (they also take the family's and the workplace's phone
+// numbers: the basis of the harassment). What follows comes through the justice core's loan events
+// (loanTick: messages and calls → the visit at the door → the "work" offer) — not from this file.
+// The right answers are shown here too: 交番・警察、弁護士・法テラス、区役所の多重債務相談.
+const YAMI_BOSS = { name: 'クイック融資の男', look: { hair: 'slick', hairColor: 'black', skin: 'tan', top: '#3a2a3a', bottom: '#1e1e26', jacket: true, tie: '#c9a227', glasses: 'sun' } };
+const YAMI_KID = { name: '若い男', look: { hair: 'spiky', hairColor: 'brown', skin: 'fair', top: '#5a1a2a', bottom: '#1e1e26' } };
+const YAMI_WOMAN = { name: '封筒を持った女性', look: { hair: 'bob', hairColor: 'brown', skin: 'fair', top: '#8a9aa8', bottom: '#4a4a5a', skirt: true } };
+const yamiLoans = (g) => { const j = jus(g); return j ? (j.loans || []).filter((l) => l.lender === 'yamikin' && l.status !== 'void' && l.status !== 'paid') : []; };
+const helpWhere = (g) => `${since(g, 2007, 4) ? '区役所の多重債務相談' : '消費生活センター'}、${since(g, 2006, 10) ? '法テラス' : '弁護士会'}、警察`;
+
+tile('yami_floor', { variants: 3 }, (c, r, f, v) => {
+  R(c, 0, 0, 32, 32, '#6e6c5c');
+  for (let y = 0; y < 32; y += 16) for (let x = 0; x < 32; x += 16) {
+    R(c, x, y, 16, 16, ((x + y) / 16 + v) % 2 ? '#74725f' : '#6a6858');
+    R(c, x, y, 16, 1, '#7e7c68'); R(c, x, y, 1, 16, '#7a7864');
+  }
+  speckle(c, r, ['#5e5c4e', '#807e6a', '#626050'], 50);
+  if (v === 1) oval(c, 5, 13, 16, 8, 'rgba(58,48,30,0.28)'); // an old stain
+  if (v === 2) { R(c, 20, 9, 2, 2, '#2e2a22'); R(c, 9, 22, 2, 1, '#2e2a22'); R(c, 24, 25, 6, 1, '#5a584a'); } // burns, a scuff
+});
+tile('yami_desk', { solid: true, obj: true, talkThrough: true }, (c) => {
+  shadowEllipse(c, 16, 30, 15, 2);
+  R(c, 0, 10, 32, 20, '#7a7e86'); R(c, 0, 10, 32, 5, '#9aa0a8'); R(c, 0, 10, 32, 1, '#c0c6ce'); R(c, 0, 15, 32, 1, '#565a62');
+  R(c, 3, 17, 12, 11, '#6a6e76'); R(c, 4, 22, 10, 1, '#4a4e56'); R(c, 8, 19, 3, 1, '#c8ccd2'); R(c, 8, 25, 3, 1, '#c8ccd2');
+  R(c, 2, 4, 9, 7, '#1e1e22'); R(c, 3, 3, 7, 2, '#2e2e34'); R(c, 4, 7, 5, 2, '#3a3a40'); // a black phone
+  R(c, 13, 6, 8, 5, '#d8d0b8'); R(c, 14, 7, 6, 3, '#9ac89a'); R(c, 14, 8, 6, 1, '#7aa87a'); // a bundle of notes
+  disc(c, 26, 9, 3, '#8a8e96'); R(c, 24, 7, 5, 2, '#e4e0d4'); P(c, 25, 6, '#e86a3a'); // a full ashtray
+  outline(c, { tint: 0.3 });
+});
+tile('yami_sofa', { solid: true, obj: true }, (c) => {
+  shadowEllipse(c, 16, 29, 15, 2);
+  R(c, 0, 6, 32, 22, '#2a2a30'); R(c, 0, 6, 32, 3, '#46464e'); R(c, 0, 24, 32, 4, '#18181c');
+  R(c, 2, 12, 28, 10, '#34343c'); R(c, 2, 12, 28, 1, '#4c4c56');
+  R(c, 8, 15, 8, 3, '#c8b878'); R(c, 11, 13, 2, 7, '#c8b878'); // tape over a tear
+  R(c, 22, 18, 5, 1, '#55555f');
+  outline(c, { tint: 0.3 });
+});
+tile('yami_table', { solid: true, obj: true }, (c) => {
+  shadowEllipse(c, 16, 26, 14, 3);
+  R(c, 2, 12, 28, 9, '#5a4a3a'); R(c, 2, 12, 28, 2, '#7a6a52'); R(c, 4, 21, 3, 6, '#3a2e22'); R(c, 25, 21, 3, 6, '#3a2e22');
+  R(c, 6, 8, 11, 7, '#f2efe6'); R(c, 7, 9, 9, 1, '#8a8a8a'); R(c, 7, 11, 6, 1, '#8a8a8a'); R(c, 13, 12, 3, 2, '#d23a3a'); // a contract, a red seal
+  disc(c, 23, 11, 3, '#9aa0aa'); R(c, 21, 9, 5, 1, '#e4e0d4'); // ashtray
+  outline(c, { tint: 0.3 });
+});
+tile('yami_safe', { solid: true, obj: true }, (c) => {
+  shadowEllipse(c, 16, 30, 12, 2);
+  R(c, 4, 4, 24, 26, '#2e4036'); R(c, 4, 4, 24, 2, '#4a5e52'); R(c, 26, 4, 2, 26, '#1e2a24');
+  R(c, 7, 8, 18, 18, '#26362e'); R(c, 7, 8, 18, 1, '#3a4c42');
+  disc(c, 13, 16, 4, '#c8b878'); disc(c, 13, 16, 2, '#8a7a4a'); P(c, 13, 13, '#fff0c0');
+  R(c, 19, 14, 4, 6, '#c8b878'); R(c, 19, 14, 4, 1, '#fff0c0');
+  outline(c, { tint: 0.3 });
+});
+tile('yami_cabinet', { solid: true, obj: true }, (c) => {
+  shadowEllipse(c, 16, 30, 12, 2);
+  R(c, 5, 1, 22, 29, '#8a9098'); R(c, 5, 1, 22, 2, '#aab0b8'); R(c, 25, 1, 2, 29, '#5a6068');
+  for (let i = 0; i < 4; i++) { const y = 4 + i * 6.5; R(c, 7, y, 18, 5, '#7a8088'); R(c, 7, y, 18, 1, '#9aa0a8'); R(c, 13, y + 2, 6, 1, '#d8dce2'); R(c, 8, y + 1, 3, 2, '#f2efe6'); }
+  R(c, 18, 17, 6, 3, '#6a7078'); // a dent
+  outline(c, { tint: 0.3 });
+});
+tile('yami_plant', { solid: true, obj: true }, (c) => {
+  shadowEllipse(c, 16, 30, 8, 2);
+  R(c, 10, 21, 12, 9, '#7a5a3a'); R(c, 10, 21, 12, 2, '#9a7a52');
+  for (const [x0, y0, x1, y1] of [[16, 21, 12, 8], [16, 21, 20, 6], [16, 21, 24, 12], [16, 21, 9, 15]]) line(c, x0, y0, x1, y1, '#6a6a3a');
+  for (const [x, y] of [[12, 8], [20, 6], [24, 12], [9, 15], [22, 15]]) { R(c, x - 2, y, 4, 2, '#9a8a4a'); P(c, x, y + 2, '#7a6a3a'); } // dry leaves
+  R(c, 13, 28, 6, 2, '#a89a6a');
+  outline(c, { tint: 0.3 });
+});
+// wall overlays
+tile('yami_blinds', { obj: true }, (c, r, f) => {
+  R(c, 3, 4, 26, 21, '#4a4c54'); R(c, 4, 5, 24, 19, '#c8c4b0');
+  for (let y = 6; y < 24; y += 3) { R(c, 4, y, 24, 2, '#b0ac98'); R(c, 4, y + 2, 24, 1, f ? '#ff6ab0' : '#ff8ac8'); } // neon through the slats
+  R(c, 6, 5, 1, 19, '#8a8670'); R(c, 25, 5, 1, 19, '#8a8670');
+});
+tile('yami_board', { obj: true }, (c) => {
+  R(c, 2, 4, 28, 20, '#9aa0aa'); R(c, 3, 5, 26, 18, '#f4f4f0');
+  for (let i = 0; i < 5; i++) { R(c, 5, 7 + i * 3, 9, 1, '#3a3a44'); R(c, 16, 7 + i * 3, 6, 1, '#3a3a44'); }
+  for (const [x, y] of [[24, 7], [24, 13], [24, 16]]) { line(c, x, y - 1, x + 2, y + 1, '#d23a3a'); line(c, x + 2, y - 1, x, y + 1, '#d23a3a'); }
+  R(c, 6, 24, 20, 2, '#7a8088');
+});
+tile('yami_calendar', { obj: true }, (c) => {
+  R(c, 8, 4, 16, 20, '#f4f0e6'); R(c, 8, 4, 16, 4, '#d23a3a'); R(c, 15, 2, 2, 3, '#3a3a44');
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 5; x++) R(c, 10 + x * 3, 10 + y * 3, 2, 2, '#8a8a8a');
+  for (const [x, y] of [[13, 13], [19, 16], [16, 19]]) { R(c, x - 1, y - 1, 4, 1, '#d23a3a'); R(c, x - 1, y + 2, 4, 1, '#d23a3a'); R(c, x - 1, y - 1, 1, 4, '#d23a3a'); R(c, x + 2, y - 1, 1, 4, '#d23a3a'); }
+});
+
+async function yamikinDesk(g, npc) {
+  const o = who(npc);
+  const f = K(g);
+  if (age(g) < 18) {
+    await g.say(['…なんだ、ガキじゃねえか。', '未成年に貸すと、親が出てきて面倒なんだよ。\n帰んな。こんなとこ、二度と来るな。'], o);
+    return;
+  }
+  if (!f.met_yami_boss) {
+    f.met_yami_boss = today(g);
+    await g.say(['いらっしゃい。クイック融資だ。', 'うちは審査なし、即日融資。\nよそで断られた人にも、ちゃんと貸してやるよ。'], o);
+  }
+  const late = yamiLoans(g).some((l) => (l.missed || 0) > 0);
+  if (late) await g.say(['おう、いいとこに来たな。\n期日、とっくに過ぎてるよなあ？', '払えねえなら、払える「仕事」を\n紹介してやってもいいんだぜ？'], o);
+  for (;;) {
+    const loans = yamiLoans(g);
+    const items = ['話を聞く', '借りる', ...(loans.length ? ['返す'] : []), '帰る'];
+    const owe = loans.reduce((a, l) => a + loanBalance(l), 0);
+    const k = await g.ask(loans.length ? `で、今日は何の用だ？\n（いまの借り：${fmtMoney(owe)}）` : 'で、いくら要るんだ？', items, { ...o, cancel: items.length - 1 });
+    const pick = items[k];
+    if (!pick || pick === '帰る') { await g.say(loans.length ? '期日、忘れんなよ。\n…忘れたら、こっちから行くからな。' : '困ったら、いつでも来な。', o); return; }
+    if (pick === '話を聞く') await yamiTerms(g, o);
+    if (pick === '借りる') { await yamiBorrow(g, o); return; }
+    if (pick === '返す') await yamiRepay(g, o, loans);
+  }
+}
+async function yamiTerms(g, o) {
+  await g.say(['利息は「トイチ」。10日で1割だ。', `${fmtMoney(100000)}借りたら、10日ごとに${fmtMoney(10000)}。\n手数料は、先に引かせてもらう。`, '利息だけ払って元金を先に回す「ジャンプ」もできる。\n…親切だろ？'], o);
+  await narrate(g, ['（10日で1割は、年にすると365%。\n法律（出資法）の上限の何倍もの、違法な金利だ）', '（壁のどこにも、貸金業の登録番号が書いていない。\n…ここは「闇金」だ）']);
+}
+async function yamiBorrow(g, o) {
+  const st = g.state, f = K(g);
+  await narrate(g, [
+    '（ここは「闇金」――登録のない、違法な貸金業者だ）',
+    '（利息だけ払い続けても、元金は1円も減らない。\n返せなくなれば、家族や事務所にまで\n取り立ての電話や訪問が来る…）',
+    `（お金に困ったら、${helpWhere(g)}へ。\n借りる前なら、まだ引き返せる）`,
+  ]);
+  const k = await g.ask('（それでも、ここで借りる…？）', ['借りずに帰る', '借りる…'], { cancel: 0 });
+  if (k !== 1) { await g.say('…なんだよ、冷やかしか。\nま、そのうちまた来るさ。みんなそうだ。', o); return false; }
+  const amounts = [30000, 50000, 100000, 300000];
+  const i = await g.ask('いくらだ？', [...amounts.map((a) => fmtMoney(a)), 'やっぱりやめる'], { ...o, cancel: amounts.length });
+  if (i < 0 || i >= amounts.length) { await g.say('チッ。時間の無駄だったな。', o); return false; }
+  const amount = amounts[i];
+  const work = st.agency && AGENCIES[st.agency] ? '事務所' : '勤め先';
+  await g.say(['じゃあ、この紙に書け。名前と住所と…', `実家の電話番号と、${work}の電話番号もだ。\n…念のためだよ、念のため。`], o);
+  await narrate(g, `（実家と${work}の連絡先まで、書かされてしまった…）`);
+  const res = typeof g.borrow === 'function' ? g.borrow('yamikin', amount) : null;
+  if (!res || !res.ok) { await g.say(res && res.reason ? res.reason : '…今日は貸せねえな。', o); return false; }
+  g.sfx('coin');
+  f.yamiBorrowed = (f.yamiBorrowed || 0) + 1;
+  f.yamiDay = today(g);
+  await g.say([`ほらよ、${fmtMoney(amount)}。手数料を引いて${fmtMoney(res.received)}な。`, `10日後に、利息${fmtMoney(Math.round(amount * 0.1))}。\n払えなきゃ…わかってるよな？`], o);
+  await narrate(g, ['（お金を受け取った手が、少しふるえている…）', '（借りてしまっても、ひとりで抱えないこと。\n交番や弁護士に相談すれば、取り立ては止められる）']);
+  return true;
+}
+async function yamiRepay(g, o, loans) {
+  const st = g.state;
+  const l = loans[0];
+  if (!l) return;
+  const bal = loanBalance(l);
+  const jump = Math.min(bal, Math.round(l.interest || 0));
+  const opts = [...(jump > 0 ? [`利息だけ ${fmtMoney(jump)}`] : []), `全額 ${fmtMoney(bal)}`, 'やめておく'];
+  const k = await g.ask([`${l.company}への借りは、${fmtMoney(bal)}だ。`, '利息だけ払えば、元金は次に回してやるよ。'], opts, { ...o, cancel: opts.length - 1 });
+  const pick = opts[k];
+  if (!pick || pick === 'やめておく') return;
+  const amount = pick.startsWith('利息') ? jump : bal;
+  if (st.money < amount) { await g.say('金が足りねえじゃねえか。\n…期日までに用意しとけよ。', o); return; }
+  const r = g.repay(l, amount);
+  if (r.cleared) {
+    await g.say('…全部返すのか。ふん、物好きだな。\nまた困ったら来いよ。', o);
+    await narrate(g, '（もう二度と、ここには来ない…）');
+    K(g).yamiCleared = today(g);
+    return;
+  }
+  await g.say(`${fmtMoney(r.paid)}、たしかに。\n元金はそのまま。次も期日に払えよ。`, o);
+  await narrate(g, ['（利息を払っても、元金は1円も減っていない…）', '（本当は、こんな金利の契約は無効だ。\n警察や弁護士に相談すれば、取り立ては止められる）']);
+}
+async function yamiWomanTalk(g, npc) {
+  const o = who(npc), f = K(g);
+  await g.say(['…パートのお給料だけじゃ、\n子どもの給食費が足りなくて。', `最初は${fmtMoney(30000)}だったの。\nもう半年、利息だけ払ってる。…元金は、そのまま。`], o);
+  const k = await g.ask('（封筒を、ぎゅっと握りしめている…）', ['だまって聞く', '相談先を教える'], { cancel: 0 });
+  if (k !== 1) return;
+  await g.say(`…${helpWhere(g)}…？\nこういうのも、相談していいの？`, o);
+  await narrate(g, '（闇金の利息は払わなくていい場合が多いこと、\n取り立ては警察が止めてくれることを話した）');
+  await g.say('…ありがとう。この封筒、今日は渡さないで、\nそのまま相談に行ってみる。', o);
+  f.yamiWoman = today(g);
+  g.addNeed('stress', -3);
+}
+
+registerPlace({
+  id: 'yamikin',
+  name: 'クイック融資',
+  kind: 'building',
+  bgm: 'kan_shady',
+  start: { room: 'main', x: 4, y: 8, dir: 'up' },
+  rooms: {
+    main: {
+      floor: 'yami_floor',
+      wall: 'gray',
+      tiles: [
+        '############',
+        '#=b==B==B=k#',
+        '#S.........#',
+        '#C..DDD....#',
+        '#C.........#',
+        '#......UU..#',
+        '#..L...TT..#',
+        '#......UU..#',
+        '#..........#',
+        '####EE######',
+      ],
+      legend: { b: 'wall_gray+yami_board', B: 'wall_gray+yami_blinds', k: 'wall_gray+yami_calendar', S: 'yami_safe', C: 'yami_cabinet', D: 'yami_desk', U: 'yami_sofa', T: 'yami_table', L: 'yami_plant', E: 'exit_mat' },
+      warps: exits([4, 5], 9),
+      entities: [
+        { type: 'npc', id: 'yami_boss', x: 5, y: 2, dir: 'down', look: YAMI_BOSS.look, name: YAMI_BOSS.name, talk: yamikinDesk, fixedDir: true },
+        { type: 'npc', id: 'yami_kid', x: 9, y: 8, dir: 'left', look: YAMI_KID.look, name: YAMI_KID.name, fixedDir: true,
+          text: ['…なんだよ。', '用があるなら、奥の社長に言え。\n（スマホをいじりながら、じろりとにらまれた）'] },
+        { type: 'npc', id: 'yami_woman', x: 9, y: 6, dir: 'left', look: YAMI_WOMAN.look, name: YAMI_WOMAN.name, fixedDir: true, talk: yamiWomanTalk, cond: (g) => !K(g).yamiWoman },
+        { type: 'sign', x: 2, y: 1, text: ['ホワイトボードに、名前と金額がずらりと書いてある。', '「期日」の横に、赤い×印がいくつも…。\n（返せなかった人たちの名前だろうか）'] },
+        { type: 'sign', x: 8, y: 1, text: '窓のブラインドは、閉めきったままだ。\nすき間から、ネオンの光がちらちらもれている。' },
+        { type: 'sign', x: 10, y: 1, text: 'カレンダーの日付に、赤い丸がいくつも。\n…取り立ての予定だろうか。' },
+        { type: 'sign', x: 1, y: 2, text: '古い金庫だ。\n中には、借りた人たちの書類が入っているらしい。' },
+        { type: 'sign', x: 1, y: 3, text: 'スチールの書類棚。\n引き出しには「顧客」「保証人」の札が貼ってある。' },
+        { type: 'sign', x: 1, y: 4, text: 'スチールの書類棚。\n引き出しには「顧客」「保証人」の札が貼ってある。' },
+        { type: 'sign', x: 3, y: 6, text: '枯れかけた観葉植物。\nだれも水をやっていないようだ。' },
+        { type: 'sign', x: 7, y: 6, text: ['テーブルの上に「金銭消費貸借契約書」。', '…金利の欄が、空白のままだ。'] },
+      ],
+      onEnter: (g) => firstVisit(g, 'yamikin', ['（せまい階段を3階まで上ると、\n「クイック融資」と書いたドアがあった）', '（中は、たばこの煙でかすんでいる。\n電話が、ひっきりなしに鳴っている…）']),
+    },
+  },
+});
+
+// ====================================================================== 鬼灯興業 ('kumi': a fictional 暴力団's office)
+// 鬼灯組 (ほおずきぐみ) is invented, like every person here. The office is dangerous and the people in
+// it predatory: a nobody is turned away at the door; a known face, a politician or a 闇金 debtor is
+// "invited" in, where the 若頭 makes one offer a day — 闇営業 (to an entertainer), 運び屋, 取り立ての
+// 手伝い, joining the group, or money and votes for a politician. Every offer can be refused (the first
+// choice); three refusals and they stop asking. Accepting goes through the justice core:
+// commitCrime('antisocial_ties') (反社との交際: exposure ends contracts, TV work, offices — the core's
+// careerSanction / darkside.js's 'scoop_hansha'), plus 'stolen_goods' / 'assault' for the "jobs".
+const KUMI_GUARD = { name: '組員の若い男', look: { hair: 'slick', hairColor: 'black', skin: 'fair', top: '#1e1e26', bottom: '#1e1e26', jacket: true, glasses: 'sun' } };
+const KUMI_WAKA = { name: '鬼灯組の若頭', look: { hair: 'short', hairColor: 'black', skin: 'tan', top: '#2a2a32', bottom: '#2a2a32', jacket: true, tie: '#5a1a2a', glasses: true } };
+const KUMI_MEMBER = { name: '組員', look: { hair: 'bald', hairColor: 'black', skin: 'tan', top: '#3a3a44', bottom: '#2a2a32', jacket: true } };
+const KUMI_GOLD = '#c9a227';
+
+tile('kumi_floor', { variants: 2 }, (c, r, f, v) => {
+  R(c, 0, 0, 32, 32, '#3a2618');
+  for (let y = 0; y < 32; y += 8) {
+    const row = y / 8;
+    R(c, 0, y, 32, 7, shade('#4a3020', (row % 3) * 0.03)); R(c, 0, y, 32, 1, '#5a3c28'); R(c, 0, y + 7, 32, 1, '#24160e');
+    R(c, (row * 13 + v * 7) % 32, y, 1, 7, '#24160e'); // one long board per row
+    R(c, ((row * 13 + v * 7) % 32 + 9) % 32, y + 3, 6, 1, '#40281a'); // grain
+  }
+  speckle(c, r, ['#40281a', '#523422'], 18);
+});
+tile('kumi_stone', { variants: 2 }, (c, r, f, v) => {
+  R(c, 0, 0, 32, 32, '#4a4c52');
+  for (const [x, y] of [[0, 0], [16, 0], [0, 16], [16, 16]]) { R(c, x + 1, y + 1, 14, 14, (x + y + v * 16) % 32 ? '#55575e' : '#505259'); R(c, x + 1, y + 1, 14, 1, '#62646c'); }
+  speckle(c, r, ['#44464c', '#5c5e66'], 30);
+});
+tile('kumi_desk', { solid: true, obj: true, talkThrough: true }, (c) => {
+  shadowEllipse(c, 16, 30, 16, 2);
+  R(c, 0, 9, 32, 21, '#2a160c'); R(c, 0, 9, 32, 5, '#4a2a16'); R(c, 0, 9, 32, 1, '#6a4428'); R(c, 0, 14, 32, 1, KUMI_GOLD);
+  for (let x = 2; x < 32; x += 10) { R(c, x, 17, 7, 10, '#341c10'); R(c, x, 17, 7, 1, '#4a2a16'); }
+  R(c, 4, 4, 6, 6, '#1a1a1e'); R(c, 5, 3, 4, 2, '#2a2a30'); // phone
+  R(c, 14, 6, 8, 4, '#f2efe6'); R(c, 15, 7, 6, 1, '#8a8a8a'); // papers
+  R(c, 25, 4, 3, 6, KUMI_GOLD); R(c, 24, 9, 5, 1, '#8a6a1a'); // pen stand
+  outline(c, { tint: 0.3 });
+});
+tile('kumi_sofa', { solid: true, obj: true }, (c) => {
+  shadowEllipse(c, 16, 29, 15, 2);
+  R(c, 0, 6, 32, 22, '#141418'); R(c, 0, 6, 32, 3, '#34343c'); R(c, 0, 24, 32, 4, '#0a0a0e');
+  R(c, 2, 12, 28, 10, '#1e1e24'); R(c, 2, 12, 28, 1, '#3a3a44');
+  for (let x = 6; x < 32; x += 8) { disc(c, x, 16, 1, '#0a0a0e'); P(c, x - 1, 15, '#4a4a56'); }
+  outline(c, { tint: 0.3 });
+});
+tile('kumi_table', { solid: true, obj: true }, (c) => {
+  shadowEllipse(c, 16, 26, 15, 3);
+  R(c, 1, 12, 30, 9, '#1a1a1e'); R(c, 1, 12, 30, 3, '#e8e4dc'); R(c, 1, 12, 30, 1, '#ffffff');
+  for (const [x, y] of [[6, 13], [15, 14], [24, 13]]) R(c, x, y, 4, 1, '#c8c4bc'); // marble veins
+  R(c, 4, 21, 3, 6, '#0a0a0e'); R(c, 25, 21, 3, 6, '#0a0a0e');
+  disc(c, 22, 9, 3, '#c8ccd2'); R(c, 20, 7, 5, 1, '#f4f4f0'); // a heavy crystal ashtray
+  R(c, 8, 7, 5, 6, '#e8f0ff'); R(c, 9, 9, 3, 3, '#c8a050'); // a glass
+  outline(c, { tint: 0.3 });
+});
+tile('kumi_tank', { solid: true, obj: true, frames: 2, speed: 30 }, (c, r, f) => {
+  shadowEllipse(c, 16, 30, 14, 2);
+  R(c, 1, 22, 30, 8, '#1a1a1e'); R(c, 1, 22, 30, 1, '#3a3a44');
+  R(c, 1, 3, 30, 19, '#2a3a4a'); R(c, 2, 4, 28, 17, '#3a6a8a'); R(c, 2, 4, 28, 2, '#8ac8e8');
+  R(c, 2, 18, 28, 3, '#c8b890'); for (const x of [6, 22]) { R(c, x, 11, 2, 7, '#3a8a5a'); R(c, x + 2, 13, 1, 5, '#2a6a4a'); }
+  const fx = f ? 12 : 16;
+  R(c, fx, 10, 8, 3, '#e8e0c0'); R(c, fx + 8, 9, 2, 5, '#e8e0c0'); P(c, fx + 1, 10, '#1a1a1e'); // one pale fish
+  for (const [x, y] of [[25, 8 - f], [26, 13 - f]]) P(c, x, y, '#d8f0ff');
+  outline(c, { tint: 0.3 });
+});
+tile('kumi_shoes', { solid: true, obj: true }, (c) => {
+  shadowEllipse(c, 16, 30, 13, 2);
+  R(c, 3, 6, 26, 24, '#4a2e1c'); R(c, 3, 6, 26, 2, '#6a4428'); R(c, 27, 6, 2, 24, '#2e1c10');
+  for (const y of [10, 18, 26]) { R(c, 5, y, 22, 1, '#2e1c10'); for (let x = 6; x < 26; x += 5) { R(c, x, y - 3, 4, 3, '#141418'); P(c, x + 1, y - 3, '#4a4a56'); } }
+  outline(c, { tint: 0.3 });
+});
+tile('kumi_door', {}, (c) => {
+  R(c, 0, 0, 32, 32, '#454559');
+  R(c, 4, 2, 24, 30, '#1a1a20'); R(c, 6, 4, 20, 28, '#3a3c44'); R(c, 6, 4, 20, 1, '#5a5c66');
+  for (const y of [10, 20]) R(c, 6, y, 20, 1, '#2a2c34');
+  R(c, 21, 16, 3, 4, '#c8ccd2'); R(c, 13, 8, 6, 2, '#2a2c34'); // handle, peephole
+});
+// wall overlays
+tile('kumi_monitors', { obj: true, frames: 2, speed: 40 }, (c, r, f) => {
+  R(c, 2, 4, 28, 20, '#1a1a1e');
+  for (const [x, y] of [[4, 6], [17, 6], [4, 15], [17, 15]]) {
+    R(c, x, y, 11, 7, '#2a3a2a'); R(c, x + 1, y + 1, 9, 5, '#3a4e3a');
+    R(c, x + 1, y + 4, 9, 2, '#2a3a2a'); if ((x + y + f) % 2) R(c, x + 4, y + 2, 2, 3, '#8ac08a'); // a figure in the alley
+  }
+  P(c, 27, 5, f ? '#ff2a2a' : '#5a1010');
+});
+tile('kumi_frame', { obj: true }, (c) => {
+  R(c, 4, 3, 24, 22, KUMI_GOLD); R(c, 5, 4, 22, 20, '#1a1012');
+  // the group's (fictional) mark: a ほおずき lantern in gold
+  oval(c, 11, 8, 10, 12, '#d8a23a'); oval(c, 12, 9, 8, 10, '#a8762a');
+  R(c, 15, 6, 2, 3, '#d8a23a'); line(c, 16, 9, 16, 18, '#e8c25a'); line(c, 13, 11, 13, 17, '#c8922a'); line(c, 19, 11, 19, 17, '#c8922a');
+});
+tile('kumi_plaque', { obj: true }, (c) => {
+  R(c, 4, 2, 24, 25, '#6a4428'); R(c, 5, 3, 22, 23, '#c8a46a'); R(c, 5, 3, 22, 1, '#e8c88a');
+  sign(c, '鬼灯', 16, 9, 10, '#2a1a0a');
+  sign(c, '興業', 16, 20, 10, '#2a1a0a');
+});
+
+const kumiFlags = (g) => { const f = K(g); f.kumi = f.kumi || { refused: 0, accepted: 0, offers: 0 }; return f.kumi; };
+async function kumiGuard(g, npc) {
+  const o = who(npc), f = K(g), km = kumiFlags(g);
+  if (age(g) < 18) { await g.say(['…ガキが何の用だ。', 'ここは、おまえの来るとこじゃねえ。\n二度と近づくな。…いいな？'], o); return; }
+  if (km.done) { await g.say(['…またおまえか。若頭は、もう会わねえってよ。', 'カタギはカタギらしくしてろ。帰んな。'], o); return; }
+  if (km.calledDay === today(g)) { await g.say('若頭が奥でお待ちだ。…さっさと行け。', o); return; }
+  const known = g.state.fame >= 30 || politician(g) || yamiLoans(g).length > 0 || !!f.kumiTies;
+  if (!known) {
+    await g.say(['…なんだ、おまえ。', '道に迷ったんなら、さっさと帰んな。\nここは、カタギの来るとこじゃねえ。'], o);
+    await narrate(g, '（鋭い目でにらまれ、追い返された…。\n近づかないほうがいい場所だ）');
+    km.turned = (km.turned || 0) + 1;
+    return;
+  }
+  const hello = politician(g) ? '…ほう、{familyname}先生じゃないですか。' : g.state.fame >= 30 ? '…おっ、テレビで見た顔だな。' : '…クイック融資んとこの客か。';
+  await g.say([hello, '若頭が、話があるそうだ。\n奥へどうぞ。…断れると思うなよ？'], o);
+  const k = await g.ask('（どうする…？）', ['帰る', '奥へ入る'], { cancel: 0 });
+  if (k !== 1) { await g.say('…チッ。また来ることになるぜ。', o); await narrate(g, '（背中に視線を感じながら、事務所を出た）'); return; }
+  km.calledDay = today(g);
+  await g.goto('kumi', 'jimusho', 6, 8, 'up');
+}
+async function kumiDoorCheck(g) {
+  const km = kumiFlags(g);
+  if (km.calledDay === today(g)) return true;
+  const n = g.npc('kumi_guard');
+  await g.say('おい！ 勝手に奥へ行くんじゃねえ。', n ? who(n) : KUMI_GUARD);
+  return false;
+}
+// What the 若頭 offers today (one a day).
+function kumiOffer(g) {
+  const km = kumiFlags(g);
+  if (politician(g)) return 'seiji';
+  if (g.state.fame >= 30 && !km.yamieigyo) return 'yamieigyo';
+  const cycle = ['hakobi', 'toritate', 'sakazuki'];
+  return cycle[km.offers % cycle.length];
+}
+const KUMI_REFUSE = [
+  ['…そうか。ま、今日のところはいい。', '気が変わったら、いつでも来な。\nうちは、いつでも歓迎だ。'],
+  ['二度も断るとはな。…いい度胸だ。', '次で最後だ。よく考えとけ。'],
+  ['…わかった。もう誘わねえ。', 'カタギはカタギらしく、まっとうに生きな。\n…二度とここに顔を出すなよ。'],
+];
+async function kumiWaka(g, npc) {
+  const o = who(npc), f = K(g), km = kumiFlags(g);
+  if (km.offerDay === today(g)) { await g.say('今日の話は、もう済んだろ。\n…気が変わったら、いつでも来な。', o); return; }
+  km.offerDay = today(g);
+  if (!km.met) {
+    km.met = today(g);
+    await g.say(['よく来てくれた。まあ、楽にしてくれ。', '鬼灯興業――表向きは、建設と不動産の会社だ。\n…裏の顔は、言わなくてもわかるな？'], o);
+  }
+  const id = kumiOffer(g);
+  km.offers += 1;
+  const res = await KUMI_OFFERS[id](g, o);
+  if (res === 'refuse') {
+    const n = Math.min(KUMI_REFUSE.length - 1, km.refused);
+    km.refused += 1;
+    await g.say(KUMI_REFUSE[n], o);
+    g.addNeed('stress', 4);
+    await narrate(g, km.refused >= 3
+      ? ['（足がふるえていた。…でも、断りとおした）', `（こわい思いをしたら、ひとりで抱えず${since(g, 1992, 3) ? '警察や\n暴力追放運動推進センター' : '警察'}に相談しよう）`]
+      : '（足がふるえていた。…でも、断ってよかった）');
+    if (km.refused >= 3) km.done = today(g);
+    return;
+  }
+  if (res === 'accept') {
+    km.accepted += 1;
+    f.kumiTies = today(g);
+    f.kumiCut = 0;
+    await narrate(g, '（これで、もう「関係ない」とは言えなくなった…）');
+  }
+}
+// Exposure: a photo makes a 週刊誌 story likely (darkside.js 'scoop_hansha', if loaded; the justice
+// core surfaces 'antisocial_ties' heat on its own as well).
+function kumiPhoto(g) {
+  const dark = typeof window !== 'undefined' ? window.__dark : null;
+  if (dark && dark.EVENTS && dark.EVENTS.scoop_hansha && typeof dark.schedule === 'function') {
+    try { dark.schedule(g, 'scoop_hansha', 3 + Math.floor(rnd() * 5), {}); return; } catch (e) { console.error(e); }
+  }
+  if (typeof g.investigate === 'function') Promise.resolve(g.investigate('antisocial_ties', {})).catch((e) => console.error(e));
+}
+const tieCrime = (g, ctx) => (typeof g.commitCrime === 'function' ? g.commitCrime('antisocial_ties', ctx) : Promise.resolve({ caught: false }));
+const KUMI_OFFERS = {
+  // 闇営業: a show for the 組長's party, cash in hand, no agency
+  async yamieigyo(g, o) {
+    const km = kumiFlags(g);
+    km.yamieigyo = today(g);
+    const pay = 500000;
+    await g.say(['うちの会長の誕生日の宴会で、\nひと芸見せてほしいんだ。10分でいい。', `ギャラは現金で${fmtMoney(pay)}。\n事務所を通す必要はねえ。…わかるよな？`], o);
+    await narrate(g, ['（事務所を通さない「闇営業」。\nしかも相手は暴力団だ）', '（受ければ、反社会的勢力との「交際」になる。\nばれたら、芸能界にはいられない…）']);
+    const k = await g.ask('（どうする…？）', ['きっぱり断る', '引き受ける'], { cancel: 0 });
+    if (k !== 1) return 'refuse';
+    let photo = false;
+    await withVignette(g, 'party', { title: 'ホテルの宴会場', sub: '会長の誕生日の宴会' }, async () => {
+      await narrate(g, ['（ネタを終えると、会場はわいた。\n…拍手をする客の目は、だれも笑っていない）']);
+      const p = await g.ask([`いやあ、よかった！ 会長も喜んでる。`, '記念に、みんなで一枚撮ろうや。'], ['写真は断る', '一緒に写る'], { ...o, cancel: 0 });
+      photo = p === 1;
+      if (photo) { g.sfx('shutter'); await narrate(g, '（会長の横で、カメラに向かって笑ってしまった…）'); } else await g.say('…ちっ、つれねえな。ま、いいさ。', o);
+    });
+    await tieCrime(g, { amount: pay, gain: { money: pay }, where: 'ホテルの宴会場' });
+    await narrate(g, `（帰りぎわ、分厚い封筒を渡された。\n中には、現金で${fmtMoney(pay)}…）`);
+    if (photo) { K(g).kumiPhoto = today(g); kumiPhoto(g); }
+    return 'accept';
+  },
+  // 運び屋: carry a package (盗品) to a coin locker
+  async hakobi(g, o) {
+    const pay = 200000;
+    await g.say(['ちょっとした頼みだ。この紙袋を、\n駅前のコインロッカーまで運んでくれ。', `中身は聞くな。それで${fmtMoney(pay)}だ。\n楽な仕事だろ？`], o);
+    await narrate(g, '（中身は盗品か、もっと危ない物かもしれない。\n知っていて運べば、それだけで犯罪だ）');
+    const k = await g.ask('（どうする…？）', ['きっぱり断る', '引き受ける'], { cancel: 0 });
+    if (k !== 1) return 'refuse';
+    await narrate(g, '（紙袋は、思ったより重かった。\n人の目が、ぜんぶ自分を見ている気がする…）');
+    await tieCrime(g, { where: '鬼灯興業の事務所' });
+    const r = typeof g.commitCrime === 'function' ? await g.commitCrime('stolen_goods', { amount: 500000, gain: { money: pay }, where: '駅前のコインロッカー' }) : { caught: false };
+    if (!r.caught) await narrate(g, `（言われたとおりにロッカーに入れ、${fmtMoney(pay)}を受け取った。\n…もう、あの人たちに弱みをにぎられた）`);
+    return 'accept';
+  },
+  // 取り立ての手伝い: stand beside the collector at a debtor's door
+  async toritate(g, o) {
+    const pay = 50000;
+    await g.say(['うちが貸した金を、返さねえやつがいてな。', `取り立てについていって、横に立ってるだけでいい。\n日当は${fmtMoney(pay)}だ。`], o);
+    await narrate(g, '（脅して金を取り立てる手伝いだ。\nついていけば、もう引き返せないかもしれない）');
+    const k = await g.ask('（どうする…？）', ['きっぱり断る', 'ついていく'], { cancel: 0 });
+    if (k !== 1) return 'refuse';
+    let obey = false;
+    const OLD = { name: 'アパートの住人', look: { hair: 'bald', hairColor: 'silver', skin: 'fair', top: '#8a8070', bottom: '#5a5448', glasses: true } };
+    await withVignette(g, 'door', { title: '古いアパートの廊下', sub: '取り立て' }, async () => {
+      await g.say(['おい、いるのはわかってんだよ！ 開けろ！'], KUMI_MEMBER);
+      await g.say(['…待ってください。来週、年金が入ったら必ず…。', '妻が入院していて、どうしても…。'], OLD);
+      await g.say('おい、おまえもなんか言ってやれ。\n胸ぐらでもつかんでよ。', KUMI_MEMBER);
+      const c = await g.ask('（おじいさんの手が、ふるえている…）', ['手を出さない', '言われたとおりにする'], { cancel: 0 });
+      obey = c === 1;
+      if (obey) await narrate(g, '（言われるまま、おじいさんの胸ぐらをつかんでしまった…。\nおじいさんは、ただ頭を下げつづけた）');
+      else await g.say('…チッ、使えねえな。もういい、先に帰れ。', KUMI_MEMBER);
+    });
+    await tieCrime(g, { where: '取り立て先のアパート' });
+    if (obey) {
+      const r = typeof g.commitCrime === 'function' ? await g.commitCrime('assault', { where: '取り立て先のアパートの廊下', gain: { money: pay } }) : { caught: false };
+      if (!r.caught) await narrate(g, ['（日当を受け取った。…お金が、こんなに重いと思ったことはない）', '（あのおじいさんの顔が、頭から離れない）']);
+      g.addNeed('stress', 12);
+    } else {
+      await narrate(g, '（ひとりで帰り道を歩いた。\n…あのおじいさんは、だいじょうぶだろうか）');
+      g.addNeed('stress', 6);
+    }
+    return 'accept';
+  },
+  // 盃: joining the group (refusable pressure; taking the 名刺 is already a tie)
+  async sakazuki(g, o) {
+    await g.say(['おまえ、根性ありそうだな。', 'うちに来ねえか。若い衆として面倒見てやる。\n金にも、寝る場所にも困らせねえ。'], o);
+    await narrate(g, '（一度入れば、簡単には抜けられない世界だ。\n家族にも、友だちにも、もう顔向けできない…）');
+    const k = await g.ask('（どうする…？）', ['きっぱり断る', '名刺だけもらう'], { cancel: 0 });
+    if (k !== 1) return 'refuse';
+    await g.say('いい返事を待ってるぜ。\n困ったことがあったら、いつでもかけてきな。', o);
+    await narrate(g, '（若頭の名刺を受け取ってしまった…。\nこれも「交際」のはじまりだ）');
+    await tieCrime(g, { where: '鬼灯興業の事務所' });
+    return 'accept';
+  },
+  // a politician: money and votes for a word in the right ear (裏金・利権)
+  async seiji(g, o) {
+    const pay = 1000000;
+    await g.say(['先生、選挙は金と票だ。うちが面倒を見ますよ。', `とりあえず、${fmtMoney(pay)}。\n…駅前の再開発の工事、うちの会社に回るよう\n口をきいてくれりゃいい。`], o);
+    await narrate(g, ['（暴力団の金を受け取り、見返りに口利き…。\n届け出られない「裏金」で、しかも反社との「利権」だ）', '（発覚すれば、議員を辞めるだけではすまない）']);
+    const k = await g.ask('（どうする…？）', ['きっぱり断る', '受け取る'], { cancel: 0 });
+    if (k !== 1) return 'refuse';
+    await narrate(g, '（菓子折りの箱の底に、札束が詰まっていた…）');
+    if (typeof g.addSecretFunds === 'function') {
+      try { g.addSecretFunds(pay, '鬼灯興業'); } catch (e) { console.error(e); }
+      await tieCrime(g, { amount: pay, where: '鬼灯興業の事務所' });
+    } else await tieCrime(g, { amount: pay, gain: { money: pay }, where: '鬼灯興業の事務所' });
+    K(g).kumiPhoto = today(g);
+    if (rnd() < 0.5) kumiPhoto(g);
+    return 'accept';
+  },
+};
+
+registerPlace({
+  id: 'kumi',
+  name: '鬼灯興業',
+  kind: 'building',
+  bgm: 'kan_shady',
+  start: { room: 'genkan', x: 4, y: 5, dir: 'up' },
+  rooms: {
+    genkan: {
+      floor: 'kumi_stone',
+      wall: 'dark',
+      tiles: [
+        '##########',
+        '#=VV=d==F#',
+        '#........#',
+        '#H.......#',
+        '#H.......#',
+        '#........#',
+        '####EE####',
+      ],
+      legend: { V: 'wall_dark+kumi_monitors', d: 'kumi_door', F: 'wall_dark+kumi_plaque', H: 'kumi_shoes', E: 'exit_mat' },
+      warps: [...exits([4, 5], 6), { x: 5, y: 1, room: 'jimusho', tx: 6, ty: 8, dir: 'up', check: kumiDoorCheck }],
+      entities: [
+        { type: 'npc', id: 'kumi_guard', x: 4, y: 2, dir: 'down', look: KUMI_GUARD.look, name: KUMI_GUARD.name, talk: kumiGuard, fixedDir: true },
+        { type: 'sign', x: 2, y: 1, text: '監視カメラのモニターだ。\n事務所の前の路地が、四方から映っている。' },
+        { type: 'sign', x: 3, y: 1, text: '監視カメラのモニターだ。\n事務所の前の路地が、四方から映っている。' },
+        { type: 'sign', x: 8, y: 1, text: ['「鬼灯興業株式会社」の木の看板。', '表向きは、建設と不動産の会社らしい。'] },
+        { type: 'sign', x: 1, y: 3, text: 'ずらりと並んだ、黒い革靴…。' },
+        { type: 'sign', x: 1, y: 4, text: 'ずらりと並んだ、黒い革靴…。' },
+      ],
+      onEnter: (g) => firstVisit(g, 'kumi', ['（重い鉄の扉の向こうは、たばこと線香のにおいがした…）', '（監視カメラが、こちらの動きを追っている。\n…ここは、来てはいけない場所だ）']),
+    },
+    jimusho: {
+      floor: 'kumi_floor',
+      wall: 'dark',
+      tiles: [
+        '############',
+        '#=F=VV===F=#',
+        '#A........S#',
+        '#...DDDD...#',
+        '#..........#',
+        '#..UUUU....#',
+        '#..TTTT....#',
+        '#..UUUU....#',
+        '#..........#',
+        '#####dd#####',
+      ],
+      legend: { F: 'wall_dark+kumi_frame', V: 'wall_dark+kumi_monitors', A: 'kumi_tank', S: 'yami_safe', D: 'kumi_desk', U: 'kumi_sofa', T: 'kumi_table', d: 'kumi_door' },
+      warps: [{ x: 5, y: 9, room: 'genkan', tx: 5, ty: 2, dir: 'down' }, { x: 6, y: 9, room: 'genkan', tx: 5, ty: 2, dir: 'down' }],
+      entities: [
+        { type: 'npc', id: 'kumi_waka', x: 5, y: 2, dir: 'down', look: KUMI_WAKA.look, name: KUMI_WAKA.name, talk: kumiWaka, fixedDir: true },
+        { type: 'npc', id: 'kumi_member', x: 9, y: 5, dir: 'left', look: KUMI_MEMBER.look, name: KUMI_MEMBER.name, fixedDir: true,
+          text: ['……。', '（腕を組んだまま、こちらから目を離さない）'] },
+        { type: 'sign', x: 2, y: 1, text: ['額に入った、金色のしるし。', '…ほおずきの形をしている。この組の紋らしい。'] },
+        { type: 'sign', x: 9, y: 1, text: ['額に入った、金色のしるし。', '…ほおずきの形をしている。この組の紋らしい。'] },
+        { type: 'sign', x: 4, y: 1, text: '監視カメラのモニター。\n路地も、玄関も、すべて映っている。' },
+        { type: 'sign', x: 1, y: 2, text: '大きな水槽。\n白い魚が一匹だけ、ゆっくり泳いでいる。' },
+        { type: 'sign', x: 10, y: 2, text: '重そうな金庫だ。' },
+      ],
+    },
+  },
+});
+
+// ====================================================================== ゲームセンター ネオン ('gamecen')
+// UFOキャッチャー, a 対戦格闘ゲーム cabinet, a medal game, a sticker-photo booth: a cheap stress outlet.
+// ヤンキー hang out by the cabinets: the 絡まれる event (カツアゲ) can be met three ways — walk away
+// (and maybe be shoved: the player is the victim → 交番), call the staff and the police, or fight
+// back (→ g.commitCrime('assault'), 正当防衛 is explained). The floor manager ケンジ is a reformed
+// former yankee (少年院 → 保護司 → 高卒認定 → 福祉の勉強) whose story moves on one step a day.
+const KENJI = { name: '店長代理のケンジ', look: { hair: 'short', hairColor: 'brown', skin: 'tan', top: '#ff4fa0', bottom: '#2a2a34', apron: '#1e1e2a' } };
+const YANKEE_A = { name: 'ヤンキー', look: { hair: 'spiky', hairColor: 'blonde', skin: 'fair', top: '#5a2a8a', bottom: '#1e1e26' } };
+const YANKEE_B = { name: 'ヤンキーの連れ', look: { hair: 'slick', hairColor: 'brown', skin: 'tan', top: '#1e1e26', bottom: '#3a3a44', glasses: 'sun' } };
+const yankeesHere = (g) => !(K(g).yankeeGone > today(g));
+const GC_FLOOR = ['#1c1838', '#ff4fa0', '#4fe0ff', '#ffd23f'];
+
+tile('gc_floor', { variants: 4 }, (c, r, f, v) => {
+  R(c, 0, 0, 32, 32, GC_FLOOR[0]);
+  speckle(c, r, ['#221e44', '#16122e'], 40);
+  const col = (k) => mix(GC_FLOOR[0], GC_FLOOR[1 + ((k + v) % 3)], 0.38);
+  if (v === 0) { line(c, 4, 7, 8, 11, col(0)); line(c, 8, 11, 12, 7, col(0)); disc(c, 23, 22, 2, col(1)); }
+  else if (v === 1) { R(c, 20, 6, 5, 1, col(1)); R(c, 22, 4, 1, 5, col(1)); }
+  else if (v === 2) { line(c, 6, 23, 9, 20, col(2)); line(c, 9, 20, 12, 23, col(2)); }
+  else { disc(c, 10, 9, 1, col(0)); R(c, 21, 21, 4, 1, col(2)); }
+});
+tile('gc_crane', { solid: true, obj: true, frames: 2, speed: 24 }, (c, r, f) => {
+  shadowEllipse(c, 16, 31, 14, 1);
+  R(c, 2, 0, 28, 6, '#ff4fa0'); R(c, 2, 0, 28, 1, '#ffb0d8'); for (let x = 4; x < 30; x += 4) P(c, x, 3, (x / 4 + f) % 2 ? '#fff3a0' : '#a0306a');
+  R(c, 2, 6, 28, 16, '#2a2a3a'); R(c, 3, 7, 26, 14, '#d8f0ff'); R(c, 3, 7, 26, 2, '#ffffff');
+  R(c, 15, 7, 2, 4 + f, '#8a8e98'); R(c, 12, 11 + f, 8, 2, '#c8ccd2'); P(c, 12, 13 + f, '#c8ccd2'); P(c, 19, 13 + f, '#c8ccd2'); // the claw
+  for (const [x, y, col] of [[7, 17, '#ffb0c8'], [12, 18, '#c8a07a'], [18, 17, '#a0d8ff'], [24, 18, '#fff0a0'], [9, 19, '#c8ffb0'], [21, 19, '#ffc8e8']]) { disc(c, x, y, 3, col); P(c, x - 1, y - 1, '#2a2a3a'); P(c, x + 1, y - 1, '#2a2a3a'); }
+  R(c, 2, 22, 28, 9, '#ff4fa0'); R(c, 2, 22, 28, 1, '#ffb0d8');
+  R(c, 6, 24, 8, 4, '#2a2a3a'); disc(c, 9, 25, 1, '#ff3a3a'); R(c, 18, 24, 6, 5, '#1a1a24'); R(c, 19, 25, 4, 1, '#ffd23f'); // button, coin slot
+  outline(c, { tint: 0.3 });
+});
+tile('gc_cab', { solid: true, obj: true, frames: 2, speed: 18 }, (c, r, f) => {
+  shadowEllipse(c, 16, 31, 14, 1);
+  R(c, 3, 0, 26, 31, '#2a2448'); R(c, 3, 0, 26, 1, '#5a4ab0'); R(c, 27, 0, 2, 31, '#1a1630');
+  R(c, 5, 2, 22, 4, '#ffd23f'); R(c, 6, 3, 20, 2, '#ff4fa0');
+  R(c, 5, 7, 22, 13, '#0a0a14'); R(c, 6, 8, 20, 11, f ? '#3a5ab0' : '#4a6ac0');
+  R(c, 6, 15, 20, 4, '#5a8a4a'); // the stage
+  R(c, 9 + f, 10, 3, 5, '#ff8a3c'); R(c, 20 - f, 10, 3, 5, '#4fe0ff'); P(c, 10 + f, 9, '#f6c9a0'); P(c, 21 - f, 9, '#f6c9a0');
+  R(c, 7, 9, 7, 1, '#ffd23f'); R(c, 18, 9, 7, 1, '#ffd23f'); // the health bars
+  R(c, 4, 21, 24, 6, '#3a3460'); R(c, 4, 21, 24, 1, '#6a5ac0');
+  disc(c, 9, 24, 1, '#ff3a3a'); R(c, 8, 23, 2, 1, '#1a1a24'); for (const x of [17, 20, 23]) disc(c, x, 24, 1, ['#ffd23f', '#4fe0ff', '#5ef08a'][(x - 17) / 3]);
+  outline(c, { tint: 0.3 });
+});
+tile('gc_medal', { solid: true, obj: true, frames: 2, speed: 16 }, (c, r, f) => {
+  shadowEllipse(c, 16, 31, 15, 1);
+  R(c, 1, 2, 30, 29, '#c8a227'); R(c, 1, 2, 30, 2, '#ffe9a0');
+  R(c, 3, 5, 26, 14, '#1a3a5a'); R(c, 4, 6, 24, 12, '#2a5a8a');
+  for (let i = 0; i < 9; i++) { const x = 5 + ((i * 7 + f * 3) % 22), y = 8 + (i % 3) * 3; disc(c, x, y, 1, '#e8d8a8'); }
+  R(c, 3, 19, 26, 4, '#8a6a1a'); for (let x = 4; x < 29; x += 3) disc(c, x, 21, 1, '#e8d8a8'); // the pusher's edge
+  R(c, 3, 24, 26, 6, '#ff4fa0'); for (let x = 5; x < 28; x += 4) P(c, x, 26, (x + f) % 8 ? '#fff3a0' : '#ffffff');
+  outline(c, { tint: 0.3 });
+});
+tile('gc_puri', { solid: true, obj: true }, (c) => {
+  shadowEllipse(c, 16, 31, 15, 1);
+  R(c, 1, 0, 30, 31, '#ffb0d8'); R(c, 1, 0, 30, 2, '#ffe0f0'); R(c, 29, 0, 2, 31, '#d880b0');
+  R(c, 3, 3, 26, 9, '#ffffff'); disc(c, 10, 7, 3, '#f6c9a0'); R(c, 7, 3, 6, 2, '#5a3a2a'); disc(c, 21, 7, 3, '#ffe0c4'); R(c, 18, 3, 6, 2, '#2a2a30'); // the sample faces
+  for (let x = 3; x < 29; x += 3) R(c, x, 13, 2, 17, x % 6 ? '#ff7ab8' : '#ff9ac8'); // the curtain
+  R(c, 3, 13, 26, 1, '#c8508a');
+  outline(c, { tint: 0.3 });
+});
+tile('gc_change', { solid: true, obj: true }, (c) => {
+  shadowEllipse(c, 16, 31, 9, 1);
+  R(c, 7, 2, 18, 29, '#c8ccd2'); R(c, 7, 2, 18, 2, '#eef0f4'); R(c, 23, 2, 2, 29, '#8a8e98');
+  R(c, 9, 6, 14, 5, '#2a5a8a'); R(c, 10, 7, 12, 3, '#9ad0ff');
+  R(c, 10, 14, 12, 3, '#3a3a44'); R(c, 10, 20, 12, 6, '#2a2a30'); R(c, 11, 24, 10, 1, '#d8c060');
+  outline(c, { tint: 0.3 });
+});
+tile('gc_counter', { solid: true, obj: true, talkThrough: true }, (c) => {
+  R(c, 0, 10, 32, 20, '#2a2448'); R(c, 0, 10, 32, 5, '#ff4fa0'); R(c, 0, 10, 32, 1, '#ffb0d8');
+  R(c, 2, 17, 28, 11, '#d8f0ff'); R(c, 2, 17, 28, 1, '#ffffff');
+  for (const [x, col] of [[4, '#ffb0c8'], [11, '#c8a07a'], [18, '#a0d8ff'], [25, '#fff0a0']]) { disc(c, x + 2, 23, 3, col); P(c, x + 1, 22, '#2a2a3a'); P(c, x + 3, 22, '#2a2a3a'); }
+  R(c, 20, 5, 9, 6, '#2a2a30'); R(c, 21, 6, 7, 3, '#4fe0ff'); // the register
+  outline(c, { tint: 0.3 });
+});
+// wall overlays
+tile('gc_poster', { obj: true, variants: 2 }, (c, r, f, v) => {
+  const bg = v ? '#4fe0ff' : '#ffd23f';
+  R(c, 5, 3, 22, 22, '#1a1a24'); R(c, 6, 4, 20, 20, bg);
+  R(c, 8, 6, 16, 4, v ? '#1a3a6a' : '#d62f2f');
+  if (v) { disc(c, 16, 16, 5, '#ffb0c8'); P(c, 14, 15, '#2a2a3a'); P(c, 18, 15, '#2a2a3a'); } else { for (let i = 0; i < 5; i++) disc(c, 9 + i * 3.5, 16 + (i % 2) * 2, 2, '#e8d8a8'); }
+  R(c, 8, 21, 16, 1, '#2a2a3a');
+});
+tile('gc_rule', { obj: true }, (c) => {
+  R(c, 6, 4, 20, 20, '#ffffff'); R(c, 6, 4, 20, 1, '#d8d8d8'); R(c, 6, 4, 20, 4, '#d62f2f');
+  for (let i = 0; i < 4; i++) R(c, 8, 10 + i * 3, i % 2 ? 12 : 16, 1, '#3a3a44');
+  disc(c, 21, 19, 3, '#d62f2f'); disc(c, 21, 19, 2, '#ffffff'); sign(c, '18', 21, 19, 5, '#d62f2f', { bold: false });
+});
+
+async function gcRules(g) {
+  const p = ['「ご来店のお客さまへ」', '16歳未満の方は午後6時以降、\n18歳未満の方は午後10時以降の\nご入場をお断りしています。'];
+  if (since(g, 2016, 7)) p.push('（保護者の方とご一緒なら、16歳未満の方も\n午後10時までご入場いただけます）');
+  p.push('店内での暴力・恐喝・迷惑行為を見つけたら、\nすぐ警察に通報します。' + (since(g, 2020, 4) ? '\n※店内は全面禁煙です' : ''));
+  await g.say(p);
+}
+async function craneGame(g) {
+  const fee = 100;
+  const k = await g.ask(['UFOキャッチャーだ。\nふわふわのぬいぐるみが、山になっている。', `1回 ${fmtMoney(fee)}。`], ['遊ぶ', 'やめておく'], { cancel: 1 });
+  if (k !== 0) return;
+  for (;;) {
+    if (!g.spend(fee)) { await g.say('（小銭が足りない…）'); return; }
+    g.sfx('coin');
+    const f = K(g);
+    const n = (f.craneDay === today(g) ? f.craneN || 0 : 0) + 1;
+    f.craneDay = today(g); f.craneN = n;
+    const got = roll(Math.min(0.3, 0.08 + 0.03 * (n - 1)));
+    const relief = n === 1 ? 5 : n <= 3 ? 2 : 0;
+    if (relief) g.addNeed('stress', -relief);
+    if (got) {
+      g.sfx('fanfare');
+      if (ITEMS.plushie) g.giveItem('plushie', 1, true);
+      f.cranePrize = (f.cranePrize || 0) + 1;
+      await g.say(`ガシャン…ゴトン！\nぬいぐるみをゲットした！${relief ? `（ストレス -${relief}）` : ''}`);
+      return;
+    }
+    await g.say(pickOne(['アームが、するっとすべった…。', 'つかんだ！…と思ったら、落ちた。', 'あと少しだったのに…！']) + (relief ? `\n（ちょっと楽しい。ストレス -${relief}）` : ''));
+    if (n >= 6) await narrate(g, '（…気づけば、今日はもう何回もやっている。\n熱くなりすぎかも）');
+    const again = await g.ask('（もう1回やる？）', ['やめておく', `もう1回（${fmtMoney(fee)}）`], { cancel: 0 });
+    if (again !== 1) return;
+  }
+}
+async function fightGame(g) {
+  const fee = 100;
+  const modern = since(g, 1991);
+  const k = await g.ask([`${modern ? '対戦格闘ゲーム' : 'シューティングゲーム'}のきょう体だ。`, `1プレイ ${fmtMoney(fee)}。`], ['遊ぶ', 'やめておく'], { cancel: 1 });
+  if (k !== 0) return;
+  if (!g.spend(fee)) { await g.say('（小銭が足りない…）'); return; }
+  g.sfx('coin');
+  const f = K(g);
+  let win = false;
+  if (modern) {
+    const moves = ['攻める', '守る', '投げる'];
+    const beats = [2, 0, 1]; // 攻める > 投げる, 守る > 攻める, 投げる > 守る
+    let w = 0, l = 0;
+    for (let round = 1; round <= 5 && w < 2 && l < 2; round++) {
+      const m = Math.max(0, await g.ask(`ROUND ${round}（${w}勝${l}敗）\nどう動く？`, moves, { cancel: 0 }));
+      const cpu = Math.floor(rnd() * 3);
+      if (m === cpu) await narrate(g, `（あいうち！ 相手も「${moves[cpu]}」だ）`);
+      else if (beats[m] === cpu) { w++; g.sfx('ok'); await narrate(g, `（「${moves[m]}」が決まった！ 相手は「${moves[cpu]}」）`); }
+      else { l++; await narrate(g, `（相手の「${moves[cpu]}」にやられた…）`); }
+    }
+    win = w > l;
+  } else win = roll(0.45);
+  const first = !doneToday(g, 'arcade');
+  markToday(g, 'arcade');
+  const relief = first ? (win ? 8 : 4) : win ? 2 : 0;
+  if (relief) g.addNeed('stress', -relief);
+  await g.say(win ? `YOU WIN！\n画面に、大きな文字が光った。${relief ? `（ストレス -${relief}）` : ''}` : `GAME OVER…\nくやしい！${relief ? `（でも、ちょっとすっきり。ストレス -${relief}）` : ''}`);
+  if (win) f.arcadeWins = (f.arcadeWins || 0) + 1;
+  // beating the regulars on "their" cabinet is how trouble starts
+  if (win && yankeesHere(g) && f.karamaDay !== today(g) && age(g) >= 13 && roll(0.5)) {
+    const n = g.npc('gc_yankee_a');
+    if (n) { await g.emote(n.id, '!'); await karamareru(g); }
+  }
+}
+async function medalGame(g) {
+  const fee = 500;
+  const k = await g.ask(['メダルゲームだ。\nジャラジャラと、メダルの落ちる音がにぎやか。', `${fmtMoney(fee)}でメダル50枚。`], ['遊ぶ', 'やめておく'], { cancel: 1 });
+  if (k !== 0) return;
+  if (!g.spend(fee)) { await g.say('（お金が足りない…）'); return; }
+  g.sfx('coin');
+  const first = !doneToday(g, 'medal');
+  markToday(g, 'medal');
+  const jackpot = roll(0.08);
+  if (first) g.addNeed('stress', -8);
+  await g.say([jackpot ? 'ジャックポット！！\nメダルが滝のように流れ出てきた！' : pickOne(['メダルが、少しずつ押し出されていく…。\n…あっという間に、なくなった。', 'あと1枚で落ちそう…！\n…そこで、メダルがつきた。']), 'メダルは、お金や景品にはかえられない。\n店に預けるか、ここで遊ぶだけだ。' + (first ? '\n（気分転換になった。ストレス -8）' : '')]);
+}
+async function purikura(g) {
+  if (!since(g, 1995, 7)) {
+    await g.say(['証明写真の機械だ。', '履歴書やオーディションに使う写真が、\nここで撮れるらしい。']);
+    return;
+  }
+  const fee = 400;
+  const k = await g.ask([`${since(g, 2000) ? 'プリントシール機' : 'プリクラ'}だ。\nカーテンの向こうから、楽しそうな声がする。`, `1回 ${fmtMoney(fee)}。`], ['撮る', 'やめておく'], { cancel: 1 });
+  if (k !== 0) return;
+  if (!g.spend(fee)) { await g.say('（お金が足りない…）'); return; }
+  g.sfx('shutter');
+  const first = !doneToday(g, 'puri');
+  markToday(g, 'puri');
+  if (first) g.addNeed('stress', -4);
+  await g.say(['「さん、に、いち…パシャッ！」', `ひとりで撮るのは、ちょっと照れくさい。\nでも、いい顔で撮れた。${first ? '（ストレス -4）' : ''}`]);
+}
+const kenjiSchool = (g) => (since(g, 2005, 8) ? '高卒認定' : '大検');
+function kenjiStory(g) {
+  return [
+    ['いらっしゃい。店長代理のケンジだ。\n…見た目はこんなだけど、悪い店じゃないよ。', 'ガラの悪いのがいたら、すぐ言ってくれ。\nこの店で、客に手出しはさせない。'],
+    ['…あいつら見てると、昔の自分を思い出すんだ。', '中学で荒れて、先輩とつるんで、夜中に走り回って。\n16のとき、ケンカで相手に大けがをさせた。', '家庭裁判所で「少年院送致」。\n…あの日のことは、いまでも夢に見るよ。'],
+    ['面会に来たおふくろが、なんにも言わずに泣いててさ。\n…あれは、こたえた。', '出てきたとき、ここのオーナーが「うちで働け」って\n拾ってくれた。保護司の先生も、毎月話を聞いてくれた。', '保護司って、給料の出ないボランティアなんだぜ。\nそれでも、おれなんかのために…。'],
+    [`夜は勉強して、去年「${kenjiSchool(g)}」に受かったんだ。`, 'いまは通信制の大学で、福祉の勉強をしてる。\nレポートの締め切りに追われてるよ。', '人って、やり直せるんだな。\n…やり直させてくれる人がいれば、だけど。'],
+    ['いつか、少年院を出た子の話を聞く仕事がしたいんだ。\n保護司の先生みたいにさ。', 'あいつら（ヤンキー）も、昔のおれと同じだ。\n店では、ガツンと言うけどな。', '…話、聞いてくれてありがとな。\nなんか、すっきりした。'],
+  ];
+}
+async function kenjiTalk(g, npc) {
+  const o = who(npc), f = K(g);
+  const story = kenjiStory(g);
+  const stage = f.kenji || 0;
+  if (f.gameFought && f.kenjiFought !== f.gameFought) {
+    f.kenjiFought = f.gameFought;
+    await g.say(['…手を出したんだってな。\nおれが言えたことじゃないけど。', 'やっちまったことからは、逃げるなよ。\nやり直しは、ちゃんときくから。'], o);
+    return;
+  }
+  if (f.gameCalled === today(g)) { await g.say(['さっきは、通報してくれて助かった。', 'ああいうのは、ほっとくと\nもっとひどくなるんだ。…ありがとな。'], o); return; }
+  if (stage < story.length && f.kenjiDay !== today(g)) {
+    await g.say(story[stage], o);
+    f.kenji = stage + 1;
+    f.kenjiDay = today(g);
+    if (stage + 1 === story.length) { g.addNeed('stress', -6); await narrate(g, '（ケンジさんの話を、最後まで聞いた。\n胸のあたりが、あたたかい。ストレス -6）'); }
+    return;
+  }
+  await g.say(pickOne([
+    ['UFOキャッチャー、今日のは取りやすいぜ。\n…って、店員が言っちゃだめか。'],
+    ['ゲームは、ほどほどにな。\n財布が空っぽになったら、元も子もない。'],
+    [`${kenjiSchool(g) === '大検' ? '大学' : '通信の大学'}のレポート、今週もしめ切りなんだ。\n…休憩中に書いてる。`],
+  ]), o);
+}
+async function yankeeTalk(g, npc) {
+  const f = K(g);
+  if (age(g) < 13 || f.karamaDay === today(g)) {
+    await g.say(pickOne([['…なに見てんだよ。あっち行けよ。'], ['チッ、今日はツイてねえな…。']]), who(npc));
+    return;
+  }
+  await karamareru(g);
+}
+// 絡まれる: three ways out. Decided inside the cut-in; the crime runs after it closes.
+async function karamareru(g) {
+  const f = K(g), st = g.state;
+  f.karamaDay = today(g);
+  f.karama = (f.karama || 0) + 1;
+  let pick = 0, shoved = false, injury = false;
+  await withVignette(g, 'gamefight', { title: 'ゲームセンター ネオン', sub: '絡まれた…！' }, async (v) => {
+    await g.say(['おい。さっきから、なにジロジロ見てんだよ。', `今、肩ぶつかったろ。\n…いてえなあ。治療費、${fmtMoney(5000)}でいいわ。`], YANKEE_A);
+    await g.say('払えねえなら、ちょっと外で話そうか？', YANKEE_B);
+    let k = await g.ask('（これはカツアゲ…恐喝だ。どうする…？）', ['相手にせず離れる', '店員と警察を呼ぶ', 'やり返す'], { cancel: 0 });
+    if (k === 2) {
+      const c = await g.ask(['（手を出せば、こっちも「暴行罪」だ。）', '（やり返していいのは、身を守るために\nどうしてもしかたがない時だけ――正当防衛だ）'], ['やっぱりやめる', 'つかみかかる'], { cancel: 0 });
+      if (c !== 1) k = 0;
+    }
+    pick = k;
+    if (k === 0) {
+      await narrate(g, '（目を合わせずに、出口へ向かった――）');
+      if (roll(0.5)) {
+        shoved = true;
+        v.opts.hit = true;
+        await g.say('シカトしてんじゃねえよ！', YANKEE_A);
+        await narrate(g, '（後ろから突き飛ばされて、床に手をついた…！）');
+        v.opts.hit = false;
+        await g.say('…ダッセ。行こうぜ。', YANKEE_B);
+      } else await g.say('…チッ、つまんねえやつ。', YANKEE_A);
+    } else if (k === 1) {
+      await narrate(g, '（「すみません！」と、カウンターに向かって叫んだ）');
+      await g.say('おい、そこ！ うちの店で何やってんだ。\n…警察、もう呼んだからな。', KENJI);
+      v.opts.police = true;
+      g.sfx('whistle');
+      await g.say(['警察です。通報があったのは、ここですね。', 'お金を要求したの？ それは恐喝だよ。\n君たち、ちょっと話を聞かせてもらおうか。'], { name: '警察官', look: POLICE_LOOK });
+      await g.say('…チッ、マジかよ…。', YANKEE_A);
+    } else {
+      v.opts.hit = true;
+      injury = roll(0.35);
+      await narrate(g, ['（カッとなって、相手につかみかかった――）', injury ? '（もみ合いになり、相手は顔をおさえてうずくまった…）' : '（もみ合いになり、相手は床にしりもちをついた…）']);
+      v.opts.hit = false;
+    }
+  });
+  if (pick === 0) {
+    if (shoved) {
+      st.stamina = Math.max(1, st.stamina - 8);
+      g.addNeed('stress', 6);
+      f.gameVictim = today(g);
+      f.gameReported = 0;
+      await narrate(g, ['（ひざをすりむいた。体力 -8）', '（人を突き飛ばすのは「暴行」だ。\n交番に相談すれば、被害届を出せる）']);
+    } else {
+      g.addNeed('stress', 3);
+      await narrate(g, '（相手にしないのが、いちばんだ）');
+    }
+    return 'walk';
+  }
+  if (pick === 1) {
+    f.gameCalled = today(g);
+    f.yankeeGone = today(g) + 12;
+    await narrate(g, '（ヤンキーたちは、警察官に連れていかれた。\n…しばらく、この店には来ないだろう）');
+    return 'police';
+  }
+  f.gameFought = today(g);
+  const r = typeof g.commitCrime === 'function' ? await g.commitCrime('assault', { where: 'ゲームセンター ネオン', injury }) : { caught: false };
+  if (!r.caught) {
+    st.stamina = Math.max(1, st.stamina - 12);
+    g.addNeed('stress', 8);
+    f.yankeeGone = today(g) + 5;
+    await narrate(g, ['（相手は、捨てぜりふを残して逃げていった。\nこっちも、ほおをなぐられた…。体力 -12）', '（…でも、店の防犯カメラには、すべて映っている）']);
+  }
+  return 'fight';
+}
+
+registerPlace({
+  id: 'gamecen',
+  name: 'ゲームセンター ネオン',
+  kind: 'building',
+  bgm: 'kan_arcade',
+  start: { room: 'floor', x: 7, y: 9, dir: 'up' },
+  rooms: {
+    floor: {
+      floor: 'gc_floor',
+      wall: 'navy',
+      tiles: [
+        '################',
+        '#=P==r==Q=P==Q=#',
+        '#..............#',
+        '#.CC.CC.CC..AA.#',
+        '#..............#',
+        '#.CC.CC.....AA.#',
+        '#..............#',
+        '#MM....KK...RR.#',
+        '#..............#',
+        '#Y.............#',
+        '#######EE#######',
+      ],
+      legend: { P: 'wall_navy+gc_poster', Q: 'wall_navy+gc_poster', r: 'wall_navy+gc_rule', C: 'gc_crane', A: 'gc_cab', M: 'gc_medal', K: 'gc_counter', R: 'gc_puri', Y: 'gc_change', E: 'exit_mat' },
+      warps: exits([7, 8], 10),
+      entities: [
+        { type: 'npc', id: 'gc_kenji', x: 7, y: 6, dir: 'down', look: KENJI.look, name: KENJI.name, talk: kenjiTalk, fixedDir: true },
+        { type: 'npc', id: 'gc_yankee_a', x: 12, y: 4, dir: 'down', look: YANKEE_A.look, name: YANKEE_A.name, talk: yankeeTalk, fixedDir: true, cond: yankeesHere },
+        { type: 'npc', id: 'gc_yankee_b', x: 14, y: 4, dir: 'left', look: YANKEE_B.look, name: YANKEE_B.name, talk: yankeeTalk, fixedDir: true, cond: yankeesHere },
+        { type: 'npc', id: 'gc_student', x: 5, y: 4, dir: 'up', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#2f9a6a', bottom: '#3a3a44', glasses: true }, name: '大学生', fixedDir: true,
+          text: ['あと100円…あと100円で取れる気がする…！', '…って、もう3000円使ってるんだけどね。'] },
+        { type: 'npc', id: 'gc_medal_man', x: 3, y: 7, dir: 'left', look: { ...LOOKS.salaryman, tie: '#c9a227' }, name: 'メダルゲームの会社員', fixedDir: true,
+          text: ['仕事帰りに、ここでメダルを眺めるのが日課でね。', 'お金はかけない。メダルは店の中だけ。\n…それくらいが、ちょうどいいんだ。'] },
+        { type: 'npc', id: 'gc_girls', x: 11, y: 8, dir: 'right', look: { hair: 'twin', hairColor: 'brown', skin: 'light', top: '#ff9ac8', bottom: '#3a4a7a', skirt: true }, name: '待ち合わせの女の子', fixedDir: true,
+          text: ['友だちが着替えてるの、待ってるんだ〜。', 'あ、そこのヤンキーには近づかないほうがいいよ。\nよく、人に絡んでるから。'] },
+        { type: 'sign', x: 5, y: 1, talk: gcRules },
+        { type: 'sign', x: 2, y: 1, text: ['ポスターが貼ってある。', '「UFOキャッチャー 新景品入荷！」'] },
+        { type: 'sign', x: 10, y: 1, text: ['ポスターが貼ってある。', '「UFOキャッチャー 新景品入荷！」'] },
+        { type: 'sign', x: 8, y: 1, text: ['ポスターが貼ってある。', '「メダル大感謝祭　毎週末開催」'] },
+        { type: 'sign', x: 13, y: 1, text: ['ポスターが貼ってある。', '「メダル大感謝祭　毎週末開催」'] },
+        { type: 'sign', x: 1, y: 9, text: '両替機だ。\nお札を100円玉にくずせる。' },
+      ],
+      events: [
+        ...[[2, 3], [5, 3], [8, 3], [2, 5], [5, 5]].map(([x, y]) => ({ x, y, w: 2, on: 'action', run: craneGame })),
+        { x: 12, y: 3, w: 2, on: 'action', run: fightGame },
+        { x: 12, y: 5, w: 2, on: 'action', run: fightGame },
+        { x: 1, y: 7, w: 2, on: 'action', run: medalGame },
+        { x: 12, y: 7, w: 2, on: 'action', run: purikura },
+        { x: 7, y: 7, w: 2, on: 'action', run: (g) => { const n = g.npc('gc_kenji'); return n ? kenjiTalk(g, n) : null; } },
+      ],
+      onEnter: (g) => firstVisit(g, 'gamecen', ['（電子音とメダルの音が、わっと押し寄せてきた）', yankeesHere(g) ? '（奥のゲーム機の前に、ガラの悪そうな二人組がいる…）' : '（今日の店内は、落ち着いている）']),
     },
   },
 });

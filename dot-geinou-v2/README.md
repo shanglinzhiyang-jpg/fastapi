@@ -156,7 +156,7 @@ NHK放送センターで年末の大型歌番組に出演。これは大きな�
   民主党本部（1998〜2016年の時代だけ）、野党の党本部、自分の党の本部（結党後）、警視庁、検察庁、裁判所、霞が関の役所、
   議員会館、国会図書館、国会前の歩道（集会・番記者・街頭演説）
 - **ネオン街**（東京の中央の通りを南へまっすぐ）：架空の夜の街。カプセルホテル、牛丼屋、居酒屋、喫煙所、交番、
-  ゲームセンター、CLUB ステラ（20歳から）、消費者金融「ドットローン」、闇金「クイック融資」、裏通りの組事務所、ネオン公園
+  ゲームセンター、CLUB ステラ（キャバクラ：会話とお酒の店。入店は18歳から、お酒は20歳から）、消費者金融「ドットローン」、闇金「クイック融資」、裏通りの組事務所、ネオン公園
 - **ドット区役所**（商店街の北東）：住民票・税の窓口、選挙管理委員会（立候補の届出・期日前投票）、区民相談室、区議会
 
 ### 事務所とオーディション
@@ -653,7 +653,7 @@ NHK放送センターで年末の大型歌番組に出演。これは大きな�
 - **せいかつ**：曜日と調子、ゲージごとの助言、住まいと家賃、今週のレギュラー番組、仲間のハート、ファン
 - **くらしと法**：いまの状態（前科・執行猶予・保護観察・公民権停止・活動自粛・事件の手続き）、記録、借入れ（闇金の注意・信用情報・自己破産）、タバコとお酒、困ったときの相談先
 - **政治**：あなたの公職と党・評判、被選挙権と選挙権、立候補中の選挙と情勢、次の選挙、国会の会期とあなたの法案、内閣と支持率、政党の支持率、経済、政治資金と裏金の注意
-- **ばしょ**：行ったことのある場所と、そこでできること（東京・なんば・永田町・ネオン街）。まだの場所は「？？？」とヒントだけ
+- **ばしょ**：行ったことのある場所と、そこでできること（東京・なんば・永田町・ネオン街）。まだの場所は「？？？」とヒントだけ。民主党本部はその党がある時代（1998〜2016年）だけ、刑務所は行ったことがあるときだけ載ります（「行った場所」の数には入りません）
 - **きろく**：氏名・日数・プレイ時間、プロフィール（年齢と次の誕生日・性別・出身・性格・時代）と家族、お仕事とミニゲームの回数・ベストランク・よく受けたお仕事・相方・住まい
 
 ステータス画面にも、政治家や党員なら「政治：衆議院議員・自民」、前科や執行猶予があれば「法：執行猶予中（あと40日）」のような1行が出ます。
@@ -1052,6 +1052,8 @@ standing（党内の評価）, kouenkai, candidacy, campaign, votes, offers, led
 - `await g.politicsMenu()`：ダッシュボード（スマホの「政治」アプリも同じ）。タブ：選挙・政党・政策・法案・国会・内閣・党内・資金・活動・ニュース
 - `await g.politicsScreen(name, opts)`：場所から1画面を直接開く。`'dashboard' 'elections' 'candidacy' { electionId } 'campaign' { electionId } 'parties' 'found' 'policy' 'bills' 'diet' 'cabinet' 'budget' 'formation' 'coalition' 'amendment' 'party' 'money' 'activities' 'news' 'results' 'night' { resultId }（開票速報） 'vote' { billId, house }（本会議の採決）`
 - `await g.politicsEvents()`：ひと晩の出来事（開票・首班指名・打診・不信任・採決）。`g.sleep` のあとに自動で出ます
+- 立候補の届出は「所属 →（衆参なら）立候補のしかた・地元 → 党の選考 → 届出書」。比例代表（参院の比例・衆院の比例単独）でも公認を申請でき、
+  見送られたら別のしかたか無所属を選べます。いまの職を失う立候補（公職選挙法90条）は、一覧と届出書に注意が出ます
 - `import { openPolitics, politicsScreen, drawEmblem, drawPartyMark } from '../engine/politics_ui.js'`：`drawEmblem(ctx, emblem, x, y, size)`（プレイヤーの党章）、
   `drawPartyMark(ctx, g, partyId, x, y, size)`（ロゴ・党章・色）
 - UI だけのデータは `g.state.flags.polui`（経済のグラフ・情勢調査の履歴・夜の出来事の列）。予算編成（`applyBudget`）と民間人閣僚（`ensureCivilian`）だけは状態に直接書きます
@@ -1108,7 +1110,7 @@ income[], garnish, unpaid, suspendUntil, supervision, smoke{} }`。`outcome`：`
 | `jimin_hq` `minshu_hq` `yato_hq` `myparty_hq` | `js/places/parties.js` | 同じ5部屋のつくり：受付（入党・離党・寄付）・記者会見室・選挙対策本部（公認・届出）・政務（政策）調査会・幹部室／党首室。民主党本部はその時代だけ（ほかの時代は別の会社）、`yato_hq` はその時いちばん大きい架空の野党、`myparty_hq` は結党までテナント募集 |
 | `kuyakusho` ドット区役所 | `js/places/kuyakusho.js`（商店街の北東） | 総合窓口（住民票・税・確定申告の相談）・選挙管理委員会（選挙の説明・立候補の届出・期日前投票・投票所）・区民相談室（多重債務・闇金・生活）・区議会（傍聴・区議の質問と採決） |
 | `keisatsu` `kensatsu` `saibansho` `keimusho` | `js/places/justice.js` | 警視庁（受付・遺失物・自首・相談室・取調室・留置場）、検察庁（検事室・特捜部）、裁判所（地裁・裁判員法廷・高裁・最高裁・勾留質問室・破産係・審尋室）、刑務所（地図にない：正門・居室・工場・運動場・教室・面会室・面接室・拘置所）。`JUSTICE_PLACES` の部屋をゲッターで指定 |
-| `kanraku` ネオン街 | `js/world/kanraku.js` | 東京の南（中央の通りがそのまま続く、70×50）。すべて架空の夜の街：カプセルホテル・牛丼屋・居酒屋・喫煙所・バス停・パチンコ店・スナック横丁・映画館・ネオン公園。中の場所は `koban`（交番）`kyabakura`（CLUB ステラ：20歳から・会話とお酒だけ）`shohisha`（ドットローン）`yamikin`（クイック融資）`kumi`（鬼灯興業＝架空の組事務所）`gamecen`（ゲームセンター）。ほかのお店向けに `PLACES.kanraku.api`（`shoplift` `tobaccoCounter` `fareEvasion`） |
+| `kanraku` ネオン街 | `js/world/kanraku.js` | 東京の南（中央の通りがそのまま続く、70×50）。すべて架空の夜の街：カプセルホテル・牛丼屋・居酒屋・喫煙所・バス停・パチンコ店・スナック横丁・映画館・ネオン公園。中の場所は `koban`（交番）`kyabakura`（CLUB ステラ：入店は18歳から・お酒は20歳から・会話とお酒だけ）`shohisha`（ドットローン）`yamikin`（クイック融資）`kumi`（鬼灯興業＝架空の組事務所）`gamecen`（ゲームセンター）。ほかのお店向けに `PLACES.kanraku.api`（`shoplift` `tobaccoCounter` `fareEvasion`） |
 
 ### 社会の裏側の出来事（`js/world/darkside.js`）
 
@@ -1127,7 +1129,9 @@ API：`import { DARK } from './darkside.js'`（`window.__dark` も）`DARK.decid
 2. `js/registry.js` の `MODULES` に追加
 3. 町（`tokyo.js` / `namba.js` / `machi.js` / `minato.js` / `nagatacho.js` / `kanraku.js`）に `{ type: 'building', place: '<id>', ... }` を置く
 4. `js/world/guide.js` の `GUIDE` / `GUIDE_ORDER`（お仕事があれば `GUIDE_JOBS`、オーディションなら `AUDITIONS`）に追加。
-   町は `town: 'tokyo' | 'namba' | 'nagatacho' | 'kanraku'`（`TOWNS`。てちょうのタグの色は `notebook.js` の `TOWN_BG`）
+   町は `town: 'tokyo' | 'namba' | 'nagatacho' | 'kanraku'`（`TOWNS`。てちょうのタグの色は `notebook.js` の `TOWN_BG`）。
+   その政党がある時代だけの場所は `party: '<政党ID>'`、行ったときだけ載せる場所（刑務所）は `secret: true`。
+   `registerPlace` されていない場所（作りかけ・読み込み失敗）は、行ったことがなければ「ばしょ」に載りません
 5. `node tools/inspect.mjs <id> --out test-output/<id>` で確認
 
 **タイル**：`defineTile('<施設ID>_xxx', { solid, obj, draw, hd })`。新しいタイルには `hd()` を書きます（なければ Scale2x）。
