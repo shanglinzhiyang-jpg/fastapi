@@ -377,6 +377,11 @@ function monorail(W) {
       const top = sy - 40;
       if (top + 66 < -8 || top - 20 > VIEW_H + 8) return;
       const x0 = Math.max(0, Math.floor(-sx / 16) - 1), x1 = Math.min(W - 1, Math.floor((VIEW_W - sx) / 16) + 1);
+      // the player walking right behind the guideway (rows 47..50) sees it see-through
+      const p = g.map && g.map.player;
+      const under = p && !p.hidden && p.py >= (MONO - 3) * 16 && p.py <= MONO * 16;
+      ctx.save();
+      if (under) ctx.globalAlpha = 0.5;
       const col = bake('minato_column', 16, 30, paintColumn);
       for (const px of PILLARS) if (px >= x0 - 1 && px <= x1 + 1) blit(ctx, col, sx + px * 16, top + 14);
       const seg = bake('minato_beam', 16, 16, paintBeam);
@@ -396,6 +401,7 @@ function monorail(W) {
         blit(ctx, cars[0], 0, top - 13);
         ctx.restore();
       }
+      ctx.restore();
     },
   };
 }
@@ -1136,7 +1142,7 @@ function generate() {
   fill(c, 64, 5, 1, 9, 'minato_plaza'); fill(c, 75, 5, 2, 9, 'minato_plaza');
   trees(84, 5, 90, 11, 0);
   for (const [x, y] of [[86, 6], [89, 8], [85, 10]]) P2(x, y, 'sakura');
-  fill(c, 64, 13, 21, 1, 'grass');
+  set(c, 64, 13, 'minato_plaza');
   fill(c, 75, 13, 10, 1, 'sidewalk');
   fill(c, 64, 14, 27, 3, 'sidewalk');
   fill(c, 89, 12, 2, 2, 'sidewalk');

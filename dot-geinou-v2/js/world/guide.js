@@ -162,7 +162,7 @@ export const GUIDE = {
   tbs: {
     town: 'tokyo', name: 'TBS', short: 'TBS',
     hint: 'テレビ局エリアの北西、あかね坂の上',
-    lines: ['坂の上のテレビ局。ドラマや音楽番組でおなじみ', '受付で番組のゲスト出演（★の条件あり）'],
+    lines: ['受付で番組の相談・ゲスト出演（★の条件あり）', '前説・ドラマの代役（だれでも）・コント（所属か★30）', '楽屋でひと休み・社員食堂でごはん'],
   },
   tvasahi: {
     town: 'tokyo', name: 'テレビ朝日', short: 'テレビ朝日',
@@ -259,6 +259,8 @@ export const GUIDE_JOBS = [
   { place: 'nhk', label: 'クイズ番組の予選', ids: ['nhk_quiz_yosen'], tier: 0, skill: 'talk' },
   { place: 'takoyaki', label: 'たこ焼きのバイト', ids: ['takoyaki_baito'], tier: 0, skill: 'uta' },
   { place: 'ntv', label: '前説', ids: ['ntv_maesetsu'], tier: 0, skill: 'warai' },
+  { place: 'tbs', label: '前説', ids: ['tbs_maesetsu'], tier: 0, skill: 'talk' },
+  { place: 'tbs', label: 'ドラマのリハーサルの代役', ids: ['tbs_daiyaku'], tier: 0, skill: 'engi' },
   { place: 'tvasahi', label: 'トーク番組の前説', ids: ['tvasahi_maesetsu'], tier: 0, skill: 'talk' },
   { place: 'fujitv', label: 'コントの通行人役', ids: ['fujitv_tsukonin'], tier: 0, skill: 'engi' },
   { place: 'tvtokyo', label: 'ロケのお手伝い', ids: ['tvtokyo_kosho'], tier: 0, skill: 'talk' },
@@ -285,6 +287,7 @@ export const GUIDE_JOBS = [
   { place: 'hotel', label: '宴会の余興', ids: ['hotel_yokyo'], tier: 1, ...T1, skill: 'warai' },
   { place: 'takoyaki', label: '商店街の祭りの司会', ids: ['takoyaki_matsuri'], tier: 1, ...T1, skill: 'talk' },
   { place: 'ntv', label: 'バラエティのひな壇ゲスト', ids: ['ntv_hinadan'], tier: 1, ...T1, skill: 'talk' },
+  { place: 'tbs', label: 'スタジオコントの脇役', ids: ['tbs_konto'], tier: 1, ...T1, skill: 'engi' },
   { place: 'tvasahi', label: 'クイズ番組の解答者', ids: ['tvasahi_quiz'], tier: 1, ...T1, skill: 'talk' },
   { place: 'tvasahi', label: 'トーク番組のひな壇ゲスト', ids: ['tvasahi_hinadan'], tier: 1, ...T1, skill: 'talk' },
   { place: 'fujitv', label: 'コント番組のツッコミ役', ids: ['fujitv_tsukkomi'], tier: 1, ...T1, skill: 'warai' },
