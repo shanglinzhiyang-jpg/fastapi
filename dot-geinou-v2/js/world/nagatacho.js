@@ -73,7 +73,7 @@ function pdate(g) {
   try { d = g.polDate(); } catch (e) { d = null; }
   if (!d) {
     const era = (g.state.profile && g.state.profile.era) || 'reiwa';
-    const y = { showa: 1987, heisei_early: 1995, heisei: 2004, reiwa: 2026 }[era] || 2026;
+    const y = { showa: 1987, heisei_early: 1996, heisei: 2004, reiwa: 2026 }[era] || 2026;
     d = { year: y, fy: y + 0.3, month: 4 };
   }
   Object.assign(dateCache, { frame: g.frame, day: g.state.day, d });

@@ -527,7 +527,11 @@ async function sentaiTalk(g, npc, hq) {
     route = k === 1 ? 'only' : false;
   }
   const r = g.requestNomination(e.id, route ? { proportional: route } : {});
-  if (!r || !r.ok) { await g.say([`${e.label}の${r && r.kind ? r.kind : '公認'}ですが…`, (r && r.why) || '今回は見送りです。', '党内の評価、地元の支持、知名度。\nどれかを伸ばしてから、また来てください。'], S); return; }
+  if (!r || !r.ok) {
+    // r.eligible === false: the law (被選挙権) bars the player, not the party; no point in "growing" anything
+    const tail = r && r.eligible === false ? [] : ['党内の評価、地元の支持、知名度。\nどれかを伸ばしてから、また来てください。'];
+    await g.say([`${e.label}の${r && r.kind ? r.kind : '公認'}ですが…`, (r && r.why) || '今回は見送りです。', ...tail], S); return;
+  }
   const suisen = r.kind === '推薦';
   g.sfx('success');
   await g.say([`${e.label}、${pt.name}の${r.kind}が決まりました！`, '必勝だるまに、片目を入れておきますね。'], S);
