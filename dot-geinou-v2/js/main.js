@@ -125,7 +125,7 @@ function birthdayHook(g) {
 }
 
 // The two cores, loaded optionally (game.js does not import them): crime.js (justice, debts;
-// it imports politics.js itself) and politics.js. A core that 404s, fails to parse or throws
+// it reads politics.js through a guarded import(), so either core may be missing) and politics.js. A core that 404s, fails to parse or throws
 // is left out and the game boots without it — every other module reads them guarded
 // (notebook, ui, places through registry.js). Installed in this order: politics wraps job()
 // over justice's wrapper. Returns the paths that failed (added to g.failedModules).
