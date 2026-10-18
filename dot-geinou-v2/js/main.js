@@ -13,7 +13,9 @@ import { loadAll } from './registry.js';
 import { newState, loadGame, hasSave, deleteSave, AGENCIES } from './engine/state.js';
 import { PLACES } from './engine/map.js';
 import { MINIGAMES } from './engine/minigame.js';
-import { TitleScene, CreateScene, drawTitleBackdrop } from './title.js';
+import { TitleScene, CreateScene, EraIntroScene, drawTitleBackdrop } from './title.js';
+import { onMorning, PEOPLE } from './engine/life.js';
+import { ageOf, isBirthday, birthdayFlag, sortFamily, RELATIONS, regionOf, familyLook } from './engine/profile.js';
 import { SW, SH, hash2 } from './engine/util.js';
 import { text, panel, measure, COLORS } from './engine/draw.js';
 import { audio } from './engine/audio.js';
@@ -79,9 +81,36 @@ function richState(st) {
 
 async function newGame(g) {
   const res = await new Promise((r) => g.push(new CreateScene(g, r)));
-  g.state = newState(res.name, res.look);
+  g.state = newState(res.name, res.look, res.profile);
+  // a short card about the era and who you are, then the room
+  g.setBase(loadingScene('', { title: true }));
+  await new Promise((r) => g.push(new EraIntroScene(g, g.state.profile, r)));
   await g.goto('home', 'room', 4, 6, 'up');
 }
+
+// Birthdays (profile.js: the age goes up every YEAR_DAYS days). Registered before the
+// content modules load, so it runs before their morning hooks: it sets
+// flags['birthday_<age>'] (family.js reads it to skip a second birthday message), shows a
+// toast and a morning note, and sends one message from a family member who is alive.
+onMorning((g) => {
+  const st = g.state;
+  if (!st || !st.profile || !isBirthday(st)) return;
+  const age = ageOf(st);
+  const key = birthdayFlag(age);
+  if (st.flags[key]) return;
+  st.flags[key] = true;
+  g.notify(`今日は誕生日！${age}さいになった！`, { color: COLORS.pink, life: 200 });
+  (g.morningNotes || (g.morningNotes = [])).push(`（今日は誕生日！${age}さいになった）`);
+  const fam = sortFamily((st.profile.family || []).filter((m) => m && m.alive !== false && RELATIONS[m.rel]));
+  const m = fam.find((x) => x.rel === 'mother') || fam.find((x) => x.rel === 'father') || fam[0];
+  if (!m) return;
+  const kansai = regionOf(st.profile.hometown).dialect === 'kansai';
+  const younger = !RELATIONS[m.rel].older;
+  const text = younger
+    ? (kansai ? `{name}、誕生日おめでとう！もう${age}さいなんや。\nテレビで見るの、いつも楽しみにしてるで！` : `{name}、誕生日おめでとう！もう${age}さいだね。\nテレビで見るの、いつも楽しみにしてるよ！`)
+    : (kansai ? `{name}、誕生日おめでとう。もう${age}さいかぁ。\n体に気ぃつけて、お仕事がんばりや。いつでも帰っておいで。` : `{name}、誕生日おめでとう。もう${age}さいなんだね。\n体に気をつけて、お仕事がんばってね。いつでも帰っておいで。`);
+  g.message({ from: PEOPLE[m.id] ? PEOPLE[m.id].name : `${RELATIONS[m.rel].call}`, person: PEOPLE[m.id] ? m.id : undefined, family: m.id, look: PEOPLE[m.id] ? PEOPLE[m.id].look : familyLook(m, st.look), kind: 'chat', text });
+});
 
 async function titleFlow(g) {
   for (;;) {

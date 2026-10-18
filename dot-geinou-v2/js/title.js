@@ -19,7 +19,7 @@ import {
   AGE_MIN, AGE_MAX, YEAR_DAYS, GENDERS, PREFECTURES, REGIONS, PERSONALITIES, ERAS, RELATIONS, CAUSES,
   ERA_ORDER, REGION_ORDER, PREF_ORDER, RELATION_ORDER, CAUSE_ORDER, PERSONALITY_ORDER,
   FAMILY_NAMES, GIVEN_NAMES, RELATIVE_NAMES, defaultFamily, newFamilyMember, canAddRelation, relationCount,
-  personalityEffects, familyLook, sortFamily,
+  personalityEffects, familyLook, sortFamily, fullName,
 } from './engine/profile.js';
 
 const LOGO_PARADE = ['yoshimoto', 'shinkigeki', 'bs_yoshimoto', 'shochiku', 'grape', 'nhk', 'toei', 'horipro', 'toho'];
@@ -563,7 +563,7 @@ export class TitleScene {
         if (d && d.state) {
           const st = d.state;
           const wd = ['月', '火', '水', '木', '金', '土', '日'][(((st.day || 1) - 1) % 7 + 7) % 7];
-          this.saveInfo = `${st.name || '？？？'}・${st.day || 1}日目（${wd}）・★${st.fame || 0}`;
+          this.saveInfo = `${(st.profile && fullName(st.profile)) || st.name || '？？？'}・${st.day || 1}日目（${wd}）・★${st.fame || 0}`;
         }
       } catch (e) { this.saveInfo = null; }
     }
@@ -733,7 +733,6 @@ function buildPreviewStage(w, h) {
 
 // ------------------------------------------------------------------ new game pages
 const STEPS = ['look', 'profile', 'family', 'confirm'];
-const STEP_NAMES = { look: '見た目', profile: 'プロフィール', family: '家族', confirm: 'かくにん' };
 const STEP_TITLES = { look: 'キャラクターをつくろう', profile: 'プロフィール', family: 'かぞく', confirm: 'これでいいかな？' };
 const STEP_COLORS = { look: '#d63a4a', profile: '#2f6fd0', family: '#c0703a', confirm: '#2f9a4a' };
 const GENDER_ORDER = ['m', 'f', 'x'];
@@ -791,7 +790,7 @@ function fieldRows(ctx, rows, { x, y, w, rh = 26, valX, sel, t, dim = false, lab
 function descBox(ctx, { x, y, w, h }, lines, size = 13) {
   R(ctx, x, y, w, h, '#0b1030');
   R(ctx, x, y, w, 1, '#3a4a8a');
-  const lh = size + 4;
+  const lh = size + (size <= 12 ? 3 : 4);
   const out = [];
   for (const [l, c] of lines) for (const ln of wrap(ctx, l, w - 16, size)) out.push([ln, c]);
   out.slice(0, Math.floor((h - 6) / lh)).forEach(([l, c], i) => text(ctx, l, x + 8, y + 5 + i * lh, { size, color: c, shadow: null }));
@@ -1060,8 +1059,6 @@ export class CreateScene {
       R(ctx, x, y + S - 2, S, 2, shade(col, -0.3));
       text(ctx, String(i + 1), x + S / 2, y + 3, { size: 14, align: 'center', color: i === i0 ? '#20232a' : i < i0 ? '#ffffff' : '#7a7ea8', shadow: null });
     });
-    // the current step's name under the boxes
-    text(ctx, STEP_NAMES[this.step], SW - 16, y + S + 4, { size: 12, align: 'right', color: '#d8dcf0', shadow: '#0a0a18' });
   }
 
   // ---------------------------------------------------------------- page 2: プロフィール
@@ -1295,7 +1292,7 @@ export class CreateScene {
     const P = FAM_R;
     panel(ctx, P.x, P.y, P.w, P.h);
     const it = items[this.fIdx];
-    const note = ['家族は、物語の背景の設定です。', '亡くなった家族のことも、思い出として', 'やさしく語られるだけです。'];
+    const note = ['家族は、物語の背景になる設定です。', '亡くなった家族のことも、思い出として', 'やさしく語られるだけです。'];
     if (this.fFocus === 'add') {
       text(ctx, 'だれをふやす？', P.x + 16, P.y + 10, { size: 16, color: COLORS.cyan });
       RELATION_ORDER.forEach((r, i) => {
@@ -1321,7 +1318,7 @@ export class CreateScene {
       text(ctx, fitTo(ctx, m.name, P.w - 118, ns), P.x + 102, P.y + 36, { size: ns, color: COLORS.accent });
       text(ctx, m.alive ? '元気にしている' : `${(CAUSES[m.cause] || CAUSES.secret).text || ''}旅立った`, P.x + 102, P.y + 58, { size: 13, color: m.alive ? COLORS.good : '#c8b8e8' });
       fieldRows(ctx, this.famFields(m), { x: P.x, y: P.y + 88, w: P.w, rh: 25, valX: P.x + 206, sel: edit ? this.fRow : -1, t, dim: !edit, labelX: 30 });
-      descBox(ctx, { x: P.x + 10, y: P.y + P.h - 58, w: P.w - 20, h: 50 }, note.map((l) => [l, COLORS.dim]), 12);
+      descBox(ctx, { x: P.x + 10, y: P.y + P.h - 62, w: P.w - 20, h: 56 }, note.map((l) => [l, COLORS.dim]), 12);
       if (!edit) return 'Aでこの人を編集　▲▼でえらぶ　Bでもどる';
       const k = this.famFields(m)[this.fRow].key;
       return k === 'name' ? 'A：入力　◀▶：候補　Bで一覧へ' : k === 'remove' ? 'Aでこの人をはずす　Bで一覧へ' : k === 'back' ? 'Aで一覧へもどる' : '◀▶で変更　▲▼で項目えらび　Bで一覧へ';
@@ -1330,7 +1327,7 @@ export class CreateScene {
       text(ctx, '家族をふやす', P.x + 16, P.y + 10, { size: 16, color: COLORS.cyan });
       const lines = [['父・母・祖父・祖母は1人ずつ、', COLORS.text], ['兄・姉・弟・妹は2人まで。', COLORS.text], ['家族がいると、電話や仕送り、', COLORS.text], ['帰省のおたのしみがあります。', COLORS.text]];
       lines.forEach(([l, c], i) => text(ctx, l, P.x + 18, P.y + 42 + i * 22, { size: 15, color: c }));
-      descBox(ctx, { x: P.x + 10, y: P.y + P.h - 58, w: P.w - 20, h: 50 }, note.map((l) => [l, COLORS.dim]), 12);
+      descBox(ctx, { x: P.x + 10, y: P.y + P.h - 62, w: P.w - 20, h: 56 }, note.map((l) => [l, COLORS.dim]), 12);
       return 'Aでえらぶ　▲▼で項目えらび　Bでもどる';
     }
     // つぎへ: a short summary
@@ -1340,7 +1337,7 @@ export class CreateScene {
       ? [[`いっしょに暮らしていた家族：${this.family.length}人`, COLORS.text], [`元気な家族：${alive}人`, COLORS.good], [alive ? 'ふるさとから、ときどき連絡が来るかも。' : '空から、そっと見守ってくれている。', COLORS.dim]]
       : [['家族のいない設定です。', COLORS.text], ['仲間たちが、新しい家族になるかも。', COLORS.dim]];
     lines.forEach(([l, c], i) => text(ctx, l, P.x + 18, P.y + 44 + i * 24, { size: 15, color: c }));
-    descBox(ctx, { x: P.x + 10, y: P.y + P.h - 58, w: P.w - 20, h: 50 }, note.map((l) => [l, COLORS.dim]), 12);
+    descBox(ctx, { x: P.x + 10, y: P.y + P.h - 62, w: P.w - 20, h: 56 }, note.map((l) => [l, COLORS.dim]), 12);
     return 'Aでつぎへ　▲▼で項目えらび　Bでもどる';
   }
 
@@ -1619,3 +1616,54 @@ function drawHangingTrousers(ctx, x, col) {
   R(ctx, x + 6, 18, 1, 16, shade(col, 0.15)); // crease
   R(ctx, x + 12, 23, 1, 11, shade(col, 0.1));
 }
+
+// ------------------------------------------------------------------ the era's opening card
+// After the creator (new game): a few lines about the era over the dusk city (sepia for
+// 昭和, a cool blue for 平成), then who you are. A shows everything / goes on.
+//   new EraIntroScene(g, profile, resolve)
+const ERA_TINT = { showa: 'rgba(130,86,34,0.38)', heisei: 'rgba(36,70,140,0.28)', reiwa: null };
+export class EraIntroScene {
+  constructor(g, profile, resolve) {
+    this.g = g;
+    this.resolve = resolve;
+    this.hd = true;
+    this.opaque = true;
+    this.t = 0;
+    const p = profile || {};
+    const era = ERAS[p.era] || ERAS.reiwa;
+    this.era = p.era in ERAS ? p.era : 'reiwa';
+    const pref = PREFECTURES[p.hometown] || PREFECTURES.tokyo;
+    this.lines = [...(era.intro || []), `${p.familyName || ''} ${p.givenName || ''}、${p.age || 20}さい。`.trim(), `${pref.name}から、めざせ！国民的スター！`];
+    this.label = era.label;
+  }
+  get allShown() { return this.t >= (this.lines.length - 1) * LINE_GAP + 30; }
+  update(g) {
+    this.t++;
+    if (g.auto) { this.done(); return; }
+    if (g.input.pressed('a') || g.input.pressed('b')) {
+      if (!this.allShown) { this.t = (this.lines.length - 1) * LINE_GAP + 30; return; }
+      audio.sfx('ok');
+      this.done();
+    }
+  }
+  done() { this.g.pop(this); this.resolve(); }
+  draw(ctx) {
+    const t = this.t;
+    drawTitleBackdrop(ctx, t + 900, 0.55);
+    const tint = ERA_TINT[this.era];
+    if (tint) { ctx.fillStyle = tint; ctx.fillRect(0, 0, SW, SH); }
+    ribbon(ctx, this.label, SW / 2, 30, { size: 16, color: STEP_COLORS.profile });
+    const n = this.lines.length;
+    const y0 = Math.round(SH / 2 - (n * 30) / 2) + 12;
+    this.lines.forEach((l, i) => {
+      const k = Math.max(0, Math.min(1, (t - i * LINE_GAP) / 30));
+      if (k <= 0) return;
+      ctx.globalAlpha = k;
+      const last = i >= n - 2;
+      text(ctx, l, SW / 2, y0 + i * 30 + Math.round((1 - k) * 6), { size: 16, align: 'center', color: last ? COLORS.accent : '#ffffff', shadow: '#0a0612' });
+      ctx.globalAlpha = 1;
+    });
+    if (this.allShown && Math.floor(t / 30) % 2 === 0) text(ctx, 'Aでスタート', SW / 2, SH - 34, { size: 14, align: 'center', color: '#d8dcf0', shadow: '#0a0612' });
+  }
+}
+const LINE_GAP = 50;
