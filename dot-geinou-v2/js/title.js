@@ -640,7 +640,7 @@ export class TitleScene {
     // the notice before a new game: A goes on to the character creator, B back to the menu
     if (this.notice) {
       this.notice.t++;
-      if (this.notice.t > 10 && inp.pressed('a')) { audio.sfx('ok'); g.pop(this); this.resolve('new'); }
+      if (this.notice.t > NOTICE_READY && inp.pressed('a')) { audio.sfx('ok'); g.pop(this); this.resolve('new'); }
       else if (this.notice.t > 3 && (inp.pressed('b') || inp.pressed('menu'))) { audio.sfx('cancel'); this.notice = null; }
       return;
     }
@@ -721,7 +721,7 @@ export class TitleScene {
     });
     if (this.saveInfo) text(ctx, this.saveInfo, SW / 2, py + 64, { size: 12, align: 'center', color: this.idx === 1 ? COLORS.cyan : COLORS.dim, shadow: null });
 
-    text(ctx, 'この物語はフィクションです・実在の企業名とロゴは各社の商標です（非公式ファンゲーム）', SW / 2, SH - 18, { size: 12, align: 'center', color: '#c8a8a0', shadow: '#1a0c10' });
+    text(ctx, 'この物語はフィクションです・実在の企業や政党の名前とロゴは各権利者のものです（非公式ファンゲーム）', SW / 2, SH - 18, { size: 12, align: 'center', color: '#c8a8a0', shadow: '#1a0c10' });
     if (this.notice) drawNotice(ctx, this.notice.t);
   }
 }
@@ -730,8 +730,10 @@ export class TitleScene {
 // A short card after 「はじめから」: fiction, real companies / parties only as places, no real
 // politicians, crimes are not encouraged and have consequences, 20+ for drinking and smoking.
 const NOTICE_TITLE = 'はじめる前に';
+// frames before A goes on (half a second): a quick double tap on はじめから cannot skip the card
+const NOTICE_READY = 30;
 const NOTICE = [
-  'この物語はフィクションです。人物・団体・事件はすべて架空です。',
+  'この物語はフィクションです。登場人物と出来事はすべて架空です。',
   '実在の企業・番組・政党（自由民主党・民主党）は、場所や名前として\n出てくるだけです。実在の政治家は登場しません。',
   '政策や選挙の結果は、どの考え方が正しいかを示すものではありません。',
   '犯罪も選べますが、決してすすめるものではありません。\n現実と同じように、逮捕・裁判・刑罰などの重い結果が待っています。',
@@ -759,7 +761,7 @@ function drawNotice(ctx, t) {
     b.forEach((l, j) => text(ctx, l, x + 34, ly + j * LH, { size: SIZE, color: i === 3 ? '#ffd0d0' : '#ffffff' }));
     ly += b.length * LH + 6;
   });
-  if (t > 10) text(ctx, 'A：つぎへ　B：もどる', SW / 2, yy + H - 30, { size: 14, align: 'center', color: Math.floor(t / 30) % 2 === 0 ? COLORS.accent : '#c8b070' });
+  if (t > NOTICE_READY) text(ctx, 'A：つぎへ　B：もどる', SW / 2, yy + H - 30, { size: 14, align: 'center', color: Math.floor(t / 30) % 2 === 0 ? COLORS.accent : '#c8b070' });
   ctx.globalAlpha = 1;
 }
 

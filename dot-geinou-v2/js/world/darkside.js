@@ -16,10 +16,13 @@
 // ---------------------------------------------------------------- how events start
 // - onMorning → decide(): at most one dark event every few days. The gap (3..9 days) and the daily
 //   chance (6..40%) follow the player's risk (riskOf: 闇金, 延滞, 前科・heat, ネオン街, 反社, 裏金, fame,
-//   office). Story follow-ups come first. The chosen event waits in flags.darkside.pending for a free
-//   moment: 'any' when a script ends (usually right after waking), 'town' after some steps in a town
-//   (onWalkStep), 'home_return' when coming home, { places } inside those places. Unfired events of
-//   yesterday are dropped (follow-ups are retried).
+//   office). Story follow-ups come first. Plain misfortune (events marked luck: an accident, a fraud
+//   call, a stalker, a threat) keeps the rate of the player's position (posRisk: fame, a seat), so a
+//   risky life brings more of its own consequences, not more car accidents; accidents are at least
+//   30 days apart (ACC_GAP). The chosen event waits in flags.darkside.pending for a free
+//   moment: 'any' when a script ends (usually right after waking), 'home' at home after a script,
+//   'town' after some steps in a town (onWalkStep), 'home_return' when coming home, { places } inside
+//   those places. Unfired events of yesterday are dropped (follow-ups are retried).
 // - Moments: after a job in a venue (収録・舞台の事故) and after a 街頭演説 / 地元回り / 視察 (g.campaign /
 //   g.activity of the politics core: a foiled attack, rare).
 // - Hooks: onJustice('harassment' | 'loan_missed' | 'arrested'), onPolitics('elected' | 'scandal' | 'resign')
@@ -35,7 +38,7 @@
 //   story{}, guard, sp, threat, famWarned, hospUntil, townSteps, awayDay, jobs, speech, risk }
 //
 // Facts used (checked 2026-10, WebSearch):
-//   ストーカー規制法 2000年11月24日施行、2017年1月施行の改正で警告を経ない禁止命令・SNSの連続送信も規制
+//   ストーカー規制法 2000年11月24日施行（2016年改正の施行日は下の行）
 //     （npa.go.jp stalker/kaisei, gender.go.jp bo86-1.pdf）
 //   芸能従事者の労災保険特別加入 2021年4月1日から（mhlw.go.jp kanyu_r3.4.1）
 //   東京都の自転車保険の加入義務 2020年4月1日（条例改正。兵庫県が2015年に全国初）（kuruma-news.jp 239640）
@@ -50,7 +53,11 @@
 //   政治家個人（資金管理団体）への企業・団体献金は2000年1月から禁止（政党・政党支部へは可）（imidas C-103-0010）
 //   貸金業法21条: 正当な理由なく午後9時〜午前8時の取立て・勤務先への電話や訪問は禁止（fsa.go.jp yami_leaf）
 //   SP（警視庁警備部警護課）の警護対象: 内閣総理大臣・国務大臣・衆参両院議長・政党要人など（agora-web.jp 16128）
-//   証人の宣誓書「良心に従って真実を述べ、何事も隠さず、偽りを述べないことを誓います」（刑訴規則118条）
+//   証人の宣誓書: 刑訴規則118条「良心に従つて、真実を述べ何事も隠さず、又何事も附け加えないことを誓う」旨
+//   ストーカー規制法の2016年改正: SNSの連続送信など2017年1月施行、警告を経ない禁止命令は2017年6月14日施行
+//     （法務省 犯罪白書 令和6年版 4-6-3-1、警察庁 白書 h29 tt200000）
+//   内閣危機管理監は1998年4月1日に新設（それまでは内閣安全保障室）。新官邸の危機管理センターは2002年4月から
+//     （内閣府 cstp siryo4-2、防災白書 h14）
 
 import { Game } from '../engine/game.js';
 import { SW, SH, clamp, fmtMoney } from '../engine/util.js';
@@ -143,9 +150,16 @@ function ctxOf(g) {
     guarded: num(d.guard) > day || (!!office && (pm || cabinet.length > 0)),
   };
 }
+// The part of the risk that comes with the player's position (fame, a seat, a cabinet post), not
+// with their choices.
+function posRisk(c) {
+  return (c.fame >= 4000 ? 1 : c.fame >= 1000 ? 0.5 : 0) + (c.office ? 0.5 : 0) + (c.minister ? 1 : 0) + (c.pm ? 0.5 : 0);
+}
 // 0 (a quiet, clean life) .. about 12 (debts to 闇金, 反社 ties, 裏金, a famous minister).
 function riskOf(g, c = ctxOf(g)) {
   const d = c.d, day = c.day;
+  // an old deal weighs on the risk while its case is open or for about a year (120 days)
+  const recent = (v) => Number.isFinite(v) && day - v <= 120;
   let r = 0;
   if (c.yami.length) r += 3;
   if (c.late.length) r += 1.5;
@@ -154,18 +168,18 @@ function riskOf(g, c = ctxOf(g)) {
   r += Math.min(2, Object.keys(c.heat || {}).length * 0.5);
   if (seenWithin(d, NIGHT, day, 10)) r += 1.5;
   if (seenWithin(d, ['kumi'], day, 30)) r += 1;
-  if (d.story.hanshaDeal) r += 2;
+  if (d.story.hanshaDeal && (recent(d.story.hanshaDeal) || c.heat.antisocial_ties)) r += 2;
   if (c.secret > 0) r += 1 + clamp(Math.log10(c.secret / 1e6 + 1) * 1.5, 0, 2);
-  if (d.story.bribe) r += 2;
+  if (d.story.bribe && (recent(d.story.bribe) || c.heat.bribery_take || c.heat.assen)) r += 2;
   if (c.j && num(c.j.smoker) > 50) r += 0.5;
-  r += c.fame >= 4000 ? 1 : c.fame >= 1000 ? 0.5 : 0;
-  if (c.office) r += 0.5;
-  if (c.minister) r += 1;
-  if (c.pm) r += 0.5;
+  r += posRisk(c);
   return Math.round(r * 10) / 10;
 }
 const minGap = (r) => clamp(Math.round(9 - r * 0.8), 3, 9);
 const dayChance = (r) => clamp(0.06 + r * 0.035, 0.06, 0.4);
+// Accidents (on the street, at work) never come in a cluster.
+const ACC_GAP = 30;
+const accidentRecent = (d, day) => Object.keys(d.lastId).some((id) => EV[id] && EV[id].cat === 'accident' && day - num(d.lastId[id]) < ACC_GAP);
 
 // ======================================================================== speakers
 const LK = {
@@ -672,20 +686,56 @@ function sanction(g, level, info = {}) { try { return g.careerSanction(level, in
 async function commit(g, id, ctx = {}) {
   try { return await g.commitCrime(id, ctx); } catch (e) { console.error(e); return { caught: false, report: { none: true } }; }
 }
-// A crime that is already public (自首, a search, a report already in the news) goes straight to the
-// investigators: the core's 週刊誌 round (heat.weekly) is marked as done first.
+// Is this crime already on its way through the justice core (investigated, a case open)? With
+// weekly, a 週刊誌 round the core has queued for it counts as well.
+function caseOpen(g, crime, weekly = false) {
+  try {
+    const j = g.jus();
+    if (!j) return false;
+    const h = j.heat && j.heat[crime];
+    if (h && h.queued) return true;
+    const types = weekly ? ['arrest', 'summons', 'weekly'] : ['arrest', 'summons'];
+    if ((j.queue || []).some((e) => e && e.crime === crime && types.includes(e.type))) return true;
+    return (j.cases || []).some((cs) => cs && !cs.closed && cs.crime === crime);
+  } catch (e) { return false; }
+}
+// A crime that is already public (a search, a report already in the news) goes straight to the
+// investigators: the core's 週刊誌 round for it (heat.weekly / a queued 'weekly') is not needed any
+// more. A crime the core is already handling is left to it (no second case).
 async function prosecute(g, crime, ctx = {}) {
   try {
     const j = g.jus();
+    if (caseOpen(g, crime)) { if (ctx.now) await g.justiceEvents(); return null; }
+    j.queue = (j.queue || []).filter((e) => !(e && e.crime === crime && e.type === 'weekly'));
     const h = j && j.heat && j.heat[crime];
     if (h) h.weekly = true;
     return await g.investigate(crime, ctx);
   } catch (e) { console.error(e); return null; }
 }
+// 自首 (刑法42条: before the investigators know, the sentence may be reduced): the player goes to the
+// prosecutors with a lawyer. Like the 警視庁's 自首 counter (justice.js), the core's g.arrest runs the
+// procedure with the plea already made, and the case records the surrender (反省).
+let SURRENDER = null;
+async function surrender(g, crime) {
+  try {
+    if (caseOpen(g, crime)) return prosecute(g, crime, { now: true });
+    const j = g.jus();
+    const h = j.heat && j.heat[crime];
+    if (h) h.queued = true;
+    j.queue = (j.queue || []).filter((e) => !(e && e.crime === crime && ['arrest', 'summons', 'weekly'].includes(e.type)));
+    SURRENDER = { crime, day: g.state.day };
+    const cs = await g.arrest(crime, { via: 'warrant', evidence: 0.92, amount: h ? num(h.amount) : 0, request: h ? h.request : undefined, plea: 'admit', askPlea: false, skipArrestScene: true, source: '自首' });
+    if (cs && typeof cs === 'object') { cs.remorse = Math.max(num(cs.remorse), 1.5); cs.plea = 'admit'; cs.jishu = 'jishu'; }
+    return cs;
+  } catch (e) { console.error(e); return null; } finally { SURRENDER = null; }
+}
 function caughtCount(g, id) { try { const j = g.jus(); return num(j && j.stats && j.stats.caught && j.stats.caught[id]); } catch (e) { return 0; } }
 function money(g, n) { const st = g.state; const t = Math.min(Math.max(0, Math.round(n)), st.money); st.money -= t; return t; }
 function schedule(g, id, inDays, data = {}) { const d = D(g); d.follow.push({ id, day: g.state.day + Math.max(1, Math.round(inDays)), data, tries: 0 }); }
 const sagiWord = (y) => (y < 2005 ? 'オレオレ詐欺' : y < 2013 ? '振り込め詐欺' : '特殊詐欺');
+// ストーカー規制法: in force from 2000-11-24; the 2016 amendment's 禁止命令 without a prior 警告 from 2017-06-14.
+const stalkerLaw = (c) => c.year > 2000 || (c.year === 2000 && c.month >= 11);
+const directOrder = (c) => c.year > 2017 || (c.year === 2017 && c.month >= 6);
 
 // Regular shows on the days in hospital are put on hold (the shows wait; they are not "missed").
 function excuseRegulars(g, notes) {
@@ -742,7 +792,7 @@ async function hospitalStay(g, S, days, o = {}) {
 const EV = {
   // ---------------------------------------------------------------- 事故
   acc_pedestrian: {
-    name: '交通事故（歩行中）', cat: 'accident', where: 'town', weight: 1, cool: 50,
+    name: '交通事故（歩行中）', cat: 'accident', luck: true, where: 'town', weight: 1, cool: 50,
     async run(g, c, data, open) {
       const st = g.state;
       const S = open('crossing', { title: '交差点', sub: '横断歩道を渡っていたとき…' });
@@ -808,7 +858,7 @@ const EV = {
     },
   },
   acc_bicycle: {
-    name: '自転車の事故（加害）', cat: 'accident', where: 'town', weight: 0.6, cool: 70,
+    name: '自転車の事故（加害）', cat: 'accident', luck: true, where: 'town', weight: 0.6, cool: 70,
     async run(g, c, data, open) {
       const st = g.state, d = c.d;
       const S = open('sidewalk', { title: '歩道', sub: '借りた自転車で急いでいたとき…' });
@@ -887,7 +937,7 @@ const EV = {
 
   // ---------------------------------------------------------------- 事件（被害・目撃）
   inc_sagi_warn: {
-    name: '詐欺の注意（家族へ）', cat: 'incident', where: 'any', weight: 0.5, cool: 90,
+    name: '詐欺の注意（家族へ）', cat: 'incident', luck: true, where: 'any', weight: 0.5, cool: 90,
     ok: (g, c) => c.year >= 2003 && !!c.elder && (!c.d.famWarned || c.day - num(c.d.famWarned) > 60),
     async run(g, c, data, open) {
       const M = c.elder;
@@ -905,7 +955,7 @@ const EV = {
     },
   },
   inc_sagi: {
-    name: '特殊詐欺（家族が狙われる）', cat: 'incident', where: 'any', noJikka: true, weight: 0.6, cool: 90,
+    name: '特殊詐欺（家族が狙われる）', cat: 'incident', luck: true, where: 'any', noJikka: true, weight: 0.6, cool: 90,
     ok: (g, c) => c.year >= 2003 && !!c.elder,
     async run(g, c, data, open) {
       const st = g.state, M = c.elder;
@@ -938,7 +988,7 @@ const EV = {
     },
   },
   inc_akisu: {
-    name: '空き巣', cat: 'incident', where: 'home_return',
+    name: '空き巣', cat: 'incident', luck: true, where: 'home_return',
     weight: (g, c) => (c.home === 'tower' ? 0.2 : c.home === 'mansion' ? 0.4 : 0.6), cool: 80,
     async run(g, c, data, open) {
       const st = g.state;
@@ -973,20 +1023,20 @@ const EV = {
     },
   },
   inc_stalker: {
-    name: 'ストーカー', cat: 'incident', where: 'any', weight: 0.7, cool: 150,
+    name: 'ストーカー', cat: 'incident', luck: true, where: 'any', weight: 0.7, cool: 150,
     ok: (g, c) => c.fame >= 250 && !c.d.story.stalker,
     async run(g, c, data, open) {
       const st = g.state, d = c.d;
       const how = c.year < 2005 ? '同じ人物から、手紙が毎日のように届く' : c.year < 2015 ? 'ブログのコメント欄に、同じ人物の書きこみが続く' : 'ドッターのDMに、同じ人物から何十通もメッセージが届く';
       const S = open('letter', { title: '届いたメッセージ', sub: 'このところ毎日…', words: 'きょうの帰り道\nすてきでした', screen: c.year < 2005 ? null : c.year < 2015 ? 'ブログのコメント' : g.fmt('ドッター　DM') });
       await narr(g, [`（このところ、${how}）`, '（「今日の帰り道、すてきでした」――\n…どうして、帰り道を知っているんだろう）']);
-      const law = c.year > 2000 || (c.year === 2000 && c.month >= 11);
+      const law = stalkerLaw(c);
       const k = await ask(g, null, '（どうしよう…）', ['事務所と警察に相談', 'しばらく様子を見る', '返事をしてみる']);
       d.story.stalker = st.day;
       if (k === 0) {
         S.core('kouban', { title: '警察署', sub: '生活安全課の相談窓口' });
         if (law) {
-          await say(g, WHO.police, ['つきまといは、ストーカー規制法の対象です。', c.year >= 2017 ? '相手に警告したり、すぐに禁止命令を出したりできます。\n（2017年の改正で、警告なしでも命令が出せる）' : '相手に「警告」を出して、やめるよう求めます。\n従わなければ、禁止命令や逮捕もありえます。', 'ひとりで抱えこまないで、何かあればすぐ110番を。']);
+          await say(g, WHO.police, ['つきまといは、ストーカー規制法の対象です。', directOrder(c) ? '相手に警告したり、すぐに禁止命令を出したりできます。\n（2017年6月から、警告なしでも命令が出せる）' : '相手に「警告」を出して、やめるよう求めます。\n従わなければ、禁止命令や逮捕もありえます。', 'ひとりで抱えこまないで、何かあればすぐ110番を。']);
           await narr(g, '（警察が相手に警告をした。\nメッセージは、ぴたりと止まった）');
           g.addNeed('stress', -6);
           d.story.stalker = 'done';
@@ -1009,27 +1059,29 @@ const EV = {
     },
   },
   inc_stalker2: {
-    name: 'ストーカー（家の前）', cat: 'incident', where: 'any', story: true,
+    name: 'ストーカー（家の前）', cat: 'incident', where: 'home_return', story: true,
     async run(g, c, data, open) {
       const S = open('doorway', { title: '自宅の前', sub: '夜、帰ってくると…' });
       await narr(g, ['（家の前の電柱のかげに、だれかが立っている）', '（…あのメッセージの人物だ）']);
       const k = await ask(g, null, '（どうする…？）', ['すぐに110番する', '話しかけてみる']);
-      const law = c.year > 2000 || (c.year === 2000 && c.month >= 11);
+      const law = stalkerLaw(c);
       if (k === 1) {
         await narr(g, ['（「やめてください」と声をかけた。\n「やっと会えたね」…相手が一歩、近づいてきた）', '（近所の人が気づいて、110番してくれた）']);
         g.addNeed('stress', 20);
       } else await narr(g, '（家に入って鍵をかけ、すぐに110番した）');
       S.set('doorway', { title: '自宅の前', sub: '警察が来た', police: true });
-      await say(g, WHO.police, law
-        ? ['相手から事情を聞きました。ストーカー規制法にもとづいて、\n二度と近づかないよう命令を出します。', 'ひとりで直接、相手に会わないでくださいね。']
-        : ['相手から事情を聞き、厳しく注意しました。', '何かあれば、夜中でもすぐに呼んでください。']);
+      await say(g, WHO.police, !law
+        ? ['相手から事情を聞き、厳しく注意しました。', '何かあれば、夜中でもすぐに呼んでください。']
+        : directOrder(c)
+          ? ['相手から事情を聞きました。ストーカー規制法にもとづいて、\n二度と近づかないよう禁止命令を出します。', 'ひとりで直接、相手に会わないでくださいね。']
+          : ['相手から事情を聞き、ストーカー規制法の「警告」を\n出しました。従わなければ、禁止命令や逮捕もありえます。', 'ひとりで直接、相手に会わないでくださいね。']);
       c.d.story.stalker = 'done';
       if (k === 0) g.addNeed('stress', -4);
       return { pick: k === 0 ? 'police' : 'talk' };
     },
   },
   inc_witness: {
-    name: 'ひったくりの目撃', cat: 'incident', where: 'town', weight: 0.7, cool: 70,
+    name: 'ひったくりの目撃', cat: 'incident', luck: true, where: 'town', weight: 0.7, cool: 70,
     async run(g, c, data, open) {
       const st = g.state;
       const S = open('snatch', { title: '商店街', sub: '目の前で…' });
@@ -1074,7 +1126,7 @@ const EV = {
       }
       S.core('houtei', { title: '地方裁判所　刑事法廷', sub: '証人尋問' });
       await say(g, WHO.judge, ['証人は、宣誓書を読み上げてください。']);
-      await narr(g, '「良心に従って真実を述べ、何事も隠さず、\n偽りを述べないことを誓います」');
+      await narr(g, '「良心に従って真実を述べ、何事も隠さず、\nまた何事も付け加えないことを誓います」');
       await say(g, WHO.kenji, ['あなたが見たことを、順番に話してください。']);
       await narr(g, '（あの日のことを、見たとおりに話した）');
       const k2 = await ask(g, WHO.bengo, ['弁護人です。', 'その時、あたりは暗くなかったですか？\n本当に、被告人の顔が見えたのでしょうか。'], ['見たままを答える', '自信がないと答える']);
@@ -1332,11 +1384,12 @@ const EV = {
   pol_naibu: {
     name: '秘書の内部告発', cat: 'corruption', where: 'any', cool: 40,
     weight: (g, c) => 1.2 + (c.secret > 0 ? 0.6 : 0) + (c.d.story.bribe ? 0.6 : 0),
-    ok: (g, c) => !!c.office && (c.secret > 0 || !!(c.d.story.bribe && c.heat && (c.heat.bribery_take || c.heat.assen))),
+    // only for money the investigators do not have yet (no second case for the same thing)
+    ok: (g, c) => !!c.office && !!naibuCrime(g, c),
     async run(g, c, data, open) {
       const st = g.state;
-      const crime = c.secret > 0 ? 'slush_fund' : c.heat.bribery_take ? 'bribery_take' : 'assen';
-      const S = open('office', { title: '議員事務所', sub: '夜遅く、秘書が残っていた' });
+      const crime = naibuCrime(g, c) || 'slush_fund';
+      const S = open('office', { title: '議員事務所', sub: '秘書が、思いつめた顔で…' });
       await say(g, WHO.secretary, ['先生…もう、黙っていられません。', crime === 'slush_fund' ? '帳簿にのせていないお金のこと、\n検察に話そうと思います。' : 'あの業者からのお金のこと、\n検察に話そうと思います。']);
       const k = await ask(g, null, '（どうする…？）', ['自ら公表して謝る', '口止め料を払う', '秘書を解雇する']);
       if (k === 0) {
@@ -1347,9 +1400,9 @@ const EV = {
           scandalPol(g, 'slush_fund', { amount, severity: 3 });
           return { pick: 'confess', crime };
         }
-        await narr(g, '（弁護士とともに検察庁へ出向き、\nすべてを話すことにした…）');
+        await narr(g, ['（弁護士とともに検察庁へ出向き、\nすべてを話すことにした…）', '（捜査機関に知られる前に名乗り出るのが「自首」。\n刑が軽くなることがある――刑法42条）']);
         S.hide();
-        await prosecute(g, crime, { now: true });
+        await surrender(g, crime);
         return { pick: 'confess', crime };
       }
       if (k === 1) {
@@ -1378,7 +1431,7 @@ const EV = {
   },
   pol_tokuso: {
     name: '家宅捜索', cat: 'corruption', where: 'any', story: true,
-    ok: (g, c, data) => !!c.office && !!(c.heat && c.heat[data.crime || 'slush_fund'] && !c.heat[data.crime || 'slush_fund'].queued),
+    ok: (g, c, data) => !!c.office && !!(c.heat && c.heat[data.crime || 'slush_fund']) && !caseOpen(g, data.crime || 'slush_fund'),
     async run(g, c, data, open) {
       const crime = data.crime && CRIMES[data.crime] ? data.crime : 'slush_fund';
       const tokuso = c.national || c.level === 'exec';
@@ -1442,9 +1495,12 @@ const EV = {
   hansha_bust: {
     name: '闇営業の発覚', cat: 'hansha', where: 'any', story: true,
     async run(g, c, data, open) {
-      news(g, '特殊詐欺グループを摘発。グループの「会長」が開いた宴会には、芸能人も出ていたとみられる。');
-      const S = open('letter', { title: 'ニュース', sub: '摘発', words: '詐欺グループを摘発\n「会長」ら逮捕', tv: true });
-      await narr(g, ['（ニュースを見て、血の気が引いた。\nあの「感謝の宴」の会長だ…）', '（あの会社は、詐欺グループの隠れみのだった）']);
+      // what the 会長's company really was, in words of that time (no 特殊詐欺 before 2003)
+      const fraud = c.year >= 2003;
+      const group = fraud ? `${sagiWord(c.year)}のグループ` : '暴力団の資金源とされる会社';
+      news(g, `${group}を摘発。「会長」が開いた宴会には、芸能人も出ていたとみられる。`);
+      const S = open('letter', { title: 'ニュース', sub: '摘発', words: fraud ? '詐欺グループを摘発\n「会長」ら逮捕' : '暴力団の関連会社\n「会長」ら逮捕', tv: true });
+      await narr(g, ['（ニュースを見て、血の気が引いた。\nあの「感謝の宴」の会長だ…）', fraud ? '（あの会社は、詐欺グループの隠れみのだった）' : '（あの会社は、暴力団の資金源だった）']);
       const c2 = ctxOf(g);
       if ((data.photo || roll(0.5)) && (c2.fame >= 250 || c2.office)) {
         S.hide();
@@ -1459,16 +1515,21 @@ const EV = {
   hansha_recruit: {
     name: '闇バイトの誘い', cat: 'hansha', where: 'any', cool: 25,
     weight: (g, c) => (seenWithin(c.d, ['gamecen'], c.day, 7) ? 1.6 : 0.8),
-    ok: (g, c) => c.year >= 1990 && (c.st.money < 10000 || c.yami.length > 0 || c.age <= 22),
+    // money trouble, or a young person who is not yet well known (never a sitting politician)
+    ok: (g, c) => !c.office && c.year >= 1990 && (c.st.money < 10000 || c.yami.length > 0 || (c.age <= 22 && c.fame < 1000)),
     async run(g, c, data, open) {
       const st = g.state;
       const atGame = g.map && g.map.placeId === 'gamecen';
       const modern = c.year >= 2003;
       const crime = modern ? 'fraud_courier' : 'stolen_goods';
       const pay = 50000;
-      const S = atGame || !modern ? open('arcade', { title: 'ゲームセンター', sub: '先輩に声をかけられた' }) : open('phone', { title: c.year >= 2019 ? 'SNSの募集' : 'ケータイの掲示板', sub: '「高額・即日払い」', who: LK.shadow, rightBg: '#1a1a24', rightFloor: '#24242c' });
-      const who = atGame || !modern ? WHO.yankee : { name: '募集の相手', look: LK.shadow };
-      await say(g, who, [`金に困ってるんだろ？ 楽して稼げるバイトがあるぜ。`, modern ? `荷物を受け取って、渡すだけで${fmtMoney(pay)}。` : `荷物を運ぶだけで${fmtMoney(pay)}。`]);
+      const senpai = atGame || !modern;
+      const S = atGame ? open('arcade', { title: 'ゲームセンター', sub: '先輩に声をかけられた' })
+        : senpai ? open('phone', { title: 'ゲーセンの先輩からの電話', who: LK.yankee, rightBg: '#1a1428', rightFloor: '#221a34' })
+          : open('phone', { title: c.year >= 2019 ? 'SNSの募集' : 'ケータイの掲示板', sub: '「高額・即日払い」', who: LK.shadow, rightBg: '#1a1a24', rightFloor: '#24242c' });
+      const who = senpai ? WHO.yankee : { name: '募集の相手', look: LK.shadow };
+      const broke = c.st.money < 10000 || c.yami.length > 0;
+      await say(g, who, [broke ? '金に困ってるんだろ？ 楽して稼げるバイトがあるぜ。' : '割のいいバイトがあるんだけど、やらない？', modern ? `荷物を受け取って、渡すだけで${fmtMoney(pay)}。` : `荷物を運ぶだけで${fmtMoney(pay)}。`]);
       const k = await ask(g, null, '（うまい話には、裏がある…）', ['断って立ち去る', '話を聞いてみる']);
       if (k === 0) {
         await narr(g, '（「やめておきます」と言って、その場を離れた）');
@@ -1481,6 +1542,7 @@ const EV = {
         S.hide();
         await narr(g, '（怖くなって、警察に相談した）');
         try { await g.policeConsult('threat'); } catch (e) { console.error(e); }
+        await narr(g, '（「脅されても、言いなりにならないで。\n本人も家族も、警察が守ります」と言われた）');
         return { pick: 'police' };
       }
       S.hide();
@@ -1497,7 +1559,8 @@ const EV = {
       const st = g.state;
       const amt = round1000(data.amt || 30000);
       const S = open('alley', { title: '路地裏', sub: '呼び止められた' });
-      await say(g, WHO.chinpira, [data.again ? 'よう、また会ったな。\nこの前の分じゃ、足りねえんだよ。' : 'おう、テレビの人じゃねえか。\nこの街で遊ぶなら、あいさつってもんがあるだろ。', `${fmtMoney(amt)}でいいぜ。…払えねえとは言わせねえぞ。`]);
+      const hey = c.office ? 'おう、議員のセンセイじゃねえか。' : c.fame >= 250 ? 'おう、テレビの人じゃねえか。' : 'おう、見ねえ顔だな。';
+      await say(g, WHO.chinpira, [data.again ? 'よう、また会ったな。\nこの前の分じゃ、足りねえんだよ。' : `${hey}\nこの街で遊ぶなら、あいさつってもんがあるだろ。`, `${fmtMoney(amt)}でいいぜ。…払えねえとは言わせねえぞ。`]);
       const k = await ask(g, null, '（これは恐喝だ…）', ['断って交番へ行く', '黙って払う']);
       if (k === 0) {
         S.core('kouban', { title: '交番', sub: '相談' });
@@ -1519,7 +1582,7 @@ const EV = {
 
   // ---------------------------------------------------------------- 脅迫・襲撃・危機管理
   threat_letter: {
-    name: '脅迫', cat: 'threat', where: 'any', cool: 45,
+    name: '脅迫', cat: 'threat', luck: true, where: 'any', cool: 45,
     weight: (g, c) => 0.6 + (c.minister ? 0.6 : 0) + (c.fame >= 4000 ? 0.3 : 0),
     ok: (g, c) => c.fame >= 1000 || !!c.office,
     async run(g, c, data, open) {
@@ -1596,9 +1659,14 @@ const EV = {
     async run(g, c, data, open) {
       const st = g.state;
       const ev = 'ドット国際スポーツ大会';
+      // 内閣危機管理監 from 1998-04 (before: 内閣安全保障室); a threat on the net only from about 2000
+      const modern = c.year > 1998 || (c.year === 1998 && c.month >= 4);
+      const net = c.year >= 2000;
+      const kanshi = { name: modern ? '内閣危機管理監' : '内閣安全保障室長', look: LK.kanshi };
+      const center = modern ? '危機管理センター' : '官邸の対策室';
       if (!c.pm) {
         const S = open('crisis', { title: '官邸　緊急の閣僚会議', sub: 'テロ予告' });
-        await say(g, WHO.kanshi, [`週末の「${ev}」の会場周辺で、不審な荷物が\n見つかり、ネットに予告の書きこみがありました。`, '総理のもとで、関係閣僚が対応を協議します。']);
+        await say(g, kanshi, [`週末の「${ev}」の会場周辺で、不審な荷物が\n見つかり、${net ? 'ネットに予告の書きこみ' : '新聞社に予告の電話'}がありました。`, '総理のもとで、関係閣僚が対応を協議します。']);
         const k = await ask(g, null, '（大臣として…）', ['所管の対応を急ぐ', '総理の判断を待つ']);
         await narr(g, k === 0 ? '（省の担当者を集め、すぐに警備と情報の連携を指示した）' : '（総理の判断を待った。…動きが遅いという声も出た）');
         polNudge(g, { rep: k === 0 ? 3 : -2 });
@@ -1608,22 +1676,22 @@ const EV = {
       }
       let S = null;
       const kantei = PLACES.kantei && PLACES.kantei.rooms && PLACES.kantei.rooms.crisis;
-      const pre = open('phone', { title: '緊急の電話', sub: '内閣危機管理監から', who: LK.kanshi, rightBg: '#10141e', rightFloor: '#1a1e28' });
-      await say(g, WHO.kanshi, ['総理、緊急事態です。', `週末に開かれる「${ev}」の会場周辺で、\n不審な荷物が見つかりました。`, 'ネットには、会場をねらうと予告する書きこみも。']);
-      let went = false;
-      if (kantei) {
-        const k0 = await ask(g, WHO.kanshi, '官邸の危機管理センターへ、お願いします。', ['官邸に向かう', '電話で指示する']);
+      const pre = open('phone', { title: '緊急の電話', sub: `${kanshi.name}から`, who: LK.kanshi, rightBg: '#10141e', rightFloor: '#1a1e28' });
+      await say(g, kanshi, ['総理、緊急事態です。', `週末に開かれる「${ev}」の会場周辺で、\n不審な荷物が見つかりました。`, net ? 'ネットには、会場をねらうと予告する書きこみも。' : '新聞社には、会場をねらうと予告する電話も。']);
+      let went = false, phone = false;
+      if (kantei && modern) {
+        const k0 = await ask(g, kanshi, '官邸の危機管理センターへ、お願いします。', ['官邸に向かう', '電話で指示する']);
         if (k0 === 0) {
           pre.hide();
           try { await g.goto('kantei', 'crisis'); went = true; } catch (e) { console.error(e); }
-        }
+        } else phone = true;
       }
-      S = went ? null : pre.set('crisis', { title: '危機管理センター', sub: 'テロ予告への対応' });
+      S = went ? null : phone ? pre.set('phone', { title: '電話で指示', sub: `${center}と結んで`, who: LK.kanshi, rightBg: '#10141e', rightFloor: '#1a1e28' }) : pre.set('crisis', { title: center, sub: 'テロ予告への対応' });
       if (went) g.showBanner('首相官邸　危機管理センター');
-      await say(g, WHO.kanshi, '関係省庁がそろいました。ご指示をお願いします。');
-      const a = await ask(g, WHO.kanshi, '総理、警戒のレベルは？', ['警戒を最高度に上げる', '警備を強めて様子見']);
-      const b = await ask(g, WHO.kanshi, '大会と、周辺の交通は？', ['大会を延期し交通規制', '大会は続け警備を増員']);
-      const i = await ask(g, WHO.kanshi, '国民への説明は？', ['すぐに会見で呼びかける', '捜査のため一部を伏せる']);
+      await say(g, kanshi, '関係省庁がそろいました。ご指示をお願いします。');
+      const a = await ask(g, kanshi, '総理、警戒のレベルは？', ['警戒を最高度に上げる', '警備を強めて様子見']);
+      const b = await ask(g, kanshi, '大会と、周辺の交通は？', ['大会を延期し交通規制', '大会は続け警備を増員']);
+      const i = await ask(g, kanshi, '国民への説明は？', ['すぐに会見で呼びかける', '捜査のため一部を伏せる']);
       let mood = 0, rep = 0;
       if (a === 0) { mood -= 0.5; rep += 1; } else rep += 0.5;
       if (b === 0) { mood -= 1.5; rep += 1; await narr(g, '（大会は延期、会場周辺の電車と道路を止めた。\n「やりすぎだ」「安全第一だ」――声は分かれた）'); } else await narr(g, '（大会は予定どおり。会場の警備を倍に増やした）');
@@ -1645,12 +1713,12 @@ const EV = {
   },
   crisis_after: {
     name: '予告の容疑者逮捕', cat: 'crisis', passive: true, story: true,
-    run(g) { news(g, 'スポーツ大会の会場をねらうと予告した疑いで、警察は男を威力業務妨害の疑いで逮捕。単独の犯行とみている。'); note(g, '（予告の書きこみをした男が、逮捕された）'); },
+    run(g, c) { news(g, 'スポーツ大会の会場をねらうと予告した疑いで、警察は男を威力業務妨害の疑いで逮捕。単独の犯行とみている。'); note(g, c.year >= 2000 ? '（予告の書きこみをした男が、逮捕された）' : '（予告の電話をかけた男が、逮捕された）'); },
   },
 
   // ---------------------------------------------------------------- 借金と破産
   debt_collect: {
-    name: '延滞の取り立て', cat: 'debt', where: 'any', noJikka: true, weight: 2, cool: 12,
+    name: '延滞の取り立て', cat: 'debt', where: 'home', weight: 2, cool: 12,
     ok: (g, c) => c.late.length > 0,
     async run(g, c, data, open) {
       const st = g.state;
@@ -1732,6 +1800,13 @@ const EV = {
     },
   },
 };
+// What the secretary would take to the prosecutors: 裏金, or the contractor's money (収賄・あっせん利得).
+function naibuCrime(g, c) {
+  if (c.secret > 0 && !caseOpen(g, 'slush_fund', true)) return 'slush_fund';
+  if (!c.d.story.bribe || !c.heat) return null;
+  for (const id of ['bribery_take', 'assen']) if (c.heat[id] && !caseOpen(g, id, true)) return id;
+  return null;
+}
 // A politician at the center of a 反社 scandal decides whether to stay.
 async function politicianResign(g, c, open, why) {
   const p = polOf(g);
@@ -1821,6 +1896,8 @@ async function runEvent(g, id, opts = {}) {
   } finally {
     CUR = prev;
     RUNNING--;
+    // the slot counts from the day the event ended (a stay in hospital or in custody moves it)
+    if (!E.passive && !opts.noSlot && g.state === st) d.last = Math.max(num(d.last), num(st.day));
     for (const sc of rec.stages) g.pop(sc);
     delete rec.stages;
     d.log.push(rec);
@@ -1844,6 +1921,7 @@ function whereOk(g, E, pd, how) {
   if (w === 'any') return !(E.noJikka && pid === 'jikka');
   if (w === 'town') return how === 'step' && place.kind === 'town' && d.townSteps >= num(pd.steps, 20);
   if (w === 'home_return') return how === 'script' && pid === homePlace(g) && d.awayDay === st.day;
+  if (w === 'home') return how === 'script' && pid === homePlace(g);
   if (w && Array.isArray(w.places)) return w.places.includes(pid) && (how === 'script' || (place.kind === 'town' && d.townSteps >= num(pd.steps, 15)));
   return false;
 }
@@ -1886,10 +1964,12 @@ function decide(g, opts = {}) {
   if (!opts.force && day - d.last < minGap(risk)) return null;
   if (!opts.force && !roll(dayChance(risk))) return null;
   const pool = [];
+  const accBusy = accidentRecent(d, day);
   for (const [id, E] of Object.entries(EV)) {
     if (E.story || E.passive || E.moment) continue;
     if (opts.only && !opts.only.includes(id)) continue;
     if (!opts.ignoreCool && d.lastId[id] && day - d.lastId[id] < (E.cool || 30)) continue;
+    if (!opts.ignoreCool && E.cat === 'accident' && accBusy) continue;
     let ok = false;
     try { ok = !E.ok || !!E.ok(g, c, {}); } catch (e) { console.error(e); }
     if (!ok) continue;
@@ -1900,6 +1980,11 @@ function decide(g, opts = {}) {
   let r = rnd() * pool.reduce((a, [, w]) => a + w, 0);
   let id = pool[pool.length - 1][0];
   for (const [k, w] of pool) { r -= w; if (r <= 0) { id = k; break; } }
+  // Plain misfortune (a car at the crossing, a fraud call, a stalker, a threat) has nothing to do with
+  // the player's choices: it stays at the rate of the player's position. The extra chance a risky
+  // life brings is for its own consequences (debts, scoops, offers, 反社).
+  const pos = posRisk(c);
+  if (!opts.force && EV[id].luck && risk > pos && !roll(dayChance(pos) / dayChance(risk))) return null;
   return setPending(g, id, {});
 }
 // News-only follow-ups arrive in the morning (they take no slot).
@@ -1938,6 +2023,7 @@ function slotFree(g, gapDays = 3) {
 function startMoment(g, id) {
   const E = EV[id], c = ctxOf(g), d = D(g);
   if (!E || (d.lastId[id] && c.day - d.lastId[id] < (E.cool || 30))) return false;
+  if (E.cat === 'accident' && accidentRecent(d, c.day)) return false;
   if (E.ok && !E.ok(g, c, {})) return false;
   if (!canStart(g)) return false;
   g.run(() => runEvent(g, id, {}));
@@ -2052,7 +2138,17 @@ onMorning((g) => {
 });
 
 // The justice core: an arrest clears what was waiting; 闇金 at the family's door; legal debts in arrears.
-onJustice('arrested', (g) => { try { if (g && g.state) D(g).pending = null; } catch (e) { console.error(e); } });
+onJustice('arrested', (g, info) => {
+  try {
+    if (!g || !g.state) return;
+    D(g).pending = null;
+    // a 自首 (surrender): the case counts it before the prosecutors decide
+    if (SURRENDER && info && info.crime === SURRENDER.crime) {
+      const cs = (g.jus().cases || []).find((x) => x && x.id === info.caseId);
+      if (cs) { cs.remorse = Math.max(num(cs.remorse), 1.5); cs.plea = 'admit'; cs.jishu = 'jishu'; }
+    }
+  } catch (e) { console.error(e); }
+});
 onJustice('harassment', (g, info) => {
   try {
     if (!g || !g.state || !info || num(info.level) < 3) return;

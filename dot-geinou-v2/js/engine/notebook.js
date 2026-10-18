@@ -311,7 +311,12 @@ function goalPage(g, ctx) {
 
   // the one most important next step
   pg.block().head('つぎの目標', COLORS.accent);
-  if (fl.finaleDone) {
+  // in prison the career waits: the one goal is to serve the term and come back
+  const inPrison = hasJustice(g) && g.state.justice && safe(() => g.justiceStatus().status) === 'prison';
+  if (inPrison) {
+    pg.para('刑期をつとめあげて、社会にもどろう。');
+    pg.para('刑務作業や改善指導にまじめに取り組めば、仮釈放が認められることもある。', { s: SMALL, c: COLORS.dim });
+  } else if (fl.finaleDone) {
     // the year-end show was a milestone: the next title is the goal now
     const nr = nextTitle(st.fame);
     if (nr) {
@@ -344,7 +349,7 @@ function goalPage(g, ctx) {
     if (polGoal[1]) pg.para(polGoal[1], { s: SMALL, c: COLORS.dim });
   }
 
-  if (!st.agency && !fl.finaleDone) {
+  if (!st.agency && !fl.finaleDone && !inPrison) {
     pg.block().head('オーディション（合格で所属）');
     for (const a of AUDITIONS) pg.row(placeName(a.place), a.how, { tag: townTag(a.place), rs: SMALL, rc: COLORS.dim });
   }
@@ -373,16 +378,16 @@ function goalPage(g, ctx) {
 
   // jobs
   const here = g.map && GUIDE[g.map.placeId];
-  const jobs = suggestJobs(st, visited, here ? here.town : 'tokyo');
+  const jobs = inPrison ? [] : suggestJobs(st, visited, here ? here.town : 'tokyo');
   if (jobs.length) {
     pg.block().head('おすすめのお仕事');
     for (const j of jobs) pg.row('・' + j.label, GUIDE[j.place] ? GUIDE[j.place].short : j.place, { rs: SMALL, rc: COLORS.dim });
   }
-  const nextTier = TIER_FAME.find((f) => f > st.fame && !(f === 30 && st.agency));
+  const nextTier = inPrison ? null : TIER_FAME.find((f) => f > st.fame && !(f === 30 && st.agency));
   // (with an agency the next ★ line is already the main goal above)
   if (nextTier === 30) pg.para('所属するか★30になると、受けられるお仕事が増える。', { s: SMALL, c: COLORS.dim });
   else if (nextTier && (!st.agency || fl.finaleDone)) pg.para(`★${nextTier}で、もっと大きなお仕事が増える（あと★${nextTier - st.fame}）。`, { s: SMALL, c: COLORS.dim });
-  if (st.agency && AGENCIES[st.agency]) {
+  if (st.agency && AGENCIES[st.agency] && !inPrison) {
     const sk = SKILLS[AGENCIES[st.agency].skill];
     pg.para(`${AGENCIES[st.agency].name}の得意分野は「${sk}」。${sk}のお仕事は、ギャラと知名度が1.1倍！`, { s: SMALL, c: COLORS.dim });
   }
@@ -542,8 +547,11 @@ function urgentNotes(g) {
     if (js) {
       const yami = (js.loans || []).filter((l) => l.lender === 'yamikin');
       if (yami.length) out.push(['闇金から借りている。払い続ける前に、警察や弁護士に相談しよう。', COLORS.bad, 'law']);
-      const late = (js.loans || []).find((l) => l.lender !== 'yamikin' && num(l.due) - day <= 2 && l.status !== 'frozen');
-      if (late) out.push([`${late.company || '借入れ'}の返済日が${inDays(num(late.due) - day)}。`, COLORS.accent, 'law']);
+      if (js.status === 'prison') out.push([`刑務所で服役中${num(js.prisonUntil) > day ? `（刑期の終わりまで${inDays(num(js.prisonUntil) - day)}）` : ''}。芸能のお仕事も選挙もできない。`, COLORS.bad, 'law']);
+      else if (js.status === 'detained') out.push(['身柄を拘束されている。手続きが終わるまで、家には帰れない。', COLORS.bad, 'law']);
+      if (num(js.kinshinUntil) > day) out.push([`活動自粛中（${inDays(num(js.kinshinUntil) - day)}）。芸能のお仕事は受けられない（アルバイトは可）。`, COLORS.accent, 'law']);
+      const late = (js.loans || []).find((l) => l.lender !== 'yamikin' && (num(l.missed) > 0 || num(l.due) - day <= 2) && l.status !== 'frozen');
+      if (late) out.push([num(late.missed) > 0 || num(late.due) < day ? `${late.company || '借入れ'}の返済が遅れている。早めに返すか、法律相談を。` : `${late.company || '借入れ'}の返済日が${inDays(num(late.due) - day)}。`, num(late.missed) > 0 ? COLORS.bad : COLORS.accent, 'law']);
       const c = (js.cases || [])[0];
       const cname = c && JUS.CRIMES && JUS.CRIMES[c.crime] ? JUS.CRIMES[c.crime].name : '';
       if (c && c.next && c.next >= day) out.push([`${cname || '事件'}の手続きがある（${inDays(c.next - day)}）。`, COLORS.bad, 'law']);
@@ -616,7 +624,8 @@ function lawPage(g, ctx) {
   // ---- now
   pg.block().head('いまの状態', C);
   const open = (s.cases || []).length > 0;
-  const [sw, sc] = s.status === 'free' && open ? ['事件の手続きが続いている', COLORS.accent] : STATUS_WORD[s.status] || STATUS_WORD.free;
+  const [sw, sc] = s.status === 'free' && open ? ['事件の手続きが続いている', COLORS.accent]
+    : s.status === 'probation' && !s.suspendUntil ? ['保護観察中', COLORS.accent] : STATUS_WORD[s.status] || STATUS_WORD.free;
   pg.row('くらし', sw, { rc: sc });
   const record = Array.isArray(s.record) ? s.record : [];
   const convicted = !!s.hasRecord;
@@ -627,7 +636,10 @@ function lawPage(g, ctx) {
     pg.row(`執行猶予${j.supervision ? '（保護観察つき）' : ''}`, inDays(s.suspendUntil - day), { rc: COLORS.accent });
     pg.para('猶予中にまた罪を犯して実刑になると、猶予が取り消され、前の刑も受けることになる。\n猶予の期間を無事に過ごせば、刑の言い渡しは効力を失う。', { s: SMALL, c: COLORS.accent, x: 16 });
   }
-  if (s.probationUntil) pg.row('保護観察', inDays(s.probationUntil - day), { rc: COLORS.accent, rs: SMALL });
+  if (s.probationUntil) {
+    pg.row('保護観察', inDays(s.probationUntil - day), { rc: COLORS.accent, rs: SMALL });
+    if (!s.suspendUntil) pg.para('保護司と定期的に会い、決められた約束（遵守事項）を守って暮らす。', { s: SMALL, c: COLORS.dim, x: 16 });
+  }
   const civic = safe(() => g.civicBanReason('vote'));
   const cand = safe(() => g.civicBanReason('candidacy'));
   if (civic || cand) {
@@ -664,7 +676,7 @@ function lawPage(g, ctx) {
     const rate = yami ? 'トイチ' : `年${pctText(num(l.rate) * 100)}`;
     pg.row(`${l.company || (LND[l.lender] && LND[l.lender].name) || '借入れ'}`, fmtMoney(num(l.balance)), { tag: { t: (LND[l.lender] && LND[l.lender].name) || '借入れ', bg: yami ? '#8a1a2a' : '#5a4a2a' }, rc: yami ? COLORS.bad : COLORS.text });
     const due = num(l.due) - day;
-    pg.para(`${rate}・${l.status === 'frozen' ? '返済は止まっている' : `返済日 ${inDays(due)}`}${l.missed ? `・延滞${l.missed}回` : ''}`, { s: SMALL, c: l.missed ? COLORS.bad : COLORS.dim, x: 16 });
+    pg.para(`${rate}・${l.status === 'frozen' ? '返済は止まっている' : due < 0 ? '返済日を過ぎている' : `返済日 ${inDays(due)}`}${l.missed ? `・延滞${l.missed}回` : ''}`, { s: SMALL, c: l.missed ? COLORS.bad : COLORS.dim, x: 16 });
   }
   if (loans.length > 1) pg.row('合計', fmtMoney(num(s.debt)), { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.accent });
   if (loans.some((l) => l.lender === 'yamikin')) {
@@ -704,7 +716,7 @@ function lawPage(g, ctx) {
   // ---- where to get help
   pg.block().head('困ったときは', C);
   pg.para('・借金：スマホの「借入・返済」の法律相談、ドット区役所の生活・多重債務相談', { s: SMALL });
-  pg.para('・闇金・ストーカー・詐欺：警視庁（永田町）の相談室', { s: SMALL });
+  pg.para(`・闇金・ストーカー・詐欺：警視庁（永田町）の相談室${PLACES.koban ? '、ネオン街の交番' : ''}`, { s: SMALL });
   pg.para('・自己破産：裁判所（永田町）の破産係', { s: SMALL });
   pg.para('罪をおかせば、逮捕・裁判・刑罰がある。現実と同じように、取り返しのつかないこともある。', { s: SMALL, c: COLORS.dim });
   return pg;
@@ -899,7 +911,8 @@ function placesPage(g, ctx) {
       continue;
     }
     const mark = id === here;
-    pg.line({ t: p.name, c: mark ? COLORS.accent : COLORS.text, tag, mark, badge: p.audition ? { t: 'オーディション', c: COLORS.pink } : mark ? { t: 'いまここ', c: COLORS.accent } : null });
+    const live = p.liveName ? safe(() => (PLACES[id] && PLACES[id].name) || '', '') : '';
+    pg.line({ t: live || p.name, c: mark ? COLORS.accent : COLORS.text, tag, mark, badge: p.audition ? { t: 'オーディション', c: COLORS.pink } : mark ? { t: 'いまここ', c: COLORS.accent } : null });
     for (const l of p.lines || []) pg.para(l, { s: SMALL, x: 12, mark });
   }
   return pg;

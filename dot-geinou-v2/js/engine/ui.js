@@ -338,7 +338,10 @@ function civicLines(g) {
       else if (s.status === 'detained') { t = '身柄拘束中'; c = COLORS.bad; }
       else if (s.status === 'trial' || (s.cases && s.cases.length)) { t = '事件の手続き中'; c = COLORS.bad; }
       else if (s.suspendUntil) t = `執行猶予中${left(s.suspendUntil)}`;
-      else if (s.hasRecord) t = '前科あり';
+      // after 仮釈放 (or a juvenile 保護観察) the status is 'probation' without a suspended sentence
+      else if (s.probationUntil) t = `保護観察中${left(s.probationUntil)}`;
+      // a 公民権停止 matters more than the bare record: shown together when both apply
+      else if (s.hasRecord) t = s.civicBanUntil ? `前科あり・公民権停止${left(s.civicBanUntil)}` : '前科あり';
       else if (s.civicBanUntil) t = `公民権停止${left(s.civicBanUntil)}`;
       if (t) out.push(['法', t, c]);
     }
@@ -414,7 +417,8 @@ export class StatusScene {
     });
     // 政治 / 法 (only when relevant): one compact row under the skills
     this.civic.slice(0, 2).forEach(([label, v, col], i) => {
-      const x = i ? c2 : X + 24, w = i ? X + PW - 24 - c2 : c2 - 24 - (X + 24);
+      // side by side when both apply; a single row may use the whole width
+      const x = i ? c2 : X + 24, w = i || this.civic.length < 2 ? X + PW - 24 - x : c2 - 24 - (X + 24);
       let s = v;
       while (s.length > 1 && measure(ctx, `${label}：${s}`, 14) > w) s = s.slice(0, -2) + '…';
       text(ctx, `${label}：`, x, Y + 296, { size: 14, color: COLORS.dim });

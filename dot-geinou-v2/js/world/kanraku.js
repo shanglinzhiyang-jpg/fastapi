@@ -714,8 +714,8 @@ const FACADES = {
     // the sign 「交番」 + KOBAN
     R(c, dx - 26, 16, 84, 22, '#ffffff'); R(c, dx - 27, 15, 86, 24, INK);
     R(c, dx - 26, 16, 84, 22, '#ffffff');
-    sign(c, '交番', dx + 6, 24, 14, '#1a1a22');
-    sign(c, 'KOBAN', dx + 40, 24, 8, '#2a4a8a');
+    sign(c, '交番', dx + 4, 27, 16, '#1a1a22');
+    sign(c, 'KOBAN', dx + 40, 27, 11, '#2a4a8a', { bold: false, maxW: 32 });
     // the red lamp above the sign
     R(c, dx + 12, -14, 8, 4, '#2a2a30');
     live.push({ kind: 'lamp', x: dx + 10, y: -24, w: 12, h: 10, col: '#ff2a2a', hi: '#ffd0d0', mode: 'pulse' });

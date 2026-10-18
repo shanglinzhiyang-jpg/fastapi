@@ -30,6 +30,7 @@
 //   警視庁本部庁舎 1980年竣工、皇居の桜田門の前で「桜田門」とも呼ばれる。
 //   議員会館は2010年に新しい建物に（衆議院第一・第二議員会館、参議院議員会館）。
 //   千代田区 生活環境条例: 2002年10月施行、翌11月から路上禁煙地区での喫煙に過料2,000円（全国で初めての罰則）。
+//   はじめの禁煙地区は8か所（区の約3割）、2010年4月から区内全域。
 //   首相官邸の新しい建物の運用は2002年4月から。
 // Every politician, demonstrator, reporter and guard here is fictional. 自由民主党 / 民主党 are
 // described only with the neutral facts of politics.js (PARTY_DEFS).
@@ -1064,7 +1065,9 @@ function generate() {
 }
 
 // Smoking: 千代田区の生活環境条例 (2002年10月施行、11月から路上禁煙地区での喫煙に過料2,000円).
-registerSmokingRule('nagatacho', (g) => (lawDate(g).ym >= 200211
+// The first zones were 8 areas (about 30% of the ward, 秋葉原駅周辺 など); whether 永田町・霞が関 was among
+// them could not be confirmed, so the fine applies here from April 2010, when the whole ward became a zone.
+registerSmokingRule('nagatacho', (g) => (lawDate(g).ym >= 201004
   ? { ok: false, area: '千代田区（永田町・霞が関）', law: '千代田区生活環境条例', fine: 2000, patrol: 0.4, smokingArea: true }
   : { ok: true, area: '永田町' }));
 
