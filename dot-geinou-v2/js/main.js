@@ -131,9 +131,14 @@ function birthdayHook(g) {
 // over justice's wrapper. Returns the paths that failed (added to g.failedModules).
 async function loadCores() {
   const failed = [];
-  for (const [path, fn] of [['./engine/crime.js', 'installJustice'], ['./engine/politics.js', 'installPolitics']]) {
+  // literal import() paths, so a bundler can include the cores in a single-file build
+  const cores = [
+    ['./engine/crime.js', 'installJustice', () => import('./engine/crime.js')],
+    ['./engine/politics.js', 'installPolitics', () => import('./engine/politics.js')],
+  ];
+  for (const [path, fn, load] of cores) {
     try {
-      const mod = await import(path);
+      const mod = await load();
       mod[fn](Game.prototype);
     } catch (e) {
       console.error(`[core] failed to load ${path}:`, e);
