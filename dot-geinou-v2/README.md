@@ -1116,8 +1116,11 @@ income[], garnish, unpaid, suspendUntil, supervision, smoke{} }`。`outcome`：`
 
 ランダムと続きものの出来事 `DARK.EVENTS`（`acc_*` 事故、`inc_*` 事件、`scoop_*` 週刊誌、`pol_*` 政治家への誘い、`hansha_*` 反社、
 `threat_*` `crisis_*` 脅迫と危機管理、`debt_*` 取り立て）。毎朝 `decide()` が、プレイヤーの危うさ（`DARK.risk(g)`：闇金・延滞・前科と発覚前の罪・
-ネオン街・反社・裏金・知名度・公職）から間隔（3〜9日）と確率（6〜40%）を決め、多くても数日に1つ。最初の6日はなし。選ばれた出来事は
-`flags.darkside.pending` で、スクリプトが終わったとき・町を歩いたとき・家に帰ったとき・決まった場所に入ったときを待って始まります。
+ネオン街・反社・裏金・知名度・公職）から間隔（3〜9日）と確率（6〜40%）を決め、多くても数日に1つ。最初の6日はなし。
+ただの不運（`luck`：交通事故・詐欺の電話・空き巣・ストーカー・脅迫）は知名度と公職の分だけで決まり、危うい暮らしで増えるのは
+その暮らしの結果（借金・週刊誌・誘い・反社）のほう。事故どうしは30日以上あけます。選ばれた出来事は
+`flags.darkside.pending` で、スクリプトが終わったとき・家で・町を歩いたとき・家に帰ったとき・決まった場所に入ったときを待って始まり、
+始める直前にも条件（`ok`）を確かめ直します。
 犯罪は `g.commitCrime` / `g.coverUp` / `g.investigate` など司法のコアを通し、どの出来事もまっとうな選択肢が先頭（B と `g.auto` の既定）。
 API：`import { DARK } from './darkside.js'`（`window.__dark` も）`DARK.decide(g, { force, only })` `DARK.run(g, id, { data })`（`g.run` の中で）
 `DARK.flush(g)` `DARK.schedule(g, id, inDays, data)` `DARK.state(g)` `DARK.risk(g)`。状態は `g.state.flags.darkside`。

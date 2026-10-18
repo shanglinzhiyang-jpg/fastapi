@@ -542,14 +542,15 @@ const SCN = {
     text(c, g.fmt('{familyname}'), 190, 54, { size: 12, color: '#1a1a1a', shadow: null });
     R(c, 270, 134, 100, 40, '#6a6a72'); R(c, 270, 134, 100, 5, '#8a8a92');
     fig(c, playerLook(g), 288, 64, 'down');
-    if (o.sp) { fig(c, LK.sp, 200, 104, 'down'); fig(c, LK.sp, 376, 104, 'down'); }
+    if (o.sp) { if (!o.rush) fig(c, LK.sp, 200, 104, 'down'); fig(c, LK.sp, 376, 104, 'down'); }
     crowd(c, 30, 600, 186, 9, 2, 'up');
     if (o.rush) {
+      // on the left, clear of the choice box: the man is stopped short of the podium
       const k = Math.min(1, t / 20);
-      fig(c, LK.rusher, 470 - k * 40, 150, 'left');
-      fig(c, o.sp ? LK.sp : LK.police, 420 - k * 20, 146, 'right');
-      fig(c, o.sp ? LK.sp : LOOKS.staff, 500 - k * 30, 150, 'left');
-      if ((t >> 2) % 2) for (let i = 0; i < 3; i++) R(c, 520 + i * 10, 170 + i * 8, 14, 2, '#ffffff');
+      fig(c, o.sp ? LK.sp : LOOKS.staff, 30 + k * 40, 124, 'right');
+      fig(c, LK.rusher, 70 + k * 50, 118, 'right');
+      fig(c, o.sp ? LK.sp : LK.police, 186 - k * 16, 108, 'left');
+      if ((t >> 2) % 2) for (let i = 0; i < 3; i++) R(c, 40 + k * 50 - i * 6, 150 + i * 10, 18, 2, '#ffffff');
     }
   },
   crisis(c, t, g, o) {
@@ -879,6 +880,7 @@ const EV = {
         S.set('phone', { title: '数日後の電話', who: WHO.victimFam.look, rightBg: '#d8dce4', rightFloor: '#9a9ea8' });
         await say(g, WHO.victimFam, ['母は、手首を骨折していました。', 'あなた、警察にも届けずに行ってしまったそうですね。\nけが人を残して立ち去るのは、許されることですか！']);
         await narr(g, '（けが人を残して立ち去るのは、救護義務違反として\n罪に問われることもある。何も言い返せなかった）');
+        await narr(g, '（警察からも呼び出され、事故のことを一から聞かれた。\n「次は、必ずその場で救護と通報を」と厳しく言われた）');
         g.addNeed('stress', 15);
         if (c.fame >= 250 || c.office) {
           news(g, `【${MAG}】${whoIs(g, c)}、自転車で歩行者にけがをさせ、その場を離れていた。`);
@@ -893,7 +895,7 @@ const EV = {
         await say(g, WHO.lawyer, ['相手方の弁護士です。', `治療費と慰謝料、休業損害として\n${fmtMoney(amount)}をお支払いください。`, '自転車の事故でも、けがが重いと賠償は高額になります。']);
         const r = await g.fine(amount, '自転車事故の損害賠償', { kind: 'civil' });
         if (r && r.unpaid) await narr(g, '（払いきれない分は、これからの収入から\n少しずつ支払っていくことになった…）');
-        const law = c.year >= 2020 ? '\n（東京都では2020年4月から、加入が義務になった）' : '';
+        const law = c.year > 2020 || (c.year === 2020 && c.month >= 4) ? '\n東京都では2020年4月から、加入が義務になった' : '';
         const k2 = await ask(g, null, `（自転車保険に入っていれば…。${law}）`, ['自転車保険に入る', 'いまは入らない']);
         if (k2 === 0) {
           const fee = 4000;
@@ -1250,7 +1252,7 @@ const EV = {
       const st = g.state;
       const truth = c.secret > 0;
       const S = open('magazine', { title: MAG, sub: '来週号のゲラ', headline: '{familyname}議員に\n「裏金」疑惑', stamp: '追及' });
-      await say(g, WHO.secretary, [`${MAG}が、先生の政治団体の収支報告書に\n書かれていない収入があると書くそうです。`, truth ? '…パーティー券の分のことだと思います。' : '身に覚えは、ありませんよね…？']);
+      await say(g, WHO.secretary, [`${MAG}が、先生の政治団体の収支報告書に\n書かれていない収入があると書くそうです。`, truth ? (secretFromParty(c) ? '…パーティー券の分のことだと思います。' : '…帳簿にのせていない、あのお金のことだと思います。') : '身に覚えは、ありませんよね…？']);
       if (!truth) {
         const k = await ask(g, null, '（身に覚えのない疑惑だ…）', ['事実無根と説明する', '名誉毀損で訴える', '何も言わない']);
         if (k === 0) {
@@ -1280,7 +1282,7 @@ const EV = {
         if (!free(g)) return { truth: true, pick: 'momikeshi' };
       }
       S.ensure();
-      await narr(g, k === 1 ? '（「まったくの事実無根です」と言い切った）' : k === 2 ? '（「事実無根の記事です。法的措置をとります」と発表した）' : '（もみ消しは、うまくいかなかった…）');
+      await narr(g, k === 1 ? '（「まったくの事実無根です」と言い切った）' : k === 2 ? '（「事実無根の記事です。法的措置をとります」と発表した）' : '（記事を止めることは、できなかった…）');
       const amount = exposeSecret(g, 4);
       await narr(g, `（発売された記事には、帳簿の写しまで載っていた。\n不記載は${fmtMoney(amount)}にのぼる…）`);
       polNudge(g, { rep: -5 });
@@ -1350,7 +1352,8 @@ const EV = {
     async run(g, c, data, open) {
       const st = g.state;
       const S = open('phone', { title: 'くろがね建設からの電話', who: LK.shacho, rightBg: '#e8dfc8', rightFloor: '#cdbf86' });
-      await say(g, WHO.shacho, ['先生、例の件ですが…。', '国交省の担当の方に、そろそろ\nひと声かけていただけませんか。']);
+      // 国土交通省 from 2001-01 (before: 建設省)
+      await say(g, WHO.shacho, ['先生、例の件ですが…。', `${c.year >= 2001 ? '国交省' : '建設省'}の担当の方に、そろそろ\nひと声かけていただけませんか。`]);
       const k = await ask(g, null, '（約束を果たせば、罪をかさねることになる…）', ['できないと断る', '役所に口をきく']);
       if (k === 0) {
         await say(g, WHO.shacho, '…お金だけ受け取って、それですか。\nまあ、いいでしょう。覚えておきますよ。');
@@ -1389,7 +1392,8 @@ const EV = {
     ok: (g, c) => !!c.office && !!naibuCrime(g, c),
     async run(g, c, data, open) {
       const st = g.state;
-      const crime = naibuCrime(g, c) || 'slush_fund';
+      const crime = naibuCrime(g, c);
+      if (!crime) return { skipped: true };
       const S = open('office', { title: '議員事務所', sub: '秘書が、思いつめた顔で…' });
       await say(g, WHO.secretary, ['先生…もう、黙っていられません。', crime === 'slush_fund' ? '帳簿にのせていないお金のこと、\n検察に話そうと思います。' : 'あの業者からのお金のこと、\n検察に話そうと思います。']);
       const k = await ask(g, null, '（どうする…？）', ['自ら公表して謝る', '口止め料を払う', '秘書を解雇する']);
@@ -1440,19 +1444,20 @@ const EV = {
       const S = open('office', { title: '事務所', sub: '朝早く、事務所に…', who: who.look });
       g.sfx('buzz');
       await narr(g, ['（朝早く、事務所に段ボール箱を抱えた人たちが\n次々と入ってきた）', `（${tokuso ? '東京地検特捜部' : '警視庁'}の家宅捜索だ――）`]);
-      await say(g, who, [`${CRIMES[crime].short}の疑いで、捜索します。`, '帳簿とパソコン、手帳を押収させていただきます。']);
+      await say(g, who, [`${CRIMES[crime].short}の疑いで、捜索します。`, c.year >= 1995 ? '帳簿とパソコン、手帳を押収させていただきます。' : '帳簿と手帳、書類を押収させていただきます。']);
       const k = await ask(g, null, '（どうする…？）', ['捜査に協力する', '弁護士を呼ぶ', '書類を処分させる']);
       if (k === 2) {
         await narr(g, '（秘書に目くばせした…。\n秘書は、首を横にふった）');
         await say(g, WHO.secretary, '先生…それだけは、できません。\n証拠を隠せば、罪がもっと重くなります。');
         await narr(g, '（証拠を隠すよう頼むことも、罪になりうる。\n…捜査員の目つきが、いっそう厳しくなった）');
-        polNudge(g, { standing: -3 });
+        polNudge(g, { standing: -6, rep: -6 });
       } else if (k === 1) await say(g, WHO.lawyer, ['取り調べには、事実だけを話してください。', '黙秘する権利もあります。\n迷ったら、まず私に相談してください。']);
       else await narr(g, '（「すべて、ありのままにお見せします」と答えた）');
-      news(g, `${tokuso ? '東京地検特捜部' : '警視庁'}が、${whoIs(g, c)}の事務所を${CRIMES[crime].short}の疑いで家宅捜索。`);
+      news(g, `${tokuso ? '東京地検特捜部' : '警視庁'}が、${whoIs(g, c)}の事務所を${CRIMES[crime].short}の疑いで家宅捜索。${k === 2 ? '関係者によると、捜索の場で書類の処分を秘書に求めたという。' : ''}`);
       polNudge(g, { rep: -4, local: -3 });
-      S.hide();
-      await prosecute(g, crime, { now: true, amount: num(data.amount) || undefined });
+      await narr(g, '（段ボール箱が運び出されていく。\n…これで終わりではないことは、分かっていた）');
+      // the search comes first; the arrest (or a summons) follows on another day, as the core queues it
+      await prosecute(g, crime, { amount: num(data.amount) || undefined });
       return { pick: ['cooperate', 'lawyer', 'destroy'][k], crime };
     },
   },
@@ -1805,9 +1810,9 @@ const EV = {
 // with someone from that world (the fixer of a もみ消し).
 function hanshaSource(g, c) {
   const kan = (c.st.flags && c.st.flags.kanraku) || {};
-  if (c.d.story.hanshaDeal) return { id: 'party', head: '反社の宴に出演', photo: '反社会的勢力の宴会に出ていた写真', news: '反社会的勢力の宴会に出演していた', other: LK.boss };
-  if (kan.kumiTies) return { id: 'kumi', head: '暴力団事務所に出入り', photo: '暴力団の事務所に出入りする写真', news: '暴力団の事務所に出入りしていた', other: LK.chinpira2 };
-  return { id: 'meet', head: '反社の男と密会', photo: '反社会的勢力の人物と会っている写真', news: '反社会的勢力の人物と会っていた', other: LK.broker };
+  if (c.d.story.hanshaDeal) return { id: 'party', head: '反社の宴に出演', photo: '反社会的勢力の宴会に出ていた写真', news: '反社会的勢力の宴会に出演していた', other: LK.boss, sorry: '相手が何者か確かめもせず、宴会に出ました。\n本当に軽率でした' };
+  if (kan.kumiTies) return { id: 'kumi', head: '暴力団事務所に出入り', photo: '暴力団の事務所に出入りする写真', news: '暴力団の事務所に出入りしていた', other: LK.chinpira2, sorry: '暴力団の事務所に出入りしていました。\n言い訳はしません' };
+  return { id: 'meet', head: '反社の男と密会', photo: '反社会的勢力の人物と会っている写真', news: '反社会的勢力の人物と会っていた', other: LK.broker, sorry: '反社会的勢力の人物と会っていました。\n本当に軽率でした' };
 }
 // The 反社 story is out. The career consequence goes through the justice core's careerSanction (the
 // agency ends the contract, TV drops the player; softer for one who told it first), and the case is
@@ -1816,7 +1821,7 @@ async function hanshaExposed(g, c, S, { admit, src }) {
   if (!free(g)) return;
   if (admit) {
     S.core('press', { title: '記者会見', sub: '', banner: 'おわびの会見' });
-    await narr(g, ['（「反社会的勢力の関係者だと知らずに、とは言いません。\n軽率でした」と、深く頭を下げた）', '（フラッシュの光が、いつまでも止まなかった）']);
+    await narr(g, [`（「${src.sorry}」と、深く頭を下げた）`, '（フラッシュの光が、いつまでも止まなかった）']);
   } else {
     S.set('magazine', { title: MAG, sub: '発売', headline: `{familyname}${c.office ? '議員' : ''}\n${src.head}`, other: src.other, stamp: '発売' });
     await narr(g, '（記事が出た。…説明を求める声が、日に日に大きくなった）');
@@ -1828,7 +1833,12 @@ async function hanshaExposed(g, c, S, { admit, src }) {
     if (j.heat) delete j.heat.antisocial_ties;
     j.queue = (j.queue || []).filter((e) => !(e && e.crime === 'antisocial_ties' && e.type === 'weekly'));
   } catch (e) { console.error(e); }
-  if (c.anyFam) famMsg(g, c.anyFam, admit ? '会見、見た{yo}。正直に話したの{ne}。\nつらいだろうけど、いちからやり直そう{ne}。' : '週刊誌のこと、本当な{no}？\n{you}の口から、ちゃんと聞かせて{ne}。');
+  if (c.anyFam) famMsg(g, c.anyFam, admit ? '会見、見た{yo}。正直に話したんだ{ne}。\nつらいだろうけど、いちからやり直そう{ne}。' : '週刊誌のこと、本当な{no}？\n{you}の口から、ちゃんと聞かせて{ne}。');
+}
+// Did the hidden money come from party tickets (the politics core's secretLog)?
+function secretFromParty(c) {
+  const log = c.me && Array.isArray(c.me.secretLog) ? c.me.secretLog : [];
+  return !log.length || log.some((e) => e && /パーティー/.test(String(e.source || '')));
 }
 // What the secretary would take to the prosecutors: 裏金, or the contractor's money (収賄・あっせん利得).
 function naibuCrime(g, c) {
@@ -1962,6 +1972,10 @@ function tryRun(g, how) {
   if (!E) { d.pending = null; return false; }
   if (!whereOk(g, E, pd, how)) return false;
   d.pending = null;
+  // what was true in the morning may not be any more (a case opened, a seat lost, a debt paid)
+  let still = true;
+  try { still = !E.ok || !!E.ok(g, ctxOf(g), pd.data || {}); } catch (e) { console.error(e); still = false; }
+  if (!still) return false;
   g.run(() => runEvent(g, pd.id, { data: pd.data || {}, follow: pd.follow }));
   return true;
 }
