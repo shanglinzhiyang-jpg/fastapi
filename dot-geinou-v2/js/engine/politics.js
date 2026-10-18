@@ -157,7 +157,25 @@
 // - 政治資金規正法 2024年改正: パーティー券の公開基準を20万円超→5万円超（2027年から）、連座制の導入など。
 //   source: hokkaido-np.co.jp, nri.com
 // Fictional: every politician NPC, ドット区, the parties ともしび党・青空党・日輪党・にじいろ党・田園党・
-// かけはし党, all scandals and all events. 自由民主党 / 民主党 appear only with the facts above.
+// かけはし党, all scandals and all events. 自由民主党 / 民主党 appear only with the facts above; NPCs of
+// those two parties never get a scandal (they only step down for neutral reasons).
+//
+// Game model in short:
+// - Calendar: 120 game days a year, 10 a month (1 game day ≈ 3 real days); eras start in April of 1987 /
+//   1995 / 2004 / 2026. Real campaign periods are divided by 3 (衆院 12日 → 4 game days).
+// - Where the player can run: ドット区議会 (定数40) / ドット区長 / 東京都議会 (ドット区選挙区, 定数3) /
+//   東京都知事, 衆院 (東京ドット区 or the hometown: 小選挙区・中選挙区・比例), 参院 (東京都選挙区, the
+//   hometown 選挙区 or 全国比例), any 補欠選挙, and the party leadership race. ドット区 votes off the
+//   統一地方選挙 cycle (as many real 特別区 do), so a race comes up within the first two years.
+// - Votes: segments (weights by year) → party support (opinion) → district shares with turnout;
+//   candidates add a personal vote by quality Q (fame and fans = 名前の知られ方, 地盤, campaign,
+//   reputation, incumbency, talk skill, hometown). National seats: 小選挙区 by blocs (share^1.8),
+//   比例 by d'Hondt per block, 中選挙区 near-proportional; the player's own district is simulated.
+// - The Diet: sessions by the calendar, the cabinet's agenda by period (AGENDA), member bills, 党議拘束
+//   and defections, つるし (bills held in committee), 再可決, みなし否決, 予算の自然成立, 不信任, 解散,
+//   憲法改正 → 国民投票. Laws change segments' support, the economy (over `lasting` years) and the budget.
+// - Money: internal amounts are game money; legal fixed amounts of other eras (供託金) are converted so
+//   that they show as that era's yen; 歳費 etc. use today's amounts shown at the era's price level.
 
 import { clamp, fmtMoney, YEN_MARK } from './util.js';
 import { COLORS } from './draw.js';
@@ -638,7 +656,7 @@ policy('defense_cut', 'diplomacy', '防衛費の削減', '防衛費をおさえ�
   apply: (pol) => { pol.economy.defense = Math.max(0.5, (pol.economy.defense || 1) - 0.1); },
 });
 policy('security_law', 'diplomacy', '安全保障法制の整備', '同盟国との協力や自衛隊の活動の範囲を法律で定める。', {
-  ideo: { security: 1.6 }, ministry: 'minister_defense',
+  years: yr(1997), ideo: { security: 1.6 }, ministry: 'minister_defense',
   seg: { business: 1, elderly: 1, rural: 1, young: -2, unions: -4, families: -1, floating: -2, urban: -1 },
 });
 policy('pko', 'diplomacy', '国際貢献（国連の平和維持活動）への参加', '国連の平和維持活動に、自衛隊などが参加できるようにする。', {
@@ -795,7 +813,7 @@ policy('anti_yakuza', 'safety', '暴力団排除の強化', '暴力団への利�
   apply: (pol) => { pol.flags.antiYakuza = (pol.flags.antiYakuza || 0) + 1; },
 });
 policy('conspiracy_law', 'safety', '組織犯罪対策の強化（共謀罪の新設）', '重大な犯罪の計画段階から処罰できるようにする。', {
-  ideo: { social: 0.8, security: 1.0 }, ministry: 'minister_justice',
+  years: yr(1999), ideo: { social: 0.8, security: 1.0 }, ministry: 'minister_justice',
   seg: { elderly: 2, business: 1, rural: 1, young: -2, unions: -3, urban: -1, floating: -2 },
 });
 policy('smoking_ban', 'health', '受動喫煙対策（飲食店などの原則屋内禁煙）', 'たばこを吸わない人を煙から守るため、屋内を原則禁煙にする。', {
@@ -1236,9 +1254,20 @@ export function newPoliticsState(g) {
 
 // Older saves / hand edits: fill what is missing and make numbers numbers.
 function normalizePolitics(g, p) {
-  if (!p || typeof p !== 'object') return newPoliticsState(g);
-  const fresh = () => newPoliticsState(g);
-  if (!p.cal || !p.parties || !p.diet || !p.diet.shugi || !p.diet.sangi || !p.economy || !p.cabinet) return fresh();
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return newPoliticsState(g);
+  const obj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  // the world itself is broken: start it again, keeping the player's own record
+  if (!obj(p.cal) || !obj(p.parties) || !Object.keys(p.parties).length || !obj(p.diet) || !obj(p.diet.shugi) || !obj(p.diet.sangi) || !obj(p.economy) || !obj(p.cabinet) || !obj(p.local) || !obj(p.local.kugi) || !obj(p.npcs)) {
+    const keep = obj(p.me) ? p.me : null;
+    const fresh = newPoliticsState(g);
+    if (keep) {
+      fresh.me = { ...newMe(), ...keep };
+      if (fresh.me.party && !fresh.parties[fresh.me.party]) fresh.me.party = null;
+      fresh.me.posts = Array.isArray(keep.posts) ? keep.posts.filter((x) => POSTS[x] && POSTS[x].kind !== 'cabinet') : [];
+      if (fresh.me.office === 'shugi' || fresh.me.office === 'sangi') { const H = fresh.diet[fresh.me.office]; const id = fresh.me.party || IND; H.seats[id] = num(H.seats[id]) + 1; H.total = sumSeats(H.seats); }
+    }
+    return normalizePolitics(g, fresh);
+  }
   p.v = POL_STATE_VERSION;
   p.me = { ...newMe(), ...(p.me && typeof p.me === 'object' ? p.me : {}) };
   const me = p.me;
@@ -1548,7 +1577,7 @@ function scheduleElections(g, p) {
     addElection(p, { kind, day: dayOfAbs(p, t) - 3 });
   }
   if (!up('touitsu')) {
-    let y = yearOfAbs(p, abs);
+    let y = Math.max(yearOfAbs(p, abs), num(p.flags.touitsuYear, 0) + 1);
     while ((y - 1947) % 4 !== 0 || dayOfAbs(p, absOf(p, y, 4, 22)) <= day) y++;
     addElection(p, { kind: 'touitsu', day: dayOfAbs(p, absOf(p, y, 4, 22)) });
   }
@@ -1696,14 +1725,16 @@ function runRace(p, race) {
   const local = ['kugi', 'togi'].includes(kind);
   const partyK = local ? 0.65 : 1;
   const personal = (d.none + orphan * 0.5) * (local ? 1.6 : kind === 'chiji' ? 1.5 : 1.0) + (race.personalExtra || 0);
-  const qs = candidates.reduce((a, c) => a + Math.pow(Math.max(0.02, c.Q), 1.5), 0) || 1;
+  const qw = (c) => Math.pow(clamp(c.Q, 0.02, 1.7), M > 1 ? 1.0 : 1.3);
+  const qs = candidates.reduce((a, c) => a + qw(c), 0) || 1;
   let tot = 0;
   for (const c of candidates) {
-    let v = Math.pow(Math.max(0.02, c.Q), 1.5) / qs * personal;
+    let v = (qw(c) / qs) * personal;
     if (c.party && byParty[c.party]) {
       const mates = byParty[c.party];
-      const qsum = mates.reduce((a, m) => a + 0.5 + m.Q, 0);
-      v += partyK * num(partyPool[c.party]) * ((0.5 + c.Q) / qsum);
+      const base = M > 1 ? 1.4 : 0.8; // 中選挙区・複数区: the party's organisation spreads its vote
+      const qsum = mates.reduce((a, m) => a + base + clamp(m.Q, 0, 1.7), 0);
+      v += partyK * num(partyPool[c.party]) * ((base + clamp(c.Q, 0, 1.7)) / qsum);
     }
     if (c.backers) for (const b of c.backers) if (p.parties[b] && !byParty[b]) v += partyK * num(d.parties[b]) * 0.8 / Math.max(1, candidates.filter((x) => (x.backers || []).includes(b)).length);
     v *= Math.exp(gauss() * (race.noise ?? 0.1));
@@ -1735,7 +1766,7 @@ function fieldCandidates(p, M, fy, kind, opts = {}) {
     if (Math.random() < 0.4) list.push(npcCandidate(p, IND));
   } else {
     const field = Math.round(M * (kind === 'kugi' ? 1.3 : 1.5)) + 1;
-    const k = kind === 'kugi' || kind === 'togi' ? 1.35 : 0.85; // local parties field many; 参院選挙区 / 中選挙区 fewer
+    const k = kind === 'kugi' || kind === 'togi' ? 1.35 : kind === 'shugi' ? 1.3 : 0.85; // 地方議会・中選挙区 (同士討ち) field many; 参院の複数区は少なめ
     for (const id of ids) {
       let n = Math.max(nat[id] > 0.02 ? 1 : 0, Math.round(nat[id] * M * k * (id === 'jimin' ? 1.15 : 1)));
       if (opts.mine === id) n = Math.max(0, n - 1);
@@ -1757,6 +1788,19 @@ function electorateFor(kind, year, district) {
   if (kind === 'chu') return lerp(1250000, 1300000);
   if (kind === 'sangiNational') return lerp(87000000, 104000000);
   return lerp(420000, 460000); // 小選挙区 (目安)
+}
+// 参院選挙区の改選数（目安: 大都市圏は複数区、ほとんどの県は1人区）and the size of a prefecture vs Tokyo.
+const sangiPrefMagnitude = (pref) => (['osaka', 'kanagawa', 'aichi', 'saitama'].includes(pref) ? 4 : ['hokkaido', 'chiba', 'fukuoka', 'hyogo'] .includes(pref) ? 3 : ['ibaraki', 'shizuoka', 'kyoto', 'hiroshima'].includes(pref) ? 2 : 1);
+const prefScale = (pref) => ({ osaka: 0.63, kanagawa: 0.66, aichi: 0.54, saitama: 0.53, hokkaido: 0.37, chiba: 0.45, fukuoka: 0.37, hyogo: 0.39, ibaraki: 0.21, shizuoka: 0.27, kyoto: 0.19, hiroshima: 0.2 }[pref] || 0.1);
+// The 比例ブロック of a prefecture.
+function blockOfPref(pref) {
+  const r = (PREFECTURES[pref] || PREFECTURES.tokyo).region;
+  if (pref === 'tokyo') return '東京';
+  if (['ibaraki', 'tochigi', 'gunma', 'saitama'].includes(pref)) return '北関東';
+  if (['chiba', 'kanagawa', 'yamanashi'].includes(pref)) return '南関東';
+  if (['niigata', 'toyama', 'ishikawa', 'fukui', 'nagano'].includes(pref)) return '北陸信越';
+  if (['gifu', 'shizuoka', 'aichi', 'mie'].includes(pref)) return '東海';
+  return { hokkaido: '北海道', tohoku: '東北', kansai: '近畿', chugoku: '中国', shikoku: '四国', kyushu: '九州' }[r] || '東京';
 }
 const profileOfPref = (pref) => (['tokyo', 'osaka', 'kanagawa'].includes(pref) ? 'urban' : ['aichi', 'saitama', 'chiba', 'hyogo', 'fukuoka', 'kyoto', 'miyagi', 'hiroshima', 'hokkaido'].includes(pref) ? 'mixed' : 'rural');
 // The player's race record (deposit, votes...) -> myResult.
@@ -1802,7 +1846,7 @@ function runShugi(g, p, e, fy) {
     if (inDistrict) {
       const cands = fieldCandidates(p, M, fy, 'shugi', { mine: decl.party });
       cands.push(playerCandidate(g, p, e, decl));
-      race = runRace(p, { candidates: cands, M, electorate: electorateFor('chu', year), profile: 'urban', fy, kind: 'shugi' });
+      race = runRace(p, { candidates: cands, M, electorate: electorateFor('chu', year), profile: decl.hometown ? profileOfPref(decl.pref) : 'urban', fy, kind: 'shugi' });
       for (const w of winnersOf(race, M)) seats[w.party] = (seats[w.party] || 0) + 1;
       my = finishMine(g, p, e, decl, race, M);
     }
@@ -1817,12 +1861,13 @@ function runShugi(g, p, e, fy) {
     const smd = { ...alloc(coalShare, bs.__coal || 0, 1.6), [IND]: ind };
     for (const [id, n] of Object.entries(bs)) if (id !== '__coal') smd[id] = (smd[id] || 0) + n;
     const pr = {};
+    const myBlock = blockOfPref(decl && decl.hometown ? decl.pref : 'tokyo');
     for (const b of prBlocks(R.pr)) {
       const v = {};
       for (const id of Object.keys(nat.share)) if (nat.share[id] > 0.006) v[id] = nat.share[id] * Math.exp(gauss() * 0.1) * (b.name === '東京' && ['aozora', 'nijiiro'].includes(id) ? 1.25 : 1);
       const dh = dhondt(v, b.seats);
       addTo(pr, dh);
-      if (b.name === '東京') tokyoPR = { seats: b.seats, byParty: dh };
+      if (b.name === myBlock) tokyoPR = { seats: b.seats, byParty: dh };
     }
     seats = addTo(addTo({}, smd), pr);
     if (decl) {
@@ -1830,7 +1875,7 @@ function runShugi(g, p, e, fy) {
         const nominee = decl.party && decl.party !== IND;
         const cands = fieldCandidates(p, 1, fy, 'shugi', { exclude: nominee ? decl.party : null, skipCoalition: nominee && coalition.includes(decl.party) });
         cands.push(playerCandidate(g, p, e, decl));
-        race = runRace(p, { candidates: cands, M: 1, electorate: electorateFor('smd', year), profile: 'urban', fy, kind: 'shugi' });
+        race = runRace(p, { candidates: cands, M: 1, electorate: electorateFor('smd', year), profile: decl.hometown ? profileOfPref(decl.pref) : 'urban', fy, kind: 'shugi' });
         const w = race.candidates[0];
         seats[w.party] = (seats[w.party] || 0) + 1;
         const meC = race.candidates.find((c) => c.isPlayer);
@@ -1838,8 +1883,9 @@ function runShugi(g, p, e, fy) {
         if (!meC.won && decl.proportional && nominee && tokyoPR) {
           const forfeited = meC.votes < race.valid / 10; // 2000年改正: 没収点未満は復活できない
           const prSeats = num(tokyoPR.byParty[decl.party]);
-          const wins = Math.round(25 * num(smd[decl.party]) / Math.max(1, R.smd));
-          const losers = Math.max(1, 25 - wins);
+          const smdIn = Math.max(4, Math.round(tokyoPR.seats * 1.6)); // 小選挙区の数（ブロック内, 目安）
+          const wins = Math.round(smdIn * num(smd[decl.party]) / Math.max(1, R.smd));
+          const losers = Math.max(1, smdIn - wins);
           const sek = meC.votes / Math.max(1, w.votes);
           const ahead = Math.round(losers * clamp((0.95 - sek) / 0.65, 0, 1));
           if (!forfeited && ahead < prSeats) revived = true;
@@ -1863,8 +1909,8 @@ function runShugi(g, p, e, fy) {
 function runSangi(g, p, e, fy) {
   const year = Math.floor(fy);
   const R = sangiRules(year);
-  const Mt = tokyoSangiMagnitude(year);
   const decl = myDecl(e);
+  const Mt = decl && decl.hometown ? sangiPrefMagnitude(decl.pref) : tokyoSangiMagnitude(year);
   const nat = nationalShares(g, p, fy, 'sangi');
   const coalition = (p.cabinet.partyIds || []).filter((id) => p.parties[id]);
   const inTokyo = decl && !decl.proportional;
@@ -1884,9 +1930,10 @@ function runSangi(g, p, e, fy) {
   let race = null, my = null;
   if (decl) {
     if (inTokyo) {
-      const cands = fieldCandidates(p, Mt, fy, 'sangi', { mine: decl.party });
+      const nominee = decl.party && decl.party !== IND;
+      const cands = fieldCandidates(p, Mt, fy, 'sangi', Mt === 1 ? { exclude: nominee ? decl.party : null, skipCoalition: nominee && coalition.includes(decl.party) } : { mine: decl.party });
       cands.push(playerCandidate(g, p, e, decl));
-      race = runRace(p, { candidates: cands, M: Mt, electorate: electorateFor('sangiTokyo', year), profile: 'urban', fy, kind: 'sangi', noise: 0.12 });
+      race = runRace(p, { candidates: cands, M: Mt, electorate: decl.hometown ? Math.round(electorateFor('sangiTokyo', year) * prefScale(decl.pref)) : electorateFor('sangiTokyo', year), profile: decl.hometown ? profileOfPref(decl.pref) : 'urban', fy, kind: 'sangi', noise: 0.12 });
       for (const w of winnersOf(race, Mt)) half[w.party] = (half[w.party] || 0) + 1;
       my = finishMine(g, p, e, decl, race, Mt);
     } else {
@@ -1910,13 +1957,14 @@ function runSangi(g, p, e, fy) {
   for (const k of Object.keys(half)) if (!half[k]) delete half[k];
   // the older class is replaced
   const cls = p.diet.sangi.classes.slice().sort((a, b) => a.year - b.year);
+  const replacedYear = cls[0].year;
   cls[0] = { year, seats: half };
   p.diet.sangi.classes = cls;
   const seats = addTo(addTo({}, cls[0].seats), cls[1].seats);
   for (const k of Object.keys(seats)) if (!seats[k]) delete seats[k];
   p.diet.sangi = { ...p.diet.sangi, seats, total: sumSeats(seats), last: absOfDay(p, e.day) };
   for (const id of Object.keys(p.parties)) p.parties[id].voteShare.sangi = num(nat.share[id]);
-  return { seats: { ...half }, total: sumSeats(half), houseSeats: { ...seats }, turnout: race ? race.turnout : nat.turnout, valid: race ? race.valid : 0, national: { share: { ...nat.share } }, race, my, winners: race ? winnersOf(race, Mt) : [] };
+  return { replacedYear, seats: { ...half }, total: sumSeats(half), houseSeats: { ...seats }, turnout: race ? race.turnout : nat.turnout, valid: race ? race.valid : 0, national: { share: { ...nat.share } }, race, my, winners: race ? winnersOf(race, Mt) : [] };
 }
 
 function runLocal(g, p, e, fy) {
@@ -2055,6 +2103,7 @@ function cabinetPartyOfPM(p) {
 }
 
 function runTouitsu(g, p, e, fy) {
+  p.flags.touitsuYear = Math.floor(fy);
   const d = districtShares(p, 'mixed', fy, 'touitsu');
   const ids = Object.keys(p.parties);
   const seats = alloc(d.parties, 2600, 1.1); // 都道府県議会の改選議席の目安
@@ -2110,7 +2159,7 @@ function note(g, text) { (g.morningNotes || (g.morningNotes = [])).push(text); }
 function phoneNews(g, text, from = 'ドット新聞 政治部') {
   try { g.message({ from, text, kind: 'news' }); } catch (e) { /* no phone in some tests */ }
 }
-const pname = (p, id) => (id === IND ? '無所属' : id === 'none' ? '支持なし' : (p.parties[id] && p.parties[id].short) || id || '');
+const pname = (p, id) => (id === IND ? '無所属' : id === 'none' ? '支持なし' : (p.parties[id] && p.parties[id].short) || (PARTY_DEFS[id] && PARTY_DEFS[id].short) || (p.flags.partyNames && p.flags.partyNames[id]) || id || '');
 function seatsLine(p, seats, n = 4) {
   return Object.entries(seats || {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, n).map(([id, v]) => `${pname(p, id)}${v}`).join('・');
 }
@@ -2143,6 +2192,19 @@ function afterElection(g, p, e, res, decl, r) {
     if (w && e.kind !== 'kugi') news(p, g, `${e.label}：${w.name}氏（${pname(p, w.party)}）が当選`);
     else news(p, g, `${e.label}：${seatsLine(p, res.seats, 5)}`);
   }
+  // a member who did not stand again leaves office with the old house / council
+  if (!decl) {
+    const off = (ELECTION_KINDS[e.kind] || {}).office;
+    const retire = off && me.office === off && (off !== 'sangi' || num(me.sangiClass) === num(r && r.replacedYear));
+    if (retire) {
+      me.formerOffice = off;
+      me.office = null;
+      me.termEnd = null;
+      me.posts = me.posts.filter((x) => POSTS[x] && POSTS[x].kind === 'party');
+      if (p.cabinet.pm === 'player' && off === 'shugi') p.cabinet.pending = { kind: 'special', day: day + 3, reason: '総選挙' };
+      note(g, `（${e.label}に立候補しなかったので、${OFFICES[off].label}の任期を終えた）`);
+    }
+  }
   if (!decl || !res.myResult) return;
   const my = res.myResult;
   const off = e.kind === 'hosen' ? (e.house === 'sangi' ? 'sangi' : 'shugi') : (ELECTION_KINDS[e.kind] || {}).office;
@@ -2167,7 +2229,7 @@ function afterElection(g, p, e, res, decl, r) {
   if (my.won) {
     me.office = off;
     me.formerOffice = null;
-    me.district = my.pr ? (e.kind === 'sangi' ? '全国比例' : '比例東京ブロック') : (decl.district || HOME_DISTRICT[e.kind] || e.district);
+    me.district = my.pr || my.revived ? (e.kind === 'sangi' ? '全国比例' : `比例${blockOfPref(decl.pref || 'tokyo')}ブロック`) : (decl.district || HOME_DISTRICT[e.kind] || e.district);
     me.termEnd = dayOfAbs(p, abs + term * YEAR_DAYS);
     me.wins++;
     if (off === 'shugi' || off === 'sangi') me.nationalWins++;
@@ -2440,6 +2502,7 @@ function enact(g, p, b) {
   try { if (pl.apply) pl.apply(p, { ...pl.defaults, ...(b.params || {}) }, g); } catch (e) { console.error(e); }
   if (num(cost) && p.economy.budget) { p.economy.budget.deficit = Math.round((num(p.economy.budget.deficit) + cost * (pl.area === 'tax' && !/shohizei/.test(b.policy) ? 1 : 1)) * 10) / 10; }
   news(p, g, `「${b.title}」が成立した`);
+  if (/^shohizei_/.test(b.policy) || pl.kind === 'amendment') phoneNews(g, /^shohizei_/.test(b.policy) ? `【法律成立】「${b.title}」が成立。消費税率は${p.economy.taxRate}%に。` : `【憲法改正】国民投票で承認され、「${pl.name}」が成立しました。`);
   if (b.by === 'player') {
     p.me.reputation = clamp(p.me.reputation + 6, -100, 100);
     p.me.standing = clamp(p.me.standing + 6, 0, 100);
@@ -2786,8 +2849,10 @@ function scandalImpl(g, p, kind, opts = {}) {
     if (sev >= 5 && me.party && p.parties[me.party] && !p.parties[me.party].isPlayers) { note(g, `（${rec.name}で、党から離党を求められた…）`); leavePartyImpl(g, p, '離党勧告'); }
   } else {
     const n = p.npcs[who];
+    // NPCs of a real party (自民・民主) are never shown in a scandal (neutral step-down instead)
+    if (n && PARTY_DEFS[n.party] && PARTY_DEFS[n.party].real) { npcStepDown(g, p, n, '一身上の都合'); return { ...rec, kind: 'stepdown', name: '辞任', severity: 0 }; }
     if (n) {
-      const post = n.posts.find((x) => POSTS[x] && POSTS[x].kind === 'cabinet');
+      const post = n.posts.find((x) => POSTS[x] && POSTS[x].kind === 'cabinet' && (x === 'pm' ? p.cabinet.pm === who : p.cabinet.ministers[x] === who));
       news(p, g, `${n.name}${post ? postName(post, fyNow(g)) : '議員'}に${rec.name}`);
       if (n.party && p.parties[n.party]) addSupportAll(p, n.party, -0.002 * sev);
       if (post && post !== 'pm' && sev >= 2) {
@@ -2938,12 +3003,28 @@ function shockImpl(g, p, kind) {
   emit(g, 'shock', s);
   return s;
 }
+// A minister (NPC) leaves the cabinet for a neutral reason; a successor is appointed.
+function npcStepDown(g, p, n, reason) {
+  const post = n.posts.find((x) => POSTS[x] && POSTS[x].kind === 'cabinet' && x !== 'pm' && p.cabinet.ministers[x] === n.id);
+  if (!post) return;
+  n.posts = n.posts.filter((x) => x !== post);
+  const m = pickMinister(p, n.party, p.cabinet.ministers);
+  m.posts.push(post);
+  p.cabinet.ministers[post] = m.id;
+  p.cabinet.scandal = num(p.cabinet.scandal) - 1;
+  news(p, g, `${n.name}${postName(post, fyNow(g))}が${reason}で辞任。後任に${m.name}氏`);
+}
 function npcEvents(g, p) {
-  // fictional NPC scandals (about 4 a year)
+  // NPC troubles (about 4 a year). Scandals happen only to NPCs of the fictional parties (and
+  // independents); an NPC of a real party (自民・民主) only ever steps down for neutral reasons
+  // (体調不良・一身上の都合), so the game never claims misconduct by a real party.
   if (Math.random() < 4 / YEAR_DAYS) {
     const cab = Object.values(p.cabinet.ministers || {}).filter((id) => id !== 'player' && p.npcs[id]);
     const pool = cab.length && Math.random() < 0.6 ? cab : Object.keys(p.npcs).filter((id) => p.npcs[id].office);
-    if (pool.length) scandalImpl(g, p, pickOne(['gaffe', 'gaffe', 'expense', 'private', 'slush_fund']), { who: pickOne(pool) });
+    const who = pool.length ? pickOne(pool) : null;
+    const n = who && p.npcs[who];
+    if (n && PARTY_DEFS[n.party] && PARTY_DEFS[n.party].real) npcStepDown(g, p, n, pickOne(['体調不良', '一身上の都合']));
+    else if (n) scandalImpl(g, p, pickOne(['gaffe', 'gaffe', 'expense', 'private', 'slush_fund']), { who });
   }
   // vacancies -> by-elections
   if (Math.random() < 2 / YEAR_DAYS) makeVacancy(g, p, 'shugi', { reason: pickOne(['議員の死去', '議員の辞職', '知事選への立候補', '議員の辞職']) });
@@ -2973,6 +3054,7 @@ function history(g, p, fy) {
     }
     p.me.posts = p.me.posts.map((x) => (POSTS[x] && POSTS[x].kind === 'cabinet' && !postExists(x, fy, F) ? POSTS[x].next : x)).filter((x, i, a) => x && a.indexOf(x) === i);
     p.cabinet.ministers = out;
+    for (const n of Object.values(p.npcs)) n.posts = n.posts.filter((x) => !(POSTS[x] && POSTS[x].kind === 'cabinet' && !postExists(x, fy, F)));
     fillCabinet(g, p, { keep: true, quiet: true });
     news(p, g, '中央省庁が再編され、1府22省庁が1府12省庁になった');
   }
@@ -3086,7 +3168,10 @@ function loseOffice(g, p, reason, opts = {}) {
   me.formerOffice = off;
   me.office = null;
   me.termEnd = null;
-  me.posts = me.posts.filter((x) => POSTS[x] && POSTS[x].kind === 'party' && x === 'party_leader' && p.parties[me.party] && p.parties[me.party].isPlayers);
+  // party posts of a party the player does not lead go to NPCs
+  const pt = p.parties[me.party];
+  if (pt && !pt.isPlayers) for (const [k, v] of Object.entries(pt.posts || {})) if (v === 'player') { const n = pickMinister(p, pt.id, {}); n.posts.push(k); pt.posts[k] = n.id; }
+  me.posts = me.posts.filter((x) => x === 'party_leader' && pt && pt.isPlayers);
   for (const [post, id] of Object.entries(p.cabinet.ministers)) if (id === 'player') { const m = pickMinister(p, cabinetPartyOfPM(p) || p.cabinet.partyIds[0], p.cabinet.ministers); m.posts.push(post); p.cabinet.ministers[post] = m.id; }
   if (p.cabinet.pm === 'player') resignCabinet(g, p, reason);
   note(g, `（${OFFICES[off].label}の職を失った${reason ? `（${reason}）` : ''}）`);
@@ -3214,6 +3299,7 @@ function tickDay(g, p, day, abs) {
     }
     if (e.status === 'scheduled' && day >= e.koji) {
       e.status = 'campaign';
+      if (e.kind === 'shugi' || e.kind === 'sangi') phoneNews(g, `【公示】${e.label}が公示されました。投票日は${dateLabel(g, e.day)}です。${e.kind === 'shugi' && e.reason === '解散' ? '（解散による総選挙）' : ''}`);
       const d = myDecl(e);
       if (d) {
         const off = e.kind === 'hosen' ? (e.house === 'sangi' ? 'sangi' : 'shugi') : (ELECTION_KINDS[e.kind] || {}).office;
@@ -3243,7 +3329,7 @@ function tickDay(g, p, day, abs) {
       let ch = 0;
       if (since >= 2 && num(p.cabinet.approval) >= 45) ch = 0.012;
       if (since >= 3.2) ch = 0.03;
-      if (since < 1 && num(p.cabinet.approval) >= 60 && today(g) - num(p.cabinet.formed) < 30) ch = 0.01; // a new PM's early dissolution
+      if (since >= 1 && since < 2 && num(p.cabinet.approval) >= 60 && today(g) - num(p.cabinet.formed) < 30) ch = 0.01; // a new PM's early dissolution
       if (Math.random() < ch) dissolveImpl(g, p, pickOne(['首相の判断', '国民に信を問う', '政策の転換を問う']));
     }
   }
@@ -3392,7 +3478,7 @@ function leavePartyImpl(g, p, why = '離党') {
   for (const e of p.elections.upcoming) { const d = myDecl(e); if (d && d.party === old) d.party = IND; }
   if (pt && pt.isPlayers && pt.leader === 'player') {
     // the founder leaves: the party carries on under an NPC (or dissolves when nobody is left)
-    if (partySeats(p, old) <= 0 && num(pt.members) <= 1) { delete p.parties[old]; news(p, g, `${pt.name}が解散した`); }
+    if (partySeats(p, old) <= 0 && num(pt.members) <= 1) { (p.flags.partyNames || (p.flags.partyNames = {}))[old] = pt.short; delete p.parties[old]; news(p, g, `${pt.name}が解散した`); }
     else { const n = newNpc(p, { party: old, office: 'shugi', house: 'shugi' }); pt.leader = n.id; pt.isPlayers = false; }
   }
   if (me.office) me.reputation = clamp(me.reputation - 3, -100, 100);
@@ -3537,9 +3623,12 @@ function declareImpl(g, p, e, opts = {}) {
     if (me.funds >= deposit) me.funds -= deposit;
     else { from = 'money'; g.state.money -= deposit; }
   }
-  const hometown = !!opts.hometown && g.state.profile && e.kind === 'hosen' && e.vacancy && e.vacancy.pref === g.state.profile.hometown;
-  const district = opts.district || (e.kind === 'hosen' ? e.district : e.kind === 'shugi' && shugiRules(year, p.flags).system === 'chusenkyoku' ? HOME_DISTRICT.shugiChu : e.kind === 'sangi' && proportional ? '全国比例' : HOME_DISTRICT[e.kind] || null);
-  e.declared.player = { day, district, party: party || IND, proportional: proportional && !prOnly, prOnly: e.kind === 'shugi' && prOnly, pr: e.kind === 'sangi' && proportional, deposit, depositFrom: from, hometown };
+  // 地元（ふるさと）から出馬: 衆院の小選挙区・中選挙区、参院の選挙区 (hosen: when the vacancy is there)
+  const homePref = g.state.profile && PREFECTURES[g.state.profile.hometown] ? g.state.profile.hometown : 'tokyo';
+  const hometown = !!opts.hometown && homePref !== 'tokyo' && (e.kind === 'hosen' ? !!(e.vacancy && e.vacancy.pref === homePref) : (e.kind === 'shugi' && !prOnly) || (e.kind === 'sangi' && !proportional));
+  const chu = e.kind === 'shugi' && shugiRules(year, p.flags).system === 'chusenkyoku';
+  const district = opts.district || (e.kind === 'hosen' ? e.district : hometown ? (e.kind === 'sangi' ? `${prefShort(homePref)}選挙区` : `${prefShort(homePref)}ドット区${chu ? '（定数4）' : ''}`) : chu ? HOME_DISTRICT.shugiChu : e.kind === 'sangi' && proportional ? '全国比例' : HOME_DISTRICT[e.kind] || null);
+  e.declared.player = { day, district, party: party || IND, proportional: proportional && !prOnly, prOnly: e.kind === 'shugi' && prOnly, pr: e.kind === 'sangi' && proportional, deposit, depositFrom: from, hometown, pref: hometown ? homePref : 'tokyo' };
   me.candidacy = e.id;
   me.campaign = { election: e.id, points: 0, actions: {}, spent: 0, day };
   if (day >= e.koji && me.office && (me.office !== office || e.kind === 'hosen')) loseOffice(g, p, '他の選挙に立候補（公職選挙法90条）');
@@ -3604,6 +3693,7 @@ async function campaignImpl(g, p, action, opts = {}) {
   if (A.fans) pts *= 1 + Math.min(1.5, Math.log10(1 + num(st.fans)) / 4);
   if (A.score) pts *= 0.4 + clamp(num(opts.score, 55), 0, 100) / 100 * 1.4;
   if (pre) pts *= 0.5;
+  pts *= 1 + Math.min(5, me.staff) * 0.05; // 秘書・運動員
   pts = Math.round(pts * 10) / 10;
   camp.points += pts;
   camp.actions[key] = num(camp.actions[key]) + 1;
@@ -3636,6 +3726,69 @@ function donationsImpl(g, p, opts = {}) {
 // any place. Methods that can fail return null on success and a reason string otherwise
 // (eligible / joinParty / leaveParty / declareCandidacy / vote / ...), or null with
 // g.lastPoliticsError set (foundParty / proposeBill / dissolve).
+//
+//  state & time
+//   pol() -> g.state.politics                 created / repaired on demand (old saves are fine)
+//   polDate(day?) / gameDate(day?) -> { year, month, dom, doy, fy, wareki, label, short }
+//                                               the simulated calendar (crime.js lawDate reads gameDate)
+//   politicsTick() -> Promise                  the morning step (also registered with onMorning)
+//   politicsSummary() -> { date, era, me, cabinet, diet, economy, support, upcoming, news }
+//   onPolitics(event, fn(g, data)) -> unsubscribe   'elected' 'lost' 'enacted' 'cabinet' 'scandal'
+//                                               'dissolve' 'resign' + 'election' 'session' 'bill' 'poll'
+//                                               'shock' 'party' 'offer' 'payday'
+//  elections
+//   upcomingElections() -> [{ id, kind, label, day, koji, status, date, kojiDate, declared, party,
+//                             district, office, newsOnly }]
+//   eligible(officeId, opts?) -> null | reason      age (25/30), 公民権停止, custody, 供託金 (opts.noMoney)
+//   depositInternal(officeId, { pr }?) -> game money for that year's 供託金 (show with fmtMoney)
+//   requestNomination(electionId) -> { ok, why?, kind: '公認'|'推薦', party }
+//   declareCandidacy(electionId, { party?, proportional?: true|'only', hometown?: true }) -> null | reason
+//       届出 up to the 公示/告示 day; pays the deposit (政治資金 first, then money); another
+//       office is lost at 公示 (公選法90条). proportional: 衆院=重複 / 'only'=比例単独, 参院=比例
+//   withdrawCandidacy(electionId?) -> null | reason (after 公示 the deposit is forfeited)
+//   campaign(action, { electionId?, score? }) -> Promise<{ ok, why?, pts, total, cost, text, illegal? }>
+//       actions: CAMPAIGN_ACTIONS keys; '買収' / '戸別訪問' go through g.commitCrime (crime.js)
+//   electionForecast(electionId?) -> { chance, votes, rank, seats } | null   (情勢調査, no side effects)
+//   castVote(electionId, choice?) -> null | reason    the player's own ballot (選挙権 18/20歳)
+//   runElection(electionId) -> RESULT  normally run by the tick the morning after 投票日
+//       RESULT = { id, kind, label, day, year, turnout %, valid, winners: [{ name, party, votes, isPlayer }],
+//         seats: { party: n }, total, houseSeats?, national?: { share }, candidates?, runoff?,
+//         myResult: { won, votes, rank, share, depositLost, deposit, revived, pr, district, party } | null }
+//  parties
+//   joinParty(id) / leaveParty(opts?) -> null | reason      seats follow the player (会派)
+//   foundParty({ name, short, color, emblem, ideology?, platform: [policyIds], desc }) -> id | null
+//   partyStatus(id?) -> { official (政党要件), members, seats, shugi, sangi, subsidy, voteShare, funds, reason }
+//   recruitMembers({ funds }) -> { ok, joined: [{ name, from, house }], status }   (own party, 1/day)
+//   joinFaction(id) / leaveFaction() -> null | reason;  appointPartyPost(post, 'player'|npcId)
+//   transferPartyFunds(n) -> null | reason (党 → 政治資金, leader only)
+//   setCoalitionStance('auto'|'accept'|'refuse'); joinCoalition() / leaveCoalition() -> null | reason
+//  the Diet
+//   billsList({ house?, mine?, pending?, today? }) -> [BILL]
+//   policyBlock(policyId, params?) -> null | reason;  policyPreview(policyId, params?) -> { cost, segments,
+//                                                       economy, alignment: { party: 0..1 }, block, ... }
+//   proposeBill({ policy, params?, title? }) -> billId | null   (議員立法: needs 賛成者; 閣法 when in the cabinet)
+//   gatherSupporters(billId) -> { ok, supporters, need, ready }   (1/day)
+//   vote(billId, 'yes'|'no'|'abstain') -> null | reason   (counted at the plenary; 党議拘束 applies)
+//   attendDiet() -> { ok, why?, bills }       (attendance; long absences become a scandal)
+//   advanceBills() -> [BILL]                  (the tick calls it)
+//   noConfidence({ rebel? }) -> { ok, why?, passed, yes, no, outcome: 'dissolve'|'resign'|'pending'|null }
+//  the cabinet
+//   approval() -> %;  partySupport(id) -> %
+//   electPM() -> { pm, name, partyIds, votes, sangiDiffers, minority }   (首班指名; the tick runs it)
+//   formCabinet({ partners?, ministers?: { post: npcId|'player' } }) -> { ok, ministers, partyIds }  (PM only)
+//   reshuffle(choices?) -> { ok, ... }; dissolve(reason?) -> electionId | null; resignPM(reason?)
+//   respondOffer(offerId|null, yes) -> null | reason   (入閣 / 党役員の打診: p.me.offers)
+//   resignPost(post, reason?); resignOffice(reason?); loseOffice(reason, opts?)   (失職 → 補選)
+//  activities & money
+//   activity(kind, { score? }) -> { ok, why?, text, gaffe }   (ACTIVITIES; once a day each)
+//   holdFundraiser({ unreported: 0..0.5 }) -> { ok, tickets, gross, net, secret, text }
+//   collectDonations() -> { ok, amount, text };  addSecretFunds(n, source) -> secret total
+//   reportFunds({ includeSecret?, year? }) -> { ok, year, income, expense, corrected, text }
+//   politicalScandal(kind, { who?: 'player'|npcId, amount?, severity? }) -> record (emits 'scandal';
+//       an NPC of a real party only steps down for neutral reasons: kind 'stepdown', no hook)
+//   hireStaff(+1|-1) -> null | reason   (私設秘書: monthly cost, helps activities and campaigns)
+//  misc
+//   npcName(id), partyName(id, short?), postLabel(post), triggerShock(kind), politicsMenu() (text UI)
 const isNational = (me) => me.office === 'shugi' || me.office === 'sangi';
 const inCabinet = (me) => me.posts.some((x) => POSTS[x] && POSTS[x].kind === 'cabinet');
 function sanitizeParams(pl, params) {
@@ -3648,10 +3801,6 @@ function sanitizeParams(pl, params) {
   }
   return out;
 }
-function findElection(p, id) {
-  return p.elections.upcoming.find((e) => e.id === id) || p.elections.history.find((r) => r.id === id) || null;
-}
-function displayName(g) { const pr = g.state.profile; return pr ? `${pr.familyName} ${pr.givenName}` : g.state.name; }
 function protectYen(n) { return `${YEN_MARK}${Math.round(num(n)).toLocaleString('ja-JP')}円`; }
 
 const methods = {
@@ -3941,7 +4090,7 @@ const methods = {
     me.lastAct[kind] = day;
     if (A.funds) { const f = Math.min(me.funds, A.funds); me.funds -= f; st.money -= A.funds - f; ledger(p, calYear(this)).expense += A.funds; }
     const sk = A.skill ? num(st.skills && st.skills[A.skill]) / 100 : 0.5;
-    const q = clamp(opts.score != null ? num(opts.score) / 100 : 0.3 + sk * 0.7 + gauss() * 0.1, 0, 1.2);
+    const q = clamp((opts.score != null ? num(opts.score) / 100 : 0.3 + sk * 0.7 + gauss() * 0.1) * (1 + Math.min(5, me.staff) * 0.04), 0, 1.3);
     const out = [];
     if (A.local) { me.localSupport = clamp(me.localSupport + A.local * (0.6 + q * 0.6), 0, 100); out.push(`地元の支持 +${Math.round(A.local * (0.6 + q * 0.6))}`); }
     if (A.rep) { const d = Math.round(A.rep * (q - 0.2) * 1.5); me.reputation = clamp(me.reputation + d, -100, 100); if (d) out.push(`評判 ${d > 0 ? '+' : ''}${d}`); }
@@ -4075,6 +4224,17 @@ const methods = {
     news(p, this, `${pt.name}が連立政権から離脱した`);
     return null;
   },
+  // ext: 私設秘書 (the 3 公設秘書 of a Diet member are paid by the state). delta: +1 / -1.
+  // Each one costs STAFF_COST a month from 政治資金 and helps activities / campaigns (up to 5).
+  hireStaff(delta = 1) {
+    const p = ensurePol(this);
+    const me = p.me;
+    if (!me.office && delta > 0) return '政治家として活動していないと、秘書を雇う意味がない';
+    const n = clamp(me.staff + Math.round(num(delta)), 0, 10);
+    if (n > me.staff && me.funds + this.state.money < STAFF_COST) return `秘書の給料（月${fmtMoney(STAFF_COST)}）が払えない`;
+    me.staff = n;
+    return null;
+  },
   politicalScandal(kind, opts = {}) { return scandalImpl(this, ensurePol(this), kind, opts); },
   resignOffice(reason = '辞職') { return loseOffice(this, ensurePol(this), reason); },
   // ext: 失職 for any reason (crime.js calls it with { by: 'justice' }); the seat goes to a by-election.
@@ -4117,7 +4277,7 @@ const methods = {
     me.lastAct.recruit = day;
     const offer = Math.min(num(opts.funds), me.funds + num(pt.funds));
     if (offer > 0) { const f = Math.min(num(pt.funds), offer); pt.funds -= f; me.funds -= offer - f; }
-    const pull = 0.06 + Math.min(0.12, Math.log10(1 + num(this.state.fame)) * 0.025) + natSupport(p, pt.id, fyNow(this)) * 1.5 + Math.min(0.1, offer / 5e7) + me.reputation / 1000;
+    const pull = 0.1 + Math.min(0.15, Math.log10(1 + num(this.state.fame)) * 0.03) + natSupport(p, pt.id, fyNow(this)) * 2 + Math.min(0.15, offer / 4e7) + me.reputation / 800;
     const joined = [];
     for (let i = 0; i < 3; i++) {
       if (Math.random() > pull) continue;
@@ -4160,7 +4320,7 @@ const methods = {
   },
   myElection() { const p = ensurePol(this); return p.elections.upcoming.find((e) => myDecl(e)) || null; },
   npcName(id) { const p = ensurePol(this); return id === 'player' ? this.state.name : (p.npcs[id] && p.npcs[id].name) || ''; },
-  partyName(id, short = false) { const p = ensurePol(this); if (id === IND || !id) return '無所属'; const pt = p.parties[id]; return pt ? (short ? pt.short : pt.name) : ''; },
+  partyName(id, short = false) { const p = ensurePol(this); if (id === IND || !id) return '無所属'; const pt = p.parties[id] || PARTY_DEFS[id]; return pt ? (short ? pt.short : pt.name) : pname(p, id); },
   postLabel(post) { const p = ensurePol(this); return postName(post, fyNow(this), p.me.party); },
   triggerShock(kind) { return shockImpl(this, ensurePol(this), kind); },
   // ext: one object with what a screen needs.
@@ -4379,14 +4539,19 @@ async function menuMoney(g) {
   const me = p.me;
   const y = calYear(g);
   const lg = me.ledger[y] || { income: 0, expense: 0 };
-  await sayLines(g, [`政治資金 ${fmtMoney(me.funds)}${me.secret ? `・帳簿にないお金 ${fmtMoney(me.secret)}` : ''}`, `今年の収入 ${fmtMoney(lg.income)}・支出 ${fmtMoney(lg.expense)}`, `収支報告書：${me.reported[y - 1] ? `${y - 1}年分は提出ずみ` : `${y - 1}年分は3月末まで`}`]);
-  const i = await g.ask('どうする？', ['パーティーを開く', '寄付を募る', '収支報告書を出す', 'もどる']);
+  const d = polDate(g);
+  const due = d.month <= 3 ? `${y - 1}年分は${me.reported[y - 1] ? '提出ずみ' : '3月末まで'}` : `${y}年分は${y + 1}年3月末まで`;
+  await sayLines(g, [`政治資金 ${fmtMoney(me.funds)}${me.secret ? `・帳簿にないお金 ${fmtMoney(me.secret)}` : ''}`, `今年の収入 ${fmtMoney(lg.income)}・支出 ${fmtMoney(lg.expense)}`, `収支報告書：${due}`]);
+  const i = await g.ask('どうする？', ['パーティーを開く', '寄付を募る', '収支報告書を出す', `秘書を雇う（${me.staff}人）`, 'もどる']);
   if (i === 0) { const r = g.holdFundraiser({}); await g.say(r.ok ? r.text : r.why); }
   else if (i === 1) { const r = g.collectDonations({}); await g.say(r.ok ? r.text : r.why); }
   else if (i === 2) {
     const inc = me.secret > 0 ? (await g.ask('帳簿にないお金も、正直に書く？', ['正直に書く', '書かない'])) === 0 : false;
     const r = g.reportFunds({ includeSecret: inc });
     await g.say(r.ok ? r.text : r.why);
+  } else if (i === 3) {
+    const w = g.hireStaff(1);
+    await g.say(w || `私設秘書を雇った（${me.staff}人）。毎月 ${fmtMoney(STAFF_COST)} かかる。`);
   }
 }
 async function menuActivities(g) {

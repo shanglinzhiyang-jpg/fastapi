@@ -152,8 +152,9 @@ async function minigameLab(g, id) {
 
 async function debugMenu(g) {
   const ids = Object.keys(PLACES);
-  const i = await g.list({ title: 'デバッグ', items: ['場所へワープ', 'お金+10万', '知名度+500', 'スキル+20', '体力全快', '所属を変える', '政治（デバッグ）'], x: 8, y: 8, w: 160 });
+  const i = await g.list({ title: 'デバッグ', items: ['場所へワープ', 'お金+10万', '知名度+500', 'スキル+20', '体力全快', '所属を変える', '政治（デバッグ）', '司法・借金（デバッグ）'], x: 8, y: 8, w: 160 });
   if (i === 6 && typeof g.pol === 'function') { await politicsDebug(g); return; }
+  if (i === 7 && typeof g.jus === 'function') { await justiceDebug(g); return; }
   const st = g.state;
   if (i === 0) {
     const j = await g.list({ title: 'ワープ先', items: ids, x: 8, y: 8, w: 200 });
@@ -167,6 +168,28 @@ async function debugMenu(g) {
     const j = await g.list({ title: '所属', items: ag.map((a) => (a ? AGENCIES[a].name : 'フリー')), x: 8, y: 8, w: 200 });
     if (j >= 0) st.agency = ag[j];
   }
+}
+
+// Justice debug (js/engine/crime.js): crimes caught on the spot or found out later, loans, debt relief,
+// smoking, the status, and nights passing (each night runs the morning and the queued justice events).
+async function justiceDebug(g) {
+  const acts = [
+    ['万引き（捕まる）', () => g.commitCrime('shoplifting', { amount: 800, forceCaught: true })],
+    ['強盗（捕まる）', () => g.commitCrime('robbery', { amount: 50000, forceCaught: true })],
+    ['暴行（あとで発覚）', async () => { await g.commitCrime('assault', { neverCaught: true }); await g.investigate('assault', { now: true }); }],
+    ['収賄（逮捕状）', () => g.arrest('bribery_take', { amount: 10000000, via: 'warrant' })],
+    ['脱税（税務調査）', async () => { await g.commitCrime('tax_evasion', { amount: 3000000, neverCaught: true }); await g.investigate('tax_evasion', { now: true }); }],
+    ['反社交際（週刊誌）', async () => { await g.commitCrime('antisocial_ties', { neverCaught: true }); await g.investigate('antisocial_ties', { now: true }); }],
+    ['消費者金融で借りる', () => g.loanCounter('shohisha')],
+    ['闇金で借りる', () => g.loanCounter('yamikin')],
+    ['法律相談（借金）', () => g.consultLawyer('debt')],
+    ['自己破産', () => g.fileBankruptcy({ force: true })],
+    ['タバコを買って吸う', async () => { const r = g.buyCigarettes(1); if (!r.ok) await g.say(r.reason); else await g.smoke(); }],
+    ['状態を見る', () => g.say(g.justiceLines().join('\n'))],
+    ['10日すすめる（寝る）', async () => { for (let k = 0; k < 10; k++) await g.sleep({ notes: false }); }],
+  ];
+  const k = await g.list({ title: '司法・借金（デバッグ）', items: acts.map((a) => a[0]), x: 8, y: 8, w: 200 });
+  if (k >= 0) await acts[k][1]();
 }
 
 // Politics debug (js/engine/politics.js): the text menu, a quick start as a politician,

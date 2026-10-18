@@ -89,6 +89,33 @@
 // 在職中の収賄; via g.loseOffice(reason) when the politics core provides it, else the state directly.
 // Family send messages; the trial may call a parent as 情状証人; prison has 面会 and letters.
 //
+// ---------------------------------------------------------------- final API (justice core)
+// Exports: CRIMES, CRIME_ORDER, crimeLaw(g, id, ctx), penaltyOf(g, id, ctx), limitYears(g, id, ctx), LENDERS,
+//   lenderRate(g, lender, principal), rateLawText(g), loanBalance(loan), loanTick(g, opts), LABOR_YEN, CIG_PRICE,
+//   SMOKING_RULES, registerSmokingRule(placeId, rule | (g, placeDef) => rule), JUSTICE_PLACES (set
+//   JUSTICE_PLACES.police.rooms.torishirabe = '<room id>' etc. when the places exist), StageScene,
+//   careerSanction(g, level 1..5, info), sentenceText(g, sentence), onJustice(event, fn), justiceTick(g),
+//   newJusticeState(), installJustice(proto), lawDate(g, day?), lawYear(g), wareki(year, month), kokinEra(g),
+//   fmtTerm(months), realToGameDays(d), years(n), monthsToDays(n), MONTH_DAYS, ERA_BASE_YEAR, isPolitician(g),
+//   isDietMember(g), JUSTICE_CONTRACT_VERSION.
+// g.* (all from installJustice):
+//   jus() · commitCrime(id, ctx) → { caught, report, outcome } (ctx: amount, where, injury, request, gain:
+//   { money, item }, detect, risk, forceCaught, neverCaught, handle:false, rule, private) · arrest(id, ctx) → case
+//   (ctx: via 'genkouhan'|'warrant', evidence, amount, plea, caseId) · trial(caseOrId, opts) · serveSentence() ·
+//   hasRecord() (前科) · hasHistory() · isFree() · civicBanned() · civicBanReason() · fine(amount, reason,
+//   { kind: 'bakkin'|'karyo'|'kare'|'tsuicho'|'tax'|'civil' }) → { paid, labor, unpaid } · borrow(lender, amount)
+//   → { ok, reason, loan, received } · repay(loanIndex|id|loan, amount) → { paid, left, cleared } · loanTick() ·
+//   loanTotal(lender?) · loanLimit(lender) · annualIncome() · creditBlacklisted(lender) · loanCounter(lender) ·
+//   consultLawyer(topic 'debt'|'yamikin') · debtRelief('nini'|'saisei'|'hasan') · fileBankruptcy({ force }) ·
+//   policeConsult(topic) · smoke({ place, anyway, smokingArea, silent }) · canSmokeHere(place?) ·
+//   buyCigarettes(n, { counter }) · canSmoke() · canDrink() · drinkAlcohol({ private, heavy, relief, where }) ·
+//   onJustice(event, fn) · justiceTick() · justiceEvents() · justiceRefusal(kind 'job'|'regular'|'audition'|
+//   'candidacy'|'vote', def) · careerSanction(level, info) · investigate(id, { amount, now }) · coverUp(id, ctx) ·
+//   justiceStatus() · justiceLines() · lawDate() · lawYear() · crimeLaw(id, ctx).
+// Wrapped (behaviour kept): g.job / g.audition / g.doRegular refuse during 謹慎 / TV ban; g.sleep runs the
+// queued events after waking; g.addMoney records income (年収) and takes 差押え.
+// Shops selling cigarettes should call g.buyCigarettes() (age checks), not g.shop(['tabako']).
+//
 // Sources checked (2026-10, WebSearch; amounts/dates as encoded below):
 //   拘禁刑: 2022年6月17日公布・2025年6月1日施行（懲役・禁錮を一本化）— keiyaku-watch.jp/media/hourei/202506-kokinkei,
 //     courts.go.jp 福岡地裁 2025 QUIZ; 有期刑は1か月以上20年以下（2005年1月1日施行の改正で上限15→20年: moj.go.jp 001413633.pdf）
@@ -146,7 +173,10 @@ export const JUSTICE_CONTRACT_VERSION = 1;
 
 // ======================================================================== time & the law in force
 export const MONTH_DAYS = YEAR_DAYS / 12; // 10 game days
-export const ERA_BASE_YEAR = { showa: 1985, heisei_early: 1993, heisei: 2003, reiwa: 2026 };
+// Where each era's game starts (April of that year; the same calendar as the politics core's polDate,
+// which lawDate prefers when it is loaded).
+export const ERA_BASE_YEAR = { showa: 1987, heisei_early: 1995, heisei: 2004, reiwa: 2026 };
+const ERA_START_MONTH = 4;
 export const years = (n) => Math.round(n * YEAR_DAYS);
 export const monthsToDays = (n) => Math.round(n * MONTH_DAYS);
 // Real-world day counts → game days: 1:1 up to two weeks, then compressed to the game year.
@@ -157,16 +187,17 @@ export function realToGameDays(d) {
 // The date the law is read at: { year, month, ym } (ym = year * 100 + month).
 export function lawDate(g, day) {
   const st = g && g.state;
-  if (g && typeof g.gameDate === 'function' && day == null) {
+  if (g && typeof g.gameDate === 'function') {
     try {
-      const d = g.gameDate();
+      const d = day == null ? g.gameDate() : g.gameDate(day);
       if (d && Number.isFinite(d.year)) { const month = clamp(Math.round(d.month || 1), 1, 12); return { year: d.year, month, ym: d.year * 100 + month }; }
     } catch (e) { /* fall back */ }
   }
   const era = (st && st.profile && st.profile.era) || 'reiwa';
   const n = Math.max(0, ((day ?? (st && st.day)) || 1) - 1);
-  const year = (ERA_BASE_YEAR[era] ?? 2026) + Math.floor(n / YEAR_DAYS);
-  const month = Math.floor((n % YEAR_DAYS) / MONTH_DAYS) + 1;
+  const idx = ERA_START_MONTH - 1 + Math.floor(n / MONTH_DAYS);
+  const year = (ERA_BASE_YEAR[era] ?? 2026) + Math.floor(idx / 12);
+  const month = (idx % 12) + 1;
   return { year, month, ym: year * 100 + month };
 }
 export const lawYear = (g) => lawDate(g).year;
@@ -464,9 +495,6 @@ export const CRIMES = {
 };
 export const CRIME_ORDER = Object.keys(CRIMES);
 for (const [id, def] of Object.entries(CRIMES)) def.id = id;
-// Compatibility: some content may look up the contract's optional name.
-CRIMES.loan_shark_use = undefined;
-delete CRIMES.loan_shark_use;
 
 // Text of the law in force (罪名・条文・法定刑).
 export function crimeLaw(g, id, ctx) {
@@ -530,7 +558,7 @@ function normalizeJustice(j) {
   const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
   const arr = (v) => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : []);
   j.record = arr(j.record);
-  j.loans = arr(j.loans).map((l) => ({ ...l, principal: Math.max(0, num(l.principal)), interest: Math.max(0, num(l.interest)), rate: Math.max(0, num(l.rate, 0.18)), due: num(l.due, 1), missed: Math.max(0, num(l.missed)), cycle: Math.max(1, num(l.cycle, MONTH_DAYS)), id: l.id || j.nextId++ }));
+  j.loans = arr(j.loans).map((l) => ({ ...l, principal: Math.max(0, num(l.principal)), interest: Math.max(0, num(l.interest)), rate: Math.max(0, num(l.rate, l.lender === 'yamikin' ? 0.1 : l.lender === 'bank' ? 0.145 : 0.18)), due: num(l.due, 1), missed: Math.max(0, num(l.missed)), cycle: Math.max(1, num(l.cycle, MONTH_DAYS)), id: l.id || j.nextId++ }));
   j.cases = arr(j.cases);
   j.queue = arr(j.queue);
   j.heat = obj(j.heat);
@@ -552,7 +580,24 @@ function normalizeJustice(j) {
   if (j.status === 'prison' && !j.prison) j.status = 'free';
   return j;
 }
+let polHooked = false;
+function hookPolitics() {
+  if (polHooked) return;
+  polHooked = true;
+  try {
+    const on = POL.onPolitics;
+    if (typeof on !== 'function') return;
+    on('scandal', (g, rec) => {
+      if (!g || !g.state || !rec || rec.who !== 'player' || !rec.crime || !CRIMES[rec.crime]) return;
+      const h = addHeat(g, rec.crime, { amount: rec.amount || 0 });
+      h.boost = Math.max(h.boost || 1, 4 + Math.max(0, (rec.severity || 3) - 3) * 2); // the prosecutors read the papers too
+      h.weekly = true;
+      h.n = Math.max(1, h.n - 1);
+    });
+  } catch (e) { polHooked = false; }
+}
 function J(g) {
+  hookPolitics();
   const st = g.state;
   if (!st.justice || typeof st.justice !== 'object') st.justice = newJusticeState();
   if (!normalized.has(st.justice)) { normalizeJustice(st.justice); normalized.add(st.justice); }
@@ -609,17 +654,17 @@ function loseOffice(g, reason) {
   let done = false;
   for (const k of ['loseOffice', 'resignOffice']) {
     if (typeof g[k] === 'function') {
-      try { g[k](reason, { by: 'justice' }); done = true; break; } catch (e) { console.error(e); }
+      try { g[k](reason, { by: 'justice' }); done = !p.me.office; break; } catch (e) { console.error(e); }
     }
   }
-  if (!done || p.me.office) {
+  if (!done) {
     p.me.office = null;
     p.me.termEnd = null;
     p.me.posts = [];
+    g.message({ from: '選挙管理委員会', kind: 'news', text: `${name}の職を失いました。（${reason}）` });
   }
   p.me.reputation = clamp(num(p.me.reputation) - 40, -100, 100);
   (p.flags || (p.flags = {})).lostOfficeBy = reason;
-  g.message({ from: '選挙管理委員会', kind: 'news', text: `${name}の職を失いました。（${reason}）` });
   emit(g, 'lost_office', { reason, office: name });
   return true;
 }
@@ -780,7 +825,7 @@ const STAGES = {
   torishirabe(c, t, g, o) {
     wallFloor(c, '#8a8e96', '#6a6e78', '#4a4e58', '#3e424c');
     windowBox(c, 470, 38, 96, 56, '#a8c8e0', true);
-    R(c, 90, 40, 26, 26, '#e8e8e0'); R(c, 102, 44, 2, 10, '#222'); R(c, 102, 52, 8, 2, '#222'); // clock
+    R(c, 300, 40, 26, 26, '#e8e8e0'); R(c, 312, 44, 2, 10, '#222'); R(c, 312, 52, 8, 2, '#222'); // clock
     fig(c, o.officer || LK.keiji, SW / 2 - 32, 96, 'down');
     desk(c, SW / 2 - 110, 160, 220, 40, '#8a8e86', '#5e625a');
     R(c, SW / 2 + 50, 146, 14, 14, '#2a2a2a'); R(c, SW / 2 + 44, 140, 26, 8, '#d8c060'); // lamp
@@ -877,7 +922,7 @@ const STAGES = {
     fig(c, LK.keiji2, 440, 124, 'left');
     fig(c, LK.police, 500, 128, 'left');
     if (!o.noPlayer) fig(c, playerLook(g), 268, 118, 'down');
-    text(c, o.clock || '午前6時', 20, 40, { size: 14, color: '#fff' });
+    text(c, o.clock || '午前6時', SW - 90, 44, { size: 14, color: '#fff' });
   },
   store(c, t, g, o) {
     wallFloor(c, '#e8e4d8', '#c8c2b0', '#9a9a90', '#8a8a80');
@@ -933,7 +978,8 @@ const STAGES = {
   },
   press(c, t, g, o) {
     wallFloor(c, '#2a2a3a', '#20202c', '#3a3a44', '#2e2e38');
-    R(c, 160, 40, 320, 60, '#3a4a7a');
+    R(c, 160, 40, 320, 60, '#3a4a7a'); R(c, 164, 44, 312, 52, '#2e3c66');
+    text(c, o.banner || '会見', SW / 2, 58, { size: 16, align: 'center', color: '#e8ecff', shadow: null });
     fig(c, playerLook(g), SW / 2 - 32, 104, 'down');
     for (let i = 0; i < 7; i++) {
       fig(c, i % 2 ? LK.kisha : { ...LK.kisha, top: '#3a3a3a', hat: '#2a2a2a' }, 40 + i * 84, 196, 'up');
@@ -1503,6 +1549,8 @@ async function arrestFlow(g, id, ctx = {}) {
     flow.hide();
     return cs;
   }
+  // a new arrest while on bail: the bail is revoked and the money forfeited (保釈の取消し・保証金の没取)
+  for (const o of j.cases) if (o !== cs && o.bail && !o.closed) { j.flags.bailForfeited = (j.flags.bailForfeited || 0) + o.bail.amount; g.message({ from: `${courtCity(g)}地方裁判所`, kind: 'bill', text: `保釈中の再犯により、保釈を取り消しました。保釈保証金${fmtMoney(o.bail.amount)}は没取されます。` }); o.bail = null; }
   j.status = 'detained';
   j.custody = { crime: id, since: st.day, stage: 'police', caseId: cs.id };
   cs.detained = true;
@@ -3087,10 +3135,22 @@ function surfaceHeat(g) {
 // The politics core's 裏金 (pol().me.secret) is an undetected 政治資金規正法違反.
 function syncPoliticsHeat(g) {
   const p = polState(g);
-  if (!p || !p.me || !(num(p.me.secret) > 0)) return;
+  if (!p || !p.me) return;
   const j = J(g);
+  const secret = num(p.me.secret), exposed = num(p.me.exposed);
+  const h0 = j.heat.slush_fund;
+  // the money was written into a proper report (訂正) without being exposed: the risk mostly goes away
+  if (h0 && h0.fromPol && secret < num(h0.polSecret) && exposed <= num(h0.polExposed)) {
+    h0.amount = Math.max(0, h0.amount - (num(h0.polSecret) - secret) * 0.8);
+    h0.polSecret = secret;
+    if (h0.amount < 100000) delete j.heat.slush_fund;
+  }
+  if (!(secret > 0)) return;
   const h = j.heat.slush_fund || (j.heat.slush_fund = { n: 1, day: g.state.day, first: g.state.day, amount: 0 });
-  if (num(p.me.secret) > h.amount) { h.amount = num(p.me.secret); h.day = g.state.day; }
+  h.fromPol = true;
+  h.polExposed = exposed;
+  if (secret > num(h.polSecret)) { h.amount += secret - num(h.polSecret); h.day = g.state.day; }
+  h.polSecret = secret;
 }
 async function weeklyEvent(g, ev) {
   const st = g.state, j = J(g), id = ev.crime, def = CRIMES[id] || { name: ev.text || 'スキャンダル', kind: 'career' };
@@ -3241,7 +3301,8 @@ function refusalImpl(g, kind = 'job', def = {}) {
     const id = String((def && (def.id || def.title)) || '');
     const partTime = /baito|store_help|yobikomi/.test(id);
     if (j.career.kinshinUntil > day && !partTime) return [`いまは活動自粛中だ…。（あと${j.career.kinshinUntil - day}日）`, '（芸能のお仕事は受けられない。\nアルバイトなら、できるかもしれない）'];
-    if (j.career.tvBanUntil > day && (kind === 'regular' || isMediaJob(g, id))) return [`テレビ局が、起用を見送っているようだ…。\n（あと${j.career.tvBanUntil - day}日ほど）`, '（劇場やライブのお仕事から、少しずつ信頼を取り戻そう）'];
+    const onStage = kind === 'regular' && ['stage', 'event'].includes(def && def.medium);
+    if (j.career.tvBanUntil > day && !onStage && (kind === 'regular' || isMediaJob(g, id))) return [`テレビ局が、起用を見送っているようだ…。\n（あと${j.career.tvBanUntil - day}日ほど）`, '（劇場やライブのお仕事から、少しずつ信頼を取り戻そう）'];
   }
   if (kind === 'audition') {
     if (j.career.kinshinUntil > day) return `いまは活動自粛中だ…。（あと${j.career.kinshinUntil - day}日）`;
@@ -3411,7 +3472,7 @@ export function installJustice(proto) {
     return orig.call(this, def);
   });
   wrap('doRegular', (orig) => async function (id) {
-    const why = this.state ? refusalImpl(this, 'regular', { id: 'regular_' + id }) : null;
+    const why = this.state ? refusalImpl(this, 'regular', { id: 'regular_' + id, medium: REGULARS[id] && REGULARS[id].medium }) : null;
     if (why) { await this.say(why); return null; }
     return orig.call(this, id);
   });
