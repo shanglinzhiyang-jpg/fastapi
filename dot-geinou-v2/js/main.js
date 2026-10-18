@@ -15,7 +15,7 @@ import { PLACES } from './engine/map.js';
 import { MINIGAMES } from './engine/minigame.js';
 import { TitleScene, CreateScene, EraIntroScene, drawTitleBackdrop } from './title.js';
 import { onMorning, PEOPLE } from './engine/life.js';
-import { ageOf, isBirthday, birthdayFlag, sortFamily, RELATIONS, regionOf, familyLook } from './engine/profile.js';
+import { ageOf, eraOf, isBirthday, birthdayFlag, sortFamily, RELATIONS, regionOf, familyLook } from './engine/profile.js';
 import { SW, SH, hash2 } from './engine/util.js';
 import { text, panel, measure, COLORS } from './engine/draw.js';
 import { audio } from './engine/audio.js';
@@ -88,11 +88,12 @@ async function newGame(g) {
   await g.goto('home', 'room', 4, 6, 'up');
 }
 
-// Birthdays (profile.js: the age goes up every YEAR_DAYS days). Registered before the
-// content modules load, so it runs before their morning hooks: it sets
-// flags['birthday_<age>'] (family.js reads it to skip a second birthday message), shows a
-// toast and a morning note, and sends one message from a family member who is alive.
-onMorning((g) => {
+// Birthdays (profile.js: the age goes up every YEAR_DAYS days). Registered in boot() after
+// the two cores and before the content modules load, so it runs after the cores' morning
+// hooks (as before) and before the content's: it sets flags['birthday_<age>'] (family.js
+// reads it to skip a second birthday message), shows a toast and a morning note (at 20, 25
+// and 30 also what the new age opens up), and sends one message from a family member who is alive.
+function birthdayHook(g) {
   const st = g.state;
   if (!st || !st.profile || !isBirthday(st)) return;
   const age = ageOf(st);
@@ -100,7 +101,18 @@ onMorning((g) => {
   if (st.flags[key]) return;
   st.flags[key] = true;
   g.notify(`今日は誕生日！${age}さいになった！`, { color: COLORS.pink, life: 200 });
-  (g.morningNotes || (g.morningNotes = [])).push(`（今日は誕生日！${age}さいになった）`);
+  const notes = g.morningNotes || (g.morningNotes = []);
+  notes.push(`（今日は誕生日！${age}さいになった）`);
+  // 被選挙権 (公職選挙法10条): 25 for 区議・区長・都議・衆議院, 30 for 参議院・知事 — the same in every era
+  if (age === 20) notes.push('（20さいになった。法律では、お酒とタバコは20さいから）');
+  if ((age === 25 || age === 30) && typeof g.pol === 'function') {
+    let ban = null;
+    try { ban = typeof g.civicBanReason === 'function' ? g.civicBanReason('candidacy') : null; } catch (e) { ban = null; }
+    const app = `${eraOf(st).deviceShort || 'スマホ'}の「政治」`;
+    if (ban) notes.push(`（${age}さいになった。ただ、いまは立候補できない：${ban}）`);
+    else if (age === 25) notes.push(`（25さいになった。区議・区長・都議・衆議院の選挙に立候補できる！${app}→選挙から）`);
+    else notes.push(`（30さいになった。参議院と知事の選挙にも立候補できる！${app}→選挙から）`);
+  }
   const fam = sortFamily((st.profile.family || []).filter((m) => m && m.alive !== false && RELATIONS[m.rel]));
   const m = fam.find((x) => x.rel === 'mother') || fam.find((x) => x.rel === 'father') || fam[0];
   if (!m) return;
@@ -110,7 +122,26 @@ onMorning((g) => {
     ? (kansai ? `{name}、誕生日おめでとう！もう${age}さいなんや。\nテレビで見るの、いつも楽しみにしてるで！` : `{name}、誕生日おめでとう！もう${age}さいだね。\nテレビで見るの、いつも楽しみにしてるよ！`)
     : (kansai ? `{name}、誕生日おめでとう。もう${age}さいかぁ。\n体に気ぃつけて、お仕事がんばりや。いつでも帰っておいで。` : `{name}、誕生日おめでとう。もう${age}さいなんだね。\n体に気をつけて、お仕事がんばってね。いつでも帰っておいで。`);
   g.message({ from: PEOPLE[m.id] ? PEOPLE[m.id].name : `${RELATIONS[m.rel].call}`, person: PEOPLE[m.id] ? m.id : undefined, family: m.id, look: PEOPLE[m.id] ? PEOPLE[m.id].look : familyLook(m, st.look), kind: 'chat', text: g.fmt(text) });
-});
+}
+
+// The two cores, loaded optionally (game.js does not import them): crime.js (justice, debts;
+// it imports politics.js itself) and politics.js. A core that 404s, fails to parse or throws
+// is left out and the game boots without it — every other module reads them guarded
+// (notebook, ui, places through registry.js). Installed in this order: politics wraps job()
+// over justice's wrapper. Returns the paths that failed (added to g.failedModules).
+async function loadCores() {
+  const failed = [];
+  for (const [path, fn] of [['./engine/crime.js', 'installJustice'], ['./engine/politics.js', 'installPolitics']]) {
+    try {
+      const mod = await import(path);
+      mod[fn](Game.prototype);
+    } catch (e) {
+      console.error(`[core] failed to load ${path}:`, e);
+      failed.push(path);
+    }
+  }
+  return failed;
+}
 
 async function titleFlow(g) {
   for (;;) {
@@ -118,12 +149,25 @@ async function titleFlow(g) {
     const choice = await new Promise((r) => { g.scenes[0].resolve = r; });
     if (choice === 'continue') {
       const data = loadGame();
-      if (data && data.location && PLACES[data.location.place]) {
+      if (data && data.state) {
         g.state = data.state;
         const L = data.location;
-        await g.goto(L.place, L.room, L.x, L.y, L.dir || 'down');
-        g.notify('つづきから再開しました', { color: '#fff' });
-        return;
+        if (L && PLACES[L.place]) {
+          await g.goto(L.place, L.room, L.x, L.y, L.dir || 'down');
+          g.notify('つづきから再開しました', { color: '#fff' });
+          return;
+        }
+        // the saved place is gone (its module failed to load, or a place was renamed):
+        // the state itself is fine, so wake up at home instead of refusing the save
+        let h = null;
+        try { h = g.housing(); } catch (e) { h = null; }
+        const home = h && PLACES[h.place] ? h : null;
+        const place = home ? home.place : PLACES.home ? 'home' : PLACES.tokyo ? 'tokyo' : Object.keys(PLACES)[0];
+        if (place) {
+          await g.goto(place, home ? home.room : undefined);
+          g.notify('前にいた場所が読み込めなかったので、家から再開します', { color: '#fff', life: 240 });
+          return;
+        }
       }
       g.setBase(loadingScene('', { title: true }));
       await g.say('セーブデータを読み込めませんでした。');
@@ -326,7 +370,9 @@ async function boot() {
   } catch (e) { /* font optional */ }
   setTimeout(() => g.resize(), 50);
   await loadLogos();
-  g.failedModules = await loadAll();
+  const coreFailed = await loadCores();
+  onMorning(birthdayHook);
+  g.failedModules = [...coreFailed, ...(await loadAll())];
 
   if (params.has('debug')) {
     const orig = ui.openMenu;

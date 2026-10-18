@@ -761,6 +761,18 @@ export function ministriesOf(g) {
 }
 const MIN_BLDG = 4;
 function ministriesIn(g, k) { return ministriesOf(g).filter((_, i) => i % MIN_BLDG === k); }
+// The 案内図 at the arrival point (the party HQs change with the era and the player's own party).
+async function mapSignTalk(g) {
+  G = g;
+  const left = ['自由民主党本部', ...(minshuOpen(g) ? ['民主党本部'] : [])];
+  const yato = yatoPartyOf(g), mine = myPartyOf(g);
+  const right = [...(yato ? [`${yato.name}本部`] : []), ...(mine ? [`${mine.name}本部`] : [])];
+  await g.say([
+    '「永田町・霞が関」の案内図だ。',
+    `↑ 国会議事堂・議員会館・国立国会図書館\n　通りの左手に ${left.join('・')}${right.length ? `\n　右手に ${right.join('・')}` : ''}`,
+    '← 裁判所・検察庁・警視庁、その先の角を北へ首相官邸\n→ 霞が関の官庁街・公園\n↓ 東京エリア（バス停は右手）',
+  ]);
+}
 function ministryBuilding(k, x, y, w, extra = {}) {
   return {
     type: 'building', x, y, w, h: 6, door: Math.floor(w / 2), kind: 'office', rise: 2,
@@ -976,7 +988,7 @@ function generate() {
     bannerProp(47, 25, 6, 'yes'),
     busStop(BUS.x, BUS.y, { text: undefined, talk: takeBus }),
     signpost(43, H - 2, '東京エリア', ['道しるべだ。', '↓ 東京エリア\n（東京駅・NHK・事務所・ドット荘）\nこの中央の通りを南へまっすぐ。', '東京エリアの北の出口から、\nここ「永田町・霞が関」に通じている。']),
-    { type: 'sign', x: 37, y: 53, text: ['「永田町・霞が関」の案内図だ。', '↑ 国会議事堂・議員会館・国立国会図書館\n← 首相官邸・警視庁\n→ 政党の本部・霞が関の官庁街・公園', '↓ 東京エリア（バス停は右手）'] },
+    { type: 'sign', x: 37, y: 53, talk: mapSignTalk },
     { type: 'sign', x: 34, y: 17, talk: plaqueTalk },
 
     // ---- people: 国会の正門
@@ -1089,6 +1101,7 @@ registerPlace({
         await g.wait(250);
         await g.say(['ここは「永田町・霞が関」。\n国会、首相官邸、政党の本部、国の役所が集まる\n日本の政治の中心だ。']);
         await panDiet(g, [...dietLines(g), '（議事堂をまたながめたくなったら、\n　門の前の説明板を調べよう）']);
+        await g.say(['（党本部の受付で入党、2階の選挙対策本部で公認の相談。\n　国会は、だれでも見学と本会議の傍聴ができる）', '（選挙の届出は、ドット商店街の区役所でもできる。\n　行き先は、すぐそばの案内図で確かめよう）']);
       },
     },
   },

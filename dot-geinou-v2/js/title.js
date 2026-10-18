@@ -737,15 +737,20 @@ const NOTICE = [
   '実在の企業・番組・政党（自由民主党・民主党）は、場所や名前として\n出てくるだけです。実在の政治家は登場しません。',
   '政策や選挙の結果は、どの考え方が正しいかを示すものではありません。',
   '犯罪も選べますが、決してすすめるものではありません。\n現実と同じように、逮捕・裁判・刑罰などの重い結果が待っています。',
+  '脅迫や襲撃、借金の取り立て、スキャンダルなど、つらい場面もあります。',
   'お酒とタバコは20歳になってから。',
 ];
+// one dim line under the bullets: where to turn in real life (real numbers: 警察相談専用電話
+// #9110, 消費者ホットライン 188, 法テラス サポートダイヤル)
+const NOTICE_HELP = '現実で困ったら：警察相談 #9110・消費者ホットライン 188・法テラス';
 function drawNotice(ctx, t) {
   ctx.fillStyle = 'rgba(6,4,18,0.72)';
   ctx.fillRect(0, 0, SW, SH);
   const W = 600, TW = W - 60, SIZE = 16, LH = 21;
   const blocks = NOTICE.map((l) => wrap(ctx, l, TW, SIZE));
   const lines = blocks.reduce((a, b) => a + b.length, 0);
-  const H = 54 + lines * LH + (blocks.length - 1) * 6 + 34;
+  const HELP_SIZE = 13, HELP_H = 22;
+  const H = 54 + lines * LH + (blocks.length - 1) * 6 + HELP_H + 34;
   const x = Math.round((SW - W) / 2), y = Math.round((SH - H) / 2) + 4;
   const k = Math.min(1, t / 8);
   const yy = y + Math.round((1 - k) * 10);
@@ -754,14 +759,16 @@ function drawNotice(ctx, t) {
   ribbon(ctx, NOTICE_TITLE, SW / 2, yy - 10, { size: 16, color: STEP_COLORS.profile });
   let ly = yy + 34;
   blocks.forEach((b, i) => {
-    // a small diamond bullet, the fourth (crime) in red
-    const col = i === 3 ? '#ff8a8a' : '#ffd23f';
+    // a small diamond bullet, the fourth (crime) and fifth (hard scenes) in red
+    const warn = i === 3 || i === 4;
+    const col = warn ? '#ff8a8a' : '#ffd23f';
     R(ctx, x + 20, ly + 7, 6, 6, shade(col, -0.4));
     R(ctx, x + 21, ly + 8, 4, 4, col);
-    b.forEach((l, j) => text(ctx, l, x + 34, ly + j * LH, { size: SIZE, color: i === 3 ? '#ffd0d0' : '#ffffff' }));
+    b.forEach((l, j) => text(ctx, l, x + 34, ly + j * LH, { size: SIZE, color: warn ? '#ffd0d0' : '#ffffff' }));
     ly += b.length * LH + 6;
   });
-  if (t > NOTICE_READY) text(ctx, 'A：つぎへ　B：もどる', SW / 2, yy + H - 30, { size: 14, align: 'center', color: Math.floor(t / 30) % 2 === 0 ? COLORS.accent : '#c8b070' });
+  text(ctx, fitTo(ctx, NOTICE_HELP, TW, HELP_SIZE), x + 34, ly + 4, { size: HELP_SIZE, color: '#9aa3c7', shadow: null });
+  if (t > NOTICE_READY) text(ctx, 'A（Z・Enter）：つぎへ　B（X）：もどる', SW / 2, yy + H - 30, { size: 14, align: 'center', color: Math.floor(t / 30) % 2 === 0 ? COLORS.accent : '#c8b070' });
   ctx.globalAlpha = 1;
 }
 
@@ -1246,12 +1253,18 @@ export class CreateScene {
     let lines;
     if (row.key === 'familyName' || row.key === 'givenName') lines = [['A：入力する　◀▶：候補から選ぶ', COLORS.accent], ['まわりの人からは「名」で呼ばれます。', COLORS.text], ['家族の名字も、いっしょに変わります。', COLORS.dim]];
     else if (row.key === 'gender') lines = [['家族からの呼ばれ方などが、少し変わります。', COLORS.text], ['（見た目は「見た目」のページで）', COLORS.dim]];
-    else if (row.key === 'age') lines = [[`${AGE_MIN}〜${AGE_MAX}さい。${YEAR_DAYS}日ごとに誕生日がきて、`, COLORS.text], ['ひとつ年をとります。', COLORS.text]];
+    else if (row.key === 'age') {
+      // 1年＝YEAR_DAYS日; 20: alcohol / tobacco; 被選挙権 25 (参院・知事 30), the same in every era
+      lines = [[`${AGE_MIN}〜${AGE_MAX}さい。${YEAR_DAYS}日で1年、誕生日がきます。`, COLORS.text], ['お酒・タバコは20さい、立候補は25さいから。', COLORS.text]];
+      if (p.age < 25) lines.push([`（立候補まで あと${(25 - p.age) * YEAR_DAYS}日。参院・知事は30さい）`, COLORS.dim]);
+      else if (p.age < 30) lines.push([`（参議院・知事は30さいから。あと${(30 - p.age) * YEAR_DAYS}日）`, COLORS.dim]);
+      else lines.push(['（どの選挙にも立候補できます）', COLORS.dim]);
+    }
     else if (row.key === 'hometown') {
       const reg = REGIONS[PREFECTURES[p.hometown].region];
       lines = [[`${reg.name}地方　A：次の地方へ`, COLORS.accent], [`ふるさとから、${reg.gift.name}が届くことも。`, COLORS.text], ['（家族がいれば）', COLORS.dim]];
     } else if (row.key === 'personality') lines = [[PERSONALITIES[p.personality].desc, COLORS.text], [personalityEffects(p.personality), COLORS.cyan]];
-    else if (row.key === 'era') lines = [...ERAS[p.era].desc.split('\n').map((l) => [l, COLORS.text]), ['（ゲームの中身・バランスは同じです）', COLORS.dim]];
+    else if (row.key === 'era') lines = [...ERAS[p.era].desc.split('\n').map((l) => [l, COLORS.text]), ['（政党・選挙・法律も、その時代のしくみに）', COLORS.dim]];
     else lines = [['つぎは家族の設定です。', COLORS.text], ['Bでひとつ前のページにもどれます。', COLORS.dim]];
     descBox(ctx, { x: x + 10, y: y + h - 70, w: w - 20, h: 60 }, lines);
     return row.key === 'next' ? 'Aでつぎへ　Bでもどる' : row.kind === 'text' ? 'A：入力　◀▶：候補　▲▼：項目　Bでもどる' : row.key === 'hometown' ? '◀▶：都道府県　A：次の地方　Bでもどる' : '◀▶で変更　▲▼で項目えらび　Bでもどる';
@@ -1480,18 +1493,27 @@ export class CreateScene {
       ['時代', ERAS[p.era].label],
     ];
     const LX = x + 20, VX = x + 86, VW = w - 106;
+    // family on up to three lines (laid out first: the under-25 note goes where there is room)
+    const fy = y + 12 + rows.length * 24;
+    const fam = sortFamily(this.family).map((m) => `${RELATIONS[m.rel].name} ${m.name.startsWith(p.familyName + ' ') ? m.name.slice(p.familyName.length + 1) : m.name}${m.alive ? '' : '（他界）'}`);
+    const flines = wrapItems(ctx, fam.length ? fam : ['なし（ひとりで上京）'], VW, 14, 3);
+    const noteLine = p.age < 25 && fy + 1 + flines.length * 18 <= y + h - 86;
     rows.forEach(([k, v], i) => {
       const ry = y + 12 + i * 24;
       text(ctx, k, LX, ry, { size: 16, color: COLORS.cyan });
       const vs = [16, 14, 12].find((z) => measure(ctx, v, z) <= VW) || 12;
       text(ctx, fitTo(ctx, v, VW, vs), VX, ry + (16 - vs) / 2, { size: vs, color: COLORS.text });
+      // under 25: a small dim note beside the age (the days are on a line above the buttons)
+      if (k === '年齢' && p.age < 25 && !noteLine && measure(ctx, '（立候補は25さいから）', 12) <= VW - measure(ctx, v, vs) - 10) {
+        text(ctx, '（立候補は25さいから）', VX + measure(ctx, v, vs) + 10, ry + 3, { size: 12, color: COLORS.dim });
+      }
     });
-    // family on up to three lines
-    const fy = y + 12 + rows.length * 24;
     text(ctx, '家族', LX, fy, { size: 16, color: COLORS.cyan });
-    const fam = sortFamily(this.family).map((m) => `${RELATIONS[m.rel].name} ${m.name.startsWith(p.familyName + ' ') ? m.name.slice(p.familyName.length + 1) : m.name}${m.alive ? '' : '（他界）'}`);
-    const flines = wrapItems(ctx, fam.length ? fam : ['なし（ひとりで上京）'], VW, 14, 3);
     flines.forEach((l, i) => text(ctx, l, VX, fy + 1 + i * 18, { size: 14, color: COLORS.text }));
+    // under 25: how long until the first election (1年＝YEAR_DAYS日), when the family leaves room
+    if (noteLine) {
+      text(ctx, `選挙に立候補できるのは25さいから（あと${(25 - p.age) * YEAR_DAYS}日）`, LX, y + h - 86, { size: 13, color: COLORS.dim });
+    }
     // buttons
     ['これでスタート！', 'もどる'].forEach((label, i) => {
       const bw = w - 60, bx = x + 30, by = y + h - 64 + i * 30;

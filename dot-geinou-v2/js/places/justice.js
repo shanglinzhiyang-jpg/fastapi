@@ -98,7 +98,9 @@ export function saibaninCase(g, cs) {
   if (def && def.saibanin != null) { try { return typeof def.saibanin === 'function' ? !!def.saibanin(g, cs) : !!def.saibanin; } catch (e) { return false; } }
   return cs.crime === 'robbery' && !!cs.injury;
 }
-const tokusoCase = (cs) => !!cs && POLITICAL_MONEY.has(cs.crime);
+// crime.js decides it per case (cs.tokuso: national / executive office, or a 特捜・国税 source); a local
+// politician's police case goes to the ordinary 検事室. Old cases without the field: by the crime.
+const tokusoCase = (cs) => !!cs && (typeof cs.tokuso === 'boolean' ? cs.tokuso : POLITICAL_MONEY.has(cs.crime));
 // 録音・録画（2019年6月～）: 身柄拘束中の裁判員裁判対象事件と、検察の独自捜査事件。
 const recordedCase = (g, cs) => !!cs && since(g, 2019, 6) && !!cs.detained && (saibaninCase(g, cs) || tokusoCase(cs));
 
@@ -1734,6 +1736,8 @@ const SPK = {
 function trialCases(g) {
   const w = laborWord(g);
   const y = lawYear(g);
+  // 窃盗罪 has had a fine only since 2006-05: before that, petty shoplifting ended in 起訴猶予 (a 前歴, not a 前科).
+  const theftFine = since(g, 2006, 5);
   const cases = {
     elder: {
       title: '窃盗被告事件', judges: 1, defendant: 'defOld', witness: 'daughter', note: '高齢の被告人の万引き事件',
@@ -1745,20 +1749,20 @@ function trialCases(g) {
         { cap: '黙秘権の告知' }, { who: 'chief', text: '被告人には黙秘権があります。答えたくない質問には、\n答えなくてかまいません。話したことは、有利にも\n不利にも証拠になります。' },
         { cap: '罪状認否' }, { who: 'chief', text: '今、検察官が読んだ事実に、違うところはありますか。' }, { who: 'def', text: '…ありません。まちがいありません。' },
         { who: 'bengo', text: '弁護人も、被告人と同じ意見です。' }, { sit: 'def' },
-        { cap: '冒頭陳述' }, { who: 'pros', text: ['被告人は、5年前に妻を亡くして以来、一人暮らし。\n同じような万引きで、これまでに罰金の前科が2回あります。', '財布には、商品を買えるだけの現金が入っていました。'] },
+        { cap: '冒頭陳述' }, { who: 'pros', text: [theftFine ? '被告人は、5年前に妻を亡くして以来、一人暮らし。\n同じような万引きで、これまでに罰金の前科が2回あります。' : '被告人は、5年前に妻を亡くして以来、一人暮らし。\n同じような万引きで、これまでに2回、\n起訴猶予になっています。', '財布には、商品を買えるだけの現金が入っていました。'] },
         { cap: '証拠調べ' }, { who: 'pros', text: '被害届、防犯カメラの映像の報告書、\n被告人の供述調書などを請求します。' }, { who: 'bengo', text: 'すべて同意します。' },
         { who: 'chief', text: '採用して、取り調べます。' }, { note: '（検察官が、証拠の内容を要約して読み上げていく。\n弁護人が同意した書類は、そのまま証拠になる）' },
         { who: 'bengo', text: '情状証人として、被告人の長女を請求します。' }, { stand: 'wit' },
         { who: 'daughter', text: ['母が亡くなってから、父はひとりで食事もとらず、\n家にこもりがちでした。気づいてやれなかった…。', 'これからは毎週、父の家に通います。\n地域包括支援センターにも、相談に行きました。'] }, { sit: 'wit' },
         { cap: '被告人質問' }, { stand: 'def' }, { who: 'bengo', text: 'お金はあったのに、なぜ盗んだんですか。' },
         { who: 'def', text: '…自分でも、わからないんです。\n気がつくと、かばんに入れていて…。' },
-        { who: 'pros', text: '前の裁判でも「もうしない」と誓いましたね。' }, { who: 'def', text: '…はい。申し訳ありません。' },
+        { who: 'pros', text: theftFine ? '前に罰金を受けたときも、\n「もうしない」と誓いましたね。' : '前に検察庁で調べを受けたときも、\n「もうしない」と誓いましたね。' }, { who: 'def', text: '…はい。申し訳ありません。' },
         { who: 'chief', text: 'これからは、どうやって暮らしていきますか。' }, { who: 'def', text: '娘の家の近くに越して、病院にも通います。\n…もう、店には一人で行きません。' }, { sit: 'def' },
-        { cap: '論告・求刑' }, { who: 'pros', text: `同じ種類の前科がありながら、再び犯行に及んでおり、\n常習性は明らかです。被告人を${w}1年に処するのが\n相当と考えます。` },
+        { cap: '論告・求刑' }, { who: 'pros', text: theftFine ? `同じ種類の前科がありながら、再び犯行に及んでおり、\n常習性は明らかです。被告人を${w}1年に処するのが\n相当と考えます。` : `2度も起訴猶予の機会を与えられながら、\n再び犯行に及んでおり、常習性は明らかです。\n被告人を${w}1年に処するのが相当と考えます。` },
         { cap: '最終弁論' }, { who: 'bengo', text: ['被害は弁償し、お店も厳しい処罰は望んでいません。\n長女が監督を約束し、医療にもつながりました。', '刑務所ではなく、社会の中での立ち直りこそ必要です。\n執行猶予つきの判決を求めます。'] },
         { cap: '最終陳述' }, { stand: 'def' }, { who: 'chief', text: '最後に、何か言っておきたいことはありますか。' }, { who: 'def', text: 'お店の方に、本当に申し訳ないことをしました。\n…娘にも。もう、二度としません。' },
         { who: 'chief', text: '判決は、このあと言い渡します。しばらく休廷します。' }, { pause: '― 20分後 ―' },
-        { cap: '判決' }, { who: 'chief', text: [`主文。被告人を${w}1年に処する。\nこの裁判が確定した日から3年間、\nその刑の執行を猶予する。`, '同じ罪を重ねたことは軽くないが、被害は回復され、\n家族の監督と医療の支えが期待できることを考えた。', '…今日、娘さんがここに来てくれたことを、\n忘れないでください。'] }, { sit: 'def' },
+        { cap: '判決' }, { who: 'chief', text: [`主文。被告人を${w}1年に処する。\nこの裁判が確定した日から3年間、\nその刑の執行を猶予する。`, theftFine ? '同じ罪を重ねたことは軽くないが、被害は回復され、\n家族の監督と医療の支えが期待できることを考えた。' : '同じことをくり返したのは軽くないが、被害は回復され、\n家族の監督と医療の支えが期待できることを考えた。', '…今日、娘さんがここに来てくれたことを、\n忘れないでください。'] }, { sit: 'def' },
         { note: y >= 2005 ? '（高齢者の万引きでは、孤立や認知機能の衰えが\n背景にあることも少なくない。刑罰だけでなく、\n福祉や医療につなぐ取り組みが広がっている）' : '（判決のあと、被告人は娘に支えられて法廷を出ていった）' },
       ],
     },

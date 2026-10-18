@@ -251,7 +251,10 @@ function generate() {
 
     // signs
     { type: 'sign', x: 46, y: 15, text: '東映 撮影所\n本日撮影中！関係者は正面入口へどうぞ。' },
-    { type: 'sign', x: 17, y: 18, text: ['↑ NHK・ホリプロ・東宝・東映\n↓ よしもと・BSよしもと・グレープカンパニー\n→ 東京駅（新幹線で大阪へ）', '→→ テレビ局エリア（大通りを東のはしまで）\n← ドット商店街（大通りを西のはしまで）'], solid: true },
+    { type: 'sign', x: 17, y: 18, text: [
+      '↑ NHK・ホリプロ・東宝・東映\n↓ よしもと・BSよしもと・グレープカンパニー\n→ 東京駅（新幹線で大阪へ）', '→→ テレビ局エリア（大通りを東のはしまで）\n← ドット商店街（大通りを西のはしまで）',
+      ...(PLACES.nagatacho || PLACES.kanraku ? [[PLACES.nagatacho ? '↑↑ 永田町・霞が関（まん中の通りを北のはしまで）' : '', PLACES.kanraku ? '↓↓ ネオン街（まん中の通りを南のはしまで）' : ''].filter(Boolean).join('\n')] : []),
+    ], solid: true },
 
     // NPCs
     {
@@ -271,6 +274,7 @@ function generate() {
     { type: 'npc', id: 'young_comedian', x: 29, y: 33, dir: 'left', look: LOOKS.comedian2, name: '若手芸人', text: ['よしもとのオーディション、ツッコミのタイミングが命やで。', 'ボケを最後まで聞いてから、ビシッとツッコむ！早すぎても遅すぎてもアカン。'] },
     { type: 'npc', id: 'grape_fan', x: 33, y: 42, dir: 'up', look: { ...LOOKS.fan, hairColor: 'brown', top: '#9273bd' }, name: 'お笑いファン', wander: 2, text: ['グレープカンパニーの芸人さんのグッズ、買っちゃった！', 'お風呂屋さんの「ドットの湯」は、疲れがとれるって評判だよ。'] },
     { type: 'npc', id: 'tv_guide', x: 68, y: 18, dir: 'down', look: { ...LOOKS.staff, top: '#2f6fd0', hat: '#2f6fd0' }, name: '案内係さん', text: ['この大通りを東へまっすぐ行くと「テレビ局エリア」！', '日本テレビ、TBS、テレビ朝日、フジテレビ、テレビ東京…\nテレビ局がずらりと並んでるよ。', 'ちょっと遠いけど、とても広くて楽しい街さ。\nバス停からは、テレビ局エリア行きのバスもあるよ。'] },
+    ...(PLACES.nagatacho ? [{ type: 'npc', id: 'poster_watcher', x: 43, y: 4, dir: 'up', look: { ...LOOKS.salaryman, top: '#6a7a8a' }, name: '道しるべを見る人', text: ['この通りを北へまっすぐ行くと、永田町。\n国会の見学は、だれでもできるんだって。', '選挙に出られるのは、25歳から。\n立候補の届出は、商店街の区役所でもできるらしいよ。'] }] : []),
     { type: 'npc', id: 'taxi_driver', x: 53, y: 34, dir: 'left', look: { ...LOOKS.guard, hat: '#3b3f48' }, name: 'タクシー運転手', text: ['お客さん、芸能人の卵？', '新幹線で大阪まで行けば、お笑いの本場・なんばもすぐそこだよ。運賃はちと高いけどね。'] },
   ];
 

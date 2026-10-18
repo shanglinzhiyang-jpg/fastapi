@@ -1195,7 +1195,11 @@ async function historyDrama(g, npc) {
     await g.say(['日曜夜の歴史ドラマの監督だ。', '主演は一年の顔。知名度★2000…「スター」と呼ばれるくらいの人にしか任せられないな。', 'セットにいる殺陣師さんの稽古で、腕を磨いておくといい。'], s);
     return;
   }
-  // burnout / starving: refuse before the costume fitting (g.job would only refuse after it)
+  // 活動自粛 / a TV ban, the campaign / a cabinet post, burnout / starving: refuse before the costume
+  // fitting (g.job would only refuse after it)
+  const def = { id: 'nhk_history_drama', title: '日曜夜の歴史ドラマで主演' };
+  const ban = (typeof g.justiceRefusal === 'function' && g.justiceRefusal('job', def)) || (typeof g.politicsRefusal === 'function' && g.politicsRefusal('job', def)) || null;
+  if (ban) { await g.say(ban); return; }
   const tired = g.lifeRefusal();
   if (tired) { await g.say(tired); return; }
   const i = await g.ask(['{name}さん…次の主演は、君しかいない！', `「日曜夜の歴史ドラマで主演」\nギャラ 目安¥70,000（出来で変動）／体力 -30・ストレス +${ACTIVITY.job.stress}`], ['引き受ける', 'やめておく'], s);

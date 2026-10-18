@@ -30,7 +30,7 @@
 // and .posts (life fields), g.state.regulars (engine). All names are fictional.
 
 import { registerRegular, REGULARS, onMorning, registerPhoneApp, PHONE_APPS, weekdayOf, weekOf, WEEKDAYS, PEOPLE, isKansai, OFFER_DAYS } from '../engine/life.js';
-import { programShowsHeld, PROGRAM_SHOW_IDS } from './programs.js';
+import { programShowsHeld, PROGRAM_SHOW_IDS, showOfferRefusal, inCabinet } from './programs.js';
 import { registerItem, ITEMS, RANKS, rankIndex, AGENCIES, CAREER } from '../engine/state.js';
 import { PLACES } from '../engine/map.js';
 import { LOOKS, charSheetHD, drawFaceHD } from '../engine/sprites.js';
@@ -407,11 +407,67 @@ function joinFanMeet(g) {
   const st = g.state;
   const f = fmCfg(st);
   if (!f || f.state !== 'planned' || st.regulars[FANMEET] || st.day > f.day || weekOf(st.day) !== weekOf(f.day)) return;
+  if (fanMeetBlock(g)) return;
   g.joinRegular(FANMEET);
 }
+// In hospital (darkside's hospitalStay: the days pass with the morning hooks running).
+function inHospital(g) {
+  const d = g.state.flags && g.state.flags.darkside;
+  return !!(d && num(d.hospUntil) > 0 && num(d.hospUntil) >= g.state.day);
+}
+// Why a fan meeting cannot be held / planned now: 'justice' (custody, 活動自粛), 'hospital',
+// 'cabinet' (planning only: a minister takes on no new events). null: it can.
+function fanMeetBlock(g, planning = false) {
+  if (showOfferRefusal(g, FANMEET, 'event')) return 'justice';
+  if (inHospital(g)) return 'hospital';
+  if (planning && inCabinet(g)) return 'cabinet';
+  return null;
+}
+// The organizer calls the event off: after an arrest / a scandal it is cancelled; after a stay in
+// hospital it is postponed and planned again once the player is well (fanMeetMorning).
+function cancelFanMeet(g, why) {
+  const st = g.state;
+  const f = fmCfg(st);
+  if (!f || f.state !== 'planned') return false;
+  const what = f.big ? 'ファン感謝祭' : 'ファンミーティング';
+  const later = why === 'hospital';
+  f.state = later ? 'postponed' : 'cancelled';
+  f.cancelDay = st.day;
+  if (st.regulars[FANMEET]) delete st.regulars[FANMEET];
+  const text = later
+    ? `【${what} 延期のお知らせ】\n${f.day}日目に予定していた${what}は、{name}さんの体調を最優先し、延期とさせていただきます。\n新しい日程は、決まりしだいお知らせします。`
+    : `【${what} 中止のお知らせ】\n${f.day}日目に予定していた${what}は、諸般の事情により中止とさせていただきます。\n楽しみにしてくださっていたみなさまには、心よりお詫び申し上げます。`;
+  g.message({ from: 'イベント制作 ドットプロモーション', kind: 'news', look: LOOKS.ad, text: g.fmt(text) });
+  return true;
+}
+// Scandals and arrests (justice core): remembered for the fan letters and the award; a planned fan
+// meeting is called off at once (the message waits in the inbox while the player is held).
+function noteScandal(g, kind, level = 3) {
+  const st = g.state;
+  if (!st || !st.flags) return;
+  // only a known face is in the news (crime.js knownFigure: ★100+ or holding an office)
+  const pol = st.politics && st.politics.me && st.politics.me.office;
+  if (!(st.fame >= 100 || pol)) return;
+  const s = obj(g, 'career_scandal');
+  s.level = Math.max(level, s.day === st.day ? num(s.level) : 0);
+  s.day = st.day;
+  s.kind = kind;
+}
+// (the justice core is optional: hooked through a guarded dynamic import, like the politics core)
+import('../engine/crime.js').then(({ onJustice }) => {
+  onJustice('arrested', (g) => { noteScandal(g, 'arrested', 3); cancelFanMeet(g, 'justice'); });
+  onJustice('jailed', (g) => { noteScandal(g, 'jailed', 4); cancelFanMeet(g, 'justice'); });
+  onJustice('convicted', (g) => noteScandal(g, 'convicted', 3));
+  onJustice('scandal', (g, info) => {
+    const lv = num(info && info.level, 1);
+    if (lv >= 2) noteScandal(g, 'scandal', lv);
+    if (fanMeetBlock(g) === 'justice') cancelFanMeet(g, 'justice');
+  });
+  onJustice('released', (g, info) => { if (info && info.prison) obj(g, 'career_scandal').released = g.state.day; });
+}).catch(() => { /* no justice core: nothing to hear about */ });
 // Where a fan meeting is held: the player's agency, else the BSよしもと studio.
 const FM_VENUE = { yoshimoto: 'yoshimoto', shochiku: 'shochiku', grape: 'grape', horipro: 'horipro' };
-function scheduleFanMeet(g, big) {
+function scheduleFanMeet(g, big, again = false) {
   const st = g.state;
   const place = (st.agency && FM_VENUE[st.agency] && PLACES[FM_VENUE[st.agency]] ? FM_VENUE[st.agency] : 'bs_yoshimoto');
   // the next Saturday / Sunday at least 2 days away: best a day without any of your
@@ -425,9 +481,11 @@ function scheduleFanMeet(g, big) {
   st.flags.career_fm = { day, place, big: !!big, state: 'planned', n: num(prev && prev.n) + 1 };
   joinFanMeet(g);
   const what = big ? 'ファン感謝祭' : 'ファンミーティング';
-  const intro = big
-    ? `ファン10万人突破、おめでとうございます！\nこれを記念して、大きな${what}をひらきます！`
-    : `ファン2万人突破、おめでとうございます！\n記念の${what}をひらくことになりました！`;
+  const intro = again
+    ? `延期になっていた${what}の、新しい日程が決まりました！\n{name}さん、体調はもう大丈夫ですか？`
+    : big
+      ? `ファン10万人突破、おめでとうございます！\nこれを記念して、大きな${what}をひらきます！`
+      : `ファン2万人突破、おめでとうございます！\n記念の${what}をひらくことになりました！`;
   g.message({
     from: 'イベント制作 ドットプロモーション', kind: 'news', look: LOOKS.ad,
     text: g.fmt(`${intro}\n日時：${day}日目（${WEEKDAYS[weekdayOf(day)]}曜）\n会場：${placeName(place)}\n当日、会場に来てくださいね。（トークの様子は配信用に収録します）`),
@@ -764,7 +822,9 @@ function offerable(g, id) {
   if (offers[id] && st.day - offers[id] < OFFER_GAP) return false;
   const s = st.regulars[id];
   if (s && s.declined && st.day - s.declined < OFFER_GAP) return false;
-  return g.checkRequires(REGULARS[id].requires) === null;
+  if (g.checkRequires(REGULARS[id].requires) !== null) return false;
+  // nobody calls while the show could not be recorded (custody, 活動自粛, a TV ban, the campaign, the cabinet)
+  return !showOfferRefusal(g, id, mediumOf(id));
 }
 function kanEligible(g) {
   const st = g.state;
@@ -774,7 +834,8 @@ function kanEligible(g) {
   // dropped from it (missed twice): a long break; only declined: a week
   const s = st.regulars[KAN];
   const gap = s && s.dropped && s.since != null ? OFFER_GAP : KAN_GAP;
-  return !(offers[KAN] && st.day - offers[KAN] < gap);
+  if (offers[KAN] && st.day - offers[KAN] < gap) return false;
+  return !showOfferRefusal(g, KAN, 'tv');
 }
 function sendOffer(g, id) {
   const st = g.state;
@@ -827,6 +888,7 @@ function offerMorning(g, out) {
   const st = g.state;
   noteDrops(g);
   if (out.sent >= 2) return; // a busy morning: tomorrow
+  if (inCabinet(g)) return; // a minister takes on no new entertainment work (大臣規範)
   // the 冠番組 does not wait for the regular shows' turn
   if (kanEligible(g)) {
     setupKan(g);
@@ -879,8 +941,9 @@ function milestoneMorning(g, out) {
   for (const m of MILESTONES) {
     if (ms[m] || st.fans < m) continue;
     if (out.sent >= 2) return;
-    // a fan meeting can only be planned when none is pending
-    if ((m === 20000 || m === 100000) && fmCfg(st) && fmCfg(st).state === 'planned') continue;
+    // a fan meeting can only be planned when none is pending, and not while it could not be held
+    // (custody, 活動自粛, in hospital, in the cabinet): that milestone waits
+    if ((m === 20000 || m === 100000) && ((fmCfg(st) && ['planned', 'postponed'].includes(fmCfg(st).state)) || fanMeetBlock(g, true))) continue;
     ms[m] = st.day;
     sendMilestone(g, m);
     out.sent++;
@@ -935,18 +998,18 @@ function sendMilestone(g, m) {
 // first small jobs (did(st, ids)).
 const did = (st, ids) => ids.some((id) => num(st.jobs && st.jobs[id]) > 0);
 const LETTERS = [
-  { t: 'はじめてお手紙を書きます。テレビで{name}さんを見て、一目でファンになりました！\nこれからも応援しています。', s: '北国のみかん箱', need: (st, c) => c.tv },
-  { t: '{name}さんへ。仕事でへこんだ日に{name}さんを見て、大笑いしました。\n明日もがんばれそうです。', s: '会社員・夜ふかしペンギン' },
+  { t: 'はじめてお手紙を書きます。テレビで{name}さんを見て、一目でファンになりました！\nこれからも応援しています。', s: '北国のみかん箱', need: (st, c) => c.tv, seen: true },
+  { t: '{name}さんへ。仕事でへこんだ日に{name}さんを見て、大笑いしました。\n明日もがんばれそうです。', s: '会社員・夜ふかしペンギン', seen: true },
   { t: '{name}さん、だいすき！\nおおきくなったら、{name}さんみたいになりたいです。', s: 'ゆうた（5さい）・ママ代筆' },
-  { t: '孫に教えてもらって、{name}さんを知りました。\nテレビの前で、毎週ふたりで応援しています。お体に気をつけてね。', s: 'ドット町のおばあちゃん', need: (st, c) => c.tv },
-  { t: '{name}さんのモノマネをしたら、クラスで大ウケしました。\n勝手にすみません！', s: '高校1年・ものまね修行中' },
-  { t: 'うちの犬が、テレビに{name}さんが映るとしっぽをふります。\n犬にも人気です！', s: '柴犬こむぎの飼い主', need: (st, c) => c.tv },
-  { t: '受験勉強の休けいに{name}さんの番組を見るのが、毎日のごほうびです。\n春までがんばります！', s: '受験生・はちみつ', need: (st, c) => c.tv },
+  { t: '孫に教えてもらって、{name}さんを知りました。\nテレビの前で、毎週ふたりで応援しています。お体に気をつけてね。', s: 'ドット町のおばあちゃん', need: (st, c) => c.tv, seen: true },
+  { t: '{name}さんのモノマネをしたら、クラスで大ウケしました。\n勝手にすみません！', s: '高校1年・ものまね修行中', seen: true },
+  { t: 'うちの犬が、テレビに{name}さんが映るとしっぽをふります。\n犬にも人気です！', s: '柴犬こむぎの飼い主', need: (st, c) => c.tv, seen: true },
+  { t: '受験勉強の休けいに{name}さんの番組を見るのが、毎日のごほうびです。\n春までがんばります！', s: '受験生・はちみつ', need: (st, c) => c.tv, seen: true },
   { t: 'きのう、ゆめに{name}さんがでてきました。\nいっしょに、おにぎりをたべました。', s: 'りこ（7さい）' },
-  { t: 'バイト先のラジオで{name}さんの声が流れて、思わず手が止まりました。\n店長にはバレずにすみました。', s: 'コンビニ店員・ドット', need: (st, c) => c.radio },
-  { t: 'いつも全力の{name}さんを見て、わたしも、もう一度夢を追いかけることにしました。', s: '元・役者志望のサラリーマン' },
-  { t: '{name}さんの笑顔を見ると、なぜか肩こりが治ります。\n医学的にはわかりませんが、本当です。', s: 'ドット整骨院の院長' },
-  { t: '家族4人、好きな芸能人がバラバラなのに、{name}さんだけは全員一致です！', s: 'ドット家一同', need: (st) => st.fame >= 250 },
+  { t: 'バイト先のラジオで{name}さんの声が流れて、思わず手が止まりました。\n店長にはバレずにすみました。', s: 'コンビニ店員・ドット', need: (st, c) => c.radio, seen: true },
+  { t: 'いつも全力の{name}さんを見て、わたしも、もう一度夢を追いかけることにしました。', s: '元・役者志望のサラリーマン', seen: true },
+  { t: '{name}さんの笑顔を見ると、なぜか肩こりが治ります。\n医学的にはわかりませんが、本当です。', s: 'ドット整骨院の院長', seen: true },
+  { t: '家族4人、好きな芸能人がバラバラなのに、{name}さんだけは全員一致です！', s: 'ドット家一同', need: (st) => st.fame >= 250, seen: true },
   // the first small jobs (while still on the way up)
   { t: '公園で{name}さんの路上ライブを見ました！\n足を止めたのは、わたしが最初のひとりだったかも。', s: 'いつもの散歩道・たんぽぽ', need: (st) => st.fame < 500 && did(st, ['street_tsukkomi', 'street_rhythm']) },
   { t: '劇場の前説で{name}さんを見ました。\n本番の前から笑いすぎて、ちょっと疲れました（笑）', s: '劇場通いの大学生・ぽてと', need: (st) => st.fame < 500 && did(st, ['yoshimoto_maesetsu']) },
@@ -964,6 +1027,26 @@ const LETTERS = [
   { t: '{partner}さんとのコンビ、最高です！\nふたりのかけ合いが大好き！', s: 'お笑い大好き・まめ', need: (st, c) => !!c.partner },
   { t: 'ファンクラブの会報、宝物にしています！\n表紙の{name}さんを、額に入れて飾りました。', s: 'ファンクラブ会員・ことり', need: (st) => st.fans >= 5000 },
 ];
+// While the player is off the air after a scandal (活動自粛, a TV ban, within 30 days of an arrest /
+// scandal, or of leaving prison): fewer letters, from this pool only (no gifts). Some fans wait,
+// some leave. Letters marked seen (above) also need the player to have worked lately (c.active).
+const QUIET_LETTERS = [
+  { t: 'ニュースを見ました。\n正直、びっくりしたし、悲しかったです。\nでも、わたしは待っています。', s: '古くからのファン・ぽんず' },
+  { t: '{name}さんへ。\nいろいろ言われているけれど、わたしは{name}さんの笑顔が好きでした。\nきちんと向き合って、いつか戻ってきてください。', s: 'ドット町の会社員' },
+  { t: 'ファンクラブを、退会することにしました。\n応援していた分、裏切られた気持ちです。\nごめんなさい。', s: '元・ファンクラブ会員' },
+  { t: '子どもに「どうしてテレビに出ないの？」と聞かれて、返事に困りました。\nしっかり反省してください。', s: '小学生の母' },
+  { t: '一度まちがえても、やり直せると信じています。\nいつか、また舞台で会えますように。', s: '劇場通いの大学生' },
+  { t: '手紙を書くか、ずいぶん迷いました。\n許せない気持ちもあります。それでも、体には気をつけて。', s: '名前は書きません' },
+  { t: 'グッズは、しばらく押し入れにしまいます。\n捨てはしません。また出せる日が来るといいな。', s: 'もと最前列のファン' },
+];
+function quietNow(g) {
+  const st = g.state;
+  const sc = st.flags.career_scandal;
+  if (sc && typeof sc === 'object' && (st.day - num(sc.day, -999) <= 30 || st.day - num(sc.released, -999) <= 30)) return true;
+  let js = null;
+  try { js = typeof g.justiceStatus === 'function' ? g.justiceStatus() : null; } catch (e) { js = null; }
+  return !!(js && (js.kinshinUntil || js.tvBanUntil));
+}
 // Has the public seen you on TV / radio yet? (a recorded show of that medium, a job of
 // that kind from the notebook's job list; on TV also: every ★250 job is on air somewhere)
 const MEDIA_RE = { tv: /^(?!.*ラジオ).*(番組|CM|ドラマ|映画|テレビ|アフレコ|クイズ|リポーター|食レポ)/, radio: /ラジオ/ };
@@ -981,10 +1064,27 @@ function letterMorning(g, out) {
   const rk = rankIndex(st.fame), ag = st.agency || '';
   if (L.rank == null || rk > L.rank) { if (L.rank != null) L.rankDay = st.day; L.rank = rk; } // L.rank = highest title seen
   if (L.agency !== ag) { if (L.agency != null && ag) L.agencyDay = st.day; L.agency = ag; }
+  // the last day with work (jobs done; a save without it starts counting today)
+  const jobsNow = num(st.stats && st.stats.jobs);
+  if (L.jobs == null || jobsNow > num(L.jobs) || L.workDay == null) L.workDay = st.day;
+  L.jobs = jobsNow;
   if (out.sent >= 2 || st.fans < 50) return;
-  const p = clamp(0.1 + 0.07 * Math.log10(st.fans), 0, 0.5);
+  const quiet = quietNow(g);
+  const p = clamp(0.1 + 0.07 * Math.log10(st.fans), 0, 0.5) * (quiet ? 0.4 : 1);
   if (Math.random() >= p) return;
   if (L.day === st.day) return;
+  if (quiet) {
+    const rq = Array.isArray(L.recentQ) ? L.recentQ : [];
+    let okq = QUIET_LETTERS.map((l, i) => i).filter((i) => !rq.includes(i));
+    if (!okq.length) { L.recentQ = []; okq = QUIET_LETTERS.map((l, i) => i); }
+    const i = pick(okq);
+    L.recentQ = [...rq, i].slice(-4);
+    L.day = st.day;
+    L.count = num(L.count) + 1;
+    g.message({ from: 'ファンレター', kind: 'fan', text: g.fmt(`${QUIET_LETTERS[i].t}\n― ${QUIET_LETTERS[i].s}`) });
+    out.sent++;
+    return;
+  }
   // only shows that have been on (not one whose first recording is still ahead)
   const shows = activeShows(st).concat([KAN]).filter((id) => aired(st, id));
   const sh = shows.length ? pick(shows) : null;
@@ -993,10 +1093,11 @@ function letterMorning(g, out) {
     show: sh ? REGULARS[sh].title : '', wd: sh ? WEEKDAYS[REGULARS[sh].weekday] : '', medium: sh ? mediumOf(sh) : '',
     tv: seenOn(st, 'tv'), radio: seenOn(st, 'radio'),
     partner: P ? P.short || P.name : '',
+    active: activeShows(st).length > 0 || st.day - num(L.workDay) <= 30,
     newTitle: st.day - num(L.rankDay, -99) <= 6, newAgency: st.day - num(L.agencyDay, -99) <= 6,
   };
   const recent = Array.isArray(L.recent) ? L.recent : [];
-  const ok = LETTERS.map((l, i) => i).filter((i) => (!LETTERS[i].need || LETTERS[i].need(st, ctx)) && !recent.includes(i));
+  const ok = LETTERS.map((l, i) => i).filter((i) => (!LETTERS[i].need || LETTERS[i].need(st, ctx)) && (!LETTERS[i].seen || ctx.active) && !recent.includes(i));
   if (!ok.length) { L.recent = []; return; }
   const i = pick(ok);
   L.recent = [...recent, i].slice(-8);
@@ -1036,7 +1137,9 @@ function playerScore(g, d) {
 }
 export function weeklyRanking(g, d) {
   const week = g.week;
-  const me = playerScore(g, d);
+  // after an arrest / a scandal (活動自粛, a TV ban, the 30 days after the news) the public's
+  // goodwill is gone for a while: off the 好感度 list
+  const me = quietNow(g) ? 0 : playerScore(g, d);
   const list = RIVALS.map((name, i) => ({ name, score: rivalScore(i, week) }));
   list.push({ name: g.state.name, score: me, me: true });
   list.sort((a, b) => b.score - a.score);
@@ -1069,7 +1172,7 @@ function rankingMorning(g, out) {
     lines.push(`{name}は${rank}位！（${move}）`);
   } else {
     lines.push('　　…');
-    lines.push(`{name}は${LIMIT}位圏外…。\nお仕事やレギュラー番組、ドッターで、まずはランクインを目指そう！`);
+    lines.push(quietNow(g) ? `{name}は${LIMIT}位圏外…。\n（世間の目は、まだきびしい）` : `{name}は${LIMIT}位圏外…。\nお仕事やレギュラー番組、ドッターで、まずはランクインを目指そう！`);
   }
   if (rank <= LIMIT) {
     const why = aired(st, KAN) ? '冠番組が好調！' : d.regs >= 2 ? 'レギュラー番組での安定感が評価されています。' : d.jobs >= 15 ? 'お仕事の多さが話題に！' : st.fans >= 20000 ? 'ドッターでの人気がすごい！' : d.posts >= 5 ? '毎日の投稿で、親しみやすさアップ！' : '';
@@ -1643,6 +1746,17 @@ function fanMeetMorning(g, out) {
     f.doneDay = f.day;
     g.giveItem('career_fm_photo', 1, true);
   }
+  // dropped with the other shows after a scandal, held, in 活動自粛 or in hospital: the organizer calls it off
+  if (f.state === 'planned' && num(rec && rec.count) <= 0) {
+    const why = rec && rec.dropped ? 'justice' : fanMeetBlock(g);
+    if (why && cancelFanMeet(g, why)) out.sent++;
+  }
+  // postponed (a stay in hospital): a new date once the player is well again
+  if (f.state === 'postponed' && !fanMeetBlock(g, true) && st.day > num(f.cancelDay) && out.sent < 2) {
+    scheduleFanMeet(g, f.big, true);
+    out.sent++;
+    return;
+  }
   if (f.state === 'planned' && st.day > f.day) {
     f.state = 'missed';
     g.message({ from: 'ファンのみんな', kind: 'fan', look: { ...LOOKS.fan, hairColor: 'brown', top: '#ff7eb6' }, text: g.fmt(`きのうの${f.big ? 'ファン感謝祭' : 'ファンミーティング'}、{name}さんに会えなくて残念…。\nでも、いそがしいのはわかってるよ！\nまた会える日を楽しみにしてます。`) });
@@ -1698,6 +1812,21 @@ function awardScore(g, a) {
   return Math.max(0, now.fame - num(a.snap.fame)) + Math.max(0, now.fans - num(a.snap.fans)) / 100
     + Math.max(0, now.regs - num(a.snap.regs)) * 40 + (aired(st, KAN) ? 1000 : 0);
 }
+// Out of the running this year: held / on trial, in 活動自粛 or under a TV ban, or a conviction, a
+// police caution or a scandal (arrest, 週刊誌 …) during the judged days. The judges pass over a
+// talent in the news for the wrong reasons; nothing is said on stage.
+const AWARD_BAD = ['fine', 'suspended', 'prison', 'bizai'];
+function awardExcluded(g, a) {
+  const st = g.state;
+  const from = num(a.k) * AWARD_EVERY + 1; // the first day judged
+  const sc = st.flags.career_scandal;
+  if (sc && typeof sc === 'object' && num(sc.day, -1) >= from) return true;
+  let js = null;
+  try { js = typeof g.justiceStatus === 'function' ? g.justiceStatus() : null; } catch (e) { js = null; }
+  if (!js) return false;
+  if (['detained', 'prison', 'trial'].includes(js.status) || js.kinshinUntil || js.tvBanUntil) return true;
+  return (js.record || []).some((r) => r && AWARD_BAD.includes(r.outcome) && !r.juvenile && num(r.day) >= from);
+}
 function awardMorning(g, out) {
   const st = g.state;
   const a = awardRec(g);
@@ -1713,14 +1842,17 @@ function awardMorning(g, out) {
   // the ceremony (one per morning even when a save skipped several years)
   const score = awardScore(g, a);
   const first = num(a.n) === 0 && st.day <= AWARD_EVERY + 1;
-  const tier = AWARD_TIERS.find((t) => score >= t.min && (!t.first || first)) || null;
+  const excluded = awardExcluded(g, a);
+  const tier = excluded ? null : AWARD_TIERS.find((t) => score >= t.min && (!t.first || first)) || null;
   a.k = k;
   a.snap = awardSnap(st);
   a.n = num(a.n) + 1;
   const no = a.n;
   if (!tier) {
-    a.last = { no, day: st.day, prize: null };
-    g.message({ from: 'ドット芸能ニュース', kind: 'news', text: g.fmt(`【第${no}回 ドット芸能大賞】受賞者が発表されました。\n{name}さんは、今回は惜しくも受賞ならず…。\n来年こそ！お仕事やレギュラー番組で、たくさん活躍しよう。`) });
+    a.last = { no, day: st.day, prize: null, excluded };
+    g.message({ from: 'ドット芸能ニュース', kind: 'news', text: g.fmt(excluded
+      ? `【第${no}回 ドット芸能大賞】受賞者が発表されました。\n{name}さんは、今回は選考の対象外となりました。`
+      : `【第${no}回 ドット芸能大賞】受賞者が発表されました。\n{name}さんは、今回は惜しくも受賞ならず…。\n来年こそ！お仕事やレギュラー番組で、たくさん活躍しよう。`) });
     out.sent++;
     return;
   }

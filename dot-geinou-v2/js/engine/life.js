@@ -160,6 +160,7 @@ export const showWords = (r) => SHOW_WORDS[r && r.medium] || SHOW_WORDS.tv;
 // marks it answered: 'expired'), so an old offer never brings a show past the 4-show limit.
 export const OFFER_DAYS = 14;
 const INBOX_MAX = 60;
+const BILL_KEEP_DAYS = 30; // an unread bill stays at least this long when the inbox is full
 
 export const FURNITURE = {};
 // def: { name, price, desc, sleepStress (extra stress removed per night), stamina (max stamina +),
@@ -351,7 +352,7 @@ const methods = {
     if (!left) {
       st.rent.debt = 0;
       st.rent.late = 0;
-      this.message({ from: h.name, text: `今週の家賃 ${fmtMoney(due)} をお支払いいただきました。いつもありがとうございます。`, kind: 'bill' });
+      this.message({ from: h.name, text: `今週の家賃 ${fmtMoney(due)} をお支払いいただきました。いつもありがとうございます。`, kind: 'bill', receipt: true });
       notes.push(`（家賃 ${fmtMoney(due)} を払った。のこり ${fmtMoney(st.money)}）`);
       return true;
     }
@@ -562,13 +563,24 @@ const methods = {
     const m = { id: ph.nextId++, day: this.state.day, read: false, ...msg };
     ph.inbox.unshift(m);
     // full inbox: drop the oldest read message first, then the oldest one that is not
-    // an offer you can still answer or the latest rent bill (those never vanish silently)
-    const bill = ph.inbox.find((x) => x && x.kind === 'bill');
-    const keep = (x) => x === m || x === bill || this.offerOpen(x);
+    // protected. Protected (they never vanish unseen): an offer you can still answer, an
+    // unread bill younger than BILL_KEEP_DAYS (rent arrears, loan notices, unpaid fines — a
+    // debtor gets a loan statement every 10 days per lender, so "the newest bill" is not
+    // enough), and an unread legal notice of any age (msg.legal, or one from a court:
+    // 支払督促, bail forfeiture). A paid receipt (msg.receipt) is never protected.
+    // If everything left is protected, the oldest unread bill that is not a legal notice
+    // goes next, and a legal notice only as the very last resort.
+    const day = this.state.day;
+    const legal = (x) => !!(x && x.kind === 'bill' && !x.read && !x.receipt && (x.legal || /裁判所/.test(String(x.from || ''))));
+    const keep = (x) => x === m || this.offerOpen(x) || legal(x)
+      || (x && x.kind === 'bill' && !x.read && !x.receipt && day - (Number(x.day) || 0) < BILL_KEEP_DAYS);
+    const tiers = [(x) => x.read && !keep(x), (x) => !keep(x), (x) => x !== m && !this.offerOpen(x) && !legal(x), (x) => x !== m];
     while (ph.inbox.length > INBOX_MAX) {
       let i = -1;
-      for (let k = ph.inbox.length - 1; k >= 0 && i < 0; k--) if (ph.inbox[k].read && !keep(ph.inbox[k])) i = k;
-      for (let k = ph.inbox.length - 1; k >= 0 && i < 0; k--) if (!keep(ph.inbox[k])) i = k;
+      for (const ok of tiers) {
+        for (let k = ph.inbox.length - 1; k >= 0 && i < 0; k--) if (ph.inbox[k] && ok(ph.inbox[k])) i = k;
+        if (i >= 0) break;
+      }
       ph.inbox.splice(i < 0 ? ph.inbox.length - 1 : i, 1);
     }
     return m;

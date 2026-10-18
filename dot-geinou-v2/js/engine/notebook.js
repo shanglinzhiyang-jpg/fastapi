@@ -25,12 +25,16 @@ import { text, wrap, panel, measure, rect, downArrow, COLORS } from './draw.js';
 import { audio } from './audio.js';
 import { SKILLS, AGENCIES, RANKS, FINALE_FAME, CAREER, rankIndex, rankName, nextRank as nextTitle } from './state.js';
 import { MINIGAMES } from './minigame.js';
-import { eraOf, fullName, ageOf, prefecture, regionOf, GENDERS, PERSONALITIES, RELATIONS, CAUSES, isBirthday, daysToBirthday, personalityEffects, sortFamily } from './profile.js';
+import { eraOf, fullName, ageOf, prefecture, regionOf, GENDERS, PERSONALITIES, RELATIONS, CAUSES, isBirthday, daysToBirthday, personalityEffects, sortFamily, YEAR_DAYS } from './profile.js';
 import { GUIDE, GUIDE_ORDER, TOWNS, AUDITIONS, GUIDE_JOBS, TIER_FAME, jobOpen } from '../world/guide.js';
-import { PEOPLE, HEARTS, heartIndex, REGULARS, FURNITURE, WEEKDAYS, weekdayOf, weekOf, HUNGRY, STRESSED, SCRUFFY, BURNOUT, FULL, showWords } from './life.js';
-// read lazily at run time (both cores import modules that end up importing this one)
-import * as POL from './politics.js';
-import * as JUS from './crime.js';
+import { PEOPLE, HEARTS, heartIndex, REGULARS, FURNITURE, WEEKDAYS, weekdayOf, weekOf, HUNGRY, STRESSED, SCRUFFY, BURNOUT, FULL, showWords, PHONE_APPS } from './life.js';
+// The two cores' exports, read at run time. Loaded optionally (main.js installs them; a
+// static import here would let a broken core take the whole game down through ui.js):
+// until they arrive, or if one fails, every read below falls back (POL.OFFICES || {} …).
+let POL = {};
+let JUS = {};
+import('./politics.js').then((m) => { POL = m; }).catch(() => { /* politics left out */ });
+import('./crime.js').then((m) => { JUS = m; }).catch(() => { /* justice left out */ });
 import { PLACES } from './map.js'; // (also a cycle through ui.js: read only at run time)
 
 const TABS = [
@@ -527,6 +531,26 @@ const hasPolitics = (g) => typeof g.pol === 'function' && typeof g.politicsSumma
 const hasJustice = (g) => typeof g.jus === 'function' && typeof g.justiceStatus === 'function';
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const inDays = (n) => (n <= 0 ? 'きょう' : n === 1 ? 'あした' : `あと${n}日`);
+// 'あと5年＝600日' until the birthday that makes the player `age` (1年＝YEAR_DAYS日)
+function daysUntilAge(st, age) {
+  const now = ageOf(st);
+  if (now >= age) return 'いまから';
+  const d = daysToBirthday(st) + (age - now - 1) * YEAR_DAYS;
+  return `あと${age - now}年＝${d}日`;
+}
+// 選挙権 age on today's date: 20, 18 from 2016 (politics.js votingAge; 20 without the core)
+function votingAgeNow(g) {
+  return safe(() => {
+    if (!POL.votingAge || typeof g.polDate !== 'function') return 20;
+    const p = typeof g.pol === 'function' ? g.pol() : null;
+    return POL.votingAge(g.polDate().year, (p && p.flags) || {});
+  }, 20);
+}
+// Has the calendar reached year / month (the law calendar of crime.js; true without it)?
+function sinceYM(g, year, month = 1) {
+  const d = safe(() => (JUS.lawDate ? JUS.lawDate(g) : null), null);
+  return !d || !Number.isFinite(d.year) ? true : d.year * 100 + (d.month || 1) >= year * 100 + month;
+}
 // a literal yen amount that is not money (exchange rate, stock index): never era-converted
 const plainYen = (n) => `${YEN_MARK}${Math.round(num(n)).toLocaleString('ja-JP')}円`;
 const pctText = (v) => `${Math.round(num(v) * 10) / 10}%`;
@@ -647,7 +671,13 @@ function lawPage(g, ctx) {
     pg.row('選挙権（投票）', civic ? 'なし' : 'あり', { s: SMALL, rs: SMALL, c: COLORS.dim, rc: civic ? COLORS.bad : COLORS.good });
     pg.row('被選挙権（立候補）', 'なし', { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.bad });
     pg.para(civic || cand, { s: SMALL, c: COLORS.bad, x: 16 });
-  } else pg.row('選挙権・被選挙権', 'あり', { s: SMALL, rs: SMALL, c: COLORS.dim, rc: COLORS.good });
+  } else {
+    // the same rules as the 政治 tab: 選挙権 at 20 (18 from 2016), 被選挙権 at 25 (参院・知事 30)
+    const age = ageOf(st);
+    const va = votingAgeNow(g);
+    pg.row('選挙権（投票）', age >= va ? 'あり' : `${va}歳から`, { s: SMALL, rs: SMALL, c: COLORS.dim, rc: age >= va ? COLORS.good : COLORS.dim });
+    pg.row('被選挙権（立候補）', age >= 30 ? 'あり' : age >= 25 ? 'あり（参院・知事は30歳から）' : `25歳から（${daysUntilAge(st, 25)}）`, { s: SMALL, rs: SMALL, c: COLORS.dim, rc: age >= 25 ? COLORS.good : COLORS.dim });
+  }
   if (s.kinshinUntil) pg.row('活動自粛', inDays(s.kinshinUntil - day), { rc: COLORS.bad, rs: SMALL });
   if (s.tvBanUntil) pg.row('テレビの起用見送り', inDays(s.tvBanUntil - day), { rc: COLORS.accent, rs: SMALL });
   if (s.agencyBanUntil) pg.row('事務所との契約', `できない（${inDays(s.agencyBanUntil - day)}）`, { rc: COLORS.accent, rs: SMALL });
@@ -715,7 +745,14 @@ function lawPage(g, ctx) {
 
   // ---- where to get help
   pg.block().head('困ったときは', C);
-  pg.para('・借金：スマホの「借入・返済」の法律相談、ドット区役所の生活・多重債務相談', { s: SMALL });
+  {
+    // 多重債務の相談窓口 2007年4月〜 (多重債務問題改善プログラム), 法テラス 2006年10月〜
+    const app = PHONE_APPS.justice ? 'スマホの「借入・返済」の法律相談、' : ''; // (スマホ → the era's word: eraText)
+    const ward = sinceYM(g, 2007, 4) ? 'ドット区役所3階の多重債務相談' : 'ドット区役所3階の区民相談室';
+    const terrace = sinceYM(g, 2006, 10) ? '、法テラス' : '、弁護士会の法律相談';
+    pg.para(`・借金：${app}${ward}${terrace}`, { s: SMALL });
+    if (!PHONE_APPS.justice) pg.para('（お金を借りると、スマホに「借入・返済」が出る）', { s: SMALL, c: COLORS.dim, x: 16 });
+  }
   pg.para(`・闇金・ストーカー・詐欺：警視庁（永田町）の相談室${PLACES.koban ? '、ネオン街の交番' : ''}`, { s: SMALL });
   pg.para('・自己破産：裁判所（永田町）の破産係', { s: SMALL });
   pg.para('罪をおかせば、逮捕・裁判・刑罰がある。現実と同じように、取り返しのつかないこともある。', { s: SMALL, c: COLORS.dim });
@@ -777,10 +814,10 @@ function politicsPage(g, ctx) {
     if (can.length) pg.para(`被選挙権：${can.join('・')}`, { s: SMALL, c: COLORS.text });
     if (later.length) {
       const ages = [...new Set(later.map((o) => num(o.ageMin)))].sort((a, b) => a - b);
-      for (const a of ages) pg.para(`${a}歳から：${later.filter((o) => num(o.ageMin) === a).map((o) => o.short || o.name).join('・')}（あと${a - age}年）`, { s: SMALL, c: COLORS.dim });
+      for (const a of ages) pg.para(`${a}歳から：${later.filter((o) => num(o.ageMin) === a).map((o) => o.short || o.name).join('・')}（${daysUntilAge(st, a)}）`, { s: SMALL, c: COLORS.dim });
     }
   }
-  const va = safe(() => (POL.votingAge ? POL.votingAge(s.date.year, p.flags) : 20), 20);
+  const va = votingAgeNow(g);
   const voteBan = safe(() => g.civicBanReason && g.civicBanReason('vote'));
   pg.row('選挙権（投票）', voteBan ? 'いまはない' : age >= va ? 'あり' : `${va}歳から`, { s: SMALL, rs: SMALL, c: COLORS.dim, rc: voteBan ? COLORS.bad : age >= va ? COLORS.good : COLORS.dim });
 

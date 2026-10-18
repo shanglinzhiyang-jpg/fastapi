@@ -210,6 +210,15 @@ const BIRTHDAY = {
   older: '{you}、{age}歳おめでとう！いい一年にして{ne}。',
   younger: '{you}、お誕生日おめでとう〜！{age}歳の{you}も、応援し{teru}{yo}！',
 };
+// A birthday that passed while the player was held / inside (the justice core skips the morning hooks
+// there and records it in jus().flags.insideBirthday): a belated wish on the first morning out.
+const BIRTHDAY_LATE = {
+  parent: '{you}、遅くなったけど、{age}歳のお誕生日おめでとう。\n中で迎えた誕生日、さびしかった{deshou}。…生まれてきてくれて、{honma}にありがとう。',
+  grand: '{you}、遅れてしまったけど、{age}歳おめでとう。\n{me}は、{you}が元気で帰ってきてくれたら、それでいい{nda}。',
+  older: '{you}、遅くなったけど、{age}歳おめでとう。\n中で誕生日を迎えたんだ{ne}。…これからの一年、ちゃんとやり直そう{ne}。',
+  younger: '{you}、遅くなっちゃったけど、{age}歳おめでとう！\n{me}、ずっと待って{teru}{yo}。',
+};
+const BIRTHDAY_LATE_GIFT = '遅くなったけど、誕生日の{gift}を送った{yo}。';
 const BIRTHDAY_GIFT = 'お誕生日おめでとう！ささやかだけど、{gift}を送った{yo}。';
 const PACKAGE = {
   parent: ['{gift}を送った{yo}。ちゃんと食べて、元気でいて{ne}。', '{you}、ちゃんと食べ{teru}？{gift}と、少しだけど、おこづかいも入れておいた{yo}。'],
@@ -617,8 +626,19 @@ onMorning((g) => {
   // birthday: main.js may already have sent the wish (flag + a message with `family`)
   const bd = events.find((e) => e.kind === 'birthday');
   if (bd) {
+    // passed inside (custody / a term): a belated wish, never "happy birthday" as if it were today
+    const jf = st.justice && st.justice.flags;
+    const late = !!(jf && Number(jf.insideBirthday) === bd.age);
+    if (jf && jf.insideBirthday != null) delete jf.insideBirthday;
     const sentBy = st.flags[`birthday_${bd.age}`] ? (st.phone.inbox.find((m) => m && m.family && m.day === day) || null) : null;
     let first = null;
+    if (late) {
+      first = order[0];
+      famMessage(g, first, fill(BIRTHDAY_LATE[first.role], first, { age: String(bd.age) }));
+      const other = order.find((M) => M !== first);
+      if (other) sendPackage(g, { member: other, text: fill(BIRTHDAY_LATE_GIFT, other), money: 0, items: 2, need: false });
+      return;
+    }
     if (sentBy) {
       const fid = String(sentBy.family);
       first = members.find((M) => M.pid === fid || M.pid === 'fam_' + fid) || order[0];
@@ -1524,3 +1544,19 @@ if (typeof window !== 'undefined') {
   setInterval(() => { try { const g = game(); if (g && g.state) ensureFamily(g); } catch (e) { console.error(e); } }, 500);
 }
 export const FAMILY = { DIA, ROLE, NEWS, WORRY, CHEER, EVENTS, fill, callPlan, seating };
+
+// The justice core (optional: a guarded dynamic import): the family stands by the player — crime.js
+// sends their messages — but an arrest and a judgment still hurt them (家族の気持ち, ♥ silently down).
+import('../engine/crime.js').then(({ onJustice }) => {
+  const hurt = (g, n) => {
+    try {
+      if (!g || !g.state || !g.state.people) return;
+      for (const M of ensureFamily(g)) if (M && M.pid && PEOPLE[M.pid]) g.addAff(M.pid, -n, true);
+    } catch (e) { console.error('[family] justice', e); }
+  };
+  onJustice('arrested', (g) => hurt(g, 3));
+  onJustice('convicted', (g, info) => {
+    const k = info && info.sentence && info.sentence.kind;
+    hurt(g, k === 'prison' ? 8 : k === 'suspended' ? 5 : 2);
+  });
+}).catch(() => { /* no justice core */ });

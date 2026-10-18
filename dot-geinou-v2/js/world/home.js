@@ -17,6 +17,7 @@ import { SKILLS, SKILL_MAX, MAX_STAMINA } from '../engine/state.js';
 import { drawFaceHD, LOOKS } from '../engine/sprites.js';
 import { makeCanvas, fmtMoney, pick, shade } from '../engine/util.js';
 import { FURNITURE, HOUSING } from '../engine/life.js';
+import { eraOf, ageOf } from '../engine/profile.js';
 
 // Two lines at most (watchTv adds a third), broken at phrase boundaries.
 export const TV_TIPS = [
@@ -110,6 +111,8 @@ function oyaSmallTalk(g) {
     if (!(st.stats && st.stats.jobs)) return ['そうそう、すぐそこの公園のステージなら\n事務所に入ってなくても、歌や漫才で\n投げ銭がもらえるわよ。'];
     return ['そうそう、事務所のオーディションには、もう行ってみた？\n所属できたら、お仕事がぐんと増えるわよ。'];
   }
+  // now and then (25+, when the 被選挙権 starts): the other path
+  if (ageOf(st) >= 25 && Math.random() < 0.2) return ['そうそう、商店街の区役所でね、\n選挙の立候補の説明をしてるんですって。\n{name}ちゃんも、いつか出てみたら？　なーんてね。'];
   if (st.fame < 250) return ['{name}ちゃん、お仕事がんばってるみたいね。', 'ちゃんとごはん食べてる？\n体が資本なんだから、無理しちゃだめよ。'];
   if (st.fame < 1000) return ['この前、テレビで{name}ちゃんを見たわよ！\nご近所さんに自慢しちゃった。'];
   if (st.fame < 2000) return ['ご近所さんに、{name}ちゃんのサインを頼まれて困ってるのよ〜。', '…あ、私の分もお願いね。'];
@@ -123,9 +126,11 @@ function oyaLife(g) {
     'おなか（満腹）、ストレス、身だしなみ…\nこの3つは毎日気にかけるのよ。\nごはんを食べて、お風呂に入って、たまには息抜き。',
     'ストレスがたまりすぎると、お仕事どころじゃなくなるわ。\n疲れたら、部屋のベッドでゆっくり休むこと。\nキッチンで自炊、ユニットバスでシャワーもできるわよ。',
     `お家賃は毎週月曜の朝に${fmtMoney((HOUSING.dotsou && HOUSING.dotsou.rent) || 8000)}。\n払えないときは、スマホの「家計」からあとで払えばいいの。\nうちはね、だれも追い出したりしないから。`,
-    'スマホは、メニューから開けるわよ。\nお友だちからの連絡も、そこに届くの。',
+    `${eraOf(g.state).deviceShort || 'スマホ'}は、メニューから開けるわよ。\nお友だちからの連絡も、そこに届くの。`,
     '西の「ドット商店街」には、スーパーやお花屋さん、\n家具屋さんに不動産屋さんもあるわ。\n一度のぞいてごらんなさい。',
   ];
+  if (PLACES.nagatacho || PLACES.kuyakusho) lines.push(`東京の大通りを北へまっすぐ行くと、永田町。国会があるところよ。\n選挙のことは、商店街の「区役所」でも教えてくれるわ。`);
+  if (PLACES.kanraku) lines.push('南のはしの「ネオン街」は、夜の街。\n「うまい話」と、高い利息でお金を貸す人には気をつけてね。\n困ったときは、交番に相談するのよ。');
   if (!g.state.agency) lines.push('それから、お仕事ね。まずは事務所のオーディション！\nよしもとさん、グレープカンパニーさん、ホリプロさん…\nこのあたりにいっぱいあるわよ。');
   return lines;
 }
@@ -230,6 +235,9 @@ async function intro(g) {
   await g.say(['ここは東京の小さなアパート「ドット荘」。', '{name}は、芸能界のてっぺんを目指して、今日 上京してきたばかりだ！']);
   await g.emote('player', '!');
   await g.say(['目標は…国民的スター！', 'まずはどこかの事務所のオーディションに合格して、所属タレントになろう。']);
+  // the other path (politics: the phone app, 永田町 to the north, the ward office's 選挙管理委員会)
+  const dev = eraOf(g.state).deviceShort || 'スマホ';
+  await g.say(['芸能の道だけじゃない。\n25歳になれば、選挙に出て政治家をめざすこともできる。', `政治の入口は、${dev}の「政治」、\n東京の北の「永田町」、商店街の「区役所」。`]);
   await g.say([
     '【あそびかた】\n移動：矢印キー／WASD（スマホは十字パッド）\n話す・調べる・決定：Aボタン（Z / スペース / Enter）',
     'ダッシュ：Bボタン（X / Shift）を押しながら移動\nメニュー：Esc / C（スマホはMENUボタン）',

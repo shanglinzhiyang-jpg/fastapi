@@ -23,13 +23,32 @@ export function askText(g, { title = 'なまえを入力', value = '', max = 8, 
     const form = wrap.querySelector('form');
     const input = wrap.querySelector('input');
     wrap.querySelector('label').textContent = title;
-    wrap.querySelector('.textask-note').textContent = `${max}文字まで`;
+    const note = wrap.querySelector('.textask-note');
     input.value = value;
     input.placeholder = placeholder;
     const clip = () => Array.from(input.value.trim()).slice(0, max).join('');
-    input.addEventListener('input', () => {
-      if (input.value.length > max * 2) input.value = Array.from(input.value).slice(0, max * 2).join('');
+    // The limit holds while typing (no silent cut on けってい). During an IME composition
+    // (かな → 漢字) the text may run up to max * 2 so a conversion is not broken halfway;
+    // when it is committed, the field is cut to max. A live counter shows the length.
+    let composing = false;
+    const count = () => {
+      const n = Array.from(input.value).length;
+      note.textContent = `${n}/${max}文字`;
+      note.classList.toggle('over', n > max);
+    };
+    const enforce = () => {
+      const ch = Array.from(input.value);
+      if (ch.length > max) input.value = ch.slice(0, max).join('');
+    };
+    input.addEventListener('compositionstart', () => { composing = true; });
+    input.addEventListener('compositionend', () => { composing = false; enforce(); count(); });
+    input.addEventListener('input', (e) => {
+      if (composing || e.isComposing) {
+        if (input.value.length > max * 2) input.value = Array.from(input.value).slice(0, max * 2).join('');
+      } else enforce();
+      count();
     });
+    count();
     const close = (result) => {
       if (!open) return;
       open = null;

@@ -109,6 +109,14 @@ function D(g) {
   return d;
 }
 const seenWithin = (d, ids, day, days) => ids.some((id) => d.seen[id] && day - d.seen[id] <= days);
+// Under prosecution or held (on bail awaiting a verdict, in custody, in prison), or with a political-money case
+// still open: no 業者 or 派閥 brings money to such a politician.
+function underCase(c) {
+  const j = c.j;
+  if (!j) return false;
+  if (['trial', 'detained', 'prison'].includes(j.status)) return true;
+  return (j.cases || []).some((cs) => cs && !cs.closed && CRIMES[cs.crime] && CRIMES[cs.crime].political);
+}
 function free(g) {
   try { return typeof g.isFree === 'function' ? g.isFree() : true; } catch (e) { return true; }
 }
@@ -733,7 +741,8 @@ async function surrender(g, crime) {
 function caughtCount(g, id) { try { const j = g.jus(); return num(j && j.stats && j.stats.caught && j.stats.caught[id]); } catch (e) { return 0; } }
 function money(g, n) { const st = g.state; const t = Math.min(Math.max(0, Math.round(n)), st.money); st.money -= t; return t; }
 function schedule(g, id, inDays, data = {}) { const d = D(g); d.follow.push({ id, day: g.state.day + Math.max(1, Math.round(inDays)), data, tries: 0 }); }
-const sagiWord = (y) => (y < 2005 ? 'オレオレ詐欺' : y < 2013 ? '振り込め詐欺' : '特殊詐欺');
+// the same years as crime.js (振り込め詐欺: 警察庁の統一名称 2004年12月, 特殊詐欺: 2011年から)
+const sagiWord = (y) => (y < 2005 ? 'オレオレ詐欺' : y < 2011 ? '振り込め詐欺' : '特殊詐欺');
 // ストーカー規制法: in force from 2000-11-24; the 2016 amendment's 禁止命令 without a prior 警告 from 2017-06-14.
 const stalkerLaw = (c) => c.year > 2000 || (c.year === 2000 && c.month >= 11);
 const directOrder = (c) => c.year > 2017 || (c.year === 2017 && c.month >= 6);
@@ -1247,7 +1256,8 @@ const EV = {
   scoop_urakane: {
     name: '週刊誌：裏金疑惑', cat: 'scoop', where: 'any', cool: 40,
     weight: (g, c) => (c.secret > 0 ? 2 : 0.2),
-    ok: (g, c) => !!c.office,
+    // not while the investigators already have the money (the case clears me.secret: no 「身に覚えのない」 path)
+    ok: (g, c) => !!c.office && !caseOpen(g, 'slush_fund', true),
     async run(g, c, data, open) {
       const st = g.state;
       const truth = c.secret > 0;
@@ -1294,14 +1304,16 @@ const EV = {
   // ---------------------------------------------------------------- 裏金・汚職・利権（政治家）
   pol_offer: {
     name: '業者からの見返りの申し出', cat: 'corruption', where: 'any', weight: 1.2, cool: 30,
-    ok: (g, c) => !!c.office,
+    ok: (g, c) => !!c.office && !underCase(c),
     async run(g, c, data, open) {
       const st = g.state, d = c.d;
       const level = c.level;
       if (c.national) {
         const amt = 3000000;
         const S = open('ryotei', { title: '料亭の座敷', sub: '「ぜひ一席」と招かれた', host: LK.shacho });
-        await say(g, WHO.shacho, ['先生、本日はありがとうございます。', '地元のバイパス工事の件で、役所のほうに\nひと声かけていただければ…。', 'これは、ほんの気持ちです。']);
+        // a request within the member's own duty (a question in committee: 受託収賄, as kokkai.js's 議員会館 bribe);
+        // a word to the ministry (あっせん) is pol_benbi's later demand
+        await say(g, WHO.shacho, ['先生、本日はありがとうございます。', '地元のバイパス工事の予算の件、\n国会の委員会で取り上げていただければ…。', 'これは、ほんの気持ちです。']);
         await narr(g, `（テーブルの上に、紙袋が置かれた。\n中には、現金${fmtMoney(amt)}…）`);
         const k = await ask(g, null, `（受け取れば、収賄だ。\n${CRIMES.bribery_take.law(g).split('：')[0]}…）`, ['きっぱり断る', '受け取る']);
         if (k === 0) {
@@ -1312,7 +1324,7 @@ const EV = {
         }
         const r = await commit(g, 'bribery_take', { amount: amt, request: true, gain: { money: amt }, where: '料亭' });
         d.story.bribe = st.day;
-        if (!r.caught) { await narr(g, '（紙袋を受け取った。…手が、少しふるえていた）'); schedule(g, 'pol_benbi', rint(5, 10), { amt }); }
+        if (!r.caught) { await narr(g, ['（紙袋を受け取った。…手が、少しふるえていた）', '（数日後の委員会で、バイパスの予算のことを質問した…）']); schedule(g, 'pol_benbi', rint(5, 10), { amt }); }
         return { pick: 'take', caught: !!r.caught };
       }
       if (level === 'exec') {
@@ -1348,15 +1360,15 @@ const EV = {
   },
   pol_benbi: {
     name: '業者からの催促', cat: 'corruption', where: 'any', story: true,
-    ok: (g, c) => !!c.office,
+    ok: (g, c) => !!c.office && !underCase(c),
     async run(g, c, data, open) {
       const st = g.state;
       const S = open('phone', { title: 'くろがね建設からの電話', who: LK.shacho, rightBg: '#e8dfc8', rightFloor: '#cdbf86' });
       // 国土交通省 from 2001-01 (before: 建設省)
-      await say(g, WHO.shacho, ['先生、例の件ですが…。', `${c.year >= 2001 ? '国交省' : '建設省'}の担当の方に、そろそろ\nひと声かけていただけませんか。`]);
-      const k = await ask(g, null, '（約束を果たせば、罪をかさねることになる…）', ['できないと断る', '役所に口をきく']);
+      await say(g, WHO.shacho, ['先生、委員会でのご質問、ありがとうございました。', `それで…今度は${c.year >= 2001 ? '国交省' : '建設省'}の担当の方に、\nうちが工事を取れるよう、ひと声かけていただけませんか。\nお礼は、別にいたします。`]);
+      const k = await ask(g, null, '（口をきいて見返りを受ければ、罪をかさねることになる…）', ['できないと断る', '役所に口をきく']);
       if (k === 0) {
-        await say(g, WHO.shacho, '…お金だけ受け取って、それですか。\nまあ、いいでしょう。覚えておきますよ。');
+        await say(g, WHO.shacho, '…そうですか。先生とは、もう\n「持ちつ持たれつ」だと思っていましたがね。\nまあ、いいでしょう。覚えておきますよ。');
         g.addNeed('stress', 10);
         return { pick: 'refuse' };
       }
@@ -1369,7 +1381,7 @@ const EV = {
   },
   pol_kickback: {
     name: 'パーティー券の不記載のすすめ', cat: 'corruption', where: 'any', weight: 1, cool: 80,
-    ok: (g, c) => !!(c.national && c.me && c.me.faction && c.party && !c.realParty),
+    ok: (g, c) => !!(c.national && c.me && c.me.faction && c.party && !c.realParty) && !underCase(c),
     async run(g, c, data, open) {
       const amt = 3000000;
       const S = open('office', { title: '派閥の事務所', sub: '事務総長に呼ばれた', who: LK.kanbu, poster: '政策研究会' });
@@ -1439,7 +1451,8 @@ const EV = {
     ok: (g, c, data) => !!c.office && !!(c.heat && c.heat[data.crime || 'slush_fund']) && !caseOpen(g, data.crime || 'slush_fund'),
     async run(g, c, data, open) {
       const crime = data.crime && CRIMES[data.crime] ? data.crime : 'slush_fund';
-      const tokuso = c.national || c.level === 'exec';
+      // 特捜部: Diet members and the governor; a ward mayor's case is 警視庁捜査二課's
+      const tokuso = c.national || c.office === 'chiji';
       const who = tokuso ? { name: '東京地検特捜部の検事', look: WHO.kenji.look } : { name: '警視庁捜査二課の刑事', look: LK.keiji };
       const S = open('office', { title: '事務所', sub: '朝早く、事務所に…', who: who.look });
       g.sfx('buzz');
@@ -1541,7 +1554,8 @@ const EV = {
         await narr(g, '（「やめておきます」と言って、その場を離れた）');
         return { pick: 'refuse' };
       }
-      await say(g, who, ['身分証の写真を送って。\nあとは、指示どおりに動くだけ。', '…やめたいなんて言ったら、どうなるか分かるよな？']);
+      // before camera phones (about 2000) the 身分証 changed hands as a photocopy
+      await say(g, who, [modern ? '身分証の写真を送って。\nあとは、指示どおりに動くだけ。' : '免許証のコピーを持ってこい。\nあとは、言われたとおりに運ぶだけだ。', '…やめたいなんて言ったら、どうなるか分かるよな？']);
       await narr(g, modern ? '（これは、特殊詐欺の「受け子」だ…。\nお年寄りから、お金をだまし取る手伝いだ）' : '（中身は、盗品かもしれない…）');
       const k2 = await ask(g, null, '（どうする…？）', ['断って警察に相談', '引き受ける']);
       if (k2 === 0) {
@@ -1810,7 +1824,10 @@ const EV = {
 // with someone from that world (the fixer of a もみ消し).
 function hanshaSource(g, c) {
   const kan = (c.st.flags && c.st.flags.kanraku) || {};
-  if (c.d.story.hanshaDeal) return { id: 'party', head: '反社の宴に出演', photo: '反社会的勢力の宴会に出ていた写真', news: '反社会的勢力の宴会に出演していた', other: LK.boss, sorry: '相手が何者か確かめもせず、宴会に出ました。\n本当に軽率でした' };
+  // kanraku.js's 組事務所 闇営業 (the 組長's party) is a party too: kumi.yamiDone is set when it was accepted.
+  // A later photo at the 組事務所 itself (kanraku's 'seiji' offer sets kumiPhoto) is the newer story.
+  const party = Math.max(num(c.d.story.hanshaDeal), num(kan.kumi && kan.kumi.yamiDone));
+  if (party && !(kan.kumiTies && num(kan.kumiPhoto) > party)) return { id: 'party', head: '反社の宴に出演', photo: '反社会的勢力の宴会に出ていた写真', news: '反社会的勢力の宴会に出演していた', other: LK.boss, sorry: '相手が何者か確かめもせず、宴会に出ました。\n本当に軽率でした' };
   if (kan.kumiTies) return { id: 'kumi', head: '暴力団事務所に出入り', photo: '暴力団の事務所に出入りする写真', news: '暴力団の事務所に出入りしていた', other: LK.chinpira2, sorry: '暴力団の事務所に出入りしていました。\n言い訳はしません' };
   return { id: 'meet', head: '反社の男と密会', photo: '反社会的勢力の人物と会っている写真', news: '反社会的勢力の人物と会っていた', other: LK.broker, sorry: '反社会的勢力の人物と会っていました。\n本当に軽率でした' };
 }

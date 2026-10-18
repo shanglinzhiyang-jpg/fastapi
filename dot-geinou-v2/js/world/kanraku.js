@@ -1170,12 +1170,12 @@ async function fareEvasion(g, opts = {}) {
   const j = jus(g);
   if (j && (j.status === 'detained' || j.status === 'prison')) return { ok: false };
   const k = await g.ask([
-    '（きっぷを買わずに、ほかの人のうしろについて\n改札を抜けてしまえば…）',
+    '（きっぷを買わずに、乗ってしまえば…）',
     '無賃乗車は、鉄道営業法違反。見つかれば、\n運賃に加えて2倍の「増運賃」――合計3倍を払う。\nくり返せば、詐欺罪で警察沙汰になることも…',
     ...(opts.inspected ? ['（それに、新幹線では車掌さんが\nきっぷを確かめに回ってくる…）'] : []),
   ], ['やめておく', 'きっぷを買わずに乗る'], { cancel: 0 });
   if (k !== 1) { await narrate(g, '（…やっぱり、きっぷを買おう）'); return { ok: false }; }
-  await narrate(g, '（人ごみにまぎれて、改札を抜けた…）');
+  await narrate(g, '（きっぷを買わずに、電車に乗ってしまった…）');
   if (opts.ride) await opts.ride();
   // opts.inspected: a train with a conductor's ticket check (車内改札) — most riders without a ticket
   // are found (the core's base chance is for a commuter gate)
@@ -1185,7 +1185,7 @@ async function fareEvasion(g, opts = {}) {
   const res = await g.commitCrime('fare_evasion', ctx);
   if (!res.caught) {
     g.addNeed('stress', 6);
-    await narrate(g, [opts.inspected ? '（車掌さんの検札をやりすごし、\n到着した駅の改札も、なんとか抜けた…）' : '（到着した駅の改札も、なんとか抜けた…）', '（…でも、駅には防犯カメラも改札の記録もある。\n次も見逃してもらえるとはかぎらない）']);
+    await narrate(g, ['（なんとか、そのまま駅を出た…）', '（…でも、駅には防犯カメラも改札の記録もある。\n次も見逃してもらえるとはかぎらない）']);
   }
   return { ok: true, caught: !!res.caught, res };
 }
@@ -1729,6 +1729,10 @@ function generate() {
     // B4: the 組事務所 at the end of the back alley (door on row 47)
     bld(59, 43, 8, 5, 3, { style: 'kumi', seed: 29 }, { place: 'kumi', name: '鬼灯興業' }),
   ];
+  // the footprints sit on the solid 'kanraku_back' fill (the gaps between façades): open the door cell
+  // of every building you can walk into, or MapScene.blocked() stops the player at the threshold
+  // (the building entity itself still blocks every other cell of its footprint)
+  for (const b of B) if (b.place || b.enter) { const d = b.door ?? Math.floor(b.w / 2); set(c, b.x + d, b.y + b.h - 1, 'kanraku_side'); }
 
   const entities = [
     ...B,
@@ -1778,7 +1782,7 @@ function generate() {
 
   return { w: W, h: H, cells: c, entities, warps, events: [
     { x: 27, y: 31, on: 'action', cond: (g) => !K(g).wallet && g.state.day >= 2, run: foundWallet },
-    { x: 40, y: 13, on: 'step', cond: (g) => !g.flag('kanraku_gate'), run: async (g) => { g.setFlag('kanraku_gate'); await g.say(['「ネオン街一番通り」のゲートだ。', '（楽しそうな街だけど、危ない誘いもありそうだ。\n困ったら、大通りの交番へ）']); } },
+    { x: 40, y: 13, on: 'step', cond: (g) => !g.flag('kanraku_gate'), run: async (g) => { g.setFlag('kanraku_gate'); await g.say(['「ネオン街一番通り」のゲートだ。', '（客引きには、ついていかないこと。\nお店の料金は、入口の料金表でたしかめよう）']); } },
   ], glows };
 }
 // a wallet on the ground (once): hand it in at the 交番
@@ -2507,6 +2511,15 @@ async function loanExplain(g, o) {
   pages.push('借金を返すための借金は、絶対にやめてください。\nそれが「多重債務」の入口です。');
   await g.say(pages, o);
 }
+// 遅延損害金 on the posted terms: from 2010-06 利息制限法7条 caps it at 20% for a lender's loan; before that the
+// lenders posted the 出資法 cap of the time (the 出資法 counts 損害金 as 利息), as with the rates (crime.js lenderRate)
+function lateRateText(g) {
+  if (since(g, 2010, 6)) return '20%';
+  if (since(g, 2000, 6)) return '29.2%';
+  if (since(g, 1991, 11)) return '40.004%';
+  if (since(g, 1986, 11)) return '54.75%';
+  return '73%';
+}
 async function loanBorrow(g, o) {
   const st = g.state;
   if (age(g) < 20) { await g.say(['申し訳ございません。\n当社のご契約は、二十歳以上の方に限らせていただいています。'], o); return; }
@@ -2515,8 +2528,18 @@ async function loanBorrow(g, o) {
   const lines = [`まず、ご年収を確認させてください。\n…この1年のご収入は、およそ${fmtMoney(inc)}ですね。`];
   if (since(g, 2010, 6)) lines.push(`総量規制で、お貸しできるのは年収の3分の1まで。\nほかの借入れを引いて、あと${fmtMoney(Math.max(0, limit))}までです。`);
   else lines.push(`審査の結果しだいですが、1社あたり${fmtMoney(Math.max(0, limit))}までが目安です。`);
+  // the clerk checks the income first: with nothing to lend, say so now (not after a repayment plan and 契約する)
+  if (inc <= 0 || limit <= 0) {
+    await g.say(inc <= 0 ? lines.slice(0, 1) : lines, o);
+    if (inc <= 0) await g.say(['申し訳ございません。\n安定したご収入がないと、お貸しすることはできないんです。', 'お仕事の収入ができたら、また、ご相談ください。'], o);
+    else if (since(g, 2010, 6)) await g.say(['申し訳ございません。\nいまのご収入とお借入れの状況では、これ以上はお貸しできません（総量規制）。', 'ご返済が進むか、ご収入が増えたら、また、ご相談ください。'], o);
+    else await g.say(['申し訳ございません。\nほかの会社さんからのお借入れが多くて、当社ではお貸しできません。', 'ご返済が進んだら、また、ご相談ください。'], o);
+    return;
+  }
   await g.say(lines, o);
-  const amounts = [50000, 100000, 300000, 500000];
+  // only the amounts within the limit (or the limit itself, when it is under the smallest one)
+  let amounts = [50000, 100000, 300000, 500000].filter((a) => a <= limit);
+  if (!amounts.length) amounts = [Math.floor(limit / 1000) * 1000];
   const items = amounts.map((a) => `${fmtMoney(a)}`).concat(['やめておく']);
   const k = await g.ask('おいくら、ご希望ですか？', items, { ...o, cancel: items.length - 1 });
   if (k < 0 || k >= amounts.length) return;
@@ -2580,7 +2603,7 @@ registerPlace({
         { type: 'npc', id: 'loan_staff2', x: 9, y: 2, dir: 'down', look: { ...LOAN_STAFF.look, hair: 'short', hairColor: 'black', skin: 'fair', bottom: '#2f6a52' }, name: '返済相談の係', talk: loanDesk, fixedDir: true },
         { type: 'npc', id: 'loan_customer', x: 9, y: 5, dir: 'up', look: { ...LOOKS.salaryman, top: '#5a5e6a', tie: '#5a5e6a' }, name: '順番を待つ男性',
           text: ['…最初は、ちょっと足りない分だけのつもりだったんだ。', '返済日に足りなくて、別の会社で借りて…\nいまは、3社から借りてる。', '利息を払うために働いてるみたいだよ。\n…今日は、返済の相談に来たんだ。'] },
-        { type: 'sign', x: 2, y: 1, talk: async (g) => { await g.say(['「貸付条件の掲示」が貼ってある。（貸金業法で、\n店に見えるように出すことが決められている）', `実質年率　${Math.round(lenderRate(g, 'shohisha', 100000) * 1000) / 10}%（10万円の場合）\n返済方式　残高スライドリボルビング\n遅延損害金　年20%`]); } },
+        { type: 'sign', x: 2, y: 1, talk: async (g) => { await g.say(['「貸付条件の掲示」が貼ってある。（貸金業法で、\n店に見えるように出すことが決められている）', `実質年率　${Math.round(lenderRate(g, 'shohisha', 100000) * 1000) / 10}%（10万円の場合）\n返済方式　残高スライドリボルビング\n遅延損害金　年${lateRateText(g)}`]); } },
         { type: 'sign', x: 4, y: 1, text: ['ポスターだ。', '「ご利用は計画的に。」\n「返済が苦しいときは、お早めにご相談ください」'] },
         { type: 'sign', x: 10, y: 1, text: ['ポスターだ。', '「借金の悩みは、ひとりで抱えずに。\n多重債務の相談窓口があります」'] },
         { type: 'sign', x: 1, y: 5, talk: async (g) => { if (since(g, 1993)) await g.say(['自動契約機だ。', '人と顔を合わせずに、その場でカードが作れる。\n…手軽すぎるのも、ちょっとこわい。']); else await g.say(['カード発行機だ。', '契約した人のカードは、ここで受け取るらしい。']); } },
@@ -3062,6 +3085,7 @@ const KUMI_OFFERS = {
       photo = p === 1;
       if (photo) { g.sfx('shutter'); await narrate(g, '（会長の横で、カメラに向かって笑ってしまった…）'); } else await g.say('…ちっ、つれねえな。ま、いいさ。', o);
     });
+    km.yamiDone = today(g); // accepted (km.yamieigyo only says it was offered): darkside's hanshaSource reads it
     await tieCrime(g, { amount: pay, gain: { money: pay }, where: 'ホテルの宴会場' });
     // darkside.js's 週刊誌 story names its source from its own state: this was a party, not an office visit
     try { const dark = typeof window !== 'undefined' ? window.__dark : null; if (dark && typeof dark.state === 'function') { const ds = dark.state(g); if (ds && ds.story) ds.story.hanshaDeal = today(g); } } catch (e) { console.error(e); }

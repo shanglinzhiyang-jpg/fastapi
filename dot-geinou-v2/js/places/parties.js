@@ -501,7 +501,8 @@ async function sentaiTalk(g, npc, hq) {
   if (!isMember(g, pt)) { await g.say(['選挙対策本部です。', `公認の申請は、${pt.name}の党員のかただけ。\nまずは1階の受付で入党の手続きを。`], S); return; }
   const list = (() => { try { return g.upcomingElections().filter((e) => !e.newsOnly && e.kind !== 'sosaisen'); } catch (e) { return []; } })();
   if (!list.length) { await g.say(['いまは、予定されている選挙がありません。', '選挙がないときこそ、地元を回って\n後援会を固めておくことです。'], S); return; }
-  const i = await g.list({ title: '選挙の予定', items: list.map((e) => ({ label: e.label.slice(0, 16), right: e.declared ? '届出ずみ' : e.date.replace(/^\d+年/, '') })), x: 16, y: 56, w: 420, px: true, describe: (k) => `${list[k].kojiDate}に${['shugi', 'sangi'].includes(list[k].kind) ? '公示' : '告示'}、${list[k].date}投票` });
+  await g.say(`${/・/.test(npc.name) ? `${npc.name.replace('・', 'の')}です。` : '選挙対策本部です。'}\nどの選挙の公認を希望しますか？`, S);
+  const i = await g.list({ title: '選挙の予定', items: list.map((e) => ({ label: e.label.slice(0, 16), right: e.declared ? '届出ずみ' : e.date.replace(/^(?:19|20)(\d\d)年/, '$1年') })), x: 16, y: 56, w: 420, px: true, describe: (k) => `${list[k].kojiDate}に${['shugi', 'sangi'].includes(list[k].kind) ? '公示' : '告示'}、${list[k].date}投票` });
   if (i < 0) return;
   const e = list[i];
   if (e.declared) {

@@ -708,7 +708,11 @@ async function canDo(g, key, who) {
     await g.say('今日の特番は、もう放送しましたよ。\n特番は1日1本まで！また明日お願いします！', who);
     return false;
   }
-  // burnout / starving: refuse before the bus ride or the studio intro
+  // 活動自粛 / a TV ban (justice core), the campaign / a cabinet post (politics core), burnout /
+  // starving: refuse before the bus ride or the studio intro (g.job would only refuse after it)
+  const def = { ...JOBS[key].def };
+  const ban = (typeof g.justiceRefusal === 'function' && g.justiceRefusal('job', def)) || (typeof g.politicsRefusal === 'function' && g.politicsRefusal('job', def)) || null;
+  if (ban) { await g.say(ban); return false; }
   const tired = g.lifeRefusal();
   if (tired) { await g.say(tired); return false; }
   return true;

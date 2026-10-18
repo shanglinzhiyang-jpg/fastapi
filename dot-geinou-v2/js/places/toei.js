@@ -1200,7 +1200,10 @@ async function voiceAudition(g, npc) {
     await g.say('オーディションは1日1回まで。\nまた明日、挑戦してね！', o);
     return;
   }
-  // an audition like g.audition: refused at burnout / when starving, and the same toll on the needs
+  // an audition like g.audition: refused during 活動自粛 / while agencies keep away after a case (the
+  // justice core's wrapper of g.audition), at burnout / when starving, and the same toll on the needs
+  const ban = typeof g.justiceRefusal === 'function' ? g.justiceRefusal('audition', { agency: 'toei' }) : null;
+  if (ban) { await g.say(ban); return; }
   const tired = g.lifeRefusal();
   if (tired) { await g.say(tired); return; }
   const i = await g.ask(['新作アニメ『ドット冒険記』の声優オーディション、受けてみる？', '（体力 -15・1日1回）'], ['受ける', 'やめておく'], o);

@@ -1105,7 +1105,13 @@ function generate() {
 
     // ---- ドット区役所 (js/places/kuyakusho.js): the north-east corner beyond the arcade
     { type: 'building', x: 43, y: 2, w: 4, h: 3, door: 2, place: 'kuyakusho', name: 'ドット区役所', kind: 'office', rise: 0, wall: '#e4e2d8', roof: '#5a6a7a', canopy: '#2a5088', plants: true, sign: { text: 'ドット区役所', bg: '#2a3a5a', color: '#ffffff' } },
-    { type: 'sign', x: 44, y: 4, text: ['入口のわきに「ドット区役所」の各階の案内が掲げてある。', '1階：住民課・税務課（確定申告の相談）\n2階：選挙管理委員会・期日前投票所', '3階：区民相談室（暮らしやお金の相談）\n5階：区議会'] },
+    // (期日前投票 from 2003-12; before it, the same floor is the 不在者投票 office — kuyakusho.js)
+    { type: 'sign', x: 44, y: 4, talk: (g) => {
+      let y = 2026;
+      try { y = typeof g.lawDate === 'function' ? g.lawDate().ym : 202604; } catch (e) { y = 202604; }
+      const vote = y >= 200312 ? '期日前投票所' : '不在者投票の受付';
+      return g.say(['入口のわきに「ドット区役所」の各階の案内が掲げてある。', `1階：住民課・税務課（確定申告の相談）\n2階：選挙管理委員会・${vote}`, '3階：区民相談室（暮らしやお金の相談）\n5階：区議会']);
+    } },
 
     // ---- residential side (doors on y 27) and neighbours' houses
     { type: 'building', x: 2, y: 22, w: 8, h: 6, door: 4, place: 'mansion', name: 'ドットレジデンス', kind: 'mansion', sign: { text: 'ドットレジデンス' } },
@@ -1193,7 +1199,11 @@ registerPlace({
         if (g.flag('machi_intro')) return;
         g.setFlag('machi_intro');
         await g.wait(250);
-        await g.say(['にぎやかな通りに出た。\nアーケードの入口に「ドット商店街」の文字が見える。', '食材、カフェ、ジム、カラオケ…。\n暮らしのことなら、ここでそろいそうだ。']);
+        await g.say([
+          'にぎやかな通りに出た。\nアーケードの入口に「ドット商店街」の文字が見える。',
+          '食材、カフェ、ジム、カラオケ…。\n暮らしのことなら、ここでそろいそうだ。',
+          ...(PLACES.kuyakusho ? ['アーケードの先、北東のはしには「ドット区役所」。\n選挙の届出や、お金・暮らしの相談はそこでできるらしい。'] : []),
+        ]);
       },
     },
   },

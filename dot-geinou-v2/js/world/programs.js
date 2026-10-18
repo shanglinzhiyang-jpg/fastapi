@@ -41,6 +41,10 @@ import { registerItem } from '../engine/state.js';
 import { PLACES } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
 import { ERAS } from '../engine/profile.js';
+// The politics core is optional (main.js loads it before the content; a core that failed is left out):
+// read it through a guarded dynamic import, never a static one.
+let POL = null;
+import('../engine/politics.js').then((m) => { POL = m; }).catch(() => { POL = null; });
 
 // ======================================================================== helpers
 const G = () => (typeof window !== 'undefined' ? window.__game : null);
@@ -445,6 +449,34 @@ const weeklyHeld = (st) => Object.keys(st.regulars).filter((id) => REGULARS[id] 
 const openShowOffers = (st) => st.phone.inbox.filter((m) => openOffer(st, m) && m.regular && m.regular !== 'career_kanmuri' && REGULARS[m.regular] && REGULARS[m.regular].medium !== 'event');
 // How many real-program regulars the player holds (for career.js and the notebook).
 export function programShowsHeld(st = ST()) { return st && st.regulars ? PROGRAM_SHOW_IDS.filter((id) => activeReg(st, id)).length : 0; }
+// A sitting minister / prime minister (大臣規範: no other occupation while in office): no new offers
+// of any kind (shows already held follow the politics core: TV / radio end, stage work may go on).
+export function inCabinet(g) {
+  const p = g && g.state && g.state.politics;
+  const posts = p && p.me && Array.isArray(p.me.posts) ? p.me.posts : [];
+  const POSTS = (POL && POL.POSTS) || {};
+  return posts.some((x) => x === 'pm' || (POSTS[x] && POSTS[x].kind === 'cabinet'));
+}
+// Why no producer calls with a show now (null: they may). Asks the cores the recording itself would
+// ask (g.doRegular / g.job): custody, 活動自粛 and a TV ban (justice core: stage shows still come during
+// a TV ban), an official campaign the player runs in or a cabinet post (politics core: TV / radio only).
+// The politics core gets a def without the 'regular_' prefix, so it reads only the medium and leaves
+// the show's week alone. Also used by career.js (offers, the 冠番組).
+export function showOfferRefusal(g, id, medium) {
+  const r = REGULARS[id];
+  const md = medium || (r && r.medium) || 'tv';
+  try {
+    if (typeof g.justiceRefusal === 'function') {
+      const why = g.justiceRefusal('regular', { id: 'regular_' + id, medium: md });
+      if (why) return why;
+    }
+    if (typeof g.politicsRefusal === 'function') {
+      const why = g.politicsRefusal('regular', { id: 'offer_' + id, medium: md });
+      if (why) return why;
+    }
+  } catch (e) { console.error('[programs] showOfferRefusal', e); }
+  return null;
+}
 
 // A program the player can be offered a regular slot on now (or why not: for the desk).
 function regularBlock(g, p) {
@@ -500,7 +532,7 @@ function regularOfferMorning(g, P) {
   if (held.length + offers.length >= MAX_SHOWS) return;
   const mine = held.filter(isProgShow).length + offers.filter((m) => isProgShow(m.regular)).length;
   if (mine >= MAX_PROG_SHOWS) return;
-  const cands = PROGRAM_LIST.filter((p) => regularBlock(g, p) === null);
+  const cands = PROGRAM_LIST.filter((p) => regularBlock(g, p) === null && !showOfferRefusal(g, progId(p)));
   if (!cands.length) return;
   // the program you appeared on most, the higher tier, then random
   const score = (p) => num(st.jobs[progId(p)]) * 2 + p.tier * 3 + Math.random() * 2;
@@ -512,6 +544,7 @@ function regularOfferMorning(g, P) {
 function localMeet(p) { return ((p.local && p.local.meet) || []).find((id) => PLACES[id]) || null; }
 function localOfferMorning(g, P) {
   const st = g.state;
+  if (showOfferRefusal(g, 'prog_local', 'tv')) return; // no TV work now: the ロケ offer waits
   for (const p of PROGRAM_LIST) {
     if (!p.local || P.local[p.id] || !p.eras.includes(eraKey(st))) continue;
     if (g.checkRequires(tierReq(p.tier))) continue;
@@ -640,6 +673,10 @@ async function regularTalk(g, p, who) {
     noplace: () => 'いまはスタジオの準備中で、レギュラーの話はまだ先になりそうです。',
     none: () => `『${p.title}』は、いまはゲスト出演だけなんです。`,
   };
+  if (why !== 'active' && why !== 'none' && showOfferRefusal(g, id)) {
+    await g.say('レギュラーのお話は…いまは、ちょっと難しいみたいです。\nまた落ち着いたら、ぜひ。', who);
+    return;
+  }
   if (why === null || why === 'wait') {
     await g.say('評判はプロデューサーの耳にも届いていますよ。\n枠が空いたら、スマホに連絡が行くと思います！', who);
     return;

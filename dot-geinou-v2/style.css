@@ -117,6 +117,12 @@ body.fullscreen #fs .fs-exit { display: inline; }
   border: 2px solid #9aa3c7; border-radius: 0; outline: none; }
 .textask-input:focus { border-color: #ffd23f; }
 .textask-note { color: #9aa3c7; font-size: 14px; }
+.textask-note.over { color: #ff8a8a; }
 .textask-btns { display: flex; justify-content: flex-end; gap: 10px; }
 .textask-btns button { font: 18px "DotGothic16", sans-serif; padding: 8px 16px; border: 2px solid #fff; background: #2a3a7a; color: #fff; }
 .textask-btns .textask-ok { background: #d64161; }
+/* boot watchdog (index.html): shown only when js/main.js never starts */
+#bootfail { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60; width: min(92vw, 460px);
+  padding: 16px 18px; background: #3a1424; border: 3px double #fff; color: #ff8a8a; font: 18px "DotGothic16", sans-serif; text-align: center; }
+#bootfail[hidden] { display: none; }
+#bootfail span { display: block; margin-top: 8px; color: #f0c8d0; font-size: 13px; }

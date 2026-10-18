@@ -10,13 +10,14 @@
 //       'dashboard' | 'elections' | 'candidacy' { electionId } | 'campaign' { electionId } |
 //       'parties' | 'found' | 'policy' | 'bills' | 'diet' | 'cabinet' | 'budget' | 'formation' |
 //       'coalition' | 'amendment' | 'party' | 'money' | 'activities' | 'news' | 'results' |
-//       'night' { resultId } (開票速報 + result card) | 'vote' { billId, house } (本会議の採決)
+//       'night' { resultId } (開票速報 + result card) | 'vote' { billId, house } (本会議の採決) |
+//       'retire' (進退：議員辞職・政界引退の表明・政治家としての歩み; also in 資金・活動)
 //   await g.politicsEvents()               show what happened overnight (election night, 首班指名,
 //                                          打診, 不信任案の可決, 採決) — runs after g.sleep by itself
 //   drawEmblem(ctx, emblem, x, y, size)    the player's party emblem (party.emblem from 党を立ち上げる)
 //   drawPartyMark(ctx, g, partyId, x, y, size)   logo (自民・民主) / emblem / colour mark of any party
 // UI-only data lives in g.state.flags.polui (economy history for the sparklines, 情勢調査 history,
-// the overnight queue). The places that write to the simulation without a g.* call: the 予算編成
+// the overnight queue, the retirement / career records: see 進退 below). The places that write to the simulation without a g.* call: the 予算編成
 // screen (applyBudget: the core has no budget API yet) and 民間人閣僚 (ensureCivilian adds an NPC
 // record for a friend so g.formCabinet accepts them).
 // Headless: under g.auto the screens do not open (openPolitics returns null) and the overnight
@@ -30,7 +31,7 @@ import { audio } from './audio.js';
 import { drawFaceHD, charSheetHD, LOOKS } from './sprites.js';
 import { drawLogo } from './logos.js';
 import { registerPhoneApp, onMorning, PEOPLE, WEEKDAYS, weekdayOf } from './life.js';
-import { ERAS, ageOf, PREFECTURES, fullName } from './profile.js';
+import { ERAS, ageOf, PREFECTURES, fullName, YEAR_DAYS } from './profile.js';
 import { appTile, rrect } from './phone.js';
 import { crimeLaw } from './crime.js';
 
@@ -64,8 +65,12 @@ function fit(c, s, w, size = 12) {
 // wrap() with one more kinsoku rule: a line never starts with a closing mark or a small kana
 // (after a hung 「）」 the next 「。」 would otherwise open the following line)
 const NO_START = new Set('、。，．・：；？！ー～…‥）」』】〕〉》’”ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ!?.,)]}'.split(''));
+// The pass runs per paragraph, so a hard '\n' break (a 「・」 bullet, a 「…」 line) is never pulled
+// up onto the line above.
 function wrapJ(c, s, w, size) {
-  const lines = wrap(c, s, w, size);
+  return String(s ?? '').split('\n').flatMap((par) => kinsoku(wrap(c, par, w, size)));
+}
+function kinsoku(lines) {
   const gone = new Set();
   for (let i = 1; i < lines.length; i++) {
     const a = Array.from(lines[i]);
@@ -190,6 +195,8 @@ const today = (g) => (g.state && g.state.day) || 1;
 const isNational = (me) => me.office === 'shugi' || me.office === 'sangi';
 const inCabinet = (me) => me.posts.some((x) => POSTS[x] && POSTS[x].kind === 'cabinet');
 const yearOf = (g) => polDate(g).year;
+// 期日前投票 began on 2003-12-01 (公選法改正); before it, 不在者投票 (as kuyakusho.js kijitsuName)
+const kijitsuOK = (g) => { const d = polDate(g); return d.year * 100 + d.month >= 200312; };
 const fyOf = (g) => polDate(g).fy;
 const isRuling = (p, id) => (p.cabinet.partyIds || []).includes(id);
 function partyColor(p, id) { if (!id || id === IND) return IND_COLOR; const pt = p.parties[id] || PARTY_DEFS[id]; return (pt && pt.color) || IND_COLOR; }
@@ -654,6 +661,7 @@ function queue(g, item) {
 // the morning: economy history, the poll of the player's race
 onMorning((g) => {
   try { recordEco(g); recordForecast(g); } catch (e) { console.error(e); }
+  try { trackCareer(g); } catch (e) { console.error(e); }
 });
 const involved = (g) => { const me = polOf(g).me; return !!(me.office || me.party || me.wins || me.losses || me.candidacy || me.formerOffice); };
 onPolitics('election', (g, d) => {
@@ -701,6 +709,33 @@ function alerts(g) {
   }
   return out;
 }
+// the あなた card's last line: what the player can do next (a newcomer's call to action), or the office's
+// staff when in office. [text, colour]
+function nextStep(g) {
+  const p = polOf(g);
+  const me = p.me;
+  const d = uiData(g);
+  const day = today(g);
+  if (d.retire && !d.retire.done && me.office) return ['引退を表明・任期まで務める', C.warn];
+  if (me.office) return [`秘書 ${me.staff}人・後援会 ${fmtNum(me.kouenkai)}人`, C.faint];
+  const mine = p.elections.upcoming.find((e) => myDecl(e) && e.status !== 'done' && e.kind !== 'sosaisen');
+  if (mine) return [day >= mine.koji ? `${electionShort(g, mine)}に立候補中・投票${daysLeft(mine.day - day)}` : `${electionShort(g, mine)}に立候補・${kojiWord(mine.kind)}${daysLeft(mine.koji - day)}`, C.good];
+  const intent = me.intent && p.elections.upcoming.find((e) => e.id === me.intent.election && e.status !== 'done');
+  if (intent) return [`${electionShort(g, intent)}に出馬表明・届出は${dateLabel(g, intent.day - 30).replace(/^\d+年/, '')}から`, C.good];
+  if (d.retire && d.retire.done) return [`政界を引退（${dateLabel(g, d.retire.done).replace(/上旬|中旬|下旬/, '')}）`, C.dim];
+  let banned = false;
+  try { banned = typeof g.civicBanned === 'function' && !!g.civicBanned(); } catch (e) { banned = false; }
+  if (banned) return ['公民権停止中：立候補できない', C.bad];
+  const age = ageOf(g.state);
+  const minAge = Math.min(...Object.values(OFFICES).map((o) => num(o.ageMin, 25)));
+  if (age < minAge) {
+    const n = (minAge - age) * YEAR_DAYS - ((day - 1) % YEAR_DAYS);
+    return [`立候補は${minAge}歳から（あと${n}日）`, C.cyan];
+  }
+  const next = electionList(g).find((e) => !ELECTION_KINDS[e.kind].newsOnly && e.kind !== 'sosaisen' && day <= e.koji && OFFICES[officeOfE(e)] && age >= OFFICES[officeOfE(e)].ageMin);
+  if (next) return [`つぎは${electionShort(g, next)}・届出は${dateLabel(g, next.koji).replace(/^\d+年/, '')}まで`, C.cyan];
+  return [me.party ? '党の活動で評価を上げよう' : 'まずは選挙か政党から', C.cyan];
+}
 function dashboardView(g) {
   let sum = null, sumT = -99;
   const view = {
@@ -709,6 +744,12 @@ function dashboardView(g) {
     tip: () => (view.focus === 'alert' ? '返事や決断には期限がある。早めに対応しよう' : COMMANDS[view.idx].tip),
     summary(ui) { if (!sum || ui.t - sumT > 20) { sum = g.politicsSummary(); sumT = ui.t; } return sum; },
     update(ui, inp) {
+      // the first visit of a newcomer: what this is and where to start (over the dashboard)
+      const d = uiData(g);
+      if (!d.introSeen) {
+        d.introSeen = true;
+        if (!involved(g)) { ui.act(() => ui.alert('政治アプリへようこそ', ['選挙・政党・国会・内閣・経済のいまを、ここで見られる。', `まずは「選挙」で、立候補の条件（${Math.min(...Object.values(OFFICES).map((o) => num(o.ageMin, 25)))}歳から・供託金・届出の期限）を確かめよう。`, '立候補の届出は、ドット区役所2階の選挙管理委員会や、永田町の党本部でもできる。'], { w: 460 })); return; }
+      }
       const al = alerts(g);
       if (view.focus === 'alert' && !al.length) view.focus = 'cmd';
       if (view.focus === 'cmd') {
@@ -755,7 +796,7 @@ function drawDashboard(c, g, ui, view, s) {
       const blink = Math.floor(ui.t / 24) % 2 === 0;
       R(c, x + 3, y + 105, w - 6, 15, blink ? '#5a1420' : '#3a0e18');
       T(c, fit(c, `⚠ 裏金 ${fmtMoney(me.secret)}・発覚の危険`, w - 12, 12), x + 7, y + 106, 12, '#ffb0b8');
-    } else T(c, fit(c, me.office || me.party ? `秘書 ${me.staff}人・後援会 ${fmtNum(me.kouenkai)}人` : 'まずは選挙か政党から', w - 16, 12), x + 8, y + 105, 12, C.faint);
+    } else { const [s1, col] = nextStep(g); T(c, fit(c, s1, w - 16, 12), x + 8, y + 105, 12, col); }
   }
   // ---- 内閣
   {
@@ -910,6 +951,8 @@ async function drainQueue(g) {
         else if (it.kind === 'pm' && SECTIONS.pmCeremony) await SECTIONS.pmCeremony(ui, {});
         else if (it.kind === 'offer') { const o = p.me.offers.find((x) => x.id === it.id && !x.answered); if (o) await offerFlow(ui, o); }
         else if (it.kind === 'vote' && SECTIONS.vote) await SECTIONS.vote(ui, { billId: it.id, house: it.house });
+        else if (it.kind === 'career') { const rec = (uiData(g).career || [])[0]; if (rec) { await ui.alert('政界引退', [`${rec.office ? `${rec.office}の任期を終え、` : ''}政界を引退した。`, '長いあいだ、おつかれさまでした。'], { draw: (c, rc) => stampArt(c, rc, '引退', '#8a6a1a'), artH: 60 }); await ui.open(careerCardView(g, rec)); } }
+        else if (it.kind === 'einen') { sfx('fanfare'); await ui.alert('永年在職議員表彰', ['衆議院議員として在職25年。', '本会議で、永年在職議員として表彰された。', '評判と知名度が上がった。'], { draw: (c, rc) => stampArt(c, rc, '表彰'), artH: 60 }); }
       } catch (e) { console.error(e); }
     }
     if (p.cabinet.pending && p.cabinet.pending.kind === 'ncDeadline' && p.cabinet.pm === 'player' && !p.cabinet.ncAsked) await ncDecision(ui);
@@ -1196,6 +1239,16 @@ async function candidacyFlow(ui, eid) {
   const e = findE(g, eid);
   if (!e) { await ui.alert('立候補', 'その選挙は予定されていない。'); return; }
   if (myDecl(e)) { await campaignScreen(ui, e.id); return; }
+  // an announced (or finished) retirement: standing again withdraws it / is a comeback
+  const R0 = uiData(g).retire;
+  if (R0) {
+    const k = await ui.confirm(R0.done
+      ? { title: '政界復帰', text: '政界を引退している。\n復帰して、立候補する？', choices: ['復帰して立候補する', 'やめておく'] }
+      : { title: '引退を表明している', text: '次の選挙には出ないと表明している。\n表明を撤回して立候補する？（評判は少し下がる）', choices: ['撤回して立候補する', 'やめておく'] });
+    if (k !== 0) return;
+    if (!R0.done) me.reputation = clamp(num(me.reputation) - 3, -100, 100);
+    uiData(g).retire = null;
+  }
   if (e.kind === 'sosaisen') {
     const pt = p.parties[e.party];
     const i = await ui.confirm({ title: `${e.label}に立候補`, text: `国会議員の推薦人を集めて、${pt ? pt.name : ''}の${postName('party_leader', fyOf(g), e.party)}選挙に名乗りを上げる？\n届出：${dateLabel(g, e.koji)}まで・投票：${dateLabel(g, e.day)}`, choices: ['立候補する', 'やめておく'], tip: '推薦人の数は、派閥・グループの大きさと党内の評価で決まる' });
@@ -1371,7 +1424,7 @@ function campaignView(g, eid) {
       if (v.focus === 'plan') return '体力と資金が足りる範囲で、1日の予定を組もう';
       if (!it) return '';
       if (it.illegal) return `${it.key}は公職選挙法違反（犯罪）。発覚すれば逮捕・公民権停止も`;
-      if (it.cmd === 'vote') return yearOf(g) >= 2003 ? '期日前投票：選挙期間中なら投票日の前でも投票できる（2003年〜）' : '投票日に行けない人は「不在者投票」の制度がある';
+      if (it.cmd === 'vote') return kijitsuOK(g) ? '期日前投票：選挙期間中なら投票日の前でも投票できる（2003年12月〜）' : '投票日に行けない人は「不在者投票」の制度がある';
       if (it.cmd === 'poll') return '情勢調査は、世論調査や取材から当落の見込みを探るもの';
       if (it.cmd === 'run') return '予定は上から順に行う。討論会はトークのミニゲームになる';
       if (it.cmd === 'sleep') return '休むと次の日になる。体力は戻るが、投票日までの日数は減る';
@@ -1396,7 +1449,10 @@ function campaignView(g, eid) {
       const pStam = v.plan.reduce((a, k) => a + num((CAMPAIGN_ACTIONS[k] || {}).stamina), 0);
       const pCost = v.plan.reduce((a, k) => a + num((CAMPAIGN_ACTIONS[k] || {}).money), 0);
       const year = yearOf(g);
-      const rows = [];
+      // the order a candidate needs: the plan's 「実行」 first (always visible), the legal campaign,
+      // the day's other commands, and the crimes last, below everything else
+      const rows = [{ cmd: 'run', label: `▶ 予定を実行する${v.plan.length ? `（${v.plan.length}件）` : ''}`, labelColor: C.gold, disabled: !v.plan.length || onDay, why: onDay ? '投票日は選挙運動ができない' : '予定が空っぽ（下の一覧からAで入れる）' }];
+      const crimes = [];
       for (const key of ACT_ORDER()) {
         const illegal = !!ILLEGAL_CAMPAIGN[key];
         const A = CAMPAIGN_ACTIONS[key];
@@ -1413,7 +1469,7 @@ function campaignView(g, eid) {
           else if (pCost + num(A.money) > num(st.money) + num(p.me.funds)) why = 'お金が足りない';
         } else if (planned(key)) why = 'もう予定に入っている';
         const used = illegal ? 0 : num(camp.actions[`${key}@${day}`]) + planned(key);
-        rows.push({
+        (illegal ? crimes : rows).push({
           key, illegal, label: key,
           right: illegal ? '犯罪' : `体力${A.stamina}${A.money ? `・${fmtMoney(A.money)}` : ''}`,
           rightColor: illegal ? C.bad : null,
@@ -1421,16 +1477,16 @@ function campaignView(g, eid) {
           disabled: !!why, why, labelColor: illegal ? '#ff9aa4' : null,
         });
       }
-      rows.push({ cmd: 'run', label: '▶ 予定を実行する', labelColor: C.gold, disabled: !v.plan.length || onDay, why: onDay ? '投票日は選挙運動ができない' : '予定が空っぽ' });
       rows.push({ cmd: 'poll', label: '情勢調査を見る', labelColor: C.cyan, disabled: !!(d && (d.pr || d.prOnly)), why: '比例代表は党の得票と名簿の順位しだい' });
-      // 期日前投票（2003年から。それまでは理由のいる「不在者投票」）: the day after 公示・告示 to the eve of 投票日
+      // 期日前投票（2003年12月から。それまでは理由のいる「不在者投票」）: the day after 公示・告示 to the eve of 投票日
       const canVote = ((day > e.koji && day < e.day) || day === e.day) && !e.voted && e.kind !== 'sosaisen';
-      rows.push({ cmd: 'vote', label: e.voted ? '投票ずみ' : day === e.day ? '投票に行く' : year >= 2003 ? '期日前投票に行く' : '不在者投票に行く', labelColor: C.cyan, disabled: !canVote, why: e.voted ? 'もう投票した' : `投票できるのは${kojiWord(e.kind)}日の翌日から投票日まで` });
+      rows.push({ cmd: 'vote', label: e.voted ? '投票ずみ' : day === e.day ? '投票に行く' : kijitsuOK(g) ? '期日前投票に行く' : '不在者投票に行く', labelColor: C.cyan, disabled: !canVote, why: e.voted ? 'もう投票した' : `投票できるのは${kojiWord(e.kind)}日の翌日から投票日まで` });
       rows.push({ cmd: 'sleep', label: onDay ? '開票を待つ（休む）' : '今日はここまで（休む）', labelColor: C.dim });
       rows.push({ cmd: 'withdraw', label: '立候補をとりやめる', labelColor: C.faint });
-      return rows;
+      return rows.concat(crimes);
     },
-    enter() { v.lb = new ListBox({ items: () => v.rows(), rowH: 23 }); },
+    // the cursor starts on the first campaign action (row 0 is 「予定を実行する」)
+    enter() { v.lb = new ListBox({ items: () => v.rows(), rowH: 23, index: 1 }); },
     update(ui, inp) {
       const e = findE(g, eid);
       if (!e) { ui.done(v, null); return; }
@@ -1500,6 +1556,7 @@ async function campaignCommand(ui, g, v, e, cmd) {
         break;
       }
     }
+    if (v.lb) v.lb.idx = 1; // back to the first action for the next plan
     if (done.length) {
       const camp = p.me.campaign;
       sfx('good');
@@ -1518,7 +1575,7 @@ async function campaignCommand(ui, g, v, e, cmd) {
     const why = g.castVote(e.id, 'self');
     if (why) { ui.toast(why, C.dim); return; }
     sfx('success');
-    await ui.alert(today(g) === e.day ? '投票' : yearOf(g) >= 2003 ? '期日前投票' : '不在者投票', ['投票所で、自分の名前を書いて投票した。', '一票の重さをかみしめる…。']);
+    await ui.alert(today(g) === e.day ? '投票' : kijitsuOK(g) ? '期日前投票' : '不在者投票', ['投票所で、自分の名前を書いて投票した。', '一票の重さをかみしめる…。']);
     return;
   }
   if (cmd === 'sleep') {
@@ -1559,7 +1616,9 @@ function drawCampaign(c, g, ui, v, e) {
     const col = isVote ? '#7a2a34' : k >= e.koji ? '#6a4a1a' : '#2a3262';
     frame(c, x, 34, bw, 28, isToday ? shade(col, 0.25) : col, isToday ? C.gold : shade(col, 0.3));
     T(c, isToday ? '今日' : WEEKDAYS[weekdayOf(k)], x + bw / 2, 35, 12, isToday ? '#ffffff' : C.dim, 'center');
-    T(c, isVote ? '投票' : isKoji ? kojiWord(e.kind) : `${k - day}日後`.replace('0日後', ''), x + bw / 2, 48, 12, isVote ? '#ffb0b8' : isKoji ? C.gold : C.faint, 'center');
+    // 「+3」= 3日後 (「N日後」 is wider than the cell; today shows 「今日」 above and nothing here)
+    const lab = isVote ? '投票' : isKoji ? kojiWord(e.kind) : isToday ? '' : `+${k - day}`;
+    T(c, fit(c, lab, bw - 2, 12), x + bw / 2, 48, 12, isVote ? '#ffb0b8' : isKoji ? C.gold : C.faint, 'center');
   });
   if (e.day - day >= 12) T(c, '…', sx - 10, 42, 12, C.dim, 'center');
   // ---- actions list
@@ -1570,15 +1629,15 @@ function drawCampaign(c, g, ui, v, e) {
   const rx = 312, rw = SW - 6 - rx;
   const ph = 132;
   card(c, rx, ly, rw, ph, '今日の予定', { right: `${v.plan.length}/6`, rightW: 40, edge: v.focus === 'plan' ? C.gold : C.edge });
-  if (!v.plan.length) para(c, '左の一覧からAで予定に入れて、「予定を実行する」。体力とお金が足りる分だけできる。', rx + 10, ly + 26, rw - 20, 12, C.dim, 16, 4);
+  if (!v.plan.length) para(c, '左の一覧からAで予定に入れて、いちばん上の「▶ 予定を実行する」でまとめて行う。体力とお金が足りる分だけできる。', rx + 10, ly + 26, rw - 20, 12, C.dim, 16, 4);
   const camp = p.me.campaign && p.me.campaign.election === e.id ? p.me.campaign : { actions: {}, points: 0 };
   let stam = 0, cost = 0, est = 0;
   const cnt = {};
   v.plan.forEach((k, i) => {
     const A = CAMPAIGN_ACTIONS[k];
-    const y = ly + 22 + i * 14;
+    const y = ly + 22 + i * 13;
     const sel = v.focus === 'plan' && i === v.pidx;
-    if (sel) R(c, rx + 3, y, rw - 6, 14, C.sel);
+    if (sel) R(c, rx + 3, y, rw - 6, 13, C.sel);
     if (A) {
       const used = num(camp.actions[`${k}@${day}`]) + (cnt[k] || 0);
       cnt[k] = (cnt[k] || 0) + 1;
@@ -1591,13 +1650,13 @@ function drawCampaign(c, g, ui, v, e) {
       T(c, '？', rx + rw - 10, y, 12, C.bad, 'right');
     }
   });
-  const by = ly + ph - 34;
-  R(c, rx + 6, by - 3, rw - 12, 1, C.edge);
+  const by = ly + ph - 30; // below the 6th plan row (ly + 22 + 5 * 13 + 13)
+  R(c, rx + 6, by - 2, rw - 12, 1, C.edge);
   T(c, '体力', rx + 10, by, 12, C.dim);
   hbar(c, rx + 42, by + 3, 110, 8, (g.state.stamina - stam) / Math.max(1, g.state.maxStamina), C.good);
   T(c, `${g.state.stamina}→${g.state.stamina - stam}`, rx + 158, by, 12, C.text);
-  T(c, `費用 ${fmtMoney(cost)}`, rx + 10, by + 15, 12, C.text);
-  T(c, `見込み +${Math.round(est * 10) / 10}`, rx + rw - 10, by + 15, 12, C.good, 'right');
+  T(c, `費用 ${fmtMoney(cost)}`, rx + 10, by + 14, 12, C.text);
+  T(c, `見込み +${Math.round(est * 10) / 10}`, rx + rw - 10, by + 14, 12, C.good, 'right');
   // ---- the polls
   const gy = ly + ph + 4, gh = lh - ph - 4;
   card(c, rx, gy, rw, gh, '情勢（当選の見込み）', { right: `手ごたえ ${Math.round(num(camp.points) * 10) / 10}`, rightW: 110 });
@@ -2266,7 +2325,7 @@ function partyInfo(c, g, id, r) {
   drawIdeology(c, pt.ideology, x, y, w, pt.color);
   y += 92;
   const plat = (pt.platform || []).filter((q) => POLICIES[q]).slice(0, 3).map((q) => POLICIES[q].name);
-  if (plat.length && y < r.y + r.h - 16) para(c, `主な政策：${plat.join('・')}`, x, y, w, 12, C.dim, 16, Math.max(1, Math.floor((r.y + r.h - 6 - y) / 16)));
+  if (plat.length && y < r.y + r.h - 16) para(c, `主な政策${pt.real ? '（シミュレーション上の傾向）' : ''}：${plat.join('・')}`, x, y, w, 12, C.dim, 16, Math.max(1, Math.floor((r.y + r.h - 6 - y) / 16)));
 }
 SECTIONS.parties = async (ui) => {
   const g = ui.g;
@@ -2515,7 +2574,7 @@ SECTIONS.found = async (ui) => {
   const year = yearOf(g);
   const intro = await ui.confirm({
     title: '党を立ち上げる（1/7）', w: 460,
-    text: `自分の政党をつくる。\n・結党の費用 ${fmtMoney(cost)}（事務所・届出・印刷など）\n・国会議員5人以上、または1人以上で得票率2%以上で「政党」に\n・${subsidyExists(year) ? '政党になれば政党交付金（国民1人あたり250円が原資）を受けられる' : 'この時代には、まだ政党交付金の制度はない（1995年から）'}\n・いまの党は離党することになる`,
+    text: `自分の政党をつくる。\n・結党の費用 ${fmtMoney(cost)}（事務所・届出・印刷など）\n・国会議員5人以上、または1人以上で得票率2%以上で「政党」に\n・${subsidyExists(year) ? '政党になれば、政党交付金（原資は国民1人250円）が出る' : 'この時代には、まだ政党交付金の制度はない（1995年から）'}${p.me.party ? `\n・いまの${partyShort(g, p.me.party)}は離党することになる` : ''}`,
     choices: ['つくる', 'やめておく'], tip: '政党をつくるのは自由。ただし「政党」と認められるには要件がある',
   });
   if (intro !== 0) return;
@@ -2983,6 +3042,19 @@ function dietView(g) {
   };
   return v;
 }
+// a sitting with nothing on the plenary's agenda: the bills still in committee (or a quiet day)
+function attendQuiet(g) {
+  const p = polOf(g);
+  const pend = (g.billsList({ house: p.me.office, pending: true }) || []).filter((b) => b.stage === 'committee' || b.stage === 'draft');
+  const any = pend.length ? pend : (g.billsList({ pending: true }) || []);
+  return any.length ? `今日の本会議に採決はなく、委員会で${billShort(any[0].title)}${any.length > 1 ? `など${any.length}本` : ''}を審議した。` : '今日は大きな採決はなく、委員会で質疑が続いた。';
+}
+// 「○○に関する法律案」→「○○」の法案 (a whole title, not cut in the middle)
+function billShort(t) {
+  const s = String(t || '');
+  const m = s.match(/^(.*)に関する法律案$/);
+  return m ? `「${m[1]}」の法案` : `「${s}」`;
+}
 async function dietCommand(ui, g, id) {
   const p = polOf(g);
   if (id === 'attend') {
@@ -2990,7 +3062,7 @@ async function dietCommand(ui, g, id) {
     if (!r.ok) { ui.toast(r.why, C.dim); return; }
     sfx('good');
     const bills = r.bills || [];
-    await ui.alert('国会に出席', [`${p.me.office === 'sangi' ? '参議院' : '衆議院'}の本会議と委員会に出席した。`, bills.length ? `今日の審議：${bills.slice(0, 2).map((b) => `「${b.title.slice(0, 16)}」`).join('')}${bills.length > 2 ? `ほか${bills.length - 2}本` : ''}` : '今日は大きな採決はない。', '党内の評価が少し上がった。']);
+    await ui.alert('国会に出席', [`${p.me.office === 'sangi' ? '参議院' : '衆議院'}の本会議と委員会に出席した。`, bills.length ? `今日の審議：${bills.slice(0, 2).map((b) => billShort(b.title)).join('・')}${bills.length > 2 ? `ほか${bills.length - 2}本` : ''}` : attendQuiet(g), '党内の評価が少し上がった。']);
   } else if (id === 'bills') await SECTIONS.bills(ui);
   else if (id === 'policy') await SECTIONS.policy(ui);
   else if (id === 'question') {
@@ -3029,7 +3101,7 @@ function cabinetCmds(g) {
   } else if (inCabinet(me)) {
     out.push({ id: 'kakugi', label: '閣議に出る', sub: '体力3' });
     out.push({ id: 'answer', label: '国会で答弁する', sub: '会期中・失言に注意' });
-    if (me.posts.includes('minister_finance')) out.push({ id: 'budget', label: '予算編成', sub: '財務大臣として' });
+    if (me.posts.includes('minister_finance')) out.push({ id: 'budget', label: '予算編成', sub: `${postName('minister_finance', fyOf(g))}として` });
     out.push({ id: 'quit', label: '大臣を辞める', labelColor: '#ffb0b8' });
   }
   if (pt && pt.leader === 'player' && !pm) {
@@ -3399,15 +3471,22 @@ function budgetView(g) {
         if (pv) T(c, `${pv > 0 ? '+' : ''}${pv}%`, 286, y, 12, pv > 0 ? C.warn : C.cyan, 'right');
         hbar(c, 16, y + 16, 336, 7, r.items[k] / Math.max(1, r.spending) * 2.5, k === 'finance' ? C.faint : sel ? C.gold : '#5a7ad8');
       });
-      if (!canEdit) para(c, B.passed ? '今年度の予算はもう成立している。来年度の予算は、年が明けて通常国会の前に編成する。' : p.cabinet.pm === 'player' || p.me.posts.includes('minister_finance') ? '今年度の予算案は、もう閣議決定した。' : '予算を編成するのは内閣（総理大臣と財務大臣）。', 16, SH - 76, 340, 12, C.dim, 16, 3);
       const x = 372, w = SW - 6 - x;
       card(c, x, 30, w, SH - 55, '財政と影響（見込み）');
       const rows2 = [['歳出（一般会計）', fmtCho(r.spending), '#ffffff'], ['税収など', fmtCho(r.revenue), C.text], ['新規国債など', fmtCho(r.deficit), r.deficit > num(B.deficit) ? C.bad : C.good], ['政府債務（GDP比）', `${Math.round(E.debtRatio)}%`, C.dim], ['消費税率', taxWord(E.taxRate), C.dim]];
       rows2.forEach(([a, b2, col], i) => { T(c, a, x + 10, 52 + i * 18, 12, C.dim); T(c, b2, x + w - 10, 52 + i * 18, 12, col, 'right'); });
-      T(c, '有権者の受けとめ', x + 10, 150, 12, C.gold);
-      const segs = SEGMENT_ORDER.filter((s) => Math.abs(num(r.segs[s])) > 0.05);
-      if (!segs.length) T(c, '配分を変えると表示される', x + 10, 168, 12, C.faint);
-      segs.slice(0, 8).forEach((s, i) => { const y = 168 + i * 16; T(c, SEGMENTS[s].name, x + 10, y, 12, C.text); cbar(c, x + 90, y + 3, w - 100, 8, num(r.segs[s]) / 6); });
+      if (canEdit) {
+        T(c, '有権者の受けとめ', x + 10, 150, 12, C.gold);
+        const segs = SEGMENT_ORDER.filter((s) => Math.abs(num(r.segs[s])) > 0.05);
+        if (!segs.length) T(c, '配分を変えると表示される', x + 10, 168, 12, C.faint);
+        segs.slice(0, 8).forEach((s, i) => { const y = 168 + i * 16; T(c, SEGMENTS[s].name, x + 10, y, 12, C.text); cbar(c, x + 90, y + 3, w - 100, 8, num(r.segs[s]) / 6); });
+      } else {
+        // nothing can be changed here: say why instead of the voters' reaction to a change
+        T(c, B.passed ? '予算の流れ' : '予算を編成するのは', x + 10, 150, 12, C.gold);
+        para(c, B.passed ? '今年度の予算はもう成立している。来年度の予算案は、秋から編成して12月に閣議決定し、1月の通常国会に出す。'
+          : p.cabinet.pm === 'player' || p.me.posts.includes('minister_finance') ? '今年度の予算案は、もう閣議決定した。国会で可決されれば成立する（衆議院が先に審議）。'
+            : `内閣（総理大臣と${postName('minister_finance', fyOf(g))}）。配分を変えられるのは、総理大臣か${postName('minister_finance', fyOf(g))}のときだけ。`, x + 10, 168, w - 20, 12, C.dim, 16, 6);
+      }
       if (r.delta) T(c, r.delta > 0 ? '景気：少し上向く・借金は増える' : '景気：少し下向く・借金は減る', x + 10, SH - 44, 12, C.cyan);
       void year;
     },
@@ -3567,14 +3646,26 @@ SECTIONS.money = async (ui) => {
     const me = p.me;
     const y = yearOf(g);
     const lg = me.ledger[y] || { income: 0, expense: 0, donations: 0, parties: 0 };
+    // the same gates as the core (holdFundraiser / donationBlock / hireStaff), shown before anything
+    // is asked: a newcomer is never offered 「一部を書かない（違法）」 for a party they cannot hold
+    const day = today(g);
+    const gap = num(POL.FUNDRAISER_GAP, 60);
+    const nextParty = num(me.lastParty, -999) + gap;
+    const live = (id) => !!id && p.elections.upcoming.some((x) => x.id === id && x.status !== 'done');
+    const running = live(me.candidacy) || live(me.intent && me.intent.election);
+    const partyWhy = !me.office && !me.posts.length ? '議員か党の役職についてから' : day < nextParty ? `次は${dateLabel(g, nextParty)}ごろから` : g.state.stamina < 15 ? '体力が足りない（15）' : null;
+    const donWhy = !me.office && !me.formerOffice && !running && !me.posts.includes('party_leader') ? '立候補を届け出てから（支援者が寄付してくれる）' : null;
+    const hireWhy = !me.office ? '議員・首長になってから' : null;
+    const involvedNow = involved(g) || !!uiData(g).retire;
     const items = [
-      { id: 'party', label: '政治資金パーティーを開く', sub: '月1回まで・体力15' },
-      { id: 'donate', label: '寄付を募る', sub: '1日1回・体力6' },
+      { id: 'party', label: '政治資金パーティーを開く', sub: partyWhy || `年に${Math.max(1, Math.round(YEAR_DAYS / gap))}回まで・体力15`, disabled: !!partyWhy, why: partyWhy },
+      { id: 'donate', label: '寄付を募る', sub: donWhy || '1日1回・体力6', disabled: !!donWhy, why: donWhy },
       { id: 'report', label: '収支報告書を出す', sub: me.reported[y - 1] && !me.reported[y - 1].auto ? `${y - 1}年分は提出ずみ` : `${y - 1}年分（3月末まで）` },
-      { id: 'hire', label: '私設秘書を雇う', sub: `いま${me.staff}人・月${fmtMoney(POL.STAFF_COST)}` },
+      { id: 'hire', label: '私設秘書を雇う', sub: hireWhy || `いま${me.staff}人・月${fmtMoney(POL.STAFF_COST)}`, disabled: !!hireWhy, why: hireWhy },
       { id: 'fire', label: '私設秘書を減らす', disabled: !me.staff, why: '秘書はいない' },
       { id: 'acts', label: '議員の活動', sub: '地元回り・記者会見・視察など', labelColor: C.cyan },
     ];
+    if (involvedNow) items.push({ id: 'retire', label: '進退（辞職・引退）', sub: me.office ? '議員辞職・政界引退の表明' : '政界引退・これまでの歩み', labelColor: '#ffb0b8' });
     const i = await ui.menu({ title: '政治資金・活動', listTitle: 'お金と活動', listW: 290, rowH: 34, items, index: idx,
       detail: (c, it, r) => {
         card(c, r.x, r.y, r.w, r.h, `${y}年の政治資金`);
@@ -3589,7 +3680,8 @@ SECTIONS.money = async (ui) => {
           yy += 70;
         }
         // the threshold is a sum in law (that year's yen): never converted by the era's price level
-        const desc = { party: y >= 1993 ? `券を売って資金を集める。1回のパーティーで${plainYen(partyTicketDisclosure(y))}を超えて買った人の名前は、収支報告書で公開される。` : '券を売って資金を集める。集めたお金は政治資金として収支報告書に載せる。', donate: y >= 2000 ? '支援者から寄付を募る。個人からの寄付には上限があり、企業・団体の寄付は政党などに限られる（2000年から）。' : '支援者から寄付を募る。寄付には上限があり、一定の額を超える寄付は収支報告書で公開される。', report: '1年間のお金の出入りを報告する。正直に書けば、ごまかしたお金も「修正」できる。', hire: '秘書がいると、活動や選挙運動の効果が上がる。給料は政治資金から。', fire: '秘書を減らして経費を下げる。', acts: '議員としての毎日の活動。地元の支持や評判が変わる。' }[it && it.id] || '';
+        if (it && it.disabled && it.why) { T(c, fit(c, `いまはできない：${it.why}`, w, 12), x, yy, 12, C.warn); yy += 18; }
+        const desc = { party: y >= 1993 ? `券を売って資金を集める。1回のパーティーで${plainYen(partyTicketDisclosure(y))}を超えて買った人の名前は、収支報告書で公開される。` : '券を売って資金を集める。集めたお金は政治資金として収支報告書に載せる。', donate: y >= 2000 ? '支援者から寄付を募る。個人からの寄付には上限があり、企業・団体の寄付は政党などに限られる（2000年から）。' : '支援者から寄付を募る。寄付には上限があり、一定の額を超える寄付は収支報告書で公開される。', report: '1年間のお金の出入りを報告する。正直に書けば、ごまかしたお金も「修正」できる。', hire: '秘書がいると、活動や選挙運動の効果が上がる。給料は政治資金から。', fire: '秘書を減らして経費を下げる。', acts: '議員としての毎日の活動。地元の支持や評判が変わる。', retire: '議員を辞めるか、政界からの引退を表明する。引退すれば、これまでの歩みが記録に残る。' }[it && it.id] || '';
         para(c, desc, x, yy, w, 12, C.text, 16, 6);
       },
       tip: (it) => ({ party: '政治資金パーティーの収入は、政治資金として報告が必要', report: '政治資金収支報告書は、原則として翌年3月末までに提出する', donate: '寄付の上限や公開のルールは、政治資金規正法で決められている' }[it && it.id] || '政治資金は、個人のお金とは分けて管理する'),
@@ -3597,6 +3689,7 @@ SECTIONS.money = async (ui) => {
     if (i < 0) return;
     idx = i;
     const id = items[i].id;
+    if (items[i].disabled) { if (items[i].why) ui.toast(items[i].why, C.dim); continue; }
     if (id === 'party') {
       const k = await ui.confirm({ title: '政治資金パーティー', text: '収入をどう報告する？', choices: ['全部、収支報告書に書く', '一部を書かない（違法）', 'やめておく'], tip: 'パーティー収入の一部を記載しない「裏金」は、政治資金規正法違反' });
       if (k < 0 || k === 2) continue;
@@ -3630,6 +3723,7 @@ SECTIONS.money = async (ui) => {
       const why = g.hireStaff(id === 'hire' ? 1 : -1);
       if (why) await ui.alert('秘書', why); else ui.toast(`秘書 ${polOf(g).me.staff}人`, C.good);
     } else if (id === 'acts') await SECTIONS.activities(ui);
+    else if (id === 'retire') await SECTIONS.retire(ui);
   }
 };
 SECTIONS.activities = async (ui) => {
@@ -3667,6 +3761,284 @@ SECTIONS.activities = async (ui) => {
     if (!r.ok) { ui.toast(r.why, C.dim); continue; }
     sfx(r.gaffe ? 'buzz' : 'good');
     await ui.alert(kinds[i], r.text.split('\n'));
+  }
+};
+
+// ================================================================ 進退（議員辞職・政界引退）
+// The core ends a career three ways: g.resignOffice (辞職 now: a 補選 or 繰上補充, the posts go to
+// NPCs, a PM's cabinet resigns), not filing for the office's next election (the term ends with it,
+// politics.js runElection), and g.leaveParty (a founder hands the party on). The UI adds the 会見,
+// the career card and, in flags.polui:
+//   retire { day, office, mode: 'term'|'now', done: day|undefined }   an announced retirement (term:
+//          serving out the term; the morning after the office ends it is done) / a finished one
+//   career [records]   the 「政治家としての歩み」 of each retirement (newest first; the notebook may read it)
+//   held { [post]: days }   posts held (the core keeps only pmDays / ministerDays)
+//   shugiDays, einen   days in the 衆議院 and the day of the 永年在職議員表彰 (25 years)
+const EINEN_DAYS = 25 * YEAR_DAYS;
+const MONTH_LEN = YEAR_DAYS / 12;
+function spanText(n) {
+  n = Math.max(0, Math.round(num(n)));
+  const y = Math.floor(n / YEAR_DAYS), m = Math.floor((n % YEAR_DAYS) / MONTH_LEN);
+  return y ? `${y}年${m ? `${m}か月` : ''}` : `${Math.max(1, m)}か月`;
+}
+const postRank = (x) => (x === 'pm' ? 0 : x === 'party_leader' ? 1 : POSTS[x] && POSTS[x].kind === 'cabinet' ? 2 : 3);
+function careerRecord(g, how) {
+  const p = polOf(g);
+  const me = p.me;
+  const d = uiData(g);
+  const day = today(g);
+  const fy = fyOf(g);
+  const held = { ...(d.held || {}) };
+  for (const x of me.posts) held[x] = Math.max(1, num(held[x]));
+  const posts = Object.keys(held).filter((x) => POSTS[x]).sort((a, b) => postRank(a) - postRank(b) || held[b] - held[a]).map((x) => (x === 'pm' ? '内閣総理大臣' : postName(x, fy, me.party))).filter((x, i, a) => a.indexOf(x) === i);
+  const laws = (p.laws || []).filter((l) => l.by === 'player');
+  const off = me.office || me.formerOffice;
+  // the first win (careerStart); an old save may only have the latest one (officeSince)
+  const start = me.careerStart ?? me.officeSince ?? null;
+  return {
+    day, date: dateLabel(g, day), how, name: playerName(g),
+    office: off && OFFICES[off] ? OFFICES[off].label : null, party: me.party ? partyFull(g, me.party) : '無所属',
+    since: start != null ? dateLabel(g, start) : null, span: start != null ? day - num(start) : 0,
+    won: (me.history || []).filter((h) => h && h.won && h.kind !== 'sosaisen').slice(0, 3).map((h) => h.label),
+    wins: num(me.wins), losses: num(me.losses), nationalWins: num(me.nationalWins), pmDays: num(me.pmDays), ministerDays: num(me.ministerDays),
+    posts: posts.slice(0, 6), laws: laws.length, lawTitles: laws.slice(-3).reverse().map((l) => l.title), einen: d.einen ? dateLabel(g, d.einen) : null,
+  };
+}
+function careerLine(rec) {
+  return rec.since ? `政治家として${spanText(rec.span)}・当選${rec.wins}回${rec.pmDays ? '・元総理大臣' : rec.ministerDays ? '・大臣経験者' : ''}` : `当選の経験はないまま、${rec.how}`;
+}
+// a finished retirement: the record, the phone news; queued for the card unless the UI shows it now
+function finishRetire(g, rec, o = {}) {
+  const d = uiData(g);
+  const day = today(g);
+  d.retire = { ...(d.retire || {}), day: d.retire ? d.retire.day : day, office: d.retire && d.retire.office, mode: (d.retire && d.retire.mode) || 'now', done: day };
+  const list = Array.isArray(d.career) ? d.career : (d.career = []);
+  list.unshift(rec);
+  if (list.length > 5) list.length = 5;
+  try { g.message({ from: 'ドット新聞 政治部', kind: 'news', text: `【政界引退】${g.state.name}さんが政界を引退した。\n${careerLine(rec)}。` }); } catch (e) { /* no phone in some tests */ }
+  if (o.queue) queue(g, { kind: 'career', id: `c${day}` });
+}
+// the morning: posts held, the years in the 衆議院 (永年在職議員表彰), the end of an announced retirement
+function trackCareer(g) {
+  if (!g.state || !g.state.politics) return;
+  const p = polOf(g);
+  const me = p.me;
+  const d = uiData(g);
+  const day = today(g);
+  if (d.careerDay === day) return;
+  d.careerDay = day;
+  if (me.posts.length) { const h = d.held && typeof d.held === 'object' ? d.held : (d.held = {}); for (const x of me.posts) h[x] = num(h[x]) + 1; }
+  if (me.office === 'shugi') {
+    if (d.shugiDays == null) d.shugiDays = Math.max(0, day - num(me.officeSince, day));
+    d.shugiDays = num(d.shugiDays) + 1;
+    if (d.shugiDays >= EINEN_DAYS && !d.einen) {
+      d.einen = day;
+      me.reputation = clamp(num(me.reputation) + 5, -100, 100);
+      if (g.addFame) g.addFame(60, true);
+      try { g.message({ from: '衆議院', kind: 'news', text: `${g.state.name}議員は、在職25年をむかえ、衆議院から永年在職議員として表彰されることになった。` }); } catch (e) { /* no phone */ }
+      queue(g, { kind: 'einen', id: 'einen' });
+    }
+  }
+  const R0 = d.retire;
+  const filed = p.elections.upcoming.some((e) => myDecl(e) && e.status !== 'done' && e.kind !== 'sosaisen');
+  // filed for an election after all (a place's 届出 window bypasses the UI's question): an
+  // announcement is withdrawn, a finished retirement becomes a comeback
+  if (R0 && (filed || (R0.done && me.office))) d.retire = null;
+  else if (R0 && !R0.done && !me.office) finishRetire(g, careerRecord(g, '任期満了で政界引退'), { queue: true });
+}
+// 会見 (press conference): lines [[speaker, text]], A to go on
+function pressView(g, o) {
+  const lines = o.lines;
+  const v = {
+    noChrome: true, k: 0, hint: 'A:つぎへ',
+    tip: () => o.tip || '',
+    update(ui, inp) {
+      if (g.auto) { ui.done(v, true); return; }
+      if (v.t > 14 && (inp.pressed('a') || inp.pressed('b'))) { sfx('cursor'); v.k++; v.t = 3; if (v.k >= lines.length) ui.done(v, true); }
+    },
+    draw(c) {
+      const t = num(v.t);
+      for (let i = 0; i < 5; i++) R(c, 0, i * 42, SW, 43, mix('#1a2242', '#283258', i / 5));
+      R(c, 0, 206, SW, SH - 206, '#3a3040');
+      // the backdrop with the event's name
+      R(c, 150, 18, SW - 300, 32, '#0e1534'); frame(c, 150, 18, SW - 300, 32, null, C.gold);
+      T(c, o.board, SW / 2, 26, 16, '#ffffff', 'center');
+      // the player behind the table, the microphones
+      drawSprite(c, g.state.look, SW / 2 - 32, 80, 2, 'down', 0);
+      R(c, 130, 152, SW - 260, 46, '#f0eee6'); R(c, 130, 152, SW - 260, 3, '#ffffff'); R(c, 130, 195, SW - 260, 3, '#c8c4b8');
+      const flags = ['#d63a3a', '#3a7bd5', '#e8c25a', '#5ee07a', '#b8a0ff', '#ff8a5a'];
+      flags.forEach((col, i) => { const mx = SW / 2 - 50 + i * 20; R(c, mx, 128, 3, 26, '#333'); R(c, mx - 2, 122, 7, 8, '#222'); R(c, mx - 4, 140, 11, 7, col); });
+      // reporters (from behind) and the cameras' flashes
+      for (let i = 0; i < 8; i++) drawSprite(c, LOOKS[CROWD[(i * 3) % CROWD.length]] || LOOKS.salaryman, 18 + i * 78, 196 + (i % 2) * 6, 1.4, 'up', 0);
+      for (let i = 0; i < 3; i++) {
+        const ph = (t + i * 17) % 41;
+        if (ph < 3) { const fx = 60 + Math.floor(hash2(i, Math.floor((t + i * 17) / 41), 5) * (SW - 120)), fy = 196 + Math.floor(hash2(i, Math.floor(t / 41), 9) * 30); c.globalAlpha = 0.85 - ph * 0.25; disc(c, fx, fy, 9, '#ffffff'); c.globalAlpha = 1; }
+      }
+      // the words
+      const [who, s] = lines[clamp(v.k, 0, lines.length - 1)];
+      frame(c, 40, 262, SW - 80, 80, 'rgba(10,15,38,0.94)', C.edge);
+      T(c, who, 54, 268, 12, who === '記者' ? C.cyan : C.gold);
+      para(c, s, 54, 286, SW - 108, 14, '#ffffff', 19, 3);
+      T(c, `${v.k + 1}/${lines.length}`, SW - 52, 268, 12, C.faint, 'right');
+      if (t > 14) downArrow(c, SW - 60, 326, t, C.gold);
+    },
+  };
+  return v;
+}
+function careerCardView(g, rec) {
+  const v = {
+    noChrome: true, hint: 'A:とじる',
+    tip: () => '引退したあとでも、また立候補することはできる（政界復帰）',
+    update(ui, inp) { if (g.auto || (v.t > 20 && (inp.pressed('a') || inp.pressed('b')))) { sfx('ok'); ui.done(v, true); } },
+    draw(c) {
+      tvBg(c, num(v.t));
+      const x = 96, y = 14, w = SW - 192, h = SH - 28;
+      paper(c, x, y, w, h);
+      const ink = C.ink;
+      T(c, '政治家としての歩み', x + w / 2, y + 12, 16, ink, 'center');
+      R(c, x + 28, y + 34, w - 56, 1, C.paperEdge);
+      T(c, fit(c, rec.name, w - 200, 16), x + 28, y + 42, 16, ink);
+      T(c, fit(c, rec.how, 160, 12), x + w - 28, y + 46, 12, C.inkDim, 'right');
+      let yy = y + 70;
+      const row = (a, b, max = 1) => { T(c, a, x + 28, yy, 12, C.inkDim); yy = para(c, b, x + 130, yy, w - 158, 12, ink, 16, max) + 3; };
+      row('最後の職', rec.office ? `${rec.office}（${rec.party}）` : `なし（${rec.party}）`);
+      row('政治家として', rec.since ? `${rec.since}の当選から ${spanText(rec.span)}` : rec.wins ? '—' : '当選の経験はない');
+      row('選挙', `当選${rec.wins}回${rec.nationalWins ? `（うち国政${rec.nationalWins}回）` : ''}・落選${rec.losses}回`);
+      if (rec.won && rec.won.length) row('当選した選挙', rec.won.join('・'), 2);
+      if (rec.pmDays) row('内閣総理大臣', spanText(rec.pmDays));
+      if (rec.ministerDays) row('国務大臣', spanText(rec.ministerDays));
+      if (rec.posts.length) row('主な役職', rec.posts.join('・'), 2);
+      row('成立させた法律', rec.laws ? `${rec.laws}本${rec.lawTitles.length ? `：${rec.lawTitles.map((s) => `「${s}」`).join('')}` : ''}` : 'なし', 3);
+      if (rec.einen) row('表彰', `永年在職議員表彰（${rec.einen}）`);
+      T(c, rec.date, x + w - 28, y + h - 30, 12, C.inkDim, 'right');
+      if (v.t > 18) {
+        const s2 = clamp((v.t - 18) / 8, 0, 1);
+        c.save(); c.translate(x + w - 70, y + h - 70); c.scale(1 + (1 - s2) * 0.6, 1 + (1 - s2) * 0.6); c.globalAlpha = s2;
+        stampArt(c, { x: -32, y: -32, w: 64, h: 64 }, /辞職/.test(rec.how) && !/引退/.test(rec.how) ? '辞職' : '引退', '#8a6a1a');
+        c.restore(); c.globalAlpha = 1;
+      }
+    },
+  };
+  return v;
+}
+// withdraw what the player has filed (or announced) before leaving politics
+function dropFilings(g) {
+  const p = polOf(g);
+  for (const e of p.elections.upcoming) if (myDecl(e) && e.status !== 'done') g.withdrawCandidacy(e.id);
+  if (p.me.intent) p.me.intent = null;
+}
+SECTIONS.retire = async (ui) => {
+  const g = ui.g;
+  if (!involved(g) && !uiData(g).retire) { await ui.alert('進退', 'まだ政治家としての歩みはない。\n選挙に立候補するか、政党に入ってから。'); return; }
+  let idx = 0;
+  for (let guard = 0; guard < 30; guard++) {
+    const p = polOf(g);
+    const me = p.me;
+    const d = uiData(g);
+    const ann = d.retire && !d.retire.done ? d.retire : null;
+    const done = d.retire && d.retire.done ? d.retire : null;
+    const O = me.office ? OFFICES[me.office] : null;
+    const exec = O && O.level === 'exec';
+    const items = [];
+    if (O) items.push({ id: 'resign', label: exec ? `${O.short}を辞職する` : '議員辞職', sub: 'いまの職を辞める（また立候補はできる）', labelColor: '#ffb0b8' });
+    if (O && !ann) items.push({ id: 'announce', label: '政界引退を表明', sub: '任期の終わりまで務め、次の選挙に出ない' });
+    if (ann) items.push({ id: 'undo', label: '引退表明を撤回する', sub: '次の選挙に出られるようになる（評判↓）' });
+    if (O || !done) items.push({ id: 'now', label: O ? '辞職して、いますぐ政界引退' : '政界引退を表明', sub: O ? '職も党の役職も退く' : '党の役職も退く', labelColor: '#ffb0b8' });
+    if (Array.isArray(d.career) && d.career.length) items.push({ id: 'card', label: '政治家としての歩み', sub: `${d.career[0].date}の記録`, labelColor: C.cyan });
+    const preview = careerRecord(g, '');
+    const i = await ui.menu({ title: '進退', listTitle: '政治家としての進退', listW: 300, rowH: 34, items, index: idx,
+      detail: (c, it, r) => {
+        card(c, r.x, r.y, r.w, r.h, it && it.id === 'card' ? '記録' : 'これまでの歩み');
+        const x = r.x + 10, w = r.w - 20;
+        let y = r.y + 26;
+        const line2 = (a, b, col = C.text) => { T(c, a, x, y, 12, C.dim); T(c, fit(c, b, w - 96, 12), x + w, y, 12, col, 'right'); y += 17; };
+        line2('いまの立場', O ? O.label : me.formerOffice ? `元${OFFICES[me.formerOffice].short}` : '民間人', O ? C.gold : C.text);
+        line2('政治家として', preview.since ? spanText(preview.span) : preview.wins ? '—' : '当選の経験はない');
+        line2('当選・落選', `${preview.wins}回・${preview.losses}回`);
+        if (preview.pmDays) line2('総理大臣', spanText(preview.pmDays), C.gold);
+        if (preview.ministerDays) line2('大臣', spanText(preview.ministerDays));
+        line2('成立させた法律', `${preview.laws}本`);
+        if (ann) { T(c, '引退を表明している（任期まで務める）', x, y, 12, C.warn); y += 17; }
+        if (done && !O) { T(c, fit(c, `${dateLabel(g, done.done)}に政界を引退した`, w, 12), x, y, 12, C.dim); y += 17; }
+        y += 6;
+        R(c, x - 4, y - 4, w + 8, 1, C.edge);
+        const pr = !!(me.prElected || /比例/.test(String(me.district || '')));
+        const desc = {
+          resign: `${exec ? '任期の途中で職を退く（議会の議長に申し出る）。' : '議長の許可を得て、議員を辞める（会期中は本会議で許可）。'}${O && (O.level === 'national') ? (pr ? '比例代表の議席は、名簿の次の人に移る（繰上補充）。' : '空いた議席は補欠選挙で埋まる。') : '欠員は補欠選挙などで埋まる。'}${p.cabinet.pm === 'player' ? '総理大臣が議員を辞めれば、内閣は総辞職する。' : inCabinet(me) ? '大臣も退く。' : ''}`,
+          announce: '次の選挙には立候補しないと表明する。任期の終わり（衆議院なら解散でも）まで、これまでどおり務める。後継は地元の有権者が選ぶ。',
+          undo: '表明を取り消して、次の選挙に出られるようにする。「話が違う」という声で、評判は少し下がる。',
+          now: O ? 'いますぐ職を辞めて、政界から身を引く。党の役職も後進にゆずる（自分の党は、ほかの議員に託す）。' : '政界から身を引くと表明する。党の役職も後進にゆずる。',
+          card: '引退のときにまとめた、政治家としての記録。',
+        }[it && it.id] || '';
+        para(c, desc, x, y + 2, w, 12, C.text, 16, 8);
+      },
+      tip: () => '政治家の進退は、自分で決めるもの。表明のしかたで評判も変わる',
+    });
+    if (i < 0) return;
+    idx = i;
+    const it = items[i];
+    if (it.disabled) continue;
+    if (it.id === 'card') { await ui.open(careerCardView(g, d.career[0])); continue; }
+    if (it.id === 'undo') {
+      const k = await ui.confirm({ title: '引退表明の撤回', text: '引退の表明を取り消す？\n次の選挙に立候補できるようになるが、評判は少し下がる。', choices: ['撤回する', 'やめておく'] });
+      if (k !== 0) continue;
+      d.retire = null;
+      me.reputation = clamp(num(me.reputation) - 3, -100, 100);
+      ui.toast('引退表明を撤回した', C.warn);
+      continue;
+    }
+    if (it.id === 'announce') {
+      const filed = p.elections.upcoming.some((e) => myDecl(e) && e.status !== 'done') || !!me.intent;
+      const k = await ui.confirm({ title: '政界引退を表明', w: 460, text: `次の選挙には立候補せず、${O.label}の任期かぎりで政界を引退すると表明する？\n任期中は、これまでどおり務める。${filed ? '\n届け出ている立候補（出馬表明）は取り下げる。' : ''}`, choices: ['表明する', 'やめておく'], tip: '引退の表明は、後援会や党の候補者選びにも関わる' });
+      if (k !== 0) continue;
+      dropFilings(g);
+      d.retire = { day: today(g), office: me.office, mode: 'term' };
+      await ui.open(pressView(g, { board: '引退表明 記者会見', tip: '引退の表明は、地元の後援会や党に先に伝えるのがならわし', lines: [
+        [playerName(g), `次の選挙には立候補いたしません。${O.label}としての今期をもって、政界を引退いたします。`],
+        [playerName(g), '残りの任期は、最後の一日まで全力で務めます。'],
+        ['記者', '後継はどうされますか？'],
+        [playerName(g), 'それは地元の皆さまが選ぶことです。新しい人が出てくることを願っています。'],
+      ] }));
+      ui.toast('引退を表明した（任期まで務める）', C.gold);
+      continue;
+    }
+    if (it.id === 'resign' || it.id === 'now') {
+      const full = it.id === 'now';
+      const pm = p.cabinet.pm === 'player';
+      const k = await ui.confirm({ title: full ? '政界引退' : it.label, danger: true, w: 460,
+        text: full
+          ? `${O ? `${O.label}を辞職し、` : ''}政界から引退する？${pm ? '\n内閣は総辞職する。' : ''}\n党の役職も退く。あとで復帰することもできる。`
+          : `${O.label}を辞職する？${pm ? '\n総理大臣のあなたが辞職すれば、内閣は総辞職する。' : ''}\nあとで、また立候補することはできる。`,
+        choices: [full ? '引退しない' : '辞職しない', full ? '引退する' : '辞職する'], index: 0, cancel: 0 });
+      if (k !== 1) continue;
+      const rec = careerRecord(g, full ? (O ? '辞職して政界引退' : '政界引退') : `${exec ? '' : '議員'}辞職`);
+      dropFilings(g);
+      if (O && !g.resignOffice(full ? '政界引退' : exec ? '辞職' : '議員辞職')) { await ui.alert('辞職', g.lastPoliticsError || '辞職できなかった。'); continue; }
+      if (full || ann) {
+        // the party posts go to others; a founder hands the party on (the core dissolves it when empty)
+        const me2 = polOf(g).me;
+        const pt = p.parties[me2.party];
+        if (pt && pt.leader === 'player') g.leaveParty({ why: '政界引退' });
+        else for (const x of me2.posts.slice()) if (POSTS[x] && POSTS[x].kind === 'party') g.resignPost(x, '政界引退');
+        if (!full) rec.how = '辞職して政界引退';
+        finishRetire(g, rec);
+      }
+      const name = playerName(g);
+      await ui.open(pressView(g, full || ann ? { board: '引退 記者会見', tip: '引退しても、党員として、また一人の有権者として政治に関わることはできる', lines: [
+        [name, O ? `本日、${exec ? '議会の議長に退職を申し出ました' : '議長に辞職願を提出しました'}。政界を引退いたします。` : '本日をもって、政界を引退いたします。'],
+        [name, '支えてくださった皆さまに、心から感謝申し上げます。'],
+        ['記者', '心残りはありますか？'],
+        [name, rec.laws ? `「${rec.lawTitles[0]}」を形にできたことは、私の誇りです。あとは次の世代に託します。` : '志なかばのことも多くあります。後に続く人たちに託します。'],
+      ] } : { board: '辞職 記者会見', tip: exec ? '首長が任期の途中で辞めると、選挙で新しい首長を選ぶ' : '国会議員の辞職は、会期中は本会議で、閉会中は議長が許可する（国会法107条）', lines: [
+        [name, `本日、${exec ? '議会の議長に退職を申し出ました' : '議長に辞職願を提出しました'}。`],
+        [name, 'ご迷惑をおかけする皆さまには、申し訳なく思っています。'],
+        ['記者', '今後はどうされますか？'],
+        [name, 'しばらくは一人の民間人として、地元を歩きます。'],
+      ] }));
+      if (full || ann) await ui.open(careerCardView(g, rec));
+      else ui.toast(`${O.label}を辞職した`, C.dim);
+      return;
+    }
   }
 };
 

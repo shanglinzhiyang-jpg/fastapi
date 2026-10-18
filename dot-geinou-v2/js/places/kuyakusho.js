@@ -35,7 +35,7 @@ import { makeCanvas, shade, mix, fmtMoney, clamp, hash2 } from '../engine/util.j
 import { registerSong } from '../engine/audio.js';
 import { registerItem } from '../engine/state.js';
 import { onMorning } from '../engine/life.js';
-import { YEAR_DAYS, ageOf } from '../engine/profile.js';
+import { YEAR_DAYS, ageOf, PREFECTURES } from '../engine/profile.js';
 import * as POL from '../engine/politics.js';
 import * as JUS from '../engine/crime.js';
 import { VoteScene, seatKey, paintSeat, ZL, schematicLayout, seatParties, chairColor, memberLooks, exchange, LOCAL_Q_ROUNDS, actText, fitPages } from './kokkai.js';
@@ -461,16 +461,38 @@ const OFFICE_NOTE = {
 function officeName(off) { return (POL.OFFICES && POL.OFFICES[off] && POL.OFFICES[off].label) || off; }
 async function senkanTalk(g) {
   const w = say(WHO.senkan);
-  const items = ['選挙の予定', '立候補の届出', '立候補をやめる', '被選挙権と供託金', '選挙運動のきまり', 'なんでもない'];
-  const k = await g.list({ title: '選挙管理委員会', items, x: 160, y: 60, w: 300, px: true });
-  const pick = items[k];
-  if (pick === '選挙の予定') await schedule(g);
-  else if (pick === '立候補の届出') await rikkouho(g);
-  else if (pick === '立候補をやめる') await withdraw(g);
-  else if (pick === '被選挙権と供託金') await eligibilityInfo(g);
-  else if (pick === '選挙運動のきまり') await campaignRules(g);
-  else await g.say('選挙のことなら、いつでもどうぞ。', w);
+  const items = ['選挙の予定', '立候補の届出', '届出の手続き', '立候補をやめる', '被選挙権と供託金', '選挙運動のきまり', 'なんでもない'];
+  // the counter keeps taking questions until the player is done (bounded, like the party reception)
+  for (let n = 0; n < 8; n++) {
+    const k = await g.list({ title: '選挙管理委員会', items, x: 160, y: 60, w: 300, px: true, describe: () => (n ? 'ほかに、ご用件はありますか？' : '選挙管理委員会です。ご用件をどうぞ。') });
+    const pick = items[k];
+    if (pick === '選挙の予定') await schedule(g);
+    else if (pick === '立候補の届出') await rikkouho(g);
+    else if (pick === '届出の手続き') await procedureInfo(g);
+    else if (pick === '立候補をやめる') await withdraw(g);
+    else if (pick === '被選挙権と供託金') await eligibilityInfo(g);
+    else if (pick === '選挙運動のきまり') await campaignRules(g);
+    else break;
+  }
+  await g.say('選挙のことなら、いつでもどうぞ。', w);
 }
+// The filing procedure (shown once before the first filing list, then on request).
+async function procedureInfo(g) {
+  g.setFlag('senkan_proc', true);
+  await g.say(['立候補の手続きをご案内します。', 'まず立候補予定者説明会に出て、書類の事前審査を受けます。\n届出は告示（公示）の日の、午前8時30分から午後5時まで。', '供託金は法務局（供託所）に納め、その証明書を添えます。\n得票が一定に届かないと、供託金は没収されます。', '（ゲームでは、告示日までにこの窓口で手続きすれば\n届出したことになります。供託金もここで納めます）'], say(WHO.senkan));
+}
+// A by-election outside Tokyo is filed with that prefecture's 選挙長, not at a Tokyo ward office.
+function prefOfDistrict(e) {
+  if (!e || e.kind !== 'hosen') return null;
+  const d = String(e.district || '');
+  let best = null;
+  for (const pr of Object.values(PREFECTURES)) {
+    const short = String(pr.name).replace(/[都府県]$/, '');
+    if (d.startsWith(short) && (!best || short.length > best.short.length)) best = { name: pr.name, short };
+  }
+  return best;
+}
+const awayHosen = (e) => { const pf = prefOfDistrict(e); return !!pf && pf.name !== '東京都'; };
 async function schedule(g) {
   const w = say(WHO.senkan);
   const list = electionsOf(g);
@@ -484,16 +506,38 @@ async function rikkouho(g) {
   const mine = electionsOf(g).find((e) => e.declared);
   if (mine) { await g.say([`${mine.label}に、立候補を届け出ていますね。`, `投票日は${mine.date}です。ご健闘を。`], w); return; }
   if (!list.length) { await g.say(['いま届出を受け付けられる選挙はありません。', '（届出は、公示・告示の日まで）'], w); return; }
-  await g.say(['立候補の手続きをご案内します。', 'まず立候補予定者説明会に出て、書類の事前審査を受けます。\n届出は告示（公示）の日の、午前8時30分から午後5時まで。', '供託金は法務局（供託所）に納め、その証明書を添えます。\n得票が一定に届かないと、供託金は没収されます。', '（ゲームでは、告示日までにこの窓口で手続きすれば\n届出したことになります。供託金もここで納めます）'], w);
-  const items = list.slice(0, 7).map((e) => ({ label: e.label.length > 15 ? e.label.slice(0, 14) + '…' : e.label, right: fmtMoney(typeof g.depositInternal === 'function' ? g.depositInternal(e.office) : 0) }));
-  const k = await g.list({ title: 'どの選挙に立候補する？', items: [...items, { label: 'やめる' }], x: 100, y: 56, w: 440, px: true, describe: (i) => (i < list.length ? `${list[i].label}：告示 ${list[i].kojiDate}・投票 ${list[i].date}（供託金は右）` : 'またにする') });
-  const e = list[k];
+  if (!g.flag('senkan_proc')) await procedureInfo(g);
+  const homeId = g.state.profile && g.state.profile.hometown;
+  const homeName = homeId && PREFECTURES[homeId] ? PREFECTURES[homeId].name : null;
+  // by-elections in other prefectures are marked: their 届出先 is that prefecture's 選挙長
+  const shortLabel = (e) => (awayHosen(e) ? `［${prefOfDistrict(e).name === homeName ? 'ふるさと' : '県外'}］${e.label.replace(/^衆議院/, '衆院').replace(/^参議院/, '参院').replace(/補欠選挙$/, '補選')}` : e.label);
+  const shown = list.slice(0, 8);
+  const items = shown.map((e) => { const l = shortLabel(e); return { label: l.length > 15 ? l.slice(0, 14) + '…' : l, right: fmtMoney(typeof g.depositInternal === 'function' ? g.depositInternal(e.office) : 0) }; });
+  const where = (e) => { const pf = prefOfDistrict(e); return pf && pf.name !== '東京都' ? `\n届出先は${pf.name}の選挙長${pf.name === homeName ? '（ふるさと）' : ''}。この窓口でも取り次ぎます。` : ''; };
+  const p0 = pol(g);
+  const intent = (e) => (p0 && p0.me && p0.me.intent && p0.me.intent.election === e.id ? '（出馬表明ずみ）' : '');
+  const k = await g.list({ title: 'どの選挙に立候補する？', items: [...items, { label: 'やめる' }], x: 100, y: 56, w: 440, px: true, describe: (i) => (i < shown.length ? `${shown[i].label}${intent(shown[i])}\n告示 ${shown[i].kojiDate}・投票 ${shown[i].date}（供託金は右）${where(shown[i])}` : 'またにする') });
+  const e = shown[k];
   if (!e) return;
   const note = OFFICE_NOTE[e.office] || { age: 25 };
   // 被選挙権 first: the age on 投票日 (公選法10条2項), 公民権. The deposit is checked when filing.
   const why = g.eligible(e.office, { day: e.day, noMoney: true });
   if (why) {
     await g.say(/歳/.test(why) ? [`${officeName(e.office)}の被選挙権は、投票日に満${note.age}歳以上であることです。`, `申し訳ありません。\n（${why}）`] : [`申し訳ありません。届出は受け付けられません。\n（${why}）`], w);
+    return;
+  }
+  // 届出 opens about 30 game days before the vote (politics.js); before that only a 出馬表明 is possible
+  if (e.day - today(g) > 30) {
+    let lb = '';
+    try { lb = POL.dateLabel(g, e.day - 30); } catch (err) { lb = date(g, e.day - 30).short; }
+    await g.say([`${e.label}の届出の受付は、\n${lb}ごろからです。その時期に、またお越しください。`], w);
+    const m0 = me(g);
+    if (m0 && m0.intent && m0.intent.election === e.id) { await g.say(`（出馬は、もう表明してある。\n　${lb}を過ぎたら、またこの窓口で届け出よう）`); return; }
+    const c0 = await g.ask(['（いまできるのは、出馬を表明しておくことだけだ。\n　表明すれば、支援者からの寄付も集まりはじめる）', ...(m0 && m0.party ? ['（党の公認は、党本部の選挙対策本部で\n　先に申請しておける）'] : [])], ['出馬を表明する', 'やめておく'], { cancel: 1 });
+    if (c0 !== 0) return;
+    g.declareCandidacy(e.id, {}); // before the window this only records the 出馬表明 (not binding)
+    g.sfx('ok');
+    await g.say([`（後援会と記者に、${e.label}への出馬を表明した）`, `（${lb}を過ぎたら、またこの窓口で届け出よう）`]);
     return;
   }
   const opts = {};
@@ -544,10 +588,11 @@ async function rikkouho(g) {
   const depLine = partyPays
     ? `比例代表の供託金（1人${prMan}）は、名簿を届け出る政党が納めます。`
     : `供託金は${fmtMoney(dep)}。政治資金から、足りなければ所持金から納めます。${opts.proportional === true && e.office === 'shugi' ? '\n（比例代表の分は、政党が納めます）' : ''}`;
-  const c = await g.ask([`${e.label}に立候補します。`, `${depLine}${note.home ? '\n（この選挙は、その地域に3か月以上住んでいることも条件です）' : ''}`], ['届け出る', 'やめておく'], { ...w, cancel: 1 });
+  const away = awayHosen(e) ? prefOfDistrict(e).name : null;
+  const c = await g.ask([`${e.label}に立候補します。`, `${depLine}${note.home ? '\n（この選挙は、その地域に3か月以上住んでいることも条件です）' : ''}`, ...(away ? [`${away}の補欠選挙なので、届出先は${away}の選挙長です。\n書類は、この窓口から取り次ぎます。\n（国政選挙は、住んでいない地域からも立候補できます）`] : [])], ['届け出る', 'やめておく'], { ...w, cancel: 1 });
   if (c !== 0) return;
   const r = g.declareCandidacy(e.id, opts);
-  if (r) { await g.say(`申し訳ありません。届出を受理できませんでした。\n（${r}）`, w); return; }
+  if (r) { await g.say(['申し訳ありません。届出を受理できませんでした。', `（${r}）`], w); return; }
   g.sfx('fanfare');
   await g.say(['届出を受理しました。', `${e.kojiDate}の${e.office === 'shugi' || e.office === 'sangi' ? '公示' : '告示'}から、選挙運動ができます。\n投票日は${e.date}です。`, '告示の前に「投票してください」と頼むのは事前運動で、\n禁止されています。いまは、ふだんの政治活動だけです。', 'ポスターは、区が設ける公営の掲示場に。\n戸別訪問や、物やお金を配ることは犯罪です。'], w);
 }
@@ -575,7 +620,22 @@ async function eligibilityInfo(g) {
       ? '得票が一定に届かないと、供託金は没収されます。\n（区議は有効投票÷定数の10分の1、衆議院（中選挙区）は\n5分の1、区長・知事は有効投票の10分の1など）'
       : '得票が一定に届かないと、供託金は没収されます。\n（区議は有効投票÷定数の10分の1、区長・知事・衆院小選挙区は\n有効投票の10分の1など）',
     `${y > 2025 || (y === 2025 && date(g).month >= 6) ? '拘禁刑' : '禁錮'}以上の刑の執行中や、選挙違反などで\n公民権が停止されている間は、立候補も投票もできません。`,
+    myAgeLine(g),
   ], w);
+}
+// The player's own age and when they reach 25 / 30 (公選法10条: the age on 投票日 counts).
+function myAgeLine(g) {
+  const age = ageOf(g.state);
+  const pr = g.state.profile;
+  const when = (min) => {
+    const d = pr ? (min - pr.age) * YEAR_DAYS + 1 : today(g); // the first day ageOf() reaches min
+    let lb = '';
+    try { lb = POL.dateLabel(g, d); } catch (e) { lb = date(g, d).short; }
+    return `${lb}ごろ・あと${Math.max(1, d - today(g))}日`;
+  };
+  if (age >= 30) return `あなたは いま満${age}歳。\nどの選挙にも立候補できる年齢です。`;
+  if (age >= 25) return `あなたは いま満${age}歳。\n区議・区長・都議・衆議院には立候補できます。\n知事・参議院は30歳から（${when(30)}）。`;
+  return `あなたは いま満${age}歳。立候補は25歳から（${when(25)}）。\n投票日に25歳になっていれば、届け出られます。`;
 }
 async function campaignRules(g) {
   const w = say(WHO.senkan);

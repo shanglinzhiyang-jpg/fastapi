@@ -27,7 +27,7 @@
 // and npcTalk, before: a declined proposal asked again, after: the first phone message) and
 // PEOPLE_UI.extras (コンビを組もう / 気持ちを伝える after they asked once, 豚まん at the 大将).
 
-import { registerPerson, PEOPLE, PEOPLE_UI, HANGOUTS, heartIndex, onMorning } from '../engine/life.js';
+import { registerPerson, PEOPLE, PEOPLE_UI, HANGOUTS, heartIndex, onMorning, isKansai } from '../engine/life.js';
 import { registerItem, ITEMS, RANKS, rankIndex } from '../engine/state.js';
 import { LOOKS } from '../engine/sprites.js';
 import { fmtMoney } from '../engine/util.js';
@@ -92,6 +92,217 @@ async function cut(g, sfx = 'applause') {
 
 const isPartner = (g, id) => g.state.partner === id;
 const isSpecial = (g, id) => !!(g.state.people[id] && g.state.people[id].special);
+
+// ======================================================================== the justice core: how people take it
+// An arrest, a conviction, a term inside or a scandal reaches the people close to you (♥ 友だち+,
+// the 相方 and the 大切な人 always): each texts once, in their own way, and how they feel changes —
+// some stand by you, some worry and are let down, some keep away for a while (away: no small talk).
+// Small talk and invitations stop for HUSH_ARREST days after an arrest; after a release the ones who
+// stood by you say おかえり. The 相方 puts the combi on hold after the arrest of a known face and,
+// after a 実刑 for a grave or violent offence (or with a cool bond), ends it. Chats never lighten the news.
+// State: flags.people_jus { arrest, release, scandal, crime, told: { id: stance }, away: { id: untilDay }, combiPause }.
+const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+const HUSH_ARREST = 7, HUSH_RELEASE = 3, AWAY_DAYS = 30, MAX_REACT = 3;
+// small talk about watching the player's show (left out while the player is off the air)
+const SAW_SHOW = /\{name\}(さん|どの|ちゃん)?の(出てる|出ている)?番組|あんたの(番組|テレビ)/;
+// grave / violent offences and ties to 暴力団: most people step back
+const HEAVY = new Set(['robbery', 'assault', 'antisocial_ties', 'fraud_courier', 'bribery_take']);
+const STANCE = {
+  oya: 'support', jiro: 'support', haruto: 'support', chiyo: 'support', tamae: 'support', taisho: 'support', korosuke: 'support',
+  mio: 'worry', maruyama: 'worry', kaori: 'worry', emikawa: 'worry', momo: 'worry',
+  hinata: 'distance', asagiri: 'distance', yoruno: 'distance', takeru: 'distance',
+};
+const JUS_LINES = {
+  oya: { arrest: '{name}ちゃん、ニュースで見たわよ…。\nお部屋は、そのままにしてあるからね。\nちゃんと、正直に話すのよ。', release: 'おかえりなさい、{name}ちゃん。\nあったかいお茶、いれてあるわよ。\nまずは、ゆっくり眠りなさいね。' },
+  jiro: { arrest: 'ニュース見たで…。\nなにしとんねん、ほんまに。\n…ちゃんと話してこい。待っとるから。', release: '出てきたんか。\n…おかえり。\nまた一から、やろうや。' },
+  haruto: { arrest: 'ニュースを見ました。\n…正直、まだ信じられません。\nでも、ちゃんと向き合ってください。待っています。', release: 'おかえりなさい。\nまた、お店に寄ってください。\n話なら、いくらでも聞きます。' },
+  maruyama: { arrest: 'ニュースを拝見したでござる…。\n罪は罪、きちんと償うでござるよ。\n拙者、それだけは言っておくでござる。', release: 'おかえりでござる。\n一からやり直すのに、遅すぎることはないでござるよ。' },
+  mio: { arrest: 'ニュース、見たわ。\n…がっかりした、とだけ言っておく。\n逃げないで、ちゃんと向き合いなさい。', release: '出てきたのね。\n…やり直す気があるなら、見ていてあげる。' },
+  hinata: { arrest: 'ニュースを見て、びっくりしました…。\n事務所から、しばらく連絡はひかえるように言われてしまって。\nごめんなさい。' },
+  asagiri: { arrest: 'きょうのニュースで、{name}さんの件を読みました。\n原稿に、私情ははさめません。\n…どうか、誠実に。' },
+  yoruno: { arrest: '番組のほうは、こちらでなんとかします。\n…しばらく、ご連絡はひかえます。' },
+  kaori: { arrest: 'ニュースで知ったよ。\n…なんでなの？\nちゃんと話してくれるの、待ってるからね。', release: 'おかえり。\n…今度、ゆっくり話そう。' },
+  emikawa: { arrest: 'ニュースを見ました…。\nぼくの立場では、何も言えないのが悔しいです。\nどうか、正直に。', release: 'おかえりなさい。\nまずは体を休めてください。\nこれからのことは、それからです。' },
+  momo: { arrest: 'ニュース見た。\n…笑えないよ、これは。\nちゃんと反省して、ちゃんと戻ってきて。', release: 'おかえり。\n…正直、まだ怒ってる。\nでも、おかえり。' },
+  chiyo: { arrest: 'ニュースを聞いたわ。\n…待つのは、慣れているの。\nでも、きちんと償ってちょうだい。', release: 'おかえりなさい。\n…待っていたわ。' },
+  tamae: { arrest: 'ニュース見たで！あんた、なにやっとんの！\n…ちゃんと反省するんやで。\nおばちゃんは、見捨てへんからな。', release: 'おかえり！\n…やせたんちゃう？\nおばちゃんとこで、ごはん食べていき！' },
+  takeru: { arrest: 'ニュース見ました…。\n正直、ショックです。\nしばらく、連絡はひかえます。' },
+  korosuke: { arrest: 'ニュース見ました…。\n座長も、みんなも、心配してます。\nちゃんと戻ってきてくださいね。', release: 'おかえりなさい！\nまた一緒に舞台に立てる日、待ってます！' },
+  taisho: { arrest: 'ニュース見たわ。\n…出てきたら、店に来い。\n説教と、たこ焼きや。', release: '…おかえり。\n約束どおり、たこ焼き焼いたるわ。' },
+};
+// generic lines (people without their own): by stance, then 関西弁 / です・ます / plain
+const JUS_GENERIC = {
+  arrest: {
+    support: { k: 'ニュース見たで…。\nびっくりしたわ。でも、話はちゃんと聞くからな。', p: 'ニュースを見ました…。\n驚きました。でも、お話はちゃんと聞きます。', n: 'ニュース見たよ…。\nびっくりした。でも、話はちゃんと聞くから。' },
+    worry: { k: 'ニュース見たで。\n…なんでや。ちゃんと向き合うて、償いや。', p: 'ニュースを見ました。\n…どうして、と思っています。\nきちんと向き合ってください。', n: 'ニュース見た。\n…どうして？\nちゃんと向き合って、ちゃんと償って。' },
+    distance: { k: 'ニュース見たで。\n…しばらく、連絡はひかえるわ。', p: 'ニュースを見ました。\n…しばらく、ご連絡はひかえます。', n: 'ニュース見た。\n…しばらく、連絡はひかえるね。' },
+  },
+  scandal: {
+    support: { k: '記事、読んだで。\n…ほんまのとこ、ちゃんと聞かせてや。', p: '記事を読みました。\n…本当のところを、聞かせてください。', n: '記事、読んだよ。\n…本当のところ、ちゃんと聞かせて。' },
+    worry: { k: '記事、読んだで。\n…信じたいけど、ちゃんと説明してや。', p: '記事を読みました。\n…信じたいです。でも、きちんと説明してください。', n: '記事、読んだ。\n…信じたいけど、ちゃんと説明して。' },
+    distance: { k: '記事、読んだで。\n…悪いけど、しばらく距離おかせてもらうわ。', p: '記事を読みました。\n…しばらく、距離をおかせてください。', n: '記事、読んだ。\n…ごめん、しばらく距離をおかせて。' },
+  },
+  // not in the news (an unknown face, or a minor: 少年法61条): they hear of it from others
+  heard: {
+    support: { k: '話、聞いたで…。\nびっくりしたわ。でも、話はちゃんと聞くからな。', p: 'お話、聞きました…。\n驚きました。でも、ちゃんと聞きます。', n: '話、聞いたよ…。\nびっくりした。でも、話はちゃんと聞くから。' },
+    worry: { k: '話、聞いたで。\n…なんでや。ちゃんと向き合うて、償いや。', p: 'お話、聞きました。\n…どうして、と思っています。\nきちんと向き合ってください。', n: '話、聞いた。\n…どうして？\nちゃんと向き合って、ちゃんと償って。' },
+    distance: { k: '話、聞いたで。\n…しばらく、連絡はひかえるわ。', p: 'お話、聞きました。\n…しばらく、ご連絡はひかえます。', n: '話、聞いた。\n…しばらく、連絡はひかえるね。' },
+  },
+  release: { k: 'おかえり。\n…また、ゆっくり話そな。', p: 'おかえりなさい。\nまた、ゆっくりお話ししましょう。', n: 'おかえり。\n…また、ゆっくり話そう。' },
+};
+const voice = (P) => (isKansai(P) ? 'k' : P.polite ? 'p' : 'n');
+function jusState(g) {
+  const fl = g.state.flags;
+  if (!fl.people_jus || typeof fl.people_jus !== 'object') fl.people_jus = {};
+  const J = fl.people_jus;
+  if (!J.told || typeof J.told !== 'object') J.told = {};
+  if (!J.away || typeof J.away !== 'object') J.away = {};
+  return J;
+}
+// The people who hear it first: the 相方, the 大切な人, then friends (♥ 友だち+) by affection.
+function closeOnes(g, n = MAX_REACT) {
+  const st = g.state;
+  const ids = Object.keys(st.people || {}).filter((id) => PEOPLE[id] && PEOPLE[id].kind !== 'family' && st.people[id].contact !== false
+    && (st.partner === id || st.people[id].special || g.aff(id) >= 35));
+  const rank = (id) => g.aff(id) + (st.partner === id ? 200 : 0) + (st.people[id].special ? 150 : 0);
+  return ids.sort((a, b) => rank(b) - rank(a)).slice(0, n);
+}
+const stanceOf = (g, id, crime) => {
+  const s = STANCE[id] || 'worry';
+  // grave offences and 暴力団 ties: the worried step back, the loyal still worry; the 相方 / 大切な人 stay
+  if (HEAVY.has(crime) && g.state.partner !== id && !(g.state.people[id] && g.state.people[id].special)) return s === 'support' ? 'worry' : 'distance';
+  return s;
+};
+function jusText(g, id, kind, stance) {
+  const P = PEOPLE[id];
+  const own = JUS_LINES[id] && JUS_LINES[id][kind];
+  if (own && !(kind === 'arrest' && stance !== (STANCE[id] || 'worry'))) return own;
+  const gen = JUS_GENERIC[kind];
+  const t = kind === 'release' ? gen : gen[stance] || gen.worry;
+  return t[voice(P)] || t.n;
+}
+function jusSend(g, id, text) {
+  const P = PEOPLE[id];
+  const p = g.meet(id);
+  if (!P || !p) return;
+  p.msgDay = g.state.day;
+  g.message({ from: P.name, person: id, kind: 'chat', text: flat(g.fmt(text)) });
+}
+// arrested / a scandal in the news: everyone close feels it (affection by stance and gravity);
+// the closest MAX_REACT text you once each
+function jusReact(g, crime, kind) {
+  const st = g.state, day = st.day;
+  const J = jusState(g);
+  const heavy = HEAVY.has(crime);
+  const known = st.fame >= 100;
+  J.told = {};
+  closeOnes(g, 20).forEach((id, n) => {
+    const stance = stanceOf(g, id, crime);
+    J.told[id] = stance;
+    const d = stance === 'support' ? (heavy ? -2 : 0) : stance === 'worry' ? (heavy ? -6 : -2) : (heavy ? -10 : -4);
+    if (d) g.addAff(id, d, true);
+    if (stance === 'distance') J.away[id] = day + AWAY_DAYS;
+    let text = jusText(g, id, kind, stance);
+    // the 相方 of a known face: the combi takes a break
+    if (st.partner === id && known && kind === 'arrest') {
+      J.combiPause = day;
+      text = isKansai(PEOPLE[id])
+        ? 'ニュース見たで…。\nコンビの活動は、しばらく休止や。\n…ちゃんと向き合うてこい。話は、それからや。'
+        : 'ニュース見た…。\nコンビの活動は、しばらく休止にしよう。\n…ちゃんと向き合ってきて。話は、それから。';
+    }
+    if (n < MAX_REACT) jusSend(g, id, text);
+  });
+}
+// the judgment: a fine, a suspended term or 実刑 (the arrest already counted)
+function jusConvicted(g, info) {
+  const st = g.state;
+  const J = jusState(g);
+  const kind = info && info.sentence && info.sentence.kind;
+  const crime = info && info.crime;
+  const heavy = HEAVY.has(crime);
+  const k = kind === 'prison' ? 2 : kind === 'suspended' ? 1.2 : 0.6;
+  for (const id of closeOnes(g, 20)) {
+    const stance = J.told[id] || stanceOf(g, id, crime);
+    const base = stance === 'support' ? 0 : stance === 'worry' ? -3 : -5;
+    const d = Math.round(base * k) - (heavy && stance !== 'support' ? 3 : 0);
+    if (d) g.addAff(id, d, true);
+    if (!J.told[id]) J.told[id] = stance;
+  }
+  J.convicted = st.day;
+}
+// a term starts: the 相方 decides about the combi
+function jusJailed(g) {
+  const st = g.state;
+  const J = jusState(g);
+  const id = st.partner;
+  for (const pid of closeOnes(g, 20)) if (!J.told[pid]) J.told[pid] = stanceOf(g, pid, J.crime);
+  if (!id || !PEOPLE[id]) return;
+  const heavy = HEAVY.has(J.crime);
+  if (heavy || g.aff(id) < 60) {
+    const k = isKansai(PEOPLE[id]);
+    jusSend(g, id, k
+      ? 'ずっと考えとった。\n…コンビは、解散させてくれ。\nお前のこと、嫌いになったわけやない。けど、もう同じ舞台には立たれへん。'
+      : 'ずっと考えてた。\n…コンビは、解散させてほしい。\n嫌いになったわけじゃない。でも、もう同じ舞台には立てない。');
+    if (typeof g.setPartner === 'function') g.setPartner(null);
+    else st.partner = null;
+    if (st.people[id]) st.people[id].partner = false;
+    delete J.told[id];
+    J.combiEnded = st.day;
+  }
+}
+// out again: the ones who stood by you say おかえり (two at most)
+function jusReleased(g, info) {
+  const st = g.state;
+  const J = jusState(g);
+  J.release = st.day;
+  const ids = Object.keys(J.told).filter((id) => PEOPLE[id] && J.told[id] !== 'distance' && st.people[id]);
+  ids.sort((a, b) => (st.partner === b) - (st.partner === a) || g.aff(b) - g.aff(a));
+  for (const id of ids.slice(0, 2)) {
+    const own = JUS_LINES[id] && JUS_LINES[id].release;
+    let text = own || jusText(g, id, 'release', J.told[id]);
+    if (st.partner === id && J.combiPause && info && info.prison) {
+      text = isKansai(PEOPLE[id]) ? 'おかえり。\nネタ、ノートに書きためといたで。\n…一から、やり直そか。' : 'おかえり。\nネタ、ノートに書きためておいた。\n…一から、やり直そう。';
+    }
+    jusSend(g, id, text);
+  }
+  J.told = {};
+  if (info && info.prison) J.combiPause = 0;
+}
+// (the justice core is optional: a guarded dynamic import)
+import('../engine/crime.js').then(({ onJustice }) => {
+  const safe = (fn) => (g, info) => { try { if (g && g.state && g.state.people && g.state.flags) fn(g, info || {}); } catch (e) { console.error('[people] justice', e); } };
+  onJustice('arrested', safe((g, info) => {
+    const J = jusState(g);
+    J.arrest = g.state.day;
+    J.crime = info.crime || null;
+    // in the news only as a known face (crime.js knownFigure), never as a minor (少年法61条)
+    let juvenile = false;
+    try { const cs = g.jus().cases.find((c) => c.id === info.caseId); juvenile = !!(cs && cs.juvenile); } catch (e) { juvenile = false; }
+    const pol = g.state.politics && g.state.politics.me && g.state.politics.me.office;
+    jusReact(g, info.crime, !juvenile && (g.state.fame >= 100 || pol) ? 'arrest' : 'heard');
+  }));
+  onJustice('convicted', safe(jusConvicted));
+  onJustice('jailed', safe(jusJailed));
+  onJustice('released', safe(jusReleased));
+  // cleared: the worried ones come back a little, nobody keeps away any more
+  const cleared = safe((g) => {
+    const J = jusState(g);
+    for (const id of Object.keys(J.told)) if (J.told[id] !== 'support') g.addAff(id, 3, true);
+    J.away = {};
+  });
+  onJustice('acquitted', cleared);
+  onJustice('not_indicted', cleared);
+  // a scandal with no arrest that day (暴力団との交際, a 週刊誌 story …): the same, as an article
+  onJustice('scandal', safe((g, info) => {
+    const J = jusState(g), day = g.state.day;
+    // (a case's own stages — the arrest, the judgment — are answered by the hooks above)
+    if (num(info.level) < 3 || info.caseId != null || num(J.arrest, -99) === day || num(J.scandal, -99) === day) return;
+    J.scandal = day;
+    J.crime = info.crime || null;
+    jusReact(g, info.crime, 'scandal');
+  }));
+}).catch(() => { /* no justice core */ });
+
 function otherSpecial(g, id) {
   return Object.keys(g.state.people).find((k) => k !== id && PEOPLE[k] && g.state.people[k].special) || null;
 }
@@ -2108,8 +2319,12 @@ onMorning((g) => {
   const fl = st.flags;
   const sent = new Set();
   tidyInbox(g);
-  // nobody texts two days in a row (nor twice in one morning)
-  const free = (id) => { const p = st.people[id]; return !!p && p.msgDay !== day - 1 && p.msgDay !== day && !sent.has(id); };
+  // nobody texts two days in a row (nor twice in one morning); after an arrest the usual small talk
+  // and invitations stop for a while (justice reactions below), and some people keep away longer
+  const J = fl.people_jus && typeof fl.people_jus === 'object' ? fl.people_jus : null;
+  const hush = !!J && (day - num(J.arrest, -99) < HUSH_ARREST || day - num(J.release, -99) < HUSH_RELEASE || day - num(J.scandal, -99) < HUSH_RELEASE);
+  const away = (id) => !!(J && J.away && num(J.away[id]) > day);
+  const free = (id) => { const p = st.people[id]; return !!p && p.msgDay !== day - 1 && p.msgDay !== day && !sent.has(id) && !away(id); };
   const send = (id, msg) => {
     const P = PEOPLE[id];
     const p = g.meet(id);
@@ -2142,7 +2357,23 @@ onMorning((g) => {
     if (id) send(id, { text: cheer(PEOPLE[id], 'agency') });
   }
 
+  // the combi on hold (arrest of a known face): back together once the player is free, out of
+  // 活動自粛 and two weeks have passed (a term inside ends it on release: jusReleased)
+  const pid = st.partner;
+  if (J && J.combiPause && pid && PEOPLE[pid] && free(pid) && sent.size < MAX_MORNING) {
+    let js = null;
+    try { js = typeof g.justiceStatus === 'function' ? g.justiceStatus() : null; } catch (e) { js = null; }
+    if (day - num(J.combiPause) >= 14 && !(js && (!js.free || js.kinshinUntil))) {
+      J.combiPause = 0;
+      send(pid, { text: isKansai(PEOPLE[pid]) ? 'そろそろ、コンビ再始動といこか。\n…今度こそ、ちゃんとやろな。' : 'そろそろ、コンビを再始動しよう。\n…今度こそ、ちゃんとやろう。' });
+    }
+  }
   // friends (♥2+) sometimes text: small talk, or an invitation for today
+  if (hush) return;
+  // off the air (活動自粛 / a TV ban): no "I saw your show" small talk
+  let offAir = false;
+  try { const js = typeof g.justiceStatus === 'function' ? g.justiceStatus() : null; offAir = !!(js && (js.kinshinUntil || js.tvBanUntil)); } catch (e) { offAir = false; }
+  const onAir = (list) => (offAir && list ? list.filter((t) => typeof t !== 'string' || !SAW_SHOW.test(t)) : list);
   const spots = Object.keys(HANGOUTS);
   for (const id of shuffle(g.friends(2).filter(free))) {
     if (sent.size >= MAX_MORNING) break;
@@ -2156,9 +2387,9 @@ onMorning((g) => {
       send(id, { kind: 'invite', spot, text: freshLine(p, P.invites).replaceAll('{spot}', spotWord(spot)) });
     } else {
       let list = P.messages;
-      if (st.partner === id && P.partnerMessages && Math.random() < 0.5) list = P.partnerMessages;
+      if (st.partner === id && P.partnerMessages && !(J && J.combiPause) && Math.random() < 0.5) list = P.partnerMessages;
       else if (p.special && P.specialMessages && Math.random() < 0.5) list = P.specialMessages;
-      const text = freshLine(p, list);
+      const text = freshLine(p, onAir(list));
       if (text) send(id, { text });
     }
   }
