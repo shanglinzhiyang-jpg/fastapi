@@ -58,8 +58,15 @@ import {
   PEOPLE, HEARTS, HANGOUTS, REGULARS, PHONE_APPS, PEOPLE_UI, WEEKDAYS,
   heartIndex, weekdayOf, weekdayName, isKansai, showWords, hangoutMeal,
 } from './life.js';
+import { eraOf } from './profile.js';
 
 // ---------------------------------------------------------------- geometry & theme
+// The phone's case per era (profile.js ERAS[era].deviceShort).
+const BODY_TONES = {
+  スマホ: { edge: '#07080e', mid: '#2a2e46', face: '#1d2034', hi: '#4a5074', lo: '#12141f' },
+  ケータイ: { edge: '#2a2838', mid: '#c4c0d4', face: '#a6a2bc', hi: '#ecebf6', lo: '#6a6680' },
+  手帳: { edge: '#2a1608', mid: '#86522a', face: '#6c3e1e', hi: '#b07a44', lo: '#3e2210', stitch: '#d8b47a' },
+};
 export const PHONE = { x: 200, y: 8, w: 240, h: 344 };
 export const SCREEN = { x: 208, y: 30, w: 224, h: 290 };
 const STATUS_H = 16;
@@ -449,18 +456,25 @@ class PhoneScene {
 
   drawBody(c) {
     const { x, y, w, h } = PHONE;
+    // the case follows the era: a leather 手帳 (昭和), a silver ケータイ (平成), a smartphone
+    const B = BODY_TONES[eraOf(this.g.state).deviceShort] || BODY_TONES.スマホ;
     R(c, x + 4, y + 6, w, h - 2, 'rgba(0,0,0,0.35)');
     // side buttons
-    R(c, x - 2, y + 64, 3, 22, '#0a0b12'); R(c, x - 1, y + 65, 1, 20, '#4a5070');
-    R(c, x - 2, y + 92, 3, 22, '#0a0b12'); R(c, x - 1, y + 93, 1, 20, '#4a5070');
-    R(c, x + w - 1, y + 78, 3, 30, '#0a0b12'); R(c, x + w, y + 79, 1, 28, '#3a3f58');
-    rrect(c, x, y, w, h, 16, '#07080e');
-    rrect(c, x + 1, y + 1, w - 2, h - 2, 15, '#2a2e46');
-    rrect(c, x + 2, y + 2, w - 4, h - 4, 14, '#1d2034');
-    R(c, x + 14, y + 2, w - 28, 1, '#4a5074');
-    R(c, x + 2, y + 14, 1, h - 28, '#4a5074');
-    R(c, x + 14, y + h - 3, w - 28, 1, '#12141f');
-    R(c, x + w - 3, y + 14, 1, h - 28, '#12141f');
+    R(c, x - 2, y + 64, 3, 22, '#0a0b12'); R(c, x - 1, y + 65, 1, 20, B.hi);
+    R(c, x - 2, y + 92, 3, 22, '#0a0b12'); R(c, x - 1, y + 93, 1, 20, B.hi);
+    R(c, x + w - 1, y + 78, 3, 30, '#0a0b12'); R(c, x + w, y + 79, 1, 28, B.lo);
+    rrect(c, x, y, w, h, 16, B.edge);
+    rrect(c, x + 1, y + 1, w - 2, h - 2, 15, B.mid);
+    rrect(c, x + 2, y + 2, w - 4, h - 4, 14, B.face);
+    R(c, x + 14, y + 2, w - 28, 1, B.hi);
+    R(c, x + 2, y + 14, 1, h - 28, B.hi);
+    R(c, x + 14, y + h - 3, w - 28, 1, B.lo);
+    R(c, x + w - 3, y + 14, 1, h - 28, B.lo);
+    if (B.stitch) {
+      // the 手帳's stitched edge
+      for (let i = x + 16; i < x + w - 16; i += 6) { R(c, i, y + 6, 3, 1, B.stitch); R(c, i, y + h - 7, 3, 1, B.stitch); }
+      for (let j = y + 18; j < y + h - 18; j += 6) { R(c, x + 6, j, 1, 3, B.stitch); R(c, x + w - 7, j, 1, 3, B.stitch); }
+    }
     // speaker + camera
     rrect(c, x + w / 2 - 18, y + 13, 36, 4, 2, '#0a0b12');
     R(c, x + w / 2 - 16, y + 14, 32, 1, '#2a2e46');
@@ -481,7 +495,7 @@ class PhoneScene {
   drawGuide(c) {
     const x = PHONE.x + PHONE.w + 18, y = SH - 104, w = 176;
     panel(c, x, y, w, 92, { bg: 'rgba(18,26,58,0.92)' });
-    const rows = [['↑↓←→', 'えらぶ'], ['A', 'けってい'], ['B', 'もどる'], ['MENU', 'スマホをとじる']];
+    const rows = [['↑↓←→', 'えらぶ'], ['A', 'けってい'], ['B', 'もどる'], ['MENU', `${eraOf(this.g.state).deviceShort}をとじる`]];
     rows.forEach(([k, v], i) => {
       text(c, k, x + 14, y + 10 + i * 19, { size: 12, color: COLORS.accent });
       text(c, v, x + 72, y + 10 + i * 19, { size: 12, color: '#fff' });

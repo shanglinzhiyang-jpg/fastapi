@@ -2,7 +2,7 @@
 // Scenes are plain objects with update(g) / draw(ctx, g); see game.js.
 // Everything here is an `hd` scene: coordinates are screen pixels (SW x SH).
 
-import { SW, SH, fmtMoney, clamp } from './util.js';
+import { SW, SH, fmtMoney, yenText, clamp } from './util.js';
 import { text, wrap, panel, cursor, downArrow, bar, measure, rect, COLORS } from './draw.js';
 import { drawFaceHD } from './sprites.js';
 import { audio } from './audio.js';
@@ -10,6 +10,7 @@ import { SKILLS, SKILL_MAX, ITEMS, AGENCIES, rankName, RANKS, rankIndex } from '
 import { NotebookScene } from './notebook.js';
 import { HUNGRY, STRESSED, SCRUFFY } from './life.js';
 import { openPhone } from './phone.js';
+import { eraOf, fullName, ageOf, prefecture, GENDERS, PERSONALITIES } from './profile.js';
 
 const FS = 16; // body text size
 const BOX = { x: 12, y: SH - 96, w: SW - 24, h: 86 };
@@ -206,8 +207,9 @@ export class ListScene {
     if (!this.items.length) text(ctx, '（なし）', this.x + 28, yy, { size: FS, color: COLORS.dim });
     for (let i = top; i < Math.min(this.items.length, top + rows); i++) {
       const it = this.items[i];
-      const label = typeof it === 'string' ? it : it.label;
-      const right = typeof it === 'string' ? null : it.right;
+      // literal prices in labels (「もやし炒め（¥100）」) follow the era like g.fmt texts
+      const label = yenText(typeof it === 'string' ? it : it.label);
+      const right = typeof it === 'string' || it.right == null ? null : yenText(it.right);
       const sel = i === this.idx;
       const dim = typeof it !== 'string' && it.disabled;
       text(ctx, label, this.x + 28, yy, { size: FS, color: sel ? COLORS.accent : dim ? COLORS.dim : COLORS.text });
@@ -219,7 +221,8 @@ export class ListScene {
     if (top > 0) downArrowUp(ctx, this.x + this.w - 24, y + 10, this.t);
     if (top + rows < this.items.length) downArrow(ctx, this.x + this.w - 24, y + h - 14, this.t);
     if (this.describe && this.items.length) {
-      const d = this.describe(this.idx);
+      const d0 = this.describe(this.idx);
+      const d = d0 ? yenText(d0) : d0;
       if (d) {
         panel(ctx, BOX.x, BOX.y + 10, BOX.w, BOX.h - 10);
         wrap(ctx, d, TEXT_W, FS).slice(0, 3).forEach((l, i) => text(ctx, l, BOX.x + 18, BOX.y + 18 + i * 21, { size: FS }));
@@ -317,11 +320,29 @@ export class StatusScene {
   }
   draw(ctx, g) {
     const st = g.state;
-    const X = 80, Y = 12, PW = SW - 160, PH = SH - 24;
+    const X = 40, Y = 12, PW = SW - 80, PH = SH - 24;
     panel(ctx, X, Y, PW, PH);
     rect(ctx, X + 18, Y + 18, 76, 60, '#0b1030');
     drawFaceHD(ctx, st.look || {}, X + 24, Y + 24, 2);
-    text(ctx, st.name, X + 110, Y + 18, { size: 24, color: COLORS.accent });
+    // the profile card (top right): age, gender, hometown, personality, era
+    const pf = st.profile;
+    const BX = X + PW - 190, BW = 172;
+    const nameW = BX - 14 - (X + 110);
+    const full = pf ? fullName(pf) : st.name;
+    const ns = [24, 20, 16].find((z) => measure(ctx, full, z) <= nameW) || 16;
+    text(ctx, full, X + 110, Y + 18 + (24 - ns) / 2, { size: ns, color: COLORS.accent });
+    if (pf) {
+      const era = eraOf(st);
+      rect(ctx, BX, Y + 16, BW, 76, '#0b1030');
+      rect(ctx, BX, Y + 16, 2, 76, era.name === '昭和' ? '#c98a3a' : era.name === '平成' ? '#5fd7ff' : COLORS.pink);
+      const lines = [
+        [`${ageOf(st)}さい・${(GENDERS[pf.gender] || GENDERS.x).name}`, COLORS.text],
+        [`${prefecture(pf.hometown).name}出身`, COLORS.text],
+        [`性格：${(PERSONALITIES[pf.personality] || {}).name || ''}`, COLORS.cyan],
+        [`時代：${era.label}`, COLORS.dim],
+      ];
+      lines.forEach(([l, c], i) => text(ctx, l, BX + 10, Y + 20 + i * 17, { size: 13, color: c }));
+    }
     text(ctx, `${rankName(st.fame)}　★${st.fame}`, X + 110, Y + 50, { size: FS, color: COLORS.pink });
     const ri = rankIndex(st.fame);
     const next = RANKS[ri + 1];
@@ -345,7 +366,7 @@ export class StatusScene {
     const COND = { great: ['絶好調！', COLORS.good], normal: ['ふつう', COLORS.text], hungry: ['はらぺこ…', COLORS.bad], stressed: ['ストレスぎみ…', COLORS.bad], scruffy: ['身だしなみが乱れている', COLORS.accent], burnout: ['燃え尽きた…', COLORS.bad], edge: ['燃え尽き寸前！', COLORS.bad] };
     const cond = g.condition();
     const [cl, cc] = COND[cond === 'stressed' && L.stress >= 90 ? 'edge' : cond] || COND.normal;
-    const nx = X + 270;
+    const nx = X + 300;
     text(ctx, `調子：${cl}`, nx, Y + 186, { size: 14, color: cc });
     [['満腹', L.hunger, '#ff9a3c'], ['ストレス', L.stress, L.stress >= 70 ? COLORS.bad : '#b48cff'], ['身だしなみ', L.clean, COLORS.cyan]].forEach(([n, v, col], i) => {
       text(ctx, n, nx, Y + 212 + i * 26, { size: 14 });
@@ -422,8 +443,8 @@ export class ShopScene {
     panel(ctx, BOX.x, BOX.y, BOX.w, BOX.h);
     const gd = this.goods[this.idx];
     const desc = gd ? (ITEMS[gd.item]?.desc || '') : 'お店を出る。';
-    wrap(ctx, this.msg, TEXT_W, FS).slice(0, 1).forEach((l) => text(ctx, l, BOX.x + 18, BOX.y + 10, { size: FS, color: COLORS.accent }));
-    wrap(ctx, desc, TEXT_W, FS).slice(0, 2).forEach((l, i) => text(ctx, l, BOX.x + 18, BOX.y + 10 + (i + 1) * LINE_H, { size: FS }));
+    wrap(ctx, yenText(this.msg), TEXT_W, FS).slice(0, 1).forEach((l) => text(ctx, l, BOX.x + 18, BOX.y + 10, { size: FS, color: COLORS.accent }));
+    wrap(ctx, yenText(desc), TEXT_W, FS).slice(0, 2).forEach((l, i) => text(ctx, l, BOX.x + 18, BOX.y + 10 + (i + 1) * LINE_H, { size: FS }));
   }
 }
 
@@ -433,7 +454,9 @@ export async function openMenu(g) {
   for (;;) {
     const unread = g.unread();
     const entries = [
-      [unread ? `スマホ（${unread}）` : 'スマホ', 'phone'],
+      // the phone is called what the era calls it (手帳と電話 / ケータイ / スマホ; not just
+      // 手帳, which would read like てちょう below)
+      [unread ? `${eraOf(g.state).device}（${unread}）` : eraOf(g.state).device, 'phone'],
       ['ステータス', 'status'], ['もちもの', 'items'], ['てちょう', 'notebook'], ['セーブ', 'save'],
       [audio.muted ? '音：OFF' : '音：ON', 'sound'], ['とじる', 'close'],
     ];

@@ -9,7 +9,7 @@
 //
 // See README.md (開発者向け) for the full list.
 
-import { W, H, SW, SH, UNIT, LEGACY_SCALE, LEGACY_X, TILE, DIRS, OPP, fmtMoney, clamp, display, makeCanvas } from './util.js';
+import { W, H, SW, SH, UNIT, LEGACY_SCALE, LEGACY_X, TILE, DIRS, OPP, fmtMoney, yenText, clamp, display, makeCanvas } from './util.js';
 import { Input } from './input.js';
 import { audio } from './audio.js';
 import { MapScene, PLACES, doorIndexFor, entryFor } from './map.js';
@@ -23,6 +23,7 @@ import {
   rankIndex, rankName, saveGame, payText,
 } from './state.js';
 import { installLife, REGULARS, SCRUFFY, ACTIVITY, showWords } from './life.js';
+import { eraOf, fullName, personalityMult } from './profile.js';
 
 const RANK_MULT = { S: 1.5, A: 1.2, B: 1.0, C: 0.7, D: 0.4 };
 // A job's mood swing on top of ACTIVITY.job.stress: a great result lifts it, a bad one weighs.
@@ -135,6 +136,14 @@ export class Game {
     this.input.consume();
   }
 
+  // g.state: assigning a state (new game, continue, tests) also sets the era's price level
+  // for money on screen (util.js display.priceRate); update() keeps it in step after that.
+  get state() { return this._state; }
+  set state(s) {
+    this._state = s;
+    display.priceRate = eraOf(s).priceRate || 1;
+  }
+
   setBase(scene) {
     this.scenes = [scene];
     this.input.consume();
@@ -143,6 +152,7 @@ export class Game {
   update() {
     this.frame++;
     if (this.state && this.frame % 3600 === 0) this.state.playMinutes++;
+    if (this._state) display.priceRate = eraOf(this._state).priceRate || 1;
     for (const tm of this.timers) tm.left--;
     const done = this.timers.filter((t) => t.left <= 0);
     this.timers = this.timers.filter((t) => t.left > 0);
@@ -267,11 +277,21 @@ export class Game {
   fadeOut(frames = 14) { return this.tweenFade(1, frames); }
   fadeIn(frames = 14) { return this.tweenFade(0, frames); }
 
+  // Placeholders: {name} (what people call you: the given name), {fullname} (姓 名),
+  // {familyname} (姓), {agency}. Then the era: the SNS name (ドッター in 令和) and every
+  // literal amount of money (¥1,500 / 100円) in the era's prices (util.js yenText; amounts
+  // made with fmtMoney are already scaled and stay as they are).
   fmt(str) {
     const st = this.state || {};
-    return String(str)
+    const p = st.profile;
+    let s = String(str)
       .replaceAll('{name}', st.name || 'あなた')
+      .replaceAll('{fullname}', p ? fullName(p) : st.name || 'あなた')
+      .replaceAll('{familyname}', p ? p.familyName : '')
       .replaceAll('{agency}', st.agency ? AGENCIES[st.agency].name : 'フリー');
+    const sns = eraOf(st).sns;
+    if (sns && sns !== 'ドッター') s = s.replaceAll('ドッター', sns);
+    return yenText(s);
   }
 
   // text: string | string[]. opts: { name, look, top, speed, color }
@@ -643,7 +663,8 @@ export class Game {
     const mult = RANK_MULT[res.rank] * agencyBonus;
     const pay = Math.round(((def.pay ?? 3000) * mult) / 10) * 10;
     const scruffy = st.life.clean < SCRUFFY;
-    const fame = Math.max(1, Math.round((def.fame ?? 10) * mult * (scruffy ? 0.8 : 1)));
+    // personality 負けず嫌い: an S rank brings a little more fame (profile.js rankS)
+    const fame = Math.max(1, Math.round((def.fame ?? 10) * mult * (scruffy ? 0.8 : 1) * (res.rank === 'S' ? personalityMult(st, 'rankS') : 1)));
     const fans = Math.max(1, Math.round((def.fans ?? (def.fame ?? 10) * 3) * mult * (scruffy ? 0.8 : 1)));
     const gain = Math.max(1, Math.round((def.gain ?? 2) * (res.rank === 'S' ? 2 : res.rank === 'A' ? 1.5 : res.rank === 'D' ? 0.5 : 1)));
     st.jobs[def.id || def.title] = (st.jobs[def.id || def.title] || 0) + 1;
@@ -693,6 +714,7 @@ export class Game {
       await this.wait(500);
       await this.fadeIn(10);
     }
+    gain = Math.max(1, Math.round(gain * personalityMult(st, 'lesson'))); // personality まじめ
     this.addSkill(def.skill, gain, true);
     audio.sfx('good');
     await this.say(`レッスン終了！\n${SKILLS[def.skill]}が${gain}上がった！（${st.skills[def.skill]}）`);

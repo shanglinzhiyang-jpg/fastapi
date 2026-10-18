@@ -20,7 +20,10 @@ export const LEGACY_X = (SW - W * LEGACY_SCALE) / 2; // 80
 export const FPS = 60;
 // Device pixels per logical pixel, set by Game.resize (code that pixelates at the
 // current resolution reads it, e.g. drawLogo).
-export const display = { S: 1 };
+// priceRate: the era's price level for DISPLAY only (profile.js ERAS[era].priceRate). The
+// Game keeps it in step with g.state (state setter + every frame); this module never
+// imports the state.
+export const display = { S: 1, priceRate: 1 };
 
 export const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 export const OPP = { up: 'down', down: 'up', left: 'right', right: 'left' };
@@ -77,7 +80,30 @@ export function mix(a, b, t) {
   return toHex(lerp(A[0], B[0], t), lerp(A[1], B[1], t), lerp(A[2], B[2], t));
 }
 
-export const fmtMoney = (n) => '¥' + Math.round(n).toLocaleString('ja-JP');
+// ---- money on screen (era prices)
+// Internal amounts never change (the balance is the same in every era); what the player
+// sees is scaled by display.priceRate and rounded to ¥10 (令和 = rate 1 shows exact amounts).
+// An amount that is already scaled carries YEN_MARK (U+2060 WORD JOINER: zero width and
+// invisible in DotGothic16) right before its digits, so yenText() never scales it twice:
+//   fmtMoney(3000)            -> '¥⁠1,800' in 昭和 (shown as ¥1,800)
+//   yenText('チケット¥1,500')  -> literal amounts in content text, scaled once
+// g.fmt (game.js) runs yenText on every say / ask / notify text; lists, the shop, the
+// notebook and the phone run it on their own texts too.
+export const YEN_MARK = '⁠';
+export function eraPrice(n) {
+  const r = display.priceRate || 1;
+  return r === 1 ? Math.round(n) : Math.round((n * r) / 10) * 10;
+}
+export const fmtMoney = (n) => '¥' + YEN_MARK + eraPrice(n).toLocaleString('ja-JP');
+const num = (s) => Number(s.replace(/,/g, ''));
+export function yenText(str) {
+  const s = String(str);
+  if (!s.includes('¥') && !s.includes('円')) return s;
+  return s
+    .replace(/¥(?!⁠)(\d[\d,]*)/g, (m, d) => fmtMoney(num(d)))
+    // 「100円で」 but not 「100円玉」 (a coin) and not an amount already marked
+    .replace(/(?<![⁠\d,])(\d[\d,]*)円(?!玉)/g, (m, d) => YEN_MARK + eraPrice(num(d)).toLocaleString('ja-JP') + '円');
+}
 
 export const pick = (arr, r = Math.random) => arr[Math.floor(r() * arr.length)];
 

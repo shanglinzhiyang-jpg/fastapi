@@ -2,18 +2,25 @@
 //
 //   TitleScene   logo, a dusk skyline with searchlights, an outdoor stage and the
 //                はじめから / つづきから menu (resolve('new' | 'continue'))
-//   CreateScene  the character editor (new game) and the closet (home.js)
+//   CreateScene  the character editor (new game: 見た目 → プロフィール → 家族 → かくにん)
+//                and the closet (home.js: the look page only)
 //
 // The pixel-art backdrops are drawn once into offscreen canvases at 1 logical
 // pixel per pixel and scaled up by the engine, so they stay crisp at any size.
 
 import { askText } from './engine/textinput.js';
 import { SW, SH, shade, mix, makeCanvas, hash2, mulberry32 } from './engine/util.js';
-import { text, panel, cursor, COLORS, measure } from './engine/draw.js';
-import { charSheetHD, LOOKS, HAIR, HAIR_STYLES, SKIN } from './engine/sprites.js';
+import { text, panel, cursor, COLORS, measure, wrap } from './engine/draw.js';
+import { charSheetHD, drawFaceHD, LOOKS, HAIR, HAIR_STYLES, SKIN } from './engine/sprites.js';
 import { audio } from './engine/audio.js';
 import { drawLogo } from './engine/logos.js';
 import { hasSave, loadGame } from './engine/state.js';
+import {
+  AGE_MIN, AGE_MAX, YEAR_DAYS, GENDERS, PREFECTURES, REGIONS, PERSONALITIES, ERAS, RELATIONS, CAUSES,
+  ERA_ORDER, REGION_ORDER, PREF_ORDER, RELATION_ORDER, CAUSE_ORDER, PERSONALITY_ORDER,
+  FAMILY_NAMES, GIVEN_NAMES, RELATIVE_NAMES, defaultFamily, newFamilyMember, canAddRelation, relationCount,
+  personalityEffects, familyLook, sortFamily,
+} from './engine/profile.js';
 
 const LOGO_PARADE = ['yoshimoto', 'shinkigeki', 'bs_yoshimoto', 'shochiku', 'grape', 'nhk', 'toei', 'horipro', 'toho'];
 const OUTLINE = '#22202a';
@@ -724,8 +731,115 @@ function buildPreviewStage(w, h) {
   return cv;
 }
 
-// opts (all optional): { look, name, closet }
-//   new game: new CreateScene(g, resolve)  -> resolve({ name, look })
+// ------------------------------------------------------------------ new game pages
+const STEPS = ['look', 'profile', 'family', 'confirm'];
+const STEP_NAMES = { look: '見た目', profile: 'プロフィール', family: '家族', confirm: 'かくにん' };
+const STEP_TITLES = { look: 'キャラクターをつくろう', profile: 'プロフィール', family: 'かぞく', confirm: 'これでいいかな？' };
+const STEP_COLORS = { look: '#d63a4a', profile: '#2f6fd0', family: '#c0703a', confirm: '#2f9a4a' };
+const GENDER_ORDER = ['m', 'f', 'x'];
+const FAM_L = { x: 20, y: 50, w: 280, h: 278 }; // the family list
+const FAM_R = { x: 312, y: 50, w: 308, h: 278 }; // the selected member
+
+// Rows of label + value (◀ value ▶) or buttons, in the look page's style.
+// rows: [{ label, value, kind: 'text' | 'cycle' | 'button', pos: [i, n], color, primary }]
+function fieldRows(ctx, rows, { x, y, w, rh = 26, valX, sel, t, dim = false, labelX = 34 }) {
+  rows.forEach((r, i) => {
+    const ry = y + i * rh;
+    const on = i === sel;
+    if (r.kind === 'button') {
+      const bw = w - 60, bx = x + 30, by = ry - 2;
+      const main = on ? (r.primary ? COLORS.accent : '#9aa3c7') : dim ? '#1a2250' : '#24306a';
+      R(ctx, bx - 1, by - 1, bw + 2, rh - 2, OUTLINE);
+      R(ctx, bx, by, bw, rh - 4, main);
+      R(ctx, bx, by, bw, 1, shade(main, 0.35));
+      R(ctx, bx, by + rh - 6, bw, 2, shade(main, -0.25));
+      text(ctx, r.label, x + w / 2, by + (rh - 4 - 16) / 2, { size: 16, align: 'center', color: on ? '#20232a' : dim ? COLORS.dim : '#ffffff', shadow: on ? null : undefined });
+      if (on) cursor(ctx, bx + 12, by + (rh - 4) / 2 - 3, t, '#20232a');
+      return;
+    }
+    if (on) {
+      R(ctx, x + 8, ry - 4, w - 16, rh - 2, '#24306a');
+      R(ctx, x + 8, ry - 4, 2, rh - 2, COLORS.accent);
+      cursor(ctx, x + 18, ry + 4, t);
+    }
+    text(ctx, r.label, x + labelX, ry, { size: 16, color: on ? COLORS.accent : dim ? COLORS.dim : '#ffffff' });
+    // the value, shrunk to fit between the label and the arrows
+    const room = Math.min(valX - (x + labelX + measure(ctx, r.label, 16) + 26), x + w - 30 - valX) * 2;
+    const vs = [16, 14, 12].find((z) => measure(ctx, r.value, z) <= room) || 12;
+    const v = fitTo(ctx, r.value, room, vs);
+    const vw = Math.ceil(measure(ctx, v, vs));
+    text(ctx, v, valX, ry + (16 - vs) / 2, { size: vs, align: 'center', color: r.color || (on ? '#ffffff' : dim ? COLORS.dim : COLORS.cyan) });
+    if (r.kind === 'text') {
+      // a dotted "write here" line under a name
+      const ul = Math.max(40, Math.ceil(vw / 2) + 3);
+      for (let k = -ul; k < ul; k += 3) R(ctx, valX + k, ry + 19, 2, 1, on ? COLORS.accent : '#5a6ab8');
+    }
+    if (on) {
+      const half = r.kind === 'text' ? Math.max(40, vw / 2) : vw / 2;
+      const nudge = Math.floor(t / 12) % 2;
+      arrow(ctx, Math.round(valX - half - 16 - nudge), ry + 4, -1, COLORS.accent);
+      arrow(ctx, Math.round(valX + half + 11 + nudge), ry + 4, 1, COLORS.accent);
+      if (r.pos) {
+        const pos = `${r.pos[0]}/${r.pos[1]}`;
+        if (valX + half + 24 + measure(ctx, pos, 12) <= x + w - 14) text(ctx, pos, x + w - 14, ry + 3, { size: 12, align: 'right', color: COLORS.dim, shadow: null });
+      }
+    }
+  });
+}
+
+// A small box of explanation lines ([text, colour]), wrapped to the box (at most what fits).
+function descBox(ctx, { x, y, w, h }, lines, size = 13) {
+  R(ctx, x, y, w, h, '#0b1030');
+  R(ctx, x, y, w, 1, '#3a4a8a');
+  const lh = size + 4;
+  const out = [];
+  for (const [l, c] of lines) for (const ln of wrap(ctx, l, w - 16, size)) out.push([ln, c]);
+  out.slice(0, Math.floor((h - 6) / lh)).forEach(([l, c], i) => text(ctx, l, x + 8, y + 5 + i * lh, { size, color: c, shadow: null }));
+}
+
+// Cut a string to maxW with '…'.
+function fitTo(ctx, s, maxW, size) {
+  if (measure(ctx, s, size) <= maxW) return s;
+  const ch = Array.from(s);
+  while (ch.length > 1 && measure(ctx, ch.join('') + '…', size) > maxW) ch.pop();
+  return ch.join('') + '…';
+}
+
+// Join items with ・ into at most maxLines lines of width w (the rest becomes ' ほか').
+function wrapItems(ctx, items, w, size, maxLines) {
+  const lines = [];
+  let cur = '';
+  for (let i = 0; i < items.length; i++) {
+    const next = cur ? `${cur}・${items[i]}` : items[i];
+    if (measure(ctx, next, size) <= w || !cur) { cur = next; continue; }
+    lines.push(cur + '・');
+    cur = items[i];
+    if (lines.length === maxLines) { lines[maxLines - 1] = fitTo(ctx, lines[maxLines - 1].replace(/・$/, '') + ' ほか', w, size); return lines; }
+  }
+  if (cur) lines.push(cur);
+  return lines.slice(0, maxLines);
+}
+
+// A tiny 5x5 flower (for family members who have passed away: gentle, not sad).
+function flower(ctx, x, y) {
+  R(ctx, x + 1, y, 3, 1, '#f2d0e8'); R(ctx, x, y + 1, 5, 3, '#f2d0e8'); R(ctx, x + 1, y + 4, 3, 1, '#f2d0e8');
+  R(ctx, x + 2, y + 2, 1, 1, '#ffd23f');
+}
+function arrowUp(ctx, x, y, t) {
+  const o = Math.floor(t / 10) % 2;
+  for (let i = 0; i < 4; i++) R(ctx, x + i, y - o + 3 - i, 7 - i * 2, 1, '#ffffff');
+}
+function downArrowSmall(ctx, x, y, t) {
+  const o = Math.floor(t / 10) % 2;
+  for (let i = 0; i < 4; i++) R(ctx, x + i, y + o + i, 7 - i * 2, 1, '#ffffff');
+}
+
+// opts (all optional): { look, name, closet, profile }
+//   new game: new CreateScene(g, resolve)  -> resolve({ name, look, profile })
+//             four pages: 見た目 → プロフィール（姓・名・性別・年齢・出身・性格・時代）→
+//             家族 → かくにん (B goes back a page). name = the given name (state.name);
+//             profile = the shape documented in engine/profile.js. Text goes through
+//             askText (the in-game text box), never window.prompt.
 //   closet:   new CreateScene(g, resolve, { look, name, closet: true })
 //             starts from the given look, the name row is hidden (the name stays),
 //             B or 「やめる」 cancels -> resolve(null), otherwise resolve({ name, look }).
@@ -746,6 +860,38 @@ export class CreateScene {
     if (this.base) this.fromLook(this.base);
     this.naming = null;
     this.flash = 0; // brief highlight on the preview after a change
+    // new game: the profile pages (the closet only has the look page)
+    this.step = 'look';
+    const p0 = opts.profile || {};
+    this.prof = {
+      familyName: p0.familyName || FAMILY_NAMES[0], givenName: p0.givenName || GIVEN_NAMES.x[0], gender: p0.gender || 'x',
+      age: p0.age || 20, hometown: p0.hometown || 'tokyo', personality: p0.personality || 'akarui', era: p0.era || 'reiwa',
+    };
+    this.family = Array.isArray(p0.family) ? p0.family.map((m) => ({ ...m })) : defaultFamily(this.prof.familyName);
+    this.pRow = 0; // profile page row
+    this.fIdx = 0; // family list row (members, then ＋ and つぎへ)
+    this.fFocus = 'list'; // 'list' | 'edit' (the member's fields) | 'add' (choose a relation)
+    this.fRow = 0; // field row in 'edit'
+    this.addIdx = 0; // relation row in 'add'
+    this.fTop = 0; // first visible family row
+    this.cRow = 0; // confirm page: 0 = start, 1 = back
+    this.stepT = 0;
+  }
+  // The name on the plate under the preview: the full name in a new game.
+  plateName() { return this.closet ? this.name : `${this.prof.familyName} ${this.prof.givenName}`; }
+  // Open the in-game text box; done(value) runs with a non-empty value.
+  typeText(title, value, max, done) {
+    audio.sfx('ok');
+    this.naming = true;
+    askText(this.g, { title, value, max }).then((v) => {
+      this.naming = false;
+      if (v) { done(v); this.flash = 10; }
+    });
+  }
+  goStep(step) {
+    this.step = step;
+    this.stepT = 0;
+    this.flash = 10;
   }
   fromLook(look) {
     const at = (key, val) => {
@@ -781,7 +927,6 @@ export class CreateScene {
     const v = this.v;
     const L = this.lists;
     const rows = [];
-    if (!this.closet) rows.push(['なまえ', this.name, 'name']);
     rows.push(
       ['かみがた', STYLE_NAMES[L.style[v.style]] || 'いまの髪型', 'style'],
       ['かみのいろ', HAIRC_NAMES[L.hairc[v.hairc]] || 'いまの色', 'hairc'],
@@ -792,7 +937,7 @@ export class CreateScene {
       ['めがね', GLASSES_NAMES[GLASSES.indexOf(L.glasses[v.glasses])] || 'いまのメガネ', 'glasses'],
     );
     if (this.closet) rows.push(['これでOK！', '', 'done'], ['やめる', '', 'cancel']);
-    else rows.push(['これでけってい！', '', 'done']);
+    else rows.push(['つぎへ（プロフィール）', '', 'done']);
     return rows;
   }
   change(d) {
@@ -818,10 +963,18 @@ export class CreateScene {
   update(g) {
     this.t++;
     if (this.flash > 0) this.flash--;
+    this.stepT++;
     if (this.naming) return; // name box open
     const inp = g.input;
     // headless autoplay (tests): the closet closes without changing anything
     if (this.closet && g.auto) { this.finish(null); return; }
+    if (!this.closet && this.step !== 'look') {
+      if (this.stepT < 4) return; // the press that turned the page is not reused
+      if (this.step === 'profile') this.updateProfile(g, inp);
+      else if (this.step === 'family') this.updateFamily(g, inp);
+      else this.updateConfirm(g, inp);
+      return;
+    }
     const rows = this.rows();
     const n = rows.length;
     if (inp.repeat('up')) { this.row = (this.row + n - 1) % n; audio.sfx('cursor'); }
@@ -841,7 +994,8 @@ export class CreateScene {
         });
       } else if (k === 'done') {
         audio.sfx('ok');
-        this.finish({ name: this.name, look: this.look() });
+        if (this.closet) this.finish({ name: this.name, look: this.look() });
+        else this.goStep('profile');
       } else if (k === 'cancel') {
         audio.sfx('cancel');
         this.finish(null);
@@ -851,7 +1005,8 @@ export class CreateScene {
 
   draw(ctx) {
     const t = this.t;
-    const title = this.closet ? 'クローゼットで着がえよう' : 'キャラクターをつくろう';
+    const step = this.closet ? 'look' : this.step;
+    const title = this.closet ? 'クローゼットで着がえよう' : STEP_TITLES[step];
     if (this.closet) {
       // no clothes hang behind the ribbon (its band + swallow tails), so it reads cleanly
       const half = Math.ceil(measure(ctx, title, 16) / 2) + 22 + 22 + 4;
@@ -861,20 +1016,386 @@ export class CreateScene {
       ctx.fillStyle = 'rgba(6,6,20,0.42)';
       ctx.fillRect(0, 0, SW, SH);
     }
-    ribbon(ctx, title, SW / 2, 12, { size: 16, color: this.closet ? '#8a5ac8' : '#d63a4a' });
+    ribbon(ctx, title, SW / 2, 12, { size: 16, color: this.closet ? '#8a5ac8' : STEP_COLORS[step] });
+    if (!this.closet) this.drawSteps(ctx);
     const look = this.look();
-    this.drawPreview(ctx, look);
-    this.drawRows(ctx);
-
-    const rows = this.rows();
-    const k = rows[this.row][2];
     let help;
-    if (this.closet) help = k === 'done' ? 'Aで着がえる' : k === 'cancel' ? 'Aでやめる（もとのまま）' : '◀▶で変更　▲▼で項目えらび　Bでやめる';
-    else help = k === 'name' ? 'A：なまえを入力　◀▶：候補から選ぶ' : k === 'done' ? 'Aでゲームスタート！' : '◀▶で変更　▲▼で項目えらび';
+    if (step === 'look') {
+      this.drawPreview(ctx, look);
+      this.drawRows(ctx);
+      const rows = this.rows();
+      const k = rows[this.row][2];
+      if (this.closet) help = k === 'done' ? 'Aで着がえる' : k === 'cancel' ? 'Aでやめる（もとのまま）' : '◀▶で変更　▲▼で項目えらび　Bでやめる';
+      else help = k === 'name' ? 'A：なまえを入力　◀▶：候補から選ぶ' : k === 'done' ? 'Aでつぎへ（プロフィール）' : '◀▶で変更　▲▼で項目えらび';
+    } else if (step === 'profile') {
+      this.drawPreview(ctx, look);
+      help = this.drawProfile(ctx);
+    } else if (step === 'family') {
+      help = this.drawFamily(ctx, look);
+    } else {
+      this.drawPreview(ctx, look);
+      help = this.drawConfirm(ctx);
+    }
+    this.drawHelp(ctx, help);
+  }
+
+  drawHelp(ctx, help) {
     const hw = Math.ceil(measure(ctx, help, 14)) + 36;
     R(ctx, Math.round((SW - hw) / 2), 334, hw, 22, 'rgba(8,8,24,0.78)');
     R(ctx, Math.round((SW - hw) / 2), 334, hw, 1, this.closet ? '#c9a227' : '#5a6ab8');
     text(ctx, help, SW / 2, 338, { size: 14, align: 'center', color: '#d8dcf0', shadow: null });
+  }
+
+  // Four numbered steps at the top right (new game).
+  drawSteps(ctx) {
+    const i0 = STEPS.indexOf(this.step);
+    const S = 22, GAP = 12, x0 = SW - 16 - STEPS.length * S - (STEPS.length - 1) * GAP, y = 15;
+    STEPS.forEach((st, i) => {
+      const x = x0 + i * (S + GAP);
+      if (i > 0) R(ctx, x - GAP, y + S / 2 - 1, GAP, 2, i <= i0 ? COLORS.accent : '#4a4a6a');
+      const col = i === i0 ? COLORS.accent : i < i0 ? '#5a6ab8' : '#1a1e3e';
+      R(ctx, x - 1, y - 1, S + 2, S + 2, OUTLINE);
+      R(ctx, x, y, S, S, col);
+      R(ctx, x, y, S, 1, shade(col, 0.35));
+      R(ctx, x, y + S - 2, S, 2, shade(col, -0.3));
+      text(ctx, String(i + 1), x + S / 2, y + 3, { size: 14, align: 'center', color: i === i0 ? '#20232a' : i < i0 ? '#ffffff' : '#7a7ea8', shadow: null });
+    });
+    // the current step's name under the boxes
+    text(ctx, STEP_NAMES[this.step], SW - 16, y + S + 4, { size: 12, align: 'right', color: '#d8dcf0', shadow: '#0a0a18' });
+  }
+
+  // ---------------------------------------------------------------- page 2: プロフィール
+  profRows() {
+    const p = this.prof;
+    const pos = (list, v) => [list.indexOf(v) + 1, list.length];
+    return [
+      { key: 'familyName', label: '姓', value: p.familyName, kind: 'text' },
+      { key: 'givenName', label: '名', value: p.givenName, kind: 'text' },
+      { key: 'gender', label: '性別', value: GENDERS[p.gender].name, kind: 'cycle', pos: pos(GENDER_ORDER, p.gender) },
+      { key: 'age', label: '年齢', value: `${p.age}さい`, kind: 'cycle', pos: [p.age - AGE_MIN + 1, AGE_MAX - AGE_MIN + 1] },
+      { key: 'hometown', label: '出身', value: PREFECTURES[p.hometown].name, kind: 'cycle', pos: pos(PREF_ORDER, p.hometown) },
+      { key: 'personality', label: '性格', value: PERSONALITIES[p.personality].name, kind: 'cycle', pos: pos(PERSONALITY_ORDER, p.personality) },
+      { key: 'era', label: '時代', value: ERAS[p.era].label, kind: 'cycle', pos: pos(ERA_ORDER, p.era) },
+      { key: 'next', label: 'つぎへ（家族）', kind: 'button', primary: true },
+    ];
+  }
+  setFamilyName(v) {
+    const old = this.prof.familyName;
+    this.prof.familyName = v;
+    // family members who share the old family name take the new one
+    for (const m of this.family) if (m.name.startsWith(old + ' ')) m.name = v + m.name.slice(old.length);
+  }
+  changeProfile(key, d) {
+    const p = this.prof;
+    const cyc = (list, v) => list[(list.indexOf(v) + d + list.length) % list.length];
+    if (key === 'familyName') this.setFamilyName(cyc(FAMILY_NAMES, p.familyName) || FAMILY_NAMES[0]);
+    else if (key === 'givenName') p.givenName = cyc(GIVEN_NAMES[p.gender], p.givenName) || GIVEN_NAMES[p.gender][0];
+    else if (key === 'gender') p.gender = cyc(GENDER_ORDER, p.gender);
+    else if (key === 'age') {
+      const a = Math.min(AGE_MAX, Math.max(AGE_MIN, p.age + d));
+      if (a === p.age) { audio.sfx('buzz'); return; }
+      p.age = a;
+    } else if (key === 'hometown') p.hometown = cyc(PREF_ORDER, p.hometown);
+    else if (key === 'personality') p.personality = cyc(PERSONALITY_ORDER, p.personality);
+    else if (key === 'era') p.era = cyc(ERA_ORDER, p.era);
+    else return;
+    audio.sfx('cursor');
+    this.flash = 10;
+  }
+  // A on 出身: the first prefecture of the next region
+  nextRegion() {
+    const r = PREFECTURES[this.prof.hometown].region;
+    const nr = REGION_ORDER[(REGION_ORDER.indexOf(r) + 1) % REGION_ORDER.length];
+    this.prof.hometown = PREF_ORDER.find((id) => PREFECTURES[id].region === nr);
+    audio.sfx('cursor');
+    this.flash = 10;
+  }
+  updateProfile(g, inp) {
+    const rows = this.profRows();
+    const n = rows.length;
+    if (inp.repeat('up')) { this.pRow = (this.pRow + n - 1) % n; audio.sfx('cursor'); }
+    if (inp.repeat('down')) { this.pRow = (this.pRow + 1) % n; audio.sfx('cursor'); }
+    const row = rows[this.pRow];
+    if (inp.repeat('left')) this.changeProfile(row.key, -1);
+    if (inp.repeat('right')) this.changeProfile(row.key, 1);
+    if (inp.pressed('b')) { audio.sfx('cancel'); this.goStep('look'); return; }
+    if (!inp.pressed('a')) return;
+    const p = this.prof;
+    if (row.key === 'familyName') this.typeText('姓（みょうじ）を入力してください', p.familyName, 6, (v) => this.setFamilyName(v));
+    else if (row.key === 'givenName') this.typeText('名（なまえ）を入力してください', p.givenName, 8, (v) => { p.givenName = v; });
+    else if (row.key === 'hometown') this.nextRegion();
+    else if (row.key === 'next') { audio.sfx('ok'); this.goStep('family'); } else this.changeProfile(row.key, 1);
+  }
+  drawProfile(ctx) {
+    const { x, y, w, h } = RP;
+    panel(ctx, x, y, w, h);
+    const rows = this.profRows();
+    fieldRows(ctx, rows, { x, y: y + 10, w, rh: 25, valX: VAL_X, sel: this.pRow, t: this.t });
+    // what the selected row means
+    const row = rows[this.pRow];
+    const p = this.prof;
+    let lines;
+    if (row.key === 'familyName' || row.key === 'givenName') lines = [['A：入力する　◀▶：候補から選ぶ', COLORS.accent], ['まわりの人からは「名」で呼ばれます。', COLORS.text], ['家族の名字も、いっしょに変わります。', COLORS.dim]];
+    else if (row.key === 'gender') lines = [['家族からの呼ばれ方などが、少し変わります。', COLORS.text], ['（見た目は「見た目」のページで）', COLORS.dim]];
+    else if (row.key === 'age') lines = [[`${AGE_MIN}〜${AGE_MAX}さい。${YEAR_DAYS}日ごとに誕生日がきて、`, COLORS.text], ['ひとつ年をとります。', COLORS.text]];
+    else if (row.key === 'hometown') {
+      const reg = REGIONS[PREFECTURES[p.hometown].region];
+      lines = [[`${reg.name}地方　A：次の地方へ`, COLORS.accent], [`ふるさとから、${reg.gift.name}が届くことも。`, COLORS.text], ['（家族がいれば）', COLORS.dim]];
+    } else if (row.key === 'personality') lines = [[PERSONALITIES[p.personality].desc, COLORS.text], [personalityEffects(p.personality), COLORS.cyan]];
+    else if (row.key === 'era') lines = [...ERAS[p.era].desc.split('\n').map((l) => [l, COLORS.text]), ['（ゲームの中身・バランスは同じです）', COLORS.dim]];
+    else lines = [['つぎは家族の設定です。', COLORS.text], ['Bでひとつ前のページにもどれます。', COLORS.dim]];
+    descBox(ctx, { x: x + 10, y: y + h - 70, w: w - 20, h: 60 }, lines);
+    return row.key === 'next' ? 'Aでつぎへ　Bでもどる' : row.kind === 'text' ? 'A：入力　◀▶：候補　▲▼：項目　Bでもどる' : row.key === 'hometown' ? '◀▶：都道府県　A：次の地方　Bでもどる' : '◀▶で変更　▲▼で項目えらび　Bでもどる';
+  }
+
+  // ---------------------------------------------------------------- page 3: 家族
+  famItems() {
+    return [...this.family.map((m, i) => ({ kind: 'member', m, i })), { kind: 'add' }, { kind: 'next' }];
+  }
+  famFields(m) {
+    const rows = [
+      { key: 'name', label: 'なまえ', value: m.name, kind: 'text' },
+      { key: 'alive', label: 'ようす', value: m.alive ? '元気' : '他界', kind: 'cycle', color: m.alive ? COLORS.good : '#c8b8e8' },
+    ];
+    if (!m.alive) rows.push({ key: 'cause', label: '死因', value: (CAUSES[m.cause] || CAUSES.secret).name, kind: 'cycle', pos: [CAUSE_ORDER.indexOf(m.cause) + 1, CAUSE_ORDER.length] });
+    rows.push({ key: 'remove', label: 'この人をはずす', kind: 'button' }, { key: 'back', label: 'もどる', kind: 'button' });
+    return rows;
+  }
+  changeMember(m, key, d) {
+    if (key === 'name') {
+      const fam = this.prof.familyName;
+      const names = RELATIVE_NAMES[m.rel] || [];
+      const given = m.name.startsWith(fam + ' ') ? m.name.slice(fam.length + 1) : '';
+      const i = names.indexOf(given);
+      m.name = `${fam} ${names[((i < 0 ? -1 : i) + d + names.length) % names.length]}`;
+    } else if (key === 'alive') {
+      m.alive = !m.alive;
+      m.cause = m.alive ? null : (m.rel === 'grandfather' || m.rel === 'grandmother' ? 'age' : 'illness');
+    } else if (key === 'cause') {
+      const i = CAUSE_ORDER.indexOf(m.cause);
+      m.cause = CAUSE_ORDER[((i < 0 ? 0 : i) + d + CAUSE_ORDER.length) % CAUSE_ORDER.length];
+    } else return;
+    audio.sfx('cursor');
+    this.flash = 10;
+  }
+  updateFamily(g, inp) {
+    const items = this.famItems();
+    if (this.fFocus === 'add') {
+      const n = RELATION_ORDER.length;
+      if (inp.repeat('up')) { this.addIdx = (this.addIdx + n - 1) % n; audio.sfx('cursor'); }
+      if (inp.repeat('down')) { this.addIdx = (this.addIdx + 1) % n; audio.sfx('cursor'); }
+      if (inp.pressed('b')) { audio.sfx('cancel'); this.fFocus = 'list'; return; }
+      if (inp.pressed('a')) {
+        const rel = RELATION_ORDER[this.addIdx];
+        if (!canAddRelation(this.family, rel)) { audio.sfx('buzz'); return; }
+        audio.sfx('ok');
+        const m = newFamilyMember(rel, this.prof.familyName, this.family);
+        this.family = sortFamily([...this.family, m]);
+        this.fIdx = this.family.indexOf(m);
+        this.fFocus = 'edit';
+        this.fRow = 0;
+        this.flash = 10;
+      }
+      return;
+    }
+    if (this.fFocus === 'edit') {
+      const m = this.family[this.fIdx];
+      if (!m) { this.fFocus = 'list'; return; }
+      const rows = this.famFields(m);
+      const n = rows.length;
+      this.fRow = Math.min(this.fRow, n - 1);
+      if (inp.repeat('up')) { this.fRow = (this.fRow + n - 1) % n; audio.sfx('cursor'); }
+      if (inp.repeat('down')) { this.fRow = (this.fRow + 1) % n; audio.sfx('cursor'); }
+      const row = rows[this.fRow];
+      if (inp.repeat('left')) this.changeMember(m, row.key, -1);
+      if (inp.repeat('right')) this.changeMember(m, row.key, 1);
+      if (inp.pressed('b')) { audio.sfx('cancel'); this.fFocus = 'list'; return; }
+      if (!inp.pressed('a')) return;
+      if (row.key === 'name') this.typeText(`${RELATIONS[m.rel].name}のなまえを入力してください`, m.name, 12, (v) => { m.name = v; });
+      else if (row.key === 'remove') {
+        audio.sfx('cancel');
+        this.family.splice(this.fIdx, 1);
+        this.fFocus = 'list';
+        this.fIdx = Math.min(this.fIdx, this.famItems().length - 1);
+      } else if (row.key === 'back') { audio.sfx('cancel'); this.fFocus = 'list'; } else this.changeMember(m, row.key, 1);
+      return;
+    }
+    const n = items.length;
+    this.fIdx = Math.min(this.fIdx, n - 1);
+    if (inp.repeat('up')) { this.fIdx = (this.fIdx + n - 1) % n; audio.sfx('cursor'); }
+    if (inp.repeat('down')) { this.fIdx = (this.fIdx + 1) % n; audio.sfx('cursor'); }
+    if (inp.pressed('b')) { audio.sfx('cancel'); this.goStep('profile'); return; }
+    if (!inp.pressed('a')) return;
+    const it = items[this.fIdx];
+    audio.sfx('ok');
+    if (it.kind === 'member') { this.fFocus = 'edit'; this.fRow = 0; } else if (it.kind === 'add') {
+      this.fFocus = 'add';
+      const free = RELATION_ORDER.findIndex((r) => canAddRelation(this.family, r));
+      this.addIdx = free < 0 ? 0 : free;
+    } else this.goStep('confirm');
+  }
+  drawFamily(ctx, look) {
+    const t = this.t;
+    const items = this.famItems();
+    // left: the list
+    const L = FAM_L;
+    panel(ctx, L.x, L.y, L.w, L.h);
+    text(ctx, `家族　${this.family.length}人`, L.x + 16, L.y + 10, { size: 16, color: COLORS.cyan });
+    text(ctx, `${this.prof.familyName}家`, L.x + L.w - 16, L.y + 12, { size: 13, align: 'right', color: COLORS.dim });
+    R(ctx, L.x + 10, L.y + 32, L.w - 20, 1, '#3a4a8a');
+    const RHF = 26, rowsVis = Math.floor((L.h - 46) / RHF);
+    if (this.fIdx < this.fTop) this.fTop = this.fIdx;
+    if (this.fIdx >= this.fTop + rowsVis) this.fTop = this.fIdx - rowsVis + 1;
+    this.fTop = Math.max(0, Math.min(this.fTop, items.length - rowsVis));
+    const listActive = this.fFocus === 'list';
+    for (let k = 0; k < rowsVis && this.fTop + k < items.length; k++) {
+      const i = this.fTop + k;
+      const it = items[i];
+      const ry = L.y + 40 + k * RHF;
+      const sel = i === this.fIdx;
+      if (it.kind === 'next') {
+        const bw = L.w - 40, bx = L.x + 20, by = ry;
+        const main = sel && listActive ? COLORS.accent : '#24306a';
+        R(ctx, bx - 1, by - 1, bw + 2, RHF - 2, OUTLINE);
+        R(ctx, bx, by, bw, RHF - 4, main);
+        R(ctx, bx, by, bw, 1, shade(main, 0.35));
+        text(ctx, 'つぎへ（かくにん）', L.x + L.w / 2, by + 3, { size: 16, align: 'center', color: sel && listActive ? '#20232a' : '#ffffff', shadow: sel && listActive ? null : undefined });
+        if (sel && listActive) cursor(ctx, bx + 10, by + 7, t, '#20232a');
+        continue;
+      }
+      if (sel) {
+        R(ctx, L.x + 8, ry - 3, L.w - 16, RHF - 2, listActive ? '#24306a' : '#1a2250');
+        R(ctx, L.x + 8, ry - 3, 2, RHF - 2, listActive ? COLORS.accent : '#5a6ab8');
+      }
+      if (sel && listActive) cursor(ctx, L.x + 16, ry + 5, t);
+      if (it.kind === 'add') {
+        const full = RELATION_ORDER.every((r) => !canAddRelation(this.family, r));
+        text(ctx, '＋ 家族をふやす', L.x + 30, ry, { size: 16, color: full ? COLORS.dim : sel ? COLORS.accent : COLORS.cyan });
+        continue;
+      }
+      const m = it.m;
+      const rel = RELATIONS[m.rel].name;
+      const cw = Math.ceil(measure(ctx, rel, 13)) + 10;
+      const chip = m.alive ? '#5a6ab8' : '#6a5a7a';
+      R(ctx, L.x + 30, ry + 1, cw, 17, chip);
+      R(ctx, L.x + 30, ry + 1, cw, 1, shade(chip, 0.35));
+      text(ctx, rel, L.x + 30 + cw / 2, ry + 3, { size: 13, align: 'center', color: '#ffffff', shadow: null });
+      const st = m.alive ? '元気' : '他界';
+      const sw = measure(ctx, st, 13);
+      const nx = L.x + 36 + cw, maxW = L.x + L.w - 22 - sw - 8 - nx;
+      const ns = [16, 14, 12].find((z) => measure(ctx, m.name, z) <= maxW) || 12;
+      text(ctx, fitTo(ctx, m.name, maxW, ns), nx, ry + (16 - ns) / 2, { size: ns, color: sel ? COLORS.accent : COLORS.text });
+      text(ctx, st, L.x + L.w - 18, ry + 2, { size: 13, align: 'right', color: m.alive ? COLORS.good : '#c8b8e8', shadow: null });
+      if (!m.alive) flower(ctx, L.x + L.w - 26 - sw, ry + 5);
+    }
+    if (this.fTop > 0) arrowUp(ctx, L.x + L.w / 2 - 3, L.y + 36, t);
+    if (this.fTop + rowsVis < items.length) downArrowSmall(ctx, L.x + L.w / 2 - 3, L.y + L.h - 10, t);
+
+    // right: the selected member, the relation chooser, or a note
+    const P = FAM_R;
+    panel(ctx, P.x, P.y, P.w, P.h);
+    const it = items[this.fIdx];
+    const note = ['家族は、物語の背景の設定です。', '亡くなった家族のことも、思い出として', 'やさしく語られるだけです。'];
+    if (this.fFocus === 'add') {
+      text(ctx, 'だれをふやす？', P.x + 16, P.y + 10, { size: 16, color: COLORS.cyan });
+      RELATION_ORDER.forEach((r, i) => {
+        const ry = P.y + 38 + i * 24;
+        const ok = canAddRelation(this.family, r);
+        const sel = i === this.addIdx;
+        if (sel) { R(ctx, P.x + 8, ry - 3, P.w - 16, 22, '#24306a'); R(ctx, P.x + 8, ry - 3, 2, 22, COLORS.accent); cursor(ctx, P.x + 16, ry + 4, t); }
+        text(ctx, `${RELATIONS[r].name}（${RELATIONS[r].call}）`, P.x + 30, ry, { size: 16, color: !ok ? COLORS.dim : sel ? COLORS.accent : COLORS.text });
+        text(ctx, `${relationCount(this.family, r)}/${RELATIONS[r].max}`, P.x + P.w - 18, ry + 2, { size: 13, align: 'right', color: ok ? COLORS.dim : COLORS.bad, shadow: null });
+      });
+      return '▲▼でえらぶ　Aでふやす　Bでもどる';
+    }
+    if (it && it.kind === 'member') {
+      const m = it.m;
+      const edit = this.fFocus === 'edit';
+      // a small portrait (a soft frame with a flower for someone who has passed away)
+      R(ctx, P.x + 14, P.y + 14, 76, 60, m.alive ? '#0b1030' : '#2a2440');
+      if (!m.alive) { R(ctx, P.x + 14, P.y + 14, 76, 2, '#c8b8e8'); R(ctx, P.x + 14, P.y + 72, 76, 2, '#c8b8e8'); }
+      drawFaceHD(ctx, familyLook(m, look), P.x + 20, P.y + 20, 2);
+      if (!m.alive) flower(ctx, P.x + 78, P.y + 60);
+      text(ctx, `${RELATIONS[m.rel].name}（${RELATIONS[m.rel].call}）`, P.x + 102, P.y + 16, { size: 13, color: COLORS.dim });
+      const ns = [16, 14, 12].find((z) => measure(ctx, m.name, z) <= P.w - 118) || 12;
+      text(ctx, fitTo(ctx, m.name, P.w - 118, ns), P.x + 102, P.y + 36, { size: ns, color: COLORS.accent });
+      text(ctx, m.alive ? '元気にしている' : `${(CAUSES[m.cause] || CAUSES.secret).text || ''}旅立った`, P.x + 102, P.y + 58, { size: 13, color: m.alive ? COLORS.good : '#c8b8e8' });
+      fieldRows(ctx, this.famFields(m), { x: P.x, y: P.y + 88, w: P.w, rh: 25, valX: P.x + 206, sel: edit ? this.fRow : -1, t, dim: !edit, labelX: 30 });
+      descBox(ctx, { x: P.x + 10, y: P.y + P.h - 58, w: P.w - 20, h: 50 }, note.map((l) => [l, COLORS.dim]), 12);
+      if (!edit) return 'Aでこの人を編集　▲▼でえらぶ　Bでもどる';
+      const k = this.famFields(m)[this.fRow].key;
+      return k === 'name' ? 'A：入力　◀▶：候補　Bで一覧へ' : k === 'remove' ? 'Aでこの人をはずす　Bで一覧へ' : k === 'back' ? 'Aで一覧へもどる' : '◀▶で変更　▲▼で項目えらび　Bで一覧へ';
+    }
+    if (it && it.kind === 'add') {
+      text(ctx, '家族をふやす', P.x + 16, P.y + 10, { size: 16, color: COLORS.cyan });
+      const lines = [['父・母・祖父・祖母は1人ずつ、', COLORS.text], ['兄・姉・弟・妹は2人まで。', COLORS.text], ['家族がいると、電話や仕送り、', COLORS.text], ['帰省のおたのしみがあります。', COLORS.text]];
+      lines.forEach(([l, c], i) => text(ctx, l, P.x + 18, P.y + 42 + i * 22, { size: 15, color: c }));
+      descBox(ctx, { x: P.x + 10, y: P.y + P.h - 58, w: P.w - 20, h: 50 }, note.map((l) => [l, COLORS.dim]), 12);
+      return 'Aでえらぶ　▲▼で項目えらび　Bでもどる';
+    }
+    // つぎへ: a short summary
+    text(ctx, this.family.length ? 'この家族で上京します' : 'ひとりで上京します', P.x + 16, P.y + 10, { size: 16, color: COLORS.cyan });
+    const alive = this.family.filter((m) => m.alive).length;
+    const lines = this.family.length
+      ? [[`いっしょに暮らしていた家族：${this.family.length}人`, COLORS.text], [`元気な家族：${alive}人`, COLORS.good], [alive ? 'ふるさとから、ときどき連絡が来るかも。' : '空から、そっと見守ってくれている。', COLORS.dim]]
+      : [['家族のいない設定です。', COLORS.text], ['仲間たちが、新しい家族になるかも。', COLORS.dim]];
+    lines.forEach(([l, c], i) => text(ctx, l, P.x + 18, P.y + 44 + i * 24, { size: 15, color: c }));
+    descBox(ctx, { x: P.x + 10, y: P.y + P.h - 58, w: P.w - 20, h: 50 }, note.map((l) => [l, COLORS.dim]), 12);
+    return 'Aでつぎへ　▲▼で項目えらび　Bでもどる';
+  }
+
+  // ---------------------------------------------------------------- page 4: かくにん
+  profileResult() {
+    return { ...this.prof, family: this.family.map((m) => ({ ...m })) };
+  }
+  updateConfirm(g, inp) {
+    if (inp.repeat('up') || inp.repeat('down')) { this.cRow = 1 - this.cRow; audio.sfx('cursor'); }
+    if (inp.pressed('b')) { audio.sfx('cancel'); this.goStep('family'); return; }
+    if (!inp.pressed('a')) return;
+    if (this.cRow === 1) { audio.sfx('cancel'); this.goStep('family'); return; }
+    audio.sfx('ok');
+    this.finish({ name: this.prof.givenName, look: this.look(), profile: this.profileResult() });
+  }
+  drawConfirm(ctx) {
+    const { x, y, w, h } = RP;
+    const t = this.t;
+    panel(ctx, x, y, w, h);
+    const p = this.prof;
+    const pref = PREFECTURES[p.hometown];
+    const rows = [
+      ['氏名', `${p.familyName} ${p.givenName}`],
+      ['性別', GENDERS[p.gender].name],
+      ['年齢', `${p.age}さい`],
+      ['出身', `${pref.name}（${REGIONS[pref.region].name}）`],
+      ['性格', PERSONALITIES[p.personality].name],
+      ['時代', ERAS[p.era].label],
+    ];
+    const LX = x + 20, VX = x + 86, VW = w - 106;
+    rows.forEach(([k, v], i) => {
+      const ry = y + 12 + i * 24;
+      text(ctx, k, LX, ry, { size: 16, color: COLORS.cyan });
+      const vs = [16, 14, 12].find((z) => measure(ctx, v, z) <= VW) || 12;
+      text(ctx, fitTo(ctx, v, VW, vs), VX, ry + (16 - vs) / 2, { size: vs, color: COLORS.text });
+    });
+    // family on up to three lines
+    const fy = y + 12 + rows.length * 24;
+    text(ctx, '家族', LX, fy, { size: 16, color: COLORS.cyan });
+    const fam = sortFamily(this.family).map((m) => `${RELATIONS[m.rel].name} ${m.name.startsWith(p.familyName + ' ') ? m.name.slice(p.familyName.length + 1) : m.name}${m.alive ? '' : '（他界）'}`);
+    const flines = wrapItems(ctx, fam.length ? fam : ['なし（ひとりで上京）'], VW, 14, 3);
+    flines.forEach((l, i) => text(ctx, l, VX, fy + 1 + i * 18, { size: 14, color: COLORS.text }));
+    // buttons
+    ['これでスタート！', 'もどる'].forEach((label, i) => {
+      const bw = w - 60, bx = x + 30, by = y + h - 64 + i * 30;
+      const sel = i === this.cRow;
+      const main = sel ? (i === 0 ? COLORS.accent : '#9aa3c7') : '#24306a';
+      R(ctx, bx - 1, by - 1, bw + 2, 26, OUTLINE);
+      R(ctx, bx, by, bw, 24, main);
+      R(ctx, bx, by, bw, 1, shade(main, 0.35));
+      R(ctx, bx, by + 22, bw, 2, shade(main, -0.25));
+      text(ctx, label, x + w / 2, by + 4, { size: 16, align: 'center', color: sel ? '#20232a' : '#ffffff', shadow: sel ? null : undefined });
+      if (sel) cursor(ctx, bx + 12, by + 8, t, '#20232a');
+    });
+    return this.cRow === 0 ? 'Aでゲームスタート！　Bでもどる' : 'Aで家族のページへもどる';
   }
 
   // The big turning preview (3x) plus the four directions (1x).
@@ -943,11 +1464,13 @@ export class CreateScene {
     }
     // name plate
     const ny = y + 202;
-    const nw = Math.max(110, Math.ceil(measure(ctx, this.name, 16)) + 32);
+    const plate = this.plateName();
+    const ps = measure(ctx, plate, 16) + 32 <= w - 16 ? 16 : 14;
+    const nw = Math.min(w - 16, Math.max(110, Math.ceil(measure(ctx, plate, ps)) + 32));
     R(ctx, cx - nw / 2 - 1, ny - 1, nw + 2, 26, OUTLINE);
     R(ctx, cx - nw / 2, ny, nw, 24, this.closet ? '#4a3420' : '#24306a');
     R(ctx, cx - nw / 2, ny, nw, 1, this.closet ? '#8a6a3a' : '#4a5aa8');
-    text(ctx, this.name, cx, ny + 4, { size: 16, align: 'center', color: COLORS.accent });
+    text(ctx, plate, cx, ny + 4 + (16 - ps) / 2, { size: ps, align: 'center', color: COLORS.accent });
     // the four directions
     const sheet = charSheetHD(look);
     const tw = 44, tx0 = Math.round(cx - (tw * 4) / 2);

@@ -2,6 +2,7 @@
 
 import { fmtMoney } from './util.js';
 import { newLifeState } from './life.js';
+import { defaultProfile, normalizeProfile, PERSONALITIES } from './profile.js';
 
 export const SKILLS = { warai: 'お笑い', engi: '演技', uta: '歌', talk: 'トーク' };
 export const SKILL_MAX = 100;
@@ -55,8 +56,10 @@ export function registerItem(id, def) { ITEMS[id] = def; }
 
 export const MAX_STAMINA = 100;
 
-export function newState(name = 'ドット', look = null) {
-  return {
+// profile: from the character creator (see profile.js). Given, its personality's starting
+// skills are added; without one the state gets defaultProfile (tests, old saves).
+export function newState(name = 'ドット', look = null, profile = null) {
+  const st = {
     version: 2,
     name,
     look,
@@ -75,6 +78,12 @@ export function newState(name = 'ドット', look = null) {
     playMinutes: 0,
     ...newLifeState(),
   };
+  st.profile = profile ? normalizeProfile(profile, st) : defaultProfile(st);
+  if (profile) {
+    const bonus = (PERSONALITIES[st.profile.personality] || {}).skills || {};
+    for (const [k, v] of Object.entries(bonus)) if (k in st.skills) st.skills[k] += v;
+  }
+  return st;
 }
 
 const SAVE_KEY = 'dotgeinou_save_v2';
@@ -105,6 +114,8 @@ export function loadGame() {
     for (const k of ['items', 'buffs', 'flags', 'jobs', 'furniture', 'people', 'regulars']) st[k] = { ...obj(k in data.state ? data.state[k] : def[k]) };
     for (const k of ['life', 'rent', 'phone']) st[k] = { ...def[k], ...obj(data.state[k]) };
     normalize(st, def);
+    // saves from before the character creator had profiles: the name becomes the given name
+    st.profile = data.state.profile ? normalizeProfile(data.state.profile, st) : defaultProfile(st);
     data.state = st;
     return data;
   } catch (e) {

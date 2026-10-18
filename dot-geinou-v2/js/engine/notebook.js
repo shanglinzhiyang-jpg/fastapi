@@ -5,17 +5,19 @@
 //               regular shows, friends (hearts) and fans
 //   ばしょ      places the player has been to (state.flags.visited, set by g.goto)
 //               with a short guide from js/world/guide.js; others are 「？？？」 + a hint
-//   きろく      days, jobs, minigames and their best ranks, title, agency
+//   きろく      the profile (name, age, hometown, personality, era) and family, days, jobs,
+//               minigames and their best ranks, title, agency
 //
 // Controls: ←→ tabs, ↑↓ scroll, A next page, B / MENU close. Everything is wrapped
 // to the page, so long text never runs off it. The life registries (PEOPLE,
 // REGULARS, HOUSING) are read when the notebook opens and may be empty.
 
-import { SW, SH, fmtMoney, clamp, shade } from './util.js';
+import { SW, SH, fmtMoney, yenText, clamp, shade } from './util.js';
 import { text, wrap, panel, measure, rect, downArrow, COLORS } from './draw.js';
 import { audio } from './audio.js';
 import { SKILLS, AGENCIES, RANKS, FINALE_FAME, rankIndex, rankName } from './state.js';
 import { MINIGAMES } from './minigame.js';
+import { eraOf, fullName, ageOf, prefecture, regionOf, GENDERS, PERSONALITIES, RELATIONS, CAUSES, isBirthday, daysToBirthday, personalityEffects, sortFamily } from './profile.js';
 import { GUIDE, GUIDE_ORDER, TOWNS, AUDITIONS, GUIDE_JOBS, TIER_FAME, jobOpen } from '../world/guide.js';
 import { PEOPLE, HEARTS, heartIndex, REGULARS, FURNITURE, WEEKDAYS, weekdayOf, weekOf, HUNGRY, STRESSED, SCRUFFY, BURNOUT, FULL, showWords } from './life.js';
 
@@ -45,6 +47,16 @@ const HEART_N = Math.max(1, Math.min(6, HEARTS.length - 1)); // one heart per le
 
 let lastTab = 0; // reopen on the tab the player looked at last
 
+// Era words for the page texts (set when the notebook opens): the phone is 手帳 / ケータイ /
+// スマホ, the SNS ブログ etc., and literal prices follow the era (util.js yenText).
+let ERA = eraOf(null);
+const eraText = (t) => {
+  let s = String(t ?? '');
+  if (ERA.deviceShort !== 'スマホ') s = s.replaceAll('スマホ', ERA.deviceShort);
+  if (ERA.sns !== 'ドッター') s = s.replaceAll('ドッター', ERA.sns);
+  return yenText(s);
+};
+
 // ---------------------------------------------------------------- content builder
 // A page is a list of blocks (scroll unit); a block is a list of lines.
 // line: { t, s: BODY|SMALL, c, x, h, r, rs, rc, tag: { t, bg }, badge: { t, c }, mark,
@@ -56,6 +68,8 @@ class Page {
 
   line(l) {
     if (!this.b) this.block();
+    if (l.t) l.t = eraText(l.t);
+    if (l.r) l.r = eraText(l.r);
     l.s = l.s || BODY;
     l.h = l.h || LH[l.s] || 21;
     this.b.lines.push(l);
@@ -67,6 +81,7 @@ class Page {
 
   // wrapped paragraph
   para(t, { c = COLORS.text, s = BODY, x = 0, mark } = {}) {
+    t = eraText(t);
     for (const ln of wrap(this.ctx, t, VW - x, s)) this.line({ t: ln, c, s, x, mark });
     return this;
   }
@@ -74,6 +89,8 @@ class Page {
   // left text (optionally after a small tag) with right-aligned text; falls back to
   // two lines when both do not fit side by side
   row(t, r, { c = COLORS.text, s = BODY, x = 0, rc = COLORS.text, rs = s, tag, mark, gauge, hearts } = {}) {
+    t = eraText(t);
+    if (r) r = eraText(r);
     const tagW = tag ? measure(this.ctx, tag.t, 12) + 12 : 0;
     const lw = tagW + measure(this.ctx, t, s);
     const rw = r ? measure(this.ctx, r, rs) : 0;
@@ -467,11 +484,40 @@ function recordPage(g, ctx) {
   const visited = visitedPlaces(g);
   const ids = GUIDE_ORDER.filter((id) => GUIDE[id]);
 
-  pg.block().row(st.name, `${rankName(st.fame)}　★${st.fame}`, { c: COLORS.accent, rc: COLORS.pink });
+  const pf = st.profile;
+  pg.block().row(pf ? fullName(pf) : st.name, `${rankName(st.fame)}　★${st.fame}`, { c: COLORS.accent, rc: COLORS.pink });
   pg.row('所属', st.agency && AGENCIES[st.agency] ? AGENCIES[st.agency].name : 'フリー（未所属）');
   const pm = st.playMinutes || 0;
   pg.row('日数', g.dayLabel ? g.dayLabel() : `${st.day}日目`);
   pg.row('プレイ時間', pm >= 60 ? `${Math.floor(pm / 60)}時間${pm % 60}分` : `${pm}分`);
+
+  if (pf) {
+    pg.block().head('プロフィール');
+    const d = daysToBirthday(st);
+    pg.row('年齢', `${ageOf(st)}さい`, { rc: COLORS.accent });
+    pg.para(isBirthday(st) ? '今日は誕生日！おめでとう！' : `次の誕生日まで あと${d}日`, { s: SMALL, c: isBirthday(st) ? COLORS.pink : COLORS.dim, x: 12 });
+    pg.row('性別', (GENDERS[pf.gender] || GENDERS.x).name);
+    pg.row('出身', `${prefecture(pf.hometown).name}（${regionOf(pf.hometown).name}）`);
+    const per = PERSONALITIES[pf.personality];
+    if (per) {
+      pg.row('性格', per.name, { rc: COLORS.cyan });
+      pg.para(`${per.desc}（${personalityEffects(pf.personality)}）`, { s: SMALL, c: COLORS.dim, x: 12 });
+    }
+    pg.row('時代', ERA.label);
+    pg.para(`${ERA.year}。${ERA.device}を持って、芸能界へ。`, { s: SMALL, c: COLORS.dim, x: 12 });
+
+    pg.block().head('家族', COLORS.pink);
+    const fam = sortFamily(Array.isArray(pf.family) ? pf.family : []);
+    if (!fam.length) pg.para('ひとりで上京してきた。いまは仲間が家族みたいなもの。', { s: SMALL, c: COLORS.dim });
+    for (const m of fam) {
+      const rel = RELATIONS[m.rel] ? RELATIONS[m.rel].name : '家族';
+      pg.row(`${rel}　${m.name}`, m.alive ? '元気' : '空から見守っている', { rc: m.alive ? COLORS.good : COLORS.dim, rs: m.alive ? BODY : SMALL });
+      if (!m.alive) {
+        const why = CAUSES[m.cause] && CAUSES[m.cause].text;
+        pg.para(`${why ? why + '旅立った。' : ''}いまも、心の支え。`, { s: SMALL, c: COLORS.dim, x: 12 });
+      }
+    }
+  }
 
   pg.block().head('あゆみ');
   pg.row('こなしたお仕事', `${stats.jobs || 0}回`);
@@ -522,6 +568,7 @@ export class NotebookScene {
     this.opaque = true; // covers the whole screen
     this.hidesHud = true; // MapScene skips the HUD while this is open
     this.tab = clamp(lastTab, 0, TABS.length - 1);
+    ERA = eraOf(g.state);
     this.pages = BUILDERS.map((b) => {
       try { return b(g, g.ctx); } catch (e) { console.error(e); return new Page(g.ctx).block().para('（読み込めませんでした）'); }
     });

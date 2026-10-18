@@ -21,7 +21,7 @@
 // State: g.state.flags career_* / dotter (old saves simply lack them), g.state.phone.lastPost
 // and .posts (life fields), g.state.regulars (engine). All names are fictional.
 
-import { registerRegular, REGULARS, onMorning, registerPhoneApp, weekdayOf, weekOf, WEEKDAYS, PEOPLE, isKansai, OFFER_DAYS } from '../engine/life.js';
+import { registerRegular, REGULARS, onMorning, registerPhoneApp, PHONE_APPS, weekdayOf, weekOf, WEEKDAYS, PEOPLE, isKansai, OFFER_DAYS } from '../engine/life.js';
 import { registerItem, ITEMS, RANKS, rankIndex, AGENCIES } from '../engine/state.js';
 import { PLACES } from '../engine/map.js';
 import { LOOKS, charSheetHD, drawFaceHD } from '../engine/sprites.js';
@@ -30,6 +30,7 @@ import { SW, SH, clamp, makeCanvas, shade, hash2 } from '../engine/util.js';
 import { audio } from '../engine/audio.js';
 import * as Phone from '../engine/phone.js';
 import * as Guide from './guide.js';
+import { eraOf } from '../engine/profile.js';
 
 // ======================================================================== small helpers
 const G = () => (typeof window !== 'undefined' ? window.__game : null);
@@ -38,6 +39,9 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const shuffled = (arr) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+// The SNS's name in the player's era (ドッター in 令和, ブログ in 平成, ファンクラブ会報 in 昭和).
+// Dialogue goes through g.fmt, which renames it too; this is for the app's own labels.
+const SNS = () => eraOf(ST()).sns;
 function fansShort(n) {
   n = Math.max(0, Math.round(n || 0));
   if (n >= 100000) return `${Math.round(n / 10000)}万`;
@@ -1344,7 +1348,7 @@ function glyph(c, name, x, y, col) {
 const LINE_H = 15;
 function timelineView(g) {
   return {
-    title: 'ドッター',
+    title: () => SNS(),
     color: DOT.color,
     bg: DOT.bg,
     cancel: -1,
@@ -1510,9 +1514,9 @@ async function composeFlow(g, ph, view) {
 export async function dotterApp(g) {
   if (Phone.phoneView) return Phone.phoneView(g, timelineView(g));
   // fallback without the HD phone: a plain list
-  if (!canPost(g)) { await g.say('（ドッター：今日はもう投稿した。また明日！）'); return; }
+  if (!canPost(g)) { await g.say(`（${SNS()}：今日はもう投稿した。また明日！）`); return; }
   const items = topicItems(g).filter((it) => !it.disabled);
-  const i = await g.list({ title: 'ドッターに投稿', items: items.map((it) => it.label) });
+  const i = await g.list({ title: `${SNS()}に投稿`, items: items.map((it) => it.label) });
   if (i < 0) return;
   const res = postToDotter(g, items[i].id);
   if (res) await g.say(`「${res.post.x}」\n（ファン +${res.gain}人）`);
@@ -1523,6 +1527,10 @@ registerPhoneApp('dotter', {
   badge: (g) => (enjoPending(g) ? 1 : 0),
   open: (g) => dotterApp(g),
 });
+// the app's label follows the era (registerPhoneApp copies the def, so redefine it there)
+try {
+  Object.defineProperty(PHONE_APPS.dotter, 'name', { get: () => eraOf(ST()).snsShort || SNS(), configurable: true, enumerable: true });
+} catch (e) { /* keep the plain name */ }
 
 // ======================================================================== the 冠番組: next-morning news
 function kanMorning(g, out) {

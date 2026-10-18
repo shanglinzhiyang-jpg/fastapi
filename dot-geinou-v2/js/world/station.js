@@ -1,63 +1,168 @@
-// 東京駅 / なんば駅: travel between the two towns.
+// 東京駅 / なんば駅: travel between the two towns, and (東京駅) going home to the
+// 実家 (js/world/family.js adds that ticket through STATION_TICKETS).
 // The real route is 東京 →(新幹線)→ 新大阪 →(電車)→ なんば; the game sells it as one ticket.
+//
+// For other modules:
+//   STATION_TICKETS[stationId].push({ id, label, cond(g), run: async (g, npc) => {} })
+//       an extra choice at the ticket counter (label ≤ 14 chars; shown when cond passes).
+//   await travelScene(g, { to, via, vehicle, scenery })   the HD ride cutscene
+//       vehicle: 'shinkansen' | 'local' | 'plane'; scenery: 'fuji' | 'mountains' | 'fields' | 'sea' | 'city'
 
 import { registerPlace } from '../engine/map.js';
 import { defineTile, R as TR, P as TP } from '../engine/tiles.js';
 import { LOOKS } from '../engine/sprites.js';
-import { W, H } from '../engine/util.js';
-import { text, COLORS } from '../engine/draw.js';
+import { SW, SH, fmtMoney } from '../engine/util.js';
+import { text } from '../engine/draw.js';
 import { audio } from '../engine/audio.js';
 
 export const FARE = 3000;
+// Extra ticket-counter choices per station (see the header).
+export const STATION_TICKETS = { station_tokyo: [], station_namba: [] };
 
-// Short train ride cutscene (shinkansen passing Mt. Fuji).
-function rideScene(g, toName, via) {
+// ---------------------------------------------------------------- the ride (HD, 640x360)
+const F = (c, x, y, w, h, col) => { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+const wrapX = (x, span) => ((x % span) + span) % span;
+
+function drawSky(c, top, mid, low) {
+  for (let y = 0; y < 230; y += 10) F(c, 0, y, SW, 10, y < 80 ? top : y < 160 ? mid : low);
+}
+function drawClouds(c, t, y0, speed, col = '#ffffff') {
+  for (let i = 0; i < 6; i++) {
+    const x = wrapX(i * 131 - t * speed, SW + 120) - 60;
+    const y = y0 + (i % 3) * 22;
+    F(c, x, y, 64, 10, col); F(c, x + 12, y - 8, 36, 8, col); F(c, x + 6, y + 10, 50, 4, 'rgba(200,220,240,0.7)');
+  }
+}
+function drawFuji(c, t) {
+  const fx = 420 - t * 0.25;
+  for (let i = 0; i < 120; i += 2) {
+    F(c, fx - i * 1.5, 100 + i, i * 3, 2, '#5a78b0');
+    if (i < 34) F(c, fx - i * 1.5, 100 + i, i * 3, 2, i % 6 === 4 ? '#e4ecf6' : '#ffffff');
+  }
+  F(c, fx - 6, 100, 12, 2, '#ffffff');
+}
+function drawRidge(c, t, base, col, speed, amp, seed) {
+  for (let x = 0; x < SW; x += 4) {
+    const wx = x + t * speed;
+    const h = amp * (0.55 + 0.25 * Math.sin((wx + seed) / 47) + 0.2 * Math.sin((wx + seed * 3) / 19));
+    F(c, x, base - h, 4, h + 2, col);
+  }
+}
+function drawSea(c, t) {
+  F(c, 0, 150, SW, 70, '#3f8fd0');
+  for (let i = 0; i < 18; i++) {
+    const x = wrapX(i * 53 - t * 1.2, SW + 40) - 20;
+    F(c, x, 160 + (i % 4) * 14, 18, 2, '#9fd4ff');
+  }
+  // islands far away
+  F(c, wrapX(500 - t * 0.2, SW + 200) - 100, 142, 90, 8, '#4f7a5a');
+  F(c, wrapX(500 - t * 0.2, SW + 200) - 80, 136, 44, 6, '#5f8a6a');
+}
+function drawCity(c, t) {
+  for (let i = 0; i < 16; i++) {
+    const x = wrapX(i * 47 - t * 1.6, SW + 60) - 30;
+    const h = 40 + ((i * 37) % 70);
+    F(c, x, 220 - h, 38, h, ['#8a93a8', '#a3abbd', '#7a849a'][i % 3]);
+    for (let wy = 220 - h + 8; wy < 212; wy += 10) for (let wx = 4; wx < 34; wx += 9) F(c, x + wx, wy, 4, 4, '#dfe8f4');
+  }
+}
+function drawFields(c, t) {
+  F(c, 0, 210, SW, 150, '#62b35b');
+  for (let i = 0; i < 16; i++) {
+    const x = wrapX(i * 60 - t * 5, SW + 60) - 30;
+    F(c, x, 228 + (i % 3) * 30, 40, 4, '#55a34f');
+    F(c, x + 20, 300 + (i % 2) * 20, 28, 4, '#6fc067');
+  }
+  // small houses go by
+  for (let i = 0; i < 4; i++) {
+    const x = wrapX(i * 190 - t * 2.4, SW + 120) - 60;
+    F(c, x, 196, 30, 16, '#efe2bf'); F(c, x - 3, 188, 36, 9, '#b8434a'); F(c, x + 11, 202, 8, 10, '#7a4e2a');
+  }
+}
+function drawTrain(c, t, kind) {
+  // poles and track
+  F(c, 0, 268, SW, 14, '#8e929c'); F(c, 0, 268, SW, 2, '#b8bcc6'); F(c, 0, 282, SW, 4, '#5a5f6b');
+  for (let i = 0; i < 8; i++) {
+    const x = wrapX(i * 96 - t * 14, SW + 96) - 30;
+    F(c, x, 196, 5, 74, '#5a5f6b'); F(c, x - 10, 198, 25, 3, '#5a5f6b');
+  }
+  F(c, 0, 200, SW, 1, '#40444e');
+  const bob = Math.round(Math.sin(t / 5));
+  const y = 222 + bob;
+  if (kind === 'local') {
+    // commuter train: boxy cars with a stripe
+    for (let k = 0; k < 3; k++) {
+      const x = 30 + k * 172;
+      F(c, x, y, 166, 44, '#d8dce4'); F(c, x, y, 166, 3, '#f4f6fa');
+      F(c, x, y + 28, 166, 6, '#3fa86a');
+      for (let wx = x + 10; wx < x + 156; wx += 26) F(c, wx, y + 8, 18, 14, '#3b4a6a');
+      F(c, x + 70, y + 6, 22, 34, '#9aa0aa');
+    }
+    F(c, 542, y + 8, 10, 14, '#3b4a6a');
+    return;
+  }
+  // shinkansen: long white body, blue line, pointed nose
+  F(c, 20, y, 470, 42, '#f4f6fa'); F(c, 20, y, 470, 3, '#ffffff');
+  for (let i = 0; i < 70; i += 2) F(c, 490 + i, y + 6 + Math.floor(i * 0.5), 2, 36 - Math.floor(i * 0.5), '#eef1f6');
+  F(c, 20, y + 26, 540, 5, '#2f5fd0');
+  F(c, 512, y + 12, 18, 7, '#20232a');
+  for (let x = 34; x < 480; x += 22) F(c, x, y + 9, 14, 11, '#3b4a6a');
+  F(c, 20, y + 40, 470, 3, '#c8ccd6');
+}
+function drawPlane(c, t) {
+  drawClouds(c, t, 250, 2.4, '#ffffff');
+  const x = 230 + Math.sin(t / 30) * 8, y = 150 + Math.round(Math.sin(t / 12) * 2);
+  F(c, x, y, 190, 26, '#f4f6fa'); F(c, x, y, 190, 3, '#ffffff');
+  for (let i = 0; i < 30; i += 2) F(c, x + 190 + i, y + 4 + i / 2, 2, 22 - i / 2, '#eef1f6');
+  F(c, x - 20, y - 40, 34, 44, '#e8484f'); F(c, x - 20, y - 40, 34, 4, '#ff7a80');
+  F(c, x + 70, y + 18, 80, 10, '#c8ccd6'); F(c, x + 90, y + 28, 50, 8, '#a8acb6');
+  for (let wx = x + 20; wx < x + 180; wx += 14) F(c, wx, y + 9, 7, 7, '#3b4a6a');
+  F(c, x, y + 16, 210, 3, '#2f5fd0');
+}
+
+// The ride cutscene (HD). Resolves when it ends (A to skip after a moment).
+export function travelScene(g, o = {}) {
+  const vehicle = o.vehicle || 'shinkansen';
+  const scenery = o.scenery || (vehicle === 'plane' ? 'sky' : 'fuji');
   return new Promise((resolve) => {
     const scene = {
-      opaque: true,
-      t: 0,
+      hd: true, opaque: true, hidesHud: true, t: 0,
       update(gg) {
         scene.t++;
-        if (scene.t === 1) audio.sfx('whistle');
-        if (scene.t > 220 || (scene.t > 40 && gg.input.pressed('a'))) { gg.pop(scene); resolve(); }
+        if (scene.t === 1) audio.sfx(vehicle === 'plane' ? 'chime' : 'whistle');
+        const done = gg.auto ? scene.t > 3 : scene.t > 230 || (scene.t > 40 && gg.input.pressed('a'));
+        if (done) { gg.pop(scene); resolve(); }
       },
-      draw(ctx) {
+      draw(c) {
         const t = scene.t;
-        for (let y = 0; y < 150; y += 6) { ctx.fillStyle = y < 50 ? '#7cc4f0' : y < 100 ? '#9ad3f5' : '#bfe6ff'; ctx.fillRect(0, y, W, 6); }
-        // Mt. Fuji
-        const fx = 220 - t * 0.3;
-        ctx.fillStyle = '#5a78b0';
-        for (let i = 0; i < 70; i++) ctx.fillRect(Math.round(fx - i * 1.4), 80 + i, Math.round(i * 2.8), 1);
-        ctx.fillStyle = '#ffffff';
-        for (let i = 0; i < 18; i++) ctx.fillRect(Math.round(fx - i * 1.4), 80 + i, Math.round(i * 2.8), 1);
-        // clouds
-        ctx.fillStyle = '#ffffff';
-        for (let i = 0; i < 4; i++) { const cx = ((i * 97 - t * 0.6) % (W + 60) + W + 60) % (W + 60) - 30; ctx.fillRect(Math.round(cx), 30 + i * 9, 30, 6); ctx.fillRect(Math.round(cx) + 6, 26 + i * 9, 18, 4); }
-        // fields
-        ctx.fillStyle = '#62b35b'; ctx.fillRect(0, 150, W, 90);
-        ctx.fillStyle = '#55a34f';
-        for (let i = 0; i < 12; i++) { const x = ((i * 40 - t * 4) % (W + 40) + W + 40) % (W + 40) - 20; ctx.fillRect(Math.round(x), 160 + (i % 3) * 20, 24, 3); }
-        // track + poles
-        ctx.fillStyle = '#8e929c'; ctx.fillRect(0, 196, W, 8);
-        ctx.fillStyle = '#5a5f6b';
-        for (let i = 0; i < 6; i++) { const x = ((i * 70 - t * 8) % (W + 70) + W + 70) % (W + 70) - 20; ctx.fillRect(Math.round(x), 150, 3, 50); ctx.fillRect(Math.round(x) - 6, 152, 15, 2); }
-        // shinkansen
-        const bob = Math.round(Math.sin(t / 4));
-        const ty = 172 + bob;
-        ctx.fillStyle = '#f4f6fa'; ctx.fillRect(20, ty, 230, 24);
-        for (let i = 0; i < 26; i++) { ctx.fillRect(250 + i, ty + 4 + Math.floor(i * 0.7), 1, 20 - Math.floor(i * 0.7)); }
-        ctx.fillStyle = '#2f5fd0'; ctx.fillRect(20, ty + 15, 240, 3);
-        ctx.fillStyle = '#20232a'; ctx.fillRect(258, ty + 6, 8, 4);
-        ctx.fillStyle = '#3b4a6a';
-        for (let x = 28; x < 240; x += 12) ctx.fillRect(x, ty + 5, 8, 6);
-        text(ctx, `${toName} へ移動中…`, W / 2, 10, { align: 'center', color: '#fff', outline: '#20232a' });
-        if (via) text(ctx, via, W / 2, 28, { size: 10, align: 'center', color: '#fff6a8', outline: '#20232a' });
+        if (vehicle === 'plane') {
+          drawSky(c, '#5aa8e8', '#7cc4f0', '#a8dcf8');
+          F(c, 0, 230, SW, 130, '#a8dcf8');
+          drawClouds(c, t, 40, 0.5);
+          drawPlane(c, t);
+        } else {
+          drawSky(c, '#6cb8ec', '#8fcbf2', '#b8e2fb');
+          drawClouds(c, t, 30, 0.6);
+          if (scenery === 'fuji') { drawFuji(c, t); drawRidge(c, t, 214, '#7fa8c8', 0.4, 46, 3); }
+          if (scenery === 'mountains') { drawRidge(c, t, 200, '#7a98bc', 0.3, 90, 7); drawRidge(c, t, 214, '#5f8a6a', 0.9, 50, 11); }
+          if (scenery === 'sea') drawSea(c, t);
+          if (scenery === 'city') drawCity(c, t);
+          if (scenery !== 'city') drawFields(c, t); else F(c, 0, 220, SW, 140, '#8a8f99');
+          if (scenery === 'fields') drawRidge(c, t, 196, '#86a8c0', 0.25, 30, 5);
+          drawTrain(c, t, vehicle);
+          F(c, 0, 286, SW, 74, scenery === 'city' ? '#7a7f89' : '#4f9a4a');
+        }
+        F(c, 0, 0, SW, 52, 'rgba(10,14,34,0.55)');
+        text(c, `${o.to || ''} へ移動中…`, SW / 2, 8, { size: 20, align: 'center', color: '#fff', outline: '#20232a' });
+        if (o.via) text(c, o.via, SW / 2, 32, { size: 12, align: 'center', color: '#fff6a8', outline: '#20232a' });
+        if (t > 40) text(c, 'A：とばす', SW - 12, SH - 22, { size: 12, align: 'right', color: '#ffffff', outline: '#20232a' });
       },
     };
     g.push(scene);
   });
 }
 
+// ---------------------------------------------------------------- tiles
 // Automatic ticket gate: a cabinet on the left with a closed red flap reaching across.
 defineTile('station_gate', {
   solid: true, obj: true,
@@ -94,8 +199,26 @@ function departureBoard(x, y, w, rows) {
   };
 }
 
-function makeStation({ id, name, wall, floor, destPlace, destName, bgm, transfer, via, board, wallRow, gateText, extraLegend = {}, extraEntities = [], traveler, warnReturn }) {
+function makeStation({ id, name, wall, floor, destPlace, destName, bgm, transfer, via, board, wallRow, gateText, extraLegend = {}, extraEntities = [], traveler, warnReturn, scenery }) {
   const say = (g, npc, t) => g.say(t, { name: npc.name, look: npc.look });
+  // the usual ticket to the other town
+  async function townTicket(g, npc) {
+    if (g.state.money < FARE) { await say(g, npc, 'お金が足りないようですね…。'); return; }
+    if (warnReturn && g.state.money - FARE < FARE) {
+      const j = await g.ask(`帰りの運賃（${fmtMoney(FARE)}）も\n残しておくと安心ですよ。\nそれでも行きますか？`, ['行く', 'やめておく'], { name: npc.name, look: npc.look });
+      if (j !== 0) return;
+    }
+    if (!g.spend(FARE)) { await say(g, npc, 'お金が足りないようですね…。'); return; }
+    g.sfx('coin');
+    await say(g, npc, 'いってらっしゃいませ！');
+    await g.fadeOut();
+    const ride = travelScene(g, { to: destName, via, vehicle: 'shinkansen', scenery });
+    await g.fadeIn();
+    await ride;
+    await g.fadeOut();
+    await g.goto(destPlace, 'concourse', 10, 3, 'down');
+    await g.say(`${destName}に到着した！`);
+  }
   registerPlace({
     id,
     name,
@@ -125,23 +248,14 @@ function makeStation({ id, name, wall, floor, destPlace, destName, bgm, transfer
           {
             type: 'npc', id: 'ticket', x: 2, y: 2, dir: 'down', look: { ...LOOKS.guard, hat: '#2f5fd0' }, name: 'きっぷ売り場',
             talk: async (g, npc) => {
-              const i = await g.ask(`きっぷ売り場です。\n${destName}まで ¥${FARE.toLocaleString()} です。\n（${transfer}）`, [`${destName}へ行く`, 'やめておく'], { name: npc.name, look: npc.look });
-              if (i !== 0) return;
-              if (g.state.money < FARE) { await say(g, npc, 'お金が足りないようですね…。'); return; }
-              if (warnReturn && g.state.money - FARE < FARE) {
-                const j = await g.ask(`帰りの運賃（¥${FARE.toLocaleString()}）も\n残しておくと安心ですよ。\nそれでも行きますか？`, ['行く', 'やめておく'], { name: npc.name, look: npc.look });
-                if (j !== 0) return;
-              }
-              if (!g.spend(FARE)) { await say(g, npc, 'お金が足りないようですね…。'); return; }
-              g.sfx('coin');
-              await say(g, npc, 'いってらっしゃいませ！');
-              await g.fadeOut();
-              const ride = rideScene(g, destName, via);
-              await g.fadeIn();
-              await ride;
-              await g.fadeOut();
-              await g.goto(destPlace, 'concourse', 10, 3, 'down');
-              await g.say(`${destName}に到着した！`);
+              const extra = (STATION_TICKETS[id] || []).filter((x) => {
+                try { return !x.cond || x.cond(g); } catch (e) { console.error(e); return false; }
+              });
+              const choices = [`${destName}へ行く`, ...extra.map((x) => (typeof x.label === 'function' ? x.label(g) : x.label)), 'やめておく'];
+              const i = await g.ask(`きっぷ売り場です。\n${destName}まで ${fmtMoney(FARE)} です。\n（${transfer}）`, choices, { name: npc.name, look: npc.look, cancel: choices.length - 1 });
+              if (i === 0) { await townTicket(g, npc); return; }
+              const x = extra[i - 1];
+              if (x) { try { await x.run(g, npc); } catch (e) { console.error(e); } }
             },
           },
           { type: 'npc', id: 'traveler', x: 9, y: 6, dir: 'left', look: LOOKS.tourist, name: '旅行客', wander: 2, text: traveler },
@@ -163,6 +277,7 @@ makeStation({
   gateText: '改札だ。この先は新幹線のりば。\nきっぷ売り場で、きっぷを買おう。',
   traveler: ['新大阪行きの新幹線、もうすぐ出発だって！', '大阪に着いたら、電車でなんばに行くんだ。'],
   warnReturn: true,
+  scenery: 'fuji',
   extraEntities: [
     { type: 'npc', id: 'biz', x: 4, y: 8, dir: 'up', look: { ...LOOKS.salaryman, tie: '#2f5fd0' }, name: '出張の会社員', text: ['これから大阪へ出張です。', '新幹線で新大阪まで行って、\nそこから電車でなんばへ向かいます。'] },
     { type: 'sign', x: 1, y: 6, text: 'おみやげ売り場だ。\n東京のお菓子がずらりと並んでいる。' },
@@ -179,6 +294,7 @@ makeStation({
   extraLegend: { L: 'wall_cream+lantern' },
   gateText: '改札だ。この先は電車のりば。\n東京へは、新大阪で新幹線に乗りかえ。\nきっぷ売り場で、きっぷを買おう。',
   traveler: ['新大阪で新幹線に乗りかえて、東京へ帰るんだ！', '大阪、おもろかったわ〜。また来よっと！'],
+  scenery: 'fuji',
   extraEntities: [
     { type: 'npc', id: 'owarai_fan', x: 4, y: 8, dir: 'up', look: { ...LOOKS.fan, top: '#ff7eb6' }, name: 'お笑いファン', text: ['劇場、めっちゃ笑ったわ〜！', '次は東京のお笑いも見に行ってみたいなあ。'] },
     { type: 'sign', x: 1, y: 6, text: 'おみやげ売り場だ。\n大阪のお菓子がずらりと並んでいる。' },

@@ -16,6 +16,7 @@ import { clamp, fmtMoney } from './util.js';
 import { COLORS } from './draw.js';
 import { audio } from './audio.js';
 import { ITEMS } from './state.js'; // runtime use only (state.js imports this module too)
+import { personalityMult } from './profile.js';
 
 // ---------------------------------------------------------------- calendar
 export const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
@@ -203,6 +204,7 @@ const methods = {
     const L = this.state.life;
     if (!(k in NEEDS)) { console.error('addNeed: unknown need', k); return 0; }
     const before = L[k];
+    if (k === 'stress' && n > 0) n *= personalityMult(this.state, 'stress'); // personality (profile.js)
     L[k] = clamp(Math.round(before + n), 0, 100);
     const d = L[k] - before;
     if (!silent && d) this.notify(`${NEEDS[k].name} ${d > 0 ? '+' : ''}${d}`, { color: '#fff' });
@@ -403,6 +405,10 @@ const methods = {
   addAff(id, n, silent = false) {
     const p = this.meet(id);
     if (!p) return 0;
+    // personality (profile.js aff): the fraction is carried over (a gain is never below +1),
+    // so small gains (+2) still add up to ×1.2 / ×0.85 over time
+    const am = personalityMult(this.state, 'aff');
+    if (n > 0 && am !== 1) { const x = n * am + (Number(p.affCarry) || 0); n = Math.max(1, Math.floor(x)); p.affCarry = Math.round((x - n) * 100) / 100; }
     if (n > 0 && this.state.life.clean < SCRUFFY) n = Math.ceil(n / 2);
     const before = p.aff;
     const lv = heartIndex(before);
