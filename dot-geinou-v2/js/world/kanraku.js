@@ -52,7 +52,7 @@ import { registerItem, ITEMS, AGENCIES } from '../engine/state.js';
 import { onMorning } from '../engine/life.js';
 import { ageOf } from '../engine/profile.js';
 import { audio, registerSong } from '../engine/audio.js';
-import { lawDate, registerSmokingRule, LENDERS, lenderRate, rateLawText, loanBalance, MONTH_DAYS, CRIMES, isPolitician } from '../engine/crime.js';
+import { lawDate, registerSmokingRule, LENDERS, lenderRate, rateLawText, loanBalance, MONTH_DAYS, CRIMES, isPolitician, onJustice } from '../engine/crime.js';
 import { busStop } from './props.js';
 import { grid, set, put, fill } from './townkit.js';
 import { GUIDE, GUIDE_ORDER } from './guide.js';
@@ -1307,7 +1307,7 @@ async function bottakuri(g, npc) {
     st.money -= paid;
     g.sfx('coin');
     if (paid < bill) await g.say(['足りない？ じゃあ、あるだけでいいわ。\n今日のところはね。'], MAMA);
-    await narrate(g, [`（${fmtMoney(paid)}も払ってしまった…。）`, '（こういう店は「ぼったくり」。\n払う前に、警察を呼んでよかったのだ…）']);
+    await narrate(g, [`（${fmtMoney(paid)}も払ってしまった…。）`, '（こういう店は「ぼったくり」。\n払う前に、その場で110番すればよかった…）']);
     K(g).bottakuri = 'paid';
     g.addNeed('stress', 18);
   }
@@ -1526,7 +1526,8 @@ const VBG = {
     const y2 = { hair: 'slick', hairColor: 'brown', skin: 'tan', top: '#1e1e26', bottom: '#3a3a44', glasses: 'sun' };
     fig(c, y1, 330, 140, 'left'); fig(c, y2, 400, 130, 'left');
     fig(c, PL(g), 200, 140, 'right');
-    if (o.police) fig(c, POLICE_LOOK, 40, 150, 'right');
+    if (o.kenji) fig(c, KENJI.look, 110, 144, 'right');
+    if (o.police) fig(c, POLICE_LOOK, 30, 150, 'right');
     if (o.hit && (t % 20) < 10) { R(c, 270, 150, 30, 4, '#ffffff'); R(c, 283, 137, 4, 30, '#ffffff'); }
   },
 };
@@ -1899,7 +1900,7 @@ async function kobanTalk(g, npc) {
     if (k === 0) await kobanDirections(g, o);
     if (k === 1) await kobanLost(g, o);
     if (k === 2) await kobanConsult(g, o);
-    if (k === 3) await kobanJishu(g, o);
+    if (k === 3 && (await kobanJishu(g, o))) return; // after the 刑事 came, the talk at the counter is over
   }
 }
 const KAN_PLACES = [
@@ -1983,23 +1984,42 @@ async function kobanConsult(g, o) {
     await g.say(['ゲームセンターで、突き飛ばされたんだね。\nけがはないかい。', 'それは暴行だ。被害届を受理しよう。\n店の防犯カメラも確認する。', '話してくれてありがとう。\n泣き寝入りしないことが、次の被害を防ぐんだ。'], o);
   }
 }
+// 自首 (刑法42条): an undetected offence (heat) is reported here; the core's arrest() runs the procedure
+// (small cases go on 在宅, ending as 書類送検) and the 'arrested' hook below counts the surrender (反省).
+let JISHU = null;
+onJustice('arrested', (g, info) => {
+  try {
+    if (!JISHU || !info || info.crime !== JISHU.id || today(g) - JISHU.day > 1) return;
+    const j = jus(g);
+    const cs = j && (j.cases || []).find((c) => c.id === info.caseId);
+    if (cs) { cs.remorse = Math.max(cs.remorse || 0, JISHU.legal ? 1.5 : 1); cs.jishu = JISHU.legal ? 'jishu' : 'shuto'; cs.plea = 'admit'; }
+    JISHU = null;
+  } catch (e) { console.error(e); }
+});
 async function kobanJishu(g, o) {
   const j = jus(g);
-  if (!j || typeof g.arrest !== 'function') { await g.say('…自首、ですか？\n詳しくは、警察署で聞きます。', o); return; }
-  if (j.status === 'detained' || j.status === 'prison') return;
+  if (!j || typeof g.arrest !== 'function') { await g.say('…自首、ですか？\n詳しくは、警察署で聞きます。', o); return false; }
+  if (j.status === 'detained' || j.status === 'prison') return false;
   const ids = Object.keys(j.heat || {}).filter((id) => CRIMES[id] && CRIMES[id].kind === 'crime' && !(j.cases || []).some((c) => !c.closed && c.crime === id));
-  if (!ids.length) { await g.say(['自首…？', '話を聞くかぎり、事件にあたるようなことは\nなさそうだね。困りごとなら、相談に乗るよ。'], o); return; }
+  if (!ids.length) { await g.say(['自首…？', '話を聞くかぎり、事件にあたるようなことは\nなさそうだね。困りごとなら、相談に乗るよ。'], o); return false; }
   const names = ids.map((id) => CRIMES[id].name).concat(['やっぱりやめる']);
   const k = await g.ask('（どのことを話そう…）', names, { cancel: names.length - 1 });
-  if (k < 0 || k >= ids.length) { await narrate(g, '（言い出せなかった…）'); return; }
+  if (k < 0 || k >= ids.length) { await narrate(g, '（言い出せなかった…）'); return false; }
   const id = ids[k];
-  if (id === 'tax_evasion') { await g.say('税金の申告のことなら、まず税務署へ。\n自分から修正申告をすれば、扱いが軽くなることもある。', o); return; }
+  if (id === 'tax_evasion') { await g.say('税金の申告のことなら、まず税務署へ。\n自分から修正申告をすれば、扱いが軽くなることもある。', o); return false; }
   const h = j.heat[id];
-  const c = await g.ask([`${CRIMES[id].name}の件、だね。`, '捜査機関に知られる前に、自分から申し出ることを\n「自首」という。刑が軽くなることがある。（刑法42条）', '警察署に連絡して、担当の刑事に来てもらう。\n…いいね？'], ['すべて話す', 'やっぱりやめる'], { ...o, cancel: 1 });
-  if (c !== 0) { await g.say('…わかった。気持ちが決まったら、また来なさい。', o); return; }
+  const known = !!(h && h.queued) || (j.queue || []).some((e) => e.crime === id);
+  const c = await g.ask([`${CRIMES[id].name}の件、だね。`, known ? '…その件は、もう捜査が始まっているようだ。\nそれでも、自分から来たことはちゃんと伝える。' : '捜査機関に知られる前に、自分から申し出ることを\n「自首」という。刑が軽くなることがある。（刑法42条）', '警察署に連絡して、担当の刑事に来てもらう。\n…いいね？'], ['すべて話す', 'やっぱりやめる'], { ...o, cancel: 1 });
+  if (c !== 0) { await g.say('…わかった。気持ちが決まったら、また来なさい。', o); return false; }
+  if (h) h.queued = true; // it must not "surface" again while this case runs
+  j.queue = (j.queue || []).filter((e) => !(e.crime === id && ['arrest', 'summons', 'weekly'].includes(e.type)));
+  JISHU = { id, day: today(g), legal: !known };
   K(g).jishu = (K(g).jishu || 0) + 1;
   await narrate(g, '（しばらくして、警察署から刑事がやって来た…）');
-  await g.arrest(id, { via: 'warrant', evidence: 0.92, amount: h ? h.amount : 0, plea: 'admit' });
+  const sev = CRIMES[id].severity || 2;
+  await g.arrest(id, { via: 'warrant', evidence: 0.92, amount: h ? h.amount : 0, injury: h ? h.injury : false, request: h ? h.request : undefined, plea: 'admit', askPlea: false, skipArrestScene: true, zaitaku: sev <= 2, source: '自首' });
+  JISHU = null;
+  return true;
 }
 
 registerPlace({
@@ -2256,7 +2276,8 @@ async function kyabaVisit(g, npc) {
   });
   // the bill
   const sum = total();
-  const lines = [`セット ${fmtMoney(bill.set)}${bill.shimei ? `／指名料 ${fmtMoney(bill.shimei)}` : ''}`, `ドリンク ${bill.drinks}杯 ${fmtMoney(bill.drinks * KYABA.drink)}／延長 ${bill.ext}回 ${fmtMoney(bill.ext * KYABA.ext)}`, `サービス料・税込みで、合計 ${fmtMoney(sum)}`];
+  const extras = [bill.drinks ? `ドリンク ${bill.drinks}杯 ${fmtMoney(bill.drinks * KYABA.drink)}` : '', bill.ext ? `延長 ${bill.ext}回 ${fmtMoney(bill.ext * KYABA.ext)}` : ''].filter(Boolean);
+  const lines = [`セット ${fmtMoney(bill.set)}${bill.shimei ? `／指名料 ${fmtMoney(bill.shimei)}` : ''}`, ...(extras.length ? [extras.join('／')] : []), `サービス料・税込みで、合計 ${fmtMoney(sum)}`];
   await g.say(['お会計でございます。', lines.join('\n')], o);
   const paid = Math.min(st.money, sum);
   st.money -= paid;
@@ -3365,6 +3386,7 @@ async function karamareru(g) {
       } else await g.say('…チッ、つまんねえやつ。', YANKEE_A);
     } else if (k === 1) {
       await narrate(g, '（「すみません！」と、カウンターに向かって叫んだ）');
+      v.opts.kenji = true;
       await g.say('おい、そこ！ うちの店で何やってんだ。\n…警察、もう呼んだからな。', KENJI);
       v.opts.police = true;
       g.sfx('whistle');
