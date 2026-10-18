@@ -24,6 +24,7 @@ import {
 const R = (ctx, x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
 const n0 = (n) => Math.max(0, Math.round(Number(n) || 0)).toLocaleString('ja-JP');
 const ART_H = SH - 100; // the message window covers the bottom 96 px
+const SEG_SHORT = { young: '若者', families: '子育て', elderly: '高齢者', employees: '会社員', selfemployed: '自営業', business: '経営者', farmers: '農林漁', unions: '労組', urban: '都市', rural: '地方', floating: '無党派' };
 
 // ======================================================================== drawing kit
 function sky(ctx, top, bottom, h = ART_H, steps = 12) {
@@ -48,12 +49,19 @@ function windows(ctx, base, seed, col, t = 0) {
     for (let y = base - h + 6; y < base - 4; y += 8) if (hash2(x, y, seed + Math.floor(t / 90)) > 0.6) R(ctx, x + 3, y, 2, 3, col);
   }
 }
-// a person seen from far away (from behind): head + body, w ≈ 4..8 px
+// a person seen from far away (from behind): head, shoulders, legs. s ≈ 0.6 (far) .. 3 (near); y = the feet.
 function figure(ctx, x, y, s, col, arm = 0) {
-  const hw = Math.max(2, Math.round(2 * s)), bw = Math.max(3, Math.round(4 * s)), bh = Math.max(4, Math.round(7 * s));
-  R(ctx, x - hw / 2, y - bh - hw, hw, hw, col);
-  R(ctx, x - bw / 2, y - bh, bw, bh, col);
-  if (arm) R(ctx, x + bw / 2 - 1, y - bh - hw - Math.round(3 * s), Math.max(1, Math.round(s)), Math.round(4 * s), col);
+  const legH = Math.max(2, Math.round(4.5 * s)), torsoH = Math.max(3, Math.round(6 * s)), headW = Math.max(2, Math.round(3 * s));
+  const torsoW = Math.max(3, Math.round(5 * s)), legW = Math.max(1, Math.round(1.7 * s)), gap = s >= 1.5 ? Math.max(1, Math.round(0.8 * s)) : 0;
+  const top = y - legH - torsoH;
+  R(ctx, x - legW - gap / 2, y - legH, legW, legH, col);
+  R(ctx, x + gap / 2, y - legH, legW, legH, col);
+  R(ctx, x - torsoW / 2, top + 1, torsoW, torsoH - 1, col);
+  R(ctx, x - torsoW / 2 + 1, top, torsoW - 2, 1, col);
+  const neck = s >= 1.5 ? 1 : 0;
+  R(ctx, x - headW / 2, top - headW - neck, headW, headW, col);
+  if (s >= 2) R(ctx, x - headW / 2 + 1, top - headW - neck - 1, headW - 2, 1, col);
+  if (arm) R(ctx, x + torsoW / 2 - 1, top - Math.round(4 * s), Math.max(1, Math.round(1.2 * s)), Math.round(5 * s), col);
 }
 function crowd(ctx, x0, x1, yTop, yBot, seed, t = 0, cols = ['#1a1a26', '#22222e', '#2a2a36'], arms = 0.08) {
   const rows = Math.max(1, Math.floor((yBot - yTop) / 5));
@@ -70,9 +78,11 @@ function crowd(ctx, x0, x1, yTop, yBot, seed, t = 0, cols = ['#1a1a26', '#22222e
 }
 function placard(ctx, x, y, label, t) {
   const bob = Math.floor(t / 15 + x) % 4 === 0 ? 1 : 0;
-  R(ctx, x + 6, y + 10 - bob, 2, 14, '#3a2a1a');
-  R(ctx, x - 6, y - bob, 28, 12, '#f2ecdc');
-  if (label) text(ctx, label, x + 8, y + 1 - bob, { size: 8, align: 'center', color: '#3a2020', shadow: null });
+  const w = Math.max(40, measure(ctx, label, 10) + 10);
+  R(ctx, x - 1, y + 14 - bob, 2, 14, '#3a2a1a');
+  R(ctx, x - w / 2, y - bob, w, 16, '#f2ecdc');
+  R(ctx, x - w / 2, y + 15 - bob, w, 1, '#a89c84');
+  if (label) text(ctx, label, x, y + 2 - bob, { size: 10, align: 'center', color: '#3a2020', shadow: null });
 }
 function dateBox(ctx, g) {
   try {
@@ -223,21 +233,25 @@ const ARTS = {
     // the count: a yes / no bar and the segments
     const yes = Number(s.numbers && s.numbers.yes) || 0;
     const k = Math.min(1, t / 90);
-    panel(ctx, 60, 50, SW - 120, 60, { bg: '#121a2e' });
+    panel(ctx, 60, 70, SW - 120, 58, { bg: '#121a2e' });
     const w = SW - 160;
-    R(ctx, 80, 72, w, 20, '#5a5a6a');
-    R(ctx, 80, 72, Math.round((w * yes * k) / 100), 20, '#5fd7ff');
-    R(ctx, 80 + w / 2, 66, 2, 32, '#ffd23f');
-    text(ctx, `賛成 ${Math.round(yes * k * 10) / 10}%`, 80, 56, { size: 12, color: '#5fd7ff' });
-    text(ctx, '過半数', 80 + w / 2, 98, { size: 10, color: '#ffd23f', align: 'center' });
+    R(ctx, 80, 94, w, 16, '#7a4a52');
+    R(ctx, 80, 94, Math.round((w * yes * k) / 100), 16, '#5fd7ff');
+    R(ctx, 80 + w / 2 - 1, 90, 2, 24, '#ffd23f');
+    text(ctx, `賛成 ${(Math.round(yes * k * 10) / 10).toFixed(1)}%`, 80, 77, { size: 12, color: '#5fd7ff' });
+    text(ctx, `反対 ${(Math.round((100 - yes) * k * 10) / 10).toFixed(1)}%`, 80 + w, 77, { size: 12, color: '#ff9aa6', align: 'right' });
+    text(ctx, '過半数', 80 + w / 2, 77, { size: 10, color: '#ffd23f', align: 'center' });
     const seg = s.bySeg || {};
     const ids = Object.keys(seg);
+    const x0 = Math.round((SW - ids.length * 52) / 2);
+    text(ctx, '層ごとの賛成', x0, 138, { size: 10, color: '#d8dcf0' });
     ids.forEach((id, i) => {
-      const x = 70 + i * 46, h = Math.round(((seg[id] || 0) / 100) * 90 * k);
-      R(ctx, x, 230 - h, 28, h, '#5fd7ff');
-      R(ctx, x, 230 - 90, 28, 90 - h, '#3a3a4a');
+      const x = x0 + i * 52 + 10, h = Math.round(((seg[id] || 0) / 100) * 80 * k);
+      R(ctx, x, 154, 30, 80 - h, '#3a3a4a');
+      R(ctx, x, 234 - h, 30, h, '#5fd7ff');
+      R(ctx, x - 2, 154 + 40, 34, 1, '#ffd23f');
+      text(ctx, SEG_SHORT[id] || id, x + 15, 238, { size: 10, align: 'center', color: '#d8dcf0' });
     });
-    text(ctx, '層ごとの賛成（青）', 70, 120, { size: 10, color: '#d8dcf0' });
   },
   emergency(ctx, t) {
     R(ctx, 0, 0, SW, ART_H, '#0e101a');
@@ -265,8 +279,8 @@ const ARTS = {
     R(ctx, 0, 210, SW, ART_H - 210, '#4a4a50');
     for (let x = 100; x < 540; x += 10) R(ctx, x, 196, 3, 40, '#2a2a30');
     R(ctx, 100, 196, 440, 3, '#2a2a30');
-    R(ctx, 270, 200, 100, 16, '#e8e0c8');
-    text(ctx, '閉鎖', 320, 201, { size: 12, align: 'center', color: '#8a2020', shadow: null });
+    R(ctx, 150, 178, 64, 16, '#e8e0c8');
+    text(ctx, '閉鎖', 182, 179, { size: 12, align: 'center', color: '#8a2020', shadow: null });
   },
   court(ctx) {
     R(ctx, 0, 0, SW, ART_H, '#2a1e16');
@@ -296,16 +310,17 @@ const ARTS = {
     text(ctx, DISPUTED_AREA.name, 320, 190, { size: 12, align: 'center', color: '#d8dcf0' });
     const w = (g && g.war && g.war()) || null;
     const nat = w ? FICTIONAL_NATIONS[w.enemy] : null;
-    text(ctx, '日本', 50, 50, { size: 12, color: '#d8dcf0' });
-    if (nat) text(ctx, nat.short, SW - 60, 50, { size: 12, color: '#d8dcf0', align: 'center' });
+    text(ctx, '日本', 40, 140, { size: 12, color: '#f2eee2' });
+    if (nat) text(ctx, nat.short, SW - 60, 140, { size: 12, color: '#f2eee2', align: 'center' });
     // the front: a gauge (劣勢 ← → 優勢), no people
     const f = w ? w.front : Number(s.front) || 0;
-    panel(ctx, 170, 228, 300, 34, { bg: '#121a2e' });
-    R(ctx, 186, 244, 268, 6, '#3a3a4a');
-    R(ctx, 186 + 134, 240, 2, 14, '#9aa3c7');
-    R(ctx, 186 + 134 + Math.round((clamp(f, -100, 100) / 100) * 132) - 3, 240, 6, 14, f >= 0 ? '#5fd7ff' : '#ff5d6c');
-    text(ctx, '劣勢', 186, 230, { size: 10, color: '#ff5d6c' });
-    text(ctx, '優勢', 454, 230, { size: 10, color: '#5fd7ff', align: 'right' });
+    panel(ctx, 170, 212, 300, 40, { bg: '#121a2e' });
+    R(ctx, 186, 234, 268, 6, '#3a3a4a');
+    R(ctx, 186 + 134, 230, 2, 14, '#9aa3c7');
+    R(ctx, 186 + 134 + Math.round((clamp(f, -100, 100) / 100) * 132) - 3, 230, 6, 14, f >= 0 ? '#5fd7ff' : '#ff5d6c');
+    text(ctx, '劣勢', 186, 218, { size: 10, color: '#ff5d6c' });
+    text(ctx, '戦況', 320, 218, { size: 10, color: '#d8dcf0', align: 'center' });
+    text(ctx, '優勢', 454, 218, { size: 10, color: '#5fd7ff', align: 'right' });
     if (w) {
       panel(ctx, SW - 210, 44, 200, 76, { bg: '#20162a' });
       text(ctx, `兵士の死傷 ${n0(w.cas.soldiers.dead + w.cas.soldiers.wounded)}人`, SW - 198, 54, { size: 12, color: '#ffffff' });
@@ -318,7 +333,8 @@ const ARTS = {
     skyline(ctx, 150, '#2a2434', 71, 30, 110, 20);
     R(ctx, 0, 150, SW, ART_H - 150, '#3a3438');
     crowd(ctx, 10, SW - 10, 160, ART_H - 6, 7, t, ['#141018', '#1c1822', '#24202a'], 0.12);
-    for (let i = 0; i < 7; i++) placard(ctx, 50 + i * 86, 150 + (i % 2) * 14, ['選挙を', '報道に', '自由を', '戦争', '国会を', '声を', '返せ'][i], t);
+    const words = ['選挙を返せ', '報道の自由', '戦争反対', '国会を開け', '言論の自由', '退陣を'];
+    for (let i = 0; i < words.length; i++) placard(ctx, 64 + i * 102, 146 + (i % 2) * 16, words[i], t);
   },
   newspaper(ctx, t, s) {
     R(ctx, 0, 0, SW, ART_H, '#2a2a30');
@@ -332,16 +348,21 @@ const ARTS = {
 };
 function paperArt(ctx, headline, sub) {
   // a newspaper of the fictional ドット新聞, the headline in large type
-  R(ctx, 120, 22, 400, 226, '#f2eee2');
-  R(ctx, 124, 26, 392, 30, '#f2eee2');
-  text(ctx, 'ドット新聞', 320, 28, { size: 16, align: 'center', color: '#2a2a2a', shadow: null });
-  R(ctx, 132, 52, 376, 2, '#2a2a2a');
-  const lines = wrap(ctx, headline, 360, 24);
-  lines.slice(0, 2).forEach((l, i) => text(ctx, l, 320, 64 + i * 30, { size: 24, align: 'center', color: '#8a1a1a', shadow: null }));
-  if (sub) text(ctx, sub, 320, 128, { size: 12, align: 'center', color: '#2a2a2a', shadow: null });
-  for (let y = 150; y < 240; y += 8) R(ctx, 140, y, 170 + (y % 3) * 10, 2, '#a8a294');
-  R(ctx, 340, 150, 160, 86, '#c8c2b4');
-  for (let i = 0; i < 26; i++) figure(ctx, 348 + (i % 13) * 12, 200 + Math.floor(i / 13) * 14, 1, '#6a645a');
+  const x0 = 150, y0 = 44, w = 380, h = 210, cx = x0 + w / 2;
+  R(ctx, x0 + 4, y0 + 4, w, h, '#0a0a0e');
+  R(ctx, x0, y0, w, h, '#f2eee2');
+  text(ctx, 'ドット新聞', cx, y0 + 6, { size: 16, align: 'center', color: '#2a2a2a', shadow: null });
+  R(ctx, x0 + 12, y0 + 28, w - 24, 2, '#2a2a2a');
+  const lines = wrap(ctx, headline, w - 40, 24);
+  lines.slice(0, 2).forEach((l, i) => text(ctx, l, cx, y0 + 38 + i * 30, { size: 24, align: 'center', color: '#8a1a1a', shadow: null }));
+  if (sub) text(ctx, sub, cx, y0 + 100, { size: 12, align: 'center', color: '#2a2a2a', shadow: null });
+  for (let y = y0 + 122; y < y0 + h - 8; y += 8) R(ctx, x0 + 16, y, 160 + (y % 3) * 10, 2, '#a8a294');
+  // the photo: a crowd far away, grey newsprint
+  const px = x0 + w - 176, py = y0 + 120;
+  R(ctx, px, py, 160, 80, '#b8b2a4');
+  R(ctx, px, py, 160, 28, '#cac4b6');
+  for (let x = px + 4; x < px + 156; x += 9) R(ctx, x, py + 18 - Math.floor(hash2(x, 3, 5) * 14), 7, 14 + Math.floor(hash2(x, 3, 5) * 14), '#8a857a');
+  crowd(ctx, px + 4, px + 156, py + 40, py + 78, 21, 0, ['#4a463e', '#5a554c', '#3e3a34'], 0.12);
 }
 function alertOverlay(ctx, t, alert) {
   const blink = Math.floor(t / 12) % 2 === 0;
@@ -366,9 +387,11 @@ function alertOverlay(ctx, t, alert) {
 }
 
 // ======================================================================== the scene
+// The scenes animate with g.frame: the message window is the top scene, so this one is not updated.
 class KikiScene {
-  constructor(g, spec) { Object.assign(this, { g, spec, t: 0, hd: true, opaque: true, hidesHud: true }); }
-  update() { this.t++; }
+  constructor(g, spec) { Object.assign(this, { g, spec, f0: g.frame, hd: true, opaque: true, hidesHud: true }); }
+  get t() { return this.g.frame - this.f0; }
+  update() { /* animated by g.frame */ }
   draw(ctx, g) {
     const s = this.spec;
     const fn = ARTS[s.art] || ARTS.newspaper;
@@ -391,11 +414,14 @@ async function showSpec(g, spec) {
   if (spec.alert) { try { audio.sfx('buzz'); } catch (e) { /* no audio */ } }
   try {
     if (spec.pages && spec.pages.length) await g.say(spec.pages);
+    let v = null;
     if (spec.options && spec.options.length) {
       const i = await g.ask(spec.prompt || 'どうする？', spec.options.map((o) => o.label), { cancel: spec.options.length - 1 });
-      return spec.options[i] ? spec.options[i].value : null;
+      v = spec.options[i] ? spec.options[i].value : null;
     }
-    return null;
+    // the outcome of the choice is told while the scene is still up
+    if (typeof spec.then === 'function') await spec.then(v);
+    return v;
   } finally {
     g.pop(sc);
   }
@@ -403,8 +429,9 @@ async function showSpec(g, spec) {
 
 // ======================================================================== the downfall (abstract, non-graphic)
 class DownfallScene {
-  constructor(g, rec, stage) { Object.assign(this, { g, rec, stage, t: 0, hd: true, opaque: true, hidesHud: true }); }
-  update() { this.t++; }
+  constructor(g, rec, stage) { Object.assign(this, { g, rec, stage, f0: g.frame, hd: true, opaque: true, hidesHud: true }); }
+  get t() { return this.g.frame - this.f0; }
+  update() { /* animated by g.frame */ }
   draw(ctx) {
     const t = this.t;
     if (this.stage === 'square') {

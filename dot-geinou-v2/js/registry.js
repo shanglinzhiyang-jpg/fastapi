@@ -20,9 +20,14 @@ export const MODULES = [
   './world/minato.js',
   './engine/politics_ui.js',
   './engine/ideology.js', // ideology core (思想): encyclopedia, player ideology, 思想診断, classifyRegime
+  './engine/assist.js', // 政治ナビ（ことは先生）: phone app, glossary, lessons, quiz UI, tips, g.explain / g.navi
   './world/nagatacho.js',
   './world/kanraku.js',
   './world/darkside.js',
+  // government core (税率・予算・行政・郵政・宗教・野党・世論の声・デモ・支持率) and its 政権交代・総辞職 scenes (api: test-output/api_govt.txt)
+  './engine/govt.js',
+  './world/seiken.js',
+  './engine/phone_apps.js', // phone life apps: マップ, お仕事, 出前, 通販, 銀行, ニュース, カメラ, 設定 (api: test-output/api_phone.txt)
   // companies / venues
   './places/yoshimoto.js',
   './places/shinkigeki.js',

@@ -862,6 +862,8 @@ function buildHQ(hq) {
           { type: 'prop', x: 4, y: 6, w: 1, h: 1, cond: vacant, draw: boxesDraw, text: '引っ越しの段ボールが積んである。' },
           { type: 'prop', x: 15, y: 7, w: 1, h: 1, cond: vacant, draw: boxesDraw, text: '前のテナントが残していった段ボールだ。' },
         ],
+        // 政治ナビ (js/engine/assist.js): a first-visit tip, shown once the player is free
+        onEnter: (g) => { G = g; if (typeof g.assistTip === 'function' && (hq === 'myparty_hq' || partyOf(hq, g))) g.assistTip(hq === 'myparty_hq' ? 'myparty_hq' : 'party_hq'); },
         events: [
           { x: 16, y: 2, on: 'step', run: elevatorFor(hq) },
           {

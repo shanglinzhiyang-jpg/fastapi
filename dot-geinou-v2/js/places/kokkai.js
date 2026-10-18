@@ -1801,6 +1801,8 @@ registerPlace({
           text: ['修学旅行で国会見学に来ました！', '中央広間の銅像の台座、ひとつだけ空いてるんですって。\nなんでだろう？'],
         }),
         boardProp(6, 5),
+        // 政治ナビの「ことは先生」(js/engine/assist.js; only when that module is loaded)
+        { type: 'npc', id: 'kokkai_navi', x: 8, y: 6, dir: 'down', name: 'ことは先生', get look() { const g = GG(); return (g && typeof g.naviLook === 'function' && g.naviLook()) || LOOKS.announcer; }, cond: (g) => typeof g.naviTalk === 'function', talk: (g) => g.naviTalk('kokkai') },
       ],
       events: [
         ...PANELS.map((pnl, i) => ({ x: 13 + i * 2, y: 1, on: 'action', run: (g) => g.say(pnl.lines) })),
@@ -1815,6 +1817,7 @@ registerPlace({
           await g.wait(200);
           await g.say(['国会議事堂の、参観ロビーに入った。', '左は国会見学（参観）の受付、右は本会議の傍聴人受付。\n正面の扉の先が、院内だ。']);
         }
+        if (typeof g.assistTip === 'function') g.assistTip('kokkai');
       },
     },
 

@@ -461,6 +461,7 @@ const OFFICE_NOTE = {
 function officeName(off) { return (POL.OFFICES && POL.OFFICES[off] && POL.OFFICES[off].label) || off; }
 async function senkanTalk(g) {
   const w = say(WHO.senkan);
+  if (typeof g.assistTip === 'function') g.assistTip('senkan_counter'); // 政治ナビ: records the visit (mission)
   const items = ['選挙の予定', '立候補の届出', '届出の手続き', '立候補をやめる', '被選挙権と供託金', '選挙運動のきまり', 'なんでもない'];
   // the counter keeps taking questions until the player is done (bounded, like the party reception)
   for (let n = 0; n < 8; n++) {
@@ -1019,6 +1020,7 @@ registerPlace({
         g.setFlag('kuya_welcome');
         await g.wait(200);
         await g.say(['ドット区役所に入った。', '左が住民課、右が税務課。番号札を取って、呼ばれるのを待つ。\n2階から上へは、正面奥のエレベーターで。']);
+        if (typeof g.assistTip === 'function') g.assistTip('kuyakusho');
       },
     },
 
@@ -1043,7 +1045,10 @@ registerPlace({
         npc('kuya_senkan', 3, 2, 'down', WHO.senkan, { talk: senkanTalk }),
         npc('kuya_kijitsu', 11, 2, 'down', WHO.kijitsu, { talk: kijitsuTalk }),
         npc('kuya_tachiai', 17, 5, 'left', WHO.tachiai, { cond: (g) => votable(g).length > 0, text: ['投票立会人です。投票がきちんと行われるか、\nここで見守っています。', '地域の人が交代でつとめているんですよ。'] }),
+        // 政治ナビの「ことは先生」(js/engine/assist.js; only when that module is loaded)
+        { type: 'npc', id: 'kuya_navi', x: 6, y: 5, dir: 'down', name: 'ことは先生', get look() { const g = GG(); return (g && typeof g.naviLook === 'function' && g.naviLook()) || LOOKS.announcer; }, cond: (g) => typeof g.naviTalk === 'function', talk: (g) => g.naviTalk('kuyakusho') },
       ],
+      onEnter: async (g) => { if (typeof g.assistTip === 'function') g.assistTip('senkan'); },
       events: [
         { x: 9, y: 8, w: 2, on: 'step', run: ELEVATOR_STEP('senkan') },
         { x: 14, y: 3, w: 4, on: 'action', run: (g) => g.say(['投票用紙に名前を書く「記載台」だ。', '仕切りがあって、だれに投票したか\nほかの人からは見えないようになっている。']) },
