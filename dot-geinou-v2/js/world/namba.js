@@ -126,7 +126,7 @@ function generate() {
   put(c, 57, 9, 'bench'); put(c, 59, 9, 'bench');
   for (const x of [46, 53, 64, 71]) put(c, x, 14, 'sakura');
   for (const x of [56, 63]) put(c, x, 10, 'nobori');
-  for (const x of [45, 54, 66, 72]) put(c, x, 23, 'lantern');
+  for (const x of [43, 54, 66, 70]) put(c, x, 23, 'lantern');
   // stall corner and the plaza by the station
   fill(c, 43, 26, 11, 4, 'stone');
   put(c, 44, 28, 'bench'); put(c, 45, 28, 'bench'); put(c, 52, 27, 'vending'); put(c, 53, 27, 'trash');

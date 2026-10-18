@@ -295,18 +295,19 @@ tile('elevlamp', {
 
 // ------------------------------------------------------------------ doors
 // dressing-room door with a red noren hanging in front
-tile('gdoor', {
-  hd(c) {
-    R(c, 3, 0, 26, 32, '#5a3a20'); R(c, 5, 2, 22, 30, '#a8733f'); R(c, 5, 2, 22, 1, '#c08a55');
-    R(c, 6, 18, 9, 11, '#9b6638'); R(c, 17, 18, 9, 11, '#9b6638');
-    R(c, 23, 20, 2, 3, GOLD);
-    R(c, 3, 1, 26, 2, '#3b2a18');
-    R(c, 4, 3, 24, 15, RED); R(c, 4, 3, 24, 1, REDL); R(c, 4, 17, 24, 1, REDX);
-    for (const x of [11, 20]) R(c, x, 8, 1, 10, REDX);
-    R(c, 4, 13, 24, 2, WHT);
-    disc(c, 16, 8, 2, WHT); P(c, 16, 8, RED);
-  },
-});
+function gdoorPaint(c) {
+  R(c, 3, 0, 26, 32, '#5a3a20'); R(c, 5, 2, 22, 30, '#a8733f'); R(c, 5, 2, 22, 1, '#c08a55');
+  R(c, 6, 18, 9, 11, '#9b6638'); R(c, 17, 18, 9, 11, '#9b6638');
+  R(c, 23, 20, 2, 3, GOLD);
+  R(c, 3, 1, 26, 2, '#3b2a18');
+  R(c, 4, 3, 24, 15, RED); R(c, 4, 3, 24, 1, REDL); R(c, 4, 17, 24, 1, REDX);
+  for (const x of [11, 20]) R(c, x, 8, 1, 10, REDX);
+  R(c, 4, 13, 24, 2, WHT);
+  disc(c, 16, 8, 2, WHT); P(c, 16, 8, RED);
+}
+tile('gdoor', { hd: gdoorPaint });
+// an occupied dressing room (someone else's): the door stays shut
+tile('gdoor_lock', { solid: true, hd: gdoorPaint });
 // heavy padded studio door (two leaves)
 function sdoor(side) {
   const L = side === 'l';
@@ -1125,20 +1126,13 @@ registerPlace({
         '#######################',
       ],
       legend: {
-        e: 'elevator', a: T('gdoor'), b: T('gdoor'), p: `${T('wall')}+poster`, S: T('sdoor_l'), s: T('sdoor_r'),
+        e: 'elevator', a: T('gdoor_lock'), b: T('gdoor'), p: `${T('wall')}+poster`, S: T('sdoor_l'), s: T('sdoor_r'),
         O: `${T('wall')}+onair`, d: 'door_wood', c: `${T('wall')}+clock`, g: 'door_glass',
         Q: 'water_server', V: 'vending', B: 'sofa',
       },
       warps: [
         { x: 2, y: 2, room: 'lobby', tx: 17, ty: 3, dir: 'down' },
         { x: 4, y: 2, room: 'lobby', tx: 19, ty: 3, dir: 'down' },
-        {
-          x: 6, y: 2, room: 'gakuya', tx: 5, ty: 7, dir: 'up',
-          check: async (g) => {
-            await g.say('のれんの奥から、ドライヤーの音がする。\nドアの紙には「本日 使用中」。\n…ここは、ほかの出演者さんの楽屋みたいだ。');
-            return false;
-          },
-        },
         { x: 9, y: 2, room: 'gakuya', tx: 5, ty: 7, dir: 'up' },
         { x: 13, y: 2, room: 'studio', tx: 10, ty: 12, dir: 'up' },
         { x: 14, y: 2, room: 'studio', tx: 11, ty: 12, dir: 'up' },
@@ -1184,6 +1178,10 @@ registerPlace({
             g.sfx('ok');
             await g.say('「話題の雑誌」をもらった！');
           },
+        },
+        {
+          x: 6, y: 2, on: 'action',
+          run: async (g) => { await g.say('のれんの奥から、ドライヤーの音がする。\nドアの紙には「本日 使用中」。\n…ここは、ほかの出演者さんの楽屋みたいだ。'); },
         },
         { x: 9, y: 5, w: 2, on: 'action', run: async (g) => { await g.say('廊下のベンチだ。\n出番待ちの芸人さんが、よくここでネタを合わせている。'); } },
       ],
@@ -1367,7 +1365,7 @@ registerPlace({
         npc('ntv_writer', 10, 5, 'left', WHO.writer, {
           talk: posted('left', lines(WHO.writer, ['構成作家の筆坂です。台本を書いてます。', '台本には「ここで笑い」って書いてあっても、\n本当に笑えるかは出演者さんしだい。', 'ネタ帳を持ってると、ふられたときに強いですよ。\nトークのネタは、日々の暮らしの中にあります！'])),
         }),
-        npc('ntv_ad3', 8, 3, 'down', { name: 'ADの見習い', look: { ...LOOKS.ad, hair: 'bob', hairColor: 'black', top: REDL } }, {
+        npc('ntv_ad3', 10, 3, 'down', { name: 'ADの見習い', look: { ...LOOKS.ad, hair: 'bob', hairColor: 'black', top: REDL } }, {
           wander: 1,
           text: ['会議の資料をコピーしてきました！', '…あっ、1枚だけ逆さまに刷っちゃった。\nこれも「企画」ってことで、だめですか？'],
         }),
