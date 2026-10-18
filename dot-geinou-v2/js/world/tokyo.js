@@ -5,7 +5,7 @@ import { LOOKS } from '../engine/sprites.js';
 import { grid, set, put, fill, hroad, vroad, border } from './townkit.js';
 import { fountain, train, taxi, busStop, streetStage, statue } from './props.js';
 import { text } from '../engine/draw.js';
-export const TOKYO_W = 60;
+export const TOKYO_W = 76; // x 60..75: the east block and the road to テレビ局エリア (minato.js)
 export const TOKYO_H = 46;
 
 // The landlady's talk and the apartment upgrades live in home.js, which puts the
@@ -29,19 +29,44 @@ async function streetLive(g) {
   await g.job({ id: 'street_' + k.minigame, title: k.title, stamina: 10, minigame: k.minigame, opts: { difficulty: 1 }, pay: 600, fame: 4, skill: k.skill, gain: 1, confirm: false });
 }
 
-// The bus stop by the station: a bus to ドット商店街 (machi.js has the bus back).
+// The bus stops (by the station, and in the east plaza): buses to ドット商店街 and
+// テレビ局エリア (machi.js / minato.js have the buses back).
 async function busToMachi(g) {
-  if (!PLACES.machi) { await g.say('バス停だ。時刻表を見ると…次のバスはしばらく来ないみたい。'); return; }
-  const i = await g.ask('バス停だ。\n「ドット商店街」行きのバスが来た！\n乗っていく？（¥210）', ['乗る', 'やめておく'], { cancel: 1 });
-  if (i !== 0) return;
-  if (!g.spend(210)) { await g.say('運賃が足りない…。\n歩いていこう。（大通りを西へまっすぐ）'); return; }
+  const dests = [];
+  if (PLACES.machi) dests.push({ label: 'ドット商店街', place: 'machi', x: 38, y: 20, flag: 'machi_intro', walk: '大通りを西へまっすぐ' });
+  if (PLACES.minato) dests.push({ label: 'テレビ局エリア', place: 'minato', x: 35, y: 28, flag: 'minato_intro', walk: '大通りを東へまっすぐ' });
+  if (!dests.length) { await g.say('バス停だ。時刻表を見ると…次のバスはしばらく来ないみたい。'); return; }
+  const i = await g.ask('バス停だ。\nどこ行きのバスに乗る？（¥210）', [...dests.map((d) => d.label), 'やめておく'], { cancel: dests.length });
+  if (i < 0 || i >= dests.length) return;
+  const d = dests[i];
+  if (!g.spend(210)) { await g.say(`運賃が足りない…。\n歩いていこう。（${d.walk}）`); return; }
   g.sfx('coin');
-  const first = !g.flag('machi_intro'); // the town's first-visit lines describe the arrival
+  const first = !g.flag(d.flag); // the town's first-visit lines describe the arrival
   await g.fadeOut(16);
   g.sfx('door');
   await g.wait(600);
-  await g.goto('machi', 'main', 38, 20, 'down');
-  if (!first) await g.say('ブロロロ…。\nドット商店街でバスを降りた。');
+  await g.goto(d.place, 'main', d.x, d.y, 'down');
+  if (!first) await g.say(`ブロロロ…。\n${d.label}でバスを降りた。`);
+}
+
+// Signpost by the east exit: 「テレビ局エリア →」.
+function minatoSignpost(x, y) {
+  const F = (ctx, x0, y0, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x0, y0, w, h); };
+  return {
+    type: 'prop', x, y, w: 1, h: 1,
+    text: ['道しるべだ。', 'テレビ局エリア →\n（日本テレビ・TBS・テレビ朝日・フジテレビ・テレビ東京）\nこの大通りを東へまっすぐ。', '東京駅前のバス停からは、\nテレビ局エリア行きのバスも出ている。（¥210）'],
+    draw(ctx, sx, sy) {
+      F(ctx, sx + 3, sy + 14.5, 10, 1.5, 'rgba(0,0,0,0.22)');
+      F(ctx, sx + 6.5, sy - 4, 2.5, 19, '#4a2e18'); F(ctx, sx + 7, sy - 4, 1, 19, '#8a5a33');
+      // arrow board pointing east
+      F(ctx, sx - 13.5, sy - 9.5, 28, 9, '#3a2512');
+      for (let k = 0; k < 4; k++) F(ctx, sx + 14.5 - k, sy - 5.5 - k, 1, 1 + k * 2, '#3a2512');
+      F(ctx, sx - 13, sy - 9, 27, 8, '#c48a52'); F(ctx, sx - 13, sy - 9, 27, 1, '#e0b07a');
+      for (let k = 0; k < 4; k++) F(ctx, sx + 14 - k, sy - 5 - k + 0.5, 1, k * 2, '#c48a52');
+      F(ctx, sx - 13, sy - 1.5, 27, 0.5, '#8a5a33');
+      text(ctx, 'テレビ局エリア', sx + 0.5, sy - 7.5, { size: 4, align: 'center', color: '#fff6e0', shadow: '#3a2512' });
+    },
+  };
 }
 
 // Signpost by the west exit: 「← ドット商店街」 (a wooden arrow board on a post).
@@ -72,9 +97,12 @@ function generate() {
   hroad(c, 20, 1, W - 2);
   vroad(c, 19, 1, H - 2);
   vroad(c, 39, 1, H - 2);
-  for (const x of [17, 23, 37, 43]) for (let y = 20; y <= 22; y++) set(c, x, y, 'crosswalk_h');
-  for (const y of [17, 25]) for (const x0 of [19, 39]) for (let x = x0; x < x0 + 3; x++) set(c, x, y, 'crosswalk_v');
+  vroad(c, 59, 1, 36);   // the east avenue ends at the railway fence
+  for (const x of [17, 23, 37, 43, 57, 63]) for (let y = 20; y <= 22; y++) set(c, x, y, 'crosswalk_h');
+  for (const y of [17, 25]) for (const x0 of [19, 39, 59]) for (let x = x0; x < x0 + 3; x++) set(c, x, y, 'crosswalk_v');
   border(c, 'tree');
+  // ---- east exit: the main road continues to テレビ局エリア (minato.js; warps below)
+  for (let y = 19; y <= 23; y++) set(c, W - 1, y, y === 19 || y === 23 ? 'sidewalk' : y === 21 ? 'road_line_h' : 'road');
   // ---- west exit: the main road continues to ドット商店街 (machi.js; warps below)
   for (let y = 19; y <= 23; y++) set(c, 0, y, y === 19 || y === 23 ? 'sidewalk' : 'road');
 
@@ -127,14 +155,30 @@ function generate() {
   // ---- block BR: station
   fill(c, 43, 24, 15, 2, 'stone');
   fill(c, 43, 31, 15, 6, 'brick');
-  for (let x = 43; x <= 57; x++) { put(c, x, 37, 'fence'); set(c, x, 38, 'rail'); set(c, x, 39, 'rail'); }
-  for (let x = 43; x <= 57; x++) if (x % 3 === 0) put(c, x, 41, 'tree');
+  for (let x = 43; x <= W - 2; x++) { put(c, x, 37, 'fence'); set(c, x, 38, 'rail'); set(c, x, 39, 'rail'); }
+  for (let x = 43; x <= W - 2; x++) if (x % 3 === 0) put(c, x, 41, 'tree');
   put(c, 44, 33, 'planter'); put(c, 56, 33, 'planter');
   put(c, 46, 35, 'bench');
 
+  // ---- block NE (east of the new avenue): newspaper building, a small park
+  for (const [x, y] of [[63, 2], [72, 2], [74, 5], [73, 9], [74, 13]]) put(c, x, y, 'tree');
+  fill(c, 63, 12, 9, 6, 'stone');
+  for (const [x, y] of [[72, 4], [73, 7], [72, 11]]) put(c, x, y, 'sakura');
+  set(c, 74, 8, 'flowers'); set(c, 73, 11, 'flowers'); set(c, 74, 3, 'flowers');
+  put(c, 64, 15, 'bench'); put(c, 65, 15, 'bench'); put(c, 70, 13, 'vending'); put(c, 71, 13, 'trash');
+  for (const x of [63, 71]) put(c, x, 17, 'planter');
+  // ---- block SE: a little plaza with a second bus stop, a park strip by the railway
+  fill(c, 63, 24, 12, 3, 'stone');
+  for (let y = 27; y <= 35; y++) set(c, 68, y, 'path');
+  for (let x = 63; x <= 74; x++) set(c, x, 31, 'path');
+  for (const [x, y] of [[64, 28], [66, 33], [70, 28], [73, 30], [72, 34], [64, 35]]) put(c, x, y, (x + y) % 3 ? 'tree' : 'sakura');
+  for (const [x, y] of [[65, 29], [71, 33], [73, 27], [66, 35]]) set(c, x, y, 'flowers');
+  put(c, 69, 29, 'bench'); put(c, 67, 33, 'bench'); put(c, 74, 25, 'vending');
+  for (let y = 40; y <= 44; y++) for (let x = 59; x <= 74; x++) if ((x + y) % 4 === 0) put(c, x, y, 'tree');
+
   // ---- street furniture
-  for (const x of [6, 13, 27, 33, 47, 53]) { put(c, x, 19, 'lamp'); put(c, x, 23, 'lamp'); }
-  for (const y of [6, 13, 30, 36]) { put(c, 18, y, 'lamp'); put(c, 42, y, 'lamp'); }
+  for (const x of [6, 13, 27, 33, 47, 53, 67, 72]) { put(c, x, 19, 'lamp'); put(c, x, 23, 'lamp'); }
+  for (const y of [6, 13, 30, 36]) { put(c, 18, y, 'lamp'); put(c, 42, y, 'lamp'); put(c, 62, y, 'lamp'); }
   put(c, 22, 9, 'mailbox');
   put(c, 17, 18, 'sign_board');
   put(c, 38, 28, 'vending');
@@ -152,6 +196,8 @@ function generate() {
     { type: 'building', x: 24, y: 35, w: 7, h: 6, door: 3, place: 'grape', name: 'グレープカンパニー', kind: 'office', wall: '#f3eefa', roof: '#7a4fa0', logo: 'grape', signH: 34, signW: 36 },
     { type: 'building', x: 32, y: 36, w: 6, h: 5, door: 3, place: 'sento', name: '銭湯 ドットの湯', kind: 'bath', wall: '#f6e7c8', roof: '#3b4a6a', sign: { text: 'ゆ', bg: '#2a3a7a', color: '#ffffff', size: 12 } },
     { type: 'building', x: 44, y: 26, w: 12, h: 5, door: 6, place: 'station_tokyo', name: '東京駅', kind: 'station', wall: '#b8644a', roof: '#4a5a70', sign: { text: '東京駅', bg: '#ffffff' } },
+    { type: 'building', x: 63, y: 4, w: 8, h: 8, door: 4, name: 'ドット新聞社', kind: 'office', wall: '#e6e2d8', roof: '#4a5568', sign: { text: 'ドット新聞', bg: '#ffffff', color: '#20232a' },
+      text: ['「ドット新聞社」のビルだ。', '芸能面の記事も、ここで書かれているらしい。\n…いつか自分の記事がのる日が来るかも？'] },
 
     // props
     fountain(8, 13),
@@ -160,11 +206,12 @@ function generate() {
     { type: 'sign', x: 50, y: 37, text: 'フェンスの向こうに新幹線が停まっている。乗るなら駅のきっぷ売り場へ。' },
     taxi(48, 33), taxi(51, 33, '#2f9a4a'),
     busStop(55, 32, { text: undefined, talk: busToMachi }),
+    busStop(66, 24, { text: undefined, talk: busToMachi }),
     statue(27, 13, { text: '「笑顔は世界をつなぐ」と刻まれた像だ。' }),
 
     // signs
     { type: 'sign', x: 46, y: 15, text: '東映 撮影所\n本日撮影中！関係者は正面入口へどうぞ。' },
-    { type: 'sign', x: 17, y: 18, text: '↑ NHK・ホリプロ・東宝・東映\n↓ よしもと・BSよしもと・グレープカンパニー\n→ 東京駅（新幹線で大阪へ）', solid: true },
+    { type: 'sign', x: 17, y: 18, text: ['↑ NHK・ホリプロ・東宝・東映\n↓ よしもと・BSよしもと・グレープカンパニー\n→ 東京駅（新幹線で大阪へ）', '→→ テレビ局エリア（大通りを東のはしまで）\n← ドット商店街（大通りを西のはしまで）'], solid: true },
 
     // NPCs
     {
@@ -183,12 +230,15 @@ function generate() {
     { type: 'npc', id: 'extra', x: 50, y: 13, dir: 'down', look: { ...LOOKS.samurai, top: '#8a5a33' }, name: 'エキストラさん', person: 'maruyama', text: ['拙者、本日は時代劇のエキストラでござる…なんてね！', '東映の撮影所では時代劇や特撮ヒーローの撮影をしてるんだ。体力勝負だよ〜。'] },
     { type: 'npc', id: 'young_comedian', x: 29, y: 33, dir: 'left', look: LOOKS.comedian2, name: '若手芸人', text: ['よしもとのオーディション、ツッコミのタイミングが命やで。', 'ボケを最後まで聞いてから、ビシッとツッコむ！早すぎても遅すぎてもアカン。'] },
     { type: 'npc', id: 'grape_fan', x: 33, y: 42, dir: 'up', look: { ...LOOKS.fan, hairColor: 'brown', top: '#9273bd' }, name: 'お笑いファン', wander: 2, text: ['グレープカンパニーの芸人さんのグッズ、買っちゃった！', 'お風呂屋さんの「ドットの湯」は、疲れがとれるって評判だよ。'] },
+    { type: 'npc', id: 'tv_guide', x: 68, y: 18, dir: 'down', look: { ...LOOKS.staff, top: '#2f6fd0', hat: '#2f6fd0' }, name: '案内係さん', text: ['この大通りを東へまっすぐ行くと「テレビ局エリア」！', '日本テレビ、TBS、テレビ朝日、フジテレビ、テレビ東京…\nテレビ局がずらりと並んでるよ。', 'ちょっと遠いけど、とても広くて楽しい街さ。\nバス停からは、テレビ局エリア行きのバスもあるよ。'] },
     { type: 'npc', id: 'taxi_driver', x: 53, y: 34, dir: 'left', look: { ...LOOKS.guard, hat: '#3b3f48' }, name: 'タクシー運転手', text: ['お客さん、芸能人の卵？', '新幹線で大阪まで行けば、お笑いの本場・なんばもすぐそこだよ。運賃はちと高いけどね。'] },
   ];
 
   entities.push(machiSignpost(2, 18));
+  entities.push(minatoSignpost(W - 2, 18));
   const warps = [];
   for (let y = 19; y <= 23; y++) warps.push({ x: 0, y, place: 'machi', room: 'main', tx: 46, ty: y - 3, dir: 'left' }); // machi's road: rows 16..20
+  for (let y = 19; y <= 23; y++) warps.push({ x: W - 1, y, place: 'minato', room: 'main', tx: 1, ty: y + 5, dir: 'right' }); // minato's road: rows 24..28
 
   return { w: W, h: H, cells: c, entities, warps, events: [{ x: 6, y: 34, w: 4, h: 2, on: 'action', run: streetLive }, { x: 6, y: 36, w: 4, h: 1, on: 'step', run: async (g) => { if (!g.flag('stageHint')) { g.setFlag('stageHint'); await g.say('小さなステージだ。ステージの前でAボタンを押すとパフォーマンスできそうだ。'); } } }] };
 }

@@ -115,15 +115,31 @@ function runner(side) {
 }
 tile('run_l', { hd: runner('l') });
 tile('run_r', { hd: runner('r') });
-// glossy set floor with a faint grid; v1 = the performer's tape mark
+// glossy set floor with a faint grid and a little sheen
 tile('setfloor', {
-  variants: 3,
+  variants: 14,
   hd(c, r, f, v) {
     R(c, 0, 0, 32, 32, '#f7eef0');
     R(c, 0, 0, 32, 1, '#ead7db'); R(c, 0, 16, 32, 1, '#efe0e3'); R(c, 0, 0, 1, 32, '#ead7db'); R(c, 16, 0, 1, 32, '#efe0e3');
-    if (v === 0) { line(c, 4, 12, 12, 4, WHT); line(c, 5, 13, 13, 5, '#fbf6f7'); }
-    if (v === 1) { R(c, 10, 15, 12, 3, RED); R(c, 15, 10, 3, 12, RED); R(c, 10, 15, 12, 1, REDL); }
-    if (v === 2) { line(c, 20, 28, 28, 20, WHT); }
+    if (v === 1 || v === 5) { line(c, 4, 12, 12, 4, WHT); line(c, 5, 13, 13, 5, '#fbf6f7'); }
+    if (v === 2 || v === 8) { line(c, 20, 28, 28, 20, WHT); }
+  },
+});
+// the performer's mark on the set (placed by hand where people stand)
+tile('setmark', {
+  hd(c) {
+    R(c, 0, 0, 32, 32, '#f7eef0');
+    R(c, 0, 0, 32, 1, '#ead7db'); R(c, 0, 16, 32, 1, '#efe0e3'); R(c, 0, 0, 1, 32, '#ead7db'); R(c, 16, 0, 1, 32, '#efe0e3');
+    R(c, 10, 15, 12, 3, RED); R(c, 15, 10, 3, 12, RED); R(c, 10, 15, 12, 1, REDL); R(c, 15, 10, 3, 1, REDL);
+  },
+});
+// studio floor (dark, matte); v0 = a yellow gaffer-tape mark (rare)
+tile('sfloor', {
+  variants: 24,
+  hd(c, r, f, v) {
+    R(c, 0, 0, 32, 32, '#2e3038'); speckle(c, r, ['#34363f', '#292b32', '#31333b'], 60);
+    if (v === 0) { R(c, 6, 14, 12, 4, '#e8c43a'); R(c, 10, 10, 4, 12, '#e8c43a'); R(c, 6, 14, 12, 1, '#f6dc6a'); R(c, 10, 10, 4, 1, '#f6dc6a'); }
+    if (v === 3) { line(c, 4, 26, 26, 20, '#3a3c46'); line(c, 4, 27, 26, 21, '#25272e'); }
   },
 });
 
@@ -363,9 +379,10 @@ function ledImage(f) {
     const rnd = (() => { let s = 7; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();
     const cols = [RED, GOLD, '#5fd7ff', '#5ee07a', WHT];
     for (let i = 0; i < 90; i++) R(c, x0 + Math.floor(rnd() * (w - 2)), y0 + Math.floor(rnd() * (h - 2)), 2, 2, cols[i % cols.length]);
-    const Q = ['.#####.', '##...##', '.....##', '...###.', '...##..', '.......', '...##..'];
-    pix(c, Q.map((row) => row.replace(/#/g, 'X')), { X: REDX }, 0, 0);
-    for (let j = 0; j < Q.length; j++) for (let i = 0; i < Q[j].length; i++) if (Q[j][i] === '#') { R(c, 46 + i * 5, 12 + j * 5, 5, 5, WHT); R(c, 46 + i * 5, 16 + j * 5, 5, 1, MG); }
+    const Q = ['.####.', '##..##', '....##', '...##.', '..##..', '......', '..##..'];
+    for (const [dx, col] of [[2, REDX], [0, WHT]]) {
+      for (let j = 0; j < Q.length; j++) for (let i = 0; i < Q[j].length; i++) if (Q[j][i] === '#') R(c, 46 + i * 6 + dx, 9 + j * 6 + dx, 6, 6, col);
+    }
   } else {
     // sky, rainbow, clouds (a VTR)
     for (let y = y0; y < y0 + h; y++) R(c, x0, y, w, 1, y < 24 ? '#7ec8f7' : '#a6dcff');
@@ -392,19 +409,20 @@ for (let i = 0; i < 8; i++) {
     hd(c, r, f) { c.drawImage(ledImage(f), -col * 32, -row * 32); },
   });
 }
-// ひな壇 (tiered guest benches): a = back (high), b = middle, c = front (low)
+// ひな壇 (tiered guest benches): a = back (high), b = middle, c = front (low).
+// Each row: carpeted tread, a white bench cushion, then the riser down to the next tier.
 function hina(tier) {
-  return (c) => {
-    const top = [2, 6, 10][tier];
+  return (c, r) => {
     const riser = [REDX, REDD, RED][tier];
-    R(c, 0, top, 32, 32 - top, riser);
-    R(c, 0, top, 32, 2, '#3c1016');
-    // bench cushion (white) with a seam every 8px
-    R(c, 0, top + 2, 32, 7, WHT); R(c, 0, top + 2, 32, 1, '#fafafa'); R(c, 0, top + 8, 32, 1, MG);
-    for (let x = 7; x < 32; x += 8) R(c, x, top + 3, 1, 5, LG);
-    R(c, 0, top + 9, 32, 1, shade(riser, -0.3));
-    for (let x = 2; x < 32; x += 8) R(c, x, top + 12, 4, 1, shade(riser, 0.2));
-    if (tier === 2) { R(c, 0, 29, 32, 3, 'rgba(0,0,0,0.25)'); }
+    const bottom = tier === 2 ? 27 : 32;
+    R(c, 0, 0, 32, bottom, riser);
+    R(c, 0, 0, 32, 3, shade(riser, -0.35)); speckle(c, r, [shade(riser, -0.45)], 10, 0, 0, 32, 3);
+    R(c, 0, 3, 32, 8, WHT); R(c, 0, 3, 32, 1, '#fafafa'); R(c, 0, 10, 32, 1, MG);
+    for (let x = 7; x < 32; x += 8) R(c, x, 4, 1, 6, LG);
+    R(c, 0, 11, 32, 2, shade(riser, -0.3));
+    R(c, 0, 13, 32, 1, shade(riser, 0.25));
+    for (let x = 3; x < 32; x += 8) R(c, x, 20, 3, 1, shade(riser, 0.18));
+    if (tier === 2) { R(c, 0, 26, 32, 1, shade(riser, -0.35)); R(c, 0, 27, 32, 3, 'rgba(0,0,0,0.25)'); }
   };
 }
 tile('hina_a', { solid: true, obj: true, hd: hina(0) });
@@ -570,6 +588,9 @@ const npc = (id, x, y, dir, who, extra = {}) => ({ type: 'npc', id, x, y, dir, l
 const posted = (dir, fn) => async (g, e) => { await fn(g, e); if (e) e.dir = dir; };
 const lines = (who, list) => (g) => g.say(list, say(who));
 const today = (g, k) => g.flag(k) === g.state.day;
+// A first-visit greeting from onEnter. It runs as its own script (the player still waits)
+// so the room has finished loading before anyone speaks.
+const greet = (g, fn) => { g.run(fn); };
 
 // Name plates on the upper wall.
 function plate(x, y, label, w = 2) {
@@ -1018,6 +1039,7 @@ registerPlace({
     // -------------------------------------------------------------- エントランス
     lobby: {
       floor: T('floor'),
+      topPad: 24,
       tiles: [
         '######################',
         '#UUUUUUULLLLLLUUUEUEU#',
@@ -1049,8 +1071,7 @@ registerPlace({
         {
           type: 'logo', x: 8.3, y: 0.45, w: 5.4, h: 2.3, logo: PID, board: true, lights: true,
         },
-        plate(16.5, 1, 'スタジオ・楽屋', 3),
-        plate(1, 1, '開局からのあゆみ', 3),
+        plate(1.5, 1, 'あゆみ'),
         npc('ntv_recep', 10, 3, 'down', WHO.uketsuke, { talk: uketsukeTalk }),
         npc('ntv_annai', 11, 3, 'down', WHO.annai, { talk: annaiTalk }),
         npc('ntv_guard', 15, 5, 'down', WHO.guard, { talk: posted('down', guardTalk) }),
@@ -1192,7 +1213,7 @@ registerPlace({
       ],
       entities: [
         npc('ntv_make', 4, 3, 'left', WHO.make, { talk: makeTalk }),
-        { type: 'logo', x: 9.5, y: 1.2, w: 2, h: 1.02, logo: PID, board: true, text: '楽屋にも、日本テレビのロゴ。\n本番前に見ると、背すじがのびる。' },
+        { type: 'logo', x: 8.9, y: 1.2, w: 2, h: 1.02, logo: PID, board: true, text: '楽屋にも、日本テレビのロゴ。\n本番前に見ると、背すじがのびる。' },
       ],
       events: [
         { x: 2, y: 3, w: 2, on: 'action', run: mirror },
@@ -1203,18 +1224,20 @@ registerPlace({
         { x: 10, y: 3, on: 'action', run: async (g) => { await g.say('ロッカーだ。\n「貴重品は自分で管理してください」の貼り紙。'); } },
         { x: 10, y: 4, on: 'action', run: async (g) => { await g.say('衣装がずらりと並んでいる。\n今日の衣装は…赤いジャケット！目立ちそう。'); } },
       ],
-      onEnter: async (g) => {
+      onEnter: (g) => {
         if (g.flag('ntv_gakuya_first')) return;
         g.setFlag('ntv_gakuya_first');
-        await g.wait(200);
-        await g.emote('ntv_make', '!');
-        await g.say(['あら、出演者さん？いらっしゃい。', '楽屋は自由に使ってね。\nソファでひと休み、鏡で身だしなみ、\nちゃぶ台の差し入れもどうぞ！'], say(WHO.make));
+        greet(g, async () => {
+          await g.wait(200);
+          await g.emote('ntv_make', '!');
+          await g.say(['あら、出演者さん？いらっしゃい。', '楽屋は自由に使ってね。\nソファでひと休み、鏡で身だしなみ、\nちゃぶ台の差し入れもどうぞ！'], say(WHO.make));
+        });
       },
     },
 
     // -------------------------------------------------------------- バラエティスタジオ
     studio: {
-      floor: 'floor_studio',
+      floor: T('sfloor'),
       bgm: 'studio',
       topPad: 24,
       tiles: [
@@ -1223,7 +1246,7 @@ registerPlace({
         '#aaaaaaaa5678aaaaaaaa#',
         '#L,,,,,,,,,,,,HHHHH,L#',
         '#,,,m,,,,,,,,,IIIII,,#',
-        '#,,,,,,,,,,,,,JJJJJ,,#',
+        '#,,,,,,,,,+,,,JJJJJ,,#',
         '#.eeeeeeesssseeeeeee.#',
         '#....................#',
         '#...K.....K.....K..D.#',
@@ -1236,10 +1259,10 @@ registerPlace({
       legend: {
         A: T('set_u'), a: T('set'),
         1: T('led0'), 2: T('led1'), 3: T('led2'), 4: T('led3'), 5: T('led4'), 6: T('led5'), 7: T('led6'), 8: T('led7'),
-        ',': T('setfloor'), L: `${T('setfloor')}+spotlight`, m: `${T('setfloor')}+${T('mcstand')}`,
+        ',': T('setfloor'), '+': T('setmark'), L: `${T('setfloor')}+spotlight`, m: `${T('setfloor')}+${T('mcstand')}`,
         H: `${T('setfloor')}+${T('hina_a')}`, I: `${T('setfloor')}+${T('hina_b')}`, J: `${T('setfloor')}+${T('hina_c')}`,
-        e: `floor_studio+${T('edge')}`, s: T('steps'),
-        K: 'floor_studio+camera', D: 'floor_studio+director_chair', Q: 'floor_studio+seat',
+        e: `${T('sfloor')}+${T('edge')}`, s: T('steps'),
+        K: `${T('sfloor')}+camera`, D: `${T('sfloor')}+director_chair`, Q: `${T('sfloor')}+seat`,
       },
       warps: [
         { x: 10, y: 13, room: 'corridor', tx: 13, ty: 3, dir: 'down' },
@@ -1299,12 +1322,14 @@ registerPlace({
           ctx.closePath(); ctx.fill();
         }
       },
-      onEnter: async (g) => {
+      onEnter: (g) => {
         if (show || g.flag('ntv_studio_first')) return;
         g.setFlag('ntv_studio_first');
-        await g.wait(200);
-        await g.emote('ntv_fd', '!');
-        await g.say(['おっ、見学ですか？\nここがバラエティのスタジオです！', '奥がセット、右がひな壇、手前が観覧席。\n本番中は、入口の「ON AIR」が光ります。', '前説をやってくれる人、いつでも募集中！\n声をかけてくださいね！'], say(WHO.fd));
+        greet(g, async () => {
+          await g.wait(200);
+          await g.emote('ntv_fd', '!');
+          await g.say(['おっ、見学ですか？\nここがバラエティのスタジオです！', '奥がセット、右がひな壇、手前が観覧席。\n本番中は、入口の「ON AIR」が光ります。', '前説をやってくれる人、いつでも募集中！\n声をかけてくださいね！'], say(WHO.fd));
+        });
       },
     },
 
@@ -1406,12 +1431,14 @@ registerPlace({
         { x: 8, y: 2, w: 2, on: 'action', run: async (g) => { await g.say('窓の外に、海と街が広がっている。\nお昼ごはんが、いつもよりおいしく感じる。'); } },
         { x: 11, y: 2, w: 2, on: 'action', run: async (g) => { await g.say('窓ぎわの席は、いつも取りあいらしい。'); } },
       ],
-      onEnter: async (g) => {
+      onEnter: (g) => {
         if (g.flag('ntv_shokudo_first')) return;
         g.setFlag('ntv_shokudo_first');
-        await g.wait(200);
-        await g.emote('ntv_obachan', '!');
-        await g.say(['あら、はじめての顔ね！いらっしゃい。', '食券機かカウンターで注文してね。\n安くて、おなかいっぱいになるわよ〜！'], say(WHO.obachan));
+        greet(g, async () => {
+          await g.wait(200);
+          await g.emote('ntv_obachan', '!');
+          await g.say(['あら、はじめての顔ね！いらっしゃい。', '食券機かカウンターで注文してね。\n安くて、おなかいっぱいになるわよ〜！'], say(WHO.obachan));
+        });
       },
     },
   },
