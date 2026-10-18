@@ -22,6 +22,7 @@ export const LOGOS = {
   toei: { file: 'toei.png', name: '東映', bg: '#ffffff' },
   horipro: { file: 'horipro.png', name: 'ホリプロ', bg: '#ffffff' },
   toho: { file: 'toho.png', name: '東宝', bg: '#ffffff', mark: [13, 0, 243, 242] },
+  lawson: { file: 'lawson.png', name: 'ローソン', bg: '#ffffff' },
 };
 
 const images = {};

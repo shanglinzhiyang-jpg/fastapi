@@ -146,7 +146,7 @@ function generate() {
     { type: 'building', x: 31, y: 3, w: 7, h: 8, door: 3, place: 'toho', name: '東宝', kind: 'theater', wall: '#ece4d2', roof: '#1f3a8a', logo: 'toho', signH: 38, signW: 40 },
     { type: 'building', x: 44, y: 3, w: 12, h: 7, door: 8, place: 'toei', name: '東映 撮影所', kind: 'studio', wall: '#d8d2c4', roof: '#7d8391', logo: 'toei', signH: 34, signW: 40 },
     { type: 'building', x: 2, y: 25, w: 7, h: 5, door: 2, place: 'home', name: 'ドット荘', kind: 'house', wall: '#efe2bf', roof: '#8a5a33', sign: { text: 'ドット荘', bg: '#fff6e0' } },
-    { type: 'building', x: 11, y: 25, w: 6, h: 4, door: 3, place: 'konbini', name: 'ドットマート', kind: 'shop', wall: '#f6f6f8', roof: '#e8eaee', stripes: ['#2f9a4a', '#ff8a3d', '#2f6fd0'], sign: { text: 'ドットマート', bg: '#ffffff', color: '#2f6fd0' } },
+    { type: 'building', x: 11, y: 25, w: 6, h: 4, door: 3, place: 'konbini', name: 'ローソン', kind: 'shop', wall: '#f6f6f8', roof: '#e8eaee', stripes: ['#0068b7', '#ffffff', '#0068b7'], logo: 'lawson', signBg: '#0068b7', signH: 26 },
     { type: 'building', x: 23, y: 25, w: 8, h: 7, door: 4, place: 'yoshimoto', name: 'よしもと 東京本部', kind: 'office', wall: '#fff3e6', roof: '#e8492a', logo: 'yoshimoto', signH: 30, signW: 30 },
     { type: 'building', x: 32, y: 25, w: 6, h: 6, door: 3, place: 'bs_yoshimoto', name: 'BSよしもと', kind: 'office', wall: '#ffffff', roof: '#ff3b1f', logo: 'bs_yoshimoto', signH: 22, signW: 84 },
     { type: 'building', x: 24, y: 35, w: 7, h: 6, door: 3, place: 'grape', name: 'グレープカンパニー', kind: 'office', wall: '#f3eefa', roof: '#7a4fa0', logo: 'grape', signH: 34, signW: 36 },

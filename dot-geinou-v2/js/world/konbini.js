@@ -1,4 +1,4 @@
-// コンビニ（ドットマート）: buy food and buff items.
+// コンビニ（ローソン）: buy food and buff items.
 
 import { registerPlace } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
@@ -14,7 +14,7 @@ const GOSSIP = [
 
 registerPlace({
   id: 'konbini',
-  name: 'ドットマート',
+  name: 'ローソン',
   kind: 'building',
   bgm: 'office',
   start: { room: 'store', x: 4, y: 6, dir: 'up' },
@@ -35,10 +35,11 @@ registerPlace({
       legend: { F: 'wall_white+fridge_drinks', S: 'shelf_goods', R: 'register', G: 'magazine' },
       warps: [{ x: 4, y: 7, to: 'exit' }],
       entities: [
+        { type: 'logo', x: 7, y: 0.9, w: 1.2, h: 1.1, logo: 'lawson', text: 'ローソンの看板だ。今日も24時間営業！' },
         {
           type: 'npc', id: 'clerk', x: 7, y: 4, dir: 'down', look: LOOKS.clerk, name: '店員さん', person: 'haruto',
           talk: async (g, npc) => {
-            await g.shop(['onigiri', 'bento', 'drink', 'nodoame', 'netacho', 'daihon', 'wadai'], { title: 'ドットマート', greeting: 'いらっしゃいませ〜！' });
+            await g.shop(['onigiri', 'bento', 'drink', 'nodoame', 'netacho', 'daihon', 'wadai'], { title: 'ローソン', greeting: 'いらっしゃいませ〜！' });
             // once you know him, the same name as in his talk menu (people.js)
             await g.say('ありがとうございました〜！', { name: g.met('haruto') ? '店員の春斗さん' : npc.name, look: npc.look });
           },

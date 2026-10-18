@@ -29,7 +29,10 @@ export class Input {
     this.onAnyKey = null; // hook used to unlock audio
     this.onMute = null;
 
+    // typing in a text field (name entry) is not game input
+    const typing = (e) => { const t = e.target; return !!(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)); };
     window.addEventListener('keydown', (e) => {
+      if (typing(e)) return;
       if (this.onAnyKey) this.onAnyKey();
       // leave browser / OS shortcuts (Ctrl+S, Cmd+D, Alt+...) alone
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -44,6 +47,7 @@ export class Input {
       this.press(k, 'kb:' + e.code);
     });
     window.addEventListener('keyup', (e) => {
+      if (typing(e)) return;
       // macOS sends no keyup for keys released while Cmd is held
       if (e.key === 'Meta') { this.releaseAll(); return; }
       const k = KEYMAP[e.code];

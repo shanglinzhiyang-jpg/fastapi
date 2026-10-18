@@ -106,3 +106,17 @@ body.fullscreen #fs .fs-exit { display: inline; }
   body.touch #ab .a { margin-top: 0; align-self: flex-end; }
   body.touch #ab .b { align-self: flex-start; }
 }
+
+/* In-game text entry (engine/textinput.js) */
+.textask { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-start; justify-content: center;
+  padding-top: max(12vh, env(safe-area-inset-top)); background: rgba(6, 9, 20, 0.6); }
+.textask-box { width: min(92vw, 420px); background: #121a3a; border: 3px double #fff; box-shadow: 4px 4px 0 #060914;
+  padding: 16px; display: flex; flex-direction: column; gap: 10px; font-family: "DotGothic16", sans-serif; color: #fff; }
+.textask-title { color: #5fd7ff; font-size: 18px; }
+.textask-input { font: 22px "DotGothic16", sans-serif; padding: 8px 10px; background: #0b1030; color: #ffd23f;
+  border: 2px solid #9aa3c7; border-radius: 0; outline: none; }
+.textask-input:focus { border-color: #ffd23f; }
+.textask-note { color: #9aa3c7; font-size: 14px; }
+.textask-btns { display: flex; justify-content: flex-end; gap: 10px; }
+.textask-btns button { font: 18px "DotGothic16", sans-serif; padding: 8px 16px; border: 2px solid #fff; background: #2a3a7a; color: #fff; }
+.textask-btns .textask-ok { background: #d64161; }

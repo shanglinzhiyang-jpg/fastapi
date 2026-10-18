@@ -7,6 +7,7 @@
 // The pixel-art backdrops are drawn once into offscreen canvases at 1 logical
 // pixel per pixel and scaled up by the engine, so they stay crisp at any size.
 
+import { askText } from './engine/textinput.js';
 import { SW, SH, shade, mix, makeCanvas, hash2, mulberry32 } from './engine/util.js';
 import { text, panel, cursor, COLORS, measure } from './engine/draw.js';
 import { charSheetHD, LOOKS, HAIR, HAIR_STYLES, SKIN } from './engine/sprites.js';
@@ -817,6 +818,7 @@ export class CreateScene {
   update(g) {
     this.t++;
     if (this.flash > 0) this.flash--;
+    if (this.naming) return; // name box open
     const inp = g.input;
     // headless autoplay (tests): the closet closes without changing anything
     if (this.closet && g.auto) { this.finish(null); return; }
@@ -831,10 +833,12 @@ export class CreateScene {
       const k = rows[this.row][2];
       if (k === 'name') {
         audio.sfx('ok');
-        let name = null;
-        try { name = window.prompt('なまえを入力してください（8文字まで）', this.name); } catch (e) { name = null; }
-        g.input.releaseAll();
-        if (name && name.trim()) this.name = Array.from(name.trim()).slice(0, 8).join('');
+        // in-game text box (window.prompt froze the loop and left touch input stuck on phones)
+        this.naming = true;
+        askText(g, { title: 'なまえを入力してください', value: this.name, max: 8 }).then((name) => {
+          this.naming = false;
+          if (name) this.name = name;
+        });
       } else if (k === 'done') {
         audio.sfx('ok');
         this.finish({ name: this.name, look: this.look() });

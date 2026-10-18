@@ -290,7 +290,7 @@ defineTile('grape_mirror_lo', {
     R(c, 0, 11, 16, 1, '#6d7078');
   },
 });
-// a painted "convenience store" set built against the wall (fictional ドットマート colours)
+// a painted "convenience store" set built against the wall (fictional colours, no real chain)
 function setStripe(c) { R(c, 0, 0, 16, 4, '#2f9a4a'); R(c, 0, 2, 16, 1, '#ff8a3d'); R(c, 0, 4, 16, 1, '#2f6fd0'); }
 function setShelves(c, y0) {
   const cols = ['#d62f2f', '#ffd23f', '#5fd7ff', '#ff7eb6', '#5ee07a'];
@@ -990,7 +990,7 @@ async function rehearsal(g) {
   g.placeNpc('maruo', 3, 3, 'down');
   g.placeNpc('kakuta', 5, 6, 'up');
   await g.fadeIn();
-  await say(g, 'kakuta', 'コント「ドットマートの新人」。\nよーい…はい！');
+  await say(g, 'kakuta', 'コント「コンビニの新人」。\nよーい…はい！');
   g.sfx('snare');
   await g.moveNpc('kakuta', 'left left up', 1);
   await say(g, 'maruo', 'いらっしゃいませー！');
