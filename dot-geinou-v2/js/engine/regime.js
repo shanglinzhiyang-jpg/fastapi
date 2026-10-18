@@ -853,7 +853,7 @@ export const PRESS_ACTIONS = {
       const me = meOf(g);
       if (me) me.standing = clamp(num(me.standing) - 4, 0, 100);
       news(g, `${g.state.name}${isPM(g) ? '総理' : '大臣'}が国会で「電波停止」に言及。放送界や弁護士会から「表現の自由への威嚇だ」と抗議`);
-      spawnDemo(g, { cause: '報道への圧力', size: 'small', segment: 'young', against: 'government' });
+      spawnDemo(g, { cause: '報道への圧力', size: 'small', segment: 'young', against: 'speech' });
       return '「電波停止もありうる」と言及した。放送局や弁護士会、党内からも批判が出ている。';
     },
   },
@@ -877,7 +877,7 @@ export const PRESS_ACTIONS = {
         bumpApproval(g, -5, -2);
         news(g, `放送局への「要請文書」が明らかに。${g.state.name}政権に「報道への介入だ」と批判が集まる`);
         defect(g, 0.02, '報道への圧力');
-        spawnDemo(g, { cause: '報道への介入', size: 'medium', segment: 'urban', against: 'government' });
+        spawnDemo(g, { cause: '報道への介入', size: 'medium', segment: 'urban', against: 'speech' });
         return '要請文書が報道で明らかになり、強い批判を浴びた。党内からも離反者が出た。';
       }
       news(g, 'ある放送局の看板番組の出演者が交代。「政治の圧力では」との声も');
@@ -908,7 +908,7 @@ export const PRESS_ACTIONS = {
       press(g, -10, '言論規制法案');
       bumpApproval(g, -8, -3);
       defect(g, 0.04, '言論規制法案');
-      spawnDemo(g, { cause: '言論規制法案', size: 'large', segment: 'young', against: 'government' });
+      spawnDemo(g, { cause: '言論規制法案', size: 'large', segment: 'young', against: 'speech' });
       const p = pol(g);
       const pi = partyOf(g);
       const share = p && pi && p.diet && p.diet.shugi ? num(p.diet.shugi.seats[pi.id]) / Math.max(1, num(p.diet.shugi.total)) : 0;
@@ -1010,7 +1010,11 @@ function defenseBudget(g) {
       const list = Array.isArray(items) ? items : items && typeof items === 'object' ? Object.entries(items).map(([id, v]) => (typeof v === 'object' ? { id, ...v } : { id, value: v })) : [];
       const it = list.find((x) => x && (x.id === 'defense' || /防衛/.test(String(x.name || x.label || ''))));
       const v = it && num(it.value ?? it.amount ?? it.cho, NaN);
-      if (Number.isFinite(v) && v > 0) return { cho: Math.round(v * 100) / 100, gdpPct: null, source: 'govt' };
+      if (Number.isFinite(v) && v > 0) {
+        const p = pol(g);
+        const gdp = p && p.economy ? num(p.economy.gdp, 0) : 0;
+        return { cho: Math.round(v * 100) / 100, gdpPct: gdp > 0 ? Math.round((v / gdp) * 10000) / 100 : null, source: 'govt' };
+      }
     }
   } catch (e) { console.error(e); }
   const p = pol(g);
@@ -1236,6 +1240,7 @@ function startDisaster(g, opts = {}) {
     const st = g.state;
     try { if (typeof g.addNeed === 'function') g.addNeed('stress', 10 + d.tier * 8); } catch (e) { console.error(e); }
     r.cancelUntil = today(g) + (d.tier >= 3 ? 4 : d.tier === 2 ? 2 : 1);
+    cancelWork(g);
     note(g, `（${d.name}の影響で、交通機関が止まっている。${d.tier >= 2 ? 'しばらく' : '今日は'}お仕事も中止だ）`);
     if (st && st.flags) familyMessage(g, d.tier >= 2 ? '{name}、大丈夫！？ニュースを見てびっくりしたよ。\nけがはない？無理しないで、なにかあったらすぐ連絡してね。' : '{name}、地震があったみたいだけど大丈夫？\n気をつけてね。');
   }
@@ -1323,6 +1328,19 @@ export const DISASTER_ACTIONS = {
       d.log.push({ day: today(g), text: '緊急災害対策本部（本部長：内閣総理大臣）' });
       news(g, `政府が${d.name}の緊急災害対策本部を設置（本部長：内閣総理大臣、全閣僚が本部員）`);
       return '閣議決定で緊急災害対策本部を設置した。本部長として、全閣僚に応急対策を指示した。';
+    },
+  },
+  fukoku: {
+    name: '災害緊急事態の布告', roles: ['pm'], phases: ['hassei', 'shodo', 'hinan'],
+    desc: '災害対策基本法105条：非常災害が国の経済と公共の福祉に重大な影響を及ぼすとき、閣議にかけて布告する。緊急災害対策本部が置かれ（107条）、国会の閉会中などで国会を待つ時間がなければ、物資の配給や価格の統制の政令も出せる（109条）。選挙や国会を止める力はない。',
+    check(g, d) { if (d.done.fukoku) return 'すでに布告した'; if (d.tier < 3) return '国の経済と公共の福祉に重大な影響を及ぼすほどの災害ではない（布告の要件にあたらない）'; return null; },
+    run(g, d) {
+      d.done.fukoku = today(g);
+      d.score += 1;
+      bumpApproval(g, 1);
+      if (d.honbu !== 'kinkyu') { d.honbu = 'kinkyu'; d.done.honbu = d.done.honbu || today(g); }
+      news(g, `政府が${d.name}について災害緊急事態を布告した（災害対策基本法105条）`);
+      return '閣議にかけて、災害緊急事態を布告した。緊急災害対策本部のもとで、生活必需品の買い占めや値上がりを抑える準備に入った。';
     },
   },
   sdf_request: {
@@ -1432,9 +1450,12 @@ export const DISASTER_ACTIONS = {
     check(g, d) { if (d.done.hosei) return 'すでに補正予算案を出した'; if (d.tier < 2) return '補正予算を組むほどの被害ではない（予備費で対応できる）'; if (today(g) - d.start < 4) return '被害額の見積もりがまだ出ていない'; return null; },
     run(g, d) {
       const amount = d.tier >= 3 ? 10 : 2;
-      let id = null;
-      if (typeof g.proposeBill === 'function') {
-        id = g.proposeBill({ policy: 'stimulus', params: { amount }, title: `補正予算案（災害復旧・${amount}兆円）` });
+      // govt.js (A1) when loaded (its 補正予算 records), else the politics core's stimulus bill
+      if (typeof g.supplementaryBudget === 'function') {
+        const res = g.supplementaryBudget({ amount, purpose: '災害復旧' });
+        if (!res || !res.ok) return { ok: false, why: (res && res.why) || '補正予算案を出せなかった' };
+      } else if (typeof g.proposeBill === 'function') {
+        const id = g.proposeBill({ policy: 'stimulus', params: { amount }, title: `補正予算案（災害復旧・${amount}兆円）` });
         if (!id) return { ok: false, why: g.lastPoliticsError || '補正予算案を出せなかった' };
       }
       d.done.hosei = today(g);
@@ -1695,6 +1716,7 @@ function warOrder(g, kind, opts = {}) {
     bumpApproval(g, -6, -4);
     ecoShock(g, '戦争', { growth: -2.5, inflation: 2.5, yen: 15, len: 360, nikkei: -12 });
     news(g, `【もしも】政府は${DISPUTED_AREA.name}をめぐり、${FICTIONAL_NATIONS[target].name}（架空の国）に宣戦した`);
+    spawnDemo(g, { label: '戦争に反対するデモ', size: 'large', segment: 'young', against: 'war' });
     phone(g, `【もしもシミュレーション】\n政府が${FICTIONAL_NATIONS[target].name}（架空の国）に宣戦した。\n国連と各国が即時停戦を求めている。\n（${FICTION_NOTE}）`, 'ドット新聞 国際部');
     familyMessage(g, '{name}、戦争なんて本当なの？\n近所の人も、みんな不安がってる。\nお願いだから、引き返して…。');
     queueScene(g, 'war', { event: 'declare' });
@@ -2064,7 +2086,7 @@ const SCENES = {
       const choice = await show(g, { art: K.art, title: d.name, sub: '（架空の災害）', pages, alert, numbers: { ...d.known }, options: actionOptions(g, ids), prompt, home: d.home, then: (v) => doDisasterChoice(g, v) });
       // the PM keeps deciding in the crisis room (one more step, if any)
       if (choice && roles.includes('pm')) {
-        const more = actionOptions(g, ['sdf_order', 'honbu_hijo', 'honbu_kinkyu']);
+        const more = actionOptions(g, ['sdf_order', 'honbu_hijo', 'honbu_kinkyu', 'fukoku']);
         if (more.length > 1) await show(g, { art: 'kantei', title: crisisRoom(g), sub: d.name, pages: ['各省庁の担当者が集まっている。\nつづけて指示を出す。'], options: more, prompt: '次は？', then: (v) => doDisasterChoice(g, v) });
       }
       return;
@@ -2241,13 +2263,15 @@ function extendDemoResponses() {
   demoExtended = true;
   const D = GOVT.DEMO_RESPONSES;
   const add = (id, def) => { if (!D[id]) D[id] = { id, ...def }; };
-  const okIn = (g) => { const r = R(g); return r.id === 'emergency' || r.id === 'dictatorship'; };
+  // available(g, demo) → true | reason (govt.js shows the reason): only in an emergency or a dictatorship (もしも)
+  const okIn = (g) => { const r = R(g); return r.id === 'emergency' || r.id === 'dictatorship' ? true : '民主制の政府は、デモを力で抑えない（集会・表現の自由：憲法21条）。これは「もしも」の独裁・緊急事態体制だけの選択'; };
   add('crackdown', {
     name: '弾圧（治安部隊の出動）', label: '弾圧', regime: true,
     desc: '（もしも）治安部隊でデモを解散させる。国内外から激しい非難を浴び、蜂起の危険が一気に高まる。',
     when: okIn, available: okIn,
     apply(g, demo) {
       const r = R(g);
+      if (demo && typeof demo === 'object') { demo.momentum = num(demo.momentum, 1) * 0.5; demo.size = Math.round(num(demo.size) * 0.6); }
       r.unrest = clamp(r.unrest + 18, 0, 100);
       raiseIntl(g, 15, 'デモの弾圧');
       press(g, -5, 'デモの弾圧');
@@ -2261,8 +2285,9 @@ function extendDemoResponses() {
     name: '外出禁止令', label: '外出禁止令', regime: true,
     desc: '（もしも）夜間の外出を禁じる。暮らしと経済に重い負担。',
     when: okIn, available: okIn,
-    apply(g) {
+    apply(g, demo) {
       const r = R(g);
+      if (demo && typeof demo === 'object') demo.momentum = num(demo.momentum, 1) * 0.8;
       r.unrest = clamp(r.unrest + 6, 0, 100);
       raiseIntl(g, 5, '外出禁止令');
       ecoShock(g, '外出禁止令', { growth: -0.5, len: 60 });

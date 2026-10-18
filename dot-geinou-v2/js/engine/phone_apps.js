@@ -589,11 +589,12 @@ function tripBlock(g) {
   if (P && (P.noTrip || P.noSave)) return '（ここからは移動できない）';
   return null;
 }
-// A disaster near home stops the trains and buses for a few days (regime.js sets
-// state.regime.cancelUntil when one hits): then only walking (and no delivery).
+// A disaster near home stops the trains and buses for a few days (regime.js:
+// g.regimeTravelBlock() gives the reason, or null): then only walking (and no delivery).
 function transportStopped(g) {
-  const r = g.state && g.state.regime;
-  return !!(r && typeof r === 'object' && num(r.cancelUntil) > (g.state.day || 0));
+  if (typeof g.regimeTravelBlock === 'function') { try { return !!g.regimeTravelBlock(); } catch (e) { console.error(e); } }
+  const r = g.state && g.state.regime; // regime.js missing or older: cancelUntil is the last cancelled day, inclusive
+  return !!(r && typeof r === 'object' && num(r.cancelUntil) >= (g.state.day || 0) && r.disaster);
 }
 const mapTitle = (g) => (devOf(g) === 'smart' ? 'マップ' : '地図');
 

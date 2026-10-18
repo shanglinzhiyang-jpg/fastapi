@@ -333,7 +333,7 @@ const ARTS = {
     skyline(ctx, 150, '#2a2434', 71, 30, 110, 20);
     R(ctx, 0, 150, SW, ART_H - 150, '#3a3438');
     crowd(ctx, 10, SW - 10, 160, ART_H - 6, 7, t, ['#141018', '#1c1822', '#24202a'], 0.12);
-    const words = ['選挙を返せ', '報道の自由', '戦争反対', '国会を開け', '言論の自由', '退陣を'];
+    const words = ['選挙を返せ', '報道の自由', '戦争反対', '国会を開け', '言論の自由', '独裁反対'];
     for (let i = 0; i < words.length; i++) placard(ctx, 64 + i * 102, 146 + (i % 2) * 16, words[i], t);
   },
   newspaper(ctx, t, s) {
@@ -525,7 +525,7 @@ async function actionList(g, title, getList, run, opts = {}) {
     const i = await phoneList(g, {
       title, color: APP_COLOR, index,
       items: list.map((a) => ({ label: short(a.name, 13), right: a.why ? '×' : '○', sub: a.why ? 'いまはできない' : 'できる' })),
-      describe: (k) => (list[k] ? short(list[k].desc, 60) : ''),
+      describe: (k) => (list[k] ? short(list[k].desc, 34) : ''),
     });
     if (i < 0) return;
     index = i;
@@ -604,7 +604,7 @@ export async function kikiApp(g) {
       if (w) await info(g, `戦争：${w.enemyName}`, [`係争地：${w.area}（架空）`, `戦況：${w.frontText}`, `死者 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人`, `けが人 ${n0(w.cas.soldiers.wounded + w.cas.civilians.wounded)}人`, `相手国側の死傷者 ${n0(w.cas.enemySoldiers + w.cas.enemyCivilians)}人`, `戦費 約${w.cost}兆円・厭戦 ${Math.round(w.weariness)}／100`]);
       await actionList(g, '戦争（もしも）', () => g.warOrders(), async (wid) => {
         if (wid === 'declare') {
-          const k = await phoneList(g, { title: '相手（架空の国）', color: APP_COLOR, items: NATION_ORDER.map((n) => ({ label: FICTIONAL_NATIONS[n].name, sub: '架空の国' })), describe: (x) => short(FICTIONAL_NATIONS[NATION_ORDER[x]].desc, 60) });
+          const k = await phoneList(g, { title: '相手（架空の国）', color: APP_COLOR, items: NATION_ORDER.map((n) => ({ label: FICTIONAL_NATIONS[n].name, sub: '架空の国' })), describe: (x) => short(FICTIONAL_NATIONS[NATION_ORDER[x]].desc, 34) });
           if (k < 0) return null;
           return g.warOrder('declare', { target: NATION_ORDER[k] });
         }
