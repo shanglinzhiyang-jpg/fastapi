@@ -52,6 +52,8 @@ export const MODULES = [
   // regime & security core (体制・自衛隊・震災対応・報道の自由・もしもの戦争) and its scenes + phone app 危機管理
   './engine/regime.js',
   './world/kiki.js',
+  // 政府中枢 (government console, HD) + political phone apps 世論の声・国会中継・政府中枢 (api: test-output/api_govt_ui.txt)
+  './engine/govt_ui.js',
   // minigames
   './minigames/tsukkomi.js',
   './minigames/zukko.js',

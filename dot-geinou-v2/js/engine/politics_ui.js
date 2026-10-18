@@ -370,15 +370,46 @@ const ICONS = {
     for (let i = 0; i < 5; i++) R(c, x + 12, y + 5 + i * 2, 5, 1, '#8a8270');
   },
   alert(c, x, y, col) { R(c, x + 8, y + 2, 4, 11, col); R(c, x + 8, y + 15, 4, 3, col); },
+  govt(c, x, y, col) { // 政府中枢 (govt_ui.js): a console screen with bars and a line
+    R(c, x + 1, y + 2, 18, 13, '#05081a'); R(c, x + 2, y + 3, 16, 11, '#0f2a3a');
+    R(c, x + 4, y + 9, 2, 4, col); R(c, x + 7, y + 7, 2, 6, col); R(c, x + 10, y + 5, 2, 8, shade(col, 0.3)); R(c, x + 13, y + 8, 2, 5, col);
+    R(c, x + 3, y + 4, 4, 1, '#5fd7ff'); R(c, x + 8, y + 15, 4, 2, '#3a4066'); R(c, x + 5, y + 17, 10, 2, '#5a6488');
+  },
 };
 
 // ================================================================ the scene and its views
 // One full-screen HD scene hosts a stack of views. A view: { title, hint, tip(), modal, update(ui, inp),
 // draw(c, ui) }. ui.open(view) → promise of the value given to ui.done(view, value).
+// taps on the canvas while the politics UI is on top (only the header's ？ uses the position; a tap is also A)
+let polTapCanvas = null;
+function bindPolTap(g) {
+  const cv = g && g.canvas;
+  if (!cv || polTapCanvas === cv || typeof cv.addEventListener !== 'function') return;
+  polTapCanvas = cv;
+  cv.addEventListener('pointerdown', (e) => {
+    const ui = g.top;
+    if (!ui || !ui.isPolUI) return;
+    const r = cv.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    ui.tapAt = { x: ((e.clientX - r.left) * SW) / r.width, y: ((e.clientY - r.top) * SH) / r.height };
+  }, { passive: true });
+}
+// 政治ナビ over the politics UI: with the phone open below (the 政治 app), step aside so the navi opens on top
+async function naviOver(ui, topic) {
+  const g = ui.g;
+  if (typeof g.navi !== 'function') return;
+  const i = g.scenes.indexOf(ui);
+  const below = g.scenes.slice(0, Math.max(0, i)).some((s) => s.isPhone && !s.closing && !s.dismissed);
+  if (!below) { await g.navi(topic); return; }
+  g.pop(ui);
+  try { await g.navi(topic); } finally { for (const s of g.scenes) if (s.isPhone) s.tapAt = null; if (!ui.closed) g.push(ui); }
+}
 class PolScene {
   constructor(g) {
-    Object.assign(this, { g, hd: true, opaque: true, hidesHud: true, isPolUI: true, views: [], t: 0, lock: 0, toasts: [] });
+    Object.assign(this, { g, hd: true, opaque: true, hidesHud: true, isPolUI: true, views: [], t: 0, lock: 0, toasts: [], tapAt: null, helpRect: null });
+    bindPolTap(g);
   }
+  help() { sfx('ok'); return this.act(() => naviOver(this, 'advice')); }
   top() { return this.views[this.views.length - 1]; }
   update(g) {
     this.t++;
@@ -386,7 +417,14 @@ class PolScene {
     this.toasts = this.toasts.filter((t) => t.t < t.life);
     const v = this.top();
     if (v && !v.modal && !(v._busy > 0)) this.backdrop = null;
+    const tap = this.tapAt;
+    this.tapAt = null;
     if (!v || v._busy > 0) return;
+    if (tap && !v.modal && this.helpRect && tap.x >= this.helpRect.x && tap.x < this.helpRect.x + this.helpRect.w && tap.y >= this.helpRect.y && tap.y < this.helpRect.y + this.helpRect.h) {
+      if (g.input.pressedNow) g.input.pressedNow.a = false;
+      this.help();
+      return;
+    }
     v.t = (v.t || 0) + 1;
     if (v.t < 3) return;
     try { v.update(this, g.input, g); } catch (e) { console.error(e); }
@@ -471,7 +509,16 @@ function chrome(c, g, ui, v) {
   R(c, 0, 24, SW, 1, C.gold);
   ICONS.diet(c, 5, 2, '#5a78c8');
   const title = typeof v.title === 'function' ? v.title(ui) : v.title || '政治';
-  T(c, fit(c, title, 330, 16), 30, 4, 16, '#ffffff', 'left', 'rgba(0,0,0,0.5)');
+  const tt = fit(c, title, 280, 16);
+  T(c, tt, 30, 4, 16, '#ffffff', 'left', 'rgba(0,0,0,0.5)');
+  // ？ (政治ナビ): tap it, or focus it from the dashboard with ↑
+  if (typeof g.navi === 'function') {
+    const hx = 30 + Math.round(measure(c, tt, 16)) + 10;
+    const on = !!(v.focus === 'help');
+    ui.helpRect = { x: hx, y: 4, w: 58, h: 17 };
+    frame(c, hx, 4, 58, 17, on ? '#1d4a44' : '#0f2a28', on ? C.gold : '#2a9d8f');
+    T(c, '？ナビ', hx + 29, 6, 12, on ? '#ffffff' : '#7fe0d0', 'center');
+  } else ui.helpRect = null;
   const d = polDate(g);
   const dl = `${dateLabel(g)}（${d.wareki}）`;
   const dw = measure(c, g.dayLabel(), 12);
@@ -716,6 +763,8 @@ const COMMANDS = [
   { id: 'party', label: '党内', color: '#5ee07a', tip: '幹事長・政調会長・総務会長などの党役員が、党の運営と政策を担う' },
   { id: 'money', label: '資金・活動', color: '#ffd23f', tip: '政治資金は毎年、収支報告書で公開される（原則、翌年3月末まで）' },
   { id: 'news', label: 'ニュース', color: '#9aa3c8', tip: 'このゲームの政治はシミュレーション。実在の政治家は登場しない' },
+  // the government console (js/engine/govt_ui.js, when loaded)
+  { id: 'govt', label: '政府中枢', color: '#ffb547', tip: '予算・税・省庁・世論・国会・安全保障・危機管理を一つの画面で（政府中枢）' },
 ];
 function alerts(g) {
   const p = polOf(g);
@@ -770,8 +819,8 @@ function dashboardView(g) {
   let sum = null, sumT = -99;
   const view = {
     title: '政治ダッシュボード', ownBg: false, idx: 0, focus: 'cmd', aidx: 0, tick: 0,
-    hint: () => (view.focus === 'alert' ? '↑↓ A:ひらく B:もどる' : '←→↑ A:ひらく B:とじる'),
-    tip: () => (view.focus === 'alert' ? '返事や決断には期限がある。早めに対応しよう' : COMMANDS[view.idx].tip),
+    hint: () => (view.focus === 'help' ? 'A:政治ナビ ↓:もどる' : view.focus === 'alert' ? '↑↓ A:ひらく B:もどる' : '←→↑ A:ひらく B:とじる'),
+    tip: () => (view.focus === 'help' ? '政治ナビ（ことは先生）：いま何をすればいいか、用語、しくみ' : view.focus === 'alert' ? '返事や決断には期限がある。早めに対応しよう' : COMMANDS[view.idx].tip),
     summary(ui) { if (!sum || ui.t - sumT > 20) { sum = g.politicsSummary(); sumT = ui.t; } return sum; },
     update(ui, inp) {
       // the first visit of a newcomer: what this is and where to start (over the dashboard)
@@ -782,13 +831,20 @@ function dashboardView(g) {
       }
       const al = alerts(g);
       if (view.focus === 'alert' && !al.length) view.focus = 'cmd';
+      if (view.focus === 'help') {
+        if (typeof g.navi !== 'function') { view.focus = 'cmd'; return; }
+        if (inp.pressed('a')) { ui.help(); return; }
+        if (inp.pressed('down') || inp.pressed('b')) { view.focus = al.length ? 'alert' : 'cmd'; view.aidx = 0; sfx('cursor'); }
+        return;
+      }
       if (view.focus === 'cmd') {
         if (inp.repeat('left')) { view.idx = (view.idx + COMMANDS.length - 1) % COMMANDS.length; sfx('cursor'); }
         if (inp.repeat('right')) { view.idx = (view.idx + 1) % COMMANDS.length; sfx('cursor'); }
         if (inp.pressed('up') && al.length) { view.focus = 'alert'; view.aidx = 0; sfx('cursor'); }
+        else if (inp.pressed('up') && typeof g.navi === 'function') { view.focus = 'help'; sfx('cursor'); }
         if (inp.pressed('a')) { sfx('ok'); ui.act(async () => { await openSection(ui, COMMANDS[view.idx].id); sum = null; }); return; }
       } else {
-        if (inp.repeat('up')) { if (view.aidx > 0) { view.aidx--; sfx('cursor'); } }
+        if (inp.repeat('up')) { if (view.aidx > 0) { view.aidx--; sfx('cursor'); } else if (typeof g.navi === 'function') { view.focus = 'help'; sfx('cursor'); } }
         if (inp.repeat('down')) { if (view.aidx < al.length - 1) { view.aidx++; sfx('cursor'); } else { view.focus = 'cmd'; sfx('cursor'); } }
         view.aidx = clamp(view.aidx, 0, Math.max(0, al.length - 1));
         if (inp.pressed('a') && al[view.aidx]) { sfx('ok'); const a = al[view.aidx]; ui.act(async () => { await a.run(ui); sum = null; }); return; }
@@ -947,7 +1003,7 @@ function drawDashboard(c, g, ui, view, s) {
   }
   // ---- commands
   {
-    const y = 292, tw = 76, x0 = Math.round((SW - COMMANDS.length * tw) / 2);
+    const y = 292, tw = 70, x0 = Math.round((SW - COMMANDS.length * tw) / 2);
     COMMANDS.forEach((cmd, i) => {
       const x = x0 + i * tw;
       const sel = view.focus === 'cmd' && view.idx === i;
@@ -967,6 +1023,12 @@ async function openSection(ui, id, opts = {}) {
   return fn(ui, opts);
 }
 const SECTIONS = {};
+// 政府中枢 (govt_ui.js registers g.govtConsole): opens over the politics UI and comes back here
+SECTIONS.govt = async (ui) => {
+  const g = ui.g;
+  if (typeof g.govtConsole === 'function') { await g.govtConsole('overview'); return; }
+  await ui.alert('政府中枢', '政府中枢の画面は、まだ読み込まれていない。');
+};
 
 // ================================================================ the overnight queue
 async function drainQueue(g) {

@@ -625,8 +625,10 @@ async function pmDeskTalk(g) {
     return;
   }
   for (let guard = 0; guard < 6; guard++) {
-    const items = ['きょうの報告を聞く', '政治のメニュー', '外遊に出る', '危機管理センターへ', 'もどる'];
+    const console0 = typeof g.govtConsole === 'function';
+    const items = ['きょうの報告を聞く', '政治のメニュー', '外遊に出る', '危機管理センターへ', ...(console0 ? ['政府中枢（コンソール）'] : []), 'もどる'];
     const i = await g.ask('総理の執務机だ。何をする？', items, { cancel: items.length - 1 });
+    if (console0 && i === 4) { try { await g.govtConsole('overview'); } catch (e) { console.error(e); } continue; }
     if (i === 0) await briefing(g);
     else if (i === 1) { try { await g.politicsMenu(); } catch (e) { console.error(e); } }
     else if (i === 2) {
@@ -667,10 +669,22 @@ async function pmNpcTalk(g, npc) {
 }
 
 // ------------------------------------------------------------------ scripts: 危機管理センター
+// the 政府中枢 console at its 危機管理 tab (govt_ui.js; A2's disaster / press / regime actions); null when it is missing
+function crisisConsole(g) { return typeof g.govtConsole === 'function' && !g.auto ? g.govtConsole('crisis') : null; }
+// A2's current disaster (regime.js), when there is one
+function regimeDisaster(g) { try { return typeof g.disaster === 'function' ? g.disaster() : null; } catch (e) { console.error(e); return null; } }
 async function crisisTalk(g, npc) {
   G = g;
   const c = activeCrisis(g);
   const S = { name: yearOf(g) >= 1998 ? '内閣危機管理監' : WHO.kanshi.name, look: WHO.kanshi.look };
+  // the PM / a minister may go straight to the console (disaster actions, 自衛隊, 報道, 体制)
+  if (isMinister(g) && typeof g.govtConsole === 'function' && !g.auto) {
+    const ds = regimeDisaster(g);
+    const k = await g.ask(ds ? `${ds.name}の対応中です。どうなさいますか？` : c ? `${c.name}の対応中です。どうなさいますか？` : '危機管理センターです。どうなさいますか？', ['報告を聞く', '危機管理の画面（政府中枢）', 'もどる'], { cancel: 2, ...S });
+    if (k === 2) return;
+    if (k === 1) { await crisisConsole(g); return; }
+    if (!c && ds) { await g.say([`${ds.name}（${ds.tierName}）。${ds.summary}`, '具体的な対応は、危機管理の画面からご指示ください。'], S); return; }
+  }
   if (!c) {
     await g.say([`${S.name}です。`, 'ここは24時間、休まず動いています。\n地震、台風、事故…なにかあれば、すぐ情報が集まる。', 'いまは大きな事態はありません。\n…平穏なのが、いちばんです。'], S);
     return;
@@ -957,6 +971,11 @@ registerPlace({
         npc('kantei_op2', 15, 5, 'up', WHO.op2, { talk: posted('up', opTalk) }),
         npc('kantei_op3', 4, 8, 'down', WHO.op1, { talk: posted('down', opTalk) }),
         npc('kantei_op4', 17, 8, 'down', WHO.op2, { talk: posted('down', opTalk) }),
+        // the console terminal: the 政府中枢's 危機管理 tab (govt_ui.js)
+        {
+          type: 'sign', x: 8, y: 4,
+          talk: async (g) => { G = g; const pr = crisisConsole(g); if (pr) { await pr; return; } await g.say(['危機管理システムの端末だ。', '各省庁と自治体の情報が、ここに集まってくる。']); },
+        },
         {
           type: 'sign', x: 12, y: 6,
           talk: async (g) => { G = g; const c = activeCrisis(g); await g.say(c ? [`テーブルの地図に、${c.name}の情報が書きこまれている。`, '付せんとマーカーで、びっしりだ。'] : ['大きなテーブルに、地図と連絡先の一覧が置かれている。', '「平時の備えが、有事を救う」と書いた紙が貼ってある。']); },

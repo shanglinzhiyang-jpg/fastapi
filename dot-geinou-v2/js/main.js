@@ -201,9 +201,10 @@ async function minigameLab(g, id) {
 
 async function debugMenu(g) {
   const ids = Object.keys(PLACES);
-  const i = await g.list({ title: 'デバッグ', items: ['場所へワープ', 'お金+10万', '知名度+500', 'スキル+20', '体力全快', '所属を変える', '政治（デバッグ）', '司法・借金（デバッグ）'], x: 8, y: 8, w: 160 });
+  const i = await g.list({ title: 'デバッグ', items: ['場所へワープ', 'お金+10万', '知名度+500', 'スキル+20', '体力全快', '所属を変える', '政治（デバッグ）', '司法・借金（デバッグ）', '政府中枢（デバッグ）'], x: 8, y: 8, w: 160 });
   if (i === 6 && typeof g.pol === 'function') { await politicsDebug(g); return; }
   if (i === 7 && typeof g.jus === 'function') { await justiceDebug(g); return; }
+  if (i === 8 && typeof g.pol === 'function') { await govtDebug(g); return; }
   const st = g.state;
   if (i === 0) {
     const j = await g.list({ title: 'ワープ先', items: ids, x: 8, y: 8, w: 200 });
@@ -275,6 +276,96 @@ async function politicsDebug(g) {
     p.cabinet.pm = was;
     g.notify(id ? '衆議院を解散した' : g.lastPoliticsError, { color: '#fff' });
   } else if (i === 6) g.triggerShock('quake');
+}
+
+// Government console debug (js/engine/govt_ui.js): jump to test states — the PM in each era, a minister, a session,
+// a fictional disaster, the emergency regime and the dictatorship at war (both a fictional 「もしも」 simulation).
+// The era jump starts the political world of that era anew (politics / regime / govt / justice states are rebuilt).
+function debugEra(g, era) {
+  const st = g.state;
+  st.profile.era = era;
+  for (const k of ['politics', 'regime', 'govt', 'justice']) delete st[k];
+  if (st.flags.polui) st.flags.polui.eco = [];
+  if (st.flags.govtui) st.flags.govtui.def = [];
+  st.day = 40;
+  st.profile.age = Math.max(st.profile.age, 40);
+  g.pol();
+}
+// the player becomes a 衆院議員, the leader of `party` ('own' = a new fictional party) with `share` of both houses, and PM
+function debugPM(g, party = 'jimin', share = 0.62) {
+  const st = g.state, p = g.pol();
+  st.money += 300000000; p.me.funds += 50000000; st.fame = Math.max(st.fame, 2000);
+  if (p.me.office !== 'shugi') {
+    p.me.office = 'shugi'; p.me.district = '東京ドット区'; p.me.termEnd = st.day + 480; p.me.wins = Math.max(3, p.me.wins); p.me.nationalWins = Math.max(3, p.me.nationalWins); p.me.standing = 90; p.me.prElected = null;
+    p.diet.shugi.seats.ind = (p.diet.shugi.seats.ind || 0) + 1; p.diet.shugi.total++;
+  }
+  let id = party;
+  if (party === 'own') {
+    id = p.me.party && p.parties[p.me.party] && !p.parties[p.me.party].real && p.parties[p.me.party].leader === 'player' ? p.me.party
+      : g.foundParty({ name: 'みらい改革党', short: 'みらい', color: '#3a8a6a', platform: ['defense_up', 'disaster_prep'] });
+    if (!id) { g.notify(g.lastPoliticsError || '党をつくれなかった', { color: '#fff' }); return null; }
+  } else if (p.me.party !== party && p.parties[party]) { const w = g.joinParty(party); if (w) { g.notify(w, { color: '#fff' }); return null; } }
+  if (!p.parties[id]) return null;
+  for (const house of ['shugi', 'sangi']) {
+    const H = p.diet[house];
+    const want = Math.round(H.total * share);
+    let have = H.seats[id] || 0;
+    for (const k of Object.keys(H.seats).sort((a, b) => H.seats[b] - H.seats[a])) { if (k === id) continue; while (have < want && H.seats[k] > 0) { H.seats[k]--; have++; } }
+    H.seats[id] = have;
+  }
+  p.parties[id].leader = 'player';
+  if (!p.me.posts.includes('party_leader')) p.me.posts.push('party_leader');
+  p.flags.skipPlayerPM = false;
+  g.electPM();
+  return id;
+}
+function debugSession(g) { const p = g.pol(); if (!p.diet.session) p.diet.session = { kind: '臨時国会', start: g.state.day, end: g.state.day + 30 }; }
+function debugEmergency(g) {
+  if (typeof g.regime !== 'function') return false;
+  debugPM(g, 'own', 0.75);
+  debugSession(g);
+  const r = g.state.regime;
+  if (r && r.id === 'democracy') { r.steps.clause = true; r.steps.clauseDay = g.state.day; }
+  const res = g.regimeStep('declare_emergency');
+  if (!res.ok) g.notify(res.why, { color: '#fff' });
+  return g.regime().id !== 'democracy';
+}
+async function govtDebug(g) {
+  const items = ['政府中枢を開く', '総理（昭和1987）', '総理（平成初期1996）', '総理（平成2004）', '総理（令和2026）', '架空の党の総理（いまの時代）', '財務大臣にする', '防衛大臣にする', '国会を開く（30日）', '大地震（架空・東京）', '緊急事態体制（もしも）', '独裁・戦争（もしも）'];
+  const i = await g.list({ title: '政府中枢（デバッグ）', items, x: 8, y: 8, w: 220 });
+  if (i < 0) return;
+  const open = (tab) => (typeof g.govtConsole === 'function' ? g.govtConsole(tab) : null);
+  if (i === 0) { await open('overview'); return; }
+  if (i >= 1 && i <= 4) { debugEra(g, ['showa', 'heisei_early', 'heisei', 'reiwa'][i - 1]); debugPM(g, 'jimin'); debugSession(g); await open('overview'); return; }
+  if (i === 5) { debugPM(g, 'own', 0.7); debugSession(g); await open('overview'); return; }
+  if (i === 6 || i === 7) {
+    const p = g.pol();
+    if (p.cabinet.pm === 'player') { g.notify('いまは総理大臣（大臣にするのは、総理でないときだけ）', { color: '#fff' }); return; }
+    if (p.me.office !== 'shugi' && p.me.office !== 'sangi') {
+      // a 衆院議員 of the ruling core party
+      const core = (p.cabinet.partyIds || [])[0];
+      if (core && p.me.party !== core) { g.state.money += 100000; g.joinParty(core); }
+      p.me.office = 'shugi'; p.me.district = '東京ドット区'; p.me.termEnd = g.state.day + 480; p.me.wins = Math.max(3, p.me.wins); p.me.standing = 80; p.me.prElected = null;
+      p.diet.shugi.seats[p.me.party || 'ind'] = (p.diet.shugi.seats[p.me.party || 'ind'] || 0) + 1; p.diet.shugi.total++;
+    }
+    const post = i === 6 ? 'minister_finance' : 'minister_defense';
+    const was = p.cabinet.ministers[post];
+    if (was && p.npcs[was]) p.npcs[was].posts = (p.npcs[was].posts || []).filter((x) => x !== post);
+    p.cabinet.ministers[post] = 'player';
+    if (!p.me.posts.includes(post)) p.me.posts.push(post);
+    await open(i === 6 ? 'budget' : 'security');
+    return;
+  }
+  if (i === 8) { debugSession(g); g.notify('臨時国会を開いた（デバッグ）', { color: '#fff' }); return; }
+  if (i === 9) { if (typeof g.startDisaster === 'function') g.startDisaster({ kind: 'quake', place: 'dotwan', tier: 3 }); await open('crisis'); return; }
+  if (i === 10) { debugEmergency(g); await open('crisis'); return; }
+  if (i === 11) {
+    if (!debugEmergency(g)) return;
+    for (const k of ['suspend_elections', 'suspend_diet', 'national_army']) { const r = g.regimeStep(k); if (!r.ok) g.notify(r.why, { color: '#fff' }); }
+    const w = g.warOrder('declare', { target: 'nevalon' });
+    if (!w.ok) g.notify(w.why, { color: '#fff' });
+    await open('security');
+  }
 }
 
 // Touch devices: block what CSS (touch-action / user-select) cannot. iOS Safari
