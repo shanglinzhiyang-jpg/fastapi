@@ -205,8 +205,9 @@ async function playNew(g, rec, full) {
       ], 'アナウンサー');
       return;
     }
-    S.set('honkaigi', { title: '首班指名', sub: rec.date });
-    await say(g, [
+    // the player's own 首班指名 is shown by the politics screens (pmCeremony); here the rest of the day
+    if (to.pm !== 'player') S.set('honkaigi', { title: '首班指名', sub: rec.date });
+    if (to.pm !== 'player') await say(g, [
       '衆議院と参議院の本会議で、内閣総理大臣の指名選挙が行われた（憲法67条）。',
       `${to.pmName}${to.pm === 'player' ? '（あなた）' : '氏'}が、第${to.pmNo}代 内閣総理大臣に指名された。`,
       ...(kotai ? [`${partyLong(g, from.core)}を中心とする政権から、${partyLong(g, to.core)}を中心とする政権へ。「政権交代」だ。`] : []),

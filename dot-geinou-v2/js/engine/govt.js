@@ -317,7 +317,7 @@ export const BUDGET_ITEMS = {
   kokusai: {
     id: 'kokusai', name: '国債費', area: 'finance', fixed: 'debt', min: 0, max: 0, ministry: 'minister_finance',
     explain: '過去に発行した国債の返済（債務償還費）と利払い。借金の契約と法律で決まるので、予算で減らすことはできない。金利が上がるとふくらむ。',
-    pro: ['国債をきちんと返すことで、国の信用が保たれる'], con: ['歳出の4分の1ほどを占め、政策に使えるお金を圧迫する'],
+    pro: ['国債をきちんと返すことで、国の信用が保たれる'], con: ['歳出の大きな割合を占め、政策に使えるお金を圧迫する'],
     seg: {}, eco: {},
   },
   kofuzei: {
@@ -947,7 +947,7 @@ function registerPolicies() {
   });
   addPolicy('kifu_kanyu', 'society', '不当な寄附の勧誘の防止（被害者の救済）', '不安をあおるなどして寄附を求めることを禁じ、困惑して寄附した人が取り消せるようにする。', {
     years: [1987, 2022], ideo: { social: -0.2 }, ministry: 'minister_special',
-    check: (pol, prm, y) => { if (pol.flags.kifuLaw) return 'すでにある'; return null; },
+    check: (pol) => (pol.flags.kifuLaw ? 'すでにある' : !pol.flags.kifuIssue ? '寄附の勧誘をめぐる被害が、まだ社会の問題になっていない' : null),
     seg: { families: 2, elderly: 1, floating: 1, business: -1 },
     apply: (pol, prm, g) => { pol.flags.kifuLaw = true; const s = g && GS(g); if (s) { s.religion.kifuLaw = { day: today(g), year: gdate(g).year }; s.religion.cult.complaints = Math.round(num(s.religion.cult.complaints) * 0.5); } },
   });
@@ -1678,6 +1678,18 @@ function bureaucratAnswerImpl(g, s, topic = 'generic') {
   s.admin.answers = num(s.admin.answers) + 1;
   return { who: person ? person.name : '担当の局長', title: person ? `${ministryName(post, d.fy)} ${person.title}` : '', role: d.year < 2000 ? '政府委員' : '政府参考人', text: pickOne([...pool, ...KANRYO.generic.slice(0, 2)]), fictional: true };
 }
+// In the 予算委員会 the PM or the minister answers (from the officials' draft).
+function ministerAnswer(g, s, topic) {
+  const p = pol(g);
+  const d = gdate(g);
+  const base = bureaucratAnswerImpl(g, s, topic);
+  let post = ANSWER_POST[topic] || 'pm';
+  if (post !== 'pm' && POL && !POL.postExists(post, d.fy, (p && p.flags) || {})) post = { minister_mgmt: 'minister_internal', minister_posts: 'minister_internal' }[post] || 'pm';
+  if (post === 'kanbo' || !(p && p.cabinet && p.cabinet.ministers[post])) post = 'pm';
+  const who = post === 'pm' ? p && p.cabinet && p.cabinet.pm : p.cabinet.ministers[post];
+  const name = who === 'player' ? g.state.name : npcNameOf(g, who);
+  return { ...base, who: name || base.who, title: post === 'pm' ? '内閣総理大臣' : postNameNow(g, post), role: '答弁' };
+}
 function adminActionImpl(g, s, kind, opts = {}) {
   const p = pol(g);
   const d = gdate(g);
@@ -1784,8 +1796,10 @@ function cultTick(g, s) {
   const grp = s.religion.groups.tenkan;
   const day = today(g);
   const p = pol(g);
+  if (C.stage >= 1 && p && p.flags && !p.flags.kifuIssue) p.flags.kifuIssue = true;
   if (C.stage === 0 && day >= num(C.next)) {
     C.stage = 1; C.day = day; C.complaints = irnd(25, 60); C.nextStep = day + irnd(10, 20);
+    if (p && p.flags) p.flags.kifuIssue = true;
     govtNews(g, s, `消費生活センターや弁護士会に、宗教団体「${R.name}」（架空）への高額な献金をめぐる家族からの相談が増えている`, { phone: true, head: '社会' });
     addEvent(g, s, 'religion', `「${R.name}」への高額献金の相談`, { segs: { families: -1 } });
     emit(g, 'religion', { stage: 'complaints', group: 'tenkan' });
@@ -2012,12 +2026,12 @@ function oppositionImpl(g, s, kind, opts = {}) {
     me.reputation = clamp(num(me.reputation) + (score - 40) / 10, -100, 100);
     if (!role.ruling) ledgerAdd(g, s, 'diet', { mood: -clamp((score - 45) / 15, -1, 3), text: '予算委員会での追及' });
     else ledgerAdd(g, s, 'diet', { mood: clamp((score - 50) / 30, -1, 1.5), text: '予算委員会での質疑' });
-    const ans = bureaucratAnswerImpl(g, s, topic);
+    const ans = ministerAnswer(g, s, topic);
     if (topic === 'religion') s.religion.cult.asked = true;
     if (topic === 'amakudari') s.admin.amakudari.heat = clamp(num(s.admin.amakudari.heat) + 5, 0, 100);
     addEvent(g, s, 'opposition', `予算委員会の質疑（${QUESTION_TOPICS[topic]}）`, { segs: role.ruling ? {} : { floating: 0.5, young: 0.3 }, n: 2 });
     emit(g, 'opposition', { kind, topic, score });
-    return { ok: true, score: Math.round(score), answer: ans, text: `テレビ中継の予算委員会で「${QUESTION_TOPICS[topic]}」について質問した（出来 ${Math.round(score)}点）。\n${ans.role}（${ans.title} ${ans.who}）「${ans.text}」` };
+    return { ok: true, score: Math.round(score), answer: ans, text: `テレビ中継の予算委員会で「${QUESTION_TOPICS[topic]}」について質問した（出来 ${Math.round(score)}点）。\n${ans.title}（${ans.who}）「${ans.text}」` };
   }
   if (kind === 'taian') {
     if (!isNational(p)) return { ok: false, why: '対案（議員立法）を出せるのは国会議員だけ' };
@@ -3052,7 +3066,7 @@ const methods = {
     const d = gdate(this);
     const A = s.admin;
     const items = [
-      { id: 'reorg2001', label: '中央省庁の再編（1府22省庁 → 1府12省庁）', done: d.year >= 2001, when: '2001年1月6日', text: d.year >= 2001 ? '大蔵省は財務省に、厚生省と労働省は厚生労働省に、郵政省・自治省・総務庁は総務省になった。' : '行政改革の議論が続いている。' },
+      { id: 'reorg2001', label: d.year >= 1998 ? '中央省庁の再編（1府22省庁 → 1府12省庁）' : '中央省庁の再編', done: d.year >= 2001, when: '2001年1月6日', text: d.year >= 2001 ? '大蔵省は財務省に、厚生省と労働省は厚生労働省に、郵政省・自治省・総務庁は総務省になった。' : '行政改革の議論が続いている。' },
       { id: 'amakudariBan', label: '再就職あっせんの禁止（天下りの規制）', done: !!A.reforms.amakudariBan, when: A.reforms.amakudariBan ? `${A.reforms.amakudariBan.year}年` : '未', text: A.reforms.amakudariBan && A.reforms.amakudariBan.real ? '2007年の国家公務員法改正で、各府省による再就職のあっせんが禁止された。' : A.reforms.amakudariBan ? '天下りを規制する法律が成立した（ゲームの中の出来事）。' : '各府省がOBの再就職をあっせんしている。規制の法律（政策「天下り（再就職あっせん）の規制」）で変えられる。' },
       { id: 'jinjikyoku', label: '内閣人事局（幹部人事の一元管理）', done: !!A.reforms.jinjikyoku, when: A.reforms.jinjikyoku ? (A.reforms.jinjikyoku.real ? '2014年5月30日' : `${A.reforms.jinjikyoku.year}年`) : '未', text: A.reforms.jinjikyoku ? '各府省の幹部の人事を、総理と官房長官のもとで一元的に管理する（政治主導が進む一方、「忖度」への懸念も）。' : '幹部の人事は、実際には各府省が決めている。' },
     ];
