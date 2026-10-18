@@ -541,12 +541,14 @@ A（Z・Enter）でつぎへ、B（X）でタイトルにもどります。
 
 - **被選挙権**：区議会議員・都議会議員・区長・衆議院議員は25歳から、参議院議員・都知事は30歳から。
   **選挙権**（投票）は20歳から（2016年からは18歳から）。公民権停止中や刑の執行中は、立候補も投票もできません
-- **政党**：党本部の受付で入党すると、2階の選挙対策本部で **公認**（党の候補者）を申請できます。
+- **政党**：党本部の受付で入党すると（党費 年4,000円。党員になれるのは選挙権の年齢から）、2階の選挙対策本部で **公認**（党の候補者）を申請できます。
+  被選挙権がないうちは公認を申請しても、その理由（年齢・公民権停止）が告げられます
   議席を持つ現職がいる選挙区は、その人が優先。参議院の比例代表は、知名度のある人にとって入りやすい入口です。
   無所属でも立候補できます（党の組織票はないが、しがらみもない）
 - **新党**：永田町の貸しオフィス（不動産会社の人）かスマホの「政治」アプリで、党名・略称・色・エンブレム・公約を決めて結党できます。
   法律の上で「政党」と認められる（政党交付金が出る）のは、国会議員5人以上か、国会議員1人以上で直近の国政選挙の得票率2%以上のとき
-- **立候補の届出**：「政治」アプリの選挙、党本部の選挙対策本部、区役所の選挙管理委員会から。
+- **立候補の届出**：「政治」アプリの選挙、党本部の選挙対策本部、区役所の選挙管理委員会から。届出を受け付けるのは投票日の30日前から
+  （それより前は「出馬表明」だけ）。受付が始まる日と締切（公示・告示）の3日前に、ドット区 選挙管理委員会からスマホにお知らせが届きます。
   **供託金**（衆院小選挙区・参院選挙区・知事 300万円、比例代表 600万円、区長 100万円、都議 60万円、区議 30万円 など。
   時代によって変わる）を政治資金から、足りなければ所持金から納めます。得票が少ないと没収されます
 - 議員がほかの選挙に立候補すると、届出の日に今の職を辞めたことになります（公職選挙法90条）
@@ -602,7 +604,9 @@ A（Z・Enter）でつぎへ、B（X）でタイトルにもどります。
   （罰金・執行猶予・実刑・無罪）→ 控訴・上告 → 刑務所（刑務作業・面会・仮釈放）。軽いものは微罪処分や過料・補導で終わります。
   国会議員や首長の「政治とお金」の事件は特捜部が独自に捜査し、検察官が逮捕します（送検はなく、48時間以内に勾留請求）
 - **結末**：前科がつく、事務所の契約が切られる、レギュラー番組を降板、活動自粛やテレビの起用見送り、ファンが減る。
-  議員は禁錮（拘禁刑）以上の実刑や、公民権停止（選挙・政治資金の罪、在職中の収賄）で失職します。**執行猶予中** にまた罪を犯して実刑になると、猶予が取り消されます
+  議員は禁錮（拘禁刑）以上の実刑や、公民権停止（選挙・政治資金の罪、在職中の収賄）で失職します。在職中の収賄（あっせん収賄を含む）は
+  1992年12月から執行猶予中も、1994年12月から実刑のあと5年間も公民権停止、1999年9月からは被選挙権がさらに5年（公職選挙法11条1項4号・11条の2）。
+  政治資金規正法違反による公民権停止は1995年1月から。**執行猶予中** にまた罪を犯して実刑になると、猶予が取り消されます
 - 警視庁で自首、検察庁や裁判所で手続き、裁判の傍聴もできます。てちょうの「くらしと法」で、いまの状態と記録が見られます
 
 #### 借金と破産
@@ -610,9 +614,12 @@ A（Z・Enter）でつぎへ、B（X）でタイトルにもどります。
 - **消費者金融**（ネオン街のドットローンなど、架空の会社）と **銀行カードローン** は合法の貸し手。審査があり、利息は法律の上限まで
   （2010年6月からは利息制限法の15〜20%、借入れは「総量規制」で年収の3分の1まで。それより前の時代は「グレーゾーン金利」の時代）
 - **闇金** は違法な業者。トイチ（10日で1割）の利息と取り立てで、暮らしがこわれます。借りてしまったら、ひとりで払い続けず、
-  警視庁の相談室や弁護士（スマホの「借入・返済」→ 法律相談）、区役所の多重債務相談へ
+  警視庁の相談室や弁護士（スマホの「借入・返済」→ 法律相談）、区役所の多重債務相談へ。警察や弁護士が入ると、闇金はしばらく（30日）手を出してきません
 - 返済が遅れると信用情報に事故の記録が残り、しばらく借りられなくなります。どうにもならなければ **任意整理・個人再生・自己破産**
-  （裁判所の破産係。免責が決まれば返済は免除されるが、その後しばらく新しい借入れはできない）
+  （裁判所の破産係。免責が決まれば返済は免除されるが、その後しばらく新しい借入れはできない）。
+  弁護士費用が払えなくても、2000年10月からは法律扶助協会、2006年10月からは法テラスが立て替えます。それより前の時代や対象外のときは、
+  **自分で申し立てる（本人申立て）** こともできます（印紙と予納金だけ。足りなければ家族の助けを借りるか、収入の一部を積み立てる）。
+  正直に申し立て、免責を認めない理由（浪費・ギャンブル・財産隠し など）がなければ、免責は認められます
 
 #### 反社会的勢力
 
@@ -645,10 +652,10 @@ A（Z・Enter）でつぎへ、B（X）でタイトルにもどります。
 ### 実在の政党の扱い
 
 - 実在の政党として登場するのは **自由民主党**（1955年11月15日結党。すべての時代）と **民主党**（1998年4月27日結成〜2016年3月27日に他党と合流。
-  その時代だけ）の2つだけです。党本部の場所・ロゴの看板・結党の経緯・党首の呼び名（総裁・代表）など、確かめられる事実だけを中立に書いています
+  その時代だけ）の2つだけです。民主党は2016年3月27日に他党と合流して党名を改め、ゲームからは退場します（合流後の党は登場せず、所属議員は無所属になります）。党本部の場所・ロゴの看板・結党の経緯・党首の呼び名（総裁・代表）など、確かめられる事実だけを中立に書いています
 - **実在の政治家は登場しません**。総裁・代表・幹事長・大臣・議員は、すべてゲームが作る架空の人物です。実在の政党や人物の不祥事を描くことはありません
   （ゲームの中のスキャンダルは、架空の人物とプレイヤー自身に起きる出来事です）
-- ほかの政党（ともしび党・青空党・日輪党・にじいろ党・田園党・かけはし党）は架空です。名前・ロゴ・政策・人物は実在の党と関係ありません。プレイヤーの新党の名前も、実在の党に似せたものはつけられません
+- ほかの政党（ともしび党・青空党・日輪党・にじいろ党・田園党）は架空です。名前・ロゴ・政策・人物は実在の党と関係ありません。プレイヤーの新党の名前も、実在の党に似せたものはつけられません
 - 各時代のはじめの議席の配分（与党と野党の大きさ）は、シミュレーションの出発点として、その時期の国会の勢力図に近い数にしてあります。架空の党の議席数が、特定の実在の党を表すわけではありません
 - 議席・支持率・政権の行方はシミュレーションで、史実どおりには進みません。政策の効果は、どの立場にも得と損があるように作ってあります
 
@@ -1029,7 +1036,7 @@ standing（党内の評価）, kouenkai, candidacy, campaign, votes, offers, led
 | --- | --- |
 | `OFFICES` | `kugi`（ドット区議会議員）`togi`（都議）`shicho`（区長）`chiji`（都知事）`shugi` `sangi`：`{ name, label, short, house?, ageMin, deposit, depositPR?, termYears, salary（月）, level, seats?, campaignDays, allowance, allowanceName? }` |
 | `ELECTION_KINDS` | `shugi sangi chiji shicho kugi togi hosen（補選） sosaisen（党首選） touitsu（ニュースだけ）` |
-| `PARTY_DEFS` / `partyExistsIn(id, fy)` / `platformFor(id, year)` | 政党：`jimin` `minshu`（実在）、`tomoshibi` `aozora` `nichirin` `nijiiro` `denen` `kakehashi`（架空） |
+| `PARTY_DEFS` / `partyExistsIn(id, fy)` / `platformFor(id, year)` | 政党：`jimin` `minshu`（実在）、`tomoshibi` `aozora` `nichirin` `nijiiro` `denen`（架空） |
 | `POLICY_AREAS`（20）`AREA_ORDER` / `POLICIES`（85）`POLICY_ORDER` | 政策：`{ area, name, desc, kind: 'law'\|'amendment', params, cost, costOf, effects(params, era, ctx) → { segments, economy }, ideo, ministry, eras, check?, apply? }` |
 | `SEGMENTS`（11）`SEGMENT_ORDER` `segWeights(year)` | 有権者の層（若者・子育て世帯・高齢者・会社員・自営業・企業経営者・農林漁業・労働組合・都市住民・地方住民・無党派層） |
 | `POSTS` `CABINET_ORDER` `PARTY_POST_ORDER` `postExists` `postName(id, fy, party)` `cabinetPosts(fy, flags)` | 内閣・党・国会の役職（時代ごとの省庁名） |
@@ -1086,7 +1093,7 @@ income[], garnish, unpaid, suspendUntil, supervision, smoke{} }`。`outcome`：`
 
 | 名前 | 中身 |
 | --- | --- |
-| `CRIMES` / `CRIME_ORDER` | `{ id, name, short, law(g, ctx), severity 1..5, kind: 'crime'\|'admin'\|'hodo'\|'career', detect, later, hotDays, victim, political, civicBan, penalty(g, ctx), facts, typical }`。ID：`shoplifting robbery fare_evasion assault tax_evasion slush_fund bribery_take bribery_give vote_buying door_to_door underage_smoking underage_drinking street_smoking antisocial_ties drunk gambling drunk_driving traffic_injury account_sale fraud_courier stolen_goods cover_up assen` |
+| `CRIMES` / `CRIME_ORDER` | `{ id, name, short, law(g, ctx), severity 1..5, kind: 'crime'\|'admin'\|'hodo'\|'career', detect, later, hotDays, victim, political, civicBan, penalty(g, ctx), facts, typical }`。ID：`shoplifting robbery fare_evasion assault tax_evasion slush_fund bribery_take bribery_give vote_buying door_to_door underage_smoking underage_drinking street_smoking antisocial_ties drunk gambling drunk_driving traffic_injury account_sale fraud_courier stolen_goods cover_up assen assen_shuwai` |
 | `crimeLaw(g, id, ctx)` `penaltyOf` `limitYears`（公訴時効） `sentenceText` `fmtTerm` `kokinEra` `ryakushikiCap` `legalYen(g, nominal)` | 条文と法定刑の文、法律で決まった金額を内部の金額に（どの時代も同じ額で表示） |
 | `LENDERS`（`shohisha` `bank` `yamikin`、会社名は架空）`lenderRate` `rateLawText(g)` `loanBalance` `LABOR_YEN` `CIG_PRICE` | 借入れ・時代ごとの上限金利の説明 |
 | `SMOKING_RULES` / `registerSmokingRule(placeId, rule \| (g, def) => rule)` | 場所ごとの喫煙のルール `{ ok, area, law, fine（過料）, patrol, smokingArea, indoor, private }`。場所の定義に `smoking: rule` でも可 |
