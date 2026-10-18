@@ -52,7 +52,7 @@ import { ITEMS } from './state.js';
 import { PLACES } from './map.js';
 import {
   PEOPLE, HEARTS, HANGOUTS, REGULARS, PHONE_APPS, PEOPLE_UI, WEEKDAYS,
-  heartIndex, weekdayOf, weekdayName, isKansai,
+  heartIndex, weekdayOf, weekdayName, isKansai, showWords, hangoutMeal,
 } from './life.js';
 
 // ---------------------------------------------------------------- geometry & theme
@@ -724,19 +724,21 @@ function todayInfo(g) {
   const st = g.state;
   const out = [];
   if (st.rent.debt) out.push([`未払いの家賃 ${fmtMoney(st.rent.debt)}`, PC.bad]);
-  for (const id of g.regularsToday()) out.push([`今日：『${REGULARS[id].title}』の収録`, PC.accent]);
+  for (const id of g.regularsToday()) out.push([`今日は${showWords(REGULARS[id]).act}：『${REGULARS[id].title}』`, PC.accent]);
   for (const m of pendingInvites(g)) out.push([`${senderName(m)}から おさそい！`, PC.good]);
   const unread = g.unread();
   if (unread && out.length < 2) out.push([`未読メッセージ ${unread}件`, PC.text]);
-  const d = daysToRent(g);
-  out.push([`家賃まで ${d === 1 ? 'あした' : `あと${d}日`}（${fmtMoney(g.housing().rent)}）`, PC.dim]);
+  out.push([`家賃まで ${rentWhen(g)}（${fmtMoney(g.housing().rent)}）`, PC.dim]);
   return out;
 }
 const daysToRent = (g) => (7 - weekdayOf(g.state.day)) % 7 || 7;
+// 'あした' / 'あと3日' (as in the notebook)
+const rentWhen = (g) => (daysToRent(g) === 1 ? 'あした' : `あと${daysToRent(g)}日`);
 const pendingInvites = (g) => g.state.phone.inbox.filter((m) => m.kind === 'invite' && !m.answered && m.day === g.state.day && !metToday(g, m));
 // An invite from someone you already spent today with (talk menu / another invite).
 const metToday = (g, m) => !!(m.person && g.state.people[m.person] && g.state.people[m.person].hangDay === g.state.day);
-const senderName = (m) => (m.person && PEOPLE[m.person] ? PEOPLE[m.person].name : m.from || '？？？');
+// short names (ジロー) where a row has little room, as in the message list
+const senderName = (m) => (m.person && PEOPLE[m.person] ? PEOPLE[m.person].short || PEOPLE[m.person].name : m.from || '？？？');
 
 // Entry point used by the pause menu. Resolves with 'menu' when the player closed
 // the phone with MENU (the pause menu then closes too), else undefined (B).
@@ -951,6 +953,7 @@ function previewText(m) {
   if (m.answered === 'met') return '今日はもう いっしょに過ごした';
   if (m.answered === 'yes') return m.kind === 'offer' ? 'オファーを引き受けた' : '行く！と返事した';
   if (m.answered === 'no') return m.kind === 'offer' ? 'オファーをことわった' : 'ことわった';
+  if (m.answered === 'expired') return m.kind === 'offer' ? 'オファーの期限が過ぎてしまった' : 'おさそいの日が過ぎてしまった';
   return oneLine(m.text);
 }
 
@@ -992,7 +995,7 @@ function threadView(g, key) {
       this.toBottom = true;
     },
     pending() {
-      return this.msgs().find((m) => !m.answered && ((m.kind === 'invite' && m.day === g.state.day && !metToday(g, m)) || (m.kind === 'offer' && m.regular && REGULARS[m.regular]))) || null;
+      return this.msgs().find((m) => !m.answered && ((m.kind === 'invite' && m.day === g.state.day && !metToday(g, m)) || (m.kind === 'offer' && m.regular && REGULARS[m.regular] && g.offerOpen(m)))) || null;
     },
     layout(c, w) {
       const items = [];
@@ -1017,7 +1020,7 @@ function threadView(g, key) {
           items.push({ type: 'out', y, h: rh, bw: Math.ceil(Math.max(...rl.map((l) => measure(c, l, 12)))) + 14, lines: rl });
           y += rh + 8;
         } else if (m.answered === 'expired' || m.answered === 'met') {
-          items.push({ type: 'note', y, text: m.answered === 'met' ? '今日はもう いっしょに過ごした' : 'おさそいの日が過ぎてしまった' });
+          items.push({ type: 'note', y, text: m.answered === 'met' ? '今日はもう いっしょに過ごした' : m.kind === 'offer' ? 'オファーの期限が過ぎてしまった' : 'おさそいの日が過ぎてしまった' });
           y += 20;
         }
       }
@@ -1156,14 +1159,18 @@ export async function answerMessage(g, m, yes) {
     const r = REGULARS[m.regular];
     if (!r) return false;
     if (yes) {
+      // an old offer (OFFER_DAYS) or one whose conditions no longer hold (agency changed…)
+      const why = !g.offerOpen(m) ? 'このオファーは、返事の期限が過ぎてしまった…。' : g.checkRequires(r.requires) ? 'このオファーは、条件が合わなくなってしまった…。' : null;
+      if (why) { m.answered = 'expired'; await g.say(`（${why}）`); return true; }
       const cur = g.state.regulars[m.regular];
       if (!cur || cur.dropped) g.joinRegular(m.regular); // a duplicate offer does not reset the week
       m.answered = 'yes';
       audio.sfx('fanfare');
       const where = placeName(r.place);
       const day = showDay(r);
+      const w = showWords(r);
       const now = g.regularsToday().includes(m.regular);
-      await g.say(`『${r.title}』のレギュラーになった！\n${day ? day + 'は、' : ''}${where ? where + 'で収録だ。' : '収録をがんばろう。'}` + (now ? '\n（さっそく今日も収録がある。今週は休んでもだいじょうぶ）' : ''));
+      await g.say(`『${r.title}』のレギュラーになった！\n${day ? day + 'は、' : ''}${where ? where + 'で' + w.act + 'だ。' : w.act + 'をがんばろう。'}` + (now ? `\n（さっそく今日も${w.act}がある。今週は休んでもだいじょうぶ）` : ''));
     } else {
       m.answered = 'no';
       if (!g.state.regulars[m.regular]) g.state.regulars[m.regular] = { declined: g.state.day, dropped: true, doneWeek: 0, missed: 0, count: 0 };
@@ -1202,6 +1209,12 @@ export async function readMessage(g, m) {
   if (m.kind === 'offer' && m.regular && !m.answered) {
     const r = REGULARS[m.regular];
     if (!r) { await g.say(m.text, opts); return; }
+    if (!g.offerOpen(m)) {
+      m.answered = 'expired';
+      await g.say(m.text, opts);
+      await g.say('（このオファーは、返事の期限が過ぎてしまった…）');
+      return;
+    }
     const i = await g.ask(`${m.text}\n（${showDay(r) ? showDay(r) + '：' : ''}${r.title}／ギャラ ${fmtMoney(r.pay)}）`, ['引き受ける', 'おことわりする'], { ...opts, cancel: 1 });
     await answerMessage(g, m, i === 0);
     if (i !== 0) await g.say('今回はおことわりした。');
@@ -1349,7 +1362,9 @@ function contactCardView(g, index, list) {
       if (def.profile) wrap(c, g.fmt(def.profile), a.w - 20, 12).slice(0, 2).forEach((l) => lines.push([l, PC.text]));
       if (def.where) wrap(c, 'よくいる場所：' + def.where, a.w - 20, 12).slice(0, 2).forEach((l) => lines.push([l, '#4a5a8a']));
       const known = Object.entries(p.known || {}).filter(([, r]) => r === 'love' || r === 'like').sort((x, z) => (x[1] === 'love' ? 0 : 1) - (z[1] === 'love' ? 0 : 1)).map(([it]) => (ITEMS[it] ? ITEMS[it].name : it));
-      lines.push([known.length ? '好きなもの：' + known.join('、') : '好きなもの：？？？', known.length ? PC.pink : PC.dim]);
+      // (a little narrower than the row: wrap may let a 、 hang past the edge)
+      if (known.length) wrap(c, '好きなもの：' + known.join('、'), a.w - 32, 12).slice(0, 2).forEach((l) => lines.push([l, PC.pink]));
+      else lines.push(['好きなもの：？？？', PC.dim]);
       R(c, a.x + 8, y - 4, a.w - 16, 1, PC.line);
       for (const [l, col] of lines) {
         if (y + 13 > btnY - 1) break;
@@ -1521,10 +1536,11 @@ function scheduleView(g) {
         const r = REGULARS[id];
         const place = PLACES[r.place] ? PLACES[r.place].name : '';
         const s = this.regularStatus(id, i);
-        const sub = { done: ['収録ずみ', PC.good], missed: ['休んでしまった…', PC.bad], today: [`今日！${place}へ行こう`, PC.accent], later: [`${place}　ギャラ ${fmtMoney(r.pay)}`, PC.dim], next: ['来週から', PC.dim] }[s];
-        out.push([s === 'done' ? 'done' : s === 'missed' ? 'miss' : 'tv', `『${r.title}』収録`, sub[0], sub[1]]);
+        const w = showWords(r);
+        const sub = { done: [w.done, PC.good], missed: ['休んでしまった…', PC.bad], today: [`今日！${place}へ行こう`, PC.accent], later: [`${place}　ギャラ ${fmtMoney(r.pay)}`, PC.dim], next: ['来週から', PC.dim] }[s];
+        out.push([s === 'done' ? 'done' : s === 'missed' ? 'miss' : 'tv', `『${r.title}』${w.act}`, sub[0], sub[1]]);
       }
-      if (i === wd) for (const m of pendingInvites(g)) out.push(['invite', `${senderName(m)}からおさそい`, `${HANGOUTS[m.spot] ? HANGOUTS[m.spot].name : ''}（返事はメッセージで）`, PC.good]);
+      if (i === wd) for (const m of pendingInvites(g)) out.push(['invite', `${senderName(m)}からおさそい`, `${HANGOUTS[m.spot] ? HANGOUTS[m.spot].name + '・' : ''}返事はメッセージで`, PC.good]);
       return out;
     },
     draw(c, ph, a) {
@@ -1532,7 +1548,7 @@ function scheduleView(g) {
       const wd = weekdayOf(st.day);
       const monday = st.day - wd;
       T(c, `${monday}日目〜${monday + 6}日目`, a.x + 8, a.y + 6, 12, PC.dim);
-      T(c, `家賃まで あと${daysToRent(g)}日`, a.x + a.w - 8, a.y + 6, 12, PC.dim, 'right');
+      T(c, `家賃まで ${rentWhen(g)}`, a.x + a.w - 8, a.y + 6, 12, PC.dim, 'right');
       const cw = 30, sx = a.x + 7, sy = a.y + 24, ch = 60;
       for (let i = 0; i < 7; i++) {
         const x = sx + i * cw;
@@ -1622,8 +1638,9 @@ function moneyView(g) {
       T(c, '住まい', a.x + 10, y, 12, PC.dim);
       T(c, `${fmtMoney(h.rent)}／週`, a.x + a.w - 10, y, 12, PC.text, 'right');
       T(c, fitText(c, h.name, a.w - 20, 14), a.x + 10, y + 14, 14, PC.text);
-      T(c, `次の家賃：あと${daysToRent(g)}日（月曜の朝）`, a.x + 10, y + 32, 12, PC.dim);
-      const regs = Object.keys(st.regulars).filter((id) => REGULARS[id] && !st.regulars[id].dropped);
+      T(c, `次の家賃：${rentWhen(g)}（月曜の朝）`, a.x + 10, y + 32, 12, PC.dim);
+      // weekly shows only (a one-day event such as the fan meeting is not weekly pay)
+      const regs = Object.keys(st.regulars).filter((id) => REGULARS[id] && !st.regulars[id].dropped && !st.regulars[id].declined && REGULARS[id].medium !== 'event');
       if (regs.length) {
         const sum = regs.reduce((s, id) => s + (REGULARS[id].pay || 0), 0);
         T(c, `レギュラー ${regs.length}本：目安 ${fmtMoney(sum)}／週`, a.x + 10, y + 46, 12, PC.good);
@@ -1672,7 +1689,7 @@ const LINES = {
   greetPartner: ['相方！今日も一緒にがんばろう！', '相方！今日もいっちょやったろか！'],
   greetSpecial: ['{name}…！えへへ、会えてうれしいな。', '{name}…！えへへ、会えてうれしいわ。'],
   again: ['ほかに何かある？', 'ほかになんかある？'],
-  noGift: ['（わたせそうなものを持っていない…）\n（花屋や本屋でプレゼントを買える）', '（わたせそうなものを持っていない…）\n（花屋や本屋でプレゼントを買える）'],
+  noGift: ['（わたせそうなものを持っていない…）\n（商店街の「はなや」やスーパーで、プレゼントを買える）', '（わたせそうなものを持っていない…）\n（商店街の「はなや」やスーパーで、プレゼントを買える）'],
   giftDone: ['今日はもうもらったよ！\nまた今度ね。', '今日はもうもろたで！\nまた今度な。'],
   hangDone: ['今日はもう遊んだし、また今度ね！', '今日はもう遊んだし、また今度な！'],
   inviteYes: ['いいね、行こう！', 'ええやん、行こ行こ！'],
@@ -1848,6 +1865,11 @@ export async function talkPersonUI(g, npc) {
   const rec = g.meet(id);
   if (!rec.seen) rec.seen = {}; // records from older builds
   if (typeof rec.aff !== 'number') rec.aff = 0;
+  // once you have talked, the nameplate is the person's name all through the talk (also
+  // in the venue's own talk, which reads npc.name), not the NPC's job title
+  const ownName = npc.name;
+  const named = !first && !!rec.talkDay && !!def.name && ownName !== def.name;
+  if (named) npc.name = def.name;
   runHooksSync('start', g, id, npc);
   try {
     const ev = g.pendingHeartEvent(id);
@@ -1859,6 +1881,7 @@ export async function talkPersonUI(g, npc) {
     if (await firstHook('before', g, id, npc)) return;
     await talkMenu(g, id, def, npc, first);
   } finally {
+    if (named) npc.name = ownName;
     await runHooks('after', g, id, npc);
   }
 }
@@ -1926,8 +1949,10 @@ async function talkMenu(g, id, def, npc, first) {
     const [, act, extra] = opts[k] || opts[opts.length - 1];
     if (act === 'bye') break;
     used.add(act);
-    if (act === 'talk') await chat();
-    else if (act === 'gift') await giftFlow(g, id, def, npc);
+    if (act === 'talk') {
+      await chat();
+      if (npc.talk && def.talkLabel) break; // a shop / job desk says its own goodbye
+    } else if (act === 'gift') await giftFlow(g, id, def, npc);
     else if (act === 'invite') { if (await inviteFlow(g, id, def, npc)) break; } else if (extra) { let r; try { r = await extra.run(); } catch (e) { console.error(e); } if (r === 'end') break; }
     if (!g.person(id)) break;
     prompt = lineFor(def, 'again', g);
@@ -2257,7 +2282,9 @@ class HangoutScene {
     if (this.mode === 'intro') {
       const a = Math.min(1, this.mt / 15);
       ctx.globalAlpha = a;
-      const s = `${this.def.name}と ${name}へ`;
+      // 「ジローと ラーメン屋へ」 / 「ジローと 公園へおさんぽ」 (spot.go); a name that is already
+      // an outing (公園で散歩) gets no へ
+      const s = `${this.def.short || this.def.name}と ${this.spot.go || (/で./.test(name) ? name : name + 'へ')}`;
       panel(ctx, 120, SH - 92, SW - 240, 56, { bg: '#1d2a5e' });
       text(ctx, s, SW / 2, SH - 74, { size: 20, align: 'center', color: '#fff' });
       ctx.globalAlpha = 1;
@@ -2318,7 +2345,7 @@ export async function hangoutUI(g, id, spotId) {
   if (st.money < spot.price) { await g.say(`お金が足りない…。（${spot.name}：${fmtMoney(spot.price)}）`); return false; }
   if (st.stamina < spot.stamina) { await g.say('体力が足りない…。今日はやめておこう。'); return false; }
   const L = st.life;
-  const before = { stress: L.stress, hunger: L.hunger, clean: L.clean, aff: p.aff };
+  const before = { stress: L.stress, hunger: L.hunger, clean: L.clean, aff: p.aff, stamina: st.stamina };
   st.money -= spot.price;
   st.stamina -= spot.stamina;
   p.hangDay = st.day;
@@ -2335,14 +2362,14 @@ export async function hangoutUI(g, id, spotId) {
     else await sayLines(g, [...(spot.lines || []).map((l) => (typeof l === 'string' && !/^[（(]/.test(l) ? { text: l, narr: true } : l)), ...[].concat(lineFor(def, 'hangBye', g))], def);
     // effects
     g.relax({ stress: spot.stress });
-    if (spot.fill) g.addNeed('hunger', spot.fill);
+    hangoutMeal(g, spot); // like any food: nothing when already full
     if (spot.clean) g.addNeed('clean', spot.clean);
-    if (spot.heal) g.heal(spot.heal);
     const scruffy = L.clean < 30;
     g.addAff(id, spot.aff, true);
     const chips = [];
     if (spot.price) chips.push(['お金', `-${fmtMoney(spot.price)}`, null]);
-    if (spot.stamina) chips.push(['体力', `-${spot.stamina}`, false]);
+    const dSt = st.stamina - before.stamina; // the outing's cost, less what a meal gave back
+    if (dSt) chips.push(['体力', `${dSt > 0 ? '+' : ''}${dSt}`, dSt > 0]);
     const dS = L.stress - before.stress, dH = L.hunger - before.hunger, dC = L.clean - before.clean;
     if (dS) chips.push(['ストレス', `${dS > 0 ? '+' : ''}${dS}`, dS < 0]);
     if (dH) chips.push(['満腹', `${dH > 0 ? '+' : ''}${dH}`, dH > 0]);

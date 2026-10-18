@@ -11,6 +11,7 @@ import { registerPlace } from '../engine/map.js';
 import { LOOKS, charSheet, drawChar } from '../engine/sprites.js';
 import { defineTile, tileImage, R, P } from '../engine/tiles.js';
 import { registerItem, AGENCIES, payText } from '../engine/state.js';
+import { ACTIVITY } from '../engine/life.js';
 import { registerSong } from '../engine/audio.js';
 import { text, panel } from '../engine/draw.js';
 import { W, H, fmtMoney, pick } from '../engine/util.js';
@@ -480,7 +481,7 @@ function hintFor(g, byManager = false) {
 }
 
 function confirmText(def, title = def.title) {
-  return `${def.desc}\n「${title}」\n${payText(def.pay)}／体力 -${def.stamina}`;
+  return `${def.desc}\n「${title}」\n${payText(def.pay)}／体力 -${def.stamina}・ストレス +${ACTIVITY.job.stress}`;
 }
 
 // Short label of what blocks a job right now (null = available).
@@ -559,7 +560,7 @@ function festivalScene(g) {
         box(ctx, x, 31, 10, 1, INK); box(ctx, x, 45, 10, 1, INK);
         box(ctx, x + 2, 35, 2, 7, '#ff8a6a');
       }
-      text(ctx, 'ドット商店街 夏まつり', W / 2, 52, { align: 'center', size: 12, color: '#fff6a8', outline: '#7a1f12' });
+      text(ctx, 'ドット商店街まつり', W / 2, 52, { align: 'center', size: 12, color: '#fff6a8', outline: '#7a1f12' });
       // stage with red/white curtain
       box(ctx, 92, 112, 136, 8, '#c48a52'); box(ctx, 92, 112, 136, 2, '#ddb06e');
       for (let k = 0; k < 17; k++) box(ctx, 92 + k * 8, 120, 8, 22, k % 2 ? '#d62f2f' : '#ffffff');
@@ -628,7 +629,8 @@ const clientOf = (def, who) => who || CLIENT[def.client] || { name: def.client }
 async function runStageJob(g, j, who) {
   const st = g.state;
   const def = j.def;
-  const why = g.checkRequires(def.requires);
+  // refuse (requirements, burnout, starving) before any cutscene or daily flag
+  const why = g.checkRequires(def.requires) || g.lifeRefusal();
   if (why) { await g.say(why); return null; }
   if (j.key === 'gp' && today(g, 'yoshimoto_gp_day')) {
     await g.say('今日の決勝はもう終わりましたよ。\nまた明日、挑戦しましょう！', WHO.manager);
@@ -650,12 +652,13 @@ async function runStageJob(g, j, who) {
     await g.goto(PID, 'theater', 9, 2, 'down', { fade: false });
     await g.fadeIn();
     await showIntro(g, j);
-    if (j.key === 'gp') {
-      g.setFlag('yoshimoto_gp_day', st.day);
-      g.setFlag('yoshimoto_gp_entries', gpNo(g));
-    }
     res = await g.job({ ...def, title, confirm: false });
     if (res) {
+      // the final only counts (and closes for the day) once it was actually performed
+      if (j.key === 'gp') {
+        g.setFlag('yoshimoto_gp_day', st.day);
+        g.setFlag('yoshimoto_gp_entries', gpNo(g));
+      }
       await crowdReact(g, res);
       await showAfter(g, j, res);
       if (j.key === 'gp') await gpResult(g, res);
@@ -674,7 +677,7 @@ async function runStageJob(g, j, who) {
 async function runFestival(g, j, who) {
   const st = g.state;
   const def = j.def;
-  const why = g.checkRequires(def.requires);
+  const why = g.checkRequires(def.requires) || g.lifeRefusal();
   if (why) { await g.say(why); return null; }
   const i = await g.ask(confirmText(def), ['受ける', 'やめておく'], clientOf(def, who));
   if (i !== 0) return null;
@@ -815,7 +818,10 @@ async function managerTalk(g) {
   if (member(g) && !g.flag('yoshimoto_mgr_intro')) { await managerIntro(g); return; }
   let greet;
   if (!member(g)) {
-    greet = 'ぼくは、よしもと所属タレントのマネージャー。\n外部の方にも、出られるお仕事を\n紹介していますよ！';
+    // no self-introduction to a friend (笑川 is a person in people.js)
+    greet = g.heartLevel('emikawa') >= 1
+      ? '{name}さん、いらっしゃい！\n今日も、外部の方向けのお仕事、\nちゃんと用意してありますよ！'
+      : 'ぼくは、よしもと所属タレントのマネージャー。\n外部の方にも、出られるお仕事を\n紹介していますよ！';
   } else if (g.flag('yoshimoto_gp_champion')) {
     greet = 'グランプリ王者！今日もお仕事が山ほど来てますよ！';
   } else if (st.fame >= 2000) {
@@ -827,7 +833,7 @@ async function managerTalk(g) {
       ? '冠番組、評判いいですよ！\n今週の収録もよろしくお願いします！'
       : '大変です！{name}さんの冠番組が決まりました！\n…いや、大変じゃなくて、めでたいんです！';
   } else {
-    greet = pick(['おはようございます！今日もお仕事がんばろう！', '{name}さん、最近ちょっと顔が売れてきましたね〜！']);
+    greet = pick(['おはようございます！\n今日もお仕事、がんばりましょう！', '{name}さん、最近ちょっと顔が売れてきましたね〜！']);
   }
   const i = await g.ask(greet, ['お仕事', '相談する', 'またね'], who);
   if (i === 0) await jobBoard(g);
@@ -997,7 +1003,7 @@ async function welcome(g) {
   g.setFlag('yoshimoto_welcome');
   await g.wait(250);
   await g.emote('yoshi_guard', '!');
-  await g.say(['おっ、見ない顔やな。いらっしゃい！', 'ここは、よしもと東京本部や。\nまずは奥の受付へどうぞ！'], WHO.guard);
+  await g.say(['おっ、見ん顔やな。いらっしゃい！', 'ここは、よしもと東京本部や。\nまずは奥の受付へどうぞ！'], WHO.guard);
   const p = g.map.player;
   if (p.x === 9 && p.y === 11) await g.movePlayer('up up up up up up');
   await g.emote('yoshi_uketsuke', '♪');

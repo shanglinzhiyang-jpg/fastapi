@@ -104,12 +104,51 @@ export function loadGame() {
     st.stats.bestRanks = { ...obj(st.stats.bestRanks) };
     for (const k of ['items', 'buffs', 'flags', 'jobs', 'furniture', 'people', 'regulars']) st[k] = { ...obj(k in data.state ? data.state[k] : def[k]) };
     for (const k of ['life', 'rent', 'phone']) st[k] = { ...def[k], ...obj(data.state[k]) };
-    if (!Array.isArray(st.phone.inbox)) st.phone.inbox = [];
+    normalize(st, def);
     data.state = st;
     return data;
   } catch (e) {
     return null;
   }
+}
+
+// Records inside the merged objects (one person, one show, one message) from early
+// builds, other versions or hand edits: numbers that are numbers, nothing undefined.
+function normalize(st, def) {
+  const num = (v, d = 0) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : d);
+  const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  for (const k of ['money', 'fame', 'fans', 'playMinutes']) st[k] = Math.max(0, num(st[k], def[k] || 0));
+  st.day = Math.max(1, Math.floor(num(st.day, 1)));
+  st.maxStamina = Math.max(1, num(st.maxStamina, def.maxStamina));
+  st.stamina = Math.min(st.maxStamina, Math.max(0, num(st.stamina, st.maxStamina)));
+  for (const k of Object.keys(def.skills)) st.skills[k] = Math.max(0, num(st.skills[k]));
+  for (const k of ['hunger', 'stress', 'clean']) st.life[k] = Math.min(100, Math.max(0, num(st.life[k], def.life[k])));
+  st.life.steps = num(st.life.steps);
+  for (const k of ['paidWeek', 'debt', 'late']) st.rent[k] = Math.max(0, num(st.rent[k], def.rent[k]));
+  for (const id of Object.keys(st.people)) {
+    const p = obj(st.people[id]);
+    st.people[id] = { ...p, aff: Math.min(100, Math.max(0, num(p.aff))), met: num(p.met, st.day), talkDay: num(p.talkDay), giftDay: num(p.giftDay), hangDay: num(p.hangDay), seen: { ...obj(p.seen) } };
+  }
+  for (const id of Object.keys(st.regulars)) {
+    const r = obj(st.regulars[id]);
+    const out = { ...r, doneWeek: num(r.doneWeek), missed: num(r.missed), count: num(r.count) };
+    // a show held (not declined / dropped) always has its start day
+    if (r.since != null || (!r.dropped && !r.declined)) out.since = num(r.since, st.day);
+    st.regulars[id] = out;
+  }
+  const ph = st.phone;
+  const inbox = (Array.isArray(ph.inbox) ? ph.inbox : []).filter((m) => m && typeof m === 'object' && !Array.isArray(m));
+  let next = Math.max(1, num(ph.nextId, 1));
+  const ids = new Set();
+  ph.inbox = inbox.map((m) => {
+    let id = num(m.id, -1);
+    if (id < 1 || ids.has(id)) id = next++;
+    ids.add(id);
+    return { ...m, id, day: Math.max(1, num(m.day, st.day)), text: String(m.text ?? ''), from: String(m.from || ''), read: m.read !== false };
+  });
+  ph.nextId = Math.max(next, ...[...ids].map((i) => i + 1), 1);
+  ph.lastPost = num(ph.lastPost);
+  ph.posts = num(ph.posts);
 }
 
 export function hasSave() {

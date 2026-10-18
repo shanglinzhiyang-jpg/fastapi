@@ -952,7 +952,7 @@ person('yoruno', {
   profile: 'BSよしもとのAD。夜型で、朝はいつもねむそう。夢はディレクター。',
   loves: ['drink', 'bento', 'toei_lokeben'], likes: ['onigiri', 'okashi', 'cake'], dislikes: ['hanataba'],
   giftLines: {
-    love: ['{item}！！\nこ、これで今夜も戦えます…！\n一生ついていきます！'],
+    love: ['{item}！！\nこ、これで今日も一日がんばれます…！\n一生ついていきます！'],
     like: ['{item}、ありがとうございます！\nスタッフ一同…いや、ぼくがいただきます！'],
     neutral: ['ぼくにですか？\nうれしいです…ねむけが三秒とびました！'],
     dislike: ['は、{item}…！\n控室に花びんがなくて…。\nあ、紙コップに生けておきますね！'],
@@ -978,12 +978,12 @@ person('yoruno', {
     '熱田さんに「おまえの企画書、ちょっとおもろい」\nって言われました！ちょっと！',
     'ロケで食べたご当地パン、おいしかったです。\n今度おみやげに持っていきますね。',
     'ばあちゃんから、野菜が段ボールで届きました。\n控室がちょっとした八百屋です。',
-    '{name}さん、ちゃんと寝てますか？\n…ぼくが言うのも、なんですが。',
+    '{name}さん、ちゃんと寝てますか？\nぼくはけさ、寝すぎて遅刻しかけました…。',
   ],
   invites: [
     '収録が巻きで終わりました！\n「{spot}」、行きませんか！？',
     '{name}さん、「{spot}」どうですか？\n…ぼくが寝ないように見張っててください。',
-    '本日、休みです！休みなんです！\n「{spot}」、ごいっしょしませんか？',
+    '本日、お休みをいただきました！\n「{spot}」、ごいっしょしませんか？',
   ],
   hangout: {
     ramen: ['ラーメン…。\n夜食じゃないラーメン、ひさしぶりだなあ…。', 'うまい…。\nあ、だめだ、満腹でねむけが…。'],
@@ -1744,13 +1744,14 @@ person('korosuke', {
   where: '新喜劇 劇場の楽屋', polite: true, again: 'ほかに、なんかありますか？',
   giftDone: ['今日はもう、もろたとこですやん！', 'お気持ちだけで、じゅうぶんです！'], hangDone: '今日はもう、いっぱい遊んでもらいました！\nまた今度、さそてください！',
   callShy: ['もしもし、ころ助です！…あ、{name}さん！', 'また今度、楽屋でしゃべりましょ！'], callAgain: ['今日は、めっちゃ遊びましたね！', 'また今度、よろしゅうお願いします！'],
-  // his talk in his own (polite Kansai) voice from the first meeting; once you know each
-  // other, without the self-introduction (the 座長 line stays the theater's own)
+  // his talk in his own (polite Kansai) voice from the first meeting; the self-introduction
+  // only that first time (the 座長 line stays the theater's own)
   npcTalkFrom: 0,
   npcTalk: async (g, npc, own) => {
     if (g.flag('shinkigeki_zacho')) return own(g, npc);
     const P = PEOPLE.korosuke;
-    await T(g, P, [g.heartLevel('korosuke') >= 1 ? 'あっ、{name}さん！\n今日もここで、転ぶ練習してます！'
+    const p = g.person('korosuke');
+    await T(g, P, [p && p.talkDay ? 'ぼく、今日もここで転ぶ練習ですわ！\n目標は、座長みたいな見事なこけっぷりです！'
       : '若手座員のころ助です！\n毎日、ここで転ぶ練習してますねん！', g.state.agency === 'yoshimoto'
       ? '同じよしもとの仲間ですやん！\nいつか同じ舞台に立ちましょな！'
       : 'エキストラやったら、だれでも舞台に立てますよ。\n舞台監督さんに言うてみてください！']);
@@ -2126,11 +2127,11 @@ onMorning((g) => {
 
   // reactions to your progress (a new title, joining an agency)
   const rank = rankIndex(st.fame);
+  // fl.people_rank is the highest title seen: losing one and winning it back is not news
   if (typeof fl.people_rank !== 'number') fl.people_rank = rank;
-  else if (rank !== fl.people_rank) {
-    const up = rank > fl.people_rank;
+  else if (rank > fl.people_rank) {
     fl.people_rank = rank;
-    const id = up ? closest() : null;
+    const id = closest();
     if (id) send(id, { text: cheer(PEOPLE[id], 'rank').replaceAll('{rank}', RANKS[rank][1]) });
   }
   const ag = st.agency || '';

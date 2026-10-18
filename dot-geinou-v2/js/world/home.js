@@ -106,10 +106,11 @@ function oyaSmallTalk(g) {
   const st = g.state;
   if (!st.agency && st.fame < 30) {
     // one line pointing at the next step (the full advice was in her first talk)
-    if (!(st.stats && st.stats.jobs)) return ['あら{name}ちゃん、おでかけ？\nすぐそこの公園のステージなら、事務所に入ってなくても\n歌や漫才で投げ銭がもらえるわよ。'];
-    return ['あら{name}ちゃん、おでかけ？\n事務所のオーディションには、もう行ってみた？\n所属できたら、お仕事がぐんと増えるわよ。'];
+    // (the person menu already greeted: no second 「おでかけ？」)
+    if (!(st.stats && st.stats.jobs)) return ['そうそう、すぐそこの公園のステージなら\n事務所に入ってなくても、歌や漫才で\n投げ銭がもらえるわよ。'];
+    return ['そうそう、事務所のオーディションには、もう行ってみた？\n所属できたら、お仕事がぐんと増えるわよ。'];
   }
-  if (st.fame < 250) return ['あら{name}ちゃん、お仕事がんばってるみたいね。', 'ちゃんとごはん食べてる？\n体が資本なんだから、無理しちゃだめよ。'];
+  if (st.fame < 250) return ['{name}ちゃん、お仕事がんばってるみたいね。', 'ちゃんとごはん食べてる？\n体が資本なんだから、無理しちゃだめよ。'];
   if (st.fame < 1000) return ['この前、テレビで{name}ちゃんを見たわよ！\nご近所さんに自慢しちゃった。'];
   if (st.fame < 2000) return ['ご近所さんに、{name}ちゃんのサインを頼まれて困ってるのよ〜。', '…あ、私の分もお願いね。'];
   return ['すっかりスターねえ。\nでも、ここが{name}ちゃんの家なのは変わらないわよ。'];
@@ -118,7 +119,7 @@ function oyaSmallTalk(g) {
 // Her first talk: the v2 life in her words (the intro only names the gauges), once.
 function oyaLife(g) {
   const lines = [
-    'あら{name}ちゃん、おでかけ？\nちょうどよかった。暮らしのことで、大事なお話。',
+    'あら{name}ちゃん、ちょうどよかった。\n暮らしのことで、大事なお話があるの。',
     'おなか（満腹）、ストレス、身だしなみ…\nこの3つは毎日気にかけるのよ。\nごはんを食べて、お風呂に入って、たまには息抜き。',
     'ストレスがたまりすぎると、お仕事どころじゃなくなるわ。\n疲れたら、部屋のベッドでゆっくり休むこと。\nキッチンで自炊、ユニットバスでシャワーもできるわよ。',
     `お家賃は毎週月曜の朝に${fmtMoney((HOUSING.dotsou && HOUSING.dotsou.rent) || 8000)}。\n払えないときは、スマホの「家計」からあとで払えばいいの。\nうちはね、だれも追い出したりしないから。`,

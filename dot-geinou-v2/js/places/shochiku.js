@@ -560,7 +560,7 @@ async function lobbyIntro(g) {
   await sayAs(g, UKETSUKE, 'こらー！ロビーは走ったらあかんで〜！');
   late.dir = 'down';
   await g.emote('chikoku', '…', 40);
-  await sayAs(g, CHIKOKU, ['す、すんません！', '…あれ？見ない顔やね。見学の人？', 'ほな、またな〜！劇場で待ってるで〜！']);
+  await sayAs(g, CHIKOKU, ['す、すんません！', '…あれ？見ん顔やね。見学の人？', 'ほな、またな〜！劇場で待ってるで〜！']);
   await g.moveNpc('chikoku', 'up', 2);
   g.sfx('door');
   late.hidden = true;
@@ -611,13 +611,22 @@ async function guardTalk(g, npc) {
 
 async function wakateTalk(g, npc) {
   const st = g.state;
-  const s = (t) => sayAs(g, npc, t);
-  if (st.fame >= 1000) return s(['うわ、{name}や…！もう売れっ子やん。', 'ええなあ〜。ボクも負けへんで！今日もネタ合わせや！']);
-  if (isMember(g)) return s(['同期やな！これからよろしゅう！', '若手ライブ、舞台監督に声かけたら出番もらえるで。', 'お客さんの前に立つのが、一番の稽古やからな！']);
+  // once you know him, the same name as in his talk menu (people.js)
+  const s = (t) => sayAs(g, g.met('takeru') ? { name: '若手芸人 タケル', look: npc.look } : npc, t);
+  // タケル (people.js) speaks polite Kansai to the player; a friend gets no stranger's tutorial
+  if (g.heartLevel('takeru') >= 1) {
+    const more = st.partner === 'takeru' ? '相方、次のネタ合わせ、いつにします？'
+      : st.fame >= 1000 ? 'テレビ、いつも見てます！\nボクも負けてられへんですわ！'
+        : isMember(g) ? '若手ライブ、また一緒に出ましょ！\n舞台監督さんに声かけたら、出番もらえますよ。'
+          : 'オーディションの審査はトークなんです。\n「おっ」て思わせる返しが勝負ですわ！';
+    return s(['{name}さん、来てくれはったんですね！', more]);
+  }
+  if (st.fame >= 1000) return s(['うわ、{name}さんや…！もう売れっ子ですやん。', 'ええなあ〜。ボクも負けませんよ！\n今日もネタ合わせです！']);
+  if (isMember(g)) return s(['同期ですね！これから、よろしゅうお願いします！', '若手ライブ、舞台監督さんに声かけたら\n出番もらえますよ。', 'お客さんの前に立つのが、\nいちばんの稽古ですから！']);
   return s([
-    'オーディション受けるん？審査はトークやで。',
-    '質問に「おっ」と思わせる返しができるかが勝負や。',
-    'しゃべりは稽古場のレッスンで鍛えられるで。ボクも毎日通っとる！',
+    'オーディション受けはるんですか？\n審査はトークですよ。',
+    '質問に「おっ」と思わせる返しが\nできるかが勝負です。',
+    'しゃべりは稽古場のレッスンで鍛えられますよ。\nボクも毎日通ってます！',
   ]);
 }
 
@@ -1137,6 +1146,7 @@ async function mirrorPractice(g) {
   if (i !== 0 && i !== 1) return;
   if (!g.useStamina(10)) { await g.say('体力が足りない…。今日はもう休もう。'); return; }
   markToday(g, 'shochiku_mirror_day');
+  g.lifeTick({ hunger: -4, stress: 2, clean: -2 }); // like practising at home
   await g.fadeOut(10);
   g.sfx(i === 0 ? 'talk' : 'hit');
   await g.wait(400);

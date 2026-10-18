@@ -16,6 +16,7 @@ import { registerPlace } from '../engine/map.js';
 import { LOOKS, drawFace } from '../engine/sprites.js';
 import { defineTile, R, P, speckle, disc, shadowEllipse } from '../engine/tiles.js';
 import { registerItem, ITEMS } from '../engine/state.js';
+import { ACTIVITY } from '../engine/life.js';
 import { registerSong } from '../engine/audio.js';
 import { text } from '../engine/draw.js';
 import { TILE, DIRS, makeCanvas, shade } from '../engine/util.js';
@@ -435,6 +436,12 @@ function bather(id, x, y, who, towel, talk) {
 // ====================================================================== 銭湯 content
 const BATH_PRICE = 500;
 const bathPrice = (g) => (g.flag('sento_vip') ? 0 : BATH_PRICE);
+// A soak in the big tub (once a day): stamina, a full wash and a calmer mind.
+// A bit less stress relief than going with a friend (the 銭湯 hangout in machi.js).
+const BATH_HEAL = 40;
+const BATH_STRESS = 12;
+const BATH_EFFECT = `体力 +${BATH_HEAL}・身だしなみ 全回復・ストレス -${BATH_STRESS}`;
+const MASSAGE_STRESS = 4;
 
 const YOSE_LINES = [
   { boke: 'いやあ、今日もいいお湯だったねえ。', punch: false },
@@ -658,7 +665,7 @@ async function talkKid(g, n) {
 
 async function massage(g) {
   if (today(g, 'sento_massage_day')) { await g.say('マッサージチェアだ。\n今日はもう、十分ほぐれた。'); return; }
-  const i = await g.ask('マッサージチェアだ。\n¥100で、体力が5回復するらしい。', ['すわる', 'やめておく']);
+  const i = await g.ask(`マッサージチェアだ。\n¥100で、肩こりがほぐれるらしい。\n（体力 +5・ストレス -${MASSAGE_STRESS}）`, ['すわる', 'やめておく']);
   if (i !== 0) return;
   if (!g.spend(100)) { await g.say('100円玉が見つからない…。'); return; }
   g.sfx('coin');
@@ -666,8 +673,9 @@ async function massage(g) {
   g.shake(40, 1);
   await g.say('ウィーン…ゴリゴリゴリ……\nあ゛〜〜、そこそこ……。');
   g.heal(5);
+  const ds = -g.addNeed('stress', -MASSAGE_STRESS);
   g.sfx('good');
-  await g.say('肩こりがほぐれた！\n体力が5回復した。');
+  await g.say(`肩こりがほぐれた！\n（体力 +5${ds > 0 ? `・ストレス -${ds}` : ''}）`);
 }
 
 // The cozy bath cutscene. side: 'm' (男湯) | 'f' (女湯)
@@ -682,7 +690,7 @@ async function soak(g, side) {
     if (i !== 0) return;
     if (!(await payBath(g))) return;
   }
-  const i = await g.ask('大きな湯船だ。\nゆっくりつかって、温まる？', ['つかる', 'やめておく']);
+  const i = await g.ask(`大きな湯船だ。\nゆっくりつかって、温まる？\n（${BATH_EFFECT}）`, ['つかる', 'やめておく']);
   if (i !== 0) return;
   await g.say('まずは、かけ湯をして…\nざばーっ！');
   g.sfx('hit');
@@ -705,7 +713,11 @@ async function soak(g, side) {
   }
   await g.say('体の芯まで、ぽっかぽかだ……。');
   await g.fadeOut(24);
-  g.heal(40);
+  const before = g.state.stamina;
+  g.heal(BATH_HEAL);
+  const dh = g.state.stamina - before;
+  const dc = g.bathe(100, true);
+  const ds = -g.addNeed('stress', -BATH_STRESS);
   g.setFlag('sento_bath_day', g.state.day);
   bathing = null;
   p.hidden = false;
@@ -714,7 +726,8 @@ async function soak(g, side) {
   await g.fadeIn(24);
   g.sfx('good');
   await g.emote('player', '♥');
-  await g.say(['お風呂でしっかり温まった！\n体力が40回復した。', '風呂上がりには、番台のコーヒー牛乳がおすすめだ！']);
+  const what = [dh > 0 ? `体力 +${dh}` : '', dc > 0 ? `身だしなみ +${dc}` : '', ds > 0 ? `ストレス -${ds}` : ''].filter(Boolean).join('・');
+  await g.say([`お風呂でしっかり温まった！\n体も心も、さっぱりした。${what ? `\n（${what}）` : ''}`, '風呂上がりには、番台のコーヒー牛乳がおすすめだ！']);
 }
 
 // Steam rising from both tubs.
@@ -1560,7 +1573,8 @@ defineTile('takoyaki_aframe', {
 });
 
 // ====================================================================== たこ焼き屋 people & content
-const TAISHO = { name: '大将', look: { ...LOOKS.chef, hat: '#ffffff', top: '#2a3560', bottom: '#2a3560' } };
+// the same name as in his talk menu (people.js)
+const TAISHO = { name: 'たこ焼き屋の大将', look: { ...LOOKS.chef, hat: '#ffffff', top: '#2a3560', bottom: '#2a3560' } };
 const SENPAI = { name: 'バイトの先輩', look: { hair: 'cap', hat: '#d62f2f', hairColor: 'brown', skin: 'fair', top: '#ff8a3d', bottom: '#3b3f48' } };
 const T_OBACHAN = { name: '常連のおばちゃん', look: { ...LOOKS.oldwoman, hairColor: 'purple', top: '#d8a03a', bottom: '#5a4a3a' } };
 const T_KAISHAIN = { name: '仕事帰りの会社員', look: { ...LOOKS.salaryman, tie: '#ff8a3d' } };
@@ -1620,8 +1634,8 @@ const TAKO_JOBS = {
   },
   matsuri: {
     id: 'takoyaki_matsuri', title: '商店街の祭りの司会', client: TAISHO.name, clientLook: TAISHO.look,
-    desc: 'なにわ商店街の夏祭りを盛り上げよう！', stamina: 20,
-    minigame: 'talk', opts: { difficulty: 2, topic: '商店街の夏祭り', scenes: MATSURI_SCENES },
+    desc: 'なにわ商店街のお祭りを盛り上げよう！', stamina: 20,
+    minigame: 'talk', opts: { difficulty: 2, topic: '商店街のお祭り', scenes: MATSURI_SCENES },
     pay: 4000, fame: 15, skill: 'talk', gain: 2, requires: TIER1,
   },
   report: {
@@ -1647,7 +1661,10 @@ async function takoShop(g) {
 
 async function baito(g) {
   const job = TAKO_JOBS.baito;
-  const i = await ask(g, TAISHO, `手伝ってくれるんか？おおきに！\n「${job.title}」\nギャラ 目安¥900（出来で変動）／体力 -${job.stamina}`, ['やる！', 'やめておく']);
+  // burnout / starving: refuse before the kitchen scene (g.job would only refuse after it)
+  const why = g.checkRequires(job.requires) || g.lifeRefusal();
+  if (why) { await g.say(why); return; }
+  const i = await ask(g, TAISHO, `手伝ってくれるんか？おおきに！\n「${job.title}」\nギャラ 目安¥900（出来で変動）／体力 -${job.stamina}・ストレス +${ACTIVITY.job.stress}`, ['やる！', 'やめておく']);
   if (i !== 0) return;
   if (g.state.stamina < job.stamina) {
     await say(g, TAISHO, ['顔色悪いで！\n体力が足りひんのとちゃうか？', 'たこ焼きでも食べて、休んでからおいで。']);
@@ -1770,7 +1787,7 @@ async function talkTaisho(g, n) {
 
 async function talkObachan(g, n) {
   if (today(g, 'takoyaki_boke_day')) { await say(g, n, ['また明日も、おもろいこと聞かせてや〜！', '大阪ではな、ふられたら返す！\nこれ、基本やで。']); return; }
-  await say(g, n, g.state.fame >= 250 ? 'あんた、テレビに出とった子やろ！？' : 'あら、見ない顔やね！\nあんた、もしかして芸人さん？');
+  await say(g, n, g.state.fame >= 250 ? 'あんた、テレビに出とった子やろ！？' : 'あら、見ん顔やね！\nあんた、もしかして芸人さん？');
   const i = await ask(g, n, 'ほな、なんかおもろいこと言うてみ！', ['タコだけに、タコ〜', 'たこ焼きの具は私です', '急に言われても…']);
   g.setFlag('takoyaki_boke_day', g.state.day);
   if (i === 0) {

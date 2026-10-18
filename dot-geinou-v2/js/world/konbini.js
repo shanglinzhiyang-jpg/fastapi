@@ -39,7 +39,8 @@ registerPlace({
           type: 'npc', id: 'clerk', x: 7, y: 4, dir: 'down', look: LOOKS.clerk, name: '店員さん', person: 'haruto',
           talk: async (g, npc) => {
             await g.shop(['onigiri', 'bento', 'drink', 'nodoame', 'netacho', 'daihon', 'wadai'], { title: 'ドットマート', greeting: 'いらっしゃいませ〜！' });
-            await g.say('ありがとうございました〜！', { name: npc.name, look: npc.look });
+            // once you know him, the same name as in his talk menu (people.js)
+            await g.say('ありがとうございました〜！', { name: g.met('haruto') ? '店員の春斗さん' : npc.name, look: npc.look });
           },
         },
         { type: 'npc', id: 'customer', x: 4, y: 4, dir: 'up', look: { ...LOOKS.salaryman, top: '#5a6f8a' }, name: 'お客さん', wander: 1, text: ['エナジードリンクは仕事前の必需品ですよ…。', '体力が足りないとお仕事もレッスンも受けられませんからね。'] },

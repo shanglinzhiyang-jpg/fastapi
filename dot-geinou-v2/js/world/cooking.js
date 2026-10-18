@@ -48,7 +48,7 @@ export const RECIPES = [
   { id: 'oyakodon', name: '親子丼', needs: { ing_rice: 1, ing_egg: 1, ing_chicken: 1 }, heal: 45, fill: 60, stress: 6, bento: '親子丼弁当',
     text: 'とろとろ卵と、ジューシーな鶏肉。\n丼をかきこむ手が止まらない！' },
   { id: 'shake', name: '焼き鮭定食', needs: { ing_rice: 1, ing_fish: 1, ing_miso: 1 }, heal: 48, fill: 60, stress: 8, bento: '鮭弁当',
-    text: 'こんがり焼けた鮭に、みそ汁とごはん。\n体にやさしい、ちゃんとした朝ごはんだ。' },
+    text: 'こんがり焼けた鮭に、みそ汁とごはん。\n体にやさしい、ほっとする和の定食だ。' },
   { id: 'omurice', name: 'オムライス', needs: { ing_rice: 1, ing_egg: 2, ing_chicken: 1 }, heal: 52, fill: 62, stress: 12, bento: 'オムライス弁当',
     text: 'ケチャップライスを、ふわふわ卵でつつんだ！\nケチャップで星マークも描いておこう。' },
   { id: 'curry', name: 'カレーライス', needs: { ing_rice: 2, ing_curry: 1, ing_veg: 1, ing_pork: 1 }, heal: 50, fill: 65, stress: 10, serves: 2, bento: 'カレー弁当',
@@ -146,7 +146,7 @@ function eatDish(g, r) {
   const b = cookRank(g).bonus;
   const before = { st: g.state.stamina, hu: g.state.life.hunger, sr: g.state.life.stress };
   g.eat(Math.round(r.heal * (1 + b)), { silent: true, fill: r.fill });
-  g.relax({ stress: Math.round(r.stress * (1 + b)) });
+  g.relax({ stress: Math.round(r.stress * (1 + b) * g.lastEatRatio) }); // a full stomach wastes most of it
   const d = { st: g.state.stamina - before.st, hu: g.state.life.hunger - before.hu, sr: before.sr - g.state.life.stress };
   const parts = [];
   if (d.st > 0) parts.push(`体力+${d.st}`);

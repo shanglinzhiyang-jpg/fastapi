@@ -17,7 +17,7 @@ import { audio } from './audio.js';
 import { SKILLS, AGENCIES, RANKS, FINALE_FAME, rankIndex, rankName } from './state.js';
 import { MINIGAMES } from './minigame.js';
 import { GUIDE, GUIDE_ORDER, TOWNS, AUDITIONS, GUIDE_JOBS, TIER_FAME, jobOpen } from '../world/guide.js';
-import { PEOPLE, HEARTS, heartIndex, REGULARS, FURNITURE, WEEKDAYS, weekdayOf, weekOf, HUNGRY, STRESSED, SCRUFFY, BURNOUT, FULL } from './life.js';
+import { PEOPLE, HEARTS, heartIndex, REGULARS, FURNITURE, WEEKDAYS, weekdayOf, weekOf, HUNGRY, STRESSED, SCRUFFY, BURNOUT, FULL, showWords } from './life.js';
 
 const TABS = [
   { label: 'もくひょう', color: '#ff8a3d' },
@@ -177,12 +177,15 @@ function regularStatus(g, id) {
   const r = REGULARS[id], s = st.regulars[id];
   const wk = weekOf(st.day), today = weekdayOf(st.day);
   if (s.dropped) return ['降板', COLORS.dim];
+  const w = showWords(r);
   if ((s.doneWeek || 0) >= wk) {
     if (s.missed > 0) return ['休んでしまった…', COLORS.bad];
-    if (weekOf(s.since) === wk && weekdayOf(s.since) > r.weekday) return ['来週から', COLORS.dim];
-    return ['収録ずみ', COLORS.good];
+    // joined after this week's show (or on its day, without doing it): starts next week
+    const ws = weekdayOf(s.since);
+    if (weekOf(s.since) === wk && (ws > r.weekday || (ws === r.weekday && !s.count))) return ['来週から', COLORS.dim];
+    return [w.done, COLORS.good];
   }
-  if (r.weekday === today) return ['きょう収録！', COLORS.accent];
+  if (r.weekday === today) return [`きょう${w.act}！`, COLORS.accent];
   if (r.weekday > today) return [`あと${r.weekday - today}日`, COLORS.text];
   return ['今週は終わった', COLORS.dim]; // the day passed without a recording (not counted yet)
 }
@@ -191,8 +194,10 @@ function regularStatus(g, id) {
 const daysToRent = (day) => (7 - weekdayOf(day)) % 7 || 7;
 
 // Short advice for each need: [text, color].
-function needAdvice(k, v) {
+function needAdvice(k, v, g) {
   if (k === 'hunger') {
+    // broke and nothing to eat: work is still allowed (g.lifeRefusal), so say so
+    if (v <= 0 && g && g.canFeed && !g.canFeed()) return ['おなかペコペコで、お金も食べ物もない…。まずはお仕事でかせいで、何か食べよう。', COLORS.bad];
     if (v <= 0) return ['おなかがすきすぎて力が出ない！何か食べないと、お仕事もレッスンもできない。', COLORS.bad];
     if (v < HUNGRY) return ['おなかがペコペコ！何か食べよう。ミニゲームが難しくなり、よく眠れない。', COLORS.bad];
     if (v < 45) return ['そろそろ何か食べよう。', COLORS.accent];
@@ -213,8 +218,11 @@ function needAdvice(k, v) {
 
 const COND = {
   great: ['絶好調！', COLORS.good], normal: ['ふつう', COLORS.text], hungry: ['はらぺこ…', COLORS.bad],
-  stressed: ['ストレスぎみ…', COLORS.bad], scruffy: ['身だしなみが乱れている', COLORS.accent], burnout: ['燃え尽き寸前！', COLORS.bad],
+  stressed: ['ストレスぎみ…', COLORS.bad], scruffy: ['身だしなみが乱れている', COLORS.accent], burnout: ['燃え尽きた…', COLORS.bad],
+  edge: ['燃え尽き寸前！', COLORS.bad], // stressed, 90 and up
 };
+// g.condition(), with 'edge' for stress 90+ (one bad job away from burning out)
+const condOf = (g) => { const c = g.condition(); return c === 'stressed' && g.state.life.stress >= 90 ? 'edge' : c; };
 
 // ---------------------------------------------------------------- tab: もくひょう
 function goalPage(g, ctx) {
@@ -232,12 +240,15 @@ function goalPage(g, ctx) {
   // first, since it cannot wait, then the needs from the most to the least pressing
   const notes = [];
   try {
-    for (const id of g.regularsToday ? g.regularsToday() : []) notes.push([`きょうは『${REGULARS[id].title}』の収録日！`, COLORS.accent]);
+    for (const id of g.regularsToday ? g.regularsToday() : []) notes.push([`きょうは『${REGULARS[id].title}』の${showWords(REGULARS[id]).day}！`, COLORS.accent]);
   } catch (e) { /* registry changed under us */ }
   if (st.stamina < 25) {
     notes.push([g.canEat && !g.canEat() ? '体力が少ない。おなかいっぱいなので、ベッドで寝て回復しよう。' : '体力が少ない。何か食べるか、ベッドで寝て回復しよう。', COLORS.bad]);
   }
-  if (L.hunger < HUNGRY && st.stamina >= 25) notes.push([L.hunger <= 0 ? 'おなかがすきすぎて力が出ない！まず何か食べよう。' : 'おなかがペコペコ…。何か食べよう。', COLORS.bad]);
+  if (L.hunger < HUNGRY && st.stamina >= 25) {
+    const broke = L.hunger <= 0 && g.canFeed && !g.canFeed();
+    notes.push([broke ? 'おなかペコペコで、お金も食べ物もない！まずはお仕事でかせごう。' : L.hunger <= 0 ? 'おなかがすきすぎて力が出ない！まず何か食べよう。' : 'おなかがペコペコ…。何か食べよう。', COLORS.bad]);
+  }
   if (L.stress >= BURNOUT) notes.push(['ストレスが限界。ジョギングやテレビで気分転換するか、今日は休もう。', COLORS.bad]);
   else if (L.stress >= STRESSED) notes.push(['ストレスがたまっている。友だちと遊んで息抜きしよう。', COLORS.accent]);
   if (st.rent && st.rent.debt) notes.push([`家賃が未払い（${fmtMoney(st.rent.debt)}）。スマホの「家計」から払おう。`, COLORS.bad]);
@@ -319,14 +330,14 @@ function lifePage(g, ctx) {
   pg.block().head('きょう', TABS[1].color);
   pg.row(`${day}日目　${WEEKDAYS[wd]}曜日`, `第${weekOf(day)}週`, { c: COLORS.accent, rc: COLORS.dim, rs: SMALL });
   if (g.condition) {
-    const [cl, cc] = COND[g.condition()] || COND.normal;
+    const [cl, cc] = COND[condOf(g)] || COND.normal;
     pg.row('調子', cl, { rc: cc });
   }
   try {
     for (const id of g.regularsToday ? g.regularsToday() : []) {
       const r = REGULARS[id];
       const where = anyPlaceName(g, r.place);
-      pg.para(`きょうは『${r.title}』の収録日！${where ? `（${where}）` : ''}`, { s: SMALL, c: COLORS.accent });
+      pg.para(`きょうは『${r.title}』の${showWords(r).day}！${where ? `（${where}）` : ''}`, { s: SMALL, c: COLORS.accent });
     }
   } catch (e) { /* ignore */ }
   const unread = g.unread ? g.unread() : 0;
@@ -348,7 +359,7 @@ function lifePage(g, ctx) {
   ];
   for (const [k, name, fmt, col] of NEED_ROWS) {
     const v = clamp(Math.round(L[k] || 0), 0, 100);
-    const [adv, ac] = needAdvice(k, v);
+    const [adv, ac] = needAdvice(k, v, g);
     pg.row(name, fmt(v), { gauge: { frac: v / 100, color: col(v) }, rc: ac === COLORS.bad ? COLORS.bad : COLORS.text });
     pg.para(adv, { s: SMALL, c: ac, x: 16 });
   }
@@ -390,7 +401,7 @@ function lifePage(g, ctx) {
       const where = anyPlaceName(g, r.place);
       pg.para(`${where ? where + '・' : ''}出演 ${s.count || 0}回${s.missed && !s.dropped ? `・お休み ${s.missed}回` : ''}`, { s: SMALL, c: COLORS.dim, x: 16 });
     }
-    pg.para('収録日に現場へ行けば出演できる。続けて2回休むと降板…。', { s: SMALL, c: COLORS.dim });
+    pg.para('収録や本番の日に現場へ行けば出演できる。続けて2回休むと降板…。', { s: SMALL, c: COLORS.dim });
   }
 
   // friends

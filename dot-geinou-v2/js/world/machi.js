@@ -113,7 +113,8 @@ async function orderMenu(g, { title, entries, host, thanks, sale = 1 }) {
   const a = snap(g);
   if (e.heal || e.fill) g.eat(e.heal || 0, { silent: true, fill: e.fill || 0 });
   // a drink (nothing to eat) is a treat: full relief twice a day, then less
-  const t = e.stress && !e.fill ? treat(g, 'drink', e.stress) : { stress: e.stress || 0, tired: false };
+  // food relieves stress only as much as the stomach could take (g.lastEatRatio)
+  const t = e.stress && !e.fill ? treat(g, 'drink', e.stress) : { stress: Math.round((e.stress || 0) * (e.fill ? g.lastEatRatio : 1)), tired: false };
   g.relax({ stress: t.stress, clean: e.clean || 0 });
   const res = diffText(g, a);
   await g.say([e.text || `${e.name}をいただいた。`, (res || 'ほっとひと息。') + (t.tired ? '\n' + TREAT_NOTE : '')]);
@@ -174,7 +175,7 @@ registerHangout('ramen', {
   lines: ['（湯気の向こうで、ふたりでズルズル…）', '仕事の話、くだらない話。\nスープまで飲み干した。'],
 });
 registerHangout('park', {
-  name: '公園で散歩', price: 0, stress: 10, aff: 4, place: 'machi',
+  name: '公園で散歩', go: '公園へおさんぽ', price: 0, stress: 10, aff: 4, place: 'machi',
   lines: ['（ドット中央公園を、のんびり歩いた）', 'ベンチに座って、とりとめのない話をした。\n池のカモが、すいーっと泳いでいく。'],
 });
 registerHangout('cafe', {
@@ -1284,7 +1285,7 @@ registerPlace({
         { type: 'npc', id: 'super_deli', x: 2, y: 6, dir: 'down', look: DELI_LADY.look, name: DELI_LADY.name,
           talk: async (g, npc) => { const n = await superShop(g, 'deli'); await g.say(n ? '毎度ありがと！\nコロッケは、おやつにもいいわよ〜。' : 'また寄ってってね〜。\n揚げたては、いまだけよ！', who(npc)); } },
         { type: 'npc', id: 'super_mom', x: 12, y: 4, dir: 'left', look: { ...LOOKS.mom, top: '#5fb8a8' }, name: 'お客さん', wander: 1,
-          text: ['卵と鶏肉があれば、親子丼。\nお米とお魚とみそがあれば、焼き鮭定食。', '組み合わせを考えるのが、楽しいのよね。'] },
+          text: ['お米と卵と鶏肉があれば、親子丼。\nお米とお魚とみそなら、焼き鮭定食。', '組み合わせを考えるのが、楽しいのよね。'] },
         { type: 'npc', id: 'super_student', x: 4, y: 5, dir: 'left', look: { hair: 'short', hairColor: 'brown', skin: 'fair', top: '#2f6fd0', bottom: '#3b3f48' }, name: '一人暮らしの学生',
           text: ['お金がピンチのときは、もやし炒めっす。\nキッチンがあれば¥100で作れるっすよ。', 'でも、たまにはちゃんと肉も食べたい…。'] },
       ],

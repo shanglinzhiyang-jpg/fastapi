@@ -83,7 +83,7 @@ function generate() {
     { type: 'npc', id: 'obachan', x: 12, y: 21, dir: 'down', look: { ...LOOKS.oldwoman, top: '#ff7eb6', hairColor: 'purple' }, name: '大阪のおばちゃん', person: 'tamae', talk: async (g, npc) => {
       if (!g.flag('ame_' + g.state.day)) {
         g.setFlag('ame_' + g.state.day);
-        await g.say(['あら、あんた見ない顔やね！東京から来たん？', 'ほな、アメちゃんあげるわ！のどにええで〜。'], { name: npc.name, look: npc.look });
+        await g.say(['あら、あんた見ん顔やね！東京から来たん？', 'ほな、アメちゃんあげるわ！のどにええで〜。'], { name: npc.name, look: npc.look });
         g.giveItem('nodoame');
         g.sfx('coin');
       } else {

@@ -817,6 +817,9 @@ async function talkMio(g) {
     ]);
   } else if (st.fame >= 250) {
     await say(g, 'mio', ['最近、テレビでよく見かけるわ。\nいい表情してたじゃない！', 'ドラマの脇役は物語のささえ。\n主役を光らせる芝居を研究してみて。']);
+  } else if (g.heartLevel('mio') >= 1) {
+    // she knows you (people.js): no "新人さん？" to a friend
+    await say(g, 'mio', ['{name}、また来たのね。', 'お芝居はね、セリフより「聞く」ことが大事。\n…これ、前にも言ったかしら？']);
   } else {
     await say(g, 'mio', [
       'あなた、新人さん？\nわたしもオーディションから始まったの。',
@@ -1073,9 +1076,15 @@ async function talkDance(g) { await lessonMenu(g, 'dance', LESSONS.dance, LESSON
 const TRAINEES = ['ken1', 'ken2', 'ken3'];
 const TRAINEE_HOME = { ken1: [8, 6], ken2: [10, 6], ken3: [12, 6] };
 
+// ひなた's friendship (people.js): no self-introduction to a friend; her unit debut is her ♥4 event.
+const hinataFriend = (g) => g.heartLevel('hinata') >= 1;
+const unitDebuted = (g) => { const p = g.person('hinata'); return !!(p && p.seen && p.seen[4]); };
+
 async function watchRehearsal(g, who) {
   const intro = {
-    ken1: ['研修生のひなたです！', 'いまからフォーメーションの\n通し稽古なんです。'],
+    ken1: !hinataFriend(g) ? ['研修生のひなたです！', 'いまからフォーメーションの\n通し稽古なんです。']
+      : unitDebuted(g) ? ['{name}さん！来てくれたんですね！', 'デビュー曲の通し稽古なんです。\n見ていってください！']
+        : ['{name}さん！来てくれたんですね！', 'いまから通し稽古なんです。\n見ていってください！'],
     ken2: ['研修生のソウっす！', 'これから3人で通し稽古。\nよかったら見てってください！'],
     ken3: ['研修生のくるみです。', '通し稽古、ちょっと緊張するけど…\n見ててくれますか？'],
   }[who];
@@ -1104,7 +1113,7 @@ async function watchRehearsal(g, who) {
   g.sfx('applause');
   await g.emote('dance', '!');
   await say(g, 'dance', 'うん、そろってきた！\nラストのポーズ、もっと大きく！');
-  await say(g, 'ken2', '{name}さん、どうでした？\nオレたちも早くデビューしたいっす！');
+  await say(g, 'ken2', unitDebuted(g) ? '{name}さん、どうでした？\nデビューしても、稽古は毎日っす！' : '{name}さん、どうでした？\nオレたちも早くデビューしたいっす！');
   if (!today(g, 'horipro_watch_day')) {
     markToday(g, 'horipro_watch_day');
     g.addSkill('uta', 1, true);
@@ -1218,6 +1227,9 @@ async function auditionDesk(g, who) {
     await say(g, who, ['あれ、顔色が悪いですよ？', '体力が足りないみたいです。\n休んで万全にしてから来てくださいね！']);
     return;
   }
+  // burnout / starving: refuse before walking on stage
+  const tired = g.lifeRefusal();
+  if (tired) { await g.say(tired); return; }
   const D = DEPTS[i];
   await stageEntrance(g, D);
   await g.audition({ agency: PID, title: D.title, minigame: D.minigame, opts: D.opts, skill: D.key, pass: 55, stamina: 15 });

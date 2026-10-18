@@ -17,6 +17,7 @@ import { registerPlace } from '../engine/map.js';
 import { LOOKS, charSheet, drawChar } from '../engine/sprites.js';
 import { defineTile, R as TR, P as TP, speckle, pix } from '../engine/tiles.js';
 import { registerItem, FINALE_FAME } from '../engine/state.js';
+import { ACTIVITY } from '../engine/life.js';
 import { registerSong } from '../engine/audio.js';
 import { text, measure } from '../engine/draw.js';
 import { drawLogo } from '../engine/logos.js';
@@ -1090,7 +1091,10 @@ async function historyDrama(g, npc) {
     await g.say(['日曜夜の歴史ドラマの監督だ。', '主演は一年の顔。知名度★2000…「スター」と呼ばれるくらいの人にしか任せられないな。', 'セットにいる殺陣師さんの稽古で、腕を磨いておくといい。'], s);
     return;
   }
-  const i = await g.ask(['{name}さん…次の主演は、君しかいない！', '「日曜夜の歴史ドラマで主演」\nギャラ 目安¥70,000（出来で変動）／体力 -30'], ['引き受ける', 'やめておく'], s);
+  // burnout / starving: refuse before the costume fitting (g.job would only refuse after it)
+  const tired = g.lifeRefusal();
+  if (tired) { await g.say(tired); return; }
+  const i = await g.ask(['{name}さん…次の主演は、君しかいない！', `「日曜夜の歴史ドラマで主演」\nギャラ 目安¥70,000（出来で変動）／体力 -30・ストレス +${ACTIVITY.job.stress}`], ['引き受ける', 'やめておく'], s);
   if (i !== 0) return;
   if (g.state.stamina < 30) { await g.say('体力が足りない…。\n家で休むか、何か食べて回復しよう。'); return; }
   await g.fadeOut(12);

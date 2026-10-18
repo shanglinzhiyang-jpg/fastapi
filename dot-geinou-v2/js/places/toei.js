@@ -1200,10 +1200,14 @@ async function voiceAudition(g, npc) {
     await g.say('オーディションは1日1回まで。\nまた明日、挑戦してね！', o);
     return;
   }
+  // an audition like g.audition: refused at burnout / when starving, and the same toll on the needs
+  const tired = g.lifeRefusal();
+  if (tired) { await g.say(tired); return; }
   const i = await g.ask(['新作アニメ『ドット冒険記』の声優オーディション、受けてみる？', '（体力 -15・1日1回）'], ['受ける', 'やめておく'], o);
   if (i !== 0) return;
   if (!g.useStamina(15)) { await g.say('体力が足りない…。\n声がかすれちゃう。休んでからにしよう。'); return; }
   g.setFlag('toei_voice_aud_day', g.state.day);
+  g.lifeTick('audition');
   const res = await g.minigame('talk', {
     difficulty: 3, skill: 'engi', pass: 55, title: 'アニメ声優オーディション', topic: 'アニメ声優オーディション',
     scenes: AUDITION_SCENES, howto: ['審査員のお題に合わせて、', 'いちばんキャラクターらしい演じ方を選ぼう！'],
@@ -1841,6 +1845,7 @@ async function micPractice(g) {
   if (i !== 0) return;
   if (!g.useStamina(5)) { await g.say('体力が足りない…。'); return; }
   g.setFlag('toei_mic_day', g.state.day);
+  g.lifeTick({ hunger: -4, stress: 2, clean: -2 }); // like practising at home
   await g.fadeOut(8);
   g.sfx('talk');
   await g.wait(250);

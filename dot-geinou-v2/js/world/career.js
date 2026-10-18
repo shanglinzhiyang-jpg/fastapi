@@ -4,7 +4,7 @@
 //   Regular shows   8 weekly shows at the companies' buildings (registerRegular), offered by
 //                   phone (kind 'offer') at most once every 3 days when the requirements are
 //                   met. A declined show is not offered again within 4 weeks (an unanswered
-//                   offer stays in the inbox and can still be accepted).
+//                   offer can still be accepted for OFFER_DAYS = 14 days, then it expires).
 //   冠番組          at ★1200 and 8,000+ fans: your own weekly show ('career_kanmuri'), so it
 //                   has a few weeks to run before the ★4000 finale. Its title, studio, weekday
 //                   and minigame follow the player (agency, best skill) and are fixed when the
@@ -21,7 +21,7 @@
 // State: g.state.flags career_* / dotter (old saves simply lack them), g.state.phone.lastPost
 // and .posts (life fields), g.state.regulars (engine). All names are fictional.
 
-import { registerRegular, REGULARS, onMorning, registerPhoneApp, weekdayOf, weekOf, WEEKDAYS, PEOPLE, isKansai } from '../engine/life.js';
+import { registerRegular, REGULARS, onMorning, registerPhoneApp, weekdayOf, weekOf, WEEKDAYS, PEOPLE, isKansai, OFFER_DAYS } from '../engine/life.js';
 import { registerItem, ITEMS, RANKS, rankIndex, AGENCIES } from '../engine/state.js';
 import { PLACES } from '../engine/map.js';
 import { LOOKS, charSheetHD, drawFaceHD } from '../engine/sprites.js';
@@ -713,8 +713,10 @@ const OFFER_GAP = 28; // days before a show is offered again (declined / dropped
 const KAN_GAP = 7; // the 冠番組, declined: offered again a week later (dropped: OFFER_GAP)
 const OFFER_EVERY = 3; // days between two regular-show offers
 const KAN_FAME = 1200, KAN_FANS = 8000; // the 冠番組 is offered from here
+// an offer still waiting for your answer (unanswered and not expired)
+const openOffer = (st, m) => m && m.kind === 'offer' && !m.answered && st.day - num(m.day) < OFFER_DAYS;
 function pendingOffer(st, id) {
-  return st.phone.inbox.some((m) => m.kind === 'offer' && m.regular === id && !m.answered);
+  return st.phone.inbox.some((m) => openOffer(st, m) && m.regular === id);
 }
 function offerable(g, id) {
   const st = g.state;
@@ -795,7 +797,7 @@ function offerMorning(g, out) {
   }
   if (st.day - num(st.flags.career_offerDay, -99) < OFFER_EVERY) return;
   // shows you hold + fresh offers you have not answered yet (older ones no longer count)
-  const fresh = st.phone.inbox.filter((m) => m.kind === 'offer' && !m.answered && SHOW_IDS.includes(m.regular) && st.day - num(m.day) < 14).length;
+  const fresh = st.phone.inbox.filter((m) => openOffer(st, m) && SHOW_IDS.includes(m.regular)).length;
   if (activeShows(st).length + fresh >= MAX_SHOWS) return;
   const cands = SHOW_IDS.filter((id) => REGULARS[id] && offerable(g, id));
   if (!cands.length) return;
@@ -925,7 +927,7 @@ function letterMorning(g, out) {
   const L = obj(g, 'career_letters');
   // remember when the title / the agency last changed (congratulation letters)
   const rk = rankIndex(st.fame), ag = st.agency || '';
-  if (L.rank !== rk) { if (L.rank != null && rk > L.rank) L.rankDay = st.day; L.rank = rk; }
+  if (L.rank == null || rk > L.rank) { if (L.rank != null) L.rankDay = st.day; L.rank = rk; } // L.rank = highest title seen
   if (L.agency !== ag) { if (L.agency != null && ag) L.agencyDay = st.day; L.agency = ag; }
   if (out.sent >= 2 || st.fans < 50) return;
   const p = clamp(0.1 + 0.07 * Math.log10(st.fans), 0, 0.5);
@@ -959,7 +961,7 @@ function letterMorning(g, out) {
 
 // ======================================================================== weekly ranking
 const RIVALS = [
-  '白鳥ルミナ', '大河原ツバサ', '桃瀬あんず', 'すずめ百貨店', '風見ケイタ', '雪村しずく', '黒潮ゴロー', '天城コハル', 'ミルクティー同盟', '真夜中ペンギンズ',
+  '白鳥ルミナ', '大河原ツバサ', '椿あんず', 'すずめ百貨店', '風見ケイタ', '雪村しずく', '黒潮ゴロー', '天城コハル', 'ミルクティー同盟', '真夜中ペンギンズ',
   '鳴海タクト', '南野マリン', '森乃くまお', '青空ハイウェイ', '藤咲レイナ', 'こたつむり', '早乙女ジョー', '星屑シスターズ', 'ドット山ピク太', '浪花のマダム千鶴',
   '御影リョウ', 'ナポリタン親方', '小野寺みのり', 'カスタードプリンス', '真壁ソウジ', 'ゆるふわ団地', '春風ひまり', '鉄板ジュンペイ', '朝凪カオル', 'ピコピコ博士',
   '銀河ステーション', '若葉のぞみ', 'たこやきガールズ', '千本木リク', 'おかわり侍', '水無月セナ', '草野ぽぽ', '月見ボーイズ', '紅林アキラ', '七色クレヨン',
@@ -1025,11 +1027,12 @@ function rankingMorning(g, out) {
   out.sent++;
   if (rank === 1 && !fl.career_no1) {
     fl.career_no1 = st.day;
+    if (!fl.career_top10) fl.career_top10 = st.day; // straight to No.1: no 「次はてっぺん」 letter later
     g.giveItem('career_no1_badge', 1, true);
     g.addFans(Math.round(st.fans * 0.05), true);
     g.message({ from: 'ドット芸能ニュース', kind: 'news', text: g.fmt('【速報】{name}さん、タレント好感度ランキングで初の1位に！\n街の声「元気をもらえる」「家族みんなで好き」\n（記念のバッジが届いた！）') });
     g.notify('好感度ランキング1位！', { color: COLORS.accent });
-  } else if (rank <= 10 && !fl.career_top10 && out.sent < 3) {
+  } else if (rank > 1 && rank <= 10 && !fl.career_top10 && out.sent < 3) {
     fl.career_top10 = st.day;
     g.message({ from: 'ファンレター', kind: 'fan', text: g.fmt(`ランキング${rank}位、見ました！トップ10入り、おめでとう！\n次はてっぺんだね！\n― ファン一同`) });
   }
@@ -1095,7 +1098,7 @@ const POST_TEXT = {
     { t: '公園のベンチでぼーっとしてたら、ハトに囲まれました。', r: ['ハトうらやましい', 'ハトにも人気（笑）'] },
     { t: '銭湯の大きいお風呂で、心までぽかぽか♪', r: ['銭湯いいよね〜', 'お風呂上がりはコーヒー牛乳ですか？'] },
     { t: 'ひさしぶりに一日中マンガを読んでました。\n続きが気になる…！', r: ['なんのマンガか気になる！'] },
-    { t: '商店街をお散歩。\nコロッケ屋さんのおばちゃんに元気をもらいました！', r: ['その商店街、わたしの地元です！'] },
+    { t: '商店街をお散歩。\nスーパーのお惣菜のおばちゃんに、元気をもらいました！', r: ['その商店街、わたしの地元です！'] },
     { t: '部屋の片づけをしてたら、デビュー前のネタ帳が出てきました。\n…そっと閉じました。', r: ['見たい！そのネタ帳見たい！', 'そっと閉じた（笑）'] },
   ],
   promo_tv: [

@@ -18,6 +18,7 @@ import { registerPlace } from '../engine/map.js';
 import { LOOKS, charSheet, drawFace } from '../engine/sprites.js';
 import { defineTile, R, P, disc, shadowEllipse } from '../engine/tiles.js';
 import { registerItem, payText } from '../engine/state.js';
+import { ACTIVITY } from '../engine/life.js';
 import { registerSong } from '../engine/audio.js';
 import { text, panel } from '../engine/draw.js';
 import { W, H, fmtMoney, pick } from '../engine/util.js';
@@ -770,7 +771,7 @@ function lockLabel(g, j) {
   if (r.fame && g.state.fame < r.fame) return `★${r.fame}〜`;
   return null;
 }
-const confirmText = (def) => `${def.desc}\n「${def.title}」\n${payText(def.pay)}／体力 -${def.stamina}`;
+const confirmText = (def) => `${def.desc}\n「${def.title}」\n${payText(def.pay)}／体力 -${def.stamina}・ストレス +${ACTIVITY.job.stress}`;
 
 // ------------------------------------------------------------------ confetti & celebration card
 const CONFETTI = [GOLD, RED, '#ff7eb6', '#5fd7ff', '#5ee07a', '#ffffff'];
@@ -1027,6 +1028,9 @@ async function runStageJob(g, j, who) {
   const def = j.def;
   const why = blockReason(g, j);
   if (why) { await g.say(why, who); return null; }
+  // burnout / starving: refuse before the curtain goes up (and before the daily flag)
+  const tired = g.lifeRefusal();
+  if (tired) { await g.say(tired); return null; }
   const i = await g.ask(confirmText(def), ['受ける', 'やめておく'], who || { name: def.client });
   if (i !== 0) return null;
   if (st.stamina < def.stamina) {
@@ -1051,13 +1055,13 @@ async function runStageJob(g, j, who) {
     g.sfx('applause');
     for (const [w, t] of INTRO[j.mode]) await g.say(t, WHO[w]);
     if (zachoMode) {
-      g.setFlag('shinkigeki_zacho_day', st.day);
       await g.walkNpcTo(CAST.zacho, 18, 5, 1.5);
       g.showNpc(CAST.zacho, false);
       await g.emote('player', '!');
     }
     res = await g.job({ ...def, confirm: false });
     if (res) {
+      if (zachoMode) g.setFlag('shinkigeki_zacho_day', st.day);
       await crowdReact(g, res);
       const good = res.rank === 'S' || res.rank === 'A';
       const bad = res.rank === 'C' || res.rank === 'D';
@@ -1255,9 +1259,14 @@ async function koroTalk(g) {
     await g.say(['座長！ おつかれさまです！', 'ぼくも座長みたいに、お客さんを\nドッカンドッカン笑わせたいです！'], who);
     return;
   }
+  // no self-introduction to a friend (his polite Kansai voice, as in people.js)
+  if (g.heartLevel('korosuke') >= 1) {
+    await g.say(['{name}さん！今日も転びまくってますわ！', 'おしりの青あざ、また増えてもうて…\nでも、ええ音で転べるようになってきました！'], who);
+    return;
+  }
   await g.say([
-    '若手座員のころ助です！\n毎日、ここで転ぶ練習してます！',
-    member(g) ? '同じよしもとの仲間ですね！\nいつか同じ舞台に立ちましょう！' : 'エキストラなら、だれでも舞台に立てるんですよ。\n舞台監督さんに言ってみてください！',
+    '若手座員のころ助です！\n毎日、ここで転ぶ練習してますねん！',
+    member(g) ? '同じよしもとの仲間ですやん！\nいつか同じ舞台に立ちましょな！' : 'エキストラやったら、だれでも舞台に立てますよ。\n舞台監督さんに言うてみてください！',
   ], who);
 }
 

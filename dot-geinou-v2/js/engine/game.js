@@ -22,20 +22,13 @@ import {
   SKILLS, SKILL_MAX, ITEMS, AGENCIES, RANKS, FINALE_FAME,
   rankIndex, rankName, saveGame, payText,
 } from './state.js';
-import { installLife, REGULARS, SCRUFFY, ACTIVITY } from './life.js';
+import { installLife, REGULARS, SCRUFFY, ACTIVITY, showWords } from './life.js';
 
 const RANK_MULT = { S: 1.5, A: 1.2, B: 1.0, C: 0.7, D: 0.4 };
 // A job's mood swing on top of ACTIVITY.job.stress: a great result lifts it, a bad one weighs.
 const RANK_STRESS = { S: -4, D: 3 };
 // The minigame bonus (skill + condition) never goes below this (a hungry, stressed beginner).
 const MIN_BONUS = -0.35;
-// Wording of the regular-show door prompt by REGULARS[id].medium.
-const SHOW_WORDS = {
-  tv: { day: '収録日', where: 'スタジオ', go: '収録へ行く' },
-  radio: { day: '収録日', where: 'ブース', go: '収録へ行く' },
-  stage: { day: '本番の日', where: '楽屋', go: '本番へ行く' },
-  event: { day: 'イベントの日', where: '会場', go: '会場へ行く' },
-};
 
 // Side bands beside an opaque v1-size scene (cached per device scale).
 let bands = null;
@@ -440,7 +433,7 @@ export class Game {
           if (!id) return;
           asked.add(id);
           const r = REGULARS[id];
-          const w = SHOW_WORDS[r.medium] || SHOW_WORDS.tv;
+          const w = showWords(r);
           const i = await this.ask(`今日は『${r.title}』の${w.day}だ！\n${w.where}へ向かう？（体力 -${r.stamina}）`, [w.go, 'あとにする'], { cancel: 1 });
           if (i !== 0 || !(await this.doRegular(id))) return;
         }
@@ -775,7 +768,9 @@ export class Game {
       const sign = (v) => (v > 0 ? '+' : '') + v;
       const bits = [];
       if (m.hunger) bits.push(`満腹 ${sign(m.hunger)}`);
-      if (m.clean || m.shower) bits.push(`身だしなみ ${sign(m.clean)}${m.shower ? '（朝シャワー）' : ''}`);
+      // a shower that only made up for the night (net 0) must not read as 「身だしなみ 0」
+      if (m.clean) bits.push(`身だしなみ ${sign(m.clean)}${m.shower ? '（朝シャワー）' : ''}`);
+      else if (m.shower) bits.push('朝シャワーでさっぱり');
       if (bits.length) this.notify(bits.join('　'), { color: '#fff', life: 200 });
     }
     if (opts.notes !== false && this.morningNotes && this.morningNotes.length) {

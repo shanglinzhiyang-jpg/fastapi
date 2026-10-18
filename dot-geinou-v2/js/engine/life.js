@@ -130,11 +130,13 @@ export function heartIndex(aff) {
 export const HANGOUTS = {};
 // def: { name, price, stress (removed), aff (gained), stamina (cost, default 5), fill (hunger), clean,
 //   place (placeId shown in text), lines: ['…'] generic narration }
+// Optional: go: '公園へおさんぽ' (the hangout's title card: 「ジローと 公園へおさんぽ」; default
+//   「ジローと ラーメン屋へ」), heal (stamina back; a meal spot with fill heals fill / 3 by default).
 export function registerHangout(id, def) {
   HANGOUTS[id] = { id, price: 1000, stress: 15, aff: 5, stamina: 5, ...def };
 }
 registerHangout('ramen', { name: 'ラーメン屋', price: 900, stress: 12, aff: 5, fill: 45, lines: ['ズルズル…。仕事の話、くだらない話。', 'スープまで飲み干した。'] });
-registerHangout('park', { name: '公園で散歩', price: 0, stress: 10, aff: 4, lines: ['ベンチに座って、とりとめのない話をした。', '気持ちのいい風がふいている。'] });
+registerHangout('park', { name: '公園で散歩', go: '公園へおさんぽ', price: 0, stress: 10, aff: 4, lines: ['ベンチに座って、とりとめのない話をした。', '気持ちのいい風がふいている。'] });
 
 export const REGULARS = {};
 // def: { title, place, weekday (0=月), medium: 'tv'|'radio'|'stage'|'event' (door prompt wording),
@@ -143,6 +145,20 @@ export const REGULARS = {};
 export function registerRegular(id, def) {
   REGULARS[id] = { id, stamina: 15, pay: 10000, fame: 15, fans: 60, ...def };
 }
+// How a show is talked about, by REGULARS[id].medium: the door prompt (day / where / go),
+// the phone and the notebook (act: 'きょうは収録' / 'きょうは本番', done: after the show).
+// 'event' is a one-day event (not a weekly show: the 家計 app leaves it out of the weekly pay).
+export const SHOW_WORDS = {
+  tv: { day: '収録日', where: 'スタジオ', go: '収録へ行く', act: '収録', done: '収録ずみ' },
+  radio: { day: '収録日', where: 'ブース', go: '収録へ行く', act: '収録', done: '収録ずみ' },
+  stage: { day: '本番の日', where: '楽屋', go: '本番へ行く', act: '本番', done: '出演ずみ' },
+  event: { day: 'イベントの日', where: '会場', go: '会場へ行く', act: 'イベント', done: '出演ずみ' },
+};
+export const showWords = (r) => SHOW_WORDS[r && r.medium] || SHOW_WORDS.tv;
+// An offer (kind 'offer') can be accepted for this many days; then it expires (the morning
+// marks it answered: 'expired'), so an old offer never brings a show past the 4-show limit.
+export const OFFER_DAYS = 14;
+const INBOX_MAX = 60;
 
 export const FURNITURE = {};
 // def: { name, price, desc, sleepStress (extra stress removed per night), stamina (max stamina +),
@@ -251,9 +267,13 @@ const methods = {
         '（ストレスが限界！気分転換しよう。\n商店街の公園でジョギング（無料）、家でテレビ、\nカフェやカラオケ、友だちと遊ぶ。今日は休むのもいい）'];
     }
     // starving: no strength left (unless there is no way to buy food: then work is the way out)
-    const canFeed = st.money >= 100 || Object.keys(st.items || {}).some((k) => st.items[k] > 0 && ITEM_HEALS(k));
-    if (st.life.hunger <= 0 && canFeed) return 'おなかがすきすぎて、力が出ない…。\n（なにか食べてからにしよう）';
+    if (st.life.hunger <= 0 && this.canFeed()) return 'おなかがすきすぎて、力が出ない…。\n（なにか食べてからにしよう）';
     return null;
+  },
+  // There is a way to eat: money for the cheapest food (¥100) or food in the bag.
+  canFeed() {
+    const st = this.state;
+    return st.money >= 100 || Object.keys(st.items || {}).some((k) => st.items[k] > 0 && ITEM_HEALS(k));
   },
 
   // Food: heals stamina and fills the stomach. Returns the stamina gained; sets
@@ -519,7 +539,7 @@ const methods = {
     if (!r || !s) return null;
     const why = this.lifeRefusal();
     if (why) { await this.say(why); return null; }
-    if (this.state.stamina < r.stamina) { await this.say('体力が足りない…。\nこのままでは収録に出られない。何か食べて回復しよう。'); return null; }
+    if (this.state.stamina < r.stamina) { await this.say(`体力が足りない…。\nこのままでは${showWords(r).act}に出られない。何か食べて回復しよう。`); return null; }
     const res = await this.job({
       id: 'regular_' + id, title: r.title, minigame: r.minigame, opts: r.opts, skill: r.skill,
       pay: r.pay, fame: r.fame, fans: r.fans, stamina: r.stamina, confirm: false,
@@ -534,8 +554,21 @@ const methods = {
     const ph = this.state.phone;
     const m = { id: ph.nextId++, day: this.state.day, read: false, ...msg };
     ph.inbox.unshift(m);
-    if (ph.inbox.length > 60) ph.inbox.length = 60;
+    // full inbox: drop the oldest read message first, then the oldest one that is not
+    // an offer you can still answer or the latest rent bill (those never vanish silently)
+    const bill = ph.inbox.find((x) => x && x.kind === 'bill');
+    const keep = (x) => x === m || x === bill || this.offerOpen(x);
+    while (ph.inbox.length > INBOX_MAX) {
+      let i = -1;
+      for (let k = ph.inbox.length - 1; k >= 0 && i < 0; k--) if (ph.inbox[k].read && !keep(ph.inbox[k])) i = k;
+      for (let k = ph.inbox.length - 1; k >= 0 && i < 0; k--) if (!keep(ph.inbox[k])) i = k;
+      ph.inbox.splice(i < 0 ? ph.inbox.length - 1 : i, 1);
+    }
     return m;
+  },
+  // An offer that can still be accepted (not answered, younger than OFFER_DAYS days).
+  offerOpen(m) {
+    return !!(m && m.kind === 'offer' && !m.answered && this.state.day - (Number(m.day) || 0) < OFFER_DAYS);
   },
   unread() { return this.state.phone.inbox.filter((m) => !m.read).length; },
 
@@ -586,11 +619,13 @@ const methods = {
       this.addFame(-Math.round(r.fame / 2), true);
       if (s.missed >= 2) {
         s.dropped = true;
-        this.message({ from: r.host || 'プロデューサー', text: `『${r.title}』の収録を続けて休んでしまったので、レギュラーは降板ということになりました…。`, kind: 'news' });
+        this.message({ from: r.host || 'プロデューサー', text: `『${r.title}』の${showWords(r).act}を続けて休んでしまったので、レギュラーは降板ということになりました…。`, kind: 'news' });
       } else {
-        this.message({ from: r.host || 'プロデューサー', text: `昨日は『${r.title}』の収録日でしたよ！次は必ず来てくださいね。`, kind: 'news' });
+        this.message({ from: r.host || 'プロデューサー', text: `昨日は『${r.title}』の${showWords(r).day}でしたよ！次は必ず来てくださいね。`, kind: 'news' });
       }
     }
+    // offers left unanswered too long expire (the phone shows them as 期限切れ)
+    for (const m of st.phone.inbox) if (m && m.kind === 'offer' && !m.answered && st.day - (Number(m.day) || 0) >= OFFER_DAYS) m.answered = 'expired';
     for (const fn of MORNING_HOOKS) {
       try { await fn(this); } catch (e) { console.error(e); }
     }
@@ -661,11 +696,17 @@ export const PEOPLE_UI = {
     const lines = def.hangout[spotId] || spot.lines;
     await g.say(lines.map((l) => g.fmt(l)), { name: def.name, look: def.look });
     g.relax({ stress: spot.stress });
-    if (spot.fill) g.addNeed('hunger', spot.fill);
+    hangoutMeal(g, spot);
     g.addAff(id, spot.aff);
     return true;
   },
 };
+
+// A hangout's meal (spot.fill): eaten like any food (nothing when you are already full),
+// healing spot.heal or fill / 3 stamina. A spot without fill may still heal.
+export function hangoutMeal(g, spot) {
+  if (spot.fill) { if (g.canEat()) g.eat(spot.heal ?? Math.round(spot.fill / 3), { fill: spot.fill, silent: true }); } else if (spot.heal) g.heal(spot.heal);
+}
 
 export function installLife(proto) {
   for (const k of Object.getOwnPropertyNames(methods)) {

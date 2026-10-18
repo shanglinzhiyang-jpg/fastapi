@@ -1719,7 +1719,7 @@ registerPlace({
         {
           type: 'npc', id: 'tower_resident', x: 3, y: 5, dir: 'right', look: { ...LOOKS.actor, top: '#3b3f48', tie: '#c9a227' }, name: '住人さん',
           talk: (g, npc) => g.say(lives(g, 'tower')
-            ? ['こんばんは、{name}さん。\nこの前の番組、拝見しましたよ。', '最上階からの夜景はいかがです？\nがんばった人へのごほうび、ですね。']
+            ? ['こんにちは、{name}さん。\nこの前の番組、拝見しましたよ。', '最上階からの夜景はいかがです？\nがんばった人へのごほうび、ですね。']
             : ['…おや、見学の方ですか？', 'ここの最上階からの夜景は格別ですよ。\nがんばった人へのごほうび、ですね。'], { name: npc.name, look: npc.look }),
         },
       ],
@@ -1842,7 +1842,15 @@ onMorning((g) => {
   if (lives(g, 'dotsou') || !(st.rent && st.rent.debt) || (st.rent.late || 0) < 2) return;
   if (g.flag('housing_warnWeek') === g.week) return;
   g.setFlag('housing_warnWeek', g.week);
-  g.message({ from: 'ドット不動産', look: AGENT.look, kind: 'news', text: `${g.housing().name}の家賃が、${st.rent.late}週続けて払えていないようです…。無理をせず、家賃¥8,000のドット荘に戻るのも手ですよ。ご相談はドット商店街の店舗まで！` });
+  // safety net: after 4 weeks behind, the agent arranges the move back so the debt stops growing
+  if ((st.rent.late || 0) >= 4) {
+    const from = g.housing().name;
+    g.moveHousing('dotsou');
+    g.message({ from: 'ドット不動産', look: AGENT.look, kind: 'news', text: `${from}の家賃が4週続けて払えなかったため、ご契約は終了となりました…。大家さんとお話しして、ドット荘のお部屋をご用意しています。今夜からはドット荘でお休みください。未払いの家賃は、スマホの「家計」から少しずつでも払えます。` });
+    g.message({ from: '大家さん', kind: 'chat', text: '{name}ちゃん、おかえり。部屋はちゃんと掃除してあるからね。\nまた一からがんばればいいのよ。' });
+    return;
+  }
+  g.message({ from: 'ドット不動産', look: AGENT.look, kind: 'news', text: `${g.housing().name}の家賃が、${st.rent.late}週続けて払えていないようです…。4週たまると契約終了になってしまいます。無理をせず、家賃¥8,000のドット荘に戻るのも手ですよ。ご相談はドット商店街の店舗まで！` });
 });
 
 // ================================================================ music

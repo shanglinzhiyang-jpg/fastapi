@@ -17,6 +17,7 @@ import { registerPlace } from '../engine/map.js';
 import { LOOKS, charSheet, drawChar } from '../engine/sprites.js';
 import { defineTile, tileImage, R, P, disc, shadowEllipse, pix } from '../engine/tiles.js';
 import { registerItem, payText } from '../engine/state.js';
+import { ACTIVITY } from '../engine/life.js';
 import { text, panel } from '../engine/draw.js';
 import { W, H, OPP, fmtMoney, pick, shuffle, makeCanvas } from '../engine/util.js';
 
@@ -670,7 +671,7 @@ function here(g) {
   return { room: g.map.roomId, x: p.x, y: p.y, dir: p.dir };
 }
 function confirmText(def) {
-  return `${def.desc}\n「${def.title}」\n${payText(def.pay)}／体力 -${def.stamina}`;
+  return `${def.desc}\n「${def.title}」\n${payText(def.pay)}／体力 -${def.stamina}・ストレス +${ACTIVITY.job.stress}`;
 }
 const quizOk = (g) => !!g.state.agency || g.state.fame >= 30;
 
@@ -707,6 +708,9 @@ async function canDo(g, key, who) {
     await g.say('今日の特番は、もう放送しましたよ。\n特番は1日1本まで！また明日お願いします！', who);
     return false;
   }
+  // burnout / starving: refuse before the bus ride or the studio intro
+  const tired = g.lifeRefusal();
+  if (tired) { await g.say(tired); return false; }
   return true;
 }
 
@@ -928,9 +932,11 @@ async function runStudioJob(g, key, who) {
   let res = null;
   try {
     await INTRO[key](g);
-    if (key === 'special') g.setFlag('bs_yoshimoto_sp_day', st.day);
     res = await g.job({ ...j.def, confirm: false });
-    if (res) await OUTRO[key](g, res);
+    if (res) {
+      if (key === 'special') g.setFlag('bs_yoshimoto_sp_day', st.day);
+      await OUTRO[key](g, res);
+    }
   } catch (e) {
     console.error(e);
   }
@@ -1505,7 +1511,7 @@ const PROGRAM_TEXT = {
   mount: 'モニターに、朝日にかがやく山々が映っている。\n「ふるさと ぶらり発見」のオープニングだ。',
   sea: 'モニターに、港町の漁船が映っている。\n「とれたての魚、いただきます！」…おいしそう。',
   mascot: 'モニターに、ほっくりんが映っている。\n「ほっくり町に来てほしいいも〜！」',
-  fest: 'モニターでは、夏祭りの中継をやっている。\nちょうちんの明かりと花火がきれいだ。',
+  fest: 'モニターでは、お祭りの中継をやっている。\nちょうちんの明かりと花火がきれいだ。',
   field: 'モニターに、一面の棚田が映っている。\n田んぼの緑がまぶしい…。',
 };
 const lobbyReel = (g) => LOBBY_REEL[Math.floor(g.frame / 150) % LOBBY_REEL.length];

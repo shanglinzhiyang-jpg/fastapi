@@ -342,8 +342,9 @@ export class StatusScene {
     }
     // needs
     const L = st.life;
-    const COND = { great: ['絶好調！', COLORS.good], normal: ['ふつう', COLORS.text], hungry: ['はらぺこ…', COLORS.bad], stressed: ['ストレスぎみ…', COLORS.bad], scruffy: ['身だしなみが乱れている', COLORS.accent], burnout: ['燃え尽き寸前！', COLORS.bad] };
-    const [cl, cc] = COND[g.condition()];
+    const COND = { great: ['絶好調！', COLORS.good], normal: ['ふつう', COLORS.text], hungry: ['はらぺこ…', COLORS.bad], stressed: ['ストレスぎみ…', COLORS.bad], scruffy: ['身だしなみが乱れている', COLORS.accent], burnout: ['燃え尽きた…', COLORS.bad], edge: ['燃え尽き寸前！', COLORS.bad] };
+    const cond = g.condition();
+    const [cl, cc] = COND[cond === 'stressed' && L.stress >= 90 ? 'edge' : cond] || COND.normal;
     const nx = X + 270;
     text(ctx, `調子：${cl}`, nx, Y + 186, { size: 14, color: cc });
     [['満腹', L.hunger, '#ff9a3c'], ['ストレス', L.stress, L.stress >= 70 ? COLORS.bad : '#b48cff'], ['身だしなみ', L.clean, COLORS.cyan]].forEach(([n, v, col], i) => {
