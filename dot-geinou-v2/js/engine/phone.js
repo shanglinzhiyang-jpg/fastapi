@@ -899,13 +899,18 @@ function homeView(g) {
       const pages = this.pages(apps.length);
       if (pages > 1) {
         const d0 = a.x + a.w / 2 - (pages * 10) / 2;
+        c.globalAlpha = 0.7;
+        rrect(c, d0 - 6, SCREEN.y + DOTS_Y - 5, pages * 10 + 12, 16, 7, '#0c0e26');
+        rrect(c, a.x + 6, SCREEN.y + DOTS_Y - 6, 18, 18, 6, '#0c0e26');
+        rrect(c, a.x + a.w - 24, SCREEN.y + DOTS_Y - 6, 18, 18, 6, '#0c0e26');
+        c.globalAlpha = 1;
         for (let p = 0; p < pages; p++) {
           const on = p === this.page;
-          rrect(c, d0 + p * 10 + 2, SCREEN.y + DOTS_Y - (on ? 1 : 0), on ? 6 : 5, on ? 6 : 5, 2, on ? '#ffffff' : '#7a7ab0');
+          rrect(c, d0 + p * 10 + 2 - (on ? 1 : 0), SCREEN.y + DOTS_Y - (on ? 1 : 0), on ? 7 : 5, on ? 7 : 5, 2, on ? '#ffffff' : '#7a7ab0');
         }
-        const arrow = (x, flip) => art(c, x, SCREEN.y + DOTS_Y - 4, flip ? ['#...', '##..', '###.', '##..', '#...'] : ['...#', '..##', '.###', '..##', '...#'], { '#': '#c8ccf0' }, 2);
+        const arrow = (x, flip) => art(c, x, SCREEN.y + DOTS_Y - 2, flip ? ['#..', '##.', '###', '##.', '#..'] : ['..#', '.##', '###', '.##', '..#'], { '#': '#e0e4ff' }, 2);
         arrow(a.x + 12, false);
-        arrow(a.x + a.w - 20, true);
+        arrow(a.x + a.w - 18, true);
       }
     },
   };
@@ -1930,6 +1935,10 @@ function moneyView(g) {
       rrect(c, cx + 10, cy + 30, 16, 12, 2, '#e0a82e'); R(c, cx + 12, cy + 34, 12, 1, '#a07018'); R(c, cx + 17, cy + 31, 1, 10, '#a07018');
       T(c, '所持金', cx + 10, cy + 8, 12, '#c8cce8');
       text(c, fmtMoney(st.money), cx + cw - 10, cy + 22, { size: 20, align: 'right', color: '#ffd23f', shadow: '#000' });
+      // money in the bank (phone_apps.js 銀行 / 通帳), when there is some
+      const bank = st.phone && st.phone.apps && st.phone.apps.bank;
+      const saved = bank ? (Number(bank.bal) || 0) + (Array.isArray(bank.time) ? bank.time.reduce((s, t) => s + (Number(t && t.amount) || 0), 0) : 0) : 0;
+      if (saved > 0) T(c, fitText(c, `預金 ${fmtMoney(saved)}`, cw - 70, 12), cx + cw - 10, cy + 6, 12, '#a8b0d8', 'right');
       // housing
       let y = cy + 60;
       T(c, '住まい', a.x + 10, y, 12, PC.dim);

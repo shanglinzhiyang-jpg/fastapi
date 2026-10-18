@@ -41,22 +41,29 @@
 //   devOf(g)                  'techo' | 'keitai' | 'smart'
 
 import { SW, SH, fmtMoney, clamp, shade, mix, makeCanvas, hash2, display } from './util.js';
-import { text, wrap, measure, COLORS, downArrow } from './draw.js';
+import { text, wrap, measure, COLORS } from './draw.js';
 import { audio } from './audio.js';
 import { ITEMS } from './state.js';
-import { PLACES, doorIndexFor, buildRoom } from './map.js';
+import { PLACES, buildRoom } from './map.js';
 import { LOOKS, drawFaceHD, charSheetHD } from './sprites.js';
 import {
-  registerPhoneApp, PEOPLE, REGULARS, FURNITURE, onMorning, WEEKDAYS, weekdayOf, OFFER_DAYS, showWords,
+  registerPhoneApp, PEOPLE, REGULARS, FURNITURE, onMorning, WEEKDAYS, OFFER_DAYS, showWords,
 } from './life.js';
 import { eraOf } from './profile.js';
 import { GUIDE, GUIDE_ORDER, AUDITIONS, GUIDE_JOBS, jobOpen } from '../world/guide.js';
 import {
-  phoneView, phoneList, phoneInfo, phoneConfirm, closePhoneThen, phoneOverMapOnly, withPhone,
-  appTile, rrect, box, phoneText as T, fitText, PC, SCREEN, readMessage, phoneApps, setAppOrder,
+  phoneView, phoneList, phoneInfo, phoneConfirm, closePhoneThen, phoneOverMapOnly,
+  appTile, rrect, box, phoneText as T, fitText, PC, readMessage, phoneApps, setAppOrder,
   appName, drawAppIcon, appOrder,
 } from './phone.js';
 import { Game } from './game.js';
+
+// Other content modules this one works through, looked up when used (each may be missing; the
+// literal paths let a single-file bundler include them).
+const EXT = { station: null, housing: null, career: null };
+import('../world/station.js').then((m) => { EXT.station = m; }).catch(() => { /* station.js left out */ });
+import('../world/housing.js').then((m) => { EXT.housing = m; }).catch(() => { /* housing.js left out */ });
+import('../world/career.js').then((m) => { EXT.career = m; }).catch(() => { /* career.js left out */ });
 
 // ======================================================================== small helpers
 const R = (c, x, y, w, h, col) => { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
@@ -78,8 +85,12 @@ function art(c, x, y, rows, pal, s = 1) {
 const num = (v, d = 0) => (v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const arr = (v) => (Array.isArray(v) ? v : []);
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const pad2 = (n) => String(n).padStart(2, '0');
+// fn(g) computed once per game frame (lists read by update, draw, header and badge alike)
+function perFrame(fn) {
+  let f = -1, v = null, st = null;
+  return (g) => { if (f !== g.frame || st !== g.state) { v = fn(g); f = g.frame; st = g.state; } return v; };
+}
 
 const ERA_IDS = ['showa', 'heisei_early', 'heisei', 'reiwa'];
 export function eraId(g) {
@@ -160,7 +171,7 @@ export function appState(g) {
     .map((p) => ({ ...p, id: num(p.id), day: num(p.day, day), w: num(p.w, 80), h: num(p.h, 45), who: arr(p.who).map(String).slice(0, 4), name: String(p.name || ''), dev: num(p.dev), seen: p.seen !== false }));
   s.photoId = Math.max(num(s.photoId, 1), ...s.album.map((p) => p.id + 1), 1);
   s.film = clamp(Math.floor(num(s.film)), 0, FILM_SHOTS);
-  s.orders = arr(s.orders).filter((o) => isObj(o) && typeof o.item === 'string' && num(o.n) > 0).map((o) => ({ item: o.item, n: Math.floor(num(o.n)), day: num(o.day, day), from: String(o.from || '') }));
+  s.orders = arr(s.orders).filter((o) => isObj(o) && typeof o.item === 'string' && ITEMS[o.item] && num(o.n) > 0).map((o) => ({ item: o.item, n: Math.floor(num(o.n)), day: num(o.day, day), from: String(o.from || '') }));
   s.news = isObj(s.news) ? { seen: num(s.news.seen) } : { seen: 0 };
   const stt = isObj(s.stats) ? s.stats : {};
   s.stats = { trips: num(stt.trips), meals: num(stt.meals), orders: num(stt.orders), photos: num(stt.photos), fares: num(stt.fares) };
@@ -329,10 +340,11 @@ function iconJobs(c, x, y) {
 function iconDemae(c, x, y, g) {
   appTile(c, x, y, COL.demae);
   if (devOf(g) === 'smart') {
-    // a square delivery backpack
-    R(c, x + 7, y + 8, 18, 18, '#2a2a34'); R(c, x + 8, y + 9, 16, 16, '#3fb07a'); R(c, x + 8, y + 9, 16, 3, '#62d09a');
-    R(c, x + 12, y + 5, 8, 4, '#2a2a34'); R(c, x + 13, y + 6, 6, 2, COL.demae);
-    R(c, x + 11, y + 16, 10, 2, '#ffffff'); R(c, x + 15, y + 14, 2, 6, '#ffffff');
+    // a take-out paper bag with a burger on it, and speed lines (it is coming to you)
+    R(c, x + 9, y + 10, 18, 17, '#6a4a1a'); R(c, x + 10, y + 11, 16, 15, '#e0b878'); R(c, x + 10, y + 11, 16, 2, '#f0d098');
+    R(c, x + 13, y + 6, 1, 5, '#6a4a1a'); R(c, x + 22, y + 6, 1, 5, '#6a4a1a'); R(c, x + 13, y + 6, 10, 1, '#6a4a1a');
+    R(c, x + 13, y + 15, 10, 3, '#c8782a'); R(c, x + 12, y + 18, 12, 2, '#5ec44a'); R(c, x + 12, y + 20, 12, 2, '#6a3a1a'); R(c, x + 13, y + 22, 10, 2, '#c8782a');
+    R(c, x + 3, y + 13, 5, 1, '#ffffff'); R(c, x + 2, y + 17, 6, 1, '#ffffff'); R(c, x + 4, y + 21, 4, 1, '#ffffff');
     return;
   }
   // a 岡持ち (the delivery box) with a steaming bowl on top
@@ -524,7 +536,8 @@ function hereOf(g) {
 const visitedOf = (g) => { const v = g.state.flags && g.state.flags.visited; return isObj(v) ? v : {}; };
 const known = (g, id) => !!visitedOf(g)[id] || (g.map && g.map.placeId === id);
 // Every place the player has been to (and their home), in map order.
-function destinations(g) {
+const destinations = perFrame(destinationsNow);
+function destinationsNow(g) {
   const ids = new Set(Object.keys(visitedOf(g)).filter((k) => visitedOf(g)[k]));
   try { ids.add(g.housing().place); } catch (e) { /* no housing */ }
   if (g.map && g.map.placeId) ids.add(g.map.placeId);
@@ -551,19 +564,20 @@ function tripOptions(g, from, d, shinFare) {
   if (regionOf(from.area) === regionOf(d.area)) {
     if (from.area === d.area) {
       const far = t > 40;
-      out.push({ id: 'walk', label: '歩いて行く', short: '徒歩', fare: 0, stamina: far ? 4 : 2, hunger: far ? 3 : 1, ride: 'walk', sub: far ? '少し遠い' : 'すぐそこ', desc: '自分の足で。お金はかからないけれど、少しつかれる。' });
+      out.push({ id: 'walk', label: '歩いて行く', short: '徒歩', fare: 0, stamina: far ? 4 : 2, hunger: far ? 3 : 1, ride: 'walk', sub: far ? '少し遠い' : 'すぐそこ', desc: 'お金はかからないが、少しつかれる。' });
     } else {
       const rides = from.area === HUB || d.area === HUB ? 1 : 2;
-      out.push({ id: 'bus', label: 'バスで行く', short: 'バス', fare: BUS_FARE * rides, stamina: 3 * rides, ride: 'bus', sub: rides > 1 ? '東京駅前で乗りかえ' : 'バス停から', desc: '街のバス。安いけれど、バス停まで歩く。' });
+      out.push({ id: 'bus', label: 'バスで行く', short: 'バス', fare: BUS_FARE * rides, stamina: 3 * rides, ride: 'bus', sub: rides > 1 ? '東京駅前で乗りかえ' : 'バス停から', desc: 'バス停まで歩くけれど、安い。' });
     }
-    out.push({ id: 'taxi', label: 'タクシー', short: 'タクシー', fare: taxiFare(t), stamina: 0, ride: 'taxi', sub: taxiHow, desc: '目の前まで送ってもらえる。体力を使わない。' });
+    out.push({ id: 'taxi', label: 'タクシー', short: 'タクシー', fare: taxiFare(t), stamina: 0, ride: 'taxi', sub: taxiHow, desc: '目の前まで。体力を使わない。' });
   } else {
     const s1 = destOf(g, STATION[regionOf(from.area)]), s2 = destOf(g, STATION[regionOf(d.area)]);
     const legs = (s1 && s1.id !== from.id ? taxiFare(tiles(from, s1)) : 0) + (s2 && s2.id !== d.id ? taxiFare(tiles(s2, d)) : 0);
-    out.push({ id: 'shinkansen', label: '新幹線', short: '新幹線', fare: shinFare, stamina: 8, ride: 'shinkansen', sub: '駅までは電車と歩き', desc: '新幹線で大阪と東京を行き来する。駅までは自分で。' });
-    out.push({ id: 'shinkansen_taxi', label: '新幹線＋タクシー', short: '新幹線', fare: shinFare + legs, stamina: 3, ride: 'shinkansen', sub: '駅の前後はタクシー', desc: '駅まではタクシー、新幹線で移動して、駅からまたタクシー。' });
+    out.push({ id: 'shinkansen', label: '新幹線', short: '新幹線', fare: shinFare, stamina: 8, ride: 'shinkansen', sub: '駅までは電車と歩き', desc: '駅までは自分で行く。' });
+    out.push({ id: 'shinkansen_taxi', label: '新幹線＋タクシー', short: '新幹線', fare: shinFare + legs, stamina: 3, ride: 'shinkansen', sub: '駅の前後はタクシー', desc: '駅の前後もタクシーで楽に。' });
   }
-  for (const o of out) o.why = g.state.money < o.fare ? 'お金が足りない…' : g.state.stamina < o.stamina ? '体力が足りない…' : null;
+  const stopped = transportStopped(g);
+  for (const o of out) o.why = stopped && o.id !== 'walk' ? '災害の影響で、交通機関が止まっている' : g.state.money < o.fare ? 'お金が足りない…' : g.state.stamina < o.stamina ? '体力が足りない…' : null;
   return out;
 }
 // Why no trip can start now (null: one can).
@@ -573,13 +587,13 @@ function tripBlock(g) {
   if (!phoneOverMapOnly(g)) return '（いまは移動できない。用事がすんでからにしよう）';
   const P = g.map && g.map.place;
   if (P && (P.noTrip || P.noSave)) return '（ここからは移動できない）';
-  try {
-    if (typeof g.regimeRefusal === 'function') {
-      const w = g.regimeRefusal('travel');
-      if (w) return [].concat(w).join('\n');
-    }
-  } catch (e) { console.error(e); }
   return null;
+}
+// A disaster near home stops the trains and buses for a few days (regime.js sets
+// state.regime.cancelUntil when one hits): then only walking (and no delivery).
+function transportStopped(g) {
+  const r = g.state && g.state.regime;
+  return !!(r && typeof r === 'object' && num(r.cancelUntil) > (g.state.day || 0));
 }
 const mapTitle = (g) => (devOf(g) === 'smart' ? 'マップ' : '地図');
 
@@ -598,10 +612,14 @@ async function tripFlow(g, d) {
   const why = tripBlock(g);
   if (why) { audio.sfx('buzz'); await phoneInfo(g, { title: mapTitle(g), color: COL.map, text: why }); return false; }
   const from = hereOf(g);
-  if (!from) { audio.sfx('buzz'); await phoneInfo(g, { title: mapTitle(g), color: COL.map, text: '（ここからは移動できない。\nまずは町に出よう）' }); return false; }
+  if (!from) {
+    audio.sfx('buzz');
+    const jikka = g.map && g.map.placeId === 'jikka';
+    await phoneInfo(g, { title: mapTitle(g), color: COL.map, text: jikka ? '（ふるさとの実家からは、地図では帰れない。\n玄関から「東京に帰る」で帰ろう）' : '（ここからは移動できない。\nまずは町に出よう）' });
+    return false;
+  }
   if (from.id === d.id) { audio.sfx('buzz'); await phoneInfo(g, { title: d.name, color: COL.map, text: '（いま、ここにいる）' }); return false; }
-  let shinFare = SHINKANSEN_FARE;
-  try { const m = await import('../world/station.js'); shinFare = num(m.FARE, SHINKANSEN_FARE); } catch (e) { /* station.js left out */ }
+  const shinFare = num(EXT.station && EXT.station.FARE, SHINKANSEN_FARE);
   const opts = tripOptions(g, from, d, shinFare);
   const k = await rowsList(g, {
     title: d.name, color: COL.map, rowH: 40, hint: 'A:これで行く　B:もどる',
@@ -624,13 +642,11 @@ async function doTrip(g, from, d, o) {
   S.stats.fares += o.fare;
   await g.fadeOut(12);
   let ride = null;
-  if (o.ride === 'shinkansen') {
-    try {
-      const m = await import('../world/station.js');
-      if (typeof m.travelScene === 'function') ride = m.travelScene(g, { to: areaOf(d.area).full, via: o.id === 'shinkansen_taxi' ? '駅までタクシー → 新幹線 → 駅からタクシー' : '新幹線で', vehicle: 'shinkansen', scenery: 'fuji' });
-    } catch (e) { console.error(e); }
+  const m = EXT.station;
+  if (o.ride === 'shinkansen' && m && typeof m.travelScene === 'function') {
+    try { ride = m.travelScene(g, { to: areaOf(d.area).full, via: o.id === 'shinkansen_taxi' ? '駅までタクシー → 新幹線 → 駅からタクシー' : '新幹線で', vehicle: 'shinkansen', scenery: 'fuji' }); } catch (e) { console.error(e); ride = null; }
   }
-  if (!ride) ride = rideScene(g, { mode: o.ride === 'shinkansen' ? 'taxi' : o.ride, to: d.name, era: eraId(g) });
+  if (!ride) ride = rideScene(g, { mode: o.ride === 'shinkansen' ? 'taxi' : o.ride, to: d.name, era: eraId(g), sign: areaOf(d.area).name });
   await g.fadeIn(10);
   await ride;
   await g.fadeOut(10);
@@ -662,7 +678,7 @@ function rideScene(g, o) {
 function drawRide(c, t, o, g) {
   const era = o.era || 'reiwa';
   const sp = o.mode === 'walk' ? 1.4 : o.mode === 'bus' ? 4 : 6;
-  for (let y = 0; y < 240; y += 10) R(c, 0, y, SW, 10, y < 70 ? '#6cb8ec' : y < 150 ? '#8fcbf2' : '#b8e2fb');
+  for (let y = 0; y < 250; y += 10) R(c, 0, y, SW, 10, y < 70 ? '#6cb8ec' : y < 150 ? '#8fcbf2' : '#b8e2fb');
   for (let i = 0; i < 5; i++) {
     const x = wrapX(i * 151 - t * 0.3, SW + 120) - 60, y = 40 + (i % 3) * 22;
     R(c, x, y, 64, 10, '#ffffff'); R(c, x + 12, y - 8, 36, 8, '#ffffff'); R(c, x + 6, y + 10, 50, 4, 'rgba(200,220,240,0.8)');
@@ -674,6 +690,7 @@ function drawRide(c, t, o, g) {
     R(c, x, 236 - h, w, h, ['#9aa6c0', '#a8b2c8', '#8e9ab6'][i % 3]);
     for (let wy = 236 - h + 8; wy < 226; wy += 12) for (let wx = 6; wx < w - 6; wx += 10) R(c, x + wx, wy, 4, 5, '#dce6f4');
   }
+  R(c, 0, 236, SW, 14, '#9aa2b4'); // the back street between the shops
   // near shops
   const awn = ['#d6304a', '#2f6fd0', '#2f9a4a', '#e0a82e'];
   for (let i = 0; i < 9; i++) {
@@ -698,7 +715,7 @@ function drawRide(c, t, o, g) {
     R(c, x, 192, 4, 64, '#3a3a44'); R(c, x - 9, 188, 22, 5, '#3a3a44'); R(c, x - 5, 193, 14, 2, '#fff6a8');
   }
   if (o.mode === 'taxi') drawTaxi(c, 228, 304, t, era);
-  else if (o.mode === 'bus') drawBus(c, 150, 306, t, era);
+  else if (o.mode === 'bus') drawBus(c, 150, 306, t, era, o.sign);
   else drawWalker(c, 288, 186, t, g);
   R(c, 0, 0, SW, 52, 'rgba(10,14,34,0.55)');
   text(c, fitText(c, `${o.to} へ移動中…`, SW - 40, 20), SW / 2, 8, { size: 20, align: 'center', color: '#fff', outline: '#20232a' });
@@ -734,7 +751,7 @@ function drawTaxi(c, x, gy, t, era) {
     R(c, wx - 1 + Math.round(Math.cos(a) * 4), gy - 13 + Math.round(Math.sin(a) * 4), 2, 2, '#1e1e26');
   }
 }
-function drawBus(c, x, gy, t, era) {
+function drawBus(c, x, gy, t, era, sign = '') {
   const bob = Math.round(Math.sin(t / 5) * 0.8);
   const y = gy - 92 + bob;
   const band = era === 'showa' || era === 'heisei_early' ? '#2f8a5e' : '#2f6fd0';
@@ -745,7 +762,7 @@ function drawBus(c, x, gy, t, era) {
   for (let k = 0; k < 7; k++) R(c, x + 14 + k * 44, y + 12, 36, 3, '#c8e0f4');
   R(c, x + 300, y + 10, 34, 58, '#5a6a8a'); R(c, x + 316, y + 10, 2, 58, '#3a3a44');
   R(c, x + 120, y - 2, 100, 9, '#2a2a34');
-  text(c, '東京駅前', x + 170, y - 4, { size: 10, align: 'center', color: '#ffb03a', shadow: null });
+  text(c, fitText(c, sign ? `${sign} 行` : '回送', 96, 10), x + 170, y - 4, { size: 10, align: 'center', color: '#ffb03a', shadow: null });
   R(c, x + 334, y + 60, 6, 8, '#fff6a8');
   for (const wx of [x + 60, x + 272]) {
     disc(c, wx, gy - 13, 13, '#1e1e26'); disc(c, wx, gy - 13, 6, '#a0a6b0');
@@ -854,6 +871,19 @@ export async function mapApp(g, opts = {}) {
       const sel = rows[clamp(v.idx, 0, Math.max(0, rows.length - 1))];
       drawMapPanel(c, area, g, rows.map((r) => r.d), sel && sel.d, hereOf(g), ph.t);
     },
+    // a tap on the map picks the nearest place
+    tapTop(ph, x, y, v) {
+      const rows = v.rows();
+      let best = -1, bd = 14 * 14;
+      rows.forEach((r, i) => {
+        const p = mapPoint(r.d, v.area.x, v.area.y);
+        if (!p) return;
+        const d = (p[0] - x) ** 2 + (p[1] - y) ** 2;
+        if (d < bd) { bd = d; best = i; }
+      });
+      if (best >= 0 && best !== v.idx) { v.idx = best; audio.sfx('cursor'); }
+      return false;
+    },
     pick(ph, it, i, v) { ph.run(v, () => tripFlow(g, it.d)); },
   });
   // start on a place: the one asked for, else the first one that is not here
@@ -878,7 +908,8 @@ function jobBlock(g, j) {
   } catch (e) { console.error(e); }
   return null;
 }
-function jobRows(g) {
+const jobRows = perFrame(jobRowsNow);
+function jobRowsNow(g) {
   const st = g.state, rows = [];
   for (const m of st.phone.inbox) {
     if (!m || !g.offerOpen(m) || !m.regular || !REGULARS[m.regular]) continue;
@@ -965,6 +996,7 @@ function deliveryWhere(g) {
 function deliveryWhy(g) {
   const lb = lifeBlock(g);
   if (lb) return lb;
+  if (transportStopped(g)) return '災害の影響で、いまは配達を休んでいる…。';
   if (deliveryWhere(g)) return null;
   const dv = devOf(g);
   if (dv === 'techo') return '出前は、家の電話でお店にたのんで、\n家まで届けてもらうもの。\n（家にいるときに、たのもう）';
@@ -993,8 +1025,8 @@ export async function demaeApp(g) {
         const why = full ? 'おなかいっぱいだ…' : g.state.money < cost ? 'お金が足りない…' : null;
         return { label: it.name, sub: `${it.shop}・体力+${it.heal}・満腹+${it.fill}`, right: fmtMoney(it.price), rightColor: g.state.money < cost ? PC.bad : PC.text, icon: (c, x, y) => dishArt(c, x, y + 3, it.art, 1), disabled: !!why, why };
       }),
-      describe: () => (deliveryWhy(g) ? (dv === 'smart' ? '（ここでは受け取れない。家か、建物の外で）' : '（出前は、家にいるときにたのめる）')
-        : where === 'town' ? '（いる場所まで届けてもらえる）' : dv === 'techo' ? '（家の電話で、お店にたのむ）' : dv === 'keitai' ? '（ケータイからお店に電話。家に届く）' : '（アプリで注文。家に届く）'),
+      describe: (i) => `${items[i] ? `ストレス-${items[i].stress}。` : ''}${deliveryWhy(g) ? (dv === 'smart' ? '（ここでは受け取れない。家か、建物の外で）' : '（出前は、家にいるときにたのめる）')
+        : where === 'town' ? '（いる場所まで届けてもらえる）' : dv === 'techo' ? '（家の電話で、お店にたのむ）' : dv === 'keitai' ? '（ケータイからお店に電話。家に届く）' : '（アプリで注文。家に届く）'}`,
     });
     if (k < 0) return;
     const it = items[k];
@@ -1029,7 +1061,7 @@ function deliveryView(g, it, where) {
   const line = dv === 'smart'
     ? (where === 'town' ? `${it.name}、お届けにあがりました！` : `（玄関の前に置いて、写真を撮っていった。\n置き配だ）`)
     : `毎度ありがとうございます！\n${it.shop}です。お待たせしました！`;
-  const steps = dv === 'smart' ? ['注文', '調理中', '配達中', 'お届け'] : ['電話で注文', '調理中', '出前中', 'ピンポーン'];
+  const steps = dv === 'smart' ? ['注文', '調理中', '配達中', 'お届け'] : ['電話', '調理中', '出前中', 'ピンポン'];
   return {
     title: demaeTitle(g), color: COL.demae, bg: '#fbf4ea', cancel: true,
     hint() { return this.t >= ARRIVE ? 'A:受け取って食べる' : `${dv === 'techo' ? '待っている' : '配達を待っている'}…`; },
@@ -1050,19 +1082,27 @@ function deliveryView(g, it, where) {
       const sy = a.y + 60;
       const sw = (a.w - 32) / (steps.length - 1);
       R(c, a.x + 16, sy + 5, a.w - 32, 3, '#e0d4c0');
-      R(c, a.x + 16, sy + 5, Math.min(a.w - 32, sw * stage + (stage < 3 ? sw * ((t % 30) / 30) * (stage === 2 ? 1 : 0) : 0)), 3, COL.demae);
+      const fillW = stage >= 3 ? a.w - 32 : sw * stage + (stage === 2 ? sw * clamp((t - 60) / (ARRIVE - 60), 0, 1) : 0);
+      R(c, a.x + 16, sy + 5, Math.round(fillW), 3, COL.demae);
       steps.forEach((s, i) => {
         const x = a.x + 16 + i * sw;
         disc(c, x, sy + 6, 5, i <= stage ? COL.demae : '#d8ccb8');
         disc(c, x, sy + 6, 2, '#ffffff');
-        T(c, s, clamp(x, a.x + 24, a.x + a.w - 24), sy + 16, 12, i === stage ? COL.demae : PC.dim, 'center');
+        const hw = measure(c, s, 12) / 2;
+        T(c, s, clamp(x, a.x + 4 + hw, a.x + a.w - 4 - hw), sy + 16, 12, i === stage ? COL.demae : PC.dim, 'center');
       });
       // the street: a scooter (or a bicycle in 令和) on its way, the door at the end
       const ry = a.y + 116;
       R(c, a.x + 8, ry + 22, a.w - 16, 2, '#b8b0a0');
-      R(c, a.x + a.w - 40, ry - 14, 26, 36, '#8a5a32'); R(c, a.x + a.w - 38, ry - 12, 22, 34, '#c89a5a'); R(c, a.x + a.w - 22, ry + 4, 2, 3, '#ffd23f');
+      if (where === 'town') {
+        // out in a town: it comes to you
+        let sh = null;
+        try { sh = charSheetHD((g.state && g.state.look) || {}); } catch (e) { sh = null; }
+        const im = sh && (sh.left || sh.down) && (sh.left || sh.down)[0];
+        if (im) c.drawImage(im, 0, 0, im.width, im.height, a.x + a.w - 44, ry - 18, 32, 40);
+      } else { R(c, a.x + a.w - 40, ry - 14, 26, 36, '#8a5a32'); R(c, a.x + a.w - 38, ry - 12, 22, 34, '#c89a5a'); R(c, a.x + a.w - 22, ry + 4, 2, 3, '#ffd23f'); }
       const prog = stage < 2 ? 0 : stage === 2 ? (t - 60) / (ARRIVE - 60) : 1;
-      const vx = Math.round(a.x + 12 + prog * (a.w - 80));
+      const vx = Math.round(a.x + 12 + prog * (a.w - 112));
       if (stage >= 2) {
         const bob = Math.floor(t / 4) % 2;
         if (dv === 'smart') {
@@ -1075,17 +1115,21 @@ function deliveryView(g, it, where) {
           R(c, vx + 14, ry - 2 + bob, 8, 10, it.art === 'pizza' ? '#d62f2f' : '#f2f2f2'); R(c, vx + 15, ry - 7 + bob, 6, 6, '#f0c8a0');
         }
       } else {
-        for (let i = 0; i < 3; i++) { const ph2 = (t * 0.4 + i * 6) % 14; c.globalAlpha = Math.max(0, 0.8 - ph2 / 16); R(c, a.x + 30 + i * 5, ry + 8 - ph2, 1, 3, '#a89a88'); c.globalAlpha = 1; }
-        T(c, stage === 0 ? (dv === 'techo' ? '（ジーコ、ジーコ…）' : '（注文中…）') : '（いま作っています…）', a.x + 60, ry + 2, 12, PC.dim);
+        // the shop's kitchen: a pot on the stove (or the phone ringing at the shop)
+        R(c, a.x + 18, ry + 10, 24, 12, '#3a3a44'); R(c, a.x + 20, ry + 4, 20, 8, '#8a929a'); R(c, a.x + 20, ry + 4, 20, 2, '#c8d0d8');
+        if (stage === 1) R(c, a.x + 22, ry + 20, 16, 2, t % 8 < 4 ? '#ff7a3a' : '#ffb03a');
+        for (let i = 0; i < 3; i++) { const ph2 = (t * 0.4 + i * 6) % 14; c.globalAlpha = Math.max(0, 0.8 - ph2 / 16); R(c, a.x + 24 + i * 6, ry - ph2, 1, 3, '#a89a88'); c.globalAlpha = 1; }
+        T(c, stage === 0 ? (dv === 'techo' ? '（ジーコ、ジーコ…）' : '（注文中…）') : '（いま作っています…）', a.x + 50, ry + 4, 12, PC.dim);
       }
       if (stage === 3) {
-        // the courier at the door, the meal
-        box(c, a.x + 8, a.y + 152, a.w - 16, a.h - 160, 5, '#ffffff', '#c8b8a0');
-        box(c, a.x + 14, a.y + 158, 34, 26, 3, '#ffffff', '#3a3a4a');
-        drawFaceHD(c, who.look, a.x + 15, a.y + 159, 1);
-        T(c, who.name, a.x + 54, a.y + 160, 12, COL.demae);
-        wrap(c, line, a.w - 70, 12).slice(0, 3).forEach((l, i) => T(c, l, a.x + 54, a.y + 176 + i * 14, 12, PC.text));
-        dishArt(c, a.x + a.w / 2 - 24, a.y + a.h - 44, it.art, 2);
+        // the meal at the door, the courier's words
+        dishArt(c, a.x + a.w - 66, ry + 4, it.art, 1);
+        const by = ry + 34, bh = a.y + a.h - 6 - by;
+        box(c, a.x + 8, by, a.w - 16, bh, 5, '#ffffff', '#c8b8a0');
+        box(c, a.x + 14, by + 6, 34, 26, 3, '#ffffff', '#3a3a4a');
+        drawFaceHD(c, who.look, a.x + 15, by + 7, 1);
+        T(c, who.name, a.x + 54, by + 5, 12, COL.demae);
+        wrap(c, line, a.w - 70, 12).slice(0, Math.max(1, Math.floor((bh - 22) / 14))).forEach((l, i) => T(c, l, a.x + 54, by + 21 + i * 14, 12, PC.text));
       }
     },
   };
@@ -1106,9 +1150,9 @@ function catalog(g) {
   const dv = devOf(g);
   const cats = [
     { id: 'furniture', label: '家具', sub: `大型の配送・送料${fmtMoney(SHIP_FURNITURE)}`, ship: SHIP_FURNITURE },
-    { id: 'goods', label: '本・文具', sub: `ネタ帳や雑誌・送料${fmtMoney(SHIP_SMALL)}・翌朝`, ship: SHIP_SMALL, items: ['netacho', 'daihon', 'wadai', 'nodoame'] },
-    { id: 'gift', label: 'ギフト', sub: `プレゼント向け・送料${fmtMoney(SHIP_SMALL)}・翌朝`, ship: SHIP_SMALL, items: Object.keys(ITEMS).filter((k) => ITEMS[k] && ITEMS[k].gift) },
-    { id: 'food', label: dv === 'techo' ? '米屋・八百屋の配達' : 'ネットスーパー', sub: `料理の食材・配達料${fmtMoney(SHIP_FOOD)}・翌朝`, ship: SHIP_FOOD, items: Object.keys(ITEMS).filter((k) => ITEMS[k] && ITEMS[k].ingredient) },
+    { id: 'goods', label: '本・文具', sub: `ネタ帳や雑誌・送料${fmtMoney(SHIP_SMALL)}`, ship: SHIP_SMALL, items: ['netacho', 'daihon', 'wadai', 'nodoame'] },
+    { id: 'gift', label: 'ギフト', sub: `プレゼント用・送料${fmtMoney(SHIP_SMALL)}`, ship: SHIP_SMALL, items: Object.keys(ITEMS).filter((k) => ITEMS[k] && ITEMS[k].gift) },
+    { id: 'food', label: dv === 'techo' ? '米屋・八百屋の配達' : 'ネットスーパー', sub: `料理の食材・配達料${fmtMoney(SHIP_FOOD)}`, ship: SHIP_FOOD, items: Object.keys(ITEMS).filter((k) => ITEMS[k] && ITEMS[k].ingredient) },
   ];
   // no 冷蔵便 before 1988-07
   const chill = ym(g) >= 198807;
@@ -1125,7 +1169,7 @@ export async function tsuhanApp(g) {
       title: tsuhanTitle(g), color: COL.tsuhan, rowH: 38, index: ci,
       headerRight: () => (pending ? `配達待ち${pending}` : ''),
       items: cats.map((c) => ({ label: c.label, sub: c.sub, chip: [c.id === 'furniture' ? '大型' : c.id === 'food' ? '食材' : c.id === 'gift' ? '贈り物' : '小物', COL.tsuhan] })),
-      describe: () => (pending ? `明日の朝に届く：${S.orders.slice(0, 3).map((o) => `${ITEMS[o.item] ? ITEMS[o.item].name : o.item}×${o.n}`).join('、')}${S.orders.length > 3 ? ' ほか' : ''}` : devOf(g) === 'techo' ? '（電話で注文。品物は家に届く）' : '（注文した品物は家に届く）'),
+      describe: () => (pending ? `明日の朝に届く：${S.orders.slice(0, 3).map((o) => `${ITEMS[o.item] ? ITEMS[o.item].name : o.item}×${o.n}`).join('、')}${S.orders.length > 3 ? ' ほか' : ''}` : devOf(g) === 'techo' ? '（電話で注文。家具はすぐ、ほかの品物は明日の朝、家に届く）' : '（家具はすぐ、ほかの品物は明日の朝、家に届く）'),
     });
     if (k < 0) return;
     ci = k;
@@ -1137,8 +1181,7 @@ export async function tsuhanApp(g) {
   }
 }
 async function furnitureShop(g, cat) {
-  let mod = null;
-  try { mod = await import('../world/housing.js'); } catch (e) { console.error(e); }
+  const mod = EXT.housing;
   if (!mod || typeof mod.buyFurniture !== 'function') { await phoneInfo(g, { title: '家具', color: COL.tsuhan, text: '（いまは家具のカタログがない）' }); return; }
   let idx = 0;
   for (;;) {
@@ -1216,7 +1259,7 @@ function deliverOrders(g) {
   if (!names.length) return;
   const dv = devOf(g);
   (g.morningNotes || (g.morningNotes = [])).push(`（${dv === 'techo' ? '注文していた品物' : '通販の荷物'}が届いた：${names.join('、')}）`);
-  g.message({ from: dv === 'techo' ? 'カタログ通販' : 'ドット通販', kind: 'bill', receipt: true, read: true, text: `ご注文の品物をお届けしました。\n${names.join('、')}` });
+  g.message({ from: dv === 'techo' ? 'カタログ通販' : 'ドット通販', kind: 'bill', receipt: true, read: true, text: `${names.join('、')}をお届けしました。` });
 }
 
 // ======================================================================== 銀行（通帳）
@@ -1279,7 +1322,8 @@ function bankTally(g) {
   if (d > B.lastDay) B.sekisu += B.bal * (d - B.lastDay);
   B.lastDay = d;
 }
-function bankMorning(g) {
+// Every morning (onMorning below; exported so a test can run the bank's days alone).
+export function bankMorning(g) {
   const B = appState(g).bank;
   if (!B.opened) return;
   bankTally(g);
@@ -1341,12 +1385,12 @@ function bankRows(g) {
   const atm = atmOf(g);
   const cost = atm.fee ? `手数料${fmtMoney(atm.fee)}` : `体力-${atm.stamina}`;
   return [
-    { id: 'in', label: '預け入れる', sub: `所持金 → 普通預金（${atm.where}・${cost}）`, chip: ['入金', '#2f9a4a'] },
-    { id: 'out', label: '引き出す', sub: `普通預金 → 所持金（${cost}）`, chip: ['出金', '#d07a2a'], disabled: !B.opened || B.bal <= atm.fee, why: '普通預金にお金がない' },
-    { id: 'teiki', label: '定期預金をつくる', sub: `1年（120日）・年${pct(teikiRate(g))}・${fmtMoney(toInternal(10000))}から`, chip: ['定期', '#2f5f9a'], disabled: !B.opened || B.bal < TEIKI_MIN, why: `普通預金に${fmtMoney(TEIKI_MIN)}以上あればつくれる` },
-    { id: 'list', label: `定期預金（${B.time.length}口）`, sub: B.time.length ? `合計 ${fmtMoney(B.time.reduce((s, t) => s + t.amount, 0))}・満期の確認と解約` : 'まだない', chip: ['一覧', '#5a6a8a'], disabled: !B.time.length, why: '定期預金はまだない' },
+    { id: 'in', label: '預け入れる', sub: `${atm.where}・${cost}`, chip: ['入金', '#2f9a4a'] },
+    { id: 'out', label: '引き出す', sub: `${atm.where}・${cost}`, chip: ['出金', '#d07a2a'], disabled: !B.opened || B.bal <= atm.fee, why: '普通預金にお金がない' },
+    { id: 'teiki', label: '定期預金をつくる', sub: `1年・年${pct(teikiRate(g))}・${fmtMoney(TEIKI_MIN)}から`, chip: ['定期', '#2f5f9a'], disabled: !B.opened || B.bal < TEIKI_MIN, why: `普通預金に${fmtMoney(TEIKI_MIN)}以上あればつくれる` },
+    { id: 'list', label: `定期預金（${B.time.length}口）`, sub: B.time.length ? `合計${fmtMoney(B.time.reduce((s, t) => s + t.amount, 0))}・解約もできる` : 'まだない', chip: ['一覧', '#5a6a8a'], disabled: !B.time.length, why: '定期預金はまだない' },
     { id: 'log', label: '明細', sub: B.log.length ? `${B.log.length}件` : 'まだ取引はない', chip: ['明細', '#7a7a8a'], disabled: !B.log.length, why: 'まだ取引はない' },
-    { id: 'help', label: '金利と税金のこと', sub: '時代でちがう金利・利息の税金・預金の安心', chip: ['説明', '#9a8a5a'] },
+    { id: 'help', label: '金利と税金のこと', sub: '時代でちがう金利と、利息の税金', chip: ['説明', '#9a8a5a'] },
   ];
 }
 function drawBankCard(c, a, g) {
@@ -1370,8 +1414,7 @@ function drawBankCard(c, a, g) {
   const tsum = B.time.reduce((s, t) => s + t.amount, 0);
   T(c, `定期 ${fmtMoney(tsum)}`, x + 10, y + 44, 12, ink);
   T(c, `所持金 ${fmtMoney(st.money)}`, x + w - 10, y + 44, 12, ink, 'right');
-  T(c, fitText(c, `金利 普通${pct(futsuRate(g))}・1年定期${pct(teikiRate(g))}（${gameDate(g).year}年）`, w - 20, 12), x + 10, y + 60, 12, dim);
-  if (!B.opened) T(c, '（まだ口座にお金がない）', x + w / 2, y + h - 2 - 14, 12, dim, 'center');
+  T(c, fitText(c, `金利 普通${pct(futsuRate(g))}・1年定期${pct(teikiRate(g))}`, w - 20, 12), x + 10, y + 60, 12, dim);
 }
 export async function bankApp(g) {
   const view = panelView(g, {
@@ -1483,3 +1526,691 @@ function bankHelp(g) {
     '・手元の現金は、空き巣などで失うことがある。預金なら安心。',
   ];
 }
+
+// ======================================================================== ニュース（新聞）
+// One feed of the stories the game already sends: press messages in the inbox (senders that are
+// news outlets: ドット芸能ニュース, ニュース, ドット新聞 …; personal notices stay in メッセージ),
+// the politics core's news (state.politics.news) and g.govtNews when that core is there.
+const PRESS = /ニュース|新聞|週刊|速報|報道|通信/;
+const CAT = { ent: ['芸能', '#e0457a'], soc: ['社会', '#3a7ac0'], pol: ['政治', '#5a5aa8'] };
+const NEWS_TABS = [['all', 'すべて'], ['ent', '芸能'], ['soc', '社会'], ['pol', '政治']];
+const newsTitle = (g) => (devOf(g) === 'techo' ? '新聞' : 'ニュース');
+function catOf(from, txt) {
+  from = String(from || ''); txt = String(txt || '');
+  if (/政治|経済|選挙|国会|内閣|官邸/.test(from)) return 'pol';
+  if (/芸能|週刊/.test(from)) return 'ent';
+  if (/選挙|国会|内閣|首相|議員|政党|法案|知事|官房|税|予算|政府/.test(txt)) return 'pol';
+  if (/番組|視聴率|ファン|ドラマ|ライブ|芸能|タレント|ランキング|収録|映画/.test(txt)) return 'ent';
+  return 'soc';
+}
+export function newsItems(g, opts = {}) {
+  const st = g.state, out = [], seen = new Set();
+  const S = appState(g);
+  const key = (s) => String(s).replace(/\s+/g, '').slice(0, 60);
+  const add = (n) => { const k = key(n.text); if (!n.text || seen.has(k)) return; seen.add(k); out.push(n); };
+  for (const m of st.phone.inbox) {
+    if (!m || m.kind !== 'news' || !PRESS.test(String(m.from || ''))) continue;
+    add({ day: num(m.day), text: String(m.text || ''), from: String(m.from), cat: catOf(m.from, m.text), read: !!m.read, msg: m });
+  }
+  const p = st.politics;
+  if (p && Array.isArray(p.news)) {
+    for (const n of p.news) if (n && n.text) add({ day: num(n.day), text: String(n.text), from: 'ドット新聞 政治部', cat: 'pol', read: num(n.day) <= S.news.seen });
+  }
+  if (opts.govt !== false && typeof g.govtNews === 'function') {
+    try {
+      for (const n of [].concat(g.govtNews(30) || [])) {
+        const t = typeof n === 'string' ? n : n && (n.text || n.title);
+        if (!t) continue;
+        const day = typeof n === 'object' && n ? num(n.day, st.day) : st.day;
+        add({ day, text: String(t), from: (n && n.from) || 'ドット新聞 政治部', cat: 'pol', read: day <= S.news.seen });
+      }
+    } catch (e) { console.error(e); }
+  }
+  return out.sort((a, b) => b.day - a.day).slice(0, 80);
+}
+const newsUnread = (g) => newsItems(g, { govt: false }).filter((n) => !n.read).length;
+const headline = (s) => String(s).split('\n')[0];
+// A news row: the genre chip, day and source on top, the headline on two lines under them.
+function drawNewsRow(c, it, x, y, w, rh, sel) {
+  const [cn, col] = it.chip;
+  rrect(c, x + 8, y + 4, 34, 15, 4, col);
+  T(c, cn, x + 25, y + 5, 12, '#ffffff', 'center');
+  T(c, fitText(c, it.sub, w - 58 - (it.right ? 34 : 0), 12), x + 48, y + 5, 12, PC.dim);
+  if (it.right) T(c, it.right, x + w - 8, y + 5, 12, it.rightColor || PC.bad, 'right');
+  const all = wrap(c, it.label, w - 22, 12);
+  const lines = all.slice(0, 2);
+  if (all.length > 2) lines[1] = fitText(c, lines[1] + '…', w - 22, 12);
+  lines.forEach((l, i) => T(c, l, x + 10, y + 22 + i * 14, 12, sel ? '#1a1a28' : PC.text));
+}
+async function readArticle(g, n) {
+  if (n.msg) n.msg.read = true;
+  const [cn] = CAT[n.cat] || CAT.soc;
+  const d = gameDate(g, n.day);
+  await phoneInfo(g, { title: newsTitle(g), color: COL.news, lines: [`【${cn}】${n.from}`, `${n.day}日目（${wareki(d.year, d.month)}）`, '', n.text] });
+}
+export async function newsApp(g) {
+  const S = appState(g);
+  const last = S.news.seen;
+  S.news.seen = g.state.day;
+  const techo = devOf(g) === 'techo';
+  const tabY = techo ? 30 : 2;
+  const view = panelView(g, {
+    title: newsTitle(g), color: COL.news, bg: techo ? '#f4efe0' : '#f6f6f8', top: tabY + 24, rowH: 54, drawRow: drawNewsRow,
+    hint: 'A:よむ　←→:ジャンル　B:もどる',
+    empty: 'まだニュースはない。',
+    items(v) {
+      const tab = NEWS_TABS[v.tab || 0][0];
+      return newsItems(g).filter((n) => tab === 'all' || n.cat === tab).map((n) => ({
+        n, chip: CAT[n.cat] || CAT.soc, label: headline(n.text), sub: `${n.day}日目・${n.from}`,
+        right: (n.msg ? !n.read : n.day > last) ? 'NEW' : '', rightColor: PC.bad,
+      }));
+    },
+    update(ph, inp, v) {
+      if (inp.repeat('left') || inp.repeat('right')) {
+        v.tab = ((v.tab || 0) + (inp.repeat('left') ? 3 : 1)) % 4;
+        v.idx = 0; v.sy = null; v.topRow = 0;
+        audio.sfx('cursor');
+        return true;
+      }
+      return false;
+    },
+    tapTop(ph, x, y, v) {
+      const a = v.area;
+      if (y < a.y + tabY) return false;
+      const i = clamp(Math.floor((x - a.x - 4) / ((a.w - 8) / 4)), 0, 3);
+      if (i !== (v.tab || 0)) { v.tab = i; v.idx = 0; v.sy = null; v.topRow = 0; audio.sfx('cursor'); }
+      return false;
+    },
+    drawTop(c, a, v) {
+      if (techo) {
+        // the masthead of the morning paper
+        R(c, a.x, a.y, a.w, tabY, '#f4efe0');
+        text(c, 'ドット新聞', a.x + 8, a.y + 3, { size: 16, color: '#1e1e26', shadow: null });
+        const d = gameDate(g);
+        T(c, fitText(c, `${wareki(d.year, d.month)}　朝刊`, a.w - 104, 12), a.x + a.w - 8, a.y + 8, 12, '#4a4a5a', 'right');
+        R(c, a.x + 4, a.y + tabY - 3, a.w - 8, 2, '#1e1e26');
+      }
+      const tw = (a.w - 8) / 4;
+      NEWS_TABS.forEach(([id, label], i) => {
+        const on = i === (v.tab || 0);
+        const x = Math.round(a.x + 4 + i * tw);
+        const col = id === 'all' ? COL.news : CAT[id][1];
+        box(c, x + 1, a.y + tabY + 2, Math.round(tw) - 2, 20, 4, on ? col : '#ffffff', on ? shade(col, -0.4) : '#c8c4bc');
+        T(c, label, x + tw / 2, a.y + tabY + 6, 12, on ? '#ffffff' : PC.text, 'center');
+      });
+    },
+    pick(ph, it, i, v) { ph.run(v, () => readArticle(g, it.n)); },
+  });
+  view.tab = 0;
+  return phoneView(g, view);
+}
+
+// ======================================================================== カメラ（写真）
+// 昭和・平成のはじめ: a disposable film camera (写ルンです, 1986-07-01: about ¥1,380 then), 27 shots,
+// the prints come back the next morning; 平成: a camera phone (写メ, since J-SH04 in 2000-11);
+// 令和: the smartphone camera. A photo is the map screen inside the viewfinder, 80x45 pixels with
+// at most 16 colours (a palette + 4-bit pixels, about 2.5 KB in the save), plus where and who.
+const FILM_SHOTS = 27;
+const FILM_PRICE = 2300; // shown ¥1,380 in 昭和 prices (×0.6)
+const PHOTO_W = 80, PHOTO_H = 45;
+const FRAME = { x: 160, y: 90, w: 320, h: 180 }; // the viewfinder (16:9, the middle of the screen: ×4 → 80x45)
+const camTitle = (g) => (devOf(g) === 'techo' ? '写真' : 'カメラ');
+const hex2 = (n) => clamp(Math.round(n), 0, 255).toString(16).padStart(2, '0');
+function medianCut(px, n) {
+  let boxes = [px.slice()];
+  while (boxes.length < n) {
+    let bi = -1, best = 0, ch = 0;
+    boxes.forEach((b, i) => {
+      if (b.length < 2) return;
+      for (let k = 0; k < 3; k++) {
+        let lo = 255, hi = 0;
+        for (const p of b) { if (p[k] < lo) lo = p[k]; if (p[k] > hi) hi = p[k]; }
+        if (hi - lo > best) { best = hi - lo; bi = i; ch = k; }
+      }
+    });
+    if (bi < 0 || best < 4) break;
+    const b = boxes[bi].sort((p, q) => p[ch] - q[ch]);
+    const mid = b.length >> 1;
+    boxes.splice(bi, 1, b.slice(0, mid), b.slice(mid));
+  }
+  return boxes.map((b) => {
+    const s = [0, 0, 0];
+    for (const p of b) { s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; }
+    return s.map((v) => Math.round(v / Math.max(1, b.length)));
+  });
+}
+function nearest(pal, p) {
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < pal.length; i++) {
+    const q = pal[i];
+    const d = (q[0] - p[0]) ** 2 * 3 + (q[1] - p[1]) ** 2 * 4 + (q[2] - p[2]) ** 2 * 2;
+    if (d < bd) { bd = d; bi = i; }
+  }
+  return bi;
+}
+// The viewfinder area of the screen as it is drawn now → { pal, px } (or null).
+function capturePhoto(g, style) {
+  const src = g.canvas;
+  if (!src || !src.width || typeof btoa !== 'function') return null;
+  const S = src.width / SW;
+  const [, c] = makeCanvas(PHOTO_W, PHOTO_H);
+  c.imageSmoothingEnabled = true;
+  try { c.imageSmoothingQuality = 'high'; } catch (e) { /* older browsers */ }
+  c.drawImage(src, FRAME.x * S, FRAME.y * S, FRAME.w * S, FRAME.h * S, 0, 0, PHOTO_W, PHOTO_H);
+  const d = c.getImageData(0, 0, PHOTO_W, PHOTO_H).data;
+  const px = [];
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], gg = d[i + 1], b = d[i + 2];
+    if (style === 'film') { r = r * 1.03 + 12; gg = gg * 0.97 + 8; b = b * 0.84 + 6; } // warm prints, lifted blacks
+    else if (style === 'keitai') { const l = (r + gg + b) / 3; r = r * 0.8 + l * 0.2 + 4; gg = gg * 0.8 + l * 0.2 + 4; b = b * 0.8 + l * 0.2 + 8; }
+    px.push([clamp(Math.round(r), 0, 255), clamp(Math.round(gg), 0, 255), clamp(Math.round(b), 0, 255)]);
+  }
+  const pal = medianCut(px, style === 'keitai' ? 12 : 16);
+  const bytes = new Uint8Array(Math.ceil(px.length / 2));
+  px.forEach((p, i) => { const k = nearest(pal, p); if (i & 1) bytes[i >> 1] |= k; else bytes[i >> 1] = k << 4; });
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return { pal: pal.map((q) => hex2(q[0]) + hex2(q[1]) + hex2(q[2])).join(''), px: btoa(bin) };
+}
+const PHOTO_CACHE = new Map();
+function photoCanvas(p) {
+  const key = `${p.id}:${p.px.length}:${p.pal}`;
+  if (PHOTO_CACHE.has(key)) return PHOTO_CACHE.get(key);
+  let cv = null;
+  try {
+    const [canvas, c] = makeCanvas(p.w, p.h);
+    const img = c.createImageData(p.w, p.h);
+    const pal = [];
+    for (let i = 0; i + 6 <= p.pal.length; i += 6) pal.push([parseInt(p.pal.slice(i, i + 2), 16), parseInt(p.pal.slice(i + 2, i + 4), 16), parseInt(p.pal.slice(i + 4, i + 6), 16)]);
+    const bin = atob(p.px);
+    for (let i = 0; i < p.w * p.h; i++) {
+      const b = bin.charCodeAt(i >> 1) || 0;
+      const q = pal[i & 1 ? b & 15 : b >> 4] || [0, 0, 0];
+      img.data[i * 4] = q[0]; img.data[i * 4 + 1] = q[1]; img.data[i * 4 + 2] = q[2]; img.data[i * 4 + 3] = 255;
+    }
+    c.putImageData(img, 0, 0);
+    cv = canvas;
+  } catch (e) { console.error(e); cv = null; }
+  if (PHOTO_CACHE.size > 60) PHOTO_CACHE.clear();
+  PHOTO_CACHE.set(key, cv);
+  return cv;
+}
+const developed = (g, p) => !p.dev || p.dev <= g.state.day;
+// Who is in the frame: the people (registered persons) whose NPC stands inside it.
+function whoInFrame(g) {
+  const m = g.map, out = [];
+  if (!m || !Array.isArray(m.entities)) return out;
+  const U = SW / 320;
+  for (const e of m.entities) {
+    if (!e || e.type !== 'npc' || !e.person || !PEOPLE[e.person]) continue;
+    try { if (typeof m.visible === 'function' && !m.visible(e)) continue; } catch (err) { continue; }
+    const sx = (num(e.px) + 8 - m.cam.x) * U, sy = (num(e.py) + 8 - m.cam.y) * U;
+    if (sx < FRAME.x || sx > FRAME.x + FRAME.w || sy < FRAME.y || sy > FRAME.y + FRAME.h) continue;
+    const def = PEOPLE[e.person];
+    const n = def.short || def.name;
+    if (n && !out.includes(n)) out.push(n);
+  }
+  return out.slice(0, 3);
+}
+function cameraScene(g) {
+  const dv = devOf(g);
+  const style = dv === 'techo' ? 'film' : dv;
+  const map = g.map;
+  const base = { x: map.cam.x, y: map.cam.y };
+  const DIR = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  return new Promise((resolve) => {
+    const sc = {
+      hd: true, hidesHud: true, t: 0, mode: 'aim', pan: { x: 0, y: 0 }, flash: 0, photo: null, shotT: 0,
+      update(gg) {
+        sc.t++;
+        const inp = gg.input;
+        if (sc.mode === 'aim') {
+          if (gg.auto) { if (sc.t > 2) sc.shoot(gg); return; }
+          const d = inp.dir();
+          if (d && DIR[d]) { sc.pan.x = clamp(sc.pan.x + DIR[d][0] * 2, -56, 56); sc.pan.y = clamp(sc.pan.y + DIR[d][1] * 2, -36, 36); }
+          map.cam.x = Math.round(base.x + sc.pan.x); map.cam.y = Math.round(base.y + sc.pan.y);
+          if (inp.pressed('a') && sc.t > 6) sc.shoot(gg);
+          else if (inp.pressed('b') || inp.pressed('menu')) { audio.sfx('cancel'); sc.finish(gg, null); }
+        } else if (sc.mode === 'shot') {
+          if (sc.flash > 0) sc.flash--;
+          if (gg.auto || sc.t - sc.shotT > 46) sc.finish(gg, sc.photo);
+        }
+      },
+      shoot(gg) {
+        sc.mode = 'capture';
+        sc.stash = { toasts: gg.toasts, banner: gg.banner };
+        gg.toasts = [];
+        gg.banner = null;
+        audio.sfx('shutter');
+      },
+      finish(gg, photo) {
+        map.cam.x = base.x; map.cam.y = base.y;
+        gg.pop(sc);
+        resolve(photo);
+      },
+      draw(ctx, gg) {
+        if (sc.mode === 'capture') {
+          let shot = null;
+          try { shot = capturePhoto(gg, style); } catch (e) { console.error(e); }
+          sc.photo = shot ? { ...shot, who: whoInFrame(gg) } : null;
+          gg.toasts = sc.stash.toasts; gg.banner = sc.stash.banner;
+          sc.mode = 'shot'; sc.shotT = sc.t; sc.flash = 10;
+        }
+        drawViewfinder(ctx, gg, sc, dv);
+      },
+    };
+    g.push(sc);
+  });
+}
+function drawViewfinder(c, g, sc, dv) {
+  const F = FRAME;
+  const shade0 = dv === 'techo' ? 'rgba(8,6,4,0.92)' : dv === 'keitai' ? 'rgba(40,44,52,0.94)' : 'rgba(0,0,0,0.6)';
+  R(c, 0, 0, SW, F.y, shade0); R(c, 0, F.y + F.h, SW, SH - F.y - F.h, shade0);
+  R(c, 0, F.y, F.x, F.h, shade0); R(c, F.x + F.w, F.y, SW - F.x - F.w, F.h, shade0);
+  const S = appState(g);
+  if (dv === 'techo') {
+    // looking through a film camera: dark rounded corners, the counter
+    for (let i = 0; i < 10; i++) { c.globalAlpha = 0.08; R(c, F.x, F.y, F.w, i * 2, '#000'); R(c, F.x, F.y + F.h - i * 2, F.w, i * 2, '#000'); c.globalAlpha = 1; }
+    R(c, F.x - 1, F.y - 1, F.w + 2, 1, '#6a6a6a'); R(c, F.x - 1, F.y + F.h, F.w + 2, 1, '#6a6a6a');
+    text(c, `のこり ${pad2(Math.max(0, S.film))}`, SW - 16, 4, { size: 12, align: 'right', color: '#ff9a3c', shadow: null });
+    text(c, '使い捨てカメラ', 16, 4, { size: 12, color: '#c8c0a8', shadow: null });
+  } else {
+    const col = dv === 'keitai' ? '#7ae07a' : '#ffffff';
+    const L = 18;
+    for (const [x, y, sx, sy] of [[F.x, F.y, 1, 1], [F.x + F.w, F.y, -1, 1], [F.x, F.y + F.h, 1, -1], [F.x + F.w, F.y + F.h, -1, -1]]) {
+      R(c, x + (sx < 0 ? -L : 0), y + (sy < 0 ? -2 : 0), L, 2, col);
+      R(c, x + (sx < 0 ? -2 : 0), y + (sy < 0 ? -L : 0), 2, L, col);
+    }
+    const pulse = Math.floor(sc.t / 15) % 2;
+    const fx = SW / 2, fy = SH / 2;
+    const fc = sc.mode === 'aim' ? (pulse ? '#ffd23f' : '#ffe88a') : '#5ee07a';
+    R(c, fx - 30, fy - 20, 10, 2, fc); R(c, fx - 30, fy - 20, 2, 10, fc); R(c, fx + 20, fy - 20, 10, 2, fc); R(c, fx + 28, fy - 20, 2, 10, fc);
+    R(c, fx - 30, fy + 18, 10, 2, fc); R(c, fx - 30, fy + 10, 2, 10, fc); R(c, fx + 20, fy + 18, 10, 2, fc); R(c, fx + 28, fy + 10, 2, 10, fc);
+    text(c, dv === 'keitai' ? 'カメラ　1.3M' : '写真', 16, 4, { size: 12, color: col, shadow: '#000' });
+    if (dv === 'smart') { disc(c, SW - 20, SH / 2, 12, '#ffffff'); disc(c, SW - 20, SH / 2, 9, '#2a2a34'); disc(c, SW - 20, SH / 2, 7, sc.mode === 'aim' ? '#ffffff' : '#e8384f'); }
+    else text(c, '[決定]で撮影', SW - 16, 4, { size: 12, align: 'right', color: col, shadow: '#000' });
+  }
+  const hint = sc.mode === 'aim' ? 'A:撮る　↑↓←→:向きを変える　B:やめる' : dv === 'techo' ? 'パシャ！（現像は明日の朝）' : 'パシャ！';
+  text(c, hint, SW / 2, SH - 19, { size: 12, align: 'center', color: '#ffffff', shadow: '#000' });
+  if (sc.flash > 0) { c.globalAlpha = sc.flash / 10; R(c, 0, 0, SW, SH, '#ffffff'); c.globalAlpha = 1; }
+  if (sc.mode === 'shot' && sc.photo && dv !== 'techo') {
+    const cv = photoCanvas({ id: -1, w: PHOTO_W, h: PHOTO_H, ...sc.photo });
+    if (cv) { box(c, F.x + 8, F.y + F.h - 64, PHOTO_W + 12, PHOTO_H + 12, 3, '#ffffff', '#2a2a34'); c.drawImage(cv, F.x + 14, F.y + F.h - 58); }
+  }
+}
+function caption(p) {
+  return `${p.name}で${p.who && p.who.length ? `${p.who.join('・')}と` : ''}`;
+}
+async function shootFlow(g) {
+  const S = appState(g);
+  const why = lifeBlock(g) || (!phoneOverMapOnly(g) ? '（いまは写真を撮れない。用事がすんでからにしよう）' : null);
+  if (why) { audio.sfx('buzz'); await phoneInfo(g, { title: camTitle(g), color: COL.camera, text: why }); return; }
+  if (S.album.length >= ALBUM_MAX) { audio.sfx('buzz'); await phoneInfo(g, { title: camTitle(g), color: COL.camera, text: `アルバムがいっぱいだ（${ALBUM_MAX}枚）。\nいらない写真を消してから撮ろう。` }); return; }
+  const dv = devOf(g);
+  if (dv === 'techo' && S.film <= 0) {
+    const c = await phoneConfirm(g, { title: '使い捨てカメラ', color: COL.camera, text: `フィルムを使いきっている。\n新しい使い捨てカメラ（${FILM_SHOTS}枚撮り）を買う？\n${fmtMoney(FILM_PRICE)}（現像代こみ）`, choices: ['買う', 'やめる'] });
+    if (c !== 0) return;
+    if (!g.spend(FILM_PRICE)) { audio.sfx('buzz'); await phoneInfo(g, { title: '使い捨てカメラ', color: COL.camera, text: 'お金が足りない…。' }); return; }
+    audio.sfx('coin');
+    S.film = FILM_SHOTS;
+  }
+  closePhoneThen(g, async (gg) => {
+    const shot = await cameraScene(gg);
+    if (!shot) return;
+    const st = gg.state;
+    const pid = gg.map && gg.map.placeId;
+    const photo = { id: S.photoId++, day: st.day, place: pid, name: placeLabel(pid), who: shot.who || [], w: PHOTO_W, h: PHOTO_H, pal: shot.pal, px: shot.px, dev: dv === 'techo' ? st.day + 1 : 0, seen: dv === 'techo' ? false : true };
+    S.album.unshift(photo);
+    S.stats.photos++;
+    if (dv === 'techo') {
+      S.film = Math.max(0, S.film - 1);
+      gg.notify(`写真を撮った（のこり${S.film}枚・現像は明日の朝）`, { color: '#ffffff' });
+      return;
+    }
+    await phoneView(gg, photoView(gg, photo));
+  });
+}
+// The album: a "撮る" tile and the photos (newest first), two to a row.
+const CELL_W = 104, CELL_H = 72;
+function albumView(g) {
+  return {
+    title: camTitle(g), color: COL.camera, bg: '#2a2a32', idx: 0, topRow: 0, sy: 0, cancel: -1,
+    hint: 'A:えらぶ　B:もどる',
+    headerRight: () => `${appState(g).album.length}/${ALBUM_MAX}枚`,
+    cells() { return [{ shoot: true }, ...appState(g).album]; },
+    enter() { for (const p of appState(g).album) if (developed(g, p)) p.seen = true; },
+    update(ph, inp) {
+      const cells = this.cells(), n = cells.length;
+      const before = this.idx;
+      if (inp.repeat('left')) this.idx = (this.idx + n - 1) % n;
+      if (inp.repeat('right')) this.idx = (this.idx + 1) % n;
+      if (inp.repeat('up') && this.idx >= 2) this.idx -= 2;
+      if (inp.repeat('down') && this.idx + 2 < n) this.idx += 2;
+      if (this.idx !== before) audio.sfx('cursor');
+      if (inp.pressed('a')) {
+        const cell = cells[this.idx];
+        if (!cell) return;
+        if (cell.shoot) { audio.sfx('ok'); ph.run(this, () => shootFlow(g)); return; }
+        if (!developed(g, cell)) { audio.sfx('buzz'); ph.toast('まだ現像中（明日の朝にあがる）', '#9aa3c7'); return; }
+        audio.sfx('ok');
+        ph.run(this, () => phoneView(g, photoView(g, cell)));
+        return;
+      }
+      if (inp.pressed('b')) { audio.sfx('cancel'); ph.back(-1); }
+    },
+    tap(ph, x, y) {
+      const a = this.area;
+      if (!a) return false;
+      const col = Math.floor((x - a.x - 6) / CELL_W), row = Math.floor((y - a.y - 4 + this.sy) / CELL_H);
+      const i = row * 2 + clamp(col, 0, 1);
+      if (i < 0 || i >= this.cells().length) return false;
+      this.idx = i;
+      return true;
+    },
+    draw(c, ph, a) {
+      this.area = a;
+      const cells = this.cells();
+      this.idx = clamp(this.idx, 0, cells.length - 1);
+      const vis = Math.max(1, Math.floor((a.h - 4) / CELL_H));
+      const row = Math.floor(this.idx / 2);
+      if (row < this.topRow) this.topRow = row;
+      if (row >= this.topRow + vis) this.topRow = row - vis + 1;
+      const target = this.topRow * CELL_H;
+      this.sy += (target - this.sy) * 0.4;
+      if (Math.abs(target - this.sy) < 1) this.sy = target;
+      c.save();
+      c.beginPath();
+      c.rect(a.x, a.y, a.w, a.h);
+      c.clip();
+      const dv = devOf(g);
+      cells.forEach((cell, i) => {
+        const cx = a.x + 6 + (i % 2) * CELL_W, cy = Math.round(a.y + 4 + Math.floor(i / 2) * CELL_H - this.sy);
+        if (cy > a.y + a.h || cy + CELL_H < a.y) return;
+        const sel = i === this.idx;
+        if (sel) {
+          const sw = CELL_W - 4, sh = CELL_H - 6;
+          R(c, cx - 2, cy - 3, sw + 4, 2, '#ffd23f'); R(c, cx - 2, cy + sh - 1, sw + 4, 2, '#ffd23f');
+          R(c, cx - 2, cy - 3, 2, sh + 2, '#ffd23f'); R(c, cx + sw, cy - 3, 2, sh + 2, '#ffd23f');
+        }
+        if (cell.shoot) {
+          box(c, cx + 2, cy, CELL_W - 8, 50, 5, '#3a3a46', '#5a5a6a');
+          iconCamera(c, cx + CELL_W / 2 - 20, cy + 9, g);
+          T(c, dv === 'techo' ? `撮る（のこり${appState(g).film}）` : '撮る', cx + CELL_W / 2 - 2, cy + 54, 12, '#ffffff', 'center');
+          return;
+        }
+        const ok = developed(g, cell);
+        // a print (film) has a white border; a phone photo a thin frame
+        const film = dv === 'techo' || cell.dev;
+        if (film) R(c, cx + 2, cy, PHOTO_W + 8, PHOTO_H + 8, '#f4f0e6');
+        else R(c, cx + 5, cy + 3, PHOTO_W + 2, PHOTO_H + 2, '#5a5a6a');
+        if (ok) { const cv = photoCanvas(cell); if (cv) c.drawImage(cv, cx + 6, cy + 4); }
+        else {
+          R(c, cx + 6, cy + 4, PHOTO_W, PHOTO_H, '#4a4036');
+          T(c, '現像中…', cx + 6 + PHOTO_W / 2, cy + 4 + PHOTO_H / 2 - 7, 12, '#e8d8b8', 'center');
+        }
+        if (ok && !cell.seen) drawNewDot(c, cx + PHOTO_W + 4, cy + 2);
+        T(c, fitText(c, `${cell.day}日目 ${cell.name}`, CELL_W - 10, 12), cx + 4, cy + PHOTO_H + 12, 12, '#d8d8e0');
+      });
+      c.restore();
+      if (cells.length === 1) {
+        const lines = wrap(c, devOf(g) === 'techo' ? 'まだ写真はない。\n使い捨てカメラで撮った写真は、次の朝に現像があがって、ここに並ぶ。' : 'まだ写真はない。\n撮った写真は、ここに並ぶ。', a.w - 32, 12);
+        lines.forEach((l, i) => T(c, l, a.x + a.w / 2, a.y + 96 + i * 16, 12, '#b8b8c8', 'center'));
+      }
+    },
+  };
+}
+function drawNewDot(c, x, y) { disc(c, x, y, 4, '#7a0a1a'); disc(c, x, y, 3, '#ff3b4f'); }
+function photoView(g, photo) {
+  return {
+    title: camTitle(g), color: COL.camera, bg: '#2a2a32', cancel: -1,
+    hint: 'A:メニュー　←→:となり　B:もどる',
+    enter() { photo.seen = true; },
+    list() { return appState(g).album.filter((p) => developed(g, p)); },
+    update(ph, inp) {
+      const L = this.list();
+      if ((inp.repeat('left') || inp.repeat('right')) && L.length > 1) {
+        const i = L.indexOf(photo);
+        photo = L[(i + (inp.repeat('left') ? L.length - 1 : 1)) % L.length] || photo;
+        photo.seen = true;
+        audio.sfx('cursor');
+      }
+      if (inp.pressed('a')) { audio.sfx('ok'); ph.run(this, async () => { if ((await photoMenu(g, photo)) === 'deleted') ph.back(-1, this); }); return; }
+      if (inp.pressed('b')) { audio.sfx('cancel'); ph.back(-1); }
+    },
+    draw(c, ph, a) {
+      const cv = photoCanvas(photo);
+      const film = devOf(g) === 'techo' || photo.dev;
+      const pw = PHOTO_W * 2, phh = PHOTO_H * 2;
+      const px = a.x + Math.round((a.w - pw) / 2), py = a.y + 14;
+      if (film) { R(c, px - 8, py - 8, pw + 16, phh + 26, '#f4f0e6'); R(c, px - 8, py + phh + 17, pw + 16, 1, '#d8d0c0'); }
+      else { R(c, px - 2, py - 2, pw + 4, phh + 4, '#5a5a6a'); }
+      if (cv) c.drawImage(cv, 0, 0, PHOTO_W, PHOTO_H, px, py, pw, phh);
+      const d = gameDate(g, photo.day);
+      let y = py + phh + (film ? 26 : 10);
+      T(c, fitText(c, caption(photo), a.w - 20, 14), a.x + 10, y, 14, '#ffffff'); y += 20;
+      T(c, `${photo.day}日目（${wareki(d.year, d.month)}）`, a.x + 10, y, 12, '#b8b8c8'); y += 16;
+      if (photo.posted) T(c, `${eraOf(g.state).sns}に載せた写真`, a.x + 10, y, 12, '#ffd23f');
+      const L = this.list();
+      const i = L.indexOf(photo);
+      if (L.length > 1 && i >= 0) T(c, `${i + 1}/${L.length}`, a.x + a.w - 10, a.y + a.h - 18, 12, '#8a8a9a', 'right');
+    },
+  };
+}
+const snsVerb = (g) => (devOf(g) === 'smart' ? `${eraOf(g.state).sns}に投稿` : devOf(g) === 'keitai' ? `${eraOf(g.state).sns}に載せる` : '会報に送る');
+async function photoMenu(g, photo) {
+  const career = EXT.career;
+  const can = !!(career && typeof career.canPost === 'function' && typeof career.draftPost === 'function' && typeof career.publishPost === 'function');
+  const posted = can && !career.canPost(g);
+  const choices = [];
+  if (can && !photo.posted) choices.push(posted ? `${snsVerb(g)}（今日はもう投稿した）` : snsVerb(g));
+  choices.push('写真を消す', 'もどる');
+  const k = await phoneConfirm(g, { title: camTitle(g), color: COL.camera, text: `${caption(photo)}\n${photo.day}日目の写真。`, choices });
+  const pickd = choices[k];
+  if (!pickd || pickd === 'もどる') return null;
+  if (pickd === '写真を消す') {
+    const c = await phoneConfirm(g, { title: '写真を消す', color: COL.camera, text: 'この写真を消す？\n（元にはもどせない）', choices: ['消す', 'やめる'] });
+    if (c !== 0) return null;
+    const S = appState(g);
+    S.album = S.album.filter((p) => p !== photo);
+    audio.sfx('cancel');
+    return 'deleted';
+  }
+  if (posted || !can) { audio.sfx('buzz'); return null; }
+  const work = GUIDE_JOBS.some((j) => j.place === photo.place);
+  const food = ['ramen', 'cafe', 'famires', 'takoyaki', 'konbini'].includes(photo.place);
+  const topic = photo.who && photo.who.length ? 'off' : work ? 'work' : food ? 'food' : 'off';
+  try {
+    const draft = career.draftPost(g, topic);
+    if (!draft) return null;
+    draft.x = `${draft.x}\n（写真：${caption(photo)}）`;
+    const res = career.publishPost(g, draft);
+    if (!res) return null;
+    photo.posted = g.state.day;
+    audio.sfx('chime');
+    g.notify(`${snsVerb(g)}した！ ファン +${res.gain.toLocaleString('ja-JP')}人`, { color: COLORS.pink });
+  } catch (e) { console.error(e); }
+  return null;
+}
+export async function cameraApp(g) { return phoneView(g, albumView(g)); }
+const newPhotos = (g) => appState(g).album.filter((p) => developed(g, p) && !p.seen).length;
+// Morning: yesterday's film comes back from the shop.
+function developFilm(g) {
+  const S = appState(g);
+  const ready = S.album.filter((p) => p.dev && p.dev <= g.state.day && !p.seen && !p.devNoted);
+  if (!ready.length) return;
+  for (const p of ready) p.devNoted = true;
+  (g.morningNotes || (g.morningNotes = [])).push(`（写真の現像があがった。${ready.length}枚。${camTitle(g)}のアルバムで見られる）`);
+}
+
+// ======================================================================== 設定
+// Sound (audio.js), text speed (a default speed for g.say / g.ask when the caller gives none),
+// the order of the home screen, the controls, and what the era's device is.
+const SPEEDS = [['slow', 'ゆっくり', 0.45], ['normal', 'ふつう', null], ['fast', 'はやい', 1.6], ['instant', 'いっしゅん', 99]];
+let SPEED = 'normal';
+try { const v = localStorage.getItem('dotgeinou_textspeed'); if (SPEEDS.some((s) => s[0] === v)) SPEED = v; } catch (e) { /* storage blocked */ }
+export const textSpeed = () => { const s = SPEEDS.find((x) => x[0] === SPEED); return s ? s[2] : null; };
+function setTextSpeed(id) {
+  if (!SPEEDS.some((s) => s[0] === id)) return;
+  SPEED = id;
+  try { localStorage.setItem('dotgeinou_textspeed', id); } catch (e) { /* storage blocked */ }
+}
+(function installTextSpeed() {
+  const P = Game && Game.prototype;
+  if (!P) return;
+  const say = P.say;
+  if (typeof say === 'function' && !say.__textSpeed) {
+    const f = function (pages, opts) {
+      const sp = textSpeed();
+      return say.call(this, pages, sp && !(opts && opts.speed != null) ? { ...(opts || {}), speed: sp } : opts);
+    };
+    f.__textSpeed = true;
+    P.say = f;
+  }
+  const ask = P.ask;
+  if (typeof ask === 'function' && !ask.__textSpeed) {
+    const f = function (pages, choices, opts) {
+      const sp = textSpeed();
+      return ask.call(this, pages, choices, sp && !(opts && opts.speed != null) ? { ...(opts || {}), speed: sp } : opts);
+    };
+    f.__textSpeed = true;
+    P.ask = f;
+  }
+})();
+function settingsRows(g) {
+  const sp = SPEEDS.find((s) => s[0] === SPEED) || SPEEDS[1];
+  const custom = appOrder(g).length > 0;
+  return [
+    { id: 'sound', label: '音', sub: 'BGMと効果音（Mキーでも）', right: audio.muted ? 'OFF' : 'ON', rightColor: audio.muted ? PC.bad : PC.good, chip: ['音', '#5a8ad8'] },
+    { id: 'speed', label: '文字の速さ', sub: 'メッセージが出る速さ', right: sp[1], rightColor: PC.accent, chip: ['文字', '#8a5ac8'] },
+    { id: 'order', label: 'アプリの並べかえ', sub: `${devWord(g)}のホーム画面の順番`, chip: ['並び', '#2f9a4a'] },
+    { id: 'reset', label: '並びを元にもどす', sub: custom ? '最初の順番にもどす' : 'いまは最初の順番', chip: ['並び', '#7a8a7a'], disabled: !custom, why: 'いまは最初の順番' },
+    { id: 'keys', label: '操作のしかた', sub: 'キーボード・タッチ', chip: ['操作', '#c0703a'] },
+    { id: 'about', label: `この${devWord(g)}のこと`, sub: eraOf(g.state).label, chip: ['時代', '#9a8a5a'] },
+  ];
+}
+export async function settingsApp(g) {
+  return rowsList(g, {
+    title: '設定', color: COL.settings, rowH: 38,
+    items: () => settingsRows(g),
+    hint: 'A:えらぶ　B:もどる',
+    pick(ph, it, i, v) {
+      if (it.id === 'sound') { audio.toggleMute(); audio.sfx('ok'); return; }
+      if (it.id === 'speed') { const k = SPEEDS.findIndex((s) => s[0] === SPEED); setTextSpeed(SPEEDS[(k + 1) % SPEEDS.length][0]); audio.sfx('cursor'); return; }
+      if (it.id === 'reset') { setAppOrder(g, null); ph.toast('アプリの並びを元にもどした', COL.settings); return; }
+      if (it.id === 'order') { ph.run(v, () => phoneView(g, reorderView(g))); return; }
+      if (it.id === 'keys') { ph.run(v, () => phoneInfo(g, { title: '操作のしかた', color: COL.settings, lines: controlsHelp(g) })); return; }
+      if (it.id === 'about') ph.run(v, () => phoneInfo(g, { title: `この${devWord(g)}のこと`, color: COL.settings, lines: deviceAbout(g) }));
+    },
+  });
+}
+function controlsHelp(g) {
+  const dw = devWord(g);
+  return [
+    '― キーボード ―',
+    '移動・えらぶ：矢印キー／WASD',
+    'A（けってい・話す）：Z／Enter／スペース',
+    'B（もどる・走る）：X／Shift／Backspace',
+    'メニュー：Esc／C／Q　音：M',
+    '',
+    '― タッチ ―',
+    '左下の十字キーで移動、A／B／MENUボタン。画面をタップするとA。',
+    `${dw}の中では、アイコンや行をタップして選べる。下の丸いボタンか、左上の「<」でもどる。`,
+    '',
+    `― ${dw} ―`,
+    'ホーム画面は12こずつのページ。←→で次のページへ（下の点をタップしても）。',
+    '「設定」の「アプリの並べかえ」で、好きな順番にできる。',
+  ];
+}
+function deviceAbout(g) {
+  const e = eraId(g);
+  if (e === 'showa') return ['昭和の終わり：手帳と電話の時代。', '予定も地図も、手帳に書きこむ。電話は家の電話か公衆電話。', '出前は家の電話でたのむ。買い物はカタログ通販。', 'お金の出し入れは銀行の窓口まで行く。', '写真は使い捨てカメラ（1986年発売）。現像は次の日。', '新聞で世の中のことを知る。'];
+  if (e === 'heisei_early') return ['平成のはじめ：手帳とポケベルの時代。', 'ポケベルで呼ばれたら、公衆電話へ走る。予定と地図は手帳に。', '出前は家の電話で。買い物はカタログ通販。', 'お金の出し入れは銀行の窓口で。', '写真は使い捨てカメラ。プリントは次の日にあがる。', 'ニュースは新聞とテレビ。'];
+  if (e === 'heisei') return ['平成のなかごろ：ケータイの時代。', 'iモード（1999年）などで、ケータイからネットが使える。', 'カメラつきケータイ（2000年〜）で「写メ」。', '出前はケータイで電話。ネット通販やネットスーパー（2001年〜）も。', 'お金の出し入れはコンビニのATMでも。'];
+  return ['令和：スマホの時代。', '地図アプリ、配車アプリ、デリバリーアプリ。', '銀行もアプリで、残高の確認や定期預金。', 'カメラで撮って、すぐSNSへ。', 'ニュースもスマホで読む。'];
+}
+// Reorder the home screen: A picks an app up, ↑↓ moves it, A puts it down.
+function reorderView(g) {
+  return {
+    title: 'アプリの並べかえ', color: COL.settings, idx: 0, held: false, sy: 0, topRow: 0, cancel: -1,
+    hint() { return this.held ? '↑↓:動かす　A:ここに置く' : '↑↓:えらぶ　A:つかむ　B:もどる'; },
+    move(d) {
+      const ids = phoneApps(g).map((a) => a.id);
+      const j = this.idx + d;
+      if (j < 0 || j >= ids.length) return;
+      [ids[this.idx], ids[j]] = [ids[j], ids[this.idx]];
+      setAppOrder(g, ids);
+      this.idx = j;
+      audio.sfx('cursor');
+    },
+    update(ph, inp) {
+      const n = phoneApps(g).length;
+      if (!n) { if (inp.pressed('b')) ph.back(-1); return; }
+      this.idx = clamp(this.idx, 0, n - 1);
+      if (this.held) {
+        if (inp.repeat('up')) this.move(-1);
+        if (inp.repeat('down')) this.move(1);
+        if (inp.pressed('a') || inp.pressed('b')) { this.held = false; audio.sfx('ok'); }
+        return;
+      }
+      const before = this.idx;
+      if (inp.repeat('up')) this.idx = (this.idx + n - 1) % n;
+      if (inp.repeat('down')) this.idx = (this.idx + 1) % n;
+      if (before !== this.idx) audio.sfx('cursor');
+      if (inp.pressed('a')) { this.held = true; audio.sfx('ok'); return; }
+      if (inp.pressed('b')) { audio.sfx('cancel'); ph.back(-1); }
+    },
+    tap(ph, x, y) {
+      const a = this.area;
+      if (!a) return false;
+      const i = Math.floor((y - a.y + this.sy) / 36);
+      const n = phoneApps(g).length;
+      if (i < 0 || i >= n) return false;
+      if (this.held) { while (this.idx !== i) this.move(i > this.idx ? 1 : -1); this.held = false; audio.sfx('ok'); } else { this.idx = i; this.held = true; audio.sfx('ok'); }
+      return false;
+    },
+    draw(c, ph, a) {
+      this.area = a;
+      const apps = phoneApps(g);
+      const rh = 36;
+      const vis = Math.max(1, Math.floor(a.h / rh));
+      if (this.idx < this.topRow) this.topRow = this.idx;
+      if (this.idx >= this.topRow + vis) this.topRow = this.idx - vis + 1;
+      const target = this.topRow * rh;
+      this.sy += (target - this.sy) * 0.4;
+      if (Math.abs(target - this.sy) < 1) this.sy = target;
+      c.save();
+      c.beginPath();
+      c.rect(a.x, a.y, a.w, a.h);
+      c.clip();
+      apps.forEach((app, i) => {
+        const y = Math.round(a.y + i * rh - this.sy);
+        if (y > a.y + a.h || y + rh < a.y) return;
+        const sel = i === this.idx;
+        if (sel) { R(c, a.x, y, a.w, rh, this.held ? '#ffe08a' : PC.sel); R(c, a.x, y, 3, rh, this.held ? PC.accent : PC.selEdge); }
+        const ox = sel && this.held ? 6 : 0;
+        drawAppIcon(c, a.x + 10 + ox, y + 2, app, g);
+        T(c, fitText(c, appName(app, g), a.w - 120, 14), a.x + 48 + ox, y + 10, 14, PC.text);
+        T(c, `${Math.floor(i / 12) + 1}ページ`, a.x + a.w - 10, y + 12, 12, PC.dim, 'right');
+        R(c, a.x + 6, y + rh - 1, a.w - 12, 1, PC.line);
+      });
+      c.restore();
+    },
+  };
+}
+
+// ======================================================================== registration
+const offersWaiting = (g) => g.state.phone.inbox.filter((m) => m && g.offerOpen(m) && m.regular && REGULARS[m.regular]).length;
+registerPhoneApp('map', { name: (g) => mapTitle(g), color: COL.map, order: 32, iconHD: iconMap, open: (g) => mapApp(g) });
+registerPhoneApp('jobs', { name: 'お仕事', color: COL.jobs, order: 33, iconHD: iconJobs, badge: (g) => offersWaiting(g), open: (g) => jobsApp(g) });
+registerPhoneApp('bank', { name: (g) => bankTitle(g), color: COL.bank, order: 42, iconHD: iconBank, open: (g) => bankApp(g) });
+registerPhoneApp('demae', { name: (g) => demaeTitle(g), color: COL.demae, order: 64, iconHD: iconDemae, open: (g) => demaeApp(g) });
+registerPhoneApp('tsuhan', { name: (g) => tsuhanTitle(g), color: COL.tsuhan, order: 65, iconHD: iconTsuhan, open: (g) => tsuhanApp(g) });
+registerPhoneApp('news', { name: (g) => newsTitle(g), color: COL.news, order: 67, iconHD: iconNews, badge: (g) => newsUnread(g), open: (g) => newsApp(g) });
+registerPhoneApp('camera', { name: (g) => camTitle(g), color: COL.camera, order: 68, iconHD: iconCamera, badge: (g) => newPhotos(g), open: (g) => cameraApp(g) });
+registerPhoneApp('settings', { name: '設定', color: COL.settings, order: 99, iconHD: iconSettings, open: (g) => settingsApp(g) });
+
+onMorning((g) => {
+  try { bankMorning(g); } catch (e) { console.error(e); }
+  try { deliverOrders(g); } catch (e) { console.error(e); }
+  try { developFilm(g); } catch (e) { console.error(e); }
+});
