@@ -111,13 +111,29 @@ function drawTrain(c, t, kind) {
 }
 function drawPlane(c, t) {
   drawClouds(c, t, 250, 2.4, '#ffffff');
-  const x = 230 + Math.sin(t / 30) * 8, y = 150 + Math.round(Math.sin(t / 12) * 2);
-  F(c, x, y, 190, 26, '#f4f6fa'); F(c, x, y, 190, 3, '#ffffff');
-  for (let i = 0; i < 30; i += 2) F(c, x + 190 + i, y + 4 + i / 2, 2, 22 - i / 2, '#eef1f6');
-  F(c, x - 20, y - 40, 34, 44, '#e8484f'); F(c, x - 20, y - 40, 34, 4, '#ff7a80');
-  F(c, x + 70, y + 18, 80, 10, '#c8ccd6'); F(c, x + 90, y + 28, 50, 8, '#a8acb6');
-  for (let wx = x + 20; wx < x + 180; wx += 14) F(c, wx, y + 9, 7, 7, '#3b4a6a');
-  F(c, x, y + 16, 210, 3, '#2f5fd0');
+  const x = Math.round(220 + Math.sin(t / 30) * 8), y = 150 + Math.round(Math.sin(t / 12) * 2);
+  // far wing (behind the body)
+  for (let i = 0; i < 16; i += 2) F(c, x + 66 + i * 2, y - 16 + i, 46, 2, '#b8bcc6');
+  // tail fin: a stepped triangle
+  for (let i = 0; i < 40; i += 2) F(c, x - 8 + i * 0.6, y - 40 + i, 30 - i * 0.4, 2, '#e8484f');
+  F(c, x - 8, y - 40, 18, 2, '#ff7a80');
+  // body with a rounded nose
+  F(c, x - 10, y, 200, 26, '#f4f6fa'); F(c, x - 10, y, 200, 3, '#ffffff'); F(c, x - 10, y + 23, 200, 3, '#d8dce4');
+  for (let i = 0; i < 24; i += 2) F(c, x + 190 + i, y + Math.round(i * 0.35), 2, 26 - Math.round(i * 0.75), '#eef1f6');
+  F(c, x + 192, y + 6, 10, 5, '#3b4a6a');
+  for (let wx = x + 8; wx < x + 180; wx += 12) F(c, wx, y + 9, 6, 6, '#3b4a6a');
+  F(c, x - 10, y + 17, 214, 3, '#2f5fd0');
+  // near wing and its engine
+  for (let i = 0; i < 20; i += 2) F(c, x + 110 - i * 2, y + 20 + i, 60, 2, '#c8ccd6');
+  F(c, x + 92, y + 34, 26, 10, '#8a8f99'); F(c, x + 92, y + 34, 26, 2, '#a8acb6'); F(c, x + 116, y + 36, 3, 6, '#3b3f48');
+}
+function drawBushes(c, t) {
+  for (let i = 0; i < 14; i++) {
+    const x = wrapX(i * 71 - t * 9, SW + 80) - 40;
+    const y = 312 + (i % 3) * 14;
+    F(c, x, y, 34, 12, '#3f8a3a'); F(c, x + 6, y - 6, 22, 8, '#4f9a4a'); F(c, x + 10, y - 4, 6, 3, '#6fc067');
+    if (i % 4 === 0) { F(c, x + 40, y + 4, 4, 4, '#ffd23f'); F(c, x + 48, y + 8, 4, 4, '#ff8ab0'); }
+  }
 }
 
 // The ride cutscene (HD). Resolves when it ends (A to skip after a moment).
@@ -138,11 +154,11 @@ export function travelScene(g, o = {}) {
         if (vehicle === 'plane') {
           drawSky(c, '#5aa8e8', '#7cc4f0', '#a8dcf8');
           F(c, 0, 230, SW, 130, '#a8dcf8');
-          drawClouds(c, t, 40, 0.5);
+          drawClouds(c, t, 74, 0.5);
           drawPlane(c, t);
         } else {
           drawSky(c, '#6cb8ec', '#8fcbf2', '#b8e2fb');
-          drawClouds(c, t, 30, 0.6);
+          drawClouds(c, t, 72, 0.6);
           if (scenery === 'fuji') { drawFuji(c, t); drawRidge(c, t, 214, '#7fa8c8', 0.4, 46, 3); }
           if (scenery === 'mountains') { drawRidge(c, t, 200, '#7a98bc', 0.3, 90, 7); drawRidge(c, t, 214, '#5f8a6a', 0.9, 50, 11); }
           if (scenery === 'sea') drawSea(c, t);
@@ -151,6 +167,8 @@ export function travelScene(g, o = {}) {
           if (scenery === 'fields') drawRidge(c, t, 196, '#86a8c0', 0.25, 30, 5);
           drawTrain(c, t, vehicle);
           F(c, 0, 286, SW, 74, scenery === 'city' ? '#7a7f89' : '#4f9a4a');
+          if (scenery !== 'city') drawBushes(c, t);
+          else for (let i = 0; i < 10; i++) F(c, wrapX(i * 97 - t * 9, SW + 60) - 30, 310 + (i % 2) * 20, 50, 4, '#8a8f99');
         }
         F(c, 0, 0, SW, 52, 'rgba(10,14,34,0.55)');
         text(c, `${o.to || ''} へ移動中…`, SW / 2, 8, { size: 20, align: 'center', color: '#fff', outline: '#20232a' });

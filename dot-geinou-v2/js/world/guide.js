@@ -173,6 +173,11 @@ export const GUIDE = {
     hint: 'なんばの北、ホテルのとなりの小さな店',
     lines: ['たこ焼きを販売・焼くバイト（だれでも）', '祭りの司会（所属か★30）・食レポ★250・CM★2000', '売れっ子になると、新メニューが誕生するかも？'],
   },
+  jikka: {
+    town: 'tokyo', name: '実家', short: '実家',
+    hint: '東京駅のきっぷ売り場で「帰省する」',
+    lines: ['家族と会える（ごはん・お泊まり・思い出話）', '7日に1度、ストレスが大きく回復・家族の♥アップ', '帰りにお弁当とふるさとの名産をもらえる'],
+  },
   hotel: {
     town: 'namba', name: 'ドットホテル なんば', short: 'ホテル',
     hint: 'なんばの北東（右上）の高い建物',
@@ -184,7 +189,7 @@ export const GUIDE_ORDER = [
   'tokyo', 'home', 'konbini', 'sento', 'station_tokyo',
   'yoshimoto', 'bs_yoshimoto', 'grape', 'horipro', 'toho', 'toei', 'nhk',
   'machi', 'super', 'hanaya', 'ramen', 'cafe', 'salon', 'famires', 'gym', 'karaoke', 'fudousan', 'kagu', 'mansion', 'tower',
-  'namba', 'station_namba', 'shinkigeki', 'shochiku', 'takoyaki', 'hotel',
+  'namba', 'station_namba', 'shinkigeki', 'shochiku', 'takoyaki', 'hotel', 'jikka',
 ];
 
 // how: what the audition is (shown in もくひょう while the player has no agency)

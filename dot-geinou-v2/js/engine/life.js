@@ -470,8 +470,9 @@ const methods = {
   async hangout(id, spotId) {
     return PEOPLE_UI.hangout(this, id, spotId);
   },
+  // Friends (family members are not counted: they have their own messages and endings).
   friends(minLevel = 2) {
-    return Object.keys(this.state.people).filter((id) => PEOPLE[id] && this.heartLevel(id) >= minLevel);
+    return Object.keys(this.state.people).filter((id) => PEOPLE[id] && PEOPLE[id].kind !== 'family' && this.heartLevel(id) >= minLevel);
   },
   // Make someone your 相方 (comedy partner; null = none). Shows a toast and sends a
   // phone message unless opts.silent; opts.text overrides the message.

@@ -12,6 +12,7 @@ export const MODULES = [
   // life simulation (people, housing, the shopping street, career)
   './world/cooking.js',
   './world/people.js',
+  './world/family.js',
   './world/housing.js',
   './world/machi.js',
   './world/career.js',
