@@ -32,7 +32,7 @@ import { SW, SH, clamp, fmtMoney, shade, mix, makeCanvas, hash2 } from './util.j
 import { text, wrap, measure, COLORS, panel, downArrow, cursor } from './draw.js';
 import { audio } from './audio.js';
 import { charSheetHD, drawFaceHD, LOOKS } from './sprites.js';
-import { registerPhoneApp, onMorning } from './life.js';
+import { registerPhoneApp, onMorning, weekdayOf } from './life.js';
 import { eraOf, ageOf, YEAR_DAYS } from './profile.js';
 import { registerItem } from './state.js';
 import * as PH from './phone.js';
@@ -77,6 +77,13 @@ function dateText(g, day) { try { if (POL && POL.dateLabel) return POL.dateLabel
 export function deviceWord(g) { return (g && g.state ? eraOf(g.state).deviceShort : '') || 'スマホ'; }
 // 「スマホの『政治ナビ』」 / 「手帳の『政治ナビ』」
 function naviWhere(g) { return `${deviceWord(g)}の「政治ナビ」`; }
+// the politics app by era (2026-10 play audit): 1980s the 手帳 has a 「政治」 page, later an app.
+// polApp(g) → 「政治アプリ」 | 「手帳の『政治』のページ」; polApp(g, true) → 「スマホの『政治』アプリ」 …
+function polApp(g, long = false) {
+  const d = deviceWord(g);
+  if (d === '手帳') return '手帳の「政治」のページ';
+  return long ? `${d}の「政治」アプリ` : '政治アプリ';
+}
 const vAge = (g) => safe(() => (POL && POL.votingAge ? POL.votingAge(yearOf(g), (g.state.politics || {}).flags || {}) : (yearOf(g) >= 2016 ? 18 : 20)), yearOf(g) >= 2016 ? 18 : 20);
 function polState(g) { if (!g || !g.state || typeof g.pol !== 'function') return null; return safe(() => g.pol(), null); }
 // The game's own 「いま」 for the glossary (glossary.js ctx): 消費税率, 選挙権年齢, 衆議院の選挙制度と定数,
@@ -270,13 +277,19 @@ export function drawNaviBust(c, x, y, k = 2, o = {}) {
 }
 
 // ================================================================ context tips (portrait + bubble)
-// TIPS[key] = { lv: 1 (はじめて only) | 2 (はじめて・ふつう) | 3 (every level), text: string | (g) => string }
+// TIPS[key] = { lv: 1 (はじめて only) | 2 (はじめて・ふつう) | 3 (every level), text: string | (g) => string,
+//   ctx?: 'phone' | 'ui' (only on that screen), calm?: true (a general / cheerful tip: not while a disaster, a war
+//   or a もしも regime is going on), until?: (g) => true when it is no longer needed (dropped unseen) }
 // text '' = record only (missions read the key).
 export const TIPS = {
-  // the player's first steps
-  phone_open: { lv: 3, ctx: 'phone', text: (g) => (deviceWord(g) === '手帳' ? '手帳に「政治ナビ」のページをはさんでおいたよ。政治でこまったら、いつでも開いてね。' : `${deviceWord(g)}に「政治ナビ」を入れておいたよ。政治でこまったら、いつでも開いてね。`) },
-  polui_open: { lv: 2, ctx: 'ui', text: () => '政治アプリでは、選挙・政党・国会・内閣が見られるよ。まずは「選挙」で、立候補の条件をチェック！' },
-  navi_first: { lv: 1, text: () => 'まずは「いま何をすればいい？」を見てみて。あなたの状況にあわせて答えるよ。' },
+  // the player's first steps. The first contact is her own introduction (a stranger never just says
+  // she put an app on your phone); once the navi's introduction has been seen it is not needed.
+  phone_open: {
+    lv: 3, ctx: 'phone', calm: true, until: (g) => !!(assistState(g) || {}).intro,
+    text: (g) => `はじめまして！ドット大学で政治学を教えている、${NAVI.name}です。${deviceWord(g) === '手帳' ? '手帳の「政治ナビ」のページ' : `${deviceWord(g)}の「政治ナビ」`}で、選挙や国会のことをやさしく説明するね。`,
+  },
+  polui_open: { lv: 2, ctx: 'ui', calm: true, text: (g) => `${polApp(g)}では、選挙・政党・国会・内閣が見られるよ。まずは「選挙」で、立候補の条件をチェック！` },
+  navi_first: { lv: 1, calm: true, text: () => 'まずは「いま何をすればいい？」を見てみて。あなたの状況にあわせて答えるよ。' },
   // places
   nagatacho: { lv: 2, text: () => 'ここは永田町。国会議事堂、首相官邸、党本部が集まる、日本の政治の中心だよ。' },
   kokkai: { lv: 2, text: () => '国会議事堂の参観ロビー。見学（参観）はだれでも無料。国会の会期中は、本会議の傍聴もできるよ。' },
@@ -292,17 +305,17 @@ export const TIPS = {
   shohisha: { lv: 3, text: (g) => (yearOf(g) >= 2010 ? 'お金を借りる前に、利息と返す計画を確かめて。借りられるのは原則、年収の3分の1まで（総量規制）。' : 'お金を借りる前に、利息と返す計画をよく確かめて。返せなくなったら、区役所3階の相談室へ。') },
   yamikin: { lv: 3, text: () => 'ここは登録のない違法な業者（ヤミ金）かもしれない。借りてしまったら、返す前に警察か弁護士に相談して。' },
   // politics events
-  first_elected: { lv: 3, text: (g) => { const o = safe(() => polState(g).me.office, null); return o === 'shugi' || o === 'sangi' ? '当選おめでとう！会期中は本会議に出て、採決に加わろう。地元回りと後援会も大切だよ。' : '当選おめでとう！議会の定例会で質問して、住民の声を届けよう。'; } },
-  minister: { lv: 3, text: () => '大臣になったら、閣議に出て、国会で答弁するのが仕事。役所の説明も、よく聞いてね。' },
-  pm: { lv: 3, text: () => '総理大臣になったね。内閣支持率と国会の議席をよく見て。予算は年度内に成立させるのが大事だよ。' },
+  first_elected: { lv: 3, calm: true, text: (g) => { const o = safe(() => polState(g).me.office, null); return o === 'shugi' || o === 'sangi' ? '当選おめでとう！会期中は本会議に出て、採決に加わろう。地元回りと後援会も大切だよ。' : '当選おめでとう！議会の定例会で質問して、住民の声を届けよう。'; } },
+  minister: { lv: 3, calm: true, text: () => '大臣になったら、閣議に出て、国会で答弁するのが仕事。役所の説明も、よく聞いてね。' },
+  pm: { lv: 3, calm: true, text: () => '総理大臣になったね。内閣支持率と国会の議席をよく見て。予算は年度内に成立させるのが大事だよ。' },
   scandal: { lv: 3, text: () => 'スキャンダルが出たら、事実をはっきり説明することが大切。かくすほど信頼を失うよ。' },
   dissolve: { lv: 2, text: () => '衆議院が解散！40日以内に総選挙だよ。立候補するなら、公示日までに届出を。' },
-  session: { lv: 1, text: () => '国会が始まったよ。法律案は、委員会で審査してから本会議で採決するんだ。' },
+  session: { lv: 1, calm: true, text: () => '国会が始まったよ。法律案は、委員会で審査してから本会議で採決するんだ。' },
   vote_day: { lv: 2, text: () => '今日は投票日！区役所2階の投票所で投票できるよ。' },
   filing_open: { lv: 2, text: () => `選挙の届出の受付が始まったよ（本来の届出は公示・告示の日。ゲームでは投票日の${FILING_DAYS()}日前から受け付ける）。立候補するなら、区役所の選管か党本部へ。` },
   quiz_done: { lv: 1, text: () => '結果は目安だよ。考えは変わっていいし、どれが正しいということもないんだ。' },
   // for the government console (js/engine/govt_ui.js) and the regime / security screens
-  govt_open: { lv: 2, text: () => '政府の中枢の画面。予算・税・省庁・世論が一度に見られるよ。わからない言葉は「？」で用語じてんへ。' },
+  govt_open: { lv: 2, calm: true, text: () => '政府の中枢の画面。予算・税・省庁・世論が一度に見られるよ。わからない言葉は「？」で用語じてんへ。' },
   govt_budget: { lv: 2, text: (g) => `予算づくりは、概算要求（8月）→${yearOf(g) >= 2001 ? '財務省' : '大蔵省'}原案（12月）→閣議決定→国会。衆議院が先に審議するよ。` },
   govt_tax: { lv: 2, text: () => '税率を上げると財源はふえるけど、くらしの負担も重くなる。賛成・反対の両方の声を見て決めよう。' },
   govt_ministries: { lv: 1, text: () => '省庁のトップは大臣。法律の細かいことは、政令（内閣）や省令（大臣）で決めるんだ。' },
@@ -329,7 +342,7 @@ const PLACE_TIPS = { nagatacho: 'nagatacho', kantei: 'kantei', saibansho: 'saiba
 // tips about a place are dropped when the player leaves it before the tip was shown (or while it shows)
 const PLACE_BOUND = new Set(['kokkai', 'kuyakusho', 'senkan', 'party_hq', 'myparty_hq', ...Object.values(PLACE_TIPS)]);
 
-function tipBox(g) { return g._naviTips || (g._naviTips = { queue: [], cur: null, lastPlace: null, watchT: 0 }); }
+function tipBox(g) { return g._naviTips || (g._naviTips = { queue: [], cur: null, lastPlace: null, watchT: 0, clock: 0 }); }
 function helpOf(g) { const a = assistState(g); return a ? a.help : 'normal'; }
 function tipAllowed(g, lv) {
   const a = assistState(g);
@@ -352,6 +365,69 @@ function tipContext(g) {
   if (top.isPolUI || top.isGovtUI || top.allowTips) return 'ui';
   return null;
 }
+// ---------------------------------------------------------------- which screen a tip belongs to (2026-10 play audit)
+// A tip can belong to one screen, its SCOPE: the government console's tabs are 'govt:<tab id>' (the tab ids of
+// js/engine/govt_ui.js), the console as a whole 'govt'. A scene states its current scope with an optional
+// `tipScope` (a string, or () => string); the console (isGovtUI with a `tab.id`) needs nothing: its scope is
+// 'govt:<tab.id>'. A caller may pass opts.scope; the console's own tip keys have theirs in KEY_SCOPE, so its
+// tipKey() calls need no change. A scoped tip plays only while the top scene's scope matches it ('govt'
+// matches every 'govt:…'), and it is DROPPED (not recorded as shown, so it comes back the next time its screen
+// opens) as soon as that screen shows another scope of the same family (another tab) or no scene of its family
+// is open any more. Other optional scene fields read here:
+//   hasModal  (bool or () => bool; also a non-empty `modals` array, or a politics-UI view with `.modal`): while a
+//             modal / confirmation is open no tip is drawn, none starts, and the time of the shown one stands still
+//   tipArea   {x, y, w, h} (or a function): where a tip may go. The console's default: its body, under the tab bar
+//             with 「？解説」 and above the footer (govt_ui.js TAB_Y + TAB_H = 40, FOOT_Y = 340)
+//   tipAvoid  () => [{x, y, w, h}]: rects to keep free. The console's default: its focused control
+// Tips marked calm (general, cheerful ones) are not shown while a disaster, a war or a もしも regime is going on.
+const KEY_SCOPE = {
+  govt_open: 'govt',
+  govt_approval: 'govt:overview',
+  govt_budget: 'govt:budget', govt_tax: 'govt:budget',
+  govt_network: 'govt:network',
+  govt_voices: 'govt:opinion', govt_demo: 'govt:opinion',
+  govt_seats: 'govt:diet',
+  govt_ministries: 'govt:admin',
+  sdf_order: 'govt:security', war_warning: 'govt:security',
+  disaster_first: 'govt:crisis', regime_press: 'govt:crisis', amendment: 'govt:crisis', regime_emergency: 'govt:crisis', regime_dictator: 'govt:crisis',
+  govt_ideology: 'govt:ideology',
+  govt_religion: 'govt:society', govt_postal: 'govt:society',
+};
+function sceneScope(s) {
+  if (!s) return null;
+  try {
+    const v = typeof s.tipScope === 'function' ? s.tipScope() : s.tipScope;
+    if (typeof v === 'string' && v) return v;
+    if (s.isGovtUI && s.tab && typeof s.tab.id === 'string') return `govt:${s.tab.id}`;
+  } catch (e) { /* a scene that is closing */ }
+  return null;
+}
+const scopeFamily = (sc) => (sc ? String(sc).split(':')[0] : null);
+const scopeMatch = (tip, now) => !tip || (!!now && (now === tip || now.startsWith(`${tip}:`)));
+function openFamilies(g) {
+  const out = new Set();
+  for (const s of g.scenes || []) if (s && !s.closed && !s.dismissed) { const f = scopeFamily(sceneScope(s)); if (f) out.add(f); }
+  return out;
+}
+function sceneModal(s) {
+  if (!s) return false;
+  try {
+    if (typeof s.hasModal === 'function') return !!s.hasModal();
+    if (s.hasModal != null) return !!s.hasModal;
+    if (Array.isArray(s.modals) && s.modals.length) return true;
+    if (s.isPolUI && typeof s.top === 'function') { const v = s.top(); return !!(v && v.modal); }
+  } catch (e) { return false; }
+  return false;
+}
+// no disaster, no war, no もしも regime (every core feature-detected)
+function calmNow(g) {
+  const r = safe(() => (typeof g.regime === 'function' ? g.regime() : null), null);
+  if (r && r.id && r.id !== 'democracy') return false;
+  const d = safe(() => (typeof g.disaster === 'function' ? g.disaster() : null), null);
+  if (d && d.phase !== 'done' && d.phase !== 'fukko') return false; // (復旧・復興 is calm again)
+  if (safe(() => (typeof g.war === 'function' ? g.war() : null), null)) return false;
+  return true;
+}
 export function assistTip(g, key, opts = {}) {
   if (!g || !g.state || !key) return false;
   const a = assistState(g);
@@ -363,28 +439,56 @@ export function assistTip(g, key, opts = {}) {
   const def = TIPS[key] || {};
   const lv = opts.level || def.lv || 2;
   if (!opts.force && !tipAllowed(g, lv)) return false;
+  if (def.until && safe(() => def.until(g), false)) return false;
+  const calm = !!def.calm && !opts.force;
+  if (calm && !calmNow(g)) return false;
   const txt = tipText(g, key, opts);
   if (!txt) return false;
   const b = tipBox(g);
   if ((b.cur && b.cur.key === key) || b.queue.some((q) => q.key === key)) return false;
   const place = opts.place || (PLACE_BOUND.has(key) && g.map ? g.map.placeId : null) || null;
-  b.queue.push({ key, text: txt, place, ctx: opts.ctx || def.ctx || null });
+  const scope = opts.scope !== undefined ? opts.scope || null : KEY_SCOPE[key] || null;
+  b.queue.push({ key, text: txt, place, ctx: opts.ctx || def.ctx || (scope ? 'ui' : null), scope, born: b.clock, calm, until: def.until || null });
   if (b.queue.length > 4) b.queue.shift();
   return true;
+}
+// drops the tip (shown or queued) with this key, without recording it as shown
+function dropTip(g, key) {
+  const b = g && g._naviTips;
+  if (!b) return;
+  if (b.cur && b.cur.key === key) b.cur = null;
+  b.queue = b.queue.filter((q) => q.key !== key);
 }
 function stepTips(g) {
   const b = g._naviTips;
   if (!b || (!b.cur && !b.queue.length)) return;
+  b.clock = (b.clock | 0) + 1;
   const ctx = tipContext(g);
+  const top = g.top;
   const here = g.map ? g.map.placeId : null;
+  const scopeNow = ctx === 'ui' ? sceneScope(top) : null;
+  const famNow = scopeFamily(scopeNow);
+  const fams = openFamilies(g);
+  // no longer wanted / its screen shows something else / its screen is closed
+  const stale = (q) => {
+    if (q.until && safe(() => q.until(g), false)) return true;
+    if (!q.scope) return false;
+    const f = scopeFamily(q.scope);
+    if (!fams.has(f)) return b.clock - (q.born | 0) > 30; // (the console queues its first tips just before it opens)
+    return famNow === f && !scopeMatch(q.scope, scopeNow);
+  };
   if (b.cur && b.cur.place && here !== b.cur.place) b.cur = null;
   if (b.cur && b.cur.ctx && ctx && ctx !== b.cur.ctx) b.cur = null; // its screen was closed: it has been seen
+  if (b.cur && stale(b.cur)) b.cur = null;
   if (b.queue.length && here) b.queue = b.queue.filter((q) => !q.place || q.place === here);
+  if (b.queue.length) b.queue = b.queue.filter((q) => !stale(q));
+  const modal = ctx === 'ui' && sceneModal(top);
   if (!b.cur) {
-    if (!ctx || !b.queue.length) return;
-    const k = b.queue.findIndex((q) => !q.ctx || q.ctx === ctx);
+    if (!ctx || modal || !b.queue.length) return;
+    const k = b.queue.findIndex((q) => (!q.ctx || q.ctx === ctx) && scopeMatch(q.scope, scopeNow));
     if (k < 0) return;
     const next = b.queue.splice(k, 1)[0];
+    if (next.calm && !calmNow(g)) return; // a cheerful tip while a disaster / a war / a もしも regime goes on: dropped
     const a = assistState(g);
     if (!a) return;
     a.tips[next.key] = today(g);
@@ -393,25 +497,49 @@ function stepTips(g) {
     sfx('cursor');
     return;
   }
-  if (ctx && (!b.cur.ctx || b.cur.ctx === ctx)) { b.cur.t++; if (b.cur.t >= b.cur.life) b.cur = null; }
+  if (ctx && !modal && (!b.cur.ctx || b.cur.ctx === ctx) && scopeMatch(b.cur.scope, scopeNow)) { b.cur.t++; if (b.cur.t >= b.cur.life) b.cur = null; }
+}
+// Where a tip goes over a full-screen UI: a scene's tipArea / tipAvoid (see above). The console keeps its header,
+// tab bar (with 「？解説」) and footer free, and the tip moves away from its focused control: bottom right first,
+// then top right, bottom left, top left (the corner that covers the least of it; it stays put while that is free).
+// Other UIs (the politics UI): top right, under the header.
+function uiTipSpot(g, top, w, h, cur) {
+  let area = safe(() => (typeof top.tipArea === 'function' ? top.tipArea() : top.tipArea), null);
+  if (!area && top && top.isGovtUI) area = { x: 4, y: 44, w: SW - 8, h: 340 - 4 - 44 };
+  if (!area || !Number.isFinite(area.x)) return { x: SW - w - 8, y: 30 };
+  let avoid = safe(() => (typeof top.tipAvoid === 'function' ? top.tipAvoid() : null), null);
+  if (!avoid && top.isGovtUI && top.focus === 'body' && typeof top.ctl === 'function') { const k = safe(() => top.ctl(), null); if (k) avoid = [k]; }
+  avoid = (Array.isArray(avoid) ? avoid : []).filter((r) => r && [r.x, r.y, r.w, r.h].every(Number.isFinite));
+  const right = area.x + area.w - w - 4, left = area.x + 2, top0 = area.y + 2, bottom = Math.max(top0, area.y + area.h - h - 2);
+  const spots = [[right, bottom], [right, top0], [left, bottom], [left, top0]];
+  const over = ([sx, sy]) => avoid.reduce((s, r) => s + Math.max(0, Math.min(sx + w + 2, r.x + r.w) - Math.max(sx, r.x)) * Math.max(0, Math.min(sy + h + 2, r.y + r.h) - Math.max(sy, r.y)), 0);
+  const o = spots.map(over);
+  let i = clamp(cur.spot | 0, 0, spots.length - 1);
+  if (o[i] > 0) { const best = o.indexOf(Math.min(...o)); if (o[best] < o[i]) i = best; }
+  cur.spot = i;
+  return { x: spots[i][0], y: spots[i][1] };
 }
 function drawTip(c, g) {
   const b = g._naviTips;
   if (!b || !b.cur) return;
   const ctx = tipContext(g);
   if (!ctx || (b.cur.ctx && b.cur.ctx !== ctx)) return;
+  const top = g.top;
+  // never over a modal / confirmation, never on another tab of its screen
+  if (ctx === 'ui' && (sceneModal(top) || !scopeMatch(b.cur.scope, sceneScope(top)))) return;
   const t = b.cur.t, life = b.cur.life;
   const a = t < 10 ? t / 10 : life - t < 16 ? (life - t) / 16 : 1;
   // geometry by context: on the map bottom-left; with the phone open, the free strip left of it;
-  // over a full-screen UI, above its footer on the left
+  // over a full-screen UI: uiTipSpot (the console: its body, away from the focused control)
   let x = 8, w = 312, y;
   if (ctx === 'phone') { x = 6; w = (PH.PHONE ? PH.PHONE.x : 200) - 12; }
-  else if (ctx === 'ui') x = SW - w - 8; // over a full-screen UI: top right, under its header
   const pw = 44;
   const tw = w - pw - 22;
   const lines = wrapJ(c, b.cur.text, tw, 12).slice(0, ctx === 'phone' ? 9 : 5);
   const h = Math.max(54, 24 + lines.length * 16);
-  y = ctx === 'phone' ? 40 : ctx === 'ui' ? 30 : SH - 10 - h;
+  if (ctx === 'phone') y = 40;
+  else if (ctx === 'ui') ({ x, y } = uiTipSpot(g, top, w, h, b.cur));
+  else y = SH - 10 - h;
   const slide = t < 10 ? Math.round((1 - t / 10) * 12) : 0;
   c.save();
   c.globalAlpha = clamp(a, 0, 1);
@@ -448,13 +576,21 @@ function watchContext(g) {
   const top = g.top;
   const a = assistState(g);
   if (!a) return;
-  if (top && top.isPolUI && !a.seen.polui_open) assistTip(g, 'polui_open');
-  if (top && top.isPhone && !a.seen.phone_open) assistTip(g, 'phone_open');
+  // first-contact tips: offered again while they have not been shown (dropped unseen: a disaster, the screen closed)
+  if (top && top.isPolUI) offerAgain(g, a, 'polui_open');
+  if (top && top.isPhone && !top.closing && !top.dismissed && !a.intro) offerAgain(g, a, 'phone_open');
   const pid = g.map && g.map.placeId;
   if (pid && pid !== b.lastPlace) {
     b.lastPlace = pid;
     if (PLACE_TIPS[pid] && !a.tips[PLACE_TIPS[pid]]) assistTip(g, PLACE_TIPS[pid]);
   }
+}
+function offerAgain(g, a, key) {
+  if (a.tips[key]) return;
+  const b = tipBox(g);
+  if ((b.cur && b.cur.key === key) || b.queue.some((q) => q.key === key)) return;
+  if (a.seen[key] && (!tipAllowed(g, (TIPS[key] || {}).lv || 2) || !calmNow(g))) return;
+  assistTip(g, key);
 }
 
 // ================================================================ the glossary card (g.explain)
@@ -633,14 +769,119 @@ function daysToAge(g, age) {
   return (age - now) * YEAR_DAYS - ((st.day - 1) % YEAR_DAYS);
 }
 const OFFICE_AGE = { kugi: 25, togi: 25, shicho: 25, chiji: 30, shugi: 25, sangi: 30 };
+// (2026-10 play audit) every line is something to DO, with where to do it: the open budget window, the Diet
+// attendance, approval risks, deadlines; a new player's life (rent, work) comes before politics. Links:
+// { govt: tab, sub } the government console (govt_ui.js, when loaded), { politics: screen } the politics UI,
+// { app: id } a phone app (お仕事, 家計), { navi: topic }, { term }.
+const GOVT_TABS = { overview: '概況', budget: '予算・税', network: '政策マップ', opinion: '世論', diet: '国会', admin: '行政', security: '安全保障', crisis: '危機管理', ideology: '思想', society: '社会・宗教' };
+const govtGo = (g, tab, sub = null, fallback = 'dashboard') => (typeof g.govtConsole === 'function' ? { govt: tab, sub } : { politics: fallback });
+const appOf = (g, id) => safe(() => (typeof PH.phoneApps === 'function' ? PH.phoneApps(g).find((x) => x.id === id) : null), null);
+const appGo = (g, id) => (appOf(g, id) ? { app: id } : null);
+const daysToRent = (day) => (7 - weekdayOf(day)) % 7 || 7;
+const dueText = (n) => (n <= 0 ? '期限は今日' : n === 1 ? '期限はあした' : `期限まであと${n}日`);
+const ACUTE = (d) => !!d && d.phase !== 'done';
+// もしも (war, a regime of the player's) and disasters: sober, numbers and consequences, never glory
+function crisisAdvice(g, add) {
+  const w = safe(() => (typeof g.war === 'function' ? g.war() : null), null);
+  if (w) {
+    const cas = w.cas || {};
+    const dead = num(cas.soldiers && cas.soldiers.dead) + num(cas.civilians && cas.civilians.dead);
+    add(97, `（もしも）戦争が続いている。これまでの死者は${dead.toLocaleString('ja-JP')}人。`, '戦争は、勝っても制裁や孤立、長い対立が残る。停戦の交渉という道もある。これは架空の「もしも」のシミュレーション。', govtGo(g, 'security', 'war'));
+  }
+  const r = safe(() => (typeof g.regime === 'function' ? g.regime() : null), null);
+  if (r && r.id && r.id !== 'democracy' && r.id !== 'fallen') {
+    add(92, `（もしも）${r.name || '非常時'}の体制。民衆の不満は${Math.round(num(r.unrest))}/100。`, '権力をチェックする人がいない体制は、不満がたまると大きなデモや反乱につながる。憲法の手続きにもどす道（緊急事態の解除・民主化）もある。これは架空の「もしも」のシミュレーション。', govtGo(g, 'crisis', 'regime'));
+  }
+  const d = safe(() => (typeof g.disaster === 'function' ? g.disaster() : null), null);
+  if (ACUTE(d)) {
+    const can = (safe(() => (typeof g.disasterActions === 'function' ? g.disasterActions() : []), []) || []).filter((x) => x && !x.why);
+    const official = (d.roles || []).some((x) => ['pm', 'defmin', 'finmin', 'minister', 'chiji', 'kucho'].includes(x));
+    const name = d.name || '災害';
+    if (can.length) {
+      add(official ? 94 : 58, `${name}：いまできることがある（「${can[0].name}」${can.length > 1 ? `ほか${can.length - 1}つ` : ''}）。`, official ? 'まず命を守ること。対策本部、自衛隊の災害派遣、被災した人の支援…。政府中枢の「危機管理」で、あなたの役目でできることを進めよう。' : '無理はしないで、まず自分と家族の安全を。義援金やボランティアでも、被災した人の力になれる。', govtGo(g, 'crisis', 'disaster'));
+    } else if (d.home) add(60, `${name}。まず自分と家族の安全を。`, '交通が止まったり、お仕事が休みになったりすることがある。落ち着いて、正しい情報を待とう。', null);
+  }
+}
+// the government's own business (govt.js, feature-detected): the budget window, the budget in the Diet,
+// the most important bill, demos waiting for an answer
+function govtAdvice(g, p, add, isPM) {
+  const day = g.state.day;
+  const G = safe(() => (typeof g.govt === 'function' ? g.govt() : null), null);
+  const posts = (p.me && p.me.posts) || [];
+  // 概算要求 → 閣議決定: the PM or the 財務（大蔵）大臣 decides the allocation (govtRefusal('budget') is side-effect free)
+  if (typeof g.govtRefusal === 'function' && safe(() => g.govtRefusal('budget'), 'x') == null) {
+    const fy = safe(() => G.budget.draft.fy, null) || yearOf(g) + 1;
+    add(82, `${fy}年度予算の配分を決めよう（12月下旬の閣議決定まで）。`, '政府中枢の「予算・税」で、社会保障・公共事業・防衛など分野ごとの配分を決める。決めなければ、前年なみの配分のまま閣議決定される。', govtGo(g, 'budget', 'budget', 'budget'), `${fy}年度予算の配分を決めよう`);
+  }
+  if (!isPM || !G) return;
+  const stage = safe(() => G.budget.stage, null);
+  const mo = num(safe(() => g.polDate().month, 0));
+  if (stage === 'provisional') add(80, '本予算がまだ成立していない（暫定予算で運営中）。成立を急ごう。', '衆議院で可決されれば、参議院が30日以内に議決しなくても予算は成立する（憲法60条）。答弁と国会の出席を欠かさずに。', govtGo(g, 'diet', null, 'diet'));
+  else if (stage === 'diet' && mo >= 1 && mo <= 3) add(76, '予算案を3月末までに成立させよう（年度内成立）。', '予算は衆議院が先に審議する。衆議院で可決されれば、30日で自然成立する（憲法60条）。間に合わないと、暫定予算が必要になる。', govtGo(g, 'diet', null, 'diet'));
+  for (const K of Object.values(G.keyBills || {})) {
+    if (K && K.offer && !K.dissolved && day - num(K.rejected) <= 30) { add(80, `最重要法案「${K.title}」が参議院で否決された。どうするか決めよう。`, '衆議院を解散して国民に信を問うこともできるし、解散しない道もある。政府中枢の「国会」から。', govtGo(g, 'diet', null, 'diet')); break; }
+  }
+  if (isPM || posts.includes('kanbo')) {
+    const ds = safe(() => (typeof g.demos === 'function' ? g.demos({ active: true }) : []), []) || [];
+    const dm = ds.find((x) => x && x.status === 'active' && x.stance === 'protest' && !(x.responses || []).length);
+    if (dm) add(70, `デモ（${/^「/.test(String(dm.cause)) ? dm.cause : `「${dm.cause}」`}・約${num(dm.size).toLocaleString('ja-JP')}人）に、政府としてどう応えるか決めよう。`, 'デモは表現の自由（憲法21条）で守られている。対話や説明で応えるのが基本で、力でおさえると強い反発をまねく。政府中枢の「世論」から。', govtGo(g, 'opinion'));
+  }
+}
+// the PM: approval risks with their reasons, the elections ahead, and always one next task of the season
+function pmAdvice(g, p, add) {
+  const day = g.state.day;
+  const ap = Math.round(num(p.cabinet && p.cabinet.approval));
+  const br = safe(() => (typeof g.approvalBreakdown === 'function' ? g.approvalBreakdown() : null), null);
+  const weekly = br && Array.isArray(br.weekly) ? br.weekly.filter((x) => x && Number.isFinite(Number(x.approval))).slice().sort((a, b) => num(a.day) - num(b.day)) : [];
+  const prev = weekly.length >= 2 ? Math.round(num(weekly[weekly.length - 2].approval)) : null;
+  const segs = br && Array.isArray(br.bySegment) ? br.bySegment.filter((x) => x && Number.isFinite(Number(x.approval))) : [];
+  const low = segs.length ? segs.reduce((m, x) => (num(x.approval) < num(m.approval) ? x : m)) : null;
+  const neg = br && Array.isArray(br.reasons) ? br.reasons.filter((x) => x && num(x.value) <= -1).sort((a, b) => num(a.value) - num(b.value))[0] : null;
+  const why = [neg ? `いちばん支持を下げている理由は「${neg.label}」` : '', low ? `支持がいちばん低い層は${low.name}（${Math.round(num(low.approval))}%）` : ''].filter(Boolean).join('。');
+  if (ap < 30) add(84, `内閣支持率${ap}%は「危険水域」。支持を取りもどそう。`, `${why ? `${why}。` : ''}世論の声を聞いて、政策と、ていねいな説明で応えよう。低いままだと、党内から退陣を求める声が出る。`, govtGo(g, 'opinion', null, 'cabinet'), `支持率${ap}%。支持を取りもどそう`);
+  else if (prev != null && prev - ap >= 4) add(64, `内閣支持率が${prev}%から${ap}%に下がった。理由をたしかめよう。`, `${why ? `${why}。` : ''}政府中枢の「概況」で、支持率の内わけが見られる。`, govtGo(g, 'overview', null, 'cabinet'));
+  let ups = [];
+  try { ups = typeof g.upcomingElections === 'function' ? g.upcomingElections() || [] : []; } catch (e) { ups = []; }
+  const nat = ups.filter((e) => e && !e.newsOnly && !e.declared && (e.office === 'shugi' || e.office === 'sangi') && e.kind !== 'hosen' && e.day >= day).sort((a, b) => a.day - b.day)[0];
+  if (nat && nat.day - day <= 120) add(66, `${nat.label}まであと${nat.day - day}日（投票 ${dateText(g, nat.day)}）。与党の議席がかかる。`, '総理大臣は与党の顔。内閣の支持率が、与党の議席を大きく左右する。過半数を割ると、政権交代もありうる。', { politics: 'elections' });
+  const lead = ups.find((e) => e && e.kind === 'sosaisen' && e.day >= day && e.day - day <= 60);
+  if (lead) add(68, `${lead.label}まであと${lead.day - day}日。党内の支持を固めよう。`, '党首でなくなると、総理大臣を続けるのはむずかしい。党の議員や派閥の支持がものをいう。', { politics: 'party' });
+  const mo = num(safe(() => g.polDate().month, 0));
+  const task = mo >= 1 && mo <= 3 ? '予算を年度内（3月末）に成立させよう' : mo >= 8 ? '来年度の予算づくり（12月下旬に閣議決定）を進めよう' : '公約の法案を国会に出して、成立させよう';
+  add(60, `内閣支持率${ap}%。${task}。`, '内閣を続けるには、国会の過半数と世論の支持の両方がいる。政府中枢で、予算・世論・国会をまとめて見られる。', mo >= 1 && mo <= 3 ? govtGo(g, 'diet', null, 'diet') : mo >= 8 ? govtGo(g, 'budget', 'budget', 'budget') : { politics: 'policy' }, task);
+}
+// a Diet member: the session, today's sitting and the absence streak (politics.js g.attendance())
+function dietAdvice(g, p, add, cabinet) {
+  const me = p.me;
+  const day = g.state.day;
+  if (p.diet && p.diet.shugi && p.diet.shugi.dissolved && me.office === 'shugi') { add(85, '衆議院は解散中。総選挙に向けて準備しよう。', '解散で議員の身分はなくなった。もう一度立候補するなら、公示日までに届出を。', { politics: 'elections' }); return; }
+  const att = safe(() => (typeof g.attendance === 'function' ? g.attendance() : null), null);
+  const S = p.diet && p.diet.session;
+  const session = att ? !!att.session : !!S;
+  if (!session) { add(42, '国会は閉会中。地元回りと後援会づくりの好機。', `${polApp(g)}の「資金・活動」から。次の選挙に向けて、地元の支持を固めよう。`, { politics: 'activities' }); return; }
+  const absent = att ? num(att.absent) : num(me.attend && me.attend.absent);
+  const done = att ? !!att.today : num(me.attend && me.attend.last) === day;
+  const reportAt = num(att && att.reportAt, 8) || 8;
+  const how = `国会議事堂の議場の自分の席か、${polApp(g)}の「国会」→「国会に出席する」から。`;
+  if (done) { add(34, '今日の国会は出席ずみ。', cabinet ? '大臣は国会で答弁する。「資金・活動」の「国会で答弁」も大切。' : '委員会での質問や議員立法で、政策を前に進めることもできる（「資金・活動」→「委員会で質問」）。', { politics: 'activities' }); return; }
+  const kind = S && S.kind ? `（${S.kind}）` : '';
+  if (absent >= 3) add(89, `国会を${absent}日続けて欠席している。今日は出席しよう。`, `${absent >= reportAt ? '欠席はもう報道された。続けば、また報道される。' : `${reportAt}日続くと報道される（あと${reportAt - absent}日）。`}党内の評価と地元の支持も下がっていく。${how}`, { politics: 'diet' }, `欠席${absent}日。今日は国会に出よう`);
+  else {
+    const busy = att ? !!att.business : true;
+    add(cabinet ? 79 : 76, busy ? (cabinet ? `今日は国会で答弁がある。国会に出席しよう${kind}。` : `今日は本会議・委員会がある。国会に出席しよう${kind}。`) : `国会の会期中${kind}。今日も国会に出席しよう。`, `会期中は毎日の出席が仕事。休むと欠席が数えられ、${reportAt}日続くと報道される。${how}`, { politics: 'diet' }, '今日も国会に出席しよう');
+  }
+}
 export function adviceItems(g) {
   const out = [];
   if (!g || !g.state) return out;
   const st = g.state;
-  const add = (prio, text, detail = '', go = null) => out.push({ prio, text, detail, go });
+  // say: a short form for her speech bubble on the navi home (the full text when it fits)
+  const add = (prio, text, detail = '', go = null, say = null) => out.push({ prio, text, detail, go, say });
   const age = ageOf(st);
   const va = vAge(g);
   const yr = yearOf(g);
+  // ---- もしも (war, regime) and disasters
+  try { crisisAdvice(g, add); } catch (e) { console.error(e); }
   // ---- justice: custody, trial, prison, probation, 公民権停止
   try {
     const j = typeof g.jus === 'function' ? g.jus() : null;
@@ -655,25 +896,39 @@ export function adviceItems(g) {
       add(90, '公民権停止中。いまは立候補できない。', why || '罪によって、一定の期間、選挙権・被選挙権がなくなっている。', { term: '公民権停止' });
     }
   } catch (e) { console.error(e); }
-  // ---- money: 闇金, loans, rent
+  // ---- money and life first: 闇金, loans, rent (for a new player the rent comes before politics)
   try {
     const yami = typeof g.loanTotal === 'function' ? num(g.loanTotal('yamikin')) : 0;
     const all = typeof g.loanTotal === 'function' ? num(g.loanTotal()) : 0;
     if (yami > 0) add(93, 'ヤミ金から借りている。返す前に警察か弁護士へ！', 'ヤミ金は違法な業者。区役所3階の相談室、警察、弁護士に相談すれば、取り立てを止められる。', { term: 'ヤミ金' });
     else if (all > 0) add(68, `借金が ${fmtMoney(all)} ある。返す計画を立てよう。`, '返せなくなりそうなら、早めに区役所3階の相談室か弁護士へ。任意整理や自己破産などの方法がある。', { term: '多重債務' });
-    if (st.rent && st.rent.debt > 0) add(74, `家賃の滞納が ${fmtMoney(st.rent.debt)} ある。`, 'まずは家賃を払おう。お仕事でお金をかせぐのが先。', null);
+    if (st.rent && st.rent.debt > 0) add(74, `家賃の滞納が ${fmtMoney(st.rent.debt)} ある。まずは払おう。`, `お金ができたら、${deviceWord(g)}の「家計」から払える。お仕事でかせぐのが先。`, appGo(g, 'money'), 'まずは家賃の滞納を払おう');
+    else {
+      const rent = num(safe(() => g.housing().rent, 0));
+      const d = daysToRent(st.day);
+      if (rent > 0 && num(st.money) < rent) add(72, `月曜に家賃 ${fmtMoney(rent)}（${d === 1 ? 'あした' : `あと${d}日`}）。まずはお仕事でかせごう。`, `いまの所持金は ${fmtMoney(st.money)}（あと${fmtMoney(rent - num(st.money))}）。政治の前に、まずはくらし。お仕事は${deviceWord(g)}の「お仕事」で探せる。家賃が足りないと滞納になる。`, appGo(g, 'jobs'), 'お仕事で、月曜の家賃をかせごう');
+    }
   } catch (e) { console.error(e); }
   // ---- politics
   const p = polState(g);
   if (p && p.me) {
     const me = p.me;
     const day = st.day;
+    const posts = me.posts || [];
+    const isPM = posts.includes('pm');
     try {
-      if (p.cabinet && p.cabinet.pending && p.cabinet.pending.kind === 'ncDeadline' && p.cabinet.pm === 'player') add(99, '内閣不信任案が可決！解散か総辞職を決める。', '憲法69条で、10日以内に衆議院を解散するか、内閣総辞職しなければならない。', { politics: 'dashboard' });
-      const offers = (me.offers || []).filter((o) => !o.answered);
-      if (offers.length) add(88, '打診への返事を待っている人がいる。', '政治アプリのお知らせから、引き受けるかどうか決めよう。返事には期限がある。', { politics: 'dashboard' });
-      if (num(me.secret) > 0) add(86, `裏金 ${fmtMoney(me.secret)} がある。見つかる危険がある。`, '政治資金収支報告書にのせないお金は違法。報告書を訂正して公開すれば、そのぶん正しい状態にもどせる。', { term: '裏金' });
-      if (me.scandalDay && day - num(me.scandalDay) <= 20) add(77, 'スキャンダルの直後。説明責任を果たそう。', '記者会見で事実をはっきり説明することが、信頼を取りもどす第一歩。', { politics: 'activities' });
+      if (p.cabinet && p.cabinet.pending && p.cabinet.pending.kind === 'ncDeadline' && p.cabinet.pm === 'player') add(99, `内閣不信任案が可決された。解散か総辞職を決めよう（${dueText(num(p.cabinet.pending.day) - day)}）。`, `憲法69条で、10日以内に衆議院を解散するか、内閣総辞職しなければならない。${polApp(g)}のダッシュボードから決める。`, { politics: 'dashboard' }, '解散か総辞職かを決めよう');
+      const offers = (me.offers || []).filter((o) => o && !o.answered).sort((a, b) => num(a.until) - num(b.until));
+      if (offers.length) {
+        const o = offers[0];
+        const what = o.post ? `「${safe(() => g.postLabel(o.post), o.post)}」への就任の打診` : '打診';
+        add(88, `${what}に返事をしよう（${dueText(num(o.until) - day)}）。`, `${polApp(g)}のお知らせから、引き受けるかどうか決める。返事をしないと、打診は立ち消えになる。`, { politics: 'dashboard' }, '打診に返事をしよう');
+      }
+      if (num(me.secret) > 0) add(86, `裏金 ${fmtMoney(me.secret)} を、収支報告書に正しくのせよう。`, '政治資金収支報告書にのせないお金は違法（政治資金規正法）で、見つかれば事件になる。報告書を訂正して公開すれば、正しい状態にもどせる。', { politics: 'money' });
+      if (me.scandalDay && day - num(me.scandalDay) <= 20) {
+        if (me.office) add(77, '記者会見で、事実をはっきり説明しよう（スキャンダルの直後）。', `かくすほど信頼を失う。${polApp(g)}の「資金・活動」→「記者会見」から。説明責任を果たすことが、信頼を取りもどす第一歩。`, { politics: 'activities' }, '記者会見で説明しよう');
+        else add(77, 'スキャンダルの直後。事実をはっきり説明しよう。', 'かくすほど信頼を失う。説明責任を果たすことが、信頼を取りもどす第一歩。', null);
+      }
     } catch (e) { console.error(e); }
     let ups = [];
     try { ups = typeof g.upcomingElections === 'function' ? g.upcomingElections() : []; } catch (e) { ups = []; }
@@ -685,22 +940,23 @@ export function adviceItems(g) {
       else if (day <= mine.day) add(91, `選挙運動中！投票日まであと${mine.day - day}日。`, '街頭演説やポスターで支持を広げよう。お金や物を配る買収、家を回る戸別訪問は犯罪。', { politics: 'campaign' });
     }
     // voting (選挙権 on 投票日; not during 公民権停止 for voting)
+    let nextVote = null;
     try {
       const banned = typeof g.civicBanned === 'function' && g.civicBanned('vote');
       const full = (p.elections && p.elections.upcoming) || [];
-      for (const e of pub) {
-        const raw = full.find((x) => x.id === e.id);
-        if (!raw || raw.voted || banned) continue;
-        if (ageOnDay(g, e.day) < va) continue;
-        if (day === e.day) { add(87, `今日は${e.label}の投票日！`, '区役所2階の投票所で投票できる。あなたの1票が、政治を決める。', { term: '選挙権' }); break; }
-        if (day > e.koji && day < e.day && yr >= 2004) { add(56, `${e.label}の期日前投票ができる。`, '区役所2階の期日前投票所へ。投票日に行けなくても大丈夫。', { term: '期日前投票' }); break; }
-      }
+      const votable = banned ? [] : pub.filter((e) => { const raw = full.find((x) => x.id === e.id); return raw && !raw.voted && e.day >= day && ageOnDay(g, e.day) >= va; }).sort((a, b) => a.day - b.day);
+      const onDay = votable.find((e) => e.day === day);
+      const early = yr >= 2004 ? votable.find((e) => day > e.koji && day < e.day) : null;
+      if (onDay) add(87, `今日は${onDay.label}の投票日！`, '区役所2階の投票所で投票できる。あなたの1票が、政治を決める。', { term: '選挙権' });
+      else if (early) add(56, `${early.label}の期日前投票ができる。`, '区役所2階の期日前投票所へ。投票日に行けなくても大丈夫。', { term: '期日前投票' });
+      else nextVote = votable.find((e) => !e.declared) || null;
     } catch (e) { console.error(e); }
-    // not in office and not running: what the next election needs
+    // not in office and not running: voting, the age rules, then (later) a party
     if (!me.office && !mine) {
       try {
+        if (nextVote) add(age < 25 ? 46 : 30, `つぎの${nextVote.label}（投票 ${dateText(g, nextVote.day)}）で、あなたも投票できる。`, `投票日に区役所2階の投票所へ。${yr >= 2004 ? `行けない日があれば、${kojiWord(nextVote.kind)}の次の日から期日前投票もできる。` : ''}候補者や政党の公約を、くらべておこう。`, { politics: 'elections' }, `${nextVote.label}で投票しよう`);
         if (age < va) add(32, `選挙権は${va}歳から。いまは政治を学ぶチャンス！`, '「政治のしくみ」や「用語じてん」で、選挙や国会のことを知っておこう。', { navi: 'lessons' });
-        if (age < 25) add(40, `立候補は25歳から（あと${daysToAge(g, 25)}日）。`, '参議院と知事は30歳から。それまでに政党の活動や勉強をしておこう。', { term: '被選挙権' });
+        if (age < 25) add(40, `25歳になったら立候補できる（あと${daysToAge(g, 25)}日）。`, '参議院議員と知事は30歳から。それまでは投票と勉強の時期。選挙や国会のしくみを知っておこう。', { term: '被選挙権' }, '25歳までは、投票と勉強の時期');
         else {
           const fd = FILING_DAYS();
           const cands = pub.filter((e) => e.kind !== 'hosen' && day <= e.koji && ageOnDay(g, e.day) >= (OFFICE_AGE[e.office] || 25));
@@ -713,31 +969,28 @@ export function adviceItems(g) {
             else add(81, `${open.label}の届出を受付中（${dateText(g, open.koji)}まで）。`, `立候補するなら、区役所2階の選挙管理委員会か、党本部の選挙対策本部へ。供託金は${fmtMoney(dep)}。`, { politics: 'elections' });
           } else if (ok.length) {
             const e = ok[0];
-            add(44, `つぎは${e.label}（投票 ${dateText(g, e.day)}）。`, `本来の届出は${kojiWord(e.kind)}の日。ゲームでは投票日の${fd}日前から受け付ける。それまでに政党の公認をめざそう。`, { politics: 'elections' });
+            add(44, `つぎは${e.label}（投票 ${dateText(g, e.day)}）。立候補するか考えよう。`, `本来の届出は${kojiWord(e.kind)}の日。ゲームでは投票日の${fd}日前から受け付ける。それまでに政党の公認をめざそう。`, { politics: 'elections' });
           }
         }
         if (!me.party && age >= va) {
           let fee = 4000;
           try { if (typeof g.partyFee === 'function') fee = num(g.partyFee(), 4000); } catch (e) { fee = 4000; }
-          add(48, '政党に入ると、選挙で公認がもらいやすい。', `永田町の党本部の受付で入党できる（党費 年${fmtMoney(fee)}）。どの党にも入らず、無所属で立候補することもできる。`, { term: '公認' });
+          if (age < 25) add(30, '25歳が近づいたら、政党に入るか考えよう。', `政党に入ると、選挙で「公認」がもらいやすい（永田町の党本部で入党、党費 年${fmtMoney(fee)}）。無所属で立候補することもできる。`, { term: '公認' });
+          else add(48, '政党に入るか考えよう（選挙で公認がもらいやすい）。', `永田町の党本部の受付で入党できる（党費 年${fmtMoney(fee)}）。どの党にも入らず、無所属で立候補することもできる。`, { term: '公認' });
         }
       } catch (e) { console.error(e); }
     }
     // in office
     if (me.office) {
       try {
-        const S = p.diet && p.diet.session;
-        const posts = me.posts || [];
-        if (posts.includes('pm')) {
-          const ap = Math.round(num(p.cabinet && p.cabinet.approval));
-          add(83, `総理大臣。内閣支持率は${ap}%。`, ap < 30 ? '30%を切ると「危険水域」といわれる。政策の中身と、ていねいな説明で信頼を取りもどそう。' : '予算を年度内に成立させることと、国会の過半数を保つことが大事。', { politics: 'cabinet' });
-        } else if (posts.some((x) => x === 'kanbo' || /^minister_/.test(x))) add(72, '大臣のつとめ：閣議に出て、国会で答弁。', '政治アプリの「内閣」から閣議へ。国会の委員会では、大臣として答弁する。', { politics: 'cabinet' });
-        if (me.office === 'shugi' || me.office === 'sangi') {
-          if (p.diet && p.diet.shugi && p.diet.shugi.dissolved && me.office === 'shugi') add(85, '衆議院は解散中。総選挙に向けて準備を！', '解散で議員の身分はなくなった。もう一度立候補するなら、公示日までに届出を。', { politics: 'elections' });
-          else if (S) add(78, `国会の会期中（${S.kind}）。本会議の採決に出よう。`, '国会議事堂の議場の自分の席で採決に加わる。委員会での質問も大切。欠席が続くと批判される。', { politics: 'diet' });
-          else add(42, '国会は閉会中。地元回りと後援会づくりの好機。', '政治アプリの「資金・活動」から。次の選挙に向けて、地元の支持を固めよう。', { politics: 'activities' });
-        } else if (me.office === 'kugi' || me.office === 'togi') add(46, '議会の定例会で、住民の声を質問にしよう。', '区議会の定例会は2・6・9・11月。会期中は区役所5階の議場へ。', null);
-        else add(46, '首長の仕事：予算と条例を議会に出して説明する。', '議会と首長は、住民がそれぞれ選ぶ（二元代表制）。おたがいにチェックしあう関係。', { term: '二元代表制' });
+        const cabinetPost = posts.some((x) => x === 'kanbo' || /^minister_/.test(x));
+        const national = me.office === 'shugi' || me.office === 'sangi';
+        if (isPM || cabinetPost) govtAdvice(g, p, add, isPM);
+        if (isPM) pmAdvice(g, p, add);
+        else if (cabinetPost) add(58, '大臣のつとめ：閣議に出て、国会で答弁しよう。', `${polApp(g)}の「資金・活動」から「閣議に出る」「国会で答弁」。役所の説明も、よく聞こう。`, { politics: 'activities' });
+        if (national) dietAdvice(g, p, add, isPM || cabinetPost);
+        else if (me.office === 'kugi' || me.office === 'togi') add(46, '議会の定例会で、住民の声を質問にしよう。', '区議会の定例会は2・6・9・11月。会期中は区役所5階の議場へ。', null);
+        else add(46, '首長の仕事：予算と条例を議会に出して説明しよう。', '議会と首長は、住民がそれぞれ選ぶ（二元代表制）。おたがいにチェックしあう関係。', { term: '二元代表制' });
       } catch (e) { console.error(e); }
     }
   } else add(20, '政治の情報はまだない。', '「政治のしくみ」で、基本から学んでみよう。', { navi: 'lessons' });
@@ -745,7 +998,7 @@ export function adviceItems(g) {
   const a = assistState(g);
   if (a && !a.quiz && IDEO) add(16, '「思想しんだん」で、自分の考えの位置を見てみよう。', 'いくつかの質問に答えると、近い考え方がわかる。結果は目安で、正しい答えはない。', { navi: 'quiz' });
   const m = MISSIONS.find((x) => !missionDone(g, x.id) && (!x.locked || !x.locked(g)));
-  if (m) add(13, `ミッション：${m.label}`, m.hint(g), { navi: 'missions' });
+  if (m) add(13, `ミッション：${mLabel(g, m)}`, m.hint(g), { navi: 'missions' });
   add(5, '「政治のしくみ」で、基本を学ぼう。', '選挙・法律・内閣・予算…。短いスライドで、ひとつずつ説明するよ。', { navi: 'lessons' });
   out.sort((x, y) => y.prio - x.prio);
   // くわしい: fewer study hints when there are real things to do
@@ -833,9 +1086,11 @@ export const MISSIONS = [
   { id: 'terms', label: '用語を5つ調べる', reward: 500, hint: () => '「用語じてん」や、ニュースに出てきた言葉を調べよう。', check: (g, a) => Object.keys(a.terms).length >= 5 },
   { id: 'lessons', label: 'しくみを3つ学ぶ', reward: 1000, hint: () => '「政治のしくみ」のスライドを、最後まで3つ見よう。', check: (g, a) => Object.keys(a.lessons).length >= 3 },
   { id: 'quiz', label: '思想しんだんをする', reward: 500, hint: () => '「思想しんだん」の質問に、最後まで答えてみよう。', check: (g, a) => !!a.quiz },
-  { id: 'polapp', label: '政治アプリを開く', reward: 500, hint: (g) => `${deviceWord(g)}の「政治」アプリで、選挙の予定を見てみよう。`, check: (g, a) => !!(a.seen.polui_open || (g.state.flags.polui && g.state.flags.polui.introSeen)) },
+  { id: 'polapp', label: (g) => (deviceWord(g) === '手帳' ? '「政治」のページを開く' : '政治アプリを開く'), reward: 500, hint: (g) => `${polApp(g, true)}で、選挙の予定を見てみよう。`, check: (g, a) => !!(a.seen.polui_open || (g.state.flags.polui && g.state.flags.polui.introSeen)) },
   { id: 'vote', label: '選挙で投票する', reward: 1000, hint: (g) => `選挙の日（期日前投票の期間）に、区役所2階の投票所へ。投票は${vAge(g)}歳から。`, check: (g, a) => !!(a.seen.voted || g.flag('kuya_vote')), locked: (g) => ageOf(g.state) < vAge(g) - 1 },
 ];
+// a mission's label (polapp's names the 手帳's page in the 1980s)
+export function mLabel(g, m) { return String((m && (typeof m.label === 'function' ? safe(() => m.label(g), m.id) : m.label)) || ''); }
 export function missionDone(g, id) { const a = assistState(g); return !!(a && a.missions[id] && a.missions[id].done); }
 // marks newly achieved missions (a toast once each; the reward is claimed in the app)
 export function checkMissions(g) {
@@ -848,7 +1103,7 @@ export function checkMissions(g) {
     try { ok = !!m.check(g, a); } catch (e) { ok = false; }
     if (ok) { a.missions[m.id] = { done: today(g), claimed: 0 }; fresh.push(m); }
   }
-  if (fresh.length && !g.auto) { for (const m of fresh) g.notify(`達成！${m.label}`, { color: '#9af0d8', life: 160 }); }
+  if (fresh.length && !g.auto) { for (const m of fresh) g.notify(`達成！${mLabel(g, m)}`, { color: '#9af0d8', life: 160 }); }
   return fresh;
 }
 function claimMission(g, id) {
@@ -875,7 +1130,8 @@ export async function naviTalk(g, where = 'default') {
   markSeen(g, `navi_npc_${where}`);
   if (!a.intro) {
     a.intro = true;
-    await g.say([`はじめまして！ドット大学で政治学を教えている、${NAVI.name}です。`, 'みんなには「ことは先生」って呼ばれてる。政治のことなら、なんでも聞いてね。', 'わたしは、どの政党がいいとか、どの考えが正しいとかは言わない。賛成の声も反対の声も、両方見せるのがわたしの仕事。', `${naviWhere(g)}にも、わたしの解説を入れておいたよ。`], NAVI_SAY);
+    dropTip(g, 'phone_open');
+    await g.say([`はじめまして！ドット大学で政治学を教えている、${NAVI.name}です。`, 'みんなには「ことは先生」って呼ばれてる。政治のことなら、なんでも聞いてね。', 'わたしは、どの政党がいいとか、どの考えが正しいとかは言わない。賛成の声も反対の声も、両方見せるのがわたしの仕事。', deviceWord(g) === '手帳' ? 'あなたの手帳に「政治ナビ」のページをはさんでおくね。いつでも開いてみて。' : `${naviWhere(g)}にも、わたしの解説を入れておいたよ。`], NAVI_SAY);
   } else await g.say(NPC_LINES[where] || NPC_LINES.default, NAVI_SAY);
   const items = [['いま何をすればいい？', 'advice'], ['用語を調べたい', 'glossary'], ['政治のしくみを学ぶ', 'lessons'], ['思想しんだん', 'quiz'], ['ミッション', 'missions'], ['またね', null]];
   const k = await g.ask('なにが知りたい？', items.map((x) => x[0]), { ...NAVI_SAY, cancel: items.length - 1 });
@@ -956,17 +1212,28 @@ function homeBadge(g, id) {
   if (id === 'settings') return [HELP_NAMES[a.help], PCx.dim];
   return ['', ''];
 }
-function greeting(g) {
+// her speech bubble on the navi home: the most urgent advice as a sentence of her own (「いまのおすすめは
+// 『…』だよ」). The candidates go from the friendliest to the shortest; the first that fits 4 lines is shown.
+function greetings(g) {
   const nm = g.state.name || 'あなた';
   const first = safe(() => adviceItems(g)[0], null);
   const hello = ['こんにちは', 'おつかれさま', 'やあ', 'いらっしゃい'][today(g) % 4];
-  return `${hello}、${nm}さん。${first ? `いまは「${first.text.replace(/。$/, '')}」` : '今日は何を学ぶ？'}`;
+  if (!first) return [`${hello}、${nm}さん。今日は何を学ぶ？`];
+  const q = (s0) => String(s0 || '').replace(/。$/, '').replace(/「/g, '『').replace(/」/g, '』');
+  const t = q(first.text), sh = first.say ? q(first.say) : '';
+  const out = [`${hello}、${nm}さん。いまのおすすめは「${t}」だよ。`];
+  if (sh) out.push(`${hello}、${nm}さん。いまのおすすめは「${sh}」だよ。`);
+  out.push(`${nm}さん、いまのおすすめは「${t}」だよ。`);
+  if (sh) out.push(`${nm}さん、いまのおすすめは「${sh}」だよ。`, `いまのおすすめは「${sh}」だよ。`);
+  out.push(`いまのおすすめは「${t}」だよ。`, `いまのおすすめ：${t}`);
+  return out;
 }
+function greeting(g) { return greetings(g)[0]; }
 function homeView(g) {
   return {
     title: '政治ナビ', color: NC, idx: 0, cancel: undefined,
     hint: 'A:ひらく　B:とじる',
-    enter() { this.bubble = greeting(g); },
+    enter() { this.bubbles = greetings(g); this.bubble = null; },
     update(ph, inp) {
       const n = HOME_ITEMS.length;
       if (inp.repeat('up')) { this.idx = (this.idx + n - 1) % n; sfx('cursor'); }
@@ -974,7 +1241,7 @@ function homeView(g) {
       if (inp.pressed('a')) {
         sfx('ok');
         const id = HOME_ITEMS[this.idx].id;
-        openTopic(g, ph, id).then(() => { this.bubble = greeting(g); });
+        openTopic(g, ph, id).then(() => { this.bubbles = greetings(g); this.bubble = null; });
         return;
       }
       if (inp.pressed('b')) { sfx('cancel'); ph.back(undefined); }
@@ -985,6 +1252,7 @@ function homeView(g) {
       const bx = a.x + 80, bw = a.w - 86, by = a.y + 6, bh = 62;
       frame(c, bx, by, bw, bh, '#ffffff', ND);
       for (let i = 0; i < 5; i++) R(c, bx - 5 + i, by + 16 + i, 1, 10 - i * 2, i === 0 ? ND : '#ffffff');
+      if (!this.bubble) { const all = this.bubbles || greetings(g); this.bubble = all.find((s0) => wrapJ(c, s0, bw - 12, 12).length <= 4) || all[all.length - 1]; }
       const ls = wrapJ(c, this.bubble || '', bw - 12, 12);
       ls.slice(0, 4).forEach((l, i) => T(c, i === 3 && ls.length > 4 ? fit(c, l + '…', bw - 12, 12) : l, bx + 6, by + 4 + i * 14, 12, PCx.text));
       // the menu
@@ -1069,7 +1337,8 @@ function listView(g, o) {
     },
     draw(c, ph, a) {
       const rows = this.rows();
-      const descH = o.describe && rows.length ? 42 : 0;
+      const dl = Math.max(1, o.descLines || 2);
+      const descH = o.describe && rows.length ? 10 + dl * 16 : 0;
       const lh = a.h - descH;
       if (!rows.length) {
         const ls = wrapJ(c, o.empty || '（なし）', a.w - 32, 12);
@@ -1110,7 +1379,7 @@ function listView(g, o) {
         const dy = a.y + a.h - descH;
         R(c, a.x, dy, a.w, descH, '#ebe5d6');
         R(c, a.x, dy, a.w, 1, '#cfc6b0');
-        if (d) { const ls = wrapJ(c, d, a.w - 16, 12); ls.slice(0, 2).forEach((l, i) => T(c, i === 1 && ls.length > 2 ? fit(c, l + '…', a.w - 16, 12) : l, a.x + 8, dy + 5 + i * 16, 12, PCx.text)); }
+        if (d) { const ls = wrapJ(c, d, a.w - 16, 12); ls.slice(0, dl).forEach((l, i) => T(c, i === dl - 1 && ls.length > dl ? fit(c, l + '…', a.w - 16, 12) : l, a.x + 8, dy + 5 + i * 16, 12, PCx.text)); }
       }
     },
   };
@@ -1271,11 +1540,12 @@ export async function openNavi(g, topic = 'home') {
   if (typeof PH.withPhone !== 'function') return null;
   return PH.withPhone(g, async (ph) => {
     const a = assistState(g);
-    if (topic === 'intro') { await ph.open(talkView(g, introPages(g))); a.intro = true; return null; }
-    if (!a.intro) { a.intro = true; await ph.open(talkView(g, introPages(g))); if (ph.dismissed) return null; assistTip(g, 'navi_first'); }
+    // her full introduction replaces the first-contact tip (it is not shown next to it)
+    if (topic === 'intro') { a.intro = true; dropTip(g, 'phone_open'); await ph.open(talkView(g, introPages(g))); return null; }
+    if (!a.intro) { a.intro = true; dropTip(g, 'phone_open'); await ph.open(talkView(g, introPages(g))); if (ph.dismissed) return null; assistTip(g, 'navi_first'); }
     const home = homeView(g);
     const done = ph.open(home);
-    if (topic && topic !== 'home') openTopic(g, ph, topic).then(() => { home.bubble = greeting(g); });
+    if (topic && topic !== 'home') openTopic(g, ph, topic).then(() => { home.bubbles = greetings(g); home.bubble = null; });
     return done;
   });
 }
@@ -1330,7 +1600,7 @@ function adviceView(g) {
         let ly = y + 5 + cd.tl.length * 15 + 3;
         cd.dl.forEach((l, k) => T(c, l, a.x + 16, ly + k * 14, 12, PCx.dim));
         ly += cd.dl.length * 14;
-        if (cd.it.go) T(c, goLabel(cd.it.go), a.x + 8 + W - 6, ly, 12, on ? PCx.accent : '#9a8a70', 'right');
+        if (cd.it.go) T(c, fit(c, goLabel(cd.it.go, g), W - 12, 12), a.x + 8 + W - 6, ly, 12, on ? PCx.accent : '#9a8a70', 'right');
       });
       c.restore();
       if (!cards.length) T(c, 'いまは、とくにやることはないみたい。', a.x + 10, a.y + 10, 12, PCx.dim);
@@ -1338,9 +1608,11 @@ function adviceView(g) {
   };
   return v;
 }
-function goLabel(go) {
+function goLabel(go, g) {
   if (go.term) return `▶用語「${go.term}」`;
-  if (go.politics) return '▶政治アプリで見る';
+  if (go.govt) return `▶政府中枢「${GOVT_TABS[go.govt] || '概況'}」`;
+  if (go.politics) return g && deviceWord(g) === '手帳' ? '▶手帳の「政治」のページ' : '▶政治アプリで見る';
+  if (go.app) { const app = g ? appOf(g, go.app) : null; return `▶「${app ? PH.appName(app, g) : go.app}」をひらく`; }
   if (go.navi) return `▶${({ lessons: '政治のしくみ', quiz: '思想しんだん', missions: 'ミッション', glossary: '用語じてん' })[go.navi] || 'ひらく'}`;
   return '';
 }
@@ -1348,6 +1620,24 @@ async function followGo(g, ph, go) {
   if (!go) return null;
   if (go.term) return ph.open(termView(g, go.term));
   if (go.navi) return openTopic(g, ph, go.navi);
+  if (go.app) {
+    // another phone app (お仕事, 家計): it opens in this same phone, B comes back here
+    const app = appOf(g, go.app);
+    if (app && typeof app.open === 'function') { try { return await app.open(g); } catch (e) { console.error(e); } }
+    return null;
+  }
+  if (go.govt && typeof g.govtConsole === 'function') {
+    // the console is a full-screen scene. Opened from the navi it comes above the phone (the phone stays
+    // under it); when the console is already open under the phone, it switches to the tab and the phone
+    // is put away so the tab can be seen
+    const under = (g.scenes || []).some((s0) => s0 && s0.isGovtUI && !s0.closed);
+    try {
+      const r = g.govtConsole(go.govt, go.sub ? { sub: go.sub } : {});
+      if (under) { if (typeof ph.dismiss === 'function') ph.dismiss(); return null; }
+      return await r;
+    } catch (e) { console.error(e); }
+    return null;
+  }
   if (go.politics && typeof g.politicsScreen === 'function') {
     // the politics UI is a full-screen scene above the phone; the phone stays open under it
     try { return await g.politicsScreen(go.politics === 'dashboard' ? 'dashboard' : go.politics); } catch (e) { console.error(e); }

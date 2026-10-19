@@ -25,7 +25,7 @@
 
 import { Game } from './game.js';
 import * as POL from './politics.js';
-import { SW, SH, clamp, shade, makeCanvas, hash2 } from './util.js';
+import { SW, SH, clamp, shade, makeCanvas, hash2, fmtMoney } from './util.js';
 import { text, wrap, measure } from './draw.js';
 import { audio } from './audio.js';
 import { drawFaceHD } from './sprites.js';
@@ -361,6 +361,10 @@ function mark(c, x, y, col = K.amber) {
 }
 
 // ================================================================ geometry
+// portrait phones (2026-10 fix): the 640x360 console shrinks to ~412x232 CSS px; a zoomed view (×1.6 around the focus,
+// a large-text footer) is offered by a 「拡大表示」 button and remembered in flags.govtui.zoom
+const ZOOM = 1.6, ZOOM_FOOT = 46;
+function portraitView() { try { return typeof window !== 'undefined' && window.innerHeight > window.innerWidth * 1.2; } catch (e) { return false; } }
 const HEAD_H = 21;
 const TAB_Y = 23, TAB_H = 17;
 const BODY = { x: 4, y: 44, w: 632, h: 292 };
@@ -395,6 +399,8 @@ class GovtScene {
       tabRects: [], helpRect: { x: 0, y: 0, w: 0, h: 0 }, closeRect: { x: SW - 22, y: 2, w: 18, h: 17 }, tapAt: null, closed: false,
     });
     bindTap(g);
+    this.zoom = !!uiData(g).zoom; // the portrait zoom (flags.govtui.zoom, the player's choice)
+    this.zv = null; this.zpan = 0; this.zFocusKey = null; this.zoomRect = null;
     const i = tabIndex(opts && opts.tab);
     this.tabIdx = i >= 0 ? i : clamp(num(uiData(g).tab, 0), 0, TABS.length - 1);
     if (opts && opts.sub) this.tabState().sub = opts.sub;
@@ -412,10 +418,14 @@ class GovtScene {
     const T0 = this.tab;
     const key = typeof T0.tip === 'function' ? T0.tip(this) : T0.tip;
     if (first) tipKey(this.g, 'govt_open');
-    if (key) tipKey(this.g, key);
+    // (2026-10 fix) a tab's tip is sent only once the player stays on the tab (sweeping the tabs no longer queues a
+    // tip per tab), and tips queued for the other tabs are dropped
+    dropTabTips(this.g, key);
+    this.tipPending = key ? { key, at: this.t + 45 } : null;
   }
   setTab(i, sub) {
     i = clamp(i, 0, TABS.length - 1);
+    this.dropLockToasts();
     if (sub) this.st[TABS[i].id] = { ...(this.st[TABS[i].id] || {}), sub };
     if (i === this.tabIdx && !sub) return;
     this.tabIdx = i;
@@ -439,9 +449,11 @@ class GovtScene {
     for (const t of this.toasts) t.t++;
     this.toasts = this.toasts.filter((t) => t.t < t.life);
     const inp = g.input;
-    const tap = this.tapAt;
+    let tap = this.tapAt;
     this.tapAt = null;
     if (this.t < 3) return;
+    if (tap && this.zoom) { const w = this.zoomTap(tap, inp); if (w === true) { tap = null; if (this.closed) return; } else if (w) tap = w; }
+    else if (tap && !this.zoom && this.zoomRect && portraitView() && inR(tap.x, tap.y, this.zoomRect) && !this.modals.length) { (inp.pressedNow || {}).a = false; this.setZoom(true); tap = null; }
     const m = this.modals[this.modals.length - 1];
     if (m) {
       if (tap) this.tapModal(m, tap, inp);
@@ -449,6 +461,7 @@ class GovtScene {
       return;
     }
     if (this.busy > 0) return;
+    if (this.tipPending && this.t >= this.tipPending.at) { const k0 = this.tipPending.key; this.tipPending = null; tipKey(this.g, k0); }
     this.refresh();
     if (tap) this.handleTap(tap, inp);
     // MENU closes the console (as it closes the phone); the ？ is on the tab bar (→ past the last tab, or a tap)
@@ -572,7 +585,8 @@ class GovtScene {
   pick(o) { return this.openModal(pickModal(o)); }
   amount(o) { return this.openModal(amountModal(o)); }
   info(title, lines, o = {}) { return this.openModal(confirmModal({ title, lines: [].concat(lines), choices: ['OK'], ...o })); }
-  toast(s, color = K.amber) { this.toasts.unshift({ text: String(s), t: 0, life: 170, color }); if (this.toasts.length > 3) this.toasts.length = 3; }
+  toast(s, color = K.amber) { this.toasts.unshift({ text: String(s), t: 0, life: 170, color, lock: /^🔒/.test(String(s)) }); if (this.toasts.length > 3) this.toasts.length = 3; }
+  dropLockToasts() { this.toasts = this.toasts.filter((t) => !t.lock); }
   // show a core result: { ok, why, text }
   async result(title, r, okText = '') {
     if (!r) { await this.info(title, ['うまくいかなかった。']); return false; }
@@ -630,6 +644,8 @@ class GovtScene {
   close() {
     if (this.closed) return;
     this.closed = true;
+    this.tipPending = null;
+    dropTabTips(this.g, null); // the console's tab tips do not follow the player out of it
     for (const m of this.modals.splice(0)) m._res(null);
     this.g.pop(this);
     for (const s of this.g.scenes) if (s.isPhone) s.tapAt = null;
@@ -637,6 +653,23 @@ class GovtScene {
   }
   // ---------------------------------------------------------------- draw
   draw(c, g) {
+    if (!this.zoom) {
+      this.drawWorld(c, g);
+      this.drawToasts(c, 12, SH - 50);
+      if (portraitView()) this.drawZoomButton(c);
+      return;
+    }
+    // the zoomed view (portrait phones, 2026-10 fix): the world drawn larger around the focus, an overlay footer with
+    // the tip in large text and the buttons ◀ ▶ (pan) / 縮小 / ×
+    const v = this.zoomView(c);
+    c.save();
+    c.beginPath(); c.rect(0, 0, SW, v.h); c.clip();
+    c.scale(v.z, v.z); c.translate(-v.x, -v.y);
+    this.drawWorld(c, g);
+    c.restore();
+    this.drawZoomOverlay(c, v);
+  }
+  drawWorld(c, g) {
     drawBg(c);
     const d = this.data || {};
     try { this.tab.draw(c, this, d); } catch (e) { console.error(e); T(c, '（この画面を表示できなかった）', BODY.x + 10, BODY.y + 10, 12, K.bad); }
@@ -646,16 +679,101 @@ class GovtScene {
       c.globalAlpha = 0.66; R(c, 0, 0, SW, SH, '#02050a'); c.globalAlpha = 1;
       try { this.modals[i].draw(c, this); } catch (e) { console.error(e); }
     }
-    let ty = SH - 50;
+  }
+  drawToasts(c, size, y0) {
+    let ty = y0;
     for (const t of this.toasts) {
       const a = t.t < 6 ? t.t / 6 : t.life - t.t < 12 ? (t.life - t.t) / 12 : 1;
       c.globalAlpha = clamp(a, 0, 1);
-      const w = Math.min(SW - 40, measure(c, t.text, 12) + 26);
-      frame(c, (SW - w) / 2, ty, w, 20, '#0d1d2c', t.color);
-      T(c, t.text, SW / 2, ty + 4, 12, t.color, 'center', w - 14);
+      const w = Math.min(SW - 40, measure(c, t.text, size) + 26);
+      frame(c, (SW - w) / 2, ty, w, size + 8, '#0d1d2c', t.color);
+      T(c, t.text, SW / 2, ty + 4, size, t.color, 'center', w - 14);
       c.globalAlpha = 1;
-      ty -= 24;
+      ty -= size + 12;
     }
+  }
+  // ---------------------------------------------------------------- portrait zoom
+  setZoom(on) {
+    this.zoom = !!on;
+    uiData(this.g).zoom = this.zoom;
+    this.zv = null; this.zpan = 0;
+    sfx('cursor');
+  }
+  // the world window: { z, x, y, w, h (screen height used by the world), modal }
+  zoomView(c) {
+    const m = this.modals[this.modals.length - 1];
+    const footH = m ? 0 : ZOOM_FOOT;
+    let z = ZOOM, cx = SW / 2, cy = SH / 2;
+    if (m) {
+      const b = m._box || { x: SW / 2 - 210, y: 60, w: 420, h: 240 };
+      z = clamp(Math.min(ZOOM, SW / (b.w + 10), SH / (b.h + 10)), 1, ZOOM);
+      cx = b.x + b.w / 2; cy = b.y + b.h / 2;
+    } else if (this.focus === 'tabs') {
+      const r = this.cur._tabsHelp ? this.helpRect : this.tabRects[this.tabIdx] || { x: 0, y: 0, w: 0, h: 0 };
+      cx = r.x + r.w / 2; cy = 0;
+    } else {
+      const k = this.ctl();
+      if (k) {
+        const vw0 = SW / z;
+        cx = k.w > vw0 - 20 ? k.x + vw0 / 2 - 8 : k.x + k.w / 2;
+        if (k.list && k.list.n) { const top = k.list.top ? k.list.top() : 0; cy = k.y + num(k.list.y0) + (k.list.get() - top + 0.5) * num(k.list.rowH, 16); } else cy = k.y + k.h / 2;
+      }
+      const key = `${this.tabIdx}:${k ? k.id : ''}`;
+      if (key !== this.zFocusKey) { this.zFocusKey = key; this.zpan = 0; }
+    }
+    const vw = SW / z, vh = (SH - footH) / z;
+    const tx = clamp(cx - vw / 2 + (m ? 0 : num(this.zpan)), 0, SW - vw), ty = clamp(cy - vh / 2, 0, SH - vh);
+    const prev = this.zv;
+    const sm = (a, b) => (prev ? a + (b - a) * 0.35 : b);
+    const v = { z, x: prev && prev.z === z ? sm(prev.x, tx) : tx, y: prev && prev.z === z ? sm(prev.y, ty) : ty, w: vw, h: SH - footH, foot: footH, modal: !!m };
+    if (Math.abs(v.x - tx) < 0.5) v.x = tx;
+    if (Math.abs(v.y - ty) < 0.5) v.y = ty;
+    this.zv = v;
+    void c;
+    return v;
+  }
+  zoomButtons() {
+    const y = SH - ZOOM_FOOT + 3, h = ZOOM_FOOT - 6;
+    return { left: { x: 3, y, w: 34, h }, right: { x: 40, y, w: 34, h }, out: { x: SW - 118, y, w: 66, h }, close: { x: SW - 48, y, w: 45, h } };
+  }
+  drawZoomOverlay(c, v) {
+    if (v.modal) return;
+    const B = this.zoomButtons();
+    R(c, 0, SH - v.foot, SW, v.foot, K.head);
+    R(c, 0, SH - v.foot, SW, 1, K.amberDk);
+    const btn2 = (r, label, col, on = true) => { frame(c, r.x, r.y, r.w, r.h, on ? '#14283a' : '#0b1621', on ? col : K.ghost); T(c, label, r.x + r.w / 2, r.y + (r.h - 16) / 2, 16, on ? K.white : K.faint, 'center', r.w - 4); };
+    btn2(B.left, '◀', K.cyan, v.x > 0.5);
+    btn2(B.right, '▶', K.cyan, v.x < SW - v.w - 0.5);
+    btn2(B.out, '縮小', K.teal);
+    btn2(B.close, '×', K.dim);
+    const k = this.focus === 'body' ? this.ctl() : null;
+    let tip = '', col = K.cyan;
+    if (this.focus === 'tabs') tip = `${this.tab.label}：${this.tab.short || this.tab.about || ''}`;
+    else if (k) { const why = whyOf(k, this) || ''; if (why) { tip = `🔒 ${why}`; col = K.lock; } else tip = safe(() => (typeof k.tip === 'function' ? k.tip(this) : k.tip) || '', ''); }
+    if (tip) para(c, tip, 80, SH - v.foot + 4, SW - 80 - 124, 16, col, 19, 2);
+    this.drawToasts(c, 16, SH - v.foot - 30);
+  }
+  drawZoomButton(c) {
+    const r = this.zoomRect = { x: SW - 86, y: SH - 32, w: 82, h: 30 };
+    const blink = Math.floor(this.t / 30) % 2 === 0;
+    frame(c, r.x, r.y, r.w, r.h, '#123a44', blink ? K.selEdge : K.teal);
+    T(c, '拡大表示', r.x + r.w / 2, r.y + 7, 16, K.white, 'center', r.w - 6);
+  }
+  // a tap in the zoomed view: the overlay's buttons (true = handled), else the world point
+  zoomTap(tap, inp) {
+    const now = inp.pressedNow || {};
+    const v = this.zv;
+    if (!v) return null;
+    if (!v.modal && tap.y >= SH - v.foot) {
+      const B = this.zoomButtons();
+      now.a = false;
+      if (inR(tap.x, tap.y, B.out)) this.setZoom(false);
+      else if (inR(tap.x, tap.y, B.close)) { sfx('cancel'); this.close(); }
+      else if (inR(tap.x, tap.y, B.left)) { this.zpan = num(this.zpan) - v.w / 2; sfx('cursor'); }
+      else if (inR(tap.x, tap.y, B.right)) { this.zpan = num(this.zpan) + v.w / 2; sfx('cursor'); }
+      return true;
+    }
+    return { x: v.x + tap.x / v.z, y: v.y + tap.y / v.z };
   }
   drawFocus(c) {
     if (this.focus !== 'body' || this.modals.length) return;
@@ -766,6 +884,7 @@ function confirmModal(o) {
       const shown = lines.slice(0, 15);
       const h = 26 + shown.length * 15 + 8 + choices.length * 22 + 8;
       const b = modalBox(c, { ...o, w }, h);
+      this._box = { x: b.x, y: b.y, w, h }; // for the portrait zoom
       shown.forEach((l, i) => {
         const warn = /^⚠|^※|^【/.test(l);
         T(c, i === 14 && lines.length > 15 ? l + '…' : l, b.x + 14, b.y + 24 + i * 15, 12, warn ? (o.danger ? '#ffb0b8' : K.warn) : K.text, 'left', i === 14 && lines.length > 15 ? w - 26 : w - 16);
@@ -822,6 +941,7 @@ function pickModal(o) {
       const vis = Math.max(1, Math.min(items.length, Math.floor((300 - 30 - hs.length * 15 - fh) / rh)));
       const h = 26 + hs.length * 15 + (hs.length ? 6 : 0) + vis * rh + 10 + fh;
       const b = modalBox(c, { ...o, w }, h);
+      this._box = { x: b.x, y: b.y, w, h }; // for the portrait zoom
       hs.forEach((l, i) => T(c, l, b.x + 14, b.y + 24 + i * 15, 12, K.dim, 'left', w - 16));
       const ly = b.y + 24 + hs.length * 15 + (hs.length ? 6 : 0);
       if (this.idx < this.top) this.top = this.idx;
@@ -883,6 +1003,7 @@ function amountModal(o) {
       const shown = lines.slice(0, 6);
       const h = 26 + shown.length * 15 + 40 + 2 * 22 + 10;
       const b = modalBox(c, { ...o, w }, h);
+      this._box = { x: b.x, y: b.y, w, h }; // for the portrait zoom
       shown.forEach((l, i) => T(c, l, b.x + 14, b.y + 24 + i * 15, 12, K.text, 'left', w - 16));
       const vy = b.y + 26 + shown.length * 15 + 4;
       const vs = o.fmt ? o.fmt(this.v) : `${fmtN(this.v, step < 1 ? 1 : 0)}${o.unit || ''}`;
@@ -935,7 +1056,8 @@ function listCtl(ui, key, o) {
     list: {
       n, rowH: rh, y0, vis,
       get: () => clamp(num(st[key], 0), 0, Math.max(0, n - 1)),
-      set: (i) => { st[key] = clamp(i, 0, Math.max(0, n - 1)); if (o.onMove) o.onMove(ui, st[key]); },
+      // a new row: rebuild the controls at once (the option buttons' locks follow the row) and drop a stale lock toast
+      set: (i) => { const was = st[key]; st[key] = clamp(i, 0, Math.max(0, n - 1)); if (o.onMove) o.onMove(ui, st[key]); if (was !== st[key]) { ui.dirty(); ui.dropLockToasts(); } },
       top: () => num(st[tk], 0),
     },
   };
@@ -1317,7 +1439,9 @@ function drawBudgetSub(c, ui, d, st) {
   const rows = d.rows;
   const k = ui.ctls.find((q) => q.id === 'brow');
   if (!k) return; // a stale layout (the sub-view changed while a dialog was open): drawn on the next frame
-  panel(c, 4, 64, 318, 272, d.draft ? `${d.draft.fy}年度 予算案（編成中）` : '歳出（費目別）', { right: d.draft ? `案 ${cho(d.draft.total)}` : '当初予算・基準との差' });
+  // the draft as edited (←→ before A counts too): its total and its deficit, live (2026-10 fix)
+  const editTotal = rows.reduce((a, r) => a + num(st.edit && st.edit[r.id], r.value), 0);
+  panel(c, 4, 64, 318, 272, d.draft ? `${d.draft.fy}年度 予算案（編成中）` : '歳出（費目別）', { right: d.draft ? `案 ${cho(editTotal)}` : '当初予算・基準との差', rightColor: d.draft && Math.abs(editTotal - num(d.draft.total)) > 0.05 ? K.amber : undefined });
   T(c, '費目', 10, 82, 10, K.faint); T(c, '金額', 222, 82, 10, K.faint, 'right'); T(c, '基準比', 316, 82, 10, K.faint, 'right');
   const total = Math.max(1, rows.reduce((a, r) => a + num(r.value), 0));
   drawList(c, ui, k, (c2, i, x, y, w, rh, sel) => {
@@ -1335,20 +1459,32 @@ function drawBudgetSub(c, ui, d, st) {
   });
   // ---- the right column: revenue / spending bars, the selected item, the calendar
   const x = 326, w = 310;
-  panel(c, x, 64, w, 94, '歳入と歳出', { right: `公債依存度 ${pct(b.bondRatio)}` });
+  const dr = d.draft;
+  const revEst = dr && dr.revenueEst != null ? num(dr.revenueEst) : null;
+  const bondsEst = revEst != null ? Math.max(0, editTotal - revEst) : null;
+  const ratioEst = bondsEst != null && editTotal > 0 ? (bondsEst / editTotal) * 100 : null;
+  panel(c, x, 64, w, 94, dr ? `歳入と歳出（${dr.fy}年度・案）` : `歳入と歳出（${b.fy}年度）`, { right: ratioEst != null ? `公債依存度（案）${pct(ratioEst)}` : `公債依存度 ${pct(b.bondRatio)}`, rightColor: ratioEst != null && ratioEst > num(b.bondRatio) + 0.05 ? K.warn : undefined });
   const bw = w - 54;
   const bar = (yy, label, parts, tot) => {
     T(c, label, x + 6, yy, 10, K.dim);
     let bx = x + 46;
     for (const pt of parts) { const ww = Math.max(0, Math.round((pt.v / Math.max(1e-9, tot)) * bw)); if (ww > 0) R(c, bx, yy, Math.min(ww, x + 46 + bw - bx), 10, pt.col); bx += ww; }
   };
-  const revTotal = b.revenue.reduce((a, r) => a + num(r.value), 0);
-  bar(84, '歳入', b.revenue.map((r) => ({ v: num(r.value), col: REVENUE_COLORS[r.id] || '#8a90a6' })), revTotal);
-  bar(98, d.draft ? '歳出案' : '歳出', rows.map((r, i) => ({ v: num(st.edit && st.edit[r.id], r.value), col: SPEND_COLORS[i % SPEND_COLORS.length] })), total);
-  const lg = [['税収', `${cho(b.tax)}`, K.cyan], ['税外', cho(b.nontax), '#a0a0c0'], ['公債金', cho(b.bonds), K.bad]];
+  // a draft: this year's revenue mix as the estimate, the 公債金 from the draft's total
+  const revParts = dr && bondsEst != null ? [...b.revenue.filter((r) => r.id !== 'kosai'), { id: 'kosai', value: bondsEst }] : b.revenue;
+  const revTotal = revParts.reduce((a, r) => a + num(r.value), 0);
+  bar(84, dr ? '歳入見込' : '歳入', revParts.map((r) => ({ v: num(r.value), col: REVENUE_COLORS[r.id] || '#8a90a6' })), revTotal);
+  bar(98, dr ? '歳出案' : '歳出', rows.map((r, i) => ({ v: num(st.edit && st.edit[r.id], r.value), col: SPEND_COLORS[i % SPEND_COLORS.length] })), total);
+  const lg = [['税収', `${cho(b.tax)}`, K.cyan], ['税外', cho(b.nontax), '#a0a0c0'], ['公債金', cho(dr && bondsEst != null ? bondsEst : b.bonds), K.bad]];
   lg.forEach(([a, v, col], i) => { R(c, x + 8 + i * 100, 116, 6, 6, col); T(c, `${a} ${v}`, x + 17 + i * 100, 113, 10, K.text, 'left', 88); });
-  T(c, `PB ${sgn(b.primaryBalance, 1)}兆円・政府債務 GDP比${fmtN(b.debtRatio, 0)}%`, x + 8, 128, 10, K.dim, 'left', w - 16);
-  T(c, '※開始年度は実際の当初予算、その後はシミュレーション', x + 8, 141, 10, K.faint, 'left', w - 16);
+  if (dr && revEst != null) {
+    const kokusai = num((rows.find((r) => r.id === 'kokusai') || {}).value);
+    T(c, `PB（案）${sgn(revEst - (editTotal - kokusai), 1)}兆円・今年度の公債依存度 ${pct(b.bondRatio)}`, x + 8, 128, 10, K.dim, 'left', w - 16);
+    T(c, '※税収・税外収入は今年度なみと仮定した見込み', x + 8, 141, 10, K.faint, 'left', w - 16);
+  } else {
+    T(c, `PB ${sgn(b.primaryBalance, 1)}兆円・政府債務 GDP比${fmtN(b.debtRatio, 0)}%`, x + 8, 128, 10, K.dim, 'left', w - 16);
+    T(c, '※開始年度は実際の当初予算、その後はシミュレーション', x + 8, 141, 10, K.faint, 'left', w - 16);
+  }
   // selected item
   const r = rows[st.brow | 0];
   panel(c, x, 162, w, 106, r ? r.name : '費目', { right: r ? r.ministry || '' : '' });
@@ -1389,6 +1525,8 @@ function taxProcessLines(g, d) {
   const out = ['税率は、毎年の税制改正で変わる：', '① 与党の税制調査会が議論（秋〜12月）', '② 税制改正大綱（12月中旬）', '③ 「所得税法等の一部を改正する法律案」を1月の通常国会へ', '④ 成立すれば4月1日から施行（住民税は6月）', ''];
   if (tr) {
     out.push(`いまの段階：${REFORM_STAGE[tr.stage] || 'とくになし'}`);
+    for (const [id, x] of Object.entries(tr.proposals || {})) if (x) out.push(`あなたの提案：${(GV && GV.TAXES && GV.TAXES[id] ? GV.TAXES[id].short : id)} → ${x.rate}（${x.target}年度の改正として、${x.target - 1}年12月中旬の大綱で採否）`);
+    if (tr.taiko && tr.taiko.reasons) for (const [id, why] of Object.entries(tr.taiko.reasons)) out.push(`見送り：${(GV && GV.TAXES && GV.TAXES[id] ? GV.TAXES[id].short : id)}（${why}）`);
     for (const pl of (tr.plan || []).slice(0, 3)) out.push(`予定：${(GV && GV.TAXES && GV.TAXES[pl.id] ? GV.TAXES[pl.id].short : pl.id)} → ${pl.rate}（${pl.year}年${pl.month}月）${pl.why ? `・${pl.why}` : ''}`);
     for (const l of (tr.log || []).slice(-3)) out.push(`・${typeof l === 'string' ? l : l.text || ''}`);
   }
@@ -1403,12 +1541,20 @@ async function taxProposal(ui, d, t) {
   const why = safe(() => g.govtRefusal('tax', { id: t.id, value: v }), null);
   if (why) { await ui.info(`${t.name}：いまは提案できない`, [why], { color: K.lock }); return; }
   const nowWhy = safe(() => g.govtRefusal('tax', { id: t.id, value: v, now: true }), null);
+  // the voices about THIS change (2026-10 fix): for a cut, the tax's critics argue for it and its defenders against
+  const cut = v < t.rate;
+  const dir = cut ? '引き下げ' : '引き上げ';
+  const forV = (cut ? t.con : t.pro) || [], againstV = (cut ? t.pro : t.con) || [];
+  const pv = has(g, 'taxProposalPreview') ? safe(() => g.taxProposalPreview(t.id, v), null) : null;
+  const segTxt = pv && pv.segments && pv.segments.length ? `・支持 ${pv.segments.slice(0, 2).concat(pv.segments.slice(-2)).filter((x, i, a) => a.indexOf(x) === i).map((x) => `${SEG_SHORT[x.seg] || x.name}${x.v > 0 ? '↑' : '↓'}`).join(' ')}` : '';
   const lines = [
-    `${t.name}を ${t.rate}${t.unit} → ${v}${t.unit} にする税制改正を提案する。`,
-    `【賛成の声】${(t.pro || []).slice(0, 2).join('／') || '—'}`,
-    `【反対の声】${(t.con || []).slice(0, 2).join('／') || '—'}`,
+    `${t.name}を ${t.rate}${t.unit} → ${v}${t.unit} に${dir}る税制改正を提案する。`,
+    pv ? `見込み：${pv.local ? '地方の' : '国の'}税収 年${pv.revenue >= 0 ? '+' : '−'}${fmtN(Math.abs(pv.revenue), 1)}兆円${segTxt}` : null,
+    `【${dir}に賛成の声】${forV.slice(0, 2).join('／') || '—'}`,
+    `【${dir}に反対の声】${againstV.slice(0, 2).join('／') || '—'}`,
+    pv && pv.odds ? `【与党税調の見通し】${pv.odds.label}${pv.odds.why ? `（${pv.odds.why}）` : ''}` : null,
     '流れ：与党税調 → 税制改正大綱（12月）→ 法案（1月の国会）→ 施行（4月）。税調が認めないこともある。',
-  ];
+  ].filter(Boolean);
   const choices = ['与党税調に提案する', nowWhy ? '臨時の税制改正（いまはできない）' : '臨時の税制改正法案を今国会に出す', 'やめる'];
   const k = await ui.confirm({ title: `税制改正：${t.name}`, lines, choices, index: 0, cancel: 2, w: 480 });
   if (k === 0) { const r = safe(() => g.setTaxRate(t.id, v), null); if (r && r.ok) delete st.target[t.id]; await ui.result('税制改正の提案', r); }
@@ -1438,7 +1584,8 @@ function drawTaxSub(c, ui, d, st) {
     else if (t.pending && t.pending.length) right = `→${t.pending[0].rate}（${t.pending[0].year}.${t.pending[0].month}）`;
     else if (t.proposal) right = `提案中 ${t.proposal.rate}`;
     T(c2, right, x + w - 4, y + 2, 12, changed ? K.amber : K.cyan, 'right', 110);
-    if (t.rejected != null) T(c2, `税調が見送り：${t.rejected}`, x + w - 4, y + 14, 10, K.bad, 'right', 110);
+    if (t.proposal && (sel || changed)) T(c2, `提案中 ${t.proposal.rate}${t.unit}`, x + w - 4, y + 14, 10, K.amber, 'right', 110);
+    else if (t.rejected != null) T(c2, `税調が見送り：${t.rejected}`, x + w - 4, y + 14, 10, K.bad, 'right', 110);
     else if (t.revenue != null) T(c2, `税収 ${cho(t.revenue)}`, x + w - 4, y + 14, 10, K.faint, 'right', 110);
   });
   // the pipeline (与党税調 → 大綱 → 法案 → 施行)
@@ -1446,14 +1593,19 @@ function drawTaxSub(c, ui, d, st) {
   const pk = ui.ctls.find((q) => q.id === 'tax_pipeline');
   panel(c, pk.x, pk.y, pk.w, pk.h, '税制改正の流れ', { right: 'A：くわしく' });
   const stages = [['chosakai', '与党税調'], ['taiko', '大綱（12月）'], ['bill', '法案（国会）'], ['enacted', '施行（4月）']];
-  const at = tr ? { idle: -1, none: -1, failed: -1, chosakai: 0, taiko: 1, bill: 2, enacted: 3 }[tr.stage] : -1;
+  const props = tr ? Object.entries(tr.proposals || {}).filter(([, x]) => x) : [];
+  const waiting = props.length && tr && ['idle', 'none', 'failed', 'enacted'].includes(tr.stage);
+  const at = tr ? (waiting ? 0 : { idle: -1, none: -1, failed: -1, chosakai: 0, taiko: 1, bill: 2, enacted: 3 }[tr.stage]) : -1;
   stages.forEach(([, lab], i) => {
     const bx = pk.x + 8 + i * 77;
     frame(c, bx, pk.y + 22, 70, 16, i === at ? '#3a2a0a' : i < at ? '#0f2a1a' : '#0b1621', i === at ? K.amber : i < at ? K.good : K.edge);
     T(c, lab, bx + 35, pk.y + 24, 10, i === at ? K.amber : i < at ? K.good : K.dim, 'center', 66);
     if (i < 3) T(c, '→', bx + 73, pk.y + 24, 10, K.faint, 'center');
   });
-  T(c, tr ? REFORM_STAGE[tr.stage] || 'いまは税制改正の動きはない' : '（税制のコアは準備中）', pk.x + 8, pk.y + 40, 10, K.text, 'left', pk.w - 16);
+  const propTxt = props.map(([id, x]) => { const tt = taxes.find((q) => q.id === id); return `${tt ? tt.short : id}${x.rate}${tt ? tt.unit : ''}`; }).join('・');
+  const stageTxt = waiting ? `提案を受付中：${propTxt}（10月から税調で審議→12月中旬の大綱で決まる）`
+    : tr ? `${REFORM_STAGE[tr.stage] || 'いまは税制改正の動きはない'}${props.length && tr.stage === 'chosakai' ? `・あなたの提案：${propTxt}` : ''}` : '（税制のコアは準備中）';
+  T(c, stageTxt, pk.x + 8, pk.y + 40, 10, waiting ? K.amber : K.text, 'left', pk.w - 16);
   // the selected tax
   const t = taxes[st.trow | 0];
   const x = 326, w = 310;
@@ -1898,12 +2050,27 @@ async function demoJoin(ui, dm) {
   if (k < 0 || k === 2) return;
   await ui.result('デモ', safe(() => ui.g.joinDemo(dm.id, { role: k === 1 ? 'speaker' : 'participant' }), null));
 }
+// 主催 (2026-10 fix): a cause with a live issue (the core's reason greys the others out), then a confirmation with the
+// cost, the permit and the place.
+const DEMO_PLACES_UI = () => (GV && GV.DEMO_PLACES) || ['国会議事堂前', '首相官邸前', '日比谷公園', 'ドット区 駅前広場'];
+const demoCostText = () => fmtMoney((GV && GV.DEMO_COST) || 30000);
+function demoCauseItems(g) {
+  return DEMO_CAUSES.map(([id, label]) => ({ label, sub: id === 'rally' ? '政府を応援する集会' : '政府や政策への抗議', id, why: has(g, 'govtRefusal') ? safe(() => g.govtRefusal('demo_organize', { against: id }), null) : null }));
+}
+function demoConfirmLines(label) {
+  return [`「${label}」デモ・集会を主催する。`, `準備のお金 ${demoCostText()}（音響・プラカード）。公安条例にもとづき公安委員会に許可を申請し、あすから開く。`, '暴力や施設の占拠はしない、平和的な集会にする（憲法21条：集会・表現の自由）。', '場所をえらぶ：'];
+}
 async function demoOrganize(ui) {
-  const items = DEMO_CAUSES.map(([id, label]) => ({ label, sub: id === 'rally' ? '政府を応援する集会' : '政府や政策への抗議', id }));
-  const i = await ui.pick({ title: 'デモを主催する', lines: ['公安条例にもとづく許可をとり、あすから行う。準備のお金がいる。'], items, w: 420 });
+  const g = ui.g;
+  const items = demoCauseItems(g);
+  const i = await ui.pick({ title: 'デモを主催する', lines: ['何を訴える？（いま起きていることについてだけ主催できる）'], items, w: 440 });
   if (i == null || i < 0) return;
   const [against, label] = DEMO_CAUSES[i];
-  await ui.result('デモの主催', safe(() => ui.g.organizeDemo({ cause: label, against }), null));
+  if (items[i].why) return;
+  const places = DEMO_PLACES_UI();
+  const k = await ui.confirm({ title: 'デモの主催', lines: demoConfirmLines(label), choices: [...places.map((pl) => `${pl}で主催する`), 'やめる'], index: places.length - 1, cancel: places.length, w: 460 });
+  if (k == null || k < 0 || k >= places.length) return;
+  await ui.result('デモの主催', safe(() => g.organizeDemo({ cause: label, against, place: places[k] }), null));
 }
 async function demoRespond(ui, dm) {
   if (!dm) return;
@@ -1923,8 +2090,23 @@ async function demoRespond(ui, dm) {
 }
 
 // ================================================================ tab 5: 国会
-const PIPE = [['draft', '提出'], ['committee', '委員会'], ['shugi', '衆議院'], ['sangi', '参議院'], ['enacted', '成立']];
-function billStageIdx(b) { const s = b.stage === 'referendum' ? 'sangi' : b.stage; const i = PIPE.findIndex(([k]) => k === s); return i < 0 ? 0 : i; }
+// The bill's way (2026-10 fix: never shown going backwards): 提出 → the first house (委員会 → 本会議) → the second house
+// (委員会 → 本会議) → 成立, in the order of the bill's own houses (a bill may start in the 参院). The 衆院's re-vote after the
+// 参院 said no is the last house step (再可決); an amendment's 国民投票 sits on the last step.
+function billPipe(b) {
+  const h1 = b.first || b.house || 'shugi';
+  const h2 = h1 === 'shugi' ? 'sangi' : 'shugi';
+  const H = { shugi: '衆', sangi: '参' };
+  const labels = ['提出', `${H[h1]}委員会`, `${H[h1]}本会議`, `${H[h2]}委員会`, b.revote ? '衆再可決' : `${H[h2]}本会議`, b.stage === 'referendum' ? '国民投票' : '成立'];
+  let at = 0;
+  if (b.stage === 'draft') at = 0;
+  else if (b.stage === 'enacted' || b.stage === 'referendum') at = 5;
+  else if (b.revote) at = 4;
+  else if (!b.first) at = b.stage === 'committee' ? 1 : 2;
+  else at = b.stage === 'committee' ? 3 : 4;
+  return { labels, at };
+}
+function billStageIdx(b) { return billPipe(b).at; }
 const TAB_DIET = {
   id: 'diet', label: '国会', short: '議席・法案の流れ・国会戦術・政権交代', lesson: 'houritsu',
   tip: 'govt_seats',
@@ -1948,6 +2130,12 @@ const TAB_DIET = {
     const oppWhy = (id) => { const o = d.opp && (d.opp.opposition || []).find((x) => x.id === id); return o ? o.why : R0(id); };
     const rulWhy = (id) => { const o = d.opp && (d.opp.ruling || []).find((x) => x.id === id); return o ? o.why : R0(id); };
     const OA = (GV && GV.OPPOSITION_ACTIONS) || {}, RA = (GV && GV.RULING_ACTIONS) || {};
+    // attendance first (2026-10 fix): the duty of every member; the cabinet's is 答弁
+    d.att = has(g, 'attendance') ? safe(() => g.attendance(), null) : null;
+    if (d.att) {
+      const A = d.att;
+      acts.push({ id: 'attend', grp: '議員', label: A.today ? '今日の国会：出席ずみ' : A.cabinet ? '国会に出席する（答弁・体力5）' : '今日の国会に出席する（体力5）', desc: `出席：${A.text}`, why: has(g, 'attendBlock') ? safe(() => g.attendBlock(), null) : null });
+    }
     acts.push({ id: 'bill', grp: '議員', label: '法案を出す（政策をつくる）', desc: '議員立法（議員が出す）か閣法（内閣が出す）。政策・法案の画面へ', why: role && (role.diet || role.pm || role.kind === 'minister') ? null : '法律案を出せるのは国会議員か内閣だけ' });
     for (const id of ['shitsumon_shuisho', 'yosan_shitsugi', 'taian', 'kyoto', 'shingi_kyohi', 'fushinnin']) if (OA[id] || d.opp) acts.push({ id, grp: '野党', label: (OA[id] || {}).label || id, desc: `${(OA[id] || {}).desc || ''}${OA[id] && OA[id].law && OA[id].law !== '—' ? `（${OA[id].law}）` : ''}`, why: oppWhy(id) });
     for (const id of ['kokutai', 'kyoko', 'key_bill']) if (RA[id] || d.opp) acts.push({ id, grp: '与党', label: (RA[id] || {}).label || id, desc: (RA[id] || {}).desc || '', why: rulWhy(id) || (!d.billId && id !== 'kyoko' ? '先に左の一覧で法案をえらぶ' : null) });
@@ -2007,17 +2195,19 @@ const TAB_DIET = {
       const tw = measure(c2, tags, 10) + 6;
       T(c2, b.title, x + 6, y + 1, 10, b.by === 'player' ? K.amber : K.text, 'left', w - tw - 10);
       T(c2, tags, x + w - 4, y + 1, 10, b.key ? K.warn : K.faint, 'right', tw);
-      const at = billStageIdx(b);
-      PIPE.forEach(([k2, lab], j) => {
-        const bx = x + 6 + j * 60;
+      const { labels, at } = billPipe(b);
+      const sw2 = Math.floor((w - 8) / labels.length);
+      labels.forEach((lab, j) => {
+        const bx = x + 6 + j * sw2;
         const on = j === at;
-        const l2 = k2 === 'committee' ? `${b.house === 'sangi' ? '参' : '衆'}・委員会` : lab;
-        R(c2, bx, y + 14, 56, 9, j < at ? '#123a24' : on ? '#3a2a0a' : '#0b1621');
-        T(c2, l2, bx + 28, y + 13, 10, j < at ? K.good : on ? K.amber : K.faint, 'center', 54);
+        R(c2, bx, y + 14, sw2 - 3, 9, j < at ? '#123a24' : on ? '#3a2a0a' : '#0b1621');
+        T(c2, lab, bx + (sw2 - 3) / 2, y + 13, 10, j < at ? K.good : on ? K.amber : K.faint, 'center', sw2 - 4);
       });
     }, { empty: d.p.diet.session ? '審議中の法案はない' : '国会は閉会中。審議中の法案はない' });
     // ---- actions
-    panel(c, 322, 170, 314, 104, '国会での行動', { right: ui.role0 ? ui.role0.label : '' });
+    const A = d.att;
+    const attTxt = A && A.member && A.session ? (A.today ? '今日は出席ずみ' : A.absent ? `欠席${A.absent}日連続` : '今日はまだ出席していない') : '';
+    panel(c, 322, 170, 314, 104, '国会での行動', { right: attTxt || (ui.role0 ? ui.role0.label : ''), rightColor: A && !A.today && A.absent >= 3 ? K.bad : A && A.today ? K.good : undefined });
     drawList(c, ui, ui.ctls.find((q) => q.id === 'act'), (c2, i, x, y, w) => {
       const a = d.acts[i];
       chip(c2, x + 4, y + 2, a.grp, a.grp === '野党' ? '#2a3a5a' : a.grp === '与党' ? '#3a2a1a' : a.grp === '総理' ? '#4a2a10' : '#1a3a3a', K.white, 10);
@@ -2060,6 +2250,17 @@ async function dietAction(ui, d, a) {
   const g = ui.g;
   const st = ui.tabState();
   if (a.id === 'bill') { await ui.away(() => g.politicsScreen('policy')); return; }
+  if (a.id === 'attend') {
+    const r = safe(() => g.attendDiet(), null);
+    if (r && r.ok) {
+      const p = polOf(g);
+      const house = p && p.me.office === 'sangi' ? '参議院' : '衆議院';
+      const bills = r.bills || [];
+      r.text = `${house}の${r.cabinet ? '本会議・委員会に出て、答弁に立った' : '本会議と委員会に出席した'}。\n${bills.length ? `今日の審議：${bills.slice(0, 2).map((b) => `「${b.title}」`).join('・')}${bills.length > 2 ? `ほか${bills.length - 2}本` : ''}` : '今日の本会議に採決はなく、委員会の質疑が続いた。'}\n欠席の記録はリセットされた（党内の評価が少し上がった）。`;
+    }
+    await ui.result('国会に出席', r);
+    return;
+  }
   if (a.id === 'questions') {
     const qs = (d.opp && d.opp.questions) || [];
     const lines = qs.length ? qs.slice(-8).reverse().flatMap((q) => [`【${q.title || q.topic}】${q.answered ? '答弁ずみ' : `答弁は${safe(() => dateLabel(g, q.due).replace(/^\d+年/, ''), '')}ごろ`}`, q.answer ? `　${q.answer.title}：${q.answer.text}` : '']).filter(Boolean) : ['まだ質問主意書は出されていない。'];
@@ -3027,6 +3228,17 @@ const CUSTOM_TIPS = {
   govt_network: '政策マップでは、法律や法案が景気などの指標と、有権者のどの層に効くかを線で見られるよ。緑はプラス、赤はマイナス。',
   govt_ideology: '思想に正解はないよ。軸を変えると、政党や議員の位置の見え方も変わる。思想じてんで、考えと実際の歴史の両方を読んでみてね。',
 };
+// the console's tab tips (one per tab / sub-view): a queued one about another tab is dropped on a tab change
+const TAB_TIP_KEYS = new Set(['govt_approval', 'govt_budget', 'govt_tax', 'govt_network', 'govt_voices', 'govt_demo', 'govt_seats', 'govt_ministries', 'sdf_order', 'war_warning', 'disaster_first', 'regime_press', 'amendment', 'govt_ideology', 'govt_religion', 'govt_postal']);
+function dropTabTips(g, keep) {
+  const drop = [...TAB_TIP_KEYS].filter((k) => k !== keep);
+  if (has(g, 'assistTipClear')) { safe(() => g.assistTipClear(drop)); return; }
+  // without assist.js's own call: its queue (g._naviTips, see api_assist.txt) is filtered here; the shown one stays seen
+  const b = g && g._naviTips;
+  if (!b || typeof b !== 'object') return;
+  if (Array.isArray(b.queue)) b.queue = b.queue.filter((q) => !q || !drop.includes(q.key));
+  if (b.cur && drop.includes(b.cur.key)) b.cur = null;
+}
 function tipKey(g, key, force = false) {
   if (!key || !has(g, 'assistTip')) return;
   const own = CUSTOM_TIPS[key] && !(AS && AS.TIPS && AS.TIPS[key]);
@@ -3135,9 +3347,13 @@ async function voiceRowAction(g, r) {
   if (r.kind === 'org') {
     const why = has(g, 'govtRefusal') ? safe(() => g.govtRefusal('demo_organize'), null) : 'しくみがない';
     if (why) { await PH.phoneInfo(g, { title: 'デモの主催', color: APP_VOICE, lines: ['いまは主催できない：', why] }); return; }
-    const i = await PH.phoneList(g, { title: '何を訴える？', color: APP_VOICE, items: DEMO_CAUSES.map(([, l]) => ({ label: l })) });
+    const items = demoCauseItems(g).map((it) => ({ label: it.label, sub: it.why ? `🔒 ${it.why}` : it.sub, disabled: !!it.why, why: it.why }));
+    const i = await PH.phoneList(g, { title: '何を訴える？', color: APP_VOICE, items });
     if (i < 0) return;
-    const res = safe(() => g.organizeDemo({ cause: DEMO_CAUSES[i][1], against: DEMO_CAUSES[i][0] }), null);
+    const places = DEMO_PLACES_UI();
+    const k = await PH.phoneConfirm(g, { title: 'デモの主催', color: APP_VOICE, text: `「${DEMO_CAUSES[i][1]}」を主催する。\n準備のお金 ${demoCostText()}。公安委員会に許可を申請し、あすから開く。\n場所は？`, choices: [...places, 'やめる'] });
+    if (k == null || k < 0 || k >= places.length) return;
+    const res = safe(() => g.organizeDemo({ cause: DEMO_CAUSES[i][1], against: DEMO_CAUSES[i][0], place: places[k] }), null);
     await PH.phoneInfo(g, { title: 'デモの主催', color: APP_VOICE, lines: [res && res.ok ? res.text || '主催の届け出をした。' : `できなかった：${(res && res.why) || ''}`] });
     return;
   }
@@ -3172,8 +3388,11 @@ async function kokkaiApp(g) {
     const todayBills = has(g, 'billsList') ? safe(() => g.billsList({ today: true }), []) : [];
     const pend = (p.diet.bills || []).filter((b) => b.kind !== 'noconfidence' && !['enacted', 'rejected', 'shelved'].includes(b.stage));
     const recent = (p.diet.bills || []).filter((b) => ['enacted', 'rejected', 'shelved'].includes(b.stage) && today(g) - num(b.closed, -99) <= 12).slice(-5).reverse();
+    const att = has(g, 'attendance') ? safe(() => g.attendance(), null) : null;
     const items = [
       { t: 'session', label: S ? `${S.kind}・会期中` : '国会は閉会中', sub: sessionText(g) },
+      // the member's attendance (2026-10 fix): 出席ずみ / 欠席n日 and 「国会に出席する」
+      ...(att && att.member && att.session ? [{ t: 'attend', label: att.today ? '国会：今日は出席ずみ' : att.cabinet ? '国会に出席する（答弁）' : '国会に出席する', sub: att.text, right: att.today ? '✓' : att.absent ? `欠席${att.absent}日` : '', rightColor: att.today ? PC.good : att.absent >= 3 ? PC.bad : PC.dim }] : []),
       { t: 'today', label: '今日の国会', sub: todayBills.length ? `本会議の採決：${todayBills.length}本` : S ? '本会議の採決はない（委員会で審議）' : '閉会中' },
       ...pend.slice(0, 12).map((b) => ({ t: 'bill', b, label: b.title, sub: plainStage(b) })),
       ...recent.map((b) => ({ t: 'bill', b, label: `【${b.stage === 'enacted' ? '成立' : b.stage === 'rejected' ? '否決' : '廃案'}】${b.title}`, sub: plainStage(b) })),
@@ -3184,7 +3403,11 @@ async function kokkaiApp(g) {
     if (i < 0) return;
     index = i;
     const it = items[i];
-    if (it.t === 'session') await PH.phoneInfo(g, { title: '国会', color: APP_KOKKAI, lines: [sessionText(g), '', '通常国会は毎年1月に召集（会期150日）。臨時国会・特別国会もある。法律は衆参両院で可決して成立し、衆議院は出席議員の3分の2で再可決できる。'] });
+    if (it.t === 'attend') {
+      const r = safe(() => g.attendDiet(), null);
+      const house = p.me.office === 'sangi' ? '参議院' : '衆議院';
+      await PH.phoneInfo(g, { title: '国会に出席', color: APP_KOKKAI, lines: r && r.ok ? [`${house}の${r.cabinet ? '本会議・委員会に出て、答弁に立った' : '本会議と委員会に出席した'}。`, (r.bills || []).length ? `今日の審議：${r.bills.length}本` : '今日の本会議に採決はなかった。', '欠席の記録はリセットされた。'] : ['出席できない：', (r && r.why) || '—'] });
+    } else if (it.t === 'session') await PH.phoneInfo(g, { title: '国会', color: APP_KOKKAI, lines: [sessionText(g), '', '通常国会は毎年1月に召集（会期150日）。臨時国会・特別国会もある。法律は衆参両院で可決して成立し、衆議院は出席議員の3分の2で再可決できる。'] });
     else if (it.t === 'today') await PH.phoneInfo(g, { title: '今日の国会', color: APP_KOKKAI, lines: todayBills.length ? todayBills.map((b) => `・${b.title}\n　${plainStage(b)}`) : [S ? '今日の本会議に採決はない。委員会で法案の質疑が続いている。' : '国会は閉会中。'] });
     else if (it.t === 'bill') await PH.phoneInfo(g, { title: '法案', color: APP_KOKKAI, lines: [it.b.title, `いま：${plainStage(it.b)}`, '', ...billLines(g, it.b).slice(1)] });
     else if (it.t === 'questions') {
@@ -3210,19 +3433,30 @@ function accessFor(role, tab) {
   };
   return M[tab] || '見るだけ';
 }
+// the alerts of govtSummary() as the launcher's first rows (2026-10 fix: the badge's reason is shown) → the tab
+const ALERT_GO = { budget: ['budget', 'budget', '来年度予算の配分を決められる'], taxReform: ['budget', 'tax', '税制改正：税調で審議中'], keyBill: ['diet', null, '最重要法案が参院で否決'], demo: ['opinion', null, 'デモへの政府の対応'], answer: ['diet', null, '答弁書が届いた'] };
+function launcherAlerts(g) {
+  const r = govtRole(g);
+  if (r.kind !== 'pm' && r.kind !== 'minister') return [];
+  const s = has(g, 'govtSummary') ? safe(() => g.govtSummary(), null) : null;
+  return s && Array.isArray(s.alerts) ? s.alerts : [];
+}
 async function launcherApp(g) {
   const PH = { phoneInfo, phoneList, phoneConfirm };
-  let index = 1;
+  let index = -1;
   for (let guard = 0; guard < 40; guard++) {
     const role = govtRole(g);
+    const alerts = launcherAlerts(g).slice(0, 4).map((a) => { const go = ALERT_GO[a.kind] || ['overview', null, 'お知らせ']; const t = TABS.find((x) => x.id === go[0]); return { label: `⚠ ${go[2]}`, sub: `${a.text}`, right: t ? t.label : '', rightColor: PC.bad, tab: go[0], subId: go[1], full: a.text }; });
     const items = [
+      ...alerts,
       { label: `あなた：${role.label}`, sub: ROLE_NOTE[role.kind], tab: null },
       ...TABS.map((t) => ({ label: t.label, sub: accessFor(role, t.id), right: safe(() => (t.alert ? t.alert({ g, tabState: () => ({}) }) : 0), 0) ? '●' : '', rightColor: PC.bad, tab: t.id })),
     ];
-    const i = await PH.phoneList(g, { title: '政府中枢', color: APP_GOVT, items, index, describe: (k) => (items[k] && items[k].tab ? (TABS.find((t) => t.id === items[k].tab) || {}).about || '' : 'A：概況から開く') });
+    if (index < 0) index = alerts.length ? 0 : alerts.length + 1;
+    const i = await PH.phoneList(g, { title: '政府中枢', color: APP_GOVT, items, index: clamp(index, 0, items.length - 1), describe: (k) => (items[k] && items[k].full ? `${items[k].full}（Aで開く）` : items[k] && items[k].tab ? (TABS.find((t) => t.id === items[k].tab) || {}).about || '' : 'A：概況から開く') });
     if (i < 0) return;
     index = i;
-    await openGovtConsole(g, { tab: items[i].tab || 'overview' });
+    await openGovtConsole(g, { tab: items[i].tab || 'overview', sub: items[i].subId || undefined });
   }
 }
 function drawBubbles(c, x, y) {
@@ -3244,7 +3478,15 @@ registerPhoneApp('kokkai_live', {
     R(c, x + 5, y + 13, 14, 4, '#ece6d4'); R(c, x + 9, y + 9, 6, 4, '#ece6d4'); R(c, x + 11, y + 6, 2, 3, '#ddd4bc');
     R(c, x + 8, y + 20, 8, 2, '#1a2a44'); R(c, x + 18, y + 5, 3, 3, '#ff3b4f');
   },
-  badge: (g) => { const r = govtRole(g); return r.diet && has(g, 'billsList') ? safe(() => g.billsList({ today: true }).length, 0) : 0; },
+  // Diet members: today's business while not yet attended (and a reminder once absent 3 days or more)
+  badge: (g) => {
+    const r = govtRole(g);
+    if (!r.diet) return 0;
+    const a = has(g, 'attendance') ? safe(() => g.attendance(), null) : null;
+    if (a && (!a.session || a.today)) return 0;
+    const n = has(g, 'billsList') ? safe(() => g.billsList({ house: polOf(g).me.office, today: true }).length, 0) : 0;
+    return Math.min(9, Math.max(n, a && a.absent >= 3 ? 1 : 0));
+  },
   cond: (g) => has(g, 'pol'),
   open: (g) => kokkaiApp(g),
 });

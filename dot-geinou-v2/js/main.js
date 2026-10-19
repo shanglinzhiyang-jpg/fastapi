@@ -317,12 +317,20 @@ function debugPM(g, party = 'jimin', share = 0.62) {
   if (!p.me.posts.includes('party_leader')) p.me.posts.push('party_leader');
   p.flags.skipPlayerPM = false;
   g.electPM();
+  // (2026-10 fix) the moved seats: ねじれ and the approval's parts recomputed by a poll taken now (testers are not misled
+  // by the last poll's numbers); the era jump has no poll yet otherwise (支持なし 0%)
+  if (typeof g.politicsPollNow === 'function') g.politicsPollNow();
+  else { const n = (H) => (p.cabinet.partyIds || []).reduce((a, q) => a + (H.seats[q] || 0), 0); p.flags.nejire = n(p.diet.shugi) > p.diet.shugi.total / 2 && n(p.diet.sangi) <= p.diet.sangi.total / 2; }
   return id;
 }
 function debugSession(g) { const p = g.pol(); if (!p.diet.session) p.diet.session = { kind: '臨時国会', start: g.state.day, end: g.state.day + 30 }; }
 function debugEmergency(g) {
   if (typeof g.regime !== 'function') return false;
-  debugPM(g, 'own', 0.75);
+  // already the PM of a fictional party the player leads: keep that cabinet (no new 首班指名 → no cheerful 組閣 scene)
+  const p0 = g.pol(), mine = p0.parties[p0.me.party];
+  if (!(p0.cabinet.pm === 'player' && mine && !mine.real && mine.leader === 'player')) debugPM(g, 'own', 0.75);
+  // the 組閣 scene of the debug's own 首班指名 would play the next night inside the emergency: dropped
+  try { const s = typeof g.govt === 'function' ? g.govt() : null; if (s && s.seiken && Array.isArray(s.seiken.queue)) s.seiken.queue.length = 0; } catch (e) { console.error(e); }
   debugSession(g);
   const r = g.state.regime;
   if (r && r.id === 'democracy') { r.steps.clause = true; r.steps.clauseDay = g.state.day; }

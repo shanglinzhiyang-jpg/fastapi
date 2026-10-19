@@ -54,6 +54,8 @@
 // g.regimeHold(kind, ...)   → politics.js hook ('election' | 'diet')
 // g.regimeNews(n)           → recent lines; g.regimeLabel() → { label, why }; g.regimeRecord() → the life's record
 // g.regimeFlush()           → Promise: run the queued scenes now (UIs call it after an action)
+// g.regimeBarred(who='player') → null | reason: the former PM of the emergency / dictatorship (stepped down or removed)
+//                              gets no cabinet post again, 内閣総理大臣 included (state.regime.barred; NPCs → null)
 // g.startDisaster(opts)     → test / debug: start a fictional disaster now ({ kind, place, tier })
 // onRegime events: 'step', 'regime' (from, to), 'press', 'sdf', 'disaster' (phase), 'war', 'fall', 'trial'
 // State: g.state.regime (see newRegimeState; old saves get the defaults).
@@ -2462,7 +2464,7 @@ const SCENES = {
       opts.push({ label: 'このまま続ける', value: null });
       const pages = num(data.level) >= 80
         ? ['前線が崩れかけている。\n参謀は青ざめている。「敗戦は、時間の問題です」', `死者は兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人にのぼった。\n厭戦の声は、もう抑えきれない。`]
-        : [`前線が押し戻されている。戦況：${frontText(w.front)}。\n参謀は言う。「このままでは、いずれ前線が崩れます」`, `死者は兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人にのぼった。\n各国の制裁で、弾薬も燃料も足りなくなっている。`];
+        : ['前線が押し戻されている。\n参謀は言う。「このままでは、いずれ前線が崩れます」', `死者は兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人にのぼった。\n各国の制裁で、弾薬も燃料も足りなくなっている。`];
       pages.push(`（命令は${deviceName(g)}の「危機管理」→「戦争（もしも）」からも出せる）`);
       await show(g, { art: 'war', title: '戦況の悪化', sub: `${nat.name}（架空の国）`, front: w.front, pages, options: opts, prompt: num(data.level) >= 80 ? '敗戦か、停戦か。どうする？' : 'どうする？', then: async (v) => { if (v) { const res = warOrder(g, v); if (res.text || res.why) await say(g, res.text || res.why); } } });
     }
@@ -2818,7 +2820,7 @@ export function installRegime(proto) {
     const res = await orig.apply(this, a);
     try {
       const r = this.state && this.state.regime;
-      if (r && r.id === 'fallen' && r.fall && num(r.fall.day) === today(this) && R(this).queue.some((q) => q.id === 'downfall')) {
+      if (r && r.id === 'fallen' && r.fall && R(this).queue.some((q) => q.id === 'downfall')) {
         this.morningNotes = [];
         this.lastMorning = null;
         this.toasts = [];

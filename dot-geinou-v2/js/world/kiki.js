@@ -34,6 +34,7 @@ const SEG_SHORT = { young: '若者', families: '子育て', elderly: '高齢者'
 const MSG_W = SW - 64; // the message window's text width (ui.js: BOX.w - 40), 16 px
 const NO_START = new Set('、。，．・：；？！ー～…‥）」』】〕〉》’”ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ!?.,)]}%％'.split(''));
 const NO_END = new Set('（「『【〔〈《‘“([{'.split(''));
+const SOFT = new Set('・、　 '.split(''));
 const TOKEN = /⁠?[−\-]?[0-9０-９]+(?:[.,][0-9]+)*(?:[／/][0-9]+)?(?:分の[0-9]+|[%％年月日歳人分万億兆円倍回本条号割棟件隻機台]+)?|[A-Za-z0-9.,:%/+\-#'’]+|\s+|./gu;
 export function jwrap(c, str, w, size = 12) {
   measure(c, '', size); // sets the font
@@ -53,6 +54,16 @@ export function jwrap(c, str, w, size = 12) {
         let k = a0.length - 1;
         while (k > 0 && NO_START.has(a0[k])) k--;
         if (k > 0) { carry = a0.slice(k).join(''); line = a0.slice(0, k).join(''); } else { line += t; continue; }
+      } else {
+        // a soft break after 「・」「、」 or a space a few characters back: a short label stays with its number
+        // (「けが人5,260人」, 「住宅被害52,143棟」 rather than 「けが｜人5,260人」)
+        const a0 = Array.from(line);
+        for (let k = a0.length - 2; k >= Math.max(1, a0.length - 7); k--) {
+          if (!SOFT.has(a0[k])) continue;
+          const rest = a0.slice(k + 1).join('');
+          if (W(rest + t) <= w && !NO_START.has(a0[k + 1])) { carry = rest; line = a0.slice(0, k + 1).join(''); }
+          break;
+        }
       }
       while (line.length > 1 && NO_END.has(line[line.length - 1])) { carry = line[line.length - 1] + carry; line = line.slice(0, -1); }
       out.push(line.replace(/\s+$/, ''));

@@ -2716,6 +2716,46 @@ function closeSession(g, p) {
   emit(g, 'session', { kind: S.kind, open: false });
 }
 const inSession = (p, day) => !!(p.diet.session && day >= p.diet.session.start && day <= p.diet.session.end);
+// (2026-10 fix) The Diet's business of one day: plenary votes waiting in each house, committee work due (the same rule
+// as billsList({ today: true })), the budget under review (予算委員会: the PM and all ministers attend), the session's
+// opening day (施政方針・所信表明演説). Recorded each morning in p.diet.agenda; attendance reads yesterday's.
+function dietAgenda(p, day) {
+  const out = { day, plenary: { shugi: 0, sangi: 0 }, committee: { shugi: 0, sangi: 0 }, budget: false, opening: false };
+  const S = p.diet.session;
+  if (!S || day < S.start || day > S.end) return out;
+  out.opening = num(S.start) === day;
+  for (const b of p.diet.bills) {
+    if (!['committee', 'shugi', 'sangi'].includes(b.stage) || !(b.house in out.plenary)) continue;
+    if (b.stage === b.house) out.plenary[b.house]++;
+    else if (b.stage === 'committee' && num(b.next) <= day + 1 && !(b.held && b.heldIn === S.start)) out.committee[b.house]++;
+    if (b.kind === 'budget') out.budget = true;
+  }
+  return out;
+}
+// Was the player expected in the Diet on that day? (no record of the day, e.g. an old save: a member yes, the cabinet no)
+function attendDuty(p, me, day) {
+  const A = p.diet.agenda && num(p.diet.agenda.day) === day ? p.diet.agenda : null;
+  const cab = inCabinet(me);
+  const h = me.office;
+  if (!A) return !cab;
+  if (A.opening) return true;
+  if (cab) return !!A.budget || num(A.plenary[h]) > 0;
+  return num(A.plenary[h]) + num(A.committee[h]) > 0;
+}
+// The player's title in a headline: 首相 / the cabinet post / 区長・知事 / 議員 / 氏.
+function playerTitle(g, p) {
+  const me = p.me;
+  if (me.posts.includes('pm')) return '首相';
+  const cab = me.posts.find((x) => POSTS[x] && POSTS[x].kind === 'cabinet');
+  if (cab) return postName(cab, fyNow(g));
+  if (me.office === 'shicho') return '区長';
+  if (me.office === 'chiji') return '知事';
+  return me.office ? '議員' : '氏';
+}
+// The former PM of the もしも emergency / dictatorship is not appointed to any cabinet post (regime.js, feature-detected).
+function playerBarred(g) {
+  try { return typeof g.regimeBarred === 'function' ? g.regimeBarred('player') || null : null; } catch (e) { console.error(e); return null; }
+}
 // Party alignment with a policy (0..1): ideology distance + platform + coalition politics.
 function alignment(p, partyId, policyId) {
   const pt = p.parties[partyId];
@@ -3045,9 +3085,10 @@ function fillCabinet(g, p, opts = {}) {
   const quota = {};
   for (const id of coalition) quota[id] = Math.max(1, Math.round((posts.length * seats(id)) / totalSeats));
   const pmParty = cabinetPartyOfPM(p);
+  const barred = !!playerBarred(g); // regime.js: the former PM of the もしも regime holds no cabinet post (2026-10 fix)
   for (const post of posts) {
-    if (opts.keep && prev[post] && (prev[post] === 'player' || (p.npcs[prev[post]] && coalition.includes(p.npcs[prev[post]].party)))) { out[post] = prev[post]; continue; }
-    if (prev[post] === 'player' && opts.keepPlayer !== false && p.me.posts.includes(post)) { out[post] = 'player'; continue; }
+    if (opts.keep && prev[post] && ((prev[post] === 'player' && !barred) || (p.npcs[prev[post]] && coalition.includes(p.npcs[prev[post]].party)))) { out[post] = prev[post]; continue; }
+    if (prev[post] === 'player' && !barred && opts.keepPlayer !== false && p.me.posts.includes(post)) { out[post] = 'player'; continue; }
     const party = coalition.find((id) => id !== pmParty && quota[id] > 0 && Math.random() < 0.5) || pmParty || coalition[0];
     if (quota[party] != null) quota[party]--;
     const n = pickMinister(p, party, out);
@@ -3056,6 +3097,7 @@ function fillCabinet(g, p, opts = {}) {
   }
   // former ministers lose their post (their NPC record is pruned later)
   for (const [post, id] of Object.entries(prev)) if (out[post] !== id && id !== 'player' && p.npcs[id]) p.npcs[id].posts = p.npcs[id].posts.filter((x) => x !== post);
+  if (barred) p.me.posts = p.me.posts.filter((x) => !(POSTS[x] && POSTS[x].kind === 'cabinet' && x !== 'pm'));
   p.cabinet.ministers = out;
   if (!opts.quiet) news(p, g, `内閣の顔ぶれが決まった（${posts.length + 1}人）`);
   return out;
@@ -3142,7 +3184,10 @@ function electPMImpl(g, p) {
   // who has just resigned as PM) is not named: the party puts forward another member.
   const skipPlayer = !!p.flags.skipPlayerPM;
   p.flags.skipPlayerPM = false;
-  if (leader === 'player' && (!isNational(p.me) || skipPlayer)) leader = partyNominee(p, c.core).id;
+  // ext (2026-10 fix, regime.js g.regimeBarred, feature-detected): the former PM of the もしも emergency / dictatorship
+  // is not named again, nor appointed to any cabinet post
+  const barred = !!playerBarred(g);
+  if (leader === 'player' && (!isNational(p.me) || skipPlayer || barred)) leader = partyNominee(p, c.core).id;
   if (leader && leader !== 'player' && !p.npcs[leader]) leader = partyNominee(p, c.core).id;
   const partyIds = [c.core, ...c.partners];
   const prevPM = p.cabinet.pm;
@@ -3166,7 +3211,7 @@ function electPMImpl(g, p) {
   } else if (p.me.posts.includes('pm')) p.me.posts = p.me.posts.filter((x) => x !== 'pm');
   // ministers: the player keeps a post only if their party is in the coalition and they still
   // sit in the Diet (a defeated minister is not appointed again)
-  if ((p.me.party && !partyIds.includes(p.me.party)) || !isNational(p.me)) p.me.posts = p.me.posts.filter((x) => !(POSTS[x] && POSTS[x].kind === 'cabinet' && x !== 'pm'));
+  if ((p.me.party && !partyIds.includes(p.me.party)) || !isNational(p.me) || barred) p.me.posts = p.me.posts.filter((x) => !(POSTS[x] && POSTS[x].kind === 'cabinet' && x !== 'pm'));
   fillCabinet(g, p, { keepPlayer: true });
   if (leader !== 'player') offerPostToPlayer(g, p);
   const name = leader === 'player' ? g.state.name : (p.npcs[leader] && p.npcs[leader].name) || '';
@@ -3196,6 +3241,7 @@ function reshuffleKeepPlayer(g, p) {
 function offerPostToPlayer(g, p, force = false) {
   const me = p.me;
   if (!me.party || !isRuling(p, me.party)) return null;
+  if (playerBarred(g)) return null; // regime.js g.regimeBarred (2026-10 fix)
   if (me.office !== 'shugi' && me.office !== 'sangi') return null;
   const fame = num(g.state.fame);
   const fy = fyNow(g);
@@ -3280,7 +3326,7 @@ function resolveNoConfidence(g, p, b, v) {
     b.stage = 'rejected';
     b.result = '否決';
     news(p, g, `内閣不信任決議案は否決（${v.yes}対${v.no}）`);
-    if (b.by === 'player') note(g, `（提出した内閣不信任案は否決された。賛成${v.yes}・反対${v.no}）`);
+    // (the screens that submit it show the vote at once: politics_ui, the console, kokkai.js)
     return;
   }
   b.stage = 'enacted';
@@ -3410,7 +3456,7 @@ function scandalImpl(g, p, kind, opts = {}) {
     if (me.party && p.parties[me.party]) addSupportAll(p, me.party, -0.003 * sev);
     if (me.party && isRuling(p, me.party)) p.cabinet.scandal = num(p.cabinet.scandal) - sev * (p.cabinet.pm === 'player' ? 4 : 1.5);
     if (g.addFame) g.addFame(-sev * 20, true);
-    news(p, g, `${g.state.name}議員に${rec.name}が発覚`);
+    news(p, g, `${g.state.name}${playerTitle(g, p)}に${rec.name}が発覚`);
     phoneNews(g, `【スクープ】${g.state.name}氏に${rec.name}${rec.amount ? `（${fmtMoney(rec.amount)}）` : ''}が発覚。\n${sev >= 4 ? '捜査当局も関心を寄せているという。' : '説明責任を問う声が上がっている。'}`, '週刊ドット');
     // ministers resign over serious scandals; parties distance themselves
     const cab = me.posts.filter((x) => POSTS[x] && POSTS[x].kind === 'cabinet' && x !== 'pm');
@@ -4207,7 +4253,11 @@ function tickDay(g, p, day, abs) {
   const heldInside = !!(J && typeof J === 'object' && (J.status === 'detained' || J.status === 'prison'));
   const DS = g.state.flags && g.state.flags.darkside;
   const excused = heldInside || num(me.attend.excusedUntil) >= day - 1 || (DS && typeof DS === 'object' && num(DS.hospUntil) >= day - 1);
-  if ((me.office === 'shugi' || me.office === 'sangi') && inSession(p, day - 1) && num(me.attend.last) < day - 1) {
+  // (2026-10 fix) only a day with business counts: yesterday's agenda (p.diet.agenda, recorded below each morning).
+  // A member: a plenary vote or committee work in their house; the PM and ministers (whose Diet duty is 答弁):
+  // the budget under review (予算委員会), a plenary vote in their own house, the session's opening day.
+  const duty = attendDuty(p, me, day - 1);
+  if ((me.office === 'shugi' || me.office === 'sangi') && inSession(p, day - 1) && num(me.attend.last) < day - 1 && duty) {
     if (excused) me.attend.excused = num(me.attend.excused) + 1;
     else {
       me.attend.absent = num(me.attend.absent) + 1;
@@ -4215,13 +4265,14 @@ function tickDay(g, p, day, abs) {
       me.standing = clamp(me.standing - 0.4, 0, 100);
       me.localSupport = clamp(me.localSupport - 0.2, 0, 100);
       const a = me.attend.absent;
-      if (a === 4 && me.party) note(g, '（党の国会対策委員会から「本会議と委員会には必ず出るように」と注意された）');
+      if (a === 4 && me.party) note(g, inCabinet(me) ? '（官邸の国会担当から「答弁に立つ日は、必ず国会へ」と念を押された）' : '（党の国会対策委員会から「本会議と委員会には必ず出るように」と注意された）');
       if (a === 8 || (a > 8 && (a - 8) % 15 === 0)) {
         scandalImpl(g, p, 'absence', { who: 'player' });
-        news(p, g, `国会の欠席が続く${g.state.name}議員（${a}日連続）。地元からも疑問の声`);
+        news(p, g, inCabinet(me) ? `国会での答弁を欠席が続く${g.state.name}${playerTitle(g, p)}（${a}日）。野党が「国会軽視」と批判` : `国会の欠席が続く${g.state.name}${playerTitle(g, p)}（${a}日連続）。地元からも疑問の声`);
       }
     }
   }
+  p.diet.agenda = dietAgenda(p, day);
   // --- the career meters drift back (review): standing in the party settles at what one's
   // seniority earns, 地元の支持 needs tending, reputation fades both ways; the 後援会 loses a few
   // members every day (引っ越し・高齢化)
@@ -4937,8 +4988,13 @@ function donationsImpl(g, p, opts = {}) {
 //   gatherSupporters(billId) -> { ok, supporters, need, ready }   (1/day)
 //   vote(billId, 'yes'|'no'|'abstain') -> null | reason   (counted at the plenary; 党議拘束 applies)
 //   attendDiet() -> { ok, why?, bills }       (attendance; long absences become a scandal)
+//   attendBlock() -> null | reason; attendance() -> { member, session, today, absent, days, missed, cabinet,
+//       business, reportAt, text }   (2026-10: absence counts only on a day with business: p.diet.agenda;
+//       the cabinet's duty is 答弁 — 国会で答弁 / 委員会で質問 also count as attending)
 //   advanceBills() -> [BILL]                  (the tick calls it)
 //   noConfidence({ rebel? }) -> { ok, why?, passed, yes, no, outcome: 'dissolve'|'resign'|'pending'|null }
+//   noConfidenceBlock({ rebel? }) -> null | reason   (2026-10: never the PM / a minister; a ruling member only
+//       with rebel — the UIs do not offer it)
 //  the cabinet
 //   approval() -> %;  partySupport(id) -> %
 //   electPM() -> { pm, name, partyIds, votes, sangiDiffers, minority }   (首班指名; the tick runs it)
@@ -5172,21 +5228,33 @@ const methods = {
     const p = ensurePol(this);
     const me = p.me;
     const day = today(this);
-    if (me.office !== 'shugi') return { ok: false, why: '内閣不信任決議案を出せるのは衆議院議員だけ' };
-    if (!inSession(p, day)) return { ok: false, why: '国会の会期中でないと出せない' };
-    if (me.party && isRuling(p, me.party) && !opts.rebel) return { ok: false, why: '与党の議員が出すのは、党を割る覚悟がいる（opts.rebel）' };
-    if (p.diet.bills.some((b) => b.kind === 'noconfidence' && b.created >= (p.diet.session.start || 0) && b.stage !== 'shelved')) return { ok: false, why: 'この国会ではもう不信任案が採決された' };
+    const why = this.noConfidenceBlock(opts);
+    if (why) return { ok: false, why };
     const myP = me.party || IND;
-    const oppAll = Object.keys(p.diet.shugi.seats).filter((id) => id !== IND && !isRuling(p, id)).reduce((a, id) => a + num(p.diet.shugi.seats[id]), 0);
-    const leads = me.party && p.parties[me.party] && (p.parties[me.party].leader === 'player' || me.standing >= 40);
-    const supporters = leads ? oppAll : num(p.diet.shugi.seats[myP]);
-    if (supporters < 50) return { ok: false, why: `賛成者が50人に届かない（${supporters}人）` };
     const b = addBill(p, { title: '内閣不信任決議案', sponsor: 'member', by: 'player', party: myP, kind: 'noconfidence', stage: 'shugi', house: 'shugi', day, delay: 0 });
     me.votes[b.id] = 'yes';
     const v = houseVote(this, p, b, 'shugi');
     b.votes.shugi = { yes: v.yes, no: v.no, absent: v.absent, passed: v.passed };
     resolveNoConfidence(this, p, b, v);
     return { ok: true, billId: b.id, passed: v.passed, yes: v.yes, no: v.no, outcome: !v.passed ? null : p.diet.shugi.dissolved ? 'dissolve' : p.cabinet.pm === 'player' ? 'pending' : 'resign' };
+  },
+  // (2026-10 fix) why noConfidence(opts) is refused now (no side effects): null | reason. The motion is the
+  // opposition's: never the PM or a minister against their own cabinet; a ruling member only with opts.rebel (API).
+  noConfidenceBlock(opts = {}) {
+    const p = ensurePol(this);
+    const me = p.me;
+    const day = today(this);
+    if (me.office !== 'shugi') return '内閣不信任決議案を出せるのは衆議院議員だけ';
+    if (me.posts.includes('pm')) return '総理は自分の内閣に不信任案を出さない（辞めるなら総辞職、信を問うなら衆議院の解散）';
+    if (inCabinet(me)) return '大臣は内閣の一員。自分の内閣に不信任案は出さない（出すなら大臣を辞めてから）';
+    if (!inSession(p, day)) return '国会の会期中でないと出せない';
+    if (me.party && isRuling(p, me.party) && !(opts && opts.rebel)) return '与党の議員は不信任案を出さない（不信任案は野党が出すもの。出すなら離党してから）';
+    if (p.diet.bills.some((b) => b.kind === 'noconfidence' && b.created >= (p.diet.session.start || 0) && b.stage !== 'shelved')) return 'この国会ではもう不信任案が採決された';
+    const oppAll = Object.keys(p.diet.shugi.seats).filter((id) => id !== IND && !isRuling(p, id)).reduce((a, id) => a + num(p.diet.shugi.seats[id]), 0);
+    const leads = me.party && p.parties[me.party] && (p.parties[me.party].leader === 'player' || me.standing >= 40);
+    const supporters = leads ? oppAll : num(p.diet.shugi.seats[me.party || IND]);
+    if (supporters < 50) return `賛成者が50人に届かない（${supporters}人）`;
+    return null;
   },
   dissolve(reason = '') {
     const p = ensurePol(this);
@@ -5263,6 +5331,9 @@ const methods = {
   govIncludesRealParty() { const p = this.state ? ensurePol(this) : null; return govIncludesRealParty(p); },
   partySupport(partyId) { const p = ensurePol(this); return Math.round(natSupport(p, partyId, fyNow(this)) * 1000) / 10; },
   politicsTick() { return politicsTick(this); },
+  // (2026-10 fix; debug / tests) take this week's opinion poll now: recomputes ねじれ (flags.nejire), the approval and
+  // its parts (cabinet.parts) from the seats and the state as they are -> the poll row
+  politicsPollNow() { const p = ensurePol(this); return weeklyPoll(this, p); },
   addSecretFunds(n, source = '') {
     const p = ensurePol(this);
     const v = Math.max(0, Math.round(num(n)));
@@ -5299,16 +5370,43 @@ const methods = {
     const p = ensurePol(this);
     const me = p.me;
     const day = today(this);
-    if (!isNational(me)) return { ok: false, why: '国会議員ではない' };
-    if (!inSession(p, day)) return { ok: false, why: '国会は閉会中' };
-    if (me.attend.last === day) return { ok: false, why: '今日はもう出席した', bills: this.billsList({ house: me.office, today: true }) };
-    if (this.state.stamina < 5) return { ok: false, why: '体力が足りない' };
+    const why = this.attendBlock();
+    if (why) return { ok: false, why, bills: me.attend.last === day ? this.billsList({ house: me.office, today: true }) : undefined };
     this.state.stamina -= 5;
     me.attend.last = day;
     me.attend.days = num(me.attend.days) + 1;
     me.attend.absent = 0;
     me.standing = clamp(me.standing + gainTo(me.standing, 0.5), 0, 100);
-    return { ok: true, bills: this.billsList({ house: me.office, today: true }) };
+    return { ok: true, bills: this.billsList({ house: me.office, today: true }), cabinet: inCabinet(me) };
+  },
+  // (2026-10 fix) why attendDiet() is not possible now (no side effects): null | reason
+  attendBlock() {
+    const p = ensurePol(this);
+    const me = p.me;
+    const day = today(this);
+    if (!isNational(me)) return '国会議員ではない';
+    if (!inSession(p, day)) return '国会は閉会中';
+    if (me.attend.last === day) return '今日はもう出席した';
+    if (num(this.state.stamina) < 5) return '体力が足りない';
+    return null;
+  },
+  // (2026-10 fix) the player's attendance for the screens: { member, session, today (attended today), absent (days in a
+  // row), days, missed, cabinet (the duty is 答弁), business (the house has business today: plenary / committee / 予算委員会),
+  // reportAt (8: a streak this long is reported), text (one line) }
+  attendance() {
+    const p = ensurePol(this);
+    const me = p.me;
+    const day = today(this);
+    const member = isNational(me);
+    const session = inSession(p, day);
+    const A = dietAgenda(p, day);
+    const cab = inCabinet(me);
+    const h = me.office;
+    const business = member && session && (A.opening || (cab ? A.budget || A.plenary[h] > 0 : A.plenary[h] + A.committee[h] > 0));
+    const att = num(me.attend && me.attend.last) === day;
+    const absent = num(me.attend && me.attend.absent);
+    const text = !member ? '国会議員ではない' : !session ? '国会は閉会中' : att ? '今日は出席ずみ' : `${business ? (cab ? '今日は答弁の予定がある' : '今日は本会議・委員会がある') : '今日は大きな日程なし'}${absent ? `・欠席${absent}日連続（8日で報道される）` : ''}`;
+    return { member, session, today: att, absent, days: num(me.attend && me.attend.days), missed: num(me.attend && me.attend.missed), cabinet: cab, business: !!business, reportAt: 8, text };
   },
   activity(kind, opts = {}) {
     const p = ensurePol(this);
@@ -5320,6 +5418,8 @@ const methods = {
     const need = A.need;
     const okNeed = need === 'any' ? true : need === 'national' ? isNational(me) : need === 'local' ? ['kugi', 'togi'].includes(me.office) : need === 'exec' ? ['shicho', 'chiji'].includes(me.office) : need === 'cabinet' ? inCabinet(me) : need === 'pm' ? me.posts.includes('pm') : need === 'faction' ? !!me.faction : !!me.office;
     if (!okNeed) return { ok: false, why: 'いまの立場ではできない' };
+    // (2026-10 fix) the cabinet answers questions in the committees; it does not ask them
+    if (kind === '委員会で質問' && inCabinet(me)) return { ok: false, why: '総理・大臣は委員会で質問に答える側（内閣の一員は「国会で答弁」をする）' };
     if (A.session && !inSession(p, day)) return { ok: false, why: '国会の会期中だけ' };
     if (me.lastAct[kind] === day) return { ok: false, why: '今日はもうやった' };
     if (st.stamina < A.stamina) return { ok: false, why: '体力が足りない' };
@@ -5345,6 +5445,8 @@ const methods = {
     if (A.fame && this.addFame) { this.addFame(Math.round(A.fame * (0.5 + q)), true); out.push('知名度アップ'); }
     if (A.approval && (me.posts.includes('pm') || inCabinet(me))) p.cabinet.mood = clamp(num(p.cabinet.mood) + A.approval * (q - 0.3), -20, 20);
     if (kind === '国会で答弁') me.answers = num(me.answers) + (q >= 0.5 ? 1 : 0);
+    // answering (the cabinet) or asking (a member) in the Diet counts as attending that day (2026-10 fix)
+    if ((kind === '国会で答弁' || kind === '委員会で質問') && num(me.attend.last) !== day) { me.attend.last = day; me.attend.days = num(me.attend.days) + 1; me.attend.absent = 0; }
     let gaffe = null;
     if (A.gaffe && Math.random() < (sk < 0.4 ? 0.12 : 0.04) * (q < 0.4 ? 1.5 : 1)) gaffe = scandalImpl(this, p, 'gaffe', { who: 'player' });
     if (this.lifeTick) this.lifeTick({ hunger: -6, stress: 5, clean: -5 });

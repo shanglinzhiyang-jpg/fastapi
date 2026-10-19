@@ -647,7 +647,8 @@ const RELIGION_LAW = {
 };
 
 // ================================================================ DEMOS (デモ)
-const DEMO_PLACES = ['国会議事堂前', '首相官邸前', '日比谷公園', 'ドット区 駅前広場'];
+export const DEMO_PLACES = ['国会議事堂前', '首相官邸前', '日比谷公園', 'ドット区 駅前広場'];
+export const DEMO_COST = 30000; // organizeDemo: preparation (音響・プラカード), internal money (show with fmtMoney)
 // against: what the demo opposes (or 'rally' support) -> cause label templates
 const DEMO_CAUSES = {
   government: { label: '内閣の退陣を求めるデモ', seg: 'floating' },
@@ -879,7 +880,7 @@ function newGovtState(g) {
     admin: { bureaucrats: {}, councils: {}, ordinances: {}, amakudari: { heat: 15, cases: [] }, reforms: {}, personnelYear: d.year - (d.doy >= 65 ? 0 : 1), picks: 0, answers: 0, officials: {} },
     postal: { law: null, privatized: null, revised: null, log: [], key: null },
     religion: { groups: {}, cult: { stage: 0, next: day + irnd(100, 320), complaints: 0, day: null, reported: false, questioned: null, requested: null, decided: null, victims: 0 }, log: [], endorsements: [] },
-    opposition: { questions: [], alliance: null, boycott: null, budgetQ: {}, log: [], lastQ: 0 },
+    opposition: { questions: [], alliance: null, boycott: null, budgetQ: {}, log: [], lastQ: -99 },
     voices: { feed: [], seq: 0 },
     demos: { list: [], seq: 0, lastAuto: day },
     approval: { ledger: [], segLedger: {}, weekly: [], lastPoll: 0 },
@@ -952,6 +953,10 @@ function seedPolitics(g, s) {
   for (const [id, y] of Object.entries(IF)) { if (p.flags.inForce[id] == null) p.flags.inForce[id] = y; if (IN_FORCE_FLAG[id]) p.flags[IN_FORCE_FLAG[id]] = true; }
   if (!s.seiken.last && p.cabinet && p.cabinet.pm) s.seiken.last = govSnapshot(g, p);
 }
+// A line in the morning message (g.sleep shows g.morningNotes).
+function note(g, text) { try { if (g) (g.morningNotes || (g.morningNotes = [])).push(text); } catch (e) { /* */ } }
+// The ministry of a post by the game's date: 大蔵省 before 2001-01, 財務省 after (the sender where the ministry acts).
+function ministryOf(g, post) { const n = postNameNow(g, post); return /大臣$/.test(n) ? n.replace(/大臣$/, '省') : n; }
 function govtNews(g, s, text, opts = {}) {
   const day = today(g);
   s.news.unshift({ day, text, kind: opts.kind || 'govt' });
@@ -1074,7 +1079,7 @@ function taxLawEnacted(g, prm) {
   for (const it of sched) {
     const at = inForceDate(g, it.year, it.month, it.id);
     s.taxPlan = s.taxPlan.filter((x) => !(x.id === it.id && !x.done && x.by !== 'law'));
-    s.taxPlan.push({ id: it.id, rate: it.rate, year: at.year, month: at.month, asOf: at.asOf || null, law: d.year, by: prm.by || 'cabinet', why: prm.why || '税制改正', title: prm.title || '' });
+    s.taxPlan.push({ id: it.id, rate: it.rate, year: at.year, month: at.month, asOf: at.asOf || null, law: d.year, by: prm.by || 'cabinet', why: prm.why || '税制改正', title: prm.title || '', player: !!it.player });
   }
   const R = s.taxReform;
   if (!prm.urgent) R.stage = 'enacted';
@@ -1093,7 +1098,14 @@ function taxInForce(g, s) {
   for (const it of s.taxPlan) {
     if (it.done || ym(it.year, it.month) > now) continue;
     it.done = today(g);
+    const before = rateNow(g, s, it.id);
     applyTaxChange(g, s, it.id, it.rate, it.why || '法律による改正', { law: it.law, phone: true, asOf: it.asOf || null });
+    // the player's own proposal takes effect: what it does to the revenue (2026-10 fix)
+    if (it.player && involved(g) && TAXES[it.id]) {
+      const T = TAXES[it.id];
+      const dv = (T.local ? num(T.localCoef) : num(T.coef)) * (it.rate - before) * gdpScale(g);
+      note(g, `（あなたが提案した${T.short}の改正（${before}${T.unit}→${it.rate}${T.unit}）が施行された。${T.local ? '地方の' : '国の'}税収は年におよそ${fmtCho(Math.abs(dv))}${dv >= 0 ? '増える' : '減る'}見込み）`);
+    }
   }
   s.taxPlan = s.taxPlan.filter((x) => !x.done || today(g) - x.done < 240);
 }
@@ -1180,25 +1192,48 @@ function npcTaxItems(g, s, year) {
 // from that January (the year's income / inheritances), as the real 1989, 1999, 2003 and 2015 changes did.
 const TAX_MONTH = { jumin: 6, shotoku: 1, sozoku: 1 };
 const CAL_YEAR_TAX = { shotoku: true, sozoku: true };
-// The 与党税調 decides on a proposal: the PM / 財務大臣 / the party's 政調会長 carry more weight; a change against the
-// leading party's economic line is harder; the 政府税調's report helps.
-function zeichoAccepts(g, s, id, rate) {
+// The 与党税調's view of a proposal (2026-10 fix: a PM's proposal is no longer a near-certain yes). The chance depends on
+// who proposes (PM / 財務大臣 / 政調会長; the leader of the player's own party leads its 税調 too), the player's standing in
+// the party, the cabinet's approval, the leading party's economic line (redistributive taxes), the economy (a rise in a
+// downturn, a cut with a large deficit), the size of the change, the 消費税 itself (社会保障の財源: 財務省 and the 税調
+// resist a cut; a rise worries ruling members before an election) and the 政府税調's report (councilConsult zeicho).
+// -> { p (0.05..0.9), label 通りやすい|五分五分|厳しい, factors[{ label, v }], why (the main reason against, or '') }
+function zeichoOdds(g, s, id, rate) {
   const p = pol(g);
+  const T = TAXES[id];
+  if (!p || !T) return { p: 0, label: '—', factors: [], why: '政治のしくみが読み込まれていない' };
   const core = cabinetCore(p);
-  const pt = p && p.parties[core];
+  const pt = p.parties[core];
   const econ = num(pt && pt.ideology && pt.ideology.econ);
   const before = rateNow(g, s, id);
-  const redistributive = ['shotoku', 'hojin', 'sozoku'].includes(id);
   const raise = rate > before;
-  let conflict = 0;
-  if (redistributive && raise && econ > 0.5) conflict = 0.15 * econ;
-  if (redistributive && !raise && econ < -0.5) conflict = 0.15 * -econ;
-  if (id === 'shohi' && raise) conflict += 0.1;
-  const size = Math.abs(rate - before) / Math.max(0.5, num(TAXES[id].maxStep, 5));
-  const leader = pt && pt.leader === 'player';
-  let pr = 0.5 + (isPMg(p) ? 0.25 : financeMinister(p) ? 0.15 : 0.05) + num(p && p.me && p.me.standing) / 400 + num(s.taxReform.zeichoBonus) - conflict - Math.min(0.35, size * 0.3);
-  if (leader && pt.isPlayers) pr = 0.97;
-  return Math.random() < clamp(pr, 0.08, 0.95);
+  const f = [];
+  const add = (label, v) => { if (Math.abs(v) >= 0.005) f.push({ label, v: r2(v) }); };
+  add(isPMg(p) ? '総理の提案' : financeMinister(p) ? `${postNameNow(g, 'minister_finance')}の提案` : '与党の政調会長・党首の提案', isPMg(p) ? 0.2 : financeMinister(p) ? 0.12 : 0.05);
+  if (pt && pt.leader === 'player' && pt.isPlayers) add('自分の党の税制調査会', 0.3);
+  add('党内の評価', (clamp(num(p.me && p.me.standing), 0, 100) - 50) / 250);
+  const appr = num(p.cabinet && p.cabinet.approval, 40);
+  if (appr < 30) add('内閣支持率が低い', -0.1); else if (appr > 55) add('内閣支持率が高い', 0.05);
+  if (['shotoku', 'jumin', 'hojin', 'sozoku'].includes(id)) {
+    if (raise && econ > 0.2) add('党の経済路線（市場・成長を重視）と逆', -0.3 * econ);
+    else if (!raise && econ < -0.2) add('党の経済路線（再分配を重視）と逆', -0.3 * -econ);
+    else if ((raise && econ < -0.2) || (!raise && econ > 0.2)) add('党の経済路線に沿う', 0.1);
+  }
+  if (id === 'shohi') add(raise ? (before > 0 ? '増税は選挙に響く（与党議員の反発）' : '大型間接税の導入には反発が強い') : '消費税は社会保障の財源（財務省と税調が強く抵抗）', raise ? -0.25 : -0.3);
+  const E = p.economy || {};
+  const B = E.budget || {};
+  if (raise && num(E.growth, 1) < 0.5) add('景気が弱い（増税は景気を冷やす）', -0.15);
+  if (!raise && num(B.spending) > 0 && num(B.deficit) / num(B.spending) > 0.3) add('財政赤字が大きい（減税の財源がない）', -0.1);
+  const size = Math.abs(rate - before) / Math.max(0.5, num(T.maxStep, 5));
+  add('変更の幅が大きい', -Math.min(0.5, size * 0.5));
+  if (num(s.taxReform.zeichoBonus)) add('政府税調の答申', num(s.taxReform.zeichoBonus));
+  const pr = clamp(0.35 + f.reduce((a, x) => a + x.v, 0), 0.05, 0.9);
+  const neg = f.filter((x) => x.v < 0).sort((a, b) => a.v - b.v)[0];
+  return { p: r2(pr), label: pr >= 0.65 ? '通りやすい' : pr >= 0.4 ? '五分五分' : '厳しい', factors: f, why: neg ? neg.label : '' };
+}
+function zeichoAccepts(g, s, id, rate) {
+  const o = zeichoOdds(g, s, id, rate);
+  return { ok: Math.random() < o.p, odds: o };
 }
 function taxReformCycle(g, s) {
   const p = pol(g);
@@ -1219,19 +1254,24 @@ function taxReformCycle(g, s) {
     const items = {};
     const npc = R.npc || { items: {}, plan: [] };
     for (const [id, it] of Object.entries(npc.items || {})) items[id] = it;
-    const acc = [], rej = [];
+    const acc = [], rej = [], reasons = {}, mine = [];
     for (const [id, pr] of Object.entries(R.proposals || {})) {
       if (!pr || num(pr.target) !== target) continue;
-      if (zeichoAccepts(g, s, id, pr.rate)) { items[id] = { rate: pr.rate, year: target, month: TAX_MONTH[id] || 4, player: true }; acc.push(id); } else { rej.push(id); R.rejected[id] = pr.rate; delete items[id]; }
+      const za = zeichoAccepts(g, s, id, pr.rate);
+      if (za.ok) { items[id] = { rate: pr.rate, year: target, month: TAX_MONTH[id] || 4, player: true }; acc.push(id); } else { rej.push(id); R.rejected[id] = pr.rate; reasons[id] = za.odds.why || '党内の理解が得られなかった'; delete items[id]; }
+      mine.push({ id, rate: pr.rate, from: rateNow(g, s, id), ok: za.ok, why: za.ok ? '' : reasons[id] });
     }
     const schedule = Object.entries(items).map(([id, it]) => ({ id, rate: it.rate, year: it.year, month: it.month, player: !!it.player }));
     for (const it of npc.plan || []) schedule.push({ ...it });
-    R.taiko = { day: today(g), year: target, schedule, why: npc.why || (acc.length ? '政府・与党の提案による見直し' : ''), accepted: acc, rejected: rej };
+    R.taiko = { day: today(g), year: target, schedule, why: npc.why || (acc.length ? '政府・与党の提案による見直し' : ''), accepted: acc, rejected: rej, reasons };
     R.proposals = Object.fromEntries(Object.entries(R.proposals || {}).filter(([, v]) => v && num(v.target) > target));
     R.zeichoBonus = 0;
+    // the player's own proposals: what became of them, and why (2026-10 fix)
+    const mineLines = mine.map((m) => `${TAXES[m.id].short} ${m.from}→${m.rate}${TAXES[m.id].unit}：${m.ok ? '大綱に入った' : `見送り（${m.why}）`}`);
+    const rejNote = rej.length ? `${rej.map((id) => TAXES[id].short).join('・')}の見直しは見送り（${reasons[rej[0]] || '党内の理解が得られなかった'}）` : '';
     if (!schedule.length) {
       R.stage = 'none';
-      govtNews(g, s, `${target}年度の税制改正大綱がまとまった（主な税率は据え置き）${rej.length ? `。${rej.map((id) => TAXES[id].short).join('・')}の税率の見直しは見送られた` : ''}`);
+      govtNews(g, s, `${target}年度の税制改正大綱がまとまった（主な税率は据え置き）${rejNote ? `。${rejNote}` : ''}`, { phone: involved(g) && mine.length ? `【税制改正大綱】${target}年度の大綱がまとまりました。主な税率は据え置きです。\nあなたの提案：\n${mineLines.join('\n')}` : false, from: '与党税制調査会' });
     } else {
       R.stage = 'bill';
       const from = {}, changes = {};
@@ -1240,9 +1280,11 @@ function taxReformCycle(g, s) {
       const b = addCabinetBill(g, p, { title, policy: 'zeisei_kaisei', params: { changes, from, schedule, why: R.taiko.why || '税制改正', year: target, title }, ministry: POL.postExists('minister_finance', d.fy, p.flags) ? 'minister_finance' : 'kanbo', draft: true });
       R.billId = b.id;
       const lines = schedule.slice(0, 4).map((it) => `${TAXES[it.id].short} ${rateNow(g, s, it.id)}→${it.rate}${TAXES[it.id].unit}`);
-      govtNews(g, s, `${target}年度の税制改正大綱が決まった：${lines.join('・')}${rej.length ? `（${rej.map((id) => TAXES[id].short).join('・')}は見送り）` : ''}`, { phone: involved(g) ? `【税制改正大綱】${target}年度の大綱がまとまりました。\n${lines.join('\n')}${rej.length ? `\n見送り：${rej.map((id) => TAXES[id].short).join('・')}` : ''}\n法律案は1月の通常国会に提出されます。` : false, from: '財務省（大蔵省）' });
+      // the 大綱 is the ruling parties' (与党税制調査会); the ministry drafts the bill from it
+      govtNews(g, s, `${target}年度の税制改正大綱が決まった：${lines.join('・')}${rej.length ? `（${rej.map((id) => TAXES[id].short).join('・')}は見送り）` : ''}`, { phone: involved(g) ? `【税制改正大綱】${target}年度の大綱がまとまりました。\n${lines.join('\n')}${mine.length ? `\nあなたの提案：\n${mineLines.join('\n')}` : rej.length ? `\n見送り：${rej.map((id) => TAXES[id].short).join('・')}` : ''}\n${ministryOf(g, 'minister_finance')}が法律案をまとめ、1月の通常国会に提出します。` : false, from: '与党税制調査会' });
       addEvent(g, s, schedule.some((it) => it.rate > rateNow(g, s, it.id)) ? 'tax_up' : 'tax_down', `${target}年度の税制改正大綱`, { segs: taxLawEffects({ changes, from }).segments });
     }
+    for (const m of mine) note(g, m.ok ? `（あなたの提案「${TAXES[m.id].short} ${m.from}→${m.rate}${TAXES[m.id].unit}」は、税制改正大綱に入った。法律案は1月の通常国会へ）` : `（あなたの提案「${TAXES[m.id].short} ${m.from}→${m.rate}${TAXES[m.id].unit}」は、与党の税制調査会で見送られた。理由：${m.why}）`);
     R.log.push({ day: today(g), text: `税制改正大綱：${schedule.length ? schedule.map((it) => `${TAXES[it.id].short}${it.rate}${TAXES[it.id].unit}`).join('・') : '税率は据え置き'}` });
     emit(g, 'taxReform', { stage: 'taiko', year: target, taiko: R.taiko });
   }
@@ -1468,6 +1510,12 @@ function budgetCycle(g, s) {
     S.draft = { fy: next, items: { ...preview }, preview: { ...preview }, by: null, day: today(g) };
     S.stage = 'request';
     govtNews(g, s, `各府省庁の${next}年度予算の概算要求が出そろった（一般会計で約${fmtCho(S.requests.total)}）`);
+    // the PM / 財務（大蔵）大臣: the window to shape the budget opens now (2026-10 fix)
+    if (budgetActor(g)) {
+      const mof = ministryOf(g, 'minister_finance');
+      try { g.message({ from: `${mof} 主計局`, kind: 'news', text: `【概算要求】各府省の${next}年度予算の概算要求が出そろいました（一般会計 約${fmtCho(S.requests.total)}）。\n12月下旬の閣議決定まで、政府中枢の「予算・税」で費目ごとの配分を決められます。\n決めなければ、${mof}原案（前年なみ）で編成します。` }); } catch (e) { /* no phone in tests */ }
+      note(g, `（各府省の概算要求が出そろった。12月下旬の閣議決定まで、政府中枢の「予算・税」で${next}年度予算の配分を決められる）`);
+    }
     emit(g, 'budget', { stage: 'request', fy: next, total: S.requests.total });
   }
   // late December: the 財務省原案 and the 政府案 (閣議決定)
@@ -1486,6 +1534,10 @@ function budgetCycle(g, s) {
     if (set.yobi) S.draft.items.yobi = num(S.draft.yobiSet, S.draft.items.yobi);
     S.draft.preview = fresh;
     govtNews(g, s, `${postNameNow(g, 'minister_finance').replace(/大臣$/, '省')}原案が各府省に内示された。大臣どうしの「復活折衝」が続く`, { politics: false });
+    if (budgetActor(g)) {
+      const mof = ministryOf(g, 'minister_finance');
+      try { g.message({ from: `${mof} 主計局`, kind: 'news', text: `【${mof}原案】${next}年度予算の${mof}原案を各府省に内示しました（一般会計 ${fmtCho(sumObj(S.draft.items))}）。\n${S.draft.by === 'player' ? 'あなたが決めた配分を反映しています。' : '配分は前年なみです。'}\n復活折衝のあと、すぐに閣議決定です。変えるなら政府中枢の「予算・税」で今のうちに。` }); } catch (e) { /* */ }
+    }
     emit(g, 'budget', { stage: 'genan', fy: next });
   }
   if (d.doy >= 117 && num(S.decidedYear) < d.year && S.draft && S.draft.fy === next) {
@@ -1496,8 +1548,15 @@ function budgetCycle(g, s) {
     const total = r1(sumObj(S.draft.items));
     S.decided = { fy: next, ratios, items: { ...S.draft.items }, total, by: S.draft.by || 'npc', day: today(g) };
     govtNews(g, s, `${next}年度予算の政府案を閣議決定した（一般会計 ${fmtCho(total)}）`);
-    if (S.draft.by === 'player') budgetDecidedEffects(g, s, S.draft);
+    let fx = null;
+    if (S.draft.by === 'player') fx = budgetDecidedEffects(g, s, S.draft);
     else addEvent(g, s, 'budget', `${next}年度予算の政府案`, { segs: { elderly: 0.5, young: -0.3, floating: -0.3 }, data: { item: BUDGET_ITEMS.shakaihosho.name } });
+    // the PM / 財務大臣: what the cabinet decided (their own budget) in a few words (2026-10 fix)
+    if (budgetActor(g)) {
+      const sm = budgetSummaryLines(g, s, S.draft, fx);
+      note(g, `（${next}年度予算の政府案を閣議決定した：一般会計 ${fmtCho(total)}。${sm.short}）`);
+      try { g.message({ from: '内閣（閣議決定）', kind: 'news', text: `【予算の閣議決定】${next}年度予算の政府案（一般会計 ${fmtCho(total)}）を閣議決定しました。\n${sm.lines.join('\n')}\n1月の通常国会に提出します（衆議院が先に審議：憲法60条）。` }); } catch (e) { /* */ }
+    }
     emit(g, 'budget', { stage: 'cabinet', fy: next, total, by: S.decided.by });
   }
   // the Diet (politics.js 年度予算案) → passed / 暫定予算
@@ -1540,6 +1599,38 @@ function budgetDecidedEffects(g, s, draft) {
   const top = big[0] ? BUDGET_ITEMS[big[0][0]].name : BUDGET_ITEMS.shakaihosho.name;
   addEvent(g, s, 'budget', `${draft.fy}年度予算の政府案（${big.slice(0, 2).map(([k, dv]) => `${BUDGET_ITEMS[k].name}${fmtD(dv, '兆円')}`).join('・') || '前年なみ'}）`, { segs, data: { item: top } });
   if (p && p.me) p.me.reputation = clamp(num(p.me.reputation) + 2, -100, 100);
+  return { segs, big, dTot };
+}
+// The PM / 財務（大蔵）大臣 who can shape next year's budget (gets the budget messages).
+function budgetActor(g) { const p = pol(g); return !!(p && p.me && (isPMg(p) || financeMinister(p)) && !(p.cabinet && p.cabinet.resigned)); }
+// 公債依存度 of a draft (見込み): next year's tax and non-tax revenue are taken at this year's level (a simplification).
+function draftBondRatio(g, s, total) {
+  const p = pol(g);
+  const B = p && p.economy && p.economy.budget;
+  if (!B || !(num(total) > 0)) return null;
+  const rev = num(B.revenue) + num(B.govt && B.govt.nontax);
+  return r1(Math.max(0, (num(total) - rev) / num(total)) * 100);
+}
+// The decided budget in short lines: the main changes against the 前年なみ draft, 公債依存度 (this year → the plan),
+// the segments that gain / lose (from budgetDecidedEffects).
+function budgetSummaryLines(g, s, draft, fx) {
+  const p = pol(g);
+  const B = p && p.economy && p.economy.budget;
+  const total = sumObj(draft.items);
+  const ch = BUDGET_ORDER.map((k) => [k, num(draft.items[k]) - num(draft.preview[k])]).filter(([, dv]) => Math.abs(dv) >= 0.1).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const chText = ch.slice(0, 3).map(([k, dv]) => `${BUDGET_ITEMS[k].name.replace(/関係費$|交付金等$|及び.*$/, '')} ${fmtD(dv, '兆')}`).join('・');
+  const nowR = B && num(B.spending) > 0 ? r1((num(B.deficit) / num(B.spending)) * 100) : null;
+  const planR = draftBondRatio(g, s, total);
+  const segs = fx && fx.segs ? Object.entries(fx.segs).filter(([, v]) => Math.abs(v) >= 0.3).sort((a, b) => b[1] - a[1]) : [];
+  const SG = SEGS();
+  const up = segs.filter(([, v]) => v > 0).slice(0, 3).map(([k]) => (SG[k] || {}).name || k);
+  const down = segs.filter(([, v]) => v < 0).slice(-3).map(([k]) => (SG[k] || {}).name || k);
+  const lines = [draft.by === 'player' && ch.length ? `あなたの配分：${chText}` : `配分は${ministryOf(g, 'minister_finance')}原案どおり（前年なみ）`];
+  if (nowR != null && planR != null) lines.push(`公債依存度（見込み）：今年度 ${nowR}% → ${planR}%`);
+  if (up.length) lines.push(`喜ぶ層：${up.join('・')}`);
+  if (down.length) lines.push(`不満の層：${down.join('・')}`);
+  const short = `${draft.by === 'player' && ch.length ? chText : '前年なみの配分'}${nowR != null && planR != null ? `・公債依存度 ${nowR}→${planR}%` : ''}`;
+  return { lines, short };
 }
 // The budget the player can still change (the 政府案 being drafted for next fiscal year), or why not.
 function budgetBlock(g, s) {
@@ -2148,10 +2239,42 @@ export const RULING_ACTIONS = {
   key_bill: { label: '政権の最重要法案に位置づける', law: '—', desc: '参議院で否決されたら、衆議院を解散して国民に信を問う、という覚悟を示す。' },
 };
 const liveBill = (b) => b && !['enacted', 'rejected', 'shelved', 'draft', 'referendum'].includes(b.stage);
+// the last 質問主意書 was the day before or today (0 / -99 = never: a brand-new member can submit on day 1)
+const qTooSoon = (O, day) => num(O.lastQ) > 0 && day - num(O.lastQ) < 2;
+// the player holds a cabinet post (the PM included): the cabinet answers the Diet's questions, it does not ask them
+const inCabinetP = (p) => isPMg(p) || myPosts(p).some((x) => (POL && POL.POSTS && POL.POSTS[x] ? POL.POSTS[x].kind === 'cabinet' : /^minister_|^kanbo$/.test(x)));
+const CABINET_ANSWERS = '総理・大臣は内閣として答える側。質問主意書は、議員が内閣に出すもの（国会法74条）';
+const CABINET_ANSWERS_BUDGET = '総理・大臣は予算委員会で質問に答える側（質問するのは各会派の議員）';
+const CABINET_NO_PROTEST = '総理・大臣は内閣の一員。政府への抗議デモに加わる立場ではない';
 function playerPartyRole(p) {
   const me = p && p.me;
   const pt = me && me.party && p.parties[me.party];
   return { pt, leader: !!(pt && pt.leader === 'player'), kokutai: myPosts(p).includes('kokutai'), kanjicho: myPosts(p).includes('kanjicho'), sentai: myPosts(p).includes('sentai'), ruling: !!(me && me.party && isRulingParty(p, me.party)) };
+}
+// 内閣不信任決議案 (g.noConfidence of the politics core) with the result in words (2026-10 fix): the vote, what it
+// means (憲法69条), and the submitter's standing (a united opposition) — or the cabinet's choice when it passed.
+function fushinninImpl(g, s, p, opts = {}) {
+  let r = null;
+  try { r = g.noConfidence(opts); } catch (e) { return { ok: false, why: String(e && e.message) }; }
+  if (!r || !r.ok) return r || { ok: false, why: '提出できなかった' };
+  const me = p.me;
+  const lines = [`衆議院本会議で採決：賛成${r.yes}・反対${r.no}で${r.passed ? '可決！' : '否決された。'}`];
+  if (r.passed) {
+    me.standing = clamp(num(me.standing) + 6, 0, 100);
+    lines.push('内閣は10日以内に衆議院を解散するか、総辞職しなければならない（憲法69条）。');
+    if (r.outcome === 'dissolve') lines.push('内閣は衆議院を解散した。総選挙になる。');
+    else if (r.outcome === 'resign') lines.push('内閣は総辞職を選んだ。国会で新しい総理大臣が指名される。');
+    lines.push('野党が結束して内閣を追いこんだ（党内の評価が大きく上がった）。');
+  } else {
+    me.standing = clamp(num(me.standing) + 2, 0, 100);
+    me.reputation = clamp(num(me.reputation) + 1, -100, 100);
+    lines.push(`可決（出席議員の過半数）には${Math.max(1, Math.floor((r.yes + r.no) / 2) + 1 - r.yes)}票足りなかった。`);
+    lines.push('それでも、内閣に反対する野党の意思は示せた（党内の評価が少し上がった）。');
+  }
+  try { if (typeof g.addFame === 'function') g.addFame(r.passed ? 40 : 10, true); } catch (e) { /* */ }
+  addEvent(g, s, 'opposition', `内閣不信任決議案の${r.passed ? '可決' : '否決'}（${r.yes}対${r.no}）`, { segs: r.passed ? { floating: 0.6 } : { floating: 0.2 }, n: 2 });
+  emit(g, 'opposition', { kind: 'fushinnin', passed: r.passed, yes: r.yes, no: r.no });
+  return { ...r, text: lines.join('\n') };
 }
 function oppositionImpl(g, s, kind, opts = {}) {
   const p = pol(g);
@@ -2160,11 +2283,12 @@ function oppositionImpl(g, s, kind, opts = {}) {
   const me = p.me;
   const role = playerPartyRole(p);
   const O = s.opposition;
-  if (kind === 'fushinnin') { try { return g.noConfidence(opts); } catch (e) { return { ok: false, why: String(e && e.message) }; } }
+  if (kind === 'fushinnin') return fushinninImpl(g, s, p, opts);
   if (kind === 'shitsumon_shuisho') {
     if (!isNational(p)) return { ok: false, why: '質問主意書を出せるのは国会議員だけ' };
+    if (inCabinetP(p)) return { ok: false, why: CABINET_ANSWERS };
     if (!inSessionP(p, day)) return { ok: false, why: '質問主意書は国会の会期中に出す（国会法74条）' };
-    if (day - num(O.lastQ, -99) < 2) return { ok: false, why: '前の質問主意書から間がない' };
+    if (qTooSoon(O, day)) return { ok: false, why: '前の質問主意書から間がない（次は明日から）' };
     const topic = QUESTION_TOPICS[opts.topic] ? opts.topic : 'generic';
     O.lastQ = day;
     const q = { id: 'q' + s.nextId++, day, topic, title: `${QUESTION_TOPICS[topic]}に関する質問主意書`, due: day + 3, answered: null };
@@ -2178,6 +2302,7 @@ function oppositionImpl(g, s, kind, opts = {}) {
   }
   if (kind === 'yosan_shitsugi') {
     if (!isNational(p)) return { ok: false, why: '予算委員会で質問できるのは国会議員だけ' };
+    if (inCabinetP(p)) return { ok: false, why: CABINET_ANSWERS_BUDGET };
     const S = p.diet.session;
     const bud = p.diet.bills.find((b) => b.kind === 'budget' && !b.policy && liveBill(b));
     if (!S || !inSessionP(p, day) || !bud) return { ok: false, why: '予算委員会の審議（通常国会の前半、予算案が審議中のとき）に' };
@@ -2450,6 +2575,7 @@ function demoLabel(def, against) {
   const C = DEMO_CAUSES[against] || DEMO_CAUSES.other;
   let cause = def.cause ? String(def.cause) : '';
   if (/^[a-z0-9_]+$/i.test(cause)) cause = REG && REG.REGIME_STEPS && REG.REGIME_STEPS[cause] ? `「${REG.REGIME_STEPS[cause].name}」に抗議するデモ` : '';
+  if (cause && against === 'rally' && /応援|支持/.test(cause) && !/デモ|集会|行進/.test(cause)) cause = `${cause}集会`;
   if (cause && !/デモ|集会|行進/.test(cause)) cause = /反対|抗議|要求|求め|守れ|なくそう|やめ|撤回|守ろう|救済|支援/.test(cause) ? `「${cause}」を訴える${against === 'rally' ? '集会' : 'デモ'}` : `「${cause}」${against === 'rally' ? 'を支持する集会' : 'に反対するデモ'}`;
   return cause || C.label.replace('{title}', def.title || '政府の方針').replace('{cause}', '抗議のデモ');
 }
@@ -2544,6 +2670,7 @@ function joinDemoImpl(g, s, id, opts = {}) {
   try { if (typeof g.isFree === 'function' && !g.isFree()) return { ok: false, why: '身柄を拘束されていて参加できない' }; } catch (e) { /* */ }
   if (regimeId(g) === 'dictatorship' && d.stance !== 'rally') return { ok: false, why: 'いまは集会やデモが禁じられている。法律に反する参加は、ここではできない' };
   if (d.joined && d.joined.day === day) return { ok: false, why: '今日はもう参加した' };
+  if (d.stance === 'protest' && inCabinetP(pol(g))) return { ok: false, why: CABINET_NO_PROTEST };
   if (num(st.stamina) < 15) return { ok: false, why: '体力が足りない' };
   st.stamina -= 15;
   const role = opts.role === 'speaker' ? 'speaker' : 'participant';
@@ -2554,15 +2681,32 @@ function joinDemoImpl(g, s, id, opts = {}) {
   const draw = Math.round(Math.log10(1 + fame) * (role === 'speaker' ? 600 : 200));
   d.size += draw;
   d.peak = Math.max(d.peak, d.size);
-  if (role === 'speaker' && fame >= 300) {
-    try { if (typeof g.addFame === 'function') g.addFame(Math.round(40 + Math.log10(1 + fame) * 20), true); } catch (e) { /* */ }
-    const lost = Math.round(num(st.fans) * rnd(0.005, 0.02));
-    const gain = Math.round(num(st.fans) * rnd(0.003, 0.02));
-    try { if (typeof g.addFans === 'function') g.addFans(gain - lost, true); } catch (e) { /* */ }
-    out.push(`スピーチが報じられた（知名度アップ。ファン ${gain >= lost ? '+' : ''}${gain - lost}人）`);
-    if (fame >= 2000) { st.flags = st.flags || {}; st.flags.govtSponsorWorry = day; out.push('スポンサーや事務所からは「政治的な発言には気をつけて」と言われた'); }
-    addEvent(g, s, 'demo_celeb', `${st.name}さんが${qd(d.cause)}でスピーチ`, { n: 4 });
-  }
+  // A speech is news once per demo, if the media cover it at all (2026-10 fix: no fame farm). The coverage grows with
+  // the crowd and the speaker's name; speeches in the last 30 days wear thin (同じ顔ぶれの演説は記事にならない).
+  if (role === 'speaker' && !d.spoke) {
+    d.spoke = day;
+    const SP = (st.flags = st.flags || {}).govtSpeeches = (Array.isArray(st.flags.govtSpeeches) ? st.flags.govtSpeeches : []).filter((x) => day - num(x) < 30);
+    const fresh = 1 / (1 + SP.length);
+    SP.push(day);
+    const covered = Math.random() < clamp(0.25 + Math.log10(1 + fame) * 0.12 + Math.log10(1 + num(d.size)) * 0.05, 0.2, 0.85) * (fresh < 1 ? 0.8 : 1);
+    if (!covered) out.push('スピーチはしたが、ニュースにはならなかった');
+    else {
+      const gainFame = Math.round((5 + 3 * Math.log10(1 + num(d.size)) + 2 * Math.log10(1 + fame)) * fresh);
+      try { if (typeof g.addFame === 'function' && gainFame > 0) g.addFame(gainFame, true); } catch (e) { /* */ }
+      const lost = Math.round(num(st.fans) * rnd(0.005, 0.02) * (fame >= 2000 ? 1.5 : 1));
+      const gain = Math.round(num(st.fans) * rnd(0.003, 0.015) * fresh);
+      try { if (typeof g.addFans === 'function' && gain - lost) g.addFans(gain - lost, true); } catch (e) { /* */ }
+      out.push(`スピーチが報じられた（知名度 +${gainFame}${fresh < 1 ? '・最近の演説が続き、扱いは小さめ' : ''}。ファン ${gain >= lost ? '+' : ''}${gain - lost}人）`);
+      if (fame >= 300) addEvent(g, s, 'demo_celeb', `${st.name}さんが${qd(d.cause)}でスピーチ`, { n: 4 });
+      if (fame >= 2000) {
+        // a household name takes a side: the sponsors and the agency worry (a real cost: stress, and a word on the phone)
+        st.flags.govtSponsorWorry = day;
+        try { if (typeof g.addNeed === 'function') g.addNeed('stress', 6); } catch (e) { /* */ }
+        try { g.message({ from: '事務所のマネージャー', kind: 'news', text: `デモでのスピーチ、ニュースで見ました。\nスポンサーさんから問い合わせが来ています。表現の自由はもちろん大事ですが、CMの契約もあるので、次からは事前に相談してくださいね。` }); } catch (e) { /* */ }
+        out.push('スポンサーや事務所からは「政治的な発言には気をつけて」と言われた');
+      }
+    }
+  } else if (role === 'speaker') out.push('同じデモでの2回目のスピーチは、もうニュースにならなかった');
   if (p && p.me && p.me.party && p.me.office) {
     const ruling = isRulingParty(p, p.me.party);
     if (d.stance === 'protest' && ruling) { p.me.standing = clamp(num(p.me.standing) - 6, 0, 100); out.push('与党の議員が政府への抗議に加わったことで、党内の評価が下がった'); }
@@ -2571,7 +2715,45 @@ function joinDemoImpl(g, s, id, opts = {}) {
   }
   try { if (typeof g.addNeed === 'function') g.addNeed('stress', -3); } catch (e) { /* */ }
   emit(g, 'demo', { stage: 'joined', demo: d, role });
-  return { ok: true, role, size: d.size, text: `${d.place}の${qd(d.cause)}に${role === 'speaker' ? 'スピーチで' : '一人の参加者として'}加わった（憲法21条：集会・表現の自由）。${out.join('。')}` };
+  const how = d.by === 'player' ? (role === 'speaker' ? '主催者としてあいさつし、マイクを握った' : '主催者として集まった人たちを迎えた') : role === 'speaker' ? 'スピーチで加わった' : '一人の参加者として加わった';
+  return { ok: true, role, size: d.size, text: `${d.place}の${qd(d.cause)}に、${how}（憲法21条：集会・表現の自由）。${out.join('。')}` };
+}
+// Is there a live issue for this cause? (2026-10 fix: a demo is organised about something that is happening) null | reason.
+// A disaster at home stops every gathering for a while (救助と避難が先).
+function demoCauseBlock(g, s, against) {
+  const p = pol(g);
+  const day = today(g);
+  let dz = null;
+  try { dz = typeof g.disaster === 'function' ? g.disaster() : null; } catch (e) { dz = null; }
+  if (dz && dz.home && ['hassei', 'hinan'].includes(dz.phase)) return '地元が被災したばかり。いまは集会より、救助と避難が先';
+  const live = (b) => b && !['enacted', 'rejected', 'shelved'].includes(b.stage);
+  const bills = (p && p.diet && p.diet.bills) || [];
+  const recent = (kind, n = 120) => s.events.some((e) => e.kind === kind && day - num(e.day) <= n);
+  switch (against) {
+    case 'tax': {
+      const up = s.taxPlan.some((x) => !x.done && x.rate > rateNow(g, s, x.id)) || Object.entries(s.taxReform.proposals || {}).some(([id, x]) => x && x.rate > rateNow(g, s, id))
+        || bills.some((b) => live(b) && (/^shohizei_/.test(String(b.policy)) || (b.policy === 'zeisei_kaisei' && b.params && Object.entries(b.params.changes || {}).some(([id, r]) => num(r) > num(b.params.from && b.params.from[id], r)))))
+        || !!(p && p.flags && p.flags.taxPlan && !p.flags.taxPlan.done) || recent('tax_up', 60);
+      return up ? null : 'いまは増税の予定も法案もない（反対する増税がない）';
+    }
+    case 'war': {
+      let w = null; try { w = typeof g.war === 'function' ? g.war() : null; } catch (e) { w = null; }
+      const area = (b) => { try { return POL && POL.POLICIES[b.policy] && POL.POLICIES[b.policy].area; } catch (e) { return null; } };
+      return w || regimeId(g) !== 'democracy' || bills.some((b) => live(b) && ['diplomacy', 'defense'].includes(area(b))) ? null : 'いまは戦争や軍事の大きな動きがない';
+    }
+    case 'disaster': {
+      let past = [];
+      try { past = typeof g.disasters === 'function' ? g.disasters() || [] : []; } catch (e) { past = []; }
+      return dz || past.some((x) => day - num(x.end, x.start) <= 120) ? null : 'いまは支援を求める被災地がない';
+    }
+    case 'scandal': return recent('scandal', 120) || num(p && p.cabinet && p.cabinet.scandal) <= -2 ? null : '政治とカネの問題が、いまは話題になっていない';
+    case 'speech': {
+      let pf = 72; try { pf = typeof g.pressFreedom === 'function' ? num(g.pressFreedom().value, 72) : 72; } catch (e) { /* */ }
+      return pf < 65 || regimeId(g) !== 'democracy' || recent('press', 120) ? null : 'いまは表現の自由が脅かされる動きがない';
+    }
+    case 'policy': return bills.some((b) => live(b) && b.sponsor === 'cabinet' && b.kind !== 'budget' && b.kind !== 'noconfidence') || (p && (p.laws || []).some((l) => day - num(l.day, -999) <= 60)) ? null : '反対する政府の法案が、いま国会にない';
+    default: return null;
+  }
 }
 function organizeDemoImpl(g, s, def = {}) {
   const st = g.state;
@@ -2579,7 +2761,9 @@ function organizeDemoImpl(g, s, def = {}) {
   try { if (typeof g.isFree === 'function' && !g.isFree()) return { ok: false, why: '身柄を拘束されていて主催できない' }; } catch (e) { /* */ }
   if (regimeId(g) === 'dictatorship') return { ok: false, why: 'いまは集会やデモが禁じられている（体制）。法律に反する主催は、ここではできない' };
   if (s.demos.list.some((d) => d.by === 'player' && d.status !== 'ended')) return { ok: false, why: 'すでに主催しているデモがある' };
-  const cost = 30000;
+  const cb = demoCauseBlock(g, s, def.against);
+  if (cb) return { ok: false, why: cb };
+  const cost = DEMO_COST;
   if (num(st.money) < cost) return { ok: false, why: `準備のお金（音響・プラカード）が足りない（${fmtMoney(cost)}）` };
   st.money -= cost;
   const against = DEMO_CAUSES[def.against] ? def.against : 'other';
@@ -2991,11 +3175,13 @@ function dietBlock(g, s, kind, opts = {}) {
   switch (kind) {
     case 'question': case 'shitsumon_shuisho':
       if (!isNational(p)) return '質問主意書を出せるのは国会議員だけ';
+      if (inCabinetP(p)) return CABINET_ANSWERS;
       if (!inSessionP(p, day)) return '質問主意書は国会の会期中に出す（国会法74条）';
-      if (day - num(O.lastQ, -99) < 2) return '前の質問主意書から間がない';
+      if (qTooSoon(O, day)) return '前の質問主意書から間がない（次は明日から）';
       return null;
     case 'budget_question': case 'yosan_shitsugi':
       if (!isNational(p)) return '予算委員会で質問できるのは国会議員だけ';
+      if (inCabinetP(p)) return CABINET_ANSWERS_BUDGET;
       if (!inSessionP(p, day) || !p.diet.bills.some((b) => b.kind === 'budget' && !b.policy && liveBill(b))) return '予算委員会の審議（通常国会の前半、予算案が審議中のとき）に';
       if (day - num(O.budgetQ.day, -99) < 5) return '予算委員会の質問の時間は、次は数日後';
       return null;
@@ -3029,7 +3215,13 @@ function dietBlock(g, s, kind, opts = {}) {
       return K ? null : '参議院で否決された最重要法案がない';
     }
     case 'fushinnin':
+      // the politics core's own side-effect-free check (2026-10: the opposition's motion — never the PM / a minister,
+      // a ruling member only by leaving the party first; the 50 supporters); older cores: the basic rules
+      if (typeof g.noConfidenceBlock === 'function') { try { return g.noConfidenceBlock({}); } catch (e) { console.error(e); } }
       if (p.me.office !== 'shugi') return '内閣不信任決議案を出せるのは衆議院議員だけ';
+      if (isPMg(p)) return '総理は自分の内閣に不信任案を出さない（辞めるなら総辞職、信を問うなら衆議院の解散）';
+      if (inCabinetP(p)) return '大臣は内閣の一員。自分の内閣に不信任案は出さない';
+      if (role.ruling) return '与党の議員は不信任案を出さない（不信任案は野党が出すもの。出すなら離党してから）';
       if (!inSessionP(p, day)) return '国会の会期中でないと出せない';
       return null;
     default: return null;
@@ -3054,14 +3246,16 @@ function refusalImpl(g, s, kind, opts = {}) {
     case 'demo_join': {
       if (regimeId(g) === 'dictatorship') return 'いまは集会やデモが禁じられている';
       try { if (typeof g.isFree === 'function' && !g.isFree()) return '身柄を拘束されている'; } catch (e) { /* */ }
-      if (opts.id) { const d = s.demos.list.find((x) => x.id === opts.id); if (!d || d.status === 'ended') return 'そのデモはもう終わっている'; }
+      if (opts.id) { const d = s.demos.list.find((x) => x.id === opts.id); if (!d || d.status === 'ended') return 'そのデモはもう終わっている'; if (d.stance === 'protest' && inCabinetP(pol(g))) return CABINET_NO_PROTEST; }
       else if (!s.demos.list.some((d) => d.status !== 'ended')) return 'いま行われているデモはない';
       return num(g.state.stamina) < 15 ? '体力が足りない' : null;
     }
     case 'demo_organize':
       if (regimeId(g) === 'dictatorship') return 'いまは集会やデモが禁じられている（体制）';
       if (s.demos.list.some((d) => d.by === 'player' && d.status !== 'ended')) return 'すでに主催しているデモがある';
-      return num(g.state.money) < 30000 ? `準備のお金が足りない（${fmtMoney(30000)}）` : null;
+      if (num(g.state.money) < 30000) return `準備のお金が足りない（${fmtMoney(30000)}）`;
+      // opts.against: is there a live issue for that cause (null without it: any cause)
+      return opts.against ? demoCauseBlock(g, s, opts.against) : null;
     case 'demo_respond': {
       const d = opts.id ? s.demos.list.find((x) => x.id === opts.id) : s.demos.list.find((x) => x.status === 'active');
       return respondBlock(g, s, d, opts.how || 'tolerate');
@@ -3120,6 +3314,21 @@ function taxRowsImpl(g, s) {
     };
   });
 }
+// A proposal's expected effects: { id, from, to, delta, local, revenue (兆円/年: the national revenue, or the local one
+// for 住民税), segments [{ seg, name, v }] (support shift, + = gains), economy { growth, inflation }, approval (消費税: the
+// cabinet's mood), odds (zeichoOdds) }.
+function taxPreviewImpl(g, s, id, value) {
+  const T = TAXES[id];
+  if (!T) return null;
+  const from = rateNow(g, s, id);
+  const to = stepRate(id, value);
+  const dl = to - from;
+  const SG = SEGS();
+  const segments = Object.entries(T.seg || {}).map(([k, v]) => ({ seg: k, name: (SG[k] || {}).name || k, v: r1(num(v) * dl) })).filter((x) => Math.abs(x.v) >= 0.1).sort((a, b) => b.v - a.v);
+  const economy = {};
+  for (const [e, k] of Object.entries(T.eco || {})) economy[e] = r2(num(k) * dl);
+  return { id, from, to, delta: r2(dl), local: !!T.local, revenue: r2((T.local ? num(T.localCoef) : num(T.coef)) * dl * gdpScale(g)), segments, economy, approval: id === 'shohi' ? r1(-dl * 0.8) : null, odds: pol(g) && POL ? zeichoOdds(g, s, id, to) : null };
+}
 function setTaxRateImpl(g, s, id, v, opts = {}) {
   const why = taxBlock(g, s, id, v, opts);
   if (why) return { ok: false, why };
@@ -3129,7 +3338,8 @@ function setTaxRateImpl(g, s, id, v, opts = {}) {
   const val = stepRate(id, v);
   const R = s.taxReform;
   if (opts.now) {
-    if (!zeichoAccepts(g, s, id, val)) { R.rejected[id] = val; return { ok: false, why: '与党の税制調査会が了承しなかった（党内の理解が得られなかった）', stage: 'rejected' }; }
+    const za = zeichoAccepts(g, s, id, val);
+    if (!za.ok) { R.rejected[id] = val; return { ok: false, why: `与党の税制調査会が了承しなかった（${za.odds.why || '党内の理解が得られなかった'}）`, stage: 'rejected' }; }
     const at = d.month >= 1 && d.month <= 3 ? { year: d.year, month: 4 } : { year: d.month === 12 ? d.year + 1 : d.year, month: d.month === 12 ? 1 : d.month + 1 };
     const schedule = [{ id, rate: val, year: at.year, month: at.month, player: true }];
     const b = addCabinetBill(g, p, { title: `${T.short}の税率を改める法律案（臨時の税制改正）`, policy: 'zeisei_kaisei', params: { changes: { [id]: val }, from: { [id]: rateNow(g, s, id) }, schedule, why: '臨時の税制改正', year: at.year, title: '臨時の税制改正', urgent: true }, ministry: 'minister_finance' });
@@ -3143,7 +3353,8 @@ function setTaxRateImpl(g, s, id, v, opts = {}) {
   R.proposals[id] = { rate: val, target, day: today(g), by: isPMg(p) ? 'pm' : financeMinister(p) ? 'finance' : 'party' };
   if (R.rejected) delete R.rejected[id];
   emit(g, 'taxReform', { stage: 'proposal', id, rate: val, target });
-  return { ok: true, stage: 'proposal', target, text: `${target}年度の税制改正に向けて、与党の税制調査会に「${T.short}を${val}${T.unit}に」と提案した。${target - 1}年12月中旬の税制改正大綱で採否が決まり、法律案が成立すれば、原則${CAL_YEAR_TAX[id] ? `${target}年分（1月）` : `${target}年${TAX_MONTH[id] || 4}月`}から適用。` };
+  const od = zeichoOdds(g, s, id, val);
+  return { ok: true, stage: 'proposal', target, odds: od, text: `${target}年度の税制改正に向けて、与党の税制調査会に「${T.short}を${val}${T.unit}に」と提案した。\n${target - 1}年12月中旬の税制改正大綱で採否が決まり、法律案が成立すれば、原則${CAL_YEAR_TAX[id] ? `${target}年分（1月）` : `${target}年${TAX_MONTH[id] || 4}月`}から適用。\n税調の見通し：${od.label}${od.why ? `（${od.why}）` : ''}` };
 }
 const STAGE_LABEL = { request: '概算要求', genan: '財務省原案', cabinet: '政府案（閣議決定）', diet: '国会で審議中', passed: '成立', provisional: '暫定予算' };
 function budgetImpl(g, s) {
@@ -3173,7 +3384,7 @@ function budgetImpl(g, s) {
   const cal = [
     { step: 'ceiling', label: '概算要求基準（シーリング）を閣議了解', when: '7月下旬', done: num(S.ceilingYear) >= d.year },
     { step: 'request', label: '各府省が概算要求を提出', when: '8月末', done: num(S.requestYear) >= d.year },
-    { step: 'genan', label: '財務省原案の内示 → 復活折衝', when: '12月下旬', done: num(S.genanYear) >= d.year },
+    { step: 'genan', label: `${ministryOf(g, 'minister_finance')}原案の内示 → 復活折衝`, when: '12月下旬', done: num(S.genanYear) >= d.year },
     { step: 'cabinet', label: '政府案を閣議決定', when: '12月下旬', done: num(S.decidedYear) >= d.year },
     { step: 'diet', label: '通常国会に提出（衆議院が先に審議、憲法60条）', when: '1月', done: d.doy < 30 && num(S.decidedYear) >= d.year - 1 && !!p.diet.bills.find((b) => b.kind === 'budget' && !b.policy && String(b.title || '').startsWith(`${d.year}年度`)) },
     { step: 'passed', label: '成立（参院が30日以内に議決しなければ自然成立）', when: '3月末まで', done: !!B.passed && num(B.year) === d.year },
@@ -3181,7 +3392,7 @@ function budgetImpl(g, s) {
   ];
   const used = (S.reserve.used || []).reduce((a, u) => a + num(u.amount), 0);
   return {
-    fy: num(B.year), stage: B.passed ? 'passed' : B.provisional ? 'provisional' : S.stage, stageLabel: B.passed ? '成立' : B.provisional ? '暫定予算' : STAGE_LABEL[S.stage] || S.stage,
+    fy: num(B.year), stage: B.passed ? 'passed' : B.provisional ? 'provisional' : S.stage, stageLabel: B.passed ? '成立' : B.provisional ? '暫定予算' : S.stage === 'genan' ? `${ministryOf(g, 'minister_finance')}原案` : STAGE_LABEL[S.stage] || S.stage,
     passed: !!B.passed, provisional: !!B.provisional, total: r1(total), spending, revenue, tax: r1(B.revenue), nontax: r1(G2.nontax), bonds: r1(B.deficit), bondRatio: total ? r1((num(B.deficit) / total) * 100) : 0,
     primaryBalance: r1(num(B.revenue) + num(G2.nontax) - (total - num(det.kokusai))), debtRatio: Math.round(num(p.economy.debtRatio)), gdp: Math.round(num(p.economy.gdp)),
     calendar: cal, draft: budgetDraftImpl(g, s), requests: S.requests ? { ...S.requests } : null, decided: S.decided ? { fy: S.decided.fy, total: S.decided.total, by: S.decided.by } : null,
@@ -3196,7 +3407,12 @@ function budgetDraftImpl(g, s) {
   const Dr = S.draft;
   const items = BUDGET_ORDER.map((k) => ({ id: k, name: BUDGET_ITEMS[k].name, preview: r2(Dr.preview[k]), draft: r2(Dr.items[k]), request: S.requests && S.requests.fy === Dr.fy ? r2(S.requests.items[k]) : null, fixed: BUDGET_ITEMS[k].fixed, min: BUDGET_ITEMS[k].abs ? BUDGET_ITEMS[k].min : r2(Dr.preview[k] * (1 + BUDGET_ITEMS[k].min)), max: BUDGET_ITEMS[k].abs ? BUDGET_ITEMS[k].max : r2(Dr.preview[k] * (1 + BUDGET_ITEMS[k].max)), delta: r2(Dr.items[k] - Dr.preview[k]) }));
   const total = sumObj(Dr.items);
-  return { fy: Dr.fy, by: Dr.by, editable: budgetBlock(g, s), items, total: r1(total), previewTotal: r1(sumObj(Dr.preview)), requestTotal: S.requests ? S.requests.total : null, decided: !!(S.decided && S.decided.fy === Dr.fy) };
+  // (2026-10) the draft's deficit: revenue taken at this year's level (見込み); bondRatioOf(total) for an unsaved edit
+  const p = pol(g);
+  const B = p && p.economy && p.economy.budget;
+  const revenueEst = B ? r1(num(B.revenue) + num(B.govt && B.govt.nontax)) : null;
+  return { fy: Dr.fy, by: Dr.by, editable: budgetBlock(g, s), items, total: r1(total), previewTotal: r1(sumObj(Dr.preview)), requestTotal: S.requests ? S.requests.total : null, decided: !!(S.decided && S.decided.fy === Dr.fy),
+    revenueEst, bondsEst: revenueEst != null ? r1(Math.max(0, total - revenueEst)) : null, bondRatioEst: draftBondRatio(g, s, total), bondRatioNow: B && num(B.spending) > 0 ? r1((num(B.deficit) / num(B.spending)) * 100) : null };
 }
 function setBudgetImpl(g, s, item, v) {
   const why = budgetBlock(g, s);
@@ -3228,6 +3444,8 @@ const methods = {
   taxRates() { const s = GS(this); return s ? taxRowsImpl(this, s) : []; },
   taxReform() { const s = GS(this); if (!s) return null; const R = s.taxReform; return { year: R.year, stage: R.stage, proposals: { ...(R.proposals || {}) }, rejected: { ...(R.rejected || {}) }, taiko: R.taiko ? { ...R.taiko } : null, billId: R.billId, urgent: R.urgent || null, plan: s.taxPlan.filter((x) => !x.done).map((x) => ({ ...x })), log: R.log.slice(-12), history: s.taxHistory.slice(0, 20) }; },
   setTaxRate(id, v, opts = {}) { const s = GS(this); return s ? setTaxRateImpl(this, s, id, v, opts || {}) : { ok: false, why: 'まだ準備ができていない' }; },
+  // (2026-10) what a proposed rate would do — revenue per year, segments, economy, the 与党税調's odds — for a confirm
+  taxProposalPreview(id, value) { const s = GS(this); return s ? taxPreviewImpl(this, s, id, value) : null; },
   budget() { const s = GS(this); return s ? budgetImpl(this, s) : null; },
   budgetDraft() { const s = GS(this); return s ? budgetDraftImpl(this, s) : null; },
   setBudget(item, v) { const s = GS(this); return s ? setBudgetImpl(this, s, item, v) : { ok: false, why: 'まだ準備ができていない' }; },

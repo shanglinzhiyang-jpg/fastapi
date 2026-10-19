@@ -3127,17 +3127,20 @@ function dietView(g) {
     const me = p.me;
     const S = p.diet.session;
     return [
-      { id: 'attend', label: '国会に出席する', disabled: !isNational(me) || !S, why: !isNational(me) ? '国会議員ではない' : '国会は閉会中', sub: me.attend && me.attend.last === today(g) ? '今日は出席ずみ' : '体力5・欠席が続くと批判される' },
+      { id: 'attend', label: '国会に出席する', disabled: !isNational(me) || !S, why: !isNational(me) ? '国会議員ではない' : '国会は閉会中', sub: (() => { const A = typeof g.attendance === 'function' ? g.attendance() : null; return A && A.member && A.session ? A.text : me.attend && me.attend.last === today(g) ? '今日は出席ずみ' : '体力5・欠席が続くと批判される'; })() },
       { id: 'bills', label: '法案の一覧・採決', sub: `審議中 ${g.billsList({ pending: true }).length}本` },
       { id: 'policy', label: '政策をつくる・法案を出す', sub: isNational(me) || inCabinet(me) ? '議員立法・閣法' : '研究だけ（提出は議員から）' },
-      { id: 'question', label: '委員会で質問する', disabled: !isNational(me) || !S, why: '国会議員が会期中にできる', sub: 'トークの力しだい・体力12' },
-      { id: 'nc', label: '内閣不信任案を出す', disabled: me.office !== 'shugi' || !S, why: '衆議院議員が会期中に出せる', sub: '賛成者50人・可決なら解散か総辞職' },
+      // (2026-10 fix) the cabinet answers in the committees (国会で答弁); the no-confidence motion is the opposition's
+      inCabinet(me)
+        ? { id: 'answer', label: '国会で答弁する', disabled: !S, why: '国会は閉会中', sub: '大臣として質問に答える・失言に注意' }
+        : { id: 'question', label: '委員会で質問する', disabled: !isNational(me) || !S, why: '国会議員が会期中にできる', sub: 'トークの力しだい・体力12' },
+      (() => { const why = typeof g.noConfidenceBlock === 'function' ? g.noConfidenceBlock({}) : me.office !== 'shugi' || !S ? '衆議院議員が会期中に出せる' : null; return { id: 'nc', label: '内閣不信任案を出す', disabled: !!why, why, sub: why ? `出せない：${why}` : '賛成者50人・可決なら解散か総辞職' }; })(),
       { id: 'amend', label: '憲法改正', sub: '発議と国民投票のしくみ' },
     ];
   };
   const v = {
     title: '国会', hint: '↑↓ A:けってい B:もどる',
-    tip: () => ({ attend: '本会議や委員会に出るのが議員の基本。出席は記録に残る', bills: '法律は衆参両院で可決して成立。衆院は出席議員の3分の2で再可決できる', policy: '法律案には、内閣が出す「閣法」と、議員が出す「議員立法」がある', question: '委員会では、議員が大臣や役所に質問して政策を問いただす', nc: '内閣不信任決議は衆議院だけ。参議院の問責決議に法的な拘束力はない', amend: '憲法改正は、各院の総議員の3分の2で発議し、国民投票の過半数で成立' }[(v.lb.current() || {}).id] || ''),
+    tip: () => ({ answer: '総理や大臣は、本会議や委員会で議員の質問に答える（答弁）。国会への出席として記録される', attend: '本会議や委員会に出るのが議員の基本。出席は記録に残る', bills: '法律は衆参両院で可決して成立。衆院は出席議員の3分の2で再可決できる', policy: '法律案には、内閣が出す「閣法」と、議員が出す「議員立法」がある', question: '委員会では、議員が大臣や役所に質問して政策を問いただす', nc: '内閣不信任決議は衆議院だけ。参議院の問責決議に法的な拘束力はない', amend: '憲法改正は、各院の総議員の3分の2で発議し、国民投票の過半数で成立' }[(v.lb.current() || {}).id] || ''),
     enter() { v.lb = new ListBox({ items: cmds, rowH: 34 }); },
     update(ui, inp) {
       v.lb.move(inp);
@@ -3197,17 +3200,16 @@ async function dietCommand(ui, g, id) {
     await ui.alert('国会に出席', [`${p.me.office === 'sangi' ? '参議院' : '衆議院'}の本会議と委員会に出席した。`, bills.length ? `今日の審議：${bills.slice(0, 2).map((b) => billShort(b.title)).join('・')}${bills.length > 2 ? `ほか${bills.length - 2}本` : ''}` : attendQuiet(g), '党内の評価が少し上がった。']);
   } else if (id === 'bills') await SECTIONS.bills(ui);
   else if (id === 'policy') await SECTIONS.policy(ui);
-  else if (id === 'question') {
-    const r = g.activity('委員会で質問');
+  else if (id === 'question' || id === 'answer') {
+    const kind = id === 'answer' ? '国会で答弁' : '委員会で質問';
+    const r = g.activity(kind);
     if (!r.ok) { ui.toast(r.why, C.dim); return; }
     sfx(r.gaffe ? 'buzz' : 'good');
-    await ui.alert('委員会で質問', r.text.split('\n'));
+    await ui.alert(kind, r.text.split('\n'));
   } else if (id === 'nc') {
-    const me = p.me;
-    const ruling = me.party && isRuling(p, me.party);
-    const k = await ui.confirm({ title: '内閣不信任決議案', danger: !!ruling, w: 460, text: `内閣不信任決議案を提出する？\n可決されれば、内閣は10日以内に衆議院を解散するか総辞職しなければならない（憲法69条）。${ruling ? '\n⚠ あなたは与党の議員。賛成すれば党を割る覚悟がいる（除名もありうる）。' : ''}`, choices: ['提出する', 'やめておく'], tip: '不信任決議は、衆議院が内閣を信任しないという意思を示すもの' });
+    const k = await ui.confirm({ title: '内閣不信任決議案', w: 460, text: '内閣不信任決議案を提出する？\n可決されれば、内閣は10日以内に衆議院を解散するか総辞職しなければならない（憲法69条）。', choices: ['提出する', 'やめておく'], tip: '不信任決議は、衆議院が内閣を信任しないという意思を示すもの' });
     if (k !== 0) return;
-    const r = g.noConfidence({ rebel: !!ruling });
+    const r = g.noConfidence({});
     if (!r.ok) { await ui.alert('提出できない', r.why); return; }
     await SECTIONS.vote(ui, { billId: r.billId, house: 'shugi' });
     await ui.alert('採決の結果', r.passed ? ['内閣不信任決議案は可決された！', r.outcome === 'dissolve' ? '内閣は衆議院を解散した。総選挙だ。' : r.outcome === 'pending' ? '解散か総辞職かを決めなければならない。' : '内閣は総辞職へ。'] : [`否決された（賛成${r.yes}・反対${r.no}）。`]);
@@ -3490,9 +3492,13 @@ SECTIONS.coalition = async (ui) => {
   for (let guard = 0; guard < 100; guard++) {
     const ids = Object.keys(p.parties).filter((id) => id !== me.party).sort((a, b) => g.partyStatus(b).seats - g.partyStatus(a).seats);
     const tot = (h) => [me.party, ...partners].reduce((a, id) => a + num(p.diet[h].seats[id]), 0);
+    // (2026-10 fix) a real party the regime rule keeps out of this government (regime.js g.regimeCoalitionBlock,
+    // feature-detected) is shown locked with its reason, and cannot be put in the coalition
+    const blockOf = (id) => { try { return typeof g.regimeCoalitionBlock === 'function' ? g.regimeCoalitionBlock(id) || null : null; } catch (e) { console.error(e); return null; } };
     const items = ids.map((id) => {
       const d = ideoDist(mine.ideology, p.parties[id].ideology);
-      return { label: p.parties[id].name, sub: `衆${num(p.diet.shugi.seats[id])}・参${num(p.diet.sangi.seats[id])}・${d < 2.2 ? '政策が近い' : d < 3.2 ? '協議しだい' : '政策が遠い'}`, icon: (c, x, y) => drawPartyMark(c, g, id, x, y, 20), tag: partners.has(id) ? { text: '連立', color: '#2a7a4a' } : null };
+      const why = partners.has(id) ? null : blockOf(id);
+      return { label: p.parties[id].name, sub: why ? `連立できない：${why}` : `衆${num(p.diet.shugi.seats[id])}・参${num(p.diet.sangi.seats[id])}・${d < 2.2 ? '政策が近い' : d < 3.2 ? '協議しだい' : '政策が遠い'}`, icon: (c, x, y) => drawPartyMark(c, g, id, x, y, 20), tag: partners.has(id) ? { text: '連立', color: '#2a7a4a' } : null, disabled: !!why, why };
     });
     items.push({ label: '✔ この枠組みで連立政権をつくる', labelColor: C.gold });
     const i = await ui.menu({ title: '連立協議', listTitle: 'Aで連立に入れる・外す', listW: 300, rowH: 36, items, index: idx,
@@ -3521,7 +3527,14 @@ SECTIONS.coalition = async (ui) => {
     const keep = {};
     for (const [post, w] of Object.entries(p.cabinet.ministers)) if (w === 'player' || (p.npcs[w] && [me.party, ...accepted].includes(p.npcs[w].party))) keep[post] = w;
     const r = g.formCabinet({ partners: accepted, ministers: keep });
-    if (!r.ok) { await ui.alert('連立協議', r.why || 'まとまらなかった'); return; }
+    if (!r.ok) {
+      sfx('buzz');
+      // the core's reason, and each refused partner with its own (regime.js: { refused: [{ id, why }] })
+      const lines = Array.isArray(r.refused) && r.refused.length ? ['連立の枠組みはまとまらなかった。', ...r.refused.map((x) => `${partyShort(g, x.id)}：${x.why}`)] : [r.why || 'まとまらなかった'];
+      for (const x of r.refused || []) partners.delete(x.id);
+      await ui.alert('連立協議', lines);
+      continue;
+    }
     sfx(refused.length ? 'buzz' : 'success');
     await ui.alert('連立協議', [`与党：${r.partyIds.map((id) => partyShort(g, id)).join('・')}`, refused.length ? `${refused.map((id) => partyShort(g, id)).join('・')}とは政策の違いが大きく、協議は決裂した。` : '連立の合意がまとまった。']);
     return;

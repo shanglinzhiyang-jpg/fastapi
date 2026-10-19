@@ -235,6 +235,17 @@ async function playNew(g, rec, full) {
     }
   } finally { S.close(); }
 }
+// The player's own step-down at the end of the もしも emergency / dictatorship (regime.js: 民主化 or a lawful removal; the
+// former PM is then barred from office and may face an investigation): { detained, charged } | null.
+function regimeExit(g, rec) {
+  if (!rec || !rec.from || rec.from.pm !== 'player') return null;
+  const r = g.state && g.state.regime;
+  const b = r && r.barred;
+  const near = b && Math.abs(num(b.day) - num(rec.day)) <= 1;
+  if (!near && !/民主化/.test(String(rec.reason || ''))) return null;
+  const detained = Math.max(num(r && r.record && r.record.detained), num(r && r.press && r.press.detained));
+  return { detained, charged: !!(b && b.charged) };
+}
 async function playResign(g, rec, full) {
   const from = rec.from || {};
   const S = stage(g);
@@ -246,8 +257,24 @@ async function playResign(g, rec, full) {
     }
     S.set('kakugi', { title: '臨時閣議', sub: '内閣総辞職' });
     await say(g, [`臨時閣議が開かれ、閣僚全員が辞表を提出した。${from.pmName}${from.pm === 'player' ? '（あなた）' : ''}内閣の総辞職だ${rec.reason ? `（${rec.reason}）` : ''}。`, '新しい総理大臣が任命されるまで、内閣はそのまま職務を続ける（憲法71条）。']);
-    S.set('kaiken', { title: '退陣の記者会見', figs: [{ look: lookOf(g, from.pm), x: SW / 2 - 32, y: 90 }] });
-    if (from.pm === 'player') {
+    const exit = regimeExit(g, rec);
+    if (exit) {
+      // (2026-10 fix) the step-down after the もしも emergency / dictatorship: no friendly farewell — the questions are
+      // about what was done under the emergency, and the investigation to come
+      S.set('kaiken', { title: '退陣の記者会見', sub: '緊急事態のあとで（もしも）', figs: [{ look: lookOf(g, from.pm), x: SW / 2 - 32, y: 90 }] });
+      await say(g, ['会見場は、張りつめた空気に包まれていた。', exit.detained ? `記者席には、拘束されていた記者の同僚たちも並んでいる（拘束された記者は${exit.detained.toLocaleString('ja-JP')}人にのぼった）。` : '緊急事態のもとで何が行われたのか、説明を求める質問が続いた。']);
+      const i = await g.ask('「緊急事態のもとでの行為について、説明してください」', ['謝罪し、捜査に協力すると述べる', '説明を拒む'], { name: '記者', cancel: 1 });
+      const p = polOf(g);
+      if (i === 0) {
+        await say(g, ['「国民の皆さまの自由と権利を損なったことを、深くおわびします。捜査には全面的に協力します」', '深く頭を下げ、しばらく顔を上げなかった。']);
+        try { if (p && p.me) p.me.reputation = Math.min(100, num(p.me.reputation) + 2); } catch (e) { /* */ }
+      } else {
+        await say(g, ['「お答えは差し控えます」', '会見は打ち切られた。記者たちの抗議の声が、背中に響いた。']);
+        try { if (p && p.me) p.me.reputation = Math.max(-100, num(p.me.reputation) - 5); } catch (e) { /* */ }
+      }
+      if (exit.charged) await say(g, ['検察が、緊急事態のもとでの職権の濫用について捜査を始めると伝えられている。']);
+    } else S.set('kaiken', { title: '退陣の記者会見', figs: [{ look: lookOf(g, from.pm), x: SW / 2 - 32, y: 90 }] });
+    if (exit) { /* done above */ } else if (from.pm === 'player') {
       const i = await g.ask('「退陣にあたって、ひと言お願いします」', ['支えてくれた人に感謝を述べる', '道半ばの課題を次に託すと述べる', '多くは語らない'], { name: '記者', cancel: 2 });
       await say(g, [['支えてくれた国民と仲間たちに、深く頭を下げた。', 'やり残した課題を挙げ、次の内閣に託した。', '「以上です」とだけ述べて、会見場をあとにした。'][i] || '会見を終えた。']);
     } else {
