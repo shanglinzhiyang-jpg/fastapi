@@ -1215,15 +1215,15 @@ function zeichoOdds(g, s, id, rate) {
   const appr = num(p.cabinet && p.cabinet.approval, 40);
   if (appr < 30) add('内閣支持率が低い', -0.1); else if (appr > 55) add('内閣支持率が高い', 0.05);
   if (['shotoku', 'jumin', 'hojin', 'sozoku'].includes(id)) {
-    if (raise && econ > 0.2) add('党の経済路線（市場・成長を重視）と逆', -0.3 * econ);
-    else if (!raise && econ < -0.2) add('党の経済路線（再分配を重視）と逆', -0.3 * -econ);
+    if (raise && econ > 0.2) add('市場・成長を重視する党の路線と逆', -0.3 * econ);
+    else if (!raise && econ < -0.2) add('再分配を重視する党の路線と逆', -0.3 * -econ);
     else if ((raise && econ < -0.2) || (!raise && econ > 0.2)) add('党の経済路線に沿う', 0.1);
   }
-  if (id === 'shohi') add(raise ? (before > 0 ? '増税は選挙に響く（与党議員の反発）' : '大型間接税の導入には反発が強い') : '消費税は社会保障の財源（財務省と税調が強く抵抗）', raise ? -0.25 : -0.3);
+  if (id === 'shohi') add(raise ? (before > 0 ? '増税は選挙に響くと与党議員が反発' : '大型間接税の導入には反発が強い') : '社会保障の財源が減るため、財務省と税調が強く抵抗', raise ? -0.25 : -0.3);
   const E = p.economy || {};
   const B = E.budget || {};
-  if (raise && num(E.growth, 1) < 0.5) add('景気が弱い（増税は景気を冷やす）', -0.15);
-  if (!raise && num(B.spending) > 0 && num(B.deficit) / num(B.spending) > 0.3) add('財政赤字が大きい（減税の財源がない）', -0.1);
+  if (raise && num(E.growth, 1) < 0.5) add('景気が弱いときの増税は景気を冷やす', -0.15);
+  if (!raise && num(B.spending) > 0 && num(B.deficit) / num(B.spending) > 0.3) add('財政赤字が大きく、減税の財源がない', -0.1);
   const size = Math.abs(rate - before) / Math.max(0.5, num(T.maxStep, 5));
   add('変更の幅が大きい', -Math.min(0.5, size * 0.5));
   if (num(s.taxReform.zeichoBonus)) add('政府税調の答申', num(s.taxReform.zeichoBonus));
@@ -2269,7 +2269,7 @@ function fushinninImpl(g, s, p, opts = {}) {
     me.standing = clamp(num(me.standing) + 2, 0, 100);
     me.reputation = clamp(num(me.reputation) + 1, -100, 100);
     lines.push(`可決（出席議員の過半数）には${Math.max(1, Math.floor((r.yes + r.no) / 2) + 1 - r.yes)}票足りなかった。`);
-    lines.push('それでも、内閣に反対する野党の意思は示せた（党内の評価が少し上がった）。');
+    lines.push('それでも内閣への反対の意思は示せた（党内の評価が少し上がった）。');
   }
   try { if (typeof g.addFame === 'function') g.addFame(r.passed ? 40 : 10, true); } catch (e) { /* */ }
   addEvent(g, s, 'opposition', `内閣不信任決議案の${r.passed ? '可決' : '否決'}（${r.yes}対${r.no}）`, { segs: r.passed ? { floating: 0.6 } : { floating: 0.2 }, n: 2 });
@@ -2726,6 +2726,7 @@ function demoCauseBlock(g, s, against) {
   let dz = null;
   try { dz = typeof g.disaster === 'function' ? g.disaster() : null; } catch (e) { dz = null; }
   if (dz && dz.home && ['hassei', 'hinan'].includes(dz.phase)) return '地元が被災したばかり。いまは集会より、救助と避難が先';
+  if (against !== 'rally' && inCabinetP(p)) return CABINET_NO_PROTEST;
   const live = (b) => b && !['enacted', 'rejected', 'shelved'].includes(b.stage);
   const bills = (p && p.diet && p.diet.bills) || [];
   const recent = (kind, n = 120) => s.events.some((e) => e.kind === kind && day - num(e.day) <= n);

@@ -3519,6 +3519,7 @@ SECTIONS.coalition = async (ui) => {
           y += 38;
         }
         T(c, `与党：${[me.party, ...partners].map((id) => partyShort(g, id)).join('・')}`, x, y, 12, C.text); y += 20;
+        if (it && it.disabled && it.why) { y = para(c, `${it.label}とは連立できない：${it.why}`, x, y, w, 12, C.warn, 16, 4) + 6; }
         para(c, '政策が遠い党とは、協議がまとまらないことがある。衆議院で過半数を持てば、法案や予算を通しやすい。参議院で過半数がないと「ねじれ」になる。', x, y, w, 12, C.dim, 16, 6);
       },
       tip: () => '連立を組むときは、党どうしで政策の合意文書を交わすことが多い',

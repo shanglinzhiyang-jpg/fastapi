@@ -1533,7 +1533,7 @@ function drawBudgetSub(c, ui, d, st) {
     if (yy < 262) T(c, d.draft ? `範囲 ${fmtN(r.min, 2)}〜${fmtN(r.max, 2)}兆円（前年なみ ${fmtN(r.base, 2)}）` : r.fixedLabel || '', x + 6, yy, 10, K.faint, 'left', w - 12);
   }
   // calendar
-  panel(c, x, 272, w, 64, '予算編成の流れ', { right: b.stageLabel || '' });
+  panel(c, x, 272, w, 64, '予算編成の流れ', { right: dr ? `${dr.fy}年度予算を編成中` : b.stageLabel || '' });
   const cal = b.calendar || [];
   const n = Math.max(1, cal.length);
   const step = (w - 60) / Math.max(1, n - 1);
@@ -1573,7 +1573,9 @@ async function taxProposal(ui, d, t) {
   // the voices about THIS change (2026-10 fix): for a cut, the tax's critics argue for it and its defenders against
   const cut = v < t.rate;
   const dir = cut ? '引き下げ' : '引き上げ';
-  const forV = (cut ? t.con : t.pro) || [], againstV = (cut ? t.pro : t.con) || [];
+  const first = (arr, not) => ((arr || []).filter((x) => !not.test(x))[0]);
+  const forV = (cut ? [first(t.con, /上げると|引き上げ/), '税の負担が軽くなり、家計や企業を助ける'] : [first(t.pro, /下げると|引き下げ/), '税収が増え、財政の立て直しや社会保障にまわせる']).filter(Boolean);
+  const againstV = (cut ? [first(t.pro, /上げると|引き上げ/), '税収が減り、財政赤字と将来の世代の負担が増える'] : [first(t.con, /下げると|引き下げ/), '負担が重くなり、家計や企業の活動を冷やすおそれ']).filter(Boolean);
   const pv = has(g, 'taxProposalPreview') ? safe(() => g.taxProposalPreview(t.id, v), null) : null;
   const segTxt = pv && pv.segments && pv.segments.length ? `・支持 ${pv.segments.slice(0, 2).concat(pv.segments.slice(-2)).filter((x, i, a) => a.indexOf(x) === i).map((x) => `${SEG_SHORT[x.seg] || x.name}${x.v > 0 ? '↑' : '↓'}`).join(' ')}` : '';
   const lines = [
@@ -1632,7 +1634,7 @@ function drawTaxSub(c, ui, d, st) {
     if (i < 3) T(c, '→', bx + 73, pk.y + 24, 10, K.faint, 'center');
   });
   const propTxt = props.map(([id, x]) => { const tt = taxes.find((q) => q.id === id); return `${tt ? tt.short : id}${x.rate}${tt ? tt.unit : ''}`; }).join('・');
-  const stageTxt = waiting ? `提案を受付中：${propTxt}（10月から税調で審議→12月中旬の大綱で決まる）`
+  const stageTxt = waiting ? `提案中：${propTxt}→10月から税調、12月の大綱で採否`
     : tr ? `${REFORM_STAGE[tr.stage] || 'いまは税制改正の動きはない'}${props.length && tr.stage === 'chosakai' ? `・あなたの提案：${propTxt}` : ''}` : '（税制のコアは準備中）';
   T(c, stageTxt, pk.x + 8, pk.y + 40, 10, waiting ? K.amber : K.text, 'left', pk.w - 16);
   // the selected tax
@@ -1665,9 +1667,9 @@ function drawTaxSub(c, ui, d, st) {
     T(c, fmtN(mx / 1.15, 0), chX - 3, chY, 10, K.faint, 'right');
   } else T(c, '（推移のデータはない）', chX + 6, chY + 20, 10, K.dim);
   yy = chY + chH + 14;
-  T(c, '賛成の声', x + 6, yy, 10, K.good); yy += 12;
+  T(c, 'この税への賛成の声', x + 6, yy, 10, K.good); yy += 12;
   for (const s of (t.pro || []).slice(0, 2)) { yy = para(c, `・${s}`, x + 6, yy, w - 12, 10, K.text, 12, 2); }
-  T(c, '反対の声', x + 6, yy + 2, 10, K.bad); yy += 14;
+  T(c, 'この税への反対の声', x + 6, yy + 2, 10, K.bad); yy += 14;
   for (const s of (t.con || []).slice(0, 2)) { if (yy > 320) break; yy = para(c, `・${s}`, x + 6, yy, w - 12, 10, K.text, 12, 2); }
 }
 async function suppFlow(ui, d) {
@@ -3421,7 +3423,7 @@ async function kokkaiApp(g) {
     const items = [
       { t: 'session', label: S ? `${S.kind}・会期中` : '国会は閉会中', sub: sessionText(g) },
       // the member's attendance (2026-10 fix): 出席ずみ / 欠席n日 and 「国会に出席する」
-      ...(att && att.member && att.session ? [{ t: 'attend', label: att.today ? '国会：今日は出席ずみ' : att.cabinet ? '国会に出席する（答弁）' : '国会に出席する', sub: att.text, right: att.today ? '✓' : att.absent ? `欠席${att.absent}日` : '', rightColor: att.today ? PC.good : att.absent >= 3 ? PC.bad : PC.dim }] : []),
+      ...(att && att.member && att.session ? [{ t: 'attend', label: att.today ? '国会：今日は出席ずみ' : att.cabinet ? '国会に出席する（答弁）' : '国会に出席する', sub: att.today ? `これまで 出席${att.days}日・欠席${att.missed}日` : att.text, right: att.today ? '✓' : att.absent ? `欠席${att.absent}日` : '', rightColor: att.today ? PC.good : att.absent >= 3 ? PC.bad : PC.dim }] : []),
       { t: 'today', label: '今日の国会', sub: todayBills.length ? `本会議の採決：${todayBills.length}本` : S ? '本会議の採決はない（委員会で審議）' : '閉会中' },
       ...pend.slice(0, 12).map((b) => ({ t: 'bill', b, label: b.title, sub: plainStage(b) })),
       ...recent.map((b) => ({ t: 'bill', b, label: `【${b.stage === 'enacted' ? '成立' : b.stage === 'rejected' ? '否決' : '廃案'}】${b.title}`, sub: plainStage(b) })),
