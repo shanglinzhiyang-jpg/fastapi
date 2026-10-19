@@ -1221,6 +1221,8 @@ const HOOKS = {};
 // ext events: 'election' (any result), 'session', 'bill', 'poll', 'shock', 'party', 'offer', 'payday'.
 export function onPolitics(event, fn) { (HOOKS[event] || (HOOKS[event] = [])).push(fn); return () => { HOOKS[event] = HOOKS[event].filter((f) => f !== fn); }; }
 function emit(g, event, data) {
+  // the ruling parties changed: ねじれ follows the seats at once (review: the flag lagged coalition changes)
+  if (event === 'cabinet') { const p = pol0(g); if (p && p.flags) p.flags.nejire = nejireNow(p); }
   for (const fn of HOOKS[event] || []) {
     try {
       const r = fn(g, data);
@@ -1351,7 +1353,7 @@ export function newPoliticsState(g) {
   // the number (代) of the PM in office at the start; each 首班指名 adds one
   p.flags.pmNo = PM_NO[era] || 100;
   seedInForce(p);
-  p.flags.nejire = coalition.reduce((a, id) => a + num(p.diet.sangi.seats[id]), 0) <= p.diet.sangi.total / 2;
+  p.flags.nejire = nejireNow(p);
   fillCabinet(g, p, { quiet: true });
   refreshOpinion(p, g);
   for (const id of Object.keys(p.parties)) { const v = num(E.support[id]) / Math.max(0.1, Object.values(E.support).reduce((a, b) => a + b, 0)); p.parties[id].voteShare = { shugi: v, sangi: v }; }
@@ -2548,9 +2550,9 @@ function afterElection(g, p, e, res, decl, r) {
     const coalition = p.cabinet.partyIds || [];
     const got = coalition.reduce((a, id) => a + num(res.seats[id]), 0);
     const houseMaj = coalition.reduce((a, id) => a + num(p.diet.sangi.seats[id]), 0) > p.diet.sangi.total / 2;
-    p.flags.nejire = !houseMaj;
-    news(p, g, `${e.label}：改選${res.total} ${seatsLine(p, res.seats, 5)}${houseMaj ? '' : '（与党は参院で過半数割れ＝ねじれ）'}`);
-    phoneNews(g, `【${e.label}】\n${seatsLine(p, res.seats, 6)}（改選${res.total}・投票率${res.turnout}%）${houseMaj ? '' : '\n与党は参議院で過半数を失い、「ねじれ国会」に。'}`);
+    p.flags.nejire = nejireNow(p);
+    news(p, g, `${e.label}：改選${res.total} ${seatsLine(p, res.seats, 5)}${houseMaj ? '' : p.flags.nejire ? '（与党は参院で過半数割れ＝ねじれ）' : '（与党は参院でも過半数割れ）'}`);
+    phoneNews(g, `【${e.label}】\n${seatsLine(p, res.seats, 6)}（改選${res.total}・投票率${res.turnout}%）${houseMaj ? '' : p.flags.nejire ? '\n与党は参議院で過半数を失い、「ねじれ国会」に。' : '\n与党は参議院でも過半数に届かない。'}`);
     // a heavy defeat: the PM takes responsibility (seen many times in real politics)
     if (got < res.total * 0.4 && p.cabinet.pm !== 'player' && Math.random() < 0.55) p.cabinet.pending = { kind: 'resign', day: day + 2, reason: '参院選の敗北の責任をとって' };
   } else if (e.kind === 'sosaisen') {
@@ -3336,6 +3338,7 @@ function weeklyPoll(g, p) {
   const fatigue = -Math.min(14, days / 40);
   const deficit = -clamp(deficitRatio(E) - 9, 0, 10) * 0.4; // 「ばらまき」批判 when the deficit balloons
   const pmq = pmQuality(g, p);
+  p.flags.nejire = nejireNow(p);
   const target = 38 + honey + eco + num(C.mood) + num(C.scandal) + fatigue + deficit + pmq + (p.flags.nejire ? -2 : 0);
   // ext (hook for govt.js, A1): the parts of this week's target, read by g.approvalBreakdown()
   const r1 = (v) => Math.round(num(v) * 10) / 10;
@@ -5207,6 +5210,16 @@ const methods = {
     const fy = fyNow(this);
     if (Array.isArray(choices.partners)) {
       const ok = choices.partners.filter((id) => p.parties[id] && id !== me.party);
+      // ext (regime.js, feature-detected): a party may refuse to govern with the player's regime (e.g. a real party
+      // never joins a cabinet that took an authoritarian step). Refused before anything changes.
+      if (typeof this.regimeCoalitionBlock === 'function') {
+        for (const id of ok) {
+          if ((p.cabinet.partyIds || []).includes(id)) continue; // already a partner: keeping it is not a new coalition
+          let why = null;
+          try { why = this.regimeCoalitionBlock(id); } catch (e) { console.error(e); why = null; }
+          if (why) return { ok: false, why: String(why), party: id };
+        }
+      }
       p.cabinet.partyIds = [me.party, ...ok].filter(Boolean);
     }
     const posts = cabinetPosts(fy, p.flags);
@@ -5241,6 +5254,8 @@ const methods = {
     return { ok: true, ministers: { ...p.cabinet.ministers }, offer: o || null };
   },
   approval() { return Math.round(num(ensurePol(this).cabinet.approval)); },
+  // ext: the real-party rule in one place (see govIncludesRealParty above)
+  govIncludesRealParty() { const p = this.state ? ensurePol(this) : null; return govIncludesRealParty(p); },
   partySupport(partyId) { const p = ensurePol(this); return Math.round(natSupport(p, partyId, fyNow(this)) * 1000) / 10; },
   politicsTick() { return politicsTick(this); },
   addSecretFunds(n, source = '') {
@@ -5453,6 +5468,7 @@ const methods = {
     if (!pt || pt.leader !== 'player') return '連立を決められるのは党首だけ';
     if (!isRuling(p, pt.id) || cabinetPartyOfPM(p) === pt.id) return '連立の相手ではない';
     p.cabinet.partyIds = p.cabinet.partyIds.filter((x) => x !== pt.id);
+    p.flags.nejire = nejireNow(p);
     for (const [post, id] of Object.entries(p.cabinet.ministers)) if (id === 'player') { me.posts = me.posts.filter((x) => x !== post); const m = pickMinister(p, cabinetPartyOfPM(p), p.cabinet.ministers); m.posts.push(post); p.cabinet.ministers[post] = m.id; }
     p.cabinet.approval = clamp(num(p.cabinet.approval) - 3, 3, 90);
     news(p, this, `${pt.name}が連立政権から離脱した`);

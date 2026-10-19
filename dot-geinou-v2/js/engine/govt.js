@@ -19,7 +19,9 @@
 // Numbers marked 目安 are approximations for the game (not checked against an official table).
 // 消費税: 1989-04 3% → 1997-04 5% → 2014-04 8% → 2019-10 10%（軽減税率8%）. (politics.js; nippon.com, zeiken.co.jp)
 // 所得税の最高税率: ～1986 70%（15段階）→ 1987 60%（12段階、2年かけて6段階に）→ 1989 50%（5段階）→ 1999 37%（4段階）
-//   → 2007 40%（6段階、税源移譲）→ 2015 45%. 2013-2037 は復興特別所得税（2.1%）が上乗せ。
+//   → 2007 40%（6段階、税源移譲）→ 2015 45%. 2013-2037 は復興特別所得税（2.1%）が上乗せ。2026年3月31日成立の
+//   令和8年度改正（防衛財源確保法の改正）で、2027年1月から防衛特別所得税1%を新設し、復興特別所得税を1.1%に下げて
+//   2047年まで延長（合計2.1%は当面同じ）。sources: nenkin.go.jp 2027fuyoukami zeigaku.pdf, mof.go.jp zeisei26_05.pdf
 //   sources: mof.go.jp tax_information/qanda019（かつては70%・平成27年分から45%）, ipp.hit-u.ac.jp tajika-060228
 //   （87年度に70→60%、89年に60→50%・5段階）, 国税庁の情報を引く記事（平成11～18年分は4区分・最高37%、平成19年に6区分・40%）
 // 住民税（所得割）の最高税率: 1987年度 18%（4.5～18%の14段階、soumu.go.jp 000874330）→ 1988年度 16%（目安）→ 1989年度
@@ -31,8 +33,9 @@
 //   2026年度から防衛特別法人税（防衛力強化の財源）。source: dlri.co.jp 560687
 // 相続税の最高税率: 1975-1987 75% → 1988 70%（13段階）→ 2003 50% → 2015 55%。sources: mof.go.jp property/146.pdf,
 //   cao.go.jp a04kai_1, legacy.ne.jp（2015年55%）
-// ガソリン税（揮発油税＋地方揮発油税、旧地方道路税）: 本則 28.7円/L、暫定（特例）税率で 53.8円/L（1979年6月から。
-//   1974年4月に「暫定的」な上乗せが始まる）。2008年4月に1か月だけ期限切れ。2025年12月31日に暫定税率を廃止（与野党合意
+// ガソリン税（揮発油税＋地方揮発油税。2009年3月までは地方道路税、2009年度改正で道路特定財源の一般財源化とともに改称）:
+//   本則 28.7円/L、暫定（特例）税率で 53.8円/L（1979年6月から。1974年4月に「暫定的」な上乗せが始まる: 34.5円、
+//   1976年7月 43.1円）。2008年4月に1か月だけ期限切れ。2025年12月31日に暫定税率を廃止（与野党合意
 //   2025年11月5日）、年約1.5兆円の減収。sources: sakigake.jp 20251031, mynavi 20251208, coki.jp, ja.wikid.org 揮発油税
 // 酒税（ビール 350ml缶あたり）: 77円 → 2020年10月 70円 → 2023年10月 63.35円 → 2026年10月 54.25円（平成29年度改正で
 //   ビール系飲料は155,000円/kLに一本化）。1994年5月にビール増税。それより前の額（1987年 84円・1989年 73円）は 目安。
@@ -70,7 +73,9 @@
 //   sangiin.go.jp 答弁書 t169143, pref.ibaraki.jp
 // 会派: 衆院「自由民主党・無所属の会」（2016年以降の資料で確認）、「民主党・無所属クラブ」（第148回国会から）。
 //   source: gender.go.jp 1-1-a-4, shugiin.go.jp 会派別所属議員数
-// Fictional: ドット仏教会, ドット明神 氏子会, ドット坂キリスト教会, 和光修養会, 天環の泉 (no real group has these names),
+// Fictional: ドット仏教会, ドット明神 氏子会, ドット坂キリスト教会, 和光修養会, 蒼穹の泉 (no real group has these names;
+// the problem group was 天環の泉 (てんかん…) until 2026-10: renamed so its reading is not the word for epilepsy. Its
+// internal id stays 'tenkan' for old saves; it is never shown),
 // every bureaucrat, citizen, demo, scandal and council report.
 //
 // ---------------------------------------------------------------- model in short
@@ -160,6 +165,22 @@ const myPosts = (p) => (p && p.me && Array.isArray(p.me.posts) ? p.me.posts : []
 const isNational = (p) => !!(p && p.me && (p.me.office === 'shugi' || p.me.office === 'sangi'));
 const isRulingParty = (p, id) => !!(p && p.cabinet && (p.cabinet.partyIds || []).includes(id));
 const realParty = (id) => !!(POL && POL.PARTY_DEFS && POL.PARTY_DEFS[id] && POL.PARTY_DEFS[id].real);
+// The real-party rule in one place (politics.js govIncludesRealParty): the government includes 自民 or 民主 in any role
+// (the PM's party or a partner). Without the politics core there is no government, so false.
+const realInGovt = (p) => { try { return !!(POL && typeof POL.govIncludesRealParty === 'function' && POL.govIncludesRealParty(p)); } catch (e) { return false; } };
+// The reason a government with a real party does not take a step the game presents as wrong (強行採決, デモの強制排除):
+// the real party's organ does not agree (a lawful, neutral refusal; the same shape as regime.js's). null = no real party.
+function realPartyNo(g, p, what) {
+  if (!realInGovt(p)) return null;
+  const ids = [...new Set([...(p.cabinet.partyIds || []), cabinetCore(p)].filter((id) => id && (realParty(id) || (p.parties[id] && p.parties[id].real))))];
+  const mine = p.me && p.me.party && ids.includes(p.me.party) ? p.me.party : null;
+  const id = mine || ids[0];
+  const name = partyNameOf(g, id, false);
+  const organ = id === 'jimin' ? `${name}の総務会は` : `${name}は党の機関で`;
+  return mine
+    ? `${organ}「${what}」を了承しなかった。（このゲームでは、実在の政党がこうした手段をとる場面は描かない）`
+    : `連立を組む${name}が「${what}」に同意しなかった。（このゲームでは、実在の政党を含む政府がこうした手段をとる場面は描かない）`;
+}
 const partyNameOf = (g, id, short = true) => { try { if (typeof g.partyName === 'function') return g.partyName(id, short); } catch (e) { /* */ } return id || '無所属'; };
 const npcNameOf = (g, id) => { try { if (typeof g.npcName === 'function') return g.npcName(id); } catch (e) { /* */ } return ''; };
 const segWeightsOf = (year) => (POL && POL.segWeights ? POL.segWeights(year) : null);
@@ -194,7 +215,8 @@ export const TAXES = {
   shohi: {
     id: 'shohi', maxStep: 3, name: '消費税', short: '消費税', unit: '%', step: 1, min: 0, max: 25, kind: '間接税（国税＋地方消費税）', owner: 'politics',
     hist: [[1989, 4, 3], [1997, 4, 5, { law: 1994 }], [2014, 4, 8, { law: 2012 }], [2019, 10, 10, { law: 2012 }]], before: 0,
-    law: '消費税法（1988年12月成立、1989年4月施行）',
+    // law: the real text by year (the g.taxRates() row uses the game's own history: shohiLawText)
+    law: (y) => (y < 1989 ? '消費税法はまだない（大型間接税の導入が争点。1987年2月に政府が売上税法案を国会に提出した）' : '消費税法（1988年12月成立、1989年4月施行）'),
     explain: (y) => (y < 1989 ? 'ものやサービスを買うときに広くかかる税（大型間接税）。いまの日本にはまだない。導入するかどうかが大きな争点になっている。'
       : `ものやサービスを買うときに広くかかる税。景気に左右されにくく、社会保障の財源とされる。${y >= 1997 ? '税率は国税と地方消費税の合計。' : ''}${y >= 2020 ? '2019年10月からは食料品などに軽減税率（8%）がある。' : ''}`),
     pro: ['景気に左右されにくい安定した財源で、高齢化で増える社会保障を支えられる', '働く世代だけでなく、すべての世代が広く負担する', '所得税や法人税に比べ、経済活動をゆがめにくい'],
@@ -205,7 +227,13 @@ export const TAXES = {
   shotoku: {
     id: 'shotoku', maxStep: 15, name: '所得税（最高税率）', short: '所得税', unit: '%', step: 1, min: 10, max: 75, kind: '直接税（国税・累進課税）',
     hist: [[1984, 1, 70], [1987, 1, 60], [1989, 1, 50], [1999, 1, 37], [2007, 1, 40], [2015, 1, 45]],
-    law: '所得税法', note: (y) => (y >= 2013 ? '2013年から2037年までは復興特別所得税（所得税額の2.1%）が上乗せされる' : ''),
+    law: '所得税法',
+    // 2026: the 令和8年度改正 (所得税法等の一部を改正する法律, 成立 2026-03-31) amended the 防衛財源確保法: 防衛特別所得税 1%
+    // from 2027-01 and 復興特別所得税 2.1% → 1.1%, its period extended by 10 years to 2047 (nenkin.go.jp 2027fuyoukami
+    // zeigaku.pdf, mof.go.jp zeisei2026 zeisei26_05.pdf)
+    note: (y) => (y >= 2027 ? '2013年から復興特別所得税が上乗せされている。2027年からは復興特別所得税1.1%（2047年まで）と防衛特別所得税1%（2026年3月成立の改正）'
+      : y >= 2026 ? '2013年から復興特別所得税（所得税額の2.1%）が上乗せされている。2026年3月成立の改正で、2027年からは復興特別所得税1.1%（2047年まで延長）＋防衛特別所得税1%になる'
+        : y >= 2013 ? '2013年から2037年までは復興特別所得税（所得税額の2.1%）が上乗せされる' : ''),
     explain: '個人の所得にかかる国の税。所得が多いほど高い税率がかかる累進課税で、ここでは一番上の段階（最高税率）を扱う。',
     pro: ['所得の多い人に多く負担してもらい、格差をやわらげる（所得の再分配）', '税収を増やして、財政や社会保障にまわせる'],
     con: ['働く意欲や起業の意欲をそぐおそれ', '高い所得の人や会社が海外に移るおそれ', '税率を上げても、税収の増え方は限られる'],
@@ -243,12 +271,19 @@ export const TAXES = {
     eco: {}, coef: 0.05,
   },
   kihatsu: {
-    id: 'kihatsu', maxStep: 25.1, name: 'ガソリン税（揮発油税＋地方揮発油税）', short: 'ガソリン税', unit: '円/L', step: 0.1, min: 0, max: 80, kind: '間接税（国税）',
+    // 地方揮発油税 was 地方道路税 until the 2009 改正 (道路特定財源の一般財源化, 2009-04): names by year
+    id: 'kihatsu', maxStep: 25.1, name: 'ガソリン税（揮発油税＋地方揮発油税）', names: [[0, 'ガソリン税（揮発油税＋地方道路税）'], [2009.25, 'ガソリン税（揮発油税＋地方揮発油税）']], short: 'ガソリン税', unit: '円/L', step: 0.1, min: 0, max: 80, kind: '間接税（国税）',
     hist: [[1974, 4, 34.5], [1976, 7, 43.1], [1979, 6, 53.8], [2008, 4, 28.7], [2008, 5, 53.8], [2026, 1, 28.7, { law: 2025 }]],
-    law: '揮発油税法など（暫定税率は租税特別措置法）', note: (y) => (y >= 2026 ? '本則28.7円に上乗せされていた「暫定税率」25.1円は、2025年12月31日に廃止された' : '本則28.7円に、1974年からの「暫定税率」25.1円が上乗せされて53.8円'),
+    law: (y) => (y >= 2009.25 ? '揮発油税法・地方揮発油税法（暫定税率は租税特別措置法）' : '揮発油税法・地方道路税法（暫定税率は租税特別措置法）'),
+    // note(y, { rate }): the rate in force in this game (history may diverge from the real one)
+    note: (y, c) => {
+      const rate = c && c.rate != null ? num(c.rate) : taxRateAt('kihatsu', Math.floor(y), 4);
+      if (rate <= 28.7 + 1e-6) return y >= 2026 && Math.abs(rate - 28.7) < 1e-6 ? '本則28.7円に上乗せされていた「暫定税率」25.1円は、2025年12月31日に廃止された' : '本則28.7円（上乗せ分はない）';
+      return Math.abs(rate - 53.8) < 1e-6 ? '本則28.7円に、暫定的な上乗せ（1974年から。1979年6月からは25.1円）が加わって53.8円' : `本則28.7円に、暫定的な上乗せ分が加わって${rate}円`;
+    },
     explain: (y) => `ガソリン1リットルにかかる税。${y >= 2009 ? 'もとは道路を整備するための財源だった（2009年度から一般財源）。' : '道路を整備するための財源（道路特定財源）。'}`,
     pro: ['安定した税収になる', '車の利用をおさえ、二酸化炭素の排出を減らす効果がある'],
-    con: ['車が欠かせない地方の暮らしや、運送業の負担が重い', '税金に消費税がかかる「二重課税」との批判'],
+    con: (y) => ['車が欠かせない地方の暮らしや、運送業の負担が重い', ...(y >= 1989.25 ? ['税金に消費税がかかる「二重課税」との批判'] : ['道路をつくるための税なのに、使い道が硬直しているという声'])],
     seg: { rural: -0.15, selfemployed: -0.1, farmers: -0.1, employees: -0.04, young: -0.04, families: -0.04, urban: 0.02 },
     eco: { inflation: 0.006, growth: -0.002 }, coef: 0.06,
   },
@@ -321,13 +356,13 @@ export const BUDGET_ITEMS = {
     seg: {}, eco: {},
   },
   kofuzei: {
-    id: 'kofuzei', name: '地方交付税交付金等', area: 'regional', fixed: 'formula', min: -0.03, max: 0.03, ministry: 'minister_internal',
+    id: 'kofuzei', name: '地方交付税交付金等', area: 'regional', fixed: 'formula', min: -0.03, max: 0.03, ministry: 'minister_internal', ministries: [[0, 'minister_home'], [2001, 'minister_internal']],
     explain: '自治体の財源の差をならすために国が配るお金。国税の一定の割合（法定率）で決まるので、大きく変えるには地方交付税法の改正がいる。',
     pro: ['どこに住んでいても、一定の行政サービスを受けられる'], con: ['自治体が国に頼り、自分で財源を増やす努力をしにくい'],
     seg: { rural: 0.8, farmers: 0.2, elderly: 0.1, urban: -0.3, business: -0.1 }, eco: { growth: 0.01 },
   },
   kokyo: {
-    id: 'kokyo', name: '公共事業関係費', area: 'regional', fixed: 'discretionary', min: -0.25, max: 0.3, ministry: 'minister_transport',
+    id: 'kokyo', name: '公共事業関係費', area: 'regional', fixed: 'discretionary', min: -0.25, max: 0.3, ministry: 'minister_transport', ministries: [[0, 'minister_construction'], [2001, 'minister_transport']],
     explain: '道路・河川・港・空港・住宅・防災などのインフラ整備。景気対策として増やされることも多い。',
     pro: ['地方の雇用を生み、景気を下支えする', '防災・減災で命と暮らしを守る'], con: ['むだな事業や「ばらまき」との批判', '完成後の維持費が将来の負担になる'],
     seg: { rural: 0.8, selfemployed: 0.4, business: 0.3, farmers: 0.1, urban: -0.3, young: -0.2, floating: -0.2 }, eco: { growth: 0.04, unemployment: -0.02 },
@@ -369,12 +404,13 @@ export const BUDGET_ITEMS = {
     seg: { selfemployed: 1.0, business: 0.3, employees: 0.1 }, eco: { unemployment: -0.01 },
   },
   onkyu: {
-    id: 'onkyu', name: '恩給関係費', area: 'other', fixed: 'entitlement', min: 0, max: 0, ministry: 'kanbo',
+    // 恩給: 総理府恩給局 → 総務庁恩給局 (1984-07) → 総務省 (2001)
+    id: 'onkyu', name: '恩給関係費', area: 'other', fixed: 'entitlement', min: 0, max: 0, ministry: 'minister_internal', ministries: [[0, 'minister_mgmt'], [2001, 'minister_internal']],
     explain: '旧軍人などの恩給。受給者が少なくなるにつれて、年々減っている。法律で決まった給付なので、予算では変えられない。',
-    pro: ['国のために働いた人への約束を守る'], con: [], seg: {}, eco: {},
+    pro: ['国のために働いた人への約束を守る'], con: ['受給者が減るなか、制度を動かす事務の費用も見直すべきという声'], seg: {}, eco: {},
   },
   sonota: {
-    id: 'sonota', name: 'その他', area: 'other', fixed: 'discretionary', min: -0.1, max: 0.2, ministry: 'kanbo',
+    id: 'sonota', name: 'その他', area: 'other', fixed: 'discretionary', min: -0.1, max: 0.2, ministry: null, ministryLabel: '各府省',
     explain: (y) => `各省の事務費、司法・警察、外交${y >= 2021 ? '、デジタル、こども政策の一部' : ''}など、上の分類に入らない経費。`,
     pro: ['行政を動かすのに欠かせない経費'], con: ['見えにくく、むだが入りこみやすい'],
     seg: { floating: -0.05 }, eco: {},
@@ -404,8 +440,12 @@ export const REVENUE_ITEMS = {
   kosai: { name: '公債金（国債）' },
 };
 
-// era-gated text: a string, or fn(year) -> string
-const txt = (v, year) => (typeof v === 'function' ? v(year) : v || '');
+// era-gated text: a string, or fn(year, ctx) -> string; arr: a list, or fn(year) -> list; byYear: [[fromYear, v], ...]
+const txt = (v, year, ctx) => (typeof v === 'function' ? v(year, ctx) : v || '');
+const arr = (v, year) => (typeof v === 'function' ? v(year) : Array.isArray(v) ? v : []);
+const byYear = (rows, fy, def) => { let out = def; for (const [y, v] of rows || []) if (fy >= y) out = v; return out; };
+// A tax's name in a (fractional) year (names: [[from, name]]; else name).
+const taxName = (id, fy) => (TAXES[id] ? byYear(TAXES[id].names, fy, TAXES[id].name) : id);
 
 // ================================================================ ADMINISTRATION (行政)
 // The ministry (府省庁) a cabinet post heads, by year ([fromYear, name]). Posts come from politics.js POSTS.
@@ -420,8 +460,21 @@ export const MINISTRY_OF_POST = {
   minister_hokkaido: [[0, '北海道開発庁']], minister_okinawa: [[0, '沖縄開発庁']], minister_econ: [[2001, '内閣府（経済財政）']],
   minister_special: [[2001, '内閣府']], minister_reconstruction: [[2012.1, '復興庁']], minister_digital: [[2021.67, 'デジタル庁']],
 };
-// The top official and a few senior posts (only long-standing titles; 大臣官房長 exists in every ministry).
+// The top official and a few senior posts (only long-standing titles).
 const TOP_TITLE = { kanbo: '内閣官房副長官（事務）', minister_npsc: '警察庁長官', minister_digital: 'デジタル監' };
+// The second senior post of a body, by year: 大臣官房長 in a 省; 長官官房長 in a 庁 headed by a 国務大臣 (警察庁, 防衛庁,
+// 環境庁, 総務庁…); 統括官 in 復興庁・デジタル庁 (no 大臣官房); in the 内閣官房 the 内閣官房副長官補 from the 2001
+// reorganisation, before it the 内政審議室長 (1986-2001). 北海道開発庁 総務監理官 / 沖縄開発庁 総務局長 (目安).
+const SECOND_TITLE = {
+  kanbo: [[0, '内閣内政審議室長'], [2001, '内閣官房副長官補']],
+  minister_npsc: [[0, '長官官房長']], minister_mgmt: [[0, '長官官房長']], minister_epa: [[0, '長官官房長']], minister_sci: [[0, '長官官房長']],
+  minister_land: [[0, '長官官房長']], minister_env: [[0, '長官官房長'], [2001, '大臣官房長']], minister_defense: [[0, '長官官房長'], [2007, '大臣官房長']],
+  minister_hokkaido: [[0, '総務監理官']], minister_okinawa: [[0, '総務局長']], minister_reconstruction: [[0, '統括官']], minister_digital: [[0, '統括官']],
+};
+const secondTitle = (post, fy) => byYear(SECOND_TITLE[post], fy, '大臣官房長');
+// An official who answers on a topic outside the ministries' standing posts (天下り: 総務庁人事局 → 総務省人事・恩給局 →
+// 内閣人事局 2014-05-30): [post (ministry name), title] by year.
+const TOPIC_OFFICIAL = { amakudari: [[0, ['minister_mgmt', '人事局長']], [2001, ['minister_internal', '人事・恩給局長']], [2014.42, ['kanbo', '内閣人事局 人事政策統括官']]] };
 const BUREAUS = {
   minister_finance: ['主計局長', '主税局長'], minister_internal: ['自治財政局長'], minister_home: ['財政局長'], minister_justice: ['刑事局長'],
   minister_foreign: ['北米局長'], minister_health: ['保険局長'], minister_education: ['初等中等教育局長'], minister_npsc: ['警備局長'],
@@ -431,25 +484,41 @@ export function ministryName(post, fy = 2026) {
   if (!rows) return '';
   let n = '';
   for (const [y, name] of rows) if (fy >= y) n = name;
-  return n || rows[0][1];
+  // before the first row: the bodies of the 2001 reorganisation did not exist yet (総務省・内閣府…); an agency that a
+  // law of this game set up early (復興庁, デジタル庁: flag posts) keeps its name
+  return n || (rows[0][0] === 2001 ? '' : rows[0][1]);
+}
+// The ministry (府省庁 name) that carries a budget item in a year.
+function itemMinistry(it, fy) {
+  if (!it.ministry && !it.ministries) return it.ministryLabel || '';
+  return ministryName(byYear(it.ministries, fy, it.ministry), fy) || it.ministryLabel || '';
 }
 // 審議会・会議 (posts: who may ask; the PM may ask any). years: [from, to). report effects are small and even-handed.
 export const COUNCILS = {
   zeicho: { name: '税制調査会（政府税調）', posts: ['pm', 'minister_finance'], years: [1959, INF], areas: ['tax'], topic: '税制のあり方', desc: (y) => `総理の諮問に答えて税制の基本を議論する${y >= 2001 ? '（2001年から内閣府に置かれる）' : ''}。毎年の税率を実際に決めるのは、与党の税制調査会の色合いが強い。` },
   zaiseishin: { name: (y) => (y >= 2001 ? '財政制度等審議会' : '財政制度審議会'), posts: ['minister_finance'], years: [1950, INF], areas: ['finance'], topic: '予算と財政健全化', desc: '予算編成の考え方や財政の健全化について、財務（大蔵）大臣に意見を出す。' },
   keizaizaisei: { name: '経済財政諮問会議', posts: ['pm', 'minister_econ'], years: [2001, INF], areas: ['economy', 'finance'], topic: '経済財政運営の基本方針', desc: '議長は総理大臣。毎年、経済財政運営の基本方針（いわゆる「骨太の方針」）をまとめ、予算の大枠を示す。' },
-  shakaihosho: { name: (y) => (y >= 2001 ? '社会保障審議会' : '社会保障制度審議会'), posts: ['minister_health'], years: [1949, INF], areas: ['welfare', 'health', 'childcare'], topic: '年金・医療・介護の制度', desc: '社会保障の制度について審議し、答申や意見を出す。' },
+  // 社会保障制度審議会 (1949-2001) sat in the 総理府 and answered the PM (関係大臣 also had to hear it); 社会保障審議会
+  // (2001-) is the 厚生労働省's
+  shakaihosho: { name: (y) => (y >= 2001 ? '社会保障審議会' : '社会保障制度審議会'), posts: ['pm', 'minister_health'], years: [1949, INF], areas: ['welfare', 'health', 'childcare'], topic: '年金・医療・介護の制度', desc: (y) => (y >= 2001 ? '厚生労働省に置かれ、社会保障の制度について厚生労働大臣の諮問に答え、意見を出す。' : '総理府に置かれ、総理大臣の諮問に答えて社会保障の制度を審議し、勧告もする（関係する大臣も意見を聞く）。') },
   chuikyo: { name: '中央社会保険医療協議会（中医協）', posts: ['minister_health'], years: [1950, INF], areas: ['health'], topic: '診療報酬の改定', desc: '診療報酬（医療の値段）の改定について、厚生（労働）大臣の諮問に答える。答申を受けて大臣が告示する。' },
-  chukyoshin: { name: '中央教育審議会', posts: ['minister_education'], years: [1952, INF], areas: ['education'], topic: '学校教育のあり方', desc: '教育の制度や学習指導要領について答申する。' },
+  chukyoshin: { name: '中央教育審議会', posts: ['minister_education'], years: [1952, INF], areas: ['education'], topic: '学校教育のあり方', desc: (y) => (y >= 2001 ? '教育の制度や学習指導要領について答申する（2001年に教育課程審議会などを統合）。' : '教育の制度の基本について答申する。') },
+  // the 学習指導要領 was revised on the report of the 教育課程審議会 until it was merged into the 中教審 (2001-01):
+  // its 1987-12 report led to the 1989 revision, its 1998 report to the 1998 revision
+  kyoikukatei: { name: '教育課程審議会', posts: ['minister_education'], years: [1950, 2001], areas: ['education'], topic: '学習指導要領の改訂', desc: '学校で教える内容の基準（学習指導要領）の改訂について、文部大臣の諮問に答える。' },
   hoseishin: { name: '法制審議会', posts: ['minister_justice'], years: [1949, INF], areas: ['society', 'safety'], topic: '民法・刑法などの見直し', desc: '民法や刑事法などの基本的な法律の改正について、法務大臣の諮問に答える。' },
   chiseicho: { name: '地方制度調査会', posts: ['pm', 'minister_home', 'minister_internal'], years: [1952, INF], areas: ['regional'], topic: '地方自治の制度', desc: '総理大臣の諮問を受け、地方自治の制度について答申する。' },
-  gyokakushin: { name: '臨時行政改革推進審議会（行革審）', posts: ['pm', 'minister_mgmt'], years: [1983.5, 1993.8], areas: ['admin'], topic: '行政改革の推進', desc: '第二臨調の答申を受けて行政改革を進めるための審議会（3次にわたって置かれた。目安）。' },
+  // 行革審: 第1次 1983-07〜1986-06, 第2次 1987-04〜1990-04, 第3次 1990-10〜1993-10 (ranges: the council sits only then)
+  gyokakushin: { name: '臨時行政改革推進審議会（行革審）', posts: ['pm', 'minister_mgmt'], years: [1983.5, 1993.8], ranges: [[1983.5, 1986.45], [1987.3, 1990.3], [1990.75, 1993.8]], areas: ['admin'], topic: '行政改革の推進', desc: '第二臨調の答申を受けて行政改革を進めるための審議会（期限つきで3次にわたって置かれた）。' },
   gyokakukaigi: { name: '行政改革会議', posts: ['pm'], years: [1996.9, 1998.5], areas: ['admin'], topic: '中央省庁の再編', desc: '中央省庁の再編などを議論した会議（会長は総理大臣）。最終報告が2001年の省庁再編のもとになった。' },
   energy: { name: (y) => (y >= 2001 ? '総合資源エネルギー調査会' : '総合エネルギー調査会'), posts: ['minister_trade'], years: [1965, INF], areas: ['energy'], topic: 'エネルギー政策', desc: 'エネルギーの需給や政策の方向について審議する。' },
   kankyo: { name: (y) => (y >= 1993 ? '中央環境審議会' : '中央公害対策審議会'), posts: ['minister_env'], years: [1971, INF], areas: ['environment'], topic: '環境の基準と対策', desc: '環境基準や公害・環境対策について答申する。' },
-  shukyo: { name: '宗教法人審議会', posts: ['minister_education'], years: [1951.4, INF], areas: ['society'], topic: '宗教法人法の運用', desc: '宗教法人法の運用について意見を述べる。報告徴収・質問権を使う前には、この審議会の意見を聞く（1995年の改正から）。' },
-  saichin: { name: '中央最低賃金審議会', posts: ['minister_labor', 'minister_health'], years: [1959, INF], areas: ['labor'], topic: '最低賃金の引き上げの目安', desc: '毎年、地域別最低賃金の改定の目安を答申する。各都道府県の審議会を経て、労働局長が決める。' },
-  senkyoseido: { name: '選挙制度審議会', posts: ['pm'], years: [1961, 1992], areas: ['admin'], topic: '選挙制度の改革', desc: '選挙制度について総理大臣に答申する（第8次審議会は1989年から1991年）。' },
+  shukyo: { name: '宗教法人審議会', posts: ['minister_education'], years: [1951.4, INF], areas: ['society'], topic: '宗教法人法の運用', desc: (y) => `宗教法人法の運用について、所轄庁に意見を述べる。${y >= 1996 ? '報告徴収・質問権を使う前には、この審議会の意見を聞く（1995年の改正から）。' : ''}` },
+  // 地域別最低賃金: 都道府県労働基準局長 → 都道府県労働局長 (都道府県労働局 2000-04)
+  saichin: { name: '中央最低賃金審議会', posts: ['minister_labor', 'minister_health'], years: [1959, INF], areas: ['labor'], topic: '最低賃金の引き上げの目安', desc: (y) => `毎年、地域別最低賃金の改定の目安を答申する。各都道府県の審議会を経て、${y >= 2000.25 ? '都道府県労働局長' : '都道府県労働基準局長'}が決める。` },
+  // 選挙制度審議会 (設置法 1961): members are appointed by term (第8次 1989-06〜1991); between terms it does not sit, and a PM
+  // who wants it appoints the members first
+  senkyoseido: { name: '選挙制度審議会', posts: ['pm'], years: [1961, 1992], areas: ['admin'], topic: '選挙制度の改革', desc: (y) => `選挙制度について総理大臣に答申する。委員は期ごとに任命される${y >= 1989.5 ? '（第8次審議会は1989年から1991年）' : '（いまは委員がおらず、総理が任命すると動き出す）'}。` },
 };
 export const COUNCIL_ORDER = Object.keys(COUNCILS);
 // 政令・省令・告示・認可 a minister (or the cabinet) can issue without the Diet, within the law that delegates it.
@@ -491,11 +560,12 @@ export const ORDINANCES = {
     name: '短期滞在ビザ（査証）の発給要件の緩和', kind: '運用の見直し', posts: ['minister_foreign'], years: [2003, INF], basis: '出入国管理及び難民認定法・外務省の運用', cooldown: 240,
     desc: '観光客などの短期滞在ビザの要件をゆるめ、海外からの旅行者を増やす。',
     options: { ease: { label: '発給要件を緩和する', seg: { selfemployed: 0.6, business: 0.6, urban: 0.1, elderly: -0.3, rural: 0.2 }, eco: { growth: 0.03, yen: 0.5 } } },
-    pro: ['観光客が増え、地域の商店やホテルがうるおう'], con: ['観光地の混雑やマナーの問題（オーバーツーリズム）'],
+    // 「オーバーツーリズム」 came into Japanese use around 2017-2018
+    pro: ['観光客が増え、地域の商店やホテルがうるおう'], con: (y) => [y >= 2017 ? '観光地の混雑やマナーの問題（オーバーツーリズム）' : '観光地の混雑やマナーの問題'],
   },
   shidoyoryo: {
-    name: '学習指導要領の改訂（告示）', kind: '告示', posts: ['minister_education'], basis: '学校教育法施行規則', cooldown: 600, needCouncil: 'chukyoshin',
-    desc: '学校で教える内容の基準。中央教育審議会の答申を受けて、文部（科学）大臣が告示する（おおむね10年ごと）。',
+    name: '学習指導要領の改訂（告示）', kind: '告示', posts: ['minister_education'], basis: '学校教育法施行規則', cooldown: 600, needCouncil: (fy) => (fy >= 2001 ? 'chukyoshin' : 'kyoikukatei'),
+    desc: (y) => `学校で教える内容の基準。${y >= 2001 ? '中央教育審議会' : '教育課程審議会'}の答申を受けて、${y >= 2001 ? '文部科学大臣' : '文部大臣'}が告示する（おおむね10年ごと）。`,
     options: { revise: { label: '新しい学習指導要領を告示する', seg: { families: 0.4, young: 0.2, unions: -0.2, elderly: -0.1 } } },
     pro: ['時代に合った学びにできる'], con: ['現場の先生の負担が増える。ころころ変わると混乱する'],
   },
@@ -506,7 +576,8 @@ export const ORDINANCES = {
     pro: ['健康と自然を守る'], con: ['企業の対策の費用がかさむ'],
   },
   jouriku: {
-    name: '上陸許可基準の見直し（法務省令）', kind: '省令', posts: ['minister_justice'], basis: '出入国管理及び難民認定法', cooldown: 240,
+    // the 上陸許可基準 省令 (平成2年法務省令第16号) came with the 1989 amendment, in force 1990-06-01
+    name: '上陸許可基準の見直し（法務省令）', kind: '省令', posts: ['minister_justice'], years: [1990.41, INF], basis: '出入国管理及び難民認定法', cooldown: 240,
     desc: '外国人が日本で働くときの在留資格の基準のうち、省令で決まる部分を見直す。',
     options: {
       widen: { label: '人手不足の分野で受け入れを広げる', seg: { business: 0.6, selfemployed: 0.3, farmers: 0.3, unions: -0.4, elderly: -0.2 }, eco: { growth: 0.02 } },
@@ -522,7 +593,7 @@ export const ORDINANCES = {
     pro: ['行政のむだを減らし、人件費をおさえる'], con: ['行政サービスや災害対応の人手が足りなくなる'],
   },
   saichin: {
-    name: '最低賃金の引き上げの目安（審議会の答申を受けて）', kind: '審議会の答申 → 労働局長の決定', posts: ['minister_labor', 'minister_health'], basis: '最低賃金法', cooldown: 120, needCouncil: 'saichin',
+    name: '最低賃金の引き上げの目安（審議会の答申を受けて）', kind: (y) => `審議会の答申 → ${y >= 2000.25 ? '労働局長' : '労働基準局長'}の決定`, posts: ['minister_labor', 'minister_health'], basis: '最低賃金法', cooldown: 120, needCouncil: 'saichin',
     desc: '中央最低賃金審議会の目安をもとに、各都道府県で最低賃金が改定される。',
     options: {
       up3: { label: '目安どおり3%程度の引き上げ', seg: { young: 0.6, unions: 0.6, employees: 0.2, selfemployed: -0.6, business: -0.4 }, eco: { inflation: 0.03 } },
@@ -558,8 +629,8 @@ export const RELIGIOUS_GROUPS = {
     activities: ['朝の修養会', '清掃奉仕', '被災地へのボランティア', '青年部の勉強会'], segments: { elderly: 0.3, families: 0.3, selfemployed: 0.2 }, endorse: true, votePower: 1,
   },
   tenkan: {
-    id: 'tenkan', name: '天環の泉', kana: 'てんかんのいずみ', kind: '新宗教（小規模）', members: 6000, fictional: true, problem: true,
-    desc: '1970年代にできたとされる小さな宗教団体（架空）。信仰の内容とは別に、一部の信者の家族から「高額な献金を求められた」という相談が寄せられることがある。',
+    id: 'tenkan', name: '蒼穹の泉', kana: 'そうきゅうのいずみ', kind: '新宗教（小規模）', members: 6000, fictional: true, problem: true,
+    desc: '1970年代にできたとされる小さな宗教団体（架空）。複数の都道府県に施設があるため、所轄庁は文部（科学）大臣。信仰の内容とは別に、一部の信者の家族から「高額な献金を求められた」という相談が寄せられることがある。',
     activities: ['集会', '機関紙の発行'], segments: {}, endorse: false,
   },
 };
@@ -780,12 +851,11 @@ function newBureaucrat(s, year, title, ministryPost, day) {
   const age = irnd(55, 60);
   return { id: 'bu' + s.nextId++, name: n.name, gender: n.gender, title, post: ministryPost, age, since: day, entered: year - (age - 23), fictional: true };
 }
-function staffMinistry(s, post, year, day) {
+function staffMinistry(s, post, year, day, fy = year) {
   const top = TOP_TITLE[post] || '事務次官';
-  const rec = { top: newBureaucrat(s, year, top, post, day), kanbo: newBureaucrat(s, year, '大臣官房長', post, day), bureaus: (BUREAUS[post] || []).map((t) => newBureaucrat(s, year, t, post, day)) };
+  const rec = { top: newBureaucrat(s, year, top, post, day), kanbo: newBureaucrat(s, year, secondTitle(post, fy), post, day), bureaus: (BUREAUS[post] || []).map((t) => newBureaucrat(s, year, t, post, day)) };
   rec.kanbo.age = Math.max(50, rec.top.age - irnd(2, 4));
   for (const b of rec.bureaus) b.age = Math.max(50, rec.top.age - irnd(1, 4));
-  if (post === 'kanbo') rec.kanbo.title = '内閣官房副長官補';
   return rec;
 }
 // The ministries of a (fractional) year: the cabinet posts that exist then (内閣府 once).
@@ -806,7 +876,7 @@ function newGovtState(g) {
     taxes: {}, taxPlan: [], taxHistory: [],
     taxReform: { year: null, stage: 'idle', proposals: {}, npc: {}, rejected: {}, taiko: null, billId: null, day: null, log: [], zeichoBonus: 0 },
     budget: { stage: 'passed', ceilingYear: d.year - 1, requestYear: d.year - 1, genanYear: d.year - 1, decidedYear: d.year - 1, fyStarted: d.doy >= 30 ? d.year : d.year - 1, requests: null, draft: null, decided: null, history: [], supplementary: [], reserve: { fy: d.year, used: [] } },
-    admin: { bureaucrats: {}, councils: {}, ordinances: {}, amakudari: { heat: 15, cases: [] }, reforms: {}, personnelYear: d.year - (d.doy >= 65 ? 0 : 1), picks: 0, answers: 0 },
+    admin: { bureaucrats: {}, councils: {}, ordinances: {}, amakudari: { heat: 15, cases: [] }, reforms: {}, personnelYear: d.year - (d.doy >= 65 ? 0 : 1), picks: 0, answers: 0, officials: {} },
     postal: { law: null, privatized: null, revised: null, log: [], key: null },
     religion: { groups: {}, cult: { stage: 0, next: day + irnd(100, 320), complaints: 0, day: null, reported: false, questioned: null, requested: null, decided: null, victims: 0 }, log: [], endorsements: [] },
     opposition: { questions: [], alliance: null, boycott: null, budgetQ: {}, log: [], lastQ: 0 },
@@ -833,7 +903,7 @@ function newGovtState(g) {
     const R = RELIGIOUS_GROUPS[id];
     s.religion.groups[id] = { members: R.members, trust: R.problem ? 40 : 60, relation: 0, status: 'normal', visits: 0, endorse: null };
   }
-  for (const post of ministryPosts(g, d.fy)) s.admin.bureaucrats[post] = staffMinistry(s, post, d.year, day);
+  for (const post of ministryPosts(g, d.fy)) s.admin.bureaucrats[post] = staffMinistry(s, post, d.year, day, d.fy);
   const IF = GOVT_IN_FORCE[era] || {};
   if (IF.postal_privatization) { s.postal.law = { year: 2005, month: 10, real: true }; s.postal.privatized = { year: 2007, month: 10, real: true }; }
   if (IF.postal_revision) s.postal.revised = { year: 2012, month: 4, real: true };
@@ -987,22 +1057,29 @@ function taxLawEffects(prm) {
   return { segments, economy };
 }
 // When a tax change takes effect: April of the bill's year, or the month the change names (酒税 10月), or the next month
-// when the law passes later than that.
-function inForceDate(g, y, m) { const d = gdate(g); return ym(y, m) > ym(d.year, d.month) ? { year: y, month: m } : { year: d.month === 12 ? d.year + 1 : d.year, month: d.month === 12 ? 1 : d.month + 1 }; }
+// when the law passes later than that. A calendar-year tax (所得税・相続税) set for January of this year applies to this
+// year from January (retro: applied at once, recorded as January).
+function inForceDate(g, y, m, id) {
+  const d = gdate(g);
+  if (ym(y, m) > ym(d.year, d.month)) return { year: y, month: m };
+  if (CAL_YEAR_TAX[id] && m === 1 && y === d.year) return { year: d.year, month: d.month, asOf: { year: y, month: 1 } };
+  return { year: d.month === 12 ? d.year + 1 : d.year, month: d.month === 12 ? 1 : d.month + 1 };
+}
+const atLabel = (at) => (at.asOf ? `${at.asOf.year}年分から（1月にさかのぼって）` : `${dateText(at.year, at.month)}から`);
 function taxLawEnacted(g, prm) {
   const s = GS(g);
   if (!s) return;
   const sched = Array.isArray(prm && prm.schedule) ? prm.schedule : [];
   const d = gdate(g);
   for (const it of sched) {
-    const at = inForceDate(g, it.year, it.month);
+    const at = inForceDate(g, it.year, it.month, it.id);
     s.taxPlan = s.taxPlan.filter((x) => !(x.id === it.id && !x.done && x.by !== 'law'));
-    s.taxPlan.push({ id: it.id, rate: it.rate, year: at.year, month: at.month, law: d.year, by: prm.by || 'cabinet', why: prm.why || '税制改正', title: prm.title || '' });
+    s.taxPlan.push({ id: it.id, rate: it.rate, year: at.year, month: at.month, asOf: at.asOf || null, law: d.year, by: prm.by || 'cabinet', why: prm.why || '税制改正', title: prm.title || '' });
   }
   const R = s.taxReform;
   if (!prm.urgent) R.stage = 'enacted';
   R.log.push({ day: today(g), text: prm.urgent ? '臨時の税制改正法案が成立した' : '税制改正法案が成立した' });
-  const lines = sched.map((it) => `${TAXES[it.id].short} ${it.rate}${TAXES[it.id].unit}（${dateText(inForceDate(g, it.year, it.month).year, inForceDate(g, it.year, it.month).month)}から）`);
+  const lines = sched.map((it) => `${TAXES[it.id].short} ${it.rate}${TAXES[it.id].unit}（${atLabel(inForceDate(g, it.year, it.month, it.id))}）`);
   govtNews(g, s, `税制改正法案が成立。${lines.join('・')}`);
   emit(g, 'taxReform', { stage: 'enacted', schedule: sched });
 }
@@ -1016,7 +1093,7 @@ function taxInForce(g, s) {
   for (const it of s.taxPlan) {
     if (it.done || ym(it.year, it.month) > now) continue;
     it.done = today(g);
-    applyTaxChange(g, s, it.id, it.rate, it.why || '法律による改正', { law: it.law, phone: true });
+    applyTaxChange(g, s, it.id, it.rate, it.why || '法律による改正', { law: it.law, phone: true, asOf: it.asOf || null });
   }
   s.taxPlan = s.taxPlan.filter((x) => !x.done || today(g) - x.done < 240);
 }
@@ -1025,6 +1102,8 @@ function applyTaxChange(g, s, id, rate, why, opts = {}) {
   const p = pol(g);
   const d = gdate(g);
   const before = rateNow(g, s, id);
+  // asOf: a calendar-year tax applied from an earlier January of this year (recorded as that month)
+  const at = opts.asOf && num(opts.asOf.year) === d.year ? { year: d.year, month: num(opts.asOf.month, 1) } : { year: d.year, month: d.month };
   if (id === 'shohi') {
     if (!p) return;
     p.economy.taxRate = rate;
@@ -1035,7 +1114,7 @@ function applyTaxChange(g, s, id, rate, why, opts = {}) {
     const t = s.taxes[id];
     if (!t) return;
     t.rate = rate;
-    t.history.push({ day: today(g), year: d.year, month: d.month, rate, why });
+    t.history.push({ day: today(g), year: at.year, month: at.month, rate, why });
     if (t.history.length > 30) t.history.splice(0, t.history.length - 30);
     if (id === 'kihatsu' && p && p.flags && rate <= 28.7 && obj(p.flags.inForce) && p.flags.inForce.gasoline_tax == null) p.flags.inForce.gasoline_tax = d.year;
     // this fiscal year's budget feels the change at once (full-year figure, a simplification)
@@ -1047,10 +1126,10 @@ function applyTaxChange(g, s, id, rate, why, opts = {}) {
       B.govt.taxDelta = r1(num(B.govt.taxDelta) + dv);
     }
   }
-  s.taxHistory.unshift({ day: today(g), id, from: before, to: rate, why, year: d.year, month: d.month });
+  s.taxHistory.unshift({ day: today(g), id, from: before, to: rate, why, year: at.year, month: at.month });
   if (s.taxHistory.length > 60) s.taxHistory.length = 60;
   const up = rate > before;
-  const text = `${dateText(d.year, d.month)}から${T.name}が${before}${T.unit}→${rate}${T.unit}になった（${why}）`;
+  const text = `${at.month !== d.month ? `${at.year}年分（${at.month}月にさかのぼって）` : dateText(d.year, d.month)}から${taxName(id, d.fy)}が${before}${T.unit}→${rate}${T.unit}になった（${why}）`;
   govtNews(g, s, text, { phone: opts.phone && (id === 'shohi' || id === 'sake' || id === 'kihatsu') ? `【税金】${dateText(d.year, d.month)}から、${T.short}が${before}${T.unit}から${rate}${T.unit}になりました。` : false, from: 'ドット新聞 経済部' });
   if (id === 'shohi' && p) { s.lastShohi = rate; ledgerAdd(g, s, 'tax', { mood: -(rate - before) * 0.8, text: `${T.short}の${up ? '引き上げ' : '引き下げ'}` }); }
   addEvent(g, s, up ? 'tax_up' : 'tax_down', `${T.short} ${before}${T.unit}→${rate}${T.unit}`, { segs: scaleSegs(T.seg, rate - before) });
@@ -1096,7 +1175,11 @@ function npcTaxItems(g, s, year) {
   }
   return { items: out, plan, why };
 }
-const TAX_MONTH = { jumin: 6 };
+// The month a rate change takes effect: 住民税 June (年度の課税), 所得税・相続税 January (暦年: 「○年分の所得」, 「○年1月1日
+//以後の相続」, as TAXES.hist), the rest April. A calendar-year change in a law passed in March of that year applies
+// from that January (the year's income / inheritances), as the real 1989, 1999, 2003 and 2015 changes did.
+const TAX_MONTH = { jumin: 6, shotoku: 1, sozoku: 1 };
+const CAL_YEAR_TAX = { shotoku: true, sozoku: true };
 // The 与党税調 decides on a proposal: the PM / 財務大臣 / the party's 政調会長 carry more weight; a change against the
 // leading party's economic line is harder; the 政府税調's report helps.
 function zeichoAccepts(g, s, id, rate) {
@@ -1523,7 +1606,9 @@ function useReserveImpl(g, s, amount, purpose = 'other') {
 }
 
 // ================================================================ ADMINISTRATION logic
-function councilExists(id, fy) { const C = COUNCILS[id]; return !!C && fy >= C.years[0] && fy < C.years[1]; }
+function councilExists(id, fy) { const C = COUNCILS[id]; return !!C && fy >= C.years[0] && fy < C.years[1] && (!C.ranges || C.ranges.some(([a, b]) => fy >= a && fy < b)); }
+// The council an ordinance needs in a year (needCouncil: id | fn(fy) -> id).
+const needCouncilOf = (O, fy) => (typeof O.needCouncil === 'function' ? O.needCouncil(fy) : O.needCouncil || null);
 function canAsk(p, posts) { return isPMg(p) || (posts || []).some((x) => x !== 'pm' && postOf(p, x)); }
 function ordinanceExists(id, fy) { const O = ORDINANCES[id]; return !!O && (!O.years || (fy >= O.years[0] && fy < O.years[1])); }
 // Keep the staff in step with the ministries of the year (2001 再編, 2007 防衛省, 2012 復興庁, 2021 デジタル庁).
@@ -1531,8 +1616,10 @@ function syncMinistries(g, s) {
   const d = gdate(g);
   const posts = ministryPosts(g, d.fy);
   const made = [];
-  for (const post of posts) if (!s.admin.bureaucrats[post]) { s.admin.bureaucrats[post] = staffMinistry(s, post, d.year, today(g)); made.push(post); }
+  for (const post of posts) if (!s.admin.bureaucrats[post]) { s.admin.bureaucrats[post] = staffMinistry(s, post, d.year, today(g), d.fy); made.push(post); }
   for (const post of Object.keys(s.admin.bureaucrats)) if (!posts.includes(post)) delete s.admin.bureaucrats[post];
+  // titles follow reorganisations (2001: 内政審議室長 → 内閣官房副長官補; 2007: 防衛庁 → 防衛省) and old saves
+  for (const [post, rec] of Object.entries(s.admin.bureaucrats)) if (rec && rec.kanbo) rec.kanbo.title = secondTitle(post, d.fy);
   if (made.length && today(g) > s.init + 1) {
     const names = made.map((x) => ministryName(x, d.fy)).filter(Boolean);
     if (names.length) govtNews(g, s, `${names.slice(0, 4).join('・')}${names.length > 4 ? 'など' : ''}の${made.some((x) => TOP_TITLE[x]) ? '幹部' : '事務次官'}が任命された（組織の発足・再編）`, { politics: false });
@@ -1565,7 +1652,7 @@ function personnelTick(g, s) {
       s.admin.amakudari.heat = clamp(num(s.admin.amakudari.heat) + (ban ? 1 : 3), 0, 100);
     }
     rec.top = next;
-    if (pick !== 'bureau' || next === rec.kanbo) rec.kanbo = newBureaucrat(s, d.year, post === 'kanbo' ? '内閣官房副長官補' : '大臣官房長', post, today(g));
+    if (pick !== 'bureau' || next === rec.kanbo) rec.kanbo = newBureaucrat(s, d.year, secondTitle(post, d.fy), post, today(g));
     while (rec.bureaus.length < (BUREAUS[post] || []).length) rec.bureaus.push(newBureaucrat(s, d.year, (BUREAUS[post] || [])[rec.bureaus.length], post, today(g)));
     rec.bureaus.forEach((b, i) => { b.title = (BUREAUS[post] || [])[i] || b.title; });
     rec.pick = null;
@@ -1631,7 +1718,8 @@ function ordinanceBlock(g, s, id, opt) {
   if (p.cabinet.resigned) return '総辞職した内閣は、新しい政策を決められない';
   const st = s.admin.ordinances[id];
   if (st && today(g) - num(st.last) < O.cooldown) return `前回から間がない（次は${dLabel(g, num(st.last) + O.cooldown)}ごろから）`;
-  if (O.needCouncil) { const c = s.admin.councils[O.needCouncil]; if (!c || c.status !== 'reported' || today(g) > num(c.validUntil)) return `先に${txt(COUNCILS[O.needCouncil].name, d.year)}に諮問し、答申を受ける必要がある`; }
+  const need = needCouncilOf(O, d.fy);
+  if (need) { const c = s.admin.councils[need]; if (!c || c.status !== 'reported' || today(g) > num(c.validUntil)) return `先に${txt(COUNCILS[need].name, d.year)}に諮問し、答申を受ける必要がある`; }
   if (opt != null && !O.options[opt]) return 'その選択肢はない';
   return null;
 }
@@ -1652,10 +1740,11 @@ function issueOrdinanceImpl(g, s, id, opts = {}) {
   if (P.cost && B) B.deficit = r1(num(B.deficit) + P.cost);
   const rec = s.admin.bureaucrats[O.posts.find((x) => s.admin.bureaucrats[x]) || 'kanbo'];
   const who = rec ? `${rec.top.name}${rec.top.title}` : '事務方';
-  govtNews(g, s, `${O.name}：${P.label}（${O.kind}、根拠：${txt(O.basis, d.year)}）`);
+  const kind = txt(O.kind, d.fy);
+  govtNews(g, s, `${O.name}：${P.label}（${kind}、根拠：${txt(O.basis, d.year)}）`);
   addEvent(g, s, 'ordinance', `${O.name}（${P.label}）`, { segs: P.seg, data: { item: O.name.replace(/（.*$/, '') } });
   emit(g, 'ordinance', { id, option: opt });
-  return { ok: true, id, option: opt, text: `${who}「${O.kind === '閣議決定' ? '閣議にお諮りする手続き' : `${O.kind}の手続き`}を進めます」\n${O.name}：${P.label}。国会の議決はいらないが、もとになる法律（${txt(O.basis, d.year)}）の範囲の中でだけ決められる。` };
+  return { ok: true, id, option: opt, text: `${who}「${kind === '閣議決定' ? '閣議にお諮りする手続き' : `${kind}の手続き`}を進めます」\n${O.name}：${P.label}。国会の議決はいらないが、もとになる法律（${txt(O.basis, d.year)}）の範囲の中でだけ決められる。` };
 }
 // 官僚答弁: a fictional official's careful answer (政府委員 before 2000, 政府参考人 after: 目安).
 const KANRYO = {
@@ -1676,7 +1765,16 @@ function bureaucratAnswerImpl(g, s, topic = 'generic') {
   let post = ANSWER_POST[topic] || 'kanbo';
   if (!s.admin.bureaucrats[post]) { const alt = { minister_mgmt: 'minister_internal', minister_posts: 'minister_internal' }[post]; post = alt && s.admin.bureaucrats[alt] ? alt : 'kanbo'; }
   const rec = s.admin.bureaucrats[post] || Object.values(s.admin.bureaucrats)[0];
-  const person = rec ? (rec.bureaus[0] || rec.kanbo) : null;
+  let person = rec ? (rec.bureaus[0] || rec.kanbo) : null;
+  // a topic with its own office (天下り): a fictional official of that office, kept in s.admin.officials
+  const TO = TOPIC_OFFICIAL[topic] ? byYear(TOPIC_OFFICIAL[topic], d.fy, null) : null;
+  if (TO) {
+    const [tp, title] = TO;
+    const O = obj(s.admin.officials) ? s.admin.officials : (s.admin.officials = {});
+    if (!O[topic] || O[topic].title !== title || O[topic].post !== tp) O[topic] = newBureaucrat(s, d.year, title, tp, today(g));
+    post = tp;
+    person = O[topic];
+  }
   let pool = KANRYO[topic] || KANRYO.generic;
   if (topic === 'amakudari') { const p = pol(g); pool = p && p.flags && p.flags.amakudariBan ? KANRYO.amakudari.after : KANRYO.amakudari.before; }
   s.admin.answers = num(s.admin.answers) + 1;
@@ -1874,18 +1972,83 @@ function doRequestDissolution(g, s, by) {
   ledgerAdd(g, s, 'religion', { mood: 0.6, text: '解散命令の請求' });
   emit(g, 'religion', { stage: 'requested', group: 'tenkan', by });
 }
-function religionActionImpl(g, s, groupId, kind, opts = {}) {
+// The 組織票 of a religious group never goes to a candidate tied to a real party (the real-party rule): one of a real
+// party, put up (公認・推薦) by one, in a cabinet or coalition that includes one, or in an election alliance with one.
+function realPartyTie(g, s, p, R) {
+  const me = p && p.me;
+  if (!me) return null;
+  const isReal = (id) => !!id && (realParty(id) || !!(p.parties && p.parties[id] && p.parties[id].real));
+  const nom = me.candidacy && me.nominations ? me.nominations[me.candidacy] : null;
+  if (isReal(me.party) || isReal(nom)) return `「${R.name}」は、実在の政党に所属する（公認・推薦を受けた）候補者の推薦はしない（このゲームの設定）`;
+  if (me.party && isRulingParty(p, me.party) && realInGovt(p)) return `「${R.name}」は、実在の政党と連立を組む政党の候補者の推薦はしない（このゲームの設定）`;
+  const A = s.opposition && s.opposition.alliance;
+  if (A && me.party && (A.parties || []).includes(me.party) && (A.parties || []).some(isReal)) return `「${R.name}」は、実在の政党と選挙協力をしている政党の候補者の推薦はしない（このゲームの設定）`;
+  return null;
+}
+// religionAction kinds and their govtRefusal kinds (one check for both: the UI never guesses).
+export const RELIGION_ACTIONS = { visit: 'religion_visit', ask_support: 'religion_endorse', public_money: 'religion_funds', report: 'religion_report', victim_support: 'religion_victim', diet_question: 'religion_question', question_power: 'religion_question_power', request_dissolution: 'religion_dissolution' };
+const RELIGION_ACTION_OF = Object.fromEntries(Object.entries(RELIGION_ACTIONS).map(([a, k]) => [k, a]));
+const PROBLEM_ACTIONS = ['report', 'victim_support', 'diet_question', 'question_power', 'request_dissolution'];
+// Why a religion action cannot be taken now (null = it can). Side-effect free; religionActionImpl runs it first.
+function religionBlock(g, s, groupId, kind) {
   const R = RELIGIOUS_GROUPS[groupId];
   const st = s.religion.groups[groupId];
   const p = pol(g);
   const day = today(g);
   const C = s.religion.cult;
-  if (!R || !st) return { ok: false, why: 'そんな団体はない' };
-  const gs = g.state;
-  if (kind === 'public_money') return { ok: false, why: RELIGION_LAW.art89 };
+  if (kind === 'public_money') return RELIGION_LAW.art89;
+  if (!R || !st) return 'そんな団体はない';
   if (kind === 'visit') {
-    if (st.lastVisit === day) return { ok: false, why: '今日はもう訪ねた' };
-    if (gs.stamina < 10) return { ok: false, why: '体力が足りない' };
+    if (st.lastVisit === day) return '今日はもう訪ねた';
+    return num(g.state && g.state.stamina) < 10 ? '体力が足りない' : null;
+  }
+  if (kind === 'ask_support') {
+    if (!R.endorse) return `「${R.name}」は、選挙で候補者を推薦する活動はしていない`;
+    if (!p || !p.me) return '政治のしくみが読み込まれていない';
+    const tie = realPartyTie(g, s, p, R);
+    if (tie) return tie;
+    const e = p.me.candidacy && p.elections.upcoming.find((x) => x.id === p.me.candidacy);
+    if (!e) return '立候補を届け出てから、推薦をお願いできる';
+    if (s.religion.endorsements.some((x) => x.election === e.id)) return 'この選挙では、もう推薦をもらっている';
+    if (num(st.relation) < 40) return `まだ「${R.name}」との信頼関係が足りない（行事に参加して、考えを伝えるところから）`;
+    return null;
+  }
+  if (!PROBLEM_ACTIONS.includes(kind)) return 'そんな行動はない';
+  if (!R.problem) return 'この団体には、その対応は関係ない';
+  if (C.stage === 0) return 'いまのところ、この団体をめぐる被害の相談は表に出ていない';
+  if (C.stage >= 5) return C.stage === 5 ? 'すでに解散命令が出ている' : '裁判所の判断が出たあと';
+  if (kind === 'report') return null;
+  if (kind === 'victim_support') return num(g.state && g.state.stamina) < 10 ? '体力が足りない' : null;
+  if (kind === 'diet_question') {
+    if (!isNational(p)) return '国会で質問できるのは国会議員だけ';
+    if (!inSessionP(p, day)) return '国会の会期中に';
+    return C.lastQ && day - C.lastQ < 10 ? '前の質問から間がない' : null;
+  }
+  if (kind === 'question_power') {
+    if (!p || !hasPost(p, 'minister_education')) return `報告徴収・質問権を使うのは所轄庁（この団体は${postNameNow(g, 'minister_education')}）`;
+    if (!reportPowerOK(g, s)) return '宗教法人法に、報告徴収・質問権の規定がまだない（法改正「宗教法人法の改正」が必要）';
+    if (C.stage === 4) return 'すでに裁判所が審理している';
+    const cs = s.admin.councils.shukyo;
+    if (!cs || cs.status !== 'reported' || day > num(cs.validUntil)) return '先に宗教法人審議会の意見を聞く（審議会に諮問する）';
+    return C.questioned && day - num(C.questioned.day) < 15 ? '前回の質問への回答を待っている' : null;
+  }
+  // request_dissolution
+  if (!p || !hasPost(p, 'minister_education')) return `解散命令を請求するのは所轄庁（${postNameNow(g, 'minister_education')}）か検察官など`;
+  if (C.stage === 4) return 'すでに裁判所が審理している';
+  return num(C.questions) >= 2 || C.complaints >= 140 ? null : '請求には、法令違反と「著しく公共の福祉を害する」ことを示す十分な証拠がいる（報告徴収・質問で実態を確かめてから）';
+}
+function religionActionImpl(g, s, groupId, kind, opts = {}) {
+  const why = religionBlock(g, s, groupId, kind);
+  if (why) return { ok: false, why };
+  const R = RELIGIOUS_GROUPS[groupId];
+  const st = s.religion.groups[groupId];
+  const p = pol(g);
+  const day = today(g);
+  const C = s.religion.cult;
+  const gs = g.state;
+  const d = gdate(g);
+  void opts;
+  if (kind === 'visit') {
     gs.stamina -= 10;
     st.lastVisit = day; st.visits = num(st.visits) + 1; st.relation = clamp(num(st.relation) + 8, 0, 100);
     const act = pickOne(R.activities);
@@ -1896,13 +2059,7 @@ function religionActionImpl(g, s, groupId, kind, opts = {}) {
     return { ok: true, text: `「${R.name}」の${act}に参加した。${extra}`, relation: st.relation };
   }
   if (kind === 'ask_support') {
-    if (!R.endorse) return { ok: false, why: `「${R.name}」は、選挙で候補者を推薦する活動はしていない` };
-    if (!p || !p.me) return { ok: false, why: '政治のしくみが読み込まれていない' };
-    if (realParty(p.me.party)) return { ok: false, why: `「${R.name}」は、実在の政党に所属する候補者の推薦はしない（このゲームの設定）` };
-    const e = p.me.candidacy && p.elections.upcoming.find((x) => x.id === p.me.candidacy);
-    if (!e) return { ok: false, why: '立候補を届け出てから、推薦をお願いできる' };
-    if (s.religion.endorsements.some((x) => x.election === e.id)) return { ok: false, why: 'この選挙では、もう推薦をもらっている' };
-    if (num(st.relation) < 40) return { ok: false, why: `まだ「${R.name}」との信頼関係が足りない（行事に参加して、考えを伝えるところから）` };
+    const e = p.elections.upcoming.find((x) => x.id === p.me.candidacy);
     const camp = p.me.campaign && p.me.campaign.election === e.id ? p.me.campaign : (p.me.campaign = { election: e.id, points: 0, actions: {}, spent: 0, day });
     const pts = Math.round(12 + num(st.relation) / 8) * num(R.votePower, 1);
     camp.points = num(camp.points) + pts;
@@ -1911,46 +2068,49 @@ function religionActionImpl(g, s, groupId, kind, opts = {}) {
     addEvent(g, s, 'religion_politics', '宗教団体が候補者を推薦', { segs: { elderly: 0.5, families: 0.3, floating: -0.8, young: -0.5 } });
     return { ok: true, points: pts, text: `「${R.name}」から推薦をもらった（選挙運動の力 +${pts}）。宗教団体が選挙で候補者を応援すること自体は憲法で禁じられていないが、「組織票に頼るのか」という声もある。` };
   }
-  if (!R.problem) return { ok: false, why: 'この団体には、その対応は関係ない' };
-  if (C.stage === 0) return { ok: false, why: 'いまのところ、この団体をめぐる被害の相談は表に出ていない' };
-  if (C.stage >= 5) return { ok: false, why: C.stage === 5 ? 'すでに解散命令が出ている' : '裁判所の判断が出たあと' };
   if (kind === 'report') {
     C.complaints = num(C.complaints) + 4;
     return { ok: true, text: '被害の家族の話を聞き、消費生活センターと弁護士会の相談窓口につないだ。（信仰の自由は尊重しながら、違法な勧誘には法律で対応する）' };
   }
   if (kind === 'victim_support') {
-    if (gs.stamina < 10) return { ok: false, why: '体力が足りない' };
     gs.stamina -= 10;
     C.victims = num(C.victims) + 1;
     if (p && p.me && p.me.office) p.me.reputation = clamp(num(p.me.reputation) + 1, -100, 100);
-    return { ok: true, text: '被害にあった家族の相談会を手伝った。法テラスや弁護士会の窓口を紹介した。' };
+    // 法テラス（日本司法支援センター）: 業務開始 2006-10-02 (houterasu.or.jp)
+    return { ok: true, text: `被害にあった家族の相談会を手伝った。${d.fy >= 2006.75 ? '法テラスや弁護士会の窓口を紹介した。' : '弁護士会や消費生活センターの窓口を紹介した。'}` };
   }
   if (kind === 'diet_question') {
-    if (!isNational(p)) return { ok: false, why: '国会で質問できるのは国会議員だけ' };
-    if (!inSessionP(p, day)) return { ok: false, why: '国会の会期中に' };
-    if (C.lastQ && day - C.lastQ < 10) return { ok: false, why: '前の質問から間がない' };
     C.lastQ = day; C.asked = true;
     p.me.reputation = clamp(num(p.me.reputation) + 2, -100, 100);
     const ans = bureaucratAnswerImpl(g, s, 'religion');
     return { ok: true, answer: ans, text: `委員会で、高額献金の被害の救済について質問した。\n${ans.role}（${ans.title} ${ans.who}）「${ans.text}」` };
   }
   if (kind === 'question_power') {
-    if (!p || !hasPost(p, 'minister_education')) return { ok: false, why: `報告徴収・質問権を使うのは所轄庁（この団体は${postNameNow(g, 'minister_education')}）` };
-    if (!reportPowerOK(g, s)) return { ok: false, why: '宗教法人法に、報告徴収・質問権の規定がまだない（法改正「宗教法人法の改正」が必要）' };
-    const cs = s.admin.councils.shukyo;
-    if (!cs || cs.status !== 'reported' || day > num(cs.validUntil)) return { ok: false, why: '先に宗教法人審議会の意見を聞く（審議会に諮問する）' };
-    if (C.questioned && day - num(C.questioned.day) < 15) return { ok: false, why: '前回の質問への回答を待っている' };
     doQuestionPower(g, s, 'player');
     return { ok: true, text: '宗教法人審議会の意見を聞いたうえで、報告徴収・質問権を行使した。信教の自由に配慮しつつ、献金の勧誘の実態について報告を求めた。' };
   }
   if (kind === 'request_dissolution') {
-    if (!p || !hasPost(p, 'minister_education')) return { ok: false, why: `解散命令を請求するのは所轄庁（${postNameNow(g, 'minister_education')}）か検察官など` };
-    if (C.stage === 4) return { ok: false, why: 'すでに裁判所が審理している' };
-    if (!(num(C.questions) >= 2 || C.complaints >= 140)) return { ok: false, why: '請求には、法令違反と「著しく公共の福祉を害する」ことを示す十分な証拠がいる（報告徴収・質問で実態を確かめてから）' };
     doRequestDissolution(g, s, 'player');
     return { ok: true, text: '裁判所に解散命令を請求した。判断するのは裁判所。解散命令は法人格を失わせるもので、信仰そのものを禁じるものではない。' };
   }
   return { ok: false, why: 'そんな行動はない' };
+}
+// An endorsement already given is withdrawn when the candidate becomes tied to a real party before the vote (joins a
+// coalition with one, an alliance...): the real-party rule holds on every day, not only on the day of the request.
+function endorsementsTick(g, s) {
+  const p = pol(g);
+  if (!p || !p.me || !Array.isArray(s.religion.endorsements)) return;
+  for (const E of s.religion.endorsements) {
+    if (E.withdrawn) continue;
+    const e = p.elections && p.elections.upcoming.find((x) => x.id === E.election && x.status !== 'done');
+    if (!e) continue;
+    const R = RELIGIOUS_GROUPS[E.group] || RELIGIOUS_GROUPS.wako;
+    if (!realPartyTie(g, s, p, R)) continue;
+    E.withdrawn = today(g);
+    const camp = p.me.campaign;
+    if (camp && camp.election === E.election) camp.points = Math.max(0, num(camp.points) - num(E.points));
+    govtNews(g, s, `「${R.name}」（架空）は、${e.label}での${g.state.name}候補の推薦を取り下げた（候補者の政党が実在の政党と連携したため。このゲームの設定）`, { politics: true });
+  }
 }
 function religionStatus(g, s) {
   const d = gdate(g);
@@ -2090,6 +2250,7 @@ function oppositionImpl(g, s, kind, opts = {}) {
 function kyokoImpl(g, s, b, by) {
   const p = pol(g);
   const day = today(g);
+  if (realInGovt(p)) return false; // the real-party rule (callers refuse first; this is the last guard)
   b.next = day;
   b.log.push({ day, text: '野党の反対を押し切って採決へ（いわゆる強行採決）' });
   b.kyoko = day;
@@ -2099,6 +2260,7 @@ function kyokoImpl(g, s, b, by) {
   addEvent(g, s, 'kyoko', `「${b.title}」の強行採決`, { segs: { floating: -1.5, young: -0.8, urban: -0.6, business: 0.3, elderly: 0.2 } });
   if (Math.random() < 0.4) spawnDemoImpl(g, s, { against: 'policy', title: b.title, policy: b.policy, segment: 'urban', size: irnd(3000, 15000) });
   emit(g, 'ruling', { kind: 'kyoko', billId: b.id, by });
+  return true;
 }
 function rulingImpl(g, s, kind, opts = {}) {
   const p = pol(g);
@@ -2135,11 +2297,13 @@ function rulingImpl(g, s, kind, opts = {}) {
     return { ok: true, agreed, text: agreed.length ? `野党と修正協議をまとめた。${agreed.map((id) => partyNameOf(g, id)).join('・')}が賛成に回る見通し。中身の一部を譲ったので、党内には不満の声も。` : '協議したが、野党とは折り合えなかった。' };
   }
   if (kind === 'kyoko') {
+    const real = realPartyNo(g, p, '採決の強行');
+    if (real) return { ok: false, why: real };
     const house = b.house;
     const rulingSeats = (p.cabinet.partyIds || []).reduce((a, id) => a + num(p.diet[house].seats[id]), 0);
     if (rulingSeats <= p.diet[house].total / 2) return { ok: false, why: `${house === 'shugi' ? '衆' : '参'}議院で与党が過半数に届かず、採決を強行しても可決できない` };
     if (b.kyoko && day - b.kyoko < 5) return { ok: false, why: 'すでに採決を急いでいる' };
-    kyokoImpl(g, s, b, 'player');
+    if (!kyokoImpl(g, s, b, 'player')) return { ok: false, why: 'いまは採決を急げない' };
     p.me.standing = clamp(num(p.me.standing) + 1, 0, 100);
     return { ok: true, text: `「${b.title}」の採決を急がせた。成立には近づくが、「数の横暴」との批判で支持率が下がるおそれがある。` };
   }
@@ -2161,7 +2325,10 @@ function questionsTick(g, s) {
     const p = pol(g);
     const b = p && p.diet.bills.find((x) => x.id === O.boycott.billId);
     O.boycott = null;
-    if (b && liveBill(b) && p.cabinet.pm !== 'player' && Math.random() < 0.4) kyokoImpl(g, s, b, 'npc');
+    // an NPC cabinet may push the vote — never one that includes a real party (the real-party rule): there the
+    // 国対委員長s talk and the committee resumes (an ordinary, neutral end of a boycott)
+    if (b && liveBill(b) && p.cabinet.pm !== 'player' && !realInGovt(p) && Math.random() < 0.4) kyokoImpl(g, s, b, 'npc');
+    else if (b && liveBill(b) && realInGovt(p)) { b.log.push({ day: today(g), text: '与野党の国会対策委員長が協議し、審議が再開された' }); govtNews(g, s, `与野党の国会対策委員長が協議し、「${b.title}」の審議が再開された`, { politics: false }); }
     else if (b) b.log.push({ day: today(g), text: '野党が審議に復帰した' });
   }
   if (O.alliance && today(g) > num(O.alliance.until) + 3) O.alliance = null;
@@ -2484,7 +2651,9 @@ Object.assign(DEMO_RESPONSES, {
   },
   remove: {
     label: '強制排除（座り込みの排除を求める）', desc: '道路の占拠などに対して、警察が排除するよう求める。民主国家では強い反発を招く。',
-    available: (g, d) => (d.stance === 'rally' ? '必要ない' : true),
+    // the real-party rule: a government that includes 自民・民主 (any role) never orders it (dialogue / tolerate /
+    // regulate, the lawful traffic control, stay open)
+    available: (g, d) => (d.stance === 'rally' ? '必要ない' : realPartyNo(g, pol(g), 'デモの強制排除') || true),
     apply(g, d) {
       const s = GS(g);
       d.momentum = num(d.momentum, 1) * 1.25;
@@ -2582,8 +2751,10 @@ function seatDetailsImpl(g, s) {
     if (h === 'sangi' && Array.isArray(H.classes)) out.classes = H.classes.map((c) => ({ year: c.year, seats: { ...c.seats } }));
     return out;
   };
+  const shugi = house('shugi'), sangi = house('sangi');
   return {
-    shugi: house('shugi'), sangi: house('sangi'), coalition: ruling.map((id) => ({ id, name: partyNameOf(g, id, false) })), nejire: !!(p.flags && p.flags.nejire),
+    // ねじれ from the same rows (the ruling parties hold the 衆院 but not the 参院), never a stale flag
+    shugi, sangi, coalition: ruling.map((id) => ({ id, name: partyNameOf(g, id, false) })), nejire: !!(shugi.rulingMajority && !sangi.rulingMajority),
     note: '会派名は、確認できた実在の会派名（自民・民主）のほかは党名で示す。数はシミュレーション',
   };
 }
@@ -2693,6 +2864,7 @@ function onEnacted(g, s, d) {
     if (after > before && /^shohizei_(intro|up)$/.test(L.policy)) {
       const intro = before <= 0;
       const y = intro ? (yr.month >= 4 ? yr.year + 1 : yr.year) : (yr.month >= 7 ? yr.year + 2 : yr.year + 1);
+      if (intro) s.shohiLaw = { year: yr.year, month: yr.month, inForce: { year: y, month: 4 } }; // the game's own 消費税法
       p.economy.taxRate = before;
       if (!intro && !(p.flags.taxPlan && !p.flags.taxPlan.done)) p.flags.taxPlan = { rate: after, year: y, month: 4, law: yr.year };
       else s.taxPlan.push({ id: 'shohi', rate: after, year: y, month: 4, law: yr.year, by: 'law', why: L.title });
@@ -2769,7 +2941,7 @@ export async function govtTick(g) {
   const day = today(g);
   if (num(s.lastTick) >= day) return;
   s.lastTick = day;
-  const steps = [syncBudget, taxInForce, taxReformCycle, budgetCycle, syncMinistries, personnelTick, councilTick, postalTick, cultTick, questionsTick, keyBillsTick, resubmitKeyBills, demoTick, (gg, ss) => demoAuto(gg, ss, null), watchOthers];
+  const steps = [syncBudget, taxInForce, taxReformCycle, budgetCycle, syncMinistries, personnelTick, councilTick, postalTick, cultTick, endorsementsTick, questionsTick, keyBillsTick, resubmitKeyBills, demoTick, (gg, ss) => demoAuto(gg, ss, null), watchOthers];
   for (const fn of steps) { try { fn(g, s); } catch (e) { console.error('govtTick', fn.name, e); } }
   // a missed change of government (e.g. an old save): remember who governs now
   const p = pol(g);
@@ -2844,6 +3016,7 @@ function dietBlock(g, s, kind, opts = {}) {
     case 'kokutai': case 'kyoko':
       if (!role.ruling) return '与党の国会運営の手段（与党の議員でないと使えない）';
       if (!(isPMg(p) || role.kokutai || role.kanjicho)) return '国会運営を仕切るのは、総理か与党の国会対策委員長・幹事長';
+      if (kind === 'kyoko') { const real = realPartyNo(g, p, '採決の強行'); if (real) return real; }
       if (!inSessionP(p, day)) return '国会の会期中に';
       if (!p.diet.bills.some((b) => liveBill(b) && b.sponsor === 'cabinet' && b.kind !== 'budget')) return '審議中の政府の法案がない';
       return null;
@@ -2893,20 +3066,15 @@ function refusalImpl(g, s, kind, opts = {}) {
       const d = opts.id ? s.demos.list.find((x) => x.id === opts.id) : s.demos.list.find((x) => x.status === 'active');
       return respondBlock(g, s, d, opts.how || 'tolerate');
     }
+    // religion: every religionAction kind has its refusal (religionBlock, the same check the action runs first).
+    // opts.group: the group (default: 和光修養会 for the endorsement, the problem group for the problem actions)
     case 'religion_funds': return RELIGION_LAW.art89;
-    case 'religion_endorse': {
-      if (!p || !p.me) return '政治のしくみが読み込まれていない';
-      if (realParty(p.me.party)) return '（このゲームでは）宗教団体は実在の政党の候補者を推薦しない';
-      if (!p.me.candidacy) return '立候補を届け出てから';
-      return num(s.religion.groups.wako.relation) < 40 ? 'まだ信頼関係が足りない' : null;
+    case 'religion': case 'religion_visit': case 'religion_endorse': case 'religion_report': case 'religion_victim': case 'religion_question': case 'religion_question_power': case 'religion_dissolution': {
+      const action = kind === 'religion' ? opts.action : RELIGION_ACTION_OF[kind];
+      if (!RELIGION_ACTIONS[action]) return 'そんな行動はない';
+      const grp = opts.group || (action === 'ask_support' ? 'wako' : action === 'visit' ? RELIGION_ORDER[0] : RELIGION_ORDER.find((id) => RELIGIOUS_GROUPS[id].problem));
+      return religionBlock(g, s, grp, action);
     }
-    case 'religion_question_power':
-      if (!p || !hasPost(p, 'minister_education')) return `報告徴収・質問権を使うのは所轄庁（${postNameNow(g, 'minister_education')}）`;
-      if (!reportPowerOK(g, s)) return '宗教法人法に、報告徴収・質問権の規定がまだない';
-      return s.religion.cult.stage >= 2 && s.religion.cult.stage <= 3 ? null : 'いま調べるべき事案がない';
-    case 'religion_dissolution':
-      if (!p || !hasPost(p, 'minister_education')) return `解散命令を請求するのは所轄庁（${postNameNow(g, 'minister_education')}）や検察官など`;
-      return s.religion.cult.stage >= 2 && s.religion.cult.stage <= 3 && (num(s.religion.cult.questions) >= 2 || s.religion.cult.complaints >= 140) ? null : '請求には十分な証拠がいる（報告徴収・質問で実態を確かめてから）';
     case 'postal': { try { return typeof g.policyBlock === 'function' ? g.policyBlock('postal_privatization') : '政治のしくみが読み込まれていない'; } catch (e) { return '—'; } }
     case 'kanbu_jinji': return !s.admin.reforms.jinjikyoku ? '内閣人事局がまだない（幹部人事は各府省が決める）' : !p || !(isPMg(p) || postOf(p, 'kanbo')) ? '幹部人事を決めるのは総理大臣と官房長官' : null;
     case 'amakudari_check': return !p || !(isPMg(p) || postOf(p, 'kanbo') || postOf(p, 'minister_mgmt') || postOf(p, 'minister_internal')) ? '公務員制度を担当する大臣か、総理・官房長官が指示する' : null;
@@ -2915,6 +3083,21 @@ function refusalImpl(g, s, kind, opts = {}) {
 }
 
 // ================================================================ g.* API
+// The 消費税 row's law: the game's own 消費税法 when it passed in this game, the real one when the era starts with it,
+// else not yet (in 1987-1988, or later when history diverged).
+function shohiLawText(g, s) {
+  const d = gdate(g);
+  const p = pol(g);
+  let L = s.shohiLaw || null;
+  if (!L && p && Array.isArray(p.laws)) { const l = p.laws.find((x) => x.policy === 'shohizei_intro'); if (l) { const ld = gdate(g, l.day); L = { year: ld.year, month: ld.month, inForce: null }; } }
+  if (L) {
+    const f = L.inForce;
+    const when = f ? `、${f.year}年${f.month}月${ym(f.year, f.month) > ym(d.year, d.month) ? 'から施行の予定' : '施行'}` : '';
+    return `消費税法（${L.year}年${L.month}月成立${when}。このゲームの中で成立した法律）`;
+  }
+  if (s.startYear >= 1990 || shohiRate(g) > 0) return txt(TAXES.shohi.law, Math.max(d.fy, 1990));
+  return d.fy < 1989.25 ? txt(TAXES.shohi.law, d.fy) : '消費税法はまだない（このゲームでは、大型間接税はまだ導入されていない）';
+}
 function taxRowsImpl(g, s) {
   const d = gdate(g);
   const p = pol(g);
@@ -2928,8 +3111,8 @@ function taxRowsImpl(g, s) {
       : T.hist.filter(([y, m]) => ym(y, m) <= ym(s.startYear, 4)).map(([y, m, r, o]) => ({ year: y, month: m, rate: r, why: o && o.est ? '（目安）' : '' })).concat((s.taxes[id].history || []).slice(1).map((h) => ({ year: h.year, month: h.month, rate: h.rate, why: h.why })));
     const prop = s.taxReform.proposals && s.taxReform.proposals[id];
     return {
-      id, name: T.name, short: T.short, unit: T.unit, step: T.step, min: T.min, max: T.max, kind: T.kind, local: !!T.local, owner: T.owner || 'govt',
-      rate, base: T.owner === 'politics' ? taxRateAt('shohi', s.startYear, 4) : num(s.taxes[id] && s.taxes[id].base), law: T.law, note: txt(T.note, d.year), explain: txt(T.explain, d.year), pro: T.pro, con: T.con,
+      id, name: taxName(id, d.fy), short: T.short, unit: T.unit, step: T.step, min: T.min, max: T.max, kind: T.kind, local: !!T.local, owner: T.owner || 'govt',
+      rate, base: T.owner === 'politics' ? taxRateAt('shohi', s.startYear, 4) : num(s.taxes[id] && s.taxes[id].base), law: id === 'shohi' ? shohiLawText(g, s) : txt(T.law, d.fy), note: txt(T.note, d.fy, { rate }), explain: txt(T.explain, d.year), pro: arr(T.pro, d.fy), con: arr(T.con, d.fy),
       history: hist, pending: s.taxPlan.filter((x) => x.id === id && !x.done).map((x) => ({ rate: x.rate, year: x.year, month: x.month, why: x.why })),
       proposal: prop ? { rate: prop.rate, target: prop.target } : null, rejected: s.taxReform.rejected && s.taxReform.rejected[id] != null ? s.taxReform.rejected[id] : null,
       revenue: T.local ? null : rev[id] != null ? rev[id] : null, localRevenueDelta: T.local ? r2(localRevenueDelta(g, s)) : null,
@@ -2960,7 +3143,7 @@ function setTaxRateImpl(g, s, id, v, opts = {}) {
   R.proposals[id] = { rate: val, target, day: today(g), by: isPMg(p) ? 'pm' : financeMinister(p) ? 'finance' : 'party' };
   if (R.rejected) delete R.rejected[id];
   emit(g, 'taxReform', { stage: 'proposal', id, rate: val, target });
-  return { ok: true, stage: 'proposal', target, text: `${target}年度の税制改正に向けて、与党の税制調査会に「${T.short}を${val}${T.unit}に」と提案した。${target - 1}年12月中旬の税制改正大綱で採否が決まり、法律案が成立すれば、原則${target}年4月から適用。` };
+  return { ok: true, stage: 'proposal', target, text: `${target}年度の税制改正に向けて、与党の税制調査会に「${T.short}を${val}${T.unit}に」と提案した。${target - 1}年12月中旬の税制改正大綱で採否が決まり、法律案が成立すれば、原則${CAL_YEAR_TAX[id] ? `${target}年分（1月）` : `${target}年${TAX_MONTH[id] || 4}月`}から適用。` };
 }
 const STAGE_LABEL = { request: '概算要求', genan: '財務省原案', cabinet: '政府案（閣議決定）', diet: '国会で審議中', passed: '成立', provisional: '暫定予算' };
 function budgetImpl(g, s) {
@@ -2980,10 +3163,10 @@ function budgetImpl(g, s) {
   const rev = revenueDetail(g, s, B);
   const spending = BUDGET_ORDER.map((k) => {
     const it = BUDGET_ITEMS[k];
-    return { id: k, name: it.name, value: r2(det[k]), share: total ? r1((det[k] / total) * 100) : 0, baseline: r2(G2.base ? G2.base[k] : det[k]), fixed: it.fixed, fixedLabel: { debt: '減らせない（国債の返済・利払い）', formula: 'ほぼ法律で決まる（法定率）', entitlement: '自然増がある（法律で決まる給付）', reserve: '予備費', discretionary: '政策で増減できる' }[it.fixed], min: it.min, max: it.max, area: it.area, explain: txt(it.explain, d.year), pro: it.pro, con: it.con, ministry: ministryName(it.ministry, d.fy) };
+    return { id: k, name: it.name, value: r2(det[k]), share: total ? r1((det[k] / total) * 100) : 0, baseline: r2(G2.base ? G2.base[k] : det[k]), fixed: it.fixed, fixedLabel: { debt: '減らせない（国債の返済・利払い）', formula: 'ほぼ法律で決まる（法定率）', entitlement: '自然増がある（法律で決まる給付）', reserve: '予備費', discretionary: '政策で増減できる' }[it.fixed], min: it.min, max: it.max, area: it.area, explain: txt(it.explain, d.year), pro: it.pro, con: it.con, ministry: itemMinistry(it, d.fy) };
   });
   const midYear = r1(num(B.deficit) - (num(B.spending) - num(B.revenue) - num(G2.nontax)));
-  if (midYear > 0.05) spending.push({ id: 'midyear', name: '年度途中の追加（補正・新しい法律）', value: midYear, share: 0, fixed: 'discretionary', fixedLabel: '年度の途中で決まった', explain: '年度の途中で成立した補正予算や法律の費用。', pro: [], con: [] });
+  if (midYear > 0.05) spending.push({ id: 'midyear', name: '年度途中の追加（補正・新しい法律）', value: midYear, share: 0, fixed: 'discretionary', fixedLabel: '年度の途中で決まった', explain: '年度の途中で成立した補正予算や法律の費用。', pro: ['災害や景気の急な変化など、年度の途中の必要にすぐ応えられる'], con: ['当初予算ほどの審議を経ずに支出がふくらみ、国債が増える'], ministry: '各府省' });
   const revTotal = sumObj(rev);
   const revenue = Object.entries(rev).map(([id, v]) => ({ id, name: id === 'sonotazei' ? (d.year < 1989 ? 'その他の税（物品税・関税など）' : 'その他の税（関税・印紙収入など）') : REVENUE_ITEMS[id].name, value: v, share: revTotal ? r1((v / revTotal) * 100) : 0 }));
   const S = s.budget;
@@ -3071,14 +3254,14 @@ const methods = {
     const s = GS(this);
     if (!s) return [];
     const d = gdate(this);
-    return COUNCIL_ORDER.filter((id) => councilExists(id, d.fy)).map((id) => { const C = COUNCILS[id]; const st = s.admin.councils[id] || null; return { id, name: txt(C.name, d.year), desc: txt(C.desc, d.year), topic: C.topic, areas: C.areas, posts: C.posts.map((x) => (x === 'pm' ? '内閣総理大臣' : postNameNow(this, x))), why: refusalImpl(this, s, 'council', { id }), status: st ? st.status : 'idle', report: st && st.report ? { ...st.report } : null, due: st && st.status === 'pending' ? st.due : null }; });
+    return COUNCIL_ORDER.filter((id) => councilExists(id, d.fy)).map((id) => { const C = COUNCILS[id]; const st = s.admin.councils[id] || null; return { id, name: txt(C.name, d.year), desc: txt(C.desc, d.fy), topic: C.topic, areas: C.areas, posts: C.posts.map((x) => (x === 'pm' ? '内閣総理大臣' : postNameNow(this, x))), why: refusalImpl(this, s, 'council', { id }), status: st ? st.status : 'idle', report: st && st.report ? { ...st.report } : null, due: st && st.status === 'pending' ? st.due : null }; });
   },
   councilConsult(id, topic) { const s = GS(this); return s ? councilConsultImpl(this, s, id, topic) : { ok: false, why: 'まだ準備ができていない' }; },
   ordinances() {
     const s = GS(this);
     if (!s) return [];
     const d = gdate(this);
-    return ORDINANCE_ORDER.filter((id) => ordinanceExists(id, d.fy)).map((id) => { const O = ORDINANCES[id]; return { id, name: O.name, kind: O.kind, basis: txt(O.basis, d.year), desc: O.desc, posts: O.posts.map((x) => postNameNow(this, x)), options: Object.entries(O.options).map(([key, o]) => ({ key, label: o.label, segments: { ...(o.seg || {}) }, cost: o.cost || 0 })), pro: O.pro, con: O.con, needCouncil: O.needCouncil || null, why: ordinanceBlock(this, s, id), last: s.admin.ordinances[id] ? s.admin.ordinances[id].last : null }; });
+    return ORDINANCE_ORDER.filter((id) => ordinanceExists(id, d.fy)).map((id) => { const O = ORDINANCES[id]; return { id, name: O.name, kind: txt(O.kind, d.fy), basis: txt(O.basis, d.year), desc: txt(O.desc, d.fy), posts: O.posts.map((x) => postNameNow(this, x)), options: Object.entries(O.options).map(([key, o]) => ({ key, label: o.label, segments: { ...(o.seg || {}) }, cost: o.cost || 0 })), pro: arr(O.pro, d.fy), con: arr(O.con, d.fy), needCouncil: needCouncilOf(O, d.fy), why: ordinanceBlock(this, s, id), last: s.admin.ordinances[id] ? s.admin.ordinances[id].last : null }; });
   },
   issueOrdinance(id, opts = {}) { const s = GS(this); return s ? issueOrdinanceImpl(this, s, id, opts || {}) : { ok: false, why: 'まだ準備ができていない' }; },
   adminReform() {

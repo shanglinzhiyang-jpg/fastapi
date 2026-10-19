@@ -2134,8 +2134,8 @@ const TAB_ADMIN = {
     const s = sub(ui);
     if (s === 'min') {
       out.push(listCtl(ui, 'mrow', { id: 'mrow', x: 4, y: 64, w: 250, h: 272, y0: 30, rowH: 20, n: d.min.length, tip: (u) => { const m = d.min[u.tabState().mrow | 0]; return m ? `${m.name}：大臣 ${m.ministerName || '—'}` : ''; }, a: null }));
-      out.push(btn({ id: 'm_answer', x: 262, y: 314, w: 180, h: 20, label: '官僚の答弁を聞く', why: has(ui.g, 'bureaucratAnswer') ? null : '行政のしくみがない', tip: '国会での官僚（政府参考人）の答弁の例（架空の人物）', a: (u) => bureauAnswer(u, d) }));
-      out.push(btn({ id: 'm_jinji', x: 448, y: 314, w: 184, h: 20, label: '幹部人事（内閣人事局）', why: d.R('kanbu_jinji'), tip: '各省の事務次官などの幹部を決める（2014年の内閣人事局から）', a: (u) => kanbuJinji(u, d) }));
+      out.push(btn({ id: 'm_answer', x: 262, y: 314, w: 180, h: 20, label: '官僚の答弁を聞く', why: has(ui.g, 'bureaucratAnswer') ? null : '行政のしくみがない', tip: `国会での官僚（${yearOf(ui.g) < 2000 ? '政府委員' : '政府参考人'}）の答弁の例（架空の人物）`, a: (u) => bureauAnswer(u, d) }));
+      out.push(btn({ id: 'm_jinji', x: 448, y: 314, w: 184, h: 20, label: '幹部人事（内閣人事局）', why: d.R('kanbu_jinji'), tip: jinjiTip(d), a: (u) => kanbuJinji(u, d) }));
     } else if (s === 'council') {
       out.push(listCtl(ui, 'crow', { id: 'crow', x: 4, y: 64, w: 300, h: 272, y0: 18, rowH: 26, n: d.councils.length, tip: (u) => { const k = d.councils[u.tabState().crow | 0]; return k ? `${k.name}：${k.topic}` : ''; }, a: null }));
       const k = d.councils[st.crow | 0];
@@ -2147,8 +2147,8 @@ const TAB_ADMIN = {
         out.push(btn({ id: `o_opt${i}`, x: 272, y: 290 - ((o.options.length - 1 - i) * 22), w: 360, h: 20, label: `${o.kind}を出す：${op.label}`, why: o.why || d.R('ordinance', { id: o.id, option: op.key }), color: K.amber, tip: `${op.label}${op.cost ? `（費用 年${cho(op.cost)}）` : ''}`, a: (u) => ordinanceFlow(u, o, op) }));
       });
     } else {
-      out.push(btn({ id: 'r_jinji', x: 330, y: 290, w: 302, h: 20, label: '幹部人事を決める（内閣人事局）', why: d.R('kanbu_jinji'), tip: '総理と官房長官が各省の幹部を決める', a: (u) => kanbuJinji(u, d) }));
-      out.push(btn({ id: 'r_ama', x: 330, y: 314, w: 302, h: 20, label: '天下りの実態を調べさせる', why: d.R('amakudari_check'), tip: '再就職のあっせんがないか調べる（2007年から禁止）', a: (u) => u.result('天下りの調査', safe(() => u.g.adminAction('amakudari_check'), null)) }));
+      out.push(btn({ id: 'r_jinji', x: 330, y: 290, w: 302, h: 20, label: '幹部人事を決める（内閣人事局）', why: d.R('kanbu_jinji'), tip: jinjiTip(d), a: (u) => kanbuJinji(u, d) }));
+      out.push(btn({ id: 'r_ama', x: 330, y: 314, w: 302, h: 20, label: '天下りの実態を調べさせる', why: d.R('amakudari_check'), tip: reformDone(d, 'amakudariBan') ? '再就職のあっせんがないか調べる（あっせんは法律で禁じられている）' : '再就職のあっせんの実態を調べる（あっせんを禁じる法律はまだない）', a: (u) => u.result('天下りの調査', safe(() => u.g.adminAction('amakudari_check'), null)) }));
     }
     return out;
   },
@@ -2253,7 +2253,9 @@ const TAB_ADMIN = {
         const cases = r.amakudari.cases || [];
         if (!cases.length) { T(c, '問題になっている事例はない', 336, yy, 10, K.dim, 'left', 290); yy += 13; }
         for (const cs of cases.slice(0, 5)) { yy = para(c, `・${typeof cs === 'string' ? cs : cs.text || `${cs.name}（架空）：${cs.from} → ${cs.to}`}`, 336, yy, 290, 10, K.text, 12, 2); }
-        para(c, '天下り：退職した官僚が、仕事で関わった業界の団体や企業に再就職すること。2007年の国家公務員法改正で、府省による再就職のあっせんが禁止された。', 336, Math.max(yy + 4, 214), 292, 10, K.faint, 12, 5);
+        // the core's era- and history-aware text (never tells the future: the 2007 ban only once it exists)
+        const ban = ((r.items || []).find((it) => it.id === 'amakudariBan') || {}).text || '';
+        para(c, `天下り：退職した官僚が、仕事で関わった業界の団体や企業に再就職すること。${ban}`, 336, Math.max(yy + 4, 214), 292, 10, K.faint, 12, 5);
       }
       drawBtn(c, ui, ui.ctls.find((q) => q.id === 'r_jinji'), { center: true });
       drawBtn(c, ui, ui.ctls.find((q) => q.id === 'r_ama'), { center: true });
@@ -2268,8 +2270,11 @@ async function bureauAnswer(ui, d) {
   if (i < 0) return;
   const a = safe(() => g.bureaucratAnswer(ids[i]), null);
   if (!a) { await ui.info('答弁', ['答弁はなかった。']); return; }
-  await ui.info(`${a.role}の答弁`, [`${a.title}　${a.who}`, `「${a.text}」`, '', `※${yearOf(g) < 2000 ? '2000年より前は「政府委員」として官僚が答弁していた' : '1999年の国会審議活性化法で政府委員制度は廃止。いまは「政府参考人」として答える'}。人物は架空。`], { w: 480 });
+  await ui.info(`${a.role}の答弁`, [`${a.title}　${a.who}`, `「${a.text}」`, '', `※${a.role === '政府委員' ? 'いまは官僚が「政府委員」として国会で答弁する' : '1999年の国会審議活性化法で政府委員制度は廃止。いまは「政府参考人」として答える'}。人物は架空。`], { w: 480 });
 }
+// adminReform() items (the core's era- and history-aware record)
+function reformDone(d, id) { return !!(d && d.reform && (d.reform.items || []).some((it) => it.id === id && it.done)); }
+function jinjiTip(d) { return reformDone(d, 'jinjikyoku') ? '各府省の事務次官などの幹部を、総理と官房長官が決める（内閣人事局）' : '幹部人事を内閣で一元管理する仕組み（内閣人事局）ができると、総理と官房長官が決められる'; }
 async function kanbuJinji(ui, d) {
   const g = ui.g;
   const items = d.min.map((m) => ({ label: m.name, sub: m.top ? `事務次官など：${m.top.name}` : '', post: m.post }));
@@ -2903,7 +2908,7 @@ const TAB_SOCIETY = {
     const d = {};
     d.rel = has(g, 'religion') ? safe(() => g.religion(), null) : null;
     d.postal = has(g, 'postal') ? safe(() => g.postal(), null) : null;
-    d.R = (kind) => (has(g, 'govtRefusal') ? safe(() => g.govtRefusal(kind), null) : '政府のしくみが読み込まれていない');
+    d.R = (kind, opts) => (has(g, 'govtRefusal') ? safe(() => g.govtRefusal(kind, opts || {}), null) : '政府のしくみが読み込まれていない');
     d.role = ui.role0;
     return d;
   },
@@ -2914,18 +2919,10 @@ const TAB_SOCIETY = {
       const groups = d.rel ? d.rel.groups : [];
       out.push(listCtl(ui, 'grow', { id: 'grow', x: 4, y: 64, w: 196, h: 272, y0: 18, rowH: 30, n: groups.length, tip: (u) => { const gr = groups[u.tabState().grow | 0]; return gr ? `${gr.name}（架空の団体）：${gr.kind}` : ''; }, a: null }));
       const gr = groups[st.grow | 0];
-      const cult = d.rel && d.rel.cult;
+      // the core's side-effect-free check for every action kind (govtRefusal('religion', { group, action }))
       const whyOfAct = (kind) => {
         if (!gr) return '団体をえらぶ';
-        if (kind === 'public_money') return d.R('religion_funds');
-        if (kind === 'ask_support') return !gr.endorse ? `「${gr.name}」は、選挙で候補者を推薦する活動はしていない` : d.R('religion_endorse');
-        if (['report', 'victim_support', 'diet_question', 'question_power', 'request_dissolution'].includes(kind)) {
-          if (!gr.problem) return 'この団体には、その対応は関係ない';
-          if (!cult || cult.stage === 0) return 'いまのところ、この団体をめぐる被害の相談は表に出ていない';
-          if (kind === 'question_power') return d.R('religion_question_power');
-          if (kind === 'request_dissolution') return d.R('religion_dissolution');
-        }
-        return null;
+        return d.R('religion', { group: gr.id, action: kind });
       };
       d.acts = REL_ACTIONS.map(([id, label]) => ({ id, label, why: whyOfAct(id) }));
       out.push(listCtl(ui, 'rarow', { id: 'rarow', x: 424, y: 64, w: 212, h: 150, y0: 18, rowH: 16, n: d.acts.length, why: (u) => { const a = d.acts[u.tabState().rarow | 0]; return a ? a.why : null; }, tip: (u) => { const a = d.acts[u.tabState().rarow | 0]; return a ? a.label : ''; }, a: (u) => religionFlow(u, d, gr, d.acts[u.tabState().rarow | 0]) }));

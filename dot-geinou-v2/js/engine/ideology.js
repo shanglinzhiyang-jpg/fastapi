@@ -94,7 +94,7 @@ export const IDEOLOGIES = {
     axes: AX(0.4, 0.3, 0.8, 0.3, -0.2, -0.4, -0.3),
     summary: '伝統や慣習、長く続いた制度を大切にする。\n社会は急がず、少しずつ変えるべきだと考える。',
     ideas: ['急な改革より、少しずつの改善', '家族・地域・伝統の役割を重んじる', '長く続く制度には知恵があると考える', '秩序の中で自由を守る'],
-    history: ['1790年 英国のバークが', '　『フランス革命の省察』で急進的な革命を批判', '1867年 英国の保守党政権が', '　都市の男性労働者に選挙権を広げる', '1955年 日本で「保守合同」、自由民主党が結党'],
+    history: ['1790年 英国のバークが', '　『フランス革命の省察（せいさつ）』で革命を批判', '1867年 英国の保守党政権が', '　都市の男性労働者に選挙権を広げる', '1955年 日本で「保守合同」、自由民主党が結党'],
     record: ['急な変化による混乱を避け、制度を安定させたとされる', '英国では保守党政権も段階的に選挙権を広げた', '一方、身分や差別の解消を遅らせたとの批判もある'],
     pro: ['うまくいっている仕組みを壊さずにすむ', '人のつながりや伝統が安心を生む'],
     con: ['今ある不平等をそのまま守ってしまう', '時代の変化への対応が遅れやすい'],
@@ -112,7 +112,7 @@ export const IDEOLOGIES = {
     summary: '左右どちらかに大きくかたよらず、\n話し合いと妥協で現実的な答えを探す。',
     ideas: ['極端な主張をさけ、中道をめざす', '対立する意見のよい所を組み合わせる', '急がず、実際の効果を見て決める'],
     history: ['前4世紀 アリストテレスが「中庸」を説く', '1990年代 英国などで「第三の道」', '　（市場と福祉の両立）が唱えられる', '1998年 日本の民主党が基本理念に「民主中道」'],
-    record: ['連立や超党派の合意で、政治の安定に役立った例が多い', '「第三の道」の政権は最低賃金制度などを導入した', '一方、改革が中途半端になるとの批判もある'],
+    record: ['連立や超党派の合意で、政治の安定に役立った例が多い', '1999年 英国の「第三の道」の政権が全国最低賃金を導入', '一方、改革が中途半端になるとの批判もある'],
     pro: ['対立をやわらげ、多くの人が納得しやすい', '失敗したときの被害が小さい'],
     con: ['はっきりした理想や方向が見えにくい', '大きな問題に思い切った手が打てない'],
     related: ['democracy', 'conservatism', 'progressivism'],
@@ -127,7 +127,7 @@ export const IDEOLOGIES = {
     axes: AX(0.9, -0.1, 0.1, -0.2, -0.6, -0.1, 0.4),
     summary: '工場や会社などを個人がもち、\n市場での自由な取引と競争で経済を動かす。',
     ideas: ['私有財産と、自由な売り買い', '競争が工夫と成長を生む', '価格が「何をどれだけ作るか」を決める', '政府の役割は小さめがよいとされる'],
-    history: ['1776年 アダム・スミスが『国富論』', '18〜19世紀 産業革命で工業化が進む', '1929年 世界恐慌', '2008年 世界金融危機'],
+    history: ['1776年 アダム・スミスが『国富論』', '18〜19世紀 産業革命で工業化が進む', '1929年 世界恐慌（きょうこう）', '2008年 世界金融危機'],
     record: ['多くの国で生産と所得が大きく伸びた', '世界の極度の貧困は1990年の36%から', '　2015年の10%に下がった（世界銀行）', '初期の工場では長時間労働や児童労働が広がった', '恐慌や金融危機、格差の拡大もくり返された'],
     pro: ['自由な工夫が新しい商品と豊かさを生む', '個人が財産と仕事を自分で選べる'],
     con: ['格差が広がり、弱い立場の人が困る', '不況や環境破壊を市場だけでは防げない'],
@@ -174,7 +174,7 @@ export const IDEOLOGIES = {
     axes: AX(-0.1, 0.4, 0.4, 0.1, -0.2, -0.5, -0.1),
     summary: '政府・経営者・労働組合などの団体が\n話し合って、賃金や政策を決めていく。',
     ideas: ['対立より協調で社会をまとめる', '業界や職業の団体が政治に参加する', '賃金や物価を話し合いで調整する'],
-    history: ['1891年 ローマ教皇の回勅が労使の協調を説く', '1920〜30年代 ファシズム期のイタリアが', '　国家主導の「協同体国家」をつくる', '1938年 スウェーデンで労使の基本協約', '1982年 オランダで賃金抑制と時短の合意'],
+    history: ['1891年 ローマ教皇の回勅（かいちょく）が', '　労使の協調を説く', '1920〜30年代 ファシズム期のイタリアが', '　国家主導の「協同体国家」をつくる', '1938年 スウェーデンで労使の基本協約', '1982年 オランダで賃金抑制と時短の合意'],
     record: ['北欧などでは安定した労使関係が続いた', 'ファシズム期のイタリアでは独立した労働組合が', '　つぶされ、ストライキが禁止された', '団体に入らない人の声が届きにくいとの批判'],
     pro: ['争いを減らし、経済を安定させやすい', '多くの関係者の合意で決められる'],
     con: ['一部の大きな団体だけで物事が決まりやすい', '国が団体を支配すると独裁の道具になる'],
@@ -190,8 +190,8 @@ export const IDEOLOGIES = {
     axes: AX(1.0, -0.9, -0.2, -0.1, -0.4, 0.3, 0.5),
     summary: '個人の自由と財産を何より大切にし、\n国の役割は治安や契約を守る程度でよい\nと考える。',
     ideas: ['政府は小さいほどよい（最小国家）', '税や規制はできるだけ少なく', '他人を傷つけない限り、生き方は自由', '自由な市場を信頼する'],
-    history: ['1944年 ハイエクが『隷従への道』', '1971年 米国でリバタリアン党が結成', '1974年 ノージックが', '　『アナーキー・国家・ユートピア』'],
-    record: ['規制緩和や民営化の議論に影響を与えた', '国全体でそのまま実行された例はない', '規制の緩めすぎが金融危機の一因との見方もある'],
+    history: ['1944年 ハイエクが『隷従（れいじゅう）への道』', '1971年 米国でリバタリアン党が結成', '1974年 ノージックが', '　『アナーキー・国家・ユートピア』'],
+    record: ['規制緩和や民営化の議論に影響を与えた', '国全体でそのまま実行された例はない', '2008年の金融危機は規制の緩めすぎが一因との見方も'],
     pro: ['個人の選択と責任を尊重する', '政府のむだや介入を減らせる'],
     con: ['貧しい人や弱い人が取り残されやすい', '道路や環境など、みんなのものが守りにくい'],
     related: ['capitalism', 'anarchism', 'transhumanism'],
@@ -206,7 +206,7 @@ export const IDEOLOGIES = {
     summary: 'ある地域や民族が、今の国から分かれて\n独立や強い自治を求める考え。',
     ideas: ['自分たちのことは自分たちで決める', '言葉・文化・歴史の違いを重んじる', '住民投票などで独立を問う'],
     history: ['1905年 ノルウェーが住民投票を経て', '　スウェーデンから平和的に独立', '1993年 チェコとスロバキアが話し合いで分離', '2011年 南スーダンが住民投票を経て独立'],
-    record: ['平和的に分かれた国もあれば、内戦になった例もある', '南スーダンは独立の2年後に内戦が起きた', '武装闘争やテロに走った組織もあった'],
+    record: ['平和的に分かれた国もあれば、内戦になった例もある', '2013年 南スーダンで独立の2年後に内戦が起きた', '武装闘争やテロに走った組織もあった'],
     pro: ['少数派の文化や権利を守れる', '住民が身近な政治を自分で決められる'],
     con: ['経済や安全保障が不安定になりやすい', '新しい国の中で別の少数派が生まれる'],
     related: ['communitarianism', 'anarchism', 'populism'],
@@ -221,9 +221,9 @@ export const IDEOLOGIES = {
     summary: '工場や土地を社会全体のものにして、\n階級のない平等な社会をめざす思想。\n実際の国家の多くは一党独裁となった。',
     ideas: ['工場や土地（生産手段）の共有', '階級のない社会をめざす', '「能力に応じて働き、必要に応じて受け取る」', '多くの国で共産党の一党支配になった'],
     history: ['1848年 マルクスとエンゲルスが『共産党宣言』', '1917年 ロシア革命。1922年 ソ連が成立', '1949年 中華人民共和国が成立', '1991年 ソ連が解体'],
-    record: ['急速な工業化や識字率の向上を進めた国もある', 'ソ連の大粛清（1937〜38年）では', '　公式記録だけで約68万人が銃殺された', '中国の大躍進（1958〜62年）の大飢饉で', '　推計1500万〜4500万人が死亡', 'カンボジアのポル・ポト政権（1975〜79年）で', '　推計150万〜200万人が死亡', '多くの国で言論の自由や自由な選挙が失われた'],
-    pro: ['貧富の差や搾取のない社会を理想とする', '教育や医療を全員に届けようとした'],
-    con: ['一党独裁となり、反対意見が弾圧された', '計画経済は非効率で、飢饉や物不足をまねいた'],
+    record: ['急速な工業化や識字率の向上を進めた国もある', 'ソ連の大粛清（だいしゅくせい、1937〜38年）では', '　公式記録だけで約68万人が銃殺（じゅうさつ）された', '中国の大躍進（1958〜62年）の大飢饉で', '　推計1500万〜5000万人が死亡（研究で幅がある）', 'カンボジアのポル・ポト政権（1975〜79年）で', '　推計150万〜200万人が死亡', '多くの国で言論の自由や自由な選挙が失われた'],
+    pro: ['貧富の差や搾取（さくしゅ）のない社会を理想とする', '教育や医療を全員に届けようとした'],
+    con: ['一党独裁となり、反対意見が弾圧（だんあつ）された', '計画経済は非効率で、飢饉や物不足をまねいた'],
     related: ['socialism', 'marxism', 'leninism', 'anarchism'],
     sources: [
       S('Great Purge (Wikipedia)', 'https://en.wikipedia.org/wiki/Great_Purge'),
@@ -236,7 +236,7 @@ export const IDEOLOGIES = {
     axes: AX(-0.2, -0.4, -0.9, -0.4, 0.2, 0, 0.1),
     summary: '性別によって機会や権利に差がつかない\n社会をめざす思想と運動。',
     ideas: ['女性の参政権・教育・仕事の権利', '性別による役割の押しつけを見直す', '暴力やハラスメントをなくす', 'いろいろな立場・流れがある'],
-    history: ['1792年 英国のウルストンクラフトが', '　『女性の権利の擁護』', '1848年 米国でセネカフォールズ会議', '1893年 ニュージーランドで女性が国政の投票権', '1911年 日本で雑誌『青鞜』創刊', '1946年 日本の女性が初めて投票、39人が当選'],
+    history: ['1792年 英国のウルストンクラフトが', '　『女性の権利の擁護（ようご）』', '1848年 米国でセネカフォールズ会議', '1893年 ニュージーランドで女性が国政の投票権', '1911年 日本で雑誌『青鞜』創刊', '1946年 日本の女性が初めて投票、39人が当選'],
     record: ['多くの国で女性の参政権と法の下の平等が実現した', '働く女性の権利を守る法律が広がった', '運動の中でも考え方の違いや対立がある', '政策の進め方には賛否が分かれる'],
     pro: ['人口の半分の力と才能を生かせる', '家庭や職場の不公平を正せる'],
     con: ['一部の主張は行きすぎだと感じる人もいる', '割り当て制（クオータ）は逆の不公平との意見'],
@@ -252,7 +252,7 @@ export const IDEOLOGIES = {
     name: '無政府主義', alt: 'アナキズム', full: '無政府主義（アナキズム）', kana: 'むせいふしゅぎ', short: '国家のない自由な社会',
     axes: AX(-0.4, -1.0, -0.6, -0.6, 0.3, 0.7, -0.1),
     summary: '国家や支配のしくみをなくし、\n人々の自由な助け合いで社会を\nつくろうとする考え。',
-    ideas: ['国家・警察・軍隊などの強制をなくす', '自発的な協力と相互扶助', '小さな共同体の自治', '平和的な流れと、暴力を認めた流れがあった'],
+    ideas: ['国家・警察・軍隊などの強制をなくす', '自発的な協力と相互扶助（そうごふじょ）', '小さな共同体の自治', '平和的な流れと、暴力を認めた流れがあった'],
     history: ['1840年 プルードンが『財産とは何か』で', '　自らアナキストと名のる', '1890年代〜1901年 一部が要人を暗殺', '　（仏大統領、米大統領など）', '1910〜11年 日本の大逆事件で12人が処刑', '　（大半は計画と無関係だったとされる）', '1936年 スペイン内戦中に自主管理の試み'],
     record: ['国家のない社会が長く続いた例はない', 'スペインの自主管理は内戦の中で消えた', '暗殺などの暴力は多くの命を奪い、弾圧を強めた'],
     pro: ['権力による抑圧や戦争への強い批判', '人々の自発的な協力の力を信じる'],
@@ -270,7 +270,7 @@ export const IDEOLOGIES = {
     summary: '自然や地球環境を守ることを重んじ、\n将来の世代に住みよい地球を残そうとする。',
     ideas: ['公害や気候変動を防ぐ', '資源を使いすぎない社会', '国境をこえた協力が必要', '成長の中身を問い直す'],
     history: ['1962年 カーソンが『沈黙の春』で農薬の害を警告', '1967年 日本で公害対策基本法', '1971年 日本で環境庁が発足', '1972年 ストックホルムで国連人間環境会議', '1987年 オゾン層を守るモントリオール議定書'],
-    record: ['公害規制で空気や水がきれいになった地域が多い', 'オゾン層は回復に向かっている（国連の報告 2023年）', '規制やエネルギー転換の費用が重いとの声もある', '対策の速さをめぐり、国や世代で意見が分かれる'],
+    record: ['公害規制で空気や水がきれいになった地域が多い', '2023年 国連の報告「オゾン層は回復に向かっている」', '規制やエネルギー転換の費用が重いとの声もある', '対策の速さをめぐり、国や世代で意見が分かれる'],
     pro: ['健康と自然、将来の世代を守れる', '新しい産業や技術を生む'],
     con: ['仕事や生活のコストが上がることがある', '経済成長をおさえすぎるとの批判'],
     related: ['progressivism', 'communitarianism', 'primitive_communism'],
@@ -372,7 +372,7 @@ export const IDEOLOGIES = {
       S('History of “transhumanism” (academia.edu)', 'https://www.academia.edu/13997038'),
     ],
   }),
-  communitarianism: entry('communitarianism', 'conservative', {
+  communitarianism: entry('communitarianism', 'centrist', {
     name: '共同体主義', alt: 'コミュニタリアニズム', full: '共同体主義（コミュニタリアニズム）', kana: 'きょうどうたいしゅぎ', short: '地域や共同体のきずな',
     axes: AX(-0.2, 0.1, 0.6, -0.1, 0.3, 0.4, -0.4),
     summary: '人は家族や地域などの共同体の中で育つと考え、\n個人の権利だけでなく、\n共通の善や責任を重んじる。',
@@ -392,7 +392,7 @@ export const IDEOLOGIES = {
     summary: '強い指導者や少数の集団に権力を集め、\n選挙や言論の自由を制限して国を\n治める考えと体制。',
     ideas: ['政治の競争を限る（限られた多元主義）', '秩序と安定を最優先にする', '反対派や報道をおさえる', '全体主義ほど人の内面までは支配しない'],
     history: ['1939〜75年 スペインのフランコ体制', '1964年 政治学者リンスが権威主義体制を定義', '1973〜90年 チリの軍事政権', '1987年 韓国が民主化、台湾が戒厳令を解除'],
-    record: ['急速な経済成長をとげた国もある（開発独裁）', 'チリの軍事政権では3000人以上が殺害・行方不明', '　数万人が政治犯として拘束され、多くが拷問を受けた', '多くの国で政治犯の投獄や検閲が行われた', '1970〜90年代に多くの国が民主化した'],
+    record: ['急速な経済成長をとげた国もある（開発独裁）', 'チリの軍事政権では3000人以上が殺害・行方不明', '　数万人が政治犯として拘束され、多くが拷問を受けた', '多くの国で政治犯の投獄や検閲が行われた', '1970年代から多くの国が民主化した（民主化の波）'],
     pro: ['（支持者）混乱を防ぎ、すばやく決められる', '（支持者）経済発展に集中できる'],
     con: ['権力の乱用を止められない', '人権侵害や腐敗が隠される'],
     related: ['fascism', 'imperialism', 'populism', 'deng_theory'],
@@ -424,7 +424,7 @@ export const IDEOLOGIES = {
     axes: AX(0, 1.0, 1.0, 1.0, -0.4, -1.0, 0.3),
     summary: 'ヒトラーが率いたナチ党の思想。\n人種差別と独裁で、ホロコーストと\n侵略戦争を引き起こした。',
     ideas: ['人種差別（反ユダヤ主義）を国の中心に置いた', '指導者への絶対服従と一党独裁', '侵略による領土の拡大', '言論・芸術・教育の全面的な統制'],
-    history: ['1920年 ナチ党が党名を名のる', '1933年1月 ヒトラーが首相に。3月 全権委任法', '1935年 ニュルンベルク法でユダヤ人を差別', '1938年11月 「水晶の夜」の迫害', '1939年 ポーランド侵攻、第二次世界大戦'],
+    history: ['1920年 ナチ党が党名を名のる', '1933年1月 ヒトラーが首相に', '　3月 全権委任法（政府だけで法律をつくれる法）', '1935年 ニュルンベルク法でユダヤ人を差別', '1938年11月 「水晶の夜」の迫害（はくがい）', '1939年 ポーランド侵攻、第二次世界大戦'],
     record: ['ホロコーストで約600万人のユダヤ人が殺害された', 'ロマ、障害のある人、政治犯なども迫害・殺害', '障害者を殺害した「T4作戦」（1939〜41年）', '　では少なくとも7万人が殺された', '1945年 敗戦。ニュルンベルク裁判で指導者が裁かれた', '戦後のドイツではナチスの象徴の使用を禁止'],
     pro: ['（当時の宣伝）不況と敗戦からの', '　「復活」を約束して支持を集めた'],
     con: ['人種差別にもとづく大量虐殺を行った', '侵略戦争で数千万人が犠牲になった', '自由・人権・法の支配を完全に否定した'],
@@ -462,7 +462,7 @@ export const COMMUNISM_SCHOOLS = {
     name: 'マルクス主義', kana: 'まるくすしゅぎ', short: '階級闘争と史的唯物論',
     axes: AX(-1.0, 0.2, -0.6, -0.7, -0.2, -0.3, 0.3),
     summary: 'マルクスとエンゲルスの思想。\n歴史は階級の争いで動き、資本主義は\nやがて社会主義に変わると考えた。',
-    ideas: ['経済のしくみが社会の土台（史的唯物論）', '資本家と労働者の階級闘争', '労働者が生む価値の一部を資本家が得る', '万国の労働者の団結'],
+    ideas: ['経済のしくみが社会の土台（史的唯物論・してきゆいぶつろん）', '資本家と労働者の階級闘争', '労働者が生む価値の一部を資本家が得る', '万国の労働者の団結'],
     history: ['1848年 『共産党宣言』', '1867年 『資本論』第1巻', '1883年 マルクスが死去', '1889年 第二インターナショナルの理論に'],
     record: ['多くの社会主義・共産主義政党の土台になった', '先進国で労働者革命が起きるという予想は、', '　そのとおりにはならなかった', 'その名のもとで一党独裁の国家がつくられた'],
     pro: ['格差や恐慌など資本主義の問題を分析した', '経済学や社会学に大きな影響を与えた'],
@@ -476,10 +476,10 @@ export const COMMUNISM_SCHOOLS = {
   leninism: school('leninism', {
     name: 'レーニン主義', kana: 'れーにんしゅぎ', short: '前衛党が革命を導く',
     axes: AX(-1.0, 0.7, -0.5, -0.6, -0.3, -0.5, 0.3),
-    summary: 'レーニンがマルクス主義を発展させた思想。\n職業革命家の党（前衛党）が革命を\n指導すべきだと考えた。',
-    ideas: ['前衛党が労働者を導く', 'プロレタリアート独裁', '帝国主義は資本主義の最終段階', '党の決定には全員が従う（民主集中制）'],
+    summary: 'レーニンがマルクス主義を発展させた思想。\n職業革命家の党「前衛党（ぜんえいとう）」が\n革命を指導すべきだと考えた。',
+    ideas: ['前衛党が労働者を導く', 'プロレタリアート独裁', '帝国主義は資本主義の最終段階', '民主集中制（党の決定には全員が従う）'],
     history: ['1902年 『何をなすべきか』で前衛党論', '1917年 十月革命でボリシェヴィキが政権', '1918年1月 憲法制定議会を解散', '1921年 新経済政策（ネップ）', '1924年 レーニンが死去'],
-    record: ['世界で初めての社会主義国家をつくった', '反対派への「赤色テロル」と秘密警察', '1921年 クロンシュタットの反乱を武力で鎮圧', '一党独裁の型が各国の共産党に広がった'],
+    record: ['世界で初めての社会主義国家をつくった', '反対派への「赤色テロル」と秘密警察', '1921年 クロンシュタットの反乱を武力で鎮圧（ちんあつ）', '一党独裁の型が各国の共産党に広がった'],
     pro: ['革命を実際に成功させた組織論', '帝国主義と植民地支配を批判した'],
     con: ['選挙と多党制を否定し、独裁を生んだ', '党の指導者に権力が集中した'],
     related: ['marxism', 'stalinism', 'trotskyism'],
@@ -492,15 +492,16 @@ export const COMMUNISM_SCHOOLS = {
   stalinism: school('stalinism', {
     name: 'スターリン主義', kana: 'すたーりんしゅぎ', short: '一国社会主義と恐怖政治',
     axes: AX(-1.0, 1.0, 0.1, 0.3, -0.8, -0.9, 0.3),
-    summary: 'スターリンが1920年代末〜1953年に\nソ連で行った政治のやり方。\n個人崇拝と恐怖による支配で知られる。',
+    summary: 'スターリンが1920年代末〜1953年に\nソ連で行った政治のやり方。\n個人崇拝（すうはい）と恐怖の支配で知られる。',
     ideas: ['一国社会主義（まず自国で社会主義を）', '五か年計画による重工業化', '農業の強制的な集団化', '指導者の個人崇拝と秘密警察'],
-    history: ['1924年 「一国社会主義」を唱える', '1928年 第1次五か年計画', '1937〜38年 大粛清', '1953年 スターリンが死去', '1956年 後継者がスターリンを批判'],
-    record: ['短い期間で重工業化を進めた', '1932〜33年の大飢饉で、ウクライナだけで', '　少なくとも390万人が死亡（ホロドモール）', '大粛清では公式記録で約68万人が銃殺', '強制収容所（グラーグ）に延べ約1800万人'],
+    history: ['1924年 「一国社会主義」を唱える', '1928年 第1次五か年計画', '1937〜38年 大粛清（だいしゅくせい）', '1953年 スターリンが死去', '1956年 後継者がスターリンを批判'],
+    record: ['短い期間で重工業化を進めた', '1932〜33年の大飢饉（ホロドモール）で、', '　ウクライナだけで推計350万〜500万人が死亡', '　（人口学の推計では約390万人）', '大粛清では公式記録で約68万人が銃殺（じゅうさつ）', '強制収容所（グラーグ）に延べ約1800万人'],
     pro: ['（支持者）農業国を短期間で工業国にした', '（支持者）ナチス・ドイツを打ち破った'],
     con: ['数百万人規模の死者を出した恐怖政治', '個人崇拝のため誤りを正せなかった'],
     related: ['leninism', 'maoism', 'hoxhaism', 'juche'],
     sources: [
       S('Holodomor (Encyclopaedia Britannica)', 'https://www.britannica.com/event/Holodomor'),
+      S('Holodomor: death toll estimates (Wikipedia)', 'https://en.wikipedia.org/wiki/Holodomor'),
       S('Great Purge (Wikipedia)', 'https://en.wikipedia.org/wiki/Great_Purge'),
       S('Gulag (Wikipedia)', 'https://en.wikipedia.org/wiki/Gulag'),
       S('First five-year plan (Soviet Union) (Wikipedia)', 'https://en.wikipedia.org/wiki/First_five-year_plan_(Soviet_Union)'),
@@ -511,8 +512,8 @@ export const COMMUNISM_SCHOOLS = {
     axes: AX(-1.0, 0.4, -0.6, -1.0, -0.3, -0.4, 0.3),
     summary: 'トロツキーの思想。革命は一つの国では\n完成しないとして、世界各国での革命\n（永続革命）を唱えた。',
     ideas: ['永続革命論', 'スターリンの官僚的な支配への批判', '国際主義（第四インターナショナル）', '労働者の民主主義を主張'],
-    history: ['1905〜06年 永続革命論をまとめる', '1917年 十月革命の指導者の一人', '1929年 ソ連から国外追放', '1938年 第四インターナショナル結成', '1940年 メキシコでスターリンの手先に暗殺'],
-    record: ['国家の権力をにぎったことはない', '各国の小さな政党や運動に影響が続く', 'トロツキー自身も内戦期には反乱の鎮圧など', '　強い手段を使った'],
+    history: ['1905〜06年 永続革命論をまとめる', '1917年 十月革命の指導者の一人', '1929年 ソ連から国外追放', '1938年 第四インターナショナル結成', '1940年 メキシコでソ連の秘密警察の工作員に暗殺'],
+    record: ['国家の権力をにぎったことはない', '各国の小さな政党や運動に影響が続く', 'トロツキー自身も内戦期には反乱の鎮圧（ちんあつ）など', '　強い手段を使った'],
     pro: ['スターリン体制をいち早く批判した', '国境をこえた労働者の連帯を重んじる'],
     con: ['世界革命は現実的でないとの批判', '党派が細かく分裂しやすい'],
     related: ['leninism', 'posadism', 'marxism'],
@@ -527,9 +528,9 @@ export const COMMUNISM_SCHOOLS = {
     summary: '毛沢東がマルクス・レーニン主義を\n中国の農村に合わせた思想。\n農民の革命と「人民戦争」を重んじた。',
     ideas: ['農民を革命の主力とする', '農村から都市を包囲する人民戦争', '大衆運動で社会を改造する', '党と指導者の権威'],
     history: ['1949年 中華人民共和国が成立', '1958〜62年 大躍進政策', '1966〜76年 文化大革命', '1981年 中国共産党が文化大革命を誤りと決議'],
-    record: ['内戦に勝ち、統一国家をつくった', '大躍進の大飢饉で推計1500万〜4500万人が死亡', '文化大革命で数十万〜200万人前後が死亡と推計', '　教育や文化財も大きく破壊された', '影響を受けた武装組織が各地で内戦を起こした'],
+    record: ['内戦に勝ち、統一国家をつくった', '大躍進の大飢饉で推計1500万〜5000万人が死亡', '　（研究によって幅がある）', '文化大革命で数十万〜200万人前後が死亡と推計', '　教育や文化財も大きく破壊された', '影響を受けた武装組織が各地で内戦を起こした'],
     pro: ['（支持者）農民を主役にし、外国の支配から独立した', '（支持者）識字や衛生の運動を広げた'],
-    con: ['大衆運動の暴走で多くの命が失われた', '個人崇拝のため誤りが正されなかった'],
+    con: ['大衆運動の暴走で多くの命が失われた', '個人崇拝（すうはい）のため誤りが正されなかった'],
     related: ['stalinism', 'hoxhaism', 'deng_theory'],
     sources: [
       S('Great Leap Forward famine (EBSCO Research Starters)', 'https://www.ebsco.com/research-starters/history/great-leap-forward-famine'),
@@ -539,7 +540,7 @@ export const COMMUNISM_SCHOOLS = {
   hoxhaism: school('hoxhaism', {
     name: 'ホッジャ主義', kana: 'ほっじゃしゅぎ', short: '孤立と最も厳しい路線',
     axes: AX(-1.0, 1.0, -0.3, 0.8, -0.5, -0.8, -0.3),
-    summary: 'アルバニアの指導者ホッジャの路線。\nソ連や中国も「修正主義」と批判し、\n国を孤立させて独自の道をとった。',
+    summary: 'アルバニアの指導者ホッジャの路線。\nソ連や中国も「修正主義（しゅうせいしゅぎ）」と\n批判し、国を孤立させて独自の道をとった。',
     ideas: ['スターリン路線の厳格な継承', 'ソ連・中国・ユーゴへの批判（反修正主義）', '自力更生と、鎖国に近い孤立', '宗教の全面禁止'],
     history: ['1944年 共産党政権が成立', '1948年 ユーゴスラビアと断絶', '1961年 ソ連と断絶し中国に接近', '1967年 「世界初の無神論国家」を宣言', '1978年 中国とも断絶。1985年 ホッジャ死去'],
     record: ['電化や識字率の向上が進んだとされる', '宗教施設の閉鎖や政治犯の強制収容', '侵攻に備えて約17万のトーチカを建設', '欧州でも特に貧しいまま、1990〜91年に体制が終わった'],
@@ -558,7 +559,7 @@ export const COMMUNISM_SCHOOLS = {
     summary: 'ローザ・ルクセンブルクの思想。\n労働者の自発的な運動を重んじ、\n革命の後も自由が必要だと説いた。',
     ideas: ['大衆の自発的な行動（大衆ストライキ）', '改良だけでは社会主義にならない', '少数の党による独裁への批判', '「自由とは、つねに異なる考えの者の自由」'],
     history: ['1899年 『社会改良か革命か』', '1916年 スパルタクス団の活動', '1918年 獄中でボリシェヴィキの独裁を批判', '1919年1月 ベルリンで殺害される'],
-    record: ['国家の権力をにぎったことはない', '1919年のベルリンでの蜂起は鎮圧された', '民主的な社会主義の考えに影響を残した'],
+    record: ['国家の権力をにぎったことはない', '1919年 ベルリンの蜂起（ほうき）は鎮圧（ちんあつ）された', '民主的な社会主義の考えに影響を残した'],
     pro: ['革命と自由・民主主義の両立を説いた', '独裁への警告は先を見ていたと評価される'],
     con: ['自発性に頼りすぎ、組織が弱いとの批判', '具体的な国づくりの道筋は示されなかった'],
     related: ['marxism', 'libertarian_communism', 'eurocommunism'],
@@ -572,8 +573,8 @@ export const COMMUNISM_SCHOOLS = {
     name: '無政府共産主義', kana: 'むせいふきょうさんしゅぎ', short: '国家もお金もない共有',
     axes: AX(-1.0, -1.0, -0.6, -0.7, 0.3, 0.7, 0),
     summary: '国家も貨幣もなくし、財産を\nみんなで共有して「必要に応じて」\n分け合う社会をめざす。',
-    ideas: ['国家と資本主義の両方をなくす', '自由な共同体どうしの連合', '貨幣をなくし、必要に応じて分ける', '相互扶助'],
-    history: ['1892年 クロポトキンが『パンの略取』', '1918〜21年 ウクライナ南部のマフノ運動', '1936〜39年 スペイン内戦中に集産化'],
+    ideas: ['国家と資本主義の両方をなくす', '自由な共同体どうしの連合', '貨幣をなくし、必要に応じて分ける', '相互扶助（そうごふじょ）'],
+    history: ['1892年 クロポトキンが『パンの略取』', '1918〜21年 ウクライナ南部のマフノ運動', '1936〜39年 スペイン内戦中に集産化（しゅうさんか）'],
     record: ['短い期間、農村や工場の自主管理が行われた', '強制的な集産化があったと指摘される地域もある', 'いずれも戦争の中で軍事的に滅ぼされた'],
     pro: ['支配も搾取もない社会を理想とする', '人々の協力の力を信じる'],
     con: ['大きな社会を調整する方法が不明確', '外からの攻撃に弱い'],
@@ -603,14 +604,15 @@ export const COMMUNISM_SCHOOLS = {
     name: 'ジュチェ思想', alt: '主体思想', full: 'ジュチェ思想（主体思想）', kana: 'じゅちぇしそう', short: '「自主」と指導者への忠誠',
     axes: AX(-0.9, 1.0, 0.7, 1.0, -0.4, -1.0, -0.1),
     summary: '北朝鮮の公式の思想。「自主・自立・\n自衛」をかかげるが、実際は指導者\n一家への絶対的な忠誠を求める。',
-    ideas: ['思想の自主、経済の自立、国防の自衛', '指導者（首領）が人民を導くとする', '軍事を最優先する路線', '世襲による権力の継承'],
+    ideas: ['思想の自主、経済の自立、国防の自衛', '指導者「首領（しゅりょう）」が人民を導くとする', '軍事を最優先する路線', '世襲による権力の継承'],
     history: ['1955年 金日成が演説で「主体」を強調', '1972年 憲法に公式の思想として記す', '1994年 金日成が死去、権力は子へ世襲', '1990年代半ば 大飢饉'],
-    record: ['1990年代の飢饉で推計数十万〜100万人前後が死亡', '国連の調査委員会（2014年）が', '　「人道に対する罪」を認定', '政治犯収容所、移動や言論の自由の欠如', '2002年 日本人の拉致を認めた（政府認定の被害者17人）', '核・ミサイル開発で国連安保理の制裁を受けている'],
+    record: ['1990年代の飢饉で推計数十万〜100万人前後が死亡', '国連の調査委員会（2014年）が', '　「人道に対する罪」を認定', '政治犯収容所、移動や言論の自由の欠如', '2002年 日本人の拉致を認めた（政府認定の被害者17人）', '2006年から 核・ミサイル開発で国連安保理の制裁'],
     pro: ['（公式の主張）大国から自立した国づくり'],
     con: ['世襲の独裁と個人崇拝', '深刻な人権侵害と経済の困窮'],
     related: ['stalinism', 'hoxhaism', 'authoritarianism'],
     sources: [
       S('1990s North Korean famine (Wikipedia)', 'https://en.wikipedia.org/wiki/1990s_North_Korean_famine'),
+      S('UN Security Council Resolution 1718 (2006) (Wikipedia)', 'https://en.wikipedia.org/wiki/United_Nations_Security_Council_Resolution_1718'),
       S('The Juche Factor: North Korea’s Political Ideology and Human Rights (Pacific Forum)', 'https://pacforum.org/publications/issues-insights-vol-16-no-7-the-juche-factor-north-koreas-political-ideology-and-human-rights-reform/'),
       S('Re-Evaluating Kim Il Sung’s “Juche Speech” of 1955 (Acta Koreana)', 'https://actakoreana.org/digital-library/55621'),
       S('北朝鮮による日本人拉致問題（外務省）', 'https://www.mofa.go.jp/mofaj/a_o/na/kp/page1w_000082.html'),
@@ -622,9 +624,9 @@ export const COMMUNISM_SCHOOLS = {
     summary: 'ユーゴスラビアの指導者チトーの路線。\nソ連から独立した社会主義で、労働者の\n自主管理と非同盟の外交をとった。',
     ideas: ['ソ連に従わない独自の社会主義', '労働者の自主管理と市場の一部活用', '東西どちらにも属さない非同盟', '多民族の連邦'],
     history: ['1948年 ソ連と対立し、コミンフォルムから除名', '1950年 労働者の自主管理を導入', '1961年 ベオグラードで非同盟諸国首脳会議', '1980年 チトーが死去', '1991年 連邦が解体し、内戦へ'],
-    record: ['東側の国としては旅行や文化が比較的自由だった', '親ソ派など1万人以上をゴリ・オトク島などの', '　収容所に送った', '1980年代に対外債務とインフレが深刻になった', '連邦の解体で激しい民族紛争が起きた'],
+    record: ['東側の国としては旅行や文化が比較的自由だった', '親ソ派など1万人以上をゴリ・オトク島などの', '　収容所に送った', '1980年代に対外債務とインフレが深刻になった', '1991年からの連邦の解体で、激しい民族紛争'],
     pro: ['大国から独立した外交をつらぬいた', '労働者が経営に参加するしくみを試した'],
-    con: ['一党支配と政治犯の弾圧は続いた', '指導者の死後、国をまとめられなかった'],
+    con: ['一党支配と政治犯の弾圧は続いた', '指導者に頼り、死後の体制が不安定になった'],
     related: ['eurocommunism', 'stalinism', 'separatism'],
     sources: [
       S('The Tito-Stalin Split and the Years of Cominform (Mašina)', 'https://www.masina.rs/eng/tito-stalin-split-years-cominform-part/'),
@@ -669,7 +671,7 @@ export const COMMUNISM_SCHOOLS = {
     summary: '国家や党の独裁をしりぞけ、働く人の\n評議会（ソビエト）による自主管理で\n共産主義をめざす考え。',
     ideas: ['労働者評議会による自主管理', '党の独裁への批判', '下からの民主主義', '評議会共産主義などの流れを含む'],
     history: ['1918年 ドイツ革命で労働者・兵士評議会', '1921年 クロンシュタットの水兵が反乱', '1920〜40年代 パンネクークらの評議会共産主義', '1956年 ハンガリー動乱で労働者評議会'],
-    record: ['国全体で長く実行された例はない', 'クロンシュタットの反乱は1921年に赤軍が鎮圧', 'ハンガリー動乱はソ連軍に鎮圧され、', '　約2500人が死亡、約20万人が国外へ逃れた'],
+    record: ['国全体で長く実行された例はない', 'クロンシュタットの反乱は1921年に赤軍が鎮圧（ちんあつ）', 'ハンガリー動乱はソ連軍に鎮圧され、', '　約2500人が死亡、約20万人が国外へ逃れた'],
     pro: ['独裁にならない共産主義を追求する', '働く人が自分たちで職場を決められる'],
     con: ['大きな社会をどう調整するかが不明確', '軍事的に弱く、鎮圧されてきた'],
     related: ['anarcho_communism', 'luxemburgism', 'anarchism'],
@@ -699,11 +701,11 @@ export const COMMUNISM_SCHOOLS = {
     name: '鄧小平理論', alt: 'デン・シャオピン主義', full: '鄧小平理論（デン・シャオピン主義）', kana: 'とうしょうへいりろん', short: '改革開放と一党支配',
     axes: AX(0.1, 0.9, 0.3, 0.1, -0.8, -0.8, 0.4),
     summary: '鄧小平が唱えた中国の路線。共産党の\n指導を保ったまま、市場経済と対外開放で\n経済の発展をめざした。',
-    ideas: ['改革開放（市場の導入と外国資本）', '社会主義市場経済', '「豊かになれる者から先に」', '共産党の指導は守りつづける'],
+    ideas: ['改革開放（市場の導入と外国資本）', '計画経済に市場のしくみを取り入れる', '「豊かになれる者から先に」', '共産党の指導は守りつづける'],
     history: ['1978年12月 改革開放が始まる', '1980年 深圳などに経済特区', '1989年6月 天安門事件', '1992年 南方視察で改革を加速', '1997年 鄧小平が死去'],
-    record: ['長い高成長で多くの人が貧困から抜け出した', '天安門事件では民主化運動を武力で鎮圧', '　死者は数百〜数千人と推計（全容は未公表）', '格差の拡大や環境汚染が深刻になった', '一人っ子政策は強制的な手段をともなった'],
+    record: ['長い高成長で多くの人が貧困から抜け出した', '1989年 天安門事件で民主化運動を武力で鎮圧（ちんあつ）', '　死者は数百〜数千人と推計（全容は未公表）', '格差の拡大や環境汚染が深刻になった', '一人っ子政策は強制的な手段をともなった'],
     pro: ['（支持者）現実的な方法で国を豊かにした'],
-    con: ['経済の自由と政治の不自由が同居する', '民主化の要求を武力でおさえた'],
+    con: ['経済の自由と政治の不自由が同居する', '1989年、民主化の要求を武力でおさえた'],
     related: ['maoism', 'authoritarianism', 'capitalism'],
     sources: [
       S('Reform and opening up (Wikipedia)', 'https://en.wikipedia.org/wiki/Reform_and_opening_up'),
@@ -720,21 +722,58 @@ export const ideologyById = (id) => IDEOLOGIES[id] || COMMUNISM_SCHOOLS[id] || n
 export const ideologyName = (id) => (ideologyById(id) ? ideologyById(id).name : '');
 export const isSelectable = (id) => !!(ideologyById(id) && ideologyById(id).selectable);
 
+// ---------------------------------------------------------------- era: lines later than the game year
+// The latest year a line (with its '　' continuation lines) talks about: 4-digit years, and ranges
+// written with a short end ('1973〜90年' → 1990, '1920〜30年代' → 1930). 0 when it names no year.
+export function lineYear(s) {
+  const t = String(s || '');
+  let m = 0;
+  for (const x of t.matchAll(/(\d{4})/g)) m = Math.max(m, Number(x[1]));
+  for (const x of t.matchAll(/(\d{2})\d{2}(?:年代)?〜(\d{2})(?=年)/g)) m = Math.max(m, Number(x[1] + x[2]));
+  return m;
+}
+export const FUTURE_MARK = '（ゲームの年より後のできごと）';
+// Lines of an entry for a game year: a line (with its continuations) that names a year later than
+// `year` is left out — or, with opts.showFuture, kept and marked 「（ゲームの年より後のできごと）」.
+// Returns { lines, hidden } (hidden = how many items were left out or marked). year null = all.
+export function linesForYear(lines, year = null, opts = {}) {
+  const groups = [];
+  for (const l of lines || []) {
+    if (/^[　 ]/.test(l) && groups.length) groups[groups.length - 1].push(l); else groups.push([l]);
+  }
+  const out = [];
+  let hidden = 0;
+  for (const gr of groups) {
+    const late = year != null && Number.isFinite(Number(year)) && lineYear(gr.join('')) > Number(year);
+    if (!late) { out.push(...gr); continue; }
+    hidden++;
+    if (opts.showFuture) out.push(...gr.slice(0, -1), gr[gr.length - 1] + FUTURE_MARK);
+  }
+  return { lines: out, hidden };
+}
+
 // An entry split into short sections for a small-screen reader:
-// [{ key, title, lines[] }] (summary, ideas, history, record, pro, con, related, sources).
-export function ideologySections(id) {
+// [{ key, title, tab, lines[], hidden }] (summary, ideas, history, record, pro, con, related, sources).
+// Titles are neutral: 「実際に起きたこと」 (never 成果・失敗). For the two entries that cannot be chosen
+// (ファシズム・ナチズム) the pro / con sections are 「当時の宣伝（どう支持を集めたか）」 and 「批判・歴史の
+// 評価」 — there is no "supporters' voice" for them. year (the game year, optional): lines about later
+// events are left out (opts.showFuture: kept and marked). `hidden` = items left out / marked.
+export function ideologySections(id, year = null, opts = {}) {
   const e = ideologyById(id);
   if (!e) return [];
   const fam = IDEO_FAMILIES[e.family] ? IDEO_FAMILIES[e.family].name : '';
+  const prop = e.selectable === false;
+  const yl = (arr) => linesForYear(arr, year, opts);
+  const sec = (key, title, tab, r) => ({ key, title, tab, lines: r.lines, hidden: r.hidden });
   return [
-    { key: 'summary', title: 'どんな考え？', lines: [...e.summary.split('\n'), ...(fam ? [`（${fam}）`] : []), ...(e.note ? [e.note] : [])] },
-    { key: 'ideas', title: '主な考え', lines: [...e.ideas] },
-    { key: 'history', title: '歴史', lines: [...e.history] },
-    { key: 'record', title: '実際に起きたこと', lines: [...e.record] },
-    { key: 'pro', title: '支持する人の考え', lines: [...e.pro] },
-    { key: 'con', title: '批判する人の考え', lines: [...e.con] },
-    { key: 'related', title: '関連する思想', lines: e.related.map(ideologyName).filter(Boolean) },
-    { key: 'sources', title: '出典', lines: e.sources.map((x) => x.title) },
+    sec('summary', 'どんな考え？', '概要', { lines: [...e.summary.split('\n'), ...(fam ? [`（${fam}）`] : []), ...(e.note ? [e.note] : [])], hidden: 0 }),
+    sec('ideas', '主な考え', '考え', yl(e.ideas)),
+    sec('history', '歴史', '歴史', yl(e.history)),
+    sec('record', '実際に起きたこと', '記録', yl(e.record)),
+    sec('pro', prop ? '当時の宣伝（どう支持を集めたか）' : '支持する人の考え', prop ? '宣伝' : '支持', yl(e.pro)),
+    sec('con', prop ? '批判・歴史の評価' : '批判する人の考え', '批判', yl(e.con)),
+    sec('related', '関連する思想', '関連', { lines: e.related.map(ideologyName).filter(Boolean), hidden: 0 }),
+    sec('sources', '出典', '出典', { lines: e.sources.map((x) => x.title), hidden: 0 }),
   ];
 }
 
@@ -1106,7 +1145,37 @@ export const QUIZ_INFO = {
   title: '思想診断',
   intro: ['20の文を読んで、自分の考えに', '近いものをえらんでください。', 'あなたに近い思想がわかります。'],
   note: '考え方の傾向の目安です。どの思想が正しいということはありません。',
+  limits: 'この診断は、他の国や地域を支配すること（帝国主義）、「エリート」への見方（大衆主義）、君主制（共和主義）については質問していないので、それらは結果に出しません。',
 };
+// Ideologies the quiz never returns, and why: their defining trait is not asked by any statement
+// (wanting a strong defence or national unity is not 「他国の支配」, so it must not read as 帝国主義).
+// They stay in the encyclopedia, and 帝国主義 still describes actions (war) elsewhere.
+export const QUIZ_EXCLUDE = {
+  imperialism: '他の国や地域を支配することを問う質問がない',
+  populism: '「エリート」への見方を問う質問がない',
+  republicanism: '君主制についての質問がない',
+};
+// The pool for a set of quiz answers: QUIZ_EXCLUDE, plus
+// - 権威主義 only when the answers about power itself lean authoritarian: q05 (a strong leader may decide
+//   without the Diet) and q06 (free speech always protected) together ≥ 0.5 on their own, and the 権力
+//   axis ≥ 0.4 — police powers, defence or national unity alone do not make anyone 権威主義;
+// - 無政府主義 only for a clearly anti-state, decentralist answer set: 権力 ≤ −0.6, 分離・自治 ≥ 0.3 and
+//   agreeing with q07 (leave the state's work to the regions) — valuing free speech alone is not anarchism.
+const choiceK = (answers, i, id) => {
+  const a = Array.isArray(answers) ? answers[i] : answers && typeof answers === 'object' ? answers[id] : null;
+  const idx = a == null || a === '' ? null : Number(a);
+  return Number.isInteger(idx) && QUIZ_CHOICES[idx] ? QUIZ_CHOICES[idx].k : 0;
+};
+export function quizExclusions(axes = {}, answers = null) {
+  const ex = Object.keys(QUIZ_EXCLUDE);
+  const i5 = QUIZ_BASE.findIndex((q) => q[0] === 'q05'), i6 = QUIZ_BASE.findIndex((q) => q[0] === 'q06');
+  const core = answers ? (choiceK(answers, i5, 'q05') - choiceK(answers, i6, 'q06')) / 2 : num(axes.power);
+  if (num(axes.power) < 0.4 || core < 0.5) ex.push('authoritarianism');
+  const i7 = QUIZ_BASE.findIndex((q) => q[0] === 'q07');
+  const local = answers ? choiceK(answers, i7, 'q07') >= 0.5 : true;
+  if (!(num(axes.power) <= -0.6 && num(axes.nation) >= 0.3 && local)) ex.push('anarchism');
+  return ex;
+}
 export const QUIZ = QUIZ_BASE.map(([id, q, axes]) => ({
   id, q, axes,
   choices: QUIZ_CHOICES.map((c) => ({ label: c.label, axes: Object.fromEntries(Object.entries(axes).map(([k, v]) => [k, r3(v * c.k)])) })),
@@ -1134,7 +1203,7 @@ export function quizAxes(answers) {
 // The quiz result (pure function; g.ideologyQuizResult wraps it).
 export function quizResult(answers) {
   const { axes, answered } = quizAxes(answers);
-  const near = nearestIdeology(axes);
+  const near = nearestIdeology(axes, { exclude: quizExclusions(axes, answers) });
   const e = ideologyById(near.id);
   const school = e && e.family === 'communism' ? nearestIdeology(axes, { pool: 'communism' }) : null;
   const leanings = IDEO_AXES.map((a) => ({ a, v: axes[a.id] })).filter((x) => Math.abs(x.v) >= 0.25)
@@ -1146,6 +1215,7 @@ export function quizResult(answers) {
     ...(leanings.length ? leanings : ['どの軸でも、真ん中に近い考え方です。']),
     ...(school ? [`共産主義の流れの中では「${school.name}」が近い。`] : []),
     '※考え方の傾向の目安です。正しい答えはありません。',
+    `※${QUIZ_INFO.limits}`,
   ];
   return {
     id: near.id, name: near.name, kana: e ? e.kana : '', family: e ? e.family : null, dist: near.dist, match: near.match,
@@ -1284,13 +1354,16 @@ const methods = {
   // ideologyNudge(axes, weight, why) -> { axes, id, label, changed }. Other cores may call it
   // (e.g. a tax or budget decision): axes is the position the act expresses, weight 0..1.
   ideologyNudge(axes, weight = 0.05, why = '') { return nudge(this, axes, weight, why); },
-  // ideologyQuizResult(answers, { apply? }) -> the 思想診断 result (see quizResult). With
-  // apply: true the player's own axes move toward it (weight 0.35) and the result is kept.
+  // ideologyQuizResult(answers, { apply? }) -> the 思想診断 result (see quizResult). Pure by default:
+  // taking the quiz changes nothing. apply: true — only when the player chose 「この結果を自分の考え方に
+  // 反映する」 after being told what it changes — moves the player's own axes toward it (weight 0.35;
+  // a party member far from the line may then lose 党内の評価 over time) and keeps the result.
   ideologyQuizResult(answers, opts = {}) {
     const res = quizResult(answers);
     if (opts.apply && this.state && res.answered >= 5) {
-      nudge(this, res.axes, 0.35, '思想診断の結果');
+      nudge(this, res.axes, 0.35, '思想診断の結果を反映（自分で選んだ）');
       ensureIdeo(this).quiz = { id: res.id, school: res.school ? res.school.id : null, day: today(this), axes: { ...res.axes } };
+      res.applied = today(this);
     }
     return res;
   },

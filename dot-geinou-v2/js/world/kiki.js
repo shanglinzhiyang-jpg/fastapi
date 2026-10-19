@@ -619,15 +619,16 @@ export async function kikiApp(g) {
 registerPhoneApp('kiki', {
   name: '危機管理', color: APP_COLOR, order: 62,
   icon(ctx, x, y) {
-    // a shield with a small red cross-bar (generic emblem of 危機管理)
-    ctx.fillStyle = '#f2eee2';
-    ctx.fillRect(x + 5, y + 3, 14, 12);
-    ctx.fillRect(x + 7, y + 15, 10, 3);
-    ctx.fillRect(x + 9, y + 18, 6, 2);
-    ctx.fillRect(x + 11, y + 20, 2, 1);
-    ctx.fillStyle = '#c03a3a';
-    ctx.fillRect(x + 11, y + 5, 2, 10);
-    ctx.fillRect(x + 8, y + 8, 8, 2);
+    // a warning triangle with "!" (generic 危機管理 sign). No cross of any kind: a red cross on white is the protected
+    // Red Cross emblem (赤十字の標章及び名称等の使用の制限に関する法律), and a cross reads as a religious sign.
+    ctx.fillStyle = '#3a1a20';
+    for (let i = 0; i < 17; i++) { const hw = 1 + Math.floor(i * 0.62); ctx.fillRect(x + 12 - hw - 1, y + 3 + i, hw * 2 + 2, 1); }
+    ctx.fillRect(x + 1, y + 20, 22, 1);
+    ctx.fillStyle = '#ffd23f';
+    for (let i = 0; i < 16; i++) { const hw = 1 + Math.floor(i * 0.62); ctx.fillRect(x + 12 - hw, y + 4 + i, hw * 2, 1); }
+    ctx.fillStyle = '#2a1418';
+    ctx.fillRect(x + 11, y + 9, 2, 6);
+    ctx.fillRect(x + 11, y + 16, 2, 2);
   },
   badge: (g) => { try { return (g.disaster && g.disaster() ? 1 : 0) + (g.war && g.war() ? 1 : 0); } catch (e) { return 0; } },
   open: (g) => kikiApp(g),

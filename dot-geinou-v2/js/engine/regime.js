@@ -102,6 +102,9 @@
 //   2007年の改正で最高300万円）。内閣府（防災担当）2001年1月（それまでは国土庁防災局・国土庁長官）。
 //   内閣危機管理監 1998年4月、官邸危機管理センター 2002年4月。復興庁 2012年2月10日（東日本大震災の復興のため）。
 //   緊急地震速報: 2007年10月1日から一般向け（テレビ・ラジオ）、2007年12月10日から携帯電話（エリアメール）。
+//   震度階級: 1996年10月から震度5・6を弱・強に分けた10階級（それまでは震度6）。噴火警報・噴火警戒レベル 2007年12月
+//   1日から（それまでは緊急火山情報など）、噴火速報 2015年8月4日から。sources: jma.go.jp 震度について,
+//   data.jma.go.jp 火山活動解説資料 2007年12月, jma-net.go.jp/niigata 年表
 //   sources: bousai.go.jp（防災白書 h13/h24・災対法改正 r3）, sn-hoki.co.jp 法令改正情報, mhlw.go.jp,
 //   kotobank 激甚災害, seijiyama.jp 激甚災害, jma.go.jp 緊急地震速報の沿革, ascii.jp (ドコモ 2007/12/10),
 //   imidas F-118-0029 / kobe-np 被災者生活再建支援法, darkside.js（内閣危機管理監・危機管理センター）
@@ -365,21 +368,25 @@ function defect(g, share, why) {
   return total;
 }
 // Seats that would vote for an authoritarian amendment in one house (the player's party minus 造反; fictional
-// coalition partners in part; a real party never).
-function amendVotes(g, house, opts = {}) {
+// coalition partners in part; a real party never). EXPORTED (stable name) so UIs show the same projection:
+// amendVotes(g, house 'shugi'|'sangi', { expected: true }) → { yes, total, need } (expected: no random part);
+// without expected it is the real roll call (random; used by the 発議).
+export function amendVotes(g, house, opts = {}) {
   const p = pol(g), pi = partyOf(g);
   const H = p && p.diet && p.diet[house];
-  if (!H || !pi) return { yes: 0, total: num(H && H.total, 1), need: Math.ceil(num(H && H.total, 1) * 2 / 3) };
+  if (!H || !H.seats || !pi) return { yes: 0, total: num(H && H.total, 1), need: Math.ceil(num(H && H.total, 1) * 2 / 3) };
   const total = num(H.total) || Object.values(H.seats).reduce((a, v) => a + num(v), 0);
   const loyal = pi.own ? 0.97 : 0.85;
   const appr = approvalOf(g);
   const loyalty = clamp(loyal - (appr < 35 ? (35 - appr) / 200 : 0), 0.6, 0.99);
-  let yes = num(H.seats[pi.id]) * (opts.expected ? loyalty : 1);
+  // a real party's members never vote for it (its organs refuse)
+  const ownSeats = pi.real ? 0 : num(H.seats[pi.id]);
+  let yes = ownSeats * (opts.expected ? loyalty : 1);
   for (const id of (p.cabinet && p.cabinet.partyIds) || []) if (id !== pi.id && !isRealParty(p, id)) yes += num(H.seats[id]) * 0.5;
   yes += num(H.seats.ind) * 0.1;
   if (!opts.expected) {
     // the real vote: each member decides (造反 by approval and loyalty)
-    const own = num(H.seats[pi.id]);
+    const own = ownSeats;
     let y = 0;
     for (let i = 0; i < own; i++) if (rnd() < loyalty) y++;
     yes = y;
@@ -484,9 +491,11 @@ function dropPartners(g, gone, line) {
   for (let i = C.partyIds.length - 1; i >= 0; i--) if (gone.includes(C.partyIds[i])) C.partyIds.splice(i, 1);
   const vacated = [];
   const keep = {};
+  const me = p.me || {};
   for (const [post, who] of Object.entries(C.ministers || {})) {
     const n = p.npcs && p.npcs[who];
     if (n && gone.includes(n.party)) { n.posts = (n.posts || []).filter((x) => x !== post); vacated.push(post); }
+    else if (who === 'player' && me.party && gone.includes(me.party) && C.pm !== 'player') { me.posts = (me.posts || []).filter((x) => x !== post); vacated.push(post); }
     else if (who) keep[post] = who;
   }
   for (const id of gone) news(g, typeof line === 'function' ? line(id) : `${partyName(p, id)}は連立政権から離脱した`);
@@ -497,8 +506,9 @@ function dropPartners(g, gone, line) {
     try { const res = g.formCabinet({ ministers: keep }); done = !!(res && res.ok); } catch (e) { console.error(e); }
   }
   if (!done) {
-    // fallback (no politics API): Diet members of the remaining parties without a cabinet post
+    // an NPC PM's cabinet (or no politics API): Diet members of the remaining parties without a cabinet post
     const P = POL && POL.POSTS;
+    for (const post of vacated) delete C.ministers[post];
     const busy = new Set(Object.values(C.ministers || {}));
     for (const post of vacated) {
       const n = Object.values(p.npcs || {}).find((x) => x && C.partyIds.includes(x.party) && (x.office === 'shugi' || x.office === 'sangi') && x.id !== C.pm && !busy.has(x.id) && !(x.posts || []).some((y) => (P ? P[y] && P[y].kind === 'cabinet' : /^minister_|^kanbo$/.test(y))));
@@ -521,10 +531,12 @@ export function regimeCoalitionBlock(g, partyId, opts = {}) {
   const name = partyName(p, partyId);
   if (r.id !== 'democracy') return `${name}は、${REGIME_INFO[r.id].name}（もしも）のもとの政府には加わらない（実在の政党は、この道をとらない）`;
   const mine = p.me && p.me.party;
-  const involved = opts.core == null || (mine && (opts.core === mine || opts.partner === mine)) || (!mine && isPM(g) && opts.core == null);
+  const involved = opts.core == null || !!(mine && (opts.core === mine || opts.partner === mine));
   if (!involved) return null;
   if (r.amend && r.amend.stage === 'referendum') return `${name}は、強権型の緊急事態条項の国民投票を控えた政権とは連立を組まない`;
-  if (r.steps.clause && isPM(g)) return `${name}は、強権型の緊急事態条項を憲法に加えた政権とは連立を組まない`;
+  // the player's own government: the player is the PM, or the coalition being formed is the player's party's
+  const own = isPM(g) || !!(mine && opts.core === mine);
+  if (r.steps.clause && own) return `${name}は、強権型の緊急事態条項を憲法に加えた政権とは連立を組まない`;
   const formed = isPM(g) && p.cabinet ? num(p.cabinet.formed, 0) : Infinity;
   const recent = (r.record.steps || []).filter((s) => s && (today(g) - num(s.day) < 2 * YEAR_DAYS || num(s.day) >= formed));
   if (recent.length) return `${name}は、「${recent[recent.length - 1].step}」をおこなった${(g.state && g.state.name) || ''}氏の側とは連立を組まない（実在の政党は、この道をとらない）`;
@@ -546,10 +558,19 @@ function coalitionFilter(g, core, partners = []) {
 // Every new / changed cabinet (首班指名・組閣・連立): a real party that may not be in it leaves (never the core).
 function enforceCoalition(g) {
   const G = govParties(g);
-  if (!G || !G.real.length) return;
-  const bad = G.real.filter((id) => id !== G.core && regimeCoalitionBlock(g, id, { core: G.core || undefined }));
+  if (!G || (!G.real.length && !(G.core && isRealParty(G.p, G.core)))) return;
+  const why = {};
+  for (const id of G.real) if (id !== G.core) { const w = regimeCoalitionBlock(g, id, { core: G.core || undefined }); if (w) why[id] = w; }
+  // a real core does not keep the player's party as a partner while the rule applies (e.g. after the player's
+  // dictatorship stepped down): the player's party leaves that coalition, its ministries are refilled
+  const mine = G.p.me && G.p.me.party;
+  if (G.core && isRealParty(G.p, G.core) && mine && mine !== G.core && G.ids.includes(mine) && !G.playerPM) {
+    const w = regimeCoalitionBlock(g, G.core, { core: G.core, partner: mine });
+    if (w) why[mine] = w;
+  }
+  const bad = Object.keys(why);
   if (!bad.length) return;
-  dropPartners(g, bad, (id) => `${partyName(G.p, id)}は連立に加わらなかった（${regimeCoalitionBlock(g, id, { core: G.core || undefined })}）`);
+  dropPartners(g, bad, (id) => why[id]);
 }
 
 // ======================================================================== consequences of a step
@@ -636,7 +657,7 @@ function needPM(g) {
   return null;
 }
 function needFictionalLeader(g, what) {
-  const real = realPartyRefusal(g, what);
+  const real = realGovRefusal(g, what, { leave: true });
   if (real) return real;
   const pi = partyOf(g);
   if (!pi) return '無所属の総理には、これを進める党の組織がない（架空の政党の党首として進める）';
@@ -870,22 +891,42 @@ function restoreDemocracy(g, why) {
 }
 
 // ======================================================================== the amendment's referendum (by segments)
-// The share voting yes in each segment (the 強権型 emergency clause is unpopular with most groups).
-const REF_BASE = { young: 0.25, families: 0.32, elderly: 0.42, employees: 0.33, selfemployed: 0.4, business: 0.4, farmers: 0.42, unions: 0.15, urban: 0.28, rural: 0.44, floating: 0.27 };
+// The share voting yes in each segment (the 強権型 emergency clause is unpopular with most groups). EXPORTED (stable
+// name, frozen): the UIs' projection uses it through referendumProjection(g).
+export const REF_BASE = Object.freeze({ young: 0.25, families: 0.32, elderly: 0.42, employees: 0.33, selfemployed: 0.4, business: 0.4, farmers: 0.42, unions: 0.15, urban: 0.28, rural: 0.44, floating: 0.27 });
+// The segment weights of the year (politics core) or equal weights.
+function refWeights(g) {
+  const segs = Object.keys(REF_BASE);
+  let W = null;
+  try { W = POL && POL.segWeights ? POL.segWeights(yearOf(g)) : null; } catch (e) { W = null; }
+  if (!W) { W = {}; for (const s of segs) W[s] = 1 / segs.length; }
+  return W;
+}
+// The share voting yes in one segment (noise: the random part of the real vote; 0 for the projection).
+const refShare = (g, s, noise = 0) => clamp(REF_BASE[s] + (approvalOf(g) - 40) * 0.006 - R(g).unrest * 0.001 + noise, 0.05, 0.9);
+// EXPORTED: the 国民投票 projection without the random part → { yes (%, one decimal), bySeg { seg: share 0..1 } }.
+export function referendumProjection(g) {
+  const W = refWeights(g);
+  const bySeg = {};
+  let yes = 0, wsum = 0;
+  for (const s of Object.keys(REF_BASE)) { const v = refShare(g, s); bySeg[s] = v; yes += num(W[s]) * v; wsum += num(W[s]); }
+  return { yes: Math.round((wsum ? yes / wsum : 0.3) * 1000) / 10, bySeg };
+}
+// EXPORTED: the 発議 projection in both houses → { shugi: { yes, total, need }, sangi: {…}, ok } (expected votes).
+export function amendProjection(g) {
+  const shugi = amendVotes(g, 'shugi', { expected: true }), sangi = amendVotes(g, 'sangi', { expected: true });
+  return { shugi, sangi, ok: shugi.yes >= shugi.need && sangi.yes >= sangi.need };
+}
 function runReferendum(g) {
   const r = R(g);
   const A = r.amend;
   if (!A || A.stage !== 'referendum') return;
-  const year = yearOf(g);
-  let W = null;
-  try { W = POL && POL.segWeights ? POL.segWeights(year) : null; } catch (e) { W = null; }
+  const W = refWeights(g);
   const segs = Object.keys(REF_BASE);
-  if (!W) { W = {}; for (const s of segs) W[s] = 1 / segs.length; }
-  const appr = approvalOf(g);
   const bySeg = {};
   let yes = 0, wsum = 0;
   for (const s of segs) {
-    const v = clamp(REF_BASE[s] + (appr - 40) * 0.006 - r.unrest * 0.001 + gauss() * 0.03, 0.05, 0.9);
+    const v = refShare(g, s, gauss() * 0.03);
     bySeg[s] = Math.round(v * 1000) / 10;
     yes += num(W[s]) * v;
     wsum += num(W[s]);
@@ -984,7 +1025,9 @@ const netWord = (g) => (since(g, 2008, 1) ? 'SNS' : since(g, 1998, 1) ? 'イン�
 export const PRESS_ACTIONS = {
   denpa: {
     name: '電波停止への言及', regimes: ['democracy'], size: 2,
-    desc: '国会で、放送局が政治的公平（放送法4条）に反すれば電波法76条で電波を止めることもありうる、と言及する。',
+    desc: '国会で、放送局が政治的公平（放送法の番組編集準則）に反すれば電波法76条で電波を止めることもありうる、と言及する。',
+    // the 番組編集準則: 放送法3条の2第1項 until the 2010 amendment took effect (2011-06-30), 4条1項 since
+    descFor: (g) => `国会で、放送局が政治的公平（${since(g, 2011, 7) ? '放送法4条' : '放送法3条の2'}）に反すれば電波法76条で電波を止めることもありうる、と言及する。`,
     run(g) {
       press(g, -6, '電波停止への言及');
       bumpApproval(g, -3, -1, 'regime', '電波停止への言及');
@@ -1001,7 +1044,8 @@ export const PRESS_ACTIONS = {
     run(g) {
       press(g, -4, '記者の排除');
       bumpApproval(g, -2, -1, 'regime', '記者の排除');
-      news(g, '首相官邸の記者会見で特定の記者の質問が打ち切られ、記者クラブが抗議文を出した');
+      // by role: the PM's 官邸 press conference, or the minister's own
+      news(g, isPM(g) ? '首相官邸の記者会見で特定の記者の質問が打ち切られ、記者クラブが抗議文を出した' : `${g.state.name}大臣の記者会見で特定の記者の質問が打ち切られ、記者クラブが抗議文を出した`);
       return '批判的な記者の質問を受けつけないようにした。記者クラブが抗議している。';
     },
   },
@@ -1119,7 +1163,9 @@ function pressRefusal(g, kind) {
   }
   if (!A.regimes.includes(r.id)) return r.id === 'democracy' ? `民主制では、${A.name}はできない（表現の自由・検閲の禁止：憲法21条）` : `いまの体制では、これは選ばない（${REGIME_INFO[r.id].name}）`;
   if (r.id === 'democracy' ? !inCabinet(g) : !isPM(g)) return r.id === 'democracy' ? '内閣の一員（総理・大臣）でなければできない' : '内閣総理大臣でなければできない';
-  const real = realPartyRefusal(g, A.name);
+  // the real-party rule for the whole government: a real PM's party or a real partner of a cabinet the player does
+  // not lead refuses (no minister of it may do this); a real junior partner of the player's cabinet leaves instead
+  const real = realGovRefusal(g, A.name, { leave: true });
   if (real) return real;
   if (num(r.press.actions[kind]) && today(g) - num(r.press.actions[kind]) < 5) return 'ついこのあいだ同じことをした（数日あける）';
   return null;
@@ -1192,11 +1238,12 @@ export function sdfStatus(g) {
   ].filter(Boolean);
   if (r.sdf.haken) lines.push(`災害派遣中：${r.sdf.haken.where}（約${n0(r.sdf.haken.personnel)}人）`);
   for (const d of dep) lines.push(`${d.kind === 'pko' ? 'PKO' : '派遣'}：${d.where}（約${n0(d.personnel)}人）`);
+  lines.push(`緊急発進（スクランブル）：${r.sdf.scrambles ? `今年 約${n0(r.sdf.scrambles)}回。` : ''}この時代は年に約${n0(scrambleLevel(yearOf(g)))}回（目安）`);
   return {
     name: army ? '国軍' : '自衛隊', status: army ? 'kokugun' : 'sdf', founded: 1954, agency: ministry,
     minister: postName(g, 'minister_defense'), personnel: per, budget: bud, rules: defenseRuleLines(g), pkoLaw: pko,
     deployments: dep.map((d) => ({ ...d })), haken: r.sdf.haken ? { ...r.sdf.haken } : null,
-    scrambles: r.sdf.scrambles, kaijo: r.sdf.kaijo ? { ...r.sdf.kaijo } : null, pkoOffer: r.sdf.pkoOffer ? { ...r.sdf.pkoOffer } : null, lines,
+    scrambles: r.sdf.scrambles, scrambleLevel: scrambleLevel(yearOf(g)), kaijo: r.sdf.kaijo ? { ...r.sdf.kaijo } : null, pkoOffer: r.sdf.pkoOffer ? { ...r.sdf.pkoOffer } : null, lines,
   };
 }
 function pkoLawOk(g) { return lawInForce(g, 'pko'); }
@@ -1346,7 +1393,8 @@ function newDisaster(g, opts = {}) {
   const pl = DISASTER_PLACES[placeId];
   const tier = clamp(Math.round(num(opts.tier, rollTier(kind))), 1, 3);
   const mag = kind === 'tsunami' ? Math.round((8 + rnd() * 0.8) * 10) / 10 : kind === 'quake' ? Math.round((6.4 + tier * 0.4 + rnd() * 0.4) * 10) / 10 : 0;
-  const shindo = kind === 'quake' || kind === 'tsunami' ? (tier >= 3 ? '7' : tier === 2 ? '6強' : '6弱') : null;
+  // 震度5・6 were split into 弱・強 in October 1996 (気象庁震度階級); before: 震度6
+  const shindo = kind === 'quake' || kind === 'tsunami' ? (tier >= 3 ? '7' : !since(g, 1996, 10) ? '6' : tier === 2 ? '6強' : '6弱') : null;
   const plan = casualtyPlan(tier, kind);
   return {
     id: 'd' + today(g) + kind, kind, place: placeId, name: K.label(pl, g), where: pl.area, home: !!pl.home, tier, mag, shindo,
@@ -1363,7 +1411,7 @@ function startDisaster(g, opts = {}) {
   r.lastDisasterDay = today(g);
   r.record.disasters++;
   revealCasualties(g, d);
-  const head = d.kind === 'storm' ? `${d.name}。各地で川の氾濫や土砂崩れ` : d.kind === 'volcano' ? 'ドット岳（架空の火山）が噴火。噴火警戒レベルが引き上げられた' : `${d.name}（M${d.mag}・最大震度${d.shindo}）が発生${d.kind === 'tsunami' ? '。大津波警報' : ''}`;
+  const head = d.kind === 'storm' ? `${d.name}。各地で川の氾濫や土砂崩れ` : d.kind === 'volcano' ? `ドット岳（架空の火山）が噴火。${since(g, 2007, 12) ? '噴火警戒レベルが引き上げられた' : '気象庁が緊急火山情報を出した'}` : `${d.name}（M${d.mag}・最大震度${d.shindo}）が発生${d.kind === 'tsunami' ? '。大津波警報' : ''}`;
   news(g, `【災害】${head}（架空の災害）`);
   phone(g, `【速報】${head}。\n${d.where}で被害が出ている。（ゲーム内の架空の災害です）`, 'ドット新聞 社会部');
   // the economy (politics core): only when this did not come from its own shock
@@ -1432,11 +1480,27 @@ function honbuChief(g, kind) {
   return since(g, 2001, 1) ? '防災担当大臣' : '国土庁長官';
 }
 const crisisRoom = (g) => (since(g, 2002, 4) ? '官邸危機管理センター' : since(g, 1998, 4) ? '官邸（内閣危機管理監のもと）' : '首相官邸');
+// 災害対策基本法 before the December 1995 amendment: the 緊急災害対策本部 only together with the 災害緊急事態の布告.
+const kinkyuNeedsFukoku = (g) => !since(g, 1995, 12);
+// The office the 本部 is put in (総理府 until the 2001 reorganisation, then 内閣府).
+const honbuOffice = (g) => (since(g, 2001, 1) ? '内閣府' : '総理府');
+// Real history from before the game's own timeline (the game's world has no real disaster after its start).
+const realPast = (g, year) => (ERA_BASE[eraOf(g)] ?? 2026) > year;
+// A registry entry's description for the game's date (descFor(g) when the text depends on the date). EXPORTED.
+export function actionDesc(A, g) {
+  if (!A) return '';
+  try { if (typeof A.descFor === 'function' && g) return A.descFor(g) || A.desc || ''; } catch (e) { console.error(e); }
+  return A.desc || '';
+}
 // Each action: who (roles), when (phases), prerequisites, and what it does. run → result text.
+// desc is era-neutral; descFor(g) (when present) is the text of the game's date (the lists use it).
 export const DISASTER_ACTIONS = {
   honbu_hijo: {
     name: '非常災害対策本部の設置', roles: ['pm'], phases: ['hassei', 'shodo', 'hinan'],
-    desc: '災害対策基本法24条：非常災害のとき、内閣府に臨時に置く（2021年5月の改正で本部長は内閣総理大臣に）。',
+    desc: '災害対策基本法24条：非常災害のとき、政府に臨時に置き、各省庁の応急対策をまとめる。',
+    descFor: (g) => (since(g, 2021, 5)
+      ? '災害対策基本法24条：非常災害のとき、内閣府に置く（2021年5月の改正で本部長は内閣総理大臣に）。'
+      : `災害対策基本法24条：非常災害のとき、${honbuOffice(g)}に臨時に置く。本部長は国務大臣（${honbuChief(g, 'hijo')}）。`),
     check(g, d) { if (d.honbu) return `すでに${d.honbu === 'kinkyu' ? '緊急' : '非常'}災害対策本部を設置した`; return null; },
     run(g, d) {
       d.honbu = 'hijo';
@@ -1451,10 +1515,14 @@ export const DISASTER_ACTIONS = {
   },
   honbu_kinkyu: {
     name: '緊急災害対策本部の設置', roles: ['pm'], phases: ['hassei', 'shodo', 'hinan'],
-    desc: '災害対策基本法28条の2：著しく異常かつ激甚な非常災害のとき、閣議決定で置く。本部長は内閣総理大臣、全閣僚が本部員。',
+    desc: '災害対策基本法28条の2：とくに激甚な非常災害のとき、内閣総理大臣を本部長として置く。',
+    descFor: (g) => (kinkyuNeedsFukoku(g)
+      ? 'この時代の災害対策基本法28条の2：異常かつ激甚な非常災害で、災害緊急事態の布告（105条）があったときだけ置ける。本部長は内閣総理大臣。'
+      : '災害対策基本法28条の2：著しく異常かつ激甚な非常災害のとき、閣議にかけて置く（1995年12月の改正で、布告がなくても置けるように）。本部長は内閣総理大臣、全閣僚が本部員。'),
     check(g, d) {
       if (d.honbu === 'kinkyu') return 'すでに緊急災害対策本部を設置した';
       if (d.tier < 3) return '著しく異常かつ激甚な災害ではない（緊急災害対策本部の要件にあたらない。非常災害対策本部で対応する）';
+      if (kinkyuNeedsFukoku(g) && !d.done.fukoku) return 'この時代の災害対策基本法では、緊急災害対策本部は災害緊急事態の布告とあわせてしか置けない（布告は20日以内に国会の承認を求める：106条）。非常災害対策本部で対応するか、先に布告する';
       return null;
     },
     run(g, d) {
@@ -1471,6 +1539,9 @@ export const DISASTER_ACTIONS = {
   fukoku: {
     name: '災害緊急事態の布告', roles: ['pm'], phases: ['hassei', 'shodo', 'hinan'],
     desc: '災害対策基本法105条：非常災害が国の経済と公共の福祉に重大な影響を及ぼすとき、閣議にかけて布告する。緊急災害対策本部が置かれ（107条）、国会の閉会中などで国会を待つ時間がなければ、物資の配給や価格の統制の政令も出せる（109条）。選挙や国会を止める力はない。',
+    descFor: (g) => (kinkyuNeedsFukoku(g)
+      ? '災害対策基本法105条：非常災害が国の経済と公共の福祉に重大な影響を及ぼすとき、閣議にかけて布告する（20日以内に国会の承認を求める）。この時代は、布告があってはじめて緊急災害対策本部を置ける。国会の閉会中などには、物資の配給や価格の統制の政令も出せる（109条）。選挙や国会を止める力はない。'
+      : '災害対策基本法105条：非常災害が国の経済と公共の福祉に重大な影響を及ぼすとき、閣議にかけて布告する（20日以内に国会の承認を求める）。緊急災害対策本部が置かれ（107条）、国会の閉会中などで国会を待つ時間がなければ、物資の配給や価格の統制の政令も出せる（109条）。選挙や国会を止める力はない。'),
     check(g, d) { if (d.done.fukoku) return 'すでに布告した'; if (d.tier < 3) return '国の経済と公共の福祉に重大な影響を及ぼすほどの災害ではない（布告の要件にあたらない）'; return null; },
     run(g, d) {
       d.done.fukoku = today(g);
@@ -1483,7 +1554,9 @@ export const DISASTER_ACTIONS = {
   },
   sdf_request: {
     name: '自衛隊の災害派遣を要請', roles: ['chiji'], phases: ['hassei', 'shodo', 'hinan'],
-    desc: '自衛隊法83条：都道府県知事が防衛大臣などに部隊の派遣を求める（市区町村長は知事に要請を求める）。',
+    desc: '自衛隊法83条：都道府県知事が、自衛隊の部隊の派遣を求める。',
+    // 防衛庁長官 before 2007-01; the 市町村長's request to the 知事 (災対法68条の2) since the 1995-12 amendment
+    descFor: (g) => `自衛隊法83条：都道府県知事が${postName(g, 'minister_defense')}などに部隊の派遣を求める${since(g, 1995, 12) ? '（市区町村長は知事に要請を求める）' : ''}。`,
     check(g, d) { if (!d.home) return '東京都の災害ではない（派遣を要請するのは被災地の知事）'; if (R(g).sdf.haken || d.done.haken) return 'すでに自衛隊が派遣されている'; return null; },
     run(g, d) {
       d.done.request = today(g);
@@ -1572,7 +1645,11 @@ export const DISASTER_ACTIONS = {
   },
   shienho: {
     name: '被災者生活再建支援法の適用', roles: ['chiji'], phases: ['hinan', 'fukko'],
-    desc: '被災者生活再建支援法（1998年11月施行）：住宅が全壊した世帯などに支援金（最高100万円 → 2007年改正後は最高300万円）。',
+    desc: '被災者生活再建支援法：住宅が全壊した世帯などに、国と都道府県の支援金を出す。',
+    descFor: (g) => (!since(g, 1998, 11) ? '被災した世帯の生活再建に国の支援金を出す法律は、この時代にはまだない（現実には1998年に成立）。'
+      : since(g, 2007, 11) ? '被災者生活再建支援法：住宅が全壊した世帯などに支援金（2007年の改正で、使いみちを問わない定額。最高300万円）。'
+        : since(g, 2004, 4) ? '被災者生活再建支援法：住宅が全壊した世帯などに支援金（2004年の改正で最高300万円。うち200万円は住まいの安定のための支援）。'
+          : '被災者生活再建支援法（1998年11月施行）：住宅が全壊した世帯などに、生活必需品などの支援金（最高100万円）。'),
     check(g, d) { if (!since(g, 1998, 11)) return 'この時代には、被災者生活再建支援法はまだない（1998年成立）。義援金と自治体の独自支援に頼る'; if (!d.home) return '東京都の災害ではない'; if (d.done.shienho) return 'すでに適用した'; if (d.tier < 2) return '適用の基準（全壊の世帯数）に届かない'; return null; },
     run(g, d) {
       d.done.shienho = today(g);
@@ -1603,7 +1680,10 @@ export const DISASTER_ACTIONS = {
   },
   fukko_plan: {
     name: '復興の基本方針を決める', roles: ['pm'], phases: ['fukko'],
-    desc: '被災地の復興の方針を決める。大きな災害では、専門の組織や特別な法律も議論される（2012年に東日本大震災の復興のため復興庁ができた）。',
+    desc: '被災地の復興の方針を決める。大きな災害では、復興のための専門の組織や特別な法律が議論されることもある。',
+    // 復興庁 (2012-02) is named only where it is real history before the game's own timeline (the reiwa start)
+    descFor: (g) => (realPast(g, 2012) ? '被災地の復興の方針を決める。大きな災害では、専門の組織や特別な法律も議論される（現実には2012年、東日本大震災の復興のため復興庁が置かれた）。'
+      : '被災地の復興の方針を決める。大きな災害では、復興のための専門の組織や特別な法律が議論されることもある。'),
     check(g, d) { if (d.done.plan) return 'すでに決めた'; if (d.tier < 2) return '国の復興方針が要るほどの被害ではない'; return null; },
     run(g, d) {
       d.done.plan = today(g);
@@ -1630,7 +1710,8 @@ export const DISASTER_ACTIONS = {
   },
   volunteer: {
     name: 'ボランティアに行く', roles: ['citizen'], phases: ['hinan', 'fukko'],
-    desc: '社会福祉協議会の災害ボランティアセンターを通して、泥かきや物資の仕分けを手伝う（体力40）。',
+    desc: 'ボランティアとして、泥かきや物資の仕分けを手伝う（体力40）。',
+    descFor: (g) => (since(g, 2000, 1) ? '社会福祉協議会の災害ボランティアセンターを通して、泥かきや物資の仕分けを手伝う（体力40）。' : '被災地の受け入れ窓口を通して、泥かきや物資の仕分けを手伝う（体力40）。'),
     check(g, d) { if (num(d.done.volunteer) === today(g)) return '今日はもう行った'; if (num(g.state.stamina) < 40) return '体力が足りない（体力40）'; return null; },
     run(g, d) {
       const st = g.state;
@@ -1640,7 +1721,7 @@ export const DISASTER_ACTIONS = {
       try { if (typeof g.addNeed === 'function') { g.addNeed('stress', -4); g.addNeed('clean', -25); } } catch (e) { /* ignore */ }
       if (num(st.fame) >= 300 && typeof g.addFame === 'function') g.addFame(10, true);
       queueScene(g, 'volunteer', {}, { front: true });
-      return '災害ボランティアセンターで受付をして、泥かきと物資の仕分けを手伝った。くたくただけど、ありがとうと言われた。';
+      return `${since(g, 2000, 1) ? '災害ボランティアセンター' : '被災地の受け入れ窓口'}で受付をして、泥かきと物資の仕分けを手伝った。くたくただけど、ありがとうと言われた。`;
     },
   },
   charity: {
@@ -1691,7 +1772,8 @@ function npcDisaster(g, d) {
   const roles = roleOf(g);
   const days = today(g) - d.start;
   if (!d.honbu && !roles.includes('pm') && d.tier >= 2) {
-    d.honbu = d.tier >= 3 ? 'kinkyu' : 'hijo';
+    // before the 1995-12 amendment a 緊急本部 needed the 布告 (never proclaimed): the NPC government sets the 非常本部
+    d.honbu = d.tier >= 3 && !kinkyuNeedsFukoku(g) ? 'kinkyu' : 'hijo';
     d.done.honbu = today(g);
     news(g, `政府が${d.name}の${honbuName(g, d.honbu)}を設置した（本部長：${honbuChief(g, d.honbu)}）`);
   }
@@ -1767,15 +1849,17 @@ function cancelWork(g) {
 }
 
 // ======================================================================== events of the 自衛隊 (fictional nations only)
+// The yearly number of scrambles at the real level of the year (目安; 1984 944 → 1990s-2000s 100-300 → 700+ since 2013).
+function scrambleLevel(y) { return y < 1990 ? 850 : y < 1995 ? 450 : y < 2010 ? 200 : y < 2013 ? 400 : y < 2023 ? 900 : 700; }
 function sdfEvents(g) {
   const r = R(g);
   const y = yearOf(g);
   if (r.sdf.scrambleYear !== y) { r.sdf.scrambleYear = y; r.sdf.scrambles = 0; }
-  // scrambles (対領空侵犯措置, 84条): news a few times a year
+  // scrambles (対領空侵犯措置, 84条): news a few times a year; the yearly count follows the real level of the era
+  // (目安, see the facts above). No country is named (a fictional nation must not stand in for a real one).
   if (roll(4 / YEAR_DAYS)) {
-    const nat = pick(['keldoa', 'keldoa', 'nevalon']);
-    r.sdf.scrambles += rint(20, 60);
-    news(g, `航空自衛隊が、${FICTIONAL_NATIONS[nat].short}の軍用機に緊急発進（スクランブル）。領空侵犯はなかった（自衛隊法84条・架空の国）`, { feed: false });
+    r.sdf.scrambles += Math.round((scrambleLevel(y) / 4) * (0.75 + rnd() * 0.5));
+    news(g, '航空自衛隊の戦闘機が、日本の領空に近づいた外国の軍用機に緊急発進（スクランブル）した。領空侵犯はなかった（自衛隊法84条）', { feed: false });
   }
   // a suspicious ship (海上警備行動の判断): rare
   if (!r.sdf.kaijo && roll(0.5 / YEAR_DAYS) && r.id !== 'dictatorship') {
@@ -1818,6 +1902,8 @@ function warRefusal(g, kind, opts = {}) {
   if (!pol(g)) return '政治の仕組み（政治コア）が読み込まれていない';
   if (r.id !== 'dictatorship') return r.id === 'fallen' ? '体制はもう崩れている' : '憲法9条：民主制の日本は、国際紛争を解決する手段として戦争をしない（侵略戦争はできない）。自衛隊は専守防衛';
   if (!isPM(g)) return '独裁者（総理）でなければ命じられない';
+  // a real party never goes to war: no war order while one is in the government (it cannot be, but never rely on it)
+  if (['declare', 'mobilize', 'offensive'].includes(kind)) { const real = realGovRefusal(g, WAR_ORDERS[kind].name, { leave: false }); if (real) return real; }
   const w = r.war;
   if (kind === 'declare') {
     if (!r.steps.army) return 'まず自衛隊を国軍に改める（もしも）。自衛隊のままでは、他国を攻める組織も法もない';
@@ -2203,7 +2289,7 @@ const SCENES = {
     const K = DISASTER_KINDS[d.kind];
     if (data.phase === 'hassei') {
       const eew = (d.kind === 'quake' || d.kind === 'tsunami') && d.home;
-      const alert = eew ? (since(g, 2007, 12) ? { kind: 'phone', text: '緊急地震速報\n強い揺れに警戒' } : since(g, 2007, 10) ? { kind: 'tv', text: '緊急地震速報' } : { kind: 'tv', text: '地震速報' }) : d.kind === 'storm' ? { kind: 'tv', text: since(g, 2013, 8) ? '大雨特別警報' : '大雨警報' } : d.kind === 'volcano' ? { kind: 'tv', text: '噴火速報' } : { kind: 'tv', text: '地震速報' };
+      const alert = eew ? (since(g, 2007, 12) ? { kind: 'phone', text: '緊急地震速報\n強い揺れに警戒' } : since(g, 2007, 10) ? { kind: 'tv', text: '緊急地震速報' } : { kind: 'tv', text: '地震速報' }) : d.kind === 'storm' ? { kind: 'tv', text: since(g, 2013, 8) ? '大雨特別警報' : '大雨警報' } : d.kind === 'volcano' ? { kind: 'tv', text: since(g, 2015, 8) ? '噴火速報' : since(g, 2007, 12) ? '噴火警報' : '緊急火山情報' } : { kind: 'tv', text: '地震速報' };
       const pages = [];
       if (eew && since(g, 2007, 12)) pages.push(`${g.state.name}の${deviceName(g)}が、聞いたことのない音で鳴りはじめた。\n「緊急地震速報。強い揺れに警戒してください」`);
       else if (eew && since(g, 2007, 10)) pages.push('テレビから警報音が流れた。\n「緊急地震速報です。強い揺れに警戒してください」');
@@ -2215,7 +2301,7 @@ const SCENES = {
       pages.push('（ゲーム内の架空の災害です。手続きと法律は、その時代の実際のものです）');
       let prompt = 'どうする？';
       let ids = [];
-      if (roles.includes('pm')) { pages.push(`総理として、${crisisRoom(g)}へ向かう。\n官邸対策室が立ち上がり、情報が集まりはじめた。`); ids = ['honbu_kinkyu', 'honbu_hijo', 'sdf_order']; prompt = '総理として、まず何を指示する？'; }
+      if (roles.includes('pm')) { pages.push(`総理として、${crisisRoom(g)}へ向かう。\n${since(g, 1998, 4) ? '官邸対策室が立ち上がり、' : '関係省庁の幹部が集まり、'}情報が集まりはじめた。`); ids = ['honbu_kinkyu', 'honbu_hijo', 'sdf_order']; prompt = '総理として、まず何を指示する？'; }
       else if (roles.includes('defmin')) { ids = ['sdf_order']; prompt = `${postName(g, 'minister_defense')}として、どうする？`; }
       else if (roles.includes('chiji') && d.home) { ids = ['sdf_request', 'kyujo_ho']; prompt = '東京都知事として、どうする？'; }
       else if (roles.includes('kucho') && d.home) { ids = ['shelter']; prompt = 'ドット区長として、どうする？'; }
@@ -2394,6 +2480,11 @@ function hookPolitics() {
   };
   POL.onPolitics('resign', gone);
   POL.onPolitics('cabinet', gone);
+  // every new / changed cabinet (首班指名 after an election, 組閣, 連立): the real-party coalition rule
+  POL.onPolitics('cabinet', (g) => {
+    try { if (g && g.state && g.state.regime) enforceCoalition(g); } catch (e) { console.error(e); }
+  });
+  wrapCoalition(Game.prototype);
 }
 
 // ======================================================================== A1's demonstrations: the dictatorship's responses
@@ -2405,10 +2496,16 @@ function extendDemoResponses() {
   const add = (id, def) => { if (!D[id]) D[id] = { id, ...def }; };
   // available(g, demo) → true | reason (govt.js shows the reason): only in an emergency or a dictatorship (もしも)
   const okIn = (g) => { const r = R(g); return r.id === 'emergency' || r.id === 'dictatorship' ? true : '民主制の政府は、デモを力で抑えない（集会・表現の自由：憲法21条）。これは「もしも」の独裁・緊急事態体制だけの選択'; };
+  // the force options: the real-party rule first (a real party in the government in ANY role refuses; no leaving here)
+  const forceOk = (what) => (g) => {
+    let real = null;
+    try { real = realGovRefusal(g, what, { leave: false }); } catch (e) { console.error(e); }
+    return real || okIn(g);
+  };
   add('crackdown', {
     name: '弾圧（治安部隊の出動）', label: '弾圧', regime: true,
     desc: '（もしも）治安部隊でデモを解散させる。国内外から激しい非難を浴び、蜂起の危険が一気に高まる。',
-    when: okIn, available: okIn,
+    when: forceOk('治安部隊の出動'), available: forceOk('治安部隊の出動'),
     apply(g, demo) {
       const r = R(g);
       if (demo && typeof demo === 'object') { demo.momentum = num(demo.momentum, 1) * 0.5; demo.size = Math.round(num(demo.size) * 0.6); }
@@ -2424,7 +2521,7 @@ function extendDemoResponses() {
   add('curfew', {
     name: '外出禁止令', label: '外出禁止令', regime: true,
     desc: '（もしも）夜間の外出を禁じる。暮らしと経済に重い負担。',
-    when: okIn, available: okIn,
+    when: forceOk('外出禁止令'), available: forceOk('外出禁止令'),
     apply(g, demo) {
       const r = R(g);
       if (demo && typeof demo === 'object') demo.momentum = num(demo.momentum, 1) * 0.8;
@@ -2478,12 +2575,14 @@ const methods = {
     const S = REGIME_STEPS[kind];
     const why = stepRefusal(this, kind);
     if (why) return { ok: false, why };
+    // a real junior partner of the player's cabinet refuses every authoritarian step and leaves first
+    if (S.auth) realPartnersLeave(this, S.name);
     const res = S.run(this, opts) || { ok: true };
     emit(this, 'step', { kind, res });
     return res.ok === false ? res : { ok: true, ...res };
   },
   regimeSteps() {
-    return REGIME_STEP_ORDER.map((id) => ({ id, name: REGIME_STEPS[id].name, desc: REGIME_STEPS[id].desc, auth: !!REGIME_STEPS[id].auth, why: stepRefusal(this, id) }));
+    return REGIME_STEP_ORDER.map((id) => ({ id, name: REGIME_STEPS[id].name, desc: actionDesc(REGIME_STEPS[id], this), auth: !!REGIME_STEPS[id].auth, why: stepRefusal(this, id) }));
   },
   // Why something is not possible now: a regime step, a press action, an SDF order, a war order or a disaster action.
   regimeRefusal(kind, opts = {}) {
@@ -2530,7 +2629,7 @@ const methods = {
     return { ok: true, text };
   },
   pressActions() {
-    return PRESS_ORDER.map((id) => ({ id, name: PRESS_ACTIONS[id].label ? PRESS_ACTIONS[id].label(this) : PRESS_ACTIONS[id].name, desc: PRESS_ACTIONS[id].desc, regimes: PRESS_ACTIONS[id].regimes.slice(), why: pressRefusal(this, id) }));
+    return PRESS_ORDER.map((id) => ({ id, name: PRESS_ACTIONS[id].label ? PRESS_ACTIONS[id].label(this) : PRESS_ACTIONS[id].name, desc: actionDesc(PRESS_ACTIONS[id], this), regimes: PRESS_ACTIONS[id].regimes.slice(), why: pressRefusal(this, id) }));
   },
   sdf() { return sdfStatus(this); },
   sdfOrder(kind, opts = {}) {
@@ -2541,7 +2640,7 @@ const methods = {
     if (R(this).sdf.orders.length > 30) R(this).sdf.orders.shift();
     return res;
   },
-  sdfOrders() { return SDF_ORDER_LIST.map((id) => ({ id, name: SDF_ORDERS[id].name, desc: SDF_ORDERS[id].desc, why: sdfRefusal(this, id) })); },
+  sdfOrders() { return SDF_ORDER_LIST.map((id) => ({ id, name: SDF_ORDERS[id].name, desc: actionDesc(SDF_ORDERS[id], this), why: sdfRefusal(this, id) })); },
   disaster() {
     const d = R(this).disaster;
     if (!d) return null;
@@ -2562,7 +2661,7 @@ const methods = {
     const d = R(this).disaster;
     if (!d) return [];
     const roles = roleOf(this);
-    return DISASTER_ACTION_ORDER.filter((id) => DISASTER_ACTIONS[id].roles.some((x) => roles.includes(x))).map((id) => ({ id, name: DISASTER_ACTIONS[id].name, desc: DISASTER_ACTIONS[id].desc, why: disasterRefusal(this, id) }));
+    return DISASTER_ACTION_ORDER.filter((id) => DISASTER_ACTIONS[id].roles.some((x) => roles.includes(x))).map((id) => ({ id, name: DISASTER_ACTIONS[id].name, desc: actionDesc(DISASTER_ACTIONS[id], this), why: disasterRefusal(this, id) }));
   },
   startDisaster(opts = {}) { return startDisaster(this, opts); },
   war() {
@@ -2586,6 +2685,15 @@ const methods = {
   regimeTick() { return regimeTick(this); },
   // the answer to a court ruling (UIs; the scene asks it itself)
   regimeCourt(step, comply = true) { return answerCourt(this, step, comply); },
+  // The real-party coalition rule (for politics.js chooseCoalition / formCabinet / joinCoalition and the UIs):
+  // → null | the reason the real party partyId may not be in this government now. opts { core?, partner? }:
+  // core = the coalition's core (PM's party; default: the player's government), partner = the party joining a core.
+  regimeCoalitionBlock(partyId, opts = {}) { return regimeCoalitionBlock(this, partyId, opts || {}); },
+  // → { core, partners (allowed), refused: [{ id, why }] } for a proposed coalition
+  regimeCoalitionFilter(core, partners = []) { return coalitionFilter(this, core, partners); },
+  // the 発議 / 国民投票 projections (the same model as the real votes, without the random part)
+  regimeAmendProjection() { return amendProjection(this); },
+  regimeReferendumProjection() { return referendumProjection(this); },
 };
 
 // ======================================================================== install
@@ -2644,6 +2752,52 @@ export function installRegime(proto) {
   wrap('noConfidence', (orig) => function (...a) {
     const w = held(this, 'diet');
     if (w) { this.lastPoliticsError = w; return { ok: false, why: w }; }
+    return orig.apply(this, a);
+  });
+  wrapCoalition(proto);
+}
+// The real-party coalition rule on the politics core's own entry points (defence in depth: politics.js / the UIs may
+// call g.regimeCoalitionBlock themselves too). formCabinet({ partners }) by the player PM: a requested real partner the
+// rule refuses → { ok: false, why, refused } and nothing changes; without partners, a refused real party already in the
+// coalition is dropped (its ministries refilled). joinCoalition(): a real core refuses the player's party → the reason.
+function wrapCoalition(proto) {
+  const wrap = (name, make) => {
+    const orig = proto[name];
+    if (typeof orig !== 'function' || orig.__regime) return;
+    const w = make(orig);
+    w.__regime = true;
+    proto[name] = w;
+  };
+  wrap('formCabinet', (orig) => function (choices = {}, ...a) {
+    try {
+      const p = this.state ? pol(this) : null;
+      if (p && p.cabinet && p.cabinet.pm === 'player') {
+        const mine = (p.me && p.me.party) || undefined;
+        const asked = choices && Array.isArray(choices.partners);
+        const list = asked ? choices.partners : (p.cabinet.partyIds || []).filter((id) => id !== mine);
+        const f = coalitionFilter(this, mine, list);
+        if (f.refused.length) {
+          if (asked) {
+            this.lastPoliticsError = f.refused[0].why;
+            return { ok: false, why: f.refused.map((x) => x.why).join('\n'), refused: f.refused };
+          }
+          dropPartners(this, f.refused.map((x) => x.id), (id) => (f.refused.find((x) => x.id === id) || {}).why);
+        }
+      }
+    } catch (e) { console.error(e); }
+    return orig.call(this, choices, ...a);
+  });
+  wrap('joinCoalition', (orig) => function (...a) {
+    try {
+      const p = this.state ? pol(this) : null;
+      const mine = p && p.me && p.me.party;
+      if (p && p.cabinet && mine) {
+        const G = govParties(this);
+        const core = G && G.core;
+        const why = (core && regimeCoalitionBlock(this, core, { core, partner: mine })) || regimeCoalitionBlock(this, mine, { core: core || undefined, partner: mine });
+        if (why) { this.lastPoliticsError = why; return why; }
+      }
+    } catch (e) { console.error(e); }
     return orig.apply(this, a);
   });
 }
