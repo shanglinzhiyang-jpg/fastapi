@@ -578,6 +578,26 @@ export const CRIMES = {
     facts: (cs) => `請託を受けて、他の公務員にその職務上不正な行為をさせるようあっせんし、その報酬として、業者から現金${fmtMoney(cs.amount || 1000000)}の供与を受けた`,
     typical: (g, cs) => ({ charge: 1, months: clamp(18 + Math.round((cs.amount || 0) / 5000000) * 6, 18, 60), suspendOk: true, tsuicho: cs.amount || 0 }),
   }),
+  // 銭湯で、自分の性別と違う側（男湯・女湯）に入ること: 建造物侵入罪（刑法130条）. The bath (施設の管理者) does
+  // not allow it, so going in is a 侵入 even inside the building. Staff or customers stop the person on the
+  // spot (私人による現行犯逮捕, 刑訴法213条) and hand them to the police (214条). Only the act of going in:
+  // the scene never shows the bath itself. Called by js/world/misc.js (sento) with ctx.side ('m' 男湯 / 'f' 女湯).
+  trespass_bath: T({
+    name: '浴場への侵入', short: '建造物侵入',
+    law: (g) => `建造物侵入罪（刑法130条）：正当な理由がないのに、人の看守する建造物に侵入した者は、3年以下の${laborWord(g, 'choeki')}又は${since(g, 1991, 5) ? '10万円以下の罰金' : `${man(10000)}以下の罰金（条文の「50円」を罰金等臨時措置法で200倍に読み替えた額。1991年5月の改正で10万円に）`}。銭湯の男湯・女湯のように、施設が立ち入りを認めていない側に入れば、建物の中でもこの罪になる`,
+    severity: 2, kind: 'crime', victim: true, hotDays: 5,
+    detect: () => 1, // the people inside notice at once
+    later: () => 0,
+    penalty: (g) => ({ prison: [1, 36], labor: 'choeki', fine: since(g, 1991, 5) ? [10000, 100000] : [4000, 10000] }),
+    facts: (cs) => `${cs.where || '公衆浴場'}に、施設の管理者の意思に反し、正当な理由なく立ち入った`,
+    typical(g, cs) {
+      const max = since(g, 1991, 5) ? 100000 : 10000;
+      const k = (cs.same || 0) + Math.min(2, cs.hist || 0);
+      if (!k && !cs.priors) return { charge: 0.6, fine: max, suspendOk: true }; // 初犯: 起訴猶予か、略式の罰金（上限近く）
+      if (k <= 1) return { charge: 1, fine: max, suspendOk: true };
+      return { charge: 1, months: 6 + 2 * Math.min(6, k), suspendOk: true };
+    },
+  }),
 };
 export const CRIME_ORDER = Object.keys(CRIMES);
 for (const [id, def] of Object.entries(CRIMES)) def.id = id;
@@ -966,6 +986,15 @@ const SP = {
   shoki: { name: '裁判所書記官（破産係）', look: LK.jimukan },
   shidoin: { name: '巡回指導員', look: { hair: 'cap', hat: '#ffd23f', hairColor: 'black', skin: 'tan', top: '#ffd23f', bottom: '#3b3f48' } },
 };
+// 銭湯 (trespass_bath): everyone fully dressed, in the lobby
+const SENTO_STAGE = {
+  okami: { hair: 'bob', hairColor: 'silver', skin: 'fair', top: '#f2f2f2', bottom: '#3a58a8', skirt: true },
+  staff: { hair: 'short', hairColor: 'brown', skin: 'fair', top: '#ffffff', bottom: '#3a58a8' },
+  customer: {
+    m: { hair: 'short', hairColor: 'black', skin: 'tan', top: '#5a6a8a', bottom: '#3a3e48' },
+    f: { hair: 'long', hairColor: 'brown', skin: 'light', top: '#c25070', bottom: '#5a4a6a', skirt: true },
+  },
+};
 const say = (g, who, text) => g.say(text, who ? { name: who.name, look: who.look } : {});
 const ask = (g, who, text, choices, opts = {}) => g.ask(text, choices, { ...(who ? { name: who.name, look: who.look } : {}), ...opts });
 const narrate = (g, text) => g.say(text);
@@ -1125,6 +1154,25 @@ const STAGES = {
     fig(c, o.officer || LK.tenchou, 150, 100, 'right');
     desk(c, 120, 168, 260, 30, '#c8c8c0', '#9a9a92');
     fig(c, playerLook(g), 270, 120, 'left');
+  },
+  // 銭湯の番台の前（ロビー）: the two noren, the 番台, staff and a clothed customer. Never the baths.
+  sento(c, t, g, o) {
+    wallFloor(c, '#efe4c8', '#d4c49c', '#a9804f', '#8f6a40');
+    const noren = (x, col, ch) => {
+      R(c, x - 4, 62, 168, 6, '#5a3a20');
+      for (let i = 0; i < 4; i++) { R(c, x + i * 40, 68, 38, 70, col); R(c, x + i * 40, 68, 38, 3, '#ffffff40'); }
+      text(c, ch, x + 80, 86, { size: 24, align: 'center', color: '#ffffff', shadow: null });
+    };
+    noren(36, '#24407a', '男');
+    noren(SW - 196, '#b83a4a', '女');
+    R(c, SW / 2 - 70, 70, 140, 98, '#7a5232'); R(c, SW / 2 - 70, 70, 140, 6, '#a07048'); // 番台
+    fig(c, SENTO_STAGE.okami, SW / 2 - 32, 30, 'down');
+    const into = o.side === 'm' ? 70 : SW - 170; // the side the player went into
+    if (o.alarm && (t >> 4) % 2 === 0) text(c, '！', into + 80, 144, { size: 22, color: '#d62f2f', shadow: '#ffffff' });
+    fig(c, playerLook(g), SW / 2 - 32, 170, 'up');
+    if (o.staff) fig(c, SENTO_STAGE.staff, SW / 2 + 34, 172, 'left');
+    if (o.customer) fig(c, SENTO_STAGE.customer[o.side === 'm' ? 'm' : 'f'], 60, 168, 'right');
+    if (o.officer) fig(c, o.officer, SW - 150, 168, 'left');
   },
   eki(c, t, g, o) {
     wallFloor(c, '#d8dce4', '#b8bcc8', '#7a7e88', '#6a6e78');
@@ -1737,6 +1785,40 @@ async function stationCaught(g, c) {
   g.addNeed('stress', 5);
   await flow.end();
   return 'zoun';
+}
+// 銭湯で異性の側ののれんをくぐった: screams, the staff stop the player (私人による現行犯逮捕, 刑訴法213条),
+// the police take over (214条) → the usual arrest flow (minors → 家庭裁判所). c.side: the side entered.
+// Nothing of the bath is shown or described: the scene is the lobby.
+async function bathCaught(g, c) {
+  const flow = new Flow(g);
+  const side = c.side === 'm' ? 'm' : 'f';
+  const bath = side === 'm' ? '男湯' : '女湯';
+  const place = c.placeName || '銭湯';
+  const staff = { name: c.staffName || '銭湯の従業員', look: SENTO_STAGE.staff };
+  const okami = { name: c.okamiName || '番台のおかみさん', look: SENTO_STAGE.okami };
+  const guest = { name: side === 'f' ? '女性客' : '男性客', look: SENTO_STAGE.customer[side] };
+  const opts = { title: place, sub: `${bath}ののれんの先で`, side, alarm: true };
+  await flow.show('sento', opts);
+  audio.sfx('buzz');
+  await narrate(g, `（${bath}の脱衣所に入ったとたん、悲鳴があがった）`);
+  await flow.show('sento', { ...opts, customer: true });
+  await say(g, guest, side === 'f' ? ['きゃーっ！', 'ここは女湯よ！\nだれか、警察を呼んで！'] : ['おい、ここは男湯だぞ！', 'だれか、警察を呼んでくれ！']);
+  await flow.show('sento', { ...opts, customer: true, staff: true });
+  await say(g, staff, `お客さん、そっちは${bath}です！\nすぐに出てください。こちらへ！`);
+  await narrate(g, '（従業員に腕をつかまれ、番台の前まで連れ出された。\n…ほかのお客さんが、110番に電話をしている）');
+  await say(g, okami, ['…あんた、なんてことをしてくれたんだい。', 'うちは、お客さんが安心して入れるのが\nいちばんなんだよ。警察が来るまで、ここにいておくれ。']);
+  const i = await ask(g, null, '（どうする…？）', ['すぐに謝る', '「間違えただけだ」と言い張る']);
+  const plea = i === 0 ? 'admit' : 'deny';
+  if (plea === 'admit') await narrate(g, '（「申し訳ありません」と、頭を下げた。\nおかみさんは、黙って首を横にふった）');
+  else await say(g, okami, 'のれんには、大きく「' + (side === 'm' ? '男' : '女') + '」と書いてあるだろう。\n入る前に、あんたは確かに足を止めてたよ。');
+  await flow.show('sento', { ...opts, alarm: false, staff: true, officer: LK.police });
+  audio.sfx('buzz');
+  await say(g, SP.police, [`${policeName(g)}です。通報があったのは、こちらですね。`, 'お店の方とお客さんから、話は聞きました。']);
+  await narrate(g, '（その場で取り押さえられた者は、だれでも「現行犯逮捕」ができる。\n従業員から、警察官に引き渡された――刑事訴訟法213条・214条）');
+  await say(g, SP.police, '建造物侵入の現行犯で、逮捕します。');
+  await narrate(g, '（手錠をかけられ、パトカーに乗せられた…）');
+  const cs = await arrestFlow(g, 'trespass_bath', { ...c, via: 'genkouhan', evidence: 0.95, plea, flow, skipArrestScene: true });
+  return cs ? cs.outcome || cs.stage || 'arrest' : 'arrest';
 }
 // 補導 (minors' smoking / drinking): no penalty for the minor; tobacco confiscated, family told.
 async function hodoFlow(g, id, c) {
@@ -3812,6 +3894,7 @@ async function caughtFlow(g, id, c, prev = 0) {
   if (def.kind === 'career') return weeklyEvent(g, { crime: id, text: def.name });
   if (id === 'shoplifting') return storeCaught(g, c);
   if (id === 'fare_evasion') return stationCaught(g, { ...c, n: prev + 1 });
+  if (id === 'trespass_bath') return bathCaught(g, c);
   if (c.warnFirst && !J(g).flags['warned_' + id]) return warningFlow(g, id, c);
   if (id === 'drunk') return drunkFlow(g, { ...c, n: prev + 1 });
   if (id === 'tax_evasion') { addHeat(g, id, c); queueEvent(g, { type: 'tax_audit', day: st.day }); delete J(g).flags.pendingCaught; saveHere(g); return 'audit'; }

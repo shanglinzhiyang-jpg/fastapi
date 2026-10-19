@@ -524,6 +524,93 @@ async function norenCheck(g) {
   return payBath(g);
 }
 
+// ---------------------------------------------------------------- 男湯・女湯 and the profile's gender
+// The player goes in on the side of their profile gender ('m' 男湯 / 'f' 女湯). The other side is
+// 建造物侵入罪 (刑法130条; js/engine/crime.js CRIMES.trespass_bath): one clear warning, then the core's
+// flow (screams in the lobby → the staff → the police → 取調べ → 送検 → 処分). Nothing of the bath is shown.
+// 'x' (ないしょ): no noren is forced on anyone — the 番台 offers the 貸切の家族風呂.
+const BATH_NAME = { m: '男湯', f: '女湯' };
+const genderOf = (g) => { const s = g.state.profile && g.state.profile.gender; return s === 'm' || s === 'f' ? s : 'x'; };
+const norenFor = (side) => (g) => norenGate(g, side);
+async function norenGate(g, side) {
+  const me = genderOf(g);
+  if (me === 'x') { await kashikiriOffer(g); return false; }
+  if (me !== side) {
+    if (await wrongNoren(g, side)) {
+      // the warp script walks the player back a step first; then the scene runs as its own script
+      const p = g.map.player;
+      g.run(async () => {
+        await g.waitFrames(2);
+        while (p.moving || (p.path && p.path.length) || p.pathDone) await g.waitFrames(1);
+        await trespass(g, side);
+      });
+    }
+    return false;
+  }
+  return norenCheck(g);
+}
+// true when the player chose to go in anyway
+async function wrongNoren(g, side) {
+  const bath = BATH_NAME[side], mine = BATH_NAME[side === 'm' ? 'f' : 'm'];
+  const j = typeof g.jus === 'function' ? g.jus() : null;
+  if (typeof g.commitCrime !== 'function' || (j && (j.status === 'detained' || j.status === 'prison'))) {
+    await g.say(`${bath}ののれんだ。\n自分が入るのは、${mine}のほう。`);
+    return false;
+  }
+  const k = await g.ask([
+    `（${bath}ののれんだ。自分が入るのは、${mine}のほう）\n${bath}に入れば「建造物侵入罪」。\nその場で通報され、逮捕されることになる。`,
+    `${bath}ののれんだ。本当に入る？`,
+  ], ['やめておく', '入る'], { cancel: 0 });
+  if (k !== 1) { await g.say(`（…${mine}は、${side === 'm' ? '右' : '左'}ののれんだ）`); return false; }
+  return true;
+}
+async function trespass(g, side) {
+  g.sfx('hit');
+  await g.say(`（${BATH_NAME[side]}ののれんを、くぐってしまった――）`);
+  await g.fadeOut(12);
+  await g.fadeIn(1);
+  await g.commitCrime('trespass_bath', {
+    side, forceCaught: true, where: `銭湯「ドットの湯」の${BATH_NAME[side]}`,
+    placeName: '銭湯 ドットの湯', okamiName: OKAMI.name, staffName: WAKA.name,
+  });
+}
+// 貸切の家族風呂: same price, a small tub of its own (once a day like the big bath).
+async function kashikiriOffer(g) {
+  if (today(g, 'sento_bath_day')) { await say(g, OKAMI, '今日はもう、温まったろう？\nのぼせちゃうから、また明日おいで！'); return; }
+  const price = bathPrice(g);
+  if (g.npc('sento_okami')) await g.emote('sento_okami', '♪', 30);
+  const k = await ask(g, OKAMI, [
+    'お客さん、ちょいと。',
+    'うちには、貸切の「家族風呂」もあるんだよ。\n鍵をかけて、だれにも気兼ねなく\nひとりでのんびり入れるからね。',
+    price ? 'お代は大浴場と同じ¥500。どうだい？' : 'スターさんは、もちろん無料だよ。どうだい？',
+  ], [today(g, 'sento_paid_day') ? '貸切風呂に入る' : `貸切風呂に入る（${price ? '¥500' : '無料'}）`, 'やめておく']);
+  if (k !== 0) { await say(g, OKAMI, 'はいよ。いつでも声をかけておくれ。'); return; }
+  if (!today(g, 'sento_paid_day')) {
+    if (price && !g.spend(price)) { await say(g, OKAMI, ['あらら、お金が足りないみたいだね…。', 'お仕事でかせいでから、またおいで！']); return; }
+    if (price) g.sfx('coin');
+    g.setFlag('sento_paid_day', g.state.day);
+  }
+  await say(g, OKAMI, 'はい、家族風呂の鍵だよ。\n番台の奥の戸を入って、つきあたり。\nゆっくり温まっておいで！');
+  await g.fadeOut();
+  g.sfx('hit');
+  await g.say(['カポーン……', '小さなヒノキの湯船を、ひとりじめ。\n窓の外から、子どもの笑い声がかすかに聞こえる。', 'ふぅ〜〜〜……\n体の芯まで、ぽっかぽかだ……。']);
+  const what = applyBath(g);
+  await g.fadeIn();
+  g.sfx('good');
+  await g.emote('player', '♥');
+  await g.say([`貸切風呂でしっかり温まった！${what ? `\n（${what}）` : ''}`, '風呂上がりには、番台のコーヒー牛乳がおすすめだ！']);
+}
+// The effects of one soak (once a day); returns the text of what changed.
+function applyBath(g) {
+  const before = g.state.stamina;
+  g.heal(BATH_HEAL);
+  const dh = g.state.stamina - before;
+  const dc = g.bathe(100, true);
+  const ds = -g.addNeed('stress', -BATH_STRESS);
+  g.setFlag('sento_bath_day', g.state.day);
+  return [dh > 0 ? `体力 +${dh}` : '', dc > 0 ? `身だしなみ +${dc}` : '', ds > 0 ? `ストレス -${ds}` : ''].filter(Boolean).join('・');
+}
+
 async function gulpMilk(g) {
   const id = g.hasItem('sento_milk') ? 'sento_milk' : 'sento_fruitmilk';
   g.takeItem(id);
@@ -633,7 +720,7 @@ async function talkOkami(g, n) {
   const bathLabel = today(g, 'sento_bath_day') ? 'お風呂（入浴済み）'
     : today(g, 'sento_paid_day') ? 'お風呂（支払い済み）' : `お風呂（${bathPrice(g) ? '¥500' : '無料'}）`;
   const items = [
-    { label: bathLabel, run: () => payBath(g) },
+    { label: genderOf(g) === 'x' && !today(g, 'sento_bath_day') ? 'お風呂（貸切の家族風呂）' : bathLabel, run: () => (genderOf(g) === 'x' ? kashikiriOffer(g) : payBath(g)) },
     { label: '牛乳を買う', run: () => milkShop(g) },
   ];
   if (tier1(g)) items.push({ label: '銭湯寄席に出る', run: () => yoseJob(g) });
@@ -713,12 +800,7 @@ async function soak(g, side) {
   }
   await g.say('体の芯まで、ぽっかぽかだ……。');
   await g.fadeOut(24);
-  const before = g.state.stamina;
-  g.heal(BATH_HEAL);
-  const dh = g.state.stamina - before;
-  const dc = g.bathe(100, true);
-  const ds = -g.addNeed('stress', -BATH_STRESS);
-  g.setFlag('sento_bath_day', g.state.day);
+  const what = applyBath(g);
   bathing = null;
   p.hidden = false;
   g.placePlayer(col, 6, 'down');
@@ -726,7 +808,6 @@ async function soak(g, side) {
   await g.fadeIn(24);
   g.sfx('good');
   await g.emote('player', '♥');
-  const what = [dh > 0 ? `体力 +${dh}` : '', dc > 0 ? `身だしなみ +${dc}` : '', ds > 0 ? `ストレス -${ds}` : ''].filter(Boolean).join('・');
   await g.say([`お風呂でしっかり温まった！\n体も心も、さっぱりした。${what ? `\n（${what}）` : ''}`, '風呂上がりには、番台のコーヒー牛乳がおすすめだ！']);
 }
 
@@ -803,10 +884,10 @@ registerPlace({
       },
       warps: [
         { x: 7, y: 8, to: 'exit' }, { x: 8, y: 8, to: 'exit' },
-        { x: 4, y: 1, room: 'bath', tx: 4, ty: 11, dir: 'up', check: norenCheck },
-        { x: 5, y: 1, room: 'bath', tx: 5, ty: 11, dir: 'up', check: norenCheck },
-        { x: 10, y: 1, room: 'bath', tx: 14, ty: 11, dir: 'up', check: norenCheck },
-        { x: 11, y: 1, room: 'bath', tx: 15, ty: 11, dir: 'up', check: norenCheck },
+        { x: 4, y: 1, room: 'bath', tx: 4, ty: 11, dir: 'up', check: norenFor('m') },
+        { x: 5, y: 1, room: 'bath', tx: 5, ty: 11, dir: 'up', check: norenFor('m') },
+        { x: 10, y: 1, room: 'bath', tx: 14, ty: 11, dir: 'up', check: norenFor('f') },
+        { x: 11, y: 1, room: 'bath', tx: 15, ty: 11, dir: 'up', check: norenFor('f') },
       ],
       entities: [
         { type: 'prop', x: 6, y: 1, w: 4, h: 1, solid: false, draw: drawSentoSign },
