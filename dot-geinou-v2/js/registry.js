@@ -28,6 +28,7 @@ export const MODULES = [
   './engine/govt.js',
   './world/seiken.js',
   './engine/phone_apps.js', // phone life apps: マップ, お仕事, 出前, 通販, 銀行, ニュース, カメラ, 設定 (api: test-output/api_phone.txt)
+  './engine/phone_apps2.js', // more phone apps: 家計簿, 健康, レシピ, 占い, 音楽, ゲーム, 図鑑, 実績, 電卓 (same api doc)
   // companies / venues
   './places/yoshimoto.js',
   './places/shinkigeki.js',

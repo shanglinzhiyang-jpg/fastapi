@@ -2224,6 +2224,19 @@ registerPhoneApp('news', { name: (g) => newsTitle(g), color: COL.news, order: 67
 registerPhoneApp('camera', { name: (g) => camTitle(g), color: COL.camera, order: 68, iconHD: iconCamera, badge: (g) => newPhotos(g), open: (g) => cameraApp(g) });
 registerPhoneApp('settings', { name: '設定', color: COL.settings, order: 99, iconHD: iconSettings, open: (g) => settingsApp(g) });
 
+// For phone_apps2.js (and other apps): the list / panel views of these apps, and grocery /
+// goods ordering for a given set of items (the 通販 rules: era names, 冷蔵便, the fee).
+export { panelView, drawRow, rowsList, lifeBlock };
+export async function orderGoods(g, ids) {
+  const lb = lifeBlock(g);
+  if (lb) { audio.sfx('buzz'); await phoneInfo(g, { title: tsuhanTitle(g), color: COL.tsuhan, text: lb }); return; }
+  const cats = catalog(g);
+  const want = new Set(ids || []);
+  const cat = cats.find((c) => c.items && c.items.some((k) => want.has(k)));
+  if (!cat) { await phoneInfo(g, { title: tsuhanTitle(g), color: COL.tsuhan, text: '（いまは配達でたのめる品物がない）' }); return; }
+  await goodsShop(g, { ...cat, items: cat.items.filter((k) => want.has(k)) });
+}
+
 onMorning((g) => {
   try { bankMorning(g); } catch (e) { console.error(e); }
   try { deliverOrders(g); } catch (e) { console.error(e); }
