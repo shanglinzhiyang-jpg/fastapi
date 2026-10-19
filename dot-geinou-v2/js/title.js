@@ -14,7 +14,7 @@ import { text, panel, cursor, COLORS, measure, wrap } from './engine/draw.js';
 import { charSheetHD, drawFaceHD, LOOKS, HAIR, HAIR_STYLES, SKIN } from './engine/sprites.js';
 import { audio } from './engine/audio.js';
 import { drawLogo } from './engine/logos.js';
-import { hasSave, loadGame } from './engine/state.js';
+import { hasSave, saveSummary, lastSaveSlot, SAVE_SLOTS } from './engine/state.js';
 import {
   AGE_MIN, AGE_MAX, YEAR_DAYS, GENDERS, PREFECTURES, REGIONS, PERSONALITIES, ERAS, RELATIONS, CAUSES,
   ERA_ORDER, REGION_ORDER, PREF_ORDER, RELATION_ORDER, CAUSE_ORDER, PERSONALITY_ORDER,
@@ -622,14 +622,15 @@ export class TitleScene {
     this.opaque = true;
     this.saveInfo = null;
     if (this.hasSave) {
-      try {
-        const d = loadGame();
-        if (d && d.state) {
-          const st = d.state;
-          const wd = ['月', '火', '水', '木', '金', '土', '日'][(((st.day || 1) - 1) % 7 + 7) % 7];
-          this.saveInfo = `${(st.profile && fullName(st.profile)) || st.name || '？？？'}・${st.day || 1}日目（${wd}）・★${st.fame || 0}`;
-        }
-      } catch (e) { this.saveInfo = null; }
+      // the slot played last (つづきから then lists all three)
+      const n = lastSaveSlot();
+      const sm = saveSummary(n);
+      if (sm) {
+        const wd = ['月', '火', '水', '木', '金', '土', '日'][((sm.day - 1) % 7 + 7) % 7];
+        let used = 0;
+        for (let i = 1; i <= SAVE_SLOTS; i++) if (hasSave(i)) used++;
+        this.saveInfo = `${used > 1 ? `スロット${n}：` : ''}${sm.name}・${sm.day}日目（${wd}）・★${sm.fame}`;
+      }
     }
     audio.bgm('title'); // only remembered until the first tap/key unlocks audio
   }

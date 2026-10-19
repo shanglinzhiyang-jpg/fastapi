@@ -102,10 +102,48 @@ export function newState(name = 'ドット', look = null, profile = null) {
 }
 
 const SAVE_KEY = 'dotgeinou_save_v2';
-
-export function saveGame(state, location) {
+// Three save slots. Slot 1 keeps the old key, so saves from before slots load as slot 1.
+// saveGame / loadGame / deleteSave use the current slot (chosen on the title) unless given one.
+export const SAVE_SLOTS = 3;
+const LAST_SLOT_KEY = 'dotgeinou_lastslot';
+const slotKey = (n) => (n === 1 ? SAVE_KEY : `${SAVE_KEY}_s${n}`);
+const validSlot = (n) => Number.isInteger(n) && n >= 1 && n <= SAVE_SLOTS;
+let currentSlot = 1;
+export function saveSlot() { return currentSlot; }
+export function setSaveSlot(n) {
+  n = Math.floor(Number(n));
+  if (!validSlot(n)) return currentSlot;
+  currentSlot = n;
+  try { localStorage.setItem(LAST_SLOT_KEY, String(n)); } catch (e) { /* storage blocked */ }
+  return n;
+}
+// The slot played last (for the title's つづきから), else the first slot with a save.
+export function lastSaveSlot() {
+  let n = 0;
+  try { n = Math.floor(Number(localStorage.getItem(LAST_SLOT_KEY))); } catch (e) { n = 0; }
+  if (validSlot(n) && hasSave(n)) return n;
+  for (let i = 1; i <= SAVE_SLOTS; i++) if (hasSave(i)) return i;
+  return 1;
+}
+// A short summary of a slot without the full load (title / slot list): null when empty or broken.
+export function saveSummary(n = currentSlot) {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ state, location, savedAt: Date.now() }));
+    const raw = localStorage.getItem(slotKey(n));
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const st = data && data.state;
+    if (!st) return null;
+    const pr = st.profile || {};
+    const name = pr.familyName || pr.givenName ? `${pr.familyName || ''} ${pr.givenName || ''}`.trim() : st.name || '？？？';
+    return { slot: n, name, day: Math.max(1, Math.floor(Number(st.day) || 1)), fame: Math.max(0, Math.floor(Number(st.fame) || 0)), era: pr.era || null, savedAt: Number(data.savedAt) || 0 };
+  } catch (e) {
+    return null;
+  }
+}
+
+export function saveGame(state, location, n = currentSlot) {
+  try {
+    localStorage.setItem(slotKey(validSlot(n) ? n : currentSlot), JSON.stringify({ state, location, savedAt: Date.now(), slot: n }));
     return true;
   } catch (e) {
     console.warn('save failed', e);
@@ -113,9 +151,9 @@ export function saveGame(state, location) {
   }
 }
 
-export function loadGame() {
+export function loadGame(n = currentSlot) {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(slotKey(validSlot(n) ? n : currentSlot));
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (!data || !data.state) return null;
@@ -177,10 +215,14 @@ function normalize(st, def) {
   ph.posts = num(ph.posts);
 }
 
-export function hasSave() {
-  try { return !!localStorage.getItem(SAVE_KEY); } catch (e) { return false; }
+// hasSave(n): that slot has a save; hasSave(): any slot has one.
+export function hasSave(n) {
+  try {
+    if (n === undefined) { for (let i = 1; i <= SAVE_SLOTS; i++) if (localStorage.getItem(slotKey(i))) return true; return false; }
+    return validSlot(n) && !!localStorage.getItem(slotKey(n));
+  } catch (e) { return false; }
 }
 
-export function deleteSave() {
-  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ }
+export function deleteSave(n = currentSlot) {
+  try { if (validSlot(n)) localStorage.removeItem(slotKey(n)); } catch (e) { /* ignore */ }
 }

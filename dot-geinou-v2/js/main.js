@@ -10,7 +10,7 @@
 import { Game } from './engine/game.js';
 import { loadLogos } from './engine/logos.js';
 import { loadAll } from './registry.js';
-import { newState, loadGame, hasSave, deleteSave, AGENCIES } from './engine/state.js';
+import { newState, loadGame, hasSave, deleteSave, AGENCIES, SAVE_SLOTS, saveSummary, setSaveSlot, lastSaveSlot } from './engine/state.js';
 import { PLACES } from './engine/map.js';
 import { MINIGAMES } from './engine/minigame.js';
 import { TitleScene, CreateScene, EraIntroScene, drawTitleBackdrop } from './title.js';
@@ -148,12 +148,47 @@ async function loadCores() {
   return failed;
 }
 
+// The three save slots on the title: 'load' picks a slot with a save, 'new' picks where a
+// new game is saved (an occupied slot asks before it is overwritten). Returns the slot or 0.
+function slotLine(n) {
+  const s = saveSummary(n);
+  if (!s) return `スロット${n}　（空き）`;
+  const d = s.savedAt ? new Date(s.savedAt) : null;
+  const when = d ? `　${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '';
+  return `スロット${n}　${s.name}・${s.day}日目・★${s.fame}${when}`;
+}
+async function pickSlot(g, mode) {
+  g.setBase(loadingScene('', { title: true }));
+  for (;;) {
+    const items = [];
+    for (let n = 1; n <= SAVE_SLOTS; n++) items.push(slotLine(n));
+    items.push('もどる');
+    const W = 440;
+    const i = await g.list({ title: mode === 'load' ? 'どのセーブデータで遊びますか？' : 'どのスロットに記録しますか？', items, x: Math.round((SW - W) / 2), y: 96, w: W, px: true, cancel: SAVE_SLOTS, index: mode === 'load' ? lastSaveSlot() - 1 : 0 });
+    if (i < 0 || i >= SAVE_SLOTS) return 0;
+    const n = i + 1;
+    if (mode === 'load') {
+      if (!hasSave(n)) { await g.say('このスロットには、セーブデータがありません。'); continue; }
+      return n;
+    }
+    if (hasSave(n)) {
+      const k = await g.ask(`スロット${n}にはセーブデータがあります。\nはじめから遊ぶと上書きされます。いいですか？`, ['上書きして はじめる', 'えらびなおす'], { cancel: 1 });
+      if (k !== 0) continue;
+      deleteSave(n);
+    }
+    return n;
+  }
+}
+
 async function titleFlow(g) {
   for (;;) {
     g.setBase(new TitleScene(g, () => {}));
     const choice = await new Promise((r) => { g.scenes[0].resolve = r; });
     if (choice === 'continue') {
-      const data = loadGame();
+      const slot = await pickSlot(g, 'load');
+      if (!slot) continue;
+      setSaveSlot(slot);
+      const data = loadGame(slot);
       if (data && data.state) {
         g.state = data.state;
         const L = data.location;
@@ -178,12 +213,9 @@ async function titleFlow(g) {
       await g.say('セーブデータを読み込めませんでした。');
       continue;
     }
-    if (hasSave()) {
-      g.setBase(loadingScene('', { title: true }));
-      const i = await g.ask('セーブデータがあります。\nはじめから遊ぶと上書きされます。いいですか？', ['はじめから遊ぶ', 'もどる'], { cancel: 1 });
-      if (i !== 0) continue;
-      deleteSave();
-    }
+    const slot = await pickSlot(g, 'new');
+    if (!slot) continue;
+    setSaveSlot(slot);
     await newGame(g);
     return;
   }
