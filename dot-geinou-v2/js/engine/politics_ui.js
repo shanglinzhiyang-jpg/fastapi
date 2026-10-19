@@ -1058,6 +1058,10 @@ async function offerFlow(ui, o) {
   const fy = fyOf(g);
   const post = o.kind === 'post' ? postName(o.post, fy) : postName(o.post, fy, o.party);
   const from = o.kind === 'post' ? `${g.npcName(o.from) || ''}総理` : `${g.npcName(o.from) || ''}${postName('party_leader', fy, o.party)}`;
+  // (2026-10 fix) the former PM of the もしも regime cannot take a cabinet post (regime.js g.regimeBarred): say why
+  let bar = null;
+  try { bar = o.kind === 'post' && typeof g.regimeBarred === 'function' ? g.regimeBarred('player', o.post) : null; } catch (e) { bar = null; }
+  if (bar) { g.respondOffer(o.id, false); sfx('buzz'); await ui.alert('入閣の打診', [`「${post}」の打診は、受けられない。`, bar]); return; }
   const i = await ui.confirm({
     title: o.kind === 'post' ? '入閣の打診' : '党役員の打診',
     text: `${from}から連絡があった。\n「${post}」をお願いしたい、とのこと。\n返事の期限：${dateLabel(g, o.until)}`,

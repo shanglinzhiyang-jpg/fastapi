@@ -177,8 +177,9 @@ const NO_START = new Set('、。，．・：；？！ー～…‥）」』】〕
 const NO_END = new Set('（「『【〔〈《‘“([{'.split(''));
 function tokens(par) {
   const out = [];
-  // numbers keep their unit (3分の2, 1800万人, 10日以内), ASCII words stay whole
-  const re = /[0-9０-９]+(?:[.,][0-9]+)*(?:分の[0-9]+|[%％年月日歳人分万億兆円倍回本条号割]+)?|[A-Za-z0-9.,:%/+\-#'’]+|\s+|./gu;
+  // numbers keep their unit (3分の2, 1800万人, 10日以内) and a money sign (¥5,000 — fmtMoney puts a word
+  // joiner U+2060 after the ¥), ASCII words stay whole
+  const re = /(?:[¥￥]\u2060?)?[0-9０-９]+(?:[.,][0-9]+)*(?:分の[0-9]+|[%％年月日歳人分万億兆円倍回本条号割]+)?|[A-Za-z0-9.,:%/+\-#'’]+|\s+|./gu;
   let m;
   while ((m = re.exec(par))) out.push(m[0]);
   return out;
@@ -2023,10 +2024,20 @@ function quizView(g, qs) {
         const ls = wrapJ(c, `${qs.length}の質問に答えると、あなたの考えがどの思想に近いかを、ざっくり示すよ。`, a.w - 92, 12);
         ls.forEach((l, i) => T(c, l, a.x + 82, a.y + 8 + i * 15, 12, PCx.text));
         const notes = ['・正しい答えも、まちがった答えもない。結果は目安。', '・答えるだけでは、ゲームの中のあなたは何も変わらない。', '・何度でもやり直せる。実在の政党や政治家とは関係ない。'];
-        let y = a.y + 80;
-        for (const n of notes) { const l2 = wrapJ(c, n, a.w - 24, 12); l2.forEach((l, i) => T(c, l, a.x + 12, y + i * 15, 12, PCx.text)); y += l2.length * 15 + 4; }
-        frame(c, a.x + 40, a.y + a.h - 34, a.w - 80, 24, '#d0507a', '#8a2a4a');
-        T(c, 'はじめる', a.x + a.w / 2, a.y + a.h - 29, 14, '#ffffff', 'center');
+        // the notes always end above the button (2026-10 play audit: a wrapped last line sat on it):
+        // tighter spacing when they are long, never a line under the button
+        const btnY = a.y + a.h - 32;
+        const blocks = notes.map((n) => wrapJ(c, n, a.w - 24, 12));
+        const top0 = Math.max(a.y + 70, a.y + 8 + ls.length * 15 + 6);
+        const need = (lh, gap) => blocks.reduce((s0, b2) => s0 + b2.length * lh + gap, 0);
+        const [lh, gap] = need(15, 4) <= btnY - 4 - top0 ? [15, 4] : [13, 2];
+        let y = top0;
+        for (const b2 of blocks) {
+          for (const l of b2) { if (y + 13 > btnY - 2) break; T(c, l, a.x + 12, y, 12, PCx.text); y += lh; }
+          y += gap;
+        }
+        frame(c, a.x + 40, btnY, a.w - 80, 24, '#d0507a', '#8a2a4a');
+        T(c, 'はじめる', a.x + a.w / 2, btnY + 5, 14, '#ffffff', 'center');
         return;
       }
       const q = qs[v.q];
@@ -2672,26 +2683,135 @@ async function lessonsSection(g, ph) {
 }
 
 // ---- はじめてのミッション
+// A on a mission that is not done yet opens its card: the whole hint, how to get there, and buttons that lead
+// there (a trip with the map app when the place is known, the navi section, the politics app, a lesson).
+const MISSION_WAY = {
+  senkan: { place: 'kuyakusho', lesson: 'senkyo' },
+  kokkai: { place: 'kokkai', via: 'nagatacho', lesson: 'houritsu' },
+  party: { place: 'nagatacho', hintOf: 'jimin_hq', lesson: 'seito' },
+  news: { topic: 'news' },
+  terms: { topic: 'glossary' },
+  lessons: { topic: 'lessons' },
+  quiz: { topic: 'quiz' },
+  polapp: { politics: 'elections' },
+  vote: { place: 'kuyakusho', lesson: 'senkyo', vote: true },
+};
+const PLACE_NAME = { kuyakusho: 'ドット区役所', kokkai: '国会議事堂', nagatacho: '永田町' };
+const mapWord = (g) => (deviceWord(g) === 'スマホ' ? 'マップ' : '地図');
+const visitedPl = (g, id) => !!(id && ((g.state.flags && g.state.flags.visited && g.state.flags.visited[id]) || (g.map && g.map.placeId === id)));
+// the election the player can vote in next: { e, now: 'day' | 'early' | null }
+function nextBallot(g) {
+  const p = polState(g);
+  if (!p || typeof g.upcomingElections !== 'function') return null;
+  const day = today(g);
+  const full = (p.elections && p.elections.upcoming) || [];
+  const list = (safe(() => g.upcomingElections(), []) || []).filter((e) => e && !e.newsOnly && e.kind !== 'sosaisen' && e.office && e.day >= day)
+    .filter((e) => { const raw = full.find((x) => x.id === e.id); return raw && !raw.voted; }).sort((a, b) => a.day - b.day);
+  const e = list[0];
+  if (!e) return null;
+  return { e, now: e.day === day ? 'day' : yearOf(g) >= 2004 && day > e.koji ? 'early' : null };
+}
+async function missionCard(g, ph, m) {
+  const W = MISSION_WAY[m.id] || {};
+  const GD = await import('../world/guide.js').then((x) => x.GUIDE || {}).catch(() => ({}));
+  const PA = await import('./phone_apps.js').catch(() => null);
+  const hintOf = (id) => (GD[id] && GD[id].hint) || '';
+  const lines = [m.hint(g)];
+  const acts = [];
+  const here = g.map && g.map.placeId;
+  let canGo = true;
+  if (W.vote) {
+    const va = vAge(g);
+    const nb = nextBallot(g);
+    if (ageOf(g.state) < va) { lines.push(`投票は${va}歳から（あと${daysToAge(g, va)}日）。`); canGo = false; }
+    else if (!nb) { lines.push('いまは予定されている選挙がないみたい。選挙が決まったら、政治ナビやニュースで知らせるね。'); canGo = false; }
+    else if (nb.now === 'day') lines.push(`今日は${nb.e.label}の投票日！`);
+    else if (nb.now === 'early') lines.push(`${nb.e.label}の期日前投票ができる（投票日は${dateText(g, nb.e.day)}）。`);
+    else { lines.push(`つぎは${nb.e.label}（投票 ${dateText(g, nb.e.day)}）。`); canGo = false; }
+  }
+  if (W.place) {
+    const name = PLACE_NAME[W.place] || W.place;
+    const known = visitedPl(g, W.place);
+    const viaKnown = W.via && visitedPl(g, W.via);
+    if (here === W.place) lines.push(`いま、${name}にいるよ！`);
+    else if (known) lines.push(`${name}へは、${mapWord(g)}から行ける。`);
+    else if (viaKnown) lines.push(`${PLACE_NAME[W.via] || W.via}へは${mapWord(g)}から行ける。そこから：${hintOf(W.place)}。`);
+    else {
+      const h = W.via ? `${hintOf(W.via)}。${hintOf(W.place)}` : hintOf(W.hintOf || W.place);
+      if (h) lines.push(`行き方：${h}。`);
+    }
+    if (canGo && PA && typeof PA.travelTo === 'function' && here !== W.place) {
+      const to = known ? W.place : viaKnown ? W.via : null;
+      if (to) acts.push({ label: `${PLACE_NAME[to] || to}へ行く（${mapWord(g)}）`, run: () => PA.travelTo(g, to) });
+    }
+  }
+  if (W.topic) acts.push({ label: `「${(HOME_ITEMS.find((x) => x.id === W.topic) || {}).label || W.topic}」をひらく`, run: () => openTopic(g, ph, W.topic) });
+  if (W.politics && typeof g.politicsScreen === 'function') acts.push({ label: `${polApp(g)}の「選挙」を見る`, run: () => g.politicsScreen(W.politics) });
+  if (W.lesson) { const L = LESSONS.find((x) => x.id === W.lesson); if (L) acts.push({ label: `「${L.title}」を学ぶ`, run: () => ph.open(lessonView(g, L.id)) }); }
+  const text = lines.filter(Boolean).join('\n');
+  const v = {
+    title: 'ミッション', color: '#e07a1f', idx: 0, cancel: -1,
+    hint: () => (acts.length ? 'A:えらぶ　B:もどる' : 'B:もどる'),
+    update(ph2, inp) {
+      const n = acts.length;
+      if (n) {
+        if (inp.repeat('up')) { this.idx = (this.idx + n - 1) % n; sfx('cursor'); }
+        if (inp.repeat('down')) { this.idx = (this.idx + 1) % n; sfx('cursor'); }
+        if (inp.pressed('a')) {
+          sfx('ok');
+          Promise.resolve().then(() => acts[clamp(this.idx, 0, n - 1)].run()).catch((e) => console.error(e)).then(() => {
+            // done now (or the phone was put away for a trip): back to the list, where the reward is
+            if ((missionDone(g, m.id) || ph2.dismissed) && ph2.view === v) ph2.back(-1);
+          });
+          return;
+        }
+      }
+      if (inp.pressed('b') || (!n && inp.pressed('a'))) { sfx('cancel'); ph2.back(-1); }
+    },
+    draw(c, ph2, a) {
+      drawNaviBust(c, a.x + 8, a.y + 6, 2);
+      const tl = wrapJ(c, mLabel(g, m), a.w - 92, 14).slice(0, 2);
+      tl.forEach((l, i) => T(c, l, a.x + 82, a.y + 6 + i * 17, 14, '#1a1a28'));
+      T(c, `ごほうび ${fmtMoney(m.reward)}`, a.x + 82, a.y + 8 + tl.length * 17, 12, '#e07a1f');
+      T(c, 'まだ達成していない', a.x + 82, a.y + 24 + tl.length * 17, 12, PCx.dim);
+      const by = a.y + a.h - acts.length * 24 - 4;
+      const ty = Math.max(a.y + 72, a.y + 42 + tl.length * 17);
+      const ls = wrapJ(c, text, a.w - 20, 12);
+      const room = Math.max(1, Math.floor((by - 6 - ty) / 15));
+      ls.slice(0, room).forEach((l, i) => T(c, i === room - 1 && ls.length > room ? fit(c, l + '…', a.w - 20, 12) : l, a.x + 10, ty + i * 15, 12, PCx.text));
+      acts.forEach((it, i) => {
+        const on = i === this.idx;
+        const y = by + i * 24;
+        frame(c, a.x + 10, y, a.w - 20, 21, on ? '#e07a1f' : '#ffffff', on ? '#9a4a10' : '#d6cfbf');
+        T(c, fit(c, it.label, a.w - 36, 12), a.x + 18, y + 4, 12, on ? '#ffffff' : PCx.text);
+        if (on) T(c, '▶', a.x + a.w - 22, y + 4, 12, '#ffffff');
+      });
+    },
+  };
+  return ph.open(v);
+}
 function missionsView(g) {
   const a = assistState(g);
   checkMissions(g);
-  return listView(g, {
-    title: 'はじめてのミッション', color: '#e07a1f', rowH: 24,
-    items: () => MISSIONS.map((m) => {
-      const r = a.missions[m.id];
-      const locked = m.locked && m.locked(g) && !(r && r.done);
-      const state = r && r.claimed ? 'claimed' : r && r.done ? 'done' : locked ? 'locked' : 'todo';
-      return {
-        label: m.label, m, state,
-        icon: (c, x, y) => { frame(c, x, y + 1, 12, 12, '#ffffff', state === 'todo' || state === 'locked' ? '#a8a090' : PCx.good); if (state !== 'todo' && state !== 'locked') { line(c, x + 2, y + 7, x + 5, y + 10, PCx.good); line(c, x + 5, y + 10, x + 10, y + 3, PCx.good); } },
-        right: state === 'claimed' ? '済' : state === 'done' ? '受け取る' : locked ? 'まだ' : fmtMoney(m.reward),
-        rightColor: state === 'done' ? PCx.bad : state === 'claimed' ? PCx.good : PCx.dim,
-        labelColor: state === 'claimed' ? PCx.dim : null,
-      };
-    }),
+  const rowsOf = () => MISSIONS.map((m) => {
+    const r = a.missions[m.id];
+    const locked = m.locked && m.locked(g) && !(r && r.done);
+    const state = r && r.claimed ? 'claimed' : r && r.done ? 'done' : locked ? 'locked' : 'todo';
+    return {
+      label: mLabel(g, m), m, state,
+      icon: (c, x, y) => { frame(c, x, y + 1, 12, 12, '#ffffff', state === 'todo' || state === 'locked' ? '#a8a090' : PCx.good); if (state !== 'todo' && state !== 'locked') { line(c, x + 2, y + 7, x + 5, y + 10, PCx.good); line(c, x + 5, y + 10, x + 10, y + 3, PCx.good); } },
+      right: state === 'claimed' ? '済' : state === 'done' ? '受け取る' : locked ? 'まだ' : fmtMoney(m.reward),
+      rightColor: state === 'done' ? PCx.bad : state === 'claimed' ? PCx.good : PCx.dim,
+      labelColor: state === 'claimed' ? PCx.dim : null,
+    };
+  });
+  const view = listView(g, {
+    title: 'はじめてのミッション', color: '#e07a1f', rowH: 24, descLines: 3,
+    items: rowsOf,
     describe: (i) => { const m = MISSIONS[i]; if (!m) return ''; const r = a.missions[m.id]; return r && r.done ? (r.claimed ? '達成！ごほうびは受け取ったよ。' : 'Aでごほうびを受け取ろう！') : m.hint(g); },
     pick(ph, it) {
-      if (it.state !== 'done') { sfx('buzz'); ph.toast(it.state === 'claimed' ? 'もう受け取ったよ' : 'まだ達成していないよ', '#9aa3c7'); return; }
+      if (it.state === 'claimed') { sfx('buzz'); ph.toast('もう受け取ったよ', '#9aa3c7'); return; }
+      if (it.state !== 'done') { missionCard(g, ph, it.m).catch((e) => console.error(e)); return; }
       const r = claimMission(g, it.m.id);
       if (!r) return;
       sfx('coin');
@@ -2699,6 +2819,9 @@ function missionsView(g) {
       if (r.all) { sfx('fanfare'); ph.open(talkView(g, ['ミッションをぜんぶクリア！すごい！', '「政治ナビの修了証」をどうぞ。政治のはじめの一歩、おめでとう！', 'これからは、ニュースを見たり、選挙で投票したり…あなたのペースで、政治とつきあっていってね。'], 'ミッションクリア')); }
     },
   });
+  // the key hint follows the selected row: A opens a mission's card, or takes its reward
+  view.hint = () => { const st0 = (rowsOf()[view.idx | 0] || {}).state; return st0 === 'done' ? 'A:受け取る　B:もどる' : st0 === 'claimed' ? 'B:もどる' : 'A:行き方・やり方　B:もどる'; };
+  return view;
 }
 
 // ---- ナビの設定

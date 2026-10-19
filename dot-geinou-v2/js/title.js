@@ -728,7 +728,8 @@ export class TitleScene {
 
 // ------------------------------------------------------------------ the notice before a new game
 // A short card after 「はじめから」: fiction, real companies / parties only as places, no real
-// politicians, crimes are not encouraged and have consequences, 20+ for drinking and smoking.
+// politicians, crimes are not encouraged and have consequences, the もしも dictatorship / war
+// simulation (fictional, with heavy scenes), 20+ for drinking and smoking.
 const NOTICE_TITLE = 'はじめる前に';
 // frames before A goes on (half a second): a quick double tap on はじめから cannot skip the card
 const NOTICE_READY = 30;
@@ -738,19 +739,24 @@ const NOTICE = [
   '政策や選挙の結果は、どの考え方が正しいかを示すものではありません。',
   '犯罪も選べますが、決してすすめるものではありません。\n現実と同じように、逮捕・裁判・刑罰などの重い結果が待っています。',
   '脅迫や襲撃、借金の取り立て、スキャンダルなど、つらい場面もあります。',
+  '独裁や戦争は、架空の「もしも」のシミュレーションです。\n戦争の犠牲や独裁者の最期など、重い場面もあります。',
   'お酒とタバコは20歳になってから。',
 ];
+// the bullets drawn in red (crime, hard scenes, the もしも simulation)
+const NOTICE_WARN = new Set([3, 4, 5]);
 // one dim line under the bullets: where to turn in real life (real numbers: 警察相談専用電話
 // #9110, 消費者ホットライン 188, 法テラス サポートダイヤル)
 const NOTICE_HELP = '現実で困ったら：警察相談 #9110・消費者ホットライン 188・法テラス';
 function drawNotice(ctx, t) {
   ctx.fillStyle = 'rgba(6,4,18,0.72)';
   ctx.fillRect(0, 0, SW, SH);
-  const W = 600, TW = W - 60, SIZE = 16, LH = 21;
+  const W = 600, TW = W - 60, SIZE = 16;
   const blocks = NOTICE.map((l) => wrap(ctx, l, TW, SIZE));
   const lines = blocks.reduce((a, b) => a + b.length, 0);
+  // the card keeps inside the screen with every bullet (a little tighter when there are more lines)
+  const LH = lines > 9 ? 20 : 21, GAP = lines > 9 ? 5 : 6;
   const HELP_SIZE = 13, HELP_H = 22;
-  const H = 54 + lines * LH + (blocks.length - 1) * 6 + HELP_H + 34;
+  const H = 54 + lines * LH + (blocks.length - 1) * GAP + HELP_H + 34;
   const x = Math.round((SW - W) / 2), y = Math.round((SH - H) / 2) + 4;
   const k = Math.min(1, t / 8);
   const yy = y + Math.round((1 - k) * 10);
@@ -759,13 +765,13 @@ function drawNotice(ctx, t) {
   ribbon(ctx, NOTICE_TITLE, SW / 2, yy - 10, { size: 16, color: STEP_COLORS.profile });
   let ly = yy + 34;
   blocks.forEach((b, i) => {
-    // a small diamond bullet, the fourth (crime) and fifth (hard scenes) in red
-    const warn = i === 3 || i === 4;
+    // a small diamond bullet, the crime / hard scenes / もしも ones in red
+    const warn = NOTICE_WARN.has(i);
     const col = warn ? '#ff8a8a' : '#ffd23f';
     R(ctx, x + 20, ly + 7, 6, 6, shade(col, -0.4));
     R(ctx, x + 21, ly + 8, 4, 4, col);
     b.forEach((l, j) => text(ctx, l, x + 34, ly + j * LH, { size: SIZE, color: warn ? '#ffd0d0' : '#ffffff' }));
-    ly += b.length * LH + 6;
+    ly += b.length * LH + GAP;
   });
   text(ctx, fitTo(ctx, NOTICE_HELP, TW, HELP_SIZE), x + 34, ly + 4, { size: HELP_SIZE, color: '#9aa3c7', shadow: null });
   if (t > NOTICE_READY) text(ctx, 'A（Z・Enter）：つぎへ　B（X）：もどる', SW / 2, yy + H - 30, { size: 14, align: 'center', color: Math.floor(t / 30) % 2 === 0 ? COLORS.accent : '#c8b070' });

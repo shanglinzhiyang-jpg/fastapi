@@ -74,18 +74,47 @@ function T(c, s, x, y, size = 12, color = K.text, align = 'left', w = 0) {
   const str = w > 0 ? fit(c, s, w, size) : String(s ?? '');
   text(c, str, Math.round(x), Math.round(y), { size, color, align, shadow: null });
 }
+// Japanese line breaking (2026-10 fix, the same rules as assist.js wrapJ): a number keeps its sign and unit together
+// (「122.9兆円」「−2.1兆円」「3分の2」「10日以内」), an ASCII run stays whole unless wider than the line, a closing mark /
+// small kana never starts a line (the last character goes down with it), an opening bracket never ends one.
 const NO_START = new Set('、。，．・：；？！ー～…‥）」』】〕〉》’”ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ!?.,)]}%％'.split(''));
+const NO_END = new Set('（「『【〔〈《‘“([{'.split(''));
+function wrapTokens(par) {
+  const out = [];
+  const re = /[+＋−±-]?[0-9０-９]+(?:[.,．][0-9０-９]+)*(?:分の[0-9０-９]+|[%％年月日歳人分万億兆円倍回本条号割度件票席点位代]+)?|[A-Za-z0-9.,:%/+\-#'’]+|\s+|./gu;
+  let m;
+  while ((m = re.exec(par))) out.push(m[0]);
+  return out;
+}
 function wrapJ(c, s, w, size) {
-  return String(s ?? '').split('\n').flatMap((par) => {
-    const lines = wrap(c, par, w, size);
-    for (let i = 1; i < lines.length; i++) {
-      const a = Array.from(lines[i]);
-      let k = 0;
-      while (k < a.length && k < 2 && NO_START.has(a[k])) k++;
-      if (k && lines[i - 1] !== '') { lines[i - 1] += a.slice(0, k).join(''); lines[i] = a.slice(k).join(''); }
+  measure(c, '', size); // sets the font
+  const W = (x) => c.measureText(x).width;
+  const out = [];
+  for (const par of String(s ?? '').split('\n')) {
+    const toks = wrapTokens(par);
+    let line = '';
+    for (const t of toks) {
+      if (!line && /^\s+$/.test(t) && out.length) continue;
+      if (W(line + t) <= w || !line) {
+        if (!line && W(t) > w) { for (const ch of Array.from(t)) { if (line && W(line + ch) > w) { out.push(line); line = ''; } line += ch; } continue; }
+        line += t;
+        continue;
+      }
+      let carry = '';
+      if (Array.from(t).length === 1 && NO_START.has(t)) {
+        const a0 = Array.from(line);
+        let k = a0.length - 1;
+        while (k > 0 && NO_START.has(a0[k])) k--;
+        if (k > 0) { carry = a0.slice(k).join(''); line = a0.slice(0, k).join(''); } else { line += t; continue; }
+      }
+      while (line.length > 1 && NO_END.has(line[line.length - 1])) { carry = line[line.length - 1] + carry; line = line.slice(0, -1); }
+      out.push(line.replace(/\s+$/, ''));
+      line = carry + (/^\s+$/.test(t) ? '' : t);
+      if (W(line) > w) { const chars = Array.from(line); line = ''; for (const ch of chars) { if (line && W(line + ch) > w) { out.push(line); line = ''; } line += ch; } }
     }
-    return lines.filter((l, i) => l !== '' || i === 0);
-  });
+    out.push(line.replace(/\s+$/, ''));
+  }
+  return out;
 }
 // a wrapped paragraph (at most `max` lines, the last one cut with '…'); returns the y below it
 function para(c, s, x, y, w, size = 12, color = K.text, lh = size + 3, max = 99) {

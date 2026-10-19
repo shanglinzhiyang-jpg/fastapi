@@ -2720,18 +2720,21 @@ const inSession = (p, day) => !!(p.diet.session && day >= p.diet.session.start &
 // as billsList({ today: true })), the budget under review (予算委員会: the PM and all ministers attend), the session's
 // opening day (施政方針・所信表明演説). Recorded each morning in p.diet.agenda; attendance reads yesterday's.
 function dietAgenda(p, day) {
-  const out = { day, plenary: { shugi: 0, sangi: 0 }, committee: { shugi: 0, sangi: 0 }, budget: false, opening: false };
+  const out = { day, plenary: { shugi: 0, sangi: 0 }, committee: { shugi: 0, sangi: 0 }, pending: { shugi: 0, sangi: 0 }, budget: false, opening: false };
   const S = p.diet.session;
   if (!S || day < S.start || day > S.end) return out;
   out.opening = num(S.start) === day;
   for (const b of p.diet.bills) {
     if (!['committee', 'shugi', 'sangi'].includes(b.stage) || !(b.house in out.plenary)) continue;
+    const held = !!(b.held && b.heldIn === S.start);
     if (b.stage === b.house) out.plenary[b.house]++;
-    else if (b.stage === 'committee' && num(b.next) <= day + 1 && !(b.held && b.heldIn === S.start)) out.committee[b.house]++;
+    else if (b.stage === 'committee' && !held) { out.pending[b.house]++; if (num(b.next) <= day + 1) out.committee[b.house]++; }
     if (b.kind === 'budget') out.budget = true;
   }
   return out;
 }
+// the Diet has bills before it (either house: a committee or a plenary vote)
+const dietBusy = (A) => ['shugi', 'sangi'].some((h) => num(A.plenary[h]) + num(A.pending ? A.pending[h] : A.committee[h]) > 0);
 // Was the player expected in the Diet on that day? (no record of the day, e.g. an old save: a member yes, the cabinet no)
 function attendDuty(p, me, day) {
   const A = p.diet.agenda && num(p.diet.agenda.day) === day ? p.diet.agenda : null;
@@ -2740,7 +2743,8 @@ function attendDuty(p, me, day) {
   if (!A) return !cab;
   if (A.opening) return true;
   if (cab) return !!A.budget || num(A.plenary[h]) > 0;
-  return num(A.plenary[h]) + num(A.committee[h]) > 0;
+  // a member: every plenary vote, and the committees while the Diet has bills before it (委員会の質疑)
+  return num(A.plenary[h]) > 0 || dietBusy(A);
 }
 // The player's title in a headline: 首相 / the cabinet post / 区長・知事 / 議員 / 氏.
 function playerTitle(g, p) {
@@ -2753,8 +2757,8 @@ function playerTitle(g, p) {
   return me.office ? '議員' : '氏';
 }
 // The former PM of the もしも emergency / dictatorship is not appointed to any cabinet post (regime.js, feature-detected).
-function playerBarred(g) {
-  try { return typeof g.regimeBarred === 'function' ? g.regimeBarred('player') || null : null; } catch (e) { console.error(e); return null; }
+function playerBarred(g, post = null) {
+  try { return typeof g.regimeBarred === 'function' ? g.regimeBarred('player', post) || null : null; } catch (e) { console.error(e); return null; }
 }
 // Party alignment with a policy (0..1): ideology distance + platform + coalition politics.
 function alignment(p, partyId, policyId) {
@@ -3186,7 +3190,7 @@ function electPMImpl(g, p) {
   p.flags.skipPlayerPM = false;
   // ext (2026-10 fix, regime.js g.regimeBarred, feature-detected): the former PM of the もしも emergency / dictatorship
   // is not named again, nor appointed to any cabinet post
-  const barred = !!playerBarred(g);
+  const barred = !!playerBarred(g, 'pm');
   if (leader === 'player' && (!isNational(p.me) || skipPlayer || barred)) leader = partyNominee(p, c.core).id;
   if (leader && leader !== 'player' && !p.npcs[leader]) leader = partyNominee(p, c.core).id;
   const partyIds = [c.core, ...c.partners];
@@ -5281,6 +5285,8 @@ const methods = {
     if (p.cabinet.pm !== 'player') return { ok: false, why: '組閣できるのは総理大臣だけ' };
     const me = p.me;
     const fy = fyNow(this);
+    // regime.js g.regimeBarred (2026-10 fix): a barred former PM is not given a post (refused before anything changes)
+    for (const [post, w] of Object.entries(choices.ministers || {})) if (w === 'player') { const bar = playerBarred(this, post); if (bar) return { ok: false, why: bar, post }; }
     if (Array.isArray(choices.partners)) {
       const ok = choices.partners.filter((id) => p.parties[id] && id !== me.party);
       // ext (regime.js, feature-detected): a party may refuse to govern with the player's regime (e.g. a real party
@@ -5402,7 +5408,7 @@ const methods = {
     const A = dietAgenda(p, day);
     const cab = inCabinet(me);
     const h = me.office;
-    const business = member && session && (A.opening || (cab ? A.budget || A.plenary[h] > 0 : A.plenary[h] + A.committee[h] > 0));
+    const business = member && session && (A.opening || (cab ? A.budget || A.plenary[h] > 0 : A.plenary[h] > 0 || dietBusy(A)));
     const att = num(me.attend && me.attend.last) === day;
     const absent = num(me.attend && me.attend.absent);
     const text = !member ? '国会議員ではない' : !session ? '国会は閉会中' : att ? '今日は出席ずみ' : `${business ? (cab ? '今日は答弁の予定がある' : '今日は本会議・委員会がある') : '今日は大きな日程なし'}${absent ? `・欠席${absent}日連続（8日で報道される）` : ''}`;
@@ -5528,6 +5534,8 @@ const methods = {
     if (!yes) return null;
     const fy = fyNow(this);
     if (o.kind === 'post') {
+      const bar = playerBarred(this, o.post); // regime.js (2026-10 fix)
+      if (bar) { o.answered = 'no'; this.lastPoliticsError = bar; return bar; }
       if (!me.party || !isRuling(p, me.party) || !postExists(o.post, fy, p.flags)) return 'もう、その話はなくなっていた';
       const old = p.cabinet.ministers[o.post];
       if (old && old !== 'player' && p.npcs[old]) p.npcs[old].posts = p.npcs[old].posts.filter((x) => x !== o.post);
