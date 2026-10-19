@@ -7,8 +7,15 @@
 // - The dictatorship and the war are a fictional 「もしも」 simulation; the game says so whenever they start.
 // - Real parties (自由民主党, 民主党 1998-2016) NEVER take an authoritarian step, suppress speech or go to war:
 //   when the player (even as PM and party leader) tries one from a real party, the party's organs refuse
-//   (総務会/党の機関が了承しない) and the player has to leave it (離党) first. A real coalition partner refuses too
-//   and leaves the coalition. The route is open only to the leader of a fictional party.
+//   (総務会/党の機関が了承しない) and the player has to leave it (離党) first. A real party in ANY role in the
+//   government refuses: as the PM's party (an NPC PM's cabinet does not agree: no minister of it, fictional-party or
+//   independent, may take a press action), as a partner of a cabinet the player does not lead (refused), or as a
+//   junior partner of the player's fictional-party cabinet (it leaves the coalition first; its ministries are
+//   refilled by NPCs of the remaining parties: realPartnersLeave). Crackdowns, curfews and the war are refused
+//   outright while any real party is in the government. A real party never enters (or is brought back into) a
+//   government in an emergency / dictatorship, nor the cabinet of a player who has taken such steps
+//   (g.regimeCoalitionBlock; formCabinet / joinCoalition are guarded here, and every new cabinet is checked).
+//   The route is open only to the leader of a fictional party.
 // - War only against FICTIONAL_NATIONS over a fictional disputed area. No WMD, no choice to attack civilians, no
 //   war-crime mechanics, no gore: the human cost is shown as numbers, letters from families, sanctions and the
 //   economy. Winning is hard and inglorious; defeat or a popular uprising ends that life (the downfall scene is
@@ -23,7 +30,13 @@
 // ---------------------------------------------------------------- API (installRegime(Game.prototype); self-installs on import)
 // exports: REGIMES, REGIME_INFO, FICTIONAL_NATIONS, DISPUTED_AREA, DISASTER_PLACES, DISASTER_KINDS, REGIME_STEPS,
 //   PRESS_ACTIONS, SDF_ORDERS, WAR_ORDERS, DISASTER_ACTIONS, KIKI (scene hooks filled by kiki.js),
-//   onRegime(event, fn) → unsubscribe, regimeTick(g), newRegimeState(), installRegime(proto), setRegimeRng(fn)
+//   onRegime(event, fn) → unsubscribe, regimeTick(g), newRegimeState(), installRegime(proto), setRegimeRng(fn),
+//   REF_BASE / amendVotes(g, house, opts) / amendProjection(g) / referendumProjection(g) (the 発議 and 国民投票
+//   model: UIs import these instead of copying the math), regimeCoalitionBlock(g, partyId, opts) (the real-party
+//   coalition rule), actionDesc(A, g) (a registry entry's dated description)
+// g.regimeCoalitionBlock(partyId, { core?, partner? }) → null | reason a real party may not be in this government now
+// g.regimeCoalitionFilter(core, partners[]) → { core, partners (allowed), refused: [{ id, why }] }
+// g.regimeAmendProjection() → { shugi: { yes, total, need }, sangi: {…}, ok }; g.regimeReferendumProjection() → { yes %, bySeg }
 // g.regime()                → { id, name, since, steps, label, fiction, unrest, intl, sanctions, history[] }
 // g.regimeStep(kind, opts)  → { ok, why?, text? }   kinds: REGIME_STEPS (referendum_law, amend_emergency,
 //                              declare_emergency, suspend_elections, suspend_diet, ban_opposition, national_army,
@@ -75,6 +88,13 @@
 //   参加5原則（停戦合意・受入れ同意・中立・撤収・必要最小限の武器使用）。2015年9月 平和安全法制。
 //   sources: cao.go.jp/pko（pko25th 年表・other_data04）, nippon.com today0810
 // - 災害対策基本法 1961年（緊急災害対策本部 28条の2・非常災害対策本部 24条・災害緊急事態の布告 105条）。
+//   1995年12月の改正（平成7年法律第132号）までは、緊急災害対策本部は災害緊急事態の布告（いわゆる緊急事態宣言。
+//   国会の承認が要る）があったときだけ置けた。このため阪神・淡路大震災（1995年1月）では置かれず、非常災害対策
+//   本部（本部長 国土庁長官）で対応した。改正で布告がなくても閣議にかけて置けるようになった（設置要件の緩和）。
+//   改正では市町村長が知事に自衛隊の派遣要請を求める規定（68条の2）も加わった。非常災害対策本部は2001年1月の
+//   省庁再編までは総理府に置かれた（本部長は国務大臣＝国土庁長官）。
+//   sources: fdma.go.jp 消防白書 h20-h22（平成7年 設置要件の緩和）, jsnds.org ssk_30_2_199（改正前は布告が条件・
+//   国会承認）, bousai.go.jp 防災白書 h13・h29, bousai.go.jp 阪神・淡路の教訓 1-2-3
 //   緊急災害対策本部（本部長 内閣総理大臣）は2011年3月11日に初めて設置。非常災害対策本部の本部長は
 //   2021年5月20日施行の改正で国務大臣から内閣総理大臣に（あわせて特定災害対策本部＝本部長 防災担当大臣）。
 //   災害救助法 1947年（都道府県知事が適用）。激甚災害法 1962年（激甚災害は政令で指定＝閣議決定。復旧事業の
@@ -90,10 +110,18 @@
 //   発議から60日以後180日以内（2条）。投票権は2018年6月から18歳以上。
 //   sources: kotobank 国民投票法, japaneseclass/朝日 2007, allabout.co.jp, city.itabashi.tokyo.jp
 // - 情報公開法（行政機関の保有する情報の公開に関する法律）: 1999年成立、2001年4月1日施行。放送法4条（政治的
-//   公平）・電波法76条（無線局の運用停止）。憲法21条（表現の自由・検閲の禁止）。
+//   公平）・電波法76条（無線局の運用停止）。憲法21条（表現の自由・検閲の禁止）。番組編集準則は、2010年の改正
+//   （平成22年法律第65号、2010年12月3日公布、2011年6月30日施行）までは放送法3条の2第1項（1959年の改正から）。
+//   sources: soumu.go.jp 放送法 2006年の条文（3条の2）, shugiin.go.jp 質問答弁 b189081（4条1項）, soumu.go.jp
+//   000110961（改正法の施行）
+// - 緊急発進（スクランブル、自衛隊法84条）の年間回数（目安）: 1984年度944回（冷戦期のピーク）、1990年代半ば〜2010年
+//   前後は100〜300回（1998年220回・2003年158回）、2013年度以降はおおむね700回超（ピーク2016年度1,168回）、2023年度
+//   669回・2024年度704回。ゲームのニュースでは相手国を書かない（実在の国の代わりに架空の国を使わない）。
+//   sources: mod.go.jp 防衛白書 資料（緊急発進回数の推移）, mod.go.jp qa_86, nippon.com japan-data h02139
 // - 公務員職権濫用罪（刑法193条）: 2年以下の懲役又は禁錮（2025年6月から拘禁刑）。
 // Fictional (checked that no real country/place has these names): ネヴァロン共和国, ルーゼニア王国, ケルドア連邦,
-//   ヴェルミナ諸島; every disaster place (ドット湾北部・北ドット地方・南ドット地方・西ドット地方・ドット岳), every
+//   ヴェルミナ諸島 / ヴェルミナ海 (all placed in one invented sea far from Japan, with no compass hint that could map them
+//   onto a real neighbour); every disaster place (ドット湾北部・北ドット地方・南ドット地方・西ドット地方・ドット岳), every
 //   disaster, every NPC, every war, every regime event. The game's dictatorship is a 「もしも」 simulation.
 
 import { Game } from './game.js';
@@ -159,13 +187,15 @@ export const REGIME_INFO = {
 export const FICTION_NOTE = 'これは架空の「もしも」のシミュレーションです。実在の政党・人物・国とは関係ありません。';
 
 // FICTIONAL nations and the fictional disputed area (names checked: no real country or place).
+// All of them lie around one invented sea far from Japan (ヴェルミナ海): no compass hint relative to Japan, so none of
+// them can be read as a real neighbour.
 export const FICTIONAL_NATIONS = {
-  nevalon: { id: 'nevalon', name: 'ネヴァロン共和国', short: 'ネヴァロン', power: 62, people: 4200, desc: '（架空の国）西の海をへだてた共和国。ヴェルミナ諸島の領有を主張している。', fictional: true },
-  luzenia: { id: 'luzenia', name: 'ルーゼニア王国', short: 'ルーゼニア', power: 48, people: 2600, desc: '（架空の国）南の海の島国。漁業と海運の国で、ヴェルミナ諸島の近くに漁場をもつ。', fictional: true },
-  keldoa: { id: 'keldoa', name: 'ケルドア連邦', short: 'ケルドア', power: 90, people: 9800, desc: '（架空の国）北の大陸の大きな連邦国家。軍用機の飛来がときどき報じられる。', fictional: true },
+  nevalon: { id: 'nevalon', name: 'ネヴァロン共和国', short: 'ネヴァロン', power: 62, people: 4200, desc: '（架空の国）架空の海「ヴェルミナ海」に面した共和国。ヴェルミナ諸島の領有を主張している。', fictional: true },
+  luzenia: { id: 'luzenia', name: 'ルーゼニア王国', short: 'ルーゼニア', power: 48, people: 2600, desc: '（架空の国）ヴェルミナ海に浮かぶ島国。漁業と海運の国で、諸島の近くに漁場をもつ。', fictional: true },
+  keldoa: { id: 'keldoa', name: 'ケルドア連邦', short: 'ケルドア', power: 90, people: 9800, desc: '（架空の国）ヴェルミナ海をかこむ国々でいちばん大きな連邦国家。大きな軍をもつ。', fictional: true },
 };
 export const NATION_ORDER = Object.keys(FICTIONAL_NATIONS);
-export const DISPUTED_AREA = { id: 'vermina', name: 'ヴェルミナ諸島', desc: '（架空の係争地）無人の小さな島々。周辺の海の資源をめぐって、複数の国が領有を主張している。', fictional: true };
+export const DISPUTED_AREA = { id: 'vermina', name: 'ヴェルミナ諸島', desc: '（架空の係争地）日本から遠く離れた架空の海「ヴェルミナ海」の無人の島々。海の資源をめぐり、いくつもの国が領有を主張している。', fictional: true };
 
 // FICTIONAL disaster places. home: the player's town (ドット区, 東京都) is hit — work stops, the 知事 (東京都) requests
 // the SDF, the 区長・区議 run the 避難所.
@@ -407,19 +437,119 @@ function realPartyRefusal(g, what) {
   const who = pi.id === 'jimin' ? `${pi.name}の総務会は` : `${pi.name}は党の機関で`;
   return `${who}「${what}」を了承しなかった。党の機関の了承がなければ進められない。（このルートは架空の政党の党首だけが選べる。進めるなら、まず離党する）`;
 }
-// A real coalition partner leaves the coalition rather than take part (a neutral, lawful act).
-function realPartnersLeave(g, what) {
+// The government's parties: the PM's party (the core), every party in it, the real ones among them.
+function govParties(g) {
   const p = pol(g);
-  if (!p || !p.cabinet || !Array.isArray(p.cabinet.partyIds)) return [];
-  const gone = p.cabinet.partyIds.filter((id) => isRealParty(p, id) && id !== (meOf(g) || {}).party);
+  if (!p || !p.cabinet) return null;
+  const ids = (Array.isArray(p.cabinet.partyIds) ? p.cabinet.partyIds : []).filter(Boolean);
+  const pm = p.cabinet.pm;
+  const playerPM = pm === 'player' || isPM(g);
+  const core = playerPM ? (p.me && p.me.party) || null : pm && p.npcs && p.npcs[pm] ? p.npcs[pm].party || null : ids[0] || null;
+  return { p, ids, core, playerPM, real: ids.filter((id) => isRealParty(p, id)) };
+}
+// The real-party rule for the whole government (the player's party, the PM's party, every partner). → reason | null.
+// opts.leave: true (regime steps, press actions) → a real JUNIOR partner of the player's own fictional-party cabinet
+//   does not block: it refuses and leaves the coalition when the step is taken (realPartnersLeave);
+//   false (crackdown, curfew, war) → any real party in the government refuses.
+function realGovRefusal(g, what, opts = {}) {
+  const own = realPartyRefusal(g, what);
+  if (own) return own;
+  const G = govParties(g);
+  if (!G) return null;
+  const { p } = G;
+  if (G.core && isRealParty(p, G.core)) return `${partyName(p, G.core)}の総理と内閣は「${what}」を了承しなかった。実在の政党の内閣は、この道をとらない（閣議で決められない）`;
+  if (!G.real.length) return null;
+  const names = G.real.map((id) => partyName(p, id)).join('・');
+  if (!G.playerPM) return `連立与党の${names}が「${what}」を了承しなかった。閣議で決められず、大臣ひとりでは進められない（実在の政党は、この道をとらない）`;
+  if (!G.core) return `与党の${names}が「${what}」を了承しなかった。無所属の総理には、ほかに支える党がない（このルートは架空の政党の党首だけが選べる）`;
+  if (!opts.leave) return `連立を組む${names}が「${what}」を了承しなかった。（実在の政党は、この道をとらない。進めるなら、まず連立を解消する）`;
+  return null;
+}
+// A real junior partner of the player's fictional-party cabinet leaves the coalition rather than take part (a neutral,
+// lawful act). Never the PM's party; only when the player is the PM (otherwise realGovRefusal has refused already).
+// The vacated ministries are refilled by NPCs of the remaining parties (the politics core's formCabinet).
+function realPartnersLeave(g, what) {
+  const G = govParties(g);
+  if (!G || !G.playerPM || !G.core || isRealParty(G.p, G.core)) return [];
+  const gone = G.real.filter((id) => id !== G.core);
   if (!gone.length) return [];
-  p.cabinet.partyIds = p.cabinet.partyIds.filter((id) => !gone.includes(id));
-  for (const [post, who] of Object.entries(p.cabinet.ministers || {})) {
-    const n = p.npcs && p.npcs[who];
-    if (n && gone.includes(n.party)) { n.posts = (n.posts || []).filter((x) => x !== post); delete p.cabinet.ministers[post]; }
-  }
-  for (const id of gone) news(g, `${partyName(p, id)}は「${what}」に同意せず、連立政権から離脱した`);
+  dropPartners(g, gone, (id) => `${partyName(G.p, id)}は「${what}」に同意せず、連立政権から離脱した`);
   return gone;
+}
+// Take parties out of the cabinet (in place: callers may hold p.cabinet.partyIds) and refill their ministries.
+function dropPartners(g, gone, line) {
+  const p = pol(g);
+  if (!p || !p.cabinet || !Array.isArray(p.cabinet.partyIds) || !gone.length) return;
+  const C = p.cabinet;
+  for (let i = C.partyIds.length - 1; i >= 0; i--) if (gone.includes(C.partyIds[i])) C.partyIds.splice(i, 1);
+  const vacated = [];
+  const keep = {};
+  for (const [post, who] of Object.entries(C.ministers || {})) {
+    const n = p.npcs && p.npcs[who];
+    if (n && gone.includes(n.party)) { n.posts = (n.posts || []).filter((x) => x !== post); vacated.push(post); }
+    else if (who) keep[post] = who;
+  }
+  for (const id of gone) news(g, typeof line === 'function' ? line(id) : `${partyName(p, id)}は連立政権から離脱した`);
+  if (!vacated.length) return;
+  // the player's cabinet: the politics core appoints the successors (NPCs of the remaining coalition parties)
+  let done = false;
+  if (C.pm === 'player' && typeof g.formCabinet === 'function') {
+    try { const res = g.formCabinet({ ministers: keep }); done = !!(res && res.ok); } catch (e) { console.error(e); }
+  }
+  if (!done) {
+    // fallback (no politics API): Diet members of the remaining parties without a cabinet post
+    const P = POL && POL.POSTS;
+    const busy = new Set(Object.values(C.ministers || {}));
+    for (const post of vacated) {
+      const n = Object.values(p.npcs || {}).find((x) => x && C.partyIds.includes(x.party) && (x.office === 'shugi' || x.office === 'sangi') && x.id !== C.pm && !busy.has(x.id) && !(x.posts || []).some((y) => (P ? P[y] && P[y].kind === 'cabinet' : /^minister_|^kanbo$/.test(y))));
+      if (n) { C.ministers[post] = n.id; n.posts = [...(n.posts || []), post]; busy.add(n.id); } else delete C.ministers[post];
+    }
+  }
+  news(g, `離脱した党の閣僚${vacated.length}人に代わり、残る与党から新しい大臣が任命された`);
+}
+// The real-party rule for coalitions: may the real party partyId be part of this government now? → reason | null.
+// opts.core: the coalition's core (the PM's party) when known (default: the player's government / party);
+// opts.partner: the party joining the core (joinCoalition: the player's party joins a real core).
+// A real party never governs in an emergency or a dictatorship; it does not join (or come back to) the player's
+// side while an authoritarian amendment is pending or in force under the player, nor within two years of an
+// authoritarian / press step by the player (or at all during the premiership in which one was taken).
+// NPC-led coalitions without the player's party are ordinary politics (only the regime matters).
+export function regimeCoalitionBlock(g, partyId, opts = {}) {
+  const p = pol(g);
+  if (!p || !partyId || !isRealParty(p, partyId)) return null;
+  const r = R(g);
+  const name = partyName(p, partyId);
+  if (r.id !== 'democracy') return `${name}は、${REGIME_INFO[r.id].name}（もしも）のもとの政府には加わらない（実在の政党は、この道をとらない）`;
+  const mine = p.me && p.me.party;
+  const involved = opts.core == null || (mine && (opts.core === mine || opts.partner === mine)) || (!mine && isPM(g) && opts.core == null);
+  if (!involved) return null;
+  if (r.amend && r.amend.stage === 'referendum') return `${name}は、強権型の緊急事態条項の国民投票を控えた政権とは連立を組まない`;
+  if (r.steps.clause && isPM(g)) return `${name}は、強権型の緊急事態条項を憲法に加えた政権とは連立を組まない`;
+  const formed = isPM(g) && p.cabinet ? num(p.cabinet.formed, 0) : Infinity;
+  const recent = (r.record.steps || []).filter((s) => s && (today(g) - num(s.day) < 2 * YEAR_DAYS || num(s.day) >= formed));
+  if (recent.length) return `${name}は、「${recent[recent.length - 1].step}」をおこなった${(g.state && g.state.name) || ''}氏の側とは連立を組まない（実在の政党は、この道をとらない）`;
+  return null;
+}
+// The coalition filter for the politics core (chooseCoalition / the coalition screen): the partners that may join the
+// core, and the refused ones with the reason. A real core also refuses the player's party when the rule applies.
+function coalitionFilter(g, core, partners = []) {
+  const p = pol(g);
+  const mine = p && p.me && p.me.party;
+  const out = [], refused = [];
+  for (const id of partners || []) {
+    let why = regimeCoalitionBlock(g, id, { core });
+    if (!why && id && id === mine && p && isRealParty(p, core)) why = regimeCoalitionBlock(g, core, { core, partner: id });
+    if (why) refused.push({ id, why }); else out.push(id);
+  }
+  return { core, partners: out, refused };
+}
+// Every new / changed cabinet (首班指名・組閣・連立): a real party that may not be in it leaves (never the core).
+function enforceCoalition(g) {
+  const G = govParties(g);
+  if (!G || !G.real.length) return;
+  const bad = G.real.filter((id) => id !== G.core && regimeCoalitionBlock(g, id, { core: G.core || undefined }));
+  if (!bad.length) return;
+  dropPartners(g, bad, (id) => `${partyName(G.p, id)}は連立に加わらなかった（${regimeCoalitionBlock(g, id, { core: G.core || undefined })}）`);
 }
 
 // ======================================================================== consequences of a step

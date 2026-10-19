@@ -500,6 +500,8 @@ export const AREA_ORDER = Object.keys(POLICY_AREAS);
 // ext: costOf(params, ctx), check(pol, params) -> reason|null, apply(pol, params, g) (state change).
 // Trade-offs are on purpose: every policy pleases some segments and costs others.
 export const POLICIES = {};
+// The game year that era-dependent names follow (set by ensurePol once per game day; reiwa until a game is loaded).
+const NAMES_AT = { st: null, day: null, fy: 2026 };
 const sc = (o, k) => { const r = {}; for (const [s, v] of Object.entries(o || {})) r[s] = Math.round(v * k * 10) / 10; return r; };
 // ext (review): a law that adds to the deficit (cost > 0, 兆円/年) is paid for by the future
 // (将来世代へのつけ). Segments that weigh that cost lose a little support per 兆円 (capped), so a
@@ -851,11 +853,15 @@ policy('public_works_cut', 'regional', '公共事業の削減', '公共事業を
   costOf: (p) => -p.amount, scale: (p) => p.amount / 2,
   seg: { urban: 3, young: 2, floating: 2, rural: -4, selfemployed: -2, business: -1 }, eco: { growth: -0.08, unemployment: 0.05 },
 });
-policy('disaster_prep', 'disaster', '防災・減災（国土の強靱化）', '堤防や耐震化など、災害に強い国づくりを進める。', {
+policy('disaster_prep', 'disaster', '防災・減災（災害に強い国土づくり）', '堤防や耐震化など、災害に強い国づくりを進める。', {
   params: [{ key: 'amount', name: '規模', min: 1, max: 5, step: 1, unit: '兆円', def: 2 }], ideo: { econ: -0.4, security: 0.3 }, ministry: 'minister_transport',
   costOf: (p) => p.amount, scale: (p) => p.amount / 2, lasting: 5,
   seg: { rural: 3, elderly: 2, selfemployed: 2, families: 1, young: -1 }, eco: { growth: 0.08 },
 });
+// 「国土強靱化」 is a word of 2012-2013 (国土強靱化担当大臣 2012-12-26; 国土強靱化基本法 成立 2013-12-04, 公布・施行
+// 12-11; cao.go.jp 古屋大臣会見 2013-12-06, japaneselawtranslation 2354). The name follows the game's year (a getter, so
+// every reader of POLICIES.disaster_prep.name sees the era's name; NAMES_AT is refreshed by ensurePol).
+Object.defineProperty(POLICIES.disaster_prep, 'name', { get: () => (NAMES_AT.fy >= 2013 ? '防災・減災（国土強靱化）' : '防災・減災（災害に強い国土づくり）'), enumerable: true, configurable: true });
 policy('reconstruction', 'disaster', '被災地の復興支援', '災害からの復旧・復興に予算と人を集中する。', {
   ideo: {}, ministry: 'minister_reconstruction', cost: 2, lasting: 3,
   check: (pol) => (pol.flags.disasterDay ? null : '大きな災害が起きたときの政策'),
@@ -2438,6 +2444,26 @@ function cabinetPartyOfPM(p) {
   if (pm === 'player') return p.me.party;
   return pm && p.npcs[pm] ? p.npcs[pm].party : (p.cabinet.partyIds || [])[0] || null;
 }
+// ext (the real-party rule, CONTEXT.md / BRIEF.md 1): does the government include a real party (自民・民主) in any
+// role — the PM's party or a coalition partner? The cores keep real parties out of conduct the game presents as
+// wrong with this one check (govt.js: 強行採決, デモの強制排除, a religious group's 組織票; regime.js: its steps).
+// Exported, and on the Game as g.govIncludesRealParty().
+export function govIncludesRealParty(p) {
+  if (!p || !p.cabinet) return false;
+  let core = null;
+  try { core = cabinetPartyOfPM(p); } catch (e) { core = null; }
+  const ids = new Set([...(Array.isArray(p.cabinet.partyIds) ? p.cabinet.partyIds : []), core].filter(Boolean));
+  for (const id of ids) if ((p.parties && p.parties[id] && p.parties[id].real) || (PARTY_DEFS[id] && PARTY_DEFS[id].real)) return true;
+  return false;
+}
+// ねじれ国会: the ruling parties hold a majority of the 衆院 but not of the 参院. Recomputed whenever the coalition or the
+// seats change (game start, 参院選, cabinet / coalition changes, the weekly poll), so the flag never lags the seats.
+function nejireNow(p) {
+  if (!p || !p.cabinet || !p.diet || !p.diet.shugi || !p.diet.sangi) return false;
+  const ids = Array.isArray(p.cabinet.partyIds) ? p.cabinet.partyIds : [];
+  const sum = (H) => ids.reduce((a, id) => a + num(H.seats && H.seats[id]), 0);
+  return sum(p.diet.shugi) > num(p.diet.shugi.total) / 2 && sum(p.diet.sangi) <= num(p.diet.sangi.total) / 2;
+}
 
 function runTouitsu(g, p, e, fy) {
   p.flags.touitsuYear = Math.floor(fy);
@@ -3836,6 +3862,8 @@ function ensurePol(g) {
   if (!st.politics || typeof st.politics !== 'object') st.politics = newPoliticsState(g);
   else if (!st.politics._ok) { st.politics = normalizePolitics(g, st.politics); }
   Object.defineProperty(st.politics, '_ok', { value: true, enumerable: false, configurable: true, writable: true });
+  // the year names follow (POLICIES[id].name getters, e.g. disaster_prep): refreshed once per game day
+  if (NAMES_AT.st !== st || NAMES_AT.day !== st.day) { NAMES_AT.st = st; NAMES_AT.day = st.day; try { NAMES_AT.fy = fyNow(g); } catch (e) { /* keep the last year */ } }
   return st.politics;
 }
 function seatMove(p, house, from, to) {
@@ -4303,7 +4331,7 @@ function localCouncilCheck(g, p, day, excused) {
 }
 // The entertainment side (review): broadcasters keep candidates off the air during the official
 // campaign (公職選挙法151条の5: no campaigning by broadcast except 政見放送; 放送法4条 political
-// fairness), and a minister / the PM puts TV and radio work aside while in office. Stage and event
+// fairness — 3条の2 before the 2010 amendment took effect in 2011), and a minister / the PM puts TV and radio work aside while in office. Stage and event
 // work stay possible. Read by the job wrapper (installPolitics) and g.politicsRefusal.
 const MEDIA_RE = /^(prog_|regular_)|(^|_)(tv|cm|drama|radio|news|kanmuri|quiz|wipe|loke|maesetsu|kanran|report|voice|special|kansai_local|morning_drama|model_cm|cm_extra|conte_tv|radio_guest)($|_)/;
 const TV_PLACES = new Set(['nhk', 'ntv', 'tbs', 'tvasahi', 'fujitv', 'tvtokyo', 'mbs', 'ktv', 'bs_yoshimoto']);
@@ -4332,7 +4360,9 @@ function politicsRefusalImpl(g, kind = 'job', def = {}) {
   const e = campaigningNow(p, day);
   if (e) {
     excuse();
-    return [`（いまは${e.label}の選挙期間中。候補者は、テレビやラジオの番組には出られない）`, '（選挙運動に放送を使えるのは政見放送など決まったものだけ（公職選挙法151条の5）。放送局は政治的公平（放送法4条）も守るため、選挙期間中は候補者を番組に出さない。\n舞台やイベントの仕事なら、できる）'];
+    // 番組編集準則: 放送法3条の2 until the 2010 amendment (平成22年法律第65号, in force 2011-06-30), 4条 since
+    const hosoArt = fyNow(g) >= 2011.5 ? '放送法4条' : '放送法3条の2';
+    return [`（いまは${e.label}の選挙期間中。候補者は、テレビやラジオの番組には出られない）`, `（選挙運動に放送を使えるのは政見放送など決まったものだけ（公職選挙法151条の5）。放送局は政治的公平（${hosoArt}）も守るため、選挙期間中は候補者を番組に出さない。\n舞台やイベントの仕事なら、できる）`];
   }
   if (inCabinet(p.me)) {
     excuse();
