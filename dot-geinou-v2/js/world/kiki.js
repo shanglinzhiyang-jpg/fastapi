@@ -13,9 +13,9 @@
 //   text }, headline?, numbers?, bySeg?, front?, home? }
 
 import { SW, SH, clamp, hash2 } from '../engine/util.js';
-import { text, measure, panel, wrap, COLORS } from '../engine/draw.js';
+import { text, measure, panel, wrap, downArrow, COLORS } from '../engine/draw.js';
 import { registerPhoneApp } from '../engine/life.js';
-import { phoneList, phoneInfo, phoneConfirm } from '../engine/phone.js';
+import { phoneList, phoneInfo, phoneConfirm, phoneText, PC } from '../engine/phone.js';
 import { audio } from '../engine/audio.js';
 import {
   KIKI, REGIME_INFO, FICTIONAL_NATIONS, NATION_ORDER, DISPUTED_AREA, FICTION_NOTE, downfallText, recordLines,
@@ -25,6 +25,51 @@ const R = (ctx, x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(Math.rou
 const n0 = (n) => Math.max(0, Math.round(Number(n) || 0)).toLocaleString('ja-JP');
 const ART_H = SH - 100; // the message window covers the bottom 96 px
 const SEG_SHORT = { young: '若者', families: '子育て', elderly: '高齢者', employees: '会社員', selfemployed: '自営業', business: '経営者', farmers: '農林漁', unions: '労組', urban: '都市', rural: '地方', floating: '無党派' };
+
+// ======================================================================== Japanese line breaking (numbers kept whole)
+// A number keeps its unit and is never split across lines (「5,260人」「1.2兆円」「48／100」「M7.2」), a closing mark or a
+// small kana never starts a line (the last character goes down with it), an opening bracket never ends one. Every
+// line fits the width, so the game's own wrap (draw.js, character by character) never has to break it again.
+// (The same rules as assist.js wrapJ; kept here so kiki.js works without assist.js.)
+const MSG_W = SW - 64; // the message window's text width (ui.js: BOX.w - 40), 16 px
+const NO_START = new Set('、。，．・：；？！ー～…‥）」』】〕〉》’”ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ!?.,)]}%％'.split(''));
+const NO_END = new Set('（「『【〔〈《‘“([{'.split(''));
+const TOKEN = /⁠?[−\-]?[0-9０-９]+(?:[.,][0-9]+)*(?:[／/][0-9]+)?(?:分の[0-9]+|[%％年月日歳人分万億兆円倍回本条号割棟件隻機台]+)?|[A-Za-z0-9.,:%/+\-#'’]+|\s+|./gu;
+export function jwrap(c, str, w, size = 12) {
+  measure(c, '', size); // sets the font
+  const W = (s0) => c.measureText(s0).width;
+  const out = [];
+  for (const par of String(str ?? '').split('\n')) {
+    const toks = par.match(TOKEN) || [];
+    let line = '';
+    const hardSplit = (s0) => { for (const ch of Array.from(s0)) { if (line && W(line + ch) > w) { out.push(line); line = ''; } line += ch; } };
+    for (const t of toks) {
+      if (!line && /^\s+$/.test(t) && out.length) continue;
+      if (W(line + t) <= w) { line += t; continue; }
+      if (!line) { hardSplit(t); continue; }
+      let carry = '';
+      if (Array.from(t).length === 1 && NO_START.has(t)) {
+        const a0 = Array.from(line);
+        let k = a0.length - 1;
+        while (k > 0 && NO_START.has(a0[k])) k--;
+        if (k > 0) { carry = a0.slice(k).join(''); line = a0.slice(0, k).join(''); } else { line += t; continue; }
+      }
+      while (line.length > 1 && NO_END.has(line[line.length - 1])) { carry = line[line.length - 1] + carry; line = line.slice(0, -1); }
+      out.push(line.replace(/\s+$/, ''));
+      line = '';
+      const rest = carry + (/^\s+$/.test(t) ? '' : t);
+      if (W(rest) > w) hardSplit(rest); else line = rest;
+    }
+    out.push(line);
+  }
+  return out;
+}
+// A page of the message window, line-broken as above ({name} and the era's money already applied: g.fmt is idempotent).
+function wrapPage(g, s) {
+  if (s == null || !g || !g.ctx) return s;
+  try { return jwrap(g.ctx, typeof g.fmt === 'function' ? g.fmt(s) : String(s), MSG_W, 16).join('\n'); } catch (e) { console.error(e); return s; }
+}
+const sayJ = (g, pages) => g.say([].concat(pages).filter((p) => p != null).map((p) => wrapPage(g, p)));
 
 // ======================================================================== drawing kit
 function sky(ctx, top, bottom, h = ART_H, steps = 12) {
@@ -413,10 +458,10 @@ async function showSpec(g, spec) {
   if (['quake', 'tsunami'].includes(spec.art) && spec.home && typeof g.shake === 'function') g.shake(50, 3);
   if (spec.alert) { try { audio.sfx('buzz'); } catch (e) { /* no audio */ } }
   try {
-    if (spec.pages && spec.pages.length) await g.say(spec.pages);
+    if (spec.pages && spec.pages.length) await sayJ(g, spec.pages);
     let v = null;
     if (spec.options && spec.options.length) {
-      const i = await g.ask(spec.prompt || 'どうする？', spec.options.map((o) => o.label), { cancel: spec.options.length - 1 });
+      const i = await g.ask(wrapPage(g, spec.prompt || 'どうする？'), spec.options.map((o) => o.label), { cancel: spec.options.length - 1 });
       v = spec.options[i] ? spec.options[i].value : null;
     }
     // the outcome of the choice is told while the scene is still up
@@ -458,17 +503,17 @@ async function downfall(g, rec) {
   const sq = new DownfallScene(g, rec, 'square');
   g.push(sq);
   try {
-    await g.say([lines[0], lines[1]]);
+    await sayJ(g, [lines[0], lines[1]]);
   } finally { g.pop(sq); }
   const pp = new DownfallScene(g, rec, 'paper');
   g.push(pp);
   try {
-    await g.say(lines[2]);
+    await sayJ(g, lines[2]);
   } finally { g.pop(pp); }
   const bk = new DownfallScene(g, rec, 'black');
   g.push(bk);
   try {
-    await g.say([lines[3], `（${FICTION_NOTE}）`]);
+    await sayJ(g, [lines[3], `（${FICTION_NOTE}）`]);
   } finally { g.pop(bk); }
 }
 
@@ -509,13 +554,36 @@ class RecordScene {
 function record(g, rec) { return new Promise((resolve) => g.push(new RecordScene(g, rec, resolve))); }
 
 KIKI.show = showSpec;
+KIKI.wrap = wrapPage;
 KIKI.downfall = downfall;
 KIKI.record = record;
 
 // ======================================================================== the phone app 「危機管理」
 const APP_COLOR = '#8a3a4a';
 const short = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s));
-async function info(g, title, lines) { await phoneInfo(g, { title, color: APP_COLOR, lines }); }
+// An info page of the app. Drawn here (same look and scrolling as phone.js infoView) so that no number is broken
+// across lines (「けが人5,260人」「住宅被害52,143棟」 stay whole).
+async function info(g, title, lines) {
+  const src = [].concat(lines).filter((l) => l != null).join('\n');
+  let cache = null;
+  await phoneInfo(g, {
+    title, color: APP_COLOR, lines,
+    draw(c, a, view) {
+      const w = a.w - 20;
+      if (!cache || cache.w !== w) cache = { w, ls: jwrap(c, g.fmt(src), w, 12) };
+      const ls = cache.ls;
+      view.maxScroll = Math.max(0, ls.length * 16 + 16 - a.h);
+      view.sy = clamp(view.sy || 0, 0, view.maxScroll);
+      c.save();
+      c.beginPath();
+      c.rect(a.x, a.y, a.w, a.h);
+      c.clip();
+      ls.forEach((l, i) => { const y = a.y + 8 + i * 16 - view.sy; if (y > a.y - 16 && y < a.y + a.h) phoneText(c, l, a.x + 10, y, 12, PC.text); });
+      c.restore();
+      if (view.maxScroll > 0 && view.sy < view.maxScroll) downArrow(c, a.x + a.w - 14, a.y + a.h - 10, g.frame || 0, PC.dim);
+    },
+  });
+}
 // a list of actions: [{ id, name, desc, why }] → run(id) on a pick (a refused one explains why)
 async function actionList(g, title, getList, run, opts = {}) {
   let index = 0;

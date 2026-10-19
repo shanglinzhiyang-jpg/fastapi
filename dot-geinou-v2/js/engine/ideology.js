@@ -424,7 +424,7 @@ export const IDEOLOGIES = {
     axes: AX(0, 1.0, 1.0, 1.0, -0.4, -1.0, 0.3),
     summary: 'ヒトラーが率いたナチ党の思想。\n人種差別と独裁で、ホロコーストと\n侵略戦争を引き起こした。',
     ideas: ['人種差別（反ユダヤ主義）を国の中心に置いた', '指導者への絶対服従と一党独裁', '侵略による領土の拡大', '言論・芸術・教育の全面的な統制'],
-    history: ['1920年 ナチ党が党名を名のる', '1933年1月 ヒトラーが首相に', '　3月 全権委任法（政府だけで法律をつくれる法）', '1935年 ニュルンベルク法でユダヤ人を差別', '1938年11月 「水晶の夜」の迫害（はくがい）', '1939年 ポーランド侵攻、第二次世界大戦'],
+    history: ['1920年 ナチ党が党名を名のる', '1933年1月 ヒトラーが首相に。', '　3月 全権委任法（政府だけで法律をつくれる法）', '1935年 ニュルンベルク法でユダヤ人を差別', '1938年11月 「水晶の夜」の迫害（はくがい）', '1939年 ポーランド侵攻、第二次世界大戦'],
     record: ['ホロコーストで約600万人のユダヤ人が殺害された', 'ロマ、障害のある人、政治犯なども迫害・殺害', '障害者を殺害した「T4作戦」（1939〜41年）', '　では少なくとも7万人が殺された', '1945年 敗戦。ニュルンベルク裁判で指導者が裁かれた', '戦後のドイツではナチスの象徴の使用を禁止'],
     pro: ['（当時の宣伝）不況と敗戦からの', '　「復活」を約束して支持を集めた'],
     con: ['人種差別にもとづく大量虐殺を行った', '侵略戦争で数千万人が犠牲になった', '自由・人権・法の支配を完全に否定した'],
@@ -606,7 +606,7 @@ export const COMMUNISM_SCHOOLS = {
     summary: '北朝鮮の公式の思想。「自主・自立・\n自衛」をかかげるが、実際は指導者\n一家への絶対的な忠誠を求める。',
     ideas: ['思想の自主、経済の自立、国防の自衛', '指導者「首領（しゅりょう）」が人民を導くとする', '軍事を最優先する路線', '世襲による権力の継承'],
     history: ['1955年 金日成が演説で「主体」を強調', '1972年 憲法に公式の思想として記す', '1994年 金日成が死去、権力は子へ世襲', '1990年代半ば 大飢饉'],
-    record: ['1990年代の飢饉で推計数十万〜100万人前後が死亡', '国連の調査委員会（2014年）が', '　「人道に対する罪」を認定', '政治犯収容所、移動や言論の自由の欠如', '2002年 日本人の拉致を認めた（政府認定の被害者17人）', '2006年から 核・ミサイル開発で国連安保理の制裁'],
+    record: ['1990年代の飢饉で推計数十万〜100万人前後が死亡', '国連の調査委員会（2014年）が', '　「人道に対する罪」を認定', '政治犯収容所、移動や言論の自由の欠如', '2002年 日本人の拉致を認めた（政府認定の被害者17人）', '2006年から 核・ミサイル開発で国連安保理が制裁'],
     pro: ['（公式の主張）大国から自立した国づくり'],
     con: ['世襲の独裁と個人崇拝', '深刻な人権侵害と経済の困窮'],
     related: ['stalinism', 'hoxhaism', 'authoritarianism'],
@@ -723,12 +723,13 @@ export const ideologyName = (id) => (ideologyById(id) ? ideologyById(id).name : 
 export const isSelectable = (id) => !!(ideologyById(id) && ideologyById(id).selectable);
 
 // ---------------------------------------------------------------- era: lines later than the game year
-// The latest year a line (with its '　' continuation lines) talks about: 4-digit years, and ranges
-// written with a short end ('1973〜90年' → 1990, '1920〜30年代' → 1930). 0 when it names no year.
+// The latest year a line (with its '　' continuation lines) talks about: 4-digit years (followed by 年
+// or a range 〜, so 「1500万人」「3000人」 are not years), and ranges written with a short end
+// ('1973〜90年' → 1990, '1920〜30年代' → 1930). 0 when it names no year.
 export function lineYear(s) {
   const t = String(s || '');
   let m = 0;
-  for (const x of t.matchAll(/(\d{4})/g)) m = Math.max(m, Number(x[1]));
+  for (const x of t.matchAll(/(\d{4})(?=年|〜)/g)) m = Math.max(m, Number(x[1]));
   for (const x of t.matchAll(/(\d{2})\d{2}(?:年代)?〜(\d{2})(?=年)/g)) m = Math.max(m, Number(x[1] + x[2]));
   return m;
 }
@@ -755,7 +756,7 @@ export function linesForYear(lines, year = null, opts = {}) {
 // An entry split into short sections for a small-screen reader:
 // [{ key, title, tab, lines[], hidden }] (summary, ideas, history, record, pro, con, related, sources).
 // Titles are neutral: 「実際に起きたこと」 (never 成果・失敗). For the two entries that cannot be chosen
-// (ファシズム・ナチズム) the pro / con sections are 「当時の宣伝（どう支持を集めたか）」 and 「批判・歴史の
+// (ファシズム・ナチズム) the pro / con sections are 「当時の宣伝（支持の集め方）」 and 「批判・歴史の
 // 評価」 — there is no "supporters' voice" for them. year (the game year, optional): lines about later
 // events are left out (opts.showFuture: kept and marked). `hidden` = items left out / marked.
 export function ideologySections(id, year = null, opts = {}) {
@@ -770,7 +771,7 @@ export function ideologySections(id, year = null, opts = {}) {
     sec('ideas', '主な考え', '考え', yl(e.ideas)),
     sec('history', '歴史', '歴史', yl(e.history)),
     sec('record', '実際に起きたこと', '記録', yl(e.record)),
-    sec('pro', prop ? '当時の宣伝（どう支持を集めたか）' : '支持する人の考え', prop ? '宣伝' : '支持', yl(e.pro)),
+    sec('pro', prop ? '当時の宣伝（支持の集め方）' : '支持する人の考え', prop ? '宣伝' : '支持', yl(e.pro)),
     sec('con', prop ? '批判・歴史の評価' : '批判する人の考え', '批判', yl(e.con)),
     sec('related', '関連する思想', '関連', { lines: e.related.map(ideologyName).filter(Boolean), hidden: 0 }),
     sec('sources', '出典', '出典', { lines: e.sources.map((x) => x.title), hidden: 0 }),

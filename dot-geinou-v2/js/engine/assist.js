@@ -85,12 +85,13 @@ function polState(g) { if (!g || !g.state || typeof g.pol !== 'function') return
 const AMEND_NAMES = { amend_sdf: '自衛隊の明記', amend_emergency: '緊急事態条項', amend_education: '教育の無償化', amend_environment: '環境権' };
 function glossCtx(g) {
   if (!g || !g.state) return null;
-  const key = `${g.state.day}`;
+  const p = polState(g);
+  // recomputed when the day, the 消費税 rate, the laws or the flags change (a bill passed today)
+  const key = `${g.state.day}|${p ? `${p.economy && p.economy.taxRate}|${(p.laws || []).length}|${Object.keys(p.flags || {}).length}` : '-'}`;
   if (g._naviCtx && g._naviCtx.key === key && g._naviCtx.st === g.state) return g._naviCtx.c;
   const yr = yearOf(g);
   const era = (g.state.profile && g.state.profile.era) || 'reiwa';
   const c = { year: yr, month: safe(() => (typeof g.polDate === 'function' ? g.polDate().month : null), null), startYear: ERA_BASE[era] || 2026 };
-  const p = polState(g);
   if (p) {
     const F = p.flags || {};
     if (p.economy && Number.isFinite(Number(p.economy.taxRate))) c.taxRate = Number(p.economy.taxRate);
@@ -280,11 +281,11 @@ export const TIPS = {
   nagatacho: { lv: 2, text: () => 'ここは永田町。国会議事堂、首相官邸、党本部が集まる、日本の政治の中心だよ。' },
   kokkai: { lv: 2, text: () => '国会議事堂の参観ロビー。見学（参観）はだれでも無料。国会の会期中は、本会議の傍聴もできるよ。' },
   kuyakusho: { lv: 1, text: () => '区役所の2階は選挙管理委員会。立候補の届出や、選挙のときの投票ができるよ。' },
-  senkan: { lv: 2, text: () => 'ここが選挙管理委員会。立候補の届出は、告示（公示）の日まで。供託金もここで納めるよ。' },
+  senkan: { lv: 2, text: () => `ここが選挙管理委員会。立候補の届出は本来、公示・告示の日だけ（ゲームでは投票日の${FILING_DAYS()}日前から受付）。供託金もここで納めるよ。` },
   senkan_counter: { lv: 3, text: '' },
   kokkai_bocho: { lv: 3, text: '' },
   party_hq: { lv: 2, text: () => '党本部の1階で入党できるよ。2階の選挙対策本部では、選挙の「公認」をお願いできる。' },
-  myparty_hq: { lv: 2, text: () => '自分の党をつくるなら、ここ。国会議員5人以上か、得票率2%で「政党」と認められるよ（政党要件（せいとうようけん））。' },
+  myparty_hq: { lv: 2, text: (g) => `自分の党をつくるなら、ここ。国会議員5人以上か、国会議員1人以上で得票率2%以上あると、${yearOf(g) >= 1994 ? '「政党」と認められるよ（政党要件（せいとうようけん））' : 'このゲームでは「政党」として扱われるよ'}。` },
   kantei: { lv: 2, text: () => '首相官邸。総理大臣が仕事をするところで、閣議や記者会見もここで行われるよ。' },
   saibansho: { lv: 2, text: () => '裁判は公開が原則（憲法82条）。法廷の傍聴は、だれでもできるよ。' },
   keisatsu: { lv: 1, text: () => '警察署。逮捕には、原則として裁判官の令状がいるんだ。困りごとの相談もできるよ。' },
@@ -298,7 +299,7 @@ export const TIPS = {
   dissolve: { lv: 2, text: () => '衆議院が解散！40日以内に総選挙だよ。立候補するなら、公示日までに届出を。' },
   session: { lv: 1, text: () => '国会が始まったよ。法律案は、委員会で審査してから本会議で採決するんだ。' },
   vote_day: { lv: 2, text: () => '今日は投票日！区役所2階の投票所で投票できるよ。' },
-  filing_open: { lv: 2, text: () => '選挙の届出の受付が始まったよ。立候補するなら、区役所の選管か党本部へ。' },
+  filing_open: { lv: 2, text: () => `選挙の届出の受付が始まったよ（本来の届出は公示・告示の日。ゲームでは投票日の${FILING_DAYS()}日前から受け付ける）。立候補するなら、区役所の選管か党本部へ。` },
   quiz_done: { lv: 1, text: () => '結果は目安だよ。考えは変わっていいし、どれが正しいということもないんだ。' },
   // for the government console (js/engine/govt_ui.js) and the regime / security screens
   govt_open: { lv: 2, text: () => '政府の中枢の画面。予算・税・省庁・世論が一度に見られるよ。わからない言葉は「？」で用語じてんへ。' },
@@ -518,7 +519,7 @@ function sinceLabel(e, yr, ctx = null) {
   const since = termSince(e, yr, ctx), until = termUntil(e, yr, ctx);
   if (st === 'future') return { text: `この時代にはまだない（${since || '―'}〜）`, color: '#b05a2a' };
   if (st === 'past') return { text: `いまはない（${until || 'かつてあった'}）`, color: '#6a6a7a' };
-  if (since) return { text: `${since}から`, color: '#2a7a6a' };
+  if (since) return { text: /た$/.test(since) ? since : `${since}から`, color: '#2a7a6a' };
   return null;
 }
 // The card's kana and since label share a row only when both fit; otherwise the label gets its own row.
@@ -712,7 +713,7 @@ export function adviceItems(g) {
             else add(81, `${open.label}の届出を受付中（${dateText(g, open.koji)}まで）。`, `立候補するなら、区役所2階の選挙管理委員会か、党本部の選挙対策本部へ。供託金は${fmtMoney(dep)}。`, { politics: 'elections' });
           } else if (ok.length) {
             const e = ok[0];
-            add(44, `つぎは${e.label}（投票 ${dateText(g, e.day)}）。`, `届出の受付は、投票日の${fd}日前から${kojiWord(e.kind)}の日まで。それまでに政党の公認をめざそう。`, { politics: 'elections' });
+            add(44, `つぎは${e.label}（投票 ${dateText(g, e.day)}）。`, `本来の届出は${kojiWord(e.kind)}の日。ゲームでは投票日の${fd}日前から受け付ける。それまでに政党の公認をめざそう。`, { politics: 'elections' });
           }
         }
         if (!me.party && age >= va) {
@@ -1131,7 +1132,7 @@ function drawRow(c, it, x, y, w, rh, sel) {
 //   chip(ph, i, label), tabs: [{ label, body() | items() + pick(ph, i) }], hint }
 function pageView(g, o) {
   const v = {
-    title: o.title, color: o.color || NC, cancel: -1, sy: 0, chip: 0, tab: o.tab | 0, li: 0, maxScroll: 0,
+    title: o.title, color: o.color || NC, cancel: -1, sy: 0, chip: 0, tab: o.tab | 0, li: 0, maxScroll: 0, opts: o,
     hint: () => {
       const tabs = o.tabs && o.tabs.length;
       const t = tabs ? o.tabs[v.tab | 0] : null;
@@ -1561,15 +1562,16 @@ async function openIdeology(g, ph, id) {
   const secs = typeof IDEO.ideologySections === 'function' ? IDEO.ideologySections(id, yr, { showFuture: !!a.showFuture }) : [];
   const sec = (key, fb) => secs.find((x) => x.key === key) || fb;
   const fbLines = (k) => ({ lines: [].concat(d[k] || []), hidden: 0 });
-  const later = (x) => (x.hidden ? `\n（${a.showFuture ? `「${IDEO.FUTURE_MARK ? IDEO.FUTURE_MARK.replace(/[（）]/g, '') : 'ゲームの年より後のできごと'}」の印は、${yr}年より後のこと` : `${yr}年より後のできごとは、のせていない（設定の「この時代にない用語」で表示できる）`}）` : '');
+  const later = (x) => (!x.hidden ? '' : a.showFuture ? `\n（「ゲームの年より後のできごと」の印は、${yr}年より後のこと）`
+    : `\n（${yr}年より後のできごとは、のせていない。ナビの設定の「この時代にない用語」で表示できる）`);
   const body = (key, title, fb) => () => { const x = sec(key, { title, ...fbLines(fb) }); return `【${x.title}】\n${listText(x.lines)}${later(x)}`; };
   const supportNote = prop ? '' : '\n※その思想を支持する人が、どう考えるかの紹介。どの思想が正しいということはない。';
   const tabs = [
-    { label: '概要', body: () => `${String(d.summary || '').replace(/\s*\n\s*/g, '')}${note}${src.length ? `\n【出典】\n${src.map((s) => `・${s}`).join('\n')}` : ''}` },
+    { label: '概要', body: () => `${String(d.summary || '').replace(/\s*\n\s*/g, '')}${note}${src.length ? `\n【出典】\n${src.map((s) => `・${s}`).join('\n')}${yr < 2026 ? '\n（出典は2026年に調べた資料。ゲームの年より後のことも書かれている）' : ''}` : ''}` },
     { label: '考え', body: body('ideas', '主な考え', 'ideas') },
     { label: '歴史', body: body('history', '歴史', 'history') },
     { label: '記録', body: body('record', '実際に起きたこと', 'record') },
-    { label: prop ? '宣伝' : '支持', body: () => body('pro', prop ? '当時の宣伝（どう支持を集めたか）' : '支持する人の考え', 'pro')() + supportNote },
+    { label: prop ? '宣伝' : '支持', body: () => body('pro', prop ? '当時の宣伝（支持の集め方）' : '支持する人の考え', 'pro')() + supportNote },
     { label: '批判', body: body('con', prop ? '批判・歴史の評価' : '批判する人の考え', 'con') },
     { label: '関連', items: () => rel.map((r) => ideoName(r)), empty: '（関連する項目はない）', pick: (ph2, i) => { openIdeology(g, ph2, rel[i]); } },
   ];
@@ -1638,8 +1640,10 @@ function quizCompute(g, qs, answers) {
   for (const k of Object.keys(max)) axes[k] = max[k] > 0 ? clamp(sum[k] / max[k], -1, 1) : 0;
   let top = [];
   let res = null;
+  // taking the quiz changes nothing in the game: the result is only shown. The player may choose
+  // afterwards, on the result screen, to let it move their own ideology (applyQuiz, with a warning).
   if (typeof g.ideologyQuizResult === 'function') {
-    try { res = g.ideologyQuizResult(answers.slice(), { apply: true }); } catch (e) { console.error(e); res = null; }
+    try { res = g.ideologyQuizResult(answers.slice()); } catch (e) { console.error(e); res = null; }
   }
   if (res && typeof res === 'object') {
     const ra = res.axes || res.vector || (res.ideology && res.ideology.axes);
@@ -1724,7 +1728,7 @@ function quizView(g, qs) {
         drawNaviBust(c, a.x + 8, a.y + 8, 2);
         const ls = wrapJ(c, `${qs.length}の質問に答えると、あなたの考えがどの思想に近いかを、ざっくり示すよ。`, a.w - 92, 12);
         ls.forEach((l, i) => T(c, l, a.x + 82, a.y + 8 + i * 15, 12, PCx.text));
-        const notes = ['・正しい答えも、まちがった答えもない。', '・結果は目安。あなたの考えを決めつけるものではない。', '・答えは、あとから何度でもやり直せる。', '・実在の政党や政治家とは関係ない。'];
+        const notes = ['・正しい答えも、まちがった答えもない。結果は目安。', '・答えるだけでは、ゲームの中のあなたは何も変わらない。', '・何度でもやり直せる。実在の政党や政治家とは関係ない。'];
         let y = a.y + 80;
         for (const n of notes) { const l2 = wrapJ(c, n, a.w - 24, 12); l2.forEach((l, i) => T(c, l, a.x + 12, y + i * 15, 12, PCx.text)); y += l2.length * 15 + 4; }
         frame(c, a.x + 40, a.y + a.h - 34, a.w - 80, 24, '#d0507a', '#8a2a4a');
@@ -1762,19 +1766,38 @@ function resultView(g, r) {
   const [ax, ay] = compassAxes();
   const top = (r.top || []).filter((t) => ideoGet(t.id));
   const COL = ['#d6304a', '#e0a03a', '#4a78d8'];
+  // the last row: 「この結果を自分の考え方に反映する」 — only on the player's explicit choice, after a
+  // confirmation that says what it changes (it never happens just by taking the quiz)
+  const canApply = () => typeof g.ideologyQuizResult === 'function' && Array.isArray(r.answers) && r.answers.length > 0;
+  const nRows = () => top.length + (canApply() ? 1 : 0);
+  const applyQuiz = async (ph) => {
+    if (r.applied) { ph.toast('もう反映してある', PCx.dim); return; }
+    const k = await PH.phoneConfirm(g, {
+      title: '考え方に反映する？', color: '#d0507a', choices: ['反映する', 'やめておく'],
+      text: 'この結果を、ゲームの中のあなたの考え方（政治家としての立ち位置）に反映する？\n・あなたの考え方が、この結果のほうへ少し動く。\n・政党に入っていて党の路線から大きくずれると、党内の評価が少しずつ下がることがある。\n・反映しなければ、何も変わらない。',
+    });
+    if (k !== 0) return;
+    let res = null;
+    try { res = g.ideologyQuizResult(r.answers.slice(), { apply: true }); } catch (e) { console.error(e); }
+    if (res) { r.applied = today(g); sfx('ok'); ph.toast('考え方に反映した', '#d0507a'); }
+  };
   const v = {
     title: 'しんだん結果', color: '#d0507a', cancel: -1, idx: 0, page: 0, sy: 0, maxScroll: 0,
-    hint: () => (v.page === 1 ? '←:図にもどる　↑↓:よむ　B:もどる' : top.length ? 'A:じてんで見る　→:説明' : '→:説明　B:もどる'),
+    hint: () => (v.page === 1 ? '←:図にもどる　↑↓:よむ　B:もどる' : v.idx >= top.length && canApply() ? 'A:えらぶ　→:説明　B:もどる' : top.length ? 'A:じてんで見る　→:説明' : '→:説明　B:もどる'),
     update(ph, inp) {
       if (inp.pressed('right') && v.page === 0) { v.page = 1; v.sy = 0; sfx('cursor'); return; }
       if (inp.pressed('left') && v.page === 1) { v.page = 0; sfx('cursor'); return; }
       if (v.page === 1) {
         if (inp.repeat('down') && v.maxScroll > 0) v.sy = Math.min(v.maxScroll, v.sy + LH);
         if (inp.repeat('up')) v.sy = Math.max(0, v.sy - LH);
-      } else if (top.length) {
-        if (inp.repeat('up')) { v.idx = (v.idx + top.length - 1) % top.length; sfx('cursor'); }
-        if (inp.repeat('down')) { v.idx = (v.idx + 1) % top.length; sfx('cursor'); }
-        if (inp.pressed('a')) { sfx('ok'); openIdeology(g, ph, top[v.idx].id); return; }
+      } else if (nRows()) {
+        const n = nRows();
+        if (inp.repeat('up')) { v.idx = (v.idx + n - 1) % n; sfx('cursor'); }
+        if (inp.repeat('down')) { v.idx = (v.idx + 1) % n; sfx('cursor'); }
+        if (inp.pressed('a')) {
+          if (v.idx >= top.length) { sfx('ok'); applyQuiz(ph); return; }
+          sfx('ok'); openIdeology(g, ph, top[v.idx].id); return;
+        }
       }
       if (inp.pressed('b')) { sfx('cancel'); ph.back(-1); }
     },
@@ -1785,7 +1808,9 @@ function resultView(g, r) {
           ...(r.school ? [`共産主義の流れの中では「${r.school.name}」が近い。`] : []),
           '', '【軸ごとの位置】',
           ...axesList().map((x) => { const val = num((r.axes || {})[x.id]); const pos = Math.abs(val) < 0.2 ? 'まんなか' : `${val < 0 ? x.left : x.right}寄り`; return `${x.name}：${pos}`; }),
-          '', '※考え方の傾向の目安。どの思想が正しいということはない。考えは変わっていい。'];
+          '', '※考え方の傾向の目安。どの思想が正しいということはない。考えは変わっていい。',
+          '※答えただけでは、ゲームの中のあなたは変わらない。反映するかは、図の画面の下で選べる。',
+          ...(IDEO && IDEO.QUIZ_INFO && IDEO.QUIZ_INFO.limits ? [`※${IDEO.QUIZ_INFO.limits}`] : [])];
         const lines = lines0.flatMap((l) => (l ? wrapJ(c, l, a.w - 20, 12) : ['']));
         v.maxScroll = Math.max(0, lines.length * LH + 10 - a.h);
         c.save(); c.beginPath(); c.rect(a.x, a.y, a.w, a.h); c.clip();
@@ -1835,7 +1860,12 @@ function resultView(g, r) {
         y += 19;
       });
       if (!top.length) T(c, '（近い思想が見つからなかった）', a.x + 10, y, 12, PCx.dim);
-      T(c, fit(c, '目安だよ。正しい答えはないんだ。', a.w - 20, 12), a.x + 10, a.y + a.h - 15, 12, PCx.dim);
+      if (canApply()) {
+        const on = v.idx >= top.length;
+        const by = y + 3;
+        frame(c, a.x + 8, by, a.w - 16, 20, on ? '#d0507a' : '#ffffff', on ? '#8a2a4a' : '#d6cfbf');
+        T(c, fit(c, r.applied ? '自分の考え方に反映ずみ' : '自分の考え方に反映する…', a.w - 28, 12), a.x + a.w / 2, by + 4, 12, on ? '#ffffff' : r.applied ? PCx.dim : '#8a2a4a', 'center');
+      } else T(c, fit(c, '目安だよ。答えただけでは何も変わらない。', a.w - 20, 12), a.x + 10, a.y + a.h - 15, 12, PCx.dim);
     },
   };
   return v;
@@ -1846,8 +1876,8 @@ function resultView(g, r) {
 export const LESSONS = [
   { id: 'senkyo', title: '選挙のしくみ', slides: [
     { h: '選挙ってなに？', art: 'ballot', text: '選挙は、わたしたちの代わりに政治をする人を、投票で選ぶしくみ。だれに投票したかは秘密（秘密投票）。' },
-    { h: '何歳から？', art: 'age', text: (y) => `投票できるのは${y >= 2016 ? 18 : 20}歳から（選挙権）。立候補は25歳から。参議院と知事は30歳から（被選挙権）。` },
-    { h: '衆議院の選挙', art: 'twoBallots', text: (y) => (y >= 1996 ? '衆議院の選挙では2票を書く。小選挙区は1人だけ当選。比例代表は、政党の票の割合で議席を分ける。' : 'いまの衆議院は中選挙区制。1つの選挙区から3〜5人が当選する。参議院には比例代表もある。') },
+    { h: '何歳から？', art: 'age', text: (y, c) => `投票できるのは${(c && c.votingAge) || (y >= 2016 ? 18 : 20)}歳から（選挙権）。立候補は25歳から。参議院と知事は30歳から（被選挙権）。` },
+    { h: '衆議院の選挙', art: 'twoBallots', text: (y, c) => ((c && c.shugi && c.shugi.next ? c.shugi.next === 'heiritsu' : y >= 1996) ? '衆議院の選挙では2票を書く。小選挙区は1人だけ当選。比例代表は、政党の票の割合で議席を分ける。' : 'いまの衆議院は中選挙区制。1つの選挙区から3〜5人が当選する。参議院には比例代表もある。') },
     { h: '立候補するには', art: 'deposit', text: '公示・告示の日に届け出て、供託金（きょうたくきん）を預ける。票が少ないと没収。選挙運動は、その日から投票日の前日まで。' },
   ] },
   { id: 'houritsu', title: '法律ができるまで', slides: [
@@ -1864,8 +1894,9 @@ export const LESSONS = [
   ] },
   { id: 'yosan', title: '予算と税', slides: [
     { h: '予算づくりの1年', art: 'budgetFlow', text: (y) => `8月に各省が概算要求（がいさんようきゅう）、12月に${y >= 2001 ? '財務省' : '大蔵省'}が原案。閣議決定して、1月からの国会で審議する。` },
-    { h: '国の収入', art: 'pieIn', text: (y) => `国の収入（歳入（さいにゅう））は、税金と国債（借金）。税には所得税・法人税${y >= 1989 ? '・消費税' : ''}などがある。` },
-    { h: '国の支出', art: 'pieOut', text: '支出（歳出（さいしゅつ））でいちばん多いのは社会保障。国債の返済や、地方にくばるお金（地方交付税）も大きい。' },
+    { h: '国の収入', art: 'pieIn', text: (y, c) => `国の収入（歳入（さいにゅう））は、税金と国債（借金）。税には所得税・法人税${(c && c.taxRate != null ? c.taxRate > 0 : y >= 1989) ? '・消費税' : ''}などがある。` },
+    { h: '国の支出', art: 'pieOut', text: (y) => (y >= 2005 ? '支出（歳出（さいしゅつ））でいちばん多いのは社会保障。国債の返済や、地方にくばるお金（地方交付税）も大きい。'
+      : '支出（歳出（さいしゅつ））では、社会保障、国債の返済と利子（国債費）、地方にくばるお金（地方交付税）の3つが大きい。') },
     { h: '予算を決める', art: 'diet', text: '予算は衆議院が先に審議。参議院が30日以内に議決しないと、衆議院の議決で成立する（自然成立：衆議院の優越）。' },
   ] },
   { id: 'chiho', title: '地方自治', slides: [
@@ -2103,13 +2134,17 @@ const ART = {
     st.forEach(([m, l], i) => { const bx = x + 4 + i * 52; T(c, m, bx + 21, y + 8, 12, PCx.dim, 'center'); abox(c, bx, y + 24, 42, 40, l, i === 3 ? '#eef4ff' : '#fff8e8'); if (i < 3) arrowR(c, bx + 43, y + 44, 9); });
     T(c, '3月末までに成立させたい', x + w / 2, y + 80, 12, ND, 'center');
   },
-  pieIn(c, x, y, w, h, yr) {
-    const P = [[60, '#4a9a6a', '税金など'], [35, '#d6304a', '国債（借金）'], [5, '#9a9aa8', 'その他']];
+  // shares by era (当初予算の目安; 公債依存度: 1987年度 19.4%, バブル期は10%前後, 2000年代は40%台, 令和は30%前後→20%台)
+  pieIn(c, x, y, w, h, yr = 2026) {
+    const b = yr < 1990 ? 19 : yr < 1993 ? 10 : yr < 1998 ? 27 : yr < 2013 ? 45 : yr < 2020 ? 34 : yr < 2025 ? 30 : 25;
+    const P = [[95 - b, '#4a9a6a', '税金など'], [b, '#d6304a', '国債（借金）'], [5, '#9a9aa8', 'その他']];
     pie(c, x + 54, y + 46, 38, P); legend(c, x + 108, y + 18, P);
     T(c, '（割合は目安）', x + 108, y + 72, 12, PCx.dim);
   },
-  pieOut(c, x, y, w, h) {
-    const P = [[33, '#e0a03a', '社会保障'], [23, '#d6304a', '国債費'], [15, '#4a78d8', '地方交付税'], [29, '#9a9aa8', 'その他']];
+  // 2004年度ごろまでは社会保障・国債費・地方交付税がほぼ同じくらい（どれも約2割）、その後は社会保障がいちばん大きい
+  pieOut(c, x, y, w, h, yr = 2026) {
+    const S = yr < 2005 ? [20, 21, 20] : yr < 2015 ? [28, 22, 19] : [33, 23, 15];
+    const P = [[S[0], '#e0a03a', '社会保障'], [S[1], '#d6304a', '国債費'], [S[2], '#4a78d8', '地方交付税'], [100 - S[0] - S[1] - S[2], '#9a9aa8', 'その他']];
     pie(c, x + 54, y + 46, 38, P); legend(c, x + 108, y + 10, P);
     T(c, '（割合は目安）', x + 108, y + 76, 12, PCx.dim);
   },
@@ -2225,10 +2260,18 @@ const ART = {
     for (let i = 0; i < 4; i++) { R(c, x + 130 + i * 16, y + 24, 10, 22, '#4a8ac8'); R(c, x + 132 + i * 16, y + 22, 6, 3, '#2a5a9a'); }
     T(c, '給水・救助・物資', x + 154, y + 56, 12, PCx.dim, 'center');
   },
-  alert(c, x, y, w, h) {
-    frame(c, x + 30, y + 6, 40, 68, '#2a2e3a', '#1a1d26'); R(c, x + 34, y + 14, 32, 48, '#ffffff'); R(c, x + 34, y + 14, 32, 12, '#d6304a');
-    T(c, '!', x + 50, y + 14, 12, '#ffffff', 'center'); T(c, '避難', x + 50, y + 34, 12, PCx.bad, 'center');
-    arrowR(c, x + 80, y + 40, 30);
+  alert(c, x, y, w, h, yr = 2026) {
+    if (yr < 2007) {
+      // before the phone alerts (緊急地震速報 2007-10): the town's 防災無線 (outdoor loudspeakers)
+      R(c, x + 48, y + 22, 4, 52, '#8a8f99'); R(c, x + 40, y + 74, 20, 4, '#6a6f79');
+      frame(c, x + 30, y + 8, 18, 14, '#e8e8e0', '#6a6f79'); frame(c, x + 52, y + 8, 18, 14, '#e8e8e0', '#6a6f79');
+      for (let i = 0; i < 3; i++) { R(c, x + 74 + i * 5, y + 10 - i * 2, 2, 10 + i * 4, '#d6304a'); R(c, x + 22 - i * 5, y + 10 - i * 2, 2, 10 + i * 4, '#d6304a'); }
+      T(c, '防災無線', x + 50, y + 82, 12, PCx.dim, 'center');
+    } else {
+      frame(c, x + 30, y + 6, 40, 68, '#2a2e3a', '#1a1d26'); R(c, x + 34, y + 14, 32, 48, '#ffffff'); R(c, x + 34, y + 14, 32, 12, '#d6304a');
+      T(c, '!', x + 50, y + 14, 12, '#ffffff', 'center'); T(c, '避難', x + 50, y + 34, 12, PCx.bad, 'center');
+    }
+    arrowR(c, x + (yr < 2007 ? 88 : 80), y + 40, yr < 2007 ? 24 : 30);
     houseArt(c, x + 120, y + 20);
     for (let i = 0; i < 3; i++) mini(c, CROWD[i], x + 156 + i * 14, y + 40, 'right');
   },
@@ -2314,7 +2357,7 @@ function lessonView(g, id) {
       c.beginPath(); c.rect(bx, by, bw, bh); c.clip();
       try { (ART[s.art] || ART.balance)(c, bx, by, bw, bh, yr); } catch (e) { console.error(e); }
       c.restore();
-      const txt = typeof s.text === 'function' ? s.text(yr) : s.text;
+      const txt = typeof s.text === 'function' ? s.text(yr, glossCtx(g)) : s.text;
       const ls = wrapJ(c, txt, a.w - 20, 12);
       ls.slice(0, 6).forEach((l, i) => T(c, l, a.x + 10, by + bh + 8 + i * LH, 12, PCx.text));
       // page dots
@@ -2389,7 +2432,7 @@ function settingsView(g) {
       const id = rows()[i] && rows()[i].id;
       if (id === 'help') return `${HELP_NAMES[a.help]}：${HELP_DESC[a.help]}`;
       if (id === 'tips') return '場所やできごとに合わせて、ことは先生が小さな吹き出しで説明するよ。';
-      if (id === 'future') return a.showFuture ? 'この時代にまだない言葉も、印をつけて用語じてんにのせる。' : 'この時代にまだない言葉は、用語じてんにのせない。';
+      if (id === 'future') return a.showFuture ? 'この時代にまだない言葉や、ゲームの年より後のできごとも、印をつけてじてんにのせる。' : 'この時代にまだない言葉や、ゲームの年より後のできごとは、じてんにのせない。';
       if (id === 'reset') return '一度見たヒントを、もう一度見られるようにする。';
       return 'ことは先生の自己紹介を、もう一度見る。';
     },

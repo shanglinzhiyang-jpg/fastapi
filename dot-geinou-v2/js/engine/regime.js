@@ -233,7 +233,7 @@ export function newRegimeState() {
     queue: [], // scenes waiting for a free moment { id, day, data }
     news: [],
     record: { maxRegime: 'democracy', steps: [], wars: 0, soldiers: 0, civilians: 0, enemy: 0, detained: 0, disasters: 0, firstPM: 0 },
-    fall: null, trial: null, fictionShown: false, flags: {},
+    fall: null, trial: null, barred: null, fictionShown: false, flags: {},
   };
 }
 function R(g) {
@@ -279,7 +279,14 @@ function news(g, text, opts = {}) {
 function phone(g, text, from = 'ドット新聞') {
   try { if (typeof g.message === 'function') g.message({ from, text, kind: 'news' }); } catch (e) { /* no phone in some tests */ }
 }
-function note(g, text) { (g.morningNotes || (g.morningNotes = [])).push(text); }
+// Japanese line breaking for the message window (kiki.js KIKI.wrap: a number keeps its unit — 「5,260人」「1.2兆円」 —
+// and is never broken across lines); the plain text without kiki.js.
+function wrapText(g, s) {
+  try { return typeof KIKI.wrap === 'function' && s != null ? KIKI.wrap(g, String(s)) : s; } catch (e) { return s; }
+}
+function note(g, text) { (g.morningNotes || (g.morningNotes = [])).push(wrapText(g, text)); }
+// g.say with the pages line-broken as above (the regime's own texts).
+function say(g, pages) { return g.say([].concat(pages).filter((p) => p != null).map((p) => wrapText(g, p))); }
 // One of the player's family (alive), for a worried message.
 function familyMember(g) {
   try {
@@ -1719,8 +1726,9 @@ export const DISASTER_ACTIONS = {
       d.done.volunteer = today(g);
       d.volunteerDays = num(d.volunteerDays) + 1;
       try { if (typeof g.addNeed === 'function') { g.addNeed('stress', -4); g.addNeed('clean', -25); } } catch (e) { /* ignore */ }
-      if (num(st.fame) >= 300 && typeof g.addFame === 'function') g.addFame(10, true);
-      queueScene(g, 'volunteer', {}, { front: true });
+      // a famous volunteer is noticed on the first two days only (then it is just the work): no fame farm in a disaster
+      if (num(st.fame) >= 300 && d.volunteerDays <= 2 && typeof g.addFame === 'function') g.addFame(d.volunteerDays === 1 ? 10 : 5, true);
+      queueScene(g, 'volunteer', { home: !!d.home, n: d.volunteerDays }, { front: true });
       return `${since(g, 2000, 1) ? '災害ボランティアセンター' : '被災地の受け入れ窓口'}で受付をして、泥かきと物資の仕分けを手伝った。くたくただけど、ありがとうと言われた。`;
     },
   },
@@ -1987,6 +1995,7 @@ function warTick(g) {
   const own = 60 + w.mob * 12 - w.weariness * 0.25 - r.sanctions * 6 - num(r.sdf.quit) / 2000;
   const foe = nat.power + w.support * 0.6;
   const push = (own - foe) * 0.05 + (w.stance === 'offense' ? 1.2 : -0.4) + gauss() * 2.2;
+  const before = w.front;
   w.front = clamp(w.front + push, -100, 100);
   // the human cost (numbers only): soldiers of both sides, civilians caught in the war
   const intensity = (w.stance === 'offense' ? 1.6 : 0.9) * (1 + w.mob * 0.25);
@@ -2014,15 +2023,38 @@ function warTick(g) {
   }
   if (days > 0 && days % 5 === 0) news(g, `【もしも】戦況：${frontText(w.front)}。死傷者（自国）兵士${n0(w.cas.soldiers.dead + w.cas.soldiers.wounded)}人・民間人${n0(w.cas.civilians.dead + w.cas.civilians.wounded)}人`);
   // talks
+  let talksFailed = false;
   if (w.talks && today(g) >= w.talks.until) {
     const ok = roll(clamp(0.35 + w.front / 150 + (w.weariness > 50 ? 0.1 : 0), 0.05, 0.85));
     w.talks = null;
     w.lastTalks = today(g);
     if (ok) { endWar(g, 'ceasefire'); return; }
+    talksFailed = true;
     news(g, `【もしも】${nat.name}との停戦交渉は決裂した`);
   }
   if (w.front <= -100) { endWar(g, 'defeat'); return; }
   if (w.front >= 100) { endWar(g, 'victory'); return; }
+  // the dictator's morning report: one sober note a day (front, the day's dead, the totals, 厭戦, sanctions, cost)
+  w.day = { sd, cd, move: w.front - before };
+  note(g, warReport(g, w, talksFailed));
+  // the front gives way: a warning with the choices (停戦交渉・防衛) at −50 and −80 (again after a recovery)
+  if (w.front > -35) w.warned = 0;
+  const lv = w.front <= -80 ? 80 : w.front <= -50 ? 50 : 0;
+  if (lv > num(w.warned)) { w.warned = lv; queueScene(g, 'war', { event: 'warn', level: lv }); }
+}
+// The war's morning report (a morning note, line-broken without splitting a number).
+function warReport(g, w, talksFailed) {
+  const r = R(g);
+  const nat = FICTIONAL_NATIONS[w.enemy];
+  const days = today(g) - w.start;
+  const mv = num(w.day && w.day.move);
+  const move = mv >= 1 ? '前進' : mv <= -1 ? '後退' : '動かず';
+  return [
+    `【戦況報告・もしも】${nat.short}との戦争${days}日目・戦費 約${w.cost}兆円`,
+    `戦況：${frontText(w.front)}（この1日で${move}）・厭戦 ${Math.round(w.weariness)}／100・${r.sanctions ? `制裁 段階${r.sanctions}` : '制裁なし'}`,
+    `この1日の死者 兵士${n0(w.day.sd)}人・民間人${n0(w.day.cd)}人（累計 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人）`,
+    talksFailed ? `${nat.name}との停戦交渉は決裂した。` : null,
+  ].filter(Boolean).join('\n');
 }
 const frontText = (f) => (f >= 60 ? '係争地の大部分を押さえた' : f >= 20 ? 'やや優勢' : f > -20 ? 'こう着' : f > -60 ? '劣勢' : '前線が崩れかけている');
 function endWar(g, how) {
@@ -2154,6 +2186,9 @@ function repressionWeight(g) {
 function scheduleTrial(g, how) {
   const r = R(g);
   const w = repressionWeight(g);
+  // the former PM of the emergency / the dictatorship is never appointed to a cabinet post again in this life
+  // (g.regimeBarred: politics.js checks it at 首班指名, 組閣, 入閣の打診)
+  r.barred = { day: today(g), how, charged: w > 0 };
   if (w <= 0) {
     r.trial = { day: today(g), how, charged: false };
     news(g, `${g.state.name}前総理について、検察は刑事責任を問わないと判断した`);
@@ -2162,6 +2197,29 @@ function scheduleTrial(g, how) {
   }
   r.trial = { day: today(g) + 2, how, charged: true, weight: w, done: false };
   queueScene(g, 'stepdown', { charged: true, how });
+}
+// The trial is due (its day has come and it has not started yet).
+function trialDue(g) {
+  const t = g && g.state && g.state.regime && g.state.regime.trial;
+  return !!(t && t.charged && !t.done && today(g) >= num(t.day));
+}
+// Why the player (or an NPC) may not be given a cabinet post (内閣総理大臣 included) now: null | reason.
+// Only the player can have led the もしも emergency / dictatorship; NPCs → null.
+function barredReason(g, who = 'player') {
+  if (who !== 'player' && who != null) return null;
+  const st = g && g.state;
+  const r = st && st.regime;
+  if (!r) return null;
+  // old saves: the step-down before the flag existed (r.trial) counts too
+  const b = r.barred || (r.trial && r.trial.how ? { day: num(r.trial.day), how: r.trial.how, charged: !!r.trial.charged } : null);
+  if (!b) return null;
+  let open = false;
+  try {
+    const j = typeof g.jus === 'function' ? g.jus() : null;
+    open = !!(j && (j.cases || []).some((c) => c && c.crime === 'abuse_power' && !c.closed));
+  } catch (e) { open = false; }
+  if (b.charged && (open || (r.trial && !r.trial.done))) return '職権濫用の疑いで捜査・裁判を受けている前総理は、どの内閣にも起用されない（もしも）';
+  return '緊急事態・独裁の体制を敷いて退陣した前総理は、どの内閣にも起用されない（もしも）';
 }
 async function runTrial(g) {
   const r = R(g);
@@ -2176,7 +2234,7 @@ async function runTrial(g) {
     } catch (e) { console.error(e); }
   }
   // without the justice core: a short summary
-  await g.say([`${g.state.name}前総理は、職権濫用の罪で起訴された。`, '（刑法193条：公務員職権濫用罪）', '裁判の結果、有罪となった。政治の世界に戻る道は、もうない。']);
+  await say(g, [`${g.state.name}前総理は、職権濫用の罪で起訴された。`, '（刑法193条：公務員職権濫用罪）', '裁判の結果、有罪となった。政治の世界に戻る道は、もうない。']);
 }
 
 // ======================================================================== the downfall (fallen): never saved over the player's save
@@ -2205,14 +2263,17 @@ export function regimeRecord(g) {
   };
 }
 // Back to the title. The save on disk is the last one made before the fall (saving is blocked once fallen).
+// r.fall.toTitle: 'title' (g.toTitle) | 'reload' (the page is going back to the title).
 function backToTitle(g) {
-  try { if (typeof g.toTitle === 'function') { g.toTitle(); return; } } catch (e) { console.error(e); }
+  const r = R(g);
+  try { if (typeof g.toTitle === 'function') { if (r.fall) r.fall.toTitle = 'title'; g.toTitle(); return; } } catch (e) { console.error(e); }
   try {
     const q = new URLSearchParams(location.search);
     const keep = new URLSearchParams();
     for (const k of ['debug', 'touch']) if (q.has(k)) keep.set(k, q.get(k));
     const s = keep.toString();
     location.href = location.pathname + (s ? `?${s}` : '');
+    if (r.fall) r.fall.toTitle = 'reload';
   } catch (e) { console.error(e); }
 }
 
@@ -2255,14 +2316,15 @@ async function flush(g) {
     for (let guard = 0; guard < 8 && r.queue.length; guard++) {
       const q = r.queue.shift();
       // a stale scene (days old) is dropped, except the ones that matter
-      if (today(g) - num(q.day) > 3 && !['downfall', 'referendum', 'court', 'stepdown'].includes(q.id)) continue;
+      if (today(g) - num(q.day) > 3 && !['downfall', 'referendum', 'court', 'stepdown', 'trial'].includes(q.id)) continue;
       const fn = SCENES[q.id];
       if (!fn) continue;
       try { await fn(g, q.data || {}); } catch (e) { console.error(e); }
       if (q.id === 'downfall') return;
     }
   } finally { g._kikiRunning = false; }
-  if (r.trial && r.trial.charged && !r.trial.done && today(g) >= r.trial.day) await runTrial(g);
+  // the trial on its day (also queued as the scene 'trial' by the morning tick; runTrial runs once)
+  if (trialDue(g) && r.id !== 'fallen') await runTrial(g);
 }
 // the options of a scene: what the player can do now (disaster actions, steps), plus "later"
 function actionOptions(g, ids, later = 'あとで') {
@@ -2277,8 +2339,8 @@ function actionOptions(g, ids, later = 'あとで') {
 async function doDisasterChoice(g, id) {
   if (!id) return;
   const res = g.disasterAction(id);
-  if (res && res.text) await g.say(res.text);
-  else if (res && res.why) await g.say(res.why);
+  if (res && res.text) await say(g, res.text);
+  else if (res && res.why) await say(g, res.why);
 }
 const SCENES = {
   async disaster(g, data) {
@@ -2316,7 +2378,7 @@ const SCENES = {
       return;
     }
     if (data.phase === 'hinan') {
-      const pages = [`【${d.name}】${dateText(g)}\n${disasterSummary(g, d)}`, '避難所では、毛布と水、トイレが足りない。\n自衛隊とボランティアが、物資を運んでいる。'];
+      const pages = [`【${d.name}】${dateText(g)}の被害：\n${disasterSummary(g, d)}`, '避難所では、毛布と水、トイレが足りない。\n自衛隊とボランティアが、物資を運んでいる。'];
       let ids = ['gekijin', 'hosei', 'shienho', 'shelter_visit', 'volunteer', 'charity', 'donate'];
       ids = ids.filter((id) => !disasterRefusal(g, id)).slice(0, 3);
       await show(g, { art: 'shelter', title: d.name, sub: '避難生活', pages, numbers: { ...d.known }, options: actionOptions(g, ids), then: (v) => doDisasterChoice(g, v) });
@@ -2332,7 +2394,14 @@ const SCENES = {
     const d = R(g).disaster;
     await show(g, { art: 'shelter', title: '避難所', sub: d ? d.name : '', pages: data.who === 'kucho' ? ['体育館に段ボールの仕切りが並ぶ。\n区の職員が名簿をつくり、水と毛布を配っている。'] : ['体育館で、ひとりひとりの話を聞いて回った。\n「ありがとう。顔を見せてくれてうれしい」'] });
   },
-  async volunteer(g) { await show(g, { art: 'volunteer', title: '災害ボランティア', pages: ['長靴とマスクで、家の泥をかき出す。\n地元の人が「遠くからありがとう」と麦茶をくれた。'] }); },
+  async volunteer(g, data) {
+    // the player's own town (d.home): neighbours, not "from far away"; later days are quiet work, not a photo op
+    const page = num(data.n, 1) >= 3
+      ? '今日も泥かきと物資の仕分けを手伝った。\n顔なじみになった人たちと、黙々と作業する。'
+      : data.home ? '長靴とマスクで、近所の家の泥をかき出す。\n近所の人と声をかけあいながら、少しずつ片付けた。'
+        : '長靴とマスクで、家の泥をかき出す。\n地元の人が「遠くからありがとう」と麦茶をくれた。';
+    await show(g, { art: 'volunteer', title: '災害ボランティア', pages: [page] });
+  },
   async charity(g, data) { await show(g, { art: 'charity', title: 'チャリティ', pages: [`チャリティ企画で、被災地への支援を呼びかけた。\n${fmtMoney(num(data.raised))}の義援金が集まった。`] }); },
   async cabinet(g, data) { await show(g, { art: 'cabinet', title: '閣議', pages: data.what === 'gekijin' ? ['閣議で、激甚災害の指定の政令を決めた。\n復旧事業の国の補助がかさ上げされる。'] : ['閣議で決めた。'] }); },
   async fukko(g) { await show(g, { art: 'fukko', title: '復興の基本方針', pages: ['住まい、仕事、学校、道路。\nひとつずつ、町を取り戻していく。'] }); },
@@ -2341,15 +2410,15 @@ const SCENES = {
     const r = R(g), o = r.sdf.pkoOffer;
     if (!o) return;
     const ok = !sdfRefusal(g, 'pko');
-    await show(g, { art: 'pko', title: '国連からの要請', sub: o.mission, pages: [`国連から、${o.mission}（架空）への参加の要請が届いた。\n停戦合意と受入れ国の同意がある。`], options: ok ? [{ label: '派遣を閣議決定', value: 'pko' }, { label: '見送る', value: null }] : [{ label: 'わかった', value: null }], then: async (v) => { if (v === 'pko') { const res = g.sdfOrder('pko'); if (res.text || res.why) await g.say(res.text || res.why); } } });
+    await show(g, { art: 'pko', title: '国連からの要請', sub: o.mission, pages: [`国連から、${o.mission}（架空）への参加の要請が届いた。\n停戦合意と受入れ国の同意がある。`], options: ok ? [{ label: '派遣を閣議決定', value: 'pko' }, { label: '見送る', value: null }] : [{ label: 'わかった', value: null }], then: async (v) => { if (v === 'pko') { const res = g.sdfOrder('pko'); if (res.text || res.why) await say(g, res.text || res.why); } } });
   },
   async kaijo(g, data) {
     const r = R(g);
     if (!r.sdf.kaijo || r.sdf.kaijo.done) return;
     const ok = !sdfRefusal(g, 'kaijo');
     await show(g, { art: 'sea', title: '不審船', sub: `${FICTIONAL_NATIONS[data.nation].short}籍とみられる（架空の国）`, pages: ['領海に不審船。海上保安庁の巡視船が追跡している。\n停船の命令に応じない。'], options: ok ? [{ label: '海上保安庁に任せる', value: null }, { label: '海上警備行動を発令', value: 'kaijo' }] : [{ label: 'わかった', value: null }], then: async (v) => {
-      if (v === 'kaijo') { const res = g.sdfOrder('kaijo'); if (res.text || res.why) await g.say(res.text || res.why); }
-      else if (ok && r.sdf.kaijo) { r.sdf.kaijo.done = 'jcg'; await g.say('海上保安庁に対応を任せた。（まずは海上保安庁が対応する）'); }
+      if (v === 'kaijo') { const res = g.sdfOrder('kaijo'); if (res.text || res.why) await say(g, res.text || res.why); }
+      else if (ok && r.sdf.kaijo) { r.sdf.kaijo.done = 'jcg'; await say(g, '海上保安庁に対応を任せた。（まずは海上保安庁が対応する）'); }
     } });
   },
   async referendum(g, data) {
@@ -2372,7 +2441,7 @@ const SCENES = {
       return;
     }
     if (!isPM(g)) { await show(g, { art: 'court', title: '最高裁判決', sub: data.what, pages }); answerCourt(g, data.step, true); return; }
-    await show(g, { art: 'court', title: '最高裁判決', sub: data.what, pages, options: [{ label: '判決に従う', value: 'comply' }, { label: '判決を無視する', value: 'ignore' }], prompt: '判決にどう向き合う？', then: (v) => g.say(answerCourt(g, data.step, v !== 'ignore')) });
+    await show(g, { art: 'court', title: '最高裁判決', sub: data.what, pages, options: [{ label: '判決に従う', value: 'comply' }, { label: '判決を無視する', value: 'ignore' }], prompt: '判決にどう向き合う？', then: (v) => say(g, answerCourt(g, data.step, v !== 'ignore')) });
   },
   async army(g) { await show(g, { art: 'army', title: '国軍化', sub: 'もしもシミュレーション', pages: ['自衛隊の駐屯地で、看板がかけ替えられた。\n「国軍」――多くの隊員が、黙って制服を脱いだ。', `（${FICTION_NOTE}）`] }); },
   async war(g, data) {
@@ -2385,8 +2454,22 @@ const SCENES = {
     if (data.event === 'declare') await show(g, { art: 'war', title: '宣戦', sub: `${nat.name}（架空の国）`, front: 0, pages: [`${DISPUTED_AREA.name}（架空の係争地）をめぐり、${nat.name}に宣戦した。`, '国連の安全保障理事会が緊急会合を開いた。\n各国は即時の停戦を求めている。', `（${FICTION_NOTE}）`] });
     else if (data.event === 'ceasefire') await show(g, { art: 'war', title: '停戦', sub: nat.name, front: 0, pages: ['停戦が成立した。前線の銃声が止んだ。', `死者　兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人\nけが人　${n0(cas.soldiers.wounded + cas.civilians.wounded)}人\n相手国側の死傷者　${n0(cas.enemySoldiers + cas.enemyCivilians)}人`, '制裁は続き、物価は高いまま。\n帰ってこない人たちの家族が、町に残された。'] });
     else if (data.event === 'victory') await show(g, { art: 'war', title: '占領', sub: DISPUTED_AREA.name, front: 100, pages: [`国軍は${DISPUTED_AREA.name}を占領した。\nだが、祝う声はほとんど聞こえない。`, `死者　兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人\n相手国側の死傷者　${n0(cas.enemySoldiers + cas.enemyCivilians)}人\n戦費　約${w.cost}兆円`, 'どの国も占領を認めず、制裁はさらに強まった。\n島では抵抗が続いている。'] });
+    else if (data.event === 'warn' && r.war && r.war.phase === 'war' && isPM(g)) {
+      // the front gives way: the choices that can still end the war without the downfall
+      const opts = [];
+      if (!warRefusal(g, 'negotiate')) opts.push({ label: '停戦交渉を始める', value: 'negotiate' });
+      if (w.stance !== 'defend' && !warRefusal(g, 'defend')) opts.push({ label: '防衛に徹する', value: 'defend' });
+      opts.push({ label: 'このまま続ける', value: null });
+      const pages = num(data.level) >= 80
+        ? ['前線が崩れかけている。\n参謀は青ざめている。「敗戦は、時間の問題です」', `死者は兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人にのぼった。\n厭戦の声は、もう抑えきれない。`]
+        : [`前線が押し戻されている。戦況：${frontText(w.front)}。\n参謀は言う。「このままでは、いずれ前線が崩れます」`, `死者は兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人にのぼった。\n各国の制裁で、弾薬も燃料も足りなくなっている。`];
+      pages.push(`（命令は${deviceName(g)}の「危機管理」→「戦争（もしも）」からも出せる）`);
+      await show(g, { art: 'war', title: '戦況の悪化', sub: `${nat.name}（架空の国）`, front: w.front, pages, options: opts, prompt: num(data.level) >= 80 ? '敗戦か、停戦か。どうする？' : 'どうする？', then: async (v) => { if (v) { const res = warOrder(g, v); if (res.text || res.why) await say(g, res.text || res.why); } } });
+    }
   },
   async uprising_warn(g) { await show(g, { art: 'demo', title: 'ゼネスト', sub: 'もしもシミュレーション', pages: ['全国でゼネストが始まった。\n広場を埋めた群衆が、退陣を求めている。', '国軍の一部の部隊は、市民に向けた出動を拒んだ。\n残された時間は少ない。'] }); },
+  // the 特捜 case after stepping down / a lawful removal (crime.js g.arrest), on its day whatever the player does
+  async trial(g) { if (trialDue(g)) await runTrial(g); },
   async stepdown(g, data) {
     await show(g, { art: 'newspaper', title: '退陣', headline: data.charged ? '前総理を職権濫用で捜査' : '前総理 刑事責任問われず', pages: data.charged ? ['総理の座を降りた。選挙と国会は再開される。', 'それまでの行為について、検察が捜査を始めた。\n法にもとづいて、裁かれることになる。'] : ['総理の座を降りた。選挙と国会は再開される。', '検察は、刑事責任は問わないと判断した。\nだが、政治家としての信頼は、もう戻らない。'] });
   },
@@ -2441,6 +2524,9 @@ export async function regimeTick(g) {
     // 任期の延長 while elections are suspended (the player's own term does not lapse)
     if (r.steps.elections) { const me = meOf(g); if (me && me.termEnd && me.termEnd < today(g) + 30) me.termEnd = today(g) + 30; }
     if (isPM(g) && !r.record.firstPM) r.record.firstPM = today(g);
+    // the 特捜 case after stepping down: on its day it is queued like any scene (shown at the next free moment,
+    // usually right after waking), so it starts whatever the player does
+    if (r.id !== 'fallen' && trialDue(g)) queueScene(g, 'trial', {}, { front: true });
   } catch (e) { console.error('regimeTick', e); }
 }
 
@@ -2682,6 +2768,10 @@ const methods = {
   regimeLabel() { return regimeLabel(this); },
   regimeRecord() { return regimeRecord(this); },
   regimeFlush() { return flush(this); },
+  // null | the reason the player (who = 'player', the default) may not be given a cabinet post, 内閣総理大臣 included:
+  // the former PM of the もしも emergency / dictatorship (stepped down or removed). NPCs → null. Flag:
+  // g.state.regime.barred = { day, how: 'democratize'|'removal', charged }. post is accepted for symmetry (any post).
+  regimeBarred(who = 'player', post = null) { return barredReason(this, who == null ? 'player' : who); },
   regimeTick() { return regimeTick(this); },
   // the answer to a court ruling (UIs; the scene asks it itself)
   regimeCourt(step, comply = true) { return answerCourt(this, step, comply); },
@@ -2713,13 +2803,37 @@ export function installRegime(proto) {
     try { if (this.state && this.state.regime && this.state.regime.id === 'fallen') return false; } catch (e) { /* ignore */ }
     return orig.apply(this, a);
   });
-  // a free moment: show the queued scenes (the downfall first)
+  // a free moment: show the queued scenes (the downfall first) and start the trial on its day
   wrap('afterScript', (orig) => function (...a) {
     const res = orig.apply(this, a);
     try {
-      if (this.state && this.state.regime && R(this).queue.length && canShow(this)) this.run(() => flush(this));
+      if (this.state && this.state.regime && (R(this).queue.length || trialDue(this)) && canShow(this)) this.run(() => flush(this));
     } catch (e) { console.error(e); }
     return res;
+  });
+  // the morning of the downfall: the downfall comes first. The ordinary morning (notes such as 仕送り or rent, the
+  // 満腹 / 身だしなみ toasts, the bed's cheerful line, the other modules' morning scenes) is not shown: the scene plays
+  // right after the night, inside g.sleep, and the game goes back to the title from it.
+  wrap('morning', (orig) => async function (...a) {
+    const res = await orig.apply(this, a);
+    try {
+      const r = this.state && this.state.regime;
+      if (r && r.id === 'fallen' && r.fall && num(r.fall.day) === today(this) && R(this).queue.some((q) => q.id === 'downfall')) {
+        this.morningNotes = [];
+        this.lastMorning = null;
+        this.toasts = [];
+        await this.fadeIn(20);
+        await flush(this);
+        // back to the title: the page is reloading. Nothing of the ordinary morning follows (the sleep never ends).
+        if (r.fall.toTitle === 'reload') await new Promise(() => {});
+      }
+    } catch (e) { console.error(e); }
+    return res;
+  });
+  // no toasts once the regime has fallen (only the downfall and the record are shown)
+  wrap('notify', (orig) => function (...a) {
+    try { if (this.state && this.state.regime && this.state.regime.id === 'fallen') return undefined; } catch (e) { /* ignore */ }
+    return orig.apply(this, a);
   });
   // work stops for a few days when a disaster hits the player's town
   wrap('lifeRefusal', (orig) => function (...a) {
@@ -2787,6 +2901,19 @@ function wrapCoalition(proto) {
     } catch (e) { console.error(e); }
     return orig.call(this, choices, ...a);
   });
+  // an offered cabinet post (入閣の打診) is refused for the barred former PM (defence in depth: politics.js is to check
+  // g.regimeBarred itself before offering / appointing)
+  wrap('respondOffer', (orig) => function (offerId, yes = true, ...a) {
+    try {
+      if (yes && this.state && this.state.regime) {
+        const why = barredReason(this, 'player');
+        const p = why ? pol(this) : null;
+        const o = p && p.me && Array.isArray(p.me.offers) ? p.me.offers.find((x) => (offerId ? x.id === offerId : !x.answered) && !x.answered) : null;
+        if (o && o.kind === 'post') { o.answered = 'no'; this.lastPoliticsError = why; return why; }
+      }
+    } catch (e) { console.error(e); }
+    return orig.call(this, offerId, yes, ...a);
+  });
   wrap('joinCoalition', (orig) => function (...a) {
     try {
       const p = this.state ? pol(this) : null;
@@ -2804,4 +2931,4 @@ function wrapCoalition(proto) {
 
 onMorning((g) => regimeTick(g));
 installRegime(Game.prototype);
-if (typeof window !== 'undefined') window.__regime = { R, KIKI, startDisaster, fall, endWar, setRegimeRng, regimeLabel, queueScene, flush, FICTIONAL_NATIONS };
+if (typeof window !== 'undefined') window.__regime = { R, KIKI, startDisaster, fall, endWar, setRegimeRng, regimeLabel, queueScene, flush, FICTIONAL_NATIONS, trialDue, barredReason, warReport };

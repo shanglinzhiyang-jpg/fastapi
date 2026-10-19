@@ -120,6 +120,17 @@ function underCase(c) {
 function free(g) {
   try { return typeof g.isFree === 'function' ? g.isFree() : true; } catch (e) { return true; }
 }
+// The もしも regime path (regime.js; read from the state, so this works without it): during the emergency, the
+// dictatorship, a war or after the fall, the everyday dark events (a stalker's DMs, a fraud call to the family, a
+// burglary, a 週刊誌 photo, an offer from a 業者, an accident on the street) make no sense for the sitting PM who rules by
+// decree under guard. None starts then; the story follow-ups wait (they are checked again when they come due).
+function regimeQuiet(g) {
+  try {
+    const r = g && g.state && g.state.regime;
+    if (!r || typeof r !== 'object') return false;
+    return (r.id && r.id !== 'democracy') || !!(r.war && r.war.phase === 'war');
+  } catch (e) { return false; }
+}
 function polOf(g) {
   try { if (typeof g.pol === 'function') return g.pol(); } catch (e) { console.error(e); }
   return null;
@@ -1989,6 +2000,7 @@ function canStart(g) {
   if (g.busy || g.top !== g.map || g.fade > 0) return false;
   if (g.map.player && g.map.player.moving) return false;
   if (!free(g) || NO_EVENT_PLACES.has(g.map.placeId)) return false;
+  if (regimeQuiet(g)) return false;
   return !(D(g).hospUntil > st.day);
 }
 function whereOk(g, E, pd, how) {
@@ -2026,6 +2038,7 @@ function setPending(g, id, o = {}) {
 function decide(g, opts = {}) {
   const st = g.state, d = D(g), day = st.day;
   if (d.pending && !opts.force) return d.pending;
+  if (regimeQuiet(g) && !opts.force) return null;
   const c = ctxOf(g);
   const risk = riskOf(g, c);
   d.risk = risk;
@@ -2213,6 +2226,7 @@ onMorning((g) => {
   d.townSteps = 0;
   if (!free(g)) return;
   try { spCheck(g); } catch (e) { console.error(e); }
+  if (regimeQuiet(g)) return; // the もしも regime path: nothing everyday (see regimeQuiet); follow-ups wait
   passiveFollowups(g);
   if (st.day < GRACE) return;
   decide(g);
