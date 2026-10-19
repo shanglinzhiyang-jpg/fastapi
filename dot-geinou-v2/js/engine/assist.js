@@ -1450,20 +1450,24 @@ function termView(g, term) {
       const cat = catOf(e.cat);
       const cw = Math.round(measure(c, cat.name, 12)) + 8;
       // the title never runs under the category tag: beside it when it fits at 16px, else on its own
-      // row (16px, or 14px for the longest names) with the tag moved down to the reading's row
+      // row (16px, or 14px for the longest names) with the tag moved down to the since label's row
       const beside = measure(c, key, 16) <= r.w - 20 - cw - 8;
       const ts = beside || measure(c, key, 16) <= r.w - 20 ? 16 : 14;
       T(c, fit(c, key, beside ? r.w - 20 - cw - 8 : r.w - 20, ts), r.x + 10, r.y + 4 + (16 - ts), ts, '#1a1a28');
-      const tagY = beside ? r.y + 4 : r.y + 23;
-      frame(c, r.x + r.w - 8 - cw, tagY, cw, 16, cat.color, shade(cat.color, -0.4));
-      T(c, cat.name, r.x + r.w - 8 - cw + 4, tagY + 2, 12, '#ffffff');
+      const tag = (ty) => { frame(c, r.x + r.w - 8 - cw, ty, cw, 16, cat.color, shade(cat.color, -0.4)); T(c, cat.name, r.x + r.w - 8 - cw + 4, ty + 2, 12, '#ffffff'); };
+      if (beside) tag(r.y + 4);
       // the reading and the since label wrap (2 lines at most each) instead of being cut
-      const kw = beside ? r.w - 20 : r.w - 20 - cw - 8;
-      const kl = wrapJ(c, e.kana, kw, 12).slice(0, 2);
+      const kl = wrapJ(c, e.kana, r.w - 20, 12).slice(0, 2);
       kl.forEach((l, i) => T(c, l, r.x + 10, r.y + 22 + i * 14, 12, PCx.dim));
       let h = 22 + Math.max(16, kl.length * 14) + 2;
       const sl = sinceLabel(e, yr, glossCtx(g));
-      if (sl) { const sls = wrapJ(c, sl.text, r.w - 20, 12).slice(0, 2); sls.forEach((l, i) => T(c, l, r.x + 10, r.y + h + i * 14, 12, sl.color)); h += sls.length * 14 + 2; }
+      // a long title: the tag goes beside the since label when that still fits in 2 lines, else on its own row
+      const narrow = sl && !beside ? wrapJ(c, sl.text, r.w - 20 - cw - 8, 12) : null;
+      const withTag = !beside && (!sl || narrow.length <= 2);
+      const sls = sl ? (withTag ? narrow : wrapJ(c, sl.text, r.w - 20, 12)).slice(0, 2) : [];
+      sls.forEach((l, i) => T(c, l, r.x + 10, r.y + h + i * 14, 12, sl.color));
+      if (withTag) { tag(r.y + h - 1); h += Math.max(16, sls.length * 14) + 2; }
+      else { if (sls.length) h += sls.length * 14 + 2; if (!beside) { tag(r.y + h - 1); h += 18; } }
       const ls = wrapJ(c, e.short, r.w - 28, 12);
       frame(c, r.x + 8, r.y + h, r.w - 16, 8 + ls.length * 15, NL, '#9ad0c4');
       ls.forEach((l, i) => T(c, l, r.x + 14, r.y + h + 4 + i * 15, 12, '#1f5f56'));

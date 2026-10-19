@@ -13,7 +13,8 @@
 //     until      the year it ended (shown as history: 「〜YYYY年」)
 //     status     optional (year, ctx) => 'now' | 'future' | 'past' | null: the game state overrides
 //                since/until (e.g. the player enacted 18歳選挙権 before 2016)
-//     sinceText / untilText: a string or (year, ctx) => string
+//     sinceText / untilText: a string or (year, ctx) => string (stored as sinceFn / untilFn; the string
+//                fields then hold the real-timeline text)
 //     prev / next: the term with the same role in an earlier / later era (大蔵原案 → 財務省原案)
 //     related    other GLOSSARY terms
 //   ctx (all fields optional; built by assist.js from g.pol() / g.govt() / g.postal() / g.regime(),
@@ -1113,6 +1114,14 @@ T('ヤミ金', 'やみきん', 'kurashi', '登録しないで高い利息でお�
   '国や都道府県に登録しないで、法律の上限をはるかにこえる利息でお金を貸す違法な業者。借りてしまったら、返す前に警察や弁護士に相談すること。',
   { related: ['多重債務', '弁護士'] });
 
+// sinceText / untilText given as (year, ctx) => string become sinceFn / untilFn; the plain fields keep the
+// real-timeline string (so a reader that only knows the strings still gets a sensible label).
+for (const e of Object.values(GLOSSARY)) {
+  for (const [k, fk] of [['sinceText', 'sinceFn'], ['untilText', 'untilFn']]) {
+    if (typeof e[k] === 'function') { e[fk] = e[k]; try { e[k] = e[fk](2026, null); } catch (err) { e[k] = ''; } }
+  }
+}
+
 // ---------------------------------------------------------------- aliases
 export const GLOSSARY_ALIAS = {
   総理大臣: '内閣総理大臣', 総理: '内閣総理大臣', 首相: '内閣総理大臣', 大臣: '国務大臣', 衆院: '衆議院', 参院: '参議院',
@@ -1143,10 +1152,11 @@ export function termText(entry, year = 2026, ctx = null) {
   if (!entry) return '';
   try { return typeof entry.long === 'function' ? entry.long(year, ctx) : String(entry.long || ''); } catch (e) { return String(entry.short || ''); }
 }
-const labelOf = (v, year, ctx, d) => { try { return typeof v === 'function' ? v(year, ctx) : v || d; } catch (e) { return d; } };
-// The 「…から」 / 「…まで」 texts of an entry for that year (and game).
-export function termSince(entry, year, ctx = null) { return entry ? labelOf(entry.sinceText, year, ctx, entry.since ? `${entry.since}年` : '') : ''; }
-export function termUntil(entry, year, ctx = null) { return entry ? labelOf(entry.untilText, year, ctx, entry.until ? `${entry.until}年まで` : '') : ''; }
+const labelOf = (fn, v, year, ctx, d) => { try { return typeof fn === 'function' ? fn(year, ctx) || v || d : v || d; } catch (e) { return v || d; } };
+// The 「…から」 / 「…まで」 texts of an entry for that year (and game): sinceFn / untilFn when the entry has
+// one, else the plain sinceText / untilText strings (which always hold the real-timeline text).
+export function termSince(entry, year, ctx = null) { return entry ? labelOf(entry.sinceFn, entry.sinceText, year, ctx, entry.since ? `${entry.since}年` : '') : ''; }
+export function termUntil(entry, year, ctx = null) { return entry ? labelOf(entry.untilFn, entry.untilText, year, ctx, entry.until ? `${entry.until}年まで` : '') : ''; }
 // The term for that era: an entry that does not exist yet gives way to its earlier name (prev), one that
 // is history gives way to its later name only when asked (opts.later). 財務省原案 in 1990 → 大蔵原案.
 export function eraTerm(term, year, ctx = null, opts = {}) {
