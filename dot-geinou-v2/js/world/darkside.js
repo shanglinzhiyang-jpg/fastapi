@@ -29,6 +29,8 @@
 //   (a serious 裏金・収賄 scandal may bring a 家宅捜索: pol_tokuso → g.investigate);
 //   the morning check assigns / removes SP for ministers.
 // - Passive follow-ups (news only: an arrest, a court ruling) arrive in the morning without a slot.
+// - The もしも regime path (regime.js state: the emergency, the dictatorship, a war, the fall): no event starts and
+//   no follow-up runs (regimeQuiet); they are for ordinary life and wait until democracy is back.
 //
 // ---------------------------------------------------------------- API (export DARK; window.__dark)
 //   DARK.EVENTS, DARK.state(g), DARK.ctx(g), DARK.risk(g), DARK.decide(g, { force, only }),
