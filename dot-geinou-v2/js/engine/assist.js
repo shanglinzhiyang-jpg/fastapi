@@ -370,7 +370,7 @@ function tipContext(g) {
 // A tip can belong to one screen, its SCOPE: the government console's tabs are 'govt:<tab id>' (the tab ids of
 // js/engine/govt_ui.js), the console as a whole 'govt'. A scene states its current scope with an optional
 // `tipScope` (a string, or () => string); the console (isGovtUI with a `tab.id`) needs nothing: its scope is
-// 'govt:<tab.id>'. A caller may pass opts.scope; the console's own tip keys have theirs in KEY_SCOPE, so its
+// 'govt:<tab.id>' (the politics UI: 'polui'). A caller may pass opts.scope; the console's own tip keys have theirs in KEY_SCOPE, so its
 // tipKey() calls need no change. A scoped tip plays only while the top scene's scope matches it ('govt'
 // matches every 'govt:…'), and it is DROPPED (not recorded as shown, so it comes back the next time its screen
 // opens) as soon as that screen shows another scope of the same family (another tab) or no scene of its family
@@ -379,9 +379,10 @@ function tipContext(g) {
 //             modal / confirmation is open no tip is drawn, none starts, and the time of the shown one stands still
 //   tipArea   {x, y, w, h} (or a function): where a tip may go. The console's default: its body, under the tab bar
 //             with 「？解説」 and above the footer (govt_ui.js TAB_Y + TAB_H = 40, FOOT_Y = 340)
-//   tipAvoid  () => [{x, y, w, h}]: rects to keep free. The console's default: its focused control
+//   tipAvoid  () => [{x, y, w, h}]: rects to keep free. The console's default: its focused control and its toasts
 // Tips marked calm (general, cheerful ones) are not shown while a disaster, a war or a もしも regime is going on.
 const KEY_SCOPE = {
+  polui_open: 'polui', // the politics UI (its scope is 'polui'): not over the console opened from it
   govt_open: 'govt',
   govt_approval: 'govt:overview',
   govt_budget: 'govt:budget', govt_tax: 'govt:budget',
@@ -400,6 +401,7 @@ function sceneScope(s) {
     const v = typeof s.tipScope === 'function' ? s.tipScope() : s.tipScope;
     if (typeof v === 'string' && v) return v;
     if (s.isGovtUI && s.tab && typeof s.tab.id === 'string') return `govt:${s.tab.id}`;
+    if (s.isPolUI) return 'polui';
   } catch (e) { /* a scene that is closing */ }
   return null;
 }
@@ -417,6 +419,9 @@ function sceneModal(s) {
     if (s.hasModal != null) return !!s.hasModal;
     if (Array.isArray(s.modals) && s.modals.length) return true;
     if (s.isPolUI && typeof s.top === 'function') { const v = s.top(); return !!(v && v.modal); }
+    // the console's zoomed view (portrait phones) shows only part of the screen: no tip over it unless the scene
+    // gives a tipArea for it
+    if (s.isGovtUI && s.zoom && !s.tipArea) return true;
   } catch (e) { return false; }
   return false;
 }
@@ -459,6 +464,19 @@ function dropTip(g, key) {
   if (!b) return;
   if (b.cur && b.cur.key === key) b.cur = null;
   b.queue = b.queue.filter((q) => q.key !== key);
+}
+// g.assistTipClear(keys?) → number dropped: the queued tips with these keys (a string or an array; omitted:
+// every tip) are dropped unseen (they can come again); the one on screen, if it is one of them, ends now
+export function assistTipClear(g, keys) {
+  const b = g && g._naviTips;
+  if (!b) return 0;
+  const all = keys == null;
+  const set = new Set([].concat(keys || []));
+  const hit = (k) => all || set.has(k);
+  const n0 = b.queue.length + (b.cur ? 1 : 0);
+  b.queue = b.queue.filter((q) => !hit(q.key));
+  if (b.cur && hit(b.cur.key)) b.cur = null;
+  return n0 - b.queue.length - (b.cur ? 1 : 0);
 }
 function stepTips(g) {
   const b = g._naviTips;
@@ -509,7 +527,13 @@ function uiTipSpot(g, top, w, h, cur) {
   if (!area && top && top.isGovtUI) area = { x: 4, y: 44, w: SW - 8, h: 340 - 4 - 44 };
   if (!area || !Number.isFinite(area.x)) return { x: SW - w - 8, y: 30 };
   let avoid = safe(() => (typeof top.tipAvoid === 'function' ? top.tipAvoid() : null), null);
-  if (!avoid && top.isGovtUI && top.focus === 'body' && typeof top.ctl === 'function') { const k = safe(() => top.ctl(), null); if (k) avoid = [k]; }
+  if (!avoid && top.isGovtUI) {
+    avoid = [];
+    if (top.focus === 'body' && typeof top.ctl === 'function') { const k = safe(() => top.ctl(), null); if (k) avoid.push(k); }
+    // its toasts (bottom centre, stacked upward from SH - 50)
+    const n = Array.isArray(top.toasts) ? top.toasts.length : 0;
+    if (n) avoid.push({ x: 20, y: SH - 50 - 24 * (n - 1), w: SW - 40, h: 24 * (n - 1) + 20 });
+  }
   avoid = (Array.isArray(avoid) ? avoid : []).filter((r) => r && [r.x, r.y, r.w, r.h].every(Number.isFinite));
   const right = area.x + area.w - w - 4, left = area.x + 2, top0 = area.y + 2, bottom = Math.max(top0, area.y + area.h - h - 2);
   const spots = [[right, bottom], [right, top0], [left, bottom], [left, top0]];
@@ -791,7 +815,7 @@ function crisisAdvice(g, add) {
   }
   const r = safe(() => (typeof g.regime === 'function' ? g.regime() : null), null);
   if (r && r.id && r.id !== 'democracy' && r.id !== 'fallen') {
-    add(92, `（もしも）${r.name || '非常時'}の体制。民衆の不満は${Math.round(num(r.unrest))}/100。`, '権力をチェックする人がいない体制は、不満がたまると大きなデモや反乱につながる。憲法の手続きにもどす道（緊急事態の解除・民主化）もある。これは架空の「もしも」のシミュレーション。', govtGo(g, 'crisis', 'regime'));
+    add(92, `（もしも）いまは${r.name || '非常時の体制'}。民衆の不満は${Math.round(num(r.unrest))}/100。`, '権力をチェックする人がいない体制は、不満がたまると大きなデモや反乱につながる。憲法の手続きにもどす道（緊急事態の解除・民主化）もある。これは架空の「もしも」のシミュレーション。', govtGo(g, 'crisis', 'regime'));
   }
   const d = safe(() => (typeof g.disaster === 'function' ? g.disaster() : null), null);
   if (ACUTE(d)) {
@@ -839,17 +863,22 @@ function pmAdvice(g, p, add) {
   const low = segs.length ? segs.reduce((m, x) => (num(x.approval) < num(m.approval) ? x : m)) : null;
   const neg = br && Array.isArray(br.reasons) ? br.reasons.filter((x) => x && num(x.value) <= -1).sort((a, b) => num(a.value) - num(b.value))[0] : null;
   const why = [neg ? `いちばん支持を下げている理由は「${neg.label}」` : '', low ? `支持がいちばん低い層は${low.name}（${Math.round(num(low.approval))}%）` : ''].filter(Boolean).join('。');
+  const apRisk = ap < 30 || (prev != null && prev - ap >= 4);
   if (ap < 30) add(84, `内閣支持率${ap}%は「危険水域」。支持を取りもどそう。`, `${why ? `${why}。` : ''}世論の声を聞いて、政策と、ていねいな説明で応えよう。低いままだと、党内から退陣を求める声が出る。`, govtGo(g, 'opinion', null, 'cabinet'), `支持率${ap}%。支持を取りもどそう`);
   else if (prev != null && prev - ap >= 4) add(64, `内閣支持率が${prev}%から${ap}%に下がった。理由をたしかめよう。`, `${why ? `${why}。` : ''}政府中枢の「概況」で、支持率の内わけが見られる。`, govtGo(g, 'overview', null, 'cabinet'));
   let ups = [];
   try { ups = typeof g.upcomingElections === 'function' ? g.upcomingElections() || [] : []; } catch (e) { ups = []; }
   const nat = ups.filter((e) => e && !e.newsOnly && !e.declared && (e.office === 'shugi' || e.office === 'sangi') && e.kind !== 'hosen' && e.day >= day).sort((a, b) => a.day - b.day)[0];
   if (nat && nat.day - day <= 120) add(66, `${nat.label}まであと${nat.day - day}日（投票 ${dateText(g, nat.day)}）。与党の議席がかかる。`, '総理大臣は与党の顔。内閣の支持率が、与党の議席を大きく左右する。過半数を割ると、政権交代もありうる。', { politics: 'elections' });
-  const lead = ups.find((e) => e && e.kind === 'sosaisen' && e.day >= day && e.day - day <= 60);
+  // the leader election of the PM's own party only (other parties' leader elections are news)
+  const lead = ups.find((e) => e && e.kind === 'sosaisen' && p.me.party && e.party === p.me.party && e.day >= day && e.day - day <= 60);
   if (lead) add(68, `${lead.label}まであと${lead.day - day}日。党内の支持を固めよう。`, '党首でなくなると、総理大臣を続けるのはむずかしい。党の議員や派閥の支持がものをいう。', { politics: 'party' });
+  // (under a もしも regime the regime line above says what matters; no ordinary seasonal task)
+  const rg = safe(() => (typeof g.regime === 'function' ? g.regime() : null), null);
+  if (rg && rg.id && rg.id !== 'democracy') return;
   const mo = num(safe(() => g.polDate().month, 0));
   const task = mo >= 1 && mo <= 3 ? '予算を年度内（3月末）に成立させよう' : mo >= 8 ? '来年度の予算づくり（12月下旬に閣議決定）を進めよう' : '公約の法案を国会に出して、成立させよう';
-  add(60, `内閣支持率${ap}%。${task}。`, '内閣を続けるには、国会の過半数と世論の支持の両方がいる。政府中枢で、予算・世論・国会をまとめて見られる。', mo >= 1 && mo <= 3 ? govtGo(g, 'diet', null, 'diet') : mo >= 8 ? govtGo(g, 'budget', 'budget', 'budget') : { politics: 'policy' }, task);
+  add(60, apRisk ? `つぎの仕事：${task}。` : `内閣支持率${ap}%。${task}。`, '内閣を続けるには、国会の過半数と世論の支持の両方がいる。政府中枢で、予算・世論・国会をまとめて見られる。', mo >= 1 && mo <= 3 ? govtGo(g, 'diet', null, 'diet') : mo >= 8 ? govtGo(g, 'budget', 'budget', 'budget') : { politics: 'policy' }, task);
 }
 // a Diet member: the session, today's sitting and the absence streak (politics.js g.attendance())
 function dietAdvice(g, p, add, cabinet) {
@@ -954,8 +983,8 @@ export function adviceItems(g) {
     } catch (e) { console.error(e); }
     // not in office and not running: voting, the age rules, then (later) a party
     if (!me.office && !mine) {
+      const named = new Set(); // elections a candidacy line already talks about
       try {
-        if (nextVote) add(age < 25 ? 46 : 30, `つぎの${nextVote.label}（投票 ${dateText(g, nextVote.day)}）で、あなたも投票できる。`, `投票日に区役所2階の投票所へ。${yr >= 2004 ? `行けない日があれば、${kojiWord(nextVote.kind)}の次の日から期日前投票もできる。` : ''}候補者や政党の公約を、くらべておこう。`, { politics: 'elections' }, `${nextVote.label}で投票しよう`);
         if (age < va) add(32, `選挙権は${va}歳から。いまは政治を学ぶチャンス！`, '「政治のしくみ」や「用語じてん」で、選挙や国会のことを知っておこう。', { navi: 'lessons' });
         if (age < 25) add(40, `25歳になったら立候補できる（あと${daysToAge(g, 25)}日）。`, '参議院議員と知事は30歳から。それまでは投票と勉強の時期。選挙や国会のしくみを知っておこう。', { term: '被選挙権' }, '25歳までは、投票と勉強の時期');
         else {
@@ -966,13 +995,16 @@ export function adviceItems(g) {
           if (open) {
             const dep = num(safe(() => g.depositInternal(open.office), 0));
             const have = num(st.money) + num(me.funds);
+            named.add(open.id);
             if (dep > have) add(80, `${open.label}の届出を受付中。でも供託金が足りない。`, `供託金は${fmtMoney(dep)}（あと${fmtMoney(dep - have)}）。届出は${open.kojiDate}まで。政治資金を集めるか、お金をためよう。`, { term: '供託金' });
             else add(81, `${open.label}の届出を受付中（${dateText(g, open.koji)}まで）。`, `立候補するなら、区役所2階の選挙管理委員会か、党本部の選挙対策本部へ。供託金は${fmtMoney(dep)}。`, { politics: 'elections' });
           } else if (ok.length) {
             const e = ok[0];
+            named.add(e.id);
             add(44, `つぎは${e.label}（投票 ${dateText(g, e.day)}）。立候補するか考えよう。`, `本来の届出は${kojiWord(e.kind)}の日。ゲームでは投票日の${fd}日前から受け付ける。それまでに政党の公認をめざそう。`, { politics: 'elections' });
           }
         }
+        if (nextVote && !named.has(nextVote.id)) add(age < 25 ? 46 : 30, `つぎの${nextVote.label}（投票 ${dateText(g, nextVote.day)}）で、あなたも投票できる。`, `投票日に区役所2階の投票所へ。${yr >= 2004 ? `行けない日があれば、${kojiWord(nextVote.kind)}の次の日から期日前投票もできる。` : ''}候補者や政党の公約を、くらべておこう。`, { politics: 'elections' }, `${nextVote.label}で投票しよう`);
         if (!me.party && age >= va) {
           let fee = 4000;
           try { if (typeof g.partyFee === 'function') fee = num(g.partyFee(), 4000); } catch (e) { fee = 4000; }
@@ -1539,6 +1571,7 @@ export async function openNavi(g, topic = 'home') {
   checkMissions(g);
   if (g.auto && !g.auto.navi) return null;
   if (typeof PH.withPhone !== 'function') return null;
+  loadRoutes();
   return PH.withPhone(g, async (ph) => {
     const a = assistState(g);
     // her full introduction replaces the first-contact tip (it is not shown next to it)
@@ -2711,10 +2744,17 @@ function nextBallot(g) {
   if (!e) return null;
   return { e, now: e.day === day ? 'day' : yearOf(g) >= 2004 && day > e.koji ? 'early' : null };
 }
+// guide.js (the places' 「行き方」 hints) and phone_apps.js (travelTo: the map app's trip) — guarded literal imports,
+// started on the first navi open (the registry has loaded them by then), so a mission card opens at once
+let ROUTE_MODS = null;
+let routeP = null;
+function loadRoutes() {
+  if (!routeP) routeP = Promise.all([import('../world/guide.js').catch(() => null), import('./phone_apps.js').catch(() => null)]).then(([gd, pa]) => (ROUTE_MODS = { GD: (gd && gd.GUIDE) || {}, PA: pa || null }));
+  return routeP;
+}
 async function missionCard(g, ph, m) {
   const W = MISSION_WAY[m.id] || {};
-  const GD = await import('../world/guide.js').then((x) => x.GUIDE || {}).catch(() => ({}));
-  const PA = await import('./phone_apps.js').catch(() => null);
+  const { GD, PA } = ROUTE_MODS || await loadRoutes();
   const hintOf = (id) => (GD[id] && GD[id].hint) || '';
   const lines = [m.hint(g)];
   const acts = [];
@@ -2768,6 +2808,13 @@ async function missionCard(g, ph, m) {
       }
       if (inp.pressed('b') || (!n && inp.pressed('a'))) { sfx('cancel'); ph2.back(-1); }
     },
+    // touch: a tap on a button picks it (the tap's A then runs it); elsewhere the tap does nothing
+    tap(ph2, x, y) {
+      const i = (this.btns || []).findIndex((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+      if (i < 0) return false;
+      this.idx = i;
+      return true;
+    },
     draw(c, ph2, a) {
       drawNaviBust(c, a.x + 8, a.y + 6, 2);
       const tl = wrapJ(c, mLabel(g, m), a.w - 92, 14).slice(0, 2);
@@ -2779,6 +2826,7 @@ async function missionCard(g, ph, m) {
       const ls = wrapJ(c, text, a.w - 20, 12);
       const room = Math.max(1, Math.floor((by - 6 - ty) / 15));
       ls.slice(0, room).forEach((l, i) => T(c, i === room - 1 && ls.length > room ? fit(c, l + '…', a.w - 20, 12) : l, a.x + 10, ty + i * 15, 12, PCx.text));
+      this.btns = acts.map((it, i) => ({ x: a.x + 10, y: by + i * 24, w: a.w - 20, h: 21 }));
       acts.forEach((it, i) => {
         const on = i === this.idx;
         const y = by + i * 24;
@@ -2867,6 +2915,7 @@ function settingsView(g) {
 const METHODS = {
   navi(topic) { return openNavi(this, topic || 'home'); },
   assistTip(key, opts) { return assistTip(this, key, opts || {}); },
+  assistTipClear(keys) { return assistTipClear(this, keys); },
   helpLevel() { const a = assistState(this); return a ? a.help : 'normal'; },
   setHelpLevel(level) { const a = assistState(this); if (!a || !HELP_LEVELS.includes(level)) return false; a.help = level; return true; },
   explain(term) { return explain(this, term); },

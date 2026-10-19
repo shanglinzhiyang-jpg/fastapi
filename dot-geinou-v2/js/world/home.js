@@ -237,7 +237,7 @@ async function intro(g) {
   await g.say(['目標は…国民的スター！', 'まずはどこかの事務所のオーディションに合格して、所属タレントになろう。']);
   // the other path (politics: the phone app, 永田町 to the north, the ward office's 選挙管理委員会)
   const dev = eraOf(g.state).deviceShort || 'スマホ';
-  await g.say(['芸能の道だけじゃない。\n25歳になれば、選挙に出て政治家をめざすこともできる。', `政治の入口は、${dev}の「政治」、\n東京の北の「永田町」、商店街の「区役所」。`]);
+  await g.say(['芸能の道だけじゃない。\n25歳になれば、選挙に出て政治家をめざすこともできる。', `政治の入口は、${dev}の「政治」、\n東京の北の「永田町」、商店街の「区役所」。`, `政治のことがわからなくても大丈夫。\n${dev}の「政治ナビ」で、ことは先生が教えてくれる。`]);
   await g.say([
     '【あそびかた】\n移動：矢印キー／WASD（スマホは十字パッド）\n話す・調べる・決定：Aボタン（Z / スペース / Enter）',
     'ダッシュ：Bボタン（X / Shift）を押しながら移動\nメニュー：Esc / C（スマホはMENUボタン）',
