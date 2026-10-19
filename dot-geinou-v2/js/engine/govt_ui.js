@@ -1316,6 +1316,7 @@ function drawBudgetSub(c, ui, d, st) {
   const b = d.b;
   const rows = d.rows;
   const k = ui.ctls.find((q) => q.id === 'brow');
+  if (!k) return; // a stale layout (the sub-view changed while a dialog was open): drawn on the next frame
   panel(c, 4, 64, 318, 272, d.draft ? `${d.draft.fy}年度 予算案（編成中）` : '歳出（費目別）', { right: d.draft ? `案 ${cho(d.draft.total)}` : '当初予算・基準との差' });
   T(c, '費目', 10, 82, 10, K.faint); T(c, '金額', 222, 82, 10, K.faint, 'right'); T(c, '基準比', 316, 82, 10, K.faint, 'right');
   const total = Math.max(1, rows.reduce((a, r) => a + num(r.value), 0));
@@ -1421,6 +1422,7 @@ async function taxProposal(ui, d, t) {
 function drawTaxSub(c, ui, d, st) {
   const taxes = d.taxes;
   const k = ui.ctls.find((q) => q.id === 'trow');
+  if (!k) return; // a stale layout (the sub-view changed while a dialog was open): drawn on the next frame
   panel(c, 4, 64, 318, 214, '税率（国税・地方税）', { right: '←→：目標 A：提案' });
   T(c, '税', 10, 82, 10, K.faint); T(c, 'いま', 196, 82, 10, K.faint, 'right'); T(c, '目標・予定', 316, 82, 10, K.faint, 'right');
   drawList(c, ui, k, (c2, i, x, y, w, rh, sel) => {
@@ -1911,6 +1913,8 @@ async function demoRespond(ui, dm) {
   const i = await ui.pick({ title: `デモへの対応：${dm.cause}`, lines: ['民主国家の政府は、デモを力でおさえず、対話で応えるのが基本（憲法21条）。'], items, w: 500, color: K.amber });
   if (i == null || i < 0) return;
   const r = list[i];
+  if (!r) return;
+  if (r.why) { await ui.info(r.label, [r.why], { color: K.lock }); return; } // locked: the core's reason, nothing runs
   const severe = ['remove', 'crackdown', 'curfew', 'concession'].includes(r.id);
   const lines = [r.desc, '', `【この対応の結果】${DEMO_CONSEQ[r.id] || '—'}`];
   const k = await ui.confirm({ title: `${severe ? '⚠ ' : ''}${r.label}`, lines, choices: severe ? ['やめておく', '理解したうえで実行する'] : ['実行する', 'やめる'], index: 0, cancel: severe ? 0 : 1, danger: severe, fiction: ['crackdown', 'curfew', 'concession'].includes(r.id), w: 480 });
@@ -2590,6 +2594,7 @@ function drawDisaster(c, ui, d) {
     for (const l of (ds.log || []).slice(-6).reverse()) { if (yy > 324) break; T(c, `・${safe(() => dateLabel(ui.g, l.day).replace(/^\d+年/, ''), '')} ${l.text}`, 14, yy, 10, K.dim, 'left', 310); yy += 12; }
   }
   const k = ui.ctls.find((q) => q.id === 'darow');
+  if (!k) return; // a stale layout (the sub-view changed while a dialog was open): drawn on the next frame
   const ROLE_JA = { pm: '総理', defmin: '防衛', finmin: '財務', minister: '大臣', chiji: '知事', kucho: '区長', local: '地方議員', diet: '国会議員', celebrity: '芸能人', citizen: '市民' };
   panel(c, k.x, k.y, k.w, k.h, 'できる対応', { right: ds ? `立場：${(ds.roles || []).map((r) => ROLE_JA[r] || r).join('・')}` : '' });
   drawList(c, ui, k, (c2, i, x, y, w) => { const a = d.dacts[i]; if (a.why) padlock(c2, x + 5, y + 4); T(c2, a.name, x + 15, y + 2, 12, a.why ? K.faint : K.text, 'left', w - 18); }, { empty: ds ? 'いまの立場でできる対応はない' : '災害が起きると、ここに対応が出る' });
@@ -2619,6 +2624,7 @@ function drawPress(c, ui, d) {
   for (const h of hist) { T(c, `・${safe(() => dateLabel(ui.g, h.day).replace(/^\d+年/, ''), '')} ${h.v}${h.why ? `（${h.why}）` : ''}`, 16, yy, 10, K.text, 'left', 308); yy += 12; }
   para(c, '民主制では、報道への圧力をかけても検閲はできない（憲法21条）。圧力は強い反発をまねき、時間がたつと指標は戻っていく。', 10, Math.max(yy + 6, 270), 314, 10, K.faint, 12, 5);
   const k = ui.ctls.find((q) => q.id === 'parow');
+  if (!k) return; // a stale layout (the sub-view changed while a dialog was open): drawn on the next frame
   panel(c, k.x, k.y, k.w, k.h, '報道に関する行為', { accent: K.danger });
   drawList(c, ui, k, (c2, i, x, y, w) => { const a = d.pacts[i]; if (a.why) padlock(c2, x + 5, y + 4); T(c2, a.name, x + 15, y + 2, 12, a.why ? K.faint : '#ffc8cc', 'left', w - 18); });
   actionDesc(c, ui, d.pacts, 'parow', 228, '行為');
@@ -2678,6 +2684,7 @@ function drawRegime(c, ui, d) {
   yy += 36;
   para(c, '※見込みは目安。発議は議員一人ひとりの判断、国民投票は層ごとの投票で決まる。実在の政党はこの改正に賛成しない。', 10, Math.min(yy, 312), 314, 10, K.faint, 11, 2);
   const k = ui.ctls.find((q) => q.id === 'srow');
+  if (!k) return; // a stale layout (the sub-view changed while a dialog was open): drawn on the next frame
   panel(c, k.x, k.y, k.w, k.h, '体制の手続き', { accent: K.danger });
   drawList(c, ui, k, (c2, i, x, y, w) => { const a = d.steps[i]; if (a.why) padlock(c2, x + 5, y + 4); T(c2, a.name, x + 15, y + 2, 12, a.why ? K.faint : a.auth ? '#ffc8cc' : K.text, 'left', w - 18); });
   const a = d.steps[ui.tabState().srow | 0];
@@ -2952,9 +2959,11 @@ function drawReligion(c, ui, d) {
     para(c, '※架空の団体。信仰そのものではなく、違法な勧誘・献金の強要が問題として扱われる。', 210, Math.max(yy + 4, 300), 204, 10, K.faint, 12, 3);
   }
   const k = ui.ctls.find((q) => q.id === 'rarow');
+  if (!k) return; // a stale layout (the sub-view changed while a dialog was open): drawn on the next frame
   panel(c, k.x, k.y, k.w, k.h, 'できること');
   drawList(c, ui, k, (c2, i, x, y, w) => { const a = d.acts[i]; if (a.why) padlock(c2, x + 4, y + 3); T(c2, a.label, x + 14, y + 1, 10, a.why ? K.faint : K.text, 'left', w - 16); });
   const lk = ui.ctls.find((q) => q.id === 'r_law');
+  if (!lk) return; // a stale layout (the sub-view changed while a dialog was open): drawn on the next frame
   panel(c, lk.x, lk.y, lk.w, lk.h, '政教分離の法律', { right: 'A：全文' });
   para(c, (rel.law || []).slice(0, 2).join('\n'), lk.x + 6, lk.y + 20, lk.w - 12, 10, K.text, 12, 8);
 }

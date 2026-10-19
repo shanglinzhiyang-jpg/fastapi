@@ -407,7 +407,7 @@ export const BUDGET_ITEMS = {
     // 恩給: 総理府恩給局 → 総務庁恩給局 (1984-07) → 総務省 (2001)
     id: 'onkyu', name: '恩給関係費', area: 'other', fixed: 'entitlement', min: 0, max: 0, ministry: 'minister_internal', ministries: [[0, 'minister_mgmt'], [2001, 'minister_internal']],
     explain: '旧軍人などの恩給。受給者が少なくなるにつれて、年々減っている。法律で決まった給付なので、予算では変えられない。',
-    pro: ['国のために働いた人への約束を守る'], con: ['受給者が減るなか、制度を動かす事務の費用も見直すべきという声'], seg: {}, eco: {},
+    pro: ['国のために働いた人への約束を守る'], con: ['受給者が減るなか、事務の費用も見直すべきという声'], seg: {}, eco: {},
   },
   sonota: {
     id: 'sonota', name: 'その他', area: 'other', fixed: 'discretionary', min: -0.1, max: 0.2, ministry: null, ministryLabel: '各府省',
@@ -3092,8 +3092,8 @@ function shohiLawText(g, s) {
   if (!L && p && Array.isArray(p.laws)) { const l = p.laws.find((x) => x.policy === 'shohizei_intro'); if (l) { const ld = gdate(g, l.day); L = { year: ld.year, month: ld.month, inForce: null }; } }
   if (L) {
     const f = L.inForce;
-    const when = f ? `、${f.year}年${f.month}月${ym(f.year, f.month) > ym(d.year, d.month) ? 'から施行の予定' : '施行'}` : '';
-    return `消費税法（${L.year}年${L.month}月成立${when}。このゲームの中で成立した法律）`;
+    const when = f ? `、${f.year}年${f.month}月${ym(f.year, f.month) > ym(d.year, d.month) ? '施行予定' : '施行'}` : '';
+    return `消費税法（${L.year}年${L.month}月成立${when}）`;
   }
   if (s.startYear >= 1990 || shohiRate(g) > 0) return txt(TAXES.shohi.law, Math.max(d.fy, 1990));
   return d.fy < 1989.25 ? txt(TAXES.shohi.law, d.fy) : '消費税法はまだない（このゲームでは、大型間接税はまだ導入されていない）';
@@ -3166,7 +3166,7 @@ function budgetImpl(g, s) {
     return { id: k, name: it.name, value: r2(det[k]), share: total ? r1((det[k] / total) * 100) : 0, baseline: r2(G2.base ? G2.base[k] : det[k]), fixed: it.fixed, fixedLabel: { debt: '減らせない（国債の返済・利払い）', formula: 'ほぼ法律で決まる（法定率）', entitlement: '自然増がある（法律で決まる給付）', reserve: '予備費', discretionary: '政策で増減できる' }[it.fixed], min: it.min, max: it.max, area: it.area, explain: txt(it.explain, d.year), pro: it.pro, con: it.con, ministry: itemMinistry(it, d.fy) };
   });
   const midYear = r1(num(B.deficit) - (num(B.spending) - num(B.revenue) - num(G2.nontax)));
-  if (midYear > 0.05) spending.push({ id: 'midyear', name: '年度途中の追加（補正・新しい法律）', value: midYear, share: 0, fixed: 'discretionary', fixedLabel: '年度の途中で決まった', explain: '年度の途中で成立した補正予算や法律の費用。', pro: ['災害や景気の急な変化など、年度の途中の必要にすぐ応えられる'], con: ['当初予算ほどの審議を経ずに支出がふくらみ、国債が増える'], ministry: '各府省' });
+  if (midYear > 0.05) spending.push({ id: 'midyear', name: '年度途中の追加（補正・新しい法律）', value: midYear, share: 0, fixed: 'discretionary', fixedLabel: '年度の途中で決まった', explain: '年度の途中で成立した補正予算や法律の費用。', pro: ['年度の途中の急な必要（災害・景気）に応えられる'], con: ['審議が短いまま支出がふくらみ、国債が増える'], ministry: '各府省' });
   const revTotal = sumObj(rev);
   const revenue = Object.entries(rev).map(([id, v]) => ({ id, name: id === 'sonotazei' ? (d.year < 1989 ? 'その他の税（物品税・関税など）' : 'その他の税（関税・印紙収入など）') : REVENUE_ITEMS[id].name, value: v, share: revTotal ? r1((v / revTotal) * 100) : 0 }));
   const S = s.budget;
@@ -3307,7 +3307,9 @@ const methods = {
   joinDemo(id, opts = {}) { const s = GS(this); return s ? joinDemoImpl(this, s, id, opts || {}) : { ok: false, why: 'まだ準備ができていない' }; },
   organizeDemo(def = {}) { const s = GS(this); return s ? organizeDemoImpl(this, s, def || {}) : { ok: false, why: 'まだ準備ができていない' }; },
   respondDemo(id, how) { const s = GS(this); return s ? respondDemoImpl(this, s, id, how) : { ok: false, why: 'まだ準備ができていない' }; },
-  demoResponses(id) { const s = GS(this); if (!s) return []; const d = s.demos.list.find((x) => x.id === id); return Object.entries(DEMO_RESPONSES).map(([how, R]) => ({ id: how, label: R.label, desc: R.desc || '', why: respondBlock(this, s, d, how) })); },
+  // the real-party rule: under a government that includes a real party, 強制排除 is not offered at all (respondDemo
+  // still refuses it with the reason)
+  demoResponses(id) { const s = GS(this); if (!s) return []; const d = s.demos.list.find((x) => x.id === id); const real = realInGovt(pol(this)); return Object.entries(DEMO_RESPONSES).filter(([how]) => !(real && how === 'remove')).map(([how, R]) => ({ id: how, label: R.label, desc: R.desc || '', why: respondBlock(this, s, d, how) })); },
   approvalBreakdown() { const s = GS(this); return s ? approvalBreakdownImpl(this, s) : null; },
   // other cores record their part of the approval (reason: 'disaster' | 'regime' | ...). opts.applied: the change was
   // already made to the cabinet (only record it); otherwise delta is added to the cabinet's mood (policy term).
