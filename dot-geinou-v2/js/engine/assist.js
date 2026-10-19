@@ -38,6 +38,7 @@ import { registerItem } from './state.js';
 import * as PH from './phone.js';
 import {
   GLOSSARY, GLOSSARY_CATS, glossaryLookup, glossaryFind, termStatus, termText, glossaryTermsByCat, glossaryKanaOrder,
+  termSince, termUntil, eraTerm,
 } from './glossary.js';
 
 // ---------------------------------------------------------------- optional cores (guarded, literal paths)
@@ -78,6 +79,60 @@ export function deviceWord(g) { return (g && g.state ? eraOf(g.state).deviceShor
 function naviWhere(g) { return `${deviceWord(g)}の「政治ナビ」`; }
 const vAge = (g) => safe(() => (POL && POL.votingAge ? POL.votingAge(yearOf(g), (g.state.politics || {}).flags || {}) : (yearOf(g) >= 2016 ? 18 : 20)), yearOf(g) >= 2016 ? 18 : 20);
 function polState(g) { if (!g || !g.state || typeof g.pol !== 'function') return null; return safe(() => g.pol(), null); }
+// The game's own 「いま」 for the glossary (glossary.js ctx): 消費税率, 選挙権年齢, 衆議院の選挙制度と定数,
+// constitutional amendments made in this game, 郵政. Every core is feature-detected; a missing one
+// leaves its fields out and the glossary falls back to the real timeline for them. Cached per game day.
+const AMEND_NAMES = { amend_sdf: '自衛隊の明記', amend_emergency: '緊急事態条項', amend_education: '教育の無償化', amend_environment: '環境権' };
+function glossCtx(g) {
+  if (!g || !g.state) return null;
+  const key = `${g.state.day}`;
+  if (g._naviCtx && g._naviCtx.key === key && g._naviCtx.st === g.state) return g._naviCtx.c;
+  const yr = yearOf(g);
+  const era = (g.state.profile && g.state.profile.era) || 'reiwa';
+  const c = { year: yr, month: safe(() => (typeof g.polDate === 'function' ? g.polDate().month : null), null), startYear: ERA_BASE[era] || 2026 };
+  const p = polState(g);
+  if (p) {
+    const F = p.flags || {};
+    if (p.economy && Number.isFinite(Number(p.economy.taxRate))) c.taxRate = Number(p.economy.taxRate);
+    if (F.taxPlan && !F.taxPlan.done && Number(F.taxPlan.rate) > 0) c.taxPlan = { rate: Number(F.taxPlan.rate), year: F.taxPlan.year, month: F.taxPlan.month };
+    c.reducedRate = !!F.reducedRate;
+    c.age18 = !!F.age18 && yr < 2016;
+    c.votingAge = vAge(g);
+    c.heiritsuGame = !!F.heiritsuFrom && Number(F.heiritsuFrom) <= 1995;
+    c.heiritsuLaw = c.heiritsuGame || yr >= 1994;
+    c.referendumLawGame = !!F.referendumLaw;
+    c.referendumLaw = !!F.referendumLaw || yr >= 2010;
+    const next = safe(() => (POL && POL.shugiRules ? POL.shugiRules(yr, F) : null), null);
+    const sh = p.diet && p.diet.shugi;
+    if (next || sh) c.shugi = { now: (sh && sh.system) || (next && next.system) || null, next: next ? next.system : null, total: (next && next.total) || (sh && sh.total) || null, smd: next ? next.smd : null, pr: next ? next.pr : null };
+    const am = Object.keys(AMEND_NAMES).filter((id) => F['done_' + id]).map((id) => safe(() => POL.POLICIES[id].name, null) || `憲法改正（${AMEND_NAMES[id]}）`);
+    c.amendments = am;
+    if (F.done_amend_emergency) c.emergencyClause = safe(() => POL.POLICIES.amend_emergency.name, null) || '緊急事態条項';
+  }
+  const r = safe(() => (typeof g.regime === 'function' ? g.regime() : null), null);
+  if (r && r.steps && r.steps.clause) {
+    c.amendments = [...(c.amendments || []), '強権型の緊急事態条項'];
+    c.emergencyClause = '強権型の緊急事態条項（もしもの世界のシミュレーション）';
+  }
+  if (c.taxRate == null) {
+    const rows = safe(() => (typeof g.taxRates === 'function' ? g.taxRates() : null), null);
+    const sh = Array.isArray(rows) ? rows.find((x) => x && x.id === 'shohi') : null;
+    if (sh && Number.isFinite(Number(sh.rate))) c.taxRate = Number(sh.rate);
+  }
+  if (!c.taxPlan) {
+    const tr = safe(() => (typeof g.taxReform === 'function' ? g.taxReform() : null), null);
+    const pl = tr && Array.isArray(tr.plan) ? tr.plan.find((x) => x && x.id === 'shohi' && Number(x.rate) > num(c.taxRate)) : null;
+    if (pl) c.taxPlan = { rate: Number(pl.rate), year: pl.year, month: pl.month };
+  }
+  const ps = safe(() => (typeof g.postal === 'function' ? g.postal() : null), null);
+  if (ps && ps.stage) c.postal = { stage: ps.stage, law: ps.inForce || null, privatized: ps.privatized ? { year: ps.privatized.year, month: ps.privatized.month } : null };
+  g._naviCtx = { key, st: g.state, c };
+  return c;
+}
+// glossary helpers bound to the game (year + ctx)
+const gStatus = (g, e) => termStatus(e, yearOf(g), glossCtx(g));
+const gText = (g, e) => termText(e, yearOf(g), glossCtx(g));
+const gTerm = (g, term) => eraTerm(term, yearOf(g), glossCtx(g));
 
 // ================================================================ state
 const HELP_LEVELS = ['beginner', 'normal', 'expert'];
@@ -410,7 +465,7 @@ class ExplainScene {
   }
   show(term) {
     const yr = yearOf(this.g);
-    const e = glossaryLookup(term);
+    const e = glossaryLookup(gTerm(this.g, term));
     this.cur = e ? { term: e.term, e } : { term: String(term || ''), e: null };
     this.sy = 0;
     this.chip = 0;
@@ -421,7 +476,7 @@ class ExplainScene {
     const e = this.cur.e;
     if (!e) return [];
     const a = assistState(this.g);
-    return (e.related || []).filter((r) => GLOSSARY[r] && (a.showFuture || termStatus(GLOSSARY[r], this.yr) !== 'future'));
+    return (e.related || []).map((r) => gTerm(this.g, r)).filter((r, i, arr) => GLOSSARY[r] && arr.indexOf(r) === i && r !== this.cur.term && (a.showFuture || gStatus(this.g, GLOSSARY[r]) !== 'future'));
   }
   update(g) {
     this.t++;
@@ -451,19 +506,26 @@ class ExplainScene {
     c.fillRect(0, 0, SW, SH);
     // the card is as tall as its text needs (the body scrolls beyond CARD.h)
     const e = this.cur.e;
-    const n = e ? wrapJ(c, termText(e, this.yr), CARD.w - 36, 12).length : 3;
-    const h = clamp(104 + n * 17 + (this.related().length ? 26 : 0) + 28, 190, CARD.h);
+    const n = e ? wrapJ(c, gText(this.g, e), CARD.w - 36, 12).length : 3;
+    const h = clamp(104 + n * 17 + (this.related().length ? 26 : 0) + 28 + (e && cardSplit(c, this.g, e, CARD.w) ? 16 : 0), 190, CARD.h);
     const x = Math.round((SW - CARD.w) / 2), y = Math.round((SH - h) / 2) + Math.round((1 - k) * 16);
     drawTermCard(c, this.g, this.cur, { x, y, w: CARD.w, h }, this);
   }
 }
 function catOf(id) { return GLOSSARY_CATS.find((x) => x.id === id) || { name: '', color: '#888' }; }
-function sinceLabel(e, yr) {
-  const st = termStatus(e, yr);
-  if (st === 'future') return { text: `この時代にはまだない（${e.sinceText || `${e.since}年`}〜）`, color: '#b05a2a' };
-  if (st === 'past') return { text: `いまはない（${e.untilText || `${e.until}年まで`}）`, color: '#6a6a7a' };
-  if (e.since) return { text: `${e.sinceText || `${e.since}年`}から`, color: '#2a7a6a' };
+function sinceLabel(e, yr, ctx = null) {
+  const st = termStatus(e, yr, ctx);
+  const since = termSince(e, yr, ctx), until = termUntil(e, yr, ctx);
+  if (st === 'future') return { text: `この時代にはまだない（${since || '―'}〜）`, color: '#b05a2a' };
+  if (st === 'past') return { text: `いまはない（${until || 'かつてあった'}）`, color: '#6a6a7a' };
+  if (since) return { text: `${since}から`, color: '#2a7a6a' };
   return null;
+}
+// The card's kana and since label share a row only when both fit; otherwise the label gets its own row.
+function cardSplit(c, g, e, w) {
+  const sl = sinceLabel(e, yearOf(g), glossCtx(g));
+  if (!sl) return false;
+  return measure(c, e.kana, 12) + measure(c, sl.text, 12) + 12 > w - 32;
 }
 // The card used by g.explain (also reused by the phone entry page for the header block).
 function drawTermCard(c, g, cur, r, view) {
@@ -484,14 +546,22 @@ function drawTermCard(c, g, cur, r, view) {
     return;
   }
   const cat = catOf(e.cat);
-  T(c, fit(c, cur.term, w - 150, 16), x + 16, yy, 16, '#1a1a28');
-  T(c, fit(c, e.kana, w - 150, 12), x + 16, yy + 20, 12, '#7a7a88');
   const cw = Math.round(measure(c, cat.name, 12)) + 10;
+  T(c, fit(c, cur.term, w - 32 - cw - 8, 16), x + 16, yy, 16, '#1a1a28');
   frame(c, x + w - 16 - cw, yy, cw, 16, cat.color, shade(cat.color, -0.4));
   T(c, cat.name, x + w - 16 - cw + 5, yy + 2, 12, '#ffffff');
-  const sl = sinceLabel(e, yr);
-  if (sl) T(c, fit(c, sl.text, w - 180, 12), x + w - 16, yy + 20, 12, sl.color, 'right');
-  yy += 40;
+  const sl = sinceLabel(e, yr, glossCtx(g));
+  // the reading and the 「…から」 label: one row when both fit, else the label on its own row below
+  const split = cardSplit(c, g, e, w);
+  if (sl && !split) {
+    const lw = Math.round(measure(c, sl.text, 12));
+    T(c, fit(c, e.kana, w - 32 - lw - 12, 12), x + 16, yy + 20, 12, '#7a7a88');
+    T(c, sl.text, x + w - 16, yy + 20, 12, sl.color, 'right');
+  } else {
+    T(c, fit(c, e.kana, w - 32, 12), x + 16, yy + 20, 12, '#7a7a88');
+    if (sl) T(c, fit(c, sl.text, w - 32, 12), x + w - 16, yy + 36, 12, sl.color, 'right');
+  }
+  yy += split ? 56 : 40;
   // the short line
   frame(c, x + 12, yy, w - 24, 22, '#e2f3ee', '#9ad0c4');
   T(c, fit(c, e.short, w - 40, 12), x + 20, yy + 5, 12, '#1f5f56');
@@ -500,7 +570,7 @@ function drawTermCard(c, g, cur, r, view) {
   const rel = view.related ? view.related() : [];
   const relH = rel.length ? 26 : 0;
   const bodyH = y + h - 22 - relH - yy;
-  const body = termText(e, yr);
+  const body = gText(g, e);
   const lines = wrapJ(c, body, w - 36, 12);
   view.maxScroll = Math.max(0, lines.length * 17 - bodyH + 2);
   c.save();
@@ -538,7 +608,7 @@ function drawTermCard(c, g, cur, r, view) {
 }
 export function explain(g, term) {
   if (!g || !g.state) return Promise.resolve(null);
-  const e = glossaryLookup(term);
+  const e = glossaryLookup(gTerm(g, term));
   if (e) { const a = assistState(g); if (a && !a.terms[e.term]) a.terms[e.term] = today(g); checkMissions(g); }
   if (g.auto) return Promise.resolve(e ? e.term : null);
   return new Promise((resolve) => g.push(new ExplainScene(g, term, resolve)));
@@ -734,7 +804,7 @@ export function explainNews(g, n) {
   const s = String((n && n.text) || n || '');
   const rule = NEWS_RULES.find(([re]) => re.test(s));
   const yr = yearOf(g);
-  const terms = glossaryFind(s, assistState(g).showFuture ? null : yr).map((x) => x.term);
+  const terms = glossaryFind(s, assistState(g).showFuture ? null : yr, glossCtx(g)).map((x) => x.term);
   return { text: s, plain: rule ? rule[1] : 'このニュースに出てくる言葉を、下で調べてみよう。わからない言葉がわかると、ニュースはぐっと読みやすくなるよ。', terms };
 }
 function newsList(g) {
@@ -1326,7 +1396,7 @@ function newsDetail(g, n) {
 function visibleTerms(g, list) {
   const a = assistState(g);
   const yr = yearOf(g);
-  return list.filter((k) => a.showFuture || termStatus(GLOSSARY[k], yr) !== 'future');
+  return list.filter((k) => a.showFuture || termStatus(GLOSSARY[k], yr, glossCtx(g)) !== 'future');
 }
 async function glossarySection(g, ph) {
   const a = assistState(g);
@@ -1358,39 +1428,47 @@ function termListView(g, cat, title) {
     title, color: NC, rowH: 36,
     items: () => keys().map((k) => {
       const e = GLOSSARY[k];
-      const st = termStatus(e, yr);
+      const st = termStatus(e, yr, glossCtx(g));
       return { label: k, sub: e.short, term: k, right: st === 'future' ? 'まだない' : st === 'past' ? '歴史' : a.terms[k] ? '✓' : '', rightColor: st === 'future' ? '#b05a2a' : st === 'past' ? PCx.dim : PCx.good, labelColor: st === 'future' ? PCx.dim : null };
     }),
     pick(ph, it) { ph.open(termView(g, it.term)); },
   });
 }
 function termView(g, term) {
-  const e0 = glossaryLookup(term);
+  const e0 = glossaryLookup(gTerm(g, term));
   const yr = yearOf(g);
   const a = assistState(g);
   if (e0 && !a.terms[e0.term]) { a.terms[e0.term] = today(g); checkMissions(g); }
   const key = e0 ? e0.term : String(term);
   const e = e0 ? GLOSSARY[key] : null;
-  const rel = () => (e ? (e.related || []).filter((r) => GLOSSARY[r] && (a.showFuture || termStatus(GLOSSARY[r], yr) !== 'future')) : []);
+  const rel = () => (e ? (e.related || []).map((r) => gTerm(g, r)).filter((r, i, arr) => GLOSSARY[r] && arr.indexOf(r) === i && r !== key && (a.showFuture || gStatus(g, GLOSSARY[r]) !== 'future')) : []);
   return pageView(g, {
     title: '用語じてん', color: NC,
     head(c, r) {
       if (!e) { T(c, fit(c, key, r.w - 20, 16), r.x + 10, r.y + 6, 16, PCx.text); return 28; }
-      T(c, fit(c, key, r.w - 20, 16), r.x + 10, r.y + 4, 16, '#1a1a28');
-      T(c, fit(c, e.kana, r.w - 20, 12), r.x + 10, r.y + 22, 12, PCx.dim);
       const cat = catOf(e.cat);
       const cw = Math.round(measure(c, cat.name, 12)) + 8;
-      frame(c, r.x + r.w - 8 - cw, r.y + 4, cw, 16, cat.color, shade(cat.color, -0.4));
-      T(c, cat.name, r.x + r.w - 8 - cw + 4, r.y + 6, 12, '#ffffff');
-      let h = 38;
-      const sl = sinceLabel(e, yr);
-      if (sl) { T(c, fit(c, sl.text, r.w - 20, 12), r.x + 10, r.y + h, 12, sl.color); h += 16; }
+      // the title never runs under the category tag: beside it when it fits at 16px, else on its own
+      // row (16px, or 14px for the longest names) with the tag moved down to the reading's row
+      const beside = measure(c, key, 16) <= r.w - 20 - cw - 8;
+      const ts = beside || measure(c, key, 16) <= r.w - 20 ? 16 : 14;
+      T(c, fit(c, key, beside ? r.w - 20 - cw - 8 : r.w - 20, ts), r.x + 10, r.y + 4 + (16 - ts), ts, '#1a1a28');
+      const tagY = beside ? r.y + 4 : r.y + 23;
+      frame(c, r.x + r.w - 8 - cw, tagY, cw, 16, cat.color, shade(cat.color, -0.4));
+      T(c, cat.name, r.x + r.w - 8 - cw + 4, tagY + 2, 12, '#ffffff');
+      // the reading and the since label wrap (2 lines at most each) instead of being cut
+      const kw = beside ? r.w - 20 : r.w - 20 - cw - 8;
+      const kl = wrapJ(c, e.kana, kw, 12).slice(0, 2);
+      kl.forEach((l, i) => T(c, l, r.x + 10, r.y + 22 + i * 14, 12, PCx.dim));
+      let h = 22 + Math.max(16, kl.length * 14) + 2;
+      const sl = sinceLabel(e, yr, glossCtx(g));
+      if (sl) { const sls = wrapJ(c, sl.text, r.w - 20, 12).slice(0, 2); sls.forEach((l, i) => T(c, l, r.x + 10, r.y + h + i * 14, 12, sl.color)); h += sls.length * 14 + 2; }
       const ls = wrapJ(c, e.short, r.w - 28, 12);
       frame(c, r.x + 8, r.y + h, r.w - 16, 8 + ls.length * 15, NL, '#9ad0c4');
       ls.forEach((l, i) => T(c, l, r.x + 14, r.y + h + 4 + i * 15, 12, '#1f5f56'));
       return h + 8 + ls.length * 15 + 4;
     },
-    body: () => (e ? termText(e, yr) : 'この言葉は、まだ用語じてんにのっていないみたい。'),
+    body: () => (e ? gText(g, e) : 'この言葉は、まだ用語じてんにのっていないみたい。'),
     chips: rel,
     chip(ph, i, t) { ph.open(termView(g, t)); },
   });
@@ -1472,28 +1550,46 @@ async function openIdeology(g, ph, id) {
   if (!d) return ph.open(pageView(g, { title: '思想じてん', color: '#8a5ac8', body: () => 'この思想は、まだじてんにのっていないみたい。' }));
   const a = assistState(g);
   a.ideo[id] = today(g);
+  const yr = yearOf(g);
   const rel = [].concat(d.related || []).filter((r) => ideoGet(r));
   const src = [].concat(d.sources || []).map((s) => (typeof s === 'string' ? s : s.title || s.name || s.url || '')).filter(Boolean);
-  const note = d.selectable === false ? `\n【この項目について】\n${d.note || 'この思想は、歴史を学ぶための項目。ゲームでは、政党の理念に選ぶことはできない。'}` : '';
+  const prop = d.selectable === false;
+  const note = prop ? `\n【この項目について】\n${d.note || 'この思想は、歴史を学ぶための項目。ゲームでは、政党の理念に選ぶことはできない。'}` : '';
+  // the sections and their neutral titles come from ideology.js (実際に起きたこと / 支持する人の考え /
+  // 批判する人の考え; 当時の宣伝・批判と歴史の評価 for ファシズム・ナチズム); lines about events later than
+  // the game year are left out (the setting 「この時代にない用語」 shows them, marked) — like the glossary
+  const secs = typeof IDEO.ideologySections === 'function' ? IDEO.ideologySections(id, yr, { showFuture: !!a.showFuture }) : [];
+  const sec = (key, fb) => secs.find((x) => x.key === key) || fb;
+  const fbLines = (k) => ({ lines: [].concat(d[k] || []), hidden: 0 });
+  const later = (x) => (x.hidden ? `\n（${a.showFuture ? `「${IDEO.FUTURE_MARK ? IDEO.FUTURE_MARK.replace(/[（）]/g, '') : 'ゲームの年より後のできごと'}」の印は、${yr}年より後のこと` : `${yr}年より後のできごとは、のせていない（設定の「この時代にない用語」で表示できる）`}）` : '');
+  const body = (key, title, fb) => () => { const x = sec(key, { title, ...fbLines(fb) }); return `【${x.title}】\n${listText(x.lines)}${later(x)}`; };
+  const supportNote = prop ? '' : '\n※その思想を支持する人が、どう考えるかの紹介。どの思想が正しいということはない。';
   const tabs = [
     { label: '概要', body: () => `${String(d.summary || '').replace(/\s*\n\s*/g, '')}${note}${src.length ? `\n【出典】\n${src.map((s) => `・${s}`).join('\n')}` : ''}` },
-    { label: '考え', body: () => `【おもな考え方】\n${listText(d.ideas)}` },
-    { label: '歴史', body: () => `【歴史】\n${listText(d.history)}` },
-    { label: '記録', body: () => `【実際の記録（成果と失敗）】\n${listText(d.record)}` },
-    { label: '賛成', body: () => `【支持する人の声】\n${listText(d.pro)}` },
-    { label: '反対', body: () => `【批判する人の声】\n${listText(d.con)}` },
+    { label: '考え', body: body('ideas', '主な考え', 'ideas') },
+    { label: '歴史', body: body('history', '歴史', 'history') },
+    { label: '記録', body: body('record', '実際に起きたこと', 'record') },
+    { label: prop ? '宣伝' : '支持', body: () => body('pro', prop ? '当時の宣伝（どう支持を集めたか）' : '支持する人の考え', 'pro')() + supportNote },
+    { label: '批判', body: body('con', prop ? '批判・歴史の評価' : '批判する人の考え', 'con') },
     { label: '関連', items: () => rel.map((r) => ideoName(r)), empty: '（関連する項目はない）', pick: (ph2, i) => { openIdeology(g, ph2, rel[i]); } },
   ];
   return ph.open(pageView(g, {
     title: d.name || id, color: '#8a5ac8', tabs,
     head(c, r, view) {
       if (view.tab !== 0) return 0;
-      const fam0 = d.family ? familyName(d.family) : '';
-      T(c, fit(c, d.full || d.name || id, r.w - 28 - (fam0 ? Math.round(measure(c, fam0, 12)) + 12 : 0), 16), r.x + 10, r.y + 3, 16, '#1a1a28');
-      T(c, fit(c, d.kana || '', r.w - 90, 12), r.x + 10, r.y + 21, 12, PCx.dim);
+      // row 1: the short name (≤ 9 characters) and the family tag; row 2 (wrapped): the other name and
+      // the reading — nothing is cut with 「…」
       const fam = d.family ? familyName(d.family) : '';
-      if (fam) { const fw = Math.round(measure(c, fam, 12)) + 8; frame(c, r.x + r.w - 8 - fw, r.y + 4, fw, 16, '#8a5ac8', '#5a3a8a'); T(c, fam, r.x + r.w - 8 - fw + 4, r.y + 6, 12, '#ffffff'); }
-      return 38;
+      const fw = fam ? Math.round(measure(c, fam, 12)) + 8 : 0;
+      const nm = d.name || id;
+      const avail = r.w - 20 - (fw ? fw + 8 : 0);
+      const ts = measure(c, nm, 16) <= avail ? 16 : measure(c, nm, 14) <= avail ? 14 : 12;
+      T(c, fit(c, nm, avail, ts), r.x + 10, r.y + 3 + (16 - ts), ts, '#1a1a28');
+      if (fam) { frame(c, r.x + r.w - 8 - fw, r.y + 4, fw, 16, '#8a5ac8', '#5a3a8a'); T(c, fam, r.x + r.w - 8 - fw + 4, r.y + 6, 12, '#ffffff'); }
+      const sub = [d.alt, d.kana].filter(Boolean).join('／');
+      const ls = wrapJ(c, sub, r.w - 20, 12).slice(0, 2);
+      ls.forEach((l, i) => T(c, l, r.x + 10, r.y + 22 + i * 14, 12, PCx.dim));
+      return ls.length > 1 ? 52 : 38;
     },
   }));
 }

@@ -501,7 +501,7 @@ export const AREA_ORDER = Object.keys(POLICY_AREAS);
 // Trade-offs are on purpose: every policy pleases some segments and costs others.
 export const POLICIES = {};
 // The game year that era-dependent names follow (set by ensurePol once per game day; reiwa until a game is loaded).
-const NAMES_AT = { st: null, day: null, fy: 2026 };
+const NAMES_AT = { st: null, day: null, pol: null, fy: 2026 };
 const sc = (o, k) => { const r = {}; for (const [s, v] of Object.entries(o || {})) r[s] = Math.round(v * k * 10) / 10; return r; };
 // ext (review): a law that adds to the deficit (cost > 0, 兆円/年) is paid for by the future
 // (将来世代へのつけ). Segments that weigh that cost lose a little support per 兆円 (capped), so a
@@ -3101,6 +3101,11 @@ function chooseCoalition(g, p) {
   if (!ids.length) return { core: Object.keys(p.parties)[0], partners: [], seats: 0 };
   const dist = (a, b) => { const A = p.parties[a].ideology, B = p.parties[b].ideology; return Math.abs(A.econ - B.econ) + Math.abs(A.social - B.social) + Math.abs(A.security - B.security); };
   const willing = (core, id) => {
+    // ext (regime.js, feature-detected): the real-party coalition rule — a real party does not join (or take in the
+    // player's party) where the regime rule refuses it
+    if (typeof g.regimeCoalitionBlock === 'function') {
+      try { if (g.regimeCoalitionBlock(id, { core }) || (id === p.me.party && g.regimeCoalitionBlock(core, { core, partner: id }))) return false; } catch (e) { console.error(e); }
+    }
     if (p.parties[id].leader === 'player') {
       const st = p.me.coalitionStance;
       if (st === 'refuse') return false;
@@ -3866,7 +3871,7 @@ function ensurePol(g) {
   else if (!st.politics._ok) { st.politics = normalizePolitics(g, st.politics); }
   Object.defineProperty(st.politics, '_ok', { value: true, enumerable: false, configurable: true, writable: true });
   // the year names follow (POLICIES[id].name getters, e.g. disaster_prep): refreshed once per game day
-  if (NAMES_AT.st !== st || NAMES_AT.day !== st.day) { NAMES_AT.st = st; NAMES_AT.day = st.day; try { NAMES_AT.fy = fyNow(g); } catch (e) { /* keep the last year */ } }
+  if (NAMES_AT.st !== st || NAMES_AT.day !== st.day || NAMES_AT.pol !== st.politics) { NAMES_AT.st = st; NAMES_AT.day = st.day; NAMES_AT.pol = st.politics; try { NAMES_AT.fy = fyNow(g); } catch (e) { /* keep the last year */ } }
   return st.politics;
 }
 function seatMove(p, house, from, to) {
@@ -5216,7 +5221,7 @@ const methods = {
         for (const id of ok) {
           if ((p.cabinet.partyIds || []).includes(id)) continue; // already a partner: keeping it is not a new coalition
           let why = null;
-          try { why = this.regimeCoalitionBlock(id); } catch (e) { console.error(e); why = null; }
+          try { why = this.regimeCoalitionBlock(id, { core: me.party || undefined }); } catch (e) { console.error(e); why = null; }
           if (why) return { ok: false, why: String(why), party: id };
         }
       }
@@ -5455,6 +5460,12 @@ const methods = {
     const A = p.parties[core] && p.parties[core].ideology, B = pt.ideology;
     const dist = A ? Math.abs(A.econ - B.econ) + Math.abs(A.social - B.social) + Math.abs(A.security - B.security) : 9;
     if (dist > 3.2) return '政策が違いすぎて、連立を断られた';
+    // ext (regime.js, feature-detected): a real core does not take in the party of a player who took authoritarian steps
+    if (typeof this.regimeCoalitionBlock === 'function') {
+      let why = null;
+      try { why = this.regimeCoalitionBlock(core, { core, partner: pt.id }); } catch (e) { console.error(e); why = null; }
+      if (why) return String(why);
+    }
     p.cabinet.partyIds.push(pt.id);
     news(p, this, `${pt.name}が連立政権に加わった`);
     offerPostToPlayer(this, p, true);

@@ -2485,35 +2485,21 @@ async function warFlow(ui, d, o) {
 // ================================================================ tab 8: 危機管理
 const CRISIS_SUBS = [{ id: 'disaster', label: '災害対応' }, { id: 'press', label: '報道の自由' }, { id: 'regime', label: '体制・憲法改正' }];
 const PHASES = [['hassei', '発生'], ['hinan', '避難・救助'], ['fukko', '復旧・復興'], ['done', '終了']];
-// the 国民投票 projection: regime.js's model (runReferendum REF_BASE) without the random part
-const REF_BASE = { young: 0.25, families: 0.32, elderly: 0.42, employees: 0.33, selfemployed: 0.4, business: 0.4, farmers: 0.42, unions: 0.15, urban: 0.28, rural: 0.44, floating: 0.27 };
-function referendumProjection(g, rg) {
-  const appr = num(safe(() => g.approval(), 40), 40);
-  const W = safe(() => segWeights(yearOf(g)), null) || {};
-  let yes = 0, ws = 0;
-  const bySeg = {};
-  for (const s of Object.keys(REF_BASE)) {
-    const v = clamp(REF_BASE[s] + (appr - 40) * 0.006 - num(rg && rg.unrest) * 0.001, 0.05, 0.9);
-    bySeg[s] = v; yes += num(W[s], 1 / 11) * v; ws += num(W[s], 1 / 11);
-  }
-  return { yes: ws ? (yes / ws) * 100 : 30, bySeg };
+// The 発議 / 国民投票 projections come from regime.js itself (g.regimeAmendProjection / g.regimeReferendumProjection:
+// the same model the vote uses, no copy here). Without regime.js there is no amendment to project: a neutral fallback.
+function referendumProjection(g) {
+  const r = has(g, 'regimeReferendumProjection') ? safe(() => g.regimeReferendumProjection(), null) : null;
+  return r && Number.isFinite(Number(r.yes)) ? { yes: num(r.yes), bySeg: r.bySeg || {} } : { yes: 0, bySeg: {} };
 }
-// 発議: the votes the player's side can count on (regime.js amendVotes, expected: the own party, fictional partners
-// half, a few independents; a real party never). Needs ceil(2/3 × 総議員) in each house.
 function amendProjection(g, house) {
+  const r = has(g, 'regimeAmendProjection') ? safe(() => g.regimeAmendProjection(), null) : null;
+  const h = r && r[house];
+  if (h && Number.isFinite(Number(h.yes)) && Number.isFinite(Number(h.total))) return { yes: Math.round(num(h.yes)), total: num(h.total), need: num(h.need, Math.ceil((num(h.total) * 2) / 3)) };
   const p = polOf(g);
-  const H = p && p.diet[house];
+  const H = p && p.diet && p.diet[house];
   if (!H) return null;
   const total = num(H.total) || Object.values(H.seats || {}).reduce((a, v) => a + num(v), 0);
-  const me = p.me.party;
-  const real = (id) => !!(p.parties[id] && (p.parties[id].real || id === 'jimin' || id === 'minshu'));
-  let yes = 0;
-  if (me && !real(me)) {
-    yes += num(H.seats[me]) * 0.97;
-    for (const id of p.cabinet.partyIds || []) if (id !== me && !real(id)) yes += num(H.seats[id]) * 0.5;
-    yes += num(H.seats.ind) * 0.1;
-  }
-  return { yes: Math.round(yes), total, need: Math.ceil((total * 2) / 3) };
+  return { yes: 0, total, need: Math.ceil((total * 2) / 3) };
 }
 const STEP_CONSEQ = {
   referendum_law: '憲法改正の国民投票の手続きを定める法律案を国会に出す（民主的な手続き）。',
@@ -2544,7 +2530,7 @@ const TAB_CRISIS = {
     d.rg = has(g, 'regime') ? safe(() => g.regime(), null) : null;
     d.steps = has(g, 'regimeSteps') ? safe(() => g.regimeSteps(), []) : [];
     d.amend = { shugi: amendProjection(g, 'shugi'), sangi: amendProjection(g, 'sangi') };
-    d.ref = referendumProjection(g, d.rg);
+    d.ref = referendumProjection(g);
     if (ui.tabState().sub == null && !d.ds) ui.tabState().sub = d.rg && d.rg.id !== 'democracy' ? 'regime' : 'disaster';
     return d;
   },

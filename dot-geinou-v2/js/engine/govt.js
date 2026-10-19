@@ -1065,7 +1065,7 @@ function inForceDate(g, y, m, id) {
   if (CAL_YEAR_TAX[id] && m === 1 && y === d.year) return { year: d.year, month: d.month, asOf: { year: y, month: 1 } };
   return { year: d.month === 12 ? d.year + 1 : d.year, month: d.month === 12 ? 1 : d.month + 1 };
 }
-const atLabel = (at) => (at.asOf ? `${at.asOf.year}年分から（1月にさかのぼって）` : `${dateText(at.year, at.month)}から`);
+const atLabel = (at) => (at.asOf ? `${at.asOf.year}年${at.asOf.month}月にさかのぼって` : `${dateText(at.year, at.month)}から`);
 function taxLawEnacted(g, prm) {
   const s = GS(g);
   if (!s) return;
@@ -1129,7 +1129,7 @@ function applyTaxChange(g, s, id, rate, why, opts = {}) {
   s.taxHistory.unshift({ day: today(g), id, from: before, to: rate, why, year: at.year, month: at.month });
   if (s.taxHistory.length > 60) s.taxHistory.length = 60;
   const up = rate > before;
-  const text = `${at.month !== d.month ? `${at.year}年分（${at.month}月にさかのぼって）` : dateText(d.year, d.month)}から${taxName(id, d.fy)}が${before}${T.unit}→${rate}${T.unit}になった（${why}）`;
+  const text = `${at.month !== d.month ? `${at.year}年${at.month}月にさかのぼって、` : `${dateText(d.year, d.month)}から`}${taxName(id, d.fy)}が${before}${T.unit}→${rate}${T.unit}になった（${why}）`;
   govtNews(g, s, text, { phone: opts.phone && (id === 'shohi' || id === 'sake' || id === 'kihatsu') ? `【税金】${dateText(d.year, d.month)}から、${T.short}が${before}${T.unit}から${rate}${T.unit}になりました。` : false, from: 'ドット新聞 経済部' });
   if (id === 'shohi' && p) { s.lastShohi = rate; ledgerAdd(g, s, 'tax', { mood: -(rate - before) * 0.8, text: `${T.short}の${up ? '引き上げ' : '引き下げ'}` }); }
   addEvent(g, s, up ? 'tax_up' : 'tax_down', `${T.short} ${before}${T.unit}→${rate}${T.unit}`, { segs: scaleSegs(T.seg, rate - before) });
