@@ -61,6 +61,12 @@ export const MODULES = [
   // the routes into a war) + its HD screen and the phone app 世界 (api: test-output/api_world.txt)
   './engine/world.js',
   './engine/world_ui.js',
+  // 各界 (stakeholder groups: 観光地・協会・連合・スポーツ・ビジネス・セクト・有識者・アーティスト・文化・研究・政府): the core, then its screens
+  // (the 「各界」 tab of the 政府中枢 console) and the phone app 各界 (api: test-output/api_groups.txt)
+  './engine/groups.js',
+  './engine/groups_ui.js',
+  // the advisor mascots 独裁くん (the road to dictatorship and its upkeep) and イクサくん (war coach): phone apps, tips, g.advisor* (api: test-output/api_advisors.txt)
+  './engine/advisors.js',
   // minigames
   './minigames/tsukkomi.js',
   './minigames/zukko.js',

@@ -3556,6 +3556,275 @@ const methods = {
 };
 export function installGovt(proto) {
   for (const k of Object.getOwnPropertyNames(methods)) Object.defineProperty(proto, k, { ...Object.getOwnPropertyDescriptor(methods, k), configurable: true, writable: true });
+  try { installOpinionEval(proto); } catch (e) { console.error(e); } // R5-D: 世論の評価 (the section at the end of this file)
 }
 installGovt(Game.prototype);
+
+// ================================================================ R5-D: 世論の評価 (opinion evaluation) — a marked section
+// g.opinionEval() -> the numbers of the console's 世論 tab: the three ratings (内閣支持率・政党支持・総理個人の好感度) apart,
+// 争点ごとの評価 (12 issues: score, 関心度, trend, which party people trust), the issue × group matrix, polls with margins
+// (three fictional pollsters, house effects and a sampling margin), the trend lines (weekly), and the 選挙予測
+// (g.seatProjection() of politics.js: median and 80% range per party, the chance of a majority / 政権交代).
+// Issue scores follow the economy, the laws of the area (segment-weighted, fading over three years), the scandal term, the
+// world (g.world()), disasters and the war; they are smoothed week by week and kept in g.state.govt.ev (old saves: created
+// on first use). Pure reading of the other cores; nothing here changes the approval itself.
+const EV_ISSUES = [
+  ['economy', '経済・景気', ['economy', 'finance']],
+  ['prices', '物価・暮らし', ['tax', 'energy']],
+  ['jobs', '雇用・賃金', ['labor']],
+  ['welfare', '社会保障・医療', ['welfare', 'health']],
+  ['childcare', '子育て・少子化', ['childcare']],
+  ['education', '教育・文化・人権', ['education', 'culture', 'digital', 'society']],
+  ['diplomacy', '外交', ['diplomacy', 'constitution']],
+  ['security', '安全保障・治安', ['safety', 'diplomacy']],
+  ['integrity', '政治とカネ・信頼', ['admin']],
+  ['disaster', '災害対応・防災', ['disaster']],
+  ['environ', '環境・エネルギー', ['environment', 'energy']],
+  ['regional', '地方・農業', ['regional', 'agriculture']],
+].map(([id, name, areas]) => ({ id, name, areas }));
+const EV_SEG_CONCERN = { young: ['jobs', 'prices'], families: ['childcare', 'education'], elderly: ['welfare', 'security'], employees: ['jobs', 'economy'], selfemployed: ['economy', 'prices'], business: ['economy', 'diplomacy'], farmers: ['regional', 'prices'], unions: ['jobs', 'welfare'], urban: ['prices', 'environ'], rural: ['regional', 'welfare'], floating: ['integrity', 'economy'] };
+const EV_POLLSTERS = [
+  { id: 'dotshinbun', name: 'ドット新聞', how: '電話（RDD）', n: 1200, house: 0.0, day: 3 },
+  { id: 'dotterebi', name: 'ドットテレビ', how: 'インターネット', n: 1000, house: -1.8, day: 13 },
+  { id: 'dotsoken', name: 'ドット世論調査会', how: '郵送', n: 2000, house: 1.1, day: 23 },
+];
+function evHash(str) { let h = 2166136261; for (const ch of String(str)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return ((h >>> 0) % 100000) / 100000; }
+function evGauss(key) { const u = Math.max(1e-6, evHash(key + 'a')), v = evHash(key + 'b'); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+const evMargin = (pct, n) => { const q = clamp(pct, 1, 99) / 100; return Math.round(1.96 * Math.sqrt((q * (1 - q)) / n) * 1000) / 10; };
+const EV_BASE_UNEMP = { showa: 2.8, heisei_early: 3.3, heisei: 4.6, reiwa: 2.6 };
+function evOpinionState(s) {
+  if (!obj(s.ev)) s.ev = {};
+  if (!obj(s.ev.issues)) s.ev.issues = {};
+  if (!Array.isArray(s.ev.hist)) s.ev.hist = [];
+  return s.ev;
+}
+// the effect of laws of some policy areas on the segments (weighted by the population), fading over three years
+function evLawEffect(g, p, areas, seg = null) {
+  const W = segWeightsOf(gdate(g).year) || {};
+  const day = today(g);
+  let tot = 0;
+  for (const l of p.laws || []) {
+    if (!areas.includes(l.area)) continue;
+    const age = day - num(l.day);
+    if (age < 0 || age > 3 * YEAR_DAYS) continue;
+    const decay = 1 - age / (3 * YEAR_DAYS);
+    const credit = l.sponsor === 'cabinet' ? 1 : 0.5;
+    let v = 0;
+    if (seg) v = num(l.segments && l.segments[seg]);
+    else for (const sg of SEG_IDS()) v += num(W[sg], 1 / 11) * num(l.segments && l.segments[sg]);
+    tot += v * decay * credit * 1.6;
+  }
+  return clamp(tot, -22, 22);
+}
+function evPMFav(g, p) {
+  const C = p.cabinet;
+  const pm = C.pm;
+  let q = 0, name = '', src = 'npc';
+  if (pm === 'player') {
+    q = Math.min(8, Math.log10(1 + num(g.state.fame)) * 1.6 + num(p.me.reputation) / 25 + num(g.state.skills && g.state.skills.talk) / 30) - 3;
+    name = g.state.name; src = 'player';
+  } else {
+    const n = p.npcs[pm];
+    q = n ? (num(n.traits && n.traits.charisma, 50) - 50) / 6 : 0;
+    name = n ? n.name : '';
+  }
+  const parts = C.parts || {};
+  let gaffe = 0;
+  try { if (typeof g.gaffes === 'function') { const live = g.gaffes({ who: pm === 'player' ? 'player' : undefined, active: true }) || []; gaffe = live.filter((r) => pm === 'player' ? r.who === 'player' : r.who === pm).reduce((a, r) => a + num(r.heat) / 12, 0); } } catch (e) { gaffe = 0; }
+  const media = pm === 'player' ? num(p.me.media) / 12 : 0;
+  const like = 50 + q * 3.4 + num(parts.honeymoon) * 0.5 - gaffe + media; // 人柄の好感
+  const fav = clamp(num(C.approval, 45) * 0.5 + like * 0.5 + 2, 6, 92);
+  return { fav, name, src, q, gaffe };
+}
+function evTarget(g, p, id, ctx) {
+  const E = p.economy, C = p.cabinet, parts = C.parts || {};
+  const W = ctx.law(id);
+  const halo = (num(C.approval, 45) - 45) * 0.12;
+  let v = 50;
+  if (id === 'economy') v = 50 + num(parts.economy) * 1.5 + W;
+  else if (id === 'prices') v = 50 - 6.5 * Math.max(0, num(E.inflation) - 1.8) + 2 * Math.max(0, 1.2 - num(E.inflation)) + W - Math.max(0, num(E.yen) - 160) * 0.05;
+  else if (id === 'jobs') v = 50 - 6 * (num(E.unemployment) - (EV_BASE_UNEMP[eraKey(g)] || 3)) + W + num(parts.economy) * 0.4;
+  else if (id === 'welfare') v = 50 + W - Math.max(0, num(E.debtRatio) - 230) * 0.025 + (num(parts.deficit) * 0.4);
+  else if (id === 'diplomacy') v = 50 + W * 0.5 + (ctx.world ? (num(ctx.world.standing, 55) - 55) * 0.45 - Math.max(0, num(ctx.world.tension) - 60) * 0.2 : 0);
+  else if (id === 'security') v = 50 + W * 0.8 + (ctx.world ? (45 - num(ctx.world.threat, 45)) * 0.3 : 0) - (ctx.war ? 12 : 0);
+  else if (id === 'integrity') v = 50 + num(C.scandal) * 2.2 + num(parts.scandal) * 0.6 - ctx.amakudari * 0.12 + W;
+  else if (id === 'disaster') v = 54 + ctx.disasterMood + W;
+  else v = 50 + W;
+  v += halo + evGauss(`${id}:${Math.floor(today(g) / 30)}`) * 1.6;
+  return clamp(v, 18, 84);
+}
+function evContext(g, s, p) {
+  const ctx = { world: null, war: false, amakudari: 0, disasterMood: 0 };
+  try { if (typeof g.world === 'function') ctx.world = g.world(); } catch (e) { ctx.world = null; }
+  try { if (typeof g.war === 'function') { const w = g.war(); ctx.war = !!(w && w.phase && w.phase !== 'none' && w.phase !== 'peace'); } } catch (e) { ctx.war = false; }
+  try { ctx.amakudari = num(s.admin && s.admin.amakudari && s.admin.amakudari.heat); } catch (e) { ctx.amakudari = 0; }
+  const day = today(g);
+  for (const e of s.approval.ledger || []) { if (e.reason === 'disaster' && day - num(e.day) < 90) ctx.disasterMood += (num(e.mood) + num(e.scandal)) * 3; }
+  try { if (typeof g.fukko === 'function') { const F = g.fukko(); if (F && F.active) ctx.disasterMood += (num(F.progress) - 40) * 0.12; } } catch (e) { /* ignore */ }
+  ctx.disasterMood = clamp(ctx.disasterMood, -22, 18);
+  ctx.law = (id) => evLawEffect(g, p, (EV_ISSUES.find((q) => q.id === id) || { areas: [] }).areas);
+  return ctx;
+}
+function evIssueScores(g, s, p, smooth) {
+  const ev = evOpinionState(s);
+  const ctx = evContext(g, s, p);
+  const out = {};
+  for (const I0 of EV_ISSUES) {
+    const t = evTarget(g, p, I0.id, ctx);
+    const prev = ev.issues[I0.id];
+    out[I0.id] = smooth && Number.isFinite(prev) ? prev * 0.72 + t * 0.28 : (Number.isFinite(prev) ? prev * 0.5 + t * 0.5 : t);
+  }
+  return { scores: out, ctx };
+}
+function evAttention(g, p, ctx) {
+  const sal = (p.opinion && p.opinion.issues) || {};
+  const out = {};
+  for (const I0 of EV_ISSUES) {
+    let a = 14 + I0.areas.reduce((m, ar) => Math.max(m, num(sal[ar])), 0) * 38;
+    if (I0.id === 'integrity') a += clamp(-num(p.cabinet.scandal), 0, 12) * 2.2;
+    if (I0.id === 'prices') a += clamp(num(p.economy.inflation) - 2, 0, 5) * 5;
+    if (I0.id === 'jobs') a += clamp(num(p.economy.unemployment) - 4, 0, 4) * 4;
+    if (I0.id === 'disaster' && ctx.disasterMood !== 0) a += 14;
+    if (I0.id === 'security' && ctx.war) a += 30;
+    if (I0.id === 'diplomacy' && ctx.world) a += clamp(num(ctx.world.tension) - 50, 0, 40) * 0.4;
+    out[I0.id] = clamp(Math.round(a), 5, 75);
+  }
+  return out;
+}
+function evTrust(g, p, issue, score) {
+  // which party people trust most on the issue: its platform in the issue's areas, its ideology, and (for the ruling side) the score
+  let best = null;
+  for (const [pid, pt] of Object.entries(p.parties)) {
+    const plat = (pt.platform || []).filter((id) => POL && POL.POLICIES[id] && issue.areas.includes(POL.POLICIES[id].area)).length;
+    const ruling = isRulingParty(p, pid);
+    const seats = num(p.diet.shugi.seats[pid]) + num(p.diet.sangi.seats[pid]);
+    const v = 10 + plat * 9 + Math.log10(1 + seats) * 4 + (ruling ? (score - 50) * 0.45 : -(score - 50) * 0.25) + evHash(pid + issue.id) * 3;
+    if (!best || v > best.v) best = { id: pid, name: partyNameOf(g, pid, true), v };
+  }
+  return best;
+}
+function evRecord(g, s, row) {
+  const p = pol(g);
+  if (!p) return;
+  const ev = evOpinionState(s);
+  const { scores } = evIssueScores(g, s, p, true);
+  for (const k of Object.keys(scores)) ev.issues[k] = Math.round(scores[k] * 10) / 10;
+  const fav = evPMFav(g, p);
+  const core = (p.cabinet.partyIds || [])[0];
+  let party = null;
+  try { party = core ? g.partySupport(core) : null; } catch (e) { party = null; }
+  const last = ev.hist[ev.hist.length - 1];
+  const rec = { day: row.day, label: row.label, iss: { ...ev.issues }, pm: Math.round(fav.fav * 10) / 10, party, cab: row.approval };
+  if (last && last.day === rec.day) ev.hist[ev.hist.length - 1] = rec; else ev.hist.push(rec);
+  if (ev.hist.length > 130) ev.hist.splice(0, ev.hist.length - 130);
+}
+function opinionEvalImpl(g, s) {
+  const p = pol(g);
+  if (!p || !p.cabinet) return null;
+  const ev = evOpinionState(s);
+  const day = today(g);
+  const ab = approvalBreakdownImpl(g, s);
+  const C = p.cabinet;
+  const A = num(C.approval, 45);
+  const { scores, ctx } = evIssueScores(g, s, p, false);
+  const att = evAttention(g, p, ctx);
+  const W = segWeightsOf(gdate(g).year) || {};
+  const hist = ev.hist;
+  const back = (k, n) => { const r = hist[hist.length - 1 - n]; return r ? r : null; };
+  // ---- the three ratings
+  const core = (C.partyIds || [])[0] || null;
+  const partyNow = core ? (() => { try { return g.partySupport(core); } catch (e) { return 0; } })() : 0;
+  const fav = evPMFav(g, p);
+  const series = (key, n = 40) => hist.slice(-n).map((r) => num(r[key], NaN));
+  const dk = Math.max(2, 100 - A - ab.disapproval);
+  const cabinet = { approve: Math.round(A), disapprove: ab.disapproval, dk: Math.max(0, 100 - Math.round(A) - ab.disapproval), margin: evMargin(A, 1200), series: hist.slice(-40).map((r) => num(r.cab, NaN)), trend: back(null, 4) ? Math.round(A - num(back(null, 4).cab, A)) : 0 };
+  void dk;
+  const party = { id: core, name: core ? partyNameOf(g, core, false) : '', short: core ? partyNameOf(g, core, true) : '', support: Math.round(partyNow * 10) / 10, margin: evMargin(partyNow, 1200), series: series('party'), trend: back(null, 4) && Number.isFinite(back(null, 4).party) ? Math.round((partyNow - back(null, 4).party) * 10) / 10 : 0, ruling: (C.partyIds || []).map((id) => ({ id, name: partyNameOf(g, id, true), pct: (() => { try { return g.partySupport(id); } catch (e) { return 0; } })() })) };
+  const pmRow = { name: fav.name, fav: Math.round(fav.fav), unfav: Math.round(clamp(100 - fav.fav - 14, 3, 90)), margin: evMargin(fav.fav, 1200), series: series('pm'), trend: back(null, 4) && Number.isFinite(back(null, 4).pm) ? Math.round(fav.fav - back(null, 4).pm) : 0, player: fav.src === 'player' };
+  const gap = Math.round(fav.fav - A);
+  const gapText = gap >= 10 ? `人柄の好感度は支持率より${gap}ポイント高い（「人柄は好かれるが、政策や政権への評価は別」）` : gap <= -10 ? `好感度は支持率より${-gap}ポイント低い（「政権は支持されても、総理個人の人気は高くない」）` : '好感度と支持率はほぼ同じ水準';
+  // other parties' leaders
+  const leaders = Object.values(p.parties).filter((pt) => pt.leader && pt.id !== core).map((pt) => {
+    const n = pt.leader === 'player' ? null : p.npcs[pt.leader];
+    const sup = (() => { try { return g.partySupport(pt.id); } catch (e) { return 0; } })();
+    const f = pt.leader === 'player' ? clamp(50 + num(p.me.reputation) * 0.3, 8, 90) : clamp(40 + (n ? (num(n.traits.charisma, 50) - 50) * 0.5 : 0) + sup * 0.25 + (evHash(pt.id) - 0.5) * 6, 8, 85);
+    return { party: pt.id, partyName: partyNameOf(g, pt.id, true), name: pt.leader === 'player' ? g.state.name : n ? n.name : '', fav: Math.round(f), support: Math.round(sup * 10) / 10 };
+  }).sort((a, b) => b.support - a.support).slice(0, 5);
+  // the player's own standing with voters
+  const me = p.me;
+  const mine = (me.office || me.party || me.wins) ? { name: g.state.name, fame: Math.round(clamp((Math.log10(1 + num(g.state.fame)) / 4.2) * 100, 0, 100)), fav: Math.round(clamp(50 + num(me.reputation) * 0.32 + (me.media ? num(me.media) * 0.1 : 0), 5, 95)), local: Math.round(num(me.localSupport)), standing: Math.round(num(me.standing)) } : null;
+  // ---- the issues
+  const issues = EV_ISSUES.map((I0) => {
+    const v = scores[I0.id];
+    const pv = back(null, 4) && back(null, 4).iss ? back(null, 4).iss[I0.id] : null;
+    const tr = pv != null ? Math.round((v - pv) * 10) / 10 : 0;
+    const top = evTrust(g, p, I0, v);
+    const driver = evDriver(g, p, I0, ctx, v);
+    return { id: I0.id, name: I0.name, areas: I0.areas.slice(), score: Math.round(v), neg: Math.round(clamp(100 - v - 16, 3, 90)), margin: evMargin(v, 1200), attention: att[I0.id], trend: tr, series: hist.slice(-40).map((r) => (r.iss ? num(r.iss[I0.id], NaN) : NaN)), trust: top ? { id: top.id, name: top.name } : null, driver };
+  });
+  const rank = issues.slice().sort((a, b) => b.attention - a.attention).map((x, i) => ({ rank: i + 1, id: x.id, name: x.name, attention: x.attention, score: x.score, trust: x.trust, trend: x.trend }));
+  // ---- groups (segments): the cabinet's approval, party support, PM favourability and the issue matrix
+  const segs = SEG_IDS();
+  const groups = segs.map((sg) => {
+    const bs = (ab.bySegment || []).find((r) => r.seg === sg);
+    const cab = bs ? bs.approval : Math.round(A);
+    const row = p.opinion[sg] || {};
+    const partySeg = core ? Math.round(num(row[core]) * 1000) / 10 : 0;
+    const lean = (core && p.parties[core]) ? 0 : 0;
+    void lean;
+    const favSeg = Math.round(clamp(fav.fav + (cab - A) * 0.7, 5, 92));
+    const matrix = {};
+    for (const I0 of EV_ISSUES) {
+      const adj = evLawEffect(g, p, I0.areas, sg) - evLawEffect(g, p, I0.areas, null);
+      matrix[I0.id] = Math.round(clamp(scores[I0.id] + adj * 0.8 + (EV_SEG_CONCERN[sg].includes(I0.id) ? (scores[I0.id] - 50) * 0.18 : 0), 5, 95));
+    }
+    return { seg: sg, name: (SEGS()[sg] || {}).name || sg, weight: num(W[sg]), cabinet: cab, party: partySeg, pm: favSeg, concern: EV_SEG_CONCERN[sg].map((id) => (EV_ISSUES.find((q) => q.id === id) || {}).name), matrix };
+  });
+  // ---- polls with margins (three fictional pollsters; the value is the truth + house effect + sampling noise, stable per poll)
+  const polls = EV_POLLSTERS.map((P) => {
+    // the latest poll of this house: its day within the 30-day cycle
+    const cyc = Math.floor((day - P.day) / 30);
+    const pday = P.day + cyc * 30;
+    const key = `${P.id}:${cyc}`;
+    const sd = Math.sqrt((A / 100) * (1 - A / 100) / P.n) * 100;
+    const ap = clamp(A + P.house + evGauss(key) * sd, 2, 95);
+    const dis = clamp(ab.disapproval - P.house + evGauss(key + 'd') * sd, 2, 95);
+    const ps = clamp(partyNow + P.house * 0.35 + evGauss(key + 'p') * Math.sqrt((partyNow / 100) * (1 - partyNow / 100) / P.n) * 100, 0.5, 90);
+    return { id: P.id, name: P.name, how: P.how, n: P.n, day: pday, date: dLabel(g, Math.max(1, pday)), approve: Math.round(ap * 10) / 10, disapprove: Math.round(dis * 10) / 10, party: Math.round(ps * 10) / 10, margin: evMargin(ap, P.n), house: P.house };
+  });
+  const avg = polls.reduce((a, r) => a + r.approve, 0) / polls.length;
+  const nTot = polls.reduce((a, r) => a + r.n, 0);
+  const pollAvg = { approve: Math.round(avg * 10) / 10, margin: evMargin(avg, nTot), note: `3社の平均（合計${nTot.toLocaleString('ja-JP')}人）。各社の誤差は±${evMargin(A, 2000)}〜${evMargin(A, 1000)}ポイントほど` };
+  // ---- the forecast
+  let forecast = null;
+  try { forecast = typeof g.seatProjection === 'function' ? g.seatProjection({}) : null; } catch (e) { forecast = null; }
+  // ---- trends (weekly): cabinet approval, support of the parties
+  const weekly = (ab.weekly || []).slice(-60);
+  return { date: dLabel(g, day), day, cabinet, party, pm: pmRow, gap, gapText, leaders, mine, issues, rank, groups, polls, pollAvg, forecast, weekly, history: hist.length, note: '世論調査は各社の方法の違いと標本誤差を含む目安' };
+}
+function evDriver(g, p, I0, ctx, v) {
+  const E = p.economy;
+  const up = v >= 50;
+  const law = ctx.law(I0.id);
+  const parts = [];
+  if (I0.id === 'economy') parts.push(`成長率${r1(E.growth)}%・株価${Math.round(E.nikkei).toLocaleString('ja-JP')}`);
+  if (I0.id === 'prices') parts.push(`物価${r1(E.inflation)}%・円${Math.round(E.yen)}円`);
+  if (I0.id === 'jobs') parts.push(`失業率${r1(E.unemployment)}%`);
+  if (I0.id === 'welfare') parts.push(`債務GDP比${Math.round(E.debtRatio)}%`);
+  if (I0.id === 'diplomacy' && ctx.world) parts.push(`国際的な信頼${Math.round(num(ctx.world.standing))}・${ctx.world.tensionLabel || ''}`);
+  if (I0.id === 'security') parts.push(ctx.war ? '戦争の影響' : ctx.world ? `脅威${Math.round(num(ctx.world.threat))}` : '');
+  if (I0.id === 'integrity') parts.push(num(p.cabinet.scandal) < -1 ? '不祥事の影響が残る' : '大きな不祥事はない');
+  if (I0.id === 'disaster') parts.push(ctx.disasterMood > 2 ? '復興・対応が評価されている' : ctx.disasterMood < -2 ? '対応に批判' : '大きな災害対応はない');
+  if (Math.abs(law) >= 1) parts.push(`最近の法律で${law > 0 ? 'プラス' : 'マイナス'}${r1(Math.abs(law))}`);
+  return parts.filter(Boolean).join('・') || (up ? '特に大きな動きはない' : '評価は厳しめ');
+}
+function installOpinionEval(proto) {
+  const m = {
+    opinionEval() { const s = GS(this); return s ? opinionEvalImpl(this, s) : null; },
+    opinionIssues() { const e = this.opinionEval(); return e ? e.issues : []; },
+  };
+  for (const k of Object.keys(m)) Object.defineProperty(proto, k, { value: m[k], configurable: true, writable: true });
+}
+onGovt('approval', (g, row) => { try { const s = GS(g); if (s) evRecord(g, s, row); } catch (e) { console.error('opinion record', e); } });
+// ================================================================ end of R5-D section
 if (typeof window !== 'undefined') window.__govt = { TAXES, BUDGET_ITEMS, RELIGIOUS_GROUPS, DEMO_RESPONSES, onGovt, govtTick };

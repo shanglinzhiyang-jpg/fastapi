@@ -93,7 +93,7 @@ function gauge(c, x, y, w, v, lo = -100, hi = 100) {
 // 144 × 53 cells of 2.5°: longitude −25 → 335 (Pacific-centred), latitude 75 → −57.5. Codes: '.' sea, 'x' other land.
 const MAP = { COLS: 144, ROWS: 53, LON0: -25, LAT0: 75, STEP: 2.5, CELL: 4, X: 32, Y: 42 };
 const LEGEND = { '.': '.', x: 'x', A: 'sv', B: 'au', C: 'br', D: 'ca', E: 'cn', F: 'tw', G: 'fr', H: 'de', I: 'in', J: 'id', K: 'ir', L: 'iq', M: 'il', N: 'it', O: 'jp', P: 'kp', Q: 'kr', R: 'my', S: 'ph', T: 'ru', U: 'sa', V: 'sg', W: 'vn', X: 'th', Y: 'tr', Z: 'ua', a: 'gb', b: 'us', c: 'dd' };
-const MAP_DATA = 'xx.29T03.04T.03T20.04T.37D06.D.DD.D07.08x13x.18x.x.09TT.04T37.16b04.10D09.D03.D08.06x12T17x05TT..T04.04TT.T45.T05b10T04DT06DDTDT07DT03DDT08x09TT16x03T03.T05.10T.43T.T04b10T46.x03.09x09T60.06b10D24.D.D03.05x05.06.12x05.x04T58.07b11D19.06D03.08x03.07.08a.03x06.AAT48.TT.T03.13b04.05bbD17.06D06.15.07aa.04x04.A04T44.06T03.14bb.09bD19.03D07.14.06xxaa..xHHcx03A04T12A06T26.05TT.27D20.D10.12.06x.a03xxHHcx04Z04T06AT03A08T07xxT07E03T07.04T.30D29.12.08G05HHx04Z07T03A16x12E05T06.36D25.D03.11.09G04xNx06AZ03T05A13E03x11E07T.39b16D06bD03.14.07xxG04N03x06.03T04.A12E06x07E08T..OO.36b17DDb04DD.15.06x05..G.NNx04Y06A03.A10E20P.04O.37b22.18.06x04.05NN.xxY08KK.A09E18..PQ.04O.37b20.20.07xx.x05.06Y03x03LK06AAx04E19.QQ.O04.38b19.20.07x08.09xxLLK06x06IIE16.04O03.41b17.21.06x11.x07UULLK05x06IIE17.48x05b10.22.05x19U06K05x04I03xxE15.49x06bb.b.03b.22.04x20U06.K04x03I07xIIxE09.50x07.06b.22.03x21.U06x03.03xI07xxIxE08.F.50x.x04.06x.22.03x22U07xx.04I08.x04WWEE.56x04.03x.03xx.20.03x22.U04x03.06I05.03xxXXxWE.04S.53x07.05xx.18.03x23.x05.07I04.05xX03x.05S.55x06.24.03x27.10II.07XXxxW.04S.58x04.23.04x27.09II.07X.xWW.05S.59xx.03x05.15.04x26.10IIx.06X..W.06SS.59x10.14.05x25.12x.07R.05RR..S.62x09G.11.13x16.19JJRR.03RJ.66x06CxxGC.10.14x14.21JJR.J06.63x04CxC06.10.13x14.23JJ..J03.J.03JJ.J.55x05C10.08.14x12.25JJ.J05.04J04x.53x05C13.05.15x11.26J03.10Jx03.52x04C15.04.15x11.28JJ.03Jx.05x04.52x03C15.04.15x12.36B.59x05C11.05.15x12..x.30B.B03.BB.55x06C10.05.14x12..xx.29B10.55x06C09.05.15x10..x03.28B11.57x05C07.06.15x09.03x03.26B14.06x.49x05C07.06.16x08.03xx.26B16.54x07C05.07.16x07.32B17.53x07C03.09.16x07.33B16.53x07C03.09.17x05.34B15.54x07CC.10.17x04.35B04.04B07.54x08.11.65B05.09x.45x06.13.67BB.10x03.42x07.13.68B.09x03.43x05.15.68B.08xx.45x04.16.77x.46x04.16.99.25x03.17.99.25x03.03x.13.99.25x04.16.99.45';
+const MAP_DATA = 'xx.29T03.04T.03T20.04T.37D06.D.DD.D07.08x13x.18x.x.09TT.04T37.16b04.10D09.D03.D08.06x12T17x05TT..T04.04TT.T45.T05b10T04DT06DDTDT07DT03DDT08x09TT16x03T03.T05.10T.43T.T04b10T46.x03.09x09T60.06b10D24.D.D03.05x05.06.12x05.x04T58.07b11D19.06D03.08x03.07.08a.03x06.AAT48.TT.T03.13b04.05bbD17.06D06.15.07aa.04x04.A04T44.06T03.14bb.09bD19.03D07.14.06xxaa..xHHcx03A04T12A06T26.05TT.27D20.D10.12.06x.a03xxHHcx04Z04T06AT03A08T07xxT07E03T07.04T.30D29.12.08G05HHx04Z07T03A16x12E05T06.36D25.D03.11.09G04xNx06AZ03T05A13E03x11E07T.39b16D06bD03.14.07xxG04N03x06.03T04.A12E06x07E08T..OO.36b17DDb04DD.15.06x05..G.NNx04Y06A03.A10E20P.04O.37b22.18.06x04.05NN.xxY08KK.A09E18..PQ.04O.37b20.20.07xx.x05.06Y03x03LK06AAx04E19.QQ.O04.38b19.20.07x08.09xxLLK06x06IIE16.04O03.41b17.21.06x11.x07UULLK05x06IIE17.48x05b10.22.05x19U06K05x04I03xxE15.49x06bb.b.03b.22.04x20U06.K04x03I07xIIxE09.50x07.06b.22.03x21.U06x03.03xI07xxIxE08.F.50x.x04.06x.22.03x22U07xx.04I08.x04WWEE.56x04.03x.03xx.20.03x22.U04x03.06I05.03xxxWE.04S.53x07.05xx.18.03x23.x05.07I04.05xX03x.05S.55x06.24.03x27.10II.07xxW.04S.58x04.23.04x27.09II.07X.xWW.05S.59xx.03x05.15.04x26.10IIx.06X..W.06SS.59x10.14.05x25.12x.07R.05RR..S.62x09G.11.13x16.19JJRR.03RJ.66x06CxxGC.10.14x14.21JJR.J06.63x04CxC06.10.13x14.23JJ..J03.J.03JJ.J.55x05C10.08.14x12.25JJ.J05.04J04x.53x05C13.05.15x11.26J03.10Jx03.52x04C15.04.15x11.28JJ.03Jx.05x04.52x03C15.04.15x12.36B.59x05C11.05.15x12..x.30B.B03.BB.55x06C10.05.14x12..xx.29B10.55x06C09.05.15x10..x03.28B11.57x05C07.06.15x09.03x03.26B14.06x.49x05C07.06.16x08.03xx.26B16.54x07C05.07.16x07.32B17.53x07C03.09.16x07.33B16.53x07C03.09.17x05.34B15.54x07CC.10.17x04.35B04.04B07.54x08.11.65B05.09x.45x06.13.67BB.10x03.42x07.13.68B.09x03.43x05.15.68B.08xx.45x04.16.77x.46x04.16.99.25x03.17.99.25x03.03x.13.99.25x04.16.99.45';
 let GRID = null;
 function grid() {
   if (GRID) return GRID;
@@ -284,7 +284,7 @@ const TAB_COUNTRIES = {
   },
   act: (ui, row) => (row && row.key ? actionsMenu(ui, row.key) : null),
 };
-const GLOBAL_DIPLO = ['ally_up', 'ally_down', 'withdraw_notice', 'abrogate', 'peace_conf', 'un_speech', 'unsc_run', 'leave_un', 'rejoin_un'];
+const GLOBAL_DIPLO = ['dispute_action', 'ally_up', 'ally_down', 'withdraw_notice', 'abrogate', 'peace_conf', 'un_speech', 'unsc_run', 'leave_un', 'rejoin_un'];
 const TAB_DIPLOMACY = {
   id: 'diplomacy', label: '外交',
   rows(ui) {
@@ -344,6 +344,8 @@ const TAB_ALLIANCES = {
     for (const a of w.alliances.filter((x) => x.japan)) out.push({ key: 'a:' + a.id, label: a.name, right: a.strength != null ? `${a.strength}` : '', sub: a.notice ? '終了を通告中' : { defense: '相互防衛', partnership: '協力の枠組み', collective: '集団防衛' }[a.kind] || '', a });
     out.push({ header: true, label: '日本の条約・協定' });
     for (const t of w.treaties) out.push({ key: 't:' + t.id, label: t.name, sub: { ties: '国交', peace: '平和条約', fta: '経済連携', security: '安全保障', declaration: '宣言', alliance: '同盟' }[t.kind] || '', t });
+    const dietL = (safe(() => ui.g.dietTreaties(), []) || []).filter((d) => d.status === 'open' && d.kind === 'treaty');
+    if (dietL.length) { out.push({ header: true, label: '国会で審議中の条約' }); for (const d of dietL) out.push({ key: 'd:' + d.id, label: d.name, right: d.stageShort, rightColor: K.warn, d }); }
     out.push({ header: true, label: '制裁' });
     for (const x of w.sanctions.byJapan) out.push({ key: 's:' + x.id, label: `日本 → ${x.name}`, right: `段階${x.level}`, rightColor: K.warn, sub: x.g7 ? 'G7と協調' : x.un ? '国連の制裁に参加' : '日本の判断' });
     for (const x of w.sanctions.onJapan) out.push({ key: 'r:' + x.id, label: `${x.name} → 日本`, right: `段階${x.level}`, rightColor: K.bad, sub: x.war ? '戦争への制裁' : '対抗措置' });
@@ -359,15 +361,25 @@ const TAB_ALLIANCES = {
     const x = DETAIL.x + 8;
     let y = DETAIL.y + 22;
     const names = (ids) => (ids || []).map((id) => (id === 'jp' ? '日本' : (ui.data.rows[id] || {}).short || id)).join('・');
+    const contents = (id) => {
+      const ti = safe(() => ui.g.treatyInfo(id), null);
+      if (!ti) return;
+      const wd = DETAIL.w - 16;
+      T(c, '得るもの', x, y, 10, K.good); y += 13;
+      for (const l of ti.gives.slice(0, 4)) y += para(c, `・${l}`, x + 4, y, wd - 4, 10, K.text, 13, 2);
+      y += 3; T(c, '負うもの・課題', x, y, 10, K.warn); y += 13;
+      for (const l of ti.costs.slice(0, 4)) y += para(c, `・${l}`, x + 4, y, wd - 4, 10, K.text, 13, 2);
+    };
+    if (row && row.d) { drawDietItem(ui, c, row.d); return; }
     if (row && row.a) {
       const a = row.a;
-      T(c, `加盟：${names(a.members)}`, x, y, 12, K.text, 'left', DETAIL.w - 16); y += 18;
-      if (a.strength != null) { T(c, `同盟の強さ ${a.strength}／100`, x, y, 12, K.cyan); R(c, x + 130, y + 4, 200, 6, '#1a2a3a'); R(c, x + 130, y + 4, 2 * a.strength, 6, K.cyan); y += 18; }
-      if (a.notice) { T(c, '終了を通告中（通告から1年で終了）', x, y, 12, K.bad); y += 18; }
-      para(c, a.desc || '', x, y, DETAIL.w - 16, 12, K.text, 16, 8);
+      T(c, `加盟：${names(a.members)}`, x, y, 12, K.text, 'left', DETAIL.w - 16); y += 16;
+      if (a.strength != null) { T(c, `同盟の強さ ${a.strength}／100`, x, y, 12, K.cyan); R(c, x + 130, y + 4, 200, 6, '#1a2a3a'); R(c, x + 130, y + 4, 2 * a.strength, 6, K.cyan); y += 16; }
+      if (a.notice) { T(c, '終了を通告中（通告から1年で終了）', x, y, 12, K.bad); y += 16; }
+      if (a.id === 'anpo') contents('anpo'); else para(c, a.desc || '', x, y, DETAIL.w - 16, 12, K.text, 16, 8);
     } else if (row && row.t) {
-      T(c, `相手：${names(row.t.with)}`, x, y, 12, K.text, 'left', DETAIL.w - 16); y += 18;
-      T(c, row.t.by === 'history' ? 'ゲームの始まる前から結ばれている' : row.t.by === 'npc' ? '政府が結んだ' : row.t.since > 0 ? `${row.t.since}日目に結んだ` : '', x, y, 10, K.dim, 'left', DETAIL.w - 16);
+      T(c, `相手：${names(row.t.with)}　${row.t.by === 'history' ? 'ゲームの始まる前から' : row.t.by === 'npc' ? '政府が結んだ' : row.t.since > 0 ? `${row.t.since}日目に結んだ` : ''}`, x, y, 10, K.dim, 'left', DETAIL.w - 16); y += 16;
+      contents(row.t.id);
     } else para(c, '日米安保条約は、総理（防衛大臣）が強化・見直しでき、総理は破棄（終了の通告）もできる。同盟は戦争のとき援軍になる一方、相手の戦争に巻きこまれることもある。', x, y, DETAIL.w - 16, 12, K.dim, 16, 8);
   },
   async act(ui, row) {
@@ -483,7 +495,493 @@ const TAB_NEWS = {
   },
   act: (ui, row) => (row && row.news ? ui.info('ニュース', [row.news.text]) : null),
 };
-const TABS = [TAB_MAP, TAB_COUNTRIES, TAB_DIPLOMACY, TAB_ALLIANCES, TAB_CRISIS, TAB_NEWS];
+// ================================================================ 貿易・関税 (trade and tariffs) and the richer 外交 tab
+const shortCat = (n) => String(n).replace(/（.*$/, '');
+const sgn = (v, d = 2) => `${num(v) >= 0 ? '+' : ''}${num(v).toFixed(d)}`;
+const pc = (p) => `${Math.round(num(p) * 100)}%`;
+const DIRCOL = { up: '#ff9a5a', down: '#5ad2e8', same: '#93a8bc' };
+const KIND_JA = { epa: '経済連携協定', tariffs: '関税交渉', security: '防衛協力の協定', peace: '平和条約' };
+function bar(c, x, y, w, v, max, col) { R(c, x, y, w, 6, '#1a2a3a'); R(c, x, y, Math.max(0, Math.min(w, (num(v) / max) * w)), 6, col); }
+function sparkline(c, x, y, w, h, vals, col) {
+  if (!vals || vals.length < 2) return;
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const rng = Math.max(1e-6, hi - lo);
+  R(c, x, y + h, w, 1, K.edge);
+  vals.forEach((v, i) => { const px = x + (i / (vals.length - 1)) * (w - 2); const py = y + h - 2 - ((v - lo) / rng) * (h - 4); R(c, px, py, 2, 2, col); });
+}
+const TAB_TRADE = {
+  id: 'trade', label: '貿易・関税',
+  rows(ui) {
+    const g = ui.g;
+    const t = safe(() => g.tariffs(), null);
+    ui.trade = t;
+    if (!t) return [{ header: true, label: '貿易・関税' }, { key: 'none', label: '（貿易の仕組みが読み込まれていない）' }];
+    const out = [{ header: true, label: '概況' }];
+    out.push({ key: 'over', label: '貿易と関税の概況', right: `関税収入 約${t.revenue.total}兆円` });
+    out.push({ header: true, label: '日本の輸入関税（品目別）' });
+    for (const c of t.cats) out.push({ key: 'c:' + c.id, label: shortCat(c.name), right: c.rateText.replace(/（.*$/, ''), rightColor: DIRCOL[c.dir], c });
+    out.push({ header: true, label: '貿易相手と関税の応酬' });
+    for (const p of t.partners) {
+      const st = p.war > 0 ? p.warLabel : p.treaties.length ? 'EPA' : p.theirs.some((x) => x.add > 0.5) ? '相手が関税' : '';
+      out.push({ key: 'p:' + p.pk, label: p.name, right: st || `関係${p.rel}`, rightColor: p.war > 1 ? K.bad : p.war > 0 ? K.warn : p.treaties.length ? K.cyan : K.dim, p });
+    }
+    const open = t.frictions.filter((f) => f.status === 'open');
+    const negos = (safe(() => g.negotiations(), []) || []).filter((n) => n.status === 'open' && (n.kind === 'epa' || n.kind === 'tariffs'));
+    const diet = (safe(() => g.dietTreaties(), []) || []).filter((d) => d.status === 'open' && (d.kind === 'law' || /経済連携/.test(d.name)));
+    if (open.length || t.deals.length || negos.length || diet.length) {
+      out.push({ header: true, label: '進行中' });
+      for (const f of open) out.push({ key: 'f:' + f.id, label: `摩擦：${f.title}`, right: `期限${f.daysLeft}日`, rightColor: f.daysLeft <= 8 ? K.bad : K.warn, f });
+      for (const d of t.deals) out.push({ key: 'dl:' + d.id, label: `提案：${d.name}から関税の協議`, right: '!', rightColor: K.warn, dl: d });
+      for (const n of negos) out.push({ key: 'n:' + n.id, label: `交渉：${n.name}`, right: `第${n.round}/${n.rounds}`, rightColor: K.cyan, n });
+      for (const d of diet) out.push({ key: 'd:' + d.id, label: `国会：${d.name.replace(/関税定率法等の一部を改正する法律案/, '関税改正案')}`, right: '審議中', rightColor: K.dim, d });
+    }
+    out.push({ header: true, label: '貿易の記録' });
+    for (const e of t.ledger.slice(0, 8)) out.push({ key: 'l' + out.length, label: e.text, l: e });
+    if (!t.ledger.length) out.push({ key: 'none', label: '（まだ記録はない）' });
+    return out;
+  },
+  draw(ui, c) {
+    drawList(ui, c, LIST);
+    const t = ui.trade;
+    const row = ui.curRow();
+    const x = DETAIL.x + 8;
+    const wd = DETAIL.w - 16;
+    if (!t) { panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '貿易・関税'); return; }
+    if (row && row.c) return drawCategory(ui, c, row.c, t);
+    if (row && row.p) return drawPartner(ui, c, row.p, t);
+    if (row && row.f) {
+      const f = row.f;
+      panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, f.title, { accent: K.warn, right: 'A：対応を選ぶ' });
+      let y = DETAIL.y + 22;
+      T(c, `相手：${f.name}　品目：${f.item}`, x, y, 12, K.text, 'left', wd); y += 20;
+      y += para(c, `相手の要求：${f.ask}`, x, y, wd, 12, K.text, 16, 4) + 4;
+      const thr = Object.entries(f.theirs || {}).map(([e, p]) => `${({ auto: '自動車', industrial: '工業製品', steel: '鉄鋼', farm: '農水産物' })[e] || e}に${p}%`);
+      y += para(c, `応じない場合：日本の${thr.join('・')}の関税を上乗せ（期限まであと${f.daysLeft}日）`, x, y, wd, 12, K.warn, 16, 3) + 6;
+      para(c, '対応：閣僚協議／要求の一部を受け入れる（譲歩）／WTO（GATT）に求める／対抗措置。それぞれ見込みと国内の反応を確かめてから決める。期限まで何もしないと、相手は関税を発動する。', x, y, wd, 10, K.dim, 13, 6);
+      return;
+    }
+    if (row && row.dl) {
+      panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '関税の協議の提案', { accent: K.warn, right: 'A：交渉を始める／見送る' });
+      para(c, row.dl.text, x, DETAIL.y + 24, wd, 12, K.text, 16, 6);
+      return;
+    }
+    if (row && row.n) return drawNego(ui, c, row.n);
+    if (row && row.d) return drawDietItem(ui, c, row.d);
+    if (row && row.l) {
+      panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '貿易の記録');
+      para(c, row.l.text, x, DETAIL.y + 24, wd, 12, K.text, 16, 8);
+      return;
+    }
+    // the overview
+    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '貿易と関税の概況', { right: `${t.date.year}年${t.date.month}月` });
+    let y = DETAIL.y + 22;
+    const r = t.revenue, m = t.macro, e = t.effects;
+    T(c, `関税収入 約${r.total}兆円/年${r.shareOfTax != null ? `（税収の約${r.shareOfTax}%）` : ''}`, x, y, 12, K.text, 'left', wd); y += 16;
+    T(c, `歴史どおりとの差 ${sgn(r.delta, 3)}兆円　品目別の最大：${r.byCat[0] ? shortCat(r.byCat[0].name) : ''}`, x, y, 10, K.dim, 'left', wd); y += 16;
+    T(c, `貿易（目安）輸出 ${m.exports}兆・輸入 ${m.imports}兆　収支 ${sgn(m.balance, 1)}兆円/年（歴史では ${sgn(m.balanceBase, 1)}）`, x, y, 10, K.text, 'left', wd); y += 18;
+    R(c, x, y, wd, 1, K.edge); y += 5;
+    T(c, '政策の影響（歴史どおりの水準との差）', x, y, 10, K.amber); y += 14;
+    T(c, `物価 ${sgn(e.infl)}ポイント　成長率 ${sgn(e.growth)}ポイント　貿易収支 ${sgn(e.balance, 1)}兆円`, x, y, 12, e.infl > 0.05 || e.growth < -0.05 ? K.warn : K.text, 'left', wd); y += 16;
+    if (e.exportLoss) { T(c, `相手国の報復関税による輸出の減少 約${e.exportLoss}兆円/年`, x, y, 10, K.bad, 'left', wd); y += 14; }
+    const gain = t.segments.filter((s0) => s0.v > 0).slice(0, 3).map((s0) => s0.name), lose = t.segments.filter((s0) => s0.v < 0).slice(0, 3).map((s0) => s0.name);
+    if (gain.length || lose.length) { T(c, `${gain.length ? `歓迎：${gain.join('・')}　` : ''}${lose.length ? `反発：${lose.join('・')}` : ''}`, x, y, 10, K.text, 'left', wd); y += 14; }
+    if (t.surge.length) { T(c, `輸入が急増中：${t.surge.map((s0) => s0.name).join('・')}（緊急関税の根拠になる）`, x, y, 10, K.warn, 'left', wd); y += 14; }
+    y += 4; R(c, x, y, wd, 1, K.edge); y += 5;
+    T(c, 'この時代の貿易', x, y, 10, K.amber); y += 14;
+    for (const b of t.background.slice(0, 3)) y += para(c, `・${b}`, x, y, wd, 10, K.text, 13, 4);
+    if (t.series.length > 2) { sparkline(c, DETAIL.x + DETAIL.w - 96, DETAIL.y + 22, 86, 28, t.series.map((s0) => s0.rev), K.cyan); T(c, '関税収入', DETAIL.x + DETAIL.w - 96, DETAIL.y + 52, 10, K.faint); }
+  },
+  async act(ui, row) {
+    if (!row) return;
+    const g = ui.g;
+    if (row.c) { await tariffFlow(ui, row.c); return; }
+    if (row.p) { await partnerMenu(ui, row.p); return; }
+    if (row.f) { await frictionFlow(ui, row.f); return; }
+    if (row.dl) {
+      const k = await ui.pick({ title: '関税の協議の提案', lines: [row.dl.text], items: [{ label: '交渉を始める', sub: '関税交渉（ラウンドを重ねて進める）' }, { label: '見送る', sub: '関係が少し冷える' }, { label: 'もどる' }] });
+      if (k === 0) { const pk = row.dl.pk; g.tradeDealAnswer(row.dl.id, true); await negoEntry(ui, 'tariffs', (ui.trade.partners.find((p) => p.pk === pk) || {}).main); }
+      else if (k === 1) await ui.result('関税の協議', g.tradeDealAnswer(row.dl.id, false));
+      return;
+    }
+    if (row.n) { await negoFlow(ui, row.n.id); return; }
+    if (row.d) { await ui.info(row.d.name, [`いまの段階：${row.d.stageName}`, ...(row.d.log || []).map((l) => `・${l.text}`)]); }
+  },
+};
+function drawCategory(ui, c, k, t) {
+  const x = DETAIL.x + 8, wd = DETAIL.w - 16;
+  panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, shortCat(k.name), { right: 'A：関税率を変える' });
+  let y = DETAIL.y + 22;
+  T(c, `いまの関税 ${k.rateText}`, x, y, 14, DIRCOL[k.dir] === DIRCOL.same ? K.text : DIRCOL[k.dir], 'left', wd); y += 18;
+  T(c, `歴史どおりなら ${k.histText}　WTOの上限 ${k.boundText}${k.over ? '（超過）' : ''}`, x, y, 10, k.over ? K.bad : K.dim, 'left', wd); y += 14;
+  if (k.effText) { T(c, `実効：${k.effText}`, x, y, 10, K.dim, 'left', wd); y += 14; }
+  T(c, `輸入に占める割合 約${k.imp}%　関税収入 約${k.revenue}兆円/年　物価への影響 ${sgn(k.price)}`, x, y, 10, K.text, 'left', wd); y += 15;
+  y += para(c, `守られる人：${k.who}`, x, y, wd, 10, K.text, 13, 2) + 2;
+  y += para(c, `守る理由：${k.pro[0]}`, x, y, wd, 10, K.good, 13, 2);
+  y += para(c, `問題点：${k.con[0]}`, x, y, wd, 10, K.warn, 13, 2) + 2;
+  if (k.pending.length) { T(c, `国会に提出中：${k.pending.map((p) => p.to).join('・')}`, x, y, 10, K.cyan, 'left', wd); y += 14; }
+  R(c, x, y, wd, 1, K.edge); y += 4;
+  T(c, 'これまでの歴史', x, y, 10, K.amber); y += 13;
+  const rem = Math.floor((DETAIL.y + DETAIL.h - y - 4) / 13);
+  for (const tl of k.timeline.slice(-Math.max(2, rem - (k.note ? 3 : 0)))) { const d = `${Math.floor(tl.date / 10000) || ''}${tl.date ? '年' : ''}`; y += para(c, `${d ? d + ' ' : ''}${tl.text}`, x, y, wd, 10, K.text, 13, 2); if (y > DETAIL.y + DETAIL.h - 20) break; }
+  if (k.note && y < DETAIL.y + DETAIL.h - 20) para(c, k.note, x, y + 2, wd, 10, K.dim, 13, Math.max(1, Math.floor((DETAIL.y + DETAIL.h - y - 4) / 13)));
+}
+function drawPartner(ui, c, p, t) {
+  const x = DETAIL.x + 8, wd = DETAIL.w - 16;
+  panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, `${p.name}（日本の貿易の約${p.share}%）`, { right: 'A：関税の手段' });
+  let y = DETAIL.y + 22;
+  T(c, `関係 ${p.rel}　${p.warLabel}${p.treaties.length ? `　協定：${p.treaties.map((n) => n.replace(/^日本・/, '').replace(/経済連携協定|包括的/g, '')).join('・')}` : ''}`, x, y, 12, p.war > 1 ? K.bad : p.war > 0 ? K.warn : K.text, 'left', wd); y += 16;
+  gauge(c, x, y + 2, 170, p.rel);
+  T(c, `不満の高まり ${p.grievance}`, x + 184, y - 1, 10, p.grievance > 40 ? K.bad : K.dim); bar(c, x + 262, y + 2, 100, p.grievance, 100, p.grievance > 40 ? K.bad : K.warn); y += 16;
+  T(c, `${p.name}が日本の輸出品にかけている関税（歴史の水準＋追加分）`, x, y, 10, K.amber); y += 14;
+  for (const th of p.theirs) {
+    T(c, th.name, x + 4, y, 10, K.text, 'left', 70);
+    T(c, `${th.total}%`, x + 78, y, 10, th.add > 0.4 ? K.bad : th.add < -0.4 ? K.cyan : K.text, 'left', 44);
+    T(c, th.add ? `（歴史は${th.base}%・${th.add > 0 ? '追加' : '引き下げ'}${sgn(th.add, 1)}）` : th.note || '', x + 124, y, 10, K.dim, 'left', wd - 128); y += 13;
+  }
+  y += 3;
+  T(c, '日本が科している関税', x, y, 10, K.amber); y += 14;
+  if (p.extra.length) for (const e of p.extra) { T(c, `${e.name}に追加 +${e.pts}%（あと${e.days}日）`, x + 4, y, 10, K.warn, 'left', wd - 8); y += 13; } else { T(c, '追加関税はない', x + 4, y, 10, K.faint); y += 13; }
+  if (p.exempt.length) { T(c, `適用除外：${p.exempt.map((k) => (k === 'all' ? '全品目' : shortCat((t.cats.find((c0) => c0.id === k) || { name: k }).name))).join('・')}`, x + 4, y, 10, K.cyan, 'left', wd - 8); y += 13; }
+  y += 3;
+  para(c, '手段：関税交渉（相手の関税の引き下げ）／EPA交渉／追加関税／解除／適用除外。報復の見込みと国内の反応を確かめてから決める。', x, y, wd, 10, K.dim, 13, Math.max(1, Math.floor((DETAIL.y + DETAIL.h - y - 4) / 13)));
+}
+function drawDietItem(ui, c, d) {
+  const x = DETAIL.x + 8, wd = DETAIL.w - 16;
+  panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, d.name.slice(0, 30), { right: d.inSession ? '国会は会期中' : '国会は閉会中' });
+  let y = DETAIL.y + 22;
+  T(c, `いまの段階：${d.stageName}`, x, y, 12, K.amber, 'left', wd); y += 18;
+  if (d.estimate) { T(c, `通過の見込み ${pc(d.estimate.pass)}　衆議院の賛成 ${d.estimate.shugi != null ? Math.round(d.estimate.shugi * 100) + '%' : '—'}　参議院 ${d.estimate.sangi != null ? Math.round(d.estimate.sangi * 100) + '%' : '—'}`, x, y, 10, K.text, 'left', wd); y += 15; }
+  para(c, d.kind === 'treaty' ? '条約の承認は、衆議院から先に審議。参議院が否決・30日以内に議決しなくても、衆議院の議決が国会の議決になる（憲法61条・60条）。' : '関税は法律で定める（憲法84条）。参議院が否決しても、衆議院が出席議員の3分の2以上で再可決すれば成立する（憲法59条）。', x, y, wd, 10, K.dim, 13, 3); y += 42;
+  for (const l of (d.log || []).slice().reverse().slice(0, 5)) y += para(c, `・${l.text}`, x, y, wd, 10, K.text, 13, 2);
+}
+function drawNego(ui, c, n) {
+  const x = DETAIL.x + 8, wd = DETAIL.w - 16;
+  panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, n.name, { right: 'A：交渉を続ける' });
+  let y = DETAIL.y + 22;
+  T(c, `${n.levelName}・第${n.round}/${n.rounds}ラウンド　相手の雰囲気 ${n.mood}　合意の見込み ${pc(n.pConclude)}`, x, y, 10, K.text, 'left', wd); y += 16;
+  for (const i of n.issues.slice(0, 6)) { T(c, i.name, x + 4, y, 10, K.text, 'left', 180); T(c, `日本 ${i.mine}／要求 ${i.dem}　相手 ${i.theirs}／期待 ${i.want}`, x + 190, y, 10, K.dim, 'left', wd - 194); y += 13; }
+  y += 4;
+  for (const l of (n.log || []).slice(-3)) y += para(c, `・${l}`, x, y, wd, 10, K.dim, 13, 2);
+}
+const ISSUE_HDR = ['日本の提示', '相手の約束'];
+function negoModal(ui, v) {
+  const m = {
+    kind: 'nego', v, idx: Math.max(0, v.moves.findIndex((mv) => !mv.why)), t: 0, rects: [],
+    update(ui2, inp) {
+      m.t++;
+      if (m.t < 4) return;
+      const n = v.moves.length;
+      if (inp.repeat('up')) { m.idx = (m.idx + n - 1) % n; sfx('cursor'); }
+      if (inp.repeat('down')) { m.idx = (m.idx + 1) % n; sfx('cursor'); }
+      if (inp.pressed('a')) { sfx('ok'); ui2.closeModal(m, v.moves[m.idx].id); }
+      else if (inp.pressed('b') || inp.pressed('menu')) { sfx('cancel'); ui2.closeModal(m, null); }
+    },
+    tap(ui2, tap, inp) {
+      const now = inp.pressedNow || {};
+      now.a = false;
+      for (let i = 0; i < m.rects.length; i++) if (inR(tap.x, tap.y, m.rects[i])) { if (m.idx === i) ui2.closeModal(m, v.moves[i].id); else m.idx = i; return; }
+      if (!inR(tap.x, tap.y, m.box)) ui2.closeModal(m, null);
+    },
+    draw(ui2, c) {
+      const bx = 8, by = 22, bw = SW - 16, bh = 312;
+      m.box = { x: bx, y: by, w: bw, h: bh };
+      R(c, bx, by, bw, bh, '#0c1828'); R(c, bx, by, bw, 2, K.amber); R(c, bx, by + bh - 1, bw, 1, K.edge); R(c, bx, by, 1, bh, K.edge); R(c, bx + bw - 1, by, 1, bh, K.edge);
+      T(c, v.name, bx + 10, by + 6, 12, K.amber, 'left', 360);
+      T(c, `${v.levelName}　第${v.round}／${v.rounds}ラウンド${v.over ? '（回数が尽きた）' : ''}`, bx + bw - 10, by + 7, 10, K.dim, 'right', 240);
+      // the issue table
+      const tx = bx + 10, ty = by + 26;
+      R(c, tx, ty, 408, 14, '#0a1626');
+      T(c, '項目', tx + 4, ty + 2, 10, K.dim); T(c, ISSUE_HDR[0], tx + 232, ty + 2, 10, K.cyan); T(c, ISSUE_HDR[1], tx + 312, ty + 2, 10, K.good);
+      v.issues.forEach((i, k) => {
+        const y = ty + 16 + k * 24;
+        R(c, tx, y, 408, 22, k % 2 ? '#0e1c30' : '#0f2034');
+        T(c, i.name, tx + 4, y + 2, 10, i.sacred ? K.lock : K.text, 'left', 214);
+        if (i.note) T(c, i.note, tx + 4, y + 12, 8, K.faint, 'left', 214);
+        for (let q = 1; q <= 3; q++) {
+          const px = tx + 232 + (q - 1) * 14, py = y + 5;
+          R(c, px, py, 11, 11, i.dem >= q ? K.amber : '#31465c'); R(c, px + 1, py + 1, 9, 9, q <= i.mine ? K.cyan : '#0c1828');
+          const qx = tx + 312 + (q - 1) * 14;
+          const locked = q > i.max;
+          R(c, qx, py, 11, 11, i.want >= q ? K.amber : '#31465c'); R(c, qx + 1, py + 1, 9, 9, q <= i.theirs ? K.good : locked ? '#1a1a22' : '#0c1828');
+        }
+        if (i.dem === 0) T(c, '要求なし', tx + 276, y + 5, 8, K.faint, 'left', 34);
+        if (i.want === 0) T(c, '—', tx + 360, y + 5, 10, K.faint);
+      });
+      T(c, '●＝提示・約束　黄の枠＝相手の要求／日本の期待', tx, ty + 16 + 6 * 24 + 1, 8, K.faint, 'left', 408);
+      // the right side: the mood, the odds, the home reaction, the log
+      const rx = bx + 430, rw = bw - 440;
+      T(c, `相手の雰囲気 ${v.mood}`, rx, ty, 10, K.text); bar(c, rx + 82, ty + 3, rw - 84, v.mood, 100, v.mood < 25 ? K.bad : v.mood < 50 ? K.warn : K.good);
+      T(c, `勢い ${v.momentum >= 0 ? '+' : ''}${v.momentum}`, rx, ty + 14, 10, K.dim); T(c, `合意の見込み ${pc(v.pConclude)}`, rx + 70, ty + 14, 10, v.pConclude >= 0.5 ? K.good : K.warn, 'left', rw - 72);
+      T(c, `相手の満足 ${pc(v.sp)}　日本の満足 ${pc(v.sj)}`, rx, ty + 28, 10, K.dim, 'left', rw);
+      let ry = ty + 46;
+      for (const l of v.domestic.slice(0, 2)) ry += para(c, l, rx, ry, rw, 10, K.warn, 12, 2);
+      ry += 2;
+      for (const l of v.log.slice(-3)) ry += para(c, `・${l.replace(/\n/g, ' ')}`, rx, ry, rw, 10, K.dim, 12, 3);
+      // the moves
+      const my = ty + 16 + 6 * 24 + 14;
+      R(c, tx, my - 2, bw - 20, 1, K.edge);
+      m.rects = [];
+      const half = Math.ceil(v.moves.length / 2);
+      v.moves.forEach((mv, i) => {
+        const col = i < half ? 0 : 1, row = i < half ? i : i - half;
+        const mx = tx + col * 304, yy = my + row * 17;
+        const sel = i === m.idx;
+        R(c, mx, yy, 298, 16, sel ? K.sel : '#0d1b2e'); if (sel) R(c, mx, yy, 2, 16, K.amber);
+        T(c, mv.label, mx + 8, yy + 2, 12, mv.why ? K.faint : mv.id === 'walk' ? K.warn : mv.id === 'conclude' ? K.good : K.text, 'left', 286);
+        m.rects[i] = { x: mx, y: yy, w: 298, h: 16 };
+      });
+      const cur = v.moves[m.idx];
+      if (cur) para(c, cur.why ? `いまはできない：${cur.why}` : cur.sub, tx, my + half * 17 + 2, bw - 24, 10, cur.why ? K.lock : K.dim, 12, 2);
+      T(c, '↑↓手を選ぶ　A決める　B中断（交渉は残る）', bx + bw - 10, by + bh - 14, 10, K.faint, 'right');
+    },
+  };
+  return m;
+}
+async function negoEntry(ui, kind, target) {
+  const g = ui.g;
+  const open = (safe(() => g.negotiations(), []) || []).find((n) => n.kind === kind && n.target === target && n.status === 'open');
+  if (open) { await negoFlow(ui, open.id); return; }
+  const pv = kind === 'epa' ? safe(() => g.diplomacyPreview('fta', target), null) : kind === 'security' ? safe(() => g.diplomacyPreview('defense_pact', target), null) : kind === 'peace' ? safe(() => g.diplomacyPreview('peace_treaty', target), null) : safe(() => g.diplomacyPreview('tariff_talks', target), null);
+  if (pv && pv.why) { await whyInfo(ui, KIND_JA[kind] || '交渉', pv.why, 'x', target); return; }
+  const levels = [{ id: 'official', label: '事務レベル協議から始める', sub: '体力は使わない。進みは遅めで、あとから格を上げられる' }, { id: 'fm', label: '閣僚折衝（外相会談）で始める', sub: '体力12。見込みが少し上がる（総理か外務大臣）' }, { id: 'summit', label: '首脳協議で始める', sub: '体力22。大きな合意を引き出しやすい（総理）' }];
+  const k = await ui.pick({ title: `${KIND_JA[kind] || '交渉'}（${(ui.data.rows[target] || { name: target }).name || target}）`, lines: [pv ? pv.desc : '', '交渉は複数のラウンドで進む。譲歩する項目と守る項目、相手に求める項目を選び、合意の見込みが上がったら署名へ。'].filter(Boolean), items: levels.map((l) => ({ label: l.label, sub: l.sub })), w: 520 });
+  if (k == null || k < 0) return;
+  const r = safe(() => g.negotiationStart(kind, target, { level: levels[k].id }), null);
+  if (!r || !r.ok) { await ui.info('交渉', [`始められない：${(r && r.why) || '理由は不明'}`]); return; }
+  await negoFlow(ui, r.id);
+}
+async function negoFlow(ui, id) {
+  const g = ui.g;
+  for (let guard = 0; guard < 80 && !ui.closed; guard++) {
+    const v = safe(() => g.negotiationView(id), null);
+    if (!v) return;
+    if (v.status !== 'open') { await ui.info(v.name, [v.status === 'done' || v.status === 'signed' ? '交渉は合意に至った。' : '交渉は終わった。', v.result ? v.result.text : '']); return; }
+    const mid = await ui.openModal(negoModal(ui, v));
+    if (!mid) return;
+    const mv = v.moves.find((x) => x.id === mid);
+    if (!mv) return;
+    if (mv.why) { await ui.info(mv.label, ['いまはできない：', mv.why]); continue; }
+    let arg = null;
+    if (mv.issue) {
+      const cand = v.issues.filter((i) => (mid === 'concede' ? i.mine < 3 : mid === 'press' ? i.want > 0 && i.theirs < Math.min(i.want, i.max) : i.dem > 0));
+      if (!cand.length) { await ui.info(mv.label, ['選べる項目がない。']); continue; }
+      const k = await ui.pick({
+        title: mv.label, lines: [mv.sub],
+        items: cand.map((i) => ({ label: i.name, sub: mid === 'concede' ? `いま：${i.lv[i.mine]}${i.mine < 3 ? ` → ${i.lv[i.mine + 1]}` : ''}（相手の要求：${i.lv[i.dem]}）` : mid === 'press' ? `いま：${i.lvT[i.theirs]} → ${i.lvT[Math.min(3, i.theirs + 1)]}（上限：${i.lvT[i.max]}）` : `相手の要求：${i.lv[i.dem]}を下げさせたい`, right: mid === 'press' ? pc(i.pressOdds) : mid === 'shield' ? pc(i.shieldOdds) : '' })), w: 520,
+      });
+      if (k == null || k < 0) continue;
+      arg = cand[k].id;
+    }
+    if (mid === 'walk' || mid === 'conclude') {
+      const c = await ui.confirm({ title: mv.label, danger: mid === 'walk', lines: [mv.sub, mid === 'conclude' ? `【合意の見込み】${pc(v.pConclude)}　相手の満足 ${pc(v.sp)}・日本の満足 ${pc(v.sj)}` : '関係が冷え、支持率に響くことがある。相手が条件を見直して呼び戻すこともある。', ...v.domestic], choices: mid === 'walk' ? ['やめておく', '席を立つ'] : ['署名を試みる', 'やめる'], index: 0 });
+      if (mid === 'walk' ? c !== 1 : c !== 0) continue;
+    }
+    const res = safe(() => g.negotiationMove(id, mid, arg), null);
+    if (!res) continue;
+    if (!res.ok) { sfx('buzz'); await ui.info(mv.label, [`できなかった：${res.why}`]); continue; }
+    sfx(res.signed ? 'good' : 'ok');
+    await ui.info(res.signed ? '合意・署名' : mv.label, String(res.text || '').split('\n'));
+    ui.dirty();
+    if (res.ended) {
+      if (has(g, 'regimeFlush')) await safe(() => g.regimeFlush(), null);
+      return;
+    }
+  }
+}
+async function tariffFlow(ui, cat) {
+  const g = ui.g;
+  const cands = safe(() => g.tariffCandidates(cat.id), []) || [];
+  if (!cands.length) { await ui.info(cat.name, ['変えられる水準がない。']); return; }
+  const first = safe(() => g.tariffPreview(cat.id, cands[0].rate), null);
+  if (first && first.why) { await ui.info(`${shortCat(cat.name)}の関税`, ['いまはできない：', first.why, '', '（総理か、担当の大臣になれば、ここから動かせる）']); return; }
+  const k = await ui.pick({ title: `${shortCat(cat.name)}の関税率（いま ${cat.rateText}）`, lines: [`歴史どおりなら ${cat.histText}`, '新しい水準を選ぶ。関税は法律で定めるので、国会の審議を経て成立する。'], items: cands.map((cd) => ({ label: cd.label, sub: cd.sub || `物価・収入・報復の見込みは次の画面で確かめる`, right: cd.rateText.replace(/（.*$/, '') })), w: 540 });
+  if (k == null || k < 0) return;
+  const pv = safe(() => g.tariffPreview(cat.id, cands[k].rate), null);
+  if (!pv || !pv.ok) return;
+  const danger = pv.over;
+  const c = await ui.confirm({ title: `${danger ? '⚠ ' : ''}${shortCat(cat.name)}の関税を ${pv.toText.replace(/（.*$/, '')} に`, danger, lines: pv.lines, choices: ['国会に提出する', 'やめる'], index: 0 });
+  if (c !== 0) return;
+  await ui.result('関税の改正', safe(() => g.tariffSet(cat.id, cands[k].rate), null));
+}
+async function frictionFlow(ui, f) {
+  const g = ui.g;
+  const kinds = ['trade_talk', 'trade_concede', 'trade_wto', 'trade_counter'];
+  const pvs = kinds.map((kd) => safe(() => g.diplomacyPreview(kd, f.crisis), null));
+  const k = await ui.pick({ title: `貿易摩擦：${f.title}`, lines: [`相手の要求：${f.ask}`, `期限まであと${f.daysLeft}日。応じないと相手は関税を発動する。`], items: pvs.map((pv, i) => ({ label: pv ? pv.name : kinds[i], sub: pv ? (pv.why ? `🔒 ${pv.why}` : pv.lines[0] || pv.desc) : '', right: pv && pv.why ? '🔒' : pv && pv.odds != null ? pc(pv.odds) : '○', lock: pv && pv.why })), w: 560 });
+  if (k == null || k < 0) return;
+  await diploFlow(ui, kinds[k], f.crisis);
+}
+async function partnerMenu(ui, p) {
+  const g = ui.g;
+  const id = p.main;
+  const items = [
+    { label: '関税交渉（相手の関税の引き下げを求める）', sub: '事務レベルから閣僚・首脳へ。見返りに輸入拡大・投資を求められる', run: () => negoEntry(ui, 'tariffs', id) },
+    { label: '経済連携協定（EPA）の交渉', sub: p.treaties.length ? 'すでに協定がある' : '関税を下げ、貿易と投資を広げる。農産物の扱いが争点', run: () => negoEntry(ui, 'epa', id) },
+    { label: '追加関税（対抗関税）を科す', sub: '政令で6か月。報復の見込みを確かめてから', run: () => diploFlow(ui, 'tariff_extra', id) },
+    { label: '追加関税・対抗措置を解除する', sub: p.extra.length ? '日本の追加関税をやめる' : '追加関税は科していない', run: () => diploFlow(ui, 'tariff_lift', id) },
+    { label: '関税の適用除外（例外）にする', sub: '日本の関税引き上げの対象から外す', run: () => diploFlow(ui, 'tariff_exempt', id) },
+    { label: '外交の手段をすべて見る', sub: '首脳会談・制裁・援助…', run: () => actionsMenu(ui, id) },
+  ];
+  const k = await ui.pick({ title: `${p.name}：関税・貿易の手段`, items: items.map((it) => ({ label: it.label, sub: it.sub })), w: 540 });
+  if (k == null || k < 0) return;
+  await items[k].run();
+}
+
+// ---- the richer 外交 tab: the report rows on top, the old action list below
+const TAB_DIPLOMACY_BASE = TAB_DIPLOMACY;
+const REPORT = [['score', '外交の通信簿'], ['advice', '外務省の助言'], ['visits', '来日する要人'], ['negos', '進行中の交渉'], ['diet', '国会で審議中の条約'], ['terr', '領土問題'], ['soft', 'ソフトパワー・文化交流'], ['opinion', '国内の世論の反応'], ['stance', '外交の姿勢（親中派・親米派…）'], ['timeline', '外交の年表']];
+const TAB_DIPLOMACY2 = {
+  id: 'diplomacy', label: '外交',
+  rows(ui) {
+    const g = ui.g;
+    const out = [{ header: true, label: '外交の状況' }];
+    const st = safe(() => g.diplomaticStanding(), null);
+    const negos = (safe(() => g.negotiations(), []) || []).filter((n) => n.status === 'open');
+    const diet = (safe(() => g.dietTreaties(), []) || []).filter((d) => d.status === 'open');
+    const visits = safe(() => g.foreignVisits(), []) || [];
+    ui.rep = { st, negos, diet, visits };
+    const right = { score: st ? `${st.grade} ${st.score}` : '', advice: '', visits: visits.length ? `${visits.length}件` : '', negos: negos.length ? `${negos.length}件` : '', diet: diet.length ? `${diet.length}件` : '', soft: st ? `${(st.parts.find((p0) => p0.id === 'soft') || {}).value}` : '' };
+    for (const [key, label] of REPORT) {
+      if (key === 'negos' && !negos.length) continue;
+      if (key === 'diet' && !diet.length) continue;
+      if (key === 'visits' && !visits.length) continue;
+      out.push({ key: 'r:' + key, label, right: right[key] || '', rightColor: key === 'visits' || key === 'negos' ? K.warn : K.dim, report: key });
+    }
+    for (const n of negos) out.push({ key: 'nn:' + n.id, label: `交渉：${n.name}`, right: `第${n.round}/${n.rounds}`, rightColor: K.cyan, n });
+    for (const d of diet) out.push({ key: 'dd:' + d.id, label: `国会：${d.name}`, right: d.stageShort, rightColor: K.dim, d });
+    const base = TAB_DIPLOMACY_BASE.rows(ui);
+    return out.concat(base);
+  },
+  draw(ui, c) {
+    const row = ui.curRow();
+    if (row && (row.report || row.n || row.d)) {
+      drawList(ui, c, LIST);
+      if (row.n) return drawNego(ui, c, row.n);
+      if (row.d) return drawDietItem(ui, c, row.d);
+      return drawReport(ui, c, row.report);
+    }
+    TAB_DIPLOMACY_BASE.draw(ui, c);
+  },
+  async act(ui, row) {
+    if (!row) return;
+    const g = ui.g;
+    if (row.n) { await negoFlow(ui, row.n.id); return; }
+    if (row.d) { await ui.info(row.d.name, [`いまの段階：${row.d.stageName}`, ...(row.d.log || []).map((l) => `・${l.text}`)]); return; }
+    if (row.report) {
+      const k = row.report;
+      if (k === 'advice') { const a = safe(() => g.mofaAdvice(), []) || []; await ui.info('外務省の助言', a.flatMap((x) => [`【${x.who}】（${x.stance}）`, x.text])); return; }
+      if (k === 'visits') {
+        const vs = ui.rep.visits.filter((v) => v.status === 'pending');
+        if (!vs.length) { await ui.info('来日する要人', ['いま来日している要人はいない。']); return; }
+        const i = await ui.pick({ title: '来日中の要人', items: vs.map((v) => ({ label: v.title, sub: `${v.kind}来日・あと${v.daysLeft}日`, right: '接遇' })), w: 480 });
+        if (i >= 0) await diploFlow(ui, 'receive_visit', vs[i].country);
+        return;
+      }
+      if (k === 'terr') { await territoryFlow(ui); return; }
+      if (k === 'soft') { const id = await pickCountry(ui, '交流の相手'); if (id) await diploFlow(ui, 'soft_action', id); return; }
+      if (k === 'timeline') { const tl = safe(() => g.diplomacyTimeline(24), []) || []; await ui.info('外交の年表', tl.length ? tl.map((e) => `${e.date}　${e.text}`) : ['まだ記録はない。']); return; }
+      if (k === 'opinion') { const o = safe(() => g.worldOpinion(10), []) || []; await ui.info('国内の世論の反応', o.length ? o.map((e) => `${e.date}　${e.name}：${e.text}`) : ['まだ反応は記録されていない。']); return; }
+      if (k === 'stance') { await stanceInfo(ui); return; }
+      return;
+    }
+    return TAB_DIPLOMACY_BASE.act(ui, row);
+  },
+};
+async function territoryFlow(ui) {
+  const g = ui.g;
+  const ids = ['northern', 'takeshima', 'senkaku'];
+  const infos = ids.map((id) => safe(() => g.disputeInfo(id), null)).filter(Boolean);
+  const k = await ui.pick({ title: '領土問題', lines: ['それぞれの立場と、これまでのいきさつ'], items: infos.map((d) => ({ label: d.name, sub: d.status === 'dispute' ? '解決していない' : d.status === 'partial' ? '一部が決着' : d.status === 'resolved' ? '決着' : '棚上げ', right: '▶' })).concat([{ label: '領土問題に取り組む（協議・警備・対話…）', sub: '見込みと立場を確かめてから' }]), w: 520 });
+  if (k == null || k < 0) return;
+  if (k === infos.length) { await diploFlow(ui, 'dispute_action', null); return; }
+  const d = infos[k];
+  await ui.info(d.name, [`日本の立場：${d.jp}`, `相手の立場：${d.other}`, `争点：${d.law}`, '', ...d.timeline.slice(-5).map((e) => `${e.year}年　${e.text}`)]);
+}
+async function stanceInfo(ui) {
+  const g = ui.g;
+  const info = safe(() => g.foreignStanceInfo('player'), null);
+  const gov = safe(() => g.foreignStanceInfo('government'), null);
+  if (!info) { await ui.info('外交の姿勢', ['姿勢の仕組みが読み込まれていない。']); return; }
+  const NAMES = { china: '中国', us: '米国', russia: 'ロシア', korea: '韓国', taiwan: '台湾', eu: '欧州', asean: '東南アジア', nk: '北朝鮮' };
+  const line = (v) => Object.keys(NAMES).map((k) => `${NAMES[k]}${v[k] >= 0 ? '+' : ''}${v[k]}`).join('　');
+  await ui.info('外交の姿勢', [`あなた：${info.label}（${info.long}）`, info.desc, line(info.vec), '', `政権：${gov ? gov.label : '—'}　${gov ? line(gov.vec) : ''}`, '', info.effect.text, '', '姿勢は、会談・制裁・援助などの行いで少しずつ動く。政権の姿勢（総理・与党・派閥）は、各国との関係と貿易に影響する。']);
+}
+function drawReport(ui, c, key) {
+  const g = ui.g;
+  const x = DETAIL.x + 8, wd = DETAIL.w - 16;
+  const rep = ui.rep || {};
+  if (key === 'score') {
+    const st = rep.st;
+    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '外交の通信簿', { right: st ? `${st.score}点・評価${st.grade}` : '' });
+    if (!st) return;
+    let y = DETAIL.y + 22;
+    T(c, `${st.grade}　${st.label}`, x, y, 14, st.score >= 62 ? K.good : st.score >= 50 ? K.warn : K.bad); T(c, `前月比 ${sgn(st.trend, 0)}`, x + wd, y + 2, 10, st.trend >= 0 ? K.good : K.bad, 'right'); y += 22;
+    for (const p of st.parts) { T(c, p.label, x, y, 10, K.text, 'left', 150); bar(c, x + 156, y + 3, 120, p.value, 100, p.value >= 60 ? K.good : p.value >= 40 ? K.warn : K.bad); T(c, `${p.value}`, x + 282, y, 10, K.text); T(c, p.desc, x + 306, y, 8, K.faint, 'left', wd - 310); y += 15; }
+    if (st.history.length > 2) { sparkline(c, x, y + 8, wd, 28, st.history.map((h) => h.score), K.amber); T(c, '通信簿の推移', x, y + 40, 10, K.faint); }
+    return;
+  }
+  if (key === 'advice') {
+    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '外務省の助言', { right: 'A：全文を読む' });
+    const a = safe(() => g.mofaAdvice(), []) || [];
+    let y = DETAIL.y + 22;
+    for (const it of a.slice(0, 4)) { T(c, `${it.who}（${it.stance}）`, x, y, 10, it.stance === '積極' ? K.good : K.warn, 'left', wd); y += 13; y += para(c, it.text, x + 6, y, wd - 6, 10, K.text, 13, 4) + 4; if (y > DETAIL.y + DETAIL.h - 30) break; }
+    return;
+  }
+  if (key === 'visits') {
+    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '来日する要人', { right: 'A：接遇する' });
+    let y = DETAIL.y + 22;
+    for (const v of rep.visits || []) { T(c, `${v.title}（${v.kind}来日・${v.status === 'pending' ? `あと${v.daysLeft}日` : `${v.daysLeft}日後に来日予定`}）`, x, y, 12, K.text, 'left', wd); y += 18; }
+    para(c, '来日中の要人は、会談・歓迎の行事で関係を深められる。会談の成果は共同声明に残り、関係が良いほど踏みこんだ内容になる。接遇しないまま滞在が終わると、関係が少し冷える。', x, y + 4, wd, 10, K.dim, 13, 6);
+    return;
+  }
+  if (key === 'terr') {
+    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '領土問題', { right: 'A：くわしく・取り組む' });
+    let y = DETAIL.y + 22;
+    for (const id of ['northern', 'takeshima', 'senkaku']) { const d = safe(() => g.disputeInfo(id), null); if (!d) continue; T(c, `${d.name}（${d.status === 'dispute' ? '解決していない' : d.status === 'partial' ? '一部が決着' : d.status === 'resolved' ? '決着' : '棚上げ'}・協議${d.talks}回）`, x, y, 12, K.warn, 'left', wd); y += 16; y += para(c, `日本：${d.jp}`, x + 6, y, wd - 6, 10, K.text, 13, 2); y += para(c, `相手：${d.other}`, x + 6, y, wd - 6, 10, K.dim, 13, 3) + 4; }
+    return;
+  }
+  if (key === 'soft') {
+    const sp = safe(() => g.softPower(), null);
+    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, 'ソフトパワー・文化交流', { right: 'A：交流事業を行う' });
+    if (!sp) return;
+    let y = DETAIL.y + 22;
+    T(c, `ソフトパワー ${sp.score}／100`, x, y, 14, K.cyan); bar(c, x + 150, y + 6, 180, sp.score, 100, K.cyan); y += 24;
+    T(c, `事業の積み重ね +${sp.bonus}　団体・協会の協力 +${sp.groups}`, x, y, 10, K.dim, 'left', wd); y += 16;
+    para(c, '文化の発信・留学生と青年の交流・スポーツ交流・日本語の普及・観光ビザの緩和。相手国の国民との結びつきを深め、関係と日本のイメージにじわじわ効く。援助（ODA）の積み重ねも加わる。', x, y, wd, 10, K.text, 13, 5); y += 70;
+    for (const o of sp.options) { T(c, `・${o.label}`, x, y, 10, K.text, 'left', wd); y += 13; }
+    return;
+  }
+  if (key === 'opinion') {
+    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '国内の世論の反応', { right: 'A：一覧' });
+    const o = safe(() => g.worldOpinion(5), []) || [];
+    let y = DETAIL.y + 22;
+    if (!o.length) para(c, 'まだ外交への反応は記録されていない。会談・条約・制裁・援助などを行うと、歓迎する層と懸念する層が表れる。', x, y, wd, 10, K.dim, 13, 4);
+    for (const e of o) { T(c, `${e.date}　${e.name}`, x, y, 10, K.amber, 'left', wd); y += 13; y += para(c, e.text, x + 6, y, wd - 6, 10, K.text, 13, 3) + 3; if (y > DETAIL.y + DETAIL.h - 24) break; }
+    return;
+  }
+  if (key === 'stance') {
+    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '外交の姿勢（親中派・親米派…）', { right: 'A：くわしく' });
+    const info = safe(() => g.foreignStanceInfo('player'), null);
+    const gov = safe(() => g.foreignStanceInfo('government'), null);
+    let y = DETAIL.y + 22;
+    if (!info) return;
+    const NAMES = { china: '中国', us: '米国', russia: 'ロシア', korea: '韓国', taiwan: '台湾', eu: '欧州', asean: 'ASEAN', nk: '北朝鮮' };
+    T(c, `あなた：${info.label}（${info.long}）`, x, y, 12, K.amber, 'left', wd); y += 16;
+    for (const k of Object.keys(NAMES)) { T(c, NAMES[k], x, y, 10, K.text, 'left', 64); const v = info.vec[k]; R(c, x + 70, y + 3, 160, 6, '#1a2a3a'); R(c, x + 150, y + 1, 1, 10, K.dim); R(c, Math.min(x + 150, x + 150 + (v / 100) * 80), y + 3, Math.max(1, Math.abs(v) * 0.8), 6, v >= 0 ? K.cyan : K.bad); T(c, `${v >= 0 ? '+' : ''}${v}`, x + 236, y, 10, K.dim); if (gov) { const gv = gov.vec[k]; T(c, `政権 ${gv >= 0 ? '+' : ''}${gv}`, x + 280, y, 10, K.faint, 'left', wd - 284); } y += 14; }
+    y += 4;
+    para(c, gov ? `政権：${gov.label}。${gov.effect.text}` : '', x, y, wd, 10, K.dim, 13, Math.max(1, Math.floor((DETAIL.y + DETAIL.h - y - 4) / 13)));
+    return;
+  }
+  if (key === 'timeline') {
+    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '外交の年表', { right: 'A：一覧' });
+    const tl = safe(() => g.diplomacyTimeline(12), []) || [];
+    let y = DETAIL.y + 22;
+    if (!tl.length) para(c, 'あなたの外交の記録がここに残る（会談・条約・制裁・援助・交渉の経過）。', x, y, wd, 10, K.dim, 13, 3);
+    for (const e of tl) { T(c, e.date, x, y, 10, K.amber); y += para(c, e.text, x + 62, y, wd - 62, 10, K.text, 13, 2); if (y > DETAIL.y + DETAIL.h - 16) break; }
+  }
+}
+
+const TABS = [TAB_MAP, TAB_COUNTRIES, TAB_DIPLOMACY2, TAB_TRADE, TAB_ALLIANCES, TAB_CRISIS, TAB_NEWS];
 const tabIndex = (t) => { if (typeof t === 'number') return clamp(t, 0, TABS.length - 1); const i = TABS.findIndex((x) => x.id === t); return i < 0 ? 0 : i; };
 
 // ================================================================ lists
@@ -514,12 +1012,13 @@ function drawList(ui, c, L, wide = false) {
 }
 
 // ================================================================ flows (modals: confirm / pick / info)
-const OPT_KEY = { summit: 'topic', visit: 'topic', fm_talks: 'topic', statement: 'kind', sanction: 'level', aid: 'level', peace_treaty: 'terms', abrogate: 'treaty', peace_conf: 'terms', dispatch: 'side' };
+const OPT_KEY = { summit: 'topic', visit: 'topic', fm_talks: 'topic', statement: 'kind', sanction: 'level', aid: 'level', peace_treaty: 'terms', abrogate: 'treaty', peace_conf: 'terms', dispatch: 'side', tariff_extra: 'level', tariff_exempt: 'kind', receive_visit: 'topic', soft_action: 'kind', dispute_action: 'act', safeguard: 'cat' };
 async function diploFlow(ui, kind, target, opts0 = {}) {
   const g = ui.g;
   let pv = safe(() => g.diplomacyPreview(kind, target, opts0), null);
   if (!pv) return;
   if (pv.why) { await whyInfo(ui, pv.name, pv.why, kind, target); return; }
+  if (pv.rich && has(g, 'negotiationStart')) { await negoEntry(ui, pv.rich, target); return; }
   let opts = { ...opts0 };
   if (pv.options && pv.options.length && OPT_KEY[kind] && opts[OPT_KEY[kind]] == null) {
     const k = await ui.pick({ title: pv.name, lines: [pv.desc], items: pv.options.map((o) => ({ label: o.label, sub: o.sub })) });
@@ -801,7 +1300,7 @@ class WorldScene {
     TABS.forEach((tb, i) => {
       const x = i * tw, on = i === this.tabIdx;
       R(c, x + 1, 21, tw - 2, 18, on ? (this.focus === 'tabs' ? K.amber : K.panel2) : '#0a1424');
-      const alert = (tb.id === 'crisis' && (d.war || d.w.crises.some((k) => k.sev >= 2))) || (tb.id === 'diplomacy' && (d.w.offers || []).length);
+      const alert = (tb.id === 'crisis' && (d.war || d.w.crises.some((k) => k.sev >= 2))) || (tb.id === 'diplomacy' && ((d.w.offers || []).length || (d.w.diplo && d.w.diplo.visits))) || (tb.id === 'trade' && d.w.trade && (d.w.trade.frictions || d.w.trade.deals));
       T(c, tb.label, x + tw / 2, 24, 12, on && this.focus === 'tabs' ? '#1a1206' : on ? K.amber : K.text, 'center', tw - 8);
       if (alert) R(c, x + tw - 9, 24, 4, 4, K.bad);
       this.tabRects.push({ x, y: 20, w: tw, h: 20 });
@@ -932,6 +1431,11 @@ async function worldApp(g) {
       { id: 'crises', label: '世界の危機', sub: `${w.crises.length}件・紛争${w.conflicts.length}件` },
       { id: 'summits', label: '首脳会議の予定', sub: w.summits[0] ? `${w.summits[0].year}年${w.summits[0].month}月 ${short(w.summits[0].name, 10)}` : '' },
       { id: 'countries', label: '国々と日本の関係', sub: `${w.countries.length}か国` },
+      has(g, 'tariffs') ? { id: 'rates', label: '関税率の一覧', sub: `関税収入 約${safe(() => g.tariffRevenue().total, '—')}兆円/年` } : null,
+      has(g, 'tariffs') ? { id: 'trade', label: '貿易と関税の動き', sub: w.trade && w.trade.frictions ? `貿易摩擦 ${w.trade.frictions}件` : '貿易摩擦はない' } : null,
+      has(g, 'diplomaticStanding') ? { id: 'score', label: '外交の通信簿', sub: w.diplo ? `${w.diplo.grade}（${w.diplo.score}点）` : '' } : null,
+      has(g, 'mofaAdvice') ? { id: 'advice', label: '外務省の助言', sub: '' } : null,
+      has(g, 'dietTreaties') ? { id: 'diet', label: '国会で審議中の条約・関税法案', sub: `${(safe(() => g.dietTreaties(), []) || []).filter((d) => d.status === 'open').length}件` } : null,
     ].filter(Boolean);
     const i = await phoneList(g, { title: '世界', color: APP_COLOR, index, items: items.map((x) => ({ label: x.label, sub: x.sub })) });
     if (i < 0) return;
@@ -943,6 +1447,27 @@ async function worldApp(g) {
     else if (id === 'news') await phoneInfo(g, { title: FRAME[eraOfG(g)] || 'ニュース', color: APP_COLOR, lines: w.news.length ? w.news.slice(0, 16).map((n) => `・${n.text}`) : ['まだニュースはない。'] });
     else if (id === 'crises') await phoneInfo(g, { title: '世界の危機', color: APP_COLOR, lines: [...(w.crises.length ? w.crises.map((k) => `・${k.title}`) : ['・いまは大きな危機はない']), '', '紛争：', ...(w.conflicts.length ? w.conflicts.map((k) => `・${k.name}`) : ['・いまはない'])] });
     else if (id === 'summits') await phoneInfo(g, { title: '首脳会議の予定', color: APP_COLOR, lines: w.summits.map((s0) => `・${s0.year}年${s0.month}月　${s0.name}${s0.hostName ? `（${s0.hostName}）` : ''}`) });
+    else if (id === 'rates') {
+      const t = g.tariffs();
+      await phoneInfo(g, { title: '関税率の一覧', color: APP_COLOR, lines: [...t.cats.map((c) => `・${c.name.replace(/（.*$/, '')}：${c.rateText.replace(/（.*$/, '')}${c.changed ? `（歴史では${c.histText.replace(/（.*$/, '')}）` : ''}`), '', `関税収入 約${t.revenue.total}兆円/年（歴史との差 ${t.revenue.delta >= 0 ? '+' : ''}${t.revenue.delta}兆円）`, `輸出 ${t.macro.exports}兆・輸入 ${t.macro.imports}兆円　収支 ${t.macro.balance >= 0 ? '+' : ''}${t.macro.balance}兆円`] });
+    }
+    else if (id === 'trade') {
+      const t = g.tariffs();
+      const open = t.frictions.filter((f) => f.status === 'open');
+      await phoneInfo(g, { title: '貿易と関税の動き', color: APP_COLOR, lines: [...(open.length ? open.map((f) => `・貿易摩擦：${f.title}（${f.name}・期限${f.daysLeft}日）`) : ['・貿易摩擦はない']), ...t.partners.filter((p) => p.war > 0).map((p) => `・${p.name}：${p.warLabel}`), '', ...(t.ledger.length ? t.ledger.slice(0, 6).map((e) => `・${e.text}`) : []), '', '画面で関税率の改正・追加関税・交渉ができる（総理・担当大臣）'] });
+    }
+    else if (id === 'score') {
+      const st = g.diplomaticStanding();
+      await phoneInfo(g, { title: '外交の通信簿', color: APP_COLOR, lines: [`${st.grade}　${st.label}（${st.score}点・前月比 ${st.trend >= 0 ? '+' : ''}${st.trend}）`, ...st.parts.map((p) => `・${p.label} ${p.value}`)] });
+    }
+    else if (id === 'advice') {
+      const a = g.mofaAdvice();
+      await phoneInfo(g, { title: '外務省の助言', color: APP_COLOR, lines: a.flatMap((x) => [`【${x.who}】`, x.text]) });
+    }
+    else if (id === 'diet') {
+      const d = (g.dietTreaties() || []).slice(0, 6);
+      await phoneInfo(g, { title: '国会で審議中', color: APP_COLOR, lines: d.length ? d.flatMap((x) => [`・${x.name}`, `　${x.stageName}${x.estimate ? `（通過の見込み ${Math.round(x.estimate.pass * 100)}%）` : ''}`]) : ['審議中の条約・関税法案はない。'] });
+    }
     else if (id === 'countries') {
       const list = w.countries.slice().sort((a, b) => b.relation - a.relation);
       const k = await phoneList(g, { title: '国々と日本の関係', color: APP_COLOR, items: list.map((c) => ({ label: short(c.name, 12), sub: `${c.relLabel}・${BLOC_SHORT(w, c.bloc)}${c.war ? '・戦争中' : ''}`, right: `${c.relation}` })) });

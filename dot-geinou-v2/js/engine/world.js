@@ -39,11 +39,15 @@
 import { Game } from './game.js';
 import { onMorning } from './life.js';
 import { clamp } from './util.js';
+import { createDiplo } from './world_diplo.js';
+import { createTrade } from './world_trade.js';
+import { createStance } from './world_stance.js';
 
 // ======================================================================== optional modules (guarded)
 let POL = null; // politics.js
 let REG = null; // regime.js
 let IDEO = null;
+let EXT = null; // trade / diplomacy depth / stance (world_trade.js, world_diplo.js, world_stance.js), created at the end of this file
 import('./politics.js').then((m) => { POL = m; }).catch(() => { POL = null; });
 import('./regime.js').then((m) => { REG = m; hookRegime(); }).catch(() => { REG = null; });
 import('../registry.js').then((reg) => {
@@ -711,11 +715,12 @@ export function countryInfo(g, id) {
 //   desc, check(g, t, o) → why | null (a structural reason with the path; never "because it is bad"),
 //   odds(g, t, o) → 0..1 | null, lines(g, t, o) → [cost / effect lines], options(g, t) → [{ id, label, sub }] | null,
 //   run(g, t, o) → { ok, success, text } }
-const WHO = { pm: '内閣総理大臣', foreign: '外務大臣', defense: '防衛大臣' };
+const WHO = { pm: '内閣総理大臣', foreign: '外務大臣', defense: '防衛大臣', finance: '財務（大蔵）大臣', trade: '経済産業（通商産業）大臣', agri: '農林水産大臣' };
+const WHO_POST = { finance: 'minister_finance', trade: 'minister_trade', agri: 'minister_agri' };
 function roleWhy(g, who) {
   if (who.includes('any')) return null;
   if (!pol(g)) return '政治の仕組み（政治コア）が読み込まれていない';
-  if ((who.includes('pm') && isPM(g)) || (who.includes('foreign') && isFM(g)) || (who.includes('defense') && isDM(g))) return null;
+  if ((who.includes('pm') && isPM(g)) || (who.includes('foreign') && isFM(g)) || (who.includes('defense') && isDM(g)) || who.some((w) => WHO_POST[w] && hasPost(g, WHO_POST[w]))) return null;
   return `${who.map((w) => (w === 'defense' ? postName(g, 'minister_defense') : WHO[w])).join('・')}が行う（総理や大臣になれば、ここから動かせる）`;
 }
 const stam = (g) => num(g.state && g.state.stamina);
@@ -740,7 +745,7 @@ function baseOdds(g, id, k = 0) {
   const r = relation(g, id);
   const s = W(g);
   const opp = opposed(blocOf(g, 'jp'), blocOf(g, id)) ? -0.08 : 0;
-  return clamp(0.5 + r / 180 + (s.standing - 60) / 200 + opp - sanctioned(g, id) * 0.07 - (s.ambassadors[id] === 'recalled' ? 0.15 : 0) + k, 0.04, 0.95);
+  return clamp(0.5 + r / 180 + (s.standing - 60) / 200 + opp - sanctioned(g, id) * 0.07 - (s.ambassadors[id] === 'recalled' ? 0.15 : 0) + k + (EXT ? EXT.diplo.prepBonus(g, id) : 0), 0.04, 0.95);
 }
 const SUMMIT_TOPICS = [
   { id: 'econ', label: '経済・貿易の協力', sub: '関係がよくなり、景気にも少しプラス' },
@@ -1066,6 +1071,7 @@ export const DIPLO = {
       const T = s.treaties[id];
       if (!T) return { ok: false, why: 'その条約はない' };
       T.status = 'ended'; T.ended = today(g);
+      if (EXT) EXT.trade.onAbrogate(g, id);
       const with0 = ((TREATIES[id] && TREATIES[id].with) || T.with || []).map((x) => current(g, x));
       for (const x of with0) { relAdd(g, x, -15); if ((TREATIES[id] || T).kind === 'fta') tradeShock(g, x, -1, 1, '協定の破棄'); }
       for (const [aid, a] of Object.entries(s.alliances)) if (a && a.player && with0.some((x) => (a.members || []).includes(x)) && (TREATIES[id] || T).kind !== 'fta') a.ended = today(g);
@@ -1152,6 +1158,7 @@ export const DIPLO = {
       let counter = '';
       if (roll(0.25 * lv) && COUNTRIES[id]) { s.sanctions.onJapan[id] = { level: Math.min(lv, 2), day: today(g) }; tradeShock(g, id, -1, 0.3, `${shortName(g, id)}の対抗措置`); counter = `\n${shortName(g, id)}は対抗措置として、日本への制裁を発表した。`; }
       s.provoked[id] = today(g);
+      if (EXT) EXT.trade.onSanction(g, id, lv);
       ideoNudge(g, { world: 0.5 }, 0.03, '経済制裁');
       news(g, `日本政府が${shortName(g, id)}への経済制裁（${['', '資産凍結', '輸出入の一部停止', '輸出入の全面停止'][lv]}）を閣議決定した`);
       return { ok: true, success: true, text: `${shortName(g, id)}に制裁を科した（${['', '資産凍結', '輸出入の一部停止', '輸出入の全面停止'][lv]}）。${counter}` };
@@ -1652,7 +1659,8 @@ export const WORLD_EVENTS = {
       threatAdd(g, 0.5);
       news(g, `${shortName(g, id)}の軍用機が日本の領空に近づき、航空自衛隊が緊急発進した`, { feed: false });
     } },
-  trade: { weight: (g) => (fyear(g) < 1997 ? 0.5 : 0.15) + (fyear(g) > 2017 ? 0.15 : 0),
+  trade: { weight: () => 0, // 貿易摩擦 are run by world_trade.js now (frictions with answers); this old random event stays for g.worldEvent('trade')
+
     fire(g) {
       const id = fyear(g) > 2009 && roll(0.4) ? 'cn' : 'us';
       const item = id === 'us' ? pick(fyear(g) < 1997 ? ['自動車', '半導体', 'コメ', '牛肉・オレンジ'] : fyear(g) < 2019 ? ['自動車', '鉄鋼', '牛肉'] : ['自動車', '鉄鋼', 'デジタル課税']) : pick(['レアアース', '水産物', '半導体の部材']);
@@ -2004,6 +2012,7 @@ export function worldTick(g) {
     driftTick(g);
     reactionsTick(g);
     worldEventsTick(g);
+    if (EXT) EXT.tick(g);
   } catch (e) { console.error('worldTick', e); }
 }
 
@@ -2039,6 +2048,7 @@ function summary(g) {
     offers: s.offers.map((o) => ({ ...o, name: TREATIES[o.treaty] ? TREATIES[o.treaty].name : o.treaty })), leftUN: !!s.flags.leftUN,
     statements: s.statements.slice(0, 6).map((x) => ({ ...x, withName: shortName(g, x.with) })), record: { ...s.record },
     news: s.news.slice(0, 30),
+    ...(EXT ? EXT.summary(g) : {}),
   };
 }
 function upcomingSummits(g) {
@@ -2107,7 +2117,7 @@ function previewOf(g, id, t, o = {}) {
   try { odds = typeof D.odds === 'function' ? D.odds.call(D, g, t, o) : null; } catch (e) { odds = null; }
   try { lines = (typeof D.lines === 'function' ? D.lines.call(D, g, t, o) : []) || []; } catch (e) { lines = []; }
   try { options = typeof D.options === 'function' ? D.options.call(D, g, t) : null; } catch (e) { options = null; }
-  return { id, name: D.name, desc: D.desc, who: D.who.slice(), why: why || null, odds: odds == null ? null : Math.round(clamp(odds, 0, 1) * 100) / 100, lines: lines.filter(Boolean), options, target: t };
+  return { id, name: D.name, desc: D.desc, who: D.who.slice(), rich: D.rich || (id === 'fta' ? 'epa' : id === 'defense_pact' ? 'security' : id === 'peace_treaty' ? 'peace' : null), why: why || null, odds: odds == null ? null : Math.round(clamp(odds, 0, 1) * 100) / 100, lines: lines.filter(Boolean), options, target: t };
 }
 function diplomacy(g, kind, target, opts = {}) {
   const D = DIPLO[kind];
@@ -2118,6 +2128,7 @@ function diplomacy(g, kind, target, opts = {}) {
   let res;
   try { res = D.run.call(D, g, t, opts || {}); } catch (e) { console.error(e); return { ok: false, why: 'うまくいかなかった' }; }
   emit(g, 'diplomacy', { kind, target: t, res });
+  try { if (EXT && res) EXT.after(g, kind, t, opts || {}, res); } catch (e) { console.error(e); }
   return res || { ok: true };
 }
 
@@ -2148,7 +2159,7 @@ function hookRegime() {
     const k = crisisById(g, d.id);
     if (!k) return;
     const opts = [];
-    for (const kind of ['evac', 'protest', 'un_raise', 'jdr', 'reserve', 'coordinate']) {
+    for (const kind of ['evac', 'protest', 'un_raise', 'jdr', 'reserve', 'coordinate', 'trade_talk', 'trade_concede', 'trade_wto', 'trade_counter']) {
       const tgt = ['protest', 'un_raise'].includes(kind) ? k.country : k.id;
       const pv = previewOf(g, kind, tgt);
       if (!pv.why) opts.push({ label: pv.name.length > 13 ? pv.name.slice(0, 13) : pv.name, value: kind, tgt });
@@ -2216,7 +2227,79 @@ export function installWorld(proto) {
   Object.defineProperty(proto, '__world', { value: true, configurable: true });
   for (const [k, fn] of Object.entries(methods)) proto[k] = fn;
 }
+// ======================================================================== extensions: stance, diplomacy depth, trade and tariffs
+// Support of the cabinet's parties by segment (the scale govt.js uses for its own shifts).
+function shiftSupport(p, segs, k = 0.004) {
+  if (!p || !p.support || !p.support.mods || !p.cabinet || !p.parties) return;
+  const ids = p.cabinet.partyIds || [];
+  for (const [sg, d] of Object.entries(segs || {})) {
+    if (!(POL && POL.SEGMENTS && POL.SEGMENTS[sg])) continue;
+    const m = p.support.mods[sg] || (p.support.mods[sg] = {});
+    for (const id of ids) if (p.parties[id]) m[id] = clamp(num(m[id]) + d * k, -0.3, 0.3);
+  }
+}
+const membersOf = (g, t) => { if (COUNTRIES[t]) return [t]; const O = ORGS[t] || PSEUDO[t]; return O ? (dv(O.members, dateNum(g)) || []).filter((x) => exists(g, x)) : []; };
+const STANCE_OF = { cn: 'china', us: 'us', ru: 'russia', su: 'russia', kr: 'korea', tw: 'taiwan', kp: 'nk', fr: 'eu', de: 'eu', wde: 'eu', it: 'eu', gb: 'eu', id: 'asean', ph: 'asean', th: 'asean', sg: 'asean', my: 'asean', vn: 'asean' };
+const NOTABLE = { summit: 1, visit: 1, fm_talks: 1, statement: 1, fta: 1, defense_pact: 1, alliance: 1, ties: 1, peace_treaty: 1, abrogate: 1, sanction: 1, lift: 1, aid: 1, protest: 1, recall: 1, return_amb: 1, cut_ties: 1, un_raise: 1, ally_up: 1, ally_down: 1, withdraw_notice: 1, peace_conf: 1, leave_un: 1, rejoin_un: 1, un_speech: 1, mediate: 1, tariff_set: 1, tariff_extra: 1, tariff_lift: 1, tariff_exempt: 1, safeguard: 1, envoy: 1, soft_action: 1, dispute_action: 1, invite: 1, receive_visit: 1 };
+{
+  const X = {
+    W, clamp, num, rnd, roll, rint, pick, today, dateNum, worldDate, fyear, since, relation, relAdd, relLabel, hasTies, exists, countryName, shortName, leaderTitle, COUNTRIES, tradeOf, news, phone, note, scene, pol,
+    isPM, isFM, isDM, bumpApproval, standingAdd, ideoNudge, dietOdds, useStam, stam, treatiesNow, treatyWith, TREATIES, DISPUTES, alliancesNow, japanAllies, blocOf, addTreaty, emit, atWarWith, who0, pct,
+    approvalOf, baseOdds, tensionShift, threatAdd, ecoShock, crisis, pairRelation, countriesNow, japanWar, CNRU, current, PSEUDO, ORGS, membersOf, roleWhy, shiftSupport,
+    targetName: (g, t) => countryName(g, t, true), segWeights: (y) => (POL && POL.segWeights ? POL.segWeights(y) : null),
+  };
+  const STANCE = createStance(X);
+  const DIPLOX = createDiplo(X);
+  const TRADEX = createTrade(X, DIPLOX);
+  DIPLOX.setStance(STANCE);
+  EXT = {
+    stance: STANCE, diplo: DIPLOX, trade: TRADEX,
+    tick(g) { STANCE.tick(g); DIPLOX.tick(g); TRADEX.tick(g); },
+    summary(g) { return { ...DIPLOX.summary(g), trade: TRADEX.brief(g) }; },
+    // after every diplomacy action: the timeline, the reaction at home, the words of the communiqué, the player's stance
+    after(g, kind, t, opts, res) {
+      if (!res || res.ok === false) return;
+      const D = DIPLO[kind];
+      const id = typeof t === 'string' ? t : null;
+      const ok = res.success !== false;
+      const nameT = id && (COUNTRIES[id] || ORGS[id] || PSEUDO[id]) ? shortName(g, id) : '';
+      if (NOTABLE[kind] && !['tariff_set', 'tariff_extra'].includes(kind)) DIPLOX.tl(g, 'action', `${D ? D.name : kind}${nameT ? `（${nameT}）` : ''}${ok ? '' : '：不調'}`, id);
+      let extra = '';
+      if (['summit', 'visit', 'fm_talks'].includes(kind) && id && COUNTRIES[id]) {
+        const c = DIPLOX.communique(g, id, (opts && opts.topic) || 'friend', ok);
+        extra += `\n【${c.head}】${c.lines.join('')}`;
+        if (ok && DIPLOX.D(g).prep[id]) delete DIPLOX.D(g).prep[id];
+      } else if (kind === 'statement' && id && COUNTRIES[id]) {
+        const c = DIPLOX.communique(g, id, (opts && opts.kind) || 'econ', ok);
+        extra += `\n【${c.head}】${c.lines.join('')}`;
+        const st = W(g).statements[0];
+        if (ok && st && st.with === id) st.text = c.lines.join('');
+      }
+      const op = DIPLOX.opinionReaction(g, kind, id, opts, res);
+      if (op) extra += `\n${op}`;
+      if (extra && typeof res.text === 'string') res.text += extra;
+      // the player's own stance moves a little with what the player does
+      const key = STANCE_OF[id];
+      if (key && ok) {
+        const d1 = { summit: 1.2, visit: 1.6, fm_talks: 0.8, statement: 1, fta: 1.5, aid: 0.6, ally_up: 1, defense_pact: 1.5, alliance: 2.5, soft_action: 0.6, envoy: 0.6, receive_visit: 1, tariff_extra: -2, sanction: -2.5, recall: -1.5, cut_ties: -4, protest: -0.6 }[kind];
+        if (d1) STANCE.nudgePlayer(g, key, d1);
+      }
+      if (kind === 'ally_up') STANCE.nudgePlayer(g, 'us', 1);
+      if (kind === 'ally_down') STANCE.nudgePlayer(g, 'us', -2);
+    },
+  };
+  Object.assign(methods, STANCE.methods, DIPLOX.methods, TRADEX.methods);
+  Object.assign(DIPLO, DIPLOX.actions, TRADEX.actions);
+  DIPLO_ORDER.length = 0;
+  DIPLO_ORDER.push(...Object.keys(DIPLO));
+}
+export { STANCE_KEYS, STANCE_NAMES, STANCE_BASE, ARCHETYPES } from './world_stance.js';
+export { TARIFF_CATS, CAT_ORDER, PARTNERS, rateText } from './world_trade.js';
+export { TREATY_INFO } from './world_diplo.js';
+export const TRADE = () => EXT && EXT.trade;
+export const DIPLOMACY = () => EXT && EXT.diplo;
+export const STANCES = () => EXT && EXT.stance;
 onMorning((g) => worldTick(g));
 installWorld(Game.prototype);
-if (typeof window !== 'undefined') window.__world = { W, COUNTRIES, DIPLO, WORLD_EVENTS, relation, pairRelation, blocOf, newConflict, endConflict, allyDecisions, setWorldRng, worldTick, previewOf };
+if (typeof window !== 'undefined') window.__world = { W, COUNTRIES, DIPLO, WORLD_EVENTS, relation, pairRelation, blocOf, newConflict, endConflict, allyDecisions, setWorldRng, worldTick, previewOf, get EXT() { return EXT; } };
 export const relShift = (g, id, d) => relAdd(g, id, d);

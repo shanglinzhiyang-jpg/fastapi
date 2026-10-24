@@ -218,6 +218,11 @@ import { clamp, fmtMoney, YEN_MARK } from './util.js';
 import { COLORS } from './draw.js';
 import { onMorning, registerPhoneApp, weekdayOf, weekOf, REGULARS } from './life.js';
 import { ERAS, PREFECTURES, ageOf, YEAR_DAYS } from './profile.js';
+// R5-D: 党内の権力争い・内部紛争・外交スタンス・公約・立法のスタジオ (the engine lives in these files; see the 「R5-D」 block before installPolitics)
+import { installIntra } from './politics_intra.js';
+import { installConflict } from './politics_conflict.js';
+import { installPledge } from './politics_pledge.js';
+import { installLaw } from './politics_law.js';
 
 export const POLITICS_CONTRACT_VERSION = 1;
 export const POL_STATE_VERSION = 1;
@@ -1487,7 +1492,7 @@ function normalizePolitics(g, p) {
   // no longer in the game (no fictional party stands in for a real one), so it leaves like the 民主党
   for (const id of Object.keys(p.parties)) {
     const pt = p.parties[id];
-    if (PARTY_DEFS[id] || !pt || pt.isPlayers || /^my\d+$/.test(id)) continue;
+    if (PARTY_DEFS[id] || !pt || pt.isPlayers || /^my\d+$/.test(id) || /^sp\d+$/.test(id)) continue;
     if (!p.diet || !p.diet.sangi || !Array.isArray(p.diet.sangi.classes) || !p.cabinet || !p.local) continue;
     const wasMember = p.me.party === id;
     try { retireParty(g, p, id, '与党の再編'); } catch (e) { console.error(e); continue; }
@@ -2413,7 +2418,7 @@ function runLeader(g, p, e) {
   const cands = npcs.map((id) => {
     const n = p.npcs[id];
     const f = fs.find((x) => x.leader === id);
-    return { id, name: n.name, party: pt.id, diet: (f ? f.size : 0) + (dietN * 0.15 * n.traits.charisma) / 100, member: n.traits.charisma / 100 + rnd(0, 0.4) };
+    return { id, name: n.name, party: pt.id, diet: (f ? f.size : 0) + (dietN * 0.15 * n.traits.charisma) / 100 + (p.flags.plotBoss === id ? dietN * 0.1 : 0), member: n.traits.charisma / 100 + rnd(0, 0.4) };
   });
   // an incumbent player leader runs again automatically (if still a Diet member and the party's
   // term limit allows it)
@@ -2466,6 +2471,7 @@ function runLeader(g, p, e) {
   if (winner.isPlayer) { p.me.leaderTerms = (was === 'player' ? num(p.me.leaderTerms) : 0) + 1; if (!p.me.posts.includes('party_leader')) p.me.posts.push('party_leader'); }
   else if (p.me.party === pt.id) { p.me.leaderTerms = 0; if (p.me.posts.includes('party_leader')) p.me.posts = p.me.posts.filter((x) => x !== 'party_leader'); }
   if (outgoing) p.flags.outgoingLeader = null;
+  p.flags.plotBoss = null;
   // a new leader of the PM's party becomes PM (首班指名 in a few days); after a resignation the
   // Diet names a PM even when the acting leader keeps the post
   const pmParty = cabinetPartyOfPM(p);
@@ -2814,7 +2820,8 @@ function partyStance(p, partyId, bill) {
     const appr = num(p.cabinet.approval);
     return appr < 22 ? clamp((22 - appr) * 0.025, 0, 0.35) : 0;
   }
-  const al = alignment(p, partyId, bill.policy);
+  // R5-D: 国会対策・修正協議・付帯決議 (bill.lobby { partyId: bonus }) move a party's alignment
+  const al = alignment(p, partyId, bill.policy) + num(bill.lobby && bill.lobby[partyId]);
   // an opposition party decides as a bloc (党議拘束) whether to back a cabinet bill: likely when the
   // policy is close to its own, rarely otherwise; the decision holds for the bill's whole way (review)
   if (bill.sponsor === 'cabinet' && !ruling) {
@@ -3050,10 +3057,14 @@ function cabinetBills(g, p) {
   if (p.cabinet.pm === 'player') return; // the player brings bills as PM (proposeBill)
   const enacted = new Set(p.laws.map((l) => l.policy));
   const ag = agendaFor(year).filter((id) => POLICIES[id] && !enacted.has(id) && !policyBlock(p, id, null, year, fy));
-  const plat = new Set([...(p.parties[pmParty] ? p.parties[pmParty].platform : []), ...(p.cabinet.partyIds || []).filter((id) => id !== pmParty && Math.random() < 0.3).flatMap((id) => (p.parties[id] ? p.parties[id].platform.slice(0, 3) : []))]);
+  // R5-D: the governing party's open pledges come first (公約の実現); the rest as before
+  let pledged = [];
+  try { pledged = INTRA.pledge.pledgeAgenda(p, pmParty); } catch (e) { pledged = []; }
+  const plat = new Set([...pledged, ...(p.parties[pmParty] ? p.parties[pmParty].platform : []), ...(p.cabinet.partyIds || []).filter((id) => id !== pmParty && Math.random() < 0.3).flatMap((id) => (p.parties[id] ? p.parties[id].platform.slice(0, 3) : []))]);
   const extra = [...plat].filter((id) => POLICIES[id] && !ag.includes(id) && !enacted.has(id) && POLICIES[id].kind === 'law' && !policyBlock(p, id, null, year, fy));
-  const n = irnd(2, 4);
-  const pickList = [...ag.sort(() => Math.random() - 0.5).slice(0, Math.min(n, ag.length)), ...extra.sort(() => Math.random() - 0.5)].slice(0, n);
+  const pledgedNow = Math.random() < 0.6 ? [...ag, ...extra].filter((id) => pledged.includes(id) && POLICIES[id] && !policyBlock(p, id, null, year, fy)).slice(0, 1) : [];
+  const n = irnd(2, 4) + (pledgedNow.length ? 1 : 0);
+  const pickList = [...new Set([...pledgedNow, ...ag.sort(() => Math.random() - 0.5).slice(0, Math.min(n, ag.length)), ...extra.sort(() => Math.random() - 0.5)])].slice(0, n);
   for (const id of pickList) {
     const pl = POLICIES[id];
     const params = agendaParams(p, id, year);
@@ -3160,6 +3171,7 @@ function pruneNpcs(p) {
   for (const h of Object.values(p.flags.smdHolders || {})) add(h && h.npc);
   for (const b of p.diet.bills) add(b.by);
   for (const o of p.me.offers || []) add(o.from);
+  try { for (const id of INTRA.refs(p)) add(id); } catch (e) { console.error(e); } // R5-D: 番頭・後継者・首謀者など
   const ids = Object.keys(p.npcs);
   // keep up to ~25 spare Diet members per party for reuse
   const spare = {};
@@ -4340,6 +4352,7 @@ function tickDay(g, p, day, abs) {
   // round 4: the gaffe chains (player and NPCs) and the 復興担当大臣 after a major disaster
   try { speechTick(g, p, day); } catch (e) { console.error(e); }
   try { fukkoTick(g, p, day, abs); } catch (e) { console.error(e); }
+  try { INTRA.tickAll(g, p, day, abs); } catch (e) { console.error('intra', e); } // R5-D
   for (const s of SEGMENT_ORDER) {
     const m = p.support.mods[s];
     if (!m) continue;
@@ -4389,7 +4402,7 @@ function reviewDrafts(g, p) {
     const post = me.posts.some((x) => POSTS[x] && (POSTS[x].kind === 'party' || POSTS[x].kind === 'cabinet'));
     // policy the government handles itself (its agenda, a ministry's budget) is left to a 閣法
     const govt = pl && (agendaFor(calYear(g)).includes(pl.id) || (pl.ministry && num(pl.cost) !== 0));
-    const chance = clamp(((al - 0.55) * 3 + (me.standing - 50) / 100 + (post ? 0.15 : 0)) * (govt ? 0.5 : 1), 0.05, 0.9);
+    const chance = clamp(((al - 0.55) * 3 + (me.standing - 50) / 100 + (post ? 0.15 : 0)) * (govt ? 0.5 : 1) + num(b.reviewBonus), 0.05, 0.9);
     if (!me.party || !isRuling(p, me.party) || Math.random() >= chance) {
       b.stage = 'shelved';
       b.result = '党の事前審査で見送り';
@@ -6990,6 +7003,44 @@ const methods = {
   // 候補者・在任中の大臣) -> null | text. kind: 'job' | 'regular'; def: the job def ({ id, medium }).
   politicsRefusal(kind = 'job', def = {}) { return politicsRefusalImpl(this, kind, def); },
 };
+
+// ================================================================ R5-D: 党内の権力争い・内部紛争・公約・外交スタンス・法律制定
+// The engine is in politics_intra.js (factions, 倒閣運動, moves), politics_conflict.js (conflicts, events, stances),
+// politics_pledge.js (manifesto, 選挙予測) and politics_law.js (the bill studio and the legislation record). They get the
+// helpers below through one context object, so none of them imports this file. Their g.* methods are merged into `methods`.
+let IDEO_MOD = null;
+if (typeof document !== 'undefined') import('./ideology.js').then((m) => { IDEO_MOD = m; }).catch(() => { IDEO_MOD = null; });
+const INTRA = (() => {
+  const X = {
+    clamp, num, rnd, irnd, pickOne, gauss, YEAR_DAYS, ERAS, PARTY_DEFS, POSTS, PARTY_POST_ORDER, ELECTION_KINDS, POLICIES, POLICY_AREAS, SEGMENTS, SEGMENT_ORDER,
+    fmtMoney, news, note, phoneNews, emit, newNpc, pickMinister, partySeats, isRulingParty: isRuling, cabinetPartyOfPM, leaderRaceSoon, stepDownLeader, resignCabinet,
+    leavePartyImpl, seatMove, makeParty, refreshOpinion, addSupport, addSupportAll, natSupport, postName, dateLabel, polDate, calYear, fyNow, ensurePol, alignment, partyStance,
+    sanitizeParams, ctxOf, billTitle, nationalShares, alloc, dhondt, prBlocks, shugiRules, segWeights, absOfDay: (p, d) => absOfDay(p, d), dayOfAbs: (p, a) => dayOfAbs(p, a), agendaParams,
+    isNational, inSession,
+    policyOk: (g, p, id) => !policyBlock(p, id, null, calYear(g), fyNow(g)),
+    policyBlockFor: (p, id, params, g) => policyBlock(p, id, params, calYear(g), fyNow(g)),
+    isGovtMatter: (p, pl, year) => !!(pl && (agendaFor(year).includes(pl.id) || (pl.ministry && num(pl.cost) !== 0))),
+    policyAxes: (id) => (IDEO_MOD && IDEO_MOD.policyAxes ? IDEO_MOD.policyAxes(id) : null),
+    politicalScandal: (g, p, kind, opts) => scandalImpl(g, p, kind, opts),
+    dissolveNpc: (g, p, why) => dissolveImpl(g, p, why),
+  };
+  const H = installIntra(X);
+  installConflict(X);
+  installPledge(X);
+  installLaw(X);
+  H.tickAll = (g, p, day, abs) => {
+    H.tick(g, p, day, abs);
+    H.pledge.pledgeTick(g, p, day);
+    H.law.record(g, p);
+  };
+  onPolitics('election', (g, d) => { const p = pol0(g); if (!p) return; try { H.onElectionDone(g, p, d); H.pledge.onElectionDone(g, p, d); } catch (e) { console.error(e); } });
+  onPolitics('cabinet', (g, d) => { const p = pol0(g); if (p) try { H.onCabinet(g, p, d); } catch (e) { console.error(e); } });
+  onPolitics('dissolve', (g) => { const p = pol0(g); if (p) try { H.onDissolve(g, p); } catch (e) { console.error(e); } });
+  onPolitics('enacted', (g) => { const p = pol0(g); if (p) try { H.pledge.onEnacted(g, p); } catch (e) { console.error(e); } });
+  onPolitics('party', (g, d) => { const p = pol0(g); if (p) try { H.onPartyFounded(g, p, d); } catch (e) { console.error(e); } });
+  return H;
+})();
+Object.assign(methods, INTRA.methods);
 
 export function installPolitics(proto) {
   for (const k of Object.getOwnPropertyNames(methods)) {

@@ -34,6 +34,9 @@ import { registerPhoneApp, onMorning, PEOPLE, WEEKDAYS, weekdayOf } from './life
 import { ERAS, ageOf, PREFECTURES, fullName, YEAR_DAYS } from './profile.js';
 import { appTile, rrect } from './phone.js';
 import { crimeLaw } from './crime.js';
+// R5-D: the 党内 hub (factions, 倒閣運動, conflicts, pledges, stances), the bill studio and the legislation record
+import { registerIntraUI } from './politics_intra_ui.js';
+import { registerLawUI } from './politics_law_ui.js';
 
 const {
   OFFICES, POLICY_AREAS, AREA_ORDER, POLICIES, POLICY_ORDER, SEGMENTS, SEGMENT_ORDER, POSTS, PARTY_POST_ORDER,
@@ -806,6 +809,7 @@ function alerts(g) {
     if (F.active && F.canAppoint && !F.ministerName) out.push({ text: `${F.disaster.name}：${F.postName}を任命できる`, color: C.gold, run: (ui) => fukkoAppoint(ui) });
     else if (F.active && F.isPlayer && F.works.some((w) => !w.why)) out.push({ text: `${F.disaster.name}の復興（進み具合 ${F.progress}%）：${F.postName}の仕事`, color: C.cyan, run: (ui) => SECTIONS.fukko(ui) });
   }
+  try { if (UIK.intraAlerts) out.push(...UIK.intraAlerts(g)); } catch (err) { console.error(err); } // R5-D: 党内の決断・倒閣の動き・深刻な紛争
   const e = p.elections.upcoming.find((x) => myDecl(x) && x.status !== 'done');
   if (e) {
     const left = e.day - today(g);
@@ -2928,6 +2932,7 @@ function policyStudioView(g, o) {
   const areaRows = () => {
     const rows = AREA_ORDER.map((a) => { const n = POLICY_ORDER.filter((id) => POLICIES[id].area === a); const sel = n.filter((id) => picked.has(id)).length; return { label: POLICY_AREAS[a].name, right: pick && sel ? `✔${sel}` : String(n.length), rightColor: pick && sel ? C.gold : null }; });
     if (pick) rows.push({ label: `✔ これで決める（${picked.size}件）`, labelColor: C.gold });
+    else if (typeof g.legislationHistory === 'function') rows.push({ label: '立法の記録', right: '私の法律', labelColor: C.cyan });
     return rows;
   };
   const v = {
@@ -2951,6 +2956,7 @@ function policyStudioView(g, o) {
       if (v.focus === 'area') {
         if (v.al.move(inp)) v.pl.idx = 0;
         const isDone = pick && v.al.idx === AREA_ORDER.length;
+        if (!pick && v.al.idx === AREA_ORDER.length) { if (inp.pressed('a') || inp.pressed('right')) { sfx('ok'); ui.act(() => openSection(ui, 'lawbook')); } if (inp.pressed('b')) { sfx('cancel'); ui.done(v, undefined); } return; }
         if (inp.pressed('a') && isDone) { sfx('ok'); ui.done(v, [...picked]); return; }
         if ((inp.pressed('right') || inp.pressed('a')) && !isDone) { v.focus = 'pol'; sfx('cursor'); return; }
         if (inp.pressed('b')) { sfx('cancel'); ui.done(v, pick ? null : undefined); }
@@ -2968,7 +2974,7 @@ function policyStudioView(g, o) {
         if (inp.repeat('left')) { cur[d.key] = clamp(num(cur[d.key], d.def) - (d.step || 1), d.min, d.max); sfx('cursor'); }
         if (inp.repeat('right')) { cur[d.key] = clamp(num(cur[d.key], d.def) + (d.step || 1), d.min, d.max); sfx('cursor'); }
         if (inp.pressed('b')) { v.focus = 'pol'; sfx('cancel'); return; }
-        if (inp.pressed('a') && !pick) { sfx('ok'); ui.act(() => submitPolicy(ui, id, params[id])); }
+        if (inp.pressed('a') && !pick) { sfx('ok'); ui.act(() => studio(ui, id, params[id])); }
         return;
       }
       v.pl.move(inp);
@@ -2985,7 +2991,7 @@ function policyStudioView(g, o) {
         }
         sfx('ok');
         if (pl.params) { v.focus = 'param'; v.pidx = 0; return; }
-        ui.act(() => submitPolicy(ui, id, null));
+        ui.act(() => studio(ui, id, null));
       }
     },
     draw(c, ui) {
@@ -2995,6 +3001,11 @@ function policyStudioView(g, o) {
       v.pl.draw(c, 162, 50, 210, SH - 78, v.focus !== 'area', ui.t);
       const id = v.pols()[v.pl.idx];
       const r = { x: 378, y: 30, w: SW - 6 - 378, h: SH - 55 };
+      if (!pick && v.al.idx === AREA_ORDER.length) {
+        card(c, r.x, r.y, r.w, r.h, '立法の記録');
+        para(c, '出した法案の結果（成立・否決・廃案）と、自分の名前で成立した法律の記録。Aで開く。', r.x + 10, r.y + 26, r.w - 20, 12, C.dim, 16, 5);
+        return;
+      }
       if (pick && v.al.idx === AREA_ORDER.length) {
         card(c, r.x, r.y, r.w, r.h, '選んだ公約');
         [...picked].forEach((pid, i) => T(c, fit(c, `・${POLICIES[pid].name}`, r.w - 20, 12), r.x + 10, r.y + 26 + i * 16, 12, C.text));
@@ -3008,20 +3019,20 @@ function policyStudioView(g, o) {
   return v;
 }
 async function policyStudio(ui, o = {}) { return ui.open(policyStudioView(ui.g, o)); }
-async function submitPolicy(ui, id, params) {
+async function submitPolicy(ui, id, params, plan) {
   const g = ui.g;
   const p = polOf(g);
   const me = p.me;
   const pl = POLICIES[id];
   const why = g.policyBlock(id, params || undefined);
-  if (why) { sfx('buzz'); await ui.alert(pl.name, `いまは出せない：${why}`); return; }
-  if (!isNational(me) && !inCabinet(me)) { await ui.alert('法律案を出すには', ['法律案を国会に出せるのは、国会議員か内閣（大臣）だけ。', 'いまは政策を研究しておこう。国会議員になるには「選挙」から。']); return; }
-  if (pl.kind === 'amendment' && !isNational(me)) { await ui.alert('憲法改正', '憲法改正の原案は、国会議員が提出する。'); return; }
+  if (why) { sfx('buzz'); await ui.alert(pl.name, `いまは出せない：${why}`); return false; }
+  if (!isNational(me) && !inCabinet(me)) { await ui.alert('法律案を出すには', ['法律案を国会に出せるのは、国会議員か内閣（大臣）だけ。', 'いまは政策を研究しておこう。国会議員になるには「選挙」から。']); return false; }
+  if (pl.kind === 'amendment' && !isNational(me)) { await ui.alert('憲法改正', '憲法改正の原案は、国会議員が提出する。'); return false; }
   const cabinet = inCabinet(me) && pl.kind !== 'amendment';
   const pv = g.policyPreview(id, params || undefined);
   // a 補正予算 (the stimulus: policyPreview billKind 'budget'): only the cabinet sends a budget to the Diet
   const budget = pv && pv.billKind === 'budget';
-  if (budget && !cabinet) { sfx('buzz'); await ui.alert(pv.title || pl.name, ['補正予算案を国会に出せるのは内閣だけ（憲法73条・86条）。', '大臣か総理大臣として、閣議に出そう。']); return; }
+  if (budget && !cabinet) { sfx('buzz'); await ui.alert(pv.title || pl.name, ['補正予算案を国会に出せるのは内閣だけ（憲法73条・86条）。', '大臣か総理大臣として、閣議に出そう。']); return false; }
   const house = me.office === 'sangi' ? '参議院' : '衆議院';
   const need = pl.kind === 'amendment' ? (me.office === 'shugi' ? 100 : 50) : me.office === 'shugi' ? (num(pv.cost) > 0 ? 50 : 20) : (num(pv.cost) > 0 ? 20 : 10);
   const k = await ui.confirm({
@@ -3029,16 +3040,20 @@ async function submitPolicy(ui, id, params) {
     text: `「${budget && pv.title ? pv.title : pl.name}」\n${budget ? `内閣が閣議決定して${p.diet.session ? '国会に提出する' : '次の国会に提出する'}。\n予算は衆議院が先に審議する（憲法60条）。` : cabinet ? `内閣が閣議決定して${p.diet.session ? '国会に提出する' : '次の国会に提出する'}。与党の賛成が見込める。` : `${house}に提出するには、賛成者が${need}人以上必要（国会法56条）。${me.party ? '党の了承も大切。' : ''}`}\n財政：${budget ? `${fmtCho(pv.cost)}の追加の支出（この年度）` : num(pv.cost) > 0 ? `年${fmtCho(pv.cost)}` : num(pv.cost) < 0 ? `年${fmtCho(-pv.cost)}の財源` : '影響は小さい'}`,
     choices: ['提出する', 'やめておく'], tip: budget ? '補正予算は、年度の途中で予算を追加・変更するときに組む' : cabinet ? '閣法は、各省庁がまとめ、内閣法制局の審査と閣議決定を経て出す' : '議員立法は、議員が自分で法律案をつくって出す',
   });
-  if (k !== 0) return;
-  const bid = g.proposeBill({ policy: id, params: params || undefined });
-  if (!bid) { sfx('buzz'); await ui.alert('提出できなかった', g.lastPoliticsError || 'うまくいかなかった。'); return; }
+  if (k !== 0) return false;
+  const bid = typeof g.proposeBillPlanned === 'function' ? g.proposeBillPlanned({ policy: id, params: params || undefined, plan: plan || {} }) : g.proposeBill({ policy: id, params: params || undefined });
+  if (!bid) { sfx('buzz'); await ui.alert('提出できなかった', g.lastPoliticsError || 'うまくいかなかった。'); return false; }
   const b = p.diet.bills.find((x) => x.id === bid);
   sfx('success');
   if (b.stage === 'draft' && !b.ready) {
     await ui.alert('法案をまとめた', [`「${b.title}」`, `賛成者 ${b.supporters}/${b.need}人。「法案」の画面から、議員に声をかけて賛成者を集めよう（1日1回）。${b.partyApproved === false ? '\n党の了承はまだ得られていない。' : ''}`]);
   } else if (b.stage === 'draft') await ui.alert('法案をまとめた', [`「${b.title}」`, '次の国会が開かれたら提出される。']);
   else await ui.alert('国会に提出した', [`「${b.title}」`, '委員会で審議が始まる。本会議の採決は、毎朝の国会の動きで進む。']);
+  if (g.lastPlanNotes && g.lastPlanNotes.length) await ui.alert('戦術', g.lastPlanNotes.slice(0, 5));
+  return true;
 }
+// the bill studio (politics_law_ui.js) sits between the numbers and the submission
+async function studio(ui, id, params) { return UIK.studio ? UIK.studio(ui, id, params) : submitPolicy(ui, id, params); }
 SECTIONS.policy = (ui, o = {}) => policyStudio(ui, { area: o.area });
 
 // ---------------------------------------------------------------- 法案（bill tracker）
@@ -3142,6 +3157,7 @@ SECTIONS.bills = async (ui) => {
     const myHouse = isNational(me) && (b.kind === 'noconfidence' ? me.office === 'shugi' : true);
     const acts = [];
     if (b.by === 'player' && b.stage === 'draft' && !b.ready) acts.push(['gather', '賛成者を集める（体力8）']);
+    if (pending && b.policy && b.kind !== 'noconfidence' && typeof g.billTactics === 'function' && UIK.billTactics && (b.by === 'player' || (inCabinet(me) && b.sponsor === 'cabinet'))) acts.push(['tactics', '国会対策・修正協議など（戦術）']);
     if (pending && myHouse && b.stage !== 'draft' && b.stage !== 'referendum') { acts.push(['yes', '賛成で投票する']); acts.push(['no', '反対で投票する']); acts.push(['abstain', '棄権する']); }
     const vkeys = Object.keys(b.votes || {});
     if (vkeys.length) acts.push(['replay', '採決のようすを見る']);
@@ -3150,6 +3166,7 @@ SECTIONS.bills = async (ui) => {
     const j = await ui.confirm({ title: fit(ui.g.ctx, b.title, 340, 14), text: `${STAGE_WORD[b.stage] || ''}${line && myHouse && pending ? `\n党の方針：${line === 'yes' ? '賛成' : '反対'}（逆らうと党内の評価が下がる＝党議拘束）` : ''}`, choices: acts.map((a) => a[1]), tip: '採決は、その日の本会議で行われる（毎朝の国会の動き）' });
     const a = acts[j] && acts[j][0];
     if (!a || a === 'back') continue;
+    if (a === 'tactics') { await UIK.billTactics(ui, b); continue; }
     if (a === 'gather') {
       const r = g.gatherSupporters(b.id);
       if (!r.ok) { sfx('buzz'); await ui.alert('賛成者', r.why); continue; }
@@ -3174,7 +3191,8 @@ function dietView(g) {
     return [
       { id: 'attend', label: '国会に出席する', disabled: !isNational(me) || !S, why: !isNational(me) ? '国会議員ではない' : '国会は閉会中', sub: (() => { const A = typeof g.attendance === 'function' ? g.attendance() : null; return A && A.member && A.session ? A.text : me.attend && me.attend.last === today(g) ? '今日は出席ずみ' : '体力5・欠席が続くと批判される'; })() },
       { id: 'bills', label: '法案の一覧・採決', sub: `審議中 ${g.billsList({ pending: true }).length}本` },
-      { id: 'policy', label: '政策をつくる・法案を出す', sub: isNational(me) || inCabinet(me) ? '議員立法・閣法' : '研究だけ（提出は議員から）' },
+      { id: 'policy', label: '政策をつくる・法案を出す', sub: isNational(me) || inCabinet(me) ? '法案づくり（見込み・日程・国会対策）' : '研究だけ（提出は議員から）' },
+      ...(typeof g.legislationHistory === 'function' ? [{ id: 'lawbook', label: '立法の記録・私の法律', sub: '出した法案の結果と、成立した法律' }] : []),
       // (2026-10 fix) the cabinet answers in the committees (国会で答弁); the no-confidence motion is the opposition's
       inCabinet(me)
         ? { id: 'answer', label: '国会で答弁する', disabled: !S, why: '国会は閉会中', sub: '大臣として質問に答える・態度を選ぶ（失言リスク）' }
@@ -3185,7 +3203,7 @@ function dietView(g) {
   };
   const v = {
     title: '国会', hint: '↑↓ A:けってい B:もどる',
-    tip: () => ({ answer: '総理や大臣は、本会議や委員会で議員の質問に答える（答弁）。国会への出席として記録される', attend: '本会議や委員会に出るのが議員の基本。出席は記録に残る', bills: '法律は衆参両院で可決して成立。衆院は出席議員の3分の2で再可決できる', policy: '法律案には、内閣が出す「閣法」と、議員が出す「議員立法」がある', question: '委員会では、議員が大臣や役所に質問して政策を問いただす', nc: '内閣不信任決議は衆議院だけ。参議院の問責決議に法的な拘束力はない', amend: '憲法改正は、各院の総議員の3分の2で発議し、国民投票の過半数で成立' }[(v.lb.current() || {}).id] || ''),
+    tip: () => ({ answer: '総理や大臣は、本会議や委員会で議員の質問に答える（答弁）。国会への出席として記録される', attend: '本会議や委員会に出るのが議員の基本。出席は記録に残る', bills: '法律は衆参両院で可決して成立。衆院は出席議員の3分の2で再可決できる', policy: '法律案には、内閣が出す「閣法」と、議員が出す「議員立法」がある', question: '委員会では、議員が大臣や役所に質問して政策を問いただす', nc: '内閣不信任決議は衆議院だけ。参議院の問責決議に法的な拘束力はない', amend: '憲法改正は、各院の総議員の3分の2で発議し、国民投票の過半数で成立', lawbook: '出した法案の結果（成立・否決・廃案）と、自分の名前で成立した法律の記録' }[(v.lb.current() || {}).id] || ''),
     enter() { v.lb = new ListBox({ items: cmds, rowH: 34 }); },
     update(ui, inp) {
       v.lb.move(inp);
@@ -3245,6 +3263,7 @@ async function dietCommand(ui, g, id) {
     await ui.alert('国会に出席', [`${p.me.office === 'sangi' ? '参議院' : '衆議院'}の本会議と委員会に出席した。`, bills.length ? `今日の審議：${bills.slice(0, 2).map((b) => billShort(b.title)).join('・')}${bills.length > 2 ? `ほか${bills.length - 2}本` : ''}` : attendQuiet(g), '党内の評価が少し上がった。']);
   } else if (id === 'bills') await SECTIONS.bills(ui);
   else if (id === 'policy') await SECTIONS.policy(ui);
+  else if (id === 'lawbook') await SECTIONS.lawbook(ui);
   else if (id === 'answer' && typeof g.speechOptions === 'function') await speechFlow(ui, { venue: 'toben', activity: '国会で答弁' });
   else if (id === 'question' || id === 'answer') {
     const kind = id === 'answer' ? '国会で答弁' : '委員会で質問';
@@ -4611,3 +4630,14 @@ async function fukkoWorkFlow(ui, kind) {
 }
 SECTIONS.fukko = (ui) => ui.open(fukkoView(ui.g));
 SECTIONS.fukkoAppoint = (ui) => fukkoAppoint(ui);
+
+// ================================================================ R5-D: the new screens (politics_intra_ui.js / politics_law_ui.js)
+// They get the drawing primitives and helpers of this file through one object, so they need no imports from it.
+const UIK = {
+  C, R, T, fit, para, wrapJ, line, disc, frame, card, paper, pill, pillR, hbar, cbar, spark, ListBox, menuView, confirmView, sfx, SW, SH, clamp, shade, mix, measure, text, cursor,
+  drawFaceHD, drawPartyMark, partyColor, partyShort, playerName, whoName, lookOf, npcLook, fmtMoney, fmtNum, fmtBig, pct, sign, polOf, today, dateLabel, polDate, POL,
+  SEGMENTS, SEGMENT_ORDER, POLICIES, POLICY_AREAS, AREA_ORDER, POLICY_ORDER, SEG_SHORT, ECO_WORDS, isNational, inCabinet, STAGE_WORD, billStages, drawBillDetail, policyStatus, segWeights,
+  openSection: (ui, id, o) => openSection(ui, id, o), policyStudio: (ui, o) => policyStudio(ui, o), submitPolicy: (ui, id, params, plan) => submitPolicy(ui, id, params, plan), fmtCho, yearOf, postName, PARTY_POST_ORDER, POSTS,
+};
+registerIntraUI(UIK, SECTIONS);
+registerLawUI(UIK, SECTIONS);

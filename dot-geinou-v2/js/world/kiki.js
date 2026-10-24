@@ -778,6 +778,8 @@ export async function kikiApp(g) {
       r.id === 'dictatorship' || g.war() || isPMg(g) ? ['war', '戦争', g.war() ? g.war().frontText : '開戦前'] : null,
       ['nations', '関係国', 'ヴェルミナ海'],
       ['news', 'ニュース', ''],
+      typeof g.advisorOpen === 'function' ? ['dokusai', '独裁くん', r.id === 'democracy' ? '次の一手・リスク' : '権力の維持'] : null,
+      typeof g.advisorOpen === 'function' ? ['ikusa', 'イクサくん', g.war() ? '戦況・次の命令' : '開戦の前に'] : null,
     ].filter(Boolean);
     const i = await phoneList(g, { title: '危機管理', color: APP_COLOR, index, items: entries.map(([, label, sub]) => ({ label, sub })) });
     if (i < 0) return;
@@ -815,6 +817,7 @@ export async function kikiApp(g) {
     } else if (id === 'nations') {
       await info(g, '関係国', [...NATION_ORDER.map((n) => `${FICTIONAL_NATIONS[n].name}：${FICTIONAL_NATIONS[n].desc}`), `${DISPUTED_AREA.name}：${DISPUTED_AREA.desc}`]);
     } else if (id === 'news') await info(g, 'ニュース', newsLines(g));
+    else if (id === 'dokusai' || id === 'ikusa') await g.advisorOpen(id, 'home');
   }
 }
 
