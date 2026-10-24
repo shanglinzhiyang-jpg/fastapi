@@ -15,7 +15,15 @@ import { MINIGAMES, rankFor } from './minigame.js';
 import { SW, SH, clamp, mulberry32 } from './util.js';
 import { text, panel, rect, measure, wrap, COLORS, sparkle } from './draw.js';
 import { charSheetHD, LOOKS } from './sprites.js';
-import { contestDate } from './contests.js';
+// the current in-game year (D1's contestDate is the same calendar; kept local so this file never depends on D1's load order)
+export function contestYear(g) {
+  try { if (g && typeof g.gameDate === 'function') { const d = g.gameDate(); if (d && Number.isFinite(d.year)) return d.year; } } catch (e) { /* fall back */ }
+  const st = g && g.state;
+  const base = { showa: 1987, heisei_early: 1996, heisei: 2004, reiwa: 2026 }[(st && st.profile && st.profile.era) || 'reiwa'] || 2026;
+  const n = Math.max(0, ((st && st.day) || 1) - 1);
+  return base + Math.floor((3 + Math.floor(n / 10)) / 12);
+}
+const contestDate = (g) => ({ year: contestYear(g) });
 
 // ------------------------------------------------------------------ basics
 export const has = (g, fn) => !!g && typeof g[fn] === 'function';
@@ -29,6 +37,18 @@ export const pickR = (arr, r) => arr[Math.floor(r() * arr.length) % arr.length];
 export function gauss(r) { let u = 0; for (let i = 0; i < 6; i++) u += r(); return (u - 3) / 1.0; } // ≈ N(0, 0.7)
 export function shuffleR(arr, r) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 export const yearOf = (g, ctx) => (ctx && ctx.year) || contestDate(g).year;
+// D1's ctx.round is the round INDEX (ctx.cycle.rounds[i] = { idx, r, id, name, options }); accept an object too
+export function roundInfo(ctx) {
+  if (!ctx) return { id: '', name: '', idx: null, def: null };
+  const R = ctx.round;
+  if (R && typeof R === 'object') return { id: R.id || '', name: R.name || '', idx: Number.isFinite(R.idx) ? R.idx : null, def: R.r || R };
+  const idx = Number.isFinite(R) ? R : null;
+  const cr = idx != null && ctx.cycle && Array.isArray(ctx.cycle.rounds) ? ctx.cycle.rounds[idx] : null;
+  const dr = idx != null && ctx.def && Array.isArray(ctx.def.rounds) ? ctx.def.rounds[idx] : null;
+  return { id: (cr && cr.id) || (dr && dr.id) || (idx != null ? `r${idx + 1}` : ''), name: (cr && cr.name) || (dr && dr.name) || '', idx, def: dr };
+}
+export const rid = (ctx) => roundInfo(ctx).id;
+export const rname = (ctx) => roundInfo(ctx).name;
 export function wareki(y) {
   if (y >= 2019) return `令和${y - 2018 === 1 ? '元' : y - 2018}年`;
   if (y >= 1989) return `平成${y - 1988 === 1 ? '元' : y - 1988}年`;
@@ -171,11 +191,11 @@ const isStubName = (s) => /^(ライバル|審査員)\d+$/.test(String(s || ''));
 // rivals: D1's (when it returns real-looking people) else local fictional ones around `level` (0..100 power)
 export function rivals(g, ctx, n, opts = {}) {
   const level = opts.level ?? 50;
-  const r = rngFor(g, ctx && ctx.id, ctx && ctx.round && ctx.round.id, 'rivals', opts.salt || '');
+  const r = rngFor(g, ctx && ctx.id, rid(ctx), 'rivals', opts.salt || '');
   let list = null;
   try {
     if (has(g, 'contestRivals')) {
-      const got = g.contestRivals(ctx && ctx.id, ctx && ctx.round && ctx.round.id, n);
+      const got = g.contestRivals(ctx && ctx.id, roundInfo(ctx).idx ?? 0, n);
       if (Array.isArray(got) && got.length && !got.every((x) => isStubName(x && x.name))) list = got.slice(0, n);
     }
   } catch (e) { console.error(e); }
@@ -230,7 +250,7 @@ export function rivalScore(g, rv, o, r) {
 // o: { kind, length (sec), venue: { name, size, crowd, pressure }, title, skip, mode, minigame }
 export async function perform(g, ctx, o = {}) {
   const kind = o.kind || 'manzai';
-  const contest = { id: ctx && ctx.id, round: ctx && ctx.round && ctx.round.id, name: (ctx && ctx.def && ctx.def.name) || '' };
+  const contest = { id: ctx && ctx.id, round: rid(ctx), name: (ctx && ctx.def && ctx.def.name) || '' };
   let res = null;
   let viaPerform = false;
   // C's minigame for this kind may not be registered yet: then simulate (おまかせ) instead of an unknown-minigame error
@@ -277,8 +297,9 @@ export const hasMinigame = (id) => !!MINIGAMES[id];
 
 // 「自分で演じる / おまかせで進める」: the first time a round is always shown in full
 export async function omakase(g, ctx, label = 'ネタ') {
+  if (ctx && ctx.mode) return ctx.mode === 'auto' || !!g.auto; // D1's runner already asked 「どう進める？」
   const d = dstate(g);
-  const key = `${ctx && ctx.id}:${ctx && ctx.round && ctx.round.id}`;
+  const key = `${ctx && ctx.id}:${rid(ctx)}`;
   const first = !d.seen[key];
   d.seen[key] = (d.seen[key] || 0) + 1;
   if (first || g.auto) return false;
@@ -648,7 +669,7 @@ export function boardSpec(ctx, round, extra = {}) {
   const def = (ctx && ctx.def) || {};
   const ed = ctx && ctx.edition;
   const label = ctx && ctx.revival ? `復刻開催 ${ed ? ordinal(ed) : ''}`.trim() : (def.editionLabel ? def.editionLabel(ctx.year) : (ed ? `${ctx.year}　${ordinal(ed)}` : `${ctx && ctx.year}`));
-  return { title: nameOf(def, ctx && ctx.year), sub: round || (ctx && ctx.round && ctx.round.name) || '', color: def.color || '#2a3a8a', label, revival: !!(ctx && ctx.revival), ...extra };
+  return { title: nameOf(def, ctx && ctx.year), sub: round || (rname(ctx)) || '', color: def.color || '#2a3a8a', label, revival: !!(ctx && ctx.revival), ...extra };
 }
 export function nameOf(def, year) {
   if (!def) return '';
@@ -663,7 +684,7 @@ export function nameOf(def, year) {
 // ------------------------------------------------------------------ rounds
 // Rank the player's score among a sample of rivals; pass by share (0..1) or count of a known field.
 export function standing(g, ctx, myScore, rvs, o) {
-  const r = rngFor(g, ctx && ctx.id, ctx && ctx.round && ctx.round.id, 'standing');
+  const r = rngFor(g, ctx && ctx.id, rid(ctx), 'standing');
   const rows = rvs.map((x) => ({ name: x.name, score: rivalScore(g, x, o, r), tag: (x.tags || [])[0] || '' }));
   rows.push({ name: unitName(g), score: myScore, me: true, tag: 'あなた' });
   rows.sort((a, b) => b.score - a.score || (a.me ? -1 : 1));
@@ -679,17 +700,17 @@ export function standing(g, ctx, myScore, rvs, o) {
 // spec: { kind, length, pass (share or count), field, level (rival power), venue, beats: [str|fn], judge: '…', label, after: fn }
 export function stdRound(spec) {
   return async (g, ctx) => {
-    const r = rngFor(g, ctx.id, ctx.round && ctx.round.id, 'beats');
+    const r = rngFor(g, ctx.id, rid(ctx), 'beats');
     const k0 = typeof spec.kind === 'function' ? spec.kind(g, ctx) : spec.kind || (ctx.def && ctx.def.kind) || 'manzai';
     const kind = k0 === 'any' || k0 === 'double' ? defaultKind(g) : k0;
     return withBoard(g, boardSpec(ctx, spec.label, { set: spec.set || 'theater' }), async (b) => {
-      b.set('stage', { caption: spec.caption ? spec.caption(g, ctx) : `${(ctx.round && ctx.round.name) || ''}　${spec.venueName ? spec.venueName(g, ctx) : ''}`.trim() });
+      b.set('stage', { caption: spec.caption ? spec.caption(g, ctx) : `${rname(ctx)}　${spec.venueName ? spec.venueName(g, ctx) : ''}`.trim() });
       for (const beat of pickBeats(spec.beats, r, 2)) await g.say(typeof beat === 'function' ? beat(g, ctx) : beat);
       const skip = await omakase(g, ctx);
-      const res = await perform(g, ctx, { kind, length: spec.length, venue: spec.venue, title: `${nameOf(ctx.def, ctx.year)} ${(ctx.round && ctx.round.name) || ''}`, skip });
+      const res = await perform(g, ctx, { kind, length: spec.length, venue: spec.venue, title: `${nameOf(ctx.def, ctx.year)} ${rname(ctx)}`, skip });
       const rvs = rivals(g, ctx, spec.sample || 11, { level: typeof spec.level === 'function' ? spec.level(g, ctx) : spec.level ?? 50, kind, amateur: spec.amateur });
       const st = standing(g, ctx, res.score, rvs, { kind, length: spec.length, pass: spec.pass, field: spec.field });
-      b.set('ranking', { rows: st.rows, passLine: st.passN, head: spec.head || `${(ctx.round && ctx.round.name) || ''}　結果`, note: spec.judgeText || '' });
+      b.set('ranking', { rows: st.rows, passLine: st.passN, head: spec.head || `${rname(ctx)}　結果`, note: spec.judgeText || '' });
       await pause(g, 40);
       return finishRound(g, ctx, res, st, { kind, passText: spec.passText, failText: spec.failText });
     });
@@ -703,8 +724,8 @@ export function defaultKind(g) {
 }
 export function pickBeats(beats, r, n) { return beats && beats.length ? shuffleR(beats, r).slice(0, n) : []; }
 export async function finishRound(g, ctx, res, st, o = {}) {
-  const r = rngFor(g, ctx.id, 'finish', ctx.round && ctx.round.id);
-  const name = (ctx.round && ctx.round.name) || '';
+  const r = rngFor(g, ctx.id, 'finish', rid(ctx));
+  const name = rname(ctx);
   if (st.passed) {
     g.sfx('success');
     await g.say(o.passText ? o.passText(g, ctx, st) : `${name}通過！（${st.rows.length}組中${st.place}位　全体でおよそ${st.estPlace}位／${st.field}組）`);
@@ -713,7 +734,7 @@ export async function finishRound(g, ctx, res, st, o = {}) {
     const why = flawLines(g, o.kind, res.score, r);
     await g.say([o.failText ? o.failText(g, ctx, st) : `${name}で敗退…（全体でおよそ${st.estPlace}位／${st.field}組）`, `敗因：${why.join('／')}`]);
   }
-  return { passed: st.passed, score: res.score, rank: res.rank, place: st.estPlace, field: st.field, detail: { sample: st.rows.length, sampleRank: st.place } };
+  return { passed: st.passed, score: res.score, rank: res.rank, place: st.estPlace, of: st.field, field: st.field, detail: { sample: st.rows.length, sampleRank: st.place } };
 }
 // an act's audience votes (1..3 each) from a score
 export function audienceVotes(score, n, r, k = 15) {
@@ -728,7 +749,7 @@ export const sumV = (vs) => vs.reduce((a, b) => a + b, 0);
 export const countV = (vs, k) => vs.filter((v) => v === k).length;
 
 // a fixed result for selection-type rounds
-export const selResult = (passed, score, extra = {}) => ({ passed, score: clamp(Math.round(score), 0, 100), rank: rankFor(score), place: extra.place ?? null, field: extra.field ?? null, ...extra });
+export const selResult = (passed, score, extra = {}) => ({ passed, score: clamp(Math.round(score), 0, 100), rank: rankFor(score), place: extra.place ?? null, of: extra.field ?? null, field: extra.field ?? null, ...extra });
 
 // invitation check for TV specials: fame + a stat
 export function inviteScore(g, keys = ['hassou', 'adlib']) {
@@ -739,7 +760,26 @@ export function inviteScore(g, keys = ['hassou', 'adlib']) {
 export function talkScenes(rows) {
   return rows.map(([prompt, best, ok, bad]) => ({ prompt, answers: [{ text: best, score: 100 }, { text: ok, score: 55 }, { text: bad, score: 10 }] }));
 }
-export { COLORS };
+// every round run() returns D1's record shape: { passed (bool), score, rank, place, of, champion?, award?, note? }
+export function normalizeRuns(def) {
+  for (const r of (def && def.rounds) || []) {
+    if (typeof r.run !== 'function' || r.run.d2) continue;
+    const f = r.run;
+    const w = async (g, ctx) => {
+      const res = await f(g, ctx);
+      if (!res || typeof res !== 'object') return res;
+      if (res.of == null && res.field != null) res.of = res.field;
+      res.passed = !!res.passed;
+      if (!Number.isFinite(res.score)) res.score = 0;
+      if (res.champion) res.place = 1;
+      return res;
+    };
+    w.d2 = true;
+    r.run = w;
+  }
+  return def;
+}
+export { COLORS, clamp };
 
 // ------------------------------------------------------------------ activity (selection-type awards) & past titles
 // 0..100: fame (log scale) + this/last year's contest results (D1 entries via g.contestEntry) + stage experience (A)

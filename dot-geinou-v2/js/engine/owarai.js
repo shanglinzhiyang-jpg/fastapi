@@ -24,7 +24,8 @@ import {
   COMEDY_STATS, STAT_KEYS, KINDS, WEIGHTS, SOLO_KINDS, GAP_REASON, GROW_HINT, ROLES, STYLES, THEATER_RANKS, QUIRKS,
   CANDIDATES, CAST_STATS, NAME_A, NAME_B, num, dateOf, baseStats, candStats, personName, strHash,
 } from './owarai_data.js';
-import './owarai_net.js';
+import { netMorning } from './owarai_net.js';
+import { nscMorning } from './owarai_nsc.js';
 import './owarai_ui.js';
 
 export { COMEDY_STATS };
@@ -972,7 +973,7 @@ function morning(g) {
   for (const fn of OW_MORNING) { try { fn(g, o); } catch (e) { console.error('[owarai] morning', e); } }
 }
 // other owarai files add their morning work here (net replies, NSC fees)
-export const OW_MORNING = [];
+export const OW_MORNING = [nscMorning, netMorning];
 onMorning((g) => { try { morning(g); } catch (e) { console.error('[owarai] morning', e); } });
 
 // ================================================================ talk menu entries (any member / candidate)

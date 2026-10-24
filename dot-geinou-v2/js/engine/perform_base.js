@@ -140,7 +140,7 @@ export class AdlibTask extends Task {
   draw(ctx) {
     const x = this.panel(ctx);
     S.glyph(ctx, (this.o.key || 'b').toUpperCase(), x + 120, PANEL.y + 15);
-    text(ctx, this.o.prompt || 'アドリブ！', x + 148, PANEL.y + 17, { size: 16, color: Math.floor(this.t / 5) % 2 ? '#ffffff' : '#ffd23f', shadow: null });
+    text(ctx, this.o.prompt || 'でアドリブ！', x + 146, PANEL.y + 17, { size: 16, color: Math.floor(this.t / 5) % 2 ? '#ffffff' : '#ffd23f', shadow: null });
     const frac = 1 - this.t / (this.o.win || 45);
     rect(ctx, x + 14, PANEL.y + 38, Math.round((PANEL.w - 28) * clamp(frac, 0, 1)), 3, '#ff7eb6');
   }
@@ -265,6 +265,30 @@ export class RingTask extends Task {
     ctx.arc(cx, cy, Math.min(r, 22), 0, Math.PI * 2);
     ctx.stroke();
     text(ctx, this.o.prompt || 'Aで役に入る', x + 110, PANEL.y + 17, { size: 14, color: '#ffffff', shadow: null });
+  }
+}
+// 暗転: the light goes out when you press A; the laugh then finishes in the dark.
+export class BlackoutTask extends Task {
+  update(inp, mg) {
+    this.t++;
+    if (inp.pressed('a') && this.t > 6) {
+      const w = mg.wave;
+      const peak = this.maxW || 0;
+      let grade;
+      if (peak < 0.2) grade = this.t < 45 ? 'good' : 'late'; // no laugh to ride: cut quickly
+      else grade = w >= peak * 0.55 && w > 0.25 ? 'perfect' : w > 0.12 ? 'good' : this.t < 20 ? 'early' : 'late';
+      this.result = { grade };
+      return true;
+    }
+    this.maxW = Math.max(this.maxW || mg.wave, mg.wave);
+    if (this.t > 150) { this.result = { grade: 'late', auto: true }; return true; }
+    return false;
+  }
+  draw(ctx, mg) {
+    const x = this.panel(ctx);
+    S.glyph(ctx, 'A', x + 120, PANEL.y + 15);
+    text(ctx, '暗転のタイミング！', x + 148, PANEL.y + 17, { size: 16, color: '#ffffff', shadow: null });
+    rect(ctx, x + 14, PANEL.y + 38, Math.round((340 - 28) * clamp(mg.wave / 1.2, 0, 1)), 3, '#ffd23f');
   }
 }
 // Wait n frames (visual beats of a sequence). o: { frames, tick(mg, t), done(mg) }
@@ -524,7 +548,7 @@ export class PerformGame extends Minigame {
     const adl = this.members[this.pi].s.adlib;
     const win = Math.round(this.ease(30 + adl * 30, 0.3));
     const other = this.members.length > 1;
-    this.push(new AdlibTask({ label: self ? '噛んだ！' : `${this.members[ln.who].short}が噛んだ！`, prompt: self ? 'B で言い直す' : (other ? 'B でいじる（アドリブ）' : 'B でごまかす'), win, onDone: (r, mg) => {
+    this.push(new AdlibTask({ label: self ? '噛んだ！' : `${this.members[ln.who].short}が噛んだ！`, prompt: self ? 'で言い直す' : (other ? 'でいじる（アドリブ）' : 'でごまかす'), win, onDone: (r, mg) => {
       if (r.ok) {
         const ok = self ? mg.rng() < 0.55 + adl * 0.4 : mg.rng() < 0.4 + adl * 0.55;
         mg.show.flub(ln.who, ok);
@@ -553,7 +577,7 @@ export class PerformGame extends Minigame {
         else { mg.popup('頭が真っ白…', 520, 140, COLORS.bad, 16); mg.silenceT = 60; mg.shakeT = 3; }
       } }));
     } else {
-      this.push(new AdlibTask({ label: `${this.members[ln.who].short}のセリフが飛んだ！`, prompt: 'B でフォロー', win: Math.round(this.ease(40, 0.3)), onDone: (r, mg) => {
+      this.push(new AdlibTask({ label: `${this.members[ln.who].short}のセリフが飛んだ！`, prompt: 'でフォロー', win: Math.round(this.ease(40, 0.3)), onDone: (r, mg) => {
         const adl = mg.members[mg.pi].s.adlib;
         const ok = r.ok && mg.rng() < 0.45 + adl * 0.5;
         mg.show.blank(ln.who, ok);
@@ -583,7 +607,7 @@ export class PerformGame extends Minigame {
       if (resp.who !== this.pi) { const rk = this.show.risk(resp); if (this.rng() < rk.kamu * 0.6) { this.show.flub(resp.who, false); this.popup(`${this.members[resp.who].short}が噛んだ`, 520, 110, COLORS.bad, 14); } }
       this.show.speak(resp);
     }
-    let mult = this.nextMult;
+    let mult = this.nextMult * (this.lineRes.mult ?? 1) * (ln.who === this.pi ? (this.actMult ?? 1) : 1);
     this.nextMult = 1;
     if (this.rushing && (ln.who === this.pi || (resp && resp.who === this.pi))) {
       mult *= 0.75;
@@ -725,7 +749,7 @@ export class PerformGame extends Minigame {
     if (t instanceof WindowTask) return ['ボケが言い終わったら', 'A', 'でツッコミ！'];
     if (t instanceof HoldTask) return ['A', '長押しで間をためて、緑のゾーンではなす'];
     if (t instanceof SettleTask) return ['爆笑中は待つ。笑いが引きかけたら', 'A', 'で次のセリフ'];
-    if (t instanceof AdlibTask) return [String(t.o.key || 'b').toUpperCase(), t.o.prompt || 'アドリブ！'];
+    if (t instanceof AdlibTask) return ['すかさず', String(t.o.key || 'b').toUpperCase(), t.o.prompt || 'でアドリブ！'];
     if (t instanceof ArrowTask) return t.o.hint || ['表示された', 'up', 'down', 'left', 'right', 'を押そう'];
     if (t instanceof ChoiceTask) return ['up', 'down', 'でえらんで', 'A', 'で決定'];
     if (t instanceof BeatTask) return ['リズムに合わせて', 'A'];
@@ -820,24 +844,24 @@ export class PerformGame extends Minigame {
     const PL = [['neta', 'ネタ'], ['execution', '実行'], ['presence', '存在感'], ['timing', '間'], ['crowd', '客席']];
     PL.forEach(([kk, lab], i) => {
       const yy = y + 38 + i * 22;
-      text(ctx, lab, x + 370, yy - 2, { size: 13, color: COLORS.dim });
-      S.meter(ctx, x + 420, yy, 130, 10, (P[kk] || 0) / 100, (f) => (f >= 0.75 ? '#ffd23f' : f >= 0.5 ? '#5ee07a' : f >= 0.3 ? '#5fd7ff' : '#9aa3c7'));
-      text(ctx, String(P[kk] ?? '-'), x + 556, yy - 2, { size: 12, color: COLORS.text });
+      text(ctx, lab, x + 352, yy - 2, { size: 13, color: COLORS.dim });
+      S.meter(ctx, x + 404, yy, 116, 10, (P[kk] || 0) / 100, (f) => (f >= 0.75 ? '#ffd23f' : f >= 0.5 ? '#5ee07a' : f >= 0.3 ? '#5fd7ff' : '#9aa3c7'));
+      text(ctx, String(P[kk] ?? '-'), x + w - 16, yy - 2, { size: 12, align: 'right', color: COLORS.text });
     });
     // heat wave
     const hv = r.heat || [];
     if (hv.length > 1) {
-      const gx = x + 20, gy = y + 172, gw = w - 40, gh = 34;
+      const gx = x + 20, gy = y + 156, gw = w - 40, gh = 28;
       rect(ctx, gx, gy, gw, gh, '#0a0c22');
       for (let i = 0; i < hv.length; i++) {
         const bx = gx + Math.round((i / hv.length) * gw), bw2 = Math.max(2, Math.round(gw / hv.length) - 2);
-        const bh2 = Math.round((hv[i] / 100) * (gh - 4));
+        const bh2 = Math.max(1, Math.round((hv[i] / 100) * (gh - 4)));
         rect(ctx, bx, gy + gh - 2 - bh2, bw2, bh2, hv[i] >= 70 ? '#ff7a5c' : hv[i] >= 40 ? '#ffd23f' : '#5fd7ff');
       }
       text(ctx, '笑いの波', gx + 4, gy + 2, { size: 11, color: COLORS.dim, shadow: null });
     }
     // highlights + comment
-    let yy = y + 212;
+    let yy = y + 190;
     const hl = (r.highlights || []).slice(0, 3);
     for (const hline of hl) {
       let s = 13;
@@ -846,8 +870,8 @@ export class PerformGame extends Minigame {
       yy += 18;
     }
     const cm = wrap(ctx, r.comment || '', w - 40, 14).slice(0, 2);
-    cm.forEach((l, i) => text(ctx, l, SW / 2, y + h - 62 + i * 18, { size: 14, align: 'center', color: COLORS.accent }));
-    if (this.growthText) text(ctx, this.growthText, SW / 2, y + h - 26, { size: 12, align: 'center', color: COLORS.good });
+    cm.forEach((l, i) => text(ctx, l, SW / 2, Math.max(yy + 4, y + h - 66) + i * 18, { size: 14, align: 'center', color: COLORS.accent }));
+    if (this.growthText) text(ctx, this.growthText, x + 20, y + h - 24, { size: 12, color: COLORS.good });
     if (this.t > 40 && Math.floor(this.t / 20) % 2 === 0) text(ctx, 'Aで次へ', x + w - 16, y + h - 24, { size: 13, align: 'right', color: COLORS.cyan });
   }
 }

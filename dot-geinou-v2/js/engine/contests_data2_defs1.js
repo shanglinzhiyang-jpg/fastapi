@@ -17,7 +17,9 @@ import {
 } from './contests_data2_kit.js';
 import { clamp } from './util.js';
 
-// eligibility function with a display note (D1 may read fn.note)
+// Eligibility is given in D1's OBJECT form (D1 evaluates it: invitations, notes, the simulated field's filter).
+// Conditions the object cannot say (今宮の「受賞歴なし」, バイアスロンの「沖縄で活動」) are checked at the start of round 1.
+// elig() (function form) stays available for tests / other callers.
 function elig(note, fn, extra = {}) {
   const f = (g, unit, year) => {
     try { return fn(g, unit || unitOf(g), year ?? yearOf(g)); } catch (e) { console.error(e); return { ok: false, why: '出場資格を確かめられなかった' }; }
@@ -56,11 +58,8 @@ registerContest('kamigata_kyokai', {
   },
   editionOf: (y) => (y >= 2016 ? y - 2015 : null),
   schedule: { entry: null, final: [1, 4] },
-  eligibility: elig('上方漫才協会の協会員（よしもと所属・関西の劇場に立つ漫才師）。新人賞は芸歴8年目以下。選考制（エントリー不要）', (g, u) => {
-    if (playerAgency(g) !== 'yoshimoto') return no('上方漫才協会の協会員（よしもと所属の漫才師）が対象');
-    if (memberCount(u) < 2) return no('漫才師（コンビ・トリオ）の協会');
-    return OK;
-  }, { invite: { fame: 0 } }),
+  eligibility: { pro: true, amateur: false, members: [2, null], agency: ['yoshimoto'], region: 'osaka', invite: { fame: 300 }, repeat: true,
+    note: '上方漫才協会の協会員（よしもと所属・関西の劇場に立つ漫才師）。選考制（協会から授賞式に呼ばれる）。新人賞は芸歴8年目以下' },
   fee: 0, prizeText: '大賞・新人賞・文芸部門賞・特別賞・話題賞ほか（賞金は非公表）',
   perform: { kind: 'manzai' },
   facts: {
@@ -77,13 +76,15 @@ registerContest('kamigata_kyokai', {
         const pts = theaterPoints(g);
         return withBackdrop(g, 'ceremony', { title: ctx.def.name, sub: `${edLabel(ctx)} 新人賞ノミネート`, sign: '上方漫才協会', cast: castOf(g) }, async () => {
           if (gk > 8) {
-            s.flags[`kyokai_vet_${y}`] = 1;
-            await g.say([`芸歴${gk}年目。新人賞の対象（8年目以下）からは外れている。`, 'それでも協会員として、大賞・特別賞・話題賞の選考対象だ。授賞式に呼ばれた。']);
-            const out = roundResult({ score: pts }, { passed: true, place: null, field: null, comment: '大賞などの選考対象' });
+            // 芸歴9年目以上: 新人賞の対象外。大賞の最終候補に残るかどうか（1年の舞台・メディアでの活躍、漫才への貢献）
+            const big = powerOf(g, 'manzai') >= 72 && famous(g) >= 4000;
+            await g.say([`芸歴${gk}年目。新人賞の対象（8年目以下）からは外れている。`, big ? '協会から連絡――大賞の最終選考に名前が残っている、と。授賞式に呼ばれた。' : '大賞の最終選考には残らなかった。今年の授賞式は客席から見守ることになる。']);
+            if (big) s.flags[`kyokai_vet_${y}`] = 1;
+            const out = roundResult({ score: pts }, { passed: big, place: big ? 1 : null, field: null, comment: big ? '大賞の最終候補' : '選考外', reasons: big ? [] : ['1年を通じた舞台・メディアでの活躍', '漫才への貢献'] });
             record(g, ctx, 'nominate', out);
             return out;
           }
-          const j = judgeField(g, ctx, 'nominate', pts, { field: 40, pass: 5, sample: 16, level: 52, kind: 'manzai' });
+          const j = judgeField(g, ctx, 'nominate', pts, { field: 40, pass: 5, sample: 16, level: 46, kind: 'manzai' });
           await showBoard(g, {
             title: '前年の劇場成績（若手・芸歴8年目以下）', sub: `${edLabel(ctx)} 新人賞ノミネート選考　上位5組がネタバトルへ`,
             cols: [{ key: 'place', label: '順', w: 50 }, { key: 'name', label: '名前', w: 360 }, { key: 'score', label: '劇場成績', w: 160, align: 'right' }],
@@ -95,7 +96,6 @@ registerContest('kamigata_kyokai', {
             s.flags[`kyokai_nom_${y}`] = 1;
             await g.say([`${unitName(g)}、上方漫才協会大賞 新人賞にノミネート！`, 'なんばグランド花月の授賞式で、5組によるネタバトルが待っている。']);
             news(g, ctx, `【上方漫才協会大賞】${edLabel(ctx)}の新人賞ノミネート5組が発表。${unitName(g)}も名を連ねた`);
-            grant(g, ctx, 'nominate', { fame: 25, fans: 120 });
           } else {
             out.reasons = ['劇場の出番の数', 'ネタの完成度', '劇場でのウケ'].slice(0, 2);
             await g.say([`新人賞ノミネートの5組には入れなかった（劇場成績 推定${j.place}位）。`, '今年はもっと劇場の出番を増やして、ウケを積み上げたい。']);
@@ -118,6 +118,7 @@ registerContest('kamigata_kyokai', {
           await g.say(['なんばグランド花月。協会員がずらりと並ぶ、年に一度の授賞式。', '進行役「それではまず、新人賞のネタバトルから参りましょう！」'], { name: '' });
           let out = roundResult({ score: theaterPoints(g) }, { passed: true });
           let newcomer = rv[0].name;
+          if (!nominee && vet) out = roundResult({ score: theaterPoints(g) }, { passed: true, place: 4, field: 5 });
           if (nominee) {
             const skip = await askSkip(g, ctx, 'final');
             const res = await stagePerform(g, ctx, { kind: 'manzai', round: 'final', title: '新人賞ネタバトル', venue: { name: 'なんばグランド花月', size: 'hall', crowd: 'warm', pressure: 70 }, skip });
@@ -132,7 +133,6 @@ registerContest('kamigata_kyokai', {
               newcomer = unitName(g);
               out.champion = true; out.award = '新人賞';
               await g.say([`新人賞は――${unitName(g)}！！`, '協会の重鎮たちから、あたたかい拍手が送られた。']);
-              grant(g, ctx, 'shinjin', { fame: 120, fans: 900 });
             } else {
               newcomer = j.top.name;
               out.reasons = failReasons(g, 'manzai', res);
@@ -151,7 +151,7 @@ registerContest('kamigata_kyokai', {
             title: `${ctx.def.name}　受賞一覧`, sub: edLabel(ctx), cols: [{ key: 'name', label: '賞と受賞者', w: 600 }],
             rows: lines.map((t) => ({ name: t, me: t.includes(unitName(g)) })), note: '大賞は「1年を通じての舞台、メディアでの活躍や、漫才への貢献」から選ばれる。',
           });
-          if (bigYear) { out.champion = true; out.award = '大賞'; grant(g, ctx, 'taisho', { fame: 260, fans: 2400 }); await g.say('大賞……！ 一年間、劇場とテレビを走り抜いた日々が報われた。'); }
+          if (bigYear) { out.champion = true; out.award = '大賞'; out.place = 1; await g.say('大賞……！ 一年間、劇場とテレビを走り抜いた日々が報われた。'); }
           if (bunsei === unitName(g)) { out.award = out.award || '文芸部門賞'; grant(g, ctx, 'bunsei', { fame: 60, fans: 300 }); await g.say('文芸部門賞も受賞！ 書いてきた台本が認められた。'); }
           if (wadai === unitName(g)) { out.award = out.award || '話題賞'; grant(g, ctx, 'wadai', { fame: 50, fans: 500 }); }
           news(g, ctx, `【上方漫才協会大賞】${edLabel(ctx)}の大賞は${taisho}、新人賞は${newcomer}`);
@@ -194,10 +194,7 @@ registerContest('under25', {
   organizer: 'ニッポン放送・SLUSH-PILE.', broadcaster: 'ニッポン放送（配信）', venue: 'シアターマーキュリー新宿', region: 'tokyo',
   history: { founded: 2023, ended: null, note: '25歳以下限定。2023年 第1回（決勝 草月ホール、エントリー1,004組）、2024年から準決勝・決勝の審査に出場者も参加。', sources: U25_SRC },
   schedule: { entry: { from: [6, 1], to: [6, 10] }, final: [9, 6] },
-  eligibility: elig('決勝当日に満25歳以下（芸歴・プロアマ不問。養成所生・学生も可）', (g, u, y) => {
-    const a = ageOf(g, y);
-    return a <= 25 ? OK : no(`決勝当日に満25歳以下が対象（いま${a}歳）`);
-  }, { ageMax: 25, pro: true, amateur: true }),
+  eligibility: { ageMax: 25, pro: true, amateur: true, note: '決勝当日に満25歳以下（芸歴・プロアマ不問。養成所生・学生・アマチュアも可）' },
   prize: 250000, prizeText: '賞金25万円＋ニッポン放送のポッドキャスト番組パーソナリティ権（期間限定）',
   perform: { kind: 'any' },
   facts: {
@@ -297,11 +294,7 @@ registerContest('imamiya', {
   },
   editionOf: imamiyaEdition,
   schedule: { entry: { from: [5, 1], to: [6, 5] }, final: [7, 8] },
-  eligibility: elig('プロを目指す、受賞歴のないコンビ・グループ（漫才・コント可、プロ・アマ問わず）', (g, u) => {
-    if (memberCount(u) < 2) return no('コンビ・グループが対象（ピンは出られない）');
-    if (hasAnyTitle(g)) return no('受賞歴のない組が対象');
-    return OK;
-  }, { pro: true, amateur: true, members: [2, null] }),
+  eligibility: { pro: true, amateur: true, members: [2, null], region: 'osaka', note: 'プロを目指す、受賞歴のないコンビ・グループ（漫才・コント可、プロ・アマ問わず）。受賞歴は予選の受付で確認' },
   prize: 200000, prizeText: '新人漫才福笑い大賞 賞金20万円と楯／奨励賞 10万円',
   perform: { kind: 'manzai' },
   facts: {
@@ -309,7 +302,18 @@ registerContest('imamiya', {
     unverified: ['参加費', '予選方式', '本選の組数', 'ネタ時間', '2028年再開（推定）'],
   },
   rounds: [
-    { id: 'r1', name: '予選（ネタ審査・詳細非公開）', when: [6, 8], judge: 'staff', field: 40, pass: 10, run: (g, ctx) => stageRound(g, ctx, { round: 'r1', name: '予選（ネタ審査）', scene: 'theater', sign: 'マンザイ新人コンクール 予選', field: 40, pass: 10, level: 34, intro: ['今宮戎のマンザイ新人コンクール、予選。', '「受賞歴なし」の組だけが集まる。ここからが始まりだ。'] }) },
+    {
+      id: 'r1', name: '予選（ネタ審査・詳細非公開）', when: [6, 8], judge: 'staff', field: 40, pass: 10,
+      run: async (g, ctx) => {
+        if (hasAnyTitle(g)) {
+          await g.say(['受付「すみません、こちらは受賞歴のないコンビ・グループのコンクールでして……」', '過去の受賞歴があるため、出場できなかった。']);
+          const out = roundResult({ score: 0 }, { passed: false, reasons: ['受賞歴のない組が対象（要項）'] });
+          record(g, ctx, 'r1', out);
+          return out;
+        }
+        return stageRound(g, ctx, { round: 'r1', name: '予選（ネタ審査）', scene: 'theater', sign: 'マンザイ新人コンクール 予選', field: 40, pass: 10, level: 34, intro: ['今宮戎のマンザイ新人コンクール、予選。', '「受賞歴なし」の組だけが集まる。ここからが始まりだ。'] });
+      },
+    },
     {
       id: 'final', name: '本選（境内特設舞台）', when: [7, 8], judge: 'panel', field: 10, final: true, venues: ['今宮戎神社 境内'],
       run: async (g, ctx) => {
@@ -332,13 +336,12 @@ registerContest('imamiya', {
             rows: j.rows.map((x, i) => ({ place: i + 1, name: x.name, score: i === 0 ? '福笑い大賞' : i === 1 ? '奨励賞' : `${x.score}`, me: x.me })),
           });
           if (j.place === 1) {
-            out.champion = true; out.award = '新人漫才福笑い大賞';
-            grant(g, ctx, 'award', { money: 200000, fame: 90, fans: 600 });
+            out.champion = true; out.award = '新人漫才福笑い大賞'; // 賞金20万円（def.prize）は D1 が支払う
             await g.say([`新人漫才福笑い大賞は――${unitName(g)}！`, '賞金20万円と楯。境内の子どもたちが手をたたいて跳ねている。']);
             news(g, ctx, `【今宮戎】${edLabel(ctx)}マンザイ新人コンクール、福笑い大賞は${unitName(g)}`);
           } else if (j.place === 2) {
             out.award = '奨励賞';
-            grant(g, ctx, 'award', { money: 100000, fame: 40, fans: 250 });
+            grant(g, ctx, 'shoreisho', { money: 100000 });
             await g.say(['奨励賞！ 賞金10万円。', `福笑い大賞は「${j.top.name}」。来年は……もう「受賞歴あり」だ。`]);
           } else {
             out.reasons = failReasons(g, 'manzai', res);
@@ -375,11 +378,7 @@ registerContest('warawankai', {
   organizer: '笑わん会（関西の新人お笑いライブ「笑わんかいライブ」運営委員会）', broadcaster: null, venue: '大阪市内の劇場（詳細非公開）', region: 'osaka',
   history: { founded: 2000, ended: 2010, note: '2002=第3回、2007=第8回、2010=第11回を確認（第1回は逆算で2000年）。2011年以降の開催は確認できず、以降は復刻開催扱い。', sources: WARAWAN_SRC },
   schedule: { entry: { from: [4, 1], to: [4, 10] }, final: [9, 5] },
-  eligibility: elig('関西の芸能各社に所属する新人（キャリア原則5年以内）', (g, u, y) => {
-    if (!playerAgency(g)) return no('関西の芸能各社に所属する新人が対象（事務所に入ろう）');
-    const gk = geirekiOf(g, y);
-    return gk <= 5 ? OK : no(`キャリア原則5年以内（いま芸歴${gk}年）`);
-  }, { pro: true, amateur: false, geirekiMax: 5 }),
+  eligibility: { pro: true, amateur: false, geirekiMax: 5, region: 'osaka', note: '関西の芸能各社に所属する新人（キャリア原則5年以内）' },
   prizeText: '最優秀賞・優秀賞（賞金は詳細非公開）',
   facts: {
     verified: ['「笑わんかいライブ」運営委員会', '関西の芸能各社の新人・キャリア原則5年以内', '2002=第3回(最優秀賞/優秀賞)', '2007=第8回', '2010=第11回'],
@@ -387,7 +386,7 @@ registerContest('warawankai', {
   },
   rounds: [
     { id: 'r1', name: '笑わんかいライブ（予選）', when: [[5, 5], [6, 5], [7, 5]], judge: 'panel', field: 36, pass: 0.3, run: (g, ctx) => stageRound(g, ctx, { round: 'r1', name: '笑わんかいライブ（予選）', scene: 'theater', sign: '笑わんかいライブ', field: 36, pass: 0.3, level: 40, intro: ['関西の各事務所から、芸歴の浅い新人が集まる「笑わんかいライブ」。', '客席の常連が腕を組んでいる。「笑わんかい！」と言わせたら勝ちだ。'] }) },
-    { id: 'final', name: '本選（最優秀賞・優秀賞）', when: [9, 5], judge: 'panel', field: 10, final: true, run: (g, ctx) => stageRound(g, ctx, { round: 'final', name: '本選', scene: 'theater', sign: '笑わん会', field: 10, pass: 1, sample: 9, level: 52, final: true, judgesN: 5, judgeTitles: ['放送作家', '劇場プロデューサー', 'ラジオディレクター', '構成作家', '演芸評論家'], judgeText: '審査：放送作家や劇場関係者による審査（詳細非公開）', intro: ['笑わん会、本選。各社の推しの新人がそろった。', '最優秀賞は、関西の若手にとって「最初の勲章」。'], awards: [{ place: 1, name: '最優秀賞', fame: 110, fans: 700 }, { place: 2, name: '優秀賞', fame: 50, fans: 300 }, { place: 3, name: '優秀賞', fame: 40, fans: 250 }] }) },
+    { id: 'final', name: '本選（最優秀賞・優秀賞）', when: [9, 5], judge: 'panel', field: 10, final: true, run: (g, ctx) => stageRound(g, ctx, { round: 'final', name: '本選', scene: 'theater', sign: '笑わん会', field: 10, pass: 1, sample: 9, level: 56, final: true, judgesN: 5, judgeTitles: ['放送作家', '劇場プロデューサー', 'ラジオディレクター', '構成作家', '演芸評論家'], judgeText: '審査：放送作家や劇場関係者による審査（詳細非公開）', intro: ['笑わん会、本選。各社の推しの新人がそろった。', '最優秀賞は、関西の若手にとって「最初の勲章」。'], awards: [{ place: 1, name: '最優秀賞', fame: 110, fans: 700 }, { place: 2, name: '優秀賞', fame: 50, fans: 300 }, { place: 3, name: '優秀賞', fame: 40, fans: 250 }] }) },
   ],
   news: [
     '関西の新人だけの「笑わんかいライブ」、今月も満員。各事務所の若手がしのぎを削る',
@@ -431,7 +430,7 @@ registerContest('bu1', {
   organizer: '武田塾', broadcaster: 'ニコニコ生放送（決勝）', venue: '（詳細非公開）', region: 'tokyo',
   history: { founded: 2018, ended: 2018, note: '「勉強をテーマとしたお笑いの祭典」。決勝は2018年3月23日にニコ生で配信。2回目以降は確認できず → 以降は復刻開催。', sources: BU1_SRC },
   schedule: { entry: { from: [1, 1], to: [1, 10] }, final: [3, 8] },
-  eligibility: elig('プロの芸人（出場資格の詳細は非公開）。ネタのテーマは「勉強」', (g) => (isAmateur(g) ? no('プロの芸人の大会（事務所に所属しよう）') : OK), { pro: true, amateur: false }),
+  eligibility: { pro: true, amateur: false, note: 'プロの芸人（出場資格の詳細は非公開）。ネタのテーマは「勉強」' },
   prizeText: '優勝（賞金・副賞は詳細非公開）',
   facts: { verified: ['主催 武田塾', '勉強をテーマとしたお笑いの祭典', '決勝 2018年3月23日 ニコニコ生放送'], unverified: ['2019年以降', '出場資格', '予選', 'ネタ時間', '審査方式', '賞金'] },
   rounds: [
@@ -465,7 +464,6 @@ registerContest('bu1', {
           });
           if (j.place === 1) {
             out.champion = true; out.award = '優勝';
-            grant(g, ctx, 'award', { fame: 120, fans: 900 });
             await g.say([`武−1グランプリ、優勝は${unitName(g)}！`, '受験生のコメントが画面を埋めつくす。「明日のテスト、これで覚えた」']);
           } else {
             out.reasons = failReasons(g, styleKind(g), res);
@@ -501,12 +499,7 @@ registerContest('alcoveil', {
   organizer: '大正製薬（リポビタン アルコベール）・吉本興業', broadcaster: '公式SNS（予選）', venue: '（本戦の会場は詳細非公開）', region: 'tokyo',
   history: { founded: 2019, ended: 2019, note: '2019年5月13日開幕。若手30組、予選はネタ動画のSNS拡散数上位10組が本戦へ。優勝＝宣伝部長＋副賞1年分。2020年以降は確認できず → 以降は復刻開催。', sources: ALCO_SRC },
   schedule: { entry: null, final: [6, 3] },
-  eligibility: elig('よしもと所属の若手30組（主催側が選出・ネクストブレイク候補）', (g) => {
-    if (playerAgency(g) !== 'yoshimoto') return no('よしもと所属の若手が対象');
-    if (famous(g) < 300) return no('ネクストブレイク候補30組に選ばれるには、もう少し知名度が必要');
-    if (famous(g) >= 30000) return no('すでにブレイクしている（ネクストブレイク候補ではない）');
-    return OK;
-  }, { pro: true, amateur: false, agency: ['yoshimoto'], invite: { fame: 300 } }),
+  eligibility: { pro: true, amateur: false, agency: ['yoshimoto'], invite: { fame: 300 }, note: 'よしもと所属の若手30組（主催側が選出・ネクストブレイク候補。招待制）' },
   fee: 0, prizeText: '優勝者は宣伝部長に任命、副賞アルコベール1年分',
   facts: { verified: ['大正製薬「リポビタン アルコベール」宣伝部長争奪戦', '2019年5月13日開幕', 'よしもと若手30組', '予選＝ネタ動画を公式SNSで公開、拡散（RT）数上位10組が本戦', '予選期間 5/13〜5/22', '優勝＝宣伝部長、副賞1年分'], unverified: ['本戦の日時・形式・審査', '2020年以降'] },
   rounds: [
@@ -536,7 +529,7 @@ registerContest('alcoveil', {
             rows: rows.map((x, i) => ({ place: i + 1, name: x.name, n: x.n.toLocaleString('ja-JP'), me: x.me })), max: 11,
           });
           const out = roundResult(res, { passed: place <= 10, place, field: 30, shares: mine });
-          if (out.passed) { await g.say(`拡散数${mine.toLocaleString('ja-JP')}で${place}位、本戦へ！`); grant(g, ctx, 'sns', { fame: 20, fans: 300 }); }
+          if (out.passed) await g.say(`拡散数${mine.toLocaleString('ja-JP')}で${place}位、本戦へ！`);
           else { out.reasons = ['拡散数（ファンの数・告知の工夫）', ...failReasons(g, styleKind(g), res).slice(0, 2)]; await g.say([`${place}位。本戦の10組には届かなかった。`, `足りなかったもの：${out.reasons.join('、')}`]); }
           record(g, ctx, 'sns', out);
           return out;
@@ -586,11 +579,7 @@ registerContest('monomanegp', {
   organizer: '日本テレビ', broadcaster: '日本テレビ系「ものまねグランプリ」', venue: '日本テレビ スタジオ', region: 'tokyo',
   history: { founded: 2020, ended: 2023, note: 'シリーズは2009年5月3日〜2023年。「次世代ものまね芸人No.1決定戦」は2020年5月19日放送。形式はシリーズの「ザ・トーナメント」（25組・5ブロック・審査員7人の投票）を流用。', sources: MONO_SRC },
   schedule: { entry: null, final: [5, 6] },
-  eligibility: elig('次世代（若手）のものまね芸人。番組オーディションで選ばれる（ゲームでは芸歴10年以内）', (g, u, y) => {
-    if (isAmateur(g)) return no('テレビのものまね番組はプロの芸人が対象');
-    const gk = geirekiOf(g, y);
-    return gk <= 10 ? OK : no(`「次世代」枠は若手が対象（いま芸歴${gk}年）`);
-  }, { pro: true, amateur: false, invite: { fame: 200 } }),
+  eligibility: { pro: true, amateur: false, geirekiMax: 10, invite: { fame: 200 }, note: '次世代（若手）のものまね芸人。番組から声がかかる（ゲームでは芸歴10年以内・招待制）' },
   fee: 0, prizeText: '次世代ものまね芸人No.1の称号（賞金は詳細非公開）',
   perform: { kind: 'monomane' },
   facts: { verified: ['日本テレビ「ものまねグランプリ」2009年5月3日〜2023年', '2020年5月19日「次世代ものまね芸人No.1決定戦」', 'ザ・トーナメント: 25組・5ブロック・審査員7人の投票・各ブロック1位が決勝', '2021年決勝は視聴者投票、2023年は審査員投票'], unverified: ['次世代決定戦そのものの採点・資格', '毎年の開催', '賞金'] },
@@ -620,16 +609,18 @@ registerContest('monomanegp', {
             cols: [{ key: 'place', label: '順', w: 50 }, { key: 'name', label: '名前', w: 380 }, { key: 'v', label: '票', w: 140, align: 'right' }],
             rows: order.map((x, i) => ({ place: i + 1, name: x.name, v: `${x.v}票`, me: x.me })), note: `審査員：${judges.map((j) => j.title).join('・')}（全員架空）`,
           });
-          const out = roundResult(res, { passed: true, place: order.findIndex((x) => x.me) + 1, field: 25 });
+          const blockPos = order.findIndex((x) => x.me) + 1;
+          // overall place among 25: the 5 block winners are 1..5, block 2nd ≈ 6..10, 3rd ≈ 11..15 …
+          const out = roundResult(res, { passed: true, place: blockPos === 1 ? 1 : 3 + (blockPos - 1) * 5, field: 25, blockPos });
           if (!order[0].me) {
             out.reasons = failReasons(g, 'monomane', res);
-            await g.say([`ブロック${out.place}位。決勝に進んだのは「${order[0].name}」。`, `足りなかったもの：${out.reasons.join('、')}`]);
+            await g.say([`ブロック${blockPos}位。決勝に進んだのは「${order[0].name}」。`, `足りなかったもの：${out.reasons.join('、')}`]);
             record(g, ctx, 'final', out);
             return out;
           }
           await g.say('ブロック1位！ 決勝へ。');
           const fin = await stagePerform(g, ctx, { kind: 'monomane', round: 'final2', title: `決勝「${MONO_TARGETS[4]}」`, style: 'monomane', useC: 'pinneta', custom: { id: 'rhythm', opts: { song: '決勝メドレー', style: 'sing', lanes: 4 } }, venue: { name: '日本テレビ スタジオ', size: 'tv', crowd: 'warm', pressure: 85 }, skip });
-          const fr = rivalsFor(g, ctx, 'final2', 4, { level: 70, kind: 'monomane', pinOnly: true });
+          const fr = rivalsFor(g, ctx, 'final2', 4, { level: 70, kind: 'monomane', pinOnly: true, offset: 4 });
           const fs = [fin.score, ...fr.map((x) => simScore(g, 'monomane', x.power, x.quality, r))];
           const viewers = ctx.year === 2021;
           let fv;
@@ -643,9 +634,8 @@ registerContest('monomanegp', {
           const fin1 = roundResult(fin, { passed: true, place: fo.findIndex((x) => x.me) + 1, field: 25 });
           if (fo[0].me) {
             fin1.champion = true; fin1.award = '次世代ものまね芸人No.1';
-            grant(g, ctx, 'award', { fame: 220, fans: 3000 });
             await g.say([`次世代ものまね芸人No.1は――${unitName(g)}！`, 'スタジオの大御所たちが立ち上がって拍手している。']);
-          } else { fin1.reasons = failReasons(g, 'monomane', fin); await g.say([`決勝は${fin1.place}位。No.1は「${fo[0].name}」。`, `足りなかったもの：${fin1.reasons.join('、')}`]); grant(g, ctx, 'final', { fame: 60, fans: 600 }); }
+          } else { fin1.reasons = failReasons(g, 'monomane', fin); await g.say([`決勝は${fin1.place}位。No.1は「${fo[0].name}」。`, `足りなかったもの：${fin1.reasons.join('、')}`]); }
           news(g, ctx, `【ものまねグランプリ】次世代No.1決定戦は${fo[0].name}が制す`);
           record(g, ctx, 'final', fin1);
           return fin1;
@@ -682,7 +672,7 @@ registerContest('loudness', {
   organizer: 'ABEMA', broadcaster: 'ABEMA', venue: 'ABEMAのスタジオ（観客80人）', region: 'tokyo',
   history: { founded: 2021, ended: 2022, note: '審査員なし・観客の笑い声と拍手を計測して数値化。2021: 821組→決勝15組・観客80人、2022: 1018組→15組・賞金95万8400円。2023年以降は確認できず → 復刻開催扱い。', sources: LOUD_SRC },
   schedule: { entry: { from: [4, 1], to: [5, 1] }, final: [7, 6] },
-  eligibility: elig('出場資格の詳細は未確認（ゲームではプロ・アマ不問）', () => OK, { pro: true, amateur: true }),
+  eligibility: { pro: true, amateur: true, note: '出場資格の詳細は未確認（ゲームではプロ・アマ不問）' },
   prizeText: '優勝賞金＝笑量の得点×1万円（2022年は95万8400円）＋ABEMAの番組出演権',
   facts: { verified: ['ABEMA', '審査員なし・笑い声と拍手を計測', '2021: 7/18放送・15組・観客80人・821組', '2022: 7/17放送・1018組・15組・賞金95万8400円・番組出演権'], unverified: ['賞金=得点×1万円（推定）', '2023年以降', '出場資格', '予選の方式', 'ネタ時間'] },
   rounds: [
@@ -711,7 +701,7 @@ registerContest('loudness', {
           if (place === 1) {
             const prize = Math.round(mine * 10000);
             out.champion = true; out.award = '優勝'; out.prize = prize;
-            grant(g, ctx, 'award', { money: prize, fame: 160, fans: 1800 });
+            grant(g, ctx, 'prize', { money: prize }); // 得点で変わる賞金は def.prize にできないのでここで支払う（名誉・ファンは D1）
             await g.say([`笑量${mine.toFixed(2)}点で優勝！`, `賞金は得点×1万円＝${yen(prize)}。ABEMAの番組出演権も手に入れた。`]);
           } else {
             out.reasons = failReasons(g, styleKind(g), res);
@@ -746,7 +736,7 @@ registerContest('bs1', {
   organizer: 'オリックス・バファローズ', broadcaster: null, venue: '京セラドーム大阪（試合終了後のグラウンド）', region: 'osaka',
   history: { founded: 2021, ended: null, note: 'オリックス大好き芸人のネタバトル。第3回2023年8月20日、第4回2024年8月3日（いずれも試合終了後）。第1回は逆算で2021年。', sources: BS1_SRC },
   schedule: { entry: null, final: [8, 3] },
-  eligibility: elig('オリックス大好き芸人（球団が招く。プロの芸人）', (g) => (isAmateur(g) ? no('プロの芸人が招かれるイベント') : OK), { pro: true, amateur: false, invite: { fame: 150 } }),
+  eligibility: { pro: true, amateur: false, invite: { fame: 150 }, note: 'オリックス大好き芸人（球団が招く。プロの芸人・招待制）' },
   fee: 0, prizeText: '翌シーズンの特別始球式投球権',
   facts: { verified: ['オリックス・バファローズ主催', 'オリックス大好き芸人', '京セラドーム大阪・試合終了後', '第3回 2023/8/20、第4回 2024/8/3', '優勝＝翌シーズンの特別始球式投球権'], unverified: ['第1回=2021年（逆算）', '審査方式', '出場組数', 'ネタ時間'] },
   onMorning: (g, ctx) => {
@@ -785,7 +775,6 @@ registerContest('bs1', {
           if (j.place === 1) {
             out.champion = true; out.award = '優勝（翌シーズン特別始球式投球権）';
             s.flags.bs1Pitch = ctx.year + 1;
-            grant(g, ctx, 'award', { fame: 90, fans: 900 });
             await g.say([`Bs-1グランプリ、優勝は${unitName(g)}！`, `副賞は来シーズンの特別始球式。${ctx.year + 1}年4月、京セラドーム大阪のマウンドへ。`]);
           } else {
             out.reasons = failReasons(g, styleKind(g), res);
@@ -859,8 +848,7 @@ async function okowaBout(g, ctx, roundId, name, level, isFinal) {
     const out = roundResult({ ...res, score: res.fear }, { passed: win, place: win ? 1 : 2, field: 2, opponent: rv.name, oppScore: opp });
     if (win) {
       await g.say(isFinal ? [`判定――${unitName(g)}！`, 'OKOWAチャンピオンシップ王者。チャンピオンベルトが肩にかけられた。'] : `判定は${unitName(g)}。（恐さ ${res.fear} 対 ${opp}）勝ち上がった。`);
-      if (isFinal) { out.champion = true; out.award = 'チャンピオンベルト'; grant(g, ctx, 'award', { fame: 120, fans: 1000 }); }
-      else grant(g, ctx, `win_${roundId}`, { fame: 10, fans: 80 });
+      if (isFinal) { out.champion = true; out.award = 'チャンピオンベルト'; }
     } else {
       out.reasons = failReasons(g, 'talk', res);
       await g.say([`判定は「${rv.name}」。（恐さ ${res.fear} 対 ${opp}）`, `足りなかったもの：${out.reasons.join('、')}`]);
@@ -875,7 +863,7 @@ registerContest('okowa', {
   organizer: '有限会社ちゅるんカンパニー（Web番組「おちゅーんLive!」）', broadcaster: 'ニコニコ生放送・YouTube', venue: 'シアター朝日（大阪・新世界）', region: 'osaka',
   history: { founded: 2018, ended: null, note: '恐い話（怪談）No.1決定戦。2018年6月6日開幕戦（16人）→7月7日決勝。2019年決勝8月17日。2020年大会は2021年初頭に第1ステージ（15人）。', sources: OKOWA_SRC },
   schedule: { entry: { from: [4, 1], to: [5, 5] }, final: [7, 3] },
-  eligibility: elig('ジャンル不問。いちばん恐い話ができる人なら誰でも（怪談師・芸人・僧侶など）', () => OK, { pro: true, amateur: true }),
+  eligibility: { pro: true, amateur: true, note: 'ジャンル不問。いちばん恐い話ができる人なら誰でも（怪談師・芸人・僧侶など）' },
   prizeText: 'チャンピオンベルト（賞金は詳細非公開）',
   perform: { kind: 'talk' },
   facts: { verified: ['恐い話（怪談）No.1決定戦', 'ちゅるんカンパニー／おちゅーんLive!', '2018年創設', '2018: 6/6開幕戦（新世界シアター朝日・16人）→7/7決勝', '2019決勝8/17（ニコ生）', '2020大会→2021年第1ステージ（15人）', 'トーナメント', 'チャンピオンベルト'], unverified: ['判定方式', '持ち時間', '2022年以降'] },

@@ -327,7 +327,13 @@ export class Show {
     const mu = 0.36 + 0.55 * (0.6 * s.ma + 0.4 * R) + 0.1 * this.skill(i, 'b') - this.pe * 0.2 * (1 - s.dokyo) - (this.ctx.harmony < 35 ? 0.06 : 0);
     return clamp(mu + gauss(this.rng) * 0.15, 0.05, 1.08);
   }
-  speak(line, tempo = 1) { if (line) this.time += line.sec / Math.max(0.5, tempo); this.h = Math.max(0.02, this.h * 0.992); }
+  speak(line, tempo = 1) {
+    if (line) this.time += line.sec / Math.max(0.5, tempo);
+    this.h = Math.max(0.05, this.h * 0.992);
+    if (line && !line.punch) this.samples.push(this.h);
+  }
+  // a small bonus for the act's craft beyond laughs (役に入る・小道具・仕草・暗転・お辞儀), capped in finish()
+  craft(points, key, note) { this.bonusPts = (this.bonusPts || 0) + points; if (note) this.note(key, note); }
   wait(sec) { this.time += Math.max(0, sec); }
 
   // A laugh. o: { resp (the response line), q (this line's own quality, 大喜利), mult, waitK (laugh-wait factor) }
@@ -427,7 +433,7 @@ export class Show {
       if (ot >= 4) this.note('ot', `尺オーバー ${Math.floor(ot / 60)}:${String(ot % 60).padStart(2, '0')}${ctx.contest && otPen >= 10 ? '（大きく減点）' : ''}`);
     }
     pen += otPen;
-    const bonus = Math.min(8, c.adlib * 2.5) + (c.maxChain >= 4 ? 2 : 0);
+    const bonus = Math.min(8, c.adlib * 2.5) + (c.maxChain >= 4 ? 2 : 0) + clamp(this.bonusPts || 0, -6, 6);
     let score = clamp(Math.round(base - pen + bonus), 0, 100);
     if (Number.isFinite(o.score)) score = clamp(Math.round(o.score), 0, 100);
     const rank = rankFor(score);

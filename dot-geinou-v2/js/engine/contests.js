@@ -49,7 +49,7 @@
 // Rules of thumb: real names, years, fees and formats verified (comment the sources); every person fictional.
 
 import { Game } from './game.js';
-import { onMorning, MORNING_HOOKS, registerRegular, REGULARS } from './life.js';
+import { onMorning, MORNING_HOOKS, registerRegular, REGULARS, PEOPLE } from './life.js';
 import { AGENCIES } from './state.js';
 import { clamp, fmtMoney, display } from './util.js';
 import {
@@ -457,7 +457,7 @@ export function toFieldScore(g, score) {
 }
 // expected field-scale score (mean, sd) of the player for a kind (power + their best neta)
 export function playerScoreDist(g, kind) {
-  const power = has(g, 'unitPower') ? num(safe('unitPower', () => g.unitPower(kind), 40), 40) : 40;
+  const power = playerPower(g, kind);
   let quality = Math.max(10, power - 8); // no script of your own: an おまかせ one
   if (has(g, 'netaList') && has(g, 'netaQuality')) {
     const list = safe('netaList', () => g.netaList(kind === 'double' ? undefined : kind), []) || [];
@@ -539,6 +539,7 @@ function simulateCore(g, id, year, champs) {
     const removed = new Set((pm && pm.remove) || []);
     let passed, cut, exact = anon.n < 0.5 || E <= named.length || last;
     const anonIn = anon.n;
+    let anonInMS = null;
     if (exact) {
       const want = Math.max(0, P - (pm && pm.pass ? 1 : 0));
       passed = sorted.filter((e) => !removed.has(e.id)).slice(0, last ? sorted.length : want);
@@ -549,6 +550,7 @@ function simulateCore(g, id, year, champs) {
       const c = MODEL;
       const sS = Math.sqrt((c.b * anon.sd) ** 2 + c.s ** 2);
       const mS = c.a + c.b * anon.mu;
+      anonInMS = { mS, sS };
       const sc = sorted.map((e) => scores.get(e.id));
       const namedAbove = (T) => { let lo = 0, hi = sc.length; while (lo < hi) { const m = (lo + hi) >> 1; if (sc[m] >= T) lo = m + 1; else hi = m; } return lo; };
       const total = (T) => namedAbove(T) + anon.n * (1 - PHI((T - mS) / sS));
@@ -566,7 +568,7 @@ function simulateCore(g, id, year, champs) {
     }
     const passSet = new Set(passed.map((e) => e.id));
     prevElim = sorted.filter((e) => !passSet.has(e.id));
-    rounds.push({ i, id: r.id || `r${i + 1}`, name: r.name || `${i + 1}回戦`, E: exact ? named.length + (pm ? 1 : 0) : E, P: last ? 1 : exact ? passed.length + (pm && pm.pass ? 1 : 0) : P, exact, cut, scores, sorted: sorted.map((e) => e.id), passed: passed.map((e) => e.id), anonIn, anonOut: anon.n, anonMS: exact ? null : { mS: MODEL.a + MODEL.b * (anon.mu), sS: Math.sqrt((MODEL.b * anon.sd) ** 2 + MODEL.s ** 2) }, revival, entrants: named.map((e) => e.id) });
+    rounds.push({ i, id: r.id || `r${i + 1}`, name: r.name || `${i + 1}回戦`, E: exact ? named.length + (pm ? 1 : 0) : E, P: last ? 1 : exact ? passed.length + (pm && pm.pass ? 1 : 0) : P, exact, cut, scores, sorted: sorted.map((e) => e.id), passed: passed.map((e) => e.id), anonIn, anonInMS, anonOut: anon.n, anonMS: exact ? null : { mS: MODEL.a + MODEL.b * (anon.mu), sS: Math.sqrt((MODEL.b * anon.sd) ** 2 + MODEL.s ** 2) }, revival, entrants: named.map((e) => e.id) });
     if (last) break;
     named = passed;
   }
@@ -741,7 +743,23 @@ export function judgesFor(g, id, year, n) {
 }
 
 // ================================================================ the player
-function playerUnit(g) { return has(g, 'unit') ? safe('unit', () => g.unit(), null) : null; }
+// g.unit() (owarai.js); without it (not loaded yet): the 相方 makes a combi, else a pin act named after the player
+export function playerUnit(g) {
+  if (has(g, 'unit')) return safe('unit', () => g.unit(), null);
+  const st = g.state;
+  if (!st) return null;
+  const P = st.partner && PEOPLE[st.partner];
+  const me = { id: 'player', name: st.name, short: st.name, role: P ? 'tsukkomi' : 'pin', look: st.look || {}, stats: {} };
+  const base = { formed: { year: startYear(g), month: 4, day: 1 }, harmony: 50, amateur: !st.agency, agency: st.agency || null, dissolved: false };
+  return P ? { id: `u_${P.id}`, type: 'combi', name: `${st.name}と${P.short || P.name}`, members: [me, { id: P.id, name: P.name, short: P.short || P.name, role: 'boke', look: P.look || {}, stats: {} }], style: 'manzai', source: 'people', ...base }
+    : { id: 'solo', type: 'pin', name: st.name, members: [me], style: 'pin', source: 'solo', ...base };
+}
+// g.unitPower(kind) (owarai.js); without it: the お笑い skill
+export function playerPower(g, kind) {
+  if (has(g, 'unitPower')) return num(safe('unitPower', () => g.unitPower(kind), 40), 40);
+  const w = num(g.state && g.state.skills && g.state.skills.warai, 0);
+  return clamp(Math.round(12 + w * 0.7), 5, 95);
+}
 export function playerUnitName(g) {
   const u = playerUnit(g);
   return (u && u.name) || (g.state && g.state.name) || 'あなた';
@@ -928,12 +946,13 @@ export function applyReward(g, id, what, opts = {}) {
   if (fans) g.addFans(fans, true);
   if (money) { g.addMoney(money, true); cstate(g).stats.prize = num(cstate(g).stats.prize) + money; }
   if (stress) g.addNeed('stress', stress);
-  if (harmony) addHarmony(g, harmony);
+  if (harmony) addHarmony(g, harmony, what === 'out' ? '賞レースで敗退' : what === 'champion' ? '賞レースで優勝' : '賞レースで勝ち上がった');
   if ((what === 'champion' || what === 'runnerup' || what === 'finalist') && prestigeOf(def) >= 40) offerShows(g, id, what);
   return { fame, fans, money, stress, harmony };
 }
-export function addHarmony(g, n) {
-  if (has(g, 'addHarmony')) { safe('addHarmony', () => g.addHarmony(n)); return; }
+export function addHarmony(g, n, why = '') {
+  if (has(g, 'addHarmony')) { safe('addHarmony', () => g.addHarmony(n, why)); return; }
+  if (has(g, 'unitHarmony')) { safe('unitHarmony', () => g.unitHarmony(n, why)); return; }
   const pid = g.state && g.state.partner;
   if (pid && has(g, 'addAff')) safe('addAff', () => g.addAff(pid, n, true));
 }
@@ -1186,7 +1205,7 @@ export const CONTEST_UI = {};
 
 // internals shared with contests_run.js / contest_ui.js / places/shourace.js
 export const internals = {
-  cstate, cycleOf, seasonYearOf, contestInfo, dueOn, eventsOn, simOf, entryOf, registerEntry, eligibilityOf, feeOf, prizeOf, applyReward, addHarmony,
+  cstate, playerUnit, playerPower, cycleOf, seasonYearOf, contestInfo, dueOn, eventsOn, simOf, entryOf, registerEntry, eligibilityOf, feeOf, prizeOf, applyReward, addHarmony,
   pushNews, rivalsFor, judgesFor, panelScores, scaleOf, toFieldScore, playerScoreDist, PHI, kindOf, KIND_LABEL, roundsOf, labelOf, contestName, colorOf,
   prestigeOf, isInvitational, dateText, todayOf, playerUnitName, bump, resultsOf, historyRows, lastDoneYear, logOnce, realToInternal, yenLabel,
   OFFICE_FROM, NEWS_FROM, judgeComment, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, TAG_COLORS, hostPerson, rngOf, gauss, pickR, MODEL,

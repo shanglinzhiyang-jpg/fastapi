@@ -342,8 +342,9 @@ export function runRevival(m, year, meScore = null) {
     const pop = rules.revival.kind === 'vote' ? (c ? c.fin * 2 + c.sm : 0) : 0;
     return clamp(rivalScore(p, q, h01(sd(m, year), year, 'rev', key)) + pop * 0.6, 0, 100);
   };
-  const keys = fin.losers.slice();
-  if (meScore != null) keys.push('me');
+  let keys = fin.losers.slice();
+  if (meScore == null) keys = keys.filter((k) => k !== 'me');
+  else if (!keys.includes('me')) keys.push('me');
   const table = keys.map((key) => ({ key, s: Math.round(rs(key)) }));
   let winner;
   let blocks = null;

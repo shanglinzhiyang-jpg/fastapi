@@ -9,7 +9,7 @@ import {
   rngFor, gauss, shuffleR, pickR, clamp, wareki, nendo, deviceOf, mediaOf, ordinal, yearOf, dstate, yearLog, addTitle,
   unitOf, unitName, unitYears, geireki, fame, isKansai, perform, rivals, judges, rivalScore, news, omakase, withBoard, pause,
   boardSpec, nameOf, stdRound, standing, finishRound, flawLines, audienceVotes, sumV, countV, selResult, activityScore,
-  pastChampion, editionCounter, checkElig, defaultKind, pickBeats, personName, combiName, rakugoName,
+  pastChampion, editionCounter, checkElig, defaultKind, pickBeats, personName, combiName, rakugoName, rid, rname, normalizeRuns,
 } from './contests_data_lib.js';
 
 const say = (g, t, o) => g.say(t, o);
@@ -19,7 +19,7 @@ const MC = (r) => ({ name: `進行役・${personName(r)}` });
 // 1対1 タイマン (THE SECOND): both acts do a 6-minute set, 100 audience judges give 1/2/3 points each (300 max).
 // Tie → more 3-point votes wins → 抽選 (verified rule, see THE SECOND sources).
 async function taiman(g, ctx, b, opp, o = {}) {
-  const r = rngFor(g, ctx.id, ctx.round && ctx.round.id, 'taiman', opp.name, o.salt || '');
+  const r = rngFor(g, ctx.id, rid(ctx), 'taiman', opp.name, o.salt || '');
   const first = r() < 0.5; // 先攻・後攻は抽選
   b.set('match', { a: { name: unitName(g), me: true, score: 0, tag: first ? '先攻' : '後攻' }, b: { name: opp.name, score: 0, tag: first ? '後攻' : '先攻' }, max: 300, reveal: 0, label: o.label || '1対1のタイマン　観客100人×最大3点' });
   await say(g, `${first ? 'こちらが先攻' : `先攻は${opp.name}`}。${o.intro || '6分間、どちらがより面白いか。'}`);
@@ -28,7 +28,7 @@ async function taiman(g, ctx, b, opp, o = {}) {
   const os = rivalScore(g, opp, { kind: 'manzai', length: 360 }, r);
   const va = audienceVotes(res.score, 100, r);
   const vb = audienceVotes(os, 100, r);
-  let sa = sumV(va); let sb = sumV(vb);
+  const sa = sumV(va); const sb = sumV(vb);
   b.set('votes', { n: 100, votes: va, who: unitName(g), label: '観客審査員100人の採点（3点＝とても面白かった）' });
   await pause(g, 70);
   let win = sa > sb;
@@ -40,7 +40,6 @@ async function taiman(g, ctx, b, opp, o = {}) {
   b.set('match', { a: { name: unitName(g), me: true, score: sa, votes: { 3: countV(va, 3), 2: countV(va, 2), 1: countV(va, 1) }, win }, b: { name: opp.name, score: sb, votes: { 3: countV(vb, 3), 2: countV(vb, 2), 1: countV(vb, 1) }, win: !win }, max: 300, label: o.label || '1対1のタイマン' });
   g.sfx(win ? 'applause' : 'buzz');
   await say(g, `${unitName(g)} ${sa}点 − ${sb}点 ${opp.name}。${tie}${win ? '勝ち抜け！' : '敗退…'}`);
-  void sa; void sb;
   return { win, score: res.score, res, sa, sb };
 }
 // several acts score from N judges (each 1..10 or 1..100); returns sorted rows
@@ -80,22 +79,32 @@ const kindLabel = { manzai: '漫才', conte: 'コント', pin: 'ピン芸', raku
 //   4組×8ブロックの1対1トーナメント; 優勝賞金1000万円（第1・2回で同額と発表）。参加費は未確認（ゲームでは無料扱い）。
 // Sources: oricon.co.jp/news/2269344, /2370530, /2319285, /2366734; news.mynavi.jp/article/20230430-2669388, 20230329-2639049,
 //   20260116-3979043; natalie.mu/owarai/news/513348, 672314; toyokeizai.net/articles/-/673438; weblio THE SECOND (ja.wikipedia mirror)
+// 選考会: the std round, after the cross-contest rule (全国ネットの漫才賞レース優勝経験者は出られない)
+const SECOND_SENKOU = stdRound({ kind: 'manzai', length: 360, pass: 32, field: 150, level: 58, set: 'theater', judgeText: '公認審査員が32組を選出',
+        beats: [
+          '楽屋に並ぶのは、芸歴20年近いベテランばかり。誰かが「同窓会みたいやな」とつぶやいた。',
+          '持ち時間は6分。いつもの4分ネタに、もうひと山を足してきた。',
+          (g) => `「若い頃に置いてきたもん、取りに来たんや」——${unitName(g)}の楽屋に、小さな笑いが起きた。`,
+          '選考会は劇場の小屋。客席には審査員と、少しの関係者だけ。',
+        ] });
+async function secondSenkou(g, ctx) {
+  const pc = pastChampion(g, ['m1', 'themanzai', 'thesecond'], yearOf(g, ctx));
+  if (pc) {
+    await say(g, ['受付で書類を確認された。', '「申し訳ありません。全国ネットの漫才賞レースで優勝経験のある組は出場できない規定です」']);
+    return { passed: false, score: 0, place: null, field: 150, note: '出場資格なし（優勝経験）' };
+  }
+  return SECOND_SENKOU(g, ctx);
+}
 const SECOND = {
   name: 'THE SECOND〜漫才トーナメント〜', short: 'THE2nd', kind: 'manzai', category: 'major', color: '#b8892a',
   organizer: 'フジテレビ', broadcaster: 'フジテレビ系（グランプリファイナル＝全国ネット・ゴールデン生放送）', venue: 'フジテレビ（グランプリファイナル生放送）', region: 'all',
   history: { founded: 2023, ended: null, gaps: [], revived: null, note: '結成16年以上の漫才師による“セカンドチャンス”。審査は観客100人、1対1のタイマン。',
     sources: ['https://www.oricon.co.jp/news/2269344/full/', 'https://news.mynavi.jp/article/20230430-2669388/', 'https://news.mynavi.jp/article/20260116-3979043/', 'https://natalie.mu/owarai/news/672314', 'https://toyokeizai.net/articles/-/673438'] },
   editionOf: editionCounter(2023),
-  schedule: { entry: { from: [1, 1], to: [1, 6] }, final: [5, 6] },
+  schedule: { entry: { from: [12, 1], to: [1, 6] }, final: [5, 6] }, // entry Dec (previous year) – mid-Jan
   rounds: [
     { id: 'senkou', name: '選考会', when: [[2, 2], [2, 6]], venues: ['東京', '大阪'], length: 360, pass: 32, field: 150, judge: 'staff', scoring: '事務局公認の審査員による選考（6分ネタ）',
-      run: stdRound({ kind: 'manzai', length: 360, pass: 32, field: 150, level: 58, set: 'theater', judgeText: '公認審査員が32組を選出',
-        beats: [
-          '楽屋に並ぶのは、芸歴20年近いベテランばかり。誰かが「同窓会みたいやな」とつぶやいた。',
-          '持ち時間は6分。いつもの4分ネタに、もうひと山を足してきた。',
-          (g) => `「若い頃に置いてきたもん、取りに来たんや」——${unitName(g)}の楽屋に、小さな笑いが起きた。`,
-          '選考会は劇場の小屋。客席には審査員と、少しの関係者だけ。',
-        ] }) },
+      run: (g, ctx) => secondSenkou(g, ctx) },
     { id: 'ko32', name: '開幕戦ノックアウトステージ 32→16', when: [3, 6], length: 360, pass: 16, field: 32, judge: 'audience', judges: 100, scoring: '観客100人×1〜3点（300点満点）・1対1',
       run: (g, ctx) => secondKO(g, ctx, 62, '開幕戦ノックアウトステージ') },
     { id: 'ko16', name: 'ノックアウトステージ 16→8', when: [4, 8], length: 360, pass: 8, field: 16, judge: 'audience', judges: 100, scoring: '観客100人×1〜3点（300点満点）・1対1',
@@ -103,13 +112,9 @@ const SECOND = {
     { id: 'final', name: 'グランプリファイナル', when: [5, 6], length: 360, field: 8, judge: 'audience', judges: 100, tv: true, final: true, scoring: '8組のトーナメント（準々決勝・準決勝・決勝）観客100人×1〜3点',
       run: secondFinal },
   ],
-  eligibility: (g, unit, year) => {
-    const c = checkElig(g, unit, year, { members: [2, null], pro: true, amateur: false, unitYearsMin: 16 });
-    const pc = pastChampion(g, ['m1', 'themanzai', 'thesecond'], year);
-    if (pc) return { ok: false, why: [c.why, '全国ネットの漫才賞レースで優勝経験がある組は出場できない'].filter(Boolean).join('／') };
-    return c;
-  },
-  eligibilityNote: '結成16年以上のプロの漫才師（アマチュア・即席ユニット不可／全国ネットの漫才賞レース優勝経験者は不可）',
+  // object form so D1 builds a realistic field; the cross-contest rule (past national champions) is checked at the 選考会 (secondSenkou)
+  eligibility: { members: [2, null], pro: true, amateur: false, unitYearsMin: 16, note: '結成16年以上のプロの漫才師（アマチュア・即席ユニット不可／全国ネットの漫才賞レース優勝経験者は不可）',
+    extra: (g, unit, year) => (pastChampion(g, ['m1', 'themanzai', 'thesecond'], year) ? { ok: false, why: '全国ネットの漫才賞レースで優勝経験がある組は出場できない' } : { ok: true }) },
   fee: 0, feeNote: '参加費は未確認（ゲームでは無料扱い）',
   prize: 10000000, prizeText: '優勝賞金1000万円',
   perform: { kind: 'manzai', length: 360 },
@@ -206,8 +211,7 @@ const DOUBLE = {
     { id: 'sf', name: '準決勝', when: [6, 5], venues: ['東京'], length: 240, pass: 8, field: 25, judge: 'staff', scoring: '漫才とコントを同日に披露', run: doubleRound(240, 8, 25, 68) },
     { id: 'final', name: '決勝', when: [7, 8], length: 240, field: 8, judge: 'panel', judges: 5, scoring: '漫才4分＋コント4分・審査員5人×100点＝500点満点', tv: true, final: true, run: doubleFinal },
   ],
-  eligibility: (g, unit, year) => checkElig(g, unit, year, { members: [2, null], pro: true, amateur: true }),
-  eligibilityNote: '2人以上ならプロ・アマ、芸歴を問わない',
+  eligibility: { members: [2, null], pro: true, amateur: true, note: '2人以上ならプロ・アマ、芸歴を問わない' },
   fee: 0, feeNote: '参加費は未確認（ゲームでは無料扱い）',
   prize: 10000000, prizeText: '優勝賞金1000万円',
   perform: { kind: 'double', length: 240 },
@@ -225,19 +229,19 @@ const DOUBLE = {
 };
 function doubleRound(length, pass, field, level) {
   return async (g, ctx) => withBoard(g, boardSpec(ctx, '', { set: 'theater' }), async (b) => {
-    const r = rngFor(g, ctx.id, ctx.round.id, 'dbl');
+    const r = rngFor(g, ctx.id, rid(ctx), 'dbl');
     for (const t of pickBeats(DOUBLE.beats, r, 1)) await say(g, t);
-    b.set('stage', { caption: `${ctx.round.name}　1本目：漫才` });
+    b.set('stage', { caption: `${rname(ctx)}　1本目：漫才` });
     const skip = await omakase(g, ctx);
-    const a = await perform(g, ctx, { kind: 'manzai', length, title: `${ctx.round.name} 漫才`, skip, venue: { size: 'theater', crowd: 'normal', pressure: 50 + level / 3 } });
-    b.set('stage', { caption: `${ctx.round.name}　2本目：コント` });
+    const a = await perform(g, ctx, { kind: 'manzai', length, title: `${rname(ctx)} 漫才`, skip, venue: { size: 'theater', crowd: 'normal', pressure: 50 + level / 3 } });
+    b.set('stage', { caption: `${rname(ctx)}　2本目：コント` });
     await say(g, '漫才が終わるとすぐ着替え。2本目はコントだ。');
-    const c = await perform(g, ctx, { kind: 'conte', length, title: `${ctx.round.name} コント`, skip, venue: { size: 'theater', crowd: 'normal', pressure: 50 + level / 3 } });
+    const c = await perform(g, ctx, { kind: 'conte', length, title: `${rname(ctx)} コント`, skip, venue: { size: 'theater', crowd: 'normal', pressure: 50 + level / 3 } });
     const score = Math.round((a.score + c.score) / 2 - Math.abs(a.score - c.score) * 0.1); // a weak side hurts (二刀流)
     await say(g, `漫才 ${a.score}点・コント ${c.score}点 → 二刀流の総合 ${score}点${Math.abs(a.score - c.score) > 20 ? '（片方が弱いと総合が伸びない）' : ''}`);
     const rvs = rivals(g, ctx, 11, { level, kind: 'manzai', amateur: true });
     const st = standing(g, ctx, score, rvs, { kind: 'manzai', pass, field });
-    b.set('ranking', { rows: st.rows, passLine: st.passN, head: `${ctx.round.name}　結果（漫才＋コント）` });
+    b.set('ranking', { rows: st.rows, passLine: st.passN, head: `${rname(ctx)}　結果（漫才＋コント）` });
     await pause(g, 40);
     return finishRound(g, ctx, { score, rank: a.rank }, st, { kind: a.score < c.score ? 'manzai' : 'conte' });
   });
@@ -265,7 +269,7 @@ async function doubleFinal(g, ctx) {
     await revealRanking(g, b, rows, '1st STAGE（500点満点）', { max: 500, passLine: y >= 2026 ? 5 : null, unit: '点' });
     const myPlace = rows.findIndex((x) => x.me) + 1;
     await say(g, `${unitName(g)}は${rows.find((x) => x.me).total}点、${n}組中${myPlace}位。（漫才${sc.manzai}・コント${sc.conte}）`);
-    let champ = false; let place = myPlace;
+    let champ = false; let place = myPlace; let winnerName = null;
     if (y >= 2026) {
       if (myPlace <= 5) {
         await say(g, 'ファイナルステージへ！ 最後の1本は、漫才かコントか。');
@@ -276,9 +280,10 @@ async function doubleFinal(g, ctx) {
         await revealRanking(g, b, fr, 'FINAL STAGE（500点満点）', { max: 500, unit: '点' });
         place = fr.findIndex((x) => x.me) + 1;
         champ = place === 1;
+        winnerName = fr[0].name;
       }
     } else champ = myPlace === 1;
-    if (champ) { g.sfx('fanfare'); await say(g, `二刀流No.1——${unitName(g)}！ 漫才とコント、両方で頂点に立った。`); champion(g, ctx, '優勝'); } else await say(g, `優勝は${(y >= 2026 ? rows[0] : rows[0]).name === unitName(g) ? '…' : rows[0].name}。${unitName(g)}は${place}位。`);
+    if (champ) { g.sfx('fanfare'); await say(g, `二刀流No.1——${unitName(g)}！ 漫才とコント、両方で頂点に立った。`); champion(g, ctx, '優勝'); } else await say(g, `優勝は${winnerName || rows[0].name}。${unitName(g)}は${place}位。`);
     return { passed: champ, champion: champ, score: mine, place, field: n, award: champ ? '優勝' : null, detail: { manzai: sc.manzai, conte: sc.conte } };
   });
 }
@@ -309,11 +314,10 @@ const MANZAI = {
     { id: 'r2', name: '2回戦（認定漫才師50組の選考）', when: [9, 5], venues: ['東京', '大阪'], length: 240, pass: 50, field: 500, judge: 'staff', scoring: '上位50組が「認定漫才師」',
       run: stdRound({ kind: 'manzai', length: 240, pass: 50, field: 500, level: 56, head: '2回戦　結果（上位50組＝認定漫才師）', passText: (g) => `「THE MANZAI認定漫才師」50組に選ばれた！ 次は本戦サーキット。`, beats: ['ここを抜ければ「認定漫才師」。年末までの本戦サーキットを回れる。', 'テレビ局のスタッフが客席の端でメモを取っている。'] }) },
     { id: 'circuit', name: '本戦サーキット', when: [[10, 3], [10, 8], [11, 3], [11, 8]], length: 240, pass: 11, field: 50, judge: 'audience', scoring: '各公演の順位に応じたポイント（ゲーム上の配点）→上位11組が決勝', run: manzaiCircuit },
-    { id: 'wild', name: 'ワイルドカード決定戦', when: [12, 4], length: 240, pass: 1, field: 39, judge: 'vote', scoring: 'サーキット12位以下から1組', tv: true, revival: true, run: manzaiWildcard },
+    { id: 'wild', name: 'ワイルドカード決定戦', when: [12, 4], length: 240, pass: 1, field: 39, judge: 'vote', scoring: 'サーキット12位以下から1組', tv: true, wildcard: true, run: manzaiWildcard },
     { id: 'final', name: '決勝', when: [12, 5], length: 240, field: 12, judge: 'vote', judges: 9, scoring: '審査員9票＋視聴者1票。グループ1位が最終決戦', tv: true, final: true, run: manzaiFinal },
   ],
-  eligibility: (g, unit, year) => checkElig(g, unit, year, { members: [2, null], pro: true, amateur: false }),
-  eligibilityNote: '結成年数不問・プロの漫才師（ピン同士の即席コンビは不可）',
+  eligibility: { members: [2, null], pro: true, amateur: false, note: '結成年数不問・プロの漫才師（ピン同士の即席コンビは不可）' },
   fee: 0, feeNote: '参加費は未確認（ゲームでは無料扱い）',
   prize: 0, prizeText: '現金の賞金なし（フジテレビの番組出演権・スポンサー副賞）',
   perform: { kind: 'manzai', length: 240 },
@@ -459,11 +463,8 @@ const NHK_OWARAI = {
       run: stdRound({ kind: 'any', length: 240, pass: 8, field: 290, level: 56, beats: ['NHKの会議室を仕切った控室。ほかの局より、少しだけ静かだ。', '「NHKなので、商品名や企業名はネタに入れないでくださいね」とディレクター。', '予選会場には東京も大阪も、結成10年未満の若手がぎっしり。'] }) },
     { id: 'honsen', name: '本選（生放送）', when: [10, 8], length: 240, field: 8, judge: 'panel', judges: 5, scoring: '8組を2ブロックに抽選→各ブロック1位が決勝（ゲーム上：審査員5人×10点）', tv: true, final: true, run: nhkHonsen },
   ],
-  eligibility: (g, unit, year) => {
-    const u = unit || unitOf(g);
-    return checkElig(g, u, year, { members: [1, null], pro: true, amateur: false, unitYearsLt: 10 });
-  },
-  eligibilityNote: '結成10年未満（ピン芸人は活動開始から10年未満）',
+  // 結成10年未満 = unitYears ≤ 9 (A counts a pin's years from the start of the act)
+  eligibility: { members: [1, null], unitYearsMax: 9, note: '結成10年未満（ピン芸人は活動開始から10年未満）' },
   fee: 0, feeNote: '参加費は未確認（ゲームでは無料扱い）',
   prize: 0, prizeText: '大賞（賞金は未確認）',
   perform: { kind: 'any', length: 240 },
@@ -515,7 +516,7 @@ async function nhkBlocks(g, ctx, o) {
     return { passed: champ, champion: champ, score: myScore, place: champ ? 1 : inFinal ? 2 : 5, field: o.n, award: champ ? (o.award || '大賞') : null };
   });
 }
-const nhkHonsen = (g, ctx) => nhkBlocks(g, ctx, { kind: defaultKind(g), length: 240, n: 8, nJ: 5, max: 10, set: 'hall', title: `${nameOf(NHK_OWARAI, ctx.year)} 本選`, award: '大賞', level: 66 });
+function nhkHonsen(g, ctx) { return nhkBlocks(g, ctx, { kind: defaultKind(g), length: 240, n: 8, nJ: 5, max: 10, set: 'hall', title: `${nameOf(NHK_OWARAI, ctx.year)} 本選`, award: '大賞', level: 66 }); }
 
 // ============================================================== NHK新人落語大賞（← NHK新人演芸大賞 落語部門 ← NHK新人演芸コンクール）
 // VERIFIED: 2014年から『NHK新人演芸大賞』の落語部門を改称; 対象＝入門15年未満（2017年報道）; 東京・大阪の予選（計125人の年）を経た
@@ -537,12 +538,7 @@ const NHK_RAKUGO = {
       run: stdRound({ kind: 'rakugo', length: 600, pass: 5, field: 125, level: 58, set: 'kouza', beats: ['楽屋で着物をたたみ直す。帯をきゅっと締めると、背筋が伸びた。', '出囃子が鳴る。めくりに自分の名前。', '「まくらは短め、本題に時間を」——師匠の声が頭をよぎる。'] }) },
     { id: 'honsen', name: '本選（5人の高座）', when: [11, 2], length: 660, field: 5, judge: 'panel', judges: 5, scoring: '持ち時間11分・審査員5人×10点＝50点満点', tv: true, final: true, run: rakugoHonsen },
   ],
-  eligibility: (g, unit, year) => {
-    const u = unit || unitOf(g);
-    const c = checkElig(g, u, year, { members: [1, 1], geirekiLt: 15 });
-    return c.ok ? c : { ok: false, why: c.why + '（入門15年未満の落語家）' };
-  },
-  eligibilityNote: '入門15年未満の落語家（ピン）',
+  eligibility: { members: [1, 1], geirekiMax: 14, note: '入門15年未満の落語家' },
   fee: 0, prize: 0, prizeText: '大賞（賞金は未確認）', perform: { kind: 'rakugo', length: 660 },
   news: [
     (g, c) => `${nendo(c.year)} ${nameOf(NHK_RAKUGO, c.year)}、本選に進む5人が決定`,
@@ -596,8 +592,7 @@ const NHK_KAMIGATA = {
       run: stdRound({ kind: 'any', length: 240, pass: 8, field: 125, level: 54, beats: ['NHK大阪のロビーから大阪城が見える。', '控室では、同期の芸人どうしがネタを小声で合わせている。', '「関西の新人の登竜門」——ポスターの文字が誇らしい。'] }) },
     { id: 'honsen', name: '本選（生放送）', when: [5, 8], length: 240, field: 8, judge: 'panel', judges: 5, scoring: '本選8組（ゲーム上：審査員5人×10点、上位が優勝・優秀賞）', tv: true, final: true, run: kamigataHonsen },
   ],
-  eligibility: (g, unit, year) => checkElig(g, unit, year, { members: [1, null], unitYearsLt: 10, kansai: true }),
-  eligibilityNote: '結成10年未満・関西を拠点に活動',
+  eligibility: { members: [1, null], unitYearsMax: 9, region: 'osaka', note: '結成10年未満・関西を拠点に活動する若手' },
   fee: 0, prize: 0, prizeText: '優勝（賞金は未確認）', perform: { kind: 'any', length: 240 },
   news: [
     (g, c) => `${ordinal(c.edition)}NHK上方漫才コンテスト、本選8組が決定`,
@@ -651,8 +646,8 @@ const KAMIGATA_MANZAI = {
     { id: 'nominate', name: 'ノミネート（審査会）', when: [3, 5], judge: 'staff', scoring: 'その年度の活躍ぶりで候補を選ぶ', run: kmNominate },
     { id: 'happyou', name: '発表会（生中継）', when: [4, 6], length: 240, judge: 'panel', judges: 5, scoring: '奨励賞・新人賞の候補がネタ披露→審査', tv: true, final: true, run: kmHappyou },
   ],
-  eligibility: (g, unit, year) => checkElig(g, unit, year, { members: [2, null] }),
-  eligibilityNote: '上方（関西）で活躍する漫才師。新人賞は結成10年目まで。応募ではなく審査会のノミネート',
+  // selection award: D1's 招待 (invite) = the 審査会 has the act on its list; the nominate round then decides the tier (or none)
+  eligibility: { members: [2, null], region: 'osaka', repeat: true, invite: { fame: 300 }, note: '上方（関西）で活躍する漫才師。新人賞は結成10年目まで。応募ではなく審査会のノミネート' },
   fee: 0, prize: 0, prizeText: '大賞・奨励賞・新人賞', perform: { kind: 'manzai', length: 240 },
   news: [
     (g, c) => `${ordinal(c.edition)}上方漫才大賞、ノミネート発表。新人賞は結成10年目までの漫才師から`,
@@ -719,7 +714,7 @@ async function kmHappyou(g, ctx) {
     const act = activityScore(g, y, []);
     acts.forEach((a) => { a.score = Math.round(a.score * 0.8 + (a.me ? act : 50 + gauss(r) * 10) * 0.2); });
     const rows = panelScores(g, r, acts, 5, 10);
-    b.set('award', { head: `${ordinal(ctx.edition)}上方漫才大賞`, rows: [{ award: '大賞', name: personName(r).split(' ')[0] + '・' + combiName(r) }, { award: label, name: rows[0].name, me: rows[0].me }], label: `${label}発表` });
+    b.set('award', { head: `${ordinal(ctx.edition)}上方漫才大賞`, rows: [{ award: '大賞', name: combiName(r) }, { award: label, name: rows[0].name, me: rows[0].me }], label: `${label}発表` });
     await pause(g, 50);
     const won = rows[0].me;
     if (won) { g.sfx('fanfare'); await say(g, `${label}は——${unitName(g)}！`); champion(g, ctx, label); }
@@ -741,14 +736,13 @@ const KAMIGATA_OWARAI = {
   history: { founded: 1972, ended: 2006, gaps: [], revived: null, note: '読売テレビが1972〜2006年度に35回開催した上方演芸の賞。2007〜08年度は「笑いの超新星 新人賞」、2012年からytv漫才新人賞。ゲームでは2007年以降も復刻開催。',
     sources: ['https://www.weblio.jp/content/%E4%B8%8A%E6%96%B9%E3%81%8A%E7%AC%91%E3%81%84%E5%A4%A7%E8%B3%9E', 'https://www.weblio.jp/wkpja/content/%E4%B8%8A%E6%96%B9%E3%81%8A%E7%AC%91%E3%81%84%E5%A4%A7%E8%B3%9E_%E4%B8%8A%E6%96%B9%E3%81%8A%E7%AC%91%E3%81%84%E5%A4%A7%E8%B3%9E%E3%81%AE%E6%A6%82%E8%A6%81'] },
   editionOf: editionCounter(1972),
-  schedule: { entry: { from: [9, 1], to: [9, 10] }, final: [12, 6] },
+  schedule: { entry: null, final: [12, 6] },
   selection: true,
   rounds: [
     { id: 'shinjin_yosen', name: '新人部門 予選／各賞の選考', when: [10, 6], length: 240, pass: 6, field: 60, judge: 'staff', scoring: '芸歴10年以内は新人部門の予選（6組が本選）、それ以上は各賞の選考', run: koNominate },
     { id: 'honsen', name: '本選・発表（年末特番）', when: [12, 6], length: 240, field: 6, judge: 'panel', judges: 7, scoring: '新人部門本選6組→最優秀新人賞1・優秀新人賞5／大賞・金賞・銀賞は選考', tv: true, final: true, run: koHonsen },
   ],
-  eligibility: () => ({ ok: true, why: '' }),
-  eligibilityNote: '上方の大衆演芸（漫才・コント・落語・新喜劇…）。新人部門は芸歴10年以内',
+  eligibility: { region: 'osaka', repeat: true, invite: { fame: 60 }, note: '上方の大衆演芸（漫才・コント・落語・新喜劇…）。新人部門は芸歴10年以内' },
   fee: 0, prize: 0, prizeText: '大賞・金賞・銀賞・最優秀新人賞ほか', perform: { kind: 'any', length: 240 },
   news: [
     (g, c) => `${c.revival ? '【復刻】' : ''}${ordinal(c.edition)}上方お笑い大賞、新人部門の本選6組が決定`,
@@ -808,7 +802,7 @@ async function koHonsen(g, ctx) {
 // VERIFIED: 読売テレビ; 上方お笑い大賞の後継として2012年に新設（芸歴10年未満が対象）; 関西で活動し、メンバー全員が芸歴10年目以内
 //   の漫才師; 年度内に“選考会”ROUNDが3回、各ROUNDの上位2組＋敗者のなかで最高点の1組（敗者復活枠）の計7組が年度末の“決定戦”へ;
 //   ネタ3分、審査員4人の合計400点満点; 第15回決定戦＝2026年3月1日生放送（→ 第1回＝2012年）; 決定戦は2〜3月。
-//   ゲームの暦は暦年なので、3回のROUNDは決定戦と同じ年の1〜2月に置く（本来は前年の年度内に分散）。
+//   3回のROUNDは決定戦の前年（年度内）の6・9・12月に置く（月は未確認、ゲーム上の配置）。D1の暦は決勝より後の月を前年として扱う。
 // Sources: weblio 上方お笑い大賞; natalie.mu/owarai/news/547933, 638050, 639644, 647975; oricon.co.jp/news/2439171, 2367821;
 //   daily.co.jp/gossip/2021/02/08/0014064853.shtml
 const YTV = {
@@ -817,15 +811,14 @@ const YTV = {
   history: { founded: 2012, ended: null, gaps: [], revived: null, note: '上方お笑い大賞の後継として2012年新設。3回の選考会ROUND→上位2組ずつ＋敗者復活1組の7組で決定戦。',
     sources: ['https://natalie.mu/owarai/news/639644', 'https://www.oricon.co.jp/news/2439171/full/', 'https://www.daily.co.jp/gossip/2021/02/08/0014064853.shtml'] },
   editionOf: editionCounter(2012),
-  schedule: { entry: { from: [1, 1], to: [1, 3] }, final: [3, 1] },
+  schedule: { entry: { from: [5, 1], to: [5, 10] }, final: [3, 1] }, // entry / ROUNDs in the previous calendar year (年度)
   rounds: [
-    { id: 'round1', name: 'ROUND1（選考会）', when: [1, 5], length: 180, pass: 2, field: 10, judge: 'panel', judges: 4, scoring: '3分・審査員4人×100点。上位2組が決定戦', chance: true, run: (g, ctx) => ytvRound(g, ctx, 1) },
-    { id: 'round2', name: 'ROUND2（選考会）', when: [1, 9], length: 180, pass: 2, field: 10, judge: 'panel', judges: 4, scoring: '同上', chance: true, run: (g, ctx) => ytvRound(g, ctx, 2) },
-    { id: 'round3', name: 'ROUND3（選考会）', when: [2, 5], length: 180, pass: 2, field: 10, judge: 'panel', judges: 4, scoring: '同上（敗者の最高得点1組は敗者復活）', chance: true, run: (g, ctx) => ytvRound(g, ctx, 3) },
+    { id: 'round1', name: 'ROUND1（選考会）', when: [6, 5], length: 180, pass: 2, field: 10, judge: 'panel', judges: 4, scoring: '3分・審査員4人×100点。上位2組が決定戦', chance: true, run: (g, ctx) => ytvRound(g, ctx, 1) },
+    { id: 'round2', name: 'ROUND2（選考会）', when: [9, 5], length: 180, pass: 2, field: 10, judge: 'panel', judges: 4, scoring: '同上', chance: true, run: (g, ctx) => ytvRound(g, ctx, 2) },
+    { id: 'round3', name: 'ROUND3（選考会）', when: [12, 3], length: 180, pass: 2, field: 10, judge: 'panel', judges: 4, scoring: '同上（敗者の最高得点1組は敗者復活）', chance: true, run: (g, ctx) => ytvRound(g, ctx, 3) },
     { id: 'kettei', name: '決定戦（生放送）', when: [3, 1], length: 180, field: 7, judge: 'panel', judges: 4, scoring: '7組・審査員4人×100点→上位3組の最終決戦（ゲーム上）', tv: true, final: true, run: ytvKettei },
   ],
-  eligibility: (g, unit, year) => checkElig(g, unit, year, { members: [2, null], geirekiMax: 10, kansai: true }),
-  eligibilityNote: '関西で活動する漫才師、メンバー全員が芸歴10年目以内',
+  eligibility: { members: [2, null], geirekiMax: 10, region: 'osaka', note: '関西で活動する漫才師、メンバー全員が芸歴10年目以内' },
   fee: 0, prize: 0, prizeText: '優勝（賞金は未確認）', perform: { kind: 'manzai', length: 180 },
   news: [
     (g, c) => `${ordinal(c.edition)}ytv漫才新人賞、ROUND1の結果発表。上位2組が決定戦へ`,
@@ -920,13 +913,12 @@ const MBS = {
   editionOf: editionCounter(2003),
   schedule: { entry: { from: [5, 1], to: [6, 5] }, final: [8, 9] },
   rounds: [
-    { id: 'y1', name: '1次予選', when: [7, 3], venues: ['大阪'], length: 180, pass: 0.3, field: 300, judge: 'staff', scoring: 'MBSの審査',
-      run: stdRound({ kind: 'manzai', length: 180, pass: 0.3, field: 300, level: 48, beats: ['MBSの会議室に、出番表が貼られている。', '控室で、高校生審査員の話題になった。「あいつら、ほんまに厳しいで」'] }) },
+    { id: 'y1', name: '1次予選', when: [7, 3], venues: ['大阪'], length: 180, pass: 0.3, field: 300, judge: 'staff', scoring: 'MBSの審査', run: (g, ctx) => mbsYosen(g, ctx) },
     { id: 'y2', name: '2次予選（高校生審査員）', when: [8, 2], length: 180, pass: 12, field: 60, judge: 'audience', judges: 200, scoring: '高校生審査員200人×1〜3点', run: (g, ctx) => mbsStudents(g, ctx, false) },
     { id: 'final', name: '決勝（高校生審査員）', when: [8, 9], length: 240, field: 12, judge: 'audience', judges: 300, scoring: '高校生審査員の採点（1〜3点）', tv: true, final: true, run: (g, ctx) => mbsStudents(g, ctx, true) },
   ],
-  eligibility: (g, unit, year) => (year <= 2004 ? checkElig(g, unit, year, { members: [2, null], unitYearsMax: 10, kansai: true }) : checkElig(g, unit, year, { members: [2, null] })),
-  eligibilityNote: '第1・2回は関西地区・結成10年以下、第3回から芸歴の制限なし',
+  // 2003–04 (第1・2回) were 関西・結成10年以下 only: checked at the 1次予選 (mbsYosen); the object keeps D1's field realistic
+  eligibility: { members: [2, null], region: 'osaka', note: '第1・2回は関西地区・結成10年以下、第3回から芸歴の制限なし' },
   fee: 0, prize: 0, prizeText: '優勝（賞金は未確認）', perform: { kind: 'manzai', length: 240 },
   news: [
     (g, c) => `${c.revival ? '【復刻】' : ''}${ordinal(c.edition)}${nameOf(MBS, c.year)}、審査員は高校生`,
@@ -938,6 +930,15 @@ const MBS = {
   ],
   beats: ['客席の高校生審査員は、手元のボタンをぎゅっと握っている。', '「流行りの言葉を使えばウケる、なんて甘くない」——先輩の忠告。', '制服の客席。笑い声が、劇場のお客さんより少し高い。'],
 };
+const MBS_YOSEN = stdRound({ kind: 'manzai', length: 180, pass: 0.3, field: 300, level: 48, beats: ['MBSの会議室に、出番表が貼られている。', '控室で、高校生審査員の話題になった。「あいつら、ほんまに厳しいで」', '受付で「高校生審査員の皆さんは別室で待機中です」と言われた。'] });
+async function mbsYosen(g, ctx) {
+  const y = yearOf(g, ctx);
+  if (y <= 2004 && (unitYears(g, y) > 10 || !isKansai(g))) {
+    await say(g, `第${y - 2002}回は関西地区・結成10年以下の漫才師に限られている。${unitName(g)}は対象外だった。`);
+    return { passed: false, score: 0, place: null, field: 300, note: '出場資格なし（第1・2回の制限）' };
+  }
+  return MBS_YOSEN(g, ctx);
+}
 async function mbsStudents(g, ctx, isFinal) {
   const r = rngFor(g, ctx.id, isFinal ? 'mf' : 'm2');
   const nJ = isFinal ? 300 : 200;
@@ -950,8 +951,7 @@ async function mbsStudents(g, ctx, isFinal) {
     b.set('votes', { n: 100, votes: votes.slice(0, 100), who: unitName(g), label: `高校生審査員${nJ}人の採点（画面は最初の100人）` });
     await pause(g, 70);
     const my = sumV(votes);
-    const nAct = isFinal ? 11 : 11;
-    const rvs = rivals(g, ctx, nAct, { level: isFinal ? 68 : 58, kind: 'manzai' });
+    const rvs = rivals(g, ctx, 11, { level: isFinal ? 68 : 58, kind: 'manzai' });
     const rows = [{ name: unitName(g), me: true, total: my }, ...rvs.map((x) => ({ name: x.name, total: sumV(audienceVotes(rivalScore(g, x, { kind: 'manzai' }, r), nJ, r, 17)) }))].sort((a, c) => c.total - a.total);
     const place = rows.findIndex((x) => x.me) + 1;
     const passN = isFinal ? 1 : 3; // 12組の見本のうち上位3組 ≒ 60組中12組
@@ -971,6 +971,6 @@ export const D2A_DEFS = {
   nhk_kamigata: NHK_KAMIGATA, kamigata_manzai: KAMIGATA_MANZAI, kamigata_owarai: KAMIGATA_OWARAI, ytv_manzai: YTV, mbs_manzai: MBS,
 };
 export function defineContestsA(register) {
-  for (const [id, def] of Object.entries(D2A_DEFS)) register(id, def);
+  for (const [id, def] of Object.entries(D2A_DEFS)) register(id, normalizeRuns(def));
 }
 void deviceOf; void wareki; void dstate; void fame; void isKansai; void flawLines; void rakugoName;

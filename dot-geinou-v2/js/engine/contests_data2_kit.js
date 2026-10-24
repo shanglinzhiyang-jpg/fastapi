@@ -9,7 +9,8 @@
 //   log: [{ id, year, round, score, place, passed }], flags: {} }.
 // Every person named here is fictional (entrants, judges, 進行役, past winners).
 
-import { contestDate } from './contests.js';
+import * as C from './contests.js';
+const contestDate = (g, day) => C.contestDate(g, day);
 import { MINIGAMES, rankFor } from './minigame.js';
 import { clamp, mulberry32 } from './util.js';
 
@@ -114,11 +115,16 @@ export function hasAnyTitle(g) {
 const STUB_RIVAL = /^ライバル\d+$/;
 const STUB_JUDGE = /^審査員\d+$/;
 // rivals: [{ name, unit, kind, power, quality, tags, agency }]
+// roundId may be a sub-stage ('block', 'final2' …): D1 is asked for the real round (opts.d1Round, else the def's
+// round with that id, else the final), skipping opts.offset acts so two sub-stages do not meet the same names.
 export function rivalsFor(g, ctx, roundId, n, opts = {}) {
   const r = rngFor(g, ctx.id, ctx.year, roundId, 'rivals');
   const level = opts.level ?? 50;
+  const rounds = (ctx.def && Array.isArray(ctx.def.rounds)) ? ctx.def.rounds : [];
+  const d1Round = opts.d1Round || (rounds.some((x) => x.id === roundId) ? roundId : rounds.length ? rounds[rounds.length - 1].id : roundId);
+  const off = Math.max(0, opts.offset | 0);
   let list = [];
-  try { if (typeof g.contestRivals === 'function') list = g.contestRivals(ctx.id, roundId, n) || []; } catch (e) { console.error(e); list = []; }
+  try { if (typeof g.contestRivals === 'function') list = (g.contestRivals(ctx.id, d1Round, n + off, ctx.year) || []).slice(off); } catch (e) { console.error(e); list = []; }
   const out = [];
   for (let i = 0; i < n; i++) {
     const x = list[i] || {};
@@ -151,7 +157,8 @@ export function judgesFor(g, ctx, n, titles = []) {
   for (let i = 0; i < n; i++) {
     const x = list[i] || {};
     const stub = !x.name || STUB_JUDGE.test(x.name);
-    out.push({ name: stub ? fictionalPerson(r) : x.name, title: (stub || !x.title ? titles[i % Math.max(1, titles.length)] : x.title) || '審査員', taste: (stub || !x.taste ? pickR(TASTES, r) : x.taste) });
+    // the contest's own roles (when given) win over D1's generic titles; D1's names / tastes are kept
+    out.push({ name: stub ? fictionalPerson(r) : x.name, title: (titles.length ? titles[i % titles.length] : x.title) || '審査員', taste: (stub || !x.taste ? pickR(TASTES, r) : x.taste) });
   }
   return out;
 }
@@ -270,11 +277,25 @@ export function judgeField(g, ctx, roundId, myScore, opts = {}) {
   rows.push(me);
   rows.sort((a, b) => b.score - a.score || (a.me ? -1 : b.me ? 1 : 0));
   const idx = rows.indexOf(me);
-  // with a big field the sample stands for everyone: scale the place
-  const place = field > rows.length ? Math.max(1, Math.round(((idx + 0.5) / rows.length) * field)) : idx + 1;
+  // with a big field the sample stands for everyone: the place comes from the sampled rivals' score
+  // distribution (normal approximation), so a 1-in-1000 act can still be 1st of 1000
+  let place = idx + 1;
+  if (field > rows.length) {
+    const xs = rows.filter((x) => !x.me).map((x) => x.score);
+    const mu = xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
+    const sd = Math.max(4, Math.sqrt(xs.reduce((a, b) => a + (b - mu) ** 2, 0) / Math.max(1, xs.length)));
+    place = clamp(1 + Math.round((field - 1) * (1 - normCdf((myScore - mu) / sd))), 1, field);
+  }
   const passed = place <= passCount;
   const cut = rows[Math.min(rows.length - 1, Math.max(0, Math.round((passCount / field) * rows.length) - 1))];
   return { place, field, passed, passCount, rows, top: rows[0], cutoff: cut ? cut.score : 0 };
+}
+
+function normCdf(z) {
+  // Abramowitz–Stegun 7.1.26
+  const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-(z * z) / 2);
+  return z >= 0 ? (1 + y) / 2 : (1 - y) / 2;
 }
 
 // Points from a panel of judges: each judge's score scatters around the act's score by taste.
@@ -294,12 +315,15 @@ export function panelPoints(g, ctx, roundId, score, judges, perMax = 100, who = 
 export async function askSkip(g, ctx, roundId) {
   const s = d2(g);
   const key = `${ctx.id}:${roundId}`;
+  // D1's runner already asked how to go on (ctx.mode 'full' | 'quick' | 'auto'): 'auto' = おまかせ (simulated)
+  if (ctx && typeof ctx.mode === 'string') { s.seen[key] = s.seen[key] || (g.state ? g.state.day : 1); return ctx.mode === 'auto'; }
   if (!s.seen[key]) { s.seen[key] = g.state ? g.state.day : 1; return false; }
   if (g.auto) return !!g.auto.skip;
   const i = await g.ask('この舞台は前にも経験している。', ['自分で演じる', 'おまかせで進める（結果だけ見る）'], { cancel: 0 });
   return i === 1;
 }
-// Pays a reward once per contest-year-key. → true when paid now.
+// Pays an EXTRA reward once per contest-year-key (D1's runner already pays fame / fans / def.prize for the recorded
+// result: use this only for what D1 cannot know — 奨励賞 money, 得点×1万円, 文芸部門賞 …). → true when paid now.
 export function grant(g, ctx, key, rw = {}) {
   const s = d2(g);
   const k = `${ctx.id}:${ctx.year}:${key}`;
@@ -308,7 +332,8 @@ export function grant(g, ctx, key, rw = {}) {
   try {
     if (rw.fame && typeof g.addFame === 'function') g.addFame(rw.fame);
     if (rw.fans && typeof g.addFans === 'function') g.addFans(rw.fans);
-    if (rw.money && typeof g.addMoney === 'function') g.addMoney(rw.money);
+    // rw.money is a REAL nominal amount of that year (D1's rule): stored as amount / era price rate
+    if (rw.money && typeof g.addMoney === 'function') g.addMoney(typeof C.realToInternal === 'function' ? C.realToInternal(rw.money) : rw.money);
     if (rw.stress && typeof g.lifeTick === 'function') g.lifeTick({ stress: rw.stress });
   } catch (e) { console.error(e); }
   return true;
@@ -322,7 +347,9 @@ export function record(g, ctx, roundId, res) {
 // A round result in the shape D1's runner records (plus extras).
 export function roundResult(res, extra = {}) {
   const score = Math.round(res && Number.isFinite(res.score) ? res.score : 0);
-  return { score, rank: rankFor(score), passed: false, place: null, field: null, comment: '', reasons: [], perf: res || null, ...extra };
+  const out = { score, rank: rankFor(score), passed: false, place: null, field: null, comment: '', reasons: [], perf: res || null, ...extra };
+  if (out.of == null && out.field != null) out.of = out.field; // D1's record() reads res.of
+  return out;
 }
 
 // The round def from ctx (D1 may pass the round object or its id).

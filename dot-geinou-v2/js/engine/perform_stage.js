@@ -301,7 +301,7 @@ const BACK = {
     vgrad(c, kx, ky + 8, kw, LIP_Y - ky - 8, ['#c42a30', '#b42428', '#a01e22', '#8a1a1e']);
     for (let x = kx + 4; x < kx + kw; x += 8) rect(c, x, ky + 10, 1, LIP_Y - ky - 12, 'rgba(0,0,0,0.12)');
     // めくり
-    const mx = 532, my = 150;
+    const mx = 598, my = 146;
     rect(c, mx - 12, my + 74, 3, 60, '#2e1a0c');
     rect(c, mx + 9, my + 74, 3, 60, '#2e1a0c');
     rect(c, mx - 22, my + 132, 44, 4, '#2e1a0c');

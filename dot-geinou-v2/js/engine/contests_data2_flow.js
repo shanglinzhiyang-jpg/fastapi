@@ -7,8 +7,8 @@
 // cfg: { round (id), name, scene (Backdrop kind), sign, intro: [str] | (g, ctx) => [str], host (fictional 進行役),
 //   kind, length (sec), venue: { name, size, crowd, pressure }, custom / useC / style / theme (see kit.stagePerform),
 //   field, pass, sample, level, spread, pinOnly (judgeField), scoreLabel (e.g. '点'), scale (display max, default 100),
-//   final: bool, board: bool, boardTitle, judgesN, judgeTitles, judgeText,
-//   awards: [{ place, name, prize, fame, fans }], fame / fans (for passing), after: async (g, ctx, out) => void }
+//   final: bool, board: bool, boardTitle, boardNote, genreTags (show each act's genre), judgesN, judgeTitles, judgeText,
+//   awards: [{ place, name, prize (real yen, paid here only below 1st: 1st is def.prize, paid by D1) }], after: async (g, ctx, out, j) }
 import { withBackdrop, showBoard } from './contests_data2_scenes.js';
 import {
   askSkip, stagePerform, judgeField, roundResult, failReasons, record, news, grant, edLabel, unitName, unitOf,
@@ -49,20 +49,22 @@ export async function stageRound(g, ctx, cfg) {
       const aw = (cfg.awards || []).find((a) => a.place === j.place);
       if (aw) out.award = aw.name;
       await g.say(out.champion ? [`結果発表――${def.name}、${edLabel(ctx)}の${(cfg.awards && cfg.awards[0] && cfg.awards[0].name) || '優勝'}は……`, `${me}！！`] : [`結果発表。${me}は ${j.place}位（${j.field}組中）。`, `優勝は「${j.top.name}」。`]);
-      if (aw) {
-        grant(g, ctx, 'award', { money: aw.prize || 0, fame: aw.fame ?? (out.champion ? 160 : 60), fans: aw.fans ?? (out.champion ? 1200 : 400) });
-        if (aw.prize) await g.say(`${aw.name}――賞金${yen(aw.prize)}を受け取った。`);
-      } else grant(g, ctx, 'final', { fame: 30, fans: 150 });
+      // fame / fans / def.prize for the place are paid by D1's runner when it records this result;
+      // an award below 1st with its own money (aw.prize) is paid here
+      if (aw && aw.prize) {
+        if (!out.champion) grant(g, ctx, `award${j.place}`, { money: aw.prize });
+        await g.say(`${aw.name}――賞金${yen(aw.prize)}。`);
+      } else if (aw && !out.champion) await g.say(`${aw.name}を受賞！`);
       if (!out.champion) out.reasons = failReasons(g, cfg.kind || def.kind, res);
     } else if (j.passed) {
       await g.say(cfg.passLine || `${cfg.name}――通過！（推定${j.place}位／${j.field}組・通過${j.passCount}組）`);
-      grant(g, ctx, `pass_${cfg.round}`, { fame: cfg.fame ?? 8, fans: cfg.fans ?? 40 });
     } else {
       out.reasons = failReasons(g, cfg.kind || def.kind, res);
       await g.say([cfg.failLine || `${cfg.name}で敗退……（推定${j.place}位／${j.field}組・通過${j.passCount}組）`, `足りなかったもの：${out.reasons.join('、')}`]);
     }
     if (cfg.board || cfg.final) {
-      const rows = j.rows.slice(0, 12).map((x, i) => ({ place: `${i + 1}`, name: x.name, score: `${toScale(x.score, scale)}${unit}`, me: !!x.me, note: (x.tags || []).slice(0, 1).join('') }));
+      const genre = (x) => (x.me ? KIND_LABEL[res.kindPlayed] || '' : x.unit === 'pin' ? 'ピン' : (x.name.length % 2 ? '漫才' : 'コント'));
+      const rows = j.rows.slice(0, 12).map((x, i) => ({ place: `${i + 1}`, name: x.name, score: `${toScale(x.score, scale)}${unit}`, me: !!x.me, note: cfg.genreTags ? genre(x) : (x.tags || []).slice(0, 1).join('') }));
       if (cfg.judgesN) {
         const js = judgesFor(g, ctx, cfg.judgesN, cfg.judgeTitles || []);
         out.judges = js;
