@@ -700,7 +700,7 @@ export function countryInfo(g, id) {
   const D = c.dispute ? DISPUTES[c.dispute] : null;
   return {
     id, name: c.name, short: c.short, leader: leaderTitle(g, id), mil: milPower(g, id), econ: gdpOf(g, id), real: true, nuclear: nuc === 'nws' || nuc === 'test' || nuc === 'test74',
-    allies: alliesOf(g, id).map((a) => a.id), dispute: D ? D.id : null, area: D ? D.name : `${c.short}との境界の海域`, far: distanceKm(id) > 5000, near: NEAR.includes(id), trade: tradeOf(g, id), bloc: blocOf(g, id),
+    allies: alliesOf(g, id).map((a) => a.id), dispute: D ? D.id : null, area: D ? D.name : NEAR.includes(id) ? `${c.short}の沿岸部` : `${c.short}との戦域`, far: distanceKm(id) > 5000, near: NEAR.includes(id), trade: tradeOf(g, id), bloc: blocOf(g, id),
   };
 }
 
@@ -1895,6 +1895,19 @@ function electionsTick(g) {
 // Others react to Japan: counter-sanctions, and sanctions lifted over time.
 function reactionsTick(g) {
   const s = W(g);
+  // a pending peace while the player does not lead the government: the NPC cabinet concludes it
+  if (s.peace && !isPM(g) && today(g) - num(s.peace.day) >= 10 && !(japanWar(g) && japanWar(g).phase === 'war')) {
+    const P = s.peace;
+    const terms = P.lost ? 'cede' : P.won ? 'keep' : 'status';
+    s.peace = null;
+    s.ties[P.enemy] = 'normal';
+    relAdd(g, P.enemy, 25);
+    for (const [cid, v] of Object.entries(s.sanctions.onJapan)) if (v && v.war) delete s.sanctions.onJapan[cid];
+    const D = COUNTRIES[P.enemy] && COUNTRIES[P.enemy].dispute;
+    if (D && s.disputes[D] && terms !== 'status') s.disputes[D].admin = terms === 'keep' ? 'jp' : P.enemy;
+    addTreaty(g, { name: `日${countryName(g, P.enemy, true)}講和条約`, kind: 'peace', with: [P.enemy], by: 'npc' });
+    news(g, `政府は${countryName(g, P.enemy, true)}と講和条約を結んだ（${{ status: '国境は戦争の前のまま', keep: `${P.area}は日本の施政のもとに`, cede: `${P.area}は相手の側に` }[terms]}）`);
+  }
   for (const [id, v] of Object.entries(s.sanctions.onJapan)) {
     if (!v) continue;
     if (!exists(g, id)) { delete s.sanctions.onJapan[id]; continue; }
@@ -1938,8 +1951,7 @@ export function onJapanWar(g, kind, w) {
   const enemy = w.enemy;
   const real = !!COUNTRIES[enemy];
   if (kind === 'start') {
-    s.rel[enemy] = num(s.rel[enemy]) - 200;
-    relAdd(g, enemy, 0);
+    relAdd(g, enemy, -200);
     if (real) { s.ties[enemy] = 'cut'; tradeShock(g, enemy, -1, 3, `${shortName(g, enemy)}との戦争`); }
     delete s.ambassadors[enemy];
     s.peace = null;
@@ -1963,7 +1975,7 @@ export function onJapanWar(g, kind, w) {
     const how = w.result;
     const D = real && COUNTRIES[enemy].dispute ? COUNTRIES[enemy].dispute : null;
     if (how === 'ceasefire' || how === 'withdraw' || how === 'lost') s.peace = { enemy, day: today(g), area: w.area, front: num(w.front), lost: how === 'lost' };
-    if (how === 'victory' && D && s.disputes[D]) { s.disputes[D].admin = 'jp'; s.disputes[D].occupied = today(g); s.peace = { enemy, day: today(g), area: w.area, front: 100 }; }
+    if (how === 'victory') { s.peace = { enemy, day: today(g), area: w.area, front: 100, won: true }; if (D && s.disputes[D]) { s.disputes[D].admin = 'jp'; s.disputes[D].occupied = today(g); } }
     if (how === 'lost' && D && s.disputes[D]) s.disputes[D].admin = enemy;
     tensionShift(g, -8);
     for (const c of s.conflicts) if (c.japan && (c.a === enemy || c.b === enemy) && c.status === 'war' && w.mode === 'alliance' && how !== 'withdraw') { /* the ally's war goes on */ }

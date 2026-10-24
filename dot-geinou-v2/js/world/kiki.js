@@ -359,15 +359,17 @@ const ARTS = {
     R(ctx, 0, 0, SW, ART_H, '#1a2a3a');
     for (let y = 0; y < ART_H; y += 16) R(ctx, 0, y, SW, 1, '#1e3044');
     for (let x = 0; x < SW; x += 16) R(ctx, x, 0, 1, ART_H, '#1e3044');
-    // abstract map: our coast (left), the enemy's coast (right), the disputed islands in the middle
+    // abstract map: our coast (left), the enemy's coast (right), the contested area in the middle
     for (let y = 30; y < ART_H; y += 4) { const w = 120 + Math.sin(y / 18) * 20; R(ctx, 0, y, w, 4, '#4a5a3a'); }
     for (let y = 20; y < ART_H; y += 4) { const w = 130 + Math.cos(y / 22) * 22; R(ctx, SW - w, y, w, 4, '#5a4a3a'); }
     for (let i = 0; i < 5; i++) R(ctx, 290 + (i % 3) * 22, 110 + i * 14, 14, 8, '#6a6a4a');
-    text(ctx, DISPUTED_AREA.name, 320, 190, { size: 12, align: 'center', color: '#d8dcf0' });
     const w = (g && g.war && g.war()) || null;
-    const nat = w ? FICTIONAL_NATIONS[w.enemy] : null;
+    const enemy = w ? w.enemyShort || (FICTIONAL_NATIONS[w.enemy] || {}).short : null;
+    text(ctx, w ? w.area : DISPUTED_AREA.name, 320, 190, { size: 12, align: 'center', color: '#d8dcf0' });
     text(ctx, '日本', 40, 140, { size: 12, color: '#f2eee2' });
-    if (nat) text(ctx, nat.short, SW - 60, 140, { size: 12, color: '#f2eee2', align: 'center' });
+    if (enemy) text(ctx, enemy, SW - 60, 140, { size: 12, color: '#f2eee2', align: 'center' });
+    if (w && w.allies && w.allies.length) text(ctx, `味方：${w.allies.map((a) => a.name).join('・')}`.slice(0, 18), 12, 26, { size: 10, color: '#9ad0ff' });
+    if (w && w.foes && w.foes.length) text(ctx, `相手側：${w.foes.map((a) => a.name).join('・')}`.slice(0, 18), SW - 12, 26, { size: 10, color: '#ffb0a0', align: 'right' });
     // the front: a gauge (劣勢 ← → 優勢), no people
     const f = w ? w.front : Number(s.front) || 0;
     panel(ctx, 170, 212, 300, 40, { bg: '#121a2e' });
@@ -383,6 +385,95 @@ const ARTS = {
       text(ctx, `民間人の死傷 ${n0(w.cas.civilians.dead + w.cas.civilians.wounded)}人`, SW - 198, 72, { size: 12, color: '#ffffff' });
       text(ctx, `相手国側 ${n0(w.cas.enemySoldiers + w.cas.enemyCivilians)}人`, SW - 198, 90, { size: 12, color: '#d8dcf0' });
     }
+  },
+  // a battle at a front: the abstract map with the arrow of the attack, no people
+  battle(ctx, t, s) {
+    R(ctx, 0, 0, SW, ART_H, '#16222e');
+    for (let y = 0; y < ART_H; y += 16) R(ctx, 0, y, SW, 1, '#1a2a38');
+    for (let x = 0; x < SW; x += 16) R(ctx, x, 0, 1, ART_H, '#1a2a38');
+    const b = s.battle || {};
+    // the line of the front moves with the result
+    const k = Math.min(1, t / 60);
+    const fx = 320 + Math.round(((Number(s.front) || 0) / 100) * 200 * k);
+    for (let y = 30; y < ART_H - 20; y += 6) R(ctx, fx + (Math.floor(y / 6) % 2) * 2, y, 3, 4, b.win ? '#5fd7ff' : '#ff5d6c');
+    // arrows (our side → / their side ←)
+    const ax = 120 + ((t * 2) % 160);
+    for (let i = 0; i < 3; i++) { const y = 70 + i * 50; R(ctx, ax - 40, y, 40, 4, '#5fd7ff'); for (let j = 0; j < 6; j++) R(ctx, ax + j, y - 6 + j, 2, 16 - j * 2, '#5fd7ff'); }
+    const bx = SW - 120 - ((t * 2) % 160);
+    for (let i = 0; i < 2; i++) { const y = 95 + i * 50; R(ctx, bx, y, 40, 4, '#ff7a6a'); for (let j = 0; j < 6; j++) R(ctx, bx - j, y - 6 + j, 2, 16 - j * 2, '#ff7a6a'); }
+    // smoke puffs far away
+    ctx.globalAlpha = 0.4;
+    for (let i = 0; i < 10; i++) { const x = (i * 71 + t) % SW, y = 40 + (i * 37) % 150; R(ctx, x, y, 18, 10, '#5a5a62'); }
+    ctx.globalAlpha = 1;
+    if (b.name) {
+      panel(ctx, 170, ART_H - 70, 300, 56, { bg: '#121a2e' });
+      text(ctx, `${b.name}：${b.win ? '前進' : '後退'}（見込み${b.odds}%）`, 320, ART_H - 62, { size: 12, align: 'center', color: b.win ? '#5fd7ff' : '#ff9aa6' });
+      text(ctx, `死者 自国${n0(b.sd)}人・相手側${n0(b.ed)}人`, 320, ART_H - 42, { size: 12, align: 'center', color: '#ffffff' });
+    }
+  },
+  // the player's front: dusk, a trench line far away, silhouettes from behind, smoke (no violence drawn)
+  front(ctx, t) {
+    sky(ctx, '#2a2a3a', '#7a5a4a');
+    ctx.globalAlpha = 0.35;
+    for (let i = 0; i < 12; i++) { const x = (i * 57 + t * 0.3) % (SW + 60) - 30; R(ctx, x, 60 + (i % 4) * 18, 50, 14, '#3a3236'); }
+    ctx.globalAlpha = 1;
+    R(ctx, 0, 170, SW, ART_H - 170, '#3a3226');
+    for (let x = 0; x < SW; x += 12) R(ctx, x, 168 + Math.round(Math.sin(x / 30) * 3), 10, 6, '#2a241c');
+    for (let x = 20; x < SW; x += 70) { R(ctx, x, 150, 2, 22, '#2a2420'); R(ctx, x + 2, 152, 26, 2, '#2a2420'); }
+    for (let i = 0; i < 6; i++) figure(ctx, 70 + i * 95, 200, 2.2, '#141210');
+    if (Math.floor(t / 40) % 5 === 0) { ctx.globalAlpha = 0.25; R(ctx, 0, 0, SW, ART_H, '#ffb070'); ctx.globalAlpha = 1; }
+  },
+  // a telegram / a letter: the notice of a death (no detail)
+  telegram(ctx) {
+    R(ctx, 0, 0, SW, ART_H, '#2a2622');
+    R(ctx, 170, 40, 300, 180, '#efe6d0');
+    R(ctx, 170, 40, 300, 22, '#a8a090');
+    text(ctx, '通知', 320, 44, { size: 12, align: 'center', color: '#2a2a2a', shadow: null });
+    for (let y = 80; y < 200; y += 16) R(ctx, 190, y, 260, 1, '#cfc4a8');
+    R(ctx, 380, 170, 40, 40, '#b03a30'); R(ctx, 384, 174, 32, 32, '#efe6d0'); R(ctx, 388, 178, 24, 24, '#b03a30');
+  },
+  // the call-up paper
+  conscript(ctx) {
+    R(ctx, 0, 0, SW, ART_H, '#24202a');
+    R(ctx, 200, 36, 240, 190, '#e8b8a8');
+    R(ctx, 200, 36, 240, 26, '#c06858');
+    text(ctx, '召集令状', 320, 41, { size: 16, align: 'center', color: '#3a1a14', shadow: null });
+    for (let y = 80; y < 210; y += 14) R(ctx, 220, y, 180 + (y % 3) * 10, 2, '#a07060');
+  },
+  // a new party's press conference (a banner and a table; silhouettes)
+  breakaway(ctx, t) {
+    R(ctx, 0, 0, SW, ART_H, '#1a2030');
+    R(ctx, 120, 40, 400, 46, '#e8e0c8');
+    text(ctx, '新党結成', 320, 52, { size: 20, align: 'center', color: '#3a2a4a', shadow: null });
+    R(ctx, 100, 150, 440, 30, '#5a3a2a');
+    for (let i = 0; i < 7; i++) figure(ctx, 150 + i * 58, 150, 2.4, '#0c0e16');
+    for (let i = 0; i < 12; i++) { const fl = (Math.floor(t / 8) + i * 3) % 17 === 0; if (fl) R(ctx, 40 + i * 50, 210 + (i % 3) * 8, 8, 6, '#ffffff'); figure(ctx, 44 + i * 50, 240, 2, '#1c1e28'); }
+  },
+  // a summit: a long round table, flags omitted (name boards), silhouettes
+  summit(ctx, t) {
+    R(ctx, 0, 0, SW, ART_H, '#1c2638');
+    R(ctx, 0, 0, SW, 70, '#26324a');
+    for (let i = 0; i < 8; i++) R(ctx, 40 + i * 76, 20, 50, 30, '#34425e');
+    // the table (an ellipse of boxes)
+    for (let i = 0; i < 40; i++) { const a = (i / 40) * Math.PI * 2; R(ctx, 320 + Math.cos(a) * 200 - 8, 160 + Math.sin(a) * 60 - 4, 16, 8, '#6a4a2a'); }
+    for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 + 0.3; figure(ctx, 320 + Math.cos(a) * 225, 160 + Math.sin(a) * 75 + 10, 2.2, '#0c0e16'); R(ctx, 320 + Math.cos(a) * 185 - 8, 160 + Math.sin(a) * 50 - 4, 16, 6, '#e8e8e8'); }
+    if (Math.floor(t / 30) % 3 === 0) R(ctx, 300, 150, 40, 3, '#ffd23f');
+  },
+  // the signing of a treaty
+  treaty(ctx) {
+    R(ctx, 0, 0, SW, ART_H, '#2a2218');
+    R(ctx, 0, 0, SW, 60, '#3a2e20');
+    R(ctx, 140, 130, 360, 40, '#6a4a2a'); R(ctx, 140, 126, 360, 6, '#8a6a3a');
+    R(ctx, 250, 118, 60, 10, '#f2eee2'); R(ctx, 330, 118, 60, 10, '#f2eee2');
+    figure(ctx, 270, 128, 2.6, '#0e0a08'); figure(ctx, 370, 128, 2.6, '#0e0a08');
+    for (let i = 0; i < 9; i++) figure(ctx, 90 + i * 60, 230, 2.2, '#16120e');
+  },
+  // the UN General Assembly hall (rows of desks, the rostrum)
+  un(ctx) {
+    R(ctx, 0, 0, SW, ART_H, '#1a2a3a');
+    R(ctx, 230, 20, 180, 70, '#c8a868'); R(ctx, 250, 30, 140, 50, '#d8bc80');
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 14; c++) R(ctx, 40 + c * 42 + (r % 2) * 10, 120 + r * 26, 30, 8, '#4a5a6a');
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 14; c++) figure(ctx, 55 + c * 42 + (r % 2) * 10, 120 + r * 26, 1.2, '#0e1622');
   },
   demo(ctx, t) {
     sky(ctx, '#3a3048', '#7a6070');
@@ -528,6 +619,33 @@ async function downfall(g, rec) {
   } finally { g.pop(bk); }
 }
 
+// ======================================================================== the end of a life at the front (戦死)
+class KiaScene {
+  constructor(g, rec, stage) { Object.assign(this, { g, rec, stage, f0: g.frame, hd: true, opaque: true, hidesHud: true }); }
+  get t() { return this.g.frame - this.f0; }
+  update() { /* animated by g.frame */ }
+  draw(ctx) {
+    const t = this.t;
+    if (this.stage === 'front') ARTS.front(ctx, t, {}, this.g);
+    else if (this.stage === 'paper') { R(ctx, 0, 0, SW, ART_H, '#1a1a20'); paperArt(ctx, `${this.rec.name}、戦死`, `${this.rec.where || '前線'}で（${this.rec.date}）`); }
+    else R(ctx, 0, 0, SW, ART_H, '#050508');
+    R(ctx, 0, ART_H, SW, SH - ART_H, '#050508');
+  }
+}
+async function kia(g, rec) {
+  try { audio.bgm(null); } catch (e) { /* no audio */ }
+  const stages = [
+    ['front', ['砲声が、すぐそばまで近づいていた。', 'まぶしい光のあと、あたりは静かになった。']],
+    ['paper', [`${rec.name}は、${rec.where || '前線'}で戦死した。`, '知らせを受けた家族は、言葉を失った。']],
+    ['black', ['こうして、この人生の物語は終わった。']],
+  ];
+  for (const [stage, pages] of stages) {
+    const sc = new KiaScene(g, rec, stage);
+    g.push(sc);
+    try { await sayJ(g, pages); } finally { g.pop(sc); }
+  }
+}
+
 // ======================================================================== the record card (then the title)
 class RecordScene {
   constructor(g, rec, resolve) { Object.assign(this, { g, rec, resolve, t: 0, hd: true, opaque: true, hidesHud: true }); }
@@ -540,20 +658,22 @@ class RecordScene {
     R(ctx, 0, 0, SW, SH, '#0b0d1a');
     panel(ctx, 70, 20, SW - 140, SH - 40, { bg: '#121a3a' });
     text(ctx, 'この人生の記録', SW / 2, 34, { size: 16, align: 'center', color: COLORS.accent });
+    const kia = r.cause === 'kia';
     const rows = [
       ['名前', r.name],
       ['最後の日', `${r.date}（${r.days}日目）`],
-      ['総理大臣として', `${r.pmDays}日`],
+      r.pmDays || !kia ? ['総理大臣として', `${r.pmDays}日`] : null,
       ['体制', `${REGIME_INFO[r.maxRegime] ? REGIME_INFO[r.maxRegime].name : r.maxRegime}（${r.label}）`],
-      ['終わり方', r.cause === 'uprising' ? '民衆の蜂起' : r.cause === 'surrender' ? '降伏' : '敗戦'],
+      ['終わり方', kia ? `戦死（${r.where || '前線'}）` : r.cause === 'uprising' ? '民衆の蜂起' : r.cause === 'surrender' ? '降伏' : '敗戦'],
       ['戦争', `${r.wars}回・戦費 約${r.cost}兆円`],
       ['死者（自国）', `兵士 ${n0(r.soldiers)}人・民間人 ${n0(r.civilians)}人`],
       ['死傷者（相手国側）', `${n0(r.enemy)}人`],
       ['けが人（自国）', `${n0(r.wounded)}人`],
-      ['拘束された記者', `${n0(r.detained)}人`],
+      r.knownKia ? ['戦死した知り合い', `${n0(r.knownKia)}人`] : null,
+      kia ? null : ['拘束された記者', `${n0(r.detained)}人`],
       ['報道の自由度', `${r.press}／100`],
       ['国際社会の制裁', r.sanctions ? `段階${r.sanctions}` : 'なし'],
-    ];
+    ].filter(Boolean);
     rows.forEach(([k, v], i) => {
       text(ctx, k, 96, 62 + i * 19, { size: 12, color: '#9aa3c7' });
       text(ctx, String(v), 250, 62 + i * 19, { size: 12, color: '#ffffff' });
@@ -567,6 +687,7 @@ KIKI.show = showSpec;
 KIKI.wrap = wrapPage;
 KIKI.downfall = downfall;
 KIKI.record = record;
+KIKI.kia = kia;
 
 // ======================================================================== the phone app 「危機管理」
 const APP_COLOR = '#8a3a4a';
@@ -641,6 +762,7 @@ function pressLines(g) {
   const hist = pf.history.slice(-8).map((h) => `${h.day}日目 ${h.v}${h.why ? `（${h.why}）` : ''}`);
   return [`報道の自由度：${pf.value}／100（${pf.label}）`, '報道への圧力や検閲で下がり、民主制では時間とともに戻る。', '', ...(hist.length ? ['推移：', ...hist] : [])];
 }
+const isPMg = (g) => { try { const p = g.pol && g.pol(); return !!(p && p.me && (p.me.posts || []).includes('pm')); } catch (e) { return false; } };
 export async function kikiApp(g) {
   if (typeof g.regime !== 'function') { await info(g, '危機管理', ['（体制・安全保障の仕組みが読み込まれていない）']); return; }
   let index = 0;
@@ -653,7 +775,7 @@ export async function kikiApp(g) {
       ['sdf', '自衛隊・防衛', r.steps.army && r.id === 'dictatorship' ? '国軍' : '状況と命令'],
       ['press', '報道の自由', `${g.pressFreedom().value}`],
       ['regime', '体制', r.id === 'democracy' ? '民主制' : r.name],
-      r.id === 'dictatorship' || g.war() ? ['war', '戦争', g.war() ? g.war().frontText : '開戦前'] : null,
+      r.id === 'dictatorship' || g.war() || isPMg(g) ? ['war', '戦争', g.war() ? g.war().frontText : '開戦前'] : null,
       ['nations', '関係国', 'ヴェルミナ海'],
       ['news', 'ニュース', ''],
     ].filter(Boolean);
@@ -678,12 +800,15 @@ export async function kikiApp(g) {
       await actionList(g, '体制の手続き', () => g.regimeSteps(), (sid) => g.regimeStep(sid));
     } else if (id === 'war') {
       const w = g.war();
-      if (w) await info(g, `戦争：${w.enemyName}`, [`係争地：${w.area}`, `戦況：${w.frontText}`, `死者 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人`, `けが人 ${n0(w.cas.soldiers.wounded + w.cas.civilians.wounded)}人`, `相手国側の死傷者 ${n0(w.cas.enemySoldiers + w.cas.enemyCivilians)}人`, `戦費 約${w.cost}兆円・厭戦 ${Math.round(w.weariness)}／100`]);
+      if (w) await info(g, `戦争：${w.enemyName}`, [`${w.modeName}`, `戦域：${w.area}`, `戦況：${w.frontText}`, ...w.fronts.map((f) => `・${f.name}：${f.control >= 0 ? '優勢' : '劣勢'}${Math.abs(f.control)}・兵力約${n0(f.own * 1000)}人・作戦の見込み${f.odds}%`), w.allies.length ? `味方：${w.allies.map((a) => a.name).join('・')}` : null, w.foes.length ? `相手側：${w.foes.map((a) => a.name).join('・')}` : null, `死者 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人`, `けが人 ${n0(w.cas.soldiers.wounded + w.cas.civilians.wounded)}人`, `相手国側の死傷者 ${n0(w.cas.enemySoldiers + w.cas.enemyCivilians)}人`, `戦費 約${w.cost}兆円・厭戦 ${Math.round(w.weariness)}／100`, ...w.known.map((k) => `${k.rel}の${k.name}（${k.unit}）：${{ front: '前線', called: '召集', wounded: '負傷', kia: '戦死', exempt: '免除', back: '帰還', home: '自宅' }[k.status] || k.status}`)].filter(Boolean));
+      else if (typeof g.warPaths === 'function') { const P = g.warPaths(); await info(g, '戦争への道', [P.declare ? P.paths : '宣戦できる（相手国を選ぶ）', P.art9 ? '9条は改正ずみ（国会の承認で宣戦できる）' : null, P.collective ? `集団的自衛権の根拠：${P.collective}` : null, P.attack ? '武力攻撃事態：防衛出動を命じられる（自衛隊・防衛から）' : null].filter(Boolean)); }
       await actionList(g, '戦争', () => g.warOrders(), async (wid) => {
         if (wid === 'declare') {
-          const k = await phoneList(g, { title: '宣戦の相手', color: APP_COLOR, items: NATION_ORDER.map((n) => ({ label: FICTIONAL_NATIONS[n].name, sub: `国力 ${FICTIONAL_NATIONS[n].power}` })), describe: (x) => short(FICTIONAL_NATIONS[NATION_ORDER[x]].desc, 34) });
+          const real = typeof g.world === 'function' ? g.world().countries.filter((c) => !c.war) : [];
+          const opts = [...real.map((c) => ({ id: c.id, label: c.name, sub: `関係 ${c.relation}・軍事力 ${c.mil}` })), ...NATION_ORDER.map((n) => ({ id: n, label: FICTIONAL_NATIONS[n].name, sub: `国力 ${FICTIONAL_NATIONS[n].power}` }))];
+          const k = await phoneList(g, { title: '宣戦の相手', color: APP_COLOR, items: opts.map((o) => ({ label: short(o.label, 13), sub: o.sub })), describe: (x) => (FICTIONAL_NATIONS[opts[x].id] ? short(FICTIONAL_NATIONS[opts[x].id].desc, 34) : opts[x].sub) });
           if (k < 0) return null;
-          return g.warOrder('declare', { target: NATION_ORDER[k] });
+          return g.warOrder('declare', { target: opts[k].id });
         }
         return g.warOrder(wid);
       });
