@@ -2574,6 +2574,8 @@ const TAB_SECURITY = {
       const y0 = d.showWar ? 64 : 44;
       out.push(listCtl(ui, 'orow', { id: 'orow', x: 450, y: y0, w: 186, h: 168, y0: 18, rowH: 18, n: d.orders.length, why: (u) => { const o = d.orders[u.tabState().orow | 0]; return o ? o.why : null; }, tip: (u) => { const o = d.orders[u.tabState().orow | 0]; return o ? o.desc : ''; }, a: (u) => sdfFlow(u, d, d.orders[u.tabState().orow | 0]) }));
       out.push(jump('s_def', 254, y0, 192, 150, 'budget', '防衛費（防衛関係費）の推移とGDP比。A：予算の画面へ'));
+      // the world-affairs screen (world_ui.js): countries, alliances, diplomacy, wars
+      if (has(ui.g, 'worldScreen')) out.push(btn({ id: 's_world', x: 254, y: y0 + 154, w: 192, label: '世界情勢を開く', tip: '世界の国々との関係・同盟と条約・外交・危機と戦争', a: (u) => u.away(() => u.g.worldScreen('map')) }));
     }
     return out;
   },
@@ -2620,8 +2622,10 @@ const TAB_SECURITY = {
     T(c, '■実際の当初予算（参考）', dk.x + 6, dk.y + dk.h - 29, 10, '#5a8db0', 'left', dk.w - 12);
     T(c, '■この政府の予算', dk.x + 6, dk.y + dk.h - 17, 10, K.teal, 'left', 100);
     T(c, S.budget.gdpPct != null ? `いまGDP比 ${fmtN(S.budget.gdpPct, 2)}%` : '', dk.x + dk.w - 6, dk.y + dk.h - 17, 10, K.white, 'right', 90);
-    // ---- the log
-    const ly = dk.y + dk.h + 4;
+    // ---- the world-affairs button, then the log
+    const wk = ui.ctls.find((q) => q.id === 's_world');
+    if (wk) drawBtn(c, ui, wk, { center: true });
+    const ly = (wk ? wk.y + wk.h : dk.y + dk.h) + 4;
     panel(c, 254, ly, 192, 336 - ly, '自衛隊の動き（ニュース）');
     let yl = ly + 20;
     if (!d.log.length) T(c, 'まだ大きな動きはない', 260, yl, 10, K.dim, 'left', 180);

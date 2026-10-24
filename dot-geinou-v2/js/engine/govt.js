@@ -168,18 +168,14 @@ const realParty = (id) => !!(POL && POL.PARTY_DEFS && POL.PARTY_DEFS[id] && POL.
 // The real-party rule in one place (politics.js govIncludesRealParty): the government includes 自民 or 民主 in any role
 // (the PM's party or a partner). Without the politics core there is no government, so false.
 const realInGovt = (p) => { try { return !!(POL && typeof POL.govIncludesRealParty === 'function' && POL.govIncludesRealParty(p)); } catch (e) { return false; } };
-// The reason a government with a real party does not take a step the game presents as wrong (強行採決, デモの強制排除):
-// the real party's organ does not agree (a lawful, neutral refusal; the same shape as regime.js's). null = no real party.
-function realPartyNo(g, p, what) {
-  if (!realInGovt(p)) return null;
+// The player's own order under a government that includes a real party: it goes through, attributed to the player;
+// the party keeps its distance (a statement and a hit to 党内の評価). Returns the news suffix or ''.
+function realPartyDistance(g, p, what) {
+  if (!realInGovt(p)) return '';
   const ids = [...new Set([...(p.cabinet.partyIds || []), cabinetCore(p)].filter((id) => id && (realParty(id) || (p.parties[id] && p.parties[id].real))))];
-  const mine = p.me && p.me.party && ids.includes(p.me.party) ? p.me.party : null;
-  const id = mine || ids[0];
-  const name = partyNameOf(g, id, false);
-  const organ = id === 'jimin' ? `${name}の総務会は` : `${name}は党の機関で`;
-  return mine
-    ? `${organ}「${what}」を了承しなかった。`
-    : `連立を組む${name}が「${what}」に同意しなかった。閣議で決められない`;
+  const name = partyNameOf(g, ids[0], false);
+  if (p.me) p.me.standing = clamp(num(p.me.standing) - rnd(6, 10), 0, 100);
+  return `。${name}の幹部は「${what}は党として了承したものではない」と距離を置いた`;
 }
 const partyNameOf = (g, id, short = true) => { try { if (typeof g.partyName === 'function') return g.partyName(id, short); } catch (e) { /* */ } return id || '無所属'; };
 const npcNameOf = (g, id) => { try { if (typeof g.npcName === 'function') return g.npcName(id); } catch (e) { /* */ } return ''; };
@@ -2375,13 +2371,14 @@ function oppositionImpl(g, s, kind, opts = {}) {
 function kyokoImpl(g, s, b, by) {
   const p = pol(g);
   const day = today(g);
-  if (realInGovt(p)) return false; // the real-party rule (callers refuse first; this is the last guard)
+  if (realInGovt(p) && by !== 'player') return false; // NPC governments with a real party never force a vote
   b.next = day;
   b.log.push({ day, text: '野党の反対を押し切って採決へ（いわゆる強行採決）' });
   b.kyoko = day;
   if (s.opposition.boycott && s.opposition.boycott.billId === b.id) s.opposition.boycott = null;
   ledgerAdd(g, s, 'diet', { mood: -rnd(3, 5), text: `「${b.title}」の強行採決` });
-  govtNews(g, s, `与党が「${b.title}」の採決を強行した。野党は「数の横暴」と強く反発`, { phone: involved(g) });
+  const dist = by === 'player' ? realPartyDistance(g, p, '採決の強行') : '';
+  govtNews(g, s, `${dist ? `${g.state.name}${isPMg(p) ? '総理' : '氏'}の指示で、` : '与党が'}「${b.title}」の採決を強行した。野党は「数の横暴」と強く反発${dist}`, { phone: involved(g) });
   addEvent(g, s, 'kyoko', `「${b.title}」の強行採決`, { segs: { floating: -1.5, young: -0.8, urban: -0.6, business: 0.3, elderly: 0.2 } });
   if (Math.random() < 0.4) spawnDemoImpl(g, s, { against: 'policy', title: b.title, policy: b.policy, segment: 'urban', size: irnd(3000, 15000) });
   emit(g, 'ruling', { kind: 'kyoko', billId: b.id, by });
@@ -2422,8 +2419,6 @@ function rulingImpl(g, s, kind, opts = {}) {
     return { ok: true, agreed, text: agreed.length ? `野党と修正協議をまとめた。${agreed.map((id) => partyNameOf(g, id)).join('・')}が賛成に回る見通し。中身の一部を譲ったので、党内には不満の声も。` : '協議したが、野党とは折り合えなかった。' };
   }
   if (kind === 'kyoko') {
-    const real = realPartyNo(g, p, '採決の強行');
-    if (real) return { ok: false, why: real };
     const house = b.house;
     const rulingSeats = (p.cabinet.partyIds || []).reduce((a, id) => a + num(p.diet[house].seats[id]), 0);
     if (rulingSeats <= p.diet[house].total / 2) return { ok: false, why: `${house === 'shugi' ? '衆' : '参'}議院で与党が過半数に届かず、採決を強行しても可決できない` };
@@ -2838,13 +2833,14 @@ Object.assign(DEMO_RESPONSES, {
     label: '強制排除（座り込みの排除を求める）', desc: '道路の占拠などに対して、警察が排除するよう求める。民主国家では強い反発を招く。',
     // the real-party rule: a government that includes 自民・民主 (any role) never orders it (dialogue / tolerate /
     // regulate, the lawful traffic control, stay open)
-    available: (g, d) => (d.stance === 'rally' ? '必要ない' : realPartyNo(g, pol(g), 'デモの強制排除') || true),
+    available: (g, d) => (d.stance === 'rally' ? '必要ない' : true),
     apply(g, d) {
       const s = GS(g);
+      const dist = realPartyDistance(g, pol(g), 'デモの強制排除');
       d.momentum = num(d.momentum, 1) * 1.25;
       d.until += 2;
       ledgerAdd(g, s, 'demo', { mood: -rnd(4, 7), text: 'デモの強制排除への批判' });
-      govtNews(g, s, `${qd(d.cause)}の参加者の一部を警察が排除した。強引な対応だとして、政府への批判が広がっている`, { phone: true, head: 'デモ' });
+      govtNews(g, s, `${qd(d.cause)}の参加者の一部を警察が排除した。強引な対応だとして、政府への批判が広がっている${dist}`, { phone: true, head: 'デモ' });
       addEvent(g, s, 'demo', `${qd(d.cause)}の強制排除`, { segs: { young: -2, urban: -1.5, floating: -1.5, elderly: 0.4, business: 0.3 } });
       return { text: '座り込みの排除を求めた。現場は一時混乱し、「表現の自由への介入だ」という強い批判が起き、参加者はかえって増えている。' };
     },
@@ -3203,7 +3199,6 @@ function dietBlock(g, s, kind, opts = {}) {
     case 'kokutai': case 'kyoko':
       if (!role.ruling) return '与党の国会運営の手段（与党の議員でないと使えない）';
       if (!(isPMg(p) || role.kokutai || role.kanjicho)) return '国会運営を仕切るのは、総理か与党の国会対策委員長・幹事長';
-      if (kind === 'kyoko') { const real = realPartyNo(g, p, '採決の強行'); if (real) return real; }
       if (!inSessionP(p, day)) return '国会の会期中に';
       if (!p.diet.bills.some((b) => liveBill(b) && b.sponsor === 'cabinet' && b.kind !== 'budget')) return '審議中の政府の法案がない';
       return null;
@@ -3528,7 +3523,7 @@ const methods = {
   respondDemo(id, how) { const s = GS(this); return s ? respondDemoImpl(this, s, id, how) : { ok: false, why: 'まだ準備ができていない' }; },
   // the real-party rule: under a government that includes a real party, 強制排除 is not offered at all (respondDemo
   // still refuses it with the reason)
-  demoResponses(id) { const s = GS(this); if (!s) return []; const d = s.demos.list.find((x) => x.id === id); const real = realInGovt(pol(this)); return Object.entries(DEMO_RESPONSES).filter(([how]) => !(real && how === 'remove')).map(([how, R]) => ({ id: how, label: R.label, desc: R.desc || '', why: respondBlock(this, s, d, how) })); },
+  demoResponses(id) { const s = GS(this); if (!s) return []; const d = s.demos.list.find((x) => x.id === id); const real = realInGovt(pol(this)); return Object.entries(DEMO_RESPONSES).map(([how, R]) => ({ id: how, label: R.label, desc: R.desc || '', why: respondBlock(this, s, d, how) })); },
   approvalBreakdown() { const s = GS(this); return s ? approvalBreakdownImpl(this, s) : null; },
   // other cores record their part of the approval (reason: 'disaster' | 'regime' | ...). opts.applied: the change was
   // already made to the cabinet (only record it); otherwise delta is added to the cabinet's mood (policy term).

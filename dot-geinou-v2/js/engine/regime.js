@@ -573,11 +573,15 @@ function realPathAfter(g, what) {
   const out = [];
   const G = govParties(g);
   const pi = partyOf(g);
-  if (G && G.core && isRealParty(G.p, G.core) && inCabinet(g)) {
+  const realCore = !!(G && G.core && isRealParty(G.p, G.core));
+  const realPartner = !!(G && !realCore && G.real.length);
+  if ((realCore || realPartner) && inCabinet(g)) {
+    // the PM of a real party does not accept it; or a real coalition partner demands the minister's dismissal
     const me = meOf(g);
     const posts = (me.posts || []).filter((x) => POL && POL.POSTS && POL.POSTS[x] && POL.POSTS[x].kind === 'cabinet' && x !== 'pm');
     for (const post of posts) { try { if (typeof g.resignPost === 'function') g.resignPost(post, '罷免'); else me.posts = me.posts.filter((x) => x !== post); } catch (e) { console.error(e); } }
-    if (posts.length) { out.push(`（${partyName(G.p, G.core)}の総理は「${what}」を認めず、${g.state.name}大臣を罷免した）`); news(g, `${partyName(G.p, G.core)}の総理は、「${what}」を独断で進めた${g.state.name}大臣を罷免した`); }
+    const who = realCore ? `${partyName(G.p, G.core)}の総理は「${what}」を認めず` : `連立を組む${G.real.map((id) => partyName(G.p, id)).join('・')}の求めで、総理は`;
+    if (posts.length) { out.push(`（${who}、${g.state.name}大臣を罷免した）`); news(g, `${who}、「${what}」を独断で進めた${g.state.name}大臣を罷免した`); }
   }
   if (pi && pi.real) { const b = breakaway(g, what); if (b) out.push(b); }
   return out.length ? out.join('\n') : null;
@@ -887,7 +891,8 @@ export const REGIME_STEPS = {
     odds(g) {
       const p = pol(g), pi = partyOf(g);
       const H = p && p.diet && p.diet.shugi;
-      const share = H && pi ? num(H.seats[pi.id]) / Math.max(1, num(H.total)) : 0.3;
+      // a PM who must first break with a real party (or found one) leads only the members who follow (about a third)
+      const share = (H && pi ? num(H.seats[pi.id]) / Math.max(1, num(H.total)) : 0.3) * (needsBreak(g) ? 0.6 : 1);
       const threat = WORLD && WORLD.W ? num(WORLD.W(g).threat, 40) : 40;
       return clamp(0.12 + (approvalOf(g) - 30) / 150 + share * 0.3 + (threat - 40) / 300 - (pressValue(g) - 50) / 400 + (worldCall('attackOnJapan', g) ? 0.1 : 0), 0.04, 0.7);
     },
@@ -920,7 +925,7 @@ export const REGIME_STEPS = {
       const r = R(g);
       const w = needPM(g) || needFictionalLeader(g, '選挙の停止');
       if (w) return w;
-      if (r.id === 'democracy') return '民主制のもとでは選挙を止められない（憲法15条・47条。任期は憲法と法律で決まっている）';
+      if (r.id === 'democracy') return '民主制のもとでは選挙を止められない（憲法15条・47条。任期は憲法と法律で決まっている）（道：緊急事態宣言〔緊急事態条項の改正〕か、憲法の停止で緊急事態にする）';
       if (r.steps.elections) return 'すでに選挙は止められている';
       return null;
     },
@@ -942,7 +947,7 @@ export const REGIME_STEPS = {
       const r = R(g);
       const w = needPM(g) || needFictionalLeader(g, '国会の停止');
       if (w) return w;
-      if (r.id === 'democracy') return '民主制のもとでは国会を止められない（国会は国権の最高機関：憲法41条）';
+      if (r.id === 'democracy') return '民主制のもとでは国会を止められない（国会は国権の最高機関：憲法41条）（道：緊急事態宣言〔緊急事態条項の改正〕か、憲法の停止で緊急事態にする）';
       if (r.steps.diet) return 'すでに国会は止められている';
       return null;
     },
@@ -965,7 +970,7 @@ export const REGIME_STEPS = {
       const r = R(g);
       const w = needPM(g) || needFictionalLeader(g, '野党の禁止');
       if (w) return w;
-      if (r.id === 'democracy') return '民主制のもとでは政党の活動を禁止できない（結社の自由：憲法21条）';
+      if (r.id === 'democracy') return '民主制のもとでは政党の活動を禁止できない（結社の自由：憲法21条）（道：緊急事態宣言〔緊急事態条項の改正〕か、憲法の停止で緊急事態にする）';
       if (r.steps.opposition) return 'すでに野党は禁止されている';
       return null;
     },
@@ -987,7 +992,7 @@ export const REGIME_STEPS = {
       const r = R(g);
       const w = needPM(g) || needFictionalLeader(g, '自衛隊の国軍化');
       if (w) return w;
-      if (r.id !== 'dictatorship') return '自衛隊は憲法9条のもとの組織。国軍にはできない（民主制では、変えるなら憲法改正の発議と国民投票が必要）';
+      if (r.id !== 'dictatorship') return '自衛隊は憲法9条のもとの組織。政令で国軍にできるのは独裁体制（選挙と国会を止めた体制）になってから。民主制のままなら「9条の改正（交戦権の容認）」の発議と国民投票';
       if (r.steps.army) return 'すでに国軍に改められている';
       return null;
     },
@@ -1372,7 +1377,7 @@ function pressRefusal(g, kind) {
     if (!r.press.detained && !r.steps.censor) return '拘束も検閲もしていない';
     return null;
   }
-  if (!A.regimes.includes(r.id)) return r.id === 'democracy' ? `民主制では、${A.name}はできない（表現の自由・検閲の禁止：憲法21条）` : `いまの体制では、これは選ばない（${REGIME_INFO[r.id].name}）`;
+  if (!A.regimes.includes(r.id)) return r.id === 'democracy' ? `民主制では、${A.name}はできない（表現の自由・検閲の禁止：憲法21条）${'（道：緊急事態宣言〔緊急事態条項の改正〕か、憲法の停止で緊急事態にする）'}` : `いまの体制では、これは選ばない（${REGIME_INFO[r.id].name}。民主制のときの手段）`;
   if (r.id === 'democracy' ? !inCabinet(g) : !isPM(g)) return r.id === 'democracy' ? '内閣の一員（総理・大臣）でなければできない' : '内閣総理大臣でなければできない';
   // (round 4) a real party in the government never makes this a refusal: the PM breaks with a real party first, a
   // minister of a real-party NPC cabinet acts alone and is dismissed afterwards, a real junior partner leaves
@@ -2285,8 +2290,8 @@ function addAcquaintances(g, w) {
   const units = [['陸上自衛隊', 'land'], ['海上自衛隊', 'sea'], ['航空自衛隊', 'air']];
   const base = rint(0, 2);
   for (let i = 0, tries = 0; w.known.filter((k) => k.kind === 'acq').length < 2 && tries < 12; tries++) {
-    const sex = roll(0.7) ? 'm' : 'f';
-    const name = `${pick(ACQ_FAM)} ${pick(ACQ_GIVEN[sex])}`;
+    const sex = (roll(0.7) ? i === 0 : i !== 0) ? 'm' : 'f';
+    const name = `${ACQ_FAM[(rint(0, ACQ_FAM.length - 1) + i * 3 + tries) % ACQ_FAM.length]} ${ACQ_GIVEN[sex][(rint(0, 4) + i * 2 + tries) % 5]}`;
     if (w.known.some((k) => k.name === name)) continue;
     const [unit, front] = units[(base + i) % 3];
     const rel = ACQ_REL[(base + i) % ACQ_REL.length];
@@ -2301,7 +2306,8 @@ function conscriptKnown(g, w, level) {
   const st = g.state;
   const out = [];
   try {
-    const ids = Object.keys(st.people || {}).filter((id) => PEOPLE[id] && PEOPLE[id].kind !== 'family' && typeof g.heartLevel === 'function' && g.heartLevel(id) >= 1 && !(st.people[id] && st.people[id].kia));
+    // performers of the player's generation (not the landlord, the shopkeepers or the office staff)
+    const ids = Object.keys(st.people || {}).filter((id) => PEOPLE[id] && ['comedian', 'idol', 'actor', 'singer'].includes(PEOPLE[id].kind) && typeof g.heartLevel === 'function' && g.heartLevel(id) >= 1 && !(st.people[id] && st.people[id].kia));
     for (const id of ids.slice(0, level >= 3 ? 4 : 2)) {
       if (w.known.some((k) => k.key === 'p:' + id)) continue;
       out.push({ key: 'p:' + id, person: id, name: PEOPLE[id].name, rel: g.heartLevel(id) >= 3 ? '親友' : '友だち', kind: 'friend', unit: '国軍', front: pick(['land', 'sea', 'air']), status: 'called', since: today(g) });
@@ -2388,7 +2394,7 @@ function warOrder(g, kind, opts = {}) {
     if (dict && w.mob >= 2) { w.conscription = true; conscriptKnown(g, w, w.mob); }
     if (dict && w.mob >= 3) playerCallUp(g, w);
     if (!dict && w.mob >= 2 && roll(0.35)) {
-      const ids = Object.keys(g.state.people || {}).filter((id) => PEOPLE[id] && PEOPLE[id].kind !== 'family' && g.heartLevel(id) >= 2 && !w.known.some((k) => k.person === id));
+      const ids = Object.keys(g.state.people || {}).filter((id) => PEOPLE[id] && ['comedian', 'idol', 'actor', 'singer'].includes(PEOPLE[id].kind) && g.heartLevel(id) >= 2 && !w.known.some((k) => k.person === id));
       if (ids.length) { const id = pick(ids); w.known.push({ key: 'p:' + id, person: id, name: PEOPLE[id].name, rel: '友だち', kind: 'friend', unit: '志願兵', front: pick(['land', 'sea', 'air']), status: 'front', since: today(g) }); try { g.message({ from: PEOPLE[id].name, person: id, kind: 'chat', war: true, text: '志願したよ。じっとしていられなくて。\nしばらく連絡できないかもしれない。元気でね。' }); } catch (e) { /* ignore */ } }
     }
     familyMessage(g, dict && w.mob >= 2 ? '町から若い人がいなくなっていく。\nみんな、口には出さないけど怒ってるよ。' : 'となりの家の息子さんも、部隊に呼ばれたって…。\n{name}、体に気をつけて。');

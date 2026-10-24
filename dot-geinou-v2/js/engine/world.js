@@ -356,17 +356,17 @@ export const SUMMITS = {
 
 // ======================================================================== era start states
 const ERA_WORLD = {
-  showa: { tension: 70, coldWar: true, standing: 60, anpo: 68, unsc: { member: true, until: 19881231, next: 19911031 }, sanctions: {}, conflicts: [{ id: 'iran_iraq', a: 'ir', b: 'iq', name: 'イラン・イラク戦争', since: 19800922, real: true, intensity: 2 }], deploy: [], oil: 100, threat: 45 },
-  heisei_early: { tension: 25, coldWar: false, standing: 64, anpo: 72, unsc: { member: false, next: 19961031 }, sanctions: { iq: { level: 2, un: true, since: 19900805 } }, conflicts: [], oil: 100, threat: 35,
+  showa: { intro: ['米ソの冷戦が続いている。ソ連ではペレストロイカ（改革）が進んでいる', 'イラン・イラク戦争（1980年〜）が続いている。ペルシャ湾ではタンカーへの攻撃も起きている'], tension: 70, coldWar: true, standing: 60, anpo: 68, unsc: { member: true, until: 19881231, next: 19911031 }, sanctions: {}, conflicts: [{ id: 'iran_iraq', a: 'ir', b: 'iq', name: 'イラン・イラク戦争', since: 19800922, real: true, intensity: 2 }], deploy: [], oil: 100, threat: 45 },
+  heisei_early: { intro: ['冷戦が終わり、世界は協調の時代に入った。自衛隊はゴラン高原の国連PKO（UNDOF）に参加している（1996年2月〜）', '北朝鮮の核開発をめぐる緊張が続いている'], tension: 25, coldWar: false, standing: 64, anpo: 72, unsc: { member: false, next: 19961031 }, sanctions: { iq: { level: 2, un: true, since: 19900805 } }, conflicts: [], oil: 100, threat: 35,
     deploy: [{ kind: 'pko', where: 'ゴラン高原', mission: '国連兵力引き離し監視隊（UNDOF）', personnel: 45, law: 'PKO協力法', start: 19960201, endDate: 20130115 }] },
-  heisei: { tension: 30, coldWar: false, standing: 62, anpo: 80, unsc: { member: false, next: 20041031 }, sanctions: {}, conflicts: [], oil: 110, threat: 45,
+  heisei: { intro: ['イラクでは戦争のあとの治安の悪化が続く。陸上自衛隊はサマワで人道復興支援をしている', '北朝鮮の核問題をめぐり、6か国協議（2003年〜）が続いている'], tension: 30, coldWar: false, standing: 62, anpo: 80, unsc: { member: false, next: 20041031 }, sanctions: {}, conflicts: [], oil: 110, threat: 45,
     crises: [{ id: 'iraq_sec', kind: 'unrest', title: 'イラクの治安の悪化', country: 'iq', sev: 2, untilDate: 20111218 }],
     deploy: [
       { kind: 'rear', where: 'イラク南部サマワ', mission: 'イラク人道復興支援（陸上自衛隊）', personnel: 550, law: 'イラク人道復興支援特別措置法（2003年）', start: 20040119, endDate: 20060717 },
       { kind: 'rear', where: 'クウェート・イラク', mission: 'イラク人道復興支援の空輸（航空自衛隊）', personnel: 200, law: 'イラク人道復興支援特別措置法（2003年）', start: 20031226, endDate: 20081218 },
       { kind: 'rear', where: 'インド洋', mission: '補給支援（海上自衛隊）', personnel: 330, law: 'テロ対策特別措置法（2001年）', start: 20011202, endDate: 20071101 },
     ] },
-  reiwa: { tension: 66, coldWar: false, standing: 66, anpo: 86, unsc: { member: false, next: 20310630 }, g8: false, oil: 105, threat: 62,
+  reiwa: { intro: ['ロシアのウクライナ侵攻（2022年2月〜）が続いている。日本はG7と協調してロシアに制裁を科している', '米中の対立や北朝鮮の核・ミサイル開発で、東アジアの緊張が高まっている'], tension: 66, coldWar: false, standing: 66, anpo: 86, unsc: { member: false, next: 20310630 }, g8: false, oil: 105, threat: 62,
     sanctions: { ru: { level: 3, g7: true, since: 20220226 }, kp: { level: 3, since: 20090616 } },
     conflicts: [{ id: 'ru_ua', a: 'ru', b: 'ua', name: 'ロシアのウクライナ侵攻', since: 20220224, real: true, aggressor: 'ru', intensity: 3 }],
     deploy: [{ kind: 'other', where: 'ソマリア沖・アデン湾', mission: '海賊対処（海上自衛隊）', personnel: 240, law: '海賊対処法（2009年）', start: 20090330 }] },
@@ -404,13 +404,15 @@ function initWorld(g, s) {
   s.crises = (E.crises || []).map((c, i) => ({ ...c, day: -1, handled: {}, n: i }));
   s.deploy = (E.deploy || []).map((d, i) => ({ id: 'h' + i, ...d, startDay: -1, history: true }));
   for (const D of Object.values(DISPUTES)) s.disputes[D.id] = { admin: D.admin0, status: 'dispute' };
+  for (const t of (E.intro || []).slice().reverse()) s.news.unshift({ day: 1, text: t, kind: 'world' });
   if (start >= 20140301) s.g8 = false;
 }
 export function W(g) {
   const st = g && g.state;
   if (!st) return newWorldState(g);
   let s = st.world;
-  if (!s || typeof s !== 'object' || Array.isArray(s)) s = st.world = newWorldState(g);
+  // a world of another era (an old save never has one; a debug switch of the era does) starts anew
+  if (!s || typeof s !== 'object' || Array.isArray(s) || (s.era && st.profile && st.profile.era && s.era !== st.profile.era)) s = st.world = newWorldState(g);
   if (!s._ok) {
     const b = newWorldState(g);
     for (const k of Object.keys(b)) if (s[k] === undefined) s[k] = b[k];

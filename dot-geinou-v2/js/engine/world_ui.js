@@ -27,6 +27,8 @@ const num = (v, d = 0) => (v !== null && v !== '' && Number.isFinite(Number(v)) 
 const sfx = (k) => { try { audio.sfx(k); } catch (e) { /* no audio */ } };
 const R = (c, x, y, w, h, col) => { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
 const n0 = (n) => Math.max(0, Math.round(num(n))).toLocaleString('ja-JP');
+// troops given in 千人 → 「約1.6万人」 / 「約8,000人」
+const troops = (k) => (num(k) >= 10 ? `約${(Math.round(num(k)) / 10).toFixed(1).replace(/\.0$/, '')}万人` : `約${n0(num(k) * 1000)}人`);
 const K = {
   bg: '#07101c', head: '#0b1626', panel: '#0d1a2c', panel2: '#10223a', edge: '#21405e', edgeHi: '#4a86b8', text: '#e8f0f8', dim: '#93a8bc', faint: '#566c80',
   amber: '#ffb547', cyan: '#4fd2e8', good: '#57d98a', bad: '#ff6470', warn: '#ffcc4d', sel: '#173452', lock: '#c9a76a', sea: '#0c2640', sea2: '#0e2c48', land: '#4a5462', white: '#ffffff', danger: '#ff5468',
@@ -89,7 +91,7 @@ function gauge(c, x, y, w, v, lo = -100, hi = 100) {
 
 // ================================================================ the map (Natural Earth 1:50m, public domain; world-atlas 2.0.2, ISC)
 // 144 × 53 cells of 2.5°: longitude −25 → 335 (Pacific-centred), latitude 75 → −57.5. Codes: '.' sea, 'x' other land.
-const MAP = { COLS: 144, ROWS: 53, LON0: -25, LAT0: 75, STEP: 2.5, CELL: 4, X: 4, Y: 42 };
+const MAP = { COLS: 144, ROWS: 53, LON0: -25, LAT0: 75, STEP: 2.5, CELL: 4, X: 32, Y: 42 };
 const LEGEND = { '.': '.', x: 'x', A: 'sv', B: 'au', C: 'br', D: 'ca', E: 'cn', F: 'tw', G: 'fr', H: 'de', I: 'in', J: 'id', K: 'ir', L: 'iq', M: 'il', N: 'it', O: 'jp', P: 'kp', Q: 'kr', R: 'my', S: 'ph', T: 'ru', U: 'sa', V: 'sg', W: 'vn', X: 'th', Y: 'tr', Z: 'ua', a: 'gb', b: 'us', c: 'dd' };
 const MAP_DATA = 'xx.29T03.04T.03T20.04T.37D06.D.DD.D07.08x13x.18x.x.09TT.04T37.16b04.10D09.D03.D08.06x12T17x05TT..T04.04TT.T45.T05b10T04DT06DDTDT07DT03DDT08x09TT16x03T03.T05.10T.43T.T04b10T46.x03.09x09T60.06b10D24.D.D03.05x05.06.12x05.x04T58.07b11D19.06D03.08x03.07.08a.03x06.AAT48.TT.T03.13b04.05bbD17.06D06.15.07aa.04x04.A04T44.06T03.14bb.09bD19.03D07.14.06xxaa..xHHcx03A04T12A06T26.05TT.27D20.D10.12.06x.a03xxHHcx04Z04T06AT03A08T07xxT07E03T07.04T.30D29.12.08G05HHx04Z07T03A16x12E05T06.36D25.D03.11.09G04xNx06AZ03T05A13E03x11E07T.39b16D06bD03.14.07xxG04N03x06.03T04.A12E06x07E08T..OO.36b17DDb04DD.15.06x05..G.NNx04Y06A03.A10E20P.04O.37b22.18.06x04.05NN.xxY08KK.A09E18..PQ.04O.37b20.20.07xx.x05.06Y03x03LK06AAx04E19.QQ.O04.38b19.20.07x08.09xxLLK06x06IIE16.04O03.41b17.21.06x11.x07UULLK05x06IIE17.48x05b10.22.05x19U06K05x04I03xxE15.49x06bb.b.03b.22.04x20U06.K04x03I07xIIxE09.50x07.06b.22.03x21.U06x03.03xI07xxIxE08.F.50x.x04.06x.22.03x22U07xx.04I08.x04WWEE.56x04.03x.03xx.20.03x22.U04x03.06I05.03xxXXxWE.04S.53x07.05xx.18.03x23.x05.07I04.05xX03x.05S.55x06.24.03x27.10II.07XXxxW.04S.58x04.23.04x27.09II.07X.xWW.05S.59xx.03x05.15.04x26.10IIx.06X..W.06SS.59x10.14.05x25.12x.07R.05RR..S.62x09G.11.13x16.19JJRR.03RJ.66x06CxxGC.10.14x14.21JJR.J06.63x04CxC06.10.13x14.23JJ..J03.J.03JJ.J.55x05C10.08.14x12.25JJ.J05.04J04x.53x05C13.05.15x11.26J03.10Jx03.52x04C15.04.15x11.28JJ.03Jx.05x04.52x03C15.04.15x12.36B.59x05C11.05.15x12..x.30B.B03.BB.55x06C10.05.14x12..xx.29B10.55x06C09.05.15x10..x03.28B11.57x05C07.06.15x09.03x03.26B14.06x.49x05C07.06.16x08.03xx.26B16.54x07C05.07.16x07.32B17.53x07C03.09.16x07.33B16.53x07C03.09.17x05.34B15.54x07CC.10.17x04.35B04.04B07.54x08.11.65B05.09x.45x06.13.67BB.10x03.42x07.13.68B.09x03.43x05.15.68B.08xx.45x04.16.77x.46x04.16.99.25x03.17.99.25x03.03x.13.99.25x04.16.99.45';
 let GRID = null;
@@ -133,8 +135,7 @@ function cellColor(ui, id) {
   return relColor(row.relation);
 }
 function bakeMap(ui) {
-  const cv = makeCanvas(MAP.COLS * MAP.CELL, MAP.ROWS * MAP.CELL);
-  const c = cv.getContext('2d');
+  const [cv, c] = makeCanvas(MAP.COLS * MAP.CELL, MAP.ROWS * MAP.CELL);
   c.fillStyle = K.sea; c.fillRect(0, 0, cv.width, cv.height);
   for (let y = 0; y < cv.height; y += 16) { c.fillStyle = K.sea2; c.fillRect(0, y, cv.width, 1); }
   for (let x = 0; x < cv.width; x += 16) { c.fillStyle = K.sea2; c.fillRect(x, 0, 1, cv.height); }
@@ -222,10 +223,10 @@ const TAB_MAP = {
     const sel = ui.sel && d.rows[ui.sel];
     if (sel && sel.pos) { const p = project(sel.pos[0], sel.pos[1]); ring(c, p.x, p.y, 6 + ((ui.t >> 4) % 2), K.amber); const lab = sel.short; const lw = measure(c, lab, 10) + 6; const lx = clamp(p.x + 8, MAP.X + 2, MAP.X + MAP.COLS * MAP.CELL - lw - 2); R(c, lx, p.y - 7, lw, 13, 'rgba(0,0,0,0.75)'); T(c, lab, lx + 3, p.y - 6, 10, K.amber); }
     // the inset: the fictional nations of ヴェルミナ海
-    const fx = MAP.X + 6, fy = MAP.Y + 160;
-    R(c, fx, fy, 116, 46, 'rgba(6,14,26,0.85)'); R(c, fx, fy, 116, 1, K.edge);
+    const fx = INSET.x, fy = INSET.y;
+    R(c, fx, fy, INSET.w, 58, 'rgba(6,14,26,0.88)'); R(c, fx, fy, INSET.w, 1, K.edge);
     T(c, 'ヴェルミナ海', fx + 4, fy + 2, 10, K.dim);
-    (d.w.fictional || []).forEach((f, i) => { const sx = fx + 6 + i * 36, sy = fy + 18; R(c, sx, sy, 28, 14, relColor(f.relation)); if (f.war) R(c, sx, sy, 28, 2, K.bad); T(c, fit(c, f.short, 34, 10), sx + 14, sy + 16, 10, ui.sel === f.id ? K.amber : K.text, 'center'); if (ui.sel === f.id) ring(c, sx + 14, sy + 7, 12, K.amber); });
+    (d.w.fictional || []).forEach((f, i) => { const sy = fy + 16 + i * 13; R(c, fx + 6, sy + 2, 8, 8, relColor(f.relation)); if (f.war && Math.floor(ui.t / 15) % 2) R(c, fx + 6, sy + 2, 8, 8, K.bad); T(c, f.short, fx + 18, sy, 10, ui.sel === f.id ? K.amber : K.text, 'left', INSET.w - 46); T(c, `${f.relation}`, fx + INSET.w - 6, sy, 10, relColor(f.relation), 'right'); if (ui.sel === f.id) R(c, fx + 2, sy + 4, 2, 4, K.amber); });
     // the colour chips (top right)
     ui.chips = [];
     MODES.forEach((m, i) => { const w = 40, x = MAP.X + MAP.COLS * MAP.CELL - 4 - (MODES.length - i) * (w + 3), y = MAP.Y + 3; const on = ui.mode === m.id; R(c, x, y, w, 15, on ? K.amber : 'rgba(10,20,34,0.85)'); T(c, m.label, x + w / 2, y + 2, 10, on ? '#1a1206' : K.text, 'center'); ui.chips.push({ x, y, w, h: 15, id: m.id }); });
@@ -238,6 +239,8 @@ const TAB_MAP = {
     drawCountryStrip(ui, c, 4, 258, 632, 76);
   },
 };
+const INSET = { x: MAP.X + 4, y: MAP.Y + 146, w: 100 };
+const insetPts = (fl) => (fl || []).map((f, i) => ({ id: f.id, x: INSET.x + 10, y: INSET.y + 22 + i * 13 }));
 function dotLine(c, a, b, col) { const n = Math.max(2, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 4)); for (let i = 0; i <= n; i++) R(c, a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n, 2, 2, col); }
 function ring(c, x, y, r, col) { for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; R(c, x + Math.cos(a) * r, y + Math.sin(a) * r, 1, 1, col); } }
 function drawCountryStrip(ui, c, x, y, w, h) {
@@ -301,7 +304,7 @@ const TAB_DIPLOMACY = {
     drawList(ui, c, LIST);
     const row = ui.curRow();
     const d = ui.data;
-    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, row && !row.header ? row.label : '外交');
+    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, row && row.pv ? row.label : '外交の概況');
     const x = DETAIL.x + 8;
     let y = DETAIL.y + 20;
     if (row && row.pv) {
@@ -445,12 +448,12 @@ function drawWar(ui, c, row) {
     R(c, bx, y + 3, bw, 6, '#1a2a3a'); R(c, bx + bw / 2, y + 1, 1, 10, K.dim);
     const p = bx + bw / 2 + (clamp(f.control, -100, 100) / 100) * (bw / 2);
     R(c, Math.min(p, bx + bw / 2), y + 3, Math.abs(p - (bx + bw / 2)), 6, f.control >= 0 ? K.cyan : K.bad);
-    T(c, `兵力 約${n0(f.own * 1000)}人`, x0 + 268, y, 10, K.dim, 'left', 70);
+    T(c, `兵力 ${troops(f.own)}`, x0 + 268, y, 10, K.dim, 'left', 80);
     T(c, `${f.odds}%`, x0 + DETAIL.w - 8, y, 10, f.odds >= 50 ? K.good : K.warn, 'right');
   });
   let y = y0 + 22 + w.fronts.length * 18;
   T(c, `死者 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人　相手側 ${n0(w.cas.enemySoldiers + w.cas.enemyCivilians)}人`, x0 + 6, y, 10, K.text, 'left', DETAIL.w - 12); y += 13;
-  T(c, `予備 約${n0(w.reserve * 1000)}人・動員 段階${w.mob}・厭戦 ${Math.round(w.weariness)}・戦費 約${w.cost}兆円`, x0 + 6, y, 10, K.dim, 'left', DETAIL.w - 12); y += 13;
+  T(c, `予備 ${troops(w.reserve)}・動員 段階${w.mob}・厭戦 ${Math.round(w.weariness)}・戦費 約${w.cost}兆円`, x0 + 6, y, 10, K.dim, 'left', DETAIL.w - 12); y += 13;
   T(c, `${w.allies.length ? `味方：${w.allies.map((a) => a.name).join('・')}　` : ''}${w.foes.length ? `相手側：${w.foes.map((a) => a.name).join('・')}` : ''}` || '同盟国の参戦はない', x0 + 6, y, 10, K.cyan, 'left', DETAIL.w - 12);
   // the people the player knows / the player
   const y2 = y0 + 132;
@@ -467,8 +470,12 @@ function drawWar(ui, c, row) {
 const TAB_NEWS = {
   id: 'news', label: 'ニュース',
   rows(ui) {
+    const w = ui.data.w;
     const out = [{ header: true, label: '世界のニュース' }];
-    for (const n of ui.data.w.news.slice(0, 30)) out.push({ key: 'n' + out.length, label: n.text, sub: `${n.day}日目`, news: n });
+    for (const n of w.news.slice(0, 30)) out.push({ key: 'n' + out.length, label: n.text, sub: `${n.day}日目`, news: n });
+    if (!w.news.length) out.push({ key: 'none', label: '（まだニュースはない）' });
+    out.push({ header: true, label: '首脳会議の予定' });
+    for (const s0 of w.summits) out.push({ key: 's' + out.length, label: `${s0.name}${s0.hostName ? `（${s0.hostName}）` : ''}`, sub: `${s0.year}/${s0.month}` });
     return out;
   },
   draw(ui, c) {
@@ -578,7 +585,7 @@ async function stepsFlow(ui) {
     if (k == null || k < 0) return;
     const s0 = steps[k];
     if (s0.why) { await ui.info(s0.name, [s0.desc, '', `いまはできない：${s0.why}`]); continue; }
-    const c = await ui.confirm({ title: `⚠ ${s0.name}`, danger: s0.auth || s0.war, lines: [s0.desc, s0.odds != null ? `【成功の見込み】${Math.round(s0.odds * 100)}%` : null, s0.breakaway ? `【党】${s0.breakaway}。党を離れて新党を結成してから進める。` : null, s0.auth ? '【結果】支持率・国際社会の評価・民衆の不満に重い影響がある。' : null].filter(Boolean), choices: ['やめておく', '進める'], index: 0 });
+    const c = await ui.confirm({ title: `${s0.auth || s0.war ? '⚠ ' : ''}${s0.name}`, danger: s0.auth || s0.war, lines: [s0.desc, s0.odds != null ? `【成功の見込み】${Math.round(s0.odds * 100)}%` : null, s0.breakaway ? `【党】${s0.breakaway}。党を離れて新党を結成してから進める。` : null, s0.auth ? '【結果】支持率・国際社会の評価・民衆の不満に重い影響がある。' : null].filter(Boolean), choices: ['やめておく', '進める'], index: 0 });
     if (c !== 1) continue;
     await ui.result(s0.name, safe(() => g.regimeStep(s0.id), null));
   }
@@ -604,7 +611,7 @@ async function warFlow(ui, o) {
   let opts = {};
   if (o.id === 'battle' || o.id === 'deploy' || o.id === 'front_go' || o.id === 'front_visit') {
     const w = ui.data.war;
-    const k = await ui.pick({ title: o.id === 'battle' ? '作戦を行う前線' : o.id === 'deploy' ? '部隊を送る前線' : '向かう前線', items: w.fronts.map((f) => ({ label: f.name, sub: `兵力 約${n0(f.own * 1000)}人・${f.control >= 0 ? '優勢' : '劣勢'}${Math.abs(f.control)}${f.today && o.id === 'battle' ? '・今日は作戦ずみ' : ''}`, right: `${f.odds}%`, rightColor: f.odds >= 50 ? K.good : K.warn })) });
+    const k = await ui.pick({ title: o.id === 'battle' ? '作戦を行う前線' : o.id === 'deploy' ? '部隊を送る前線' : '向かう前線', items: w.fronts.map((f) => ({ label: f.name, sub: `兵力 ${troops(f.own)}・${f.control >= 0 ? '優勢' : '劣勢'}${Math.abs(f.control)}${f.today && o.id === 'battle' ? '・今日は作戦ずみ' : ''}`, right: `${f.odds}%`, rightColor: f.odds >= 50 ? K.good : K.warn })) });
     if (k == null || k < 0) return;
     opts.front = w.fronts[k].id;
     if (o.id === 'deploy') opts.n = Math.min(40, Math.max(2, Math.round(w.reserve / 2)));
@@ -699,7 +706,7 @@ class WorldScene {
   updateMap(inp) {
     const d = this.data;
     if (!d || !d.ok) return;
-    const pts = [...d.markers, ...(d.w.fictional || []).map((f, i) => ({ id: f.id, x: MAP.X + 26 + i * 36, y: MAP.Y + 185 }))];
+    const pts = [...d.markers, ...insetPts(d.w.fictional)];
     const cur = pts.find((p) => p.id === this.sel) || pts[0];
     for (const [dir, dx, dy] of [['left', -1, 0], ['right', 1, 0], ['up', 0, -1], ['down', 0, 1]]) {
       if (!inp.repeat(dir)) continue;
@@ -734,7 +741,7 @@ class WorldScene {
     if (this.tab.id === 'map') {
       for (const ch of this.chips || []) if (inR(x, y, ch)) { now.a = false; this.mode = ch.id; this.mapKey = ''; sfx('cursor'); return true; }
       const d = this.data;
-      const pts = [...d.markers, ...(d.w.fictional || []).map((f, i) => ({ id: f.id, x: MAP.X + 26 + i * 36, y: MAP.Y + 185 }))];
+      const pts = [...d.markers, ...insetPts(d.w.fictional)];
       let best = null, bd = 14;
       for (const p of pts) { const dd = Math.hypot(p.x - x, p.y - y); if (dd < bd) { bd = dd; best = p; } }
       if (best) { this.focus = 'body'; if (this.sel !== best.id) { this.sel = best.id; now.a = false; sfx('cursor'); } return !now.a; }
@@ -803,12 +810,13 @@ class WorldScene {
     // ticker
     R(c, 0, 336, SW, 24, '#050b14');
     R(c, 0, 336, SW, 1, K.edge);
-    const news = d.w.news.slice(0, 8).map((n) => n.text).join('　　◆　　') || 'ニュースはまだない';
+    const news = d.w.news.slice(0, 8).map((n) => n.text).join('　　◆　　') || d.w.summits.slice(0, 3).map((s0) => `${s0.year}年${s0.month}月　${s0.name}${s0.hostName ? `（${s0.hostName}）` : ''}`).join('　　◆　　');
     const tw2 = measure(c, news, 10) + 80;
     const off = (this.t * 0.6) % Math.max(1, tw2);
-    c.save(); c.beginPath(); c.rect(0, 337, 470, 22); c.clip();
-    T(c, news, 470 - off, 343, 10, K.text); T(c, news, 470 - off + tw2, 343, 10, K.text);
+    c.save(); c.beginPath(); c.rect(0, 337, 462, 22); c.clip();
+    T(c, news, 8 - off, 343, 10, K.text); T(c, news, 8 - off + tw2, 343, 10, K.text);
     c.restore();
+    R(c, 466, 338, 1, 20, K.edge);
     T(c, this.focus === 'tabs' ? '←→タブ　↓選ぶ　B閉じる' : this.tab.id === 'map' ? '十字で国を選ぶ　A決定　Bタブへ' : '↑↓選ぶ　←→タブ　A決定　B戻る', SW - 6, 343, 10, K.dim, 'right', 160);
     // toasts and modals
     this.toasts.forEach((t, i) => { const w = Math.min(SW - 40, measure(c, t.text, 12) + 20); R(c, (SW - w) / 2, 300 - i * 22, w, 20, 'rgba(0,0,0,0.85)'); T(c, t.text, SW / 2, 304 - i * 22, 12, t.color, 'center', w - 10); });
@@ -948,7 +956,7 @@ registerPhoneApp('world', {
   iconHD(c, x, y) {
     appTile(c, x, y, '#1a4a72');
     // a small globe: the ocean, two land shapes, a meridian
-    const cx = x + 18, cy = y + 18;
+    const cx = x + 16, cy = y + 16;
     for (let dy = -9; dy <= 9; dy++) { const hw = Math.round(Math.sqrt(81 - dy * dy)); c.fillStyle = '#4fb0e8'; c.fillRect(cx - hw, cy + dy, hw * 2, 1); }
     c.fillStyle = '#6ad08a'; c.fillRect(cx - 6, cy - 5, 5, 4); c.fillRect(cx - 4, cy - 1, 3, 5); c.fillRect(cx + 2, cy - 6, 5, 3); c.fillRect(cx + 3, cy - 3, 3, 6);
     c.fillStyle = 'rgba(255,255,255,0.5)'; c.fillRect(cx, cy - 9, 1, 18); c.fillRect(cx - 9, cy, 18, 1);
