@@ -59,7 +59,7 @@ const COL = { app: '#2a2438', top: '#141220', text: '#f0ecff', dim: '#a49cc0', g
 
 // ======================================================================== state
 function blank() {
-  return { v: 1, rep: 0, skill: 0, dirty: 0, laundered: 0, earned: 0, contacts: {}, stash: [], safehouse: null, debt: null, rival: null, tip: null, alibi: 0, log: [], board: { day: 0, jobs: [] }, done: {}, intro: 0, lastEvent: 0, lastShoku: 0, steps: 0, nextId: 1 };
+  return { v: 1, rep: 0, skill: 0, dirty: 0, laundered: 0, earned: 0, contacts: {}, stash: [], safehouse: null, debt: null, rival: null, tip: null, alibi: 0, log: [], board: { day: 0, jobs: [] }, listings: [], done: {}, intro: 0, lastEvent: 0, lastShoku: 0, steps: 0, nextId: 1 };
 }
 const READY = new WeakSet();
 export function ura(g) {
@@ -78,10 +78,11 @@ export function ura(g) {
   u.safehouse = isObj(u.safehouse) && num(u.safehouse.until) > 0 ? { until: num(u.safehouse.until), rent: Math.max(0, num(u.safehouse.rent)), since: num(u.safehouse.since) } : null;
   u.debt = isObj(u.debt) && num(u.debt.amount) > 0 ? { amount: Math.round(num(u.debt.amount)), due: num(u.debt.due), missed: Math.max(0, num(u.debt.missed)), day: num(u.debt.day) } : null;
   u.rival = isObj(u.rival) ? { name: String(u.rival.name || 'よそのグループ'), day: num(u.rival.day) } : null;
-  u.tip = isObj(u.tip) && URA_JOBS[u.tip.job] ? { job: u.tip.job, until: num(u.tip.until) } : null;
+  u.tip = isObj(u.tip) && (URA_JOBS[u.tip.job] || /^L\d+$/.test(String(u.tip.job))) ? { job: String(u.tip.job), until: num(u.tip.until) } : null;
   u.log = Array.isArray(u.log) ? u.log.filter(isObj).map((l) => ({ day: num(l.day), text: String(l.text || '') })).slice(-LOG_MAX) : [];
   u.board = isObj(u.board) ? { day: num(u.board.day), jobs: Array.isArray(u.board.jobs) ? u.board.jobs.filter((id) => URA_JOBS[id]) : [] } : { day: 0, jobs: [] };
   u.done = isObj(u.done) ? u.done : {};
+  u.listings = Array.isArray(u.listings) ? u.listings.filter((l) => isObj(l) && URA_JOBS[l.base]).map((l) => ({ id: String(l.id), base: l.base, title: String(l.title || URA_JOBS[l.base].name).slice(0, 40), from: String(l.from || ''), kind: String(l.kind || ''), day: num(l.day), until: num(l.until) })).slice(-6) : [];
   READY.add(u);
   return u;
 }
@@ -161,13 +162,23 @@ export const URA_JOBS = {
   tataki: { name: '強盗の実行役', crime: 'robbery', rep: 0, reward: [300000, 1000000], stamina: 22, scene: 'street', exists: (g) => since(g, 2021, 1), crew: true, unpaid: 0.3, big: true,
     desc: '「指示役」の言うとおりに押し入る（顔も名前も向こうに握られている）', spot: { label: '住宅街', detect: 1.05, cam: 1.2, hide: 0.05 } },
 };
-const jobName = (g, j) => (j === URA_JOBS.tobaku ? (since(g, 2000, 1) ? '闇カジノで遊ぶ' : '裏の賭場で遊ぶ') : j === URA_JOBS.tataki ? `${bigMoneyWord(g)}（${j.name}）` : j === URA_JOBS.ukeko && since(g, 2004, 12) ? `${since(g, 2011, 1) ? '特殊詐欺' : '振り込め詐欺'}の受け子` : j.name);
+// A job id is a URA_JOBS key, or 'L<n>' for a listing another module posted (addListing): the base job with its own title.
+function jobOf(g, id) {
+  if (URA_JOBS[id]) return URA_JOBS[id];
+  if (typeof id !== 'string' || id[0] !== 'L' || !g || !g.state) return null;
+  const l = ura(g).listings.find((x) => x.id === id);
+  if (!l || !URA_JOBS[l.base]) return null;
+  const base = URA_JOBS[l.base];
+  return Object.assign(Object.create(base), { title: l.title, listing: l, once: true });
+}
+const jobName = (g, j) => (j && j.title ? j.title : j === URA_JOBS.tobaku ? (since(g, 2000, 1) ? '闇カジノで遊ぶ' : '裏の賭場で遊ぶ') : j === URA_JOBS.tataki ? `${bigMoneyWord(g)}（${j.name}）` : j === URA_JOBS.ukeko && since(g, 2004, 12) ? `${since(g, 2011, 1) ? '特殊詐欺' : '振り込め詐欺'}の受け子` : j.name);
 function jobAvailable(g, id) {
-  const j = URA_JOBS[id], u = ura(g);
+  const j = jobOf(g, id), u = ura(g);
   if (!j) return { ok: false, why: '' };
   const def = CRIMES[j.crime];
   if (!def || (def.exists && !def.exists(g)) || (j.exists && !j.exists(g))) return { ok: false, hidden: true };
   if (j.once && num(u.done[id]) > 0) return { ok: false, hidden: true };
+  if (j.listing && j.listing.until < g.state.day) return { ok: false, hidden: true };
   if (u.rep < j.rep) return { ok: false, why: `裏の信用 ${j.rep} から` };
   if (j.contact && !u.contacts[j.contact]) return { ok: false, why: `${URA_CONTACTS[j.contact].name}を知らない` };
   if (ageOf(g.state) < 18 && (j.crime === 'gambling' || j.crime === 'gambling_den' || j.crime === 'robbery')) return { ok: false, hidden: true };
@@ -176,17 +187,18 @@ function jobAvailable(g, id) {
 // The board: up to 5 jobs a day, picked by the day (so a reload shows the same board).
 function board(g) {
   const u = ura(g), day = g.state.day;
-  if (u.board.day === day && u.board.jobs.length) return u.board.jobs.filter((id) => !jobAvailable(g, id).hidden);
+  const posted = u.listings.map((l) => l.id).filter((id) => !jobAvailable(g, id).hidden);
+  if (u.board.day === day && u.board.jobs.length) return [...posted, ...u.board.jobs.filter((id) => !jobAvailable(g, id).hidden)];
   const ids = Object.keys(URA_JOBS).filter((id) => !jobAvailable(g, id).hidden);
   const seed = (n) => ((day * 9301 + n * 49297) % 233280) / 233280;
   const sorted = ids.map((id, i) => [id, seed(i + 1)]).sort((a, b) => a[1] - b[1]).map((x) => x[0]);
   u.board = { day, jobs: sorted.slice(0, 5) };
-  return u.board.jobs;
+  return [...posted, ...u.board.jobs];
 }
 const PHASE_IDS = ['day', 'night', 'late'];
 const PHASE_LABEL = { day: '昼', night: '夜', late: '深夜' };
 function jobCtx(g, id, o = {}) {
-  const j = URA_JOBS[id], u = ura(g);
+  const j = jobOf(g, id), u = ura(g);
   const amount = j.goods ? Math.round((j.goods[0] + j.goods[1]) / 2) : j.reward ? Math.round((j.reward[0] + j.reward[1]) / 2) : num(o.stake, 10000);
   return {
     job: id, spot: j.spot, amount, where: j.spot.label, crew: j.crew ? clamp(num(o.crew), 0, 2) : 0, prep: o.prep ? 0.6 : 0, prepLabel: '下見',
@@ -196,7 +208,7 @@ function jobCtx(g, id, o = {}) {
 export function jobOdds(g, id, o = {}) {
   const prev = g._crimePhase;
   g._crimePhase = PHASE_IDS.includes(o.phase) ? o.phase : 'night';
-  try { return g.crimeOdds(URA_JOBS[id].crime, jobCtx(g, id, o)); } finally { if (prev === undefined) delete g._crimePhase; else g._crimePhase = prev; }
+  try { return g.crimeOdds(jobOf(g, id).crime, jobCtx(g, id, o)); } finally { if (prev === undefined) delete g._crimePhase; else g._crimePhase = prev; }
 }
 const jobCost = (j, o) => num(j.stamina) + (o.prep ? 8 : 0) + (o.phase === 'late' ? 6 : 0);
 function rewardText(g, j, o = {}) {
@@ -239,7 +251,7 @@ class JobScene {
 const GOOD_LINES = ['（段取りどおりに、仕事は終わった）', '（だれにも見られずに済んだ。…手際がよくなってきた）', '（思ったより、あっけなかった）'];
 // Runs one job (as a script, outside the phone). o: { phase, prep, crew, disguise, stake }. Returns the commit result.
 export async function runJob(g, id, o = {}) {
-  const j = URA_JOBS[id], u = ura(g), st = g.state;
+  const j = jobOf(g, id), u = ura(g), st = g.state;
   if (!j || !jobAvailable(g, id).ok || !free(g)) return null;
   const cost = jobCost(j, o);
   if (st.stamina < cost) { await g.say('（体力が足りない…。今日はもう動けない）'); return null; }
@@ -276,6 +288,7 @@ export async function runJob(g, id, o = {}) {
     delete g._crimePhase;
     u.done[id] = num(u.done[id]) + 1;
     if (u.tip && u.tip.job === id) u.tip = null;
+    if (j.listing) u.listings = u.listings.filter((l) => l.id !== id);
     if (!res || res.report && res.report.none) return res;
     if (res.caught) {
       addRep(g, -3);
@@ -412,7 +425,7 @@ function drawStatus(c, a, g) {
 }
 export async function uraApp(g) {
   const u = ura(g);
-  if (!crimeMode(g) && !u.intro) { await uraInfo(g, appLabel(g).title, '（まだ、何も届いていない）'); return; }
+  if (!crimeMode(g) && !u.intro && !liveListings(g).length) { await uraInfo(g, appLabel(g).title, '（まだ、何も届いていない）'); return; }
   let last = 0;
   for (;;) {
     const items = menuItems(g);
@@ -431,8 +444,13 @@ function menuItems(g) {
   const kept = u.stash.reduce((a, s) => a + s.value, 0);
   const rows = [];
   if (!on) {
-    rows.push({ label: 'また裏の仕事を受ける', sub: '足を洗ってからは、何も届いていない', run: async () => { g.setCrimeMode(true, 'app'); await uraInfo(g, appLabel(g).title, '（また、仕事の連絡が届くようになった）'); } });
+    const posts = liveListings(g);
+    if (posts.length) rows.push({ label: '届いた募集', sub: posts[posts.length - 1].title, right: `${posts.length}件`, run: () => jobsScreen(g, { only: posts.map((l) => l.id) }) });
+    rows.push(u.intro
+      ? { label: 'また裏の仕事を受ける', sub: '足を洗ってからは、何も届いていない', run: async () => { g.setCrimeMode(true, 'app'); await uraInfo(g, appLabel(g).title, '（また、仕事の連絡が届くようになった）'); } }
+      : { label: '裏の仕事を受ける', sub: 'ほかの仕事の連絡も届くようになる', run: async () => { g.setCrimeMode(true, 'app'); await uraInfo(g, appLabel(g).title, '（仕事の連絡が届くようになった）'); } });
   } else rows.push({ label: '仕事を探す', sub: appLabel(g).board, right: `${board(g).length}件`, run: () => jobsScreen(g) });
+  if (!u.intro && !on) return rows; // only the posts so far: nothing else to show
   rows.push({ label: '手配度・ほとぼり', sub: lv > 0 ? `★${starsOf(lv)}　ほとぼりを冷ます` : '警察の目は向いていない', right: lv > 0 ? '★'.repeat(starsOf(lv)) : '', rightColor: COL.gold, run: () => heatScreen(g) });
   rows.push({ label: '連絡先', sub: `${n}人${u.tip && u.tip.until >= day ? '・ネタあり' : ''}`, run: () => contactsScreen(g) });
   rows.push({ label: '隠し場所', sub: u.stash.length ? `${u.stash.length}点・時価${fmtMoney(kept)}` : 'からっぽ', run: () => stashScreen(g) });
@@ -443,12 +461,13 @@ function menuItems(g) {
   if (on) rows.push({ label: '足を洗う', sub: '裏の仕事から手を引く', run: async () => leave(g) });
   return rows;
 }
-async function jobsScreen(g) {
+const liveListings = (g) => { try { return ura(g).listings.filter((l) => !jobAvailable(g, l.id).hidden); } catch (e) { return []; } };
+async function jobsScreen(g, opts = {}) {
   for (;;) {
-    const ids = board(g);
+    const ids = opts.only ? board(g).filter((id) => opts.only.includes(id)) : board(g);
     const items = ids.map((id) => {
-      const j = URA_JOBS[id], av = jobAvailable(g, id), o = jobOdds(g, id, { phase: 'night' });
-      return { id, label: jobName(g, j), sub: av.ok ? `成功${o.pct.success}%・捕${o.pct.now}%・後${o.pct.later}%` : av.why, right: j.stake ? '賭け' : fmtMoney(j.reward ? j.reward[1] : j.goods[1]), disabled: !av.ok, why: av.why, subColor: av.ok ? (o.pct.success >= 60 ? COL.good : o.pct.success >= 35 ? COL.warn : COL.bad) : COL.dim };
+      const j = jobOf(g, id), av = jobAvailable(g, id), o = jobOdds(g, id, { phase: 'night' });
+      return { id, label: jobName(g, j), sub: av.ok ? `成功${o.pct.success}%・捕${o.pct.now}%・後${o.pct.later}%` : av.why, right: j.listing ? '募集' : j.stake ? '賭け' : fmtMoney(j.reward ? j.reward[1] : j.goods[1]), disabled: !av.ok, why: av.why, subColor: av.ok ? (o.pct.success >= 60 ? COL.good : o.pct.success >= 35 ? COL.warn : COL.bad) : COL.dim };
     });
     const i = await uraList(g, { title: appLabel(g).board, items, index: jobsScreen.last || 0, empty: '（今日の募集はない）', pick: (ph, it, idx) => ph.back(idx) });
     if (i < 0) return;
@@ -459,7 +478,7 @@ async function jobsScreen(g) {
 }
 // The job card: live odds as the options change (←→ on a row, or A to step it).
 async function jobDetail(g, id) {
-  const j = URA_JOBS[id], u = ura(g);
+  const j = jobOf(g, id), u = ura(g);
   const o = { phase: 'night', prep: false, crew: 0, disguise: false, stake: j.stake ? j.stake[0] : 0 };
   const step = (key, d) => {
     if (key === 'phase') o.phase = PHASE_IDS[(PHASE_IDS.indexOf(o.phase) + d + 3) % 3];
@@ -499,7 +518,7 @@ async function jobDetail(g, id) {
   return result;
 }
 function drawJobTop(c, a, g, id, o) {
-  const j = URA_JOBS[id];
+  const j = jobOf(g, id);
   const odds = jobOdds(g, id, o);
   R0(c, a.x, a.y, a.w, a.h, COL.top);
   const lines = wrap(c, j.desc, a.w - 16, 12);
@@ -576,7 +595,7 @@ async function contactsScreen(g) {
 const tipPrice = (g) => 20000;
 async function buyTip(g) {
   const u = ura(g), day = g.state.day;
-  if (u.tip && u.tip.until >= day) { await uraInfo(g, '情報屋', `「${jobName(g, URA_JOBS[u.tip.job])}」のネタは、もう買ってある。\n（あと${u.tip.until - day}日）`); return; }
+  if (u.tip && u.tip.until >= day) { await uraInfo(g, '情報屋', `「${jobName(g, jobOf(g, u.tip.job))}」のネタは、もう買ってある。\n（あと${u.tip.until - day}日）`); return; }
   const k = await uraConfirm(g, { title: '情報屋', color: COL.app, text: `今日の募集のどれかについて、\n現場の様子を教えてくれる。\n（見つかりにくくなる・3日間）\n${fmtMoney(tipPrice(g))}`, choices: ['ネタを買う', 'やめる'] });
   if (k !== 0) return;
   const ids = board(g).filter((id) => jobAvailable(g, id).ok);
@@ -584,8 +603,8 @@ async function buyTip(g) {
   if (!g.spend(tipPrice(g))) { await uraInfo(g, '情報屋', 'お金が足りない。'); return; }
   const id = pickOne(ids);
   u.tip = { job: id, until: day + 3 };
-  log(g, `情報屋から「${jobName(g, URA_JOBS[id])}」のネタを買った`);
-  await uraInfo(g, '情報屋', `「${jobName(g, URA_JOBS[id])}」の現場は、いま手薄だ。\n…3日のうちにやれ。`);
+  log(g, `情報屋から「${jobName(g, jobOf(g, id))}」のネタを買った`);
+  await uraInfo(g, '情報屋', `「${jobName(g, jobOf(g, id))}」の現場は、いま手薄だ。\n…3日のうちにやれ。`);
 }
 const fenceRate = (g) => 0.4 + 0.15 * (ura(g).rep / 100);
 async function stashScreen(g) {
@@ -719,8 +738,8 @@ registerPhoneApp('ura', {
   name: (g) => appLabel(g).name,
   color: '#2a2438',
   order: 48,
-  cond: (g) => { try { const u = g.state && g.state.ura; return crimeMode(g) || !!(u && u.intro); } catch (e) { return false; } },
-  badge: (g) => { try { const u = ura(g); return crimeMode(g) && u.board.day !== g.state.day ? 1 : 0; } catch (e) { return 0; } },
+  cond: (g) => { try { const u = g.state && g.state.ura; return crimeMode(g) || !!(u && (u.intro || (Array.isArray(u.listings) && u.listings.some((l) => l && num(l.until) >= g.state.day)))); } catch (e) { return false; } },
+  badge: (g) => { try { const u = ura(g); return (crimeMode(g) || liveListings(g).length) && u.board.day !== g.state.day ? 1 : 0; } catch (e) { return 0; } },
   iconHD(c, x, y, g) {
     const A = appLabel(g);
     appTile(c, x, y, A.color);
@@ -775,7 +794,7 @@ onJustice('stash_found', (g) => { try { const u = ura(g); u.stash = u.stash.filt
 
 // Mornings in crime mode: the money, the 隠れ家's rent, the 元締め's loan, and now and then a turn of luck.
 export const URA_EVENTS = {
-  tip: { good: true, ok: (g, u) => !!u.contacts.joho, run: (g, u) => { const ids = board(g).filter((id) => jobAvailable(g, id).ok); if (!ids.length) return false; const id = pickOne(ids); u.tip = { job: id, until: g.state.day + 3 }; msg(g, '情報屋', `タダでいいネタだ。「${jobName(g, URA_JOBS[id])}」の現場、いま手薄だぞ。`); log(g, `情報屋から「${jobName(g, URA_JOBS[id])}」のネタ（タダ）`); return true; } },
+  tip: { good: true, ok: (g, u) => !!u.contacts.joho, run: (g, u) => { const ids = board(g).filter((id) => jobAvailable(g, id).ok); if (!ids.length) return false; const id = pickOne(ids); u.tip = { job: id, until: g.state.day + 3 }; msg(g, '情報屋', `タダでいいネタだ。「${jobName(g, jobOf(g, id))}」の現場、いま手薄だぞ。`); log(g, `情報屋から「${jobName(g, jobOf(g, id))}」のネタ（タダ）`); return true; } },
   windfall: { good: true, ok: (g, u) => u.rep >= 10, run: (g, u) => { const n = r1000(rint(20000, 80000) * (1 + u.rep / 50)); g.state.money += n; addDirty(g, n); msg(g, '昔の仲間', `前に助けてもらった礼だ。${fmtMoney(n)}、いつもの場所に置いておいた。`); log(g, `昔の仲間から礼金${fmtMoney(n)}`); return true; } },
   rival_busted: { good: true, ok: (g, u) => !!u.rival, run: (g, u) => { msg(g, '情報屋', `${u.rival.name}が、まとめて挙げられたらしい。シマが空いたぞ。`); log(g, `${u.rival.name}が摘発された`); u.rival = null; addRep(g, 5); return true; } },
   alibi: { good: true, ok: (g, u) => u.rep >= 15 && !u.alibi && wantedOf(g) >= 1, run: (g, u) => { u.alibi = g.state.day; msg(g, '昔の仲間', 'いざとなったら、「あの夜はおれと飲んでた」って言ってやるよ。'); log(g, '仲間がアリバイを申し出た'); return true; } },
@@ -880,4 +899,24 @@ onMorning(uraMorning);
   P.onWalkStep = f;
 })();
 
-if (typeof window !== 'undefined') window.__ura = { URA_JOBS, URA_CONTACTS, URA_EVENTS, ura, uraApp, jobOdds, runJob, rankOf, uraMorning, appLabel, setRng: (fn) => { RNG = fn || Math.random; } };
+// ======================================================================== listings posted by other modules
+// addListing(g, { kind, crime, from, title, days }) — another module (js/world/yami.js: the 闇バイト ad a fan answered) puts a
+// recruitment post on the board. It becomes a normal job: the URA_JOBS entry for that crime (fraud_courier → 受け子,
+// stolen_goods → 荷物の運び, …) under the post's own title, for `days` (default 10), once. Returns the listing or null.
+const CRIME_JOB = { fraud_courier: 'ukeko', fraud_caller: 'kakeko', stolen_goods: 'hakobi', theft: 'nuki', robbery: 'tataki', account_sale: 'ganpu', extortion: 'kyokatsu', counterfeit: 'mitsubai', gambling: 'tobaku', gambling_den: 'doumoto', fence: 'koubai' };
+export function addListing(g, listing = {}) {
+  try {
+    if (!g || !g.state || !isObj(listing)) return null;
+    const u = ura(g);
+    const base = CRIME_JOB[listing.crime] || (URA_JOBS[listing.job] ? listing.job : null) || 'hakobi';
+    const title = String(listing.title || jobName(g, URA_JOBS[base])).slice(0, 40);
+    if (u.listings.some((l) => l.title === title && l.until >= g.state.day)) return null; // the same post is already up
+    const l = { id: `L${u.nextId++}`, base, title, from: String(listing.from || ''), kind: String(listing.kind || ''), day: g.state.day, until: g.state.day + Math.max(1, Math.round(num(listing.days, 10))) };
+    u.listings.push(l);
+    if (u.listings.length > 6) u.listings.splice(0, u.listings.length - 6);
+    log(g, `募集が届いた：${title}`);
+    return { ...l };
+  } catch (e) { console.error(e); return null; }
+}
+if (typeof window !== 'undefined') window.__crimeApp = { addListing, addOffer: addListing, ura: (g) => ura(g), jobOdds, runJob };
+if (typeof window !== 'undefined') window.__ura = { URA_JOBS, URA_CONTACTS, URA_EVENTS, ura, uraApp, jobOdds, runJob, rankOf, uraMorning, appLabel, addListing, jobOf, setRng: (fn) => { RNG = fn || Math.random; } };
