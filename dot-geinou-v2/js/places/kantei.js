@@ -676,8 +676,11 @@ async function pmDeskTalk(g) {
     let plot0 = null;
     try { plot0 = intra0 && typeof g.intraPlot === 'function' ? g.intraPlot() : null; } catch (e) { plot0 = null; }
     const intraItem = intra0 ? `党内の動き${plot0 && plot0.mine ? '（倒閣の動き！）' : ''}` : null;
-    const items = ['きょうの報告を聞く', '政治のメニュー', '外遊に出る', '危機管理センターへ', ...(console0 ? ['政府中枢（コンソール）'] : []), ...(fk ? [fk] : []), ...(intraItem ? [intraItem] : []), 'もどる'];
+    // round 5 (R5-B): 各界 (業界団体・労組・メディアなど): the console's 各界 tab
+    const groupsItem = typeof g.groupsScreen === 'function' && !g.auto ? '各界との関係' : null;
+    const items = ['きょうの報告を聞く', '政治のメニュー', '外遊に出る', '危機管理センターへ', ...(console0 ? ['政府中枢（コンソール）'] : []), ...(fk ? [fk] : []), ...(intraItem ? [intraItem] : []), ...(groupsItem ? [groupsItem] : []), 'もどる'];
     const i = await g.ask('総理の執務机だ。何をする？', items, { cancel: items.length - 1 });
+    if (groupsItem && items[i] === groupsItem) { try { await g.groupsScreen(); } catch (e) { console.error(e); } continue; }
     if (intraItem && items[i] === intraItem) { try { await g.politicsScreen('party', {}); } catch (e) { console.error(e); } continue; }
     if (fk && items[i] === fk) {
       if (g.auto) { await g.say(`（${F.disaster.name}の復興を担う${F.postName}を決めよう）`); return; }

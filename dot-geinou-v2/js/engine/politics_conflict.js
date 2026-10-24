@@ -486,11 +486,16 @@ export function installConflict(X) {
     const S = I(p);
     const real = pt.real;
     n = Math.max(1, Math.min(n, Math.floor(X.partySeats(p, pt.id) * 0.12) + 2, 36));
-    const boss = npcOf(p, f ? f.leader : c && c.sideA.leader);
+    // the one who leads the group out is never the party's own leader (he stays: the group goes without him)
+    let boss = npcOf(p, f ? f.leader : c && c.sideA.leader);
+    if (!boss || boss.party !== pt.id || boss.id === pt.leader) {
+      const mem = Object.values(p.npcs).filter((q) => q.party === pt.id && q.id !== pt.leader && f && q.faction === f.id).sort((a, b) => num(b.traits && b.traits.charisma, 50) - num(a.traits && a.traits.charisma, 50));
+      boss = mem[0] || null;
+    }
     const roll = Math.random();
     let toId = IND, kind = 'ind';
     const opps = Object.keys(p.parties).filter((id) => id !== pt.id && !X.isRulingParty(p, id) && !p.parties[id].isPlayers && !/^my\d/.test(id));
-    if (n >= 5 && roll < 0.4) { const sp = createSplinter(g, p, pt, n, boss, why); if (sp) { toId = sp.id; kind = 'new'; } }
+    if (n >= 5 && roll < 0.4 && boss) { const sp = createSplinter(g, p, pt, n, boss, why); if (sp) { toId = sp.id; kind = 'new'; } }
     if (kind === 'ind' && roll > 0.65 && opps.length) {
       // a party close in policy
       opps.sort((a, b) => Math.abs(num(p.parties[a].ideology.econ) - num(pt.ideology.econ)) + Math.abs(num(p.parties[a].ideology.security) - num(pt.ideology.security)) - (Math.abs(num(p.parties[b].ideology.econ) - num(pt.ideology.econ)) + Math.abs(num(p.parties[b].ideology.security) - num(pt.ideology.security))));
@@ -930,6 +935,8 @@ export function installConflict(X) {
     const S = I(p);
     if (day - num(S.stanceDay, -99) < 7) return;
     S.stanceDay = day;
+    // a player PM steers the government's line: R5-C keeps the override for 40 days, so it is renewed every week
+    if (p.cabinet.pm === 'player' && typeof g.setForeignStance === 'function') { try { g.setForeignStance('government', null, { ...stanceOfPlayer(g, p).vec }); } catch (e) { /* ignore */ } }
     const cab = stanceOfCabinet(g, p);
     const fx = stanceEffect(g, p, cab.vec);
     // relations: only when R5-C's own effect is not in use (it would apply its own)

@@ -131,6 +131,19 @@ export function installIntra(X) {
         return f;
       });
     }
+    // a faction whose boss has left the party (a split, a defection) gets a new boss from its own members
+    for (const f of pt.factions) {
+      if (f.leader === 'player') continue;
+      const old = npcOf(p, f.leader);
+      if (old && old.party === pt.id) continue;
+      const pool = Object.values(p.npcs).filter((n) => n.party === pt.id && n.faction === f.id && n.id !== f.leader && (n.office === 'shugi' || n.office === 'sangi')).sort((a, b) => num(b.wins) - num(a.wins));
+      const nb = pool[0] || makeNpcFor(p, pt, f, { wins: irnd(5, 10), age: irnd(52, 68) });
+      f.leader = nb.id; nb.faction = f.id;
+      const sur = old ? String(old.name).split(' ')[0] : null;
+      if (sur && String(f.name).startsWith(sur) && /グループ$/.test(f.name)) f.name = `${String(nb.name).split(' ')[0]}グループ`;
+      const x = I(p).fx[f.id];
+      if (x) { x.bantou = null; x.heir = null; }
+    }
     for (const f of pt.factions) fxOf(g, p, pt, f);
   }
   function fxOf(g, p, pt, f) {
@@ -1036,6 +1049,27 @@ export function installIntra(X) {
     for (const pt of Object.values(p.parties)) ensureFactions(g, p, pt);
     S.ensured = today(g);
   }
+  // party posts and faction bosses held by someone who has since left the party (a split, a defection, a retirement from the party)
+  // are handed to a member of the same faction (or left to a new face), so no party is led through a stranger
+  function sweepStale(g, p) {
+    for (const pt of Object.values(p.parties)) { try { ensureFactions(g, p, pt); } catch (e) { /* ignore */ } }
+    for (const pt of Object.values(p.parties)) {
+      if (!pt.posts) continue;
+      for (const [post, who] of Object.entries(pt.posts)) {
+        if (!who || who === 'player') continue;
+        const n = p.npcs[who];
+        if (n && n.party === pt.id) continue;
+        if (n) n.posts = (n.posts || []).filter((q) => q !== post);
+        const f = n && n.faction ? findFaction(p, n.faction) : null;
+        const fid = f ? f.f.id : null;
+        const pool = Object.values(p.npcs).filter((q) => q.party === pt.id && (q.office === 'shugi' || q.office === 'sangi') && !(q.posts || []).some((x) => POSTS[x] && POSTS[x].kind === 'party') && q.id !== pt.leader);
+        const same = pool.filter((q) => fid && q.faction === fid);
+        const pick = (same.length ? same : pool)[0];
+        if (pick) { pt.posts[post] = pick.id; pick.posts = [...(pick.posts || []), post]; }
+        else { const nn = X.newNpc(p, { party: pt.id, house: 'shugi', office: 'shugi', wins: irnd(4, 9), age: irnd(50, 68) }); nn.posts = [post]; pt.posts[post] = nn.id; }
+      }
+    }
+  }
   function tick(g, p, day, abs) {
     const S = I(p);
     if (S.ensured == null || (day - S.ensured > 30)) ensureAll(g, p);
@@ -1045,6 +1079,7 @@ export function installIntra(X) {
       S.ageDay += YEAR_DAYS;
       for (const n of Object.values(p.npcs)) if (n.faction || (n.posts && n.posts.length)) n.age = (n.age || 55) + 1;
     }
+    if (day - num(S.sweepDay, -99) >= 7) { S.sweepDay = day; try { sweepStale(g, p); } catch (e) { console.error('intra sweep', e); } }
     if (X.stepEvents) X.stepEvents(g, p, day);
     plotTick(g, p, day);
     dealsTick(g, p, day);
@@ -1155,6 +1190,16 @@ export function installIntra(X) {
     if (!res) return;
     const S = I(p);
     if (res.kind === 'shugi' || res.kind === 'sangi') {
+      // a splinter party left without a seat ends (its members go to 無所属 / other parties)
+      for (const id of Object.keys(p.parties)) {
+        const sp = p.parties[id];
+        if (!/^sp\d+$/.test(id) || !sp || sp.isPlayers || p.me.party === id || X.partySeats(p, id) > 0 || !X.retireParty) continue;
+        for (const f of sp.factions || []) delete S.fx[f.id];
+        for (const k of ['conflicts', 'events', 'deals']) if (Array.isArray(S[k])) S[k] = S[k].filter((x) => !x || x.party !== id);
+        if (S.plot && S.plot.party === id) S.plot = null;
+        const nm = sp.name;
+        try { X.retireParty(g, p, id, '議席を失ったため'); X.news(p, g, `${nm}は議席を失い、活動を終えた`); } catch (e) { console.error(e); }
+      }
       for (const pt of Object.values(p.parties)) {
         // faction sizes follow the new seat totals; the losers' factions are in a bad mood
         const seats = X.partySeats(p, pt.id);

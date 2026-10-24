@@ -7023,6 +7023,7 @@ const INTRA = (() => {
     policyAxes: (id) => (IDEO_MOD && IDEO_MOD.policyAxes ? IDEO_MOD.policyAxes(id) : null),
     politicalScandal: (g, p, kind, opts) => scandalImpl(g, p, kind, opts),
     dissolveNpc: (g, p, why) => dissolveImpl(g, p, why),
+    retireParty: (g, p, id, why) => retireParty(g, p, id, why),
   };
   const H = installIntra(X);
   installConflict(X);

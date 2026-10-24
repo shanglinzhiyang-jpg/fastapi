@@ -87,6 +87,10 @@ export function installPledge(X) {
     }
     return ed;
   }
+  // the open pledges of an edition follow the election day (a dissolution moves it)
+  function syncDeadlines(p, pid, ed, nx) {
+    for (const q of PL(p).list) if (q.party === pid && q.edition === ed.n && q.deadline !== nx.day && !['fulfilled', 'broken', 'dropped'].includes(q.status)) q.deadline = nx.day;
+  }
   function ensureAll(g, p) {
     for (const pt of Object.values(p.parties)) ensureEdition(g, p, pt);
     // an election day that moved (a dissolution): the editions follow
@@ -212,6 +216,7 @@ export function installPledge(X) {
       const ed = ensureEdition(g, p, pt);
       if (ed.judged) continue;
       ed.deadline = nx.day; ed.koji = nx.koji; ed.electionId = nx.id;
+      syncDeadlines(p, pt.id, ed, nx);
       // locked once the campaign opens; the verdict then
       if (day >= nx.koji - 0 || (nx.status === 'campaign')) {
         ed.locked = true;
@@ -269,6 +274,7 @@ export function installPledge(X) {
     const S = PL(p);
     if (S.ensured == null) ensureAll(g, p);
     const ed = ensureEdition(g, p, pt);
+    if (!ed.judged) syncDeadlines(p, pt.id, ed, nextElectionDay(g, p));
     const list = S.list.filter((q) => q.party === pt.id && q.edition === ed.n).map((q) => rowOf(g, p, q));
     list.sort((a, b) => b.prio - a.prio || (a.status === 'fulfilled') - (b.status === 'fulfilled'));
     const ruling = isRuling(p, pt.id);

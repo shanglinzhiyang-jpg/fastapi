@@ -1174,7 +1174,7 @@ const STANCE_COL = { pro: K.good, con: K.bad, neutral: K.dim };
 const STANCE_WORD = { pro: '賛成', con: '反対', neutral: '中立' };
 
 // ================================================================ tab 1: 概況
-const REASON_SHORT = { base: '基礎', honeymoon: '発足直後', economy: '経済', deficit: '財政', policy: '政策', scandal: '不祥事・カネ', fatigue: '政権の長さ', pm: '総理の人気', nejire: 'ねじれ', tax: '税', budget: '予算', demo: 'デモ', diet: '国会運営', religion: '宗教問題', admin: '行政', disaster: '災害対応', regime: '体制・安保', other: 'その他' };
+const REASON_SHORT = { base: '基礎', honeymoon: '発足直後', economy: '経済', deficit: '財政', policy: '政策', scandal: '不祥事・カネ', fatigue: '政権の長さ', pm: '総理の人気', nejire: 'ねじれ', tax: '税', budget: '予算', demo: 'デモ', diet: '国会運営', religion: '宗教問題', admin: '行政', groups: '各界', disaster: '災害対応', regime: '体制・安保', other: 'その他' };
 const TAB_OVERVIEW = {
   id: 'overview', label: '概況', short: '支持率・議席・経済・体制・危機・世論・予定', tip: 'govt_approval', lesson: 'yoron',
   about: '内閣支持率・議席・経済・体制・危機・世論・次の予定を一度に見る',

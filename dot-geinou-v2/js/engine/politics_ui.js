@@ -398,6 +398,13 @@ const ICONS = {
     for (let i = 0; i < 5; i++) R(c, x + 12, y + 5 + i * 2, 5, 1, '#8a8270');
   },
   alert(c, x, y, col) { R(c, x + 8, y + 2, 4, 11, col); R(c, x + 8, y + 15, 4, 3, col); },
+  groups(c, x, y, col) { // 各界 (groups_ui.js): three buildings of different heights (the industry, the unions, the media)
+    for (const [dx, h, k] of [[1, 11, -0.35], [7, 16, 0], [13, 9, -0.35]]) {
+      R(c, x + dx, y + 18 - h, 6, h, k ? shade(col, k) : col); R(c, x + dx, y + 18 - h, 6, 1, shade(col, 0.35));
+      for (let j = 0; j < Math.floor(h / 4); j++) { R(c, x + dx + 1, y + 20 - h + j * 4, 1, 2, '#0a0f26'); R(c, x + dx + 4, y + 20 - h + j * 4, 1, 2, '#0a0f26'); }
+    }
+    R(c, x, y + 18, 20, 1, '#5a6488');
+  },
   govt(c, x, y, col) { // 政府中枢 (govt_ui.js): a console screen with bars and a line
     R(c, x + 1, y + 2, 18, 13, '#05081a'); R(c, x + 2, y + 3, 16, 11, '#0f2a3a');
     R(c, x + 4, y + 9, 2, 4, col); R(c, x + 7, y + 7, 2, 6, col); R(c, x + 10, y + 5, 2, 8, shade(col, 0.3)); R(c, x + 13, y + 8, 2, 5, col);
@@ -789,6 +796,7 @@ const COMMANDS = [
   { id: 'diet', label: '国会', color: '#b8a0ff', tip: '法律は衆参両院で可決して成立。衆院は出席議員の3分の2で再可決できる' },
   { id: 'cabinet', label: '内閣', color: '#ff8a5a', tip: '総理大臣は国会が指名し、天皇が任命する（憲法6条・67条）' },
   { id: 'party', label: '党内', color: '#5ee07a', tip: '幹事長・政調会長・総務会長などの党役員が、党の運営と政策を担う' },
+  { id: 'groups', label: '各界', color: '#8ad06a', tip: '業界団体・労働組合・メディア・宗教団体など、政治を動かす各界との関係（政府中枢の「各界」へ）' },
   { id: 'money', label: '資金・活動', color: '#ffd23f', tip: '政治資金は毎年、収支報告書で公開される（原則、翌年3月末まで）' },
   { id: 'news', label: 'ニュース', color: '#9aa3c8', tip: '新聞やテレビが伝えた、最近の政治の動き' },
   // the government console (js/engine/govt_ui.js, when loaded)
@@ -1039,7 +1047,7 @@ function drawDashboard(c, g, ui, view, s) {
   }
   // ---- commands
   {
-    const y = 292, tw = 70, x0 = Math.round((SW - COMMANDS.length * tw) / 2);
+    const y = 292, tw = Math.min(70, Math.floor((SW - 6) / COMMANDS.length)), x0 = Math.round((SW - COMMANDS.length * tw) / 2);
     COMMANDS.forEach((cmd, i) => {
       const x = x0 + i * tw;
       const sel = view.focus === 'cmd' && view.idx === i;
@@ -1047,7 +1055,7 @@ function drawDashboard(c, g, ui, view, s) {
       frame(c, x + 2, y + lift, tw - 4, 44, sel ? shade(cmd.color, -0.55) : '#151d44', sel ? cmd.color : C.edge);
       if (sel) R(c, x + 3, y + 1 + lift, tw - 6, 1, shade(cmd.color, 0.2));
       ICONS[cmd.id](c, x + tw / 2 - 10, y + 3 + lift, cmd.color);
-      T(c, cmd.label, x + tw / 2, y + 26 + lift, 12, sel ? '#ffffff' : C.dim, 'center');
+      T(c, fit(c, cmd.label, tw - 4, tw < 66 ? 11 : 12), x + tw / 2, y + 26 + lift, tw < 66 ? 11 : 12, sel ? '#ffffff' : C.dim, 'center');
     });
   }
 }
@@ -1060,6 +1068,12 @@ async function openSection(ui, id, opts = {}) {
 }
 const SECTIONS = {};
 // 政府中枢 (govt_ui.js registers g.govtConsole): opens over the politics UI and comes back here
+// 各界 (groups_ui.js registers g.groupsScreen: the console's 各界 tab); the politics UI links to it
+SECTIONS.groups = async (ui, o = {}) => {
+  const g = ui.g;
+  if (typeof g.groupsScreen === 'function') { await g.groupsScreen(o.sub, o); return; }
+  await ui.alert('各界', '各界の画面は、まだ読み込まれていない。');
+};
 SECTIONS.govt = async (ui) => {
   const g = ui.g;
   if (typeof g.govtConsole === 'function') { await g.govtConsole('overview'); return; }
@@ -2937,7 +2951,7 @@ function policyStudioView(g, o) {
   };
   const v = {
     title: o.title || '政策をつくる', focus: 'area', pidx: 0,
-    hint: () => (v.focus === 'param' ? '←→:数字を変える ↑↓ A:提出 B:もどる' : pick ? '↑↓→ A:公約に入れる・外す B:もどる' : '↑↓→ A:えらぶ B:もどる'),
+    hint: () => (v.focus === 'param' ? '←→:数字を変える ↑↓ A:提出 B:もどる' : pick ? '↑↓→ A:入れる・外す ✔これで決める:確定 B:やめる' : '↑↓→ A:えらぶ B:もどる'),
     tip: () => { const pl = v.cur(); if (v.focus === 'area') return POLICY_AREAS[AREA_ORDER[v.al.idx]] ? `${POLICY_AREAS[AREA_ORDER[v.al.idx]].name}：${POLICY_AREAS[AREA_ORDER[v.al.idx]].desc}` : '公約は、選挙で有権者に示す約束'; return pl ? (pl.kind === 'amendment' ? '憲法改正は、各院の総議員の3分の2で発議し、国民投票で決まる' : '効果は見込み。成立してから、時間をかけて経済に表れる') : ''; },
     enter() {
       v.al = new ListBox({ items: areaRows, rowH: 18, index: o.area ? Math.max(0, AREA_ORDER.indexOf(o.area)) : 0 });
@@ -3778,8 +3792,9 @@ SECTIONS.amendment = async (ui) => {
   }
 };
 
-// ================================================================ 党内
-SECTIONS.party = async (ui) => {
+// ================================================================ 党の運営（役員人事・派閥に入る・党首選・入党の呼びかけ・党資金）
+// (R5-D: the 党内 screen itself is now the hub of politics_intra_ui.js; this older menu stays reachable from its 人事 tab as 'partyAdmin')
+SECTIONS.partyAdmin = async (ui) => {
   const g = ui.g;
   let idx = 0;
   for (let guard = 0; guard < 100; guard++) {

@@ -2861,7 +2861,7 @@ Object.assign(DEMO_RESPONSES, {
 const REASON_LABEL = {
   base: '基礎（内閣への一般的な評価）', honeymoon: '発足直後の期待（ご祝儀）', economy: '経済（景気・物価・雇用）', deficit: '財政（赤字への批判）', policy: '政策（成立した法律・内閣の評価）',
   scandal: '不祥事・政治とカネ', fatigue: '政権の長さ（飽き）', pm: '総理の人気', nejire: 'ねじれ国会', tax: '税', budget: '予算', demo: 'デモ・集会', diet: '国会運営（強行採決・審議拒否など）',
-  religion: '宗教団体の問題への対応', admin: '行政（政令・人事・天下り）', disaster: '災害への対応', regime: '体制・安全保障など（ほかのコア）', other: 'その他（調査の誤差を含む）',
+  religion: '宗教団体の問題への対応', admin: '行政（政令・人事・天下り）', groups: '各界（業界団体・労組・メディアなどとの関係）', disaster: '災害への対応', regime: '体制・安全保障など（ほかのコア）', other: 'その他（調査の誤差を含む）',
 };
 function approvalBreakdownImpl(g, s) {
   const p = pol(g);
@@ -2872,7 +2872,7 @@ function approvalBreakdownImpl(g, s) {
   out.approval = Math.round(A);
   out.disapproval = Math.round(clamp(100 - A - 12 + rnd(-1, 1), 0, 100));
   const parts = C.parts || (p.polls[p.polls.length - 1] || {}).parts || null;
-  const L = { tax: 0, budget: 0, demo: 0, diet: 0, religion: 0, admin: 0, disaster: 0, regime: 0 };
+  const L = { tax: 0, budget: 0, demo: 0, diet: 0, religion: 0, admin: 0, groups: 0, disaster: 0, regime: 0 };
   let ledgerMood = 0, ledgerScandal = 0;
   for (const e of s.approval.ledger) { const k = L[e.reason] != null ? e.reason : 'admin'; L[k] += num(e.mood) + num(e.scandal); ledgerMood += num(e.mood); ledgerScandal += num(e.scandal); }
   const rs = [];

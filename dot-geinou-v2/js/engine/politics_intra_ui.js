@@ -251,7 +251,14 @@ export function registerIntraUI(K, SECTIONS) {
           for (const l of vs.pro.slice(0, 2)) y = para(c, `【${l.who}】${l.text}`, r.x + 10, y, r.w - 20, 12, C.text, 15, 2) + 2;
           y += 4; T(c, '反対の声', r.x + 10, y, 12, '#ff9aa4'); y += 15;
           for (const l of vs.con.slice(0, 3)) y = para(c, `【${l.who}】${l.text}`, r.x + 10, y, r.w - 20, 12, C.text, 15, 2) + 2;
-        } else para(c, x.sub || '', r.x + 10, r.y + 26, r.w - 20, 12, C.dim, 16, 5);
+        } else {
+          let y = para(c, x.sub || '', r.x + 10, r.y + 26, r.w - 20, 12, C.dim, 16, 3) + 8;
+          R(c, r.x + 10, y, r.w - 20, 1, '#2a3262'); y += 8;
+          T(c, `状態：${q.statusName}${q.prio >= 2 ? '（重点）' : ''}`, r.x + 10, y, 12, C.text); y += 16;
+          T(c, fit(c, `費用：${q.cost > 0 ? `年${q.cost}兆円の支出` : q.cost < 0 ? `年${-q.cost}兆円の財源` : '大きな負担なし'}`, r.w - 20, 12), r.x + 10, y, 12, q.cost > 3 ? C.warn : C.text); y += 16;
+          T(c, fit(c, `期限：${q.status === 'fulfilled' ? '実現ずみ' : q.daysLeft > 0 ? `選挙まであと${q.daysLeft}日` : '期限'}${q.billId ? '・法案あり' : ''}`, r.w - 20, 12), r.x + 10, y, 12, C.text); y += 18;
+          if (q.why) para(c, q.why, r.x + 10, y, r.w - 20, 12, C.dim, 15, 3);
+        }
       },
     });
     if (i < 0) return;
@@ -356,6 +363,7 @@ export function registerIntraUI(K, SECTIONS) {
       } else if (tab === 'post') {
         for (const p of ov.posts) rows.push({ kind: 'post', p, label: p.label, sub: `${p.whoName}${p.faction ? `（${p.faction}）` : ''}`, right: p.claims.length ? `要求${p.claims.length}` : '', rightColor: C.warn, color: p.player ? C.gold : p.claims.length ? C.warn : C.dim, labelColor: p.player ? C.gold : undefined });
         for (const dd of ov.deals) rows.push({ kind: 'deal', d: dd, label: `約束：${dd.faction}に${dd.post}`, sub: `あと${dd.left}日で果たす`, right: `あと${dd.left}日`, rightColor: dd.left <= 10 ? C.bad : C.warn, color: C.warn });
+        if (ov.mine) rows.push({ kind: 'admin', label: '党の運営', sub: '派閥に入る・党首選・入党の呼びかけ・党の資金', color: C.cyan, labelColor: C.cyan });
       } else if (tab === 'decide') {
         for (const e of d.events) rows.push({ kind: 'event', e, label: e.title, sub: `あと${e.left}日・放っておくと「${(e.choices.find((c) => c.id === e.defaultChoice) || {}).label || '成り行き'}」`, right: `${e.left}日`, rightColor: e.left <= 2 ? C.bad : C.warn, color: C.bad, labelColor: '#ffd0a0' });
         for (const l of ov.log) rows.push({ kind: 'log', l, label: l.text, sub: dl(g, l.day), color: C.faint, labelColor: C.dim });
@@ -443,7 +451,7 @@ export function registerIntraUI(K, SECTIONS) {
         R(c, 478, 31, SW - 488, 44, '#3a1018'); R(c, 478, 31, 3, 44, C.bad);
         T(c, '倒閣の動き', 486, 33, 12, C.bad);
         T(c, fit(c, `${ov.plot.bossName}氏ら・${ov.plot.stageLabel}`, SW - 500, 12), 486, 47, 12, '#ffd0d0');
-        T(c, `あと${ov.plot.daysLeft}日・${ov.plot.mine ? '退陣' : '交代'}の見込み ${Math.round(ov.plot.odds)}%`, 486, 61, 12, '#ffffff');
+        T(c, fit(c, `あと${ov.plot.daysLeft}日・${ov.plot.mine ? '退陣' : '交代'}の見込み${Math.round(ov.plot.odds)}%`, SW - 500, 12), 486, 61, 12, '#ffffff');
       } else {
         T(c, '次の火種', 482, 31, 12, C.dim);
         if (ov.flash) { T(c, `あと${ov.flash.days}日`, SW - 12, 31, 12, C.text, 'right'); para(c, ov.flash.text, 482, 45, SW - 494, 12, C.gold, 14, 2); }
@@ -582,6 +590,10 @@ export function registerIntraUI(K, SECTIONS) {
         else { T(c, '要求している派閥はない', X0, y, 12, C.dim); y += 18; }
         y = para(c, '役員人事は取引。与えた派閥は喜び、外れた派閥は不満を持つ。約束したポストを守らないと、信用を失う。', X0, y, W, 12, C.text, 15, 3);
         para(c, d.ov.role === 'leader' ? 'A：このポストの人事を考える' : '党首だけが決められる', X0, r.y + r.h - 16, W, 12, d.ov.role === 'leader' ? C.gold : C.dim, 14, 1);
+      } else if (row.kind === 'admin') {
+        card(c, r.x, r.y, r.w, r.h, '党の運営');
+        para(c, '派閥・グループに入る／抜ける、党首選への立候補、議員への入党の呼びかけ、党の資金を政治資金に移す。役員人事もここから。', X0, r.y + 26, W, 12, C.text, 16, 6);
+        para(c, 'A：開く', X0, r.y + r.h - 16, W, 12, C.gold, 14, 1);
       } else if (row.kind === 'deal') {
         card(c, r.x, r.y, r.w, r.h, '果たすべき約束');
         para(c, `${row.d.faction}に「${row.d.post}」で報いると約束した。あと${row.d.left}日で果たさなければ、機嫌が大きく下がり、恨みが残る。`, X0, r.y + 26, W, 12, C.text, 16, 6);
@@ -652,6 +664,8 @@ export function registerIntraUI(K, SECTIONS) {
       } else if (row.kind === 'event') {
         const res = await eventFlow(ui, row.e, d);
         if (res && res.openConflict) { st.tab = TABS.findIndex((t) => t.id === 'conflict'); const L = lbFor(ui); const cid = res.openConflict.conflict; const rows = tabRows(ui); const k = rows.findIndex((r) => r.c && r.c.id === cid); if (k >= 0) L.idx = k; }
+      } else if (row.kind === 'admin') {
+        await K.openSection(ui, 'partyAdmin');
       } else if (row.kind === 'log' || row.kind === 'none' || row.kind === 'calm' || row.kind === 'summary' || row.kind === 'cab' || row.kind === 'party' || row.kind === 'deal') {
         ui.toast('見るだけの項目', C.dim);
       }

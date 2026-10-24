@@ -22,7 +22,7 @@ export function registerLawUI(K, SECTIONS) {
     T(c, fit(c, `${O.sponsorName}・${O.firstName}から・${O.areaName}${O.kind === 'amendment' ? '・憲法改正' : ''}`, 360, 12), 14, y0 + 23, 12, C.dim);
     T(c, '可決の見込み', 392, y0 + 4, 12, C.dim);
     T(c, `${O.passAll}%`, 392, y0 + 18, 20, passCol(O.passAll));
-    hbar(c, 452, y0 + 8, 90, 8, O.passAll / 100, passCol(O.passAll));
+    hbar(c, 470, y0 + 8, 72, 8, O.passAll / 100, passCol(O.passAll));
     T(c, fit(c, O.fiscal.kind === 'none' ? '財政：負担小' : O.fiscal.kind === 'spend' ? `年${Math.round(O.fiscal.cost * 10) / 10}兆円の支出` : `年${Math.round(-O.fiscal.cost * 10) / 10}兆円の財源`, 90, 12), 452, y0 + 24, 12, O.fiscal.kind === 'spend' ? C.warn : O.fiscal.kind === 'revenue' ? C.good : C.dim);
     T(c, `日程 約${O.timetable.days}日`, 548, y0 + 8, 12, C.text);
     T(c, label || '', 548, y0 + 24, 12, C.cyan);
