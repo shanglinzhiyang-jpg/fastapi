@@ -1180,6 +1180,46 @@ async function toben(g) {
   if (asker) { asker.look = qwho.look; asker.sheet = charSheetHD(qwho.look); asker.hidden = false; g.placeNpc('kokkai_answer', 14, 6, 'left'); }
   const chair = { name: '委員長', look: npcLook(g, p.flags.chair_budget) };
   await g.say(qsur ? `質疑の申し出があります。これを許します。\n${qsur}君。` : '質疑に入ります。', chair);
+  // round 4 (politics.js g.speechOptions / g.speak): each answer is an attitude with its 失言リスク; the opposition goes
+  // after a remark of the minister's that is still burning
+  if (typeof g.speechOptions === 'function' && typeof g.speak === 'function') {
+    const live = typeof g.gaffes === 'function' ? g.gaffes({ who: 'player', active: true })[0] : null;
+    let fk = null;
+    try { fk = typeof g.fukko === 'function' ? g.fukko() : null; } catch (e) { fk = null; }
+    const first = live ? 'gaffe' : fk && fk.active && fk.isPlayer ? 'disaster' : 'general';
+    const rounds = [
+      [first, live ? `大臣の先日の${live.venueName}での発言は、資質を疑わせるものです。\n撤回しないのですか！` : first === 'disaster' ? `${fk.disaster.name}の被災地では、まだ住まいも仕事も戻っていない。\n大臣は何をしているのですか！` : `${topic}の対応について、大臣に伺います。\n国民の不安に、どう応えるのですか。`],
+      ['opposition', 'それでは答えになっていません！\nいつまでに、何をするのか。'],
+      ['message', '最後に、大臣の決意を伺います。'],
+    ];
+    const cap = new Caption({ title: '委員会　答弁', sub: `答弁：${myFamilyName(g)}${label}`, left: 1 });
+    g.push(cap);
+    let sum = 0;
+    const self = { name: `${myFamilyName(g)}${label}`, look: g.state.look };
+    try {
+      for (let k = 0; k < rounds.length; k++) {
+        const [tp, line] = rounds[k];
+        await g.say(line, qwho);
+        const O = g.speechOptions('toben', { topic: tp });
+        const labels = O.options.map((o) => (o.risky ? `${o.name.replace(/^際どい一言：/, '')}（${o.risk}%）` : `${o.name}（失言${o.risk}%）`));
+        const i = await g.ask(['（どう答える…？）', '（追及が厳しい…）', '（最後の答弁だ）'][k], labels, { cancel: 0 });
+        const o = O.options[i] || O.options[0];
+        const res = g.speak('toben', { topic: O.topic, attitude: o.id, force: true });
+        if (!res || !res.ok) { sum += 50; continue; }
+        sum += res.score;
+        await g.say(res.line, self);
+        if (res.outcome === 'gaffe') { g.sfx('buzz'); await g.say('静粛に！　静粛に！\n（議場が騒然となった。答弁が問題にされそうだ）', chair); }
+        else if (res.outcome === 'good') await g.say(`（${res.reaction}）`);
+        else if (k < rounds.length - 1 && res.attitude === 'hagurakasu') await g.say('…答弁になっていない！', qwho);
+        cap.left = Math.max(0, 1 - (k + 1) / rounds.length);
+      }
+    } finally { g.pop(cap); }
+    const skill = num(g.state.skills && g.state.skills.talk);
+    const r = g.activity('国会で答弁', { score: clamp(Math.round(sum / rounds.length + skill / 12), 0, 100), speech: true });
+    if (asker) { asker.hidden = true; g.placeNpc('kokkai_answer', 6, 6, 'right'); }
+    await g.say([actText(r)]);
+    return;
+  }
   const score = await exchange(g, A_ROUNDS, {
     title: '委員会　答弁', sub: `答弁：${myFamilyName(g)}${label}`, topic,
     prompt: ['（どう答える…？）', '（追及が厳しい…）', '（最後の答弁だ）'],

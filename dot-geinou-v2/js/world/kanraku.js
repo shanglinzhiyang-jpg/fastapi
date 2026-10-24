@@ -82,6 +82,8 @@ const eraKey = (g) => (g.state.profile && g.state.profile.era) || 'reiwa';
 const famous = (g) => g.state.fame >= 1000;
 const politician = (g) => { try { return isPolitician(g); } catch (e) { return false; } };
 const hasPhone = (g) => since(g, 1999); // a mobile phone in everyone's pocket
+// crime mode (crime.js): no second thoughts in the narration once the player is in the underworld
+const crimeOn = (g) => { try { return typeof g.crimeMode === 'function' && g.crimeMode(); } catch (e) { return false; } };
 async function narrate(g, t) { await g.say(t); }
 
 // ====================================================================== crisp lettering
@@ -1104,12 +1106,11 @@ async function shoplift(g, opts = {}) {
   if (!items.length || typeof g.commitCrime !== 'function') return { done: false };
   const j = jus(g);
   if (j && (j.status === 'detained' || j.status === 'prison')) return { done: false };
-  const k = await g.ask([
-    '（棚の商品が目に入った。\n…お金を払わずに、持って出てしまえば――）',
-    '（万引きは窃盗罪。店には防犯カメラも、見回りの店員もいる）',
-    '（見つかれば警察に通報され、前科がつくこともある）',
-  ], ['やめておく', '万引きする…'], { cancel: 0 });
-  if (k !== 1) { await narrate(g, '（手をひっこめた）'); return { done: false }; }
+  const cm = crimeOn(g);
+  const odds = typeof g.crimeConfirm === 'function'
+    ? await g.crimeConfirm('shoplifting', { amount: Math.max(100, ITEMS[items[0]].price || 300) }, { title: '万引き', text: cm ? '（棚の商品…。いけるか？）' : '（棚の商品が目に入った。\n…お金を払わずに、持って出てしまえば――）', yes: '万引きする…', note: `${opts.where || '店'}：店員の目と防犯カメラ` })
+    : { go: false };
+  if (!odds.go) { await narrate(g, '（手をひっこめた）'); return { done: false }; }
   let item = items[0];
   if (items.length > 1) {
     const i = await g.list({ title: '何をとる…？', items: items.map((id) => ({ label: ITEMS[id].name, right: fmtMoney(ITEMS[id].price) })), x: 150, y: 70, w: 340, px: true });
@@ -1120,8 +1121,15 @@ async function shoplift(g, opts = {}) {
   await narrate(g, `（${ITEMS[item].name}を、そっとかばんに入れた…）`);
   const res = await g.commitCrime('shoplifting', { amount, where: opts.where, gain: { item } });
   if (!res.caught) {
-    g.addNeed('stress', 8);
-    await narrate(g, ['（何事もなく、店を出た…。\nでも、胸のどきどきがおさまらない）', '（防犯カメラには、映っていたかもしれない。\nあとから警察が来ることだってある…）']);
+    const later = res.report && res.report.odds ? res.report.odds.later : 0;
+    const ran = res.report && res.report.chase === 'escaped';
+    if (crimeOn(g)) {
+      g.addNeed('stress', ran ? 4 : -2);
+      await narrate(g, ran ? '（店員をふりきって、人ごみに消えた。…顔は見られたかもしれない）' : `（何事もなく、店を出た。…ちょろいもんだ）${later ? `\n（あとでバレる見込み：${later}%）` : ''}`);
+    } else {
+      g.addNeed('stress', 6);
+      await narrate(g, [ran ? '（店員をふりきって、なんとか逃げた…）' : '（何事もなく、店を出た…。\n胸のどきどきが、まだおさまらない）', `（あとでバレる見込み：${later}%）`]);
+    }
   }
   return { done: true, caught: !!res.caught, res };
 }
@@ -1169,12 +1177,13 @@ async function fareEvasion(g, opts = {}) {
   if (typeof g.commitCrime !== 'function') return { ok: false };
   const j = jus(g);
   if (j && (j.status === 'detained' || j.status === 'prison')) return { ok: false };
-  const k = await g.ask([
-    '（きっぷを買わずに、乗ってしまえば…）',
-    '無賃乗車は、鉄道営業法違反。見つかれば、\n運賃に加えて2倍の「増運賃」――合計3倍を払う。\nくり返せば、詐欺罪で警察沙汰になることも…',
-    ...(opts.inspected ? ['（それに、新幹線では車掌さんが\nきっぷを確かめに回ってくる…）'] : []),
-  ], ['やめておく', 'きっぷを買わずに乗る'], { cancel: 0 });
-  if (k !== 1) { await narrate(g, '（…やっぱり、きっぷを買おう）'); return { ok: false }; }
+  const prev0 = (() => { const j = jus(g); return (j && j.stats && j.stats.committed && j.stats.committed.fare_evasion) || 0; })();
+  const ctx0 = { fare: opts.fare, where: `${opts.dest || '駅'}の改札` };
+  if (opts.inspected) ctx0.detect = Math.min(0.9, 0.6 + 0.05 * prev0);
+  const odds = typeof g.crimeConfirm === 'function'
+    ? await g.crimeConfirm('fare_evasion', ctx0, { title: '無賃乗車', text: '（きっぷを買わずに、乗ってしまえば…）', yes: 'きっぷを買わずに乗る', note: opts.inspected ? '新幹線は車掌さんがきっぷを確かめる（見つかれば3倍）' : '見つかれば、増運賃と合わせて運賃の3倍を払う' })
+    : { go: false };
+  if (!odds.go) { await narrate(g, '（…やっぱり、きっぷを買おう）'); return { ok: false }; }
   await narrate(g, '（きっぷを買わずに、電車に乗ってしまった…）');
   if (opts.ride) await opts.ride();
   // opts.inspected: a train with a conductor's ticket check (車内改札) — most riders without a ticket
@@ -1184,8 +1193,8 @@ async function fareEvasion(g, opts = {}) {
   if (opts.inspected) ctx.detect = Math.min(0.9, 0.6 + 0.05 * prev);
   const res = await g.commitCrime('fare_evasion', ctx);
   if (!res.caught) {
-    g.addNeed('stress', 6);
-    await narrate(g, ['（なんとか、そのまま駅を出た…）', '（…でも、駅には防犯カメラも改札の記録もある。\n次も見逃してもらえるとはかぎらない）']);
+    g.addNeed('stress', crimeOn(g) ? 0 : 4);
+    await narrate(g, res.report && res.report.chase === 'escaped' ? '（駅員をふりきって、改札の外へ走り出た！）' : crimeOn(g) ? '（そのまま駅を出た。…浮いた運賃は、そのまま懐に）' : '（なんとか、そのまま駅を出た…）');
   }
   return { ok: true, caught: !!res.caught, res };
 }
@@ -1421,8 +1430,42 @@ async function npoTalk(g, npc) {
     await narrate(g, '「相談窓口カード」をもらった！');
   } else await g.say('いつでも、ここにいますからね。', o);
 }
+// 情報屋 (the east alley): crime mode's first contact. Offers the underworld's work (the 裏アプリ: js/engine/crime_app.js);
+// once in, the word on the street (how hot the player is). Adults only. Accepting is the player's choice.
+const JOHO = { name: '路地の情報屋', look: { hair: 'cap', hat: '#3a3a44', hairColor: 'black', skin: 'tan', top: '#4a4038', bottom: '#2a2620' } };
+async function johoTalk(g, npc) {
+  const o = who(npc);
+  if (age(g) < 18) { await g.say(['…ガキに売るネタはねえよ。', '帰んな。'], o); return; }
+  const U = uraApi();
+  const app = U ? U.appLabel(g) : null;
+  if (!crimeOn(g)) {
+    await g.say(['…あんた、金に困ってる顔してるな。', 'それとも、退屈してるだけか？\n割のいい仕事なら、いくらでもある。'], o);
+    const k = await g.ask('（どうする…？）', ['相手にしない', '話を聞く'], { cancel: 0 });
+    if (k !== 1) { await g.say('…そうかい。気が変わったら、またここに来な。', o); return; }
+    await g.say(['仕事の中身は、受けるまで言えねえ。\nだが、成功の見込みと取り分は、ちゃんと教える。', app ? `連絡は「${app.name}」で回す。…足のつく話はするなよ。` : '連絡は、こっちからする。'], o);
+    if (typeof g.setCrimeMode === 'function') g.setCrimeMode(true, 'joho');
+    if (app) await narrate(g, `（「${app.name}」――${eraKey(g) === 'reiwa' ? 'スマホ' : eraKey(g) === 'heisei' ? 'ケータイ' : '手帳'}を開けば、仕事の募集が見られる）`);
+    return;
+  }
+  const stars = typeof g.wantedStars === 'function' ? g.wantedStars() : 0;
+  if (stars >= 3) await g.say(['おい、あんた今、相当マークされてるぞ。', 'しばらく大人しくしてな。\n隠れ家があるなら、そこにこもれ。'], o);
+  else if (stars > 0) await g.say('サツが、このへんを嗅ぎまわってる。\nあんまり目立つなよ。', o);
+  else await g.say(pickOne([['静かなもんだ。…仕事なら、いつもの所に流してある。'], ['最近、南口のほうで手入れがあった。\nあっちには近づかねえほうがいい。'], ['腕のいい奴には、いい話が回ってくる。\n信用ってのは、そういうもんだ。']]), o);
+}
+// 職務質問: with a 手配度 of ★2 or more, the officer on patrol takes a closer look (crime.js g.shokushitsu).
+const uraApi = () => (typeof window !== 'undefined' && window.__ura) || null;
+function carried(g) {
+  try { const U = uraApi(); return U ? U.ura(g).stash.filter((x) => !x.kept).reduce((n, x) => n + x.value, 0) : 0; } catch (e) { return 0; }
+}
 async function patrolTalk(g, npc) {
   const o = who(npc);
+  const stars = typeof g.wantedStars === 'function' ? g.wantedStars() : 0;
+  if (stars >= 2 && typeof g.shokushitsu === 'function') {
+    await g.say('…ん？ ちょっと待って。', o);
+    const j = jus(g);
+    await g.shokushitsu({ stash: carried(g), foundCrime: j && j.heat && j.heat.theft ? 'theft' : 'stolen_goods' });
+    return;
+  }
   if (age(g) < 18) { await g.say(['君、まだ未成年だろう？\n夜の繁華街は、危ないことも多い。', '用がすんだら、早めに帰りなさい。\n困ったことがあったら、交番においで。'], o); return; }
   const j = jus(g);
   const tips = [
@@ -1773,6 +1816,7 @@ function generate() {
     { type: 'npc', id: 'kan_tissue', x: 16, y: 9, dir: 'down', look: { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#2f9a6a', bottom: '#3a3a44', hat: '#2f9a6a' }, name: 'ティッシュ配りの人',
       text: ['ドットローンです〜。どうぞ〜。', '（ポケットティッシュをもらった。\n裏には「ご利用は計画的に」と書いてある）'] },
     { type: 'npc', id: 'kan_tourist', x: 33, y: 9, dir: 'down', look: LOOKS.tourist, name: '観光客', wander: 2, text: ['Wow… すごいネオン！', 'この街、夜でもこんなに明るいんだね。\n写真、いっぱい撮っちゃった！'] },
+    { type: 'npc', id: 'kan_joho', x: 57, y: 33, dir: 'left', look: JOHO.look, name: JOHO.name, fixedDir: true, talk: johoTalk },
     { type: 'npc', id: 'kan_cast', x: 46, y: 21, dir: 'left', look: CASTS.misaki.look, name: '出勤途中の女性', wander: 1,
       text: ['これから出勤なんです。CLUB ステラで。', '昼間はネイルの専門学校。\nお店のお給料で、学費を払ってるんです。'] },
   ];
@@ -2958,7 +3002,7 @@ async function kumiGuard(g, npc) {
   const known = g.state.fame >= 30 || politician(g) || yamiLoans(g).length > 0 || !!f.kumiTies;
   if (!known) {
     await g.say(['…なんだ、おまえ。', '道に迷ったんなら、さっさと帰んな。\nここは、カタギの来るとこじゃねえ。'], o);
-    await narrate(g, '（鋭い目でにらまれ、追い返された…。\n近づかないほうがいい場所だ）');
+    await narrate(g, '（鋭い目でにらまれ、追い返された…）');
     km.turned = (km.turned || 0) + 1;
     return;
   }
@@ -3006,9 +3050,7 @@ async function kumiWaka(g, npc) {
     km.refused += 1;
     await g.say(KUMI_REFUSE[n], o);
     g.addNeed('stress', 4);
-    await narrate(g, km.refused >= 3
-      ? '（足がふるえていた。…でも、断りとおした）'
-      : '（足がふるえていた。…でも、断ってよかった）');
+    await narrate(g, km.refused >= 3 ? '（足がふるえていた。…でも、断りとおした）' : '（足がふるえていた）');
     if (km.refused >= 3) km.done = today(g);
     return;
   }
@@ -3016,7 +3058,7 @@ async function kumiWaka(g, npc) {
     km.accepted += 1;
     f.kumiTies = today(g);
     f.kumiCut = 0;
-    if (res === 'accept') await narrate(g, '（これで、もう「関係ない」とは言えなくなった…）');
+    if (res === 'accept') await narrate(g, crimeOn(g) ? '（これで、組とのつながりができた）' : '（これで、もう「関係ない」とは言えなくなった…）');
   }
 }
 // Exposure: a photo makes a 週刊誌 story likely (darkside.js 'scoop_hansha', if loaded; the justice
@@ -3044,7 +3086,7 @@ async function kumiDemand(g) {
   let pay = false;
   await withVignette(g, 'street', { title: 'ネオン街', sub: '組員に呼び止められた', thug: true }, async () => {
     await g.say([f.kumiPaid ? 'よう、また来たぜ。' : 'よう、探したぜ。', `この前の件の「礼」がまだだろ。\n今月の「おつきあい」だ。${fmtMoney(amt)}。\n…払えねえとは言わせねえぞ。`], KUMI_MEMBER);
-    await narrate(g, '（一度関わると、こうしてたかられ続ける…。\nこれは恐喝だ）');
+    await narrate(g, '（一度関わると、こうしてたかられ続ける…）');
     const k = await g.ask('（どうする…？）', ['断って交番へ行く', '言われたとおり払う'], { cancel: 0 });
     pay = k === 1;
     if (!pay) await g.say('…チッ。サツに泣きつく気か。\n覚えてろよ。', KUMI_MEMBER);
@@ -3056,7 +3098,7 @@ async function kumiDemand(g) {
     g.sfx('coin');
     f.kumiPaid = (f.kumiPaid || 0) + 1;
     g.addNeed('stress', 10);
-    await narrate(g, [`（${fmtMoney(paid)}を渡してしまった…）`, '（払えば、次はもっと高くなる。\n断って、交番に相談するしかない）']);
+    await narrate(g, [`（${fmtMoney(paid)}を渡した…）`, '（払えば、次はもっと高くなる）']);
     return;
   }
   await narrate(g, '（その足で、大通りの交番に駆けこんだ）');
@@ -3064,6 +3106,12 @@ async function kumiDemand(g) {
   f.kumiCut = day;
   f.kumiPressure = 0;
   g.addNeed('stress', -6);
+}
+// The odds card for an offer (crime.js g.crimeConfirm), or a plain question when the core has none.
+async function kumiOdds(g, id, ctx, opts) {
+  if (typeof g.crimeConfirm === 'function') return g.crimeConfirm(id, { where: '鬼灯興業の事務所', ...ctx }, { text: '（どうする…？）', ...opts });
+  const k = await g.ask('（どうする…？）', [opts.no || 'きっぱり断る', opts.yes || '引き受ける'], { cancel: 0 });
+  return { go: k === 1, k };
 }
 const KUMI_OFFERS = {
   // 闇営業: a show for the 組長's party, cash in hand, no agency
@@ -3074,8 +3122,8 @@ const KUMI_OFFERS = {
     const fame = g.state.fame || 0;
     const pay = fame >= 1000 ? 500000 : fame >= 250 ? 300000 : 100000;
     await g.say(['うちの会長の誕生日の宴会で、\nひと芸見せてほしいんだ。10分でいい。', `ギャラは現金で${fmtMoney(pay)}。\n事務所を通す必要はねえ。…わかるよな？`], o);
-    await narrate(g, ['（事務所を通さない「闇営業」。\nしかも相手は暴力団だ）', '（受ければ、反社会的勢力との「交際」になる。\nばれたら、芸能界にはいられない…）']);
-    const k = await g.ask('（どうする…？）', ['きっぱり断る', '引き受ける'], { cancel: 0 });
+    await narrate(g, '（事務所を通さない「闇営業」。相手は暴力団だ）');
+    const { k } = await kumiOdds(g, 'antisocial_ties', { amount: pay }, { title: '闇営業', reward: `ギャラ ${fmtMoney(pay)}（現金）`, note: 'ばれれば、契約解除・番組降板（反社条項）', yes: '引き受ける', no: 'きっぱり断る' });
     if (k !== 1) return 'refuse';
     let photo = false;
     await withVignette(g, 'party', { title: 'ホテルの宴会場', sub: '会長の誕生日の宴会' }, async () => {
@@ -3096,21 +3144,20 @@ const KUMI_OFFERS = {
   async hakobi(g, o) {
     const pay = 200000;
     await g.say(['ちょっとした頼みだ。この紙袋を、\n駅前のコインロッカーまで運んでくれ。', `中身は聞くな。それで${fmtMoney(pay)}だ。\n楽な仕事だろ？`], o);
-    await narrate(g, '（中身は盗品か、もっと危ない物かもしれない。\n知っていて運べば、それだけで犯罪だ）');
-    const k = await g.ask('（どうする…？）', ['きっぱり断る', '引き受ける'], { cancel: 0 });
+    const { k } = await kumiOdds(g, 'stolen_goods', { amount: 500000 }, { title: '運び屋', reward: `報酬 ${fmtMoney(pay)}`, note: '中身は盗品かもしれない（知っていて運べば同罪）', yes: '引き受ける', no: 'きっぱり断る' });
     if (k !== 1) return 'refuse';
-    await narrate(g, '（紙袋は、思ったより重かった。\n人の目が、ぜんぶ自分を見ている気がする…）');
+    await narrate(g, crimeOn(g) ? '（紙袋は、思ったより重かった。…さっさと片づけよう）' : '（紙袋は、思ったより重かった。\n人の目が、ぜんぶ自分を見ている気がする…）');
     await tieCrime(g, { where: '鬼灯興業の事務所' });
     const r = typeof g.commitCrime === 'function' ? await g.commitCrime('stolen_goods', { amount: 500000, gain: { money: pay }, where: '駅前のコインロッカー' }) : { caught: false };
     if (r.caught) return 'caught';
-    await narrate(g, `（言われたとおりにロッカーに入れ、${fmtMoney(pay)}を受け取った。\n…もう、あの人たちに弱みをにぎられた）`);
+    await narrate(g, crimeOn(g) ? `（言われたとおりにロッカーに入れ、${fmtMoney(pay)}を受け取った。楽な仕事だ）` : `（言われたとおりにロッカーに入れ、${fmtMoney(pay)}を受け取った。\n…あの人たちとは、これで貸し借りができた）`);
     return 'accept';
   },
   // 取り立ての手伝い: stand beside the collector at a debtor's door
   async toritate(g, o) {
     const pay = 50000;
     await g.say(['うちが貸した金を、返さねえやつがいてな。', `取り立てについていって、横に立ってるだけでいい。\n日当は${fmtMoney(pay)}だ。`], o);
-    await narrate(g, '（脅して金を取り立てる手伝いだ。\nついていけば、もう引き返せないかもしれない）');
+    await narrate(g, '（脅して金を取り立てる手伝いだ）');
     const k = await g.ask('（どうする…？）', ['きっぱり断る', 'ついていく'], { cancel: 0 });
     if (k !== 1) return 'refuse';
     let obey = false;
@@ -3119,7 +3166,9 @@ const KUMI_OFFERS = {
       await g.say(['おい、いるのはわかってんだよ！ 開けろ！'], KUMI_MEMBER);
       await g.say(['…待ってください。来週、年金が入ったら必ず…。', '妻が入院していて、どうしても…。'], OLD);
       await g.say('おい、おまえもなんか言ってやれ。\n胸ぐらでもつかんでよ。', KUMI_MEMBER);
-      const c = await g.ask('（おじいさんの手が、ふるえている…）', ['手を出さない', '言われたとおりにする'], { cancel: 0 });
+      const off = typeof g.showOdds === 'function' ? g.showOdds('assault', { where: '取り立て先のアパートの廊下' }, { title: '胸ぐらをつかむ', reward: `日当 ${fmtMoney(pay)}` }) : () => {};
+      let c = 0;
+      try { c = await g.ask('（おじいさんの手が、ふるえている…）', ['手を出さない', '言われたとおりにする'], { cancel: 0 }); } finally { off(); }
       obey = c === 1;
       if (obey) await narrate(g, '（言われるまま、おじいさんの胸ぐらをつかんでしまった…。\nおじいさんは、ただ頭を下げつづけた）');
       else await g.say('…チッ、使えねえな。もういい、先に帰れ。', KUMI_MEMBER);
@@ -3128,8 +3177,8 @@ const KUMI_OFFERS = {
     if (obey) {
       const r = typeof g.commitCrime === 'function' ? await g.commitCrime('assault', { where: '取り立て先のアパートの廊下', gain: { money: pay } }) : { caught: false };
       if (r.caught) return 'caught';
-      await narrate(g, ['（日当を受け取った。…お金が、こんなに重いと思ったことはない）', '（あのおじいさんの顔が、頭から離れない）']);
-      g.addNeed('stress', 12);
+      await narrate(g, crimeOn(g) ? `（日当の${fmtMoney(pay)}を受け取った）` : ['（日当を受け取った）', '（あのおじいさんの顔が、頭から離れない）']);
+      g.addNeed('stress', crimeOn(g) ? 4 : 12);
     } else {
       await narrate(g, '（ひとりで帰り道を歩いた。\n…あのおじいさんは、だいじょうぶだろうか）');
       g.addNeed('stress', 6);
@@ -3139,11 +3188,10 @@ const KUMI_OFFERS = {
   // 盃: joining the group (refusable pressure; taking the 名刺 is already a tie)
   async sakazuki(g, o) {
     await g.say(['おまえ、根性ありそうだな。', 'うちに来ねえか。若い衆として面倒見てやる。\n金にも、寝る場所にも困らせねえ。'], o);
-    await narrate(g, '（一度入れば、簡単には抜けられない世界だ。\n家族にも、友だちにも、もう顔向けできない…）');
-    const k = await g.ask('（どうする…？）', ['きっぱり断る', '名刺だけもらう'], { cancel: 0 });
+    const { k } = await kumiOdds(g, 'antisocial_ties', {}, { title: '盃の誘い', note: '一度入れば、簡単には抜けられない', yes: '名刺だけもらう', no: 'きっぱり断る' });
     if (k !== 1) return 'refuse';
     await g.say('いい返事を待ってるぜ。\n困ったことがあったら、いつでもかけてきな。', o);
-    await narrate(g, '（若頭の名刺を受け取ってしまった…。\nこれも「交際」のはじまりだ）');
+    await narrate(g, '（若頭の名刺を受け取った。…これも「交際」のはじまりだ）');
     await tieCrime(g, { where: '鬼灯興業の事務所' });
     return 'accept';
   },
@@ -3151,8 +3199,8 @@ const KUMI_OFFERS = {
   async seiji(g, o) {
     const pay = 1000000;
     await g.say(['先生、選挙は金と票だ。うちが面倒を見ますよ。', `とりあえず、${fmtMoney(pay)}。\n…駅前の再開発の工事、うちの会社に回るよう\n口をきいてくれりゃいい。`], o);
-    await narrate(g, ['（暴力団の金を受け取り、見返りに口利き…。\n届け出られない「裏金」で、しかも反社との「利権」だ）', '（発覚すれば、議員を辞めるだけではすまない）']);
-    const k = await g.ask('（どうする…？）', ['きっぱり断る', '受け取る'], { cancel: 0 });
+    await narrate(g, '（暴力団の金を受け取り、見返りに口利き…。\n届け出られない「裏金」で、しかも反社との「利権」だ）');
+    const { k } = await kumiOdds(g, 'antisocial_ties', { amount: pay }, { title: '組の金', reward: `${fmtMoney(pay)}（裏金）`, note: '発覚すれば、議員を辞めるだけではすまない', yes: '受け取る', no: 'きっぱり断る' });
     if (k !== 1) return 'refuse';
     await narrate(g, '（菓子折りの箱の底に、札束が詰まっていた…）');
     if (typeof g.addSecretFunds === 'function') {
@@ -3194,7 +3242,7 @@ registerPlace({
         { type: 'sign', x: 1, y: 3, text: 'ずらりと並んだ、黒い革靴…。' },
         { type: 'sign', x: 1, y: 4, text: 'ずらりと並んだ、黒い革靴…。' },
       ],
-      onEnter: (g) => firstVisit(g, 'kumi', ['（重い鉄の扉の向こうは、たばこと線香のにおいがした…）', '（監視カメラが、こちらの動きを追っている。\n…ここは、来てはいけない場所だ）']),
+      onEnter: (g) => firstVisit(g, 'kumi', ['（重い鉄の扉の向こうは、たばこと線香のにおいがした…）', '（監視カメラが、こちらの動きを追っている…）']),
     },
     jimusho: {
       floor: 'kumi_floor',
@@ -3460,7 +3508,9 @@ async function karamareru(g) {
     await g.say('払えねえなら、ちょっと外で話そうか？', YANKEE_B);
     let k = await g.ask('（これはカツアゲ…恐喝だ。どうする…？）', ['相手にせず離れる', '店員と警察を呼ぶ', 'やり返す'], { cancel: 0 });
     if (k === 2) {
-      const c = await g.ask(['（手を出せば、こっちも「暴行罪」だ。）', '（やり返していいのは、身を守るために\nどうしてもしかたがない時だけ――正当防衛だ）'], ['やっぱりやめる', 'つかみかかる'], { cancel: 0 });
+      const c = typeof g.crimeConfirm === 'function'
+        ? (await g.crimeConfirm('assault', { where: 'ゲームセンター ネオン' }, { title: 'やり返す', text: '（つかみかかる…？）', no: 'やっぱりやめる', yes: 'つかみかかる', note: '正当防衛は、身を守るためにしかたがない時だけ' })).k
+        : 0;
       if (c !== 1) k = 0;
     }
     pick = k;
@@ -3514,7 +3564,7 @@ async function karamareru(g) {
     st.stamina = Math.max(1, st.stamina - 12);
     g.addNeed('stress', 8);
     f.yankeeGone = today(g) + 5;
-    await narrate(g, ['（相手は、捨てぜりふを残して逃げていった。\nこっちも、ほおをなぐられた…。体力 -12）', '（…でも、店の防犯カメラには、すべて映っている）']);
+    await narrate(g, ['（相手は、捨てぜりふを残して逃げていった。\nこっちも、ほおをなぐられた…。体力 -12）', `（店の防犯カメラには、映っていたかもしれない。あとでバレる見込み：${(r.report && r.report.odds && r.report.odds.later) || 0}%）`]);
   }
   return 'fight';
 }

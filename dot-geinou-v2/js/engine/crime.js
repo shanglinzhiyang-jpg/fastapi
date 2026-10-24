@@ -213,11 +213,34 @@
 //     （1994年12月施行）で実刑の執行終了後5年を追加; 11条の2（被選挙権さらに5年）: 平成11年法律第122号（1999年8月13日
 //     公布・9月施行）（houseikyoku.sangiin.go.jp column017, 犯罪白書 令和元年版 1-1-2-8, ja.wikipedia 公民権）
 //   政治資金規正法28条の公民権停止: 平成6年法律第4号、1995年1月施行（犯罪白書 令和元年版 1-1-2-8）
+//
+// ---------------------------------------------------------------- crime mode (round 4: GTA-like; overrides the above)
+// No crime is certain arrest. commitCrime rolls the odds that g.crimeOdds(id, ctx) shows: { success, now, later, pct
+// { success, now, later }, spot, escape, chase, factors[{ label, d, on: 'now'|'later', good }], heat, text:
+// '成功 72%・その場で捕まる 18%・あとでバレる 10%' }. Inputs: the crime's base chance, 裏の経験 (g.state.ura.skill),
+// トーク (talk crimes), ctx.prep / disguise / tip / crew (0-3: fewer eyes at the scene, more mouths later), the place
+// (registerCrimeSpot(placeId, info | (g) => info); ctx.spot overrides: { label, detect, cam, hide }), the time of day
+// (dayPhase: stamina-based 昼/夕方/夜, or g._crimePhase for a job), 防犯カメラ by year (camDensity), fame, and the
+// 手配度. The chance of being caught at the scene is capped at 92% (ODDS_CAP) unless ctx.forceCaught. A crime with a
+// chase (def.chase; CHASE table) that is seen goes to g.chase(): 投降 / 逃げる (two rounds) / 隠れる (one gamble);
+// escaped → not caught, the heat gets h.boost 2.2 and h.witness; surrender → caught with plea 'admit'. ctx.handle ===
+// false rolls the chase silently. The heat keeps h.k (laterK: cameras, crew, skill) and surfaceHeat multiplies the daily
+// chance by h.k and (1 + 0.25 × 手配度). LATER_DAYS = 60 for the shown "あとでバレる".
+// 手配度 j.wanted { lv 0..5, day, peak }: + WANTED_ADD[severity] for an undetected crime the police look into, +1.4 when
+// seen and escaped (+1 for fleeing a 職務質問), cleared on arrest; cools 0.3/day (0.4 with a 隠れ家), 0.75/day while lying
+// low (j.flags.lowUntil, g.lieLow(n)), 1.0 with both; at ★4+ an undetected offence may be traced on a morning. starsOf(lv).
+// Crime mode j.flags.crimeMode (day): set when an UNDERWORLD crime is committed (not ctx.pressured) or by
+// g.setCrimeMode(true) (the 情報屋 in ネオン街, the 裏アプリ). Places drop second thoughts in their narration then.
+// Methods: crimeOdds, crimeOddsLine, crimeConfirm(id, ctx, { title, text, yes, no, reward, note, extra, who }) →
+// { go, k, odds } (the odds card above the question), showOdds(id, ctx, opts) → close(), chase(id, opts), wanted(),
+// wantedStars(), addWanted(d, why), lieLow(n), shokushitsu({ stash, foundCrime }), crimeMode(), setCrimeMode(on, why),
+// dayPhase(). Events (onJustice): committed, crime_mode, wanted, dodged, stash_found, ura_lawyer. New CRIMES: theft,
+// extortion, fraud_caller, fence, gambling_den, counterfeit, laundering. The 裏アプリ is js/engine/crime_app.js.
 
 import { SW, SH, clamp, fmtMoney, makeCanvas, hash2, mulberry32, YEN_MARK } from './util.js';
 import { text, wrap, panel, measure, rect, COLORS } from './draw.js';
 import { audio } from './audio.js';
-import { ITEMS, AGENCIES, registerItem, saveGame } from './state.js';
+import { ITEMS, AGENCIES, registerItem, saveGame, SKILL_MAX } from './state.js';
 import { PLACES } from './map.js';
 import { onMorning, PEOPLE, REGULARS, HOUSING, registerPhoneApp, PHONE_APPS, weekOf } from './life.js';
 import { ageOf, eraOf, YEAR_DAYS, isBirthday, birthdayFlag, RELATIONS, sortFamily, familyLook, regionOf, fullName, ERAS } from './profile.js';
@@ -527,7 +550,7 @@ export const CRIMES = {
     exists: (g) => since(g, 2003, 1),
     severity: 4, kind: 'crime', victim: true, hotDays: 60,
     detect: () => 0.35,
-    later: () => 0.025,
+    later: () => 0.018, // the cameras at the victim's door, the other members' phones
     penalty: () => ({ prison: [1, 120], labor: 'choeki', fine: null }),
     facts: (cs) => `氏名不詳者らと共謀のうえ、高齢の被害者から現金${fmtMoney(cs.amount || 2000000)}をだまし取った（受け子）`,
     typical: (g, cs) => ({ charge: 1, months: 30 + 6 * Math.min(4, cs.priors), suspendOk: true, hard: true }),
@@ -586,8 +609,9 @@ export const CRIMES = {
     name: '浴場への侵入', short: '建造物侵入',
     law: (g) => `建造物侵入罪（刑法130条）：正当な理由がないのに、人の看守する建造物に侵入した者は、3年以下の${laborWord(g, 'choeki')}又は${since(g, 1991, 5) ? '10万円以下の罰金' : `${man(10000)}以下の罰金（条文の「50円」を罰金等臨時措置法で200倍に読み替えた額。1991年5月の改正で10万円に）`}。銭湯の男湯・女湯のように、施設が立ち入りを認めていない側に入れば、建物の中でもこの罪になる`,
     severity: 2, kind: 'crime', victim: true, hotDays: 5,
-    detect: () => 1, // the people inside notice at once
-    later: () => 0,
+    detect: () => 0.88, // the people inside almost always notice at once (never certain: crime mode's odds)
+    later: () => 0.012, // the 番台 remembers a face
+    chase: 0, // the staff stand between the player and the door
     penalty: (g) => ({ prison: [1, 36], labor: 'choeki', fine: since(g, 1991, 5) ? [10000, 100000] : [4000, 10000] }),
     facts: (cs) => `${cs.where || '公衆浴場'}に、施設の管理者の意思に反し、正当な理由なく立ち入った`,
     typical(g, cs) {
@@ -598,9 +622,107 @@ export const CRIMES = {
       return { charge: 1, months: 6 + 2 * Math.min(6, k), suspendOk: true };
     },
   }),
+  // ---- the 裏アプリ's jobs (js/engine/crime_app.js; crime mode). Abstract: what was done, never how.
+  // 窃盗（店の外: 倉庫・事務所など）: 刑法235条 as 万引き; a building entered is also 建造物侵入 (130条). The goods go to the
+  // 隠し場所 as 盗品; selling one's own loot is no new crime (不可罰的事後行為), buying others' loot to resell is 'fence'.
+  theft: T({
+    name: '窃盗', short: '窃盗',
+    law: (g) => `窃盗罪（刑法235条）：10年以下の${laborWord(g, 'choeki')}${since(g, 2006, 5) ? '又は50万円以下の罰金' : '（当時は罰金刑がない）'}。建物に入れば建造物侵入罪（130条）も`,
+    severity: 3, kind: 'crime', victim: true, hotDays: 45,
+    detect: (g, ctx) => clamp(0.16 + 0.03 * Math.min(6, ctx.n || 0), 0.05, 0.6),
+    later: (g, h) => 0.009 * ((h.amount || 0) > 300000 ? 1.5 : 1) * famous(g, 0.5),
+    penalty: (g) => ({ prison: [1, 120], labor: 'choeki', fine: since(g, 2006, 5) ? [10000, 500000] : null }),
+    facts: (cs) => `${cs.where || '倉庫'}に侵入し、物品（時価合計${fmtMoney(cs.amount || 300000)}相当）を窃取した`,
+    typical: (g, cs) => (cs.priors ? { charge: 1, months: 24 + 6 * Math.min(4, cs.same || 0), suspendOk: true } : { charge: 0.95, months: 18, suspendOk: true }),
+  }),
+  // 恐喝: 刑法249条, 10年以下の懲役（2025-06〜 拘禁刑）, no fine.
+  extortion: T({
+    name: '恐喝', short: '恐喝',
+    law: (g) => `恐喝罪（刑法249条）：10年以下の${laborWord(g, 'choeki')}（罰金刑はない）`,
+    severity: 3, kind: 'crime', victim: true, hotDays: 40,
+    detect: (g, ctx) => clamp(0.12 + 0.03 * Math.min(5, ctx.n || 0), 0.05, 0.5),
+    later: (g) => 0.012 * famous(g, 0.5), // 被害届
+    penalty: () => ({ prison: [1, 120], labor: 'choeki', fine: null }),
+    facts: (cs) => `被害者を脅して畏怖させ、現金${fmtMoney(cs.amount || 300000)}を交付させた`,
+    typical: (g, cs) => ({ charge: 0.95, months: 24 + 6 * Math.min(4, cs.priors), suspendOk: true }),
+  }),
+  // 特殊詐欺の「かけ子」 (calls from a hideout; the 受け子 is 'fraud_courier'): 詐欺罪, usually 実刑.
+  fraud_caller: T({
+    get name() { return `${sagiWord(GAME)}のかけ子`; }, short: '詐欺',
+    law: (g) => `詐欺罪（刑法246条）：10年以下の${laborWord(g, 'choeki')}（罰金刑はない）。電話でだます「かけ子」は、組織の中心に近いとみられて重く処罰される`,
+    exists: (g) => since(g, 2003, 1),
+    severity: 4, kind: 'crime', victim: true, hotDays: 90,
+    detect: () => 0.06, // the hideout raided while the player is there
+    later: () => 0.011, // a 受け子's statement, the call records
+    penalty: () => ({ prison: [1, 120], labor: 'choeki', fine: null }),
+    facts: (cs) => `氏名不詳者らと共謀のうえ、被害者に電話でうそを言い、現金${fmtMoney(cs.amount || 3000000)}をだまし取った（かけ子）`,
+    typical: (g, cs) => ({ charge: 1, months: 36 + 6 * Math.min(4, cs.priors), suspendOk: false, hard: true }),
+  }),
+  // 盗品の売買（故買）: 刑法256条2項（有償譲受け・有償処分あっせん）, the same article and penalty as 運搬; 贓物故買 before 1995.
+  fence: T({
+    name: '盗品の売買', short: '盗品等有償譲受け',
+    law: (g) => `${since(g, 1995, 6) ? '盗品等有償譲受け・有償処分あっせん罪' : '贓物故買・牙保罪'}（刑法256条2項）：10年以下の${laborWord(g, 'choeki')}及び${eraKey(g) === 'showa' ? '罰金' : '50万円以下の罰金'}`,
+    severity: 3, kind: 'crime', hotDays: 60,
+    detect: () => 0.08,
+    later: () => 0.009,
+    penalty: () => ({ prison: [1, 120], labor: 'choeki', fine: [10000, 500000], both: true }),
+    facts: (cs) => `盗品であることを知りながら、時価${fmtMoney(cs.amount || 300000)}相当の物品を買い受けて転売した`,
+    typical: () => ({ charge: 0.95, months: 18, suspendOk: true, extraFine: 300000 }),
+  }),
+  // 賭博場の開張（胴元・手伝い）: 刑法186条2項, 3月以上5年以下, no fine. The guests commit 'gambling' (185条).
+  gambling_den: T({
+    name: '賭博場の開張', short: '賭博場開張等図利',
+    law: (g) => `賭博場開張等図利罪（刑法186条2項）：3月以上5年以下の${laborWord(g, 'choeki')}（罰金刑はない）。客も賭博罪（185条）`,
+    severity: 3, kind: 'crime', hotDays: 90,
+    detect: (g, ctx) => clamp(0.05 + 0.02 * Math.min(5, ctx.n || 0), 0.03, 0.3),
+    later: (g, h) => 0.007 * (1 + Math.min(4, (h.n || 1) - 1) * 0.25),
+    penalty: () => ({ prison: [3, 60], labor: 'choeki', fine: null }),
+    facts: () => '利益を得る目的で、違法な賭博場を開き、客に賭博をさせた',
+    typical: (g, cs) => ({ charge: 1, months: 18 + 6 * Math.min(3, cs.priors), suspendOk: true }),
+  }),
+  // 偽ブランド品の密売: 商標法78条 (商標権の侵害). 10年以下・1000万円以下・併科 from 2007-01 (平成18年法律第55号);
+  // before that 5年以下の懲役 (the fine of the time is not stated here).
+  counterfeit: T({
+    name: '偽ブランド品の密売', short: '商標法違反',
+    law: (g) => (since(g, 2007, 1)
+      ? `商標法違反（商標権の侵害・78条）：10年以下の${laborWord(g, 'choeki')}若しくは1000万円以下の罰金、又はその併科`
+      : '商標法違反（商標権の侵害・78条）：5年以下の懲役又は罰金'),
+    severity: 2, kind: 'crime', hotDays: 60,
+    detect: (g, ctx) => clamp(0.08 + 0.02 * Math.min(5, ctx.n || 0), 0.04, 0.35),
+    later: () => 0.007, // 税関・通報
+    penalty: (g) => (since(g, 2007, 1) ? { prison: [1, 120], labor: 'choeki', fine: [10000, 10000000] } : { prison: [1, 60], labor: 'choeki', fine: [10000, 5000000] }),
+    facts: (cs) => `他人の登録商標を付した偽ブランド品を、${fmtMoney(cs.amount || 500000)}相当売り渡した`,
+    typical: (g, cs) => (cs.priors ? { charge: 1, months: 18, suspendOk: true, extraFine: 1000000 } : { charge: 0.85, fine: 500000, months: 0, suspendOk: true }),
+  }),
+  // 資金洗浄（犯罪収益等隠匿）: 組織的犯罪処罰法10条, from 2000-02. 5年以下・300万円以下（併科可）→ 10年以下・500万円以下
+  // (令和4年法律第97号, 2022-12-29). Before 2000-02 hiding money of these crimes was no separate offence.
+  laundering: T({
+    name: '資金洗浄', short: '犯罪収益等隠匿',
+    law: (g) => `組織的犯罪処罰法違反（犯罪収益等隠匿・10条）：${since(g, 2022, 12) ? `10年以下の${laborWord(g, 'choeki')}若しくは500万円以下の罰金` : '5年以下の懲役若しくは300万円以下の罰金'}、又はその併科`,
+    exists: (g) => since(g, 2000, 2),
+    severity: 3, kind: 'crime', hotDays: 120,
+    detect: () => 0.01,
+    later: (g, h) => clamp(0.0025 * (1 + Math.log10(1 + (h.amount || 0) / 1000000)), 0, 0.02),
+    penalty: (g) => (since(g, 2022, 12) ? { prison: [1, 120], labor: 'choeki', fine: [10000, 5000000] } : { prison: [1, 60], labor: 'choeki', fine: [10000, 3000000] }),
+    facts: (cs) => `犯罪で得た現金${fmtMoney(cs.amount || 1000000)}について、その出どころを隠すため、事実を仮装して処分した`,
+    typical: (g, cs) => ({ charge: 0.9, months: 18, suspendOk: true }),
+  }),
 };
+// Crime mode (the GTA-like layer): a crime seen at the scene may still end in a chase the player can win.
+// chase = the chance to get away when running (before stamina, time and place), street = time of day and the
+// crowd matter, cam = 防犯カメラ (by era) change the odds at the scene and of being found later.
+const CHASE = { shoplifting: 0.45, robbery: 0.35, fare_evasion: 0.4, assault: 0.5, fraud_courier: 0.35, stolen_goods: 0.45, gambling: 0.5, drunk_driving: 0.25, theft: 0.5, extortion: 0.4, fraud_caller: 0.3, fence: 0.4, gambling_den: 0.3, counterfeit: 0.45 };
+const STREET = new Set(['shoplifting', 'robbery', 'fare_evasion', 'assault', 'fraud_courier', 'stolen_goods', 'theft', 'extortion', 'counterfeit', 'drunk', 'street_smoking', 'underage_smoking', 'underage_drinking']);
+const CAM_CRIMES = new Set(['shoplifting', 'robbery', 'fare_evasion', 'assault', 'fraud_courier', 'stolen_goods', 'theft', 'extortion', 'counterfeit', 'trespass_bath']);
+// crimes that start "crime mode" (the 裏アプリ and no more second thoughts) when the player commits one
+const UNDERWORLD = new Set(['shoplifting', 'robbery', 'theft', 'extortion', 'fraud_courier', 'fraud_caller', 'stolen_goods', 'fence', 'gambling', 'gambling_den', 'counterfeit', 'account_sale', 'laundering']);
 export const CRIME_ORDER = Object.keys(CRIMES);
-for (const [id, def] of Object.entries(CRIMES)) def.id = id;
+for (const [id, def] of Object.entries(CRIMES)) {
+  def.id = id;
+  if (def.chase == null) def.chase = CHASE[id] || 0;
+  def.street = STREET.has(id);
+  def.cam = CAM_CRIMES.has(id);
+}
 // The lead's contract describes law as text, penalty as "text + numbers" and detect as a base chance.
 // They stay functions of (g, ctx) here (era-aware), and also read as the contract says for the game
 // that is running: `${CRIMES.robbery.law}` is the law text, Number(CRIMES.assault.detect) the base
@@ -696,7 +818,10 @@ export function newJusticeState() {
     suspendUntil: 0, // 執行猶予 ends
     supervision: false, // 保護観察付き
     smoke: { cigs: 0, day: 0, today: 0, yesterday: 0, load: 0, lost: 0, clean: 0, total: 0 },
-    stats: { committed: {}, caught: {}, arrests: 0, convictions: 0, hodo: 0 },
+    stats: { committed: {}, caught: {}, arrests: 0, convictions: 0, hodo: 0, escaped: 0, chases: 0 },
+    // 手配度 (GTA-like ★0-5): lv rises with crimes, witnesses and chases and falls day by day (faster while
+    // lying low: flags.lowUntil); peak = the highest of this life; day = the last change
+    wanted: { lv: 0, day: 0, peak: 0 },
     nextId: 1,
   };
 }
@@ -721,6 +846,10 @@ function normalizeJustice(j) {
   j.stats = { ...d.stats, ...obj(j.stats) };
   j.stats.committed = obj(j.stats.committed);
   j.stats.caught = obj(j.stats.caught);
+  j.wanted = { ...d.wanted, ...obj(j.wanted) };
+  j.wanted.lv = clamp(num(j.wanted.lv), 0, WANTED_MAX);
+  j.wanted.peak = clamp(num(j.wanted.peak), 0, WANTED_MAX);
+  j.wanted.day = num(j.wanted.day);
   j.income = Array.isArray(j.income) ? j.income.filter((x) => Array.isArray(x) && x.length === 2) : [];
   j.smoker = clamp(num(j.smoker), 0, 100);
   j.unpaid = Math.max(0, num(j.unpaid));
@@ -1236,6 +1365,29 @@ const STAGES = {
     desk(c, 220, 160, 220, 32, '#8a8e86', '#5e625a');
     fig(c, o.officer || LK.police, 300, 96, 'down');
     fig(c, playerLook(g), 300, 194, 'up');
+  },
+  // the chase (crime mode): a street rushing past, the player running, the chaser behind
+  chase(c, t, g, o) {
+    const night = o.night !== false;
+    for (let y = 0; y < 132; y++) R(c, 0, y, SW, 1, night ? `rgb(${14 + y * 0.18},${16 + y * 0.18},${40 + y * 0.28})` : `rgb(${150 + y * 0.4},${188 + y * 0.3},228)`);
+    const speed = o.lost || o.caught ? 1 : o.hide ? 0 : 7;
+    const off = (t * speed) % 140;
+    for (let i = -1; i < 7; i++) {
+      const bx = Math.round(i * 140 - off * 0.6), bh = 70 + ((i * 37 + 1000) % 3) * 18;
+      R(c, bx, 132 - bh, 120, bh, night ? '#22243a' : '#9a9caa');
+      for (let wy = 132 - bh + 10; wy < 124; wy += 16) for (let wx = bx + 10; wx < bx + 110; wx += 22) R(c, wx, wy, 10, 8, night ? ((wx * 7 + wy * 3 + i) % 5 ? '#ffd88a' : '#3a3c58') : '#c8d8e8');
+    }
+    R(c, 0, 132, SW, 44, night ? '#4a4a52' : '#a8a8a0'); R(c, 0, 132, SW, 2, '#00000060');
+    R(c, 0, 176, SW, SH - 176, night ? '#2a2a30' : '#5a5a62');
+    for (let i = -1; i < 10; i++) R(c, Math.round(i * 80 - off), 214, 40, 4, '#d8d0a0'); // road marks
+    for (let i = -1; i < 5; i++) { const lx = Math.round(i * 170 - (off * 1.2) % 170); R(c, lx, 60, 4, 74, '#3a3a44'); if (night) R(c, lx - 8, 56, 20, 6, '#fff2b0'); }
+    if (speed > 2) for (let i = 0; i < 6; i++) R(c, (i * 113 + t * 11) % SW, 150 + i * 9, 26, 2, '#ffffff50'); // speed lines
+    const fr = speed > 2 ? (t >> 2) % 3 : 0;
+    const px = o.hide ? 466 : o.lost ? 560 : 380, cx = o.caught ? px - 44 : o.lost ? 40 : o.hide ? 250 : 220 + Math.round(Math.sin(t / 9) * 10);
+    fig(c, o.chaser || LK.police, cx, 118, o.lost ? 'left' : 'right', 2, o.lost ? (t >> 3) % 3 : fr);
+    fig(c, playerLook(g), px, o.hide && !o.caught ? 128 : 112, o.caught ? 'left' : o.hide ? 'left' : 'right', 2, fr);
+    if (o.hide && !o.caught) { R(c, 452, 140, 96, 72, '#3a3020'); R(c, 452, 140, 96, 5, '#5a4a30'); R(c, 452, 174, 96, 2, '#2a2216'); R(c, 456, 212, 90, 4, '#00000050'); } // 物陰（積まれた木箱）の向こうに身をかがめる
+    if (!o.lost && !o.caught && !o.hide && (t >> 4) % 2 === 0) text(c, '！', cx + 30, 100, { size: 22, color: '#ff5a6a', shadow: '#000' });
   },
   street(c, t, g, o) {
     for (let y = 0; y < 120; y++) R(c, 0, y, SW, 1, o.night ? `rgb(${20 + y * 0.2},${24 + y * 0.2},${48 + y * 0.3})` : `rgb(${150 + y * 0.4},${190 + y * 0.3},230)`);
@@ -1952,6 +2104,8 @@ async function arrestFlow(g, id, ctx = {}) {
   // a new arrest while on bail: the bail is revoked and the money forfeited (保釈の取消し・保証金の没取)
   for (const o of j.cases) if (o !== cs && o.bail && !o.closed) { j.flags.bailForfeited = (j.flags.bailForfeited || 0) + o.bail.amount; g.message({ from: `${courtCity(g)}地方裁判所`, kind: 'bill', legal: true, text: `保釈中の再犯により、保釈を取り消しました。保釈保証金${fmtMoney(o.bail.amount)}は没取されます。` }); o.bail = null; }
   j.status = 'detained';
+  clearWanted(g);
+  j.flags.lowUntil = 0;
   j.custody = { crime: id, since: st.day, stage: 'police', caseId: cs.id };
   cs.detained = true;
   cs.stage = 'police';
@@ -2069,11 +2223,25 @@ async function chooseLawyer(g, cs, phase) {
   items.push(['私選弁護人に頼む', 'shisen']);
   const yame = st.money >= yfee || st.fame >= 2000;
   if (yame) items.push(['元検事の弁護士に頼む', 'yameken']);
+  if (hasContact(g, 'bengoshi')) items.push(['顔なじみの弁護士に頼む', 'ura']);
   if (items.length <= 1) return null;
   const q0 = phase === 'court' ? '（裁判では、弁護人がつく。どうしよう…）' : phase === 'kouryu' ? '（勾留が決まると、国選弁護人をつけてもらえる）' : '（弁護士を頼もうか…）';
   const q = `${q0}\n（私選は着手金だけで約${fmtMoney(fee)}${yame ? `、\n元検事の弁護士は約${fmtMoney(yfee)}` : ''}）`;
   const k = await ask(g, null, q, items.map((x) => x[0]), { cancel: items.findIndex((x) => x[1] === null) });
   const pick = items[k] ? items[k][1] : null;
+  if (pick === 'ura') {
+    // the 裏アプリ's contact: a 私選 lawyer at half the fee who knows how such cases go
+    const f = Math.round(fee / 2);
+    if (st.money < f) { await narrate(g, `（お金が足りない…。着手金だけで${fmtMoney(f)}かかる）`); return chooseLawyer(g, cs, phase === 'police' ? 'none' : phase); }
+    st.money -= f;
+    cs.lawyer = 'shisen';
+    cs.lawyerFee = f;
+    cs.uraLawyer = true;
+    cs.evidence = clamp(num(cs.evidence) - 0.04, 0.3, 1);
+    await say(g, { name: '顔なじみの弁護士', look: LK.shisen }, ['話は聞いてる。着手金は、いつもの半分でいい。', '調書には、納得できないことは書かせるな。\n…あとは、こっちでやる。']);
+    emit(g, 'ura_lawyer', { caseId: cs.id });
+    return 'shisen';
+  }
   if (pick === 'shisen' || pick === 'yameken') {
     const f = pick === 'yameken' ? yfee : fee;
     if (st.money < f) { await narrate(g, `（お金が足りない…。着手金だけで${fmtMoney(f)}かかる）`); return chooseLawyer(g, cs, phase === 'police' ? 'none' : phase); }
@@ -3342,7 +3510,8 @@ async function crimeOffer(g, ev) {
   const what = { account_sale: '通帳とキャッシュカードを売る', fraud_courier: '荷物を受け取ってくる', stolen_goods: '荷物を運ぶ' }[crime];
   await flow.show('yamikin', { title: '雑居ビルの一室', sub: '「話がある」と呼び出された' });
   await say(g, SP.collector, ['金がないなら、仕事を手伝え。', `${what}だけでいい。\nそれで、借金はチャラにしてやる。`]);
-  const k = await ask(g, null, `（${CRIMES[crime].name}…犯罪だ。\nどうする…？）`, ['断る', '引き受ける']);
+  const amount0 = crime === 'fraud_courier' ? 2000000 : crime === 'stolen_goods' ? 500000 : 0;
+  const { k } = await confirmImpl(g, crime, { amount: amount0, pressured: true }, { text: '（どうする…？）', no: '断る', yes: '引き受ける', reward: '報酬：借金がチャラ' });
   if (k === 0) {
     await say(g, SP.collector, '…そうか。後悔するなよ。');
     await narrate(g, '（取り立ては、これからもっと厳しくなるだろう…）');
@@ -3351,14 +3520,13 @@ async function crimeOffer(g, ev) {
     return;
   }
   flow.hide();
-  const amount = crime === 'fraud_courier' ? 2000000 : crime === 'stolen_goods' ? 500000 : 0;
-  const res = await g.commitCrime(crime, { amount, pressured: true, where: '待ち合わせ場所' });
+  const res = await g.commitCrime(crime, { amount: amount0, pressured: true, where: '待ち合わせ場所' });
   if (!res.caught) {
     l.status = 'void';
     j.loans = j.loans.filter((x) => x !== l);
     j.flags.yamikinHook = (j.flags.yamikinHook || 0) + 1;
-    await narrate(g, '（借金は「チャラ」になった。…でも、あの男たちとの縁は、もう切れない気がした）');
-    g.addNeed('stress', 15);
+    await narrate(g, '（借金は「チャラ」になった。…あの男たちとは、これで貸し借りなしだ。向こうがそう思っていれば、だが）');
+    g.addNeed('stress', 8);
   }
   await flow.end();
 }
@@ -3750,7 +3918,11 @@ async function smokeImpl(g, opts = {}) {
   if (!rule.ok) {
     const choices = ['やめておく', ...(rule.smokingArea ? ['喫煙所で吸う'] : []), 'かまわず吸う'];
     let k = opts.anyway ? choices.length - 1 : opts.smokingArea && rule.smokingArea ? 1 : 0;
-    if (!opts.silent && opts.anyway == null && opts.smokingArea == null) k = await g.ask(`（ここは禁煙だ。${rule.law || ''}${rule.fine ? `\n違反すると過料${man(rule.fine)}` : ''}）\nどうする？`, choices, { cancel: 0 });
+    if (!opts.silent && opts.anyway == null && opts.smokingArea == null) {
+      // the odds of being stopped (a 巡回指導員 / the staff), as for any offence
+      const off = !rule.indoor || rule.fine ? showOddsImpl(g, 'street_smoking', { rule, place: rule.place }, { title: '禁煙の場所で吸う', note: rule.fine ? `見つかれば過料${man(rule.fine)}（前科にはならない）` : '見つかれば注意される' }) : () => {};
+      try { k = await g.ask(`（ここは禁煙だ。${rule.law || ''}${rule.fine ? `\n違反すると過料${man(rule.fine)}` : ''}）\nどうする？`, choices, { cancel: 0 }); } finally { off(); }
+    }
     const pick = choices[k];
     if (pick === 'やめておく') return { ok: false, reason: 'banned', rule };
     if (pick === 'かまわず吸う') violated = true;
@@ -3825,6 +3997,372 @@ async function drinkImpl(g, opts = {}) {
   return { ok: true };
 }
 
+// ======================================================================== crime mode: odds, 手配度, chase, 職務質問
+// The player asked (round 4): crime is not certain arrest — in reality people often get away (GTA-like). Every
+// crime shows its odds before it is committed (成功 / その場で捕まる / あとでバレる), computed from the crime, the
+// player's 裏の経験 and skills, preparation and gear, the 手配度 (★0-5), the place, the time of day, accomplices and the
+// era (防犯カメラ). Being seen is not the end: crimes with a chase let the player run or hide (or give up). Once in
+// crime mode (j.flags.crimeMode: a crime of the underworld kind was committed, or the 裏アプリ was opened) the
+// narration drops second thoughts. Odds, choices and outcomes only — no method is ever described.
+const ODDS_CAP = 0.92; // nothing is caught for certain at the scene (ctx.forceCaught — tests / debug — still is)
+const LATER_DAYS = 60; // 「あとでバレる」 = found out within two game months
+export const WANTED_MAX = 5;
+const WANTED_ADD = [0, 0.4, 0.6, 1.0, 1.5, 2.2]; // by severity, an offence the police look into
+const WITNESS_ADD = 1.4; // seen, and got away
+const CRIME_SPOTS = {};
+// registerCrimeSpot(placeId, info | (g) => info): info = { label, detect (× at the scene), cam (× cameras), hide (+ to hide) }
+export function registerCrimeSpot(placeId, info) { CRIME_SPOTS[placeId] = info; }
+registerCrimeSpot('konbini', { label: '店内（防犯カメラ）', detect: 1.1, cam: 1.25, hide: -0.15 });
+registerCrimeSpot('kanraku', (g) => (since(g, 2002, 2)
+  ? { label: '繁華街（街頭防犯カメラ）', detect: 0.95, cam: 1.3, hide: 0.15 } // 歌舞伎町の街頭防犯カメラ 2002-02-27〜
+  : { label: '繁華街（人ごみ）', detect: 0.85, cam: 0.85, hide: 0.2 }));
+for (const id of ['station_tokyo', 'station_namba']) registerCrimeSpot(id, { label: '駅（人の目とカメラ）', detect: 1.1, cam: 1.2, hide: 0.05 });
+registerCrimeSpot('machi', { label: '商店街（顔なじみが多い）', detect: 1.12, cam: 0.9, hide: 0.05 });
+registerCrimeSpot('sento', { label: '銭湯（番台とお客の目）', detect: 1.04, cam: 0.6, hide: -0.2 });
+// The scene: ctx.spot (an info object: the 裏アプリ's jobs happen elsewhere), else ctx.place, else where the
+// player stands. A private act (ctx.private: at home) is already in the crime's own base chance.
+function spotOf(g, where) {
+  if (where && typeof where === 'object') return { label: '現場', detect: 1, cam: 1, hide: 0, ...where };
+  const pid = where || (g.map && g.map.placeId) || '';
+  let s = CRIME_SPOTS[pid];
+  try { if (typeof s === 'function') s = s(g); } catch (e) { console.error(e); s = null; }
+  if (s) return s;
+  const kind = PLACES[pid] && PLACES[pid].kind;
+  return kind === 'town' ? { label: '街中', detect: 1, cam: 1, hide: 0.1 } : { label: '屋内', detect: 1.04, cam: 1.08, hide: -0.05 };
+}
+// 防犯カメラの多さ by year (0.2 in the late 1980s → 1 now): stores first (1990s), 繁華街 from 2002, then everywhere,
+// plus phone cameras and ドライブレコーダー in the 2010s. A rounded trend, used as a multiplier only.
+const CAM_POINTS = [[1985, 0.2], [1996, 0.35], [2002, 0.5], [2010, 0.72], [2026, 1]];
+export function camDensity(g) {
+  const y = lawDate(g).year + (lawDate(g).month - 1) / 12;
+  if (y <= CAM_POINTS[0][0]) return CAM_POINTS[0][1];
+  for (let i = 1; i < CAM_POINTS.length; i++) {
+    const [y1, v1] = CAM_POINTS[i], [y0, v0] = CAM_POINTS[i - 1];
+    if (y <= y1) return v0 + ((v1 - v0) * (y - y0)) / (y1 - y0);
+  }
+  return 1;
+}
+// The time of day: the game has no clock, so it is the day's stamina used (a fresh morning is 昼, a spent day is
+// 夜), unless a job chose its time (g._crimePhase: 'day' | 'night' | 'late').
+const PHASES = { day: { label: '昼', k: 1.12, esc: -0.06 }, evening: { label: '夕方', k: 1, esc: 0 }, night: { label: '夜', k: 0.88, esc: 0.06 }, late: { label: '深夜', k: 0.8, esc: 0.1 } };
+export function dayPhase(g) {
+  if (g._crimePhase && PHASES[g._crimePhase]) return { id: g._crimePhase, ...PHASES[g._crimePhase] };
+  const st = g.state, f = st && st.maxStamina ? st.stamina / st.maxStamina : 1;
+  const id = f >= 0.6 ? 'day' : f >= 0.3 ? 'evening' : 'night';
+  return { id, ...PHASES[id] };
+}
+const uraOf = (g) => { const u = g.state && g.state.ura; return u && typeof u === 'object' ? u : null; };
+const uraSkill = (g) => { const u = uraOf(g); return clamp(num(u && u.skill), 0, 100); };
+const safehouseOn = (g) => { const u = uraOf(g); return !!(u && u.safehouse && num(u.safehouse.until) >= g.state.day); };
+const hasContact = (g, id) => { const u = uraOf(g); return !!(u && u.contacts && u.contacts[id]); };
+const wantedLv = (g) => clamp(num(J(g).wanted && J(g).wanted.lv), 0, WANTED_MAX);
+export const starsOf = (lv) => (lv > 0.05 ? clamp(Math.round(lv), 1, WANTED_MAX) : 0);
+const TALK_CRIMES = new Set(['fraud_caller', 'fraud_courier', 'extortion', 'counterfeit', 'fence', 'account_sale']);
+// The same numbers are used for the card and for the roll (commitCrime), so what is shown is what happens.
+function oddsImpl(g, id, ctx = {}) {
+  const st = g.state, j = J(g), def = CRIMES[id];
+  GAME = g;
+  if (!def) return { ok: false, id, why: 'そのような罪はない' };
+  if (def.exists && !def.exists(g)) return { ok: false, id, why: 'この時代には、まだその罪はない' };
+  const prev = num(j.stats.committed[id]);
+  const c = { ...ctx, n: prev, where: ctx.where || placeName(g), age: ageOf(st) };
+  if (id === 'street_smoking' && !c.rule) c.rule = canSmokeImpl(g);
+  const factors = [];
+  let base = 0;
+  try { base = ctx.detect != null ? num(ctx.detect) : num(def.detect(g, c)); } catch (e) { console.error(e); }
+  if (ctx.risk != null) base *= num(ctx.risk, 1);
+  base = clamp(base, 0, 1);
+  let p = base;
+  const step = (label, k, good) => {
+    if (!(p > 0) || k === 1) return;
+    const before = p;
+    p = clamp(p * k, 0, 1);
+    const d = p - before;
+    if (Math.abs(d) >= 0.005) factors.push({ label, d, on: 'now', good: good ?? d < 0 });
+  };
+  const skill = uraSkill(g), lv = wantedLv(g), cam = camDensity(g), spot = spotOf(g, ctx.spot || ctx.place), ph = dayPhase(g);
+  const crew = clamp(Math.round(num(ctx.crew)), 0, 3);
+  if (skill > 0) step('裏の経験', 1 - 0.3 * (skill / 100));
+  if (TALK_CRIMES.has(id) && st.skills) step('口のうまさ（トーク）', 1 - 0.15 * clamp(num(st.skills.talk) / SKILL_MAX, 0, 1));
+  if (num(ctx.prep) > 0) step(ctx.prepLabel || '下見・準備', 1 - 0.25 * clamp(num(ctx.prep), 0, 1));
+  if (ctx.disguise) step('変装', 0.85);
+  if (ctx.tip) step('情報屋のネタ', 0.85);
+  if (crew) step(`仲間${crew}人（見張り）`, 0.88 ** crew);
+  if (num(spot.detect, 1) !== 1) step(spot.label, num(spot.detect, 1));
+  if (def.street) step(`時間帯：${ph.label}`, ph.k);
+  if (def.cam) step(`防犯カメラ（${lawDate(g).year}年）`, 0.85 + 0.25 * cam * num(spot.cam, 1));
+  if (def.street && st.fame >= 250) step('顔が知られている', famous(g, 0.3));
+  if (lv > 0 && p > 0) { const before = p; p = clamp(p + 0.035 * lv, 0, 1); factors.push({ label: `手配度★${starsOf(lv)}（警戒中）`, d: p - before, on: 'now', good: false }); }
+  let spotP = clamp(p, 0, ODDS_CAP);
+  if (ctx.forceCaught) spotP = 1;
+  if (ctx.neverCaught) spotP = 0;
+  // a chase: the overall chance to get away when the player keeps running
+  let esc = 0;
+  if (def.chase > 0 && ctx.chase !== false && !ctx.forceCaught && def.kind !== 'admin' && def.kind !== 'hodo') {
+    esc = def.chase * (0.7 + 0.6 * clamp(st.maxStamina ? st.stamina / st.maxStamina : 1, 0, 1));
+    if (hasContact(g, 'hakobiya')) esc += 0.12;
+    esc += ph.esc + 0.5 * num(spot.hide) - 0.04 * lv + (ctx.escape ? num(ctx.escape) : 0);
+    esc = clamp(esc, 0.05, 0.85);
+  }
+  // found out later: the core's daily chance over LATER_DAYS, with the multipliers kept on the heat (h.k)
+  const k = laterK(g, id, { crew, skill, cam, spot });
+  const hLike = { n: 1, day: st.day, first: st.day, amount: num(c.amount), injury: !!c.injury, request: c.request, k };
+  const L1 = def.kind === 'admin' ? 0 : surfaceOver(g, id, hLike, 1, lv);
+  const L2 = def.kind === 'admin' ? 0 : surfaceOver(g, id, hLike, 2.2, lv + WITNESS_ADD);
+  if (k !== 1 && (L1 > 0.005)) {
+    const plain = surfaceOver(g, id, { ...hLike, k: 1 }, 1, lv);
+    if (Math.abs(L1 - plain) >= 0.005) factors.push({ label: crew ? '仲間の口（裏切りの心配）' : def.cam ? `防犯カメラの映像（${lawDate(g).year}年）` : '足どり', d: L1 - plain, on: 'later', good: L1 < plain });
+  }
+  const now = spotP * (esc > 0 ? 1 - esc : 1);
+  const later = ctx.neverLater ? 0 : (1 - spotP) * L1 + spotP * esc * L2;
+  const success = clamp(1 - now - later, 0, 1);
+  // percentages that add up to 100
+  const pn = Math.round(now * 100), pl = Math.min(100 - pn, Math.round(later * 100));
+  const ps = Math.max(0, 100 - pn - pl);
+  const heat = def.kind === 'crime' && (base > 0 || def.victim) ? WANTED_ADD[def.severity] || 0.5 : 0;
+  return {
+    ok: true, id, name: def.name, short: def.short, law: crimeLaw(g, id, c), lawShort: lawShortOf(g, id), kind: def.kind,
+    spot: spotP, escape: esc, chase: esc > 0, now, later, success, pct: { success: ps, now: pn, later: pl },
+    laterIfSeen: L2, factors, heat, heatIfSeen: heat + WITNESS_ADD, phase: ph.label, place: spot.label, cam,
+    text: `成功 ${ps}%・その場で捕まる ${pn}%・あとでバレる ${pl}%`,
+  };
+}
+function laterK(g, id, o = {}) {
+  const def = CRIMES[id];
+  let k = 1;
+  if (def.cam) k *= 0.6 + 0.6 * clamp(o.cam ?? camDensity(g), 0, 1) * num(o.spot ? o.spot.cam : 1, 1);
+  if (o.crew) k *= 1 + 0.45 * o.crew; // someone always talks
+  if (o.skill) k *= 1 - 0.3 * (o.skill / 100);
+  return Math.round(k * 1000) / 1000;
+}
+function surfaceOver(g, id, h, boost = 1, lv = 0) {
+  const def = CRIMES[id];
+  let p = 0;
+  try { p = num(def.later(g, h)); } catch (e) { console.error(e); }
+  if (!(p > 0)) return 0;
+  p *= num(h.k, 1) * boost;
+  let stay = 1, w = lv;
+  for (let d = 0; d < LATER_DAYS; d++) {
+    const q = clamp(p * (d > (def.hotDays ?? 30) ? 0.25 : 1) * (1 + 0.25 * w), 0, 0.6);
+    stay *= 1 - q;
+    w = Math.max(0, w - 0.3);
+  }
+  return 1 - stay;
+}
+const lawShortOf = (g, id) => { const t = String(crimeLaw(g, id)).split('：')[0]; return t.length > 30 ? t.slice(0, 29) + '…' : t; };
+function addWantedImpl(g, d, why) {
+  const j = J(g), w = j.wanted;
+  const before = starsOf(w.lv);
+  w.lv = clamp(num(w.lv) + num(d), 0, WANTED_MAX);
+  w.day = g.state.day;
+  w.peak = Math.max(num(w.peak), w.lv);
+  const after = starsOf(w.lv);
+  if (after !== before) emit(g, 'wanted', { lv: w.lv, stars: after, before, why });
+  if (after >= 5 && before < 5 && knownFigure(g)) news(g, '警察は、一連の事件に関わったとみて、{fullname}さんの行方を追っている。');
+  return w.lv;
+}
+function clearWanted(g) { const w = J(g).wanted; if (w.lv > 0) { w.lv = 0; w.day = g.state.day; emit(g, 'wanted', { lv: 0, stars: 0, why: 'custody' }); } }
+// Daily: the 手配度 cools; lying low (flags.lowUntil, the 裏アプリ's 「ほとぼりを冷ます」) cools it faster, a 隠れ家 more.
+// At ★4 and up the investigators push harder: an undetected offence may be traced the same day.
+function wantedTick(g, notes) {
+  const j = J(g), w = j.wanted, day = g.state.day;
+  if (j.status === 'detained' || j.status === 'prison') { if (w.lv) w.lv = 0; return; }
+  if (!(w.lv > 0)) return;
+  const low = num(j.flags.lowUntil) >= day - 1;
+  const u = uraOf(g);
+  const safe = !!(u && u.safehouse && num(u.safehouse.until) >= day);
+  const before = starsOf(w.lv);
+  if (w.lv >= 4) {
+    const hot = Object.keys(j.heat).filter((id) => CRIMES[id] && CRIMES[id].kind === 'crime' && !j.heat[id].queued && !casePending(g, id));
+    if (hot.length && roll(g, 0.06 * (w.lv - 3) * (safe && low ? 0.5 : 1))) {
+      const id = hot.sort((a, b) => CRIMES[b].severity - CRIMES[a].severity)[0];
+      const h = j.heat[id];
+      h.queued = true;
+      emit(g, 'exposed', { crime: id, heat: { ...h }, by: 'wanted' });
+      planSurface(g, id, h);
+    }
+  }
+  w.lv = Math.max(0, w.lv - (low ? (safe ? 1.0 : 0.75) : safe ? 0.4 : 0.3));
+  if (w.lv < 0.05) w.lv = 0;
+  const after = starsOf(w.lv);
+  if (after !== before) emit(g, 'wanted', { lv: w.lv, stars: after, before, why: 'cool' });
+  if (!after && before && notes) notes.push('（手配度が消えた。…警察の目は、もうこちらを向いていない）');
+}
+// ---------------------------------------------------------------- the odds card (HD overlay above the question)
+const ODDS_COL = { success: '#4fd08a', now: '#ff5a6a', later: '#ffb43c', bg: '#141826', dim: '#9aa3c7', star: '#ffd23f', starOff: '#4a5068' };
+export function drawStars(ctx, x, y, lv, size = 12) {
+  const n = starsOf(lv);
+  for (let i = 0; i < WANTED_MAX; i++) text(ctx, '★', x + i * (size + 2), y, { size, color: i < n ? ODDS_COL.star : ODDS_COL.starOff });
+  return x + WANTED_MAX * (size + 2);
+}
+class OddsCard {
+  constructor(g, o, opts = {}) { Object.assign(this, { g, o, opts, t: 0, hd: true, hidesHud: true }); }
+  update() { this.t++; }
+  draw(ctx, g) {
+    const o = this.o, op = this.opts;
+    const x = 8, w = 384;
+    const fs = (o.factors || []).slice(0, 5);
+    const h = 110 + (o.chase ? 18 : 0) + fs.length * 17 + (op.reward || o.heat ? 22 : 0) + (op.note ? 20 : 0);
+    const y = 8;
+    panel(ctx, x, y, w, h, { bg: ODDS_COL.bg });
+    text(ctx, op.title || o.name, x + 12, y + 8, { size: 16, color: COLORS.accent });
+    drawStars(ctx, x + w - 82, y + 10, wantedLv(g), 12);
+    text(ctx, o.lawShort, x + 12, y + 30, { size: 12, color: ODDS_COL.dim });
+    // the stacked bar: 成功 | その場で | あとで
+    const bx = x + 12, by = y + 50, bw = w - 24, bh = 12;
+    const ws = Math.round((bw * o.pct.success) / 100), wn = Math.round((bw * o.pct.now) / 100);
+    rect(ctx, bx, by, bw, bh, '#2a3048');
+    rect(ctx, bx, by, ws, bh, ODDS_COL.success);
+    rect(ctx, bx + ws, by, wn, bh, ODDS_COL.now);
+    rect(ctx, bx + ws + wn, by, Math.max(0, bw - ws - wn), bh, o.pct.later ? ODDS_COL.later : '#2a3048');
+    text(ctx, `成功 ${o.pct.success}%`, bx, by + 18, { size: 16, color: o.pct.success >= 60 ? ODDS_COL.success : o.pct.success >= 35 ? ODDS_COL.later : ODDS_COL.now });
+    text(ctx, `その場で捕まる ${o.pct.now}%　あとでバレる ${o.pct.later}%`, bx + bw, by + 21, { size: 12, color: '#ffffff', align: 'right' });
+    let ly = by + 44;
+    if (o.chase) { text(ctx, `見つかっても、逃げ切れる見込み ${Math.round(o.escape * 100)}%`, bx, ly, { size: 12, color: ODDS_COL.dim }); ly += 18; }
+    text(ctx, `${o.place}・${o.phase}`, bx, ly, { size: 12, color: ODDS_COL.dim });
+    ly += 17;
+    for (const f of fs) {
+      const col = f.good ? ODDS_COL.success : ODDS_COL.now;
+      text(ctx, `${f.good ? '＋' : '－'} ${f.label}`, bx, ly, { size: 12, color: col });
+      const v = Math.round(f.d * 100);
+      if (v) text(ctx, `${f.on === 'later' ? 'あとで' : '見つかる'} ${v > 0 ? '+' : ''}${v}%`, bx + bw, ly, { size: 12, color: col, align: 'right' });
+      ly += 17;
+    }
+    if (op.reward || o.heat) {
+      ly += 3;
+      if (op.reward) text(ctx, op.reward, bx, ly, { size: 12, color: COLORS.accent });
+      if (o.heat) text(ctx, `手配度 +${Math.round(o.heat * 10) / 10}（見つかって逃げれば +${Math.round(o.heatIfSeen * 10) / 10}）`, bx + bw, ly, { size: 12, color: ODDS_COL.star, align: 'right' });
+      ly += 19;
+    }
+    if (op.note) text(ctx, fitTo(ctx, op.note, bw, 12), bx, ly, { size: 12, color: ODDS_COL.dim });
+  }
+}
+function fitTo(ctx, s, w, size) {
+  let t = String(s);
+  while (t.length > 1 && measure(ctx, t, size) > w) t = t.slice(0, -1);
+  return t === String(s) ? t : t.slice(0, -1) + '…';
+}
+// The question with the odds card above it. Returns { go, odds }. opts: { title, text (the question), yes, no,
+// reward (a line: '報酬 ¥50,000'), note, who ({ name, look }), extra (more choices after yes: returns k) }.
+async function confirmImpl(g, id, ctx = {}, opts = {}) {
+  const o = oddsImpl(g, id, ctx);
+  if (!o.ok) { if (!opts.quiet) await narrate(g, `（${o.why}）`); return { go: false, odds: o, k: 0 }; }
+  const card = g.push(new OddsCard(g, o, opts));
+  let k = 0;
+  try {
+    const choices = [opts.no || 'やめておく', opts.yes || '実行する', ...(opts.extra || [])];
+    k = await g.ask(opts.text || `（${o.name}…？）`, choices, { cancel: 0, ...(opts.who ? { name: opts.who.name, look: opts.who.look } : {}) });
+  } finally { g.pop(card); }
+  return { go: k >= 1, k, odds: o };
+}
+// The card alone (for a question a place asks itself): returns a function that takes it down again.
+function showOddsImpl(g, id, ctx = {}, opts = {}) {
+  const o = oddsImpl(g, id, ctx);
+  if (!o.ok) return () => {};
+  const card = g.push(new OddsCard(g, o, opts));
+  return () => { if (g.scenes.includes(card)) g.pop(card); };
+}
+// ---------------------------------------------------------------- the chase (逃げる / 隠れる / 投降)
+// opts: { escape (overall chance when running), hide, chaser (look), name (the chaser's name), shout, title, sub,
+// night }. Two rounds of running (r, then 0.8r: together = escape); hiding is one gamble. Returns
+// 'escaped' | 'caught' | 'surrender'. g.auto picks 投降 (the first choice).
+async function chaseImpl(g, id, opts = {}) {
+  const st = g.state, j = J(g);
+  const E = clamp(num(opts.escape, 0.4), 0.02, 0.95);
+  const r1 = (1.8 - Math.sqrt(Math.max(0, 3.24 - 3.2 * E))) / 1.6;
+  const ph = dayPhase(g);
+  const hide = clamp(num(opts.hide, E * 0.8 + (ph.id === 'day' ? -0.08 : 0.06) + num(spotOf(g).hide) * 0.6), 0.03, 0.9);
+  j.stats.chases = num(j.stats.chases) + 1;
+  const chaser = { name: opts.name || '警察官', look: opts.chaser || LK.police };
+  const scene = g.push(new StageScene(g, 'chase', { title: opts.title || '追跡', sub: opts.sub || (CRIMES[id] ? CRIMES[id].name : ''), chaser: chaser.look, night: opts.night ?? ph.id !== 'day' }));
+  let result = 'caught', how = '';
+  try {
+    audio.sfx('buzz');
+    await say(g, chaser, opts.shout || '待てっ！');
+    let r = r1;
+    for (let round = 0; round < 2; round++) {
+      const ch = ['投降する', `逃げる（${Math.round(r * 100)}%）`, `隠れる（${Math.round(hide * 100)}%）`];
+      const k = await ask(g, null, round ? '（まだ追ってくる…！）' : '（見つかった…！ どうする？）', ch, { cancel: 0 });
+      if (k === 0) { result = 'surrender'; break; }
+      if (k === 2) { how = 'hide'; scene.opts.hide = true; result = roll(g, hide) ? 'escaped' : 'caught'; break; }
+      how = 'run';
+      scene.opts.run = true;
+      st.stamina = Math.max(0, st.stamina - 6);
+      if (roll(g, r)) { result = 'escaped'; break; }
+      r *= 0.8;
+    }
+    if (result === 'escaped') {
+      scene.opts.lost = true;
+      await narrate(g, how === 'hide' ? '（物陰で息を殺した。…足音が、遠ざかっていく）' : '（路地を抜けて、人ごみにまぎれた――振り切った！）');
+    } else if (result === 'caught') {
+      scene.opts.caught = true;
+      await narrate(g, how === 'hide' ? '（「そこにいるのは分かってる！」…見つかった）' : '（息が切れたところで、腕をつかまれた――）');
+    } else await narrate(g, '（足を止めて、両手を上げた）');
+  } finally { g.pop(scene); }
+  if (result === 'escaped') j.stats.escaped = num(j.stats.escaped) + 1;
+  g.addNeed('stress', result === 'escaped' ? 6 : 10);
+  return result;
+}
+// ---------------------------------------------------------------- 職務質問 (called by the 裏アプリ's walk check)
+// A uniformed officer stops the player in town; how likely depends on the 手配度. opts.stash: what is carried
+// (value of 盗品), opts.hot: an undetected offence. Choices: 応じる (所持品検査: 盗品 found → 窃盗/盗品の件で),
+// ごまかす (トーク), 逃げる (a chase: +★). Returns 'ok' | 'bluffed' | 'escaped' | 'arrested' | 'found'.
+async function shokushitsuImpl(g, opts = {}) {
+  const st = g.state, j = J(g);
+  if (j.status === 'detained' || j.status === 'prison') return null;
+  const lv = wantedLv(g);
+  const stash = Math.max(0, num(opts.stash));
+  const officer = { name: '警察官', look: LK.police };
+  const scene = g.push(new StageScene(g, 'street', { title: '職務質問', sub: `${placeName(g)}で呼び止められた`, officer: LK.police, night: dayPhase(g).id !== 'day' }));
+  let out = 'ok';
+  try {
+    await say(g, officer, ['ちょっといいですか。\nこのあたりで事件があってね。', 'どちらへ？ お名前と、かばんの中を\n見せてもらえますか。']);
+    const talk = clamp(num(st.skills && st.skills.talk) / SKILL_MAX, 0, 1);
+    const pFind = stash > 0 ? clamp(0.55 + 0.08 * lv, 0.4, 0.9) : 0;
+    const pBluff = clamp(0.45 + 0.35 * talk + 0.2 * (uraSkill(g) / 100) - 0.08 * lv, 0.1, 0.85);
+    const esc = clamp(0.45 * (0.7 + 0.6 * clamp(st.stamina / st.maxStamina, 0, 1)) + (hasContact(g, 'hakobiya') ? 0.1 : 0) - 0.04 * lv, 0.08, 0.8);
+    const ch = ['素直に応じる', `ごまかす（${Math.round(pBluff * 100)}%）`, `逃げる（${Math.round(esc * 100)}%）`];
+    const k = await ask(g, null, stash > 0 ? `（かばんには「盗品」が入っている…。\n見られれば、見つかる見込み ${Math.round(pFind * 100)}%）` : '（どうする…？）', ch, { cancel: 0 });
+    if (k === 0) {
+      await narrate(g, '（言われるまま、かばんを開けた…）');
+      if (stash > 0 && roll(g, pFind)) out = 'found';
+      else { await say(g, officer, '…はい、ご協力ありがとうございました。\n気をつけて。'); addWantedImpl(g, -0.3, 'cooperate'); }
+    } else if (k === 1) {
+      if (roll(g, pBluff)) { await narrate(g, '（急ぎの用があると、うまく話をそらした。\n警察官は、しぶしぶ道をあけた）'); out = 'bluffed'; }
+      else { await say(g, officer, '…なんで目をそらすんですか。\nかばん、見せてもらいますよ。'); out = stash > 0 && roll(g, pFind + 0.1) ? 'found' : 'ok'; if (out === 'ok') await say(g, officer, '…いいでしょう。行っていいですよ。'); }
+    } else {
+      g.pop(scene);
+      const r = await chaseImpl(g, opts.crime || 'theft', { escape: esc, title: '追跡', sub: '職務質問から逃げた', shout: 'おい、待ちなさい！' });
+      if (r === 'escaped') { addWantedImpl(g, 1, 'flee'); out = 'escaped'; }
+      else out = stash > 0 ? 'found' : r === 'surrender' ? 'ok' : 'held';
+      if (out === 'held' || (out === 'ok' && r === 'surrender')) { await say(g, officer, ['…なんで逃げたんですか。', '署で、少し話を聞かせてもらいます。']); await narrate(g, '（交番で長い時間、話を聞かれた。\n…何も出てこなかった。夜になって、ようやく帰された）'); addWantedImpl(g, 0.4, 'held'); g.addNeed('stress', 10); out = 'held'; }
+    }
+  } finally { if (g.scenes.includes(scene)) g.pop(scene); }
+  if (out === 'found') {
+    await say(g, officer, ['…これは、どうしたんですか？', 'ちょっと、署まで来てもらいます。']);
+    const crime = opts.foundCrime || 'theft';
+    emit(g, 'stash_found', { crime });
+    const h = j.heat[crime];
+    const cs = await arrestFlow(g, crime, { via: 'genkouhan', evidence: 0.85, amount: stash || (h ? h.amount : 0), where: placeName(g), skipArrestScene: false });
+    return cs ? 'arrested' : 'found';
+  }
+  return out;
+}
+// ---------------------------------------------------------------- lying low
+// n days indoors: the days pass with sleep (rent, the morning, queued events as usual); no work, no town.
+async function lieLowImpl(g, n = 1, opts = {}) {
+  const j = J(g);
+  n = clamp(Math.round(num(n, 1)), 1, 14);
+  j.flags.lowUntil = g.state.day + n;
+  for (let i = 0; i < n; i++) {
+    if (j.status === 'detained' || j.status === 'prison') break;
+    j.flags.lowUntil = Math.max(num(j.flags.lowUntil), g.state.day + 1);
+    await g.sleep({ notes: i === n - 1 });
+    if (opts.each) { try { await opts.each(g, i); } catch (e) { console.error(e); } }
+  }
+  return wantedLv(g);
+}
+
 // ======================================================================== commit, heat, surfacing
 function addHeat(g, id, c = {}) {
   const j = J(g), day = g.state.day;
@@ -3852,26 +4390,41 @@ async function commitCrimeImpl(g, id, ctx = {}) {
   if (!def) { console.error('commitCrime: unknown crime', id); return { caught: false, report: { crime: id, none: true, text: 'そのような罪はない' } }; }
   if (def.exists && !def.exists(g)) return { caught: false, report: { crime: id, none: true, text: 'この時代には、まだその罪はない' } };
   if (j.status === 'detained' || j.status === 'prison') return { caught: false, report: { crime: id, none: true, text: 'いまはできない' } };
+  // the odds shown on the card (crimeConfirm) are the odds rolled here
+  const odds = oddsImpl(g, id, ctx);
   const prev = num(j.stats.committed[id]);
   j.stats.committed[id] = prev + 1;
   const c = { ...ctx, n: prev, where: ctx.where || placeName(g), age: ageOf(st) };
+  delete c.spot;
   if (id === 'street_smoking' && !c.rule) c.rule = canSmokeImpl(g);
   if (def.warnFirst && !j.flags['warned_' + id]) c.warnFirst = true;
-  let p = ctx.detect != null ? ctx.detect : def.detect(g, c);
-  if (ctx.risk != null) p *= ctx.risk;
-  if (ctx.forceCaught) p = 1;
-  if (ctx.neverCaught) p = 0;
-  p = clamp(p, 0, 1);
-  const caught = roll(g, p);
-  const report = { crime: id, name: def.name, law: crimeLaw(g, id, c), chance: Math.round(p * 1000) / 1000, caught, when: caught ? 'now' : 'later', day: st.day };
+  const p = odds.spot;
+  const seen = roll(g, p);
+  let chase = null;
+  if (seen && odds.chase) {
+    if (ctx.handle === false) chase = roll(g, odds.escape) ? 'escaped' : 'caught';
+    else { try { chase = await chaseImpl(g, id, { escape: odds.escape, ...chaseWho(g, id, c) }); } catch (e) { console.error(e); chase = 'caught'; } }
+    if (chase === 'surrender') { c.plea = 'admit'; c.surrender = true; }
+  }
+  const caught = seen && chase !== 'escaped';
+  const report = { crime: id, name: def.name, law: crimeLaw(g, id, c), chance: Math.round(p * 1000) / 1000, odds: odds.pct, seen, chase, caught, when: caught ? 'now' : 'later', day: st.day };
+  if (UNDERWORLD.has(id) && !ctx.pressured) setCrimeModeImpl(g, true, id);
   if (!caught) {
-    if (def.kind !== 'admin') addHeat(g, id, c);
+    if (def.kind !== 'admin') {
+      const h = addHeat(g, id, c);
+      h.k = laterK(g, id, { crew: clamp(Math.round(num(ctx.crew)), 0, 3), skill: uraSkill(g), spot: spotOf(g, ctx.spot || ctx.place) });
+      if (chase === 'escaped') { h.boost = Math.max(num(h.boost, 1), 2.2); h.witness = st.day; }
+      if (ctx.neverLater) h.k = 0;
+    }
+    if (odds.heat) addWantedImpl(g, odds.heat + (chase === 'escaped' ? WITNESS_ADD : 0), id);
     if (ctx.gain) applyGain(g, ctx.gain);
+    emit(g, 'committed', { crime: id, caught: false, seen, chase, gain: ctx.gain || null, amount: num(c.amount), odds: odds.pct, where: c.where, job: ctx.job || null });
     saveHere(g); // the roll stands: reloading cannot take the act back
     return { caught: false, report };
   }
   j.stats.caught[id] = num(j.stats.caught[id]) + 1;
   emit(g, 'caught', report);
+  emit(g, 'committed', { crime: id, caught: true, seen, chase, gain: null, amount: num(c.amount), odds: odds.pct, where: c.where, job: ctx.job || null });
   if (ctx.handle === false) return { caught: true, report };
   // caught: until the flow makes a case or a record, a reload replays the scene (recoverInterrupted)
   const replay = def.kind === 'crime';
@@ -3885,6 +4438,22 @@ async function commitCrimeImpl(g, id, ctx = {}) {
   } catch (e) { console.error(e); } finally { if (replay) delete j.flags.pendingCaught; }
   report.outcome = outcome;
   return { caught: true, report, outcome };
+}
+// Who runs after the player (the chase scene).
+function chaseWho(g, id, c) {
+  if (id === 'shoplifting') return { name: '保安員', chaser: LK.keiji2, shout: 'お客さま、お待ちください！\nお会計がまだですよね！', sub: `${c.where || '店'}の前` };
+  if (id === 'fare_evasion') return { name: '駅員', chaser: LK.ekiin, shout: 'お客さま！ 待ってください！', sub: c.where || '改札' };
+  if (id === 'gambling' || id === 'gambling_den') return { name: '捜査員', chaser: LK.keiji, shout: '警察だ！ 全員、その場を動くな！', title: '手入れ', sub: '賭博場に警察が踏みこんだ' };
+  if (id === 'fraud_courier' || id === 'fraud_caller') return { name: '刑事', chaser: LK.keiji, shout: 'そこの人、止まりなさい！', sub: c.where || '' };
+  return { name: '警察官', chaser: LK.police, shout: '待てっ！ 止まりなさい！', sub: c.where || '' };
+}
+function setCrimeModeImpl(g, on, why) {
+  const j = J(g);
+  if (!!j.flags.crimeMode === !!on) return !!on;
+  j.flags.crimeMode = on ? g.state.day : 0;
+  if (!on) j.flags.crimeModeLeft = g.state.day;
+  emit(g, 'crime_mode', { on: !!on, why: why || null });
+  return !!on;
 }
 // What happens when the player is caught (now, or replayed after a reload).
 async function caughtFlow(g, id, c, prev = 0) {
@@ -3935,6 +4504,8 @@ const SOURCES = {
   fare_evasion: ['改札の記録'], slush_fund: ['市民団体の告発', '元秘書の内部告発'], bribery_take: ['業者の供述'], bribery_give: ['業者の帳簿'],
   vote_buying: ['陣営関係者の証言'], door_to_door: ['対立陣営の通報'], fraud_courier: ['防犯カメラの映像', '共犯者の供述'],
   account_sale: ['口座の不正利用の捜査'], traffic_injury: ['目撃証言', '現場に残った車の部品'], stolen_goods: ['共犯者の供述'], gambling: ['違法賭博店の摘発'], cover_up: ['関係者の供述'], assen: ['関係者の供述'], assen_shuwai: ['業者の供述', '役所の内部調査'],
+  theft: ['防犯カメラの映像', '現場に残った指紋'], extortion: ['被害届'], fraud_caller: ['受け子の供述', '通話の記録'], fence: ['盗品の流通の捜査', '共犯者の供述'],
+  gambling_den: ['客の供述', '違法賭博店の摘発'], counterfeit: ['税関の通報', '買った客の通報'], laundering: ['金融機関の疑わしい取引の届出'], trespass_bath: ['銭湯の届出'],
 };
 function planSurface(g, id, h) {
   const st = g.state, def = CRIMES[id];
@@ -3967,6 +4538,7 @@ function surfaceHeat(g) {
     let p = 0;
     try { p = def.later(g, h) || 0; } catch (e) { console.error(e); }
     p *= h.boost || 1;
+    p *= num(h.k, 1) * (1 + 0.25 * wantedLv(g)); // 防犯カメラ・仲間の口・経験 (laterK) and the 手配度
     if (st.day - num(h.day) > (def.hotDays ?? 30)) p *= 0.25;
     if (num(h.coveredUntil) > st.day) p *= 0.3;
     if (!roll(g, clamp(p, 0, 0.6))) continue;
@@ -4115,6 +4687,7 @@ export async function justiceTick(g) {
   }
   syncPoliticsHeat(g);
   surfaceHeat(g);
+  wantedTick(g, notes);
   hasanTick(g, notes);
   loanTick(g);
   smokeTick(g);
@@ -4166,6 +4739,16 @@ async function runEvent(g, ev) {
   switch (ev.type) {
     case 'arrest':
       if ((ev.caseId && !cs) || dup) return;
+      // a 隠れ家 (the 裏アプリ): the investigators may not find the player at dawn (twice at most per warrant)
+      if (!ev.caseId && num(ev.dodged) < 2 && safehouseOn(g) && num(J(g).flags.lowUntil) >= g.state.day - 1 && roll(g, 0.35)) {
+        ev.dodged = num(ev.dodged) + 1;
+        ev.day = g.state.day + rint(g, 3, 6);
+        queueEvent(g, ev);
+        addWantedImpl(g, 0.6, 'dodged');
+        emit(g, 'dodged', { crime: ev.crime, day: ev.day });
+        await narrate(g, ['（明け方、自宅に捜査員が来ていたらしい。\n…隠れ家にこもっていたおかげで、顔を合わせずにすんだ）', '（逮捕状は、まだ生きている。次も逃げられるとはかぎらない）']);
+        return;
+      }
       if (cs && cs.kyodaku) news(g, `${cs.politician ? '国会は本会議で、' : ''}{fullname}議員の逮捕を許諾した。`);
       return arrestFlow(g, ev.crime, { caseId: ev.caseId, via: 'warrant', evidence: ev.evidence ?? 0.75, amount: ev.amount, injury: ev.injury, request: ev.request, candidate: ev.candidate, source: ev.source });
     case 'summons': return dup ? null : voluntaryCase(g, ev.crime, ev);
@@ -4240,6 +4823,7 @@ function statusImpl(g) {
     debt: loanTotalImpl(g), unpaid: j.unpaid, terasu: num(j.terasu && j.terasu.left), garnish: j.garnish ? { ...j.garnish } : null,
     creditBlackUntil: num(j.credit.blackUntil) > day ? j.credit.blackUntil : null, bankrupt: j.bankrupt ? { ...j.bankrupt } : null, hasanPrep: j.hasanPrep ? { ...j.hasanPrep } : null,
     smoker: j.smoker, cigs: j.smoke.cigs, lostStamina: j.smoke.lost, heat: Object.keys(j.heat),
+    wanted: Math.round(num(j.wanted && j.wanted.lv) * 100) / 100, stars: starsOf(num(j.wanted && j.wanted.lv)), crimeMode: !!j.flags.crimeMode,
   };
 }
 const RECORD_WORDS = { fine: '罰金・科料（前科）', suspended: '執行猶予つき有罪（前科）', prison: '実刑（前科）', acquitted: '無罪', not_indicted: '不起訴', bizai: '微罪処分', hodo: '補導', warning: '警告・指導', kare: '過料', zoun: '増運賃', hogo: '保護', tax_admin: '修正申告', juvenile_fusho: '少年審判：不処分', juvenile_hogo: '少年審判：保護観察', juvenile_in: '少年院送致', juvenile_kan: '簡易送致' };
@@ -4247,6 +4831,7 @@ function justiceLinesImpl(g) {
   const st = g.state, j = J(g), day = st.day, s = statusImpl(g);
   const L = [];
   L.push(`いまの状態：${{ free: 'ふつう', detained: '身柄拘束中', trial: '裁判中', prison: '服役中', probation: '執行猶予・保護観察中' }[j.status] || j.status}`);
+  if (s.stars) L.push(`手配度：${'★'.repeat(s.stars)}${'☆'.repeat(WANTED_MAX - s.stars)}`);
   if (s.suspendUntil) L.push(`執行猶予：あと${s.suspendUntil - day}日${j.supervision ? '（保護観察つき）' : ''}`);
   if (s.probationUntil) L.push(`保護観察：あと${s.probationUntil - day}日`);
   if (s.civicBanUntil) L.push(`公民権停止：あと${s.civicBanUntil - day}日`);
@@ -4361,6 +4946,20 @@ const methods = {
   lawDate() { return lawDate(this); },
   lawYear() { return lawDate(this).year; },
   crimeLaw(id, ctx) { return crimeLaw(this, id, ctx); },
+  // crime mode (GTA-like): odds, 手配度, chase, 職務質問, lying low
+  crimeOdds(id, ctx) { return oddsImpl(this, id, ctx || {}); },
+  crimeOddsLine(id, ctx) { const o = oddsImpl(this, id, ctx || {}); return o.ok ? o.text : o.why; },
+  crimeConfirm(id, ctx, opts) { return confirmImpl(this, id, ctx || {}, opts || {}); },
+  showOdds(id, ctx, opts) { return showOddsImpl(this, id, ctx || {}, opts || {}); },
+  chase(id, opts) { return chaseImpl(this, id, opts || {}); },
+  wanted() { return wantedLv(this); },
+  wantedStars() { return starsOf(wantedLv(this)); },
+  addWanted(d, why) { return addWantedImpl(this, d, why); },
+  lieLow(n, opts) { return lieLowImpl(this, n, opts || {}); },
+  shokushitsu(opts) { return shokushitsuImpl(this, opts || {}); },
+  crimeMode() { return !!(this.state && J(this).flags.crimeMode); },
+  setCrimeMode(on, why) { return setCrimeModeImpl(this, !!on, why); },
+  dayPhase() { return dayPhase(this); },
 };
 export function installJustice(proto) {
   for (const k of Object.getOwnPropertyNames(methods)) Object.defineProperty(proto, k, Object.getOwnPropertyDescriptor(methods, k));

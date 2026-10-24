@@ -16,11 +16,21 @@ const GOODS = ['onigiri', 'bento', 'drink', 'nodoame', 'netacho', 'daihon', 'wad
 // ネオン街's shared crime / age-check helpers (js/world/kanraku.js), looked up when used (no import).
 const kanApi = () => (PLACES.kanraku && PLACES.kanraku.api) || null;
 
-// The shelves: buying goes through the register. 「万引きする…？」 (a clear warning first, then
-// g.commitCrime('shoplifting')) is kanraku.js's api.shoplift.
+// The shelves: buying goes through the register. 「万引きする…？」 (the odds card first — crime.js
+// g.crimeConfirm — then g.commitCrime('shoplifting')) is kanraku.js's api.shoplift.
+// In crime mode the choice shows the odds right away (crime.js g.crimeOdds).
+function liftLabel(g) {
+  try {
+    if (typeof g.crimeMode === 'function' && g.crimeMode() && typeof g.crimeOdds === 'function') {
+      const o = g.crimeOdds('shoplifting', { amount: 300 });
+      if (o && o.ok) return `万引き（成功${o.pct.success}%）`;
+    }
+  } catch (e) { console.error(e); }
+  return '万引きする…？';
+}
 async function shelf(g) {
   const api = kanApi();
-  const k = await g.ask('おにぎり、パン、お菓子、飲み物…\n棚に商品がぎっしり並んでいる。', api ? ['レジで買う', 'ながめるだけ', '万引きする…？'] : ['レジで買う', 'ながめるだけ'], { cancel: 1 });
+  const k = await g.ask('おにぎり、パン、お菓子、飲み物…\n棚に商品がぎっしり並んでいる。', api ? ['レジで買う', 'ながめるだけ', liftLabel(g)] : ['レジで買う', 'ながめるだけ'], { cancel: 1 });
   if (k === 0) await g.shop(GOODS, { title: 'ローソン', greeting: 'いらっしゃいませ〜！' });
   else if (k === 2 && api) await api.shoplift(g, { where: 'ローソン', items: ['onigiri', 'drink', 'nodoame'] });
 }

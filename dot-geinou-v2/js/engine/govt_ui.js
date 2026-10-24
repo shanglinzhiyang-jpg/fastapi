@@ -2170,6 +2170,15 @@ const TAB_DIET = {
     for (const id of ['kokutai', 'kyoko', 'key_bill']) if (RA[id] || d.opp) acts.push({ id, grp: '与党', label: (RA[id] || {}).label || id, desc: (RA[id] || {}).desc || '', why: rulWhy(id) || (!d.billId && id !== 'kyoko' ? '先に左の一覧で法案をえらぶ' : null) });
     acts.push({ id: 'key_dissolve', grp: '総理', label: '最重要法案の否決を受けて解散', desc: '参議院で最重要法案が否決されたとき、衆議院を解散して国民に信を問う', why: R0('key_dissolve') });
     acts.push({ id: 'questions', grp: '見る', label: `質問主意書と答弁書（${d.opp ? d.opp.questions.length : 0}件）`, desc: '出された質問主意書と、内閣の答弁書', why: null });
+    // round 4 (politics.js): the minister's answer with an attitude (失言リスク), and the record of gaffes and their chain
+    if (has(g, 'speechOptions')) {
+      const cab = role && (role.pm || role.kind === 'minister');
+      acts.push({ id: 'toben', grp: '内閣', label: '答弁に立つ（態度を選ぶ・失言リスク）', desc: '委員会で野党の質問に答える。丁寧・強気・はぐらかす…態度ごとに失言リスクが出る', why: !cab ? '答弁に立つのは総理・大臣（内閣の側）' : has(g, 'activityBlock') ? safe(() => g.activityBlock('国会で答弁'), null) : null });
+      const gl = has(g, 'gaffes') ? safe(() => g.gaffes({ n: 30 }), []) || [] : [];
+      const mine = gl.filter((r) => r.who === 'player' && !r.done);
+      d.gaffeLive = gl.filter((r) => !r.done);
+      acts.push({ id: 'gaffes', grp: '見る', label: `発言と失言（${mine.length ? `炎上中${mine.length}件` : `${gl.length}件`}）`, desc: '問題になった発言と、炎上→撤回→謝罪会見→野党の追及→問責・不信任→辞任・更迭の流れ', why: null });
+    }
     d.acts = acts;
     return d;
   },
@@ -2239,7 +2248,7 @@ const TAB_DIET = {
     panel(c, 322, 170, 314, 104, '国会での行動', { right: attTxt || (ui.role0 ? ui.role0.label : ''), rightColor: A && !A.today && A.absent >= 3 ? K.bad : A && A.today ? K.good : undefined });
     drawList(c, ui, ui.ctls.find((q) => q.id === 'act'), (c2, i, x, y, w) => {
       const a = d.acts[i];
-      chip(c2, x + 4, y + 2, a.grp, a.grp === '野党' ? '#2a3a5a' : a.grp === '与党' ? '#3a2a1a' : a.grp === '総理' ? '#4a2a10' : '#1a3a3a', K.white, 10);
+      chip(c2, x + 4, y + 2, a.grp, a.grp === '野党' ? '#2a3a5a' : a.grp === '与党' ? '#3a2a1a' : a.grp === '総理' || a.grp === '内閣' ? '#4a2a10' : '#1a3a3a', K.white, 10);
       if (a.why) padlock(c2, x + 34, y + 4);
       T(c2, a.label, x + 44, y + 2, 12, a.why ? K.faint : K.text, 'left', w - 48);
     });
@@ -2279,6 +2288,8 @@ async function dietAction(ui, d, a) {
   const g = ui.g;
   const st = ui.tabState();
   if (a.id === 'bill') { await ui.away(() => g.politicsScreen('policy')); return; }
+  if (a.id === 'toben') { await ui.away(() => g.politicsScreen('speech', { venue: 'toben', activity: '国会で答弁' })); return; }
+  if (a.id === 'gaffes') { await ui.away(() => g.politicsScreen('gaffes')); return; }
   if (a.id === 'attend') {
     const r = safe(() => g.attendDiet(), null);
     if (r && r.ok) {
@@ -2404,7 +2415,8 @@ const TAB_ADMIN = {
       panel(c, 258, 64, 378, 246, m ? m.name : '府省', { right: m ? m.minister : '' });
       if (m) {
         let yy = 84;
-        T(c, `大臣：${m.playerHeads ? 'あなた' : m.ministerName || '（空席）'}`, 264, yy, 12, m.playerHeads ? K.amber : K.white, 'left', 366); yy += 17;
+        const pe = !m.playerHeads && m.ministerId && has(ui.g, 'npcPersona') ? safe(() => ui.g.npcPersona(m.ministerId), null) : null;
+        T(c, `大臣：${m.playerHeads ? 'あなた' : m.ministerName || '（空席）'}${pe ? `（人柄：${pe.name}）` : ''}`, 264, yy, 12, m.playerHeads ? K.amber : K.white, 'left', 366); yy += 17;
         const ppl = [m.top, m.kanbo, ...(m.bureaus || [])].filter(Boolean);
         T(c, '幹部の官僚', 264, yy, 10, K.amber); yy += 13;
         for (const b of ppl.slice(0, 6)) {
@@ -2757,6 +2769,14 @@ const TAB_CRISIS = {
     const d = {};
     d.ds = has(g, 'disaster') ? safe(() => g.disaster(), null) : null;
     d.dacts = has(g, 'disasterActions') ? safe(() => g.disasterActions(), []) : [];
+    // round 4 (politics.js g.fukko): the 復興担当大臣 / 復興大臣 — the PM appoints, the minister works (the politics UI)
+    d.fk = has(g, 'fukko') ? safe(() => g.fukko(), null) : null;
+    if (d.fk && d.fk.active) {
+      const F = d.fk;
+      d.dacts = [...d.dacts, F.canAppoint
+        ? { id: '_fukko_appoint', name: F.ministerName ? `${F.postName}を代える` : `${F.postName}を任命する`, desc: `${F.disaster.name}の復興を専任で担う国務大臣（${F.title}）。${F.note}`, why: null }
+        : { id: '_fukko', name: F.isPlayer ? `復興の仕事（${F.postName}）` : `復興の状況（${F.postName}）`, desc: `${F.disaster.name}・復興の進み具合 ${F.progress}%・担当：${F.ministerName || 'まだいない'}${F.persona ? `（人柄：${F.persona}）` : ''}`, why: null }];
+    }
     d.past = has(g, 'disasters') ? safe(() => g.disasters(), []).slice(-5).reverse() : [];
     d.pf = has(g, 'pressFreedom') ? safe(() => g.pressFreedom(), null) : null;
     d.pacts = has(g, 'pressActions') ? safe(() => g.pressActions(), []) : [];
@@ -2818,6 +2838,8 @@ function drawDisaster(c, ui, d) {
     });
     yy += 60;
     T(c, `政府：${ds.honbuName || '対策本部はまだない'}`, 10, yy, 10, ds.honbuName ? K.good : K.warn, 'left', 314); yy += 13;
+    const F = d.fk && d.fk.active ? d.fk : null;
+    if (F) { T(c, `${F.postName}：${F.ministerName || 'まだ置いていない'}・復興の進み具合 ${F.progress}%`, 10, yy, 10, F.ministerName ? K.cyan : K.warn, 'left', 314); yy += 13; }
     yy = para(c, ds.summary || '', 10, yy, 314, 10, K.text, 12, 3) + 4;
     T(c, '対応の記録', 10, yy, 10, K.amber); yy += 12;
     for (const l of (ds.log || []).slice(-6).reverse()) { if (yy > 324) break; T(c, `・${safe(() => dateLabel(ui.g, l.day).replace(/^\d+年/, ''), '')} ${l.text}`, 14, yy, 10, K.dim, 'left', 310); yy += 12; }
@@ -2831,6 +2853,8 @@ function drawDisaster(c, ui, d) {
 }
 async function disasterFlow(ui, a) {
   if (!a) return;
+  if (a.id === '_fukko_appoint') { await ui.away(() => ui.g.politicsScreen('fukkoAppoint')); return; }
+  if (a.id === '_fukko') { await ui.away(() => ui.g.politicsScreen('fukko')); return; }
   const k = await ui.confirm({ title: a.name, lines: [a.desc], choices: ['実行する', 'やめる'], cancel: 1, w: 460 });
   if (k !== 0) return;
   await ui.result(a.name, safe(() => ui.g.disasterAction(a.id), null));

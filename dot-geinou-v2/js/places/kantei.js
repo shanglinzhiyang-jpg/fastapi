@@ -422,25 +422,28 @@ function pressQuestions(g, opts = {}) {
   const me = p && p.me;
   if (crisis) {
     const gov = isMinister(g);
-    qs.push({ q: `${crisis.name}について、${gov ? '政府の対応は？' : '党としての考えは？'}`, a: [[crisis.disaster ? '被害と対応を説明' : '影響と対応を説明', 90, gov ? '把握している状況と、いまやっていることを順に説明した。' : '現地や関係者から聞いた状況と、党としての提案を順に説明した。'], ['全力を尽くすと言う', 60, gov ? '「政府一丸となって、全力で取り組みます」と答えた。' : '「与野党の立場をこえて、全力で取り組みます」と答えた。'], ['情報を精査中と言う', 30, '「詳細は精査中です」…記者たちは物足りなそうだ。']] });
+    qs.push({ topic: crisis.disaster ? 'disaster' : 'economy', q: `${crisis.name}について、${gov ? '政府の対応は？' : '党としての考えは？'}`, a: [[crisis.disaster ? '被害と対応を説明' : '影響と対応を説明', 90, gov ? '把握している状況と、いまやっていることを順に説明した。' : '現地や関係者から聞いた状況と、党としての提案を順に説明した。'], ['全力を尽くすと言う', 60, gov ? '「政府一丸となって、全力で取り組みます」と答えた。' : '「与野党の立場をこえて、全力で取り組みます」と答えた。'], ['情報を精査中と言う', 30, '「詳細は精査中です」…記者たちは物足りなそうだ。']] });
   }
-  if (me && (me.secret > 0 || (me.scandalDay && g.state.day - me.scandalDay < 60))) qs.push({ q: '政治資金をめぐる報道について、説明を。', a: [['事実を説明し謝罪', 75, '事実関係を説明し、頭を下げた。…厳しい質問は続いたが、逃げなかった。'], ['コメントを控える', 25, '「捜査や調査に関わることは控えます」…記者席がざわついた。'], ['報道は事実無根だ', 15, '「事実無根です」と言い切った。…本当に、それで大丈夫だろうか。']] });
+  // round 4: a remark of the player's that is still burning is the first thing the reporters ask about
+  const live = typeof g.gaffes === 'function' ? g.gaffes({ who: 'player', active: true })[0] : null;
+  if (live) qs.unshift({ topic: 'gaffe', gaffe: live.id, q: `先日の${live.venueName}での発言が問題になっています。撤回しないんですか？`, a: [['謝罪して撤回する', 70, '「不適切な発言でした。撤回し、おわびします」と頭を下げた。'], ['真意を説明する', 45, '「そういう意味ではなかった」と説明した。'], ['撤回しない', 15, '「撤回するつもりはありません」…記者席がどよめいた。']] });
+  if (me && !live && (me.secret > 0 || (me.scandalDay && g.state.day - me.scandalDay < 60))) qs.push({ topic: 'scandal', q: '政治資金をめぐる報道について、説明を。', a: [['事実を説明し謝罪', 75, '事実関係を説明し、頭を下げた。…厳しい質問は続いたが、逃げなかった。'], ['コメントを控える', 25, '「捜査や調査に関わることは控えます」…記者席がざわついた。'], ['報道は事実無根だ', 15, '「事実無根です」と言い切った。…本当に、それで大丈夫だろうか。']] });
   const bills = (() => { try { return g.billsList({ pending: true }).filter((b) => b.policy && POLICIES[b.policy]); } catch (e) { return []; } })();
   if (bills.length) {
     const b = bills.find((x) => x.by === 'player') || bills[0];
-    qs.push({ q: `『${shortTitle(POLICIES[b.policy].name)}』の法案、成立の見通しは？`, a: [['必要性を丁寧に説明', 80, '法案が必要な理由と、反対の声への考えを、丁寧に話した。'], ['国会の審議にゆだねる', 55, '「国会での審議にゆだねます」と答えた。'], ['数の力で通す', 20, '「必ず成立させます」…強い言い方が、少し波紋を呼びそうだ。']] });
+    qs.push({ topic: 'bill', q: `『${shortTitle(POLICIES[b.policy].name)}』の法案、成立の見通しは？`, a: [['必要性を丁寧に説明', 80, '法案が必要な理由と、反対の声への考えを、丁寧に話した。'], ['国会の審議にゆだねる', 55, '「国会での審議にゆだねます」と答えた。'], ['数の力で通す', 20, '「必ず成立させます」…強い言い方が、少し波紋を呼びそうだ。']] });
   }
   if (E) {
-    if (E.inflation > 2) qs.push({ q: '物価の上昇が続いています。暮らしへの対策は？', a: [['具体策を示す', 80, '電気代や食料品など、具体的な対策をあげて答えた。'], ['賃上げに期待と言う', 50, '「賃上げの流れを後押しします」と答えた。'], ['様子を見ると言う', 25, '「推移を注視します」…少し他人事に聞こえたかもしれない。']] });
-    else if (E.growth < 0.5) qs.push({ q: '景気の足取りが重いですが、経済対策は？', a: [['対策の柱を示す', 80, '投資と消費を支える対策の柱を、わかりやすく説明した。'], ['財政とのバランスと言う', 60, '「財政規律とのバランスを見ながら判断します」と答えた。'], ['景気は悪くないと言う', 25, '「景気は緩やかに回復しています」…記者は首をかしげた。']] });
-    else qs.push({ q: '経済の現状を、どう見ていますか？', a: [['数字を挙げて答える', 75, '成長率や雇用の数字をあげて、落ち着いて答えた。'], ['油断は禁物と言う', 60, '「よい流れですが、油断せずに取り組みます」と答えた。'], ['自分の手柄だと言う', 30, '「わたしの政策の成果です」…少し言い過ぎたかも。']] });
+    if (E.inflation > 2) qs.push({ topic: 'economy', q: '物価の上昇が続いています。暮らしへの対策は？', a: [['具体策を示す', 80, '電気代や食料品など、具体的な対策をあげて答えた。'], ['賃上げに期待と言う', 50, '「賃上げの流れを後押しします」と答えた。'], ['様子を見ると言う', 25, '「推移を注視します」…少し他人事に聞こえたかもしれない。']] });
+    else if (E.growth < 0.5) qs.push({ topic: 'economy', q: '景気の足取りが重いですが、経済対策は？', a: [['対策の柱を示す', 80, '投資と消費を支える対策の柱を、わかりやすく説明した。'], ['財政とのバランスと言う', 60, '「財政規律とのバランスを見ながら判断します」と答えた。'], ['景気は悪くないと言う', 25, '「景気は緩やかに回復しています」…記者は首をかしげた。']] });
+    else qs.push({ topic: 'economy', q: '経済の現状を、どう見ていますか？', a: [['数字を挙げて答える', 75, '成長率や雇用の数字をあげて、落ち着いて答えた。'], ['油断は禁物と言う', 60, '「よい流れですが、油断せずに取り組みます」と答えた。'], ['自分の手柄だと言う', 30, '「わたしの政策の成果です」…少し言い過ぎたかも。']] });
   }
   if (p && p.cabinet && (isPM(g) || myCabinetPost(g) === 'kanbo')) {
     const ap = Math.round(p.cabinet.approval);
-    qs.push({ q: `最新の世論調査で、内閣支持率は${ap}%ですが？`, a: [['謙虚に受け止める', 75, '「厳しいご意見も含めて、謙虚に受け止めます」と答えた。'], ['結果で示すと言う', 65, '「一喜一憂せず、結果でお応えします」と答えた。'], ['調査に意味はない', 15, '「世論調査は気にしていません」…これは、まずかったかもしれない。']] });
+    qs.push({ topic: 'approval', q: `最新の世論調査で、内閣支持率は${ap}%ですが？`, a: [['謙虚に受け止める', 75, '「厳しいご意見も含めて、謙虚に受け止めます」と答えた。'], ['結果で示すと言う', 65, '「一喜一憂せず、結果でお応えします」と答えた。'], ['調査に意味はない', 15, '「世論調査は気にしていません」…これは、まずかったかもしれない。']] });
   }
-  if ((g.state.fame || 0) >= 1000) qs.push({ q: '芸能界出身として、どんな政治をめざしますか？', a: [['わかりやすい政治', 80, '「むずかしい話を、わかりやすく届けたい」と答えた。会場が少しなごんだ。'], ['ギャグで答える', 45, '持ちネタで答えた。…笑いはとれたが、まじめな記者は渋い顔だ。'], ['芸能の話は控える', 50, '「いまは政治家として話します」と答えた。']] });
-  qs.push({ q: '最後に、国民へのメッセージを。', a: [['自分の言葉で語る', 80, '用意した原稿から目を上げて、自分の言葉で語った。'], ['原稿を読み上げる', 55, '用意された原稿を、正確に読み上げた。'], ['手短にすませる', 35, '「以上です」…会見はあっさり終わった。']] });
+  if ((g.state.fame || 0) >= 1000) qs.push({ topic: 'fame', q: '芸能界出身として、どんな政治をめざしますか？', a: [['わかりやすい政治', 80, '「むずかしい話を、わかりやすく届けたい」と答えた。会場が少しなごんだ。'], ['ギャグで答える', 45, '持ちネタで答えた。…笑いはとれたが、まじめな記者は渋い顔だ。'], ['芸能の話は控える', 50, '「いまは政治家として話します」と答えた。']] });
+  qs.push({ topic: 'message', q: '最後に、国民へのメッセージを。', a: [['自分の言葉で語る', 80, '用意した原稿から目を上げて、自分の言葉で語った。'], ['原稿を読み上げる', 55, '用意された原稿を、正確に読み上げた。'], ['手短にすませる', 35, '「以上です」…会見はあっさり終わった。']] });
   return qs.slice(0, 3);
 }
 export async function pressConference(g, opts = {}) {
@@ -453,16 +456,54 @@ export async function pressConference(g, opts = {}) {
   const reporters = atParty ? [{ ...WHO.kisha1, name: '新聞社の記者' }, { ...WHO.kisha2, name: '通信社の記者' }, WHO.kisha3] : [WHO.kisha1, WHO.kisha2, WHO.kisha3];
   g.sfx('shutter');
   await g.say(opts.open || ['（カメラのフラッシュがいっせいに光った）', '「それでは、記者会見を始めます」'], say(atParty ? WHO.partyKoho : WHO.koho));
+  // round 4 (politics.js g.speechOptions / g.speak): every answer is an attitude — 丁寧・誠実 / 強気 / 冗談まじり /
+  // はぐらかす / 本音 / 逆ギレ (and now and then a 際どい一言) — with its 失言リスク shown; a gaffe is reported at once
+  // and the next question is about it. Without the speech API the old fixed answers stay.
+  const speech = typeof g.speechOptions === 'function' && typeof g.speak === 'function';
+  const me0 = { name: g.state.name, look: g.state.look };
+  let gaffed = null;
   for (let k = 0; k < qs.length; k++) {
     const q = qs[k];
     const r = reporters[k % reporters.length];
-    const i = await g.ask(`「${q.q}」`, q.a.map((a) => a[0]), { cancel: q.a.length - 1, ...say(r) });
-    const a = q.a[i] || q.a[q.a.length - 1];
-    sum += a[1];
-    await g.say(a[2]);
+    // a remark that blew up (earlier, or just now): retract, explain or refuse
+    const gid = q.gaffe || (gaffed && k > 0 ? gaffed : null);
+    if (gid && speech && typeof g.gaffeRespond === 'function') {
+      const opts = g.gaffeOptions(gid).filter((o) => ['tekkai', 'setsumei', 'hirakinaori'].includes(o.id) && !o.why);
+      if (opts.length) {
+        const qq = q.gaffe ? q.q : 'いまの発言、撤回されますか？';
+        const i = await g.ask(`「${qq}」`, opts.map((o) => o.name), { cancel: opts.length - 1, ...say(r) });
+        const o = opts[i] || opts[opts.length - 1];
+        const res = g.gaffeRespond(gid, o.id, { attitude: 'teinei' });
+        sum += o.id === 'tekkai' ? 60 : o.id === 'setsumei' ? 40 : 10;
+        await g.say(res && res.ok ? String(res.text || '').split('\n').slice(0, 2).join('\n') : (res && res.why) || '（答えられなかった）');
+        gaffed = null;
+        if (q.gaffe) continue;
+      }
+    }
+    if (!speech) {
+      const i = await g.ask(`「${q.q}」`, q.a.map((a) => a[0]), { cancel: q.a.length - 1, ...say(r) });
+      const a = q.a[i] || q.a[q.a.length - 1];
+      sum += a[1];
+      await g.say(a[2]);
+      continue;
+    }
+    const O = g.speechOptions('kaiken', { topic: q.topic || 'general' });
+    const labels = O.options.map((o) => (o.risky ? `${o.name.replace(/^際どい一言：/, '')}（${o.risk}%）` : `${o.name}（失言${o.risk}%）`));
+    const i = await g.ask(`「${q.q}」`, labels, { cancel: 0, ...say(r) });
+    const o = O.options[i] || O.options[0];
+    const res = g.speak('kaiken', { topic: O.topic, attitude: o.id, force: true });
+    if (!res || !res.ok) { sum += 50; continue; }
+    sum += res.score;
+    await g.say(res.line, me0);
+    if (res.outcome === 'gaffe') {
+      g.sfx('buzz');
+      await g.say(['（記者席がざわついた。フラッシュがいっせいに光る）', `${res.reaction}`]);
+      gaffed = res.gaffe ? res.gaffe.id : null;
+    } else if (res.outcome === 'good') { g.sfx('good'); await g.say(`（${res.reaction}）`); }
+    else await g.say(`（${res.reaction}）`);
   }
   const score = clamp(Math.round(sum / Math.max(1, qs.length) * 0.75 + talk * 0.3), 0, 100);
-  const r = g.activity('記者会見', { score });
+  const r = g.activity('記者会見', { score, speech: speech || undefined });
   const lines = [];
   lines.push(r && r.ok && effects(r) ? `会見を終えた。\n${effects(r)}` : r && !r.ok && r.why === '今日はもうやった' ? '会見を終えた。\n（今日はもう取材に答えているので、評判は動かなかった）' : '会見を終えた。');
   // the cabinet's mood moves once a day at most (官邸・党本部・緊急会見のどこで開いても)
@@ -626,8 +667,17 @@ async function pmDeskTalk(g) {
   }
   for (let guard = 0; guard < 6; guard++) {
     const console0 = typeof g.govtConsole === 'function';
-    const items = ['きょうの報告を聞く', '政治のメニュー', '外遊に出る', '危機管理センターへ', ...(console0 ? ['政府中枢（コンソール）'] : []), 'もどる'];
+    // round 4: after a major disaster the PM may appoint a 復興担当大臣 (politics.js g.fukko / the politics UI)
+    let F = null;
+    try { F = typeof g.fukko === 'function' ? g.fukko() : null; } catch (e) { F = null; }
+    const fk = F && F.active && F.canAppoint ? `${F.postName}を${F.ministerName ? '代える' : '任命する'}` : null;
+    const items = ['きょうの報告を聞く', '政治のメニュー', '外遊に出る', '危機管理センターへ', ...(console0 ? ['政府中枢（コンソール）'] : []), ...(fk ? [fk] : []), 'もどる'];
     const i = await g.ask('総理の執務机だ。何をする？', items, { cancel: items.length - 1 });
+    if (fk && items[i] === fk) {
+      if (g.auto) { await g.say(`（${F.disaster.name}の復興を担う${F.postName}を決めよう）`); return; }
+      try { await g.politicsScreen('fukkoAppoint'); } catch (e) { console.error(e); }
+      continue;
+    }
     if (console0 && i === 4) { try { await g.govtConsole('overview'); } catch (e) { console.error(e); } continue; }
     if (i === 0) await briefing(g);
     else if (i === 1) { try { await g.politicsMenu(); } catch (e) { console.error(e); } }
@@ -654,6 +704,9 @@ async function briefing(g) {
   ];
   if (up.length) lines.push(`次の選挙は「${up[0].label.slice(0, 16)}」、\n${up[0].date}の予定です。`);
   if (crisis) lines.push(`${crisis.name}の対応が続いています。\n危機管理センターへお願いします。`);
+  let F = null;
+  try { F = typeof g.fukko === 'function' ? g.fukko() : null; } catch (e) { F = null; }
+  if (F && F.active) lines.push(F.ministerName ? `${F.disaster.name}の復興は、${F.ministerName}${F.postName}が担当。\n進み具合は${F.progress}%です。` : `${F.disaster.name}の復興を担う${F.postName}は、\nまだ置いていません。ご判断を。`);
   await g.say(lines, say(WHO.hisho));
 }
 async function pmNpcTalk(g, npc) {

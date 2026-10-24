@@ -864,9 +864,25 @@ policy('disaster_prep', 'disaster', '防災・減災（災害に強い国土づ�
 Object.defineProperty(POLICIES.disaster_prep, 'name', { get: () => (NAMES_AT.fy >= 2013 ? '防災・減災（国土強靱化）' : '防災・減災（災害に強い国土づくり）'), enumerable: true, configurable: true });
 policy('reconstruction', 'disaster', '被災地の復興支援', '災害からの復旧・復興に予算と人を集中する。', {
   ideo: {}, ministry: 'minister_reconstruction', cost: 2, lasting: 3,
-  check: (pol) => (pol.flags.disasterDay ? null : '大きな災害が起きたときの政策'),
+  // once per disaster (REPEATABLE below; round 4): a later disaster can have its own law
+  check: (pol) => {
+    if (!pol.flags.disasterDay) return '大きな災害が起きたときの政策';
+    const last = (pol.laws || []).slice().reverse().find((l) => l.policy === 'reconstruction');
+    if (last && num(last.day) >= num(pol.flags.disasterDay)) return 'この災害の復興の法律は、すでに成立している';
+    return null;
+  },
   seg: { rural: 3, elderly: 2, families: 2, floating: 1, selfemployed: 1 }, eco: { growth: 0.1 },
-  apply: (pol) => { pol.flags.reconstructionAgency = true; },
+  // the 復興 record moves on; after a very large disaster (tier 3) from 2001 on, the law sets up a 復興庁 (as in 2012)
+  apply: (pol, params, g) => {
+    const F = pol.fukko;
+    const day = g && g.state ? today(g) : num(NAMES_AT.day);
+    if (F && !F.ended) { F.progress = Math.min(100, num(F.progress) + 15); F.law = day; (F.log || (F.log = [])).push({ day, text: '復興の法律が成立（予算と人を集中）' }); }
+    if (F && !F.ended && num(F.tier) >= 3 && NAMES_AT.fy >= 2001 && !reconAgency(NAMES_AT.fy, pol.flags)) {
+      pol.flags.reconstructionAgency = true;
+      F.agencyLaw = true;
+      if (g && g.state) news(pol, g, `${F.name}からの復興のため、復興庁が発足した（復興担当大臣は復興大臣に）`);
+    }
+  },
 });
 // --- 行政改革・政治改革
 policy('civil_service_cut', 'admin', '公務員の削減と給与の見直し', '国家公務員の数と人件費を減らす。', {
@@ -1005,6 +1021,9 @@ export const POSTS = {
   minister_okinawa: { name: '沖縄開発庁長官', kind: 'cabinet', years: [0, 2001], areas: ['regional'], next: 'minister_special' },
   minister_econ: { name: '経済財政政策担当大臣', short: '経済財政担当相', kind: 'cabinet', years: [2001, INF], areas: ['economy', 'finance'], pre: 'minister_epa' },
   minister_special: { name: '内閣府特命担当大臣', short: '特命担当相', kind: 'cabinet', years: [2001, INF], areas: ['childcare', 'culture', 'society'], pre: 'minister_health' },
+  // 復興大臣 (復興庁, 2012-02-10; 復興庁設置法: 2031年3月末まで, 2020年改正で10年延長) and, in any era, the 復興担当大臣
+  // (国務大臣・特命: 1995-01-20 兵庫県南部地震対策担当, 2011-06-27 東日本大震災復興対策担当) that a PM appoints after a
+  // major disaster (p.flags.fukkoTanto; see 「復興担当大臣」 below). One post id for both: postExists / postName special-case it.
   minister_reconstruction: { name: '復興大臣', kind: 'cabinet', years: [2012.1, INF], flag: 'reconstructionAgency', areas: ['disaster'], pre: 'minister_land' },
   minister_digital: { name: 'デジタル大臣', kind: 'cabinet', years: [2021.67, INF], flag: 'digitalAgency', areas: ['digital'], pre: 'minister_internal' },
   // party posts (name depends on the party: postName(id, year, party))
@@ -1029,13 +1048,20 @@ export const PARTY_POST_ORDER = ['kanjicho', 'seichokai', 'somukai', 'sentai', '
 export function postExists(id, fy, flags = {}) {
   const P = POSTS[id];
   if (!P) return false;
+  if (id === 'minister_reconstruction') return reconAgency(fy, flags || {}) || !!(flags && flags.fukkoTanto);
   if (!P.years) return true;
   if (P.flag && flags[P.flag] && fy >= 2001) return fy < P.years[1];
   return fy >= P.years[0] && fy < P.years[1];
 }
+// 復興庁 exists (the real one 2012-02 .. 2031-03, longer once extended in this game; or the game's own, made by a law)
+export function reconAgency(fy, flags = {}) {
+  if (flags && flags.reconstructionAgency && fy >= 2001) return true;
+  return fy >= 2012.1 && (fy < 2031.25 || !!(flags && flags.reconExtended));
+}
 export function postName(id, fy = 2026, party = null) {
   const P = POSTS[id];
   if (!P) return String(id || '');
+  if (id === 'minister_reconstruction') return reconAgency(fy, (NAMES_AT.pol && NAMES_AT.pol.flags) || {}) ? '復興大臣' : '復興担当大臣';
   if (id === 'party_leader') return party === 'jimin' ? '総裁' : '代表';
   if (id === 'seichokai') return party === 'jimin' ? '政務調査会長' : '政策調査会長';
   if (P.names) { let n = P.name; for (const [y, nm] of P.names) if (fy >= y) n = nm; return n; }
@@ -1239,7 +1265,7 @@ function newMe() {
     // ext
     nationalWins: 0, standing: 30, kouenkai: 0, member: false, candidacy: null, campaign: null,
     votes: {}, attend: { last: 0, absent: 0, days: 0 }, ledger: {}, reported: {}, exposed: 0, scandalDay: 0,
-    history: [], coalitionStance: 'auto', offers: [], lastAct: {}, officeSince: null, ministerDays: 0, pmDays: 0, ideology: null,
+    history: [], coalitionStance: 'auto', offers: [], lastAct: {}, officeSince: null, ministerDays: 0, pmDays: 0, ideology: null, media: 0,
   };
 }
 function partySeats(p, id) {
@@ -1452,6 +1478,11 @@ function normalizePolitics(g, p) {
   if (!C.ministers || typeof C.ministers !== 'object') C.ministers = {};
   if (!Array.isArray(C.history)) C.history = [];
   for (const k of ['honeymoon', 'mood', 'scandal', 'lowWeeks']) C[k] = num(C[k]);
+  // round 4 (old saves): the speech record and the 復興 record
+  speechState(p);
+  if (p.fukko != null && (typeof p.fukko !== 'object' || Array.isArray(p.fukko) || !p.fukko.id)) p.fukko = null;
+  if (p.fukko) { const F = p.fukko; for (const k of ['done', 'last']) if (!F[k] || typeof F[k] !== 'object') F[k] = {}; if (!Array.isArray(F.log)) F.log = []; F.progress = clamp(num(F.progress), 0, 100); F.works = num(F.works); }
+  if (!Array.isArray(p.fukkoHist)) p.fukkoHist = [];
   // an old save may still have the party that once took over the 民主党's members ('kakehashi'): it is
   // no longer in the game (no fictional party stands in for a real one), so it leaves like the 民主党
   for (const id of Object.keys(p.parties)) {
@@ -3055,7 +3086,7 @@ function billTitle(pl, params) {
   const pp = (pl.params || []).map((d) => `${params && params[d.key] != null ? params[d.key] : d.def}${d.unit}`).join('・');
   return pl.kind === 'amendment' ? `${pl.name}の原案` : `${pl.name}${pp ? `（${pp}）` : ''}に関する法律案`;
 }
-const REPEATABLE = new Set(['stimulus', 'energy_subsidy', 'shohizei_up', 'shohizei_down']);
+const REPEATABLE = new Set(['stimulus', 'energy_subsidy', 'shohizei_up', 'shohizei_down', 'reconstruction']);
 // Why a policy cannot be brought now (null = it can).
 function policyBlock(p, id, params, year, fy) {
   const pl = POLICIES[id];
@@ -3710,7 +3741,8 @@ function npcEvents(g, p) {
     const who = pool.length ? pickOne(pool) : null;
     const n = who && p.npcs[who];
     if (n && PARTY_DEFS[n.party] && PARTY_DEFS[n.party].real) npcStepDown(g, p, n, pickOne(['体調不良', '一身上の都合']));
-    else if (n) scandalImpl(g, p, pickOne(['gaffe', 'gaffe', 'expense', 'private', 'slush_fund']), { who });
+    // (round 4) NPC gaffes have their own detailed chain (npcGaffeTick: 「発言・態度・失言」); money and private troubles stay here
+    else if (n) scandalImpl(g, p, pickOne(['expense', 'private', 'slush_fund']), { who });
   }
   // vacancies -> by-elections
   if (Math.random() < 2 / YEAR_DAYS) makeVacancy(g, p, 'shugi', { reason: pickOne(['議員の死去', '議員の辞職', '知事選への立候補', '議員の辞職']) });
@@ -3746,6 +3778,13 @@ function history(g, p, fy) {
   }
   for (const [flag, post, at, text] of [['defense2007', 'minister_defense', 2007.0, '防衛庁が防衛省になった'], ['recon2012', 'minister_reconstruction', 2012.1, '復興庁が発足した'], ['digital2021', 'minister_digital', 2021.67, 'デジタル庁が発足した']]) {
     if (!F[flag] && fy >= at && p.cal.year + 0.3 < at) { F[flag] = true; news(p, g, text); if (!p.cabinet.ministers[post] && postExists(post, fy, F)) fillCabinet(g, p, { keep: true, quiet: true }); }
+  }
+  // (round 4) 復興庁の設置期限: 2031年3月末（復興庁設置法、2020年の改正で10年延長）. Extended while a 復興 is under way in
+  // this game; otherwise the 庁 and its 大臣 end (a 復興担当大臣 can be appointed again after a later disaster).
+  if (!F.recon2031 && fy >= 2031.25 && p.cal.year + 0.3 < 2031.25 && !F.reconstructionAgency) {
+    F.recon2031 = true;
+    if (p.fukko && !p.fukko.ended) { F.reconExtended = true; news(p, g, `復興庁の設置期限（2031年3月末）が来たが、${p.fukko.name}からの復興のため延長された`); }
+    else if (!F.fukkoTanto) { news(p, g, '復興庁が設置期限（2031年3月末）を迎えて廃止された'); dropPost(g, p, 'minister_reconstruction', '復興庁の廃止'); }
   }
   // a 消費税 rise already set by law (taxPlan, e.g. 5% from 1997-04 under the 1994 税制改革関連法)
   const TP = F.taxPlan;
@@ -4298,6 +4337,9 @@ function tickDay(g, p, day, abs) {
   // --- money risk, NPC events, opinion, polls
   exposureCheck(g, p);
   npcEvents(g, p);
+  // round 4: the gaffe chains (player and NPCs) and the 復興担当大臣 after a major disaster
+  try { speechTick(g, p, day); } catch (e) { console.error(e); }
+  try { fukkoTick(g, p, day, abs); } catch (e) { console.error(e); }
   for (const s of SEGMENT_ORDER) {
     const m = p.support.mods[s];
     if (!m) continue;
@@ -4512,12 +4554,16 @@ export const ACTIVITIES = {
   '陳情を受ける': { need: 'office', stamina: 8, local: 2, rep: 1, desc: '地域や団体の要望を聞く' },
   '勉強会': { need: 'national', stamina: 6, standing: 2, desc: '党の部会や勉強会で政策を学ぶ' },
   '派閥の会合': { need: 'faction', stamina: 6, standing: 3, desc: '派閥・グループの会合に出る' },
-  '記者会見': { need: 'office', stamina: 5, fame: 5, rep: 1, skill: 'talk', gaffe: true, desc: '記者の質問に答える（失言に注意）' },
-  '視察': { need: 'office', stamina: 10, funds: 20000, rep: 2, desc: '現場を見て回る' },
+  '記者会見': { need: 'office', stamina: 5, fame: 5, rep: 1, skill: 'talk', gaffe: true, speech: 'kaiken', desc: '記者の質問に答える（態度しだいで失言も）' },
+  '視察': { need: 'office', stamina: 10, funds: 20000, rep: 2, gaffe: true, speech: 'shisatsu', desc: '現場を見て回る（カメラが同行。ひと言に注意）' },
+  // round 4: more places to speak (attitude and 失言リスク: see 「発言・態度・失言」 below)
+  '街頭演説': { need: 'office', stamina: 10, local: 2, fame: 4, skill: 'talk', gaffe: true, speech: 'gaito', desc: '駅前でマイクを握る（政治活動）。ヤジも飛ぶ' },
+  'TV出演': { need: 'office', stamina: 8, fame: 12, rep: 1, skill: 'talk', gaffe: true, speech: 'tv', desc: '報道番組や討論番組に出る。生放送では言い直しがきかない' },
+  'SNSで発信': { need: 'office', stamina: 2, fame: 3, gaffe: true, speech: 'sns', from: 2004, desc: '自分の言葉で発信する。広がるのも炎上するのも速い' },
   '議会で質問': { need: 'local', stamina: 8, local: 2, rep: 2, skill: 'talk', desc: '区議会・都議会で質問する' },
   '予算編成': { need: 'exec', stamina: 10, local: 3, rep: 1, desc: '区（都）の予算をまとめる' },
   '閣議に出る': { need: 'cabinet', stamina: 3, standing: 1, desc: '閣議で政府の方針を決める' },
-  '国会で答弁': { need: 'cabinet', session: true, stamina: 10, rep: 2, skill: 'talk', gaffe: true, approval: 0.5, desc: '大臣として国会で答弁する（失言に注意）' },
+  '国会で答弁': { need: 'cabinet', session: true, stamina: 10, rep: 2, skill: 'talk', gaffe: true, speech: 'toben', approval: 0.5, desc: '大臣として国会で答弁する（態度しだいで失言も）' },
   '外遊': { need: 'pm', stamina: 20, fame: 30, approval: 2, desc: '首脳会談に出かける' },
 };
 // Things that are really someone else's money must never be presented as harmless:
@@ -4885,6 +4931,12 @@ async function campaignImpl(g, p, action, opts = {}) {
   if (A.score) pts *= 0.4 + clamp(num(opts.score, 55), 0, 100) / 100 * 1.4;
   if (pre) pts *= 0.5;
   pts *= 1 + Math.min(5, me.staff) * 0.05; // 秘書・運動員
+  // round 4: how the player spoke (街頭演説・SNS・討論会 with an attitude): a hit lifts the day, a gaffe sinks it
+  let speech = null;
+  if ((action === '街頭演説' || action === 'SNS' || action === '討論会') && (opts.attitude || (opts.speech && typeof opts.speech === 'object'))) {
+    speech = opts.speech && typeof opts.speech === 'object' ? opts.speech : speakImpl(g, p, action === 'SNS' ? 'sns' : action === '討論会' ? 'tv' : 'gaito', { attitude: opts.attitude, topic: opts.topic || (action === '討論会' ? 'general' : 'crowd') });
+    if (speech && speech.ok) pts *= speech.outcome === 'good' ? 1.6 : speech.outcome === 'gaffe' ? 0.25 : ({ teinei: 1, tsuyoki: 1.1, joke: 1.05, hagurakasu: 0.8, honne: 1.1, gyakugire: 0.6, risky: 1.2, shazai: 0.9 }[speech.attitude] || 1);
+  }
   pts = Math.round(pts * 10) / 10;
   camp.points += pts;
   camp.actions[key] = num(camp.actions[key]) + 1;
@@ -4894,7 +4946,7 @@ async function campaignImpl(g, p, action, opts = {}) {
   let extra = '';
   if (A.donations) { const r = donationsImpl(g, p, {}); extra = r.text; }
   if (g.lifeTick) g.lifeTick({ hunger: -6, stress: 4, clean: -6 });
-  return { ok: true, action, pts, total: Math.round(camp.points * 10) / 10, cost, stamina: A.stamina, text: `${action}をした。手ごたえ +${pts}${extra ? `\n${extra}` : ''}` };
+  return { ok: true, action, pts, total: Math.round(camp.points * 10) / 10, cost, stamina: A.stamina, speech, text: `${action}をした。手ごたえ +${pts}${extra ? `\n${extra}` : ''}${speech && speech.outcome === 'gaffe' ? `\n…しかし、${speech.line}が問題に（${speech.gaffe ? (GAFFE_KINDS[speech.gaffe.kind] || GAFFE_KINDS.uekara).short : '失言'}）` : speech && speech.outcome === 'good' ? `\n${speech.good.name}！` : ''}` };
 }
 // 寄付 (review). Supporters give to a politician who is in office, used to be, or is running
 // (a declared candidacy or 出馬表明). 政治資金規正法: an individual may give a politician's 資金管理団体
@@ -4934,6 +4986,1104 @@ function donationsImpl(g, p, opts = {}) {
   lg.income += amt;
   lg.donations += amt;
   return { ok: true, amount: amt, text: `寄付が集まった：${fmtMoney(amt)}（政治資金に。収支報告に記載が必要）${fall < 1 ? '\n（今月はもう何度もお願いしている。集まりが悪い）' : ''}` };
+}
+
+// ================================================================ 発言・態度・失言 (ext, round 4)
+// The player chooses HOW to speak — 丁寧・誠実 / 強気 / 冗談まじり / はぐらかす / 本音 / 逆ギレ (+ 謝罪・低姿勢 when
+// apologising, and sometimes a bold 際どい一言) — at a 記者会見, 国会答弁, 街頭演説, 視察, テレビ, SNS, 被災者との対話
+// or 謝罪会見. Every choice shows its 失言リスク (%): the attitude's base × the venue × the topic × the talk skill ×
+// fatigue × the media's scrutiny × the post (the 復興担当大臣 is watched closely on the disaster). A gaffe starts a chain
+//   炎上 → 撤回 → 謝罪会見 → 野党の追及 → 問責・不信任 → 辞任・更迭   (or it dies down: 沈静化)
+// with effects on the cabinet's approval, the party's view of the player (standing), the media (me.media) and the
+// fans. Good outcomes too (本音が受ける・好感度アップ・誠実さが伝わる・頼もしい). NPC politicians have a 人柄 (persona)
+// and their own gaffes in the news — NPCs of the fictional parties (and independents) only: an NPC of a real party
+// (自民・民主) is never shown in a gaffe (as for scandals). Every line here is invented for the game; none is a real
+// politician's remark. 差別と受け取られかねない発言 / 歴史認識 are written as a description of the remark (a
+// paraphrase), never as the words themselves.
+export const SPEECH_VENUES = {
+  kaiken: { name: '記者会見', who: '記者', mult: 1.0, desc: '記者の質問に答える。言ったことは、そのまま記事になる' },
+  toben: { name: '国会答弁', who: '野党の議員', mult: 1.1, desc: '委員会で野党の質問に答える。議事録に残り、テレビ中継されることもある' },
+  gaito: { name: '街頭演説', who: '聴衆', mult: 1.2, desc: '駅前でマイクを握る。ヤジも飛ぶし、動画にも撮られている' },
+  shisatsu: { name: '視察', who: '地元の人', mult: 1.15, desc: '現場を歩き、関係者と話す。カメラが同行している' },
+  tv: { name: 'テレビ出演', who: '司会者', mult: 1.25, desc: '討論番組や報道番組に出る。生放送では言い直しがきかない' },
+  sns: { name: 'SNS', who: 'フォロワー', mult: 1.35, from: 2004, desc: '自分の言葉をそのまま発信する。広がるのも、炎上するのも速い' },
+  taiwa: { name: '被災者との対話', who: '被災した人', mult: 1.25, desc: '避難所や仮設住宅で、被災した人の声を聞く。ひと言の重みがちがう' },
+  shazai: { name: '謝罪会見', who: '記者', mult: 1.3, desc: '問題になった発言について説明し、おわびする。態度しだいで火に油を注ぐ' },
+};
+// ブログ (2000年代) → SNS (2010年代〜): the venue's name by year
+export function venueName(id, year = 2026) {
+  if (id === 'sns') return year < 2010 ? 'ブログ' : 'SNS';
+  return (SPEECH_VENUES[id] || SPEECH_VENUES.kaiken).name;
+}
+// topics: name ({t} in the lines) and, for the hot ones, how each attitude's risk is multiplied
+export const SPEECH_TOPICS = {
+  general: { name: '政府の方針' },
+  disaster: { name: '災害への対応', hot: true, mult: { joke: 2.3, honne: 1.4, tsuyoki: 1.3, gyakugire: 1.25, hagurakasu: 1.2 } },
+  victim: { name: '被災した人の暮らし', hot: true, mult: { joke: 2.6, honne: 1.3, tsuyoki: 1.5, gyakugire: 1.3, hagurakasu: 1.3 } },
+  economy: { name: '景気と暮らし', mult: { joke: 1.1 } },
+  scandal: { name: '政治とカネの問題', mult: { hagurakasu: 1.6, gyakugire: 1.3, joke: 1.4 } },
+  bill: { name: '審議中の法案' },
+  approval: { name: '内閣の支持率', mult: { tsuyoki: 1.2 } },
+  history: { name: '歴史の問題', mult: { honne: 1.9, joke: 1.5, tsuyoki: 1.3 } },
+  fame: { name: '芸能界から政治家になったこと', mult: { joke: 0.8 } },
+  gaffe: { name: '問題になった発言', hot: true, mult: { joke: 2.0, gyakugire: 1.4, hagurakasu: 1.4, honne: 1.3, tsuyoki: 1.3 } },
+  local: { name: '地元の要望', mult: { honne: 1.2 } },
+  crowd: { name: 'いまの政治' },
+  message: { name: '国民へのメッセージ' },
+  opposition: { name: 'ご指摘の点', label: '野党の質問', mult: { gyakugire: 1.3, tsuyoki: 1.2 } },
+};
+export const ATTITUDES = {
+  teinei: {
+    name: '丁寧・誠実', short: '丁寧', risk: 2, score: 78,
+    desc: '質問をよく聞き、事実と気持ちをていねいに答える。大きく外さないが、目立ちにくい。',
+    kinds: { uekara: 1, inpei: 1 }, good: { p: 0.22, kind: 'seijitsu' },
+    react: 'うなずきながらメモをとる人が多かった（無難な受け答え）',
+  },
+  tsuyoki: {
+    name: '強気', short: '強気', risk: 7, score: 66,
+    desc: '迷わず言い切る。頼もしく見える一方、上から目線や暴言と受け取られることもある。',
+    kinds: { uekara: 4, bougen: 2, miuchi: 1 }, good: { p: 0.26, kind: 'tanomoshii' },
+    react: '力強い言い方に、うなずく人も、眉をひそめる人もいた',
+  },
+  joke: {
+    name: '冗談まじり', short: '冗談', risk: 12, score: 62,
+    desc: '笑いで場をなごませる。受ければ好感度が上がるが、滑ると失言になる。災害の話題ではとくに危ない。',
+    kinds: { joke: 5, hisaichi: 2, sabetsu: 1 }, good: { p: 0.32, kind: 'kokando' },
+    react: '少し笑いが起きた',
+  },
+  hagurakasu: {
+    name: 'はぐらかす', short: 'はぐらかす', risk: 5, score: 40,
+    desc: '核心に触れずにかわす。その場はしのげるが、「何かを隠している」と疑われやすい。',
+    kinds: { inpei: 5, uekara: 1 }, good: { p: 0, kind: null },
+    react: '「答えになっていない」という空気が流れた',
+  },
+  honne: {
+    name: '本音で話す', short: '本音', risk: 11, score: 64,
+    desc: '建前を捨てて本音を語る。受ければ支持が広がるが、党の方針とぶつかったり、偏見や歴史認識の問題になったりする。',
+    kinds: { rekishi: 2, sabetsu: 2, miuchi: 2, hisaichi: 1, uekara: 1 }, good: { p: 0.3, kind: 'honne' },
+    react: 'ざわめきが起きた。賛否が分かれそうだ',
+  },
+  gyakugire: {
+    name: '逆ギレ', short: '逆ギレ', risk: 32, score: 12,
+    desc: '質問した相手に怒りをぶつける。一部の支持者は喜ぶが、たいていは暴言・恫喝として報じられる。',
+    kinds: { bougen: 6, uekara: 2 }, good: { p: 0.08, kind: 'yokuitta' },
+    react: '場が凍りついた…',
+  },
+  shazai: {
+    name: '謝罪・低姿勢', short: '謝罪', risk: 1, score: 70, only: ['shazai', 'kaiken', 'toben', 'taiwa'],
+    desc: '非を認め、深く頭を下げる。炎上は鎮まりやすいが、弱腰と見る人もいる。',
+    kinds: { inpei: 1 }, good: { p: 0.2, kind: 'seijitsu' },
+    react: '会場は静まりかえった',
+  },
+};
+export const ATTITUDE_ORDER = ['teinei', 'tsuyoki', 'joke', 'hagurakasu', 'honne', 'gyakugire', 'shazai'];
+// what the player says (by attitude and topic; {t} = the topic's name). A gaffe replaces it with the reported line.
+const SAY = {
+  teinei: { def: '「{t}については、事実を一つずつ、ていねいにご説明します」', disaster: '「まず人命と暮らしを守ります。足りないものは、すぐに届けます」', victim: '「お話を聞かせてください。できることを、一つずつやります」', scandal: '「ご心配をおかけしています。事実関係を確かめ、すべてご説明します」', gaffe: '「わたしの発言で、多くの方を傷つけました。心からおわびします」', economy: '「物価と賃金の数字をお示しして、対策をご説明します」' },
+  tsuyoki: { def: '「{t}は、必ずやり遂げます。迷いはありません」', disaster: '「国が責任をもって、必ず町を取り戻します」', victim: '「心配はいりません。国がすべてやります」', scandal: '「やましいことは、一切ありません」', gaffe: '「発言の一部だけを切り取られた。真意はちがいます」', opposition: '「ご批判は承知のうえです。結果で示します」' },
+  joke: { def: '「{t}ですか。いやあ、むずかしい（笑）。でも、やりますよ」', disaster: '「こういうときこそ、笑顔も大事ですから（笑）」', victim: '「いやあ、大変でしたね。でも、お元気そうで（笑）」', economy: '「財布のひもと同じで、景気もかたいですねえ（笑）」', fame: '「政治の世界は、台本がないのが大変で（笑）」', gaffe: '「わたしの口は、ときどき勝手にしゃべるんです（笑）」' },
+  hagurakasu: { def: '「{t}につきましては、さまざまなご意見を踏まえ、適切に対応してまいります」', scandal: '「個別の事柄については、お答えを差し控えます」', disaster: '「状況を精査したうえで、しかるべく判断いたします」', gaffe: '「誤解を招いたとすれば、残念です」' },
+  honne: { def: '「正直に言います。{t}は、きれいごとでは片づきません」', disaster: '「正直、元どおりになるには何年もかかる。それでも、やります」', victim: '「正直に言って、国の対応は遅れています。申し訳ない」', scandal: '「『みんなやっている』という空気が、たしかにありました」', economy: '「本当のことを言えば、いずれ負担は増えます」', history: '「これは、わたし個人の考えですが…」', gaffe: '「本心で言ったことです。ただ、言い方は悪かった」' },
+  gyakugire: { def: '「{t}？　そんな質問に答える必要がありますか！」', scandal: '「何度も同じことを聞くな！　失礼だろう」', disaster: '「現場は必死なんだ。文句ばかり言うな！」', gaffe: '「いつまでその話をするんですか！」', opposition: '「その質問こそ、時間のむだだ！」' },
+  shazai: { def: '「申し訳ありませんでした」（深く頭を下げた）', gaffe: '「軽率な発言でした。撤回し、心からおわびします」（深く頭を下げた）' },
+};
+// 際どい一言: a bold line, offered now and then. Higher risk, bigger upside.
+const RISKY = {
+  disaster: { label: '「復興に10年」', line: '「正直に言って、復興には10年はかかる。覚悟してほしい」', risk: 34, kinds: { hisaichi: 3, uekara: 1 }, good: 0.38, goodKind: 'honne' },
+  victim: { label: '「がんばって」', line: '「みなさん、がんばってください。ほら、元気を出して」', risk: 30, kinds: { hisaichi: 4, uekara: 1 }, good: 0.22, goodKind: 'kokando' },
+  economy: { label: '「前政権のつけ」', line: '「景気が悪いのは、前の政権のつけです」', risk: 28, kinds: { uekara: 2, bougen: 1 }, good: 0.35, goodKind: 'tanomoshii' },
+  scandal: { label: '「秘書がやった」', line: '「秘書が、わたしの知らないところでやったことです」', risk: 46, kinds: { inpei: 4, miuchi: 1 }, good: 0.05, goodKind: 'tanomoshii' },
+  approval: { label: '「支持率は無視」', line: '「支持率なんて、気にしたことがありません」', risk: 30, kinds: { uekara: 4 }, good: 0.3, goodKind: 'tanomoshii' },
+  bill: { label: '「反対は勉強不足」', line: '「反対している人は、勉強が足りないんです」', risk: 48, kinds: { uekara: 5 }, good: 0.28, goodKind: 'tanomoshii' },
+  history: { label: '自分の歴史観', line: '（過去の出来事について、政府の公式な見解とちがう自分の考えを語った）', risk: 55, kinds: { rekishi: 5 }, good: 0.18, goodKind: 'honne' },
+  fame: { label: '「芸能界は厳しい」', line: '「正直、芸能界のほうが、よっぽど厳しい世界ですよ」', risk: 26, kinds: { uekara: 2, joke: 2 }, good: 0.45, goodKind: 'kokando' },
+  message: { label: '「3年で変える」', line: '「わたしに任せてくれれば、3年でこの国を変えてみせます」', risk: 20, kinds: { uekara: 2 }, good: 0.45, goodKind: 'honne' },
+  opposition: { label: '「時間のむだ」', line: '「委員、その質問は時間のむだです」', risk: 50, kinds: { uekara: 4, bougen: 2 }, good: 0.25, goodKind: 'tanomoshii' },
+  local: { label: '「地元の道は先に」', line: '「この道路は、わたしが責任をもって先に通します」', risk: 40, kinds: { miuchi: 5 }, good: 0.4, goodKind: 'honne' },
+  crowd: { label: '「言いなりは辞めろ」', line: '「役所の言いなりの政治家は、ぜんぶ辞めさせます！」', risk: 24, kinds: { bougen: 2, uekara: 1 }, good: 0.5, goodKind: 'honne' },
+  gaffe: { label: '「言葉狩りだ」', line: '「これは言葉狩りです。真意をくんでほしい」', risk: 52, kinds: { uekara: 3, bougen: 2 }, good: 0.18, goodKind: 'honne' },
+};
+export const GOOD_KINDS = {
+  seijitsu: { name: '誠実さが伝わった', desc: 'ていねいな説明に「誠実だ」という声' },
+  tanomoshii: { name: '「頼もしい」と評判', desc: '言い切る姿に「頼もしい」「決断力がある」の声' },
+  kokando: { name: '好感度アップ', desc: '会場が笑いに包まれ、「親しみやすい」と評判に' },
+  honne: { name: '本音が受けた', desc: '建前ぬきの言葉が「よくぞ言った」と話題に（党内には苦い顔も）' },
+  yokuitta: { name: '「よく言った」の声', desc: '一部の支持者が拍手。ただし眉をひそめる人も多い' },
+};
+// The categories of gaffes, with invented example lines (quote: shown in 「」; otherwise a description of the remark).
+export const GAFFE_KINDS = {
+  hisaichi: {
+    name: '被災地・被災者への配慮を欠く発言', short: '被災地への配慮を欠く発言', sev: 3, quote: true,
+    lines: [{ t: '被災地の視察は、いい気分転換になりますね', v: ['shisatsu', 'kaiken', 'tv', 'sns'] }, { t: '避難所は思ったより快適そうで、安心しました', v: ['shisatsu', 'taiwa', 'kaiken', 'tv', 'sns'] }, '仮設住宅も、住めば都というじゃないですか', 'この程度の被害で済んで、むしろ運がよかった', '復興が遅いのは、地元の段取りが悪いからでしょう', { t: '被災地の名産、いまなら安く買えてお得ですよ', v: ['kaiken', 'tv', 'sns', 'gaito'] }],
+  },
+  joke: {
+    name: '失言（冗談が滑る）', short: '冗談が滑った失言', sev: 1, quote: true,
+    lines: ['財源？　宝くじでも当てますか（笑）', '税金は、取りやすいところから取るのがいちばん（笑）', { t: '国会の答弁なんて、寝ていてもできますよ（笑）', v: ['kaiken', 'tv', 'gaito', 'sns'] }, '大臣の椅子は座り心地がいい。辞めたくないなあ（笑）', '公約は、選挙のときの景気づけですから（笑）'],
+  },
+  sabetsu: {
+    name: '差別と受け取られかねない発言', short: '差別と受け取られかねない発言', sev: 3, quote: false,
+    lines: ['ある地方の出身者をひとくくりにして、からかう言い方をした', '性別で仕事の向き不向きを決めつける言い方をした', '年齢を理由に、高齢の人を見下すような言い方をした', '障害のある人への配慮を欠くたとえ話をした', '外国から来た人をひとくくりにして、不安をあおる言い方をした'],
+  },
+  rekishi: {
+    name: '歴史認識をめぐる発言', short: '歴史認識をめぐる発言', sev: 3, quote: false,
+    lines: ['過去の戦争について、政府の公式な見解とちがう自説を語った', '過去の出来事の被害について「大げさに言われている」と述べた', '近隣の国との歴史問題について、相手の国を軽んじる言い方をした'],
+  },
+  miuchi: {
+    name: '身内びいき', short: '身内びいきの発言', sev: 2, quote: true,
+    lines: ['地元の道路は、わたしの顔で先にやってもらいます', '応援してくれた業界には、ちゃんとお返しをしないと', '秘書の息子さんのことは、知り合いの会社に頼んでおきました', 'うちのグループの人を大事なポストに回すのは当然です'],
+  },
+  uekara: {
+    name: '上から目線', short: '上から目線の発言', sev: 2, quote: true,
+    lines: ['国民のみなさんには、もう少し勉強してほしい', { t: 'そんなことも知らないで、質問しないでください', v: ['kaiken', 'toben', 'tv', 'shazai'] }, '文句があるなら、選挙で落とせばいい', '庶民の感覚？　わたしにはよくわかりませんね', '細かいことは、役所に聞いてください'],
+  },
+  bougen: {
+    name: '暴言・恫喝', short: '暴言・恫喝', sev: 3, quote: true,
+    lines: [{ t: '次にそんな記事を書いたら、ただではおかない', v: ['kaiken', 'tv', 'sns', 'shazai'] }, '黙って座っていろ！', { t: 'あなたの会社の社長に、電話してやろうか', v: ['kaiken', 'tv', 'shazai'] }, 'そんなことを言うなら、予算はつけないぞ', { t: 'そんな質問をする資格があるのか！', v: ['toben', 'kaiken', 'tv', 'shazai'] }],
+  },
+  inpei: {
+    name: '隠蔽を疑わせる答弁', short: '隠蔽を疑わせる答弁', sev: 2, quote: true,
+    lines: ['記録は、確認できる範囲では見当たりません', 'その件は、覚えていないとしか言えません', '資料は、すでに廃棄したと聞いています', '個別の案件なので、一切お答えしません'],
+  },
+  sns: {
+    name: 'SNSの炎上', short: 'SNSでの炎上', sev: 2, quote: false,
+    lines: ['深夜に、批判してきた人へ強い言葉で言い返す投稿をした', '被災地の写真に、軽い一言をそえて投稿してしまった', '確かめていない情報を、そのまま広めてしまった', '豪華な会食の写真を投稿し、「こんなときに」と批判された'],
+  },
+};
+export const GAFFE_STAGES = [['enjo', '炎上'], ['tekkai', '撤回'], ['shazai', '謝罪会見'], ['tsuikyu', '野党の追及'], ['ketsugi', '問責・不信任'], ['jinin', '辞任・更迭']];
+const STAGE_NAME = Object.fromEntries(GAFFE_STAGES);
+// NPC politicians' 人柄 (persona): derived from their traits, stored on first use (n.persona)
+export const PERSONAS = {
+  seijitsu: { name: '誠実', desc: '説明がていねいで、失言は少ない', mult: 0.35, retract: 0, kinds: { inpei: 1 } },
+  kenkyo: { name: '謙虚', desc: '腰が低く、言葉を選ぶ', mult: 0.5, retract: 0, kinds: { joke: 1, inpei: 1 } },
+  shincho: { name: '慎重', desc: '原稿を読み上げる手堅い答弁。はぐらかしと言われることも', mult: 0.6, retract: 1, kinds: { inpei: 3, uekara: 1 } },
+  tsuyoki: { name: '強気', desc: '言い切る。上から目線と言われることも', mult: 1.3, retract: 3, kinds: { uekara: 4, bougen: 2, miuchi: 1 } },
+  joke: { name: '冗談好き', desc: '場をなごませたがる。ときどき滑る', mult: 1.4, retract: 1, kinds: { joke: 5, hisaichi: 2, sabetsu: 1 } },
+  honne: { name: '本音型', desc: '建前を嫌い、思ったことを口にする', mult: 1.45, retract: 4, kinds: { rekishi: 2, sabetsu: 2, miuchi: 2, uekara: 1 } },
+  tanki: { name: '短気', desc: '追及されると声を荒らげる', mult: 1.5, retract: 2, kinds: { bougen: 5, uekara: 2 } },
+  snsfan: { name: '発信好き', desc: '自分でSNSに書きこむのが好き', mult: 1.2, retract: 1, kinds: { sns: 5, joke: 1 } },
+};
+function strHash(s) { let h = 2166136261; for (const ch of String(s || '')) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return ((h >>> 0) % 10000) / 10000; }
+function personaOf(n, year = 2026) {
+  if (!n) return null;
+  if (n.persona && PERSONAS[n.persona]) return n.persona;
+  const t = n.traits || {};
+  const ch = num(t.charisma, 50), it = num(t.integrity, 60), am = num(t.ambition, 50);
+  const h = strHash(n.id || n.name);
+  let k;
+  if (it >= 82) k = ch < 60 ? 'seijitsu' : 'kenkyo';
+  else if (am >= 76 && it < 50) k = 'tanki';
+  else if (ch >= 70 && am >= 60) k = 'tsuyoki';
+  else if (ch >= 68 && it < 58) k = 'joke';
+  else if (it < 46) k = 'honne';
+  else if (year >= 2010 && h < 0.18) k = 'snsfan';
+  else k = h < 0.5 ? 'shincho' : 'kenkyo';
+  n.persona = k;
+  return k;
+}
+// can this NPC be shown in a gaffe? (the real-party rule; civilians from the player's circle neither)
+function npcGaffeOK(n) { return !!n && !n.civilian && !(PARTY_DEFS[n.party] && PARTY_DEFS[n.party].real); }
+
+function speechState(p) {
+  let S = p.speech;
+  if (!S || typeof S !== 'object' || Array.isArray(S)) S = p.speech = {};
+  if (!Array.isArray(S.gaffes)) S.gaffes = [];
+  if (!Array.isArray(S.log)) S.log = [];
+  S.seq = num(S.seq);
+  S.lastNpc = num(S.lastNpc, -99);
+  if (S.gaffes.length > 40) S.gaffes.splice(0, S.gaffes.length - 40);
+  if (S.log.length > 30) S.log.splice(0, S.log.length - 30);
+  p.me.media = clamp(num(p.me.media), -100, 100);
+  return S;
+}
+// the speaker's title and side: { name, title, party, kind: 'pm'|'minister'|'member'|'local'|'other', post }
+function speakerOf(g, p, who) {
+  const fy = fyNow(g);
+  if (who === 'player') {
+    const me = p.me;
+    const post = me.posts.includes('pm') ? 'pm' : me.posts.find((x) => POSTS[x] && POSTS[x].kind === 'cabinet') || null;
+    const kind = post === 'pm' ? 'pm' : post ? 'minister' : isNational(me) ? 'member' : me.office ? 'local' : 'other';
+    return { who, name: g.state.name, title: playerTitle(g, p), party: me.party, kind, post, national: isNational(me) };
+  }
+  const n = p.npcs[who];
+  if (!n) return { who, name: '', title: '議員', party: null, kind: 'other', post: null };
+  const post = p.cabinet.pm === who ? 'pm' : n.posts.find((x) => POSTS[x] && POSTS[x].kind === 'cabinet' && p.cabinet.ministers[x] === who) || null;
+  const kind = post === 'pm' ? 'pm' : post ? 'minister' : n.office === 'shugi' || n.office === 'sangi' ? 'member' : n.office ? 'local' : 'other';
+  const title = post === 'pm' ? '首相' : post ? postName(post, fy) : n.office === 'shugi' ? '衆院議員' : n.office === 'sangi' ? '参院議員' : '氏';
+  return { who, name: n.name, title, party: n.party, kind, post, national: n.office === 'shugi' || n.office === 'sangi' };
+}
+function fukkoLive(p) { return p.fukko && !p.fukko.ended ? p.fukko : null; }
+function isFukkoMinister(p, who) { return !!fukkoLive(p) && p.cabinet.ministers && p.cabinet.ministers.minister_reconstruction === who; }
+// the topic a venue talks about when the caller does not say (the hot issue of the day)
+function defaultTopic(g, p, venue) {
+  const me = p.me;
+  const F = fukkoLive(p);
+  const mine = speechState(p).gaffes.find((r) => r.who === 'player' && !r.done);
+  if (venue === 'shazai') return 'gaffe';
+  if (venue === 'taiwa') return 'victim';
+  if (mine && (venue === 'kaiken' || venue === 'toben') && Math.random() < 0.7) return 'gaffe';
+  if (F && (venue === 'shisatsu' || isFukkoMinister(p, 'player'))) return venue === 'shisatsu' ? 'victim' : 'disaster';
+  if (F && Math.random() < 0.5) return 'disaster';
+  if (venue === 'toben') return 'opposition';
+  if (venue === 'gaito') return 'crowd';
+  if ((me.secret > 0 || (me.scandalDay && today(g) - num(me.scandalDay) < 60)) && venue === 'kaiken') return 'scandal';
+  if (venue === 'shisatsu') return 'local';
+  return pickOne(['economy', 'general', 'approval', 'bill']);
+}
+function topicName(p, topic) {
+  const F = fukkoLive(p);
+  if (topic === 'disaster' && F) return `${F.name}への対応`;
+  return (SPEECH_TOPICS[topic] || SPEECH_TOPICS.general).name;
+}
+const QUESTION = {
+  kaiken: '「{t}について、お考えを聞かせてください」',
+  toben: '「{t}について伺います。政府の答弁は、あまりに不十分ではないですか！」',
+  gaito: '（駅前に人が集まってきた。{t}について訴えよう）',
+  shisatsu: '（現場の人たちが、こちらの言葉を待っている）',
+  tv: '司会「{t}について、ずばり、どうお考えですか？」',
+  sns: '（{t}について、なにを投稿しよう？）',
+  taiwa: '「家も仕事も、なくなりました。わたしたちは、これからどうなるんですか」',
+  shazai: '「問題になった発言について、説明してください」',
+};
+const QUESTION_TOPIC = {
+  scandal: { kaiken: '「政治資金をめぐる報道について、説明してください」', toben: '「政治とカネの問題、国民は納得していませんよ！」' },
+  approval: { kaiken: '「最新の世論調査で、支持率が下がっていますが？」' },
+  gaffe: { kaiken: '「先日の発言について、撤回するお考えは？」', toben: '「大臣の先日の発言は、資質を疑わせるものです。撤回しますか！」', tv: '司会「例の発言、問題になっていますが…」' },
+  opposition: { toben: '「政府の説明は不十分です。いつまでに、何をするのか。はっきり答えてください！」', kaiken: '「野党の批判に、どう答えますか？」', tv: '司会「野党は厳しく批判していますが？」' },
+  history: { kaiken: '「歴史の問題について、ご自身の考えは？」', tv: '司会「歴史の問題、個人としてはどうお考えですか？」' },
+  fame: { kaiken: '「芸能界の出身として、どんな政治をめざしますか？」', tv: '司会「芸能界から政治の世界へ。正直、どうですか？」' },
+  victim: { shisatsu: '（避難所の入り口で、年配の人が話しかけてきた）「いつ家に帰れるんでしょうか…」' },
+  disaster: { shisatsu: '（がれきの残る町を歩く。カメラが同行している）', kaiken: '「{t}が遅いという声がありますが？」' },
+};
+function speechQuestion(g, p, venue, topic) {
+  const t = topicName(p, topic);
+  const q = (QUESTION_TOPIC[topic] && QUESTION_TOPIC[topic][venue]) || QUESTION[venue] || QUESTION.kaiken;
+  return q.replaceAll('{t}', t);
+}
+function sayLine(p, att, topic) {
+  const S = SAY[att] || SAY.teinei;
+  return (S[topic] || S.def).replaceAll('{t}', topicName(p, topic));
+}
+function riskyFor(g, p, venue, topic) {
+  const R0 = RISKY[topic];
+  if (!R0 || (venue === 'shazai' && topic !== 'gaffe')) return null;
+  // offered now and then (stable within a day, so the list does not flicker)
+  return strHash(`${today(g)}:${venue}:${topic}`) < 0.55 ? R0 : null;
+}
+// the risk of a gaffe (%), with the factors that made it
+function speechRiskImpl(g, p, who, venue, att, topic, opts = {}) {
+  const A = ATTITUDES[att] || ATTITUDES.teinei;
+  const V = SPEECH_VENUES[venue] || SPEECH_VENUES.kaiken;
+  const T = SPEECH_TOPICS[topic] || SPEECH_TOPICS.general;
+  const R0 = opts.risky ? RISKY[topic] : null;
+  const st = g.state;
+  const f = [];
+  let r = R0 ? R0.risk : A.risk;
+  f.push({ label: R0 ? '際どい一言' : A.name, v: `${r}%` });
+  let m = V.mult;
+  if (m !== 1) f.push({ label: venueName(venue, calYear(g)), v: `×${m}` });
+  const tm = R0 ? 1 : num(T.mult && T.mult[att], 1);
+  if (tm !== 1) { m *= tm; f.push({ label: `話題（${topicName(p, topic)}）`, v: `×${tm}` }); }
+  if (who === 'player') {
+    const talk = clamp(num(st.skills && st.skills.talk), 0, 100);
+    const sm = Math.round((1.25 - (talk / 100) * 0.6) * 100) / 100;
+    m *= sm; f.push({ label: `トークの力 ${Math.round(talk)}`, v: `×${sm}` });
+    const stress = num(st.life && st.life.stress);
+    if (num(st.stamina, 100) < 25) { m *= 1.2; f.push({ label: '疲れている', v: '×1.2' }); }
+    if (stress >= 70) { m *= 1.25; f.push({ label: 'ストレスが高い', v: '×1.25' }); }
+    const S = speechState(p);
+    if (S.gaffes.some((x) => x.who === 'player' && today(g) - x.day < 30)) { m *= 1.3; f.push({ label: '最近の失言で注目されている', v: '×1.3' }); }
+    if (num(p.me.media) <= -30) { m *= 1.15; f.push({ label: 'メディアの目が厳しい', v: '×1.15' }); }
+  } else {
+    const n = p.npcs[who];
+    const k = personaOf(n, calYear(g));
+    if (k) { m *= PERSONAS[k].mult; f.push({ label: `人柄：${PERSONAS[k].name}`, v: `×${PERSONAS[k].mult}` }); }
+  }
+  if ((topic === 'disaster' || topic === 'victim') && isFukkoMinister(p, who)) { m *= 1.4; f.push({ label: '復興担当大臣（被災地の注目）', v: '×1.4' }); }
+  const risk = clamp(Math.round(r * m), 1, 85);
+  return { risk, factors: f };
+}
+function weighted(obj) {
+  const ents = Object.entries(obj || {}).filter(([, w]) => num(w) > 0);
+  const tot = ents.reduce((a, [, w]) => a + num(w), 0);
+  if (!tot) return null;
+  let x = Math.random() * tot;
+  for (const [k, w] of ents) { x -= num(w); if (x <= 0) return k; }
+  return ents[ents.length - 1][0];
+}
+// the kind of gaffe: the attitude's (or the line's / persona's) leanings, the venue and the topic
+function gaffeKindFor(att, venue, topic, opts = {}) {
+  const w = { ...((opts.risky && RISKY[topic] && RISKY[topic].kinds) || (opts.persona && PERSONAS[opts.persona] && PERSONAS[opts.persona].kinds) || (ATTITUDES[att] || ATTITUDES.teinei).kinds) };
+  if (opts.persona && ATTITUDES[att]) for (const [k, v] of Object.entries(ATTITUDES[att].kinds)) w[k] = num(w[k]) + v * 0.5;
+  // on the disaster, a slip is about the disaster (the 被災地 gaffe); elsewhere there is none of that kind
+  if (topic === 'disaster' || topic === 'victim') { w.hisaichi = num(w.hisaichi) * 3 + 6; if (w.joke) w.joke *= 0.3; if (w.sabetsu) w.sabetsu *= 0.5; if (w.rekishi) w.rekishi *= 0.3; }
+  else delete w.hisaichi;
+  if (topic === 'history') w.rekishi = num(w.rekishi) + 3;
+  if (topic === 'scandal') w.inpei = num(w.inpei) + 2;
+  if (venue === 'sns') w.sns = num(w.sns) + 4;
+  else delete w.sns;
+  return weighted(w) || 'uekara';
+}
+// a line of the kind that fits the venue (an entry is a string, or { t, v: [venues] })
+function gaffeLine(kind, venue = null) {
+  const L = (GAFFE_KINDS[kind] || GAFFE_KINDS.uekara).lines;
+  const fit = L.filter((x) => typeof x === 'string' || !venue || (x.v || []).includes(venue));
+  const x = pickOne(fit.length ? fit : L);
+  return typeof x === 'string' ? x : x.t;
+}
+export function gaffeQuote(rec) {
+  if (!rec) return '発言';
+  const K = GAFFE_KINDS[rec.kind] || GAFFE_KINDS.uekara;
+  return K.quote && !rec.desc ? `「${rec.line}」という発言` : `（${rec.line}）`;
+}
+function shortLine(rec, n = 14) {
+  const K = GAFFE_KINDS[rec.kind] || GAFFE_KINDS.uekara;
+  if (!K.quote || rec.desc) return K.short;
+  const a = Array.from(String(rec.line || ''));
+  return `「${a.length > n ? a.slice(0, n).join('') + '…' : a.join('')}」発言`;
+}
+// a new gaffe record (and its first wave: 炎上)
+function startGaffe(g, p, def) {
+  const S = speechState(p);
+  const day = today(g);
+  const sp = speakerOf(g, p, def.who);
+  const K = GAFFE_KINDS[def.kind] || GAFFE_KINDS.uekara;
+  const F = fukkoLive(p);
+  let sev = K.sev + (def.venue === 'tv' || def.venue === 'sns' ? 0.5 : 0) + (sp.kind === 'pm' ? 1 : sp.kind === 'minister' ? 0.5 : 0) + (def.risky ? 0.5 : 0);
+  if (def.kind === 'hisaichi' && F) sev += 1;
+  if (def.kind === 'hisaichi' && isFukkoMinister(p, def.who)) sev += 0.5;
+  sev = clamp(Math.round(sev), 1, 5);
+  const fame = def.who === 'player' ? Math.min(10, Math.log10(1 + num(g.state.fame)) * 2.5) : sp.kind === 'pm' ? 10 : sp.kind === 'minister' ? 6 : 2;
+  const heat = clamp(Math.round(16 + sev * 11 + (def.venue === 'sns' ? 8 : def.venue === 'tv' ? 5 : 0) + fame + (def.who === 'player' && num(p.me.media) <= -30 ? 6 : 0)), 12, 95);
+  const rec = {
+    id: 'gf' + (S.seq = S.seq + 1), who: def.who, name: sp.name, title: sp.title, party: sp.party, kind: def.kind, line: def.line || gaffeLine(def.kind, def.venue),
+    desc: !K.quote, venue: def.venue, topic: def.topic || 'general', day, sev, heat, peak: heat, stage: 'enjo', steps: { enjo: day }, retracted: 0, apologies: 0,
+    refused: 0, motion: null, done: false, end: null, outcome: null, log: [{ day, text: `${venueName(def.venue, calYear(g))}での${K.short}が報じられ、批判が広がった（炎上）` }], lastNews: day, fukko: !!(F && isFukkoMinister(p, def.who)),
+  };
+  if (def.line && K.quote === false) rec.desc = true;
+  S.gaffes.push(rec);
+  if (S.gaffes.length > 40) S.gaffes.splice(0, S.gaffes.length - 40);
+  // the party in the headline only for a fictional party (the real parties stay out of the gaffe news)
+  const pt = sp.party && p.parties[sp.party] && !(PARTY_DEFS[sp.party] && PARTY_DEFS[sp.party].real) && !p.parties[sp.party].real ? `（${pname(p, sp.party)}）` : '';
+  const vn = venueName(def.venue, calYear(g));
+  const head = K.quote && !rec.desc ? `【失言】${sp.name}${sp.title}${pt}、${vn}で「${rec.line}」。批判が広がる` : `【失言】${sp.name}${sp.title}${pt}が${vn}で${rec.line}として批判を浴びる`;
+  news(p, g, head);
+  if (def.who === 'player') {
+    const me = p.me;
+    me.reputation = clamp(me.reputation - sev * 2.5, -100, 100);
+    me.media = clamp(num(me.media) - sev * 4, -100, 100);
+    if (me.party) me.standing = clamp(me.standing - sev * 1.5, 0, 100);
+    if (me.party && p.parties[me.party]) addSupportAll(p, me.party, -0.0015 * sev);
+    me.scandalDay = day;
+    approvalHit(g, p, sp.kind === 'pm' ? sev * 2.2 : sp.kind === 'minister' ? sev * 1.0 : me.party && isRuling(p, me.party) ? sev * 0.3 : 0, '失言');
+    const fans = num(g.state.fans);
+    if (fans > 0 && g.addFans) g.addFans(-Math.round(fans * 0.006 * sev), true);
+    if (g.addFame) g.addFame(sev * 5, true);
+    phoneNews(g, `【失言】${g.state.name}${sp.title}の${venueName(def.venue, calYear(g))}での${K.quote && !rec.desc ? `「${rec.line}」という発言` : K.short}に、批判が集まっています。\n撤回や謝罪をするか、早めに決めたほうがいい。`, def.venue === 'sns' ? 'ドット新聞 デジタル版' : 'ドット新聞 政治部');
+  } else {
+    const n = p.npcs[def.who];
+    if (n && n.party && p.parties[n.party]) addSupportAll(p, n.party, -0.001 * sev);
+    if (sp.kind === 'minister' || sp.kind === 'pm') approvalHit(g, p, sp.kind === 'pm' ? sev * 1.6 : sev * 0.7, '閣僚の失言');
+    S.lastNpc = day;
+  }
+  emit(g, 'scandal', { kind: 'gaffe', name: K.name, who: def.who, severity: sev, day, gaffe: rec.id });
+  return rec;
+}
+// the cabinet's approval: a gaffe (scandal part) / a good word (mood part), labelled for govt.js's breakdown
+function approvalHit(g, p, amount, text) {
+  if (!amount) return;
+  p.cabinet.scandal = num(p.cabinet.scandal) - amount;
+  if (typeof g.approvalNote === 'function') { try { g.approvalNote('scandal', -Math.round(amount * 10) / 10, text, { applied: true }); } catch (e) { console.error(e); } }
+}
+function approvalLift(g, p, amount, text, reason = 'policy') {
+  if (!amount) return;
+  p.cabinet.mood = clamp(num(p.cabinet.mood) + amount, -20, 20);
+  if (typeof g.approvalNote === 'function') { try { g.approvalNote(reason, Math.round(amount * 10) / 10, text, { applied: true }); } catch (e) { console.error(e); } }
+}
+function speechBlockImpl(g, p, venue) {
+  const V = SPEECH_VENUES[venue];
+  if (!V) return 'そんな場面はない';
+  if (V.from && calYear(g) < V.from) return 'この時代は、政治家が自分で発信するブログやSNSがまだない';
+  if (venue === 'toben' && !inCabinet(p.me)) return '答弁に立つのは、総理・大臣（内閣の側）';
+  if (venue === 'toben' && !inSession(p, today(g))) return '国会の会期中だけ';
+  return null;
+}
+// the options of a moment: the attitudes that fit the venue (+ a 際どい一言 now and then), each with its risk
+function speechOptionsImpl(g, p, venue, opts = {}) {
+  const topic = SPEECH_TOPICS[opts.topic] ? opts.topic : defaultTopic(g, p, venue);
+  const out = [];
+  for (const id of ATTITUDE_ORDER) {
+    const A = ATTITUDES[id];
+    if (A.only && !A.only.includes(venue) && !(topic === 'gaffe')) continue;
+    const rk = speechRiskImpl(g, p, 'player', venue, id, topic);
+    out.push({ id, name: A.name, label: `${A.name}　${rk.risk}%`, risk: rk.risk, factors: rk.factors, desc: A.desc, kinds: Object.keys(A.kinds).map((k) => GAFFE_KINDS[k].short), good: A.good.kind ? GOOD_KINDS[A.good.kind].name : null, line: sayLine(p, id, topic) });
+  }
+  const R0 = opts.risky === false ? null : riskyFor(g, p, venue, topic);
+  if (R0) {
+    const rk = speechRiskImpl(g, p, 'player', venue, 'honne', topic, { risky: true });
+    out.push({ id: 'risky', risky: true, name: `際どい一言：${R0.label}`, label: `際どい一言　${rk.risk}%`, risk: rk.risk, factors: rk.factors, desc: `${R0.line}\n受ければ大きいが、外れれば大きな失言になる。`, kinds: Object.keys(R0.kinds).map((k) => GAFFE_KINDS[k].short), good: GOOD_KINDS[R0.goodKind].name, line: R0.line });
+  }
+  return { venue, venueName: venueName(venue, calYear(g)), topic, topicName: (SPEECH_TOPICS[topic] || {}).label || topicName(p, topic), question: speechQuestion(g, p, venue, topic), asker: (SPEECH_VENUES[venue] || {}).who || '記者', options: out, block: speechBlockImpl(g, p, venue) };
+}
+// Say it. -> { ok, why?, venue, topic, attitude, risky, risk, outcome: 'gaffe'|'good'|'neutral', line, reaction,
+//   gaffe (record) | null, good { kind, name, desc } | null, effects [text], score 0..100 }
+function speakImpl(g, p, venue, opts = {}) {
+  const S = speechState(p);
+  const V = SPEECH_VENUES[venue];
+  if (!V) return { ok: false, why: 'そんな場面はない' };
+  if (V.from && calYear(g) < V.from) return { ok: false, why: speechBlockImpl(g, p, venue) };
+  const topic = SPEECH_TOPICS[opts.topic] ? opts.topic : defaultTopic(g, p, venue);
+  const risky = opts.attitude === 'risky' || !!opts.risky;
+  const R0 = risky ? RISKY[topic] : null;
+  const att = risky ? 'honne' : ATTITUDES[opts.attitude] ? opts.attitude : 'teinei';
+  const A = ATTITUDES[att];
+  const st = g.state;
+  const me = p.me;
+  const day = today(g);
+  const rk = speechRiskImpl(g, p, 'player', venue, att, topic, { risky: !!R0 });
+  const talk = clamp(num(st.skills && st.skills.talk), 0, 100);
+  const effects = [];
+  const res = { ok: true, venue, venueName: venueName(venue, calYear(g)), topic, topicName: topicName(p, topic), attitude: R0 ? 'risky' : att, attName: R0 ? `際どい一言（${R0.label}）` : A.name, risky: !!R0, risk: rk.risk, outcome: 'neutral', line: R0 ? R0.line : sayLine(p, att, topic), reaction: A.react, gaffe: null, good: null, effects, score: 0 };
+  const sp = speakerOf(g, p, 'player');
+  const inCab = sp.kind === 'pm' || sp.kind === 'minister';
+  if (Math.random() * 100 < rk.risk && !opts.noGaffe) {
+    const kind = gaffeKindFor(att, venue, topic, { risky: !!R0 });
+    const line = R0 && Math.random() < 0.5 ? R0.line.replace(/^[「（]|[」）]$/g, '') : gaffeLine(kind, venue);
+    const rec = opts.escalate ? escalateGaffe(g, p, opts.escalate, { venue, kind, line }) : startGaffe(g, p, { who: 'player', kind, line, venue, topic, risky: !!R0 });
+    res.outcome = 'gaffe';
+    res.gaffe = rec;
+    res.line = GAFFE_KINDS[kind].quote && !rec.desc ? `「${line}」` : `（${line}）`;
+    res.reaction = opts.escalate ? '会見の場で、また問題の発言…。批判はさらに強まった' : `${GAFFE_KINDS[kind].name}として、すぐに報じられた（炎上）`;
+    effects.push('評判・メディアの評価が下がった', me.party ? '党内の評価が下がった' : null, inCab ? '内閣の支持率に響く' : null);
+  } else {
+    const gp = R0 ? R0.good : num(A.good.p) * (1 + talk / 200) * ((att === 'honne' && (venue === 'gaito' || venue === 'tv')) || (att === 'teinei' && (venue === 'taiwa' || venue === 'shazai')) || (att === 'joke' && venue === 'tv') ? 1.25 : 1);
+    const gk = R0 ? R0.goodKind : A.good.kind;
+    if (gk && Math.random() < gp) {
+      res.outcome = 'good';
+      res.good = { kind: gk, ...GOOD_KINDS[gk] };
+      res.reaction = GOOD_KINDS[gk].desc;
+      goodEffects(g, p, gk, effects, { big: !!R0, inCab, venue });
+    } else neutralEffects(g, p, att, effects);
+  }
+  res.effects = effects.filter(Boolean);
+  res.topicName = (SPEECH_TOPICS[topic] || {}).label || res.topicName;
+  res.score = clamp(Math.round((R0 ? 60 : A.score) + (res.outcome === 'good' ? 18 : res.outcome === 'gaffe' ? -45 : 0) + talk / 10), 0, 100);
+  S.log.push({ day, venue, topic, att: res.attitude, outcome: res.outcome, risk: rk.risk });
+  if (S.log.length > 30) S.log.splice(0, S.log.length - 30);
+  return res;
+}
+function goodEffects(g, p, gk, out, o = {}) {
+  const me = p.me;
+  const st = g.state;
+  const k = o.big ? 1.6 : 1;
+  const fans = num(st.fans);
+  const addFans = (n) => { if (g.addFans) g.addFans(Math.round(n), true); };
+  if (gk === 'seijitsu') { me.reputation = clamp(me.reputation + 2.5 * k, -100, 100); me.media = clamp(num(me.media) + 3 * k, -100, 100); if (o.inCab) approvalLift(g, p, 0.6 * k, '誠実な説明'); out.push('評判 +', 'メディアの評価 +', o.inCab ? '内閣の支持率に追い風' : null); }
+  else if (gk === 'tanomoshii') { if (me.party) me.standing = clamp(me.standing + 1.5 * k, 0, 100); if (g.addFame) g.addFame(6 * k, true); if (o.inCab) approvalLift(g, p, 0.5 * k, '頼もしい発言'); out.push(me.party ? '党内の評価 +' : null, '知名度 +', o.inCab ? '内閣の支持率に追い風' : null); }
+  else if (gk === 'kokando') { addFans((50 + fans * 0.004) * k); if (g.addFame) g.addFame(10 * k, true); me.media = clamp(num(me.media) + 2 * k, -100, 100); out.push('ファン +', '知名度 +', '好感度アップ'); }
+  else if (gk === 'honne') { addFans((100 + fans * 0.008) * k); if (g.addFame) g.addFame(20 * k, true); if (me.party && p.parties[me.party]) addSupport(p, 'floating', me.party, 0.002 * k); if (me.party) me.standing = clamp(me.standing - 1.5, 0, 100); me.media = clamp(num(me.media) + 1, -100, 100); out.push('ファン ++', '知名度 ++', '無党派の支持 +', me.party ? '党内には苦い顔（党内の評価 −）' : null); }
+  else if (gk === 'yokuitta') { addFans(40 + fans * 0.003); if (me.party) me.standing = clamp(me.standing - 2, 0, 100); me.media = clamp(num(me.media) - 3, -100, 100); out.push('一部のファン +', 'メディアの評価 −'); }
+}
+function neutralEffects(g, p, att, out) {
+  const me = p.me;
+  if (att === 'teinei') { me.reputation = clamp(me.reputation + 0.5, -100, 100); out.push('無難にこなした'); }
+  else if (att === 'tsuyoki') { if (me.party) me.standing = clamp(me.standing + 0.3, 0, 100); out.push('強い印象を残した'); }
+  else if (att === 'joke') { if (g.addFans) g.addFans(10, true); out.push('場が少しなごんだ'); }
+  else if (att === 'hagurakasu') { me.media = clamp(num(me.media) - 1, -100, 100); me.reputation = clamp(me.reputation - 0.3, -100, 100); out.push('「はぐらかした」と書かれた（メディアの評価 −）'); }
+  else if (att === 'honne') out.push('賛否が分かれた');
+  else if (att === 'gyakugire') { me.media = clamp(num(me.media) - 4, -100, 100); me.reputation = clamp(me.reputation - 1, -100, 100); out.push('記者たちの心証は最悪だ（メディアの評価 −）'); }
+  else if (att === 'shazai') { me.media = clamp(num(me.media) + 1, -100, 100); out.push('低姿勢がまずは受け止められた'); }
+}
+// a second blunder in the same affair (e.g. at the 謝罪会見): the record heats up instead of a new one
+function escalateGaffe(g, p, rec, o = {}) {
+  const day = today(g);
+  rec.heat = clamp(rec.heat + 22, 0, 100);
+  rec.peak = Math.max(num(rec.peak), rec.heat);
+  rec.sev = Math.min(5, rec.sev + 1);
+  rec.again = (rec.again || 0) + 1;
+  rec.log.push({ day, text: `${venueName(o.venue || 'shazai', calYear(g))}でまた問題の発言（${o.line || ''}）。批判がさらに強まった` });
+  const sp = speakerOf(g, p, rec.who);
+  news(p, g, `${sp.name}${sp.title}、${venueName(o.venue || 'shazai', calYear(g))}でも問題発言。批判がさらに強まる`);
+  rec.lastNews = day;
+  if (rec.who === 'player') {
+    p.me.media = clamp(num(p.me.media) - 6, -100, 100);
+    p.me.reputation = clamp(p.me.reputation - 4, -100, 100);
+    approvalHit(g, p, sp.kind === 'pm' ? 3 : sp.kind === 'minister' ? 1.5 : 0, '失言の上塗り');
+  }
+  return rec;
+}
+function setStage(rec, stage, day, text) {
+  if (!rec.steps[stage]) rec.steps[stage] = day;
+  rec.stage = stage;
+  if (text) rec.log.push({ day, text });
+}
+// the player's answer to their own gaffe
+function gaffeOptionsImpl(g, p, rec) {
+  if (!rec) return [];
+  const done = rec.done ? 'この件は、もう終わった' : null;
+  const sp = speakerOf(g, p, 'player');
+  const day = today(g);
+  const post = sp.kind === 'pm' ? 'pm' : sp.post;
+  const partyPost = p.me.posts.find((x) => POSTS[x] && POSTS[x].kind === 'party');
+  return [
+    { id: 'tekkai', name: '発言を撤回する', desc: '「撤回します」と表明する。火は小さくなるが、言ったことが消えるわけではない。', why: done || (rec.retracted ? 'もう撤回した' : null) },
+    { id: 'shazai', name: '謝罪会見を開く', speech: true, desc: '会見を開いておわびする。態度しだいで鎮火にも、火に油にもなる（態度を選ぶ）。', why: done || (num(rec.lastKaiken, -9) >= day - 1 ? '会見は、きのう・きょう開いたばかり' : null) },
+    { id: 'setsumei', name: '真意を説明する（釈明）', speech: true, desc: '「そういう意味ではなかった」と説明する。うまくいけば鎮まるが、言いわけに聞こえることも。', why: done || (num(rec.lastExplain, -9) === day ? '今日はもう説明した' : null) },
+    { id: 'hirakinaori', name: '撤回しない（開き直る）', desc: '「撤回しない」と言い切る。本音だと喜ぶ支持者もいるが、批判はふつう強まる。', why: done || (rec.retracted ? '撤回したあとで開き直ることはできない' : rec.refused ? 'すでに「撤回しない」と言った' : null) },
+    { id: 'jinin', name: post === 'pm' ? '責任をとって総辞職する' : post ? `${postName(post, fyNow(g))}を辞任する` : partyPost ? '党の役職を辞める' : '辞める役職はない', desc: post === 'pm' ? '内閣総辞職して、総理をやめる。国会で次の総理が選ばれる。' : post ? '大臣を辞めて、けじめをつける。内閣への打撃は小さくなる。' : partyPost ? '党の役職を退いて、けじめをつける。' : '議員を辞める（議員辞職）なら、「政治」→資金・活動→進退から。', why: done || (!post && !partyPost ? 'いまは辞める役職がない（議員辞職は「進退」から）' : post === 'pm' && p.cabinet.resigned ? 'すでに総辞職を決めている' : null), danger: true },
+  ];
+}
+function gaffeRespondImpl(g, p, id, kind, opts = {}) {
+  const S = speechState(p);
+  const rec = S.gaffes.find((r) => r.id === id && r.who === 'player') || (id == null ? S.gaffes.slice().reverse().find((r) => r.who === 'player' && !r.done) : null);
+  if (!rec) return { ok: false, why: 'その発言の記録がない' };
+  const o = gaffeOptionsImpl(g, p, rec).find((x) => x.id === kind);
+  if (!o) return { ok: false, why: 'そんな対応はない' };
+  if (o.why) return { ok: false, why: o.why };
+  const me = p.me;
+  const day = today(g);
+  const sp = speakerOf(g, p, 'player');
+  const st = g.state;
+  const out = { ok: true, kind, id: rec.id, text: '', speech: null };
+  if (kind === 'tekkai') {
+    rec.retracted = day;
+    rec.heat = clamp(rec.heat - (12 + rec.sev * 2), 0, 100);
+    if (me.party) me.standing = clamp(me.standing + 1, 0, 100);
+    me.media = clamp(num(me.media) + 2, -100, 100);
+    setStage(rec, 'tekkai', day, '発言を撤回した');
+    news(p, g, `${sp.name}${sp.title}が${shortLine(rec)}を撤回`);
+    rec.lastNews = day;
+    out.text = '「先ほどの発言は撤回いたします」と表明した。\n火は少し小さくなった。…言ったことが消えるわけではないが。';
+  } else if (kind === 'hirakinaori') {
+    rec.refused = day;
+    const K = GAFFE_KINDS[rec.kind];
+    const hard = rec.kind === 'hisaichi' || rec.kind === 'sabetsu' || rec.kind === 'rekishi' || rec.kind === 'bougen';
+    rec.heat = clamp(rec.heat + (hard ? 24 : 9) + rec.sev * 2, 0, 100);
+    rec.peak = Math.max(num(rec.peak), rec.heat);
+    me.media = clamp(num(me.media) - 5, -100, 100);
+    if (me.party) me.standing = clamp(me.standing - 3, 0, 100);
+    rec.log.push({ day, text: '「撤回しない」と言い切った' });
+    news(p, g, `${sp.name}${sp.title}、${shortLine(rec)}について「撤回しない」`);
+    rec.lastNews = day;
+    // a plain-speaking line can win the core supporters (never for the hard categories)
+    if (!hard && Math.random() < 0.3) {
+      if (g.addFans) g.addFans(Math.round(60 + num(st.fans) * 0.005), true);
+      out.text = '「撤回はしません。本心です」と言い切った。\n一部の支持者からは「ぶれない」と拍手。批判はさらに強まった。';
+      out.good = { kind: 'honne', ...GOOD_KINDS.honne };
+    } else out.text = `「撤回はしません」と言い切った。\n${K.name}への批判は、さらに強まった…。`;
+  } else if (kind === 'shazai' || kind === 'setsumei') {
+    const venue = kind === 'shazai' ? 'shazai' : 'kaiken';
+    const att = opts.attitude || 'teinei';
+    const r = speakImpl(g, p, venue, { topic: 'gaffe', attitude: att, escalate: rec });
+    out.speech = r;
+    if (kind === 'shazai') { rec.lastKaiken = day; rec.apologies++; setStage(rec, 'shazai', day, null); } else rec.lastExplain = day;
+    if (r.outcome !== 'gaffe') {
+      const A = r.attitude;
+      const cool = kind === 'shazai'
+        ? { teinei: 26, shazai: 30, hagurakasu: 8, tsuyoki: -10, joke: -14, honne: 12, gyakugire: -28, risky: -6 }[A]
+        : { teinei: 10, shazai: 12, hagurakasu: 2, tsuyoki: -6, joke: -10, honne: 6, gyakugire: -20, risky: -4 }[A];
+      const d = num(cool) + (r.outcome === 'good' ? 10 : 0);
+      rec.heat = clamp(rec.heat - d, 0, 100);
+      rec.peak = Math.max(num(rec.peak), rec.heat);
+      if (A === 'hagurakasu') rec.inpei = (rec.inpei || 0) + 1;
+      rec.log.push({ day, text: `${kind === 'shazai' ? '謝罪会見' : '釈明'}（${r.attName}）：${d >= 20 ? '批判はかなり鎮まった' : d > 0 ? '少し鎮まった' : '火に油を注いだ'}` });
+      news(p, g, kind === 'shazai' ? `${sp.name}${sp.title}が会見で謝罪${d >= 20 ? '。「反省している」' : d > 0 ? '' : '。態度に批判も'}` : `${sp.name}${sp.title}、発言の真意を説明${d > 0 ? '' : '。「言いわけだ」との声'}`);
+      rec.lastNews = day;
+      out.text = `${r.line}\n${d >= 20 ? '会場の空気が少しやわらいだ。批判はかなり鎮まった。' : d > 0 ? '批判は少しだけ鎮まった。' : d === 0 ? '空気は変わらなかった。' : '…かえって火に油を注いでしまった。'}`;
+      if (kind === 'shazai' && d >= 20) { me.media = clamp(num(me.media) + 2, -100, 100); }
+    } else out.text = `${r.line}\n${r.reaction}`;
+  } else if (kind === 'jinin') {
+    const post = sp.kind === 'pm' ? 'pm' : sp.post;
+    if (post === 'pm') { setStage(rec, 'jinin', day, '責任をとって総辞職を表明'); finishGaffe(g, p, rec, 'jinin'); resignCabinet(g, p, '総理の失言の責任をとって'); out.text = '「発言の責任をとり、内閣総辞職を決断しました」\n…国会で、次の総理が選ばれる。'; }
+    else if (post) { setStage(rec, 'jinin', day, `${postName(post, fyNow(g))}を辞任`); finishGaffe(g, p, rec, 'jinin'); resignPostImpl(g, p, post, '失言の責任をとって'); approvalLift(g, p, 1.5, '問題の大臣の辞任（けじめ）', 'scandal'); out.text = `「発言の責任をとって、${postName(post, fyNow(g))}を辞任します」\n内閣への打撃は、これ以上広がらずにすみそうだ。`; }
+    else {
+      const pp = me.posts.find((x) => POSTS[x] && POSTS[x].kind === 'party');
+      const pt = p.parties[me.party];
+      me.posts = me.posts.filter((x) => x !== pp);
+      if (pt && pt.posts && pt.posts[pp] === 'player') { const n = newNpc(p, { party: pt.id, office: 'shugi', house: 'shugi', wins: irnd(4, 10) }); n.posts.push(pp); pt.posts[pp] = n.id; }
+      setStage(rec, 'jinin', day, `党の${postName(pp, fyNow(g), me.party)}を辞任`);
+      finishGaffe(g, p, rec, 'jinin');
+      news(p, g, `${sp.name}氏が失言の責任をとって党の${postName(pp, fyNow(g), me.party)}を辞任`);
+      out.text = `発言の責任をとって、党の${postName(pp, fyNow(g), me.party)}を辞めた。`;
+    }
+  }
+  return out;
+}
+function finishGaffe(g, p, rec, outcome) {
+  rec.done = true;
+  rec.end = today(g);
+  rec.outcome = outcome;
+  if (outcome === 'chinka') rec.log.push({ day: today(g), text: '批判は収まった（沈静化）' });
+}
+// the 問責決議案 (参院) on a minister / the PM: it passes when the opposition holds the 参院 (ねじれ). Not legally binding.
+function censureVote(g, p, rec) {
+  const H = p.diet.sangi;
+  const ids = p.cabinet.partyIds || [];
+  const ruling = ids.reduce((a, id) => a + num(H.seats[id]), 0);
+  const total = num(H.total) || 1;
+  const opp = total - ruling;
+  const absent = Math.round(total * 0.03);
+  const yes = Math.round(opp * 0.95 + (rec.heat >= 85 ? ruling * 0.03 : 0));
+  const no = Math.max(0, total - absent - yes);
+  return { house: 'sangi', kind: '問責決議案', yes, no, passed: yes > no, day: today(g) };
+}
+// the daily step of every live gaffe (player and NPC), and the NPCs' new gaffes
+function speechTick(g, p, day) {
+  const S = speechState(p);
+  const me = p.me;
+  if (me.media > 0) me.media = Math.max(0, me.media - 0.15); else if (me.media < 0) me.media = Math.min(0, me.media + 0.15);
+  const session = inSession(p, day);
+  for (const rec of S.gaffes) {
+    if (rec.done || rec.day >= day) continue;
+    const days = day - rec.day;
+    const sp = speakerOf(g, p, rec.who);
+    const isP = rec.who === 'player';
+    // a minister / PM who left the post since: the chain loses its target (still reported as a 議員)
+    rec.heat = clamp(rec.heat - (3 + (rec.retracted ? 3 : 0) + Math.min(2, rec.apologies) * 3), 0, 100);
+    const canNews = rec.lastNews !== day;
+    const say = (text) => { if (canNews) { news(p, g, text); rec.lastNews = day; } };
+    // NPC: retract / apologise by persona
+    if (!isP) {
+      const n = p.npcs[rec.who];
+      const pk = personaOf(n, calYear(g)) || 'kenkyo';
+      const P0 = PERSONAS[pk];
+      if (!n) { finishGaffe(g, p, rec, 'chinka'); continue; }
+      if (!rec.retracted && days >= 1 + P0.retract && rec.heat >= 20 && canNews) { rec.retracted = day; rec.heat = clamp(rec.heat - 12, 0, 100); setStage(rec, 'tekkai', day, '発言を撤回'); say(`${sp.name}${sp.title}が${shortLine(rec)}を撤回`); continue; }
+      if (rec.retracted && !rec.apologies && rec.heat >= 40 && day - rec.retracted >= 1 && rec.lastNews !== day) { rec.apologies = 1; rec.heat = clamp(rec.heat - 15, 0, 100); setStage(rec, 'shazai', day, '記者会見で謝罪'); say(`${sp.name}${sp.title}が会見で謝罪「不適切な発言だった」`); continue; }
+    } else if (!rec.retracted && !rec.refused && days === 1 && rec.heat >= 30 && me.party) {
+      note(g, '（党の幹部から電話があった。「あの発言、早く撤回したほうがいい」）');
+    } else if (!rec.retracted && days >= 2 && me.party) me.standing = clamp(me.standing - 0.8, 0, 100);
+    // 野党の追及 (the Diet in session; ministers, the PM, and a member whose remark is loud)
+    if (session && sp.national && (sp.kind === 'pm' || sp.kind === 'minister' || rec.heat >= 50) && rec.heat >= 30 && !rec.steps.tsuikyu && rec.lastNews !== day) {
+      setStage(rec, 'tsuikyu', day, '野党が国会で追及');
+      rec.heat = clamp(rec.heat + 6, 0, 100);
+      say(`野党が${sp.name}${sp.title}の${shortLine(rec)}を国会で追及。「資質を欠く」`);
+      if (isP) { note(g, `（国会で、野党が${GAFFE_KINDS[rec.kind].short}を追及している。答弁でどう答えるかが問われる）`); approvalHit(g, p, sp.kind === 'pm' ? 1.5 : sp.kind === 'minister' ? 0.6 : 0, '失言への追及'); }
+      continue;
+    }
+    if (session && rec.steps.tsuikyu && rec.heat >= 30 && !rec.apologies) rec.heat = clamp(rec.heat + 2, 0, 100);
+    // 問責決議案 (参院) on a minister / the PM; 内閣不信任決議案 (衆院) on the PM
+    if (session && (sp.kind === 'minister' || sp.kind === 'pm') && rec.steps.tsuikyu && rec.heat >= 55 && days >= 3 && !rec.motion && rec.lastNews !== day) {
+      const v = censureVote(g, p, rec);
+      rec.motion = v;
+      setStage(rec, 'ketsugi', day, `参院で問責決議案：${v.passed ? '可決' : '否決'}（賛成${v.yes}・反対${v.no}）`);
+      rec.heat = clamp(rec.heat + (v.passed ? 10 : -6), 0, 100);
+      say(`参院で${sp.name}${sp.title}の問責決議案を${v.passed ? '可決' : '否決'}（賛成${v.yes}・反対${v.no}）${v.passed ? '。法的な拘束力はないが、辞任を求める声が強まる' : ''}`);
+      if (isP) note(g, v.passed ? '（参議院で、あなたへの問責決議が可決された。法的な拘束力はないが、進退を問う声が強まっている）' : '（参議院で、あなたへの問責決議案は否決された）');
+      if (sp.kind === 'pm' && v.passed) {
+        const oppSeats = Object.keys(p.parties).filter((pid) => !isRuling(p, pid)).reduce((a, pid) => a + num(p.diet.shugi.seats[pid]), 0);
+        const S3 = p.diet.session;
+        const opp = Object.keys(p.parties).filter((pid) => !isRuling(p, pid) && num(p.diet.shugi.seats[pid]) > 0 && !p.parties[pid].isPlayers).sort((a, b) => p.diet.shugi.seats[b] - p.diet.shugi.seats[a])[0];
+        if (opp && oppSeats >= 50 && S3 && !p.cabinet.resigned && !p.diet.bills.some((b) => b.kind === 'noconfidence' && b.created >= S3.start)) {
+          addBill(p, { title: '内閣不信任決議案', policy: null, sponsor: 'member', by: p.parties[opp].leader, party: opp, kind: 'noconfidence', stage: 'shugi', house: 'shugi', day, delay: 1 });
+          rec.log.push({ day, text: '野党が内閣不信任決議案を提出（総理の失言を理由に）' });
+        }
+      }
+      continue;
+    }
+    // 辞任・更迭
+    if (sp.kind === 'minister' && rec.lastNews !== day) {
+      const passed = rec.motion && rec.motion.passed;
+      if (!isP && (rec.heat >= 62 || (passed && rec.heat >= 45)) && Math.random() < 0.5) {
+        const n = p.npcs[rec.who];
+        const post = sp.post;
+        const koutetsu = Math.random() < 0.4;
+        setStage(rec, 'jinin', day, koutetsu ? '総理が更迭' : '責任をとって辞任');
+        finishGaffe(g, p, rec, koutetsu ? 'koutetsu' : 'jinin');
+        const m = replaceNpcMinister(g, p, n, post);
+        say(koutetsu ? `${pmLabel(g, p)}が${sp.name}${sp.title}を更迭。後任に${m ? m.name : '別の議員'}氏` : `${sp.name}${sp.title}が失言の責任をとって辞任。後任に${m ? m.name : '別の議員'}氏`);
+        approvalLift(g, p, 1, '問題の大臣の交代', 'scandal');
+        continue;
+      }
+      if (isP && p.cabinet.pm !== 'player') {
+        // the PM lets a minister go when the storm does not pass (or the 参院 has censured them)
+        if ((rec.heat >= 72 && days >= 3) || (passed && rec.heat >= 52) || (rec.warned && day - rec.warned >= 6 && rec.heat >= 48 && Math.random() < 0.3)) {
+          const post = sp.post;
+          setStage(rec, 'jinin', day, '総理が更迭（罷免）');
+          finishGaffe(g, p, rec, 'koutetsu');
+          resignPostImpl(g, p, post, '更迭（失言）');
+          note(g, `（総理から呼び出された。「…すまないが、${postName(post, fyNow(g))}を辞めてもらう」。更迭された）`);
+          news(p, g, `${pmLabel(g, p)}が${g.state.name}${postName(post, fyNow(g))}を更迭（失言）`);
+          rec.lastNews = day;
+          approvalLift(g, p, 1, '問題の大臣の交代', 'scandal');
+          continue;
+        }
+        if (rec.heat >= 55 && !rec.warned) { rec.warned = day; note(g, '（官邸から連絡があった。「総理は、あなたの進退について考えておられる」…辞任するなら「政治」→内閣→発言と失言）'); }
+      }
+    }
+    // a member (not in the cabinet): the party's warning
+    if (isP && sp.kind !== 'pm' && sp.kind !== 'minister' && me.party && rec.heat >= 65 && !rec.partyWarn) {
+      rec.partyWarn = day;
+      me.standing = clamp(me.standing - 8, 0, 100);
+      note(g, `（${pname(p, me.party)}から厳重注意を受けた。党内の評価が下がった）`);
+      rec.log.push({ day, text: '党から厳重注意' });
+    }
+    if (isP && sp.kind === 'pm' && rec.heat >= 70 && !rec.pmWarn) { rec.pmWarn = day; note(g, '（与党の中から「総理は説明責任を果たすべきだ」という声が出ている）'); }
+    // it dies down
+    if (rec.heat <= 10 || days >= 45) {
+      finishGaffe(g, p, rec, 'chinka');
+      if (isP) note(g, `（${GAFFE_KINDS[rec.kind].short}をめぐる騒ぎは、ようやく収まった）`);
+    }
+  }
+  npcGaffeTick(g, p, day, S);
+}
+function pmLabel(g, p) {
+  const pm = p.cabinet.pm;
+  if (pm === 'player') return `${g.state.name}総理`;
+  const n = p.npcs[pm];
+  return n ? `${n.name.split(' ')[0]}総理` : '総理';
+}
+// an NPC minister leaves the post (gaffe): a successor from the same party
+function replaceNpcMinister(g, p, n, post) {
+  if (!n || !post) return null;
+  n.posts = n.posts.filter((x) => x !== post);
+  const m = pickMinister(p, n.party && (p.cabinet.partyIds || []).includes(n.party) ? n.party : cabinetPartyOfPM(p) || (p.cabinet.partyIds || [])[0], p.cabinet.ministers);
+  m.posts.push(post);
+  p.cabinet.ministers[post] = m.id;
+  return m;
+}
+// NPC gaffes: one live chain at a time, at least 9 days apart (about 2-3 in 60 days), fictional-party NPCs only
+function npcGaffeTick(g, p, day, S) {
+  if (day - num(S.lastNpc, -99) < 9) return;
+  if (S.gaffes.some((r) => r.who !== 'player' && !r.done && day - r.day < 6)) return;
+  if (Math.random() > 1 / 16) return;
+  const year = calYear(g);
+  const F = fukkoLive(p);
+  const pool = [];
+  for (const n of Object.values(p.npcs)) {
+    if (!npcGaffeOK(n)) continue;
+    const mins = n.posts.some((x) => POSTS[x] && POSTS[x].kind === 'cabinet' && p.cabinet.ministers[x] === n.id);
+    const pm = p.cabinet.pm === n.id;
+    const leader = Object.values(p.parties).some((pt) => pt.leader === n.id);
+    if (!mins && !pm && !leader && n.office !== 'shugi' && n.office !== 'sangi') continue;
+    const k = personaOf(n, year);
+    let w = (pm ? 2 : mins ? 3 : leader ? 2 : 0.6) * PERSONAS[k].mult;
+    if (F && p.cabinet.ministers.minister_reconstruction === n.id) w *= 3;
+    pool.push([n, w]);
+  }
+  if (!pool.length) return;
+  const tot = pool.reduce((a, [, w]) => a + w, 0);
+  let x = Math.random() * tot;
+  let n = pool[0][0];
+  for (const [m, w] of pool) { x -= w; if (x <= 0) { n = m; break; } }
+  const sp = speakerOf(g, p, n.id);
+  const fk = F && p.cabinet.ministers.minister_reconstruction === n.id;
+  const venues = { kaiken: sp.kind === 'minister' || sp.kind === 'pm' ? 3 : 1, gaito: 2, tv: 2, toben: sp.kind === 'minister' && inSession(p, day) ? 2 : 0, sns: year >= 2004 ? (personaOf(n, year) === 'snsfan' ? 4 : 1) : 0, shisatsu: F ? (fk ? 5 : 1) : 0.5 };
+  const venue = weighted(venues) || 'kaiken';
+  const topic = F && (fk || Math.random() < 0.4) ? (venue === 'shisatsu' ? 'victim' : 'disaster') : venue === 'toben' ? 'opposition' : pickOne(['economy', 'general', 'history', 'local', 'crowd']);
+  const kind = gaffeKindFor('honne', venue, topic, { persona: personaOf(n, year) });
+  startGaffe(g, p, { who: n.id, kind, venue, topic });
+}
+
+// ================================================================ 復興担当大臣 (ext, round 4)
+// After a major disaster (regime.js g.disaster(), tier ≥ 2; without regime.js: the politics core's own 大地震 shock) the PM
+// may appoint a 復興担当大臣 — a 国務大臣 with the 特命 of the 復興 — in any era, as real PMs did: 1995-01-20 (the third day
+// of the 阪神・淡路大震災: 兵庫県南部地震対策担当; the post was folded at the 1995-08-08 改造) and 2011-06-27 (東日本大震災
+// 復興対策担当, after the 復興基本法 of 06-24); from 2012-02-10 the 復興大臣 heads the 復興庁 (復興庁設置法; until 2031-03 after
+// the 2020 extension). The post is POSTS.minister_reconstruction: 「復興担当大臣」 while it is a 担当 (p.flags.fukkoTanto),
+// 「復興大臣」 when a 復興庁 exists (then that minister takes the charge). 国務大臣の数 (内閣法2条): 20人以内 until 2000;
+// from 2001 14人（特に必要なとき17人）, 15人（18人） while the 復興庁 exists — the game does not count heads.
+// The work (FUKKO_WORKS): 被災地視察・被災者との対話 (with an attitude: the 被災地 gaffe is the classic risk of the post),
+// 仮設住宅, 復興予算, 復興計画, 風評被害対策 → the 復興 progress (p.fukko.progress 0-100), approval, the economy, and the
+// regime.js disaster's own record (its live object: score, log, done.plan — the documented fields only).
+export const FUKKO_WORKS = {
+  shisatsu: { name: '被災地を視察する', stamina: 14, every: 2, speech: 'shisatsu', topic: 'disaster', progress: 4, desc: '被災地を歩き、首長や住民の話を聞く。カメラが同行し、ひと言がそのまま報じられる（失言に注意）。' },
+  taiwa: { name: '被災者と対話する', stamina: 12, every: 3, speech: 'taiwa', topic: 'victim', progress: 3, desc: '避難所や仮設住宅で、被災した人の声を聞く。態度しだいで信頼にも、批判にもなる。' },
+  kasetsu: { name: '仮設住宅の建設を急ぐ', stamina: 10, every: 5, progress: 7, phases: ['hassei', 'hinan', 'fukko'], desc: '都道府県が建てる応急仮設住宅（災害救助法）を、国が資材・用地・予算の面で後押しする。' },
+  yosan: { name: '復興予算を確保する', stamina: 8, every: 10, progress: 6, desc: '財務省と折衝し、復旧・復興の予算を確保する（復興の法案を閣議に出す。成立後は予算の前倒し）。' },
+  keikaku: { name: '復興計画をまとめる', stamina: 10, once: true, minDays: 3, progress: 12, desc: '住まい・仕事・道路や学校の再建の道筋（復興の基本方針の案）をまとめ、閣議に諮る。' },
+  fuhyo: { name: '風評被害の対策', stamina: 8, every: 5, minDays: 5, progress: 3, desc: '観光や農産物・水産物への風評被害を防ぐ。正確な情報を発信し、産地を応援する。' },
+};
+export const FUKKO_ORDER = Object.keys(FUKKO_WORKS);
+function regimeDisasterOf(g) {
+  if (typeof g.disaster !== 'function') return { has: false, d: null };
+  try { return { has: true, d: g.disaster() }; } catch (e) { console.error(e); return { has: true, d: null }; }
+}
+// the regime.js disaster's live record when it is this one (documented fields only: score, log, done.plan)
+function regimeLive(g, F) {
+  const r = g.state && g.state.regime;
+  const d = r && r.disaster;
+  return d && F && d.id === F.id ? d : null;
+}
+function fukkoTitle(g, p, F) {
+  const fy = fyNow(g);
+  if (reconAgency(fy, p.flags)) return '復興大臣（復興庁）';
+  return F ? `国務大臣（${F.name}復興対策担当）` : '国務大臣（復興対策担当）';
+}
+function newFukko(g, p, def) {
+  return { id: def.id, name: def.name, kind: def.kind || 'quake', tier: clamp(num(def.tier, 2), 1, 3), start: num(def.start, today(g)), home: !!def.home, begun: today(g), appointed: null, agency: reconAgency(fyNow(g), p.flags), progress: 0, done: {}, last: {}, log: [{ day: today(g), text: `${def.name}が発生` }], ended: null, npcAt: null, npcWill: false, offer: null, disasterDone: null, works: 0 };
+}
+function fukkoLog(F, day, text) { F.log.push({ day, text }); if (F.log.length > 30) F.log.splice(0, F.log.length - 30); }
+function beginFukko(g, p, F) {
+  const day = today(g);
+  const post = 'minister_reconstruction';
+  if (F.agency) {
+    F.appointed = day;
+    const who = p.cabinet.ministers[post];
+    fukkoLog(F, day, '復興大臣が復興を担当');
+    news(p, g, `${F.name}からの復興は、復興大臣（復興庁）が担当する`);
+    if (who === 'player') { note(g, `（${F.name}からの復興は、復興大臣のあなたの担当だ。「政治」→内閣→復興の仕事）`); phoneNews(g, `【官邸】${F.name}からの復興は、復興大臣が担当します。被災地の視察、仮設住宅、復興予算、復興計画…よろしくお願いします。`, '内閣官房'); }
+    return;
+  }
+  if (p.cabinet.pm === 'player') {
+    note(g, `（${F.name}の被害が大きい。復興を専任で進める「復興担当大臣」（国務大臣）を任命できる：「政治」→内閣、官邸の執務室）`);
+    phoneNews(g, `【官邸】総理、${F.name}の復旧・復興を専任で担う国務大臣（復興担当大臣）を置くかどうか、ご判断ください。\n（1995年には地震の3日後、2011年には3か月あまり後に担当大臣が置かれた）`, '内閣官房');
+    F.pmAsked = day;
+    return;
+  }
+  F.npcAt = day + (F.tier >= 3 ? irnd(2, 4) : irnd(4, 8));
+  F.npcWill = F.tier >= 3 || Math.random() < 0.5;
+}
+// who could be the 復興担当大臣 (coalition Diet members without a government post; persona shown)
+function fukkoCandidatesImpl(g, p) {
+  const ids = p.cabinet.partyIds || [];
+  const busy = new Set(Object.entries(p.cabinet.ministers || {}).filter(([k]) => k !== 'minister_reconstruction').map(([, v]) => v));
+  const year = calYear(g);
+  return Object.values(p.npcs).filter((n) => ids.includes(n.party) && (n.office === 'shugi' || n.office === 'sangi') && !busy.has(n.id) && n.id !== p.cabinet.pm && !n.civilian && !n.posts.some((x) => POSTS[x] && POSTS[x].kind === 'diet'))
+    .sort((a, b) => b.wins - a.wins || b.traits.charisma - a.traits.charisma).slice(0, 24)
+    .map((n) => { const k = personaOf(n, year); return { id: n.id, name: n.name, party: n.party, partyName: pname(p, n.party), house: n.house || n.office, wins: n.wins, charisma: n.traits.charisma, integrity: n.traits.integrity, persona: k, personaName: PERSONAS[k].name, personaDesc: PERSONAS[k].desc, gaffeRisk: PERSONAS[k].mult >= 1.3 ? '高め' : PERSONAS[k].mult <= 0.6 ? '低め' : 'ふつう', real: !npcGaffeOK(n) }; });
+}
+function fukkoAppointBlock(g, p) {
+  const F = fukkoLive(p);
+  if (!F) return 'いま、復興を進めている大きな災害はない（大きな地震や津波などのあとに置く）';
+  if (p.cabinet.pm !== 'player') return '復興担当大臣を任命するのは総理大臣';
+  if (p.cabinet.resigned) return '総辞職した内閣は、次の総理が決まるまでの職務を行うだけ';
+  return null;
+}
+// appoint (or replace) the minister: who = npc id | 'player' (the PM holds it too: 兼務) | 'auto'
+function appointFukkoImpl(g, p, who = 'auto', opts = {}) {
+  const why = opts.npc ? null : fukkoAppointBlock(g, p);
+  if (why) return { ok: false, why };
+  const F = fukkoLive(p);
+  const day = today(g);
+  const post = 'minister_reconstruction';
+  const fy = fyNow(g);
+  let id = who;
+  if (id === 'auto' || !id) { const c = fukkoCandidatesImpl(g, p); id = c.length ? c[0].id : pickMinister(p, cabinetPartyOfPM(p) || (p.cabinet.partyIds || [])[0], p.cabinet.ministers).id; }
+  if (id === 'player') {
+    if (!opts.npc && p.cabinet.pm !== 'player') return { ok: false, why: '総理でなければ、自分を任命することはできない' };
+  } else {
+    const n = p.npcs[id];
+    if (!n) return { ok: false, why: 'その人はいない' };
+    if (!(p.cabinet.partyIds || []).includes(n.party) && !n.civilian) return { ok: false, why: '与党の議員（か民間人）から選ぶ' };
+  }
+  const tanto = !reconAgency(fy, p.flags);
+  if (tanto) p.flags.fukkoTanto = true;
+  const old = p.cabinet.ministers[post];
+  if (old && old !== id && old !== 'player' && p.npcs[old]) p.npcs[old].posts = p.npcs[old].posts.filter((x) => x !== post);
+  if (old === 'player' && id !== 'player') p.me.posts = p.me.posts.filter((x) => x !== post);
+  p.cabinet.ministers[post] = id;
+  if (id === 'player') { if (!p.me.posts.includes(post)) p.me.posts.push(post); }
+  else if (!p.npcs[id].posts.includes(post)) p.npcs[id].posts.push(post);
+  const first = !F.appointed;
+  F.appointed = F.appointed || day;
+  F.minister = id;
+  const nm = id === 'player' ? g.state.name : p.npcs[id].name;
+  const title = postName(post, fy);
+  fukkoLog(F, day, `${nm}氏を${title}に任命`);
+  news(p, g, `${nm}氏を${tanto ? `${F.name}の` : ''}${title}に任命${old && old !== id ? `（${old === 'player' ? g.state.name : (p.npcs[old] || {}).name || ''}氏から交代）` : ''}`);
+  // a quick appointment shows resolve (1995: three days after the quake)
+  if (first && !opts.npc) { const quick = day - F.start <= 5; approvalLift(g, p, quick ? 2 : 0.8, quick ? '復興担当大臣の素早い任命' : '復興担当大臣の任命', 'disaster'); }
+  emit(g, 'cabinet', { pm: p.cabinet.pm, partyIds: p.cabinet.partyIds, joined: post, fukko: true, reshuffle: false, coalition: false });
+  return { ok: true, who: id, post, title, formal: fukkoTitle(g, p, F), text: `${nm}氏を${fukkoTitle(g, p, F)}に任命した。${id === 'player' ? '\n（総理が自分で兼ねる）' : ''}` };
+}
+// an NPC PM appoints: the player may be offered the post (a ruling Diet member with a record, or the local member of a home disaster)
+function npcAppointFukko(g, p, F) {
+  const day = today(g);
+  const me = p.me;
+  const post = 'minister_reconstruction';
+  if (!reconAgency(fyNow(g), p.flags)) p.flags.fukkoTanto = true;
+  const eligible = me.party && isRuling(p, me.party) && isNational(me) && !inCabinet(me) && !playerBarred(g, post);
+  const chance = !eligible ? 0 : clamp(0.12 + (F.home ? 0.3 : 0) + (num(me.standing) - 50) / 150 + (num(me.nationalWins) >= 3 ? 0.15 : 0) + (num(g.state.fame) >= 3000 ? 0.1 : 0), 0, 0.75);
+  if (eligible && Math.random() < chance) {
+    const o = { id: 'o' + p.nextId++, kind: 'post', post, day, until: day + 3, from: p.cabinet.pm, fukko: F.id };
+    me.offers.push(o);
+    F.offer = o.id;
+    phoneNews(g, `【入閣の打診】総理から「${postName(post, fyNow(g))}」（${F.name}の復興を担当）をお願いしたいと連絡がありました。\n（3日以内に返事を）`, '総理大臣官邸');
+    emit(g, 'offer', o);
+    return;
+  }
+  appointFukkoImpl(g, p, 'auto', { npc: true });
+}
+function endFukko(g, p, F, why = '') {
+  const day = today(g);
+  F.ended = day;
+  fukkoLog(F, day, `復興に区切り（進み具合 ${Math.round(F.progress)}%）`);
+  const H = p.fukkoHist || (p.fukkoHist = []);
+  H.unshift({ id: F.id, name: F.name, tier: F.tier, start: F.start, appointed: F.appointed, end: day, progress: Math.round(F.progress), works: F.works });
+  if (H.length > 10) H.length = 10;
+  if (p.flags.fukkoTanto) {
+    p.flags.fukkoTanto = false;
+    if (!reconAgency(fyNow(g), p.flags)) {
+      news(p, g, `${F.name}からの復興に区切り。復興担当大臣は置かれなくなった${why ? `（${why}）` : ''}`);
+      dropPost(g, p, 'minister_reconstruction', '復興担当の終了');
+      return;
+    }
+  }
+  news(p, g, `${F.name}からの復興に区切り（復興の進み具合 ${Math.round(F.progress)}%）`);
+}
+// a cabinet post that no longer exists (a 担当 ended, an agency closed): its holder leaves it
+function dropPost(g, p, post, why = '') {
+  const id = p.cabinet.ministers[post];
+  delete p.cabinet.ministers[post];
+  if (id === 'player' || p.me.posts.includes(post)) {
+    p.me.posts = p.me.posts.filter((x) => x !== post);
+    note(g, `（${why || '職の廃止'}で、${postName(post, fyNow(g))}の任務を終えた。おつかれさまでした）`);
+  }
+  if (id && id !== 'player' && p.npcs[id]) p.npcs[id].posts = p.npcs[id].posts.filter((x) => x !== post);
+  for (const n of Object.values(p.npcs)) if (n.posts.includes(post) && p.cabinet.ministers[post] !== n.id) n.posts = n.posts.filter((x) => x !== post);
+}
+function fukkoTick(g, p, day, abs) {
+  const { has, d } = regimeDisasterOf(g);
+  let F = p.fukko && typeof p.fukko === 'object' ? p.fukko : null;
+  if (has && d && d.tier >= 2 && d.phase !== 'done' && (!F || F.id !== d.id)) {
+    if (F && !F.ended) endFukko(g, p, F, '次の災害');
+    F = p.fukko = newFukko(g, p, { id: d.id, name: d.name, kind: d.kind, tier: d.tier, start: d.start, home: d.home });
+    beginFukko(g, p, F);
+  } else if (!has && num(p.flags.disasterDay) === day && (!F || F.ended)) {
+    F = p.fukko = newFukko(g, p, { id: 'q' + day, name: '大地震', kind: 'quake', tier: 2, start: day });
+    beginFukko(g, p, F);
+  }
+  if (!F || F.ended) return;
+  const post = 'minister_reconstruction';
+  const fy = fyNow(g);
+  F.agency = reconAgency(fy, p.flags);
+  const who = p.cabinet.ministers[post] || null;
+  // the NPC PM's decision
+  if (!F.appointed && p.cabinet.pm !== 'player' && !p.cabinet.resigned) {
+    if (F.offer) {
+      const o = p.me.offers.find((x) => x.id === F.offer);
+      if (o && o.answered === 'yes' && p.cabinet.ministers[post] === 'player') { F.appointed = day; F.minister = 'player'; F.offer = null; fukkoLog(F, day, `${g.state.name}氏が${postName(post, fy)}に就任`); note(g, `（${F.name}からの復興が、あなたの仕事になった。「政治」→内閣→復興の仕事）`); }
+      else if (!o || (o.answered && o.answered !== 'yes')) { F.offer = null; appointFukkoImpl(g, p, 'auto', { npc: true }); }
+    } else if (F.npcAt && day >= F.npcAt) {
+      F.npcAt = null;
+      if (F.npcWill) npcAppointFukko(g, p, F);
+      else { F.noTanto = day; fukkoLog(F, day, '専任の担当大臣は置かず、いまの閣僚の体制で進める'); news(p, g, `政府は${F.name}の復旧・復興を、専任の担当大臣を置かず、いまの閣僚の体制で進めることにした`); }
+    }
+  } else if (!F.appointed && who && postExists(post, fy, p.flags)) { F.appointed = day; F.minister = who; }
+  // the player PM who has not appointed one after a very large disaster: the press notices (once)
+  if (p.cabinet.pm === 'player' && !F.appointed && F.tier >= 3 && day - F.start >= 8 && !F.lateNews) { F.lateNews = day; news(p, g, `${F.name}の被災地から「復興の司令塔がいない」との声。専任の担当大臣を求める意見も`); approvalHit(g, p, 1.5, '復興の体制への批判'); }
+  // progress: the ministries' daily work (more with a minister), and an NPC minister's own work now and then
+  const scale = F.tier >= 3 ? 0.65 : 1;
+  F.progress = clamp(num(F.progress) + (F.appointed ? 0.32 : 0.15) * scale, 0, 100);
+  const mw = p.cabinet.ministers[post];
+  if (F.appointed && mw && mw !== 'player' && p.npcs[mw] && day >= num(F.npcNext)) {
+    F.npcNext = day + irnd(4, 7);
+    const n = p.npcs[mw];
+    const kinds = FUKKO_ORDER.filter((k) => !(FUKKO_WORKS[k].once && F.done[k]) && !(FUKKO_WORKS[k].minDays && day - F.start < FUKKO_WORKS[k].minDays));
+    const k = pickOne(kinds.length ? kinds : ['shisatsu']);
+    const W = FUKKO_WORKS[k];
+    F.done[k] = num(F.done[k]) + 1;
+    F.last[k] = day;
+    F.works++;
+    F.progress = clamp(F.progress + W.progress * scale * 0.8, 0, 100);
+    const t = { shisatsu: `${n.name}${postName(post, fy)}が被災地を視察`, taiwa: `${n.name}${postName(post, fy)}が仮設住宅で被災者と対話`, kasetsu: `仮設住宅の建設を前倒し（${n.name}${postName(post, fy)}）`, yosan: `${n.name}${postName(post, fy)}が復興予算の確保へ財務省と折衝`, keikaku: `政府が${F.name}の復興計画をまとめた（担当：${n.name}${postName(post, fy)}）`, fuhyo: `${n.name}${postName(post, fy)}が風評被害の対策を発表`, }[k];
+    fukkoLog(F, day, t);
+    if (k === 'keikaku' || Math.random() < 0.35) news(p, g, t);
+    const live = regimeLive(g, F);
+    if (live) { if (k === 'keikaku' && live.done && !live.done.plan) live.done.plan = day; live.log.push({ day, text: t.slice(0, 40) }); }
+  }
+  // the end: the disaster's 復興 phase is over (regime.js), or (without it) 100 days and half the way
+  const over = has ? !d || d.id !== F.id || d.phase === 'done' : day - F.start >= 100;
+  if (over && !F.disasterDone) F.disasterDone = day;
+  if (F.disasterDone && (F.progress >= 60 || day - F.disasterDone >= 30)) endFukko(g, p, F);
+  void abs;
+}
+function fukkoWorkBlock(g, p, kind) {
+  const F = fukkoLive(p);
+  const W = FUKKO_WORKS[kind];
+  if (!W) return 'そんな仕事はない';
+  if (!F) return 'いま復興を進めている災害はない';
+  if (p.cabinet.ministers.minister_reconstruction !== 'player') return `${postName('minister_reconstruction', fyNow(g))}の仕事（いまの担当：${F.appointed ? g.npcName(p.cabinet.ministers.minister_reconstruction) || '—' : 'まだいない'}）`;
+  const day = today(g);
+  if (W.once && F.done[kind]) return 'もうまとめた（閣議決定ずみ）';
+  if (W.minDays && day - F.start < W.minDays) return `被害の全体像がつかめてから（発生から${W.minDays}日ごろ）`;
+  if (W.every && F.last[kind] != null && day - num(F.last[kind]) < W.every) return `${W.every}日に1回まで（つぎは${num(F.last[kind]) + W.every - day}日後）`;
+  if (g.state.stamina < W.stamina) return '体力が足りない';
+  if (W.phases) { const { d } = regimeDisasterOf(g); if (d && d.id === F.id && !W.phases.includes(d.phase)) return 'いまの段階では要らない'; }
+  return null;
+}
+function fukkoActionImpl(g, p, kind, opts = {}) {
+  const why = fukkoWorkBlock(g, p, kind);
+  if (why) return { ok: false, why };
+  const F = fukkoLive(p);
+  const W = FUKKO_WORKS[kind];
+  const day = today(g);
+  const fy = fyNow(g);
+  const st = g.state;
+  const me = p.me;
+  st.stamina -= W.stamina;
+  F.last[kind] = day;
+  F.done[kind] = num(F.done[kind]) + 1;
+  F.works++;
+  const scale = F.tier >= 3 ? 0.75 : 1;
+  const lines = [];
+  let gain = W.progress * scale;
+  let appr = 0;
+  let speech = null;
+  const live = regimeLive(g, F);
+  const abs = absOfDay(p, day);
+  if (W.speech) {
+    speech = speakImpl(g, p, W.speech, { topic: opts.topic || W.topic, attitude: opts.attitude || 'teinei', risky: opts.risky });
+    if (speech.outcome === 'gaffe') { gain *= 0.3; lines.push(`${speech.line}`, '…被災地の人たちの表情がこわばった。'); }
+    else if (speech.outcome === 'good') { gain *= 1.5; appr = 1.5; lines.push(`${speech.line}`, speech.reaction); }
+    else { appr = 0.6; lines.push(`${speech.line}`, speech.reaction); }
+    if (kind === 'shisatsu') lines.unshift(`${F.name}の被災地を歩いた。がれき、閉じたままの店、避難所の長い列。`);
+    else lines.unshift('避難所の体育館で、被災した人たちと車座になった。');
+    if (live && speech.outcome !== 'gaffe') live.score = num(live.score) + 0.5;
+  } else if (kind === 'kasetsu') {
+    appr = 1; lines.push('資材と用地の確保を関係省庁に指示し、仮設住宅の建設を前倒しした。', '「一日でも早く、プライバシーのある住まいを」');
+    for (const s of ['rural', 'elderly', 'families']) if (me.party && p.parties[me.party]) addSupport(p, s, me.party, 0.002);
+    if (live) live.score = num(live.score) + 1;
+  } else if (kind === 'yosan') {
+    let billId = null;
+    if (!policyBlock(p, 'reconstruction', null, calYear(g), fy)) billId = g.proposeBill({ policy: 'reconstruction' });
+    if (billId) { lines.push(`財務省と折衝し、「${POLICIES.reconstruction.name}」の法案を閣議に出した。`, '成立すれば、予算と人が被災地に集中する。'); gain *= 0.5; }
+    else {
+      p.economy.shocks.push({ kind: 'fukko', name: '復興需要（予算の前倒し）', until: abs + 60, len: 60, growth: 0.06, inflation: 0.02, unemployment: -0.02, yen: 0 });
+      lines.push('財務省と折衝し、復旧・復興の予算の執行を前倒しさせた。', '道路や港の工事が動きだし、地元の雇用も少し戻る。');
+      appr = 0.5;
+    }
+    if (live) live.score = num(live.score) + 1;
+  } else if (kind === 'keikaku') {
+    appr = 2;
+    lines.push(`${F.name}からの復興計画（基本方針の案）をまとめ、閣議決定した。`, '住まい、仕事、学校、道路。ひとつずつ、町を取り戻す道筋だ。');
+    news(p, g, `政府が${F.name}からの復興計画を閣議決定（担当：${g.state.name}${postName('minister_reconstruction', fy)}）`);
+    if (live) { if (live.done && !live.done.plan) live.done.plan = day; live.score = num(live.score) + 2; }
+  } else if (kind === 'fuhyo') {
+    appr = 0.5;
+    p.economy.shocks.push({ kind: 'fukko', name: '風評被害の対策', until: abs + 50, len: 50, growth: 0.03, inflation: 0, unemployment: 0, yen: 0 });
+    for (const s of ['farmers', 'selfemployed']) if (me.party && p.parties[me.party]) addSupport(p, s, me.party, 0.003);
+    lines.push('被災地の産品を、テレビカメラの前で味わってみせた。正確な情報も、あわせて発信した。', '「安全です。ぜひ、被災地のものを買ってください」');
+  }
+  F.progress = clamp(num(F.progress) + gain, 0, 100);
+  if (appr) approvalLift(g, p, appr, `復興担当大臣の仕事（${W.name}）`, 'disaster');
+  me.reputation = clamp(me.reputation + (speech && speech.outcome === 'gaffe' ? 0 : 1), -100, 100);
+  fukkoLog(F, day, `${W.name}${speech ? `（${speech.attName}${speech.outcome === 'gaffe' ? '・失言' : speech.outcome === 'good' ? '・好評' : ''}）` : ''}`);
+  if (live) live.log.push({ day, text: `復興担当大臣：${W.name}` });
+  if (g.lifeTick) g.lifeTick({ hunger: -8, stress: 6, clean: -6 });
+  lines.push(`（復興の進み具合 ${Math.round(F.progress)}%）`);
+  return { ok: true, kind, text: lines.join('\n'), progress: Math.round(F.progress), speech };
+}
+function fukkoStatusImpl(g, p) {
+  const F = p.fukko && typeof p.fukko === 'object' ? p.fukko : null;
+  const fy = fyNow(g);
+  const post = 'minister_reconstruction';
+  const exists = postExists(post, fy, p.flags);
+  const who = exists ? p.cabinet.ministers[post] || null : null;
+  const live = F && !F.ended;
+  const { d } = regimeDisasterOf(g);
+  const dd = live && d && d.id === F.id ? d : null;
+  return {
+    active: !!live, agency: reconAgency(fy, p.flags), tanto: !!p.flags.fukkoTanto, post, exists, postName: postName(post, fy), title: fukkoTitle(g, p, F),
+    minister: who, ministerName: who ? g.npcName(who) : null, isPlayer: who === 'player', persona: who && who !== 'player' && p.npcs[who] ? PERSONAS[personaOf(p.npcs[who], calYear(g))].name : null,
+    disaster: F ? { id: F.id, name: F.name, kind: F.kind, tier: F.tier, start: F.start, phase: dd ? dd.phase : F.ended ? 'done' : F.disasterDone ? 'done' : null } : null,
+    progress: F ? Math.round(num(F.progress)) : 0, appointed: F ? F.appointed : null, ended: F ? F.ended : null, noTanto: F ? !!F.noTanto : false, offer: F ? F.offer : null,
+    stageLabel: !F ? '—' : F.ended ? '区切り' : F.progress >= 80 ? '仕上げ' : F.progress >= 50 ? '再建が進む' : F.progress >= 20 ? '復旧から復興へ' : '応急の段階',
+    canAppoint: !fukkoAppointBlock(g, p), appointBlock: fukkoAppointBlock(g, p),
+    works: FUKKO_ORDER.map((k) => ({ id: k, name: FUKKO_WORKS[k].name, desc: FUKKO_WORKS[k].desc, stamina: FUKKO_WORKS[k].stamina, speech: FUKKO_WORKS[k].speech || null, done: F ? num(F.done[k]) : 0, why: fukkoWorkBlock(g, p, k) })),
+    log: F ? F.log.slice(-12) : [], history: (p.fukkoHist || []).slice(0, 6),
+    note: reconAgency(fy, p.flags) ? '復興庁（2012年2月10日発足。設置期限は2031年3月末：2020年の改正で10年延長）の大臣が、復興の司令塔になる。' : '専任の国務大臣を置いて復興を進めることができる（1995年1月の阪神・淡路大震災では3日後に、2011年の東日本大震災では6月に担当大臣が置かれた）。',
+  };
 }
 
 // ================================================================ g.* API (installPolitics)
@@ -5022,6 +6172,38 @@ function donationsImpl(g, p, opts = {}) {
 //   hireStaff(+1|-1) -> null | reason   (私設秘書: monthly cost, helps activities and campaigns)
 //  misc
 //   npcName(id), partyName(id, short?), postLabel(post), triggerShock(kind), politicsMenu() (text UI)
+//  発言・態度・失言 (round 4; see the section 「発言・態度・失言」)
+//   speechOptions(venue, { topic?, risky?: false }) -> { venue, venueName, topic, topicName, question, asker, block,
+//       options: [{ id (ATTITUDES id | 'risky'), name, label, risk %, factors [{ label, v }], desc, kinds [names], good, line }] }
+//       venue: kaiken 記者会見 | toben 国会答弁 | gaito 街頭演説 | shisatsu 視察 | tv テレビ出演 | sns SNS（2004-; ブログ until 2009)
+//              | taiwa 被災者との対話 | shazai 謝罪会見
+//   speechRisk(venue, attitude, { topic?, risky? }) -> { topic, risk, factors };  speechBlock(venue) -> null | reason
+//   speak(venue, { topic?, attitude, risky?, force? }) -> { ok, why?, venue, venueName, topic, topicName, attitude, attName,
+//       risky, risk, outcome: 'gaffe'|'good'|'neutral', line, reaction, gaffe (record) | null, good { kind, name, desc } | null,
+//       effects [text], score 0..100 }   (force: skip speechBlock — the caller already checked, e.g. an activity)
+//   gaffes({ who?: 'player'|'npc'|npcId, active?, n? }) -> [GAFFE + kindName, kindShort, venueName, stageName, quote, outcomeName]
+//       GAFFE = { id, who, name, title, party, kind (GAFFE_KINDS), line, desc, venue, topic, day, sev 1..5, heat 0..100, peak,
+//         stage (GAFFE_STAGES: enjo|tekkai|shazai|tsuikyu|ketsugi|jinin), steps { stage: day }, retracted, apologies, refused,
+//         motion { house, kind, yes, no, passed } | null, done, end, outcome 'chinka'|'jinin'|'koutetsu' | null, log [{ day, text }] }
+//   gaffeOptions(id) -> [{ id: tekkai|shazai|setsumei|hirakinaori|jinin, name, desc, why, speech?, danger? }]
+//   gaffeRespond(id, kind, { attitude? }) -> { ok, why?, kind, text, speech? }   (shazai / setsumei take an attitude)
+//   npcPersona(npcId) -> { key, name, desc, mult, retract, kinds, gaffeShown } | null   (PERSONAS)
+//   activityBlock(kind) -> null | reason   (activity()'s refusal without side effects)
+//   activity(kind, { score?, speech? }): ACTIVITIES with speech (記者会見・視察・街頭演説・TV出演・SNSで発信・国会で答弁)
+//       take the result of g.speak as opts.speech (no second roll); without it the player speaks in their usual way
+//       (attitude from the talk skill) and a gaffe becomes a GAFFE record (result.speech)
+//   campaign('街頭演説'|'SNS'|'討論会', { attitude? | speech? }) -> result.speech; the day's points ×1.6 (good) / ×0.25 (gaffe)
+//  復興担当大臣 (round 4; see the section 「復興担当大臣」)
+//   fukko() -> { active, agency (復興庁), tanto, post: 'minister_reconstruction', exists, postName (復興大臣|復興担当大臣), title
+//       (formal), minister, ministerName, isPlayer, persona, disaster { id, name, kind, tier, start, phase }, progress 0..100,
+//       stageLabel, appointed, ended, noTanto, offer, canAppoint, appointBlock, works [{ id, name, desc, stamina, speech, done,
+//       why }], log, history, note }
+//   fukkoCandidates() -> [{ id, name, party, partyName, house, wins, charisma, integrity, persona, personaName, personaDesc,
+//       gaffeRisk 高め|ふつう|低め, real }];  fukkoAppointBlock() -> null | reason (PM only, a live 復興)
+//   appointFukkoMinister(npcId | 'player' | 'auto') -> { ok, why?, who, post, title, formal, text }
+//   fukkoAction(kind, { attitude? }) -> { ok, why?, kind, text, progress, speech? }   kinds FUKKO_WORKS: shisatsu 被災地視察 /
+//       taiwa 被災者との対話 (with an attitude) / kasetsu 仮設住宅 / yosan 復興予算 / keikaku 復興計画 / fuhyo 風評被害対策
+//   fukkoWorkBlock(kind) -> null | reason
 //
 //  state extras added by the review (all optional; old saves are filled in):
 //   me: prElected { house, party, day } | null, leaderTerms, districtPref, nomKind { [electionId]: 'district'|'pr' }
@@ -5048,6 +6230,24 @@ function sanitizeParams(pl, params) {
 }
 function protectYen(n) { return `${YEN_MARK}${Math.round(num(n)).toLocaleString('ja-JP')}円`; }
 
+function activityBlockImpl(g, p, kind) {
+  const me = p.me;
+  const A = ACTIVITIES[kind];
+  const st = g.state;
+  const day = today(g);
+  if (!A) return 'そんな活動はない';
+  const need = A.need;
+  const okNeed = need === 'any' ? true : need === 'national' ? isNational(me) : need === 'local' ? ['kugi', 'togi'].includes(me.office) : need === 'exec' ? ['shicho', 'chiji'].includes(me.office) : need === 'cabinet' ? inCabinet(me) : need === 'pm' ? me.posts.includes('pm') : need === 'faction' ? !!me.faction : !!me.office;
+  if (!okNeed) return 'いまの立場ではできない';
+  // (2026-10 fix) the cabinet answers questions in the committees; it does not ask them
+  if (kind === '委員会で質問' && inCabinet(me)) return '総理・大臣は委員会で質問に答える側（内閣の一員は「国会で答弁」をする）';
+  if (A.session && !inSession(p, day)) return '国会の会期中だけ';
+  if (A.from && calYear(g) < A.from) return 'この時代は、政治家が自分で発信するブログやSNSがまだない';
+  if (me.lastAct[kind] === day) return '今日はもうやった';
+  if (st.stamina < A.stamina) return '体力が足りない';
+  if (A.funds && me.funds + st.money < A.funds) return 'お金が足りない';
+  return null;
+}
 const methods = {
   pol() { return ensurePol(this); },
   polDate(day) { ensurePol(this); return polDate(this, day); },
@@ -5414,22 +6614,16 @@ const methods = {
     const text = !member ? '国会議員ではない' : !session ? '国会は閉会中' : att ? '今日は出席ずみ' : `${business ? (cab ? '今日は答弁の予定がある' : '今日は本会議・委員会がある') : '今日は大きな日程なし'}${absent ? `・欠席${absent}日連続（8日で報道される）` : ''}`;
     return { member, session, today: att, absent, days: num(me.attend && me.attend.days), missed: num(me.attend && me.attend.missed), cabinet: cab, business: !!business, reportAt: 8, text };
   },
+  // ext (round 4): why activity(kind) would be refused now (null = it would run; no side effects)
+  activityBlock(kind) { return activityBlockImpl(this, ensurePol(this), kind); },
   activity(kind, opts = {}) {
     const p = ensurePol(this);
     const me = p.me;
     const A = ACTIVITIES[kind];
     const st = this.state;
     const day = today(this);
-    if (!A) return { ok: false, why: 'そんな活動はない' };
-    const need = A.need;
-    const okNeed = need === 'any' ? true : need === 'national' ? isNational(me) : need === 'local' ? ['kugi', 'togi'].includes(me.office) : need === 'exec' ? ['shicho', 'chiji'].includes(me.office) : need === 'cabinet' ? inCabinet(me) : need === 'pm' ? me.posts.includes('pm') : need === 'faction' ? !!me.faction : !!me.office;
-    if (!okNeed) return { ok: false, why: 'いまの立場ではできない' };
-    // (2026-10 fix) the cabinet answers questions in the committees; it does not ask them
-    if (kind === '委員会で質問' && inCabinet(me)) return { ok: false, why: '総理・大臣は委員会で質問に答える側（内閣の一員は「国会で答弁」をする）' };
-    if (A.session && !inSession(p, day)) return { ok: false, why: '国会の会期中だけ' };
-    if (me.lastAct[kind] === day) return { ok: false, why: '今日はもうやった' };
-    if (st.stamina < A.stamina) return { ok: false, why: '体力が足りない' };
-    if (A.funds && me.funds + st.money < A.funds) return { ok: false, why: 'お金が足りない' };
+    const why0 = activityBlockImpl(this, p, kind);
+    if (why0) return { ok: false, why: why0 };
     st.stamina -= A.stamina;
     // the same thing day after day wears thin (マンネリ): after 4 days in a row the gains shrink
     const sk0 = me.actStreak || (me.actStreak = {});
@@ -5453,10 +6647,16 @@ const methods = {
     if (kind === '国会で答弁') me.answers = num(me.answers) + (q >= 0.5 ? 1 : 0);
     // answering (the cabinet) or asking (a member) in the Diet counts as attending that day (2026-10 fix)
     if ((kind === '国会で答弁' || kind === '委員会で質問') && num(me.attend.last) !== day) { me.attend.last = day; me.attend.days = num(me.attend.days) + 1; me.attend.absent = 0; }
-    let gaffe = null;
-    if (A.gaffe && Math.random() < (sk < 0.4 ? 0.12 : 0.04) * (q < 0.4 ? 1.5 : 1)) gaffe = scandalImpl(this, p, 'gaffe', { who: 'player' });
+    // round 4: what was said (g.speak: the attitude the player chose, its 失言リスク, the gaffe chain). An older caller
+    // that chose no attitude speaks in the player's usual way (the risk follows the talk skill and the day's quality).
+    let speech = opts.speech && typeof opts.speech === 'object' ? opts.speech : null;
+    if (A.gaffe && A.speech && !opts.speech) {
+      const att = sk < 0.4 ? pickOne(['joke', 'hagurakasu', 'tsuyoki']) : q < 0.45 ? 'hagurakasu' : 'teinei';
+      try { speech = speakImpl(this, p, A.speech, { attitude: att, topic: defaultTopic(this, p, A.speech), auto: true }); } catch (e) { console.error(e); speech = null; }
+    }
+    const gaffe = speech && speech.gaffe ? speech.gaffe : null;
     if (this.lifeTick) this.lifeTick({ hunger: -6, stress: 5, clean: -5 });
-    return { ok: true, kind, quality: Math.round(q * 100), text: `${kind}をした。${out.join('・')}${gaffe ? '\n…しかし、発言が「失言」と報じられてしまった！' : ''}`, gaffe: !!gaffe };
+    return { ok: true, kind, quality: Math.round(q * 100), text: `${kind}をした。${out.join('・')}${gaffe && !opts.speech ? `\n…しかし、${gaffeQuote(gaffe)}が問題に！（${(GAFFE_KINDS[gaffe.kind] || GAFFE_KINDS.uekara).short}として報じられた）` : ''}`, gaffe: !!gaffe, speech: speech && !opts.speech ? speech : null };
   },
   // 政治資金パーティー. opts.unreported: 0..0.5 of the take left out of the report (裏金・違法).
   holdFundraiser(opts = {}) {
@@ -5733,6 +6933,46 @@ const methods = {
     };
   },
   politicsMenu() { return politicsMenu(this); },
+  // ---- round 4: 発言・態度・失言 (see the section above)
+  speechOptions(venue, opts = {}) { return speechOptionsImpl(this, ensurePol(this), venue, opts || {}); },
+  speechRisk(venue, attitude, opts = {}) {
+    const p = ensurePol(this);
+    const topic = SPEECH_TOPICS[opts && opts.topic] ? opts.topic : defaultTopic(this, p, venue);
+    const risky = attitude === 'risky' || !!(opts && opts.risky);
+    return { topic, ...speechRiskImpl(this, p, 'player', venue, risky ? 'honne' : attitude, topic, { risky }) };
+  },
+  speechBlock(venue) { return speechBlockImpl(this, ensurePol(this), venue); },
+  speak(venue, opts = {}) {
+    const p = ensurePol(this);
+    const why = opts && opts.force ? null : speechBlockImpl(this, p, venue);
+    if (why) return { ok: false, why };
+    return speakImpl(this, p, venue, opts || {});
+  },
+  gaffes(opts = {}) {
+    const p = ensurePol(this);
+    const S = speechState(p);
+    let L = S.gaffes.slice().reverse();
+    if (opts.who === 'npc') L = L.filter((r) => r.who !== 'player'); else if (opts.who) L = L.filter((r) => r.who === opts.who);
+    if (opts.active) L = L.filter((r) => !r.done);
+    const year = calYear(this);
+    return L.slice(0, opts.n || 40).map((r) => ({ ...r, steps: { ...r.steps }, log: r.log.slice(), motion: r.motion ? { ...r.motion } : null, kindName: (GAFFE_KINDS[r.kind] || {}).name || '失言', kindShort: (GAFFE_KINDS[r.kind] || {}).short || '失言', venueName: venueName(r.venue, year), stageName: STAGE_NAME[r.stage] || r.stage, quote: gaffeQuote(r), outcomeName: r.outcome ? { chinka: '沈静化', jinin: '辞任', koutetsu: '更迭' }[r.outcome] || r.outcome : null }));
+  },
+  gaffeOptions(id) { const p = ensurePol(this); const r = speechState(p).gaffes.find((x) => x.id === id && x.who === 'player'); return gaffeOptionsImpl(this, p, r); },
+  gaffeRespond(id, kind, opts = {}) { return gaffeRespondImpl(this, ensurePol(this), id, kind, opts || {}); },
+  npcPersona(id) {
+    const p = ensurePol(this);
+    const n = p.npcs[id];
+    if (!n) return null;
+    const k = personaOf(n, calYear(this));
+    return { key: k, ...PERSONAS[k], gaffeShown: npcGaffeOK(n) };
+  },
+  // ---- round 4: 復興担当大臣
+  fukko() { return fukkoStatusImpl(this, ensurePol(this)); },
+  fukkoCandidates() { return fukkoCandidatesImpl(this, ensurePol(this)); },
+  appointFukkoMinister(who = 'auto') { return appointFukkoImpl(this, ensurePol(this), who); },
+  fukkoAppointBlock() { return fukkoAppointBlock(this, ensurePol(this)); },
+  fukkoAction(kind, opts = {}) { return fukkoActionImpl(this, ensurePol(this), kind, opts || {}); },
+  fukkoWorkBlock(kind) { return fukkoWorkBlock(this, ensurePol(this), kind); },
   // ext (review): why an entertainment job is not possible now for political reasons (選挙期間中の
   // 候補者・在任中の大臣) -> null | text. kind: 'job' | 'regular'; def: the job def ({ id, medium }).
   politicsRefusal(kind = 'job', def = {}) { return politicsRefusalImpl(this, kind, def); },

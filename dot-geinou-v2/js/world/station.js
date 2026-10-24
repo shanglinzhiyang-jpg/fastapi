@@ -238,11 +238,19 @@ function makeStation({ id, name, wall, floor, destPlace, destName, bgm, transfer
     await g.say(`${destName}に到着した！`);
   }
   // The ticket gate. 無賃乗車 goes through ネオン街's shared api (js/world/kanraku.js, looked up when
-  // used): a clear warning, the ride, then the arrival gate decides (g.commitCrime('fare_evasion')).
+  // used): the odds card (crime.js g.crimeConfirm), the ride, then the arrival gate decides
+  // (g.commitCrime('fare_evasion')). In crime mode the choice already shows the odds.
   async function gate(g) {
     const api = PLACES.kanraku && PLACES.kanraku.api;
     if (!api) { await g.say(gateText); return; }
-    const k = await g.ask(gateText, ['もどる', 'きっぷなしで通る…'], { cancel: 0 });
+    let label = 'きっぷなしで通る…';
+    try {
+      if (typeof g.crimeMode === 'function' && g.crimeMode()) {
+        const o = g.crimeOdds('fare_evasion', { detect: 0.6 });
+        if (o && o.ok) label = `きっぷなし（成功${o.pct.success}%）`;
+      }
+    } catch (e) { console.error(e); }
+    const k = await g.ask(gateText, ['もどる', label], { cancel: 0 });
     if (k !== 1) return;
     await api.fareEvasion(g, {
       fare: FARE, dest: destName, inspected: true, // the 新幹線: the conductor checks tickets

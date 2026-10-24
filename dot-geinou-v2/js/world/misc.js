@@ -528,8 +528,9 @@ async function norenCheck(g) {
 
 // ---------------------------------------------------------------- 男湯・女湯 and the profile's gender
 // The player goes in on the side of their profile gender ('m' 男湯 / 'f' 女湯). The other side is
-// 建造物侵入罪 (刑法130条; js/engine/crime.js CRIMES.trespass_bath): one clear warning, then the core's
-// flow (screams in the lobby → the staff → the police → 取調べ → 送検 → 処分). Nothing of the bath is shown.
+// 建造物侵入罪 (刑法130条; js/engine/crime.js CRIMES.trespass_bath): the odds card (high, never certain),
+// then the core's flow when noticed (screams in the lobby → the staff → the police → 取調べ → 送検 → 処分) or, rarely,
+// back out unnoticed. Nothing of the bath is shown.
 // 'x' (ないしょ): no noren is forced on anyone — the 番台 offers the 貸切の家族風呂.
 const BATH_NAME = { m: '男湯', f: '女湯' };
 const genderOf = (g) => { const s = g.state.profile && g.state.profile.gender; return s === 'm' || s === 'f' ? s : 'x'; };
@@ -559,10 +560,11 @@ async function wrongNoren(g, side) {
     await g.say(`${bath}ののれんだ。\n自分が入るのは、${mine}のほう。`);
     return false;
   }
-  const k = await g.ask([
-    `（${bath}ののれんだ。自分が入るのは、${mine}のほう）\n${bath}に入れば「建造物侵入罪」。\nその場で通報され、逮捕されることになる。`,
-    `${bath}ののれんだ。本当に入る？`,
-  ], ['やめておく', '入る'], { cancel: 0 });
+  // the odds card (crime.js g.crimeConfirm): nearly always noticed at once, but never certain
+  const r = typeof g.crimeConfirm === 'function'
+    ? await g.crimeConfirm('trespass_bath', { side, where: `銭湯「ドットの湯」の${bath}` }, { title: `${bath}に入る`, text: `（${bath}ののれんだ。自分が入るのは、${mine}のほう）\n${bath}ののれんだ。本当に入る？`, yes: '入る', note: '中にいる人と番台の目がある（建造物侵入罪）' })
+    : { k: 0 };
+  const k = r.k;
   if (k !== 1) { await g.say(`（…${mine}は、${side === 'm' ? '右' : '左'}ののれんだ）`); return false; }
   return true;
 }
@@ -571,10 +573,14 @@ async function trespass(g, side) {
   await g.say(`（${BATH_NAME[side]}ののれんを、くぐってしまった――）`);
   await g.fadeOut(12);
   await g.fadeIn(1);
-  await g.commitCrime('trespass_bath', {
-    side, forceCaught: true, where: `銭湯「ドットの湯」の${BATH_NAME[side]}`,
+  const r = await g.commitCrime('trespass_bath', {
+    side, where: `銭湯「ドットの湯」の${BATH_NAME[side]}`,
     placeName: '銭湯 ドットの湯', okamiName: OKAMI.name, staffName: WAKA.name,
   });
+  // not noticed (rare): straight back out through the noren; nothing of the bath is shown or described
+  if (r && !r.caught && !(r.report && r.report.none)) {
+    await g.say(`（だれにも気づかれないうちに、${BATH_NAME[side]}ののれんの外へ戻った）`);
+  }
 }
 // 貸切の家族風呂: same price, a small tub of its own (once a day like the big bath).
 async function kashikiriOffer(g) {

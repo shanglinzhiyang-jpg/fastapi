@@ -221,7 +221,14 @@ async function playNew(g, rec, full) {
     S.set('hinadan', { title: '記念撮影', sub: '官邸の階段', figs: [...top, ...low, { look: lookOf(g, to.pm), x: SW / 2 - 32, y: 166, s: 2 }] });
     await say(g, ['新しい閣僚がそろって、官邸の階段で記念撮影。']);
     S.set('kaiken', { title: '総理大臣 記者会見', sub: '就任会見', figs: [{ look: lookOf(g, to.pm), x: SW / 2 - 32, y: 90 }] });
-    if (to.pm === 'player') {
+    if (to.pm === 'player' && typeof g.speechOptions === 'function' && typeof g.speak === 'function' && !g.auto) {
+      // round 4: the first words as PM are an attitude too (politics.js g.speak: 失言リスク, gaffe chain, good outcomes)
+      const O = g.speechOptions('kaiken', { topic: 'message', risky: false });
+      const i = await g.ask('「就任にあたって、国民の皆さんにひと言お願いします」', O.options.map((o) => `${o.name}（失言${o.risk}%）`), { name: '記者', cancel: 0 });
+      const o = O.options[i] || O.options[0];
+      const res = g.speak('kaiken', { topic: 'message', attitude: o.id, force: true });
+      if (res && res.ok) await say(g, [res.line, res.outcome === 'gaffe' ? `（会見場がざわついた。${res.reaction}）` : `（${res.reaction}）`]);
+    } else if (to.pm === 'player') {
       const i = await g.ask('「就任にあたって、国民の皆さんにひと言お願いします」', ['暮らしの不安に一つずつ応えると語る', '改革をやりとげると語る', '短く「全力で」とだけ言う'], { name: '記者', cancel: 2 });
       await say(g, [['暮らしの不安に一つひとつ応える政治をする、と語った。', 'しがらみをこえて改革をやりとげる、と語った。', '「全力でやります」…会見はあっさり終わった。'][i] || '会見を終えた。']);
       try { const p = polOf(g); if (p && p.me && i < 2) p.me.reputation = Math.min(100, num(p.me.reputation) + 1); } catch (e) { /* */ }

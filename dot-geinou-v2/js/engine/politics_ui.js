@@ -26,7 +26,7 @@
 import { Game } from './game.js';
 import * as POL from './politics.js';
 import { SW, SH, clamp, fmtMoney, eraPrice, shade, mix, makeCanvas, hash2, YEN_MARK } from './util.js';
-import { text, wrap, measure, COLORS, cursor, downArrow } from './draw.js';
+import { text, measure, COLORS, cursor, downArrow } from './draw.js';
 import { audio } from './audio.js';
 import { drawFaceHD, charSheetHD, LOOKS } from './sprites.js';
 import { drawLogo } from './logos.js';
@@ -62,23 +62,48 @@ function fit(c, s, w, size = 12) {
   while (a.length > 1 && measure(c, a.join('') + '…', size) > w) a.pop();
   return a.join('') + '…';
 }
-// wrap() with one more kinsoku rule: a line never starts with a closing mark or a small kana
-// (after a hung 「）」 the next 「。」 would otherwise open the following line)
-const NO_START = new Set('、。，．・：；？！ー～…‥）」』】〕〉》’”ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ!?.,)]}'.split(''));
-// The pass runs per paragraph, so a hard '\n' break (a 「・」 bullet, a 「…」 line) is never pulled
-// up onto the line above.
-function wrapJ(c, s, w, size) {
-  return String(s ?? '').split('\n').flatMap((par) => kinsoku(wrap(c, par, w, size)));
+// line breaking (kinsoku): a line never starts with a closing mark or a small kana
+const NO_START = new Set('、。，．・：；？！ー～…‥）」』】〕〉》’”ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ!?.,)]}%％'.split(''));
+const NO_END = new Set('（「『【〔〈《‘“([{'.split(''));
+// (round 4) the same token wrap as the 政府中枢 console (govt_ui.js): a number keeps its sign and unit together
+// (「2011年」「122.9兆円」「3分の2」 are never split), a closing mark never starts a line, an opening one never ends it.
+// The pass runs per paragraph, so a hard '\n' break (a 「・」 bullet, a 「…」 line) is never pulled up onto the line above.
+function wrapTokens(par) {
+  const out = [];
+  const re = /[+＋−±-]?[0-9０-９]+(?:[.,．][0-9０-９]+)*(?:分の[0-9０-９]+|[%％年月日歳人分万億兆円倍回本条号割度件票席点位代]+)?|[A-Za-z0-9.,:%/+\-#'’]+|\s+|./gu;
+  let m;
+  while ((m = re.exec(par))) out.push(m[0]);
+  return out;
 }
-function kinsoku(lines) {
-  const gone = new Set();
-  for (let i = 1; i < lines.length; i++) {
-    const a = Array.from(lines[i]);
-    let k = 0;
-    while (k < a.length && k < 2 && NO_START.has(a[k])) k++;
-    if (k && lines[i - 1] !== '') { lines[i - 1] += a.slice(0, k).join(''); lines[i] = a.slice(k).join(''); if (!lines[i]) gone.add(i); }
+function wrapJ(c, s, w, size) {
+  measure(c, '', size); // sets the font
+  const W = (x) => c.measureText(x).width;
+  const out = [];
+  for (const par of String(s ?? '').split('\n')) {
+    const toks = wrapTokens(par);
+    let line = '';
+    for (const t of toks) {
+      if (!line && /^\s+$/.test(t) && out.length) continue;
+      if (W(line + t) <= w || !line) {
+        if (!line && W(t) > w) { for (const ch of Array.from(t)) { if (line && W(line + ch) > w) { out.push(line); line = ''; } line += ch; } continue; }
+        line += t;
+        continue;
+      }
+      let carry = '';
+      if (Array.from(t).length === 1 && NO_START.has(t)) {
+        const a0 = Array.from(line);
+        let k = a0.length - 1;
+        while (k > 0 && NO_START.has(a0[k])) k--;
+        if (k > 0) { carry = a0.slice(k).join(''); line = a0.slice(0, k).join(''); } else { line += t; continue; }
+      }
+      while (line.length > 1 && NO_END.has(line[line.length - 1])) { carry = line[line.length - 1] + carry; line = line.slice(0, -1); }
+      out.push(line.replace(/\s+$/, ''));
+      line = carry + (/^\s+$/.test(t) ? '' : t);
+      if (W(line) > w) { const chars = Array.from(line); line = ''; for (const ch of chars) { if (line && W(line + ch) > w) { out.push(line); line = ''; } line += ch; } }
+    }
+    out.push(line.replace(/\s+$/, ''));
   }
-  return lines.filter((l, i) => !gone.has(i));
+  return out;
 }
 // wrapped paragraph; returns the y below it
 function para(c, s, x, y, w, size = 12, color = C.text, lh = size + 4, max = 99) {
@@ -774,6 +799,13 @@ function alerts(g) {
   if (p.cabinet.pending && p.cabinet.pending.kind === 'ncDeadline' && p.cabinet.pm === 'player') out.push({ text: '内閣不信任案が可決された！「解散」か「総辞職」を決める', color: C.bad, run: (ui) => ncDecision(ui) });
   for (const o of me.offers.filter((x) => !x.answered)) out.push({ text: o.kind === 'post' ? `総理から入閣の打診：「${postName(o.post, fy)}」` : `党役員の打診：「${postName(o.post, fy, o.party)}」`, color: C.gold, run: (ui) => offerFlow(ui, o) });
   if (uiData(g).queue.length) out.push({ text: '見ていない結果がある（開票速報・採決など）', color: C.cyan, run: (ui) => drainQueue(ui.g) });
+  // round 4: a gaffe of the player's that is still burning; the 復興担当大臣 after a major disaster
+  if (typeof g.gaffes === 'function') { const live = g.gaffes({ who: 'player', active: true }).filter((r) => num(r.heat) >= 20); if (live.length) out.push({ text: `発言が炎上中：${live[0].kindShort}（${live[0].stageName}）— 撤回・謝罪を決める`, color: C.bad, run: (ui) => SECTIONS.gaffes(ui, { id: live[0].id }) }); }
+  if (typeof g.fukko === 'function') {
+    const F = g.fukko();
+    if (F.active && F.canAppoint && !F.ministerName) out.push({ text: `${F.disaster.name}：${F.postName}を任命できる`, color: C.gold, run: (ui) => fukkoAppoint(ui) });
+    else if (F.active && F.isPlayer && F.works.some((w) => !w.why)) out.push({ text: `${F.disaster.name}の復興（進み具合 ${F.progress}%）：${F.postName}の仕事`, color: C.cyan, run: (ui) => SECTIONS.fukko(ui) });
+  }
   const e = p.elections.upcoming.find((x) => myDecl(x) && x.status !== 'done');
   if (e) {
     const left = e.day - today(g);
@@ -1659,21 +1691,30 @@ async function campaignCommand(ui, g, v, e, cmd) {
     const plan = v.plan.splice(0);
     let total = 0;
     const done = [];
+    let speechAtt = null; // round 4: the attitude of the day's 街頭演説 (chosen once, with its 失言リスク)
     for (const key of plan) {
       if (!findE(g, e.id)) break;
       let score = null;
+      if (key === '街頭演説' && !speechAtt && typeof g.speechOptions === 'function') {
+        const pk = await pickAttitude(ui, 'gaito', 'crowd', '街頭演説：どう訴える？');
+        speechAtt = pk ? pk.it.id : 'teinei';
+      }
       if (key === '討論会') {
         const ok = await ui.confirm({ title: '公開討論会', text: '候補者がそろって政策を語る公開討論会。司会や相手候補の問いに、具体的に答えよう。', choices: ['討論会にのぞむ'], tip: '公開討論会は、有権者が候補者を比べる大切な場' });
         void ok;
         const r = await g.minigame('talk', debateOpts());
         score = r ? r.score : 55;
       }
-      const r = await g.campaign(key, { electionId: e.id, score: score ?? 55 });
+      const r = await g.campaign(key, { electionId: e.id, score: score ?? 55, attitude: key === '街頭演説' ? speechAtt || undefined : undefined });
       if (!r) continue;
       if (!r.ok) { ui.toast(`${key}：${r.why}`, C.bad); continue; }
       total += num(r.pts);
       done.push(r);
       await ui.open(vignetteView(g, key, r));
+      if (r.speech && r.speech.ok && r.speech.outcome !== 'neutral') {
+        const k = await ui.open(speechResultView(g, r.speech, { title: key, extra: [`手ごたえ +${r.pts}`] }));
+        if (k === 'respond' && r.speech.gaffe) await SECTIONS.gaffes(ui, { id: r.speech.gaffe.id });
+      }
       if (r.illegal && r.crime && r.crime.caught) {
         await ui.alert('発覚', `${key}が発覚した…。選挙運動どころではない。`);
         if (!activeUI(g) || !findE(g, e.id)) return;
@@ -3136,7 +3177,7 @@ function dietView(g) {
       { id: 'policy', label: '政策をつくる・法案を出す', sub: isNational(me) || inCabinet(me) ? '議員立法・閣法' : '研究だけ（提出は議員から）' },
       // (2026-10 fix) the cabinet answers in the committees (国会で答弁); the no-confidence motion is the opposition's
       inCabinet(me)
-        ? { id: 'answer', label: '国会で答弁する', disabled: !S, why: '国会は閉会中', sub: '大臣として質問に答える・失言に注意' }
+        ? { id: 'answer', label: '国会で答弁する', disabled: !S, why: '国会は閉会中', sub: '大臣として質問に答える・態度を選ぶ（失言リスク）' }
         : { id: 'question', label: '委員会で質問する', disabled: !isNational(me) || !S, why: '国会議員が会期中にできる', sub: 'トークの力しだい・体力12' },
       (() => { const why = typeof g.noConfidenceBlock === 'function' ? g.noConfidenceBlock({}) : me.office !== 'shugi' || !S ? '衆議院議員が会期中に出せる' : null; return { id: 'nc', label: '内閣不信任案を出す', disabled: !!why, why, sub: why ? `出せない：${why}` : '賛成者50人・可決なら解散か総辞職' }; })(),
       { id: 'amend', label: '憲法改正', sub: '発議と国民投票のしくみ' },
@@ -3204,6 +3245,7 @@ async function dietCommand(ui, g, id) {
     await ui.alert('国会に出席', [`${p.me.office === 'sangi' ? '参議院' : '衆議院'}の本会議と委員会に出席した。`, bills.length ? `今日の審議：${bills.slice(0, 2).map((b) => billShort(b.title)).join('・')}${bills.length > 2 ? `ほか${bills.length - 2}本` : ''}` : attendQuiet(g), '党内の評価が少し上がった。']);
   } else if (id === 'bills') await SECTIONS.bills(ui);
   else if (id === 'policy') await SECTIONS.policy(ui);
+  else if (id === 'answer' && typeof g.speechOptions === 'function') await speechFlow(ui, { venue: 'toben', activity: '国会で答弁' });
   else if (id === 'question' || id === 'answer') {
     const kind = id === 'answer' ? '国会で答弁' : '委員会で質問';
     const r = g.activity(kind);
@@ -3238,7 +3280,7 @@ function cabinetCmds(g) {
     out.push({ id: 'trip', label: '外遊（首脳会談）', sub: '体力20・知名度と支持率' });
   } else if (inCabinet(me)) {
     out.push({ id: 'kakugi', label: '閣議に出る', sub: '体力3' });
-    out.push({ id: 'answer', label: '国会で答弁する', sub: '会期中・失言に注意' });
+    out.push({ id: 'answer', label: '国会で答弁する', sub: '会期中・態度を選ぶ（失言リスク）' });
     if (me.posts.includes('minister_finance')) out.push({ id: 'budget', label: '予算編成', sub: `${postName('minister_finance', fyOf(g))}として` });
     out.push({ id: 'quit', label: '大臣を辞める', labelColor: '#ffb0b8' });
   }
@@ -3246,6 +3288,11 @@ function cabinetCmds(g) {
     out.push(isRuling(p, pt.id) ? { id: 'leave', label: '連立から離れる', sub: '与党を抜けて野党に' } : { id: 'join', label: '連立に加わる', sub: '与党の一員になる' });
     out.push({ id: 'stance', label: '首班指名での方針', sub: { auto: 'おまかせ', accept: '連立に前向き', refuse: '連立しない' }[me.coalitionStance || 'auto'] });
   }
+  // round 4: the 復興担当大臣 after a major disaster, and the record of what was said
+  const F = typeof g.fukko === 'function' ? g.fukko() : null;
+  if (F && F.active && pm) out.push({ id: 'fukko_appoint', label: F.ministerName ? `${F.postName}を代える` : `${F.postName}を任命する`, labelColor: F.ministerName ? undefined : C.gold, sub: `${F.disaster.name}の復興・${F.ministerName ? `いま：${F.ministerName}` : 'まだ置いていない'}` });
+  if (F && (F.active || F.isPlayer)) out.push({ id: 'fukko', label: F.isPlayer ? '復興の仕事' : '復興の状況', labelColor: F.isPlayer ? C.cyan : undefined, sub: F.active ? `${F.disaster.name}・進み具合 ${F.progress}%` : '復興に区切りがついた' });
+  if (typeof g.gaffes === 'function') { const live = g.gaffes({ who: 'player', active: true }); out.push({ id: 'gaffes', label: '発言と失言', labelColor: live.length ? C.bad : undefined, sub: live.length ? `炎上中：${live[0].kindShort}（${live[0].stageName}）` : '自分とほかの政治家の失言の記録' }); }
   out.push({ id: 'amend', label: '憲法改正', sub: '発議と国民投票' });
   out.push({ id: 'chart', label: '支持率の推移', sub: '内閣と政党の支持率' });
   return out;
@@ -3265,8 +3312,10 @@ function cabinetView(g) {
         T(c, fit(c, it.name, 134, 12), x + 6, y + 1, 12, sel ? '#ffffff' : C.dim);
         const nm = it.who === 'player' ? playerName(g) : n ? n.name : '（空席）';
         R(c, x + 144, y + 3, 3, 10, n && n.civilian ? '#ffffff' : partyColor(p, it.who === 'player' ? p.me.party : n && n.party));
-        T(c, fit(c, nm, w - 160, 12), x + 151, y + 1, 12, it.who === 'player' ? C.gold : '#ffffff');
+        const pe = n && !n.civilian && typeof g.npcPersona === 'function' ? g.npcPersona(it.who) : null;
+        T(c, fit(c, nm, w - 160 - (pe || (n && n.civilian) ? 50 : 0), 12), x + 151, y + 1, 12, it.who === 'player' ? C.gold : '#ffffff');
         if (n && n.civilian) T(c, '民間', x + w - 4, y + 1, 12, C.cyan, 'right');
+        else if (pe) T(c, pe.name, x + w - 4, y + 1, 12, pe.mult >= 1.3 ? '#ffb0a0' : C.faint, 'right');
       } });
     },
     update(ui, inp) {
@@ -3312,6 +3361,10 @@ async function cabinetCommand(ui, g, id) {
   else if (id === 'budget') await SECTIONS.budget(ui);
   else if (id === 'amend') await SECTIONS.amendment(ui);
   else if (id === 'chart') await ui.open(approvalChartView(g));
+  else if (id === 'fukko') await SECTIONS.fukko(ui);
+  else if (id === 'fukko_appoint') await fukkoAppoint(ui);
+  else if (id === 'gaffes') await SECTIONS.gaffes(ui);
+  else if (id === 'answer') await speechFlow(ui, { venue: 'toben', activity: '国会で答弁' });
   else if (id === 'dissolve') {
     const k = await ui.confirm({ title: '衆議院の解散', danger: true, w: 460, text: '衆議院を解散して総選挙に打って出る？\nすべての衆議院議員がいったん職を失い、審議中の法案は廃案になる。\n解散から40日以内に総選挙（憲法54条）。', choices: ['解散しない', '解散する'], index: 0, cancel: 0, tip: '解散は「総理の専権事項」とも言われる大きな決断' });
     if (k !== 1) return;
@@ -3325,8 +3378,8 @@ async function cabinetCommand(ui, g, id) {
     if (k !== 1) return;
     const why = g.resignPM('総理の決断');
     await ui.alert('内閣総辞職', why || '内閣は総辞職した。おつかれさまでした。');
-  } else if (id === 'trip' || id === 'kakugi' || id === 'answer') {
-    const kind = { trip: '外遊', kakugi: '閣議に出る', answer: '国会で答弁' }[id];
+  } else if (id === 'trip' || id === 'kakugi') {
+    const kind = { trip: '外遊', kakugi: '閣議に出る' }[id];
     const r = g.activity(kind);
     if (!r.ok) { ui.toast(r.why, C.dim); return; }
     sfx(r.gaffe ? 'buzz' : 'good');
@@ -3396,7 +3449,7 @@ function ministerCandidates(g, post, choice) {
   const out = [{ id: 'player', label: `${playerName(g)}（兼務）`, sub: '総理大臣が自分で兼ねる', color: partyColor(p, p.me.party) }];
   const pool = Object.values(p.npcs).filter((n) => coalition.includes(n.party) && (n.office === 'shugi' || n.office === 'sangi') && !taken.has(n.id) && n.id !== p.cabinet.pm && !n.civilian)
     .sort((a, b) => b.wins - a.wins || b.traits.charisma - a.traits.charisma).slice(0, 30);
-  for (const n of pool) out.push({ id: n.id, label: n.name, sub: `${partyShort(g, n.party)}・${n.house === 'sangi' ? '参院' : '衆院'}当選${n.wins}回${n.faction ? `・${factionName(p, n.party, n.faction)}` : ''}`, color: partyColor(p, n.party), right: `力${n.traits.charisma} 清${n.traits.integrity}` });
+  for (const n of pool) { const pe = typeof g.npcPersona === 'function' ? g.npcPersona(n.id) : null; out.push({ id: n.id, label: n.name, sub: `${partyShort(g, n.party)}・${n.house === 'sangi' ? '参院' : '衆院'}当選${n.wins}回${pe ? `・人柄：${pe.name}` : ''}${n.faction ? `・${factionName(p, n.party, n.faction)}` : ''}`, color: partyColor(p, n.party), right: `力${n.traits.charisma} 清${n.traits.integrity}` }); }
   for (const pid of g.friends(2)) {
     if (!PEOPLE[pid] || taken.has('pf_' + pid)) continue;
     out.push({ id: 'pf_' + pid, person: pid, label: PEOPLE[pid].name, sub: `民間人（仲間・${['', '顔見知り', '友だち', '仲良し', '親友'][g.heartLevel(pid)] || ''}）`, color: '#ffffff', right: '民間' });
@@ -3901,12 +3954,14 @@ SECTIONS.activities = async (ui) => {
         const fx = [A.local ? '地元の支持' : null, A.rep ? '評判' : null, A.standing ? '党内の評価' : null, A.kouenkai ? '後援会' : null, A.fame ? '知名度' : null, A.approval ? '内閣支持率' : null].filter(Boolean);
         T(c, `効果：${fx.join('・') || '—'}`, r.x + 10, y, 12, C.good); y += 16;
         if (A.funds) { T(c, `費用 ${fmtMoney(A.funds)}`, r.x + 10, y, 12, C.dim); y += 16; }
-        if (A.gaffe) T(c, '失言に注意（トークの力が低いと危ない）', r.x + 10, y, 12, C.warn);
+        if (A.gaffe) T(c, A.speech ? '話し方（態度）を選ぶ。態度ごとに失言リスクが出る' : '失言に注意（トークの力が低いと危ない）', r.x + 10, y, 12, C.warn);
       },
       tip: () => '議員の仕事は、国会だけでなく地元の声を聞くことも大切',
     });
     if (i < 0) return;
     idx = i;
+    // round 4: speaking in public — choose the attitude (each with its 失言リスク) first
+    if (ACTIVITIES[kinds[i]].speech && typeof g.speechOptions === 'function') { await speechFlow(ui, { venue: ACTIVITIES[kinds[i]].speech, activity: kinds[i] }); continue; }
     const r = g.activity(kinds[i]);
     if (!r.ok) { ui.toast(r.why, C.dim); continue; }
     sfx(r.gaffe ? 'buzz' : 'good');
@@ -4208,3 +4263,345 @@ SECTIONS.news = async (ui) => {
   });
 };
 SECTIONS.cabinet = (ui) => ui.open(cabinetView(ui.g));
+
+// ================================================================ 発言・態度・失言 / 復興担当大臣 (round 4)
+// The attitude picker (each choice with its 失言リスク %), the result card, the gaffe record and its chain
+// (炎上 → 撤回 → 謝罪会見 → 野党の追及 → 問責・不信任 → 辞任・更迭), and the 復興 screen (the 復興担当大臣 / 復興大臣:
+// appointment by the PM, the minister's work). Reads only the core's g.* API (speechOptions / speak / gaffes /
+// gaffeOptions / gaffeRespond / npcPersona / fukko / fukkoCandidates / appointFukkoMinister / fukkoAction).
+//   g.politicsScreen('speech', { venue, topic?, activity? })  · 'gaffes' { id? } · 'fukko' · 'fukkoAppoint'
+const riskCol = (r) => (r < 5 ? C.good : r < 15 ? C.gold : r < 30 ? C.warn : C.bad);
+const has = (g, k) => typeof g[k] === 'function';
+// the picker: a list of attitudes (+ a 際どい一言 now and then) and the detail of the focused one
+function speechView(g, O, o = {}) {
+  const items = O.options || [];
+  const lb = new ListBox({ items, rowH: 25, drawRow: (c, it, x, y, w, rh, sel) => {
+    const col = riskCol(it.risk);
+    let lx = x + 8;
+    if (it.risky) { lx += pill(c, x + 6, y + 4, '際どい', '#8a3010') + 4; }
+    T(c, fit(c, it.risky ? it.name.replace(/^際どい一言：/, '') : it.name, w - (lx - x) - 96, 14), lx, y + 4, 14, sel ? '#ffffff' : C.text);
+    hbar(c, x + w - 88, y + 9, 46, 8, it.risk / 85, col);
+    T(c, `${it.risk}%`, x + w - 6, y + 5, 12, col, 'right');
+  } });
+  const v = {
+    title: o.title || `${O.venueName}：どう話す？`, lb,
+    hint: '↑↓ A:この態度で話す B:やめる',
+    tip: () => { const it = lb.current(); return it ? `失言リスク ${it.risk}%（${it.factors.map((f) => `${f.label}${f.v}`).join('・')}）` : ''; },
+    update(ui, inp) {
+      lb.move(inp);
+      if (inp.pressed('a')) { const it = lb.current(); if (!it) { sfx('buzz'); return; } sfx('ok'); ui.done(v, it); return; }
+      if (inp.pressed('b') || inp.pressed('menu')) { sfx('cancel'); ui.done(v, null); }
+    },
+    draw(c, ui) {
+      const p = polOf(g);
+      card(c, 6, 30, 300, 92, `${O.venueName}・${O.topicName}`, { accent: C.cyan });
+      T(c, fit(c, O.asker, 280, 12), 14, 50, 12, C.dim);
+      para(c, O.question, 14, 66, 284, 12, '#ffffff', 16, 3);
+      const md = Math.round(num(p.me.media));
+      card(c, 6, 126, 300, SH - 151, 'どう話す？', { right: `メディアの評価 ${md > 0 ? '+' : ''}${md}`, rightColor: md < -20 ? C.bad : md > 20 ? C.good : C.dim, rightW: 130 });
+      lb.draw(c, 8, 147, 296, SH - 176, true, ui.t);
+      const it = lb.current();
+      const x = 312, w = SW - 318;
+      card(c, x, 30, w, SH - 55, it ? (it.risky ? '際どい一言' : it.name) : '', { accent: it ? riskCol(it.risk) : C.gold });
+      if (!it) return;
+      let y = para(c, it.desc, x + 10, 50, w - 20, 12, C.text, 16, 3) + 4;
+      T(c, 'こう話す', x + 10, y, 12, C.gold); y += 16;
+      y = para(c, it.line, x + 14, y, w - 28, 12, '#ffffff', 16, 2) + 6;
+      T(c, '失言リスク', x + 10, y + 3, 12, C.dim);
+      T(c, `${it.risk}%`, x + 84, y - 1, 18, riskCol(it.risk));
+      hbar(c, x + 140, y + 5, w - 152, 10, it.risk / 85, riskCol(it.risk));
+      y += 24;
+      for (const f of it.factors.slice(0, 4)) { T(c, fit(c, f.label, w - 80, 12), x + 14, y, 12, C.dim); T(c, f.v, x + w - 10, y, 12, C.text, 'right'); y += 15; }
+      y += 3;
+      if (it.kinds && it.kinds.length) y = para(c, `失言になると：${it.kinds.join('・')}`, x + 10, y, w - 20, 12, '#ff9aa4', 15, 2) + 2;
+      if (it.good) T(c, fit(c, `うまくいけば：${it.good}`, w - 20, 12), x + 10, y, 12, C.good);
+    },
+  };
+  return v;
+}
+// the stages of a gaffe as boxes (reached = lit, the current one gold; the end tag after)
+function drawGaffePipe(c, x, y, w, r) {
+  const ST = [['enjo', '炎上'], ['tekkai', '撤回'], ['shazai', '謝罪会見'], ['tsuikyu', '野党追及'], ['ketsugi', '問責'], ['jinin', '辞任更迭']];
+  const bw = Math.floor((w - (ST.length - 1) * 3) / ST.length);
+  const size = bw >= 64 ? 12 : 10;
+  ST.forEach(([k, lab], i) => {
+    const bx = x + i * (bw + 3);
+    const on = !!(r.steps && r.steps[k]);
+    const cur = r.stage === k && !r.done;
+    frame(c, bx, y, bw, 18, cur ? '#5a3a0a' : on ? (k === 'jinin' ? '#5a1a20' : '#3a2030') : '#0c1230', cur ? C.gold : on ? '#ff7a6a' : C.edge);
+    T(c, fit(c, lab, bw - 4, size), bx + bw / 2, y + (size === 12 ? 2 : 3), size, cur ? C.gold : on ? '#ffd0c8' : C.faint, 'center');
+  });
+}
+function speechResultView(g, res, o = {}) {
+  const gaffe = res.outcome === 'gaffe';
+  const v = {
+    modal: false, title: o.title || `${res.venueName}の結果`, idx: 0,
+    hint: () => (gaffe && res.gaffe && res.gaffe.who === 'player' && !o.noRespond ? '↑↓ A:けってい' : 'A:OK'),
+    tip: () => (gaffe ? '失言は、撤回・謝罪のしかたで、その後の広がりが変わる' : res.outcome === 'good' ? '受けた言葉は、ファンや支持を広げる' : '無難な受け答えは、失点もしないかわりに目立たない'),
+    update(ui, inp) {
+      const two = gaffe && res.gaffe && res.gaffe.who === 'player' && !o.noRespond;
+      if (two && (inp.repeat('up') || inp.repeat('down') || inp.repeat('left') || inp.repeat('right'))) { v.idx = 1 - v.idx; sfx('cursor'); }
+      if (inp.pressed('a')) { sfx('ok'); ui.done(v, two && v.idx === 0 ? 'respond' : 'ok'); return; }
+      if (inp.pressed('b')) { sfx('cancel'); ui.done(v, 'ok'); }
+    },
+    draw(c, ui) {
+      const col = gaffe ? C.bad : res.outcome === 'good' ? C.good : C.gold;
+      card(c, 6, 30, SW - 12, SH - 55, `${res.venueName}・${res.topicName}`, { accent: col, right: `態度：${res.attName}（失言リスク ${res.risk}%）`, rightW: 300 });
+      // the words
+      paper(c, 20, 56, SW - 40, 76);
+      const lines = wrapJ(c, res.line, SW - 80, 14).slice(0, 3);
+      lines.forEach((l, i) => T(c, l, 36, 66 + i * 20, 14, C.ink));
+      // the verdict
+      const tag = gaffe ? `炎上：${res.gaffe ? (POL.GAFFE_KINDS[res.gaffe.kind] || {}).name || '失言' : '失言'}` : res.outcome === 'good' ? res.good.name : '無難';
+      let y = 142;
+      pill(c, 20, y, tag, gaffe ? '#8a1a24' : res.outcome === 'good' ? '#1a6a3a' : '#3a4066', '#ffffff', 14);
+      y += 24;
+      y = para(c, res.reaction, 24, y, SW - 60, 12, '#ffffff', 16, 2) + 4;
+      if (res.effects && res.effects.length) y = para(c, `→ ${res.effects.join('・')}`, 24, y, SW - 60, 12, gaffe ? '#ff9aa4' : C.good, 16, 2) + 4;
+      for (const ex of (o.extra || []).slice(0, 3)) { if (!ex) continue; y = para(c, ex, 24, y, SW - 60, 12, C.dim, 16, 2); }
+      if (gaffe && res.gaffe) {
+        const r = res.gaffe;
+        const gy = Math.max(y + 6, 248);
+        T(c, 'このあと', 24, gy, 12, C.gold);
+        drawGaffePipe(c, 90, gy - 2, SW - 120, r);
+        if (r.who === 'player' && !o.noRespond) {
+          ['撤回・謝罪など、対応を決める', 'あとで考える'].forEach((s, i) => {
+            const bx = 60 + i * 270, by = gy + 26;
+            const sel = v.idx === i;
+            frame(c, bx, by, 250, 22, sel ? shade(C.bad, -0.45) : '#1c2656', sel ? C.bad : C.edge);
+            T(c, fit(c, s, 230, 12), bx + 125, by + 4, 12, sel ? '#ffffff' : C.text, 'center');
+            if (sel) cursor(c, bx + 8, by + 7, ui.t, C.bad);
+          });
+        }
+      }
+    },
+  };
+  return v;
+}
+// pick an attitude (no speech yet): the chosen option or null
+async function pickAttitude(ui, venue, topic, title) {
+  const g = ui.g;
+  const O = g.speechOptions(venue, { topic });
+  const it = await ui.open(speechView(g, O, { title }));
+  return it ? { O, it } : null;
+}
+// speak at a venue (optionally as one of the 議員の活動: its checks first, its effects after)
+async function speechFlow(ui, o = {}) {
+  const g = ui.g;
+  if (!has(g, 'speechOptions')) { if (o.activity) { const r = g.activity(o.activity); await ui.alert(o.activity, r.ok ? r.text.split('\n') : r.why); } return null; }
+  const why = o.activity ? (has(g, 'activityBlock') ? g.activityBlock(o.activity) : null) : g.speechBlock(o.venue);
+  if (why) { sfx('buzz'); ui.toast(why, C.dim); return null; }
+  const pk = await pickAttitude(ui, o.venue, o.topic, o.title || (o.activity ? `${o.activity}：どう話す？` : null));
+  if (!pk) return null;
+  const res = g.speak(o.venue, { topic: pk.O.topic, attitude: pk.it.id, force: !!o.activity });
+  if (!res || !res.ok) { ui.toast((res && res.why) || '話せなかった', C.dim); return null; }
+  const extra = [];
+  if (o.activity) { const r = g.activity(o.activity, { score: res.score, speech: res }); if (r && r.ok) extra.push(r.text.split('\n')[0]); else if (r) extra.push(r.why); }
+  sfx(res.outcome === 'gaffe' ? 'buzz' : res.outcome === 'good' ? 'success' : 'good');
+  const k = await ui.open(speechResultView(g, res, { extra, title: o.activity || null }));
+  if (k === 'respond' && res.gaffe) await SECTIONS.gaffes(ui, { id: res.gaffe.id });
+  return res;
+}
+SECTIONS.speech = (ui, o = {}) => speechFlow(ui, { venue: o.venue || 'kaiken', topic: o.topic, activity: o.activity, title: o.title });
+// what to do about one's own gaffe
+async function gaffeRespondFlow(ui, rec) {
+  const g = ui.g;
+  const opts = g.gaffeOptions(rec.id);
+  const i = await ui.menu({
+    title: '発言への対応', listTitle: `${rec.kindShort}（${rec.done ? rec.outcomeName || '終了' : rec.stageName}）`, listW: 300, rowH: 34,
+    items: opts.map((x) => ({ label: x.name, sub: x.why || x.desc, disabled: !!x.why, why: x.why, labelColor: x.danger ? '#ffb0b8' : x.speech ? C.cyan : undefined })),
+    detail: (c, it, r, k) => {
+      const x = opts[k];
+      card(c, r.x, r.y, r.w, r.h, x ? x.name : '');
+      if (!x) return;
+      let y = para(c, x.desc, r.x + 10, r.y + 26, r.w - 20, 12, C.text, 16, 4) + 8;
+      if (x.speech) { y = para(c, 'つぎの画面で、態度（と失言リスク）を選ぶ。会見でまた失言すると、批判はさらに強まる。', r.x + 10, y, r.w - 20, 12, C.cyan, 16, 3) + 6; }
+      if (x.why) y = para(c, `いまはできない：${x.why}`, r.x + 10, y, r.w - 20, 12, C.dim, 16, 3) + 6;
+      T(c, `いまの批判の強さ ${Math.round(num(rec.heat))}／100`, r.x + 10, y, 12, C.dim); y += 16;
+      hbar(c, r.x + 10, y, r.w - 20, 8, num(rec.heat) / 100, num(rec.heat) >= 60 ? C.bad : C.warn);
+    },
+    tip: () => '撤回・謝罪は早いほど効く。開き直れば一部は喜ぶが、ふつうは長引く',
+  });
+  if (i < 0) return;
+  const x = opts[i];
+  let attitude = null;
+  if (x.speech) {
+    const pk = await pickAttitude(ui, x.id === 'shazai' ? 'shazai' : 'kaiken', 'gaffe', x.id === 'shazai' ? '謝罪会見：どう話す？' : '釈明：どう話す？');
+    if (!pk) return;
+    attitude = pk.it.id;
+  }
+  if (x.danger) {
+    const k = await ui.confirm({ title: x.name, danger: true, text: `${x.desc}\n本当に辞める？`, choices: ['やめておく', '辞める'], index: 0, cancel: 0 });
+    if (k !== 1) return;
+  }
+  const r = g.gaffeRespond(rec.id, x.id, { attitude });
+  if (!r || !r.ok) { sfx('buzz'); ui.toast((r && r.why) || 'できなかった', C.dim); return; }
+  if (r.speech) {
+    sfx(r.speech.outcome === 'gaffe' ? 'buzz' : 'good');
+    await ui.open(speechResultView(g, r.speech, { extra: String(r.text || '').split('\n').slice(1), title: x.name, noRespond: true }));
+  } else { sfx(x.id === 'tekkai' ? 'good' : x.danger ? 'drum' : 'buzz'); await ui.alert(x.name, String(r.text || '').split('\n')); }
+}
+// the record: the player's and the NPCs' gaffes (news), with the chain
+SECTIONS.gaffes = async (ui, o = {}) => {
+  const g = ui.g;
+  if (!has(g, 'gaffes')) { await ui.alert('発言と失言', '発言の記録のしくみが読み込まれていない。'); return; }
+  let idx = 0;
+  for (let guard = 0; guard < 40; guard++) {
+    const list = g.gaffes({ n: 30 }).sort((a, b) => (a.who === 'player' && !a.done ? 0 : 1) - (b.who === 'player' && !b.done ? 0 : 1) || b.day - a.day);
+    if (o.id) { const k = list.findIndex((r) => r.id === o.id); if (k >= 0) idx = k; o.id = null; }
+    const items = list.map((r) => ({
+      label: `${r.who === 'player' ? '★' : ''}${r.name}${r.title}`, sub: `${r.kindShort}・${r.venueName}`,
+      right: r.done ? r.outcomeName || '終了' : r.stageName, rightColor: r.done ? C.dim : C.bad,
+      color: r.done ? C.faint : num(r.heat) >= 60 ? C.bad : C.warn, labelColor: r.who === 'player' ? C.gold : undefined,
+    }));
+    const i = await ui.menu({
+      title: '発言と失言', listTitle: `記録（${items.length}件）`, listW: 280, rowH: 34, index: idx, items,
+      empty: 'まだ問題になった発言はない。記者会見・答弁・演説・テレビ・SNSでは、態度ごとの失言リスクが表示される',
+      detail: (c, it, r, k) => {
+        const rec = list[k];
+        card(c, r.x, r.y, r.w, r.h, rec ? `${rec.name}${rec.title}` : '発言の記録');
+        if (!rec) { para(c, '失言は「炎上 → 撤回 → 謝罪会見 → 野党の追及 → 問責・不信任 → 辞任・更迭」と進むことがある。早めの撤回と謝罪が、広がりを止める。', r.x + 10, r.y + 28, r.w - 20, 12, C.dim, 16, 6); return; }
+        let y = r.y + 24;
+        T(c, fit(c, `${dateLabel(g, rec.day)}・${rec.venueName}・${rec.kindName}`, r.w - 20, 12), r.x + 10, y, 12, C.dim); y += 18;
+        y = para(c, rec.desc ? `（${rec.line}）` : `「${rec.line}」`, r.x + 12, y, r.w - 24, 14, '#ffffff', 19, 3) + 6;
+        T(c, `批判の強さ ${Math.round(num(rec.heat))}（最大 ${Math.round(num(rec.peak))}）`, r.x + 10, y, 12, C.dim);
+        hbar(c, r.x + 200, y + 3, r.w - 212, 8, num(rec.heat) / 100, num(rec.heat) >= 60 ? C.bad : C.warn); y += 18;
+        drawGaffePipe(c, r.x + 8, y, r.w - 16, rec); y += 26;
+        if (rec.motion) { T(c, fit(c, `参院の問責決議案：${rec.motion.passed ? '可決' : '否決'}（賛成${rec.motion.yes}・反対${rec.motion.no}）`, r.w - 20, 12), r.x + 10, y, 12, rec.motion.passed ? C.bad : C.dim); y += 16; }
+        for (const l of rec.log.slice(-5).reverse()) { if (y > r.y + r.h - 34) break; y = para(c, `・${dateLabel(g, l.day).replace(/^\d+年/, '')} ${l.text}`, r.x + 10, y, r.w - 20, 12, C.text, 15, 2); }
+        if (rec.who === 'player' && !rec.done) T(c, 'A：撤回・謝罪・辞任など、対応を決める', r.x + 10, r.y + r.h - 22, 12, C.gold);
+        else if (rec.who !== 'player') { const pe = has(g, 'npcPersona') ? g.npcPersona(rec.who) : null; if (pe) T(c, fit(c, `人柄：${pe.name}（${pe.desc}）`, r.w - 20, 12), r.x + 10, r.y + r.h - 22, 12, C.cyan); }
+      },
+      tip: () => '新聞・テレビ・ネットで問題になった発言（自分と、ほかの政治家）',
+    });
+    if (i < 0) return;
+    idx = i;
+    const rec = list[i];
+    if (rec && rec.who === 'player' && !rec.done) await gaffeRespondFlow(ui, rec);
+    else ui.toast(rec && rec.who === 'player' ? 'この件は、もう終わった' : 'ほかの政治家の発言（ニュース）', C.dim);
+  }
+};
+
+// ---------------------------------------------------------------- 復興担当大臣
+async function fukkoAppoint(ui) {
+  const g = ui.g;
+  if (!has(g, 'fukko')) return;
+  const F = g.fukko();
+  const why = g.fukkoAppointBlock();
+  if (why) { await ui.alert('復興担当大臣', why); return; }
+  const cands = g.fukkoCandidates();
+  const items = [{ id: 'player', label: `${playerName(g)}（総理が兼務）`, sub: '自分で被災地を回る。仕事は増えるが、本気度は伝わる', right: '兼務', color: partyColor(polOf(g), polOf(g).me.party) },
+    ...cands.map((c) => ({ id: c.id, label: c.name, sub: `${c.partyName}・${c.house === 'sangi' ? '参院' : '衆院'}当選${c.wins}回・人柄：${c.personaName}`, right: `失言${c.gaffeRisk}`, rightColor: c.gaffeRisk === '高め' ? C.bad : c.gaffeRisk === '低め' ? C.good : C.dim, color: partyColor(polOf(g), c.party), c }))];
+  const i = await ui.menu({
+    title: `${F.postName}を任命する`, listTitle: F.disaster ? F.disaster.name : '', listW: 330, rowH: 34, items,
+    detail: (c, it, r) => {
+      card(c, r.x, r.y, r.w, r.h, F.title);
+      let y = para(c, F.note, r.x + 10, r.y + 26, r.w - 20, 12, C.dim, 16, 5) + 8;
+      if (!it) return;
+      T(c, fit(c, it.label, r.w - 20, 14), r.x + 10, y, 14, '#ffffff'); y += 20;
+      if (it.c) {
+        y = para(c, `人柄：${it.c.personaName}（${it.c.personaDesc}）`, r.x + 10, y, r.w - 20, 12, C.cyan, 16, 2) + 4;
+        y = para(c, `力${it.c.charisma}・清廉さ${it.c.integrity}。失言のリスク：${it.c.gaffeRisk}${it.c.gaffeRisk === '高め' ? '（被災地での失言は、内閣への打撃が大きい）' : ''}`, r.x + 10, y, r.w - 20, 12, C.text, 16, 3) + 4;
+      } else y = para(c, '総理が自分で兼ねる。被災地の視察や対話、復興計画を自分の手で進められる。', r.x + 10, y, r.w - 20, 12, C.text, 16, 3) + 4;
+      para(c, 'すばやい任命は「政府の本気度」として評価される。', r.x + 10, y + 4, r.w - 20, 12, C.good, 16, 2);
+    },
+    tip: () => '国務大臣は総理大臣が任命する（憲法68条）。数には内閣法の上限がある',
+  });
+  if (i < 0) return;
+  const r = g.appointFukkoMinister(items[i].id);
+  if (!r.ok) { sfx('buzz'); await ui.alert('任命', r.why); return; }
+  sfx('fanfare');
+  await ui.alert('任命', r.text.split('\n'));
+}
+function fukkoView(g) {
+  let st = null, stT = -99;
+  const S = (ui) => { if (!st || ui.t - stT > 20) { st = g.fukko(); stT = ui.t; } return st; };
+  const cmds = (ui) => {
+    const F = S(ui);
+    const out = [];
+    if (F.active && F.canAppoint) out.push({ id: 'appoint', label: F.ministerName ? `${F.postName}を代える` : `${F.postName}を任命する`, sub: F.ministerName ? `いま：${F.ministerName}` : 'まだ置いていない', labelColor: C.gold });
+    for (const w of F.works) out.push({ id: 'w:' + w.id, label: w.name, sub: w.why || `体力${w.stamina}${w.speech ? '・態度を選ぶ（失言に注意）' : ''}`, disabled: !!w.why, why: w.why, right: w.done ? `${w.done}回` : '' });
+    out.push({ id: 'gaffes', label: '発言と失言の記録', sub: '炎上・撤回・謝罪・問責…' });
+    return out;
+  };
+  const v = {
+    title: '復興', focus: 0,
+    hint: '↑↓ A:けってい B:もどる',
+    tip: () => { const it = v.lb && v.lb.current(); return it && it.id.startsWith('w:') ? '仕事は復興の進み具合・支持率・経済に効く。被災地での発言には特に気をつけたい' : '1995年は地震の3日後、2011年は6月に担当大臣。2012年に復興庁'; },
+    enter(ui) { v.lb = new ListBox({ items: () => cmds(ui), rowH: 30 }); },
+    update(ui, inp) {
+      v.lb.move(inp);
+      if (inp.pressed('b') || inp.pressed('menu')) { sfx('cancel'); ui.done(v, null); return; }
+      if (!inp.pressed('a')) return;
+      const it = v.lb.current();
+      if (!it) return;
+      if (it.disabled) { sfx('buzz'); ui.toast(it.why, C.dim); return; }
+      sfx('ok');
+      ui.act(async () => {
+        if (it.id === 'appoint') await fukkoAppoint(ui);
+        else if (it.id === 'gaffes') await SECTIONS.gaffes(ui);
+        else if (it.id.startsWith('w:')) await fukkoWorkFlow(ui, it.id.slice(2));
+        st = null;
+      });
+    },
+    draw(c, ui) {
+      const F = S(ui);
+      const D = F.disaster;
+      card(c, 6, 30, 300, 128, D ? `${D.name}${D.tier >= 3 ? '（甚大）' : ''}` : '復興', { accent: F.active ? C.warn : C.dim, right: F.active ? F.stageLabel : D ? '区切り' : '', rightW: 100 });
+      if (!D) para(c, 'いまは、復興を進めている大きな災害はない。大きな地震や津波などが起きると、総理は復興担当大臣を置くことができる。', 14, 54, 284, 12, C.dim, 16, 5);
+      else {
+        T(c, '復興の進み具合', 14, 52, 12, C.dim);
+        T(c, `${F.progress}%`, 298, 50, 14, F.progress >= 60 ? C.good : C.gold, 'right');
+        hbar(c, 14, 70, 284, 10, F.progress / 100, F.progress >= 60 ? C.good : C.gold);
+        R(c, 14, 88, 42, 42, '#0c1230');
+        const p = polOf(g);
+        if (F.minister) drawFaceHD(c, lookOf(g, p, F.minister), 15, 89, 1.3);
+        T(c, fit(c, `${F.postName}（${F.agency ? '復興庁' : '国務大臣・特命'}）`, 236, 12), 62, 88, 12, C.gold);
+        T(c, fit(c, F.ministerName ? `${F.ministerName}${F.isPlayer ? '（あなた）' : ''}` : F.noTanto ? '専任の担当大臣は置かれていない' : 'まだ任命されていない', 236, 14), 62, 104, 14, F.ministerName ? '#ffffff' : C.dim);
+        if (F.persona) T(c, fit(c, `人柄：${F.persona}`, 236, 12), 62, 122, 12, C.cyan);
+        else if (F.isPlayer) T(c, '被災地での発言には特に注意', 62, 122, 12, C.warn);
+      }
+      card(c, 6, 162, 300, SH - 187, 'できること');
+      v.lb.draw(c, 8, 183, 296, SH - 212, true, ui.t);
+      const x = 312, w = SW - 318;
+      const it = v.lb.current();
+      card(c, x, 30, w, SH - 55, it && it.id.startsWith('w:') ? it.label : '復興の記録');
+      if (it && it.id.startsWith('w:')) {
+        const W = F.works.find((q) => q.id === it.id.slice(2));
+        let y = para(c, W.desc, x + 10, 52, w - 20, 12, C.text, 16, 5) + 8;
+        T(c, `体力 ${W.stamina}${W.done ? `・これまで${W.done}回` : ''}`, x + 10, y, 12, C.dim); y += 18;
+        if (W.speech) { y = para(c, '被災地での発言は、そのまま報じられる。態度ごとに失言リスクが出る（冗談や本音は特に危ない）。', x + 10, y, w - 20, 12, C.warn, 16, 3) + 6; }
+        if (W.why) para(c, `いまはできない：${W.why}`, x + 10, y, w - 20, 12, C.dim, 16, 3);
+      } else {
+        let y = 52;
+        if (F.disaster) { y = para(c, `正式な職名：${F.title}`, x + 10, y, w - 20, 12, C.gold, 16, 2) + 4; }
+        y = para(c, F.note, x + 10, y, w - 20, 12, C.dim, 16, 4) + 8;
+        for (const l of (F.log || []).slice().reverse()) { if (y > SH - 50) break; y = para(c, `・${dateLabel(g, l.day).replace(/^\d+年/, '')} ${l.text}`, x + 10, y, w - 20, 12, C.text, 15, 2); }
+        if (!F.log.length && F.history.length) for (const h of F.history) { if (y > SH - 50) break; T(c, fit(c, `・${h.name}：進み具合 ${h.progress}%（${dateLabel(g, h.end).replace(/上旬|中旬|下旬/, '')}まで）`, w - 20, 12), x + 10, y, 12, C.text); y += 16; }
+      }
+    },
+  };
+  return v;
+}
+async function fukkoWorkFlow(ui, kind) {
+  const g = ui.g;
+  const F = g.fukko();
+  const W = F.works.find((q) => q.id === kind);
+  if (!W) return;
+  let attitude = null;
+  if (W.speech) {
+    const pk = await pickAttitude(ui, W.speech, kind === 'taiwa' ? 'victim' : 'disaster', `${W.name}：どう話す？`);
+    if (!pk) return;
+    attitude = pk.it.id;
+  }
+  const r = g.fukkoAction(kind, { attitude });
+  if (!r.ok) { sfx('buzz'); ui.toast(r.why, C.dim); return; }
+  if (r.speech) {
+    sfx(r.speech.outcome === 'gaffe' ? 'buzz' : 'good');
+    const lines = String(r.text || '').split('\n');
+    const k = await ui.open(speechResultView(g, r.speech, { title: W.name, extra: [lines[0], lines[lines.length - 1]] }));
+    if (k === 'respond' && r.speech.gaffe) await SECTIONS.gaffes(ui, { id: r.speech.gaffe.id });
+  } else { sfx('good'); await ui.alert(W.name, String(r.text || '').split('\n')); }
+}
+SECTIONS.fukko = (ui) => ui.open(fukkoView(ui.g));
+SECTIONS.fukkoAppoint = (ui) => fukkoAppoint(ui);

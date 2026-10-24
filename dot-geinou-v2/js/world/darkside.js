@@ -715,6 +715,12 @@ function correctReport(g) {
 }
 function scandalPol(g, kind, opts) { try { if (typeof g.politicalScandal === 'function') return g.politicalScandal(kind, opts); } catch (e) { console.error(e); } return null; }
 function sanction(g, level, info = {}) { try { return g.careerSanction(level, info); } catch (e) { console.error(e); return null; } }
+// The question before a crime, with the odds card (crime.js g.crimeConfirm): 0 = the first (refusing) choice.
+async function oddsAsk(g, id, ctx, opts) {
+  try { if (typeof g.crimeConfirm === 'function') return (await g.crimeConfirm(id, ctx, opts)).k; } catch (e) { console.error(e); }
+  return ask(g, null, opts.text || '（どうする…？）', [opts.no, opts.yes]);
+}
+const crimeOn = (g) => { try { return typeof g.crimeMode === 'function' && g.crimeMode(); } catch (e) { return false; } };
 async function commit(g, id, ctx = {}) {
   try { return await g.commitCrime(id, ctx); } catch (e) { console.error(e); return { caught: false, report: { none: true } }; }
 }
@@ -1347,7 +1353,7 @@ const EV = {
         // a word to the ministry (あっせん) is pol_benbi's later demand
         await say(g, WHO.shacho, ['先生、本日はありがとうございます。', '地元のバイパス工事の予算の件、\n国会の委員会で取り上げていただければ…。', 'これは、ほんの気持ちです。']);
         await narr(g, `（テーブルの上に、紙袋が置かれた。\n中には、現金${fmtMoney(amt)}…）`);
-        const k = await ask(g, null, `（受け取れば、収賄だ。\n${CRIMES.bribery_take.law(g).split('：')[0]}…）`, ['きっぱり断る', '受け取る']);
+        const k = await oddsAsk(g, 'bribery_take', { amount: amt, request: true, where: '料亭' }, { title: '紙袋を受け取る', text: '（どうする…？）', no: 'きっぱり断る', yes: '受け取る', reward: `現金 ${fmtMoney(amt)}` });
         if (k === 0) {
           await narr(g, ['（紙袋を押し返した。社長の顔から、笑みが消えた）', '（席を用意した地元の有力者の顔をつぶした形だ。\n地元の業者の一部は、対立候補の応援に回るだろう）']);
           polNudge(g, { local: -3, standing: -2, rep: 1 });
@@ -1363,7 +1369,7 @@ const EV = {
         const amt = 2000000;
         const S = open('office', { title: c.office === 'chiji' ? '知事室' : '区長室', sub: '来客', who: LK.shacho, poster: c.office === 'chiji' ? '都政' : '区政' });
         await say(g, WHO.aoba, ['来月の道路工事の入札の件ですが…。', '予定価格を、こっそり教えていただけませんか。\nもちろん、お礼はさせていただきます。']);
-        const k = await ask(g, null, '（入札の情報をもらすのは「官製談合」。\n見返りを受け取れば、収賄にもなる）', ['公正な入札を守る', '予定価格を教える']);
+        const k = await oddsAsk(g, 'bribery_take', { amount: amt, request: true, where: '役所の応接室' }, { title: '予定価格を教える', text: '（入札の情報をもらす「官製談合」。見返りは収賄）', no: '公正な入札を守る', yes: '予定価格を教える', reward: `お礼 ${fmtMoney(amt)}` });
         if (k === 0) {
           await narr(g, ['（「入札は公正にやります。お引き取りください」）', '（地元の業者の中には、不満をもらす人もいた）']);
           polNudge(g, { local: -4, rep: 2 });
@@ -1378,7 +1384,7 @@ const EV = {
       const crime = kuchikiCrime(g);
       const S = open('office', { title: '事務所', sub: '後援会の有力者が来た', who: LOOKS.oldman });
       await say(g, WHO.koenkai, ['いつも応援してるんだからさ。', '区の仕事が、うちの会社に回るよう、\n役所に口をきいてくれないか。お礼はするよ。']);
-      const k = await ask(g, null, '（口利きの見返りにお金をもらうのは、犯罪だ）', ['口利きは断る', '引き受ける']);
+      const k = await oddsAsk(g, crime, { amount: amt, request: true, where: '議員事務所' }, { title: '口利き', text: '（どうする…？）', no: '口利きは断る', yes: '引き受ける', reward: `お礼 ${fmtMoney(amt)}` });
       if (k === 0) {
         await narr(g, ['（「それは、できません」とはっきり断った）', '（有力者は、不機嫌そうに帰っていった。\n次の選挙では、応援してもらえないかもしれない）']);
         polNudge(g, { local: -3, rep: 1 });
@@ -1398,7 +1404,7 @@ const EV = {
       const S = open('phone', { title: 'くろがね建設からの電話', who: LK.shacho, rightBg: '#e8dfc8', rightFloor: '#cdbf86' });
       // 国土交通省 from 2001-01 (before: 建設省)
       await say(g, WHO.shacho, ['先生、委員会でのご質問、ありがとうございました。', `それで…今度は${c.year >= 2001 ? '国交省' : '建設省'}の担当の方に、\nうちが工事を取れるよう、ひと声かけていただけませんか。\nお礼は、別にいたします。`]);
-      const k = await ask(g, null, '（口をきいて見返りを受ければ、罪をかさねることになる…）', ['できないと断る', '役所に口をきく']);
+      const k = await oddsAsk(g, kuchikiCrime(g), { amount: 1000000, request: true, where: '議員会館' }, { title: '役所に口をきく', text: '（どうする…？）', no: 'できないと断る', yes: '役所に口をきく', reward: `成功報酬 ${fmtMoney(1000000)}` });
       if (k === 0) {
         await say(g, WHO.shacho, '…そうですか。先生とは、もう\n「持ちつ持たれつ」だと思っていましたがね。\nまあ、いいでしょう。覚えておきますよ。');
         g.addNeed('stress', 10);
@@ -1418,7 +1424,7 @@ const EV = {
       const amt = 3000000;
       const S = open('office', { title: '派閥の事務所', sub: '事務総長に呼ばれた', who: LK.kanbu, poster: '政策研究会' });
       await say(g, WHO.kanbu, ['パーティー券のノルマを超えた分は、\nそっちの事務所に戻しておく。', `今年は${fmtMoney(amt)}だ。`, '収支報告書には、書かなくていい。\nうちでは、昔からそうしてる。']);
-      const k = await ask(g, null, `（書かなければ「不記載」だ。\n${CRIMES.slush_fund.law(g).split('：')[0]}）`, ['全額を報告書に書く', '言われたとおりにする']);
+      const k = await oddsAsk(g, 'slush_fund', { amount: amt, where: '派閥の事務所' }, { title: '報告書に書かない', text: '（どうする…？）', no: '全額を報告書に書く', yes: '言われたとおりにする', reward: `キックバック ${fmtMoney(amt)}（裏金）` });
       if (k === 0) {
         await narr(g, ['（「全額、きちんと書かせていただきます」）', '（事務総長は、渋い顔をした。\n派閥の中で、少し浮いてしまったようだ…）']);
         polNudge(g, { standing: -6, rep: 1 });
@@ -1516,7 +1522,9 @@ const EV = {
       const amt = 300000;
       const S = open('phone', { title: '久しぶりの電話', who: LK.broker, rightBg: '#3a3436', rightFloor: '#2a2426' });
       await say(g, WHO.broker, ['久しぶり。いい話があるんだ。', 'ある会社の忘年会で、10分ネタをやってくれたら、\nギャラは現金で' + fmtMoney(amt) + '。', '事務所を通さなくていいから、気楽に来てよ。']);
-      const k = await ask(g, null, '（事務所を通さない「闇営業」だ…）', [c.agency ? '事務所に相談する' : '主催者を調べてみる', 'きっぱり断る', '引き受ける']);
+      const off = typeof g.showOdds === 'function' ? g.showOdds('antisocial_ties', { amount: amt }, { title: '闇営業', reward: `ギャラ ${fmtMoney(amt)}（現金）`, note: 'ばれれば、契約解除・番組降板（反社条項）' }) : () => {};
+      let k = 1;
+      try { k = await ask(g, null, '（事務所を通さない「闇営業」だ…）', [c.agency ? '事務所に相談する' : '主催者を調べてみる', 'きっぱり断る', '引き受ける']); } finally { off(); }
       if (k === 0) {
         const M = managerOf(c);
         S.set('phone', { title: c.agency ? '事務所' : '調べてみると…', who: M.look, rightBg: '#e8e8f0', rightFloor: '#9a9ea8' });
@@ -1588,8 +1596,8 @@ const EV = {
       }
       // before camera phones (about 2000) the 身分証 changed hands as a photocopy
       await say(g, who, [modern ? '身分証の写真を送って。\nあとは、指示どおりに動くだけ。' : '免許証のコピーを持ってこい。\nあとは、言われたとおりに運ぶだけだ。', '…やめたいなんて言ったら、どうなるか分かるよな？']);
-      await narr(g, modern ? '（これは、特殊詐欺の「受け子」だ…。\nお年寄りから、お金をだまし取る手伝いだ）' : '（中身は、盗品かもしれない…）');
-      const k2 = await ask(g, null, '（どうする…？）', ['断って警察に相談', '引き受ける']);
+      await narr(g, modern ? (crimeOn(g) ? `（${sagiWord(c.year)}の「受け子」の仕事だ）` : `（これは、${sagiWord(c.year)}の「受け子」だ…。\nお年寄りから、お金をだまし取る手伝いだ）`) : '（中身は、盗品かもしれない…）');
+      const k2 = await oddsAsk(g, crime, { amount: modern ? 2000000 : 500000, where: '駅前の待ち合わせ場所' }, { title: modern ? '受け子' : '荷物の運び', text: '（どうする…？）', no: '断って警察に相談', yes: '引き受ける', reward: `報酬 ${fmtMoney(pay)}` });
       if (k2 === 0) {
         S.hide();
         await narr(g, '（怖くなって、警察に相談した）');
@@ -1599,7 +1607,7 @@ const EV = {
       }
       S.hide();
       const r = await commit(g, crime, { amount: modern ? 2000000 : 500000, gain: { money: pay }, where: '駅前の待ち合わせ場所' });
-      if (!r.caught && free(g)) await narr(g, `（${fmtMoney(pay)}を受け取った。\n…自分のしたことが、頭から離れない）`);
+      if (!r.caught && free(g)) await narr(g, crimeOn(g) ? `（${fmtMoney(pay)}を受け取った。…次の仕事も、来るだろう）` : `（${fmtMoney(pay)}を受け取った。\n…自分のしたことが、頭から離れない）`);
       return { pick: 'accept', caught: !!r.caught };
     },
   },
@@ -1944,7 +1952,7 @@ async function scoopChoice(g, c, S, o) {
   }
   const cost = 1000000;
   await say(g, { name: '業界の裏に通じた男', look: LK.broker }, ['記事を止めたい？ 方法はあるよ。', `${fmtMoney(cost)}。出版社に顔のきく人を知ってる。`]);
-  const k2 = await ask(g, null, '（裏の人間に頼めば、弱みをにぎられる…）', ['やっぱりやめる', '金を渡す']);
+  const k2 = await oddsAsk(g, 'antisocial_ties', { amount: cost, where: '都内の喫茶店' }, { title: '記事を止める', text: '（裏の人間に頼めば、弱みをにぎられる…）', no: 'やっぱりやめる', yes: '金を渡す', reward: `費用 ${fmtMoney(cost)}` });
   if (k2 === 0 || st.money < cost) {
     if (k2 === 1) await narr(g, '（お金が足りない…）');
     await narr(g, '（記事は予定どおり出た。\n…正直に話しておけばよかった）');

@@ -75,7 +75,7 @@ const day = (g) => (g && g.state ? g.state.day : 1);
 const crimeName = (id) => (CRIMES[id] ? CRIMES[id].name : id);
 const POLITICAL_MONEY = new Set(['slush_fund', 'bribery_take', 'bribery_give', 'assen', 'assen_shuwai', 'tax_evasion']);
 const POST_INDICT = new Set(['indicted', 'trial', 'verdict_wait', 'appeal_wait', 'final']);
-const VICTIM_CRIMES = new Set(['shoplifting', 'robbery', 'assault', 'fraud_courier', 'traffic_injury', 'stolen_goods']);
+const VICTIM_CRIMES = new Set(['shoplifting', 'robbery', 'assault', 'fraud_courier', 'traffic_injury', 'stolen_goods', 'theft', 'extortion', 'fraud_caller', 'fence']);
 
 // The case a flow is about: the one in custody, else the open case furthest along.
 const STAGE_RANK = { final: 9, appeal_wait: 8, verdict_wait: 7, trial: 6, indicted: 5, kouryu: 4, police: 3, arrest: 2, zaitaku: 1 };
@@ -1231,6 +1231,24 @@ async function jishu(g, who) {
   JISHU = null;
 }
 
+// ---------------------------------------------------------------- 手配度 (crime mode) at the 警察署
+// Walking into the police station with a high 手配度 (★4〜, crime.js g.wanted): the officers have the player's
+// description. Now and then one of them recognises the face; the case for the most serious undetected offence is
+// pushed on (g.investigate → the arrest or a summons the core queues). Never certain; 自首 is still at the desk.
+async function wantedAtLobby(g) {
+  const j = jus(g);
+  if (!j || typeof g.wantedStars !== 'function' || j.status === 'detained' || j.status === 'prison') return;
+  const stars = g.wantedStars();
+  if (stars < 4 || fl(g).lobbySeen === day(g)) return;
+  fl(g).lobbySeen = day(g);
+  if (Math.random() >= 0.15 * (stars - 2)) return;
+  const ids = Object.keys(j.heat || {}).filter((id) => CRIMES[id] && CRIMES[id].kind === 'crime' && !j.heat[id].queued && !(j.cases || []).some((c) => !c.closed && c.crime === id));
+  if (!ids.length) return;
+  const id = ids.sort((a, b) => (CRIMES[b].severity || 0) - (CRIMES[a].severity || 0))[0];
+  await narrate(g, ['（受付の奥の刑事が、こちらをじっと見ている。\n…手配の写真と、見比べているようだ）', '（目をそらして、その場を離れた。…あの顔は、覚えられたかもしれない）']);
+  try { if (typeof g.investigate === 'function') await g.investigate(id, {}); } catch (e) { console.error(e); }
+}
+
 // ---------------------------------------------------------------- 遺失物
 // 遺失物法: 拾った物は警察へ。落とし主が見つかれば報労金（価格の5〜20%）。保管期間は3か月（2007年12月から。前は6か月）、
 // 過ぎれば拾った人のものに（カードなど個人情報の入った物は除く）。
@@ -1423,7 +1441,7 @@ registerPlace({
         { x: 15, y: 6, w: 3, on: 'action', cond: walletHere, run: foundWallet },
         { x: 2, y: 6, w: 3, on: 'action', run: async (g) => { await narrate(g, '待合のベンチだ。\n書類を書きながら、順番を待っている人がいる。'); } },
       ],
-      onEnter: (g) => { enteredByFlow(g, KEI, 'lobby'); },
+      onEnter: async (g) => { if (!enteredByFlow(g, KEI, 'lobby')) await wantedAtLobby(g); },
     },
 
     // -------------------------------------------------------------- 相談室（生活安全課）
