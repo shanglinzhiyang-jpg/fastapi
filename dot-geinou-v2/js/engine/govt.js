@@ -1461,9 +1461,19 @@ function revenueDetail(g, s, B) {
   for (const id of ['shotoku', 'hojin', 'sozoku', 'kihatsu', 'sake', 'tabako']) { out[id] = Math.max(0, num(sh[id]) * restBase + num(delta[id])); used += out[id]; }
   out.shohi = shohi;
   out.sonotazei = Math.max(0, tax - used - shohi);
+  // R5-C (world_trade.js): the change in 関税収入 since the historical level (追加関税・税率の変更) goes to その他の税; the baseline (~1兆円) is already in
+  // this item. The 国債 line takes the difference so the 歳入 still matches the 歳出.
+  // (g.tariffRevenue() reads g.budget() for the tax share, so a guard keeps it from calling back into this function)
+  let tdelta = 0;
+  if (!revenueDetail.busy && typeof g.tariffRevenue === 'function') {
+    revenueDetail.busy = true;
+    try { tdelta = num((g.tariffRevenue() || {}).delta); } catch (e) { tdelta = 0; } finally { revenueDetail.busy = false; }
+  }
+  const sono0 = out.sonotazei;
+  if (Math.abs(tdelta) > 0.0005) out.sonotazei = Math.max(0, sono0 + tdelta);
   const G2 = B.govt || {};
   out.zeigai = num(G2.nontax, num(B.spending) * 0.07);
-  out.kosai = num(B.deficit);
+  out.kosai = Math.max(0, num(B.deficit) - (out.sonotazei - sono0));
   for (const k of Object.keys(out)) out[k] = r2(out[k]);
   return out;
 }

@@ -559,6 +559,8 @@ async function phoneBank(g) {
   await g.say(r && r.ok ? ['ボランティアといっしょに、後援会の名簿に電話をかけた。', `「よろしくお願いします！」…手ごたえはあった。\n${effects(r)}`] : (r && r.why) || 'いまはできない。');
 }
 
+// the politics screens (党内・公約) are open to the player only when the UI is on (not in the headless tests)
+const hasPolScreen = (g, name) => typeof g.politicsScreen === 'function' && !(g.auto && !g.auto.polui) && (name !== 'manifesto' || typeof g.manifesto === 'function') && (name !== 'party' || typeof g.intra === 'function');
 // ------------------------------------------------------------------ 政務（政策）調査会
 async function seichoTalk(g, npc, hq) {
   G = g;
@@ -568,7 +570,8 @@ async function seichoTalk(g, npc, hq) {
   for (let guard = 0; guard < 4; guard++) {
     const items = ['党の公約を見る', '政策を提言する', '勉強会に出る', 'またね'];
     const i = await g.ask(`${seichoName(g, pt)}です。\n党の政策は、ここで議論して決めます。`, items, { cancel: items.length - 1, ...S });
-    if (i === 0) {
+    if (i === 0 && hasPolScreen(g, 'manifesto')) await g.politicsScreen('manifesto', { party: pt.id });
+    else if (i === 0) {
       const names = (pt.platform || []).filter((id) => POLICIES[id]).map((id) => `・${POLICIES[id].name.replace(/（[^）]*）/g, '').slice(0, 20)}`);
       const pages = [];
       for (let k = 0; k < names.length; k += 3) pages.push(names.slice(k, k + 3).join('\n'));
@@ -620,14 +623,15 @@ async function kanbuTalk(g, npc, hq) {
   for (let guard = 0; guard < 5; guard++) {
     const offers = p.me.offers.filter((o) => !o.answered && o.kind === 'partyPost' && o.party === pt.id);
     const sosai = (() => { try { return g.upcomingElections().find((e) => e.kind === 'sosaisen' && e.party === pt.id); } catch (e) { return null; } })();
-    const items = ['党内の評価を聞く', '派閥・グループ', offers.length ? `役職の打診（${offers.length}）` : null, sosai ? `${leaderTitle(pt)}選に出る` : null, 'またね'].filter(Boolean);
+    const items = ['党内の評価を聞く', hasPolScreen(g, 'party') ? '党内の動き' : null, '派閥・グループ', offers.length ? `役職の打診（${offers.length}）` : null, sosai ? `${leaderTitle(pt)}選に出る` : null, 'またね'].filter(Boolean);
     const i = await g.ask(`${pt.name}の${kanbuName(pt)}だ。`, items, { cancel: items.length - 1, ...S });
     const pick = items[i];
     if (pick === '党内の評価を聞く') {
       const st = Math.round(Number(p.me.standing) || 0);
       const word = st >= 70 ? '党の中心のひとりだ' : st >= 45 ? '期待されている' : st >= 25 ? 'まだ様子を見られている' : '信頼を取りもどす必要がある';
       await g.say([`党内での君の評価は…${word}。（${st}）`, '国会への出席、勉強会、選挙の勝ち負け。\nそういう積み重ねが、評価になるんだ。'], S);
-    } else if (pick === '派閥・グループ') await factionMenu(g, pt, S);
+    } else if (pick === '党内の動き') await g.politicsScreen('party', { party: pt.id });
+    else if (pick === '派閥・グループ') await factionMenu(g, pt, S);
     else if (pick && pick.startsWith('役職の打診')) {
       const o = offers[0];
       const j = await g.ask(`${pt.name}の${postName(o.post, fyOf(g), pt.id)}をお願いしたい。\n引き受けてくれるか？`, ['引き受ける', 'ことわる'], { cancel: 1, ...S });
@@ -672,10 +676,11 @@ async function leaderDesk(g, hq) {
   for (let guard = 0; guard < 8; guard++) {
     // the leader's own re-election (党首選) when one is scheduled
     const sosai = (() => { try { return g.upcomingElections().find((e) => e.kind === 'sosaisen' && e.party === pt.id && !e.declared); } catch (e) { return null; } })();
-    const items = ['党の状況', '議員を勧誘する', '党役員を任命', '党の資金', '公約を見直す', '連立の方針', 'もどる'];
-    if (sosai) items.splice(6, 0, `${leaderTitle(pt)}選に出る`);
+    const items = ['党の状況', '議員を勧誘する', '党役員を任命', '党の資金', '公約を見直す', '連立の方針', ...(hasPolScreen(g, 'party') ? ['党内の動き'] : []), 'もどる'];
+    const sIdx = items.length - 1;
+    if (sosai) items.splice(sIdx, 0, `${leaderTitle(pt)}選に出る`);
     const i = await g.ask(`${pt.name}の${pt.isPlayers ? '党首室' : `${leaderTitle(pt)}の机`}。\n${leaderTitle(pt)}として、何をする？`, items, { cancel: items.length - 1 });
-    if (sosai && i === 6) {
+    if (sosai && i === sIdx) {
       const w = g.declareCandidacy(sosai.id, {});
       await g.say(w || [`${leaderTitle(pt)}選に立候補した！`, `${sosai.date}の投票で決まる。\n議員と党員の票を集めよう。`]);
       if (g.auto) return;
@@ -698,7 +703,7 @@ async function leaderDesk(g, hq) {
       if (j !== 0) continue;
       const w = g.transferPartyFunds(Math.round(1000000 / rate()));
       await g.say(w || `${fmtMoney(Math.round(1000000 / rate()))}を政治資金に移した。`);
-    } else if (i === 4) await platformMenu(g, pt);
+    } else if (i === 4) { if (hasPolScreen(g, 'manifesto')) await g.politicsScreen('manifesto', { party: pt.id }); else await platformMenu(g, pt); }
     else if (i === 5) {
       if ((p.cabinet.partyIds || [])[0] === pt.id) { await g.say(['あなたの党が、いまの政権の中心だ。', '連立の相手は、総理が組閣や内閣改造のときに決める。']); if (g.auto) return; continue; }
       const ruling = (p.cabinet.partyIds || []).includes(pt.id);
@@ -709,7 +714,8 @@ async function leaderDesk(g, hq) {
       else if (!ruling && j === 1) w = g.setCoalitionStance('refuse') || '連立の誘いは断る方針にした。';
       else if (!ruling && j === 2) w = g.setCoalitionStance('auto') || '連立は、状況しだいで考えることにした。';
       if (w) await g.say(w);
-    } else return;
+    } else if (items[i] === '党内の動き') await g.politicsScreen('party', { party: pt.id });
+    else return;
     if (g.auto) return;
   }
 }

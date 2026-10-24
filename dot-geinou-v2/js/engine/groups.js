@@ -824,14 +824,14 @@ AD('coopt', {
   voices: () => ({ pro: ['「政策づくりに現場の声が入るのはよいこと」（団体幹部）', '「顕彰は長年の功績への敬意だ」（支持者）'], con: ['「身内を固めて批判を封じる『御用化』だ」（野党）', '「ポストと引き換えの取り込みではないか」（記者）'] }),
 });
 AD('bribe', {
-  name: '買収する（金品・便宜の提供）', short: '買収', kind: 'dark', desc: '代表にお金や便宜を渡して、味方につける。受け取るかどうかは相手しだい。違法で、露見すれば捜査・失脚につながる。',
+  name: '買収する（金品・便宜）', short: '買収', kind: 'dark', desc: '代表にお金や便宜を渡して、味方につける。受け取るかどうかは相手しだい。違法で、露見すれば捜査・失脚につながる。',
   who: (c) => (c.role.kind === 'citizen' && !c.role.ent ? 'まとまったお金を動かせる立場が必要' : null),
   options: () => [{ key: 'b1', tier: 0, label: '「ご挨拶」程度（100万円）' }, { key: 'b2', tier: 1, label: 'まとまった額（500万円）' }, { key: 'b3', tier: 2, label: '大金と便宜（2,000万円）' }],
   cost: (c) => ({ funds: [1000000, 5000000, 20000000][tierOf(c.opt)], stamina: 6 }), cd: 25,
   odds: (c) => clamp(0.4 + persona(c.grp, 'bribe') + 0.2 * (num(c.grp.cap) / 100) + 0.12 * tierOf(c.opt) - 0.15 * (c.def.cred ? c.grp.x.cred / 100 : 0) - 0.25 * (c.def.domain === 'seifu' ? 1 : 0) - 0.15 * (num(c.grp.s) > 40 ? 1 : 0), 0.04, 0.88),
   win: (c) => { const t = tierOf(c.opt); return { sup: [14, 22, 32][t], an: -[12, 20, 30][t], ap: 0.1, coll: [4, 8, 14][t], bribed: true, cred: c.grp.x.cred != null ? -[5, 9, 14][t] : 0 }; },
   lose: (c) => { const t = tierOf(c.opt); return { sup: -[14, 20, 28][t], an: [20, 28, 36][t], scandal: roll(0.55 + 0.1 * t) ? 2.5 + t : 0, scandalText: '団体の代表への金品の提供が表に出た', griev: ['bribe', '金品を示されたことに怒っている', 40] }; },
-  lines: (c) => { const id = bribeCrime(c.g, c.def); const o = id && has(c.g, 'crimeOddsLine') ? safe(() => c.g.crimeOddsLine(id, { amount: c.cost.funds }), null) : null; return [`相手が受け取る見込み：${Math.round(ACTIONS.bribe.odds(c) * 100)}%`, o ? `捜査当局に発覚する見込み（${CRIME_NAME[id]}）：${o}` : '発覚のリスクがある（捜査・失脚）', '受け取られなければ、相手が公表することもある']; },
+  lines: (c) => { const id = bribeCrime(c.g, c.def); const o = id && has(c.g, 'crimeOdds') ? safe(() => c.g.crimeOdds(id, { amount: c.cost.funds }), null) : null; return [`相手が受け取る見込み：${Math.round(ACTIONS.bribe.odds(c) * 100)}%`, o && o.pct ? `${CRIME_NAME[id]}の罪に問われる見込み：発覚しない${o.pct.success}%・その場で${o.pct.now}%・あとで${o.pct.later}%` : '発覚のリスクがある（捜査・失脚）', '受け取られなければ、相手が公表することもある']; },
   voices: () => ({ pro: ['「政治は綺麗事では回らない」（一部の関係者）'], con: ['「贈賄・買収は犯罪。民主主義への裏切りだ」（弁護士・有識者）', '「発覚すれば政治生命は終わる」（与党幹部）'] }),
 });
 const CRIME_NAME = { bribery_give: '贈賄', vote_buying: '買収（選挙）', slush_fund: '政治資金規正法違反' };
@@ -843,7 +843,7 @@ function bribeCrime(g, def) {
   return near ? 'vote_buying' : 'slush_fund';
 }
 AD('crackdown', {
-  name: '弾圧する（活動の禁止・摘発）', short: '弾圧', kind: 'dark', desc: '捜査・摘発・活動の禁止で、団体の力をそぐ。民主主義の体制では裁判所・国会・世論が強く反発し、失敗しやすい。非常時・独裁では歯止めが弱い。',
+  name: '弾圧する（禁止・摘発）', short: '弾圧', kind: 'dark', desc: '捜査・摘発・活動の禁止で、団体の力をそぐ。民主主義の体制では裁判所・国会・世論が強く反発し、失敗しやすい。非常時・独裁では歯止めが弱い。',
   who: (c) => (c.role.pm ? null : c.role.kind === 'minister' && (ctrlOf(c) === 'full') ? null : `弾圧を命じられるのは、総理か担当の大臣（${ministerOf(c.g, c.def.domain)}）`),
   options: (c) => [{ key: 'probe', label: '捜査・立入検査・税務調査で締めつける' }, { key: 'ban', label: '活動を禁止し、団体を解散させる' }, ...(isDemocracy(c.g) ? [] : [{ key: 'detain', label: '幹部を拘束し、運動を壊滅させる' }])],
   cost: () => ({ stamina: 12 }), cd: 30,
@@ -854,7 +854,7 @@ AD('crackdown', {
   voices: () => ({ pro: ['「違法な活動や過激化は取り締まるべきだ」（治安を重視する声）', '「秩序を乱す集団には毅然と対応を」（支持者）'], con: ['「結社・表現の自由を奪う行為。独裁への一歩だ」（弁護士会）', '「地下に潜り、かえって過激になる」（研究者）'] }),
 });
 AD('donate', {
-  name: '寄付・支援する（自分のお金）', short: '寄付', kind: 'self', desc: '自分のお金で団体の活動を支える。応援の気持ちは伝わる。',
+  name: '寄付・支援する', short: '寄付', kind: 'self', desc: '自分のお金で団体の活動を支える。応援の気持ちは伝わる。',
   who: () => null,
   options: () => [{ key: 'd0', tier: 0, label: '少額（3万円）' }, { key: 'd1', tier: 1, label: 'ふつう（20万円）' }, { key: 'd2', tier: 2, label: '大口（100万円）' }],
   cost: (c) => ({ money: [30000, 200000, 1000000][tierOf(c.opt)] }), cd: 6,
@@ -1577,7 +1577,7 @@ export const SITE_KINDS = {
   onsen: { name: '温泉地', base: 60, fr: 1.0, frag: 0.3, culture: 0.3, season: [0.2, 0.0], cost: 1 },
   jokamachi: { name: '城下町・歴史の町', base: 55, fr: 1.4, frag: 0.4, culture: 0.8, season: [0.15, 0.3], cost: 1.1 },
   shizen: { name: '自然・絶景', base: 45, fr: 1.2, frag: 0.9, culture: 0.1, season: [0.35, 0.6], cost: 0.9 },
-  isan: { name: '文化遺産の町（世界遺産候補）', base: 40, fr: 1.8, frag: 0.7, culture: 1.0, season: [0.15, 0.3], cost: 1.3 },
+  isan: { name: '文化遺産の町', base: 40, fr: 1.8, frag: 0.7, culture: 1.0, season: [0.15, 0.3], cost: 1.3 },
   theme: { name: 'リゾート・テーマパーク', base: 90, fr: 0.9, frag: 0.2, culture: 0.0, season: [0.2, 0.0], cost: 2.2 },
   minato: { name: '港町・グルメの町', base: 55, fr: 1.0, frag: 0.3, culture: 0.3, season: [0.1, 0.1], cost: 0.9 },
   rito: { name: '離島', base: 28, fr: 0.8, frag: 1.0, culture: 0.2, season: [0.5, 0.5], cost: 1.4 },
@@ -1630,10 +1630,20 @@ function newSiteCandidate(g, s, kind) {
   const pot = clamp(r0(35 + rnd() * 50 + (K.culture > 0.6 ? 5 : 0)), 30, 92);
   return { id: `s${s.siteSeq++}`, name: siteName(kind, used), kind, region: reg, x: clamp(R.x + (rnd() - 0.5) * 0.12, 0.04, 0.96), y: clamp(R.y + (rnd() - 0.5) * 0.1, 0.05, 0.95), pot, status: 'candidate', since: 0, infra: 10 + rint(0, 20), promo: 5, culture: r0(K.culture * 70 + rnd() * 20), vis: 0, fr: 0, inc: 0, sat: 60, crowd: 0, local: 55 + rint(-15, 15), gov: 40, env: 85, debt: 0, buzz: 5, owner: 'npc', pend: [], whl: { stage: 'none', until: 0 }, scandals: 0, dereg: 0, crowdCtl: 0, log: [], hist: [] };
 }
+// the derived numbers of a site (foreign share, crowding, satisfaction, income) from its visitors
+function siteRecalc(g, x) {
+  const d = gdate(g);
+  x.fr = r2(frNow(g, x));
+  x.crowd = clamp(r0((x.vis / siteCapacity(x)) * 70), 0, 100);
+  x.sat = clamp(r0(78 - Math.max(0, x.crowd - 60) * 0.9 + x.infra * 0.12 - x.scandals * 2), 5, 100);
+  const spend = 9000 + 6500 * clamp((d.year - 1987) / 39, 0, 1.2) + 4000 * x.fr;
+  x.inc = r1((x.vis * 1000 * spend * 0.55) / 1e8);
+}
 function initTourism(g, s) {
   for (let i = 0; i < 3; i++) {
     const c = newSiteCandidate(g, s);
     c.status = 'designated'; c.since = -200 + i * 40; c.infra += 25; c.promo += 15; c.vis = r1(siteBase(g, c) * 0.5); c.owner = 'npc'; c.local = 60;
+    siteRecalc(g, c);
     s.sites.push(c);
   }
   for (let i = 0; i < 3; i++) s.cands.push(newSiteCandidate(g, s));
@@ -1650,7 +1660,7 @@ function siteBase(g, x) {
   const p = polOf(g);
   const eco = p && p.economy ? clamp(1 + (num(p.economy.growth, 1) - 1) * 0.04, 0.85, 1.12) : 1;
   const boost = num(S(g).flags.eventBoostUntil) >= today(g) ? 1.15 : 1;
-  return K.base * attract * 2.4 * ((1 - fr) * eco + fr * inbound * 2.6) * seasonal * boost;
+  return K.base * attract * 1.5 * ((1 - fr) * eco + fr * inbound * 1.6) * seasonal * boost;
 }
 function frNow(g, x) {
   const t = gdate(g).t;
@@ -1687,12 +1697,7 @@ function tourismMonthly(g, s) {
     x.buzz = clamp(x.buzz * 0.9, 0, 100);
     const target = siteBase(g, x) * (x.dereg ? 1 + 0.08 * x.dereg : 1) * (x.crowdCtl ? 1 - 0.06 * x.crowdCtl : 1) * (x.crowd >= 85 ? 0.88 : 1);
     x.vis = r1(x.vis + (target - x.vis) * 0.4);
-    x.fr = r2(frNow(g, x));
-    const cap = siteCapacity(x);
-    x.crowd = clamp(r0((x.vis / cap) * 70), 0, 100);
-    x.sat = clamp(r0(78 - Math.max(0, x.crowd - 60) * 0.9 + x.infra * 0.12 - x.scandals * 2), 5, 100);
-    const spend = 9000 + 6500 * clamp((d.year - 1987) / 39, 0, 1.2) + 4000 * x.fr; // 円・一人あたり（目安）
-    x.inc = r1((x.vis * 1000 * spend * 0.55) / 1e8);
+    siteRecalc(g, x);
     x.local = clamp(x.local + (x.inc > 2 ? 0.8 : 0.2) - (x.crowd > 75 ? 2.2 : 0) - (x.dereg ? 0.8 * x.dereg : 0) + (x.crowdCtl ? 0.8 * x.crowdCtl : 0) + (x.gov - 40) / 80, 5, 100);
     x.env = clamp(x.env + (x.crowd > 80 ? -1.5 : 0.25) - SITE_KINDS[x.kind].frag * (x.crowd > 70 ? 0.8 : 0), 5, 100);
     x.gov = clamp(x.gov - 0.5, 0, 100);
@@ -1821,7 +1826,7 @@ export function siteAct(g, id, kind, opts = {}) {
   if (kind === 'designate') {
     if (ok) {
       s.cands = s.cands.filter((q) => q.id !== id);
-      x.status = 'designated'; x.owner = 'player'; x.since = today(g); x.vis = r1(siteBase(g, x) * 0.4); x.local = clamp(x.local + 6, 0, 100); x.gov = clamp(x.gov + 20, 0, 100);
+      x.status = 'designated'; x.owner = 'player'; x.since = today(g); x.vis = r1(siteBase(g, x) * 0.4); siteRecalc(g, x); x.local = clamp(x.local + 6, 0, 100); x.gov = clamp(x.gov + 20, 0, 100);
       s.sites.push(x);
       text = `${x.name}を観光地に指定した。整備と宣伝で、訪れる人を増やそう。`;
       fx = { sup: 5, an: -4, ap: 0.2, seg: { selfemployed: 0.5, rural: 0.5 } };
@@ -2301,12 +2306,12 @@ export function backingList(g) { return Object.entries(S(g).backing).filter(([, 
 
 // ================================================================ スポーツ: 大会誘致 (bids)
 export const BID_TYPES = {
-  olympic_s: { name: '夏季オリンピック', decide: 150, prep: 330, cost: 600, rival: 0.55, ap: 2.4, hold: '開幕' },
-  olympic_w: { name: '冬季オリンピック', decide: 130, prep: 270, cost: 350, rival: 0.5, ap: 1.8, hold: '開幕' },
-  expo: { name: '万国博覧会（万博）', decide: 100, prep: 240, cost: 500, rival: 0.45, ap: 1.8, hold: '開幕' },
-  worldcup: { name: 'サッカー・ワールドカップ（共催）', decide: 90, prep: 240, cost: 250, rival: 0.4, ap: 1.4, hold: '開幕' },
-  asiad: { name: 'アジア競技大会', decide: 70, prep: 180, cost: 180, rival: 0.35, ap: 0.9, hold: '開幕' },
-  kokutai: { name: '国民体育大会（国スポ）', decide: 40, prep: 100, cost: 60, rival: 0.05, ap: 0.5, hold: '開会' },
+  olympic_s: { name: '夏季オリンピック', decide: 150, prep: 330, cost: 9000, rival: 0.55, ap: 2.4, hold: '開幕' },
+  olympic_w: { name: '冬季オリンピック', decide: 130, prep: 270, cost: 5000, rival: 0.5, ap: 1.8, hold: '開幕' },
+  expo: { name: '万国博覧会（万博）', decide: 100, prep: 240, cost: 2500, rival: 0.45, ap: 1.8, hold: '開幕' },
+  worldcup: { name: 'サッカー・ワールドカップ（共催）', decide: 90, prep: 240, cost: 3000, rival: 0.4, ap: 1.4, hold: '開幕' },
+  asiad: { name: 'アジア競技大会', decide: 70, prep: 180, cost: 1500, rival: 0.35, ap: 0.9, hold: '開幕' },
+  kokutai: { name: '国民体育大会（国スポ）', decide: 40, prep: 100, cost: 500, rival: 0.05, ap: 0.5, hold: '開会' },
 };
 export const BID_ORDER = Object.keys(BID_TYPES);
 const HOSTS = ['ドット湾岸市', '星ヶ丘市', '桜浜市', '緑川市', 'ドット区とその周辺'];
@@ -2325,7 +2330,7 @@ export function bidPreview(g, type) {
   if (!T) return { ok: false, why: 'そのような大会はない' };
   const s = S(g), role = groupsRole(g);
   const ctrl = role.pm || (role.kind === 'minister' && domainControl(role, 'sports') === 'full') || role.kind === 'local';
-  const cost = { gov: r0(T.cost * 0.06 * scaleOf(g) * (role.kind === 'local' ? 0.3 : 1)), stamina: 10 };
+  const cost = { gov: r0(T.cost * 0.0016 * scaleOf(g) * (role.kind === 'local' ? 0.3 : 1)), stamina: 10 };
   let why = ctrl ? null : `大会の誘致を決められるのは、総理か担当の大臣（${ministerOf(g, 'sports')}）、または開催地の首長`;
   if (!why && s.bids.some((b) => b.type === type && ['declared', 'prep'].includes(b.status))) why = 'この大会は誘致・準備の最中';
   if (!why && s.bids.filter((b) => ['declared', 'prep'].includes(b.status)).length >= 2) why = '同時に進められる誘致・準備は2件まで';
@@ -2333,7 +2338,7 @@ export function bidPreview(g, type) {
   if (!why) why = costBlock(g, cost);
   const total = r0(T.cost * scaleOf(g) * (role.kind === 'local' ? 0.5 : 1));
   const tmp = { type, support: clamp(35 + (bidApproval(g) - 40) * 0.6 + num(s.groups.s_kyogi && s.groups.s_kyogi.s) * 0.2, 10, 85), camp: 0, rival: T.rival * (0.6 + rnd() * 0.5) };
-  return { ok: true, type, name: bidName(g, type), why, cost, costText: costText(g, cost), total, totalText: fmtOku(total), decide: T.decide, prep: T.prep, odds: r2(bidOdds(g, tmp)), support: r0(tmp.support), lines: [`招致活動から決定まで約${T.decide}日、決まれば準備に約${T.prep}日`, `全体の費用の目安 ${fmtOku(total)}（予算の枠を大きく超える。準備の間、毎月支出と景気刺激がある）`, '成功すれば開催で支持率・観光・景気が上がる。費用の超過や招致をめぐる不祥事のリスクも'], pro: ['「国民が一つになり、世界に日本を発信できる」（競技団体）', '「観光と景気の起爆剤になる」（経済界）'], con: ['「費用が膨らみ、借金を次の世代に残す」（財政に厳しい声）', '「開発と環境破壊、住民の負担が心配」（住民団体）'] };
+  return { ok: true, type, name: bidName(g, type), why, cost, costText: costText(g, cost), total, totalText: fmtOku(total), decide: T.decide, prep: T.prep, odds: r2(bidOdds(g, tmp)), support: r0(tmp.support), lines: [`招致活動から決定まで約${T.decide}日、決まれば準備に約${T.prep}日`, `全体の費用の目安 ${fmtOku(total)}（準備の間、毎月の支出と景気の刺激がある。目安は実際の大会の規模から）`, '成功すれば開催で支持率・観光・景気が上がる。費用の超過や招致をめぐる不祥事のリスクも'], pro: ['「国民が一つになり、世界に日本を発信できる」（競技団体）', '「観光と景気の起爆剤になる」（経済界）'], con: ['「費用が膨らみ、借金を次の世代に残す」（財政に厳しい声）', '「開発と環境破壊、住民の負担が心配」（住民団体）'] };
 }
 export function bidDeclare(g, type) {
   const pv = bidPreview(g, type);
@@ -2352,7 +2357,7 @@ export function bidCampaignPreview(g, id) {
   const s = S(g), b = s.bids.find((x) => x.id === id);
   if (!b || b.status !== 'declared') return { ok: false, why: '招致活動ができる誘致はない' };
   const role = groupsRole(g);
-  const cost = { gov: r0(BID_TYPES[b.type].cost * 0.025 * scaleOf(g) * (role.kind === 'local' ? 0.3 : 1)), stamina: 8 };
+  const cost = { gov: r0(BID_TYPES[b.type].cost * 0.004 * scaleOf(g) * (role.kind === 'local' ? 0.3 : 1)), stamina: 8 };
   const why = b.camp >= 0.6 ? '招致活動はもう十分に行った' : role.kind === 'citizen' || role.kind === 'member' ? '招致活動を進められるのは内閣の側か首長' : costBlock(g, cost);
   return { ok: true, id, cost, costText: costText(g, cost), why, odds: b.odds, lines: ['国際会議への働きかけ・ロビー活動・プレゼンの準備を行う（招致の見込み +15%ほど）', '費用がかさむと「招致の使途」への疑いも出る'] };
 }
@@ -2763,13 +2768,14 @@ export function groupView(g, id) {
   const link = grp.x.link || null;
   const pro = [], con = [];
   const lead = grp.leaders[0];
-  for (const pid of def.likes.slice(0, 2)) pro.push(`「${POLICY_NAME[pid] || pid}」のような政策を進めてほしい（${lead.name}）`);
-  for (const pid of def.dislikes.slice(0, 2)) con.push(`「${POLICY_NAME[pid] || pid}」には反対だ（${lead.name}）`);
-  if (!pro.length && def.asks[0]) pro.push(`「${def.asks[0][1]}」を実現してほしい（${lead.name}）`);
-  if (!con.length && def.asks[1]) con.push(`「${def.asks[1][1]}」が実現しないと協力できない（${lead.name}）`);
+  const sh = (pid) => String(POLICY_NAME[pid] || pid).replace(/（.*$/, '');
+  for (const pid of def.likes.slice(0, 2)) pro.push(`「${sh(pid)}」を進めてほしい（${lead.title}）`);
+  for (const pid of def.dislikes.slice(0, 2)) con.push(`「${sh(pid)}」には反対（${lead.title}）`);
+  if (!pro.length && def.asks[0]) pro.push(`「${def.asks[0][1]}」（${lead.title}）`);
+  if (!con.length && def.asks[1]) con.push(`「${def.asks[1][1]}」（${lead.title}）`);
   return {
     id, domain: def.domain, domainName: DOMAINS[def.domain].name, name: groupName(g, id), kana: def.kana, kind: def.kind, seg: def.seg, segName: SEG_NAME[def.seg] || def.seg, on: grp.on, note: def.note || null,
-    support: r0(grp.s), supportLabel: supportLabel(grp.s), govSupport: r0(grp.govAnchor), anger: r0(grp.an), angerLabel: angerLabel(grp.an), influence: r0(inf), influenceLabel: inf >= 60 ? '非常に強い' : inf >= 40 ? '強い' : inf >= 20 ? 'ふつう' : '小さい', capacity: def.cap, capacityLabel: def.cap >= 60 ? '大きい' : def.cap >= 30 ? 'ふつう' : def.cap > 0 ? '小さい' : 'なし（官庁・自治体）',
+    support: r0(grp.s), supportLabel: supportLabel(grp.s), govSupport: r0(grp.govAnchor), anger: r0(grp.an), angerLabel: angerLabel(grp.an), influence: r0(inf), influenceLabel: inf >= 60 ? '非常に強い' : inf >= 40 ? '強い' : inf >= 20 ? 'ふつう' : '小さい', capacity: def.cap, capacityLabel: def.cap >= 60 ? '大きい' : def.cap >= 30 ? 'ふつう' : def.cap > 0 ? '小さい' : 'なし',
     lean: def.lean, leaders: grp.leaders.map((l) => ({ ...l, personaName: LEADER_PERSONAS[l.persona].name, personaDesc: LEADER_PERSONAS[l.persona].desc })), grievances: grp.griev.map((e) => ({ id: e.id, text: e.text, heat: r0(e.heat) })).sort((a, b) => b.heat - a.heat),
     cases, asks: def.asks.map((a) => ({ kind: a[0], kindName: ASK_KIND_NAME[a[0]], text: a[1] })), log: grp.log.slice(0, 6), met: grp.met, owe: r1(grp.owe), don: grp.don, cred: grp.x.cred != null ? r0(grp.x.cred) : null,
     radical: def.radical ? r0(grp.x.radical) : null, radicalKnown: def.radical ? (today(g) - num(grp.x.known, -999) < 90 || num(grp.x.watch) >= 1) : false, radicalLabel: def.radical ? radicalLabel(grp.x.radical) : null, watch: r1(grp.x.watch || 0),

@@ -671,8 +671,14 @@ async function pmDeskTalk(g) {
     let F = null;
     try { F = typeof g.fukko === 'function' ? g.fukko() : null; } catch (e) { F = null; }
     const fk = F && F.active && F.canAppoint ? `${F.postName}を${F.ministerName ? '代える' : '任命する'}` : null;
-    const items = ['きょうの報告を聞く', '政治のメニュー', '外遊に出る', '危機管理センターへ', ...(console0 ? ['政府中枢（コンソール）'] : []), ...(fk ? [fk] : []), 'もどる'];
+    // round 5 (R5-D): 党内の動き (politics_intra_ui.js): the factions, 倒閣運動, the party's disputes; a mark while a plot against the PM is on
+    const intra0 = typeof g.politicsScreen === 'function' && typeof g.intra === 'function' && !g.auto;
+    let plot0 = null;
+    try { plot0 = intra0 && typeof g.intraPlot === 'function' ? g.intraPlot() : null; } catch (e) { plot0 = null; }
+    const intraItem = intra0 ? `党内の動き${plot0 && plot0.mine ? '（倒閣の動き！）' : ''}` : null;
+    const items = ['きょうの報告を聞く', '政治のメニュー', '外遊に出る', '危機管理センターへ', ...(console0 ? ['政府中枢（コンソール）'] : []), ...(fk ? [fk] : []), ...(intraItem ? [intraItem] : []), 'もどる'];
     const i = await g.ask('総理の執務机だ。何をする？', items, { cancel: items.length - 1 });
+    if (intraItem && items[i] === intraItem) { try { await g.politicsScreen('party', {}); } catch (e) { console.error(e); } continue; }
     if (fk && items[i] === fk) {
       if (g.auto) { await g.say(`（${F.disaster.name}の復興を担う${F.postName}を決めよう）`); return; }
       try { await g.politicsScreen('fukkoAppoint'); } catch (e) { console.error(e); }
@@ -704,6 +710,10 @@ async function briefing(g) {
   ];
   if (up.length) lines.push(`次の選挙は「${up[0].label.slice(0, 16)}」、\n${up[0].date}の予定です。`);
   if (crisis) lines.push(`${crisis.name}の対応が続いています。\n危機管理センターへお願いします。`);
+  try {
+    const pl = typeof g.intraPlot === 'function' ? g.intraPlot() : null;
+    if (pl && pl.mine && pl.stage !== 'failed') lines.push(`総理、党内で退陣を求める動きが出ています。\n${pl.bossName}氏らが動いているようです。（見込み${Math.round(pl.odds)}%）`);
+  } catch (e) { /* the politics core is missing */ }
   let F = null;
   try { F = typeof g.fukko === 'function' ? g.fukko() : null; } catch (e) { F = null; }
   if (F && F.active) lines.push(F.ministerName ? `${F.disaster.name}の復興は、${F.ministerName}${F.postName}が担当。\n進み具合は${F.progress}%です。` : `${F.disaster.name}の復興を担う${F.postName}は、\nまだ置いていません。ご判断を。`);

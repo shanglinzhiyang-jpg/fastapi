@@ -288,8 +288,8 @@ function specialSpec(ui, d, kit) {
   switch (dom) {
     case 'tourism':
       S.title = `観光立国（${sp.agency}）`;
-      S.lines = [`訪日外国人 年${f(sp.inboundMan)}万人（目安）・指定観光地 ${sp.sites}か所（自分の指定 ${sp.mine}）`, `入込の収入 月${sp.income}億円・混雑 ${sp.over}か所・満足度 ${sp.avgSat}`, sp.law || sp.resort || sp.overNote || ''];
-      S.buttons = [{ id: 'sp1', label: '観光地の地図・一覧へ', tip: '観光地の指定・整備・宣伝・混雑対策', a: (u) => { u.tabState().sub = 'tourism'; u.dirty(); } }];
+      S.lines = [`訪日客 年${f(sp.inboundMan)}万人（目安）・指定${sp.sites}か所（自分${sp.mine}）`, `入込の収入 月${sp.income}億円・混雑${sp.over}か所・満足度${sp.avgSat}`, sp.law || sp.resort || sp.overNote || ''];
+      S.buttons = [{ id: 'sp1', label: '観光地の画面へ', tip: '観光地の指定・整備・宣伝・混雑対策', a: (u) => { u.tabState().sub = 'tourism'; u.dirty(); } }];
       break;
     case 'rengo': {
       const sh = sp.shunto || {};
@@ -297,13 +297,13 @@ function specialSpec(ui, d, kit) {
       S.lines = [`組織率 ${sp.rate}%・最低賃金（全国平均の目安）${f(sp.minWageValue)}円`, `春闘：${sh.label || '—'}${sh.dem ? `　要求${sh.dem}%` : ''}${sh.settled ? `　回答${sh.settled}%` : ''}（実際の目安${sh.trend}%）`, sp.activeStrike ? `ストライキ中：${sp.activeStrike.name}（${sp.activeStrike.days}日）` : sp.results && sp.results[0] ? `前回の春闘：要求${sp.results[0].dem}%→回答${sp.results[0].settled}%` : sp.note];
       const mw = sp.minWage || { options: [] };
       const why = mw.options.length && mw.options.every((o) => o.why && !/先に/.test(o.why)) ? mw.options[0].why : null;
-      S.buttons = [{ id: 'sp1', label: '最低賃金を引き上げる', why, tip: '中央最低賃金審議会の答申を受けて、政令で決める', a: (u) => minWageFlow(u) }];
+      S.buttons = [{ id: 'sp1', label: '最低賃金を上げる', why, tip: '中央最低賃金審議会の答申を受けて、政令で決める', a: (u) => minWageFlow(u) }];
       break;
     }
     case 'sports':
       S.title = `大会の誘致（${sp.agency}）`;
       S.lines = [...(sp.active || []).slice(0, 2).map((b) => `${b.name}：${b.statusLabel}${b.status === 'declared' ? `（決定まであと${b.leftDecide}日・見込み${Math.round(b.odds * 100)}%）` : `（開幕まであと${b.leftEvent}日）`}`), (sp.active || []).length ? '' : '誘致・準備中の大会はない', sp.past && sp.past.length ? `これまで：${sp.past.slice(-2).join('・')}` : ''].filter(Boolean);
-      S.buttons = [{ id: 'sp1', label: '大会を誘致する・進める', tip: '五輪・万博・W杯・アジア大会・国スポの誘致と準備', a: (u) => bidFlow(u) }];
+      S.buttons = [{ id: 'sp1', label: '大会の誘致・準備', tip: '五輪・万博・W杯・アジア大会・国スポの誘致と準備', a: (u) => bidFlow(u) }];
       break;
     case 'business':
       S.title = '経済界との関係';
@@ -323,7 +323,7 @@ function specialSpec(ui, d, kit) {
       const n = (sp.panels || []).length, rep = (sp.panels || []).filter((p) => p.status === 'reported').length, mt = (sp.panels || []).filter((p) => p.status === 'meeting').length;
       S.title = '有識者会議（私的諮問機関）';
       S.lines = [`会議 ${n}件（審議中${mt}・採否待ち${rep}）`, (sp.backing || []).length ? `政策の後ろ盾：${sp.backing.map((b) => `${b.name}（あと${b.left}日）`).slice(0, 2).join('・')}` : '政策の後ろ盾になっている報告書はない', sp.shelved ? `棚上げした報告書 ${sp.shelved}件` : ''].filter(Boolean);
-      S.buttons = [{ id: 'sp1', label: '有識者会議の画面へ', tip: '会議を開く・報告書の採否を決める', a: (u) => { u.tabState().sub = 'panels'; u.dirty(); } }];
+      S.buttons = [{ id: 'sp1', label: '有識者会議へ', tip: '会議を開く・報告書の採否を決める', a: (u) => { u.tabState().sub = 'panels'; u.dirty(); } }];
       break;
     }
     case 'artist':
@@ -344,7 +344,7 @@ function specialSpec(ui, d, kit) {
       S.title = '官庁・自治体との関係';
       S.bars = [['官庁の協力度', num(sp.trust), num(sp.trust) >= 50 ? kit.K.good : kit.K.warn]];
       S.lines = [sp.jinji, sp.local, sp.amakudari ? `天下りへの世論の関心 ${sp.amakudari.heat}` : ''].filter(Boolean);
-      S.buttons = [{ id: 'sp1', label: '省庁と官僚（行政タブ）', tip: '行政タブで、省庁・大臣・審議会を見る', a: (u) => { u.setTab(kit.tabIndex('admin')); u.focus = 'body'; } }];
+      S.buttons = [{ id: 'sp1', label: '行政タブへ', tip: '行政タブで、省庁・大臣・審議会を見る', a: (u) => { u.setTab(kit.tabIndex('admin')); u.focus = 'body'; } }];
       break;
     default: break;
   }
@@ -372,7 +372,7 @@ export function tabLayout(ui, d, kit) {
     }
     case 'cases': {
       const cs = d.cases;
-      out.push(listCtl(ui, 'crow', { id: 'crow', x: 4, y: 64, w: 250, h: 200, y0: 18, rowH: 26, n: cs.length, tip: (u) => { const c = cs[u.tabState().crow | 0]; return c ? `${c.title}（期限${c.left <= 0 ? '今日' : `あと${c.left}日`}）` : '案件はない'; }, a: null, onMove: (u) => { u.tabState().orow = 0; } }));
+      out.push(listCtl(ui, 'crow', { id: 'crow', x: 4, y: 64, w: 250, h: 200, y0: 18, rowH: 26, n: cs.length, tip: (u) => { const c = cs[u.tabState().crow | 0]; return c ? `${c.title}（期限${c.left <= 0 ? '今日' : `あと${c.left}日`}）　A：答え方を選ぶ` : '案件はない'; }, a: (u) => { if (cs.length) u.cur[u.tab.id] = 'orow'; }, onMove: (u) => { u.tabState().orow = 0; } }));
       const c = cs[clamp(num(ui.tabState().crow), 0, Math.max(0, cs.length - 1))];
       const opts = c ? c.options : [];
       out.push(listCtl(ui, 'orow', { id: 'orow', x: 258, y: 190, w: 378, h: 146, y0: 18, rowH: 25, n: opts.length, why: (u) => { const o = opts[u.tabState().orow | 0]; return o ? o.why : null; }, tip: (u) => { const o = opts[u.tabState().orow | 0]; return o ? `${o.label}：${o.desc || ''}` : ''; }, a: (u) => { const o = opts[u.tabState().orow | 0]; if (c && o) return caseFlow(u, c, o.key); return null; } }));
@@ -394,7 +394,7 @@ export function tabLayout(ui, d, kit) {
     }
     case 'timeline': {
       out.push(listCtl(ui, 'nrow', { id: 'nrow', x: 4, y: 64, w: 380, h: 272, y0: 18, rowH: 16, n: d.news.length, tip: (u) => { const n = d.news[u.tabState().nrow | 0]; return n ? n.text : ''; }, a: (u) => { const n = d.news[u.tabState().nrow | 0]; if (n) return u.info('各界のニュース', [dayLabel(g, n.day), n.text, n.domain ? `分野：${DOMAINS[n.domain] ? DOMAINS[n.domain].full : n.domain}` : ''].filter(Boolean)); return null; } }));
-      out.push(listCtl(ui, 'hrow', { id: 'hrow', x: 388, y: 64, w: 248, h: 222, y0: 18, rowH: 18, n: DOMAIN_ORDER.length, tip: (u) => { const x = d.sum.domains[u.tabState().hrow | 0]; return x ? `${x.full}の支持の推移（A：この分野の制度を下に表示）` : ''; }, a: (u) => { const x = d.sum.domains[u.tabState().hrow | 0]; if (x) { u.tabState().dom = x.id; u.dirty(); } return null; } }));
+      out.push(listCtl(ui, 'hrow', { id: 'hrow', x: 388, y: 64, w: 248, h: 196, y0: 18, rowH: 16, n: DOMAIN_ORDER.length, tip: (u) => { const x = d.sum.domains[u.tabState().hrow | 0]; return x ? `${x.full}の支持の推移（A：この分野の制度を下に表示）` : ''; }, a: (u) => { const x = d.sum.domains[u.tabState().hrow | 0]; if (x) { u.tabState().dom = x.id; u.dirty(); } return null; } }));
       out.push(btn({ id: 'terms', x: 388, y: 316, w: 248, h: 18, label: '各界の用語メモ', tip: '春闘・有識者会議・オーバーツーリズム・組織票・癒着の疑い', a: (u) => termsFlow(u) }));
       break;
     }
@@ -463,7 +463,7 @@ function drawOverview(c, ui, d, kit) {
   T(c, isCab ? '内閣支持率への影響' : d.role.kind === 'member' ? '党内の評価への影響' : d.role.kind === 'local' ? '地元の支持への影響' : '（政治の立場ではない）', 438, 84, 10, K.dim, 'left', 150);
   T(c, `${ap > 0 ? '+' : ap < 0 ? '−' : '±'}${Math.abs(ap)}`, 630, 82, 14, ap >= 0 ? K.good : K.bad, 'right');
   T(c, '癒着の疑い', 438, 104, 10, K.dim); hbar(c, 500, 107, 100, 6, sm.corr / 100, sm.corr >= 55 ? K.bad : K.warn); T(c, `${sm.corr}`, 630, 104, 10, K.dim, 'right');
-  T(c, '各界向けの支出', 438, 120, 10, K.dim); hbar(c, 500, 123, 100, 6, sm.fiscal.spent / Math.max(1, sm.fiscal.frame), sm.fiscal.over ? K.bad : K.teal); T(c, `${Math.round((sm.fiscal.spent / Math.max(1, sm.fiscal.frame)) * 100)}%`, 630, 120, 10, K.dim, 'right');
+  T(c, '支出の枠', 438, 120, 10, K.dim); hbar(c, 500, 123, 100, 6, sm.fiscal.spent / Math.max(1, sm.fiscal.frame), sm.fiscal.over ? K.bad : K.teal); T(c, `${Math.round((sm.fiscal.spent / Math.max(1, sm.fiscal.frame)) * 100)}%`, 630, 120, 10, K.dim, 'right');
   para(c, `${sm.fiscal.text}`, 438, 136, 194, 10, K.faint, 11, 2);
   T(c, `献金の累計 ${fmtMoney(sm.donations)}`, 438, 160, 10, K.dim, 'left', 194);
   panel(c, 432, 180, 204, 156, '注意・おすすめ');
@@ -519,9 +519,9 @@ function drawGroups(c, ui, d, kit) {
   // special panel
   const spec = specialSpec(ui, d, kit);
   panel(c, 172, 252, 262, 84, spec.title, { accent: DOMAINS[st.dom].color });
-  let sy = 272;
-  for (const [label, v, col] of spec.bars.slice(0, 2)) { T(c, label, 178, sy, 10, K.dim); hbar(c, 244, sy + 3, 120, 6, v / 100, col); T(c, `${Math.round(v)}`, 370, sy, 10, K.dim); sy += 11; }
-  for (const l of spec.lines.filter(Boolean).slice(0, spec.buttons.length ? 3 : 4)) { T(c, l, 178, sy, 10, K.text, 'left', 252); sy += 11; }
+  let sy = 272, rows = spec.buttons.length ? 3 : 5;
+  for (const [label, v, col] of spec.bars.slice(0, 2)) { if (rows <= 0) break; T(c, label, 178, sy, 10, K.dim); hbar(c, 244, sy + 3, 120, 6, v / 100, col); T(c, `${Math.round(v)}`, 370, sy, 10, K.dim); sy += 11; rows--; }
+  for (const l of spec.lines.filter(Boolean)) { if (rows <= 0) break; T(c, l, 178, sy, 10, K.text, 'left', 252); sy += 11; rows--; }
   for (const b of spec.buttons) drawBtn(c, ui, ui.ctls.find((q) => q.id === b.id), { center: true });
   // actions
   panel(c, 438, 84, 198, 170, 'できること', { right: cur ? `${d.acts.filter((a) => !a.why).length}/${d.acts.length}` : '' });
@@ -536,8 +536,8 @@ function drawGroups(c, ui, d, kit) {
   panel(c, 438, 256, 198, 80, '選んだ行動');
   const a = d.acts[clamp(num(st.arow), 0, Math.max(0, d.acts.length - 1))];
   if (a) {
-    chip(c, 444, 276, ACT_KIND_LABEL[a.kind] || '', kit.shade(KIND_COLOR[a.kind] || K.dim, -0.55), KIND_COLOR[a.kind] || K.dim, 9);
-    T(c, a.why ? '' : `${a.costText}`, 492, 276, 9, K.dim, 'left', 142);
+    const cw = chip(c, 444, 276, ACT_KIND_LABEL[a.kind] || '', kit.shade(KIND_COLOR[a.kind] || K.dim, -0.55), KIND_COLOR[a.kind] || K.dim, 9);
+    T(c, a.why ? '' : `${a.costText}`, 444 + cw + 4, 277, 9, K.dim, 'left', 188 - cw - 4);
     para(c, a.why ? `🔒 ${a.why}` : a.desc, 444, 290, 188, 9, a.why ? K.lock : K.text, 10, 5);
   }
 }
@@ -579,8 +579,8 @@ function drawTourism(c, ui, d, kit) {
   const t = d.tour;
   panel(c, 4, 64, 296, 272, `観光地の地図（${t.agency}）`, { accent: '#4fd2e8' });
   const sel = d.sites[clamp(num(st.trow), 0, Math.max(0, d.sites.length - 1))];
-  drawMap(c, kit, 6, 82, 292, 232, [...t.siteList, ...(st.tmode === 'cand' ? t.candList : [])], sel ? sel.id : null, ui.t);
-  T(c, `訪日外国人 年${kit.fmtN(t.inboundMan)}万人（目安）　緑：余裕　黄：混雑ぎみ　赤：混雑　□：候補`, 10, 318, 9, K.dim, 'left', 284);
+  drawMap(c, kit, 6, 82, 292, 220, [...t.siteList, ...(st.tmode === 'cand' ? t.candList : [])], sel ? sel.id : null, ui.t);
+  T(c, `訪日客 年${kit.fmtN(t.inboundMan)}万人（目安）`, 10, 306, 9, K.dim, 'left', 284); T(c, '■緑：余裕　■黄：混雑ぎみ　■赤：混雑　□候補地', 10, 319, 9, K.faint, 'left', 284);
   for (const id of ['tm_have', 'tm_cand']) {
     const k = ui.ctls.find((q) => q.id === id);
     if (!k) continue;
@@ -598,7 +598,7 @@ function drawTourism(c, ui, d, kit) {
     T(c2, `${s.kindName}`, x + 138, y + 3, 9, K.dim, 'left', 100);
     T(c2, s.status === 'candidate' ? `魅力${'★'.repeat(s.stars)}` : `${s.vis}千人/月`, x + w - 6, y + 2, 10, K.dim, 'right', 80);
   }, { empty: st.tmode === 'cand' ? '候補はいまない（そのうち提案される）' : '指定した観光地がない（候補地から指定する）' });
-  panel(c, 304, 200, 332, 136, sel ? `${sel.name}（${sel.regionName}・${sel.kindName}）` : '観光地の様子', { accent: '#4fd2e8', right: sel ? (sel.owner === 'player' ? 'あなたの指定' : '既存') : '' });
+  panel(c, 304, 200, 332, 136, sel ? sel.name : '観光地の様子', { accent: '#4fd2e8', right: sel ? `${sel.regionName}・${sel.owner === 'player' ? 'あなたの指定' : sel.status === 'candidate' ? '候補' : '既存'}` : '' });
   if (sel) {
     const row = (label, v, x, y, col, txt) => { T(c, label, x, y, 9, K.dim); hbar(c, x + 40, y + 2, 64, 5, clamp(v / 100, 0, 1), col); T(c, txt, x + 108, y, 9, K.text, 'left', 50); };
     const x1 = 310, x2 = 474;
@@ -671,18 +671,19 @@ function drawTimeline(c, ui, d, kit) {
     T(c2, dayLabel(ui.g, n.day).replace(/^\d+年/, ''), x + 11, y + 3, 9, K.faint, 'left', 54);
     T(c2, n.text, x + 66, y + 2, 10, K.text, 'left', w - 72);
   }, { empty: 'まだニュースはない' });
-  panel(c, 388, 64, 248, 222, '分野ごとの支持の推移（月ごと）');
+  panel(c, 388, 64, 248, 196, '分野ごとの支持の推移（月ごと）');
   const hk = ui.ctls.find((q) => q.id === 'hrow');
   if (hk) drawList(c, ui, hk, (c2, i, x, y, w) => {
     const dm = d.sum.domains[i];
     c2.fillStyle = dm.color; c2.fillRect(x + 4, y + 4, 3, 9);
-    T(c2, dm.name, x + 10, y + 3, 10, st.dom === dm.id ? K.white : K.text, 'left', 58);
-    spark(c2, dm.hist.length >= 2 ? dm.hist : [dm.avg, dm.avg], x + 70, y + 2, 110, 14, dm.color, { min: -50, max: 50, ref: 0 });
+    T(c2, dm.name, x + 10, y + 3, 10, st.dom === dm.id ? K.white : K.text, 'left', 68);
+    spark(c2, dm.hist.length >= 2 ? dm.hist : [dm.avg, dm.avg], x + 82, y + 2, 100, 12, dm.color, { min: -50, max: 50, ref: 0 });
     T(c2, `${dm.avg > 0 ? '+' : ''}${dm.avg}`, x + w - 6, y + 4, 10, supCol(dm.avg, K), 'right');
   });
-  panel(c, 388, 290, 248, 24, `制度：${DOMAINS[st.dom].name}`, {});
-  const inst = d.inst.slice(-1)[0];
-  T(c, inst ? `${inst.when} ${inst.text}` : '（この分野の制度の記録はまだない）', 394, 306, 9, K.dim, 'left', 238);
+  panel(c, 388, 264, 248, 50, `制度：${DOMAINS[st.dom].name}`, {});
+  let iy = 282;
+  for (const inst of d.inst.slice(-3)) { T(c, `${inst.when} ${inst.text}`, 393, iy, 9, K.dim, 'left', 240); iy += 10; }
+  if (!d.inst.length) T(c, '（この分野の制度の記録はまだない）', 393, iy, 9, K.faint, 'left', 240);
   drawBtn(c, ui, ui.ctls.find((q) => q.id === 'terms'), { center: true });
 }
 export function tabDraw(c, ui, d, kit) {

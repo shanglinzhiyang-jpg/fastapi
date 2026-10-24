@@ -1958,21 +1958,59 @@ const DEMO_CONSEQ = {
   curfew: '勢い×0.8。民衆の不満+6・国際社会の懸念+5・成長率−0.5（60日）。暮らしと経済に重い負担',
   concession: '民衆の不満−10・国際社会の懸念−4。拘束者を解放し、対話を約束する',
 };
+// ---- R5-D (2026-10): the 世論 tab is a set of views of g.opinionEval() (govt.js 「世論の評価」): 評価 (the cabinet, the party and the
+// PM's personal favourability apart, polls with margins), 争点 (the issues ranked), 層別 (by group), 推移 (trend lines),
+// 選挙予測 (the seat projection with its range), and the older 世論の声 and デモ.
+const OPINION_SUBS = [
+  { id: 'ratings', label: '評価', tip: '内閣・政党・総理個人の評価と、世論調査（誤差つき）' }, { id: 'issues', label: '争点', tip: '争点ごとの評価と、関心の高さのランキング' },
+  { id: 'groups', label: '層別', tip: '有権者の層ごとの支持と、争点への評価' }, { id: 'trend', label: '推移', tip: '支持率・好感度・争点評価の推移（毎週の世論調査）' },
+  { id: 'forecast', label: '選挙予測', tip: 'いま総選挙があった場合の議席の予測（幅つき）' }, { id: 'voices', label: '世論の声', tip: '街やネットの声（賛成・反対・中立）' }, { id: 'demo', label: 'デモ', tip: 'デモ・集会への参加、主催、政府の対応' },
+];
+const trendWord = (v, d = 0) => (Math.abs(v) < 0.5 ? '横ばい' : `${v > 0 ? '▲' : '▼'}${Math.abs(Math.round(v * 10 ** d) / 10 ** d)}`);
+const trendCol = (v) => (v > 0.5 ? K.good : v < -0.5 ? K.bad : K.dim);
+const scoreCol = (v) => (v >= 55 ? K.good : v >= 42 ? K.warn : K.bad);
+// a line chart of several series (arrays of numbers, NaN = no data) in a box; ref = a dashed reference line
+function chartLines(c, box, series, o = {}) {
+  const { x, y, w, h } = box;
+  R(c, x, y, w, h, '#07111b');
+  const all = series.flatMap((s) => s.vals.filter(Number.isFinite));
+  if (all.length < 2) { T(c, 'データがたまると線が出る（毎週の世論調査）', x + 8, y + h / 2 - 6, 12, K.dim, 'left', w - 16); return; }
+  let mn = o.min ?? Math.floor(Math.min(...all) / 10) * 10, mx = o.max ?? Math.ceil(Math.max(...all) / 10) * 10;
+  if (mx - mn < 20) { const m = (mx + mn) / 2; mn = m - 10; mx = m + 10; }
+  const py = (v) => y + h - 3 - ((clamp(v, mn, mx) - mn) / (mx - mn)) * (h - 6);
+  for (let g0 = Math.ceil(mn / 10) * 10; g0 <= mx; g0 += 10) { for (let i = 0; i < w; i += 4) R(c, x + i, py(g0), 1, 1, K.ghost); T(c, String(g0), x + 2, py(g0) - 11, 10, K.faint); }
+  if (o.ref != null && o.ref > mn && o.ref < mx) for (let i = 0; i < w; i += 2) R(c, x + i, py(o.ref), 1, 1, K.amberDk);
+  for (const s of series) {
+    const n = s.vals.length;
+    let prev = null;
+    for (let i = 0; i < n; i++) {
+      const v = s.vals[i];
+      if (!Number.isFinite(v)) { prev = null; continue; }
+      const pt = [x + 24 + Math.round((i * (w - 30)) / Math.max(1, n - 1)), py(v)];
+      if (prev) line(c, prev[0], prev[1], pt[0], pt[1], s.col, s.bold ? 2 : 1);
+      prev = pt;
+    }
+    if (prev) disc(c, prev[0], prev[1], 2, s.col);
+  }
+}
 const TAB_OPINION = {
-  id: 'opinion', label: '世論', short: '層別の支持・世論の声・デモ（参加・対応）', lesson: 'yoron',
-  tip: (ui) => (ui.tabState().last === 'demo' ? 'govt_demo' : 'govt_voices'),
-  about: '層ごとの内閣支持・政党支持・世論の声・デモ（参加・主催・政府の対応）',
-  terms: ['世論', '世論調査', 'デモ', '表現の自由', '無党派層'],
+  id: 'opinion', label: '世論', short: '評価・争点・層別・推移・選挙予測・世論の声・デモ', lesson: 'yoron',
+  tip: (ui) => { const s = ui.tabState().sub; return s === 'demo' ? 'govt_demo' : s === 'voices' ? 'govt_voices' : 'govt_approval'; },
+  about: '内閣・政党・総理個人の評価、争点ごとの評価、層別の支持、推移、選挙予測（議席の幅）、世論の声、デモ（参加・主催・政府の対応）',
+  terms: ['世論', '世論調査', '支持率', 'デモ', '表現の自由', '無党派層'],
   alert: (ui) => (has(ui.g, 'demos') ? safe(() => ui.g.demos({ active: true }).length, 0) : 0),
   load(ui) {
     const g = ui.g;
     const st = ui.tabState();
     const d = {};
     d.ab = has(g, 'approvalBreakdown') ? safe(() => g.approvalBreakdown(), null) : null;
-    const f = st.vf || 'all';
-    d.voices = voicesOf(g, 40, f === 'all' ? {} : { stance: f });
-    d.demos = has(g, 'demos') ? safe(() => g.demos(), []) : [];
-    d.demos = d.demos.slice().sort((a, b) => (a.status === 'ended') - (b.status === 'ended') || b.day - a.day).slice(0, 14);
+    const sb = st.sub || 'ratings';
+    d.ev = has(g, 'opinionEval') && ['ratings', 'issues', 'groups', 'trend', 'forecast'].includes(sb) ? safe(() => g.opinionEval(), null) : null;
+    if (sb === 'voices') { const f = st.vf || 'all'; d.voices = voicesOf(g, 40, f === 'all' ? {} : { stance: f }); } else d.voices = [];
+    if (sb === 'demo' || sb === 'voices') {
+      d.demos = has(g, 'demos') ? safe(() => g.demos(), []) : [];
+      d.demos = d.demos.slice().sort((a, b) => (a.status === 'ended') - (b.status === 'ended') || b.day - a.day).slice(0, 14);
+    } else d.demos = [];
     d.joinWhy = (id) => (has(g, 'govtRefusal') ? safe(() => g.govtRefusal('demo_join', { id }), null) : '政府のしくみが読み込まれていない');
     d.orgWhy = has(g, 'govtRefusal') ? safe(() => g.govtRefusal('demo_organize'), null) : '政府のしくみが読み込まれていない';
     d.respWhy = (id) => (has(g, 'govtRefusal') ? safe(() => g.govtRefusal('demo_respond', { id }), null) : '政府のしくみが読み込まれていない');
@@ -1980,99 +2018,249 @@ const TAB_OPINION = {
   },
   layout(ui, d) {
     const st = ui.tabState();
-    const out = [];
-    out.push(jump('op_seg', 4, 44, 210, 292, 'network', '層ごとの内閣支持率（推計）。A：政策マップで層ごとのつながりを見る'));
-    let x = 218;
-    for (const f of VOICE_FILTERS) {
-      const w = (ui.g.ctx ? measure(ui.g.ctx, f.label, 10) : 24) + 12;
-      out.push({ kind: 'seg', id: `vf_${f.id}`, x, y: 62, w, h: 14, why: null, tip: `世論の声：${f.label}`, a: (u) => { u.tabState().vf = f.id; u.tabState().vrow = 0; u.dirty(); } });
-      x += w + 2;
+    const out = segCtls(ui, OPINION_SUBS, 4, 44);
+    const sb = st.sub;
+    const ev = d.ev;
+    if (sb === 'issues') out.push(listCtl(ui, 'iss', { id: 'iss', x: 4, y: 64, w: 300, h: 272, rowH: 19, y0: 30, n: ev ? ev.rank.length : 0, tip: (u) => { const r = ev && ev.rank[u.tabState().iss | 0]; return r ? `${r.name}：関心${r.attention}%・評価${r.score}%` : ''; }, a: null }));
+    else if (sb === 'groups') out.push(listCtl(ui, 'grp', { id: 'grp', x: 4, y: 64, w: 330, h: 272, rowH: 22, y0: 30, n: ev ? ev.groups.length : 0, tip: (u) => { const r = ev && ev.groups[u.tabState().grp | 0]; return r ? `${r.name}：内閣${r.cabinet}%・党${r.party}%・総理${r.pm}%` : ''; }, a: null }));
+    else if (sb === 'trend') out.push(listCtl(ui, 'tr', { id: 'tr', x: 420, y: 64, w: 216, h: 272, rowH: 17, y0: 20, n: ev ? ev.issues.length : 0, tip: (u) => { const r = ev && ev.issues[u.tabState().tr | 0]; return r ? `${r.name}の評価の推移を重ねて見る` : ''; }, a: null }));
+    else if (sb === 'voices') {
+      let x = 4;
+      for (const f of VOICE_FILTERS) {
+        const w = (ui.g.ctx ? measure(ui.g.ctx, f.label, 10) : 24) + 12;
+        out.push({ kind: 'seg', id: `vf_${f.id}`, x, y: 66, w, h: 14, why: null, tip: `世論の声：${f.label}`, a: (u) => { u.tabState().vf = f.id; u.tabState().vrow = 0; u.dirty(); } });
+        x += w + 2;
+      }
+      out.push(btn({ id: 'v_fresh', x: 340, y: 66, w: 84, h: 14, label: '新しい声', why: has(ui.g, 'voices') ? null : '世論の声のしくみがない', tip: '街の声・ネットの声を新しく集める', a: (u) => { safe(() => u.g.voices(6, { fresh: true })); st.vrow = 0; u.toast('新しい声を集めた', K.cyan); } }));
+      out.push(listCtl(ui, 'vrow', { id: 'vrow', x: 4, y: 84, w: 420, h: 252, rowH: 32, n: d.voices.length, tip: (u) => { const v = d.voices[u.tabState().vrow | 0]; return v ? `${v.mediumLabel}・${v.segName}・${v.event || ''}` : ''; }, a: (u) => { const v = d.voices[u.tabState().vrow | 0]; if (v) return u.info(v.header, [`「${v.text}」`, '', `立場：${STANCE_WORD[v.stance] || '—'}・層：${v.segName}`, `話題：${v.event || '—'}・${v.mediumLabel}`]); } }));
+    } else if (sb === 'demo') {
+      out.push(listCtl(ui, 'drow', { id: 'drow', x: 4, y: 66, w: 250, h: 270, rowH: 28, y0: 16, n: d.demos.length, tip: (u) => { const dm = d.demos[u.tabState().drow | 0]; return dm ? `${dm.cause}（${dm.place}・約${fmtN(dm.size)}人）` : 'デモはない'; }, a: null, onMove: (u) => { u.tabState().last = 'demo'; } }));
+      const dm = d.demos[st.drow | 0];
+      const ended = !dm || dm.status === 'ended';
+      out.push(btn({ id: 'd_join', x: 262, y: 280, w: 120, h: 20, label: '参加する', why: !dm ? 'デモがない' : ended ? 'そのデモはもう終わっている' : d.joinWhy(dm.id), tip: '市民としてデモに参加する（集会・表現の自由：憲法21条）', a: (u) => demoJoin(u, dm) }));
+      out.push(btn({ id: 'd_org', x: 386, y: 280, w: 120, h: 20, label: '主催する', why: d.orgWhy, tip: 'デモを主催する（公安条例の許可・準備のお金）', a: (u) => demoOrganize(u) }));
+      out.push(btn({ id: 'd_resp', x: 510, y: 280, w: 122, h: 20, label: '政府として対応', color: K.amber, why: !dm ? 'デモがない' : ended ? 'そのデモはもう終わっている' : d.respWhy(dm.id), tip: '総理・官房長官・国家公安委員長がデモに対応する', a: (u) => demoRespond(u, dm) }));
+      out.push(btn({ id: 'd_scene', x: 262, y: 306, w: 370, h: 20, label: 'デモの様子を見る', why: !dm ? 'デモがない' : has(ui.g, 'demoScene') ? null : '場面のしくみがない', tip: 'デモの現場の様子', a: (u) => (dm ? safe(() => u.g.demoScene(dm.id, null), null) : null) }));
     }
-    out.push(btn({ id: 'v_fresh', x: 384, y: 62, w: 68, h: 14, label: '新しい声', why: has(ui.g, 'voices') ? null : '世論の声のしくみがない', tip: '街の声・ネットの声を新しく集める', a: (u) => { safe(() => u.g.voices(6, { fresh: true })); st.vrow = 0; u.toast('新しい声を集めた', K.cyan); } }));
-    out.push(listCtl(ui, 'vrow', { id: 'vrow', x: 218, y: 80, w: 234, h: 256, rowH: 32, n: d.voices.length, tip: (u) => { const v = d.voices[u.tabState().vrow | 0]; return v ? `${v.mediumLabel}・${v.segName}・${v.event || ''}` : ''; }, a: (u) => { const v = d.voices[u.tabState().vrow | 0]; if (v) return u.info(v.header, [`「${v.text}」`, '', `立場：${STANCE_WORD[v.stance] || '—'}・層：${v.segName}`, `話題：${v.event || '—'}・${v.mediumLabel}`]); } }));
-    out.push(listCtl(ui, 'drow', { id: 'drow', x: 456, y: 62, w: 180, h: 112, rowH: 28, n: d.demos.length, tip: (u) => { const dm = d.demos[u.tabState().drow | 0]; return dm ? `${dm.cause}（${dm.place}・約${fmtN(dm.size)}人）` : 'デモはない'; }, a: null, onMove: (u) => { u.tabState().last = 'demo'; } }));
-    const dm = d.demos[st.drow | 0];
-    const ended = !dm || dm.status === 'ended';
-    out.push(btn({ id: 'd_join', x: 456, y: 270, w: 88, h: 20, label: '参加する', why: !dm ? 'デモがない' : ended ? 'そのデモはもう終わっている' : d.joinWhy(dm.id), tip: '市民としてデモに参加する（集会・表現の自由：憲法21条）', a: (u) => demoJoin(u, dm) }));
-    out.push(btn({ id: 'd_org', x: 548, y: 270, w: 88, h: 20, label: '主催する', why: d.orgWhy, tip: 'デモを主催する（公安条例の許可・準備のお金）', a: (u) => demoOrganize(u) }));
-    out.push(btn({ id: 'd_resp', x: 456, y: 294, w: 180, h: 20, label: '政府として対応する', color: K.amber, why: !dm ? 'デモがない' : ended ? 'そのデモはもう終わっている' : d.respWhy(dm.id), tip: '総理・官房長官・国家公安委員長がデモに対応する', a: (u) => demoRespond(u, dm) }));
-    out.push(btn({ id: 'd_scene', x: 456, y: 318, w: 180, h: 18, label: 'デモの様子を見る', why: !dm ? 'デモがない' : has(ui.g, 'demoScene') ? null : '場面のしくみがない', tip: 'デモの現場の様子', a: (u) => (dm ? safe(() => u.g.demoScene(dm.id, null), null) : null) }));
     return out;
   },
   draw(c, ui, d) {
     const st = ui.tabState();
-    const ab = d.ab;
-    // ---- by segment
-    panel(c, 4, 44, 210, 292, '層ごとの内閣支持（推計）', { right: ab ? `全体 ${ab.approval}%` : '' });
-    if (!ab) para(c, '（政府コアが読み込まれると表示される）', 10, 66, 198, 12, K.dim);
-    else {
-      const segs = (ab.bySegment || []).slice().sort((a, b) => b.approval - a.approval);
-      segs.forEach((s, i) => {
-        const yy = 64 + i * 14;
-        R(c, 10, yy + 3, 3, 8, SEG_COLOR[s.seg] || K.dim);
-        T(c, SEG_SHORT[s.seg] || s.name, 16, yy, 10, K.text, 'left', 50);
-        hbar(c, 68, yy + 3, 100, 7, s.approval / 100, s.approval >= 50 ? K.good : s.approval >= 30 ? K.warn : K.bad);
-        R(c, 68 + 50, yy + 1, 1, 11, K.faint);
-        T(c, `${s.approval}%`, 208, yy, 10, K.white, 'right', 36);
-      });
-      let yy = 64 + Math.min(11, segs.length) * 14 + 4;
-      T(c, '政党支持率', 10, yy, 10, K.amber);
-      T(c, `支持なし ${pct(ab.none)}`, 208, yy, 10, K.dim, 'right', 100); yy += 13;
-      const sup = (ab.support || []).slice(0, 6);
-      for (const s of sup) {
-        R(c, 10, yy + 3, 3, 8, partyColorOf(ui.g, s.id));
-        T(c, s.name, 16, yy, 10, K.text, 'left', 60);
-        hbar(c, 80, yy + 3, 88, 7, s.pct / 60, partyColorOf(ui.g, s.id));
-        T(c, pct(s.pct), 208, yy, 10, K.white, 'right', 40);
-        yy += 12;
-      }
-      T(c, '※推計（層ごとの目安）', 10, 322, 10, K.faint, 'left', 198);
-    }
-    // ---- voices
-    panel(c, 218, 44, 234, 292, '世論の声', { right: '街・ネット' });
-    for (const f of VOICE_FILTERS) {
-      const k = ui.ctls.find((q) => q.id === `vf_${f.id}`);
-      if (!k) continue;
-      const on = (st.vf || 'all') === f.id;
-      frame(c, k.x, k.y, k.w, k.h, on ? '#1d4a64' : '#0b1621', on ? K.cyan : K.edge);
-      T(c, f.label, k.x + k.w / 2, k.y + 1, 10, on ? K.white : K.dim, 'center');
-    }
-    drawBtn(c, ui, ui.ctls.find((q) => q.id === 'v_fresh'), { center: true });
-    drawList(c, ui, ui.ctls.find((q) => q.id === 'vrow'), (c2, i, x, y, w) => {
-      const v = d.voices[i];
-      R(c2, x + 4, y + 3, 3, 25, STANCE_COL[v.stance] || K.dim);
-      T(c2, `${v.header}`, x + 10, y + 2, 10, K.dim, 'left', w - 60);
-      T(c2, safe(() => dateLabel(ui.g, v.day).replace(/^\d+年/, ''), ''), x + w - 4, y + 2, 10, K.faint, 'right', 60);
-      T(c2, v.text, x + 10, y + 15, 12, K.text, 'left', w - 14);
-    }, { empty: 'まだ声はない（「新しい声」で集める）' });
-    // ---- demos
-    panel(c, 456, 44, 180, 292, 'デモ・集会', { right: `${d.demos.filter((x) => x.status !== 'ended').length}件` });
-    drawList(c, ui, ui.ctls.find((q) => q.id === 'drow'), (c2, i, x, y, w) => {
-      const dm = d.demos[i];
-      R(c2, x + 4, y + 3, 3, 22, dm.status === 'ended' ? K.ghost : dm.stance === 'rally' ? K.teal : K.pink);
-      T(c2, dm.cause, x + 10, y + 2, 10, dm.status === 'ended' ? K.faint : K.text, 'left', w - 14);
-      T(c2, `${dm.status === 'ended' ? '終了' : dm.status === 'planned' ? '予定' : '開催中'}・約${fmtN(dm.size)}人`, x + 10, y + 14, 10, K.dim, 'left', w - 14);
-    }, { empty: 'いまデモはない' });
-    const dm = d.demos[st.drow | 0];
-    let yy = 180;
-    if (dm) {
-      T(c, dm.place, 462, yy, 10, K.cyan, 'left', 168); yy += 12;
-      T(c, `主催：${dm.organiser}`, 462, yy, 10, K.text, 'left', 168); yy += 12;
-      T(c, `層：${SEG_SHORT[dm.segment] || dm.segment}・許可：${dm.permit ? 'あり' : 'なし'}`, 462, yy, 10, K.text, 'left', 168); yy += 12;
-      const mo = num(dm.momentum, 1);
-      T(c, `最大 約${fmtN(dm.peak)}人`, 462, yy, 10, K.text, 'left', 168); yy += 12;
-      T(c, `勢い：${dm.status === 'ended' ? '終わった' : mo > 1.05 ? '強まっている' : mo < 0.95 ? '弱まっている' : '横ばい'}`, 462, yy, 10, K.text, 'left', 168); yy += 12;
-      if (dm.joined) { T(c, `あなたも参加した（${dm.joined.role === 'speaker' ? 'スピーチ' : '参加'}）`, 462, yy, 10, K.good, 'left', 168); yy += 12; }
-      const resp = (dm.responses || []).slice(-1)[0];
-      if (resp) {
-        const RD = GV && GV.DEMO_RESPONSES && GV.DEMO_RESPONSES[resp.how];
-        T(c, `政府の対応：${RD ? String(RD.label || RD.name || resp.how).replace(/（.*$/, '') : resp.how}`, 462, yy, 10, K.warn, 'left', 168); yy += 12;
-      }
-      for (const l of (dm.log || []).slice(-2)) { if (yy > 256) break; T(c, `・${l.text}`, 462, yy, 10, K.dim, 'left', 168); yy += 12; }
-    }
-    for (const id of ['d_join', 'd_org', 'd_resp', 'd_scene']) drawBtn(c, ui, ui.ctls.find((q) => q.id === id), { center: true, color: id === 'd_resp' ? K.amber : K.cyan });
+    drawSegs(c, ui, OPINION_SUBS);
+    const sb = st.sub;
+    const ev = d.ev;
+    const needEv = ['ratings', 'issues', 'groups', 'trend', 'forecast'].includes(sb);
+    if (needEv && !ev) { panel(c, 4, 66, 632, 270, '世論の評価'); para(c, '（政府コアが読み込まれると表示される）', 12, 90, 600, 12, K.dim); return; }
+    if (sb === 'ratings') drawRatings(c, ui, d, ev);
+    else if (sb === 'issues') drawIssues(c, ui, d, ev);
+    else if (sb === 'groups') drawGroups(c, ui, d, ev);
+    else if (sb === 'trend') drawTrend(c, ui, d, ev);
+    else if (sb === 'forecast') drawForecast(c, ui, d, ev);
+    else if (sb === 'voices') drawVoices(c, ui, d);
+    else if (sb === 'demo') drawDemos(c, ui, d);
   },
 };
+function drawRatings(c, ui, d, ev) {
+  const cab = ev.cabinet, pt = ev.party, pm = ev.pm;
+  // the three ratings apart
+  const card3 = (x, title, big, bigCol, line1, line2, trend, series, o = {}) => {
+    panel(c, x, 66, 208, 100, title, { right: o.right || '' });
+    T(c, big, x + 8, 86, 24, bigCol, 'left', 90);
+    T(c, trendWord(trend, o.d || 0), x + 200, 90, 12, trendCol(trend), 'right', 70);
+    T(c, '4週間', x + 200, 104, 10, K.faint, 'right');
+    T(c, line1, x + 8, 116, 10, K.text, 'left', 194);
+    if (o.bar) { const b = o.bar; R(c, x + 8, 129, 192, 8, '#081019'); R(c, x + 8, 129, Math.round(b[0] * 1.92), 8, K.good); R(c, x + 8 + Math.round(b[0] * 1.92), 129, Math.round(b[1] * 1.92), 8, K.bad); }
+    T(c, line2, x + 8, 140, 10, K.dim, 'left', 194);
+    spark(c, series, x + 8, 152, 192, 11, o.col || K.cyan, { min: o.min, max: o.max, back: false, minRange: 6 });
+  };
+  card3(4, '内閣支持率', `${cab.approve}%`, scoreCol(cab.approve + 8), `不支持 ${cab.disapprove}%・わからない ${cab.dk}%`, `誤差 ±${cab.margin}ポイント（n=1,200）`, cab.trend, cab.series, { bar: [cab.approve, cab.disapprove], right: '内閣' });
+  card3(216, `政党支持：${pt.short || '—'}`, `${pt.support}%`, K.cyan, pt.ruling.slice(0, 3).map((r) => `${r.name}${pct(r.pct)}`).join('・'), `誤差 ±${pt.margin}ポイント`, pt.trend, pt.series, { col: K.teal, d: 1, right: '与党第一党' });
+  card3(428, `総理の好感度`, `${pm.fav}%`, scoreCol(pm.fav + 5), `${pm.name || '—'}${pm.player ? '（あなた）' : ''}　好ましくない ${pm.unfav}%`, `誤差 ±${pm.margin}ポイント・人柄の評価`, pm.trend, pm.series, { bar: [pm.fav, pm.unfav], col: K.pink, right: '個人' });
+  // polls
+  panel(c, 4, 170, 316, 166, '世論調査（3社・誤差つき）', { right: ev.date });
+  T(c, '調査', 10, 190, 10, K.faint); T(c, '内閣支持', 150, 190, 10, K.faint, 'right'); T(c, '不支持', 204, 190, 10, K.faint, 'right'); T(c, '政党', 252, 190, 10, K.faint, 'right'); T(c, '誤差', 312, 190, 10, K.faint, 'right');
+  ev.polls.forEach((r, i) => {
+    const y = 202 + i * 27;
+    T(c, r.name, 10, y, 12, K.text, 'left', 100);
+    T(c, `${r.how}・n=${fmtN(r.n)}・${r.date.replace(/^\d+年/, '')}`, 10, y + 13, 10, K.faint, 'left', 160);
+    T(c, `${r.approve}%`, 150, y, 12, K.white, 'right'); T(c, `${r.disapprove}%`, 204, y, 12, K.dim, 'right'); T(c, `${r.party}%`, 252, y, 12, K.dim, 'right'); T(c, `±${r.margin}`, 312, y, 12, K.dim, 'right');
+  });
+  R(c, 10, 284, 304, 1, K.edge);
+  T(c, '3社の平均', 10, 288, 12, K.amber); T(c, `${ev.pollAvg.approve}%`, 150, 288, 12, K.white, 'right'); T(c, `±${ev.pollAvg.margin}`, 312, 288, 12, K.dim, 'right');
+  para(c, ev.pollAvg.note, 10, 304, 304, 10, K.faint, 12, 2);
+  // gap + leaders + me
+  panel(c, 324, 170, 312, 166, '好感度と支持率', {});
+  para(c, ev.gapText, 330, 190, 300, 10, K.text, 12, 3);
+  let y = 230;
+  T(c, '野党などの党首の好感度', 330, y, 10, K.amber); y += 13;
+  for (const l of ev.leaders.slice(0, 4)) {
+    R(c, 330, y + 2, 3, 8, partyColorOf(ui.g, l.party));
+    T(c, `${l.partyName}　${l.name}`, 338, y, 10, K.text, 'left', 150);
+    hbar(c, 492, y + 2, 90, 7, l.fav / 100, K.pink);
+    T(c, `${l.fav}%`, 630, y, 10, K.white, 'right'); y += 13;
+  }
+  if (ev.mine) { y += 3; T(c, `あなた：知名度 ${ev.mine.fame}%・好感度 ${ev.mine.fav}%・地元の支持 ${ev.mine.local}・党内 ${ev.mine.standing}`, 330, y, 10, K.gold || K.amber, 'left', 300); }
+}
+function drawIssues(c, ui, d, ev) {
+  const st = ui.tabState();
+  const k = ui.ctls.find((q) => q.id === 'iss');
+  panel(c, 4, 64, 300, 272, '争点ランキング（関心の高い順）');
+  T(c, '争点', 10, 82, 10, K.faint); T(c, '関心', 150, 82, 10, K.faint); T(c, '評価', 262, 82, 10, K.faint, 'right'); T(c, '動き', 298, 82, 10, K.faint, 'right');
+  drawList(c, ui, k, (c2, i, x, y, w) => {
+    const r = ev.rank[i];
+    T(c2, `${r.rank}`, x + 4, y + 3, 10, K.faint);
+    T(c2, r.name, x + 16, y + 3, 10, K.text, 'left', 128);
+    hbar(c2, x + 146, y + 6, 50, 6, r.attention / 75, K.cyan);
+    T(c2, `${r.score}%`, x + 258, y + 3, 10, scoreCol(r.score), 'right');
+    T(c2, trendWord(r.trend), x + w - 4, y + 3, 10, trendCol(r.trend), 'right');
+  }, { empty: '争点がない' });
+  const sel = ev.rank[st.iss | 0];
+  const it = sel ? ev.issues.find((q) => q.id === sel.id) : null;
+  panel(c, 308, 64, 328, 272, it ? it.name : '争点', { right: it ? `関心 ${it.attention}%` : '' });
+  if (!it) return;
+  T(c, `${it.score}%`, 316, 86, 24, scoreCol(it.score), 'left', 90);
+  T(c, '政府の対応を「評価する」', 410, 90, 10, K.dim); T(c, `評価しない ${it.neg}%・誤差 ±${it.margin}`, 410, 103, 10, K.dim, 'left', 220);
+  R(c, 316, 122, 312, 8, '#081019'); R(c, 316, 122, Math.round(it.score * 3.12), 8, scoreCol(it.score)); R(c, 316 + 156, 120, 1, 12, K.faint);
+  T(c, `動き（4週間）：${trendWord(it.trend, 1)}`, 316, 136, 10, trendCol(it.trend));
+  spark(c, it.series, 316, 150, 312, 40, K.cyan, { min: 20, max: 80, ref: 50, minRange: 16 });
+  let y = 196;
+  T(c, `いちばん信頼されている党：${it.trust ? it.trust.name : '—'}`, 316, y, 10, K.amber, 'left', 312); y += 14;
+  y = para(c, `背景：${it.driver}`, 316, y, 312, 10, K.text, 12, 3) + 4;
+  const gs = ev.groups.map((g2) => ({ name: g2.name, v: g2.matrix[it.id] })).sort((a, b) => b.v - a.v);
+  T(c, '評価が高い層', 316, y, 10, K.good); T(c, '評価が低い層', 476, y, 10, K.bad); y += 12;
+  for (let i = 0; i < 3; i++) { T(c, `${gs[i].name} ${gs[i].v}%`, 316, y + i * 12, 10, K.text, 'left', 150); const l = gs[gs.length - 1 - i]; T(c, `${l.name} ${l.v}%`, 476, y + i * 12, 10, K.text, 'left', 150); }
+}
+function drawGroups(c, ui, d, ev) {
+  const st = ui.tabState();
+  const k = ui.ctls.find((q) => q.id === 'grp');
+  panel(c, 4, 64, 330, 272, '層ごとの評価（推計）');
+  T(c, '層', 10, 82, 10, K.faint); T(c, '重み', 100, 82, 10, K.faint, 'right'); T(c, '内閣', 150, 82, 10, K.faint, 'right'); T(c, '党', 200, 82, 10, K.faint, 'right'); T(c, '総理', 250, 82, 10, K.faint, 'right');
+  drawList(c, ui, k, (c2, i, x, y, w) => {
+    const g2 = ev.groups[i];
+    R(c2, x + 4, y + 4, 3, 12, SEG_COLOR[g2.seg] || K.dim);
+    T(c2, g2.name, x + 10, y + 5, 10, K.text, 'left', 84);
+    T(c2, `${Math.round(g2.weight * 100)}%`, x + 96, y + 5, 10, K.faint, 'right');
+    T(c2, `${g2.cabinet}%`, x + 146, y + 5, 10, scoreCol(g2.cabinet + 8), 'right');
+    T(c2, `${g2.party}%`, x + 196, y + 5, 10, K.cyan, 'right');
+    T(c2, `${g2.pm}%`, x + 246, y + 5, 10, K.pink, 'right');
+    hbar(c2, x + 256, y + 8, w - 262, 5, g2.cabinet / 100, scoreCol(g2.cabinet + 8));
+  }, { empty: '層がない' });
+  const g2 = ev.groups[st.grp | 0];
+  panel(c, 338, 64, 298, 272, g2 ? `${g2.name}の争点評価` : '', { right: g2 ? `人口の${Math.round(g2.weight * 100)}%` : '' });
+  if (!g2) return;
+  T(c, `関心：${g2.concern.join('・')}`, 344, 84, 10, K.amber, 'left', 286);
+  ev.issues.forEach((it, i) => {
+    const y = 100 + i * 19;
+    const v = g2.matrix[it.id];
+    T(c, it.name, 344, y, 10, g2.concern.includes(it.name) ? K.white : K.text, 'left', 120);
+    R(c, 468, y + 2, 120, 7, '#081019'); R(c, 468, y + 2, Math.round(v * 1.2), 7, scoreCol(v)); R(c, 468 + 60, y, 1, 11, K.faint);
+    T(c, `${v}%`, 630, y, 10, scoreCol(v), 'right');
+  });
+}
+function drawTrend(c, ui, d, ev) {
+  const st = ui.tabState();
+  panel(c, 4, 64, 412, 272, '推移（毎週の調査）', { right: `${ev.history}週分` });
+  const sel = ev.issues[st.tr | 0];
+  const ser = [
+    { vals: ev.cabinet.series, col: K.amber, bold: true, label: '内閣支持率' }, { vals: ev.party.series, col: K.teal, label: `政党支持（${ev.party.short}）` }, { vals: ev.pm.series, col: K.pink, label: '総理の好感度' },
+  ];
+  if (sel) ser.push({ vals: sel.series, col: K.cyan, label: `争点：${sel.name}` });
+  chartLines(c, { x: 10, y: 84, w: 400, h: 200 }, ser, { min: 0, max: 80, ref: 30 });
+  ser.forEach((s, i) => { const x = 10 + (i % 2) * 200, y = 290 + Math.floor(i / 2) * 14; R(c, x, y + 4, 10, 3, s.col); T(c, s.label, x + 14, y, 10, K.text, 'left', 184); });
+  T(c, '点線：30%（危険水域）', 300, 84, 10, K.amberDk);
+  panel(c, 420, 64, 216, 272, '重ねる争点');
+  const k = ui.ctls.find((q) => q.id === 'tr');
+  drawList(c, ui, k, (c2, i, x, y, w) => {
+    const it = ev.issues[i];
+    T(c2, it.name, x + 6, y + 2, 10, K.text, 'left', 120);
+    T(c2, `${it.score}%`, x + w - 6, y + 2, 10, scoreCol(it.score), 'right');
+  }, { empty: '争点がない' });
+}
+function drawForecast(c, ui, d, ev) {
+  const f = ev.forecast;
+  panel(c, 4, 64, 632, 272, '選挙予測（衆議院）', { right: f ? `${f.scheduled ? '次の総選挙' : '任期満了'} ${f.date}・あと${f.daysTo}日` : '' });
+  if (!f) { para(c, '予測を出せなかった（政治のコアが必要）。', 12, 90, 600, 12, K.dim); return; }
+  T(c, `${f.note}議席数の中央値と、80%の幅を示す。`, 10, 84, 10, K.dim, 'left', 614);
+  const x0 = 92, w = 236, total = f.total;
+  const sx = (n) => x0 + (n / total) * w;
+  const rows = f.rows.slice(0, 7);
+  R(c, x0, 110, w, 1, K.edge);
+  for (const m of [0, 0.25, 0.5, 0.75, 1]) { R(c, Math.round(sx(total * m)), 108, 1, 5, K.faint); T(c, String(Math.round(total * m)), sx(total * m), 98, 10, K.faint, 'center'); }
+  R(c, Math.round(sx(f.majority)), 114, 1, 24 * rows.length + 2, K.amber);
+  T(c, `過半数 ${f.majority}`, sx(f.majority) + 3, 114 + 24 * rows.length - 8, 10, K.amber, 'left', 70);
+  rows.forEach((r, i) => {
+    const y = 116 + i * 24;
+    R(c, 10, y + 2, 4, 16, r.color);
+    T(c, r.short + (r.ruling ? '（与）' : ''), 18, y, 12, r.ruling ? K.white : K.text, 'left', 72);
+    T(c, `得票 ${r.share}%`, 18, y + 12, 10, K.faint, 'left', 72);
+    R(c, x0, y + 6, w, 8, '#081019');
+    R(c, sx(r.lo), y + 4, Math.max(2, sx(r.hi) - sx(r.lo)), 12, shade(r.color, -0.35));
+    R(c, sx(r.median) - 1, y + 2, 3, 16, r.color);
+    T(c, `${r.median}`, x0 + w + 8, y, 12, K.white, 'left', 40); T(c, `${r.lo}〜${r.hi}（いま${r.now}）`, x0 + w + 8, y + 12, 10, K.dim, 'left', 110);
+  });
+  const bx = 460;
+  let y = 100;
+  T(c, '与党の議席の見込み', bx, y, 10, K.amber); y += 13;
+  T(c, `${f.ruling.median}`, bx, y, 24, K.white, 'left', 70); T(c, `${f.ruling.lo}〜${f.ruling.hi}`, bx + 74, y + 4, 12, K.dim, 'left', 100); T(c, `いま${f.ruling.now}`, bx + 74, y + 17, 10, K.faint, 'left', 100); y += 38;
+  const chance = (label, v, col) => { T(c, label, bx, y, 12, K.text, 'left', 120); T(c, `${v}%`, 630, y, 14, col, 'right'); hbar(c, bx, y + 16, 170, 6, v / 100, col); y += 32; };
+  chance('与党が過半数', f.pMajority, f.pMajority >= 60 ? K.good : f.pMajority >= 35 ? K.warn : K.bad);
+  chance('3分の2以上', f.pTwoThirds, K.cyan);
+  chance('政権交代', f.pChange, f.pChange >= 50 ? K.bad : K.dim);
+  para(c, `支持率が${f.sd}ポイント動くだけで、小選挙区の勝敗が入れかわり、議席は大きく変わる。予測は目安で、外れることもある。選挙までの日数が長いほど、幅は広い。`, 10, 292, 614, 10, K.faint, 12, 3);
+}
+function drawVoices(c, ui, d) {
+  const st = ui.tabState();
+  panel(c, 4, 64, 424, 272, '世論の声', { right: '街・ネット' });
+  for (const f of VOICE_FILTERS) {
+    const k = ui.ctls.find((q) => q.id === `vf_${f.id}`);
+    if (!k) continue;
+    const on = (st.vf || 'all') === f.id;
+    frame(c, k.x, k.y, k.w, k.h, on ? '#1d4a64' : '#0b1621', on ? K.cyan : K.edge);
+    T(c, f.label, k.x + k.w / 2, k.y + 1, 10, on ? K.white : K.dim, 'center');
+  }
+  drawBtn(c, ui, ui.ctls.find((q) => q.id === 'v_fresh'), { center: true });
+  drawList(c, ui, ui.ctls.find((q) => q.id === 'vrow'), (c2, i, x, y, w) => {
+    const v = d.voices[i];
+    R(c2, x + 4, y + 3, 3, 25, STANCE_COL[v.stance] || K.dim);
+    T(c2, `${v.header}`, x + 10, y + 2, 10, K.dim, 'left', w - 60);
+    T(c2, safe(() => dateLabel(ui.g, v.day).replace(/^\d+年/, ''), ''), x + w - 4, y + 2, 10, K.faint, 'right', 60);
+    T(c2, v.text, x + 10, y + 15, 12, K.text, 'left', w - 14);
+  }, { empty: 'まだ声はない（「新しい声」で集める）' });
+  panel(c, 432, 64, 204, 272, '声の読みかた');
+  const ab = d.ab;
+  let y = 84;
+  y = para(c, '賛成・反対・中立の声を、同じ数だけ並べている。ひとつの声は、ひとりの意見にすぎない。', 438, y, 192, 10, K.text, 12, 4) + 6;
+  if (ab) { T(c, `内閣支持率 ${ab.approval}%`, 438, y, 12, K.white); y += 16; for (const r of (ab.reasons || []).filter((q) => Math.abs(q.value) >= 0.5).slice(0, 6)) { T(c, `${r.value > 0 ? '＋' : '−'}${Math.abs(r.value)}　${r.label.replace(/（.*$/, '')}`, 438, y, 10, r.value > 0 ? K.good : K.bad, 'left', 192); y += 12; } }
+}
+function drawDemos(c, ui, d) {
+  const st = ui.tabState();
+  panel(c, 4, 64, 254, 272, 'デモ・集会', { right: `${d.demos.filter((x) => x.status !== 'ended').length}件` });
+  drawList(c, ui, ui.ctls.find((q) => q.id === 'drow'), (c2, i, x, y, w) => {
+    const dm = d.demos[i];
+    R(c2, x + 4, y + 3, 3, 22, dm.status === 'ended' ? K.ghost : dm.stance === 'rally' ? K.teal : K.pink);
+    T(c2, dm.cause, x + 10, y + 2, 10, dm.status === 'ended' ? K.faint : K.text, 'left', w - 14);
+    T(c2, `${dm.status === 'ended' ? '終了' : dm.status === 'planned' ? '予定' : '開催中'}・約${fmtN(dm.size)}人`, x + 10, y + 14, 10, K.dim, 'left', w - 14);
+  }, { empty: 'いまデモはない' });
+  const dm = d.demos[st.drow | 0];
+  panel(c, 262, 64, 374, 212, dm ? dm.cause : 'デモの様子', {});
+  let yy = 84;
+  if (!dm) {
+    para(c, '集会・デモは憲法21条が保障する表現の自由のひとつ。大きな不満や争点があると、街頭に人が集まる。参加するのも、主催するのも、政府として対応するのも、ここからできる。', 270, yy, 356, 10, K.text, 12, 4);
+    para(c, '主催には公安条例の許可と準備のお金がかかる。人数が多く、勢いが強いほど、世論と報道に与える影響が大きい。', 270, yy + 56, 356, 10, K.dim, 12, 3);
+  }
+  if (dm) {
+    T(c, dm.place, 270, yy, 10, K.cyan, 'left', 356); yy += 13;
+    T(c, `主催：${dm.organiser}`, 270, yy, 10, K.text, 'left', 356); yy += 13;
+    T(c, `層：${SEG_SHORT[dm.segment] || dm.segment}・許可：${dm.permit ? 'あり' : 'なし'}`, 270, yy, 10, K.text, 'left', 356); yy += 13;
+    const mo = num(dm.momentum, 1);
+    T(c, `最大 約${fmtN(dm.peak)}人・勢い：${dm.status === 'ended' ? '終わった' : mo > 1.05 ? '強まっている' : mo < 0.95 ? '弱まっている' : '横ばい'}`, 270, yy, 10, K.text, 'left', 356); yy += 13;
+    if (dm.joined) { T(c, `あなたも参加した（${dm.joined.role === 'speaker' ? 'スピーチ' : '参加'}）`, 270, yy, 10, K.good, 'left', 356); yy += 13; }
+    const resp = (dm.responses || []).slice(-1)[0];
+    if (resp) { const RD = GV && GV.DEMO_RESPONSES && GV.DEMO_RESPONSES[resp.how]; T(c, `政府の対応：${RD ? String(RD.label || RD.name || resp.how).replace(/（.*$/, '') : resp.how}`, 270, yy, 10, K.warn, 'left', 356); yy += 13; }
+    for (const l of (dm.log || []).slice(-6)) { if (yy > 262) break; T(c, `・${l.text}`, 270, yy, 10, K.dim, 'left', 356); yy += 12; }
+  }
+  for (const id of ['d_join', 'd_org', 'd_resp', 'd_scene']) drawBtn(c, ui, ui.ctls.find((q) => q.id === id), { center: true, color: id === 'd_resp' ? K.amber : K.cyan });
+}
 async function demoJoin(ui, dm) {
   if (!dm) return;
   const k = await ui.confirm({ title: 'デモに参加する', lines: [`「${dm.cause}」に参加する（${dm.place}）。`, 'デモや集会は、集会・表現の自由（憲法21条）で守られている。', '体力を使う。芸能人なら知名度やスポンサーへの影響、政治家なら党内の評価にもかかわる。'], choices: ['参加する', 'スピーチもする', 'やめる'], cancel: 2 });
@@ -3272,7 +3460,28 @@ async function postalBill(ui) {
 }
 
 // ================================================================ the tabs, tips, entry points
-const TABS = [TAB_OVERVIEW, TAB_BUDGET, TAB_NETWORK, TAB_OPINION, TAB_DIET, TAB_ADMIN, TAB_SECURITY, TAB_CRISIS, TAB_IDEOLOGY, TAB_SOCIETY];
+// ---------------------------------------------------------------- tab 11: 各界 (agent R5-B). The screens are in groups_ui.js, built with this
+// console's own drawing kit (panels, lists, buttons, modals); the data comes from groups.js through g.groups() & co.
+let GU = null; // groups_ui.js
+import('./groups_ui.js').then((m) => { GU = m; }).catch(() => { GU = null; });
+let GKIT = null;
+function groupsKit() {
+  if (!GKIT) GKIT = { K, T, fit, para, wrapJ, panel, chip, chipR, hbar, cbar, frame, R, line, disc, spark, padlock, btn, drawBtn, listCtl, drawList, segCtls, drawSegs, sub, jump, safe, has, num, fmtN, sgn, pct, sfx, shade, measure, clamp, fmtMoney, SEG_SHORT, SEG_COLOR, tabIndex, whyOf };
+  return GKIT;
+}
+const TAB_GROUPS = {
+  id: 'groups', label: '各界', short: '観光地・協会・連合・スポーツ・ビジネス・セクト・有識者・アーティスト・文化・研究・政府との関係', lesson: 'yoron',
+  about: '観光地・協会・連合・スポーツ・ビジネス・セクト・有識者・アーティスト・文化・研究・政府（官庁・自治体）との関係。要望に応え、会談・補助・規制・圧力・懐柔などで関係を築く',
+  terms: ['組織票', '規制緩和', '審議会', '最低賃金', '企業・団体献金', '表現の自由', '天下り'],
+  load(ui) { return GU && has(ui.g, 'groups') ? GU.tabLoad(ui, groupsKit()) : { _pending: true }; },
+  layout(ui, d) { return GU && !d._pending ? GU.tabLayout(ui, d, groupsKit()) : []; },
+  draw(c, ui, d) {
+    if (!GU || d._pending) { panel(c, 4, 44, 632, 292, '各界'); T(c, has(ui.g, 'groups') ? '読み込み中…' : '各界のしくみ（groups.js）が読み込まれていない。', 14, 70, 12, K.dim); return; }
+    GU.tabDraw(c, ui, d, groupsKit());
+  },
+  alert(ui) { return GU ? GU.tabAlert(ui) : 0; },
+};
+const TABS = [TAB_OVERVIEW, TAB_BUDGET, TAB_NETWORK, TAB_OPINION, TAB_DIET, TAB_ADMIN, TAB_SECURITY, TAB_CRISIS, TAB_IDEOLOGY, TAB_SOCIETY, TAB_GROUPS];
 function tabIndex(t) {
   if (t == null || t === '') return -1;
   if (typeof t === 'number') return t >= 1 && t <= TABS.length ? t - 1 : -1;

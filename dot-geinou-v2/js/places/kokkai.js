@@ -1318,8 +1318,18 @@ async function hishoTalk(g) {
   const items = ['今日の予定', '帳簿を見せて', '収支報告書を出す', '献金を集める', 'パーティーを開く', '秘書を雇う'];
   // 議員辞職 / 政界引退: the politics UI's 進退 screen (sitting Diet members only: myHouse above)
   if (typeof g.politicsScreen === 'function') items.push('進退（辞職・引退）');
+  // round 5 (R5-D): the bills in the Diet (国会対策: 修正協議・付帯決議・委員会の進め方) and the party's goings-on
+  const polUI = typeof g.politicsScreen === 'function' && !g.auto;
+  if (polUI && typeof g.billTactics === 'function') items.push('国会対策（法案の戦術）');
+  if (polUI && typeof g.intra === 'function') items.push('党内の動き');
   const k = await g.list({ title: '秘書に頼む', items: [...items, 'なんでもない'], x: 200, y: 60, w: 260, px: true });
   const pick = items[k];
+  if (pick === '国会対策（法案の戦術）') {
+    await g.say(['法案の審議の進め方ですね。', '修正協議、付帯決議、委員会の進め方…\n与野党の間で、いろいろ手があります。'], say(WHO.hisho));
+    await g.politicsScreen('bills');
+    return;
+  }
+  if (pick === '党内の動き') { await g.politicsScreen('party', {}); return; }
   if (pick === '進退（辞職・引退）') {
     await g.say(['先生…進退のことですね。', '議員辞職も、引退の表明も、\n最後は先生ご自身が決めることです。'], say(WHO.hisho));
     await g.politicsScreen('retire');
