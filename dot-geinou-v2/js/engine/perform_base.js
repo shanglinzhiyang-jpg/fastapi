@@ -390,6 +390,7 @@ export class PerformGame extends Minigame {
   onLaugh(line, L, resp) {}
   onResponse(punch, resp, grade) {}
   expectsPress(line) { return false; }
+  onStrayPress(line) {}
 
   // ---------------------------------------------------------------- flow
   later(frames, fn) { this.sched.push({ at: this.pt + frames, fn }); }
@@ -457,6 +458,7 @@ export class PerformGame extends Minigame {
     this.shown = 0;
     this.typeT = 0;
     this.tempoSum = 0;
+    this.typeFrames = 0;
     this.kamuAt = -1;
     this.kamuDone = false;
     this.earlyPress = false;
@@ -482,6 +484,7 @@ export class PerformGame extends Minigame {
     if (this.fast && !ln.punch && !ln.resp) tempo = Math.max(tempo, 2.2);
     this.tempo = tempo;
     this.tempoSum += tempo;
+    this.typeFrames = (this.typeFrames || 0) + 1;
     this.typeT += tempo;
     // rushing: speaking fast for too long
     if (mine) {
@@ -496,11 +499,14 @@ export class PerformGame extends Minigame {
       this.shown = n;
       if (this.bubble) this.bubble.n = this.kamuDone ? Infinity : n;
     }
-    if (inp.pressed('a') && this.expectsPress(ln) && n < this.chars.length - 3) { this.earlyPress = true; this.popup('まだ途中！', 520, 120, COLORS.bad, 16); }
+    if (inp.pressed('a')) {
+      if (this.expectsPress(ln)) { if (n < this.chars.length - 3 && !this.earlyPress) { this.earlyPress = true; this.popup('まだ途中！', 520, 120, COLORS.bad, 16); } }
+      else this.onStrayPress(ln);
+    }
     this.speaking = ln.who;
     if (n >= this.chars.length) {
       if (this.bubble) this.bubble.n = Infinity;
-      this.show.speak(ln, this.tempoSum / Math.max(1, this.typeT / tempo) || 1);
+      this.show.speak(ln, this.tempoSum / Math.max(1, this.typeFrames) || 1);
       this.speaking = -1;
       this.setState('after');
       this.push(...(this.afterTasks(ln) || []));
@@ -710,8 +716,8 @@ export class PerformGame extends Minigame {
   }
   drawOver(ctx) {}
   drawHudBar(ctx) {
-    const total = this.lines.filter((l) => !l.consumed || l.i <= this.idx).length;
-    const done = clamp(this.lines.slice(0, this.idx + 1).filter((l) => !l.consumed).length, 0, total);
+    const total = this.lines.filter((l) => !l.resp).length;
+    const done = clamp(this.lines.slice(0, this.idx + 1).filter((l) => !l.resp).length, 0, total);
     const mineAny = this.lines.some((l) => l.who === this.pi);
     S.drawHud(ctx, { left: `ネタ ${done}/${total}`, heat: this.show.h, clock: this.show.time, limit: this.ctx.limit, rush: mineAny ? clamp(this.rushM / (0.55 + this.members[this.pi].s.ma * 0.4), 0, 1) : null });
   }

@@ -7,7 +7,7 @@
 // everything else is a plausible generic format, marked in `facts.unverified` and worded 「（詳細非公開）」 in the game.
 // Every person in this file is fictional (entrants, judges, 進行役, winners). Real organizers / broadcasters / venues only.
 
-import { registerContest } from './contests.js';
+import { registerContest, contestDate } from './contests.js';
 import { withBackdrop, showMeter, showBoard, showBracket } from './contests_data2_scenes.js';
 import { stageRound, castOf } from './contests_data2_flow.js';
 import {
@@ -354,8 +354,8 @@ registerContest('imamiya', {
     '今宮戎神社の夏の「こどもえびす」でマンザイ新人コンクール。境内に特設舞台',
     '今宮戎マンザイ新人コンクール、対象は「受賞歴のないコンビ・グループ」。コントでの出場もOK',
     '福笑い大賞は賞金20万円と楯。奨励賞は10万円',
-    (g, ctx) => (ctx.year === 2023 ? '今宮戎マンザイ新人コンクール、コロナ禍の中止を経て4年ぶりに復活' : (g2) => ''),
-    (g, ctx) => `「こども」は祭りの名前――${ctx.year - 1980 + 1 > 0 ? '1980年から続く' : ''}今宮戎の新人コンクール、今年も若手が境内へ`,
+    (g, ctx) => (ctx.year === 2023 ? '今宮戎マンザイ新人コンクール、コロナ禍の中止を経て4年ぶりに復活' : '今宮戎のコンクール、審査は審査委員長と審査員。境内の客席の反応も熱い'),
+    '「こども」は祭りの名前――1980年から続く今宮戎の新人コンクール、今年も若手が境内へ',
     (g, ctx) => (ctx.year >= 2025 ? '今宮戎、本殿の屋根葺替工事に伴い2026・2027年のこどもえびすとコンクールは休止へ' : '今宮戎のコンクール出身者が劇場の看板に。「最初の賞」の重み'),
   ],
   catchcopy: () => '境内から始まる、最初の福笑い',
@@ -683,7 +683,7 @@ registerContest('loudness', {
   history: { founded: 2021, ended: 2022, note: '審査員なし・観客の笑い声と拍手を計測して数値化。2021: 821組→決勝15組・観客80人、2022: 1018組→15組・賞金95万8400円。2023年以降は確認できず → 復刻開催扱い。', sources: LOUD_SRC },
   schedule: { entry: { from: [4, 1], to: [5, 1] }, final: [7, 6] },
   eligibility: elig('出場資格の詳細は未確認（ゲームではプロ・アマ不問）', () => OK, { pro: true, amateur: true }),
-  prize: (y) => null, prizeText: '優勝賞金＝笑量の得点×1万円（2022年は95万8400円）＋ABEMAの番組出演権',
+  prizeText: '優勝賞金＝笑量の得点×1万円（2022年は95万8400円）＋ABEMAの番組出演権',
   facts: { verified: ['ABEMA', '審査員なし・笑い声と拍手を計測', '2021: 7/18放送・15組・観客80人・821組', '2022: 7/17放送・1018組・15組・賞金95万8400円・番組出演権'], unverified: ['賞金=得点×1万円（推定）', '2023年以降', '出場資格', '予選の方式', 'ネタ時間'] },
   rounds: [
     { id: 'r1', name: '予選（詳細非公開）', when: [5, 6], judge: 'staff', field: 1000, pass: 15, run: (g, ctx) => stageRound(g, ctx, { round: 'r1', name: '予選', scene: 'theater', sign: '笑ラウドネスGP 予選', field: loudEntries(ctx.year), pass: 15, sample: 30, level: 50, intro: (gg, c) => [`エントリーは${loudEntries(c.year)}組。決勝に進めるのは15組。`, '決勝には審査員がいない。測るのは「笑いの大きさ」だけ。'] }) },
@@ -751,8 +751,8 @@ registerContest('bs1', {
   facts: { verified: ['オリックス・バファローズ主催', 'オリックス大好き芸人', '京セラドーム大阪・試合終了後', '第3回 2023/8/20、第4回 2024/8/3', '優勝＝翌シーズンの特別始球式投球権'], unverified: ['第1回=2021年（逆算）', '審査方式', '出場組数', 'ネタ時間'] },
   onMorning: (g, ctx) => {
     const s = d2(g);
-    const y = ctx && ctx.year;
-    const d = ctx && ctx.date;
+    const d = (ctx && ctx.date) || contestDate(g);
+    const y = (ctx && ctx.year) || d.year;
     if (!y || !d || !s.flags.bs1Pitch || s.flags.bs1Pitch !== y || d.month !== 4 || d.dom !== 2) return;
     s.flags.bs1Pitch = 0;
     const r = rngFor(g, 'bs1', y, 'pitch');
