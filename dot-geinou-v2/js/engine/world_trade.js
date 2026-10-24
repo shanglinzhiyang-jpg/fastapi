@@ -29,7 +29,7 @@ export const TARIFF_CATS = {
     bound: [[0, 600], [19990401, 341]], imp: A([1987, 0], [2026, 0.03]), cpiW: A([1987, 0.016], [2026, 0.012]), pMax: 45, sc: 330, gMax: -0.04, eMax: 0.4,
     seg: { farmers: 1.2, rural: 0.7, elderly: 0.15, families: -0.4, urban: -0.3, business: -0.2, young: -0.15 },
     who: '稲作農家と農村。コメは食料安全保障の象徴でもある', pro: ['稲作農家と農村の暮らし、水田の景色を守る', '食料の自給と備蓄の土台になる'], con: ['消費者はコメを高く買うことになる', '交渉のたびに最大の標的になり、ほかの分野の取引を難しくする', '農家の高齢化が進み、関税だけでは守りきれないという指摘'],
-    note: '1993年の冷夏で「平成の米騒動」が起き、緊急輸入が行われた（1993〜94年）。2025年には米価が高騰し、備蓄米の放出が行われた。',
+    note: [[19930901, '1993年の冷夏で「平成の米騒動」が起き、緊急輸入が行われた（1993〜94年）。'], [20250301, '2025年には米価が高騰し、備蓄米の放出が行われた。']],
   },
   livestock: {
     id: 'livestock', name: '畜産物（牛肉・豚肉・乳製品）', group: '農産物', unit: '%', min: 0, max: 120, step: 2.5, qeq: [[0, 60], [19910401, 0]],
@@ -37,7 +37,7 @@ export const TARIFF_CATS = {
     bound: [[0, 70], [19950401, 50], [20000401, 38.5]], imp: A([1987, 4.5], [1996, 4.8], [2004, 3.5], [2026, 2.9]), cpiW: A([1987, 0.03], [2026, 0.024]), pMax: 28, sc: 55, gMax: -0.05, eMax: 0.3,
     seg: { farmers: 1.0, rural: 0.6, families: -0.35, urban: -0.25, business: -0.15, young: -0.1 },
     who: '肉牛・酪農・養豚の農家', pro: ['畜産農家の経営を支え、国産の畜産を維持する', '口蹄疫や牛海綿状脳症（BSE）の危機のときに国内の供給を守る'], con: ['牛肉・チーズ・豚肉が高く、家計の負担になる', '輸出国との交渉でたびたび譲歩を迫られる'],
-    note: '1991年4月の牛肉・オレンジの自由化は、日米の長い交渉の結果。2003年末には米国産牛肉がBSEで輸入停止になった（2006年に条件つきで再開）。',
+    note: [[19870401, '牛肉・オレンジの輸入割当の撤廃は、日米の長い交渉の焦点になっている。'], [19910401, '1991年4月に牛肉・オレンジが自由化された（1988年6月の日米合意）。'], [20031224, '2003年末には米国産牛肉がBSEで輸入停止になった（2006年に条件つきで再開）。']],
   },
   farm: {
     id: 'farm', name: 'そのほかの農産物（麦・砂糖・野菜・果物）', group: '農産物', unit: '%', min: 0, max: 80, step: 2.5, qeq: [[0, 20], [19920401, 6], [19960401, 0]],
@@ -45,21 +45,21 @@ export const TARIFF_CATS = {
     bound: [[0, 40], [19950401, 30], [20000401, 22]], imp: A([1987, 8], [1996, 8], [2004, 7], [2026, 6.5]), cpiW: A([1987, 0.07], [2026, 0.06]), pMax: 16, sc: 22, gMax: -0.08, eMax: 0.3,
     seg: { farmers: 1.0, rural: 0.6, families: -0.3, urban: -0.25, business: -0.2, young: -0.1 },
     who: '麦・てんさい・かんしょ・野菜・果樹の農家', pro: ['国内の産地を守り、地域の雇用を支える', '主食以外の食料自給率を保つ'], con: ['食品の値段が高くなる', '輸出国から開放を迫られやすい'],
-    note: '2001年には中国産のネギ・生シイタケ・畳表に暫定セーフガードを発動し、中国が日本車などに高い関税で対抗する貿易摩擦になった。',
+    note: [[20010401, '2001年には中国産のネギ・生シイタケ・畳表に暫定セーフガードを発動し、中国が日本車などに高い関税で対抗する貿易摩擦になった。']],
   },
   fish: {
     id: 'fish', name: '水産物', group: '農産物', unit: '%', min: 0, max: 40, step: 1, qeq: [[0, 5], [19960401, 0]],
     hist: [[0, 10, '水産物の関税（平均の目安）'], [19950401, 7, 'WTOの発足'], [20040401, 5.5, ''], [20181230, 4.5, 'CPTPPなどで撤廃が進む'], [20260401, 3.5, '']],
     bound: [[0, 18], [19950401, 12]], imp: A([1987, 5], [1996, 4.5], [2004, 3.2], [2026, 2.5]), cpiW: A([1987, 0.03], [2026, 0.025]), pMax: 14, sc: 12, gMax: -0.04, eMax: 0.3,
     seg: { farmers: 0.7, rural: 0.35, families: -0.25, urban: -0.2, business: -0.1 },
-    who: '漁業者と水産加工業', pro: ['漁業と沿岸の町を守る'], con: ['魚介類の値段が上がる', '日本は水産物の輸出国でもあり、報復を受けやすい'], note: '',
+    who: '漁業者と水産加工業', pro: ['漁業と沿岸の町を守る'], con: ['魚介類の値段が上がる', '日本は水産物の輸出国でもあり、報復を受けやすい'], note: [],
   },
   industrial: {
     id: 'industrial', name: '工業製品（機械・電子・化学）', group: '工業', unit: '%', min: 0, max: 40, step: 0.5, qeq: [[0, 0]],
     hist: [[0, 3.8, '工業品の平均関税率（貿易加重平均）3.8%'], [19950401, 2.6, 'ウルグアイ・ラウンドの実施（1995〜2000年に3.8% → 1.5%）'], [19960401, 2.4, ''], [19970401, 2.1, ''], [19980401, 1.9, ''], [19990401, 1.7, ''], [20000401, 1.5, '工業品の平均 1.5%'], [20081201, 1.3, 'EPAの拡大'], [20190201, 1.1, '日EU・TPP11'], [20220101, 1.0, 'RCEP（中国・韓国と初めてのEPA）']],
     bound: [[0, 5], [19950401, 4]], imp: A([1987, 28], [1996, 38], [2004, 43], [2026, 47]), cpiW: A([1987, 0.14], [2026, 0.16]), pMax: 5, sc: 14, gMax: -0.8, eMax: 0.25,
     seg: { business: -0.6, employees: -0.1, unions: 0.25, selfemployed: 0.1, families: -0.2, urban: -0.15, young: -0.15 },
-    who: '輸入品と競争する国内メーカー（部品・素材には負担）', pro: ['国内の工場と雇用を守る', '新しい産業を育てる時間をかせぐ'], con: ['部品・素材が高くなり、輸出企業の競争力が落ちる', '相手国が日本の輸出品に同じ手で報復する'], note: '',
+    who: '輸入品と競争する国内メーカー（部品・素材には負担）', pro: ['国内の工場と雇用を守る', '新しい産業を育てる時間をかせぐ'], con: ['部品・素材が高くなり、輸出企業の競争力が落ちる', '相手国が日本の輸出品に同じ手で報復する'], note: [],
   },
   auto: {
     id: 'auto', name: '自動車・部品', group: '工業', unit: '%', min: 0, max: 60, step: 2.5, qeq: [[0, 0]],
@@ -67,28 +67,28 @@ export const TARIFF_CATS = {
     bound: [[0, 0]], imp: A([1987, 1.5], [1996, 2.6], [2004, 2.2], [2026, 2.4]), cpiW: A([1987, 0.04], [2026, 0.04]), pMax: 8, sc: 18, gMax: -0.15, eMax: 0.4,
     seg: { employees: 0.15, unions: 0.35, business: -0.35, families: -0.25, urban: -0.15, young: -0.15, selfemployed: 0.05 },
     who: '輸入車と競争する国内メーカー', pro: ['国産メーカーと下請けの雇用を守る'], con: ['輸入車・部品が高くなる', '日本の最大の輸出品である自動車で、相手国の報復の標的になる'],
-    note: '日本の自動車は1981〜94年に対米の輸出自主規制（数量の枠）を受けた。1995年には米国が高級車に100%の関税をかけると警告し、交渉の末に回避された。',
+    note: [[19810101, '日本の自動車は1981年から対米の輸出自主規制（台数の枠）を受けている。'], [19940401, '対米の輸出自主規制は1994年3月に終わった。'], [19950601, '1995年5月に米国が高級車に100%の関税を警告し、6月に交渉で回避された。']],
   },
   energy: {
     id: 'energy', name: 'エネルギー・資源（原油・石炭・LNG）', group: '資源', unit: '%', min: 0, max: 20, step: 0.5, qeq: [[0, 0]],
     hist: [[0, 0.5, '原油・石炭などの関税はほぼ無税（石油石炭税は別）'], [20260401, 0.3, '']],
     bound: [[0, 1]], imp: A([1987, 36], [1996, 23], [2004, 28], [2026, 24]), cpiW: A([1987, 0.07], [2026, 0.09]), pMax: 14, sc: 12, gMax: -0.9, eMax: 0.2,
     seg: { business: -0.7, families: -0.6, employees: -0.35, elderly: -0.4, rural: -0.45, urban: -0.25, young: -0.25 },
-    who: '（国内にほぼ産出はなく、国内の保護される産業はない）', pro: ['関税収入が増える', '省エネを促すきっかけになる'], con: ['電気・ガス・ガソリンが上がり、家計と企業の負担になる', '産業全体のコストが上がる'], note: '',
+    who: '（国内にほぼ産出はなく、国内の保護される産業はない）', pro: ['関税収入が増える', '省エネを促すきっかけになる'], con: ['電気・ガス・ガソリンが上がり、家計と企業の負担になる', '産業全体のコストが上がる'], note: [],
   },
   apparel: {
     id: 'apparel', name: '繊維・衣類', group: '工業', unit: '%', min: 0, max: 40, step: 1, qeq: [[0, 0]],
     hist: [[0, 14, '衣類の関税（品目により10〜15%）'], [19950401, 12, 'WTOの発足'], [20040401, 9.5, ''], [20081201, 9, 'ASEANとのEPA'], [20260401, 8, '']],
     bound: [[0, 18], [19950401, 14]], imp: A([1987, 3.5], [1996, 7.5], [2004, 8], [2026, 5.3]), cpiW: A([1987, 0.05], [2026, 0.04]), pMax: 8, sc: 12, gMax: -0.1, eMax: 0.35,
     seg: { unions: 0.25, selfemployed: 0.2, families: -0.35, young: -0.3, urban: -0.2, employees: -0.1, elderly: -0.1 },
-    who: '国内の繊維・縫製業', pro: ['地方の縫製工場と雇用を守る'], con: ['衣料品の値段が上がる', '1960〜70年代の繊維摩擦のように、日米の対立の種になる'], note: '',
+    who: '国内の繊維・縫製業', pro: ['地方の縫製工場と雇用を守る'], con: ['衣料品の値段が上がる', '1960〜70年代の繊維摩擦のように、日米の対立の種になる'], note: [],
   },
   steel: {
     id: 'steel', name: '鉄鋼・金属', group: '工業', unit: '%', min: 0, max: 40, step: 0.5, qeq: [[0, 0]],
     hist: [[0, 3.2, '鉄鋼の関税'], [19950401, 1.2, ''], [20040401, 0.6, ''], [20260401, 0.3, '']],
     bound: [[0, 6], [19950401, 3]], imp: A([1987, 2.5], [1996, 2.0], [2004, 2.8], [2026, 2.6]), cpiW: A([1987, 0.01], [2026, 0.01]), pMax: 6, sc: 12, gMax: -0.35, eMax: 0.3,
     seg: { unions: 0.3, business: -0.4, employees: 0.05, rural: 0.05 },
-    who: '国内の製鉄所と関連の産業', pro: ['製鉄所の雇用と技術を守る', '安い輸出（ダンピング）への備えになる'], con: ['建設・自動車・機械のコストが上がる'], note: '米国は2002年に鉄鋼セーフガード（WTOで違反と判断され2003年末に撤廃）、2018年に安全保障を理由に25%、2025年に50%の関税をかけた。',
+    who: '国内の製鉄所と関連の産業', pro: ['製鉄所の雇用と技術を守る', '安い輸出（ダンピング）への備えになる'], con: ['建設・自動車・機械のコストが上がる'], note: [[20020311, '米国は2002年に鉄鋼セーフガードを発動した（WTOで違反と判断され2003年末に撤廃）。'], [20180323, '2018年に米国が安全保障を理由に25%の関税をかけた。'], [20250604, '2025年に米国の関税は50%になった。']],
   },
 };
 export const CAT_ORDER = ['rice', 'livestock', 'farm', 'fish', 'industrial', 'auto', 'steel', 'energy', 'apparel'];
@@ -191,7 +191,7 @@ const FRICTIONS = [
   { id: 'semi', from: 19870101, to: 19930101, pk: 'us', title: '日米半導体・電子機器摩擦', item: '半導体・電子機器', ask: '日本市場での外国製半導体のシェア拡大と、第三国向けのダンピングの防止', theirs: { industrial: 20 }, sev: 2, w: 1.2, concede: { text: '外国製品の購入目標や監視の枠組みを受け入れた', approval: -0.6, segs: { business: -0.6, unions: -0.2 }, cost: 'ドット商工会議所は「事実上の数値目標だ」と反発' } },
   { id: 'beefor', from: 19870101, to: 19920401, pk: 'us', title: '牛肉・オレンジの輸入自由化要求', item: '牛肉・かんきつ類', ask: '輸入割当（数量の制限）の撤廃と関税への切りかえ', theirs: { industrial: 12 }, sev: 2, w: 1.1, concede: { cat: 'livestock', delta: -8, text: '牛肉の輸入割当を関税に切りかえ、関税を段階的に下げることで合意した', approval: -0.5, segs: { farmers: -2.2, rural: -1.0, families: 0.8 }, cost: '全国の畜産農家が反対の声を上げた' } },
   { id: 'rice_us', from: 19870101, to: 19960101, pk: 'us', title: 'コメ市場の開放要求', item: 'コメ', ask: 'コメの輸入禁止の見直し（関税化・最低限の輸入枠）', theirs: { industrial: 8, farm: 10 }, sev: 2, w: 0.9, concede: { cat: 'rice', delta: -60, text: 'コメの輸入について、最低限の輸入枠（ミニマム・アクセス）を受け入れる方向で調整した', approval: -1.2, segs: { farmers: -3.5, rural: -1.8, families: 0.6 }, cost: '農協と農村選出の議員が「国会決議に反する」と強く反発' } },
-  { id: 'sii', from: 19870101, to: 19940101, pk: 'us', title: '日米構造協議（市場の閉鎖性の批判）', item: '流通・系列・大型店規制', ask: '大型店規制の緩和、系列取引や公共投資など「構造」の見直し', theirs: { industrial: 10 }, sev: 1, w: 0.8, concede: { text: '大店法の運用の緩和や公共投資の拡大を約束した', approval: -0.3, segs: { selfemployed: -1.2, business: 0.6, urban: 0.5 }, cost: '商店街の組合が反発', eco: { growth: 0.12 } } },
+  { id: 'sii', from: 19890901, to: 19940101, pk: 'us', title: '日米構造協議（市場の閉鎖性の批判）', item: '流通・系列・大型店規制', ask: '大型店規制の緩和、系列取引や公共投資など「構造」の見直し', theirs: { industrial: 10 }, sev: 1, w: 0.8, concede: { text: '大店法の運用の緩和や公共投資の拡大を約束した', approval: -0.3, segs: { selfemployed: -1.2, business: 0.6, urban: 0.5 }, cost: '商店街の組合が反発', eco: { growth: 0.12 } } },
   { id: 'vera', from: 19870101, to: 19950101, pk: 'us', title: '自動車の対米輸出（自主規制の延長）', item: '乗用車', ask: '対米輸出台数の枠（輸出自主規制）の延長と、現地生産の拡大', theirs: { auto: 15 }, sev: 1, w: 0.9, concede: { text: '輸出台数の枠を受け入れ、米国での現地生産を増やす方針を示した', approval: -0.2, segs: { unions: -0.5, business: -0.3 }, cost: '輸出企業は「輸出の機会が奪われる」と懸念', eco: { growth: -0.06 } } },
   { id: 'auto_talk', from: 19930101, to: 19990101, pk: 'us', title: '日米自動車・部品協議', item: '高級車・自動車部品', ask: '日本の部品調達の拡大。応じなければ日本製の高級車に100%の関税', theirs: { auto: 40 }, sev: 2, w: 1.3, concede: { text: '日本メーカーの米国現地生産と部品購入の見通しを公表する形で決着した', approval: -0.2, segs: { business: -0.2 }, cost: '数値目標だとして、官民で意見が割れた' } },
   { id: 'sg_cn', from: 20000101, to: 20060101, pk: 'cn', title: '農産物のセーフガードをめぐる対立', item: 'ネギ・シイタケ・畳表', ask: '日本が発動した暫定セーフガードの撤回。応じなければ日本車・携帯電話・エアコンに100%の関税', theirs: { auto: 35, industrial: 12 }, sev: 2, w: 1.1, concede: { text: 'セーフガードを本発動せず、中国側の輸出の自主的な管理を受け入れた', approval: -0.4, segs: { farmers: -1.2, rural: -0.6, business: 0.7 }, cost: '産地の農家は「国内の産地を守る約束が崩れた」と反発' } },
@@ -403,7 +403,6 @@ export function createTrade(X, DP) {
     push('大きく引き上げる', Math.min(C.max, cur + C.step * 6));
     const b = boundAt(cat, n);
     if (b > cur && b <= C.max) push('WTOの約束（譲許税率）の上限まで', b, 'これを超えると約束違反');
-    for (const [d, r, tx] of C.hist) if (d > n && d <= n + 100000 && tx) push(`これから決まる水準（${Math.floor(d / 10000)}年）`, r, tx.slice(0, 22));
     return out.filter((x) => Math.abs(x.rate - cur) >= 0.01).sort((a, b2) => a.rate - b2.rate);
   }
   function tariffPreview(g, cat, rate, opts = {}) {
@@ -430,7 +429,7 @@ export function createTrade(X, DP) {
     lines.push(`関税収入：${sign(after.revenue - before.revenue, 3)}兆円/年（現在 約${before.revenue.toFixed(2)}兆円）`);
     const b = boundAt(cat, n);
     const over = rate > b;
-    if (over) lines.push(`⚠ WTO（GATT）で約束した上限（${rateText(cat, b)}）を超える。相手国は補償や対抗措置を求められる`);
+    if (over) lines.push(`⚠ ${n < 19950101 ? 'GATT' : 'WTO'}で約束した上限（${rateText(cat, b)}）を超える。相手国は補償や対抗措置を求められる`);
     const segs = [];
     for (const [sg, v] of Object.entries(C.seg)) { const d = (tanh((aveOf(cat, rate, n) - aveOf(cat, h, n)) / C.sc) - tanh((aveOf(cat, cur, n) - aveOf(cat, h, n)) / C.sc)) * v; if (Math.abs(d) >= 0.05) segs.push({ seg: sg, name: segName(sg), v: Math.round(d * 100) / 100 }); }
     segs.sort((a, b2) => Math.abs(b2.v) - Math.abs(a.v));
@@ -841,14 +840,14 @@ export function createTrade(X, DP) {
   const frictionOf = (g, kid) => { const k = W(g).crises.find((c) => c.id === kid); if (!k || k.kind !== 'trade') return null; return T(g).frictions.find((f) => f.crisis === kid && f.status === 'open') || null; };
   const FR_WHO = ['pm', 'foreign', 'trade', 'agri'];
   const FR_ACT = {
-    trade_talk: { name: '閣僚協議で解決を探る', how: 'talk', desc: '相手国の担当閣僚と協議し、双方が歩み寄れる線を探る（体力10）。', lines: ['成功：貿易摩擦が決着。関係＋3・支持率＋', '失敗：期限が8日延びる。関係−1'] },
-    trade_concede: { name: '要求の一部を受け入れる（譲歩）', how: 'concede', desc: '相手国の要求の一部を受け入れて、摩擦を収める。確実に決着するが、国内の産業・農家から反発が出る。', lines: ['確実に決着。関係＋5', '国内の特定の層の反発と、場合によって関税の引き下げ'] },
-    trade_wto: { name: 'WTO（GATT）に協議・提訴を求める', how: 'wto', desc: 'ルールにもとづく解決を求める（体力8）。時間はかかるが、国際的な評価は上がる。1995年のWTO発足より前はGATTの紛争処理。', lines: ['成功：相手が措置を見直す。国際的な信頼＋', '失敗：手続きが長引き、期限が12日延びる'] },
-    trade_counter: { name: '対抗措置をとる（追加関税）', how: 'counter', desc: '相手国の品目に追加関税を科して対抗する。相手が報復すると、関税の応酬（貿易戦争）に進むおそれがある。', lines: ['相手が報復する見込み：約65%', '国内では毅然とした対応として評価する声と、物価・輸出への影響を心配する声'] },
+    trade_talk: { name: '閣僚協議で解決を探る', short: '閣僚協議', how: 'talk', desc: '相手国の担当閣僚と協議し、双方が歩み寄れる線を探る（体力10）。', lines: ['成功：貿易摩擦が決着。関係＋3・支持率＋', '失敗：期限が8日延びる。関係−1'] },
+    trade_concede: { name: '要求の一部を受け入れる（譲歩）', short: '要求を受け入れる', how: 'concede', desc: '相手国の要求の一部を受け入れて、摩擦を収める。確実に決着するが、国内の産業・農家から反発が出る。', lines: ['確実に決着。関係＋5', '国内の特定の層の反発と、場合によって関税の引き下げ'] },
+    trade_wto: { name: 'WTO（GATT）に協議・提訴を求める', short: 'WTOに提訴', how: 'wto', desc: 'ルールにもとづく解決を求める（体力8）。時間はかかるが、国際的な評価は上がる。1995年のWTO発足より前はGATTの紛争処理。', lines: ['成功：相手が措置を見直す。国際的な信頼＋', '失敗：手続きが長引き、期限が12日延びる'] },
+    trade_counter: { name: '対抗措置をとる（追加関税）', short: '対抗措置', how: 'counter', desc: '相手国の品目に追加関税を科して対抗する。相手が報復すると、関税の応酬（貿易戦争）に進むおそれがある。', lines: ['相手が報復する見込み：約65%', '国内では毅然とした対応として評価する声と、物価・輸出への影響を心配する声'] },
   };
   for (const [id, F] of Object.entries(FR_ACT)) {
     ACTIONS[id] = {
-      name: F.name, who: FR_WHO, target: 'crisis', desc: F.desc,
+      name: F.name, short: F.short, who: FR_WHO, target: 'crisis', desc: F.desc,
       check(g, kid) { const f = frictionOf(g, kid); if (!f) return 'この危機は貿易摩擦ではない（または決着ずみ）'; if (stam(g) < 10 && F.how === 'talk') return '体力が足りない（体力10）'; return null; },
       odds(g, kid) { const f = frictionOf(g, kid); if (!f) return null; if (F.how === 'talk') return clamp(0.38 + relation(g, PK_MAIN[f.pk]) / 220 + (DP.D(g).prep[PK_MAIN[f.pk]] ? 0.1 : 0) - f.sev * 0.05, 0.1, 0.85); if (F.how === 'wto') return clamp(0.4 - f.sev * 0.05, 0.15, 0.7); return null; },
       lines(g, kid) { const f = frictionOf(g, kid); return [f ? `${f.title}：${f.ask}` : '', ...F.lines].filter(Boolean); },
@@ -862,9 +861,9 @@ export function createTrade(X, DP) {
     // the era's trade picture at the start: facts already in the baseline (no choices)
     const era = (g.state.profile && g.state.profile.era) || 'reiwa';
     const BG = {
-      showa: ['日米貿易摩擦の最中。1987年4月、米国は日米半導体協定の違反を理由に、日本製の電子機器に100%の関税をかけた', '牛肉・オレンジは輸入割当の撤廃に向けた交渉中（1988年6月に合意、1991年4月に自由化）', 'コメは輸入禁止。米国が市場開放を求めている'],
-      heisei_early: ['ウルグアイ・ラウンドの合意（1993年12月）にもとづき、WTO（1995年1月）の発足にあわせて関税を引き下げている', 'コメはミニマム・アクセス（最低限の輸入枠）を受け入れた。1999年4月に関税化する予定', '米国との自動車・部品の協議が続く（1995年は高級車への100%関税をめぐる交渉があった）'],
-      heisei: ['シンガポール（2002年）、メキシコ（2005年）に続き、EPA（経済連携協定）の交渉を各国と進めている', '中国の輸入が急増し、貿易の最大の相手になりつつある', '2001年の暫定セーフガード、米国産牛肉のBSEによる輸入停止（2003年12月）など、貿易の摩擦が続いた'],
+      showa: ['日米貿易摩擦の最中。1987年4月、米国は日米半導体協定の違反を理由に、日本製の電子機器に100%の関税をかけた', '牛肉・オレンジは、輸入割当（数量の制限）の撤廃を米国などが求めて交渉が続いている', 'コメは輸入禁止。米国が市場開放を求めている'],
+      heisei_early: ['ウルグアイ・ラウンドの合意（1993年12月）にもとづき、WTO（1995年1月）の発足にあわせて関税を引き下げている', 'コメはミニマム・アクセス（最低限の輸入枠。毎年少しずつ増える）を受け入れ、関税化はしない特例措置を選んでいる', '米国との自動車・部品の協議が続く（1995年は高級車への100%関税をめぐる交渉があった）'],
+      heisei: ['シンガポール（2002年）に続き、メキシコ・マレーシア・タイなどとEPA（経済連携協定）の交渉を進めている', '中国の輸入が急増し、貿易の最大の相手になりつつある', '2001年の暫定セーフガード、米国産牛肉のBSEによる輸入停止（2003年12月）など、貿易の摩擦が続いた'],
       reiwa: ['米国は2025年から相互関税・自動車関税を科し、日米合意（2025年7月）で自動車は15%に。2026年2月に最高裁がIEEPAにもとづく関税を違法と判断し、通商法122条の10%（150日）をへて、301条にもとづく関税に', '中国は日本産水産物の輸入を2023年8月から停止し、2026年1月には軍民両用品の対日輸出管理を強化した', 'TPP11・日EU・日米貿易協定・RCEPは発効ずみ。コメの価格が高騰し、関税のあり方が議論されている'],
     };
     t.background = BG[era] || BG.reiwa;
@@ -889,6 +888,7 @@ export function createTrade(X, DP) {
     relAdd(g, PK_MAIN[pk], -3);
     news(g, `【貿易摩擦】${PARTNERS[pk].name}が${f.item}をめぐり日本に要求（${f.ask}）。応じない場合は日本の輸出品への関税を警告している`);
     if (isPM(g) || X.isFM(g)) note(g, `（貿易摩擦：${f.title}。「貿易・関税」の画面で対応を選べる。期限は25日）`);
+    if (isPM(g) && f.sev >= 2) X.scene(g, 'crisis', { id: k.id });
     return fr;
   }
   function settle(g, fr, how, text) {
@@ -1069,7 +1069,7 @@ export function createTrade(X, DP) {
       return {
         id, name: C.name, group: C.group, unit: C.unit, rate: k.rate, rateText: rateText(id, k.rate), hist: k.hist, histText: rateText(id, k.hist), histNote: row[2] || '', changed: Math.abs(k.rate - k.hist) > 0.001, dir: k.rate > k.hist + 0.001 ? 'up' : k.rate < k.hist - 0.001 ? 'down' : 'same',
         eff: Math.round(k.eff * 10) / 10, effText: k.eff !== k.rate ? `${rate1(k.eff)}%（追加関税・協定をふくむ実効の目安）` : '', dAve: Math.round(k.dAve * 10) / 10, bound: boundAt(id, n), boundText: rateText(id, boundAt(id, n)), over: k.rate > boundAt(id, n) + 0.001,
-        min: C.min, max: C.max, step: C.step, imp: Math.round(interp(C.imp, y) * 10) / 10, who: C.who, pro: C.pro, con: C.con, note: C.note, revenue: Math.round(k.revenue * 1000) / 1000, price: Math.round(k.price * 100) / 100,
+        min: C.min, max: C.max, step: C.step, imp: Math.round(interp(C.imp, y) * 10) / 10, who: C.who, pro: C.pro, con: C.con, note: (C.note || []).filter((x) => x[0] <= n).map((x) => x[1]).join(''), boundLabel: n < 19950101 ? 'GATT' : 'WTO', revenue: Math.round(k.revenue * 1000) / 1000, price: Math.round(k.price * 100) / 100,
         timeline: C.hist.filter((r) => r[0] <= n && r[2]).map((r) => ({ date: r[0], text: r[2], rate: rateText(id, r[1]) })).slice(-6),
         pending: DP.D(g).diet.filter((it) => it.status === 'open' && it.handler === 'tariff' && it.payload.cat === id).map((it) => ({ id: it.id, to: rateText(id, it.payload.rate), stage: it.stage })),
       };

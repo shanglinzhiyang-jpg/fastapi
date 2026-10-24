@@ -2,8 +2,10 @@
 // Only CALLS the cores' g.* APIs: world.js (g.world, g.worldCountry, g.diplomacy*, …), regime.js (g.war, g.warOrders,
 // g.warOrder, g.warPaths, g.regimeSteps, g.regimeStep, g.regimeFlush) — all feature-detected.
 //
-// The screen (640x360, scene flags hd / opaque / hidesHud / isWorldUI): tabs 地図 · 国々 · 外交 · 同盟・条約 ·
-// 危機・戦争 · ニュース, a news ticker at the bottom. The map is a pixel-art world (Natural Earth data, public domain,
+// The screen (640x360, scene flags hd / opaque / hidesHud / isWorldUI): tabs 地図 · 国々 · 外交 · 貿易・関税 ·
+// 同盟・条約 · 危機・戦争 · ニュース, a news ticker at the bottom. (Round 5: 外交 = the report rows (通信簿・外務省の助言・来日する
+// 要人・交渉・国会審議・領土・ソフトパワー・世論・姿勢・年表) + the actions; 貿易・関税 = Japan's tariffs by category, partners,
+// 貿易摩擦, tariff laws in the Diet, EPA / 関税交渉 with the negotiation screen.) The map is a pixel-art world (Natural Earth data, public domain,
 // rasterised to 2.5° cells, Pacific-centred as Japanese maps are), coloured by the relation with Japan, by bloc or by
 // alliance; capitals, crises, conflicts, the territorial disputes and the fictional ヴェルミナ海 (inset) are marked.
 // Every action shows its odds, costs and consequences before it is taken; a locked one says why and the path.
@@ -11,7 +13,7 @@
 // Taps: tabs, ×, list rows (first tap selects, second acts), map markers, the map's colour chips, modal buttons.
 //
 // API: g.worldScreen(tab?, opts?) → Promise (resolves when closed); openWorldScreen(g, { tab, sel });
-//   tab: 'map' | 'countries' | 'diplomacy' | 'alliances' | 'crisis' | 'news'. Under g.auto it does not open unless
+//   tab: 'map' | 'countries' | 'diplomacy' | 'trade' | 'alliances' | 'crisis' | 'news'. Under g.auto it does not open unless
 //   g.auto.worldui. Phone app 'world' (「世界」, order 61). Test hook: window.__worldui = { scene(), open, TABS }.
 
 import { Game } from './game.js';
@@ -578,7 +580,7 @@ const TAB_TRADE = {
     const r = t.revenue, m = t.macro, e = t.effects;
     T(c, `関税収入 約${r.total}兆円/年${r.shareOfTax != null ? `（税収の約${r.shareOfTax}%）` : ''}`, x, y, 12, K.text, 'left', wd); y += 16;
     T(c, `歴史どおりとの差 ${sgn(r.delta, 3)}兆円　品目別の最大：${r.byCat[0] ? shortCat(r.byCat[0].name) : ''}`, x, y, 10, K.dim, 'left', wd); y += 16;
-    T(c, `貿易（目安）輸出 ${m.exports}兆・輸入 ${m.imports}兆　収支 ${sgn(m.balance, 1)}兆円/年（歴史では ${sgn(m.balanceBase, 1)}）`, x, y, 10, K.text, 'left', wd); y += 18;
+    T(c, `貿易（目安）輸出 ${m.exports}兆・輸入 ${m.imports}兆　収支 ${sgn(m.balance, 1)}兆円/年${Math.abs(m.balance - m.balanceBase) > 0.04 ? `（歴史 ${sgn(m.balanceBase, 1)}）` : ''}`, x, y, 10, K.text, 'left', wd); y += 18;
     R(c, x, y, wd, 1, K.edge); y += 5;
     T(c, '政策の影響（歴史どおりの水準との差）', x, y, 10, K.amber); y += 14;
     T(c, `物価 ${sgn(e.infl)}ポイント　成長率 ${sgn(e.growth)}ポイント　貿易収支 ${sgn(e.balance, 1)}兆円`, x, y, 12, e.infl > 0.05 || e.growth < -0.05 ? K.warn : K.text, 'left', wd); y += 16;
@@ -612,7 +614,7 @@ function drawCategory(ui, c, k, t) {
   panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, shortCat(k.name), { right: 'A：関税率を変える' });
   let y = DETAIL.y + 22;
   T(c, `いまの関税 ${k.rateText}`, x, y, 14, DIRCOL[k.dir] === DIRCOL.same ? K.text : DIRCOL[k.dir], 'left', wd); y += 18;
-  T(c, `歴史どおりなら ${k.histText}　WTOの上限 ${k.boundText}${k.over ? '（超過）' : ''}`, x, y, 10, k.over ? K.bad : K.dim, 'left', wd); y += 14;
+  T(c, `歴史どおりなら ${k.histText}　${k.boundLabel}の上限 ${k.boundText}${k.over ? '（超過）' : ''}`, x, y, 10, k.over ? K.bad : K.dim, 'left', wd); y += 14;
   if (k.effText) { T(c, `実効：${k.effText}`, x, y, 10, K.dim, 'left', wd); y += 14; }
   T(c, `輸入に占める割合 約${k.imp}%　関税収入 約${k.revenue}兆円/年　物価への影響 ${sgn(k.price)}`, x, y, 10, K.text, 'left', wd); y += 15;
   y += para(c, `守られる人：${k.who}`, x, y, wd, 10, K.text, 13, 2) + 2;
@@ -763,7 +765,7 @@ async function negoFlow(ui, id) {
     if (mv.why) { await ui.info(mv.label, ['いまはできない：', mv.why]); continue; }
     let arg = null;
     if (mv.issue) {
-      const cand = v.issues.filter((i) => (mid === 'concede' ? i.mine < 3 : mid === 'press' ? i.want > 0 && i.theirs < Math.min(i.want, i.max) : i.dem > 0));
+      const cand = v.issues.filter((i) => (mid === 'concede' ? i.mine < 3 : mid === 'press' ? i.want > 0 && i.theirs < Math.min(i.want, i.max) : i.dem > 0)).sort((a0, b0) => (mid === 'concede' ? (b0.dem - b0.mine) - (a0.dem - a0.mine) : 0));
       if (!cand.length) { await ui.info(mv.label, ['選べる項目がない。']); continue; }
       const k = await ui.pick({
         title: mv.label, lines: [mv.sub],
@@ -1486,7 +1488,7 @@ registerPhoneApp('world', {
     c.fillStyle = '#6ad08a'; c.fillRect(cx - 6, cy - 5, 5, 4); c.fillRect(cx - 4, cy - 1, 3, 5); c.fillRect(cx + 2, cy - 6, 5, 3); c.fillRect(cx + 3, cy - 3, 3, 6);
     c.fillStyle = 'rgba(255,255,255,0.5)'; c.fillRect(cx, cy - 9, 1, 18); c.fillRect(cx - 9, cy, 18, 1);
   },
-  badge: (g) => { try { const w = g.world(); const r = roleOf(g); return (has(g, 'war') && g.war() ? 1 : 0) + (r.kind !== 'citizen' && r.kind !== 'member' ? Math.min(3, w.crises.filter((k) => k.sev >= 2).length + (w.offers || []).length) : 0); } catch (e) { return 0; } },
+  badge: (g) => { try { const w = g.world(); const r = roleOf(g); const role = r.kind !== 'citizen' && r.kind !== 'member'; return (has(g, 'war') && g.war() ? 1 : 0) + (role ? Math.min(3, w.crises.filter((k) => k.sev >= 2).length + (w.offers || []).length) : 0) + (role ? Math.min(2, (w.trade && w.trade.frictions) || 0) + Math.min(1, (w.diplo && w.diplo.visits) || 0) : 0); } catch (e) { return 0; } },
   cond: (g) => has(g, 'world'),
   open: (g) => worldApp(g),
 });

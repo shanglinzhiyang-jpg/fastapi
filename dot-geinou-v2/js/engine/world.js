@@ -35,6 +35,15 @@
 //   odds, preview lines; g.diplomacyPreview(kind, target, opts) → { why, odds, lines[], options? }
 // g.worldNews(n), g.worldEvent(kind, opts) (tests / debug), g.worldTick()
 // State: g.state.world (old saves get the defaults).
+//
+// ROUND 5 (R5-C): the parts below live in their own modules, created at the end of this file with a bundle of this file's helpers:
+//   world_trade.js  関税・貿易: Japan's tariff rates by category by era (g.tariffs, g.tariffPreview, g.tariffSet, g.tariffRevenue …),
+//                   追加関税・適用除外・緊急関税, retaliation, 貿易摩擦 (frictions with answers), EPA / 関税交渉 (negotiations)
+//   world_diplo.js  外交の深まり: negotiation sessions (g.negotiationStart / View / Move), 国会承認 (g.dietTreaties), 条約の内容
+//                   (g.treatyInfo), 領土問題 (g.disputeInfo), 国内の世論, 外務省の助言 (g.mofaAdvice), 来日する要人, 共同声明の文面,
+//                   ソフトパワー, 外交の通信簿 (g.diplomaticStanding), 外交の年表 (g.diplomacyTimeline)
+//   world_stance.js 親中派・親米派… (g.foreignStance, g.setForeignStance, g.worldStanceEffect)
+// Documented in test-output/api_world.txt ("ROUND 5").
 
 import { Game } from './game.js';
 import { onMorning } from './life.js';
@@ -2117,7 +2126,7 @@ function previewOf(g, id, t, o = {}) {
   try { odds = typeof D.odds === 'function' ? D.odds.call(D, g, t, o) : null; } catch (e) { odds = null; }
   try { lines = (typeof D.lines === 'function' ? D.lines.call(D, g, t, o) : []) || []; } catch (e) { lines = []; }
   try { options = typeof D.options === 'function' ? D.options.call(D, g, t) : null; } catch (e) { options = null; }
-  return { id, name: D.name, desc: D.desc, who: D.who.slice(), rich: D.rich || (id === 'fta' ? 'epa' : id === 'defense_pact' ? 'security' : id === 'peace_treaty' ? 'peace' : null), why: why || null, odds: odds == null ? null : Math.round(clamp(odds, 0, 1) * 100) / 100, lines: lines.filter(Boolean), options, target: t };
+  return { id, name: D.name, short: D.short || null, desc: D.desc, who: D.who.slice(), rich: D.rich || (id === 'fta' ? 'epa' : id === 'defense_pact' ? 'security' : id === 'peace_treaty' ? 'peace' : null), why: why || null, odds: odds == null ? null : Math.round(clamp(odds, 0, 1) * 100) / 100, lines: lines.filter(Boolean), options, target: t };
 }
 function diplomacy(g, kind, target, opts = {}) {
   const D = DIPLO[kind];
@@ -2159,10 +2168,10 @@ function hookRegime() {
     const k = crisisById(g, d.id);
     if (!k) return;
     const opts = [];
-    for (const kind of ['evac', 'protest', 'un_raise', 'jdr', 'reserve', 'coordinate', 'trade_talk', 'trade_concede', 'trade_wto', 'trade_counter']) {
+    for (const kind of ['trade_talk', 'trade_concede', 'trade_wto', 'trade_counter', 'evac', 'protest', 'un_raise', 'jdr', 'reserve', 'coordinate']) {
       const tgt = ['protest', 'un_raise'].includes(kind) ? k.country : k.id;
       const pv = previewOf(g, kind, tgt);
-      if (!pv.why) opts.push({ label: pv.name.length > 13 ? pv.name.slice(0, 13) : pv.name, value: kind, tgt });
+      if (!pv.why) opts.push({ label: pv.short || (pv.name.length > 13 ? pv.name.slice(0, 13) : pv.name), value: kind, tgt });
     }
     opts.push({ label: 'あとで', value: null });
     await show(g, { art: k.kind === 'missile' ? 'sea' : k.kind === 'coup' ? 'newspaper' : 'kantei', headline: k.title, title: k.title, sub: k.countryName || shortName(g, k.country), pages: [`【${k.title}】`, '官邸に情報が集まっている。どう対応する？'], options: opts.slice(0, 4).concat(opts.length > 4 ? [opts[opts.length - 1]] : []), prompt: 'どう対応する？',
