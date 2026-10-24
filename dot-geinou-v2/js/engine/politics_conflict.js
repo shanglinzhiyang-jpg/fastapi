@@ -775,7 +775,15 @@ export function installConflict(X) {
     ru_neg: { pro: ['国際秩序を守るため、毅然と対応すべきだ。', '他の国々と歩調を合わせることが大切だ。'], con: ['経済やエネルギー、漁業などに跳ね返る。', '対話の窓口がなくなってしまう。'] },
     indep: { pro: ['特定の国に寄りすぎず、国益で判断する外交が必要だ。', '多様なパートナーを持つほうが、交渉力が増す。'], con: ['同盟の信頼が揺らぎ、安全保障が不安定になる。', '「全方位」は、どこからも信頼されない危険がある。'] },
     bal: { pro: ['どの国とも是々非々で付き合う、現実的な外交だ。'], con: ['方針が見えにくい、との声もある。'] },
+    korea: { pro: ['歴史や領土の問題があっても、隣国との協調は欠かせない。', '経済でも安全保障でも、協力の余地は大きい。'], con: ['譲歩ばかりでは、国内の理解が得られない。', '主張すべきことは主張すべきだ。'] },
+    korea_hawk: { pro: ['主張すべきことは毅然と主張すべきだ。'], con: ['関係の悪化は、経済や安全保障の協力にも響く。'] },
+    taiwan: { pro: ['価値観を共有する地域との交流は大切だ。', '経済の結びつきも深い。'], con: ['中国との関係を悪化させるおそれがある。'] },
+    multilateral: { pro: ['多くの国と連携するほうが、国際社会で安定した立場を築ける。'], con: ['どの国とも深い関係が築けないのでは、という見方もある。'] },
+    nk_dialogue: { pro: ['拉致や核の問題は、対話と交渉なしには動かない。'], con: ['圧力をゆるめると、相手に利用されるおそれがある。'] },
+    nk_pressure: { pro: ['制裁や圧力で、相手を交渉の席に着かせるべきだ。'], con: ['対話の窓口がなくなり、事態が動かなくなる。'] },
   };
+  // the labels of R5-C (world_stance.js) → the voices above
+  const LABEL_KEY = { '親中派': 'cn_pos', '対中強硬派': 'cn_neg', '親米派': 'us_pos', '親ロ派': 'ru_pos', '親ソ派': 'ru_pos', '日韓協調派': 'korea', '対韓強硬派': 'korea_hawk', '台湾重視派': 'taiwan', '国際協調派': 'multilateral', '自主外交派': 'indep', '対北朝鮮対話派': 'nk_dialogue', '対北朝鮮圧力派': 'nk_pressure', '等距離': 'bal' };
   function stanceLabel(vec, year) {
     const tags = [];
     const soviet = year < 1992;
@@ -803,7 +811,26 @@ export function installConflict(X) {
     const h = (k) => (hash01(`${pt.id}:${k}`) - 0.5);
     return { cn: clamp(-sec * 0.28 + h('cn') * 0.5 + (eco < -0.8 ? 0.1 : 0), -0.9, 0.9), us: clamp(sec * 0.3 + 0.1 + h('us') * 0.4, -0.8, 0.9), ru: clamp(-sec * 0.15 + h('ru') * 0.4 + (soc < -0.5 ? 0 : 0), -0.8, 0.7), indep: clamp(0.4 - sec * 0.1 + h('in') * 0.5, 0, 1) };
   }
+  // R5-C's g.foreignStance(kind, id) when it exists (kind: player | party | faction | npc | government); its vec has the dialect cn/us/ru/indep (−1..1)
+  function remote(g, kind, id) {
+    if (typeof g.foreignStance !== 'function') return null;
+    try {
+      const r = g.foreignStance(kind, id);
+      if (r && typeof r === 'object') {
+        const vec = r.vec || r;
+        if (['cn', 'us', 'ru'].some((k) => Number.isFinite(Number(vec[k])))) return { r, vec: { cn: num(vec.cn), us: num(vec.us), ru: num(vec.ru), indep: num(vec.indep, 0.4) } };
+      }
+    } catch (e) { /* the local value is used */ }
+    return null;
+  }
+  function packRemote(g, rm, src) {
+    const base = packStance(rm.vec, X.polDate(g).year, src);
+    const r = rm.r;
+    const key = LABEL_KEY[r.label] || base.key;
+    return { ...base, label: r.label || base.label, long: r.long || r.label || base.long, tags: Array.isArray(r.labels) && r.labels.length ? r.labels.map((x) => (typeof x === 'string' ? x : x.label)) : base.tags, key, keys: [key], remote: true };
+  }
   function stanceOfParty(g, p, pt) {
+    { const rm = remote(g, 'party', pt.id); if (rm) return packRemote(g, rm, 'party'); }
     const S = I(p);
     const st = S.stance;
     const key = `party:${pt.id}`;
@@ -811,6 +838,7 @@ export function installConflict(X) {
     return packStance(st[key], X.polDate(g).year, 'party');
   }
   function stanceOfFaction(g, p, pt, f) {
+    { const rm = remote(g, 'faction', f.id); if (rm) return packRemote(g, rm, 'faction'); }
     const S = I(p);
     const x = S.fx[f.id];
     if (!x) return null;
@@ -821,6 +849,7 @@ export function installConflict(X) {
     return packStance(x.stance, X.polDate(g).year, 'faction');
   }
   function stanceOfNpc(g, p, n) {
+    { const rm = remote(g, 'npc', n.id); if (rm) return packRemote(g, rm, 'npc'); }
     const q = n.faction ? findFaction(p, n.faction) : null;
     const base = q ? stanceOfFaction(g, p, q.pt, q.f).vec : n.party && p.parties[n.party] ? stanceOfParty(g, p, p.parties[n.party]).vec : { cn: 0, us: 0.3, ru: 0, indep: 0.4 };
     return packStance({ cn: base.cn + (hash01(n.id, 21) - 0.5) * 0.4, us: base.us + (hash01(n.id, 22) - 0.5) * 0.3, ru: base.ru + (hash01(n.id, 23) - 0.5) * 0.3, indep: base.indep + (hash01(n.id, 24) - 0.5) * 0.3 }, X.polDate(g).year, 'npc');
@@ -834,9 +863,10 @@ export function installConflict(X) {
     }
     return me.stance;
   }
-  function stanceOfPlayer(g, p) { return packStance(myVec(g, p), X.polDate(g).year, 'player'); }
+  function stanceOfPlayer(g, p) { const rm = remote(g, 'player', null); if (rm) return packRemote(g, rm, 'player'); return packStance(myVec(g, p), X.polDate(g).year, 'player'); }
   // the stance the government currently follows: the PM's (a player PM: the player's)
   function stanceOfCabinet(g, p) {
+    { const rm = remote(g, 'government', null); if (rm) return packRemote(g, rm, 'cabinet'); }
     const pm = p.cabinet.pm;
     if (pm === 'player') return stanceOfPlayer(g, p);
     const n = npcOf(p, pm);
@@ -844,25 +874,15 @@ export function installConflict(X) {
     const pt = p.parties[pmPartyId(p)];
     return pt ? stanceOfParty(g, p, pt) : packStance({ cn: 0, us: 0.4, ru: 0, indep: 0.3 }, X.polDate(g).year, 'cabinet');
   }
-  // R5-C's API when it exists (feature-detected); the local value otherwise. kind: 'faction' | 'party' | 'politician' | 'player' | 'cabinet'
+  // kind: 'faction' | 'party' | 'politician' | 'player' | 'cabinet' (R5-C's g.foreignStance is used inside each when it exists)
   function stanceOf(g, kind, id) {
     const p = X.ensurePol(g);
-    let local = null;
-    if (kind === 'party') local = p.parties[id] ? stanceOfParty(g, p, p.parties[id]) : null;
-    else if (kind === 'faction') { const q = findFaction(p, id); local = q ? stanceOfFaction(g, p, q.pt, q.f) : null; }
-    else if (kind === 'politician' || kind === 'npc') { const n = npcOf(p, id); local = n ? stanceOfNpc(g, p, n) : null; }
-    else if (kind === 'player') local = stanceOfPlayer(g, p);
-    else if (kind === 'cabinet') local = stanceOfCabinet(g, p);
-    if (local && typeof g.foreignStance === 'function') {
-      try {
-        const r = g.foreignStance(kind, id);
-        if (r && typeof r === 'object') {
-          const vec = r.vec || r;
-          if (['cn', 'us', 'ru'].some((k) => Number.isFinite(Number(vec[k])))) return { ...packStance({ cn: num(vec.cn, local.vec.cn), us: num(vec.us, local.vec.us), ru: num(vec.ru, local.vec.ru), indep: num(vec.indep, local.vec.indep) }, X.polDate(g).year, 'world'), label: r.label || undefined, ...(r.label ? { long: r.label } : {}) };
-        }
-      } catch (e) { /* use the local value */ }
-    }
-    return local;
+    if (kind === 'party') return p.parties[id] ? stanceOfParty(g, p, p.parties[id]) : null;
+    if (kind === 'faction') { const q = findFaction(p, id); return q ? stanceOfFaction(g, p, q.pt, q.f) : null; }
+    if (kind === 'politician' || kind === 'npc') { const n = npcOf(p, id); return n ? stanceOfNpc(g, p, n) : null; }
+    if (kind === 'player') return stanceOfPlayer(g, p);
+    if (kind === 'cabinet') return stanceOfCabinet(g, p);
+    return null;
   }
   // segments' views on foreign policy (a rough model of the voters): hawkish ones like the hard line, trade-minded ones the engagement
   const SEG_TRADE = { business: 1, selfemployed: 0.5, farmers: -0.3, employees: 0.5, urban: 0.4, young: 0.2, unions: 0, elderly: 0, rural: -0.2, families: 0, floating: 0.2 };
@@ -963,10 +983,11 @@ export function installConflict(X) {
     const S = I(p);
     const day = today(g);
     if (day - num(S.stanceSet, -99) < 20) return { ok: false, why: `外交スタンスをたびたび変えると信用を失う（${Math.max(1, 20 - (day - S.stanceSet))}日後に変えられる）` };
-    const v = { ...myVec(g, p) };
+    const v = { ...stanceOfPlayer(g, p).vec };
     for (const [k, val] of Object.entries(P.vec)) v[k] = val;
     p.me.stance = normVec(v);
     S.stanceSet = day;
+    if (typeof g.setForeignStance === 'function') { try { g.setForeignStance('player', null, { ...p.me.stance }); } catch (e) { /* ignore */ } }
     // standing in the factions: agreeing camps like it, disagreeing camps do not
     const pt = myParty(p);
     const lines = [];

@@ -1586,8 +1586,8 @@ export const SITE_KINDS = {
   art: { name: 'アートの町', base: 35, fr: 1.1, frag: 0.3, culture: 0.6, season: [0.1, 0.1], cost: 0.9 },
 };
 export const SITE_REGIONS = {
-  hokkaido: { name: '北海道', x: 0.72, y: 0.12 }, tohoku: { name: '東北', x: 0.66, y: 0.3 }, kanto: { name: '関東', x: 0.62, y: 0.5 }, chubu: { name: '中部', x: 0.5, y: 0.5 },
-  kansai: { name: '近畿', x: 0.4, y: 0.62 }, chugoku: { name: '中国', x: 0.27, y: 0.62 }, shikoku: { name: '四国', x: 0.31, y: 0.76 }, kyushu: { name: '九州', x: 0.13, y: 0.8 },
+  hokkaido: { name: '北海道', x: 0.74, y: 0.14 }, tohoku: { name: '東北', x: 0.68, y: 0.4 }, kanto: { name: '関東', x: 0.63, y: 0.5 }, chubu: { name: '中部', x: 0.52, y: 0.5 },
+  kansai: { name: '近畿', x: 0.42, y: 0.6 }, chugoku: { name: '中国', x: 0.27, y: 0.66 }, shikoku: { name: '四国', x: 0.33, y: 0.8 }, kyushu: { name: '九州', x: 0.12, y: 0.83 },
 };
 const SITE_P1 = ['月見ヶ丘', '湯の花', '白砂', '碧瑠璃', '潮風', '雲海', '星降', '石畳', '千年', '七曲', '鶴ヶ', '紅葉谷', '霧笛', '淡雪', '夕凪', '百合ヶ原', '常盤', '朝霧', '花筏', '瑠璃ヶ浜', '風車', '藍染', '陽だまり', '松籟'];
 const SITE_P2 = { onsen: ['温泉郷', '湯の里'], jokamachi: ['城下町', '宿場町'], shizen: ['高原', '渓谷', '岬'], isan: ['の古都', '遺跡の里'], theme: ['リゾート', 'ランド'], minato: ['港町', '漁港'], rito: ['島', '諸島'], ski: ['スキーリゾート', '高原'], matsuri: ['の里', '祭りの町'], art: ['アートの森', '芸術村'] };
@@ -2785,7 +2785,7 @@ export function groupsList(g, domain) {
 export function groupsSpecial(g, domain) {
   switch (domain) {
     case 'tourism': return { ...tourismSummary(g), siteList: sitesList(g), candList: sitesList(g, { cands: true }) };
-    case 'rengo': return { ...unionSummary(g), minWage: minWageActions(g) };
+    case 'rengo': { const u = unionSummary(g); return { ...u, minWageValue: u.minWage, minWage: minWageActions(g) }; }
     case 'sports': return bidsSummary(g);
     case 'kenkyu': return rdSummary(g);
     case 'seifu': return seifuSummary(g);

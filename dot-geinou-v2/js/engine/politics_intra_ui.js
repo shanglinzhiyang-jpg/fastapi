@@ -24,13 +24,13 @@ export function registerIntraUI(K, SECTIONS) {
     // the escalation ladder: 不満 → 公然批判 → 造反 → 分裂・離党
     for (let i = 0; i < 4; i++) {
       const on = i <= level;
-      R(c, x + i * 34, y, 31, 8, on ? levelCol(i) : '#1c2656');
-      if (on) R(c, x + i * 34, y, 31, 2, shade(levelCol(i), 0.3));
+      R(c, x + i * 77, y, 74, 8, on ? levelCol(i) : '#1c2656');
+      if (on) R(c, x + i * 77, y, 74, 2, shade(levelCol(i), 0.3));
     }
     void ladder;
   }
   function ladderLabels(c, x, y, ladder, level) {
-    ladder.forEach((s, i) => T(c, fit(c, s, 34, 10), x + i * 34 + 15, y, 10, i === level ? C.text : C.faint, 'center'));
+    ladder.forEach((s, i) => T(c, fit(c, s, 74, 10), x + i * 77 + 37, y, 10, i === level ? C.text : C.faint, 'center'));
   }
   function bar2(c, x, y, w, S, L) {
     // two-sided bar: plotters (red) vs defenders (blue)
@@ -44,14 +44,14 @@ export function registerIntraUI(K, SECTIONS) {
   function stanceBars(c, x, y, w, vec) {
     const rows = [['cn', '対中', '強硬', '融和'], ['us', '対米', '自立', '同盟'], ['ru', '対ロ', '強硬', '融和']];
     rows.forEach(([k, n, neg, pos], i) => {
-      const yy = y + i * 14;
+      const yy = y + i * 12;
       T(c, n, x, yy, 12, C.dim);
       T(c, neg, x + 34, yy + 1, 10, C.faint);
       cbar(c, x + 60, yy + 3, w - 100, 7, num(vec[k]), C.cyan, '#ff9a5a');
       T(c, pos, x + w - 34, yy + 1, 10, C.faint, 'right');
     });
-    T(c, '自主', x, y + 42, 12, C.dim);
-    hbar(c, x + 60, y + 45, w - 100, 7, num(vec.indep), C.gold);
+    T(c, '自主', x, y + 36, 12, C.dim);
+    hbar(c, x + 60, y + 39, w - 100, 7, num(vec.indep), C.gold);
   }
   function tagFor(r) {
     return r.intent === 'defect' || r.intent === 'plot' ? { text: r.intentLabel, color: '#8a2a34' } : r.intent === 'bargain' ? { text: r.intentLabel, color: '#8a6a1a' } : r.intent === 'loyal' ? { text: r.intentLabel, color: '#2a7a4a' } : { text: r.intentLabel, color: '#3a4066' };
@@ -446,7 +446,7 @@ export function registerIntraUI(K, SECTIONS) {
         T(c, `あと${ov.plot.daysLeft}日・${ov.plot.mine ? '退陣' : '交代'}の見込み ${Math.round(ov.plot.odds)}%`, 486, 61, 12, '#ffffff');
       } else {
         T(c, '次の火種', 482, 31, 12, C.dim);
-        if (ov.flash) { T(c, fit(c, ov.flash.text, SW - 494, 12), 482, 47, 12, C.gold); T(c, `${ov.flash.date}（あと${ov.flash.days}日）`, 482, 61, 12, C.text); }
+        if (ov.flash) { T(c, `あと${ov.flash.days}日`, SW - 12, 31, 12, C.text, 'right'); para(c, ov.flash.text, 482, 45, SW - 494, 12, C.gold, 14, 2); }
         else T(c, '特になし', 482, 47, 12, C.dim);
       }
     }
@@ -459,20 +459,18 @@ export function registerIntraUI(K, SECTIONS) {
       if (row.kind === 'faction') {
         const f = row.f;
         card(c, r.x, r.y, r.w, r.h, `${f.name}（${f.word}）`, { right: `第${f.rank}位`, rightW: 60 });
-        let y = r.y + 24;
-        T(c, fit(c, `領袖：${f.leaderName}${f.leaderAge ? `（${f.leaderAge}歳・当選${f.leaderWins}回）` : ''}`, W, 12), X0, y, 12, C.text); y += 15;
-        T(c, fit(c, `番頭：${f.bantouName || '—'}${f.bantouAge ? `（${f.bantouAge}歳）` : ''}${f.heir ? '・後継候補あり' : ''}`, W, 12), X0, y, 12, C.dim); y += 15;
-        T(c, `議員 ${f.size}人（党の${f.share}%）・力関係 ${f.power}`, X0, y, 12, C.text); y += 15;
-        hbar(c, X0, y, W, 6, clamp(f.share / 50, 0, 1), '#5a78c8'); y += 11;
+        let y = r.y + 23;
+        const L = 14;
+        T(c, fit(c, `領袖：${f.leaderName}${f.leaderAge ? `（${f.leaderAge}歳・当選${f.leaderWins}回）` : ''}`, W, 12), X0, y, 12, C.text); y += L;
+        T(c, fit(c, `番頭：${f.bantouName || '—'}${f.bantouAge ? `（${f.bantouAge}歳）` : ''}${f.heir ? '・後継候補あり' : ''}`, W, 12), X0, y, 12, C.dim); y += L;
+        T(c, fit(c, `議員 ${f.size}人（党の${f.share}%）・力関係 ${f.power}${f.funds ? `・活動費 ${K.fmtBig(f.funds)}` : ''}`, W, 12), X0, y, 12, C.text); y += L;
+        hbar(c, X0, y, W, 5, clamp(f.share / 50, 0, 1), '#5a78c8'); y += 9;
         const posts = [...f.posts.party.map((p) => ov.posts.find((q) => q.post === p)).filter(Boolean).map((p) => p.label), ...f.posts.cabinet.map((p) => K.postName(p, K.polDate(g).fy)), ...(f.posts.pm ? ['総理'] : []), ...(f.posts.leader ? [ov.leaderTitle] : [])];
-        T(c, fit(c, `役職：${posts.join('・') || 'なし'}`, W, 12), X0, y, 12, posts.length ? C.gold : C.dim); y += 15;
-        if (f.funds) { T(c, fit(c, `活動費：${K.fmtBig(f.funds)}`, W, 12), X0, y, 12, C.dim); y += 15; }
-        T(c, `機嫌：${f.moodWord}`, X0, y, 12, moodCol(f.mood)); cbar(c, X0 + 110, y + 3, W - 110, 7, f.mood / 100, C.good, C.bad); y += 15;
-        T(c, `野心 ${f.ambition}`, X0, y, 12, C.dim); hbar(c, X0 + 110, y + 3, W - 110, 7, f.ambition / 100, '#ff9a5a'); y += 15;
-        T(c, fit(c, `意図：${f.intentLabel}${f.demand ? `（${K.postName(f.demand.post, K.polDate(g).fy, ov.party)}を要求）` : ''}`, W, 12), X0, y, 12, tagFor(f).color === '#3a4066' ? C.text : C.warn); y += 15;
-        T(c, `貸し ${f.owe}・恨み ${f.grudge}`, X0, y, 12, C.dim); y += 17;
-        if (f.stance) { T(c, `外交：${f.stance.long}`, X0, y, 12, C.cyan); y += 14; stanceBars(c, X0, y, W, f.stance.vec); }
-        para(c, 'A：この派閥に動く', X0, r.y + r.h - 16, W, 12, C.gold, 14, 1);
+        T(c, fit(c, `役職：${posts.join('・') || 'なし'}`, W, 12), X0, y, 12, posts.length ? C.gold : C.dim); y += L;
+        T(c, `機嫌：${f.moodWord}`, X0, y, 12, moodCol(f.mood)); cbar(c, X0 + 110, y + 3, W - 110, 7, f.mood / 100, C.good, C.bad); y += L;
+        T(c, `野心 ${f.ambition}`, X0, y, 12, C.dim); hbar(c, X0 + 110, y + 3, W - 110, 7, f.ambition / 100, '#ff9a5a'); y += L;
+        T(c, fit(c, `意図：${f.intentLabel}${f.demand ? `（${K.postName(f.demand.post, K.polDate(g).fy, ov.party)}を要求）` : ''}　貸し${f.owe}・恨み${f.grudge}`, W, 12), X0, y, 12, tagFor(f).color === '#3a4066' ? C.text : C.warn); y += L + 2;
+        if (f.stance) { T(c, fit(c, `外交：${f.stance.long}`, W, 12), X0, y, 12, C.cyan); y += L; stanceBars(c, X0, y, W, f.stance.vec); }
       } else if (row.kind === 'rival') {
         const q = row.r;
         card(c, r.x, r.y, r.w, r.h, q.name, { right: q.role, rightW: 90 });

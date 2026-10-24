@@ -1490,4 +1490,4 @@ registerPhoneApp('world', {
   cond: (g) => has(g, 'world'),
   open: (g) => worldApp(g),
 });
-if (typeof window !== 'undefined') window.__worldui = { scene: () => sceneOf(window.__game), open: openWorldScreen, TABS, MAP, grid, project };
+if (typeof window !== 'undefined') window.__worldui = { scene: () => sceneOf(window.__game), open: openWorldScreen, TABS, MAP, grid, project, flows: { negoEntry, negoFlow, tariffFlow, partnerMenu, frictionFlow, territoryFlow, stanceInfo, diploFlow, actionsMenu } };
