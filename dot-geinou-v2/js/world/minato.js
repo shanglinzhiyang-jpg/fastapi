@@ -1310,7 +1310,7 @@ function generate() {
       text: ['日本テレビの前で、推しの出待ち中！', '日本テレビは、バラエティに情報番組、ドラマ、\nスポーツ中継…見ない日はないくらいだよね！'] },
     { type: 'npc', id: 'minato_ntv_fan2', x: 13, y: 43, dir: 'up', look: { ...LOOKS.fan, hairColor: 'blonde', top: '#ffd23f' }, name: 'ファンの子',
       text: ['うちわ、手作りしたんだ〜！', '出てくるまで、あと少し…\n…でもトイレに行きたい…！'] },
-    { type: 'npc', id: 'minato_ntv_staff', x: 15, y: 45, dir: 'left', look: { ...LOOKS.staff, top: '#ff8a3d' }, name: '観覧スタッフ',
+    { type: 'npc', id: 'minato_ntv_staff', x: 16, y: 45, dir: 'left', // next to the planter at 15,45, not on it look: { ...LOOKS.staff, top: '#ff8a3d' }, name: '観覧スタッフ',
       text: ['番組観覧のお客さまは、こちらに並んでくださーい！\n…あ、ちがいました？', '観覧のお客さんの笑い声や拍手も、\n番組の大事な一部なんですよ。'] },
     { type: 'npc', id: 'minato_mom', x: 19, y: 44, dir: 'right', look: { ...LOOKS.mom, top: '#8a5ac8' }, name: 'お母さん',
       text: ['からくり時計の人形が動くのを、待ってるんです。', 'この広場は駅にも近くて便利なのよ。\nモノレールで、海のほうまで行けるの。'] },

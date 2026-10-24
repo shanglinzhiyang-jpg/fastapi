@@ -167,10 +167,6 @@ class SeikenScene {
       text(ctx, title, 22, 15, { size: 16, color: COLORS.accent });
       if (sub) text(ctx, sub, 22, 36, { size: 12, color: '#d8dcf0' });
     }
-    const note = 'シミュレーション・登場人物は架空';
-    const w2 = measure(ctx, note, 12) + 16;
-    panel(ctx, SW - w2 - 8, 8, w2, 24, { bg: '#1a1f38' });
-    text(ctx, note, SW - w2, 13, { size: 12, color: '#9aa3c8' });
   }
 }
 function stage(g) {
@@ -259,9 +255,9 @@ async function playResign(g, rec, full) {
     await say(g, [`臨時閣議が開かれ、閣僚全員が辞表を提出した。${from.pmName}${from.pm === 'player' ? '（あなた）' : ''}内閣の総辞職だ${rec.reason ? `（${rec.reason}）` : ''}。`, '新しい総理大臣が任命されるまで、内閣はそのまま職務を続ける（憲法71条）。']);
     const exit = regimeExit(g, rec);
     if (exit) {
-      // (2026-10 fix) the step-down after the もしも emergency / dictatorship: no friendly farewell — the questions are
+      // (2026-10 fix) the step-down after the emergency / dictatorship: no friendly farewell — the questions are
       // about what was done under the emergency, and the investigation to come
-      S.set('kaiken', { title: '退陣の記者会見', sub: '緊急事態のあとで（もしも）', figs: [{ look: lookOf(g, from.pm), x: SW / 2 - 32, y: 90 }] });
+      S.set('kaiken', { title: '退陣の記者会見', sub: '緊急事態のあとで', figs: [{ look: lookOf(g, from.pm), x: SW / 2 - 32, y: 90 }] });
       await say(g, ['会見場は、張りつめた空気に包まれていた。', exit.detained ? `記者席には、拘束されていた記者の同僚たちも並んでいる（拘束された記者は${exit.detained.toLocaleString('ja-JP')}人にのぼった）。` : '緊急事態のもとで何が行われたのか、説明を求める質問が続いた。']);
       const i = await g.ask('「緊急事態のもとでの行為について、説明してください」', ['謝罪し、捜査に協力すると述べる', '説明を拒む'], { name: '記者', cancel: 1 });
       const p = polOf(g);

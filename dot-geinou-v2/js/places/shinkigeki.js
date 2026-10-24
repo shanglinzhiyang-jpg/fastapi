@@ -15,7 +15,7 @@
 // ギャグはすべてオリジナル。登場人物はすべて架空。
 
 import { registerPlace } from '../engine/map.js';
-import { LOOKS, charSheet, drawFace } from '../engine/sprites.js';
+import { LOOKS, charSheetHD, drawFace, drawCharPart, drawSeated } from '../engine/sprites.js';
 import { defineTile, R, P, disc, shadowEllipse } from '../engine/tiles.js';
 import { registerItem, payText } from '../engine/state.js';
 import { ACTIVITY } from '../engine/life.js';
@@ -499,31 +499,18 @@ const AUD = [
 ];
 
 // ------------------------------------------------------------------ sprites (seated / lying)
-const sheetOf = (g, e) => (e === g.map.player ? charSheet(g.state.look || {}) : (e.sheet || charSheet(e.look || {})));
+// (the map draws in HD: always crop HD sheets with drawCharPart, never with 1x numbers)
+const sheetOf = (g, e) => (e === g.map.player ? charSheetHD(g.state.look || {}) : (e.sheet || charSheetHD(e.look || {})));
 
-// Someone sitting in a theater seat / on a bench, seen from behind (or turned towards you).
-function seatedSprite(back, hi) {
-  return (ctx, x, y, g, e) => {
-    x = Math.round(x); y = Math.round(y);
-    const sh = sheetOf(g, e);
-    const img = (sh[e.dir] || sh.down)[0];
-    ctx.drawImage(img, 0, 0, 16, 13, x, y - 1, 16, 13);
-    if (e.dir === 'up') {
-      box(ctx, x + 1, y + 5, 14, 6, back); box(ctx, x + 1, y + 5, 14, 1, hi);
-      box(ctx, x, y + 6, 1, 8, '#3b2a20'); box(ctx, x + 15, y + 6, 1, 8, '#3b2a20');
-    } else {
-      box(ctx, x + 2, y + 10, 12, 3, hi); box(ctx, x + 2, y + 12, 12, 1, back);
-    }
-  };
-}
-const seated = seatedSprite('#9e1f2a', '#e05462');
-const benchSeated = seatedSprite(RED, '#ff8a90');
+// Someone sitting in a theater seat / on a bench, seen from behind (or turned towards you):
+// the map's own seated drawing, with the seat tile under them.
+const seated = (ctx, x, y, g, e) => drawSeated(ctx, sheetOf(g, e), e.dir, x, y, g.map.seatOf(e.x, e.y));
+const benchSeated = seated;
 // Sitting on a cushion on the tatami.
 function zabuton(ctx, x, y, g, e) {
   x = Math.round(x); y = Math.round(y);
-  const sh = sheetOf(g, e);
   box(ctx, x + 1, y + 9, 14, 6, '#6b3a8a'); box(ctx, x + 1, y + 9, 14, 1, '#8a5ab0'); box(ctx, x + 2, y + 14, 12, 1, '#4a2460');
-  ctx.drawImage((sh[e.dir] || sh.down)[0], 0, 0, 16, 15, x, y - 1, 16, 15);
+  drawCharPart(ctx, sheetOf(g, e), e.dir, 0, 0, 0, 16, 15, x, y - 1, 16, 15);
 }
 
 // The famous all-together fall: rotate the standing sprite onto its side.
@@ -540,7 +527,7 @@ function fall(g, id, side = 1) {
     ctx.save();
     ctx.translate(Math.round(x) + 8, Math.round(y) + 9);
     ctx.rotate(f.side * k * Math.PI / 2);
-    ctx.drawImage(img, -8, -10);
+    ctx.drawImage(img, -8, -10, 16, 20);
     ctx.restore();
     if (k >= 1 && dt < 16) {
       ctx.fillStyle = '#ffffff';

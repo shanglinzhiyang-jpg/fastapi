@@ -120,7 +120,7 @@ function glossCtx(g) {
   const r = safe(() => (typeof g.regime === 'function' ? g.regime() : null), null);
   if (r && r.steps && r.steps.clause) {
     c.amendments = [...(c.amendments || []), '強権型の緊急事態条項'];
-    c.emergencyClause = '強権型の緊急事態条項（もしもの世界のシミュレーション）';
+    c.emergencyClause = '強権型の緊急事態条項';
   }
   if (c.taxRate == null) {
     const rows = safe(() => (typeof g.taxRates === 'function' ? g.taxRates() : null), null);
@@ -304,7 +304,7 @@ export const TIPS = {
   saibansho: { lv: 2, text: () => '裁判は公開が原則（憲法82条）。法廷の傍聴は、だれでもできるよ。' },
   keisatsu: { lv: 1, text: () => '警察署。逮捕には、原則として裁判官の令状がいるんだ。困りごとの相談もできるよ。' },
   shohisha: { lv: 3, text: (g) => (yearOf(g) >= 2010 ? 'お金を借りる前に、利息と返す計画を確かめて。借りられるのは原則、年収の3分の1まで（総量規制）。' : 'お金を借りる前に、利息と返す計画をよく確かめて。返せなくなったら、区役所3階の相談室へ。') },
-  yamikin: { lv: 3, text: () => 'ここは登録のない違法な業者（ヤミ金）かもしれない。借りてしまったら、返す前に警察か弁護士に相談して。' },
+  yamikin: { lv: 3, text: () => 'ここは登録のない違法な業者（ヤミ金）かもしれない。借りても、警察か弁護士に相談すれば取り立てを止められるよ。' },
   // politics events
   first_elected: { lv: 3, calm: true, text: (g) => { const o = safe(() => polState(g).me.office, null); return o === 'shugi' || o === 'sangi' ? '当選おめでとう！会期中は本会議に出て、採決に加わろう。地元回りと後援会も大切だよ。' : '当選おめでとう！議会の定例会で質問して、住民の声を届けよう。'; } },
   minister: { lv: 3, calm: true, text: () => '大臣になったら、閣議に出て、国会で答弁するのが仕事。役所の説明も、よく聞いてね。' },
@@ -330,12 +330,12 @@ export const TIPS = {
   govt_change: { lv: 2, text: () => '政権交代は、選挙で国民が政権を選び直せるしるし。新しい与党は、公約の実行が問われるよ。' },
   opposition: { lv: 1, text: () => '野党の仕事は、政府のチェックと、ちがう選択肢を示すこと。' },
   amendment: { lv: 2, text: () => '憲法改正は、衆参それぞれ3分の2で発議して、国民投票で過半数。とても高いハードルだよ。' },
-  regime_emergency: { lv: 3, text: () => '非常事態でも、憲法と法律の手続きを守るのが立憲主義。権力が1か所に集まるのは、とても危険なんだ。' },
-  regime_press: { lv: 3, text: () => '報道への圧力は、民主主義の土台を弱めるよ。強い反発や、裁判所の違憲判断も覚悟して。' },
-  regime_dictator: { lv: 3, text: () => '（もしもの話）独裁は、チェックする人がいなくなる体制。歴史では、たくさんの悲劇につながったよ。' },
+  regime_emergency: { lv: 3, text: () => '緊急事態でも、憲法と法律の手続きがいる（立憲主義）。権力が集まるほど、反発と国際社会の懸念が強まるよ。' },
+  regime_press: { lv: 3, text: () => '報道への圧力は、報道の自由度を下げる。強い反発や、裁判所の違憲判断もありうるよ。' },
+  regime_dictator: { lv: 3, text: () => '独裁では、権力をチェックする人がいなくなる。不満がたまると、デモや蜂起が起きやすくなるよ。' },
   sdf_order: { lv: 2, text: () => '自衛隊の最高指揮官は総理大臣。防衛出動には国会の承認がいる（文民統制（ぶんみんとうせい））。' },
   disaster_first: { lv: 3, text: () => '災害のときは、まず命を守ること。国は対策本部をつくり、知事などの要請で自衛隊が災害派遣に出るよ。' },
-  war_warning: { lv: 3, text: () => '（もしもの話）戦争は、たくさんの命とくらしを失わせる。勝っても、制裁や孤立が待っているんだ。' },
+  war_warning: { lv: 3, text: () => '戦争では、兵士と民間人の死傷と戦費が積み重なり、各国の制裁も強まる。停戦の交渉もできるよ。' },
 };
 // where a place shows its first tip (places owned by other modules; kokkai / kuyakusho / parties call
 // g.assistTip themselves)
@@ -507,7 +507,7 @@ function stepTips(g) {
     const k = b.queue.findIndex((q) => (!q.ctx || q.ctx === ctx) && scopeMatch(q.scope, scopeNow));
     if (k < 0) return;
     const next = b.queue.splice(k, 1)[0];
-    if (next.calm && !calmNow(g)) return; // a cheerful tip while a disaster / a war / a もしも regime goes on: dropped
+    if (next.calm && !calmNow(g)) return; // a cheerful tip while a disaster / a war / a regime of the player's goes on: dropped
     const a = assistState(g);
     if (!a) return;
     a.tips[next.key] = today(g);
@@ -811,11 +811,11 @@ function crisisAdvice(g, add) {
   if (w) {
     const cas = w.cas || {};
     const dead = num(cas.soldiers && cas.soldiers.dead) + num(cas.civilians && cas.civilians.dead);
-    add(97, `（もしも）戦争が続いている。これまでの死者は${dead.toLocaleString('ja-JP')}人。`, '戦争は、勝っても制裁や孤立、長い対立が残る。停戦の交渉という道もある。これは架空の「もしも」のシミュレーション。', govtGo(g, 'security', 'war'));
+    add(97, `戦争が続いている。これまでの死者は${dead.toLocaleString('ja-JP')}人。`, '戦争は、勝っても制裁や孤立、長い対立が残る。停戦の交渉という道もある。', govtGo(g, 'security', 'war'));
   }
   const r = safe(() => (typeof g.regime === 'function' ? g.regime() : null), null);
   if (r && r.id && r.id !== 'democracy' && r.id !== 'fallen') {
-    add(92, `（もしも）いまは${r.name || '非常時の体制'}。民衆の不満は${Math.round(num(r.unrest))}/100。`, '権力をチェックする人がいない体制は、不満がたまると大きなデモや反乱につながる。憲法の手続きにもどす道（緊急事態の解除・民主化）もある。これは架空の「もしも」のシミュレーション。', govtGo(g, 'crisis', 'regime'));
+    add(92, `いまは${r.name || '非常時の体制'}。民衆の不満は${Math.round(num(r.unrest))}/100。`, '権力をチェックする人がいない体制は、不満がたまると大きなデモや反乱につながる。憲法の手続きにもどす道（緊急事態の解除・民主化）もある。', govtGo(g, 'crisis', 'regime'));
   }
   const d = safe(() => (typeof g.disaster === 'function' ? g.disaster() : null), null);
   if (ACUTE(d)) {
@@ -954,7 +954,7 @@ export function adviceItems(g) {
         const what = o.post ? `「${safe(() => g.postLabel(o.post), o.post)}」への就任の打診` : '打診';
         add(88, `${what}に返事をしよう（${dueText(num(o.until) - day)}）。`, `${polApp(g)}のお知らせから、引き受けるかどうか決める。返事をしないと、打診は立ち消えになる。`, { politics: 'dashboard' }, '打診に返事をしよう');
       }
-      if (num(me.secret) > 0) add(86, `裏金 ${fmtMoney(me.secret)} を、収支報告書に正しくのせよう。`, '政治資金収支報告書にのせないお金は違法（政治資金規正法）で、見つかれば事件になる。報告書を訂正して公開すれば、正しい状態にもどせる。', { politics: 'money' });
+      if (num(me.secret) > 0) add(86, `収支報告書にのせていない裏金が ${fmtMoney(me.secret)} ある。`, '政治資金規正法違反で、見つかれば事件になる。報告書を訂正して公開すれば、発覚の心配はなくなる。', { politics: 'money' });
       if (me.scandalDay && day - num(me.scandalDay) <= 20) {
         if (me.office) add(77, '記者会見で、事実をはっきり説明しよう（スキャンダルの直後）。', `かくすほど信頼を失う。${polApp(g)}の「資金・活動」→「記者会見」から。説明責任を果たすことが、信頼を取りもどす第一歩。`, { politics: 'activities' }, '記者会見で説明しよう');
         else add(77, 'スキャンダルの直後。事実をはっきり説明しよう。', 'かくすほど信頼を失う。説明責任を果たすことが、信頼を取りもどす第一歩。', null);
@@ -967,7 +967,7 @@ export function adviceItems(g) {
     const mine = pub.find((e) => e.declared);
     if (mine) {
       if (day < mine.koji) add(84, `${mine.label}に届出ずみ。${kojiWord(mine.kind)}まであと${mine.koji - day}日。`, `${kojiWord(mine.kind)}の前は「政治活動」だけ。選挙運動は${kojiWord(mine.kind)}の日から（事前運動の禁止）。`, { politics: 'campaign' });
-      else if (day <= mine.day) add(91, `選挙運動中！投票日まであと${mine.day - day}日。`, '街頭演説やポスターで支持を広げよう。お金や物を配る買収、家を回る戸別訪問は犯罪。', { politics: 'campaign' });
+      else if (day <= mine.day) add(91, `選挙運動中！投票日まであと${mine.day - day}日。`, '街頭演説やポスターで支持を広げよう。お金や物を配る買収や戸別訪問は公職選挙法違反（発覚すれば逮捕・当選無効も）。', { politics: 'campaign' });
     }
     // voting (選挙権 on 投票日; not during 公民権停止 for voting)
     let nextVote = null;
@@ -1085,7 +1085,7 @@ const NEWS_RULES = [
   [/省庁が再編/, '国の役所の組み立てが大きく変わった（中央省庁再編）。仕事の重なりを減らすのがねらい。'],
   [/政党交付金/, '国が政党にお金をくばるしくみが始まった。企業献金にたよらない政治をめざすため。'],
   [/選挙権年齢|18歳/, '投票できる年齢が18歳に下がった。若い人の声を政治に届けるため。'],
-  [/シミュレーション/, '経済や社会に大きな出来事があった（このゲームのシミュレーション）。政府は景気対策などの対応を考える。'],
+  [/景気後退|好景気|急激な円高|急激な円安|資源価格の高騰/, '経済に大きな出来事があった。政府は景気対策などの対応を考える。'],
 ];
 export function explainNews(g, n) {
   const s = String((n && n.text) || n || '');
@@ -2056,7 +2056,7 @@ function quizView(g, qs) {
         drawNaviBust(c, a.x + 8, a.y + 8, 2);
         const ls = wrapJ(c, `${qs.length}の質問に答えると、あなたの考えがどの思想に近いかを、ざっくり示すよ。`, a.w - 92, 12);
         ls.forEach((l, i) => T(c, l, a.x + 82, a.y + 8 + i * 15, 12, PCx.text));
-        const notes = ['・正しい答えも、まちがった答えもない。結果は目安。', '・答えるだけでは、ゲームの中のあなたは何も変わらない。', '・何度でもやり直せる。実在の政党や政治家とは関係ない。'];
+        const notes = ['・正しい答えも、まちがった答えもない。結果は目安。', '・答えるだけでは、主人公の考え方は変わらない。', '・何度でもやり直せる。'];
         // the notes always end above the button (2026-10 play audit: a wrapped last line sat on it):
         // tighter spacing when they are long, never a line under the button
         const btnY = a.y + a.h - 32;
@@ -2112,7 +2112,7 @@ function resultView(g, r) {
     if (r.applied) { ph.toast('もう反映してある', PCx.dim); return; }
     const k = await PH.phoneConfirm(g, {
       title: '考え方に反映する？', color: '#d0507a', choices: ['反映する', 'やめておく'],
-      text: 'この結果を、ゲームの中のあなたの考え方（政治家としての立ち位置）に反映する？\n・あなたの考え方が、この結果のほうへ少し動く。\n・政党に入っていて党の路線から大きくずれると、党内の評価が少しずつ下がることがある。\n・反映しなければ、何も変わらない。',
+      text: 'この結果を、主人公の考え方（政治家としての立ち位置）に反映する？\n・あなたの考え方が、この結果のほうへ少し動く。\n・政党に入っていて党の路線から大きくずれると、党内の評価が少しずつ下がることがある。\n・反映しなければ、何も変わらない。',
     });
     if (k !== 0) return;
     let res = null;
@@ -2147,7 +2147,7 @@ function resultView(g, r) {
           '', '【軸ごとの位置】',
           ...axesList().map((x) => { const val = num((r.axes || {})[x.id]); const pos = Math.abs(val) < 0.2 ? 'まんなか' : `${val < 0 ? x.left : x.right}寄り`; return `${x.name}：${pos}`; }),
           '', '※考え方の傾向の目安。どの思想が正しいということはない。考えは変わっていい。',
-          '※答えただけでは、ゲームの中のあなたは変わらない。反映するかは、図の画面の下で選べる。',
+          '※答えただけでは、主人公の考え方は変わらない。反映するかは、図の画面の下で選べる。',
           ...(IDEO && IDEO.QUIZ_INFO && IDEO.QUIZ_INFO.limits ? [`※${IDEO.QUIZ_INFO.limits}`] : [])];
         const lines = lines0.flatMap((l) => (l ? wrapJ(c, l, a.w - 20, 12) : ['']));
         v.maxScroll = Math.max(0, lines.length * LH + 10 - a.h);

@@ -5,8 +5,8 @@
 // writes their state. Every core but politics.js is feature-detected (a missing one shows 「準備中」 in its panels).
 // Locked controls always say why, with the cores' own refusal reasons (g.govtRefusal / g.regimeRefusal / the
 // `why` fields of their lists). Neutral tone: every policy, tax and budget item shows 賛成 and 反対.
-// The dictatorship / war parts are a fictional 「もしも」 simulation (regime.js FICTION_NOTE): every such step asks a
-// sober confirmation that states the consequences and says it is fiction. Wars only against FICTIONAL nations.
+// The dictatorship / war parts: every such step asks a sober confirmation that states the cost and the consequences
+// (no in-game fiction disclaimer: that is one line on the title screen only). Wars only against FICTIONAL nations.
 //
 // ---------------------------------------------------------------- for other modules
 //   import { openGovtConsole } from './govt_ui.js'   (or feature-detect g.govtConsole)
@@ -236,7 +236,6 @@ const today = (g) => (g.state && g.state.day) || 1;
 const yearOf = (g) => safe(() => polDate(g).year, 2026);
 const fyOf = (g) => safe(() => polDate(g).fy, 2026.3);
 const pName = (post, g) => safe(() => postName(post, fyOf(g)), post);
-const FICTION = () => (RG && RG.FICTION_NOTE) || 'これは架空の「もしも」のシミュレーションです。実在の政党・人物・国とは関係ありません。';
 function partyShortName(g, id) { if (!id || id === 'ind') return '無所属'; return safe(() => g.partyName(id, true), id) || id; }
 function partyColorOf(g, id) {
   if (!id || id === 'ind') return '#8a90a6';
@@ -824,7 +823,7 @@ class GovtScene {
     const rl = `${role.label}・${role.short}`;
     x += chip(c, x, 4, rl.length > 22 ? role.label : rl, shade(role.color, -0.55), role.color, 10) + 4;
     const rg = has(g, 'regime') ? safe(() => g.regime(), null) : null;
-    if (rg && rg.id !== 'democracy') x += chip(c, x, 4, `${rg.name}（もしも）`, '#4a1018', K.danger, 10) + 4;
+    if (rg && rg.id !== 'democracy') x += chip(c, x, 4, rg.name, '#4a1018', K.danger, 10) + 4;
     const dl = safe(() => `${dateLabel(g)}（${polDate(g).wareki}）`, '');
     const dw = Math.min(200, measure(c, dl, 10));
     T(c, dl, SW - 28, 6, 10, K.cyan, 'right', 200);
@@ -889,7 +888,7 @@ function modalBox(c, o, h) {
   T(c, o.title || '', x + 8, y + 3, 12, col, 'left', w - 16);
   return { x, y, w, col };
 }
-// { title, lines[] | text, choices[], index, cancel, danger, fiction (adds the もしも note), w, color }
+// { title, lines[] | text, choices[], index, cancel, danger, fiction (ignored: no in-game disclaimer), w, color }
 function confirmModal(o) {
   const choices = o.choices || ['はい', 'いいえ'];
   const m = {
@@ -907,7 +906,6 @@ function confirmModal(o) {
     draw(c) {
       const w = o.w || 440;
       const src = [...(o.lines || (o.text != null ? String(o.text).split('\n') : []))];
-      if (o.fiction) src.push('', `※${FICTION()}`);
       const lines = [];
       for (const l of src) lines.push(...wrapJ(c, String(l), w - 28, 12));
       const shown = lines.slice(0, 15);
@@ -1164,7 +1162,7 @@ function sessionText(g) {
   if (p.diet.shugi && p.diet.shugi.dissolved) return '衆議院は解散中（総選挙のあと特別国会）';
   if (S) return `${S.kind}：会期末 ${safe(() => dateLabel(g, S.end).replace(/^\d+年/, ''), '')}（あと${Math.max(0, S.end - today(g))}日）`;
   const rg = has(g, 'regime') ? safe(() => g.regime(), null) : null;
-  if (rg && rg.steps && rg.steps.diet && rg.id !== 'democracy') return '国会は停止されている（もしも）';
+  if (rg && rg.steps && rg.steps.diet && rg.id !== 'democracy') return '国会は停止されている';
   return '閉会中（通常国会は1月に召集）';
 }
 const REFORM_STAGE = { idle: null, chosakai: '与党税調で審議中（12月中旬に大綱）', taiko: '税制改正大綱がまとまった', none: '今年の税制改正はなし', bill: '税制改正法案を国会で審議中', enacted: '税制改正法が成立した', failed: '税制改正法案は成立しなかった' };
@@ -1223,9 +1221,9 @@ const TAB_OVERVIEW = {
       jump('ov_rs', 266, 44, 176, 132, 'opinion', '支持率がなぜ動いたか（理由ごとの寄与）。A：世論へ'),
       jump('ov_seat', 446, 44, 190, 132, 'diet', '衆参の議席（与党・過半数・3分の2）。A：国会の画面へ'),
       jump('ov_eco', 4, 180, 258, 82, 'network', '経済指標と最近の動き。A：政策と指標のつながり（政策マップ）へ'),
-      jump('ov_reg', 266, 180, 176, 82, 'crisis', '体制と報道の自由度（ゲーム内の指標）。A：危機管理へ', 'regime'),
+      jump('ov_reg', 266, 180, 176, 82, 'crisis', '体制と報道の自由度。A：危機管理へ', 'regime'),
       jump('ov_crisis', 446, 180, 190, 82, d.war ? 'security' : 'crisis', 'いまの危機とデモ。A：くわしく'),
-      jump('ov_voice', 4, 266, 300, 70, 'opinion', '最新の世論の声（架空の市民の声）。A：世論の声の一覧へ'),
+      jump('ov_voice', 4, 266, 300, 70, 'opinion', '最新の世論の声。A：世論の声の一覧へ'),
     ];
     d.dead.forEach((r, i) => out.push(jump(`ov_dead${i}`, 309, 284 + i * 13, 326, 13, r.tab, `${r.k}：${r.t}`, r.sub)));
     return out;
@@ -1287,7 +1285,7 @@ const TAB_OVERVIEW = {
     {
       const x = 4, y = 180, w = 258, h = 82;
       const E = d.eco;
-      panel(c, x, y, w, h, '経済（シミュレーション）', { right: `GDP ${fmtN(E.gdp, 0)}兆円` });
+      panel(c, x, y, w, h, '経済', { right: `GDP ${fmtN(E.gdp, 0)}兆円` });
       const tiles = [['成長率', pct(E.growth), 'growth', K.good], ['物価', pct(E.inflation), 'inflation', K.warn], ['失業率', pct(E.unemployment), 'unemployment', K.cyan], ['政府債務', `GDP比${fmtN(E.debtRatio, 0)}%`, 'debtRatio', K.bad], ['円相場', `${fmtN(E.yen, 0)}円/ドル`, 'yen', K.violet], ['株価', `${fmtN(E.nikkei, 0)}円`, 'nikkei', K.pink]];
       tiles.forEach(([lab, v, key, col], i) => {
         const tx = x + 4 + (i % 3) * 84, ty = y + 20 + Math.floor(i / 3) * 30;
@@ -1322,7 +1320,7 @@ const TAB_OVERVIEW = {
       panel(c, x, y, w, h, '危機・デモ', { right: ds || wr ? '対応中' : '平時', rightColor: ds || wr ? K.bad : K.good });
       let yy = y + 20;
       if (wr) {
-        T(c, `【戦争・もしも】${wr.enemyName}`, x + 6, yy, 12, K.bad, 'left', w - 12); yy += 14;
+        T(c, `【戦争】${wr.enemyName}`, x + 6, yy, 12, K.bad, 'left', w - 12); yy += 14;
         T(c, `戦況：${wr.frontText}・死傷 ${fmtN(wr.cas.soldiers.dead + wr.cas.soldiers.wounded + wr.cas.civilians.dead + wr.cas.civilians.wounded)}人`, x + 6, yy, 10, K.text, 'left', w - 12); yy += 13;
       }
       if (ds) {
@@ -1340,7 +1338,7 @@ const TAB_OVERVIEW = {
     // ---- G: voices
     {
       const x = 4, y = 266, w = 300, h = 70;
-      panel(c, x, y, w, h, '世論の声（架空の市民）', { right: 'A：一覧' });
+      panel(c, x, y, w, h, '世論の声', { right: 'A：一覧' });
       if (!d.voices.length) T(c, '（まだ声はない）', x + 6, y + 22, 12, K.dim);
       d.voices.slice(0, 2).forEach((v, i) => {
         const yy = y + 20 + i * 25;
@@ -1512,7 +1510,7 @@ function drawBudgetSub(c, ui, d, st) {
     T(c, '※税収・税外収入は今年度なみと仮定した見込み', x + 8, 141, 10, K.faint, 'left', w - 16);
   } else {
     T(c, `PB ${sgn(b.primaryBalance, 1)}兆円・政府債務 GDP比${fmtN(b.debtRatio, 0)}%`, x + 8, 128, 10, K.dim, 'left', w - 16);
-    T(c, '※開始年度は実際の当初予算、その後はシミュレーション', x + 8, 141, 10, K.faint, 'left', w - 16);
+    T(c, '※開始年度は実際の当初予算、その後は政策と景気で変わる', x + 8, 141, 10, K.faint, 'left', w - 16);
   }
   // selected item
   const r = rows[st.brow | 0];
@@ -1956,14 +1954,14 @@ const DEMO_CONSEQ = {
   tolerate: '表現の自由として見守る。支持率への影響はほとんどない',
   regulate: '勢い×0.85・規模×0.9。若者や都市の層から「過剰な警備」との反発（高齢者・経営者は理解）',
   remove: '勢いはかえって強まる（×1.25）。支持率が4〜7ポイント下がり、若者・都市・無党派が強く反発する',
-  crackdown: '【もしも】勢い×0.5・規模×0.6。民衆の不満+18・国際社会の懸念+15・報道の自由度−5・支持率−8。多数のけが人と拘束者が出たと伝えられ、蜂起の危険が一気に高まる',
-  curfew: '【もしも】勢い×0.8。民衆の不満+6・国際社会の懸念+5・成長率−0.5（60日）。暮らしと経済に重い負担',
-  concession: '【もしも】民衆の不満−10・国際社会の懸念−4。拘束者を解放し、対話を約束する',
+  crackdown: '勢い×0.5・規模×0.6。民衆の不満+18・国際社会の懸念+15・報道の自由度−5・支持率−8。多数のけが人と拘束者が出たと伝えられ、蜂起の危険が一気に高まる',
+  curfew: '勢い×0.8。民衆の不満+6・国際社会の懸念+5・成長率−0.5（60日）。暮らしと経済に重い負担',
+  concession: '民衆の不満−10・国際社会の懸念−4。拘束者を解放し、対話を約束する',
 };
 const TAB_OPINION = {
   id: 'opinion', label: '世論', short: '層別の支持・世論の声・デモ（参加・対応）', lesson: 'yoron',
   tip: (ui) => (ui.tabState().last === 'demo' ? 'govt_demo' : 'govt_voices'),
-  about: '層ごとの内閣支持・政党支持・世論の声（架空の市民）・デモ（参加・主催・政府の対応）',
+  about: '層ごとの内閣支持・政党支持・世論の声・デモ（参加・主催・政府の対応）',
   terms: ['世論', '世論調査', 'デモ', '表現の自由', '無党派層'],
   alert: (ui) => (has(ui.g, 'demos') ? safe(() => ui.g.demos({ active: true }).length, 0) : 0),
   load(ui) {
@@ -1990,15 +1988,15 @@ const TAB_OPINION = {
       out.push({ kind: 'seg', id: `vf_${f.id}`, x, y: 62, w, h: 14, why: null, tip: `世論の声：${f.label}`, a: (u) => { u.tabState().vf = f.id; u.tabState().vrow = 0; u.dirty(); } });
       x += w + 2;
     }
-    out.push(btn({ id: 'v_fresh', x: 384, y: 62, w: 68, h: 14, label: '新しい声', why: has(ui.g, 'voices') ? null : '世論の声のしくみがない', tip: '街の声・ネットの声を新しく集める（架空の市民）', a: (u) => { safe(() => u.g.voices(6, { fresh: true })); st.vrow = 0; u.toast('新しい声を集めた', K.cyan); } }));
-    out.push(listCtl(ui, 'vrow', { id: 'vrow', x: 218, y: 80, w: 234, h: 256, rowH: 32, n: d.voices.length, tip: (u) => { const v = d.voices[u.tabState().vrow | 0]; return v ? `${v.mediumLabel}・${v.segName}・${v.event || ''}（架空の市民の声）` : ''; }, a: (u) => { const v = d.voices[u.tabState().vrow | 0]; if (v) return u.info(v.header, [`「${v.text}」`, '', `立場：${STANCE_WORD[v.stance] || '—'}・層：${v.segName}`, `話題：${v.event || '—'}・${v.mediumLabel}`, '※架空の市民の声。ひとつの声だけで世論を決めつけない']); } }));
+    out.push(btn({ id: 'v_fresh', x: 384, y: 62, w: 68, h: 14, label: '新しい声', why: has(ui.g, 'voices') ? null : '世論の声のしくみがない', tip: '街の声・ネットの声を新しく集める', a: (u) => { safe(() => u.g.voices(6, { fresh: true })); st.vrow = 0; u.toast('新しい声を集めた', K.cyan); } }));
+    out.push(listCtl(ui, 'vrow', { id: 'vrow', x: 218, y: 80, w: 234, h: 256, rowH: 32, n: d.voices.length, tip: (u) => { const v = d.voices[u.tabState().vrow | 0]; return v ? `${v.mediumLabel}・${v.segName}・${v.event || ''}` : ''; }, a: (u) => { const v = d.voices[u.tabState().vrow | 0]; if (v) return u.info(v.header, [`「${v.text}」`, '', `立場：${STANCE_WORD[v.stance] || '—'}・層：${v.segName}`, `話題：${v.event || '—'}・${v.mediumLabel}`]); } }));
     out.push(listCtl(ui, 'drow', { id: 'drow', x: 456, y: 62, w: 180, h: 112, rowH: 28, n: d.demos.length, tip: (u) => { const dm = d.demos[u.tabState().drow | 0]; return dm ? `${dm.cause}（${dm.place}・約${fmtN(dm.size)}人）` : 'デモはない'; }, a: null, onMove: (u) => { u.tabState().last = 'demo'; } }));
     const dm = d.demos[st.drow | 0];
     const ended = !dm || dm.status === 'ended';
     out.push(btn({ id: 'd_join', x: 456, y: 270, w: 88, h: 20, label: '参加する', why: !dm ? 'デモがない' : ended ? 'そのデモはもう終わっている' : d.joinWhy(dm.id), tip: '市民としてデモに参加する（集会・表現の自由：憲法21条）', a: (u) => demoJoin(u, dm) }));
     out.push(btn({ id: 'd_org', x: 548, y: 270, w: 88, h: 20, label: '主催する', why: d.orgWhy, tip: 'デモを主催する（公安条例の許可・準備のお金）', a: (u) => demoOrganize(u) }));
     out.push(btn({ id: 'd_resp', x: 456, y: 294, w: 180, h: 20, label: '政府として対応する', color: K.amber, why: !dm ? 'デモがない' : ended ? 'そのデモはもう終わっている' : d.respWhy(dm.id), tip: '総理・官房長官・国家公安委員長がデモに対応する', a: (u) => demoRespond(u, dm) }));
-    out.push(btn({ id: 'd_scene', x: 456, y: 318, w: 180, h: 18, label: 'デモの様子を見る', why: !dm ? 'デモがない' : has(ui.g, 'demoScene') ? null : '場面のしくみがない', tip: 'デモの現場の様子（架空）', a: (u) => (dm ? safe(() => u.g.demoScene(dm.id, null), null) : null) }));
+    out.push(btn({ id: 'd_scene', x: 456, y: 318, w: 180, h: 18, label: 'デモの様子を見る', why: !dm ? 'デモがない' : has(ui.g, 'demoScene') ? null : '場面のしくみがない', tip: 'デモの現場の様子', a: (u) => (dm ? safe(() => u.g.demoScene(dm.id, null), null) : null) }));
     return out;
   },
   draw(c, ui, d) {
@@ -2028,10 +2026,10 @@ const TAB_OPINION = {
         T(c, pct(s.pct), 208, yy, 10, K.white, 'right', 40);
         yy += 12;
       }
-      T(c, '※推計（実在の世論調査ではない）', 10, 322, 10, K.faint, 'left', 198);
+      T(c, '※推計（層ごとの目安）', 10, 322, 10, K.faint, 'left', 198);
     }
     // ---- voices
-    panel(c, 218, 44, 234, 292, '世論の声', { right: '架空の市民' });
+    panel(c, 218, 44, 234, 292, '世論の声', { right: '街・ネット' });
     for (const f of VOICE_FILTERS) {
       const k = ui.ctls.find((q) => q.id === `vf_${f.id}`);
       if (!k) continue;
@@ -2108,7 +2106,7 @@ async function demoRespond(ui, dm) {
   const g = ui.g;
   const list = has(g, 'demoResponses') ? safe(() => g.demoResponses(dm.id), []) : [];
   const items = list.map((r) => ({ label: r.label, sub: r.why ? r.why : DEMO_CONSEQ[r.id] || r.desc, why: r.why, id: r.id, color: ['crackdown', 'curfew', 'remove'].includes(r.id) ? K.danger : ['dialogue', 'tolerate'].includes(r.id) ? K.good : K.warn }));
-  const i = await ui.pick({ title: `デモへの対応：${dm.cause}`, lines: ['民主国家の政府は、デモを力でおさえず、対話で応えるのが基本（憲法21条）。'], items, w: 500, color: K.amber });
+  const i = await ui.pick({ title: `デモへの対応：${dm.cause}`, lines: ['集会・表現の自由は憲法21条が保障する。力でおさえると、反発と国際社会の懸念が強まる。'], items, w: 500, color: K.amber });
   if (i == null || i < 0) return;
   const r = list[i];
   if (!r) return;
@@ -2352,7 +2350,7 @@ const ADMIN_SUBS = [{ id: 'min', label: '省庁と官僚' }, { id: 'council', la
 const TAB_ADMIN = {
   id: 'admin', label: '行政', short: '省庁と官僚・審議会・政令・行政改革', lesson: 'naikaku',
   tip: 'govt_ministries',
-  about: 'その年の省庁と大臣・架空の官僚、審議会への諮問、政令・省令（国会の議決なしで決める）、行政改革と天下り',
+  about: 'その年の省庁と大臣・官僚、審議会への諮問、政令・省令（国会の議決なしで決める）、行政改革と天下り',
   terms: ['官僚', '政令', '省令', '審議会', '天下り', '行政改革', '内閣人事局'],
   load(ui) {
     const g = ui.g;
@@ -2370,7 +2368,7 @@ const TAB_ADMIN = {
     const s = sub(ui);
     if (s === 'min') {
       out.push(listCtl(ui, 'mrow', { id: 'mrow', x: 4, y: 64, w: 250, h: 272, y0: 30, rowH: 20, n: d.min.length, tip: (u) => { const m = d.min[u.tabState().mrow | 0]; return m ? `${m.name}：大臣 ${m.ministerName || '—'}` : ''; }, a: null }));
-      out.push(btn({ id: 'm_answer', x: 262, y: 314, w: 180, h: 20, label: '官僚の答弁を聞く', why: has(ui.g, 'bureaucratAnswer') ? null : '行政のしくみがない', tip: `国会での官僚（${yearOf(ui.g) < 2000 ? '政府委員' : '政府参考人'}）の答弁の例（架空の人物）`, a: (u) => bureauAnswer(u, d) }));
+      out.push(btn({ id: 'm_answer', x: 262, y: 314, w: 180, h: 20, label: '官僚の答弁を聞く', why: has(ui.g, 'bureaucratAnswer') ? null : '行政のしくみがない', tip: `国会での官僚（${yearOf(ui.g) < 2000 ? '政府委員' : '政府参考人'}）の答弁の例`, a: (u) => bureauAnswer(u, d) }));
       out.push(btn({ id: 'm_jinji', x: 448, y: 314, w: 184, h: 20, label: '幹部人事（内閣人事局）', why: d.R('kanbu_jinji'), tip: jinjiTip(d), a: (u) => kanbuJinji(u, d) }));
     } else if (s === 'council') {
       out.push(listCtl(ui, 'crow', { id: 'crow', x: 4, y: 64, w: 300, h: 272, y0: 18, rowH: 26, n: d.councils.length, tip: (u) => { const k = d.councils[u.tabState().crow | 0]; return k ? `${k.name}：${k.topic}` : ''; }, a: null }));
@@ -2408,7 +2406,7 @@ const TAB_ADMIN = {
         let yy = 84;
         T(c, `大臣：${m.playerHeads ? 'あなた' : m.ministerName || '（空席）'}`, 264, yy, 12, m.playerHeads ? K.amber : K.white, 'left', 366); yy += 17;
         const ppl = [m.top, m.kanbo, ...(m.bureaus || [])].filter(Boolean);
-        T(c, '幹部（架空の官僚）', 264, yy, 10, K.amber); yy += 13;
+        T(c, '幹部の官僚', 264, yy, 10, K.amber); yy += 13;
         for (const b of ppl.slice(0, 6)) {
           T(c, b.title, 270, yy, 10, K.dim, 'left', 150);
           T(c, `${b.name}（${b.age}歳・${b.entered}年入省）`, 630, yy, 10, K.text, 'right', 210);
@@ -2488,7 +2486,7 @@ const TAB_ADMIN = {
         let yy = 98;
         const cases = r.amakudari.cases || [];
         if (!cases.length) { T(c, '問題になっている事例はない', 336, yy, 10, K.dim, 'left', 290); yy += 13; }
-        for (const cs of cases.slice(0, 5)) { yy = para(c, `・${typeof cs === 'string' ? cs : cs.text || `${cs.name}（架空）：${cs.from} → ${cs.to}`}`, 336, yy, 290, 10, K.text, 12, 2); }
+        for (const cs of cases.slice(0, 5)) { yy = para(c, `・${typeof cs === 'string' ? cs : cs.text || `${cs.name}：${cs.from} → ${cs.to}`}`, 336, yy, 290, 10, K.text, 12, 2); }
         // the core's era- and history-aware text (never tells the future: the 2007 ban only once it exists)
         const ban = ((r.items || []).find((it) => it.id === 'amakudariBan') || {}).text || '';
         para(c, `天下り：退職した官僚が、仕事で関わった業界の団体や企業に再就職すること。${ban}`, 336, Math.max(yy + 4, 214), 292, 10, K.faint, 12, 5);
@@ -2502,11 +2500,11 @@ async function bureauAnswer(ui, d) {
   const g = ui.g;
   const topics = (GV && GV.QUESTION_TOPICS) || { generic: '政府の方針' };
   const ids = Object.keys(topics);
-  const i = await ui.pick({ title: '官僚の答弁', lines: ['国会の委員会で、議員の質問に官僚が答える場面の例（架空の人物）。'], items: ids.map((t) => ({ label: topics[t] })) });
+  const i = await ui.pick({ title: '官僚の答弁', lines: ['国会の委員会で、議員の質問に官僚が答える場面の例。'], items: ids.map((t) => ({ label: topics[t] })) });
   if (i < 0) return;
   const a = safe(() => g.bureaucratAnswer(ids[i]), null);
   if (!a) { await ui.info('答弁', ['答弁はなかった。']); return; }
-  await ui.info(`${a.role}の答弁`, [`${a.title}　${a.who}`, `「${a.text}」`, '', `※${a.role === '政府委員' ? 'いまは官僚が「政府委員」として国会で答弁する' : '1999年の国会審議活性化法で政府委員制度は廃止。いまは「政府参考人」として答える'}。人物は架空。`], { w: 480 });
+  await ui.info(`${a.role}の答弁`, [`${a.title}　${a.who}`, `「${a.text}」`, '', `※${a.role === '政府委員' ? 'いまは官僚が「政府委員」として国会で答弁する' : '1999年の国会審議活性化法で政府委員制度は廃止。いまは「政府参考人」として答える'}。`], { w: 480 });
 }
 // adminReform() items (the core's era- and history-aware record)
 function reformDone(d, id) { return !!(d && d.reform && (d.reform.items || []).some((it) => it.id === id && it.done)); }
@@ -2531,11 +2529,11 @@ async function ordinanceFlow(ui, o, op) {
 }
 
 // ================================================================ tab 7: 安全保障
-const SEC_SUBS = [{ id: 'sdf', label: '自衛隊・防衛' }, { id: 'war', label: '戦争（もしも）' }];
+const SEC_SUBS = [{ id: 'sdf', label: '自衛隊・防衛' }, { id: 'war', label: '戦争' }];
 const TAB_SECURITY = {
   id: 'security', label: '安全保障', short: '自衛隊・防衛費・命令（文民統制）・PKO', lesson: 'anpo',
   tip: (ui) => (sub(ui) === 'war' ? 'war_warning' : 'sdf_order'),
-  about: '自衛隊の状況・防衛費の推移・命令（文民統制）・PKO・スクランブル。独裁体制の「もしも」では架空の国との戦争',
+  about: '自衛隊の状況・防衛費の推移・命令（文民統制）・PKO・スクランブル。独裁体制では係争地をめぐる戦争',
   terms: (ui) => (sub(ui) === 'war' ? ['独裁', '憲法9条', '文民統制'] : ['自衛隊', '文民統制', '防衛出動', 'PKO協力法', '防衛費', '専守防衛']),
   alert: (ui) => (has(ui.g, 'war') && safe(() => ui.g.war(), null) ? 1 : 0),
   load(ui) {
@@ -2558,7 +2556,7 @@ const TAB_SECURITY = {
     if (!d.showWar) ui.tabState().sub = 'sdf';
     if (sub(ui) === 'war') {
       out.push(listCtl(ui, 'wrow', { id: 'wrow', x: 384, y: 174, w: 252, h: 110, y0: 18, rowH: 15, n: d.warOrders.length, why: (u) => { const o = d.warOrders[u.tabState().wrow | 0]; return o ? o.why : null; }, tip: (u) => { const o = d.warOrders[u.tabState().wrow | 0]; return o ? o.desc : ''; }, a: (u) => warFlow(u, d, d.warOrders[u.tabState().wrow | 0]) }));
-      out.push(jump('w_map', 4, 64, 376, 186, 'security', '架空の地域（係争地ヴェルミナ諸島）。実在の国・地域とは関係ない', 'war'));
+      out.push(jump('w_map', 4, 64, 376, 186, 'security', '係争地ヴェルミナ諸島とその周辺', 'war'));
       out[out.length - 1].a = null; out[out.length - 1].nofocus = true;
     } else {
       const y0 = d.showWar ? 64 : 44;
@@ -2584,7 +2582,7 @@ const TAB_SECURITY = {
     T(c, S.pkoLaw ? 'PKO協力法：あり（1992年）' : 'PKO協力法：まだない（1992年に成立）', 10, yy, 10, S.pkoLaw ? K.good : K.dim, 'left', 234); yy += 13;
     if (S.haken) { T(c, `災害派遣中：${S.haken.where}（約${fmtN(S.haken.personnel)}人）`, 10, yy, 10, K.warn, 'left', 234); yy += 13; }
     for (const dp of (S.deployments || []).slice(0, 2)) { T(c, `${dp.kind === 'pko' ? 'PKO' : '派遣'}：${dp.where || dp.mission}（約${fmtN(dp.personnel)}人）`, 10, yy, 10, K.cyan, 'left', 234); yy += 13; }
-    if (S.pkoOffer) { T(c, `国連の要請：${S.pkoOffer.mission}（架空）`, 10, yy, 10, K.amber, 'left', 234); yy += 13; }
+    if (S.pkoOffer) { T(c, `国連の要請：${S.pkoOffer.mission}`, 10, yy, 10, K.amber, 'left', 234); yy += 13; }
     if (S.kaijo) { T(c, '不審船の事案：海上保安庁が対応中', 10, yy, 10, K.amber, 'left', 234); yy += 13; }
     T(c, `今年のスクランブル：約${fmtN(S.scrambles)}回`, 10, yy, 10, K.text, 'left', 234); yy += 15;
     T(c, 'ルール', 10, yy, 10, K.amber); yy += 12;
@@ -2608,7 +2606,7 @@ const TAB_SECURITY = {
       T(c, String(q.fy), bx + bw / 2, cy + ch + 1, 10, q.real ? '#5a8db0' : K.teal, 'center', bw + 3);
     });
     T(c, '■実際の当初予算（参考）', dk.x + 6, dk.y + dk.h - 29, 10, '#5a8db0', 'left', dk.w - 12);
-    T(c, '■ゲームの中の予算', dk.x + 6, dk.y + dk.h - 17, 10, K.teal, 'left', 100);
+    T(c, '■この政府の予算', dk.x + 6, dk.y + dk.h - 17, 10, K.teal, 'left', 100);
     T(c, S.budget.gdpPct != null ? `いまGDP比 ${fmtN(S.budget.gdpPct, 2)}%` : '', dk.x + dk.w - 6, dk.y + dk.h - 17, 10, K.white, 'right', 90);
     // ---- the log
     const ly = dk.y + dk.h + 4;
@@ -2638,7 +2636,7 @@ function drawWar(c, ui, d) {
   const nat = w && RG && RG.FICTIONAL_NATIONS ? RG.FICTIONAL_NATIONS[w.enemy] : null;
   // ---- the map of the fictional region (abstract; no people)
   const x = 4, y = 64, mw = 376, mh = 186;
-  panel(c, x, y, mw, mh, '架空の地域の地図（もしも）', { right: '架空の国・地域（実在の国とは無関係）' });
+  panel(c, x, y, mw, mh, 'ヴェルミナ海の地図', { right: '係争地と周辺国' });
   R(c, x + 1, y + 17, mw - 2, mh - 18, '#0c2236');
   for (let yy = y + 20; yy < y + mh - 2; yy += 3) { const ww = 70 + Math.sin(yy / 16) * 14; R(c, x + 2, yy, ww, 3, '#3a4a2a'); }
   for (let yy = y + 24; yy < y + mh - 2; yy += 3) { const ww = 76 + Math.cos(yy / 19) * 16; R(c, x + mw - 2 - ww, yy, ww, 3, '#4a3a2a'); }
@@ -2655,7 +2653,7 @@ function drawWar(c, ui, d) {
     T(c, `戦況：${w.frontText}`, x + 8, y + mh - 16, 10, K.white, 'left', 150);
   } else T(c, 'いまは戦争をしていない', ix, y + mh - 18, 10, K.dim, 'center', 200);
   // ---- casualties and costs (numbers only)
-  panel(c, 384, 64, 252, 106, w ? `戦争：${w.enemyName}（架空）` : '戦争（もしも）', { accent: K.danger });
+  panel(c, 384, 64, 252, 106, w ? `戦争：${w.enemyName}` : '戦争', { accent: K.danger });
   if (w) {
     const C0 = w.cas;
     const rows = [
@@ -2666,9 +2664,9 @@ function drawWar(c, ui, d) {
       ['厭戦気分', `${fmtN(w.weariness, 0)}／100・動員 段階${w.mob}`],
     ];
     rows.forEach(([a, b], i) => { T(c, a, 390, 84 + i * 16, 10, K.dim, 'left', 70); T(c, b, 630, 84 + i * 16, 10, K.white, 'right', 170); });
-  } else para(c, '独裁体制の「もしも」でだけ、架空の国との戦争になりうる。勝っても制裁・孤立・反乱が待ち、負ければ独裁者の人生は終わる。', 390, 84, 240, 10, K.text, 12, 6);
+  } else para(c, '独裁体制のもとで国軍を持つと、係争地をめぐって宣戦を布告できる。勝っても制裁・孤立・反乱が待ち、負ければ独裁者の人生は終わる。', 390, 84, 240, 10, K.text, 12, 6);
   const wk = ui.ctls.find((q) => q.id === 'wrow');
-  panel(c, wk.x, wk.y, wk.w, wk.h, '戦争の命令（もしも）', { accent: K.danger });
+  panel(c, wk.x, wk.y, wk.w, wk.h, '戦争の命令', { accent: K.danger });
   drawList(c, ui, wk, (c2, i, x2, y2, w2) => {
     const o = d.warOrders[i];
     if (o.why) padlock(c2, x2 + 5, y2 + 3);
@@ -2683,7 +2681,6 @@ function drawWar(c, ui, d) {
   let yy = 272;
   if (rg) { T(c, `民衆の不満 ${rg.unrest}／100・国際社会の懸念 ${rg.intl}／100・制裁 段階${rg.sanctions}`, 10, yy, 10, rg.unrest >= 60 ? K.bad : K.text, 'left', 364); yy += 13; }
   for (const l of (w ? w.log : []).slice(-3).reverse()) { if (yy > 298) break; T(c, `・${l.text || l}`, 10, yy, 10, K.dim, 'left', 364); yy += 12; }
-  para(c, `※${FICTION()}`, 10, 311, 364, 10, K.faint, 12, 2);
 }
 async function sdfFlow(ui, d, o) {
   if (!o) return;
@@ -2697,7 +2694,7 @@ async function warFlow(ui, d, o) {
   let target = null;
   if (o.id === 'declare') {
     const ids = (RG && RG.NATION_ORDER) || [];
-    const i = await ui.pick({ title: '相手の国（すべて架空）', lines: ['実在の国・地域とは関係ありません。'], items: ids.map((n) => ({ label: RG.FICTIONAL_NATIONS[n].name, sub: RG.FICTIONAL_NATIONS[n].desc })), w: 480, color: K.danger });
+    const i = await ui.pick({ title: '宣戦の相手', lines: ['係争地ヴェルミナ諸島をめぐる相手の国を選ぶ。'], items: ids.map((n) => ({ label: RG.FICTIONAL_NATIONS[n].name, sub: RG.FICTIONAL_NATIONS[n].desc })), w: 480, color: K.danger });
     if (i < 0) return;
     target = ids[i];
   }
@@ -2748,11 +2745,11 @@ const STEP_CONSEQ = {
   lift_emergency: '緊急事態を解除し、選挙と国会を元に戻す。',
   democratize: '権力を手放して退陣し、民主制に戻す。それまでの行為は法にもとづいて裁かれる（特捜部の捜査）。',
 };
-const PRESS_CONSEQ = '報道の自由は民主主義の土台。報道の自由度が下がり、支持率の低下・党内の造反・デモ・最高裁の違憲判決（言論規制法）・国際社会の懸念を招く。';
+const PRESS_CONSEQ = '報道の自由度が下がり、支持率の低下・党内の造反・デモ・最高裁の違憲判決（言論規制法）・国際社会の懸念を招く。';
 const TAB_CRISIS = {
   id: 'crisis', label: '危機管理', short: '災害対応・報道の自由・体制と憲法改正', lesson: (ui) => (sub(ui) === 'disaster' ? 'saigai' : 'minshu'),
   tip: (ui) => ({ disaster: 'disaster_first', press: 'regime_press', regime: 'amendment' }[sub(ui)] || 'disaster_first'),
-  about: '災害への対応（実際の法律と手続き）・報道の自由度・体制と憲法改正の手続き（独裁は架空の「もしも」）',
+  about: '災害への対応（実際の法律と手続き）・報道の自由度・体制と憲法改正の手続き',
   terms: (ui) => ({ disaster: ['災害対策基本法', '災害救助法', '激甚災害', '緊急災害対策本部', '災害派遣'], press: ['報道の自由', '検閲', '言論弾圧', '表現の自由'], regime: ['憲法改正', '発議', '国民投票', '緊急事態条項', '立憲主義', '独裁'] }[sub(ui)] || []),
   alert: (ui) => (has(ui.g, 'disaster') && safe(() => ui.g.disaster(), null) ? 1 : 0),
   load(ui) {
@@ -2798,7 +2795,7 @@ function drawDisaster(c, ui, d) {
   const ds = d.ds;
   panel(c, 4, 64, 326, 272, ds ? ds.name : '災害（いまはない）', { right: ds ? ds.tierName : '', accent: ds ? K.warn : K.amber });
   if (!ds) {
-    let yy = para(c, 'いま対応が必要な災害はない。災害が起きると、ここに被害と対応の段階が出る（災害はすべて架空の地名）。', 10, 84, 314, 10, K.text, 12, 3) + 6;
+    let yy = para(c, 'いま対応が必要な災害はない。災害が起きると、ここに被害と対応の段階が出る。', 10, 84, 314, 10, K.text, 12, 3) + 6;
     T(c, 'これまでの災害', 10, yy, 10, K.amber); yy += 12;
     if (!d.past.length) T(c, 'まだない', 16, yy, 10, K.dim);
     for (const p of d.past) { T(c, `${p.name}：死者 ${fmtN(p.dead)}人・避難 ${fmtN(p.evac)}人${p.score != null ? `・対応の評価 ${p.score}` : ''}`, 16, yy, 10, K.text, 'left', 308); yy += 12; }
@@ -2840,14 +2837,14 @@ async function disasterFlow(ui, a) {
 }
 function drawPress(c, ui, d) {
   const pf = d.pf;
-  panel(c, 4, 64, 326, 272, '報道の自由度（ゲーム内の指標）', { right: pf ? `${pf.value}／100・${pf.label}` : '' });
+  panel(c, 4, 64, 326, 272, '報道の自由度', { right: pf ? `${pf.value}／100・${pf.label}` : '' });
   if (!pf) return;
   gauge(c, 80, 140, 56, pf.value / 100, K.good, { zones: [K.bad, K.warn, K.good] });
   T(c, String(pf.value), 80, 146, 16, K.white, 'center');
   T(c, pf.label, 80, 166, 10, pf.value >= 60 ? K.good : pf.value >= 40 ? K.warn : K.bad, 'center', 120);
   T(c, `基準（いまの体制）${pf.baseline}`, 150, 92, 10, K.dim, 'left', 174);
   T(c, `拘束された記者：${fmtN(pf.detained)}人`, 150, 106, 10, pf.detained ? K.bad : K.dim, 'left', 174);
-  T(c, `検閲：${pf.censorship ? 'あり（もしも）' : 'なし'}`, 150, 120, 10, pf.censorship ? K.bad : K.dim, 'left', 174);
+  T(c, `検閲：${pf.censorship ? 'あり' : 'なし'}`, 150, 120, 10, pf.censorship ? K.bad : K.dim, 'left', 174);
   spark(c, (pf.history || []).slice(-40).map((h) => num(h.v, NaN)), 150, 134, 174, 34, K.cyan, { min: 0, max: 100 });
   let yy = 184;
   T(c, '最近の動き', 10, yy, 10, K.amber); yy += 12;
@@ -2914,7 +2911,7 @@ function drawRegime(c, ui, d) {
     T(c, (SEG_SHORT[s] || s).slice(0, 2), bx + 10, yy + 23, 10, K.faint, 'center', 28);
   });
   yy += 36;
-  para(c, '※見込みは目安。発議は議員一人ひとりの判断、国民投票は層ごとの投票で決まる。実在の政党はこの改正に賛成しない。', 10, Math.min(yy, 312), 314, 10, K.faint, 11, 2);
+  para(c, '※見込みは目安。発議は議員一人ひとりの判断、国民投票は層ごとの投票で決まる。', 10, Math.min(yy, 312), 314, 10, K.faint, 11, 2);
   const k = ui.ctls.find((q) => q.id === 'srow');
   if (!k) return; // a stale layout (the sub-view changed while a dialog was open): drawn on the next frame
   panel(c, k.x, k.y, k.w, k.h, '体制の手続き', { accent: K.danger });
@@ -2934,11 +2931,11 @@ async function stepFlow(ui, a) {
   const g = ui.g;
   const auth = a.auth;
   const lines = [a.desc, '', `【この手続きの結果】${STEP_CONSEQ[a.id] || ''}`];
-  if (auth) lines.push('', '⚠ 憲法と法律の手続きを守るのが立憲主義。権力が1か所に集まると、チェックする人がいなくなる。');
+  if (auth) lines.push('', '⚠ 手続きが進むほど、民衆の不満・国際社会の制裁・蜂起の危険がふくらむ。');
   const k = await ui.confirm({ title: `${auth ? '⚠ ' : ''}体制の手続き：${a.name}`, danger: auth, fiction: auth || a.id === 'democratize' || a.id === 'lift_emergency', lines, choices: auth ? ['やめておく', '理解したうえで進める'] : ['進める', 'やめる'], index: 0, cancel: auth ? 0 : 1, w: 490 });
   if ((auth && k !== 1) || (!auth && k !== 0)) return;
   if (auth && ['suspend_elections', 'suspend_diet', 'ban_opposition', 'national_army'].includes(a.id)) {
-    const k2 = await ui.confirm({ title: '最後の確認', danger: true, lines: ['本当に進めますか？　国民の自由と権利が大きく損なわれます。', `（${FICTION()}）`], choices: ['やめておく', '進める'], index: 0, cancel: 0 });
+    const k2 = await ui.confirm({ title: '最後の確認', danger: true, lines: ['本当に進めますか？　国民の自由と権利が大きく損なわれます。'], choices: ['やめておく', '進める'], index: 0, cancel: 0 });
     if (k2 !== 1) return;
   }
   if (has(g, 'assistTip')) safe(() => g.assistTip(a.id === 'democratize' || a.id === 'lift_emergency' ? 'regime_emergency' : 'regime_dictator'));
@@ -2971,7 +2968,7 @@ const TAB_IDEOLOGY = {
     d.npcs = [...npcIds].slice(0, 30).map((id) => safe(() => g.ideologyOf('npc', id), null)).filter((x) => x && x.axes);
     const myParty = p.me.party && p.parties[p.me.party];
     d.myParty = myParty || null;
-    d.partyWhy = !myParty ? '政党に入っていない（理念を決めるのは党首）' : (myParty.real || myParty.id === 'jimin' || myParty.id === 'minshu') ? '実在の政党の理念は、その党の綱領で決まっている' : myParty.leader !== 'player' ? '党の理念を決められるのは党首だけ' : has(g, 'setPartyIdeology') ? null : '思想のしくみが読み込まれていない';
+    d.partyWhy = !myParty ? '政党に入っていない（理念を決めるのは党首）' : (myParty.real || myParty.id === 'jimin' || myParty.id === 'minshu') ? 'この党の理念は、党の綱領で決まっている' : myParty.leader !== 'player' ? '党の理念を決められるのは党首だけ' : has(g, 'setPartyIdeology') ? null : '思想のしくみが読み込まれていない';
     return d;
   },
   layout(ui, d) {
@@ -3094,7 +3091,7 @@ const TAB_IDEOLOGY = {
 };
 function partyIdeoLines(pt) {
   const out = [`理念：${pt.label || '—'}`];
-  if (!pt.note) out.push(pt.basis === 'self' ? '（実在の政党：党自身の綱領・宣言の言葉から。ゲームの判断ではない）' : pt.basis === 'declared' ? '（党首が決めた理念）' : '（架空の政党：公約と路線からの推定）');
+  if (!pt.note) out.push(pt.basis === 'self' ? '（党の綱領・宣言の言葉から）' : pt.basis === 'declared' ? '（党首が決めた理念）' : '（公約と路線からの推定）');
   for (const q of (pt.quotes || []).slice(0, 4)) out.push(`「${q.text}」— ${q.source}`);
   if (pt.note) out.push(pt.note);
   for (const s of (pt.sources || []).slice(0, 2)) out.push(`出典：${s.title}`);
@@ -3124,9 +3121,9 @@ const REL_ACTIONS = [
   ['question_power', '報告徴収・質問権を使う（所轄庁）'], ['request_dissolution', '解散命令を請求する（所轄庁）'],
 ];
 const TAB_SOCIETY = {
-  id: 'society', label: '社会・宗教', short: '架空の宗教団体と政教分離・郵政', lesson: 'kenpo',
+  id: 'society', label: '社会・宗教', short: '宗教団体と政教分離・郵政', lesson: 'kenpo',
   tip: (ui) => (sub(ui) === 'postal' ? 'govt_postal' : 'govt_religion'),
-  about: '架空の宗教団体と政教分離（憲法20条・89条、宗教法人法）・郵政事業の歩みと郵政民営化',
+  about: '宗教団体と政教分離（憲法20条・89条、宗教法人法）・郵政事業の歩みと郵政民営化',
   terms: (ui) => (sub(ui) === 'postal' ? ['郵政民営化', '日本郵政公社', '民営化', '財政投融資'] : ['信教の自由', '政教分離', '宗教法人法', '組織票']),
   load(ui) {
     const g = ui.g;
@@ -3142,7 +3139,7 @@ const TAB_SOCIETY = {
     const st = ui.tabState();
     if (sub(ui) === 'religion') {
       const groups = d.rel ? d.rel.groups : [];
-      out.push(listCtl(ui, 'grow', { id: 'grow', x: 4, y: 64, w: 196, h: 272, y0: 18, rowH: 30, n: groups.length, tip: (u) => { const gr = groups[u.tabState().grow | 0]; return gr ? `${gr.name}（架空の団体）：${gr.kind}` : ''; }, a: null }));
+      out.push(listCtl(ui, 'grow', { id: 'grow', x: 4, y: 64, w: 196, h: 272, y0: 18, rowH: 30, n: groups.length, tip: (u) => { const gr = groups[u.tabState().grow | 0]; return gr ? `${gr.name}：${gr.kind}` : ''; }, a: null }));
       const gr = groups[st.grow | 0];
       // the core's side-effect-free check for every action kind (govtRefusal('religion', { group, action }))
       const whyOfAct = (kind) => {
@@ -3170,7 +3167,7 @@ const TAB_SOCIETY = {
 function drawReligion(c, ui, d) {
   const st = ui.tabState();
   const rel = d.rel;
-  panel(c, 4, 64, 196, 272, '宗教団体（すべて架空）');
+  panel(c, 4, 64, 196, 272, '宗教団体');
   if (!rel) { para(c, '宗教のしくみ（govt.js）が読み込まれていない。', 10, 86, 184, 10, K.dim); return; }
   drawList(c, ui, ui.ctls.find((q) => q.id === 'grow'), (c2, i, x, y, w) => {
     const gr = rel.groups[i];
@@ -3188,7 +3185,7 @@ function drawReligion(c, ui, d) {
     [['信頼', gr.trust], ['あなたとの関係', gr.relation]].forEach(([a, v]) => { T(c, a, 210, yy, 10, K.dim, 'left', 90); hbar(c, 300, yy + 3, 110, 6, num(v) / 100, K.teal); yy += 13; });
     if (gr.endorse) { T(c, '選挙で候補者を推薦することがある（組織票）', 210, yy, 10, K.warn, 'left', 204); yy += 12; }
     if (gr.problem && rel.cult) { yy = para(c, `問題：${rel.cult.label}（相談 ${fmtN(rel.cult.complaints)}件）`, 210, yy + 2, 204, 10, rel.cult.stage ? K.bad : K.dim, 12, 3); }
-    para(c, '※架空の団体。信仰そのものではなく、違法な勧誘・献金の強要が問題として扱われる。', 210, Math.max(yy + 4, 300), 204, 10, K.faint, 12, 3);
+    para(c, '※信仰そのものではなく、違法な勧誘・献金の強要が問題として扱われる。', 210, Math.max(yy + 4, 300), 204, 10, K.faint, 12, 3);
   }
   const k = ui.ctls.find((q) => q.id === 'rarow');
   if (!k) return; // a stale layout (the sub-view changed while a dialog was open): drawn on the next frame
@@ -3202,7 +3199,7 @@ function drawReligion(c, ui, d) {
 async function religionFlow(ui, d, gr, a) {
   if (!gr || !a) return;
   if (a.id === 'public_money') { await ui.info('公金の支出', [d.R('religion_funds') || '憲法89条：公金を宗教団体のために支出してはならない。'], { color: K.lock }); return; }
-  const lines = [`「${gr.name}」（架空）：${a.label}`];
+  const lines = [`「${gr.name}」：${a.label}`];
   if (a.id === 'request_dissolution') lines.push('解散命令は裁判所が決める（宗教法人法81条）。法人格を失わせるもので、信仰そのものを禁じるものではない。');
   if (a.id === 'question_power') lines.push('所轄庁が、宗教法人審議会の意見を聞いたうえで報告を求め、質問する（78条の2）。');
   if (a.id === 'visit') lines.push('国は宗教を優遇も弾圧もしない（政教分離）。政治家の訪問は、敬意をもった交流として。');
@@ -3362,7 +3359,6 @@ async function voicesApp(g) {
         }
       }
       if (rows.length <= 1 && TABS2[this.tab][0] !== 'demo') PT(c, 'まだ声はない', a.x + a.w / 2, a.y + 86, 12, PC.dim, 'center');
-      PT(c, '※架空の市民の声', a.x + a.w - 6, a.y + a.h - 12, 10, PC.dim, 'right');
     },
   };
   return phoneView(g, v);
@@ -3372,7 +3368,7 @@ async function voiceRowAction(g, r) {
   if (r.kind === 'fresh') { safe(() => g.voices(6, { fresh: true })); return; }
   if (r.kind === 'voice') {
     const x = r.v;
-    await PH.phoneInfo(g, { title: x.mediumLabel || '世論の声', color: APP_VOICE, lines: [x.header, `「${x.text}」`, '', `立場：${STANCE_WORD[x.stance] || '—'}`, `層：${x.segName}`, `話題：${x.event || '—'}`, '', '※架空の市民の声。ひとつの声だけで世論を決めつけないこと。'] });
+    await PH.phoneInfo(g, { title: x.mediumLabel || '世論の声', color: APP_VOICE, lines: [x.header, `「${x.text}」`, '', `立場：${STANCE_WORD[x.stance] || '—'}`, `層：${x.segName}`, `話題：${x.event || '—'}`] });
     return;
   }
   if (r.kind === 'org') {

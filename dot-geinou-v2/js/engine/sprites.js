@@ -2,6 +2,8 @@
 //
 //   const sheet = charSheet(look)          // cached
 //   drawChar(ctx, sheet, dir, frame, x, y) // x,y = top-left of the 16x16 tile the character stands on
+//   drawCharPart(ctx, sheet, dir, frame, sx, sy, sw, sh, dx, dy) // crop in 1x frame pixels (any sheet)
+//   drawSeated(ctx, sheet, dir, x, y, seat) // sitting on a seat tile (the map does this by itself)
 //
 //   const hd = charSheetHD(look)           // same layout, native 32x40 frames (the map uses these)
 //   drawFaceHD(ctx, look, x, y, scale)     // 32x24 face crop of the HD sheet (name tags, status)
@@ -866,6 +868,37 @@ export function charSheetHD(look = {}) {
 export function drawChar(ctx, sheet, dir, frame, x, y) {
   const img = sheet[dir] ? sheet[dir][frame] || sheet[dir][0] : sheet.down[0];
   ctx.drawImage(img, Math.round(x), Math.round(y) - 4, SW, SH);
+}
+
+// Part of a frame. The source rectangle is in 1x frame pixels (the frame is 16x20),
+// so the same call crops a 1x sheet and an HD sheet alike (custom sprites must never
+// crop an HD frame with 1x numbers: that cuts out only its top-left quarter).
+export function drawCharPart(ctx, sheet, dir, frame, sx, sy, sw, sh, dx, dy, dw = sw, dh = sh) {
+  const list = sheet[dir] || sheet.down;
+  const img = list[frame] || list[0];
+  const k = img.width / SW;
+  ctx.drawImage(img, sx * k, sy * k, sw * k, sh * k, Math.round(dx), Math.round(dy), dw, dh);
+}
+
+// Someone sitting on the tile whose top-left is (x, y) (units, like drawChar).
+// seat = { img, top } is the seat under them (its tile image, 16x16 units, and the
+// row in units where the seat's top edge starts) or null.
+//  - seen from behind ('up') in a seat with a back (its top edge in the upper part of
+//    the tile): the head and shoulders rise above the seat back and the seat is drawn
+//    again over the rest of the body (theatre / studio / gallery seats, sofas seen from
+//    behind);
+//  - otherwise (facing you or sideways, or a low seat: cushion, stool, bench without a
+//    back): the seat stays under them; the body sits 3 units lower and ends at the lap.
+export function drawSeated(ctx, sheet, dir, x, y, seat = null) {
+  x = Math.round(x); y = Math.round(y);
+  if (dir === 'up' && seat && seat.top < 7) {
+    const st = Math.max(0, Math.round(seat.top));
+    drawCharPart(ctx, sheet, 'up', 0, 0, 0, SW, 16, x, y + st - 12, SW, 16);
+    const k = seat.img.width / 16;
+    ctx.drawImage(seat.img, 0, st * k, seat.img.width, seat.img.height - st * k, x, y + st, 16, 16 - st);
+    return;
+  }
+  drawCharPart(ctx, sheet, dir, 0, 0, 0, SW, 17, x, y - 1, SW, 17);
 }
 
 export function drawShadow(ctx, x, y) {

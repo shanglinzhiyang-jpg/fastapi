@@ -1078,7 +1078,7 @@ registerPlace({
         npc('ntv_recep', 10, 3, 'down', WHO.uketsuke, { talk: uketsukeTalk }),
         npc('ntv_annai', 11, 3, 'down', WHO.annai, { talk: annaiTalk }),
         npc('ntv_guard', 15, 5, 'down', WHO.guard, { talk: posted('down', guardTalk) }),
-        npc('ntv_kanran_ad', 17, 7, 'left', WHO.kanranAD, { talk: kanranADTalk }),
+        npc('ntv_kanran_ad', 16, 7, 'left', WHO.kanranAD, { talk: kanranADTalk }), // beside the sign board (B at 17,7), not on it
         npc('ntv_mom', 5, 8, 'up', WHO.mom, {
           wander: 1,
           text: ['子どもが「テレビの中を見たい」って言うもので。', '1階のモニターで、いま放送中の番組が見られるのね。\nあの子、さっきから画面にくぎづけよ。'],

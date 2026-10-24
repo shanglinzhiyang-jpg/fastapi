@@ -13,7 +13,7 @@ import { W, H, SW, SH, UNIT, LEGACY_SCALE, LEGACY_X, TILE, DIRS, OPP, fmtMoney, 
 import { Input } from './input.js';
 import { audio } from './audio.js';
 import { MapScene, PLACES, doorIndexFor, entryFor } from './map.js';
-import { MessageScene, ListScene, ShopScene, openMenu } from './ui.js';
+import { MessageScene, ListScene, ShopScene, openMenu, drawHud, HUD_H } from './ui.js';
 import { MINIGAMES } from './minigame.js';
 import { text, panel, COLORS } from './draw.js';
 import { drawLogo, LOGOS } from './logos.js';
@@ -105,6 +105,19 @@ export class Game {
     this.canvas.style.imageRendering = S > s * dpr + 0.01 ? 'auto' : 'pixelated';
     this.S = S;
     display.S = S;
+    // Tall portrait phones (style.css shows #hudbar): the HUD is drawn in its own bar above
+    // the game screen, out of the spare height, so it never covers the map.
+    const bar = document.getElementById('hudbar');
+    this.hudOut = !!bar && getComputedStyle(bar).display !== 'none';
+    this.hudCtx = null;
+    if (this.hudOut) {
+      bar.width = SW * S;
+      bar.height = HUD_H * S;
+      bar.style.width = this.canvas.style.width;
+      bar.style.height = Math.round(HUD_H * s) + 'px';
+      bar.style.imageRendering = this.canvas.style.imageRendering;
+      this.hudCtx = bar.getContext('2d');
+    }
   }
 
   start() {
@@ -215,6 +228,17 @@ export class Game {
     if (this.fade > 0) {
       ctx.fillStyle = `rgba(0,0,0,${clamp(this.fade, 0, 1)})`;
       ctx.fillRect(0, 0, SW, SH);
+    }
+    if (this.hudCtx) {
+      // the HUD bar (portrait phones): the HUD while the map shows it, else empty
+      const hc = this.hudCtx;
+      hc.setTransform(S, 0, 0, S, 0, 0);
+      hc.imageSmoothingEnabled = false;
+      hc.clearRect(0, 0, SW, HUD_H);
+      const m = this.map;
+      if (m && m.room && this.scenes.indexOf(m) >= from && m.hudShown(this)) {
+        try { drawHud(hc, this); } catch (e) { console.error(e); }
+      }
     }
   }
 
@@ -845,7 +869,6 @@ export class Game {
         gap(30),
         { t: '※実在の企業名・ロゴは', size: 14, c: C.dim, h: 22 },
         { t: 'それぞれの権利者に帰属します。', size: 14, c: C.dim, h: 22 },
-        { t: '登場人物はすべて架空です。', size: 14, c: C.dim, h: 22 },
         gap(44),
         { t: 'THANK YOU FOR PLAYING!', size: 24, c: C.accent, h: 34, last: true },
       ].filter(Boolean);

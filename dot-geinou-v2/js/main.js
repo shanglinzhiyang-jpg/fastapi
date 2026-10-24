@@ -311,7 +311,7 @@ async function politicsDebug(g) {
 }
 
 // Government console debug (js/engine/govt_ui.js): jump to test states — the PM in each era, a minister, a session,
-// a fictional disaster, the emergency regime and the dictatorship at war (both a fictional 「もしも」 simulation).
+// a fictional disaster, the emergency regime and the dictatorship at war (the regime path).
 // The era jump starts the political world of that era anew (politics / regime / govt / justice states are rebuilt).
 function debugEra(g, era) {
   const st = g.state;
@@ -371,7 +371,7 @@ function debugEmergency(g) {
   return g.regime().id !== 'democracy';
 }
 async function govtDebug(g) {
-  const items = ['政府中枢を開く', '総理（昭和1987）', '総理（平成初期1996）', '総理（平成2004）', '総理（令和2026）', '架空の党の総理（いまの時代）', '財務大臣にする', '防衛大臣にする', '国会を開く（30日）', '大地震（架空・東京）', '緊急事態体制（もしも）', '独裁・戦争（もしも）'];
+  const items = ['政府中枢を開く', '総理（昭和1987）', '総理（平成初期1996）', '総理（平成2004）', '総理（令和2026）', '新党の総理（いまの時代）', '財務大臣にする', '防衛大臣にする', '国会を開く（30日）', '大地震（東京）', '緊急事態体制', '独裁・戦争'];
   const i = await g.list({ title: '政府中枢（デバッグ）', items, x: 8, y: 8, w: 220 });
   if (i < 0) return;
   const open = (tab) => (typeof g.govtConsole === 'function' ? g.govtConsole(tab) : null);

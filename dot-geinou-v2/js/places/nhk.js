@@ -503,7 +503,7 @@ function guideSprite(ctx, x, y, g, e) {
   const left = e.dir === 'left';
   const fx = x + (left ? 1 : 13);
   if (e.dir === 'up') { F(ctx, fx, y - 14, 1, 16, '#9aa0aa'); F(ctx, fx + 1, y - 14, 6, 4, '#3a6fd8'); }
-  drawChar(ctx, charSheet(e.look), e.dir, frame, x, y);
+  drawChar(ctx, e.sheet || charSheetHD(e.look), e.dir, frame, x, y);
   if (e.dir !== 'up') {
     F(ctx, fx, y - 14, 1, 16, '#9aa0aa');
     F(ctx, left ? fx - 6 : fx + 1, y - 14, 6, 4, '#3a6fd8');

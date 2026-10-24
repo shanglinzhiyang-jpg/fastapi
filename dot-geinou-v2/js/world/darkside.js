@@ -2228,7 +2228,7 @@ onMorning((g) => {
   d.townSteps = 0;
   if (!free(g)) return;
   try { spCheck(g); } catch (e) { console.error(e); }
-  if (regimeQuiet(g)) return; // the もしも regime path: nothing everyday (see regimeQuiet); follow-ups wait
+  if (regimeQuiet(g)) return; // the emergency / dictatorship path: nothing everyday (see regimeQuiet); follow-ups wait
   passiveFollowups(g);
   if (st.day < GRACE) return;
   decide(g);

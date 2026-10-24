@@ -1106,10 +1106,10 @@ async function shoplift(g, opts = {}) {
   if (j && (j.status === 'detained' || j.status === 'prison')) return { done: false };
   const k = await g.ask([
     '（棚の商品が目に入った。\n…お金を払わずに、持って出てしまえば――）',
-    '万引きは「窃盗罪」という犯罪だ。\n店には防犯カメラも、見回りの店員もいる。',
-    '見つかれば警察に通報され、前科がつくこともある。\n仕事も信用も、すべてを失いかねない…。',
+    '（万引きは窃盗罪。店には防犯カメラも、見回りの店員もいる）',
+    '（見つかれば警察に通報され、前科がつくこともある）',
   ], ['やめておく', '万引きする…'], { cancel: 0 });
-  if (k !== 1) { await narrate(g, '（手をひっこめた。\n…ほしい物は、ちゃんとお金を払って買おう）'); return { done: false }; }
+  if (k !== 1) { await narrate(g, '（手をひっこめた）'); return { done: false }; }
   let item = items[0];
   if (items.length > 1) {
     const i = await g.list({ title: '何をとる…？', items: items.map((id) => ({ label: ITEMS[id].name, right: fmtMoney(ITEMS[id].price) })), x: 150, y: 70, w: 340, px: true });
@@ -1312,7 +1312,7 @@ async function bottakuri(g, npc) {
     const paid = Math.min(st.money, fair);
     st.money -= paid;
     g.sfx('coin');
-    await narrate(g, [`（${fmtMoney(paid)}だけ払って、店を出た。）`, '（客引きについていくと、こういう店もある。\nおかしいと思ったら、その場で110番を）']);
+    await narrate(g, [`（${fmtMoney(paid)}だけ払って、店を出た。）`, '（客引きについていくと、こういう店もある）']);
     K(g).bottakuri = 'police';
     g.addNeed('stress', 6);
   } else {
@@ -1756,7 +1756,7 @@ function generate() {
     // ---- people
     { type: 'npc', id: 'kan_tout', x: 40, y: 17, dir: 'left', look: TOUT.look, name: TOUT.name, talk: toutTalk, cond: (g) => K(g).toutReported !== g.state.day },
     { type: 'npc', id: 'kan_patrol', x: 41, y: 27, dir: 'down', look: POLICE_LOOK, name: 'パトロール中の警察官', wander: 3, talk: patrolTalk },
-    { type: 'npc', id: 'kan_tachiban', x: 46, y: 9, dir: 'down', look: POLICE_LOOK, name: '交番のおまわりさん', fixedDir: true,
+    { type: 'npc', id: 'kan_tachiban', x: 45, y: 9, dir: 'down', // beside the koban door (a street lamp stands at 46,9) look: POLICE_LOOK, name: '交番のおまわりさん', fixedDir: true,
       text: ['こんばんは。ここは交番です。', '道案内、落とし物、困りごとの相談…\nなんでも中で聞きますよ。'] },
     { type: 'npc', id: 'kan_drunk', x: 22, y: 21, dir: 'down', look: { ...LOOKS.salaryman, tie: '#d62f2f', blush: true }, name: '酔っぱらいのサラリーマン', wander: 2, talk: drunkTalk },
     { type: 'npc', id: 'kan_uranai', x: 8, y: 30, dir: 'down', look: FORTUNE_LOOK, name: '占い師', talk: (g) => fortune(g) },
@@ -2505,7 +2505,7 @@ async function loanExplain(g, o) {
     `${rateLawText(g)}。`,
     `たとえば${fmtMoney(100000)}を借りて、最低額だけ返すと…`,
     planText(loanPlan(100000, rate), ''),
-    `返済日は${MONTH_DAYS}日ごと（ゲームの中の1か月）。口座から自動で\n引き落とします。2回続けて遅れると「信用情報」に\n延滞が記録されて、5年ほど新しい借入れができません。`,
+    `返済日は${MONTH_DAYS}日ごと。口座から自動で\n引き落とします。2回続けて遅れると「信用情報」に\n延滞が記録されて、5年ほど新しい借入れができません。`,
   ];
   if (since(g, 2010, 6)) pages.push('それから「総量規制」。貸金業者からの借入れは、\nほかの会社の分も合わせて、年収の3分の1までです。\n（銀行のカードローンは別のルールです）');
   pages.push('借金を返すための借金は、絶対にやめてください。\nそれが「多重債務」の入口です。');
@@ -2756,7 +2756,6 @@ async function yamiBorrow(g, o) {
   await narrate(g, [
     '（ここは「闇金」――登録のない、違法な貸金業者だ）',
     '（利息だけ払い続けても、元金は一円も減らない。\n返せなくなれば、家族や事務所にまで\n取り立ての電話や訪問が来る…）',
-    `（お金に困ったら、${helpWhere(g)}へ。\n借りる前なら、まだ引き返せる）`,
   ]);
   const k = await g.ask('（それでも、ここで借りる…？）', ['借りずに帰る', '借りる…'], { cancel: 0 });
   if (k !== 1) { await g.say('…なんだよ、冷やかしか。\nま、そのうちまた来るさ。みんなそうだ。', o); return false; }
@@ -2773,7 +2772,7 @@ async function yamiBorrow(g, o) {
   f.yamiBorrowed = (f.yamiBorrowed || 0) + 1;
   f.yamiDay = today(g);
   await g.say([`ほらよ、${fmtMoney(amount)}。手数料を引いて${fmtMoney(res.received)}な。`, `10日後に、利息${fmtMoney(Math.round(amount * 0.1))}。\n払えなきゃ…わかってるよな？`], o);
-  await narrate(g, ['（お金を受け取った手が、少しふるえている…）', '（借りてしまっても、ひとりで抱えないこと。\n交番や弁護士に相談すれば、取り立ては止められる）']);
+  await narrate(g, ['（お金を受け取った手が、少しふるえている…）', '（取り立ては、交番や弁護士に相談すれば止められる）']);
   return true;
 }
 async function yamiRepay(g, o, loans) {
@@ -3008,7 +3007,7 @@ async function kumiWaka(g, npc) {
     await g.say(KUMI_REFUSE[n], o);
     g.addNeed('stress', 4);
     await narrate(g, km.refused >= 3
-      ? ['（足がふるえていた。…でも、断りとおした）', `（こわい思いをしたら、ひとりで抱えず${since(g, 1992, 3) ? '警察や\n暴力追放運動推進センター' : '警察'}に相談しよう）`]
+      ? '（足がふるえていた。…でも、断りとおした）'
       : '（足がふるえていた。…でも、断ってよかった）');
     if (km.refused >= 3) km.done = today(g);
     return;

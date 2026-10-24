@@ -34,17 +34,55 @@
 
 import { TILE, SW, SH, UNIT, VIEW_W, VIEW_H, DIRS, OPP, clamp, hash2 } from './util.js';
 import { TILES, tileImageHD } from './tiles.js';
-import { charSheetHD, drawChar, drawShadow } from './sprites.js';
+import { charSheetHD, drawChar, drawShadow, drawSeated } from './sprites.js';
 import { drawBuilding } from './buildings.js';
 import { drawLogo } from './logos.js';
 import { audio } from './audio.js';
-import { drawHud, drawToasts, drawBanner, openMenu } from './ui.js';
+import { drawHud, drawToasts, drawBanner, openMenu, MessageScene } from './ui.js';
 import { text, panel } from './draw.js';
 
 export const PLACES = {};
 
 // Units of screen kept clear at the top of small rooms so the HUD does not cover the wall.
 const HUD_CLEAR = 22;
+// Rooms taller than the screen (not towns): how far the camera may rise above row 0
+// when the player is near the top, so the HUD never hides the top wall (signs, logos,
+// posters). A room can set its own topPad (0 turns it off). (ui.js HUD_H = 46 px = 23
+// units; not imported here: ui.js and map.js import each other through notebook.js.)
+const TOP_PAD = 24;
+// The message window (ui.js MessageScene, bottom style) starts this many units from the
+// top of the screen; while it is open the camera slides so the speaker and the player stay
+// above it (into the space under the window, past the bottom of the room if need be).
+const MSG_TOP = (SH - 96) / UNIT - 4;
+const MSG_SLIDE = 44;
+
+// Seat tiles (theatre seats, sofas, benches, stools, ひな壇, cushions ...): anyone standing
+// still on one is drawn sitting (sprites.js drawSeated). A tile def may say seat: true /
+// false; otherwise solid tiles named like a seat count, and walkable cushions and stools.
+const SEAT_RE = /(^|_)(seat|sofa|bench|chair|stool|couch|hina|gallery|dbench|zabuton)(_|$)/;
+const LOW_SEAT_RE = /(^|_)(zabuton|stool)(_|$)/;
+const seatTops = new Map();
+export function isSeatTile(id) {
+  const def = TILES[id];
+  if (!def) return false;
+  if (def.seat != null) return !!def.seat;
+  return def.solid ? SEAT_RE.test(id) : LOW_SEAT_RE.test(id);
+}
+// The seat's top edge in units: the first row of its HD image with any pixel in it.
+function seatTop(id, img) {
+  let top = seatTops.get(id);
+  if (top != null) return top;
+  top = 3;
+  try {
+    const c = img.getContext('2d', { willReadFrequently: true });
+    const d = c.getImageData(0, 0, img.width, img.height).data;
+    let row = -1;
+    for (let r = 0; r < img.height && row < 0; r++) for (let q = 0; q < img.width; q++) if (d[(r * img.width + q) * 4 + 3] > 0) { row = r; break; }
+    if (row >= 0) top = (row * 16) / img.width;
+  } catch (e) { /* keep the default */ }
+  seatTops.set(id, top);
+  return top;
+}
 export function registerPlace(def) {
   if (!def || !def.id) throw new Error('registerPlace: missing id');
   PLACES[def.id] = def;
@@ -236,6 +274,7 @@ export class MapScene {
     this.entities = this.room.entities.map((d) => this.instantiate(d));
     const p = this.player;
     Object.assign(p, { x, y, px: x * TILE, py: y * TILE, dir, moving: false, t: 0, turnT: 0, wasMoving: false, emote: null });
+    this.slide = 0;
     this.updateCamera(true);
   }
 
@@ -488,9 +527,14 @@ export class MapScene {
       }
       g.run(async () => {
         if (target.type === 'npc' && !target.fixedDir) target.dir = OPP[p.dir];
-        if (target.person) await g.talkPerson(target);
-        else if (target.talk) await target.talk(g, target);
-        else await g.say(target.text, { name: target.name, look: target.type === 'npc' ? target.look : undefined });
+        this.talking = target.type === 'npc' ? target : null;
+        try {
+          if (target.person) await g.talkPerson(target);
+          else if (target.talk) await target.talk(g, target);
+          else await g.say(target.text, { name: target.name, look: target.type === 'npc' ? target.look : undefined });
+        } finally {
+          if (this.talking === target) this.talking = null;
+        }
       });
       return;
     }
@@ -588,12 +632,60 @@ export class MapScene {
     const mw = this.room.w * TILE, mh = this.room.h * TILE;
     let cx = mw <= VIEW_W ? -(VIEW_W - mw) / 2 : clamp(p.px + 8 - VIEW_W / 2, 0, mw - VIEW_W);
     // small rooms: centre, but keep the top wall clear of the HUD when there is room
-    // big rooms: room.def.topPad (units) lets the camera scroll above row 0 so the HUD does not hide it
-    const pad = this.room.def.topPad || 0;
-    let cy = mh <= VIEW_H ? -Math.max((VIEW_H - mh) / 2, Math.min(HUD_CLEAR, VIEW_H - mh)) : clamp(p.py + 8 - VIEW_H / 2, -pad, mh - VIEW_H);
+    // big rooms: topPad (units; TOP_PAD by default in buildings) lets the camera scroll above
+    // row 0 so the HUD does not hide the top wall; a room that fits the screen but not with the
+    // HUD clear (10-11 rows) scrolls that little bit too
+    const pad = this.topPad();
+    let cy;
+    if (mh <= VIEW_H) {
+      const lift = Math.max((VIEW_H - mh) / 2, Math.min(this.g.hudOut ? 0 : HUD_CLEAR, VIEW_H - mh));
+      cy = pad > lift ? clamp(p.py + 8 - VIEW_H / 2, -pad, -lift) : -lift;
+    } else cy = clamp(p.py + 8 - VIEW_H / 2, -pad, mh - VIEW_H);
     if (this.camOverride) { cx = this.camOverride.x; cy = this.camOverride.y; }
     this.cam.x = Math.round(cx);
     this.cam.y = Math.round(cy);
+  }
+
+  hudShown(g) {
+    return !this.room.def.hideHud && !this.place.hideHud && !g.scenes.some((s) => s.hidesHud);
+  }
+
+  // Units the camera may rise above row 0 (none when the HUD is in its own bar).
+  topPad() {
+    const def = this.room.def;
+    if (this.g.hudOut) return 0;
+    if (def.topPad != null) return def.topPad || 0;
+    if (this.place.kind === 'town' || def.hideHud || this.place.hideHud) return 0;
+    return TOP_PAD;
+  }
+
+  // While a message window (bottom style) is open over the map: how far the camera should
+  // slide down so the one speaking (and the player) are not hidden under it. The speaker is
+  // the NPC whose name the window shows (nearest to the player), else the NPC being talked to.
+  talkSlide(g) {
+    const top = g.top;
+    if (this.camOverride || !(top instanceof MessageScene) || top.top) return 0;
+    if (g.scenes[g.scenes.length - 2] !== this) return 0;
+    const p = this.player;
+    const name = top.opts && top.opts.name;
+    let who = null;
+    if (name) {
+      let best = Infinity;
+      for (const e of this.entities) {
+        if (e.type !== 'npc' || e.name !== name || !this.visible(e)) continue;
+        const d = e === this.talking ? -1 : Math.abs(e.x - p.x) + Math.abs(e.y - p.y);
+        if (d < best) { best = d; who = e; }
+      }
+    }
+    if (!who && this.talking && this.visible(this.talking)) who = this.talking;
+    const cy = this.cam.y;
+    const need = (e) => Math.max(0, e.py + TILE - cy - MSG_TOP);
+    const room = (e) => Math.max(0, e.py - 4 - cy - (g.hudOut ? 0 : HUD_CLEAR)); // how far it can rise before the HUD covers it
+    let slide = p.hidden ? 0 : need(p);
+    if (who) slide = Math.max(need(who), Math.min(slide, room(who)));
+    if (slide <= 0) return 0;
+    const maxY = Math.max(cy, this.room.h * TILE - VIEW_H + MSG_SLIDE);
+    return Math.max(0, Math.min(slide, maxY - cy));
   }
 
   // ---------------------------------------------------------------- draw
@@ -604,12 +696,21 @@ export class MapScene {
     const cam = this.cam;
     ctx.fillStyle = room.def.bg || '#000';
     ctx.fillRect(0, 0, SW, SH);
+    // ease the message-window slide by game frames (3 units a frame)
+    const want = this.talkSlide(g);
+    const dt = Math.max(0, Math.min(30, g.frame - (this.slideFrame ?? g.frame)));
+    this.slideFrame = g.frame;
+    const cur = this.slide || 0;
+    this.slide = want > cur ? Math.min(want, cur + 3 * dt) : Math.max(want, cur - 3 * dt);
+    const camY = cam.y;
+    cam.y = camY + Math.round(this.slide);
     ctx.save();
     ctx.scale(UNIT, UNIT);
-    this.drawWorld(ctx, g);
+    try { this.drawWorld(ctx, g); } finally { cam.y = camY; }
     ctx.restore();
-    // full-screen menus (shop, status) set hidesHud so no HUD bits show around them
-    if (!room.def.hideHud && !this.place.hideHud && !g.scenes.some((s) => s.hidesHud)) drawHud(ctx, g);
+    // full-screen menus (shop, status) set hidesHud so no HUD bits show around them;
+    // on portrait phones the HUD has its own bar above the screen (game.js render)
+    if (!g.hudOut && this.hudShown(g)) drawHud(ctx, g);
     drawBanner(ctx, g);
     drawToasts(ctx, g);
   }
@@ -653,9 +754,28 @@ export class MapScene {
     for (const e of [p, ...this.entities]) if (e.emote && (e === p || this.visible(e))) this.drawEmote(ctx, e);
   }
 
+  // The seat at tile (x, y) for drawSeated ({ img, top }), or null when it is not a seat.
+  seatOf(x, y) {
+    if (!this.inBounds(x, y)) return null;
+    const cell = this.room.cells[y][x];
+    for (let i = cell.length - 1; i >= 0; i--) {
+      const id = cell[i];
+      if (!isSeatTile(id)) continue;
+      const def = TILES[id];
+      const frame = def.frames > 1 ? Math.floor(this.g.frame / def.speed) % def.frames : 0;
+      const variant = def.variants > 1 ? Math.floor(hash2(x, y, 7) * def.variants) : 0;
+      const img = tileImageHD(id, frame, variant);
+      return { img, top: seatTop(id, img) };
+    }
+    return null;
+  }
+
   drawActor(ctx, e, sheet) {
     const x = e.px - this.cam.x, y = e.py - this.cam.y;
     if (x < -20 || y < -24 || x > VIEW_W + 4 || y > VIEW_H + 4) return;
+    // standing still on a seat tile (theatre seat, sofa, bench ...): sitting in it
+    const seat = !e.sprite && !e.moving ? this.seatOf(e.x, e.y) : null;
+    if (seat) { drawSeated(ctx, sheet, e.dir, x, y, seat); return; }
     drawShadow(ctx, x, y);
     let frame = 0;
     if (e.moving) frame = [1, 0, 2, 0][Math.floor(e.anim / 8) % 4];

@@ -4,7 +4,7 @@
 // lawful way out (退陣 → trial through the justice core). Scenes and the phone app live in js/world/kiki.js.
 //
 // ---------------------------------------------------------------- rules (non-negotiable; see the brief)
-// - The dictatorship and the war are a fictional 「もしも」 simulation; the game says so whenever they start.
+// - The fiction notice is on the title screen only (one small line); no in-game disclaimer when a regime or a war starts.
 // - Real parties (自由民主党, 民主党 1998-2016) NEVER take an authoritarian step, suppress speech or go to war:
 //   when the player (even as PM and party leader) tries one from a real party, the party's organs refuse
 //   (総務会/党の機関が了承しない) and the player has to leave it (離党) first. A real party in ANY role in the
@@ -127,7 +127,7 @@
 // Fictional (checked that no real country/place has these names): ネヴァロン共和国, ルーゼニア王国, ケルドア連邦,
 //   ヴェルミナ諸島 / ヴェルミナ海 (all placed in one invented sea far from Japan, with no compass hint that could map them
 //   onto a real neighbour); every disaster place (ドット湾北部・北ドット地方・南ドット地方・西ドット地方・ドット岳), every
-//   disaster, every NPC, every war, every regime event. The game's dictatorship is a 「もしも」 simulation.
+//   disaster, every NPC, every war, every regime event. (The fiction notice is on the title screen only.)
 
 import { Game } from './game.js';
 import { onMorning } from './life.js';
@@ -185,31 +185,32 @@ function deviceName(g) { try { const e = ERAS[eraOf(g)]; return (e && e.deviceSh
 export const REGIMES = Object.freeze(['democracy', 'emergency', 'dictatorship', 'fallen']);
 export const REGIME_INFO = {
   democracy: { name: '民主制', long: '議会制民主主義（日本国憲法のもと）', color: '#5fd7ff' },
-  emergency: { name: '緊急事態体制', long: '緊急事態宣言のもとの体制（もしもシミュレーション）', color: '#ffd23f' },
-  dictatorship: { name: '独裁体制', long: '選挙と国会が止められた独裁体制（もしもシミュレーション）', color: '#ff5d6c' },
-  fallen: { name: '体制崩壊', long: '独裁体制が崩れた（もしもシミュレーション）', color: '#9aa3c7' },
+  emergency: { name: '緊急事態体制', long: '緊急事態宣言のもとの体制', color: '#ffd23f' },
+  dictatorship: { name: '独裁体制', long: '選挙と国会が止められた独裁体制', color: '#ff5d6c' },
+  fallen: { name: '体制崩壊', long: '独裁体制が崩れた', color: '#9aa3c7' },
 };
-export const FICTION_NOTE = 'これは架空の「もしも」のシミュレーションです。実在の政党・人物・国とは関係ありません。';
+// kept (empty) for old imports: the fiction notice is shown on the title screen only, never in the game
+export const FICTION_NOTE = '';
 
 // FICTIONAL nations and the fictional disputed area (names checked: no real country or place).
 // All of them lie around one invented sea far from Japan (ヴェルミナ海): no compass hint relative to Japan, so none of
 // them can be read as a real neighbour.
 export const FICTIONAL_NATIONS = {
-  nevalon: { id: 'nevalon', name: 'ネヴァロン共和国', short: 'ネヴァロン', power: 62, people: 4200, desc: '（架空の国）架空の海「ヴェルミナ海」に面した共和国。ヴェルミナ諸島の領有を主張している。', fictional: true },
-  luzenia: { id: 'luzenia', name: 'ルーゼニア王国', short: 'ルーゼニア', power: 48, people: 2600, desc: '（架空の国）ヴェルミナ海に浮かぶ島国。漁業と海運の国で、諸島の近くに漁場をもつ。', fictional: true },
-  keldoa: { id: 'keldoa', name: 'ケルドア連邦', short: 'ケルドア', power: 90, people: 9800, desc: '（架空の国）ヴェルミナ海をかこむ国々でいちばん大きな連邦国家。大きな軍をもつ。', fictional: true },
+  nevalon: { id: 'nevalon', name: 'ネヴァロン共和国', short: 'ネヴァロン', power: 62, people: 4200, desc: '「ヴェルミナ海」に面した共和国。ヴェルミナ諸島の領有を主張している。', fictional: true },
+  luzenia: { id: 'luzenia', name: 'ルーゼニア王国', short: 'ルーゼニア', power: 48, people: 2600, desc: 'ヴェルミナ海に浮かぶ島国。漁業と海運の国で、諸島の近くに漁場をもつ。', fictional: true },
+  keldoa: { id: 'keldoa', name: 'ケルドア連邦', short: 'ケルドア', power: 90, people: 9800, desc: 'ヴェルミナ海をかこむ国々でいちばん大きな連邦国家。大きな軍をもつ。', fictional: true },
 };
 export const NATION_ORDER = Object.keys(FICTIONAL_NATIONS);
-export const DISPUTED_AREA = { id: 'vermina', name: 'ヴェルミナ諸島', desc: '（架空の係争地）日本から遠く離れた架空の海「ヴェルミナ海」の無人の島々。海の資源をめぐり、いくつもの国が領有を主張している。', fictional: true };
+export const DISPUTED_AREA = { id: 'vermina', name: 'ヴェルミナ諸島', desc: '日本から遠く離れた「ヴェルミナ海」の無人の島々。海の資源をめぐり、いくつもの国が領有を主張している。', fictional: true };
 
 // FICTIONAL disaster places. home: the player's town (ドット区, 東京都) is hit — work stops, the 知事 (東京都) requests
 // the SDF, the 区長・区議 run the 避難所.
 export const DISASTER_PLACES = {
   dotwan: { id: 'dotwan', name: 'ドット湾北部', area: '東京都ドット区とその周辺', home: true, coast: true },
-  kita: { id: 'kita', name: '北ドット地方', area: '北ドット地方（架空の地域）', home: false, coast: true },
-  minami: { id: 'minami', name: '南ドット地方', area: '南ドット地方の沿岸（架空の地域）', home: false, coast: true },
-  nishi: { id: 'nishi', name: '西ドット地方', area: '西ドット地方の山あい（架空の地域）', home: false, coast: false },
-  dakesan: { id: 'dakesan', name: 'ドット岳', area: 'ドット岳（架空の火山）のふもと', home: false, coast: false },
+  kita: { id: 'kita', name: '北ドット地方', area: '北ドット地方', home: false, coast: true },
+  minami: { id: 'minami', name: '南ドット地方', area: '南ドット地方の沿岸', home: false, coast: true },
+  nishi: { id: 'nishi', name: '西ドット地方', area: '西ドット地方の山あい', home: false, coast: false },
+  dakesan: { id: 'dakesan', name: 'ドット岳', area: 'ドット岳のふもと', home: false, coast: false },
 };
 export const DISASTER_KINDS = {
   quake: { name: '地震', label: (pl) => `${pl.name}地震`, places: ['dotwan', 'kita', 'nishi', 'minami'], art: 'quake' },
@@ -451,7 +452,7 @@ function realPartyRefusal(g, what) {
   const pi = partyOf(g);
   if (!pi || !pi.real) return null;
   const who = pi.id === 'jimin' ? `${pi.name}の総務会は` : `${pi.name}は党の機関で`;
-  return `${who}「${what}」を了承しなかった。党の機関の了承がなければ進められない。（このルートは架空の政党の党首だけが選べる。進めるなら、まず離党する）`;
+  return `${who}「${what}」を了承しなかった。党の機関の了承がなければ進められない。（進めるなら、まず離党する）`;
 }
 // The government's parties: the PM's party (the core), every party in it, the real ones among them.
 function govParties(g) {
@@ -473,12 +474,12 @@ function realGovRefusal(g, what, opts = {}) {
   const G = govParties(g);
   if (!G) return null;
   const { p } = G;
-  if (G.core && isRealParty(p, G.core)) return `${partyName(p, G.core)}の総理と内閣は「${what}」を了承しなかった。実在の政党の内閣は、この道をとらない（閣議で決められない）`;
+  if (G.core && isRealParty(p, G.core)) return `${partyName(p, G.core)}の総理と内閣は「${what}」を了承しなかった。閣議で決められない`;
   if (!G.real.length) return null;
   const names = G.real.map((id) => partyName(p, id)).join('・');
-  if (!G.playerPM) return `連立与党の${names}が「${what}」を了承しなかった。閣議で決められず、大臣ひとりでは進められない（実在の政党は、この道をとらない）`;
-  if (!G.core) return `与党の${names}が「${what}」を了承しなかった。無所属の総理には、ほかに支える党がない（このルートは架空の政党の党首だけが選べる）`;
-  if (!opts.leave) return `連立を組む${names}が「${what}」を了承しなかった。（実在の政党は、この道をとらない。進めるなら、まず連立を解消する）`;
+  if (!G.playerPM) return `連立与党の${names}が「${what}」を了承しなかった。閣議で決められず、大臣ひとりでは進められない`;
+  if (!G.core) return `与党の${names}が「${what}」を了承しなかった。無所属の総理には、ほかに支える党がない（進めるなら、自分の党の党首として）`;
+  if (!opts.leave) return `連立を組む${names}が「${what}」を了承しなかった。（進めるなら、まず連立を解消する）`;
   return null;
 }
 // A real junior partner of the player's fictional-party cabinet leaves the coalition rather than take part (a neutral,
@@ -538,7 +539,7 @@ export function regimeCoalitionBlock(g, partyId, opts = {}) {
   if (!p || !partyId || !isRealParty(p, partyId)) return null;
   const r = R(g);
   const name = partyName(p, partyId);
-  if (r.id !== 'democracy') return `${name}は、${REGIME_INFO[r.id].name}（もしも）のもとの政府には加わらない（実在の政党は、この道をとらない）`;
+  if (r.id !== 'democracy') return `${name}は、${REGIME_INFO[r.id].name}のもとの政府には加わらない`;
   const mine = p.me && p.me.party;
   const involved = opts.core == null || !!(mine && (opts.core === mine || opts.partner === mine));
   if (!involved) return null;
@@ -548,7 +549,7 @@ export function regimeCoalitionBlock(g, partyId, opts = {}) {
   if (r.steps.clause && own) return `${name}は、強権型の緊急事態条項を憲法に加えた政権とは連立を組まない`;
   const formed = isPM(g) && p.cabinet ? num(p.cabinet.formed, 0) : Infinity;
   const recent = (r.record.steps || []).filter((s) => s && (today(g) - num(s.day) < 2 * YEAR_DAYS || num(s.day) >= formed));
-  if (recent.length) return `${name}は、「${recent[recent.length - 1].step}」をおこなった${(g.state && g.state.name) || ''}氏の側とは連立を組まない（実在の政党は、この道をとらない）`;
+  if (recent.length) return `${name}は、「${recent[recent.length - 1].step}」をおこなった${(g.state && g.state.name) || ''}氏の側とは連立を組まない`;
   return null;
 }
 // The coalition filter for the politics core (chooseCoalition / the coalition screen): the partners that may join the
@@ -640,8 +641,8 @@ function setRegime(g, id, why) {
   if (order[id] > order[r.record.maxRegime] && id !== 'fallen') r.record.maxRegime = id;
   const lab = regimeLabel(g);
   if (id === 'dictatorship') {
-    news(g, `【もしも】選挙も国会も止まった。海外メディアは日本の体制を「${lab.label}」と報じている`);
-    phone(g, `【もしもシミュレーション】\n選挙と国会が止められ、${g.state.name}政権は事実上の独裁体制になった。\n海外メディアは「${lab.label}」と報じている。`);
+    news(g, `選挙も国会も止まった。海外メディアは日本の体制を「${lab.label}」と報じている`);
+    phone(g, `【速報】\n選挙と国会が止められ、${g.state.name}政権は事実上の独裁体制になった。\n海外メディアは「${lab.label}」と報じている。`);
     queueScene(g, 'regime_change', { to: id, from });
   } else if (id === 'emergency') {
     queueScene(g, 'regime_change', { to: id, from });
@@ -654,8 +655,7 @@ function setRegime(g, id, why) {
 function fictionNotice(g) {
   const r = R(g);
   if (r.fictionShown) return;
-  r.fictionShown = true;
-  note(g, `（${FICTION_NOTE}）`);
+  r.fictionShown = true; // (no in-game notice: the fiction line is on the title screen only)
 }
 
 // ======================================================================== regime steps
@@ -669,7 +669,7 @@ function needFictionalLeader(g, what) {
   const real = realGovRefusal(g, what, { leave: true });
   if (real) return real;
   const pi = partyOf(g);
-  if (!pi) return '無所属の総理には、これを進める党の組織がない（架空の政党の党首として進める）';
+  if (!pi) return '無所属の総理には、これを進める党の組織がない（自分の党の党首として進める）';
   if (!pi.leader) return `${pi.name}の党首でなければ進められない`;
   return null;
 }
@@ -692,7 +692,7 @@ export const REGIME_STEPS = {
   },
   amend_emergency: {
     name: '緊急事態条項（強権型）の発議', auth: true, regimes: ['democracy'],
-    desc: '非常時に内閣が法律と同じ効力の政令を出し、選挙の延期や国会の閉会もできる条文を憲法に加える改正案（架空の強権型）。各院の総議員の3分の2で発議し、国民投票へ。',
+    desc: '非常時に内閣が法律と同じ効力の政令を出し、選挙の延期や国会の閉会もできる条文を憲法に加える改正案（強権型）。各院の総議員の3分の2で発議し、国民投票へ。',
     check(g) {
       const r = R(g);
       const w = needPM(g) || needFictionalLeader(g, '緊急事態条項（強権型）の発議');
@@ -741,8 +741,8 @@ export const REGIME_STEPS = {
       setRegime(g, 'emergency', '緊急事態宣言');
       backlash(g, '緊急事態宣言', 2);
       press(g, -6, '緊急事態宣言');
-      news(g, `【もしも】${g.state.name}総理が全国に緊急事態を宣言した`);
-      phone(g, `【緊急事態宣言】\n${g.state.name}総理が全国に緊急事態を宣言した。\n（${FICTION_NOTE}）`);
+      news(g, `${g.state.name}総理が全国に緊急事態を宣言した`);
+      phone(g, `【緊急事態宣言】\n${g.state.name}総理が全国に緊急事態を宣言した。`);
       return { ok: true, text: '全国に緊急事態を宣言した。' };
     },
   },
@@ -762,7 +762,7 @@ export const REGIME_STEPS = {
       r.steps.elections = true;
       backlash(g, '選挙の停止', 3);
       press(g, -4, '選挙の停止');
-      news(g, '【もしも】政府は、緊急事態を理由にすべての選挙を無期限に延期した');
+      news(g, '政府は、緊急事態を理由にすべての選挙を無期限に延期した');
       courtChallenge(g, 'suspend_elections', '選挙の無期限延期');
       afterStep(g);
       return { ok: true, text: 'すべての選挙を無期限に延期した。' };
@@ -785,7 +785,7 @@ export const REGIME_STEPS = {
       const p = pol(g);
       if (p && p.diet && p.diet.session) { p.diet.session.end = today(g) - 1; p.diet.session.extended = true; }
       backlash(g, '国会の停止', 3);
-      news(g, '【もしも】国会が閉じられ、政府は政令で国を動かしはじめた');
+      news(g, '国会が閉じられ、政府は政令で国を動かしはじめた');
       courtChallenge(g, 'suspend_diet', '国会の停止');
       afterStep(g);
       return { ok: true, text: '国会を止めた。これからは政令で国を動かす。' };
@@ -807,7 +807,7 @@ export const REGIME_STEPS = {
       r.steps.opposition = true;
       backlash(g, '野党の禁止', 3, { intl: 3 });
       press(g, -6, '野党の禁止');
-      news(g, `【もしも】政府は野党の活動を禁止した。海外メディアは「${regimeLabel(g).label}」と報じている`);
+      news(g, `政府は野党の活動を禁止した。海外メディアは「${regimeLabel(g).label}」と報じている`);
       courtChallenge(g, 'ban_opposition', '野党の禁止');
       afterStep(g);
       return { ok: true, text: '野党の活動を禁止した。' };
@@ -830,8 +830,8 @@ export const REGIME_STEPS = {
       const quit = rint(8000, 20000);
       r.sdf.quit += quit;
       backlash(g, '自衛隊の国軍化', 3, { intl: 5 });
-      news(g, `【もしも】政府は政令で自衛隊を「国軍」に改めた。抗議して約${n0(quit)}人の隊員が職を辞した`);
-      phone(g, `【もしも】自衛隊が政令で「国軍」に改められた。\n文民統制のもとで任務についてきた隊員のうち、約${n0(quit)}人が辞職した。`);
+      news(g, `政府は政令で自衛隊を「国軍」に改めた。抗議して約${n0(quit)}人の隊員が職を辞した`);
+      phone(g, `自衛隊が政令で「国軍」に改められた。\n文民統制のもとで任務についてきた隊員のうち、約${n0(quit)}人が辞職した。`);
       queueScene(g, 'army', {});
       afterStep(g);
       return { ok: true, text: '自衛隊を国軍に改めた。' };
@@ -994,7 +994,7 @@ function answerCourt(g, step, comply) {
   }
   r.steps.courtIgnored = true;
   backlash(g, '最高裁判決の無視', 3, { intl: 8, unrest: 6 });
-  news(g, '【もしも】政府は最高裁の判決を無視した。法の支配が揺らいでいる');
+  news(g, '政府は最高裁の判決を無視した。法の支配が揺らいでいる');
   if (r.id === 'emergency' && (r.steps.elections || r.steps.diet)) setRegime(g, 'dictatorship', '最高裁判決の無視');
   return '判決を無視した。';
 }
@@ -1123,7 +1123,7 @@ export const PRESS_ACTIONS = {
       press(g, -20, '検閲・報道統制');
       backlash(g, '検閲・報道統制', 2, { defect: false });
       courtChallenge(g, 'censor', '検閲');
-      news(g, `【もしも】政府が報道の事前検閲を始めた（憲法21条2項は検閲を禁じている）。海外メディアは「${regimeLabel(g).label}」と報じている`);
+      news(g, `政府が報道の事前検閲を始めた（憲法21条2項は検閲を禁じている）。海外メディアは「${regimeLabel(g).label}」と報じている`);
       return '報道を検閲するようにした。国際社会が強く非難している。';
     },
   },
@@ -1137,8 +1137,8 @@ export const PRESS_ACTIONS = {
       r.record.detained += n;
       press(g, -15, 'ジャーナリストの拘束');
       backlash(g, 'ジャーナリストの拘束', 3, { intl: 6, unrest: 3, defect: false });
-      news(g, `【もしも】政府に批判的な記者${n}人が拘束された。国際的な報道団体と各国政府が即時の解放を求めている`);
-      phone(g, `【もしも】記者${n}人が拘束された。\n各国政府と報道団体が強く非難している。`, 'ドット新聞 国際部');
+      news(g, `政府に批判的な記者${n}人が拘束された。国際的な報道団体と各国政府が即時の解放を求めている`);
+      phone(g, `記者${n}人が拘束された。\n各国政府と報道団体が強く非難している。`, 'ドット新聞 国際部');
       return `記者${n}人が拘束された。国際社会の非難が集まり、国内の不満も高まっている。`;
     },
   },
@@ -1237,7 +1237,7 @@ export function sdfStatus(g) {
   const pko = pkoLawOk(g);
   const dep = r.sdf.deployments.filter((d) => !d.ended);
   const lines = [
-    `${army ? '国軍（もしも：政令で自衛隊を改編）' : '自衛隊（1954年発足）'}・${ministry}`,
+    `${army ? '国軍（政令で自衛隊を改編）' : '自衛隊（1954年発足）'}・${ministry}`,
     `人員：定員 約${(per.quota / 10000).toFixed(1)}万人・現員 約${(per.actual / 10000).toFixed(1)}万人${per.approx ? '（目安）' : ''}`,
     `防衛費：約${bud.cho}兆円${bud.gdpPct ? `（GDP比 約${bud.gdpPct}%）` : ''}`,
     ...defenseRuleLines(g),
@@ -1356,13 +1356,13 @@ export const SDF_ORDERS = {
     check(g) {
       const r = R(g);
       if (r.id === 'dictatorship' && r.steps.army) return '独裁体制の戦争は「戦争」の画面から（宣戦）';
-      if (r.id === 'dictatorship') return 'まず自衛隊を国軍に改める（もしも）';
+      if (r.id === 'dictatorship') return 'まず自衛隊を国軍に改める';
       return '憲法9条：国際紛争を解決する手段としての戦争・武力の行使は放棄している。民主制の日本は侵略戦争をしない（自衛隊は専守防衛）';
     },
     run() { return { ok: false }; },
   },
   kokugun: {
-    name: '国軍化', desc: '自衛隊を国軍に改める（独裁体制のもしも）。',
+    name: '国軍化', desc: '自衛隊を国軍に改める（独裁体制のもと、政令で）。',
     check(g) { return stepRefusal(g, 'national_army'); },
     run(g) { return g.regimeStep('national_army'); },
   },
@@ -1420,9 +1420,9 @@ function startDisaster(g, opts = {}) {
   r.lastDisasterDay = today(g);
   r.record.disasters++;
   revealCasualties(g, d);
-  const head = d.kind === 'storm' ? `${d.name}。各地で川の氾濫や土砂崩れ` : d.kind === 'volcano' ? `ドット岳（架空の火山）が噴火。${since(g, 2007, 12) ? '噴火警戒レベルが引き上げられた' : '気象庁が緊急火山情報を出した'}` : `${d.name}（M${d.mag}・最大震度${d.shindo}）が発生${d.kind === 'tsunami' ? '。大津波警報' : ''}`;
-  news(g, `【災害】${head}（架空の災害）`);
-  phone(g, `【速報】${head}。\n${d.where}で被害が出ている。（ゲーム内の架空の災害です）`, 'ドット新聞 社会部');
+  const head = d.kind === 'storm' ? `${d.name}。各地で川の氾濫や土砂崩れ` : d.kind === 'volcano' ? `ドット岳が噴火。${since(g, 2007, 12) ? '噴火警戒レベルが引き上げられた' : '気象庁が緊急火山情報を出した'}` : `${d.name}（M${d.mag}・最大震度${d.shindo}）が発生${d.kind === 'tsunami' ? '。大津波警報' : ''}`;
+  news(g, `【災害】${head}`);
+  phone(g, `【速報】${head}。\n${d.where}で被害が出ている。`, 'ドット新聞 社会部');
   // the economy (politics core): only when this did not come from its own shock
   if (!d.fromShock && typeof g.triggerShock === 'function' && d.tier >= 2) {
     g._regimeShock = true;
@@ -1875,7 +1875,7 @@ function sdfEvents(g) {
   if (!r.sdf.kaijo && roll(0.5 / YEAR_DAYS) && r.id !== 'dictatorship') {
     const nat = pick(['luzenia', 'nevalon']);
     r.sdf.kaijo = { nation: nat, day: today(g) };
-    news(g, `${FICTIONAL_NATIONS[nat].short}籍とみられる不審船が領海に入った。海上保安庁が追跡している（架空の国）`);
+    news(g, `${FICTIONAL_NATIONS[nat].short}籍とみられる不審船が領海に入った。海上保安庁が追跡している`);
     if (isPM(g) || isDefMin(g)) queueScene(g, 'kaijo', { nation: nat });
   }
   if (r.sdf.kaijo && today(g) - r.sdf.kaijo.day > 3) {
@@ -1884,9 +1884,9 @@ function sdfEvents(g) {
   }
   // a UN request for a PKO (fictional mission), when the law exists
   if (!r.sdf.pkoOffer && pkoLawOk(g) && r.id === 'democracy' && roll(0.6 / YEAR_DAYS) && !r.sdf.deployments.some((d) => !d.ended && d.kind === 'pko')) {
-    const where = pick(['ネヴァロン共和国の内陸部（架空の国）', 'ルーゼニア王国の離島（架空の国）']);
+    const where = pick(['ネヴァロン共和国の内陸部', 'ルーゼニア王国の離島']);
     r.sdf.pkoOffer = { where, mission: `国連${where.startsWith('ネヴァロン') ? 'ネヴァロン' : 'ルーゼニア'}停戦監視団`, personnel: rint(300, 600), day: today(g) };
-    news(g, `国連が日本に、${r.sdf.pkoOffer.mission}（架空）への参加を要請した。停戦合意と受入れ同意はある`);
+    news(g, `国連が日本に、${r.sdf.pkoOffer.mission}への参加を要請した。停戦合意と受入れ同意はある`);
     if (isPM(g) || isDefMin(g)) queueScene(g, 'pko_offer', {});
   }
   if (r.sdf.pkoOffer && today(g) - r.sdf.pkoOffer.day > 30) { if (!isPM(g)) news(g, `政府は${r.sdf.pkoOffer.mission}への参加を見送った`); r.sdf.pkoOffer = null; }
@@ -1898,7 +1898,7 @@ function sdfEvents(g) {
 
 // ======================================================================== the war (dictatorship + 国軍, fictional nations only)
 export const WAR_ORDERS = {
-  declare: { name: '宣戦（もしも）', desc: '係争地ヴェルミナ諸島をめぐり、架空の国に宣戦する。' },
+  declare: { name: '宣戦布告', desc: '係争地ヴェルミナ諸島をめぐり、相手国に宣戦を布告する。' },
   mobilize: { name: '動員', desc: '予備の要員を召集し、兵力を増やす。経済と暮らしへの負担が大きい。' },
   offensive: { name: '攻勢', desc: '係争地の軍事目標に向けて前進する。戦況は動くが、兵士の死傷が増える。' },
   defend: { name: '防衛', desc: '守りを固める。死傷は減るが、戦況は動きにくい。' },
@@ -1916,9 +1916,9 @@ function warRefusal(g, kind, opts = {}) {
   if (['declare', 'mobilize', 'offensive'].includes(kind)) { const real = realGovRefusal(g, WAR_ORDERS[kind].name, { leave: false }); if (real) return real; }
   const w = r.war;
   if (kind === 'declare') {
-    if (!r.steps.army) return 'まず自衛隊を国軍に改める（もしも）。自衛隊のままでは、他国を攻める組織も法もない';
+    if (!r.steps.army) return 'まず自衛隊を国軍に改める。自衛隊のままでは、他国を攻める組織も法もない';
     if (w && w.phase === 'war') return 'すでに戦争中';
-    if (opts.target && !FICTIONAL_NATIONS[opts.target]) return '相手は架空の国だけ（ネヴァロン共和国・ルーゼニア王国・ケルドア連邦）';
+    if (opts.target && !FICTIONAL_NATIONS[opts.target]) return '宣戦の相手は、ネヴァロン共和国・ルーゼニア王国・ケルドア連邦のどれか';
     if (r.wars.length && today(g) - num(r.wars[r.wars.length - 1].end) < 30) return '前の戦争が終わったばかり（国も軍も疲れきっている）';
     return null;
   }
@@ -1947,11 +1947,11 @@ function warOrder(g, kind, opts = {}) {
     fictionNotice(g);
     raiseIntl(g, 25, `${FICTIONAL_NATIONS[target].name}への宣戦`);
     r.unrest = clamp(r.unrest + 8, 0, 100);
-    bumpApproval(g, -6, -4, 'regime', '宣戦（もしも）');
+    bumpApproval(g, -6, -4, 'regime', '宣戦布告');
     ecoShock(g, '戦争', { growth: -2.5, inflation: 2.5, yen: 15, len: 360, nikkei: -12 });
-    news(g, `【もしも】政府は${DISPUTED_AREA.name}をめぐり、${FICTIONAL_NATIONS[target].name}（架空の国）に宣戦した`);
+    news(g, `政府は${DISPUTED_AREA.name}をめぐり、${FICTIONAL_NATIONS[target].name}に宣戦を布告した`);
     spawnDemo(g, { label: '戦争に反対するデモ', size: 'large', segment: 'young', against: 'war' });
-    phone(g, `【もしもシミュレーション】\n政府が${FICTIONAL_NATIONS[target].name}（架空の国）に宣戦した。\n国連と各国が即時停戦を求めている。\n（${FICTION_NOTE}）`, 'ドット新聞 国際部');
+    phone(g, `【速報】\n政府が${FICTIONAL_NATIONS[target].name}に宣戦を布告した。\n国連と各国が即時停戦を求めている。`, 'ドット新聞 国際部');
     familyMessage(g, '{name}、戦争なんて本当なの？\n近所の人も、みんな不安がってる。\nお願いだから、引き返して…。');
     queueScene(g, 'war', { event: 'declare' });
     emit(g, 'war', { kind, war: w });
@@ -1964,7 +1964,7 @@ function warOrder(g, kind, opts = {}) {
     w.weariness = clamp(w.weariness + 8, 0, 100);
     r.unrest = clamp(r.unrest + 6, 0, 100);
     ecoShock(g, `動員（第${w.mob}次）`, { growth: -0.8, inflation: 0.8, unemployment: -0.3, len: 200 });
-    news(g, `【もしも】政府が第${w.mob}次の動員を命じた。各地で召集令状が届き、家族が見送っている`);
+    news(g, `政府が第${w.mob}次の動員を命じた。各地で召集令状が届き、家族が見送っている`);
     familyMessage(g, w.mob === 1 ? 'となりの家の息子さんにも、召集の知らせが来たって…。\n{name}、こんなことはもうやめて。' : '町から若い人がいなくなっていく。\nみんな、口には出さないけど怒ってるよ。');
     w.log.push({ day: today(g), text: `第${w.mob}次動員` });
     return { ok: true, text: `第${w.mob}次の動員を命じた。兵力は増えるが、暮らしへの負担と不満も大きい。` };
@@ -1972,12 +1972,12 @@ function warOrder(g, kind, opts = {}) {
   if (kind === 'offensive' || kind === 'defend') {
     w.stance = kind === 'offensive' ? 'offense' : 'defend';
     w.log.push({ day: today(g), text: kind === 'offensive' ? '攻勢に転じる' : '防衛に徹する' });
-    news(g, kind === 'offensive' ? `【もしも】国軍が${DISPUTED_AREA.name}の軍事目標に向けて攻勢に出た` : '【もしも】国軍は守りを固める方針に切り替えた');
+    news(g, kind === 'offensive' ? `国軍が${DISPUTED_AREA.name}の軍事目標に向けて攻勢に出た` : '国軍は守りを固める方針に切り替えた');
     return { ok: true, text: kind === 'offensive' ? '攻勢を命じた。戦況は動くが、死傷者は増える。' : '防衛を命じた。死傷は減るが、戦況は動きにくい。' };
   }
   if (kind === 'negotiate') {
     w.talks = { day: today(g), until: today(g) + rint(4, 8) };
-    news(g, `【もしも】政府は第三国を通じて${nat.name}との停戦交渉に入った`);
+    news(g, `政府は第三国を通じて${nat.name}との停戦交渉に入った`);
     return { ok: true, text: '第三国を通じて停戦交渉を始めた。数日で答えが出る。' };
   }
   if (kind === 'surrender') {
@@ -2023,7 +2023,7 @@ function warTick(g) {
     ]);
     phone(g, `【読者からの手紙】${L[0]}より\n${L[1]}`, 'ドット新聞 読者の声');
   }
-  if (days > 0 && days % 5 === 0) news(g, `【もしも】戦況：${frontText(w.front)}。死傷者（自国）兵士${n0(w.cas.soldiers.dead + w.cas.soldiers.wounded)}人・民間人${n0(w.cas.civilians.dead + w.cas.civilians.wounded)}人`);
+  if (days > 0 && days % 5 === 0) news(g, `戦況：${frontText(w.front)}。死傷者（自国）兵士${n0(w.cas.soldiers.dead + w.cas.soldiers.wounded)}人・民間人${n0(w.cas.civilians.dead + w.cas.civilians.wounded)}人`);
   // talks
   let talksFailed = false;
   if (w.talks && today(g) >= w.talks.until) {
@@ -2032,7 +2032,7 @@ function warTick(g) {
     w.lastTalks = today(g);
     if (ok) { endWar(g, 'ceasefire'); return; }
     talksFailed = true;
-    news(g, `【もしも】${nat.name}との停戦交渉は決裂した`);
+    news(g, `${nat.name}との停戦交渉は決裂した`);
   }
   if (w.front <= -100) { endWar(g, 'defeat'); return; }
   if (w.front >= 100) { endWar(g, 'victory'); return; }
@@ -2052,7 +2052,7 @@ function warReport(g, w, talksFailed) {
   const mv = num(w.day && w.day.move);
   const move = mv >= 1 ? '前進' : mv <= -1 ? '後退' : '動かず';
   return [
-    `【戦況報告・もしも】${nat.short}との戦争${days}日目・戦費 約${w.cost}兆円`,
+    `【戦況報告】${nat.short}との戦争${days}日目・戦費 約${w.cost}兆円`,
     `戦況：${frontText(w.front)}（この1日で${move}）・厭戦 ${Math.round(w.weariness)}／100・${r.sanctions ? `制裁 段階${r.sanctions}` : '制裁なし'}`,
     `この1日の死者 兵士${n0(w.day.sd)}人・民間人${n0(w.day.cd)}人（累計 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人）`,
     talksFailed ? `${nat.name}との停戦交渉は決裂した。` : null,
@@ -2073,7 +2073,7 @@ function endWar(g, how) {
   r.wars.push({ enemy: w.enemy, start: w.start, end: w.end, result: how, cas: JSON.parse(JSON.stringify(w.cas)), cost: w.cost });
   emit(g, 'war', { kind: 'end', how, war: w });
   if (how === 'ceasefire') {
-    news(g, `【もしも】${nat.name}との停戦が成立した。死者は兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人にのぼった`);
+    news(g, `${nat.name}との停戦が成立した。死者は兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人にのぼった`);
     phone(g, `【停戦】${nat.name}との停戦が成立した。\n死者 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人。\n制裁は続き、物価は高いままだ。`, 'ドット新聞 国際部');
     r.unrest = clamp(r.unrest - 5, 0, 100);
     queueScene(g, 'war', { event: 'ceasefire' });
@@ -2082,8 +2082,8 @@ function endWar(g, how) {
   }
   if (how === 'victory') {
     // a hollow, inglorious victory: isolation, insurgency, cost
-    news(g, `【もしも】国軍が${DISPUTED_AREA.name}を占領した。各国は占領を認めず、制裁を強めた。島では抵抗が続いている`);
-    phone(g, `【もしも】${DISPUTED_AREA.name}は占領されたが、どの国も認めていない。\n死者 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人。\n戦費 約${w.cost}兆円。制裁はさらに強まった。`, 'ドット新聞 国際部');
+    news(g, `国軍が${DISPUTED_AREA.name}を占領した。各国は占領を認めず、制裁を強めた。島では抵抗が続いている`);
+    phone(g, `${DISPUTED_AREA.name}は占領されたが、どの国も認めていない。\n死者 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人。\n戦費 約${w.cost}兆円。制裁はさらに強まった。`, 'ドット新聞 国際部');
     raiseIntl(g, 20, '占領');
     r.unrest = clamp(r.unrest + 8, 0, 100);
     ecoShock(g, '占領の費用と制裁', { growth: -1.5, inflation: 1.5, len: 360 });
@@ -2092,7 +2092,7 @@ function endWar(g, how) {
     return;
   }
   // defeat or surrender: the downfall
-  news(g, `【もしも】国軍は${nat.name}に敗れた。政府は降伏し、首都では群衆が政府庁舎を取り囲んでいる`);
+  news(g, `国軍は${nat.name}に敗れた。政府は降伏し、首都では群衆が政府庁舎を取り囲んでいる`);
   r.war = null;
   fall(g, how === 'surrender' ? 'surrender' : 'defeat');
 }
@@ -2113,15 +2113,15 @@ function unrestTick(g) {
   r.unrest = clamp(r.unrest + (r.id === 'dictatorship' ? 0.05 : 0.02) + Math.max(0, infl - 3) * 0.04 + r.sanctions * 0.04 + (approvalOf(g) < 25 ? 0.08 : -0.06) + (r.press.detained ? 0.04 : 0), 0, 100);
   // warnings before an uprising
   const lv = r.unrest;
-  if (lv >= 50 && !r.flags.warn50) { r.flags.warn50 = true; news(g, '【もしも】各地で政府への抗議が広がっている。治安部隊との小競り合いも'); spawnDemo(g, { cause: '独裁への抗議', label: '独裁に抗議するデモ', size: 'large', against: 'government' }); }
-  if (lv >= 70 && !r.flags.warn70) { r.flags.warn70 = true; news(g, '【もしも】全国でゼネスト。国軍の一部の部隊が、市民に向けた出動を拒んだと伝えられる'); queueScene(g, 'uprising_warn', {}); }
+  if (lv >= 50 && !r.flags.warn50) { r.flags.warn50 = true; news(g, '各地で政府への抗議が広がっている。治安部隊との小競り合いも'); spawnDemo(g, { cause: '独裁への抗議', label: '独裁に抗議するデモ', size: 'large', against: 'government' }); }
+  if (lv >= 70 && !r.flags.warn70) { r.flags.warn70 = true; news(g, '全国でゼネスト。国軍の一部の部隊が、市民に向けた出動を拒んだと伝えられる'); queueScene(g, 'uprising_warn', {}); }
   if (lv < 40) { r.flags.warn50 = false; if (lv < 60) r.flags.warn70 = false; }
   if (r.id === 'dictatorship') {
     const p2 = Math.pow(Math.max(0, (lv - 60) / 40), 2) * 0.08;
     if (p2 > 0 && roll(p2)) { fall(g, 'uprising'); return; }
     // the politics core: no 総理おろし inside a dictatorship; the budget is run by decree
-    if (p && p.cabinet && p.cabinet.pending && p.cabinet.pending.kind === 'resign') { p.cabinet.pending = null; news(g, '【もしも】党内の退陣要求は封じられた'); }
-    if (p && p.economy && p.economy.budget && !p.economy.budget.passed && r.steps.diet) { p.economy.budget.passed = true; news(g, '【もしも】国会を通さず、予算が政令で執行された'); }
+    if (p && p.cabinet && p.cabinet.pending && p.cabinet.pending.kind === 'resign') { p.cabinet.pending = null; news(g, '党内の退陣要求は封じられた'); }
+    if (p && p.economy && p.economy.budget && !p.economy.budget.passed && r.steps.diet) { p.economy.budget.passed = true; news(g, '国会を通さず、予算が政令で執行された'); }
   }
   // the player no longer leads the government (resigned, removed): democracy comes back, the courts take over
   if (p && !isPM(g)) { lawfulRemoval(g, '総理の退陣'); return; }
@@ -2206,7 +2206,7 @@ function trialDue(g) {
   return !!(t && t.charged && !t.done && today(g) >= num(t.day));
 }
 // Why the player (or an NPC) may not be given a cabinet post (内閣総理大臣 included) now: null | reason.
-// Only the player can have led the もしも emergency / dictatorship; NPCs → null.
+// Only the player can have led the emergency / dictatorship; NPCs → null.
 function barredReason(g, who = 'player') {
   if (who !== 'player' && who != null) return null;
   const st = g && g.state;
@@ -2220,8 +2220,8 @@ function barredReason(g, who = 'player') {
     const j = typeof g.jus === 'function' ? g.jus() : null;
     open = !!(j && (j.cases || []).some((c) => c && c.crime === 'abuse_power' && !c.closed));
   } catch (e) { open = false; }
-  if (b.charged && (open || (r.trial && !r.trial.done))) return '職権濫用の疑いで捜査・裁判を受けている前総理は、どの内閣にも起用されない（もしも）';
-  return '緊急事態・独裁の体制を敷いて退陣した前総理は、どの内閣にも起用されない（もしも）';
+  if (b.charged && (open || (r.trial && !r.trial.done))) return '職権濫用の疑いで捜査・裁判を受けている前総理は、どの内閣にも起用されない';
+  return '緊急事態・独裁の体制を敷いて退陣した前総理は、どの内閣にも起用されない';
 }
 async function runTrial(g) {
   const r = R(g);
@@ -2359,10 +2359,9 @@ const SCENES = {
       else if (eew && since(g, 2007, 10)) pages.push('テレビから警報音が流れた。\n「緊急地震速報です。強い揺れに警戒してください」');
       if (d.kind === 'quake' || d.kind === 'tsunami') pages.push(d.home ? `……数秒後、大きな揺れが来た。\n棚の物が落ち、窓ガラスが鳴る。\n${g.state.name}は、とっさに机の下にもぐった。` : `テレビのニュース速報が流れた。\n「${d.where}で強い地震」`);
       else if (d.kind === 'storm') pages.push(`${d.where}で記録的な大雨。\n川があふれ、各地で土砂崩れが起きている。`);
-      else pages.push('ドット岳（架空の火山）が噴火した。\n噴煙が空高く上がり、ふもとの町に避難指示が出た。');
+      else pages.push('ドット岳が噴火した。\n噴煙が空高く上がり、ふもとの町に避難指示が出た。');
       pages.push(`【${d.name}】${d.mag ? `マグニチュード${d.mag}・最大震度${d.shindo}。` : ''}${d.kind === 'tsunami' ? '大津波警報が出ている。' : ''}\n${TIER_NAME[d.tier]}。いまわかっている被害は――`);
       pages.push(disasterSummary(g, d));
-      pages.push('（ゲーム内の架空の災害です。手続きと法律は、その時代の実際のものです）');
       let prompt = 'どうする？';
       let ids = [];
       if (roles.includes('pm')) { pages.push(`総理として、${crisisRoom(g)}へ向かう。\n${since(g, 1998, 4) ? '官邸対策室が立ち上がり、' : '関係省庁の幹部が集まり、'}情報が集まりはじめた。`); ids = ['honbu_kinkyu', 'honbu_hijo', 'sdf_order']; prompt = '総理として、まず何を指示する？'; }
@@ -2371,7 +2370,7 @@ const SCENES = {
       else if (roles.includes('kucho') && d.home) { ids = ['shelter']; prompt = 'ドット区長として、どうする？'; }
       else if (d.home) { ids = ['safety', 'donate']; }
       else ids = ['donate'];
-      const choice = await show(g, { art: K.art, title: d.name, sub: '（架空の災害）', pages, alert, numbers: { ...d.known }, options: actionOptions(g, ids), prompt, home: d.home, then: (v) => doDisasterChoice(g, v) });
+      const choice = await show(g, { art: K.art, title: d.name, sub: TIER_NAME[d.tier], pages, alert, numbers: { ...d.known }, options: actionOptions(g, ids), prompt, home: d.home, then: (v) => doDisasterChoice(g, v) });
       // the PM keeps deciding in the crisis room (one more step, if any)
       if (choice && roles.includes('pm')) {
         const more = actionOptions(g, ['sdf_order', 'honbu_hijo', 'honbu_kinkyu', 'fukoku']);
@@ -2407,18 +2406,18 @@ const SCENES = {
   async charity(g, data) { await show(g, { art: 'charity', title: 'チャリティ', pages: [`チャリティ企画で、被災地への支援を呼びかけた。\n${fmtMoney(num(data.raised))}の義援金が集まった。`] }); },
   async cabinet(g, data) { await show(g, { art: 'cabinet', title: '閣議', pages: data.what === 'gekijin' ? ['閣議で、激甚災害の指定の政令を決めた。\n復旧事業の国の補助がかさ上げされる。'] : ['閣議で決めた。'] }); },
   async fukko(g) { await show(g, { art: 'fukko', title: '復興の基本方針', pages: ['住まい、仕事、学校、道路。\nひとつずつ、町を取り戻していく。'] }); },
-  async pko(g, data) { await show(g, { art: 'pko', title: 'PKO派遣', sub: data.mission, pages: [`${data.mission}（架空）に、自衛隊の部隊（約${n0(data.personnel)}人）が出発した。\n道路の補修や給水を担う。（PKO参加5原則）`] }); },
+  async pko(g, data) { await show(g, { art: 'pko', title: 'PKO派遣', sub: data.mission, pages: [`${data.mission}に、自衛隊の部隊（約${n0(data.personnel)}人）が出発した。\n道路の補修や給水を担う。（PKO参加5原則）`] }); },
   async pko_offer(g) {
     const r = R(g), o = r.sdf.pkoOffer;
     if (!o) return;
     const ok = !sdfRefusal(g, 'pko');
-    await show(g, { art: 'pko', title: '国連からの要請', sub: o.mission, pages: [`国連から、${o.mission}（架空）への参加の要請が届いた。\n停戦合意と受入れ国の同意がある。`], options: ok ? [{ label: '派遣を閣議決定', value: 'pko' }, { label: '見送る', value: null }] : [{ label: 'わかった', value: null }], then: async (v) => { if (v === 'pko') { const res = g.sdfOrder('pko'); if (res.text || res.why) await say(g, res.text || res.why); } } });
+    await show(g, { art: 'pko', title: '国連からの要請', sub: o.mission, pages: [`国連から、${o.mission}への参加の要請が届いた。\n停戦合意と受入れ国の同意がある。`], options: ok ? [{ label: '派遣を閣議決定', value: 'pko' }, { label: '見送る', value: null }] : [{ label: 'わかった', value: null }], then: async (v) => { if (v === 'pko') { const res = g.sdfOrder('pko'); if (res.text || res.why) await say(g, res.text || res.why); } } });
   },
   async kaijo(g, data) {
     const r = R(g);
     if (!r.sdf.kaijo || r.sdf.kaijo.done) return;
     const ok = !sdfRefusal(g, 'kaijo');
-    await show(g, { art: 'sea', title: '不審船', sub: `${FICTIONAL_NATIONS[data.nation].short}籍とみられる（架空の国）`, pages: ['領海に不審船。海上保安庁の巡視船が追跡している。\n停船の命令に応じない。'], options: ok ? [{ label: '海上保安庁に任せる', value: null }, { label: '海上警備行動を発令', value: 'kaijo' }] : [{ label: 'わかった', value: null }], then: async (v) => {
+    await show(g, { art: 'sea', title: '不審船', sub: `${FICTIONAL_NATIONS[data.nation].short}籍とみられる`, pages: ['領海に不審船。海上保安庁の巡視船が追跡している。\n停船の命令に応じない。'], options: ok ? [{ label: '海上保安庁に任せる', value: null }, { label: '海上警備行動を発令', value: 'kaijo' }] : [{ label: 'わかった', value: null }], then: async (v) => {
       if (v === 'kaijo') { const res = g.sdfOrder('kaijo'); if (res.text || res.why) await say(g, res.text || res.why); }
       else if (ok && r.sdf.kaijo) { r.sdf.kaijo.done = 'jcg'; await say(g, '海上保安庁に対応を任せた。（まずは海上保安庁が対応する）'); }
     } });
@@ -2426,12 +2425,12 @@ const SCENES = {
   async referendum(g, data) {
     const segName = (s) => (POL && POL.SEGMENTS && POL.SEGMENTS[s] && POL.SEGMENTS[s].name) || s;
     const by = Object.entries(data.bySeg || {}).sort((a, b) => b[1] - a[1]);
-    await show(g, { art: 'referendum', title: '国民投票', sub: '強権型の緊急事態条項', numbers: { yes: data.yes, turnout: data.turnout }, bySeg: data.bySeg, pages: [`開票が終わった。賛成${data.yes}%・反対${Math.round((100 - data.yes) * 10) / 10}%（投票率${data.turnout}%）`, `賛成が多かった層：${by.slice(0, 2).map(([s, v]) => `${segName(s)}${v}%`).join('・')}\n反対が多かった層：${by.slice(-2).map(([s, v]) => `${segName(s)}${Math.round((100 - v) * 10) / 10}%`).join('・')}`, data.passed ? '憲法が改正された。\n緊急事態宣言の道が開かれた。（もしもシミュレーション）' : '改正案は否決された。\n国民は、この条文を選ばなかった。'] });
+    await show(g, { art: 'referendum', title: '国民投票', sub: '強権型の緊急事態条項', numbers: { yes: data.yes, turnout: data.turnout }, bySeg: data.bySeg, pages: [`開票が終わった。賛成${data.yes}%・反対${Math.round((100 - data.yes) * 10) / 10}%（投票率${data.turnout}%）`, `賛成が多かった層：${by.slice(0, 2).map(([s, v]) => `${segName(s)}${v}%`).join('・')}\n反対が多かった層：${by.slice(-2).map(([s, v]) => `${segName(s)}${Math.round((100 - v) * 10) / 10}%`).join('・')}`, data.passed ? '憲法が改正された。\n緊急事態宣言の道が開かれた。' : '改正案は否決された。\n国民は、この条文を選ばなかった。'] });
   },
   async regime_change(g, data) {
     const lab = regimeLabel(g);
-    if (data.to === 'emergency') await show(g, { art: 'emergency', title: '緊急事態宣言', sub: 'もしもシミュレーション', headline: '全国に緊急事態宣言', pages: ['テレビの全チャンネルが、同じ会見を映している。\n「本日、全国に緊急事態を宣言します」', '内閣は、法律と同じ効力の政令を出せるようになった。\n街には不安と、静かな怒りが広がっている。', `（${FICTION_NOTE}）`] });
-    else if (data.to === 'dictatorship') await show(g, { art: 'diet_closed', title: '独裁体制', sub: 'もしもシミュレーション', headline: `${lab.label}体制`, pages: ['国会議事堂の門が閉ざされた。\n選挙の予定は、すべて消えた。', `海外のメディアは、日本の体制を「${lab.label}」と呼びはじめた。\n各国の大使が、本国に呼び戻されている。`, `（${FICTION_NOTE}）`] });
+    if (data.to === 'emergency') await show(g, { art: 'emergency', title: '緊急事態宣言', sub: '総理大臣の会見', headline: '全国に緊急事態宣言', pages: ['テレビの全チャンネルが、同じ会見を映している。\n「本日、全国に緊急事態を宣言します」', '内閣は、法律と同じ効力の政令を出せるようになった。\n街には不安と、静かな怒りが広がっている。'] });
+    else if (data.to === 'dictatorship') await show(g, { art: 'diet_closed', title: '独裁体制', sub: '選挙と国会の停止', headline: `${lab.label}体制`, pages: ['国会議事堂の門が閉ざされた。\n選挙の予定は、すべて消えた。', `海外のメディアは、日本の体制を「${lab.label}」と呼びはじめた。\n各国の大使が、本国に呼び戻されている。`] });
   },
   async court(g, data) {
     const r = R(g);
@@ -2445,7 +2444,7 @@ const SCENES = {
     if (!isPM(g)) { await show(g, { art: 'court', title: '最高裁判決', sub: data.what, pages }); answerCourt(g, data.step, true); return; }
     await show(g, { art: 'court', title: '最高裁判決', sub: data.what, pages, options: [{ label: '判決に従う', value: 'comply' }, { label: '判決を無視する', value: 'ignore' }], prompt: '判決にどう向き合う？', then: (v) => say(g, answerCourt(g, data.step, v !== 'ignore')) });
   },
-  async army(g) { await show(g, { art: 'army', title: '国軍化', sub: 'もしもシミュレーション', pages: ['自衛隊の駐屯地で、看板がかけ替えられた。\n「国軍」――多くの隊員が、黙って制服を脱いだ。', `（${FICTION_NOTE}）`] }); },
+  async army(g) { await show(g, { art: 'army', title: '国軍化', sub: '政令による改編', pages: ['自衛隊の駐屯地で、看板がかけ替えられた。\n「国軍」――多くの隊員が、黙って制服を脱いだ。'] }); },
   async war(g, data) {
     const r = R(g);
     const last = r.wars[r.wars.length - 1];
@@ -2453,7 +2452,7 @@ const SCENES = {
     if (!w) return;
     const nat = FICTIONAL_NATIONS[w.enemy];
     const cas = w.cas;
-    if (data.event === 'declare') await show(g, { art: 'war', title: '宣戦', sub: `${nat.name}（架空の国）`, front: 0, pages: [`${DISPUTED_AREA.name}（架空の係争地）をめぐり、${nat.name}に宣戦した。`, '国連の安全保障理事会が緊急会合を開いた。\n各国は即時の停戦を求めている。', `（${FICTION_NOTE}）`] });
+    if (data.event === 'declare') await show(g, { art: 'war', title: '宣戦布告', sub: nat.name, front: 0, pages: [`${DISPUTED_AREA.name}をめぐり、${nat.name}に宣戦を布告した。`, '国連の安全保障理事会が緊急会合を開いた。\n各国は即時の停戦を求めている。'] });
     else if (data.event === 'ceasefire') await show(g, { art: 'war', title: '停戦', sub: nat.name, front: 0, pages: ['停戦が成立した。前線の銃声が止んだ。', `死者　兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人\nけが人　${n0(cas.soldiers.wounded + cas.civilians.wounded)}人\n相手国側の死傷者　${n0(cas.enemySoldiers + cas.enemyCivilians)}人`, '制裁は続き、物価は高いまま。\n帰ってこない人たちの家族が、町に残された。'] });
     else if (data.event === 'victory') await show(g, { art: 'war', title: '占領', sub: DISPUTED_AREA.name, front: 100, pages: [`国軍は${DISPUTED_AREA.name}を占領した。\nだが、祝う声はほとんど聞こえない。`, `死者　兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人\n相手国側の死傷者　${n0(cas.enemySoldiers + cas.enemyCivilians)}人\n戦費　約${w.cost}兆円`, 'どの国も占領を認めず、制裁はさらに強まった。\n島では抵抗が続いている。'] });
     else if (data.event === 'warn' && r.war && r.war.phase === 'war' && isPM(g)) {
@@ -2465,11 +2464,11 @@ const SCENES = {
       const pages = num(data.level) >= 80
         ? ['前線が崩れかけている。\n参謀は青ざめている。「敗戦は、時間の問題です」', `死者は兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人にのぼった。\n厭戦の声は、もう抑えきれない。`]
         : ['前線が押し戻されている。\n参謀は言う。「このままでは、いずれ前線が崩れます」', `死者は兵士${n0(cas.soldiers.dead)}人・民間人${n0(cas.civilians.dead)}人にのぼった。\n各国の制裁で、弾薬も燃料も足りなくなっている。`];
-      pages.push(`（命令は${deviceName(g)}の「危機管理」→「戦争（もしも）」からも出せる）`);
-      await show(g, { art: 'war', title: '戦況の悪化', sub: `${nat.name}（架空の国）`, front: w.front, pages, options: opts, prompt: num(data.level) >= 80 ? '敗戦か、停戦か。どうする？' : 'どうする？', then: async (v) => { if (v) { const res = warOrder(g, v); if (res.text || res.why) await say(g, res.text || res.why); } } });
+      pages.push(`（命令は${deviceName(g)}の「危機管理」→「戦争」からも出せる）`);
+      await show(g, { art: 'war', title: '戦況の悪化', sub: nat.name, front: w.front, pages, options: opts, prompt: num(data.level) >= 80 ? '敗戦か、停戦か。どうする？' : 'どうする？', then: async (v) => { if (v) { const res = warOrder(g, v); if (res.text || res.why) await say(g, res.text || res.why); } } });
     }
   },
-  async uprising_warn(g) { await show(g, { art: 'demo', title: 'ゼネスト', sub: 'もしもシミュレーション', pages: ['全国でゼネストが始まった。\n広場を埋めた群衆が、退陣を求めている。', '国軍の一部の部隊は、市民に向けた出動を拒んだ。\n残された時間は少ない。'] }); },
+  async uprising_warn(g) { await show(g, { art: 'demo', title: 'ゼネスト', sub: '全国で退陣要求', pages: ['全国でゼネストが始まった。\n広場を埋めた群衆が、退陣を求めている。', '国軍の一部の部隊は、市民に向けた出動を拒んだ。\n残された時間は少ない。'] }); },
   // the 特捜 case after stepping down / a lawful removal (crime.js g.arrest), on its day whatever the player does
   async trial(g) { if (trialDue(g)) await runTrial(g); },
   async stepdown(g, data) {
@@ -2499,7 +2498,7 @@ export function recordLines(rec) {
     `【記録】${rec.name}　${rec.date}`,
     `体制：${REGIME_INFO[rec.maxRegime] ? REGIME_INFO[rec.maxRegime].name : rec.maxRegime}（${rec.label}）\n戦争：${rec.wars}回　死者 兵士${n0(rec.soldiers)}人・民間人${n0(rec.civilians)}人`,
     `相手国側の死傷者：${n0(rec.enemy)}人\n拘束された記者：${n0(rec.detained)}人\n報道の自由度：${rec.press}`,
-    '（これは架空の「もしも」のシミュレーションです）\nセーブデータから再開するか、新しく始めてください。',
+    'セーブデータから再開するか、新しく始めてください。',
   ];
 }
 
@@ -2582,8 +2581,8 @@ function extendDemoResponses() {
   demoExtended = true;
   const D = GOVT.DEMO_RESPONSES;
   const add = (id, def) => { if (!D[id]) D[id] = { id, ...def }; };
-  // available(g, demo) → true | reason (govt.js shows the reason): only in an emergency or a dictatorship (もしも)
-  const okIn = (g) => { const r = R(g); return r.id === 'emergency' || r.id === 'dictatorship' ? true : '民主制の政府は、デモを力で抑えない（集会・表現の自由：憲法21条）。これは「もしも」の独裁・緊急事態体制だけの選択'; };
+  // available(g, demo) → true | reason (govt.js shows the reason): only in an emergency or a dictatorship
+  const okIn = (g) => { const r = R(g); return r.id === 'emergency' || r.id === 'dictatorship' ? true : '民主制の政府は、デモを力で抑えられない（集会・表現の自由：憲法21条）。緊急事態か独裁の体制のもとでだけ選べる'; };
   // the force options: the real-party rule first (a real party in the government in ANY role refuses; no leaving here)
   const forceOk = (what) => (g) => {
     let real = null;
@@ -2592,7 +2591,7 @@ function extendDemoResponses() {
   };
   add('crackdown', {
     name: '弾圧（治安部隊の出動）', label: '弾圧', regime: true,
-    desc: '（もしも）治安部隊でデモを解散させる。国内外から激しい非難を浴び、蜂起の危険が一気に高まる。',
+    desc: '治安部隊でデモを解散させる。国内外から激しい非難を浴び、蜂起の危険が一気に高まる。',
     when: forceOk('治安部隊の出動'), available: forceOk('治安部隊の出動'),
     apply(g, demo) {
       const r = R(g);
@@ -2600,15 +2599,15 @@ function extendDemoResponses() {
       r.unrest = clamp(r.unrest + 18, 0, 100);
       raiseIntl(g, 15, 'デモの弾圧');
       press(g, -5, 'デモの弾圧');
-      bumpApproval(g, -8, -4, 'regime', 'デモの弾圧（もしも）');
+      bumpApproval(g, -8, -4, 'regime', 'デモの弾圧');
       r.record.steps.push({ day: today(g), step: 'デモの弾圧' });
-      news(g, '【もしも】治安部隊がデモを強制的に解散させた。多数のけが人と拘束者が出たと伝えられる。各国が強く非難している');
+      news(g, '治安部隊がデモを強制的に解散させた。多数のけが人と拘束者が出たと伝えられる。各国が強く非難している');
       return { ok: true, text: '治安部隊がデモを解散させた。国内外の怒りは、かえって大きくなった。' };
     },
   });
   add('curfew', {
     name: '外出禁止令', label: '外出禁止令', regime: true,
-    desc: '（もしも）夜間の外出を禁じる。暮らしと経済に重い負担。',
+    desc: '夜間の外出を禁じる。暮らしと経済に重い負担。',
     when: forceOk('外出禁止令'), available: forceOk('外出禁止令'),
     apply(g, demo) {
       const r = R(g);
@@ -2616,19 +2615,19 @@ function extendDemoResponses() {
       r.unrest = clamp(r.unrest + 6, 0, 100);
       raiseIntl(g, 5, '外出禁止令');
       ecoShock(g, '外出禁止令', { growth: -0.5, len: 60 });
-      news(g, '【もしも】全国に夜間の外出禁止令が出された');
+      news(g, '全国に夜間の外出禁止令が出された');
       return { ok: true, text: '外出禁止令を出した。街は静かになったが、不満は消えていない。' };
     },
   });
   add('concession', {
     name: '譲歩（拘束者の解放・対話）', label: '譲歩', regime: true,
-    desc: '（もしも）拘束した人を解放し、対話を約束する。',
+    desc: '拘束した人を解放し、対話を約束する。',
     when: okIn, available: okIn,
     apply(g) {
       const r = R(g);
       r.unrest = Math.max(0, r.unrest - 10);
       r.intl = Math.max(0, r.intl - 4);
-      news(g, '【もしも】政府が拘束者の一部を解放し、市民団体との対話を約束した');
+      news(g, '政府が拘束者の一部を解放し、市民団体との対話を約束した');
       return { ok: true, text: '譲歩した。広場の緊張が少しやわらいだ。' };
     },
   });
@@ -2771,7 +2770,7 @@ const methods = {
   regimeRecord() { return regimeRecord(this); },
   regimeFlush() { return flush(this); },
   // null | the reason the player (who = 'player', the default) may not be given a cabinet post, 内閣総理大臣 included:
-  // the former PM of the もしも emergency / dictatorship (stepped down or removed). NPCs → null. Flag:
+  // the former PM of the emergency / dictatorship (stepped down or removed). NPCs → null. Flag:
   // g.state.regime.barred = { day, how: 'democratize'|'removal', charged }. post is accepted for symmetry (any post).
   regimeBarred(who = 'player', post = null) { return barredReason(this, who == null ? 'player' : who); },
   regimeTick() { return regimeTick(this); },
@@ -2851,8 +2850,8 @@ export function installRegime(proto) {
   const held = (g, what) => {
     const r = g.state && g.state.regime;
     if (!r) return null;
-    if (what === 'election' && r.steps && r.steps.elections && r.id !== 'democracy') return '選挙は無期限に延期されている（もしも）';
-    if (what === 'diet' && r.steps && r.steps.diet && r.id !== 'democracy') return '国会は止められている（もしも）';
+    if (what === 'election' && r.steps && r.steps.elections && r.id !== 'democracy') return '選挙は無期限に延期されている';
+    if (what === 'diet' && r.steps && r.steps.diet && r.id !== 'democracy') return '国会は止められている';
     return null;
   };
   wrap('dissolve', (orig) => function (...a) {

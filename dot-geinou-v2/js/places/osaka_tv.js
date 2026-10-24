@@ -17,7 +17,7 @@
 // 出口：ロビー下のマット（to: 'exit'）。なんばの町にこの建物がまだ置かれていない時は、なんば駅の前へ。
 
 import { registerPlace, doorIndexFor } from '../engine/map.js';
-import { LOOKS, charSheetHD } from '../engine/sprites.js';
+import { LOOKS, charSheetHD, drawSeated } from '../engine/sprites.js';
 import { defineTile, tileImageHD, R, P, speckle, disc, oval, line, bevel, inset, outline, shadowEllipse, pix } from '../engine/tiles.js';
 import { registerItem } from '../engine/state.js';
 import { text } from '../engine/draw.js';
@@ -706,13 +706,11 @@ const lines = (who, list) => async (g) => say(g, who, typeof list === 'function'
 const signs = (list) => list.map(([x, y, t]) => ({ type: 'sign', x, y, text: t }));
 const TIER1 = { anyOf: [{ agency: true }, { fame: 30 }], anyOfText: 'このお仕事は、事務所に所属しているか\n★30以上の人にお願いしているみたいだ。' };
 
-// Audience member sitting in a bench seat, seen from behind; the seat back covers the legs.
+// Audience member sitting in a bench seat, seen from behind: head and shoulders above the
+// seat back, which covers the rest (the map's own seated drawing, HD sheet).
 function seated(ctx, x, y, g, e) {
-  x = Math.round(x); y = Math.round(y);
-  const img = charSheetHD(e.look || {}).up[0];
-  ctx.drawImage(img, 0, 0, 32, 26, x, y - 3, 16, 13);
-  const seat = e.seatTile;
-  if (seat) ctx.drawImage(tileImageHD(seat), 0, 12, 32, 20, x, y + 6, 16, 10);
+  const seat = g.map.seatOf(e.x, e.y) || (e.seatTile ? { img: tileImageHD(e.seatTile), top: 5.5 } : null);
+  drawSeated(ctx, e.sheet || charSheetHD(e.look || {}), 'up', x, y, seat);
 }
 
 // Exit to town. If the town has no door for this building yet, go to the front of なんば駅.

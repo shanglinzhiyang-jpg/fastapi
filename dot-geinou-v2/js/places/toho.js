@@ -12,7 +12,7 @@
 // 登場人物・作品（大怪獣ガオドン、『星降る街のメロディ』）はすべて架空です。
 
 import { registerPlace } from '../engine/map.js';
-import { LOOKS, charSheet } from '../engine/sprites.js';
+import { LOOKS, charSheet, charSheetHD, drawCharPart } from '../engine/sprites.js';
 import { defineTile, R, P, speckle } from '../engine/tiles.js';
 import { registerItem } from '../engine/state.js';
 import { audio, registerSong } from '../engine/audio.js';
@@ -760,7 +760,7 @@ function drawKaijuNpc(ctx, x, y, g, e) {
   if (!e.unmasked) { ctx.drawImage(img, bx, by); return; }
   // head off: suit body + the actor's own (sweaty) head
   ctx.drawImage(img, 0, 10, img.width, img.height - 10, bx, by + 10, img.width, img.height - 10);
-  ctx.drawImage(charSheet(LK.suit).down[0], 0, 0, 16, 11, Math.round(x), by - 1, 16, 11);
+  drawCharPart(ctx, charSheetHD(LK.suit), 'down', 0, 0, 0, 16, 11, x, by - 1);
   F(ctx, x + 3, by + 9, 10, 2, '#ffffff');
   if (Math.floor(g.frame / 20) % 2) { F(ctx, x + 14, by + 2, 1, 2, '#8fd0ff'); F(ctx, x + 1, by + 4, 1, 2, '#8fd0ff'); }
 }

@@ -1081,31 +1081,31 @@ export const PARTY_DEFS = {
     name: 'ともしび党', short: 'ともしび', color: '#e8833a', real: false, leaderTitle: '代表',
     ideology: { econ: -1.5, social: -0.6, security: -1.5 },
     platform: ['min_wage', 'irregular_protect', 'pension_up', 'care_expand', 'defense_cut', 'corp_tax_up', 'nuclear_exit', 'free_tuition'],
-    desc: '働く人の暮らしと福祉、平和主義をかかげる政党（架空）。労働組合の支持が厚い。',
+    desc: '働く人の暮らしと福祉、平和主義をかかげる政党。労働組合の支持が厚い。',
   },
   aozora: {
     name: '青空党', short: '青空', color: '#3a9ad9', real: false, leaderTitle: '代表',
     ideology: { econ: 1.6, social: -0.4, security: 0.4 },
     platform: ['deregulation', 'civil_service_cut', 'privatize_public', 'decentralize', 'digital_gov', 'corp_tax_cut', 'postal_privatization', 'fiscal_consolidation'],
-    desc: '規制緩和と行政改革、「小さな政府」をめざす都市型の改革政党（架空）。',
+    desc: '規制緩和と行政改革、「小さな政府」をめざす都市型の改革政党。',
   },
   nichirin: {
     name: '日輪党', short: '日輪', color: '#8a3ab9', real: false, leaderTitle: '代表',
     ideology: { econ: 0.4, social: 1.8, security: 1.8 },
     platform: ['amend_sdf', 'defense_up', 'security_law', 'police_up', 'anti_yakuza', 'conspiracy_law', 'income_tax_cut'],
-    desc: '伝統と安全保障を重んじる保守政党（架空）。',
+    desc: '伝統と安全保障を重んじる保守政党。',
   },
   nijiiro: {
     name: 'にじいろ党', short: 'にじ', color: '#2fb5a3', real: false, leaderTitle: '代表',
     ideology: { econ: -0.8, social: -1.8, security: -1.0 },
     platform: ['same_sex_marriage', 'separate_surnames', 'renewables', 'carbon_tax', 'nuclear_exit', 'daycare', 'political_money', 'env_regulation'],
-    desc: '環境と多様性、市民の参加をかかげる政党（架空）。',
+    desc: '環境と多様性、市民の参加をかかげる政党。',
   },
   denen: {
     name: '田園党', short: '田園', color: '#b5932f', real: false, leaderTitle: '代表',
     ideology: { econ: -0.3, social: 0.6, security: 0.0 },
     platform: ['farm_income', 'local_grant', 'fisheries', 'disaster_prep', 'gasoline_tax', 'child_allowance', 'pension_up'],
-    desc: '地方と農林漁業、地域の暮らしを守る中道の政党（架空）。',
+    desc: '地方と農林漁業、地域の暮らしを守る中道の政党。',
   },
 };
 // The platform of a party in a year (platformByYear when the party has one).
@@ -1460,7 +1460,7 @@ function normalizePolitics(g, p) {
     if (!p.diet || !p.diet.sangi || !Array.isArray(p.diet.sangi.classes) || !p.cabinet || !p.local) continue;
     const wasMember = p.me.party === id;
     try { retireParty(g, p, id, '与党の再編'); } catch (e) { console.error(e); continue; }
-    news(p, g, `${pt.name}（架空）は活動を終え、所属議員は無所属になったり、ほかの党に移ったりした`);
+    news(p, g, `${pt.name}は活動を終え、所属議員は無所属になったり、ほかの党に移ったりした`);
     if (wasMember) note(g, `（${pt.name}は活動を終えた。あなたは無所属になった。入りたい党があれば「政治」→政党から）`);
   }
   return p;
@@ -3089,7 +3089,7 @@ function fillCabinet(g, p, opts = {}) {
   const quota = {};
   for (const id of coalition) quota[id] = Math.max(1, Math.round((posts.length * seats(id)) / totalSeats));
   const pmParty = cabinetPartyOfPM(p);
-  const barred = !!playerBarred(g); // regime.js: the former PM of the もしも regime holds no cabinet post (2026-10 fix)
+  const barred = !!playerBarred(g); // regime.js: the former PM of the emergency / dictatorship regime holds no cabinet post (2026-10 fix)
   for (const post of posts) {
     if (opts.keep && prev[post] && ((prev[post] === 'player' && !barred) || (p.npcs[prev[post]] && coalition.includes(p.npcs[prev[post]].party)))) { out[post] = prev[post]; continue; }
     if (prev[post] === 'player' && !barred && opts.keepPlayer !== false && p.me.posts.includes(post)) { out[post] = 'player'; continue; }
@@ -3684,7 +3684,7 @@ function shockImpl(g, p, kind) {
   if (S.nikkei) p.economy.nikkei *= 1 + S.nikkei / 100;
   if (S.issue) p.opinion.issues[S.issue] = clamp(num(p.opinion.issues[S.issue]) + 0.3, 0, 1);
   if (S.disaster) { p.flags.disasterDay = today(g); p.cabinet.mood = num(p.cabinet.mood) + (Math.random() < 0.5 ? 2 : -3); }
-  news(p, g, `${S.name}（シミュレーション）`);
+  news(p, g, S.name);
   if (kind === 'quake' || kind === 'recession') phoneNews(g, `【ニュース】${S.name}。政府は対応に追われている。`);
   emit(g, 'shock', s);
   return s;
@@ -3796,7 +3796,7 @@ function foundMinshu(g, p) {
   }
   scheduleLeader(p, 'minshu', absOfDay(p, today(g)));
   news(p, g, '民主党が結成された（史実では1998年4月27日、複数の党が合流して結成）');
-  phoneNews(g, `【政界】野党の議員が合流して「民主党」が結成されました。衆議院${s}人・参議院${z}人の野党第一党に（シミュレーション）。`);
+  phoneNews(g, `【政界】野党の議員が合流して「民主党」が結成されました。衆議院${s}人・参議院${z}人の野党第一党に。`);
   emit(g, 'party', { kind: 'founded', party: 'minshu' });
 }
 // 2016-03-27: the 民主党 merged with another party and changed its name (a fact). The game does not
@@ -3806,10 +3806,10 @@ function endMinshu(g, p) {
   const me = p.me;
   const wasMember = me.party === 'minshu';
   const pr = wasMember && me.prElected && me.prElected.party === 'minshu' && me.office === me.prElected.house;
-  news(p, g, '民主党が、他党との合流にともない党名を改めた（2016年3月27日）。このゲームでは合流後の党は登場せず、所属議員は無所属になったり、ほかの党に移ったりした（シミュレーション）');
-  phoneNews(g, `【政界】民主党が、他党との合流にともない党名を改めました（2016年3月27日）。\nこのゲームでは合流後の党は登場しません。所属していた議員は、無所属になったり、ほかの党に移ったりしています（シミュレーション）。${wasMember ? `\nあなたは無所属になりました。入りたい党があれば「政治」→政党から入党できます。${pr ? '\n（比例代表で当選した議員が、選挙のときにあった別の党に入ると、議員の職を失います：国会法109条の2）' : ''}` : ''}`);
+  news(p, g, '民主党が、他党との合流にともない党名を改めた（2016年3月27日）。所属議員は無所属になったり、ほかの党に移ったりした');
+  phoneNews(g, `【政界】民主党が、他党との合流にともない党名を改めました（2016年3月27日）。\n所属していた議員は、無所属になったり、ほかの党に移ったりしています。${wasMember ? `\nあなたは無所属になりました。入りたい党があれば「政治」→政党から入党できます。${pr ? '\n（比例代表で当選した議員が、選挙のときにあった別の党に入ると、議員の職を失います：国会法109条の2）' : ''}` : ''}`);
   retireParty(g, p, 'minshu', '与党の民主党が党名を改めたため');
-  if (wasMember) note(g, '（民主党は他党との合流で党名を改めた。このゲームでは合流後の党は登場しないので、あなたは無所属になった）');
+  if (wasMember) note(g, '（民主党は他党との合流で党名を改めた。あなたは無所属になった）');
 }
 // A party leaves the game (民主党 in 2016; a party of an old save that is no longer in PARTY_DEFS).
 // Its seats, members and supporters go to other fictional opposition parties and to 無所属 (a
@@ -4626,7 +4626,7 @@ function foundPartyImpl(g, p, def = {}) {
   const name = String(def.name || '').trim();
   const short = String(def.short || name.slice(0, 2)).trim().slice(0, 6);
   if (!name || name.length > 12) return { why: '党名は1〜12文字で' };
-  if (realPartyNames.some((n) => name === n || short === n) || realPartyParts.some((n) => name.includes(n) || short.includes(n))) return { why: '実在する（した）政党とまぎらわしい名前はつけられない' };
+  if (realPartyNames.some((n) => name === n || short === n) || realPartyParts.some((n) => name.includes(n) || short.includes(n))) return { why: 'すでにある（あった）政党とまぎらわしい名前は届け出られない' };
   if (!short) return { why: '略称が必要' };
   if ([...Object.values(p.parties), ...Object.values(PARTY_DEFS)].some((x) => x.name === name || x.short === short)) return { why: '同じ名前の政党がすでにある' };
   // 成年年齢: 20歳、2022年4月1日から18歳（改正民法）
@@ -5808,7 +5808,7 @@ async function menuOverview(g) {
   const E = s.economy;
   const top = (list) => list.slice(0, 4).map((x) => `${x.name}${x.n}`).join('・');
   await sayLines(g, [
-    `${s.date.label}（シミュレーション）`,
+    s.date.label,
     `${C.pmName || '（不在）'}内閣　支持率 ${C.approval}%`,
     `与党：${C.parties.join('・') || 'なし'}`,
     `衆議院（${s.diet.shugi.total}）${top(s.diet.shugi.seats)}`,
@@ -5868,11 +5868,11 @@ async function menuParties(g) {
   const p = g.pol();
   const ids = Object.keys(p.parties);
   const items = ids.map((id) => ({ label: p.parties[id].name, right: `${partySeats(p, id)}議席` })).concat([{ label: '新党をつくる' }, { label: p.me.party ? '離党する' : '（無所属）', disabled: !p.me.party }, { label: '派閥・グループ', disabled: !p.me.party }, { label: 'もどる' }]);
-  const i = await g.list({ title: '政党', items, ...L(8, 52, 300), describe: (k) => (k < ids.length ? `${p.parties[ids[k]].real ? '' : '（架空）'}支持率 ${g.partySupport(ids[k])}%` : '') });
+  const i = await g.list({ title: '政党', items, ...L(8, 52, 300), describe: (k) => (k < ids.length ? `支持率 ${g.partySupport(ids[k])}%` : '') });
   if (i < 0 || i === items.length - 1) return;
   if (i < ids.length) {
     const pt = p.parties[ids[i]];
-    await sayLines(g, [pt.name + (pt.real ? '' : '（架空の政党）'), ...splitText(pt.desc, 34).slice(0, 4), `衆${num(p.diet.shugi.seats[pt.id])}・参${num(p.diet.sangi.seats[pt.id])}・支持率 ${g.partySupport(pt.id)}%`]);
+    await sayLines(g, [pt.name, ...splitText(pt.desc, 34).slice(0, 4), `衆${num(p.diet.shugi.seats[pt.id])}・参${num(p.diet.sangi.seats[pt.id])}・支持率 ${g.partySupport(pt.id)}%`]);
     if (p.me.party !== pt.id && !pt.isPlayers) {
       const j = await g.ask(`${pt.name}に入党する？\n党費 年${fmtMoney(g.partyFee())}（所持金 ${fmtMoney(g.state.money)}）`, ['入党する', 'やめておく']);
       if (j === 0) { const w = g.joinParty(pt.id); await g.say(w || `${pt.name}に入党した！`); }

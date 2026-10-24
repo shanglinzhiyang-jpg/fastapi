@@ -772,7 +772,6 @@ function lawPage(g, ctx) {
   }
   pg.para(`・闇金・ストーカー・詐欺：警視庁（永田町）の相談室${PLACES.koban ? '、ネオン街の交番' : ''}`, { s: SMALL });
   pg.para('・自己破産：裁判所（永田町）の破産係（弁護士に頼めなくても、本人申立てができる）', { s: SMALL });
-  pg.para('罪をおかせば、逮捕・裁判・刑罰がある。現実と同じように、取り返しのつかないこともある。', { s: SMALL, c: COLORS.dim });
   return pg;
 }
 
@@ -937,7 +936,7 @@ function politicsPage(g, ctx) {
       const nm = Array.from(String(full)).length > 9 ? Array.from(String(full)).slice(0, 8).join('') + '…' : String(full);
       pg.row(nm, `${pctText(x.pct)}`, { s: SMALL, rs: SMALL, gauge: { frac: clamp(num(x.pct) / 50, 0, 1), color: col }, c: x.id === me.party ? COLORS.accent : COLORS.text });
     }
-    pg.para('支持率は世論調査のしくみをまねた、ゲームの中の数字。', { s: SMALL, c: COLORS.dim });
+    pg.para('支持率は、層ごとの世論調査の推計。', { s: SMALL, c: COLORS.dim });
   }
 
   // ---- the economy

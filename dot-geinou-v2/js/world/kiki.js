@@ -2,8 +2,8 @@
 // 「危機管理」. regime.js owns the logic and the words; this module draws (KIKI.show / KIKI.downfall / KIKI.record)
 // and offers the player's controls (自衛隊・災害対応・報道・体制・戦争) on the phone.
 //
-// Content rules (see regime.js): fictional disasters, fictional nations, the dictatorship is a 「もしも」
-// simulation. Everything here is abstract and non-graphic: a crowd of distant silhouettes, maps, numbers,
+// Content rules (see regime.js): fictional disasters, fictional nations; no in-game disclaimer (the fiction
+// notice is on the title screen only). Everything here is abstract and non-graphic: a crowd of distant silhouettes, maps, numbers,
 // newspapers. The downfall shows the crowd from far away and a headline; the narration says what happened in
 // one short sober sentence. No body, no violence is drawn.
 //
@@ -501,7 +501,7 @@ class DownfallScene {
       text(ctx, '首都の広場', 20, 16, { size: 12, color: '#d8c8b8' });
     } else if (this.stage === 'paper') {
       R(ctx, 0, 0, SW, ART_H, '#1a1a20');
-      paperArt(ctx, '独裁体制が崩壊', `「${this.rec.label}」体制、${this.rec.cause === 'uprising' ? '民衆の蜂起で' : '敗戦で'}終わる（もしも）`);
+      paperArt(ctx, '独裁体制が崩壊', `「${this.rec.label}」体制、${this.rec.cause === 'uprising' ? '民衆の蜂起で' : '敗戦で'}終わる`);
     } else {
       R(ctx, 0, 0, SW, ART_H, '#050508');
     }
@@ -524,7 +524,7 @@ async function downfall(g, rec) {
   const bk = new DownfallScene(g, rec, 'black');
   g.push(bk);
   try {
-    await sayJ(g, [lines[3], `（${FICTION_NOTE}）`]);
+    await sayJ(g, lines[3]);
   } finally { g.pop(bk); }
 }
 
@@ -558,7 +558,6 @@ class RecordScene {
       text(ctx, k, 96, 62 + i * 19, { size: 12, color: '#9aa3c7' });
       text(ctx, String(v), 250, 62 + i * 19, { size: 12, color: '#ffffff' });
     });
-    text(ctx, '（架空の「もしも」のシミュレーションです）', SW / 2, SH - 60, { size: 12, align: 'center', color: '#9aa3c7' });
     if (this.t > 40) text(ctx, 'A：タイトルへ（セーブデータはそのまま）', SW / 2, SH - 42, { size: 12, align: 'center', color: Math.floor(this.t / 30) % 2 ? COLORS.cyan : '#ffffff' });
   }
 }
@@ -622,14 +621,13 @@ function overviewLines(g) {
   const r = g.regime();
   const pf = g.pressFreedom();
   const out = [`体制：${r.name}`, `（${r.label}）`];
-  if (r.id !== 'democracy') out.push(`※${FICTION_NOTE}`);
   out.push(`報道の自由度：${pf.value}（${pf.label}）`);
   if (r.unrest) out.push(`民衆の不満：${r.unrest}／100`);
   if (r.intl) out.push(`国際社会の懸念：${r.intl}／100${r.sanctions ? `（制裁 段階${r.sanctions}）` : ''}`);
   const d = g.disaster();
   if (d) out.push('', `【災害】${d.name}（${d.tierName}）`, d.summary);
   const w = g.war();
-  if (w) out.push('', `【戦争】${w.enemyName}（架空の国）`, `戦況：${w.frontText}`);
+  if (w) out.push('', `【戦争】${w.enemyName}`, `戦況：${w.frontText}`);
   out.push('', ...g.sdf().lines.slice(0, 3));
   return out;
 }
@@ -641,7 +639,7 @@ function newsLines(g) {
 function pressLines(g) {
   const pf = g.pressFreedom();
   const hist = pf.history.slice(-8).map((h) => `${h.day}日目 ${h.v}${h.why ? `（${h.why}）` : ''}`);
-  return [`報道の自由度：${pf.value}／100（${pf.label}）`, 'ゲーム内の指標。報道への圧力や検閲で下がり、民主制では時間とともに戻る。', '', ...(hist.length ? ['推移：', ...hist] : [])];
+  return [`報道の自由度：${pf.value}／100（${pf.label}）`, '報道への圧力や検閲で下がり、民主制では時間とともに戻る。', '', ...(hist.length ? ['推移：', ...hist] : [])];
 }
 export async function kikiApp(g) {
   if (typeof g.regime !== 'function') { await info(g, '危機管理', ['（体制・安全保障の仕組みが読み込まれていない）']); return; }
@@ -652,11 +650,11 @@ export async function kikiApp(g) {
     const entries = [
       ['overview', '概況', r.name],
       d ? ['disaster', '災害対応', short(d.name, 12)] : null,
-      ['sdf', '自衛隊・防衛', r.steps.army && r.id === 'dictatorship' ? '国軍（もしも）' : '状況と命令'],
+      ['sdf', '自衛隊・防衛', r.steps.army && r.id === 'dictatorship' ? '国軍' : '状況と命令'],
       ['press', '報道の自由', `${g.pressFreedom().value}`],
-      ['regime', '体制', r.id === 'democracy' ? '民主制' : `${r.name}（もしも）`],
-      r.id === 'dictatorship' || g.war() ? ['war', '戦争（もしも）', g.war() ? g.war().frontText : '架空の国だけ'] : null,
-      ['nations', '架空の国々', 'ゲーム内の設定'],
+      ['regime', '体制', r.id === 'democracy' ? '民主制' : r.name],
+      r.id === 'dictatorship' || g.war() ? ['war', '戦争', g.war() ? g.war().frontText : '開戦前'] : null,
+      ['nations', '関係国', 'ヴェルミナ海'],
       ['news', 'ニュース', ''],
     ].filter(Boolean);
     const i = await phoneList(g, { title: '危機管理', color: APP_COLOR, index, items: entries.map(([, label, sub]) => ({ label, sub })) });
@@ -676,21 +674,21 @@ export async function kikiApp(g) {
       await actionList(g, '報道', () => g.pressActions(), (pid) => g.pressAction(pid));
     } else if (id === 'regime') {
       const rr = g.regime();
-      await info(g, '体制', [`いまの体制：${rr.long}`, `（${rr.label}：${rr.labelWhy}）`, '', '憲法改正は、各院の総議員の3分の2で発議し、国民投票の過半数で決まる（憲法96条）。', '', `※独裁と戦争のルートは、${FICTION_NOTE}実在の政党はこの道をとらない。`]);
+      await info(g, '体制', [`いまの体制：${rr.long}`, `（${rr.label}：${rr.labelWhy}）`, '', '憲法改正は、各院の総議員の3分の2で発議し、国民投票の過半数で決まる（憲法96条）。']);
       await actionList(g, '体制の手続き', () => g.regimeSteps(), (sid) => g.regimeStep(sid));
     } else if (id === 'war') {
       const w = g.war();
-      if (w) await info(g, `戦争：${w.enemyName}`, [`係争地：${w.area}（架空）`, `戦況：${w.frontText}`, `死者 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人`, `けが人 ${n0(w.cas.soldiers.wounded + w.cas.civilians.wounded)}人`, `相手国側の死傷者 ${n0(w.cas.enemySoldiers + w.cas.enemyCivilians)}人`, `戦費 約${w.cost}兆円・厭戦 ${Math.round(w.weariness)}／100`]);
-      await actionList(g, '戦争（もしも）', () => g.warOrders(), async (wid) => {
+      if (w) await info(g, `戦争：${w.enemyName}`, [`係争地：${w.area}`, `戦況：${w.frontText}`, `死者 兵士${n0(w.cas.soldiers.dead)}人・民間人${n0(w.cas.civilians.dead)}人`, `けが人 ${n0(w.cas.soldiers.wounded + w.cas.civilians.wounded)}人`, `相手国側の死傷者 ${n0(w.cas.enemySoldiers + w.cas.enemyCivilians)}人`, `戦費 約${w.cost}兆円・厭戦 ${Math.round(w.weariness)}／100`]);
+      await actionList(g, '戦争', () => g.warOrders(), async (wid) => {
         if (wid === 'declare') {
-          const k = await phoneList(g, { title: '相手（架空の国）', color: APP_COLOR, items: NATION_ORDER.map((n) => ({ label: FICTIONAL_NATIONS[n].name, sub: '架空の国' })), describe: (x) => short(FICTIONAL_NATIONS[NATION_ORDER[x]].desc, 34) });
+          const k = await phoneList(g, { title: '宣戦の相手', color: APP_COLOR, items: NATION_ORDER.map((n) => ({ label: FICTIONAL_NATIONS[n].name, sub: `国力 ${FICTIONAL_NATIONS[n].power}` })), describe: (x) => short(FICTIONAL_NATIONS[NATION_ORDER[x]].desc, 34) });
           if (k < 0) return null;
           return g.warOrder('declare', { target: NATION_ORDER[k] });
         }
         return g.warOrder(wid);
       });
     } else if (id === 'nations') {
-      await info(g, '架空の国々', [...NATION_ORDER.map((n) => `${FICTIONAL_NATIONS[n].name}：${FICTIONAL_NATIONS[n].desc}`), `${DISPUTED_AREA.name}：${DISPUTED_AREA.desc}`, '', '実在の国・地域とは関係ありません。']);
+      await info(g, '関係国', [...NATION_ORDER.map((n) => `${FICTIONAL_NATIONS[n].name}：${FICTIONAL_NATIONS[n].desc}`), `${DISPUTED_AREA.name}：${DISPUTED_AREA.desc}`]);
     } else if (id === 'news') await info(g, 'ニュース', newsLines(g));
   }
 }

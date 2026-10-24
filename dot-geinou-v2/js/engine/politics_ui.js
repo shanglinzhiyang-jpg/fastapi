@@ -762,7 +762,7 @@ const COMMANDS = [
   { id: 'cabinet', label: '内閣', color: '#ff8a5a', tip: '総理大臣は国会が指名し、天皇が任命する（憲法6条・67条）' },
   { id: 'party', label: '党内', color: '#5ee07a', tip: '幹事長・政調会長・総務会長などの党役員が、党の運営と政策を担う' },
   { id: 'money', label: '資金・活動', color: '#ffd23f', tip: '政治資金は毎年、収支報告書で公開される（原則、翌年3月末まで）' },
-  { id: 'news', label: 'ニュース', color: '#9aa3c8', tip: 'このゲームの政治はシミュレーション。実在の政治家は登場しない' },
+  { id: 'news', label: 'ニュース', color: '#9aa3c8', tip: '新聞やテレビが伝えた、最近の政治の動き' },
   // the government console (js/engine/govt_ui.js, when loaded)
   { id: 'govt', label: '政府中枢', color: '#ffb547', tip: '予算・税・省庁・世論・国会・安全保障・危機管理を一つの画面で（政府中枢）' },
 ];
@@ -949,7 +949,7 @@ function drawDashboard(c, g, ui, view, s) {
   // ---- 経済
   {
     const x = 216, y = 156, w = 418, h = 108;
-    card(c, x, y, w, h, '経済（シミュレーション）', { right: `消費税 ${taxWord(s.economy.taxRate)}・予算 ${fmtCho(s.economy.budget.spending)}`, rightW: 200 });
+    card(c, x, y, w, h, '経済', { right: `消費税 ${taxWord(s.economy.taxRate)}・予算 ${fmtCho(s.economy.budget.spending)}`, rightW: 200 });
     const hist = uiData(g).eco;
     const prev = hist.length > 7 ? hist[hist.length - 8] : hist[0];
     const E = p.economy;
@@ -1646,10 +1646,10 @@ async function illegalWarning(ui, g, key) {
   let law = '';
   try { law = crimeLaw(g, id) || ''; } catch (e) { law = ''; }
   const i = await ui.confirm({
-    title: `⚠ ${key}は犯罪です`, danger: true, w: 460,
+    title: `⚠ ${key}（違法）`, danger: true, w: 460,
     text: `${law || '公職選挙法で禁じられている。'}\n発覚すれば逮捕され、当選しても無効になることがある。`,
     choices: ['やめておく', 'それでも予定に入れる'], index: 0, cancel: 0,
-    tip: '選挙のルールは、お金や力で票が左右されないためにある',
+    tip: '公職選挙法違反。発覚すれば逮捕・当選無効もある',
   });
   return i === 1;
 }
@@ -2435,7 +2435,7 @@ function partyInfo(c, g, id, r) {
   const p = polOf(g);
   const pt = p.parties[id];
   if (!pt) return;
-  card(c, r.x, r.y, r.w, r.h, pt.real ? '実在の政党（事実のみ）' : pt.isPlayers ? 'あなたの政党' : '架空の政党', { accent: pt.real ? C.cyan : C.gold });
+  card(c, r.x, r.y, r.w, r.h, pt.isPlayers ? 'あなたの政党' : '政党', { accent: pt.real ? C.cyan : C.gold });
   const x = r.x + 10, w = r.w - 20;
   drawPartyMark(c, g, id, x, r.y + 26, 44);
   T(c, fit(c, pt.name, w - 56, 16), x + 54, r.y + 26, 16, '#ffffff');
@@ -2449,7 +2449,7 @@ function partyInfo(c, g, id, r) {
   drawIdeology(c, pt.ideology, x, y, w, pt.color);
   y += 92;
   const plat = (pt.platform || []).filter((q) => POLICIES[q]).slice(0, 3).map((q) => POLICIES[q].name);
-  if (plat.length && y < r.y + r.h - 16) para(c, `主な政策${pt.real ? '（シミュレーション上の傾向）' : ''}：${plat.join('・')}`, x, y, w, 12, C.dim, 16, Math.max(1, Math.floor((r.y + r.h - 6 - y) / 16)));
+  if (plat.length && y < r.y + r.h - 16) para(c, `主な政策${pt.real ? '（傾向）' : ''}：${plat.join('・')}`, x, y, w, 12, C.dim, 16, Math.max(1, Math.floor((r.y + r.h - 6 - y) / 16)));
 }
 SECTIONS.parties = async (ui) => {
   const g = ui.g;
@@ -2460,7 +2460,7 @@ SECTIONS.parties = async (ui) => {
     const ids = Object.keys(p.parties).sort((a, b) => g.partyStatus(b).seats - g.partyStatus(a).seats);
     const items = ids.map((id) => {
       const st = g.partyStatus(id);
-      return { label: p.parties[id].name, sub: `${p.parties[id].isPlayers ? 'あなたの党' : p.parties[id].real ? '実在' : '架空'}・支持率 ${g.partySupport(id)}%${isRuling(p, id) ? '・与党' : ''}`, right: `衆${st.shugi} 参${st.sangi}`, icon: (c, x, y) => drawPartyMark(c, g, id, x, y, 20), tag: me.party === id ? { text: '所属', color: '#2a7a4a' } : null };
+      return { label: p.parties[id].name, sub: `${p.parties[id].isPlayers ? 'あなたの党・' : ''}支持率 ${g.partySupport(id)}%${isRuling(p, id) ? '・与党' : ''}`, right: `衆${st.shugi} 参${st.sangi}`, icon: (c, x, y) => drawPartyMark(c, g, id, x, y, 20), tag: me.party === id ? { text: '所属', color: '#2a7a4a' } : null };
     });
     items.push({ label: '新しい政党を立ち上げる', sub: '党名・色・エンブレム・政策を決める', labelColor: C.gold });
     if (me.party) items.push({ label: '離党する', sub: `${partyFull(g, me.party)}を離れて無所属に`, labelColor: C.bad });
@@ -2470,7 +2470,7 @@ SECTIONS.parties = async (ui) => {
         card(c, r.x, r.y, r.w, r.h, it.label);
         para(c, k === ids.length ? `自分の政党をつくる。結党には事務所や届出などの費用（${fmtMoney(Math.round(5000000 / priceRate(g)))}）がかかる。国会議員5人以上、または国会議員1人以上で得票率2%以上になると「政党」と認められ${subsidyExists(yearOf(g)) ? '、政党交付金を受けられる' : 'る'}。` : '党を離れると、党の組織の支えはなくなる。議員なら、議席は「無所属」に移る。党の役職も失う。', r.x + 10, r.y + 26, r.w - 20, 12, C.text, 17, 10);
       },
-      tip: (it, k) => (k < ids.length ? (p.parties[ids[k]].real ? '実在の政党は、確かめられる事実だけで紹介している' : 'このゲームの架空の政党。実在の政党とは関係ない') : '政党助成法（1994年成立）で、要件を満たす政党に交付金が出る'),
+      tip: (it, k) => (k < ids.length ? '政党要件：国会議員5人以上、または国会議員1人以上で得票率2%以上' : '政党助成法（1994年成立）で、要件を満たす政党に交付金が出る'),
     });
     if (i < 0) return;
     idx = i;
@@ -3354,7 +3354,7 @@ function approvalChartView(g) {
     draw(c) {
       const p = polOf(g);
       const polls = p.polls.slice(-40);
-      card(c, 6, 30, SW - 12, SH - 55, '週ごとの世論調査（シミュレーション）');
+      card(c, 6, 30, SW - 12, SH - 55, '週ごとの世論調査');
       const x = 40, y = 56, w = SW - 200, h = 250;
       R(c, x, y, w, h, '#0c1230');
       for (let k = 0; k <= 8; k++) { const yy = y + h - Math.round((k / 8) * h); R(c, x, yy, w, 1, k === 0 ? C.faint : '#1a2250'); T(c, `${k * 10}`, x - 6, yy - 6, 12, C.faint, 'right'); }
@@ -3847,7 +3847,7 @@ SECTIONS.money = async (ui) => {
       if (k === 1) {
         let law = '';
         try { law = crimeLaw(g, 'slush_fund') || ''; } catch (e) { law = ''; }
-        const k2 = await ui.confirm({ title: '⚠ 裏金は犯罪です', danger: true, w: 460, text: `${law || '政治資金規正法違反（不記載・虚偽記入）。'}\n発覚すれば議員の職を失うこともある。`, choices: ['やめて、全部書く', '3割を書かない', '半分を書かない'], index: 0, cancel: 0 });
+        const k2 = await ui.confirm({ title: '⚠ 裏金（不記載・違法）', danger: true, w: 460, text: `${law || '政治資金規正法違反（不記載・虚偽記入）。'}\n発覚すれば議員の職を失うこともある。`, choices: ['やめて、全部書く', '3割を書かない', '半分を書かない'], index: 0, cancel: 0 });
         unreported = [0, 0.3, 0.5][k2] || 0;
       }
       const r = g.holdFundraiser({ unreported });
@@ -4203,9 +4203,8 @@ SECTIONS.news = async (ui) => {
       if (!it) return;
       T(c, it.sub, r.x + 10, r.y + 26, 12, C.dim);
       para(c, it.label, r.x + 10, r.y + 44, r.w - 20, 14, '#ffffff', 20, 10);
-      T(c, '※ゲームの中のシミュレーション', r.x + 10, r.y + r.h - 20, 12, C.faint);
     },
-    tip: () => 'このゲームの政治はシミュレーション。実在の政治家は登場しない',
+    tip: () => '新聞やテレビが伝えた、最近の政治の動き',
   });
 };
 SECTIONS.cabinet = (ui) => ui.open(cabinetView(ui.g));

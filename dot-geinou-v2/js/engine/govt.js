@@ -178,8 +178,8 @@ function realPartyNo(g, p, what) {
   const name = partyNameOf(g, id, false);
   const organ = id === 'jimin' ? `${name}の総務会は` : `${name}は党の機関で`;
   return mine
-    ? `${organ}「${what}」を了承しなかった。（このゲームでは、実在の政党がこうした手段をとる場面は描かない）`
-    : `連立を組む${name}が「${what}」に同意しなかった。（このゲームでは、実在の政党を含む政府がこうした手段をとる場面は描かない）`;
+    ? `${organ}「${what}」を了承しなかった。`
+    : `連立を組む${name}が「${what}」に同意しなかった。閣議で決められない`;
 }
 const partyNameOf = (g, id, short = true) => { try { if (typeof g.partyName === 'function') return g.partyName(id, short); } catch (e) { /* */ } return id || '無所属'; };
 const npcNameOf = (g, id) => { try { if (typeof g.npcName === 'function') return g.npcName(id); } catch (e) { /* */ } return ''; };
@@ -610,27 +610,27 @@ export const ORDINANCE_ORDER = Object.keys(ORDINANCES);
 export const RELIGIOUS_GROUPS = {
   dot_bukkyo: {
     id: 'dot_bukkyo', name: 'ドット仏教会', kana: 'どっとぶっきょうかい', kind: '伝統仏教系（宗派をこえた地域の寺院の会）', members: 12000, fictional: true,
-    desc: 'ドット区とその周りの寺院が、宗派をこえてつくる会（架空）。お盆の合同法要や、年末の炊き出し、ひとり暮らしの高齢者の見守りを続けている。',
+    desc: 'ドット区とその周りの寺院が、宗派をこえてつくる会。お盆の合同法要や、年末の炊き出し、ひとり暮らしの高齢者の見守りを続けている。',
     activities: ['お盆の合同法要', '年末の炊き出し', '高齢者の見守り', '除夜の鐘'], segments: { elderly: 0.6, rural: 0.3 }, endorse: false,
   },
   dot_myojin: {
     id: 'dot_myojin', name: 'ドット明神 氏子会', kana: 'どっとみょうじん うじこかい', kind: '神社の氏子の会', members: 3000, fictional: true,
-    desc: 'ドット区の鎮守の神社（架空）を支える氏子の会。例大祭のみこしと、境内の清掃、子ども会の行事を担う。',
+    desc: 'ドット区の鎮守の神社を支える氏子の会。例大祭のみこしと、境内の清掃、子ども会の行事を担う。',
     activities: ['例大祭のみこし', '境内の清掃', '子ども会の夏祭り'], segments: { elderly: 0.4, selfemployed: 0.4, families: 0.2 }, endorse: false,
   },
   dotzaka_church: {
     id: 'dotzaka_church', name: 'ドット坂キリスト教会', kana: 'どっとざかきりすときょうかい', kind: 'キリスト教系（プロテスタントの小さな教会）', members: 180, fictional: true,
-    desc: 'ドット坂の小さな教会（架空）。日曜の礼拝のほか、こども食堂と、外国人住民の生活相談を開いている。',
+    desc: 'ドット坂の小さな教会。日曜の礼拝のほか、こども食堂と、外国人住民の生活相談を開いている。',
     activities: ['日曜礼拝', 'こども食堂', '外国人住民の生活相談', 'クリスマスの音楽会'], segments: { families: 0.3, urban: 0.3 }, endorse: false,
   },
   wako: {
     id: 'wako', name: '和光修養会', kana: 'わこうしゅうようかい', kind: '新宗教（在家の修養団体・全国組織）', members: 850000, fictional: true,
-    desc: '日々の心の修養と奉仕活動をかかげる全国組織（架空）。選挙では、考えの近い候補者を個別に推薦することがある（特定の政党の支持団体ではない）。宗教団体が政治活動をすること自体は、憲法で禁じられていない。',
+    desc: '日々の心の修養と奉仕活動をかかげる全国組織。選挙では、考えの近い候補者を個別に推薦することがある（特定の政党の支持団体ではない）。宗教団体が政治活動をすること自体は、憲法で禁じられていない。',
     activities: ['朝の修養会', '清掃奉仕', '被災地へのボランティア', '青年部の勉強会'], segments: { elderly: 0.3, families: 0.3, selfemployed: 0.2 }, endorse: true, votePower: 1,
   },
   tenkan: {
     id: 'tenkan', name: '蒼穹の泉', kana: 'そうきゅうのいずみ', kind: '新宗教（小規模）', members: 6000, fictional: true, problem: true,
-    desc: '1970年代にできたとされる小さな宗教団体（架空）。複数の都道府県に施設があるため、所轄庁は文部（科学）大臣。信仰の内容とは別に、一部の信者の家族から「高額な献金を求められた」という相談が寄せられることがある。',
+    desc: '1970年代にできたとされる小さな宗教団体。複数の都道府県に施設があるため、所轄庁は文部（科学）大臣。信仰の内容とは別に、一部の信者の家族から「高額な献金を求められた」という相談が寄せられることがある。',
     activities: ['集会', '機関紙の発行'], segments: {}, endorse: false,
   },
 };
@@ -772,7 +772,7 @@ const VOICE_TEXT = {
     con: ['政府の対応が遅いのでは', '{concern}現場の声をもっと聞いてほしい'],
   },
   war: {
-    pro: ['（もしもの世界）攻撃されたなら守らなければ、という声も', '早く終わってほしい。政府には冷静な判断を'],
+    pro: ['攻撃されたなら守らなければ、という声も', '早く終わってほしい。政府には冷静な判断を'],
     con: ['戦争はやめてほしい。家族が心配', '話し合いで解決する道はないのか', '{concern}物価が上がって暮らしが苦しい'],
   },
   emergency: {
@@ -1718,7 +1718,7 @@ function syncMinistries(g, s) {
   }
 }
 // 夏の人事 (July): the 事務次官 usually serve a year or two; with the 内閣人事局 the cabinet has the last word (picks).
-const AMAKUDARI_ORGS = ['一般財団法人 ドット公益協会', '公益社団法人 全国ドット振興会', '一般社団法人 ドット技術センター', 'ドット保証機構（特殊法人・架空）', '一般財団法人 ドット建設情報研究所'];
+const AMAKUDARI_ORGS = ['一般財団法人 ドット公益協会', '公益社団法人 全国ドット振興会', '一般社団法人 ドット技術センター', 'ドット保証機構（特殊法人）', '一般財団法人 ドット建設情報研究所'];
 function personnelTick(g, s) {
   const d = gdate(g);
   if (d.doy < 60 || num(s.admin.personnelYear) >= d.year) return;
@@ -1755,7 +1755,7 @@ function personnelTick(g, s) {
   if (A.heat >= 55 && Math.random() < 0.35 && (!A.lastScandal || today(g) - A.lastScandal > 200)) {
     A.lastScandal = today(g);
     A.heat = Math.max(0, A.heat - 30);
-    govtNews(g, s, '中央省庁のOBが、所管の業界や関連団体（架空）に次々と再就職していることが報じられ、「天下り」への批判が高まっている', { phone: true, head: '天下り批判' });
+    govtNews(g, s, '中央省庁のOBが、所管の業界や関連団体に次々と再就職していることが報じられ、「天下り」への批判が高まっている', { phone: true, head: '天下り批判' });
     ledgerAdd(g, s, 'admin', { scandal: -3, text: '天下りへの批判' });
     addEvent(g, s, 'amakudari', '天下りへの批判', { segs: { floating: -2, urban: -1, young: -1 } });
   }
@@ -1959,7 +1959,7 @@ function postalStatus(g, s) {
     timeline, pro: POSTAL_PRO, con: POSTAL_CON,
     segments: { pro: ['urban', 'business', 'young', 'floating'], con: ['rural', 'elderly', 'unions'] },
     bill: bill ? { id: bill.id, title: bill.title, stage: bill.stage, key: !!bill.key } : null,
-    note: '民営化の法律の実際の経緯（2005年）は、史実の日付だけを示している（実在の政治家は登場しない）',
+    note: '民営化の法律の実際の経緯（2005年）は、史実の日付だけを示している',
   };
 }
 function postalTick(g, s) {
@@ -1972,7 +1972,7 @@ function postalTick(g, s) {
   if (P.privatized && !P.privatized.real && !P.privatizedNews && now >= ym(P.privatized.year, P.privatized.month)) {
     P.privatizedNews = today(g);
     P.log.push({ year: d.year, month: d.month, text: '郵政が民営化され、持株会社のもとに郵便・窓口・貯金・保険の会社が発足した' });
-    govtNews(g, s, '郵政が民営化され、新しい郵政グループが発足した（ゲームの中の出来事）', { phone: true, head: '郵政民営化' });
+    govtNews(g, s, '郵政が民営化され、新しい郵政グループが発足した', { phone: true, head: '郵政民営化' });
     addEvent(g, s, 'postal', '郵政の民営化', { segs: { urban: 2, business: 2, rural: -2, elderly: -1 } });
     emit(g, 'postal', { stage: 'private' });
   }
@@ -1993,7 +1993,7 @@ function cultTick(g, s) {
   if (C.stage === 0 && day >= num(C.next)) {
     C.stage = 1; C.day = day; C.complaints = irnd(25, 60); C.nextStep = day + irnd(10, 20);
     if (p && p.flags) p.flags.kifuIssue = true;
-    govtNews(g, s, `消費生活センターや弁護士会に、宗教団体「${R.name}」（架空）への高額な献金をめぐる家族からの相談が増えている`, { phone: true, head: '社会' });
+    govtNews(g, s, `消費生活センターや弁護士会に、宗教団体「${R.name}」への高額な献金をめぐる家族からの相談が増えている`, { phone: true, head: '社会' });
     addEvent(g, s, 'religion', `「${R.name}」への高額献金の相談`, { segs: { families: -1 } });
     emit(g, 'religion', { stage: 'complaints', group: 'tenkan' });
     return;
@@ -2070,10 +2070,10 @@ function realPartyTie(g, s, p, R) {
   if (!me) return null;
   const isReal = (id) => !!id && (realParty(id) || !!(p.parties && p.parties[id] && p.parties[id].real));
   const nom = me.candidacy && me.nominations ? me.nominations[me.candidacy] : null;
-  if (isReal(me.party) || isReal(nom)) return `「${R.name}」は、実在の政党に所属する（公認・推薦を受けた）候補者の推薦はしない（このゲームの設定）`;
-  if (me.party && isRulingParty(p, me.party) && realInGovt(p)) return `「${R.name}」は、実在の政党と連立を組む政党の候補者の推薦はしない（このゲームの設定）`;
+  if (isReal(me.party) || isReal(nom)) return `「${R.name}」は、既成の大政党に所属する（公認・推薦を受けた）候補者は推薦しない方針だ`;
+  if (me.party && isRulingParty(p, me.party) && realInGovt(p)) return `「${R.name}」は、既成の大政党と連立を組む政党の候補者は推薦しない方針だ`;
   const A = s.opposition && s.opposition.alliance;
-  if (A && me.party && (A.parties || []).includes(me.party) && (A.parties || []).some(isReal)) return `「${R.name}」は、実在の政党と選挙協力をしている政党の候補者の推薦はしない（このゲームの設定）`;
+  if (A && me.party && (A.parties || []).includes(me.party) && (A.parties || []).some(isReal)) return `「${R.name}」は、既成の大政党と選挙協力をしている政党の候補者は推薦しない方針だ`;
   return null;
 }
 // religionAction kinds and their govtRefusal kinds (one check for both: the UI never guesses).
@@ -2155,7 +2155,7 @@ function religionActionImpl(g, s, groupId, kind, opts = {}) {
     const pts = Math.round(12 + num(st.relation) / 8) * num(R.votePower, 1);
     camp.points = num(camp.points) + pts;
     s.religion.endorsements.push({ day, group: groupId, election: e.id, points: pts });
-    govtNews(g, s, `「${R.name}」（架空）が、${e.label}で${g.state.name}候補を推薦した`, { politics: true });
+    govtNews(g, s, `「${R.name}」が、${e.label}で${g.state.name}候補を推薦した`, { politics: true });
     addEvent(g, s, 'religion_politics', '宗教団体が候補者を推薦', { segs: { elderly: 0.5, families: 0.3, floating: -0.8, young: -0.5 } });
     return { ok: true, points: pts, text: `「${R.name}」から推薦をもらった（選挙運動の力 +${pts}）。宗教団体が選挙で候補者を応援すること自体は憲法で禁じられていないが、「組織票に頼るのか」という声もある。` };
   }
@@ -2200,7 +2200,7 @@ function endorsementsTick(g, s) {
     E.withdrawn = today(g);
     const camp = p.me.campaign;
     if (camp && camp.election === E.election) camp.points = Math.max(0, num(camp.points) - num(E.points));
-    govtNews(g, s, `「${R.name}」（架空）は、${e.label}での${g.state.name}候補の推薦を取り下げた（候補者の政党が実在の政党と連携したため。このゲームの設定）`, { politics: true });
+    govtNews(g, s, `「${R.name}」は、${e.label}での${g.state.name}候補の推薦を取り下げた（候補者の政党が既成の大政党と連携したため）`, { politics: true });
   }
 }
 function religionStatus(g, s) {
@@ -2210,14 +2210,14 @@ function religionStatus(g, s) {
   const law = [RELIGION_LAW.art20, RELIGION_LAW.art89, RELIGION_LAW.politicalActivity, RELIGION_LAW.shokatsu, RELIGION_LAW.dissolution];
   if (reportPowerOK(g, s) || (s.religion.reportPowerFrom && d.year >= 1995)) law.splice(4, 0, RELIGION_LAW.reform1995);
   if (s.religion.kifuLaw && s.religion.kifuLaw.real) law.push(RELIGION_LAW.kifu2022);
-  else if (s.religion.kifuLaw) law.push('寄附の不当な勧誘を禁じる法律が成立した（ゲームの中の出来事）。');
+  else if (s.religion.kifuLaw) law.push('寄附の不当な勧誘を禁じる法律が成立した。');
   const STAGE = ['表に出た問題はない', '被害の相談が増えている', '国会・報道で取り上げられている', '所轄庁が報告徴収・質問権を行使', '解散命令の請求 → 裁判所が審理中', '解散命令（法人格を失い清算へ）', '裁判所の判断が出た（請求は退けられた）'];
   return {
     groups: RELIGION_ORDER.map((id) => ({ ...RELIGIOUS_GROUPS[id], ...s.religion.groups[id] })),
     law, reportPower: reportPowerOK(g, s), kifuLaw: !!(p && p.flags && p.flags.kifuLaw),
     cult: { group: 'tenkan', stage: C.stage, label: STAGE[C.stage] || '', complaints: Math.round(num(C.complaints)), questions: num(C.questions), requested: C.requested, decided: C.decided },
     endorsements: s.religion.endorsements.slice(-10),
-    note: '宗教団体はすべて架空。信仰そのものではなく、違法な勧誘・献金の強要が問題として扱われる',
+    note: '信仰そのものではなく、違法な勧誘・献金の強要が問題として扱われる',
   };
 }
 
@@ -2569,7 +2569,7 @@ function generalVoices(g, s, n = 4) {
 
 // ================================================================ DEMOS
 const DEMO_SIZE = { small: [500, 3000], medium: [5000, 20000], large: [30000, 80000] };
-const ORGANISERS = (year) => ['市民団体（架空）', '労働組合の連合体（架空）', '学生のグループ（架空）', '子育て世代の会（架空）', ...(year >= 2010 ? ['SNSで呼びかけた有志'] : ['地域の住民の会（架空）'])];
+const ORGANISERS = (year) => ['市民団体', '労働組合の連合体', '学生のグループ', '子育て世代の会', ...(year >= 2010 ? ['SNSで呼びかけた有志'] : ['地域の住民の会'])];
 const qd = (c) => (/^「/.test(String(c)) ? String(c) : `「${c}」`);
 function demoLabel(def, against) {
   const C = DEMO_CAUSES[against] || DEMO_CAUSES.other;
@@ -2655,7 +2655,7 @@ function demoAuto(g, s, trigger) {
     const p = pol(g);
     const a = p ? num(p.cabinet.approval, 45) : 45;
     if (a < 22 && Math.random() < 0.08) def = { against: 'government', segment: 'floating', size: irnd(3000, 20000) };
-    else if (a > 62 && Math.random() < 0.02) def = { against: 'rally', segment: 'elderly', size: irnd(1000, 6000), organiser: '支持者の会（架空）' };
+    else if (a > 62 && Math.random() < 0.02) def = { against: 'rally', segment: 'elderly', size: irnd(1000, 6000), organiser: '支持者の会' };
   }
   if (!def) return null;
   s.demos.lastAuto = day;
@@ -2859,7 +2859,7 @@ const REASON_LABEL = {
 };
 function approvalBreakdownImpl(g, s) {
   const p = pol(g);
-  const out = { approval: 0, disapproval: 0, reasons: [], bySegment: [], weekly: [], support: [], none: 0, note: 'シミュレーションの推計（実在の世論調査ではない）' };
+  const out = { approval: 0, disapproval: 0, reasons: [], bySegment: [], weekly: [], support: [], none: 0, note: '層ごとの推計' };
   if (!p || !p.cabinet) return out;
   const C = p.cabinet;
   const A = num(C.approval, 45);
@@ -2940,7 +2940,7 @@ function seatDetailsImpl(g, s) {
   return {
     // ねじれ from the same rows (the ruling parties hold the 衆院 but not the 参院), never a stale flag
     shugi, sangi, coalition: ruling.map((id) => ({ id, name: partyNameOf(g, id, false) })), nejire: !!(shugi.rulingMajority && !sangi.rulingMajority),
-    note: '会派名は、確認できた実在の会派名（自民・民主）のほかは党名で示す。数はシミュレーション',
+    note: '会派名は、確認できた会派名（自民・民主）のほかは党名で示す',
   };
 }
 
@@ -3063,7 +3063,7 @@ function onEnacted(g, s, d) {
   if (L.policy === 'postal_privatization' && !s.postal.law) {
     s.postal.law = { day: today(g), year: yr.year, month: yr.month };
     s.postal.privatized = { year: yr.year + 2, month: yr.month };
-    s.postal.log.push({ year: yr.year, month: yr.month, text: `郵政民営化法が成立（ゲームの中の出来事）。${yr.year + 2}年${yr.month}月に民営化` });
+    s.postal.log.push({ year: yr.year, month: yr.month, text: `郵政民営化法が成立。${yr.year + 2}年${yr.month}月に民営化` });
     addEvent(g, s, 'postal', '郵政民営化法の成立', { segs: L.segments });
     emit(g, 'postal', { stage: 'law' });
   }
@@ -3101,7 +3101,7 @@ function onElection(g, s, d) {
 function watchOthers(g, s) {
   const W = s.watch;
   const rid = regimeId(g);
-  if (W.regime && W.regime !== rid && (rid === 'emergency' || rid === 'dictatorship')) addEvent(g, s, rid, rid === 'emergency' ? '緊急事態' : '（もしも）独裁体制', { segs: { young: -2, urban: -1.5, elderly: 0.5 } });
+  if (W.regime && W.regime !== rid && (rid === 'emergency' || rid === 'dictatorship')) addEvent(g, s, rid, rid === 'emergency' ? '緊急事態' : '独裁体制', { segs: { young: -2, urban: -1.5, elderly: 0.5 } });
   W.regime = rid;
   let dis = null;
   try { dis = typeof g.disaster === 'function' ? g.disaster() : null; } catch (e) { dis = null; }
@@ -3110,7 +3110,7 @@ function watchOthers(g, s) {
   W.disaster = key;
   let war = null;
   try { war = typeof g.war === 'function' ? g.war() : null; } catch (e) { war = null; }
-  if (war && !W.war) addEvent(g, s, 'war', '（もしも）架空の国との戦争', { segs: { young: -2, families: -2, elderly: 0.3 } });
+  if (war && !W.war) addEvent(g, s, 'war', '係争地をめぐる戦争', { segs: { young: -2, families: -2, elderly: 0.3 } });
   W.war = !!war;
   let pf = null;
   try { pf = typeof g.pressFreedom === 'function' ? num((g.pressFreedom() || {}).value, null) : null; } catch (e) { pf = null; }
@@ -3399,7 +3399,7 @@ function budgetImpl(g, s) {
     calendar: cal, draft: budgetDraftImpl(g, s), requests: S.requests ? { ...S.requests } : null, decided: S.decided ? { fy: S.decided.fy, total: S.decided.total, by: S.decided.by } : null,
     supplementary: S.supplementary.slice(-10), reserve: { total: r2(det.yobi), used: r2(used), left: reserveLeft(g, s), list: (S.reserve.used || []).slice() },
     history: S.history.map((h) => ({ ...h })), taxDelta: r1(G2.taxDelta), calibrated: num(G2.cal, 1) !== 1,
-    note: '一般会計（兆円）。開始年度の総額と主な費目は財務省の当初予算にあわせ、その後はシミュレーション',
+    note: '一般会計（兆円）。開始年度の総額と主な費目は財務省の当初予算にあわせ、その後は政策と景気で変わる',
   };
 }
 function budgetDraftImpl(g, s) {
@@ -3490,7 +3490,7 @@ const methods = {
     const A = s.admin;
     const items = [
       { id: 'reorg2001', label: d.year >= 1998 ? '中央省庁の再編（1府22省庁 → 1府12省庁）' : '中央省庁の再編', done: d.year >= 2001, when: '2001年1月6日', text: d.year >= 2001 ? '大蔵省は財務省に、厚生省と労働省は厚生労働省に、郵政省・自治省・総務庁は総務省になった。' : '行政改革の議論が続いている。' },
-      { id: 'amakudariBan', label: '再就職あっせんの禁止（天下りの規制）', done: !!A.reforms.amakudariBan, when: A.reforms.amakudariBan ? `${A.reforms.amakudariBan.year}年` : '未', text: A.reforms.amakudariBan && A.reforms.amakudariBan.real ? '2007年の国家公務員法改正で、各府省による再就職のあっせんが禁止された。' : A.reforms.amakudariBan ? '天下りを規制する法律が成立した（ゲームの中の出来事）。' : '各府省がOBの再就職をあっせんしている。規制の法律（政策「天下り（再就職あっせん）の規制」）で変えられる。' },
+      { id: 'amakudariBan', label: '再就職あっせんの禁止（天下りの規制）', done: !!A.reforms.amakudariBan, when: A.reforms.amakudariBan ? `${A.reforms.amakudariBan.year}年` : '未', text: A.reforms.amakudariBan && A.reforms.amakudariBan.real ? '2007年の国家公務員法改正で、各府省による再就職のあっせんが禁止された。' : A.reforms.amakudariBan ? '天下りを規制する法律が成立した。' : '各府省がOBの再就職をあっせんしている。規制の法律（政策「天下り（再就職あっせん）の規制」）で変えられる。' },
       { id: 'jinjikyoku', label: '内閣人事局（幹部人事の一元管理）', done: !!A.reforms.jinjikyoku, when: A.reforms.jinjikyoku ? (A.reforms.jinjikyoku.real ? '2014年5月30日' : `${A.reforms.jinjikyoku.year}年`) : '未', text: A.reforms.jinjikyoku ? '各府省の幹部の人事を、総理と官房長官のもとで一元的に管理する（政治主導が進む一方、「忖度」への懸念も）。' : '幹部の人事は、実際には各府省が決めている。' },
     ];
     return { items, amakudari: { heat: Math.round(num(A.amakudari.heat)), cases: A.amakudari.cases.slice(0, 10) }, sontaku: Math.round(num(A.sontaku)), picks: num(A.picks), pro: ['政治主導で縦割りをなくし、国民に選ばれた政治家が責任をもって決める'], con: ['官僚が政治家の顔色をうかがい、専門家としての意見を言いにくくなる'] };

@@ -14,7 +14,7 @@
 // All ids / flags are prefixed with "horipro_". Every character is fictional.
 
 import { registerPlace } from '../engine/map.js';
-import { LOOKS, charSheet, drawChar } from '../engine/sprites.js';
+import { LOOKS, charSheetHD, drawChar } from '../engine/sprites.js';
 import { defineTile, R, P, speckle, disc, shadowEllipse } from '../engine/tiles.js';
 import { registerItem } from '../engine/state.js';
 import { registerSong } from '../engine/audio.js';
@@ -662,7 +662,7 @@ function standee(x, y, look, bg, lines) {
   return {
     type: 'prop', x, y, w: 1, h: 1, text: lines,
     draw(ctx, sx, sy) {
-      if (!sheet) sheet = charSheet(look);
+      if (!sheet) sheet = charSheetHD(look);
       const X = Math.round(sx), Y = Math.round(sy);
       ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(X + 1, Y + 14, 14, 2);
       ctx.fillStyle = '#8a5a33'; ctx.fillRect(X + 4, Y + 13, 8, 2);

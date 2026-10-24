@@ -3345,7 +3345,7 @@ async function crimeOffer(g, ev) {
   const k = await ask(g, null, `（${CRIMES[crime].name}…犯罪だ。\nどうする…？）`, ['断る', '引き受ける']);
   if (k === 0) {
     await say(g, SP.collector, '…そうか。後悔するなよ。');
-    await narrate(g, '（ひとりで抱えこんではいけない。\n警察か弁護士に相談しよう…）');
+    await narrate(g, '（取り立ては、これからもっと厳しくなるだろう…）');
     l.harass += 1;
     await flow.end();
     return;
@@ -3707,7 +3707,7 @@ registerSmokingRule('minato', (g) => (since(g, 2014, 7)
   ? { ok: false, area: '港区', law: '港区の喫煙マナー条例（みなとタバコルール）', fine: 0, patrol: 0.2, smokingArea: true }
   : { ok: true, area: 'テレビ局エリア' }));
 registerSmokingRule('machi', (g) => (since(g, 2020, 4)
-  ? { ok: false, area: 'ドット商店街', law: '（架空の）ドット区路上喫煙防止条例', fine: 2000, patrol: 0.2, smokingArea: true }
+  ? { ok: false, area: 'ドット商店街', law: 'ドット区路上喫煙防止条例', fine: 2000, patrol: 0.2, smokingArea: true }
   : { ok: true, area: 'ドット商店街' }));
 const JUSTICE_PLACE_IDS = new Set(['keisatsu', 'kensatsu', 'saibansho', 'keimusho']);
 function defaultSmokingRule(g, pid, def) {

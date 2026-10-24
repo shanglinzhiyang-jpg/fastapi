@@ -10,7 +10,7 @@
 //   ★2000 + 松竹芸能 : 冠ラジオ番組スタート！ (celebration with a kusudama)
 
 import { registerPlace } from '../engine/map.js';
-import { LOOKS, charSheet } from '../engine/sprites.js';
+import { LOOKS, charSheetHD, drawSeated } from '../engine/sprites.js';
 import { defineTile, R, P, speckle } from '../engine/tiles.js';
 import { registerItem } from '../engine/state.js';
 import { registerSong } from '../engine/audio.js';
@@ -525,18 +525,10 @@ function pdisc(ctx, cx, cy, r, col, side = 0) {
   }
 }
 
-// Audience member sitting in a theater seat (seen from behind).
+// Audience member sitting in a theater seat (seen from behind, or turned to talk):
+// the map's own seated drawing with the seat tile under them (HD sheet).
 function seated(ctx, x, y, g, e) {
-  x = Math.round(x); y = Math.round(y);
-  const sheet = e.sheet || charSheet(e.look || {});
-  const img = (sheet[e.dir] || sheet.down)[0];
-  ctx.drawImage(img, 0, 0, 16, 13, x, y - 3, 16, 13);
-  ctx.fillStyle = '#7a1520';
-  ctx.fillRect(x + 1, y + 8, 14, 6);
-  ctx.fillStyle = '#c8323f';
-  ctx.fillRect(x + 2, y + 9, 12, 3);
-  ctx.fillStyle = '#e05462';
-  ctx.fillRect(x + 2, y + 9, 12, 1);
+  drawSeated(ctx, e.sheet || charSheetHD(e.look || {}), e.dir, x, y, g.map.seatOf(e.x, e.y));
 }
 
 let quiet = false; // suppresses the room banner when a cutscene reloads a room

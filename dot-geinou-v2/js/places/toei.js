@@ -11,7 +11,7 @@
 
 import { registerPlace } from '../engine/map.js';
 import { defineTile, R, P, speckle, pix } from '../engine/tiles.js';
-import { LOOKS, charSheet, drawChar } from '../engine/sprites.js';
+import { LOOKS, charSheetHD, drawChar } from '../engine/sprites.js';
 import { registerItem } from '../engine/state.js';
 import { registerSong } from '../engine/audio.js';
 import { text } from '../engine/draw.js';
@@ -758,7 +758,7 @@ const frameOf = (e) => (e.moving ? [1, 0, 2, 0][Math.floor(e.anim / 8) % 4] : 0)
 
 // A samurai holding a (bamboo) katana: used while the rehearsal plays.
 function swordSprite(look) {
-  const sheet = charSheet(look);
+  const sheet = charSheetHD(look);
   const BL = '#eef2f8', BS = '#8e98ac', TB = '#c9a227', HD = '#2a1a10';
   return (ctx, x, y, g, e) => {
     const X = Math.round(x), Y = Math.round(y), d = e.dir;
@@ -786,12 +786,12 @@ function swordSprite(look) {
 
 // The fallen samurai: the standing sprite rotated 90° (head to the left).
 function lyingSprite(look) {
-  const sheet = charSheet(look);
+  const sheet = charSheetHD(look);
   return (ctx, x, y) => {
     ctx.save();
     ctx.translate(Math.round(x) + 8, Math.round(y) + 9);
     ctx.rotate(-Math.PI / 2);
-    ctx.drawImage(sheet.down[0], -8, -10);
+    ctx.drawImage(sheet.down[0], -8, -10, 16, 20);
     ctx.restore();
   };
 }
@@ -806,12 +806,12 @@ const COSTUMES = {
 function wearCostume(g, key) {
   const p = g.map.player;
   const look = COSTUMES[key].look({ ...(g.state.look || {}) });
-  const sheet = charSheet(look);
+  const sheet = charSheetHD(look);
   p.toeiCostume = key;
   p.sprite = (ctx, x, y, gg, e) => {
     if (!gg.map || gg.map.placeId !== 'toei') {
       e.sprite = null; e.toeiCostume = null;
-      drawChar(ctx, charSheet(gg.state.look || {}), e.dir, frameOf(e), x, y);
+      drawChar(ctx, charSheetHD(gg.state.look || {}), e.dir, frameOf(e), x, y);
       return;
     }
     drawChar(ctx, sheet, e.dir, frameOf(e), x, y);

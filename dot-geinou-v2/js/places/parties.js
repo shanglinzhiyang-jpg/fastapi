@@ -368,7 +368,7 @@ async function partyInfo(g, pt) {
   if (pt.real && def) pages.push(...paged(def.desc));
   else if (pt.isPlayers || /^my\d+$/.test(pt.id)) pages.push(...paged(`${pt.desc || ''}`));
   else pages.push(...paged(`${def ? def.desc : pt.desc || ''}`));
-  pages.push(`${leaderTitle(pt)}は${leader}${pt.leader === 'player' ? '（あなた）' : '氏'}。\n衆議院${s.shugi}人・参議院${s.sangi}人、支持率${sup}%。${pt.real ? '' : '\n（この党は架空の政党です）'}`);
+  pages.push(`${leaderTitle(pt)}は${leader}${pt.leader === 'player' ? '（あなた）' : '氏'}。\n衆議院${s.shugi}人・参議院${s.sangi}人、支持率${sup}%。`);
   await g.say(pages, who(STAFF.recep));
 }
 async function joinParty(g, pt) {
@@ -572,7 +572,7 @@ async function seichoTalk(g, npc, hq) {
       const names = (pt.platform || []).filter((id) => POLICIES[id]).map((id) => `・${POLICIES[id].name.replace(/（[^）]*）/g, '').slice(0, 20)}`);
       const pages = [];
       for (let k = 0; k < names.length; k += 3) pages.push(names.slice(k, k + 3).join('\n'));
-      await g.say(pages.length ? [`${pt.name}の主な政策です。`, ...pages, pt.real ? '（シミュレーション上の政策の傾向です）' : ''].filter(Boolean) : '公約は、まだ決まっていません。', S);
+      await g.say(pages.length ? [`${pt.name}の主な政策です。`, ...pages].filter(Boolean) : '公約は、まだ決まっていません。', S);
     } else if (i === 1) await proposePolicy(g, pt, S);
     else if (i === 2) {
       if (!isMember(g, pt) || !isNational(g)) { await g.say('勉強会は、党所属の国会議員の集まりです。', S); continue; }

@@ -95,11 +95,13 @@ export class MessageScene {
   draw(ctx, g) {
     const by = this.top ? 8 : BOX.y;
     const name = this.opts.name;
+    let tag = null; // the name tag's box: a wide choice list must not cover it
     if (name) {
       const face = this.opts.look || this.opts.face ? 38 : 0;
       const nh = face ? 34 : 28;
       const nw = Math.max(80, measure(ctx, name, FS) + 26 + face);
       const ny = this.top ? by + BOX.h - 2 : by - nh + 2;
+      tag = { x: BOX.x, y: ny, w: nw, h: nh };
       panel(ctx, BOX.x, ny, nw, nh, { bg: this.opts.nameBg || '#2a3a7a' });
       if (this.opts.face) {
         // content face drawers draw 16x12 v1 pixels: show them at 2x
@@ -124,7 +126,7 @@ export class MessageScene {
     if (this.shown >= total && !this.choice && !(this.opts.choices && this.page === this.pages.length - 1)) {
       downArrow(ctx, BOX.x + BOX.w - 22, by + BOX.h - 16, this.t);
     }
-    if (this.choice) this.choice.draw(ctx, g, this.top ? by + BOX.h + 6 : by - 6, this.top);
+    if (this.choice) this.choice.draw(ctx, g, this.top ? by + BOX.h + 6 : by - 6, this.top, tag);
   }
 }
 
@@ -147,12 +149,14 @@ export class ChoiceBox {
     if (inp.pressed('a') && this.t > 3) { audio.sfx('ok'); this.onPick(this.idx); return; }
     if (inp.pressed('b') && this.cancel != null) { audio.sfx('cancel'); this.onPick(this.cancel); }
   }
-  // bottomY: the edge the box hangs from (its bottom, or its top when below = true)
-  draw(ctx, g, bottomY, below = false) {
+  // bottomY: the edge the box hangs from (its bottom, or its top when below = true);
+  // avoid: a box to keep clear of (the speaker's name tag) when the list is wide enough to reach it
+  draw(ctx, g, bottomY, below = false, avoid = null) {
     const n = this.choices.length;
     const w = Math.min(SW - 24, Math.max(...this.choices.map((c) => measure(ctx, c, FS))) + 44);
     const h = n * ROW + 14;
     const x = SW - w - 12;
+    if (avoid && x < avoid.x + avoid.w + 4) bottomY = below ? Math.max(bottomY, avoid.y + avoid.h + 4) : Math.min(bottomY, avoid.y - 4);
     const y = below ? Math.min(SH - h - 4, bottomY) : Math.max(4, bottomY - h);
     panel(ctx, x, y, w, h);
     this.choices.forEach((c, i) => {
@@ -195,7 +199,7 @@ export class ListScene {
     const head = this.title ? 34 : 14;
     const bottom = this.describe ? BOX.y + 10 - 6 : SH - 6;
     // a long list is pulled up to show more rows, but never over the map's HUD (it shows fewer rows instead)
-    const hud = g && g.map && g.scenes[0] === g.map && g.state && !g.scenes.some((s) => s.hidesHud) ? HUD_H + 4 : 4;
+    const hud = g && g.map && !g.hudOut && g.scenes[0] === g.map && g.state && !g.scenes.some((s) => s.hidesHud) ? HUD_H + 4 : 4;
     const y = Math.max(hud, Math.min(this.y, bottom - head - Math.min(9, this.items.length || 1) * ROW));
     const rows = Math.max(1, Math.min(9, this.items.length || 1, Math.floor((bottom - y - head) / ROW)));
     const top = Math.max(0, Math.min(this.idx - rows + 1, this.items.length - rows));
@@ -282,7 +286,7 @@ function needGauge(ctx, x, y, label, frac, color, alert, blink) {
 }
 
 export function drawToasts(ctx, g) {
-  let y = HUD_H + 10;
+  let y = g && g.hudOut ? 10 : HUD_H + 10;
   for (const t of g.toasts) {
     const a = t.t < 10 ? t.t / 10 : t.life - t.t < 15 ? (t.life - t.t) / 15 : 1;
     ctx.globalAlpha = clamp(a, 0, 1);

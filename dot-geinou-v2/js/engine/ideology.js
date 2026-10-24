@@ -792,13 +792,13 @@ export const REAL_PARTY_IDEOLOGY = {
       { text: '日本らしい日本の保守主義', source: '綱領（2010年）', year: 2010 },
       { text: '常に進歩を目指す保守政党', source: '綱領（2010年）', year: 2010 },
     ],
-    note: '党の立党宣言・綱領の言葉から分類（ゲームの判断ではない）',
+    note: '党の立党宣言・綱領の言葉から分類',
     sources: [S('自由民主党 立党宣言・綱領', 'https://www.jimin.jp/aboutus/declaration/'), S('自由民主党 党のあゆみ（保守合同）', 'https://www.jimin.jp/aboutus/history/1955-1956.html')],
   },
   minshu: {
     ids: ['moderatism', 'democracy'],
     quotes: [{ text: '民主中道', source: '基本理念（1998年）', year: 1998 }],
-    note: '党の基本理念の言葉から分類（ゲームの判断ではない）',
+    note: '党の基本理念の言葉から分類',
     sources: [S('民主党 (日本 1998-2016)（Wikipedia）', 'https://ja.wikipedia.org/wiki/%E6%B0%91%E4%B8%BB%E5%85%9A_(%E6%97%A5%E6%9C%AC_1998-2016)'), S('民主党（コトバンク）', 'https://kotobank.jp/word/%E6%B0%91%E4%B8%BB%E5%85%9A-182034')],
   },
 };
@@ -990,7 +990,7 @@ function partyIdeo(g, partyId) {
     return { kind: 'party', id: partyId, name, short, real, axes, label: declared.map(ideologyName).join('・'), ideologyIds: declared, basis: 'declared', quotes: [], note: '党がかかげる理念' };
   }
   const n = nearestIdeology(computed, { pool: PARTY_SAFE });
-  return { kind: 'party', id: partyId, name, short, real, axes: computed, label: n.name, ideologyIds: [n.id], basis: 'platform', quotes: [], note: '政策・綱領から見た近い思想（架空の政党）' };
+  return { kind: 'party', id: partyId, name, short, real, axes: computed, label: n.name, ideologyIds: [n.id], basis: 'platform', quotes: [], note: '政策・綱領から見た近い思想' };
 }
 // A stable pseudo-random number in [-1, 1) from a string.
 function hashUnit(str) {
@@ -1070,7 +1070,7 @@ export function classifyRegime(stateLike = {}) {
   const st = stateLike && typeof stateLike.regime === 'function' ? gatherRegimeState(stateLike) : (stateLike || {});
   const kind = regimeKind(st.regime || st.kind) || 'democracy';
   const press = st.press != null ? num(pressValue(st.press), 100) : st.pressFreedom != null ? num(pressValue(st.pressFreedom), 100) : 100;
-  if (kind === 'fallen') return { id: 'fallen', label: '体制崩壊', level: 3, score: 0, markers: 0, reasons: ['独裁体制が崩れた'], why: '独裁体制が崩れた', news: null, fiction: '（もしもの世界のシミュレーション）' };
+  if (kind === 'fallen') return { id: 'fallen', label: '体制崩壊', level: 3, score: 0, markers: 0, reasons: ['独裁体制が崩れた'], why: '独裁体制が崩れた', news: null, fiction: '' };
   const reasons = [];
   let score = 0, markers = 0;
   const opp = anyOf(st, 'oppositionBanned', 'opposition', 'partiesBanned');
@@ -1107,7 +1107,7 @@ export function classifyRegime(stateLike = {}) {
   const news = level === 3 ? `海外の研究者や新聞は、いまの体制を「ファシズム的」だと強く批判している（${why}）。`
     : level === 2 ? `海外の研究者や新聞は、いまの体制を「権威主義的」だと評している（${why}）。`
       : level === 1 ? `報道の自由などの後退を心配する声が出ている（${why}）。` : null;
-  return { id, label, level, score, markers, reasons, why, news, fiction: kind !== 'democracy' ? '（もしもの世界のシミュレーション）' : '' };
+  return { id, label, level, score, markers, reasons, why, news, fiction: '' };
 }
 
 // ================================================================ the 思想診断 quiz
@@ -1302,7 +1302,7 @@ function ideologyMorning(g) {
     s.last.press = pf;
   }
   const war = warActive(safeCall(g, 'war'));
-  if (war && !s.last.war && meLeads) nudge(g, { world: 1, power: 0.6 }, 0.15, '戦争を始めた（もしもの世界）');
+  if (war && !s.last.war && meLeads) nudge(g, { world: 1, power: 0.6 }, 0.15, '戦争を始めた');
   s.last.war = war;
   if (kind || pf != null) {
     const c = classifyRegime(g);
@@ -1375,7 +1375,7 @@ const methods = {
     if (!p) return { ok: false, why: '政治の機能が読み込まれていない' };
     const pt = p.parties[partyId];
     if (!pt) return { ok: false, why: 'その政党はない' };
-    if (pt.real || (partyDef(partyId) && partyDef(partyId).real)) return { ok: false, why: '実在の政党の理念は、その党の綱領で決まっている' };
+    if (pt.real || (partyDef(partyId) && partyDef(partyId).real)) return { ok: false, why: 'この党の理念は、党の綱領で決まっている' };
     if (!(pt.isPlayers || pt.leader === 'player')) return { ok: false, why: '党の理念を決められるのは党首だけ' };
     const list = [...new Set((Array.isArray(ids) ? ids : [ids]).filter(Boolean))];
     if (!list.length || list.length > 2) return { ok: false, why: '理念は1つか2つえらぶ' };
