@@ -881,17 +881,16 @@ export function drawCharPart(ctx, sheet, dir, frame, sx, sy, sw, sh, dx, dy, dw 
 }
 
 // Someone sitting on the tile whose top-left is (x, y) (units, like drawChar).
-// seat = { img, top } is the seat under them (its tile image, 16x16 units, and the
-// row in units where the seat's top edge starts) or null.
-//  - seen from behind ('up') in a seat with a back (its top edge in the upper part of
-//    the tile): the head and shoulders rise above the seat back and the seat is drawn
-//    again over the rest of the body (theatre / studio / gallery seats, sofas seen from
-//    behind);
-//  - otherwise (facing you or sideways, or a low seat: cushion, stool, bench without a
-//    back): the seat stays under them; the body sits 3 units lower and ends at the lap.
+// seat = { img, top, low } is the seat under them (its tile image, 16x16 units, the row
+// in units where the seat's top edge starts, and low: a cushion or stool) or null.
+//  - seen from behind ('up') in a seat with a back: the head and shoulders rise above
+//    the seat back and the seat is drawn again over the rest of the body (theatre /
+//    studio / gallery seats, benches and sofas seen from behind);
+//  - otherwise (facing you or sideways, or a low seat): the seat stays under them; the
+//    body sits 3 units lower and ends at the lap.
 export function drawSeated(ctx, sheet, dir, x, y, seat = null) {
   x = Math.round(x); y = Math.round(y);
-  if (dir === 'up' && seat && seat.top < 7) {
+  if (dir === 'up' && seat && !seat.low) {
     const st = Math.max(0, Math.round(seat.top));
     drawCharPart(ctx, sheet, 'up', 0, 0, 0, SW, 16, x, y + st - 12, SW, 16);
     const k = seat.img.width / 16;

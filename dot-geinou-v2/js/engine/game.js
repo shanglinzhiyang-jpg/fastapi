@@ -236,8 +236,10 @@ export class Game {
       hc.imageSmoothingEnabled = false;
       hc.clearRect(0, 0, SW, HUD_H);
       const m = this.map;
-      if (m && m.room && this.scenes.indexOf(m) >= from && m.hudShown(this)) {
+      if (m && m.room && this.scenes.indexOf(m) >= from && m.hudShown(this) && this.fade < 1) {
+        hc.globalAlpha = clamp(1 - this.fade, 0, 1); // fades with the screen
         try { drawHud(hc, this); } catch (e) { console.error(e); }
+        hc.globalAlpha = 1;
       }
     }
   }

@@ -702,6 +702,8 @@ export class MapScene {
     this.slideFrame = g.frame;
     const cur = this.slide || 0;
     this.slide = want > cur ? Math.min(want, cur + 3 * dt) : Math.max(want, cur - 3 * dt);
+    // another scene drawn over the map (a movie, a camera viewfinder ...) may use cam: no slide
+    if (!want && g.top !== this && !(g.top instanceof MessageScene)) this.slide = 0;
     const camY = cam.y;
     cam.y = camY + Math.round(this.slide);
     ctx.save();
@@ -765,7 +767,7 @@ export class MapScene {
       const frame = def.frames > 1 ? Math.floor(this.g.frame / def.speed) % def.frames : 0;
       const variant = def.variants > 1 ? Math.floor(hash2(x, y, 7) * def.variants) : 0;
       const img = tileImageHD(id, frame, variant);
-      return { img, top: seatTop(id, img) };
+      return { img, top: seatTop(id, img), low: LOW_SEAT_RE.test(id) };
     }
     return null;
   }

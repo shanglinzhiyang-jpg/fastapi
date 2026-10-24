@@ -834,7 +834,13 @@ tools/                ヘッドレスブラウザでのテストツール
 - 部屋の `drawUnder / drawOver(ctx, g, cam)` と prop の `draw(ctx, sx, sy, g, e)` はユニット座標（2倍の変換の中）。
   ネイティブ HD の絵は、2倍の大きさのキャンバスに描いて `ctx.drawImage(cv, x, y, cv.width / 2, cv.height / 2)` で置きます
   （`props.js` の `bake` / `blit`、家具の `paint` がこの方式）。0.5 ユニット = 画面の1ピクセル
-- 画面に収まる小さな部屋は、上の壁が HUD に隠れないよう少し下にずらして表示されます（大きい部屋は `topPad`）
+- 画面に収まる小さな部屋は、上の壁が HUD に隠れないよう少し下にずらして表示されます。画面より大きい建物の部屋は、
+  プレイヤーが上のほうにいる時カメラが上端より `topPad`（既定 24 ユニット、`0` で無効。街は 0）まで上がり、HUD が看板やロゴを隠しません
+- 縦持ちのスマホ（タッチ・縦長）では HUD はゲーム画面の上の専用バー（`#hudbar`、`g.hudOut`）に描かれ、マップには重なりません
+- メッセージ窓（下）が開いている間、話している NPC（名前の一致、なければ話しかけた相手）とプレイヤーが窓に隠れないよう、
+  カメラが下へ少しスライドします（部屋の下端より最大 44 ユニットまで）
+- 座席タイル（`seat` `sofa` `bench` `chair` `stool` `couch` `hina` `gallery` `zabuton` を名前に含む固いタイル、と歩ける座布団・スツール。
+  タイル定義の `seat: true / false` で明示も可）の上で止まっている人は自動で座って描かれます（`drawSeated`：後ろ向きは頭と肩が背もたれの上に出る）
 
 ### 場所（place）の定義
 
@@ -862,7 +868,7 @@ registerPlace({
       warps: [ { x: 6, y: 10, to: 'exit' }, { x: 13, y: 2, room: 'studio', tx: 2, ty: 8, dir: 'up' } ],
       events: [ { x: 3, y: 4, on: 'action', run: async (g) => { ... } } ],
       onEnter: async (g) => { ... },     // 部屋に入るたびに実行
-      topPad: 24,                        // 大きい部屋：カメラが上端より少し上まで動ける（HUD対策）
+      topPad: 24,                        // 大きい部屋：カメラが上端より少し上まで動ける（HUD対策。建物は既定で 24、0 で無効）
       bgm: 'studio',                     // 部屋ごとに変えたい場合
       bg: '#000', drawUnder(ctx, g, cam) {}, drawOver(ctx, g, cam) {},  // 背景色・自由描画（ユニット座標）
     },
@@ -923,6 +929,9 @@ defineTile('myplace_sofa', {
 ### キャラクター
 
 - `charSheetHD(look)` → `{ down, up, left, right }` 各3フレームの 32x40 キャンバス（キャッシュあり）。マップ・会話の顔（`drawFaceHD(ctx, look, x, y, scale)`）・演出で使う
+- マップの独自スプライト（npc の `sprite(ctx, x, y, g, e)`）も HD シートを使います。フレームの一部を切り出すときは
+  `drawCharPart(ctx, sheet, dir, frame, sx, sy, sw, sh, dx, dy)`（元の矩形は 16x20 の 1x 座標で指定、どちらのシートでも正しく切れる）。
+  HD フレームを 1x の数字（`0, 0, 16, 13` など）で直接切り抜くと左上 1/4 だけになるので禁止。座らせるなら `drawSeated(ctx, sheet, dir, x, y, g.map.seatOf(e.x, e.y))`
 - `look = { hair, hairColor, skin, top, bottom, shoes, skirt, jacket, tie, glasses: true | 'sun', beard, hat, blush, apron, kimono, ribbon, lashes }`。
   髪型：`short long bob spiky twin slick afro cap bald mage helmet`
 - プリセット `LOOKS`：`receptionist manager president staff ad director cameraman guard comedian comedian2 idol singer actor actress announcer announcerM makeup samurai ninja hero kaiju oldman oldwoman kid salaryman fan clerk chef tourist mom`。
