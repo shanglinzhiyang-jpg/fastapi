@@ -18,6 +18,18 @@ export const MODULES = [
   './world/career.js',
   './world/programs.js',
   './world/minato.js',
+  // comedy reform (芸能改革): お笑いの土台 (stats, コンビ/トリオ/ピン, 相方 from the net or NSC, 芸歴, 実力不足), 台本 + AI審査員,
+  // 芸の実演 (g.perform), the 賞レース framework + every contest, M-1 / KOC / R-1 / ABC in full (api: test-output/api_owarai.txt …)
+  './engine/owarai.js',
+  './engine/neta.js',
+  './engine/perform.js',
+  './engine/contests.js',
+  './engine/contests_data.js',
+  './engine/contest_m1.js',
+  './engine/contest_koc.js',
+  './engine/contest_r1.js',
+  './engine/contest_abc.js',
+  './engine/contest_ui.js',
   './engine/politics_ui.js',
   './engine/ideology.js', // ideology core (思想): encyclopedia, player ideology, 思想診断, classifyRegime
   './engine/assist.js', // 政治ナビ（ことは先生）: phone app, glossary, lessons, quiz UI, tips, g.explain / g.navi
@@ -47,6 +59,8 @@ export const MODULES = [
   './places/fujitv.js',
   './places/tvtokyo.js',
   './places/osaka_tv.js',
+  './places/nsc.js', // NSC（吉本総合芸能学院）: classes, classmates, the 相方 you meet there
+  './places/shourace.js', // 賞レースの会場 (受付・楽屋・舞台袖・ステージ・決勝スタジオ・屋外ステージ)
   './places/kokkai.js',
   './places/kantei.js',
   './places/parties.js',
@@ -75,6 +89,11 @@ export const MODULES = [
   './minigames/quiz.js',
   './minigames/announce.js',
   './minigames/talk.js',
+  './minigames/manzai.js',
+  './minigames/conte.js',
+  './minigames/rakugo.js',
+  './minigames/ogiri.js',
+  './minigames/pinneta.js',
 ];
 
 export async function loadAll() {
