@@ -2177,7 +2177,7 @@ const TAB_DIET = {
       const gl = has(g, 'gaffes') ? safe(() => g.gaffes({ n: 30 }), []) || [] : [];
       const mine = gl.filter((r) => r.who === 'player' && !r.done);
       d.gaffeLive = gl.filter((r) => !r.done);
-      acts.push({ id: 'gaffes', grp: '見る', label: `発言と失言（${mine.length ? `炎上中${mine.length}件` : `${gl.length}件`}）`, desc: '問題になった発言と、炎上→撤回→謝罪会見→野党の追及→問責・不信任→辞任・更迭の流れ', why: null });
+      acts.push({ id: 'gaffes', grp: '見る', label: `発言と失言（${mine.length ? `炎上中${mine.length}件` : `${gl.length}件`}）`, desc: '問題になった発言の記録。炎上→撤回→謝罪→追及→問責→辞任と進むことも', why: null });
     }
     d.acts = acts;
     return d;
@@ -2773,9 +2773,10 @@ const TAB_CRISIS = {
     d.fk = has(g, 'fukko') ? safe(() => g.fukko(), null) : null;
     if (d.fk && d.fk.active) {
       const F = d.fk;
-      d.dacts = [...d.dacts, F.canAppoint
-        ? { id: '_fukko_appoint', name: F.ministerName ? `${F.postName}を代える` : `${F.postName}を任命する`, desc: `${F.disaster.name}の復興を専任で担う国務大臣（${F.title}）。${F.note}`, why: null }
-        : { id: '_fukko', name: F.isPlayer ? `復興の仕事（${F.postName}）` : `復興の状況（${F.postName}）`, desc: `${F.disaster.name}・復興の進み具合 ${F.progress}%・担当：${F.ministerName || 'まだいない'}${F.persona ? `（人柄：${F.persona}）` : ''}`, why: null }];
+      const extra = [];
+      if (F.canAppoint) extra.push({ id: '_fukko_appoint', name: F.ministerName ? `${F.postName}を代える` : `${F.postName}を任命する`, desc: `${F.disaster.name}の復興を専任で担う${F.title}。${F.note}`, why: null });
+      if (F.ministerName || !F.canAppoint) extra.push({ id: '_fukko', name: F.isPlayer ? `復興の仕事（${F.postName}）` : `復興の状況（${F.postName}）`, desc: `${F.disaster.name}・復興の進み具合 ${F.progress}%・担当：${F.ministerName || 'まだいない'}${F.persona ? `（人柄：${F.persona}）` : ''}`, why: null });
+      d.dacts = [...d.dacts, ...extra];
     }
     d.past = has(g, 'disasters') ? safe(() => g.disasters(), []).slice(-5).reverse() : [];
     d.pf = has(g, 'pressFreedom') ? safe(() => g.pressFreedom(), null) : null;

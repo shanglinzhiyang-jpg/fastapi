@@ -4311,7 +4311,7 @@ function speechView(g, O, o = {}) {
       T(c, `${it.risk}%`, x + 84, y - 1, 18, riskCol(it.risk));
       hbar(c, x + 140, y + 5, w - 152, 10, it.risk / 85, riskCol(it.risk));
       y += 24;
-      for (const f of it.factors.slice(0, 4)) { T(c, fit(c, f.label, w - 80, 12), x + 14, y, 12, C.dim); T(c, f.v, x + w - 10, y, 12, C.text, 'right'); y += 15; }
+      for (const f of it.factors.slice(0, 6)) { T(c, fit(c, f.label, w - 80, 12), x + 14, y, 12, C.dim); T(c, f.v, x + w - 10, y, 12, C.text, 'right'); y += 15; }
       y += 3;
       if (it.kinds && it.kinds.length) y = para(c, `失言になると：${it.kinds.join('・')}`, x + 10, y, w - 20, 12, '#ff9aa4', 15, 2) + 2;
       if (it.good) T(c, fit(c, `うまくいけば：${it.good}`, w - 20, 12), x + 10, y, 12, C.good);
@@ -4352,7 +4352,7 @@ function speechResultView(g, res, o = {}) {
       const lines = wrapJ(c, res.line, SW - 80, 14).slice(0, 3);
       lines.forEach((l, i) => T(c, l, 36, 66 + i * 20, 14, C.ink));
       // the verdict
-      const tag = gaffe ? `炎上：${res.gaffe ? (POL.GAFFE_KINDS[res.gaffe.kind] || {}).name || '失言' : '失言'}` : res.outcome === 'good' ? res.good.name : '無難';
+      const tag = gaffe ? `炎上：${res.gaffe ? (POL.gaffeKindName ? POL.gaffeKindName(res.gaffe.kind, res.gaffe.year) : (POL.GAFFE_KINDS[res.gaffe.kind] || {}).name) || '失言' : '失言'}` : res.outcome === 'good' ? res.good.name : '無難';
       let y = 142;
       pill(c, 20, y, tag, gaffe ? '#8a1a24' : res.outcome === 'good' ? '#1a6a3a' : '#3a4066', '#ffffff', 14);
       y += 24;
@@ -4414,7 +4414,10 @@ async function gaffeRespondFlow(ui, rec) {
       const x = opts[k];
       card(c, r.x, r.y, r.w, r.h, x ? x.name : '');
       if (!x) return;
-      let y = para(c, x.desc, r.x + 10, r.y + 26, r.w - 20, 12, C.text, 16, 4) + 8;
+      let y = para(c, rec.desc ? `（${rec.line}）` : `「${rec.line}」`, r.x + 10, r.y + 26, r.w - 20, 12, C.dim, 16, 2) + 6;
+      y = para(c, x.desc, r.x + 10, y, r.w - 20, 12, C.text, 16, 4) + 6;
+      const est = { tekkai: `見込み：批判 −${12 + 2 * num(rec.sev)}前後・党内の評価 +`, hirakinaori: '見込み：批判 ++（被災地・差別・歴史・暴言はとくに）・一部の支持者は喜ぶ', jinin: '見込み：この件は終わる。内閣への打撃は広がらない' }[x.id];
+      if (est) y = para(c, est, r.x + 10, y, r.w - 20, 12, x.id === 'hirakinaori' ? '#ff9aa4' : C.good, 16, 2) + 4;
       if (x.speech) { y = para(c, 'つぎの画面で、態度（と失言リスク）を選ぶ。会見でまた失言すると、批判はさらに強まる。', r.x + 10, y, r.w - 20, 12, C.cyan, 16, 3) + 6; }
       if (x.why) y = para(c, `いまはできない：${x.why}`, r.x + 10, y, r.w - 20, 12, C.dim, 16, 3) + 6;
       T(c, `いまの批判の強さ ${Math.round(num(rec.heat))}／100`, r.x + 10, y, 12, C.dim); y += 16;
@@ -4434,12 +4437,15 @@ async function gaffeRespondFlow(ui, rec) {
     const k = await ui.confirm({ title: x.name, danger: true, text: `${x.desc}\n本当に辞める？`, choices: ['やめておく', '辞める'], index: 0, cancel: 0 });
     if (k !== 1) return;
   }
+  const h0 = Math.round(num(rec.heat));
   const r = g.gaffeRespond(rec.id, x.id, { attitude });
   if (!r || !r.ok) { sfx('buzz'); ui.toast((r && r.why) || 'できなかった', C.dim); return; }
+  const now = (g.gaffes({ who: 'player' }).find((q) => q.id === rec.id) || {});
+  const heatLine = now.heat != null ? `批判の強さ ${h0} → ${Math.round(num(now.heat))}${now.done ? `（${now.outcomeName || '終了'}）` : ''}` : '';
   if (r.speech) {
     sfx(r.speech.outcome === 'gaffe' ? 'buzz' : 'good');
-    await ui.open(speechResultView(g, r.speech, { extra: String(r.text || '').split('\n').slice(1), title: x.name, noRespond: true }));
-  } else { sfx(x.id === 'tekkai' ? 'good' : x.danger ? 'drum' : 'buzz'); await ui.alert(x.name, String(r.text || '').split('\n')); }
+    await ui.open(speechResultView(g, r.speech, { extra: [...String(r.text || '').split('\n').slice(1), heatLine], title: x.name, noRespond: true }));
+  } else { sfx(x.id === 'tekkai' ? 'good' : x.danger ? 'drum' : 'buzz'); await ui.alert(x.name, [...String(r.text || '').split('\n'), heatLine].filter(Boolean)); }
 }
 // the record: the player's and the NPCs' gaffes (news), with the chain
 SECTIONS.gaffes = async (ui, o = {}) => {
@@ -4527,7 +4533,7 @@ function fukkoView(g) {
   const v = {
     title: '復興', focus: 0,
     hint: '↑↓ A:けってい B:もどる',
-    tip: () => { const it = v.lb && v.lb.current(); return it && it.id.startsWith('w:') ? '仕事は復興の進み具合・支持率・経済に効く。被災地での発言には特に気をつけたい' : '1995年は地震の3日後、2011年は6月に担当大臣。2012年に復興庁'; },
+    tip: () => { const it = v.lb && v.lb.current(); return it && it.id.startsWith('w:') ? '仕事は復興・支持率・経済に効く。被災地での発言には特に注意' : '1995年は地震の3日後、2011年は6月に担当大臣。2012年に復興庁'; },
     enter(ui) { v.lb = new ListBox({ items: () => cmds(ui), rowH: 30 }); },
     update(ui, inp) {
       v.lb.move(inp);
