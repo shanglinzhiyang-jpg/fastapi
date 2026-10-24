@@ -451,7 +451,7 @@ export function registerIntraUI(K, SECTIONS) {
         R(c, 478, 31, SW - 488, 44, '#3a1018'); R(c, 478, 31, 3, 44, C.bad);
         T(c, '倒閣の動き', 486, 33, 12, C.bad);
         T(c, fit(c, `${ov.plot.bossName}氏ら・${ov.plot.stageLabel}`, SW - 500, 12), 486, 47, 12, '#ffd0d0');
-        T(c, fit(c, `あと${ov.plot.daysLeft}日・${ov.plot.mine ? '退陣' : '交代'}の見込み${Math.round(ov.plot.odds)}%`, SW - 500, 12), 486, 61, 12, '#ffffff');
+        T(c, fit(c, `見込み${Math.round(ov.plot.odds)}%・あと${ov.plot.daysLeft}日`, SW - 500, 12), 486, 61, 12, '#ffffff');
       } else {
         T(c, '次の火種', 482, 31, 12, C.dim);
         if (ov.flash) { T(c, `あと${ov.flash.days}日`, SW - 12, 31, 12, C.text, 'right'); para(c, ov.flash.text, 482, 45, SW - 494, 12, C.gold, 14, 2); }

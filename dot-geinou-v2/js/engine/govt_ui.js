@@ -2028,11 +2028,11 @@ const TAB_OPINION = {
       let x = 4;
       for (const f of VOICE_FILTERS) {
         const w = (ui.g.ctx ? measure(ui.g.ctx, f.label, 10) : 24) + 12;
-        out.push({ kind: 'seg', id: `vf_${f.id}`, x, y: 66, w, h: 14, why: null, tip: `世論の声：${f.label}`, a: (u) => { u.tabState().vf = f.id; u.tabState().vrow = 0; u.dirty(); } });
+        out.push({ kind: 'seg', id: `vf_${f.id}`, x: x + 4, y: 69, w, h: 14, why: null, tip: `世論の声：${f.label}`, a: (u) => { u.tabState().vf = f.id; u.tabState().vrow = 0; u.dirty(); } });
         x += w + 2;
       }
-      out.push(btn({ id: 'v_fresh', x: 340, y: 66, w: 84, h: 14, label: '新しい声', why: has(ui.g, 'voices') ? null : '世論の声のしくみがない', tip: '街の声・ネットの声を新しく集める', a: (u) => { safe(() => u.g.voices(6, { fresh: true })); st.vrow = 0; u.toast('新しい声を集めた', K.cyan); } }));
-      out.push(listCtl(ui, 'vrow', { id: 'vrow', x: 4, y: 84, w: 420, h: 252, rowH: 32, n: d.voices.length, tip: (u) => { const v = d.voices[u.tabState().vrow | 0]; return v ? `${v.mediumLabel}・${v.segName}・${v.event || ''}` : ''; }, a: (u) => { const v = d.voices[u.tabState().vrow | 0]; if (v) return u.info(v.header, [`「${v.text}」`, '', `立場：${STANCE_WORD[v.stance] || '—'}・層：${v.segName}`, `話題：${v.event || '—'}・${v.mediumLabel}`]); } }));
+      out.push(btn({ id: 'v_fresh', x: 340, y: 69, w: 84, h: 14, label: '新しい声', why: has(ui.g, 'voices') ? null : '世論の声のしくみがない', tip: '街の声・ネットの声を新しく集める', a: (u) => { safe(() => u.g.voices(6, { fresh: true })); st.vrow = 0; u.toast('新しい声を集めた', K.cyan); } }));
+      out.push(listCtl(ui, 'vrow', { id: 'vrow', x: 4, y: 88, w: 420, h: 246, rowH: 32, n: d.voices.length, tip: (u) => { const v = d.voices[u.tabState().vrow | 0]; return v ? `${v.mediumLabel}・${v.segName}・${v.event || ''}` : ''; }, a: (u) => { const v = d.voices[u.tabState().vrow | 0]; if (v) return u.info(v.header, [`「${v.text}」`, '', `立場：${STANCE_WORD[v.stance] || '—'}・層：${v.segName}`, `話題：${v.event || '—'}・${v.mediumLabel}`]); } }));
     } else if (sb === 'demo') {
       out.push(listCtl(ui, 'drow', { id: 'drow', x: 4, y: 66, w: 250, h: 270, rowH: 28, y0: 16, n: d.demos.length, tip: (u) => { const dm = d.demos[u.tabState().drow | 0]; return dm ? `${dm.cause}（${dm.place}・約${fmtN(dm.size)}人）` : 'デモはない'; }, a: null, onMove: (u) => { u.tabState().last = 'demo'; } }));
       const dm = d.demos[st.drow | 0];
@@ -2210,7 +2210,7 @@ function drawForecast(c, ui, d, ev) {
 }
 function drawVoices(c, ui, d) {
   const st = ui.tabState();
-  panel(c, 4, 64, 424, 272, '世論の声', { right: '街・ネット' });
+  panel(c, 4, 64, 424, 272, '');
   for (const f of VOICE_FILTERS) {
     const k = ui.ctls.find((q) => q.id === `vf_${f.id}`);
     if (!k) continue;
