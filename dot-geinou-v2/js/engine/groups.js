@@ -295,9 +295,9 @@ GR('k_shoten', 'kyokai', 'ドット商店街振興協会', { kana: 'どっとし
   asks: [['money', '商店街のにぎわいを取り戻す支援がほしい'], ['protect', '大型店やネット通販との公平なルールがほしい'], ['safety', '税や社会保険料の負担を軽くしてほしい']] });
 
 // ---- 連合（労働）
-GR('r_somei', 'rengo', 'ドット総評議会', { kana: 'どっとそうひょうぎかい', kind: '官公庁・公共部門が中心の労働団体（連合の前身の一つ）', seg: 'unions', lean: { econ: -1.5, social: -1, security: -1 }, inf: [55, 0, 0, 0], cap: 15, likes: ['min_wage'], dislikes: ['civil_service_cut', 'privatize_public', 'defense_up'], titles: ['議長', '事務局長'], years: [0, 19891121],
+GR('r_somei', 'rengo', 'ドット総評議会', { kana: 'どっとそうひょうぎかい', kind: '官公庁・公共部門中心の労働団体（ナショナルセンター）', seg: 'unions', lean: { econ: -1.5, social: -1, security: -1 }, inf: [55, 0, 0, 0], cap: 15, likes: ['min_wage'], dislikes: ['civil_service_cut', 'privatize_public', 'defense_up'], titles: ['議長', '事務局長'], years: [0, 19891121],
   asks: [['wage', '春闘で大幅な賃上げを実現してほしい'], ['protect', '民営化や定員削減から公共部門の職員を守ってほしい'], ['law', '労働時間の短縮（週休2日・年間労働時間1800時間）を進めてほしい']] });
-GR('r_domei', 'rengo', 'ドット同盟会議', { kana: 'どっとどうめいかいぎ', kind: '民間大企業の労組が中心の労働団体（連合の前身の一つ）', seg: 'unions', lean: { econ: -0.3, social: 0, security: 0.5 }, inf: [45, 0, 0, 0], cap: 25, likes: ['min_wage'], dislikes: ['corp_tax_up'], titles: ['会長', '書記長'], years: [0, 19891121],
+GR('r_domei', 'rengo', 'ドット同盟会議', { kana: 'どっとどうめいかいぎ', kind: '民間大企業の労組中心の労働団体（ナショナルセンター）', seg: 'unions', lean: { econ: -0.3, social: 0, security: 0.5 }, inf: [45, 0, 0, 0], cap: 25, likes: ['min_wage'], dislikes: ['corp_tax_up'], titles: ['会長', '書記長'], years: [0, 19891121],
   asks: [['wage', '景気にあった賃上げを労使の話し合いで決めたい'], ['consult', '政労使の協議の場を持ってほしい'], ['law', '雇用を守る制度を整えてほしい']] });
 GR('r_rengo', 'rengo', 'ドット連合', { kana: 'どっとれんごう', kind: '労働組合のナショナルセンター', seg: 'unions', lean: { econ: -0.8, social: -0.4, security: 0 }, inf: [0, 55, 48, 42], cap: 25, likes: ['min_wage', 'irregular_protect', 'work_style', 'free_tuition', 'child_allowance'], dislikes: ['haken_dereg', 'civil_service_cut'], titles: ['会長', '事務局長'], years: [19891121, 99999999],
   asks: [['wage', '物価に負けない賃上げと、中小・非正規への波及をお願いしたい'], ['law', '最低賃金の大幅な引き上げを法律・制度で後押ししてほしい', { policy: 'min_wage' }], ['safety', '長時間労働の規制と、過労を防ぐ仕組みを強めてほしい', { policy: 'work_style' }]] });
@@ -339,7 +339,7 @@ GR('y_keizai', 'yushikisha', 'ドット経済学者会議', { kana: 'どっと�
   asks: [['consult', '政策の前に、データと分析を聞く場を設けてほしい'], ['honor', '提言を無視せず、採否の理由を説明してほしい'], ['law', '統計と財政の透明性を高めてほしい']] });
 GR('y_hogaku', 'yushikisha', 'ドット憲法学者の会', { kana: 'どっとけんぽうがくしゃのかい', kind: '憲法・法学者の集まり', seg: 'floating', lean: { econ: -0.3, social: -1.2, security: -1.2 }, inf: [30, 30, 28, 28], cap: 3, cred: 75, titles: ['代表', '世話人'], likes: [], dislikes: ['amend_emergency', 'conspiracy_law'],
   asks: [['protect', '憲法の手続きと、立憲主義を守ってほしい'], ['consult', '法案づくりの段階から意見を聞いてほしい'], ['honor', '学問の自由を尊重してほしい']] });
-GR('y_shakai', 'yushikisha', 'ドット社会・福祉研究フォーラム', { kana: 'どっとしゃかいふくしけんきゅうふぉーらむ', kind: '社会学・福祉の研究者の集まり', seg: 'floating', lean: { econ: -0.8, social: -0.5, security: 0 }, inf: [25, 28, 32, 32], cap: 3, cred: 65, titles: ['座長', '幹事'], likes: ['care_expand', 'child_allowance', 'irregular_protect'], dislikes: ['pension_cut'],
+GR('y_shakai', 'yushikisha', 'ドット社会福祉フォーラム', { kana: 'どっとしゃかいふくしけんきゅうふぉーらむ', kind: '社会学・福祉の研究者の集まり', seg: 'floating', lean: { econ: -0.8, social: -0.5, security: 0 }, inf: [25, 28, 32, 32], cap: 3, cred: 65, titles: ['座長', '幹事'], likes: ['care_expand', 'child_allowance', 'irregular_protect'], dislikes: ['pension_cut'],
   asks: [['consult', '現場の調査を踏まえた提言を聞いてほしい'], ['law', '貧困と孤立への対策を制度にしてほしい'], ['honor', '調査研究を支える予算を確保してほしい']] });
 GR('y_rondan', 'yushikisha', 'ドット論壇・メディア識者の会', { kana: 'どっとろんだんめでぃあしきしゃのかい', kind: 'テレビ・新聞の論客・コメンテーターの集まり', seg: 'floating', lean: { econ: 0.2, social: 0, security: 0.2 }, inf: [40, 45, 55, 60], cap: 20, cred: 45, titles: ['世話人', '常連'], likes: [], dislikes: [],
   asks: [['consult', '取材と対話の機会を増やしてほしい'], ['protect', '報道と言論の自由を守ってほしい'], ['honor', '政権の説明責任を果たしてほしい']] });
@@ -625,7 +625,7 @@ function moodAdd(g, d, text, reason = 'policy') {
   const before = num(p.cabinet.mood);
   p.cabinet.mood = clamp(before + d, -20, 20);
   const got = p.cabinet.mood - before;
-  if (got && has(g, 'approvalNote')) safe(() => g.approvalNote(reason === 'deficit' ? 'deficit' : 'other', r2(got), text || '各界との関係', { applied: true }));
+  // not written to the government core's approval ledger: its buckets would file this under 行政; as cabinet mood it counts as 政策・内閣の評価
   return got;
 }
 // the parties that carry the player's side (the cabinet's, or the player's own party)
@@ -736,7 +736,7 @@ function scandalHit(g, sev, text, role = groupsRole(g)) {
   const p = polOf(g);
   if (!p) return;
   const sv = clamp(num(sev), 0.2, 6);
-  if (role.cabinet && p.cabinet) { p.cabinet.scandal = num(p.cabinet.scandal) - sv * (role.pm ? 1.4 : 0.8); if (has(g, 'approvalNote')) safe(() => g.approvalNote('scandal', -r2(sv * (role.pm ? 1.4 : 0.8)), text, { applied: true })); }
+  if (role.cabinet && p.cabinet) { p.cabinet.scandal = num(p.cabinet.scandal) - sv * (role.pm ? 1.4 : 0.8); }
   if (p.me) { p.me.reputation = clamp(num(p.me.reputation) - sv * 2, -100, 100); p.me.standing = clamp(num(p.me.standing) - sv * 1.2, 0, 100); }
   if (role.ent && !role.cabinet) { if (has(g, 'addFame')) g.addFame(-Math.round(sv * 4)); }
 }
@@ -925,7 +925,7 @@ simple('sect_dialogue', { name: '対話して過激化を和らげる', short: '
   lines: () => ['主張を聞き、暴力や違法行為には明確に線を引く', '会ったこと自体が「お墨付き」と批判されることもある'],
   voices: () => ({ pro: ['「孤立させるより、対話で過激化を防ぐほうが現実的」（研究者）'], con: ['「過激な集団に正当性を与える」（野党・市民）'] }) });
 simple('sect_observe', { name: '観察処分を請求する', short: '観察処分', domains: ['sect'], desc: '団体規制法（1999年12月〜）に基づく観察処分を、公安調査庁長官が公安審査委員会に請求する。対象は無差別大量殺人行為を行った団体に限られる。',
-  who: (c) => { if (!since(c.g, 19991227)) return '団体規制法（1999年12月）がまだない。破壊活動防止法（1952年）の調査はできるが、観察処分の制度はこの時代にはない'; return c.role.pm || (c.role.kind === 'minister' && ctrlOf(c) === 'full') ? null : `請求の指示ができるのは、総理か担当の大臣（${ministerOf(c.g, 'sect')}）`; },
+  who: (c) => { if (!since(c.g, 19991227)) return '観察処分の制度（団体規制法）はまだない。破壊活動防止法（1952年）にもとづく調査はできる'; return c.role.pm || (c.role.kind === 'minister' && ctrlOf(c) === 'full') ? null : `請求の指示ができるのは、総理か担当の大臣（${ministerOf(c.g, 'sect')}）`; },
   cost: () => ({ stamina: 10 }), cd: 60,
   odds: (c) => clamp(((c.grp.x.radical || 0) - 40) / 120 + (c.grp.x.incident ? 0.25 : 0) + 0.05, 0.02, 0.8),
   win: (c) => ({ sup: -10, an: 8, inf: -5, ap: -0.2, radical: -8, silent: 120, watch: 2, griev: ['obs', '観察処分に強く反発している', 30] }), lose: (c) => ({ sup: -5, an: 10, ap: -0.5, scandal: isDemocracy(c.g) && roll(0.3) ? 1 : 0, scandalText: '観察処分の請求が「不当」と批判された' }),
@@ -947,7 +947,7 @@ simple('festival', { name: '国民的行事を支援する', short: '行事', do
   lines: () => ['安全対策（雑踏事故・熱中症）の費用もかかる', '来場者が増え、観光地の宣伝にもなる'],
   voices: () => ({ pro: ['「みんなで盛り上がれる行事は、地域の宝」（保存会）'], con: ['「警備や清掃の負担が地元にのしかかる」（住民）'] }) });
 simple('cool_japan', { name: 'クールジャパン戦略を進める', short: 'クール', domains: ['bunka', 'artist', 'business'], desc: '日本のコンテンツ（アニメ・マンガ・食・工芸）を海外に売り込む国家戦略。官民ファンドを使う。',
-  who: (c) => (!since(c.g, 20100618) ? 'クール・ジャパンが国の戦略になるのは2010年の新成長戦略から。この時代には「コンテンツ産業の育成」として文化・経済の施策で進められる' : needGov(c)), cost: (c) => ({ gov: r0(120 * scaleOf(c.g)), stamina: 8 }), cd: 40,
+  who: (c) => (!since(c.g, 20100618) ? '「クール・ジャパン」という国の戦略はまだない。コンテンツ産業の育成は、文化・経済の施策で進められる' : needGov(c)), cost: (c) => ({ gov: r0(120 * scaleOf(c.g)), stamina: 8 }), cd: 40,
   odds: () => 0.75, win: (c) => ({ sup: 8, an: -6, ap: 0.2, seg: { young: 0.5, business: 0.2 }, eco: { key: 'cool', name: 'コンテンツ輸出', growth: 0.04, len: 90 }, promo: 6 }), lose: () => ({ sup: -1, an: 3, ap: -0.1 }),
   lines: () => ['官民ファンドの投資は、失敗して赤字になる例もある', '成功すると輸出と観光（訪日客）にもプラス'],
   voices: () => ({ pro: ['「日本の文化は世界で通用する強み」（クリエイター）'], con: ['「官が選ぶと現場の自由が損なわれる。税金の無駄づかいも」（批判する声）'] }) });
@@ -986,7 +986,7 @@ simple('amakudari_check', { name: '天下りの実態を調べる', short: '天�
 
 const REL_OPTS = [['visit', '行事を訪ねる（敬意をもって交流）'], ['ask_support', '選挙の推薦をお願いする（組織票）'], ['report', '被害の相談・報道を確かめる'], ['victim_support', '被害者の支援に取り組む'], ['question_power', '報告徴収・質問権を使う（所轄庁）'], ['request_dissolution', '解散命令を請求する（所轄庁）'], ['diet_question', '国会で質問する']];
 const REL_FX = { visit: { sup: 5, an: -4 }, ask_support: { sup: 6, seg: { elderly: 0.4 }, coll: 1.5 }, report: { sup: -1 }, victim_support: { sup: -6, an: 8, ap: 0.3, seg: { floating: 0.4 } }, question_power: { sup: -8, an: 10, ap: 0.2 }, request_dissolution: { sup: -20, an: 25, ap: 0.2, inf: -6 }, diet_question: { sup: -3, an: 4, ap: 0.1 } };
-simple('rel_action', { name: '宗教法人としての対応（政教分離のルール内）', short: '宗教対応', domains: ['sect'], kind: 'soft', desc: '宗教団体との関わりを、政府の宗教コア（宗教法人法・憲法20条・89条）の決まりに沿って行う。訪問・推薦・被害者支援・質問権・解散命令請求など。',
+simple('rel_action', { name: '宗教法人としての対応', short: '宗教対応', domains: ['sect'], kind: 'soft', desc: '宗教団体との関わりを、政府の宗教コア（宗教法人法・憲法20条・89条）の決まりに沿って行う。訪問・推薦・被害者支援・質問権・解散命令請求など。',
   options: (c) => REL_OPTS.map(([k, l]) => ({ key: k, label: l })),
   who: (c) => { if (!c.def.link) return 'この団体は宗教法人ではない（宗教法人法の対象外）'; if (!has(c.g, 'govtRefusal')) return '宗教のしくみが読み込まれていない'; const rid = c.def.link.split(':')[1]; return safe(() => c.g.govtRefusal('religion', { group: rid, action: (c.opt && c.opt.key) || 'visit' }), null); },
   cost: () => ({ stamina: 6 }), cd: 6, odds: () => null,
@@ -1017,7 +1017,7 @@ function oppositionPower(g, def, dir) {
   return clamp(list.slice(0, 3).reduce((a, b) => a + b, 0) / 100, 0, 0.9);
 }
 export function tourismBrand(g) { return since(g, 20030401) ? 'ビジット・ジャパン' : since(g, 19870609) ? '観光・リゾート' : '観光'; }
-export function tourismAgency(g) { return since(g, 20081001) ? '観光庁' : since(g, 20010106) ? '国土交通省（総合政策局の観光部門）' : '運輸省（観光部門）'; }
+export function tourismAgency(g) { return since(g, 20081001) ? '観光庁' : since(g, 20010106) ? '国土交通省の観光部門' : '運輸省の観光部門'; }
 
 // ---- the preview / run pipeline
 function actionCtx(g, id, kind, optKey) {
@@ -1083,10 +1083,12 @@ export function groupActionPreview(g, id, kind, optKey) {
   };
 }
 export function groupActionsList(g, id) {
-  return actionsFor(g, id).map((k) => {
+  const list = actionsFor(g, id).map((k) => {
     const p = groupActionPreview(g, id, k);
     return { id: k, name: p.name, short: p.short, kind: p.kind, why: p.why, odds: p.odds, costText: p.costText, desc: p.desc, domainOnly: !!ACTIONS[k].domains };
   });
+  // what can be done now comes first (a locked one keeps its place after them, with its reason)
+  return list.filter((a) => !a.why).concat(list.filter((a) => a.why));
 }
 // run an action: pay, roll, apply, log. -> { ok, why?, success, text, lines[], odds }
 export async function groupAct(g, id, kind, opts = {}) {
@@ -1113,7 +1115,8 @@ export async function groupAct(g, id, kind, opts = {}) {
     const cid = bribeCrime(g, d);
     if (cid) {
       payCost(g, c.cost, d.domain);
-      const r = await safe(() => g.commitCrime(cid, { amount: c.cost.funds, where: '会合の席', request: true }), Promise.resolve(null));
+      let r = null;
+      try { r = await g.commitCrime(cid, { amount: c.cost.funds, where: '会合の席', request: true }); } catch (e) { console.error(e); }
       crime = r || null;
       c.cost = { ...c.cost, funds: 0 };
     }
@@ -1264,12 +1267,12 @@ export const CASE_KINDS = {
       const mem = role.kind === 'member';
       out.push({ key: 'accept', label: mem ? '実現に力を尽くすと約束する' : '要望に応える（全面的に）', desc: mem ? '議員として、予算・制度の実現に動くと約束する（実際に決めるのは内閣）' : `${ASK_KIND_NAME[k]}の要望を受け入れる`, cost: fullCost, fx: askFx(g, c, mem ? 0.7 : 1) });
       if (!mem) out.push({ key: 'partial', label: '一部だけ応える', desc: '要望の半分ほどを受け入れる（費用も半分）', cost: halfCost, fx: askFx(g, c, 0.5) });
-      if (c.ask.policy && !mem) {
+      if (c.ask.policy) {
         const why = has(g, 'policyBlock') ? safe(() => g.policyBlock(c.ask.policy, null), null) : '法案のしくみが読み込まれていない';
-        out.push({ key: 'bill', label: '法案として準備する', desc: `「${POLICY_NAME[c.ask.policy] || c.ask.policy}」の法案を出す（国会での審議が必要）`, cost: { stamina: 6 }, why, fx: { ...askFx(g, c, 1), sup: 14 } });
+        out.push({ key: 'bill', label: mem ? '議員立法として法案を出す' : '法案として準備する', desc: `「${POLICY_NAME[c.ask.policy] || c.ask.policy}」の法案を出す（${mem ? '議員立法。' : ''}国会での審議が必要）`, cost: { stamina: 6 }, why, fx: { ...askFx(g, c, 1), sup: 14 } });
       }
       out.push({ key: 'delay', label: c.extended ? '先送りする（もう延ばせない）' : '回答を先送りする', desc: '期限を15日延ばす（1回だけ）。団体は少し不満になる', cost: {}, why: c.extended ? '先送りはもう使った' : null, fx: { sup: -2, an: 4 } });
-      out.push({ key: 'refuse', label: '要望を断る', desc: '正直に断る。団体の不満と反発が高まる', cost: {}, fx: { sup: -(6 + num(grp.an) / 12), an: 12 + num(grp.an) / 20, griev: ['refused', `要望「${c.title}」を断られた`, 24] } });
+      out.push({ key: 'refuse', label: '要望を断る', desc: '正直に断る。団体の不満と反発が高まる', cost: {}, fx: { sup: -(6 + num(grp.an) / 12), an: 12 + num(grp.an) / 20, griev: ['refused', `要望を断られた：${String(c.title).slice(0, 12)}…`, 24] } });
       return out;
     },
     async resolve(g, c, key, o) {
@@ -1296,7 +1299,7 @@ export const CASE_KINDS = {
       return { ok: true, text: [{ accept: '要望に応えた。', partial: '一部だけ要望に応えた。', bill: '法案として準備することにした。', refuse: '要望を断った。' }[key], extra].filter(Boolean).join(' '), lines };
     },
     expire(g, c) {
-      const lines = applyFx(g, { sup: -5, an: 10, griev: ['ignored', `要望「${c.title}」に回答がなかった`, 22] }, { id: c.group, role: groupsRole(g), domain: c.domain });
+      const lines = applyFx(g, { sup: -5, an: 10, griev: ['ignored', `要望が放置された：${String(c.title).slice(0, 12)}…`, 22] }, { id: c.group, role: groupsRole(g), domain: c.domain });
       glog(g, c.group, `要望「${c.title}」を放置した`);
       return `${groupName(g, c.group)}の要望「${c.title}」に回答がないまま期限が過ぎた`;
     },
@@ -1736,7 +1739,7 @@ export function tourismSummary(g) {
   return {
     agency: tourismAgency(g), brand: tourismBrand(g), inboundMan: inboundMan(g), inboundBase: r0(anchorsAt(INBOUND, d.t)), frShare: r2(anchorsAt(FR_SHARE, d.t)), sites: sites.length, mine: sites.filter((x) => x.owner === 'player').length,
     income: r1(s.flags.tourInc || 0), foreignK: r1(s.flags.tourFr || 0), over, avgSat: sites.length ? r0(sites.reduce((a, x) => a + x.sat, 0) / sites.length) : 0, cands: s.cands.length,
-    resort: d.year >= 1987 && d.year < 1993 ? 'リゾート法（1987年〜）のもとでリゾート開発ブーム。ただし、バブルが崩れると第三セクターの破綻が相次いだ（実際の歴史）。' : null,
+    resort: d.year >= 1987 && d.year < 1996 ? 'リゾート法のもとで各地にリゾート構想。借金での開発は、あとで重荷になることも' : null,
     overNote: d.year >= 2017 ? 'オーバーツーリズム（観光客の集中で住民の暮らしや環境が損なわれること）が問題になっている。' : null,
     law: since(g, 20070101) ? '観光立国推進基本法（2007年〜）' : null,
     heritageOk: since(g, 19920630),
@@ -1797,7 +1800,7 @@ export function siteActionPreview(g, id, kind, optKey) {
       return mk('混雑対策をする', `予約制・入場制限・${fee}・時間分散などで、混雑とマナー問題を抑える。`, { gov: r0(15 * sc), stamina: 6 }, 0.85, ['混雑が減り、住民の支持と満足度が上がる', '入込客は少し減る（観光協会は渋い顔）'], { applies: !cand && x.crowdCtl < 3, pro: ['「静かな暮らしを守れる」（住民）', '「質の高い観光へ」（有識者）'], con: ['「客が減って商売あがったり」（旅館・商店）'] });
     }
     case 'whl': {
-      const why = !since(g, 19920630) ? '日本が世界遺産条約を結ぶのは1992年。この時代は国内の文化財の指定・保存までしかできない' : x.culture < 55 ? '文化の価値の水準が足りない（文化度 55以上が目安）' : x.pot < 60 ? '観光地としての魅力が足りない（魅力 60以上が目安）' : x.infra < 30 ? '保護と受け入れの体制が足りない（整備 30以上が目安）' : x.whl && x.whl.stage === 'inscribed' ? 'すでに登録された' : x.whl && x.whl.stage === 'tentative' ? '申請の審査中' : x.whl && x.whl.until > today(g) ? '前回の見送りから間もない' : null;
+      const why = !since(g, 19920630) ? '日本はまだ世界遺産条約を結んでいない。結ぶまでは、国内の文化財の指定・保存までしかできない' : x.culture < 55 ? '文化の価値の水準が足りない（文化度 55以上が目安）' : x.pot < 60 ? '観光地としての魅力が足りない（魅力 60以上が目安）' : x.infra < 30 ? '保護と受け入れの体制が足りない（整備 30以上が目安）' : x.whl && x.whl.stage === 'inscribed' ? 'すでに登録された' : x.whl && x.whl.stage === 'tentative' ? '申請の審査中' : x.whl && x.whl.until > today(g) ? '前回の見送りから間もない' : null;
       const odds = clamp(0.2 + (x.culture - 55) / 120 + (x.env - 60) / 200 + x.local / 400 - x.scandals * 0.05, 0.05, 0.85);
       return mk('世界遺産に申請する', '暫定リストへの記載から、推薦・審査へ。結果が出るまで約240日。登録されれば魅力と話題性が大きく上がる。', { gov: r0(12 * sc), stamina: 8 }, odds, ['環境の保全・住民の合意・保護の体制が審査される', '登録後は保全の義務と、観光客の集中に注意'], { applies: !cand, why: why || (whyRole ? whyRole : null), pro: ['「世界に認められる価値のある町」（文化財保存会）'], con: ['「規制が増えて、暮らしが不便になる」（住民）'] });
     }
@@ -1958,7 +1961,7 @@ export function unionSummary(g) {
   const rid = unionGroupId(s);
   const merged = d.n >= 19891121;
   return {
-    id: rid, name: groupName(g, rid), rate: u.rate, minWage: u.minWage, shunto: { ...sh, label: { none: '春闘のあいだ（来年1月から）', demand: '要求を提出（1月）', talks: '交渉中（2〜3月）', settled: '妥結（3月）' }[sh.stage] || '—', trend: r1(shuntoAnchor(g)) },
+    id: rid, name: groupName(g, rid), rate: u.rate, minWage: u.minWage, shunto: { ...sh, label: { none: '次は来年1月から', demand: '要求を提出（1月）', talks: '交渉中（2〜3月）', settled: '妥結（3月）' }[sh.stage] || '—', trend: r1(shuntoAnchor(g)) },
     results: u.results.slice(0, 6), strikes: u.strikes.slice(0, 3).map((x) => ({ ...x })), activeStrike: u.strikes.find((x) => x.status === 'active') || null,
     center: merged ? '連合（1989年11月〜）' : '総評・同盟などの分立', frozen: u.frozenUntil && u.frozenUntil > today(g) ? u.frozenUntil - today(g) : 0,
     note: '公務員は争議権がなく、人事院勧告で給与が決まる（国家公務員法）。ストライキは民間の組合の権利。',
@@ -2071,7 +2074,7 @@ function rdMonthly(g, s) {
 }
 export function rdSummary(g) {
   const R = S(g).rd;
-  return { level: r0(R.level), integrity: r0(R.integrity), young: r0(R.young), nobel: R.nobel, fraud: R.fraud, laureates: R.laureates.slice(0, 4), growthPush: r2(clamp(((R.level - 55) / 55) * 0.09, -0.08, 0.1)), law: since(g, 19951115) ? (since(g, 20210401) ? '科学技術・イノベーション基本法（2021年〜）' : '科学技術基本法（1995年〜）') : 'まだ科学技術基本法がない（1995年に制定）' };
+  return { level: r0(R.level), integrity: r0(R.integrity), young: r0(R.young), nobel: R.nobel, fraud: R.fraud, laureates: R.laureates.slice(0, 4), growthPush: r2(clamp(((R.level - 55) / 55) * 0.09, -0.08, 0.1)), law: since(g, 19951115) ? (since(g, 20210401) ? '科学技術・イノベーション基本法（2021年〜）' : '科学技術基本法（1995年〜）') : 'まだ科学技術の基本法はない' };
 }
 
 // ================================================================ 政府（官庁・自治体）
@@ -2115,11 +2118,11 @@ export function seifuSummary(g) {
   return {
     trust: s.seifu.trust, leaks: s.seifu.leaks, sabotage: r0(s.seifu.sabotage), sontaku: num(s.seifu.sontaku),
     ministries: mins.slice(0, 16).map((m) => ({ name: m.name, minister: m.playerHeads ? 'あなた' : m.ministerName || '—', player: !!m.playerHeads })),
-    jinji: since(g, 20140530) ? '内閣人事局（2014年〜）：幹部人事を官邸が一元管理。強い統制と「忖度」のリスク' : '幹部人事は各省庁の慣行が強い（内閣人事局は2014年）',
+    jinji: since(g, 20140530) ? '内閣人事局（2014年〜）：官邸が幹部人事を一元管理' : '幹部人事は各省庁の慣行が強く、官邸の力は限られる',
     amakudari: adm && adm.amakudari ? { heat: num(adm.amakudari.heat), cases: (adm.amakudari.cases || []).length } : null,
     realParty: govRealParty(g),
     role: role.kind,
-    local: since(g, 20000401) ? '地方分権一括法（2000年4月施行）：国と地方は「対等・協力」の関係に' : '機関委任事務など、国の指揮が強い地方制度（地方分権一括法は2000年施行）',
+    local: since(g, 20000401) ? '地方分権一括法（2000年〜）：国と地方は対等・協力' : '機関委任事務など、国の指揮が強い地方制度',
   };
 }
 
@@ -2146,7 +2149,7 @@ const MEMBER_AFF = ['大学教授', '研究所の主任研究員', '元官僚', 
 function panelBlock(g, theme) {
   const T = THEMES[theme];
   if (!T) return 'そのようなテーマはない';
-  if (T.from && gdate(g).n < T.from) return `${nLabel(T.from)}より前には、この課題はまだ政策の議題になっていない`;
+  if (T.from && gdate(g).n < T.from) return `${T.name}は、まだ政策の議題になっていない`;
   const role = groupsRole(g);
   if (role.kind === 'citizen') return '有識者会議を開けるのは内閣の側（総理・官房長官・大臣）や首長だけ。議員は質問や提案を通じて働きかける';
   if (role.kind === 'member') return '有識者会議（私的諮問機関）を開けるのは内閣の側や首長。議員は党の部会や国会で提案する';
@@ -2446,10 +2449,10 @@ const collValue = (g) => num(S(g).corr);
 export function bidsSummary(g) {
   const s = S(g), d = gdate(g);
   const past = [];
-  if (d.n >= 19640101) past.push('1964年 東京夏季五輪（実際の歴史）');
+  if (d.n >= 19640101) past.push('1964年 東京夏季五輪');
   if (d.n >= 19720101) past.push('1972年 札幌冬季五輪');
   if (d.n >= 19980207) past.push('1998年 長野冬季五輪');
-  if (d.n >= 20020531) past.push('2002年 日韓ワールドカップ');
+  if (d.n >= 20020531) past.push('2002年 日韓W杯');
   if (d.n >= 20050325) past.push('2005年 愛知万博');
   const live = s.bids.filter((b) => ['declared', 'prep'].includes(b.status));
   return { active: live.map((b) => bidView(g, b)), done: s.bids.filter((b) => !['declared', 'prep'].includes(b.status)).slice(0, 4).map((b) => bidView(g, b)), past: past.slice(-4), agency: since(g, 20151001) ? 'スポーツ庁（2015年〜）' : '文部省（体育局）', types: BID_ORDER.map((t) => ({ type: t, name: bidName(g, t) })) };
@@ -2771,15 +2774,15 @@ export function groupView(g, id) {
   const sh = (pid) => String(POLICY_NAME[pid] || pid).replace(/（.*$/, '');
   for (const pid of def.likes.slice(0, 2)) pro.push(`「${sh(pid)}」を進めてほしい（${lead.title}）`);
   for (const pid of def.dislikes.slice(0, 2)) con.push(`「${sh(pid)}」には反対（${lead.title}）`);
-  if (!pro.length && def.asks[0]) pro.push(`「${def.asks[0][1]}」（${lead.title}）`);
-  if (!con.length && def.asks[1]) con.push(`「${def.asks[1][1]}」（${lead.title}）`);
+  if (!pro.length && def.asks[0]) pro.push(`${ASK_KIND_NAME[def.asks[0][0]] || '要望'}に応えてくれるなら協力する（${lead.title}）`);
+  if (!con.length) con.push(`要望が通らないなら、協力しにくい（${lead.title}）`);
   return {
     id, domain: def.domain, domainName: DOMAINS[def.domain].name, name: groupName(g, id), kana: def.kana, kind: def.kind, seg: def.seg, segName: SEG_NAME[def.seg] || def.seg, on: grp.on, note: def.note || null,
     support: r0(grp.s), supportLabel: supportLabel(grp.s), govSupport: r0(grp.govAnchor), anger: r0(grp.an), angerLabel: angerLabel(grp.an), influence: r0(inf), influenceLabel: inf >= 60 ? '非常に強い' : inf >= 40 ? '強い' : inf >= 20 ? 'ふつう' : '小さい', capacity: def.cap, capacityLabel: def.cap >= 60 ? '大きい' : def.cap >= 30 ? 'ふつう' : def.cap > 0 ? '小さい' : 'なし',
     lean: def.lean, leaders: grp.leaders.map((l) => ({ ...l, personaName: LEADER_PERSONAS[l.persona].name, personaDesc: LEADER_PERSONAS[l.persona].desc })), grievances: grp.griev.map((e) => ({ id: e.id, text: e.text, heat: r0(e.heat) })).sort((a, b) => b.heat - a.heat),
     cases, asks: def.asks.map((a) => ({ kind: a[0], kindName: ASK_KIND_NAME[a[0]], text: a[1] })), log: grp.log.slice(0, 6), met: grp.met, owe: r1(grp.owe), don: grp.don, cred: grp.x.cred != null ? r0(grp.x.cred) : null,
     radical: def.radical ? r0(grp.x.radical) : null, radicalKnown: def.radical ? (today(g) - num(grp.x.known, -999) < 90 || num(grp.x.watch) >= 1) : false, radicalLabel: def.radical ? radicalLabel(grp.x.radical) : null, watch: r1(grp.x.watch || 0),
-    silent: num(grp.x.silent) > today(g) ? grp.x.silent - today(g) : 0, banned: num(grp.x.banned) > today(g) ? grp.x.banned - today(g) : 0, coop: num(grp.x.coop), link, pro: pro.slice(0, 2), con: con.slice(0, 2), likes: def.likes.map((x) => POLICY_NAME[x] || x), dislikes: def.dislikes.map((x) => POLICY_NAME[x] || x),
+    silent: num(grp.x.silent) > today(g) ? grp.x.silent - today(g) : 0, banned: num(grp.x.banned) > today(g) ? grp.x.banned - today(g) : 0, coop: num(grp.x.coop), link, pro: pro.slice(0, 2), con: con.slice(0, 2), likes: def.likes.map((x) => POLICY_NAME[x] || x), dislikes: def.dislikes.map((x) => POLICY_NAME[x] || x), likesShort: def.likes.map((x) => String(POLICY_NAME[x] || x).replace(/（.*$/, '')), dislikesShort: def.dislikes.map((x) => String(POLICY_NAME[x] || x).replace(/（.*$/, '')),
     control: domainControl(role, def.domain),
   };
 }
@@ -2796,11 +2799,11 @@ export function groupsSpecial(g, domain) {
     case 'kenkyu': return rdSummary(g);
     case 'seifu': return seifuSummary(g);
     case 'yushikisha': return { panels: panelsList(g), backing: backingList(g), themes: THEME_ORDER.filter((t) => !THEMES[t].from || gdate(g).n >= THEMES[t].from).map((t) => ({ id: t, name: THEMES[t].name, axis: THEMES[t].axis })), shelved: (S(g).flags.shelved || []).length };
-    case 'artist': { const s = S(g); return { freedom: r0(s.art.freedom), protests: s.art.protests, ent: groupsRole(g).ent, fame: groupsRole(g).fame, note: groupsRole(g).ent ? 'あなたは芸能人。団体の応援・抗議・顕彰で、知名度とファンが動く' : null }; }
+    case 'artist': { const s = S(g); return { freedom: r0(s.art.freedom), protests: s.art.protests, ent: groupsRole(g).ent, fame: groupsRole(g).fame, note: groupsRole(g).ent ? 'あなたは芸能人：応援・顕彰で知名度とファンが動く' : null }; }
     case 'bunka': { const s = S(g); return { heritage: s.culture.heritage, damage: s.culture.damage, agency: since(g, 19680615) ? '文化庁（1968年〜）' : '文部省（文化局）', cool: since(g, 20100618) ? 'クール・ジャパン戦略（2010年〜）' : null }; }
-    case 'business': { const s = S(g); return { corr: r0(s.corr), donations: r0(s.fx.don), law: since(g, 20000101) ? '政治家個人あての企業・団体献金は禁止（2000年〜）。政党・政党支部あては可' : '資金管理団体などへの団体献金（上限あり）', petition: [10, 11, 12].includes(gdate(g).month) ? '予算と税制の要望書の季節（秋〜冬）' : null }; }
+    case 'business': { const s = S(g); return { corr: r0(s.corr), donations: r0(s.fx.don), law: since(g, 20000101) ? '団体献金は政党・支部あてだけ可（2000年〜）' : '資金管理団体などへの団体献金（上限あり）', petition: [10, 11, 12].includes(gdate(g).month) ? '予算と税制の要望書の季節（秋〜冬）' : null }; }
     case 'sect': { const s = S(g); return { watch: groupsOfDomain('sect').filter((id) => s.groups[id].on && GROUP_DEFS[id].radical).map((id) => ({ id, name: groupName(g, id), radical: r0(s.groups[id].x.radical), known: today(g) - num(s.groups[id].x.known, -999) < 90 || num(s.groups[id].x.watch) >= 1, watch: r1(s.groups[id].x.watch || 0) })), law: since(g, 19991227) ? '団体規制法（観察処分）あり' : '破壊活動防止法（1952年）のみ', realParty: govRealParty(g) }; }
-    case 'kyokai': { const s = S(g); return { corr: r0(s.corr), law: since(g, 20000101) ? '政治家個人あての団体献金は禁止（2000年〜）' : '資金管理団体への団体献金（上限あり）' }; }
+    case 'kyokai': { const s = S(g); return { corr: r0(s.corr), law: since(g, 20000101) ? '団体献金は政党・支部あてだけ可（2000年〜）' : '資金管理団体への団体献金（上限あり）' }; }
     default: return {};
   }
 }

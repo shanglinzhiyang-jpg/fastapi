@@ -51,12 +51,12 @@ async function addGlossary() {
     T('春闘', 'しゅんとう', 'kurashi', '毎年春に、労働組合が賃上げなどを経営側に求める交渉。', '労働組合が毎年春にいっせいに、賃上げなどを経営側に求めて交渉すること（春季生活闘争）。1955年に始まった。大手企業の回答が出る3月中旬の「集中回答日」が山場で、その結果が中小企業や最低賃金にも波及する。', { related: ['最低賃金', '連合'] });
     T('連合', 'れんごう', 'kurashi', '日本最大の労働組合のナショナルセンター（1989年結成）。', '労働組合の全国組織（日本労働組合総連合会）。1989年11月に、総評・同盟などの流れが一つになって結成された。春闘での賃上げ要求や、最低賃金、働き方の制度について政府や経営側と話し合う。', { since: 1989, sinceText: '1989年11月', related: ['春闘', '最低賃金'] });
     T('有識者会議', 'ゆうしきしゃかいぎ', 'naikaku', '総理や大臣が専門家に意見を聞くために開く会議。', '内閣総理大臣や大臣が、専門家の意見を聞くために開く私的な会議（懇談会など）。法律や政令にもとづく「審議会」とはちがい、設置も人選も、開く側の判断が大きい。報告書は政策の後ろ盾になるが、人選の偏りは「結論ありき」「御用学者」と批判される。', { related: ['審議会'] });
-    T('観光立国推進基本法', 'かんこうりっこくすいしんきほんほう', 'chiho', '観光で国を成り立たせる方針を定めた法律（2007年施行）。', '観光を国の重要な政策とする基本法。2006年12月に成立し、2007年1月に施行された。2008年10月には、国土交通省の外局として観光庁が発足した。', { since: 2007, sinceText: '2007年1月', related: ['地方自治'] });
+    T('観光立国推進基本法', 'かんこうりっこくすいしんきほんほう', 'chiho', '観光で国を成り立たせる方針を定めた法律（2007年施行）。', (y) => `観光を国の重要な政策とする基本法。2006年12月に成立し、2007年1月に施行された。${y >= 2008 ? '2008年10月には、国土交通省の外局として観光庁が発足した。' : ''}`, { since: 2007, sinceText: '2007年1月', related: ['地方自治'] });
     T('オーバーツーリズム', 'おーばーつーりずむ', 'kurashi', '観光客が集中しすぎて、住民の暮らしや環境が損なわれること。', '観光客が特定の場所に集中し、混雑・ごみ・騒音・交通の混乱などで、住民の暮らしや自然環境、観光客の満足が損なわれること。予約制・入場制限・宿泊税や入域料などの対策がある。', { since: 2015, sinceText: '2010年代後半から問題に', related: ['観光立国推進基本法'] });
     T('団体規制法', 'だんたいきせいほう', 'kenpo', '無差別大量殺人行為を行った団体を規制する法律（1999年）。', '過去に無差別大量殺人行為を行った団体について、公安調査庁が観察処分を請求し、公安審査委員会が決める仕組み。団体の施設への立入検査や、活動状況の報告が義務づけられる。破壊活動防止法（1952年）とは別の法律。', { since: 1999, sinceText: '1999年12月', related: ['信教の自由', '政教分離'] });
-    T('文化庁', 'ぶんかちょう', 'naikaku', '文化の振興と文化財の保護を担う国の機関（1968年発足）。', '芸術の振興、文化財の保護、国語や著作権の仕事などを担う、文部科学省の外局。1968年に発足した。2023年には一部の業務が京都で始まった。', { since: 1968, sinceText: '1968年', related: ['表現の自由'] });
-    T('スポーツ庁', 'すぽーつちょう', 'naikaku', 'スポーツの振興を担う国の機関（2015年発足）。', '文部科学省の外局として、2015年10月に発足した。スポーツ基本法（2011年）のもと、競技力の向上、スポーツを通じた健康づくり、大会の招致などを進める。', { since: 2015, sinceText: '2015年10月', related: [] });
-    T('科学技術基本法', 'かがくぎじゅつきほんほう', 'naikaku', '科学技術の振興を定めた法律（1995年）。', '1995年に議員立法で全会一致で成立。政府は科学技術基本計画をつくり、研究費を確保する。2021年からは「科学技術・イノベーション基本法」になった。研究への投資は、すぐには成果が見えにくいが、長い目で成長に効く。', { since: 1995, sinceText: '1995年', related: ['研究開発'] });
+    T('文化庁', 'ぶんかちょう', 'naikaku', '文化の振興と文化財の保護を担う国の機関（1968年発足）。', (y) => `芸術の振興、文化財の保護、国語や著作権の仕事などを担う、文部省（のちに文部科学省）の外局。1968年に発足した。${y >= 2023 ? '2023年には一部の業務が京都で始まった。' : ''}`, { since: 1968, sinceText: '1968年', related: ['表現の自由'] });
+    T('スポーツ庁', 'すぽーつちょう', 'naikaku', 'スポーツの振興を担う国の機関（2015年発足）。', '文部科学省の外局として、2015年10月に発足した。スポーツの振興、競技力の向上、スポーツを通じた健康づくり、大会の招致などを進める。', { since: 2015, sinceText: '2015年10月', related: [] });
+    T('科学技術基本法', 'かがくぎじゅつきほんほう', 'naikaku', '科学技術の振興を定めた法律（1995年）。', (y) => `1995年に議員立法で全会一致で成立。政府は科学技術基本計画をつくり、研究費を確保する。${y >= 2021 ? '2021年からは「科学技術・イノベーション基本法」になった。' : ''}研究への投資は、すぐには成果が見えにくいが、長い目で成長に効く。`, { since: 1995, sinceText: '1995年', related: [] });
     T('内閣人事局', 'ないかくじんじきょく', 'naikaku', '官僚の幹部人事を官邸が一元管理する組織（2014年）。', '各府省の幹部職員の人事を、内閣が一元的に管理するための組織で、2014年5月に発足した。政治主導を強める一方、官僚が「忖度」しやすくなるという懸念もある。', { since: 2014, sinceText: '2014年5月', related: ['官僚', '天下り'] });
   } catch (e) { /* the glossary is optional */ }
 }
@@ -294,7 +294,7 @@ function specialSpec(ui, d, kit) {
     case 'rengo': {
       const sh = sp.shunto || {};
       S.title = `${sp.center || '労働'}・春闘と最低賃金`;
-      S.lines = [`組織率 ${sp.rate}%・最低賃金（全国平均の目安）${f(sp.minWageValue)}円`, `春闘：${sh.label || '—'}${sh.dem ? `　要求${sh.dem}%` : ''}${sh.settled ? `　回答${sh.settled}%` : ''}（実際の目安${sh.trend}%）`, sp.activeStrike ? `ストライキ中：${sp.activeStrike.name}（${sp.activeStrike.days}日）` : sp.results && sp.results[0] ? `前回の春闘：要求${sp.results[0].dem}%→回答${sp.results[0].settled}%` : sp.note];
+      S.lines = [`組織率 ${sp.rate}%・最低賃金（全国平均の目安）${f(sp.minWageValue)}円`, `春闘：${sh.label || '—'}${sh.dem ? `　要求${sh.dem}` : ''}${sh.settled ? `→回答${sh.settled}%` : ''}（目安${sh.trend}）`, sp.activeStrike ? `ストライキ中：${sp.activeStrike.name}（${sp.activeStrike.days}日）` : sp.results && sp.results[0] ? `前回の春闘：要求${sp.results[0].dem}%→回答${sp.results[0].settled}%` : sp.note];
       const mw = sp.minWage || { options: [] };
       const why = mw.options.length && mw.options.every((o) => o.why && !/先に/.test(o.why)) ? mw.options[0].why : null;
       S.buttons = [{ id: 'sp1', label: '最低賃金を上げる', why, tip: '中央最低賃金審議会の答申を受けて、政令で決める', a: (u) => minWageFlow(u) }];
@@ -302,18 +302,18 @@ function specialSpec(ui, d, kit) {
     }
     case 'sports':
       S.title = `大会の誘致（${sp.agency}）`;
-      S.lines = [...(sp.active || []).slice(0, 2).map((b) => `${b.name}：${b.statusLabel}${b.status === 'declared' ? `（決定まであと${b.leftDecide}日・見込み${Math.round(b.odds * 100)}%）` : `（開幕まであと${b.leftEvent}日）`}`), (sp.active || []).length ? '' : '誘致・準備中の大会はない', sp.past && sp.past.length ? `これまで：${sp.past.slice(-2).join('・')}` : ''].filter(Boolean);
+      S.lines = [...(sp.active || []).slice(0, 2).map((b) => `${b.name}：${b.statusLabel}${b.status === 'declared' ? `（決定まであと${b.leftDecide}日・見込み${Math.round(b.odds * 100)}%）` : `（開幕まであと${b.leftEvent}日）`}`), (sp.active || []).length ? '' : '誘致・準備中の大会はない', sp.past && sp.past.length ? `これまで：${sp.past.slice(-2).map((x) => x.replace('年 ', ' ')).join('・')}` : ''].filter(Boolean);
       S.buttons = [{ id: 'sp1', label: '大会の誘致・準備', tip: '五輪・万博・W杯・アジア大会・国スポの誘致と準備', a: (u) => bidFlow(u) }];
       break;
     case 'business':
       S.title = '経済界との関係';
       S.bars = [['癒着の疑い', num(sp.corr), num(sp.corr) >= 55 ? kit.K.bad : kit.K.warn]];
-      S.lines = [sp.law, `これまでの献金 ${fmtMoney(num(sp.donations))}${sp.petition ? `・${sp.petition}` : ''}`];
+      S.lines = [sp.law, `これまでの献金 ${fmtMoney(num(sp.donations))}${sp.petition ? `・要望書の季節` : ''}`];
       break;
     case 'kyokai':
       S.title = '業界団体との関係';
       S.bars = [['癒着の疑い', num(sp.corr), num(sp.corr) >= 55 ? kit.K.bad : kit.K.warn]];
-      S.lines = [sp.law, '補助金・規制・献金が重なると、見返りの癒着を疑われる'];
+      S.lines = [sp.law, '補助金・規制・献金が重なると癒着を疑われる'];
       break;
     case 'sect':
       S.title = '公安の監視・団体規制';
@@ -336,9 +336,9 @@ function specialSpec(ui, d, kit) {
       S.lines = [`指定文化財 ${sp.heritage}件・傷み ${sp.damage}`, sp.cool || 'コンテンツ産業の育成は、文化と経済の施策で進められる'];
       break;
     case 'kenkyu':
-      S.title = `研究（${sp.law}）`;
+      S.title = '研究と科学技術';
       S.bars = [['研究水準', num(sp.level), kit.K.cyan], ['研究公正', num(sp.integrity), kit.K.good]];
-      S.lines = [`若手の安定 ${sp.young}・ノーベル賞 ${sp.nobel}人${sp.laureates && sp.laureates[0] ? `（直近 ${sp.laureates[0].year}年）` : ''}`, `成長への効果 ${sp.growthPush >= 0 ? '+' : '−'}${Math.abs(sp.growthPush)}ポイント（研究水準に応じて）`];
+      S.lines = [`若手の安定 ${sp.young}・ノーベル賞 ${sp.nobel}人${sp.laureates && sp.laureates[0] ? `（直近 ${sp.laureates[0].year}年）` : ''}`, `${sp.law}`];
       break;
     case 'seifu':
       S.title = '官庁・自治体との関係';
@@ -505,15 +505,14 @@ function drawGroups(c, ui, d, kit) {
     bar('影響力', cur.influence / 100, 130, K.violet, `${cur.influence} ${cur.influenceLabel}`);
     bar('不満', cur.anger / 100, 142, cur.anger >= 45 ? K.bad : K.warn, `${cur.anger} ${cur.angerLabel}`);
     T(c, `献金・協力の力 ${cur.capacityLabel}　政権への態度 ${cur.govSupport > 0 ? '+' : ''}${cur.govSupport}${cur.cred != null ? `　信頼性 ${cur.cred}` : ''}`, 178, 155, 10, K.dim, 'left', 252);
-    T(c, cur.leaders.map((l) => `${l.title} ${l.name}（${l.personaName}）`).join('　'), 178, 168, 10, K.text, 'left', 252);
-    if (cur.radical != null) T(c, `過激化 ${cur.radicalKnown ? `${cur.radical}／100（${cur.radicalLabel}）` : '不明（公安調査で分かる）'}${cur.banned ? '　活動禁止中' : cur.silent ? '　沈静化中' : ''}`, 178, 181, 10, cur.radicalKnown && cur.radical >= 55 ? K.bad : K.warn, 'left', 252);
-    else if (cur.link) T(c, `宗教コアの記録：信頼 ${Math.round(num(cur.link.trust))}／関係 ${Math.round(num(cur.link.relation))}　${cur.link.status || ''}`, 178, 181, 10, K.dim, 'left', 252);
-    else T(c, cur.coop >= 3 ? '「御用団体」との見方が広がっている' : `献金の累計 ${fmtMoney(cur.don)}　見返りの期待 ${cur.owe}`, 178, 181, 10, cur.coop >= 3 ? K.warn : K.dim, 'left', 252);
-    let yy = 195;
-    const gv = cur.grievances.slice(0, 2);
-    if (gv.length) { for (const e of gv) { T(c, `不満：${e.text}`, 178, yy, 10, K.warn, 'left', 252); yy += 11; } } else { T(c, '不満の種：いまは目立たない', 178, yy, 10, K.faint); yy += 11; }
-    T(c, `賛成：${cur.pro[0] || '—'}`, 178, yy + 2, 10, K.good, 'left', 252); yy += 12;
-    T(c, `反対：${cur.con[0] || '—'}`, 178, yy + 2, 10, K.bad, 'left', 252);
+    cur.leaders.forEach((l, i) => T(c, `${l.title} ${l.name}（${l.personaName}）`, 178, 167 + i * 11, 10, i ? K.dim : K.text, 'left', 252));
+    if (cur.radical != null) T(c, `過激化 ${cur.radicalKnown ? `${cur.radical}／100（${cur.radicalLabel}）` : '不明（公安調査で分かる）'}${cur.banned ? '　活動禁止中' : cur.silent ? '　沈静化中' : ''}`, 178, 190, 10, cur.radicalKnown && cur.radical >= 55 ? K.bad : K.warn, 'left', 252);
+    else if (cur.link) T(c, `宗教コア：信頼 ${Math.round(num(cur.link.trust))}／関係 ${Math.round(num(cur.link.relation))}　${cur.link.status || ''}`, 178, 190, 10, K.dim, 'left', 252);
+    else T(c, cur.coop >= 3 ? '「御用団体」との見方が広がっている' : `献金の累計 ${fmtMoney(cur.don)}　見返りの期待 ${cur.owe}`, 178, 190, 10, cur.coop >= 3 ? K.warn : K.dim, 'left', 252);
+    const gv = cur.grievances[0];
+    T(c, gv ? `不満：${gv.text}` : '不満の種：いまは目立たない', 178, 201, 10, gv ? K.warn : K.faint, 'left', 252);
+    T(c, `賛成：${cur.likesShort.slice(0, 2).join('・') || '—'}`, 178, 214, 10, K.good, 'left', 252);
+    T(c, `反対：${cur.dislikesShort.slice(0, 2).join('・') || '—'}`, 178, 225, 10, K.bad, 'left', 252);
     if (cur.cases.length) T(c, `要望 ${cur.cases.length}件（期限 あと${Math.min(...cur.cases.map((x) => x.left))}日）`, 430, 106, 10, K.warn, 'right');
   }
   // special panel
@@ -570,7 +569,7 @@ function drawCases(c, ui, d, kit) {
     if (o.why) kit.padlock(c2, x + 4, y + 3);
     T(c2, o.label, x + (o.why ? 16 : 8), y + 1, 11, o.why ? K.faint : sel ? K.white : K.text, 'left', w - (o.why ? 70 : 62));
     if (o.odds != null && !o.why) T(c2, `${Math.round(o.odds * 100)}%`, x + w - 6, y + 2, 10, o.odds >= 0.6 ? K.good : o.odds >= 0.35 ? K.warn : K.bad, 'right');
-    T(c2, o.why ? `🔒 ${o.why}` : `${o.costText}${o.lines && o.lines.length ? `・${o.lines.slice(0, 2).join('・')}` : ''}`, x + 8, y + 13, 9, o.why ? K.lock : K.dim, 'left', w - 14);
+    T(c2, o.why ? `🔒 ${o.why}` : `${o.costText}${o.lines && o.lines.length ? `・${o.lines.slice(0, 2).join('・')}` : o.desc ? `・${o.desc}` : ''}`, x + 8, y + 13, 9, o.why ? K.lock : K.dim, 'left', w - 14);
   }, { empty: opts.length ? '' : '答える案件がない' });
 }
 function drawTourism(c, ui, d, kit) {
