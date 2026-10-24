@@ -24,6 +24,7 @@ export const MODULES = [
   './world/nagatacho.js',
   './world/kanraku.js',
   './world/darkside.js',
+  './world/yami.js', // 現代日本の闇: 過労・貧困・孤独死・DV・誹謗中傷・カルト・闇バイト… (after darkside: shares its slot; api: test-output/api_yami.txt)
   // government core (税率・予算・行政・郵政・宗教・野党・世論の声・デモ・支持率) and its 政権交代・総辞職 scenes (api: test-output/api_govt.txt)
   './engine/govt.js',
   './world/seiken.js',

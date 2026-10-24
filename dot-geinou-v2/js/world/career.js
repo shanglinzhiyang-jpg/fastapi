@@ -815,10 +815,12 @@ const openOffer = (st, m) => m && m.kind === 'offer' && !m.answered && st.day - 
 function pendingOffer(st, id) {
   return st.phone.inbox.some((m) => openOffer(st, m) && m.regular === id);
 }
+// 干される (yami.js: a contract dispute with the agency): no new show is offered until it blows over
+const hosare = (st) => !!(st.flags.yami && num(st.flags.yami.hosareUntil) > st.day);
 function offerable(g, id) {
   const st = g.state;
   const offers = obj(g, 'career_offers');
-  if (isActive(st, id) || pendingOffer(st, id)) return false;
+  if (isActive(st, id) || pendingOffer(st, id) || hosare(st)) return false;
   if (offers[id] && st.day - offers[id] < OFFER_GAP) return false;
   const s = st.regulars[id];
   if (s && s.declined && st.day - s.declined < OFFER_GAP) return false;
@@ -828,7 +830,7 @@ function offerable(g, id) {
 }
 function kanEligible(g) {
   const st = g.state;
-  if (st.fame < KAN_FAME || st.fans < KAN_FANS) return false;
+  if (st.fame < KAN_FAME || st.fans < KAN_FANS || hosare(st)) return false;
   const offers = obj(g, 'career_offers');
   if (isActive(st, KAN) || pendingOffer(st, KAN)) return false;
   // dropped from it (missed twice): a long break; only declined: a week
