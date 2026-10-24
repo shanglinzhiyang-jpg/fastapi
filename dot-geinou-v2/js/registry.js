@@ -25,6 +25,7 @@ export const MODULES = [
   './engine/perform.js',
   './engine/contests.js',
   './engine/contests_data.js',
+  './engine/contests_data2.js',
   './engine/contest_m1.js',
   './engine/contest_koc.js',
   './engine/contest_r1.js',
