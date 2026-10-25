@@ -309,6 +309,28 @@ function districtEntities() {
   ];
 }
 
+// [R8-L1] the driving school (ドット自動車教習所, js/places/kyoshujo.js) and the licence centre (ドット運転免許センター, js/places/menkyo.js)
+// stand on two free lots: the school at the east end of the 劇場通り (x 69..74, rows 59..64), the centre in the strip behind the
+// railway fence (x 61..68, rows 40..43, its door on the lane at row 44). Old saves: unstick() moves anyone caught inside.
+function licenseLots(c) {
+  if (PLACES.kyoshujo) {
+    fill(c, 68, 59, 7, 6, 'grass');
+    put(c, 68, 60, 'bush'); put(c, 68, 62, 'planter'); put(c, 68, 64, 'sign_board');
+  }
+  if (PLACES.menkyo) {
+    fill(c, 60, 40, 10, 4, 'grass');
+    put(c, 60, 41, 'bush'); put(c, 69, 41, 'planter'); put(c, 60, 43, 'sign_board');
+  }
+}
+function licenseEntities() {
+  const out = [];
+  if (PLACES.kyoshujo) out.push({ type: 'building', x: 69, y: 59, w: 6, h: 6, door: 3, place: 'kyoshujo', name: 'ドット自動車教習所', kind: 'office', wall: '#f1f4e8', roof: '#2f9a5a', canopy: '#2f9a5a', sign: { text: 'ドット自動車教習所', bg: '#2f9a5a', color: '#ffffff' } });
+  if (PLACES.menkyo) out.push({ type: 'building', x: 61, y: 40, w: 8, h: 4, door: 4, place: 'menkyo', name: 'ドット運転免許センター', kind: 'office', wall: '#e4e8ee', roof: '#3a5a9a', canopy: '#3a5a9a', sign: { text: 'ドット運転免許センター', bg: '#2a4a8a', color: '#ffffff' } });
+  if (PLACES.kyoshujo) out.push({ type: 'sign', x: 68, y: 64, text: ['「ドット自動車教習所」→ すぐそこ。', '免許をとりたい人は、受付へ。通学も合宿もあります。'] });
+  if (PLACES.menkyo) out.push({ type: 'sign', x: 60, y: 43, text: ['「ドット運転免許センター」↑ この先、線路ぞい。', '学科試験・免許の更新・原付免許の手続きなど。受付は平日 午前9時〜午後4時。'] });
+  return out;
+}
+
 function generate() {
   const W = TOKYO_W, H = TOKYO_H;
   const c = grid(W, H, 'grass');
@@ -414,6 +436,7 @@ function generate() {
   put(c, 38, 28, 'vending');
   put(c, 18, 48, 'lamp'); put(c, 22, 58, 'lamp'); put(c, 18, 62, 'lamp');
 
+  licenseLots(c); // [R8-L1]
   const entities = [
     // buildings
     { type: 'building', x: 3, y: 3, w: 12, h: 8, door: 6, place: 'nhk', name: 'NHK放送センター', kind: 'tower', wall: '#e8ecf2', roof: '#8d9bb0', glass: '#6fa8dc', logo: 'nhk', signH: 22, signW: 120 },
@@ -431,6 +454,7 @@ function generate() {
       text: ['「ドット新聞社」のビルだ。', '芸能面の記事も、ここで書かれているらしい。\n…いつか自分の記事がのる日が来るかも？'] },
     // 芸人通り and the 劇場通り: NSC東京校 (from 1995), the 貸し稽古場 (js/places/nsc.js) …
     ...districtEntities(),
+    ...licenseEntities(), // [R8-L1]
 
     // props
     fountain(8, 13),

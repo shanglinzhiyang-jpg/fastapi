@@ -305,6 +305,22 @@ export const GUIDE = {
     hint: 'ドット商店街の北東、アーケードの先',
     lines: ['住民票・税の窓口（確定申告の相談も）', '選挙管理委員会：選挙の説明・立候補の届出・期日前投票（2003年まで不在者投票）', '区民相談室：多重債務・闇金・生活の相談／区議会の傍聴'],
   },
+  // [R8-L1] 運転免許（教習所・免許センター・合宿）
+  kyoshujo: {
+    town: 'tokyo', name: 'ドット自動車教習所', short: '教習所',
+    hint: '劇場通りの東のはし（ドット演芸場の先）',
+    lines: ['入所・適性検査 → 学科と技能の教習 → 修了検定 → 仮免 → 路上 → 卒業検定', '通学（予約制）か合宿（宿泊・最短2週間）。AT限定は1991年から、準中型は2017年から', '二輪・第二種もここ。シミュレーター室で無料の練習'],
+  },
+  menkyo: {
+    town: 'tokyo', name: 'ドット運転免許センター', short: '免許センター',
+    hint: '東京駅の東、線路ぞいの建物（大通りの南のレーン沿い）',
+    lines: ['卒業後の適性検査・学科試験（90%以上）・写真・交付時講習 → 免許証', '原付免許は学科試験と原付講習だけ。免許証の更新もここ', '受付は平日 午前9時〜午後4時（土日は休み）'],
+  },
+  gassyuku: {
+    town: 'tokyo', tag: '合宿', tagBg: '#2f9a5a', name: 'ドット合宿教習所', short: '合宿',
+    hint: '地図にはない。教習所で合宿を申し込むと、新幹線とバスで出かける',
+    lines: ['宿泊しながら最短AT 5日・MT 6日（約14〜16日）で免許をめざす', '食堂・談話室・寮の部屋。検定に落ちると延泊', '留守のあいだの家賃は前払い。レギュラーはお休みあつかい'],
+  },
   // ---------------------------------------------------------------- ネオン街（東京の南）
   kanraku: {
     town: 'kanraku', name: 'ネオン街', short: 'ネオン街',
@@ -349,7 +365,7 @@ export const GUIDE_ORDER = [
   'machi', 'super', 'hanaya', 'ramen', 'cafe', 'salon', 'famires', 'gym', 'karaoke', 'fudousan', 'kagu', 'mansion', 'tower',
   'minato', 'ntv', 'tbs', 'tvasahi', 'fujitv', 'tvtokyo',
   'namba', 'station_namba', 'shinkigeki', 'nsc', 'shochiku', 'takoyaki', 'hotel', 'mbs', 'ktv', 'jikka',
-  'kuyakusho',
+  'kuyakusho', 'kyoshujo', 'menkyo', 'gassyuku',
   'nagatacho', 'kokkai', 'kantei', 'jimin_hq', 'minshu_hq', 'yato_hq', 'myparty_hq', 'keisatsu', 'kensatsu', 'saibansho',
   'kanraku', 'koban', 'kyabakura', 'gamecen', 'shohisha', 'yamikin', 'kumi',
   'keimusho',

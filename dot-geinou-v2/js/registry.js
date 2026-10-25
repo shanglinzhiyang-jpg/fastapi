@@ -70,6 +70,15 @@ export const MODULES = [
   './places/parties.js',
   './places/kuyakusho.js',
   './places/justice.js',
+  // 自動車免許取得システム [R8-L1]: 教習所（通学・合宿）→ 免許センター → 免許証 (api: test-output/api_license.txt)
+  './engine/license.js',
+  './engine/license_exam.js',
+  './engine/license_card.js',
+  './engine/license_flow.js',
+  './engine/license_app.js',
+  './places/kyoshujo.js',
+  './places/menkyo.js',
+  './places/gassyuku.js',
   // regime & security core (体制・自衛隊・震災対応・報道の自由・戦争) and its scenes + phone app 危機管理
   './engine/regime.js',
   './world/kiki.js',
@@ -99,6 +108,7 @@ export const MODULES = [
   './minigames/ogiri.js',
   './minigames/pinneta.js',
   './minigames/tanshuku.js',
+  './minigames/driving.js', // [R8-L2] 運転免許の技能 minigame (api: test-output/api_driving.txt)
 ];
 
 export async function loadAll() {

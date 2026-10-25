@@ -1078,6 +1078,14 @@ function recordPage(g, ctx) {
     }
     pg.row('時代', ERA.label);
     pg.para(`${ERA.year}。${ERA.device}を持って、芸能界へ。`, { s: SMALL, c: COLORS.dim, x: 12 });
+    // [R8-L1] 運転免許（license.js: g.licenseLine → { text, sub, c })
+    try {
+      const ln = typeof g.licenseLine === 'function' ? g.licenseLine() : null;
+      if (ln) {
+        pg.row('運転免許', ln.text, { rc: ln.c === 'bad' ? COLORS.bad : ln.c === 'ing' ? COLORS.cyan : COLORS.good });
+        if (ln.sub) pg.para(ln.sub, { s: SMALL, c: COLORS.dim, x: 12 });
+      }
+    } catch (e) { console.error(e); }
 
     pg.block().head('家族', COLORS.pink);
     const fam = sortFamily(Array.isArray(pf.family) ? pf.family : []);
