@@ -829,7 +829,11 @@ export class Game {
       const notes = this.morningNotes.splice(0);
       await this.say(notes); // one page each
     }
-    if (opts.save !== false) this.save();
+    if (opts.save !== false) {
+      // a place without saving (noSave) is fine; a save the browser refused is told, not lost silently
+      const canSave = !!(this.state && this.map.place && !this.map.place.noSave);
+      if (canSave && !this.save()) this.notify('セーブできなかった…（ブラウザの保存領域がいっぱいか、保存が止められています）', { color: '#ff5d6c', life: 260 });
+    }
   }
 
   // ---------------------------------------------------------------- ending

@@ -910,8 +910,17 @@ export function historyHead(g, def, now = contestDate(g).year) {
       parts.push(first != null ? `${end}年で終了→${first}年に復刻開催` : `${end}年で終了`);
     } else parts.push(`${end}年で終了`);
   }
-  const note = pastOnly(h.note || '', now);
+  // the note without what the line already says (a leading 「2001年創設。」)
+  const note = pastOnly(String(h.note || '').replace(new RegExp(`^${founded}年(?:創設|スタート|開始)[。、]?`), ''), now);
   return `${parts.join('・')}${note ? `／${note}` : ''}`;
+}
+// a title instead of 優勝 (def.winnerTitle, e.g. 'MVS'; or an acronym prize such as 「MVS（Most Valuable すべらない話）」):
+// news say 「…、MVSは○○！」 and history 「MVS：○○」, with no 準優勝
+export function winnerTitleOf(def) {
+  if (!def) return null;
+  if (def.winnerTitle) return String(def.winnerTitle);
+  const m = /^([A-Z]{2,5})（/.exec(String(def.prizeText || ''));
+  return m ? m[1] : null;
 }
 // one line for news / history: 「大賞：A／奨励賞：B／新人賞：C」
 export function awardLine(def, awards, sep = '／') {
@@ -1058,9 +1067,10 @@ export function cleanText(t) {
 }
 // Is `text` safe to show in `now`: no research notes and no year after `now` in it.
 export function pastOnly(text, now) {
-  const s = cleanText(text);
-  if (!s) return '';
-  for (const m of s.matchAll(/(1[89]\d\d|20\d\d)年?/g)) if (Number(m[1]) > now) return '';
+  const later = (t) => [...String(t).matchAll(/(1[89]\d\d|20\d\d)年?/g)].some((m) => Number(m[1]) > now);
+  // a parenthetical about a later year goes (「（2023年〜はネット投票も）」); a text that still names one goes whole
+  const s = cleanText(text).replace(/[（(][^（）()]*[）)]/g, (m) => (later(m) ? '' : m));
+  if (!s || later(s)) return '';
   return s;
 }
 export function prizeOf(def, year) {
@@ -1330,7 +1340,7 @@ export function contestInfo(g, id, day = todayOf(g)) {
     const rr = cyc.rounds.find((x) => x.last >= day);
     if (rr) { const o = rr.options.find((x) => x.day >= day) || rr.options[0]; nextRound = { idx: rr.idx, name: rr.name, day: o.day, venue: o.venue, date: o.date }; }
   }
-  const label = cyc.notyet ? `${contestName(def, year)}（まだ始まっていない／${num(def.history && def.history.founded)}年創設）` : cyc.label;
+  const label = cyc.notyet ? contestName(def, year) : cyc.label; // the status label says 「まだ始まっていない（YYYY年創設）」
   if (isSelfRun(def) && !entry) {
     // the def's own view: its entry, next round and status label
     const st = sst;
@@ -1520,7 +1530,7 @@ const methods = {
     const def = CONTESTS[id];
     const rows = isSelfRun(def) ? selfHistory(this, def) : historyRows(this, id, lastDoneYear(this, def));
     const mine = cstate(this).entries[id] || {};
-    const award = isAwardType(def);
+    const award = isAwardType(def) || !!winnerTitleOf(def);
     return rows.filter((r) => opts.all || r.held).map((r) => ({ year: r.year, edition: r.edition ?? null, champion: r.champion ?? null, runnerUp: award ? null : r.runnerUp ?? null, third: award ? null : r.third ?? null, finalists: r.finalists || [], awards: normAwards(r.awards), playerAward: r.playerAward || null, note: r.revival === true ? r.note || '' : r.note === '復刻開催' ? '' : r.note || '', revival: r.revival === true, held: r.held !== false, label: r.held === false ? '' : labelOf(def, r.year, r.edition, r.revival), playerPlace: r.player || null, playerEntry: mine[r.year] ? { status: mine[r.year].status, round: mine[r.year].round, results: mine[r.year].results } : null })).reverse();
   },
   contestNews(text, opts = {}) { return pushNews(this, text, opts); },
@@ -1564,7 +1574,7 @@ export const internals = {
   prestigeOf, isInvitational, dateText, todayOf, playerUnitName, bump, resultsOf, historyRows, lastDoneYear, logOnce, realToInternal, yenLabel,
   OFFICE_FROM, NEWS_FROM, judgeComment, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, TAG_COLORS, hostPerson, rngOf, gauss, pickR, MODEL,
   heldIn, editionIn, startYear, wareki, actPower, STATUS_LABEL, anonParams, contestDate, dayOfDate,
-  drawN, rowOfSim, isAwardType, awardNames, mainAward, normAwards, awardLine, prizeShare, manLabel, cleanText, pastOnly, unitWord, isUnitContest, historyHead,
+  drawN, winnerTitleOf, rowOfSim, isAwardType, awardNames, mainAward, normAwards, awardLine, prizeShare, manLabel, cleanText, pastOnly, unitWord, isUnitContest, historyHead,
 };
 
 // ================================================================ the morning
@@ -1577,12 +1587,61 @@ function flushLater(g) {
   if (i >= 0) MORNING_HOOKS.splice(i, 1);
   MORNING_HOOKS.push(flushHook);
 }
+// ---------------------------------------------------------------- save growth (DECISIONS6 §8)
+// Full per-year detail is kept for the last KEEP_YEARS in-game years only. Older years: the world's history rows of years the
+// player had no part in are dropped (the deterministic simulation gives the same row back on demand); rows with the player
+// shrink to { edition, champion, champId, runnerUp, player, awards }; the player's round results shrink to place / score; old
+// invitations go; once-only news keys are kept 150 days. The contests state stays about flat after year 3.
+const KEEP_YEARS = 3;
+const slim = (o, keys) => { const out = {}; for (const k of keys) if (o[k] != null && o[k] !== '' && o[k] !== false) out[k] = o[k]; return out; };
+export function compactState(g, force = false) {
+  const c = cstate(g);
+  const day = todayOf(g);
+  const now = contestDate(g).year;
+  const cut = now - KEEP_YEARS + 1;
+  if (!force && c.compact && c.compact.year === now && day - num(c.compact.day) < 10) return;
+  c.compact = { year: now, day };
+  const mine = (id, y) => !!(c.entries[id] && c.entries[id][y]);
+  for (const id of Object.keys(c.hist)) {
+    for (const y of Object.keys(c.hist[id] || {})) {
+      if (Number(y) >= cut) continue;
+      const r = c.hist[id][y];
+      if (!isObj(r) || r.z) continue;
+      const withPlayer = r.player != null || r.playerAward || r.champId === 'player' || mine(id, y);
+      if (!withPlayer) { delete c.hist[id][y]; continue; }
+      c.hist[id][y] = { z: 1, ...slim(r, ['edition', 'champion', 'champId', 'runnerUp', 'player', 'playerAward', 'awards']), ...(r.revival === true ? { revival: true } : {}) };
+    }
+    if (!Object.keys(c.hist[id]).length) delete c.hist[id];
+  }
+  for (const id of Object.keys(c.results)) {
+    for (const y of Object.keys(c.results[id] || {})) {
+      if (Number(y) >= cut) continue;
+      const r = c.results[id][y];
+      if (!isObj(r) || r.z) continue;
+      const rounds = {};
+      for (const [k, rd] of Object.entries(r.rounds || {})) if (isObj(rd)) rounds[k] = slim(rd, ['day', 'score', 'passed', 'place', 'of', 'total', 'custom']);
+      c.results[id][y] = { z: 1, v: num(r.v), mods: isObj(r.mods) ? r.mods : {}, rounds, ...(isObj(r.final) ? { final: slim(r.final, ['place', 'of', 'total']) } : {}) };
+    }
+  }
+  for (const id of Object.keys(c.entries)) for (const y of Object.keys(c.entries[id] || {})) {
+    const e = c.entries[id][y];
+    if (Number(y) >= cut || !isObj(e) || e.z) continue;
+    e.z = 1;
+    delete e.today; delete e.pending; delete e.form;
+    if (Array.isArray(e.results)) e.results = e.results.map((x) => (isObj(x) ? slim(x, ['round', 'name', 'score', 'passed', 'place', 'of', 'day', 'revival', 'withdrawn', 'note']) : x));
+  }
+  if (isObj(c.invites)) for (const id of Object.keys(c.invites)) { for (const y of Object.keys(c.invites[id] || {})) if (Number(y) < cut) delete c.invites[id][y]; if (!Object.keys(c.invites[id]).length) delete c.invites[id]; }
+  for (const k of Object.keys(c.sent)) if (num(c.sent[k]) < day - 150) delete c.sent[k];
+  if (Array.isArray(c.later)) c.later = c.later.filter((x) => num(x && x.day) >= day - 5);
+  if (isObj(c.vers)) for (const id of Object.keys(c.vers)) if (!CONTESTS[id] && !c.entries[id]) delete c.vers[id];
+}
 function openMorning(g) { if (!g.state) return; inMorning = true; morningDay = todayOf(g); flushLater(g); }
 async function contestsMorning(g) {
   if (!g.state) return;
   cstate(g);
   openMorning(g);
   try { await runner.morning(g); } catch (e) { logOnce('morning', e); }
+  try { compactState(g); } catch (e) { logOnce('compact', e); }
   for (const def of Object.values(CONTESTS)) {
     if (typeof def.onMorning !== 'function') continue;
     try {
@@ -1595,4 +1654,4 @@ async function contestsMorning(g) {
 onMorning(contestsMorning);
 // the window opens before every other module's morning hook (registered at load, never during a morning)
 MORNING_HOOKS.unshift(function contestsMorningOpen(g) { try { openMorning(g); } catch (e) { logOnce('morningOpen', e); } });
-export const _test = { CACHE, MODEL, MORNING_CAP, flushQueue, simulateCore, fieldOf, actsFormed, historyRows, realCounts, contestsMorning };
+export const _test = { CACHE, MODEL, MORNING_CAP, compactState, flushQueue, simulateCore, fieldOf, actsFormed, historyRows, realCounts, contestsMorning };

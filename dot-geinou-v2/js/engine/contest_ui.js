@@ -70,6 +70,14 @@ function chip(c, s, x, y, col, size = 10, align = 'left') {
   return w;
 }
 const inR = (x, y, r) => r && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+// Touch layout (body.touch), the same numbers as A's 芸人手帳: a 70-unit tab bar with a 70×70 × cell (≈ 45 CSS px on a
+// 412-px-wide canvas), no header / footer, and the body (drawn for y 40..336) scaled into y 72..358; taps are mapped back.
+// Desktop is unchanged.
+const isTouch = () => typeof document !== 'undefined' && !!document.body && document.body.classList.contains('touch');
+const TB = 70;
+const TS = (SH - TB - 2) / 296;
+const TOX = (SW - SW * TS) / 2;
+const TOY = TB + 2 - 40 * TS;
 
 // ================================================================ taps (shared by the scenes here)
 const sceneOf = (g) => g && g.scenes && [...g.scenes].reverse().find((s) => s.isContestUI && !s.closed);
@@ -349,9 +357,11 @@ class ContestScene {
     if (k >= 0) await this.contestMenu(uniq[k].id);
   }
   handleTap(tap, inp) {
-    const { x, y } = tap;
-    if (inR(x, y, { x: SW - 24, y: 0, w: 24, h: 20 })) { dropA(inp); sfx('cancel'); this.close(); return true; }
-    for (let i = 0; i < TABS.length; i++) if (inR(x, y, this.tabRects && this.tabRects[i])) { dropA(inp); this.focus = 'tabs'; if (i !== this.tabIdx) { this.setTab(i); sfx('cursor'); } return true; }
+    const touch = !!this.touchLayout;
+    if (inR(tap.x, tap.y, touch ? { x: SW - TB, y: 0, w: TB, h: TB } : { x: SW - 32, y: 0, w: 32, h: 20 })) { dropA(inp); sfx('cancel'); this.close(); return true; }
+    for (let i = 0; i < TABS.length; i++) if (inR(tap.x, tap.y, this.tabRects && this.tabRects[i])) { dropA(inp); this.focus = 'tabs'; if (i !== this.tabIdx) { this.setTab(i); sfx('cursor'); } return true; }
+    // the body is drawn scaled on touch: back to its own units
+    const x = touch ? (tap.x - TOX) / TS : tap.x, y = touch ? (tap.y - TOY) / TS : tap.y;
     if (this.tab.id === 'calendar') {
       if (inR(x, y, this.yPrev)) { dropA(inp); this.cal.year--; this.evCache = null; sfx('cursor'); return true; }
       if (inR(x, y, this.yNext)) { dropA(inp); this.cal.year++; this.evCache = null; sfx('cursor'); return true; }
@@ -453,7 +463,33 @@ class ContestScene {
     }
   }
   // ---------------------------------------------------------------- drawing
+  drawTouch(c, g) {
+    R(c, 0, 0, SW, SH, K.bg);
+    this.tabRects = [];
+    const tw = (SW - TB) / TABS.length;
+    const dueN = I.roundsToday(g);
+    TABS.forEach((tb, i) => {
+      const x = Math.round(i * tw), w = Math.round((i + 1) * tw) - x, on = i === this.tabIdx;
+      R(c, x + 1, 0, w - 2, TB - 2, on ? (this.focus === 'tabs' ? K.gold : K.panel2) : '#150f24');
+      if (on) R(c, x + 1, TB - 5, w - 2, 3, K.gold);
+      T(c, tb.label, x + w / 2, TB / 2 - 8, 14, on && this.focus === 'tabs' ? '#1a1206' : on ? K.gold : K.text, 'center', w - 8);
+      if (i === 0 && dueN) R(c, x + w - 12, 8, 6, 6, '#ff5468');
+      this.tabRects.push({ x, y: 0, w, h: TB });
+    });
+    R(c, SW - TB + 1, 0, TB - 2, TB - 2, '#3a1a2a');
+    T(c, '×', SW - TB / 2, TB / 2 - 12, 24, K.text, 'center');
+    this.listRect = null; this.scrollUp = this.scrollDn = null; this.yPrev = this.yNext = null;
+    c.save();
+    c.translate(TOX, TOY);
+    c.scale(TS, TS);
+    try { if (this.tab.id === 'calendar') this.drawCal(c, g); else this.drawList(c, g); } catch (e) { console.error(e); }
+    c.restore();
+    this.toasts.forEach((t, i) => { const w = Math.min(SW - 40, measure(c, t.text, 12) + 20); R(c, (SW - w) / 2, 300 - i * 22, w, 20, 'rgba(0,0,0,0.85)'); T(c, t.text, SW / 2, 304 - i * 22, 12, t.color, 'center', w - 10); });
+    for (const m of this.modals) { R(c, 0, 0, SW, SH, 'rgba(0,0,0,0.5)'); m.draw(this, c); }
+  }
   draw(c, g) {
+    this.touchLayout = isTouch();
+    if (this.touchLayout) { this.drawTouch(c, g); return; }
     R(c, 0, 0, SW, SH, K.bg);
     R(c, 0, 0, SW, 20, K.head);
     T(c, '賞レース', 8, 3, 12, K.gold);
@@ -641,6 +677,13 @@ class ContestScene {
 }
 
 // ================================================================ shared detail text
+// a history row's winners: 「大賞：A／奨励賞：B」 (award contests), 「MVS：A」, else 「優勝：A／準優勝：B」
+function historySub(def, r) {
+  if (r.awards && Object.keys(r.awards).length) return I.awardLine(def, r.awards);
+  const title = I.winnerTitleOf(def);
+  if (title || I.isAwardType(def)) return `${title || I.mainAward(def)}：${r.champion || '—'}`;
+  return `優勝：${r.champion || '—'}${r.runnerUp ? `／準優勝：${r.runnerUp}` : ''}`;
+}
 export function detailLines(g, id, year) {
   const def = CONTESTS[id];
   const y = year ?? I.seasonYearOf(g, id);
@@ -650,24 +693,39 @@ export function detailLines(g, id, year) {
   const prize = I.prizeOf(def, y);
   const h = def.history || {};
   const L = [];
-  L.push(`${I.KIND_LABEL[I.kindOf(def)] || ''}の大会${def.organizer ? `／主催：${def.organizer}` : ''}${def.broadcaster ? `／放送：${def.broadcaster}` : ''}`);
-  L.push(`${num(h.founded) ? `${h.founded}年創設` : ''}${h.ended ? `・${h.ended}年終了${def.revive !== false ? '（復刻開催）' : ''}` : ''}${Array.isArray(h.gaps) && h.gaps.length ? `・休止 ${h.gaps.map((x) => `${x[0]}〜${x[1] ?? x[0]}年`).join('、')}` : ''}${h.note ? `／${h.note}` : ''}`);
-  if (cyc.notyet) L.push(cyc.note);
-  else if (!cyc.held) L.push(cyc.note || 'この年は開催されない');
+  // texts of the def: no research notes, nothing about a year after this cycle's
+  const PO = (s) => I.pastOnly(s || '', Math.max(y, I.contestDate(g).year));
+  const org = PO(def.organizer), bc = PO(def.broadcaster);
+  const uw = I.unitWord(def);
+  L.push(`${I.KIND_LABEL[I.kindOf(def)] || ''}の大会${org ? `／主催：${org}` : ''}${bc ? `／放送：${bc}` : ''}`);
+  // only what has happened by now (no later gaps, ends, revivals or renames), no research notes; before the founding one line
+  const now = I.contestDate(g).year;
+  const head = I.historyHead(g, def, now);
+  const notYet = num(h.founded, -Infinity) > now;
+  if (head) L.push(head);
+  if (!notYet && !cyc.held && cyc.note && cyc.note !== head) L.push(cyc.note);
   L.push('');
-  L.push(`【出場資格】${el.notes.join('／') || '特になし'}`);
-  if (el.ok) L.push('→ あなたは出場できる'); else el.reasons.forEach((r) => L.push(`→ ×${r.text}`));
-  L.push(`【参加費】${fee.text}　【賞金】${prize.text || 'なし'}`);
+  const notes = [...new Set((el.notes || []).map((s) => PO(s)).filter(Boolean))];
+  L.push(`【出場資格】${notes.join('／') || '特になし'}`);
+  if (el.ok) L.push('→ あなたは出場できる');
+  else {
+    // one line per reason (a 'not yet' reason from the def and D1's own say the same thing once)
+    const seen = new Set();
+    const key = (t) => (/まだ始まっていない|創設/.test(t) ? 'notyet' : t.replace(/[。、\s]/g, ''));
+    if (notYet) seen.add('notyet');
+    for (const r of el.reasons) { const t = PO(r.text); if (!t || seen.has(key(t))) continue; seen.add(key(t)); L.push(`→ ×${t}`); }
+  }
+  L.push(`【参加費】${PO(fee.text) || 'なし'}　【賞金】${PO(prize.text) || 'なし'}`);
   if (cyc.held) {
     L.push('');
     L.push(`【日程】${cyc.label}`);
     if (cyc.entry) L.push(`エントリー：${I.dateText(g, cyc.entry.from, { year: true })}〜${I.dateText(g, cyc.entry.to)}`);
     for (const rr of cyc.rounds) {
       const r = rr.r;
-      const pass = r.pass == null ? '' : num(r.pass) < 1 ? `通過 約${Math.round(num(r.pass) * 100)}%` : `通過 ${r.pass}組`;
-      const fmt = [r.judge === 'panel' ? `審査員${num(r.judges) ? `${r.judges}人` : ''}` : r.judge === 'audience' ? '観客投票' : r.judge === 'vote' ? '投票' : r.judge === 'points' ? '採点' : '', r.scoring || '', r.length ? `持ち時間${r.length >= 60 ? `${Math.floor(r.length / 60)}分${r.length % 60 ? `${r.length % 60}秒` : ''}` : `${r.length}秒`}` : ''].filter(Boolean).join('・');
+      const pass = r.pass == null ? '' : num(r.pass) < 1 ? `通過 約${Math.round(num(r.pass) * 100)}%` : `通過 ${r.pass}${uw}`;
+      const fmt = [r.judge === 'panel' ? `審査員${num(r.judges) ? `${r.judges}人` : ''}` : r.judge === 'audience' ? '観客投票' : r.judge === 'vote' ? '投票' : r.judge === 'points' ? '採点' : '', PO(r.scoring), r.length ? `持ち時間${r.length >= 60 ? `${Math.floor(r.length / 60)}分${r.length % 60 ? `${r.length % 60}秒` : ''}` : `${r.length}秒`}` : ''].filter(Boolean).join('・');
       const dates = rr.options.length > 1 ? `${I.dateText(g, rr.first)}〜${I.dateText(g, rr.last)}（${[...new Set(rr.options.map((o) => o.venue))].join('・')}）` : `${I.dateText(g, rr.first)}（${rr.options[0].venue}）`;
-      L.push(`・${rr.name}：${dates}${r.field ? `　出場 約${num(r.field).toLocaleString('ja-JP')}組` : ''}${pass ? `　${pass}` : ''}`);
+      L.push(`・${rr.name}：${dates}${r.field ? `　出場 約${num(r.field).toLocaleString('ja-JP')}${uw}` : ''}${pass ? `　${pass}` : ''}`);
       if (fmt) L.push(`　${fmt}${r.revival ? `　※${r.revivalName || '敗者復活戦'}あり` : ''}${r.stage2 ? `　※${r.stage2.name || '最終決戦'}あり` : ''}${r.tv ? '　（テレビ放送）' : ''}`);
     }
   }
@@ -1139,7 +1197,9 @@ async function contestActions(g, id) {
 function historyLines(g, id) {
   const rows = g.contestHistory(id);
   if (!rows.length) return ['まだ一度も開催されていない。'];
-  return [...rows.slice(0, 40).map((r) => `${r.year} ${r.edition ? `第${r.edition}回 ` : ''}${r.champion}${r.playerPlace ? `（あなた${r.playerPlace}位）` : ''}${r.revival ? '［復刻］' : ''}`)];
+  const def = CONTESTS[id];
+  const award = I.isAwardType(def) || !!I.winnerTitleOf(def);
+  return [I.historyHead(g, def), ...rows.slice(0, 40).map((r) => `${r.year} ${r.edition ? `第${r.edition}回 ` : ''}${award ? historySub(def, r) : r.champion}${r.playerAward ? `（あなた${r.playerAward}）` : r.playerPlace ? `（あなた${r.playerPlace}位）` : ''}${r.revival === true ? '［復刻］' : ''}`)];
 }
 async function entriesList(g) {
   const c = I.cstate(g);

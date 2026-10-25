@@ -724,10 +724,10 @@ async function judgeFinal(g, x, P, mode) {
     // award ceremonies: each award has its own winner (no 優勝／準優勝)
     const aw = (row && row.awards) || { [I.mainAward(def)]: champName };
     const mine = row && row.playerAward;
-    I.pushNews(g, `【速報】${name}、各賞が決まった。\n${I.awardLine(def, aw, '\n')}${mine ? `\n${e ? e.unitName : ''}は${mine}を受賞！${mine === I.mainAward(def) && share.text ? `（${share.text}）` : ''}` : ''}`, { contest: id, prio: mine ? 99 : 90, key: `champ|${id}|${year}` });
+    I.pushNews(g, `【速報】${name}、各賞が決まった。\n${I.awardLine(def, aw, '\n')}${mine ? `\n${e ? e.unitName : ''}${/優勝/.test(mine) ? 'が優勝！' : `は${mine}を受賞！`}${mine === I.mainAward(def) && share.text ? `（${share.text}）` : ''}` : ''}`, { contest: id, prio: mine ? 99 : 90, key: `champ|${id}|${year}` });
     if (mode !== 'auto' && showUI(g) && CONTEST_UI.board) await asafe('finalBoard', () => CONTEST_UI.board(g, { title: name, sub: `${rr.name} 結果`, ranking: res.final.ranking, color: I.colorOf(def), champion: place === 1 }), null);
     if (mode !== 'auto') {
-      if (mine) { sfx('fanfare'); if (place === 1 && has(g, 'shake')) g.shake(20, 2); await g.say([`${mine}、受賞！！`, `${name}で${mine}をもらった！${mine === I.mainAward(def) && share.text ? `\n${share.text}` : ''}`]); }
+      if (mine) { sfx('fanfare'); if (place === 1 && has(g, 'shake')) g.shake(20, 2); await g.say([/優勝/.test(mine) ? `${mine}！！！` : `${mine}、受賞！！`, `${name}で${mine}${/優勝/.test(mine) ? 'をつかんだ' : 'をもらった'}！${mine === I.mainAward(def) && share.text ? `\n${share.text}` : ''}`]); }
       else await g.say(`今回は賞に届かなかった…。\n${I.mainAward(def)}は${aw[I.mainAward(def)] || champName}。`);
     }
     return { place, award: mine || null };
@@ -946,7 +946,7 @@ function seasonNewsYear(g, def, day, year) {
       if (award) {
         const aw = I.normAwards(row.awards) || { [I.mainAward(def)]: cn };
         const n = Object.keys(aw).length;
-        I.pushNews(g, n <= 1 ? `${name}、${I.mainAward(def)}は${aw[I.mainAward(def)] || cn}が受賞！` : `${name}、各賞が決まった。\n${I.awardLine(def, aw, '\n')}`, { contest: id, prio: 15 + pr * 0.7, key: `champ|${id}|${year}` });
+        I.pushNews(g, n <= 1 ? (/優勝/.test(I.mainAward(def)) ? `${name}は${aw[I.mainAward(def)] || cn}が優勝！` : `${name}、${I.mainAward(def)}は${aw[I.mainAward(def)] || cn}が受賞！`) : `${name}、各賞が決まった。\n${I.awardLine(def, aw, '\n')}`, { contest: id, prio: 15 + pr * 0.7, key: `champ|${id}|${year}` });
       } else if (champId !== 'player') {
         const ru = title ? null : row.runnerUp !== undefined ? row.runnerUp : nm(sim.final.ranking[1]);
         I.pushNews(g, title ? `${name}、${title}は${cn}！` : `${name}は${cn}が優勝！${ru ? `\n準優勝は${ru}。` : ''}${yen > 0 ? `賞金${I.manLabel(yen)}は${cn}の手に。` : ''}`, { contest: id, prio: 15 + pr * 0.7, key: `champ|${id}|${year}` });
@@ -955,7 +955,7 @@ function seasonNewsYear(g, def, day, year) {
         const who = championInfo(g, sim, champId);
         c.later = c.later || [];
         const q = pickQuote(g, id, year, { ...who, prize: yen > 0, award });
-        c.later.push({ day: day + 1, text: award ? `【受賞会見】${name}で${I.mainAward(def)}を受賞した${cn}が会見。\n「${q}」` : title ? `【${title}会見】${name}で${title}に選ばれた${cn}。\n「${q}」` : `【王者の会見】${name}を制した${cn}が会見。\n「${q}」`, contest: id, prio: 20 + pr * 0.4, key: `kaiken|${id}|${year}` });
+        c.later.push({ day: day + 1, text: award && !/優勝/.test(I.mainAward(def)) ? `【受賞会見】${name}で${I.mainAward(def)}を受賞した${cn}が会見。\n「${q}」` : title ? `【${title}会見】${name}で${title}に選ばれた${cn}。\n「${q}」` : `【王者の会見】${name}を制した${cn}が会見。\n「${q}」`, contest: id, prio: 20 + pr * 0.4, key: `kaiken|${id}|${year}` });
         const nv = I.netVoice(year);
         const pool = champId === 'player' ? I.NET_LINES.player : award || title ? I.NET_LINES.award : I.NET_LINES.champ;
         // three different voices, three different lines (drawn without replacement)
@@ -977,11 +977,11 @@ function seasonNewsYear(g, def, day, year) {
       // 'chance' rounds (選考会): the top acts go straight to the final, the others try again in the next one
       const dest = rr.r.passTo || (rr.r.chance ? finalName : next ? next.name : '');
       const n = Math.round(rd.P).toLocaleString('ja-JP');
-      I.pushNews(g, `${name} ${rr.name}の結果発表。${rr.r.chance ? `上位${n}${uw}が${dest}へ。` : dest ? `${n}${uw}が${dest}へ。` : `${n}${uw}が通過。`}${highlight(g, sim, rd, id, year)}`, { contest: id, prio: 8 + pr * 0.35, key: `round|${id}|${year}|${rr.idx}` });
+      I.pushNews(g, `${name} ${shortRound(rr.name)}の結果発表。${rr.r.chance ? `上位${n}${uw}が${dest}へ。` : dest ? `${n}${uw}が${dest}へ。` : `${n}${uw}が通過。`}${highlight(g, sim, rd, id, year)}`, { contest: id, prio: 8 + pr * 0.35, key: `round|${id}|${year}|${rr.idx}` });
     }
     // an upset: a favourite out
     const fav = rd.entrants.map((aid) => sim.byId.get(aid)).filter(Boolean).sort((a, b) => b.power - a.power).slice(0, 4).find((x) => !rd.passed.includes(x.id));
-    if (fav && pr >= 55 && rr.idx >= R - 3) I.pushNews(g, `【波乱】優勝候補の${fav.name}が${rr.name}で敗退。\n${I.fillName(I.pickR(I.rngOf(c.seed, 'up', id, year, rr.idx), I.NET_LINES.upset), fav.name)}（${I.netVoice(year).label}より）`, { contest: id, prio: 12 + pr * 0.4, key: `upset|${id}|${year}|${rr.idx}` });
+    if (fav && pr >= 55 && rr.idx >= R - 3 && !I.isAwardType(def)) I.pushNews(g, `【波乱】優勝候補の${fav.name}が${shortRound(rr.name)}で姿を消した。\n${I.fillName(I.pickR(I.rngOf(c.seed, 'up', id, year, rr.idx), I.NET_LINES.upset), fav.name)}（${I.netVoice(year).label}より）`, { contest: id, prio: 12 + pr * 0.4, key: `upset|${id}|${year}|${rr.idx}` });
   }
 }
 function highlight(g, sim, rd, id, year) {
@@ -991,12 +991,9 @@ function highlight(g, sim, rd, id, year) {
   const r = I.rngOf(I.cstate(g).seed, 'hl', id, year, rd.i);
   return `\n会場を一番わかせたのは${x.name}。${I.pickR(r, ['「ツカミから最後まで笑いが途切れなかった」（関係者）', '「今年の台風の目」との声も。', 'ネタ終わりに拍手が鳴りやまなかった。', '客席の空気を一変させた。'])}`;
 }
-// a title instead of 優勝 (def.winnerTitle, e.g. 'MVS'; or an acronym prize such as 「MVS（Most Valuable すべらない話）」)
-function winnerTitleOf(def) {
-  if (def.winnerTitle) return String(def.winnerTitle);
-  const m = /^([A-Z]{2,5})（/.exec(String(def.prizeText || ''));
-  return m ? m[1] : null;
-}
+const winnerTitleOf = (def) => I.winnerTitleOf(def);
+// a round's name for a news line: 「新人部門 予選／各賞の選考」 → 「新人部門 予選」, 「ROUND1（選考会）」 → 「ROUND1」
+const shortRound = (s) => String(s || '').replace(/[（(][^）)]*[）)]/g, '').split(/[／/]/)[0].trim() || String(s || '');
 // who won: { solo (one person: no 相方), members, kansai }
 function championInfo(g, sim, aid) {
   if (aid === 'player') { const u = I.playerUnit(g); const n = u && Array.isArray(u.members) ? u.members.length : 1; return { solo: n <= 1, members: n, kansai: /大阪|関西|osaka/.test(String((g.state && (g.state.home || g.state.region)) || '')) }; }

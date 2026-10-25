@@ -22,6 +22,7 @@ const T0 = (g = G()) => (g && g.state ? venue.today(g) : null);
 const active = (g = G()) => !!T0(g);
 const vcolor = (g = G()) => { const v = V(g); return active(g) && v && v.color ? v.color : '#b8402a'; };
 const vtitle = (g = G()) => { const v = V(g); return active(g) && v && v.title ? v.title : 'お笑い賞レース会場'; };
+const yearNow = (g = G()) => { try { return I.contestDate(g).year; } catch (e) { return 2026; } };
 const vsub = (g = G()) => { const v = V(g); return active(g) && v ? `${v.sub || ''}${v.venueName ? `　${v.venueName}` : ''}` : '本日の催し：なし'; };
 
 // ================================================================ tiles
@@ -124,9 +125,9 @@ const bannerPaint = (c, W, H, info) => {
   const col = info.color;
   R(c, 0, 0, W, H, shade(col, -0.45)); R(c, 2, 2, W - 4, H - 4, col); R(c, 2, 2, W - 4, 3, shade(col, 0.3)); R(c, 2, H - 6, W - 4, 4, shade(col, -0.25));
   for (let k = 6; k < W - 6; k += 12) { P(c, k, 6, GOLD); P(c, k + 6, H - 8, GOLD); }
-  const s1 = fitSize(c, info.title, W - 24, 20);
-  bold(c, info.title, W / 2, 6, { size: s1, align: 'center', color: WHT });
-  const s2 = fitSize(c, info.sub, W - 24, 12);
+  const s1 = fitSize(c, info.title, W - 24, Math.min(20, Math.floor(H * 0.42)));
+  bold(c, info.title, W / 2, 5, { size: s1, align: 'center', color: WHT });
+  const s2 = fitSize(c, info.sub, W - 24, Math.min(12, Math.floor(H * 0.27)));
   text(c, info.sub, W / 2, H - 6 - s2 - 2, { size: s2, align: 'center', color: '#fff6c8', shadow: null });
 };
 const ledPaint = (c, W, H, info) => {
@@ -134,10 +135,20 @@ const ledPaint = (c, W, H, info) => {
   const col = info.color;
   for (let y = 2; y < H - 2; y += 3) for (let x = 2; x < W - 2; x += 3) R(c, x, y, 2, 2, (x + y) % 9 === 0 ? shade(col, -0.3) : '#10102a');
   R(c, 4, 4, W - 8, 3, col); R(c, 4, H - 7, W - 8, 3, col);
-  const s1 = fitSize(c, info.title, W - 30, 26);
-  bold(c, info.title, W / 2, Math.round(H / 2) - s1 + 2, { size: s1, align: 'center', color: WHT });
-  const s2 = fitSize(c, info.sub, W - 30, 14);
-  text(c, info.sub, W / 2, Math.round(H / 2) + 6, { size: s2, align: 'center', color: GOLD, shadow: null });
+  // sized by the sign's height (a low ticker along the bottom of the LED wall stays below the camera's cut)
+  const s1 = fitSize(c, info.title, W - 30, Math.min(26, Math.floor(H * 0.42)));
+  bold(c, info.title, W / 2, 4, { size: s1, align: 'center', color: WHT });
+  const s2 = fitSize(c, info.sub, W - 30, Math.min(14, Math.floor(H * 0.24)));
+  text(c, info.sub, W / 2, H - s2 - 7, { size: s2, align: 'center', color: GOLD, shadow: null });
+};
+// a one-line strip on the wall face (row 2): below the HUD at every camera position
+const stripPaint = (c, W, H, info) => {
+  const col = info.color;
+  R(c, 0, 0, W, H, shade(col, -0.45)); R(c, 2, 2, W - 4, H - 4, col); R(c, 2, 2, W - 4, 2, shade(col, 0.3));
+  for (let k = 6; k < W - 6; k += 14) P(c, k, H - 5, GOLD);
+  const s = info.active ? info.title : `${info.title}　${info.sub}`;
+  const k = fitSize(c, s, W - 14, 18);
+  bold(c, s, W / 2, Math.max(2, Math.round((H - k) / 2) - 2), { size: k, align: 'center', color: WHT });
 };
 const plate = (x, y, label, w = 1.8) => sign(x, y, w, 0.55, `plate_${label}`, (c, W, H) => {
   R(c, 0, 0, W, H, '#20232a'); R(c, 1, 1, W - 2, H - 2, WHT); R(c, 1, H - 3, W - 2, 2, '#c3c8d2');
@@ -236,7 +247,7 @@ const lobby = {
   entry: { x: 9, y: 10, dir: 'up' },
   warps: [exitWarp(9, 11), exitWarp(10, 11), { x: 2, y: 2, room: 'gakuya', tx: 6, ty: 7, dir: 'up' }],
   entities: [
-    sign(5, 0.6, 10, 1.5, 'lobby_banner', bannerPaint),
+    sign(6.05, 2.1, 7.9, 0.8, 'lobby_strip', stripPaint),
     plate(1.6, 1.4, '楽屋'),
     plate(15.7, 1.4, '関係者以外', 2.6),
     npc('sr_uketsuke', 9, 3, 'down', STAFF.uketsuke, { talk: posted('down', (g) => venue.reception(g)) }),
@@ -248,7 +259,7 @@ const lobby = {
   events: [
     { x: 14, y: 6, w: 2, on: 'action', run: boardRead },
     { x: 4, y: 2, w: 2, on: 'action', run: async (g) => g.say(active(g) ? `「${vtitle(g)}」のポスターだ。\n${I.prizeOf(CONTESTS[V(g).contest], V(g).year).text || '出場者の名前がずらりと並んでいる。'}` : '過去の大会のポスターが貼ってある。\n歴代王者の写真が、まぶしく笑っている。') },
-    { x: 14, y: 2, w: 2, on: 'action', run: async (g) => g.say('「携帯電話の電源はお切りください」\n「客席での撮影・録音は禁止です」と書いてある。') },
+    { x: 14, y: 2, w: 2, on: 'action', run: async (g) => g.say(yearNow(g) < 1997 ? '「場内での飲食・喫煙はご遠慮ください」\n「客席での撮影・録音は禁止です」と書いてある。' : '「携帯電話の電源はお切りください」\n「客席での撮影・録音は禁止です」と書いてある。') },
     { x: 2, y: 6, w: 3, on: 'action', run: async (g) => g.say('待合のソファだ。\n出番を待つ出場者が、台本を何度も読み返している。') },
     { x: 2, y: 7, w: 3, on: 'action', run: async (g) => g.say('テーブルに、大会のパンフレットが置いてある。\n審査のルールと、これまでの王者が載っている。') },
     { x: 17, y: 2, on: 'action', run: async (g) => g.say('「関係者以外立入禁止」の扉だ。\n出場者は楽屋から舞台袖へ行く。') },
@@ -415,8 +426,11 @@ function stageWarp(x, y) {
 const AUD = [[3, 8], [6, 8], [13, 8], [15, 8], [4, 9], [6, 9], [12, 9], [14, 9], [5, 10], [13, 10]];
 const AUD_LOOKS = [LOOKS.fan, LOOKS.salaryman, LOOKS.mom, LOOKS.oldman, { ...LOOKS.fan, hairColor: 'brown', top: '#ff7eb6' }, LOOKS.tourist, LOOKS.kid, LOOKS.oldwoman, { ...LOOKS.salaryman, top: '#5a4a6a' }, { ...LOOKS.fan, top: '#ffd23f', hairColor: 'black' }];
 const AUD_LINES = ['今日はどの組がウケるやろ。', '予選はタダで見られる回もあるんだよ。', '毎年見に来てるの。予選のほうが荒々しくて好き。', 'わしは昔、漫才ブームを生で見たんじゃ。', '推しのコンビが出るの！', '観光ついでに来ました！', 'おもしろい人、出てくるかな？', 'あら、あなたも出るの？がんばってね。', '会社帰りに寄りました。', '笑う準備はできてる！'];
+// era words: 推し is a 2010s word
+const audLine = (g, i) => (i === 4 && yearNow(g) < 2010 ? '好きなコンビが出るの！' : AUD_LINES[i]);
 const stage = {
-  floor: 'floor_carpet_red', wall: 'red', bgm: 'theater', topPad: 30,
+  floor: 'floor_carpet_red', wall: 'red', bgm: 'theater', topPad: 4,
+  hideHud: true, // the banner over the curtain carries the contest name: no HUD over it
   tiles: [
     '####################',
     '#XXXXXXXXXXXXXXXXXX#',
@@ -437,10 +451,10 @@ const stage = {
   entry: { x: 10, y: 11, dir: 'up' },
   warps: [{ x: 10, y: 12, room: 'lobby', tx: 9, ty: 9, dir: 'down' }, { x: 9, y: 12, room: 'lobby', tx: 9, ty: 9, dir: 'down' }, { x: 1, y: 3, room: 'sode', tx: 9, ty: 4, dir: 'left' }],
   entities: [
-    sign(4, 0.2, 12, 1.6, 'stage_banner', bannerPaint),
+    sign(4, 1.7, 12, 1.25, 'stage_banner', bannerPaint),
     npc('sr_judge_a', 8, 8, 'up', { name: '予選審査員', look: { ...LOOKS.director } }, { cond: (g) => active(g), fixedDir: true, text: '（黙々と採点表に書きこんでいる）' }),
     npc('sr_judge_b', 11, 8, 'up', { name: '予選審査員', look: { ...LOOKS.manager } }, { cond: (g) => active(g), fixedDir: true, text: '（ペンを止めて、じっと舞台を見ている）' }),
-    ...AUD.map(([x, y], i) => npc(`sr_aud${i}`, x, y, 'up', { name: 'お客さん', look: AUD_LOOKS[i] }, { sprite: seated, seatTile: 'seat', fixedDir: true, cond: i < 4 ? undefined : (g) => active(g), talk: async (g, e) => { await g.say(AUD_LINES[i], { name: 'お客さん', look: AUD_LOOKS[i] }); e.dir = 'up'; } })),
+    ...AUD.map(([x, y], i) => npc(`sr_aud${i}`, x, y, 'up', { name: 'お客さん', look: AUD_LOOKS[i] }, { sprite: seated, seatTile: 'seat', fixedDir: true, cond: i < 4 ? undefined : (g) => active(g), talk: async (g, e) => { await g.say(audLine(g, i), { name: 'お客さん', look: AUD_LOOKS[i] }); e.dir = 'up'; } })),
   ],
   events: [
     { x: 6, y: 7, w: 8, on: 'action', run: async (g) => g.say(active(g) ? '予選の審査員席だ。\n採点表には、細かい字がびっしり書きこまれている。' : '審査員席だ。いまは空いている。') },
@@ -450,7 +464,8 @@ const stage = {
 
 // ================================================================ STUDIO (テレビ決勝)
 const studio = {
-  floor: 'floor_studio', wall: 'black', bgm: 'studio', topPad: 30,
+  floor: 'floor_studio', wall: 'black', bgm: 'studio', topPad: 4,
+  hideHud: true, // the LED wall carries the contest name: no HUD over it
   tiles: [
     '####################',
     '#LLLLLLLLLLLLLLLLLL#',
@@ -471,7 +486,7 @@ const studio = {
   entry: { x: 10, y: 11, dir: 'up' },
   warps: [{ x: 10, y: 12, room: 'lobby', tx: 9, ty: 9, dir: 'down' }, { x: 9, y: 12, room: 'lobby', tx: 9, ty: 9, dir: 'down' }, { x: 1, y: 3, room: 'sode', tx: 9, ty: 4, dir: 'left' }],
   entities: [
-    sign(2, 0.2, 16, 2.3, 'studio_led', ledPaint),
+    sign(2, 1.75, 16, 1.25, 'studio_led', ledPaint),
     {
       // the scoreboard on the right of the set
       type: 'prop', x: 15.2, y: 3.1, w: 3.4, h: 1.6, solid: false, z: 10,
@@ -511,7 +526,8 @@ const studio = {
 
 // ================================================================ OUTDOOR (屋外特設ステージ)
 const outdoor = {
-  floor: 'floor_concrete', bgm: 'town', topPad: 0, hideHud: false,
+  floor: 'floor_concrete', bgm: 'town', topPad: 0,
+  hideHud: true, // a performance space: the banner and the stage are the show (no HUD over the signage)
   tiles: [
     'CCCCCCCCCCCCCCCCCCCC',
     'kkkkkTTTTTTTTTTkkkkk',
@@ -531,7 +547,7 @@ const outdoor = {
   entry: { x: 9, y: 10, dir: 'up' },
   warps: [{ x: 9, y: 11, room: 'lobby', tx: 9, ty: 9, dir: 'down' }, { x: 10, y: 11, room: 'lobby', tx: 9, ty: 9, dir: 'down' }],
   entities: [
-    sign(5, 0.15, 10, 1.3, 'outdoor_banner', bannerPaint),
+    sign(5, 0.8, 10, 1.15, 'outdoor_banner', bannerPaint),
     npc('sr_omc', 6, 3, 'right', STAFF.mc2, { cond: (g) => active(g), talk: posted('right', async (g) => say(g, STAFF.mc2, active(g) ? ['屋外特設ステージへようこそ！', 'ここでは、お客さんと視聴者の投票で勝ち上がりが決まります！'] : '今日はイベントはありません。')) }),
   ],
   events: [

@@ -515,7 +515,7 @@ const SUBERANAI = {
     { id: 'honban', name: '収録（サイコロトーク）', when: [12, 6], field: 8, judge: 'vote', scoring: 'すべらなければ「すべらんなぁ」、最後に進行役がMVSを選ぶ', tv: true, final: true, run: suberanaiHonban },
   ],
   eligibility: { members: [1, null], invite: { fame: 1000 }, repeat: true, note: '招待制（話のうまい芸人）' },
-  fee: 0, prize: 0, prizeText: 'MVS（Most Valuable すべらない話）', perform: { kind: 'talk' },
+  fee: 0, prize: 0, prizeText: 'MVS（Most Valuable すべらない話）', winnerTitle: 'MVS', perform: { kind: 'talk' },
   news: [
     (g, c) => `『すべらない話』${c.year}年版の収録。サイコロに名前が並ぶ8人が決定`,
     '名前の書かれたサイコロを振り、出た目の人が話す。いつ自分の番が来るかわからない',
