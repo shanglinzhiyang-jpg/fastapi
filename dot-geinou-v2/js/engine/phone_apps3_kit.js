@@ -195,3 +195,29 @@ export function buttons(c, a, labels, sel, col, y0 = null) {
 export const hit = (r, x, y) => !!r && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
 export const sfx = (n) => audio.sfx(n);
 export { T, fitText, PC, rrect, box, measure, wrap, clamp };
+
+// ======================================================================== メモ (shared: other apps add notes too)
+export const MEMO_MAX = 40;
+export const MEMO_LEN = 200;
+definePart('memo', (s, day) => ({
+  list: arr(s.list).filter((m) => isObj(m) && typeof m.text === 'string').slice(0, MEMO_MAX).map((m) => ({
+    id: Math.max(1, Math.floor(num(m.id, 1))), title: str(m.title, 24), text: str(m.text, MEMO_LEN), day: Math.max(1, Math.floor(num(m.day, day))),
+    pin: !!m.pin, tag: ['seed', 'quiz', 'todo', ''].includes(m.tag) ? m.tag : '', done: !!m.done,
+  })),
+  nextId: Math.max(1, Math.floor(num(s.nextId, 1))),
+}));
+// add a note ({ title, text, tag: '' | 'seed' (ネタの種) }); the oldest unpinned note goes when full. → the note
+export function addMemo(g, o = {}) {
+  const M = part(g, 'memo');
+  const text = str(o.text, MEMO_LEN).trim();
+  if (!text) return null;
+  M.nextId = Math.max(M.nextId, ...M.list.map((m) => m.id + 1), 1);
+  const m = { id: M.nextId++, title: str(o.title || text.split('\n')[0], 24), text, day: num(g.state.day, 1), pin: !!o.pin, tag: o.tag || '', done: false };
+  M.list.unshift(m);
+  while (M.list.length > MEMO_MAX) {
+    let i = -1;
+    for (let k = M.list.length - 1; k >= 0 && i < 0; k--) if (!M.list[k].pin) i = k;
+    M.list.splice(i < 0 ? M.list.length - 1 : i, 1);
+  }
+  return m;
+}
