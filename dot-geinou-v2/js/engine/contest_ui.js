@@ -11,7 +11,7 @@ import { SW, SH, clamp, shade, fmtMoney } from './util.js';
 import { text, measure } from './draw.js';
 import { audio } from './audio.js';
 import { registerPhoneApp } from './life.js';
-import { phoneList, phoneInfo, phoneConfirm, appTile, closePhoneThen, phoneOverMapOnly } from './phone.js';
+import { phoneList, phoneInfo, phoneConfirm, appTile, closePhoneThen, phoneOverMapOnly, activePhone } from './phone.js';
 import { drawFaceHD } from './sprites.js';
 import { CONTESTS, CONTEST_UI, internals as I } from './contests.js';
 
@@ -260,6 +260,11 @@ class ContestScene {
         if (!e || !def) continue;
         out.push({ id: cid, year: Number(y), e, def, cyc: I.cycleOf(g, def, Number(y)), color: I.colorOf(def) });
       }
+      for (const def of Object.values(CONTESTS)) {
+        if (!I.isSelfRun(def) || out.some((r) => r.id === def.id)) continue;
+        const ext = I.externalEntry(g, def);
+        if (ext) { const y = ext.year ?? I.seasonYearOf(g, def.id); out.push({ id: def.id, year: y, e: ext, def, cyc: I.cycleOf(g, def, y), color: I.colorOf(def), external: true }); }
+      }
       return out.sort((a, b) => b.year - a.year || num(b.e.day) - num(a.e.day));
     }
     if (id === 'results') {
@@ -417,25 +422,30 @@ class ContestScene {
       const e = I.entryOf(g, id, y);
       const el = I.eligibilityOf(g, id, y);
       const due = I.dueOn(g).filter((d) => d.id === id);
+      const self = I.isSelfRun(def);
+      const ext = self ? I.externalEntry(g, def) : null;
       const items = [];
       items.push({ id: 'info', label: 'くわしく見る', sub: 'ルール・出場資格・日程・賞金' });
+      if (self && info.today && info.today.length && typeof def.flow === 'function') items.push({ id: 'selfgo', label: `今日の予定：${info.today[0].label || ''}`, sub: info.today.length > 1 ? `ほか${info.today.length - 1}件` : '', color: K.gold });
       if (due.length) items.push({ id: 'go', label: '会場へ向かう', sub: `${due[0].revival ? '敗者復活戦' : cyc.rounds[due[0].idx].name}（${due[0].option.venue}会場）`, color: K.gold });
       const inv = I.cstate(g).invites && I.cstate(g).invites[id] && I.cstate(g).invites[id][y] > 0;
-      if (!e && cyc.held && !cyc.invite) items.push({ id: 'enter', label: 'エントリーする', sub: info.status === 'open' ? (el.ok ? `参加費 ${I.feeOf(g, id, y).text}` : el.why) : info.status === 'future' && cyc.entry ? `受付は${I.dateText(g, cyc.entry.from)}から` : '受付期間外', lock: info.status !== 'open' || !el.ok });
+      if (!e && !ext && cyc.held && !cyc.invite) items.push({ id: 'enter', label: 'エントリーする', sub: info.status === 'open' ? (el.ok ? `参加費 ${I.feeOf(g, id, y).text}` : el.why) : info.status === 'future' && cyc.entry ? `受付は${I.dateText(g, cyc.entry.from)}から` : '受付期間外', lock: info.status !== 'open' || !el.ok });
       if (!e && cyc.invite && inv) items.push({ id: 'enter', label: '出場のお願いに返事する', sub: '招待が届いている', color: K.gold });
       if (e && (e.status === 'entered' || e.status === 'passed')) items.push({ id: 'resched', label: '日程・会場を変える', sub: '次の回戦の日程が複数あるとき' });
       if (cyc.held) items.push({ id: 'odds', label: '見込みを調べる', sub: '自分の実力と、通過ラインの目安' });
       items.push({ id: 'hist', label: '歴代王者', sub: '歴代のチャンピオン' });
       if (e && (e.status === 'entered' || e.status === 'passed')) items.push({ id: 'quit', label: 'エントリーを取り消す（辞退）', sub: '参加費はもどらない' });
       items.push({ id: 'back', label: 'もどる' });
-      const k = await this.pick({ title: info.label, lines: [`${info.statusLabel}${e ? `　エントリーNo.${e.no}（${ENTRY_LABEL[e.status] || ''}）` : ''}`], items, color: I.colorOf(def) });
+      const en = e || ext;
+      const k = await this.pick({ title: info.label, lines: [`${info.statusLabel}${en ? `　エントリーNo.${en.no}（${en.external ? en.statusText || ENTRY_LABEL[en.status] || '' : ENTRY_LABEL[en.status] || ''}）` : ''}`], items, color: I.colorOf(def) });
       if (k < 0 || items[k].id === 'back') return;
       const a = items[k].id;
       if (a === 'info') await this.info(info.label, detailLines(g, id, y), { color: I.colorOf(def), w: 560 });
       else if (a === 'hist') await this.historyOf(id);
       else if (a === 'odds') { const o = g.contestOdds(id, e ? e.round : 0); await this.info('見込み', o ? [`あなたの実力（推定）：${o.power}　ネタの出来：${o.quality}`, `本番の得点の目安：${o.mean}点前後`, `${o.round}の通過ライン（推定）：${o.cut}点`, o.text, '', '※ 実力は相方・稽古・場数で伸びる。ネタの出来は台本と練習で上がる。'] : ['この大会の見込みは出せない。']); }
       else if (a === 'enter') { if (g.auto && !g.auto.contestui) return; await g.enterContest(id); this.dirty(); }
-      else if (a === 'go') { this.close(); if (has(g, 'contestGo')) g.run(() => g.contestGo(id)); return; }
+      else if (a === 'go') { this.close(); if (has(g, 'contestGo')) { if (activePhone(g)) closePhoneThen(g, (gg) => gg.contestGo(id)); else g.run(() => g.contestGo(id)); } return; }
+      else if (a === 'selfgo') { this.close(); const run = (gg) => def.flow(gg, { id, def, year: y, edition: info.edition, revival: info.revival, entry: null, round: null, date: I.contestDate(gg), mode: 'full' }); if (activePhone(g)) closePhoneThen(g, run); else g.run(run); return; }
       else if (a === 'resched') await reschedule(g, id, y, this);
       else if (a === 'quit') { const q = await this.confirm({ title: 'エントリーの取り消し', lines: ['本当に辞退する？（参加費はもどらない）'], choices: ['辞退する', 'やめる'], index: 1 }); if (q === 0) { const en = I.entryOf(g, id, y); if (en) { en.status = 'withdrawn'; en.results.push({ round: en.round, passed: false, withdrawn: true, day: I.todayOf(g), note: '辞退' }); I.bump(g, id, y); this.toast('辞退した'); } } }
     }
@@ -591,7 +601,8 @@ class ContestScene {
       T(c, `${cyc ? cyc.label : def.name}`, 22, y + 2, 12, K.text, 'left', 360);
       T(c, `No.${e.no}　${e.unitName}`, 22, y + 14, 10, K.dim, 'left', 360);
       let nx = '';
-      if ((e.status === 'entered' || e.status === 'passed') && cyc && cyc.rounds[e.round]) { const rr = cyc.rounds[e.round]; const o = rr.options[num(e.picks && e.picks[e.round], 0)] || rr.options[0]; nx = `${rr.name} ${o.day === today ? '今日' : I.dateText(g, o.day)} ${o.venue}`; }
+      if (e.external) nx = `${e.roundName || ''}${e.next && Number.isFinite(Number(e.next.day)) ? ` ${Number(e.next.day) === today ? '今日' : I.dateText(g, Number(e.next.day))} ${e.next.city || ''}` : ''}`;
+      else if ((e.status === 'entered' || e.status === 'passed') && cyc && cyc.rounds[e.round]) { const rr = cyc.rounds[e.round]; const o = rr.options[num(e.picks && e.picks[e.round], 0)] || rr.options[0]; nx = `${rr.name} ${o.day === today ? '今日' : I.dateText(g, o.day)} ${o.venue}`; }
       else if (e.pending) nx = '結果待ち';
       else if (e.final) nx = `決勝 ${e.final.place}位`;
       T(c, nx, 392, y + 7, 10, nx.includes('今日') ? K.gold : K.dim, 'left', SW - 392 - sw - 20);
@@ -1045,6 +1056,7 @@ async function contestApp(g) {
     const mine = list.filter((x) => x.entry && (x.entry.status === 'entered' || x.entry.status === 'passed'));
     const open = list.filter((x) => x.status === 'open');
     const items = [];
+    for (const x of list) if (x.selfRun && x.today && x.today.length && typeof x.def.flow === 'function') items.push({ id: 'selfgo', x, label: `${x.def.short || x.def.name}：${x.today[0].label || '今日の予定'}`, sub: x.today.length > 1 ? `ほか${x.today.length - 1}件` : x.statusLabel, right: '今日', rightColor: '#d03030' });
     for (const d of due) items.push({ id: 'go', d, label: `会場へ向かう`, sub: `${I.contestName(CONTESTS[d.id], d.year)} ${d.revival ? '敗者復活戦' : d.cyc.rounds[d.idx].name}`, right: '今日', rightColor: '#d03030' });
     for (const iv of invites) items.push({ id: 'invite', iv, label: '出場のお願いが届いている', sub: I.contestName(CONTESTS[iv.id], iv.year), right: '招待', rightColor: '#c08010' });
     items.push({ id: 'season', label: '今シーズンの大会', sub: `受付中 ${open.length}・全${list.length}大会`, right: open.length ? `${open.length}` : '' });
@@ -1060,6 +1072,12 @@ async function contestApp(g) {
     if (it.id === 'go') {
       if (!phoneOverMapOnly(g)) { await phoneInfo(g, { title: '会場へ', color: APP_COLOR, lines: ['（いまは移動できない。用事がすんでからにしよう）'] }); continue; }
       closePhoneThen(g, (gg) => gg.contestGo(it.d.id));
+      return;
+    }
+    if (it.id === 'selfgo') {
+      if (!phoneOverMapOnly(g)) { await phoneInfo(g, { title: '会場へ', color: APP_COLOR, lines: ['（いまは移動できない。用事がすんでからにしよう）'] }); continue; }
+      const x = it.x;
+      closePhoneThen(g, (gg) => x.def.flow(gg, { id: x.id, def: x.def, year: x.year, edition: x.edition, revival: x.revival, entry: null, round: null, date: I.contestDate(gg), mode: 'full' }));
       return;
     }
     if (it.id === 'invite') { await g.enterContest(it.iv.id); continue; }
@@ -1095,7 +1113,7 @@ async function contestActions(g, id) {
     const acts = [{ id: 'info', label: 'くわしく見る' }];
     if (due.length) acts.push({ id: 'go', label: '会場へ向かう', right: '今日' });
     if (!e && info.status === 'open' && !info.invite) acts.push({ id: 'enter', label: 'エントリーする', sub: el.ok ? `参加費 ${I.feeOf(g, id, info.year).text}` : el.why, disabled: !el.ok, why: el.why });
-    if (e && (e.status === 'entered' || e.status === 'passed')) acts.push({ id: 'resched', label: '日程・会場を変える' });
+    if (e && !e.external && (e.status === 'entered' || e.status === 'passed')) acts.push({ id: 'resched', label: '日程・会場を変える' });
     if (info.cyc.held) acts.push({ id: 'odds', label: '見込みを調べる' });
     acts.push({ id: 'hist', label: '歴代王者' });
     const k = await phoneList(g, { title: def.short || def.name, color: I.colorOf(def), items: acts.map((a) => ({ label: a.label, sub: a.sub, right: a.right, disabled: a.disabled, why: a.why })) });

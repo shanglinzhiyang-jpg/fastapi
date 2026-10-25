@@ -35,6 +35,11 @@
 //   roundsOf      (year) => rounds | null    the rounds of that year (formats that change); scheduleOf (year) => schedule | null
 //                 (both fall back to def.rounds / def.schedule; every D1 path asks them with the cycle's year)
 //   entryCount    (year) => number | null    the real total entries of that year (news + round 0's field) instead of an estimate
+//   selfRun       true: the contest runs its own world (E1 M-1, E2 KOC, E3 R-1/ABC): D1 never simulates it, posts none of its generic news
+//                 and freezes nothing; its history comes from historyList (g) => rows | historyOf (year) => row | history.champions,
+//                 the player's entry from status(g).entry, today's actions from status(g).today, rivals from rivalsOf (g, round, n, year)
+//                 (in contests_run.js: seasonNews / freeze return at once for it)
+//   feeText       '1人1,000円' | (year) => '…'   how the fee is shown (default 「¥2,000（1組）」)
 //   eligibility   .extra / .check (g, unit, year) => ({ ok, why })  extra rules checked at entry; def.eligibilityNote: a note line
 //   history.gapRevival true: real gap years are held as 復刻開催 too (default: a real hiatus follows history)
 //   history.champions  { [year]: '…' } this world's champion names for given years (fictional!) instead of the generated ones
@@ -897,7 +902,7 @@ export function eligibilityOf(g, id, year) {
     const r = safe(`eligibility.${k}:${id}`, () => elx[k](g, u, y), null);
     if (r && r.ok === false) add('extra', r.why || '出場資格がない');
   }
-  const hRows = !repeatAllowed(def) ? historyRows(g, id, y - 1) : [];
+  const hRows = !repeatAllowed(def) && !isSelfRun(def) ? historyRows(g, id, y - 1) : [];
   if (hRows.some((r) => r.champId === 'player')) add('champion', '優勝した大会には、もう出られない（王者は卒業）');
   const notes = [];
   const el = eligObj(def);
@@ -916,7 +921,8 @@ export function feeOf(g, id, year) {
   else if (isObj(f)) yen = num(amateur ? f.amateur ?? f.pro : f.pro ?? f.amateur, 0);
   else yen = num(f, 0);
   if (isInvitational(def)) yen = 0;
-  return { yen, internal: realToInternal(yen), text: yen ? `${yenLabel(yen)}（1組）` : isInvitational(def) ? 'なし（招待制）' : '無料' };
+  const ft = def && (typeof def.feeText === 'function' ? safe(`feeText:${id}`, () => def.feeText(year), null) : def.feeText);
+  return { yen, internal: realToInternal(yen), text: ft ? String(ft) : yen ? `${yenLabel(yen)}（1組）` : isInvitational(def) ? 'なし（招待制）' : '無料' };
 }
 export function prizeOf(def, year) {
   const p = def && def.prize;
@@ -1079,6 +1085,38 @@ function offerShows(g, id, what) {
 
 // ================================================================ the season list (g.contests)
 export const STATUS_LABEL = { notyet: 'まだ始まっていない', future: 'エントリー前', open: 'エントリー受付中', running: '開催中', closed: '終了', invite: '招待制' };
+// ---------------------------------------------------------------- self-run contests (def.selfRun: E1 / E2 / E3 run their own world)
+export const isSelfRun = (def) => !!(def && def.selfRun);
+export function selfStatus(g, def) { return def && typeof def.status === 'function' ? safe(`status:${def.id}`, () => def.status(g), null) : null; }
+const EXT_STATUS = { entered: 'entered', entry: 'entered', before: 'entered', prelim: 'passed', passed: 'passed', semi: 'passed', final: 'passed', finalist: 'passed', out: 'out', lost: 'out', eliminated: 'out', champion: 'champion', winner: 'champion', withdrawn: 'withdrawn', kiken: 'withdrawn' };
+// the player's entry as the def reports it (status(g).entry), shaped like a D1 entry (external: true)
+export function externalEntry(g, def) {
+  const st = selfStatus(g, def);
+  const e = st && st.entry;
+  if (!e || typeof e !== 'object') return null;
+  const status = EXT_STATUS[e.status] || (e.final && e.final.place === 1 ? 'champion' : 'entered');
+  return { external: true, no: e.no ?? '—', unitName: e.name || e.unitName || playerUnitName(g), status, statusText: e.statusLabel || e.status || '', roundName: e.round || null, next: e.next || null, results: Array.isArray(e.results) ? e.results : [], round: 0, picks: {}, final: e.final || null, year: st.year ?? null };
+}
+function selfHistory(g, def) {
+  const rowOf = (r) => r && {
+    year: num(r.year ?? r.y), edition: r.edition ?? r.ed ?? null, held: r.held !== false, revival: !!(r.revival ?? r.rev), champion: r.champion ?? r.chN ?? null,
+    runnerUp: r.runnerUp ?? r.ruN ?? null, third: r.third ?? r.thN ?? null, finalists: r.finalists || r.finN || [], note: r.note || '', player: r.player ?? r.playerPlace ?? (r.ch === 'me' ? 1 : null), champId: r.ch === 'me' ? 'player' : null,
+  };
+  if (typeof def.historyList === 'function') { const L = safe(`historyList:${def.id}`, () => def.historyList(g), null); if (Array.isArray(L)) return L.map(rowOf).filter((r) => r && r.year).sort((a, b) => a.year - b.year); }
+  const out = [];
+  const h = def.history || {};
+  const upto = lastDoneYear(g, def);
+  for (let y = num(h.founded, upto); y <= upto; y++) {
+    const held = heldIn(g, def, y);
+    if (!held.held) { out.push({ year: y, held: false, note: held.note || '開催なし', revival: false }); continue; }
+    let row = typeof def.historyOf === 'function' ? rowOf(safe(`historyOf:${def.id}`, () => def.historyOf(y), null)) : null;
+    if (!row) { const ch = isObj(h.champions) ? h.champions[y] : null; row = { year: y, held: true, revival: !!held.revival, champion: ch || null, runnerUp: null, third: null, finalists: [], note: held.revival ? '復刻開催' : '', player: null }; }
+    row.edition = row.edition ?? editionIn(g, def, y);
+    out.push(row);
+  }
+  return out;
+}
+
 export function contestInfo(g, id, day = todayOf(g)) {
   const def = CONTESTS[id];
   if (!def) return null;
@@ -1099,6 +1137,15 @@ export function contestInfo(g, id, day = todayOf(g)) {
     if (rr) { const o = rr.options.find((x) => x.day >= day) || rr.options[0]; nextRound = { idx: rr.idx, name: rr.name, day: o.day, venue: o.venue, date: o.date }; }
   }
   const label = cyc.notyet ? `${contestName(def, year)}（まだ始まっていない／${num(def.history && def.history.founded)}年創設）` : cyc.label;
+  if (isSelfRun(def) && !entry) {
+    // the def's own view: its entry, next round and status label
+    const st = selfStatus(g, def);
+    const ext = externalEntry(g, def);
+    if (ext && ext.next && Number.isFinite(Number(ext.next.day))) nextRound = { idx: -1, name: ext.roundName || '次の回戦', day: Number(ext.next.day), venue: ext.next.city || ext.next.hall || '', date: contestDate(g, Number(ext.next.day)) };
+    const map = { notyet: 'notyet', hiatus: 'closed', before: 'future', entry: 'open', open: 'open', prelim: 'running', finalday: 'running', running: 'running', after: 'running', closed: 'closed' };
+    const stt = st && map[st.status] ? map[st.status] : status;
+    return { id, def, year, cyc, status: stt, statusLabel: (st && st.statusLabel) || STATUS_LABEL[stt] || '', revival: !!cyc.revival, edition: st && st.edition != null ? st.edition : cyc.edition, label: (st && st.label) || label, nextRound, entry: ext, invite: cyc.invite, selfRun: true, today: st && Array.isArray(st.today) ? st.today : [] };
+  }
   return { id, def, year, cyc, status, statusLabel: cyc.notyet ? `まだ始まっていない（${num(def.history && def.history.founded)}年創設）` : !cyc.held ? cyc.note || '開催なし' : cyc.invite && status !== 'closed' ? (status === 'running' ? '開催中（招待制）' : '招待制') : STATUS_LABEL[status], revival: !!cyc.revival, edition: cyc.edition, label, nextRound, entry, invite: cyc.invite };
 }
 
@@ -1254,6 +1301,8 @@ const methods = {
   contestRegister(id, fields) { const e = registerEntry(this, id, fields); if (e) bump(this, id, e.year); return e; },
   contestRivals(id, round = 0, n = 10, year) {
     if (!this.state) return [];
+    const sdef = CONTESTS[id];
+    if (sdef && typeof sdef.rivalsOf === 'function') return safe(`rivalsOf:${id}`, () => sdef.rivalsOf(this, round, n, year), []) || [];
     const idx = typeof round === 'string' ? Math.max(0, roundsAt(CONTESTS[id], year ?? seasonYearOf(this, id)).findIndex((r) => r.id === round)) : round;
     return safe(`rivals:${id}`, () => rivalsFor(this, id, idx, n, year), []);
   },
@@ -1264,7 +1313,7 @@ const methods = {
   contestHistory(id, opts = {}) {
     if (!this.state || !CONTESTS[id]) return [];
     const def = CONTESTS[id];
-    const rows = historyRows(this, id, lastDoneYear(this, def));
+    const rows = isSelfRun(def) ? selfHistory(this, def) : historyRows(this, id, lastDoneYear(this, def));
     const mine = cstate(this).entries[id] || {};
     return rows.filter((r) => opts.all || r.held).map((r) => ({ year: r.year, edition: r.edition ?? null, champion: r.champion ?? null, runnerUp: r.runnerUp ?? null, third: r.third ?? null, finalists: r.finalists || [], note: r.note || '', revival: !!r.revival, held: r.held !== false, label: r.held === false ? '' : labelOf(def, r.year, r.edition, r.revival), playerPlace: r.player || null, playerEntry: mine[r.year] ? { status: mine[r.year].status, round: mine[r.year].round, results: mine[r.year].results } : null })).reverse();
   },
@@ -1302,7 +1351,7 @@ export const CONTEST_UI = {};
 
 // internals shared with contests_run.js / contest_ui.js / places/shourace.js
 export const internals = {
-  cstate, playerUnit, playerPower, cycleOf, seasonYearOf, contestInfo, dueOn, eventsOn, simOf, entryOf, registerEntry, eligibilityOf, feeOf, prizeOf, applyReward, addHarmony,
+  cstate, playerUnit, playerPower, isSelfRun, selfStatus, externalEntry, cycleOf, seasonYearOf, contestInfo, dueOn, eventsOn, simOf, entryOf, registerEntry, eligibilityOf, feeOf, prizeOf, applyReward, addHarmony,
   pushNews, rivalsFor, judgesFor, panelScores, scaleOf, toFieldScore, playerScoreDist, PHI, kindOf, KIND_LABEL, roundsOf, roundsAt, scheduleAt, labelOf, contestName, colorOf,
   prestigeOf, isInvitational, dateText, todayOf, playerUnitName, bump, resultsOf, historyRows, lastDoneYear, logOnce, realToInternal, yenLabel,
   OFFICE_FROM, NEWS_FROM, judgeComment, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, TAG_COLORS, hostPerson, rngOf, gauss, pickR, MODEL,

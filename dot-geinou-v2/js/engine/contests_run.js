@@ -723,6 +723,7 @@ async function judgeFinal(g, x, P, mode) {
 function freeze(g, id, year) {
   const c = I.cstate(g);
   const def = CONTESTS[id];
+  if (I.isSelfRun(def)) return;
   const sim = I.simOf(g, id, year);
   if (!sim) return;
   const rk = sim.final.ranking;
@@ -829,6 +830,7 @@ async function morning(g) {
   if (day % 30 === 0) for (const k of Object.keys(c.sent)) if (num(c.sent[k]) < day - 240) delete c.sent[k];
 }
 function seasonNews(g, def, day) {
+  if (I.isSelfRun(def)) return; // a contest that runs its own world tells its own story (no simulated field, news or history from D1)
   const y0 = I.seasonYearOf(g, def, day - 1), y1 = I.seasonYearOf(g, def, day);
   seasonNewsYear(g, def, day, y0);
   if (y1 !== y0) seasonNewsYear(g, def, day, y1);
