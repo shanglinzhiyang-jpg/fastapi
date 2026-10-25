@@ -630,7 +630,11 @@ class PhoneScene {
     const light = !(v && v.noHeader && v.statusDark);
     const col = light ? '#ffffff' : PC.text;
     const x = SCREEN.x, y = SCREEN.y;
-    T(c, `${st.day}日目 ${WEEKDAYS[weekdayOf(st.day)]}曜`, x + 6, y + 2, 12, col);
+    // the time first, as on a real phone (when the clock module is there)
+    let ck = null;
+    try { ck = typeof g.clock === 'function' ? g.clock() : null; } catch (e) { ck = null; }
+    const day = `${st.day}日目 ${WEEKDAYS[weekdayOf(st.day)]}曜`;
+    T(c, ck && ck.label ? `${ck.label}  ${day}` : day, x + 6, y + 2, 12, col);
     // a paper 手帳 has no signal or battery: stamina is a plain gauge there
     const paper = eraOf(st).deviceShort === '手帳';
     if (!paper) for (let i = 0; i < 4; i++) R(c, x + SCREEN.w - 46 + i * 3, y + 11 - (i * 2 + 3), 2, i * 2 + 3, col);

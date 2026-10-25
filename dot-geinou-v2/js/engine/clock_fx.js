@@ -91,7 +91,7 @@ const K0 = {
   late: [4, 6, 30, 0.7], night: [6, 10, 44, 0.64], dawn: [110, 80, 140, 0.3], morning: [255, 228, 186, 0.08], day: [255, 255, 255, 0],
   golden: [255, 186, 90, 0.16], sunset: [255, 118, 40, 0.32], dusk: [56, 36, 104, 0.48],
 };
-const KW = { sunny: null, cloudy: [96, 104, 124, 0.1], rain: [64, 74, 96, 0.24], heavyrain: [46, 54, 74, 0.34], storm: [46, 54, 74, 0.34], typhoon: [42, 50, 70, 0.38], snow: [226, 234, 248, 0.14] };
+const KW = { sunny: null, cloudy: [96, 104, 124, 0.12], rain: [60, 70, 92, 0.28], heavyrain: [42, 50, 70, 0.4], storm: [42, 50, 70, 0.4], typhoon: [36, 44, 64, 0.46], snow: [226, 234, 248, 0.16] };
 // min: minutes since the day's midnight (24:00+ = after midnight); sun: { rise, set }; kind: the weather now
 // → { r, g, b, a (the wash), dark (0..1: how dark it is, for the lights) }
 export function skyOverlay(min, sun, kind) {
@@ -272,15 +272,15 @@ function drawParticles(ctx, g, kind, cam, dark) {
       }
     }
   } else if (kind === 'snow') {
-    const n = 90;
+    const n = 120;
     for (let i = 0; i < n; i++) {
       const s = 0.35 + hash2(i, 3, 6) * 0.35;
       const H = VIEW_H + 10;
       const y = ((hash2(i, 1, 6) * H + f * s) % H) - 5;
       const x = ((((hash2(i, 2, 6) * VIEW_W + Math.sin((f + i * 37) / 40) * 4 - cam.x * 0.3) % VIEW_W) + VIEW_W) % VIEW_W);
-      const big = hash2(i, 4, 6) > 0.7;
-      ctx.fillStyle = big ? 'rgba(255,255,255,0.95)' : 'rgba(240,246,255,0.8)';
-      ctx.fillRect(x, y, big ? 1.5 : 1, big ? 1.5 : 1);
+      const big = hash2(i, 4, 6) > 0.6;
+      ctx.fillStyle = big ? 'rgba(255,255,255,0.95)' : 'rgba(240,246,255,0.85)';
+      ctx.fillRect(x, y, big ? 2 : 1, big ? 2 : 1);
     }
   }
 }

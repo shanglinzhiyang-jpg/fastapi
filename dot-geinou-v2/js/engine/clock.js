@@ -253,7 +253,7 @@ export function warningsOf(g, w, year = yearOf(g)) {
   return out;
 }
 export function heatWord(g, hi, year = yearOf(g)) {
-  if (hi >= 35) return year >= 2007 ? '猛暑日' : '真夏日（35℃超え）';
+  if (hi >= 35) return year >= 2007 ? '猛暑日' : '酷暑';
   if (hi >= 30) return '真夏日';
   if (hi >= 25) return '夏日';
   return '';
@@ -527,7 +527,7 @@ const methods = {
     if (!c) return null;
     const wake = wakeFor(c.min, c.alarm);
     const hours = Math.round(((wake + 1440 - c.min) / 60) * 10) / 10;
-    return { bed: c.min, wake, hours, alarm: c.alarm, effect: sleepEffect(hours) };
+    return { bed: c.min, wake, hours, minutes: wake + 1440 - c.min, alarm: c.alarm, effect: sleepEffect(hours) };
   },
   crimePhaseNow() { const c = clk(this); return c ? crimePhaseOf(c.min) : 'night'; },
   clockLog() { const c = clk(this); return c ? c.log.slice() : []; },

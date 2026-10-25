@@ -130,7 +130,10 @@ function drawTabs(c, g, v, a, th) {
   R(c, a.x, a.y + 22, a.w, 1, th.edge);
 }
 function drawClockApp(c, g, v, a, th, ph) {
+  drawClockBody(c, g, v, a, th, ph);
   drawTabs(c, g, v, a, th);
+}
+function drawClockBody(c, g, v, a, th) {
   const y0 = a.y + 26, x = a.x, w = a.w;
   const k = has(g, 'clock') ? safe(() => g.clock(), null) : null;
   if (!k) { T(c, '（時計がない…）', x + w / 2, y0 + 60, 12, th.dim, 'center'); return; }
@@ -139,8 +142,8 @@ function drawClockApp(c, g, v, a, th, ph) {
     const date = has(g, 'dateFull') ? safe(() => g.dateFull(), '') : '';
     let y = y0 + 4;
     if (dev === 'techo') {
-      drawWatch(c, x + w / 2, y0 + 62, 50, k, th);
-      y = y0 + 122;
+      drawWatch(c, x + w / 2, y0 + 50, 42, k, th);
+      y = y0 + 104;
     } else {
       const big = dev === 'smart' ? 40 : 32;
       if (dev === 'keitai') { box(c, x + 16, y0 + 6, w - 32, 58, 4, '#b8c8a0', '#5a6a4a', { lo: '#a0b088' }); }
@@ -162,10 +165,11 @@ function drawClockApp(c, g, v, a, th, ph) {
     }
     if (dev !== 'techo') { T(c, `日の出 ${hmS(k.sunrise)}　日の入り ${hmS(k.sunset)}`, x + w / 2, y, 12, th.dim, 'center'); y += 18; }
     const sp = has(g, 'sleepPlan') ? safe(() => g.sleepPlan(), null) : null;
-    if (sp && y < a.y + a.h - 30) {
+    if (sp && y <= a.y + a.h - 38) {
+      const short = sp.effect && sp.effect.f < 1;
       box(c, x + 8, a.y + a.h - 38, w - 16, 34, 4, th.card, th.edge);
-      T(c, fitText(c, `いま寝ると：${hmS(sp.wake)}に起床（${durT(sp.hours * 60)}）`, w - 28, 12), x + 14, a.y + a.h - 34, 12, th.ink);
-      T(c, fitText(c, sp.effect && sp.effect.f < 1 ? `寝不足：体力は${Math.round(sp.effect.f * 100)}%まで` : sp.alarm == null ? 'アラームなし（自然に目覚める）' : `アラーム ${hmS(sp.alarm)}`, w - 28, 12), x + 14, a.y + a.h - 19, 12, sp.effect && sp.effect.f < 1 ? '#d6304a' : th.dim);
+      T(c, fitText(c, `いま寝ると → ${hmS(sp.wake)} 起床`, w - 28, 12), x + 14, a.y + a.h - 34, 12, th.ink);
+      T(c, fitText(c, `睡眠 ${durT(sp.minutes ?? sp.hours * 60)}${short ? `（寝不足：体力${Math.round(sp.effect.f * 100)}%）` : sp.alarm == null ? '・アラームなし' : `・アラーム ${hmS(sp.alarm)}`}`, w - 28, 12), x + 14, a.y + a.h - 19, 12, short ? '#d6304a' : th.dim);
     }
     return;
   }
@@ -181,7 +185,7 @@ function drawClockApp(c, g, v, a, th, ph) {
       info = `いま寝ると ${hmS(wake)} 起床（${durT(hrs * 60)}）`;
     }
     T(c, fitText(c, info, w - 16, 12), x + 8, y0 + 2, 12, th.ink);
-    T(c, fitText(c, '早く起きれば1日が長い。夜ふかしだと寝不足に', w - 16, 12), x + 8, y0 + 17, 12, th.dim);
+    T(c, fitText(c, '早起きするほど、1日が長くなる', w - 16, 12), x + 8, y0 + 17, 12, th.dim);
     const rh = 17, top = y0 + 34;
     const cur = k.alarm == null ? 0 : ALARMS.indexOf(k.alarm) + 1;
     for (let i = 0; i <= ALARMS.length; i++) {
@@ -216,7 +220,7 @@ function drawClockApp(c, g, v, a, th, ph) {
     });
     const note = { 1: '1分：一発ギャグや自己紹介に', 3: '3分：ショートネタの目安', 4: '4分：漫才の決勝ネタの持ち時間', 5: '5分：コントや寄席の短いネタに', 10: '10分：落語の小噺から本題まで' }[TIMERS[v.tIdx]];
     T(c, fitText(c, note, w - 16, 12), x + w / 2, y0 + 140, 12, th.dim, 'center');
-    T(c, fitText(c, '（ゲームの時間は進まない。本物の秒で計る）', w - 16, 12), x + w / 2, y0 + 158, 12, th.dim, 'center');
+    T(c, fitText(c, '※ 本物の秒で計る', w - 16, 12), x + w / 2, y0 + 158, 12, th.dim, 'center');
     return;
   }
   // ストップウォッチ
@@ -256,9 +260,10 @@ function drawClockApp(c, g, v, a, th, ph) {
 }
 // The 手帳 eras' wristwatch: a leather strap, a round case and a face with hands and the date window.
 function drawWatch(c, cx, cy, r, k, th) {
-  R(c, cx - 22, cy - r - 30, 44, 2 * r + 60, '#6a3e1e');
-  for (let y = cy - r - 30; y < cy + r + 30; y += 6) R(c, cx - 20, y, 40, 1, '#5a3218');
-  R(c, cx - 22, cy - r - 30, 2, 2 * r + 60, '#8a5a30');
+  const sl = r + 10;
+  R(c, cx - 20, cy - sl, 40, 2 * sl, '#6a3e1e');
+  for (let y = cy - sl; y < cy + sl; y += 6) R(c, cx - 18, y, 36, 1, '#5a3218');
+  R(c, cx - 20, cy - sl, 2, 2 * sl, '#8a5a30');
   disc(c, cx, cy, r + 4, '#7a7266');
   disc(c, cx, cy, r + 3, '#d8d0c0');
   disc(c, cx, cy, r, '#fbf6e8');
@@ -269,14 +274,14 @@ function drawWatch(c, cx, cy, r, k, th) {
     line(c, x1, y1, x2, y2, '#2a2014', i % 3 ? 1 : 2);
   }
   // date window at 3 o'clock
-  box(c, cx + r - 24, cy - 7, 18, 14, 1, '#ffffff', '#5a5040');
-  T(c, String((k && k.date) || ''), cx + r - 15, cy - 6, 12, '#2a2014', 'center');
+  box(c, cx + r - 26, cy - 7, 20, 14, 1, '#ffffff', '#5a5040');
+  T(c, String((k && k.date) || ''), cx + r - 16, cy - 6, 12, '#2a2014', 'center');
   const min = k ? k.minutes : 0;
   const ha = ((min / 60) % 12) / 12 * Math.PI * 2, ma = ((min % 60) / 60) * Math.PI * 2;
   line(c, cx, cy, cx + Math.sin(ha) * (r * 0.5), cy - Math.cos(ha) * (r * 0.5), '#1a140c', 3);
   line(c, cx, cy, cx + Math.sin(ma) * (r * 0.78), cy - Math.cos(ma) * (r * 0.78), '#1a140c', 2);
   disc(c, cx, cy, 2, '#a0501e');
-  T(c, 'DOT', cx, cy - r + 14, 12, '#7a6a50', 'center');
+  T(c, 'DOT', cx, cy - r + 12, 12, '#7a6a50', 'center');
 }
 
 // ======================================================================== 天気
@@ -290,7 +295,7 @@ function tenkiTheme(g, wx, night) {
 }
 function tenkiView(g) {
   const v = {
-    title: tenkiTitle(g), color: COL.tenki, cancel: -1, other: false,
+    title: tenkiTitle(g), color: devOf(g) === 'techo' ? '#7a6a4a' : COL.tenki, cancel: -1, other: false,
     hint: 'A／B:もどる　←→:東京／大阪',
     enter() { const c = g.state && g.state.clock; if (c && c.warn) c.warn.tenkiSeen = g.state.day; },
     update(ph, inp) {
