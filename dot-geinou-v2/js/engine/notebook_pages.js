@@ -194,7 +194,7 @@ export function owaraiPage(g, ctx, K) {
   const combi = u.type !== 'pin';
 
   pg.block().head(combi ? `${TYPE[u.type] || 'コンビ'}` : 'ピン芸人', col);
-  pg.row(u.name || g.state.name, `${TYPE[u.type] || ''}・${STYLE[u.style] || ''}`, { c: C.accent, rs: S, rc: C.dim });
+  pg.row(u.name || g.state.name, combi ? `${TYPE[u.type] || ''}・${STYLE[u.style] || ''}` : 'ピン芸', { c: C.accent, rs: S, rc: C.dim });
   const mem = (u.members || []).map((m) => `${m.short || m.name}（${ROLE[m.role] || ''}）`).join('・');
   if (mem && combi) pg.para(mem, { s: S, c: C.text, x: 12 });
   if (combi && u.formed && u.formed.year) {
@@ -337,7 +337,9 @@ export function contestPage(g, ctx, K) {
     const e = c.entry;
     const st = e.status === 'champion' ? ['優勝！', C.accent] : e.status === 'out' ? ['敗退', C.dim] : e.status === 'withdrawn' ? ['棄権', C.dim] : e.status === 'passed' ? ['勝ちのこり中', C.good] : ['エントリー済み', C.cyan];
     pg.row(c.label, st[0], { rc: st[1], rs: S, c: C.text, tag: { t: (c.def && c.def.short) || '大会', bg: shadeTag(c) } });
-    const sub = [e.no ? `No.${e.no}` : '', ACTIVE.has(e.status) ? c.statusLabel || '' : ''].filter(Boolean).join('　');
+    const nr = c.nextRound;
+    const next = ACTIVE.has(e.status) ? (nr && K.num(nr.day) >= g.state.day ? `次は${nr.name || '次の回戦'}：${dateText(g, K, nr.day)}${nr.venue ? `（${nr.venue}）` : ''}` : c.statusLabel || '') : '';
+    const sub = [e.no ? `No.${e.no}` : '', next].filter(Boolean).join('　');
     if (sub) pg.para(sub, { s: S, c: C.text, x: 16 });
     if (ACTIVE.has(e.status) && has(g, 'contestOdds')) {
       const od = K.safe(() => g.contestOdds(c.id), null);
@@ -357,11 +359,12 @@ export function contestPage(g, ctx, K) {
     if (open.length > 5) pg.para(`ほか ${open.length - 5}大会`, { s: S, c: C.dim, x: 16 });
   }
   // coming up: the next entry windows
-  const soon = list.filter((c) => c.status === 'future' && !c.entry && c.nextRound && K.num(c.nextRound.day) > 0)
-    .sort((a, b) => K.num(a.nextRound.day) - K.num(b.nextRound.day)).slice(0, 3);
+  const from = (c) => K.num(c.cyc && c.cyc.entry && c.cyc.entry.from);
+  const soon = list.filter((c) => c.status === 'future' && !c.entry && from(c) > g.state.day)
+    .sort((a, b) => from(a) - from(b) || K.num(b.def && b.def.prestige) - K.num(a.def && a.def.prestige)).slice(0, 4);
   if (soon.length) {
-    pg.block().head('もうすぐ始まる大会', col);
-    for (const c of soon) pg.row(c.label, c.statusLabel || '', { rs: S, rc: C.dim });
+    pg.block().head('もうすぐ受付が始まる大会', col);
+    for (const c of soon) pg.row(c.label, `受付 ${dateText(g, K, from(c))}から`, { rs: S, rc: C.dim });
   }
   // results
   const res = myResults(g, K, list);
@@ -419,7 +422,9 @@ export function netaPage(g, ctx, K) {
     const sc = score(n);
     const scol = sc >= 70 ? C.good : sc >= 45 ? C.accent : sc >= 0 ? C.bad : C.dim;
     pg.row(`${i + 1}. 「${n.title || '無題'}」`, sc >= 0 ? `${Math.round(sc)}点` : '未採点', { tag: { t: KIND[n.kind] || n.kind || 'ネタ', bg: KIND_COLOR[n.kind] || '#6a6a8a' }, rc: scol, rs: S });
-    const bits = [n.ai && n.ai.rank, `仕上がり ${Math.round(K.num(n.practice))}%`, `出来 ${Math.round(q(n))}`, n.length ? `約${Math.round(K.num(n.length) / 6) / 10}分` : ''].filter(Boolean);
+    const sec = Math.round(K.num(n.length));
+    const len = !sec ? '' : sec < 60 ? `約${sec}秒` : `約${Math.floor(sec / 60)}分${sec % 60 ? `${sec % 60}秒` : ''}`;
+    const bits = [n.ai && n.ai.rank, `仕上がり ${Math.round(K.num(n.practice))}%`, `出来 ${Math.round(q(n))}`, len].filter(Boolean);
     pg.para(bits.join('・'), { s: S, c: C.dim, x: 16 });
   });
   const top = best.find((n) => n.ai && Array.isArray(n.ai.advice) && n.ai.advice.length);
@@ -462,7 +467,7 @@ export function calendarPage(g, ctx, K, off) {
   } });
   // the grid: 5 columns
   const cols = 5, rows = Math.ceil(days.length / cols);
-  const CH = 64;
+  const CH = K.vh() < 260 ? 52 : 64, chips = CH >= 64 ? 3 : 2;
   pg.line({ h: rows * CH + 4, draw: (c, x, y, D) => {
     const w = K.vw(), cw = Math.floor(w / cols);
     days.forEach((d, i) => {
@@ -475,11 +480,11 @@ export function calendarPage(g, ctx, K, off) {
       const wd = K.weekdayOf(d);
       const wc = wd === 6 ? C.bad : wd === 5 ? C.cyan : C.text;
       D.text(c, String(dt.dom), cx + 5, cy + 3, { size: 16, color: D.ink(before || past ? C.dim : wc), shadow: D.shadow });
-      D.text(c, K.WEEKDAYS[wd], cx + 5 + D.measure(c, String(dt.dom), 16) + 3, cy + 6, { size: 12, color: D.ink(wd >= 5 ? wc : C.dim), shadow: D.shadow });
-      if (isToday) D.text(c, 'きょう', cx + cw - 6, cy + 6, { size: 12, align: 'right', color: D.ink(C.accent), shadow: D.shadow });
+      if (isToday) D.text(c, 'きょう', cx + 8 + D.measure(c, String(dt.dom), 16), cy + 6, { size: 12, color: D.ink(C.accent), shadow: D.shadow });
+      D.text(c, `(${K.WEEKDAYS[wd]})`, cx + cw - 6, cy + 6, { size: 12, align: 'right', color: D.ink(wd >= 5 ? wc : C.dim), shadow: D.shadow });
       const list = ev.get(d) || [];
-      list.slice(0, 3).forEach((e, k) => {
-        const lbl = list.length > 3 && k === 2 ? `+${list.length - 2}` : e.chip;
+      list.slice(0, chips).forEach((e, k) => {
+        const lbl = list.length > chips && k === chips - 1 ? `+${list.length - chips + 1}` : e.chip;
         const tw = Math.min(cw - 10, Math.ceil(D.measure(c, lbl, 12)) + 6);
         const bg = past ? (D.th.dark ? '#2b3150' : '#b9ad96') : e.color;
         D.rect(c, cx + 4, cy + 22 + k * 14, tw, 13, bg);
@@ -494,16 +499,20 @@ export function calendarPage(g, ctx, K, off) {
   const items = [];
   for (const d of days) for (const e of ev.get(d) || []) if (e.list !== false) items.push({ d, e });
   items.sort((a, b) => b.e.pri - a.e.pri || a.d - b.d);
-  const room = Math.max(2, Math.floor((K.vh() - 26 - 4 - rows * CH - 4 - 8 - 26 - 18 * env.weekly.length) / 18));
+  // fit the page (the calendar never scrolls: ↑↓ change the month)
+  const weekly = env.weekly.slice(0, K.vh() < 260 ? 1 : 3);
+  let room = Math.floor((K.vh() - 30 - (rows * CH + 4) - 6 - 26 - 18 * weekly.length) / 18);
+  if (items.length > room) room -= 1;
+  room = Math.max(0, room);
   const shown = items.slice(0, room).sort((a, b) => a.d - b.d || b.e.pri - a.e.pri);
   pg.block(6).head('この月の予定', K.TC.cal);
-  if (!items.length && !env.weekly.length) pg.para('とくに予定はない。', { s: S, c: C.dim });
+  if (!items.length && !weekly.length) pg.para('とくに予定はない。', { s: S, c: C.dim });
   for (const { d, e } of shown) {
     const dt = gdate(g, K, d);
     pg.row(`${dt.month}/${dt.dom}（${K.WEEKDAYS[K.weekdayOf(d)]}）${e.text}`, '', { s: S, c: d < st.day ? C.dim : e.ink || C.text, tag: { t: e.chip, bg: e.color } });
   }
   if (items.length > shown.length) pg.para(`ほか ${items.length - shown.length}件`, { s: S, c: C.dim, x: 12 });
-  for (const t of env.weekly) pg.para(t, { s: S, c: C.dim });
+  for (const t of weekly) pg.line({ t, s: S, c: C.dim });
   return pg;
 }
 function tri(c, x, y, dir, color) {
@@ -568,12 +577,21 @@ function calEnv(g, K, days) {
         const nm = def.short || def.name || e.id;
         const big = def.category === 'major' || K.num(def.prestige) >= 70;
         const round = String(e.name || '').replace(/（.*$/, '');
-        if (e.mine && (e.type === 'round' || e.type === 'final')) add(E.contest, d, { chip: round.slice(0, 4) || '本番', color: CHIP.mine, text: `「${nm}」${round}（エントリー中）`, pri: 100, ink: K.COLORS.bad });
+        if (e.mine && (e.type === 'round' || e.type === 'final')) add(E.contest, d, { id: e.id, chip: round.slice(0, 4) || '本番', color: CHIP.mine, text: `「${nm}」${round}（エントリー中）`, pri: 100, ink: K.COLORS.bad });
         else if (e.type === 'final' && big) add(E.contest, d, { chip: '決勝', color: CHIP.final, text: `「${nm}」決勝`, pri: 40 });
         else if (e.type === 'entryClose' && big) add(E.contest, d, { chip: '締切', color: CHIP.close, text: `「${nm}」エントリー締切`, pri: 30 });
         else if (e.type === 'entryOpen' && def.category === 'major') add(E.contest, d, { chip: '受付', color: CHIP.close, text: `「${nm}」エントリー受付開始`, pri: 20 });
       }
     }
+  }
+  // the player's next rounds from g.contests() (self-run contests keep their own calendars)
+  const inMonth = new Set(days);
+  for (const c of contestsOf(g, K)) {
+    const nr = c.entry && ACTIVE.has(c.entry.status) ? c.nextRound : null;
+    const d = nr ? K.num(nr.day) : 0;
+    if (!d || !inMonth.has(d) || (E.contest.get(d) || []).some((x) => x.id === c.id && x.pri === 100)) continue;
+    const round = String(nr.name || '').replace(/（.*$/, '');
+    add(E.contest, d, { id: c.id, chip: round.slice(0, 4) || '本番', color: CHIP.mine, text: `「${cname(c)}」${round}${nr.venue ? `（${nr.venue}）` : ''}`, pri: 100, ink: K.COLORS.bad });
   }
   return E;
 }

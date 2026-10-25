@@ -1,4 +1,6 @@
-// てちょう（メニュー → てちょう）: a notebook with six tabs (HD scene, 640x360).
+// てちょう（メニュー → てちょう）: a notebook with ten tabs in two groups (HD scene, 640x360), styled by era
+// (昭和 革の手帳 / 平成 システム手帳 / 令和 デジタル: notebook_look.js). The comedy pages お笑い・賞レース・ネタ帳・
+// カレンダー and the お笑いの道 goals are in notebook_pages.js (API: test-output/api_notebook.txt). The older six:
 //
 //   もくひょう  today's numbers, what needs attention and a concrete next goal
 //   せいかつ    the day of the week, needs with advice, housing and rent, this week's
@@ -69,8 +71,8 @@ const isTouch = () => typeof document !== 'undefined' && !!document.body && docu
 const TB = 70; // touch: the tab bar and the × cell (as the 芸人手帳)
 const IDX = { x: 546, y: 14, w: 90, h: 30, gap: 2, groupGap: 10 }; // desktop: the side index
 const LAYOUTS = {
-  desk: { id: 'desk', page: { x: 8, y: 8, w: 540, h: 344 }, vx: 34, vy: 52, vw: 482, vh: 272, foot: true },
-  touch: { id: 'touch', page: { x: 4, y: TB + 4, w: SW - 8, h: SH - TB - 7 }, vx: 30, vy: TB + 40, vw: 572, vh: SH - TB - 7 - 46, foot: false },
+  desk: { id: 'desk', page: { x: 8, y: 8, w: 540, h: 344 }, vx: 34, vy: 52, vw: 482, vh: 272, foot: true, head: { size: 18, y: 12, icon: 2 } },
+  touch: { id: 'touch', page: { x: 4, y: TB + 4, w: SW - 8, h: SH - TB - 7 }, vx: 30, vy: TB + 34, vw: 572, vh: SH - TB - 7 - 30 - 6, foot: false, head: { size: 15, y: 7, icon: 1 } },
 };
 let LAYOUT = LAYOUTS.desk;
 let PX, PY, PW, PH, VX, VY, VW, VH, SB_X;
@@ -129,6 +131,12 @@ class Page {
     // would start a line on its own, so wrap a little narrower until no line starts with one
     let lines = wrap(this.ctx, t, VW - x, s);
     for (let k = 1; k <= 3 && lines.some((ln, i) => i && NO_LINE_START.test(ln)); k++) lines = wrap(this.ctx, t, VW - x - k * s, s);
+    // no last line of one or two characters (「…回復しな／い。」): wrap a little narrower
+    const widow = (ls) => ls.length > 1 && Array.from(ls[ls.length - 1]).length <= 2;
+    for (let k = 1; k <= 3 && widow(lines); k++) {
+      const alt = wrap(this.ctx, t, VW - x - k * s, s);
+      if (alt.length === lines.length && !alt.some((ln, i) => i && NO_LINE_START.test(ln))) lines = alt;
+    }
     for (const ln of lines) this.line({ t: ln, c, s, x, mark });
     return this;
   }
@@ -1398,19 +1406,20 @@ export class NotebookScene {
   drawHeader(ctx, ti) {
     const tb = TABS[ti];
     const c = inkOf(THEME, tb.color);
-    const hx = PX + 26, hy = PY + 12;
-    icon(ctx, tb.id, hx, hy, c, 2);
-    text(ctx, tb.label, hx + 32, hy + 2, { size: 18, color: c, shadow: THEME.dark ? shade(tb.color, -0.6) : null });
-    const tw = measure(ctx, tb.label, 18);
+    const H = LAYOUT.head;
+    const hx = PX + 26, hy = PY + H.y, iw = 12 * H.icon + 8;
+    icon(ctx, tb.id, hx, hy + (H.icon === 1 ? 3 : 0), c, H.icon);
+    text(ctx, tb.label, hx + iw, hy + 2, { size: H.size, color: c, shadow: THEME.dark ? shade(tb.color, -0.6) : null });
+    const tw = measure(ctx, tb.label, H.size);
     if (this.head) {
       // the date (and weather / clock when the game has them), as far as there is room
-      const room = PW - 26 - 32 - tw - 30;
+      const room = PW - 26 - iw - tw - 30;
       let s = this.head;
       while (s.length > 4 && measure(ctx, s, SMALL) > room) s = s.slice(0, -2);
-      text(ctx, s, PX + PW - 18, hy + 6, { size: SMALL, align: 'right', color: inkOf(THEME, COLORS.dim), shadow: THEME.dark ? undefined : null });
+      text(ctx, s, PX + PW - 18, hy + (H.size - SMALL) / 2 + 2, { size: SMALL, align: 'right', color: inkOf(THEME, COLORS.dim), shadow: THEME.dark ? undefined : null });
     }
-    rect(ctx, PX + 22, VY - 8, PW - 44, 2, c);
-    rect(ctx, PX + 22, VY - 6, PW - 44, 1, THEME.dark ? shade(tb.color, -0.5) : shade(THEME.paper, -0.12));
+    rect(ctx, PX + 22, VY - 7, PW - 44, 2, c);
+    rect(ctx, PX + 22, VY - 5, PW - 44, 1, THEME.dark ? shade(tb.color, -0.5) : shade(THEME.paper, -0.12));
   }
 
   drawBody(ctx, pg, off, settled, color, still = false) {

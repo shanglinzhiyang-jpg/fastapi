@@ -145,11 +145,12 @@ function drawPaper(c, th, p) {
     const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
     c.fillStyle = th.paper2;
     for (let i = 0; i < 700; i++) c.fillRect(x + 2 + Math.floor(rnd() * (w - 4)), y + 2 + Math.floor(rnd() * (h - 4)), 2, 1);
-    // a ribbon bookmark hanging from the top
-    rect(c, x + w - 46, y - 2, 7, 22, '#a8322a');
-    rect(c, x + w - 46, y - 2, 2, 22, '#c8524a');
-    rect(c, x + w - 46, y + 20, 3, 2, '#a8322a');
-    rect(c, x + w - 42, y + 20, 3, 2, '#a8322a');
+    // a ribbon bookmark hanging out at the bottom
+    const rx = x + w - 130;
+    rect(c, rx, y + h - 3, 7, 8, '#a8322a');
+    rect(c, rx, y + h - 3, 2, 8, '#c8524a');
+    rect(c, rx, y + h + 5, 3, 1, '#a8322a');
+    rect(c, rx + 4, y + h + 5, 3, 1, '#a8322a');
   }
   if (th.margin) rect(c, x + 20, y + 4, 1, h - 8, th.margin);
 }
