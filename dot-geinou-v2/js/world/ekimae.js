@@ -159,19 +159,21 @@ export function tower(x, y, w, kind, extra = {}) {
     draw(ctx, sx, sy, g) {
       const cx = sx + (w * TILE) / 2;
       if (kind === 'tsutenkaku') {
-        // legs, the body, the observation deck, the lit sign, the spire
-        for (const d of [-14, 10]) { F(ctx, cx + d, sy - 30, 4, 62, '#8a8f99'); F(ctx, cx + d + 1, sy - 30, 1, 62, '#b8bcc6'); }
-        F(ctx, cx - 12, sy + 2, 24, 3, '#8a8f99');
-        F(ctx, cx - 7, sy - 92, 14, 64, '#9aa0aa'); F(ctx, cx - 7, sy - 92, 3, 64, '#c8ccd4');
-        for (let k = 0; k < 8; k++) F(ctx, cx - 7, sy - 88 + k * 8, 14, 1, '#7a808a');
-        F(ctx, cx - 13, sy - 110, 26, 18, '#c8ccd4'); F(ctx, cx - 12, sy - 106, 24, 6, '#3b4a6a');
+        // four legs over the street, the shaft with the lit sign, the observation deck, the spire with its weather lights
+        const gy = sy + 30;
+        for (const d of [-28, 22]) { F(ctx, cx + d, gy - 44, 6, 46, '#7d828c'); F(ctx, cx + d + 1, gy - 44, 2, 46, '#aeb3bc'); }
+        for (let k = 0; k < 3; k++) F(ctx, cx - 24, gy - 40 + k * 14, 48, 2, '#8a8f99');
+        for (let k = 0; k < 2; k++) for (let i = 0; i < 8; i++) F(ctx, cx - 22 + i * 6, gy - 34 + k * 14 + (i % 2) * 5, 3, 3, '#8a8f99');
+        F(ctx, cx - 18, gy - 56, 36, 14, '#a8adb6'); F(ctx, cx - 18, gy - 56, 36, 2, '#d0d4da');
+        F(ctx, cx - 11, gy - 112, 22, 58, '#b4b8c0'); F(ctx, cx - 11, gy - 112, 5, 58, '#d4d8de'); F(ctx, cx + 7, gy - 112, 4, 58, '#8e929a');
         const lit = Math.floor((g.frame || 0) / 40) % 2;
-        F(ctx, cx - 9, sy - 60, 18, 26, '#20232a');
-        text(ctx, '通', cx, sy - 60, { size: 7, align: 'center', color: lit ? '#ffe48a' : '#ff8a3d', shadow: null });
-        text(ctx, '天', cx, sy - 52, { size: 7, align: 'center', color: lit ? '#ffe48a' : '#ff8a3d', shadow: null });
-        text(ctx, '閣', cx, sy - 44, { size: 7, align: 'center', color: lit ? '#ffe48a' : '#ff8a3d', shadow: null });
-        F(ctx, cx - 2, sy - 128, 4, 18, '#c8ccd4'); F(ctx, cx - 0.5, sy - 136, 1, 8, '#9aa0aa');
-        for (const [dx, col] of [[-12, '#ff4f4f'], [-4, '#ffd23f'], [4, '#4fd04f'], [12, '#4f8fff']]) F(ctx, cx + dx - 1, sy - 114, 2, 2, col);
+        F(ctx, cx - 14, gy - 104, 28, 44, '#20232a'); F(ctx, cx - 13, gy - 103, 26, 42, '#2a2d36');
+        ['通', '天', '閣'].forEach((ch, i) => text(ctx, ch, cx, gy - 102 + i * 13, { size: 11, align: 'center', color: lit ? '#ffe48a' : '#ff8a3d', shadow: null }));
+        F(ctx, cx - 24, gy - 138, 48, 26, '#c8ccd4'); F(ctx, cx - 24, gy - 138, 48, 3, '#e8ecf0'); F(ctx, cx - 22, gy - 131, 44, 10, '#3b4a6a');
+        for (let k = 0; k < 6; k++) F(ctx, cx - 20 + k * 7, gy - 129, 4, 6, '#8fc0e8');
+        F(ctx, cx - 18, gy - 144, 36, 6, '#b4b8c0');
+        F(ctx, cx - 3, gy - 162, 6, 18, '#c8ccd4'); F(ctx, cx - 1, gy - 172, 2, 10, '#9a9ea6');
+        for (const [dx, col] of [[-14, '#ff4f4f'], [-5, '#ffd23f'], [5, '#4fd04f'], [14, '#4f8fff']]) F(ctx, cx + dx - 2, gy - 143, 4, 4, col);
       }
     },
     ...extra,
@@ -263,6 +265,19 @@ export function courseCar(x0, y0, x1, y1, color, phase = 0) {
       if (horiz) { F(ctx, cx - 11, cy - 6, 22, 11, '#3b3f48'); F(ctx, cx - 10.5, cy - 5.5, 21, 10, color); F(ctx, cx - 5, cy - 4.5, 10, 8, '#8fd0ff'); F(ctx, cx - 2, cy - 9, 4, 3, '#ffd23f'); }
       else { F(ctx, cx - 6, cy - 11, 11, 22, '#3b3f48'); F(ctx, cx - 5.5, cy - 10.5, 10, 21, color); F(ctx, cx - 4.5, cy - 5, 8, 10, '#8fd0ff'); F(ctx, cx - 1.5, cy - 2, 3, 4, '#ffd23f'); }
     },
+  };
+}
+// a parked car seen from above (2x1)
+export function parkedCar(x, y, color, extra = {}) {
+  return {
+    type: 'prop', x, y, w: 2, h: 1, solid: true, text: '駐車場に、車が停まっている。',
+    draw(ctx, sx, sy) {
+      F(ctx, sx + 3, sy + 13, 26, 2, 'rgba(0,0,0,0.25)');
+      F(ctx, sx + 2, sy + 2, 28, 12, '#3b3f48'); F(ctx, sx + 2.5, sy + 2.5, 27, 11, color);
+      F(ctx, sx + 9, sy + 3.5, 6, 9, '#8fd0ff'); F(ctx, sx + 20, sy + 3.5, 4, 9, '#8fd0ff'); F(ctx, sx + 15, sy + 3.5, 5, 9, color);
+      F(ctx, sx + 28, sy + 4, 1.5, 2, '#fff6a8'); F(ctx, sx + 28, sy + 10, 1.5, 2, '#fff6a8');
+    },
+    ...extra,
   };
 }
 // a painted word on the ground (course marks: S字・クランク …)

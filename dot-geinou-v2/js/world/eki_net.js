@@ -45,7 +45,7 @@ export const STATIONS = {
   shinjuku: { name: '新宿', kana: 'しんじゅく', region: 'tokyo', place: 'ekimae_shinjuku', mx: 262, my: 154, lab: 'b', big: true },
   harajuku: { name: '原宿', kana: 'はらじゅく', region: 'tokyo', place: null, mx: 262, my: 206, lab: 'l' },
   shibuya: { name: '渋谷', kana: 'しぶや', region: 'tokyo', place: 'ekimae_shibuya', mx: 284, my: 250, lab: 'b', big: true },
-  shinagawa: { name: '品川', kana: 'しながわ', region: 'tokyo', place: null, mx: 392, my: 270, lab: 'b' },
+  shinagawa: { name: '品川', kana: 'しながわ', region: 'tokyo', place: null, mx: 392, my: 264, lab: 'b' },
   takanawa: { name: '高輪ゲートウェイ', kana: 'たかなわげーとうぇい', region: 'tokyo', place: null, mx: 436, my: 256, lab: 'r', open: 202003 },
   kanraku: { name: '新橋', kana: 'しんばし', region: 'tokyo', place: 'kanraku', mx: 470, my: 226, lab: 'r' },
   yotsuya: { name: '四ツ谷', kana: 'よつや', region: 'tokyo', place: null, mx: 372, my: 162, lab: 'b' },
@@ -66,9 +66,9 @@ export const STATIONS = {
   umeda: { name: '梅田', jr: '大阪', kana: 'うめだ', region: 'osaka', place: 'osaka_umeda', mx: 334, my: 100, lab: 'r', big: true },
   tenma: { name: '天満', kana: 'てんま', region: 'osaka', place: null, mx: 404, my: 118, lab: 'r' },
   kyobashi: { name: '京橋', kana: 'きょうばし', region: 'osaka', place: null, mx: 438, my: 170, lab: 'r', big: true },
-  tsuruhashi: { name: '鶴橋', kana: 'つるはし', region: 'osaka', place: null, mx: 430, my: 236, lab: 'r' },
-  tennoji: { name: '天王寺', kana: 'てんのうじ', region: 'osaka', place: null, mx: 352, my: 284, lab: 'b', big: true },
-  shinimamiya: { name: '新今宮', kana: 'しんいまみや', region: 'osaka', place: null, mx: 270, my: 272, lab: 'b' },
+  tsuruhashi: { name: '鶴橋', kana: 'つるはし', region: 'osaka', place: null, mx: 430, my: 228, lab: 'r' },
+  tennoji: { name: '天王寺', kana: 'てんのうじ', region: 'osaka', place: null, mx: 352, my: 268, lab: 'r', big: true },
+  shinimamiya: { name: '新今宮', kana: 'しんいまみや', region: 'osaka', place: null, mx: 270, my: 256, lab: 'l' },
   bentencho: { name: '弁天町', kana: 'べんてんちょう', region: 'osaka', place: null, mx: 228, my: 216, lab: 'l' },
   nishikujo: { name: '西九条', kana: 'にしくじょう', region: 'osaka', place: null, mx: 234, my: 152, lab: 'l' },
   fukushima: { name: '福島', kana: 'ふくしま', region: 'osaka', place: null, mx: 272, my: 108, lab: 'l' },
@@ -77,7 +77,7 @@ export const STATIONS = {
   honmachi: { name: '本町', kana: 'ほんまち', region: 'osaka', place: null, mx: 338, my: 164, lab: 'r' },
   shinsaibashi: { name: '心斎橋', kana: 'しんさいばし', region: 'osaka', place: null, mx: 338, my: 192, lab: 'r' },
   namba: { name: 'なんば', kana: 'なんば', region: 'osaka', place: 'namba', mx: 338, my: 220, lab: 'r', big: true },
-  dobutsuen: { name: '動物園前', kana: 'どうぶつえんまえ', region: 'osaka', place: 'osaka_shinsekai', mx: 318, my: 254, lab: 'l' },
+  dobutsuen: { name: '動物園前', kana: 'どうぶつえんまえ', region: 'osaka', place: 'osaka_shinsekai', mx: 318, my: 244, lab: 'l' },
 };
 export const TOWN_STATIONS = ['tokyo', 'machi', 'minato', 'nagatacho', 'kanraku', 'namba'];
 

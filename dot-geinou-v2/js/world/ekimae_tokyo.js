@@ -13,7 +13,7 @@ import { text } from '../engine/draw.js';
 import { ageOf } from '../engine/profile.js';
 import {
   ekimae, npc, LOOKS, yearOf, ymOf, eatery, shop, sight, postSign, bigScreen, statueDog, skyline, lanternGate, lanternPillars,
-  crossingBarrier, courseCar, groundMark, trainBand,
+  crossingBarrier, courseCar, groundMark, trainBand, parkedCar,
 } from './ekimae.js';
 
 // skyline landmarks (drawn in the two sky rows behind the railway; baseY = their foot)
@@ -262,7 +262,7 @@ ekimae({
     B(26, 22, 3, 3, 'small', 'せんべい屋', { wall: '#f4e6cc', roof: '#3a2a20', sign: { text: 'せんべい', bg: '#3a2a20', color: '#ffe48a' } }, (g) => eatery(g, { greet: '「手焼きのせんべい、一枚からどうぞ」', items: [{ name: '焼きたてせんべい', price: 200, heal: 6, fill: 6, stress: 2, text: 'パリッ！しょうゆの香ばしさ。', minutes: 5 }] })),
     B(19, 26, 4, 3, 'small', 'おみやげ屋', { wall: '#fff6e0', roof: '#a8202a', sign: { text: 'みやげ', bg: '#ffd23f', color: '#a8202a' } }, ['ちょうちんのキーホルダー、扇子、手ぬぐい。', '外国からのお客さんに大人気だ。']),
     B(26, 26, 3, 3, 'small', '甘味処', { wall: '#f4e6cc', roof: '#5a3a20', sign: { text: '甘味', bg: '#5a3a20', color: '#ffffff' } }, (g) => eatery(g, { greet: '「おしるこ、あんみつ、ございます」', items: [{ name: 'あんみつ', price: 700, heal: 10, fill: 10, stress: 5, text: '寒天と黒みつ。ほっとする甘さ。', minutes: 20 }] })),
-    { type: 'building', x: 19, y: 30, w: 10, h: 5, kind: 'theater', name: 'お寺の本堂', wall: '#c8303a', roof: '#3a3f48', sign: { text: '本堂', bg: '#3a2a20', color: '#ffe48a' }, talk: (g) => temple(g) },
+    { type: 'building', x: 19, y: 30, w: 10, h: 5, kind: 'bath', chimney: false, noren: '#5a1a1a', name: 'お寺の本堂', wall: '#c8303a', roof: '#3a3f48', sign: { text: '本堂', bg: '#3a2a20', color: '#ffe48a' }, talk: (g) => temple(g) },
     B(33, 9, 12, 7, 'theater', '浅草ドット演芸ホール', { wall: '#f6e7c8', roof: '#a8202a', sign: { text: '浅草ドット演芸ホール', bg: '#a8202a', color: '#ffe48a' } }, (g) => engei(g)),
     B(17, 3, 8, 5, 'restaurant', '洋食屋', { wall: '#fff6e8', roof: '#8a3a2a', sign: { text: '洋食', bg: '#8a3a2a', color: '#ffffff' } }, (g) => eatery(g, { greet: '「いらっしゃいませ。創業は昭和のはじめです」', items: [{ name: 'ハヤシライス', price: 1400, heal: 35, fill: 35, stress: 3, text: 'じっくり煮こんだ、昔ながらの味。', minutes: 30 }] })),
     B(26, 3, 6, 5, 'small', 'どじょう料理', { wall: '#f4e6cc', roof: '#3a2a20', sign: { text: 'どぜう', bg: '#3a2a20', color: '#ffffff' } }, (g) => eatery(g, { greet: '「いらっしゃい。どぜう鍋、ネギたっぷりでどうぞ」', items: [{ name: 'どぜう鍋', price: 1800, heal: 30, fill: 30, stress: 4, text: '浅く煮たどじょうに、ネギを山盛り。江戸の味だ。', minutes: 40 }] })),
@@ -371,10 +371,10 @@ ekimae({
     { type: 'prop', x: 1, y: 2, w: 46, h: 2, solid: false, z: -800, cond: (g) => ymOf(g) >= 201905,
       draw(ctx, sx, sy) { F(ctx, sx, sy, 736, 32, '#d8d2c4'); F(ctx, sx, sy + 12, 736, 8, '#c8b89a'); for (let x = 8; x < 736; x += 40) { F(ctx, sx + x, sy + 2, 10, 8, '#6aa85a'); F(ctx, sx + x + 20, sy + 22, 12, 8, '#7ab86a'); } } },
     { type: 'sign', x: 6, y: 4, cond: (g) => ymOf(g) >= 201905, text: ['線路のあとが、細長い遊歩道とお店の通りになっている。', '（「線路街」と呼ばれているらしい）'] },
-    B(2, 3, 7, 5, 'small', '古本屋', { wall: '#efe2c8', roof: '#5a3a20', sign: { text: '古本', bg: '#5a3a20', color: '#ffffff' } }, (g) => shop(g, { greet: '古本屋だ。戯曲や演劇の本が、天井まで積まれている。', items: [{ name: '古い台本集', price: 500, item: 'daihon', text: '昔の名作の台本集。演技の参考になりそうだ。' }] })),
-    B(10, 3, 8, 5, 'shop', '雑貨屋', { wall: '#fff6e0', roof: '#7ab86a', stripes: ['#7ab86a', '#ffffff'], sign: { text: '雑貨', bg: '#7ab86a', color: '#ffffff' } }, ['雑貨屋だ。古いおもちゃ、レコード、手作りのアクセサリー。', '見ているだけで時間がたつ。']),
-    B(30, 3, 8, 5, 'cafe', 'カフェ', { wall: '#f6efe2', roof: '#6b4a2e', sign: { text: 'カフェ', bg: '#6b4a2e', color: '#fff3e0' } }, (g) => eatery(g, { greet: '小さなカフェ。壁一面に、ライブのフライヤー。', items: [{ name: 'カフェラテ', price: 550, stress: 4, text: 'ほっとひと息。', minutes: 30 }] })),
-    B(39, 3, 7, 5, 'small', 'ラーメン屋', { wall: '#f4e6cc', roof: '#3a2a20', sign: { text: 'ラーメン', bg: '#d62f2f', color: '#ffffff' } }, (g) => eatery(g, { greet: '「らっしゃい！」', items: [{ name: '煮干しラーメン', price: 900, heal: 30, fill: 35, stress: 2, text: '煮干しの香りが、ガツンとくる。', minutes: 20 }] })),
+    B(2, 5, 7, 4, 'small', '古本屋', { wall: '#efe2c8', roof: '#5a3a20', sign: { text: '古本', bg: '#5a3a20', color: '#ffffff' } }, (g) => shop(g, { greet: '古本屋だ。戯曲や演劇の本が、天井まで積まれている。', items: [{ name: '古い台本集', price: 500, item: 'daihon', text: '昔の名作の台本集。演技の参考になりそうだ。' }] })),
+    B(10, 5, 8, 4, 'shop', '雑貨屋', { wall: '#fff6e0', roof: '#7ab86a', stripes: ['#7ab86a', '#ffffff'], sign: { text: '雑貨', bg: '#7ab86a', color: '#ffffff' } }, ['雑貨屋だ。古いおもちゃ、レコード、手作りのアクセサリー。', '見ているだけで時間がたつ。']),
+    B(30, 5, 8, 4, 'cafe', 'カフェ', { wall: '#f6efe2', roof: '#6b4a2e', sign: { text: 'カフェ', bg: '#6b4a2e', color: '#fff3e0' } }, (g) => eatery(g, { greet: '小さなカフェ。壁一面に、ライブのフライヤー。', items: [{ name: 'カフェラテ', price: 550, stress: 4, text: 'ほっとひと息。', minutes: 30 }] })),
+    B(39, 5, 7, 4, 'small', 'ラーメン屋', { wall: '#f4e6cc', roof: '#3a2a20', sign: { text: 'ラーメン', bg: '#d62f2f', color: '#ffffff' } }, (g) => eatery(g, { greet: '「らっしゃい！」', items: [{ name: '煮干しラーメン', price: 900, heal: 30, fill: 35, stress: 2, text: '煮干しの香りが、ガツンとくる。', minutes: 20 }] })),
     B(1, 10, 9, 6, 'theater', 'ドット小劇場 下北', { wall: '#3a3242', roof: '#20232a', sign: { text: 'ドット小劇場', bg: '#20232a', color: '#ffd23f' } }, (g) => smallTheater(g)),
     B(10, 10, 6, 6, 'small', 'カレー屋', { wall: '#f4e6cc', roof: '#8a5a20', sign: { text: 'カレー', bg: '#e8a020', color: '#3a2a20' } }, (g) => eatery(g, { greet: '「いらっしゃい。スパイス、効いてますよ」', items: [{ name: 'スープカレー', price: 1200, heal: 30, fill: 35, stress: 3, text: 'スパイスの香りが、体にしみわたる…！', minutes: 30 }] })),
     B(33, 10, 7, 6, 'shop', 'ライブハウス 下北ドット', { wall: '#2a2d36', roof: '#ff4f8b', stripes: ['#ff4f8b', '#20232a'], sign: { text: 'LIVE', bg: '#20232a', color: '#ff7eb6' } }, (g) => liveHouse(g, '下北ドット')),
@@ -489,10 +489,11 @@ ekimae({
   },
   entities: (K) => [
     { type: 'building', x: 30, y: 8, w: 14, h: 8, door: 7, place: 'menkyo', name: 'ドット運転免許センター', kind: 'office', wall: '#e4e8ee', roof: '#3a5a9a', canopy: '#3a5a9a', sign: { text: 'ドット運転免許センター', bg: '#2a4a8a', color: '#ffffff' } },
+    parkedCar(30, 22, '#d8dce4'), parkedCar(36, 22, '#3a5a9a'), parkedCar(42, 22, '#c0392b'), parkedCar(33, 27, '#2f9a4a'), parkedCar(39, 27, '#e8e4dc'),
     postSign(28, 15, '試験場前', ['「試験場前」のバス停の標識。', '学科試験・免許の交付・更新の受付は、平日 午前9時〜午後4時（土日・祝日はお休み）。']),
     B(18, 21, 5, 5, 'small', '代書屋', { wall: '#f4ecd8', roof: '#5a5f6b', sign: { text: '代書', bg: '#5a5f6b', color: '#ffffff' } }, ['「代書・申請書類の書き方、お手伝いします」', 'おじさん「試験の前に、例題集もどうぞ。よく出るところに線を引いてあるよ」']),
     B(24, 21, 3, 5, 'small', '証明写真', { wall: '#e8ecf2', roof: '#2f6fd0', sign: { text: '写真', bg: '#2f6fd0', color: '#ffffff' } }, ['証明写真の機械だ。', '（免許証の写真は、センターの中で撮ってもらえる）']),
-    { type: 'building', x: 4, y: 22, w: 8, h: 5, kind: 'theater', name: '神社', wall: '#e8d8b8', roof: '#3a4a3a', sign: { text: '神社', bg: '#3a2a20', color: '#ffe48a' }, talk: (g) => sight(g, 'fuchu_jinja', ['古い神社だ。大きなけやきの木に囲まれている。', '手を合わせた。（試験に受かりますように…）'], 4, 10) },
+    { type: 'building', x: 4, y: 22, w: 8, h: 5, kind: 'bath', chimney: false, noren: '#a8202a', name: '神社', wall: '#e8d8b8', roof: '#3a4a3a', sign: { text: '神社', bg: '#3a2a20', color: '#ffe48a' }, talk: (g) => sight(g, 'fuchu_jinja', ['古い神社だ。大きなけやきの木に囲まれている。', '手を合わせた。（試験に受かりますように…）'], 4, 10) },
     npc('fu_jukensha', 22, 11, 'down', { ...LOOKS.fan, top: '#ff9ab8' }, '受験生', ['今日、本免の学科試験なんです。', '90%以上で合格…。ゆうべ、例題を三回解いてきました！'], { wander: 1 }),
     npc('fu_koshin', 34, 16, 'up', { ...LOOKS.salaryman, top: '#8a7a5a' }, '更新の人', ['免許の更新です。', '午前中に来ないと、待ち時間がすごいんですよ。'], { wander: 1 }),
     npc('fu_police', 26, 16, 'down', { ...LOOKS.guard, hat: '#2a4a8a', top: '#2a4a8a' }, '交通課のおまわりさん', ['ここは、運転免許の試験場ですよ。', '教習所を卒業したら、卒業証明書を持って、1年以内に来てくださいね。']),

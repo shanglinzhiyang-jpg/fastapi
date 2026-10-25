@@ -196,10 +196,17 @@ export function regionOf(g, placeId = g.map && g.map.placeId) {
     const hid = g.state && g.state.profile && g.state.profile.hometown;
     return W.regionKey(prefecture(hid).region, hid);
   }
+  // a place whose rooms are in different cities (駅構内 'eki': one room per station) says so per room
+  const P = PLACES[placeId];
+  if (P && typeof P.regionOf === 'function') {
+    try { const rr = P.regionOf(g.map && g.map.placeId === placeId ? g.map.roomId : null); if (rr) return rr === 'osaka' ? 'osaka' : 'tokyo'; } catch (e) { /* fall through */ }
+  }
   let r = REGION_CACHE.get(placeId);
   if (r) return r;
   const town = townOf(placeId);
-  r = town === 'namba' ? 'osaka' : 'tokyo';
+  // a town's own region (駅前 areas such as 梅田 carry region: 'osaka'), else なんば → 大阪
+  const T = PLACES[town];
+  r = (P && P.region === 'osaka') || (T && T.region === 'osaka') || town === 'namba' ? 'osaka' : 'tokyo';
   REGION_CACHE.set(placeId, r);
   return r;
 }

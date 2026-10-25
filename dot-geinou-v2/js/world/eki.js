@@ -366,7 +366,7 @@ function stationRoom(st) {
   const look = LOOK[st] || LOOK.tokyo;
   const s = NET.STATIONS[st];
   return {
-    floor: look.floor, wall: look.wall, bg: '#20232a', topPad: 0, entry: ENTRY,
+    floor: look.floor, wall: look.wall, bg: '#20232a', entry: ENTRY,
     generate() {
       const cells = [];
       for (let y = 0; y < H; y++) {
@@ -402,7 +402,7 @@ function stationRoom(st) {
       const entities = [
         trainProp(1, 2, 22, st),
         nameBoard(10, 5, st),
-        departureBoard(14, 5, st),
+        departureBoard(16, 5, st),
         routeBoard(1, 9, 5, st),
         ...GATES.map((x) => gateOverlay(x, 7, st)),
         ...[1, 2, 3, 4, 5].map((x) => ({ type: 'sign', x, y: 10, talk: (g) => ticketMachine(g, st) })),
@@ -669,3 +669,5 @@ Object.defineProperty(place, 'start', {
   },
 });
 registerPlace(place);
+// [R9 coordinator] clock.js regionOf: the weather and sky inside a station follow that station's city
+place.regionOf = (roomId) => (roomId && NET.STATIONS[roomId] ? NET.STATIONS[roomId].region : null);

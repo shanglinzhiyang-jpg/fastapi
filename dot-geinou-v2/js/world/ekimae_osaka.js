@@ -4,12 +4,15 @@
 // 串カツの「ソースの二度づけ禁止」.
 
 import { ageOf } from '../engine/profile.js';
+import { registerItem } from '../engine/state.js';
 import { ekimae, npc, LOOKS, yearOf, ymOf, eatery, shop, sight, postSign, tower, wheel } from './ekimae.js';
 
 const F = (c, x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
 const B = (x, y, w, h, kind, name, look, talk, extra = {}) => ({ type: 'building', x, y, w, h, kind, name, ...look, ...(typeof talk === 'function' ? { talk } : talk ? { text: talk } : {}), ...extra });
 const ok30 = (g) => !!g.state.agency || g.state.fame >= 30;
 const adult = (g) => { try { const a = ageOf(g.state); return !(Number.isFinite(a) && a < 20); } catch (e) { return true; } };
+
+registerItem('osaka_okashi', { name: '大阪のおかし', price: 800, desc: '新世界のおみやげ。体力が15回復する。', heal: 15 });
 
 const SKYBLDG = { cond: (g) => ymOf(g) >= 199303, draw: (ctx, sx, by) => { for (const dx of [0, 14]) { F(ctx, sx + 120 + dx, by - 28, 9, 28, '#a8b4c8'); for (let wy = by - 26; wy < by - 2; wy += 3) F(ctx, sx + 121 + dx, wy, 7, 1, '#c8d4e4'); } F(ctx, sx + 118, by - 31, 27, 4, '#b8c4d4'); F(ctx, sx + 126, by - 29, 11, 6, '#e8eef6'); } };
 const GRAND = { cond: (g) => ymOf(g) >= 201304, draw: (ctx, sx, by) => { for (const [x, h] of [[300, 30], [318, 26], [336, 29]]) { F(ctx, sx + x, by - h, 14, h, '#8e9cb4'); for (let wy = by - h + 2; wy < by - 2; wy += 3) F(ctx, sx + x + 1, wy, 12, 1, '#b4c0d4'); } } };
@@ -36,7 +39,7 @@ ekimae({
     B(1, 10, 9, 6, 'small', '地下街の入口', { wall: '#e8ecf2', roof: '#2a4a8a', sign: { text: '地下街', bg: '#2a4a8a', color: '#ffffff' } }, (g) => chikagai(g)),
     B(11, 10, 6, 6, 'shop', '大きな本屋', { wall: '#ffffff', roof: '#2a3a7a', sign: { text: '本屋', bg: '#2a3a7a', color: '#ffffff' } }, (g) => shop(g, { greet: '大きな本屋だ。お笑いの本のコーナーもある。', items: [{ name: 'お笑いの雑誌', price: 600, item: 'wadai', text: '芸人のインタビューがたっぷり。トークのネタになりそうだ。' }, { name: 'ネタ帳（ノート）', price: 300, item: 'netacho', text: '新しいネタ帳を買った。' }] })),
     B(2, 21, 8, 6, 'small', 'お好み焼き屋', { wall: '#f6e7c8', roof: '#2a3a7a', sign: { text: 'お好み焼き', bg: '#2a3a7a', color: '#ffffff' } }, (g) => eatery(g, { greet: '「いらっしゃい！　鉄板、あったまってるで！」', items: [{ name: '豚玉', price: 900, heal: 35, fill: 40, stress: 3, text: 'ヘラで切って、ハフハフ…うまい！', minutes: 30 }, { name: 'ミックス焼き', price: 1300, heal: 45, fill: 50, stress: 4, text: 'いか、えび、豚。ぜいたくな一枚！', minutes: 35 }] })),
-    B(11, 21, 7, 6, 'theater', '路地の神社', { wall: '#e8d8b8', roof: '#3a4a3a', sign: { text: '神社', bg: '#a8202a', color: '#ffffff' } }, (g) => sight(g, 'umeda_jinja', ['ビルの谷間の、小さな神社だ。', '恋の願いごとの絵馬が、たくさん結ばれている。'], 3, 10)),
+    B(11, 21, 7, 6, 'bath', '路地の神社', { wall: '#e8d8b8', roof: '#3a4a3a', chimney: false, noren: '#a8202a', sign: { text: '神社', bg: '#a8202a', color: '#ffffff' } }, (g) => sight(g, 'umeda_jinja', ['ビルの谷間の、小さな神社だ。', '恋の願いごとの絵馬が、たくさん結ばれている。'], 3, 10)),
     B(25, 21, 8, 6, 'restaurant', '洋食屋', { wall: '#fff6e8', roof: '#8a3a2a', sign: { text: '洋食', bg: '#8a3a2a', color: '#ffffff' } }, (g) => eatery(g, { greet: '「いらっしゃいませ。名物のオムライスです」', items: [{ name: 'オムライス', price: 1000, heal: 35, fill: 35, stress: 3, text: 'ふわふわの卵に、デミグラスソース。', minutes: 30 }] })),
     B(36, 21, 10, 6, 'office', 'オフィスビル', { wall: '#c8d0dc', roof: '#3a4a6a', sign: { text: 'ドット梅田ビル', bg: '#ffffff' } }, (g) => g.say([ymOf(g) >= 201304 ? '駅の北側に、新しいビル街ができた。' : 'オフィスビルだ。お昼どきは、地下街の店に行列ができる。', '大阪のテレビ局や新聞社も、このあたりに多い。'])),
     npc('um_oba', 18, 10, 'down', { ...LOOKS.oldwoman, top: '#ff7eb6', hairColor: 'purple' }, '大阪のおばちゃん', ['梅田の地下街は、慣れてる人でも迷うんよ。', 'わからんかったら、だれかに聞き！　大阪の人は、みんな教えてくれるで。'], { wander: 2 }),
@@ -70,15 +73,16 @@ ekimae({
   paint(K) {
     const { fill, set, put } = K;
     fill(1, 5, 46, 11, 'brick');
-    for (const x of [15, 21, 27, 33]) put(x, 15, 'lantern');
+    for (const x of [21, 27, 33]) put(x, 15, 'lantern');
     fill(1, 21, 46, 9, 'stone');
     fill(1, 27, 20, 3, 'grass');
     for (const [x, y] of [[2, 28], [6, 28], [10, 28], [14, 28], [18, 28]]) put(x, y, 'tree');
     for (const x of [3, 23, 43]) put(x, 20, 'lamp');
   },
   entities: (K) => [
-    tower(16, 9, 4, 'tsutenkaku', { talk: (g) => tsutenkaku(g) }),
-    { type: 'sign', x: 17, y: 11, solid: true, text: ['通天閣の足もとだ。', '展望台へのエレベーターは、この下から。'] },
+    tower(15, 13, 5, 'tsutenkaku', { talk: (g) => tsutenkaku(g) }),
+    B(1, 11, 6, 5, 'small', 'おみやげ屋', { wall: '#fff6e0', roof: '#d62f2f', sign: { text: 'みやげ', bg: '#ffd23f', color: '#d62f2f' } }, (g) => shop(g, { greet: '「福の神の置き物、通天閣のキーホルダー、なんでもあるで」', items: [{ name: '大阪のおかし', price: 800, item: 'osaka_okashi', text: 'おみやげのおかしを買った。' }] })),
+    B(10, 11, 5, 5, 'cafe', '純喫茶', { wall: '#efe2c8', roof: '#5a3a20', sign: { text: '喫茶', bg: '#5a3a20', color: '#ffe48a' } }, (g) => eatery(g, { greet: '昭和からつづく純喫茶。', items: [{ name: 'ミックスジュース', price: 500, stress: 5, text: 'バナナにみかん、ミルク。やさしい大阪の味。', minutes: 20 }] })),
     B(24, 3, 7, 5, 'small', 'ふぐ料理', { wall: '#f4e6cc', roof: '#2a3a7a', sign: { text: 'ふぐ', bg: '#2a3a7a', color: '#ffffff' } }, (g) => eatery(g, { greet: '大きなふぐのちょうちんが目じるしの店だ。', items: [{ name: 'てっちり（ふぐ鍋）', price: 3000, heal: 40, fill: 40, stress: 6, text: 'ぷりぷりのふぐに、ポン酢。しめは雑炊！', minutes: 60 }] })),
     B(32, 3, 6, 5, 'small', 'たこ焼き屋', { wall: '#f6e7c8', roof: '#d62f2f', sign: { text: 'たこ焼き', bg: '#ff8a3d', color: '#ffffff' } }, (g) => eatery(g, { greet: '「焼きたてやで〜！」', items: [{ name: 'たこ焼き 8個', price: 500, heal: 20, fill: 20, stress: 3, text: '外はカリッ、中はトロッ。', minutes: 10 }] })),
     B(39, 3, 8, 5, 'shop', 'ゲームセンター', { wall: '#2a2d36', roof: '#8a5ac8', stripes: ['#ff7eb6', '#5fd7ff'], sign: { text: 'ゲーム', bg: '#20232a', color: '#5fd7ff' } }, (g) => sight(g, 'shinsekai_game', ['昔ながらのゲームセンターだ。', 'レトロな筐体で、一回だけ遊んだ。'], 3, 15)),
@@ -89,7 +93,7 @@ ekimae({
     B(10, 21, 7, 5, 'small', '射的', { wall: '#f4e6cc', roof: '#a8202a', sign: { text: '射的', bg: '#a8202a', color: '#ffffff' } }, (g) => sight(g, 'shateki', ['コルクの鉄砲で、景品をねらう。（¥300）', 'パン！…おしい、ちょっとかすっただけ。'], 3, 10)),
     B(24, 21, 9, 5, 'small', 'ホルモン屋', { wall: '#f4e6cc', roof: '#3a2a20', sign: { text: 'ホルモン', bg: '#d62f2f', color: '#ffffff' } }, (g) => eatery(g, { greet: '「どて焼き、ええ感じに煮えてるで」', items: [{ name: 'どて焼き', price: 500, heal: 15, fill: 15, stress: 3, text: '甘辛い白みそで、とろとろに煮こんだすじ肉。', minutes: 15 }] })),
     B(36, 21, 10, 5, 'office', '動物園の入口', { wall: '#f4ecd8', roof: '#2f8a4a', sign: { text: '動物園', bg: '#2f8a4a', color: '#ffffff' } }, (g) => zoo(g)),
-    { type: 'prop', x: 20, y: 13, w: 1, h: 1, solid: true, text: ['足の裏をなでると、願いがかなうという福の神の像だ。', '（そっと足の裏をなでた）'],
+    { type: 'prop', x: 21, y: 12, w: 1, h: 1, solid: true, text: ['足の裏をなでると、願いがかなうという福の神の像だ。', '（そっと足の裏をなでた）'],
       draw(ctx, sx, sy) { F(ctx, sx + 2, sy + 6, 12, 9, '#c8a060'); F(ctx, sx + 3, sy - 6, 10, 13, '#e8c070'); F(ctx, sx + 4, sy - 12, 8, 7, '#e8c070'); F(ctx, sx + 6, sy - 10, 1, 1, '#20232a'); F(ctx, sx + 9, sy - 10, 1, 1, '#20232a'); F(ctx, sx + 6, sy - 7, 4, 1, '#8a5a20'); F(ctx, sx + 2, sy + 14, 12, 1, '#8a6a30'); } },
     npc('ss_oyaji', 22, 16, 'down', { ...LOOKS.oldman, top: '#5a6f8a' }, '新世界のおっちゃん', ['通天閣はな、大阪のシンボルや。', '串カツのソース、二度づけしたらあかんで！　キャベツですくうんや。'], { wander: 2 }),
     npc('ss_tourist', 12, 16, 'up', { ...LOOKS.tourist, top: '#ffd23f' }, '観光客', ['ネオンがすごい！　看板もぜんぶ大きい！', 'フグのちょうちんの看板、写真に撮らなきゃ。'], { wander: 2 }),
