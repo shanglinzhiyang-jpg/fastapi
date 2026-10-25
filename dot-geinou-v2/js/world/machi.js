@@ -1216,8 +1216,8 @@ function generate() {
       text: ['立ち飲みの店だ。', 'ビール一杯と、おでんひと皿。\n…「一杯だけ」のはずが、みんな長居している。'] },
     { ...SMALL, x: 71, w: 4, door: 2, name: 'スナック 夕顔', wall: '#e8dcd8', roof: '#5a3a5a', sign: { text: 'スナック', bg: '#3a1a3a', color: '#ffb0e0' }, noren: '#7a1a5a',
       text: ['スナック「夕顔」。', 'まだ準備中だ。\n…夜になると、カラオケの歌声が聞こえてくるらしい。'] },
-    // ---- ドット小学校 (doors on row 29; the 校庭 south of it)
-    { type: 'building', x: 54, y: 25, w: 12, h: 5, door: 6, name: 'ドット小学校', kind: 'office', rise: 1, wall: '#f2efe6', roof: '#7a8a9a', glass: '#9fc8e0', sign: { text: 'ドット小学校', bg: '#ffffff', color: '#2a5a3a' }, signH: 16,
+    // ---- ドット小学校 (door on row 29; the 校庭 south of it)
+    { type: 'building', x: 54, y: 26, w: 12, h: 4, door: 6, name: 'ドット小学校', kind: 'office', rise: 0, wall: '#f2efe6', roof: '#7a8a9a', glass: '#9fc8e0', sign: { text: 'ドット小学校', bg: '#ffffff', color: '#2a5a3a' }, signH: 16,
       text: ['区立ドット小学校だ。', '校舎の時計の下に、「元気に　なかよく　かしこく」。\n校庭から、子どもたちの声が聞こえる。'] },
 
     // ---- residential side (doors on y 27 / 33) and neighbours' houses
