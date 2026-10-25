@@ -360,9 +360,9 @@ async function staffTalk(g) {
   const i = await g.ask(u && u.type !== 'pin' ? `「${u.name}」さん、今日も稽古ですか？` : '今日はどうします？', ['練習する', 'バイトする（受付・掃除）', '芸人手帳を見る', 'やめておく'], { ...who, cancel: 3 });
   if (i === 0) await practiceMenu(g, '稽古場');
   else if (i === 1 && has(g, 'nscBaito')) {
-    const k = await g.ask(`受付と掃除のバイト、今日入る？\n日給 ${yen(2200)}・体力 -20`, ['入る', 'やめておく'], { ...who, cancel: 1 });
+    const k = await g.ask(`受付と掃除のバイト、今日入る？\n日給 ${yen(2000)}・体力 -20`, ['入る', 'やめておく'], { ...who, cancel: 1 });
     if (k === 0) {
-      const r = g.nscBaito({ pay: 2200, stamina: 20, stress: 3 });
+      const r = g.nscBaito({ pay: 2000, stamina: 20, stress: 3 });
       if (!r.ok) await g.say(r.why);
       else { await g.fadeOut(10); g.sfx('coin'); await g.wait(300); await g.fadeIn(10); await g.say([`受付で予約の電話をとって、稽古場の床をモップがけ。\n練習しに来る芸人たちの声が、壁ごしに聞こえる。`, `（日給 ${yen(r.pay)}）`]); }
     }

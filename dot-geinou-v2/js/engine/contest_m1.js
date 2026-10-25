@@ -100,8 +100,8 @@ registerContest('m1', {
   schedule: scheduleFor(2026), rounds: roundsFor(2026),
   roundsOf: (yy) => roundsFor(yy), scheduleOf: (yy) => scheduleFor(yy),
   entryCount: (yy) => (m1Held(yy) ? entriesOf(yy).n : null),
-  feeText: (yy) => { const r = m1Rules(heldYear(yy)); return r.fee.text; },
-  eligibilityNote: (g, yy) => { const r = m1Rules(heldYear(yy || (g ? cal(g).year : 2026))); return r ? r.eligibilityText : ''; },
+  feeText: (yy) => { const r = m1Rules(yy); return r ? r.fee.text : ''; },
+  eligibilityNote: (g, yy) => { const r = m1Rules(yy || (g ? cal(g).year : 2026)); return r ? r.eligibilityText : ''; }, // only a held year's own rule
   eligibility: (g, unit, yy) => { const u = unitInfo(g, yy || cal(g).year); return { ok: u.ok, why: u.why, reasons: u.ok ? [] : [{ text: u.why.split('\n')[0] }] }; },
   // REAL nominal yen (D1 converts to game money itself): 1組2,000円 / from 2025 1人1,000円 × members
   fee: (g, unit, yy) => { const rr = m1Rules(heldYear(yy || cal(g).year)); return rr.fee.per === 'person' ? rr.fee.nominal * Math.max(2, (unitInfo(g, yy).members || []).length) : rr.fee.nominal; },

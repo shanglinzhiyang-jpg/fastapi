@@ -131,7 +131,7 @@ registerContest('yama1', {
   history: { founded: 2007, ended: null, note: '新春恒例「大新年会」の企画。ブレイク前の芸人がネタを披露し、審査役がすべて独断で採点する。', sources: YAMA1_SRC },
   schedule: { entry: null, final: [1, 8] },
   eligibility: { pro: true, amateur: false, invite: { fame: 150 }, note: 'ブレイク前の芸人（番組が招く「ブレイク芸人の登竜門」・招待制）' },
-  fee: 0, prizeText: '優勝',
+  fee: 0, prizeText: '優勝の称号',
   facts: { verified: ['日本テレビ「ガキの使い」新春恒例企画（大新年会）', '審査役の独断採点', 'ブレイク芸人の登竜門', '第17回2023/1/22・第19回2025/1/26・第20回2026/1/25（12組）'], unverified: ['第1回=2007年（逆算）', '点数の満点', '持ち時間'] },
   rounds: [
     {
@@ -325,7 +325,7 @@ registerContest('seijinshiki', {
   history: { founded: 2020, ended: null, note: '芸歴20年を迎えた漫才師の「成人式」。ベテランが推薦する、まだ日の目を見ていない実力派の漫才戦。', sources: SEIJIN_SRC },
   schedule: { entry: null, final: [1, 1] },
   eligibility: { geirekiMin: 20, pro: true, amateur: false, members: [2, null], invite: { fame: 0 }, note: '芸歴20年以上の漫才師（ベテラン漫才師の推薦・招待制）' },
-  fee: 0, prizeText: '優勝',
+  fee: 0, prizeText: '優勝の称号',
   perform: { kind: 'manzai' },
   facts: { verified: ['BSフジ', '2020年3月 開局20周年記念・芸歴20年以上の漫才師10組・無観客・審査委員長と審査員', 'ベテラン推薦の「まだ日の目を見ていないけれど力のある漫才師」', '2020年11月 第2回（有観客）', '2022年1月1日 第3弾（審査員＋観客投票）', '2024年「お笑い成人式2024」'], unverified: ['2023年・2025年以降', '賞金', 'ネタ時間'] },
   rounds: [
@@ -388,7 +388,7 @@ registerContest('biathlon', {
   history: { founded: 2013, ended: null, note: '沖縄の芸人の「お笑い総合王者決定戦」。コントと漫才の合計点で争い、本番中に敗者復活組が選ばれる。同点なら決戦投票。', sources: BIA_SRC },
   schedule: { entry: { from: [5, 1], to: [5, 10] }, final: [8, 5] },
   eligibility: { pro: true, amateur: true, region: 'okinawa', note: '沖縄で活動する芸人（沖縄県出身でなければ、予選の受付で沖縄にも拠点を置くか決める）' },
-  prizeText: '総合王者',
+  prizeText: '総合王者の称号',
   facts: { verified: ['主催 QAB琉球朝日放送', '沖縄の芸人の総合王者決定戦・毎年夏', 'コント＋漫才の合計得点', '2023年=第11回', '2カ月の予選→決勝', '本番中に選ばれる敗者復活', '同点は決戦投票', 'ピン芸人も決勝に'], unverified: ['第1回=2013年（逆算）', '配点（ゲームでは各500点満点）', '予選の通過数', '月'] },
   rounds: [
     {
@@ -575,7 +575,7 @@ registerContest('thirty1', {
   history: { founded: 2021, ended: null, note: '30秒以内ならなんでもアリのノンジャンル賞レース（「水曜日のダウンタウン」の企画）。本戦は5ブロックのトーナメント。', sources: T30_SRC },
   schedule: { entry: { from: [2, 1], to: [2, 10] }, final: [5, 5] },
   eligibility: { pro: true, amateur: true, note: 'プロ・アマ不問。ネタは30秒以内' },
-  prizeText: '優勝',
+  prizeText: '優勝の称号',
   facts: { verified: ['TBS「水曜日のダウンタウン」企画', '2021年から年1回', '30秒以内ならなんでもアリ（ノンジャンル）', '2026: 931組応募→40組・5ブロックのトーナメント', '審査員5人（2024）'], unverified: ['予選の方式', 'ブロック内の対戦方式', '決勝の方式', '賞金', '30秒超過の扱い'] },
   rounds: [
     { id: 'r1', name: '予選（応募ネタ審査）', when: [3, 5], judge: 'staff', field: 931, pass: 40, run: (g, ctx) => stageRound(g, ctx, { round: 'r1', name: '予選（応募ネタ審査）', scene: 'timer30', sign: '30秒以内ならなんでもアリ', length: 30, field: ctx.year === 2026 ? 931 : 800, pass: 40, sample: 30, level: 48, intro: (gg, c) => [`30秒以内のネタを送る。${c.year === 2026 ? '今年は過去最多の931組が応募。' : ''}`, '本戦に残れるのは40組。'] }) },

@@ -457,7 +457,7 @@ class ContestScene {
     T(c, '賞レース', 8, 3, 12, K.gold);
     const d = I.contestDate(g);
     T(c, `${d.year}年（${I.wareki(d.year, d.month)}）${d.month}月${I.realDay(d.dom)}日　${I.todayOf(g)}日目`, 80, 4, 10, K.dim, 'left', 300);
-    const dueN = I.dueOn(g).length + I.selfToday(g).length;
+    const dueN = I.roundsToday(g);
     if (dueN) T(c, `今日は本番の日！（${dueN}件）`, SW - 30, 4, 10, K.gold, 'right', 220);
     T(c, '×', SW - 12, 3, 12, K.dim, 'center');
     this.tabRects = [];
@@ -1056,9 +1056,16 @@ async function contestApp(g) {
     const mine = list.filter((x) => x.entry && (x.entry.status === 'entered' || x.entry.status === 'passed'));
     const open = list.filter((x) => x.status === 'open');
     const items = [];
-    for (const x of list) if (x.selfRun && x.today && x.today.length && typeof x.def.flow === 'function') items.push({ id: 'selfgo', x, label: `${x.def.short || x.def.name}：${x.today[0].label || '今日の予定'}`, sub: x.today.length > 1 ? `ほか${x.today.length - 1}件` : x.statusLabel, right: '今日', rightColor: '#d03030' });
+    // today's rounds first (D1's and every self-run contest's 'round' items), then invitations, then 'prep' / 'event' items
+    const selfRows = list.filter((x) => x.selfRun && x.today && x.today.length && typeof x.def.flow === 'function').map((x) => {
+      const t0 = x.today[0];
+      const right = t0.kind === 'round' ? '今日' : t0.kind === 'prep' ? '準備' : '予定';
+      return { id: 'selfgo', x, kind: t0.kind, label: `${x.def.short || x.def.name}：${t0.label || '今日の予定'}`, sub: x.today.length > 1 ? `ほか${x.today.length - 1}件` : x.statusLabel, right, rightColor: t0.kind === 'round' ? '#d03030' : '#6a7a8a' };
+    });
     for (const d of due) items.push({ id: 'go', d, label: `会場へ向かう`, sub: `${I.contestName(CONTESTS[d.id], d.year)} ${d.revival ? '敗者復活戦' : d.cyc.rounds[d.idx].name}`, right: '今日', rightColor: '#d03030' });
+    for (const r of selfRows) if (r.kind === 'round') items.push(r);
     for (const iv of invites) items.push({ id: 'invite', iv, label: '出場のお願いが届いている', sub: I.contestName(CONTESTS[iv.id], iv.year), right: '招待', rightColor: '#c08010' });
+    for (const r of selfRows) if (r.kind !== 'round') items.push(r);
     items.push({ id: 'season', label: '今シーズンの大会', sub: `受付中 ${open.length}・全${list.length}大会`, right: open.length ? `${open.length}` : '' });
     items.push({ id: 'entries', label: 'エントリー状況', sub: mine.length ? mine.map((x) => x.def.short || x.def.name).slice(0, 3).join('・') : 'まだエントリーしていない' });
     items.push({ id: 'results', label: '自分の成績', sub: `出場 ${num(c.stats.entered)}・決勝 ${num(c.stats.finals)}・優勝 ${num(c.stats.wins)}` });
@@ -1077,7 +1084,7 @@ async function contestApp(g) {
     if (it.id === 'selfgo') {
       if (!phoneOverMapOnly(g)) { await phoneInfo(g, { title: '会場へ', color: APP_COLOR, lines: ['（いまは移動できない。用事がすんでからにしよう）'] }); continue; }
       const x = it.x;
-      closePhoneThen(g, (gg) => x.def.flow(gg, { id: x.id, def: x.def, year: x.year, edition: x.edition, revival: x.revival, entry: null, round: null, date: I.contestDate(gg), mode: 'full' }));
+      closePhoneThen(g, (gg) => x.def.flow(gg, { id: x.id, def: x.def, year: x.year, edition: x.edition, revival: x.revival, entry: null, round: null, date: I.contestDate(gg), item: x.today[0], mode: 'full' }));
       return;
     }
     if (it.id === 'invite') { await g.enterContest(it.iv.id); continue; }
@@ -1180,7 +1187,7 @@ registerPhoneApp('shourace', {
     R(c, x + 15, y + 18, 2, 4, '#e0b020'); R(c, x + 11, y + 22, 10, 3, '#c09010');
     R(c, x + 13, y + 11, 6, 3, '#2a2430'); R(c, x + 15, y + 9, 2, 2, '#ffffff');
   },
-  badge: (g) => { try { const c = I.cstate(g); let n = I.dueOn(g).length + I.selfToday(g).length; for (const id of Object.keys(c.invites || {})) for (const y of Object.keys(c.invites[id] || {})) if (num(c.invites[id][y]) > 0 && !I.entryOf(g, id, Number(y))) n++; return n; } catch (e) { return 0; } },
+  badge: (g) => { try { const c = I.cstate(g); let n = I.roundsToday(g); for (const id of Object.keys(c.invites || {})) for (const y of Object.keys(c.invites[id] || {})) if (num(c.invites[id][y]) > 0 && !I.entryOf(g, id, Number(y))) n++; return n; } catch (e) { return 0; } },
   cond: (g) => !!g && !!g.state && Object.keys(CONTESTS).length > 0,
   open: (g) => contestApp(g),
 });

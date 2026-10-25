@@ -18,7 +18,7 @@ import {
   has, safe, num, n0, realYen, plainYen, toInternal, eraId, devWord, rngOf, gauss, rint, pickR, shuffleR,
   cdate, absIdx, dayOf, dateText, dateTextY, randomLook, actInfo, powerOf, qualityOf, chooseNeta, netaUsedBefore,
   performAct, playerTotal, rivalTotal, cutScore, shortfallReasons, kitMorning, runKitMorning, morningNote, goRefusal,
-  d1Hub, statOf, sendOffer, realNameLike, isAutoNeta, samePenalty, nameGender, emitNews,
+  d1Hub, statOf, sendOffer, realNameLike, isAutoNeta, samePenalty, nameGender, contestMail,
 } from './r1_kit.js';
 import {
   THEMES, T, fit, jwrap, para, R, box, frame, alpha, drawBig, faceAt, confetti, stage, unstage, card, drumroll, infoCard, sfx, sizeFor,
@@ -266,8 +266,26 @@ export function makeContest(cfg) {
   C.nextRound = (g, S) => { const d = C.myDate(g, S); return d ? { rid: S.entry.round, ...d } : null; };
 
   // ---------------------------------------------------------------- morning: the season moves on (with or without the player)
+  // Save growth: full detail only for the last 3 in-game years. Older seasons become their history row (s.hist), the
+  // player's own runs keep the entry and the final's result only; old hist rows drop their finalists list.
+  C.compact = (g) => {
+    const s = C.state(g);
+    const keep = cdate(g).year - 3;
+    for (const k of Object.keys(s.seasons)) {
+      const Y = Number(k), S = s.seasons[k];
+      if (!S || S.compact || !(Y < keep)) continue;
+      const F = S.final || {};
+      if (F.done && !s.hist[Y]) s.hist[Y] = { champ: F.champName, runner: F.runnerName, champType: F.champType, champPlayer: F.champ === 'player', note: F.note || '' };
+      if (S.entry) {
+        const { prep, ...entry } = S.entry; // the preparation counters are spent
+        s.seasons[k] = { v: 1, Y, ed: S.ed, compact: true, created: S.created, notables: [], rounds: {}, ev: {}, news: {}, extra: 0, entries: S.entries, entry: { ...entry, prep: { practice: num(prep && prep.practice) } }, final: F.done ? { done: true, champ: F.champ, champName: F.champName, runnerName: F.runnerName, champType: F.champType, note: F.note || '', ranking: [], day: F.day } : null };
+      } else delete s.seasons[k];
+    }
+    for (const k of Object.keys(s.hist)) { const h = s.hist[k]; if (Number(k) < keep && h && h.finalists) delete h.finalists; }
+  };
   C.morning = async (g) => {
     const out = [];
+    safe(() => C.compact(g));
     const Y = C.seasonY(g);
     if (!Y) return out;
     // the season before may still have unprocessed days (a long trip, prison…)
@@ -306,7 +324,7 @@ export function makeContest(cfg) {
           E.status = 'withdrawn';
           E.results.push({ round: rd.id, score: 0, total: 0, passed: false, place: null, day: mine.day, withdrawn: true });
           C.logMe(g, S, `${rd.name}を欠場（棄権）`);
-          g.message({ from: cfg.office, text: `${rules.title} ${rd.name}にお越しにならなかったため、棄権となりました。`, kind: 'news' });
+          contestMail(g, cfg.id, `${rules.title} ${rd.name}にお越しにならなかったため、棄権となりました。`, cfg.office);
         }
       }
       if (day > last.day) once('round_' + rd.id, () => {
@@ -688,7 +706,7 @@ function installFlows(C) {
       const cal = C.cal(g, Y);
       const d0 = (cal.rounds[E.round] || [])[E.dateIdx] || (cal.rounds[E.round] || [])[0];
       await CARDS.ticketCard(g, { title: `${rules.title}　エントリー受付票`, no, name: unitName, line: `${C.roundName(Y, E.round)}：${d0 ? dateTextY(d0.y, d0.m, d0.d) + '　' + cfg.venueName(Y, E.round, d0.venue) : '後日お知らせします'}\n${rules.fee ? `参加費 ${plainYen(rules.fee)} 受領` : ''}`, stamp: '受付済' }, th);
-      g.message({ from: cfg.office, text: `${rules.title}へのエントリーを受け付けました。\nエントリーナンバー：${no}\n${C.roundName(Y, E.round)}：${d0 ? dateText(d0.m, d0.d) + '（' + cfg.venueName(Y, E.round, d0.venue) + '）' : '後日'}\n当日は開始時刻の30分前までに受付をお済ませください。`, kind: 'news' });
+      contestMail(g, cfg.id, `${rules.title}へのエントリーを受け付けました。\nエントリーナンバー：${no}\n${C.roundName(Y, E.round)}：${d0 ? dateText(d0.m, d0.d) + '（' + cfg.venueName(Y, E.round, d0.venue) + '）' : '後日'}\n当日は開始時刻の30分前までに受付をお済ませください。`, cfg.office);
       C.logMe(g, S, `エントリー（No.${no}）`);
       if (cfg.afterEntry) await cfg.afterEntry(g, C, { S, rules, E, act });
       await g.say(`エントリーナンバーは${no}。\n${C.roundName(Y, E.round)}まで、ネタを仕上げよう！\n（${devWord(g)}の「${cfg.appName}」→「準備する」で稽古できる）`);
@@ -945,7 +963,7 @@ function installFlows(C) {
       if (cfg.chooseNextDate && nextRd) E.dateIdx = await cfg.chooseNextDate(g, C, { S, E, rd: nextRd });
       g.addFame(rd.fame ?? 5);
       const nx = (C.cal(g, Y).rounds[E.round] || [])[E.dateIdx];
-      g.message({ from: cfg.office, text: `【${rd.name} 合格のお知らせ】\n${E.unitName}様（No.${E.no}）\n${nextRd ? `${nextRd.name}：${nx ? dateText(nx.m, nx.d) + '（' + cfg.venueName(Y, nextRd.id, nx.venue) + '）' : '後日'}` : ''}`, kind: 'news' });
+      contestMail(g, cfg.id, `【${rd.name} 合格のお知らせ】\n${E.unitName}様（No.${E.no}）\n${nextRd ? `${nextRd.name}：${nx ? dateText(nx.m, nx.d) + '（' + cfg.venueName(Y, nextRd.id, nx.venue) + '）' : '後日'}` : ''}`, cfg.office);
       C.logMe(g, S, `${rd.name} 通過（${o.tot.total.toFixed(1)}）`);
       if (rid === rules.lastPrelim) await C.finalistNight(g, S);
       else await g.say(`${rd.name}、通過！\n${nextRd ? `次は${nextRd.name}（${nx ? dateText(nx.m, nx.d) : ''}）。` : ''}もっとネタを磨こう！`);
@@ -987,7 +1005,7 @@ function installFlows(C) {
       E.catch = cfg.catchcopy(g, S, 'player');
       await CARDS.catchCard(g, { look: g.state.look, look2: E.solo ? null : null, top: `${rules.title}　ファイナリスト`, copy: E.catch, name: E.unitName, vtr: cfg.vtr ? cfg.vtr(g, S) : '' }, th);
       for (const id of fins) if (id !== 'player') { const n = C.find(S, id); if (n && !n.catch) n.catch = cfg.catchcopy(g, S, id); }
-      g.message({ from: cfg.office, text: `【決勝進出のお知らせ】\n${E.unitName}様　決勝：${rules.final.when(C.cal(g, Y))}\n${rules.broadcast}。当日はリハーサルから入っていただきます。`, kind: 'news' });
+      contestMail(g, cfg.id, `【決勝進出のお知らせ】\n${E.unitName}様　決勝：${rules.final.when(C.cal(g, Y))}\n${rules.broadcast}。当日はリハーサルから入っていただきます。`, cfg.office);
       if (cfg.partnerAfter && E.solo) await cfg.partnerAfter(g, C, { S, E, passed: true, rid: rules.lastPrelim, final: true });
     } finally { unstage(g, st); }
   };
@@ -1460,7 +1478,7 @@ function installFlows(C) {
       };
     }
     const due = S ? C.dueRound(g, S) : null;
-    const today = due ? [{ id: due.rid, label: `${C.roundName(Y, due.rid)}（${cfg.venueName(Y, due.rid, due.venue)}）` }] : [];
+    const today = due ? [{ id: due.rid, kind: 'round', label: `${C.roundName(Y, due.rid)}（${cfg.venueName(Y, due.rid, due.venue)}）` }] : [];
     return { status, statusLabel: n.label, label: Y ? cfg.rules(Y).title : cfg.label, edition: Y ? cfg.rules(Y).edition : null, year: Y, entry, today };
   };
   // historyList(g) → every year up to the last final played: [{ year, edition, held, champion, runnerUp, finalists, note, player }]

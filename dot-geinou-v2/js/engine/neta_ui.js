@@ -54,18 +54,53 @@ export const BEAT_OPTS = {
 const BEAT_SHORT = { tsukami: 'ツカミ', setup: 'フリ', boke: 'ボケ', tsukkomi: 'ツッコ', tenkai: '展開', tendon: '天丼', fukusen: '伏線', kaishu: '回収', ochi: 'オチ', makura: 'まくら', hondai: '本題', sage: 'サゲ', answer: '回答', uragiri: '裏切り' };
 const BEAT_LONG = { tsukami: 'ツカミ', setup: 'フリ・設定', boke: 'ボケ', tsukkomi: 'ツッコミ', tenkai: '展開', tendon: '天丼（くり返し）', fukusen: '伏線', kaishu: '伏線の回収', ochi: 'オチ', makura: 'まくら', hondai: '本題', sage: 'サゲ', answer: '回答', uragiri: '裏切り（展開）' };
 const BEAT_COL = { tsukami: '#ffcf4a', setup: '#7a8aa8', boke: '#ff8a3d', tsukkomi: '#4fa8ff', tenkai: '#a070e0', tendon: '#ff7eb6', fukusen: '#40b0a8', kaishu: '#5fe0c8', ochi: '#ff5d6c', makura: '#a07850', hondai: '#8a8a9a', sage: '#d0603a', answer: '#ffcf4a', uragiri: '#c060ff' };
-// Length presets. Verified (2026-10): M-1 — 1回戦 2分, 2回戦・3回戦 3分, 準々決勝・準決勝・決勝 4分 (2019年大会の規定;
-// 敗者復活戦 4分, 第11〜14回は3分) [daily.co.jp 2020-07-02, compe.japandesign.ne.jp m-1gp-2019/2020]; キングオブコント —
-// 1回戦・2回戦 2分, 準々決勝〜決勝 5分 (2020年大会, 4分→5分) [natalie.mu/owarai/award/king-of-conte/2020];
-// R-1グランプリ — 決勝 3分 → 2024年大会から4分 [news.mynavi.jp 2024-03-08, natalie.mu/owarai/award/r-1gp/2024].
-// The others are generic ("約") targets, not rules. Callers (contests) pass their own length anyway.
-export const PRESETS = [
-  { label: 'M-1 1回戦（2分）', sec: 120 }, { label: 'M-1 2回戦・3回戦（3分）', sec: 180 }, { label: 'M-1 準々決勝〜決勝（4分）', sec: 240 },
-  { label: 'キングオブコント 1・2回戦（2分）', sec: 120 }, { label: 'キングオブコント 準々決勝〜決勝（5分）', sec: 300 },
-  { label: 'R-1 決勝（2024年〜 4分）', sec: 240 }, { label: 'R-1 決勝（〜2023年 3分）', sec: 180 },
+// Length presets. The contests' round lengths are read from their own definitions (g.contest('m1' | 'koc' | 'r1').rounds,
+// owned by the contest modules), so they match those modules year by year (e.g. KOC 2回戦 3分 from 2022); a contest that
+// is not held in the current game year (not founded yet, hiatus) is not offered (no future facts).
+// Fallback when no contest module is loaded — year-gated, verified 2026-10: M-1 1回戦 2分, 2回戦・3回戦 3分, 準々決勝〜決勝
+// 4分 (2019 rules) [daily.co.jp 2020-07-02, compe.japandesign.ne.jp m-1gp-2019/2020], held 2001–2010 and from 2015;
+// キングオブコント (from 2008) 1回戦 2分, 2回戦 2分 (3分 in 2008 and from 2022, as koc_data.js), 準々決勝〜決勝 4分 / 5分
+// (5分 from 2018 as koc_data.js; natalie.mu gives the 4→5分 change for 2020) ; R-1ぐらんぷり (2002–2016) / R-1グランプリ
+// (2017–) 決勝 3分, 4分 from 2024 [news.mynavi.jp 2024-03-08, natalie.mu/owarai/award/r-1gp/2024].
+// The generic presets ("約") are targets, not rules.
+export const GENERIC_PRESETS = [
   { label: '劇場の出番（約5分）', sec: 300 }, { label: 'テレビのネタ番組（約3分）', sec: 180 }, { label: '落語の高座（約15分）', sec: 900 },
   { label: '大喜利（約2分）', sec: 120 }, { label: 'エピソードトーク（約2分）', sec: 120 },
 ];
+const gameYearOf = (g) => { const d = has(g, 'gameDate') ? safe(() => g.gameDate(), null) : null; if (d && d.year) return d.year; const e = g && g.state && g.state.profile && g.state.profile.era; return ERA_YEAR[e] || 2026; };
+function fallbackRounds(id, y) {
+  if (id === 'm1') { if (y < 2001 || (y >= 2011 && y <= 2014)) return null; return { name: 'M-1グランプリ', rounds: [{ name: '1回戦', length: 120 }, { name: '2回戦', length: 180 }, { name: '3回戦', length: 180 }, { name: '準々決勝', length: 240 }, { name: '準決勝', length: 240 }, { name: '決勝', length: 240 }] }; }
+  if (id === 'koc') { if (y < 2008) return null; const late = y >= 2018 ? 300 : 240; return { name: 'キングオブコント', rounds: [{ name: '1回戦', length: 120 }, { name: '2回戦', length: y === 2008 || y >= 2022 ? 180 : 120 }, { name: '準々決勝', length: late }, { name: '準決勝', length: late }, { name: '決勝', length: y === 2008 ? 300 : late }] }; }
+  if (id === 'r1') { if (y < 2002) return null; return { name: y >= 2017 ? 'R-1グランプリ' : 'R-1ぐらんぷり', rounds: [{ name: '決勝', length: y >= 2024 ? 240 : 180 }] }; }
+  return null;
+}
+export function lengthPresets(g) {
+  const y = gameYearOf(g);
+  const out = [];
+  for (const id of ['m1', 'koc', 'r1']) {
+    let name = null, rounds = null;
+    if (has(g, 'contest')) {
+      const c = safe(() => g.contest(id), null);
+      if (c) {
+        const ed = has(g, 'contestEdition') ? safe(() => g.contestEdition(id, y), null) : null;
+        if (!ed || c.status === 'notyet') continue;
+        name = ed.name || c.name;
+        const rs = safe(() => (typeof c.rounds === 'function' ? c.rounds(g, y) : c.rounds), null);
+        rounds = Array.isArray(rs) ? rs.filter((r) => r && Number(r.length) > 0) : null;
+      }
+    }
+    if (!rounds || !rounds.length) { const fb = fallbackRounds(id, y); if (!fb) continue; name = name || fb.name; rounds = fb.rounds; }
+    // one preset per run of rounds with the same length (準決勝（1日目）/（2日目） count once)
+    const norm = rounds.map((r) => ({ name: String(r.name || '').replace(/（.*?）/g, ''), length: Number(r.length) }));
+    const groups = [];
+    for (const r of norm) { const last = groups[groups.length - 1]; if (last && last.length === r.length) { if (!last.names.includes(r.name)) last.names.push(r.name); } else groups.push({ length: r.length, names: [r.name] }); }
+    for (const gr of groups) {
+      const rn = gr.names.length === 1 ? gr.names[0] : gr.names.length === 2 ? gr.names.join('・') : `${gr.names[0]}〜${gr.names[gr.names.length - 1]}`;
+      out.push({ label: `${name} ${rn}（${mmss(gr.length).replace(/00秒$/, '').replace(/分$/, '分')}）`, sec: gr.length });
+    }
+  }
+  return [...out, ...GENERIC_PRESETS];
+}
 
 // ------------------------------------------------------------------ text helpers (every string has a width)
 function fit(c, s, w, size = 12) {
@@ -113,6 +148,13 @@ function chip(c, x, y, label, col, w = 0, size = 10) {
   return ww;
 }
 const scoreCol = (s) => (s >= 75 ? K.green : s >= 55 ? K.gold : s >= 35 ? K.warn : K.red);
+// The × close button of every full screen: a 44x40 hit box in the top-right corner (header + tab row), drawn as a button.
+export const CLOSE = { x: SW - 44, y: 0, w: 44, h: 40 };
+function drawClose(c, rect = CLOSE) {
+  R(c, rect.x + 3, rect.y + 2, rect.w - 6, rect.h - 4, '#2a1e38');
+  R(c, rect.x + 3, rect.y + 2, rect.w - 6, 1, K.edgeHi);
+  T(c, '×', rect.x + rect.w / 2, rect.y + rect.h / 2 - 9, 16, K.text, 'center');
+}
 
 // ------------------------------------------------------------------ taps + the base scene
 let tapCanvas = null;
@@ -166,8 +208,8 @@ class Base {
     this.resolve(v);
   }
   drawOver(c) {
-    const ty = this.toastY || 300, tx = this.toastX || SW / 2;
-    this.toasts.forEach((t, i) => { const w = Math.min(this.toastW || SW - 40, measure(c, t.text, 12) + 20); R(c, tx - w / 2, ty - i * 22, w, 20, 'rgba(0,0,0,0.85)'); T(c, t.text, tx, ty + 4 - i * 22, 12, t.color, 'center', w - 10); });
+    const ty = this.toastY || 300, tx = this.toastX || SW / 2, dir = this.toastDir || -1;
+    this.toasts.slice(0, this.toastMax || 3).forEach((t, i) => { const w = Math.min(this.toastW || SW - 40, measure(c, t.text, 12) + 20); R(c, tx - w / 2, ty + dir * i * 22, w, 20, 'rgba(0,0,0,0.88)'); T(c, t.text, tx, ty + 4 + dir * i * 22, 12, t.color, 'center', w - 10); });
     for (const m of this.modals) { R(c, 0, 0, SW, SH, 'rgba(0,0,0,0.5)'); m.draw(this, c); }
   }
 }
@@ -288,15 +330,15 @@ function partsModal(o) {
       R(c, x, y, w, h, '#160f20');
       R(c, x, y, w, 2, K.gold); R(c, x, y + h - 1, w, 1, K.edge); R(c, x, y, 1, h, K.edge); R(c, x + w - 1, y, 1, h, K.edge);
       T(c, o.title || '部品から足す', x + 10, y + 6, 12, K.gold, 'left', 300);
-      T(c, o.note || '', x + w - 30, y + 7, 10, K.dim, 'right', w - 340);
-      T(c, '×', x + w - 12, y + 5, 12, K.dim, 'center');
-      m.closeRect = { x: x + w - 24, y, w: 24, h: 22 };
+      T(c, o.note || '', x + w - 54, y + 7, 10, K.dim, 'right', w - 360);
+      m.closeRect = { x: x + w - 48, y: y + 2, w: 46, h: 38 };
+      drawClose(c, m.closeRect);
       // tabs (wrap to a second row when they do not fit)
       m.tabRects = [];
       let tx = x + 8, ty = y + 24;
       m.tabs.forEach((tb, i) => {
         const tw = Math.ceil(measure(c, tb.label, 10)) + 14;
-        if (tx + tw > x + w - 8) { tx = x + 8; ty += 18; }
+        if (tx + tw > x + w - 52) { tx = x + 8; ty += 18; }
         const on = i === m.tab;
         R(c, tx, ty, tw, 16, on ? K.gold : '#2a1e38');
         T(c, tb.label, tx + tw / 2, ty + 3, 10, on ? K.ink : K.text, 'center', tw - 4);
@@ -336,7 +378,7 @@ function partsModal(o) {
 
 // ================================================================ the editor
 const LIST = { x: 6, y: 42, w: 420, h: 250, rh: 18 };
-const RIGHT = { x: 432, y: 40, w: 202, h: 252 };
+const RIGHT = { x: 432, y: 42, w: 202, h: 250 };
 const TOOLS = ['部品から足す', '自分で書く', 'まとめて書く', '台本の設定', 'AI採点', '保存して閉じる'];
 export class EditorScene extends Base {
   constructor(g, draft, opts, resolve) {
@@ -353,7 +395,8 @@ export class EditorScene extends Base {
     this.saved = draft.id ? g.neta(draft.id) : null;
     this.cache = { h: -1 };
     this.toolRects = [];
-    Object.assign(this, { toastY: 46, toastX: LIST.x + LIST.w / 2, toastW: LIST.w - 20 });
+    // toasts over the line-detail strip (above the toolbar), one at a time: never on the header or the script lines
+    Object.assign(this, { toastY: 304, toastX: LIST.x + LIST.w / 2 + 2, toastW: LIST.w, toastMax: 1 });
   }
   rows() { return [...this.n.lines, { add: true }]; }
   era() { const e = this.g.state && this.g.state.profile && this.g.state.profile.era; return ERA_YEAR[e] ? e : 'reiwa'; }
@@ -417,7 +460,7 @@ export class EditorScene extends Base {
     const now = inp.pressedNow || {};
     const { x, y } = tap;
     now.a = false;
-    if (inR(x, y, { x: SW - 24, y: 0, w: 24, h: 20 })) { sfx('cancel'); this.act(() => this.askClose()); return true; }
+    if (inR(x, y, CLOSE)) { sfx('cancel'); this.act(() => this.askClose()); return true; }
     if (this.moving) { this.moving = false; return true; }
     for (let i = 0; i < this.toolRects.length; i++) if (inR(x, y, this.toolRects[i])) { this.focus = 'tools'; this.tool = i; sfx('ok'); this.act(() => this.runTool(i)); return true; }
     if (inR(x, y, this.dialRect)) { this.n.dialect = this.n.dialect === 'kansai' ? 'std' : 'kansai'; this.mark(); sfx('cursor'); return true; }
@@ -596,10 +639,11 @@ export class EditorScene extends Base {
       n.chars = n.chars || {};
       for (const r of ['a', 'b']) { const v = await askText(this.g, { title: `登場人物${r.toUpperCase()}の名前（10文字まで）`, value: n.chars[r] || '', max: 10 }); if (v != null) { if (v.trim()) n.chars[r] = v.trim(); else delete n.chars[r]; this.mark(); } }
     } else if (id === 'target') {
-      const items2 = [...PRESETS.map((p) => ({ label: p.label, right: mmss(p.sec) })), { label: '自分で決める（秒）' }];
-      const j = await this.pick({ title: '目安の尺', lines: ['賞レースのネタは、大会ごとの持ち時間に合わせよう（尺オーバーは減点）。'], items: items2, rh: 22, index: Math.max(0, PRESETS.findIndex((p) => p.sec === n.target)) });
-      if (j >= 0 && j < PRESETS.length) { n.target = PRESETS[j].sec; this.mark(); }
-      else if (j === PRESETS.length) { const v = await askText(this.g, { title: '目安の尺（秒）', value: String(n.target || ''), max: 4 }); const s = Math.round(Number(String(v || '').replace(/[^0-9]/g, ''))); if (s >= 10 && s <= 3600) { n.target = s; this.mark(); } }
+      const PR = lengthPresets(this.g);
+      const items2 = [...PR.map((p) => ({ label: p.label, right: mmss(p.sec) })), { label: '自分で決める（秒）' }];
+      const j = await this.pick({ title: '目安の尺', lines: ['賞レースのネタは、大会ごとの持ち時間に合わせよう（尺オーバーは減点）。'], items: items2, rh: 22, index: Math.max(0, PR.findIndex((p) => p.sec === n.target)) });
+      if (j >= 0 && j < PR.length) { n.target = PR[j].sec; this.mark(); }
+      else if (j === PR.length) { const v = await askText(this.g, { title: '目安の尺（秒）', value: String(n.target || ''), max: 4 }); const s = Math.round(Number(String(v || '').replace(/[^0-9]/g, ''))); if (s >= 10 && s <= 3600) { n.target = s; this.mark(); } }
       const st = has(this.g, 'netaSettings') ? this.g.netaSettings() : null;
       if (st) st.target = n.target;
     } else if (id === 'kind') {
@@ -660,13 +704,13 @@ export class EditorScene extends Base {
     R(c, 0, 0, SW, 20, K.head);
     T(c, '台本エディタ', 8, 3, 12, K.gold);
     T(c, `${KIND_LABEL[this.kind]}${n.forContest ? '・賞レース用' : ''}`, 88, 4, 10, K.dim, 'left', 120);
-    T(c, this.dirty ? '●未保存' : this.saved ? '保存ずみ' : '', SW - 32, 4, 10, this.dirty ? K.warn : K.green, 'right', 80);
-    T(c, '×', SW - 12, 3, 12, K.dim, 'center');
+    T(c, this.dirty ? '●未保存' : this.saved ? '保存ずみ' : '', SW - 52, 4, 10, this.dirty ? K.warn : K.green, 'right', 80);
     // title / theme strip (tap: 台本の設定)
     R(c, 0, 21, SW, 18, '#170f20');
     this.headRect = { x: 0, y: 21, w: 428, h: 18 };
     T(c, n.title || '（タイトルなし）', 8, 24, 12, n.title ? K.text : K.faint, 'left', 190);
     T(c, `${this.kind === 'ogiri' ? 'お題' : 'テーマ'}：${n.theme || '（未定）'}`, 204, 25, 10, K.dim, 'left', 220);
+    drawClose(c);
     // the lines
     const rows = this.rows();
     const vis = Math.floor(LIST.h / LIST.rh);
@@ -775,7 +819,7 @@ export class ResultScene extends Base {
   handleTap(tap, inp) {
     const now = inp.pressedNow || {};
     now.a = false;
-    if (inR(tap.x, tap.y, { x: SW - 24, y: 0, w: 24, h: 20 })) { sfx('cancel'); this.close(); return true; }
+    if (inR(tap.x, tap.y, CLOSE)) { sfx('cancel'); this.close(); return true; }
     for (let i = 0; i < (this.tabRects || []).length; i++) if (inR(tap.x, tap.y, this.tabRects[i])) { this.tab = i; sfx('cursor'); return true; }
     if (this.tab === 2 && this.listRect && inR(tap.x, tap.y, this.listRect)) { const j = (this.ltop || 0) + Math.floor((tap.y - this.listRect.y) / 18); if (j >= 0 && j < this.rows.length) { this.lsel = j; sfx('cursor'); } return true; }
     if (this.tab !== 2 && tap.y > 40) { const half = tap.y > 200; this.scroll[this.tab] = clamp(this.scroll[this.tab] + (half ? 48 : -48), 0, this.maxScroll || 0); }
@@ -789,11 +833,11 @@ export class ResultScene extends Base {
     T(c, `『${this.n.title || '無題'}』${KIND_LABEL[this.kind]}`, 112, 4, 10, K.text, 'left', 300);
     const badge = ai.by === 'claude' ? 'Claude（APIキー使用）' : 'ローカルAI';
     const bw = measure(c, badge, 10) + 12;
-    R(c, SW - 32 - bw, 3, bw, 14, ai.by === 'claude' ? '#c06a3a' : '#3a5a8a');
-    T(c, badge, SW - 32 - bw / 2, 4, 10, '#ffffff', 'center');
-    T(c, '×', SW - 12, 3, 12, K.dim, 'center');
+    R(c, SW - 50 - bw, 3, bw, 14, ai.by === 'claude' ? '#c06a3a' : '#3a5a8a');
+    T(c, badge, SW - 50 - bw / 2, 4, 10, '#ffffff', 'center');
+    drawClose(c);
     this.tabRects = [];
-    const tw = Math.floor(SW / TABS_R.length);
+    const tw = Math.floor((SW - CLOSE.w) / TABS_R.length);
     TABS_R.forEach((lb, i) => { const x = i * tw, on = i === this.tab; R(c, x + 1, 21, tw - 2, 18, on ? K.gold : '#1a1222'); T(c, lb, x + tw / 2, 24, 12, on ? K.ink : K.text, 'center', tw - 8); this.tabRects.push({ x, y: 20, w: tw, h: 20 }); });
     c.save(); c.beginPath(); c.rect(0, 40, SW, 300); c.clip();
     if (this.tab === 0) this.drawSummary(c);
@@ -954,7 +998,7 @@ export class PickerScene extends Base {
   handleTap(tap, inp) {
     const now = inp.pressedNow || {};
     now.a = false;
-    if (inR(tap.x, tap.y, { x: SW - 24, y: 0, w: 24, h: 20 })) { sfx('cancel'); this.close(null); return true; }
+    if (inR(tap.x, tap.y, CLOSE)) { sfx('cancel'); this.close(null); return true; }
     if (this.listRect && inR(tap.x, tap.y, this.listRect)) { const j = this.top + Math.floor((tap.y - this.listRect.y) / 32); if (j >= 0 && j < this.items.length) { if (j === this.idx) { sfx('ok'); this.act(() => this.choose(j)); } else { this.idx = j; sfx('cursor'); } } }
     return true;
   }
@@ -989,8 +1033,8 @@ export class PickerScene extends Base {
     R(c, 0, 0, SW, SH, K.bg);
     R(c, 0, 0, SW, 20, K.head);
     T(c, 'ネタをえらぶ', 8, 3, 12, K.gold);
-    T(c, `${o.title ? o.title + '・' : ''}${KIND_LABEL[this.kind] || 'なんでも'}${o.length ? `・持ち時間 ${mmss(o.length)}` : ''}`, 100, 4, 10, K.text, 'left', SW - 140);
-    T(c, '×', SW - 12, 3, 12, K.dim, 'center');
+    T(c, `${o.title ? o.title + '・' : ''}${KIND_LABEL[this.kind] || 'なんでも'}${o.length ? `・持ち時間 ${mmss(o.length)}` : ''}`, 100, 4, 10, K.text, 'left', SW - 160);
+    drawClose(c);
     const L = { x: 6, y: 26, w: 378, h: 306 };
     this.listRect = L;
     const vis = Math.floor(L.h / 32);
@@ -1013,11 +1057,11 @@ export class PickerScene extends Base {
     }
     // detail
     const it = this.items[this.idx];
-    box(c, 390, 26, 244, 306, it && it.neta ? '台本のようす' : '');
+    box(c, 390, 44, 244, 288, it && it.neta ? '台本のようす' : '');
     if (it && it.neta) {
       const x = it.neta;
       const f = g.netaFreshness(x, o.forContest);
-      let y = 46;
+      let y = 64;
       T(c, x.title || '無題', 398, y, 12, K.gold, 'left', 228); y += 18;
       T(c, `出来（本番の見込み）${num(safe(() => g.netaQuality(x, { contest: o.forContest }), 0))}`, 398, y, 10, K.text, 'left', 228); y += 14;
       T(c, `仕上がり ${num(x.practice)}`, 398, y, 10, K.text); R(c, 480, y + 3, 140, 6, '#2a2236'); R(c, 480, y + 3, Math.round(1.4 * num(x.practice)), 6, K.cyan); y += 14;
@@ -1025,7 +1069,7 @@ export class PickerScene extends Base {
       for (const ch of structureCheck(x)) { T(c, `${ch.ok ? '✔' : '・'} ${ch.label}`, 400, y, 10, ch.ok ? K.text : K.faint, 'left', 220); y += 13; }
       y += 4;
       if (x.ai && x.ai.advice && x.ai.advice[0]) { T(c, 'AIのアドバイス', 398, y, 10, K.gold); y += 14; para(c, x.ai.advice[0], 398, y, 228, 10, K.dim, 13, 5); }
-    } else if (it) para(c, it.id === 'new' ? 'その場で台本エディタを開いて、新しいネタを書く。書き終えたら、そのネタを選べる。' : it.id === 'auto' ? '部品を組み合わせたネタで出る。手っ取り早いが、独自性は低い。' : '今回はネタを選ばない。', 398, 48, 228, 12, K.dim, 16);
+    } else if (it) para(c, it.id === 'new' ? 'その場で台本エディタを開いて、新しいネタを書く。書き終えたら、そのネタを選べる。' : it.id === 'auto' ? '部品を組み合わせたネタで出る。手っ取り早いが、独自性は低い。' : '今回はネタを選ばない。', 398, 66, 228, 12, K.dim, 16);
     R(c, 0, 340, SW, 20, '#0c0812');
     T(c, '↑↓ えらぶ　A 決定　B やめる', SW - 8, 345, 10, K.faint, 'right');
     this.drawOver(c);
@@ -1055,7 +1099,7 @@ export class SettingsScene extends Base {
   handleTap(tap, inp) {
     const now = inp.pressedNow || {};
     now.a = false;
-    if (inR(tap.x, tap.y, { x: SW - 24, y: 0, w: 24, h: 20 })) { sfx('cancel'); this.close(); return true; }
+    if (inR(tap.x, tap.y, CLOSE)) { sfx('cancel'); this.close(); return true; }
     for (let i = 0; i < this.rowRects.length; i++) if (inR(tap.x, tap.y, this.rowRects[i])) { if (this.idx === i) { sfx('ok'); this.act(() => this.run(this.rows()[i].id)); } else { this.idx = i; sfx('cursor'); } return true; }
     return true;
   }
@@ -1083,17 +1127,17 @@ export class SettingsScene extends Base {
     R(c, 0, 0, SW, SH, K.bg);
     R(c, 0, 0, SW, 20, K.head);
     T(c, 'AI審査員の設定', 8, 3, 12, K.gold);
-    T(c, '×', SW - 12, 3, 12, K.dim, 'center');
-    box(c, 40, 32, SW - 80, 200, '採点するAI');
+    drawClose(c);
+    box(c, 40, 32, SW - 92, 200, '採点するAI');
     this.rowRects = [];
     this.rows().forEach((r, i) => {
       const y = 52 + i * 34;
       const sel = i === this.idx;
-      R(c, 50, y, SW - 100, 30, sel ? K.sel : '#1d1426');
+      R(c, 50, y, SW - 112, 30, sel ? K.sel : '#1d1426');
       if (sel) R(c, 50, y, 2, 30, K.gold);
       T(c, r.label, 62, y + 8, 12, r.lock ? K.faint : K.text, 'left', 170);
-      T(c, r.value, 236, y + 8, 12, r.lock ? K.faint : r.id === 'mode' && keyState().mode === 'claude' ? K.gold : K.cyan, 'left', SW - 300);
-      this.rowRects.push({ x: 50, y, w: SW - 100, h: 30 });
+      T(c, r.value, 236, y + 8, 12, r.lock ? K.faint : r.id === 'mode' && keyState().mode === 'claude' ? K.gold : K.cyan, 'left', SW - 312);
+      this.rowRects.push({ x: 50, y, w: SW - 112, h: 30 });
     });
     box(c, 40, 240, SW - 80, 94, '注意');
     para(c, '台本の文章がAnthropicのAPIに送信され、あなたのAPIキーに課金されます。', 50, 260, SW - 100, 12, K.warn, 15, 2);
@@ -1214,3 +1258,6 @@ export function installNetaApp() {
   });
   installNetaApp.openBook = (g) => withPhone(g, () => netaApp(g));
 }
+
+// the year-independent list (generic targets only); lengthPresets(g) adds the contests' own lengths for the game year
+export const PRESETS = GENERIC_PRESETS;

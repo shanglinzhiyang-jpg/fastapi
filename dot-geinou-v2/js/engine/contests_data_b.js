@@ -523,14 +523,15 @@ const SUBERANAI = {
   ],
   beats: ['円卓。8人の名前が書かれた大きなサイコロが、真ん中に置かれている。', '進行役がサイコロを持ち上げた。全員が目で追う。', '話の途中で笑いが起きると、隣の席から「すべらんなぁ」の声。'],
 };
-function lifeTopics(g) {
+function lifeTopics(g, year = 2026) {
+  const dev = year >= 2010 ? 'スマホ' : 'ケータイ'; // era device (すべらない話 exists from 2004)
   const st = g.state || {};
   const u = unitOf(g);
   const pt = (u.members || []).find((m) => m.id !== 'player');
   const out = [];
   if (pt) out.push({ title: `相方の${pt.short || pt.name}の話`, beats: [['ネタ合わせの日、相方が30分遅れてきた。', '「ごめん、迷子の亀を交番に届けてた」と言うんです', '理由を聞いたら「寝坊」でした', '遅刻はよくないですよね'], ['交番のおまわりさんが、亀に向かって「お名前は？」って聞いてて', 'おまわりさんが調書を書き始めた', '亀はそのまま帰りました', '亀って長生きするらしいです'], ['帰り道、相方が「あいつ、ちゃんと家に帰れたかな」って泣いてたんです。亀の話で泣くやつ、初めて見ました', '相方は今でも、その亀に年賀状を出してます', 'それで、ネタ合わせはできませんでした', 'まあ、そんな感じです']] });
   if ((st.money || 0) < 30000) out.push({ title: 'お金がなかった頃の話', beats: [['給料日前、財布に47円しかなかったんです。', 'もやしを3日間、別の料理と言い張って食べてた', '貯金はゼロでした', 'お金がなかったです'], ['大家さんが「家賃、来月でええよ」って言ってくれて', 'コンビニで、もやしを買うときだけレジの人と目を合わせなくなった', 'ATMに行っても増えてない', 'つらかったです'], ['翌月、大家さんの家の前を通ったら、表札が僕の芸名になってたんです。「ファンやねん」って', 'いまでも、もやしを見ると敬語になります', 'なんとか生きてます', '以上です']] });
-  out.push({ title: '実家の父の話', beats: [['うちの父、本当に機械に弱くて。', '父がスマホ……いや、テレビのリモコンに話しかけてたんです', '父は会社員です', '普通の父です'], ['留守電に「もしもし、お父さんです」って入ってるんですけど、自宅の電話なんですよ', '「この中に、誰か入ってるんか」って', '電話がよく鳴ります', '父は元気です'], ['自分あてに留守電を残して、帰ってきて聞いて「おう、俺か」って返事してたんです', '最近は、留守電で母とケンカしてます', '電話は便利ですね', 'そういう父です']] });
+  out.push({ title: '実家の父の話', beats: [['うちの父、本当に機械に弱くて。', `父が${dev}……いや、テレビのリモコンに話しかけてたんです`, '父は会社員です', '普通の父です'], ['留守電に「もしもし、お父さんです」って入ってるんですけど、自宅の電話なんですよ', '「この中に、誰か入ってるんか」って', '電話がよく鳴ります', '父は元気です'], ['自分あてに留守電を残して、帰ってきて聞いて「おう、俺か」って返事してたんです', '最近は、留守電で母とケンカしてます', '電話は便利ですね', 'そういう父です']] });
   out.push({ title: '初めての営業の話', beats: [['初めての営業は、商店街の福引き会場でした。', '客席は、ガラガラを回す音しか聞こえない', '人はいました', 'お客さんがいました'], ['ネタの途中で「1等、温泉旅行〜！」って鐘が鳴って、全員そっちを向いたんです', '途中で雨が降ってきた', 'マイクが小さかった', 'がんばりました'], ['で、最後の最後に僕らが福引きを回したら、また1等。商店街の人に「空気読めや」って怒られました', '帰りにギャラの代わりに、ティッシュを100個もらいました', '楽しかったです', '終わりです']] });
   return out;
 }
@@ -540,7 +541,7 @@ async function suberanaiHonban(g, ctx) {
   const me = { name: g.state.name || unitName(g), me: true };
   const ppl = shuffleR([me, ...others], r);
   const host = `進行役・${personName(r)}`;
-  const topics = shuffleR(lifeTopics(g), r);
+  const topics = shuffleR(lifeTopics(g, yearOf(g, ctx)), r);
   const stories = [];
   return withBoard(g, boardSpec(ctx, '収録（サイコロトーク）', { set: 'theater' }), async (b) => {
     b.set('dice', { faces: ppl.map((p) => p.name), face: 0, people: ppl.map((p) => p.name), label: '名前の書かれたサイコロ' });
@@ -693,6 +694,7 @@ const FUTTONDA = {
   ],
   beats: ['スタジオの天井近くに、布団を飛ばす装置が見える。', '「モジりは“元の言葉”がわかる範囲で、いちばん遠くへ」——先輩の教え。', '年越しのカウントダウンが、スタジオの外から聞こえる。'],
 };
+const eraOdai = (ods, y) => ods.map(([q, a]) => [q.replace('令和', y >= 2019 ? '令和' : '平成'), a]);
 async function futonAnswer(g, b, od, r, skip, first = false) {
   const sk = Math.round((stat(g, 'hassou') + stat(g, 'neta')) / 2);
   const ans = od[1].map(([text, q]) => ({ text, q }));
@@ -719,7 +721,7 @@ async function futtondaWild(g, ctx) {
   return withBoard(g, boardSpec(ctx, 'ワイルドカード予選会', { set: 'studio' }), async (b) => {
     await say(g, ['ワイルドカード予選会。若手16名で、本戦の最後の1枠を争う。', ...pickBeats(FUTTONDA.beats, r, 1)]);
     const skip = await omakase(g, ctx, '回答');
-    const ods = shuffleR(FUTON_ODAI, r);
+    const ods = eraOdai(shuffleR(FUTON_ODAI, r), yearOf(g, ctx));
     let n = 0;
     for (let i = 0; i < 3; i++) if (await futonAnswer(g, b, ods[i], r, skip, i === 0)) n++;
     const rv = rivals(g, ctx, 15, { level: 55, kind: 'ogiri' });
@@ -739,7 +741,7 @@ async function futtondaLive(g, ctx) {
     b.set('card', { name: 'フットンダ王決定戦', edition: `${y}→${y + 1} 年越し生放送`, catch: '36名が6ブロックで“モジり”対決。布団を多く飛ばした者が勝ち上がり、6名の決勝でフットンダ王が決まる。' });
     await say(g, '36名がブロックに分かれて、モジりのお題に挑む。');
     const skip = await omakase(g, ctx, '回答');
-    const ods = shuffleR(FUTON_ODAI, r);
+    const ods = eraOdai(shuffleR(FUTON_ODAI, r), yearOf(g, ctx));
     let n = 0;
     for (let i = 0; i < 3; i++) if (await futonAnswer(g, b, ods[i], r, skip, i === 0)) n++;
     const blk = rivals(g, ctx, 5, { level: 66, kind: 'ogiri' }).map((x) => ({ name: x.name.replace(/（.*$/, ''), total: clamp(Math.round((x.power - 45) / 14 + gauss(r) * 0.8), 0, 3) }));
@@ -770,6 +772,10 @@ const AUN_ODAI = [
   ['刑事ドラマの取り調べ、ありえないやり取り', [['「カツ丼、食うか？」→「先にサラダからで」', 90], ['「吐け！」→「まだ食べてません」', 75], ['「お前がやったんだろ」→「はい」', 35], ['「……」→「……」', 5]]],
   ['2人で考えた、最悪のヒーローの決めゼリフ', [['「正義の味方！」→「…の、親戚です」', 95], ['「変身！」→「…は来週からで」', 75], ['「悪を倒す！」→「どの悪？」', 50], ['「ヒーローです」→「です」', 5]]],
   ['結婚式のスピーチ、新郎の友人2人がやらかした', [['「新郎とは小学校からの」→「初めまして」', 95], ['「ここで歌います」→（2人とも違う曲）', 80], ['「おめでとう」→「何が？」', 45], ['「以上です」→「以上です」', 5]]],
+  ['引っ越し業者2人の、絶対に聞きたくない会話', [['「この冷蔵庫、どっちが持つ？」→「……冷蔵庫ってどれ？」', 95], ['「せーの」→（片方だけ寝転ぶ）', 75], ['「重いね」→「重いね」', 30], ['「運びます」→「はい」', 5]]],
+  ['2人組の占い師、言うことが全然合わない', [['「あなたは大吉」→「あなたは来世から大吉」', 95], ['「恋愛運、最高」→「相手は僕です」', 80], ['「金運は…」→「ないです」', 40], ['「占います」→「占います」', 5]]],
+  ['漫才コンビの楽屋で、絶対に交わされない会話', [['「今日のネタどうする？」→「ネタって何？」', 90], ['「お疲れさま」→「誰？」', 70], ['「ウケたね」→「ウケたね」', 25], ['「おはよう」→「おはよう」', 5]]],
+  ['2人で考えた、まったく売れない新商品', [['「飲むと眠くなる栄養ドリンク」→「朝専用です」', 95], ['「透明な付箋」→「どこに貼ったか分かりません」', 80], ['「普通の傘」→「普通です」', 30], ['「商品」→「です」', 5]]],
 ];
 const AUN = {
   name: 'AUN〜コンビ大喜利王決定戦〜', short: 'AUN', kind: 'ogiri', category: 'special', color: '#2a8ac8',
@@ -795,7 +801,8 @@ const AUN = {
 };
 async function aunTournament(g, ctx) {
   const r = rngFor(g, ctx.id, 'aun');
-  const rvs = rivals(g, ctx, 7, { level: 62, kind: 'ogiri' });
+  // a TV-grade field: D1's world is weak at コンビ大喜利, so the def's level is the floor (and finals get stronger)
+  const rvs = rivals(g, ctx, 7, { level: 68, kind: 'ogiri', favourites: true, spread: 8 });
   const order = shuffleR([{ name: unitName(g), me: true }, ...rvs.map((x) => ({ name: x.unit === 'pin' ? combiName(r) : x.name.replace(/（.*$/, ''), power: x.power }))], r);
   const harmony = Number(unitOf(g).harmony) || 50;
   const sk = Math.round((stat(g, 'hassou') + stat(g, 'adlib')) / 2 * 0.8 + harmony * 0.2);
@@ -820,8 +827,9 @@ async function aunTournament(g, ctx) {
             const od = ods[qi++ % ods.length];
             b.set('ippon', { odai: `【コンビ大喜利】${od[0]}`, judges: [{ name: '審査員A', pts: 0 }, { name: '審査員B', pts: 0 }, { name: '審査員C', pts: 0 }], need: 3, score: `${unitName(g)} ${me} − ${op} ${opp.name}` });
             const pick = await chooseAnswer(g, `お題「${od[0]}」\n——2人でどう答える？`, od[1].map(([text, q]) => ({ text, q })), r, { auto: skip, skill: sk });
-            const q = clamp(Math.round(pick.q * 0.7 + sk * 0.3 + (harmony - 50) * 0.1 + gauss(r) * 7), 0, 100);
-            const oq = clamp(Math.round((opp.power || 60) + gauss(r) * 12), 0, 100);
+            // the answer you pick and the act's real skill weigh the same; opponents get stronger each round
+            const q = clamp(Math.round(pick.q * 0.5 + sk * 0.5 + (harmony - 50) * 0.1 + gauss(r) * 10), 0, 100);
+            const oq = clamp(Math.round((opp.power || 66) + s * 3 + gauss(r) * 10), 0, 100);
             const votes = [0, 1, 2].map(() => (q + gauss(r) * 10 >= oq + gauss(r) * 10 ? 1 : 0));
             const v = votes.reduce((a, c) => a + c, 0);
             b.patch({ answer: pick.text, judges: votes.map((x, i) => ({ name: `審査員${'ABC'[i]}`, pts: x ? 2 : 0 })), need: 6, ippon: v >= 2 });

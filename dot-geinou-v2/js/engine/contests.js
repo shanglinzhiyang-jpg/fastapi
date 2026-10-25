@@ -1044,8 +1044,9 @@ function flushQueue(g) {
   if (!c.queue.length) return;
   const q = c.queue.splice(0).sort((a, b) => b.prio - a.prio);
   const d = dailyCount(g);
-  const direct = q.length <= MORNING_CAP ? q : q.slice(0, MORNING_CAP - 1);
-  const rest = q.length <= MORNING_CAP ? [] : q.slice(MORNING_CAP - 1);
+  const room = Math.max(1, MORNING_CAP - d.n); // a show offer sent earlier this morning takes a slot
+  const direct = q.length <= room ? q : q.slice(0, room - 1);
+  const rest = q.length <= room ? [] : q.slice(room - 1);
   // the digest goes in first and the most important message last, so it sits on top of the inbox
   if (rest.length) {
     const personal = rest.filter((x) => x.personal), news = rest.filter((x) => !x.personal);
@@ -1153,16 +1154,31 @@ function selfHistory(g, def) {
   return out;
 }
 
+// Today items have a kind (DECISIONS6 §6): 'round' (a performance / round day: 本番, counts for the badge, listed first) |
+// 'prep' (entry, ネタ合わせ, 練習: never 本番, no badge) | 'event' (after-shows, tours, watching on TV). Untagged items are
+// guessed from their id / label.
+export const TODAY_KINDS = ['round', 'prep', 'event'];
+export function todayKind(it) {
+  const k = it && it.kind;
+  if (TODAY_KINDS.includes(k)) return k;
+  const s = `${(it && it.id) || ''} ${(it && it.label) || ''}`;
+  if (/ネタ合わせ|練習|稽古|エントリー|下見|準備|practice|entry/.test(s)) return 'prep';
+  if (/会場|決勝|本番|スタジオ|回戦|予選|準決勝|敗者復活|round|final|revival/.test(s)) return 'round';
+  return 'event';
+}
+export const sortToday = (list) => list.map((x, i) => [x, i]).sort((a, b) => TODAY_KINDS.indexOf(a[0].kind) - TODAY_KINDS.indexOf(b[0].kind) || a[1] - b[1]).map((p) => p[0]);
 export function selfToday(g) {
   const out = [];
   for (const def of Object.values(CONTESTS)) {
     if (!isSelfRun(def)) continue;
     const st = selfStatus(g, def);
     const items = st && Array.isArray(st.today) ? st.today : [];
-    for (const it of items) if (it) out.push({ id: def.id, def, year: st.year ?? seasonYearOf(g, def), selfRun: true, label: String(it.label || ''), item: it });
+    for (const it of items) if (it) out.push({ id: def.id, def, year: st.year ?? seasonYearOf(g, def), selfRun: true, kind: todayKind(it), label: String(it.label || ''), item: it });
   }
-  return out;
+  return sortToday(out);
 }
+// how many 本番 (rounds) the player has today: D1's own rounds + every self-run contest's 'round' items
+export const roundsToday = (g) => dueOn(g).length + selfToday(g).filter((x) => x.kind === 'round').length;
 
 export function contestInfo(g, id, day = todayOf(g)) {
   const def = CONTESTS[id];
@@ -1195,7 +1211,7 @@ export function contestInfo(g, id, day = todayOf(g)) {
     }
     const map = { notyet: 'notyet', hiatus: 'closed', before: 'future', entry: 'open', open: 'open', prelim: 'running', finalday: 'running', running: 'running', after: 'running', closed: 'closed' };
     const stt = st && map[st.status] ? map[st.status] : status;
-    return { id, def, year, cyc, status: stt, statusLabel: (st && st.statusLabel) || STATUS_LABEL[stt] || '', revival: !!cyc.revival, edition: st && st.edition != null ? st.edition : cyc.edition, label: (st && st.label) || label, nextRound, entry: ext, invite: cyc.invite, selfRun: true, today: st && Array.isArray(st.today) ? st.today : [] };
+    return { id, def, year, cyc, status: stt, statusLabel: (st && st.statusLabel) || STATUS_LABEL[stt] || '', revival: !!cyc.revival, edition: st && st.edition != null ? st.edition : cyc.edition, label: (st && st.label) || label, nextRound, entry: ext, invite: cyc.invite, selfRun: true, today: st && Array.isArray(st.today) ? sortToday(st.today.filter(Boolean).map((it) => ({ ...it, kind: todayKind(it) }))) : [] };
   }
   let closedLabel = null;
   if (status === 'closed' && cyc.held && cyc.final.day < day) {
@@ -1385,7 +1401,8 @@ const methods = {
   async openContests(tab) { if (CONTEST_UI.open) return CONTEST_UI.open(this, tab); return null; },
   // --- D1 extras (documented in api_contests.txt)
   // the player's rounds today: D1's own (dueOn) + the today items of selfRun contests ({ id, year, selfRun: true, label, item, def })
-  contestToday(day) { return this.state ? [...dueOn(this, day ?? todayOf(this)), ...(day == null || day === todayOf(this) ? selfToday(this) : [])] : []; },
+  contestToday(day, opts = {}) { if (!this.state) return []; const t = day ?? todayOf(this); const all = sortToday([...dueOn(this, t).map((d) => ({ ...d, kind: 'round' })), ...(t === todayOf(this) ? selfToday(this) : [])]); return opts.kind ? all.filter((x) => x.kind === opts.kind) : all; },
+  contestRoundsToday() { return this.state ? roundsToday(this) : 0; },
   async contestGo(id) { return runner.go(this, id); },
   async contestRunRound(id, opts = {}) { return runner.runToday(this, id, opts); },
   contestRecord(id, roundIdx, res, opts = {}) { return runner.record(this, id, roundIdx, res, opts); },
@@ -1409,7 +1426,7 @@ export const CONTEST_UI = {};
 
 // internals shared with contests_run.js / contest_ui.js / places/shourace.js
 export const internals = {
-  realDay, cstate, playerUnit, playerPower, isSelfRun, selfStatus, selfToday, externalEntry, cycleOf, seasonYearOf, contestInfo, dueOn, eventsOn, simOf, entryOf, registerEntry, eligibilityOf, feeOf, prizeOf, applyReward, addHarmony,
+  realDay, cstate, playerUnit, playerPower, isSelfRun, selfStatus, selfToday, roundsToday, todayKind, sortToday, externalEntry, cycleOf, seasonYearOf, contestInfo, dueOn, eventsOn, simOf, entryOf, registerEntry, eligibilityOf, feeOf, prizeOf, applyReward, addHarmony,
   pushNews, rivalsFor, judgesFor, panelScores, scaleOf, toFieldScore, playerScoreDist, PHI, kindOf, KIND_LABEL, roundsOf, roundsAt, scheduleAt, labelOf, contestName, colorOf,
   prestigeOf, isInvitational, dateText, todayOf, playerUnitName, bump, resultsOf, historyRows, lastDoneYear, logOnce, realToInternal, yenLabel,
   OFFICE_FROM, NEWS_FROM, judgeComment, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, TAG_COLORS, hostPerson, rngOf, gauss, pickR, MODEL,

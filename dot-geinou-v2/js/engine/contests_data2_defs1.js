@@ -383,7 +383,7 @@ registerContest('warawankai', {
   history: { founded: 2000, ended: 2010, note: '関西の芸能各社の新人（キャリア原則5年以内）が腕を磨く「笑わんかいライブ」の賞レース。最優秀賞と優秀賞を争う。', sources: WARAWAN_SRC },
   schedule: { entry: { from: [4, 1], to: [4, 10] }, final: [9, 5] },
   eligibility: { pro: true, amateur: false, geirekiMax: 5, region: 'osaka', note: '関西の芸能各社に所属する新人（キャリア原則5年以内）' },
-  prizeText: '最優秀賞・優秀賞',
+  prizeText: '最優秀賞・優秀賞の表彰',
   facts: {
     verified: ['「笑わんかいライブ」運営委員会', '関西の芸能各社の新人・キャリア原則5年以内', '2002=第3回(最優秀賞/優秀賞)', '2007=第8回', '2010=第11回'],
     unverified: ['第1回=2000年（逆算）', '2011年以降', '会場', '予選の方式', 'ネタ時間', '賞金'],
@@ -431,16 +431,16 @@ const STUDY = {
 };
 registerContest('bu1', {
   name: '武−1グランプリ', short: '武-1', kind: 'any', category: 'special',
-  organizer: '武田塾', broadcaster: 'ニコニコ生放送（決勝）', venue: '配信スタジオ（決勝）', region: 'tokyo',
+  organizer: '武田塾', broadcaster: 'ニコニコ生放送（決勝）', venue: '都内のスタジオ', region: 'tokyo',
   history: { founded: 2018, ended: 2018, note: '学習塾の武田塾が開く「勉強をテーマとしたお笑いの祭典」。決勝はネット生配信。', sources: BU1_SRC },
   schedule: { entry: { from: [1, 1], to: [1, 10] }, final: [3, 8] },
   eligibility: { pro: true, amateur: false, note: 'プロの芸人。ネタのテーマは「勉強」' },
-  prizeText: '優勝',
+  prizeText: '優勝の称号',
   facts: { verified: ['主催 武田塾', '勉強をテーマとしたお笑いの祭典', '決勝 2018年3月23日 ニコニコ生放送'], unverified: ['2019年以降', '出場資格', '予選', 'ネタ時間', '審査方式', '賞金'] },
   rounds: [
     { id: 'r1', name: '予選', when: [2, 5], judge: 'staff', field: 60, pass: 8, run: (g, ctx) => stageRound(g, ctx, { round: 'r1', name: '予選', scene: 'jyuku', sign: '武−1グランプリ', field: 60, pass: 8, level: 48, intro: ['テーマは「勉強」。参考書も黒板も、全部ネタの小道具だ。', '「勉強あるある」で笑わせるか、「知識」で笑わせるか。'] }) },
     {
-      id: 'final', name: '決勝（ニコ生配信）', when: [3, 8], judge: 'panel', field: 8, final: true, tv: true,
+      id: 'final', name: '決勝（ニコ生配信）', when: [3, 8], judge: 'panel', field: 8, final: true, tv: true, venues: ['配信スタジオ'],
       run: async (g, ctx) => {
         const skip = await askSkip(g, ctx, 'final');
         return withBackdrop(g, 'jyuku', { title: ctx.def.name, sub: `${edLabel(ctx)} 決勝（${ctx.year >= 2018 ? 'ニコ生' : 'ネット'}配信）`, sign: '武−1グランプリ 決勝', cast: castOf(g) }, async () => {
@@ -500,7 +500,7 @@ registerContest('bu1', {
 const ALCO_SRC = ['https://kyodonewsprwire.jp/release/201905136308', 'https://kyodonewsprwire.jp/prwfile/release/M104206/201904175541/_prw_PR1fl_AkgL5k08.pdf'];
 registerContest('alcoveil', {
   name: 'ネクストブレイク芸人決定戦 よしもとアルコベールグランプリ', short: 'アルコベール', kind: 'any', category: 'agency',
-  organizer: '大正製薬（リポビタン アルコベール）・吉本興業', broadcaster: '公式SNS（予選）', venue: '都内の会場（本戦）', region: 'tokyo',
+  organizer: '大正製薬（リポビタン アルコベール）・吉本興業', broadcaster: '公式SNS（予選）', venue: '都内の会場', region: 'tokyo',
   history: { founded: 2019, ended: 2019, note: 'リポビタン アルコベールの宣伝部長を決める、よしもと若手30組のお笑いバトル。予選はネタ動画の拡散数で上位10組が本戦へ。', sources: ALCO_SRC },
   schedule: { entry: null, final: [6, 3] },
   eligibility: { pro: true, amateur: false, agency: ['yoshimoto'], invite: { fame: 300 }, note: 'よしもと所属の若手30組（主催側が選ぶネクストブレイク候補・招待制）' },

@@ -341,8 +341,8 @@ function schedLines(g, y) {
   const R = rules(y);
   const out = [`エントリー：${dateText(y, S.entry.from)}〜${dateText(y, S.entry.to)}`];
   out.push(`1回戦：${S.r1.map((v) => `${v.city}${v.hall ? `（${v.hall}）` : ''} ${mdText(v.when)}`).join('／')}`);
-  out.push(`2回戦：${S.r2.map((v) => `${hallText(v)}`).join('／')}　${dateText(y, S.r2[0].when)}`);
-  if (R.hasQF) out.push(`準々決勝：${S.qf.map((v) => hallText(v)).join('／')}　${dateText(y, S.qf[0].when)}`);
+  out.push(`2回戦：${S.r2.map((v) => `${hallText(v)} ${mdText(v.when)}`).join('／')}`);
+  if (R.hasQF) out.push(`準々決勝：${S.qf.map((v) => `${hallText(v)} ${mdText(v.when)}`).join('／')}`);
   out.push(`準決勝：${hallText(S.sf[0])}　${S.sf.map((v) => dateText(y, v.when)).join('・')}${R.twoNetaSF ? '（2日間・2本）' : ''}`);
   out.push(`決勝：${dateText(y, S.final.when)}　TBS系 生放送${R.revival ? '（午後に敗者復活戦）' : ''}`);
   return out;

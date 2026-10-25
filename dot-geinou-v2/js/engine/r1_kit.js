@@ -311,6 +311,16 @@ export function newsOut(g, text, cid, cat) {
   if (has(g, 'contestNews')) { try { g.contestNews(text, { contest: cid, cat }); return; } catch (e) { console.error(e); } }
   g.message({ from: 'お笑いニュース', text, kind: 'news' });
 }
+// A personal notice of a contest office (受付完了・合格・決勝進出・棄権) — through D1's cap of contest messages a morning
+// (g.contestMail, else g.contestNews with personal: true), else straight to the phone.
+export function contestMail(g, cid, text, from, prio = 90) {
+  const o = { contest: cid, personal: true, from, prio, priority: prio };
+  try {
+    if (has(g, 'contestMail')) { g.contestMail(text, o); return; }
+    if (has(g, 'contestNews')) { g.contestNews(text, o); return; }
+  } catch (e) { console.error(e); }
+  g.message({ from, text, kind: 'news' });
+}
 export function morningNote(g, s) { if (Array.isArray(g.morningNotes)) g.morningNotes.push(s); }
 
 // An offer of a registered regular (life.js REGULARS) — the phone's offer flow answers it.

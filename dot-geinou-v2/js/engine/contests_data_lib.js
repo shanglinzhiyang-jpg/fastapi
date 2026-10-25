@@ -515,10 +515,12 @@ const MODES = {
         }
         tx(c, `${sum}点`, ox, oy + 144, 140, { size: 14, color: '#fff' });
       });
-      tx(c, d.label || '', SW / 2 - 90, 120, 180, { size: 11, color: PAL.dim });
-      tx(c, '■3点 とても面白かった', SW / 2 - 76, 150, 160, { size: 10, color: PAL.gold });
-      tx(c, '■2点 面白かった', SW / 2 - 76, 166, 160, { size: 10, color: PAL.cyan });
-      tx(c, '■1点 面白くなかった', SW / 2 - 76, 182, 160, { size: 10, color: '#9aa3c7' });
+      // the legend sits on its own dark panel (readable over any backdrop)
+      box(c, SW / 2 - 92, 108, 184, 98, sp.color || '#fff', '#0b0f24');
+      tx(c, d.label || '', SW / 2 - 80, 118, 160, { size: 12, color: '#ffffff' });
+      tx(c, '■3点 とても面白かった', SW / 2 - 80, 144, 160, { size: 11, color: PAL.gold });
+      tx(c, '■2点 面白かった', SW / 2 - 80, 162, 160, { size: 11, color: PAL.cyan });
+      tx(c, '■1点 面白くなかった', SW / 2 - 80, 180, 160, { size: 11, color: '#c8cce0' });
       return;
     }
     const n = d.n || 100;
@@ -812,19 +814,54 @@ export function normalizeRuns(def) {
 export { COLORS, clamp };
 
 // ------------------------------------------------------------------ activity (selection-type awards) & past titles
-// 0..100: fame (log scale) + this/last year's contest results (D1 entries via g.contestEntry) + stage experience (A)
+// The player's results in a contest, from every source: D1's entries (g.contestEntry), the history of ANY contest incl. the
+// selfRun ones (g.contestHistory → playerPlace; M-1 / KOC / R-1 / ABC keep their own world and never write a D1 entry),
+// E1's g.m1().me.champion, and this module's own titles. → [{ year, champion: bool, finalist: bool, passed: bool }]
+export function playerResults(g, id) {
+  const out = new Map();
+  const put = (y, o) => { if (!Number.isFinite(y)) return; const p = out.get(y) || { year: y, champion: false, finalist: false, passed: false }; out.set(y, { ...p, champion: p.champion || !!o.champion, finalist: p.finalist || !!o.finalist || !!o.champion, passed: p.passed || !!o.passed || !!o.finalist || !!o.champion }); };
+  try {
+    if (has(g, 'contestHistory')) {
+      for (const row of g.contestHistory(id) || []) {
+        const pl = row && row.playerPlace;
+        if (pl == null || pl === false) continue;
+        put(Number(row.year), { champion: pl === 1, finalist: true });
+      }
+    }
+  } catch (e) { console.error(e); }
+  try {
+    if (id === 'm1' && has(g, 'm1')) { const m = g.m1(); const ch = m && m.me && m.me.champion; if (Number.isFinite(Number(ch)) && ch) put(Number(ch), { champion: true }); }
+    const summary = { koc: 'koc', r1: 'r1', abcgp: 'abcgp' }[id];
+    if (summary && has(g, summary)) {
+      const sm = g[summary]();
+      const ch = sm && ((sm.me && sm.me.champion) ?? (sm.stats && sm.stats.champion));
+      if (Number.isFinite(Number(ch)) && ch) put(Number(ch), { champion: true });
+      for (const row of (sm && Array.isArray(sm.history) ? sm.history : [])) if (row && (row.player === 1 || row.ch === 'me' || row.playerPlace === 1)) put(Number(row.year ?? row.y), { champion: true });
+    }
+  } catch (e) { console.error(e); }
+  try {
+    if (has(g, 'contestEntry')) {
+      const y0 = contestYear(g);
+      for (let y = y0 - 45; y <= y0 + 1; y++) {
+        const e = g.contestEntry(id, y);
+        if (!e) continue;
+        const fin = (e.results || []).some((x) => x && x.passed && /final|kessho|決勝/.test(String(x.round)));
+        put(y, { champion: e.status === 'champion', finalist: fin, passed: e.status === 'passed' || e.status === 'champion' || (e.results || []).some((x) => x && x.passed) });
+      }
+    }
+  } catch (e) { console.error(e); }
+  const t = dstate(g).titles[id];
+  if (Array.isArray(t)) for (const x of t) if (x && /優勝|王者|大賞|チャンピオン|MVS|王$/.test(x.label)) put(Number(x.year), { champion: true });
+  return [...out.values()].sort((a, b) => a.year - b.year);
+}
+// 0..100: fame (log scale) + this/last year's contest results + stage experience (A)
 export function activityScore(g, year, ids = []) {
   let s = Math.min(60, Math.log10(1 + fame(g)) * 14);
   let bonus = 0;
   for (const id of ids) {
-    for (const y of [year - 1, year]) {
-      try {
-        const e = has(g, 'contestEntry') ? g.contestEntry(id, y) : null;
-        if (!e) continue;
-        bonus += e.status === 'champion' ? 18 : e.status === 'passed' ? 5 : 1;
-        const fin = (e.results || []).some((x) => x && x.passed && /final|kessho|決勝/.test(String(x.round)));
-        if (fin) bonus += 6;
-      } catch (e2) { console.error(e2); }
+    for (const x of playerResults(g, id)) {
+      if (x.year !== year - 1 && x.year !== year) continue;
+      bonus += x.champion ? 18 : x.finalist ? 8 : x.passed ? 4 : 1;
     }
   }
   let stages = 0;
@@ -832,18 +869,16 @@ export function activityScore(g, year, ids = []) {
   s += Math.min(30, bonus) + Math.min(12, stages / 8);
   return clamp(Math.round(s), 0, 100);
 }
-// did the act win any of these contests before `year`? (D1 entries, then this module's own titles)
-export function pastChampion(g, ids, year, from = 1950) {
+// did the act win any of these contests before `year`? → { id, year } | null
+export function pastChampion(g, ids, year) {
   for (const id of ids) {
-    for (let y = Math.max(from, year - 45); y < year; y++) {
-      try { const e = has(g, 'contestEntry') ? g.contestEntry(id, y) : null; if (e && e.status === 'champion') return { id, year: y }; } catch (e) { console.error(e); }
-    }
-    const t = dstate(g).titles[id];
-    if (Array.isArray(t) && t.some((x) => x && /優勝|王者|大賞/.test(x.label) && x.year < year)) return { id, year: t[0].year };
+    const hit = playerResults(g, id).find((x) => x.champion && x.year < year);
+    if (hit) return { id, year: hit.year };
   }
   return null;
 }
-// edition numbers: held years since `founded` (minus gaps); after `ended` the 復刻 continues the count
+// edition numbers of a contest that never ended: held years since `founded` (minus gaps). Ended + revived contests leave
+// editionOf out: D1 counts only HELD years, so a 復刻 continues from the last real edition +1 per held year (decision 10).
 export function editionCounter(founded, ended = null, gaps = []) {
   const off = (y) => gaps.some(([a, b]) => y >= a && y <= b);
   return (y) => {

@@ -33,7 +33,7 @@ export const BILLED_YEAR = Math.round((YEARLY * COMPRESS) / 10) * 10;
 export const monthly = () => Math.round(BILLED_YEAR / MONTHS / 10) * 10;
 export const ENTRY_SPLIT = Math.round((FEES.entry * COMPRESS) / 10) * 10;
 // the student job (劇場の裏方：場内整理・もぎり), once a day for an enrolled student
-export const BAITO = { pay: 2800, stamina: 25, stress: 3 };
+export const BAITO = { pay: 2400, stamina: 25, stress: 3 };
 // classes by weekday (0 = 月): 火 alternates ダンス / 落語 by week; April (before ネタ見せ starts in May) has 芸人の基本 instead
 export const CLASSES = {
   hassei: { label: '発声・滑舌', teacher: '羽生田 澄江 先生（ボイストレーナー）', gains: { voice: 2.5, wagei: 0.6 }, lines: ['腹式呼吸から、早口言葉、外郎売。\n「声は芸人の楽器や」…先生の口ぐせだ。', '後ろの壁に向かって、ひと言ずつ届ける練習。\n声が届くと、空気が変わるのがわかる。'] },
