@@ -32,7 +32,7 @@ import {
   actInfo, agencyNames, geireki, unitYears, statOf, sendOffer, runKitMorning, kitMorning, shortfallReasons, performAct,
 } from './r1_kit.js';
 import { makeContest, registerContestApp, fmtLen } from './r1_flow.js';
-import { stage, unstage, THEMES } from './r1_scenes.js';
+import { stage, unstage, THEMES, T } from './r1_scenes.js';
 
 // ================================================================ the rules of each year
 const CACHE = {};
@@ -340,7 +340,8 @@ async function champSceneABC(g, C, { S, E, st }) {
   const k = await g.ask('MC「いまのお気持ちを！」', ['「大阪で、いちばんになれました！」', '「…（言葉にならない）」', '「賞金で、相方に焼肉おごります！」'], { cancel: 0 });
   await g.say(k === 0 ? 'スタジオがあたたかい拍手に包まれた。' : k === 1 ? 'スタジオがもらい泣き。…そして笑い。' : 'スタジオがドッと沸いた。');
   if (S.Y >= 2026) {
-    const st2 = stage(g, { set: 'street', theme: THEMES.abcnew, sign: '大阪・梅田（数日後）', fx: { vision: (c, x, y, w, h, t) => { c.fillStyle = '#0a6fd6'; c.fillRect(x, y, w, h); c.fillStyle = '#ffd400'; c.fillRect(x, y + h - 26, w, 26); } }, cast: stageCastABC(g, E).map((m, i) => ({ ...m, x: 250 + i * 50, y: 70, k: 1, dir: 'down' })) });
+    const all = stageCastABC(g, E);
+    const st2 = stage(g, { set: 'street', theme: THEMES.abcnew, sign: '大阪・梅田（数日後）', fx: { vision: (c, x, y, w, h) => { c.fillStyle = '#0a6fd6'; c.fillRect(x, y, w, h); c.fillStyle = '#ffd400'; c.fillRect(x, y + h - 30, w, 30); T(c, `${rules.title}　優勝`, x + w / 2, y + 8, 12, '#ffffff', 'center', w - 16); T(c, E.unitName, x + w / 2, y + h - 25, 16, '#06325e', 'center', w - 16); } }, cast: all.map((m, i) => ({ ...m, x: 320 - 16 - ((all.length - 1) / 2 - i) * 56, y: 66, k: 1, dir: 'down' })) });
     try { await g.say(['数日後──大阪・梅田。', `街頭の大きなビジョンに、${E.unitName}の顔が映っている。`]); } finally { unstage(g, st2); }
   }
 }
@@ -456,6 +457,7 @@ export const ABC = makeContest({
     return `${n.name}の${netaTitle(r, n.style)}。\n${how}`;
   },
   champScene: champSceneABC,
+  champLooks: (g) => [g.state.look, ...actInfo(g).partners.map((p) => p.look)],
   afterParty: afterPartyABC,
   offers: offersABC,
   prepItems: prepItemsABC,

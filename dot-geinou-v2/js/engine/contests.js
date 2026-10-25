@@ -133,6 +133,8 @@ export const roundsOf = (def) => (def && Array.isArray(def.rounds) ? def.rounds 
 export function contestName(def, year) {
   if (!def) return '';
   let n = def.name || def.id;
+  const f = def.history && Number.isFinite(Number(def.history.founded)) ? Number(def.history.founded) : null;
+  if (f != null && year < f) year = f; // before its founding: the name it is founded with
   if (Array.isArray(def.names)) {
     for (const x of def.names.slice().sort((a, b) => num(a.from, -1e9) - num(b.from, -1e9))) {
       if (!x || !x.name) continue;
@@ -576,6 +578,8 @@ function simulateCore(g, id, year, champs) {
     // small rounds are listed in full: the anonymous entrants who got this far become named stand-ins
     if (last || E <= EXACT_MAX || anon.n < 0.5 || E <= named.length) {
       const playerHere = !!pm || (last && !!mods.final) || !!(r.revival && mods.revival && mods.revival[i] && mods.revival[i].win);
+      // an invited player takes the place of the last of the invited acts
+      if (invite && i === 0 && playerHere && named.length > Math.round(E) - 1) named = named.slice(0, Math.max(1, Math.round(E) - 1));
       const deficit = Math.round(E) - (playerHere ? 1 : 0) - named.length;
       for (let k = 0; k < deficit && k < 400; k++) { const gh = ghostEntrant(seed, def, year, i, k, anon.n >= 0.5 ? anon.mu : ap.mu, anon.n >= 0.5 ? anon.sd : ap.sd); ghosts.push(gh); named.push(gh); }
       anon = { n: 0, mu: anon.mu, sd: anon.sd };
@@ -746,7 +750,7 @@ function rowOfSim(g, def, y, sim, held) {
   const rk = sim.final.ranking;
   const deep = {};
   const n = sim.rounds.length;
-  sim.rounds.forEach((rd, i) => { if (i >= n - 3) for (const aid of rd.entrants) deep[aid] = i; });
+  for (let i = Math.max(0, n - 2); i < n; i++) for (const aid of sim.rounds[i].entrants) if (!/^g/.test(aid)) deep[aid] = i;
   return {
     year: y, edition: ed, held: true, revival: !!held.revival,
     champion: fixed || nameOfId(g, sim, rk[0]), champId: rk[0] || null,
@@ -941,7 +945,7 @@ function dailyCount(g) { const c = cstate(g); if (c.daily.day !== todayOf(g)) c.
 function logNews(g, text, opts) {
   const c = cstate(g);
   c.news.unshift({ day: todayOf(g), text: String(text), contest: opts.contest || null, kind: opts.personal ? 'personal' : 'news' });
-  if (c.news.length > 160) c.news.length = 160;
+  if (c.news.length > 120) c.news.length = 120;
 }
 // opts: { contest, cat, from, personal (a notice to the player: 賞レース事務局), prio (0..100), key (sent once per key) }
 export function pushNews(g, text, opts = {}) {

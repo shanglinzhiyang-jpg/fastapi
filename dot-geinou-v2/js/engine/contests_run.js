@@ -180,7 +180,7 @@ export function oddsOf(g, id, round) {
   if (last) { const top = rd.passed.map((x) => rd.scores.get(x)).sort((a, b) => b - a)[0]; cut = num(top, 60); }
   const p = clamp(1 - I.PHI((cut - d.mean) / Math.max(1, d.sd)), 0.005, 0.995);
   const pct = Math.round(p * 100);
-  const word = pct >= 80 ? 'かなり有利' : pct >= 55 ? '五分以上' : pct >= 30 ? '厳しめ' : pct >= 10 ? 'かなり厳しい' : 'ほぼ無理（実力不足）';
+  const word = pct >= 80 ? 'かなり有利' : pct >= 55 ? '五分以上' : pct >= 30 ? '厳しめ' : pct >= 10 ? 'かなり厳しい' : 'ほぼ無理・実力不足';
   return { power: Math.round(d.power), quality: Math.round(d.quality), mean: Math.round(d.mean), cut: Math.round(cut), pass: p, pct, word, round: rd.name, text: `${rd.name}${last ? '優勝' : '通過'}の見込み 約${pct}%（${word}）` };
 }
 function kindFor(g, def) {
@@ -723,7 +723,9 @@ function freeze(g, id, year) {
   const nameOf = (aid) => (aid === 'player' ? I.playerUnitName(g) : (sim.byId.get(aid) || {}).name || '');
   if (!c.hist[id]) c.hist[id] = {};
   c.hist[id][year] = { edition: I.editionIn(g, def, year), revival: !!I.heldIn(g, def, year).revival, champion: nameOf(rk[0]), champId: rk[0] || null, runnerUp: rk[1] ? nameOf(rk[1]) : null, runnerId: rk[1] || null, third: rk[2] ? nameOf(rk[2]) : null, finalists: rk.slice(0, 12).map(nameOf), note: I.heldIn(g, def, year).revival ? '復刻開催' : '', player: rk.includes('player') ? rk.indexOf('player') + 1 : null, deep: {} };
-  sim.rounds.forEach((rd, i) => { if (i >= sim.rounds.length - 3) for (const aid of rd.entrants) c.hist[id][year].deep[aid] = i; });
+  // who reached the last rounds (for tags like 準決勝常連): the last two rounds, the world's acts only, at most 40 (kept small in the save)
+  const deep = c.hist[id][year].deep;
+  for (let i = Math.max(0, sim.rounds.length - 2); i < sim.rounds.length; i++) for (const aid of sim.rounds[i].entrants) if (!/^g/.test(aid) && Object.keys(deep).length < 40) deep[aid] = i;
 }
 
 // ================================================================ record (custom flows: E1 / E2)
@@ -817,6 +819,8 @@ async function morning(g) {
   }
   // 4. every contest: entry windows, invitations, simulated results, champions, history
   for (const def of Object.values(CONTESTS)) safe(`season:${def.id}`, () => seasonNews(g, def, day));
+  // 5. housekeeping: once-only news keys older than two game years are dropped
+  if (day % 30 === 0) for (const k of Object.keys(c.sent)) if (num(c.sent[k]) < day - 240) delete c.sent[k];
 }
 function seasonNews(g, def, day) {
   const y0 = I.seasonYearOf(g, def, day - 1), y1 = I.seasonYearOf(g, def, day);

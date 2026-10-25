@@ -128,6 +128,8 @@ function reasonLines(g, res, need = 55) {
   if (!out.length) out.push('全体的に、決め手に欠けた。もう一段、強いボケと構成がほしい。');
   return [...new Set(out)].slice(0, 3);
 }
+// コンビ仲 (A: g.unitHarmony(n, why), feature-detected)
+function addHarmony(g, n, why) { if (has(g, 'unitHarmony')) safe(() => g.unitHarmony(n, why)); }
 function rewards(g, kind, n) {
   const R = { r1: [4, 30], r2: [10, 80], r3: [20, 200], qf: [40, 500], sf: [80, 1200], final: [400, 6000], top3: [300, 4000], champ: [1500, 30000], ru: [400, 8000] }[kind] || [0, 0];
   g.addFame(R[0] * (n || 1), true);
@@ -407,6 +409,7 @@ export async function roundFlow(g, ri) {
     if (passed) {
       await bigText(g, `${R.name} 合格！`, `${E.name}　${R.pass}組${ri === 0 ? `（エントリー${m1Rules(y).entriesText}）` : ''}が次へ`, { min: 30, max: 160 });
       if (!isSF) rewards(g, R.id);
+      addHarmony(g, 2, `M-1 ${R.name}突破`);
       safe(() => has(g, 'addComedyStat') && g.addComedyStat('dokyo', 1, true));
       logLine(E, `${R.name}（${E.next.city}）：${s}点で合格。${pickH(['「まだまだいける」', '「次や、次」', '「ここからが本番」'], y, ri)}`);
       if (isSF) {
@@ -420,6 +423,7 @@ export async function roundFlow(g, ri) {
       const why = reasonLines(g, { ...res, score: s }, Math.max(40, cut));
       await say(g, ['（後日、予選審査員のメモが届いた）'].concat(why.map((l) => `・${l}`)), { name: MC.writer.name, look: MC.writer.look });
       logLine(E, `${R.name}（${E.next.city}）：${s}点で敗退。「${why[0]}」`);
+      addHarmony(g, -2, `M-1 ${R.name}敗退`);
       // ワイルドカード (準々決勝 losers, 2015〜)
       if (R.wildcard) {
         const fame = Math.min(30, (g.state.fame || 0) / 100);
@@ -462,9 +466,9 @@ async function netaAwase(g, E, u, neta, mode, roundName) {
   if (mode >= 1) { practice(g, neta, 1); return; }
   await say(g, pickH(['…なあ、二個目のボケ、変えへん？今日の客、あれ伝わらん気がする。', 'ちょっと待って。後半のくだり、テンポ上げたほうがええって。', '正直に言うけど、今日のネタ、こっちのほうがええと思うねん。'], E.no, roundName), pw);
   const i = await ask(g, '本番直前、相方と意見が割れた。', ['相方の案でいく', '元のままでいく', 'ふたりで折衷案を考える'], null, { cancel: 1 });
-  if (i === 0) { if (u.partner) safe(() => g.addAff(u.partner, 3, true)); practice(g, neta, h01(E.no, 'alt') < 0.5 ? 2 : -2); logLine(E, `${roundName}の直前、相方の案でボケを変えた。`); await say(g, 'おおきに。…信じてくれてありがとな。', pw); }
-  else if (i === 1) { if (u.partner) safe(() => g.addAff(u.partner, -2, true)); logLine(E, `${roundName}の直前、ネタを変えるかで揉めた。`); await say(g, '…わかった。ほな、元のままで。', pw); }
-  else { g.state.stamina = Math.max(0, g.state.stamina - 5); practice(g, neta, 3); if (u.partner) safe(() => g.addAff(u.partner, 1, true)); logLine(E, `${roundName}の直前、廊下でふたりで新しい形を作った。`); await say(g, 'これや。これでいこ。', pw); }
+  if (i === 0) { addHarmony(g, 3, 'M-1の本番前、相方の案を採用'); if (u.partner) safe(() => g.addAff(u.partner, 3, true)); practice(g, neta, h01(E.no, 'alt') < 0.5 ? 2 : -2); logLine(E, `${roundName}の直前、相方の案でボケを変えた。`); await say(g, 'おおきに。…信じてくれてありがとな。', pw); }
+  else if (i === 1) { addHarmony(g, -3, 'M-1の本番前にネタで揉めた'); if (u.partner) safe(() => g.addAff(u.partner, -2, true)); logLine(E, `${roundName}の直前、ネタを変えるかで揉めた。`); await say(g, '…わかった。ほな、元のままで。', pw); }
+  else { addHarmony(g, 2, 'M-1の本番前、ふたりで新しい形を作った'); g.state.stamina = Math.max(0, g.state.stamina - 5); practice(g, neta, 3); if (u.partner) safe(() => g.addAff(u.partner, 1, true)); logLine(E, `${roundName}の直前、廊下でふたりで新しい形を作った。`); await say(g, 'これや。これでいこ。', pw); }
 }
 async function showBoard(g, y, ri, E, passed) {
   const m = M(g);
@@ -560,6 +564,7 @@ async function finalistsPress(g, E, inFinal, u) {
     if (inFinal) {
       E.status = 'finalist';
       rewards(g, 'sf'); rewards(g, 'final');
+      addHarmony(g, 6, 'M-1決勝進出');
       const i = await ask(g, '記者「決勝への意気込みを！」', ['「優勝しかないです！」', '「ふたりで一番面白い4分を」', '「…ボケていいですか？」'], { name: '記者', look: MC.ad.look }, { cancel: 1 });
       const q = ['優勝しかないです！', 'ふたりで一番面白い4分を見せます。', '（ボケた。会見場がちょっと笑った）'][Math.max(0, i)];
       logLine(E, `決勝進出者会見で「${q}」`);
@@ -669,7 +674,7 @@ function netPosts(g, y, champ, meChamp, me, top) {
   const sns = heisei ? '匿名掲示板' : `${(g.state.profile && g.state.profile.era === 'reiwa') ? 'ドッター' : 'SNS'}の反応`;
   const k = (s) => pickH(s, y, champ);
   const posts = heisei
-    ? [`${champ}優勝キター！`, k(['審査員の点数、ちょっと割れすぎじゃね？', '最終決戦、どっちが勝ってもおかしくなかった', '敗者復活の組、普通に強かった']), `${top}の1本目が今年いちばん笑った`, k(['来年も絶対見る', '年末はこれ見ないと終われない', 'テレビの前で正座して見てた'])]
+    ? [`${champ}優勝キター！`, k(['審査員の点数、ちょっと割れすぎじゃね？', '最終決戦、どっちが勝ってもおかしくなかった', '敗者復活の組、普通に強かった']), `${top}の1本目が今年いちばん笑った`, k(['敗者復活の会場、寒そうだったな', '出番順で損した組いるだろ', '審査員のコメントが一番おもしろかった']), k(['来年も絶対見る', '年末はこれ見ないと終われない', 'テレビの前で正座して見てた']), k(['録画したからもう一回見る', 'DVD出たら買う', '明日学校でこの話しかしないわ'])]
     : [`#M1グランプリ ${champ}おめでとう！！`, k(['審査員コメントまで含めて神回', '笑神籤の引き、ドラマすぎる', '最終決戦の3組、全部優勝でいい']), `${top}の1本目、今年いちばん笑った`, k(['明日から${champ}をテレビで見まくる予感', 'ネタのフレーズがもう頭から離れない', '敗者復活からの流れ、胸アツ']).replace('${champ}', champ)];
   if (me && !meChamp) posts.splice(2, 0, heisei ? `${me}、もっと評価されてもいい` : `${me}、知らなかったけど好きになった`);
   if (meChamp) posts.splice(1, 0, heisei ? `${meChamp}って去年まで誰も知らなかったよな？` : `${meChamp}、ネタ動画ぜんぶ見に行った`);
@@ -898,6 +903,7 @@ async function tearsScene(g, E, u, won, place = 1) {
     const i = await ask(g, '相方が、こっちを見ている。', ['泣きながら抱き合う', 'ガッツポーズで叫ぶ', '相方の肩を叩いて笑う'], null, { cancel: 0 });
     await say(g, [['（ふたりとも、言葉にならなかった。センターマイクの前で、ただ泣いた）'], ['（「よっしゃあああ！」スタジオが拍手に包まれる）'], ['（「やったな」「やったな」…それだけで十分だった）']][Math.max(0, i)]);
     await say(g, E.last ? 'ラストイヤーで…ほんまに獲ったで…！おまえと組んでよかった…！' : 'おまえと…おまえとやから獲れたんや…！', pw);
+    addHarmony(g, 12, 'M-1優勝');
     if (u.partner) safe(() => g.addAff(u.partner, 10, true));
   } else {
     await say(g, place === 2 ? '…あと一歩やったな。悔しいわ。めっちゃ悔しい。…でも、楽しかったな。' : 'まだや。まだ終わってへん。来年、またこの曲で出てこよ。', pw);
@@ -983,10 +989,15 @@ export async function practiceFlow(g) {
   if (g.state.stamina < 10) { await say(g, '体力が足りない…。'); return false; }
   const set = pushSet(g, h01(today(g), 'pr') < 0.5 ? 'home' : 'night', { year: y, cast: [{ look: g.state.look, x: 290, y: 212, s: 2, dir: 'right' }, { look: u.partnerLook, x: 350, y: 212, s: 2, dir: 'left' }], caption: 'ネタ合わせ' });
   try {
+    m.practicedDay = today(g);
+    if (has(g, 'owaraiPractice')) {
+      // A's ネタ合わせ (コンビ仲・ステータス・台本の仕上がり)
+      const r = await (async () => { try { return await g.owaraiPractice('awase', { skipCheck: true, quiet: true }); } catch (e) { console.error(e); return null; } })();
+      if (r) return true;
+    }
     const neta = await chooseNeta(g, 240, 'ネタ合わせ', null, 0);
     g.state.stamina -= 10;
     const v = practice(g, neta, 6);
-    m.practicedDay = today(g);
     safe(() => g.lifeTick({ hunger: -6, stress: 3 }));
     const E = entryOf(g, y);
     await netaAwase(g, E || { no: 0 }, u, neta, 0, 'ネタ合わせ');

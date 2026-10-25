@@ -538,8 +538,9 @@ function voteCard(g, o, th) {
       T(c, cd.name, cx + cw / 2, y + 136, 13, '#ffffff', 'center', cw - 20);
       const got = o.votes.slice(0, shown).map((v, k) => ({ v, k })).filter((x2) => x2.v === i);
       got.forEach((x2, k) => { box(c, cx + 14 + (k % 4) * ((cw - 28) / 4), y + 162 + Math.floor(k / 4) * 30, (cw - 28) / 4 - 4, 26, th.main, th.acc); faceAt(c, o.judges[x2.k] && o.judges[x2.k].look, cx + 14 + (k % 4) * ((cw - 28) / 4) + ((cw - 28) / 4 - 4) / 2 - 12, y + 163 + Math.floor(k / 4) * 30, 0.75); });
-      if (o.points) T(c, `${o.points[i]}`, cx + cw / 2, y + 212, 14, th.acc, 'center', cw - 20);
+      if (o.points) T(c, `${o.points[i]}点`, cx + cw / 2, y + 212, 14, th.acc, 'center', cw - 20);
     });
+    if (o.caption) T(c, o.caption, x + w / 2, y + h - 14, 9, '#a8a8b8', 'center', w - 20);
   }, { min: 30 + o.votes.length * 22 });
 }
 function championCard(g, o, th) {
@@ -1310,7 +1311,7 @@ function installFlows(C) {
       if (ui) {
         await g.say(`${rules.title}、最終決戦。\n審査員の${fmt.stage2 === '3pt' ? '得点' : '投票'}で、優勝が決まる……`);
         await drumroll(g, 10);
-        await CARDS.voteCard(g, { title: `${fmt.stage2Name || 'ファイナルステージ'}　${fmt.stage2 === '3pt' ? '持ち点3の振り分け' : '決選投票'}`, cands: ids.map((id) => ({ name: nameOf(id), look: lookOf(id), me: id === 'player' })), votes, judges: voters, points: fmt.stage2 === '3pt' ? ids.map((id) => pts[id]) : null }, ui.th);
+        await CARDS.voteCard(g, { title: `${fmt.stage2Name || 'ファイナルステージ'}　${fmt.stage2 === '3pt' ? '持ち点3の振り分け' : '決選投票'}`, cands: ids.map((id) => ({ name: nameOf(id), look: lookOf(id), me: id === 'player' })), votes, judges: voters, points: fmt.stage2 === '3pt' ? ids.map((id) => pts[id]) : null, caption: fmt.stage2 === '3pt' ? '顔：その審査員がいちばん高く評価した組　数字：持ち点3の振り分けの合計' : '' }, ui.th);
       }
     }
     return champ;
@@ -1337,7 +1338,7 @@ function installFlows(C) {
         E.status = 'champion';
         s.me.wins = num(s.me.wins) + 1;
         const prizeIn = toInternal(g, rules.prize);
-        await CARDS.championCard(g, { head: `${rules.title}　第${rules.edition}回`, name: E.unitName, looks: [g.state.look], prize: rules.prize ? `優勝賞金 ${plainYen(rules.prize)}` : rules.prizeText || 'トロフィー', foot: rules.broadcast }, th);
+        await CARDS.championCard(g, { head: rules.title.includes(`第${rules.edition}回`) ? rules.title : `${rules.title}　第${rules.edition}回`, name: E.unitName, looks: cfg.champLooks ? cfg.champLooks(g, E) : [g.state.look], prize: rules.prize ? `優勝賞金 ${plainYen(rules.prize)}` : rules.prizeText || 'トロフィー', foot: rules.broadcast }, th);
         g.addMoney(prizeIn);
         if (cfg.trophy) g.giveItem(cfg.trophy, 1, true);
         g.addFame(rules.final.champFame ?? 600);

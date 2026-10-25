@@ -852,6 +852,14 @@ export async function runFinalDay(g, y, opts = {}) {
     await g.say(`${titleOf(y)}！コント日本一、${R.entries.approx ? '約' : ''}${R.entries.n.toLocaleString('ja-JP')}組の頂点に立つのは、どのユニットか！`, { name: MCs.main.name, look: MCs.main.look });
     if (R.mode === 'panel') await g.say(`審査員は、${judges.map((j) => j.name).join('、')}のみなさんです！`, { name: MCs.sub.name, look: MCs.sub.look });
     else await g.say(`審査するのは、準決勝で敗れた芸人${R.voters}人！${R.mode === 'league' ? 'ひとり5点満点です。' : R.mode === 'sum2' ? 'ひとり10点満点、無記名で採点します。' : '「どちらが面白かったか」を投票します。'}`, { name: MCs.sub.name, look: MCs.sub.look });
+    if (R.secret) {
+      // ファイナリストシークレット制度 (2018-2019): the finalists are named for the first time on air
+      bd.set('press', { lineup: order.map((a) => ({ name: a.name, look: (a.looks || [])[0], me: !!a.me })), title: `${titleOf(y)} ファイナリスト発表（生放送）` });
+      sfx('fanfare');
+      await g.say('今年はファイナリストシークレット制度。\n決勝に進んだ10組を、いま、この生放送で初めて発表します！', { name: MCs.main.name, look: MCs.main.look });
+      if (playerIn) await sayP(g, E, 'やっと言える…！家族にも黙ってたんやから。');
+      bd.set('studio', { year: y, mc: MCs.main.look, mc2: MCs.sub.look, judges, screen: [`KOC${y}`, `第${R.edition}回`, 'LIVE'], onair: true });
+    }
     let rows;
     const ctx = { y, R, E, bd, judges, MCs, order, rf, digest, role };
     if (R.mode === 'panel') rows = await finalPanel(g, ctx);

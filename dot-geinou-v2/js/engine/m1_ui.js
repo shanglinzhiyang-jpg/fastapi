@@ -245,6 +245,10 @@ function studioBase(c, sc) {
   R(c, 90, 186, 460, 20, '#1a1426'); R(c, 90, 186, 460, 2, GOLD); for (let x = 100; x < 550; x += 30) R(c, x, 190, 14, 1, 'rgba(255,255,255,0.12)');
   c.fillStyle = 'rgba(255,240,200,0.10)'; c.beginPath(); c.moveTo(296, 104); c.lineTo(344, 104); c.lineTo(390, 206); c.lineTo(250, 206); c.closePath(); c.fill();
   centerMic(c, 320, 202, 150);
+  // the studio audience (seen when no message is open)
+  crowdRow(c, 268, 24, sc.t, ['#14141e', '#1a1a26', '#101018'], 11, sc.react || 0);
+  crowdRow(c, 292, 26, sc.t, ['#0e0e16', '#14141c'], 12, sc.react || 0);
+  crowdRow(c, 316, 24, sc.t, ['#0a0a10', '#101016'], 13, sc.react || 0);
 }
 function judgesDesk(c, sc) {
   const S = sc.studio || {};
@@ -253,7 +257,7 @@ function judgesDesk(c, sc) {
   const n = js.length;
   const w = Math.min(62, Math.floor(540 / n));
   const x0 = 320 - (n * w) / 2;
-  js.forEach((j, i) => person(c, j.look || { hair: 'short', hairColor: 'black', top: '#2e3140', bottom: '#2e3140', jacket: true }, x0 + i * w + w / 2, 230, 1, 'up'));
+  js.forEach((j, i) => person(c, j.look || { hair: 'short', hairColor: 'black', top: '#2e3140', bottom: '#2e3140', jacket: true }, x0 + i * w + w / 2, 224, 1, 'up'));
   R(c, x0 - 8, 208, n * w + 16, 28, '#2a1a10'); R(c, x0 - 8, 208, n * w + 16, 2, GOLD2); R(c, x0 - 8, 234, n * w + 16, 2, '#140a06');
   js.forEach((j, i) => {
     const x = x0 + i * w + w / 2;
