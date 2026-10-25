@@ -264,6 +264,7 @@ async function meet(g, pid, opts = {}) {
         const r = await trial(g, pid, { venue: spot.name, skip: true });
         scene.mode = 'both';
         scene.trial = r;
+        scene.trialT = scene.t; // [R9-C] the 手ごたえ meter / stamp start here
         g.sfx(r.score >= 55 ? 'good' : 'cancel');
         await g.say(`（おためしのネタ合わせ：${r.feel}。手ごたえ ${r.score}／100）`);
         await g.say(r.score >= 55 ? (k ? 'いまの、ええ感じやったな！' : 'いまの、いい感じだったね！') : (k ? '…うーん、まだ噛み合わへんな。' : '…うーん、まだ噛み合わないね。'), who);
@@ -318,6 +319,8 @@ const methods = {
   async netPost(opts) { return post(this, opts); },
   async owaraiTrial(pid, opts) { return trial(this, pid, opts); },
   async owaraiPropose(pid, opts) { return propose(this, pid, opts); },
+  // [R9-C] the reply a candidate sends (mine: they answer your contact; else: they answer your own 募集) — the board screen's thread
+  owaraiReplyText(pid, mine = true) { return CANDIDATES[pid] && CANDIDATES[pid].board ? replyText(this, pid, mine) : ''; },
 };
 for (const k of Object.getOwnPropertyNames(methods)) Object.defineProperty(Game.prototype, k, Object.getOwnPropertyDescriptor(methods, k));
 

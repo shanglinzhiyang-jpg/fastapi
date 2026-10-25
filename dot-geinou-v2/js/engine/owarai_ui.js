@@ -16,6 +16,7 @@ import {
   COMEDY_STATS, STAT_KEYS, STAT_SHORT, KINDS, KIND_ORDER, ROLES, STYLES, SOURCES, THEATER_RANKS, GROW_HINT, BOARDS, MEET_SPOTS,
   QUIRKS, PERSONAS, MOTIVES, num, dateOf, ymLabel, personName, eraKey, CANDIDATES,
 } from './owarai_data.js';
+import * as NUI from './owarai_net_ui.js'; // [R9-C] the flashy 相方募集 skin (board screen + meeting overlay)
 
 const has = (g, k) => !!g && typeof g[k] === 'function';
 const safe = (fn, d = null) => { try { return fn(); } catch (e) { console.error(e); return d; } };
@@ -117,8 +118,8 @@ export class MeetScene {
     // full frames at 3x; the table hides the legs
     const drawUpper = (sheet, dir, x, y) => { const im = (sheet[dir] || sheet.down)[0]; c.drawImage(im, 0, 0, im.width, im.height, x, y, 96, 120); };
     const bob = Math.floor(this.t / 30) % 2;
-    drawUpper(me, 'right', 140, 116 + (this.mode === 'trial' ? bob * 2 : 0));
-    if (this.mode !== 'wait' && P.look) drawUpper(charSheetHD(P.look), 'left', 404, 116 + (this.mode === 'trial' ? (1 - bob) * 2 : 0));
+    drawUpper(me, 'right', 140, 116 + (this.mode === 'trial' ? bob * 2 : 0) + NUI.meetHop(this, g, 0)); // [R9-C] hop when formed
+    if (this.mode !== 'wait' && P.look) drawUpper(charSheetHD(P.look), 'left', 404, 116 + (this.mode === 'trial' ? (1 - bob) * 2 : 0) + NUI.meetHop(this, g, 1));
     // table
     R(c, 170, 228, 300, 14, spot === 'famires' ? '#f4f4f4' : '#8a5a33');
     R(c, 170, 242, 300, 6, spot === 'famires' ? '#c8c8c8' : '#5a3a20');
@@ -131,12 +132,8 @@ export class MeetScene {
     };
     drink(236); if (this.mode !== 'wait') drink(392);
     if (this.mode === 'trial') { T(c, '♪', 300, 150 - bob * 4, 18, K.gold, 'center'); T(c, '!', 340, 140 + bob * 4, 18, K.pink, 'center'); }
-    // caption
-    R(c, 0, 0, SW, 24, 'rgba(10,6,14,0.82)');
-    const B = this.o.board && BOARDS[this.o.board];
-    T(c, `${MEET_SPOTS[spot] ? MEET_SPOTS[spot].name : ''}　${this.o.title || ''}`, 10, 5, 12, K.gold, 'left', 360);
-    if (B) T(c, B.short, SW - 10, 6, 10, K.dim, 'right', 240);
-    if (this.trial) { R(c, SW - 170, 30, 160, 22, 'rgba(10,6,14,0.8)'); T(c, `おためし：${this.trial.feel}`, SW - 90, 35, 10, this.trial.score >= 55 ? K.good : K.warn, 'center', 150); }
+    // [R9-C] caption, name plate, trial telop, 手ごたえ meter, コンビ結成！ (owarai_net_ui.js)
+    try { NUI.meetOverlay(this, c, g); } catch (e) { console.error(e); }
   }
 }
 
@@ -933,7 +930,7 @@ async function candAct(ui, row) {
   const k = await ui.pick({ title: x.met ? x.name : x.handle, items: items.map((i) => ({ label: i.label, sub: i.sub })) });
   const it = items[k];
   if (!it || it.id === 'back') return;
-  if (it.id === 'contact') { g.netContact(x.id); sfx('ok'); ui.toast(`${x.handle}に連絡した。返事を待とう`); return; }
+  if (it.id === 'contact') { g.netContact(x.id); sfx('ok'); ui.toast(`${x.handle}に連絡した。返事を待とう`); if (ui.isBoardSkin) NUI.fxContact(ui, x); return; } // [R9-C] + the contact effect
   if (it.id === 'meet') { ui.close(); await g.netMeet(x.id); return; }
   if (it.id === 'propose') { ui.close(); await g.owaraiPropose(x.id); }
 }
@@ -967,7 +964,25 @@ const BOARD_CFG = {
   id: 'board', title: (g) => ({ techo: '相方募集（手帳）', keitai: '相方募集', smart: '相方募集' }[dev(g)] || '相方募集'), tabs: [], tabsFn: (g) => boardTabs(g),
   sub: (g) => { const d = dateOf(g); return `${d.year}年${d.month}月　${(safe(() => g.owaraiBoards(), []) || []).map((b) => b.short).join('・')}`; },
 };
-export function openBoard(g, tab) { return openScreen(g, { ...BOARD_CFG, tabs: boardTabs(g) }, { tab }); }
+// [R9-C] the board screen: OwScreen with the skin of owarai_net_ui.js (each era's medium; drawing, taps, 70-unit touch
+// targets, themed modals, the contact / match effects). Rows, tabs and acts (candAct / postAct) are the ones above.
+class BoardScreen extends OwScreen {
+  constructor(g, cfg, opts, resolve) { super(g, cfg, opts, resolve); this.isBoardSkin = true; NUI.boardInit(this); }
+  update(g) { if (NUI.boardPre(this, g)) return; super.update(g); NUI.boardPost(this, g); }
+  handleTap(tap, inp) { return NUI.boardTap(this, tap, inp); }
+  setTab(i) { super.setTab(i); NUI.onTab(this); }
+  draw(c, g) { this.touchLayout = isTouch(); NUI.drawBoard(this, c, g); }
+  confirm(o) { if (this.g.auto) return Promise.resolve(o.auto ?? 0); return this.openModal(NUI.modal(this, { ...o, kind: 'confirm' })); }
+  pick(o) { if (this.g.auto) return Promise.resolve(o.auto ?? 0); return this.openModal(NUI.modal(this, { ...o, kind: 'pick' })); }
+  info(title, lines, o = {}) { if (this.g.auto) return Promise.resolve(0); return this.openModal(NUI.modal(this, { title, lines: [].concat(lines), choices: ['OK'], kind: 'confirm', ...o })); }
+}
+export function openBoard(g, tab) {
+  if (!g || !g.state) return Promise.resolve(null);
+  if (g.auto && !g.auto.owarai) return Promise.resolve(null);
+  if (g.scenes.find((s) => s.isOwaraiUI && !s.closed && s.cfg.id === BOARD_CFG.id)) return Promise.resolve(null);
+  sfx('ok');
+  return new Promise((resolve) => g.push(new BoardScreen(g, { ...BOARD_CFG, tabs: boardTabs(g) }, { tab }, resolve)));
+}
 
 // ================================================================ g.* + phone apps
 Game.prototype.owaraiScreen = function owaraiScreen(tab) { return openNote(this, tab); };

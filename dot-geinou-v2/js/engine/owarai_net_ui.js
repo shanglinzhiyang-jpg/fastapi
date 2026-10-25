@@ -250,6 +250,7 @@ function actionOf(x) {
 }
 const prefName = (k) => (PREFECTURES[k] ? PREFECTURES[k].name : '');
 const styleShort = (s) => String(STYLES[s] || '').replace('中心', '');
+const at = (th, h) => (th.id === 'sns' && !String(h).startsWith('@') ? '@' : '') + h;
 
 // ---------------------------------------------------------------- portraits
 function silhouette(c, th, x, y, w, h) {
@@ -355,7 +356,10 @@ export function radar(c, th, cx, cy, r, view, t, k = 1, size = 10) {
     c.strokeStyle = th.line; c.stroke();
   }
   for (let i = 0; i < n; i++) { const [px, py] = pt(i, 1); c.beginPath(); c.moveTo(cx, cy); c.lineTo(px, py); c.strokeStyle = th.line; c.stroke(); }
-  const val = (s, key) => clamp(num(s[key]) / 100, 0.04, 1) * k;
+  let top = 40;
+  for (const key of AX) top = Math.max(top, num(view.stats && view.stats[key]), view.level !== 'pr' ? num(view.mine && view.mine[key]) : 0);
+  const scale = Math.min(100, Math.ceil((top * 1.12) / 10) * 10);
+  const val = (s, key) => clamp(num(s[key]) / scale, 0.04, 1) * k;
   // you (dashed outline) to compare with
   if (view.mine && view.level !== 'pr') {
     c.setLineDash([3, 2]);
@@ -409,7 +413,7 @@ export function meter(c, th, cx, cy, r, m, nv, t, size = 10) {
   c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * (r - 4), cy + Math.sin(a) * (r - 4)); c.strokeStyle = th.dark ? '#ffffff' : '#2a2030'; c.lineWidth = 2.5; c.stroke();
   c.fillStyle = th.accent; c.beginPath(); c.arc(cx, cy, 4, 0, Math.PI * 2); c.fill();
   c.restore();
-  const vs = m.kind === 'guess' ? `${Math.round(m.v / 10) * 10}前後` : `${Math.round(nv)}`;
+  const vs = m.kind === 'guess' ? `${Math.round(m.v / 10) * 10}前後` : `${Math.round(clamp(nv, 0, 100))}`;
   T(c, vs, cx, cy + 4, size + 2, m.kind === 'guess' ? th.sub : m.v >= 60 ? (th.dark ? '#5ee07a' : '#1f9a4a') : m.v >= 40 ? (th.dark ? '#ffcc4d' : '#b07a00') : (th.dark ? '#ff6470' : '#c0392b'), 'center', r * 2 + 30);
   T(c, m.label, cx, cy - r - size - 6, size, th.sub, 'center', r * 2 + 60);
 }
@@ -566,7 +570,7 @@ function drawHeader(ui, c, th, g) {
   // ×
   const cx0 = SW - 26;
   if (th.id === 'web') { R(c, cx0 + 6, 2, 14, 12, '#c0c0c0'); R(c, cx0 + 6, 13, 14, 1, '#404040'); T(c, '×', cx0 + 13, 2, 10, '#000000', 'center'); }
-  else T(c, '×', cx0 + 13, 7, 14, th.id === 'magazine' || th.id === 'app' || th.id === 'techo' ? '#ffffff' : th.headInk, 'center');
+  else T(c, '×', cx0 + 13, 7, 14, th.id === 'blog' ? th.accent : th.id === 'magazine' || th.id === 'app' || th.id === 'techo' ? '#ffffff' : th.headInk, 'center');
   ui.closeRect = { x: SW - 30, y: 0, w: 30, h: 30 };
 }
 
@@ -594,13 +598,19 @@ function drawTabs(ui, c, th, y, h, w, size) {
     }
     if (lit) { c.save(); c.globalAlpha = 0.25 + 0.15 * Math.sin(ui.t * 0.2); R(c, x + 1, y + 1, ww - 2, h - 2, '#ffffff'); c.restore(); }
     const kind = tabKind(tb);
-    const isz = big ? 2 : 1;
     const label = tb.label;
-    const lw = Math.min(measure(c, label, size), ww - 16 - 14 * isz);
-    const total = lw + 12 * isz + 4;
+    // the icon shrinks (or goes) before the label is cut
+    const lwFull = measure(c, label, size);
+    const isz = big ? (lwFull + 28 + 8 <= ww ? 2 : lwFull + 16 + 8 <= ww ? 1 : 0) : (lwFull + 16 + 8 <= ww ? 1 : 0);
+    const lw = Math.min(lwFull, ww - 8 - 14 * isz);
+    const total = lw + (isz ? 12 * isz + 4 : 0);
     const lx = x + Math.max(4, (ww - total) / 2);
-    icon(c, kind, lx, y + Math.round((h - 12 * isz) / 2) - (big ? 0 : 0), isz, th);
-    T(c, label, lx + 12 * isz + 4, y + Math.round((h - size) / 2) - 1, size, ink, 'left', ww - 16 - 14 * isz);
+    const iy = y + Math.round((h - 12 * isz) / 2);
+    if (isz) {
+      if (on && ['paper', 'segment', 'ribbon', 'pill'].includes(th.tab)) rrect(c, lx - 2, iy - 2, 12 * isz + 4, 12 * isz + 4, 3, 'rgba(255,255,255,0.85)');
+      icon(c, kind, lx, iy, isz, th);
+    }
+    T(c, label, lx + (isz ? 12 * isz + 4 : 0), y + Math.round((h - size) / 2) - 1, size, ink, 'left', ww - 8 - 14 * isz);
     if (tb.alert && safe(() => tb.alert(ui), false)) { const pulse = 3 + Math.abs(Math.sin(ui.t * 0.15)) * 1.5; c.fillStyle = '#ff3a50'; c.beginPath(); c.arc(x + ww - (big ? 12 : 7), y + (big ? 12 : 6), pulse, 0, Math.PI * 2); c.fill(); }
     ui.tabRects.push({ x, y, w: ww, h });
   });
@@ -654,7 +664,7 @@ function drawRow(ui, c, th, r, x, y, w, h, sel, touch) {
   const stw = cand.status === 'none' ? (r._seen ? 0 : Math.ceil(measure(c, 'NEW!', sz)) + 14) : (stampOf(th, cand.status) ? Math.ceil(measure(c, stampOf(th, cand.status)[0], sz)) + 14 : 0);
   void sw;
   const nm = r.label;
-  const prefix = th.id === 'bbs' ? `${String(140 + (strHash(cand.id) % 80)).padStart(4, '0')} ` : th.id === 'keitai' ? `${'①②③④⑤⑥⑦⑧⑨'[Math.min(8, r._n || 0)]}` : th.id === 'sns' && !cand.met ? '@' : '';
+  const prefix = th.id === 'bbs' ? `${String(140 + (strHash(cand.id) % 80)).padStart(4, '0')} ` : th.id === 'keitai' ? `${'①②③④⑤⑥⑦⑧⑨'[Math.min(8, r._n || 0)]}` : '';
   T(c, prefix + nm, tx, y + (big ? 8 : 4), big ? 15 : 12, sel && th.selInk ? ink : th.id === 'sns' || th.id === 'app' || th.id === 'blog' ? (sel ? th.accent : ink) : ink, 'left', x + w - tx - stw - 6);
   T(c, `${cand.age}歳・${styleShort(cand.style)}・${ROLES[cand.role] || ''}`, tx, y + (big ? 30 : 20), big ? 12 : 10, sub, 'left', x + w - tx - 8);
   T(c, cand.met ? `${prefName(cand.pref)}　${cand.persona ? cand.persona : ''}` : stampTime(g, THEMES[kindOf(cand.board)] || th, cand.id), tx, y + (big ? 48 : 31), big ? 11 : 9, sub, 'left', x + w - tx - 8);
@@ -755,7 +765,7 @@ function drawThread(ui, c, th, x0, y0, w, h, cand, size = 11) {
   const lh = size + 4;
   // measure from the newest back: show what fits
   const blocks = items.map((it) => {
-    const ls = wrapJ(c, it.text, it.who === 'sys' ? w - 12 : w - 64, size).slice(0, 3);
+    const ls = wrapJ(c, it.text, it.who === 'sys' ? w - 12 : w - 64, size).slice(0, 4);
     return { it, ls, h: it.who === 'sys' ? ls.length * lh + 6 : ls.length * lh + 12 + (it.day ? 0 : 0) };
   });
   let total = 0, from = blocks.length;
@@ -788,7 +798,7 @@ function drawThread(ui, c, th, x0, y0, w, h, cand, size = 11) {
 function knownLines(x) {
   const out = [];
   if (!x.met) {
-    out.push(['顔・人柄・相性は、会ってみるまでわからない。', 'sub']);
+    out.push(['顔・人柄・相性は、会うまでわからない', 'sub']);
     if (x.status === 'sent') out.push(['返事を待っている…', 'warn']);
     if (x.status === 'replied') out.push(['返事が来た！会いに行こう', 'good']);
     return out;
@@ -819,7 +829,8 @@ function button(ui, c, th, x, y, w, h, label, sub, live, onTap, size = 12) {
   if (live) { c.save(); c.beginPath(); c.rect(x, y, w, h); c.clip(); const p = (t % 150) / 150; if (p < 0.4) { const sx = x - 40 + (w + 80) * (p / 0.4); c.fillStyle = 'rgba(255,255,255,0.25)'; c.beginPath(); c.moveTo(sx, y + h); c.lineTo(sx + 16, y); c.lineTo(sx + 34, y); c.lineTo(sx + 18, y + h); c.closePath(); c.fill(); } c.restore(); }
   const ink = th.id === 'web' ? '#000000' : th.id === 'bbs' ? (live ? th.bg : th.sub) : live ? th.btnInk : th.dark ? '#a8b4c0' : '#6a5a64';
   const hasSub = sub && h >= 30;
-  const pre = live ? (lit && Math.floor(t / 20) % 2 ? '▶ ' : '　 ') : '';
+  const plain = /^[◀▲▼]|▶$/.test(label);
+  const pre = live && !plain ? (lit && Math.floor(t / 20) % 2 ? '▶ ' : '　 ') : '';
   T(c, pre + label, x + w / 2, y + (hasSub ? h / 2 - size - 1 : (h - size) / 2 - 1), size, ink, 'center', w - 12);
   if (hasSub) T(c, sub, x + w / 2, y + h / 2 + 2, Math.max(9, size - 3), ink, 'center', w - 12);
   if (onTap) ui.hits.push({ x, y, w, h, fn: onTap });
@@ -838,7 +849,7 @@ function cardHead(ui, c, th, cand, x, y, w, touch) {
   if (cand.status === 'none') { if (!ui._cardSeen) stw = newBadge(c, th, x + w - 8, y + 8, t, touch ? 12 : 10); }
   else { const s = stampOf(th, cand.status); if (s) stw = stampDraw(c, th, x + w - 10, y + 10, s[0], s[1], sk, 'right', touch ? 14 : 12); }
   const nameW = x + w - tx - stw - 14;
-  const handle = (th.id === 'sns' ? '@' : '') + cand.handle;
+  const handle = at(th, cand.handle);
   T(c, cand.met ? cand.name : handle, tx, y + 8, touch ? 18 : 15, th.id === 'web' ? '#0000cc' : th.id === 'bbs' ? th.accent : th.dark ? th.ink : th.accent, 'left', nameW);
   T(c, cand.met ? `（${BOARDS[cand.board] ? BOARDS[cand.board].short : ''}の「${cand.handle}」）` : `本名：？　${stampTime(g, THEMES[kindOf(cand.board)] || th, cand.id)}`, tx, y + (touch ? 30 : 27), touch ? 11 : 10, th.sub, 'left', x + w - tx - 10);
   let cx = tx;
@@ -876,10 +887,9 @@ function drawCard(ui, c, th, x, y, w, h, row, touch) {
   // right: the meter and the chart
   const rx = x + lw, rw = w - lw - 8;
   const m = meterView(g, cand);
-  const key = `${cand.id}|${m.kind}`;
-  if (ui._mKey !== key) { ui._mKey = key; ui._nv = 0; }
-  const wob = m.kind === 'guess' ? Math.sin(ui.t * 0.07) * m.band * 0.35 : 0;
-  ui._nv += (m.v + wob - ui._nv) * 0.12;
+  const mk = ui.t - (ui.cardT || 0); // the needle swings in when the card appears (time based: draw may run at any rate)
+  const wob = m.kind === 'guess' ? Math.sin(ui.t * 0.07) * m.band * 0.35 * ease(mk / 30) : 0;
+  ui._nv = m.v * ease(mk / 30) + wob + (mk < 50 ? Math.sin(mk * 0.4) * (50 - mk) * 0.06 : 0);
   const view = statView(g, cand);
   const rk = ease((ui.t - (ui.cardT || 0) - 4) / 18);
   if (touch) {
@@ -888,10 +898,11 @@ function drawCard(ui, c, th, x, y, w, h, row, touch) {
     T(c, { pr: '自己PR（会えばわかる）', first: '第一印象', full: 'ネタ合わせで判明' }[view.level], rx + rw * 0.72, by + bh - 14, 10, th.sub, 'center', rw * 0.5);
     T(c, view.level !== 'pr' ? '- - あなた' : '★ 得意', rx + rw * 0.27, by + bh - 14, 10, view.level !== 'pr' ? th.accent2 : th.accent, 'center', rw * 0.5);
   } else {
-    meter(c, th, rx + rw / 2, by + 56, 42, m, ui._nv, ui.t, 10);
-    radar(c, th, rx + rw / 2, by + 134, 38, view, ui.t, rk, 10);
-    T(c, { pr: '自己PR（★得意。会えばわかる）', first: '第一印象（だいたい）', full: 'ネタ合わせで判明' }[view.level], rx + rw / 2, by + bh - 12, 9, th.sub, 'center', rw);
-    if (view.level !== 'pr') { R(c, rx + 8, by + 84, 10, 2, th.accent); T(c, '相手', rx + 20, by + 80, 9, th.sub); R(c, rx + 8, by + 96, 10, 2, th.accent2); T(c, 'あなた', rx + 20, by + 92, 9, th.sub); }
+    meter(c, th, rx + rw / 2, by + 52, 36, m, ui._nv, ui.t, 10);
+    radar(c, th, rx + rw / 2 + 12, by + 124, 33, view, ui.t, rk, 10);
+    T(c, { pr: '★自己PR', first: '第一印象', full: '判明！' }[view.level], rx + 4, by + 76, 10, view.level === 'full' ? th.accent : th.sub, 'left', 64);
+    if (view.level !== 'pr') { R(c, rx + 4, by + 96, 10, 2, th.accent); T(c, '相手', rx + 16, by + 91, 9, th.sub, 'left', 40); R(c, rx + 4, by + 108, 10, 2, th.accent2); T(c, 'あなた', rx + 16, by + 103, 9, th.sub, 'left', 40); }
+    else T(c, '会えば', rx + 4, by + 92, 9, th.sub, 'left', 50), T(c, 'わかる', rx + 4, by + 103, 9, th.sub, 'left', 50);
   }
   c.restore();
 }
@@ -940,7 +951,7 @@ function drawPostCard(ui, c, th, x, y, w, h, touch) {
   const rx = x + lw, rw = w - lw - 8;
   const mine = myStats(g);
   const view = { level: 'full', stats: mine, mine: null, pr: [] };
-  radar(c, th, rx + rw / 2, by + (touch ? 74 : 86), touch ? 40 : 44, view, ui.t, ease((ui.t - (ui.cardT || 0) - 4) / 18), 10);
+  radar(c, th, rx + rw / 2, by + (touch ? 62 : 82), touch ? 36 : 42, view, ui.t, ease((ui.t - (ui.cardT || 0) - 4) / 18), 10);
   T(c, 'あなたの実力（自己PR）', rx + rw / 2, by + bh - 14, 10, th.sub, 'center', rw);
   c.restore();
 }
@@ -1028,7 +1039,7 @@ export function fxContact(ui, cand) {
   const th = THEMES[kindOf(cand.board)] || themeOf(ui);
   ui.fx = { kind: 'contact', k: 0, dur: 86, th, cand };
 }
-function fxMatch(ui, cand) {
+export function fxMatch(ui, cand) {
   const th = THEMES[kindOf(cand.board)] || themeOf(ui);
   ui.fx = { kind: 'match', k: 0, dur: 160, th, cand };
   sfx(th.id === 'app' ? 'fanfare' : 'chime');
@@ -1081,13 +1092,14 @@ function drawFx(ui, c, g) {
       for (const [x0, look] of [[lx, me], [rx, cand.look]]) { c.fillStyle = '#ffffff'; c.beginPath(); c.arc(x0, cy - 10, 52, 0, Math.PI * 2); c.fill(); c.save(); c.beginPath(); c.arc(x0, cy - 10, 48, 0, Math.PI * 2); c.clip(); R(c, x0 - 48, cy - 58, 96, 96, '#ffe4ec'); try { drawFaceHD(c, look || {}, x0 - 48, cy - 46, 3); } catch (e) { /* no face */ } c.restore(); }
       const hs = 18 + Math.max(0, Math.sin(k * 0.18)) * 8;
       heart(c, cx, cy - 10, hs * p, '#ff4f86');
-      c.save(); c.translate(cx, 60); const sc = 0.6 + 0.4 * p + Math.max(0, Math.sin(k * 0.12)) * 0.04; c.scale(sc, sc); c.transform(1, 0, -0.15, 1, 0, 0); T(c, 'MATCH!', 0, -24, 30, '#ffffff', 'center', 0, '#ff4f86'); T(c, 'マッチング成立！', 0, 12, 18, '#ffd23f', 'center', 0, '#c8245a'); c.restore();
+      star(c, cx, 66, 96 * p, 60 * p, 16, t * 0.012, 'rgba(255,210,63,0.30)');
+      c.save(); c.translate(cx, 66); const sc = 0.6 + 0.4 * p + Math.max(0, Math.sin(k * 0.12)) * 0.04; c.scale(sc, sc); c.transform(1, 0, -0.15, 1, 0, 0); T(c, 'MATCH!', 0, -24, 30, '#ffffff', 'center', 0, '#ff4f86'); T(c, 'マッチング成立！', 0, 12, 18, '#ffd23f', 'center', 0, '#c8245a'); c.restore();
     } else if (th.id === 'sns') {
       const by = -60 + p * 120;
       rrect(c, cx - 200, by, 400, 70, 12, '#1e2a36', th.accent, 2);
       R(c, cx - 188, by + 12, 44, 44, '#2a3a4a'); portrait(c, th, cand.look, cx - 188, by + 12, 44, 44, true);
-      T(c, '🔔'.length === 2 ? 'DMが届きました' : 'DMが届きました', cx - 134, by + 12, 14, th.accent, 'left', 320);
-      T(c, `@${cand.handle}：募集見ました！一度会って話しませんか？`, cx - 134, by + 36, 11, th.ink, 'left', 320);
+      T(c, 'DMが届きました', cx - 134, by + 12, 14, th.accent, 'left', 320);
+      T(c, `${at(th, cand.handle)}：募集見ました！一度会って話しませんか？`, cx - 134, by + 36, 11, th.ink, 'left', 320);
       sparkles(c, t, cx - 200, by, 400, 70, 10, 3, '#9ad4ff');
     } else if (th.id === 'keitai') {
       const sh = k < 40 ? Math.sin(k * 1.7) * 4 : 0;
@@ -1268,8 +1280,8 @@ export function boardPost(ui, g) {
   const key = `${ui.tab.id}|${row ? row.key : ''}`;
   if (ui._cardKey !== key) { ui._cardKey = key; ui.cardT = ui.t; ui._cardSeen = row && row.c ? isSeen(g, row.c.id) : true; }
   const shown = row && row.c && (!ui.touchLayout || ui.view === 'card');
-  if (shown && row.c.status === 'none' && ui.t - ui.cardT === 45) markSeen(g, row.c.id);
-  if (ui.t - ui._checkT >= 30 && !ui.fx && !ui.modals.length && ui.busy === 0 && g.top === ui) {
+  if (shown && row.c.status === 'none' && !ui._cardSeen && ui.t - ui.cardT >= 45) { markSeen(g, row.c.id); ui._cardSeen = true; }
+  if (ui.t > 3 && ui.t - ui._checkT >= 30 && !ui.fx && !ui.modals.length && ui.busy === 0 && g.top === ui) {
     ui._checkT = ui.t;
     const list = safe(() => g.owaraiCandidates('net'), []) || [];
     ui._counts = { replied: list.filter((x) => x.status === 'replied').length, contacts: list.filter((x) => x.status !== 'none').length, all: list.length };
@@ -1282,7 +1294,7 @@ export function boardPost(ui, g) {
         if (n.uiAck && n.uiAck[x.id] === kk) continue;
         if (!n.uiAck || typeof n.uiAck !== 'object') n.uiAck = {};
         n.uiAck[x.id] = kk;
-        if (ui.t > 3) fxMatch(ui, x);
+        fxMatch(ui, x);
         break;
       }
     }
@@ -1343,7 +1355,7 @@ export function drawBoard(ui, c, g) {
         const a = actionOf(row.c);
         const sub = a.sub ? fit(c, a.sub, 180, 10) : '';
         if (sub) T(c, sub, D.x + 12, D.y + D.h - 24, 10, th.sub, 'left', 180);
-        button(ui, c, th, D.x + D.w - 200, D.y + D.h - 30, 192, 24, `A：${a.label}`, '', a.live || a.label !== '…', () => doAct(ui, row), 12);
+        button(ui, c, th, D.x + D.w - 200, D.y + D.h - 30, 192, 24, `A：${a.label}`, '', a.live, () => doAct(ui, row), 12);
       } else {
         cardPanel(c, th, D.x, D.y, D.w, D.h);
         const b = ui.tab.board;
@@ -1391,6 +1403,7 @@ export function meetOverlay(scene, c, g) {
   R(c, 0, 25, SW, 1, th.id === 'bbs' ? th.ink : th.accent2);
   if (th.id === 'bbs') R(c, 0, 0, SW, 26, '#010703');
   const ink = th.id === 'bbs' ? th.ink : th.headInk;
+  rrect(c, 6, 4, 18, 18, 4, 'rgba(255,255,255,0.85)');
   icon(c, B.kind || 'techo', 8, 6, 1.2, th);
   T(c, o.title || `${spot.name || ''}で待ち合わせ`, 28, 6, 13, ink, 'left', 300, th.id === 'bbs' || th.dark ? null : shade(th.head1, -0.3));
   T(c, `${B.short || ''}${D.hm ? `　${D.hm}` : ''}`, SW - 10, 8, 10, ink, 'right', 260);
@@ -1402,14 +1415,12 @@ export function meetOverlay(scene, c, g) {
     const x = -260 + k * 268, y = 32;
     c.save();
     c.globalAlpha = clamp(k * 1.5, 0, 1);
-    rrect(c, x, y, 252, 40, 6, th.dark ? 'rgba(10,20,40,0.85)' : 'rgba(255,255,255,0.9)', th.accent, 2);
+    rrect(c, x, y, 252, 40, 6, th.dark ? '#0c1628' : '#ffffff', th.accent, 2);
     R(c, x + 6, y + 6, 28, 28, th.dark ? '#2a3a4a' : '#e4ecf4');
     try { drawFaceHD(c, (PEOPLE[pid] && PEOPLE[pid].look) || {}, x + 4, y + 9, 1); } catch (e) { /* no face */ }
-    T(c, formed ? '相方' : '相方候補', x + 40, y + 5, 9, '#ffffff', 'left', 60);
     const lw = measure(c, formed ? '相方' : '相方候補', 9);
-    c.globalCompositeOperation = 'destination-over';
-    rrect(c, x + 37, y + 4, lw + 6, 12, 3, th.accent);
-    c.globalCompositeOperation = 'source-over';
+    rrect(c, x + 37, y + 4, lw + 6, 13, 3, formed ? '#d4a017' : th.id === 'bbs' ? '#0f5a22' : th.accent);
+    T(c, formed ? '相方' : '相方候補', x + 40, y + 5, 9, '#ffffff', 'left', 60);
     T(c, cand.s ? `${cand.s}（${cand.age}）` : '', x + 46 + lw, y + 4, 11, th.dark ? '#ffffff' : th.ink, 'left', 252 - 56 - lw);
     T(c, `${styleShort(cand.style)}・${ROLES[cand.role] || ''}志望${cand.h ? `　「${cand.h}」` : ''}`, x + 40, y + 21, 10, th.dark ? '#c8d4e8' : th.sub, 'left', 206);
     c.restore();
@@ -1444,15 +1455,15 @@ export function meetOverlay(scene, c, g) {
   }
   // the result: a 手ごたえ meter, a stamp slammed in
   if (scene.trial) {
-    if (scene._trialRef !== scene.trial) { scene._trialRef = scene.trial; scene._trialT = t; scene._nv = 0; }
+    if (scene._trialRef !== scene.trial) { scene._trialRef = scene.trial; scene._trialT = Number.isFinite(scene.trialT) ? scene.trialT : t; }
     const tr = scene.trial;
     const k = t - scene._trialT;
-    scene._nv = (scene._nv || 0) + (num(tr.score) - (scene._nv || 0)) * 0.08;
+    scene._nv = num(tr.score) * ease(k / 40) + (k < 60 ? Math.sin(k * 0.4) * (60 - k) * 0.08 : 0);
     const mth = { ...th, dark: true, sub: '#d8d0e8', line: '#5a5070', accent: th.accent, accent2: th.accent2 };
-    rrect(c, SW - 150, 34, 142, 82, 8, 'rgba(10,6,14,0.82)', th.accent, 1);
+    rrect(c, SW - 150, 34, 142, 82, 8, '#160f1c', th.accent, 1);
     meter(c, mth, SW - 79, 96, 34, { v: num(tr.score), band: 0, label: '手ごたえ', kind: 'trial' }, scene._nv, t, 10);
     const good = num(tr.score) >= 55;
-    const big = k < 70;
+    const big = k < 70 && !formed;
     const word = num(tr.score) >= 70 ? '息ぴったり！' : good ? '手ごたえあり' : num(tr.score) >= 40 ? 'ぎこちない…' : 'かみ合わない…';
     if (big) {
       const sk = clamp(k / 10, 0, 1);
