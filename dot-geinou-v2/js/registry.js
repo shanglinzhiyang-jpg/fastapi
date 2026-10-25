@@ -79,6 +79,11 @@ export const MODULES = [
   './places/kyoshujo.js',
   './places/menkyo.js',
   './places/gassyuku.js',
+  // [R9-B1] 鉄道ネットワーク: 駅構内 'eki' (券売機・改札・ホーム・路線図・乗車), 駅前の街 (東京 8・大阪 2), 教習所は調布・
+  // 免許センターは府中へ (after clock.js: eki.js wraps g.goto for the walk in and out of a station) (api: test-output/api_eki.txt)
+  './world/eki.js',
+  './world/ekimae_tokyo.js',
+  './world/ekimae_osaka.js',
   // regime & security core (体制・自衛隊・震災対応・報道の自由・戦争) and its scenes + phone app 危機管理
   './engine/regime.js',
   './world/kiki.js',
