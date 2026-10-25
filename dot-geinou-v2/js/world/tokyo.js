@@ -145,7 +145,9 @@ const nscTokyoOpen = (g) => yearOf(g) >= 1995;
 function neonGateSouth(x, y) {
   const F = (ctx, x0, y0, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x0, y0, w, h); };
   return {
-    type: 'prop', x, y, w: 7, h: 1, solid: false,
+    // z: drawn under anyone standing on the avenue rows above (the player arriving from ネオン街
+    // stands right behind it on row 44 and must stay in sight)
+    type: 'prop', x, y, w: 7, h: 1, solid: false, z: -100,
     draw(ctx, sx, sy, g) {
       const t = (g && g.frame) || 0;
       // light spilling out of the street beyond
@@ -287,7 +289,7 @@ function districtEntities() {
     { type: 'npc', id: 'gd_writer', x: 6, y: 52, dir: 'down', look: { ...LOOKS.comedian2, top: '#5a6f8a' }, name: 'ネタを書く若者', wander: 2,
       text: ['あの喫茶店でネタを書くのが日課なんだ。', 'コーヒー一杯で三時間。\n…マスターの目が、ちょっとこわい。'] },
     { type: 'npc', id: 'gd_nsc', x: 27, y: 53, dir: 'down', look: { ...LOOKS.comedian, top: '#e8492a', hairColor: 'black' }, name: 'NSC生', cond: nscOpen,
-      text: ['NSCの授業、今日はネタ見せだったんです。', '講師の先生に「三分もいらん、一分で笑わせろ」って\n言われちゃって…。', '同期が何百人もいるから、顔と名前を\n覚えてもらうだけでもたいへんなんですよ。'] },
+      text: ['NSCの授業、今日はネタ見せだったんです。', '講師の先生に「三分もいらん、一分で笑わせろ」って\n言われちゃって…。', '同期がたくさんいるから、顔と名前を\n覚えてもらうだけでもたいへんなんですよ。'] },
     { type: 'npc', id: 'gd_hopeful', x: 27, y: 53, dir: 'down', look: { ...LOOKS.comedian, top: '#2f6fd0', hairColor: 'black' }, name: '芸人志望の若者', cond: before,
       text: ['よしもとの事務所が近いから、\nこのへんには芸人志望が多いんだ。', 'みんな、劇場の前座やライブのオーディションで\nちょっとずつ舞台に立ってるよ。'] },
     { type: 'npc', id: 'gd_boke', x: 37, y: 58, dir: 'right', look: { ...LOOKS.comedian, top: '#ff8a3d', hairColor: 'brown' }, name: 'ネタ合わせ中の芸人', fixedDir: true,
@@ -473,7 +475,7 @@ function generate() {
   entities.push(machiSignpost(2, 18));
   entities.push(minatoSignpost(W - 2, 18));
   if (PLACES.nagatacho) entities.push(nagatachoSignpost(43, 3));
-  if (PLACES.kanraku) entities.push(kanrakuSignpost(43, 43));
+  if (PLACES.kanraku) entities.push(kanrakuSignpost(44, 42)); // beside the gate's east pillar
   const warps = [];
   for (let y = 19; y <= 23; y++) warps.push({ x: 0, y, place: 'machi', room: 'main', tx: 46, ty: y - 3, dir: 'left' }); // machi's road: rows 16..20
   for (let y = 19; y <= 23; y++) warps.push({ x: W - 1, y, place: 'minato', room: 'main', tx: 1, ty: y + 5, dir: 'right' }); // minato's road: rows 24..28

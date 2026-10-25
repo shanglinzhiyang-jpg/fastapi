@@ -268,10 +268,12 @@ function arrivals(m) {
   }
   return pts;
 }
+// A ?test=1 start is a fresh game placed on today's coordinates.
+const testStart = () => { try { return /[?&]test=/.test(window.location.search); } catch (e) { return false; } };
 async function nambaEnter(g) {
   const m = g.map, p = m && m.player;
   if (p && g.state && g.state.flags && g.flag('map_namba') !== 2) {
-    if (!arrivals(m).has(`${p.x},${p.y}`) && p.x + OX < NAMBA_W - 1) Object.assign(p, { x: p.x + OX, px: (p.x + OX) * TILE, tx: p.x + OX });
+    if (!testStart() && !arrivals(m).has(`${p.x},${p.y}`) && p.x + OX < NAMBA_W - 1) Object.assign(p, { x: p.x + OX, px: (p.x + OX) * TILE, tx: p.x + OX });
     g.setFlag('map_namba', 2);
     if (typeof m.updateCamera === 'function') m.updateCamera(true);
   }
