@@ -180,8 +180,9 @@ export function m1Rules(year) {
   R('r3', '3回戦', 180, cal.r3, year <= 2010 ? 50 : Math.min(140, Math.max(90, Math.round(E * 0.011))), { judge: '予選審査員' });
   if (hasQF) R('qf', '準々決勝', 240, cal.qf, 30, { judge: '予選審査員', wildcard: true });
   R('sf', '準決勝', year <= 2010 ? 240 : 240, cal.sf, finalists - (revival ? 1 : 0), { judge: '予選審査員', press: true });
-  const fee = year >= 2025 ? { per: 'person', nominal: 1000, text: '1人1,000円', verified: true }
-    : { per: 'unit', nominal: 2000, text: '1組2,000円', verified: year >= 2019 };
+  // texts carry the word joiner (util.js YEN_MARK) so the era's price scaling (yenText) leaves the real amount alone
+  const fee = year >= 2025 ? { per: 'person', nominal: 1000, text: '1人\u20601,000円', verified: true }
+    : { per: 'unit', nominal: 2000, text: '1組\u20602,000円', verified: year >= 2019 };
   const revivalFormat = !revival ? null
     : year <= 2010 ? { kind: 'outdoor', venue: year === 2009 ? '大井競馬場（東京）' : '屋外の特設会場（東京）', judge: year === 2002 ? '一般審査員100人＋プロの審査員5人' : '特別審査員＋一般審査員100人', outdoor: true }
       : year <= 2022 ? { kind: 'vote', venue: '六本木ヒルズアリーナ（屋外）', judge: '視聴者投票（得票1位が決勝へ）', outdoor: true }

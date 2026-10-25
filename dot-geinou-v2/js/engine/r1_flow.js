@@ -18,7 +18,7 @@ import {
   has, safe, num, n0, realYen, plainYen, toInternal, eraId, devWord, rngOf, gauss, rint, pickR, shuffleR,
   cdate, absIdx, dayOf, dateText, dateTextY, randomLook, actInfo, powerOf, qualityOf, chooseNeta, netaUsedBefore,
   performAct, playerTotal, rivalTotal, cutScore, shortfallReasons, kitMorning, runKitMorning, morningNote, goRefusal,
-  d1Hub, statOf, sendOffer, realNameLike, isAutoNeta, samePenalty,
+  d1Hub, statOf, sendOffer, realNameLike, isAutoNeta, samePenalty, nameGender, emitNews,
 } from './r1_kit.js';
 import {
   THEMES, T, fit, jwrap, para, R, box, frame, alpha, drawBig, faceAt, confetti, stage, unstage, card, drumroll, infoCard, sfx, sizeFor,
@@ -96,7 +96,7 @@ export function makeContest(cfg) {
     // last year's champion and finalists come back with their tags (when the rules let them)
     if (prev && prev.champ && cfg.champBack !== false) {
       const n = notables[rint(rng, 0, 3)];
-      n.name = prev.champ; n.tags = ['前年王者']; n.str = Math.max(n.str, 84);
+      n.name = prev.champ; n.gender = nameGender(n.name) || n.gender; n.tags = ['前年王者']; n.str = Math.max(n.str, 84);
       if (prev.champType) n.type = prev.champType;
       if (prev.champPlayer) { n.ghost = true; } // the player won last year: no NPC copy of the player
     }

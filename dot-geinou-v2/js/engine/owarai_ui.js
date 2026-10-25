@@ -144,6 +144,13 @@ export class MeetScene {
 const LIST = { x: 4, y: 42, w: 236, h: 292, rh: 22 };
 const DETAIL = { x: 244, y: 42, w: 392, h: 292 };
 const inR = (x, y, r) => r && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+// Touch layout (body.touch): a 70-unit tab bar with a 70×70 × cell (≈ 44 CSS px at a 412-px-wide canvas: 640 units → 412 px),
+// no footer, and the body (list + detail, drawn for y 42..334) scaled by 286/292 into y 72..358. Desktop is unchanged.
+const isTouch = () => typeof document !== 'undefined' && !!document.body && document.body.classList.contains('touch');
+const TB = 70;
+const TS = (SH - TB - 2) / 292;
+const TOX = (SW - SW * TS) / 2;
+const TOY = TB + 2 - 42 * TS;
 const sceneOf = (g) => g && g.scenes && g.scenes.find((s) => s.isOwaraiUI && !s.closed);
 let tapCanvas = null;
 function bindTap(g) {
@@ -214,9 +221,11 @@ class OwScreen {
   }
   handleTap(tap, inp) {
     const now = inp.pressedNow || {};
-    const { x, y } = tap;
-    if (inR(x, y, { x: SW - 24, y: 0, w: 24, h: 20 })) { now.a = false; sfx('cancel'); this.close(); return true; }
-    for (let i = 0; i < (this.tabRects || []).length; i++) if (inR(x, y, this.tabRects[i])) { now.a = false; this.focus = 'tabs'; if (i !== this.tabIdx) { this.setTab(i); sfx('cursor'); } return true; }
+    const touch = !!this.touchLayout;
+    if (inR(tap.x, tap.y, touch ? { x: SW - TB, y: 0, w: TB, h: TB } : { x: SW - 24, y: 0, w: 24, h: 20 })) { now.a = false; sfx('cancel'); this.close(); return true; }
+    for (let i = 0; i < (this.tabRects || []).length; i++) if (inR(tap.x, tap.y, this.tabRects[i])) { now.a = false; this.focus = 'tabs'; if (i !== this.tabIdx) { this.setTab(i); sfx('cursor'); } return true; }
+    // the body is drawn scaled on touch: back to its own units
+    const x = touch ? (tap.x - TOX) / TS : tap.x, y = touch ? (tap.y - TOY) / TS : tap.y;
     const L = this.listRect;
     if (L && inR(x, y, L)) {
       const rows = this.rows();
@@ -245,7 +254,33 @@ class OwScreen {
     for (const s of this.g.scenes) if (s.isPhone) s.tapAt = null;
     this.resolve(null);
   }
+  drawTouch(c, g) {
+    const th = this.cfg.theme || {};
+    R(c, 0, 0, SW, SH, th.bg || K.bg);
+    this.tabRects = [];
+    const tabs = this.cfg.tabs;
+    const tw = (SW - TB) / tabs.length;
+    tabs.forEach((tb, i) => {
+      const x = Math.round(i * tw), w = Math.round((i + 1) * tw) - x, on = i === this.tabIdx;
+      R(c, x + 1, 0, w - 2, TB - 2, on ? (this.focus === 'tabs' ? (th.accent || K.gold) : K.panel2) : '#120d16');
+      if (on) R(c, x + 1, TB - 5, w - 2, 3, th.accent || K.gold);
+      T(c, tb.label, x + w / 2, TB / 2 - 8, 14, on && this.focus === 'tabs' ? K.ink : on ? (th.accent || K.gold) : K.text, 'center', w - 8);
+      if (tb.alert && safe(() => tb.alert(this), false)) R(c, x + w - 12, 8, 6, 6, K.bad);
+      this.tabRects.push({ x, y: 0, w, h: TB });
+    });
+    R(c, SW - TB + 1, 0, TB - 2, TB - 2, '#3a1a2a');
+    T(c, '×', SW - TB / 2, TB / 2 - 12, 24, K.text, 'center');
+    c.save();
+    c.translate(TOX, TOY);
+    c.scale(TS, TS);
+    try { this.tab.draw(this, c); } catch (e) { console.error(e); }
+    c.restore();
+    this.toasts.forEach((t, i) => { const w = Math.min(SW - 40, measure(c, t.text, 12) + 20); R(c, (SW - w) / 2, 300 - i * 22, w, 20, 'rgba(0,0,0,0.85)'); T(c, t.text, SW / 2, 304 - i * 22, 12, t.color, 'center', w - 10); });
+    for (const m of this.modals) { R(c, 0, 0, SW, SH, 'rgba(0,0,0,0.5)'); m.draw(this, c); }
+  }
   draw(c, g) {
+    this.touchLayout = isTouch();
+    if (this.touchLayout) { this.drawTouch(c, g); return; }
     const th = this.cfg.theme || {};
     R(c, 0, 0, SW, SH, th.bg || K.bg);
     R(c, 0, 0, SW, 20, th.head || K.head);

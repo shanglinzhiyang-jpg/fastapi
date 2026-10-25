@@ -15,6 +15,7 @@ import { MINIGAMES, rankFor } from './minigame.js';
 import { SW, SH, clamp, mulberry32 } from './util.js';
 import { text, panel, rect, measure, wrap, COLORS, sparkle } from './draw.js';
 import { charSheetHD, LOOKS } from './sprites.js';
+import { isRealNameLike } from './contests_gen.js'; // D1's real-name guard (pure module)
 // the current in-game year (D1's contestDate is the same calendar; kept local so this file never depends on D1's load order)
 export function contestYear(g) {
   try { if (g && typeof g.gameDate === 'function') { const d = g.gameDate(); if (d && Number.isFinite(d.year)) return d.year; } } catch (e) { /* fall back */ }
@@ -102,14 +103,12 @@ const GIV = ['典膳', 'ひかる', '総一郎', 'いずみ', '慎平', '麻里�
   '冬馬', '小夜', '銀次', 'つばさ', '茂', '佳代', '弥生', '鉄平', '若菜', '寅彦', 'ゆかり', '紋次郎', 'みどり', '健吾', '菊乃', '与一'];
 const RAKUGO = ['亭', '家', '風亭', '遊亭', '舎'];
 const RAKUGO_A = ['春風', '桂木', '月の', '松葉', '柳原', '三笑', '笑福', '林家', '金原', '古今']; // generic yago parts (no real name)
-export function combiName(r) {
-  const x = r();
-  if (x < 0.12) return pickR(SOLO, r);
-  return pickR(CA, r) + pickR(CB, r);
-}
-export function personName(r) { return `${pickR(FAM, r)} ${pickR(GIV, r)}`; }
+const realSafe = (gen) => (r) => { let n = gen(r); for (let k = 0; k < 12 && safeReal(n); k++) n = gen(r); return n; };
+const safeReal = (n) => { try { return !!isRealNameLike(n) || !!isRealNameLike(String(n).replace(/\s+/g, '')); } catch (e) { return false; } };
+export const combiName = realSafe((r) => (r() < 0.12 ? pickR(SOLO, r) : pickR(CA, r) + pickR(CB, r)));
+export const personName = realSafe((r) => `${pickR(FAM, r)} ${pickR(GIV, r)}`);
 // 亭号 made of parts that form no real 亭号 (no 春風亭・笑福亭・三遊亭・古今亭・柳亭・月亭…)
-export function rakugoName(r) { return `${pickR(['梅', '竹', '鶴', '星', '霞', '雲', '汐', '楓', '萩', '凪'], r)}${pickR(['丸', '輔', '蔵', '吉', '之', '朝', '光', '波', '香', '石'], r)}亭 ${pickR(['小', '若', '新', ''], r)}${pickR(['ぽん', '鶴', '平', '喬', '虎', '蝶', '鹿', '丈', '雁', '燕'], r)}`; }
+export const rakugoName = realSafe((r) => `${pickR(['梅', '竹', '鶴', '星', '霞', '雲', '汐', '楓', '萩', '凪'], r)}${pickR(['丸', '輔', '蔵', '吉', '之', '朝', '光', '波', '香', '石'], r)}亭 ${pickR(['小', '若', '新', ''], r)}${pickR(['ぽん', '鶴', '平', '喬', '虎', '蝶', '鹿', '丈', '雁', '燕'], r)}`);
 void RAKUGO; void RAKUGO_A;
 export const JUDGE_TITLES = ['漫才師（芸歴40年）', 'コント師', '放送作家', 'ピン芸人', '演出家', '落語家', '劇場支配人', '元・賞レース王者', '構成作家', 'お笑い評論家'];
 
@@ -201,6 +200,9 @@ export function rivals(g, ctx, n, opts = {}) {
     }
   } catch (e) { console.error(e); }
   if (!list) list = [];
+  // D1's world field is kept (names, tags, order) but never weaker than this round's level: a TV final's acts are strong
+  if (opts.level != null) list = list.map((x) => ({ ...x, power: Math.max(Number(x.power) || 0, clamp(Math.round(level + gauss(r) * (opts.spread ?? 10)), 5, 99)) }));
+  list = list.map((x) => (safeReal(x.name) ? { ...x, name: opts.rakugo ? rakugoName(r) : combiName(r) } : x));
   const seen = new Set(list.map((x) => x.name));
   while (list.length < n) {
     let name = opts.rakugo ? rakugoName(r) : combiName(r);

@@ -1002,24 +1002,34 @@ export function registerEntry(g, id, fields = {}) {
 // ================================================================ news (rate-limited) & messages
 export const NEWS_FROM = 'ドット芸能 お笑い速報'; // matches the news app's press filter and its 芸能 category
 export const OFFICE_FROM = '賞レース事務局'; // personal notices (entries, reminders, results): メッセージ, not the news feed
-const DIRECT_PER_DAY = 3;
+// The morning cap (DECISIONS6 §5): every contest-related phone message of a morning — D1's news, any module's personal
+// contest mail (M-1 / KOC / R-1 / ABC 事務局 …) and the digest — totals ≤ MORNING_CAP. With more, the 2 most important go out
+// as messages and the rest as ONE digest (never a 1-item digest). The morning window opens with the first morning hook and
+// closes after the last one, so a module whose hook runs before D1's is queued too.
+const MORNING_CAP = 3;
+const DAY_NEWS = 3; // news pushed later in the day: up to 3 a day go out at once, the rest wait for the next morning's queue
 let inMorning = false;
+let morningDay = null;
 function dailyCount(g) { const c = cstate(g); if (c.daily.day !== todayOf(g)) c.daily = { day: todayOf(g), n: 0 }; return c.daily; }
 function logNews(g, text, opts) {
   const c = cstate(g);
-  c.news.unshift({ day: todayOf(g), text: String(text), contest: opts.contest || null, kind: opts.personal ? 'personal' : 'news' });
+  c.news.unshift({ day: todayOf(g), text: String(text), contest: opts.contest || null, kind: opts.personal ? 'personal' : 'news', ...(opts.personal && opts.from ? { from: String(opts.from) } : {}) });
   if (c.news.length > 120) c.news.length = 120;
 }
-// opts: { contest, cat, from, personal (a notice to the player: 賞レース事務局), prio (0..100), key (sent once per key) }
+const morningNow = (g) => inMorning && morningDay === todayOf(g);
+// opts: { contest, cat, from, personal (a notice to the player; from defaults to 賞レース事務局), priority | prio (0..100; personal
+// default 90, news 40), key (sent once per key), look (sender avatar), kind (phone message kind, default 'news') }
 export function pushNews(g, text, opts = {}) {
   if (!text || !g.state) return false;
   const c = cstate(g);
   if (opts.key) { if (c.sent[opts.key]) return false; c.sent[opts.key] = todayOf(g); }
   logNews(g, text, opts);
-  const item = { text: String(text), contest: opts.contest || null, from: opts.from || (opts.personal ? OFFICE_FROM : NEWS_FROM), personal: !!opts.personal, prio: num(opts.prio, opts.personal ? 90 : 40), look: opts.look, kind: opts.kind };
-  if (inMorning) { c.queue.push(item); return true; }
+  const prio = num(opts.priority ?? opts.prio, opts.personal ? 90 : 40);
+  const item = { text: String(text), contest: opts.contest || null, from: opts.from || (opts.personal ? OFFICE_FROM : NEWS_FROM), personal: !!opts.personal, prio, look: opts.look, kind: opts.kind };
+  if (morningNow(g)) { c.queue.push(item); return true; }
+  // later in the day: a personal notice answers something the player just did, so it goes out at once
   const d = dailyCount(g);
-  if (d.n < DIRECT_PER_DAY || item.personal) { sendItem(g, item); d.n++; return true; }
+  if (item.personal || d.n < DAY_NEWS) { sendItem(g, item); d.n++; return true; }
   c.queue.push(item);
   return true;
 }
@@ -1028,22 +1038,23 @@ function sendItem(g, it) {
   if (it.look) msg.look = it.look;
   g.message(msg);
 }
-// The morning's queue: the 3 most important go out as messages, everything else as one digest.
+// The morning's queue: ≤ MORNING_CAP messages in all. More than that → the (CAP − 1) most important as messages + one digest.
 function flushQueue(g) {
   const c = cstate(g);
   if (!c.queue.length) return;
   const q = c.queue.splice(0).sort((a, b) => b.prio - a.prio);
   const d = dailyCount(g);
-  const direct = [];
-  const rest = [];
-  for (const it of q) { if (d.n + direct.length < DIRECT_PER_DAY) direct.push(it); else rest.push(it); }
+  const direct = q.length <= MORNING_CAP ? q : q.slice(0, MORNING_CAP - 1);
+  const rest = q.length <= MORNING_CAP ? [] : q.slice(MORNING_CAP - 1);
   // the digest goes in first and the most important message last, so it sits on top of the inbox
   if (rest.length) {
     const personal = rest.filter((x) => x.personal), news = rest.filter((x) => !x.personal);
     const head = (s) => String(s).split('\n')[0];
-    const lines = [...personal.map((x) => `◆${head(x.text)}`), ...news.slice(0, 14).map((x) => `・${head(x.text)}`)];
-    if (news.length > 14) lines.push(`ほか${news.length - 14}件（賞レースの画面「ニュース」で全部読める）`);
-    sendItem(g, { from: NEWS_FROM, text: `【お笑いニュースまとめ】${rest.length}件\n${lines.join('\n')}`, prio: 0 });
+    const lines = [...personal.map((x) => `◆${x.from && x.from !== OFFICE_FROM ? `${x.from}：` : ''}${head(x.text)}`), ...news.slice(0, 14).map((x) => `・${head(x.text)}`)];
+    if (news.length > 14) lines.push(`ほか${news.length - 14}件`);
+    lines.push('（全文は「賞レース」の「ニュース」で読める）');
+    const title = personal.length ? '【賞レースのお知らせ・ニュース】' : '【お笑いニュースまとめ】';
+    sendItem(g, { from: NEWS_FROM, text: `${title}${rest.length}件\n${lines.join('\n')}`, prio: 0 });
     d.n++;
   }
   for (const it of direct.slice().reverse()) sendItem(g, it);
@@ -1415,11 +1426,11 @@ function flushLater(g) {
   if (i >= 0) MORNING_HOOKS.splice(i, 1);
   MORNING_HOOKS.push(flushHook);
 }
+function openMorning(g) { if (!g.state) return; inMorning = true; morningDay = todayOf(g); flushLater(g); }
 async function contestsMorning(g) {
   if (!g.state) return;
   cstate(g);
-  inMorning = true;
-  flushLater(g);
+  openMorning(g);
   try { await runner.morning(g); } catch (e) { logOnce('morning', e); }
   for (const def of Object.values(CONTESTS)) {
     if (typeof def.onMorning !== 'function') continue;
@@ -1431,4 +1442,6 @@ async function contestsMorning(g) {
   }
 }
 onMorning(contestsMorning);
-export const _test = { CACHE, MODEL, flushQueue, simulateCore, fieldOf, actsFormed, historyRows, realCounts, contestsMorning };
+// the window opens before every other module's morning hook (registered at load, never during a morning)
+MORNING_HOOKS.unshift(function contestsMorningOpen(g) { try { openMorning(g); } catch (e) { logOnce('morningOpen', e); } });
+export const _test = { CACHE, MODEL, MORNING_CAP, flushQueue, simulateCore, fieldOf, actsFormed, historyRows, realCounts, contestsMorning };

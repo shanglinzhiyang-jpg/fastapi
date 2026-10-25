@@ -213,6 +213,7 @@ function notableR1(rng, Y, i, ctx = {}) {
   if (ctx.prev && ctx.prev.runner && i === 4) { tags.length = 0; tags.push('前年準優勝'); }
   const n = { name: ctx.prev && ctx.prev.runner && i === 4 ? ctx.prev.runner : name, type: 'pin', style: pickR(rng, STYLES), gender, tags: tags.slice(0, 2), agency: amateur ? 'アマチュア' : pickR(rng, agencyNames().filter((a) => a !== 'アマチュア')) };
   if (Y >= 2026 && i < 18 && !amateur) n.skip = ['r1']; // 前回・前々回の準々決勝進出者は1回戦免除
+  n.gender = nameGender(n.name) || n.gender;
   return n;
 }
 
