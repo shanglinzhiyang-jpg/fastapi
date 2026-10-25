@@ -773,7 +773,9 @@ function installFlows(C) {
     const th = theme(Y);
     const first = !s.seen.round;
     let mode = mode0 || (g.auto ? 'auto' : 'full');
-    if (!mode0 && !first && !g.auto) mode = ['full', 'quick', 'auto'][await g.ask(`${rules.title} ${rd.name}。`, ['会場を回って準備する（全部見る）', 'すぐに出番へ（準備はおまかせ）', 'おまかせ（本番もシミュレーション）'], { cancel: 0 })] || 'full';
+    const od = safe(() => C.odds(g, Y, rid), null);
+    if (!mode0 && !first && !g.auto) mode = ['full', 'quick', 'auto'][await g.ask(`${rules.title} ${rd.name}。${od ? `\n（${od.text}）` : ''}`, ['会場を回って準備する（全部見る）', 'すぐに出番へ（準備はおまかせ）', 'おまかせ（本番もシミュレーション）'], { cancel: 0 })] || 'full';
+    else if (first && od && !g.auto) await g.say(`${rules.title} ${rd.name}。\n${od.text}`);
     const quick = mode !== 'full';
     const sim = mode === 'auto';
     const venue = cfg.venueName(Y, rid, due.venue);
@@ -876,6 +878,32 @@ function installFlows(C) {
     }
   };
   C.roundIndex = (Y, rid) => cfg.rules(Y).rounds.findIndex((x) => x.id === rid);
+  // The honest odds of the player's next round: the expected total (C's model of the act, the best script, the preparation)
+  // against the round's cut line → { pct, exp, cut, word, text }
+  C.odds = (g, Y0, rid0) => {
+    const Y = Y0 || C.seasonY(g);
+    if (!Y) return null;
+    const S = C.season(g, Y);
+    const E = S.entry;
+    const rid = rid0 || (E && E.round) || cfg.rules(Y).rounds[0].id;
+    const rd = C.roundDef(Y, rid);
+    if (!rd) return null;
+    const kind = (E && E.kind) || cfg.defaultKind || 'pin';
+    const list = safe(() => (has(g, 'netaList') ? g.netaList(kind) : []), []) || [];
+    const quality = list.length ? Math.max(...list.map((n) => qualityOf(g, n, cfg.id))) : 40;
+    const power = powerOf(g, kind);
+    const perf = safe(() => (has(g, 'performSim') ? g.performSim({ kind, power, quality, rng: rngOf('odds', Y, rid) }).score : power * 0.5 + quality * 0.4), 50);
+    const exp = perf * 0.55 + (power * 0.55 + quality * 0.45) * 0.45 + (E ? C.prepBonus(E, {}) : 0);
+    let cut;
+    if (rd.final) {
+      const fins = (S.rounds[cfg.rules(Y).lastPrelim] || {}).passed || [];
+      const strs = fins.map((id) => (C.find(S, id) || {}).str).filter(Boolean).sort((a, b) => b - a);
+      cut = rivalTotal(g, strs[0] || (cfg.topStr || 86), rngOf('oddsF', Y), kind) + 1;
+    } else cut = cutScore(g, { mu: rd.mu, sd: rd.sd, field: C.fieldOf(S, rd), pass: C.passOf(S, rd), kind, seed: `${cfg.id}|${Y}|${rid}` });
+    const pct = Math.round(clamp(0.5 * (1 + erf((exp - cut) / (6 * Math.SQRT2))), 0.01, 0.99) * 100);
+    const word = pct >= 80 ? 'かなり有利' : pct >= 55 ? '五分以上' : pct >= 30 ? '厳しめ' : pct >= 10 ? 'かなり厳しい' : 'ほぼ無理（実力不足）';
+    return { pct, exp: Math.round(exp * 10) / 10, cut: Math.round(cut * 10) / 10, word, round: rd.name, text: `${rd.name}${rd.final ? '優勝' : '通過'}の見込み 約${pct}%（${word}）` };
+  };
   C.prepBonus = (E, done) => {
     let b = (num(E.prep.practice) / 100) * 5;
     if (cfg.usesProps && cfg.usesProps(E)) b += (num(E.prep.flip) / 100) * 3;
@@ -1143,7 +1171,7 @@ function installFlows(C) {
         await g.say(note || (cfg.debayashiLine ? cfg.debayashiLine(g, E, 'final') : '♪──出囃子！'));
       }
       const pk = (E && E.kind) || kind;
-      const neta = await chooseNeta(g, { kind: pk, length: fmt.length, cid: cfg.id, title: stageNo === 2 ? '最終決戦のネタ' : '決勝のネタ', auto: ui.sim });
+      const neta = await chooseNeta(g, { kind: pk, length: fmt.length, cid: cfg.id, title: stageNo === 2 ? '最終決戦のネタ' : '決勝のネタ', auto: ui.sim, exclude: stageNo === 2 && E.finalNeta ? [E.finalNeta] : [] });
       const res = await performAct(g, { kind: pk, neta, length: fmt.length, style: E.style || undefined, venue: { name: rules.title, size: 'tv', crowd: 'normal', pressure: stageNo === 2 ? 100 : 92 }, contest: { id: cfg.id, round: stageNo === 2 ? 'final2' : 'final', name: rules.title }, title: `${rules.title} 決勝${stageNo === 2 ? '（最終決戦）' : ''}`, skip: ui.sim, ...(cfg.performExtra ? cfg.performExtra(g, E) : {}) });
       const tot = playerTotal(g, res, { power: powerOf(g, pk), quality: qualityOf(g, neta, cfg.id), prep: C.prepBonus(E, E.roundPrep || {}) + 1, same: samePenalty(g, neta, cfg.id) || (stageNo === 2 && !isAutoNeta(neta) && E.finalNeta && neta.id === E.finalNeta) });
       if (!isAutoNeta(neta)) { if (stageNo === 1) E.finalNeta = neta.id; safe(() => has(g, 'markNetaUsed') && g.markNetaUsed(neta.id, cfg.id)); }
@@ -1406,6 +1434,8 @@ function installFlows(C) {
       items.push({ label: rules ? rules.title : cfg.label, sub: n.label, key: 'info' });
       if (n.kind === 'entry') items.push({ label: 'エントリーする', sub: `参加費 ${rules.fee ? plainYen(rules.fee) : rules.feeText || 'なし'}`, key: 'entry' });
       if (n.kind === 'round' || n.kind === 'final') items.push({ label: '会場へ向かう', sub: n.label, key: 'go', right: '今日' });
+      const od = rules && ['entry', 'waiting', 'round', 'final', 'soon'].includes(n.kind) ? safe(() => C.odds(g, Y), null) : null;
+      if (od) items.push({ label: od.text, sub: `得点の目安 ${od.exp}／${od.round}のライン 約${od.cut}`, key: 'odds' });
       const S = rules && n.kind !== 'notyet' ? C.season(g, Y) : null;
       if (S && S.entry && ['entered', 'passed', 'revival'].includes(S.entry.status)) items.push({ label: '準備する', sub: `ネタ合わせ・${cfg.prepSub || '小道具'}（仕上がり ${Math.round(S.entry.prep.practice)}）`, key: 'prep' });
       items.push({ label: '大会の概要', sub: '出場資格・参加費・日程・決勝の方式', key: 'rules' });
@@ -1415,7 +1445,10 @@ function installFlows(C) {
       const i = await phoneList(g, { title: cfg.appTitle, color: cfg.color, items });
       if (i < 0) return;
       const it = items[i];
-      if (it.key === 'info' || it.key === 'rules') {
+      if (it.key === 'odds') {
+        const od = C.odds(g, Y);
+        await phoneInfo(g, { title: '見込み', color: cfg.color, lines: [od.text, '', `いまの実力で出せる得点の目安：${od.exp}`, `${od.round}の通過ライン（その年の出場者の強さから）：約${od.cut}`, '', '芸の地力（ネタ作り・間・声量…）、ネタ帳のいちばん良いネタ、準備（ネタ合わせ・小道具）で決まる。本番の出来しだいで上下する。'] });
+      } else if (it.key === 'info' || it.key === 'rules') {
         await phoneInfo(g, { title: cfg.appTitle, color: cfg.color, lines: C.rulesText(g, n.kind === 'notyet' ? null : Y) });
       } else if (it.key === 'field') {
         if (!S) { await phoneInfo(g, { title: '注目の出場者', color: cfg.color, text: n.label }); continue; }
@@ -1448,6 +1481,7 @@ function installFlows(C) {
     return lines;
   };
 }
+function erf(x) { const t = 1 / (1 + 0.3275911 * Math.abs(x)); const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; }
 export const fmtLen = (sec) => (sec % 60 ? `${Math.floor(sec / 60)}分${sec % 60}秒` : `${sec / 60}分`);
 // back to the music of the room the player is in
 function roomBgm(g) {

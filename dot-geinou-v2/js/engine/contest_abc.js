@@ -235,6 +235,13 @@ function storyABC(g, S, rules) {
     ['s16', () => (n.tags.includes('初出場') ? `初出場の${n.name}、いきなり注目の的に` : null)],
     ['s17', () => `${n.name}「ABCの決勝は、関西の若手の夢」`],
     ['s18', () => (S.Y >= 2026 ? `${rules.name}決勝の新ルール「ノックアウト・サバイバル」に、${n.name}「1組目は不利？関係ない」` : null)],
+    ['s19', () => `${n.name}、ネタの尺を4分に削る作業で「泣く泣く好きなボケを捨てた」`],
+    ['s20', () => (S.Y >= 2012 ? `${rules.name}、デビュー10年以内の若手が全国から。${n.name}は「大阪の客の前でやれるのがうれしい」` : `${n.name}、成人の日の生放送に向けて「着物を新調した」`)],
+    ['s21', () => `${n.name}の師匠筋の大御所「あの子らは、ほっといても売れる」`],
+    ['s22', () => `${rules.name}の予選会場の近くの喫茶店、ネタ合わせの若手で満席に`],
+    ['s23', () => (n.type === 'trio' ? `トリオ${n.name}、3人の立ち位置を何度も入れ替えて稽古` : `${n.name}、ツッコミのフレーズをノート3冊分ためこむ`)],
+    ['s24', () => `${n.name}「ABCで優勝して、親に恩返ししたい」`],
+    ['s25', () => (S.Y >= 2020 ? `${rules.name}、決勝はABEMAでも配信。${n.name}「スマホで見てる友だちにも届けたい」` : `${rules.name}、朝日放送のスタジオで決勝の準備が進む`)],
   ];
   const free = L.filter(([k, f]) => !S.news[k] && f());
   if (!free.length) return null;
@@ -355,7 +362,7 @@ async function afterPartyABC(g, C, { S, F, win }) {
   } finally { unstage(g, st); }
 }
 function offersABC(g, C, { S, E }) {
-  sendOffer(g, 'abc_champ_tv', `${E.unitName}さん、${rulesABC(S.Y).name}優勝おめでとうございます！\n関西の若手ネタ番組『なにわ笑いの花道』に、毎週出ていただけませんか？`, '関西の番組プロデューサー');
+  sendOffer(g, 'abc_champ_tv', `${E.unitName}さん、${rulesABC(S.Y).name}優勝おめでとうございます！\n関西の若手ネタ番組『なにわネタ天国』に、毎週出ていただけませんか？`, '関西の番組プロデューサー');
   sendOffer(g, 'abc_champ_radio', `${rulesABC(S.Y).name}王者に、深夜ラジオのレギュラーをお願いしたくて。\n『夜ふかし大阪』、どうでしょう！`, 'ラジオ局のディレクター');
 }
 
@@ -466,7 +473,7 @@ export const ABC = makeContest({
 
 // ================================================================ items, offers (fictional shows), the morning, the hub
 registerItem('abc_trophy', { name: 'ABCのトロフィー', price: 0, desc: '大阪の若手の登竜門で、いちばんになった証。' });
-registerRegular('abc_champ_tv', { title: 'なにわ笑いの花道', place: 'ktv', weekday: 3, medium: 'tv', pay: 30000, fame: 45, fans: 1800, minigame: 'tsukkomi', skill: 'warai', stamina: 16, host: '関西の番組プロデューサー', hostLook: LOOKS.director, desc: '関西の若手ネタ番組。' });
+registerRegular('abc_champ_tv', { title: 'なにわネタ天国', place: 'ktv', weekday: 3, medium: 'tv', pay: 30000, fame: 45, fans: 1800, minigame: 'tsukkomi', skill: 'warai', stamina: 16, host: '関西の番組プロデューサー', hostLook: LOOKS.director, desc: '関西の若手ネタ番組。' });
 registerRegular('abc_champ_radio', { title: '夜ふかし大阪', place: 'mbs', weekday: 0, medium: 'radio', pay: 18000, fame: 25, fans: 1000, minigame: 'talk', skill: 'talk', stamina: 12, host: 'ラジオ局のディレクター', hostLook: LOOKS.ad, desc: '関西の深夜ラジオ。' });
 kitMorning('abcgp', (g) => { syncDef(g); return ABC.morning(g); });
 registerContestApp(ABC, { id: 'abcgp', name: 'ABC', color: '#0a6fd6', glyph: 'ABC', order: 58 });

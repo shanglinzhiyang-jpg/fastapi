@@ -390,7 +390,7 @@ export function judgePoints(judge, act, s, key, salt) {
 // The audience points of 2001 (札幌・大阪・福岡, 100 people each, 1 point each)
 export function audiencePoints(act, s, key) {
   const venues = [['札幌', 0], ['大阪', act && act.region === '東京' ? -18 : 6], ['福岡', 0]];
-  return venues.map(([city, bias]) => ({ city, pts: clamp(Math.round(s * 0.85 + bias + (h01('aud', key, city) - 0.5) * 20), 3, 98) }));
+  return venues.map(([city, bias]) => ({ city, pts: clamp(Math.round(s * 0.75 - 12 + bias + (h01('aud', key, city) - 0.5) * 24), 3, 95) }));
 }
 // Score card for an act: { pts: [..], aud?: [..], total }
 export function scoreCard(m, year, act, s, key, salt = 'r1') {

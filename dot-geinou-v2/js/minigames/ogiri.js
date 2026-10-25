@@ -117,7 +117,7 @@ class Ogiri extends PerformGame {
     if (this.task) {
       let done = false;
       try { done = this.task.update(inp, this); } catch (e) { console.error(e); done = true; }
-      if (done) { const t = this.task; this.task = null; if (t.o.onDone) t.o.onDone(t.result || {}, this); }
+      if (done) { const t = this.task; this.task = null; this.recordExec(t, t.result || {}); if (t.o.onDone) t.o.onDone(t.result || {}, this); }
       return;
     }
     if (this.queue.length) { this.task = this.queue.shift(); this.task.start(this); return; }
@@ -147,6 +147,7 @@ class Ogiri extends PerformGame {
     // ideas: arrival order biased by 発想力 (a quick mind gets the good ones first)
     const hs = this.members[this.pi].s.hassou;
     const ideas = od.a.map(([t, q]) => ({ text: t, q: clamp(q, 0, 100), key: q * (0.3 + hs) + this.rng() * 60 }));
+    this.odQ = ideas.map((x) => x.q);
     ideas.sort((a, b) => b.key - a.key);
     this.pool = ideas.slice(0, 6);
     this.ideas = [];
@@ -222,7 +223,7 @@ class Ogiri extends PerformGame {
       if (this.mode === 'ippon' && this.answeredRound) { this.endRound(); return; }
       // time's up: the 司会 calls on you
       if (n) { this.popup('時間切れ！', 320, 150, COLORS.bad, 18); this.answer(this.ideas[this.sel], true); }
-      else { this.popup('何も浮かばない…', 320, 150, COLORS.dim, 18); this.show.laugh({ i: this.round, who: this.pi, beat: 'answer', text: '…', q: 5 }, 0.2, { q: 5 }); this.silenceT = 60; this.endRound(); }
+      else { this.addExec(0); this.popup('何も浮かばない…', 320, 150, COLORS.dim, 18); this.show.laugh({ i: this.round, who: this.pi, beat: 'answer', text: '…', q: 5 }, 0.2, { q: 5 }); this.silenceT = 60; this.endRound(); }
     }
   }
   npcAnswer() {
@@ -250,9 +251,12 @@ class Ogiri extends PerformGame {
     this.answers++;
     this.answeredRound++;
     const frac = this.thinkT / this.thinkLen;
-    let t = 0.9 + (this.mode === 'zabuton' ? 0.12 * (1 - frac) : 0) - (forced ? 0.2 : 0);
+    // a weak idea doesn't land however it's said: the delivery rides on how good the chosen answer is
+    const rel = clamp(idea.q / Math.max(1, ...(this.odQ || [idea.q])), 0, 1);
+    let t = 0.45 + 0.5 * rel + (this.mode === 'zabuton' ? 0.1 * (1 - frac) : 0) - (forced ? 0.2 : 0);
     if (this.mode === 'zabuton') this.hands[PLAYER_SEAT] = 30;
     this.pending = { idea, t };
+    this.addExec(rel * rel * (forced ? 0.7 : 1));
     const me = this.members[this.pi];
     if (this.mode === 'flip') {
       this.flipText = idea.text;

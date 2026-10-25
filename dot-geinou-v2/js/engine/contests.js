@@ -4,7 +4,7 @@
 // API doc for the other modules: test-output/api_contests.txt.
 //
 // registerContest(id, def) — def schema (all fields optional unless marked *):
-//   name*         '…'                       display name (current era). names: [{ from: 2017, name: 'R-1グランプリ' }, …] for renames
+//   name*         '…'                       display name (current era). names: [{ from: 2017, to?: 2030, name: 'R-1グランプリ' }, …] for renames
 //   short         'M-1'                     short label (HUD / lists, ≤ 8 chars)
 //   kind*         'manzai'|'conte'|'pin'|'rakugo'|'ogiri'|'utaneta'|'monomane'|'talk'|'any'|'double'   ('double' = 漫才とコント両方)
 //   category      'major' | 'tv' | 'kansai' | 'newcomer' | 'agency' | 'invitational' | 'amateur' | 'special'
@@ -32,6 +32,10 @@
 //   status        (g) => object             summary for the notebook / screens
 //   ctx = { id, def, year, edition, revival, entry, round, date }
 // D1 EXTENSIONS (all optional; see test-output/api_contests.txt for the exact behaviour):
+//   roundsOf      (year) => rounds | null    the rounds of that year (formats that change); scheduleOf (year) => schedule | null
+//                 (both fall back to def.rounds / def.schedule; every D1 path asks them with the cycle's year)
+//   entryCount    (year) => number | null    the real total entries of that year (news + round 0's field) instead of an estimate
+//   eligibility   .extra / .check (g, unit, year) => ({ ok, why })  extra rules checked at entry; def.eligibilityNote: a note line
 //   history.gapRevival true: real gap years are held as 復刻開催 too (default: a real hiatus follows history)
 //   history.champions  { [year]: '…' } this world's champion names for given years (fictional!) instead of the generated ones
 //   labelStyle    'edition' (第N回 名前, default) | 'year' (名前2026) | 'both' (名前2026（第N回）);  editionLabel (year, edition) => '…'
@@ -129,6 +133,21 @@ export const yenLabel = (yen) => `¥${Math.round(num(yen)).toLocaleString('ja-JP
 
 // ================================================================ def helpers
 export const roundsOf = (def) => (def && Array.isArray(def.rounds) ? def.rounds : []);
+// formats that change by year: def.roundsOf(year) / def.scheduleOf(year) when present (fall back to def.rounds / def.schedule)
+export function roundsAt(def, year) {
+  if (def && typeof def.roundsOf === 'function' && year != null) {
+    const r = safe(`roundsOf:${def.id}`, () => def.roundsOf(year), null);
+    if (Array.isArray(r) && r.length) return r;
+  }
+  return roundsOf(def);
+}
+export function scheduleAt(def, year) {
+  if (def && typeof def.scheduleOf === 'function' && year != null) {
+    const s0 = safe(`scheduleOf:${def.id}`, () => def.scheduleOf(year), null);
+    if (s0 && typeof s0 === 'object') return s0;
+  }
+  return (def && def.schedule) || {};
+}
 // names: [{ from?, to?, name }] — the name of a year: the matching entry with the latest `from` (to inclusive); else def.name
 export function contestName(def, year) {
   if (!def) return '';
@@ -158,10 +177,10 @@ function whenList(w) {
   if (typeof w[0] === 'number') return [w];
   return w.filter((x) => Array.isArray(x) && typeof x[0] === 'number');
 }
-function finalMD(def) {
-  const f = def.schedule && def.schedule.final;
+function finalMD(def, year) {
+  const f = scheduleAt(def, year).final;
   if (Array.isArray(f) && typeof f[0] === 'number') return f;
-  const R = roundsOf(def);
+  const R = roundsAt(def, year);
   const last = R.length ? whenList(R[R.length - 1].when) : [];
   return last.length ? last[last.length - 1] : [12, 10];
 }
@@ -169,7 +188,7 @@ function finalMD(def) {
 // an R-1-style entry in December for a March final). A third element [m, d, -1] forces the offset.
 function yearOfMD(def, md, year) {
   if (md.length > 2 && Number.isFinite(md[2])) return year + md[2];
-  const [fm, fd] = finalMD(def);
+  const [fm, fd] = finalMD(def, year);
   return md[0] > fm || (md[0] === fm && md[1] > fd) ? year - 1 : year;
 }
 export function labelOf(def, year, edition, revival) {
@@ -217,10 +236,10 @@ export function cycleOf(g, idOrDef, year) {
   if (hit) return hit;
   const h = heldIn(g, def, year);
   const at = (md) => { const y = yearOfMD(def, md, year); return { day: dayOfDate(g, y, md[0], clamp(md[1] || 1, 1, 10)), date: { year: y, month: md[0], dom: clamp(md[1] || 1, 1, 10) } }; };
-  const fin = at(finalMD(def));
-  const sch = def.schedule || {};
+  const fin = at(finalMD(def, year));
+  const sch = scheduleAt(def, year);
   const entry = sch.entry && Array.isArray(sch.entry.from) && Array.isArray(sch.entry.to) ? { from: at(sch.entry.from).day, to: at(sch.entry.to).day, fromDate: at(sch.entry.from).date, toDate: at(sch.entry.to).date } : null;
-  const rounds = roundsOf(def).map((r, idx) => {
+  const rounds = roundsAt(def, year).map((r, idx) => {
     const venues = Array.isArray(r.venues) && r.venues.length ? r.venues : [def.venue || (def.region === 'osaka' ? '大阪' : '東京')];
     const options = whenList(r.when).map((md, k) => ({ k, ...at(md), venue: venues[k % venues.length] }));
     if (!options.length) options.push({ k: 0, ...fin, venue: venues[0] });
@@ -240,8 +259,7 @@ export function seasonYearOf(g, idOrDef, day = todayOf(g)) {
   const def = typeof idOrDef === 'string' ? CONTESTS[idOrDef] : idOrDef;
   if (!def) return contestDate(g, day).year;
   const y0 = contestDate(g, day).year;
-  const [fm, fd] = finalMD(def);
-  for (let y = y0 - 1; y <= y0 + 2; y++) if (dayOfDate(g, y, fm, fd) >= day) return y;
+  for (let y = y0 - 1; y <= y0 + 2; y++) { const [fm, fd] = finalMD(def, y); if (dayOfDate(g, y, fm, fd) >= day) return y; }
   return y0 + 1;
 }
 
@@ -425,7 +443,8 @@ function fieldOf(g, id, year, champs) {
   if (individual) for (const e of list) e.power = clamp(e.power * 0.7 + (year - e.act.formed) * 0.9 + 6, 3, 97);
   list.sort((a, b) => b.power - a.power);
   if (isInvitational(def)) {
-    const n = clamp(num(roundsOf(def)[0] && roundsOf(def)[0].field, 12), 2, 40);
+    const R0 = roundsAt(def, year)[0];
+    const n = clamp(num(R0 && R0.field, 12), 2, 40);
     // invited: the strongest with a career (TV fame), not amateurs
     list = list.filter((e) => !e.amateur && year - e.act.formed >= (kind === 'ogiri' || kind === 'talk' ? 6 : 3)).slice(0, n);
   } else list = list.slice(0, 480);
@@ -445,7 +464,8 @@ function calibration(g) {
       const xs = [], ys = [];
       for (let p = 10; p <= 90; p += 10) for (let k = 0; k < 8; k++) {
         const r = rngOf('calib', p, k);
-        const res = g.performSim({ kind: 'manzai', power: p, quality: p, rng: r, skip: true, practice: true });
+        // an act of that power in contest conditions (contest stakes, a normal house, moderate pressure)
+        const res = g.performSim({ kind: 'manzai', power: p, quality: p, rng: r, skip: true, contest: { id: 'calibration', round: 'r1', name: '' }, venue: { size: 'theater', crowd: 'normal', pressure: 30 } });
         if (res && Number.isFinite(res.score)) { xs.push(p); ys.push(res.score); }
       }
       if (xs.length > 20) {
@@ -466,17 +486,28 @@ export function toFieldScore(g, score) {
   return clamp(MODEL.a + MODEL.b * p, 0, 100);
 }
 // expected field-scale score (mean, sd) of the player for a kind (power + their best neta)
-export function playerScoreDist(g, kind) {
+// expected field-scale score (mean, sd) of the player: g.performSim with their power, their best script (the neta object, so
+// perform.js judges it itself) and the round's conditions (opts: { venue: { size, crowd, pressure }, length }) — the same inputs
+// the real performance gets, so the odds shown are honest.
+export function playerScoreDist(g, kind, opts = {}) {
   const power = playerPower(g, kind);
   let quality = Math.max(10, power - 8); // no script of your own: an おまかせ one
+  let best = null;
   if (has(g, 'netaList') && has(g, 'netaQuality')) {
     const list = safe('netaList', () => g.netaList(kind === 'double' ? undefined : kind), []) || [];
-    if (list.length) quality = Math.max(...list.map((n) => num(safe('netaQuality', () => g.netaQuality(n), 0))));
+    for (const n of list) { const q = num(safe('netaQuality', () => g.netaQuality(n), 0)); if (!best || q > quality) { best = n; quality = q; } }
   }
+  if (!best && has(g, 'autoNeta')) best = safe('autoNeta', () => g.autoNeta(kind, quality), null);
   if (has(g, 'performSim')) {
     try {
       const xs = [];
-      for (let k = 0; k < 24; k++) { const res = g.performSim({ kind, power, quality, rng: rngOf('pdist', power, quality, k), skip: true, practice: true }); if (res && Number.isFinite(res.score)) xs.push(toFieldScore(g, res.score)); }
+      for (let k = 0; k < 24; k++) {
+        // the player's own act (no power given: perform.js reads the unit), their best script, the round's conditions
+        const o = { kind, rng: rngOf('pdist', power, quality, k), skip: true, contest: { id: 'odds', round: 'r1', name: '' }, ...opts };
+        if (best) o.neta = best; else o.quality = quality;
+        const res = g.performSim(o);
+        if (res && Number.isFinite(res.score)) xs.push(toFieldScore(g, res.score));
+      }
       if (xs.length > 5) { const m = xs.reduce((q, v) => q + v, 0) / xs.length; const sd = Math.sqrt(xs.reduce((q, v) => q + (v - m) ** 2, 0) / xs.length); return { mean: m, sd: Math.max(3, sd), power, quality }; }
     } catch (e) { logOnce('playerScoreDist', e); }
   }
@@ -497,12 +528,14 @@ function anonParams(def) {
   const mu = num(f.anonMu, el.kids ? 30 : el.pro === false ? 24 : el.amateur === false ? 36 : 28);
   return { mu, sd: num(f.anonSd, 11) };
 }
-function realCounts(def) {
-  const R = roundsOf(def);
+// the real entrants E / passers P of each round; round 0 = def.entryCount(year) (real total entries, when the def knows it) or its field
+function realCounts(def, year) {
+  const R = roundsAt(def, year);
+  const real = typeof def.entryCount === 'function' ? num(safe(`entryCount:${def.id}`, () => def.entryCount(year), null), null) : null;
   const out = [];
   let prev = null;
   R.forEach((r, i) => {
-    let E = r.field != null ? num(r.field) : i === 0 ? (isInvitational(def) ? 12 : 400) : prev;
+    let E = i === 0 && real > 0 ? real : r.field != null ? num(r.field) : i === 0 ? (isInvitational(def) ? 12 : 400) : prev;
     if (i > 0 && r.field == null && prev == null) E = 10;
     const last = i === R.length - 1;
     let P = last ? 1 : r.pass == null ? Math.max(1, Math.round(E * 0.35)) : num(r.pass) < 1 ? Math.max(1, Math.round(E * num(r.pass))) : num(r.pass);
@@ -540,13 +573,13 @@ function ghostEntrant(seed, def, year, i, k, mu, sd) {
 }
 function simulateCore(g, id, year, champs) {
   const def = CONTESTS[id];
-  const R = roundsOf(def);
+  const R = roundsAt(def, year);
   if (!R.length) return null;
   const seed = seedOf(g);
   const res = resultsOf(g, id, year);
   const mods = (res && res.mods) || {};
   const field = fieldOf(g, id, year, champs);
-  const counts = realCounts(def);
+  const counts = realCounts(def, year);
   const ap = anonParams(def);
   const invite = isInvitational(def);
   let named = field.slice();
@@ -631,7 +664,7 @@ function simulateCore(g, id, year, champs) {
 }
 function finalRanking(g, id, year, lastR, byId, mods) {
   const def = CONTESTS[id];
-  const R = roundsOf(def);
+  const R = roundsAt(def, year);
   const r = R[R.length - 1] || {};
   const seed = seedOf(g);
   const ids = lastR ? lastR.passed.slice() : [];
@@ -770,7 +803,7 @@ function lastDoneYear(g, def) {
 // ================================================================ judges (fictional panels with tenure)
 export function judgesFor(g, id, year, n) {
   const def = CONTESTS[id];
-  const R = roundsOf(def);
+  const R = roundsAt(def, year);
   const fin = R[R.length - 1] || {};
   const want = clamp(num(n, num(fin.judges, 5)), 1, 12);
   const key = `${seedOf(g)}|${id}|${year}|${want}`;
@@ -904,7 +937,7 @@ function allEntries(g) {
 }
 // A realistic entry number: how many have entered before you (entries pile up towards the deadline) out of the field.
 function entryNumber(g, id, cyc) {
-  const R = roundsOf(cyc.def);
+  const R = cyc.rounds.map((x) => x.r);
   const F = Math.max(10, num(R[0] && R[0].field, 400));
   if (!cyc.entry) return 1 + Math.floor(rngOf(seedOf(g), 'invno', id, cyc.year)() * Math.min(F, 20));
   const span = Math.max(1, cyc.entry.to - cyc.entry.from + 1);
@@ -1123,7 +1156,7 @@ function tagsFor(g, id, year, e, roundIdx, sim) {
   if (last && last.year === year - 1 && last.champId === e.id) tags.push('前年王者');
   if ((el.unitYearsMax != null && yrs === el.unitYearsMax) || (el.geirekiMax != null && year - act.debut === el.geirekiMax)) tags.push('ラストイヤー');
   if (e.amateur) tags.push(act.kid ? (act.members.some((m) => year - m.born >= 13) ? '中学生' : '小学生') : 'アマチュア');
-  const R = roundsOf(def);
+  const R = roundsAt(def, year);
   const semi = Math.max(0, R.length - 2);
   const recent = prev.slice(-4).filter((h) => h.held && h.deep && h.deep[e.id] != null);
   if (recent.filter((h) => h.deep[e.id] >= semi).length >= 2) tags.push('準決勝常連');
@@ -1221,7 +1254,7 @@ const methods = {
   contestRegister(id, fields) { const e = registerEntry(this, id, fields); if (e) bump(this, id, e.year); return e; },
   contestRivals(id, round = 0, n = 10, year) {
     if (!this.state) return [];
-    const idx = typeof round === 'string' ? Math.max(0, roundsOf(CONTESTS[id]).findIndex((r) => r.id === round)) : round;
+    const idx = typeof round === 'string' ? Math.max(0, roundsAt(CONTESTS[id], year ?? seasonYearOf(this, id)).findIndex((r) => r.id === round)) : round;
     return safe(`rivals:${id}`, () => rivalsFor(this, id, idx, n, year), []);
   },
   contestJudges(id, year, n) {
@@ -1256,6 +1289,8 @@ const methods = {
   contestSeason(id, day) { return this.state && CONTESTS[id] ? seasonYearOf(this, id, day ?? todayOf(this)) : null; },
   contestCycle(id, year) { return this.state && CONTESTS[id] ? cycleOf(this, id, year ?? seasonYearOf(this, id)) : null; },
   contestState() { return this.state ? cstate(this) : null; },
+  // a contest module takes over some of D1's generic news: the keys (see api_contests.txt) are marked as sent, so D1 stays silent
+  contestClaimNews(...keys) { if (!this.state) return; const c = cstate(this); for (const k of keys.flat()) if (k) c.sent[k] = Math.max(num(c.sent[k]), todayOf(this) + 100000); },
 };
 export function installContests(proto) {
   for (const k of Object.getOwnPropertyNames(methods)) Object.defineProperty(proto, k, Object.getOwnPropertyDescriptor(methods, k));
@@ -1268,7 +1303,7 @@ export const CONTEST_UI = {};
 // internals shared with contests_run.js / contest_ui.js / places/shourace.js
 export const internals = {
   cstate, playerUnit, playerPower, cycleOf, seasonYearOf, contestInfo, dueOn, eventsOn, simOf, entryOf, registerEntry, eligibilityOf, feeOf, prizeOf, applyReward, addHarmony,
-  pushNews, rivalsFor, judgesFor, panelScores, scaleOf, toFieldScore, playerScoreDist, PHI, kindOf, KIND_LABEL, roundsOf, labelOf, contestName, colorOf,
+  pushNews, rivalsFor, judgesFor, panelScores, scaleOf, toFieldScore, playerScoreDist, PHI, kindOf, KIND_LABEL, roundsOf, roundsAt, scheduleAt, labelOf, contestName, colorOf,
   prestigeOf, isInvitational, dateText, todayOf, playerUnitName, bump, resultsOf, historyRows, lastDoneYear, logOnce, realToInternal, yenLabel,
   OFFICE_FROM, NEWS_FROM, judgeComment, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, TAG_COLORS, hostPerson, rngOf, gauss, pickR, MODEL,
   heldIn, editionIn, startYear, wareki, actPower, STATUS_LABEL, anonParams, contestDate, dayOfDate,

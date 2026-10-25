@@ -792,6 +792,11 @@ async function finalFlow(g, E, u, rules, fin) {
         const pick = sc.pts.map((p, i) => [p, i]).sort((x, z) => z[0] - x[0]);
         for (const [p, i] of [pick[0], pick[pick.length - 1]]) await say(g, judgeComment(js[i], p, true), { name: `審査員　${js[i].name}（${p}点）`, look: S.judges[i].look });
         logLine(E, `決勝ファーストラウンド：${n + 1}番目、${sc.total}点。審査員${js[pick[0][1]].name}「${judgeComment(js[pick[0][1]], pick[0][0], true)}」`);
+      } else if (!quickRivals) {
+        // one judge's word for every act (the highest or the lowest mark, alternately)
+        const pick = sc.pts.map((p, i) => [p, i]).sort((x, z) => z[0] - x[0]);
+        const [p, i] = n % 2 ? pick[pick.length - 1] : pick[0];
+        await say(g, judgeComment(js[i], p, false), { name: `審査員　${js[i].name}（${p}点）`, look: S.judges[i].look });
       }
       // the 暫定ボックス (top 3 seats)
       ranking.push({ key: k, name: a.name, total: sc.total, look: a.members[0].look, me: k === 'me', max: Math.max(...sc.pts) });

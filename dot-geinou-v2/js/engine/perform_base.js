@@ -398,8 +398,7 @@ export class PerformGame extends Minigame {
     this.impact = 0;
     this.speaking = -1;
     this.talkT = 0;
-    this.execSum = 0;
-    this.execN = 0;
+    this.execLog = [];
     const d = this.difficulty - 1;
     this.charF = [3.0, 2.7, 2.4, 2.2, 2.0][d];
     this.win = [Math.round(this.ease([24, 21, 18, 15, 12][d], 0.5)), 0, 0];
@@ -440,7 +439,7 @@ export class PerformGame extends Minigame {
     if (this.task) {
       let done = false;
       try { done = this.task.update(inp, this); } catch (e) { console.error(e); done = true; }
-      if (done) { const t = this.task; this.task = null; if (t.o.onDone) t.o.onDone(t.result || {}, this); }
+      if (done) { const t = this.task; this.task = null; this.recordExec(t, t.result || {}); if (t.o.onDone) t.o.onDone(t.result || {}, this); }
       return;
     }
     if (this.queue.length) { this.task = this.queue.shift(); this.task.start(this); return; }
@@ -608,7 +607,7 @@ export class PerformGame extends Minigame {
     const resp = ln.respIdx != null ? this.lines[ln.respIdx] : null;
     let t = this.lineRes.t;
     if (t == null) t = this.show.simTiming(ln.who >= 0 ? ln.who : this.pi);
-    else { t = 0.8 * t + 0.2 * this.show.simTiming(this.pi); this.execSum += this.lineRes.t; this.execN++; }
+    else { const w = 0.8 + 0.15 * this.show.r; t = w * t + (1 - w) * this.show.simTiming(this.pi); }
     if (resp) {
       resp.consumed = true;
       let rt = this.lineRes.respT;
@@ -673,14 +672,27 @@ export class PerformGame extends Minigame {
     for (let i = 0; i < 2; i++) audio.tone(520 - i * 30, t + i * 0.09, 0.05, { wave: 'square', vol: 0.03 });
   }
   // the minigame's own execution rating for the result's parts
-  execRating() { return this.execN ? clamp(Math.round((this.execSum / this.execN) * 92), 0, 100) : undefined; }
+  // How well the player played (0..100): every finished task scores 0..1 (the old minigames' accuracy); the result blends
+  // it in on routine stages (perform_model.js, stakes).
+  addExec(v) { if (Number.isFinite(v)) this.execLog.push(clamp(v, 0, 1)); }
+  recordExec(task, r) {
+    const n = task.constructor.name;
+    if (task.o && task.o.noExec) return;
+    if (n === 'WindowTask' || n === 'HoldTask' || n === 'RingTask') this.addExec(r.grade === 'early' ? 0.12 : (r.t ?? 0.3) / 1.05);
+    else if (n === 'ArrowTask') this.addExec(r.ok ? 1 : 0.1);
+    else if (n === 'AdlibTask') this.addExec(r.ok ? 1 : 0.3);
+    else if (n === 'SettleTask') this.addExec({ nice: 1, nobi: r.auto ? 0.3 : 0.45, kabuse: 0.2 }[r.grade] ?? 0.4);
+    else if (n === 'BeatTask' || n === 'PitchTask') this.addExec(r.acc ?? 0.5);
+    else if (n === 'BlackoutTask') this.addExec({ perfect: 1, good: 0.8, early: 0.35, late: 0.45 }[r.grade] ?? 0.5);
+  }
+  execRating() { return this.execLog && this.execLog.length ? clamp(Math.round((this.execLog.reduce((a, b) => a + b, 0) / this.execLog.length) * 100), 0, 100) : undefined; }
 
   // ---------------------------------------------------------------- results
   end(score, comment) {
     if (this.phase === 'result') return;
     let res = null;
     try {
-      if (this.show) res = this.show.finish({ score: Number.isFinite(score) ? score : undefined, pass: this.opts.pass, exec: this.execRating() });
+      if (this.show) res = this.show.finish({ score: Number.isFinite(score) ? score : undefined, pass: this.opts.pass, execAcc: this.execRating() });
     } catch (e) { console.error(e); }
     if (!res) {
       const s = clamp(Math.round(Number.isFinite(score) ? score : 50), 0, 100);

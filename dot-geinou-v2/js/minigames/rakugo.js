@@ -118,6 +118,7 @@ class Rakugo extends PerformGame {
       const m = pick[r.i] || pick[0];
       const fit = m.fit[mg.audience] ?? 0;
       mg.makuraFit = fit;
+      mg.addExec((fit + 2) / 4);
       const lines = makuraLines(m, mg.ctx.era);
       const q = clamp(mg.ctx.quality * 0.5 + 30 + fit * 14, 5, 100);
       const add = lines.map((t, k) => ({ i: -1, who: mg.pi, role: 'pin', text: t, beat: k === lines.length - 1 ? 'boke' : 'makura', punch: k === lines.length - 1, resp: false, respIdx: null, sec: Math.max(1.2, Array.from(t).length / 5.2), side: null, char: null, q, makura: true }));

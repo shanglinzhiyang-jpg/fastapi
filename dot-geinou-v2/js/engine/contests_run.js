@@ -171,11 +171,17 @@ export function oddsOf(g, id, round) {
   const year = I.seasonYearOf(g, id);
   const sim = I.simOf(g, id, year);
   if (!sim) return null;
-  const idx = clamp(num(typeof round === 'string' ? I.roundsOf(def).findIndex((r) => r.id === round) : round, 0), 0, sim.rounds.length - 1);
+  const idx = clamp(num(typeof round === 'string' ? I.roundsAt(def, year).findIndex((r) => r.id === round) : round, 0), 0, sim.rounds.length - 1);
   const rd = sim.rounds[idx];
   const kind = kindFor(g, def);
-  const d = I.playerScoreDist(g, kind);
   const last = idx === sim.rounds.length - 1;
+  const rr = I.cycleOf(g, def, year).rounds[idx];
+  const r = (rr && rr.r) || {};
+  const tv = !!(r.tv || r.final);
+  const dokyo = has(g, 'comedyStat') ? num(safe('comedyStat', () => g.comedyStat('dokyo'), 30)) : 30;
+  const pressure = clamp(Math.round((tv ? 62 : 30 + idx * 8) + num(g.state.life && g.state.life.stress) * 0.25 - dokyo * 0.35), 5, 95);
+  const venue = { size: r.size || (tv ? 'tv' : idx === 0 ? 'small' : 'theater'), crowd: r.crowd || (idx === 0 ? 'tough' : tv ? 'warm' : 'normal'), pressure };
+  const d = I.playerScoreDist(g, kind, { venue, length: num(r.length, num(def.perform && def.perform.length, 240)), contest: { id, round: rr ? rr.id : 'r1', name: '' } });
   let cut = rd.cut;
   if (last) { const top = rd.passed.map((x) => rd.scores.get(x)).sort((a, b) => b - a)[0]; cut = num(top, 60); }
   const p = clamp(1 - I.PHI((cut - d.mean) / Math.max(1, d.sd)), 0.005, 0.995);
@@ -848,8 +854,9 @@ function seasonNewsYear(g, def, day, year) {
     if (el.ok) I.pushNews(g, `${name}のエントリー締切まで、あと3日。\n（参加費${I.feeOf(g, id, year).text}・「賞レース」からエントリーできる）`, { personal: true, contest: id, prio: 55, key: `close3|${id}|${year}` });
   }
   if (cyc.entry && cyc.entry.to === day - 1) {
+    const real = typeof def.entryCount === 'function' ? num(safe(`entryCount:${id}`, () => def.entryCount(year), null), null) : null;
     const F = Math.max(10, num(cyc.rounds[0].r.field, 200));
-    const n = Math.round(F * (0.93 + I.rngOf(c.seed, 'fieldn', id, year)() * 0.12));
+    const n = real > 0 ? Math.round(real) : Math.round(F * (0.93 + I.rngOf(c.seed, 'fieldn', id, year)() * 0.12));
     I.pushNews(g, `${name}、エントリー締切。総エントリー数は${n.toLocaleString('ja-JP')}組（大会発表）。`, { contest: id, prio: 10 + pr * 0.45, key: `count|${id}|${year}` });
   }
   // invitations (招待制): about 20 days before the first round
@@ -881,10 +888,10 @@ function seasonNewsYear(g, def, day, year) {
       if (champ !== 'player') I.pushNews(g, `${name}は${cn}が優勝！\n準優勝は${nm(sim.final.ranking[1]) || '—'}。${I.prizeOf(def, year).text ? `${I.prizeOf(def, year).text}は${cn}の手に。` : ''}`, { contest: id, prio: 15 + pr * 0.7, key: `champ|${id}|${year}` });
       if (pr >= 55) {
         c.later = c.later || [];
-        c.later.push({ day: day + 1, text: `【王者の会見】${name}を制した${cn}が会見。\n「${pickQuote(g, id, year)}」`, contest: id, prio: 20 + pr * 0.4 });
+        c.later.push({ day: day + 1, text: `【王者の会見】${name}を制した${cn}が会見。\n「${pickQuote(g, id, year)}」`, contest: id, prio: 20 + pr * 0.4, key: `kaiken|${id}|${year}` });
         const nv = I.netVoice(year);
         const lines = [0, 1, 2].map((k) => `${I.pickR(I.rngOf(c.seed, 'nvw', id, year, k), nv.who)}「${I.fillName(I.pickR(I.rngOf(c.seed, 'nv', id, year, k), champ === 'player' ? I.NET_LINES.player : I.NET_LINES.champ), cn)}」`);
-        c.later.push({ day: day + 2, text: `【${nv.label}】${name}\n${lines.join('\n')}`, contest: id, prio: 10 + pr * 0.3 });
+        c.later.push({ day: day + 2, text: `【${nv.label}】${name}\n${lines.join('\n')}`, contest: id, prio: 10 + pr * 0.3, key: `net|${id}|${year}` });
       }
       continue;
     }
@@ -932,7 +939,7 @@ function laterNews(g) {
   const day = I.todayOf(g);
   const now = c.later.filter((x) => num(x.day) <= day);
   c.later = c.later.filter((x) => num(x.day) > day);
-  for (const x of now) I.pushNews(g, x.text, { contest: x.contest, prio: x.prio });
+  for (const x of now) I.pushNews(g, x.text, { contest: x.contest, prio: x.prio, key: x.key });
 }
 
 // ================================================================ running the day's round without the venue walk (tests, おまかせ)

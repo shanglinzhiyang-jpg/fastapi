@@ -154,11 +154,11 @@ export function qualityOf(g, neta, contest) {
 }
 
 // A script for a performance. g.auto (tests / おまかせ): the best one in the ネタ帳, else a generated one.
-export async function chooseNeta(g, { kind, length, cid, title, auto }) {
-  const list = safe(() => (has(g, 'netaList') ? g.netaList(kind) : []), []) || [];
+export async function chooseNeta(g, { kind, length, cid, title, auto, exclude = [] }) {
+  const list = (safe(() => (has(g, 'netaList') ? g.netaList(kind) : []), []) || []).filter((n) => n && !exclude.includes(n.id));
   const gen = () => safe(() => (has(g, 'autoNeta') ? g.autoNeta(kind, clamp(Math.round(powerOf(g, kind) * 0.7 + 18), 10, 90)) : null), null)
     || { id: 'auto', kind, title: 'いつものネタ', length: length || 120, lines: [], ai: { total: 45 }, practice: 40, uses: {}, auto: true };
-  if (g.auto && g.auto.neta) return g.auto.neta;
+  if (g.auto && g.auto.neta) return exclude.includes(g.auto.neta.id) && g.auto.neta2 ? g.auto.neta2 : g.auto.neta;
   if (g.auto || auto) {
     const best = list.slice().sort((a, b) => qualityOf(g, b) - qualityOf(g, a))[0];
     return best || gen();

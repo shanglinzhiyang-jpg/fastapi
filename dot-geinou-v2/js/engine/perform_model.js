@@ -233,6 +233,12 @@ export function normLines(neta, ctx) {
 }
 
 // ------------------------------------------------------------------ context
+export function stakesOf(opts = {}, venue = null) {
+  if (opts.lesson || opts.practice) return 0;
+  if (opts.contest) return 1;
+  const p = venue ? venue.pressure : normVenue(opts.venue, opts).pressure;
+  return clamp((p - 35) / 40, 0, 1);
+}
 export function netaQ(g, neta, fallback = 45) {
   if (!neta) return fallback;
   if (neta.house) return Number.isFinite(neta.quality) ? neta.quality : fallback;
@@ -268,6 +274,9 @@ export function buildCtx(g, opts = {}) {
   let cond = 0;
   if (!npc && st.life && fn(g, 'lifeBonusParts')) cond = (safe(() => g.lifeBonusParts(opts.skill || 'warai'), []) || []).reduce((a, p) => a + (Number(p.v) || 0), 0);
   ctx.cond = clamp(Number.isFinite(opts.cond) ? opts.cond : cond, -0.4, 0.3);
+  // stakes 0..1: routine jobs / lessons / practice (0) are execution-heavy like the old minigames; contests (opts.contest),
+  // TV finals and high pressure (1) are decided by the act's stats and script. In between it blends.
+  ctx.stakes = Number.isFinite(opts.stakes) ? clamp(opts.stakes, 0, 1) : stakesOf(opts, ctx.venue);
   const n = normLines(neta, ctx);
   Object.assign(ctx, { lines: n.lines, title: n.title, theme: n.theme, setting: n.setting, house: n.house });
   ctx.playerIdx = Math.max(0, ctx.members.findIndex((m) => m.isPlayer));
@@ -282,7 +291,9 @@ export class Show {
     const cr = CROWD[ctx.venue.crowd] || CROWD.normal;
     const pres = this.avg('chara');
     this.crowdMult = cr.mult + (pres - 0.5) * 0.12;
-    this.h = clamp(cr.heat + (pres - 0.5) * 0.12 + ctx.cond * 0.25, 0.02, 0.85);
+    this.s = ctx.stakes ?? 1;
+    this.r = 1 - this.s; // how routine the stage is
+    this.h = clamp(cr.heat + (pres - 0.5) * 0.12 + ctx.cond * 0.25 + 0.1 * this.r, 0.02, 0.85);
     this.samples = [this.h];
     this.time = 0;
     this.c = { laughs: 0, big: 0, kusu: 0, suberi: 0, flubs: 0, flubsCovered: 0, blanks: 0, blanksCovered: 0, adlib: 0, rush: 0, maMiss: 0, recoil: 0, chain: 0, maxChain: 0, streak: 0, tendon: 0 };
@@ -296,7 +307,7 @@ export class Show {
     this.who = {}; // per-member event counts
     const need = (SIZE[ctx.venue.size] || SIZE.theater).need * (ctx.kind === 'rakugo' ? 1.15 : 1);
     const voice = this.avg('voice');
-    this.voiceMult = 1 - clamp(need - voice, 0, 1) * 0.6;
+    this.voiceMult = 1 - clamp(need - voice, 0, 1) * 0.6 * (0.4 + 0.6 * this.s);
     if (this.voiceMult < 0.9) this.note('koe', `声が後ろの席まで届かなかった（声量・滑舌 ${Math.round(voice * 100)}）`);
     this.pe = ctx.venue.pressure / 100;
     this.lastLaugh = null;
@@ -326,14 +337,16 @@ export class Show {
     const tobu = Array.from(line.text || '').length < 6 ? 0 : 0.003 + 0.05 * (1 - R) ** 2 + pe * 0.06 * (1 - s.dokyo) ** 1.5;
     const rush = pe * 0.14 * (1 - s.dokyo) + 0.04 * (1 - s.ma);
     const hm = this.ctx.harmony < 35 ? (35 - this.ctx.harmony) / 400 : 0;
-    return { kamu: clamp(kamu + hm, 0, 0.6), tobu: clamp(tobu, 0, 0.4), rush: clamp(rush, 0, 0.5) };
+    const soft = 1 - 0.5 * this.r; // routine stages: the same failures, half as often
+    return { kamu: clamp((kamu + hm) * soft, 0, 0.6), tobu: clamp(tobu * soft, 0, 0.4), rush: clamp(rush * soft, 0, 0.5) };
   }
   // the stat-based 間 (what the act does on its own)
   simTiming(i) {
     const s = this.m(i).s;
     const R = this.ctx.practice / 100;
     const mu = 0.36 + 0.55 * (0.6 * s.ma + 0.4 * R) + 0.1 * this.skill(i, 'b') - this.pe * 0.2 * (1 - s.dokyo) - (this.ctx.harmony < 35 ? 0.06 : 0);
-    return clamp(mu + gauss(this.rng) * 0.15, 0.05, 1.08);
+    const t = clamp(mu + gauss(this.rng) * 0.15, 0.05, 1.08);
+    return t + (0.5 + 0.5 * t - t) * 0.3 * this.r;
   }
   speak(line, tempo = 1) {
     if (line) this.time += line.sec / Math.max(0.5, tempo);
@@ -352,10 +365,11 @@ export class Show {
     if (line.beat === 'tendon') pot += 0.1 * Math.min(3, this.c.tendon++);
     if (line.kaishu && this.fukusenBroken) pot *= 0.75;
     const q = Number.isFinite(o.q) ? o.q : Number.isFinite(line.q) ? line.q * 0.6 + ctx.quality * 0.4 : ctx.quality;
-    const Qf = 0.35 + 0.8 * clamp(q, 0, 100) / 100;
+    const qn = clamp(q, 0, 100) / 100;
+    const Qf = (0.35 + 0.8 * qn) * this.s + (0.8 + 0.3 * qn) * this.r;
     let sk = this.skill(line.who >= 0 ? line.who : ctx.playerIdx, 'b');
     if (o.resp && o.resp.who >= 0) sk = (sk + this.skill(o.resp.who, 't')) / 2;
-    const Af = 0.6 + 0.5 * sk;
+    const Af = (0.6 + 0.5 * sk) * this.s + (0.86 + 0.28 * sk) * this.r;
     const tt = clamp(t, 0, 1.12);
     const heatM = 0.7 + 0.6 * this.h;
     const noise = 1 + gauss(this.rng) * 0.1;
@@ -433,7 +447,7 @@ export class Show {
     const c = this.c;
     const L = this.potSum > 0 ? this.laughSum / this.potSum : 0.3;
     let base = 100 * (1 - Math.exp(-1.1 * L)) / (1 - Math.exp(-1.375));
-    let pen = (c.flubs - c.flubsCovered) * 1.6 + c.flubsCovered * 0.5 + (c.blanks - c.blanksCovered) * 5 + c.blanksCovered * 2.5 + c.rush * 1.5 + c.recoil * 4;
+    let pen = ((c.flubs - c.flubsCovered) * 1.6 + c.flubsCovered * 0.5 + (c.blanks - c.blanksCovered) * 5 + c.blanksCovered * 2.5 + c.rush * 1.5 + c.recoil * 4) * (1 - 0.4 * this.r);
     const ot = ctx.limit ? Math.max(0, Math.round(this.time - ctx.limit)) : 0;
     let otPen = 0;
     if (ot > 0) {
@@ -442,12 +456,16 @@ export class Show {
     }
     pen += otPen;
     const bonus = Math.min(8, c.adlib * 2.5) + (c.maxChain >= 4 ? 2 : 0) + clamp(this.bonusPts || 0, -6, 6);
-    let score = clamp(Math.round(base - pen + bonus), 0, 100);
+    const avgT0 = this.tN ? this.tSum / this.tN : 0.5;
+    // the execution rating: the minigame's own (o.execAcc 0..100, how well the player played) or the act's from the timing
+    const execAcc = Number.isFinite(o.execAcc) ? clamp(o.execAcc, 0, 100) : 100 * clamp(0.1 + 0.8 * avgT0, 0, 1);
+    const model = base - pen + bonus;
+    let score = clamp(Math.round(model * (this.s + 0.35 * this.r) + 0.65 * this.r * execAcc), 0, 100);
     if (Number.isFinite(o.score)) score = clamp(Math.round(o.score), 0, 100);
     const rank = rankFor(score);
     const avgT = this.tN ? this.tSum / this.tN : 0.5;
     const presence = 100 * (0.5 * this.avg('chara') + 0.3 * this.avg('voice') * this.voiceMult + 0.2 * this.avg('dokyo'));
-    const exec = Number.isFinite(o.exec) ? o.exec : 100 * clamp(1 - (c.flubs - c.flubsCovered) * 0.07 - (c.blanks - c.blanksCovered) * 0.15 - c.rush * 0.06, 0, 1) * (0.6 + 0.4 * avgT);
+    const exec = Number.isFinite(o.execAcc) ? o.execAcc : Number.isFinite(o.exec) ? o.exec : 100 * clamp(1 - (c.flubs - c.flubsCovered) * 0.07 - (c.blanks - c.blanksCovered) * 0.15 - c.rush * 0.06, 0, 1) * (0.6 + 0.4 * avgT);
     const heatAvg = this.samples.reduce((a, b) => a + b, 0) / this.samples.length;
     const parts = { neta: Math.round(ctx.quality), execution: clamp(Math.round(exec), 0, 100), presence: clamp(Math.round(presence), 0, 100), timing: clamp(Math.round(avgT * 92), 0, 100), crowd: clamp(Math.round(heatAvg * 100), 0, 100) };
     const heat = downsample(this.samples.map((h) => Math.round(h * 100)), 24);

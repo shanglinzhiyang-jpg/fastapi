@@ -23,9 +23,9 @@ import { registerSong } from './audio.js';
 import { MINIGAMES } from './minigame.js';
 import { eraOf } from './profile.js';
 import { m1Rules, m1Held, editionOf, M1, entriesOf, NEWS, setNameFilter } from './m1_data.js';
-import { fieldOf, passedOf, prepareFinal, simulateFinal, actOf, comboAct, anonCombo, sd, tagsOf } from './m1_field.js';
+import { fieldOf, passedOf, prepareFinal, simulateFinal, actOf, anonCombo, sd } from './m1_field.js';
 import { has, safe, cal, dateLabel, dateLabelY, today, M, season, entryOf, plan, statusOf, unitInfo, news, flushNews, msg, internal, yenNom } from './m1_core.js';
-import { entryFlow, roundFlow, finalDayFlow, watchFinal, practiceFlow, zadankaiFlow, anotherStory, returnsFlow, tourStop, dvdRelease } from './m1_flow.js';
+import { entryFlow, roundFlow, finalDayFlow, watchFinal, practiceFlow, zadankaiFlow, anotherStory, returnsFlow, tourStop } from './m1_flow.js';
 import { phoneList, phoneInfo, closePhoneThen, appTile } from './phone.js';
 import { dvdCard } from './m1_ui.js';
 
@@ -76,7 +76,8 @@ function defFor(year) {
     schedule: { entry: { from: [r.entry.from[0], r.entry.from[1] + 1], to: [r.entry.to[0], r.entry.to[1] + 1] }, final: [r.finalAt[0], r.finalAt[1] + 1] },
     rounds,
     eligibility: (g, unit, yy) => { const u = unitInfo(g, yy || cal(g).year); return { ok: u.ok, why: u.why, reasons: u.ok ? [] : [{ text: u.why.split('\n')[0] }] }; },
-    fee: (g, unit, yy) => { const rr = m1Rules(yy || cal(g).year) || r; const n = rr.fee.per === 'person' ? rr.fee.nominal * Math.max(2, (unitInfo(g, yy).members || []).length) : rr.fee.nominal; return internal(n); },
+    // REAL nominal yen (D1 converts to game money itself): 1組2,000円 / from 2025 1人1,000円 × members
+    fee: (g, unit, yy) => { const rr = m1Rules(yy || cal(g).year) || r; return rr.fee.per === 'person' ? rr.fee.nominal * Math.max(2, (unitInfo(g, yy).members || []).length) : rr.fee.nominal; },
     prize: M1.prizeNominal, prizeText: M1.prizeText,
     perform: { kind: 'manzai', length: 240 },
     news: [],
@@ -402,6 +403,7 @@ const methods = {
     };
   },
   m1Go() { return m1Go(this); },
+  async m1Do(id) { const it = todays(this).find((x) => x.id === id); if (!it) return false; await it.run(this); return true; },
   m1Enter() { return entryFlow(this); },
   m1Round(ri) { const E = entryOf(this); return roundFlow(this, ri ?? (E && E.next ? E.next.ri : 0)); },
   m1FinalDay() { return finalDayFlow(this); },
@@ -506,4 +508,3 @@ registerPhoneApp('m1', {
 // fallback: when D1's hook order changes, this one still runs once a day
 onMorning((g) => m1Morning(g));
 export { todays as m1Todays, rulesLines, scheduleLines, historyLines };
-void dvdRelease; void comboAct; void tagsOf;
