@@ -46,10 +46,10 @@ function d1Status(g) {
     const rid = E.status === 'entered' ? E.round : E.status === 'revival' ? 'revival' : 'final';
     const ds = live ? datesOf(g, y, E, rid) : [];
     const w = rid === 'sf' && R.twoNetaSF ? ds[num(E.sfDone)] : ds[0];
-    const v = live ? (rid === 'final' || rid === 'revival' ? { city: '東京', hall: 'TBS 赤坂' } : planOf(g, y, E, rid) || {}) : null;
+    const v = live ? (rid === 'final' || rid === 'revival' ? { city: '東京', hall: 'TBS 赤坂' } : planOf(g, y, E, rid) || {}) : null; // hallText: 「東京会場」 / the hall's name
     entry = {
       no: E.no, name: E.unitName, status: STATUS_D1[E.status] || 'entered', statusLabel: STATUS_TEXT(E), round: live ? roundName(rid) : roundName(E.out || E.round),
-      next: live && w ? { day: L.d1Day(g, t.abs, absOf(y, w)), city: v.city || '', hall: v.hall || '' } : null,
+      next: live && w ? { day: L.d1Day(g, t.abs, absOf(y, w)), city: hallText(v), hall: v.hall || '' } : null,
       results: (E.results || []).map((r) => ({ round: roundName(r.round), name: roundName(r.round), passed: !!r.passed, score: r.score, place: r.place, of: r.of })),
       final: E.status === 'champion' ? { place: 1, total: h && h.champScore } : E.place ? { place: E.place } : null,
     };
