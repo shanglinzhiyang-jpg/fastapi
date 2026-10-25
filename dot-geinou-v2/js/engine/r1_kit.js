@@ -208,9 +208,10 @@ export function playerTotal(g, res, o) {
   const base = clamp(o.power * 0.55 + o.quality * 0.45, 0, 100);
   let t = res.score * 0.55 + base * 0.45 + num(o.prep);
   const pen = [];
-  if (res.overtime > 0) { const p = Math.min(8, res.overtime * 0.5); t -= p; pen.push(['尺オーバー', p]); }
-  if (res.flubs > 0) { const p = Math.min(6, res.flubs * 1.5); t -= p; pen.push(['噛み', p]); }
-  if (res.blanks > 0) { const p = Math.min(9, res.blanks * 3); t -= p; pen.push(['ネタが飛んだ', p]); }
+  // the performance score already counts the mistakes; the contest adds a little on top (尺オーバー is a rule of the round)
+  if (res.overtime > 0) { const p = Math.min(4, res.overtime * 0.25); t -= p; pen.push(['尺オーバー', p]); }
+  if (res.flubs > 0) { const p = Math.min(2, res.flubs * 0.5); t -= p; pen.push(['噛み', p]); }
+  if (res.blanks > 0) { const p = Math.min(3, res.blanks); t -= p; pen.push(['ネタが飛んだ', p]); }
   if (o.same) { t -= 5; pen.push(['同じネタ', 5]); }
   return { total: clamp(Math.round(t * 10) / 10, 0, 100), base, pen };
 }

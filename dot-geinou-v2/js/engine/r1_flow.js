@@ -1127,9 +1127,10 @@ function installFlows(C) {
         sfx('drum');
         await g.say(note || (cfg.debayashiLine ? cfg.debayashiLine(g, E, 'final') : '♪──出囃子！'));
       }
-      const neta = await chooseNeta(g, { kind, length: fmt.length, cid: cfg.id, title: stageNo === 2 ? '最終決戦のネタ' : '決勝のネタ', auto: ui.sim });
-      const res = await performAct(g, { kind, neta, length: fmt.length, style: E.style || undefined, venue: { name: rules.title, size: 'tv', crowd: 'normal', pressure: stageNo === 2 ? 100 : 92 }, contest: { id: cfg.id, round: stageNo === 2 ? 'final2' : 'final', name: rules.title }, title: `${rules.title} 決勝${stageNo === 2 ? '（最終決戦）' : ''}`, skip: ui.sim, ...(cfg.performExtra ? cfg.performExtra(g, E) : {}) });
-      const tot = playerTotal(g, res, { power: powerOf(g, kind), quality: qualityOf(g, neta), prep: C.prepBonus(E, E.roundPrep || {}) + 1, same: netaUsedBefore(neta, cfg.id) || (stageNo === 2 && E.finalNeta && neta && neta.id === E.finalNeta) });
+      const pk = (E && E.kind) || kind;
+      const neta = await chooseNeta(g, { kind: pk, length: fmt.length, cid: cfg.id, title: stageNo === 2 ? '最終決戦のネタ' : '決勝のネタ', auto: ui.sim });
+      const res = await performAct(g, { kind: pk, neta, length: fmt.length, style: E.style || undefined, venue: { name: rules.title, size: 'tv', crowd: 'normal', pressure: stageNo === 2 ? 100 : 92 }, contest: { id: cfg.id, round: stageNo === 2 ? 'final2' : 'final', name: rules.title }, title: `${rules.title} 決勝${stageNo === 2 ? '（最終決戦）' : ''}`, skip: ui.sim, ...(cfg.performExtra ? cfg.performExtra(g, E) : {}) });
+      const tot = playerTotal(g, res, { power: powerOf(g, pk), quality: qualityOf(g, neta), prep: C.prepBonus(E, E.roundPrep || {}) + 1, same: netaUsedBefore(neta, cfg.id) || (stageNo === 2 && E.finalNeta && neta && neta.id === E.finalNeta) });
       if (neta && neta.id && neta.id !== 'auto') { if (stageNo === 1) E.finalNeta = neta.id; safe(() => has(g, 'markNetaUsed') && g.markNetaUsed(neta.id, cfg.id)); }
       st.fx.react = tot.total >= 75;
       sfx(tot.total >= 75 ? 'laugh' : 'applause');

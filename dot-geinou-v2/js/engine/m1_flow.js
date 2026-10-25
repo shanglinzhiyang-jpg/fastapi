@@ -28,11 +28,17 @@ const STAMINA = [18, 20, 22, 24, 28];
 // ================================================================ helpers
 function homeCity(g) { const h = safe(() => g.housing(), null); return h && /namba|osaka/.test(String(h.place || '')) ? '大阪' : '東京'; }
 function logLine(E, s) { if (!E) return; E.log = E.log || []; E.log.push(s); if (E.log.length > 60) E.log.splice(0, E.log.length - 60); }
+// the player's act as entered (the members and looks of the entry, even if the act changed since)
+function castOf(g, y, E) {
+  const u = unitInfo(g, y);
+  if (E && Array.isArray(E.cast) && E.cast.length >= 2 && (u.members.length < 2 || u.partner !== E.partner)) return E.cast.map((x) => ({ ...x, look: x.id === 'player' ? g.state.look : x.look }));
+  return u.members.slice(0, 3).map((x) => ({ id: x.id, name: x.short || x.name, role: x.role, look: x.look }));
+}
 function meAct(g, y, E) {
   const m = M(g), u = unitInfo(g, y);
   const src = u.source === 'net' ? 'net' : u.source === 'nsc' ? 'nsc_tokyo' : u.amateur ? 'amateur' : 'other';
   return {
-    key: 'me', name: E ? E.name : u.name, me: true, members: u.members.slice(0, 3).map((x, i) => ({ name: x.name, role: x.role === 'boke' ? 'ボケ' : x.role === 'tsukkomi' ? 'ツッコミ' : i ? 'ツッコミ' : 'ボケ', look: x.look })),
+    key: 'me', name: E ? E.name : u.name, me: true, members: castOf(g, y, E).map((x, i) => ({ name: x.name, role: x.role === 'boke' ? 'ボケ' : x.role === 'tsukkomi' ? 'ツッコミ' : i ? 'ツッコミ' : 'ボケ', look: x.look })),
     years: u.years, formed: u.formedYear, agency: u.agencyName, origin: src, region: homeCity(g), style: m.me.style || 'しゃべくり',
     tags: [], power: powerOf(g), last: !!u.last, amateur: u.amateur, finals: m.me.finals || 0, semis: m.me.semis || 0, ru: m.me.ru || 0,
   };
@@ -221,6 +227,7 @@ export async function entryFlow(g) {
       agency: u.agencyName, amateur: u.amateur, contact: val('contact'), title: val('title') || '', fee, feeNominal: feeNom, paid: !heisei, day: t,
       status: 'entered', round: seeded ? 1 : 0, seeded, next: { ri: seeded ? 1 : 0, opt: opt.i, day: opt.day, city: opt.city, hall: opt.hall },
       results: [], log: [], neta: [], partner: u.partner, partnerName: u.partnerName,
+      cast: u.members.slice(0, 3).map((x) => ({ id: x.id, name: x.short || x.name, role: x.role, look: x.look })),
     };
     m.me.entries[y] = E;
     m.me.name = E.name;
@@ -257,6 +264,17 @@ function mailCard(c, E, rules, opt, g) {
   T(rules.label, 162, 284, 10, '#8a94a8');
 }
 
+// The pair that entered is no longer together (解散 / a new partner): the entry is withdrawn (棄権).
+async function brokeUp(g, E, u) {
+  if (!E || !Array.isArray(E.cast) || E.cast.length < 2) return false;
+  const was = E.cast.find((x) => x.id !== 'player');
+  if (u.members.length >= 2 && (!was || u.members.some((x) => x.id === was.id))) return false;
+  E.status = 'withdrawn'; E.next = null;
+  logLine(E, 'コンビが解散し、M-1を棄権。');
+  await say(g, [`（「${E.name}」は、もうコンビとして活動していない…）`, 'M-1グランプリは、エントリーしたコンビで出る大会。今年は棄権するしかない。'], STAFF);
+  return true;
+}
+
 // ================================================================ a 予選 round
 export async function roundFlow(g, ri) {
   const m = M(g);
@@ -267,6 +285,7 @@ export async function roundFlow(g, ri) {
   const rules = P.rules;
   const R = rules.rounds[ri];
   const u = unitInfo(g, y);
+  if (await brokeUp(g, E, u)) return null;
   const pw = partnerWho(u);
   const isSF = R.id === 'sf';
   const mode = await chooseMode(g, isSF ? 'sf' : 'round', `今日は${rules.label}の${R.name}だ。`);
@@ -572,6 +591,7 @@ export async function finalDayFlow(g) {
   const rules = m1Rules(y);
   if (!E || !rules || !['finalist', 'revival'].includes(E.status)) return watchFinal(g);
   const u = unitInfo(g, y);
+  if (await brokeUp(g, E, u)) return;
   const fin = prepareFinal(m, y);
   if (E.status === 'revival') {
     const won = await revivalFlow(g, E, u, rules, fin);
@@ -907,7 +927,7 @@ async function afterNight(g, E, u, rules) {
     const js = judgesFor(y);
     const fin = M(g).seasons[y].fin;
     const others = (fin.order || []).filter((k) => k !== 'me').slice(0, 3).map((k) => actOf(m, y, k));
-    const set = pushSet(g, 'party', { year: y, cast: [{ look: g.state.look, x: 300, y: 214, s: 2 }].concat(u.partnerLook ? [{ look: u.partnerLook, x: 346, y: 214, s: 2 }] : []).concat(others.map((a, i) => ({ look: a.members[0].look, x: 80 + i * 210, y: 214, s: 2, tag: a.name }))) });
+    const set = pushSet(g, 'party', { year: y, cast: [{ look: g.state.look, x: 290, y: 222, s: 2 }].concat(u.partnerLook ? [{ look: u.partnerLook, x: 350, y: 222, s: 2 }] : []).concat(others.map((a, i) => ({ look: a.members[0].look, x: [70, 170, 540][i], y: 214, s: 2, tag: a.name }))) });
     try {
       const age = has(g, 'playerAge') ? safe(() => g.playerAge(), 20) : (g.state.profile && g.state.profile.age) || 20;
       await say(g, age >= 20 ? '（乾杯！ファイナリストも審査員も、スタッフも入り混じっての打ち上げだ）' : '（乾杯！…未成年なので、ウーロン茶で。ファイナリストも審査員も入り混じっての打ち上げだ）');
@@ -994,8 +1014,7 @@ export async function anotherStory(g, y) {
   const m = M(g);
   const E = m.me.entries[y];
   if (!E) { await say(g, '（その年のアナザーストーリーはない）'); return; }
-  const u = unitInfo(g, y);
-  const looks = [g.state.look, u.partnerLook].filter(Boolean);
+  const looks = castOf(g, y, E).map((x) => x.look).filter(Boolean).slice(0, 2);
   const past = Object.values(m.me.entries).filter((x) => x.y < y).sort((a, b) => a.y - b.y);
   const title = `M-1グランプリ${y} アナザーストーリー　〜${E.name}〜`;
   await docPage(g, { title, looks, lines: [`結成${E.years}年目。${E.amateur ? 'アマチュアのふたり。' : `${E.agency}所属。`}`, E.last ? 'この年が、ラストイヤーだった。' : '', `エントリーナンバー${E.no}。全国${m1Rules(y).entriesText}のうちの、ひと組。`, ...past.map((p) => `${p.y}年：${p.results.length ? `${p.results[p.results.length - 1].round}${p.results[p.results.length - 1].passed ? '' : '敗退'}` : '出場'}`)].filter(Boolean) });

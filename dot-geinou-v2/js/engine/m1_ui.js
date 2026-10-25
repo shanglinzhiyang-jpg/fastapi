@@ -414,31 +414,29 @@ export function confetti(c, t, n = 100) {
 
 // ---- 笑神籤 (or 抽選): the drawn name, the remaining ones
 export function kujiCard(g, o) {
-  // o: { year, n (出番), name, remaining: [names], emikuji: bool, drawer }
   if (!g.auto) sfx('drum');
   return card(g, (c, t) => {
-    R(c, 0, 0, SW, SH, 'rgba(0,0,0,0.72)');
-    T(c, o.emikuji ? '笑神籤' : '出番順', SW / 2, 14, 24, GOLD, 'center', 0, { outline: '#3a1a06' });
-    T(c, o.emikuji ? `${o.n}組目　${o.drawer || '司会'}が籤を引く` : `${o.n}組目（事前の抽選で決定）`, SW / 2, 44, 11, '#fff', 'center', 400);
-    // the box
-    const bx = 200, by = 70;
-    R(c, bx, by, 240, 96, '#7a1a08'); R(c, bx, by, 240, 6, GOLD); R(c, bx, by + 90, 240, 6, GOLD2);
-    T(c, o.emikuji ? '笑神籤' : '抽選箱', SW / 2, by + 34, 26, GOLD, 'center', 0, { outline: '#2a0a04' });
+    bgGrad(c, '#14060a', '#020104');
+    for (let i = 0; i < 16; i++) { c.fillStyle = 'rgba(255,210,63,0.04)'; c.beginPath(); c.moveTo(320, 150); c.lineTo(i * 44 - 20, 360); c.lineTo(i * 44 + 4, 360); c.closePath(); c.fill(); }
+    T(c, o.emikuji ? '笑神籤' : '出番順', SW / 2, 10, 24, GOLD, 'center', 0, { outline: '#3a1a06' });
+    T(c, o.emikuji ? `${o.n}組目　${o.drawer || '司会'}が籤を引く` : `${o.n}組目（事前の抽選で決定）`, SW / 2, 42, 11, '#fff', 'center', 400);
+    const bx = 220, by = 120;
     const k = Math.min(1, Math.max(0, (t - 20) / 30));
-    // the stick rising out
-    const sy = by - 6 - k * 50;
-    R(c, SW / 2 - 6, sy, 12, 60, '#f2e6c8'); R(c, SW / 2 - 6, sy, 12, 4, RED);
+    const sy = by - 4 - k * 52; // the stick rises out of the box (y 64..116)
+    R(c, SW / 2 - 6, sy, 12, 58, '#f2e6c8'); R(c, SW / 2 - 6, sy, 12, 4, RED);
+    R(c, bx, by, 200, 80, '#7a1a08'); R(c, bx, by, 200, 6, GOLD); R(c, bx, by + 74, 200, 6, GOLD2); R(c, SW / 2 - 30, by, 60, 6, '#2a0a04');
+    T(c, o.emikuji ? '笑神籤' : '抽選箱', SW / 2, by + 26, 24, GOLD, 'center', 0, { outline: '#2a0a04' });
     if (t > 50) {
       if (t === 51 && !g.auto) sfx('fanfare');
       const z = Math.min(1, (t - 50) / 10);
-      const w = Math.round(380 * z);
-      R(c, SW / 2 - w / 2, 180, w, 50, '#fff8e8'); R(c, SW / 2 - w / 2, 180, w, 3, RED); R(c, SW / 2 - w / 2, 227, w, 3, RED);
-      if (z >= 1) T(c, o.name, SW / 2, 191, fitSize(c, o.name, 360, 24, 12), INK, 'center', 360);
+      const w = Math.round(400 * z);
+      R(c, SW / 2 - w / 2, 214, w, 48, '#fff8e8'); R(c, SW / 2 - w / 2, 214, w, 3, RED); R(c, SW / 2 - w / 2, 259, w, 3, RED);
+      if (z >= 1) T(c, o.name, SW / 2, 225, fitSize(c, o.name, 380, 24, 12), INK, 'center', 380);
       if (t < 62) { c.fillStyle = 'rgba(255,255,255,0.5)'; c.fillRect(0, 0, SW, SH); }
     }
     if (o.remaining && o.remaining.length) {
-      T(c, `まだ呼ばれていない：${o.remaining.length}組`, SW / 2, 240, 10, '#c8c8d8', 'center', 600);
-      T(c, o.remaining.join('・'), SW / 2, 254, 9, '#8a8aa0', 'center', 600);
+      T(c, `まだ呼ばれていない：${o.remaining.length}組`, SW / 2, 276, 10, '#c8c8d8', 'center', 600);
+      para(c, o.remaining.join('・'), 40, 292, SW - 80, 10, '#8a8aa0', 14, 3, 'center');
     }
   }, { min: 60, max: 260, tag: 'kuji' });
 }
@@ -519,13 +517,13 @@ export function championCard(g, o) {
     for (let i = 0; i < 20; i++) { c.fillStyle = 'rgba(255,210,63,0.05)'; c.beginPath(); c.moveTo(320, 120); c.lineTo(i * 34 - 20, 360); c.lineTo(i * 34 + 6, 360); c.closePath(); c.fill(); }
     T(c, `第${o.ed}代王者`, SW / 2, 16, 16, '#fff', 'center');
     T(c, o.name, SW / 2, 40, fitSize(c, o.name, 560, 36, 14), GOLD, 'center', 580, { outline: '#3a1a06' });
-    (o.members || []).slice(0, 3).forEach((m, i, a) => person(c, m.look, SW / 2 - (a.length - 1) * 50 + i * 100 + (i === 0 ? -40 : 40) * 0, 270, 3, 'down', Math.floor(t / 20) % 2));
-    // trophy
-    const tx = SW / 2;
+    (o.members || []).slice(0, 3).forEach((m, i, a) => person(c, m.look, SW / 2 - (a.length - 1) * 52 + i * 104, 280, 3, 'down', Math.floor(t / 20) % 2));
+    // trophy (right), prize board (left)
+    const tx = 520;
     R(c, tx - 16, 150, 32, 40, GOLD); R(c, tx - 22, 146, 44, 8, GOLD); R(c, tx - 6, 190, 12, 16, GOLD2); R(c, tx - 18, 206, 36, 8, GOLD3);
     R(c, tx - 12, 154, 6, 30, '#fff6c8');
     R(c, 40, 230, 170, 60, '#fff'); R(c, 40, 230, 170, 8, RED); T(c, '賞金', 125, 240, 11, INK, 'center'); T(c, o.prize || '1000万円', 125, 256, 22, RED, 'center');
-    T(c, `M-1グランプリ${o.year}`, SW - 30, 300, 12, '#ffe9a8', 'right');
+    T(c, `M-1グランプリ${o.year}`, SW - 30, 236, 12, '#ffe9a8', 'right');
     confetti(c, t, 130);
   }, { min: 60, max: 420, tag: 'champion' });
 }
