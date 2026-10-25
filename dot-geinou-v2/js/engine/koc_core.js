@@ -184,7 +184,7 @@ export function judgePoints(R, perf, j, parts, r) {
     let bias = 0;
     if (parts && j && j.taste) {
       const key = { kousei: 'neta', hassou: 'neta', engi: 'execution', warai: 'crowd', sekai: 'presence', ma: 'timing' }[j.taste];
-      if (key && Number.isFinite(parts[key])) bias = (parts[key] - perf) * 0.06;
+      if (key && Number.isFinite(parts[key])) bias = clamp((parts[key] - perf) * 0.06, -1.5, 1.5); // a judge's taste: ±1.5 at most
     }
     return clamp(Math.round(66 + perf * 0.31 + bias + gauss(r) * 2.2), 60, 99);
   }

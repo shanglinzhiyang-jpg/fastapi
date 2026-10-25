@@ -281,10 +281,16 @@ export async function runKitMorning(g) {
 }
 onMorning((g) => runKitMorning(g));
 // items: [{ cid, text, prio, cat }] (strings are fine too)
+const PRIO = [25, 45, 65, 85]; // our 0..3 → D1's 0..100 (the champion first, then the finalists / entry news)
 export function emitNews(g, items) {
   const list = items.map((x) => (typeof x === 'string' ? { text: x, prio: 1 } : x)).filter((x) => x && x.text);
   if (!list.length) return;
   list.sort((a, b) => num(b.prio, 1) - num(a.prio, 1));
+  // D1 rate-limits and digests the morning itself (≤ 3 messages + one まとめ): hand it every item with its priority
+  if (has(g, 'contestNews')) {
+    for (const x of list) { try { g.contestNews(x.text, { contest: x.cid, cat: x.cat, prio: PRIO[clamp(Math.round(num(x.prio, 1)), 0, 3)] }); } catch (e) { console.error(e); g.message({ from: 'お笑いニュース', text: x.text, kind: 'news' }); } }
+    return;
+  }
   const solo = list.slice(0, 2), rest = list.slice(2);
   for (const x of solo) newsOut(g, x.text, x.cid, x.cat);
   if (rest.length) newsOut(g, `【お笑い賞レース まとめ】\n${rest.map((x) => '・' + x.text.replace(/\n/g, ' ')).join('\n')}`, rest[0].cid, 'digest');

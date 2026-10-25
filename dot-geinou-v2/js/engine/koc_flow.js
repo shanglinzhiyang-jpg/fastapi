@@ -923,7 +923,8 @@ async function finalAct(g, ctx, a, stage) {
       await g.say(`${a.name}のコント『${title}』。\n${perf >= 85 ? 'スタジオが揺れるほどの爆笑！' : perf >= 72 ? '大きな笑いが何度も起きた。' : perf >= 60 ? 'じわじわと笑いが広がった。' : '前半は静かな時間が続いた…。'}`);
     }
   }
-  a.parts = res ? res.parts : null;
+  // the judges' taste reads the parts of this performance (a test's forced score has no parts of its own)
+  a.parts = res && !(g.auto && Number.isFinite(g.auto.performScore)) ? res.parts : null;
   return { perf, reasons };
 }
 const st0 = (g) => g.state;
