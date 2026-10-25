@@ -809,7 +809,7 @@ export async function runFinalDay(g, y, opts = {}) {
       }
     }
     const playerIn = acts.some((a) => a.me);
-    // this world's acts perform as D1's simulation ranked them (the history and D1's news then agree)
+    // this world's acts perform in the order of their strength
     precomputeNPC(g, { R, judges, rf }, acts, S.rank);
     // ---- 出番順（抽選）
     const order = acts.slice();
@@ -929,14 +929,17 @@ async function finalAct(g, ctx, a, stage) {
 }
 const st0 = (g) => g.state;
 
-// The acts of this world get their performances and scores before the broadcast, in the order of D1's simulation
-// (rank: Map id → place; without D1: by power). The player is not touched: their result is live.
+// The acts of this world get their performances and scores before the broadcast, strongest first (rank: Map id → place when
+// given, else by power). The player is not touched: their result is live.
 function precomputeNPC(g, ctx, acts, rankMap) {
   const { R, judges, rf } = ctx;
   const npcs = acts.filter((a) => !a.me);
   const rk = (a) => (a.id && rankMap && rankMap.has(a.id) ? rankMap.get(a.id) : 50 + (100 - num(a.power, 50)));
   const ord = npcs.slice().sort((a, b) => rk(a) - rk(b));
-  const perfs = (q) => ord.map((a) => simScore(g, { power: a.power, quality: q(a), r: rf, pressure: 95 })).sort((x, z) => z - x);
+  // the night's best acts land around 90-94 in every era (the first seasons have every strong act of the time in them): above 90
+  // a performance counts half, so a near-perfect night (95+) is what wins it
+  const cap = (p) => (p > 90 ? Math.round(90 + (p - 90) * 0.5) : p);
+  const perfs = (q) => ord.map((a) => cap(simScore(g, { power: a.power, quality: q(a), r: rf, pressure: 95 }))).sort((x, z) => z - x);
   const p1 = perfs((a) => a.quality), p2 = perfs((a) => clamp(a.quality - 3 + gauss(rf) * 4, 0, 100));
   ord.forEach((a, i) => { a.pre = [p1[i], p2[i]]; a.rk = i + 1; });
   const sum = (arr) => arr.reduce((t, v) => t + v, 0);
