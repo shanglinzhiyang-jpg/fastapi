@@ -612,7 +612,12 @@ export class PerformGame extends Minigame {
       resp.consumed = true;
       let rt = this.lineRes.respT;
       if (rt == null) rt = this.show.simTiming(resp.who);
-      t = (t + rt) / 2;
+      else { const w = 0.8 + 0.15 * this.show.r; rt = w * rt + (1 - w) * this.show.simTiming(this.pi); }
+      // whoever the player is in the pair carries more of the bit on a routine stage; at stakes both count alike
+      const pw = 0.5 + 0.25 * this.show.r;
+      if (resp.who === this.pi && ln.who !== this.pi) t = (1 - pw) * t + pw * rt;
+      else if (ln.who === this.pi && resp.who !== this.pi) t = pw * t + (1 - pw) * rt;
+      else t = (t + rt) / 2;
       if (resp.who !== this.pi) { const rk = this.show.risk(resp); if (this.rng() < rk.kamu * 0.6) { this.show.flub(resp.who, false); this.popup(`${this.members[resp.who].short}が噛んだ`, 520, 110, COLORS.bad, 14); } }
       this.show.speak(resp);
     }

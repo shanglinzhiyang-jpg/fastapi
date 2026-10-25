@@ -40,6 +40,8 @@
 //                 the player's entry from status(g).entry, today's actions from status(g).today, rivals from rivalsOf (g, round, n, year)
 //                 (in contests_run.js: seasonNews / freeze return at once for it)
 //   feeText       '1人1,000円' | (year) => '…'   how the fee is shown (default 「¥2,000（1組）」)
+//   repeat        true | false              may a past champion enter again (also eligibility.repeat). Unspecified: invitationals yes, open
+//                                           contests with an object eligibility no, a function eligibility: no bar from D1 for the player
 //   eligibility   .extra / .check (g, unit, year) => ({ ok, why })  extra rules checked at entry; def.eligibilityNote: a note line
 //   history.gapRevival true: real gap years are held as 復刻開催 too (default: a real hiatus follows history)
 //   history.champions  { [year]: '…' } this world's champion names for given years (fictional!) instead of the generated ones
@@ -742,7 +744,16 @@ export function simOf(g, id, year) {
   if (CACHE.sims.size > SIM_MAX) CACHE.sims.delete(CACHE.sims.keys().next().value);
   return sim;
 }
-const repeatAllowed = (def) => { const el = eligObj(def); return el.repeat != null ? !!el.repeat : isInvitational(def); };
+// May a past champion enter again? def.repeat / eligibility.repeat (explicit) win. Unspecified: invitationals yes; open contests
+// with an OBJECT eligibility no (most 新人・賞レース); a FUNCTION eligibility encodes its own rules, so D1 adds no bar for the player
+// (forPlayer) — the simulated field of such a contest still keeps past champions out (realism), unless repeat is true.
+function repeatAllowed(def, forPlayer = false) {
+  if (def.repeat != null) return !!def.repeat;
+  const el = eligObj(def);
+  if (el.repeat != null) return !!el.repeat;
+  if (isInvitational(def)) return true;
+  return forPlayer && typeof def.eligibility === 'function';
+}
 function championsBefore(g, id, year) {
   const def = CONTESTS[id];
   if (repeatAllowed(def)) return null;
@@ -902,7 +913,7 @@ export function eligibilityOf(g, id, year) {
     const r = safe(`eligibility.${k}:${id}`, () => elx[k](g, u, y), null);
     if (r && r.ok === false) add('extra', r.why || '出場資格がない');
   }
-  const hRows = !repeatAllowed(def) && !isSelfRun(def) ? historyRows(g, id, y - 1) : [];
+  const hRows = !repeatAllowed(def, true) && !isSelfRun(def) ? historyRows(g, id, y - 1) : [];
   if (hRows.some((r) => r.champId === 'player')) add('champion', '優勝した大会には、もう出られない（王者は卒業）');
   const notes = [];
   const el = eligObj(def);

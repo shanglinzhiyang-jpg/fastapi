@@ -18,7 +18,7 @@ import {
   has, safe, num, n0, realYen, plainYen, toInternal, eraId, devWord, rngOf, gauss, rint, pickR, shuffleR,
   cdate, absIdx, dayOf, dateText, dateTextY, randomLook, actInfo, powerOf, qualityOf, chooseNeta, netaUsedBefore,
   performAct, playerTotal, rivalTotal, cutScore, shortfallReasons, kitMorning, runKitMorning, morningNote, goRefusal,
-  syncEntry, d1Hub, statOf, sendOffer, d1On, d1Entry, d1Register, d1Record, d1Patch, d1Claim, d1PurgeLater, d1Freeze, d1History, d1Field, realNameLike, isAutoNeta, samePenalty,
+  d1Hub, statOf, sendOffer, realNameLike, isAutoNeta, samePenalty,
 } from './r1_kit.js';
 import {
   THEMES, T, fit, jwrap, para, R, box, frame, alpha, drawBig, faceAt, confetti, stage, unstage, card, drumroll, infoCard, sfx, sizeFor,
@@ -65,21 +65,10 @@ export function makeContest(cfg) {
     for (let Y = now.year - 1; Y <= now.year + 3; Y++) {
       if (!C.held(Y)) continue;
       const cal = C.cal(g, Y);
-      // a season whose final was before the game started is history (D1's world / pastHistory), not played
+      // a season whose final was before the game started is history (this world's, pastHistory), not played
       if (cal.final && cal.final.day >= 1 && g.state.day <= cal.final.day + 5) return Y;
     }
     return null;
-  };
-  // the season in play of the running game (D1's def getters have no g: window.__game, memoized per state and day)
-  let liveMemo = null;
-  C.liveY = (fallback) => {
-    const g = typeof window !== 'undefined' ? window.__game : null;
-    const st = g && g.state;
-    if (!st) return fallback;
-    if (liveMemo && liveMemo.st === st && liveMemo.day === st.day && liveMemo.era === (st.profile && st.profile.era)) return liveMemo.Y ?? fallback;
-    const Y = safe(() => C.seasonY(g), null);
-    liveMemo = { st, day: st.day, era: st.profile && st.profile.era, Y };
-    return Y ?? fallback;
   };
   C.nextHeld = (Y) => { for (let y = Y; y < Y + 40; y++) if (C.held(y)) return y; return null; };
 
@@ -94,27 +83,10 @@ export function makeContest(cfg) {
     const notables = [];
     const used = new Set();
     const K = cfg.notables || 36;
-    // the names come from D1's world of acts when the framework is there (the same fictional comedians enter every
-    // contest of the game), strongest first; the strengths follow our own calibrated curve
-    const fi = C.d1Idx(Y, cfg.fieldRound || r.lastPrelim);
-    const world = [];
-    for (const i of [fi, fi - 1]) if (i >= 0) for (const w of d1Field(g, cfg.id, i, K + 8, Y)) if (!world.some((x) => x.name === w.name)) world.push(w);
-    world.sort((a, b) => num(b.power) - num(a.power));
     for (let i = 0; i < K; i++) {
       let n = cfg.notable(rng, Y, i, { prev, used });
       let guard = 0;
       while (used.has(n.name) && guard++ < 8) n = cfg.notable(rng, Y, i, { prev, used });
-      const w = world.find((x) => !used.has(x.name));
-      if (w && !(n.tags || []).includes('前年準優勝')) {
-        n.name = w.name;
-        n.look = w.look || null;
-        if (w.agency) n.agency = w.agency;
-        if (w.unit && cfg.typeFromWorld) n.type = cfg.typeFromWorld(w.unit, n.type);
-        const wt = (w.tags || []).filter((t) => !['優勝候補', '前年王者', '準決勝常連', '決勝経験者'].includes(t)).slice(0, 2);
-        n.tags = Array.from(new Set([...wt, ...(n.tags || []).filter((t) => t !== 'アマチュア' && t !== '学生' && t !== '初出場')])).slice(0, 3);
-        if (w.agency === 'アマチュア' && !n.tags.includes('アマチュア')) n.tags.unshift('アマチュア');
-        n.world = w.id || true;
-      }
       used.add(n.name);
       n.id = `n${i}`;
       n.str = Math.round(clamp(n.str ?? ((cfg.topStr || 86) - i * 0.9 + gauss(rng) * 3.5), 40, 95) * 10) / 10;
@@ -130,7 +102,6 @@ export function makeContest(cfg) {
     }
     S = s.seasons[Y] = { v: 1, Y, ed: r.edition, created: g.state.day, notables: notables.filter((n) => !n.ghost), rounds: {}, entry: null, final: null, ev: {}, news: {}, extra: 0 };
     S.entries = cfg.entries(Y, rng);
-    d1Claim(g, cfg.id, Y, C.d1Rounds(Y).length);
     return S;
   };
   C.find = (S, id) => (id === 'player' ? null : S.notables.find((n) => n.id === id) || null);
@@ -141,15 +112,10 @@ export function makeContest(cfg) {
     if (s.hist[Y]) return s.hist[Y];
     if (!C.held(Y)) return null;
     const cal = C.cal(g, Y);
-    if (cal.final && cal.final.day < 1) {
-      const d = d1History(g, cfg.id);
-      const row = d && d[Y];
-      if (row && row.champion && !realNameLike(row.champion)) return { champ: row.champion, runner: row.runnerUp && !realNameLike(row.runnerUp) ? row.runnerUp : cfg.pastHistory(Y).runner, note: row.note || '', d1: true };
-      return cfg.pastHistory(Y);
-    }
+    if (cal.final && cal.final.day < 1) return cfg.pastHistory(Y);
     return null;
   };
-  // D1's rounds of a season: ours without the 復活ステージ (D1 models it on the final: revival)
+  // D1's view of a season's rounds (its calendar): ours without the 復活ステージ (D1 models it on the final: revival)
   C.d1Rounds = (Y) => cfg.rules(Y).rounds.filter((x) => x.id !== 'rev');
   C.d1Idx = (Y, rid) => C.d1Rounds(Y).findIndex((x) => x.id === rid);
 
@@ -312,8 +278,8 @@ export function makeContest(cfg) {
     const N = (text, prio = 1) => ({ cid: cfg.id, text, prio });
     if (cal.announce && day >= cal.announce.day && day <= cal.announce.day + 25) once('announce', () => N(cfg.text.announce(g, S, rules, cal), 2));
     if (cal.entryFrom && day >= cal.entryFrom.day && day <= cal.entryTo.day) once('entryOpen', () => {
-      if (!S.entry) morningNote(g, `（${rules.title}のエントリー受付が始まった。\n${dateText(cal.entryTo.m, cal.entryTo.d)}まで。${devWord(g)}の「${d1On(g) ? '賞レース' : cfg.appName}」から申し込める）`);
-      return d1On(g) ? null : N(cfg.text.entryOpen(g, S, rules, cal), 2); // D1 announces the opening of every contest
+      if (!S.entry) morningNote(g, `（${rules.title}のエントリー受付が始まった。\n${dateText(cal.entryTo.m, cal.entryTo.d)}まで。${devWord(g)}の「${cfg.appName}」か「賞レース」から申し込める）`);
+      return N(cfg.text.entryOpen(g, S, rules, cal), 2);
     });
     if (cal.entryTo && day > cal.entryTo.day) once('entryClose', () => N(cfg.text.entryClose(g, S, rules, cal), 1));
     for (const rd of rules.rounds) {
@@ -328,12 +294,8 @@ export function makeContest(cfg) {
         if (mine && day > mine.day) {
           E.status = 'withdrawn';
           E.results.push({ round: rd.id, score: 0, total: 0, passed: false, place: null, day: mine.day, withdrawn: true });
-          syncEntry(g, cfg.id, S.Y, E);
           C.logMe(g, S, `${rd.name}を欠場（棄権）`);
-          // D1 sends its own 【棄権】 notice when it keeps the entry; its record follows ours either way
-          const de = d1Entry(g, cfg.id, S.Y);
-          if (de) { if (de.status !== 'withdrawn') d1Patch(g, cfg.id, S.Y, (e) => { e.status = 'withdrawn'; }); }
-          else g.message({ from: cfg.office, text: `${rules.title} ${rd.name}にお越しにならなかったため、棄権の扱いとなりました。`, kind: 'news' });
+          g.message({ from: cfg.office, text: `${rules.title} ${rd.name}にお越しにならなかったため、棄権の扱いとなりました。`, kind: 'news' });
         }
       }
       if (day > last.day) once('round_' + rd.id, () => {
@@ -343,8 +305,7 @@ export function makeContest(cfg) {
     }
     // reminders on the player's round days
     const due = C.dueRound(g, S);
-    // (D1 reminds an entry it keeps: 【本日】 + a morning note of its own)
-    if (due && !d1Entry(g, cfg.id, S.Y)) once('due_' + due.rid, () => { morningNote(g, `（今日は${rules.title} ${C.roundName(S.Y, due.rid)}の日だ！\n${cfg.venueName(S.Y, due.rid, due.venue)}。${devWord(g)}の「${cfg.appName}」から会場へ向かおう）`); return null; });
+    if (due) once('due_' + due.rid, () => { morningNote(g, `（今日は${rules.title} ${C.roundName(S.Y, due.rid)}の日だ！\n${cfg.venueName(S.Y, due.rid, due.venue)}。${devWord(g)}の「${cfg.appName}」から会場へ向かおう）`); return null; });
     // the final without the player (or after it); a finalist who did not come is withdrawn
     if (cal.final && day > cal.final.day && !S.ev.final) {
       S.ev.final = day;
@@ -353,7 +314,6 @@ export function makeContest(cfg) {
         if (E && ['passed', 'revival'].includes(E.status) && ['final', 'rev'].includes(E.round) && !(E.done && E.done[E.round])) {
           E.status = 'withdrawn';
           E.results.push({ round: E.round, score: 0, total: 0, passed: false, place: null, day: cal.final.day, withdrawn: true });
-          syncEntry(g, cfg.id, S.Y, E);
           C.logMe(g, S, '決勝を欠場（棄権）');
         }
         if (!S.final || !S.final.done) await C.simFinal(g, S, null);
@@ -361,8 +321,6 @@ export function makeContest(cfg) {
       } catch (e) { console.error(e); }
     }
     if (cal.final && day > cal.final.day + 1 && day <= cal.final.day + 12) once('after1', () => (cfg.text.after ? N(cfg.text.after(g, S, rules), 1) : null));
-    // D1 queues its own 王者の会見 / ネットの反応 lines of every contest the morning after a final: ours are ours
-    if (cal.final && day > cal.final.day && day <= cal.final.day + 3) d1PurgeLater(g, cfg.id);
     // storylines of the field while the season runs (≤ 1 every few days, each line once a season)
     if (cal.entryFrom && day >= cal.entryFrom.day && cal.final && day < cal.final.day && day % 4 === 0) {
       const line = cfg.text.story ? cfg.text.story(g, S, rules, cal) : null;
@@ -708,8 +666,6 @@ function installFlows(C) {
       await CARDS.ticketCard(g, { title: `${rules.title}　エントリー受付票`, no, name: unitName, line: `${C.roundName(Y, E.round)}：${d0 ? dateTextY(d0.y, d0.m, d0.d) + '　' + cfg.venueName(Y, E.round, d0.venue) : '後日お知らせします'}\n${rules.fee ? `参加費 ${plainYen(rules.fee)} 受領` : ''}`, stamp: '受付済' }, th);
       g.message({ from: cfg.office, text: `${rules.title}へのエントリーを受け付けました。\nエントリーナンバー：${no}\n${C.roundName(Y, E.round)}：${d0 ? dateText(d0.m, d0.d) + '（' + cfg.venueName(Y, E.round, d0.venue) + '）' : '後日'}\n当日は開始時刻の30分前までに受付をお済ませください。`, kind: 'news' });
       C.logMe(g, S, `エントリー（No.${no}）`);
-      d1Register(g, cfg.id, Y, { unitName, rep: g.state.name, agency: act.agency, members: pre.members ? pre.members.length : 1, kinds: cfg.kindLabel ? cfg.kindLabel(E) : '', fee: rules.fee || 0, no, picks: { 0: E.dateIdx } });
-      syncEntry(g, cfg.id, Y, E);
       if (cfg.afterEntry) await cfg.afterEntry(g, C, { S, rules, E, act });
       await g.say(`エントリーナンバーは${no}。\n${C.roundName(Y, E.round)}まで、ネタを仕上げよう！\n（${devWord(g)}の「${cfg.appName}」→「準備する」で稽古できる）`);
       return E;
@@ -979,11 +935,6 @@ function installFlows(C) {
       await infoCard(g, `${rd.name}　敗退 ── 実力不足`, [`得点の目安 ${o.tot.total.toFixed(1)}　通過ライン ${o.R0.cut.toFixed(1)}（約${n0(o.R0.field)}${cfg.unitWord}中 ${n0(o.R0.pass)}${cfg.unitWord}通過）`, ...reasons.map((x) => '・' + x), canRev ? '…でも、まだ「復活ステージ」がある！' : cfg.loseTip || 'ネタを書き直し、場数を踏んで、また来年。'], { theme: th, color: '#e8e8f0' });
       if (cfg.partnerAfter && E.solo) await cfg.partnerAfter(g, C, { S, E, passed: false, rid });
     }
-    // D1's record of the entry follows (its hub, reminders and 「会場へ向かう」 read it)
-    d1Record(g, cfg.id, Y, C.d1Idx(Y, rid), { passed: o.passed, score: Math.round(o.tot.total), place: o.place, of: o.R0.field });
-    if (o.passed) d1Patch(g, cfg.id, Y, (e) => { e.picks = { ...(e.picks || {}), [C.d1Idx(Y, E.round)]: E.dateIdx }; });
-    else d1Patch(g, cfg.id, Y, (e) => { e.revivalOk = E.status === 'revival' ? C.d1Idx(Y, 'final') : null; });
-    syncEntry(g, cfg.id, Y, E);
   };
   C.revivalInvite = (g, S) => {
     const sf = S.rounds[cfg.rules(S.Y).lastPrelim];
@@ -1112,7 +1063,6 @@ function installFlows(C) {
     if (ok) {
       sfx('fanfare');
       E.status = 'passed'; E.round = 'final'; E.dateRound = 'final'; E.dateIdx = 0;
-      d1Patch(g, cfg.id, Y, (e) => { e.status = 'passed'; e.round = C.d1Idx(Y, 'final'); e.revivalOk = null; (e.results || (e.results = [])).push({ round: C.d1Idx(Y, 'final'), name: rd.name, score: Math.round(tot.total), passed: true, revival: true, day: g.state.day }); });
       await g.say(`復活したのは──${E.unitName}！！\n決勝の舞台へ！`);
       C.logMe(g, S, `${rd.name}から決勝へ`);
       E.catch = cfg.catchcopy(g, S, 'player');
@@ -1120,10 +1070,8 @@ function installFlows(C) {
     }
     sfx('fail');
     E.status = 'out';
-    d1Patch(g, cfg.id, Y, (e) => { e.revivalOk = null; (e.results || (e.results = [])).push({ round: C.d1Idx(Y, 'final'), name: rd.name, score: Math.round(tot.total), passed: false, revival: true, day: g.state.day }); });
     C.logMe(g, S, `${rd.name}で敗退`);
     await g.say(`復活したのは、${(C.find(S, R0.passed[0]) || {}).name || '別の芸人'}。\n…あと一歩、届かなかった。`);
-    syncEntry(g, cfg.id, Y, E);
     return false;
   };
 
@@ -1288,11 +1236,6 @@ function installFlows(C) {
     S.final = F;
     const hist = C.state(g).hist;
     hist[Y] = { champ: F.champName, runner: F.runnerName, champType: F.champType, champPlayer: F.champ === 'player', note: F.note, finalists: F.order.map(nameOf) };
-    // D1: the player's final result on the entry, then this world's history = ours (D1's screens read it)
-    if (ui && E) d1Record(g, cfg.id, Y, C.d1Idx(Y, 'final'), { champion: F.champ === 'player', passed: F.champ === 'player', place: F.ranking.indexOf('player') + 1, total: F.champ === 'player' ? 9999 : 0 });
-    const wid = (id) => { const n = id === 'player' ? null : C.find(S, id); return id === 'player' ? 'player' : n && typeof n.world === 'string' ? n.world : null; };
-    d1Freeze(g, cfg.id, Y, { edition: rules.edition, revival: false, champion: F.champName, champId: wid(F.champ), runnerUp: F.runnerName || null, runnerId: wid(F.ranking[1]), third: F.ranking[2] ? nameOf(F.ranking[2]) : null, finalists: F.ranking.slice(0, 12).map(nameOf), note: F.note || '', player: F.ranking.includes('player') ? F.ranking.indexOf('player') + 1 : null, deep: {} });
-    d1PurgeLater(g, cfg.id);
     return F;
   };
   // the final stage: re-perform (in the reverse order of the first stage) and decide
@@ -1384,7 +1327,6 @@ function installFlows(C) {
         C.logMe(g, S, `決勝 ${place}位`);
         if (cfg.partnerAfter && E.solo) await cfg.partnerAfter(g, C, { S, E, passed: false, final: true, place });
       }
-      syncEntry(g, cfg.id, Y, E);
       // this game's own after-show: the 打ち上げ
       if (cfg.afterParty) await cfg.afterParty(g, C, { S, E, F, st, win });
     } finally { unstage(g, st); }
@@ -1459,13 +1401,48 @@ function installFlows(C) {
         await phoneList(g, { title: '歴代王者', color: cfg.color, items: h.length ? h.map((x) => ({ label: x.champion, sub: `${x.year}年 ${x.edition ? '第' + x.edition + '回' : ''}${x.player ? '（あなた！）' : ''}` })) : [{ label: 'まだ大会がない' }] });
       } else if (it.key === 'entry' || it.key === 'go' || it.key === 'prep' || it.key === 'me') {
         if ((it.key === 'go' || it.key === 'entry' || it.key === 'prep') && !phoneOverMapOnly(g)) { await phoneInfo(g, { title: cfg.appTitle, color: cfg.color, text: '今はここを離れられない。' }); continue; }
-        // 会場へ向かう: through D1's 「賞レース」 runner when it keeps the entry (its travel and mode questions, then our flow)
-        const viaD1 = it.key === 'go' && has(g, 'contestGo') && d1Entry(g, cfg.id, Y);
-        const fn = it.key === 'entry' ? C.entry : it.key === 'go' ? (viaD1 ? (gg) => gg.contestGo(cfg.id) : C.go) : it.key === 'prep' ? C.prep : (gg) => C.recap(gg, S && S.entry ? Y : null);
+        const fn = it.key === 'entry' ? C.entry : it.key === 'go' ? C.go : it.key === 'prep' ? C.prep : (gg) => C.recap(gg, S && S.entry ? Y : null);
         closePhoneThen(g, async (gg) => { await fn(gg); gg.save && gg.save(true); });
         return;
       }
     }
+  };
+  // ---------------------------------------------------------------- D1 (def.selfRun): what its 賞レース screen / app show
+  // status(g) → { status, statusLabel, label, edition, year, entry: { no, name, status, statusLabel, round, next, results, final }, today }
+  C.d1Status = (g) => {
+    const n = C.now(g);
+    const Y = n.Y;
+    const map = { notyet: 'notyet', none: 'hiatus', soon: 'before', entry: 'entry', closed: 'prelim', waiting: 'prelim', round: 'prelim', final: 'finalday', out: 'prelim', done: 'after' };
+    let status = map[n.kind] || 'before';
+    const S = Y ? C.state(g).seasons[Y] : null;
+    if (Y) { const cal = C.cal(g, Y); if (cal.final && g.state.day > cal.final.day) status = 'after'; else if (cal.final && g.state.day === cal.final.day) status = 'finalday'; }
+    const E = S && S.entry;
+    let entry = null;
+    if (E) {
+      const rules = cfg.rules(Y);
+      const ext = { entered: 'entered', passed: 'passed', revival: 'passed', out: 'out', withdrawn: 'withdrawn', champion: 'champion', runnerup: 'out', finalist: 'out' }[E.status] || 'entered';
+      const nx = ['entered', 'passed', 'revival'].includes(E.status) ? C.myDate(g, S) : null;
+      entry = {
+        no: E.no, name: E.unitName, status: ext, statusLabel: `${statusText(E.status, rules, E)}${E.place && E.status !== 'champion' ? `（決勝${E.place}位）` : ''}`, round: C.roundName(Y, E.round),
+        next: nx ? { day: nx.day, city: cfg.venueName(Y, E.round, nx.venue), hall: '' } : null,
+        results: E.results.map((r) => ({ round: C.roundName(Y, r.round), name: C.roundName(Y, r.round), passed: r.passed, score: r.total, withdrawn: !!r.withdrawn })),
+        final: E.status === 'champion' ? { place: 1 } : E.place ? { place: E.place } : null,
+      };
+    }
+    const due = S ? C.dueRound(g, S) : null;
+    const today = due ? [{ id: due.rid, label: `${C.roundName(Y, due.rid)}（${cfg.venueName(Y, due.rid, due.venue)}）` }] : [];
+    return { status, statusLabel: n.label, label: Y ? cfg.rules(Y).title : cfg.label, edition: Y ? cfg.rules(Y).edition : null, year: Y, entry, today };
+  };
+  // historyList(g) → every year up to the last final played: [{ year, edition, held, champion, runnerUp, finalists, note, player }]
+  C.historyList = (g) => C.history(g).map((h) => ({ year: h.year, edition: h.edition, held: h.edition != null, champion: h.edition != null ? h.champion : null, runnerUp: h.runnerUp || null, finalists: (C.state(g).hist[h.year] || {}).finalists || [], note: h.note || '', player: h.player ? 1 : null }));
+  // rivalsOf(g, round (D1 index or our id), n, year) → this season's named entrants still in at that round, strongest first
+  C.rivalsOf = (g, round, n = 10, year) => {
+    const Y = year ?? C.seasonY(g);
+    if (!Y || !C.held(Y)) return [];
+    const S = C.season(g, Y);
+    const rid = typeof round === 'number' ? (C.d1Rounds(Y)[round] || {}).id : round;
+    const list = (rid ? C.alive(S, rid) : S.notables).slice().sort((a, b) => b.str - a.str).slice(0, n);
+    return list.map((x) => ({ id: x.id, name: x.name, unit: x.type, kind: cfg.kindOf ? cfg.kindOf(S) : 'pin', power: Math.round(x.str), tags: x.tags || [], agency: x.agency || '', look: C.lookOf(x), members: [{ name: x.name, look: C.lookOf(x) }] }));
   };
   C.rulesText = (g, Y) => {
     if (!Y || !C.held(Y)) return [`${cfg.label}`, `${cfg.foundedText}`, '', cfg.aboutNotYet ? cfg.aboutNotYet(g) : ''];

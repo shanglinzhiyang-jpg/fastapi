@@ -458,7 +458,7 @@ export class Show {
     const bonus = Math.min(8, c.adlib * 2.5) + (c.maxChain >= 4 ? 2 : 0) + clamp(this.bonusPts || 0, -6, 6);
     const avgT0 = this.tN ? this.tSum / this.tN : 0.5;
     // the execution rating: the minigame's own (o.execAcc 0..100, how well the player played) or the act's from the timing
-    const execAcc = Number.isFinite(o.execAcc) ? clamp(o.execAcc, 0, 100) : 100 * clamp(0.1 + 0.8 * avgT0, 0, 1);
+    const execAcc = Number.isFinite(o.execAcc) ? clamp(o.execAcc, 0, 100) : 100 * clamp(0.85 * avgT0, 0, 1);
     const model = base - pen + bonus;
     let score = clamp(Math.round(model * (this.s + 0.35 * this.r) + 0.65 * this.r * execAcc), 0, 100);
     if (Number.isFinite(o.score)) score = clamp(Math.round(o.score), 0, 100);

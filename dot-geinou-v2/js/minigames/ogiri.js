@@ -252,7 +252,9 @@ class Ogiri extends PerformGame {
     this.answeredRound++;
     const frac = this.thinkT / this.thinkLen;
     // a weak idea doesn't land however it's said: the delivery rides on how good the chosen answer is
-    const rel = clamp(idea.q / Math.max(1, ...(this.odQ || [idea.q])), 0, 1);
+    const qs = this.odQ && this.odQ.length ? this.odQ : [idea.q];
+    const lo = Math.min(...qs), hi = Math.max(...qs);
+    const rel = hi > lo ? clamp((idea.q - lo) / (hi - lo), 0, 1) : 1;
     let t = 0.45 + 0.5 * rel + (this.mode === 'zabuton' ? 0.1 * (1 - frac) : 0) - (forced ? 0.2 : 0);
     if (this.mode === 'zabuton') this.hands[PLAYER_SEAT] = 30;
     this.pending = { idea, t };
