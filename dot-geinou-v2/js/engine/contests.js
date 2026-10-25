@@ -122,9 +122,12 @@ function baseAbs(g) {
 export function dayOfDate(g, y, m, d) { return absOf(y, m, d) - baseAbs(g) + 1; }
 export function startYear(g) { return contestDate(g, 1).year; }
 export const todayOf = (g) => (g.state && g.state.day) || 1;
+// The calendar day shown for a game day of the month (dom 1..10): the same mapping as the politics core's polDate / g.gameDate
+// (day index k → (k − 1) × 3 + 1: 1, 4, 7 … 28), so a round shows the same date on every screen. Schedules stay in [month, dom 1..10].
+export const realDay = (dom) => (clamp(Math.round(num(dom, 1)), 1, MONTH_DAYS) - 1) * 3 + 1;
 export function dateText(g, day, opts = {}) {
   const d = contestDate(g, day);
-  const s = `${d.month}月${d.dom}日`;
+  const s = `${d.month}月${realDay(d.dom)}日`;
   return opts.year ? `${d.year}年${s}` : s;
 }
 // 昭和64年 = 平成元年 (1989-01-08); the game's months only
@@ -266,8 +269,16 @@ export function seasonYearOf(g, idOrDef, day = todayOf(g)) {
   const def = typeof idOrDef === 'string' ? CONTESTS[idOrDef] : idOrDef;
   if (!def) return contestDate(g, day).year;
   const y0 = contestDate(g, day).year;
-  for (let y = y0 - 1; y <= y0 + 2; y++) { const [fm, fd] = finalMD(def, y); if (dayOfDate(g, y, fm, fd) >= day) return y; }
-  return y0 + 1;
+  let y = y0 + 1;
+  for (let k = y0 - 1; k <= y0 + 2; k++) { const [fm, fd] = finalMD(def, k); if (dayOfDate(g, k, fm, fd) >= day) { y = k; break; } }
+  // a cycle that has just finished stays current until the next one actually opens (its entry window, else its first round)
+  const prev = cycleOf(g, def, y - 1);
+  if (prev && prev.held && prev.final.day < day) {
+    const next = cycleOf(g, def, y);
+    const start = next && next.held ? (next.entry ? next.entry.from : next.rounds.length ? next.rounds[0].first : next.final.day) : Infinity;
+    if (day < start) return y - 1;
+  }
+  return y;
 }
 
 // ================================================================ state
@@ -1145,7 +1156,8 @@ export function selfToday(g) {
 export function contestInfo(g, id, day = todayOf(g)) {
   const def = CONTESTS[id];
   if (!def) return null;
-  const year = seasonYearOf(g, def, day);
+  const sst = isSelfRun(def) ? selfStatus(g, def) : null;
+  const year = sst && Number.isFinite(Number(sst.year)) ? Number(sst.year) : seasonYearOf(g, def, day);
   const cyc = cycleOf(g, def, year);
   const entry = entryOf(g, id, year);
   let status;
@@ -1164,7 +1176,7 @@ export function contestInfo(g, id, day = todayOf(g)) {
   const label = cyc.notyet ? `${contestName(def, year)}（まだ始まっていない／${num(def.history && def.history.founded)}年創設）` : cyc.label;
   if (isSelfRun(def) && !entry) {
     // the def's own view: its entry, next round and status label
-    const st = selfStatus(g, def);
+    const st = sst;
     const ext = externalEntry(g, def);
     if (ext && ext.next && Number.isFinite(Number(ext.next.day))) {
       const ri = cyc.rounds.findIndex((rr) => rr.name === ext.roundName || rr.id === ext.roundName);
@@ -1174,7 +1186,13 @@ export function contestInfo(g, id, day = todayOf(g)) {
     const stt = st && map[st.status] ? map[st.status] : status;
     return { id, def, year, cyc, status: stt, statusLabel: (st && st.statusLabel) || STATUS_LABEL[stt] || '', revival: !!cyc.revival, edition: st && st.edition != null ? st.edition : cyc.edition, label: (st && st.label) || label, nextRound, entry: ext, invite: cyc.invite, selfRun: true, today: st && Array.isArray(st.today) ? st.today : [] };
   }
-  return { id, def, year, cyc, status, statusLabel: cyc.notyet ? `まだ始まっていない（${num(def.history && def.history.founded)}年創設）` : !cyc.held ? cyc.note || '開催なし' : cyc.invite && status !== 'closed' ? (status === 'running' ? '開催中（招待制）' : '招待制') : STATUS_LABEL[status], revival: !!cyc.revival, edition: cyc.edition, label, nextRound, entry, invite: cyc.invite };
+  let closedLabel = null;
+  if (status === 'closed' && cyc.held && cyc.final.day < day) {
+    const nx = cycleOf(g, def, year + 1);
+    const start = nx && nx.held ? (nx.entry ? nx.entry.from : nx.rounds[0] && nx.rounds[0].first) : null;
+    closedLabel = start ? `終了（次回は${dateText(g, start)}から${nx.entry ? '受付' : ''}）` : '終了';
+  }
+  return { id, def, year, cyc, status, statusLabel: closedLabel || (cyc.notyet ? `まだ始まっていない（${num(def.history && def.history.founded)}年創設）` : !cyc.held ? cyc.note || '開催なし' : cyc.invite && status !== 'closed' ? (status === 'running' ? '開催中（招待制）' : '招待制') : STATUS_LABEL[status]), revival: !!cyc.revival, edition: cyc.edition, label, nextRound, entry, invite: cyc.invite };
 }
 
 // Player's rounds due on a day: [{ id, year, idx, option, revival, entry, cyc }]
@@ -1380,7 +1398,7 @@ export const CONTEST_UI = {};
 
 // internals shared with contests_run.js / contest_ui.js / places/shourace.js
 export const internals = {
-  cstate, playerUnit, playerPower, isSelfRun, selfStatus, selfToday, externalEntry, cycleOf, seasonYearOf, contestInfo, dueOn, eventsOn, simOf, entryOf, registerEntry, eligibilityOf, feeOf, prizeOf, applyReward, addHarmony,
+  realDay, cstate, playerUnit, playerPower, isSelfRun, selfStatus, selfToday, externalEntry, cycleOf, seasonYearOf, contestInfo, dueOn, eventsOn, simOf, entryOf, registerEntry, eligibilityOf, feeOf, prizeOf, applyReward, addHarmony,
   pushNews, rivalsFor, judgesFor, panelScores, scaleOf, toFieldScore, playerScoreDist, PHI, kindOf, KIND_LABEL, roundsOf, roundsAt, scheduleAt, labelOf, contestName, colorOf,
   prestigeOf, isInvitational, dateText, todayOf, playerUnitName, bump, resultsOf, historyRows, lastDoneYear, logOnce, realToInternal, yenLabel,
   OFFICE_FROM, NEWS_FROM, judgeComment, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, TAG_COLORS, hostPerson, rngOf, gauss, pickR, MODEL,

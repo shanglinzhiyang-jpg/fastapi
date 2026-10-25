@@ -196,13 +196,13 @@ function kocMorning(g) {
     if (R.revival) once('revival', () => news(g, NEWS.revival[0](d), kn('revival')));
   }
   if (t.abs >= absOf(y, S.final.when) - 3 && t.abs < absOf(y, S.final.when) && R.mode === 'panel') once('judges', () => news(g, NEWS.judges[0]({ ...d, judges: judgesFor(g, y).map((j) => j.name).join('、') }), kn('judges')));
-  if (t.abs === absOf(y, S.final.when)) once('final', () => { news(g, NEWS.final[0](d), kn('final')); if (!E || !['finalist', 'revival', 'voter'].includes(E.status)) notice(g, `今夜『${titleOf(y)}』決勝！\n（KOCアプリの「決勝を見る」から、生放送が見られる）`, 'TBS', 80, `kocn|${y}|tonight`); });
+  if (t.abs === absOf(y, S.final.when)) once('final', () => news(g, `${NEWS.final[0](d)}${E && ['finalist', 'revival', 'voter'].includes(E.status) ? '' : '\n（KOCアプリの「決勝を見る」から見られる）'}`, kn('final')));
   if (t.abs > absOf(y, S.final.when)) {
     if (!k.hist[y] || !k.hist[y].champ) k.hist[y] = histFromSeason(g, y, null, null);
     if (k.hist[y] && E && !k.hist[y].me) k.hist[y].me = { unitId: E.unitId, unit: E.unitName, reached: E.out || E.round, place: E.place || null, text: '' };
     once('champ', () => { const h = k.hist[y]; if (h) news(g, NEWS.champion[0]({ ...d, champ: h.champ, score: h.champScore }), { morning: true, key: `champ|koc|${y}` }); });
     if (t.abs > absOf(y, S.final.when) + 1) once('after', () => { const h = k.hist[y]; if (h && h.champ) news(g, NEWS.after[y % NEWS.after.length]({ ...d, champ: h.champ }), kn('after')); });
-    if (R.kai && y >= 2021 && t.abs > absOf(y, S.final.when) + 20) once('kai', () => news(g, NEWS.kai[0](d), kn('kai')));
+    if (R.kai && y >= 2021 && t.abs > absOf(y, S.final.when) + 20) once('kai', () => news(g, NEWS.kai[0]({ ...d, champ: k.hist[y] && k.hist[y].champ }), kn('kai')));
   }
   // ---- the player: missed rounds, reminders (KOC's own: D1 keeps no KOC entry)
   if (E && ['entered', 'finalist', 'revival', 'voter'].includes(E.status)) {

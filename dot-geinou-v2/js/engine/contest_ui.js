@@ -345,7 +345,7 @@ class ContestScene {
     const uniq = [];
     const seen = new Set();
     for (const e of evs) { const k = `${e.id}|${e.kind}|${e.name}`; if (!seen.has(k)) { seen.add(k); uniq.push(e); } }
-    const k = await this.pick({ title: `${this.cal.year}年${this.cal.month}月${this.cal.dom}日の予定`, items: uniq.map((e) => ({ label: `${I.contestName(e.def, e.year)}　${e.name}`, sub: e.mine ? 'あなたの出番' : e.kind === 'entry' ? '' : '', color: I.colorOf(e.def), right: e.mine ? '★出場' : '', rightColor: K.gold })) });
+    const k = await this.pick({ title: `${this.cal.year}年${this.cal.month}月${I.realDay(this.cal.dom)}日の予定`, items: uniq.map((e) => ({ label: `${I.contestName(e.def, e.year)}　${e.name}`, sub: e.mine ? 'あなたの出番' : e.kind === 'entry' ? '' : '', color: I.colorOf(e.def), right: e.mine ? '★出場' : '', rightColor: K.gold })) });
     if (k >= 0) await this.contestMenu(uniq[k].id);
   }
   handleTap(tap, inp) {
@@ -456,7 +456,7 @@ class ContestScene {
     R(c, 0, 0, SW, 20, K.head);
     T(c, '賞レース', 8, 3, 12, K.gold);
     const d = I.contestDate(g);
-    T(c, `${d.year}年（${I.wareki(d.year, d.month)}）${d.month}月${d.dom}日　${I.todayOf(g)}日目`, 80, 4, 10, K.dim, 'left', 300);
+    T(c, `${d.year}年（${I.wareki(d.year, d.month)}）${d.month}月${I.realDay(d.dom)}日　${I.todayOf(g)}日目`, 80, 4, 10, K.dim, 'left', 300);
     const dueN = I.dueOn(g).length + I.selfToday(g).length;
     if (dueN) T(c, `今日は本番の日！（${dueN}件）`, SW - 30, 4, 10, K.gold, 'right', 220);
     T(c, '×', SW - 12, 3, 12, K.dim, 'center');
@@ -504,7 +504,7 @@ class ContestScene {
         const mine = list.some((e) => e.mine);
         R(c, x, y, CAL.cw - 1, CAL.ch - 1, mine ? '#4a3a10' : (m % 2 ? '#1a1430' : '#1e1736'));
         if (day < 1) R(c, x, y, CAL.cw - 1, CAL.ch - 1, 'rgba(0,0,0,0.35)');
-        T(c, String(d), x + 2, y + 1, 10, day === today ? K.cyan : K.faint);
+        T(c, String(I.realDay(d)), x + 2, y + 1, 10, day === today ? K.cyan : K.faint);
         // markers: entry windows (bottom line), rounds (dots), finals (gold square)
         const entries = list.filter((e) => e.kind === 'entry');
         if (entries.length) R(c, x + 1, y + CAL.ch - 4, CAL.cw - 3, 2, entries.some((e) => I.entryOf(g, e.id, e.year)) ? K.good : '#3a6a8a');
@@ -525,7 +525,7 @@ class ContestScene {
     const px = CAL.px, pw = SW - px - 8;
     R(c, px, 44, pw, 288, K.panel); R(c, px, 44, pw, 1, K.edgeHi);
     const day = this.dayOfCal();
-    T(c, `${cal.year}年${cal.month}月${cal.dom}日${day === today ? '（今日）' : day < today ? '' : day - today <= 30 ? `（${day - today}日後）` : ''}`, px + 8, 50, 12, K.gold, 'left', pw - 16);
+    T(c, `${cal.year}年${cal.month}月${I.realDay(cal.dom)}日${day === today ? '（今日）' : day < today ? '' : day - today <= 30 ? `（${day - today}日後）` : ''}`, px + 8, 50, 12, K.gold, 'left', pw - 16);
     const list = (evs.get(day) || []).slice();
     list.sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0) || (a.kind === 'entry' ? 1 : 0) - (b.kind === 'entry' ? 1 : 0));
     const seen = new Set();
