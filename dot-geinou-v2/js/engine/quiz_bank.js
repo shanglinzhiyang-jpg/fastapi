@@ -41,7 +41,7 @@ const RAW = {
   kanji: [
     ['「土産」の読みは？', 'みやげ', 'みあげ', 'つちうみ', 'とさん', 1],
     ['「小豆」の読みは？', 'あずき', 'こまめ', 'おまめ', 'こずき', 1],
-    ['「梅雨」の、季節を表す読み方は？', 'つゆ', 'うめあめ', 'うめさめ', 'つあめ', 1],
+    ['「梅雨」の読みは？', 'つゆ', 'うめあめ', 'うめさめ', 'つあめ', 1],
     ['「部屋」の読みは？', 'へや', 'べや', 'ぶや', 'ぶおく', 1],
     ['「果物」の読みは？', 'くだもの', 'かもの', 'はてもの', 'かぶつ', 1],
     ['「八百屋」の読みは？', 'やおや', 'はっぴゃくや', 'やおもや', 'はちひゃくや', 1],
@@ -50,10 +50,10 @@ const RAW = {
     ['「芝生」の読みは？', 'しばふ', 'しばい', 'しばせい', 'しばなま', 1],
     ['「足袋」の読みは？', 'たび', 'あしぶくろ', 'そくたい', 'たぶくろ', 1],
     ['「浴衣」の読みは？', 'ゆかた', 'よくい', 'あびごろも', 'よくころも', 1],
-    ['「二十日」（はつかの日）の読みは？', 'はつか', 'ふつか', 'はたか', 'にとおか', 1],
+    ['「二十日」（月の20番目の日）の読みは？', 'はつか', 'ふつか', 'はたか', 'にとおか', 1],
     ['「風邪」の読みは？', 'かぜ', 'かざ', 'ふうや', 'かじゃ', 1],
     ['「迷子」の読みは？', 'まいご', 'めいご', 'めいこ', 'まよこ', 1],
-    ['「笑顔」の読みは？', 'えがお', 'わらがお', 'えかお', 'えみがお', 1],
+    ['「笑顔」の読みは？', 'えがお', 'わらがお', 'えかお', 'しょうめん', 1],
     ['「草履」の読みは？', 'ぞうり', 'くさぐつ', 'そうれい', 'くさばき', 2],
     ['「団扇」の読みは？', 'うちわ', 'まるおうぎ', 'だんおうぎ', 'うちおうぎ', 2],
     ['「時雨」の読みは？', 'しぐれ', 'ときあめ', 'しあめ', 'ときさめ', 2],
@@ -83,8 +83,8 @@ const RAW = {
     ['魚へんの漢字「鰯」の読みは？', 'いわし', 'さんま', 'あじ', 'たら', 2],
     ['魚へんの漢字「鯛」の読みは？', 'たい', 'ぶり', 'さけ', 'こい', 1],
     ['魚へんの漢字「鯨」の読みは？', 'くじら', 'いるか', 'しゃち', 'さめ', 1],
-    ['「烏賊」の読みは？', 'いか', 'たこ', 'からすい', 'うぞく', 2],
-    ['「海月」の読みは？', 'くらげ', 'うみつき', 'かいげつ', 'みづき', 2],
+    ['「烏賊」の読みは？', 'いか', 'たこ', 'からすい', 'からすが', 2],
+    ['「海月」の読みは？', 'くらげ', 'うみつき', 'うみげつ', 'みづき', 2],
     ['「向日葵」の読みは？', 'ひまわり', 'こうじつき', 'むかいび', 'ひなたあおい', 1],
     ['「蒲公英」の読みは？', 'たんぽぽ', 'なずな', 'よもぎ', 'つくし', 3],
     ['「土筆」の読みは？', 'つくし', 'わらび', 'つちふで', 'ぜんまい', 2],
@@ -105,9 +105,9 @@ const RAW = {
     ['「出納」の読みは？', 'すいとう', 'しゅつのう', 'でのう', 'しゅっとう', 3],
     ['「遵守」の読みは？', 'じゅんしゅ', 'そんしゅ', 'じゅんす', 'そんす', 2],
     ['「凡例」の読みは？', 'はんれい', 'ぼんれい', 'ぼんれつ', 'はんれつ', 3],
-    ['「相殺」の読みは？', 'そうさい', 'そうさつ', 'あいごろし', 'そうせつ', 3],
+    ['「相殺」の読みは？', 'そうさい', 'そうざい', 'あいごろし', 'そうせつ', 3],
     ['「月極駐車場」の「月極」の読みは？', 'つきぎめ', 'げっきょく', 'つききょく', 'つきごく', 2],
-    ['「建立」の読みは？', 'こんりゅう', 'けんりつ', 'けんりゅう', 'こんりつ', 3],
+    ['「建立」の読みは？', 'こんりゅう', 'けんりゅう', 'こんりつ', 'たてだち', 3],
     ['「進捗」の読みは？', 'しんちょく', 'しんしょう', 'しんほ', 'しんちゅう', 2],
     ['「脆弱」の読みは？', 'ぜいじゃく', 'きじゃく', 'もろじゃく', 'ぜつじゃく', 3],
     ['「完遂」の読みは？', 'かんすい', 'かんつい', 'かんずい', 'かんとげ', 3],
@@ -231,6 +231,7 @@ const RAW = {
     ['人口がいちばん少ない都道府県は？', '鳥取県', '島根県', '高知県', '徳島県', 2],
     ['東京23区をのぞいて、人口がいちばん多い市は？', '横浜市', '大阪市', '名古屋市', '札幌市', 2],
     ['日本でいちばん面積が小さい都道府県は？', '香川県', '大阪府', '東京都', '沖縄県', 2, 1990],
+    ['日本でいちばん面積が小さい都道府県は？', '大阪府', '香川県', '東京都', '沖縄県', 2, 0, 1987],
     ['世界でいちばん長い川とされるのは？', 'ナイル川', 'アマゾン川', '長江', 'ミシシッピ川', 1],
     ['世界でいちばん高い山は？', 'エベレスト', 'K2', 'キリマンジャロ', 'モンブラン', 1],
     ['世界でいちばん面積が大きい国は？', 'ロシア', 'カナダ', 'アメリカ', '中国', 1, 1992],
@@ -677,7 +678,7 @@ const TWO_RAW = [
   ['正しいカタカナはどっち？', 'シミュレーション', 'シュミレーション', 2], ['正しいカタカナはどっち？', 'コミュニケーション', 'コミニュケーション', 2],
   ['正しいカタカナはどっち？（寝台）', 'ベッド', 'ベット', 1], ['正しいカタカナはどっち？（かばん）', 'バッグ', 'バック', 1],
   ['正しいカタカナはどっち？（果物）', 'アボカド', 'アボガド', 2], ['正しいカタカナはどっち？', 'ティッシュ', 'テッシュ', 1],
-  ['正しいカタカナはどっち？（骨折のときの固定具）', 'ギプス', 'ギブス', 3], ['正しいカタカナはどっち？（手術の）', 'メス', 'メッス', 1],
+  ['正しいカタカナはどっち？（手術の）', 'メス', 'メッス', 1],
   ['大きいのはどっち？', '地球', '月', 1], ['数が多いのはどっち？', 'アメリカの州の数', '日本の都道府県の数', 2],
   ['長いのはどっち？', '信濃川', '利根川', 2], ['高いのはどっち？', 'キリマンジャロ', '富士山', 2],
   ['面積が広いのはどっち？', '琵琶湖', '東京23区', 3], ['先にできたのはどっち？', '東京タワー', '東海道新幹線', 2],
@@ -753,10 +754,12 @@ export const TANSHUKU = TANSHUKU_RAW.map(([s, f, w1, w2, w3, from = 0, to = 9999
 // agent C's word bank (js/engine/tanshuku_words.js), when it exists: any of its exports that is an array of
 // { short|abbr|s|word, full|long|f|answer, wrong?|w?, from?, to? } is used (feature-detected, never required).
 let EXT_TAN = null;
+let EXT_OPTS = null; // its optionsFor(word, n, { rng, year }) → plausible wrong expansions, when it has one
 export async function loadTanshuku() {
   if (EXT_TAN) return EXT_TAN;
   try {
     const m = await import('./tanshuku_words.js');
+    if (typeof m.optionsFor === 'function') EXT_OPTS = m.optionsFor;
     const cands = [m.TANSHUKU_WORDS, m.WORDS, m.default, ...Object.values(m)].filter(Array.isArray);
     for (const arr of cands) {
       const list = arr.map((o, i) => {
@@ -765,7 +768,7 @@ export async function loadTanshuku() {
         const f = o.full ?? o.long ?? o.f ?? o.answer ?? o.a;
         if (typeof s !== 'string' || typeof f !== 'string' || !s || !f || s === f) return null;
         const w = Array.isArray(o.wrong) ? o.wrong : Array.isArray(o.w) ? o.w : Array.isArray(o.choices) ? o.choices.filter((c) => c !== f) : [];
-        return { id: 'tanx:' + i + ':' + s, s, f, w: w.filter((c) => typeof c === 'string' && c && c !== f).slice(0, 3), from: Number(o.from ?? o.year ?? 0) || 0, to: Number(o.to ?? 9999) || 9999, ext: true };
+        return { id: 'tanx:' + (o.id ?? i) + ':' + s, s, f, w: w.filter((c) => typeof c === 'string' && c && c !== f).slice(0, 3), from: Number(o.from ?? o.year ?? 0) || 0, to: Number(o.to ?? 9999) || 9999, ext: true, raw: o };
       }).filter(Boolean);
       if (list.length >= 8) { EXT_TAN = list; return list; }
     }
@@ -779,8 +782,14 @@ export function tanshukuPool(year) {
   return ext.length >= 8 ? ext : own;
 }
 // one 略語 question with 4 choices (missing wrong choices are taken from other entries)
-export function tanshukuQuestion(x, pool, rng = Math.random) {
-  const w = x.w.slice(0, 3);
+export function tanshukuQuestion(x, pool, rng = Math.random, year = null) {
+  let w = x.w.slice(0, 3);
+  if (x.ext && EXT_OPTS && w.length < 3) {
+    try {
+      const o = EXT_OPTS(x.raw, 4, { rng, year: year ?? undefined });
+      if (Array.isArray(o)) w = [...new Set(o.filter((c) => typeof c === 'string' && c && c !== x.f))].slice(0, 3);
+    } catch (e) { /* fall back to the others' words */ }
+  }
   const others = pool.filter((o) => o.f !== x.f && !w.includes(o.f));
   while (w.length < 3 && others.length) w.push(others.splice(Math.floor(rng() * others.length), 1)[0].f);
   return { id: x.id, cat: 'tanshuku', q: `「${x.s}」は、何という言葉を短くしたもの？`, a: x.f, w, lv: 2, s: x.s };

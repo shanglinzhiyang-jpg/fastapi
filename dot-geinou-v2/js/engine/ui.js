@@ -274,6 +274,10 @@ export function drawHud(ctx, g) {
   nx = needGauge(ctx, nx, 26, '満腹', L.hunger / 100, '#ff9a3c', L.hunger < HUNGRY, warn);
   nx = needGauge(ctx, nx, 26, 'ストレス', L.stress / 100, L.stress >= STRESSED ? COLORS.bad : L.stress >= 40 ? COLORS.accent : '#b48cff', L.stress >= STRESSED, warn);
   needGauge(ctx, nx, 26, '身なり', L.clean / 100, COLORS.cyan, L.clean < SCRUFFY, warn);
+  // [R7-C clock] middle panel: date, weather, time, temperature (js/engine/clock.js; absent → nothing)
+  if (typeof g.drawClockHud === 'function') {
+    try { g.drawClockHud(ctx, 244, 4, px - 4 - 244, HUD_H - 4); } catch (e) { console.error(e); }
+  }
 }
 
 // One need on the HUD; returns the x where the next one starts.

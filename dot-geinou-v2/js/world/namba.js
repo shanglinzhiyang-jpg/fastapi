@@ -1,14 +1,15 @@
 // なんばエリア (大阪): the home of comedy. Reached from 東京駅 (shinkansen to 新大阪, then a local train).
-// West part (x 1..42): theatres, the canal and the station. East part (x 43..74, a
-// fictional riverside district): テレビ局通り with MBS毎日放送 ('mbs') and 関西テレビ ('ktv')
-// on the north bank (js/places/osaka_tv.js), food stalls and おうぎの森公園 on the south bank.
+// West end (x 1..29): NSC大阪校 next to the 新喜劇 theatre, ドット劇場, a little park and the taxi
+// stand. Middle (x 30..72): theatres, the canal and the station. East part (x 73..104, a riverside
+// district): テレビ局通り with MBS毎日放送 ('mbs') and 関西テレビ ('ktv') on the north bank
+// (js/places/osaka_tv.js), food stalls and おうぎの森公園 on the south bank.
 
 import { registerPlace, PLACES } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
-import { grid, set, put, fill, border } from './townkit.js';
-import { commuterTrain, fountain, streetStage } from './props.js';
+import { grid, set, put, fill, border, unstick } from './townkit.js';
+import { commuterTrain, fountain, streetStage, taxi } from './props.js';
 import { text } from '../engine/draw.js';
-import { makeCanvas, fmtMoney } from '../engine/util.js';
+import { makeCanvas, fmtMoney, TILE } from '../engine/util.js';
 import { outline } from '../engine/tiles.js';
 
 // Blinking neon billboard on a pole (3x2 tiles).
@@ -83,63 +84,124 @@ function riverBoat(x0, x1, y) {
   };
 }
 
-export const NAMBA_W = 76;   // x 43..74: the riverside テレビ局通り (added later; x 0..43 kept as before)
+// The town grew west (x 0..29: NSC大阪校 next to the 新喜劇 theatre, ドット劇場, a little park and a
+// taxi stand); everything that was here before moved OX tiles east. Saves made before that stand
+// OX tiles too far west: namba's onEnter moves them (flags.map_namba marks a game already moved).
+export const NAMBA_OX = 30;
+export const NAMBA_W = 76 + NAMBA_OX; // x 73..104: the riverside テレビ局通り (x 30..72: theatres, the canal and the station)
 export const NAMBA_H = 38;
+const OX = NAMBA_OX;
+
+// The west part (x 1..29): its own buildings and people. The map app's なんば arrival
+// (phone_apps.js, at [22, 30]) is the taxi stand on the station plaza here.
+function westEntities() {
+  return [
+    // north side of the theatre street (fronts on row 10)
+    { type: 'building', x: 2, y: 5, w: 6, h: 5, door: 3, name: '道具屋', kind: 'shop', wall: '#f2ece0', roof: '#5a4a3a', display: 'goods', stripes: ['#2a3a7a', '#f2ece0'], sign: { text: '道具屋', bg: '#2a3a7a', color: '#ffffff' },
+      text: ['料理道具の店だ。', 'たこ焼き器に、のれんに、食品サンプル…。\n店の道具なら、なんでもそろうらしい。'] },
+    { type: 'building', x: 9, y: 3, w: 9, h: 7, door: 4, name: 'ドット劇場', kind: 'theater', wall: '#f6ead8', roof: '#2a6ad0', sign: { text: 'ドット劇場', bg: '#20232a', color: '#ffd23f' },
+      text: ['若手芸人が毎日ネタをかける、小さな劇場だ。', '入口の出番表に、知らないコンビ名がずらりと並んでいる。\nNSCを出たばかりの芸人も、ここから舞台に立つらしい。'] },
+    ...(PLACES.nsc ? [{ type: 'building', x: 20, y: 3, w: 10, h: 7, door: 5, place: 'nsc', name: 'NSC大阪校', kind: 'office', wall: '#fff3e6', roof: '#e8492a', canopy: '#e8492a', sign: { text: 'NSC大阪校', bg: '#e8492a', color: '#ffffff' } }]
+      : [{ type: 'building', x: 20, y: 3, w: 10, h: 7, door: 5, name: '貸しビル', kind: 'office', wall: '#e4e2dc', roof: '#7a7f8a', sign: { text: 'テナント募集', bg: '#ffffff', color: '#d62f2f' }, text: '「テナント募集」の貼り紙がある。' }]),
+    neon(13, 13, 'ライブ', '#ff7eb6'),
+    // south of the canal: a ramen shop, karaoke, the little park, the taxi stand
+    { type: 'building', x: 14, y: 23, w: 6, h: 4, door: 3, name: 'ラーメン屋', kind: 'ramen', sign: { text: 'ラーメン', bg: '#d62f2f', color: '#ffffff' },
+      text: ['ラーメン屋だ。', '「NSC生は替え玉一杯無料」の貼り紙がある。'] },
+    { type: 'building', x: 21, y: 23, w: 7, h: 4, door: 3, name: 'カラオケ', kind: 'karaoke', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' },
+      text: ['カラオケ店だ。', '個室でネタ合わせをする芸人も多いらしい。'] },
+    taxi(24, 31, '#2f6fd0', { text: 'タクシーが客待ちをしている。\nここは、なんば駅前のタクシー乗り場だ。' }),
+    { type: 'sign', x: 20, y: 31, solid: true, text: ['タクシー乗り場', '東：なんば駅（電車・新幹線のりかえ）\n北：NSC大阪校・ドット劇場・よしもと新喜劇 劇場'] },
+    { type: 'sign', x: 21, y: 15, text: ['なんば・にし橋\n北：NSC大阪校・ドット劇場・道具屋\n南：ラーメン屋・カラオケ・公園・タクシー乗り場', '東：よしもと新喜劇 劇場・松竹芸能・なんば駅'] },
+
+    // people
+    { type: 'npc', id: 'nw_nsc', x: 24, y: 12, dir: 'down', look: { ...LOOKS.comedian, top: '#e8492a', hairColor: 'black' }, name: 'NSC生', wander: 2,
+      text: ['授業終わりや。今日のネタ見せ、ボロカスに言われたわ…。', 'せやけど、となりが劇場やろ？\nほんまもんの芸人さんの出入りを、毎日見られるんや。'] },
+    { type: 'npc', id: 'nw_fan', x: 12, y: 11, dir: 'up', look: { ...LOOKS.fan, hairColor: 'brown', top: '#ff7eb6' }, name: 'お笑いファン',
+      text: ['ここの劇場は、若手の芸人さんばっかり出てるねん。', 'まだ売れてへん子を、今のうちから応援するんが\nいちばん楽しいんよ。'] },
+    { type: 'npc', id: 'nw_dogu', x: 4, y: 11, dir: 'down', look: { ...LOOKS.oldman, top: '#2a3a7a' }, name: '道具屋のおっちゃん', wander: 1,
+      text: ['たこ焼き器、いらんか？\n…いらんか。', 'このへんは劇場の街やけど、料理道具の街でもあるんやで。'] },
+    { type: 'npc', id: 'nw_boke', x: 5, y: 26, dir: 'right', look: { ...LOOKS.comedian2, top: '#ffd23f' }, name: 'ネタ合わせ中の芸人', fixedDir: true,
+      text: ['…ほんでな、オカンがな、言うねん。', '（ネタ合わせの最中みたいだ）'] },
+    { type: 'npc', id: 'nw_tsukkomi', x: 6, y: 26, dir: 'left', look: { ...LOOKS.comedian, top: '#2f9a4a', hairColor: 'black' }, name: 'ネタ合わせ中の芸人', fixedDir: true,
+      text: ['もうええわ！…って、まだ途中やった。', 'NSCの同期と組んだばっかりやねん。\n公園でネタ合わせするんが、いちばんタダやからな。'] },
+    { type: 'npc', id: 'nw_taxi', x: 26, y: 31, dir: 'left', look: { ...LOOKS.guard, hat: '#2f6fd0' }, name: 'タクシー運転手',
+      text: ['まいど！ どこまで行きはります？', '…あ、歩いて行けるとこやったら、歩いたほうが安いで。'] },
+  ];
+}
 
 function generate() {
   const W = NAMBA_W, H = NAMBA_H;
   const c = grid(W, H, 'stone');
+  // the old part's tiles, OX tiles east
+  const S = (x, y, ...l) => set(c, x + OX, y, ...l);
+  const P = (x, y, o) => put(c, x + OX, y, o);
+  const F = (x, y, w, h, ...l) => fill(c, x + OX, y, w, h, ...l);
 
-  // canal with railings and two bridges
+  // canal with railings and bridges (the west part's にし橋 at x 18..20)
   for (let x = 1; x < W - 1; x++) {
-    const bridge = (x >= 9 && x <= 11) || (x >= 30 && x <= 32) || (x >= 59 && x <= 61);
+    const o = x - OX;
+    const bridge = (x >= 18 && x <= 20) || (o >= 9 && o <= 11) || (o >= 30 && o <= 32) || (o >= 59 && o <= 61);
     for (let y = 16; y <= 18; y++) set(c, x, y, bridge ? 'bridge_v' : 'canal');
     if (!bridge) { put(c, x, 15, 'railing'); put(c, x, 19, 'railing'); }
   }
-  // north street
+  // north street, south arcade street, station plaza + rails: the whole width
   fill(c, 1, 10, W - 2, 5, 'brick');
-  // south arcade street
   fill(c, 1, 20, W - 2, 3, 'brick');
-  for (const x of [14, 29]) put(c, x, 23, 'lantern');
-  // station plaza + rails
   fill(c, 1, 30, W - 2, 3, 'brick');
   for (let x = 1; x < W - 1; x++) { put(c, x, 33, 'fence'); set(c, x, 34, 'rail'); set(c, x, 35, 'rail'); set(c, x, 36, 'grass'); }
+  for (const x of [14, 29]) P(x, 23, 'lantern');
   border(c, 'tree');
 
-  // decorations
-  for (const [x, y] of [[2, 10], [15, 10], [17, 10], [26, 10]]) put(c, x, y, 'nobori');
-  for (const [x, y] of [[16, 8], [27, 6], [33, 6]]) put(c, x, y, 'lantern');
-  put(c, 32, 8, 'kanban_takoyaki');
-  for (const [x, y] of [[1, 1], [16, 2], [27, 2], [32, 2], [42, 1]]) put(c, x, y, 'tree');
-  put(c, 13, 13, 'bench'); put(c, 36, 13, 'bench');
-  put(c, 28, 12, 'vending'); put(c, 14, 30, 'vending');
-  for (const [x, y] of [[14, 26], [29, 26]]) put(c, x, y, 'planter');
-  put(c, 8, 31, 'bench'); put(c, 36, 31, 'bench');
+  // ---- west part (x 1..29)
+  for (const [x, y] of [[1, 1], [8, 2], [18, 1], [19, 9], [30, 1]]) put(c, x, y, 'tree');
+  for (const [x, y] of [[8, 9], [18, 8]]) put(c, x, y, 'lantern');
+  put(c, 2, 4, 'nobori'); put(c, 7, 4, 'nobori');
+  for (const x of [9, 17, 20, 29]) put(c, x, 10, 'nobori');
+  put(c, 6, 13, 'bench'); put(c, 27, 13, 'vending'); put(c, 28, 13, 'trash');
+  // the little park south of the canal (ネタ合わせ spot), the shops' forecourt
+  fill(c, 1, 23, 12, 7, 'grass');
+  fill(c, 2, 27, 10, 1, 'path'); fill(c, 9, 23, 2, 7, 'path');
+  for (const [x, y] of [[1, 23], [12, 23], [2, 29], [12, 29], [6, 23]]) put(c, x, y, (x + y) % 2 ? 'sakura' : 'tree');
+  for (const [x, y] of [[3, 24], [4, 28], [11, 25]]) set(c, x, y, 'flowers');
+  put(c, 3, 25, 'bench'); put(c, 7, 29, 'bench');
+  fill(c, 13, 27, 17, 3, 'stone');
+  put(c, 13, 26, 'planter'); put(c, 20, 26, 'planter'); put(c, 28, 26, 'vending');
+  put(c, 14, 31, 'bench'); put(c, 3, 31, 'bench');
+  set(c, 20, 31, 'sidewalk'); put(c, 20, 31, 'sign_board');
 
-  // ---- east: テレビ局通り (north bank) and おうぎの森公園 (south bank)
-  for (let x = 43; x <= W - 2; x++) put(c, x, 1, x % 3 ? 'tree' : 'bush');
-  for (const [x, y] of [[43, 3], [44, 6], [43, 9], [73, 3], [74, 6], [73, 9]]) put(c, x, y, 'tree');
-  put(c, 44, 8, 'lantern');
-  fill(c, 55, 2, 7, 8, 'grass');
-  for (const [x, y] of [[55, 2], [58, 2], [61, 3], [56, 5], [60, 6], [55, 8]]) put(c, x, y, (x + y) % 2 ? 'sakura' : 'tree');
-  for (const [x, y] of [[57, 4], [59, 4], [58, 7], [61, 8]]) set(c, x, y, 'flowers');
-  put(c, 57, 9, 'bench'); put(c, 59, 9, 'bench');
-  for (const x of [46, 53, 64, 71]) put(c, x, 14, 'sakura');
-  for (const x of [56, 63]) put(c, x, 10, 'nobori');
-  for (const x of [43, 54, 66, 70]) put(c, x, 23, 'lantern');
+  // ---- the old part (x 30..105)
+  for (const [x, y] of [[2, 10], [15, 10], [17, 10], [26, 10]]) P(x, y, 'nobori');
+  for (const [x, y] of [[16, 8], [27, 6], [33, 6]]) P(x, y, 'lantern');
+  P(32, 8, 'kanban_takoyaki');
+  for (const [x, y] of [[16, 2], [27, 2], [32, 2], [42, 1]]) P(x, y, 'tree');
+  P(13, 13, 'bench'); P(36, 13, 'bench');
+  P(28, 12, 'vending'); P(14, 30, 'vending');
+  for (const [x, y] of [[14, 26], [29, 26]]) P(x, y, 'planter');
+  P(8, 31, 'bench'); P(36, 31, 'bench');
+  // east: テレビ局通り (north bank) and おうぎの森公園 (south bank)
+  for (let x = 43; x <= 74; x++) P(x, 1, x % 3 ? 'tree' : 'bush');
+  for (const [x, y] of [[43, 3], [44, 6], [43, 9], [73, 3], [74, 6], [73, 9]]) P(x, y, 'tree');
+  P(44, 8, 'lantern');
+  F(55, 2, 7, 8, 'grass');
+  for (const [x, y] of [[55, 2], [58, 2], [61, 3], [56, 5], [60, 6], [55, 8]]) P(x, y, (x + y) % 2 ? 'sakura' : 'tree');
+  for (const [x, y] of [[57, 4], [59, 4], [58, 7], [61, 8]]) S(x, y, 'flowers');
+  P(57, 9, 'bench'); P(59, 9, 'bench');
+  for (const x of [46, 53, 64, 71]) P(x, 14, 'sakura');
+  for (const x of [56, 63]) P(x, 10, 'nobori');
+  for (const x of [43, 54, 66, 70]) P(x, 23, 'lantern');
   // stall corner and the plaza by the station
-  fill(c, 43, 26, 11, 4, 'stone');
-  put(c, 44, 28, 'bench'); put(c, 45, 28, 'bench'); put(c, 52, 27, 'vending'); put(c, 53, 27, 'trash');
-  put(c, 48, 29, 'planter'); put(c, 43, 29, 'planter');
+  F(43, 26, 11, 4, 'stone');
+  P(44, 28, 'bench'); P(45, 28, 'bench'); P(52, 27, 'vending'); P(53, 27, 'trash');
+  P(48, 29, 'planter'); P(43, 29, 'planter');
   // the park
-  fill(c, 55, 23, 20, 7, 'grass');
-  for (let x = 55; x <= 74; x++) set(c, x, 27, 'path');
-  for (let y = 23; y <= 29; y++) { set(c, 55, y, 'path'); set(c, 60, y, 'path'); }
-  for (const [x, y] of [[57, 24], [72, 23], [68, 25], [74, 29], [57, 29], [70, 29], [65, 29]]) put(c, x, y, (x + y) % 2 ? 'sakura' : 'tree');
-  for (const [x, y] of [[58, 25], [67, 24], [73, 25], [62, 29], [66, 28], [71, 28]]) set(c, x, y, 'flowers');
-  put(c, 63, 28, 'bench'); put(c, 69, 28, 'bench');
+  F(55, 23, 20, 7, 'grass');
+  for (let x = 55; x <= 74; x++) S(x, 27, 'path');
+  for (let y = 23; y <= 29; y++) { S(55, y, 'path'); S(60, y, 'path'); }
+  for (const [x, y] of [[57, 24], [72, 23], [68, 25], [74, 29], [57, 29], [70, 29], [65, 29]]) P(x, y, (x + y) % 2 ? 'sakura' : 'tree');
+  for (const [x, y] of [[58, 25], [67, 24], [73, 25], [62, 29], [66, 28], [71, 28]]) S(x, y, 'flowers');
+  P(63, 28, 'bench'); P(69, 28, 'bench');
 
-  const entities = [
+  const old = [
     { type: 'building', x: 3, y: 2, w: 12, h: 8, door: 6, place: 'shinkigeki', name: 'よしもと新喜劇 劇場', kind: 'theater', wall: '#f6e7c8', roof: '#d62f2f', logo: 'shinkigeki', signH: 34, signW: 44 },
     { type: 'building', x: 18, y: 3, w: 8, h: 7, door: 4, place: 'shochiku', name: '松竹芸能', kind: 'office', wall: '#f8f0e8', roof: '#d8101c', logo: 'shochiku', signH: 20, signW: 90 },
     { type: 'building', x: 28, y: 6, w: 4, h: 4, door: 2, place: 'takoyaki', name: 'たこ焼き屋', kind: 'small', wall: '#f6e7c8', roof: '#d62f2f', sign: { text: 'たこ焼き', bg: '#ff8a3d', color: '#ffffff' } },
@@ -156,16 +218,14 @@ function generate() {
     riverBoat(33, 58, 16),
     neon(59, 12, 'テレビ', '#ffa860'),
     { type: 'sign', x: 58, y: 15, solid: true, text: ['テレビ局通り', '北：MBS毎日放送・関西テレビ\n南：いか焼き・ミックスジュース・おうぎの森公園\n西：よしもと新喜劇 劇場・松竹芸能・なんば駅'] },
-    // NSC大阪校 (js/places/nsc.js; the closed souvenir shop's lot when that module is missing)
-    PLACES.nsc ? { type: 'building', x: 36, y: 23, w: 6, h: 4, door: 3, place: 'nsc', name: 'NSC大阪校', kind: 'office', wall: '#fff3e6', roof: '#e8492a', sign: { text: 'NSC大阪校', bg: '#e8492a', color: '#ffffff' } }
-      : { type: 'building', x: 36, y: 23, w: 6, h: 4, door: 3, name: 'おみやげ屋', kind: 'shop', wall: '#ffffff', roof: '#ffd23f', stripes: ['#d62f2f', '#ffd23f'], sign: { text: 'おみやげ', bg: '#ffffff', color: '#d62f2f' }, text: '「ただいま棚卸し中」の札がかかっている。' },
+    { type: 'building', x: 36, y: 23, w: 6, h: 4, door: 3, name: 'おみやげ屋', kind: 'shop', wall: '#ffffff', roof: '#ffd23f', stripes: ['#d62f2f', '#ffd23f'], sign: { text: 'おみやげ', bg: '#ffffff', color: '#d62f2f' }, text: '「ただいま棚卸し中」の札がかかっている。' },
     neon(5, 13, 'なんば', '#ff4f8b'),
     neon(24, 13, 'お笑い', '#5fd7ff'),
     neon(39, 13, 'グルメ', '#ffd23f'),
     commuterTrain(4, 34, { text: undefined }),
     { type: 'sign', x: 8, y: 33, text: 'フェンスの向こうに、電車が停まっている。\n東京へは、駅のきっぷ売り場へ。\n（新大阪で新幹線に乗りかえ）' },
     fountain(37, 30, { text: '待ち合わせスポットの噴水だ。' }),
-    { type: 'sign', x: 12, y: 15, text: ['なんば・ことぶき橋\n北：よしもと新喜劇 劇場・松竹芸能・たこ焼き屋・ホテル\n南：なんば駅', '東：川ぞいの「テレビ局通り」\n（MBS毎日放送・関西テレビ）'] },
+    { type: 'sign', x: 12, y: 15, text: ['なんば・ことぶき橋\n北：よしもと新喜劇 劇場・松竹芸能・たこ焼き屋・ホテル\n南：なんば駅', '西：劇場のとなりに NSC大阪校、ドット劇場\n東：川ぞいの「テレビ局通り」（MBS毎日放送・関西テレビ）'] },
 
     { type: 'npc', id: 'obachan', x: 12, y: 21, dir: 'down', look: { ...LOOKS.oldwoman, top: '#ff7eb6', hairColor: 'purple' }, name: '大阪のおばちゃん', person: 'tamae', talk: async (g, npc) => {
       if (!g.flag('ame_' + g.state.day)) {
@@ -192,7 +252,30 @@ function generate() {
     { type: 'npc', id: 'hotel_guest', x: 37, y: 12, dir: 'left', look: LOOKS.salaryman, name: '出張中の人', text: ['大阪で一泊するなら、そこのドットホテルがおすすめですよ。', '体力も回復するし、セーブもできるそうです。'] },
   ];
 
-  return { w: W, h: H, cells: c, entities };
+  for (const e of old) e.x += OX;
+  return { w: W, h: H, cells: c, entities: [...westEntities(), ...old] };
+}
+
+// Door fronts, the start and the map app's arrival: where a game that has never been here
+// since the town grew arrives (a player standing anywhere else is on an old save's spot).
+function arrivals(m) {
+  const pts = new Set(['22,30']);
+  const st = m.place && m.place.start;
+  if (st) pts.add(`${st.x},${st.y}`);
+  for (const e of (m.room && m.room.entities) || []) {
+    if (e.type !== 'building' || !(e.place || e.enter)) continue;
+    pts.add(`${e.x + (e.door ?? Math.floor(e.w / 2))},${e.y + e.h}`);
+  }
+  return pts;
+}
+async function nambaEnter(g) {
+  const m = g.map, p = m && m.player;
+  if (p && g.state && g.state.flags && g.flag('map_namba') !== 2) {
+    if (!arrivals(m).has(`${p.x},${p.y}`) && p.x + OX < NAMBA_W - 1) Object.assign(p, { x: p.x + OX, px: (p.x + OX) * TILE, tx: p.x + OX });
+    g.setFlag('map_namba', 2);
+    if (typeof m.updateCamera === 'function') m.updateCamera(true);
+  }
+  unstick(g);
 }
 
 registerPlace({
@@ -200,8 +283,8 @@ registerPlace({
   name: 'なんばエリア（大阪）',
   kind: 'town',
   bgm: 'osaka',
-  start: { room: 'main', x: 22, y: 30, dir: 'down' },
+  start: { room: 'main', x: 22 + OX, y: 30, dir: 'down' },
   rooms: {
-    main: { generate, bg: '#a9adb7' },
+    main: { generate, bg: '#a9adb7', onEnter: nambaEnter },
   },
 });

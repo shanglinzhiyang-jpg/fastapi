@@ -1,8 +1,8 @@
 // NSC（吉本総合芸能学院） (owner: A) — the school where you can meet your 相方, and the 貸し稽古場 where any act rehearses.
 //
-//   nsc        NSC大阪校 (door in なんば; 1982年開校)        rooms: lobby 受付・ロビー / kyoshitsu 教室 / netami ネタ見せ教室 / keiko 稽古場
-//   nsc_tokyo  NSC東京校 (door in the Tokyo town, shown from 1995: 東京校は1995年開校)   the same rooms
-//   keikoba    貸し稽古場「ドットスタジオ」(Tokyo; fictional): studio 稽古場 (your 相方 waits here) / live 小さなライブスペース (フリーライブ)
+//   nsc        NSC大阪校 (door in なんば, next to the 新喜劇 theatre; 1982年開校)        rooms: lobby 受付・ロビー / kyoshitsu 教室 / netami ネタ見せ教室 / keiko 稽古場
+//   nsc_tokyo  NSC東京校 (door on Tokyo's 芸人通り south of よしもと, shown from 1995: 東京校は1995年開校)   the same rooms
+//   keikoba    貸し稽古場「ドットスタジオ」(Tokyo's 芸人通り, among small studios; fictional): studio 稽古場 (your 相方 waits here) / live 小さなライブスペース (フリーライブ)
 //
 // The school year (application, fees, classes, graduation) is state in js/engine/owarai_nsc.js; verified facts and their
 // sources are listed there. Teachers and classmates are fictional; the classmates are registered people

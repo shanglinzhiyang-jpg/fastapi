@@ -15,6 +15,19 @@
 //   show       show name on the studio sign (default 'クイズ！ドット王')
 //   genre      genre label for custom questions (default 'スペシャル')
 //
+//   year       game year for the era check (default: the game date) — a question is asked only in the
+//              years it is true (ERA below; the 雑学 bank in js/engine/quiz_bank.js carries from / to too)
+//   practice   true: a practice run (the 雑学 record counts it fully; a real show counts half)
+//   format     'classic' forces this 4択 even for a show that has its own format
+//   New categories from js/engine/quiz_bank.js may be named too: 'kanji' 'kotowaza' 'chiri' 'rekishi' 'rika'
+//   'eigo' 'katakana' 'keisan' 'joshiki' 'geino' (or 'all' = every category of both banks).
+//
+// TV quiz shows with their own format (クイズ!ヘキサゴン / II, ネプリーグ, 短縮鉄道の夜 — by opts.show / opts.showId,
+// or any opts.stages) are handed to the HD format minigame 'quizstudio' (js/engine/quiz_studio.js): the
+// registered 'quiz' is a small dispatcher that returns that minigame instead. Everything else plays here.
+// 雑学・知識 (js/engine/quiz_app.js): g.quizBonus(show) is added to the bonus (shown on the intro card) and
+// its pts to the score; every answer goes to g.quizRecord. Touch / mouse: a tap on an answer answers it.
+//
 // Controls: d-pad moves the cursor on a 2x2 answer grid, A answers, B uses a hint.
 // Score: each question is worth 100/count. A correct answer earns 85% of it plus up to 15% for speed
 // (full speed bonus while at least 40% of the time is left); hint-assisted answers earn 60% of that.
@@ -24,6 +37,9 @@ import { measure } from '../engine/draw.js';
 import { charSheet, drawChar, LOOKS } from '../engine/sprites.js';
 import { audio, registerSong } from '../engine/audio.js';
 import { W, clamp, shuffle, makeCanvas, mix } from '../engine/util.js';
+import { MINIGAMES } from '../engine/minigame.js';
+import { pick as bankPick, CATS as BANK2_CATS, CAT_IDS as BANK2_IDS, showOf, qOk } from '../engine/quiz_bank.js';
+import { gameYM, bindTap } from '../engine/quiz_studio.js';
 
 // ------------------------------------------------------------------ question bank
 // [question, [correct, wrong, wrong, wrong], level 1..3]. The correct answer is always first here;
@@ -171,6 +187,28 @@ const BANK = {
 };
 
 const CAT_NAMES = { general: '一般常識', japan: '日本の地理・名産', osaka: '大阪・関西', tv: 'テレビ・放送', movie: '映画', music: '音楽' };
+for (const [k, v] of Object.entries(BANK2_CATS)) CAT_NAMES[k] = v.label;
+// Facts that are true only from / until a year: [from, to] (the question is not asked outside them).
+//   大阪府 was the smallest prefecture until 1988 (関空の埋め立て); 大阪市中央区 since 1989-02 (東区 + 南区);
+//   気象予報士 since 1993 (first exam 1994-08); しまなみ海道 1999-05; 地デジ switch 2011-07 (東北3県 2012-03);
+//   大阪・関西万博 2025 at 夢洲.
+const ERA = {
+  '日本でいちばん面積が小さい都道府県は？': [1990, 9999],
+  '大阪城があるのは大阪市の何区？': [1990, 9999],
+  '天気予報の解説などで活やくする国家資格は？': [1995, 9999],
+  '「しまなみ海道」が結ぶのは広島県と何県？': [2000, 9999],
+  '多くの地域でアナログ放送が終わり、地デジに移ったのは？': [2012, 9999],
+  '2025年の大阪・関西万博の会場になった島は？': [2025, 9999],
+};
+// questions that are true before those years (same layout as BANK, with [from, to] last)
+BANK.japan.push(['日本でいちばん面積が小さい都道府県は？', ['大阪府', '香川県', '東京都', '沖縄県'], 2, [0, 1987]]);
+BANK.osaka.push(['大阪城があるのは大阪市の何区？', ['東区', '北区', '浪速区', '天王寺区'], 3, [0, 1988]]);
+const yearOk = (q, tag, year) => {
+  const t = tag || ERA[q];
+  return !t || year == null || (t[0] <= year && year <= t[1]);
+};
+// the 雑学 record's category for a question of this bank
+const REC_CAT = { general: 'joshiki', japan: 'chiri', osaka: 'chiri', tv: 'geino', movie: 'geino', music: 'geino' };
 
 // Questions asked recently (this session) are avoided so replays feel fresh.
 const RECENT = [];
@@ -260,12 +298,22 @@ function normalizeCustom(o) {
   return { q: o.q, ch, a };
 }
 
-function pickFromBank(cats, count, difficulty, rng) {
+function pickFromBank(cats, count, difficulty, rng, year = null) {
   const target = 1 + (difficulty - 1) / 2; // d1 -> easy questions, d5 -> hard ones
   const pool = [];
-  for (const cat of cats) {
-    for (const [q, ch, lv] of BANK[cat]) {
+  const own = cats.filter((c) => BANK[c]);
+  const ext = cats.filter((c) => !BANK[c] && BANK2_CATS[c]);
+  for (const cat of own) {
+    for (const [q, ch, lv, tag] of BANK[cat]) {
+      if (!yearOk(q, tag, year)) continue;
       pool.push({ q, ch, lv, cat, k: (RECENT.includes(q) ? 4 : 0) + Math.abs(lv - target) + rng() * 1.6 });
+    }
+  }
+  // the 雑学 bank (quiz_bank.js): already era-checked by year
+  if (ext.length) {
+    for (const x of bankPick({ cats: ext, n: Math.max(count * 2, 8), year, lv: Math.round(target), rng })) {
+      if (!qOk(x, year)) continue;
+      pool.push({ q: x.q, ch: [x.a, ...x.w], lv: x.lv, cat: x.cat, src: x, k: (RECENT.includes(x.q) ? 4 : 0) + Math.abs(x.lv - target) + rng() * 1.6 });
     }
   }
   const chosen = [];
@@ -283,7 +331,7 @@ function pickFromBank(cats, count, difficulty, rng) {
   chosen.sort((a, b) => a.lv - b.lv); // the show gets harder toward the end
   for (const it of chosen) RECENT.push(it.q);
   while (RECENT.length > 80) RECENT.shift();
-  return chosen.map((it) => makeItem(it.q, it.ch, 0, it.cat, rng));
+  return chosen.map((it) => { const m = makeItem(it.q, it.ch, 0, it.cat, rng); m.src = it.src || { id: 'quiz:' + it.q, cat: REC_CAT[it.cat] || it.cat, q: it.q, a: it.ch[0], lv: it.lv }; return m; });
 }
 
 // ------------------------------------------------------------------ the minigame
@@ -292,6 +340,31 @@ class Quiz extends Minigame {
   static howto = ['4つの答えから正解を選ぼう！', '十字キーで選んで Aで答える', 'Bでヒント（2択にしぼる）', '早く正解するほど高得点！'];
   static skill = 'talk';
   static bgm = 'quiz_show';
+
+  constructor(g, opts = {}) {
+    super(g, opts);
+    this.quizTap = true;
+    this.tapAt = null;
+    this.showId = opts.showId || showOf(opts.show);
+    // 雑学・知識 (quiz_app.js): easier and a few more points
+    let kb = null;
+    try { if (typeof g.quizBonus === 'function') kb = g.quizBonus(this.showId); } catch (e) { console.error(e); }
+    this.knowPts = kb ? Math.max(0, Math.round(kb.pts || 0)) : 0;
+    if (kb && kb.v > 0.005) {
+      this.bonus += kb.v;
+      this.bonusInfo = { skill: (this.bonusInfo && this.bonusInfo.skill) || 0, parts: [...((this.bonusInfo && this.bonusInfo.parts) || []), { label: '雑学', v: kb.v }] };
+    }
+    bindTap(g);
+  }
+
+  end(score, comment) {
+    if (this.phase === 'result') return;
+    const b = this.knowPts || 0;
+    if (!b) { super.end(score, comment); return; }
+    const lines = String(comment || '').split('\n');
+    lines[0] = `${lines[0]}（雑学+${b}点）`;
+    super.end(Math.min(100, Math.round(score) + b), lines.join('\n'));
+  }
 
   init() {
     const d = this.difficulty;
@@ -324,8 +397,13 @@ class Quiz extends Minigame {
 
   buildQuestions() {
     const o = this.opts;
+    let year = Number.isFinite(o.year) ? o.year : null;
+    if (year == null) { try { year = gameYM(this.g).y; } catch (e) { year = null; } }
+    this.year = year;
     const custom = Array.isArray(o.questions) ? o.questions.map(normalizeCustom).filter(Boolean) : [];
-    const cats = (Array.isArray(o.category) ? o.category : [o.category]).filter((k) => BANK[k]);
+    let want = Array.isArray(o.category) ? o.category : [o.category];
+    if (want.includes('all')) want = [...Object.keys(BANK), ...BANK2_IDS];
+    const cats = want.filter((k) => BANK[k] || BANK2_CATS[k]);
     const useCats = cats.length ? cats : Object.keys(BANK);
     if (custom.length) {
       let count = clamp(Math.round(o.count ?? custom.length), 1, 15);
@@ -335,11 +413,11 @@ class Quiz extends Minigame {
         list = list.filter((_, i) => keep.has(i));
       }
       const items = list.map((c) => makeItem(c.q, c.ch, c.a, null, this.rng, o.shuffle !== false));
-      if (items.length < count && cats.length) items.push(...pickFromBank(cats, count - items.length, this.difficulty, this.rng));
+      if (items.length < count && cats.length) items.push(...pickFromBank(cats, count - items.length, this.difficulty, this.rng, year));
       return items;
     }
     const count = clamp(Math.round(o.count ?? 5 + this.difficulty), 1, 15);
-    return pickFromBank(useCats, count, this.difficulty, this.rng);
+    return pickFromBank(useCats, count, this.difficulty, this.rng, year);
   }
 
   startQuestion(i) {
@@ -393,9 +471,16 @@ class Quiz extends Minigame {
   }
 
   updateAnswer(inp) {
-    for (const d of ['up', 'down', 'left', 'right']) if (inp.pressed(d)) this.move(d);
+    const tap = this.tapAt;
+    this.tapAt = null;
+    let tapA = false;
+    if (tap) {
+      // a tap on an answer answers it; a tap elsewhere does nothing (the hint stays on B)
+      const i = [0, 1, 2, 3].findIndex((k) => k < this.cur.choices.length && (() => { const c = cellRect(k); return tap.x >= c.x && tap.x < c.x + c.w && tap.y >= c.y && tap.y < c.y + c.h; })());
+      if (i >= 0 && !this.elim.has(i)) { this.sel = i; tapA = true; }
+    } else for (const d of ['up', 'down', 'left', 'right']) if (inp.pressed(d)) this.move(d);
     if (inp.pressed('b')) this.useHint();
-    if (inp.pressed('a')) {
+    if (tapA || (!tap && inp.pressed('a'))) {
       if (this.elim.has(this.sel)) {
         audio.sfx('cancel');
       } else {
@@ -420,6 +505,7 @@ class Quiz extends Minigame {
       this.marks[this.qi] = 'time';
       this.combo = 0;
       this.timeouts++;
+      try { if (this.cur.src && typeof this.g.quizRecord === 'function') this.g.quizRecord(this.cur.src, false, { practice: !!this.opts.practice, show: this.showId }); } catch (e) { console.error(e); }
       this.shakeT = 10;
       tones(SND.bubuu);
       this.say('時間切れ！', 70);
@@ -467,6 +553,7 @@ class Quiz extends Minigame {
 
   resolve() {
     const ok = this.picked === this.cur.answer;
+    try { if (this.cur.src && typeof this.g.quizRecord === 'function') this.g.quizRecord(this.cur.src, ok, { practice: !!this.opts.practice, show: this.showId }); } catch (e) { console.error(e); }
     this.sub = 'reveal';
     this.st = 0;
     const c = cellRect(this.picked);
@@ -958,4 +1045,24 @@ class Quiz extends Minigame {
   }
 }
 
-registerMinigame('quiz', Quiz);
+// The registered 'quiz': a TV quiz show with its own format goes to the HD 'quizstudio' (same promise, same
+// result object); everything else (オールスター感謝祭, ミリオネア, custom questions …) is the 4択 above.
+const STUDIO_SHOWS = new Set(['hexagon', 'hexagon2', 'nepleague', 'tanshuku']);
+class QuizShow {
+  static title = Quiz.title;
+  static howto = Quiz.howto;
+  static skill = Quiz.skill;
+  static get bgm() { return QuizShow.nextBgm || Quiz.bgm; }
+  constructor(g, opts = {}) {
+    const S = MINIGAMES.quizstudio;
+    const id = opts.format === 'classic' || (Array.isArray(opts.questions) && opts.questions.length) ? null : opts.showId || showOf(opts.show);
+    if (S && opts.format !== 'classic' && ((Array.isArray(opts.stages) && opts.stages.length) || (id && STUDIO_SHOWS.has(id)))) {
+      QuizShow.nextBgm = S.bgm;
+      return new S(g, { ...opts, showId: id || undefined });
+    }
+    QuizShow.nextBgm = Quiz.bgm;
+    return new Quiz(g, opts);
+  }
+}
+registerMinigame('quiz', QuizShow);
+export { Quiz, QuizShow, BANK, ERA };

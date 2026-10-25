@@ -138,7 +138,14 @@ export const PROGRAM_LIST = [
   P('millionaire', 'クイズ$ミリオネア', 'fujitv', [[2000, 2007], [2026, null]], 3, 'quiz', 'クイズ番組', '4択の問題に正解するたびに、賞金が上がっていくクイズ番組。', { reg: [[2000, 2007]], quiz: { category: 'mix', count: 8, show: 'クイズ$ミリオネア' } }),
   P('hanetobi', 'はねるのトびら', 'fujitv', [[2001, 2012]], 2, 'conte', 'コントバラエティ', '若手芸人たちのコントと企画でおくる、バラエティ。', { regular: true, wd: 2 }),
   P('trivia', 'トリビアの泉 〜素晴らしきムダ知識〜', 'fujitv', [[2002, 2006]], 3, 'trivia', '雑学バラエティ', '思わず「へぇ〜」と言いたくなる雑学を紹介する、バラエティ。'),
-  P('nepleague', 'ネプリーグ', 'fujitv', [[2003, null]], 2, 'quiz', 'クイズバラエティ', 'チームで常識問題に挑む、クイズバラエティ。', { quiz: { category: ['general', 'japan'], count: 7 } }),
+  // ---- クイズ番組 (R7-D): the quiz minigame plays each show's own format by its title (js/engine/quiz_studio.js):
+  //   ネプリーグ (2003-04〜; ゴールデン・5人1チームは2005-04〜): ファイブリーグ, ボーナスステージ トロッコアドベンチャー (2007〜)
+  //   クイズ!ヘキサゴン (2002年の深夜番組が前身、2003-04からこの題名でゴールデン、〜2005-09): 6人の心理戦
+  //   クイズ!ヘキサゴンII (2005-10-19〜2011-09-28、水曜19時): 予選ペーパーテスト → チーム分け → 1対1の早押し
+  //   Each one is listed only in the months it was on the air (see the block after PROGRAMS).
+  P('nepleague', 'ネプリーグ', 'fujitv', [[2003, null]], 2, 'quiz', 'クイズバラエティ', 'チームで常識問題に挑む、クイズバラエティ。', { quiz: { category: ['general', 'japan'], count: 7, show: 'ネプリーグ' } }),
+  P('hexagon', 'クイズ!ヘキサゴン', 'fujitv', [[2003, 2005]], 2, 'quiz', 'クイズバラエティ', '6人が六角形の席に座り、だれが間違えるかを見抜き合う、心理戦のクイズ番組。', { quiz: { category: ['general', 'japan'], count: 6, show: 'クイズ!ヘキサゴン' } }),
+  P('hexagon2', 'クイズ!ヘキサゴンII', 'fujitv', [[2005, 2011]], 2, 'quiz', 'クイズバラエティ', '予選のペーパーテストの成績でチームを分け、1対1の早押しなどで競うクイズバラエティ。', { regular: true, wd: 2, quiz: { category: ['general', 'japan'], count: 8, show: 'クイズ!ヘキサゴンII' } }),
   P('redcarpet', '爆笑レッドカーペット', 'fujitv', [[2007, 2014], [2025, null]], 2, 'neta', 'ネタ番組', '芸人が短いネタを次々に披露する、ショートネタ番組。', { reg: [[2008, 2010]] }),
   P('redtheater', '爆笑レッドシアター', 'fujitv', [[2009, 2010]], 2, 'conte', 'コント番組', '芸人たちのコントを中心にした、お笑い番組。', { regular: true, wd: 2 }),
   P('pikaru', 'ピカルの定理', 'fujitv', [[2010, 2013]], 2, 'conte', 'コントバラエティ', 'コントを中心にした、バラエティ番組。', { regular: true, wd: 2 }),
@@ -170,6 +177,29 @@ for (const p of PROGRAM_LIST) {
   // weekly-regular eras: where it ran weekly (specials never)
   p.regEras = p.special ? [] : erasOf(p.reg || p.years).eras.filter((k) => p.eras.includes(k));
   PROGRAMS[p.id] = p;
+}
+// ---- R7-D: the quiz programs that changed within an era follow the game month (クイズ!ヘキサゴン → II on
+// 2005-10; II ends 2011-09): outside its months a program is in no era (not at the desk, no regular offer).
+let QUIZBANK = null;
+import('../engine/quiz_bank.js').then((m) => { QUIZBANK = m; }).catch(() => { QUIZBANK = null; });
+function quizOnAir(id) {
+  const g = G();
+  if (!g || !g.state || !QUIZBANK) return true;
+  let y = null, m = 6;
+  try { const d = typeof g.gameDate === 'function' ? g.gameDate() : null; if (d && Number.isFinite(d.year)) { y = d.year; m = d.month || 6; } } catch (e) { /* fall back */ }
+  if (y == null) {
+    const base = { showa: 1987, heisei_early: 1996, heisei: 2004, reiwa: 2026 }[eraKey(g.state)] || 2026;
+    const mi = 3 + Math.floor(Math.max(0, num(g.state.day, 1) - 1) / 10);
+    y = base + Math.floor(mi / 12); m = (mi % 12) + 1;
+  }
+  return QUIZBANK.onAir(id, y, m);
+}
+for (const id of ['hexagon', 'hexagon2']) {
+  const p = PROGRAMS[id];
+  if (!p) continue;
+  const eras = p.eras, regEras = p.regEras;
+  Object.defineProperty(p, 'eras', { get: () => (quizOnAir(id) ? eras : []), enumerable: true, configurable: true });
+  Object.defineProperty(p, 'regEras', { get: () => (quizOnAir(id) ? regEras : []), enumerable: true, configurable: true });
 }
 const progId = (p) => 'prog_' + p.id;
 export const PROGRAM_SHOW_IDS = PROGRAM_LIST.filter((p) => p.regular).map(progId);

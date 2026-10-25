@@ -813,7 +813,10 @@ export class Game {
     this.state.stamina = this.state.maxStamina;
     await this.morning(hungerAtNight, { away, place: placeId, shower: opts.shower, sleepStress: opts.sleepStress });
     await this.fadeIn(20);
-    this.notify(`${this.dayLabel()}の朝`, { color: '#fff' });
+    // [R7-C clock] the morning toast with the wake-up time and the weather when the clock module is loaded
+    let mt = `${this.dayLabel()}の朝`;
+    if (typeof this.morningToast === 'function') { try { mt = this.morningToast() || mt; } catch (e) { console.error(e); } }
+    this.notify(mt, { color: '#fff' });
     // what the night did to the needs (the stress part is in the bed's own message)
     const m = this.lastMorning;
     if (m) {

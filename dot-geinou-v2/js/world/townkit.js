@@ -1,5 +1,7 @@
 // Helpers for building town maps procedurally (used by room.generate()).
 
+import { TILE } from '../engine/util.js';
+
 export function grid(w, h, base) {
   return Array.from({ length: h }, () => Array.from({ length: w }, () => [base]));
 }
@@ -50,4 +52,54 @@ export function border(cells, obj = 'tree') {
   const h = cells.length, w = cells[0].length;
   for (let x = 0; x < w; x++) { cells[0][x] = ['grass', obj]; cells[h - 1][x] = ['grass', obj]; }
   for (let y = 0; y < h; y++) { cells[y][0] = ['grass', obj]; cells[y][w - 1] = ['grass', obj]; }
+}
+
+// A town's onEnter calls this: when the player stands on a blocked tile (a save made
+// before the map changed, on a spot a later building, fence or tree now covers), step
+// them to the nearest free tile that is still connected to the town's start, so they
+// never land inside a wall or in a closed-off pocket. Returns true when they moved.
+export function unstick(g) {
+  const m = g && g.map, p = m && m.player, room = m && m.room;
+  if (!p || !room || typeof m.blocked !== 'function') return false;
+  const W = room.w, H = room.h;
+  const inside = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
+  if (inside(p.x, p.y) && !m.blocked(p.x, p.y)) return false;
+  const key = (x, y) => y * W + x;
+  const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  // every free tile a walker reaches from the start (the town's main walkable area)
+  const st = (m.place && m.place.start) || {};
+  const ok = new Set();
+  if (inside(st.x, st.y) && !m.blocked(st.x, st.y)) {
+    const q = [[st.x, st.y]];
+    ok.add(key(st.x, st.y));
+    for (let i = 0; i < q.length; i++) {
+      const [x, y] = q[i];
+      for (const [dx, dy] of N4) {
+        const nx = x + dx, ny = y + dy;
+        if (!inside(nx, ny) || ok.has(key(nx, ny)) || m.blocked(nx, ny)) continue;
+        ok.add(key(nx, ny));
+        q.push([nx, ny]);
+      }
+    }
+  }
+  const good = (x, y) => (ok.size ? ok.has(key(x, y)) : !m.blocked(x, y)) && !(typeof m.warpAt === 'function' && m.warpAt(x, y));
+  // the nearest such tile, searching outward through anything
+  const sx = Math.max(0, Math.min(W - 1, Math.round(p.x) || 0)), sy = Math.max(0, Math.min(H - 1, Math.round(p.y) || 0));
+  const seen = new Set([key(sx, sy)]);
+  const q = [[sx, sy]];
+  for (let i = 0; i < q.length; i++) {
+    const [x, y] = q[i];
+    if (good(x, y)) {
+      Object.assign(p, { x, y, px: x * TILE, py: y * TILE, tx: x, ty: y, moving: false });
+      if (typeof m.updateCamera === 'function') m.updateCamera(true);
+      return true;
+    }
+    for (const [dx, dy] of N4) {
+      const nx = x + dx, ny = y + dy;
+      if (!inside(nx, ny) || seen.has(key(nx, ny))) continue;
+      seen.add(key(nx, ny));
+      q.push([nx, ny]);
+    }
+  }
+  return false;
 }

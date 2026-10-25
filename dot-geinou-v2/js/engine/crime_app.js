@@ -197,6 +197,12 @@ function board(g) {
 }
 const PHASE_IDS = ['day', 'night', 'late'];
 const PHASE_LABEL = { day: '昼', night: '夜', late: '深夜' };
+// [R7-C clock] the 時間帯 defaults to the clock's (clock.js g.crimePhaseNow: day < 17:00 ≤ night < 24:00 ≤ late);
+// an earlier time of today cannot be chosen any more; a job at a later time moves the clock there (night 21:00, late
+// 1:00) and the job itself takes about an hour and a half. Without the clock module: 'night', as before.
+const phaseNow = (g) => { try { const p = typeof g.crimePhaseNow === 'function' ? g.crimePhaseNow() : null; return PHASE_IDS.includes(p) ? p : 'night'; } catch (e) { return 'night'; } };
+const PHASE_START = { day: 0, night: 21 * 60, late: 25 * 60 };
+const JOB_MINUTES = 90;
 function jobCtx(g, id, o = {}) {
   const j = jobOf(g, id), u = ura(g);
   const amount = j.goods ? Math.round((j.goods[0] + j.goods[1]) / 2) : j.reward ? Math.round((j.reward[0] + j.reward[1]) / 2) : num(o.stake, 10000);
@@ -258,6 +264,9 @@ export async function runJob(g, id, o = {}) {
   st.stamina = Math.max(0, st.stamina - cost);
   if (o.disguise) { const dc = disguiseCost(g); if (!g.spend(dc)) { await g.say('（変装の用意をするお金が足りない…）'); return null; } }
   const phase = PHASE_IDS.includes(o.phase) ? o.phase : 'night';
+  // [R7-C clock] wait until the chosen time of the day
+  const startDay = st.day;
+  try { if (typeof g.advanceTo === 'function') g.advanceTo(PHASE_START[phase] || 0, 'crime_wait'); } catch (e) { console.error(e); }
   const scene = g.push(new JobScene(g, j.scene, { title: jobName(g, j), sub: `${j.spot.label}・${PHASE_LABEL[phase]}`, phase }));
   let res = null;
   try {
@@ -326,6 +335,8 @@ export async function runJob(g, id, o = {}) {
   } finally {
     delete g._crimePhase;
     if (g.scenes.includes(scene)) g.pop(scene);
+    // [R7-C clock] the job's own time (not when the day changed meanwhile: custody)
+    try { if (st.day === startDay && typeof g.advanceTime === 'function') g.advanceTime(JOB_MINUTES, 'crime'); } catch (e) { console.error(e); }
   }
   return res;
 }
@@ -466,7 +477,7 @@ async function jobsScreen(g, opts = {}) {
   for (;;) {
     const ids = opts.only ? board(g).filter((id) => opts.only.includes(id)) : board(g);
     const items = ids.map((id) => {
-      const j = jobOf(g, id), av = jobAvailable(g, id), o = jobOdds(g, id, { phase: 'night' });
+      const j = jobOf(g, id), av = jobAvailable(g, id), o = jobOdds(g, id, { phase: phaseNow(g) });
       return { id, label: jobName(g, j), sub: av.ok ? `成功${o.pct.success}%・捕${o.pct.now}%・後${o.pct.later}%` : av.why, right: j.listing ? '募集' : j.stake ? '賭け' : fmtMoney(j.reward ? j.reward[1] : j.goods[1]), disabled: !av.ok, why: av.why, subColor: av.ok ? (o.pct.success >= 60 ? COL.good : o.pct.success >= 35 ? COL.warn : COL.bad) : COL.dim };
     });
     const i = await uraList(g, { title: appLabel(g).board, items, index: jobsScreen.last || 0, empty: '（今日の募集はない）', pick: (ph, it, idx) => ph.back(idx) });
@@ -479,9 +490,9 @@ async function jobsScreen(g, opts = {}) {
 // The job card: live odds as the options change (←→ on a row, or A to step it).
 async function jobDetail(g, id) {
   const j = jobOf(g, id), u = ura(g);
-  const o = { phase: 'night', prep: false, crew: 0, disguise: false, stake: j.stake ? j.stake[0] : 0 };
+  const o = { phase: phaseNow(g), prep: false, crew: 0, disguise: false, stake: j.stake ? j.stake[0] : 0 };
   const step = (key, d) => {
-    if (key === 'phase') o.phase = PHASE_IDS[(PHASE_IDS.indexOf(o.phase) + d + 3) % 3];
+    if (key === 'phase') { const ok = PHASE_IDS.slice(PHASE_IDS.indexOf(phaseNow(g))); o.phase = ok[(Math.max(0, ok.indexOf(o.phase)) + d + ok.length) % ok.length]; }
     else if (key === 'prep') o.prep = !o.prep;
     else if (key === 'crew') o.crew = (o.crew + d + 3) % 3;
     else if (key === 'disguise') o.disguise = !o.disguise;

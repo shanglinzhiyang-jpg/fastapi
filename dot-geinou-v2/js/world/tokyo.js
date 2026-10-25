@@ -2,11 +2,12 @@
 
 import { registerPlace, PLACES } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
-import { grid, set, put, fill, hroad, vroad, border } from './townkit.js';
+import { grid, set, put, fill, hroad, vroad, border, unstick } from './townkit.js';
 import { fountain, train, taxi, busStop, streetStage, statue } from './props.js';
 import { text } from '../engine/draw.js';
 export const TOKYO_W = 76; // x 60..75: the east block and the road to テレビ局エリア (minato.js)
-export const TOKYO_H = 46;
+export const TOKYO_H = 72; // rows 45..71: 芸人通り and the 劇場通り, south of よしもと's block (added later; rows 0..44 kept as before)
+export const TOKYO_GATE_Y = 45; // the ネオン街 gate at the foot of the centre avenue (kanraku.js arrives on row 44)
 
 // The landlady's talk and the apartment upgrades live in home.js, which puts the
 // talk on its place definition. Looked up when she is spoken to (no import), so a
@@ -125,17 +126,201 @@ function kanrakuSignpost(x, y) {
   };
 }
 
+// ---------------------------------------------------------------- 芸人通り (rows 44..71)
+// South of よしもと's block: a lane along row 44, the ネオン街 gate at the foot of the centre
+// avenue (row 45, x 38..42), then two streets. The brick 芸人通り (rows 51..55) has NSC東京校
+// (from 1995), the 貸し稽古場 and small studios on its north side; the car road 劇場通り
+// (rows 65..69) has a 小劇場, a live house, a 演芸場 and the ネタ広場 (a pocket park).
+// The west avenue (x 19..21) runs down through both.
+
+// The game year (NSC東京校 opened in 1995).
+function yearOf(g) {
+  try { if (typeof g.owaraiDate === 'function') return g.owaraiDate().year; } catch (e) { console.error(e); }
+  return g.state && g.state.profile && g.state.profile.era === 'showa' ? 1987 : 2026;
+}
+const nscTokyoOpen = (g) => yearOf(g) >= 1995;
+
+// The neon gate over the centre avenue (x .. x+6, one row): pillars at both ends (solid
+// signs), the arch drawn above the row. Walking under it leads to ネオン街 (kanraku.js).
+function neonGateSouth(x, y) {
+  const F = (ctx, x0, y0, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x0, y0, w, h); };
+  return {
+    type: 'prop', x, y, w: 7, h: 1, solid: false,
+    draw(ctx, sx, sy, g) {
+      const t = (g && g.frame) || 0;
+      // light spilling out of the street beyond
+      ctx.globalAlpha = 0.16; F(ctx, sx + 14, sy + 1, 84, 14, '#ff4f8b'); ctx.globalAlpha = 1;
+      for (const px of [sx + 3, sx + 99]) {
+        F(ctx, px, sy - 30, 10, 44, '#1a1820');
+        F(ctx, px + 0.5, sy - 30, 9, 43.5, '#2a2632'); F(ctx, px + 1, sy - 30, 2, 43, '#4a4456');
+        F(ctx, px - 1, sy + 10, 12, 5, '#3a3642'); F(ctx, px - 1, sy + 10, 12, 1, '#5a5464');
+        for (let k = 0; k < 4; k++) F(ctx, px + 3.5, sy - 24 + k * 8, 3, 3, (Math.floor(t / 10) + k) % 2 ? '#ffe9a0' : '#c8a050');
+      }
+      F(ctx, sx, sy - 41, 112, 20, '#20232a');
+      F(ctx, sx + 1, sy - 40, 110, 18, '#3a1030');
+      F(ctx, sx + 2, sy - 39, 108, 16, '#c8143c');
+      F(ctx, sx + 2, sy - 39, 108, 1.5, '#ff5a7a'); F(ctx, sx + 2, sy - 24.5, 108, 1.5, '#8a0a24');
+      const k = Math.floor(t / 6) % 3;
+      for (let i = 0; i < 36; i++) {
+        F(ctx, sx + 3.5 + i * 3, sy - 40.5, 1, 1, (i + k) % 3 ? '#fff3a0' : '#7a6a3a');
+        F(ctx, sx + 3.5 + i * 3, sy - 22.5, 1, 1, (i + k + 1) % 3 ? '#fff3a0' : '#7a6a3a');
+      }
+      text(ctx, 'ネオン街', sx + 56, sy - 37, { size: 12, align: 'center', color: '#fff6c8', shadow: '#5a0018' });
+    },
+  };
+}
+
+// Signpost at the corner of the west avenue: 「↓ 芸人通り」.
+function geininSignpost(x, y) {
+  const F = (ctx, x0, y0, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x0, y0, w, h); };
+  return {
+    type: 'prop', x, y, w: 1, h: 1,
+    talk: async (g) => g.say(['道しるべだ。', `↓ 芸人通り\n（${nscTokyoOpen(g) ? 'NSC東京校・' : ''}貸し稽古場・スタジオ）\nこの西の通りを南へすぐ。`, 'その先の「劇場通り」には、\n小劇場・ライブハウス・演芸場がある。']),
+    draw(ctx, sx, sy) {
+      F(ctx, sx + 3, sy + 14.5, 10, 1.5, 'rgba(0,0,0,0.22)');
+      F(ctx, sx + 6.5, sy - 4, 2.5, 19, '#4a2e18'); F(ctx, sx + 7, sy - 4, 1, 19, '#8a5a33');
+      F(ctx, sx - 15.5, sy - 10.5, 31, 10, '#3a2512');
+      F(ctx, sx - 15, sy - 10, 30, 9, '#c48a52'); F(ctx, sx - 15, sy - 10, 30, 1, '#e0b07a');
+      F(ctx, sx - 15, sy - 2, 30, 0.5, '#8a5a33');
+      text(ctx, '↓芸人通り', sx, sy - 8.5, { size: 5, align: 'center', color: '#fff6e0', shadow: '#3a2512' });
+    },
+  };
+}
+
+function districtTiles(c, W) {
+  // the lane between the old blocks and the new ones (the avenues cross it)
+  for (let x = 1; x <= W - 2; x++) if (!(x >= 18 && x <= 22) && !(x >= 38 && x <= 42)) set(c, x, 44, 'sidewalk');
+  // ---- north row (rows 45..50): backyards with hedges, alleys down to 芸人通り
+  fill(c, 1, 45, 17, 6, 'grass');
+  for (let x = 1; x <= 16; x++) if (x !== 9 && x !== 10) put(c, x, 45, 'hedge');
+  fill(c, 9, 45, 2, 6, 'path'); fill(c, 17, 44, 1, 7, 'path');
+  put(c, 1, 47, 'bush'); put(c, 1, 50, 'bicycle');
+  fill(c, 23, 45, 10, 6, 'stone');                     // NSC東京校's lot
+  fill(c, 33, 45, 4, 6, 'brick');                      // the alley by the gate
+  put(c, 36, 46, 'vending'); put(c, 36, 47, 'trash'); put(c, 33, 49, 'bicycle');
+  fill(c, 37, 46, 7, 5, 'sidewalk');                   // カラオケ
+  fill(c, 44, 45, 2, 6, 'path');
+  fill(c, 46, 45, 19, 6, 'grass');
+  for (let x = 46; x <= 64; x++) put(c, x, 45, 'hedge');
+  fill(c, 65, 45, 2, 6, 'path');
+  fill(c, 67, 45, 8, 6, 'grass');
+  for (let x = 67; x <= 74; x++) put(c, x, 45, 'hedge');
+  put(c, 74, 47, 'tree'); put(c, 74, 50, 'planter');
+  for (const x of [51, 58]) { put(c, x, 50, 'nobori'); put(c, x, 47, 'bush'); }
+  // ---- 芸人通り (rows 51..55), brick, with lamps and planters on its south edge
+  fill(c, 1, 51, W - 2, 5, 'brick');
+  for (const x of [4, 12, 26, 34, 46, 54, 62, 70]) put(c, x, 55, 'lamp');
+  for (const x of [8, 30, 50, 66]) put(c, x, 55, 'planter');
+  put(c, 58, 55, 'bench'); put(c, 1, 55, 'vending');
+  put(c, 17, 55, 'sign_board');
+  // ---- south block (rows 56..64): backs of the 劇場通り buildings, the ネタ広場
+  fill(c, 1, 56, W - 2, 9, 'grass');
+  for (let x = 1; x <= W - 2; x++) if (![11, 17, 32, 39, 40, 41, 44, 62].includes(x) && !(x >= 18 && x <= 22)) put(c, x, 56, 'hedge');
+  for (const x of [11, 32, 44, 62]) fill(c, x, 56, 1, 9, 'path');
+  fill(c, 23, 57, 14, 8, 'stone');
+  put(c, 1, 58, 'tree'); put(c, 13, 58, 'tree'); put(c, 15, 58, 'sakura'); put(c, 17, 60, 'tree');
+  put(c, 24, 57, 'planter'); put(c, 34, 58, 'tree'); put(c, 36, 58, 'planter');
+  put(c, 48, 58, 'tree'); put(c, 46, 59, 'sakura'); put(c, 50, 59, 'tree');
+  put(c, 65, 58, 'tree'); put(c, 67, 59, 'sakura');
+  for (const [x, y] of [[70, 58], [73, 60], [69, 62], [74, 63]]) put(c, x, y, (x + y) % 2 ? 'sakura' : 'tree');
+  for (const [x, y] of [[71, 60], [72, 63], [68, 58]]) set(c, x, y, 'flowers');
+  put(c, 71, 64, 'vending'); put(c, 72, 64, 'trash');
+  // ネタ広場: grass, a path through the middle, trees and benches
+  fill(c, 39, 56, 3, 9, 'path');
+  for (const [x, y] of [[37, 56], [43, 56], [43, 60], [37, 64]]) put(c, x, y, 'tree');
+  put(c, 43, 64, 'sakura');
+  for (const [x, y] of [[38, 63], [42, 63], [38, 56]]) set(c, x, y, 'flowers');
+  put(c, 37, 61, 'bench'); put(c, 42, 57, 'bench');
+  // ---- 劇場通り: the car road (rows 65..69) and a row of trees along the south edge
+  hroad(c, 66, 1, W - 2);
+  for (let x = 1; x <= W - 2; x++) if (x % 3 === 1 && (x < 28 || x > 32)) put(c, x, 70, 'tree');
+  for (const x of [6, 14, 26, 36, 48, 58, 68]) put(c, x, 69, 'lamp');
+}
+
+function districtEntities() {
+  const nscOpen = (g) => nscTokyoOpen(g);
+  const before = (g) => !nscTokyoOpen(g);
+  return [
+    // north row (doors on row 50, fronts on 芸人通り)
+    { type: 'building', x: 2, y: 46, w: 7, h: 5, door: 3, name: '純喫茶 ドット', kind: 'cafe', wall: '#efe3d0', roof: '#5b3a29', sign: { text: '純喫茶 ドット', bg: '#5b3a29', color: '#fff3e0' },
+      text: ['昔ながらの喫茶店だ。', 'テーブルにノートを広げて、ネタを書いている若者が何人もいる。\nコーヒー一杯で何時間もねばれる店らしい。'] },
+    { type: 'building', x: 11, y: 46, w: 6, h: 5, door: 3, name: '古着屋', kind: 'boutique', wall: '#f2ece0', roof: '#3b3f48', sign: { text: '古着', bg: '#20232a', color: '#f4e6cc' },
+      text: ['古着屋だ。', '派手なジャケットに、ド派手なシャツ…。\n衣装をさがしに来る芸人も多いらしい。'] },
+    ...(PLACES.nsc_tokyo ? [{ type: 'building', x: 23, y: 45, w: 10, h: 6, door: 5, place: 'nsc_tokyo', name: 'NSC東京校', kind: 'office', wall: '#fff3e6', roof: '#e8492a', canopy: '#e8492a', sign: { text: 'NSC東京校', bg: '#e8492a', color: '#ffffff' }, cond: nscOpen }] : []),
+    { type: 'building', x: 23, y: 45, w: 10, h: 6, door: 5, name: 'テナント募集中のビル', kind: 'office', wall: '#e4e2dc', roof: '#7a7f8a', sign: { text: 'テナント募集', bg: '#ffffff', color: '#d62f2f' },
+      cond: PLACES.nsc_tokyo ? before : undefined, text: ['まだ新しいビルだ。', '「テナント募集」の貼り紙がある。\n一階から三階まで、まるごと空いているらしい。'] },
+    { type: 'building', x: 37, y: 46, w: 7, h: 5, door: 3, name: 'カラオケ', kind: 'karaoke', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' },
+      text: ['カラオケ店だ。', '個室を借りて、ネタ合わせをする芸人も多いらしい。\n大きな声を出しても、だれにも気づかれない。'] },
+    { type: 'building', x: 46, y: 46, w: 5, h: 5, door: 2, name: 'リハーサルスタジオ', kind: 'studio', wall: '#d8d2c4', roof: '#5a6070', onair: false, sign: { text: 'スタジオ', bg: '#ffffff', color: '#20232a' },
+      text: ['時間貸しのリハーサルスタジオだ。', 'バンドやダンサー、芸人も使っているらしい。\n今日は予約でいっぱいだ。'] },
+    ...(PLACES.keikoba ? [{ type: 'building', x: 52, y: 46, w: 6, h: 5, door: 3, place: 'keikoba', name: '貸し稽古場 ドットスタジオ', kind: 'office', wall: '#efe2bf', roof: '#5a4a3a', sign: { text: '稽古場', bg: '#3b2a1a', color: '#ffd23f' } }] : []),
+    { type: 'building', x: 59, y: 46, w: 6, h: 5, door: 3, name: 'ダンススタジオ', kind: 'gym', accent: '#ff7eb6', sign: { text: 'ダンス', bg: '#20232a', color: '#ff7eb6' },
+      text: ['ダンススタジオだ。', '鏡の前で、何人もがステップの練習をしている。'] },
+    { type: 'building', x: 67, y: 46, w: 7, h: 5, door: 3, name: 'ひなた荘', kind: 'house', wall: '#e8dcc0', roof: '#6a4a33', sign: { text: 'ひなた荘', bg: '#fff6e0' },
+      text: ['古い木造アパートだ。', '家賃が安いので、芸人の卵がたくさん住んでいるらしい。\n夜中までネタ合わせの声が聞こえるとか…。'] },
+    // the gate to ネオン街, its pillars
+    ...(PLACES.kanraku ? [
+      neonGateSouth(37, TOKYO_GATE_Y),
+      { type: 'sign', x: 37, y: TOKYO_GATE_Y, solid: true, text: ['「ネオン街」の入口のゲートだ。', 'ゲートをくぐると、夜の繁華街。\n居酒屋・ゲームセンター・カプセルホテル…。'] },
+      { type: 'sign', x: 43, y: TOKYO_GATE_Y, solid: true, text: ['ゲートの柱に、貼り紙がある。', '「客引き行為は条例で禁止されています」'] },
+    ] : []),
+    geininSignpost(17, 43),
+    { type: 'sign', x: 17, y: 55, solid: true, talk: async (g) => g.say(['「芸人通り」の案内板だ。', `北：喫茶店・古着屋・${nscTokyoOpen(g) ? 'NSC東京校・' : ''}カラオケ・\nスタジオ・貸し稽古場・ダンススタジオ・アパート`, '南の「劇場通り」：小劇場・カフェ・ライブハウス・\n古本屋・ネタ広場・ラーメン屋・演芸場']) },
+    // 劇場通り (doors on row 64, fronts on the car road's sidewalk)
+    { type: 'building', x: 2, y: 58, w: 9, h: 7, door: 4, name: 'ドット小劇場', kind: 'theater', wall: '#ece4d2', roof: '#5a2a6a', sign: { text: 'ドット小劇場', bg: '#20232a', color: '#ffd23f' },
+      text: ['客席六十ほどの、小さな劇場だ。', '入口に、手書きのチラシがびっしり貼ってある。\n今夜は若手のお笑いライブらしい。'] },
+    { type: 'building', x: 12, y: 60, w: 5, h: 5, door: 2, name: 'カフェ', kind: 'cafe', wall: '#f3eadb', roof: '#2f6a4a', sign: { text: 'カフェ', bg: '#2f6a4a', color: '#ffffff' },
+      text: ['小さなカフェだ。', '台本を読みあわせている二人組がいる。'] },
+    { type: 'building', x: 24, y: 59, w: 8, h: 6, door: 4, name: 'ライブハウス', kind: 'karaoke', wall: '#2a2d36', roof: '#20232a', neon: '#5fd7ff', sign: { text: 'ライブハウス', bg: '#20232a', color: '#5fd7ff' },
+      text: ['地下にあるライブハウスだ。', '今夜の出演者の名前が、黒板に書いてある。\nバンドの日もあれば、お笑いライブの日もあるらしい。'] },
+    { type: 'building', x: 33, y: 61, w: 4, h: 4, door: 2, name: '古本屋', kind: 'bookstore', sign: { text: '古本', bg: '#ffffff', color: '#2a3a7a' },
+      text: ['古本屋だ。', '店先のワゴンに、昔の演芸雑誌が並んでいる。'] },
+    { type: 'building', x: 45, y: 61, w: 6, h: 4, door: 3, name: 'ラーメン屋', kind: 'ramen', sign: { text: 'ラーメン', bg: '#d62f2f', color: '#ffffff' },
+      text: ['ラーメン屋だ。', '「芸人さん大盛り無料」の貼り紙がある。\n…売れていない芸人のための店らしい。'] },
+    { type: 'building', x: 52, y: 58, w: 10, h: 7, door: 5, name: 'ドット演芸場', kind: 'theater', wall: '#f2e6cc', roof: '#2a3a5a', sign: { text: 'ドット演芸場', bg: '#ffffff', color: '#2a3a5a' },
+      text: ['演芸場だ。', '漫才、落語、コント、マジック…。\n昼から夜まで、毎日だれかが高座に上がっている。'] },
+    { type: 'building', x: 63, y: 61, w: 5, h: 4, door: 2, name: 'コーヒースタンド', kind: 'coffee', wall: '#efe3d0', roof: '#8a5a33', sign: { text: 'コーヒー', bg: '#8a5a33', color: '#fff3e0' },
+      text: ['コーヒースタンドだ。', 'いい香りがする。'] },
+    busStop(30, 69, { text: undefined, talk: busToMachi }),
+
+    // people of the district (passers-by; nobody here is a registered person)
+    { type: 'npc', id: 'gd_writer', x: 6, y: 52, dir: 'down', look: { ...LOOKS.comedian2, top: '#5a6f8a' }, name: 'ネタを書く若者', wander: 2,
+      text: ['あの喫茶店でネタを書くのが日課なんだ。', 'コーヒー一杯で三時間。\n…マスターの目が、ちょっとこわい。'] },
+    { type: 'npc', id: 'gd_nsc', x: 27, y: 53, dir: 'down', look: { ...LOOKS.comedian, top: '#e8492a', hairColor: 'black' }, name: 'NSC生', cond: nscOpen,
+      text: ['NSCの授業、今日はネタ見せだったんです。', '講師の先生に「三分もいらん、一分で笑わせろ」って\n言われちゃって…。', '同期が何百人もいるから、顔と名前を\n覚えてもらうだけでもたいへんなんですよ。'] },
+    { type: 'npc', id: 'gd_hopeful', x: 27, y: 53, dir: 'down', look: { ...LOOKS.comedian, top: '#2f6fd0', hairColor: 'black' }, name: '芸人志望の若者', cond: before,
+      text: ['よしもとの事務所が近いから、\nこのへんには芸人志望が多いんだ。', 'みんな、劇場の前座やライブのオーディションで\nちょっとずつ舞台に立ってるよ。'] },
+    { type: 'npc', id: 'gd_boke', x: 37, y: 58, dir: 'right', look: { ...LOOKS.comedian, top: '#ff8a3d', hairColor: 'brown' }, name: 'ネタ合わせ中の芸人', fixedDir: true,
+      text: ['…でな、そのとき俺が言うたんや。', '（ネタ合わせの最中みたいだ）'] },
+    { type: 'npc', id: 'gd_tsukkomi', x: 38, y: 58, dir: 'left', look: { ...LOOKS.comedian2, top: '#2f9a4a' }, name: 'ネタ合わせ中の芸人', fixedDir: true,
+      text: ['なんでやねん！…あ、すいません。いま練習中で。', '来週、そこの小劇場のライブに出るんです。\nよかったら見に来てください。'] },
+    { type: 'npc', id: 'gd_tree', x: 42, y: 60, dir: 'right', look: { ...LOOKS.salaryman, top: '#8a5ac8' }, name: '木に話しかける人', fixedDir: true,
+      text: ['（木に向かって、ひとりでしゃべっている…）', '…あっ、見てました？\n木をお客さんだと思って、ネタの練習してたんです。', '木は笑わないけど、帰りもしないから。'] },
+    { type: 'npc', id: 'gd_keiko', x: 56, y: 53, dir: 'left', look: { ...LOOKS.actress, top: '#3b3f48' }, name: '劇団の人', wander: 2,
+      text: ['そこの稽古場、一時間いくらで借りられるのよ。', '芝居もコントも、声を出して動いてみないと\n仕上がらないからね。'] },
+    { type: 'npc', id: 'gd_dancer', x: 63, y: 52, dir: 'down', look: { ...LOOKS.idol, top: '#ff7eb6' }, name: 'ダンサー', wander: 2,
+      text: ['ダンススタジオの帰り！', 'このへんは、夢を追いかけてる人ばっかりだよ。\n芸人さんに、役者さんに、ダンサーに…。'] },
+    { type: 'npc', id: 'gd_flyer', x: 30, y: 65, dir: 'down', look: { ...LOOKS.comedian2, top: '#ffd23f' }, name: 'チラシ配りの芸人',
+      text: ['今夜、そこのライブハウスでお笑いライブやってまーす！', '若手ばっかり十二組。\n出るほうも見るほうも、真剣勝負です！'] },
+    { type: 'npc', id: 'gd_engei_fan', x: 51, y: 65, dir: 'down', look: { ...LOOKS.oldman, top: '#5a4a3a' }, name: '演芸好きのおじいさん', wander: 1,
+      text: ['この演芸場には、もう四十年かよってるよ。', '若いのが育っていくのを見るのが、いちばんの楽しみでねえ。'] },
+  ];
+}
+
 function generate() {
   const W = TOKYO_W, H = TOKYO_H;
   const c = grid(W, H, 'grass');
 
-  // ---- roads
+  // ---- roads (the district's streets first, so the west avenue crosses them)
   hroad(c, 20, 1, W - 2);
-  vroad(c, 19, 1, H - 2);
-  vroad(c, 39, 1, H - 2);
+  districtTiles(c, W);
+  vroad(c, 19, 1, 68);   // the west avenue runs on through 芸人通り down to the 劇場通り
+  vroad(c, 39, 1, 44);   // the centre avenue ends at the ネオン街 gate (row 45)
   vroad(c, 59, 1, 36);   // the east avenue ends at the railway fence
   for (const x of [17, 23, 37, 43, 57, 63]) for (let y = 20; y <= 22; y++) set(c, x, y, 'crosswalk_h');
   for (const y of [17, 25]) for (const x0 of [19, 39, 59]) for (let x = x0; x < x0 + 3; x++) set(c, x, y, 'crosswalk_v');
+  for (const y of [52, 53, 54, 63]) for (let x = 19; x <= 21; x++) set(c, x, y, 'crosswalk_v');
+  for (const x of [17, 23, 40]) for (let y = 66; y <= 68; y++) set(c, x, y, 'crosswalk_h');
   border(c, 'tree');
   // ---- east exit: the main road continues to テレビ局エリア (minato.js; warps below)
   for (let y = 19; y <= 23; y++) set(c, W - 1, y, y === 19 || y === 23 ? 'sidewalk' : y === 21 ? 'road_line_h' : 'road');
@@ -143,8 +328,11 @@ function generate() {
   for (let y = 19; y <= 23; y++) set(c, 0, y, y === 19 || y === 23 ? 'sidewalk' : 'road');
   // ---- north exit: the center avenue continues to 永田町・霞が関 (nagatacho.js; warps below)
   if (PLACES.nagatacho) for (let x = 38; x <= 42; x++) set(c, x, 0, x === 38 || x === 42 ? 'sidewalk' : x === 40 ? 'road_line_v' : 'road');
-  // ---- south exit: the center avenue continues to ネオン街 (kanraku.js; warps below)
-  if (PLACES.kanraku) for (let x = 38; x <= 42; x++) set(c, x, H - 1, x === 38 || x === 42 ? 'sidewalk' : x === 40 ? 'road_line_v' : 'road');
+  // ---- the ネオン街 gate: the center avenue continues to ネオン街 (kanraku.js; warps below)
+  for (let x = 37; x <= 43; x++) {
+    if (!PLACES.kanraku) put(c, x, TOKYO_GATE_Y, 'hedge');
+    else set(c, x, TOKYO_GATE_Y, x <= 38 || x >= 42 ? 'sidewalk' : x === 40 ? 'road_line_v' : 'road');
+  }
 
   // ---- block TL: NHK plaza
   fill(c, 2, 11, 15, 7, 'stone');
@@ -211,11 +399,10 @@ function generate() {
   fill(c, 63, 24, 12, 3, 'stone');
   for (let y = 27; y <= 35; y++) set(c, 68, y, 'path');
   for (let x = 63; x <= 74; x++) set(c, x, 31, 'path');
-  // (63..67 / 70..74 x 27..30: NSC東京校 and the 貸し稽古場, js/places/nsc.js)
-  for (const [x, y] of [[66, 33], [72, 34], [64, 35]]) put(c, x, y, (x + y) % 3 ? 'tree' : 'sakura');
-  for (const [x, y] of [[71, 33], [66, 35]]) set(c, x, y, 'flowers');
+  for (const [x, y] of [[64, 28], [66, 33], [70, 28], [73, 30], [72, 34], [64, 35]]) put(c, x, y, (x + y) % 3 ? 'tree' : 'sakura');
+  for (const [x, y] of [[65, 29], [71, 33], [73, 27], [66, 35]]) set(c, x, y, 'flowers');
   put(c, 69, 29, 'bench'); put(c, 67, 33, 'bench'); put(c, 74, 25, 'vending');
-  for (let y = 40; y <= 44; y++) for (let x = 59; x <= 74; x++) if ((x + y) % 4 === 0) put(c, x, y, 'tree');
+  for (let y = 40; y <= 43; y++) for (let x = 59; x <= 74; x++) if ((x + y) % 4 === 0) put(c, x, y, 'tree');
 
   // ---- street furniture
   for (const x of [6, 13, 27, 33, 47, 53, 67, 72]) { put(c, x, 19, 'lamp'); put(c, x, 23, 'lamp'); }
@@ -223,6 +410,7 @@ function generate() {
   put(c, 22, 9, 'mailbox');
   put(c, 17, 18, 'sign_board');
   put(c, 38, 28, 'vending');
+  put(c, 18, 48, 'lamp'); put(c, 22, 58, 'lamp'); put(c, 18, 62, 'lamp');
 
   const entities = [
     // buildings
@@ -239,9 +427,8 @@ function generate() {
     { type: 'building', x: 44, y: 26, w: 12, h: 5, door: 6, place: 'station_tokyo', name: '東京駅', kind: 'station', wall: '#b8644a', roof: '#4a5a70', sign: { text: '東京駅', bg: '#ffffff' } },
     { type: 'building', x: 63, y: 4, w: 8, h: 8, door: 4, name: 'ドット新聞社', kind: 'office', wall: '#e6e2d8', roof: '#4a5568', sign: { text: 'ドット新聞', bg: '#ffffff', color: '#20232a' },
       text: ['「ドット新聞社」のビルだ。', '芸能面の記事も、ここで書かれているらしい。\n…いつか自分の記事がのる日が来るかも？'] },
-    // NSC東京校 (1995年開校: hidden before) and the 貸し稽古場 (js/places/nsc.js)
-    ...(PLACES.nsc_tokyo ? [{ type: 'building', x: 63, y: 27, w: 5, h: 4, door: 2, place: 'nsc_tokyo', name: 'NSC東京校', kind: 'office', wall: '#fff3e6', roof: '#e8492a', sign: { text: 'NSC', bg: '#e8492a', color: '#ffffff' }, cond: (g) => (typeof g.owaraiDate === 'function' ? g.owaraiDate().year >= 1995 : !(g.state && g.state.profile && g.state.profile.era === 'showa')) }] : []),
-    ...(PLACES.keikoba ? [{ type: 'building', x: 70, y: 27, w: 5, h: 4, door: 2, place: 'keikoba', name: '貸し稽古場 ドットスタジオ', kind: 'office', wall: '#efe2bf', roof: '#5a4a3a', sign: { text: '稽古場', bg: '#3b2a1a', color: '#ffd23f' } }] : []),
+    // 芸人通り and the 劇場通り: NSC東京校 (from 1995), the 貸し稽古場 (js/places/nsc.js) …
+    ...districtEntities(),
 
     // props
     fountain(8, 13),
@@ -258,6 +445,7 @@ function generate() {
     { type: 'sign', x: 17, y: 18, text: [
       '↑ NHK・ホリプロ・東宝・東映\n↓ よしもと・BSよしもと・グレープカンパニー\n→ 東京駅（新幹線で大阪へ）', '→→ テレビ局エリア（大通りを東のはしまで）\n← ドット商店街（大通りを西のはしまで）',
       ...(PLACES.nagatacho || PLACES.kanraku ? [[PLACES.nagatacho ? '↑↑ 永田町・霞が関（まん中の通りを北のはしまで）' : '', PLACES.kanraku ? '↓↓ ネオン街（まん中の通りを南のはしまで）' : ''].filter(Boolean).join('\n')] : []),
+      '↓↓ 芸人通り・劇場通り（この通りを南へ）\n（スタジオ・小劇場・ライブハウス・演芸場）',
     ], solid: true },
 
     // NPCs
@@ -290,7 +478,7 @@ function generate() {
   for (let y = 19; y <= 23; y++) warps.push({ x: 0, y, place: 'machi', room: 'main', tx: 46, ty: y - 3, dir: 'left' }); // machi's road: rows 16..20
   for (let y = 19; y <= 23; y++) warps.push({ x: W - 1, y, place: 'minato', room: 'main', tx: 1, ty: y + 5, dir: 'right' }); // minato's road: rows 24..28
   if (PLACES.nagatacho) for (let x = 38; x <= 42; x++) warps.push({ x, y: 0, place: 'nagatacho', room: 'main', tx: x, ty: 54, dir: 'up' }); // nagatacho's south exit: same columns
-  if (PLACES.kanraku) for (let x = 38; x <= 42; x++) warps.push({ x, y: H - 1, place: 'kanraku', room: 'main', tx: x, ty: 1, dir: 'down' }); // kanraku's north edge: same columns
+  if (PLACES.kanraku) for (let x = 38; x <= 42; x++) warps.push({ x, y: TOKYO_GATE_Y, place: 'kanraku', room: 'main', tx: x, ty: 1, dir: 'down' }); // kanraku's north edge: same columns
 
   return { w: W, h: H, cells: c, entities, warps, events: [{ x: 6, y: 34, w: 4, h: 2, on: 'action', run: streetLive }, { x: 6, y: 36, w: 4, h: 1, on: 'step', run: async (g) => { if (!g.flag('stageHint')) { g.setFlag('stageHint'); await g.say('小さなステージだ。ステージの前でAボタンを押すとパフォーマンスできそうだ。'); } } }] };
 }
@@ -302,6 +490,7 @@ registerPlace({
   bgm: 'town',
   start: { room: 'main', x: 4, y: 30, dir: 'down' },
   rooms: {
-    main: { generate, bg: '#62b35b' },
+    // onEnter: a save made on a tile the map has since built over steps to the nearest free tile
+    main: { generate, bg: '#62b35b', onEnter: async (g) => { unstick(g); } },
   },
 });

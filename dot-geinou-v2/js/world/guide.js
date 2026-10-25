@@ -29,7 +29,17 @@ export const GUIDE = {
   tokyo: {
     town: 'tokyo', name: '東京エリアの街', short: '公園',
     hint: '',
-    lines: ['公園のステージで路上漫才・路上ライブ（だれでも）', '大通りを西へ「ドット商店街」、東へ「テレビ局エリア」', '中央の通りを北へ「永田町」、南へ「ネオン街」'],
+    lines: ['公園のステージで路上漫才・路上ライブ（だれでも）', '大通りを西へ「ドット商店街」、東へ「テレビ局エリア」', '中央の通りを北へ「永田町」、南へ「ネオン街」', '西の通りを南へ「芸人通り」（稽古場・小劇場・演芸場）'],
+  },
+  nsc_tokyo: {
+    town: 'tokyo', name: 'NSC東京校', short: 'NSC東京',
+    hint: 'よしもと東京本部の南、「芸人通り」の北側（1995年開校）',
+    lines: ['吉本の芸人養成所。入学の相談・申しこみ（分納もOK）', '授業・ネタ見せ・卒業公演。同期とコンビを組める', '受付で学生向けのバイト（劇場の裏方）を紹介'],
+  },
+  keikoba: {
+    town: 'tokyo', name: '貸し稽古場 ドットスタジオ', short: '稽古場',
+    hint: '「芸人通り」の北側、スタジオとダンススタジオのあいだ',
+    lines: ['ネタの練習（相方がいればネタ合わせ）', '受付・掃除のバイト（だれでも）', '奥のライブスペースでフリーライブ（エントリー料）'],
   },
   home: {
     town: 'tokyo', name: 'ドット荘（自宅）', short: '自宅',
@@ -187,7 +197,12 @@ export const GUIDE = {
   namba: {
     town: 'namba', name: 'なんばエリアの街', short: 'なんば',
     hint: '東京駅から新幹線と電車で行ける',
-    lines: ['お笑いの本場・大阪。劇場や事務所が集まる街', '大阪のおばちゃんが1日1回アメちゃんをくれる', '東の川ぞいに MBS毎日放送・関西テレビ・屋台'],
+    lines: ['お笑いの本場・大阪。劇場や事務所が集まる街', '大阪のおばちゃんが1日1回アメちゃんをくれる', '東の川ぞいに MBS毎日放送・関西テレビ・屋台', '西の劇場通りに NSC大阪校・ドット劇場'],
+  },
+  nsc: {
+    town: 'namba', name: 'NSC大阪校', short: 'NSC大阪',
+    hint: 'なんばの北、よしもと新喜劇の劇場の西どなり',
+    lines: ['吉本の芸人養成所。入学の相談・申しこみ（分納もOK）', '授業・ネタ見せ・卒業公演。同期とコンビを組める', '受付で学生向けのバイト（劇場の裏方）を紹介'],
   },
   mbs: {
     town: 'namba', name: 'MBS毎日放送', short: 'MBS',
@@ -206,7 +221,7 @@ export const GUIDE = {
   },
   shinkigeki: {
     town: 'namba', name: 'よしもと新喜劇 劇場', short: '新喜劇', audition: true,
-    hint: 'なんばの北西（左上）の大きな劇場',
+    hint: 'なんばの北、NSC大阪校のとなりの大きな劇場',
     lines: ['座員オーディション（ズッコケ）・受け身の稽古・観劇', 'エキストラ（だれでも）・ちょい役（所属か★100）', 'よしもと所属で 準レギュラー★250〜座長★2000'],
   },
   shochiku: {
@@ -330,10 +345,10 @@ export const GUIDE = {
 
 export const GUIDE_ORDER = [
   'tokyo', 'home', 'konbini', 'sento', 'station_tokyo',
-  'yoshimoto', 'bs_yoshimoto', 'grape', 'horipro', 'toho', 'toei', 'nhk',
+  'yoshimoto', 'bs_yoshimoto', 'grape', 'nsc_tokyo', 'keikoba', 'horipro', 'toho', 'toei', 'nhk',
   'machi', 'super', 'hanaya', 'ramen', 'cafe', 'salon', 'famires', 'gym', 'karaoke', 'fudousan', 'kagu', 'mansion', 'tower',
   'minato', 'ntv', 'tbs', 'tvasahi', 'fujitv', 'tvtokyo',
-  'namba', 'station_namba', 'shinkigeki', 'shochiku', 'takoyaki', 'hotel', 'mbs', 'ktv', 'jikka',
+  'namba', 'station_namba', 'shinkigeki', 'nsc', 'shochiku', 'takoyaki', 'hotel', 'mbs', 'ktv', 'jikka',
   'kuyakusho',
   'nagatacho', 'kokkai', 'kantei', 'jimin_hq', 'minshu_hq', 'yato_hq', 'myparty_hq', 'keisatsu', 'kensatsu', 'saibansho',
   'kanraku', 'koban', 'kyabakura', 'gamecen', 'shohisha', 'yamikin', 'kumi',
