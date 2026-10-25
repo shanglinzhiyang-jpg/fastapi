@@ -356,7 +356,7 @@ function tagsOf(g, a, y) {
   return t;
 }
 // A block's entry numbers (4 digits, stable).
-export const entryNo = (y, name) => 1000 + (hashStr(`no:${y}:${name}`) % 8999);
+export const entryNo = (y, name) => 1 + (hashStr(`no:${y}:${name}`) % Math.max(100, entriesOf(y).n));
 
 // The chance (0..1) that a player with (power, quality) beats the cut of a field where `pass` acts go through.
 export function passOdds(g, field, pass, power, quality, extra = 0, samples = 40) {

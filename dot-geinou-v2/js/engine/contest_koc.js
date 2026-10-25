@@ -33,7 +33,7 @@ function seasonYear(g) {
 }
 const roundsDef = (y) => kocRounds(y);
 const DEF = {
-  name: KOC_NAME, short: 'KOC', kind: 'conte', category: 'major',
+  name: KOC_NAME, short: 'KOC', kind: 'conte', category: 'major', labelStyle: 'both', color: '#b8902a',
   organizer: 'TBSテレビ', broadcaster: 'TBS系', venue: 'TBS放送センター（赤坂）', region: 'all',
   history: { founded: FOUNDED, ended: null, gaps: [], revived: null, note: 'TBSテレビが主催・運営するコント日本一決定戦。プロ・アマ・芸歴を問わず2人以上のユニットが出場できる。', sources: SOURCES },
   revive: false,
@@ -62,13 +62,19 @@ const DEF = {
   historyOf: (g) => historyList(g),
   judgesOf: (g, y) => judgesFor(g, y ?? kDate(g).year).map((j) => ({ name: j.name, title: j.title, taste: j.taste })),
 };
-registerContest('koc', DEF);
-// the current year's schedule / rounds / eligibility note (getters: the format changes by era)
-if (CONTESTS.koc) {
+// The season's format changes by era (準々決勝 from 2009, the two-day semifinal from 2018, the revival from 2026): schedule and
+// rounds are getters, and KOC registers again when the format of the season changes, so D1 rebuilds its calendar.
+let regSig = null;
+const sigOf = (y) => { const R = rules(Math.max(FOUNDED, y)); return `${R.hasQF}|${R.twoNetaSF}|${!!R.revival}`; };
+function register() {
+  registerContest('koc', DEF);
+  regSig = sigOf(seasonYear());
+  if (!CONTESTS.koc) return;
   Object.defineProperty(CONTESTS.koc, 'schedule', { enumerable: true, configurable: true, get: () => { const S = schedule(Math.max(FOUNDED, seasonYear())); return { entry: S.entry, final: S.final.when }; } });
   Object.defineProperty(CONTESTS.koc, 'rounds', { enumerable: true, configurable: true, get: () => roundsDef(seasonYear()) });
   Object.defineProperty(CONTESTS.koc, 'eligibilityNote', { enumerable: true, configurable: true, get: () => 'プロ・アマ・所属・芸歴・年齢不問、2人以上のユニット（ピン不可・即席ユニット可）' });
 }
+register();
 
 // ================================================================ regular shows (fictional TBS programs) for the finalists / the king
 registerRegular('koc_reg_conte', {
@@ -131,6 +137,7 @@ function kocMorning(g) {
   const y = t.year;
   curYear = y;
   lastG = g;
+  if (sigOf(seasonYear(g)) !== regSig) register();
   const link = L.linked(g);
   if (y < FOUNDED) return;
   const k = K(g);
@@ -181,14 +188,15 @@ function kocMorning(g) {
   }
   // ---- the player: missed rounds, reminders
   if (E && E.d1 && link && L.withdrawnInD1(g, y) && E.status !== 'withdrawn' && E.status !== 'champion') { E.status = 'withdrawn'; E.out = E.round; }
-  if (E && ['entered', 'finalist', 'revival', 'voter'].includes(E.status) && !(E.d1 && link && E.status !== 'voter')) {
+  if (E && ['entered', 'finalist', 'revival', 'voter'].includes(E.status)) {
     const rid = E.status === 'entered' ? E.round : E.status === 'revival' ? 'revival' : 'final';
     const ds = datesOf(g, y, E, rid);
     const need = rid === 'sf' && R.twoNetaSF ? ds[num(E.sfDone)] : ds[0];
+    const quiet = E.d1 && link && E.status !== 'voter'; // D1 sends the reminders / the 棄権 notice of a linked entry
     if (need && t.abs > absOf(y, need)) {
       if (E.status === 'voter') E.status = 'out';
-      else { E.status = 'withdrawn'; E.out = rid; notice(g, `『${titleOf(y)}』${roundName(rid)}に来場されなかったため、棄権となりました。`); }
-    } else if (need && t.abs === absOf(y, need)) {
+      else { E.status = 'withdrawn'; E.out = rid; if (quiet) L.markWithdrawn(g, y); else notice(g, `『${titleOf(y)}』${roundName(rid)}に来場されなかったため、棄権となりました。`); }
+    } else if (quiet) { /* D1: 【本日】 / 【明日】 */ } else if (need && t.abs === absOf(y, need)) {
       if (!inboxToday(g, /キングオブコント|KOC/)) notice(g, `本日は『${titleOf(y)}』${roundName(rid)}です。\n${rid === 'final' || rid === 'revival' ? 'TBS 赤坂' : hallText(planOf(g, y, E, rid) || {})}。KOCアプリ（または賞レースの画面）から会場へ。`);
     } else if (need && t.abs === absOf(y, need) - 1) notice(g, `明日は『${titleOf(y)}』${roundName(rid)}。体調を整えておこう。`);
   }
@@ -230,7 +238,8 @@ async function kocApp(g) {
     const due = info.due;
     if (due) items.push({ id: 'go', label: `今日：${roundName(due.rid)}へ行く`, sub: due.rid === 'final' || due.rid === 'revival' ? 'TBS 赤坂（決勝の日）' : hallText(planOf(g, y, E, due.rid) || {}) });
     if (!E && info.phase === 'entry') items.push({ id: 'entry', label: 'エントリーする', sub: `締切 ${dateText(y, S.entry.to)}・${feeText()}` });
-    if (info.phase === 'final' && !due) items.push({ id: 'watch', label: '決勝を見る（生放送）', sub: `${titleOf(y)} 決勝` });
+    const Yy = K(g).years[y];
+    if (info.phase === 'final' && !due && !(Yy && Yy.final && Yy.final.done)) items.push({ id: 'watch', label: '決勝を見る（生放送）', sub: `${titleOf(y)} 決勝` });
     items.push({ id: 'me', label: 'わたしのKOC', sub: E ? `No.${E.no} ${E.unitName}` : 'エントリーしていない' });
     items.push({ id: 'rules', label: `大会のしくみ（${y}年）`, sub: `第${R.edition}回・${R.mode === 'panel' ? `審査員${R.judges}人` : `準決勝敗退者${R.voters}人が審査`}` });
     items.push({ id: 'sched', label: '予選の日程と会場', sub: `1回戦 ${dateText(y, S.r1[0].when)}〜` });

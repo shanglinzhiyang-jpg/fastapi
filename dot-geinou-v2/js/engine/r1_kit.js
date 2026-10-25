@@ -189,6 +189,7 @@ function norm(r) {
 // The performance itself (C's g.perform: the minigame, or a simulation when opts.skip / g.auto).
 export async function performAct(g, o) {
   let r = null;
+  if (g._r1sim) o = { ...o, skip: true }; // test hook: every scene shown, the performance simulated (C's minigame is tested by C)
   if (has(g, 'perform')) {
     try { r = await g.perform(o); } catch (e) { console.error(e); r = null; }
   }
@@ -217,7 +218,7 @@ export function playerTotal(g, res, o) {
 }
 export function rivalTotal(g, strength, rng, kind) {
   const r = simPerf(g, { kind, power: strength, quality: clamp(strength + gauss(rng) * 6, 0, 100) }, rng);
-  return clamp(Math.round((r.score * 0.55 + strength * 0.45 + rng() * 6) * 10) / 10, 0, 100);
+  return clamp(Math.round((r.score * 0.55 + strength * 0.45 + rng() * 4) * 10) / 10, 0, 100);
 }
 // The score that `pass` of `field` entrants reach in a round whose strengths are N(mu, sd) (seeded, so the same
 // season always has the same cut).
@@ -320,7 +321,8 @@ export function syncEntry(g, cid, year, rec) {
   if (!has(g, 'contestEntry')) return;
   try {
     const e = g.contestEntry(cid, year);
-    if (e && e !== rec && typeof e === 'object') Object.assign(e, { no: rec.no, unitName: rec.unitName, fee: rec.fee, status: rec.status, round: rec.round, results: rec.results });
+    // D1's own record keeps its shape (numeric round, its results) through contestRecord; only the identity is shared
+    if (e && e !== rec && typeof e === 'object') Object.assign(e, { no: rec.no, unitName: rec.unitName });
   } catch (e) { console.error(e); }
 }
 

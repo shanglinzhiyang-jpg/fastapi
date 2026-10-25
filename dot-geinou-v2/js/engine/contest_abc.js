@@ -361,7 +361,7 @@ function offersABC(g, C, { S, E }) {
 // ================================================================ the contest
 export const ABC = makeContest({
   id: 'abcgp', key: 'abcgp', label: 'ABC', appName: 'ABC', appTitle: 'ABCお笑いGP', color: '#0a6fd6', founded: 1980, foundedText: '1980年創設（朝日放送の若手の賞レース）',
-  office: 'ABC 大会事務局', unitWord: '組', notables: 30, topStr: 84, defaultKind: 'manzai', prepSub: 'ネタ見せ・小道具', trophy: 'abc_trophy',
+  office: 'ABC 大会事務局', unitWord: '組', notables: 30, topStr: 82, defaultKind: 'manzai', prepSub: 'ネタ見せ・小道具', trophy: 'abc_trophy',
   rules: rulesABC, entries: entriesABC, notable: notableABC, pastHistory, kindOf: () => 'manzai',
   typeFromWorld: (u, t) => (u === 'trio' ? 'trio' : u === 'pin' ? 'pin' : 'combi'),
   kindLabel: (E) => KIND_JA[E.kind] || '漫才',
@@ -502,13 +502,14 @@ const DEF = {
 };
 const sigOf = (Y) => JSON.stringify([d1RoundsOf(Y).map((x) => [x.when, x.length, x.field, x.pass]), rulesABC(Y).cal.entryFrom.slice(1), rulesABC(Y).cal.entryTo.slice(1), rulesABC(Y).name]);
 let sig = '';
+const yNow = () => { const y = ABC.liveY(curY); return y >= 1980 ? y : curY; };
 function registerDef() {
   registerContest('abcgp', DEF);
   const d = CONTESTS.abcgp;
   if (!d) return;
-  Object.defineProperty(d, 'schedule', { enumerable: true, configurable: true, get: () => { const r = rulesABC(curY); return { entry: { from: r.cal.entryFrom.slice(1, 3), to: r.cal.entryTo.slice(1, 3) }, final: r.rounds.find((x) => x.id === 'final').dates[0].slice(1, 3) }; } });
-  Object.defineProperty(d, 'rounds', { enumerable: true, configurable: true, get: () => d1RoundsOf(curY) });
-  Object.defineProperty(d, 'eligibilityNote', { enumerable: true, configurable: true, get: () => rulesABC(curY).eligText });
+  Object.defineProperty(d, 'schedule', { enumerable: true, configurable: true, get: () => { const r = rulesABC(yNow()); return { entry: { from: r.cal.entryFrom.slice(1, 3), to: r.cal.entryTo.slice(1, 3) }, final: r.rounds.find((x) => x.id === 'final').dates[0].slice(1, 3) }; } });
+  Object.defineProperty(d, 'rounds', { enumerable: true, configurable: true, get: () => d1RoundsOf(yNow()) });
+  Object.defineProperty(d, 'eligibilityNote', { enumerable: true, configurable: true, get: () => rulesABC(yNow()).eligText });
 }
 export function syncDef(g) {
   const Y = (g && g.state && safe(() => ABC.seasonY(g), null)) || null;

@@ -18,7 +18,8 @@ import { clamp } from './util.js';
 import { onMorning } from './life.js';
 import { PEOPLE, isKansai } from './life.js';
 import { regionOf } from './profile.js';
-import { scoreLocal, estimate, netaHash, KINDS, AXES_BY_KIND, rankLabel } from './neta_ai.js';
+import { scoreLocal, estimate, netaHash, KINDS, AXES_BY_KIND, rankLabel, parseScript } from './neta_ai.js';
+export { parseScript };
 import { buildAuto, ERA_YEAR, DEFAULT_LEN, hashStr } from './neta_bank.js';
 import { scoreClaude, getMode, hasKey, currentKey } from './neta_claude.js';
 import { openEditor, openResult, openPicker, openSettings, openWaiting, installNetaApp } from './neta_ui.js';
@@ -29,7 +30,7 @@ export const BEATS = ['tsukami', 'setup', 'boke', 'tsukkomi', 'tenkai', 'tendon'
 export const LIMITS = { scripts: 60, lines: 160, chars: 240, title: 24, theme: 40, setting: 120 };
 const V = 1;
 const num = (v, d = 0) => (v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
-const str = (v, n) => Array.from(String(v == null ? '' : v)).slice(0, n).join('');
+const str = (v, n) => Array.from(typeof v === 'string' || typeof v === 'number' ? String(v) : '').slice(0, n).join('');
 const has = (g, k) => !!g && typeof g[k] === 'function';
 const safe = (fn, d = null) => { try { return fn(); } catch (e) { console.error(e); return d; } };
 const kindOk = (k) => (NETA_KINDS[k] ? k : 'manzai');
@@ -317,47 +318,10 @@ const methods = {
     n.length = estimate(n).sec;
     return n;
   },
+  parseNetaScript(text, kind, chars) { return parseScript(text, kind, chars); },
   openNetaBook() { return installNetaApp.openBook ? installNetaApp.openBook(this) : null; },
   openNetaSettings() { return openSettings(this); },
 };
-
-// 「まとめて書く」: one line per セリフ. 'ボケ：…' 'ツッコミ：…' 'A：' 'B：' 'C：' 'ナレ：' 'ト書き：' '地：' '本人：' (or a name in
-// neta.chars), an optional '[ツカミ]' / '【オチ】' beat tag; a line without a speaker alternates (漫才) or is the main voice.
-const SPEAKER = { ボケ: 'boke', ツッコミ: 'tsukkomi', つっこみ: 'tsukkomi', ぼけ: 'boke', A: 'a', B: 'b', C: 'c', ａ: 'a', ｂ: 'b', ｃ: 'c', 人物A: 'a', 人物B: 'b', 人物C: 'c', 上手: 'a', 下手: 'b', ナレ: 'narr', ナレーション: 'narr', ト書き: 'narr', 地: 'narr', フリップ: 'narr', 本人: 'pin', ピン: 'pin', 回答: 'pin', サゲ: 'sage' };
-const BEAT_TAG = { ツカミ: 'tsukami', フリ: 'setup', 設定: 'setup', ボケ: 'boke', ツッコミ: 'tsukkomi', 展開: 'tenkai', 天丼: 'tendon', 伏線: 'fukusen', 回収: 'kaishu', オチ: 'ochi', まくら: 'makura', 本題: 'hondai', サゲ: 'sage', 回答: 'answer', 裏切り: 'tenkai' };
-export function parseScript(text, kind = 'manzai', chars = {}) {
-  const out = [];
-  const byName = Object.fromEntries(Object.entries(chars || {}).map(([r, nm]) => [nm, r]));
-  let prev = null;
-  for (let raw of String(text || '').split(/\r?\n/)) {
-    raw = raw.trim();
-    if (!raw) continue;
-    let beat = '', twist = false;
-    const bt = raw.match(/^[［[【#＃]\s*([^\]］】\s]+)\s*[\]］】]?\s*/);
-    if (bt && BEAT_TAG[bt[1]]) { beat = BEAT_TAG[bt[1]]; twist = bt[1] === '裏切り'; raw = raw.slice(bt[0].length); }
-    let role = null;
-    const m = raw.match(/^([^：:「」]{1,8})[：:]\s*(.*)$/);
-    if (m && (SPEAKER[m[1].trim()] || byName[m[1].trim()])) { role = SPEAKER[m[1].trim()] || byName[m[1].trim()]; raw = m[2]; }
-    else { const q = raw.match(/^([^「」]{1,8})「(.*)」$/); if (q && byName[q[1]]) { role = byName[q[1]]; raw = q[2]; } }
-    const bt2 = raw.match(/^[［[【#＃]\s*([^\]］】\s]+)\s*[\]］】]\s*/);
-    if (!beat && bt2 && BEAT_TAG[bt2[1]]) { beat = BEAT_TAG[bt2[1]]; raw = raw.slice(bt2[0].length); }
-    if (!role) {
-      if (kind === 'manzai') role = prev === 'boke' ? 'tsukkomi' : 'boke';
-      else if (kind === 'conte') role = /^[（(]/.test(raw) ? 'narr' : prev === 'a' ? 'b' : 'a';
-      else if (kind === 'rakugo') role = 'narr';
-      else role = /^[（(]/.test(raw) ? 'narr' : 'pin';
-    }
-    if (kind === 'ogiri' && !beat) beat = 'answer';
-    const text2 = str(raw.trim(), LIMITS.chars);
-    if (!text2) continue;
-    const l = { role, text: text2, beat };
-    if (twist) l.twist = true;
-    out.push(l);
-    prev = role;
-    if (out.length >= LIMITS.lines) break;
-  }
-  return out;
-}
 
 export function installNeta(proto) {
   for (const k of Object.getOwnPropertyNames(methods)) Object.defineProperty(proto, k, Object.getOwnPropertyDescriptor(methods, k));

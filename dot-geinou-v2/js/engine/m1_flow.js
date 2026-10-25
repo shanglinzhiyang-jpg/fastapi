@@ -75,7 +75,7 @@ function houseNeta(g) {
 }
 async function chooseNeta(g, len, title, exclude = null, mode = 0) {
   let n = null;
-  if (has(g, 'pickNeta') && mode < 2) n = await (async () => { try { return await g.pickNeta({ kind: 'manzai', length: len, title }); } catch (e) { console.error(e); return null; } })();
+  if (has(g, 'pickNeta') && mode < 2) n = await (async () => { try { return await g.pickNeta({ kind: 'manzai', length: len, title, forContest: 'm1' }); } catch (e) { console.error(e); return null; } })();
   if (n && exclude && n.id === exclude) {
     await say(g, '（さっきと同じネタだ…。最終決戦で同じネタは評価が下がる）');
   }

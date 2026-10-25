@@ -50,8 +50,9 @@ const CROWN = [
 ];
 export function crown(c, x, y, s = 2, glow = 0) {
   const col = { H: KC.goldHi, G: KC.gold, D: KC.goldDk, R: KC.red, B: '#3a7ae8' };
-  if (glow > 0) { c.globalAlpha = 0.18 * glow; R(c, x - s * 3, y - s * 3, 19 * s, 13 * s, KC.goldHi); c.globalAlpha = 1; }
   CROWN.forEach((row, j) => { for (let i = 0; i < row.length; i++) { const k = row[i]; if (k !== '.') R(c, x + i * s, y + j * s, s, s, col[k]); } });
+  // shine: the three tips light up one after another
+  if (glow > 0) { const tip = Math.floor(glow * 2.99); const ti = [0, 6, 12][tip]; c.globalAlpha = 0.85; R(c, x + ti * s - Math.floor(s / 2), y - s, s * 2, s, '#ffffff'); c.globalAlpha = 1; }
 }
 export function kocLogo(c, cx, y, size = 22, year = null) {
   const w = measure(c, 'キングオブコント', size);
@@ -151,8 +152,10 @@ const SETS = {
     R(c, 330, 140, 96, 60, '#1e1e26'); R(c, 334, 144, 88, 48, '#0a0a12'); R(c, 334, 176, 88, 16, '#3a2a1a'); person(c, d.monitorLook || null, 360, 146, 0.8, 'down', 0, { shadow: false });
     T(c, 'ステージ', 378, 194, 9, KC.dim, 'center');
     // others rehearsing (pairs facing each other)
-    (d.others || []).slice(0, 4).forEach((lk, i) => { const x = 20 + (i % 2) * 120 + (i >= 2 ? 8 : 0); const y = 134 + (i >= 2 ? 30 : 0); person(c, lk, x + (i % 2 ? 40 : 0), y, 1.6, i % 2 ? 'left' : 'right'); });
-    (d.unit || []).forEach((lk, i, a) => person(c, lk, 200 + i * 52 - (a.length - 2) * 20, 170, 2, a.length === 2 ? (i ? 'left' : 'right') : 'down'));
+    // two pairs rehearsing face to face on the left, the player's act in the middle
+    const P = [[6, 126, 'right'], [54, 126, 'left'], [110, 152, 'right'], [158, 152, 'left']];
+    (d.others || []).slice(0, 4).forEach((lk, i) => person(c, lk, P[i][0], P[i][1], 1.6, P[i][2]));
+    (d.unit || []).forEach((lk, i, a) => person(c, lk, 236 + i * 52 - (a.length - 2) * 20, 172, 2, a.length === 2 ? (i ? 'left' : 'right') : 'down'));
   },
   // 舞台袖 (the wings): dark, the cue light, the stage manager with a headset
   sode(c, t, d) {
@@ -162,7 +165,7 @@ const SETS = {
     for (let i = 0; i < 3; i++) R(c, 380 + i * 70, 0, 40, 240, '#15151c');
     R(c, 0, 230, SW, SH - 230, '#1a1a22'); R(c, 0, 230, SW, 2, '#2a2a34');
     // tape marks (バミリ)
-    for (const x of [150, 230, 310]) { R(c, x, 248, 14, 3, '#ffd23f'); R(c, x + 5, 244, 3, 11, '#ffd23f'); }
+    for (const x of [150, 230, 310]) { R(c, x, 236, 14, 3, '#ffd23f'); R(c, x + 5, 232, 3, 11, '#ffd23f'); }
     // cue light
     const on = d.cue || Math.floor(t / 30) % 2 === 0;
     R(c, 60, 40, 30, 46, '#2a2a34'); R(c, 64, 44, 22, 18, on ? '#ff3848' : '#5a1a20'); R(c, 64, 64, 22, 18, d.cue === 'go' ? '#3ae878' : '#1a4a2a');
@@ -173,7 +176,7 @@ const SETS = {
     person(c, d.staff, 40, 120, 2, 'right');
     R(c, 46, 124, 8, 4, '#3b3f48'); // headset
     (d.unit || []).forEach((lk, i) => person(c, lk, 180 + i * 56, 148, 2, 'right', 0, { dark: 0.92 }));
-    if (d.label) { R(c, 420, 240, 210, 20, '#000'); T(c, d.label, 525, 243, 12, KC.gold, 'center', 200); }
+    if (d.label) { R(c, 420, 206, 210, 20, '#000'); T(c, d.label, 525, 209, 12, KC.gold, 'center', 200); }
   },
   // 予選の劇場ステージ (audience view). d.light: 'dark' | 'up'; d.look: set pieces; d.unit: performers
   stage(c, t, d) {
@@ -206,7 +209,7 @@ const SETS = {
     for (let x = 0; x < SW; x += 20) R(c, x, 0, 18, 150, x % 40 ? '#0b0d1c' : '#0e1124');
     for (let i = 0; i < 12; i++) { const x = 26 + i * 52; const k = (Math.sin(t / 25 + i) + 1) / 2; c.globalAlpha = 0.25 + k * 0.35; R(c, x, 0, 4, 150, KC.gold); c.globalAlpha = 1; }
     // the crown emblem
-    crown(c, 320 - 39, 18, 6, (Math.sin(t / 30) + 1) / 2);
+    crown(c, 320 - 39, 18, 6, 0.01 + (Math.floor(t / 20) % 3) / 3);
     T(c, 'KING OF CONTE', 320, 64, 14, KC.goldHi, 'center', 0, { outline: '#2a1e00' });
     T(c, String(d.year || ''), 320, 82, 12, KC.white, 'center');
     // the stage platform
@@ -224,7 +227,7 @@ const SETS = {
     person(c, d.mc, 20, 76, 1.8, 'right'); if (d.mc2) person(c, d.mc2, 66, 82, 1.6, 'right');
     // score screen (right)
     R(c, 526, 30, 104, 110, '#000'); R(c, 528, 32, 100, 106, KC.navy);
-    (d.screen || ['KOC']).slice(0, 5).forEach((s, i) => T(c, s, 578, 38 + i * 20, i === 0 ? 12 : 14, i === 0 ? KC.gold : KC.white, 'center', 96));
+    (d.screen || ['KOC']).slice(0, 5).forEach((s, i) => { const z = fitSize(c, String(s), 94, i === 0 ? 12 : 14, 9); T(c, s, 578, 38 + i * 20, z, i === 0 ? KC.gold : KC.white, 'center', 96); });
     // judges' desk (backs) at the front
     const J = d.judges || [];
     R(c, 60, 226, 520, 40, '#16182a'); R(c, 60, 226, 520, 3, KC.gold);
@@ -240,7 +243,11 @@ const SETS = {
     R(c, 30, 30, 140, 90, '#9ab0c0'); R(c, 34, 34, 132, 82, '#cfe0ea'); bulbRow(c, 30, 22, 140, t);
     R(c, 0, 124, 220, 14, '#b8a080');
     R(c, 240, 30, 120, 76, '#1e1e26'); R(c, 244, 34, 112, 60, KC.navy); crown(c, 285, 46, 3); T(c, '本番中', 300, 96, 10, KC.dim, 'center');
-    R(c, 400, 26, 60, 150, '#c8b088'); R(c, 404, 30, 52, 142, '#d8c098'); R(c, 404, 30, 52, 30, '#fff'); T(c, d.door || '', 430, 36, 10, KC.ink, 'center', 50);
+    R(c, 400, 26, 60, 150, '#c8b088'); R(c, 404, 30, 52, 142, '#d8c098');
+    // the 楽屋札 on the door: vertical writing on white paper
+    const chars = Array.from(String(d.door || '')).slice(0, 10);
+    R(c, 418, 32, 24, Math.max(30, chars.length * 12 + 8), '#fff');
+    chars.forEach((ch, i) => T(c, ch === 'ー' ? '｜' : ch === ' ' ? '' : ch, 430, 36 + i * 12, 11, KC.ink, 'center'));
     R(c, 500, 140, 110, 30, '#a8865a'); R(c, 510, 128, 30, 12, '#fff'); R(c, 548, 128, 30, 12, '#fff'); R(c, 590, 110, 16, 30, '#5ee07a'); R(c, 586, 100, 24, 14, '#ff7eb6');
     T(c, '差し入れ', 555, 172, 10, '#5a4a3a', 'center');
     (d.unit || []).forEach((lk, i, a) => person(c, lk, 220 + i * 56 - (a.length - 2) * 22, 160, 2, 'down'));
@@ -270,6 +277,11 @@ const SETS = {
     R(c, 0, 0, SW, SH, '#0c0c18');
     R(c, 60, 10, 520, 120, '#000'); R(c, 64, 14, 512, 112, '#101a3a');
     T(c, d.title || '敗者復活戦', 320, 20, 16, KC.gold, 'center', 500);
+    if (!(d.bars && d.bars.length) && d.acts && d.acts.length) {
+      T(c, `出場${d.acts.length}組`, 320, 40, 11, KC.dim, 'center');
+      d.acts.slice(0, 10).forEach((n, i) => T(c, n, i % 2 ? 330 : 90, 56 + Math.floor(i / 2) * 13, 11, KC.white, 'left', 220));
+    }
+    for (let i = 0; i < 6; i++) spot(c, 110 + i * 84, 130, 214, 6, 26, 0.07);
     (d.bars || []).slice(0, 3).forEach((b, i) => { const w = Math.round(380 * clamp(b.v, 0, 1)); T(c, b.name, 76, 50 + i * 24, 12, b.me ? KC.goldHi : KC.white, 'left', 120); R(c, 200, 52 + i * 24, 380, 12, '#1a2448'); R(c, 200, 52 + i * 24, w, 12, b.me ? KC.gold : KC.cyan); if (b.label) T(c, b.label, 572, 50 + i * 24, 12, KC.white, 'right'); });
     R(c, 100, 200, 440, 16, '#1a1a26'); R(c, 100, 200, 440, 2, KC.gold);
     (d.unit || []).forEach((lk, i, a) => person(c, lk, 320 - (a.length * 54) / 2 + i * 54, 122, 1.9, 'down'));
@@ -279,15 +291,24 @@ const SETS = {
   hanseikai(c, t, d) {
     if (d.party) {
       R(c, 0, 0, SW, SH, '#3a2418'); R(c, 0, 0, SW, 190, '#7a4a2a'); for (let i = 0; i < 9; i++) { R(c, 20 + i * 70, 20, 26, 34, '#d62f2f'); R(c, 22 + i * 70, 24, 22, 26, '#ff6a50'); }
-      R(c, 60, 190, 520, 40, '#a8764a'); for (let i = 0; i < 8; i++) R(c, 80 + i * 62, 176, 16, 18, '#ffd23f');
-      T(c, '打ち上げ', 320, 70, 16, '#ffe9a0', 'center');
+      T(c, '打ち上げ', 320, 66, 16, '#ffe9a0', 'center');
+      const L0 = (d.people || []).slice(0, 12);
+      const back = L0.slice(0, Math.ceil(L0.length / 2)), front = L0.slice(Math.ceil(L0.length / 2));
+      back.forEach((lk, i) => person(c, lk, 320 - (back.length * 76) / 2 + i * 76 + 12, 104, 1.6, 'down'));
+      R(c, 60, 166, 520, 40, '#a8764a'); R(c, 60, 166, 520, 4, '#c89a6a');
+      for (let i = 0; i < 8; i++) { R(c, 84 + i * 62, 156, 14, 16, '#ffd23f'); R(c, 84 + i * 62, 156, 14, 3, '#fff6c8'); }
+      front.forEach((lk, i) => person(c, lk, 320 - (front.length * 76) / 2 + i * 76 + 12, 176, 1.6, 'up'));
+      return;
     } else {
       R(c, 0, 0, SW, SH, '#101018'); R(c, 0, 0, SW, 200, '#1a1430');
       R(c, 160, 18, 320, 40, '#000'); R(c, 162, 20, 316, 36, '#2a0a3a'); T(c, d.title || '生・大反省会', 320, 28, 16, '#ffe0f0', 'center', 300);
       R(c, 40, 196, 560, 10, '#2a2440');
     }
-    const L = d.people || [];
-    L.forEach((lk, i) => person(c, lk, 30 + (i % 9) * 66, 120 + Math.floor(i / 9) * 50 + (i % 2) * 4, 1.6, 'down'));
+    const L = (d.people || []).slice(0, 12);
+    const back = L.slice(0, Math.ceil(L.length / 2)), front = L.slice(Math.ceil(L.length / 2));
+    const row = (list, y, k) => list.forEach((lk, i) => { const x = 320 - (list.length * 84) / 2 + i * 84 + 10; if (!d.party) { R(c, x + 6, y + 30 * k, 40, 8, '#4a3a6a'); R(c, x + 10, y + 38 * k, 4, 10, '#2a2440'); R(c, x + 38, y + 38 * k, 4, 10, '#2a2440'); } person(c, lk, x, y, k, 'down'); });
+    row(back, 104, 1.6);
+    row(front, 150, 1.7);
   },
   // a quiet set for notices (the player's room at night, the phone glowing)
   night(c, t, d) {
@@ -561,7 +582,7 @@ export function drawWinner(c, t, d) {
   R(c, 0, 0, SW, SH, KC.bg);
   for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2 + t / 120; c.globalAlpha = 0.08; c.fillStyle = KC.gold; c.beginPath(); c.moveTo(320, 150); c.lineTo(320 + Math.cos(a) * 600, 150 + Math.sin(a) * 600); c.lineTo(320 + Math.cos(a + 0.12) * 600, 150 + Math.sin(a + 0.12) * 600); c.closePath(); c.fill(); c.globalAlpha = 1; }
   const drop = Math.max(0, 60 - t * 2);
-  crown(c, 320 - 52, 30 - drop, 8, 1);
+  crown(c, 320 - 52, 30 - drop, 8, 0.01 + (Math.floor(t / 15) % 3) / 3);
   (d.looks || []).forEach((lk, i, a) => person(c, lk, 320 - (a.length * 80) / 2 + i * 80, 134, 2.4, 'down'));
   confetti(c, t, 120);
   R(c, 0, 250, SW, 100, 'rgba(0,0,0,0.7)');

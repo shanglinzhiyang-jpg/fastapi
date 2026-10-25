@@ -69,7 +69,13 @@ export function record(g, y, idx, res) {
   return safe(() => g.contestRecord('koc', idx, { ...res, fs }, { year: y, reward: false }), null);
 }
 export function noRevival(g, y) { const e = d1Entry(g, y); if (e) e.revivalOk = null; }
-export function withdrawnInD1(g, y) { const e = d1Entry(g, y); return !!(e && e.status === 'withdrawn'); }
+// the player's own 辞退 in D1's hub (not D1's 欠席 bookkeeping: KOC checks its own dates)
+export function withdrawnInD1(g, y) {
+  const e = d1Entry(g, y);
+  if (!e || e.status !== 'withdrawn') return false;
+  const last = (e.results || []).slice(-1)[0];
+  return !!(last && /辞退/.test(String(last.note || '')));
+}
 export function markWithdrawn(g, y) { const e = d1Entry(g, y); if (e && e.status !== 'champion') e.status = 'withdrawn'; }
 // D1 claims: a news key D1 sends once; KOC sends the better line itself
 export function claim(g, key) {

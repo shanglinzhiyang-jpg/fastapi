@@ -75,6 +75,8 @@ export function planOf(g, y, E, rid) {
   const list = S[rid];
   if (!list || !list.length) return null;
   if (rid === 'sf' && rules(y).twoNetaSF) return list[0];
+  // a linked entry follows D1's pick (the player may change the date in D1's hub; KOC sets it to this plan first)
+  if (E.d1 && E.picked && E.picked[rid]) { const v = L.venueOfPick(g, y, roundIndex(y, rid, 0), list); if (v) return v; }
   const want = E.r1 && (E.r1.city === '大阪' || E.r1.city === '福岡') ? '大阪' : '東京';
   return list.find((v) => v.city === want) || list[0];
 }
@@ -142,7 +144,7 @@ export async function kocEntry(g) {
   // the act
   let u = playerUnit(g);
   let instant = false;
-  let members = (u.members || []).map((m) => ({ id: m.id, name: m.name || m.short || '', short: m.short || m.name || '', look: m.id === 'player' ? null : memberLook(g, m) }));
+  let members = (u.members || []).map((m) => ({ id: m.id, name: m.id === 'player' ? g.state.name : (PEOPLE[m.id] && PEOPLE[m.id].short) || m.short || m.name || '', short: m.short || m.name || '', look: m.id === 'player' ? null : memberLook(g, m) }));
   if (unitSize(u) < 2) {
     await g.say('キングオブコントは、2人以上のユニットに限られる。\nピン（1人）では出られない…。');
     const friends = has(g, 'friends') ? safe(() => g.friends(1), []).filter((id) => PEOPLE[id] && PEOPLE[id].kind !== 'family').slice(0, 5) : [];
@@ -186,7 +188,7 @@ export async function kocEntry(g) {
       { label: '人数・形態', value: `${members.length}人（${instant ? '即席ユニット' : members.length >= 3 ? 'トリオ以上' : 'コンビ'}）` },
       { label: 'メンバー', value: members.map((m) => m.name).join('・') },
       { label: '所属', value: g.state.agency ? g.fmt('{agency}') : 'なし（アマチュア）' },
-      { label: '結成', value: instant ? '今回のための即席ユニット' : u.formed && u.formed.year ? `${u.formed.year}年（結成${Math.max(0, yrs)}年）` : '—' },
+      { label: '結成', value: instant ? '今回のための即席ユニット' : u.formed && u.formed.year ? `${u.formed.year}年${u.formed.month ? `${u.formed.month}月` : ''}（${yrs > 0 ? `結成${yrs}年目` : '今年結成'}）` : '—' },
       { label: start === 'r1' ? '1回戦の会場・日程' : 'シード', value: start === 'r1' ? `${hallText(v)}　${dateText(y, v.when)}` : `${start === 'r2' ? '2回戦' : '準々決勝'}から出場（過去の成績による）`, edit: start === 'r1' },
       { label: 'ネタ（予定）', value: netas.length ? `『${(netas[form.neta] || netas[0]).title || '無題'}』` : '未定（当日までに決める）', edit: netas.length > 1 },
       { label: '小道具・音響', value: ['使う（小道具の搬入あり）', '使わない（素舞台）'][form.props], edit: true },
@@ -298,7 +300,8 @@ export async function goToday(g, opts = {}) {
 export async function goFromApp(g) {
   const due = dueToday(g);
   const E = due ? entryOf(g, due.year) : null;
-  if (due && E && E.d1 && E.status !== 'voter' && L.linked(g) && typeof g.contestGo === 'function') {
+  const d1due = due && E && E.d1 && L.linked(g) && typeof g.contestToday === 'function' ? (safe(() => g.contestToday(), []) || []).some((x) => x.id === 'koc') : false;
+  if (due && E && E.d1 && E.status !== 'voter' && d1due && typeof g.contestGo === 'function') {
     const ok = await safe(() => g.contestGo('koc'), null);
     if (ok && typeof ok.then === 'function') return ok;
     return ok;
@@ -339,6 +342,7 @@ async function chooseNeta(g, { y, rid, len, auto, exclude = [], prompt }) {
     neta = has(g, 'autoNeta') ? safe(() => g.autoNeta('conte', q), null) : null;
     if (!neta) neta = { id: 'auto', kind: 'conte', title: 'おまかせのコント', setting: '', length: len, lines: [], ai: { total: q }, practice: q, uses: {}, auto: true };
     if (neta.id === 'auto' || !neta.id) neta = { ...neta, id: `auto_${y}_${rid}_${exclude.length}` };
+    if (!auto && !g.auto) await g.say(`（ネタ帳から選ばなかったので、おまかせのコント『${neta.title || 'コント'}』でいく）`);
   }
   return neta;
 }
@@ -496,9 +500,12 @@ function stageOutcome(g, ctx, P, res) {
   const harm = clamp(harmBase + num(ctx.E.harm), 0, 100);
   perf += (harm - 55) * 0.05;
   if (harm < 40) reasons.push(PART_NOTES.harmony);
+  // C's g.perform already takes 尺オーバー / 噛み / 飛び off the score in a contest: here only the reasons (and the penalty
+  // when the score came from a fallback without that model)
+  const own = !has(g, 'perform');
   if (res.overtime > 0) {
-    if (res.overtime > 30) { perf -= 15; reasons.push(PART_NOTES.cutoff(len)); events.push('強制暗転'); }
-    else { perf -= res.overtime > 10 ? 6 : 2; reasons.push(PART_NOTES.overtime(Math.round(res.overtime), len)); }
+    if (res.overtime > 30) { if (own) perf -= 15; reasons.push(PART_NOTES.cutoff(len)); events.push('強制暗転'); }
+    else { if (own) perf -= res.overtime > 10 ? 6 : 2; reasons.push(PART_NOTES.overtime(Math.round(res.overtime), len)); }
   }
   if (res.flubs >= 2) reasons.push(PART_NOTES.flubs(res.flubs));
   if (res.blanks > 0) reasons.push(PART_NOTES.blanks);
@@ -675,7 +682,7 @@ async function judgeRound(g, { y, rid, E, field, passN, out, res, auto, bd, venu
     sfx('fanfare');
     const next = roundsOf(y)[roundsOf(y).indexOf(rid) + 1];
     E.round = next;
-    if (next !== 'final') L.pickNext(g, y, roundIndex(y, next, 0), planOf(g, y, E, next));
+    if (next !== 'final') { L.pickNext(g, y, roundIndex(y, next, 0), planOf(g, y, E, next)); E.picked = { ...(E.picked || {}), [next]: true }; }
     E.sfDone = 0;
     E.harm = Math.max(0, num(E.harm) - 4);
     if (has(g, 'addNeed')) g.addNeed('stress', -8);
@@ -834,7 +841,7 @@ export async function runFinalDay(g, y, opts = {}) {
       await sayP(g, E, pickR(['…足、震えてるわ。', 'ここまで来たら、楽しんだもん勝ちや。', R.twoNetaSF ? '準決勝と同じ2本、いつも通りやろう。' : '2本目のネタまで、きっちりやり切ろう。'], rf));
     }
     // ---- オープニング
-    bd.set('studio', { year: y, mc: MCs.main.look, mc2: MCs.sub.look, judges, screen: [titleOf(y), `第${R.edition}回`, 'LIVE'], onair: true });
+    bd.set('studio', { year: y, mc: MCs.main.look, mc2: MCs.sub.look, judges, screen: [`KOC${y}`, `第${R.edition}回`, 'LIVE'], onair: true });
     sfx('fanfare');
     if (!digest || firstTime) {
       await card(g, (c, t) => drawTitle(c, t, { year: y, big: `第${R.edition}回 ${KOC_NAME} 決勝`, small: `${R.oowarai ? 'TBS「お笑いの日」' : 'TBS系'} 生放送\n${R.judgeText}\n${R.finalText}` }), { min: 30 });
@@ -882,7 +889,9 @@ export async function runFinalDay(g, y, opts = {}) {
 async function finalAct(g, ctx, a, stage) {
   const { y, R, E, bd, judges, MCs, rf, digest } = ctx;
   const mine = !!a.me;
-  if (!digest || mine) await card(g, (c, t) => drawPV(c, t, { copy: a.copy, name: a.name, sub: `${a.agency || ''}${a.type === 'trio' ? '・トリオ' : ''}　${stage === 2 ? '2本目' : ''}`, looks: a.looks, me: mine }), { min: mine ? 40 : 24, life: mine ? 0 : 200 });
+  const yrs = mine ? (has(g, 'unitYears') ? num(safe(() => g.unitYears(y), 0)) : 0) : Math.max(0, y - num(a.act && a.act.formed, y));
+  const sub = mine ? `エントリーNo.${E.no}　${a.agency || ''}　${E.instant ? '即席ユニット' : yrs > 0 ? `結成${yrs}年目` : '今年結成'}` : `${a.agency || ''}${a.type === 'trio' ? '・トリオ' : ''}　${yrs > 0 ? `結成${yrs}年目` : '結成1年目'}`;
+  if (!digest || mine) await card(g, (c, t) => drawPV(c, t, { copy: a.copy, name: a.name, sub: `${sub}${stage === 2 ? '　2本目' : ''}`, looks: a.looks, me: mine }), { min: mine ? 40 : 24, life: mine ? 0 : 200 });
   let perf;
   let res = null;
   let reasons = [];
@@ -1077,7 +1086,7 @@ async function finalDuel(g, ctx) {
 // 敗者復活戦 (2026-): 10組 → 芸人審査員60人の採点で3組 → 国民投票で1組
 async function revivalStage(g, y, R, pool0, role, E, bd, rf, digest, forced = null) {
   const MCs = MC(y);
-  bd.set('revival', { title: `${titleOf(y)} 敗者復活戦`, bars: [], unit: [] });
+  bd.set('revival', { title: `${titleOf(y)} 敗者復活戦`, bars: [], unit: [], acts: pool0.map((a) => a.name) });
   if (role === 'revival' || !digest) await g.say(`午後2時、敗者復活戦。準決勝で敗れた25組のうち、上位10組が決勝の残り1枠を争う！`, { name: MCs.revival.name, look: MCs.revival.look });
   const scored = [];
   for (const a of pool0) {

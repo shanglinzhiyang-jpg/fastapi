@@ -208,7 +208,7 @@ const SETS = {
       box(c, x, 30, 80, 104, th.dark, '#20232a');
       R(c, x + 6, 36, 68, 56, th.main);
       T(c, th.logo, x + 40, 100, 10, th.acc, 'center', 72);
-      T(c, i ? '観覧募集' : 'エントリー受付中', x + 40, 116, 9, '#ffffff', 'center', 72);
+      T(c, i ? '観覧募集' : '出場者募集', x + 40, 116, 9, '#ffffff', 'center', 72);
       alpha(c, 0.25, () => R(c, x + 10, 40, 30, 50, '#ffffff'));
     }
     // reception desk
@@ -271,7 +271,6 @@ const SETS = {
     // banner
     signBoard(c, 190, 44, 260, 40, st.sign || th.logo, st.sub || '', th);
     spotlight(c, 320, 26, 236, 150);
-    if (st.fx && st.fx.mic !== false) micStand(c, 320, 236, 54);
     if (st.fx && st.fx.flip) flipEasel(c, 384, 236, st.fx.flip, '#ffffff');
     if (st.fx && st.fx.zabuton) zabuton(c, 320, 240);
   },
@@ -292,28 +291,24 @@ const SETS = {
     for (let i = 0; i < 7; i++) R(c, 0, 204 + i * 9, SW, 1, th.floor2);
     if (!(st.fx && st.fx.dark)) beams(c, st.t, th.acc2, 6, 0, 250);
     spotlight(c, 320, 0, 248, 170, '#ffffff', 0.12);
-    if (st.fx && st.fx.mic !== false) micStand(c, 320, 248, 60);
     if (st.fx && st.fx.flip) flipEasel(c, 386, 248, st.fx.flip);
     if (st.fx && st.fx.zabuton) zabuton(c, 320, 252);
     // judges' desk (left) and the MC stand (right)
     if (st.fx && st.fx.judges) {
+      // the judges' desk (stage left), above the message window
       const J = st.fx.judges;
-      R(c, 4, 214, 196, 40, '#20232a');
-      R(c, 4, 214, 196, 4, th.acc);
       const n = Math.max(1, J.length);
-      const w = 190 / n;
+      const w = Math.min(34, 200 / n);
+      const dw = w * n + 8;
+      J.forEach((j, i) => faceAt(c, j.look, 8 + i * w + w / 2 - 12, 150, 0.75));
+      R(c, 4, 166, dw, 44, '#20232a');
+      R(c, 4, 166, dw, 3, th.acc);
       J.forEach((j, i) => {
         const x = 8 + i * w;
-        faceAt(c, j.look, x + w / 2 - 16, 190, 1);
-        R(c, x + 2, 222, w - 4, 12, '#f4f4f8');
-        T(c, j.short || j.name, x + w / 2, 223, 9, '#20232a', 'center', w - 6);
-        if (j.show != null) { box(c, x + 2, 236, w - 4, 16, th.main, th.acc); T(c, String(j.show), x + w / 2, 238, 11, '#ffffff', 'center', w - 6); }
+        R(c, x + 1, 172, w - 2, 12, '#f4f4f8');
+        T(c, j.short || j.name, x + w / 2, 173, 8, '#20232a', 'center', w - 3);
+        if (j.show != null) { box(c, x + 1, 187, w - 2, 16, th.main, th.acc); T(c, String(j.show), x + w / 2, 189, 10, '#ffffff', 'center', w - 3); }
       });
-    }
-    if (st.fx && st.fx.mc) {
-      R(c, 520, 220, 96, 32, '#20232a');
-      R(c, 520, 220, 96, 3, th.acc);
-      T(c, 'MC', 568, 230, 11, th.acc, 'center');
     }
     if (st.fx && st.fx.crowd !== false) crowdRow(c, st.t, 262, 22, ['#15151d', '#1b1b25', '#121219'], 3, st.fx && st.fx.react ? 3 : 0);
     if (st.fx && st.fx.ticker) {
@@ -404,6 +399,14 @@ class StageScene {
     const fn = SETS[this.set] || SETS.hall;
     try { fn(c, this, th); } catch (e) { console.error(e); R(c, 0, 0, SW, SH, '#000'); }
     drawCast(c, this, g);
+    // the stand mic stands in front of the performer (mouth height of a k=2 character)
+    if ((this.set === 'hall' || this.set === 'studio' || this.set === 'rehearsal') && this.fx && this.fx.mic !== false && !this.fx.zabuton) micStand(c, 320, this.set === 'hall' ? 236 : 248, this.set === 'hall' ? 34 : 46);
+    // the MC's podium stands in front of the MC (stage right)
+    if (this.set === 'studio' && this.fx && this.fx.mc) {
+      const th = typeof this.theme === 'string' ? THEMES[this.theme] || THEMES.r1new : this.theme;
+      R(c, 506, 200, 104, 34, '#20232a'); R(c, 506, 200, 104, 3, th.acc);
+      T(c, 'MC', 558, 212, 11, th.acc, 'center');
+    }
     if (this.fx && this.fx.confetti) confetti(c, this.t, 140);
     if (this.overlay) { try { this.overlay(c, this, g); } catch (e) { console.error(e); } }
   }

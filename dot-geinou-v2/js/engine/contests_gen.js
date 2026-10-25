@@ -212,7 +212,7 @@ export function judgePerson(r) {
   const career = 18 + Math.floor(r() * 32);
   const unit = /漫才|コント/.test(title) ? `元「${actName(r, r() < 0.8 ? 'combi' : 'trio')}」` : '';
   const taste = pickR(r, TASTES);
-  return { name, title: `${title}${unit ? '・' + unit : ''}（芸歴${career}年）`, short: shortOf(name), taste: taste.label, tasteId: taste.id, tastePart: taste.part, dialect, strict: Math.round((r() - 0.5) * 6), look: lookFor(r, female), female };
+  return { name, title: `${title}${unit ? '・' + unit : ''}（芸歴${career}年）`, short: String(name).split(' ')[0], taste: taste.label, tasteId: taste.id, tastePart: taste.part, dialect, strict: Math.round((r() - 0.5) * 6), look: lookFor(r, female), female };
 }
 
 // What a judge says about a performance (score 0..100, result parts), in their own voice.

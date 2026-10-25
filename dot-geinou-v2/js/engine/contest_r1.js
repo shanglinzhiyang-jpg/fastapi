@@ -326,6 +326,8 @@ async function pinChallenge(g, C, { rules, act, st, quick }) {
     else await g.say(ks(p, ['…勝手にしたらええやん。', '…ひとりの方が、楽しいんやろ。'], ['…勝手にすれば。', '…ひとりの方が、楽しいんでしょ。']), who);
     if (h >= 60 && has(g, 'addAff')) safe(() => g.addAff(p.id, 1, true));
   }
+  st.set = rules.formSet || 'home'; st.sign = '自宅（エントリー用紙を書く）';
+  st.cast = [{ look: g.state.look, x: 520, y: 236, k: 1, dir: 'left' }];
   return { ok: true, unitName: `${act.name} ${g.state.name}`, solo: true, photos: [g.state.look], kind: 'pin', partner: p };
 }
 async function partnerAfter(g, C, { E, passed, final, champion, place }) {
@@ -582,13 +584,14 @@ const DEF = {
 };
 const sigOf = (Y) => JSON.stringify([d1RoundsOf(Y).map((x) => [x.when, x.length, x.field, x.pass, !!x.revival]), rulesR1(Y).cal.entryFrom.slice(1), rulesR1(Y).cal.entryTo.slice(1)]);
 let sig = '';
+const yNow = () => { const y = R1.liveY(curY); return y >= 2002 ? y : curY; };
 function registerDef() {
   registerContest('r1', DEF);
   const d = CONTESTS.r1;
   if (!d) return;
-  Object.defineProperty(d, 'schedule', { enumerable: true, configurable: true, get: () => { const r = rulesR1(curY); return { entry: { from: r.cal.entryFrom.slice(1, 3), to: r.cal.entryTo.slice(1, 3) }, final: r.rounds.find((x) => x.id === 'final').dates[0].slice(1, 3) }; } });
-  Object.defineProperty(d, 'rounds', { enumerable: true, configurable: true, get: () => d1RoundsOf(curY) });
-  Object.defineProperty(d, 'eligibilityNote', { enumerable: true, configurable: true, get: () => rulesR1(curY).eligText });
+  Object.defineProperty(d, 'schedule', { enumerable: true, configurable: true, get: () => { const r = rulesR1(yNow()); return { entry: { from: r.cal.entryFrom.slice(1, 3), to: r.cal.entryTo.slice(1, 3) }, final: r.rounds.find((x) => x.id === 'final').dates[0].slice(1, 3) }; } });
+  Object.defineProperty(d, 'rounds', { enumerable: true, configurable: true, get: () => d1RoundsOf(yNow()) });
+  Object.defineProperty(d, 'eligibilityNote', { enumerable: true, configurable: true, get: () => rulesR1(yNow()).eligText });
 }
 // the season in play decides the getters; a change of format re-registers (once per change)
 export function syncDef(g) {

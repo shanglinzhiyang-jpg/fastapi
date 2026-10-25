@@ -70,6 +70,17 @@ export function makeContest(cfg) {
     }
     return null;
   };
+  // the season in play of the running game (D1's def getters have no g: window.__game, memoized per state and day)
+  let liveMemo = null;
+  C.liveY = (fallback) => {
+    const g = typeof window !== 'undefined' ? window.__game : null;
+    const st = g && g.state;
+    if (!st) return fallback;
+    if (liveMemo && liveMemo.st === st && liveMemo.day === st.day && liveMemo.era === (st.profile && st.profile.era)) return liveMemo.Y ?? fallback;
+    const Y = safe(() => C.seasonY(g), null);
+    liveMemo = { st, day: st.day, era: st.profile && st.profile.era, Y };
+    return Y ?? fallback;
+  };
   C.nextHeld = (Y) => { for (let y = Y; y < Y + 40; y++) if (C.held(y)) return y; return null; };
 
   // ---------------------------------------------------------------- a season (seeded field)
@@ -408,13 +419,15 @@ export function drawForm(c, form, th) {
   const ph = (form.photos || []).filter(Boolean);
   if (ph.length) ph.slice(0, 3).forEach((lk, i) => faceAt(c, lk, px + 49 - 16 * (ph.length > 1 ? 1 : 1.5) + (ph.length > 1 ? (i - (ph.length - 1) / 2) * 30 : 0) - (ph.length > 1 ? 0 : 8), py + 16, ph.length > 1 ? 1 : 2));
   // rows
-  const rows = form.rows || [];
+  const rows = (form.rows || []).slice(0, 11);
   const lw = 112, vw = w - 24 - lw - 120;
-  rows.slice(0, 10).forEach(([label, value, pend], i) => {
-    const ry = y + 40 + i * 20;
-    R(c, x + 12, ry + 18, lw + vw, 1, '#c8c8d0');
-    T(c, label, x + 14, ry + 3, 11, '#5a5a68', 'left', lw - 6);
-    T(c, value == null || value === '' ? (pend ? '…' : '') : value, x + 14 + lw, ry + 2, 12, pend ? '#c0303a' : '#1a1a28', 'left', vw);
+  const rh = Math.min(20, Math.floor((h - 40 - 46) / Math.max(1, rows.length)));
+  const fs = rh >= 18 ? 12 : 11;
+  rows.forEach(([label, value, pend], i) => {
+    const ry = y + 38 + i * rh;
+    R(c, x + 12, ry + rh - 2, lw + vw, 1, '#c8c8d0');
+    T(c, label, x + 14, ry + (rh - fs) / 2 - 1, 11, '#5a5a68', 'left', lw - 6);
+    T(c, value == null || value === '' ? (pend ? '…' : '') : value, x + 14 + lw, ry + (rh - fs) / 2 - 2, fs, pend ? '#c0303a' : '#1a1a28', 'left', vw);
   });
   const by = y + h - 40;
   R(c, x + 12, by, w - 24, 1, '#c8c8d0');
@@ -432,7 +445,7 @@ function ticketCard(g, o, th) {
     const ns = `No. ${o.no}`;
     T(c, ns, x + w / 2, y + 64, 44, th.main, 'center', w - 40, { outline: '#20232a' });
     T(c, o.name, x + w / 2, y + 120, 16, '#1a1a28', 'center', w - 40);
-    para(c, o.line, x + 24, y + 146, w - 48, 11, '#3a3a48', 15, 3);
+    para(c, o.line, x + 24, y + 146, w - 130, 11, '#3a3a48', 15, 3);
     if (o.stamp) stampCirc(c, x + w - 54, y + h - 46, o.stamp, '#d0202a');
     for (let i = 0; i < 20; i++) R(c, x + 10 + i * 20, y + h - 8, 10, 2, '#c8c8d0');
   }, { min: 24 });
@@ -780,7 +793,7 @@ function installFlows(C) {
         await CARDS.ticketCard(g, { title: `${rd.name}　受付`, no: E.no, name: E.unitName, line: `${venue}\n${dateTextY(due.y, due.m, due.d)}　持ち時間 ${fmtLen(rd.length)}`, stamp: '受付' }, th);
         // 楽屋
         st.set = 'gakuya'; st.sign = `楽屋　${rules.title} ${rd.name}`;
-        st.cast = [{ look: g.state.look, x: 300, y: 196, k: 2, dir: 'down' }, ...others.slice(0, 4).map((o, i) => ({ look: o.look, x: [70, 150, 470, 550][i], y: 214, k: 1, dir: i < 2 ? 'right' : 'left', label: o.name, bob: true, phase: i * 9 }))];
+        st.cast = [{ look: g.state.look, x: 260, y: 150, k: 2, dir: 'down' }, ...others.slice(0, 4).map((o, i) => ({ look: o.look, x: [60, 150, 420, 520][i], y: 166, k: 1, dir: i < 2 ? 'right' : 'left', label: o.name, bob: true, phase: i * 9 }))];
         st.fx = { myRow: rint(rngOf(Y, rid, E.no), 0, 8) };
         await g.say(cfg.gakuyaLine ? cfg.gakuyaLine(g, S, rid) : '楽屋には、出番を待つ芸人がずらり。\nみんな、ぶつぶつネタを口にしている。');
         if (others[0]) await say(g, { name: others[0].name, look: others[0].look }, cfg.rivalLine(g, S, rid, others[0]));
@@ -805,7 +818,7 @@ function installFlows(C) {
         E.roundPrep = done;
         // 舞台袖
         st.set = 'sode'; st.sign = `舞台袖　${rd.name}`;
-        st.cast = [{ look: g.state.look, x: 290, y: 190, k: 2, dir: 'right' }, { look: KANTOKU.look, x: 180, y: 200, k: 1, dir: 'right' }];
+        st.cast = [{ look: g.state.look, x: 230, y: 150, k: 2, dir: 'right' }, { look: KANTOKU.look, x: 140, y: 186, k: 1, dir: 'right' }];
         await say(g, KANTOKU, [`${E.no}番、${E.unitName}さん。袖スタンバイお願いします。`, '前の組が終わったら、明転でいきます。']);
         const pr = others[1] || others[0];
         if (pr) {
@@ -874,7 +887,7 @@ function installFlows(C) {
   };
   C.debayashi = async (g, S, E, rid, st) => {
     const rules = cfg.rules(S.Y);
-    st.cast = [...st.cast.slice(0, 1), { look: SOUND.look, x: 430, y: 196, k: 2, dir: 'left' }];
+    st.cast = [...st.cast.slice(0, 1), { look: SOUND.look, x: 380, y: 150, k: 2, dir: 'left' }];
     await say(g, SOUND, cfg.soundLines ? cfg.soundLines(g, E, rid, rules) : ['音響です。登場の出囃子と、終わりの暗転のきっかけを確認させてください。', 'マイクの高さは、このままで大丈夫ですか？']);
     const k = await g.ask('どうする？', ['マイクの高さを合わせてもらう', 'このままで大丈夫です'], { cancel: 1 });
     await say(g, SOUND, k === 0 ? 'はい、口の高さに合わせました。本番もこの位置で。' : '了解です。では本番、よろしくお願いします！');
@@ -903,7 +916,7 @@ function installFlows(C) {
     const nums = [];
     const passRate = clamp(o.R0.pass / Math.max(1, o.R0.field), 0.05, 0.8);
     const base = Math.max(1, E.no - rint(rng, 10, 30));
-    for (let i = 0, k = base; nums.length < 40; i++, k += rint(rng, 1, 3)) {
+    for (let i = 0, k = base; nums.length < 39; i++, k += rint(rng, 1, 3)) {
       if (k === E.no) continue;
       nums.push({ no: k, pass: rng() < passRate });
     }
@@ -1011,7 +1024,7 @@ function installFlows(C) {
         st.set = 'gakuya';
         st.sign = `決勝　楽屋`;
         const fins0 = C.finalists(g, S).filter((id) => id !== 'player').slice(0, 4).map((id) => C.find(S, id)).filter(Boolean);
-        st.cast = [{ look: g.state.look, x: 300, y: 196, k: 2 }, ...fins0.map((n, i) => ({ look: C.lookOf(n), x: [70, 150, 470, 550][i], y: 214, k: 1, label: n.name, bob: true, phase: i * 7 }))];
+        st.cast = [{ look: g.state.look, x: 260, y: 150, k: 2 }, ...fins0.map((n, i) => ({ look: C.lookOf(n), x: [60, 150, 420, 520][i], y: 166, k: 1, label: n.name, bob: true, phase: i * 7 }))];
         if (fins0[0]) await say(g, { name: fins0[0].name, look: C.lookOf(fins0[0]) }, cfg.finalRivalLine ? cfg.finalRivalLine(g, S, fins0[0]) : 'おたがい、最高の4分にしよな。');
         const k = await g.ask('本番まで、あと少し。', ['もう一度、ひとりでネタを通す', '出囃子とマイクの最終確認', '目を閉じて集中する'], { cancel: 2 });
         E.roundPrep = { awase: k === 0, debayashi: k === 1, reh: true, calm: k === 2 };
@@ -1312,6 +1325,7 @@ function installFlows(C) {
     s.seen.final = true;
     const win = F.champ === 'player';
     const place = F.ranking.indexOf('player') + 1;
+    E.place = place;
     const st = stage(g, { set: 'studio', theme: th, sign: rules.title, fx: { crowd: true, react: true }, cast: [{ look: g.state.look, x: 288, y: 156, k: 2 }] });
     try {
       if (win) {
@@ -1356,7 +1370,7 @@ function installFlows(C) {
     if (S && S.entry) {
       const E = S.entry;
       const rows = E.results.map((r) => [C.roundName(Y, r.round === 'final2' ? 'final' : r.round) + (r.round === 'final2' ? '（最終決戦）' : ''), r.withdrawn ? '欠場' : `得点の目安 ${num(r.total).toFixed(1)}${r.cut ? `（ライン ${num(r.cut).toFixed(1)}）` : ''}`, r.withdrawn ? '棄権' : r.passed === true ? '通過' : r.passed === false ? '敗退' : '', r.passed === false ? '#ff8a9a' : undefined]);
-      await CARDS.recapCard(g, { title: `${cfg.rules(Y).title}　${E.unitName}の挑戦`, rows: [[`エントリー`, `No.${E.no}　${E.solo ? 'ピンで挑戦' : ''}`, ''], ...rows], foot: `結果：${statusText(E.status)}` }, th);
+      await CARDS.recapCard(g, { title: `${cfg.rules(Y).title}　${E.unitName}の挑戦`, rows: [[`エントリー`, `No.${E.no}　${E.solo ? 'ピンで挑戦' : ''}`, ''], ...rows], foot: `結果：${statusText(E.status, cfg.rules(Y), E)}${E.place && E.status !== 'champion' ? `（決勝${E.place}位）` : ''}` }, th);
       return;
     }
     const all = Object.values(s.seasons).filter((x) => x.entry).sort((a, b) => b.Y - a.Y);
@@ -1422,10 +1436,10 @@ function installFlows(C) {
     if (!Y || !C.held(Y)) return [`${cfg.label}`, `${cfg.foundedText}`, '', cfg.aboutNotYet ? cfg.aboutNotYet(g) : ''];
     const r = cfg.rules(Y);
     const cal = C.cal(g, Y);
-    const lines = [`${r.title}（第${r.edition}回）`, `主催：${r.organizer}`, `放送：${r.broadcast}`, '', `【出場資格】${r.eligText}`, `【参加費】${r.fee ? plainYen(r.fee) : r.feeText || 'なし'}`, `【受付】${cal.entryFrom ? dateTextY(cal.entryFrom.y, cal.entryFrom.m, cal.entryFrom.d) + '〜' + dateText(cal.entryTo.m, cal.entryTo.d) : '—'}`, '', '【日程】'];
+    const lines = [`${r.title}${r.title.includes(`第${r.edition}回`) ? '' : `（第${r.edition}回）`}`, `主催：${r.organizer}`, `放送：${r.broadcast}`, '', `【出場資格】${r.eligText}`, `【参加費】${r.fee ? plainYen(r.fee) : r.feeText || 'なし'}`, `【受付】${cal.entryFrom ? dateTextY(cal.entryFrom.y, cal.entryFrom.m, cal.entryFrom.d) + '〜' + dateText(cal.entryTo.m, cal.entryTo.d) : '—'}`, '', '【日程】'];
     for (const rd of r.rounds) {
       const ds = cal.rounds[rd.id] || [];
-      lines.push(`・${rd.name}：${ds.map((d) => `${dateText(d.m, d.d)}${d.venue ? ' ' + d.venue : ''}`).join(' / ')}（${fmtLen(rd.length)}）`);
+      lines.push(`・${rd.name}：${ds.map((d) => `${dateText(d.m, d.d)}${d.venue ? ' ' + cfg.venueName(Y, rd.id, d.venue) : ''}`).join(' / ')}（${fmtLen(rd.length)}）`);
     }
     lines.push('', `【決勝】${r.final.formatText}`, `【賞金】${r.prize ? plainYen(r.prize) : r.prizeText || '—'}`);
     if (r.notes) lines.push('', ...r.notes);

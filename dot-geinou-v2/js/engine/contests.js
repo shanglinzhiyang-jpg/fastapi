@@ -783,7 +783,8 @@ export function judgesFor(g, id, year, n) {
   }
   let list = pool.filter((j) => year >= j.from && year <= j.to);
   if (list.length < want) list = list.concat(pool.filter((j) => !list.includes(j)).sort((a, b) => Math.abs(a.from - year) - Math.abs(b.from - year)));
-  list = list.slice(0, want);
+  const seenS = new Set();
+  list = list.filter((j) => { if (seenS.has(j.short)) return false; seenS.add(j.short); return true; }).slice(0, want);
   CACHE.judges.set(key, list);
   if (CACHE.judges.size > 200) CACHE.judges.delete(CACHE.judges.keys().next().value);
   return list;
@@ -1033,6 +1034,7 @@ function offerShows(g, id, what) {
   for (const rid of ids) {
     if (!REGULARS[rid] || active(rid) || pend(rid)) continue;
     g.message({ from: REGULARS[rid].host, kind: 'offer', regular: rid, text: g.fmt(REGULARS[rid].offer) });
+    dailyCount(g).n++; // counts in the day's contest message budget (an offer is never merged into a digest)
     break; // one offer at a time
   }
 }

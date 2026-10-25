@@ -158,7 +158,13 @@ const STAFF = {
   make: { name: 'メイクさん', look: { ...LOOKS.makeup } },
 };
 const say = (g, who, t) => g.say(t, { name: who.name, look: who.look });
-const npc = (id, x, y, dir, who, extra = {}) => ({ type: 'npc', id, x, y, dir, look: who.look, name: who.name, ...extra });
+// extra may hold getters (name / look that follow today's contest): they are kept as getters on the entity def, so the map
+// reads them when the room is entered (map.js instantiate copies the def then), not once at load time
+const npc = (id, x, y, dir, who, extra = {}) => {
+  const e = { type: 'npc', id, x, y, dir, look: who.look, name: who.name };
+  for (const k of Object.keys(extra)) { const d = Object.getOwnPropertyDescriptor(extra, k); Object.defineProperty(e, k, { ...d, enumerable: true, configurable: true }); }
+  return e;
+};
 const posted = (dir, fn) => async (g, e) => { await fn(g, e); if (e) e.dir = dir; };
 function seated(ctx, x, y, g, e) {
   const seat = g.map.seatOf(e.x, e.y) || (e.seatTile ? { img: tileImageHD(e.seatTile), top: 5.5 } : null);
@@ -368,7 +374,7 @@ const sode = {
     const t = T0(g);
     if (!t || t.done) return;
     const v = clamp(t.tension, 0, 100);
-    const x0 = 110, y0 = 26, w = 100;
+    const x0 = 206, y0 = 150, w = 100;
     ctx.fillStyle = 'rgba(10,10,16,0.85)'; ctx.fillRect(x0 - 4, y0 - 2, w + 8, 14);
     ctx.fillStyle = '#2a2a38'; ctx.fillRect(x0, y0 + 6, w, 4);
     const col = v >= 70 ? '#ff5468' : v >= 45 ? '#ffcc4d' : '#57d98a';

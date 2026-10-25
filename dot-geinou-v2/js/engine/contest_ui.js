@@ -577,11 +577,11 @@ class ContestScene {
       const sw = chip(c, x.statusLabel.length > 10 ? x.statusLabel.slice(0, 9) + '…' : x.statusLabel, SW - 12, y + 5, scol, 10, 'right');
       const nr = x.nextRound;
       const nx = nr ? `${nr.name} ${nr.day === today ? '今日' : I.dateText(g, nr.day)}` : '';
-      T(c, nx, 400, y + 7, 10, nr && nr.day === today ? K.gold : K.dim, 'left', SW - 400 - sw - 20);
+      T(c, nx, 400, y + 7, 10, nr && nr.day === today && x.entry ? K.gold : K.dim, 'left', SW - 400 - sw - 20);
       const mark = x.entry && x.entry.status !== 'withdrawn' ? '★' : row.el.ok ? '○' : x.invite ? '招' : '×';
       T(c, mark, 22, y + 6, 12, mark === '★' ? K.gold : mark === '○' ? K.good : K.faint);
       T(c, x.label, 38, y + 2, 12, x.status === 'notyet' || x.status === 'closed' ? K.dim : K.text, 'left', 352);
-      T(c, `${I.KIND_LABEL[I.kindOf(x.def)] || ''}${x.def.broadcaster ? `・${x.def.broadcaster}` : ''}${row.el.ok ? '' : `・${row.el.why}`}`, 38, y + 14, 10, row.el.ok ? K.dim : K.faint, 'left', 352);
+      T(c, `${I.KIND_LABEL[I.kindOf(x.def)] || ''}${x.def.broadcaster ? `・${x.def.broadcaster}` : ''}${row.el.ok ? '' : `・${row.el.why}`}`, 38, y + 13, 10, row.el.ok ? K.dim : K.faint, 'left', 352);
       return;
     }
     if (id === 'entries') {
@@ -811,12 +811,12 @@ class FormScene {
     const by = y + h - 32;
     this.btnRects = [];
     this.buttons.forEach((b, i) => {
-      const bx = x + w / 2 - 150 + i * 160, sel = this.idx === this.fields.length && (this.btn || 0) === i;
-      R(c, bx, by, 140, 24, sel ? (i === 0 ? RED : '#8a7a6a') : '#e8dcc4');
-      T(c, b, bx + 70, by + 5, 12, sel ? '#ffffff' : INK, 'center', 130);
-      this.btnRects[i] = { x: bx, y: by, w: 140, h: 24 };
+      const bx = x + w - 14 - (2 - i) * 128 + 8, sel = this.idx === this.fields.length && (this.btn || 0) === i;
+      R(c, bx, by, 120, 24, sel ? (i === 0 ? RED : '#8a7a6a') : '#e8dcc4');
+      T(c, b, bx + 60, by + 5, 12, sel ? '#ffffff' : INK, 'center', 110);
+      this.btnRects[i] = { x: bx, y: by, w: 120, h: 24 };
     });
-    T(c, '↑↓選ぶ　A書く・決定　←→日程', x + 14, by + 7, 10, '#a89a88', 'left', w / 2 - 170);
+    T(c, '↑↓選ぶ　A:書く・決定　←→:日程', x + 14, by + 7, 10, '#a89a88', 'left', w - 14 - 2 * 128 - 20);
   }
 }
 class StampScene {
@@ -837,7 +837,7 @@ class StampScene {
     if (this.t >= 30) {
       const k = Math.min(1, (this.t - 30) / 6);
       const s = 1.6 - 0.6 * k;
-      c.save(); c.translate(x + w - 90, y + 230); c.rotate(-0.2); c.scale(s, s);
+      c.save(); c.translate(x + w - 86, y + 252); c.rotate(-0.2); c.scale(s, s);
       c.globalAlpha = 0.85;
       R(c, -46, -20, 92, 40, RED); R(c, -42, -16, 84, 32, PAPER);
       T(c, '受付完了', 0, -8, 16, RED, 'center');
@@ -880,7 +880,7 @@ class BoardScene {
         if (r.me) R(c, x + 8, yy, w - 16, rh - 2, '#fff3c0');
         T(c, `${i + 1}位`, x + 18, yy + 4, 12, i === 0 ? '#c09010' : INK);
         T(c, r.name, x + 70, yy + 4, 12, r.me ? RED : INK, 'left', w - 200);
-        T(c, Number.isFinite(r.total) ? `${Math.round(r.total * 10) / 10}点` : '', x + w - 18, yy + 4, 12, INK, 'right');
+        T(c, `${Number.isFinite(r.total) ? `${Math.round(r.total * 10) / 10}点` : ''}${Number.isFinite(r.votes) ? `　最終決戦 ${r.votes}票` : ''}`, x + w - 18, yy + 4, 12, INK, 'right');
         R(c, x + 8, yy + rh - 2, w - 16, 1, '#e8e2d4');
       });
       if (o.champion && this.t % 40 < 30) T(c, '優勝！', x + w - 24, y + h - 26, 16, '#c09010', 'right');
@@ -957,7 +957,7 @@ class ScoreScene {
       const x = x0 + i * jw;
       R(c, x + 3, 70, jw - 6, 92, '#161632');
       R(c, x + 3, 70, jw - 6, 2, col);
-      T(c, j.short || j.name, x + jw / 2, 76, 10, K.dim, 'center', jw - 10);
+      T(c, j.name, x + jw / 2, 76, 10, K.dim, 'center', jw - 10);
       if (i < this.shown || this.shown >= n) {
         T(c, String(j.pts ?? '—'), x + jw / 2, 100, 24, K.gold, 'center');
       } else T(c, '?', x + jw / 2, 100, 24, '#3a3a5a', 'center');

@@ -166,7 +166,8 @@ class Base {
     this.resolve(v);
   }
   drawOver(c) {
-    this.toasts.forEach((t, i) => { const w = Math.min(SW - 40, measure(c, t.text, 12) + 20); R(c, (SW - w) / 2, 300 - i * 22, w, 20, 'rgba(0,0,0,0.85)'); T(c, t.text, SW / 2, 304 - i * 22, 12, t.color, 'center', w - 10); });
+    const ty = this.toastY || 300, tx = this.toastX || SW / 2;
+    this.toasts.forEach((t, i) => { const w = Math.min(this.toastW || SW - 40, measure(c, t.text, 12) + 20); R(c, tx - w / 2, ty - i * 22, w, 20, 'rgba(0,0,0,0.85)'); T(c, t.text, tx, ty + 4 - i * 22, 12, t.color, 'center', w - 10); });
     for (const m of this.modals) { R(c, 0, 0, SW, SH, 'rgba(0,0,0,0.5)'); m.draw(this, c); }
   }
 }
@@ -350,6 +351,7 @@ export class EditorScene extends Base {
     this.saved = draft.id ? g.neta(draft.id) : null;
     this.cache = { h: -1 };
     this.toolRects = [];
+    Object.assign(this, { toastY: 46, toastX: LIST.x + LIST.w / 2, toastW: LIST.w - 20 });
   }
   rows() { return [...this.n.lines, { add: true }]; }
   era() { const e = this.g.state && this.g.state.profile && this.g.state.profile.era; return ERA_YEAR[e] ? e : 'reiwa'; }
@@ -364,6 +366,7 @@ export class EditorScene extends Base {
     if ((r === 'a' || r === 'b' || r === 'c') && this.n.chars && this.n.chars[r]) return `${ROLE_LONG[r]}（${this.n.chars[r]}）`;
     if (this.kind === 'rakugo' && r === 'narr') return '地（語り）';
     if (this.kind === 'pin' && r === 'narr') return 'フリップ・ト書き';
+    if (this.kind === 'ogiri' && r === 'pin') return '回答';
     if (this.kind === 'manzai' && (r === 'boke' || r === 'tsukkomi')) { const nm = this.names()[r]; if (nm) return `${ROLE_LONG[r]}（${nm}）`; }
     return ROLE_LONG[r] || r;
   }
@@ -504,8 +507,7 @@ export class EditorScene extends Base {
     if (L.length) { const k = await this.confirm({ title: 'まとめて書く', lines: ['いまの台本はどうする？'], choices: ['後ろに足す', '入れかえる', 'やめる'] }); if (k === 2 || k == null) return; mode = k === 0 ? 1 : 2; }
     const v = await askText(this.g, { title: 'まとめて書く（一行に一セリフ）', value: '', max: 6000, multiline: true, rows: 10, placeholder: 'ボケ：どうもー！\nツッコミ：よろしくお願いしますー！\n[オチ] ボケ：…', note: '「ボケ：」「ツッコミ：」「A：」「B：」「ナレ：」「地：」で話者、[ツカミ]【オチ】でビートを指定できる。話者がない行は交互・本人になる。' });
     if (v == null) return;
-    const parse = this.g.__netaParse || ((s) => s.split(/\n/).map((t) => ({ role: this.defaultRole(this.n.lines.length), text: t.trim(), beat: '' })).filter((x) => x.text));
-    const lines = parse(v, this.kind, this.n.chars || {});
+    const lines = has(this.g, 'parseNetaScript') ? this.g.parseNetaScript(v, this.kind, this.n.chars || {}) : v.split(/\n/).map((t) => ({ role: this.defaultRole(this.n.lines.length), text: t.trim(), beat: '' })).filter((x) => x.text);
     if (!lines.length) { this.toast('セリフが見つからなかった', K.red); return; }
     if (mode === 2) { this.n.lines = []; this.sel = 0; }
     const k = this.insert(this.n.lines.length, lines);
@@ -806,7 +808,7 @@ export class ResultScene extends Base {
     const ai = this.ai;
     const axes = AXES_BY_KIND[this.kind].filter((a) => a in (ai.axes || {}));
     // radar
-    const cx = 150, cy = 192, r = 96;
+    const cx = 146, cy = 192, r = 88;
     const n = axes.length;
     const pt = (i, v) => { const ang = -Math.PI / 2 + (i * 2 * Math.PI) / n; return [cx + Math.cos(ang) * r * v, cy + Math.sin(ang) * r * v]; };
     c.save();
@@ -836,9 +838,9 @@ export class ResultScene extends Base {
     T(c, `審査員5人（${JUDGES.length * 100}点満点：${(ai.judges || []).reduce((s, j) => s + num(j.score), 0)}点）`, X, y, 10, K.gold, 'left', SW - X - 8);
     y += 15;
     for (const j of ai.judges || []) {
-      T(c, j.name, X, y, 12, K.text, 'left', 112);
-      T(c, j.taste || '', X + 116, y + 1, 10, K.dim, 'left', 60);
-      R(c, X + 178, y + 3, 100, 8, '#2a2236'); R(c, X + 178, y + 3, Math.round(num(j.score)), 8, scoreCol(num(j.score)));
+      T(c, j.name, X, y, 12, K.text, 'left', 124);
+      T(c, j.taste || '', X + 128, y + 1, 10, K.dim, 'left', 54);
+      R(c, X + 186, y + 3, 100, 8, '#2a2236'); R(c, X + 186, y + 3, Math.round(num(j.score)), 8, scoreCol(num(j.score)));
       T(c, String(j.score), SW - 10, y, 12, scoreCol(num(j.score)), 'right');
       y += 18;
     }
@@ -1030,7 +1032,7 @@ export class PickerScene extends Base {
 
 // ================================================================ the settings (ローカルAI / Claude + API key)
 export class SettingsScene extends Base {
-  constructor(g, resolve) { super(g, resolve); this.idx = 0; this.rowRects = []; }
+  constructor(g, resolve) { super(g, resolve); this.idx = 0; this.rowRects = []; this.toastY = 214; }
   rows() {
     const ks = keyState();
     return [
@@ -1184,7 +1186,7 @@ async function scriptActions(g, x, A) {
     const k = await phoneList(g, { title: short(x.title || '無題', 12), color: A.color, bg: A.bg, items: acts });
     if (k < 0) return;
     const id = acts[k].id;
-    if (id === 'view') await phoneInfo(g, { title: short(x.title || '無題', 12), color: A.color, lines: [`${KIND_LABEL[x.kind]}　推定${mmss(x.length || 0)}／目安${mmss(x.target)}`, x.theme ? `テーマ：${x.theme}` : null, x.setting ? `設定：${x.setting}` : null, '', ...x.lines.map((l, j) => `${j + 1}.【${(x.chars && x.chars[l.role]) || ROLE_LONG[l.role] || l.role}】${l.text}`)].filter((s) => s != null) });
+    if (id === 'view') await phoneInfo(g, { title: short(x.title || '無題', 12), color: A.color, lines: [`${KIND_LABEL[x.kind]}　推定${mmss(x.length || 0)}／目安${mmss(x.target)}`, x.theme ? `テーマ：${x.theme}` : null, x.setting ? `設定：${x.setting}` : null, '', ...x.lines.map((l, j) => `${j + 1}.【${(x.chars && x.chars[l.role]) || (x.kind === 'ogiri' && l.role === 'pin' ? '回答' : ROLE_LONG[l.role]) || l.role}】${l.text}`)].filter((s) => s != null) });
     else if (id === 'edit') await g.writeNeta({ id: x.id, kind: x.kind });
     else if (id === 'score') { const ai = await g.scoreNeta(x, { show: true, ui: true }); if (g.auto && ai) await phoneInfo(g, { title: 'AI採点', color: A.color, lines: [`${ai.total}点（${ai.rank}）`, ...(ai.advice || []).slice(0, 3)] }); }
     else if (id === 'result') await g.showNetaResult(x);

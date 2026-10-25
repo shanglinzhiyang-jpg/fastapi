@@ -18,6 +18,8 @@ const STAFF = { name: '大会スタッフ', look: { hair: 'cap', hat: '#2a2d36',
 const UKETSUKE = { name: '受付スタッフ', look: { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#3f5fa8', bottom: '#2a3560', skirt: true, jacket: true } };
 const KANTOKU = { name: '舞台監督', look: { hair: 'cap', hat: '#d62f2f', hairColor: 'black', skin: 'tan', top: '#1e1e26', bottom: '#2a2d36' } };
 const MC = { name: '進行役', look: { hair: 'slick', hairColor: 'black', skin: 'fair', top: '#2a3560', bottom: '#2a3560', jacket: true, tie: '#d62f2f' } };
+// the HD scenes (form, boards, scoreboard, votes) are skipped under g.auto unless a test asks for them (g.auto.contestui)
+const showUI = (g) => !g.auto || !!g.auto.contestui;
 const sayAs = (g, who, t) => g.say(t, { name: who.name, look: who.look });
 const askAs = (g, who, t, ch, o = {}) => g.ask(t, ch, { name: who.name, look: who.look, ...o });
 
@@ -142,7 +144,7 @@ async function enter(g, id, opts = {}) {
   const form = { ...info, kinds: (KIND_CHOICES[I.kindOf(def)] || ['漫才'])[0], title: '' };
   const odds = safe('odds', () => oddsOf(g, id, 0), null);
   const o = { def, cyc, title: name, form, options, fee, el, odds, kinds: KIND_CHOICES[I.kindOf(def)] || ['漫才'] };
-  const f = CONTEST_UI.entryForm && !g.auto ? await asafe('entryForm', () => CONTEST_UI.entryForm(g, o), null) : g.auto ? { ...form, pick: options[0].k } : await textForm(g, o);
+  const f = CONTEST_UI.entryForm && showUI(g) ? await asafe('entryForm', () => CONTEST_UI.entryForm(g, o), null) : g.auto ? { ...form, pick: options[0].k } : await textForm(g, o);
   if (!f) return null;
   if (fee.internal > 0) {
     if (!g.spend(fee.internal)) { sfx('buzz'); await g.say(`参加費（${fmtMoney(fee.internal)}）が足りない…。\nお金をためてから出直そう。`); return null; }
@@ -154,7 +156,7 @@ async function enter(g, id, opts = {}) {
   const opt = cyc.rounds[0].options[e.picks[0]] || options[0];
   const clash = I.dueOn(g, opt.day).filter((d) => d.id !== id);
   sfx('good');
-  if (CONTEST_UI.entryDone && !g.auto) await asafe('entryDone', () => CONTEST_UI.entryDone(g, { ...o, entry: e, option: opt }), null);
+  if (CONTEST_UI.entryDone && showUI(g)) await asafe('entryDone', () => CONTEST_UI.entryDone(g, { ...o, entry: e, option: opt }), null);
   else await g.say(`エントリー完了！\nエントリーナンバーは ${e.no}番。\n${cyc.rounds[0].name}：${I.dateText(g, opt.day)} ${opt.venue}会場`);
   if (clash.length) await g.say(`（その日は${CONTESTS[clash[0].id] ? I.contestName(CONTESTS[clash[0].id], clash[0].year) : '別の大会'}と重なっている…。\n「賞レース」アプリで日程を変えられる）`);
   I.pushNews(g, `【エントリー受付完了】${name}\nエントリーナンバー：${e.no}番\n${cyc.rounds[0].name}：${I.dateText(g, opt.day, { year: true })}　${opt.venue}会場\n参加費：${fee.text}\n当日は会場の受付でエントリーナンバーをお伝えください。`, { personal: true, contest: id });
@@ -216,7 +218,7 @@ async function go(g, id) {
   if (!g.spend(cost)) { sfx('buzz'); await g.say(`交通費（${fmtMoney(cost)}）が足りない…。`); return false; }
   if (g.map && g.map.placeId && g.map.placeId !== 'shourace') { const p = g.map.player; c.ret = { place: g.map.placeId, room: g.map.roomId, x: p.x, y: p.y, dir: p.dir }; }
   let mode = 'full';
-  if (g.auto) mode = 'auto';
+  if (g.auto) mode = g.auto.contestMode || 'auto';
   else if (c.seen.venueFull) {
     const k = await g.ask('どう進める？', ['会場を回って準備する（ぜんぶ見る）', 'すぐに出番へ（準備はおまかせ）', 'おまかせ（本番もシミュレーション）'], { cancel: 0 });
     mode = ['full', 'quick', 'auto'][k] || 'full';
@@ -521,7 +523,8 @@ async function judgePrelim(g, x, P, mode) {
     const above = rd.sorted.filter((aid) => rd.scores.get(aid) > fs).length;
     const ms = rd.anonIn > 0 ? anonInputMS(rd) : null;
     const anonAbove = ms ? rd.anonIn * (1 - I.PHI((fs - ms.mS) / ms.sS)) : 0;
-    place = Math.max(1, Math.round(above + anonAbove + 1)); of = rd.E;
+    of = Math.round(rd.E);
+    place = clamp(Math.round(above + anonAbove + 1), 1, of);
   }
   const need = rd ? Math.round(rd.cut) : 50;
   const reasons = passed ? [] : reasonsFor(g, P.kind, P.res, clamp(need, 30, 90));
@@ -586,7 +589,7 @@ async function announcePrelim(g, id, year, idx, show) {
   I.pushNews(g, text, { personal: true, contest: id, prio: 98 });
   if (passed && I.prestigeOf(def) >= 70 && idx + 1 === cyc.rounds.length - 1) I.pushNews(g, `${name}、決勝進出者に${e.unitName}の名前！\n予選を勝ち抜いた新顔に注目が集まる。`, { contest: id, prio: 80, key: `fin|${id}|${year}|player` });
   if (show) {
-    if (CONTEST_UI.board && !g.auto) await asafe('board', () => CONTEST_UI.board(g, { title: `${name}`, sub: `${rr.name} ${rd.opt != null && rr.options[rd.opt] ? `${rr.options[rd.opt].venue}会場 ` : ''}合格者`, numbers, mine: e.no, passed, place: rd.place, of: rd.of, exact: !!(srd && srd.exact), names: srd && srd.exact ? srd.passed.map((aid) => (sim.byId.get(aid) || {}).name).filter(Boolean) : null, color: I.colorOf(def), reasons: rd.reasons, next: nextTxt }), null);
+    if (CONTEST_UI.board && showUI(g)) await asafe('board', () => CONTEST_UI.board(g, { title: `${name}`, sub: `${rr.name} ${rd.opt != null && rr.options[rd.opt] ? `${rr.options[rd.opt].venue}会場 ` : ''}合格者`, numbers, mine: e.no, passed, place: rd.place, of: rd.of, exact: !!(srd && srd.exact), names: srd && srd.exact ? srd.passed.map((aid) => (sim.byId.get(aid) || {}).name).filter(Boolean) : null, color: I.colorOf(def), reasons: rd.reasons, next: nextTxt }), null);
     sfx(passed ? 'fanfare' : 'cancel');
     await g.say(passed ? [`合格！${rr.name}を突破した！`, nextTxt ? `次は${nextTxt}。` : '次へ進む！'] : ['不合格…。ここで敗退だ。', ...(rd.reasons && rd.reasons.length ? [`実力不足の点：\n${rd.reasons.slice(0, 2).map((s) => `・${s}`).join('\n')}`] : [])]);
   }
@@ -619,11 +622,13 @@ async function judgeRevival(g, x, P, mode) {
   const sw = w.reduce((a, b) => a + b, 0);
   const rows = pool.map((p, i) => ({ name: p.name, votes: Math.round((w[i] / sw) * total), me: !!p.me })).sort((a, b) => b.votes - a.votes);
   if (win && rows[0] && !rows[0].me) { const mi = rows.findIndex((x2) => x2.me); const tv = rows[0].votes; rows[0].votes = rows[mi].votes; rows[mi].votes = tv; rows.sort((a, b) => b.votes - a.votes); }
-  if (CONTEST_UI.votes && mode !== 'auto' && !g.auto) await asafe('votes', () => CONTEST_UI.votes(g, { title: `${label(def, cyc)} ${r.revivalName || '敗者復活戦'}`, rows, color: I.colorOf(def), unit: r.revivalJudge === 'panel' ? '点' : '票' }), null);
+  if (CONTEST_UI.votes && mode !== 'auto' && showUI(g)) await asafe('votes', () => CONTEST_UI.votes(g, { title: `${label(def, cyc)} ${r.revivalName || '敗者復活戦'}`, rows, color: I.colorOf(def), unit: r.revivalJudge === 'panel' ? '点' : '票' }), null);
   if (win) {
     sfx('fanfare');
     if (e) { e.status = 'passed'; e.round = idx; e.picks = e.picks || {}; e.picks[idx] = 0; e.revivalOk = null; e.results.push({ round: idx, revival: true, score: P.res.score, passed: true, place: 1, of: others.length + 1, day: I.todayOf(g) }); }
     I.applyReward(g, t.id, 'revival', { tv: true });
+    I.applyReward(g, t.id, 'finalist', { tv: !!r.tv, year: t.year });
+    I.cstate(g).stats.finals = num(I.cstate(g).stats.finals) + 1;
     I.pushNews(g, `${label(def, cyc)}の${r.revivalName || '敗者復活戦'}は${e ? e.unitName : ''}が勝ち上がり！\n決勝の最後の1枠をつかんだ。`, { contest: t.id, prio: 85, key: `rev|${t.id}|${t.year}` });
     if (mode !== 'auto') await g.say(['敗者復活！！', '決勝の舞台へ、最後の切符をつかんだ！']);
     return { win, toFinal: idx };
@@ -661,7 +666,7 @@ async function judgeFinal(g, x, P, mode) {
   const nameOf = (aid) => (aid === 'player' ? (x.entry ? x.entry.unitName : 'あなた') : ((sim && sim.byId.get(aid)) || {}).name || '？');
   const rowsAt = (upto) => order.slice(0, upto).map((aid) => ({ name: nameOf(aid), total: fin.totals[aid], me: aid === 'player' })).sort((a, b) => b.total - a.total);
   const myPos = order.indexOf('player');
-  if (mode !== 'auto' && !g.auto) {
+  if (mode !== 'auto' && showUI(g)) {
     if (CONTEST_UI.scoreboard) await asafe('scoreboard', () => CONTEST_UI.scoreboard(g, { title: `${label(def, cyc)} ${rr.name}`, color: I.colorOf(def), judges: judges.map((j, i) => ({ name: j.name, short: j.short, title: j.title, pts: ps.per[i] ? ps.per[i].pts : null })), total: ps.total, max: ps.max, comments, unit: x.entry ? x.entry.unitName : '', standings: rowsAt(myPos + 1), order: myPos + 1, of: order.length, panel }), null);
     else await g.say(`採点：${ps.total}点${panel ? `（${judges.map((j, i) => `${j.short} ${ps.per[i].pts}`).join('・')}）` : ''}`);
     for (const cm of comments.slice(0, 2)) await g.say(cm.text, { name: cm.name });
@@ -676,27 +681,29 @@ async function judgeFinal(g, x, P, mode) {
     sim = I.simOf(g, id, year);
     fin = sim ? sim.final : fin;
     ranking = fin.ranking;
-    if (fin.stage2 && mode !== 'auto' && CONTEST_UI.votes && !g.auto) await asafe('votes2', () => CONTEST_UI.votes(g, { title: `${label(def, cyc)} ${r.stage2.name || '最終決戦'}`, rows: fin.stage2.order.map((aid) => ({ name: nameOf(aid), votes: fin.stage2.votes[aid], me: aid === 'player' })), color: I.colorOf(def), unit: '票' }), null);
+    if (fin.stage2 && mode !== 'auto' && CONTEST_UI.votes && showUI(g)) await asafe('votes2', () => CONTEST_UI.votes(g, { title: `${label(def, cyc)} ${r.stage2.name || '最終決戦'}`, rows: fin.stage2.order.map((aid) => ({ name: nameOf(aid), votes: fin.stage2.votes[aid], me: aid === 'player' })), color: I.colorOf(def), unit: '票' }), null);
   }
   const place = ranking.indexOf('player') + 1;
-  res.final = { place, of: ranking.length, total: ps.total, per: ps.per.map((p) => p.pts), judges: judges.map((j) => j.name), ranking: ranking.slice(0, 20).map((aid) => ({ name: nameOf(aid), total: fin.totals[aid], me: aid === 'player' })), stage2: fin.stage2 ? { order: fin.stage2.order.map(nameOf), votes: fin.stage2.order.map((aid) => fin.stage2.votes[aid]) } : null };
+  res.final = { place, of: ranking.length, total: ps.total, per: ps.per.map((p) => p.pts), judges: judges.map((j) => j.name), ranking: ranking.slice(0, 20).map((aid) => ({ name: nameOf(aid), total: fin.totals[aid], me: aid === 'player', ...(fin.stage2 && fin.stage2.order.includes(aid) ? { votes: fin.stage2.votes[aid] } : {}) })), stage2: fin.stage2 ? { order: fin.stage2.order.map(nameOf), votes: fin.stage2.order.map((aid) => fin.stage2.votes[aid]) } : null };
   res.rounds[rr.idx] = { day: I.todayOf(g), score: P.res.score, fs: P.fs, rank: P.res.rank, passed: place === 1, place, of: ranking.length, total: ps.total };
   const e = x.entry;
   if (e) {
-    e.results = (e.results || []).filter((q) => q.round !== rr.idx);
+    e.results = (e.results || []).filter((q) => q.round !== rr.idx || q.revival);
     e.results.push({ round: rr.idx, roundId: rr.id, name: rr.name, score: P.res.score, rank: P.res.rank, passed: place === 1, place, of: ranking.length, total: ps.total, day: I.todayOf(g) });
     e.status = place === 1 ? 'champion' : 'out';
     e.final = { place, total: ps.total };
   }
   const c = I.cstate(g);
   if (place === 1) c.stats.wins = num(c.stats.wins) + 1;
-  I.applyReward(g, id, place === 1 ? 'champion' : place === 2 ? 'runnerup' : place === 3 ? 'third' : 'finalist', { tv: !!(r.tv || r.final), year, prize: true });
+  // reaching the final already paid 'finalist' (announcePrelim / a revival); the podium pays on top
+  if (place <= 3) I.applyReward(g, id, place === 1 ? 'champion' : place === 2 ? 'runnerup' : 'third', { tv: !!(r.tv || r.final), year, prize: true });
+  else I.applyReward(g, id, 'out', {});
   freeze(g, id, year);
   const name = label(def, cyc);
   const champName = nameOf(ranking[0]);
   if (place === 1) I.pushNews(g, `【速報】${name}、${champName}が優勝！\n${I.prizeOf(def, year).text ? `${I.prizeOf(def, year).text}を手にした。` : ''}決勝${ranking.length}組の頂点に立った。`, { contest: id, prio: 99, key: `champ|${id}|${year}` });
   else I.pushNews(g, `【速報】${name}は${champName}が優勝。\n${e ? e.unitName : ''}は${place}位（${ranking.length}組中）。`, { contest: id, prio: 90, key: `champ|${id}|${year}` });
-  if (mode !== 'auto' && !g.auto && CONTEST_UI.board) await asafe('finalBoard', () => CONTEST_UI.board(g, { title: name, sub: `${rr.name} 最終順位`, ranking: res.final.ranking, color: I.colorOf(def), champion: place === 1 }), null);
+  if (mode !== 'auto' && showUI(g) && CONTEST_UI.board) await asafe('finalBoard', () => CONTEST_UI.board(g, { title: name, sub: `${rr.name} 最終順位`, ranking: res.final.ranking, color: I.colorOf(def), champion: place === 1 }), null);
   if (mode !== 'auto') {
     if (place === 1) { sfx('fanfare'); if (has(g, 'shake')) g.shake(20, 2); await g.say([`優勝！！！`, `${name}、王者になった！`]); }
     else await g.say(`${ranking.length}組中 ${place}位。\n優勝は${champName}だった。`);
@@ -737,7 +744,7 @@ function record(g, id, idx, res = {}, opts = {}) {
     e.status = place === 1 ? 'champion' : 'out';
     e.final = { place, total: res.total ?? null };
     if (Number.isFinite(res.fs) || Number.isFinite(res.total)) { R.mods.final = { score: num(res.fs, num(res.score, 50)), total: num(res.total, num(res.score, 50)) }; }
-    if (opts.reward !== false) I.applyReward(g, id, place === 1 ? 'champion' : place === 2 ? 'runnerup' : place === 3 ? 'third' : 'finalist', { tv: !!rr.r.tv, year });
+    if (opts.reward !== false) I.applyReward(g, id, place === 1 ? 'champion' : place === 2 ? 'runnerup' : place === 3 ? 'third' : 'out', { tv: !!rr.r.tv, year });
     I.bump(g, id, year);
     if (!res.champion && res.place == null && !res.passed) { /* nothing to freeze precisely */ }
     if (opts.freeze !== false) freeze(g, id, year);
@@ -747,6 +754,7 @@ function record(g, id, idx, res = {}, opts = {}) {
     e.status = 'passed';
     e.round = idx + 1;
     if (opts.reward !== false) I.applyReward(g, id, 'pass', { round: idx, roundsTotal: cyc.rounds.length, tv: !!rr.r.tv });
+    if (opts.reward !== false && idx + 1 === cyc.rounds.length - 1) { I.cstate(g).stats.finals = num(I.cstate(g).stats.finals) + 1; I.applyReward(g, id, 'finalist', { tv: !!cyc.rounds[idx + 1].r.tv, year }); }
     if (Number.isFinite(res.fs)) { R.mods.rounds = R.mods.rounds || {}; R.mods.rounds[idx] = { score: res.fs, pass: true }; }
   } else {
     e.status = 'out';
