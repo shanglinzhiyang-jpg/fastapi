@@ -93,7 +93,7 @@ registerPlace({
         '################',
         '#=d=p=c=g=p=d==#',
         '#..............#',
-        '#.KKKKK........#',
+        '#...KKKK.......#',
         '#..............#',
         '#.SS......VV...#',
         '#..............#',
@@ -110,7 +110,7 @@ registerPlace({
         { x: 12, y: 1, room: 'simu', tx: 5, ty: 6, dir: 'up' },
       ],
       entities: [
-        npc('ky_desk', 4, 2, 'down', WHO.uketsuke, { talk: (g) => FLOW.schoolDesk(g) }),
+        npc('ky_desk', 5, 2, 'down', WHO.uketsuke, { talk: (g) => FLOW.schoolDesk(g) }),
         npc('ky_l1', 3, 6, 'right', { name: '教習生', look: { ...LOOKS.fan, top: '#ff9a3c' } }, { wander: 1, text: ['予約、なかなか取れなくて…。', 'あしたは学科と技能、両方入れたんです。'] }),
         npc('ky_l2', 12, 8, 'up', { name: '卒業間近の人', look: { ...LOOKS.salaryman, top: '#2f6fd0' } }, { text: ['来週、卒業検定なんです。', '路上は、歩行者や自転車がいちばん怖い。声に出して確認するのがコツって、教官が。'] }),
         sign(3, 1, '「ドット自動車教習所」のプレートだ。'),

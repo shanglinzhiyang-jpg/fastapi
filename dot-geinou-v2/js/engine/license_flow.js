@@ -434,7 +434,7 @@ async function attendKen(g, step, place) {
   const line = PASS_LINE(s.cls);
   await say(g, [`${step.label}を始めます。`, `持ち点は100点からの減点方式。${line}点以上で合格です。`, first ? '所内コースを、指示どおりに走ってください。' : '路上コースです。交通ルールを守って、安全に。', '一時停止や信号無視は、その場で検定中止になりますよ。'], WHO.kentei);
   const drv = first
-    ? (CLASSES[s.cls].vehicle === 'moto' ? { stage: 'moto', course: 'kentei1' } : { stage: s.cls === 'futsu2' ? 'second' : 'kentei1', course: s.cls === 'futsu2' ? 'kentei1' : 'kentei1' })
+    ? (CLASSES[s.cls].vehicle === 'moto' ? { stage: 'moto', course: 'kentei1' } : { stage: 'kentei1', course: 'kentei1' })
     : (CLASSES[s.cls].vehicle === 'moto' ? { stage: 'moto', course: 'kentei2' } : { stage: s.cls === 'futsu2' ? 'second' : 'kentei2', course: 'kentei2' });
   const r = await runDriving(g, { ...drv, practice: false, exam: true, difficulty: first ? 2 : 3, mt: s.mt, second: s.cls === 'futsu2', passLine: line, title: step.label, minutes: step.minutes });
   g.lifeTick({ stress: 8, hunger: -6 });
@@ -971,4 +971,4 @@ Object.assign(FLOW, {
   classNpc, courseNpc, campDesk, campSleep, campGate, campVignette, campMeal, goCamp, leaveCamp, schoolDesk, centerDesk, procedure, renewFlow,
   bookStep: (g, id, off, min) => bookStep(g, id, off, min), cancelBooking, checkBooking, progressView, aptitude, practiceExam,
 });
-export { practiceExam, enroll, schoolDesk, centerDesk, campDesk, classNpc, courseNpc, campSleep, campGate, campVignette, campMeal, procedure, attend, goCamp, leaveCamp, checkBooking, progressView, bookingMenu };
+export { renewFlow, practiceExam, enroll, schoolDesk, centerDesk, campDesk, classNpc, courseNpc, campSleep, campGate, campVignette, campMeal, procedure, attend, goCamp, leaveCamp, checkBooking, progressView, bookingMenu };

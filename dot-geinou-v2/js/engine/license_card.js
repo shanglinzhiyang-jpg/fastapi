@@ -43,7 +43,6 @@ export function drawLicenseCard(ctx, x0, y0, card, look, opt = {}) {
   T(card.issued, 36, 66, 11);
   R(ctx, 12, 86, 200, 20, th.band);
   T(`${card.expires}まで有効`, 112, 90, 11, { align: 'center', color: th.bandInk });
-  T(card.colorName, 12, 108, 8, { color: '#5a6a7a' });
   T(card.kind === 2 ? '二種' : '', 150, 108, 9, { color: th.stamp });
   // 免許の条件等 / 番号
   T('条件等', 12, 122, 8, { color: '#5a6a7a' });

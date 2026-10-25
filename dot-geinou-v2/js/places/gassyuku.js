@@ -50,9 +50,7 @@ function yardRows() {
   rows.push(mid([[10, 'p'], [11, 'p'], [16, 'b']]));
   rows.push(mid([[10, 'p'], [11, 'p'], [5, 'f'], [17, 'f']]));
   rows.push(mid([[10, 'p'], [11, 'p']]));
-  const last = Array.from({ length: W }, () => 'T');
-  last[10] = 'p'; last[11] = 'p';
-  rows.push(last.join(''));
+  rows.push('T'.repeat(W));
   return rows;
 }
 
@@ -65,7 +63,7 @@ registerPlace({
     return `ドット合宿教習所（${site.name}）`;
   },
   kind: 'building', bgm: 'gassyuku', noTrip: true,
-  start: { room: 'yard', x: 10, y: 9, dir: 'up' },
+  start: { room: 'yard', x: 10, y: 7, dir: 'up' },
   rooms: {
     yard: {
       outdoor: true, wall: 'cream', floor: 'grass', bg: '#6fb86a',
@@ -75,18 +73,17 @@ registerPlace({
         { x: 4, y: 1, room: 'lobby', tx: 8, ty: 8, dir: 'up' },
         { x: 11, y: 1, room: 'hall', tx: 6, ty: 6, dir: 'up' },
         { x: 18, y: 1, room: 'shokudo', tx: 6, ty: 6, dir: 'up' },
-        { x: 10, y: 10, check: async (g) => { await FLOW.campGate(g); return false; }, to: 'exit' },
-        { x: 11, y: 10, check: async (g) => { await FLOW.campGate(g); return false; }, to: 'exit' },
       ],
       entities: [
-        npc('gs_guard', 12, 9, 'left', { name: '門の守衛さん', look: { ...LOOKS.guard, hat: '#3b3f48' } }, { talk: (g) => FLOW.campGate(g) }),
+        npc('gs_guard', 12, 8, 'left', { name: '門の守衛さん', look: { ...LOOKS.guard, hat: '#3b3f48' } }, { talk: (g) => FLOW.campGate(g) }),
         npc('gs_y1', 7, 4, 'down', MATES[0], { wander: 2, text: ['朝の散歩。空気がおいしい！', '東京とは全然ちがうなあ。'] }),
         npc('gs_y2', 15, 6, 'left', MATES[1], { wander: 1, text: ['午後の教習まで、ひとやすみ。', 'ここ、夜は星がすごいんだよ。'] }),
         sign(4, 2, '「本館」教習の受付と学科教室、教習コース。'),
         sign(11, 2, '「寮」ここで寝泊まりする。談話室と、自分の部屋。'),
         sign(18, 2, '「食堂」食事は朝・昼・夕に1回ずつ（料金は合宿代にふくまれている）。'),
-        sign(10, 9, '門のところに「ご卒業おめでとうございます」の看板が立っている。'),
       ],
+      // the gate (the bottom of the path): stepping out asks whether to go home
+      events: [{ x: 10, y: 9, w: 2, on: 'step', run: async (g) => { await FLOW.campGate(g); } }],
       onEnter: async (g) => {
         if (!inCamp(g)) {
           // ?test=1 (tools/inspect.mjs, screenshots): a pretend camp, so the place can be looked at without enrolling
@@ -107,7 +104,7 @@ registerPlace({
         '################',
         '#=d=p=c=g=p=w==#',
         '#..............#',
-        '#.KKKKK........#',
+        '#...KKKK.......#',
         '#..............#',
         '#.SS......VV...#',
         '#..............#',
@@ -123,7 +120,7 @@ registerPlace({
         { x: 8, y: 1, room: 'course', tx: 2, ty: 2, dir: 'down' },
       ],
       entities: [
-        npc('gs_desk', 4, 2, 'down', WHO.uketsuke, { talk: (g) => FLOW.campDesk(g) }),
+        npc('gs_desk', 5, 2, 'down', WHO.uketsuke, { talk: (g) => FLOW.campDesk(g) }),
         npc('gs_l1', 12, 8, 'up', MATES[2], { text: ['明日は修了検定…。', 'ほんとに、持ち点100点からの減点なんだよね。コーンに触らないようにしないと。'] }),
         sign(4, 1, '「ドット合宿教習所」のプレートだ。'),
       ],
@@ -147,7 +144,7 @@ registerPlace({
       legend: { s: 'sofa', S: 'sofa_blue', T: 'table', V: 'vending', P: 'plant', c: 'wall_wood+clock' },
       warps: [
         { x: 6, y: 8, room: 'yard', tx: 11, ty: 2, dir: 'down' }, { x: 7, y: 8, room: 'yard', tx: 11, ty: 2, dir: 'down' },
-        { x: 9, y: 1, room: 'room', tx: 4, ty: 5, dir: 'up' },
+        { x: 9, y: 1, room: 'room', tx: 3, ty: 5, dir: 'up' },
       ],
       entities: [
         npc('gs_h1', 3, 4, 'down', MATES[0], { talk: (g) => FLOW.campVignette(g) }),
@@ -165,7 +162,7 @@ registerPlace({
         '#.......#',
         '#.B..B..#',
         '#.b..b..#',
-        '#...D...#',
+        '#.....D.#',
         '###MMM###',
       ],
       legend: { B: 'bed_top', b: 'bed_bottom', D: 'desk', p: 'wall_cream+poster' },
@@ -177,7 +174,7 @@ registerPlace({
       events: [
         { x: 2, y: 3, w: 1, h: 2, on: 'action', run: async (g) => { await FLOW.campSleep(g); } },
         { x: 5, y: 3, w: 1, h: 2, on: 'action', run: async (g) => { await g.say('同室の人のベッドだ。'); } },
-        { x: 4, y: 5, on: 'action', run: async (g) => { await g.say(['机の上に、教習原簿とテキストが広げてある。', 'よく読んで、明日に備えよう。（ベッドで寝ると次の日になる）']); } },
+        { x: 6, y: 5, on: 'action', run: async (g) => { await g.say(['机の上に、教習原簿とテキストが広げてある。', 'よく読んで、明日に備えよう。（ベッドで寝ると次の日になる）']); } },
       ],
     },
     shokudo: {
