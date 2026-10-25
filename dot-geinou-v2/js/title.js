@@ -14,7 +14,7 @@ import { text, panel, cursor, COLORS, measure, wrap } from './engine/draw.js';
 import { charSheetHD, drawFaceHD, LOOKS, HAIR, HAIR_STYLES, SKIN } from './engine/sprites.js';
 import { audio } from './engine/audio.js';
 import { drawLogo } from './engine/logos.js';
-import { hasSave, saveSummary, lastSaveSlot, SAVE_SLOTS } from './engine/state.js';
+import { hasSave, saveSummary, lastSaveSlot, SAVE_SLOTS, storagePersistent } from './engine/state.js';
 import {
   AGE_MIN, AGE_MAX, YEAR_DAYS, GENDERS, PREFECTURES, REGIONS, PERSONALITIES, ERAS, RELATIONS, CAUSES,
   ERA_ORDER, REGION_ORDER, PREF_ORDER, RELATION_ORDER, CAUSE_ORDER, PERSONALITY_ORDER,
@@ -617,7 +617,8 @@ export class TitleScene {
     this.t = 0;
     this.hd = true;
     // read once: draw() runs every frame and the save is a large localStorage string
-    this.hasSave = hasSave();
+    // a browser that keeps no saves still offers つづきから: its list has 読み込み (file / text)
+    this.hasSave = hasSave() || !storagePersistent();
     this.idx = this.hasSave ? 1 : 0;
     this.opaque = true;
     this.saveInfo = null;
@@ -647,7 +648,7 @@ export class TitleScene {
     }
     if (inp.repeat('up') || inp.repeat('down')) { this.idx = 1 - this.idx; audio.sfx('cursor'); }
     if (inp.pressed('a') && this.t > 20) {
-      if (this.idx === 1 && !hasSave()) { audio.sfx('buzz'); return; }
+      if (this.idx === 1 && !this.hasSave) { audio.sfx('buzz'); return; }
       audio.unlock();
       audio.sfx('ok');
       if (this.idx === 0 && !g.auto) { this.notice = { t: 0 }; return; }

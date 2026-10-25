@@ -8,6 +8,8 @@ import { drawFaceHD } from './sprites.js';
 import { audio } from './audio.js';
 import { SKILLS, SKILL_MAX, ITEMS, AGENCIES, rankName, RANKS, rankIndex } from './state.js';
 import { NotebookScene } from './notebook.js';
+import { saveIOMenu, offerExport } from './save_io.js';
+import { storageMode } from './state.js';
 import { HUNGRY, STRESSED, SCRUFFY } from './life.js';
 import { openPhone } from './phone.js';
 import { eraOf, fullName, ageOf, prefecture, GENDERS, PERSONALITIES } from './profile.js';
@@ -516,7 +518,7 @@ export async function openMenu(g) {
       // the phone is called what the era calls it (手帳と電話 / ケータイ / スマホ; not just
       // 手帳, which would read like てちょう below)
       [unread ? `${eraOf(g.state).device}（${unread}）` : eraOf(g.state).device, 'phone'],
-      ['ステータス', 'status'], ['もちもの', 'items'], ['てちょう', 'notebook'], ['セーブ', 'save'],
+      ['ステータス', 'status'], ['もちもの', 'items'], ['てちょう', 'notebook'], ['セーブ', 'save'], ['データ', 'saveio'],
       [audio.muted ? '音：OFF' : '音：ON', 'sound'], ['とじる', 'close'],
     ];
     if (g.debugMenu) entries.push(['デバッグ', 'debug']);
@@ -535,8 +537,11 @@ export async function openMenu(g) {
         await g.say('ここではセーブできないみたいだ。');
       } else if (g.save()) {
         audio.sfx('success');
-        await g.say('セーブしました。');
-      } else await g.say('セーブできませんでした…');
+        if (storageMode() === 'local') await g.say('セーブしました。');
+        else await offerExport(g); // the browser keeps nothing: the save is only in this page
+      } else await g.say('セーブできませんでした…\n（データを文字にできませんでした。「データ」から書き出しを試してください）');
+    } else if (act === 'saveio') {
+      await saveIOMenu(g);
     } else if (act === 'sound') {
       audio.unlock();
       audio.toggleMute();

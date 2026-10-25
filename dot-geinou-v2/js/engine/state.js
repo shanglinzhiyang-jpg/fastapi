@@ -101,6 +101,44 @@ export function newState(name = 'ドット', look = null, profile = null) {
   return st;
 }
 
+// ---- storage layer. The browser's localStorage when it works; when it is refused (a file opened from
+// a content:// link, a private window, blocked site data: the access throws) or full, the save is kept
+// in memory for this page and storageMode() says so, so the game can offer 書き出し (save_io.js).
+const mem = new Map();
+let lsProbe = null; // the usable Storage, or false once it failed
+function ls() {
+  if (lsProbe !== null) return lsProbe || null;
+  try {
+    const s = window.localStorage;
+    const k = '__dotgeinou_probe';
+    s.setItem(k, '1'); s.removeItem(k);
+    lsProbe = s;
+  } catch (e) { lsProbe = false; }
+  return lsProbe || null;
+}
+let lastWrite = 'local'; // where the latest write went: 'local' | 'memory'
+const kv = {
+  get(key) {
+    if (mem.has(key)) return mem.get(key);
+    const l = ls();
+    if (!l) return null;
+    try { return l.getItem(key); } catch (e) { return null; }
+  },
+  set(key, val) { // → 'local' | 'memory'
+    const l = ls();
+    if (l) {
+      try { l.setItem(key, val); mem.delete(key); lastWrite = 'local'; return 'local'; } catch (e) { console.warn('storage write failed', e); }
+    }
+    mem.set(key, val);
+    lastWrite = 'memory';
+    return 'memory';
+  },
+  remove(key) { mem.delete(key); const l = ls(); if (l) { try { l.removeItem(key); } catch (e) { /* ignore */ } } },
+};
+// 'local' (saves stay in the browser) or 'memory' (they are lost when the page is closed)
+export function storageMode() { return ls() && lastWrite === 'local' ? 'local' : 'memory'; }
+export const storagePersistent = () => storageMode() === 'local';
+
 const SAVE_KEY = 'dotgeinou_save_v2';
 // Three save slots. Slot 1 keeps the old key, so saves from before slots load as slot 1.
 // saveGame / loadGame / deleteSave use the current slot (chosen on the title) unless given one.
@@ -114,13 +152,13 @@ export function setSaveSlot(n) {
   n = Math.floor(Number(n));
   if (!validSlot(n)) return currentSlot;
   currentSlot = n;
-  try { localStorage.setItem(LAST_SLOT_KEY, String(n)); } catch (e) { /* storage blocked */ }
+  kv.set(LAST_SLOT_KEY, String(n));
   return n;
 }
 // The slot played last (for the title's つづきから), else the first slot with a save.
 export function lastSaveSlot() {
   let n = 0;
-  try { n = Math.floor(Number(localStorage.getItem(LAST_SLOT_KEY))); } catch (e) { n = 0; }
+  n = Math.floor(Number(kv.get(LAST_SLOT_KEY)));
   if (validSlot(n) && hasSave(n)) return n;
   for (let i = 1; i <= SAVE_SLOTS; i++) if (hasSave(i)) return i;
   return 1;
@@ -128,7 +166,7 @@ export function lastSaveSlot() {
 // A short summary of a slot without the full load (title / slot list): null when empty or broken.
 export function saveSummary(n = currentSlot) {
   try {
-    const raw = localStorage.getItem(slotKey(n));
+    const raw = kv.get(slotKey(n));
     if (!raw) return null;
     const data = JSON.parse(raw);
     const st = data && data.state;
@@ -141,9 +179,11 @@ export function saveSummary(n = currentSlot) {
   }
 }
 
+// true when the save is kept (in the browser, or at least in memory: see storageMode()); false when the
+// state could not be turned into text at all.
 export function saveGame(state, location, n = currentSlot) {
   try {
-    localStorage.setItem(slotKey(validSlot(n) ? n : currentSlot), JSON.stringify({ state, location, savedAt: Date.now(), slot: n }));
+    kv.set(slotKey(validSlot(n) ? n : currentSlot), JSON.stringify({ state, location, savedAt: Date.now(), slot: n }));
     return true;
   } catch (e) {
     console.warn('save failed', e);
@@ -153,7 +193,7 @@ export function saveGame(state, location, n = currentSlot) {
 
 export function loadGame(n = currentSlot) {
   try {
-    const raw = localStorage.getItem(slotKey(validSlot(n) ? n : currentSlot));
+    const raw = kv.get(slotKey(validSlot(n) ? n : currentSlot));
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (!data || !data.state) return null;
@@ -218,11 +258,27 @@ function normalize(st, def) {
 // hasSave(n): that slot has a save; hasSave(): any slot has one.
 export function hasSave(n) {
   try {
-    if (n === undefined) { for (let i = 1; i <= SAVE_SLOTS; i++) if (localStorage.getItem(slotKey(i))) return true; return false; }
-    return validSlot(n) && !!localStorage.getItem(slotKey(n));
+    if (n === undefined) { for (let i = 1; i <= SAVE_SLOTS; i++) if (kv.get(slotKey(i))) return true; return false; }
+    return validSlot(n) && !!kv.get(slotKey(n));
   } catch (e) { return false; }
 }
 
 export function deleteSave(n = currentSlot) {
-  try { if (validSlot(n)) localStorage.removeItem(slotKey(n)); } catch (e) { /* ignore */ }
+  if (validSlot(n)) kv.remove(slotKey(n));
+}
+
+// ---- 書き出し / 読み込み (save_io.js): a slot as text, and text back into a slot.
+export function exportSaveText(n = currentSlot) {
+  const raw = kv.get(slotKey(validSlot(n) ? n : currentSlot));
+  return raw || null;
+}
+// Checks the text is a save of this game, then puts it in slot n. → { ok, error?, summary? }
+export function importSaveText(text, n = currentSlot) {
+  if (!validSlot(n)) return { ok: false, error: 'スロットがちがいます' };
+  let data;
+  try { data = JSON.parse(String(text).trim()); } catch (e) { return { ok: false, error: 'セーブデータとして読めませんでした' }; }
+  if (!data || typeof data !== 'object' || !data.state || typeof data.state !== 'object' || !data.state.profile) return { ok: false, error: 'このゲームのセーブデータではないようです' };
+  kv.set(slotKey(n), JSON.stringify({ ...data, slot: n, savedAt: Number(data.savedAt) || Date.now() }));
+  const sm = saveSummary(n);
+  return sm ? { ok: true, summary: sm } : { ok: false, error: 'セーブデータを読み込めませんでした' };
 }

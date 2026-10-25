@@ -20,7 +20,7 @@ import { drawLogo, LOGOS } from './logos.js';
 import { charSheet, drawChar } from './sprites.js';
 import {
   SKILLS, SKILL_MAX, ITEMS, AGENCIES, RANKS, FINALE_FAME,
-  rankIndex, rankName, saveGame, payText,
+  rankIndex, rankName, saveGame, payText, storageMode,
 } from './state.js';
 import { installLife, REGULARS, SCRUFFY, ACTIVITY, showWords } from './life.js';
 import { eraOf, fullName, personalityMult } from './profile.js';
@@ -835,7 +835,12 @@ export class Game {
     if (opts.save !== false) {
       // a place without saving (noSave) is fine; a save the browser refused is told, not lost silently
       const canSave = !!(this.state && this.map.place && !this.map.place.noSave);
-      if (canSave && !this.save()) this.notify('セーブできなかった…（ブラウザの保存領域がいっぱいか、保存が止められています）', { color: '#ff5d6c', life: 260 });
+      if (canSave && !this.save()) this.notify('セーブできなかった…（データを文字にできませんでした。メニューの「データ」から書き出しを試してください）', { color: '#ff5d6c', life: 260 });
+      else if (canSave && storageMode() === 'memory' && !this._memSaveWarned) {
+        // the browser refuses to keep saves (a content:// file, private window): say so once, point to 書き出し
+        this._memSaveWarned = true;
+        this.notify('このブラウザではセーブが保存されません。メニュー → データ → 書き出す で残せます', { color: '#ffd23f', life: 420 });
+      }
     }
   }
 

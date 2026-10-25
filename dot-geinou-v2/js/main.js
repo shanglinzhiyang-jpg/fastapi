@@ -13,6 +13,7 @@ import { loadAll } from './registry.js';
 import { newState, loadGame, hasSave, deleteSave, AGENCIES, SAVE_SLOTS, saveSummary, setSaveSlot, lastSaveSlot } from './engine/state.js';
 import { PLACES } from './engine/map.js';
 import { MINIGAMES } from './engine/minigame.js';
+import { saveIOMenu } from './engine/save_io.js';
 import { TitleScene, CreateScene, EraIntroScene, drawTitleBackdrop } from './title.js';
 import { onMorning, PEOPLE } from './engine/life.js';
 import { ageOf, eraOf, isBirthday, birthdayFlag, sortFamily, RELATIONS, regionOf, familyLook } from './engine/profile.js';
@@ -162,10 +163,17 @@ async function pickSlot(g, mode) {
   for (;;) {
     const items = [];
     for (let n = 1; n <= SAVE_SLOTS; n++) items.push(slotLine(n));
+    if (mode === 'load') items.push('ファイル・テキストから読み込む');
     items.push('もどる');
     const W = 440;
-    const i = await g.list({ title: mode === 'load' ? 'どのセーブデータで遊びますか？' : 'どのスロットに記録しますか？', items, x: Math.round((SW - W) / 2), y: 96, w: W, px: true, cancel: SAVE_SLOTS, index: mode === 'load' ? lastSaveSlot() - 1 : 0 });
-    if (i < 0 || i >= SAVE_SLOTS) return 0;
+    const back = items.length - 1;
+    const i = await g.list({ title: mode === 'load' ? 'どのセーブデータで遊びますか？' : 'どのスロットに記録しますか？', items, x: Math.round((SW - W) / 2), y: 96, w: W, px: true, cancel: back, index: mode === 'load' ? lastSaveSlot() - 1 : 0 });
+    if (i < 0 || i === back) return 0;
+    if (i >= SAVE_SLOTS) { // 読み込み: a file or pasted text goes into a slot, which then loads
+      const n = await saveIOMenu(g, { fromTitle: true });
+      if (n) return n;
+      continue;
+    }
     const n = i + 1;
     if (mode === 'load') {
       if (!hasSave(n)) { await g.say('このスロットには、セーブデータがありません。'); continue; }
