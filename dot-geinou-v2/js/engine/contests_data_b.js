@@ -30,6 +30,9 @@ async function showRows(g, b, rows, head, o = {}) {
 // an answer chosen by the player (ask) or, in おまかせ / g.auto, by the stats: answers [{ text, q (0..100) }]
 async function chooseAnswer(g, prompt, answers, r, o = {}) {
   const shown = shuffleR(answers, r);
+  // tests: g.auto.answerPolicy 'random' | 'best' | 'worst' picks like a player would (else the act's skill decides)
+  const pol = g.auto && g.auto.answerPolicy;
+  if (pol) { const so = shown.slice().sort((a, b) => b.q - a.q); return pol === 'best' ? so[0] : pol === 'worst' ? so[so.length - 1] : shown[Math.floor(Math.random() * shown.length)]; }
   if (g.auto || o.auto) {
     const skill = clamp((o.skill ?? 50) + gauss(r) * 15, 0, 100);
     const sorted = shown.slice().sort((a, b) => b.q - a.q);

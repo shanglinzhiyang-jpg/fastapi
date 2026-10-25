@@ -584,7 +584,9 @@ function pvCard(g, o, th) {
       const per = Math.min(70, (SW - 40) / Math.max(1, fs.length));
       fs.slice(0, shown).forEach((f, i) => {
         const cx = 20 + per * (i + 0.5);
-        drawBig(c, f.look, 'down', cx - 16, 90, 1);
+        const L = lookList(f.looks || f.look).slice(0, 3);
+        const st2 = L.length > 1 ? Math.min(20, Math.max(10, (per - 30) / (L.length - 1))) : 0;
+        L.forEach((lk, k) => drawBig(c, lk, 'down', cx - 16 + (k - (L.length - 1) / 2) * st2, 90, 1));
         T(c, f.name, cx, 136, 9, f.me ? th.acc : '#ffffff', 'center', per - 4);
       });
       if (shown >= fs.length) T(c, o.end || '決勝', SW / 2, 180, 36, '#ffffff', 'center', SW - 40, { outline: th.main });
@@ -599,8 +601,10 @@ function catchCard(g, o, th) {
     const t = sc.t;
     R(c, 0, 0, SW, SH, th.bg);
     alpha(c, 0.5, () => { for (let i = 0; i < 18; i++) R(c, (i * 47 + t * 3) % SW, 0, 2, SH, th.main); });
-    drawBig(c, o.look, 'down', o.look2 ? 40 : 70, 90 + Math.max(0, 20 - t) * 2, 3);
-    if (o.look2) drawBig(c, o.look2, 'down', 140, 90 + Math.max(0, 24 - t) * 2, 3);
+    // every member of the act (a pin 1 big, a combi 2, a trio 3 smaller)
+    const L = lookList(o.looks || [o.look, o.look2]).slice(0, 3);
+    const k3 = L.length > 2 ? 2 : 3, step = L.length > 2 ? 70 : 100;
+    L.forEach((lk, i) => drawBig(c, lk, 'down', 130 - 16 * k3 + (i - (L.length - 1) / 2) * step, (L.length > 2 ? 110 : 90) + Math.max(0, 20 + i * 4 - t) * 2, k3));
     const k = Math.min(1, t / 16);
     T(c, o.top || '', 260, 70, 12, th.acc2, 'left', SW - 280);
     para(c, o.copy, 260, 96 - (1 - k) * 12, SW - 290, sizeFor(c, o.copy, (SW - 290) * 2, 26, 14), '#ffffff', 0, 3);
@@ -1003,7 +1007,7 @@ function installFlows(C) {
       await say(g, cfg.mc(Y)[0], cfg.pressLines ? cfg.pressLines(g, S) : ['決勝進出、おめでとうございます！ひと言お願いします！']);
       await g.ask('記者の質問：「決勝への意気込みを！」', ['優勝しか見えてません！', 'ここまで来たら、楽しみます', '…（緊張で声が出ない）'], { cancel: 1 });
       E.catch = cfg.catchcopy(g, S, 'player');
-      await CARDS.catchCard(g, { look: g.state.look, look2: E.solo ? null : null, top: `${rules.title}　ファイナリスト`, copy: E.catch, name: E.unitName, vtr: cfg.vtr ? cfg.vtr(g, S) : '' }, th);
+      await CARDS.catchCard(g, { looks: C.myLooks(g, E), top: `${rules.title}　ファイナリスト`, copy: E.catch, name: E.unitName, vtr: cfg.vtr ? cfg.vtr(g, S) : '' }, th);
       for (const id of fins) if (id !== 'player') { const n = C.find(S, id); if (n && !n.catch) n.catch = cfg.catchcopy(g, S, id); }
       contestMail(g, cfg.id, `【決勝進出のお知らせ】\n${E.unitName}様　決勝：${rules.final.when(C.cal(g, Y))}\n${rules.broadcast}。当日はリハーサルから入っていただきます。`, cfg.office);
       if (cfg.partnerAfter && E.solo) await cfg.partnerAfter(g, C, { S, E, passed: true, rid: rules.lastPrelim, final: true });
@@ -1060,7 +1064,7 @@ function installFlows(C) {
       st.cast = [{ look: MC[0].look, x: 520, y: 150, k: 2, dir: 'left' }, ...(MC[1] ? [{ look: MC[1].look, x: 568, y: 160, k: 1, dir: 'left' }] : [])];
       sfx('fanfare');
       const fins = C.finalists(g, S);
-      const pvFin = fins.map((id) => ({ name: id === 'player' ? E.unitName : (C.find(S, id) || {}).name, look: id === 'player' ? g.state.look : C.lookOf(C.find(S, id)), me: id === 'player' }));
+      const pvFin = fins.map((id) => ({ name: id === 'player' ? E.unitName : (C.find(S, id) || {}).name, looks: id === 'player' ? C.myLooks(g, E) : C.looksOf(C.find(S, id)), me: id === 'player' }));
       if (!quick) {
         await CARDS.pvCard(g, { logo: rules.title, sub: rules.sub || '', tagline: rules.tagline, countLabel: 'エントリー総数', count: S.entries, countUnit: cfg.unitWord, countFoot: rules.countFoot || '', finalists: pvFin, end: '決勝' }, th);
         await say(g, MC[0], cfg.openLines(g, S, rules));
@@ -1156,7 +1160,7 @@ function installFlows(C) {
       st.fx = { ...(st.fx || {}), judges: J.map((j) => ({ ...j })), mc: true, crowd: true, react: false, ...(cfg.stageFx ? cfg.stageFx(E, rules, 'final') : {}) };
       st.cast = cfg.stageCast ? cfg.stageCast(g, E, 'final') : [{ look: g.state.look, x: 288, y: 156, k: 2 }];
       if (!ui.quick) {
-        if (stageNo === 1) await CARDS.catchCard(g, { look: g.state.look, top: `${rules.title}　エントリーナンバー${E.no}`, copy: E.catch || cfg.catchcopy(g, S, 'player'), name: E.unitName, vtr: cfg.vtr ? cfg.vtr(g, S) : '' }, ui.th);
+        if (stageNo === 1) await CARDS.catchCard(g, { looks: C.myLooks(g, E), top: `${rules.title}　エントリーナンバー${E.no}`, copy: E.catch || cfg.catchcopy(g, S, 'player'), name: E.unitName, vtr: cfg.vtr ? cfg.vtr(g, S) : '' }, ui.th);
         sfx('drum');
         await g.say(note || (cfg.debayashiLine ? cfg.debayashiLine(g, E, 'final') : '♪──出囃子！'));
       }

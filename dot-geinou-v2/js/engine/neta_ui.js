@@ -83,9 +83,9 @@ export function lengthPresets(g) {
       const c = safe(() => g.contest(id), null);
       if (c) {
         const ed = has(g, 'contestEdition') ? safe(() => g.contestEdition(id, y), null) : null;
-        if (!ed || c.status === 'notyet') continue;
+        if (!ed) continue;
         name = ed.name || c.name;
-        const rs = safe(() => (typeof c.rounds === 'function' ? c.rounds(g, y) : c.rounds), null);
+        const rs = safe(() => (typeof c.roundsOf === 'function' ? c.roundsOf(y) : null), null) || c.rounds;
         rounds = Array.isArray(rs) ? rs.filter((r) => r && Number(r.length) > 0) : null;
       }
     }
@@ -148,13 +148,13 @@ function chip(c, x, y, label, col, w = 0, size = 10) {
   return ww;
 }
 const scoreCol = (s) => (s >= 75 ? K.green : s >= 55 ? K.gold : s >= 35 ? K.warn : K.red);
-// The × close button of every full screen: a 44x40 hit box in the top-right corner (header + tab row), drawn as a button.
-export const CLOSE = { x: SW - 44, y: 0, w: 44, h: 40 };
-function drawClose(c, rect = CLOSE) {
-  R(c, rect.x + 3, rect.y + 2, rect.w - 6, rect.h - 4, '#2a1e38');
-  R(c, rect.x + 3, rect.y + 2, rect.w - 6, 1, K.edgeHi);
-  T(c, '×', rect.x + rect.w / 2, rect.y + rect.h / 2 - 9, 16, K.text, 'center');
-}
+// The × of every full screen. Desktop: the small 24x20 box in the header. Touch (body.touch), as the 芸人手帳 (owarai_ui.js):
+// a 70-unit top bar with a 70x70 × cell (about 45 CSS px on a 412-px-wide portrait canvas: 640 units → 412 px), and the
+// screen below its own header drawn scaled into y 72..360 (taps are mapped back to the screen's own units).
+const CLOSE = { x: SW - 24, y: 0, w: 24, h: 20 };
+const drawClose = (c) => T(c, '×', SW - 12, 3, 12, K.dim, 'center');
+const TB = 70;
+const isTouch = () => typeof document !== 'undefined' && !!document.body && !!document.body.classList && document.body.classList.contains('touch');
 
 // ------------------------------------------------------------------ taps + the base scene
 let tapCanvas = null;
@@ -181,16 +181,39 @@ class Base {
     for (const t of this.toasts) t.t++;
     this.toasts = this.toasts.filter((t) => t.t < 140);
     const inp = g.input;
-    const tap = this.tapAt;
+    let tap = this.tapAt;
     this.tapAt = null;
     if (this.t < 3) return;
     const m = this.modals[this.modals.length - 1];
     if (m) { if (tap) m.tap(this, tap, inp); m.update(this, inp); return; }
     if (this.busy > 0) return;
+    if (tap && this.tt) {
+      // touch layout: the top bar (× cell, the scene's own bar items), else back to the screen's own units
+      if (tap.y < TB + 2) { const now = inp.pressedNow || {}; now.a = false; if (tap.x >= SW - TB) { sfx('cancel'); this.onCloseTap(); } else this.touchBarTap(tap, inp); return; }
+      tap = { x: (tap.x - this.tt.tox) / this.tt.ts, y: (tap.y - this.tt.toy) / this.tt.ts };
+    }
     if (tap && this.handleTap(tap, inp)) return;
     this.updateBody(inp);
   }
   handleTap() { return false; }
+  onCloseTap() { this.close(); }
+  touchBarTap() {}
+  drawTouchBar(c) { T(c, this.touchTitle || '', 12, TB / 2 - 10, 16, K.gold, 'left', SW - TB - 24); }
+  draw(c, g) {
+    if (!isTouch()) { this.tt = null; this.drawScreen(c, g); this.drawOver(c); return; }
+    const y0 = this.touchY0 || 20;
+    const ts = (SH - TB - 2) / (SH - y0);
+    const tt = (this.tt = { ts, tox: (SW - SW * ts) / 2, toy: TB + 2 - y0 * ts });
+    R(c, 0, 0, SW, SH, K.bg);
+    c.save(); c.beginPath(); c.rect(0, TB + 2, SW, SH - TB - 2); c.clip(); c.translate(tt.tox, tt.toy); c.scale(ts, ts);
+    try { this.drawScreen(c, g); } catch (e) { console.error(e); }
+    c.restore();
+    R(c, 0, 0, SW, TB, K.head); R(c, 0, TB, SW, 2, K.edge);
+    try { this.drawTouchBar(c, g); } catch (e) { console.error(e); }
+    R(c, SW - TB + 1, 0, TB - 2, TB - 2, '#3a1a2a');
+    T(c, '×', SW - TB / 2, TB / 2 - 12, 24, K.text, 'center');
+    this.drawOver(c);
+  }
   updateBody() {}
   async act(fn) { this.busy++; try { return await fn(); } catch (e) { console.error(e); return null; } finally { this.busy--; this.g.input.consume(); } }
   openModal(m) { return new Promise((res) => { m._res = res; m.t = 0; this.modals.push(m); }); }
@@ -208,8 +231,11 @@ class Base {
     this.resolve(v);
   }
   drawOver(c) {
-    const ty = this.toastY || 300, tx = this.toastX || SW / 2, dir = this.toastDir || -1;
-    this.toasts.slice(0, this.toastMax || 3).forEach((t, i) => { const w = Math.min(this.toastW || SW - 40, measure(c, t.text, 12) + 20); R(c, tx - w / 2, ty + dir * i * 22, w, 20, 'rgba(0,0,0,0.88)'); T(c, t.text, tx, ty + 4 + dir * i * 22, 12, t.color, 'center', w - 10); });
+    // toast positions are in the screen's own units (scaled with the body on touch)
+    const tt = this.tt || { ts: 1, tox: 0, toy: 0 };
+    const ty = tt.toy + (this.toastY || 300) * tt.ts, tx = tt.tox + (this.toastX || SW / 2) * tt.ts, dir = this.toastDir || -1;
+    const maxW = (this.toastW || SW - 40) * tt.ts;
+    this.toasts.slice(0, this.toastMax || 3).forEach((t, i) => { const w = Math.min(maxW, measure(c, t.text, 12) + 20); R(c, tx - w / 2, ty + dir * i * 22, w, 20, 'rgba(0,0,0,0.88)'); T(c, t.text, tx, ty + 4 + dir * i * 22, 12, t.color, 'center', w - 10); });
     for (const m of this.modals) { R(c, 0, 0, SW, SH, 'rgba(0,0,0,0.5)'); m.draw(this, c); }
   }
 }
@@ -330,22 +356,24 @@ function partsModal(o) {
       R(c, x, y, w, h, '#160f20');
       R(c, x, y, w, 2, K.gold); R(c, x, y + h - 1, w, 1, K.edge); R(c, x, y, 1, h, K.edge); R(c, x + w - 1, y, 1, h, K.edge);
       T(c, o.title || '部品から足す', x + 10, y + 6, 12, K.gold, 'left', 300);
-      T(c, o.note || '', x + w - 54, y + 7, 10, K.dim, 'right', w - 360);
-      m.closeRect = { x: x + w - 48, y: y + 2, w: 46, h: 38 };
-      drawClose(c, m.closeRect);
+      const touch = isTouch(), cw = touch ? TB : 24;
+      T(c, o.note || '', x + w - cw - 6, y + 7, 10, K.dim, 'right', w - 336 - cw);
+      m.closeRect = touch ? { x: x + w - TB, y, w: TB, h: TB } : { x: x + w - 24, y, w: 24, h: 22 };
+      if (touch) { R(c, x + w - TB + 1, y + 2, TB - 3, TB - 3, '#3a1a2a'); T(c, '×', x + w - TB / 2, y + TB / 2 - 12, 24, K.text, 'center'); }
+      else T(c, '×', x + w - 12, y + 5, 12, K.dim, 'center');
       // tabs (wrap to a second row when they do not fit)
       m.tabRects = [];
       let tx = x + 8, ty = y + 24;
       m.tabs.forEach((tb, i) => {
         const tw = Math.ceil(measure(c, tb.label, 10)) + 14;
-        if (tx + tw > x + w - 52) { tx = x + 8; ty += 18; }
+        if (tx + tw > x + w - (touch ? TB + 4 : 8)) { tx = x + 8; ty += 18; }
         const on = i === m.tab;
         R(c, tx, ty, tw, 16, on ? K.gold : '#2a1e38');
         T(c, tb.label, tx + tw / 2, ty + 3, 10, on ? K.ink : K.text, 'center', tw - 4);
         m.tabRects.push({ x: tx, y: ty, w: tw, h: 16 });
         tx += tw + 4;
       });
-      const ly = ty + 22;
+      const ly = Math.max(ty + 22, touch ? y + TB + 4 : 0);
       const rh = 22;
       const items = m.items();
       const vis = Math.max(1, Math.floor((y + h - 40 - ly) / rh));
@@ -378,7 +406,7 @@ function partsModal(o) {
 
 // ================================================================ the editor
 const LIST = { x: 6, y: 42, w: 420, h: 250, rh: 18 };
-const RIGHT = { x: 432, y: 42, w: 202, h: 250 };
+const RIGHT = { x: 432, y: 40, w: 202, h: 252 };
 const TOOLS = ['部品から足す', '自分で書く', 'まとめて書く', '台本の設定', 'AI採点', '保存して閉じる'];
 export class EditorScene extends Base {
   constructor(g, draft, opts, resolve) {
@@ -460,7 +488,7 @@ export class EditorScene extends Base {
     const now = inp.pressedNow || {};
     const { x, y } = tap;
     now.a = false;
-    if (inR(x, y, CLOSE)) { sfx('cancel'); this.act(() => this.askClose()); return true; }
+    if (inR(x, y, CLOSE)) { sfx('cancel'); this.onCloseTap(); return true; }
     if (this.moving) { this.moving = false; return true; }
     for (let i = 0; i < this.toolRects.length; i++) if (inR(x, y, this.toolRects[i])) { this.focus = 'tools'; this.tool = i; sfx('ok'); this.act(() => this.runTool(i)); return true; }
     if (inR(x, y, this.dialRect)) { this.n.dialect = this.n.dialect === 'kansai' ? 'std' : 'kansai'; this.mark(); sfx('cursor'); return true; }
@@ -697,14 +725,14 @@ export class EditorScene extends Base {
     else if (k === 1) this.close(this.saved);
   }
   // ---------------------------------------------------------------- draw
-  draw(c) {
+  drawScreen(c) {
     const n = this.n;
     const S = this.stats();
     R(c, 0, 0, SW, SH, K.bg);
     R(c, 0, 0, SW, 20, K.head);
     T(c, '台本エディタ', 8, 3, 12, K.gold);
     T(c, `${KIND_LABEL[this.kind]}${n.forContest ? '・賞レース用' : ''}`, 88, 4, 10, K.dim, 'left', 120);
-    T(c, this.dirty ? '●未保存' : this.saved ? '保存ずみ' : '', SW - 52, 4, 10, this.dirty ? K.warn : K.green, 'right', 80);
+    T(c, this.dirty ? '●未保存' : this.saved ? '保存ずみ' : '', SW - 32, 4, 10, this.dirty ? K.warn : K.green, 'right', 80);
     // title / theme strip (tap: 台本の設定)
     R(c, 0, 21, SW, 18, '#170f20');
     this.headRect = { x: 0, y: 21, w: 428, h: 18 };
@@ -787,7 +815,6 @@ export class EditorScene extends Base {
       this.toolRects.push({ x, y: y2, w: bw, h: 22 });
     });
     T(c, this.moving ? '移動中：↑↓ 動かす　A/B 決定' : this.focus === 'tools' ? '←→ えらぶ　A 決定　↑ 台本へ　B 閉じる' : '↑↓ 行　A 操作　←→ 話者　↓ ツール　B 閉じる', SW - 4, 296 + 38 - 12, 10, K.faint, 'right', 200);
-    this.drawOver(c);
   }
 }
 
@@ -825,7 +852,7 @@ export class ResultScene extends Base {
     if (this.tab !== 2 && tap.y > 40) { const half = tap.y > 200; this.scroll[this.tab] = clamp(this.scroll[this.tab] + (half ? 48 : -48), 0, this.maxScroll || 0); }
     return true;
   }
-  draw(c) {
+  drawScreen(c) {
     const ai = this.ai;
     R(c, 0, 0, SW, SH, K.bg);
     R(c, 0, 0, SW, 20, K.head);
@@ -833,11 +860,11 @@ export class ResultScene extends Base {
     T(c, `『${this.n.title || '無題'}』${KIND_LABEL[this.kind]}`, 112, 4, 10, K.text, 'left', 300);
     const badge = ai.by === 'claude' ? 'Claude（APIキー使用）' : 'ローカルAI';
     const bw = measure(c, badge, 10) + 12;
-    R(c, SW - 50 - bw, 3, bw, 14, ai.by === 'claude' ? '#c06a3a' : '#3a5a8a');
-    T(c, badge, SW - 50 - bw / 2, 4, 10, '#ffffff', 'center');
+    R(c, SW - 32 - bw, 3, bw, 14, ai.by === 'claude' ? '#c06a3a' : '#3a5a8a');
+    T(c, badge, SW - 32 - bw / 2, 4, 10, '#ffffff', 'center');
     drawClose(c);
     this.tabRects = [];
-    const tw = Math.floor((SW - CLOSE.w) / TABS_R.length);
+    const tw = Math.floor(SW / TABS_R.length);
     TABS_R.forEach((lb, i) => { const x = i * tw, on = i === this.tab; R(c, x + 1, 21, tw - 2, 18, on ? K.gold : '#1a1222'); T(c, lb, x + tw / 2, 24, 12, on ? K.ink : K.text, 'center', tw - 8); this.tabRects.push({ x, y: 20, w: tw, h: 20 }); });
     c.save(); c.beginPath(); c.rect(0, 40, SW, 300); c.clip();
     if (this.tab === 0) this.drawSummary(c);
@@ -848,7 +875,6 @@ export class ResultScene extends Base {
     R(c, 0, 340, SW, 20, '#0c0812');
     T(c, '←→ タブ　↑↓ ' + (this.tab === 2 ? '行をえらぶ' : 'スクロール') + '　A 次へ　B 閉じる', SW - 8, 345, 10, K.faint, 'right', 400);
     if (ai.notice) T(c, ai.notice, 8, 345, 10, K.warn, 'left', 330);
-    this.drawOver(c);
   }
   drawSummary(c) {
     const ai = this.ai;
@@ -1028,12 +1054,12 @@ export class PickerScene extends Base {
     }
     this.close(x);
   }
-  draw(c) {
+  drawScreen(c) {
     const g = this.g, o = this.opts;
     R(c, 0, 0, SW, SH, K.bg);
     R(c, 0, 0, SW, 20, K.head);
     T(c, 'ネタをえらぶ', 8, 3, 12, K.gold);
-    T(c, `${o.title ? o.title + '・' : ''}${KIND_LABEL[this.kind] || 'なんでも'}${o.length ? `・持ち時間 ${mmss(o.length)}` : ''}`, 100, 4, 10, K.text, 'left', SW - 160);
+    T(c, `${o.title ? o.title + '・' : ''}${KIND_LABEL[this.kind] || 'なんでも'}${o.length ? `・持ち時間 ${mmss(o.length)}` : ''}`, 100, 4, 10, K.text, 'left', SW - 140);
     drawClose(c);
     const L = { x: 6, y: 26, w: 378, h: 306 };
     this.listRect = L;
@@ -1057,11 +1083,11 @@ export class PickerScene extends Base {
     }
     // detail
     const it = this.items[this.idx];
-    box(c, 390, 44, 244, 288, it && it.neta ? '台本のようす' : '');
+    box(c, 390, 26, 244, 306, it && it.neta ? '台本のようす' : '');
     if (it && it.neta) {
       const x = it.neta;
       const f = g.netaFreshness(x, o.forContest);
-      let y = 64;
+      let y = 46;
       T(c, x.title || '無題', 398, y, 12, K.gold, 'left', 228); y += 18;
       T(c, `出来（本番の見込み）${num(safe(() => g.netaQuality(x, { contest: o.forContest }), 0))}`, 398, y, 10, K.text, 'left', 228); y += 14;
       T(c, `仕上がり ${num(x.practice)}`, 398, y, 10, K.text); R(c, 480, y + 3, 140, 6, '#2a2236'); R(c, 480, y + 3, Math.round(1.4 * num(x.practice)), 6, K.cyan); y += 14;
@@ -1069,10 +1095,9 @@ export class PickerScene extends Base {
       for (const ch of structureCheck(x)) { T(c, `${ch.ok ? '✔' : '・'} ${ch.label}`, 400, y, 10, ch.ok ? K.text : K.faint, 'left', 220); y += 13; }
       y += 4;
       if (x.ai && x.ai.advice && x.ai.advice[0]) { T(c, 'AIのアドバイス', 398, y, 10, K.gold); y += 14; para(c, x.ai.advice[0], 398, y, 228, 10, K.dim, 13, 5); }
-    } else if (it) para(c, it.id === 'new' ? 'その場で台本エディタを開いて、新しいネタを書く。書き終えたら、そのネタを選べる。' : it.id === 'auto' ? '部品を組み合わせたネタで出る。手っ取り早いが、独自性は低い。' : '今回はネタを選ばない。', 398, 66, 228, 12, K.dim, 16);
+    } else if (it) para(c, it.id === 'new' ? 'その場で台本エディタを開いて、新しいネタを書く。書き終えたら、そのネタを選べる。' : it.id === 'auto' ? '部品を組み合わせたネタで出る。手っ取り早いが、独自性は低い。' : '今回はネタを選ばない。', 398, 48, 228, 12, K.dim, 16);
     R(c, 0, 340, SW, 20, '#0c0812');
     T(c, '↑↓ えらぶ　A 決定　B やめる', SW - 8, 345, 10, K.faint, 'right');
-    this.drawOver(c);
   }
 }
 
@@ -1123,28 +1148,27 @@ export class SettingsScene extends Base {
     this.toast('キーを設定した（' + keyState().masked + '）', K.green);
     return true;
   }
-  draw(c) {
+  drawScreen(c) {
     R(c, 0, 0, SW, SH, K.bg);
     R(c, 0, 0, SW, 20, K.head);
     T(c, 'AI審査員の設定', 8, 3, 12, K.gold);
     drawClose(c);
-    box(c, 40, 32, SW - 92, 200, '採点するAI');
+    box(c, 40, 32, SW - 80, 200, '採点するAI');
     this.rowRects = [];
     this.rows().forEach((r, i) => {
       const y = 52 + i * 34;
       const sel = i === this.idx;
-      R(c, 50, y, SW - 112, 30, sel ? K.sel : '#1d1426');
+      R(c, 50, y, SW - 100, 30, sel ? K.sel : '#1d1426');
       if (sel) R(c, 50, y, 2, 30, K.gold);
       T(c, r.label, 62, y + 8, 12, r.lock ? K.faint : K.text, 'left', 170);
-      T(c, r.value, 236, y + 8, 12, r.lock ? K.faint : r.id === 'mode' && keyState().mode === 'claude' ? K.gold : K.cyan, 'left', SW - 312);
-      this.rowRects.push({ x: 50, y, w: SW - 112, h: 30 });
+      T(c, r.value, 236, y + 8, 12, r.lock ? K.faint : r.id === 'mode' && keyState().mode === 'claude' ? K.gold : K.cyan, 'left', SW - 300);
+      this.rowRects.push({ x: 50, y, w: SW - 100, h: 30 });
     });
     box(c, 40, 240, SW - 80, 94, '注意');
     para(c, '台本の文章がAnthropicのAPIに送信され、あなたのAPIキーに課金されます。', 50, 260, SW - 100, 12, K.warn, 15, 2);
     para(c, `キーはふせ字でしか表示せず、記録にも残さない。「この端末に保存する」をえらばなければ、ゲームを閉じると消える。モデル：${CLAUDE.model}。失敗したときはローカルAIで採点する（ふだんはローカルAIで十分）。`, 50, 280, SW - 100, 10, K.dim, 13, 4);
     R(c, 0, 340, SW, 20, '#0c0812');
     T(c, '↑↓ えらぶ　A 決定　B 閉じる', SW - 8, 345, 10, K.faint, 'right');
-    this.drawOver(c);
   }
 }
 
