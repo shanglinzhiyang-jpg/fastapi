@@ -405,10 +405,9 @@ class ContestScene {
     const g = this.g;
     const def = CONTESTS[id];
     const rows = g.contestHistory(id, { all: true });
-    const h = def.history || {};
-    const head = [`${I.contestName(def, I.contestDate(g).year)}（${num(h.founded) ? `${h.founded}年創設` : ''}${h.ended ? `・${h.ended}年終了${def.revive !== false ? '→復刻開催' : ''}` : ''}）`];
+    const head = [`${I.contestName(def, I.contestDate(g).year)}（${I.historyHead(g, def)}）`];
     if (!rows.length) { await this.info('歴代王者', [...head, '', 'まだ一度も開催されていない。']); return; }
-    const items = rows.map((r) => (r.held ? { label: `${r.year}年 ${r.label || ''}`, sub: `優勝：${r.champion || '—'}${r.runnerUp ? `／準優勝：${r.runnerUp}` : ''}`, right: r.playerPlace ? `あなた${r.playerPlace}位` : r.revival ? '復刻' : '', rightColor: r.playerPlace === 1 ? K.gold : K.dim } : { label: `${r.year}年`, sub: r.note || '開催なし', lock: true }));
+    const items = rows.map((r) => (r.held ? { label: `${r.year}年 ${r.label || ''}`, sub: historySub(def, r), right: r.playerAward ? `あなた${r.playerAward}` : r.playerPlace ? `あなた${r.playerPlace}位` : r.revival === true ? '復刻' : '', rightColor: r.playerPlace === 1 || r.playerAward ? K.gold : K.dim } : { label: `${r.year}年`, sub: r.note || '開催なし', lock: true }));
     await this.pick({ title: `歴代王者：${def.short || def.name}`, lines: head, items, w: 560 });
   }
   async contestMenu(id, year) {
@@ -429,7 +428,10 @@ class ContestScene {
       if (self && info.today && info.today.length && typeof def.flow === 'function') items.push({ id: 'selfgo', label: `今日の予定：${info.today[0].label || ''}`, sub: info.today.length > 1 ? `ほか${info.today.length - 1}件` : '', color: K.gold });
       if (due.length) items.push({ id: 'go', label: '会場へ向かう', sub: `${due[0].revival ? '敗者復活戦' : cyc.rounds[due[0].idx].name}（${due[0].option.venue}会場）`, color: K.gold });
       const inv = I.cstate(g).invites && I.cstate(g).invites[id] && I.cstate(g).invites[id][y] > 0;
-      if (!e && !ext && cyc.held && !cyc.invite) items.push({ id: 'enter', label: 'エントリーする', sub: info.status === 'open' ? (el.ok ? `参加費 ${I.feeOf(g, id, y).text}` : el.why) : info.status === 'future' && cyc.entry ? `受付は${I.dateText(g, cyc.entry.from)}から` : '受付期間外', lock: info.status !== 'open' || !el.ok });
+      // this cycle is over: the entry row is for the next one (「次回は◯月◯日から受付」)
+      const nx = !self && info.status === 'closed' && info.next ? info.next : null;
+      if (nx) { const ncyc = I.cycleOf(g, def, nx.year); if (!I.entryOf(g, id, nx.year) && ncyc && ncyc.held && !ncyc.invite) items.push({ id: 'enter', label: 'エントリーする', sub: nx.text, lock: nx.from > I.todayOf(g) }); }
+      else if (!e && !ext && cyc.held && !cyc.invite) items.push({ id: 'enter', label: 'エントリーする', sub: info.status === 'open' ? (el.ok ? `参加費 ${I.feeOf(g, id, y).text}` : el.why) : info.status === 'future' && cyc.entry ? `受付は${I.dateText(g, cyc.entry.from)}から` : '受付期間外', lock: info.status !== 'open' || !el.ok });
       if (!e && cyc.invite && inv) items.push({ id: 'enter', label: '出場のお願いに返事する', sub: '招待が届いている', color: K.gold });
       if (e && (e.status === 'entered' || e.status === 'passed')) items.push({ id: 'resched', label: '日程・会場を変える', sub: '次の回戦の日程が複数あるとき' });
       if (cyc.held) items.push({ id: 'odds', label: '見込みを調べる', sub: '自分の実力と、通過ラインの目安' });
