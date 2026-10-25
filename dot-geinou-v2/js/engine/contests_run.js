@@ -104,7 +104,9 @@ async function textForm(g, o) {
 async function enter(g, id, opts = {}) {
   const def = CONTESTS[id];
   if (!def || !g.state) return null;
-  const year = opts.year ?? I.seasonYearOf(g, id);
+  let year = opts.year ?? I.seasonYearOf(g, id);
+  // the current cycle is over (its final is past): an entry is for the next one
+  if (opts.year == null) { const c0 = I.cycleOf(g, def, year); if (c0 && c0.held && c0.final.day < I.todayOf(g)) year += 1; }
   const cyc = I.cycleOf(g, def, year);
   const ctx = makeCtx(g, id, year, 0);
   if (typeof def.entry === 'function') return asafe(`entry:${id}`, () => def.entry(g, ctx), null);
@@ -343,7 +345,7 @@ export async function reception(g) {
   const lines = [
     `${label(def, cyc)} ${roundTitle(x)}の受付です。`,
     `エントリーナンバー${entry ? entry.no : '—'}番、${entry ? entry.unitName : ''}さんですね。`,
-    t.block ? `本日の出番は ${t.block}ブロックの${t.order}番目（${t.of}組中）です。` : `出番は${t.order}番目（全${t.of}組）です。`,
+    t.block ? `本日の出番は ${t.block}ブロックの${t.order}番目（${t.of}${I.unitWord(def)}中）です。` : `出番は${t.order}番目（全${t.of}${I.unitWord(def)}）です。`,
   ];
   if (first) lines.push('楽屋で待機して、名前を呼ばれたら舞台袖へ。\n持ち時間を超えると減点されるので気をつけて！');
   await sayAs(g, UKETSUKE, lines);
@@ -595,7 +597,8 @@ async function announcePrelim(g, id, year, idx, show) {
   rd.numbers = numbers.length <= 160 ? numbers : null;
   const nextTxt = next && passed ? `${next.name}：${I.dateText(g, (next.options[e.picks[idx + 1]] || next.options[0]).day)}　${(next.options[e.picks[idx + 1]] || next.options[0]).venue}` : '';
   const reasons = rd.reasons && rd.reasons.length ? `\n【実力不足の点】\n${rd.reasons.map((s) => `・${s}`).join('\n')}` : '';
-  const placeTxt = rd.place ? (srd && srd.exact ? `（${rd.of}組中 ${rd.place}位）` : `（推定 ${Math.round(num(rd.of)).toLocaleString('ja-JP')}組中 ${Math.round(rd.place).toLocaleString('ja-JP')}位前後）`) : '';
+  const uw = I.unitWord(CONTESTS[id]);
+  const placeTxt = rd.place ? (srd && srd.exact ? `（${rd.of}${uw}中 ${rd.place}位）` : `（推定 ${Math.round(num(rd.of)).toLocaleString('ja-JP')}${uw}中 ${Math.round(rd.place).toLocaleString('ja-JP')}位前後）`) : '';
   const text = passed
     ? `【合格】${name} ${rr.name}\nエントリーナンバー${e.no}番 ${e.unitName} は合格です！${placeTxt}\n${nextTxt ? `次は${nextTxt}` : ''}${next && next.r.revival ? '' : ''}`
     : `【結果】${name} ${rr.name}\nエントリーナンバー${e.no}番 ${e.unitName} は、残念ながら不合格でした。${placeTxt}${next && next.r.revival && e.revivalOk != null ? `\n（${next.r.revivalName || '敗者復活戦'}に出られます：${I.dateText(g, next.first)}）` : ''}${reasons}`;
@@ -714,12 +717,27 @@ async function judgeFinal(g, x, P, mode) {
   freeze(g, id, year);
   const name = label(def, cyc);
   const champName = nameOf(ranking[0]);
-  if (place === 1) I.pushNews(g, `【速報】${name}、${champName}が優勝！\n${I.prizeOf(def, year).text ? `${I.prizeOf(def, year).text}を手にした。` : ''}決勝${ranking.length}組の頂点に立った。`, { contest: id, prio: 99, key: `champ|${id}|${year}` });
-  else I.pushNews(g, `【速報】${name}は${champName}が優勝。\n${e ? e.unitName : ''}は${place}位（${ranking.length}組中）。`, { contest: id, prio: 90, key: `champ|${id}|${year}` });
+  const uw = I.unitWord(def);
+  const share = I.prizeShare(g, def, year);
+  const row = c.hist[id] && c.hist[id][year];
+  if (I.isAwardType(def)) {
+    // award ceremonies: each award has its own winner (no 優勝／準優勝)
+    const aw = (row && row.awards) || { [I.mainAward(def)]: champName };
+    const mine = row && row.playerAward;
+    I.pushNews(g, `【速報】${name}、各賞が決まった。\n${I.awardLine(def, aw, '\n')}${mine ? `\n${e ? e.unitName : ''}は${mine}を受賞！${mine === I.mainAward(def) && share.text ? `（${share.text}）` : ''}` : ''}`, { contest: id, prio: mine ? 99 : 90, key: `champ|${id}|${year}` });
+    if (mode !== 'auto' && showUI(g) && CONTEST_UI.board) await asafe('finalBoard', () => CONTEST_UI.board(g, { title: name, sub: `${rr.name} 結果`, ranking: res.final.ranking, color: I.colorOf(def), champion: place === 1 }), null);
+    if (mode !== 'auto') {
+      if (mine) { sfx('fanfare'); if (place === 1 && has(g, 'shake')) g.shake(20, 2); await g.say([`${mine}、受賞！！`, `${name}で${mine}をもらった！${mine === I.mainAward(def) && share.text ? `\n${share.text}` : ''}`]); }
+      else await g.say(`今回は賞に届かなかった…。\n${I.mainAward(def)}は${aw[I.mainAward(def)] || champName}。`);
+    }
+    return { place, award: mine || null };
+  }
+  if (place === 1) I.pushNews(g, `【速報】${name}、${champName}が優勝！\n${share.text ? `${share.text}を手にした。` : ''}決勝${ranking.length}${uw}の頂点に立った。`, { contest: id, prio: 99, key: `champ|${id}|${year}` });
+  else I.pushNews(g, `【速報】${name}は${champName}が優勝。\n${e ? e.unitName : ''}は${place}位（${ranking.length}${uw}中）。`, { contest: id, prio: 90, key: `champ|${id}|${year}` });
   if (mode !== 'auto' && showUI(g) && CONTEST_UI.board) await asafe('finalBoard', () => CONTEST_UI.board(g, { title: name, sub: `${rr.name} 最終順位`, ranking: res.final.ranking, color: I.colorOf(def), champion: place === 1 }), null);
   if (mode !== 'auto') {
-    if (place === 1) { sfx('fanfare'); if (has(g, 'shake')) g.shake(20, 2); await g.say([`優勝！！！`, `${name}、王者になった！`]); }
-    else await g.say(`${ranking.length}組中 ${place}位。\n優勝は${champName}だった。`);
+    if (place === 1) { sfx('fanfare'); if (has(g, 'shake')) g.shake(20, 2); await g.say([`優勝！！！`, `${name}、王者になった！${share.text ? `\n${share.text}` : ''}`]); }
+    else await g.say(`${ranking.length}${uw}中 ${place}位。\n優勝は${champName}だった。`);
   }
   return { place };
 }
@@ -730,13 +748,39 @@ function freeze(g, id, year) {
   if (I.isSelfRun(def)) return;
   const sim = I.simOf(g, id, year);
   if (!sim) return;
-  const rk = sim.final.ranking;
-  const nameOf = (aid) => (aid === 'player' ? I.playerUnitName(g) : (sim.byId.get(aid) || {}).name || '');
-  if (!c.hist[id]) c.hist[id] = {};
-  c.hist[id][year] = { edition: I.editionIn(g, def, year), revival: !!I.heldIn(g, def, year).revival, champion: nameOf(rk[0]), champId: rk[0] || null, runnerUp: rk[1] ? nameOf(rk[1]) : null, runnerId: rk[1] || null, third: rk[2] ? nameOf(rk[2]) : null, finalists: rk.slice(0, 12).map(nameOf), note: I.heldIn(g, def, year).revival ? '復刻開催' : '', player: rk.includes('player') ? rk.indexOf('player') + 1 : null, deep: {} };
+  const row = I.rowOfSim(g, def, year, sim, I.heldIn(g, def, year));
+  delete row.year; delete row.held;
+  if (row.revival !== true) { delete row.revival; if (row.note === '') delete row.note; }
   // who reached the last rounds (for tags like 準決勝常連): the last two rounds, the world's acts only, at most 40 (kept small in the save)
-  const deep = c.hist[id][year].deep;
-  for (let i = Math.max(0, sim.rounds.length - 2); i < sim.rounds.length; i++) for (const aid of sim.rounds[i].entrants) if (!/^g/.test(aid) && Object.keys(deep).length < 40) deep[aid] = i;
+  const deep = {};
+  for (const [aid, i] of Object.entries(row.deep || {})) if (Object.keys(deep).length < 40) deep[aid] = i;
+  row.deep = deep;
+  if (!row.playerAward) delete row.playerAward;
+  if (!c.hist[id]) c.hist[id] = {};
+  c.hist[id][year] = row;
+}
+// a custom flow's final result into the frozen row: awardWinners (award contests), the player's place
+function applyFinalResult(g, id, year, res, place) {
+  const c = I.cstate(g);
+  const def = CONTESTS[id];
+  const ch = c.hist[id] && c.hist[id][year];
+  if (!ch) return;
+  const me = I.playerUnitName(g);
+  if (I.isAwardType(def)) {
+    const aw = I.normAwards(res.awardWinners) || ch.awards || {};
+    if (res.award && !Object.values(aw).some((v) => String(v).split('・').includes(me))) aw[res.award] = aw[res.award] ? `${aw[res.award]}・${me}` : me;
+    ch.awards = aw;
+    const main = I.mainAward(def);
+    if (aw[main]) ch.champion = aw[main];
+    const mine = Object.entries(aw).find(([, v]) => String(v).split('・').includes(me));
+    if (mine) ch.playerAward = mine[0]; else delete ch.playerAward;
+    ch.champId = aw[main] && String(aw[main]).split('・').includes(me) ? 'player' : ch.champId === 'player' ? null : ch.champId;
+    ch.player = place < 99 ? place : ch.player;
+    ch.runnerUp = null; ch.runnerId = null; ch.third = null;
+    return;
+  }
+  if (place === 1) { ch.champion = me; ch.champId = 'player'; ch.player = 1; }
+  else if (place < 99) ch.player = place;
 }
 
 // ================================================================ record (custom flows: E1 / E2)
@@ -765,7 +809,8 @@ function record(g, id, idx, res = {}, opts = {}) {
     if (!res.champion && res.place == null && !res.passed) { /* nothing to freeze precisely */ }
     if (opts.freeze !== false) freeze(g, id, year);
     const c = I.cstate(g);
-    if (place === 1) { c.stats.wins = num(c.stats.wins) + 1; const ch = c.hist[id] && c.hist[id][year]; if (ch) { ch.champion = I.playerUnitName(g); ch.champId = 'player'; ch.player = 1; } }
+    if (place === 1) c.stats.wins = num(c.stats.wins) + 1;
+    applyFinalResult(g, id, year, res, place);
   } else if (res.passed) {
     e.status = 'passed';
     e.round = idx + 1;
@@ -863,7 +908,8 @@ function seasonNewsYear(g, def, day, year) {
     const real = typeof def.entryCount === 'function' ? num(safe(`entryCount:${id}`, () => def.entryCount(year), null), null) : null;
     const F = Math.max(10, num(cyc.rounds[0].r.field, 200));
     const n = real > 0 ? Math.round(real) : Math.round(F * (0.93 + I.rngOf(c.seed, 'fieldn', id, year)() * 0.12));
-    I.pushNews(g, `${name}、エントリー締切。総エントリー数は${n.toLocaleString('ja-JP')}組（大会発表）。`, { contest: id, prio: 10 + pr * 0.45, key: `count|${id}|${year}` });
+    // a small contest (a few dozen seats, a wildcard qualifier) announces no entry count of its own
+    if (real > 0 || F >= 60) I.pushNews(g, `${name}、エントリー締切。総エントリー数は${n.toLocaleString('ja-JP')}${I.unitWord(def)}（大会発表）。`, { contest: id, prio: 10 + pr * 0.45, key: `count|${id}|${year}` });
   }
   // invitations (招待制): about 20 days before the first round
   if (cyc.invite && !e && day === cyc.rounds[0].first - 20) {
@@ -887,29 +933,51 @@ function seasonNewsYear(g, def, day, year) {
     const rd = sim.rounds[rr.idx];
     if (!rd) continue;
     const nm = (aid) => (aid === 'player' ? (e ? e.unitName : I.playerUnitName(g)) : (sim.byId.get(aid) || {}).name || '');
+    const uw = I.unitWord(def);
     if (rr.idx === R - 1) {
       const champ = sim.final.ranking[0];
       if (!c.hist[id] || !c.hist[id][year]) freeze(g, id, year);
-      const cn = nm(champ);
-      if (champ !== 'player') I.pushNews(g, `${name}は${cn}が優勝！\n準優勝は${nm(sim.final.ranking[1]) || '—'}。${I.prizeOf(def, year).text ? `${I.prizeOf(def, year).text}は${cn}の手に。` : ''}`, { contest: id, prio: 15 + pr * 0.7, key: `champ|${id}|${year}` });
+      const row = (c.hist[id] && c.hist[id][year]) || {};
+      const cn = row.champion || nm(champ);
+      const champId = row.champId !== undefined ? row.champId : champ;
+      const award = I.isAwardType(def);
+      const title = winnerTitleOf(def);
+      const yen = I.prizeOf(def, year).yen;
+      if (award) {
+        const aw = I.normAwards(row.awards) || { [I.mainAward(def)]: cn };
+        const n = Object.keys(aw).length;
+        I.pushNews(g, n <= 1 ? `${name}、${I.mainAward(def)}は${aw[I.mainAward(def)] || cn}が受賞！` : `${name}、各賞が決まった。\n${I.awardLine(def, aw, '\n')}`, { contest: id, prio: 15 + pr * 0.7, key: `champ|${id}|${year}` });
+      } else if (champId !== 'player') {
+        const ru = title ? null : row.runnerUp !== undefined ? row.runnerUp : nm(sim.final.ranking[1]);
+        I.pushNews(g, title ? `${name}、${title}は${cn}！` : `${name}は${cn}が優勝！${ru ? `\n準優勝は${ru}。` : ''}${yen > 0 ? `賞金${I.manLabel(yen)}は${cn}の手に。` : ''}`, { contest: id, prio: 15 + pr * 0.7, key: `champ|${id}|${year}` });
+      }
       if (pr >= 55) {
+        const who = championInfo(g, sim, champId);
         c.later = c.later || [];
-        c.later.push({ day: day + 1, text: `【王者の会見】${name}を制した${cn}が会見。\n「${pickQuote(g, id, year)}」`, contest: id, prio: 20 + pr * 0.4, key: `kaiken|${id}|${year}` });
+        const q = pickQuote(g, id, year, { ...who, prize: yen > 0, award });
+        c.later.push({ day: day + 1, text: award ? `【受賞会見】${name}で${I.mainAward(def)}を受賞した${cn}が会見。\n「${q}」` : title ? `【${title}会見】${name}で${title}に選ばれた${cn}。\n「${q}」` : `【王者の会見】${name}を制した${cn}が会見。\n「${q}」`, contest: id, prio: 20 + pr * 0.4, key: `kaiken|${id}|${year}` });
         const nv = I.netVoice(year);
-        const lines = [0, 1, 2].map((k) => `${I.pickR(I.rngOf(c.seed, 'nvw', id, year, k), nv.who)}「${I.fillName(I.pickR(I.rngOf(c.seed, 'nv', id, year, k), champ === 'player' ? I.NET_LINES.player : I.NET_LINES.champ), cn)}」`);
-        c.later.push({ day: day + 2, text: `【${nv.label}】${name}\n${lines.join('\n')}`, contest: id, prio: 10 + pr * 0.3, key: `net|${id}|${year}` });
+        const pool = champId === 'player' ? I.NET_LINES.player : award || title ? I.NET_LINES.award : I.NET_LINES.champ;
+        // three different voices, three different lines (drawn without replacement)
+        const lines = I.drawN(I.rngOf(c.seed, 'nv', id, year), pool, 3);
+        const who3 = I.drawN(I.rngOf(c.seed, 'nvw', id, year), nv.who, lines.length);
+        c.later.push({ day: day + 2, text: `【${nv.label}】${name}\n${lines.map((t, k) => `${who3[k % who3.length]}「${I.fillName(t, cn)}」`).join('\n')}`, contest: id, prio: 10 + pr * 0.3, key: `net|${id}|${year}` });
       }
       continue;
     }
     if (pr < 55 && rr.idx < R - 2) continue;
     const next = cyc.rounds[rr.idx + 1];
-    if (rr.idx === R - 2) {
+    const finalName = String((cyc.rounds[R - 1] && cyc.rounds[R - 1].name) || '決勝').replace(/[（(][^）)]*[）)]/g, '').trim() || '決勝';
+    if (rr.idx === R - 2 && !rr.r.chance) {
       const fin = sim.rounds[R - 1].entrants.filter((aid) => !(sim.rounds[R - 1].revival && sim.rounds[R - 1].revival.winners.includes(aid)));
       const names = fin.map(nm).filter(Boolean);
       if (e && e.status === 'passed' && e.round === R - 1 && !names.includes(e.unitName)) names.push(e.unitName);
-      I.pushNews(g, `${name} 決勝進出者決定！（${names.length}組）\n${names.slice(0, 10).join('・')}${names.length > 10 ? ' ほか' : ''}${next && next.r.revival ? `\n＋${next.r.revivalName || '敗者復活戦'}の勝者` : ''}`, { contest: id, prio: 15 + pr * 0.65, key: `finalists|${id}|${year}` });
+      I.pushNews(g, `${name} ${finalName}進出者決定！（${names.length}${uw}）\n${names.slice(0, 10).join('・')}${names.length > 10 ? ' ほか' : ''}${next && next.r.revival ? `\n＋${next.r.revivalName || '敗者復活戦'}の勝者` : ''}`, { contest: id, prio: 15 + pr * 0.65, key: `finalists|${id}|${year}` });
     } else {
-      I.pushNews(g, `${name} ${rr.name}の結果発表。${Math.round(rd.P).toLocaleString('ja-JP')}組が${next ? next.name : '次'}へ。${highlight(g, sim, rd, id, year)}`, { contest: id, prio: 8 + pr * 0.35, key: `round|${id}|${year}|${rr.idx}` });
+      // 'chance' rounds (選考会): the top acts go straight to the final, the others try again in the next one
+      const dest = rr.r.passTo || (rr.r.chance ? finalName : next ? next.name : '');
+      const n = Math.round(rd.P).toLocaleString('ja-JP');
+      I.pushNews(g, `${name} ${rr.name}の結果発表。${rr.r.chance ? `上位${n}${uw}が${dest}へ。` : dest ? `${n}${uw}が${dest}へ。` : `${n}${uw}が通過。`}${highlight(g, sim, rd, id, year)}`, { contest: id, prio: 8 + pr * 0.35, key: `round|${id}|${year}|${rr.idx}` });
     }
     // an upset: a favourite out
     const fav = rd.entrants.map((aid) => sim.byId.get(aid)).filter(Boolean).sort((a, b) => b.power - a.power).slice(0, 4).find((x) => !rd.passed.includes(x.id));
@@ -923,9 +991,35 @@ function highlight(g, sim, rd, id, year) {
   const r = I.rngOf(I.cstate(g).seed, 'hl', id, year, rd.i);
   return `\n会場を一番わかせたのは${x.name}。${I.pickR(r, ['「ツカミから最後まで笑いが途切れなかった」（関係者）', '「今年の台風の目」との声も。', 'ネタ終わりに拍手が鳴りやまなかった。', '客席の空気を一変させた。'])}`;
 }
-function pickQuote(g, id, year) {
+// a title instead of 優勝 (def.winnerTitle, e.g. 'MVS'; or an acronym prize such as 「MVS（Most Valuable すべらない話）」)
+function winnerTitleOf(def) {
+  if (def.winnerTitle) return String(def.winnerTitle);
+  const m = /^([A-Z]{2,5})（/.exec(String(def.prizeText || ''));
+  return m ? m[1] : null;
+}
+// who won: { solo (one person: no 相方), members, kansai }
+function championInfo(g, sim, aid) {
+  if (aid === 'player') { const u = I.playerUnit(g); const n = u && Array.isArray(u.members) ? u.members.length : 1; return { solo: n <= 1, members: n, kansai: /大阪|関西|osaka/.test(String((g.state && (g.state.home || g.state.region)) || '')) }; }
+  const e = sim && aid ? sim.byId.get(aid) : null;
+  if (!e) return { solo: false, members: 2, kansai: false };
+  const solo = e.member != null || e.type === 'pin' || e.type === 'rakugo' || (e.act && (e.act.type === 'pin' || e.act.type === 'rakugo'));
+  return { solo, members: solo ? 1 : e.act && Array.isArray(e.act.members) ? e.act.members.length : 2, kansai: !!(e.act && e.act.region === 'osaka') };
+}
+// The 会見 line: by unit (no 相方 for a pin), prize (only with cash), award (受賞), dialect (関西 acts)
+function pickQuote(g, id, year, o = {}) {
   const r = I.rngOf(I.cstate(g).seed, 'quote', id, year);
-  return I.pickR(r, ['まだ実感がないです。明日起きたら夢やったらどうしよう', '相方と、ネタを書き続けてよかったです', '去年の悔しさがあったから、ここまで来られました', '応援してくれた人に、やっと恩返しができます', 'これからが本当のスタートやと思ってます', '賞金は…まず実家の冷蔵庫を買い替えます']);
+  const k = !!o.kansai;
+  const L = [
+    k ? 'まだ実感ないです。明日起きたら夢やったらどうしよう' : 'まだ実感がないです。明日起きたら夢だったらどうしよう',
+    k ? '去年の悔しさがあったから、ここまで来れました' : '去年の悔しさがあったから、ここまで来られました',
+    k ? '応援してくれた人に、やっと恩返しできました' : '応援してくれた人に、やっと恩返しができます',
+    k ? 'これからがほんまのスタートやと思ってます' : 'これからが本当のスタートだと思っています',
+  ];
+  if (o.solo) L.push(k ? 'ひとりでネタ書き続けてきて、よかったです' : 'ひとりで、ネタを書き続けてよかったです');
+  else L.push(o.members >= 3 ? (k ? 'この3人でネタ書き続けてきて、よかったです' : 'この3人で、ネタを書き続けてよかったです') : (k ? '相方とネタ書き続けてきて、よかったです' : '相方と、ネタを書き続けてよかったです'));
+  if (o.prize) L.push(o.solo ? (k ? '賞金は…まず実家の冷蔵庫を買い替えます' : '賞金は…まず実家の冷蔵庫を買い替えます') : (k ? '賞金は相方と山分けして…まず実家の冷蔵庫ですね' : '賞金は相方と分けて…まず実家の冷蔵庫を買い替えます'));
+  if (o.award) { L.push(k ? '大きい賞もろて、身が引き締まります' : '大きな賞をいただいて、身が引き締まる思いです'); L.push(k ? 'この賞に恥じひんように、もっと舞台に立ちます' : 'この賞に恥じないよう、もっと舞台に立ちます'); }
+  return I.pickR(r, L);
 }
 // news about the world's acts at the start of a big contest's season: the last-year acts (ラストイヤー)
 function lastYearNews(g, def, year) {

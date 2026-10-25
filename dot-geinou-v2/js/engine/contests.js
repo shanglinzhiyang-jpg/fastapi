@@ -65,7 +65,7 @@ import { AGENCIES } from './state.js';
 import { clamp, fmtMoney, display } from './util.js';
 import {
   rngOf, strHash, gauss, pickR, actName, personName, kidName, agencyFor, agencyLabel, lookFor, judgePerson, hostPerson,
-  judgeComment, TAG_COLORS, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, shortOf, isRealNameLike,
+  judgeComment, TAG_COLORS, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, shortOf, isRealNameLike, drawN,
 } from './contests_gen.js';
 export { isRealNameLike }; // (name) → true when a name is / contains a well-known real person's name (other modules reuse it)
 import { runner } from './contests_run.js';
@@ -418,6 +418,15 @@ function entrantOk(def, e, year) {
   if (el.region && el.region !== 'all') { const want = /osaka|kansai|大阪|関西/.test(el.region) ? 'osaka' : /tokyo|東京|関東/.test(el.region) ? 'tokyo' : null; if (want && act.region !== want) return false; }
   return true;
 }
+// a contest for units only (eligibility.members [2, …]): its entrants are combis / trios, counted in 組
+export function isUnitContest(def) { const el = eligObj(def); return Array.isArray(el.members) && num(el.members[0], 1) >= 2; }
+// 組 for units, 名 for contests entered one by one (ピン・大喜利・トーク・落語)
+export function unitWord(def) {
+  if (def && def.unitWord) return String(def.unitWord);
+  if (isUnitContest(def)) return '組';
+  const k = kindOf(def);
+  return k === 'pin' || k === 'rakugo' || k === 'ogiri' || k === 'talk' || k === 'monomane' ? '名' : '組';
+}
 const KIND_TYPES = {
   manzai: (a) => a.type === 'combi' || a.type === 'trio', double: (a) => a.type === 'combi' || a.type === 'trio',
   conte: (a) => a.type !== 'rakugo', pin: (a) => a.type === 'pin', utaneta: (a) => a.type !== 'rakugo', monomane: (a) => a.type === 'pin' || a.type === 'combi',
@@ -436,14 +445,16 @@ function fieldOf(g, id, year, champs) {
   if (kids) acts.push(...kidsActs(seed, id, year));
   else for (let y = year - span; y <= year - Math.max(0, minY - 3); y++) acts.push(...actsFormed(seed, y));
   const out = [];
-  const individual = kind === 'ogiri' || kind === 'talk';
+  // 大喜利 / トーク are entered one by one, unless the contest is for units (AUN: 2人1組)
+  const unitMode = isUnitContest(def);
+  const individual = (kind === 'ogiri' || kind === 'talk') && !unitMode;
   for (const act of acts) {
     if (individual) {
       if (year - act.formed < 4 || act.type === 'rakugo' && kind === 'ogiri') continue;
       act.members.forEach((m, i) => out.push({ id: `${act.id}#${i}`, name: act.type === 'pin' || act.type === 'rakugo' ? act.name : `${m.name}（${act.name}）`, short: act.type === 'pin' || act.type === 'rakugo' ? act.name : shortOf(m.name), act, member: i }));
       continue;
     }
-    const okType = (KIND_TYPES[kind] || KIND_TYPES.any)(act);
+    const okType = unitMode && (kind === 'ogiri' || kind === 'talk') ? act.type === 'combi' || act.type === 'trio' : (KIND_TYPES[kind] || KIND_TYPES.any)(act);
     if (okType) out.push({ id: act.id, name: act.name, act, member: null });
     // members of a combi may enter a pin contest alone (R-1 style)
     if ((kind === 'pin' || kind === 'utaneta' || kind === 'monomane') && (act.type === 'combi' || act.type === 'trio')) {
@@ -571,8 +582,9 @@ function ghostEntrant(seed, def, year, i, k, mu, sd) {
   const kind = kindOf(def);
   const el = eligObj(def);
   const kids = !!(el.kids || (el.ageMax != null && el.ageMax <= 15));
-  const individual = kind === 'ogiri' || kind === 'talk';
-  const type = kind === 'rakugo' ? 'rakugo' : kind === 'pin' || kind === 'monomane' || kind === 'utaneta' ? 'pin' : r() < 0.85 ? 'combi' : 'trio';
+  const unitMode = isUnitContest(def);
+  const individual = (kind === 'ogiri' || kind === 'talk') && !unitMode;
+  const type = kind === 'rakugo' ? 'rakugo' : kind === 'pin' || kind === 'monomane' || kind === 'utaneta' ? 'pin' : unitMode && num(el.members[1], 3) <= 2 ? 'combi' : r() < 0.85 ? 'combi' : 'trio';
   const n = individual ? 2 : type === 'combi' ? 2 : type === 'trio' ? 3 : 1;
   const aMin = kids ? 8 : num(el.ageMin, 19), aMax = kids ? Math.min(15, num(el.ageMax, 15)) : num(el.ageMax, 36);
   const members = [];
@@ -789,7 +801,7 @@ function historyRows(g, id, upto) {
     const held = heldIn(g, def, y);
     if (!held.held) { memo.rows.push({ year: y, held: false, note: held.note || '開催なし', revival: false }); continue; }
     const frozen = c.hist[id] && c.hist[id][y];
-    if (frozen) { memo.rows.push({ ...frozen, year: y, held: true }); if (frozen.champId && frozen.champId !== 'player') memo.champs.add(frozen.champId); continue; }
+    if (frozen) { memo.rows.push({ ...frozen, year: y, held: true, ...(isAwardType(def) && !frozen.awards && frozen.champion ? { awards: { [mainAward(def)]: frozen.champion }, runnerUp: null, third: null } : {}) }); if (frozen.champId && frozen.champId !== 'player') memo.champs.add(frozen.champId); continue; }
     const champs = repeatAllowed(def) ? null : memo.champs;
     const sim = safe(`history:${id}`, () => simulateCore(g, id, y, champs), null);
     const row = rowOfSim(g, def, y, sim, held);
@@ -811,12 +823,100 @@ function rowOfSim(g, def, y, sim, held) {
   const deep = {};
   const n = sim.rounds.length;
   for (let i = Math.max(0, n - 2); i < n; i++) for (const aid of sim.rounds[i].entrants) if (!/^g/.test(aid)) deep[aid] = i;
-  return {
+  const row = {
     year: y, edition: ed, held: true, revival: !!held.revival,
     champion: fixed || nameOfId(g, sim, rk[0]), champId: rk[0] || null,
     runnerUp: rk[1] ? nameOfId(g, sim, rk[1]) : null, runnerId: rk[1] || null, third: rk[2] ? nameOfId(g, sim, rk[2]) : null,
     finalists: rk.slice(0, 12).map((aid) => nameOfId(g, sim, aid)), note: held.revival ? '復刻開催' : '', player: rk.includes('player') ? rk.indexOf('player') + 1 : null, deep,
   };
+  return withAwards(g, def, row, sim, fixed);
+}
+
+// ---------------------------------------------------------------- award-type contests (DECISIONS6 §10)
+// def.awardType + def.awards: ['大賞', '奨励賞', '新人賞'] — every award has its own winner (different acts), never 優勝／準優勝.
+// A final's result may carry awardWinners: { [award]: name | [names] } (the player's run, D2 flows); otherwise D1's world
+// gives them out: the first award to the top of the final, 新人 / ホープ awards to the youngest act near the top, 功労 awards to
+// the most senior one, the rest down the final's order.
+export const isAwardType = (def) => !!(def && def.awardType);
+export function awardNames(def) {
+  const a = def && Array.isArray(def.awards) ? def.awards.map((x) => (typeof x === 'string' ? x : x && x.name)).filter(Boolean) : [];
+  return a.length ? [...new Set(a.map(String))] : ['大賞'];
+}
+export const mainAward = (def) => awardNames(def)[0];
+const YOUNG_AWARD = /新人|ホープ|新鋭|ルーキー|若手/;
+const SENIOR_AWARD = /功労|功績|殿堂/;
+const awardText = (v) => (Array.isArray(v) ? v.filter(Boolean).join('・') : v == null ? '' : String(v));
+export function normAwards(aw) {
+  if (!isObj(aw)) return null;
+  const out = {};
+  for (const [k, v] of Object.entries(aw)) { const t = awardText(v); if (t) out[k] = t; }
+  return Object.keys(out).length ? out : null;
+}
+function awardIdsOf(g, def, sim) {
+  const names = awardNames(def);
+  const rk = sim.final.ranking.slice();
+  const pool = rk.slice();
+  for (let i = sim.rounds.length - 1; i >= 0 && pool.length < 40; i--) for (const aid of sim.rounds[i].sorted || []) if (!pool.includes(aid) && pool.length < 40) pool.push(aid);
+  const formed = (aid) => { if (aid === 'player') { const u = playerUnit(g); return num(u && u.formed && u.formed.year, startYear(g)); } const e = sim.byId.get(aid); return e && e.act ? num(e.act.formed, 0) : 0; };
+  const used = new Set();
+  const out = {};
+  names.forEach((aw, k) => {
+    const free = pool.filter((a) => !used.has(a));
+    let pick = null;
+    if (k === 0) pick = rk.find((a) => !used.has(a)) || free[0];
+    else if (YOUNG_AWARD.test(aw)) pick = free.slice(0, 16).sort((a, b) => formed(b) - formed(a) || pool.indexOf(a) - pool.indexOf(b))[0];
+    else if (SENIOR_AWARD.test(aw)) pick = free.slice(0, 16).sort((a, b) => formed(a) - formed(b) || pool.indexOf(a) - pool.indexOf(b))[0];
+    else pick = free[0];
+    if (pick) { used.add(pick); out[aw] = pick; }
+  });
+  return out;
+}
+// adds { awards: { [award]: name } } to a history row of an award-type contest; champion = the first award's winner
+function withAwards(g, def, row, sim, fixed) {
+  if (!isAwardType(def) || !sim) return row;
+  const ids = awardIdsOf(g, def, sim);
+  const awards = {};
+  for (const [aw, aid] of Object.entries(ids)) awards[aw] = nameOfId(g, sim, aid);
+  const main = mainAward(def);
+  if (fixed) awards[main] = fixed;
+  row.awards = awards;
+  row.champion = awards[main] || row.champion;
+  row.champId = fixed ? null : ids[main] || row.champId;
+  row.runnerUp = null; row.runnerId = null; row.third = null;
+  const mine = Object.entries(ids).find(([, aid]) => aid === 'player');
+  row.playerAward = mine ? mine[0] : null;
+  return row;
+}
+// The contest's story up to the current in-game year only (DECISIONS6 §2): 「2001年創設・2003年は開催なし・2010年で終了」.
+// Before the founding: 「まだ始まっていない（YYYY年創設）」. Gaps, an end and a revival appear once they have begun; def.history.note
+// only when it names no later year and is no research note.
+export function historyHead(g, def, now = contestDate(g).year) {
+  const h = (def && def.history) || {};
+  const founded = num(h.founded, null);
+  if (founded != null && founded > now) return `まだ始まっていない（${founded}年創設）`;
+  const parts = [];
+  if (founded != null) parts.push(`${founded}年創設`);
+  for (const x of Array.isArray(h.gaps) ? h.gaps : []) {
+    if (!Array.isArray(x) || num(x[0]) > now || h.gapRevival) continue;
+    const a = num(x[0]), b = num(x[1], a);
+    parts.push(a === b ? `${a}年は開催なし` : b > now ? `${a}年から休止中` : `${a}〜${b}年は開催なし`);
+  }
+  if (h.ended != null && num(h.ended) < now) {
+    const end = num(h.ended);
+    if (h.revived != null && num(h.revived) <= now) parts.push(`${end}年でいったん終了、${h.revived}年に再開`);
+    else if (h.revived == null && def.revive !== false && startYear(g) > end) {
+      let first = null;
+      for (let y = Math.max(end + 1, startYear(g)); y <= now; y++) if (heldIn(g, def, y).revival) { first = y; break; }
+      parts.push(first != null ? `${end}年で終了→${first}年に復刻開催` : `${end}年で終了`);
+    } else parts.push(`${end}年で終了`);
+  }
+  const note = pastOnly(h.note || '', now);
+  return `${parts.join('・')}${note ? `／${note}` : ''}`;
+}
+// one line for news / history: 「大賞：A／奨励賞：B／新人賞：C」
+export function awardLine(def, awards, sep = '／') {
+  const aw = normAwards(awards) || {};
+  return awardNames(def).filter((n) => aw[n]).map((n) => `${n}：${aw[n]}`).concat(Object.keys(aw).filter((n) => !awardNames(def).includes(n)).map((n) => `${n}：${aw[n]}`)).join(sep);
 }
 // finished cycles only (the final's day is past, or the result is frozen)
 function lastDoneYear(g, def) {
@@ -1243,13 +1343,15 @@ export function contestInfo(g, id, day = todayOf(g)) {
     const stt = st && map[st.status] ? map[st.status] : status;
     return { id, def, year, cyc, status: stt, statusLabel: (st && st.statusLabel) || STATUS_LABEL[stt] || '', revival: !!cyc.revival, edition: st && st.edition != null ? st.edition : cyc.edition, label: (st && st.label) || label, nextRound, entry: ext, invite: cyc.invite, selfRun: true, today: st && Array.isArray(st.today) ? sortToday(st.today.filter(Boolean).map((it) => ({ ...it, kind: todayKind(it) }))) : [] };
   }
-  let closedLabel = null;
+  let closedLabel = null, next = null;
   if (status === 'closed' && cyc.held && cyc.final.day < day) {
     const nx = cycleOf(g, def, year + 1);
     const start = nx && nx.held ? (nx.entry ? nx.entry.from : nx.rounds[0] && nx.rounds[0].first) : null;
     closedLabel = start ? `終了（次回は${dateText(g, start)}から${nx.entry ? '受付' : ''}）` : '終了';
+    // the entry button targets the next cycle: { year, from, entry, text: 「次回は◯月◯日から受付」 }
+    if (start) next = { year: year + 1, from: start, entry: !!nx.entry, text: `次回は${dateText(g, start)}から${nx.entry ? '受付' : '開催'}` };
   }
-  return { id, def, year, cyc, status, statusLabel: closedLabel || (cyc.notyet ? `まだ始まっていない（${num(def.history && def.history.founded)}年創設）` : !cyc.held ? cyc.note || '開催なし' : cyc.invite && status !== 'closed' ? (status === 'running' ? '開催中（招待制）' : '招待制') : STATUS_LABEL[status]), revival: !!cyc.revival, edition: cyc.edition, label, nextRound, entry, invite: cyc.invite };
+  return { id, def, year, cyc, status, next, statusLabel: closedLabel || (cyc.notyet ? `まだ始まっていない（${num(def.history && def.history.founded)}年創設）` : !cyc.held ? cyc.note || '開催なし' : cyc.invite && status !== 'closed' ? (status === 'running' ? '開催中（招待制）' : '招待制') : STATUS_LABEL[status]), revival: !!cyc.revival, edition: cyc.edition, label, nextRound, entry, invite: cyc.invite };
 }
 
 // Player's rounds due on a day: [{ id, year, idx, option, revival, entry, cyc }]
@@ -1418,7 +1520,8 @@ const methods = {
     const def = CONTESTS[id];
     const rows = isSelfRun(def) ? selfHistory(this, def) : historyRows(this, id, lastDoneYear(this, def));
     const mine = cstate(this).entries[id] || {};
-    return rows.filter((r) => opts.all || r.held).map((r) => ({ year: r.year, edition: r.edition ?? null, champion: r.champion ?? null, runnerUp: r.runnerUp ?? null, third: r.third ?? null, finalists: r.finalists || [], note: r.note || '', revival: !!r.revival, held: r.held !== false, label: r.held === false ? '' : labelOf(def, r.year, r.edition, r.revival), playerPlace: r.player || null, playerEntry: mine[r.year] ? { status: mine[r.year].status, round: mine[r.year].round, results: mine[r.year].results } : null })).reverse();
+    const award = isAwardType(def);
+    return rows.filter((r) => opts.all || r.held).map((r) => ({ year: r.year, edition: r.edition ?? null, champion: r.champion ?? null, runnerUp: award ? null : r.runnerUp ?? null, third: award ? null : r.third ?? null, finalists: r.finalists || [], awards: normAwards(r.awards), playerAward: r.playerAward || null, note: r.revival === true ? r.note || '' : r.note === '復刻開催' ? '' : r.note || '', revival: r.revival === true, held: r.held !== false, label: r.held === false ? '' : labelOf(def, r.year, r.edition, r.revival), playerPlace: r.player || null, playerEntry: mine[r.year] ? { status: mine[r.year].status, round: mine[r.year].round, results: mine[r.year].results } : null })).reverse();
   },
   contestNews(text, opts = {}) { return pushNews(this, text, opts); },
   contestVenue(ctx) {
@@ -1461,6 +1564,7 @@ export const internals = {
   prestigeOf, isInvitational, dateText, todayOf, playerUnitName, bump, resultsOf, historyRows, lastDoneYear, logOnce, realToInternal, yenLabel,
   OFFICE_FROM, NEWS_FROM, judgeComment, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, TAG_COLORS, hostPerson, rngOf, gauss, pickR, MODEL,
   heldIn, editionIn, startYear, wareki, actPower, STATUS_LABEL, anonParams, contestDate, dayOfDate,
+  drawN, rowOfSim, isAwardType, awardNames, mainAward, normAwards, awardLine, prizeShare, manLabel, cleanText, pastOnly, unitWord, isUnitContest, historyHead,
 };
 
 // ================================================================ the morning

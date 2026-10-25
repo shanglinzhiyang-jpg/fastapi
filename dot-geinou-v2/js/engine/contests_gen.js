@@ -15,6 +15,12 @@ export function strHash(s) {
 // rng(seed, ...parts) → a mulberry32 stream for that key
 export function rngOf(...parts) { return mulberry32(strHash(parts.join('|'))); }
 export const pickR = (r, a) => a[Math.floor(r() * a.length) % a.length];
+// n different items of a (without replacement; fewer when a is shorter)
+export function drawN(r, a, n) {
+  const pool = a.slice(), out = [];
+  while (out.length < n && pool.length) out.push(pool.splice(Math.floor(r() * pool.length) % pool.length, 1)[0]);
+  return out;
+}
 export function gauss(r) {
   let u = 0, v = 0;
   while (u === 0) u = r();
@@ -306,6 +312,7 @@ export function netVoice(year) {
 }
 export const NET_LINES = {
   champ: ['これは納得の優勝。{name}、ずっと応援してた！', '最後のネタ、鳥肌立った。', '{name}、来年からテレビで見まくることになりそう', '審査、割れたけど妥当だと思う', '決勝で一番笑ったのは{name}だった'],
+  award: ['{name}の受賞、納得しかない', '{name}、ずっと応援してた！', '{name}、来年からテレビで見まくることになりそう', '{name}の舞台、一回生で見てみたい', '今年は{name}の年だったな'],
   upset: ['まさか{name}が落ちるとは…', '{name}が敗退は荒れすぎ', '予選の審査、たまにわからない', '{name}は来年リベンジしてほしい'],
   player: ['{name}って誰？めっちゃおもろかった', '{name}、名前覚えた', '{name}のネタ、もう一回見たい', 'え、{name}おもろいやん', '{name}、まだ伸びるでこれは'],
   playerBad: ['{name}、緊張してたな', '{name}は次に期待', '{name}、ネタ選びが惜しかった'],

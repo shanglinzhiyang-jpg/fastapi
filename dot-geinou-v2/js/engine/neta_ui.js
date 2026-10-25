@@ -423,8 +423,8 @@ export class EditorScene extends Base {
     this.saved = draft.id ? g.neta(draft.id) : null;
     this.cache = { h: -1 };
     this.toolRects = [];
-    // toasts over the line-detail strip (above the toolbar), one at a time: never on the header or the script lines
-    Object.assign(this, { toastY: 304, toastX: LIST.x + LIST.w / 2 + 2, toastW: LIST.w, toastMax: 1 });
+    // toasts in the free strip under the ネタの状態 panel (above the toolbar), one at a time: never on the header or the lines
+    Object.assign(this, { toastY: 298, toastX: RIGHT.x + RIGHT.w / 2, toastW: RIGHT.w, toastMax: 1 });
   }
   rows() { return [...this.n.lines, { add: true }]; }
   era() { const e = this.g.state && this.g.state.profile && this.g.state.profile.era; return ERA_YEAR[e] ? e : 'reiwa'; }
