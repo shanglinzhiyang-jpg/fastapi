@@ -36,15 +36,25 @@ let JUS = {};
 import('./politics.js').then((m) => { POL = m; }).catch(() => { /* politics left out */ });
 import('./crime.js').then((m) => { JUS = m; }).catch(() => { /* justice left out */ });
 import { PLACES } from './map.js'; // (also a cycle through ui.js: read only at run time)
+import { themeFor, ink as inkOf, drawBackdrop, drawPaperPart, pageTurnEdge, icon } from './notebook_look.js';
+import { owaraiPage, contestPage, netaPage, calendarPage, comedyNotes, comedyLadder } from './notebook_pages.js';
 
+// Ten tabs in two groups of five (desktop: an index down the right edge of the page; touch: a
+// 70-unit bar showing one group, with a group switch and the ×). ←→ go through all ten.
 const TABS = [
-  { label: 'もくひょう', color: '#ff8a3d' },
-  { label: 'せいかつ', color: '#e2569a' },
-  { label: 'くらしと法', color: '#c8743a' },
-  { label: '政治', color: '#8a6ad8' },
-  { label: 'ばしょ', color: '#3fb85f' },
-  { label: 'きろく', color: '#3a9fd8' },
+  { id: 'goal', label: 'もくひょう', color: '#ff8a3d', build: (g, ctx) => goalPage(g, ctx) },
+  { id: 'life', label: 'せいかつ', color: '#e2569a', build: (g, ctx) => lifePage(g, ctx) },
+  { id: 'cal', label: 'カレンダー', color: '#2fa89a', build: (g, ctx, sc) => calendarPage(g, ctx, KIT, sc ? sc.month : 0) },
+  { id: 'owarai', label: 'お笑い', color: '#e0a020', build: (g, ctx) => owaraiPage(g, ctx, KIT) },
+  { id: 'contest', label: '賞レース', color: '#d83a3a', build: (g, ctx) => contestPage(g, ctx, KIT) },
+  { id: 'neta', label: 'ネタ帳', color: '#5a72d8', build: (g, ctx) => netaPage(g, ctx, KIT) },
+  { id: 'law', label: 'くらしと法', color: '#c8743a', build: (g, ctx) => lawPage(g, ctx) },
+  { id: 'politics', label: '政治', color: '#8a6ad8', build: (g, ctx) => politicsPage(g, ctx) },
+  { id: 'places', label: 'ばしょ', color: '#3fb85f', build: (g, ctx) => placesPage(g, ctx) },
+  { id: 'record', label: 'きろく', color: '#3a9fd8', build: (g, ctx) => recordPage(g, ctx) },
 ];
+const GROUP = 5; // tabs per group
+const TC = Object.fromEntries(TABS.map((t) => [t.id, t.color]));
 const TOWN_BG = { tokyo: '#2f5fb8', namba: '#c23a3a', nagatacho: '#4a5a7a', kanraku: '#a0368a' };
 const RANK_COLOR = { S: COLORS.accent, A: COLORS.pink, B: COLORS.cyan, C: COLORS.text, D: COLORS.dim };
 const MG_ORDER = ['tsukkomi', 'zukko', 'rhythm', 'command', 'quiz', 'announce', 'talk'];
@@ -53,12 +63,24 @@ const MG_ORDER = ['tsukkomi', 'zukko', 'rhythm', 'command', 'quiz', 'announce', 
 const BODY = 16, SMALL = 13;
 const LH = { [BODY]: 21, [SMALL]: 18 };
 
-// layout
-const COVER = { x: 4, y: 4, w: SW - 8, h: SH - 8 };
-const PX = 14, PY = 36, PW = SW - 28, PH = SH - 46; // the page
-const TAB_W = 94, TAB_GAP = 4, TAB_Y = 10, TAB_H = 28;
-const VX = PX + 22, VY = PY + 16, VW = 556, VH = PH - 16 - 36; // text area; the scrollbar sits right of it
-const SB_X = VX + VW + 12;
+// layout: set by applyLayout() for desktop or touch (body.touch). The page builders wrap to VW
+// and page by VH, so the pages are rebuilt when the layout changes.
+const isTouch = () => typeof document !== 'undefined' && !!document.body && document.body.classList.contains('touch');
+const TB = 70; // touch: the tab bar and the × cell (as the 芸人手帳)
+const IDX = { x: 546, y: 14, w: 90, h: 30, gap: 2, groupGap: 10 }; // desktop: the side index
+const LAYOUTS = {
+  desk: { id: 'desk', page: { x: 8, y: 8, w: 540, h: 344 }, vx: 34, vy: 52, vw: 482, vh: 272, foot: true },
+  touch: { id: 'touch', page: { x: 4, y: TB + 4, w: SW - 8, h: SH - TB - 7 }, vx: 30, vy: TB + 40, vw: 572, vh: SH - TB - 7 - 46, foot: false },
+};
+let LAYOUT = LAYOUTS.desk;
+let PX, PY, PW, PH, VX, VY, VW, VH, SB_X;
+function applyLayout(touch) {
+  LAYOUT = touch ? LAYOUTS.touch : LAYOUTS.desk;
+  ({ x: PX, y: PY, w: PW, h: PH } = LAYOUT.page);
+  VX = LAYOUT.vx; VY = LAYOUT.vy; VW = LAYOUT.vw; VH = LAYOUT.vh;
+  SB_X = VX + VW + 10;
+}
+applyLayout(false);
 const GAUGE_X = 132, GAUGE_W = 210; // need gauges (x relative to VX)
 const HEART_X = 236; // friends' hearts (x relative to VX)
 const HEART_N = Math.max(1, Math.min(6, HEARTS.length - 1)); // one heart per level above 知り合い
@@ -80,11 +102,12 @@ const NO_LINE_START = /^[、。，．）」』】〕〉》？！]/;
 // ---------------------------------------------------------------- content builder
 // A page is a list of blocks (scroll unit); a block is a list of lines.
 // line: { t, s: BODY|SMALL, c, x, h, r, rs, rc, tag: { t, bg }, badge: { t, c }, mark,
-//         head: color, gauge: { frac, color }, hearts: level }
+//         head: color, gauge: { frac, color }, hearts: level, draw: (ctx, x, y, D) => {} (custom; D = drawKit) }
 class Page {
   constructor(ctx) { this.ctx = ctx; this.blocks = []; this.b = null; }
 
-  block(gap = 8) { this.b = { lines: [], h: 0, gap }; this.blocks.push(this.b); return this; }
+  // opts.sticky: 'note' (a yellow sticky note behind the block) | 'bad' (a pink one) | null
+  block(gap = 8, opts = {}) { this.b = { lines: [], h: 0, gap, sticky: opts.sticky || null }; this.blocks.push(this.b); return this; }
 
   line(l) {
     if (!this.b) this.block();
@@ -305,16 +328,19 @@ function goalPage(g, ctx) {
   }
   if (L.clean < SCRUFFY) notes.push(['身だしなみが乱れている。お風呂に入ろう。', COLORS.accent]);
   // politics and justice (a court date, an election, 闇金) come right after a recording today
+  // a contest round today comes with the recordings; NSC and the 相方 after the needs
   const urgent = urgentNotes(g);
+  const comedy = safe(() => comedyNotes(g, KIT), []) || [];
   const recN = notes.filter(([t]) => t.startsWith('きょうは『')).length;
-  notes.splice(recN, 0, ...urgent);
+  notes.splice(recN, 0, ...comedy.filter((n) => n[2] === 'contest'), ...urgent);
+  notes.push(...comedy.filter((n) => n[2] !== 'contest'));
   const shown = notes.slice(0, 4);
   for (const [t, c] of shown) pg.para('・' + t, { s: SMALL, c });
-  const tabs = [...new Set(shown.map((n) => ({ law: '「くらしと法」', politics: '「政治」' }[n[2]] || '「せいかつ」')))];
+  const tabs = [...new Set(shown.map((n) => ({ law: '「くらしと法」', politics: '「政治」', contest: '「賞レース」', owarai: '「お笑い」' }[n[2]] || '「せいかつ」')))];
   if (tabs.length) pg.para(`くわしくは${tabs.join('')}タブで。`, { s: SMALL, c: COLORS.dim });
 
   // the one most important next step
-  pg.block().head('つぎの目標', COLORS.accent);
+  pg.block(8, { sticky: 'note' }).head('つぎの目標', COLORS.accent);
   // in prison the career waits: the one goal is to serve the term and come back
   const inPrison = hasJustice(g) && g.state.justice && safe(() => g.justiceStatus().status) === 'prison';
   if (inPrison) {
@@ -348,9 +374,28 @@ function goalPage(g, ctx) {
   // the political path (only once the player has stepped onto it)
   const polGoal = politicsGoal(g);
   if (polGoal) {
-    pg.block().head('政治の道', TABS[3].color);
+    pg.block().head('政治の道', TC.politics);
     pg.para(polGoal[0]);
     if (polGoal[1]) pg.para(polGoal[1], { s: SMALL, c: COLORS.dim });
+  }
+
+  // the comedy career as a ladder: the last step done, the next one (with how) and the one after
+  const steps = inPrison ? null : safe(() => comedyLadder(g, KIT), null);
+  if (steps && steps.length) {
+    const ni = steps.findIndex((x) => !x.done);
+    pg.block().head('お笑いの道', TC.owarai);
+    const from = ni < 0 ? Math.max(0, steps.length - 2) : Math.max(0, ni - 1);
+    const to = ni < 0 ? steps.length : Math.min(steps.length, ni + 2);
+    const doneN = steps.filter((x) => x.done).length;
+    for (let i = from; i < to; i++) {
+      const x = steps[i];
+      if (x.done) pg.row('◎ ' + x.label, 'できた！', { s: SMALL, c: COLORS.dim, rs: SMALL, rc: COLORS.good });
+      else if (i === ni) {
+        pg.row('▶ ' + x.label, `${doneN}/${steps.length}`, { c: COLORS.accent, rs: SMALL, rc: COLORS.dim, mark: true });
+        if (x.note) pg.para(x.note, { s: SMALL, c: COLORS.text, x: 18, mark: true });
+      } else pg.row('・ ' + x.label, '', { s: SMALL, c: COLORS.dim });
+    }
+    if (ni < 0) pg.para('ぜんぶ達成！あとは、てっぺんを守りつづけよう。', { s: SMALL, c: COLORS.accent });
   }
 
   if (!st.agency && !fl.finaleDone && !inPrison) {
@@ -413,7 +458,7 @@ function lifePage(g, ctx) {
   const wd = weekdayOf(day);
 
   // today
-  pg.block().head('きょう', TABS[1].color);
+  pg.block().head('きょう', TC.life);
   pg.row(`${day}日目　${WEEKDAYS[wd]}曜日`, `第${weekOf(day)}週`, { c: COLORS.accent, rc: COLORS.dim, rs: SMALL });
   if (g.condition) {
     const [cl, cc] = COND[condOf(g)] || COND.normal;
@@ -430,7 +475,7 @@ function lifePage(g, ctx) {
   if (unread) pg.para(`スマホに未読のメッセージが${unread}件あるよ。`, { s: SMALL, c: COLORS.cyan });
 
   // needs
-  pg.block().head('からだと心', TABS[1].color);
+  pg.block().head('からだと心', TC.life);
   const sf = st.stamina / st.maxStamina;
   pg.row('体力', `${st.stamina}/${st.maxStamina}`, { gauge: { frac: sf, color: sf > 0.5 ? COLORS.good : sf > 0.2 ? COLORS.accent : COLORS.bad }, rc: st.stamina < 25 ? COLORS.bad : COLORS.text });
   if (st.stamina < 25) {
@@ -451,7 +496,7 @@ function lifePage(g, ctx) {
   }
 
   // housing & rent
-  pg.block().head('すまい', TABS[1].color);
+  pg.block().head('すまい', TC.life);
   const h = g.housing ? g.housing() : null;
   if (h) {
     pg.row(h.name || 'すまい', `家賃 ${fmtMoney(h.rent || 0)}／週`, { c: COLORS.accent, rs: SMALL, rc: COLORS.text });
@@ -474,7 +519,7 @@ function lifePage(g, ctx) {
   }
 
   // regular shows this week
-  pg.block().head('レギュラー番組（今週）', TABS[1].color);
+  pg.block().head('レギュラー番組（今週）', TC.life);
   const regs = myRegulars(st);
   if (!regs.length) {
     pg.para('まだレギュラー番組はない。知名度が上がると、番組からオファーが届くかも。', { s: SMALL, c: COLORS.dim });
@@ -491,7 +536,7 @@ function lifePage(g, ctx) {
   }
 
   // friends
-  pg.block().head('なかま', TABS[1].color);
+  pg.block().head('なかま', TC.life);
   const people = Object.keys(st.people || {}).filter((id) => PEOPLE[id] && st.people[id]);
   if (!people.length) {
     pg.para('まだ知り合いはいない。事務所や街の人に話しかけてみよう。', { s: SMALL, c: COLORS.dim });
@@ -509,7 +554,7 @@ function lifePage(g, ctx) {
   }
 
   // fans
-  pg.block().head('ファン', TABS[1].color);
+  pg.block().head('ファン', TC.life);
   const fans = Math.max(0, Math.round(st.fans || 0));
   pg.row(`ファン ${fans.toLocaleString('ja-JP')}人`, '', { c: COLORS.pink });
   const fanNote = fans === 0 ? 'まだファンはいない。テレビや舞台のお仕事で、名前を覚えてもらおう。'
@@ -637,7 +682,7 @@ const BANKRUPT_KIND = { doji: '同時廃止', kanzai: '管財事件' };
 function lawPage(g, ctx) {
   const st = g.state;
   const pg = new Page(ctx);
-  const C = TABS[2].color;
+  const C = TC.law;
   const day = st.day || 1;
   if (!hasJustice(g)) {
     pg.block().head('くらしと法', C).para('（法律のしくみを読み込めませんでした）', { s: SMALL, c: COLORS.dim });
@@ -779,7 +824,7 @@ function lawPage(g, ctx) {
 function politicsPage(g, ctx) {
   const st = g.state;
   const pg = new Page(ctx);
-  const C = TABS[3].color;
+  const C = TC.politics;
   const day = st.day || 1;
   if (!hasPolitics(g)) {
     pg.block().head('政治', C).para('（政治のしくみを読み込めませんでした）', { s: SMALL, c: COLORS.dim });
@@ -1081,9 +1126,65 @@ function recordPage(g, ctx) {
   return pg;
 }
 
-const BUILDERS = [goalPage, lifePage, lawPage, politicsPage, placesPage, recordPage];
+// The kit the comedy pages (notebook_pages.js) build with.
+const KIT = {
+  Page, BODY, SMALL, COLORS, TC, safe, num, inDays, fmtMoney,
+  vw: () => VW, vh: () => VH, WEEKDAYS, weekdayOf, myRegulars, REGULARS, showWords, AGENCIES, daysToBirthday, YEAR_DAYS,
+  housing: null, // g.housing, bound when the notebook opens
+};
+
+// ---------------------------------------------------------------- header: date, weather, clock
+// g.clock() / g.weather() (time and weather, another module): shown only when present, whatever
+// shape they return (a string, or an object with text / label / hour + minute …).
+function clockText(g) {
+  if (typeof g.clock !== 'function') return '';
+  const c = safe(() => g.clock(), null);
+  if (c == null) return '';
+  if (typeof c === 'string' || typeof c === 'number') return String(c);
+  if (typeof c.text === 'string' && c.text) return c.text;
+  const h = Number(c.hour ?? c.h);
+  const t = Number.isFinite(h) ? `${Math.floor(h)}:${String(Math.floor(num(c.minute ?? c.min ?? c.m))).padStart(2, '0')}` : '';
+  const ph = [c.phaseLabel, c.periodLabel, c.label, c.name].find((v) => typeof v === 'string' && v) || '';
+  return [ph, t].filter(Boolean).join(' ');
+}
+function weatherText(g) {
+  if (typeof g.weather !== 'function') return '';
+  const w = safe(() => g.weather(), null);
+  if (w == null) return '';
+  if (typeof w === 'string') return w;
+  const nm = [w.text, w.label, w.name].find((v) => typeof v === 'string' && v) || '';
+  const tp = Number.isFinite(Number(w.temp ?? w.temperature)) && (w.temp ?? w.temperature) !== null ? `${Math.round(Number(w.temp ?? w.temperature))}℃` : '';
+  return [nm, tp].filter(Boolean).join(' ');
+}
+function headerInfo(g) {
+  const st = g.state;
+  let date = '';
+  if (typeof g.gameDate === 'function') {
+    const d = safe(() => g.gameDate(), null);
+    if (d && d.month) date = `${d.year ? d.year + '年' : ''}${d.month}月${d.dom}日（${WEEKDAYS[weekdayOf(st.day)]}）`;
+  }
+  if (!date) date = g.dayLabel ? g.dayLabel() : `${st.day}日目`;
+  return [date, weatherText(g), clockText(g)].filter(Boolean).join('　');
+}
 
 // ---------------------------------------------------------------- scene
+let THEME = themeFor('reiwa');
+const TURN_FR = 10; // page-turn frames
+const inR = (x, y, r) => r && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+let tapCanvas = null;
+function bindTap(g) {
+  const cv = g && g.canvas;
+  if (!cv || tapCanvas === cv || typeof cv.addEventListener !== 'function') return;
+  tapCanvas = cv;
+  cv.addEventListener('pointerdown', (e) => {
+    const sc = g.top;
+    if (!sc || !sc.isNotebook) return;
+    const r = cv.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    sc.tapAt = { x: ((e.clientX - r.left) * SW) / r.width, y: ((e.clientY - r.top) * SH) / r.height };
+  }, { passive: true });
+}
+
 export class NotebookScene {
   constructor(g, resolve) {
     this.g = g;
@@ -1092,17 +1193,42 @@ export class NotebookScene {
     this.hd = true;
     this.opaque = true; // covers the whole screen
     this.hidesHud = true; // MapScene skips the HUD while this is open
+    this.isNotebook = true;
     this.tab = clamp(lastTab, 0, TABS.length - 1);
+    this.month = 0; // カレンダー: months from now
     ERA = eraOf(g.state);
-    this.pages = BUILDERS.map((b) => {
-      try { return b(g, g.ctx); } catch (e) { console.error(e); return new Page(g.ctx).block().para('（読み込めませんでした）'); }
-    });
-    for (const p of this.pages) void p.stops; // lay out once
-    this.scroll = TABS.map(() => 0); // index into page.stops per tab
-    this.shown = 0; // drawn pixel offset (eases toward the target)
+    THEME = themeFor(g.state && g.state.profile && g.state.profile.era);
+    KIT.housing = typeof g.housing === 'function' ? () => g.housing() : null;
+    this.head = safe(() => headerInfo(g), '') || '';
+    // red dots on the tabs (cheap reads only)
+    const u = safe(() => urgentNotes(g), []) || [];
+    const cn = safe(() => comedyNotes(g, KIT), []) || [];
+    this.alerts = { law: u.some((n) => n[2] === 'law'), politics: u.some((n) => n[2] === 'politics'), contest: cn.some((n) => n[2] === 'contest'), owarai: cn.some((n) => n[2] === 'owarai' && n[1] === COLORS.bad) };
+    this.relayout(isTouch());
+    bindTap(g);
   }
 
-  get page() { return this.pages[this.tab]; }
+  relayout(touch) {
+    this.touchLayout = touch;
+    applyLayout(touch);
+    this.pages = TABS.map(() => null); // built when first shown
+    this.scroll = TABS.map(() => 0); // index into page.stops per tab
+    this.shown = 0; // drawn pixel offset (eases toward the target)
+    this.turn = null;
+  }
+
+  pageAt(i) {
+    if (!this.pages[i]) {
+      let p;
+      try { p = TABS[i].build(this.g, this.g.ctx, this); } catch (e) { console.error('[notebook]', TABS[i].id, e); p = null; }
+      if (!p || !p.blocks) p = new Page(this.g.ctx).block().para('（読み込めませんでした）');
+      void p.stops; // lay out once
+      this.pages[i] = p;
+    }
+    return this.pages[i];
+  }
+
+  get page() { return this.pageAt(this.tab); }
 
   offsetOf(i) { return this.page.stops[i] || 0; }
 
@@ -1124,6 +1250,30 @@ export class NotebookScene {
     return j;
   }
 
+  // switch to tab i with a page turn (dir: +1 the page leaves to the left)
+  setTab(i, dir) {
+    i = ((i % TABS.length) + TABS.length) % TABS.length;
+    if (i === this.tab) return;
+    this.turn = { page: this.page, tab: this.tab, off: Math.round(this.shown), t: 0, dir: dir || (i > this.tab ? 1 : -1) };
+    this.tab = i;
+    lastTab = i;
+    this.setScroll(this.scroll[i], false);
+    audio.sfx('cursor');
+  }
+
+  // カレンダー: another month (the same page turn)
+  setMonth(m) {
+    m = clamp(m, -2, 6);
+    if (m === this.month) return;
+    const ci = TABS.findIndex((t) => t.id === 'cal');
+    this.turn = { page: this.pageAt(ci), tab: ci, off: 0, t: 0, dir: m > this.month ? 1 : -1 };
+    this.month = m;
+    this.pages[ci] = null;
+    this.scroll[ci] = 0;
+    this.shown = 0;
+    audio.sfx('cursor');
+  }
+
   close() {
     audio.sfx('cancel');
     lastTab = this.tab;
@@ -1131,51 +1281,147 @@ export class NotebookScene {
     this.resolve();
   }
 
+  // a tap / click: tabs, ×, the month arrows and the scrollbar; true when handled (A is dropped)
+  handleTap(tap) {
+    const inp = this.g.input;
+    const now = inp.pressedNow || {};
+    const done = () => { now.a = false; return true; };
+    if (this.touchLayout) {
+      if (tap.y < TB) {
+        if (tap.x >= SW - TB) { now.a = false; this.close(); return true; }
+        const grp = Math.floor(this.tab / GROUP);
+        if (tap.x < TB) { const o = (grp + 1) % 2; this.setTab(o * GROUP + (this.tab % GROUP), o > grp ? 1 : -1); return done(); }
+        const k = clamp(Math.floor((tap.x - TB) / ((SW - 2 * TB) / GROUP)), 0, GROUP - 1);
+        this.setTab(grp * GROUP + k);
+        return done();
+      }
+    } else {
+      for (let i = 0; i < TABS.length; i++) if (inR(tap.x, tap.y, this.tabRect(i))) { this.setTab(i); return done(); }
+    }
+    const cal = this.page.cal;
+    if (cal && cal.rects && tap.y >= cal.rects.y && tap.y < cal.rects.y + cal.rects.h) {
+      if (tap.x >= cal.rects.prev.x && tap.x < cal.rects.prev.x + cal.rects.prev.w) { this.setMonth(this.month - 1); return done(); }
+      if (tap.x >= cal.rects.next.x && tap.x < cal.rects.next.x + cal.rects.next.w) { this.setMonth(this.month + 1); return done(); }
+    }
+    // the scrollbar column: upper half up, lower half down
+    if (this.maxScroll() > 0 && tap.x >= SB_X - 16 && tap.x < PX + PW && tap.y >= VY && tap.y < VY + VH) {
+      const s = this.scroll[this.tab];
+      this.setScroll(tap.y < VY + VH / 2 ? s - 1 : s + 1);
+      audio.sfx('cursor');
+      return done();
+    }
+    return false; // anywhere else: A (next page / next month)
+  }
+
   update(g) {
     this.t++;
     if (g.auto) { g.pop(this); this.resolve(); return; }
+    if (isTouch() !== this.touchLayout) this.relayout(isTouch());
+    if (this.turn && ++this.turn.t >= TURN_FR) this.turn = null;
     const inp = g.input;
+    const tap = this.tapAt;
+    this.tapAt = null;
+    if (tap && this.t > 3 && this.handleTap(tap)) return;
     if (this.t > 3 && (inp.pressed('b') || inp.pressed('menu'))) { this.close(); return; }
     if (inp.pressed('left') || inp.pressed('right')) {
-      this.tab = (this.tab + (inp.pressed('left') ? TABS.length - 1 : 1)) % TABS.length;
-      lastTab = this.tab;
-      this.setScroll(this.scroll[this.tab], false);
-      audio.sfx('cursor');
+      const d = inp.pressed('left') ? -1 : 1;
+      this.setTab(this.tab + d, d);
     }
+    const isCal = !!this.page.cal;
     const s = this.scroll[this.tab];
     const max = this.maxScroll();
-    if (inp.repeat('up') && s > 0) { this.setScroll(s - 1); audio.sfx('cursor'); }
-    if (inp.repeat('down') && s < max) { this.setScroll(s + 1); audio.sfx('cursor'); }
-    if (inp.pressed('a') && this.t > 3 && max > 0) {
-      // A: next page, and back to the top after the last one
-      this.setScroll(s >= max ? 0 : this.nextPage(), s < max);
-      audio.sfx('cursor');
+    if (isCal && max === 0) {
+      // カレンダー: ↑↓ and A change the month
+      if (inp.repeat('up')) this.setMonth(this.month - 1);
+      else if (inp.repeat('down')) this.setMonth(this.month + 1);
+      else if (inp.pressed('a') && this.t > 3) this.setMonth(this.month >= 6 ? 0 : this.month + 1);
+    } else {
+      if (inp.repeat('up') && s > 0) { this.setScroll(s - 1); audio.sfx('cursor'); }
+      if (inp.repeat('down') && s < max) { this.setScroll(s + 1); audio.sfx('cursor'); }
+      if (inp.pressed('a') && this.t > 3 && max > 0) {
+        // A: next page, and back to the top after the last one
+        this.setScroll(s >= max ? 0 : this.nextPage(), s < max);
+        audio.sfx('cursor');
+      }
     }
     const target = this.offsetOf(this.scroll[this.tab]);
     this.shown += (target - this.shown) * 0.4;
     if (Math.abs(target - this.shown) < 0.5) this.shown = target;
   }
 
-  draw(ctx) {
-    drawCover(ctx);
-    const color = TABS[this.tab].color;
-    this.drawTabs(ctx, false);
-    panel(ctx, PX, PY, PW, PH);
-    this.drawTabs(ctx, true);
-    rect(ctx, PX + 6, PY + 6, PW - 12, 2, color);
-    rect(ctx, PX + 6, PY + 8, PW - 12, 1, shade(color, -0.45));
+  // desktop: the side index tab i
+  tabRect(i) {
+    const sel = i === this.tab;
+    const y = IDX.y + i * (IDX.h + IDX.gap) + (i >= GROUP ? IDX.groupGap : 0);
+    return sel ? { x: IDX.x - 4, y, w: IDX.w + 4, h: IDX.h } : { x: IDX.x, y, w: IDX.w - 4, h: IDX.h };
+  }
 
-    // text area (clipped; at rest only whole lines are drawn)
+  draw(ctx) {
+    if (isTouch() !== this.touchLayout) this.relayout(isTouch());
+    drawBackdrop(ctx, THEME, LAYOUT);
+    const color = TABS[this.tab].color;
     const pg = this.page;
     const off = Math.round(this.shown);
     const settled = off === Math.round(this.offsetOf(this.scroll[this.tab]));
+    this.drawHeader(ctx, this.tab);
+    this.drawBody(ctx, pg, off, settled, color);
+
+    // the page turning away (the old page, clipped to what is left of it)
+    const tn = this.turn;
+    if (tn) {
+      const p = Math.min(1, (tn.t + 1) / TURN_FR);
+      const e = 1 - (1 - p) * (1 - p);
+      const w = Math.round(PW * (1 - e));
+      const x0 = tn.dir > 0 ? PX : PX + PW - w;
+      if (w > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x0, PY, w, PH);
+        ctx.clip();
+        drawPaperPart(ctx, THEME, LAYOUT, PX, PY, PW, PH);
+        this.drawHeader(ctx, tn.tab);
+        this.drawBody(ctx, tn.page, tn.off, true, TABS[tn.tab].color, true);
+        ctx.restore();
+        pageTurnEdge(ctx, THEME, tn.dir > 0 ? x0 + w : x0, PY + 1, PH - 2, tn.dir);
+      }
+    }
+
+    if (this.touchLayout) this.drawTouchBar(ctx);
+    else this.drawIndex(ctx);
+
+    if (LAYOUT.foot) {
+      const hint = pg.cal && this.maxScroll() === 0 ? '←→ タブ　↑↓ 月をかえる　B とじる' : '←→ タブ　↑↓ スクロール　A つぎへ　B とじる';
+      text(ctx, hint, PX + PW / 2, PY + PH - 24, { size: SMALL, align: 'center', color: THEME.footer, shadow: THEME.dark ? undefined : null });
+    }
+  }
+
+  drawHeader(ctx, ti) {
+    const tb = TABS[ti];
+    const c = inkOf(THEME, tb.color);
+    const hx = PX + 26, hy = PY + 12;
+    icon(ctx, tb.id, hx, hy, c, 2);
+    text(ctx, tb.label, hx + 32, hy + 2, { size: 18, color: c, shadow: THEME.dark ? shade(tb.color, -0.6) : null });
+    const tw = measure(ctx, tb.label, 18);
+    if (this.head) {
+      // the date (and weather / clock when the game has them), as far as there is room
+      const room = PW - 26 - 32 - tw - 30;
+      let s = this.head;
+      while (s.length > 4 && measure(ctx, s, SMALL) > room) s = s.slice(0, -2);
+      text(ctx, s, PX + PW - 18, hy + 6, { size: SMALL, align: 'right', color: inkOf(THEME, COLORS.dim), shadow: THEME.dark ? undefined : null });
+    }
+    rect(ctx, PX + 22, VY - 8, PW - 44, 2, c);
+    rect(ctx, PX + 22, VY - 6, PW - 44, 1, THEME.dark ? shade(tb.color, -0.5) : shade(THEME.paper, -0.12));
+  }
+
+  drawBody(ctx, pg, off, settled, color, still = false) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(VX - 12, VY - 2, VW + 14, VH + 3);
+    ctx.rect(VX - 14, VY - 4, VW + 16, VH + 6);
     ctx.clip();
     let y = VY - off;
     for (const b of pg.blocks) {
       if (y > VY + VH) break;
+      if (b.sticky && y + b.h > VY - 4) drawSticky(ctx, y, b.h, b.sticky);
       b.lines.forEach((l, i) => {
         // at rest a heading is not left alone at the bottom without its first line
         const after = l.head && b.lines[i + 1] ? b.lines[i + 1].h : 0;
@@ -1185,6 +1431,7 @@ export class NotebookScene {
       y += b.gap;
     }
     ctx.restore();
+    if (still) return;
 
     // scrollbar + arrows
     const max = this.maxScroll();
@@ -1194,70 +1441,88 @@ export class NotebookScene {
       const total = this.offsetOf(max) + VH;
       const th = Math.max(14, Math.round((TH * VH) / total));
       const ty = TY + Math.round(((TH - th) * clamp(this.shown, 0, this.offsetOf(max))) / this.offsetOf(max));
-      rect(ctx, SB_X, TY, 4, TH, '#2a2f55');
+      rect(ctx, SB_X, TY, 4, TH, THEME.track);
       rect(ctx, SB_X, ty, 4, th, color);
       rect(ctx, SB_X, ty, 1, th, shade(color, 0.35));
       const s = this.scroll[this.tab];
-      if (s > 0) upArrow(ctx, SB_X - 2, VY, this.t);
-      if (s < max) downArrow(ctx, SB_X - 2, VY + VH - 8, this.t, '#fff');
+      const ac = THEME.dark ? '#ffffff' : inkOf(THEME, COLORS.text);
+      if (s > 0) upArrow(ctx, SB_X - 2, VY, this.t, ac);
+      if (s < max) downArrow(ctx, SB_X - 2, VY + VH - 8, this.t, ac);
     }
-
-    text(ctx, '←→ タブ　↑↓ スクロール　A つぎへ　B とじる', SW / 2, PY + PH - 27, { size: SMALL, align: 'center', color: COLORS.dim });
   }
 
-  // selected = false: the tabs behind the page; true: the open tab, joined to the page
-  drawTabs(ctx, selected) {
-    const x0 = Math.round((SW - (TAB_W * TABS.length + TAB_GAP * (TABS.length - 1))) / 2);
+  // desktop: index tabs down the right edge (two groups), the open one joined to the page
+  drawIndex(ctx) {
     TABS.forEach((tb, i) => {
+      const r = this.tabRect(i);
       const sel = i === this.tab;
-      if (sel !== selected) return;
-      const x = x0 + i * (TAB_W + TAB_GAP);
-      const y = sel ? TAB_Y - 2 : TAB_Y;
-      const h = sel ? PY - y + 6 : PY - y + 1;
-      rect(ctx, x - 1, y - 1, TAB_W + 2, h + 1, '#0a0c18');
-      rect(ctx, x, y, TAB_W, h, sel ? tb.color : '#141b3e');
-      rect(ctx, x, y, TAB_W, 1, sel ? shade(tb.color, 0.45) : tb.color);
-      rect(ctx, x, y + 1, TAB_W, 1, sel ? shade(tb.color, 0.2) : shade(tb.color, -0.4));
-      if (sel) rect(ctx, x + TAB_W - 2, y + 2, 2, h - 2, shade(tb.color, -0.2));
-      text(ctx, tb.label, x + TAB_W / 2, y + 6, { size: BODY, align: 'center', color: sel ? '#ffffff' : COLORS.dim, shadow: sel ? shade(tb.color, -0.5) : null });
+      const bg = sel ? tb.color : THEME.dark ? '#161d3a' : shade(tb.color, THEME.tabMix);
+      rect(ctx, r.x, r.y + 1, r.w + 1, r.h, 'rgba(0,0,0,0.35)');
+      rect(ctx, r.x, r.y, r.w, r.h, bg);
+      rect(ctx, r.x, r.y, r.w, 1, shade(bg, 0.3));
+      rect(ctx, r.x + r.w - 1, r.y, 1, r.h, shade(bg, -0.35));
+      rect(ctx, r.x, r.y + r.h - 1, r.w, 1, shade(bg, -0.35));
+      rect(ctx, r.x + r.w - 1, r.y, 1, 1, THEME.cover);
+      rect(ctx, r.x + r.w - 1, r.y + r.h - 1, 1, 1, THEME.cover);
+      if (!sel && THEME.dark) rect(ctx, r.x + 1, r.y + 4, 2, r.h - 8, tb.color);
+      if (sel) rect(ctx, r.x, r.y + 2, 3, r.h - 4, shade(tb.color, 0.35));
+      const fc = sel ? '#ffffff' : THEME.dark ? COLORS.dim : THEME.tabDim;
+      icon(ctx, tb.id, r.x + 6, r.y + 9, sel ? '#ffffff' : THEME.dark ? tb.color : THEME.tabDim);
+      const size = measure(ctx, tb.label, 13) > r.w - 26 ? 12 : 13;
+      text(ctx, tb.label, r.x + 21, r.y + (size === 13 ? 7 : 8), { size, color: fc, shadow: shade(bg, -0.55) });
+      if (this.alerts[tb.id]) { rect(ctx, r.x + r.w - 9, r.y + 3, 6, 6, '#20090c'); rect(ctx, r.x + r.w - 8, r.y + 4, 4, 4, COLORS.bad); }
     });
-    if (selected) return;
-    // ◀ ▶ hints that left / right switch tabs
-    const bl = Math.floor(this.t / 20) % 2 ? 1 : 0;
-    ctx.fillStyle = COLORS.accent;
-    const cy = TAB_Y + 13;
-    for (let i = 0; i < 5; i++) {
-      ctx.fillRect(x0 - 14 - bl + i, cy - i, 1, i * 2 + 1);
-      ctx.fillRect(SW - x0 + 13 + bl - i, cy - i, 1, i * 2 + 1);
+  }
+
+  // touch: one group of five tabs (70 units tall), the group switch on the left and the × on the right
+  drawTouchBar(ctx) {
+    const grp = Math.floor(this.tab / GROUP);
+    const tw = (SW - 2 * TB) / GROUP;
+    rect(ctx, 0, 0, SW, TB, THEME.dark ? '#0b1022' : shade(THEME.cover, -0.25));
+    // group switch
+    const other = TABS.slice(((grp + 1) % 2) * GROUP, ((grp + 1) % 2) * GROUP + GROUP);
+    rect(ctx, 1, 1, TB - 3, TB - 4, THEME.dark ? '#1a2244' : shade(THEME.cover, 0.12));
+    // a big arrow: ▶ to the second group, ◀ back to the first
+    ctx.fillStyle = '#ffd23f';
+    for (let i = 0; i < 12; i++) ctx.fillRect(grp ? TB / 2 + 6 - i : TB / 2 - 6 + i, 10 + i, 1, (12 - i) * 2 - 1 > 0 ? 24 - 2 * i : 1);
+    text(ctx, grp ? 'まえへ' : 'つぎへ', TB / 2, 42, { size: 13, align: 'center', color: '#ffffff' });
+    for (let k = 0; k < 2; k++) rect(ctx, TB / 2 - 9 + k * 12, 60, 6, 4, k === grp ? '#ffd23f' : '#5a6080');
+    if (other.some((t) => this.alerts[t.id])) { rect(ctx, TB - 14, 5, 7, 7, '#20090c'); rect(ctx, TB - 13, 6, 5, 5, COLORS.bad); }
+    for (let k = 0; k < GROUP; k++) {
+      const i = grp * GROUP + k;
+      const tb = TABS[i];
+      const sel = i === this.tab;
+      const x = Math.round(TB + k * tw), w = Math.round(TB + (k + 1) * tw) - x;
+      const bg = sel ? tb.color : THEME.dark ? '#161d3a' : shade(tb.color, THEME.tabMix - 0.12);
+      rect(ctx, x + 1, 2, w - 2, sel ? TB + 2 : TB - 5, bg);
+      rect(ctx, x + 1, 2, w - 2, 1, shade(bg, 0.3));
+      if (!sel) rect(ctx, x + 1, TB - 6, w - 2, 3, tb.color);
+      icon(ctx, tb.id, x + w / 2 - 12, 9, sel ? '#ffffff' : THEME.dark ? tb.color : THEME.tabDim, 2);
+      const size = measure(ctx, tb.label, 15) > w - 8 ? 13 : 15;
+      text(ctx, tb.label, x + w / 2, 40, { size, align: 'center', color: sel ? '#ffffff' : THEME.dark ? COLORS.dim : THEME.tabDim, shadow: shade(bg, -0.55) });
+      if (this.alerts[tb.id]) { rect(ctx, x + w - 14, 6, 8, 8, '#20090c'); rect(ctx, x + w - 13, 7, 6, 6, COLORS.bad); }
     }
+    rect(ctx, SW - TB + 1, 2, TB - 3, TB - 5, '#3a1a2a');
+    text(ctx, '×', SW - TB / 2, TB / 2 - 14, { size: 24, align: 'center', color: '#ffffff' });
   }
 }
 
-// The notebook's leather cover with stitching (the page panel sits on it), drawn
-// once into an offscreen canvas at 1 logical pixel per pixel.
-let coverCv = null;
-function drawCover(ctx) {
-  if (!coverCv) {
-    coverCv = document.createElement('canvas');
-    coverCv.width = SW;
-    coverCv.height = SH;
-    const c = coverCv.getContext('2d');
-    rect(c, 0, 0, SW, SH, '#0b0d1a');
-    const { x, y, w, h } = COVER;
-    rect(c, x - 1, y - 1, w + 2, h + 2, '#22202a');
-    rect(c, x, y, w, h, '#5a2e3a');
-    rect(c, x, y, w, 1, '#84505c');
-    rect(c, x, y, 1, h, '#84505c');
-    rect(c, x, y + h - 2, w, 2, '#3e1e28');
-    rect(c, x + w - 2, y, 2, h, '#3e1e28');
-    c.fillStyle = '#663644';
-    for (let yy = y + 3; yy < y + h - 3; yy += 3) for (let xx = x + 3 + ((yy * 7) % 5); xx < x + w - 3; xx += 9) c.fillRect(xx, yy, 1, 1);
-    // stitching
-    c.fillStyle = '#c8907e';
-    for (let xx = x + 6; xx < x + w - 8; xx += 7) { c.fillRect(xx, y + 4, 4, 1); c.fillRect(xx, y + h - 6, 4, 1); }
-    for (let yy = y + 6; yy < y + h - 8; yy += 7) { c.fillRect(x + 4, yy, 1, 4); c.fillRect(x + w - 6, yy, 1, 4); }
+function drawSticky(ctx, y, h, kind) {
+  const bad = kind === 'bad';
+  const bg = bad ? THEME.stickyBad : THEME.sticky, edge = bad ? THEME.stickyBadEdge : THEME.stickyEdge;
+  const x = VX - 12, w = VW + 8;
+  if (THEME.dark) {
+    rect(ctx, x, y - 3, w, h + 4, bg);
+    rect(ctx, x, y - 3, 3, h + 4, edge);
+    return;
   }
-  ctx.drawImage(coverCv, 0, 0, SW, SH);
+  rect(ctx, x + 2, y - 1, w, h + 4, 'rgba(80,60,20,0.18)');
+  rect(ctx, x, y - 3, w, h + 4, bg);
+  rect(ctx, x, y + h, w, 1, edge);
+  // folded corner and a piece of tape
+  ctx.fillStyle = edge;
+  for (let i = 0; i < 8; i++) ctx.fillRect(x + w - 8 + i, y + h - i, 8 - i, 1);
+  rect(ctx, x + 18, y - 6, 34, 7, 'rgba(255,255,255,0.55)');
 }
 
 function upArrow(ctx, x, y, t = 0, color = '#fff') {
@@ -1280,12 +1545,9 @@ const HEART = [
   '.....oso.....',
   '......o......',
 ];
-const HEART_PAL = {
-  full: { o: '#5a1430', h: '#ffd0e4', f: '#ff5f9e', s: '#d63a7a' },
-  empty: { o: '#555a80', h: '#2e3460', f: '#232a52', s: '#1e2448' },
-};
+const HEART_FULL = { o: '#5a1430', h: '#ffd0e4', f: '#ff5f9e', s: '#d63a7a' };
 function heart(ctx, x, y, full) {
-  const pal = HEART_PAL[full ? 'full' : 'empty'];
+  const pal = full ? HEART_FULL : THEME.heartEmpty;
   for (let j = 0; j < HEART.length; j++) {
     for (let i = 0; i < HEART[j].length; i++) {
       const ch = HEART[j][i];
@@ -1294,19 +1556,31 @@ function heart(ctx, x, y, full) {
   }
 }
 
+// drawing kit for custom lines (notebook_pages.js)
+const DK = {
+  get th() { return THEME; },
+  ink: (c) => inkOf(THEME, c),
+  text: (c, s, x, y, o) => text(c, s, x, y, o),
+  rect, measure,
+  get shadow() { return THEME.dark ? undefined : null; },
+};
+
 function drawLine(ctx, l, y) {
   let x = VX + (l.x || 0);
-  if (l.mark) rect(ctx, VX - 10, y + 1, 3, l.h - 2, COLORS.accent);
+  const ink = (c) => inkOf(THEME, c);
+  const sh = THEME.dark ? undefined : null; // no drop shadow on paper
+  if (l.mark) rect(ctx, VX - 10, y + 1, 3, l.h - 2, ink(COLORS.accent));
+  if (l.draw) { try { l.draw(ctx, x, y, DK); } catch (e) { console.error('[notebook] draw', e); } return; }
   const dy = 1;
   if (l.head) {
     // section heading: a small diamond, the title and a dotted rule to the right edge
-    const c = l.head;
+    const c = ink(l.head);
     rect(ctx, x, y + 9, 6, 6, shade(c, -0.35));
     rect(ctx, x + 1, y + 10, 4, 4, c);
     rect(ctx, x + 1, y + 10, 2, 1, shade(c, 0.5));
-    text(ctx, l.t, x + 12, y + 3, { size: BODY, color: c });
+    text(ctx, l.t, x + 12, y + 3, { size: BODY, color: c, shadow: sh });
     const tw = measure(ctx, l.t, BODY);
-    ctx.fillStyle = shade(c, -0.55);
+    ctx.fillStyle = THEME.dark ? shade(c, -0.55) : shade(c, 0.45);
     for (let xx = Math.round(x + 22 + tw); xx < VX + VW; xx += 4) ctx.fillRect(xx, y + 12, 2, 1);
     return;
   }
@@ -1319,19 +1593,20 @@ function drawLine(ctx, l, y) {
     text(ctx, l.tag.t, x + 4, ty + 2, { size: 12, color: '#ffffff', shadow: null });
     x += tw + 6;
   }
-  if (l.t) text(ctx, l.t, x, y + dy, { size: l.s, color: l.c || COLORS.text });
+  if (l.t) text(ctx, l.t, x, y + dy, { size: l.s, color: ink(l.c || COLORS.text), shadow: sh });
   const textEnd = l.t ? x + measure(ctx, l.t, l.s) : x;
   if (l.gauge) {
     const gx = VX + GAUGE_X, gy = y + 5, gw = GAUGE_W;
-    rect(ctx, gx, gy, gw, 11, '#06081a');
-    rect(ctx, gx + 1, gy + 1, gw - 2, 9, '#2a2f55');
+    const gc = ink(l.gauge.color);
+    rect(ctx, gx, gy, gw, 11, THEME.trackEdge);
+    rect(ctx, gx + 1, gy + 1, gw - 2, 9, THEME.track);
     const fw = Math.round(clamp(l.gauge.frac, 0, 1) * (gw - 2));
     if (fw > 0) {
-      rect(ctx, gx + 1, gy + 1, fw, 9, l.gauge.color);
-      rect(ctx, gx + 1, gy + 1, fw, 2, shade(l.gauge.color, 0.35));
-      rect(ctx, gx + 1, gy + 8, fw, 2, shade(l.gauge.color, -0.25));
+      rect(ctx, gx + 1, gy + 1, fw, 9, gc);
+      rect(ctx, gx + 1, gy + 1, fw, 2, shade(gc, 0.35));
+      rect(ctx, gx + 1, gy + 8, fw, 2, shade(gc, -0.25));
     }
-    for (let i = 1; i < 4; i++) rect(ctx, gx + Math.round((gw * i) / 4), gy + 1, 1, 2, 'rgba(255,255,255,0.25)');
+    for (let i = 1; i < 4; i++) rect(ctx, gx + Math.round((gw * i) / 4), gy + 1, 1, 2, THEME.dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)');
   }
   if (l.hearts != null) {
     const hx = Math.round(Math.max(VX + HEART_X, textEnd + 14));
@@ -1344,5 +1619,5 @@ function drawLine(ctx, l, y) {
     rect(ctx, bx, y + 2, bw, 1, shade(l.badge.c, 0.35));
     text(ctx, l.badge.t, bx + 5, y + 4, { size: 12, color: '#20232a', shadow: null });
   }
-  if (l.r) text(ctx, l.r, VX + VW, y + dy + (l.rs === SMALL && l.s === BODY ? 3 : 0), { size: l.rs || l.s, align: 'right', color: l.rc || COLORS.text });
+  if (l.r) text(ctx, l.r, VX + VW, y + dy + (l.rs === SMALL && l.s === BODY ? 3 : 0), { size: l.rs || l.s, align: 'right', color: ink(l.rc || COLORS.text), shadow: sh });
 }
