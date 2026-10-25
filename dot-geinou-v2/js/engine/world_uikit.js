@@ -177,7 +177,7 @@ export function lineChart(c, x, y, w, h, series, opts = {}) {
   if (all.length < 1) { T(c, opts.empty || '記録がまだない', x + w / 2, y + h / 2 - 6, size, K.faint, 'center', w - 8); return; }
   let lo = opts.lo != null ? opts.lo : Math.min(...all.map((p) => p.v));
   let hi = opts.hi != null ? opts.hi : Math.max(...all.map((p) => p.v));
-  if (opts.lo == null || opts.hi == null) { const pad = Math.max(1, (hi - lo) * 0.15); if (opts.lo == null) lo = Math.floor(lo - pad); if (opts.hi == null) hi = Math.ceil(hi + pad); }
+  if (opts.lo == null || opts.hi == null) { const pad = Math.max(1, (hi - lo) * 0.15); const st = hi - lo + 2 * pad > 40 ? 10 : 5; if (opts.lo == null) lo = Math.floor((lo - pad) / st) * st; if (opts.hi == null) hi = Math.ceil((hi + pad) / st) * st; }
   if (hi - lo < 1e-6) hi = lo + 1;
   let xLo = opts.xLo != null ? opts.xLo : Math.min(...all.map((p) => p.x));
   let xHi = opts.xHi != null ? opts.xHi : Math.max(...all.map((p) => p.x));
@@ -195,7 +195,7 @@ export function lineChart(c, x, y, w, h, series, opts = {}) {
   for (let yv = Math.ceil(xLo / step) * step; yv <= xHi; yv += step) { const xx = Math.round(px(yv)); R(c, xx, B, 1, 3, K.faint); T(c, `${yv}`, xx, B + 3, size, K.faint, 'center'); }
   R(c, L, B, Rr - L, 1, K.edge);
   // the line where the game began (the past part is drawn dimmer)
-  if (opts.startX != null && opts.startX > xLo && opts.startX < xHi) { const sx = Math.round(px(opts.startX)); for (let yy = Tp; yy < B; yy += 4) R(c, sx, yy, 1, 2, 'rgba(255,181,71,0.45)'); if (opts.startLabel) T(c, opts.startLabel, sx + 3, Tp, Math.max(8, size - 2), 'rgba(255,181,71,0.8)'); }
+  if (opts.startX != null && opts.startX > xLo && opts.startX < xHi) { const sx = Math.round(px(opts.startX)); for (let yy = Tp; yy < B; yy += 4) R(c, sx, yy, 1, 2, 'rgba(255,181,71,0.45)'); if (opts.startLabel) { const ls = Math.max(8, size - 2); const lw = measure(c, opts.startLabel, ls); if (sx + 3 + lw > Rr) T(c, opts.startLabel, sx - 3, Tp, ls, 'rgba(255,181,71,0.8)', 'right'); else T(c, opts.startLabel, sx + 3, Tp, ls, 'rgba(255,181,71,0.8)'); } }
   c.save();
   c.beginPath(); c.rect(L, Tp - 2, Rr - L + 2, B - Tp + 4); c.clip();
   for (const s of series) {

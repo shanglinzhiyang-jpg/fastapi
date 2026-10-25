@@ -439,5 +439,5 @@ export function makeMore(ctx) {
     },
     act: (ui, row) => (row && row.news ? ui.info('ニュース', [row.news.text]) : null),
   };
-  return { drawMapStrip, drawCountryDetail, drawCrisisDetail, drawConflictDetail, TAB_REGIONS, TAB_TRENDS, TAB_TIMELINE, TAB_NEWS, optionsBox, KIND_NAME };
+  return { drawMapStrip, drawCountryDetail, drawCrisisDetail, drawConflictDetail, TAB_REGIONS, TAB_TRENDS, TAB_TIMELINE, TAB_NEWS, optionsBox, KIND_NAME, APPLY };
 }

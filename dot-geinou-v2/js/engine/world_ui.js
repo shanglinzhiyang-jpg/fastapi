@@ -12,8 +12,12 @@
 // Keys: ←→ tabs (on the tab bar), ↓/A into the body, ↑↓ (←→ on the map) choose, A act, B back, MENU close.
 // Taps: tabs, ×, list rows (first tap selects, second acts), map markers, the map's colour chips, modal buttons.
 //
-// API: g.worldScreen(tab?, opts?) → Promise (resolves when closed); openWorldScreen(g, { tab, sel });
-//   tab: 'map' | 'countries' | 'diplomacy' | 'trade' | 'alliances' | 'crisis' | 'news'. Under g.auto it does not open unless
+// Round 9 (R9-E): 10 tabs with icons (地図 · 国々 · 地域 · 外交 · 貿易 · 同盟 · 危機 · 推移 · 年表 · ニュース); the map has views
+// (世界 / 東アジア / 東南アジア / 中東 / 欧州), status icons and a tooltip (world_ui_map.js); the detail pages show できること with odds and
+// effects, crisis stages and charts (world_ui_more.js, world_uikit.js); 「大きな文字」 = a one-pane big-text layout (default on portrait
+// phones), and on a portrait phone the bottom screen shows the detail in large type (world_ui_sub.js). See test-output/api_r9e.txt.
+// API: g.worldScreen(tab?, opts?) → Promise (resolves when closed); openWorldScreen(g, { tab, sel, view });
+//   tab: 'map' | 'countries' | 'regions' | 'diplomacy' | 'trade' | 'alliances' | 'crisis' | 'trends' | 'timeline' | 'news'. Under g.auto it does not open unless
 //   g.auto.worldui. Phone app 'world' (「世界」, order 61). Test hook: window.__worldui = { scene(), open, TABS }.
 
 import { Game } from './game.js';
@@ -892,7 +896,9 @@ async function whyInfo(ui, title, why, kind, target) {
 async function actionsMenu(ui, target, title = null) {
   const g = ui.g;
   for (let guard = 0; guard < 30 && !ui.closed; guard++) {
-    const list = safe(() => g.diplomacyActions(target), []) || [];
+    let list = safe(() => g.diplomacyActions(target), []) || [];
+    // [R9-E] a crisis: only the actions that fit its kind (the others would only say 「〜のときに行う」)
+    if (typeof target === 'string' && target.startsWith('k:')) { const kk = (ui.data.w.crises || []).find((x) => x.id === target.slice(2)); if (kk) list = list.filter((a) => !MORE.APPLY[a.id] || MORE.APPLY[a.id].includes(kk.kind)); }
     if (!list.length) { await ui.info(title || '外交', ['この相手に使える手段はない。']); return; }
     const nm = title || (ui.data.rows[target] || {}).name || '';
     // [R9-E] a country: the full information first (treaties, alliances, the dispute with both positions)
@@ -1450,6 +1456,7 @@ function modal(o) {
       const x = Math.round((SW - w) / 2);
       const lines = [];
       for (const l of o.lines || []) lines.push(...jwrap(c, String(l ?? ''), w - 24, 12));
+      if (o.kind !== 'pick' && lines.length > 14) { lines.length = 0; for (const l of o.lines || []) lines.push(...jwrap(c, String(l ?? ''), w - 40, 12)); } // room for ▲▼
       const pick = o.kind === 'pick';
       const rh = 28;
       const maxRows = pick ? Math.min(m.n, Math.max(3, Math.floor((SH - 80 - Math.min(lines.length, 6) * 16) / rh))) : 0;
