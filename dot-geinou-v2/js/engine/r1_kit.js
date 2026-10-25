@@ -320,5 +320,3 @@ export function goRefusal(g) {
 
 // D1's hub: is a phone app for the 賞レース registered? (Then our own apps only show during a season.)
 export function d1Hub() { return Object.values(PHONE_APPS).some((a) => a && a.id !== 'r1' && a.id !== 'abcgp' && (a.contestHub || /^(contests?|shourace)$/.test(a.id))); }
-
-}

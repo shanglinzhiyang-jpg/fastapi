@@ -6,12 +6,12 @@
 // finalists / the champion, and the phone app 「KOC」 (手帳 / ケータイ / スマホ). API doc: test-output/api_koc.txt.
 
 import { Game } from './game.js';
-import { registerContest, CONTESTS } from './contests.js';
+import { registerContest } from './contests.js';
 import { onMorning, registerRegular, registerPhoneApp, REGULARS } from './life.js';
 import { phoneList, phoneInfo, closePhoneThen, phoneOverMapOnly, appTile } from './phone.js';
 import { MINIGAMES } from './minigame.js';
-import { K, yearRec, kDate, absOf, ensureHistory, histFromSeason, historyList, season, news, notice, entryOf, judgesFor, roundName, safe, num } from './koc_core.js';
-import { rules, schedule, titleOf, KOC_NAME, FOUNDED, NEWS, SOURCES, ENTRY_RECORD, lenText, hallText, PRIZE, MC, STAFF, kocRounds } from './koc_data.js';
+import { K, yearRec, kDate, absOf, ensureHistory, histFromSeason, historyList, rivalsOf, season, news, notice, entryOf, judgesFor, roundName, safe, num } from './koc_core.js';
+import { rules, schedule, titleOf, KOC_NAME, FOUNDED, NEWS, SOURCES, ENTRY_RECORD, lenText, hallText, PRIZE, FEE, STAFF, kocRounds, entriesOf } from './koc_data.js';
 import { kocEntry, goToday, goFromApp, dueToday, phaseOf, datesOf, planOf, runFinalDay, runDvd, runKai, playDoc, roundsOf, feeText, manYen } from './koc_flow.js';
 import * as L from './koc_link.js';
 import { PEOPLE } from './life.js';
@@ -19,24 +19,52 @@ import { crown } from './koc_art.js';
 import { dateText } from './koc_core.js';
 
 const has = (g, k) => !!g && typeof g[k] === 'function';
-let curYear = 2026; // the year the getters on CONTESTS.koc describe (updated by g.koc() / the morning)
 
-// ================================================================ registration (D1's framework)
-// The season a date belongs to: the year whose final is still ahead (after the final, next year's season).
-let lastG = null;
-function seasonYear(g) {
-  const gg = g || lastG || (typeof globalThis !== 'undefined' ? globalThis.__game : null);
-  if (!gg || !gg.state) return curYear;
-  const t = kDate(gg);
+// ================================================================ registration (D1's framework, def.selfRun)
+// KOC runs its own world (koc_core.js): D1 never simulates it, posts none of its generic news and keeps no KOC entry. D1's
+// 賞レース screen / app read KOC through the hooks below; 「今日の予定」 there opens def.flow (KOC's own trip, desk and round).
+const PHASE_D1 = { notyet: 'notyet', before: 'before', entry: 'entry', qualifying: 'prelim', final: 'finalday', done: 'after' };
+const STATUS_D1 = { entered: 'entered', finalist: 'finalist', revival: 'passed', voter: 'out', champion: 'champion', out: 'out', withdrawn: 'withdrawn' };
+const STATUS_TEXT = (E) => ({ entered: `${roundName(E.round)}へ`, finalist: '決勝進出', revival: '敗者復活戦へ', voter: '決勝の審査員', champion: '優勝', out: `${roundName(E.out || E.round)}敗退${E.place ? `（決勝${E.place}位）` : ''}`, withdrawn: '棄権' }[E.status] || '');
+function d1Status(g) {
+  const t = kDate(g);
   const y = t.year;
-  return y >= FOUNDED && t.abs > absOf(y, schedule(y).final.when) ? y + 1 : y;
+  if (y < FOUNDED) return { status: 'notyet', statusLabel: `まだ始まっていない（${FOUNDED}年創設）`, label: `${KOC_NAME}（${FOUNDED}年創設）`, edition: null, year: y, entry: null, today: [] };
+  safe(() => ensureHistory(g, y));
+  const R = rules(y);
+  const S = schedule(y);
+  const ph = phaseOf(g, y);
+  const E = entryOf(g, y);
+  const h = K(g).hist[y];
+  const statusLabel = {
+    before: `エントリー受付は${dateText(y, S.entry.from)}から`, entry: `エントリー受付中（締切 ${dateText(y, S.entry.to)}）`,
+    qualifying: `予選中（決勝は${dateText(y, S.final.when)}）`, final: '今夜、決勝の生放送', done: h && h.champ ? `決勝終了（王者：${h.champ}）` : '決勝終了',
+  }[ph] || '';
+  let entry = null;
+  if (E) {
+    const live = ['entered', 'finalist', 'revival', 'voter'].includes(E.status);
+    const rid = E.status === 'entered' ? E.round : E.status === 'revival' ? 'revival' : 'final';
+    const ds = live ? datesOf(g, y, E, rid) : [];
+    const w = rid === 'sf' && R.twoNetaSF ? ds[num(E.sfDone)] : ds[0];
+    const v = live ? (rid === 'final' || rid === 'revival' ? { city: '東京', hall: 'TBS 赤坂' } : planOf(g, y, E, rid) || {}) : null;
+    entry = {
+      no: E.no, name: E.unitName, status: STATUS_D1[E.status] || 'entered', statusLabel: STATUS_TEXT(E), round: live ? roundName(rid) : roundName(E.out || E.round),
+      next: live && w ? { day: L.d1Day(g, t.abs, absOf(y, w)), city: v.city || '', hall: v.hall || '' } : null,
+      results: (E.results || []).map((r) => ({ round: roundName(r.round), name: roundName(r.round), passed: !!r.passed, score: r.score, place: r.place, of: r.of })),
+      final: E.status === 'champion' ? { place: 1, total: h && h.champScore } : E.place ? { place: E.place } : null,
+    };
+  }
+  const due = dueToday(g);
+  const today = due ? [{ id: due.rid, label: `${roundName(due.rid)}（${due.rid === 'final' || due.rid === 'revival' ? 'TBS 赤坂' : hallText(planOf(g, y, E, due.rid) || {})}）` }] : [];
+  return { status: PHASE_D1[ph] || 'before', statusLabel, label: `${titleOf(y)}（第${R.edition}回）`, edition: R.edition, year: y, entry, today };
 }
-const roundsDef = (y) => kocRounds(y);
+// D1's schedule format of a year: { entry: { from, to }, final: [month, dom] }
+const scheduleD1 = (y) => { const S = schedule(Math.max(FOUNDED, y)); return { entry: S.entry, final: S.final.when }; };
 const DEF = {
   name: KOC_NAME, short: 'KOC', kind: 'conte', category: 'major', labelStyle: 'both', color: '#b8902a',
   organizer: 'TBSテレビ', broadcaster: 'TBS系', venue: 'TBS放送センター（赤坂）', region: 'all',
   history: { founded: FOUNDED, ended: null, gaps: [], revived: null, note: 'TBSテレビが主催・運営するコント日本一決定戦。プロ・アマ・芸歴を問わず2人以上のユニットが出場できる。', sources: SOURCES },
-  revive: false,
+  revive: false, selfRun: true,
   editionOf: (y) => (y >= FOUNDED ? y - FOUNDED + 1 : null),
   eligibility: (g, unit, year) => {
     if ((year ?? kDate(g).year) < FOUNDED) return { ok: false, why: `まだ始まっていない（${FOUNDED}年創設）` };
@@ -48,33 +76,29 @@ const DEF = {
     }
     return { ok: true, why: '' };
   },
-  fee: (g, unit) => ((unit && Array.isArray(unit.members) && unit.members.length >= 3) || (unit && unit.type === 'trio') ? 3000 : 2000),
+  eligibilityNote: 'プロ・アマ・所属・芸歴・年齢不問、2人以上のユニット（ピン不可・即席ユニット可）',
+  // REAL nominal yen (D1 converts): コンビ2,000円・トリオ以上3,000円 (every year since 2008)
+  fee: (g, unit) => ((unit && Array.isArray(unit.members) && unit.members.length >= 3) || (unit && unit.type === 'trio') ? FEE.trio : FEE.combi),
+  feeText: () => feeText(),
+  entryCount: (y) => (y >= FOUNDED ? entriesOf(y).n : null),
   prize: PRIZE, prizeText: '優勝賞金1000万円',
   perform: { kind: 'conte', length: 300 },
-  news: [() => 'キングオブコントの予選会場は、小道具の段ボールでいっぱい。', () => 'コントの賞レースは「暗転」から始まる。'],
+  news: [],
+  // the year's format (準々決勝 from 2009, the two-day semifinal from 2018, the revival from 2026): D1 asks with the cycle's year
+  schedule: scheduleD1(2026), rounds: kocRounds(2026),
+  roundsOf: (y) => kocRounds(Math.max(FOUNDED, y)), scheduleOf: scheduleD1,
   catchcopy: (g, ctx) => { const E = entryOf(g, ctx && ctx.year); return (E && E.copy) || ''; },
   entry: async (g) => kocEntry(g),
-  flow: async (g, ctx) => { lastG = g; return goToday(g, { viaD1: true, mode: ctx && ctx.mode, revival: !!(ctx && ctx.revival) }); },
-  status: (g) => g.koc(),
-  // E2 extras (the year-specific facts; D1 may read them)
-  rulesOf: rules, scheduleOf: schedule, roundsOf: roundsDef,
+  flow: async (g, ctx) => goToday(g, { mode: ctx && ctx.mode, revival: !!(ctx && ctx.revival) }),
+  status: (g) => safe(() => d1Status(g), null),
+  historyList: (g) => safe(() => { const y = kDate(g).year; if (y >= FOUNDED) ensureHistory(g, y); return historyList(g); }, []),
+  rivalsOf: (g, round, n, year) => safe(() => rivalsOf(g, round, n, year), []),
+  // E2 extras (the year-specific facts)
+  rulesOf: rules, myScheduleOf: schedule,
   entryOf: (g, y) => entryOf(g, y ?? kDate(g).year),
-  historyOf: (g) => historyList(g),
   judgesOf: (g, y) => judgesFor(g, y ?? kDate(g).year).map((j) => ({ name: j.name, title: j.title, taste: j.taste })),
 };
-// The season's format changes by era (準々決勝 from 2009, the two-day semifinal from 2018, the revival from 2026): schedule and
-// rounds are getters, and KOC registers again when the format of the season changes, so D1 rebuilds its calendar.
-let regSig = null;
-const sigOf = (y) => { const R = rules(Math.max(FOUNDED, y)); return `${R.hasQF}|${R.twoNetaSF}|${!!R.revival}`; };
-function register() {
-  registerContest('koc', DEF);
-  regSig = sigOf(seasonYear());
-  if (!CONTESTS.koc) return;
-  Object.defineProperty(CONTESTS.koc, 'schedule', { enumerable: true, configurable: true, get: () => { const S = schedule(Math.max(FOUNDED, seasonYear())); return { entry: S.entry, final: S.final.when }; } });
-  Object.defineProperty(CONTESTS.koc, 'rounds', { enumerable: true, configurable: true, get: () => roundsDef(seasonYear()) });
-  Object.defineProperty(CONTESTS.koc, 'eligibilityNote', { enumerable: true, configurable: true, get: () => 'プロ・アマ・所属・芸歴・年齢不問、2人以上のユニット（ピン不可・即席ユニット可）' });
-}
-register();
+registerContest('koc', DEF);
 
 // ================================================================ regular shows (fictional TBS programs) for the finalists / the king
 registerRegular('koc_reg_conte', {
@@ -336,4 +360,5 @@ registerPhoneApp('koc', {
   iconHD(c, x, y) { appTile(c, x, y, APP_COLOR); crown(c, x + 3, y + 8, 2); c.fillStyle = '#e8c25a'; c.fillRect(x + 6, y + 25, 20, 2); },
   open: (g) => kocApp(g),
 });
-export { kocApp, roundsDef };
+const roundsDef = (y) => kocRounds(y);
+export { kocApp, roundsDef, d1Status };

@@ -573,21 +573,21 @@ registerContest('r1', {
   revive: false, selfRun: true, repeat: true, // repeat winners were real (2007 and 2008)
   editionOf: (y) => rulesR1(y).edition,
   // the defaults (D1 asks roundsOf / scheduleOf with each cycle's year)
-  schedule: d1ScheduleOf(2027), rounds: d1RoundsOf(2027), roundsOf: d1RoundsOf, scheduleOf: d1ScheduleOf,
+  schedule: d1ScheduleOf(2027), rounds: d1RoundsOf(2027), roundsOf: (y) => safe(() => d1RoundsOf(y), null), scheduleOf: (y) => safe(() => d1ScheduleOf(y), null),
   entryCount: (y) => ENTRY_COUNT[y] ?? null,
-  eligibility: Object.assign((g, unit, year) => { const el = R1.cfg.eligibility(g, actInfo(g), year ?? (R1.seasonY(g) || cdate(g).year), R1.state(g)); return { ok: el.ok, why: el.why || '' }; }, { note: 'ひとり芸（ピン芸）。2021–2023はプロ芸歴10年以内・アマチュア出場10回目以内、2024年から芸歴不問' }),
+  eligibility: Object.assign((g, unit, year) => safe(() => { const el = R1.cfg.eligibility(g, actInfo(g), year ?? (R1.seasonY(g) || cdate(g).year), R1.state(g)); return { ok: !!el.ok, why: el.why || '' }; }, { ok: true, why: '' }), { note: 'ひとり芸（ピン芸）。2021–2023はプロ芸歴10年以内・アマチュア出場10回目以内、2024年から芸歴不問' }),
   fee: { pro: 2000, amateur: 2000 }, feeText: '1人2,000円',
   prize: (y) => rulesR1(y).prize, prizeText: '優勝賞金500万円',
   perform: { kind: 'pin', length: 240 },
-  news: [(g, ctx) => `${rulesR1((ctx && ctx.year) || 2027).title}：${rulesR1((ctx && ctx.year) || 2027).eligText}`],
-  catchcopy: (g, ctx) => catchR1(g, R1.season(g, (ctx && ctx.year) || R1.seasonY(g) || cdate(g).year), 'player'),
+  news: [(g, ctx) => safe(() => `${rulesR1((ctx && ctx.year) || 2027).title}：${rulesR1((ctx && ctx.year) || 2027).eligText}`, '')],
+  catchcopy: (g, ctx) => safe(() => catchR1(g, R1.season(g, (ctx && ctx.year) || R1.seasonY(g) || cdate(g).year), 'player'), ''),
   // D1's 「今日の予定」 calls flow without a mode (ask); g.contestGo-style calls carry ctx.option and ctx.mode
   flow: (g, ctx) => R1.go(g, { mode: ctx && ctx.option ? ctx.mode : undefined }),
   entry: (g) => R1.entry(g),
   onMorning: (g) => runKitMorning(g),
-  status: (g) => R1.d1Status(g),
-  historyList: (g) => R1.historyList(g),
-  rivalsOf: (g, round, n, year) => R1.rivalsOf(g, round, n, year),
+  status: (g) => safe(() => R1.d1Status(g), null),
+  historyList: (g) => safe(() => R1.historyList(g), []),
+  rivalsOf: (g, round, n, year) => safe(() => R1.rivalsOf(g, round, n, year), []),
   rulesOf: rulesR1,
 });
 

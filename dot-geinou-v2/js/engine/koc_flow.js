@@ -26,8 +26,6 @@ import { registerItem } from './state.js';
 import { YEN_MARK, display, SW, SH } from './util.js';
 import { audio } from './audio.js';
 import { doorIndexFor } from './map.js';
-import * as L from './koc_link.js';
-import { roundIndex } from './koc_data.js';
 
 const has = (g, k) => !!g && typeof g[k] === 'function';
 const realYen = (n) => '¥' + YEN_MARK + Math.round(n).toLocaleString('ja-JP');
@@ -70,13 +68,11 @@ const sayP = (g, E, text) => { const p = partnerSpeaker(g, E); return p ? g.say(
 export function planOf(g, y, E, rid) {
   const S = schedule(y);
   if (!E) return null;
-  if (rid === 'r1') return (E.d1 && L.venueOfPick(g, y, 0, S.r1)) || E.r1 || S.r1[0];
+  if (rid === 'r1') return E.r1 || S.r1[0];
   if (rid === 'final') return S.final;
   const list = S[rid];
   if (!list || !list.length) return null;
   if (rid === 'sf' && rules(y).twoNetaSF) return list[0];
-  // a linked entry follows D1's pick (the player may change the date in D1's hub; KOC sets it to this plan first)
-  if (E.d1 && E.picked && E.picked[rid]) { const v = L.venueOfPick(g, y, roundIndex(y, rid, 0), list); if (v) return v; }
   const want = E.r1 && (E.r1.city === '大阪' || E.r1.city === '福岡') ? '大阪' : '東京';
   return list.find((v) => v.city === want) || list[0];
 }
@@ -260,7 +256,6 @@ async function finishEntry(g, { y, R, S, k, u, instant, members, start, form, ne
   notice(g, `『${titleOf(y)}』エントリーを受け付けました。\nエントリーナンバー：${no}\nユニット名：${E.unitName}\n${start === 'r1' ? `1回戦：${dateText(y, E.r1.when)} ${hallText(E.r1)}` : `${roundName(start)}から出場（シード）`}\nエントリー料（${realYen(E.fee)}）は当日、会場受付でお支払いください。`);
   news(g, NEWS.me.entry({ y, me: E.unitName, no }), { silent: true });
   E.plannedTitle = netas[form.neta] ? netas[form.neta].title || '' : '';
-  L.register(g, y, E);
   return contractEntry(E);
 }
 // The entry as CONTRACT4 describes it (D1's g.contestEntry shape); the same object, so it stays live.
@@ -296,18 +291,8 @@ export async function goToday(g, opts = {}) {
   await runRound(g, due.year, due.rid, due.idx, opts);
   return true;
 }
-// From the app / the KOC talk: a linked entry goes through D1's 「会場へ向かう」 (its travel, today bookkeeping, then def.flow)
-export async function goFromApp(g) {
-  const due = dueToday(g);
-  const E = due ? entryOf(g, due.year) : null;
-  const d1due = due && E && E.d1 && L.linked(g) && typeof g.contestToday === 'function' ? (safe(() => g.contestToday(), []) || []).some((x) => x.id === 'koc') : false;
-  if (due && E && E.d1 && E.status !== 'voter' && d1due && typeof g.contestGo === 'function') {
-    const ok = await safe(() => g.contestGo('koc'), null);
-    if (ok && typeof ok.then === 'function') return ok;
-    return ok;
-  }
-  return goToday(g);
-}
+// From the KOC app / D1's 「今日の予定」 (def.flow): KOC's own trip (fare, stamina), desk, round
+export async function goFromApp(g) { return goToday(g); }
 
 // The player's performance through C's g.perform (fallbacks: the 'conte' minigame, then 'tsukkomi', then a simulation).
 async function perform(g, { y, rid, neta, len, venue, auto, title }) {
@@ -547,11 +532,11 @@ export async function runRound(g, y, rid, idx = 0, opts = {}) {
   const go = viaD1 ? 0 : await g.ask(`今日は『${head}』！\n${hallText(venue)}（${city}）。持ち時間${lenText(len)}。\n交通費 ${realYen(fare)}・体力 -${staminaNeed}`, ['会場へ向かう', 'やめておく（棄権する）'], { cancel: 1 });
   if (go !== 0) {
     const sure = await g.ask('本当に棄権する？（今年のキングオブコントはここで終わる）', ['やっぱり行く', '棄権する'], { cancel: 0 });
-    if (sure === 1) { E.status = 'withdrawn'; E.out = rid; L.markWithdrawn(g, y); logRun(g, E, rid, `${roundName(rid)}を棄権した。`); await g.say('（棄権した…）'); return; }
+    if (sure === 1) { E.status = 'withdrawn'; E.out = rid; logRun(g, E, rid, `${roundName(rid)}を棄権した。`); await g.say('（棄権した…）'); return; }
   }
   if (viaD1) {
     // D1 already paid the trip; the entry fee is still due at the desk
-    if (!E.feePaid && st.money < toInternal(E.fee)) { await g.say(`エントリー料（${realYen(E.fee)}）が払えない…。棄権するしかない。`); E.status = 'withdrawn'; E.out = rid; L.markWithdrawn(g, y); return; }
+    if (!E.feePaid && st.money < toInternal(E.fee)) { await g.say(`エントリー料（${realYen(E.fee)}）が払えない…。棄権するしかない。`); E.status = 'withdrawn'; E.out = rid; return; }
   } else if (st.money < toInternal(fare) + (E.feePaid ? 0 : toInternal(E.fee))) {
     await g.say(`お金が足りない…。（交通費${realYen(fare)}${E.feePaid ? '' : `＋エントリー料${realYen(E.fee)}`}）\n${fare > 1000 && city !== '東京' ? 'このままだと会場にたどり着けない。' : ''}`);
     if (city !== '東京' && fare > 1000) { const k = await g.ask('夜行バスなら安く行ける。どうする？', [`夜行バスで行く（${realYen(Math.round(fare / 3))}・体力 -10）`, '棄権する'], { cancel: 1 }); if (k !== 0 || st.money < toInternal(Math.round(fare / 3)) + (E.feePaid ? 0 : toInternal(E.fee))) { E.status = 'withdrawn'; E.out = rid; await g.say('（棄権した…）'); return; } st.money -= toInternal(Math.round(fare / 3)); st.stamina = Math.max(0, st.stamina - 10); }
@@ -634,8 +619,6 @@ export async function runRound(g, y, rid, idx = 0, opts = {}) {
     // SF day 1 of two: no result yet
     if (rid === 'sf' && R.twoNetaSF && idx === 0) {
       E.sfDone = 1;
-      L.record(g, y, roundIndex(y, 'sf', 0), { passed: true, score: out.perf, rank: res.rank });
-      L.pickNext(g, y, roundIndex(y, 'sf', 1), schedule(y).sf[1]);
       bd.set('gakuya', { unit: looks, others, order: [], boardTitle: '準決勝 2日目へ', caption: `${head}　終演後` });
       if (!auto) await sayP(g, E, out.perf >= 70 ? '1本目、ええ感じやった！明日の2本目で決めよう。' : '…明日の2本目で取り返そう。');
       return;
@@ -675,14 +658,12 @@ async function judgeRound(g, { y, rid, E, field, passN, out, res, auto, bd, venu
     await card(g, (c, t) => { D.scroll = Math.min(Math.max(0, rows.length - 36), Math.floor(t / 20) * 3); if (t > 50) D.verdict = { ok: passed, text: passed ? `${E.no} ${E.unitName}　通過！` : `${E.no}番の名前は…なかった` }; drawBoard(c, t, D); }, { min: 60 });
   }
   E.results.push(result);
-  L.record(g, y, roundIndex(y, rid, rid === 'sf' && R.twoNetaSF ? 1 : 0), { passed, score: perf, place, of: scored.length, rank: res.rank });
   const k = K(g);
   const pid = partnerIds(g, E)[0];
   if (passed) {
     sfx('fanfare');
     const next = roundsOf(y)[roundsOf(y).indexOf(rid) + 1];
     E.round = next;
-    if (next !== 'final') { L.pickNext(g, y, roundIndex(y, next, 0), planOf(g, y, E, next)); E.picked = { ...(E.picked || {}), [next]: true }; }
     E.sfDone = 0;
     E.harm = Math.max(0, num(E.harm) - 4);
     if (has(g, 'addNeed')) g.addNeed('stress', -8);
@@ -708,7 +689,6 @@ async function judgeRound(g, { y, rid, E, field, passN, out, res, auto, bd, venu
   // ---- out
   E.out = rid;
   E.status = revivalOK ? 'revival' : 'out';
-  if (!revivalOK) L.noRevival(g, y);
   if (rid === 'sf' && R.mode !== 'panel' && !revivalOK) { E.voter = true; E.status = 'voter'; }
   if (has(g, 'addNeed')) g.addNeed('stress', 4);
   if (pid && has(g, 'addAff')) safe(() => g.addAff(pid, 1, true));
@@ -794,7 +774,7 @@ export async function runFinalDay(g, y, opts = {}) {
   const firstTime = !seenOnce(g, 'final_' + role);
   const go = opts.viaD1 ? 0 : await g.ask(role === 'viewer' ? `今夜は『${titleOf(y)}』決勝の生放送。テレビで見る？` : `今日は『${titleOf(y)}』${role === 'revival' ? '敗者復活戦と' : ''}決勝！\nTBS 赤坂のスタジオへ向かう？`, [role === 'viewer' ? '見る' : '向かう', 'やめておく'], { cancel: 1 });
   if (go !== 0) {
-    if (role === 'finalist' || role === 'revival') { const s = await g.ask('出ないと、棄権になる。本当に行かない？', ['やっぱり行く', '行かない'], { cancel: 0 }); if (s === 1) { E.status = 'withdrawn'; L.markWithdrawn(g, y); await g.say('（棄権した…）'); return; } }
+    if (role === 'finalist' || role === 'revival') { const s = await g.ask('出ないと、棄権になる。本当に行かない？', ['やっぱり行く', '行かない'], { cancel: 0 }); if (s === 1) { E.status = 'withdrawn'; await g.say('（棄権した…）'); return; } }
     else return;
   }
   const S = season(g, y);
@@ -1163,14 +1143,13 @@ function finishFinal(g, y, rows, meRow) {
     if (has(g, 'addStageExp') && !has(g, 'perform')) safe(() => g.addStageExp('conte', 3));
     if (has(g, 'unitHarmony')) safe(() => g.unitHarmony(meRow === 0 ? 6 : 2, meRow === 0 ? 'キングオブコント優勝' : 'キングオブコント決勝'));
     for (const pid of partnerIds(g, E)) if (has(g, 'addAff')) safe(() => g.addAff(pid, meRow === 0 ? 10 : 3, true));
-    const perfs = E.finalPerfs || [];
-    L.record(g, y, roundIndex(y, 'final'), { champion: meRow === 0, passed: meRow === 0, place: meRow + 1, of: rows.length, total: typeof rows[meRow].total === 'number' ? rows[meRow].total : undefined, score: perfs.length ? perfs.reduce((a, b) => a + b, 0) / perfs.length : 70 });
     if (meRow === 0) news(g, NEWS.me.champion({ ed: R.edition, me: E.unitName, score: rows[0].total, n: R.entries.n }), { key: `champ|koc|${y}`, prio: 99 });
     else { news(g, NEWS.me.runner({ me: E.unitName, place: meRow + 1 })); news(g, NEWS.champion[0]({ ed: R.edition, champ: champ.name, score: typeof champ.total === 'number' ? champ.total : null, n: R.entries.n }), { key: `champ|koc|${y}`, prio: 95 }); }
     scheduleAfter(g, y, E, meRow);
-  } else if (!L.linked(g)) news(g, NEWS.champion[0]({ ed: R.edition, champ: champ.name, score: typeof champ.total === 'number' ? champ.total : null, n: R.entries.n }), { silent: true });
-  // the broadcast is this world's history (D1 too); without the player D1's own news tells it (the ranking is D1's)
-  L.writeHistory(g, y, rows, meRow >= 0 ? meRow + 1 : null);
+    yearRec(g, y).news.champ = g.state.day; // the morning does not tell it again
+  }
+  // the broadcast is this world's history (D1 reads it through def.historyList); a final the player only watched: the
+  // champion's news goes out the next morning (kocMorning, once)
   return { champ: champ.name };
 }
 

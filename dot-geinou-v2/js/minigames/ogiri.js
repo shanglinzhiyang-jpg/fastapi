@@ -199,7 +199,7 @@ class Ogiri extends PerformGame {
       if (this.refining.t >= 70) {
         const idea = this.refining.idea;
         const hs = this.members[this.pi].s.hassou;
-        const gain = Math.round(6 + hs * 14 + this.rng() * 6);
+        const gain = Math.round(4 + hs * 16 + this.rng() * 4);
         idea.q = clamp(idea.q + gain, 0, 100);
         idea.stars = this.hunch(idea.q);
         idea.refined = (idea.refined || 0) + 1;
