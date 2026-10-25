@@ -63,6 +63,19 @@ export async function exitPoint(g, st) {
   return { place, room: P.start.room, x: P.start.x, y: P.start.y, dir: P.start.dir || 'down' };
 }
 
+// the same, without waiting for a town module (the apps: the cached EKI exports and the fallbacks)
+export function exitPointSync(st) {
+  const s = NET.STATIONS[st];
+  if (!s || !s.place || !PLACES[s.place]) return null;
+  const place = s.place, P = PLACES[place];
+  const E = EKI_OF[place];
+  if (E && Number.isFinite(E.x)) return { place, room: E.room || 'main', x: E.x, y: E.y, dir: E.dir || 'down' };
+  if (P.ekiExit) return { place, room: 'main', x: P.ekiExit.x, y: P.ekiExit.y, dir: P.ekiExit.dir || 'down' };
+  const fb = FALLBACK[place];
+  if (fb) return { place, room: 'main', x: fb[0], y: fb[1], dir: 'down' };
+  return { place, room: P.start.room, x: P.start.x, y: P.start.y, dir: P.start.dir || 'down' };
+}
+
 // ---------------------------------------------------------------- state
 const READY = new WeakSet();
 export function ekiState(g) {
@@ -637,7 +650,7 @@ const rooms = {};
 for (const id of Object.keys(NET.STATIONS)) if (NET.enterable(id)) rooms[id] = stationRoom(id);
 const place = {
   id: 'eki', kind: 'building', bgm: 'office', noTrip: false, rooms,
-  api: { enterStation, rideTo, exitPoint, rideCutscene, openRouteMap, ekiState, NET },
+  api: { enterStation, rideTo, exitPoint, exitPointSync, rideCutscene, openRouteMap, ekiState, NET, ticketMachine, buyTicket, gateStep, board, leaveStation },
 };
 // enterPlace('eki') (a door without its own goto): the station of the town you are in
 const curStation = () => {

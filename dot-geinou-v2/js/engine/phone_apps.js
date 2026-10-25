@@ -476,7 +476,22 @@ const AREAS = {
 const AREA_ORDER = ['tokyo', 'machi', 'minato', 'nagatacho', 'kanraku', 'namba'];
 const HUB = 'tokyo';
 const STATION = { kanto: 'station_tokyo', osaka: 'station_namba' };
-const NO_TRIP = new Set(['jikka', 'keimusho']); // the 実家 (its own trip home: family.js), the prison
+const NO_TRIP = new Set(['jikka', 'keimusho', 'eki']); // the 実家 (its own trip home: family.js), the prison, the 駅構内 [R9-B1]
+// [R9-B1] the rail network (js/world/eki_net.js): the 駅前 areas join the map (offsets from 東京 / なんば in tiles,
+// MINI = their small labels on the schematic map), the 電車 is a way to go (routes, fares, times by the network), and the
+// ride uses the 駅構内 module's cutscene (js/world/eki.js, PLACES.eki.api). The bus only runs between the five Tokyo towns.
+import * as NET from '../world/eki_net.js';
+const BUS_TOWNS = new Set(['tokyo', 'machi', 'minato', 'nagatacho', 'kanraku']);
+const MINI = {
+  ekimae_shinjuku: [4, 4], ekimae_shibuya: [40, 4], ekimae_shimokita: [4, 20], ekimae_chofu: [4, 74], ekimae_fuchu: [4, 90],
+  ekimae_ueno: [150, 4], ekimae_asakusa: [188, 4], ekimae_akihabara: [150, 20], osaka_umeda: [200, 78], osaka_shinsekai: [200, 92],
+};
+for (const [id, pos] of Object.entries(NET.AREA_POS)) {
+  const st = NET.stationOfPlace(id);
+  if (!AREAS[id]) AREAS[id] = { name: st ? NET.STATIONS[st].name : id, full: '', ox: pos.ox, oy: pos.oy, osaka: !!pos.osaka, at: null, box: null, mini: MINI[id] || null, col: pos.osaka ? '#d6304a' : '#3a7ac0', area: true };
+}
+const nearSt = (area) => NET.stationOfPlace(area);
+const ekiApi = () => (PLACES.eki && PLACES.eki.api) || null;
 const BUS_FARE = 210; // the town buses (tokyo.js busToMachi …)
 const SHINKANSEN_FARE = 3000; // station.js FARE (read from there when it is loaded)
 
@@ -487,7 +502,7 @@ export function placeLabel(id) {
   return String(n || (GUIDE[id] && GUIDE[id].name) || id);
 }
 const placeShort = (id) => (GUIDE[id] && GUIDE[id].short) || placeLabel(id);
-const areaOf = (id) => AREAS[id] || { name: placeShort(id), full: placeLabel(id), ox: 0, oy: 0, col: '#5a6a8a', at: null, box: null };
+const areaOf = (id) => { const A = AREAS[id]; if (A && A.area && !A.full) A.full = placeLabel(id); return A || { name: placeShort(id), full: placeLabel(id), ox: 0, oy: 0, col: '#5a6a8a', at: null, box: null }; }; // [R9-B1] the 駅前 areas' full names
 const regionOf = (town) => (areaOf(town).osaka ? 'osaka' : 'kanto');
 
 // building entity of a place in its town (the first whose cond holds), rebuilt when places change
@@ -517,7 +532,7 @@ function destOf(g, id) {
   if (P.kind === 'town') {
     const A = AREAS[id];
     const at = A && A.at ? A.at : [P.start.x, P.start.y];
-    return { id, name: A ? A.full : placeLabel(id), area: id, room: A ? 'main' : P.start.room, x: at[0], y: at[1], dir: 'down', inside: false, town: true };
+    return { id, name: A ? (A.full || placeLabel(id)) : placeLabel(id), area: id, room: A ? 'main' : P.start.room, x: at[0], y: at[1], dir: 'down', inside: false, town: true }; // [R9-B1] (A.full)
   }
   const b = buildingOf(id, g);
   if (!b) return null;
@@ -529,6 +544,7 @@ function destOf(g, id) {
 function hereOf(g) {
   const m = g.map;
   if (!m || !m.place) return null;
+  if (m.placeId === 'eki') { const api = ekiApi(); const ex = api && api.exitPointSync ? api.exitPointSync(m.roomId) : null; return ex ? { id: 'eki', area: ex.place, x: ex.x, y: ex.y } : null; } // [R9-B1] in a station: its exit
   if (m.place.kind === 'town') return { id: m.placeId, area: m.placeId, x: m.player.x, y: m.player.y };
   const d = destOf(g, m.placeId);
   return d ? { id: m.placeId, area: d.area, x: d.x, y: d.y } : null;
@@ -566,19 +582,40 @@ function tripOptions(g, from, d, shinFare) {
       const far = t > 40;
       out.push({ id: 'walk', label: '歩いて行く', short: '徒歩', fare: 0, stamina: far ? 4 : 2, hunger: far ? 3 : 1, ride: 'walk', sub: far ? '少し遠い' : 'すぐそこ', desc: 'お金はかからないが、少しつかれる。' });
     } else {
-      const rides = from.area === HUB || d.area === HUB ? 1 : 2;
-      out.push({ id: 'bus', label: 'バスで行く', short: 'バス', fare: BUS_FARE * rides, stamina: 3 * rides, ride: 'bus', sub: rides > 1 ? '東京駅前で乗りかえ' : 'バス停から', desc: 'バス停まで歩くけれど、安い。' });
+      const tr = trainOption(g, from, d); // [R9-B1]
+      if (tr) out.push(tr);
+      if (BUS_TOWNS.has(from.area) && BUS_TOWNS.has(d.area)) {
+        const rides = from.area === HUB || d.area === HUB ? 1 : 2;
+        out.push({ id: 'bus', label: 'バスで行く', short: 'バス', fare: BUS_FARE * rides, stamina: 3 * rides, ride: 'bus', sub: rides > 1 ? '東京駅前で乗りかえ' : 'バス停から', desc: 'バス停まで歩くけれど、安い。' });
+      }
     }
     out.push({ id: 'taxi', label: 'タクシー', short: 'タクシー', fare: taxiFare(t), stamina: 0, ride: 'taxi', sub: taxiHow, desc: '目の前まで。体力を使わない。' });
   } else {
+    const tr = trainOption(g, from, d); // [R9-B1] the 新幹線 and the local lines, by the network
+    if (tr) out.push(tr);
     const s1 = destOf(g, STATION[regionOf(from.area)]), s2 = destOf(g, STATION[regionOf(d.area)]);
     const legs = (s1 && s1.id !== from.id ? taxiFare(tiles(from, s1)) : 0) + (s2 && s2.id !== d.id ? taxiFare(tiles(s2, d)) : 0);
-    out.push({ id: 'shinkansen', label: '新幹線', short: '新幹線', fare: shinFare, stamina: 8, ride: 'shinkansen', sub: '駅までは電車と歩き', desc: '駅までは自分で行く。' });
+    if (!tr) out.push({ id: 'shinkansen', label: '新幹線', short: '新幹線', fare: shinFare, stamina: 8, ride: 'shinkansen', sub: '駅までは電車と歩き', desc: '駅までは自分で行く。' });
     out.push({ id: 'shinkansen_taxi', label: '新幹線＋タクシー', short: '新幹線', fare: shinFare + legs, stamina: 3, ride: 'shinkansen', sub: '駅の前後はタクシー', desc: '駅の前後もタクシーで楽に。' });
   }
   const stopped = transportStopped(g);
-  for (const o of out) o.why = stopped && o.id !== 'walk' ? '災害の影響で、交通機関が止まっている' : g.state.money < o.fare ? 'お金が足りない…' : g.state.stamina < o.stamina ? '体力が足りない…' : null;
+  for (const o of out) o.why = stopped && o.id !== 'walk' ? '災害の影響で、交通機関が止まっている' : o.svcWhy || (g.state.money < o.fare ? 'お金が足りない…' : g.state.stamina < o.stamina ? '体力が足りない…' : null);
   return out;
+}
+// [R9-B1] 電車: from the station nearest to `from` to the one nearest to `d` (walks at both ends, the network's route)
+function trainOption(g, from, d) {
+  const a = nearSt(from.area), b = nearSt(d.area);
+  if (!a || !b || a === b) return null;
+  let r = null;
+  try { r = NET.route(g, a, b); } catch (e) { console.error(e); r = null; }
+  if (!r) return null;
+  const shin = r.kinds.includes('shinkansen');
+  const lines = [...new Set(r.segs.map((s) => NET.LINES[s.line].short))];
+  return {
+    id: 'train', label: shin ? '新幹線と電車' : '電車で行く', short: shin ? '新幹線' : '電車', fare: r.fare, stamina: shin ? 6 : 1 + r.transfers, hunger: shin ? 3 : 1, ride: 'train', net: r,
+    sub: `${NET.stName(a)}→${NET.stName(b)}・${NET.hm(r.min)}${r.transfers ? `・乗換${r.transfers}回` : ''}`,
+    desc: `${lines.join('・')}。駅まで歩いて、電車に乗る。`, svcWhy: r.service.ok ? null : r.service.why,
+  };
 }
 // Why no trip can start now (null: one can).
 function tripBlock(g) {
@@ -644,6 +681,18 @@ async function doTrip(g, from, d, o) {
   await g.fadeOut(12);
   let ride = null;
   const m = EXT.station;
+  const api = ekiApi(); // [R9-B1] 電車: the network's ride (time, the line's colours), then straight to the place
+  if (o.ride === 'train' && o.net && api) {
+    if (typeof g.advanceTime === 'function') g.advanceTime(o.net.min + 6, '移動（電車）');
+    try { const E = api.ekiState(g); E.rides++; E.fares += o.fare; E.km += o.net.km; E.minutes += o.net.min; } catch (e) { console.error(e); }
+    await api.rideCutscene(g, o.net, d.name);
+    const P = PLACES[d.id];
+    if (d.inside && P && P.start) await g.goto(d.id, P.start.room, P.start.x, P.start.y, P.start.dir || 'up');
+    else await g.goto(d.area, d.room, d.x, d.y, d.dir);
+    g.notify(`${d.name}に着いた（${o.short} ${fmtMoney(o.fare)}）`, { color: '#ffffff' });
+    g.save(true);
+    return;
+  }
   if (o.ride === 'shinkansen' && m && typeof m.travelScene === 'function') {
     try { ride = m.travelScene(g, { to: areaOf(d.area).full, via: o.id === 'shinkansen_taxi' ? '駅までタクシー → 新幹線 → 駅からタクシー' : '新幹線で', vehicle: 'shinkansen', scenery: 'fuji' }); } catch (e) { console.error(e); ride = null; }
   }
@@ -789,6 +838,7 @@ function townSize(id) {
 }
 function mapPoint(d, px, py) {
   const A = AREAS[d.area];
+  if (A && A.mini) return A.osaka ? [px + A.mini[0], py + A.mini[1] + 6] : [px + A.mini[0] + A.name.length * 6 + 2, py + A.mini[1] + 7]; // [R9-B1] a 駅前 area's label
   if (!A || !A.box) return null;
   const [bx, by, bw, bh] = A.box;
   const [tw, th] = townSize(d.area);
@@ -822,6 +872,16 @@ function drawMapPanel(c, a, g, dests, sel, here, t) {
     const fill = on ? mix(A.col, bg, 0.72) : mix('#a8a8b0', bg, 0.7);
     box(c, a.x + bx, a.y + by, bw, bh, 4, fill, on ? shade(A.col, -0.2) : '#a8a8b0');
     T(c, A.name, a.x + bx + 4, a.y + by + 1, 12, on ? shade(A.col, -0.45) : '#8a8a96');
+  }
+  // [R9-B1] the 駅前 areas you have been to: small labels in the corners (大阪's inside the なんば box)
+  for (const id of Object.keys(AREAS)) {
+    const A = AREAS[id];
+    if (!A.mini || !vis.has(id)) continue;
+    const [mx, my] = A.mini;
+    if (A.osaka) { R(c, a.x + mx - 2, a.y + my + 4, 5, 5, shade(A.col, -0.2)); continue; }
+    const w = A.name.length * 12 + 4;
+    box(c, a.x + mx, a.y + my, w, 14, 3, mix(A.col, bg, 0.7), shade(A.col, -0.2));
+    T(c, fitText(c, A.name, w - 2, 12), a.x + mx + w / 2, a.y + my + 1, 12, shade(A.col, -0.45), 'center');
   }
   // places (dots), the selected one (a pin) and where you are (a ring)
   for (const d of dests) {

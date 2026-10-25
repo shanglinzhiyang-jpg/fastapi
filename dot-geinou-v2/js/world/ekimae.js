@@ -66,7 +66,6 @@ defineTile('ekimae_paving', {
 export function trainBand(x, y, w, colors, extra = {}) {
   return {
     type: 'prop', x, y, w, h: 2, solid: false, z: -50,
-    text: '電車が走っている。',
     draw(ctx, sx, sy, g) {
       const per = 520;
       const f = (g.frame || 0) + (extra.phase || 0);
@@ -380,6 +379,7 @@ export function ekimae(spec) {
     const sa = spec.signAt || [exit.x - 3, 10];
     ents.push(postSign(sa[0], sa[1], '駅前案内', spec.exitNote || [`${NET.stName(st)}駅前の案内板だ。`]));
     ents.push(...(spec.entities ? spec.entities(K) : []));
+    ents.push(...crowd(spec, c, ents, exit));
     const events = spec.events ? spec.events(K) : [];
     if (rail === 'under') events.push({ x: sx + 6, y: 8, on: 'step', run: enter });
     return { w: W, h: H, cells: c, entities: ents, events };
@@ -393,7 +393,12 @@ export function ekimae(spec) {
         onEnter: async (g) => {
           unstick(g);
           const k = `${spec.id}_intro`;
-          if (spec.intro && !g.flag(k)) { g.setFlag(k); await g.say(typeof spec.intro === 'function' ? spec.intro(g) : spec.intro); }
+          // the first visit: the arrival lines as toasts (never blocks a script that lands here)
+          if (spec.intro && !g.flag(k)) {
+            g.setFlag(k);
+            const lines = [].concat(typeof spec.intro === 'function' ? spec.intro(g) : spec.intro).filter(Boolean);
+            lines.slice(0, 3).forEach((t, i) => g.notify(t, { color: i ? '#ffffff' : '#ffd23f', life: 260 + i * 60 }));
+          }
         },
       },
     },
@@ -405,6 +410,57 @@ export function ekimae(spec) {
     if (!GUIDE_ORDER.includes(spec.id)) GUIDE_ORDER.splice(after >= 0 ? after : GUIDE_ORDER.length, 0, spec.id);
   }
   return place;
+}
+// passers-by on the plaza and the sidewalks (spec.crowd: how many, default 4), on free tiles only
+const CROWD_LOOKS = ['fan', 'salaryman', 'mom', 'kid', 'oldman', 'oldwoman', 'tourist', 'clerk', 'actress', 'comedian2'];
+const TOPS = ['#ff9a3c', '#5fd7ff', '#ff7eb6', '#7ae07a', '#c08aff', '#ffd23f', '#6a7a8a', '#3a7ac0', '#a8743a'];
+const CROWD_LINES = {
+  tokyo: [
+    () => ['駅前は、待ち合わせの人でいっぱいだね。'],
+    (g) => [yearOf(g) < 1996 ? 'ポケベルが鳴った！　公衆電話をさがさなきゃ。' : yearOf(g) < 2009 ? 'ケータイの電波、ここだと入りにくいんだよね。' : 'スマホの地図がないと、もう東京は歩けないよ。'],
+    () => ['電車、遅れてないといいけど…。'],
+    () => ['あの人、テレビで見たことあるかも…。気のせいか。'],
+    (g) => [yearOf(g) < 2001 ? 'きっぷを買う列が長くて、乗りおくれそう。' : 'ICカードの残高、足りるかな。'],
+    () => ['東京って、駅ごとに街の顔がちがうよね。'],
+  ],
+  osaka: [
+    () => ['ここ来たら、とりあえず何か食べなあかんで。'],
+    () => ['きょうも人多いなあ。どこも行列や。'],
+    () => ['エスカレーターは右に立つんが、大阪やで。'],
+    (g) => [yearOf(g) < 2003 ? 'きっぷ買うのに、小銭が足らへん…。' : 'ICOCA、チャージしとかな。'],
+    () => ['なんばまでは、地下鉄ですぐやで。'],
+  ],
+};
+function crowd(spec, c, ents, exit) {
+  const n = spec.crowd ?? 4;
+  if (!n) return [];
+  const W = c[0].length, H = c.length;
+  const busy = new Set();
+  const mark = (x, y) => busy.add(`${x},${y}`);
+  for (const e of ents) {
+    const w = Math.ceil(e.w || 1), h = Math.ceil(e.h || 1);
+    for (let y = Math.floor(e.y); y < Math.floor(e.y) + h + (e.type === 'building' ? 1 : 0); y++) for (let x = Math.floor(e.x) - 1; x <= Math.floor(e.x) + w; x++) mark(x, y);
+  }
+  for (let y = exit.y - 1; y <= exit.y + 2; y++) for (let x = exit.x - 1; x <= exit.x + 1; x++) mark(x, y);
+  const free = (x, y) => {
+    if (x < 2 || y < 2 || x >= W - 2 || y >= H - 2 || busy.has(`${x},${y}`)) return false;
+    const cell = c[y][x];
+    return cell.length === 1 && ['ekimae_paving', 'sidewalk', 'stone', 'brick', 'path'].includes(cell[0]);
+  };
+  const out = [];
+  let k = spec.id.length * 13;
+  const rows = [10, 16, 20, 11, 9, 28];
+  const lines = CROWD_LINES[spec.region] || CROWD_LINES.tokyo;
+  for (let i = 0; i < 400 && out.length < n; i++) {
+    k = (k * 1103515245 + 12345) & 0x7fffffff;
+    const y = rows[(k >> 3) % rows.length], x = 2 + ((k >> 7) % (W - 4));
+    if (!free(x, y)) continue;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -3; dx <= 3; dx++) mark(x + dx, y + dy);
+    const look = { ...LOOKS[CROWD_LOOKS[k % CROWD_LOOKS.length]], top: TOPS[(k >> 4) % TOPS.length] };
+    const say = lines[(k >> 9) % lines.length];
+    out.push({ type: 'npc', id: `crowd${out.length}`, x, y, dir: ['down', 'left', 'right', 'up'][(k >> 2) % 4], look, name: '通行人', wander: 2, talk: async (g, npc) => g.say(say(g), { name: npc.name, look: npc.look }) });
+  }
+  return out;
 }
 // an NPC shorthand
 export const npc = (id, x, y, dir, look, name, lines, extra = {}) => ({ type: 'npc', id, x, y, dir, look, name, ...(typeof lines === 'function' ? { talk: async (g, n) => g.say(lines(g), { name: n.name, look: n.look }) } : { text: lines }), ...extra });

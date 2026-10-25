@@ -1,4 +1,5 @@
-// ドット自動車教習所 (owner: R8-L1) — the driving school. Tokyo, 劇場通り (js/world/tokyo.js adds the door).
+// ドット自動車教習所 (owner: R8-L1; moved by R9-B1) — the driving school. 調布駅前 (js/world/ekimae_tokyo.js adds the door;
+// its 教習コース is also seen from the street, south of the main road).
 //
 //   lobby      受付・待合（受付の水野さん：入所・予約・進み具合・精算／掲示板）
 //   kyoshitsu  学科教室（桐生 教官：学科教習・仮免学科試験）
@@ -10,6 +11,7 @@
 // This file also exports the room builders the 合宿先 (gassyuku.js) reuses.
 
 import { registerPlace } from '../engine/map.js';
+import { text } from '../engine/draw.js';
 import { LOOKS } from '../engine/sprites.js';
 import { taxi } from '../world/props.js';
 import { FLOW, lic, schoolOf, progressText, SCHOOL_NAME, runDriving, eraId, hmText, CAMP_DAYS } from '../engine/license.js';
@@ -53,9 +55,39 @@ export function classroomRoom(back, backSpot) {
     events: [{ x: 4, y: 1, w: 6, on: 'action', run: async (g) => { await g.say(['ホワイトボードだ。', '学科教習は、50分ごとに1コマ。\n第1段階で3コマ、第2段階でも3コマほど受ける。', '仮免の学科試験は50問・90%以上で合格だ。']); } }],
   };
 }
+// [R9-B1] the course painted like a real 教習コース: lane edges, a centre island, a 踏切, an S字 and a クランク, 停止線
+// and a signal (drawn under everyone; the walkable tiles are unchanged)
+function drawCourse(ctx, g, cam) {
+  const X = (x) => x * 16 - cam.x, Y = (y) => y * 16 - cam.y;
+  const F = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  // outer lane edges
+  F(X(1) + 6, Y(2) + 6, 18 * 16 - 12, 1, '#f4f4f0'); F(X(1) + 6, Y(9) + 9, 18 * 16 - 12, 1, '#f4f4f0');
+  F(X(1) + 6, Y(2) + 6, 1, 7 * 16 + 4, '#f4f4f0'); F(X(19) - 7, Y(2) + 6, 1, 7 * 16 + 4, '#f4f4f0');
+  // the centre island (curbs + grass)
+  F(X(6), Y(5) + 2, 4 * 16, 28, '#c8c8c0'); F(X(6) + 1, Y(5) + 3, 4 * 16 - 2, 26, '#5a9a4a');
+  for (let k = 0; k < 6; k++) F(X(6) + 4 + k * 10, Y(5) + 8 + (k % 2) * 8, 3, 3, '#7ab86a');
+  // the 踏切 across the lane on the left
+  F(X(3) + 2, Y(6), 12, 4 * 16, '#5a5d66'); for (const dx of [4, 10]) F(X(3) + dx, Y(6), 1.5, 4 * 16, '#c8ccd4');
+  F(X(2) + 8, Y(6) - 2, 1, 4 * 16 + 4, '#f4f4f0');
+  // S字 (two curved edges) and the クランク (right angles) on the right
+  ctx.strokeStyle = '#f4f4f0'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(X(12), Y(9) + 8); ctx.bezierCurveTo(X(14), Y(9) + 8, X(13), Y(7), X(15), Y(7)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(X(12), Y(8) + 4); ctx.bezierCurveTo(X(14), Y(8) + 4, X(13), Y(7) - 10, X(15), Y(7) - 10); ctx.stroke();
+  F(X(15), Y(3) + 4, 1, 22, '#f4f4f0'); F(X(15), Y(3) + 4, 22, 1, '#f4f4f0'); F(X(17) - 6, Y(3) + 4, 1, 34, '#f4f4f0');
+  // 停止線 and a ダイヤマーク
+  F(X(8), Y(7) + 2, 1, 26, '#f4f4f0');
+  F(X(10) + 4, Y(8) + 6, 6, 1, '#f4f4f0'); F(X(10) + 6, Y(8) + 4, 2, 5, '#f4f4f0');
+  // labels
+  const lab = (t, x, y) => text(ctx, t, x, y, { size: 6, color: 'rgba(244,244,240,0.9)', shadow: null });
+  lab('踏切', X(3), Y(9) + 2); lab('S字', X(13), Y(8) + 4); lab('クランク', X(15) + 2, Y(4) + 2); lab('止まれ', X(7) + 1, Y(8) + 4);
+  // a signal on the island
+  F(X(7) + 7, Y(5) - 10, 2, 14, '#3b3f48'); F(X(7) + 3, Y(5) - 16, 10, 6, '#20232a');
+  const ph = Math.floor(((g && g.frame) || 0) / 90) % 3;
+  ['#3ad06a', '#ffd23f', '#ff3b3b'].forEach((c, i) => F(X(7) + 4 + i * 3, Y(5) - 14.5, 2, 2, ph === i ? c : '#3a3a40'));
+}
 export function courseRoom(back) {
   return {
-    outdoor: true,
+    outdoor: true, drawUnder: drawCourse,
     wall: 'gray', floor: 'road', bg: '#4b8a4a',
     tiles: [
       '####################',

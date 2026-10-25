@@ -79,6 +79,9 @@ ekimae({
   entities: (K) => [
     tower(16, 9, 4, 'tsutenkaku', { talk: (g) => tsutenkaku(g) }),
     { type: 'sign', x: 17, y: 11, solid: true, text: ['通天閣の足もとだ。', '展望台へのエレベーターは、この下から。'] },
+    B(24, 3, 7, 5, 'small', 'ふぐ料理', { wall: '#f4e6cc', roof: '#2a3a7a', sign: { text: 'ふぐ', bg: '#2a3a7a', color: '#ffffff' } }, (g) => eatery(g, { greet: '大きなふぐのちょうちんが目じるしの店だ。', items: [{ name: 'てっちり（ふぐ鍋）', price: 3000, heal: 40, fill: 40, stress: 6, text: 'ぷりぷりのふぐに、ポン酢。しめは雑炊！', minutes: 60 }] })),
+    B(32, 3, 6, 5, 'small', 'たこ焼き屋', { wall: '#f6e7c8', roof: '#d62f2f', sign: { text: 'たこ焼き', bg: '#ff8a3d', color: '#ffffff' } }, (g) => eatery(g, { greet: '「焼きたてやで〜！」', items: [{ name: 'たこ焼き 8個', price: 500, heal: 20, fill: 20, stress: 3, text: '外はカリッ、中はトロッ。', minutes: 10 }] })),
+    B(39, 3, 8, 5, 'shop', 'ゲームセンター', { wall: '#2a2d36', roof: '#8a5ac8', stripes: ['#ff7eb6', '#5fd7ff'], sign: { text: 'ゲーム', bg: '#20232a', color: '#5fd7ff' } }, (g) => sight(g, 'shinsekai_game', ['昔ながらのゲームセンターだ。', 'レトロな筐体で、一回だけ遊んだ。'], 3, 15)),
     B(24, 9, 6, 6, 'small', '串カツ屋', { wall: '#fff3e0', roof: '#8a5a33', sign: { text: '串カツ', bg: '#ffd23f', color: '#20232a' } }, (g) => kushikatsu(g)),
     B(31, 9, 9, 6, 'theater', '新世界ドット劇場', { wall: '#f6e7c8', roof: '#a8202a', sign: { text: 'ドット劇場', bg: '#a8202a', color: '#ffe48a' } }, (g) => taishu(g)),
     B(41, 9, 6, 6, 'small', '将棋の店', { wall: '#efe2c8', roof: '#3a2a20', sign: { text: '将棋', bg: '#3a2a20', color: '#ffffff' } }, (g) => shogi(g)),

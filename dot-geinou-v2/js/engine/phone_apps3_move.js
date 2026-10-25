@@ -7,6 +7,9 @@
 // Facts: 東京–新大阪 fastest: ひかり 2時間56分 (1986-11), のぞみ 2時間30分 (1992-03-14), 2時間25分
 // (N700系 2007-07), 2時間22分 (2015-03-14), 2時間21分 (2020-03-14). Tokyo taxi fares: phone_apps.js taxiFare.
 // IC乗車券 (Suica) 2001-11-18: earlier eras buy a きっぷ.
+// [R9-B1] the 電車 now runs on the rail network (js/world/eki_net.js): real routes with lines, transfers, minutes and
+// fares by distance (the 新幹線 is part of it), 終電・始発 and weather from the network; the 駅前 areas are destinations;
+// 「路線図から駅をえらぶ」 opens the HD route map (js/world/eki_map.js) to go to any station's 駅前, even a new one.
 
 import { SW, SH, fmtMoney, clamp, shade, mix } from './util.js';
 import { text } from './draw.js';
@@ -20,8 +23,11 @@ import {
   weatherNow, hm, chip, buttons, hit, T, fitText, PC, box, rrect, para,
 } from './phone_apps3_kit.js';
 
-const EXT = { station: null };
+const EXT = { station: null, map: null };
 import('../world/station.js').then((m) => { EXT.station = m; }).catch(() => { /* station.js left out */ });
+import('../world/eki_map.js').then((m) => { EXT.map = m; }).catch(() => { /* eki_map.js left out */ });
+import * as NET from '../world/eki_net.js';
+const ekiApi = () => (PLACES.eki && PLACES.eki.api) || null;
 
 export const COLOR = '#2a7ab0';
 export const norikaeTitle = (g) => (devOf(g) === 'techo' ? '時刻表' : '乗換案内');
@@ -37,16 +43,18 @@ definePart('trip', (t, day) => ({
 // ---------------------------------------------------------------- the towns (as the マップ app; tiles ≈ 50 m)
 const AREAS = {
   tokyo: { name: '東京', ox: 0, oy: 0, st: '東京' },
-  machi: { name: '商店街', ox: -96, oy: 0, st: 'ドット商店街' },
-  minato: { name: 'テレビ局', ox: 96, oy: 0, st: 'テレビ局前' },
+  machi: { name: '商店街', ox: -96, oy: 0, st: '阿佐ケ谷' },
+  minato: { name: 'テレビ局', ox: 96, oy: 0, st: '六本木' },
   nagatacho: { name: '永田町', ox: 0, oy: -70, st: '永田町' },
-  kanraku: { name: 'ネオン街', ox: 0, oy: 60, st: 'ネオン街' },
+  kanraku: { name: 'ネオン街', ox: 0, oy: 60, st: '新橋' },
   namba: { name: 'なんば', ox: 0, oy: 0, osaka: true, st: 'なんば' },
 };
-const AREA_ORDER = ['tokyo', 'machi', 'minato', 'nagatacho', 'kanraku', 'namba'];
+for (const [id, pos] of Object.entries(NET.AREA_POS)) { const st = NET.stationOfPlace(id); if (!AREAS[id]) AREAS[id] = { name: st ? NET.STATIONS[st].name : id, ox: pos.ox, oy: pos.oy, osaka: !!pos.osaka, st: st ? NET.STATIONS[st].name : id }; }
+const AREA_ORDER = ['tokyo', 'machi', 'minato', 'nagatacho', 'kanraku', 'namba', 'ekimae_shinjuku', 'ekimae_shibuya', 'ekimae_ueno', 'ekimae_asakusa', 'ekimae_akihabara', 'ekimae_shimokita', 'ekimae_chofu', 'ekimae_fuchu', 'osaka_umeda', 'osaka_shinsekai'];
 const HUB = 'tokyo';
+const BUS_TOWNS = new Set(['tokyo', 'machi', 'minato', 'nagatacho', 'kanraku']);
 const STATION = { kanto: 'station_tokyo', osaka: 'station_namba' };
-const NO_TRIP = new Set(['jikka', 'keimusho']);
+const NO_TRIP = new Set(['jikka', 'keimusho', 'eki']);
 export const TRAIN_FARE = 180; // one line (internal = today's yen; each era shows its own price)
 export const BUS_FARE = 210;
 const areaOf = (id) => AREAS[id] || { name: placeLabel(id), ox: 0, oy: 0, st: placeLabel(id) };
@@ -85,6 +93,7 @@ function destOf(g, id) {
 function hereOf(g) {
   const m = g.map;
   if (!m || !m.place) return null;
+  if (m.placeId === 'eki') { const api = ekiApi(); const ex = api && api.exitPointSync ? api.exitPointSync(m.roomId) : null; return ex ? { id: 'eki', name: NET.stLabel(m.roomId), area: ex.place, x: ex.x, y: ex.y } : null; }
   if (m.place.kind === 'town') return { id: m.placeId, name: placeLabel(m.placeId), area: m.placeId, x: m.player.x, y: m.player.y };
   const d = destOf(g, m.placeId);
   return d ? { id: m.placeId, name: d.name, area: d.area, x: d.x, y: d.y } : null;
@@ -141,18 +150,10 @@ export function routesTo(g, from, d) {
       const far = t > 40;
       out.push({ id: 'walk', mode: 'walk', label: '徒歩', steps: [{ how: '徒歩', from: from.name, to: d.name, min: Math.max(1, Math.round(t * 0.6)) }], fare: 0, stamina: far ? 4 : 2, hunger: far ? 3 : 1 });
     } else {
+      const tr = netRoute(g, from, d, ticket);
+      if (tr) out.push(tr);
       const lines = from.area === HUB || d.area === HUB ? 1 : 2;
       const D = townDist(from.area, d.area);
-      const ride = (dist) => Math.max(3, Math.round(dist * 0.06)) + 2 + trainDelay;
-      const steps = [{ how: '徒歩', from: from.name, to: `${A.st}駅`, min: 4 }];
-      if (lines === 1) steps.push({ how: '電車', from: `${A.st}駅`, to: `${B.st}駅`, min: ride(D), note: trainDelay ? `${w.label}で遅れ` : '' });
-      else {
-        steps.push({ how: '電車', from: `${A.st}駅`, to: '東京駅', min: ride(townDist(from.area, HUB)), note: '' });
-        steps.push({ how: '乗換', from: '東京駅', to: '東京駅', min: 4, note: 'ホームを移動' });
-        steps.push({ how: '電車', from: '東京駅', to: `${B.st}駅`, min: ride(townDist(HUB, d.area)), note: trainDelay ? `${w.label}で遅れ` : '' });
-      }
-      steps.push({ how: '徒歩', from: `${B.st}駅`, to: d.name, min: 4 });
-      out.push({ id: 'train', mode: 'train', label: lines > 1 ? '電車（東京で乗換）' : '電車', steps, fare: TRAIN_FARE * lines, stamina: 1 + lines, hunger: 1, transfers: lines - 1, why: trainStop, note: ticket });
       const bsteps = [{ how: '徒歩', from: from.name, to: `${A.st}バス停`, min: 3 }];
       if (lines === 1) bsteps.push({ how: 'バス', from: `${A.st}`, to: `${B.st}`, min: 6 + Math.round(D * 0.14) + trainDelay });
       else {
@@ -161,7 +162,7 @@ export function routesTo(g, from, d) {
         bsteps.push({ how: 'バス', from: '東京駅前', to: B.st, min: 6 + Math.round(townDist(HUB, d.area) * 0.14) + trainDelay });
       }
       bsteps.push({ how: '徒歩', from: `${B.st}バス停`, to: d.name, min: 3 });
-      out.push({ id: 'bus', mode: 'bus', label: lines > 1 ? 'バス（東京駅前で乗換）' : 'バス', steps: bsteps, fare: BUS_FARE * lines, stamina: 3 * lines, hunger: 1, transfers: lines - 1, why: busStop });
+      if (BUS_TOWNS.has(from.area) && BUS_TOWNS.has(d.area)) out.push({ id: 'bus', mode: 'bus', label: lines > 1 ? 'バス（東京駅前で乗換）' : 'バス', steps: bsteps, fare: BUS_FARE * lines, stamina: 3 * lines, hunger: 1, transfers: lines - 1, why: busStop });
     }
     out.push({ id: 'taxi', mode: 'taxi', label: 'タクシー', steps: [{ how: '待つ', from: from.name, to: from.name, min: pickup, note: taxiHow }, { how: 'タクシー', from: from.name, to: d.name, min: Math.max(2, Math.round(t * 0.09)), note: nightFare ? '深夜割増（2割増し）' : '' }], fare: taxi(t), stamina: 0, hunger: 0 });
   } else {
@@ -185,7 +186,8 @@ export function routesTo(g, from, d) {
       }
       return { id: byTaxi ? 'shin_taxi' : 'shin', mode: 'shinkansen', label: byTaxi ? '新幹線＋タクシー' : '新幹線', steps, fare, stamina, hunger: 3, transfers: steps.length - 1, why: shinStop };
     };
-    out.push(mk(false), mk(true));
+    const tr = netRoute(g, from, d, ticket);
+    out.push(tr || mk(false), mk(true));
   }
   const stopped = transportStopped(g);
   for (const o of out) {
@@ -201,6 +203,37 @@ export function routesTo(g, from, d) {
   const tag = (o, s) => { if (o) (o.tags || (o.tags = [])).push(s); };
   tag(best((o) => o.min), '早'); tag(best((o) => o.fare), '安'); tag(best((o) => o.stamina * 100 + o.min), '楽');
   return out.sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || a.min - b.min);
+}
+// [R9-B1] a train route by the network: walk to the nearest station, the lines (with transfers), walk to the place
+function walkMin(area, x, y, st) {
+  const api = ekiApi();
+  const ex = api && api.exitPointSync ? api.exitPointSync(st) : null;
+  if (!ex || ex.place !== area) return 4;
+  return Math.max(1, Math.round((Math.abs(ex.x - x) + Math.abs(ex.y - y)) / 8));
+}
+function netRoute(g, from, d, ticket) {
+  const a = NET.stationOfPlace(from.area), b = NET.stationOfPlace(d.area);
+  if (!a || !b || a === b) return null;
+  let r = null;
+  try { r = NET.route(g, a, b); } catch (e) { console.error(e); r = null; }
+  if (!r) return null;
+  const steps = [{ how: '徒歩', from: from.name, to: NET.stLabel(a), min: from.id === 'eki' ? 1 : walkMin(from.area, from.x, from.y, a) }];
+  let wi = 0;
+  r.segs.forEach((sg, i) => {
+    while (wi < r.walks.length && r.walks[wi].after <= i) { const w = r.walks[wi++]; steps.push({ how: '乗換', from: NET.stLabel(w.from), to: NET.stLabel(w.to), min: w.min, note: w.label }); }
+    if (i > 0 && !(r.walks.some((w) => w.after === i))) steps.push({ how: '乗換', from: NET.stLabel(sg.from), to: NET.stLabel(sg.from), min: 5, note: `${NET.LINES[sg.line].short}へ` });
+    const L = NET.LINES[sg.line];
+    steps.push({ how: L.kind === 'shinkansen' ? '新幹線' : L.kind === 'metro' ? '地下鉄' : '電車', from: NET.stLabel(sg.from), to: NET.stLabel(sg.to), min: sg.min + (i === 0 ? r.wait : 0), note: `${L.name}${sg.local ? '（各駅停車）' : ''}${L.kind === 'shinkansen' ? `・${NET.shinName(NET.ymOf(g))}` : ''}`, color: L.color });
+  });
+  if (r.delay) steps.push({ how: '待つ', from: NET.stLabel(b), to: NET.stLabel(b), min: r.delay, note: r.delayWhy });
+  steps.push({ how: '徒歩', from: NET.stLabel(b), to: d.name, min: walkMin(d.area, d.x, d.y, b) });
+  const shin = r.kinds.includes('shinkansen');
+  const lines = [...new Set(r.segs.map((sg) => NET.LINES[sg.line].short))];
+  return {
+    id: shin ? 'shin' : 'train', mode: shin ? 'shinkansen' : 'train', label: shin ? '新幹線と電車' : `電車（${lines.slice(0, 2).join('・')}${lines.length > 2 ? 'ほか' : ''}）`,
+    steps, fare: r.fare, stamina: shin ? 6 : 1 + r.transfers, hunger: shin ? 3 : 1, transfers: r.transfers, why: r.service.ok ? null : r.service.why,
+    note: shin ? 'きっぷ（新幹線）' : r.ic.ok ? NET.cardLabel(g, NET.STATIONS[a].region) : ticket, net: r,
+  };
 }
 function tripBlock(g) {
   const lb = lifeBlock(g);
@@ -219,7 +252,27 @@ function drawTop(c, a, g, here) {
   const paper = dv === 'techo';
   R(c, a.x, a.y, a.w, a.h, paper ? '#f2ead0' : dv === 'keitai' ? '#dfe8f0' : '#eef5fb');
   if (paper) for (let y = a.y + 6; y < a.y + a.h; y += 8) R(c, a.x, y, a.w, 1, '#e6dcbc');
-  // a strip of the line map: the towns as stations
+  // [R9-B1] the nearest station and its lines (the network), else the old strip of the towns
+  const st = here ? NET.stationOfPlace(here.area) : null;
+  if (st) {
+    const ls = NET.linesAt(st, NET.ymOf(g));
+    T(c, fitText(c, `最寄り駅：${NET.stLabel(st)}`, a.w - 16, 12), a.x + 8, a.y + 20, 12, PC.text);
+    let cx = a.x + 8;
+    for (const l of ls) {
+      const L = NET.LINES[l];
+      const w = Math.min(a.w - 16, L.short.length * 12 + 8);
+      if (cx + w > a.x + a.w - 4) break;
+      rrect(c, cx, a.y + 35, w, 14, 3, paper ? '#8a5a2a' : L.color);
+      T(c, fitText(c, L.short, w - 6, 12), cx + 4, a.y + 36, 12, '#ffffff');
+      cx += w + 4;
+    }
+    T(c, fitText(c, `いま：${here ? here.name : '（ここからは出られない）'}`, a.w - 16, 12), a.x + 8, a.y + 4, 12, PC.text);
+    const clk0 = clockNow(g), w0 = weatherNow(g);
+    const right0 = [clk0 ? clk0.label : null, w0 ? w0.label : null].filter(Boolean).join('・');
+    if (right0) T(c, right0, a.x + a.w - 8, a.y + 4, 12, PC.dim, 'right');
+    R(c, a.x, a.y + a.h - 1, a.w, 1, '#c8c0ac');
+    return;
+  }
   const ids = ['machi', 'tokyo', 'minato'];
   const y = a.y + 30;
   R(c, a.x + 16, y - 1, a.w - 32, 3, paper ? '#8a5a2a' : COLOR);
@@ -249,13 +302,21 @@ export async function norikaeApp(g, opts = {}) {
       if (here) { const r = routesTo(g, here, d).find((o) => !o.why); if (r) sub += `・最短${hm(r.min)}（${r.label.replace(/（.*）/, '')}）`; else sub += '・いまは行けない'; }
       return { d, label: (star ? '★ ' : '') + d.name, sub, chip: [areaOf(d.area).name.slice(0, 3), shade(MODE_COL.train, d.area === 'namba' ? -0.3 : 0)] };
     };
-    return [...recent.map((d) => mk(d, true)), ...rest.map((d) => mk(d, false))];
+    const mapRow = EXT.map ? [{ map: true, label: '路線図から駅をえらぶ', sub: '電車でどの駅の駅前へも（はじめての駅も）', chip: ['路線図', '#2a5ad0'] }] : []; // [R9-B1]
+    return [...mapRow, ...recent.map((d) => mk(d, true)), ...rest.map((d) => mk(d, false))];
   };
   const pickDest = async (ph, it, v) => {
     const why = tripBlock(g);
     const here = hereOf(g);
     if (why || !here) { audio.sfx('buzz'); await phoneInfo(g, { title: norikaeTitle(g), color: COLOR, text: why || '（ここからは移動できない。まずは町に出よう）' }); return; }
-    const went = await routesView(g, here, it.d);
+    let dd = it.d;
+    if (it.map) { // [R9-B1] the HD route map: any station with a 駅前
+      const st = await EXT.map.openRouteMap(g, { from: NET.stationOfPlace(here.area), mode: 'phone' });
+      if (!st || !NET.STATIONS[st]) return;
+      dd = destOf(g, NET.STATIONS[st].place);
+      if (!dd || dd.area === here.area) { audio.sfx('buzz'); await phoneInfo(g, { title: norikaeTitle(g), color: COLOR, text: dd ? '（いま、その駅の駅前にいる）' : '（その駅には、まだ行けない）' }); return; }
+    }
+    const went = await routesView(g, here, dd);
     if (went) ph.back(-1);
   };
   if (opts.place) { const d = destOf(g, opts.place); const here = hereOf(g); if (d && here && !tripBlock(g)) return routesView(g, here, d); }
@@ -339,7 +400,7 @@ function routeDetail(g, here, d, o) {
       if (t != null) T(c, clockLabel(t), a.x + a.w - 10, y + 1, 12, PC.dim, 'right');
       y += 16;
       for (const s of o.steps) {
-        const col = STEP_COL[s.how] || COLOR;
+        const col = s.color || STEP_COL[s.how] || COLOR;
         R(c, a.x + 20, y - 4, 4, 26, col);
         T(c, fitText(c, `${s.how}　${hm(s.min)}${s.note ? `・${s.note}` : ''}`, a.w - 50, 12), a.x + 32, y + 3, 12, shade(col, -0.25));
         y += 22;
@@ -368,6 +429,17 @@ async function doRoute(g, from, d, o) {
   T3.byMode[o.mode] = num(T3.byMode[o.mode]) + 1;
   T3.recent = [d.id, ...T3.recent.filter((x) => x !== d.id)].slice(0, 6);
   passMinutes(g, o.min, `移動（${o.label}）`);
+  const api = ekiApi();
+  if (o.net && api) { // [R9-B1] the network's ride scene (the line's colours, a tunnel for the metro)
+    try { const E = api.ekiState(g); E.rides++; E.fares += o.fare; E.km += o.net.km; E.minutes += o.net.min; } catch (e) { console.error(e); }
+    await api.rideCutscene(g, o.net, d.name);
+    const P0 = PLACES[d.id];
+    if (d.inside && P0 && P0.start) await g.goto(d.id, P0.start.room, P0.start.x, P0.start.y, P0.start.dir || 'up');
+    else await g.goto(d.area, d.room, d.x, d.y, d.dir);
+    g.notify(`${d.name}に着いた（${o.label.replace(/（.*）/, '')} ${hm(o.min)}${o.fare ? '・' + fmtMoney(o.fare) : ''}）`, { color: '#ffffff' });
+    g.save(true);
+    return;
+  }
   await g.fadeOut(12);
   const via = o.steps.map((s) => s.how).filter((h) => h !== '待つ').join(' → ');
   let ride = null;

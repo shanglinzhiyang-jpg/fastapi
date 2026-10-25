@@ -1,4 +1,5 @@
-// ドット運転免許センター (owner: R8-L1) — the 運転免許試験場. Tokyo, south-east strip behind the railway (js/world/tokyo.js adds the door).
+// ドット運転免許センター (owner: R8-L1; moved by R9-B1) — the 運転免許試験場. 府中駅前, ドット多摩線の終点 (js/world/ekimae_tokyo.js
+// adds the door; the 試験場前 bus stop sign, 代書屋 and 証明写真 stand in front).
 //
 //   lobby      総合受付（小松さん：本免・原付の手続き、更新、免許証を見る）／案内の掲示
 //   tekisei    適性検査（視力・色彩識別・聴力・運動能力：minigame 'license_check'）
