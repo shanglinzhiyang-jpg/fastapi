@@ -725,6 +725,20 @@ export class EditorScene extends Base {
     else if (k === 1) this.close(this.saved);
   }
   // ---------------------------------------------------------------- draw
+  // touch: the bar holds the header and the title strip (tap: 台本の設定); the lines start at y 38 of the screen
+  get touchY0() { return 38; }
+  onCloseTap() { this.act(() => this.askClose()); }
+  touchBarTap() { sfx('ok'); this.act(() => this.settingsMenu()); }
+  drawTouchBar(c) {
+    const n = this.n;
+    T(c, '台本エディタ', 12, 6, 14, K.gold);
+    T(c, `${KIND_LABEL[this.kind]}${n.forContest ? '・賞レース用' : ''}`, 112, 8, 12, K.dim, 'left', 220);
+    T(c, this.dirty ? '●未保存' : this.saved ? '保存ずみ' : '', SW - TB - 10, 8, 12, this.dirty ? K.warn : K.green, 'right', 100);
+    R(c, 4, 28, SW - TB - 8, 38, '#170f20');
+    T(c, n.title || '（タイトルなし）', 12, 31, 14, n.title ? K.text : K.faint, 'left', SW - TB - 90);
+    T(c, `${this.kind === 'ogiri' ? 'お題' : 'テーマ'}：${n.theme || '（未定）'}`, 12, 50, 12, K.dim, 'left', SW - TB - 90);
+    T(c, '設定 ▸', SW - TB - 12, 40, 12, K.cyan, 'right');
+  }
   drawScreen(c) {
     const n = this.n;
     const S = this.stats();
@@ -851,6 +865,19 @@ export class ResultScene extends Base {
     if (this.tab === 2 && this.listRect && inR(tap.x, tap.y, this.listRect)) { const j = (this.ltop || 0) + Math.floor((tap.y - this.listRect.y) / 18); if (j >= 0 && j < this.rows.length) { this.lsel = j; sfx('cursor'); } return true; }
     if (this.tab !== 2 && tap.y > 40) { const half = tap.y > 200; this.scroll[this.tab] = clamp(this.scroll[this.tab] + (half ? 48 : -48), 0, this.maxScroll || 0); }
     return true;
+  }
+  // touch: the tabs are the 70-unit bar (as the 芸人手帳)
+  get touchY0() { return 40; }
+  touchBarTap(tap) { const i = (this.touchTabs || []).findIndex((r) => inR(tap.x, tap.y, r)); if (i >= 0 && i !== this.tab) { this.tab = i; sfx('cursor'); } }
+  drawTouchBar(c) {
+    this.touchTabs = [];
+    const tw = (SW - TB) / TABS_R.length;
+    TABS_R.forEach((lb, i) => {
+      const x = Math.round(i * tw), w = Math.round((i + 1) * tw) - x, on = i === this.tab;
+      R(c, x + 1, 0, w - 2, TB - 2, on ? K.gold : '#1a1222');
+      T(c, lb, x + w / 2, TB / 2 - 8, 14, on ? K.ink : K.text, 'center', w - 8);
+      this.touchTabs.push({ x, y: 0, w, h: TB });
+    });
   }
   drawScreen(c) {
     const ai = this.ai;
@@ -1054,6 +1081,13 @@ export class PickerScene extends Base {
     }
     this.close(x);
   }
+  get touchY0() { return 24; }
+  onCloseTap() { this.close(null); }
+  drawTouchBar(c) {
+    const o = this.opts;
+    T(c, 'ネタをえらぶ', 12, 8, 16, K.gold);
+    T(c, `${o.title ? o.title + '・' : ''}${KIND_LABEL[this.kind] || 'なんでも'}${o.length ? `・持ち時間 ${mmss(o.length)}` : ''}`, 12, 40, 12, K.text, 'left', SW - TB - 24);
+  }
   drawScreen(c) {
     const g = this.g, o = this.opts;
     R(c, 0, 0, SW, SH, K.bg);
@@ -1148,6 +1182,8 @@ export class SettingsScene extends Base {
     this.toast('キーを設定した（' + keyState().masked + '）', K.green);
     return true;
   }
+  get touchY0() { return 28; }
+  get touchTitle() { return 'AI審査員の設定'; }
   drawScreen(c) {
     R(c, 0, 0, SW, SH, K.bg);
     R(c, 0, 0, SW, 20, K.head);

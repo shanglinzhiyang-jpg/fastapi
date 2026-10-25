@@ -553,7 +553,7 @@ function championCard(g, o, th) {
     T(c, '優勝', SW / 2, 34 + (1 - k) * 30, Math.round(44 * k + 10), th.acc, 'center', SW - 40, { outline: th.dark });
     (o.looks || []).slice(0, 3).forEach((lk, i, a) => drawBig(c, lk, 'down', SW / 2 - 32 + (i - (a.length - 1) / 2) * 70, 100, 2));
     T(c, o.name, SW / 2, 190, sizeFor(c, o.name, SW - 60, 28, 14), '#ffffff', 'center', SW - 60, { outline: th.main });
-    if (o.prize) { box(c, SW / 2 - 150, 230, 300, 40, '#fffdf4', th.acc); T(c, o.prize, SW / 2, 239, 18, '#1a1a28', 'center', 280); }
+    if (o.prize) { const pw = Math.min(SW - 60, Math.max(300, 40 + 18 * Array.from(o.prize).length)); box(c, SW / 2 - pw / 2, 230, pw, 40, '#fffdf4', th.acc); T(c, o.prize, SW / 2, 239, sizeFor(c, o.prize, pw - 20, 18, 11), '#1a1a28', 'center', pw - 20); }
     if (o.foot) T(c, o.foot, SW / 2, 278, 11, th.acc2, 'center', SW - 60);
   }, { min: 70, dimA: 0 });
 }
