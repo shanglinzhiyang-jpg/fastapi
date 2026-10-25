@@ -74,7 +74,7 @@ export function planOf(g, y, E, rid) {
   if (rid === 'final') return S.final;
   const list = S[rid];
   if (!list || !list.length) return null;
-  if (rid === 'sf') return list[0];
+  if (rid === 'sf' && rules(y).twoNetaSF) return list[0];
   const want = E.r1 && (E.r1.city === '大阪' || E.r1.city === '福岡') ? '大阪' : '東京';
   return list.find((v) => v.city === want) || list[0];
 }
