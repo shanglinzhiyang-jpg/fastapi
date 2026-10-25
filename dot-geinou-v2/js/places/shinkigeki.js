@@ -1047,6 +1047,11 @@ async function runStageJob(g, j, who) {
       await g.emote('player', '!');
     }
     res = await g.job({ ...def, confirm: false });
+    // 芸の実演 (C): a 新喜劇 stage is stage experience too (演技力・間・キャラ), feature-detected
+    if (res && typeof g.performGrowth === 'function') {
+      const grew = g.performGrowth('conte', res, { stats: ['act', 'ma', 'chara'], pressure: zachoMode ? 60 : 30 });
+      if (grew) g.notify(grew, { color: '#5ee07a' });
+    }
     if (res) {
       if (zachoMode) g.setFlag('shinkigeki_zacho_day', st.day);
       await crowdReact(g, res);
@@ -1218,7 +1223,8 @@ async function senseiTalk(g) {
   const who = WHO.sensei;
   const i = await g.ask('受け身ひとすじ四十年、転田（ころびた）や。\nズッコケのレッスン、受けていくか？', ['レッスン', 'お手本を見る', 'コツを聞く', 'やめる'], who);
   if (i === 0) {
-    await g.lesson({ title: 'ズッコケ（受け身）レッスン', skill: 'warai', price: 2500, stamina: 12, gain: 4, minigame: 'zukko', opts: { difficulty: 1 }, teacher: who.name });
+    const r = await g.lesson({ title: 'ズッコケ（受け身）レッスン', skill: 'warai', price: 2500, stamina: 12, gain: 4, minigame: 'zukko', opts: { difficulty: 1 }, teacher: who.name });
+    if (r && typeof g.performGrowth === 'function') { const grew = g.performGrowth('conte', r, { lesson: true, stats: ['act', 'ma', 'chara'] }); if (grew) g.notify(grew, { color: '#5ee07a' }); }
   } else if (i === 1) {
     await g.say('よう見ときや…。\nワシの話、聞いてくれるか？', who);
     await g.wait(250);

@@ -29,7 +29,9 @@ async function taiman(g, ctx, b, opp, o = {}) {
   const va = audienceVotes(res.score, 100, r);
   const vb = audienceVotes(os, 100, r);
   const sa = sumV(va); const sb = sumV(vb);
-  b.set('votes', { n: 100, votes: va, who: unitName(g), label: '観客審査員100人の採点（3点＝とても面白かった）' });
+  // both acts are scored after the two sets; the 100 judges' points are counted on screen
+  b.set('votes', { sides: [{ who: unitName(g), votes: va, me: true }, { who: opp.name, votes: vb }], label: '観客審査員100人' });
+  await say(g, '2組のネタが終わった。観客審査員100人の採点が集計される——');
   await pause(g, 70);
   let win = sa > sb;
   let tie = '';
@@ -46,7 +48,7 @@ async function taiman(g, ctx, b, opp, o = {}) {
 function panelScores(g, r, acts, nJ, max) {
   return acts.map((a) => {
     const per = [];
-    for (let j = 0; j < nJ; j++) per.push(clamp(Math.round(((a.score + gauss(r) * 7) / 100) * max), Math.round(max * 0.3), max));
+    for (let j = 0; j < nJ; j++) per.push(clamp(Math.round(max * (0.5 + 0.48 * (a.score + gauss(r) * 7) / 100)), Math.round(max * 0.3), max)); // judges' scale: ~64–98% (a 100点 judge rarely goes below 60)
     return { ...a, per, total: per.reduce((x, y) => x + y, 0) };
   }).sort((x, y) => y.total - x.total || (x.me ? -1 : 1));
 }
@@ -301,7 +303,6 @@ async function doubleFinal(g, ctx) {
 //   2045257; news.livedoor.com/article/detail/8360226; dic.pixiv.net/a/THE_MANZAI; news.mynavi.jp/article/20221127-2522894, 20251206-3767443
 const MANZAI = {
   name: 'THE MANZAI', short: 'MANZAI', kind: 'manzai', category: 'major', color: '#1f5fc8',
-  names: [{ from: 2011, to: 2014, name: 'THE MANZAI' }, { from: 2015, name: 'THE MANZAI（復刻開催）' }],
   organizer: 'フジテレビ・吉本興業（THE MANZAI大会事務局）', broadcaster: 'フジテレビ系', venue: '決勝：フジテレビ（生放送）', region: 'all',
   history: { founded: 2011, ended: 2014, gaps: [], revived: null,
     note: '1980年4月〜の漫才ブーム番組『THE MANZAI』の名を継ぎ、2011〜2014年に年間最強漫才師決定トーナメントとして開催。2015年以降の本家は非競技の『マスターズ』。ゲームでは2015年以降も賞レースとして復刻開催。',
@@ -456,7 +457,7 @@ const NHK_OWARAI = {
   history: { founded: 1956, ended: null, gaps: [], revived: null, note: '1956年のNHK新人漫才コンクールから続く若手の登竜門。1986年演芸コンクールに統合、1991年新人演芸大賞、2014年に演芸部門が「新人お笑い大賞」に。',
     sources: ['https://natalie.mu/owarai/news/643749', 'https://natalie.mu/owarai/news/403072', 'https://dic.pixiv.net/a/NHK%E6%96%B0%E4%BA%BA%E3%81%8A%E7%AC%91%E3%81%84%E5%A4%A7%E8%B3%9E', 'https://d.hatena.ne.jp/keyword/NHK%E6%96%B0%E4%BA%BA%E3%81%8A%E7%AC%91%E3%81%84%E5%A4%A7%E8%B3%9E'] },
   editionOf: editionCounter(1956), // 通し回数は未確認（ゲーム内の通算）。表示は年度（editionLabel）
-  editionLabel: (y) => nendo(y),
+  editionLabel: (y) => `${nendo(y)} ${nameOf(NHK_OWARAI, y)}`, // NHK counts by 年度 (「令和7年度 NHK新人お笑い大賞」)
   schedule: { entry: { from: [6, 1], to: [7, 5] }, final: [10, 8] },
   rounds: [
     { id: 'yosen', name: '予選', when: [[8, 4], [8, 8]], venues: ['東京', '大阪'], length: 240, pass: 8, field: 290, judge: 'staff', scoring: 'NHKの審査',
@@ -531,7 +532,7 @@ const NHK_RAKUGO = {
   history: { founded: 1986, ended: null, gaps: [], revived: null, note: '若手落語家の登竜門。持ち時間11分、5人の高座を審査員5人が10点満点で採点。',
     sources: ['https://www.daily.co.jp/gossip/2017/10/23/0010670477.shtml', 'https://www.daily.co.jp/gossip/2021/11/23/0014862783.shtml', 'https://www.oricon.co.jp/news/2098585/full/', 'https://number.bunshun.jp/articles/-/868052'] },
   editionOf: editionCounter(1986),
-  editionLabel: (y) => nendo(y),
+  editionLabel: (y) => `${nendo(y)} ${nameOf(NHK_RAKUGO, y)}`,
   schedule: { entry: { from: [6, 1], to: [7, 5] }, final: [11, 2] },
   rounds: [
     { id: 'yosen', name: '予選', when: [[9, 3], [9, 7]], venues: ['東京', '大阪'], length: 600, pass: 5, field: 125, judge: 'panel', scoring: 'NHKの審査（入門15年未満）',
@@ -866,7 +867,7 @@ async function ytvKettei(g, ctx) {
   const r = rngFor(g, ctx.id, 'kettei');
   if (!log.qualified) {
     // 敗者復活枠：敗者のなかの最高得点
-    const bar = 300 + Math.round(gauss(r) * 14);
+    const bar = 340 + Math.round(gauss(r) * 10); // 敗者の最高得点（400点満点）
     if ((log.best || 0) >= bar) { await say(g, `敗者復活枠！ ROUNDでの${log.best}点が敗者の最高得点だった。決定戦へ！`); log.qualified = 'revival'; }
     else { await say(g, `敗者復活枠には届かなかった（${log.best || 0}点）。決定戦はテレビで見ることになった。`); return { passed: false, score: 0, place: null, field: 7, note: '決定戦進出ならず' }; }
   }
@@ -970,7 +971,18 @@ export const D2A_DEFS = {
   thesecond: SECOND, doubleimpact: DOUBLE, themanzai: MANZAI, nhk_owarai: NHK_OWARAI, nhk_rakugo: NHK_RAKUGO,
   nhk_kamigata: NHK_KAMIGATA, kamigata_manzai: KAMIGATA_MANZAI, kamigata_owarai: KAMIGATA_OWARAI, ytv_manzai: YTV, mbs_manzai: MBS,
 };
+// finalist catch copies for the contests that do not define their own (D1 shows def.catchcopy(g, ctx))
+const CC_A = {
+  nhk_kamigata: ['浪花の新星', '上方の次世代', '関西の劇場育ち', '大阪城の見える登竜門'],
+  kamigata_manzai: ['上方漫才の正統', 'しゃべくりの継承者', '浪花の今年の顔'],
+  kamigata_owarai: ['上方演芸の星', '年の瀬の主役', '笑いの都の新顔'],
+  ytv_manzai: ['関西10年目までの本命', '3分の切れ味', '年度末の主役'],
+  mbs_manzai: ['高校生が選んだ漫才', '次の世代のしゃべくり', '制服の客席を沸かせた'],
+};
 export function defineContestsA(register) {
-  for (const [id, def] of Object.entries(D2A_DEFS)) register(id, normalizeRuns(def));
+  for (const [id, def] of Object.entries(D2A_DEFS)) {
+    if (!def.catchcopy && CC_A[id]) def.catchcopy = (g, ctx) => `${pickR(CC_A[id], rngFor(g, id, 'cc', ctx && ctx.year))}　${unitName(g)}`;
+    register(id, normalizeRuns(def));
+  }
 }
 void deviceOf; void wareki; void dstate; void fame; void isKansai; void flawLines; void rakugoName;

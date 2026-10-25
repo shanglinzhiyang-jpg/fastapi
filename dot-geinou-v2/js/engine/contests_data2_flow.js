@@ -29,7 +29,7 @@ export async function stageRound(g, ctx, cfg) {
   const sub = `${edLabel(ctx)} ${cfg.name || ''}`.trim();
   return withBackdrop(g, cfg.scene || 'theater', { title: def.name, sub, sign: cfg.sign, cast: castOf(g) }, async () => {
     const host = cfg.host ? { name: cfg.host } : {};
-    if (!skip) {
+    if (!skip && ctx.mode !== 'quick') {
       const intro = lines(cfg.intro, g, ctx);
       if (intro.length) await g.say(intro, host);
       if (cfg.judgeText) await g.say(cfg.judgeText);

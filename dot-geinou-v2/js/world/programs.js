@@ -360,13 +360,13 @@ const KINDS = {
   sports: { minigame: 'talk', skill: 'talk', bank: 'sports', set: 'variety', mc: 'アナウンサー' },
   news: { minigame: 'talk', skill: 'talk', bank: 'news', set: 'news', mc: 'キャスター' },
   class: { minigame: 'talk', skill: 'talk', bank: 'class', set: 'variety', mc: '先生' },
-  oogiri: { minigame: 'talk', skill: 'warai', bank: 'oogiri', set: 'variety', mc: 'アナウンサー' },
+  oogiri: { minigame: 'ogiri', skill: 'warai', bank: 'oogiri', set: 'variety', mc: 'アナウンサー' },
   prebato: { minigame: 'talk', skill: 'talk', bank: 'prebato', set: 'variety', mc: 'アナウンサー' },
   loke: { minigame: 'talk', skill: 'talk', bank: 'loke', set: 'local', mc: 'ナビゲーター' },
   quiz: { minigame: 'quiz', skill: 'talk' },
   trivia: { minigame: 'quiz', skill: 'talk' },
-  neta: { minigame: 'tsukkomi', skill: 'warai' },
-  conte: { minigame: 'command', skill: 'engi', act: 'conte' },
+  neta: { minigame: 'manzai', skill: 'warai' },
+  conte: { minigame: 'conte', skill: 'engi', act: 'conte' },
   dokkiri: { minigame: 'command', skill: 'engi', act: 'dokkiri' },
   challenge: { minigame: 'command', skill: 'engi', act: 'castle' },
   dance: { minigame: 'command', skill: 'engi' },
@@ -385,7 +385,11 @@ export function programOpts(p, st = ST(), regular = false) {
     const q = p.quiz || {};
     return { difficulty: d, category: q.category || 'mix', count: q.count || 6, show: q.show || p.title };
   }
-  if (K.minigame === 'tsukkomi') return { difficulty: d, ...partnerOpts(st) };
+  // 芸の実演 (C): ネタ番組 → 漫才, コント番組 → コント, 大喜利 → 大喜利 (a TV studio: the stakes rise with the tier)
+  const venue = { name: p.title, size: 'tv', crowd: p.tier >= 3 ? 'normal' : 'warm', pressure: Math.min(90, 35 + (Number(p.tier) || 1) * 10) };
+  if (K.minigame === 'manzai') return { difficulty: d, ...partnerOpts(st), venue, stage: 'studio' };
+  if (K.minigame === 'ogiri') return { difficulty: d, mode: 'zabuton', rounds: 3, scenes: shuffled(TALK.oogiri).slice(0, 3), venue };
+  if (K.minigame === 'conte') { const bank = ACT[p.scenes || K.act] || ACT.conte; return { difficulty: d, scenes: shuffled(bank.slice(0, -1)).slice(0, 3), venue }; }
   if (p.kind === 'dance') return { difficulty: d, theme: 'dance' };
   if (K.minigame === 'command') {
     const bank = ACT[p.scenes || K.act] || ACT.conte;

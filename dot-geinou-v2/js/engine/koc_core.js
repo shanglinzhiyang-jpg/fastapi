@@ -10,9 +10,10 @@
 
 import { contestDate } from './contests.js';
 import { PEOPLE } from './life.js';
+import * as L from './koc_link.js';
 import {
   FOUNDED, rules, edition, entriesOf, POOL_NAMES, unitType, membersOf, memberNames, lookFor, AGENCY_NAMES,
-  rngOf, hashStr, fillerName, ROUND_NAME, catchcopyFor, KOC_NAME, judgesOf,
+  rngOf, hashStr, fillerName, ROUND_NAME, catchcopyFor, KOC_NAME, judgesOf, roundIndex,
 } from './koc_data.js';
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -157,6 +158,8 @@ export function season(g, y) {
   const R = rules(y);
   const k = K(g);
   const r = rngOf((k.seed ^ Math.imul(y, 7919)) >>> 0);
+  const ws = L.season(g, y);
+  if (ws && ws.finalists.length) return { y, R, sf: ws.sf, finalists: ws.finalists, losers: ws.losers, revivalPool: ws.revivalPool, revivalWinner: ws.revivalWinner, rank: ws.rank, r, d1: true };
   const champs = champsBefore(g, y);
   const acts = pool(g).filter((a) => { const p = actPower(a, y); return p != null && y - a.formed <= 26 && !champs.has(a.name); });
   const scored = acts.map((a) => ({ ...a, power: actPower(a, y), sfs: actPower(a, y) + gauss(r) * 6 })).sort((a, b) => b.sfs - a.sfs);
@@ -167,7 +170,7 @@ export function season(g, y) {
   const finalists = sf.slice(0, R.finalists);
   const losers = sf.slice(R.finalists);
   const revivalPool = R.revival ? losers.slice(0, 10) : [];
-  return { y, R, sf, finalists, losers, revivalPool, r };
+  return { y, R, sf, finalists, losers, revivalPool, revivalWinner: null, rank: new Map(), r };
 }
 export function unitInfo(g, a, y) {
   const yrs = Math.max(1, y - (a.formed || y));
@@ -270,6 +273,18 @@ export function judgesFor(g, y) {
 // Fills K(g).hist for every year from 2008 up to (not including) `upto`, in order (champions retire from the field).
 export function ensureHistory(g, upto) {
   const k = K(g);
+  const d1 = L.history(g);
+  if (d1) {
+    for (const h of d1) {
+      // D1 lists finished seasons only; a final the player played is already in st.koc (keep its scores)
+      if (k.hist[h.y] && k.hist[h.y].mine) continue;
+      const old = k.hist[h.y] || {};
+      const ent = entriesOf(h.y);
+      const fin = (h.finalists || []).map((n, i) => { const f = (old.finalists || []).find((x) => x[0] === n); return [n, f ? f[1] : 'combi', f ? f[2] : 0, i + 1, f ? f[4] : '']; });
+      k.hist[h.y] = { y: h.y, ed: edition(h.y), mode: rules(h.y).mode, entries: ent.n, approx: ent.approx, finalists: fin, champ: h.champ, runner: h.runner, third: h.third, champScore: old.champScore || null, me: old.me || null, d1: true };
+    }
+    return;
+  }
   for (let y = FOUNDED; y < upto; y++) {
     if (k.hist[y] && k.hist[y].champ) continue;
     k.hist[y] = histFromSeason(g, y, null);
@@ -303,12 +318,18 @@ export function blockField(g, y, rid, key, size) {
   const S = rid === 'sf' || rid === 'qf' ? season(g, y) : null;
   const out = [];
   if (rid === 'sf' && S) {
-    for (const a of S.sf) out.push({ name: a.name, type: a.type, agency: a.agency, power: a.power, quality: clamp(a.power + gauss(r) * 5, 0, 100), tags: tagsOf(g, a, y), act: a });
+    for (const a of S.sf) out.push({ id: a.id, name: a.name, type: a.type, agency: a.agency, power: a.power, quality: clamp(a.power + gauss(r) * 5, 0, 100), tags: a.tags && a.tags.length ? a.tags : tagsOf(g, a, y), act: a, looks: a.looks });
     return out.slice(0, size);
   }
-  // named acts expected in this round (from the season's semifinal list, weaker ones in early rounds)
-  const named = S ? S.sf.slice(rid === 'qf' ? 0 : 20).filter(() => r() < (rid === 'qf' ? 0.25 : 0.06)) : [];
-  for (const a of named.slice(0, Math.floor(size / 4))) out.push({ name: a.name, type: a.type, agency: a.agency, power: a.power, quality: clamp(a.power + gauss(r) * 5, 0, 100), tags: tagsOf(g, a, y), act: a });
+  // named acts in this round: D1's world when it is loaded, else this file's pool (the season's semifinal list)
+  const idx = roundIndex(y, rid);
+  const riv = L.linked(g) && typeof g.contestRivals === 'function' ? safe(() => g.contestRivals('koc', idx, Math.min(size, rid === 'qf' ? 40 : 30), y), []) || [] : null;
+  if (riv) {
+    for (const x of riv) out.push({ id: x.id, name: x.name, type: x.unit === 'trio' ? 'trio' : 'combi', agency: x.agency, power: clamp(num(x.power, mu), 3, 97), quality: clamp(num(x.power, mu) + gauss(r) * 6, 0, 100), tags: x.tags || [], looks: (x.members || []).map((m) => m.look).filter(Boolean) });
+  } else {
+    const named = S ? S.sf.slice(rid === 'qf' ? 0 : 20).filter(() => r() < (rid === 'qf' ? 0.25 : 0.06)) : [];
+    for (const a of named.slice(0, Math.floor(size / 4))) out.push({ name: a.name, type: a.type, agency: a.agency, power: a.power, quality: clamp(a.power + gauss(r) * 5, 0, 100), tags: tagsOf(g, a, y), act: a });
+  }
   const names = new Set(out.map((x) => x.name));
   while (out.length < size) {
     let name = fillerName(r);
@@ -358,6 +379,8 @@ export function news(g, text, opts = {}) {
   if (k.newsLog.length > 40) k.newsLog.length = 40;
   if (opts.silent) return;
   // at most 3 KOC messages a morning; the rest wait in the KOC app's ニュース (and one digest line)
+  if (has(g, 'contestNews') && L.linked(g)) { safe(() => g.contestNews(text, { contest: 'koc', cat: opts.cat || 'koc', prio: opts.prio ?? 70, ...(opts.key ? { key: opts.key } : {}) })); return; }
+  // without D1: at most 3 KOC messages a morning (the rest stay in the KOC app's ニュース, one digest line)
   const m = k.morning;
   if (m.day !== g.state.day) { m.day = g.state.day; m.n = 0; m.held = 0; }
   if (opts.morning && m.n >= 3) { m.held = (m.held || 0) + 1; return; }
@@ -365,7 +388,9 @@ export function news(g, text, opts = {}) {
   if (has(g, 'contestNews')) safe(() => g.contestNews(text, { contest: 'koc', cat: opts.cat || 'koc' }));
   else g.message({ from: 'お笑いニュース', text, kind: 'news' });
 }
-export function notice(g, text, from = 'キングオブコント事務局') {
+// a personal notice (エントリー受付・リマインド・棄権): D1's 賞レース事務局 queue when loaded, else a message
+export function notice(g, text, from = 'キングオブコント事務局', prio = 92) {
+  if (has(g, 'contestNews') && L.linked(g)) { safe(() => g.contestNews(text, { contest: 'koc', personal: true, from, prio })); return; }
   g.message({ from, text, kind: 'news', contest: 'koc' });
 }
 export const roundName = (rid) => ROUND_NAME[rid] || rid;

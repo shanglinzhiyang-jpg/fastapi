@@ -308,3 +308,56 @@ export function syncEntry(g, cid, year, rec) {
     if (e && e !== rec && typeof e === 'object') Object.assign(e, { no: rec.no, unitName: rec.unitName, fee: rec.fee, status: rec.status, round: rec.round, results: rec.results });
   } catch (e) { console.error(e); }
 }
+
+// ================================================================ D1 (contests.js) integration — all feature-detected
+// D1 keeps the player's entry record (st.contests.entries) that drives its 賞レース hub, reminders and 「会場へ向かう」
+// (which calls our def.flow). We register our entry there, record every round (rewards off: we give our own), and keep
+// D1's world history and generic news in step with our own season (we are the authority for R-1 / ABC).
+export const d1On = (g) => has(g, 'contestRegister') && has(g, 'contestRecord') && has(g, 'contestEntry');
+export function d1Entry(g, cid, Y) { return d1On(g) ? safe(() => g.contestEntry(cid, Y), null) : null; }
+export function d1Register(g, cid, Y, fields) {
+  if (!d1On(g)) return null;
+  return safe(() => g.contestRegister(cid, { year: Y, ...fields }), null);
+}
+export function d1Record(g, cid, Y, idx, res) {
+  if (!d1On(g) || idx < 0) return null;
+  if (!d1Entry(g, cid, Y)) return null;
+  return safe(() => g.contestRecord(cid, idx, res, { year: Y, reward: false, news: false }), null);
+}
+// patch D1's entry record (picks of the next round, the 復活ステージ) — the record of our own contest
+export function d1Patch(g, cid, Y, fn) { const e = d1Entry(g, cid, Y); if (e) safe(() => fn(e)); return e; }
+const d1State = (g) => (has(g, 'contestState') ? safe(() => g.contestState(), null) : null);
+// D1 announces every contest's rounds / finalists / champion from its own simulation; ours are announced by us, so
+// those keys are marked as sent for our contest-years (D1's pushNews skips a sent key).
+export function d1Claim(g, cid, Y, nRounds) {
+  const c = d1State(g);
+  if (!c || !c.sent || typeof c.sent !== 'object') return;
+  const day = (g.state && g.state.day) || 1;
+  const keys = [`count|${cid}|${Y}`, `finalists|${cid}|${Y}`, `champ|${cid}|${Y}`, `lastyear|${cid}|${Y}`];
+  for (let i = 0; i < nRounds + 1; i++) keys.push(`round|${cid}|${Y}|${i}`, `upset|${cid}|${Y}|${i}`);
+  for (const k of keys) if (!c.sent[k]) c.sent[k] = day;
+}
+// D1's later lines (王者の会見, ネットの反応) of our contests are its own champion's: drop them (we send our own)
+export function d1PurgeLater(g, cid) { const c = d1State(g); if (c && Array.isArray(c.later)) c.later = c.later.filter((x) => !x || x.contest !== cid); }
+// write our final into D1's frozen history (its 歴代王者 / 結果 screens read it)
+export function d1Freeze(g, cid, Y, row) {
+  const c = d1State(g);
+  if (!c || !c.hist || typeof c.hist !== 'object') return;
+  if (!c.hist[cid]) c.hist[cid] = {};
+  c.hist[cid][Y] = { ...(c.hist[cid][Y] || {}), ...row };
+}
+// this world's history before the game (D1's simulation of every registered contest): { [year]: row }
+export function d1History(g, cid) {
+  if (!has(g, 'contestHistory')) return null;
+  const rows = safe(() => g.contestHistory(cid, { all: true }), null);
+  if (!Array.isArray(rows) || !rows.length) return null;
+  const out = {};
+  for (const r of rows) if (r && r.held !== false && r.champion) out[r.year] = r;
+  return out;
+}
+// entrants of D1's world for our contest-year (names, looks, tags, agencies): strongest first
+export function d1Field(g, cid, roundIdx, n, Y) {
+  if (!has(g, 'contestRivals')) return [];
+  const list = safe(() => g.contestRivals(cid, roundIdx, n, Y), []) || [];
+  return list.filter((x) => x && x.name && !x.anon).sort((a, b) => num(b.power) - num(a.power));
+}

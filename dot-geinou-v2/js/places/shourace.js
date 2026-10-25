@@ -196,7 +196,7 @@ function exitWarp(x, y) {
     if (t && !t.done) {
       const k = await g.ask(['まだ出番が終わっていない。', '帰ると棄権になる。帰る？'], ['会場に残る', '棄権して帰る'], { cancel: 0 });
       if (k !== 1) return false;
-      await venue.leaveVenue(g, { dry: true, withdrawOnly: true }).catch(() => {});
+      venue.withdrawToday(g);
     }
     const c = I.cstate(g);
     const ret = c.ret && g.PLACES && g.PLACES[c.ret.place] ? c.ret : null;

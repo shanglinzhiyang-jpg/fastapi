@@ -153,7 +153,7 @@ class Ogiri extends PerformGame {
     this.sel = 0;
     this.refining = null;
     this.answeredRound = 0;
-    this.bubble = S.makeBubble(`お題「${od.q}」`, { tailX: this.mcPos().x, tailY: this.mcPos().y, cx: 320, y: 40, name: '司会', nameCol: '#6a5a8a', maxW: 460 });
+    this.bubble = S.makeBubble(`お題「${od.q}」`, { tailX: this.mcPos().x, tailY: this.mcPos().y, cx: 320, y: this.mode === 'ippon' ? 132 : 40, name: '司会', nameCol: '#6a5a8a', maxW: 460 });
     this.g.sfx('chime');
     this.setState('read');
   }
@@ -167,8 +167,9 @@ class Ogiri extends PerformGame {
     this.ideaGap = Math.round(clamp(92 - hs * 44, 40, 100));
     this.npcAt = this.mode === 'zabuton' ? [120 + Math.floor(this.rng() * 160), 330 + Math.floor(this.rng() * 160)] : [];
     this.setState('think');
-    this.bubble = S.makeBubble(`お題「${this.od.q}」`, { cx: 320, y: 38, narr: true, maxW: 520, size: 16 });
+    this.bubble = S.makeBubble(`お題「${this.od.q}」`, { cx: 320, y: this.odaiY(), narr: true, maxW: 520, size: 16 });
   }
+  odaiY() { return this.mode === 'ippon' ? 130 : 38; }
   hunch(q) {
     const hs = this.members[this.pi].s.hassou;
     return clamp(Math.round((q + gauss(this.rng) * (1 - hs) * 28) / 20), 1, 5);
@@ -262,7 +263,7 @@ class Ogiri extends PerformGame {
     }
     const pos = this.mode === 'zabuton' ? { x: SEATS[PLAYER_SEAT], y: 150 } : { x: 92, y: 200 };
     this.speakingSeat = PLAYER_SEAT;
-    this.bubble = S.makeBubble(idea.text, { tailX: pos.x, tailY: pos.y, cx: pos.x, y: this.mode === 'zabuton' ? 70 : 60, name: me.short, nameCol: '#d64161', n: 0 });
+    this.bubble = S.makeBubble(idea.text, { tailX: pos.x, tailY: pos.y, cx: this.mode === 'zabuton' ? pos.x : 320, y: this.mode === 'zabuton' ? 70 : 140, name: me.short, nameCol: '#d64161', n: 0 });
     this.typing = { n: 0, len: this.bubble.total };
     this.setState('answerType');
   }
@@ -301,7 +302,7 @@ class Ogiri extends PerformGame {
   }
   afterAnswer() {
     this.speakingSeat = -1;
-    if (this.mode === 'ippon' && this.thinkT < this.thinkLen - 60) { this.bubble = S.makeBubble(`お題「${this.od.q}」`, { cx: 320, y: 38, narr: true, maxW: 520, size: 16 }); this.lamps = [0, 0, 0, 0, 0]; this.setState('think'); return; }
+    if (this.mode === 'ippon' && this.thinkT < this.thinkLen - 60) { this.bubble = S.makeBubble(`お題「${this.od.q}」`, { cx: 320, y: this.odaiY(), narr: true, maxW: 520, size: 16 }); this.lamps = [0, 0, 0, 0, 0]; this.setState('think'); return; }
     this.endRound();
   }
   endRound() {

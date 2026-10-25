@@ -514,6 +514,8 @@ function conteScenes(n) {
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a.slice(0, n);
 }
+// 芸の実演 (C): the practice room as a venue for the lessons (performance model in perform.js)
+const V_KEIKO = { name: 'グレープ 稽古場', size: 'small', crowd: 'warm', pressure: 5 };
 const PARTNER = { partner: '相方', partnerLook: { hair: 'short', hairColor: 'black', skin: 'fair', top: PU, bottom: '#20232a' } };
 
 const CHIHO_SCENES = [
@@ -570,7 +572,7 @@ const JOBS = {
   live: {
     id: 'grape_office_live', title: '事務所ライブ出演', client: C.manager.name, clientLook: C.manager.look,
     desc: '所属芸人が集まるお笑いライブ！', stamina: 20,
-    minigame: 'tsukkomi', opts: { difficulty: 2, lines: LIVE_LINES, ...PARTNER },
+    minigame: 'manzai', opts: { difficulty: 2, lines: LIVE_LINES, ...PARTNER, dialect: 'std', venue: { name: 'グレープ 事務所ライブ', size: 'theater', crowd: 'warm', pressure: 20 } },
     pay: 4500, fame: 18, skill: 'warai', gain: 2, requires: { agency: 'grape' },
   },
   chiho: {
@@ -582,19 +584,19 @@ const JOBS = {
   conte: {
     id: 'grape_conte_tv', title: 'コント番組', client: C.producer.name, clientLook: C.producer.look,
     desc: 'テレビのコント番組に出演！', stamina: 25,
-    minigame: 'command', get opts() { return { theme: 'acting', difficulty: 3, scenes: conteScenes(3) }; },
+    minigame: 'conte', get opts() { return { difficulty: 3, scenes: conteScenes(3), venue: { name: 'コント番組の収録', size: 'tv', crowd: 'normal', pressure: 50 } }; },
     pay: 12000, fame: 45, skill: 'engi', gain: 3, requires: { fame: 250 },
   },
   tour: {
     id: 'grape_tour', title: '全国ツアー', client: C.eigyo.name, clientLook: C.eigyo.look,
     desc: '全国の劇場をまわるお笑いツアー！', stamina: 30,
-    minigame: 'tsukkomi', opts: { difficulty: 4, lines: TOUR_LINES, ...PARTNER },
+    minigame: 'manzai', opts: { difficulty: 4, lines: TOUR_LINES, ...PARTNER, dialect: 'std', venue: { name: '全国ツアー', size: 'hall', crowd: 'warm', pressure: 45 } },
     pay: 30000, fame: 120, skill: 'warai', gain: 4, requires: { fame: 1000 },
   },
   solo: {
     id: 'grape_solo_live', title: '単独ライブ', client: C.manager.name, clientLook: C.manager.look,
     desc: '{name}の単独ライブ！大ホールが満員だ！', stamina: 30,
-    minigame: 'command', get opts() { return { theme: 'acting', difficulty: 5, scenes: conteScenes(4) }; },
+    minigame: 'conte', get opts() { return { difficulty: 5, scenes: conteScenes(4), venue: { name: '単独ライブ', size: 'hall', crowd: 'warm', pressure: 55 } }; },
     pay: 65000, fame: 250, skill: 'engi', gain: 5, requires: { agency: 'grape', fame: 2000 },
   },
 };
@@ -1047,20 +1049,20 @@ async function lessonMenu(g, who, def, adv) {
 
 const ENGI_LESSON = {
   title: 'コント演技レッスン', skill: 'engi', price: 3000, stamina: 12, gain: 4,
-  minigame: 'command', opts: { theme: 'acting', difficulty: 1 },
+  minigame: 'conte', opts: { difficulty: 1, lesson: true, venue: V_KEIKO, partner: '藤棚先生', partnerLook: C.fujidana.look },
   intro: ['コント作家の藤棚です。', 'コントは「なりきる」ことが大事。\n動きのテンポを体にしみこませよう！'],
   after: 'いいね、役が生きてきた！\n次のコント番組、楽しみにしてるよ。',
   afterNew: 'いいね、役が生きてきた！\nその調子でオーディションも突破だ！',
 };
-const ENGI_ADV = { title: 'コント演技 上級', price: 7000, stamina: 15, gain: 6, opts: { theme: 'acting', difficulty: 3 } };
+const ENGI_ADV = { title: 'コント演技 上級', price: 7000, stamina: 15, gain: 6, opts: { difficulty: 3, lesson: true, venue: V_KEIKO, partner: '藤棚先生', partnerLook: C.fujidana.look } };
 const WARAI_LESSON = {
   title: '漫才レッスン', skill: 'warai', price: 3000, stamina: 12, gain: 4,
-  minigame: 'tsukkomi', opts: { difficulty: 1, lines: LESSON_LINES, partner: '粒田先生', partnerLook: C.tsubuta.look },
+  minigame: 'manzai', opts: { difficulty: 1, lines: LESSON_LINES, partner: '粒田先生', partnerLook: C.tsubuta.look, dialect: 'std', lesson: true, venue: V_KEIKO },
   intro: ['漫才講師の粒田です。', 'ツッコミは、ボケを最後まで聞いてから。\n早すぎても遅すぎてもダメですよ。'],
   after: 'うん、キレが出てきましたね。\n舞台でもその間合いを忘れずに！',
   afterNew: 'うん、キレが出てきましたね。\n事務所に入ったら、ライブで試してみましょう。',
 };
-const WARAI_ADV = { title: '漫才 上級', price: 7000, stamina: 15, gain: 6, opts: { difficulty: 3, lines: ADV_LINES, partner: '粒田先生', partnerLook: C.tsubuta.look } };
+const WARAI_ADV = { title: '漫才 上級', price: 7000, stamina: 15, gain: 6, opts: { difficulty: 3, lines: ADV_LINES, partner: '粒田先生', partnerLook: C.tsubuta.look, dialect: 'std', lesson: true, venue: V_KEIKO } };
 
 async function talkKodougu(g) {
   if (!g.flag('grape_kodougu_gift')) {

@@ -401,6 +401,14 @@ const TALK_LESSON = {
   ],
 };
 
+// 芸の実演 (C): where each performance happens — the 客席 and the pressure feed the performance model (perform.js).
+// The scripts above are the house scripts; on the intro card the player can switch to their own ネタ (←→).
+const V_LIVE = { name: 'よしもと 若手ライブ', size: 'theater', crowd: 'normal', pressure: 25 };
+const V_OOGIRI = { name: '劇場の大喜利ライブ', size: 'theater', crowd: 'warm', pressure: 30 };
+const V_KANMURI = { name: '冠番組 公開収録', size: 'theater', crowd: 'warm', pressure: 45 };
+const V_GP = { name: 'お笑いグランプリ 決勝', size: 'hall', crowd: 'normal', pressure: 80 };
+const V_KEIKO = { name: 'よしもと 稽古場', size: 'small', crowd: 'warm', pressure: 5 };
+
 // ------------------------------------------------------------------ jobs
 // venue 'stage' = performed on the small theater's stage, 'matsuri' = shopping-street festival.
 const JOBS = [
@@ -412,7 +420,7 @@ const JOBS = [
   {
     key: 'wakate', label: '若手ライブ出演', venue: 'stage', mode: 'live',
     info: '小劇場の若手ライブで漫才を披露！\nよしもと所属／体力-20',
-    def: { id: 'yoshimoto_wakate_live', title: '若手ライブ出演', desc: '劇場の若手ライブで漫才を披露！', client: '舞台監督', stamina: 20, minigame: 'tsukkomi', opts: { difficulty: 2, lines: LINES_WAKATE }, pay: 4000, fame: 15, skill: 'warai', gain: 2, requires: { agency: PID } },
+    def: { id: 'yoshimoto_wakate_live', title: '若手ライブ出演', desc: '劇場の若手ライブで漫才を披露！', client: '舞台監督', stamina: 20, minigame: 'manzai', opts: { difficulty: 2, lines: LINES_WAKATE, venue: V_LIVE }, pay: 4000, fame: 15, skill: 'warai', gain: 2, requires: { agency: PID } },
   },
   {
     key: 'matsuri', label: 'お祭りの営業', venue: 'matsuri',
@@ -422,17 +430,17 @@ const JOBS = [
   {
     key: 'oogiri', label: '大喜利ライブ', venue: 'stage', mode: 'oogiri',
     info: 'お題に答える劇場の大喜利ライブ。\n★250〜／体力-20',
-    def: { id: 'yoshimoto_oogiri', title: '劇場の大喜利ライブ', desc: 'お題に面白い答えをズバッと返そう！', client: '舞台監督', stamina: 20, minigame: 'talk', opts: { difficulty: 3, ...TALK_OOGIRI }, pay: 10000, fame: 40, skill: 'warai', gain: 3, requires: { fame: 250 } },
+    def: { id: 'yoshimoto_oogiri', title: '劇場の大喜利ライブ', desc: 'お題に面白い答えをズバッと返そう！', client: '舞台監督', stamina: 20, minigame: 'ogiri', opts: { difficulty: 3, mode: 'zabuton', scenes: TALK_OOGIRI.scenes, venue: V_OOGIRI }, pay: 10000, fame: 40, skill: 'warai', gain: 3, requires: { fame: 250 } },
   },
   {
     key: 'kanmuri', label: '冠番組の収録', venue: 'stage', mode: 'tv',
     info: '自分の名前がついた番組を公開収録！\n★1000〜／体力-25',
-    def: { id: 'yoshimoto_kanmuri', title: '冠番組の収録', desc: '自分の名前がついた番組の公開収録！', client: 'マネージャー', stamina: 25, minigame: 'tsukkomi', opts: { difficulty: 4, lines: LINES_KANMURI }, pay: 30000, fame: 110, skill: 'warai', gain: 3, requires: { fame: 1000 } },
+    def: { id: 'yoshimoto_kanmuri', title: '冠番組の収録', desc: '自分の名前がついた番組の公開収録！', client: 'マネージャー', stamina: 25, minigame: 'manzai', opts: { difficulty: 4, lines: LINES_KANMURI, venue: V_KANMURI }, pay: 30000, fame: 110, skill: 'warai', gain: 3, requires: { fame: 1000 } },
   },
   {
     key: 'gp', label: 'グランプリ決勝', venue: 'stage', mode: 'gp',
     info: '笑いの祭典の決勝！（1日1回）\nよしもと所属・★2000〜／体力-30',
-    def: { id: 'yoshimoto_gp_final', title: 'お笑いグランプリ決勝', desc: '笑いの祭典、その決勝の舞台に立とう！', client: 'マネージャー', stamina: 30, minigame: 'tsukkomi', opts: { difficulty: 5, lines: LINES_GP }, pay: 65000, fame: 220, skill: 'warai', gain: 4, requires: { agency: PID, fame: 2000 } },
+    def: { id: 'yoshimoto_gp_final', title: 'お笑いグランプリ決勝', desc: '笑いの祭典、その決勝の舞台に立とう！', client: 'マネージャー', stamina: 30, minigame: 'manzai', opts: { difficulty: 5, lines: LINES_GP, venue: V_GP, stage: 'studio' }, pay: 65000, fame: 220, skill: 'warai', gain: 4, requires: { agency: PID, fame: 2000 } },
   },
 ];
 const job = (key) => JOBS.find((j) => j.key === key);
@@ -963,13 +971,13 @@ async function surudokiTalk(g) {
   const disc2 = member(g);
   const i = await g.ask('鋭木（するどき）や。ツッコミを教えとる。\nどのレッスンにする？' + (disc2 ? '\n（よしもと所属は割引価格や）' : ''), ['基礎レッスン', '応用クラス', 'コツを聞く', 'やめる'], who);
   if (i === 0) {
-    await g.lesson({ title: '漫才（ツッコミ）レッスン', skill: 'warai', price: disc2 ? 2000 : 3000, stamina: 12, gain: 4, minigame: 'tsukkomi', opts: { difficulty: 1, lines: LINES_LESSON, partner: '鋭木先生', partnerLook: who.look }, teacher: who.name });
+    await g.lesson({ title: '漫才（ツッコミ）レッスン', skill: 'warai', price: disc2 ? 2000 : 3000, stamina: 12, gain: 4, minigame: 'manzai', opts: { difficulty: 1, lines: LINES_LESSON, partner: '鋭木先生', partnerLook: who.look, lesson: true, venue: V_KEIKO }, teacher: who.name });
   } else if (i === 1) {
     if (st.fame < 250) {
       await g.say('応用クラスは、★250を超えた中堅向けや。\nまずは基礎をみっちりやるで！', who);
       return;
     }
-    await g.lesson({ title: '漫才・応用クラス', skill: 'warai', price: disc2 ? 5000 : 6500, stamina: 15, gain: 5, minigame: 'tsukkomi', opts: { difficulty: 3, lines: LINES_WAKATE, partner: '鋭木先生', partnerLook: who.look }, teacher: who.name });
+    await g.lesson({ title: '漫才・応用クラス', skill: 'warai', price: disc2 ? 5000 : 6500, stamina: 15, gain: 5, minigame: 'manzai', opts: { difficulty: 3, lines: LINES_WAKATE, partner: '鋭木先生', partnerLook: who.look, lesson: true, venue: V_KEIKO }, teacher: who.name });
   } else if (i === 2) {
     await g.say([
       'ツッコミは「短く、強く、愛をこめて」や。',

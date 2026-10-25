@@ -114,10 +114,11 @@ export class MeetScene {
     R(c, 110, 170, 120, 90, seat); R(c, 410, 170, 120, 90, seat);
     // the two of them (upper bodies, 3x)
     const me = charSheetHD(g.state.look || {});
-    const drawUpper = (sheet, dir, x, y) => { const im = (sheet[dir] || sheet.down)[0]; c.drawImage(im, 0, 0, im.width, (im.height * 30) / 40, x, y, 96, 90); };
+    // full frames at 3x; the table hides the legs
+    const drawUpper = (sheet, dir, x, y) => { const im = (sheet[dir] || sheet.down)[0]; c.drawImage(im, 0, 0, im.width, im.height, x, y, 96, 120); };
     const bob = Math.floor(this.t / 30) % 2;
-    drawUpper(me, 'right', 140, 150 + (this.mode === 'trial' ? bob * 2 : 0));
-    if (this.mode !== 'wait' && P.look) drawUpper(charSheetHD(P.look), 'left', 404, 150 + (this.mode === 'trial' ? (1 - bob) * 2 : 0));
+    drawUpper(me, 'right', 140, 116 + (this.mode === 'trial' ? bob * 2 : 0));
+    if (this.mode !== 'wait' && P.look) drawUpper(charSheetHD(P.look), 'left', 404, 116 + (this.mode === 'trial' ? (1 - bob) * 2 : 0));
     // table
     R(c, 170, 228, 300, 14, spot === 'famires' ? '#f4f4f4' : '#8a5a33');
     R(c, 170, 242, 300, 6, spot === 'famires' ? '#c8c8c8' : '#5a3a20');
@@ -398,10 +399,10 @@ const TAB_STATS = {
   },
   draw(ui, c) {
     const g = ui.g;
-    drawList(ui, c, LIST, (c2, r, x, y, w, rh, sel) => {
-      T(c2, r.label, x + 8, y + 4, 12, K.text, 'left', 92);
-      bar(c2, x + 104, y + 8, w - 146, r.v, 100, statCol(r.v));
-      T(c2, String(Math.round(r.v)), x + w - 8, y + 4, 12, statCol(r.v), 'right');
+    drawList(ui, c, { ...LIST, rh: 19 }, (c2, r, x, y, w, rh, sel) => {
+      T(c2, r.label, x + 8, y + 3, 12, K.text, 'left', 92);
+      bar(c2, x + 104, y + 7, w - 146, r.v, 100, statCol(r.v));
+      T(c2, String(Math.round(r.v)), x + w - 8, y + 3, 12, statCol(r.v), 'right');
     });
     const st = g.state;
     const D = DETAIL;
@@ -424,7 +425,7 @@ const TAB_STATS = {
       T(c, `次の1ポイントまで ${Math.round(fr * 100)}%（高いほど伸びにくい）`, D.x + 8, y2 + 66, 10, K.faint, 'left', D.w - 16);
     }
     const y3 = y2 + 90;
-    box(c, D.x, y3, D.w, D.y + D.h - y3, '芸の種類ごとの実力（いまの act で）');
+    box(c, D.x, y3, D.w, D.y + D.h - y3, U(g) && U(g).type !== 'pin' ? `芸の種類ごとの実力（「${U(g).name}」で）` : '芸の種類ごとの実力（ピンで）');
     KIND_ORDER.forEach((k, i) => {
       const col = i % 2, rr = Math.floor(i / 2);
       const x = D.x + 8 + col * 192, y = y3 + 22 + rr * 22;
@@ -478,7 +479,7 @@ const TAB_UNIT = {
       para(c, 'いまはピン（ひとり）で活動している。漫才は相方がいないとできない（漫談になる）。相方はネットの相方募集か、NSCの同期で見つけられる。ピン芸・落語・大喜利・ものまね・トークの大会には、コンビのままでもピンで出られる。', D.x + 82, y + 22, D.w - 92, 10, K.dim, 14, 6);
       return;
     }
-    T(c, `結成 ${ymLabel(u.formed)}（${yrs}年目の数え方：結成${yrs}年）・${STYLES[u.style]}・${SOURCES[u.source] || ''}`, D.x + 8, y, 10, K.dim, 'left', D.w - 16);
+    T(c, `結成 ${ymLabel(u.formed)}（大会の数え方で結成${yrs}年）・${STYLES[u.style]}・${SOURCES[u.source] || ''}`, D.x + 8, y, 10, K.dim, 'left', D.w - 16);
     y += 16;
     T(c, 'コンビ仲', D.x + 8, y, 12, K.text);
     bar(c, D.x + 70, y + 4, 200, u.harmony, 100, harmCol(u.harmony), 8);
@@ -677,10 +678,12 @@ const TAB_SHORT = {
     for (const gp of sf.gaps.slice(0, 7)) {
       if (y > D.y + D.h - 34) break;
       T(c, gp.label, D.x + 8, y, 12, K.text, 'left', 96);
-      if (['partner', 'young'].includes(gp.key)) T(c, gp.key === 'partner' ? '相方なし' : `結成${gp.have}年`, D.x + 110, y, 10, K.bad, 'left', 120);
+      if (['partner', 'young', 'exp'].includes(gp.key)) T(c, gp.key === 'partner' ? '相方なし' : gp.key === 'exp' ? `${gp.have}回（めやす${gp.need}回）` : `結成${gp.have}年`, D.x + 110, y, 10, K.bad, 'left', 200);
       else { bar(c, D.x + 110, y + 4, 120, gp.have, 100, statCol(gp.have)); R(c, D.x + 110 + (120 * Math.min(100, gp.need)) / 100, y + 1, 1, 12, K.text); T(c, `${gp.have}→${gp.need}`, D.x + 236, y, 10, K.dim, 'left', 60); }
       y += 14;
-      y += para(c, gp.reason, D.x + 16, y, D.w - 24, 10, K.warn, 13, 2);
+      const rs = String(gp.reason || '');
+      const ci = rs.indexOf('：');
+      y += para(c, ci > 0 && rs.slice(0, ci) === gp.label ? rs.slice(ci + 1) : rs, D.x + 16, y, D.w - 24, 10, K.warn, 13, 2);
       if (gp.hint) { T(c, `→ ${gp.hint}`, D.x + 16, y, 10, K.good, 'left', D.w - 24); y += 14; }
       y += 3;
     }
@@ -715,7 +718,7 @@ function goalsOf(g) {
       out.push({ label: `${x.def.short || x.def.name}`, sub: [el && el.note, x.status === 'notyet' ? 'まだ始まっていない' : x.status === 'revival' ? '復刻開催' : ''].filter(Boolean).join('・') || '賞レース' });
     }
   }
-  if (u && u.type !== 'pin') out.push({ label: `結成${yearsOf(g, u)}年目の「${u.name}」`, sub: `コンビ仲 ${u.harmony}・舞台 ${u.stages}回` });
+  if (u && u.type !== 'pin') out.push({ label: `「${u.name}」結成${yearsOf(g, u)}年`, sub: `コンビ仲 ${u.harmony}・舞台 ${u.stages}回` });
   return out;
 }
 const TAB_GOALS = {
@@ -802,7 +805,7 @@ const BOARD_THEME = {
   sns: { bg: '#15202b', ink: '#e7e9ea', accent: '#4aa8f0', panel: '#1e2a36' },
   app: { bg: '#fff0f4', ink: '#3a2030', accent: '#ff4f86', panel: '#ffffff' },
 };
-const STATUS_COL = { sent: K.warn, replied: K.good, met: K.cyan, declined: K.faint, refused: K.bad, formed: K.gold };
+const STATUS_COL = { sent: K.warn, replied: K.good, met: K.cyan, declined: K.faint, refused: K.bad, formed: K.gold, ex: K.lock };
 function boardTabs(g) {
   const boards = safe(() => g.owaraiBoards(), []) || [];
   const tabs = boards.map((b) => ({ id: b.id, label: b.short, board: b, rows: (ui) => boardRows(ui.g, b.id), draw: (ui, c) => drawBoard(ui, c, b), act: (ui, row) => candAct(ui, row), foot: () => b.desc }));
@@ -816,7 +819,7 @@ function boardRows(g, b) {
 }
 function contactRows(g) {
   const list = (safe(() => g.owaraiCandidates('net'), []) || []).filter((x) => x.status !== 'none');
-  const order = { replied: 0, met: 1, sent: 2, formed: 3, refused: 4, declined: 5 };
+  const order = { replied: 0, met: 1, sent: 2, formed: 3, ex: 4, refused: 5, declined: 6 };
   list.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
   return [{ header: true, label: 'やりとり中の人' }, ...list.map((x) => ({ key: x.id, c: x, label: x.met ? x.name : x.handle, right: x.statusLabel, rightColor: STATUS_COL[x.status] || K.dim }))];
 }
@@ -889,7 +892,7 @@ async function candAct(ui, row) {
   if (x.status === 'sent') { await ui.info(x.handle, ['返事を待っている。', `（${B.via || 'メール'}の返事は、ふつう${B.reply ? `${B.reply[0]}〜${B.reply[1]}日` : '数日'}で来る）`]); return; }
   const items = [];
   if (x.canMeet) items.push({ label: `会いに行く（${MEET_SPOTS[B.meet] ? MEET_SPOTS[B.meet].name : 'お店'}）`, sub: `${MEET_SPOTS[B.meet] ? fmtMoney(MEET_SPOTS[B.meet].price) : ''}・体力4`, id: 'meet' });
-  if (x.met && x.trial != null && x.status === 'met') items.push({ label: 'コンビを組もうと伝える', sub: x.feel || '', id: 'propose' });
+  if (x.met && x.trial != null && (x.status === 'met' || x.status === 'ex')) items.push({ label: 'コンビを組もうと伝える', sub: x.feel || '', id: 'propose' });
   if (x.canContact) items.push({ label: B.contact || '連絡する', sub: B.via ? `${B.via}で` : '', id: 'contact' });
   items.push({ label: 'もどる', id: 'back' });
   const k = await ui.pick({ title: x.met ? x.name : x.handle, items: items.map((i) => ({ label: i.label, sub: i.sub })) });

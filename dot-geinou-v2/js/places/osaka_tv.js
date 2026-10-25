@@ -848,8 +848,9 @@ const RADIO_JOB = {
 };
 const CONTEST_JOB = {
   id: 'ktv_manzai', title: '若手漫才コンテストのネタ見せ', desc: '金屏風の前で、審査員に漫才を見てもらおう！', client: '舞台監督',
-  stamina: 25, minigame: 'tsukkomi', pay: 4500, fame: 18, skill: 'warai', gain: 2, requires: TIER1,
-  opts: { difficulty: 2, dialect: 'kansai' },
+  stamina: 25, minigame: 'manzai', pay: 4500, fame: 18, skill: 'warai', gain: 2, requires: TIER1,
+  // 芸の実演 (C): 金屏風とセンターマイクの収録スタジオ; the judges and the cameras add pressure
+  opts: { difficulty: 2, dialect: 'kansai', stage: 'kinbyobu', venue: { name: '若手漫才コンテスト', size: 'tv', crowd: 'normal', pressure: 55 } },
 };
 
 // ================================================================== LOBBY

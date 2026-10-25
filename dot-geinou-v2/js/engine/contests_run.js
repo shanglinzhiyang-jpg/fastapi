@@ -925,4 +925,11 @@ export const runner = {
   enter, go, runToday, record, odds: (g, id, round) => oddsOf(g, id, round ?? (I.entryOf(g, id) ? I.entryOf(g, id).round : 0)),
   morning: async (g) => { await morning(g); laterNews(g); },
 };
-export const venue = { reception, practice, debayashi, mirror, breathe, stageCall, performStep, leaveVenue, today, roundOfToday, tensionNow, travelCost, label, stageRoom };
+// leaving the venue in the middle of a round day: 当日棄権 (no travel; the caller moves the player)
+function withdrawToday(g) {
+  const t = today(g);
+  if (!t || t.done) return;
+  withdraw(g, t.id, t.year, '当日棄権');
+  finishToday(g);
+}
+export const venue = { withdrawToday, reception, practice, debayashi, mirror, breathe, stageCall, performStep, leaveVenue, today, roundOfToday, tensionNow, travelCost, label, stageRoom };

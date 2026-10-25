@@ -38,7 +38,7 @@ registerContest('t1', {
   organizer: 'YouTubeチャンネル「たっくーTVれいでぃお」', broadcaster: 'YouTube生配信', venue: '（会場は詳細非公開）', region: 'tokyo',
   history: { founded: 2023, ended: 2025, note: '最恐の怪談師を決める大会。2025年4月4日の大会がラストイヤー。2025: 推薦7名＋一般募集枠3名＝10名、ゲスト審査員＋視聴者投票。以降は復刻開催。', sources: T1_SRC },
   schedule: { entry: { from: [1, 1], to: [2, 5] }, final: [4, 2] },
-  eligibility: elig('推薦出場（主催の推薦）または一般募集枠（プロ・アマ・ジャンル不問）', () => OK, { pro: true, amateur: true }),
+  eligibility: { pro: true, amateur: true, note: '推薦出場（主催の推薦）または一般募集枠（プロ・アマ・ジャンル不問）' },
   prizeText: '最恐の称号（賞金は詳細非公開）',
   perform: { kind: 'talk' },
   facts: { verified: ['怪談の大会「最恐を極めし者達の戦い」', '2023年開始・2025年ラストイヤー（4/4最終回）', '推薦7名＋一般募集枠3名＝10名', 'ゲスト審査員＋視聴者投票', '2024年大会は3月'], unverified: ['一般募集の応募数', '持ち時間', '審査員の人数・配点'] },
@@ -92,7 +92,7 @@ registerContest('t1', {
             rows: all.map((x, i) => ({ place: i + 1, name: x.name, judge: x.judge, vote: `${x.vote}%`, total: x.total, me: x.me })), max: 10,
           });
           const out = roundResult({ ...res, score: res.fear }, { passed: true, place, field: 10 });
-          if (place === 1) { out.champion = true; out.award = '最恐'; grant(g, ctx, 'award', { fame: 110, fans: 1200 }); await g.say([`T-1グランプリ、最恐は――${unitName(g)}。`, 'お笑いとは別の筋肉を使った。心身ともに、ぐったりだ。']); }
+          if (place === 1) { out.champion = true; out.award = '最恐'; await g.say([`T-1グランプリ、最恐は――${unitName(g)}。`, 'お笑いとは別の筋肉を使った。心身ともに、ぐったりだ。']); }
           else { out.reasons = failReasons(g, 'talk', res); await g.say([`${place}位。最恐は「${all[0].name}」。`, `足りなかったもの：${out.reasons.join('、')}`]); }
           news(g, ctx, `【T-1グランプリ】${edLabel(ctx)}、最恐の称号は${all[0].name}に`);
           record(g, ctx, 'final', out);
@@ -130,11 +130,7 @@ registerContest('yama1', {
   organizer: '日本テレビ', broadcaster: '日本テレビ系「ダウンタウンのガキの使いやあらへんで！」（新春企画）', venue: '大新年会の宴会場（収録スタジオ）', region: 'tokyo',
   history: { founded: 2007, ended: null, note: '新春恒例「大新年会」の企画。審査役が独断で採点。第17回2023/1/22、第19回2025/1/26、第20回2026/1/25（12組）。第1回は逆算で2007年。', sources: YAMA1_SRC },
   schedule: { entry: null, final: [1, 8] },
-  eligibility: elig('ブレイク前の芸人（番組が招く「ブレイク芸人の登竜門」）', (g) => {
-    if (isAmateur(g)) return no('プロの芸人が番組に招かれる企画');
-    if (famous(g) >= 20000) return no('もうブレイクしている（「ブレイク芸人の登竜門」の対象外）');
-    return OK;
-  }, { pro: true, amateur: false, invite: { fame: 150 } }),
+  eligibility: { pro: true, amateur: false, invite: { fame: 150 }, note: 'ブレイク前の芸人（番組が招く「ブレイク芸人の登竜門」・招待制）' },
   fee: 0, prizeText: '優勝（賞金は詳細非公開）',
   facts: { verified: ['日本テレビ「ガキの使い」新春恒例企画（大新年会）', '審査役の独断採点', 'ブレイク芸人の登竜門', '第17回2023/1/22・第19回2025/1/26・第20回2026/1/25（12組）'], unverified: ['第1回=2007年（逆算）', '点数の満点', '持ち時間'] },
   rounds: [
@@ -162,11 +158,10 @@ registerContest('yama1', {
             rows: rows.map((x, i) => ({ place: i + 1, name: x.name, uke: x.uke, pt: x.pt, me: x.me })), max: 12, note: `${YAMA_JUDGE}「${taste.text.replace('今年は', '')}。文句は受け付けません」`,
           });
           const out = roundResult(res, { passed: true, place, field: 12, dokudan: mine });
-          if (place === 1) { out.champion = true; out.award = '優勝'; grant(g, ctx, 'award', { fame: 180, fans: 2500 }); await g.say([`山-1グランプリ、優勝は${unitName(g)}！`, '宴会場の先輩たちが「なんでやねん！」と叫びながら拍手している。']); }
+          if (place === 1) { out.champion = true; out.award = '優勝'; await g.say([`山-1グランプリ、優勝は${unitName(g)}！`, '宴会場の先輩たちが「なんでやねん！」と叫びながら拍手している。']); }
           else {
             out.reasons = res.score >= 70 ? ['会場はウケていたが、審査役の「今年の気分」と合わなかった'] : failReasons(g, styleKind(g), res);
             await g.say([`${place}位（独断点${mine}）。優勝は「${rows[0].name}」。`, out.reasons[0]]);
-            grant(g, ctx, 'final', { fame: 40, fans: 500 });
           }
           news(g, ctx, `【山-1】${edLabel(ctx)}は${rows[0].name}が独断採点を制す。「ブレイク芸人の登竜門」`);
           record(g, ctx, 'final', out);
@@ -197,11 +192,7 @@ registerContest('hope', {
   organizer: 'お笑いコンベンション実行委員会（在京プロダクション38社）', broadcaster: null, venue: '東京都内のホール（詳細非公開）', region: 'tokyo',
   history: { founded: 2003, ended: 2008, note: '在京プロダクション一押しの若手がジャンル不問で競う。観客の採点が勝ち上がりに大きく影響。第6回2008年「THE FINAL」で終了 → 以降は復刻開催。', sources: HOPE_SRC },
   schedule: { entry: { from: [2, 1], to: [2, 10] }, final: [5, 2] },
-  eligibility: elig('在京プロダクションが推す若手（事務所の推薦。ゲームでは芸歴10年以内）', (g, u, y) => {
-    if (!playerAgency(g)) return no('在京プロダクションの推薦が必要（事務所に所属しよう）');
-    const gk = geirekiOf(g, y);
-    return gk <= 10 ? OK : no(`若手の大会（いま芸歴${gk}年）`);
-  }, { pro: true, amateur: false }),
+  eligibility: { pro: true, amateur: false, geirekiMax: 10, note: '在京プロダクションが推す若手（事務所の推薦。ゲームでは芸歴10年以内）' },
   prizeText: 'お笑いホープ大賞（賞金は詳細非公開）',
   facts: { verified: ['お笑いコンベンション実行委員会（在京38社）', '在京プロ一押しの若手・ジャンル不問', '観客の採点が勝ち上がりに大きく影響', '第1回2003〜第6回2008「THE FINAL」'], unverified: ['予選の段階・日程', '賞金', '芸歴の上限'] },
   rounds: [
@@ -231,11 +222,7 @@ registerContest('harvest', {
   organizer: '一般社団法人日本音楽事業者協会（音事協）', broadcaster: null, venue: '都内の劇場（詳細非公開）', region: 'tokyo',
   history: { founded: 2010, ended: 2018, note: '月例ライブ「JAMEお笑いハーベスト」の年間グランプリ。予選会→準決勝→決勝5組。漫才・コント・ピンの「異種格闘技戦」。第9回2018年まで確認 → 以降は復刻開催。', sources: HARV_SRC },
   schedule: { entry: { from: [3, 1], to: [3, 10] }, final: [7, 9] },
-  eligibility: elig('音事協の加盟プロダクションに所属する若手（ゲームでは事務所所属・芸歴10年以内）', (g, u, y) => {
-    if (!playerAgency(g)) return no('加盟プロダクションの所属が必要');
-    const gk = geirekiOf(g, y);
-    return gk <= 10 ? OK : no(`若手のライブ（いま芸歴${gk}年）`);
-  }, { pro: true, amateur: false }),
+  eligibility: { pro: true, amateur: false, geirekiMax: 10, note: '音事協の加盟プロダクションに所属する若手（ゲームでは事務所所属・芸歴10年以内。加盟社の範囲は区別しない）' },
   prizeText: 'お笑いハーベスト大賞（賞金は詳細非公開）',
   facts: { verified: ['主催 音事協', '月例ライブ「JAMEお笑いハーベスト」の年間グランプリ', '漫才・コント・ピンの異種格闘技戦', '予選会→準決勝→決勝5組', '審査員＋観客', '第1回2010〜第9回2018', '2018名称「あなたが選ぶ！お笑いハーベスト大賞2018」・7月決勝'], unverified: ['2019年以降', '賞金', '加盟社の範囲', '芸歴の上限'] },
   rounds: [
@@ -263,38 +250,46 @@ registerContest('kagetsu', {
   organizer: '吉本興業', broadcaster: null, venue: 'なんばグランド花月', region: 'osaka',
   history: { founded: 1984, ended: 1985, note: '吉本興業が所属タレントと関係の深い人に贈った賞（1984・1985年の2回）。以降は復刻開催。部門・選考方法は非公開扱い。', sources: KAGETSU_SRC },
   schedule: { entry: null, final: [12, 8] },
-  eligibility: elig('よしもと所属のタレント（選考制・エントリー不要）', (g) => (playerAgency(g) === 'yoshimoto' ? OK : no('吉本興業の所属タレントに贈られる賞')), { agency: ['yoshimoto'], invite: { fame: 0 } }),
+  eligibility: { agency: ['yoshimoto'], invite: { fame: 0 }, repeat: true, note: 'よしもと所属のタレント（選考制。会社から授賞式に呼ばれる）' },
   fee: 0, prizeText: '花月大賞（賞金・部門は詳細非公開）',
   facts: { verified: ['吉本興業', '1984年・1985年の2回', '所属タレントと吉本と関係の深い人に贈る'], unverified: ['部門', '選考方法', '時期・会場', '賞金'] },
   rounds: [
     {
-      id: 'final', name: '選考・授賞式', when: [12, 8], judge: 'staff', final: true,
+      id: 'senkou', name: '選考（一年の劇場と活躍）', when: [12, 3], judge: 'staff', field: 30, pass: 3,
       run: async (g, ctx) => {
         const y = ctx.year;
-        const venue = y <= 1987 ? 'なんば花月' : 'なんばグランド花月';
         const o = typeof g.owarai === 'function' ? g.owarai() : null;
         const stages = Number(o && o.stages) || d2(g).log.filter((x) => x.year === y).length;
         const wins = Object.values(d2(g).wins).filter((a) => Array.isArray(a) && a.includes(y)).length;
         const pts = clamp(Math.round(powerOf(g, styleKind(g)) * 0.55 + Math.min(25, stages) + Math.min(20, famous(g) / 500) + wins * 12), 0, 100);
+        return withBackdrop(g, 'ceremony', { title: ctx.def.name, sub: `${edLabel(ctx)}　選考`, sign: '花月大賞', cast: castOf(g) }, async () => {
+          const j = judgeField(g, ctx, 'senkou', pts, { field: 30, pass: 3, sample: 12, level: 45 });
+          d2(g).flags[`kagetsu_${y}`] = j.rows.slice(0, 3).map((x) => x.name);
+          const out = roundResult({ score: pts }, { passed: j.passed, place: j.place, field: j.field });
+          if (j.passed) await g.say(['会社から連絡があった。「今年の花月大賞、受賞が決まりました」', '年末の授賞式に呼ばれた！']);
+          else { out.reasons = ['劇場の出番の数', '一年のウケと話題']; await g.say(['今年の花月大賞は、受賞ならず。', '来年は、自分があの舞台に呼ばれたい。']); }
+          record(g, ctx, 'senkou', out);
+          return out;
+        });
+      },
+    },
+    {
+      id: 'final', name: '授賞式', when: [12, 8], judge: 'staff', final: true,
+      run: async (g, ctx) => {
+        const y = ctx.year;
+        const venue = y <= 1987 ? 'なんば花月' : 'なんばグランド花月';
         return withBackdrop(g, 'ceremony', { title: ctx.def.name, sub: `${edLabel(ctx)}　${venue}`, sign: `花月大賞　${venue}`, cast: castOf(g) }, async () => {
           await g.say([`年の瀬の${venue}。吉本の芸人と、吉本を支えてきた人たちが集まる。`, '花月大賞――この一年、劇場と会社に尽くした者に贈られる賞だ。']);
-          const j = judgeField(g, ctx, 'final', pts, { field: 30, pass: 3, sample: 12, level: 45 });
-          const winners = j.rows.slice(0, 3).map((x) => x.name);
+          const winners = (d2(g).flags[`kagetsu_${y}`] || [unitName(g)]).slice(0, 3);
+          if (!winners.includes(unitName(g))) winners[winners.length - 1] = unitName(g);
           await showBoard(g, {
             title: `${ctx.def.name}　受賞者`, sub: `${edLabel(ctx)}　（選考方法は非公開・ゲーム内の集計）`, cols: [{ key: 'name', label: '受賞者', w: 600 }],
             rows: [...winners.map((n) => ({ name: n, me: n === unitName(g) })), { name: `劇場を支えた裏方：${fictionalPerson(rngFor(g, ctx.id, y, 'staff'))}さん（劇場スタッフ）` }],
           });
-          const out = roundResult({ score: pts }, { passed: true, place: j.place, field: 30 });
-          if (j.place <= 3) {
-            out.champion = true; out.award = '花月大賞';
-            grant(g, ctx, 'award', { fame: 140, fans: 1200 });
-            await g.say(['花月大賞、受賞！', '授賞式のあと、記念にひとネタ披露することになった。']);
-            const skip = await askSkip(g, ctx, 'final');
-            await stagePerform(g, ctx, { kind: styleKind(g), round: 'kinen', title: '受賞記念のネタ', venue: { name: venue, size: 'hall', crowd: 'warm', pressure: 30 }, skip });
-          } else {
-            out.reasons = ['劇場の出番の数', '一年のウケと話題'];
-            await g.say(['今年は受賞ならず。客席から先輩たちの晴れ姿を見上げた。', '来年は、自分があの舞台に呼ばれたい。']);
-          }
+          await g.say(['花月大賞、受賞！', '授賞式のあと、記念にひとネタ披露することになった。']);
+          const skip = await askSkip(g, ctx, 'final');
+          const res = await stagePerform(g, ctx, { kind: styleKind(g), round: 'kinen', title: '受賞記念のネタ', venue: { name: venue, size: 'hall', crowd: 'warm', pressure: 30 }, skip });
+          const out = roundResult(res, { passed: true, place: 1, field: 3, champion: true, award: '花月大賞' });
           news(g, ctx, `【吉本】${edLabel(ctx)}花月大賞、受賞は${winners.join('、')}`);
           record(g, ctx, 'final', out);
           return out;
@@ -326,11 +321,7 @@ registerContest('seijinshiki', {
   organizer: 'BSフジ', broadcaster: 'BSフジ', venue: 'BSフジ スタジオ（公開収録）', region: 'tokyo',
   history: { founded: 2020, ended: null, note: '芸歴20年以上の漫才師の「成人式」。2020年3月（開局20周年・無観客・10組）、2020年11月（有観客）、2022年1月1日、2024年。ゲームでは毎年正月に開催・回数は通し番号。', sources: SEIJIN_SRC },
   schedule: { entry: null, final: [1, 1] },
-  eligibility: elig('芸歴20年以上の漫才師（ベテラン漫才師の推薦）', (g, u, y) => {
-    if (memberCount(u) < 2) return no('漫才師（コンビ・トリオ）の特番');
-    const gk = geirekiOf(g, y);
-    return gk >= 20 ? OK : no(`芸歴20年以上が対象（いま芸歴${gk}年）`);
-  }, { geirekiMin: 20, pro: true, amateur: false, members: [2, null], invite: { fame: 0 } }),
+  eligibility: { geirekiMin: 20, pro: true, amateur: false, members: [2, null], invite: { fame: 0 }, note: '芸歴20年以上の漫才師（ベテラン漫才師の推薦・招待制）' },
   fee: 0, prizeText: '優勝（賞金は詳細非公開）',
   perform: { kind: 'manzai' },
   facts: { verified: ['BSフジ', '2020年3月 開局20周年記念・芸歴20年以上の漫才師10組・無観客・審査委員長と審査員', 'ベテラン推薦の「まだ日の目を見ていないけれど力のある漫才師」', '2020年11月 第2回（有観客）', '2022年1月1日 第3弾（審査員＋観客投票）', '2024年「お笑い成人式2024」'], unverified: ['2023年・2025年以降', '賞金', 'ネタ時間'] },
@@ -362,8 +353,8 @@ registerContest('seijinshiki', {
             rows: rows.map((x, i) => ({ place: i + 1, name: x.name, j: x.j, a: noAudience ? '—' : x.a, t: x.t, me: x.me })), max: 10,
           });
           const out = roundResult(res, { passed: true, place, field: 10 });
-          if (place === 1) { out.champion = true; out.award = '優勝'; grant(g, ctx, 'award', { fame: 160, fans: 1500 }); await g.say(['お笑い成人式、優勝！', '芸歴20年目の晴れ着。やっと日の目を見た。']); }
-          else { out.reasons = failReasons(g, 'manzai', res); grant(g, ctx, 'final', { fame: 50, fans: 400 }); await g.say([`${place}位。優勝は「${rows[0].name}」。`, '同期たちと並んだ「成人式」の写真は、一生の宝物になった。']); }
+          if (place === 1) { out.champion = true; out.award = '優勝'; await g.say(['お笑い成人式、優勝！', '芸歴20年目の晴れ着。やっと日の目を見た。']); }
+          else { out.reasons = failReasons(g, 'manzai', res); await g.say([`${place}位。優勝は「${rows[0].name}」。`, '同期たちと並んだ「成人式」の写真は、一生の宝物になった。']); }
           news(g, ctx, `【お笑い成人式】芸歴20年超えの漫才戦、${edLabel(ctx)}は${rows[0].name}が優勝`);
           record(g, ctx, 'final', out);
           return out;
@@ -393,15 +384,28 @@ registerContest('biathlon', {
   organizer: 'QAB琉球朝日放送', broadcaster: 'QAB琉球朝日放送', venue: '沖縄県内の特設ステージ（詳細非公開）', region: 'okinawa',
   history: { founded: 2013, ended: null, note: '沖縄の芸人の「お笑い総合王者決定戦」。コント＋漫才の合計得点。2023年が第11回。2カ月の予選、本番中に選ばれる敗者復活、同点は決戦投票。', sources: BIA_SRC },
   schedule: { entry: { from: [5, 1], to: [5, 10] }, final: [8, 5] },
-  eligibility: elig('沖縄で活動する芸人（ゲームでは沖縄県出身なら出場できる）', (g) => {
-    const p = g.state && g.state.profile;
-    if ((p && p.hometown === 'okinawa') || d2(g).flags.okinawa) return OK;
-    return no('沖縄で活動する芸人の大会（沖縄県出身なら出場できる）');
-  }, { pro: true, amateur: true, region: 'okinawa' }),
+  eligibility: { pro: true, amateur: true, region: 'okinawa', note: '沖縄で活動する芸人（沖縄県出身でなければ、予選の受付で沖縄にも拠点を置くか決める）' },
   prizeText: '総合王者（賞金は詳細非公開）',
   facts: { verified: ['主催 QAB琉球朝日放送', '沖縄の芸人の総合王者決定戦・毎年夏', 'コント＋漫才の合計得点', '2023年=第11回', '2カ月の予選→決勝', '本番中に選ばれる敗者復活', '同点は決戦投票', 'ピン芸人も決勝に'], unverified: ['第1回=2013年（逆算）', '配点（ゲームでは各500点満点）', '予選の通過数', '月'] },
   rounds: [
-    { id: 'r1', name: '予選（コント）', when: [6, 5], judge: 'panel', field: 30, pass: 0.6, run: (g, ctx) => stageRound(g, ctx, { round: 'r1', name: '予選（コント）', kind: biaKind(g, 'conte'), scene: 'okinawa', sign: 'お笑いバイアスロン 予選', field: 30, pass: 0.6, level: 42, intro: ['2カ月にわたる予選。まずはコント。', '沖縄の芸人どうし、手の内はお互いよく知っている。'] }) },
+    {
+      id: 'r1', name: '予選（コント）', when: [6, 5], judge: 'panel', field: 30, pass: 0.6,
+      run: async (g, ctx) => {
+        const s = d2(g);
+        const p = g.state && g.state.profile;
+        if (!(p && p.hometown === 'okinawa') && !s.flags.okinawa) {
+          const k = g.auto ? 0 : await g.ask(['受付「お笑いバイアスロンは、沖縄で活動する芸人の大会です」', '沖縄にも拠点を置いて、県内の舞台に立ち続ける？'], ['沖縄にも拠点を置く（以後、沖縄の芸人として出場）', 'やめておく'], { cancel: 1 });
+          if (k !== 0) {
+            const out = roundResult({ score: 0 }, { passed: false, reasons: ['沖縄で活動する芸人の大会'] });
+            record(g, ctx, 'r1', out);
+            return out;
+          }
+          s.flags.okinawa = (g.state && g.state.day) || 1;
+          await g.say('沖縄の劇場にも籍を置いた。島の客席に、顔を覚えてもらおう。');
+        }
+        return stageRound(g, ctx, { round: 'r1', name: '予選（コント）', kind: biaKind(g, 'conte'), scene: 'okinawa', sign: 'お笑いバイアスロン 予選', field: 30, pass: 0.6, level: 42, intro: ['2カ月にわたる予選。まずはコント。', '沖縄の芸人どうし、手の内はお互いよく知っている。'] });
+      },
+    },
     {
       id: 'r2', name: '予選（漫才）', when: [7, 5], judge: 'panel', field: 18, pass: 8,
       run: (g, ctx) => stageRound(g, ctx, {
@@ -417,7 +421,8 @@ registerContest('biathlon', {
       }),
     },
     {
-      id: 'final', name: '決勝（コント＋漫才 合計点）', when: [8, 5], judge: 'points', judges: 5, field: 9, final: true, tv: true, revival: true,
+      // 敗者復活 is part of this run (announced during the broadcast), so the round has no `revival` flag for D1's generic 敗者復活戦
+      id: 'final', name: '決勝（コント＋漫才 合計点）', when: [8, 5], judge: 'points', judges: 5, field: 9, final: true, tv: true, revivalInRun: true,
       run: async (g, ctx) => {
         const s = d2(g);
         const skip = await askSkip(g, ctx, 'final');
@@ -459,7 +464,7 @@ registerContest('biathlon', {
             rows: rows.map((x, i) => ({ place: i + 1, name: x.name, c: x.c, m: x.m, t: x.t, me: x.me })), max: 10,
           });
           const out = roundResult({ ...m1, score: Math.round((c1.score + m1.score) / 2) }, { passed: true, place, field: rows.length, conte: myC, manzai: myM });
-          if (place === 1) { out.champion = true; out.award = '総合王者'; grant(g, ctx, 'award', { fame: 90, fans: 900 }); await g.say([`お笑いバイアスロン、総合王者は${unitName(g)}！`, 'コントも漫才もできる――沖縄でいちばんの二刀流だ。']); }
+          if (place === 1) { out.champion = true; out.award = '総合王者'; await g.say([`お笑いバイアスロン、総合王者は${unitName(g)}！`, 'コントも漫才もできる――沖縄でいちばんの二刀流だ。']); }
           else { out.reasons = failReasons(g, myC < myM ? 'conte' : 'manzai', myC < myM ? c1 : m1); out.reasons.unshift(myC < myM ? 'コントの点が伸びなかった' : '漫才の点が伸びなかった'); await g.say([`${place}位。総合王者は「${rows[0].name}」。`, `足りなかったもの：${out.reasons.slice(0, 3).join('、')}`]); }
           news(g, ctx, `【お笑いバイアスロン】${edLabel(ctx)}総合王者は${rows[0].name}（${rows[0].t}点）`);
           record(g, ctx, 'final', out);
@@ -489,11 +494,13 @@ registerContest('hyaku', {
   name: '100×100', short: '100×100', kind: 'any', category: 'agency',
   organizer: '吉本興業', broadcaster: 'YouTube「吉本興業チャンネル」（元日生配信）', venue: '（配信スタジオ）', region: 'tokyo',
   history: { founded: 2024, ended: null, note: '吉本芸人限定の新春ネタトーナメント。1回戦100秒・準決勝200秒・決勝300秒。お年玉100万円。第1回は延期を経て60組、第2回2025、第3回2026年元日（視聴者投票）。', sources: HYAKU_SRC },
-  schedule: { entry: null, final: [1, 1] },
-  eligibility: elig('吉本興業の所属芸人（予選を勝ち抜いた60組）', (g) => (playerAgency(g) === 'yoshimoto' ? OK : no('吉本芸人限定の大会')), { agency: ['yoshimoto'], pro: true, amateur: false }),
+  // the 予選 is in December of the previous calendar year (D1: a date after the final's month belongs to year − 1)
+  schedule: { entry: { from: [11, 1], to: [11, 10] }, final: [1, 1] },
+  eligibility: { agency: ['yoshimoto'], pro: true, amateur: false, note: '吉本興業の所属芸人（年末の予選を勝ち抜いた60組が元日の本戦へ）' },
   prize: 1000000, prizeText: 'お年玉（優勝賞金）100万円',
   facts: { verified: ['吉本興業・吉本芸人限定', 'お年玉100万円の新春ネタトーナメント', '1回戦100秒・準決勝200秒・決勝300秒', '元日にYouTube吉本興業チャンネルで生配信', '第1回 60組（延期を経て）', '第2回2025・第3回2026（視聴者投票）', '過去大会は審査員6人'], unverified: ['予選の応募数', '各回戦の通過数（ゲームでは60→12→3→1）', '第1回の日付'] },
   rounds: [
+    { id: 'yosen', name: '予選（年末のネタ審査・100秒）', when: [12, 5], judge: 'staff', field: 300, pass: 60, length: 100, run: (g, ctx) => stageRound(g, ctx, { round: 'yosen', name: '予選（100秒）', scene: 'stream', sign: '100×100 予選', length: 100, field: 300, pass: 60, sample: 30, level: 44, intro: ['元日の本戦に出られるのは、予選を勝ち抜いた60組。', '予選のネタは100秒。年末の劇場で審査される。'] }) },
     {
       id: 'main', name: '新春ネタトーナメント（100秒→200秒→300秒）', when: [1, 1], judge: 'vote', field: 60, final: true, tv: true,
       run: async (g, ctx) => {
@@ -501,14 +508,6 @@ registerContest('hyaku', {
         const viewers = ctx.year >= 2026;
         return withBackdrop(g, 'stream', { title: ctx.def.name, sub: `${edLabel(ctx)}　元日生配信`, sign: '100×100', chat: HYAKU_CHAT, cast: castOf(g) }, async () => {
           if (!skip) await g.say(['元日。吉本興業チャンネルで生配信。', '1回戦100秒、準決勝200秒、決勝300秒。勝ち上がるほど、ネタが長くなる。', viewers ? '優勝は視聴者投票で決まる。' : '審査員6人が採点する。']);
-          // 予選（年末に実施ずみ）
-          const pre = judgeField(g, ctx, 'pre', clamp(Math.round(powerOf(g, styleKind(g)) * 0.7 + netaQualityOf(g, styleKind(g)) * 0.3), 0, 100), { field: 300, pass: 60, sample: 30, level: 46 });
-          if (!pre.passed) {
-            const out = roundResult({ score: 0 }, { passed: false, place: pre.place, field: 300, reasons: ['予選（年末のネタ審査）で60組に入れなかった'] });
-            await g.say('……年末の予選で、60組に残れていなかった。元日は家でこの配信を見ることになった。');
-            record(g, ctx, 'main', out);
-            return out;
-          }
           const stages = [{ sec: 100, name: '1回戦（100秒）', field: 60, pass: 12, level: 50 }, { sec: 200, name: '準決勝（200秒）', field: 12, pass: 3, level: 60 }, { sec: 300, name: '決勝（300秒）', field: 3, pass: 1, level: 66 }];
           let last = null;
           let prevSec = 0;
@@ -534,12 +533,11 @@ registerContest('hyaku', {
             if (!j.passed) {
               last.reasons = failReasons(g, styleKind(g), res);
               await g.say([`${st.name}で敗退（${j.place}位／${st.field}組）。`, `足りなかったもの：${last.reasons.join('、')}`]);
-              grant(g, ctx, 'play', { fame: 15 + st.sec / 10, fans: 100 + st.sec });
+              last.place = st.sec === 100 ? 30 : st.sec === 200 ? 8 : 3;
               break;
             }
             if (st.pass === 1) {
-              last.champion = true; last.award = '優勝（お年玉100万円）';
-              grant(g, ctx, 'award', { money: 1000000, fame: 170, fans: 2200 });
+              last.champion = true; last.award = '優勝（お年玉100万円）'; last.place = 1; // 100万円（def.prize）は D1 が支払う
               await g.say([`100×100、優勝は${unitName(g)}！`, 'お年玉100万円。新年いちばんの笑いをとった。']);
             } else await g.say(`${st.name}突破！ 次は${st.sec + 100}秒。`);
             prevSec = st.sec;
@@ -573,7 +571,7 @@ registerContest('thirty1', {
   organizer: 'TBS', broadcaster: 'TBS系「水曜日のダウンタウン」', venue: 'TBS スタジオ', region: 'tokyo',
   history: { founded: 2021, ended: null, note: '30秒以内ならなんでもアリのノンジャンル賞レース（「水曜日のダウンタウン」企画、年1回）。2026年は931組応募→40組が5ブロックのトーナメント。審査員5人（2024）。', sources: T30_SRC },
   schedule: { entry: { from: [2, 1], to: [2, 10] }, final: [5, 5] },
-  eligibility: elig('出場資格の詳細は未確認（ゲームではプロ・アマ不問）。ネタは30秒以内', () => OK, { pro: true, amateur: true }),
+  eligibility: { pro: true, amateur: true, note: '出場資格の詳細は未確認（ゲームではプロ・アマ不問）。ネタは30秒以内' },
   prizeText: '優勝（賞金は詳細非公開）',
   facts: { verified: ['TBS「水曜日のダウンタウン」企画', '2021年から年1回', '30秒以内ならなんでもアリ（ノンジャンル）', '2026: 931組応募→40組・5ブロックのトーナメント', '審査員5人（2024）'], unverified: ['予選の方式', 'ブロック内の対戦方式', '決勝の方式', '賞金', '30秒超過の扱い'] },
   rounds: [
@@ -596,10 +594,11 @@ registerContest('thirty1', {
             if (a !== 0 && b !== 0) return vote(power[a], power[b], `${a}-${b}`) >= 3 ? a : b;
             const opp = a === 0 ? b : a;
             const res = await stagePerform(g, ctx, { kind: 'any', round: `b${roundName}`, length: 30, title: `30-1 ${roundName}`, venue: { name: 'TBS スタジオ', size: 'tv', crowd: 'normal', pressure: 70 }, skip });
-            const pen = res.overtime > 0 ? 18 : 0;
+            // 30秒を超えた分は強制終了（ゲームの演出）: the longer over, the bigger the loss (capped)
+            const pen = clamp(Math.round((res.overtime || 0) / 3), 0, 12);
             const va = vote(res.score - pen, power[opp], `me-${roundName}`);
             out = roundResult(res, { passed: va >= 3, place: null, field: 40, votes: va });
-            await g.say(`${roundName}：${slots[0]} 対 ${slots[opp]}――審査員5人の判定は ${va}対${5 - va}。${pen ? '（30秒オーバーで強制終了）' : ''}`);
+            await g.say(`${roundName}：${slots[0]} 対 ${slots[opp]}――審査員5人の判定は ${va}対${5 - va}。${pen >= 3 ? '（30秒オーバーで強制終了）' : ''}`);
             return va >= 3 ? 0 : opp;
           };
           const names = ['1回戦', '準決勝', 'ブロック決勝'];
@@ -613,22 +612,22 @@ registerContest('thirty1', {
           if (alive[0] !== 0) {
             const lostAt = wins.findIndex((w) => !w.includes(0));
             out = out || roundResult({ score: 0 });
-            out.passed = true; out.place = lostAt === 0 ? 5 : lostAt === 1 ? 3 : 2; out.field = 8;
+            // overall place among the 40: 1回戦負け ≈ 21〜40位, 準決勝負け ≈ 11〜20位, ブロック決勝負け ≈ 6〜10位
+            out.passed = true; out.place = lostAt === 0 ? 30 : lostAt === 1 ? 15 : 8; out.field = 40; out.of = 40;
             out.reasons = failReasons(g, styleKind(g), out.perf);
             await g.say([`${names[lostAt]}で敗退。`, `足りなかったもの：${out.reasons.join('、')}`]);
-            grant(g, ctx, 'final', { fame: 30 + lostAt * 15, fans: 300 + lostAt * 200 });
           } else {
             const fr = rivalsFor(g, ctx, 'fin', 4, { level: 66 });
             const fin = await stagePerform(g, ctx, { kind: 'any', round: 'fin', length: 30, title: '30-1 決勝', venue: { name: 'TBS スタジオ', size: 'tv', crowd: 'normal', pressure: 85 }, skip });
-            const fs = [fin.score - (fin.overtime > 0 ? 18 : 0), ...fr.map((x) => simScore(g, 'manzai', x.power, x.quality, r))];
+            const fs = [fin.score - clamp(Math.round((fin.overtime || 0) / 3), 0, 12), ...fr.map((x) => simScore(g, 'manzai', x.power, x.quality, r))];
             const votes = new Array(5).fill(0);
             const rr = rngFor(g, ctx.id, ctx.year, 'finv');
             for (let k = 0; k < 5; k++) { let bi = 0, bv = -1; fs.forEach((s, i) => { const x = s + (rr() - 0.5) * 14; if (x > bv) { bv = x; bi = i; } }); votes[bi]++; }
             const fo = [unitName(g), ...fr.map((x) => x.name)].map((n, i) => ({ name: n, v: votes[i], me: i === 0 })).sort((a, b) => b.v - a.v || (a.me ? -1 : 1));
             await showBoard(g, { title: '30-1 グランプリ　決勝（各ブロック王者5組）', sub: `${edLabel(ctx)}　審査員5人の投票（決勝の方式はゲーム内の設定）`, cols: [{ key: 'place', label: '順', w: 50 }, { key: 'name', label: '名前', w: 380 }, { key: 'v', label: '票', w: 140, align: 'right' }], rows: fo.map((x, i) => ({ place: i + 1, name: x.name, v: `${x.v}票`, me: x.me })) });
             out = roundResult(fin, { passed: true, place: fo.findIndex((x) => x.me) + 1, field: 40 });
-            if (fo[0].me) { out.champion = true; out.award = '優勝'; grant(g, ctx, 'award', { fame: 200, fans: 2600 }); await g.say([`30-1 グランプリ、優勝は${unitName(g)}！`, '30秒で日本中を笑わせた。']); }
-            else { out.reasons = failReasons(g, styleKind(g), fin); grant(g, ctx, 'final', { fame: 80, fans: 900 }); await g.say([`決勝${out.place}位。優勝は「${fo[0].name}」。`, `足りなかったもの：${out.reasons.join('、')}`]); }
+            if (fo[0].me) { out.champion = true; out.award = '優勝'; await g.say([`30-1 グランプリ、優勝は${unitName(g)}！`, '30秒で日本中を笑わせた。']); }
+            else { out.reasons = failReasons(g, styleKind(g), fin); await g.say([`決勝${out.place}位。優勝は「${fo[0].name}」。`, `足りなかったもの：${out.reasons.join('、')}`]); }
           }
           news(g, ctx, `【30-1】${edLabel(ctx)}、30秒の頂点に立ったのは${out.champion ? unitName(g) : 'あのピン芸人'}`);
           record(g, ctx, 'final', out);

@@ -50,12 +50,10 @@ function partnerSlot(id, idx, x, y, dir = 'down') {
   Object.defineProperty(e, 'person', { enumerable: true, get() { return slotPid(G(), idx) || 'ow_zs_ken'; } });
   Object.defineProperty(e, 'look', { enumerable: true, get() { const p = PEOPLE[slotPid(G(), idx)]; return p ? p.look : LOOKS.comedian; } });
   Object.defineProperty(e, 'name', { enumerable: true, get() { const p = PEOPLE[slotPid(G(), idx)]; return p ? p.name : '相方'; } });
-  e.cond = (g) => { const pid = slotPid(g, idx); return !!pid && (this0(e).person === pid); };
+  e.cond = (g) => !!slotPid(g, idx);
   e.text = ['ネタ合わせ、しよか。'];
   return e;
 }
-// the live entity (a plain copy) or the def
-const this0 = (e) => e;
 
 // classmates on the map (cohort of this campus, not your current members)
 function mate(id, x, y, dir, extra = {}) {
@@ -101,14 +99,15 @@ async function apply(g, campus) {
   const who = WHO.jimu;
   const date = dateOf(g);
   if (!has(g, 'nscCommitApply')) return;
+  let family = false;
   if (st.money < FEES.entry) {
-    const ok = await familyHelp(g);
-    if (!ok) { await g.say(`入学には、まず${eraKey(g) === 'reiwa' ? '入学諸経費' : '入学金'}（${yen(FEES.entry)}）が必要です。\nお金がたまったら、また来てくださいね。`, who); return; }
-    await g.say(`（${C.name}の入学金を、実家が出してくれた）`);
+    family = await familyHelp(g);
+    if (!family) { await g.say(`入学には、まず${eraKey(g) === 'reiwa' ? '入学諸経費' : '入学金'}（${yen(FEES.entry)}）が必要です。\nお金がたまったら、また来てくださいね。`, who); return; }
+    await g.say(`（${C.name}の入学金を、実家が出してくれることになった）`);
   }
   const when = date.month === 4 ? '今月（すぐに入学）' : `${date.month >= 4 ? date.year + 1 : date.year}年4月`;
-  const k = await g.ask(`${C.name}に入学を申しこみますか？\n入学：${when}・${st.money >= FEES.entry || g.flag('ow_nsc_family') ? '' : ''}入学金 ${yen(FEES.entry)}`, ['申しこむ', 'やめておく'], { ...who, cancel: 1 });
-  if (k !== 0) return;
+  const k = await g.ask(`${C.name}に入学を申しこみますか？\n入学：${when}・入学金 ${yen(FEES.entry)}${family ? '（実家が払う）' : ''}`, ['申しこむ', 'やめておく'], { ...who, cancel: 1 });
+  if (k !== 0) { if (family) g.setFlag('ow_nsc_family', false); return; }
   // 面接
   await g.say(['それでは、面接をします。', 'リラックスして、答えてくださいね。'], who);
   const a = await g.ask('どうして、芸人になりたいんですか？', ['人を笑わせるのが好きだから', 'テレビに出たいから', '自分を変えたいから'], { ...who, cancel: 0 });
@@ -117,9 +116,8 @@ async function apply(g, campus) {
   g.sfx(b === 0 ? 'laugh' : 'good');
   if (has(g, 'addComedyStat')) g.addComedyStat(['boke', 'mane', 'chara'][b] || 'boke', 1, true);
   await g.say('はい、ありがとうございました。\n…面接は、合格です。', who);
-  if (st.money >= FEES.entry && !(g.flag('ow_nsc_family') && st.money < FEES.entry * 2 && g.flag('ow_nsc_family_used') !== true && !g.flag('ow_nsc_paid_once'))) { st.money -= FEES.entry; g.sfx('coin'); g.setFlag('ow_nsc_paid_once', true); }
-  else g.setFlag('ow_nsc_family_used', true);
-  const s = g.nscCommitApply(campus, { familyPaid: !!g.flag('ow_nsc_family_used') });
+  if (!family) { st.money -= FEES.entry; g.sfx('coin'); }
+  const s = g.nscCommitApply(campus, { familyPaid: family });
   if (s.status === 'enrolled') {
     g.sfx('fanfare');
     await g.say([`入学おめでとうございます！\nあなたは${C.name}の${s.ki}期生です。`, '授業は月曜〜土曜。時間割はロビーの掲示板に。\n今月は「相方探しの会」もありますよ。'], who);
@@ -178,7 +176,7 @@ async function classTalk(g) {
   await g.fadeIn(10);
   const r = g.nscAttend();
   await g.say(c.lines[Math.floor(Math.random() * c.lines.length)] || `「${c.label}」の授業を受けた。`, who);
-  await g.say(r && r.ups.length ? `（${r.ups.join('・')}）` : `（${Object.keys(c.gains).map((x) => x).length ? '' : ''}力が少しずつたまってきた）`);
+  await g.say(r && r.ups.length ? `（${r.ups.join('・')}）` : '（力が少しずつたまってきた）');
   await aikataKai(g, campus);
 }
 // 相方探しの会 (April, enrolled, no act yet): try ネタ合わせ with classmates, maybe form a combi
@@ -223,7 +221,7 @@ function critique(g, res, kind, campus) {
   }
   const sf = g.shortfall(kind, clamp(sc + 15, 45, 85));
   for (const gp of sf.gaps.slice(0, 2)) out.push(`${gp.label}：${gp.reason.split('：')[1] || gp.reason}`);
-  return out.map((s) => s.replace(/(.{24})/g, '$1\n').replace(/\n$/, ''));
+  return out;
 }
 async function performHere(g, kind, opts) {
   let res = null;
@@ -385,7 +383,7 @@ function nscRooms(campus) {
         { x: 7, y: 10, to: 'exit' }, { x: 8, y: 10, to: 'exit' },
         { x: 2, y: 1, room: 'kyoshitsu', tx: 6, ty: 8, dir: 'up' },
         { x: 12, y: 1, room: 'netami', tx: 6, ty: 9, dir: 'up' },
-        { x: 14, y: 1, room: 'keiko', tx: 6, ty: 7, dir: 'up' },
+        { x: 14, y: 1, room: 'keiko', tx: 6, ty: 6, dir: 'up' },
       ],
       entities: [
         { type: 'npc', id: `${pre}_jimu`, x: 3, y: 2, dir: 'down', look: WHO.jimu.look, name: WHO.jimu.name, talk: deskTalk },
@@ -401,11 +399,9 @@ function nscRooms(campus) {
       events: [
         { x: 8, y: 1, on: 'action', run: async (g) => { const s = S(g); const c = has(g, 'nscClassToday') ? g.nscClassToday() : null; await g.say(['掲示板だ。時間割が貼ってある。', '月：発声・滑舌　火：ダンス／落語（週がわり）\n水：ネタ見せ　木：演技（コント・新喜劇）\n金：発想法（大喜利・即興）　土：ネタ見せ　日：休講', `${dateOf(g).month === 4 ? '（4月の水・土は「芸人の基本」の座学。ネタ見せは5月から）\n' : ''}今日：${c ? c.label : '休講'}${s && s.status === 'enrolled' && s.campus === campus ? `　あなたは${s.ki}期生` : ''}`]); } },
       ],
+      // (a toast, not a message: a first-visit message would block a test start / an interrupted arrival)
       onEnter: async (g) => {
-        if (!g.flag(`ow_${P}_first`)) {
-          g.setFlag(`ow_${P}_first`, true);
-          await g.say([`${C.name}だ。`, '吉本興業の養成所――ここから、何人もの芸人が\n舞台へ巣立っていった。（同期も講師も、このゲームの架空の人物）'], {});
-        }
+        if (!g.flag(`ow_${P}_first`)) { g.setFlag(`ow_${P}_first`, true); g.notify(`${C.name}。受付で入学の相談ができる（同期・講師は架空の人物）`, { color: '#ffd23f', life: 260 }); }
       },
     },
     kyoshitsu: {
@@ -511,11 +507,11 @@ registerPlace({
         partnerSlot('kb_slot0', 0, 6, 4, 'down'), partnerSlot('kb_slot1', 1, 9, 4, 'down'),
         { type: 'npc', id: 'kb_duo1', x: 10, y: 6, dir: 'left', look: { hair: 'afro', hairColor: 'brown', skin: 'tan', top: '#2f9a4a', bottom: '#3b3f48' }, name: 'アマチュア芸人', text: ['オレら、結成3か月のコンビ。', 'この稽古場、一時間いくらで借りられるから\n毎日ネタ合わせしてんねん。…バイト代、全部消えるけどな！'] },
         { type: 'npc', id: 'kb_duo2', x: 11, y: 6, dir: 'left', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#ffd23f', bottom: '#2a3560', glasses: true }, name: 'アマチュア芸人', text: ['相方がネタを書いて、ぼくが直す。', '…で、毎回ケンカになるんです。\nでも、ケンカした日のネタがいちばんウケるんですよね。'] },
-        ...signs([[3, 1, '大きな鏡だ。ネタ合わせのとき、自分たちの姿を確かめられる。'], [9, 0, '「ライブスペース →」']]),
+        ...signs([[11, 1, '時計だ。稽古場は時間貸し。']]),
       ],
       events: [{ x: 2, y: 1, w: 6, on: 'action', run: async (g) => { await practiceMenu(g, '稽古場'); } }],
       onEnter: async (g) => {
-        if (!g.flag('ow_keikoba_first')) { g.setFlag('ow_keikoba_first', true); await g.say(['貸し稽古場「ドットスタジオ」だ。', '相方とネタ合わせをしたり、ひとりで発声練習をしたり。\n（受付の人に声をかけよう）']); }
+        if (!g.flag('ow_keikoba_first')) { g.setFlag('ow_keikoba_first', true); g.notify('貸し稽古場。受付の人に声をかけると練習できる', { color: '#ffd23f', life: 260 }); }
       },
     },
     live: {

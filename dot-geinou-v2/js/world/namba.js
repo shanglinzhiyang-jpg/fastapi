@@ -3,7 +3,7 @@
 // fictional riverside district): テレビ局通り with MBS毎日放送 ('mbs') and 関西テレビ ('ktv')
 // on the north bank (js/places/osaka_tv.js), food stalls and おうぎの森公園 on the south bank.
 
-import { registerPlace } from '../engine/map.js';
+import { registerPlace, PLACES } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
 import { grid, set, put, fill, border } from './townkit.js';
 import { commuterTrain, fountain, streetStage } from './props.js';
@@ -156,7 +156,9 @@ function generate() {
     riverBoat(33, 58, 16),
     neon(59, 12, 'テレビ', '#ffa860'),
     { type: 'sign', x: 58, y: 15, solid: true, text: ['テレビ局通り', '北：MBS毎日放送・関西テレビ\n南：いか焼き・ミックスジュース・おうぎの森公園\n西：よしもと新喜劇 劇場・松竹芸能・なんば駅'] },
-    { type: 'building', x: 36, y: 23, w: 6, h: 4, door: 3, name: 'おみやげ屋', kind: 'shop', wall: '#ffffff', roof: '#ffd23f', stripes: ['#d62f2f', '#ffd23f'], sign: { text: 'おみやげ', bg: '#ffffff', color: '#d62f2f' }, text: '「ただいま棚卸し中」の札がかかっている。' },
+    // NSC大阪校 (js/places/nsc.js; the closed souvenir shop's lot when that module is missing)
+    PLACES.nsc ? { type: 'building', x: 36, y: 23, w: 6, h: 4, door: 3, place: 'nsc', name: 'NSC大阪校', kind: 'office', wall: '#fff3e6', roof: '#e8492a', sign: { text: 'NSC大阪校', bg: '#e8492a', color: '#ffffff' } }
+      : { type: 'building', x: 36, y: 23, w: 6, h: 4, door: 3, name: 'おみやげ屋', kind: 'shop', wall: '#ffffff', roof: '#ffd23f', stripes: ['#d62f2f', '#ffd23f'], sign: { text: 'おみやげ', bg: '#ffffff', color: '#d62f2f' }, text: '「ただいま棚卸し中」の札がかかっている。' },
     neon(5, 13, 'なんば', '#ff4f8b'),
     neon(24, 13, 'お笑い', '#5fd7ff'),
     neon(39, 13, 'グルメ', '#ffd23f'),

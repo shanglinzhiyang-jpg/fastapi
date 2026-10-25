@@ -231,9 +231,9 @@ export function comboName(...key) {
     if (f < 0.34) n = pickR(K1, r) + pickR(K2, r);
     else if (f < 0.62) n = pickR(KJ, r) + pickR(KJS, r);
     else if (f < 0.72) n = pickR(KJ, r) + 'と' + pickR(KJ, r);
-    else if (f < 0.84) n = pickR(HG, r) + pickR(['', 'ず', 'ぼーい', 'がーる', 'くらぶ', '団']);
+    else if (f < 0.84) n = pickR(HG, r) + pickR(['', 'ず', 'ぼーい', 'がーる', 'くらぶ', '団'], r);
     else if (f < 0.93) n = pickR(AB, r) + ' ' + pickR(AB2, r);
-    else n = pickR(K1, r) + pickR(['', '・', '']) + pickR(KJ, r);
+    else n = pickR(K1, r) + pickR(['', '・', ''], r) + pickR(KJ, r);
     if (!BLOCK.test(n) && Array.from(n).length <= 10) return n;
   }
   return pickR(KJ, r) + '座';

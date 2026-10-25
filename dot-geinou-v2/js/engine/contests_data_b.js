@@ -19,7 +19,7 @@ const champion = (g, ctx, label, o = {}) => {
 function panelRows(r, acts, nJ, max) {
   return acts.map((a) => {
     const per = [];
-    for (let j = 0; j < nJ; j++) per.push(clamp(Math.round(((a.score + gauss(r) * 7) / 100) * max), Math.round(max * 0.3), max));
+    for (let j = 0; j < nJ; j++) per.push(clamp(Math.round(max * (0.5 + 0.48 * (a.score + gauss(r) * 7) / 100)), Math.round(max * 0.3), max)); // judges' scale: ~64–98% (a 100点 judge rarely goes below 60)
     return { ...a, per, total: per.reduce((x, y) => x + y, 0) };
   }).sort((x, y) => y.total - x.total || (x.me ? -1 : 1));
 }
@@ -52,7 +52,7 @@ async function chooseAnswer(g, prompt, answers, r, o = {}) {
 const UTA_ODAI = ['失恋した冷蔵庫の歌', 'ラップで読み上げる町内会のお知らせ', '演歌で歌う「確定申告」', '回文だけでできたラブソング', 'オペラで歌う「レジ袋いりますか」', 'ロックで叫ぶ「門限」'];
 const UTANETA = {
   name: '歌ネタ王決定戦', short: '歌ネタ王', kind: 'utaneta', category: 'tv', color: '#d03a8a',
-  names: [{ from: 2013, name: '歌ネタ王決定戦' }, { from: 2021, to: 2021, name: '歌ネタ王決定戦 FINAL' }, { from: 2022, name: '歌ネタ王決定戦（復刻開催）' }],
+  names: [{ from: 2013, name: '歌ネタ王決定戦' }, { from: 2021, name: '歌ネタ王決定戦 FINAL' }, { from: 2022, name: '歌ネタ王決定戦' }], // D1 adds（復刻開催）
   organizer: '毎日放送（MBS）', broadcaster: 'MBSテレビ', venue: '大阪（MBS）', region: 'all',
   history: { founded: 2013, ended: 2021, gaps: [], revived: null, note: '笑いと音楽の融合を掲げたMBSの賞レース。2021年の「FINAL」で終了。',
     sources: ['https://www.oricon.co.jp/news/2208491/full/', 'https://www.tokyo-sports.co.jp/articles/-/68390', 'https://www.daily.co.jp/newsflash/gossip/2014/04/11/0006855438.shtml'] },
@@ -314,7 +314,7 @@ async function mxFinal(g, ctx) {
       const st = standing(g, ctx, res.score, rv, { kind, pass: 1, field: 6 });
       b.set('ranking', { rows: st.rows, passLine: 1, head: '勝ち上がりステージ（1組のみ）' });
       await pause(g, 40);
-      if (!st.passed) { await say(g, `勝ち上がったのは${st.rows[0].name}。今年のMXグランプリはここまで。`); return { passed: false, score: res.score, place: 6, field: 5, note: '勝ち上がりステージ敗退' }; }
+      if (!st.passed) { await say(g, `勝ち上がったのは${st.rows[0].name}。今年のMXグランプリはここまで。`); return { passed: false, score: res.score, place: null, field: 5, note: '勝ち上がりステージ敗退' }; }
       await say(g, '勝ち上がりステージ突破！ 決勝へ！');
     }
     const rvs = rivals(g, ctx, 4, { level: 64, kind });
@@ -406,7 +406,8 @@ async function ipponOdai(g, ctx, b, odai, judgesList, need, r, skip) {
   const ans = odai[1].map(([text, q]) => ({ text, q }));
   let quality;
   if (hasMinigame('ogiri') && !skip && !g.auto) {
-    const res = await playMinigame(g, 'ogiri', { mode: 'ippon', odai: odai[0], judges: judgesList.length, need, title: 'IPPONグランプリ', contest: { id: ctx.id } }, ogSkill);
+    // C's ogiri: opts.odai [{ q, a: [[text, q0..100]] }], mode 'ippon' (5 lamps = IPPON)
+    const res = await playMinigame(g, 'ogiri', { mode: 'ippon', rounds: 1, odai: [{ q: odai[0], a: odai[1] }], title: 'IPPONグランプリ', contest: { id: ctx.id, round: rid(ctx), name: 'IPPONグランプリ' }, noPick: true }, ogSkill);
     quality = res.score;
   } else {
     const pick = await chooseAnswer(g, `お題「${odai[0]}」\n——なんと答える？`, ans, r, { auto: skip, skill: ogSkill });
@@ -443,8 +444,8 @@ async function ipponHonban(g, ctx) {
       const tries = skip ? 1 : 2;
       for (let t = 0; t < tries; t++) {
         const res = await ipponOdai(g, ctx, b, od, opBlock.map((j) => j.name), 10, r, skip);
-        if (res.ippon) { count.set(myBlock.find((x) => x.me).name, count.get(myBlock.find((x) => x.me).name) + 1); if (!skip) await say(g, 'IPPON！'); }
-        else if (!skip) await say(g, `${res.total}点。IPPONならず。`);
+        if (res.ippon) { count.set(myBlock.find((x) => x.me).name, count.get(myBlock.find((x) => x.me).name) + 1); if (!skip || q === 0) await say(g, 'IPPON！'); }
+        else if (!skip || q === 0) await say(g, `${res.total}点。IPPONならず。`);
       }
       for (const p of myBlock) if (!p.me) { const k = Math.max(0, Math.round((p.power - 55) / 18 + gauss(r) * 0.8)); count.set(p.name, count.get(p.name) + Math.min(2, k)); }
       for (const p of opBlock) { const k = Math.max(0, Math.round((p.power - 55) / 18 + gauss(r) * 0.8)); count.set(p.name, count.get(p.name) + Math.min(2, k)); }
@@ -692,7 +693,7 @@ const FUTTONDA = {
   ],
   beats: ['スタジオの天井近くに、布団を飛ばす装置が見える。', '「モジりは“元の言葉”がわかる範囲で、いちばん遠くへ」——先輩の教え。', '年越しのカウントダウンが、スタジオの外から聞こえる。'],
 };
-async function futonAnswer(g, b, od, r, skip) {
+async function futonAnswer(g, b, od, r, skip, first = false) {
   const sk = Math.round((stat(g, 'hassou') + stat(g, 'neta')) / 2);
   const ans = od[1].map(([text, q]) => ({ text, q }));
   b.set('futon', { odai: od[0], hint: '実在の言葉をモジって答える', writers: [false, false, false] });
@@ -703,6 +704,7 @@ async function futonAnswer(g, b, od, r, skip) {
   b.set('futon', { odai: od[0], answer: pick.text, writers: w, fly });
   g.sfx(fly ? 'zukko' : 'buzz');
   await pause(g, fly ? 70 : 40);
+  if (!skip || first) await say(g, fly ? '3人全員がボタン！ 布団が吹っ飛んだ！' : `ボタンは${w.filter(Boolean).length}人……布団は飛ばなかった。`);
   return fly;
 }
 async function futtondaWild(g, ctx) {
@@ -719,7 +721,7 @@ async function futtondaWild(g, ctx) {
     const skip = await omakase(g, ctx, '回答');
     const ods = shuffleR(FUTON_ODAI, r);
     let n = 0;
-    for (let i = 0; i < 3; i++) if (await futonAnswer(g, b, ods[i], r, skip)) { n++; if (!skip) await say(g, '布団が吹っ飛んだ！'); }
+    for (let i = 0; i < 3; i++) if (await futonAnswer(g, b, ods[i], r, skip, i === 0)) n++;
     const rv = rivals(g, ctx, 15, { level: 55, kind: 'ogiri' });
     const rows = [{ name: g.state.name || unitName(g), me: true, total: n }, ...rv.map((x) => ({ name: x.name.replace(/（.*$/, ''), total: clamp(Math.round((x.power - 40) / 15 + gauss(r) * 0.8), 0, 3) }))].sort((p, q) => q.total - p.total || (q.me ? 1 : 0) - (p.me ? 1 : 0));
     await showRows(g, b, rows, 'ワイルドカード予選会（布団の数）', { max: 3, passLine: 1, unit: '枚' });
@@ -739,14 +741,14 @@ async function futtondaLive(g, ctx) {
     const skip = await omakase(g, ctx, '回答');
     const ods = shuffleR(FUTON_ODAI, r);
     let n = 0;
-    for (let i = 0; i < 3; i++) if (await futonAnswer(g, b, ods[i], r, skip)) { n++; if (!skip) await say(g, '布団が吹っ飛んだ！'); }
+    for (let i = 0; i < 3; i++) if (await futonAnswer(g, b, ods[i], r, skip, i === 0)) n++;
     const blk = rivals(g, ctx, 5, { level: 66, kind: 'ogiri' }).map((x) => ({ name: x.name.replace(/（.*$/, ''), total: clamp(Math.round((x.power - 45) / 14 + gauss(r) * 0.8), 0, 3) }));
     const rows = [{ name: nm, me: true, total: n }, ...blk].sort((p, q) => q.total - p.total || (q.me ? 1 : 0) - (p.me ? 1 : 0));
     await showRows(g, b, rows, 'ブロック予選（布団の数）', { max: 3, passLine: 1, unit: '枚' });
     if (!rows[0].me) { await say(g, `ブロックを勝ち抜いたのは${rows[0].name}。布団${n}枚で敗退。`); return { passed: false, score: n * 30, place: 7 + Math.floor(r() * 29), field: 36 }; }
     await say(g, 'ブロック突破！ 6名の決勝へ。');
     let m = 0;
-    for (let i = 3; i < 6; i++) if (await futonAnswer(g, b, ods[i], r, skip)) { m++; if (!skip) await say(g, '布団が吹っ飛んだ！'); }
+    for (let i = 3; i < 6; i++) if (await futonAnswer(g, b, ods[i], r, skip, i === 3)) m++;
     const fin = [{ name: nm, me: true, total: m }, ...rivals(g, ctx, 5, { level: 72, kind: 'ogiri', salt: 'fin' }).map((x) => ({ name: x.name.replace(/（.*$/, ''), total: clamp(Math.round((x.power - 45) / 14 + gauss(r) * 0.9), 0, 3) }))].sort((p, q) => q.total - p.total || (q.me ? 1 : 0) - (p.me ? 1 : 0));
     await showRows(g, b, fin, '決勝（布団の数）', { max: 3, passLine: 1, unit: '枚' });
     const champ = fin[0].me;
@@ -934,7 +936,18 @@ export const D2B_DEFS = {
   utaneta: UTANETA, allthats: ALLTHATS, tsugikuru: TSUGIKURU, mxgp: MXGP, ippon: IPPON, suberanai: SUBERANAI,
   omoshirosou: OMOSHIRO, futtonda: FUTTONDA, aun: AUN, under5: UNDER5,
 };
+// finalist catch copies (D1 shows def.catchcopy(g, ctx))
+const CC_B = {
+  utaneta: ['歌って笑わす二刀流', 'サビで爆発', '音楽と笑いの申し子'], allthats: ['深夜の爆発力', '1分の暴れん坊', '年末の切り込み隊長'],
+  tsugikuru: ['次に来る、の筆頭', '5局が狙う新星', 'ブレイク前夜'], mxgp: ['異端の極み', '地上波ギリギリ', '尖りすぎた才能'],
+  ippon: ['大喜利の求道者', 'IPPON製造機', '発想の怪物'], suberanai: ['すべらない語り部', '実話の名手', '円卓の主役'],
+  omoshirosou: ['まだ誰も知らない', '新春の大発見', '元日深夜の新星'], futtonda: ['モジりの達人', '布団を飛ばす男', '言葉遊びの職人'],
+  aun: ['あうんの呼吸', '二人で一つの答え', 'コンビ大喜利の雄'], under5: ['芸歴5年目以内の怪物', '未来のスター', '超若手の筆頭'],
+};
 export function defineContestsB(register) {
-  for (const [id, def] of Object.entries(D2B_DEFS)) register(id, normalizeRuns(def));
+  for (const [id, def] of Object.entries(D2B_DEFS)) {
+    if (!def.catchcopy && CC_B[id]) def.catchcopy = (g, ctx) => `${pickR(CC_B[id], rngFor(g, id, 'cc', ctx && ctx.year))}　${unitName(g)}`;
+    register(id, normalizeRuns(def));
+  }
 }
 void nendo; void dstate; void unitSize; void geireki; void power; void partnerLook; void ippCount;

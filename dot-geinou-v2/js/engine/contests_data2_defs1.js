@@ -123,7 +123,7 @@ registerContest('kamigata_kyokai', {
             const skip = await askSkip(g, ctx, 'final');
             const res = await stagePerform(g, ctx, { kind: 'manzai', round: 'final', title: '新人賞ネタバトル', venue: { name: 'なんばグランド花月', size: 'hall', crowd: 'warm', pressure: 70 }, skip });
             const j = judgeField(g, ctx, 'final', res.score, { field: 5, pass: 1, sample: 4, level: 62, kind: 'manzai' });
-            out = roundResult(res, { passed: true, place: j.place, field: 5 });
+            out = roundResult(res, { passed: true, place: j.place, field: j.field });
             await showBoard(g, {
               title: '新人賞ネタバトル（5組）', sub: `${edLabel(ctx)}　協会の審査で決定（点数は非公表・ゲーム内の目安）`,
               cols: [{ key: 'place', label: '順', w: 50 }, { key: 'name', label: '名前', w: 380 }, { key: 'score', label: '目安', w: 140, align: 'right' }],
@@ -246,7 +246,7 @@ registerContest('under25', {
           const v = await peerVote(gg, c, 'final');
           if (v) await gg.say(`決勝でも出場者として${v}に一票。`);
           if (out.champion) {
-            gg.message && gg.message({ from: 'ニッポン放送', kind: 'news', text: `UNDER 25 OWARAI CHAMPIONSHIP 優勝おめでとうございます。副賞の冠ポッドキャスト番組（期間限定）の収録についてご連絡します。` });
+            news(gg, c, 'UNDER 25 OWARAI CHAMPIONSHIP 優勝おめでとうございます。副賞の冠ポッドキャスト番組（期間限定）の収録について、ニッポン放送の担当者からご連絡します。', { personal: true });
             await gg.say('副賞は冠ポッドキャスト番組。ラジオの世界への扉が開いた！');
           }
         },
@@ -329,7 +329,7 @@ registerContest('imamiya', {
           const res = await stagePerform(g, ctx, { kind: 'manzai', round: 'final', title: '本選（境内特設舞台）', venue: { name: '今宮戎神社 境内', size: 'small', crowd: 'warm', pressure: 45 }, skip });
           res.score = clamp(res.score + mod, 0, 100);
           const j = judgeField(g, ctx, 'final', res.score, { field: 10, pass: 1, sample: 9, level: 45, kind: 'manzai' });
-          const out = roundResult(res, { passed: true, place: j.place, field: 10 });
+          const out = roundResult(res, { passed: true, place: j.place, field: j.field });
           await showBoard(g, {
             title: 'マンザイ新人コンクール 本選', sub: `${edLabel(ctx)}　審査委員長と審査員による審査（点数はゲーム内の目安）`,
             cols: [{ key: 'place', label: '順', w: 50 }, { key: 'name', label: '名前', w: 360 }, { key: 'score', label: '目安', w: 160, align: 'right' }],
@@ -456,7 +456,7 @@ registerContest('bu1', {
           }
           const total = clamp(Math.round(res.score * 0.8 + acc * 0.2), 0, 100);
           const j = judgeField(g, ctx, 'final', total, { field: 8, pass: 1, sample: 7, level: 60 });
-          const out = roundResult({ ...res, score: total }, { passed: true, place: j.place, field: 8, accuracy: acc });
+          const out = roundResult({ ...res, score: total }, { passed: true, place: j.place, field: j.field, accuracy: acc });
           await showBoard(g, {
             title: '武−1グランプリ 決勝', sub: `${edLabel(ctx)}　笑い8割＋正確さ2割（ゲーム内の採点）`,
             cols: [{ key: 'place', label: '順', w: 50 }, { key: 'name', label: '名前', w: 360 }, { key: 'score', label: '総合', w: 160, align: 'right' }],
@@ -546,7 +546,7 @@ registerContest('alcoveil', {
         after: async (gg, c, out) => {
           if (out.champion) {
             d2(gg).flags[`alco_bucho_${c.year}`] = 1;
-            gg.message && gg.message({ from: '宣伝部（スポンサー）', kind: 'news', text: `宣伝部長就任のお知らせ。副賞「アルコベール1年分」をお送りします。` });
+            news(gg, c, '宣伝部長就任のお知らせ。副賞「アルコベール1年分」をお送りします。（スポンサー宣伝部）', { personal: true });
             await gg.say('宣伝部長に任命！ 副賞は1年分。ネクストブレイク、の看板がついた。');
           }
         },
@@ -747,7 +747,7 @@ registerContest('bs1', {
     s.flags.bs1Pitch = 0;
     const r = rngFor(g, 'bs1', y, 'pitch');
     const nobou = r() < 0.5 + powerOf(g, 'any') / 300;
-    if (typeof g.message === 'function') g.message({ from: 'お笑いニュース', kind: 'news', text: `【Bs-1王者】${unitName(g)}が京セラドーム大阪で特別始球式。${nobou ? 'ノーバウンド投球にスタンドが沸いた' : 'ワンバウンドにスタンドから笑いと拍手'}` });
+    news(g, { id: 'bs1' }, `【Bs-1王者】${unitName(g)}が京セラドーム大阪で特別始球式。${nobou ? 'ノーバウンド投球にスタンドが沸いた' : 'ワンバウンドにスタンドから笑いと拍手'}`, { personal: true });
     grant(g, { id: 'bs1', year: y }, 'pitch', { fame: 40, fans: 500 });
   },
   rounds: [
@@ -770,7 +770,7 @@ registerContest('bs1', {
           const res = await stagePerform(g, ctx, { kind: 'any', round: 'final', title: 'Bs-1グランプリ', venue: { name: '京セラドーム大阪', size: 'hall', crowd: 'warm', pressure: 60 }, skip });
           res.score = clamp(res.score + mod, 0, 100);
           const j = judgeField(g, ctx, 'final', res.score, { field: 8, pass: 1, sample: 7, level: 55 });
-          const out = roundResult(res, { passed: true, place: j.place, field: 8 });
+          const out = roundResult(res, { passed: true, place: j.place, field: j.field });
           await showMeter(g, { title: 'スタンドの拍手', sub: `${edLabel(ctx)}　${unitName(g)}`, label: '拍手（ゲーム内の判定・審査方式は非公開）', unit: '', samples: res.heat, value: res.score, decimals: 0, theme: 'cheer' });
           if (j.place === 1) {
             out.champion = true; out.award = '優勝（翌シーズン特別始球式投球権）';

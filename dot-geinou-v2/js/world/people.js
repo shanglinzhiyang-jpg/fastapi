@@ -351,6 +351,7 @@ async function combi(g, P, n, again = false) {
   await E(g, n, '♥', 50);
   await T(g, P, L.yes);
   await N(g, `${P.short || P.name}と、コンビを組んだ！\n（相方がいると、お笑いのミニゲームが少しやさしくなる）`);
+  if (typeof g.formUnit === 'function') await g.formUnit(P.id, { source: 'people', already: true, npc: n }); // owarai.js: コンビ名・役割・結成日
   return true;
 }
 
@@ -2255,6 +2256,7 @@ PEOPLE_UI.extras.push({
     await E(g, npc, '♥', 50);
     await T(g, P, P.combi.yes);
     await N(g, `${P.short || P.name}と、コンビを組んだ！\n（相方がいると、お笑いのミニゲームが少しやさしくなる）`);
+    if (typeof g.formUnit === 'function') await g.formUnit(id, { source: 'people', already: true, npc }); // owarai.js: コンビ名・役割・結成日
     return 'end';
   },
 });

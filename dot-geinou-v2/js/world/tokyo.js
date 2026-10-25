@@ -211,8 +211,9 @@ function generate() {
   fill(c, 63, 24, 12, 3, 'stone');
   for (let y = 27; y <= 35; y++) set(c, 68, y, 'path');
   for (let x = 63; x <= 74; x++) set(c, x, 31, 'path');
-  for (const [x, y] of [[64, 28], [66, 33], [70, 28], [73, 30], [72, 34], [64, 35]]) put(c, x, y, (x + y) % 3 ? 'tree' : 'sakura');
-  for (const [x, y] of [[65, 29], [71, 33], [73, 27], [66, 35]]) set(c, x, y, 'flowers');
+  // (63..67 / 70..74 x 27..30: NSC東京校 and the 貸し稽古場, js/places/nsc.js)
+  for (const [x, y] of [[66, 33], [72, 34], [64, 35]]) put(c, x, y, (x + y) % 3 ? 'tree' : 'sakura');
+  for (const [x, y] of [[71, 33], [66, 35]]) set(c, x, y, 'flowers');
   put(c, 69, 29, 'bench'); put(c, 67, 33, 'bench'); put(c, 74, 25, 'vending');
   for (let y = 40; y <= 44; y++) for (let x = 59; x <= 74; x++) if ((x + y) % 4 === 0) put(c, x, y, 'tree');
 
@@ -238,6 +239,9 @@ function generate() {
     { type: 'building', x: 44, y: 26, w: 12, h: 5, door: 6, place: 'station_tokyo', name: '東京駅', kind: 'station', wall: '#b8644a', roof: '#4a5a70', sign: { text: '東京駅', bg: '#ffffff' } },
     { type: 'building', x: 63, y: 4, w: 8, h: 8, door: 4, name: 'ドット新聞社', kind: 'office', wall: '#e6e2d8', roof: '#4a5568', sign: { text: 'ドット新聞', bg: '#ffffff', color: '#20232a' },
       text: ['「ドット新聞社」のビルだ。', '芸能面の記事も、ここで書かれているらしい。\n…いつか自分の記事がのる日が来るかも？'] },
+    // NSC東京校 (1995年開校: hidden before) and the 貸し稽古場 (js/places/nsc.js)
+    ...(PLACES.nsc_tokyo ? [{ type: 'building', x: 63, y: 27, w: 5, h: 4, door: 2, place: 'nsc_tokyo', name: 'NSC東京校', kind: 'office', wall: '#fff3e6', roof: '#e8492a', sign: { text: 'NSC', bg: '#e8492a', color: '#ffffff' }, cond: (g) => (typeof g.owaraiDate === 'function' ? g.owaraiDate().year >= 1995 : !(g.state && g.state.profile && g.state.profile.era === 'showa')) }] : []),
+    ...(PLACES.keikoba ? [{ type: 'building', x: 70, y: 27, w: 5, h: 4, door: 2, place: 'keikoba', name: '貸し稽古場 ドットスタジオ', kind: 'office', wall: '#efe2bf', roof: '#5a4a3a', sign: { text: '稽古場', bg: '#3b2a1a', color: '#ffd23f' } }] : []),
 
     // props
     fountain(8, 13),

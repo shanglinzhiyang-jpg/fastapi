@@ -52,7 +52,7 @@ class Conte extends PerformGame {
     if (!title && Array.isArray(o.scenes)) {
       for (const sc of o.scenes) {
         const t = String((sc && sc.title) || '');
-        const hit = BANK.CONTE.find((c) => t.includes(c.title) || (c.title === '転校生' && /転校生/.test(t)) || (c.title === '病院' && /医者|病院/.test(t)) || (c.title === 'タクシー' && /タクシー|運転/.test(t)) || (c.title === '面接' && /面接|新入社員|会社/.test(t)));
+        const hit = BANK.CONTE.find((c) => t.includes(c.title) || (c.title === '転校生' && /転校生|宇宙人|職員室|学校/.test(t)) || (c.title === '病院' && /医者|病院/.test(t)) || (c.title === 'タクシー' && /タクシー|運転/.test(t)) || (c.title === '面接' && /面接|新入社員|会社/.test(t)) || (c.title === 'コンビニ' && /コンビニ|店員/.test(t)));
         if (hit) { title = hit.title; break; }
       }
     }

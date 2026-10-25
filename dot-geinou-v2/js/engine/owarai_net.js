@@ -32,7 +32,7 @@ export function boardsNow(g, year) {
 }
 const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const contactOf = (g, pid) => net(g).contacts[pid] || null;
-const STATUS_LABEL = { sent: '返事待ち', replied: '返事が来た', met: '会った', declined: 'ことわった', refused: 'ことわられた', formed: '相方', none: '' };
+const STATUS_LABEL = { sent: '返事待ち', replied: '返事が来た', met: '会った', declined: 'ことわった', refused: 'ことわられた', formed: '相方', ex: 'もと相方', none: '' };
 
 // ---------------------------------------------------------------- the list for the screens
 function candInfo(g, pid) {
@@ -41,7 +41,8 @@ function candInfo(g, pid) {
   const ct = contactOf(g, pid);
   const o = OWX(g).ensure(g);
   const member = !!(o.unit && o.unit.members.some((m) => m.id === pid));
-  const status = member ? 'formed' : ct ? ct.status : 'none';
+  // a former 相方 (the act was dissolved / re-formed): can be met and asked again (再結成 = a new formation date)
+  const status = member ? 'formed' : ct ? (ct.status === 'formed' ? 'ex' : ct.status) : 'none';
   const met = !!(ct && ct.met) || (c.nsc && g.met(pid));
   return {
     id: pid, name: P ? P.name : c.n, short: c.s, handle: c.h || c.s, look: c.look, age: c.age, pref: c.pref, gender: c.g,
@@ -51,7 +52,7 @@ function candInfo(g, pid) {
     persona: met ? PERSONAS[c.per] : null, motive: ct && ct.asked && ct.asked.motive ? MOTIVES[c.mot] : null,
     quirks: ct && ct.asked && ct.asked.quirk ? c.q.map((q) => QUIRKS[q].name) : null,
     feel: ct && ct.feel ? ct.feel : null, member, canContact: !member && (!ct || (ct.status === 'refused' && g.state.day - num(ct.met || ct.sent) >= 20) || ct.status === 'declined'),
-    canMeet: !member && !!ct && (ct.status === 'replied' || ct.status === 'met'),
+    canMeet: !member && !!ct && ['replied', 'met', 'formed'].includes(ct.status),
     photo: c.board ? ['blog', 'sns', 'app'].includes(c.board) : true,
   };
 }
@@ -203,7 +204,9 @@ async function meet(g, pid, opts = {}) {
   if (!c || !P) return null;
   const n = net(g);
   const ct = n.contacts[pid];
-  if (!ct || !['replied', 'met'].includes(ct.status)) { await g.say('（まだ会う約束をしていない）'); return null; }
+  const o0 = OWX(g).ensure(g);
+  if (o0.unit && o0.unit.members.some((m) => m.id === pid)) { await g.say(`（${c.s}は、いまの相方だ）`); return null; }
+  if (!ct || !['replied', 'met', 'formed'].includes(ct.status)) { await g.say('（まだ会う約束をしていない）'); return null; }
   const B = BOARDS[c.board] || BOARDS.sns;
   const spot = MEET_SPOTS[B.meet];
   const why = g.lifeRefusal();
@@ -233,7 +236,7 @@ async function meet(g, pid, opts = {}) {
       await g.say(k ? 'また会えてうれしいわ。\nこの前の話の続き、しよか。' : 'また会えてうれしい。\nこの前の話の続きをしよう。', who);
     }
     ct.met = ct.met || st.day;
-    ct.status = ct.status === 'formed' ? 'formed' : 'met';
+    ct.status = 'met';
     ct.asked = ct.asked || {};
     // questions (each once per meeting; what you learn stays on the card)
     const asked = new Set();

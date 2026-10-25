@@ -63,7 +63,7 @@ const ART = {
     if (o.gold) { for (let x = 150; x < SW - 150; x += 34) { R(c, x, 60, 32, 130, '#c9a24a'); R(c, x + 30, 60, 2, 130, '#8a6a2a'); } }
     R(c, 0, 196, SW, 40, '#8a5a32'); for (let x = 0; x < SW; x += 48) R(c, x, 196, 1, 40, '#6a4224'); R(c, 0, 196, SW, 2, '#c08a52');
     mic(c, SW / 2 - 1, 140);
-    if (o.sign) sign(c, o.sign, SW / 2 - 130, 40, 260, 26, '#3a0c14', '#ffe7a8', 14);
+    if (o.sign) sign(c, o.sign, SW / 2 - 140, 64, 280, 26, '#3a0c14', '#ffe7a8', 14);
     heads(c, 238, 30, ['#2a2230', '#3a2a24', '#24242e'], 7);
   },
   shrine(c, o) {
@@ -76,7 +76,7 @@ const ART = {
     // 大きな鳥居ではなく境内の社の屋根（末社の前の特設舞台）
     R(c, 250, 92, 140, 10, '#3a2a24'); R(c, 240, 86, 160, 8, '#2a1e1a'); R(c, 262, 102, 116, 36, '#8a3a2a');
     mic(c, SW / 2 - 1, 120);
-    if (o.sign) sign(c, o.sign, SW / 2 - 150, 16, 300, 26, '#f4efe2', '#8a1a1a', 14);
+    if (o.sign) sign(c, o.sign, 176, 178, 288, 24, '#f4efe2', '#8a1a1a', 13); // 舞台の前幕
     heads(c, 222, 40, ['#3a3040', '#5a3a2a', '#2a2a3a'], 3);
   },
   ballpark(c, o) {
@@ -84,11 +84,11 @@ const ART = {
     for (let i = 0; i < 9; i++) { c.save(); c.strokeStyle = '#4a5060'; c.lineWidth = 2; c.beginPath(); c.arc(SW / 2, 260, 140 + i * 40, Math.PI * 1.05, Math.PI * 1.95); c.stroke(); c.restore(); }
     R(c, 0, 108, SW, 52, '#2c3240'); for (let x = 0; x < SW; x += 6) R(c, x, 112 + ((x * 7) % 13), 3, 3, ['#d8c050', '#e0e0e8', '#3a5ac0', '#b8bcc8'][(x / 6) % 4]);
     R(c, 220, 30, 200, 60, '#0e1018'); R(c, 224, 34, 192, 52, '#18202c');
-    text(c, 'B  S  H  E', 236, 40, { size: 12, color: '#9aa3c7', shadow: null }); text(c, 'GAME SET', 320, 62, { size: 14, color: '#ffd23f', align: 'center', shadow: null });
+    text(c, 'GAME SET', 320, 38, { size: 14, color: '#ffd23f', align: 'center', shadow: null });
     R(c, 0, 160, SW, 76, '#2f8a3e'); for (let x = 0; x < SW; x += 64) R(c, x, 160, 32, 76, '#349a44');
     R(c, 250, 176, 140, 30, '#8a6a3a'); R(c, 250, 176, 140, 3, '#c8a050');
     mic(c, SW / 2 - 1, 120);
-    if (o.sign) sign(c, o.sign, SW / 2 - 140, 2, 280, 24, '#0e1030', '#ffd23f', 13);
+    if (o.sign) sign(c, o.sign, 226, 60, 188, 24, '#0e1030', '#ffd23f', 13); // スコアボード
     heads(c, 236, 30, ['#2a3a6a', '#d8c050', '#1e2a50'], 11);
   },
   studio(c, o) {
@@ -106,11 +106,11 @@ const ART = {
     R(c, 0, 0, SW, SH, '#3a2418');
     R(c, 0, 0, SW, 20, '#d8303a'); for (let x = 0; x < SW; x += 40) R(c, x, 0, 20, 20, '#ffffff');
     for (let x = 140; x < SW - 140; x += 45) { R(c, x, 40, 44, 130, '#d8b24a'); R(c, x + 43, 40, 1, 130, '#9a7a2a'); }
-    R(c, 300, 140, 40, 16, '#f4efe2'); R(c, 306, 128, 28, 14, '#f4efe2'); R(c, 314, 120, 12, 8, '#f0a020');
+    R(c, 450, 140, 40, 16, '#f4efe2'); R(c, 456, 128, 28, 14, '#f4efe2'); R(c, 464, 120, 12, 8, '#f0a020'); // 鏡餅
     R(c, 0, 176, SW, 60, '#a88a5a'); for (let y = 176; y < 236; y += 15) R(c, 0, y, SW, 1, '#8a6a3a');
     for (let x = 20; x < SW; x += 150) { R(c, x, 206, 110, 14, '#5a2a18'); R(c, x + 10, 200, 14, 8, '#e8e0d0'); R(c, x + 40, 198, 10, 10, '#c83a2a'); R(c, x + 70, 200, 14, 8, '#e8e0d0'); }
-    if (o.sign) sign(c, o.sign, SW / 2 - 150, 26, 300, 24, '#f4efe2', '#a8101a', 14);
-    mic(c, 200, 112);
+    if (o.sign) sign(c, o.sign, SW / 2 - 150, 62, 300, 24, '#f4efe2', '#a8101a', 14);
+    mic(c, SW / 2 - 1, 112);
   },
   kaidan(c, o) {
     R(c, 0, 0, SW, SH, '#05060c');
@@ -118,15 +118,15 @@ const ART = {
     spot(c, SW / 2, 230, 0.12, '#8aa0ff');
     R(c, 300, 150, 40, 8, '#3a2a20'); R(c, 304, 158, 4, 40, '#2a1e18'); R(c, 332, 158, 4, 40, '#2a1e18'); R(c, 302, 110, 36, 42, '#2a1e18');
     R(c, 0, 210, SW, 26, '#0c0e16');
-    if (o.sign) text(c, fit(c, o.sign, 420, 16), SW / 2, 30, { size: 16, align: 'center', color: '#c8d0ff', shadow: '#000' });
+    if (o.sign) text(c, fit(c, o.sign, 420, 16), SW / 2, 70, { size: 16, align: 'center', color: '#c8d0ff', shadow: '#000' });
   },
   jyuku(c, o) {
     R(c, 0, 0, SW, SH, '#e8e2d0');
     R(c, 120, 26, 400, 120, '#2e4a3a'); R(c, 116, 22, 408, 4, '#8a6a3a'); R(c, 116, 146, 408, 6, '#8a6a3a');
-    text(c, 'x² − 5x + 6 = 0', 150, 50, { size: 16, color: '#f0f0e0', shadow: null });
-    text(c, '1192 → 1185？', 150, 80, { size: 16, color: '#f0f0e0', shadow: null });
-    text(c, 'be動詞 / 化学式 H₂O', 150, 110, { size: 14, color: '#f0f0e0', shadow: null });
-    if (o.sign) sign(c, o.sign, 340, 40, 160, 26, '#1e3a2a', '#ffd23f', 13);
+    text(c, 'x² − 5x + 6 = 0', 150, 66, { size: 16, color: '#f0f0e0', shadow: null });
+    text(c, '1192 → 1185？', 150, 92, { size: 16, color: '#f0f0e0', shadow: null });
+    text(c, 'be動詞 / 化学式 H₂O', 150, 118, { size: 14, color: '#f0f0e0', shadow: null });
+    if (o.sign) sign(c, o.sign, 340, 64, 168, 26, '#1e3a2a', '#ffd23f', 13);
     R(c, 0, 170, SW, 66, '#b8a078');
     for (let x = 30; x < SW; x += 120) { R(c, x, 196, 80, 10, '#8a6a3a'); R(c, x + 6, 206, 6, 24, '#6a4a2a'); R(c, x + 68, 206, 6, 24, '#6a4a2a'); }
     mic(c, SW / 2 - 1, 120);
@@ -137,7 +137,7 @@ const ART = {
     R(c, 470, 100, 10, 110, '#3a3a40'); R(c, 450, 206, 50, 4, '#3a3a40'); R(c, 456, 78, 38, 26, '#18181c'); R(c, 462, 84, 26, 14, '#3a5ac0');
     c.save(); c.strokeStyle = '#f8f8f8'; c.lineWidth = 6; c.beginPath(); c.arc(140, 100, 34, 0, Math.PI * 2); c.stroke(); c.restore();
     R(c, 138, 134, 4, 76, '#3a3a40');
-    if (o.sign) sign(c, o.sign, 200, 10, 240, 24, '#2a2a30', '#ffffff', 13);
+    if (o.sign) sign(c, o.sign, 200, 64, 240, 24, '#2a2a30', '#ffffff', 13);
   },
   okinawa(c, o) {
     for (let y = 0; y < 150; y += 5) R(c, 0, y, SW, 5, `rgb(${Math.round(20 + y * 0.3)},${Math.round(30 + y * 0.5)},${Math.round(80 + y * 0.4)})`);
@@ -146,17 +146,17 @@ const ART = {
     R(c, 150, 150, 340, 56, '#2a2a3a'); R(c, 150, 150, 340, 4, '#ffd23f');
     for (let x = 160; x < 490; x += 40) R(c, x, 140, 10, 10, ['#ff5d6c', '#5fd7ff', '#ffd23f', '#5ee07a'][(x / 40) % 4]);
     mic(c, SW / 2 - 1, 120);
-    if (o.sign) sign(c, o.sign, SW / 2 - 150, 16, 300, 26, '#0a2a4a', '#ffd23f', 14);
+    if (o.sign) sign(c, o.sign, 176, 172, 288, 24, '#0a2a4a', '#ffd23f', 13); // 舞台の前幕
     heads(c, 230, 36, ['#2a2a3a', '#3a2a24', '#1e2a3a'], 5);
   },
   ceremony(c, o) {
     R(c, 0, 0, SW, SH, '#2a1a08');
     for (let x = 0; x < SW; x += 24) R(c, x, 0, 12, 200, '#c9a24a'), R(c, x + 12, 0, 12, 200, '#b08a38');
-    R(c, 270, 110, 100, 90, '#5a2a14'); R(c, 270, 110, 100, 4, '#e0b860');
-    R(c, 308, 80, 24, 30, '#ffd23f'); R(c, 302, 76, 36, 6, '#ffe070'); R(c, 314, 110, 12, 6, '#c9a24a');
+    R(c, 270, 128, 100, 72, '#5a2a14'); R(c, 270, 128, 100, 4, '#e0b860');
+    R(c, 308, 98, 24, 30, '#ffd23f'); R(c, 302, 94, 36, 6, '#ffe070'); R(c, 314, 128, 12, 6, '#c9a24a');
     for (const fx of [180, 440]) { R(c, fx, 150, 24, 50, '#2a6a2a'); R(c, fx - 6, 140, 12, 12, '#ff7eb6'); R(c, fx + 10, 134, 12, 12, '#ffd23f'); R(c, fx + 22, 142, 12, 12, '#ff5d6c'); }
     R(c, 0, 200, SW, 36, '#4a1a10');
-    if (o.sign) sign(c, o.sign, SW / 2 - 160, 22, 320, 30, '#3a0c08', '#ffe7a8', 16);
+    if (o.sign) sign(c, o.sign, SW / 2 - 160, 62, 320, 28, '#3a0c08', '#ffe7a8', 15);
     heads(c, 234, 30, ['#2a2230', '#3a2a24'], 9);
   },
   stream(c, o) {
@@ -176,7 +176,7 @@ const ART = {
     text(c, '0:30', SW / 2, 40, { size: 48, align: 'center', color: '#ff3a3a', shadow: null });
     R(c, 0, 150, SW, 86, '#2a2a34'); R(c, 0, 150, SW, 3, '#ffd23f');
     mic(c, SW / 2 - 1, 120);
-    if (o.sign) sign(c, o.sign, SW / 2 - 140, 124, 280, 22, '#000', '#ffd23f', 13);
+    if (o.sign) sign(c, o.sign, SW / 2 - 140, 206, 280, 22, '#000', '#ffd23f', 13);
   },
 };
 
@@ -202,7 +202,8 @@ export class Backdrop {
     const cast = o.cast || [playerLook(g)];
     const n = cast.length;
     const baseY = this.kind === 'banquet' ? 108 : this.kind === 'shrine' ? 74 : this.kind === 'okinawa' ? 76 : this.kind === 'ballpark' ? 100 : 118;
-    if (o.cast !== false) cast.forEach((lk, i) => fig(ctx, lk, SW / 2 - 32 * n - 6 + i * 70 + (n === 1 ? 38 : 0), baseY, i < n / 2 ? 'right' : 'left', 2, Math.floor(t / 24) % 2));
+    const cx = this.kind === 'stream' ? 210 : SW / 2;
+    if (o.cast !== false) cast.forEach((lk, i) => fig(ctx, lk, cx - 32 * n - 6 + i * 70 + (n === 1 ? 38 : 0), baseY, i < n / 2 ? 'right' : 'left', 2, Math.floor(t / 24) % 2));
     // title panel + date
     if (o.title) {
       const tw = Math.min(SW - 180, Math.max(measure(ctx, o.title, 16), measure(ctx, o.sub || '', 12)) + 28);

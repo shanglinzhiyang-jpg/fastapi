@@ -44,7 +44,7 @@ export const GAP_REASON = {
   neta: { _: 'ネタの中身が弱い：同じパターンのくり返しで、後半に失速する', manzai: 'ネタの中身が弱い：ボケの数が少なく、中盤でダレる', conte: '設定がありきたり：「どこかで見たコント」と思われる', pin: 'フリップ／一人コントの切り口が平凡' },
   boke: { _: 'ボケが弱い：言い回しがふつうで、笑いの「ズレ」が小さい' },
   tsukkomi: { _: 'ツッコミが弱い：ワードが説明的で、ボケを笑いに変えきれていない' },
-  ma: { _: '間が悪い：ツッコミが早すぎる／笑いを待たずに次へ行ってしまう', rakugo: '間が悪い：「間（ま）」がなく、オチの前に聞き手が置いていかれる' },
+  ma: { _: '間が悪い：ツッコミが早すぎる。笑いを待たずに次へ行ってしまう', rakugo: '間が悪い：「間（ま）」がなく、オチの前に聞き手が置いていかれる' },
   voice: { _: '声量・滑舌：後ろの席まで声が届かず、早口になると噛む' },
   act: { _: '演技力：役に入りきれず、設定にお客さんが乗ってこない', rakugo: '所作が硬い：登場人物の演じ分けがはっきりしない' },
   hassou: { _: '発想力：答え・ボケが予想の範囲内で、驚きがない', ogiri: '発想力：お題に対して「ふつうの答え」しか出てこない' },
@@ -107,13 +107,13 @@ export const MOTIVES = {
 // ------------------------------------------------------------------ era boards (相方募集)
 // years: when the board exists in this world (the calendar year of the game, not the start era).
 export const BOARDS = {
-  zasshi: { name: '月刊わらいの友「相方募集」欄', short: '雑誌の投稿欄', kind: 'magazine', years: [1975, 1995], reply: [4, 7], contact: 'ハガキを出す', via: '手紙', meet: 'kissa', post: '投稿ハガキを送る', postDelay: 10, desc: 'お笑い雑誌の読者投稿ページ。ハガキで連絡をとりあう。返事が来るまで日数がかかる。' },
-  pasotsu: { name: 'パソコン通信「ドットネット」お笑い会議室', short: 'パソコン通信', kind: 'bbs', years: [1985, 2000], reply: [1, 3], contact: 'メールを送る', via: 'パソコン通信のメール', meet: 'kissa', post: '会議室に書きこむ', postDelay: 2, desc: '電話回線でつなぐ会員制のネットワーク。書きこみは少ないが、熱心な人が多い。' },
-  webbbs: { name: 'お笑い相方募集BBS（インターネット掲示板）', short: 'ネット掲示板', kind: 'web', years: [1995, 2003], reply: [1, 2], contact: 'メールを送る', via: '電子メール', meet: 'kissa', post: '掲示板に書きこむ', postDelay: 2, desc: 'インターネットの掲示板。ハンドルネームで書きこむ。顔はわからない。' },
-  keitai: { name: 'ケータイ掲示板「ドット掲示板」相方募集', short: 'ケータイ掲示板', kind: 'keitai', years: [2000, 2011], reply: [1, 1], contact: 'メールする', via: 'ケータイのメール', meet: 'famires', post: '掲示板に書きこむ', postDelay: 1, desc: 'ケータイから見られる掲示板。返事は早いが、軽いノリの人も多い。' },
-  blog: { name: 'ドットブログ「#相方募集」', short: 'ブログ', kind: 'blog', years: [2003, 2012], reply: [1, 2], contact: 'コメントする', via: 'ブログのメッセージ', meet: 'famires', post: 'ブログに募集記事を書く', postDelay: 2, desc: 'ブログで日記とネタを公開している人たち。文章からなんとなく人柄がわかる。' },
+  zasshi: { name: '月刊わらいの友「相方募集」欄', short: '雑誌の投稿欄', kind: 'magazine', years: [1975, 1995], reply: [4, 7], contact: 'ハガキを出す', via: '手紙', meet: 'kissa', post: '投稿ハガキを送る', postDelay: 10, desc: 'お笑い雑誌の投稿ページ。ハガキで連絡する（返事は数日後）。' },
+  pasotsu: { name: 'パソコン通信「ドットネット」お笑い会議室', short: 'パソコン通信', kind: 'bbs', years: [1985, 2000], reply: [1, 3], contact: 'メールを送る', via: 'パソコン通信のメール', meet: 'kissa', post: '会議室に書きこむ', postDelay: 2, desc: '電話回線でつなぐ会員制のネット。熱心な人が多い。' },
+  webbbs: { name: 'お笑い相方募集BBS（インターネット掲示板）', short: 'ネット掲示板', kind: 'web', years: [1995, 2003], reply: [1, 2], contact: 'メールを送る', via: '電子メール', meet: 'kissa', post: '掲示板に書きこむ', postDelay: 2, desc: 'インターネットの掲示板。顔はわからない。' },
+  keitai: { name: 'ケータイ掲示板「ドット掲示板」相方募集', short: 'ケータイ掲示板', kind: 'keitai', years: [2000, 2011], reply: [1, 1], contact: 'メールする', via: 'ケータイのメール', meet: 'famires', post: '掲示板に書きこむ', postDelay: 1, desc: 'ケータイの掲示板。返事は早いが、軽い人も多い。' },
+  blog: { name: 'ドットブログ「#相方募集」', short: 'ブログ', kind: 'blog', years: [2003, 2012], reply: [1, 2], contact: 'コメントする', via: 'ブログのメッセージ', meet: 'famires', post: 'ブログに募集記事を書く', postDelay: 2, desc: 'ネタを公開しているブログ。文章から人柄がわかる。' },
   sns: { name: 'ドッター #相方募集', short: 'SNS', kind: 'sns', years: [2009, 9999], reply: [0, 1], contact: 'DMを送る', via: 'DM', meet: 'cafe', post: 'ドッターに投稿する', postDelay: 1, desc: 'SNSの「#相方募集」。ネタ動画を見てから会える。' },
-  app: { name: '相方募集アプリ「アイカタ・マッチ」', short: '相方募集アプリ', kind: 'app', years: [2016, 9999], reply: [0, 1], contact: 'いいね！を送る', via: 'アプリのチャット', meet: 'cafe', post: 'プロフィールを公開する', postDelay: 1, desc: '芸人志望どうしのマッチングアプリ（このゲームの架空のアプリ）。スタイルと役割で探せる。' },
+  app: { name: '相方募集アプリ「アイカタ・マッチ」', short: '相方募集アプリ', kind: 'app', years: [2016, 9999], reply: [0, 1], contact: 'いいね！を送る', via: 'アプリのチャット', meet: 'cafe', post: 'プロフィールを公開する', postDelay: 1, desc: '芸人志望どうしのマッチングアプリ（架空）。' },
 };
 export const BOARD_ORDER = ['zasshi', 'pasotsu', 'webbbs', 'keitai', 'blog', 'sns', 'app'];
 export const MEET_SPOTS = {

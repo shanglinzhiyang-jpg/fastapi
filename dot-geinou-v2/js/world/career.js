@@ -220,7 +220,7 @@ addShow('career_yoshimoto_yose', {
   title: 'ドット寄席 水曜の部', place: 'yoshimoto', weekday: 2, tier: 1, kansai: true,
   requires: { fame: 250, anyOf: [{ agency: 'yoshimoto' }, { skills: { warai: 40 } }], anyOfText: 'よしもと所属か、お笑いのスキル40以上が必要だ。' },
   pay: 15000, fame: 45, fans: 850, stamina: 20, skill: 'warai', medium: 'stage',
-  minigame: 'tsukkomi', opts: { difficulty: 3, dialect: 'kansai' },
+  minigame: 'manzai', opts: { difficulty: 3, dialect: 'kansai' },
   host: 'よしもと 舞台監督', npc: { name: '舞台監督' }, fallbackLook: LOOKS.staff,
   desc: 'よしもとの劇場で毎週ひらかれる漫才ライブ。常連のお客さんも多い。',
   offer: 'よしもとの舞台監督や。毎週水曜の劇場ライブ『ドット寄席 水曜の部』、レギュラーの枠がひとつ空いてな。\n{name}の漫才、毎週お客さんに見せたってくれへんか？',
@@ -238,7 +238,7 @@ addShow('career_grape_conte', {
   title: '金曜コントクラブ', place: 'grape', weekday: 4, tier: 1,
   requires: { fame: 250, anyOf: [{ agency: 'grape' }, { skills: { engi: 40 } }], anyOfText: 'グレープカンパニー所属か、演技のスキル40以上が必要だ。' },
   pay: 15000, fame: 45, fans: 850, stamina: 20, skill: 'engi', medium: 'stage',
-  minigame: 'command', opts: { theme: 'acting', difficulty: 3 },
+  minigame: 'conte', opts: { difficulty: 3 },
   host: 'グレープ 藤棚先生', npc: { name: 'コント作家 藤棚先生' }, fallbackLook: LOOKS.director,
   desc: 'グレープカンパニーの劇場でやる、毎週新作のコントライブ。',
   offer: 'コント作家の藤棚です。グレープカンパニーの劇場でやっている『金曜コントクラブ』、毎週新作のコントを書いていてね。\n{name}さんに、レギュラーで演じてもらいたいんです。どうかな？',
@@ -273,9 +273,23 @@ addShow('career_toei_hero', {
 // shows whose content changes each week (fresh scenes, the player's 相方 on stage)
 dyn('career_bsy_burari', { opts: () => ({ difficulty: 3, topic: 'local', show: 'ぶらり！ご当地ドット便', scenes: shuffled(BURARI_SCENES).slice(0, 5), mc: '陽向さん' }) });
 dyn('career_shochiku_radio', { opts: () => ({ difficulty: 3, topic: 'radio', show: 'なんばハガキ道場', scenes: [RADIO_SCENES[0], ...shuffled(RADIO_SCENES.slice(1, -1)).slice(0, 3), RADIO_SCENES[RADIO_SCENES.length - 1]] }) });
-dyn('career_yoshimoto_yose', { opts: () => { const dialect = partnerDialect() || 'kansai'; return { difficulty: 3, dialect, lines: yoseLines(dialect), ...partnerOpts() }; } });
-dyn('career_grape_conte', { opts: () => ({ theme: 'acting', difficulty: 3, scenes: shuffled(CONTE_CLUB).slice(0, 4) }) });
+// 芸の実演 (C): the 寄席 is 漫才 for a duo; a ピン without a 相方 sits on the 高座 for a 落語 instead
+dyn('career_yoshimoto_yose', {
+  minigame: () => (yoseSolo() ? 'rakugo' : 'manzai'),
+  opts: () => {
+    if (yoseSolo()) return { difficulty: 3, dialect: 'kansai', kamigata: true, venue: V_YOSE, audience: 'elder' };
+    const dialect = partnerDialect() || 'kansai';
+    return { difficulty: 3, dialect, lines: yoseLines(dialect), ...partnerOpts(), venue: V_YOSE };
+  },
+});
+dyn('career_grape_conte', { opts: () => ({ difficulty: 3, scenes: shuffled(CONTE_CLUB).slice(0, 4), venue: { name: '金曜コントクラブ', size: 'theater', crowd: 'warm', pressure: 30 } }) });
 
+const V_YOSE = { name: 'ドット寄席 水曜の部', size: 'theater', crowd: 'warm', pressure: 30 };
+function yoseSolo() {
+  if (partnerDef()) return false;
+  const g = G();
+  try { const u = g && typeof g.unit === 'function' ? g.unit() : null; return !u || u.type === 'pin'; } catch (e) { return true; }
+}
 // The player's 相方 (people.js) plays the ボケ in comedy shows when there is one.
 function partnerDef() {
   const st = ST();
@@ -296,9 +310,9 @@ function partnerDialect() {
 export const KAN = 'career_kanmuri';
 const KAN_KINDS = {
   talk: { suffix: 'のトークひろば', skill: 'talk', minigame: 'talk' },
-  warai: { suffix: 'のドッカン笑劇場', skill: 'warai', minigame: 'tsukkomi' },
+  warai: { suffix: 'のドッカン笑劇場', skill: 'warai', minigame: 'manzai' },
   uta: { suffix: 'のミュージック・ドット', skill: 'uta', minigame: 'rhythm' },
-  engi: { suffix: '劇場', skill: 'engi', minigame: 'command' },
+  engi: { suffix: '劇場', skill: 'engi', minigame: 'conte' },
 };
 // the studio (and the person who offers it) by agency; no agency: BSよしもと
 const KAN_STUDIOS = {
@@ -354,10 +368,10 @@ function kanOpts() {
     // the 相方 talks the way they always do; alone, the studio decides. The built-in bits
     // are Kansai-ben, so a standard-Japanese show gets its own script.
     const dialect = partnerDialect() || (kanStudio().kansai || kanCfg().studio === 'yoshimoto' ? 'kansai' : 'std');
-    return { difficulty: 5, dialect, ...(dialect === 'std' ? { lines: yoseLines('std') } : {}), ...partnerOpts() };
+    return { difficulty: 5, dialect, ...(dialect === 'std' ? { lines: yoseLines('std') } : {}), ...partnerOpts(), venue: { name: kanTitle(), size: 'tv', crowd: 'warm', pressure: 50 } };
   }
   if (kind === 'uta') return { difficulty: 5, lanes: 4, song: `${name}のテーマ` };
-  if (kind === 'engi') return { theme: 'acting', difficulty: 5, scenes: KAN_CONTE.map((s) => ({ ...s, title: s.title.replace('{name}', name) })) };
+  if (kind === 'engi') return { difficulty: 5, scenes: KAN_CONTE.map((s) => ({ ...s, title: s.title.replace('{name}', name) })), venue: { name: title, size: 'tv', crowd: 'warm', pressure: 50 } };
   return { difficulty: 5, topic: 'variety', show: title, scenes: [KAN_TALK[0], ...shuffled(KAN_TALK.slice(1, -1)).slice(0, 3), KAN_TALK[KAN_TALK.length - 1]] };
 }
 // Best skill decides what kind of show it is.

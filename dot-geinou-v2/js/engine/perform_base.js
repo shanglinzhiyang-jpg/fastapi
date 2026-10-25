@@ -117,16 +117,20 @@ export class ArrowTask extends Task {
   draw(ctx) {
     const x = this.panel(ctx);
     const dirs = this.o.dirs || [this.o.answer];
-    let gx = x + 120;
+    const lw = Math.ceil(measure(ctx, this.label, 14));
+    let gx = Math.max(x + 120, x + 24 + lw);
+    const row2 = gx + dirs.length * 30 + 120 > x + PANEL.w;
+    if (row2) gx = x + 14;
+    const gy = row2 ? PANEL.y + 24 : PANEL.y + 14;
     for (const d of dirs) {
       const show = this.o.reveal === false ? false : d === this.o.answer;
-      S.glyph(ctx, d, gx, PANEL.y + 15);
-      if (show && Math.floor(this.t / 6) % 2 === 0) rect(ctx, gx - 2, PANEL.y + 37, 24, 2, '#ffd23f');
+      S.glyph(ctx, d, gx, gy);
+      if (show && Math.floor(this.t / 6) % 2 === 0) rect(ctx, gx - 2, gy + 21, 24, 2, '#ffd23f');
       gx += 30;
     }
-    if (this.o.prompt) text(ctx, this.o.prompt, gx + 8, PANEL.y + 17, { size: 14, color: '#ffffff', shadow: null });
+    if (this.o.prompt) text(ctx, this.o.prompt, gx + 8, gy + 2, { size: 14, color: '#ffffff', shadow: null });
     const frac = 1 - this.t / (this.o.win || 60);
-    rect(ctx, x + 14, PANEL.y + 38, Math.round((PANEL.w - 28) * clamp(frac, 0, 1)), 3, frac > 0.3 ? '#5ee07a' : '#ff5d6c');
+    rect(ctx, x + 14, PANEL.y + 44, Math.round((PANEL.w - 28) * clamp(frac, 0, 1)), 2, frac > 0.3 ? '#5ee07a' : '#ff5d6c');
   }
 }
 // B (or A) quickly. o: { key, win, prompt }
@@ -139,10 +143,16 @@ export class AdlibTask extends Task {
   }
   draw(ctx) {
     const x = this.panel(ctx);
-    S.glyph(ctx, (this.o.key || 'b').toUpperCase(), x + 120, PANEL.y + 15);
-    text(ctx, this.o.prompt || 'でアドリブ！', x + 146, PANEL.y + 17, { size: 16, color: Math.floor(this.t / 5) % 2 ? '#ffffff' : '#ffd23f', shadow: null });
+    const lw = Math.ceil(measure(ctx, this.label, 14));
+    const pw = Math.ceil(measure(ctx, this.o.prompt || 'でアドリブ！', 16));
+    let gx = Math.max(x + 120, x + 24 + lw);
+    const row2 = gx + 28 + pw > x + PANEL.w - 8;
+    if (row2) gx = x + 14;
+    const gy = row2 ? PANEL.y + 24 : PANEL.y + 14;
+    S.glyph(ctx, (this.o.key || 'b').toUpperCase(), gx, gy);
+    text(ctx, this.o.prompt || 'でアドリブ！', gx + 26, gy + 2, { size: 16, color: Math.floor(this.t / 5) % 2 ? '#ffffff' : '#ffd23f', shadow: null });
     const frac = 1 - this.t / (this.o.win || 45);
-    rect(ctx, x + 14, PANEL.y + 38, Math.round((PANEL.w - 28) * clamp(frac, 0, 1)), 3, '#ff7eb6');
+    rect(ctx, x + 14, PANEL.y + 44, Math.round((PANEL.w - 28) * clamp(frac, 0, 1)), 2, '#ff7eb6');
   }
 }
 // After a 爆笑: wait for the laugh to settle, then A. Too soon = 笑いに被せる, in the zone = ナイス間, too late = 間延び.

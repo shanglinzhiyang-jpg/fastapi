@@ -12,7 +12,7 @@
 import * as C from './contests.js';
 const contestDate = (g, day) => C.contestDate(g, day);
 import { MINIGAMES, rankFor } from './minigame.js';
-import { clamp, mulberry32 } from './util.js';
+import { clamp, mulberry32, YEN_MARK } from './util.js';
 
 export const KIND_LABEL = {
   manzai: '漫才', conte: 'コント', pin: 'ピン芸', rakugo: '落語', ogiri: '大喜利', utaneta: '歌ネタ', monomane: 'ものまね',
@@ -162,10 +162,12 @@ export function judgesFor(g, ctx, n, titles = []) {
   }
   return out;
 }
-export function news(g, ctx, text, cat = 'contest') {
+// opts: 'cat' string or { personal, prio } (D1's contestNews: rate-limited; personal = a notice to the player)
+export function news(g, ctx, text, opts = {}) {
   if (!text) return;
+  const o = typeof opts === 'string' ? { cat: opts } : opts || {};
   try {
-    if (typeof g.contestNews === 'function') g.contestNews(text, { contest: ctx.id, cat });
+    if (typeof g.contestNews === 'function') g.contestNews(text, { contest: ctx.id, ...o });
     else if (typeof g.message === 'function') g.message({ from: 'お笑いニュース', text, kind: 'news' });
   } catch (e) { console.error(e); }
 }
@@ -263,10 +265,48 @@ export function failReasons(g, kind, res, need = 55) {
 }
 
 // ------------------------------------------------------------------ judging a round
-// Simulates the field (a sample of rivals) around the player's score.
-// opts: { field, pass (share < 1 | count), sample, level, spread, kind, pinOnly, jitter }
+// Judges a round: D1's simulated field when available (see d1Field), else a sample of rivals around the player's score.
+// opts: { field, pass (share < 1 | count), sample, level, spread, kind, pinOnly, d1: false (force the local sample) }
 // → { place, field, passed, passCount, rows: [{ name, score, me, tags }], top, cutoff }
+// When D1's simulated field exists (contests.js internals: simOf / toFieldScore) and roundId is a real round of the def,
+// the round is judged against THAT field (the same one D1's history, news and 大会一覧 show): the player's performance
+// score is mapped onto the field scale and compared with the named entrants (+ the anonymous mass for big 予選).
+function d1Field(g, ctx, roundId, myScore) {
+  const I = C.internals;
+  if (!I || typeof I.simOf !== 'function' || typeof I.toFieldScore !== 'function' || !g.state) return null;
+  const rounds = (ctx.def && ctx.def.rounds) || [];
+  const idx = rounds.findIndex((r) => r.id === roundId);
+  if (idx < 0) return null;
+  let sim = null;
+  try { sim = I.simOf(g, ctx.id, ctx.year); } catch (e) { return null; }
+  const rd = sim && sim.rounds && sim.rounds[idx];
+  if (!rd || !rd.scores || !Array.isArray(rd.sorted)) return null;
+  const fs = clamp(Number(I.toFieldScore(g, myScore)) || 0, 0, 100);
+  const nameOf = (aid) => ((sim.byId && sim.byId.get(aid)) || {}).name || '？';
+  const named = rd.sorted.filter((aid) => aid !== 'player').map((aid) => ({ name: nameOf(aid), score: Math.round(Number(rd.scores.get(aid)) || 0), tags: [], unit: ((sim.byId && sim.byId.get(aid)) || {}).type }));
+  const above = named.filter((x) => x.score > fs).length;
+  let passed, place, field, passCount;
+  if (rd.exact) {
+    field = named.length + 1;
+    passCount = Math.max(1, Number(rd.P) || 1);
+    place = above + 1;
+    passed = place <= passCount;
+  } else {
+    const ms = rd.anonInMS || rd.anonMS || { mS: 30, sS: 12 };
+    const PHI = typeof I.PHI === 'function' ? I.PHI : normCdf;
+    const anonAbove = rd.anonIn > 0 ? rd.anonIn * (1 - PHI((fs - ms.mS) / Math.max(1, ms.sS))) : 0;
+    field = Math.max(2, Number(rd.E) || named.length + 1);
+    passCount = Math.max(1, Number(rd.P) || 1);
+    place = clamp(Math.round(above + anonAbove + 1), 1, field);
+    passed = fs >= rd.cut;
+  }
+  const me = { name: unitName(g), score: Math.round(fs), me: true, tags: [] };
+  const rows = [...named, me].sort((a, b) => b.score - a.score || (a.me ? -1 : b.me ? 1 : 0));
+  return { place, field, passed, passCount, rows, top: rows.find((x) => !x.me) || rows[0], cutoff: Math.round(Number(rd.cut) || 0), d1: true, fs };
+}
+
 export function judgeField(g, ctx, roundId, myScore, opts = {}) {
+  if (opts.d1 !== false) { try { const x = d1Field(g, ctx, roundId, myScore); if (x) return x; } catch (e) { console.error(e); } }
   const field = Math.max(2, Math.round(opts.field || 20));
   const passCount = opts.pass == null ? Math.max(1, Math.round(field * 0.3)) : opts.pass < 1 ? Math.max(1, Math.round(field * opts.pass)) : Math.round(opts.pass);
   const n = Math.min(field - 1, opts.sample || 24);
@@ -366,4 +406,5 @@ export function edLabel(ctx) {
 }
 // Converts a 0..100 performance score into the contest's own display scale.
 export const toScale = (score, max) => Math.round((clamp(score, 0, 100) / 100) * max);
-export const yen = (n) => `${Math.round(n).toLocaleString('ja-JP')}円`;
+// a REAL nominal amount in text: YEN_MARK keeps g.fmt / yenText from rescaling it by the era's price rate (D1's rule)
+export const yen = (n) => `${YEN_MARK}${Math.round(n).toLocaleString('ja-JP')}円`;

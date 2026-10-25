@@ -148,7 +148,8 @@ export const playerLook = (g) => (g && g.state && g.state.look) || LOOKS.player;
 export function isKansai(g) {
   const st = (g && g.state) || {};
   const pf = st.profile || {};
-  if (/大阪|京都|兵庫|奈良|和歌山|滋賀/.test(String(pf.home || pf.prefecture || pf.hometown || ''))) return true;
+  if (/大阪|京都|兵庫|奈良|和歌山|滋賀|osaka|kyoto|hyogo|nara|wakayama|shiga|kobe/i.test(String(pf.home || pf.prefecture || pf.hometown || ''))) return true;
+  if (st.agency && /osaka|namba|kansai/i.test(String(st.agencyBase || st.base || ''))) return true;
   const fl = st.flags || {};
   return !!(fl.visited && (fl.visited.namba || fl.visited.osaka_tv || fl.visited.shinkigeki));
 }
@@ -342,15 +343,17 @@ export class Board {
     Object.assign(this, { g, t: 0, hd: true, opaque: true, hidesHud: true, isContestBoard: true });
     this.spec = { color: '#2a3a8a', mode: 'stage', data: {}, set: 'studio', ...spec };
   }
-  set(mode, data = {}) { this.spec.mode = mode; this.spec.data = data; this.t0 = this.t; return this; }
-  patch(data) { Object.assign(this.spec.data, data); return this; }
+  // animations run on the game's frame counter: the board keeps moving while a message window is on top of it
+  get now() { return (this.g && Number.isFinite(this.g.frame)) ? this.g.frame : this.t; }
+  set(mode, data = {}) { this.spec.mode = mode; this.spec.data = data; this.t0 = this.now; return this; }
+  patch(data) { Object.assign(this.spec.data, data); if (data && (data.rolling != null || data.fly != null || data.ippon != null)) this.t0 = this.now; return this; }
   update() { this.t++; }
   draw(c, g) {
     const sp = this.spec;
-    try { drawSet(c, this.t, sp, g); } catch (e) { console.error(e); }
+    try { drawSet(c, this.now, sp, g); } catch (e) { console.error(e); }
     try {
       const fn = MODES[sp.mode] || MODES.stage;
-      fn(c, this.t - (this.t0 || 0), sp.data || {}, g, sp);
+      fn(c, this.now - (this.t0 || 0), sp.data || {}, g, sp);
     } catch (e) { console.error(e); }
     // title plate
     const title = sp.title || '';
@@ -449,16 +452,18 @@ const MODES = {
   },
   // ranking: { rows: [{ name, score, me, tag }], passLine: index (rows above pass), unit: '点', max }
   ranking(c, t, d, g, sp) {
-    const rows = (d.rows || []).slice(0, 10);
+    let rows = (d.rows || []).slice(0, 10);
+    const meRow = (d.rows || []).find((x) => x.me);
+    if (meRow && !rows.includes(meRow)) rows = [...rows.slice(0, 9), meRow];
     const show = Math.min(rows.length, Math.floor(t / 6) + 1);
-    box(c, 40, 58, SW - 80, 26 + rows.length * 18 + 6, sp.color);
+    box(c, 40, 58, SW - 80, 26 + rows.length * 17 + 6, sp.color);
     tx(c, d.head || '結果', 54, 64, 300, { size: 12, color: PAL.gold });
     if (d.note) tx(c, d.note, 330, 64, SW - 390, { size: 11, color: PAL.dim });
     const max = d.max || 100;
     for (let i = 0; i < show; i++) {
       const rw = rows[i];
-      const y = 84 + i * 18;
-      if (d.passLine != null && i === d.passLine) R(c, 50, y - 2, SW - 100, 1, PAL.red);
+      const y = 83 + i * 17;
+      if (d.passLine != null && i === d.passLine && (rw.place ?? i + 1) === i + 1) R(c, 50, y - 2, SW - 100, 1, PAL.red);
       if (rw.me) R(c, 48, y - 1, SW - 96, 17, 'rgba(255,210,63,0.18)');
       tx(c, `${rw.place ?? i + 1}`, 56, y, 26, { size: 12, color: rw.me ? PAL.gold : '#fff' });
       tx(c, rw.name, 84, y, 210, { size: 12, color: rw.me ? PAL.gold : '#fff' });
@@ -493,6 +498,27 @@ const MODES = {
   },
   // n-person vote grid: { n: 100, votes: [1..3], shown, who, label }
   votes(c, t, d, g, sp) {
+    if (Array.isArray(d.sides)) {
+      // 1対1: both acts' 100 votes, 10×10 each, filled as they are counted
+      const shown = Math.min(100, Math.floor(t * 1.5));
+      d.sides.forEach((s, k) => {
+        const ox = k === 0 ? 70 : SW - 70 - 140; const oy = 76; const cell = 14;
+        box(c, ox - 12, 56, 164, 186, s.me ? PAL.gold : k ? PAL.pink : PAL.cyan);
+        tx(c, s.who || '', ox, 60, 140, { size: 12, color: s.me ? PAL.gold : '#fff' });
+        let sum = 0;
+        for (let i = 0; i < 100; i++) {
+          const v = i < shown ? (s.votes || [])[i] || 0 : 0;
+          sum += v;
+          R(c, ox + (i % 10) * cell, oy + Math.floor(i / 10) * cell, cell - 3, cell - 3, v === 3 ? PAL.gold : v === 2 ? PAL.cyan : v === 1 ? '#6a7090' : '#2a2f55');
+        }
+        tx(c, `${sum}点`, ox, oy + 144, 140, { size: 14, color: '#fff' });
+      });
+      tx(c, d.label || '', SW / 2 - 90, 120, 180, { size: 11, color: PAL.dim });
+      tx(c, '■3点 とても面白かった', SW / 2 - 76, 150, 160, { size: 10, color: PAL.gold });
+      tx(c, '■2点 面白かった', SW / 2 - 76, 166, 160, { size: 10, color: PAL.cyan });
+      tx(c, '■1点 面白くなかった', SW / 2 - 76, 182, 160, { size: 10, color: '#9aa3c7' });
+      return;
+    }
     const n = d.n || 100;
     const votes = d.votes || [];
     const shown = Math.min(votes.length, d.shown == null ? Math.floor(t * 2) : d.shown);
@@ -533,7 +559,7 @@ const MODES = {
     tx(c, `${total}/${need}`, SW - 112, 212, 60, { size: 12, color: '#fff' });
     if (d.ippon) {
       const s = 1 + 0.1 * Math.sin(t / 3);
-      c.save(); c.translate(SW / 2, 136); c.scale(s, s);
+      c.save(); c.translate(SW / 2 + 150, 92); c.scale(s * 0.7, s * 0.7); c.rotate(-0.12);
       R(c, -110, -30, 220, 60, '#c81e2a'); R(c, -104, -24, 208, 48, '#fff');
       text(c, 'IPPON', 0, -18, { size: 32, align: 'center', color: '#c81e2a', shadow: null });
       c.restore();
@@ -549,13 +575,14 @@ const MODES = {
     R(c, x, y, sz, sz, '#f4f1e8'); R(c, x + 4, y + 4, sz - 8, sz - 8, '#fffdf6');
     const name = faces[idx] || '';
     const lines = Array.from(name).length > 7 ? [Array.from(name).slice(0, 7).join(''), Array.from(name).slice(7, 14).join('')] : [name];
-    lines.forEach((ln, i) => tx(c, ln, x + 10, y + sz / 2 - 10 * lines.length + i * 22, sz - 20, { size: 16, color: '#c81e2a', shadow: null }));
+    lines.forEach((ln, i) => { const f = fitText(c, ln, sz - 16, 16); text(c, f.s, x + sz / 2, y + sz / 2 - 11 * lines.length + i * 22, { size: f.size, align: 'center', color: '#c81e2a', shadow: null }); });
     // side faces
     R(c, x + sz, y + 10, 18, sz - 10, '#d8d2c0'); R(c, x + 10, y - 14, sz - 10, 14, '#ebe5d4');
     if (d.label) { box(c, SW / 2 - 170, 204, 340, 26, sp.color); tx(c, d.label, SW / 2 - 158, 210, 316, { size: 12, color: '#fff' }); }
     // the round table of tellers
     const ppl = d.people || [];
-    ppl.slice(0, 8).forEach((p, i) => { const px = 40 + i * 76; tx(c, p, px, 236, 70, { size: 10, color: i === idx ? PAL.gold : PAL.dim }); });
+    const pw = Math.floor((SW - 40) / Math.max(1, Math.min(8, ppl.length)));
+    ppl.slice(0, 8).forEach((p, i) => { tx(c, p, 20 + i * pw + 2, 238, pw - 8, { size: 10, color: i === idx ? PAL.gold : PAL.dim }); });
   },
   // 布団: { odai, answer, writers: [bool,bool,bool], fly: bool, futons: { name: n }, label }
   futon(c, t, d, g, sp) {
@@ -599,7 +626,7 @@ const MODES = {
     const cw = Math.floor((SW - 40) / Math.max(1, rs.length));
     rs.forEach((ms, ri) => {
       const x = 20 + ri * cw;
-      const step = 180 / Math.max(1, ms.length);
+      const step = 172 / Math.max(1, ms.length);
       ms.forEach((m, mi) => {
         const y = 60 + mi * step + step / 2 - 16;
         box(c, x + 4, y, cw - 12, 34, m.me ? PAL.gold : sp.color);
@@ -607,7 +634,7 @@ const MODES = {
         tx(c, m.b || '', x + 12, y + 18, cw - 28, { size: 10, color: m.w === m.b ? PAL.gold : '#fff' });
       });
     });
-    if (d.label) { box(c, 60, 244, SW - 120, 22, sp.color); tx(c, d.label, 72, 248, SW - 144, { size: 11, color: '#fff' }); }
+    if (d.label) { box(c, 60, 236, SW - 120, 22, sp.color); tx(c, d.label, 72, 240, SW - 144, { size: 11, color: '#fff' }); }
   },
   // イス取りゲーム: { chairs: n, people: [{ name, seat|null, me }], music: bool }
   chairs(c, t, d, g, sp) {
@@ -740,8 +767,9 @@ export async function finishRound(g, ctx, res, st, o = {}) {
 export function audienceVotes(score, n, r, k = 15) {
   const out = [];
   for (let i = 0; i < n; i++) {
-    const v = score + gauss(r) * k;
-    out.push(v >= 66 ? 3 : v >= 40 ? 2 : 1);
+    // calibrated so a great set lands around 270–295 of 300 (THE SECOND's record is 294) and an average one ~200
+    const v = score + gauss(r) * k * 1.4;
+    out.push(v >= 72 ? 3 : v >= 42 ? 2 : 1);
   }
   return out;
 }

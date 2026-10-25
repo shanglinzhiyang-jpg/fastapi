@@ -465,3 +465,32 @@ export const STAFF = {
   producer: { name: 'TBSのプロデューサー', look: { hair: 'short', hairColor: 'black', skin: 'fair', top: '#22262e', bottom: '#22262e', jacket: true, glasses: true } },
   writer: { name: '構成作家', look: { hair: 'afro', hairColor: 'black', skin: 'fair', top: '#5a6f8a', bottom: '#3b3f48', glasses: true } },
 };
+
+// ---------------------------------------------------------------- the rounds of a year in D1's def.rounds format
+// Stable ids: r1, r2, qf (2009-), sf (one day) or sf1 + sf2 (2018-: two days, two contes), final (2026-: with 敗者復活戦).
+// field / pass are this game's 目安 (the entry count and the semifinal / final counts are real where verified).
+export function kocRounds(y) {
+  if (y < FOUNDED) y = FOUNDED;
+  const R = rules(y);
+  const S = schedule(y);
+  const P = roundPlan(y);
+  const out = [
+    { id: 'r1', name: '1回戦', when: S.r1.map((v) => v.when), venues: S.r1.map((v) => hallText(v)), length: R.len.r1, field: R.entries.n, pass: P.r2, judge: 'staff', size: 'small', crowd: 'normal' },
+    { id: 'r2', name: '2回戦', when: S.r2.map((v) => v.when), venues: S.r2.map((v) => hallText(v)), length: R.len.r2, pass: R.hasQF ? P.qf : R.sfCount, judge: 'staff', size: 'theater' },
+  ];
+  if (R.hasQF) out.push({ id: 'qf', name: '準々決勝', when: S.qf.map((v) => v.when), venues: S.qf.map((v) => hallText(v)), length: R.len.qf, pass: R.sfCount, judge: 'staff', size: 'theater' });
+  if (R.twoNetaSF) {
+    out.push({ id: 'sf1', name: '準決勝（1日目）', when: [S.sf[0].when], venues: [hallText(S.sf[0])], length: R.len.sf, pass: R.sfCount, judge: 'staff', size: 'hall' });
+    out.push({ id: 'sf2', name: '準決勝（2日目）', when: [S.sf[1].when], venues: [hallText(S.sf[1])], length: R.len.sf, pass: R.finalists, judge: 'staff', size: 'hall' });
+  } else out.push({ id: 'sf', name: '準決勝', when: S.sf.map((v) => v.when), venues: S.sf.map((v) => hallText(v)), length: R.len.sf, pass: R.finalists, judge: 'staff', size: 'hall' });
+  const fin = { id: 'final', name: '決勝', when: S.final.when, venues: ['TBS放送センター'], length: R.len.final, judge: R.mode === 'panel' ? 'panel' : 'vote', judges: R.mode === 'panel' ? R.judges : 7, scoring: R.mode === 'panel' ? '100点' : R.mode === 'sum2' ? '10点' : R.mode === 'league' ? '5点' : '投票', tv: true, final: true, stage: 'studio', size: 'tv' };
+  if (R.revival) Object.assign(fin, { revival: true, revivalPass: 1, revivalName: '敗者復活戦', revivalJudge: 'vote' });
+  out.push(fin);
+  return out;
+}
+// which D1 round a KOC round of the player is (sf: the day 0 / 1)
+export function roundIndex(y, rid, sfDay = 0) {
+  const list = kocRounds(y);
+  const id = rid === 'sf' && rules(y).twoNetaSF ? (sfDay ? 'sf2' : 'sf1') : rid === 'revival' ? 'final' : rid;
+  return list.findIndex((r) => r.id === id);
+}

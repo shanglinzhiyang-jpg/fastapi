@@ -406,7 +406,7 @@ const JOBS = {
   },
   wakate: {
     id: 'shochiku_wakate_live', title: '劇場の若手ライブ', desc: '若手ライブの舞台で漫才を披露しよう！', client: '舞台監督',
-    stamina: 25, minigame: 'tsukkomi', opts: { difficulty: 2 }, pay: 4500, fame: 18, skill: 'warai', gain: 2,
+    stamina: 25, minigame: 'manzai', opts: { difficulty: 2, venue: { name: '松竹 若手ライブ', size: 'theater', crowd: 'normal', pressure: 25 } }, pay: 4500, fame: 18, skill: 'warai', gain: 2,
     requires: { agency: 'shochiku' },
   },
   radio: {
@@ -432,7 +432,7 @@ const JOBS = {
 };
 const LESSONS = {
   talk: { title: 'しゃべりレッスン', skill: 'talk', price: 2500, stamina: 12, gain: 4, minigame: 'talk', opts: { difficulty: 1 }, teacher: 'しゃべり講師' },
-  manzai: { title: '漫才レッスン', skill: 'warai', price: 2500, stamina: 12, gain: 4, minigame: 'tsukkomi', opts: { difficulty: 1, partner: '漫才講師' }, teacher: '漫才講師' },
+  manzai: { title: '漫才レッスン', skill: 'warai', price: 2500, stamina: 12, gain: 4, minigame: 'manzai', opts: { difficulty: 1, partner: '漫才講師', lesson: true, venue: { name: '松竹芸能 稽古場', size: 'small', crowd: 'warm', pressure: 5 } }, teacher: '漫才講師' },
 };
 const AUDITION = {
   agency: 'shochiku', title: '松竹芸能オーディション', minigame: 'talk',
@@ -1088,6 +1088,21 @@ async function shabeTeacher(g, npc) {
   }
 }
 
+// 落語の自主稽古 on the stacked 座布団 (芸の実演 C): a 上方落語 at the practice room, once a day as a 稽古 (話芸 etc.),
+// again the same day only to polish the ネタ (仕上がり).
+async function rakugoKeiko(g) {
+  await g.say('座布団が積んである。\n落語の稽古にも使うらしい。');
+  if (typeof g.perform !== 'function') return;
+  const again = g.flag('shochiku_rakugo_day') === g.state.day;
+  const i = await g.ask(again ? '今日はもう一席さらった。もう一度やる？\n（ネタの仕上がりだけ上がる／体力 -8）' : '座布団に座って、落語を一席さらってみる？\n（体力 -8）', ['稽古する', 'やめておく']);
+  if (i !== 0) return;
+  if (g.state.stamina < 8) { await g.say('体力が足りない…。休んでからにしよう。'); return; }
+  g.state.stamina -= 8;
+  g.setFlag('shochiku_rakugo_day', g.state.day);
+  const r = await g.perform({ kind: 'rakugo', practice: again, lesson: !again, kamigata: true, dialect: 'kansai', title: '落語の稽古（自主練）', venue: { name: '松竹芸能 稽古場', size: 'small', crowd: 'warm', pressure: 5 } });
+  if (r) await g.say(r.rank === 'S' || r.rank === 'A' ? '稽古場にいた若手が、思わず吹き出した。\nいい高座になりそうだ！' : r.rank === 'B' ? 'まずまずの一席だった。\n上下（かみしも）の切り替えをもっと磨こう。' : '…座布団の上で、しばらく反省した。');
+}
+
 async function manzaiTeacher(g, npc) {
   const s = (t) => sayAs(g, npc, t);
   const i = await askAs(g, npc, 'よっしゃ、漫才の稽古いこか！', ['レッスンを受ける', 'コツを聞く', 'やめておく']);
@@ -1181,12 +1196,12 @@ const KEIKO = {
     { type: 'npc', id: 'kaku', x: 11, y: 7, dir: 'left', look: L.kaku, name: 'かく', fixedDir: true, talk: duoPractice },
     { type: 'npc', id: 'shinjin', x: 4, y: 8, dir: 'up', look: L.chikoku, name: '新人芸人', wander: 1, talk: shinjinTalk },
     { type: 'sign', x: 13, y: 1, text: 'ホワイトボードだ。\n「今週の目標：あいさつは元気よく！ツッコミは愛をこめて！」' },
-    { type: 'sign', x: 1, y: 7, text: '座布団が積んである。\n落語の稽古にも使うらしい。' },
     { type: 'sign', x: 1, y: 8, text: '座布団が積んである。\nふかふかだ。' },
     { type: 'sign', x: 15, y: 8, text: '稽古用のスピーカーだ。\n出囃子（でばやし）を流して、本番さながらに練習するらしい。' },
   ],
   events: [
     { x: 4, y: 1, w: 9, h: 1, on: 'action', run: mirrorPractice },
+    { x: 1, y: 7, on: 'action', run: rakugoKeiko },
     {
       x: 8, y: 4, on: 'action',
       run: async (g) => {

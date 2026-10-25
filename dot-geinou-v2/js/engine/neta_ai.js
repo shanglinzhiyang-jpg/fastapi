@@ -111,7 +111,7 @@ function bank() {
     for (let i = 0; i + 1 < a.length; i++) if (isJP(a[i]) && isJP(a[i + 1]) && !/[、。！？「」]/.test(a[i] + a[i + 1])) bi.add(toHira(a[i] + a[i + 1]));
   }
   // everyday function bigrams the bank might miss
-  for (const w of 'です ます した して いる ない から けど って ので よね ちゃ じゃ たら れば だけ でも まで こと もの ため とか なん だっ かっ ませ でし まし てい てる いま あり おり なり くれ もら あげ やっ ちょ っと すご ほん とう もう まだ'.split(' ')) bi.add(w);
+  for (const w of 'です ます した して いる ない から けど って ので よね ちゃ じゃ たら れば だけ でも まで こと もの ため とか なん だっ かっ ませ でし まし てい てる いま あり おり なり くれ もら あげ やっ ちょ っと すご ほん とう もう まだ ええ えわ やね ねん へん やろ ちゃ うわ らら るる ふふ はは あは ふん わあ ああ おお'.split(' ')) bi.add(w);
   BANK = { g4, bi };
   return BANK;
 }
@@ -132,23 +132,34 @@ function fluency(text) {
   if (!n) return 0;
   if (n <= 4) return a.some(isJP) ? 0.85 : 0.5;
   const B = bank().bi;
-  let jp = 0, kan = 0, hira = 0, pairs = 0, known = 0, longK = 0, run = 0, maxRep = 1, rep = 1;
+  const isH = (c) => /[\u3041-\u3096]/.test(c);
+  const isK = (c) => /[\u30A1-\u30FA]/.test(c);
+  let jp = 0, kan = 0, hira = 0, hp = 0, hk = 0, kp = 0, kk = 0, longK = 0, run = 0, maxRep = 1, rep = 1, badSmall = 0;
   for (let i = 0; i < n; i++) {
     const c = a[i];
+    // ゃゅょ only after an i-row kana, ぁぃぅぇぉゎ never after ん / っ / another small kana or at the start
+    if (/[ゃゅょャュョ]/.test(c) && !/[きしちにひみりぎじぢびぴキシチニヒミリギジヂビピ]/.test(a[i - 1] || '')) badSmall++;
+    else if (/[ぁぃぅぇぉゎ]/.test(c) && (!i || /[んっゃゅょぁぃぅぇぉゎ、。]/.test(a[i - 1]))) badSmall++;
     if (isJP(c)) jp++;
     if (isKanji(c)) { kan++; run++; } else { if (run >= 6) longK += run; run = 0; }
-    if (/[ぁ-ゖ]/.test(c)) hira++;
+    if (isH(c)) hira++;
     if (i && c === a[i - 1]) { rep++; maxRep = Math.max(maxRep, rep); } else rep = 1;
-    if (i + 1 < n && isJP(c) && isJP(a[i + 1]) && !/[、。！？「」『』（）…・〜～]/.test(c + a[i + 1])) { pairs++; if (B.has(toHira(c + a[i + 1]))) known++; }
+    const d = a[i + 1];
+    if (d && isH(c) && isH(d)) { hp++; if (B.has(c + d)) hk++; }
+    else if (d && isK(c) && isK(d)) { kp++; if (B.has(toHira(c + d))) kk++; }
   }
   if (run >= 6) longK += run;
   const jpRatio = jp / n;
-  let kn = pairs >= 3 ? known / pairs : 0.75;
-  if (!hira && n >= 6) kn = Math.min(kn, 0.25); // Japanese sentences almost always have hiragana
+  // hiragana pairs are the strong signal (function words are very predictable); katakana / kanji words may be new
+  let kh = hp >= 2 ? hk / hp : 0.85;
+  if (!hira && n >= 6) kh = 0.25; // Japanese sentences almost always have hiragana
+  const kkr = kp >= 2 ? kk / kp : 0.85;
+  let f = 0.7 * kh + 0.1 * kkr + 0.1 * jpRatio + 0.1 * (kan ? 1 - longK / kan : 1);
   const distinct = new Set(a).size / n;
-  let f = 0.55 * kn + 0.3 * jpRatio + 0.15 * (kan ? 1 - longK / kan : 1);
-  if (n >= 8 && distinct < 0.3) f *= 0.4;
+  if (n >= 8 && n <= 30 && distinct < 0.3) f *= 0.4;
+  if (n > 30 && new Set(grams(a.join(''), 2)).size / (n - 1) < 0.15) f *= 0.4;
   if (maxRep >= 5) f *= 0.4;
+  if (badSmall) f -= Math.min(0.4, (badSmall / n) * 4);
   return clamp(f, 0, 1);
 }
 const isAction = (l) => l.role === 'narr' && /^[（(]/.test(l.text);
@@ -213,7 +224,7 @@ function analyze(neta, ctx = {}) {
     const t = L.text;
     L.action = isAction(L);
     L.flu = L.action ? Math.max(0.7, fluency(t.replace(/[（）()]/g, ''))) : fluency(t);
-    L.nonsense = L.flu < 0.5;
+    L.nonsense = L.flu < 0.58;
     L.hits = lexHits(t);
     L.cats = [...new Set(L.hits.flatMap((h) => h.cats))];
     const toks = tokens(t);
@@ -224,6 +235,7 @@ function analyze(neta, ctx = {}) {
     L.dup = seen.has(nt) && Array.from(nt).length >= 2 ? seen.get(nt) : -1;
     if (!seen.has(nt)) seen.set(nt, L.i);
     L.closer = CLOSERS.some((c) => nt.includes(normN(c)));
+    L.n = L.n || Array.from(t).length;
     const clicheHit = CLICHE_TSUKKOMI.find((c) => nt.includes(normN(c)));
     L.clicheAny = !!clicheHit;
     L.clicheOnly = !!clicheHit && Array.from(nt).length - Array.from(normN(clicheHit)).length <= 3;
@@ -240,11 +252,16 @@ function analyze(neta, ctx = {}) {
     L.std = STD_RE.test(t);
     L.pron = (t.match(/(俺|おれ|オレ|僕|ぼく|ボク|私|わたし|わたくし|あたし|うち|わし|拙者|あっし|わっち|おいら)/g) || []);
     L.quote = /「[^」]{2,}」/.test(t);
-    L.copy = L.action ? 0 : overlap(t, B.g4);
+    L.opener = L.n <= 30 && /よろしく|お願い/.test(t) && (FIRST_RE.test(t) || /です[！!。]/.test(t));
+    L.copy = L.action || L.opener || (L.closer && L.n <= 30) ? 0 : overlap(t, B.g4);
     L.selfCopy = own.size && !L.action ? overlap(t, own) : 0;
     L.anachro = year ? ANACHRO.filter(([w, y]) => year < y && t.includes(w)).map(([w]) => w) : [];
     L.person = L.cats.some((c) => ['tech', 'home', 'food', 'weather', 'nature', 'space', 'money', 'shop', 'vehicle', 'drink'].includes(c)) && /しゃべ|言われ|言って|謝られ|謝っ|返事|返され|笑って|泣いて|怒られ|照れ|ほめて|教えて|聞かれ|あいさつ|お礼|認めて/.test(t);
     L.dajare = dajare(t);
+    L.rev = /のほうが|の代わりに|じゃなくて|ではなく|なのに|逆に|より先に|自分で自分|だけ[がをで]|[^ぁ-ん]まで[、。]?$/.test(t);
+    L.reveal = /…|。.{1,24}[。！!]$/.test(t) && L.n >= 8;
+    L.selfTsk = /…いや、|…って、|いや、それは|そりゃそうだ|ちがうか|違うか|でした。?$|ぼくでした|ぼくのせい/.test(t);
+    L.unknownNoun = tokens(t).some((w) => ((isKanji(w[0]) && w.length >= 2) || (/[\u30A1-\u30FA]/.test(w[0]) && w.length >= 3)) && !STOP_NOUNS.has(w) && !L.hits.some((h) => h.w.includes(w) || w.includes(h.w)));
   }
   // roles: punch / tsukkomi / other
   const n = lines.length;
@@ -286,11 +303,17 @@ function analyze(neta, ctx = {}) {
       s = link ? 0.35 + 0.65 * maxFar : 0.25 + 0.5 * (sum / L.cats.length);
     } else if (L.cats.length) s = 0.5;
     else if (link) s = 0.4;
-    s += (L.kochou ? 0.12 : 0) + (L.twist ? 0.1 : 0) + (L.person ? 0.14 : 0) + (L.meta ? 0.05 : 0);
+    // nouns the lexicon does not know: new, concrete information (a mild surprise, unknown direction)
+    if (L.unknownNoun && ![...L.nouns].every((w) => ctxNouns.has(w))) s = Math.max(s, 0.48);
+    s += (L.kochou ? 0.12 : 0) + (L.twist ? 0.1 : 0) + (L.person ? 0.14 : 0) + (L.meta ? 0.05 : 0) + (L.rev ? 0.12 : 0) + (L.reveal ? 0.06 : 0) + (L.quote ? 0.04 : 0);
     L.sur = clamp(s, 0, 1);
     L.link = link;
     L.beta = L.punch && link && maxFar < 0.2 && !L.kochou && !L.twist && !L.person;
-    L.tobi = L.punch && L.cats.length > 0 && !link && maxFar >= 1 && !L.kochou && !L.person;
+    L.maxFar = maxFar;
+    const wide = new Set([...headCats, ...lines.slice(Math.max(0, k - 6), k).flatMap((x) => x.cats)]);
+    const nx = lines[k + 1];
+    const explained = nx && nx.tsk && ([...nx.nouns].some((w) => L.nouns.has(w)) || nx.cats.some((c) => L.cats.includes(c)));
+    L.tobi = L.punch && L.cats.length > 0 && !link && maxFar >= 1 && !L.kochou && !L.person && !explained && !L.cats.some((c) => wide.has(c));
     if (L.beat === 'setup' || L.beat === 'makura' || L.beat === 'hondai' || L.role === 'narr') lastSetup = L;
   }
   // 言い間違い (一字ちがい) and 例えツッコミ
@@ -370,6 +393,7 @@ function punchStrength(L, A, next, extra) {
   if (L.jigyaku) s += 3;
   if (L.meta) s += 3;
   if (extra.callback) s += 12;
+  if (L.selfTsk && !(next && next.tsk)) s += 6;
   if (extra.tendon) s += 8;
   if (next && next.tsk) s += (tsukkomiQuality(next) - 50) * 0.25;
   if (L.n > K.maxLine) s -= Math.min(18, (L.n - K.maxLine) * 0.5);
@@ -377,7 +401,7 @@ function punchStrength(L, A, next, extra) {
   if (L.beta) s -= 8;
   if (L.tobi) s -= 4;
   if (L.joke) s -= 30;
-  s -= 34 * clamp((L.copy - 0.35) / 0.45, 0, 1);
+  s -= 24 * clamp((L.copy - 0.35) / 0.45, 0, 1);
   s -= 26 * clamp((L.selfCopy - 0.35) / 0.45, 0, 1);
   if (L.dup >= 0) s -= 35;
   if (L.anachro.length) s -= 6;
@@ -395,6 +419,8 @@ function findTendon(A) {
       for (let s = 0; s + len <= a.length; s++) {
         const g = a.slice(s, s + len).join('');
         if (found.has(g) || CLOSERS.some((c) => normN(c).includes(g)) || CLICHE_TSUKKOMI.some((c) => normN(c).includes(g)) || /^(どうも|よろしく|ありがとう|お願いします)/.test(g)) continue;
+        if (!/[\u4E00-\u9FFF々\u30A1-\u30FA0-9]/.test(g) || /^[のをにはがでともへやか]|[のをにはがでともへやか]$/.test(g) || normN(A.head).includes(g)) continue;
+        if (Array.from(g).filter((c) => /[\u3041-\u3096]/.test(c)).length >= len - 1) continue;
         const uses = P.filter((p) => p.norm.includes(g));
         if (uses.length >= 2 && uses[uses.length - 1].i - uses[0].i >= 2 && uses.some((u) => u.dup < 0 || u === uses[0])) {
           // keep only the longest phrase per group of lines
@@ -405,6 +431,16 @@ function findTendon(A) {
     }
   }
   // drop phrases contained in a longer found phrase with the same uses
+  // a line the writer marked 天丼 that shares a word with an earlier punch line
+  for (const l of A.lines) {
+    if (l.beat !== 'tendon') continue;
+    const k = A.lines.indexOf(l);
+    const firstUse = A.lines.slice(0, k).find((x) => x.punch && [...x.nouns].some((w) => l.nouns.has(w) && !A.head.includes(w)));
+    if (!firstUse) continue;
+    const w = [...l.nouns].find((x) => firstUse.nouns.has(x));
+    const key = `${firstUse.i},${l.i}`;
+    if (![...found.values()].some((v) => v.uses.includes(l.i))) found.set('#' + w, { g: w, key, uses: [firstUse.i, ...A.lines.filter((x) => x.beat === 'tendon' && x.nouns.has(w)).map((x) => x.i)] });
+  }
   const list = [...found.values()].filter((v) => ![...found.values()].some((w) => w !== v && w.key === v.key && w.g.length > v.g.length && w.g.includes(v.g)));
   return list.sort((a, b) => b.g.length - a.g.length).slice(0, 4);
 }
@@ -473,7 +509,7 @@ export function scoreLocal(neta, ctx = {}) {
   const selfRatio = speech.length ? avg(speech.map((l) => clamp((l.selfCopy - 0.35) / 0.45, 0, 1))) : 0;
   const pS = P.map((l) => l.s);
   const meanP = avg(pS);
-  const perMin = P.length / Math.max(0.25, sec / 60);
+  const perMin = P.filter((l) => l.s >= 30).length / Math.max(0.25, sec / 60);
   const ax = {};
   const why = {};
   const first = P[0];
@@ -494,12 +530,13 @@ export function scoreLocal(neta, ctx = {}) {
     let s = 0;
     const miss = [];
     const setup = has((l) => (l.beat === 'setup' || l.beat === 'makura' || l.beat === 'fukusen') && pos(l) < 0.35) || A.headCats.some((c) => lines.slice(0, 3).some((l) => l.cats.includes(c)));
-    if (setup) s += 20; else miss.push('設定の提示');
-    const tenk = has((l) => (l.beat === 'tenkai' || l.tenkaiMark || l.beat === 'hondai') && pos(l) > 0.2 && pos(l) < 0.85);
+    if (setup) s += 15; else miss.push('設定の提示');
+    const tenk = has((l) => (l.beat === 'tenkai' || l.tenkaiMark || l.beat === 'hondai') && pos(l) > 0.08 && pos(l) < 0.9);
     if (tenk || kind === 'ogiri') s += 15; else miss.push('展開');
     const tail = lines.slice(-3);
     const ochiLine = tail.find((l) => l.beat === 'ochi' || l.beat === 'sage' || l.beat === 'kaishu') || (P.length && lines.indexOf(P[P.length - 1]) >= n - 3 ? P[P.length - 1] : null);
-    if (ochiLine) s += 25; else miss.push(kind === 'rakugo' ? 'サゲ' : 'オチ');
+    if (ochiLine) s += 10 + 0.2 * (ochiLine.s || (P.length ? P[P.length - 1].s : 30)); else miss.push(kind === 'rakugo' ? 'サゲ' : 'オチ');
+    s += Math.min(10, P.filter((l) => l.s >= 30).length);
     if (kind === 'manzai' && lines[n - 1].closer) s += 5;
     const third = Math.max(1, Math.floor(P.length / 3));
     const early = avg(pS.slice(0, third)), late = avg(pS.slice(-third));
@@ -528,7 +565,7 @@ export function scoreLocal(neta, ctx = {}) {
   }
   // --- 言葉選び
   {
-    const wp = lines.filter((l) => l.dajare || l.iima || /[0-9]{3,}/.test(l.text) && /「/.test(l.text)).length;
+    const wp = lines.filter((l) => !l.joke && !l.nonsense && (l.dajare || l.iima || (/[0-9]{3,}/.test(l.text) && /「/.test(l.text)))).length;
     const concrete = P.length ? P.filter((l) => l.nouns.size || l.number).length / P.length : 0;
     const fit = P.length ? P.filter((l) => l.n >= 6 && l.n <= K.maxLine).length / P.length : 0;
     const tatoe = T.filter((l) => l.tatoe).length;
@@ -590,7 +627,7 @@ export function scoreLocal(neta, ctx = {}) {
     ax.dokuji = R(clamp(96 - jokes * 15 - cl * 30 - copyRatio * 85 - selfRatio * 65 - (A.beta || 0) * 15 - nonsenseRatio * 50 + rare - (distinct < 0.8 ? (0.8 - distinct) * 60 : 0), 0, 100));
     const copied = speech.filter((l) => l.copy >= 0.75).length;
     const selfC = speech.filter((l) => l.selfCopy >= 0.75).length;
-    why.dokuji = copied >= Math.max(2, speech.length * 0.3) ? `部品のセリフがそのまま${copied}行` : selfC >= 2 ? `前に書いた台本と同じ行が${selfC}行` : jokes ? 'どこかで聞いたことのあるネタがある' : cl > 0.4 ? '決まり文句のツッコミが多い' : 'ほかで見たことのない台本';
+    why.dokuji = copied >= Math.max(2, speech.length * 0.3) ? `部品のセリフがそのまま${copied}行` : selfC >= 2 ? `前に書いた台本と同じ行が${selfC}行` : jokes ? 'どこかで聞いたことのあるネタがある' : cl > 0.4 ? '決まり文句のツッコミが多い' : 'オリジナルの台本で新鮮';
     A.copied = copied; A.selfC = selfC; A.jokes = jokes;
   }
   // --- キャラ
@@ -622,7 +659,7 @@ export function scoreLocal(neta, ctx = {}) {
       if (roles.length >= 2) s += 14; else notes.push('登場人物が一人しかいない');
     } else if (by.size === 1 || kind === 'talk') s += 10;
     s += Math.min(8, lines.filter((l) => l.jigyaku).length * 4);
-    ax.chara = R(clamp(s - nonsenseRatio * 40 - (distinct < 0.6 ? 20 : 0), 0, 100));
+    ax.chara = R(clamp((s - nonsenseRatio * 40 - (distinct < 0.6 ? 20 : 0)) * 0.72 + meanP * 0.28, 0, 100));
     why.chara = notes.length ? notes.join('・') : cp ? '口ぐせが効いてキャラが立っている' : persona ? 'どんな人物かが早く伝わる' : 'キャラが一貫している';
   }
   // --- 尺の適正
@@ -686,7 +723,7 @@ export function scoreLocal(neta, ctx = {}) {
     let rh = 0;
     for (let k = 1; k < vt.length; k++) if (vt[k] === vt[k - 1]) rh++;
     ax.uta = R(clamp(25 + Math.min(30, sung * 5) + Math.min(25, rh * 8) + (tendon.length ? 15 : 0) - nonsenseRatio * 40, 0, 100));
-    why.uta = tendon.length ? 'サビのくり返しが気持ちいい' : rh ? '韻をふんでいる' : '歌のリズムが弱い（くり返しや韻を）';
+    why.uta = tendon.length ? 'サビの反復が気持ちいい' : rh ? '韻をふんでいる' : '歌のリズムが弱い（くり返しや韻を）';
   }
   if (axesIds.includes('nisete')) {
     const intro = lines.slice(0, 3).some((l) => /ものまね|まね/.test(l.text) || /ものまね/.test(neta.title || ''));
@@ -726,10 +763,14 @@ export function scoreLocal(neta, ctx = {}) {
 
   // ------------------------------------------------ judges
   const taste = { aruaru: lines.filter((l) => l.aruaru).length, meta: P.length ? P.filter((l) => l.meta).length / P.length : 0 };
+  const top3 = pS.slice().sort((a, b) => b - a).slice(0, 3);
+  const W = 0.6 * meanP + 0.4 * avg(top3);
+  const laugh = clamp(((W - 25) * 100) / 50, 0, 100);
+  A.laugh = laugh;
   res.judges = JUDGES.map((j) => {
     let ws = 0, wt = 0;
     for (const a of axesIds) { const w = j.w[a] || 1; ws += ax[a] * w; wt += w; }
-    let s = 50 + (ws / wt - 50) * j.spread + j.bias;
+    let s = 50 + ((ws / wt) * 0.58 + laugh * 0.42 - 50) * j.spread + j.bias;
     if (j.id === 'emihara') { if (taste.aruaru >= 2) s += 4; if (taste.meta > 0.3) s -= 5; if ((A.tobi || 0) > 0.5) s -= 5; }
     if (j.id === 'shindo') { s -= (A.clicheT || 0) * 8 + copyRatio * 10; if (taste.meta > 0 && ax.dokuji >= 70) s += 3; }
     if (j.id === 'koiki') s += Math.min(6, (A.wp || 0) * 3);
@@ -757,7 +798,9 @@ export function scoreLocal(neta, ctx = {}) {
   if (A.selfC >= 2) push(70, `前に書いた台本と同じ行が${A.selfC}行ある。使い回しは審査員に見抜かれる。`);
   if (sec > target * 1.05) push(84, `尺が${R(sec - target)}秒オーバー（目安${mmss(target)}）。いちばん弱いボケから削ろう。`);
   else if (sec < target * 0.8 && n >= minLines) push(55, `尺が${R(target - sec)}秒短い。展開をひとつ足すか、天丼を入れよう。`);
-  if (first && ax.tsukami < 55) push(80, `ツカミまでが長い（最初のボケが${R(first.t0)}秒後・${first.i + 1}行目）。最初の10秒で一回笑わせたい。`);
+  const slowK = kind === 'rakugo' || kind === 'talk' ? 2.5 : kind === 'conte' ? 1.6 : 1;
+  if (first && first.t0 > 12 * slowK) push(80, `ツカミまでが長い（最初のボケが${R(first.t0)}秒後・${first.i + 1}行目）。最初の10秒で一回笑わせたい。`);
+  else if (first && first.s < 45) push(74, `ツカミのボケが弱い（「${short(first.text, 12)}」）。最初の一発は一番わかりやすく強いものを。`);
   if (A.miss && A.miss.includes('オチ')) push(82, 'オチがない。最後に一番強いボケか、前半の伏線の回収を。');
   else if (A.miss && A.miss.includes('サゲ')) push(82, 'サゲがない。最後の一言で噺をすとんと落とそう。');
   else if (P.length >= 3 && P[P.length - 1].s < meanP - 6) push(65, `オチが弱い（最後のボケ「${short(P[P.length - 1].text, 12)}」が中盤のボケより弱い）。`);
@@ -857,6 +900,9 @@ const VOICE = {
   emihara: { hi: ['お客さん、絶対よろこぶわ！', 'うちの劇場で毎日かけてほしいわ。'], mid: ['うちの劇場やったら、まあまあウケるわね。', 'お客さんは半分くらい笑うわ。'], lo: ['これはお客さん、置いてけぼりやわ。', '客席がしーんとしてまうわ。'], focus: ['tsukami', 'tempo', 'chara', 'kousei', 'hitori', 'rinjou'] },
   shindo: { hi: ['新しい。久しぶりにメモを取った。', 'この台本は、まだ誰もやっていない。'], mid: ['既視感が先に立つ。', '悪くはないが、新しくもない。'], lo: ['今のままでは誰の記憶にも残らない。', 'どこかで聞いた話の寄せ集めだ。'], focus: ['dokuji', 'hassou', 'uragiri', 'tendon'] },
 };
+// a reason that is a criticism (quotes from the script are ignored)
+const NEG_RE = /ない|長い|弱い|ベタ|飛びすぎ|少ない|オーバー|短い|ぶれ|ばかり|多い|くり返し|尻すぼみ|そのまま|同じ|どこかで|ふわっと|足りない|にている|テンポが落ちる|続く|くどい|空|見つからない|ふつう|離れすぎ|近すぎ|一人しか|工夫を|伝えよう|書かれて/;
+export const isNegReason = (t) => NEG_RE.test(String(t || '').replace(/「[^」]*」/g, ''));
 function judgeComment(j, score, ax, why, axesIds, A, h) {
   const v = VOICE[j.id];
   const band = score >= 70 ? 'hi' : score >= 45 ? 'mid' : 'lo';
@@ -865,8 +911,8 @@ function judgeComment(j, score, ax, why, axesIds, A, h) {
   const best = focus.slice().sort((a, b) => ax[b] - ax[a])[0];
   const worst = focus.slice().sort((a, b) => ax[a] - ax[b])[0];
   const opener = pick(v[band], j.id.length);
-  const good = best && why[best] && ax[best] >= 60 ? `${AXES[best]}：${why[best]}。` : '';
-  const bad = worst && why[worst] && ax[worst] < 60 && worst !== best ? `${AXES[worst]}は、${why[worst]}。` : '';
+  const good = best && why[best] && ax[best] >= 60 && !isNegReason(why[best]) ? `${AXES[best]}：${why[best]}。` : '';
+  const bad = worst && why[worst] && ax[worst] < 65 && worst !== best && isNegReason(why[worst]) ? `${AXES[worst]}は、${why[worst]}。` : '';
   return (opener + (band === 'lo' ? bad || good : good || bad)).slice(0, 120);
 }
 
