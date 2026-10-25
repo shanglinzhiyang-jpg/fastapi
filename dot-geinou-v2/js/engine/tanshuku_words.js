@@ -1,6 +1,6 @@
 // 短縮言葉 bank (owner C / R7-E) for はねるのトびら「短縮鉄道の夜」 (minigame 'tanshuku') and the quiz app (R7-D).
 // Every entry: { id, abbr (短縮言葉), full (元の言葉, shown and spoken), yomi (reading of full when it has kanji),
-//   from (first year the 短縮 was in common use), to (last year, null = still used), cat, lv (1 easy … 3 hard), alts }
+//   from (first year the 短縮 was in common use), to (last year, null = still used), cat, lv (1 easy … 3 hard) }
 // Years are conservative (a word is only used in games set in a year it already existed). Company / product / program
 // names appear as names only; no person's name (and no program title that contains one) is in the bank.
 //

@@ -17,7 +17,7 @@ import { clamp, SW, SH, makeCanvas, mulberry32 } from '../engine/util.js';
 import { LOOKS } from '../engine/sprites.js';
 import * as T from '../engine/tanshuku_stage.js';
 import { pickWords, optionsFor, isCorrect } from '../engine/tanshuku_words.js';
-import { gameYM } from '../engine/tanshuku_air.js';
+import { gameYM, onAirYM } from '../engine/tanshuku_air.js';
 
 const { FW, FH, K, SET } = T;
 export const STATIONS = ['宵の口', 'リャクゴ坂', 'モトドオリ', 'イイナオシ', '星見台', '天の川'];
@@ -29,6 +29,7 @@ const CAST = [
 ];
 const HOST = { name: '早瀬 透', look: { hair: 'spiky', hairColor: 'brown', skin: 'fair', top: '#3a4a7a', bottom: '#2a3560', jacket: true, tie: '#5fd7ff' }, pitch: 1.35, rate: 1.4 };
 const SAY = { 'W杯': 'ダブルはい', 'Mステ': 'エムステ', 'MK5': 'エムケーファイブ', 'ドラ1': 'ドライチ', '月9': 'げつく', 'イッテQ': 'イッテキュー', 'セ・リーグ': 'セリーグ', 'パ・リーグ': 'パリーグ', '朝ドラ': 'あさドラ', 'りょ': 'りょ', 'KY': 'ケーワイ' };
+const isTouch = () => typeof document !== 'undefined' && !!document.body && document.body.classList.contains('touch');
 const KEY_OPT = { up: 0, right: 1, left: 2, down: 3 };
 const OPT_GLYPH = ['↑', '→', '←', '↓'];
 
@@ -455,7 +456,7 @@ class Tanshuku extends Minigame {
   }
   info() {
     return {
-      t: this.view.t, year: this.year, program: 'はねるのトびら', stations: STATIONS.slice(STATIONS.length - this.legs), leg: this.leg ?? 0,
+      t: this.view.t, year: this.year, yearLabel: onAirYM(this.year) ? `${this.year}年 放送` : `${this.year}年のことば`, program: 'はねるのトびら', stations: STATIONS.slice(STATIONS.length - this.legs), leg: this.leg ?? 0,
       cast: this.riders.map((r) => ({ tag: `${r.tag}｜${r.line}`, misses: Math.min(2, r.misses), out: r.out, player: !!r.player })),
       correct: this.correct, just: this.just, voice: this.voice.enabled, micOk: this.ears.ok, mic: this.ears.enabled,
     };
@@ -566,8 +567,10 @@ class Tanshuku extends Minigame {
   drawBottom(c, t, playing) {
     T.rect(c, 0, 400, FW, FH - 400, '#0c0a20');
     T.rect(c, 0, 400, FW, 3, '#ffd23f');
-    const w = this.word;
-    T.drawSign(c, 20, 414, FW - 40, w ? w.abbr : '短縮鉄道', w ? 'たんしゅくことば' : 'たんしゅくてつどう', this.prevWord ? this.prevWord.full : (playing ? STATIONS[this.leg] || '' : ''), w ? '？' : '', this.cardFlip || 0, w ? w.full : '');
+    const fin = this.state === 'arrive' ? 'end' : this.state === 'gameover' ? 'off' : '';
+    const w = fin ? null : this.word;
+    if (fin) T.drawSign(c, 20, 414, FW - 40, fin === 'end' ? STATIONS[STATIONS.length - 1] : STATIONS[this.leg] || '', fin === 'end' ? 'しゅうてん' : 'とちゅうげしゃ', STATIONS[STATIONS.length - 2], '', 0, '');
+    else T.drawSign(c, 20, 414, FW - 40, w ? w.abbr : '短縮鉄道', w ? 'たんしゅくことば' : 'たんしゅくてつどう', this.prevWord ? this.prevWord.full : (playing ? STATIONS[this.leg] || '' : ''), w ? '？' : '', this.cardFlip || 0, w ? w.full : '');
     // beat lamps
     const beat = playing && this.state === 'quiz' ? Math.floor((this.clock - (this.turnStart || 0)) / this.fpb) : -1;
     for (let k = 0; k < 4; k++) {
@@ -603,7 +606,7 @@ class Tanshuku extends Minigame {
       const B = [['A：土下座する', 'dogeza', '#2f6fd0'], ['B：下車する', 'getoff', '#5a5f6b']];
       B.forEach(([l, act, col], i) => { const bx = 10 + i * 174; T.rect(c, bx, 566, 166, 50, col); T.telop(c, l, bx + 83, 582, 14, '#ffffff', '#1a1a26'); this.hits.push({ x: bx, y: 566, w: 166, h: 50, act }); });
     } else if (playing) {
-      T.text(c, this.state === 'announce' ? 'まもなく出題！ ↑→←↓ で答えよう' : this.state === 'arrive' ? '終点に到着！' : '', FW / 2, 560, { size: 13, align: 'center', color: '#c8cce6', shadow: null });
+      T.text(c, this.state === 'announce' ? (isTouch() ? 'まもなく出題！ ボタンをタップで答えよう' : 'まもなく出題！ ↑→←↓ で答えよう') : this.state === 'arrive' ? '終点に到着！' : '', FW / 2, 560, { size: 13, align: 'center', color: '#c8cce6', shadow: null });
     }
   }
   drawIntroCard(c, t) {
@@ -611,7 +614,7 @@ class Tanshuku extends Minigame {
     T.rect(c, 20, 120, FW - 40, 300, 'rgba(12,16,48,0.95)'); T.rect(c, 20, 120, FW - 40, 3, '#ffd23f'); T.rect(c, 20, 417, FW - 40, 3, '#ffd23f');
     T.telop(c, 'はねるのトびら', FW / 2, 134, 16, '#ffffff', '#2a1a60');
     T.telop(c, this.opts.practice ? '短縮鉄道の夜（練習）' : '短縮鉄道の夜', FW / 2, 158, T.fitSize(c, '短縮鉄道の夜（練習）', FW - 70, 28), '#ffd23f', '#1a2a80');
-    const lines = ['短縮言葉がコールされたら、', '2拍あとの「回答」の拍までに', '元の言葉を ↑→←↓ で選ぼう', 'ミス2回でアウト… 冷却ガス！', `${this.year}年の言葉で出題`];
+    const lines = ['短縮言葉がコールされたら、', '2拍あとの「回答」の拍までに', (isTouch() ? '元の言葉をタップで選ぼう' : '元の言葉を ↑→←↓ で選ぼう'), 'ミス2回でアウト… 冷却ガス！', `${this.year}年の言葉で出題`];
     lines.forEach((l, i) => T.text(c, l, FW / 2, 206 + i * 24, { size: 14, align: 'center', color: i === 3 ? '#9ae0ff' : '#ffffff', shadow: null }));
     T.text(c, `${this.riders[2].tag}｜${this.riders[2].line}`, FW / 2, 336, { size: 13, align: 'center', color: '#ffd23f', shadow: null });
     T.text(c, `ボイス：${this.voice.ok ? (this.voice.enabled ? 'ON' : 'OFF') : '非対応'}`, FW / 2, 360, { size: 11, align: 'center', color: '#9aa3c7', shadow: null });

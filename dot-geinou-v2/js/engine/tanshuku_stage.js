@@ -321,7 +321,7 @@ function sidePanel(c, x, y, w, h, s, info, side, hits) {
   if (side === 'left') {
     T(info.program || 'はねるのトびら', cx, y + 14 * s, fit(info.program || 'はねるのトびら', w - 16 * s, 16), '#ffffff', { align: 'center', outline: '#2a1a60' });
     T('短縮鉄道の夜', cx, y + 40 * s, fit('短縮鉄道の夜', w - 16 * s, 24), '#ffd23f', { align: 'center', outline: '#3a1a00' });
-    T(info.year ? `${info.year}年 放送` : '', cx, y + 74 * s, 11, '#9aa3c7', { align: 'center' });
+    T(info.yearLabel || (info.year ? `${info.year}年` : ''), cx, y + 74 * s, 11, '#9aa3c7', { align: 'center' });
     // the route map
     const st = info.stations || [];
     const top = y + 100 * s, step = Math.min(44 * s, (h - 130 * s) / Math.max(1, st.length));
