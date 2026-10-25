@@ -74,17 +74,17 @@ if (CONTESTS.koc) {
 registerRegular('koc_reg_conte', {
   title: 'ドットコント劇場', place: 'tbs', weekday: 3, medium: 'tv', requires: { flag: 'koc_king' },
   pay: 42000, fame: 110, fans: 3000, stamina: 22, skill: 'warai', minigame: 'tsukkomi', opts: { difficulty: 4 },
-  host: STAFF.producer.name, hostLook: STAFF.producer.look, desc: 'キングオブコント王者が毎週新作コントを撮る、TBSのコント番組（この世界の番組）。',
+  host: STAFF.producer.name, hostLook: STAFF.producer.look, desc: 'キングオブコント王者が毎週新作コントを撮る、TBSのコント番組。',
 });
 registerRegular('koc_reg_variety', {
   title: '王様のひな壇', place: 'tbs', weekday: 5, medium: 'tv', requires: { flag: 'koc_king' },
   pay: 30000, fame: 80, fans: 2200, stamina: 20, skill: 'talk', minigame: 'talk',
-  host: STAFF.producer.name, hostLook: STAFF.producer.look, desc: '旬の芸人がひな壇に並ぶTBSのバラエティ（この世界の番組）。',
+  host: STAFF.producer.name, hostLook: STAFF.producer.look, desc: '旬の芸人がひな壇に並ぶTBSのバラエティ。',
 });
 registerRegular('koc_reg_radio', {
   title: '深夜のコント研究所', place: 'tbs', weekday: 1, medium: 'radio', requires: { flag: 'koc_finalist' },
   pay: 14000, fame: 40, fans: 800, stamina: 12, skill: 'talk', minigame: 'talk',
-  host: 'TBSラジオのディレクター', hostLook: STAFF.writer.look, desc: 'KOCファイナリストがコントの作り方を語る深夜ラジオ（この世界の番組）。',
+  host: 'TBSラジオのディレクター', hostLook: STAFF.writer.look, desc: 'KOCファイナリストがコントの作り方を語る深夜ラジオ。',
 });
 const OFFER_TEXT = {
   koc_reg_conte: 'TBSのプロデューサーです。キングオブコント優勝、おめでとうございます！\n毎週、新作コントを撮るレギュラー番組『ドットコント劇場』を、ぜひお願いしたいんです。',
@@ -203,7 +203,7 @@ function kocMorning(g) {
       if (ev.data.reg === 'koc_reg_conte' && MINIGAMES.conte) r.minigame = 'conte';
       g.message({ from: r.host, look: r.hostLook, kind: 'offer', regular: ev.data.reg, text: g.fmt(OFFER_TEXT[ev.data.reg] || r.desc) });
     } else if (ev.kind === 'dvd') notice(g, 'ベストネタDVDを出しませんか、というお話が来ています。\n（KOCアプリの「お仕事・イベント」から）', STAFF.manager.name);
-    else if (ev.kind === 'doc') { const Rr = rules(ev.y); notice(g, Rr.doc ? `『${Rr.doc}』（U-NEXT）の配信が始まりました。決勝の一日に密着したドキュメンタリーです。\n（KOCアプリの「ドキュメント」から見られる）` : 'KOC決勝の密着ドキュメント（この世界の番組）が放送された。\n（KOCアプリの「ドキュメント」から見られる）', Rr.doc ? 'U-NEXT' : 'TBS'); }
+    else if (ev.kind === 'doc') { const Rr = rules(ev.y); notice(g, Rr.doc ? `『${Rr.doc}』（U-NEXT）の配信が始まりました。決勝の一日に密着したドキュメンタリーです。\n（KOCアプリの「ドキュメント」から見られる）` : 'KOC決勝の密着ドキュメント『その日、王を目指して』が放送された。\n（KOCアプリの「ドキュメント」から見られる）', Rr.doc ? 'U-NEXT' : 'TBS'); }
     else if (ev.kind === 'kai') notice(g, '『キングオブコントの会』（TBS特番）への出演依頼です。歴代王者・準優勝組で、新作コントを披露していただきます。\n（KOCアプリの「お仕事・イベント」から）', STAFF.producer.name);
     break;
   }
@@ -240,7 +240,6 @@ async function kocApp(g) {
     if (docs.length) items.push({ id: 'doc', label: 'ドキュメント（挑戦の記録）', sub: `${docs.join('・')}年` });
     const evs = K(g).events.filter((e) => !e.done && e.sent && (e.kind === 'dvd' || e.kind === 'kai'));
     if (evs.length) items.push({ id: 'ev', label: 'お仕事・イベント', sub: evs.map((e) => (e.kind === 'dvd' ? 'ベストネタDVD' : 'キングオブコントの会')).join('・'), right: `${evs.length}` });
-    items.push({ id: 'src', label: '確認した事実と出典', sub: 'このゲームのKOCについて' });
     const i = await phoneList(g, { title: 'KOC', color: APP_COLOR, items: items.map((x) => ({ label: x.label, sub: x.sub, right: x.right })) });
     if (i < 0) return;
     const id = items[i].id;
@@ -258,7 +257,7 @@ async function kocApp(g) {
     else if (id === 'hist') {
       const h = info.history.slice().reverse();
       const j = await phoneList(g, { title: '歴代王者', color: APP_COLOR, items: h.map((x) => ({ label: `${x.year}年 第${x.edition}回`, sub: `王者：${x.champion}${x.note ? `（${x.note}）` : ''}`, right: x.score != null ? `${x.score}` : '' })), empty: 'まだない' });
-      if (j >= 0) { const hh = K(g).hist[h[j].year]; await phoneInfo(g, { title: `${titleOf(h[j].year)} 決勝`, color: APP_COLOR, lines: [`エントリー ${hh.approx ? '約' : ''}${num(hh.entries).toLocaleString('ja-JP')}組`, ...(hh.finalists || []).map((f) => `${f[3]}位 ${f[0]}${f[2] ? `（${f[2]}）` : ''}`), '', '※この世界の歴史（名前は架空）。回数・年・ルールは実際の大会どおり。'] }); }
+      if (j >= 0) { const hh = K(g).hist[h[j].year]; await phoneInfo(g, { title: `${titleOf(h[j].year)} 決勝`, color: APP_COLOR, lines: [`エントリー ${hh.approx ? '約' : ''}${num(hh.entries).toLocaleString('ja-JP')}組`, ...(hh.finalists || []).map((f) => `${f[3]}位 ${f[0]}${f[2] ? `（${f[2]}）` : ''}`)] }); }
     } else if (id === 'news') await phoneInfo(g, { title: 'KOCニュース', color: APP_COLOR, lines: info.news.length ? K(g).newsLog.slice(0, 20).map((n) => `・${n.text}`) : ['まだニュースはない。'] });
     else if (id === 'doc') {
       const j = docs.length === 1 ? 0 : await phoneList(g, { title: 'ドキュメント', color: APP_COLOR, items: docs.map((yy) => ({ label: `${yy}年の記録`, sub: entryOf(g, yy) ? entryOf(g, yy).unitName : '' })) });
@@ -271,7 +270,7 @@ async function kocApp(g) {
     } else if (id === 'ev') {
       const j = await phoneList(g, { title: 'お仕事・イベント', color: APP_COLOR, items: evs.map((e) => ({ label: e.kind === 'dvd' ? 'ベストネタDVDの収録' : 'キングオブコントの会（TBS特番）', sub: `${e.y}年のKOCから` })) });
       if (j >= 0) { const ev = evs[j]; if (await leave((gg) => (ev.kind === 'dvd' ? runDvd(gg, ev) : runKai(gg, ev)))) return; }
-    } else if (id === 'src') await phoneInfo(g, { title: '事実と出典', color: APP_COLOR, lines: ['実際の大会どおり：創設年（2008年・TBS主催）、回数、参加資格（プロアマ・芸歴不問、2人以上）、エントリー料（コンビ2,000円／トリオ以上3,000円・当日払い）、日程（月）、各回戦のネタ時間、審査方式（2008リーグ戦／2009-13 100人×10点／2014 1対1／2015- 審査員5人／2026- 7人と敗者復活戦）、賞金1000万円、エントリー数、生・大反省会（2024-）、激闘の1日（2026）、キングオブコントの会（2021-）。', '', '人物（司会・審査員・出場者・歴代王者）はすべて架空。', '', ...SOURCES] });
+    }
   }
 }
 function myLines(g, y, E) {
@@ -307,19 +306,18 @@ function ruleLines(g, y) {
     R.revival ? `敗者復活戦：準決勝敗退25組の上位10組 → 芸人審査員${R.revivalJudges}人の採点で3組 → 国民投票で1組。` : '',
     R.oowarai ? '決勝はTBS「お笑いの日」の中で生放送。' : '',
     R.hanseikai ? `決勝のあと『${R.hanseikai}』（U-NEXT独占ライブ配信）。` : '',
-    `エントリー数：${R.entries.approx ? '約' : ''}${R.entries.n.toLocaleString('ja-JP')}組${R.entries.real ? '' : R.entries.approx ? '（推定）' : '（この世界の数字）'}`,
+    `エントリー数：${R.entries.approx ? '約' : ''}${R.entries.n.toLocaleString('ja-JP')}組`,
   ].filter(Boolean);
 }
 function schedLines(g, y) {
   const S = schedule(y);
   const R = rules(y);
   const out = [`エントリー：${dateText(y, S.entry.from)}〜${dateText(y, S.entry.to)}`];
-  out.push(`1回戦：${S.r1.map((v) => `${v.city}${v.hall ? `（${v.hall}）` : ''} ${v.when[0]}月${v.when[1] <= 3 ? '上旬' : v.when[1] <= 7 ? '中旬' : '下旬'}`).join('／')}`);
+  out.push(`1回戦：${S.r1.map((v) => `${v.city}${v.hall ? `（${v.hall}）` : ''} ${v.when[0]}月${v.when[1]}日`).join('／')}`);
   out.push(`2回戦：${S.r2.map((v) => `${hallText(v)}`).join('／')}　${dateText(y, S.r2[0].when)}`);
   if (R.hasQF) out.push(`準々決勝：${S.qf.map((v) => hallText(v)).join('／')}　${dateText(y, S.qf[0].when)}`);
   out.push(`準決勝：${hallText(S.sf[0])}　${S.sf.map((v) => dateText(y, v.when)).join('・')}${R.twoNetaSF ? '（2日間・2本）' : ''}`);
   out.push(`決勝：${dateText(y, S.final.when)}　TBS系 生放送${R.revival ? '（午後に敗者復活戦）' : ''}`);
-  out.push('', '※会場名は確認できた年だけ実名。ほかは「○○会場」。');
   return out;
 }
 registerPhoneApp('koc', {

@@ -385,7 +385,7 @@ export function popSet(g, sc) { if (sc && g.scenes.includes(sc)) g.pop(sc); }
 export function card(g, draw, o = {}) {
   return new Promise((resolve) => {
     const sc = {
-      hd: true, opaque: !!o.opaque, hidesHud: true, t: 0, isM1Card: true,
+      hd: true, opaque: !!o.opaque, hidesHud: true, t: 0, isM1Card: true, tag: o.tag || 'card',
       update(gg) {
         sc.t++;
         if (gg.auto || sc.t >= (o.max ?? 600) || (sc.t > (o.min ?? 20) && (gg.input.pressed('a') || gg.input.pressed('b')))) { gg.pop(sc); resolve(); }
@@ -407,7 +407,7 @@ export function bigText(g, title, sub = '', o = {}) {
       if (sub) para(c, sub, 40, 120, SW - 80, 13, '#fff', 17, 2, 'center');
     }
     if (o.confetti) confetti(c, t, 90);
-  }, { min: o.min ?? 30, max: o.max ?? 200 });
+  }, { min: o.min ?? 30, max: o.max ?? 200, tag: 'big' });
 }
 const CONF = ['#ffd23f', '#ff5d8f', '#5fd7ff', '#5ee07a', '#ffffff', '#b48cff', '#ff8a3d'];
 export function confetti(c, t, n = 100) {
@@ -447,7 +447,7 @@ export function kujiCard(g, o) {
       T(c, `まだ呼ばれていない：${o.remaining.length}組`, SW / 2, 240, 10, '#c8c8d8', 'center', 600);
       T(c, o.remaining.join('・'), SW / 2, 254, 9, '#8a8aa0', 'center', 600);
     }
-  }, { min: 60, max: 260 });
+  }, { min: 60, max: 260, tag: 'kuji' });
 }
 
 // ---- the 紹介VTR (PV) with its キャッチコピー
@@ -472,7 +472,7 @@ export function pvCard(g, o) {
       ms.forEach((m, i) => T(c, `${m.role}　${m.name}`, 36, 158 + i * 16, 11, '#fff', 'left', 380));
     }
     if (t > 40) (o.lines || []).slice(0, 5).forEach((l, i) => T(c, l, 36, 214 + i * 15, 10, '#d8d8e8', 'left', 400));
-  }, { min: 40, max: 300 });
+  }, { min: 40, max: 300, tag: 'pv' });
 }
 
 // ---- the judges' points, one by one, then the total (drawn over the studio set)
@@ -514,7 +514,7 @@ export function votesCard(g, o) {
       if (i === shown - 1 && t % 26 < 6) { c.fillStyle = 'rgba(255,255,255,0.4)'; c.fillRect(x, y, 78, 24); }
     });
     if (shown >= o.votes.length && t % 40 < 30) T(c, '（A：つづける）', SW / 2, 326, 10, '#888', 'center');
-  }, { min: o.votes.length * 26 + 20, max: o.votes.length * 26 + 400 });
+  }, { min: o.votes.length * 26 + 20, max: o.votes.length * 26 + 400, tag: 'votes' });
 }
 
 // ---- the champion: confetti, trophy, prize board
@@ -534,7 +534,7 @@ export function championCard(g, o) {
     R(c, 40, 230, 170, 60, '#fff'); R(c, 40, 230, 170, 8, RED); T(c, '賞金', 125, 240, 11, INK, 'center'); T(c, o.prize || '1000万円', 125, 256, 22, RED, 'center');
     T(c, `M-1グランプリ${o.year}`, SW - 30, 300, 12, '#ffe9a8', 'right');
     confetti(c, t, 130);
-  }, { min: 60, max: 420 });
+  }, { min: 60, max: 420, tag: 'champion' });
 }
 
 // ---- ネットの反応 (掲示板 / SNS by era)
@@ -550,7 +550,7 @@ export function netCard(g, o) {
       R(c, x, 20, w, 300, '#10141c'); R(c, x, 20, w, 24, '#1a2230'); T(c, o.title || `${o.sns || 'SNS'}の反応`, x + 10, 26, 11, '#fff', 'left', w - 20);
       o.posts.slice(0, 6).forEach((p, i) => { const y = 52 + i * 44; R(c, x + 8, y, 22, 22, ['#5a6fd8', '#d85a8a', '#5ad88a', '#d8a85a'][i % 4]); T(c, `@user${(i * 7919) % 9000 + 1000}`, x + 36, y, 9, '#8a9ab8', 'left', 200); para(c, p, x + 36, y + 13, w - 50, 11, '#e8eef8', 14, 2); });
     }
-  }, { min: 30, max: 500 });
+  }, { min: 30, max: 500, tag: 'net' });
 }
 
 // ---- アナザーストーリー: sepia pages
@@ -564,7 +564,7 @@ export function docPage(g, o) {
     T(c, o.title, SW / 2, 40, fitSize(c, o.title, 560, 20, 11), '#f8e8c8', 'center', 580, { outline: '#1a0a04' });
     (o.looks || []).slice(0, 2).forEach((lk, i) => { c.globalAlpha = 0.85; person(c, lk, 500 + i * 60, 300, 3, i ? 'left' : 'right'); c.globalAlpha = 1; });
     para(c, (o.lines || []).join('\n'), 40, 84, 400, 12, '#f2e2c2', 18, 12);
-  }, { min: 30, max: 900 });
+  }, { min: 30, max: 900, tag: 'doc' });
 }
 
 // ---- DVD package
@@ -579,7 +579,7 @@ export function dvdCard(g, o) {
     T(c, o.name, x + w / 2, y + 222, fitSize(c, o.name, w - 20, 18, 10), GOLD, 'center', w - 20, { outline: '#000' });
     T(c, 'DVD', x + w - 14, y + h - 30, 14, '#fff', 'right');
     if (o.copy) T(c, `「${o.copy}」`, x + w / 2, y + 248, 10, '#ffe9a8', 'center', w - 20);
-  }, { min: 30, max: 400 });
+  }, { min: 30, max: 400, tag: 'dvd' });
 }
 
 // ================================================================ interactive: the entry form
@@ -603,7 +603,7 @@ export function formScreen(g, form) {
   return new Promise((resolve) => {
     const rows = form.fields.length + 2; // + 提出 + やめる
     const sc = {
-      hd: true, opaque: true, hidesHud: true, m1Tap: true, isM1Form: true, t: 0, idx: 0, busy: false, tapAt: null, msg: '',
+      hd: true, opaque: true, hidesHud: true, m1Tap: true, isM1Form: true, form, t: 0, idx: 0, busy: false, tapAt: null, msg: '',
       update(gg) {
         sc.t++;
         if (gg.auto) { gg.pop(sc); resolve(form); return; }
@@ -691,7 +691,7 @@ export function boardScreen(g, o) {
   return new Promise((resolve) => {
     const per = 12;
     const sc = {
-      hd: true, opaque: true, hidesHud: true, m1Tap: true, t: 0, top: Math.max(0, (o.mine ?? 0) - 5),
+      hd: true, opaque: true, hidesHud: true, m1Tap: true, isM1Board: true, t: 0, top: Math.max(0, (o.mine ?? 0) - 5),
       update(gg) {
         sc.t++;
         if (gg.auto) { gg.pop(sc); resolve(); return; }

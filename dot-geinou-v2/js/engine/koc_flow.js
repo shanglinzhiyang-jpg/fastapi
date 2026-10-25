@@ -560,7 +560,7 @@ export async function runRound(g, y, rid, idx = 0, opts = {}) {
   await g.fadeOut(10);
   const bd = pushSet(g, 'reception', { year: y, banner: `${titleOf(y)} 予選${roundName(rid)} ${hallText(venue)}`, feeText: feeText(), staff: STAFF.uketsuke.look, unit: looks, others });
   const field = rid === 'sf' ? blockField(g, y, 'sf', 'all', R.sfCount) : blockField(g, y, rid, `${venue.city}:${venue.when.join('-')}`, ROUND_SIZE[rid] || 80);
-  if (rid === 'sf') field.splice(-1, 1); // the player takes a semifinal slot
+  if (rid === 'sf' && field.length >= R.sfCount) field.splice(R.sfCount - 1); // the player takes a semifinal slot
   const plan = roundPlan(y);
   const passShare = rid === 'r1' ? plan.passR1 : rid === 'r2' ? plan.passR2 : rid === 'qf' ? plan.passQF : plan.passSF;
   const passN = Math.max(1, Math.round((field.length + 1) * passShare));
@@ -716,7 +716,7 @@ async function judgeRound(g, { y, rid, E, field, passN, out, res, auto, bd, venu
     await card(g, (c, t) => {
       RECT(c, 0, 0, SW, SH, '#101018');
       RECT(c, 0, 0, SW, 34, '#000');
-      TXT(c, `${roundName(rid)}　寸評（スタッフのメモ／このゲームの講評）`, 14, 9, 13, KC.gold, 'left', 600);
+      TXT(c, `${roundName(rid)}　寸評（スタッフのメモ）`, 14, 9, 13, KC.gold, 'left', 600);
       TXT(c, `${E.no} ${E.unitName}　${place}位／${scored.length}組（通過ライン ${passN}位）`, 20, 46, 13, KC.white, 'left', 600);
       reasons.forEach((s, i) => { RECT(c, 20, 76 + i * 56, 600, 48, '#1a1a26'); RECT(c, 20, 76 + i * 56, 3, 48, KC.red); const ls = s; TXT(c, ls.length > 44 ? ls.slice(0, 44) : ls, 32, 84 + i * 56, 13, KC.white, 'left', 580); if (ls.length > 44) TXT(c, ls.slice(44), 32, 102 + i * 56, 13, KC.white, 'left', 580); });
       if (!reasons.length) TXT(c, '（大きな欠点はない。ほかの組が、ほんの少しずつ上だった）', 32, 90, 13, KC.white, 'left', 580);
@@ -1265,7 +1265,7 @@ export async function playDoc(g, y, kind = 'run') {
   if (!E) { await g.say('その年の記録はない。'); return; }
   const R = rules(y);
   const looks = looksOf(g, E);
-  const title = kind === 'doc' ? (R.doc ? `『${R.doc}』（U-NEXT）` : '密着ドキュメント『その日、王を目指して』（この世界の番組）') : `KOC挑戦記 ― ${E.unitName}の${y}年`;
+  const title = kind === 'doc' ? (R.doc ? `『${R.doc}』（U-NEXT）` : '密着ドキュメント『その日、王を目指して』') : `KOC挑戦記 ― ${E.unitName}の${y}年`;
   const pages = [];
   pages.push({ set: 'reception', data: { year: y, banner: `${titleOf(y)} 予選会場`, unit: looks, staff: STAFF.uketsuke.look, others: [] }, caption: `${y}年`, line: `${R.entries.approx ? '約' : ''}${R.entries.n.toLocaleString('ja-JP')}組がエントリーした『${titleOf(y)}』。その中に、エントリーナンバー${E.no}「${E.unitName}」がいた。` });
   const setOf = { entry: 'night', r1: 'stage', r2: 'stage', qf: 'stage', sf: 'stage', revival: 'revival', final: 'studio', after: 'hanseikai' };

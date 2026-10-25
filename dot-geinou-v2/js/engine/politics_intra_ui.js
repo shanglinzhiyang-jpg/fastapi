@@ -741,7 +741,7 @@ export function registerIntraUI(K, SECTIONS) {
   function personView(g, id) {
     const pr = g.politicianProfile(id);
     const v = {
-      title: pr ? `${pr.name}（${pr.partyShort}）` : '議員', hint: 'B:もどる', tip: () => '議員の人柄・立場・外交スタンス（架空の人物）',
+      title: pr ? `${pr.name}（${pr.partyShort}）` : '議員', hint: 'B:もどる', tip: () => '議員の人柄・立場・外交スタンス',
       update(ui, inp) { if (inp.pressed('b') || inp.pressed('a') || inp.pressed('menu')) { sfx('cancel'); ui.done(v, null); } },
       draw(c) {
         card(c, 6, 30, SW - 12, SH - 55, pr ? pr.name : '');

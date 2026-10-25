@@ -401,7 +401,7 @@ function nscRooms(campus) {
       ],
       // (a toast, not a message: a first-visit message would block a test start / an interrupted arrival)
       onEnter: async (g) => {
-        if (!g.flag(`ow_${P}_first`)) { g.setFlag(`ow_${P}_first`, true); g.notify(`${C.name}。受付で入学の相談ができる（同期・講師は架空の人物）`, { color: '#ffd23f', life: 260 }); }
+        if (!g.flag(`ow_${P}_first`)) { g.setFlag(`ow_${P}_first`, true); g.notify(`${C.name}。受付で入学の相談ができる`, { color: '#ffd23f', life: 260 }); }
       },
     },
     kyoshitsu: {

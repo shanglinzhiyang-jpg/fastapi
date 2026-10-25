@@ -56,7 +56,7 @@ function growth(g, kind, res, o = {}) {
     add(keys[1], 1);
     if (rank === 'S') add(keys[2], 1);
   } else {
-    if (fn(g, 'addStageExp')) safe(() => g.addStageExp(k, 1));
+    if (fn(g, 'addStageExp')) safe(() => g.addStageExp(k, 1, res));
     add(keys[0], RANK_GAIN[rank] ? 1 : 0);
     if (RANK_GAIN[rank] >= 2) add(keys[1], 1);
     if ((o.pressure ?? 0) >= 50 || (res && res.flubs === 0 && res.blanks === 0 && rank !== 'D')) add('dokyo', (o.pressure ?? 0) >= 50 ? 1 : 0);

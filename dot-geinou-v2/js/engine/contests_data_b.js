@@ -501,7 +501,7 @@ async function ipponHonban(g, ctx) {
 const SUBERANAI = {
   name: '人志松本のすべらない話', short: 'すべらない', kind: 'talk', category: 'invitational', color: '#3a2a1a',
   organizer: 'フジテレビ', broadcaster: 'フジテレビ系（不定期特番）', venue: 'フジテレビのスタジオ（円卓）', region: 'all',
-  history: { founded: 2004, ended: null, gaps: [], revived: null, note: '名前の書かれたサイコロで話し手が決まるエピソードトーク。最後にMVS。（本作の進行役は架空の人物）',
+  history: { founded: 2004, ended: null, gaps: [], revived: null, note: '名前の書かれたサイコロで話し手が決まるエピソードトーク。最後にMVS。',
     sources: ['https://news.mynavi.jp/article/tviki-81/', 'https://news.allabout.co.jp/articles/o/65476/', 'https://ciatr.jp/topics/316358'] },
   editionOf: editionCounter(2004),
   labelStyle: 'year',

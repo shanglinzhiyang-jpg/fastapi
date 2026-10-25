@@ -230,7 +230,7 @@ export async function entryFlow(g) {
       await say(g, ['（応募用紙をポストに投函した）', 'エントリー料は1回戦当日、受付で支払う。受付完了のハガキが届くのを待とう。'].concat(u.partner ? [] : []));
       m.pendingMail = { y, day: t + 1, kind: 'hagaki' };
     } else {
-      await card(g, (cx) => mailCard(cx, E, rules, opt, g), { min: 30, max: 200 });
+      await card(g, (cx) => mailCard(cx, E, rules, opt, g), { min: 30, max: 200, tag: 'mail' });
       msg(g, 'M-1グランプリ事務局', `【エントリー受付完了】${E.name} 様\nエントリーナンバー：${no}\n${seeded ? '2回戦' : '1回戦'}：${dateLabelY(g, opt.day)} ${opt.city}（${opt.hall}）\n当日はこのメールと身分証をお持ちください。`, { kind: 'chat', contest: 'm1' });
     }
     if (u.partnerName) await say(g, u.last ? 'ラストイヤーや。…絶対、獲りにいこな。' : pickH(['エントリーしたな。もう後戻りでけへんで！', '番号もろたな。1回戦、まずは2分でぶちかまそ！', '今年こそ、ぜったい決勝行こな。'], m.seed, y), partnerWho(u));
@@ -643,6 +643,18 @@ async function revivalFlow(g, E, u, rules, fin) {
   } finally { popSet(g, set); safe(() => g.save()); }
 }
 
+// ネットの反応: 匿名掲示板 (2001〜2010) / SNS (2015〜, the era's name for it)
+function netPosts(g, y, champ, meChamp, me, top) {
+  const heisei = y <= 2010;
+  const sns = heisei ? '匿名掲示板' : `${(g.state.profile && g.state.profile.era === 'reiwa') ? 'ドッター' : 'SNS'}の反応`;
+  const k = (s) => pickH(s, y, champ);
+  const posts = heisei
+    ? [`${champ}優勝キター！`, k(['審査員の点数、ちょっと割れすぎじゃね？', '最終決戦、どっちが勝ってもおかしくなかった', '敗者復活の組、普通に強かった']), `${top}の1本目が今年いちばん笑った`, k(['来年も絶対見る', '年末はこれ見ないと終われない', 'テレビの前で正座して見てた'])]
+    : [`#M1グランプリ ${champ}おめでとう！！`, k(['審査員コメントまで含めて神回', '笑神籤の引き、ドラマすぎる', '最終決戦の3組、全部優勝でいい']), `${top}の1本目、今年いちばん笑った`, k(['明日から${champ}をテレビで見まくる予感', 'ネタのフレーズがもう頭から離れない', '敗者復活からの流れ、胸アツ']).replace('${champ}', champ)];
+  if (me && !meChamp) posts.splice(2, 0, heisei ? `${me}、もっと評価されてもいい` : `${me}、知らなかったけど好きになった`);
+  if (meChamp) posts.splice(1, 0, heisei ? `${meChamp}って去年まで誰も知らなかったよな？` : `${meChamp}、ネタ動画ぜんぶ見に行った`);
+  return { era: heisei ? 'heisei' : 'reiwa', title: heisei ? `【M-1】${y}年 決勝 実況スレ` : `${sns}　#M1グランプリ`, posts, sns };
+}
 function judgeComment(j, pts, me) {
   const hi = pts >= 94, lo = pts <= 88;
   const by = { しゃべくり: ['しゃべりの技術が高い。', 'ふたりの会話になってた。'], 正統派: ['基本がしっかりしてる。', '漫才の教科書みたいやった。'], 人間味: ['ふたりの関係が見えて、よかった。', '人柄が出てて好き。'], 構成: ['構成がよくできていた。', '伏線の回収が見事。'], 話芸: ['言葉の選び方がうまい。', '間で笑わせていた。'], コント漫才: ['設定の作り方がうまい。', 'コントに入る瞬間が自然やった。'], テンポ: ['テンポが最後まで落ちなかった。', '後半の加速がすごかった。'], 新しさ: ['見たことない漫才やった。', '発明があった。'], ボケ数: ['手数が多くて、ずっと笑えた。', '後半の畳みかけが効いてた。'], システム: ['システムが発明されてた。', 'ルールがわかってからが強い。'], 変則: ['型の壊し方がうまい。', '攻めてたね。'] }[j.taste] || ['よかったと思います。'];
@@ -849,6 +861,7 @@ async function finalFlow(g, E, u, rules, fin) {
       if (myPlace === 2) news(g, 'runnerUp', { x: E.name }, { prio: 2 });
     }
     E.final = { rank1: myRank, total: cards.me ? cards.me.total : 0, champ: champ === 'me', champName: cn, place: E.finalPlace || 1 };
+    await netCard(g, netPosts(g, y, cn, champ === 'me' ? E.name : null, E.name, top.name));
     m.me.history = m.me.history || [];
     m.me.history.push({ y, best: champ === 'me' ? '優勝' : `決勝${E.finalPlace || myRank}位`, total: cards.me ? cards.me.total : 0 });
     E.after = { day: today(g) };
@@ -932,6 +945,7 @@ export async function watchFinal(g, o = {}) {
       }
     }
     await say(g, [`優勝は「${row.chN}」！${row.ruN ? `準優勝「${row.ruN}」、3位「${row.thN || ''}」。` : ''}`, row.revN ? `敗者復活は「${row.revN}」。最高得点は「${row.topN}」の${row.top}点。` : `最高得点は「${row.topN}」の${row.top}点。`]);
+    await netCard(g, netPosts(g, y, row.chN, null, null, row.topN));
     const E = entryOf(g, y);
     const u = unitInfo(g, y);
     if (E && partnerWho(u)) await say(g, E.status === 'out' ? '…来年は、あっち側に立と。' : 'すごいな…。俺らも、いつか。', partnerWho(u));

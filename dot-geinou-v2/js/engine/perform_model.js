@@ -220,7 +220,10 @@ export function normLines(neta, ctx) {
   let tot = 0;
   for (const l of out) { l.sec = Math.max(1.2, Array.from(l.text).length / cps) + (l.who < 0 ? 0.6 : 0); tot += l.sec; }
   const want = Number(neta && neta.length) || Number(src.length) || 0;
-  if (want > 20 && tot > 0) { const k = clamp(want / tot, 0.6, 1.8); for (const l of out) l.sec *= k; }
+  // a ネタ with its own lines: trust its estimate within reason; a bank stand-in (B's script had no lines) plays the
+  // ネタ's full length (the screen shows an abridged version of it)
+  const ownLines = !!(neta && Array.isArray(neta.lines) && neta.lines.length);
+  if (want > 20 && tot > 0) { const k = ownLines ? clamp(want / tot, 0.6, 1.8) : clamp(want / tot, 0.4, 8); for (const l of out) l.sec *= k; }
   return { lines: out, title: (neta && neta.title) || src.title || '', theme: (neta && neta.theme) || src.theme || '', setting: (neta && neta.setting) || src.setting || '', house: !!src.house && !(neta && neta.lines && neta.lines.length && !neta.house) };
 }
 

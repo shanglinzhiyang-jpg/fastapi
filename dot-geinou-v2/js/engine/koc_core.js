@@ -46,7 +46,8 @@ export function kDate(g, day) {
 export const absOf = (y, w) => y * 120 + (w[0] - 1) * 10 + (w[1] - 1);
 // The game day number of a date in a year (may be in the past or future).
 export function dayOf(g, y, w) { const t = kDate(g); return g.state.day + (absOf(y, w) - t.abs); }
-export function dateText(y, w) { return `${y}年${w[0]}月${w[1] <= 3 ? '上旬' : w[1] <= 7 ? '中旬' : '下旬'}`; }
+// the game's own calendar (10-day months), written like D1's 賞レース screen: 「2026年7月4日」
+export function dateText(y, w) { return `${y}年${w[0]}月${w[1]}日`; }
 export const isToday = (g, y, w) => { const t = kDate(g); return t.year === y && t.month === w[0] && t.dom === w[1]; };
 
 // ---------------------------------------------------------------- state

@@ -113,7 +113,7 @@ export const BOARDS = {
   keitai: { name: 'ケータイ掲示板「ドット掲示板」相方募集', short: 'ケータイ掲示板', kind: 'keitai', years: [2000, 2011], reply: [1, 1], contact: 'メールする', via: 'ケータイのメール', meet: 'famires', post: '掲示板に書きこむ', postDelay: 1, desc: 'ケータイの掲示板。返事は早いが、軽い人も多い。' },
   blog: { name: 'ドットブログ「#相方募集」', short: 'ブログ', kind: 'blog', years: [2003, 2012], reply: [1, 2], contact: 'コメントする', via: 'ブログのメッセージ', meet: 'famires', post: 'ブログに募集記事を書く', postDelay: 2, desc: 'ネタを公開しているブログ。文章から人柄がわかる。' },
   sns: { name: 'ドッター #相方募集', short: 'SNS', kind: 'sns', years: [2009, 9999], reply: [0, 1], contact: 'DMを送る', via: 'DM', meet: 'cafe', post: 'ドッターに投稿する', postDelay: 1, desc: 'SNSの「#相方募集」。ネタ動画を見てから会える。' },
-  app: { name: '相方募集アプリ「アイカタ・マッチ」', short: '相方募集アプリ', kind: 'app', years: [2016, 9999], reply: [0, 1], contact: 'いいね！を送る', via: 'アプリのチャット', meet: 'cafe', post: 'プロフィールを公開する', postDelay: 1, desc: '芸人志望どうしのマッチングアプリ（架空）。' },
+  app: { name: '相方募集アプリ「アイカタ・マッチ」', short: '相方募集アプリ', kind: 'app', years: [2016, 9999], reply: [0, 1], contact: 'いいね！を送る', via: 'アプリのチャット', meet: 'cafe', post: 'プロフィールを公開する', postDelay: 1, desc: '芸人志望どうしのマッチングアプリ。' },
 };
 export const BOARD_ORDER = ['zasshi', 'pasotsu', 'webbbs', 'keitai', 'blog', 'sns', 'app'];
 export const MEET_SPOTS = {

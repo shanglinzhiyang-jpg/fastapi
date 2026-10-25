@@ -141,7 +141,7 @@ registerContest('yama1', {
         const r = rngFor(g, ctx.id, ctx.year, 'yama');
         const taste = YAMA_TASTES[Math.floor(r() * YAMA_TASTES.length)];
         return withBackdrop(g, 'banquet', { title: ctx.def.name, sub: `${edLabel(ctx)}　大新年会`, sign: '大新年会　山-1グランプリ', cast: castOf(g) }, async () => {
-          if (!skip) await g.say(['新年会の宴会場。出演者の先輩芸人たちが、お膳を前にこちらを見ている。', `審査役は${YAMA_JUDGE}（架空）。採点は――独断。`, `うわさでは、${taste.text}らしい。`]);
+          if (!skip) await g.say(['新年会の宴会場。出演者の先輩芸人たちが、お膳を前にこちらを見ている。', `審査役は${YAMA_JUDGE}。採点は――独断。`, `うわさでは、${taste.text}らしい。`]);
           let style = 0;
           if (!skip) style = await g.ask('どんなネタでいく？', ['正統派のネタ', '勢いの一発ギャグ連発', 'キャラ全開', 'すべっても粘る'], { cancel: 0 });
           const res = await stagePerform(g, ctx, { kind: 'any', round: 'final', title: '山-1グランプリ', venue: { name: '大新年会の宴会場', size: 'tv', crowd: 'tough', pressure: 70 }, skip });
@@ -335,7 +335,7 @@ registerContest('seijinshiki', {
         const noAudience = ctx.year === 2020;
         return withBackdrop(g, 'studio', { title: ctx.def.name, sub: `${edLabel(ctx)}　芸歴20年以上の漫才師たち`, sign: 'お笑い成人式', signColor: '#ff7eb6', cast: castOf(g) }, async () => {
           if (!skip) {
-            await g.say([`${deviceOf(ctx.year)}が鳴った。ベテラン漫才師・${vet.name}（架空）からだ。`, `「お前らを推薦しといた。芸歴20年、成人式や。まだ日の目を見てへんけど、力はある――そう書いといたで」`]);
+            await g.say([`${deviceOf(ctx.year)}が鳴った。ベテラン漫才師・${vet.name}からだ。`, `「お前らを推薦しといた。芸歴20年、成人式や。まだ日の目を見てへんけど、力はある――そう書いといたで」`]);
             const v = await g.ask('成人式の「誓いの言葉」は？', VOWS, { cancel: 0 });
             await g.say(`${unitName(g)}：${VOWS[v]}`);
           }
@@ -440,7 +440,7 @@ registerContest('biathlon', {
             await g.say('敗者復活で決勝のステージへ！');
           }
           if (!skip) await g.say(['決勝。コントと漫才、二つの種目の合計点で総合王者が決まる。', '審査員5人が各100点。コント500点＋漫才500点、計1000点満点（配点はゲーム内の設定）。']);
-          const judges = judgesFor(g, ctx, 5, ['審査委員長', '放送作家', 'QABアナウンサー（架空）', '劇場支配人', '沖縄芝居の役者']);
+          const judges = judgesFor(g, ctx, 5, ['審査委員長', '放送作家', 'QABアナウンサー', '劇場支配人', '沖縄芝居の役者']);
           const c1 = await stagePerform(g, ctx, { kind: biaKind(g, 'conte'), round: 'final_conte', title: '第一種目：コント', venue: { name: '決勝ステージ', size: 'hall', crowd: 'warm', pressure: 70 }, skip });
           const m1 = await stagePerform(g, ctx, { kind: biaKind(g, 'manzai'), round: 'final_manzai', title: '第二種目：漫才', venue: { name: '決勝ステージ', size: 'hall', crowd: 'warm', pressure: 80 }, skip });
           const myC = panelPoints(g, ctx, 'fc', c1.score, judges, 100, 'me').total;

@@ -573,7 +573,7 @@ const MONO_SRC = [
   'https://www.daily.co.jp/gossip/2020/05/23/0013363673.shtml', 'https://thetv.jp/program/0001006861/1/', 'https://dic.nicovideo.jp/t/a/ものまねグランプリ',
   'https://www.tvlife.jp/variety/439162', 'https://tmbi-joho.com/2023/12/12/mgp23w/',
 ];
-const MONO_TARGETS = ['大御所演歌歌手（架空）', '昭和のアイドル（架空）', '朝ドラの名脇役（架空）', 'ロックバンドのボーカル（架空）', 'ニュースキャスター（架空）', 'アニメの悪役の声（架空）'];
+const MONO_TARGETS = ['大御所演歌歌手', '昭和のアイドル', '朝ドラの名脇役', 'ロックバンドのボーカル', 'ニュースキャスター', 'アニメの悪役の声'];
 registerContest('monomanegp', {
   name: 'ものまねグランプリ 次世代ものまね芸人No.1決定戦', short: 'ものまねGP', kind: 'monomane', category: 'tv',
   organizer: '日本テレビ', broadcaster: '日本テレビ系「ものまねグランプリ」', venue: '日本テレビ スタジオ', region: 'tokyo',
@@ -584,7 +584,7 @@ registerContest('monomanegp', {
   perform: { kind: 'monomane' },
   facts: { verified: ['日本テレビ「ものまねグランプリ」2009年5月3日〜2023年', '2020年5月19日「次世代ものまね芸人No.1決定戦」', 'ザ・トーナメント: 25組・5ブロック・審査員7人の投票・各ブロック1位が決勝', '2021年決勝は視聴者投票、2023年は審査員投票'], unverified: ['次世代決定戦そのものの採点・資格', '毎年の開催', '賞金'] },
   rounds: [
-    { id: 'aud', name: '番組オーディション', when: [4, 5], judge: 'staff', field: 80, pass: 25, run: (g, ctx) => stageRound(g, ctx, { round: 'aud', name: '番組オーディション', scene: 'studio', sign: 'ものまねグランプリ', field: 80, pass: 25, level: 45, kind: 'monomane', useC: 'pinneta', style: 'monomane', custom: { id: 'rhythm', opts: { song: 'ものまねメドレー（架空）', style: 'sing', lanes: 2 } }, intro: ['ディレクター「次世代枠のオーディションです。いちばん自信のあるものまねを」', `持ちネタは「${MONO_TARGETS[0]}」と「${MONO_TARGETS[1]}」。`] }) },
+    { id: 'aud', name: '番組オーディション', when: [4, 5], judge: 'staff', field: 80, pass: 25, run: (g, ctx) => stageRound(g, ctx, { round: 'aud', name: '番組オーディション', scene: 'studio', sign: 'ものまねグランプリ', field: 80, pass: 25, level: 45, kind: 'monomane', useC: 'pinneta', style: 'monomane', custom: { id: 'rhythm', opts: { song: 'ものまねメドレー', style: 'sing', lanes: 2 } }, intro: ['ディレクター「次世代枠のオーディションです。いちばん自信のあるものまねを」', `持ちネタは「${MONO_TARGETS[0]}」と「${MONO_TARGETS[1]}」。`] }) },
     {
       id: 'final', name: '本番収録（ブロック対決→決勝）', when: [5, 6], judge: 'vote', judges: 7, field: 25, final: true, tv: true,
       run: async (g, ctx) => {
@@ -607,7 +607,7 @@ registerContest('monomanegp', {
           await showBoard(g, {
             title: 'ブロック対決（審査員7人の投票）', sub: `${edLabel(ctx)}　ブロック1位が決勝へ`,
             cols: [{ key: 'place', label: '順', w: 50 }, { key: 'name', label: '名前', w: 380 }, { key: 'v', label: '票', w: 140, align: 'right' }],
-            rows: order.map((x, i) => ({ place: i + 1, name: x.name, v: `${x.v}票`, me: x.me })), note: `審査員：${judges.map((j) => j.title).join('・')}（全員架空）`,
+            rows: order.map((x, i) => ({ place: i + 1, name: x.name, v: `${x.v}票`, me: x.me })), note: `審査員：${judges.map((j) => j.title).join('・')}`,
           });
           const blockPos = order.findIndex((x) => x.me) + 1;
           // overall place among 25: the 5 block winners are 1..5, block 2nd ≈ 6..10, 3rd ≈ 11..15 …
