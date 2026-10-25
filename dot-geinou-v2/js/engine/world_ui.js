@@ -17,148 +17,19 @@
 //   g.auto.worldui. Phone app 'world' (「世界」, order 61). Test hook: window.__worldui = { scene(), open, TABS }.
 
 import { Game } from './game.js';
-import { SW, SH, clamp, makeCanvas } from './util.js';
-import { text, measure } from './draw.js';
-import { audio } from './audio.js';
+import { SW, SH, clamp } from './util.js';
+import { measure } from './draw.js';
 import { registerPhoneApp } from './life.js';
 import { phoneList, phoneInfo, appTile } from './phone.js';
-
-const has = (g, k) => !!g && typeof g[k] === 'function';
-const safe = (fn, d = null) => { try { return fn(); } catch (e) { console.error(e); return d; } };
-const num = (v, d = 0) => (v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
-const sfx = (k) => { try { audio.sfx(k); } catch (e) { /* no audio */ } };
-const R = (c, x, y, w, h, col) => { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
-const n0 = (n) => Math.max(0, Math.round(num(n))).toLocaleString('ja-JP');
+// [R9-E] the drawing parts, the map and the new tabs live in their own modules
+import { K, R, T, num, safe, has, sfx, n0, fit, jwrap, para, panel, gauge, relColor, relText, bar, sparkline, icon, chip } from './world_uikit.js';
+import { MAP, MODES, VIEWS, grid, project, drawMapView } from './world_ui_map.js';
+import { makeMore } from './world_ui_more.js';
+void fit; void gauge; void chip;
 // troops given in 千人 → 「約1.6万人」 / 「約8,000人」
 const troops = (k) => (num(k) >= 10 ? `約${(Math.round(num(k)) / 10).toFixed(1).replace(/\.0$/, '')}万人` : `約${n0(num(k) * 1000)}人`);
-const K = {
-  bg: '#07101c', head: '#0b1626', panel: '#0d1a2c', panel2: '#10223a', edge: '#21405e', edgeHi: '#4a86b8', text: '#e8f0f8', dim: '#93a8bc', faint: '#566c80',
-  amber: '#ffb547', cyan: '#4fd2e8', good: '#57d98a', bad: '#ff6470', warn: '#ffcc4d', sel: '#173452', lock: '#c9a76a', sea: '#0c2640', sea2: '#0e2c48', land: '#4a5462', white: '#ffffff', danger: '#ff5468',
-};
-// ================================================================ text helpers (no overflow: every string has a width)
-function fit(c, s, w, size = 12) {
-  s = String(s ?? '');
-  if (w <= 0) return '';
-  if (measure(c, s, size) <= w) return s;
-  const a = Array.from(s);
-  while (a.length > 1 && measure(c, a.join('') + '…', size) > w) a.pop();
-  return a.join('') + '…';
-}
-function T(c, s, x, y, size = 12, color = K.text, align = 'left', w = 0) { text(c, w > 0 ? fit(c, s, w, size) : String(s ?? ''), Math.round(x), Math.round(y), { size, color, align, shadow: null }); }
-// Japanese line breaking: a number keeps its unit (「5,260人」「1.2兆円」「48%」), no closing mark starts a line.
-const NO_START = new Set('、。，．・：；？！ー～…‥）」』】〕〉》’”ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ!?.,)]}%％'.split(''));
-const NO_END = new Set('（「『【〔〈《‘“([{'.split(''));
-const TOKEN = /[−\-]?[0-9０-９]+(?:[.,][0-9]+)*(?:[／/][0-9]+)?(?:分の[0-9]+|[%％年月日歳人分万億兆円倍回本条号割棟件隻機台ドル]+)?|[A-Za-z0-9.,:%/+\-#'’]+|\s+|./gu;
-function jwrap(c, str, w, size = 12) {
-  measure(c, '', size);
-  const Wd = (s0) => c.measureText(s0).width;
-  const out = [];
-  for (const par of String(str ?? '').split('\n')) {
-    const toks = par.match(TOKEN) || [];
-    let line = '';
-    for (const t of toks) {
-      if (!line && /^\s+$/.test(t)) continue;
-      if (Wd(line + t) <= w) { line += t; continue; }
-      if (!line) { for (const ch of Array.from(t)) { if (line && Wd(line + ch) > w) { out.push(line); line = ''; } line += ch; } continue; }
-      let carry = '';
-      if (Array.from(t).length === 1 && NO_START.has(t)) { const a0 = Array.from(line); carry = a0.pop(); line = a0.join(''); }
-      while (line.length > 1 && NO_END.has(line[line.length - 1])) { carry = line[line.length - 1] + carry; line = line.slice(0, -1); }
-      out.push(line);
-      line = carry + (/^\s+$/.test(t) ? '' : t);
-    }
-    out.push(line);
-  }
-  return out;
-}
-function para(c, s, x, y, w, size = 12, color = K.text, lh = 0, maxLines = 99) {
-  const ls = jwrap(c, s, w, size);
-  const step = lh || size + 4;
-  const n = Math.min(ls.length, maxLines);
-  for (let i = 0; i < n; i++) T(c, i === n - 1 && ls.length > n ? fit(c, ls[i] + '…', w, size) : ls[i], x, y + i * step, size, color);
-  return n * step;
-}
-function panel(c, x, y, w, h, title, opts = {}) {
-  R(c, x, y, w, h, opts.bg || K.panel);
-  R(c, x, y, w, 1, opts.accent || K.edge); R(c, x, y + h - 1, w, 1, K.edge); R(c, x, y, 1, h, K.edge); R(c, x + w - 1, y, 1, h, K.edge);
-  if (title) { R(c, x + 1, y + 1, w - 2, 15, K.panel2); T(c, title, x + 6, y + 2, 10, opts.accent || K.amber, 'left', w - 12 - (opts.right ? measure(c, opts.right, 10) + 8 : 0)); if (opts.right) T(c, opts.right, x + w - 6, y + 2, 10, K.dim, 'right'); }
-}
-const relColor = (v) => (v >= 60 ? '#3aa86a' : v >= 25 ? '#7cbc62' : v > -25 ? '#c4b46a' : v > -60 ? '#d07a46' : '#c63c3c');
-function gauge(c, x, y, w, v, lo = -100, hi = 100) {
-  R(c, x, y, w, 6, '#1a2a3a');
-  const z = x + ((0 - lo) / (hi - lo)) * w;
-  const p = x + ((clamp(v, lo, hi) - lo) / (hi - lo)) * w;
-  R(c, Math.min(z, p), y, Math.max(1, Math.abs(p - z)), 6, relColor(v));
-  R(c, z, y - 1, 1, 8, K.dim);
-}
-
-// ================================================================ the map (Natural Earth 1:50m, public domain; world-atlas 2.0.2, ISC)
-// 144 × 53 cells of 2.5°: longitude −25 → 335 (Pacific-centred), latitude 75 → −57.5. Codes: '.' sea, 'x' other land.
-const MAP = { COLS: 144, ROWS: 53, LON0: -25, LAT0: 75, STEP: 2.5, CELL: 4, X: 32, Y: 42 };
-const LEGEND = { '.': '.', x: 'x', A: 'sv', B: 'au', C: 'br', D: 'ca', E: 'cn', F: 'tw', G: 'fr', H: 'de', I: 'in', J: 'id', K: 'ir', L: 'iq', M: 'il', N: 'it', O: 'jp', P: 'kp', Q: 'kr', R: 'my', S: 'ph', T: 'ru', U: 'sa', V: 'sg', W: 'vn', X: 'th', Y: 'tr', Z: 'ua', a: 'gb', b: 'us', c: 'dd' };
-const MAP_DATA = 'xx.29T03.04T.03T20.04T.37D06.D.DD.D07.08x13x.18x.x.09TT.04T37.16b04.10D09.D03.D08.06x12T17x05TT..T04.04TT.T45.T05b10T04DT06DDTDT07DT03DDT08x09TT16x03T03.T05.10T.43T.T04b10T46.x03.09x09T60.06b10D24.D.D03.05x05.06.12x05.x04T58.07b11D19.06D03.08x03.07.08a.03x06.AAT48.TT.T03.13b04.05bbD17.06D06.15.07aa.04x04.A04T44.06T03.14bb.09bD19.03D07.14.06xxaa..xHHcx03A04T12A06T26.05TT.27D20.D10.12.06x.a03xxHHcx04Z04T06AT03A08T07xxT07E03T07.04T.30D29.12.08G05HHx04Z07T03A16x12E05T06.36D25.D03.11.09G04xNx06AZ03T05A13E03x11E07T.39b16D06bD03.14.07xxG04N03x06.03T04.A12E06x07E08T..OO.36b17DDb04DD.15.06x05..G.NNx04Y06A03.A10E20P.04O.37b22.18.06x04.05NN.xxY08KK.A09E18..PQ.04O.37b20.20.07xx.x05.06Y03x03LK06AAx04E19.QQ.O04.38b19.20.07x08.09xxLLK06x06IIE16.04O03.41b17.21.06x11.x07UULLK05x06IIE17.48x05b10.22.05x19U06K05x04I03xxE15.49x06bb.b.03b.22.04x20U06.K04x03I07xIIxE09.50x07.06b.22.03x21.U06x03.03xI07xxIxE08.F.50x.x04.06x.22.03x22U07xx.04I08.x04WWEE.56x04.03x.03xx.20.03x22.U04x03.06I05.03xxxWE.04S.53x07.05xx.18.03x23.x05.07I04.05xX03x.05S.55x06.24.03x27.10II.07xxW.04S.58x04.23.04x27.09II.07X.xWW.05S.59xx.03x05.15.04x26.10IIx.06X..W.06SS.59x10.14.05x25.12x.07R.05RR..S.62x09G.11.13x16.19JJRR.03RJ.66x06CxxGC.10.14x14.21JJR.J06.63x04CxC06.10.13x14.23JJ..J03.J.03JJ.J.55x05C10.08.14x12.25JJ.J05.04J04x.53x05C13.05.15x11.26J03.10Jx03.52x04C15.04.15x11.28JJ.03Jx.05x04.52x03C15.04.15x12.36B.59x05C11.05.15x12..x.30B.B03.BB.55x06C10.05.14x12..xx.29B10.55x06C09.05.15x10..x03.28B11.57x05C07.06.15x09.03x03.26B14.06x.49x05C07.06.16x08.03xx.26B16.54x07C05.07.16x07.32B17.53x07C03.09.16x07.33B16.53x07C03.09.17x05.34B15.54x07CC.10.17x04.35B04.04B07.54x08.11.65B05.09x.45x06.13.67BB.10x03.42x07.13.68B.09x03.43x05.15.68B.08xx.45x04.16.77x.46x04.16.99.25x03.17.99.25x03.03x.13.99.25x04.16.99.45';
-let GRID = null;
-function grid() {
-  if (GRID) return GRID;
-  const out = [];
-  const s = MAP_DATA;
-  for (let i = 0; i < s.length;) {
-    const ch = s[i++];
-    let n = 1;
-    if (/[0-9]/.test(s[i] || '') && /[0-9]/.test(s[i + 1] || '')) { n = Number(s.slice(i, i + 2)); i += 2; }
-    const code = LEGEND[ch] || '.';
-    for (let k = 0; k < n; k++) out.push(code);
-  }
-  GRID = out;
-  return GRID;
-}
-// the country a cell stands for at the game's date (ソ連 before 1991-12-26, 東西ドイツ before 1990-10-03)
-function cellCountry(code, dn) {
-  if (code === 'ru' || code === 'ua' || code === 'sv') return dn < 19911226 ? 'su' : code === 'sv' ? 'x' : code;
-  if (code === 'de') return dn < 19901003 ? 'wde' : 'de';
-  if (code === 'dd') return dn < 19901003 ? 'dde' : 'de';
-  return code;
-}
-function project(lat, lon) {
-  let L = lon;
-  if (L < MAP.LON0) L += 360;
-  return { x: MAP.X + ((L - MAP.LON0) / MAP.STEP) * MAP.CELL, y: MAP.Y + ((MAP.LAT0 - lat) / MAP.STEP) * MAP.CELL };
-}
-const MODES = [{ id: 'relation', label: '関係' }, { id: 'bloc', label: '陣営' }, { id: 'alliance', label: '同盟' }];
-function cellColor(ui, id) {
-  const d = ui.data;
-  if (id === '.') return null;
-  if (id === 'x') return K.land;
-  if (id === 'jp') return '#f0f0f6';
-  const row = d.rows[id];
-  if (!row) return K.land;
-  if (row.war) return Math.floor(ui.t / 20) % 2 ? '#ff3848' : '#a82030';
-  if (ui.mode === 'bloc') return (d.w.blocs[row.bloc] || {}).color || K.land;
-  if (ui.mode === 'alliance') return row.ally ? '#4f8fe8' : row.sanction ? '#c07040' : row.onJapan ? '#a05050' : '#5a6270';
-  return relColor(row.relation);
-}
-function bakeMap(ui) {
-  const [cv, c] = makeCanvas(MAP.COLS * MAP.CELL, MAP.ROWS * MAP.CELL);
-  c.fillStyle = K.sea; c.fillRect(0, 0, cv.width, cv.height);
-  for (let y = 0; y < cv.height; y += 16) { c.fillStyle = K.sea2; c.fillRect(0, y, cv.width, 1); }
-  for (let x = 0; x < cv.width; x += 16) { c.fillStyle = K.sea2; c.fillRect(x, 0, 1, cv.height); }
-  const G0 = grid();
-  const dn = ui.data.dn;
-  for (let r = 0; r < MAP.ROWS; r++) for (let q = 0; q < MAP.COLS; q++) {
-    const code = G0[r * MAP.COLS + q];
-    if (!code || code === '.') continue;
-    const col = cellColor(ui, cellCountry(code, dn));
-    if (!col) continue;
-    c.fillStyle = col;
-    c.fillRect(q * MAP.CELL, r * MAP.CELL, MAP.CELL, MAP.CELL);
-  }
-  // country borders: a darker pixel where the country changes
-  c.fillStyle = 'rgba(0,0,0,0.35)';
-  for (let r = 0; r < MAP.ROWS; r++) for (let q = 0; q < MAP.COLS - 1; q++) {
-    const a = cellCountry(G0[r * MAP.COLS + q], dn), b = cellCountry(G0[r * MAP.COLS + q + 1], dn);
-    if (a !== b && a !== '.' && b !== '.') c.fillRect((q + 1) * MAP.CELL - 1, r * MAP.CELL, 1, MAP.CELL);
-  }
-  return cv;
-}
+// portrait phones: the 640x360 screen is about 412x232 CSS px; the big-text layout (one pane at a time) is used there
+function portraitView() { try { return typeof window !== 'undefined' && window.innerHeight > window.innerWidth * 1.2; } catch (e) { return false; } }
 
 // ================================================================ data
 function roleOf(g) {
@@ -194,6 +65,7 @@ function loadData(ui) {
 // Each tab: { id, label, rows(ui) → [{ key, label, sub?, right?, rightColor?, color?, header?, lock? }], draw(ui, c), act(ui, row) }
 const LIST = { x: 4, y: 42, w: 248, h: 292, rh: 18 };
 const DETAIL = { x: 256, y: 42, w: 380, h: 292 };
+const MORE = makeMore({ drawList: (...a) => drawList(...a), LIST, DETAIL, actionsMenu: (...a) => actionsMenu(...a), diploFlow: (...a) => diploFlow(...a) }); // [R9-E]
 function countryRows(ui) {
   const d = ui.data;
   const real = d.w.countries.slice().sort((a, b) => b.relation - a.relation);
@@ -202,87 +74,75 @@ function countryRows(ui) {
   if ((d.w.fictional || []).length) { out.push({ header: true, label: 'ヴェルミナ海の国々' }); for (const c of d.w.fictional) out.push({ key: c.id, label: c.name, right: `${c.relation}`, rightColor: relColor(c.relation), sub: c.war ? '戦争中' : '' }); }
   return out;
 }
-const TAB_MAP = {
-  id: 'map', label: '地図',
-  rows: () => [],
-  draw(ui, c) {
-    const d = ui.data;
-    if (!ui.mapCv || ui.mapKey !== ui.mapStamp()) { ui.mapCv = bakeMap(ui); ui.mapKey = ui.mapStamp(); }
-    c.drawImage(ui.mapCv, MAP.X, MAP.Y);
-    R(c, MAP.X, MAP.Y + MAP.ROWS * MAP.CELL, MAP.COLS * MAP.CELL, 1, K.edge);
-    // territorial disputes (small diamonds)
-    for (const D of d.w.disputes) { const p = project(D.pos[0], D.pos[1]); R(c, p.x - 1, p.y - 3, 2, 6, K.warn); R(c, p.x - 3, p.y - 1, 6, 2, K.warn); }
-    // conflicts: a line between the capitals, blinking
-    for (const k of d.w.conflicts) if (k.posA && k.posB) { const a = project(k.posA[0], k.posA[1]), b = project(k.posB[0], k.posB[1]); if (Math.floor(ui.t / 15) % 2) dotLine(c, a, b, K.bad); }
-    // capitals
-    for (const m of d.markers) { const row = d.rows[m.id]; R(c, m.x - 1, m.y - 1, 3, 3, row && row.war ? K.bad : '#f2f2f2'); }
-    const jp = project(35.68, 139.69); R(c, jp.x - 2, jp.y - 2, 5, 5, '#e8343c'); R(c, jp.x - 1, jp.y - 1, 3, 3, '#ffffff');
-    // crises: blinking triangles
-    for (const k of d.w.crises) if (k.pos) { const p = project(k.pos[0], k.pos[1]); if (Math.floor(ui.t / 12) % 2) { R(c, p.x + 3, p.y - 8, 1, 1, K.warn); R(c, p.x + 2, p.y - 7, 3, 1, K.warn); R(c, p.x + 1, p.y - 6, 5, 1, K.warn); R(c, p.x, p.y - 5, 7, 1, K.warn); } }
-    // the war of Japan: the enemy marker with a ring
-    if (d.war && d.rows[d.war.enemy] && d.rows[d.war.enemy].pos) { const p = project(d.rows[d.war.enemy].pos[0], d.rows[d.war.enemy].pos[1]); const r0 = 5 + (ui.t >> 3) % 4; ring(c, p.x, p.y, r0, K.bad); }
-    // the selection
-    const sel = ui.sel && d.rows[ui.sel];
-    if (sel && sel.pos) { const p = project(sel.pos[0], sel.pos[1]); ring(c, p.x, p.y, 6 + ((ui.t >> 4) % 2), K.amber); const lab = sel.short; const lw = measure(c, lab, 10) + 6; const lx = clamp(p.x + 8, MAP.X + 2, MAP.X + MAP.COLS * MAP.CELL - lw - 2); R(c, lx, p.y - 7, lw, 13, 'rgba(0,0,0,0.75)'); T(c, lab, lx + 3, p.y - 6, 10, K.amber); }
-    // the inset: the fictional nations of ヴェルミナ海
-    const fx = INSET.x, fy = INSET.y;
-    R(c, fx, fy, INSET.w, 58, 'rgba(6,14,26,0.88)'); R(c, fx, fy, INSET.w, 1, K.edge);
-    T(c, 'ヴェルミナ海', fx + 4, fy + 2, 10, K.dim);
-    (d.w.fictional || []).forEach((f, i) => { const sy = fy + 16 + i * 13; R(c, fx + 6, sy + 2, 8, 8, relColor(f.relation)); if (f.war && Math.floor(ui.t / 15) % 2) R(c, fx + 6, sy + 2, 8, 8, K.bad); T(c, f.short, fx + 18, sy, 10, ui.sel === f.id ? K.amber : K.text, 'left', INSET.w - 46); T(c, `${f.relation}`, fx + INSET.w - 6, sy, 10, relColor(f.relation), 'right'); if (ui.sel === f.id) R(c, fx + 2, sy + 4, 2, 4, K.amber); });
-    // the colour chips (top right)
-    ui.chips = [];
-    MODES.forEach((m, i) => { const w = 40, x = MAP.X + MAP.COLS * MAP.CELL - 4 - (MODES.length - i) * (w + 3), y = MAP.Y + 3; const on = ui.mode === m.id; R(c, x, y, w, 15, on ? K.amber : 'rgba(10,20,34,0.85)'); T(c, m.label, x + w / 2, y + 2, 10, on ? '#1a1206' : K.text, 'center'); ui.chips.push({ x, y, w, h: 15, id: m.id }); });
-    // the legend
-    const lx0 = MAP.X + 130, ly0 = MAP.Y + MAP.ROWS * MAP.CELL - 14;
-    const leg = ui.mode === 'bloc' ? Object.values(d.w.blocs).map((b) => [b.color, b.short]) : ui.mode === 'alliance' ? [['#4f8fe8', '同盟・協力'], ['#c07040', '日本が制裁'], ['#a05050', '日本に制裁'], ['#5a6270', 'その他']] : [['#3aa86a', '良好'], ['#7cbc62', 'まずまず'], ['#c4b46a', 'ふつう'], ['#d07a46', '冷えこみ'], ['#c63c3c', '険悪']];
-    R(c, lx0 - 4, ly0 - 2, leg.length * 62 + 4, 14, 'rgba(6,14,26,0.8)');
-    leg.forEach(([col, lab], i) => { R(c, lx0 + i * 62, ly0 + 2, 8, 8, col); T(c, lab, lx0 + i * 62 + 11, ly0, 10, K.text, 'left', 50); });
-    // the info panel
-    drawCountryStrip(ui, c, 4, 258, 632, 76);
-  },
-};
+// the 地図 tab: the map with views (世界 / 東アジア / 東南アジア / 中東 / 欧州), colour modes, status icons, the tooltip,
+// the ヴェルミナ海 inset and the strip of the selected country below
+const MAPR = { x: MAP.X, y: MAP.Y, w: MAP.COLS * MAP.CELL, h: MAP.ROWS * MAP.CELL };
 const INSET = { x: MAP.X + 4, y: MAP.Y + 146, w: 100 };
 const insetPts = (fl) => (fl || []).map((f, i) => ({ id: f.id, x: INSET.x + 10, y: INSET.y + 22 + i * 13 }));
-function dotLine(c, a, b, col) { const n = Math.max(2, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 4)); for (let i = 0; i <= n; i++) R(c, a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n, 2, 2, col); }
-function ring(c, x, y, r, col) { for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; R(c, x + Math.cos(a) * r, y + Math.sin(a) * r, 1, 1, col); } }
-function drawCountryStrip(ui, c, x, y, w, h) {
-  const d = ui.data;
-  const row = ui.sel && d.rows[ui.sel];
-  panel(c, x, y, w, h, row ? row.name : '国を選ぶ', { right: 'A：外交・くわしく' });
-  if (!row) return;
-  const det = ui.detail(ui.sel);
-  T(c, det ? det.leader : '', x + 8, y + 20, 12, K.text, 'left', 200);
-  T(c, `陣営：${row.blocName}`, x + 8, y + 36, 10, (d.w.blocs[row.bloc] || {}).color || K.dim, 'left', 200);
-  T(c, `国交：${row.tiesLabel}${row.sanction ? `・日本の制裁 段階${row.sanction}` : ''}${row.onJapan ? `・日本への制裁 段階${row.onJapan}` : ''}`, x + 8, y + 52, 10, K.dim, 'left', 220);
-  T(c, `日本との関係 ${row.relation}（${row.relLabel}）`, x + 236, y + 20, 12, relColor(row.relation), 'left', 180);
-  gauge(c, x + 236, y + 38, 170, row.relation);
-  if (row.real) T(c, `貿易の割合 約${row.trade}%・軍事力 ${row.mil}`, x + 236, y + 52, 10, K.dim, 'left', 180);
-  const note = det && (det.conflicts && det.conflicts.length ? `【紛争】${det.conflicts.join('・')}` : det.note) || '';
-  para(c, note, x + 420, y + 20, w - 428, 10, K.text, 13, 4);
+function drawMapChips(ui, c, dest, size = 10) {
+  ui.chips = [];
+  const h = size + 6;
+  // the views (top left)
+  let x = dest.x + 3;
+  for (const v of VIEWS) {
+    const w = measure(c, v.label, size) + 10, on = (ui.mapView || 'world') === v.id;
+    R(c, x, dest.y + 3, w, h, on ? K.cyan : 'rgba(10,20,34,0.85)');
+    T(c, v.label, x + w / 2, dest.y + 6, size, on ? K.ink : K.text, 'center');
+    ui.chips.push({ x, y: dest.y + 3, w, h, view: v.id });
+    x += w + 3;
+  }
+  // the colour modes (top right)
+  MODES.forEach((m, i) => {
+    const w = measure(c, m.label, size) + 14, xx = dest.x + dest.w - 4 - (MODES.length - i) * (w + 3);
+    const on = ui.mode === m.id;
+    R(c, xx, dest.y + 3, w, h, on ? K.amber : 'rgba(10,20,34,0.85)');
+    T(c, m.label, xx + w / 2, dest.y + 6, size, on ? K.ink : K.text, 'center');
+    ui.chips.push({ x: xx, y: dest.y + 3, w, h, id: m.id });
+  });
 }
+function drawMapLegend(ui, c, dest, size = 10) {
+  const d = ui.data;
+  const leg = ui.mode === 'bloc' ? Object.values(d.w.blocs).map((b) => [b.color, b.short]) : ui.mode === 'alliance' ? [['#4f8fe8', '同盟・協力'], ['#c07040', '日本が制裁'], ['#a05050', '日本に制裁'], ['#5a6270', 'その他']] : [['#3aa86a', '良好'], ['#7cbc62', 'まずまず'], ['#c4b46a', 'ふつう'], ['#d07a46', '冷えこみ'], ['#c63c3c', '険悪']];
+  const items = [...leg, ['icon:crisis', '危機'], ['icon:war', '戦争'], ['icon:dispute', '領土問題']];
+  const ws = items.map(([, lab]) => measure(c, lab, size) + 16);
+  const tw = ws.reduce((a, v) => a + v, 0) + 6;
+  let lx = dest.x + dest.w - tw - 4;
+  const ly = dest.y + dest.h - size - 8;
+  R(c, lx - 3, ly - 2, tw + 2, size + 6, 'rgba(6,14,26,0.82)');
+  items.forEach(([col, lab], i) => {
+    if (col.startsWith('icon:')) { const id = col.slice(5); icon(c, id, lx, ly + Math.round((size - 9) / 2) + 1, 1, id === 'war' ? K.bad : K.warn); }
+    else R(c, lx, ly + 2, 8, 8, col);
+    T(c, lab, lx + 11, ly, size, K.text);
+    lx += ws[i];
+  });
+}
+function drawInset(ui, c) {
+  const d = ui.data;
+  const fx = INSET.x, fy = INSET.y;
+  R(c, fx, fy, INSET.w, 58, 'rgba(6,14,26,0.88)'); R(c, fx, fy, INSET.w, 1, K.edge);
+  T(c, 'ヴェルミナ海', fx + 4, fy + 2, 10, K.dim);
+  (d.w.fictional || []).forEach((f, i) => { const sy = fy + 16 + i * 13; R(c, fx + 6, sy + 2, 8, 8, relColor(f.relation)); if (f.war && Math.floor(ui.t / 15) % 2) R(c, fx + 6, sy + 2, 8, 8, K.bad); T(c, f.short, fx + 18, sy, 10, ui.sel === f.id ? K.amber : K.text, 'left', INSET.w - 46); T(c, `${f.relation}`, fx + INSET.w - 6, sy, 10, relText(f.relation), 'right'); if (ui.sel === f.id) R(c, fx + 2, sy + 4, 2, 4, K.amber); });
+}
+const TAB_MAP = {
+  id: 'map', label: '地図', icon: 'globe',
+  rows: () => [],
+  draw(ui, c) {
+    const view = ui.mapView || 'world';
+    const r = drawMapView(ui, c, MAPR, view, { labels: view !== 'world', regions: view === 'world', icons: true });
+    ui.mapPts = view === 'world' ? [...r.pts, ...insetPts(ui.data.w.fictional)] : r.pts;
+    if (view === 'world') drawInset(ui, c);
+    drawMapChips(ui, c, MAPR);
+    drawMapLegend(ui, c, MAPR);
+    MORE.drawMapStrip(ui, c, 4, 258, 632, 76);
+  },
+};
 const TAB_COUNTRIES = {
-  id: 'countries', label: '国々',
+  id: 'countries', label: '国々', icon: 'flag',
   rows: (ui) => countryRows(ui),
   draw(ui, c) {
     drawList(ui, c, LIST);
     const row = ui.curRow();
-    const det = row && row.key ? ui.detail(row.key) : null;
-    panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, det ? det.name : '', { right: 'A：外交の手段' });
-    if (!det) return;
-    const x = DETAIL.x + 8;
-    let y = DETAIL.y + 20;
-    T(c, `${det.leader}・${det.gov || ''}`, x, y, 10, K.dim, 'left', DETAIL.w - 16); y += 14;
-    T(c, `日本との関係 ${det.relation}（${det.relLabel}）`, x, y, 12, relColor(det.relation), 'left', 180); gauge(c, x + 190, y + 4, 170, det.relation); y += 18;
-    T(c, `陣営：${det.blocName}　国交：${det.tiesLabel}`, x, y, 10, K.text, 'left', DETAIL.w - 16); y += 14;
-    if (det.real) { T(c, `GDP 約${det.gdp}兆ドル（目安）・軍事力 ${det.mil}・日本の貿易の約${det.trade}%`, x, y, 10, K.text, 'left', DETAIL.w - 16); y += 14; }
-    if (det.member && det.member.length) { T(c, `加盟：${det.member.join('・')}`, x, y, 10, K.text, 'left', DETAIL.w - 16); y += 14; }
-    if (det.nuclear) { T(c, det.nuclear, x, y, 10, K.dim, 'left', DETAIL.w - 16); y += 14; }
-    if (det.alliances && det.alliances.length) { T(c, `同盟・協力：${det.alliances.join('・')}`, x, y, 10, K.cyan, 'left', DETAIL.w - 16); y += 14; }
-    if (det.treaties && det.treaties.length) { y += para(c, `日本との条約・協定：${det.treaties.join('、')}`, x, y, DETAIL.w - 16, 10, K.text, 13, 3); }
-    if (det.conflicts && det.conflicts.length) { T(c, `紛争：${det.conflicts.join('・')}`, x, y, 10, K.bad, 'left', DETAIL.w - 16); y += 14; }
-    y += 2;
-    y += para(c, det.note || '', x, y, DETAIL.w - 16, 10, K.text, 13, 4);
-    if (det.dispute) { R(c, x, y + 2, DETAIL.w - 16, 1, K.edge); y += 6; T(c, `【${det.dispute.name}】`, x, y, 10, K.warn); y += 13; para(c, det.dispute.lines.join(''), x, y, DETAIL.w - 16, 10, K.text, 13, Math.max(1, Math.floor((DETAIL.y + DETAIL.h - 4 - y) / 13))); }
+    if (row && row.key) MORE.drawCountryDetail(ui, c, row.key); else panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, '国々');
   },
   act: (ui, row) => (row && row.key ? actionsMenu(ui, row.key) : null),
 };
@@ -339,7 +199,7 @@ const TAB_DIPLOMACY = {
   },
 };
 const TAB_ALLIANCES = {
-  id: 'alliances', label: '同盟・条約',
+  id: 'alliances', label: '同盟', icon: 'shield',
   rows(ui) {
     const w = ui.data.w;
     const out = [{ header: true, label: '日本の同盟・安全保障の協力' }];
@@ -392,7 +252,7 @@ const TAB_ALLIANCES = {
   },
 };
 const TAB_CRISIS = {
-  id: 'crisis', label: '危機・戦争',
+  id: 'crisis', label: '危機', icon: 'crisis',
   rows(ui) {
     const d = ui.data;
     const out = [];
@@ -406,12 +266,12 @@ const TAB_CRISIS = {
       for (const o of d.orders.filter((x) => x.id === 'front_go' || x.id === 'front_return')) out.push({ key: 'w:' + o.id, label: o.name, lock: o.why, right: o.why ? '🔒' : '▶', order: o });
     }
     out.push({ header: true, label: `世界の危機（${d.w.crises.length}）` });
-    for (const k of d.w.crises) out.push({ key: 'k:' + k.id, label: k.title, sub: k.countryName || '', right: '▶', k });
+    for (const k of d.w.crises) out.push({ key: 'k:' + k.id, label: k.title, sub: k.countryName || '', right: k.stage ? k.stage.label : '▶', rightColor: num(k.sev) >= 3 ? K.bad : num(k.sev) >= 2 ? K.warn : K.dim, k });
     if (!d.w.crises.length) out.push({ key: 'none', label: '（いまは大きな危機はない）' });
     out.push({ header: true, label: `各地の紛争（${d.w.conflicts.length}）` });
-    for (const k of d.w.conflicts) out.push({ key: 'c:' + k.id, label: k.name, sub: k.japan ? '日本が関わっている' : '', right: '▶', conflict: k });
+    for (const k of d.w.conflicts) out.push({ key: 'c:' + k.id, label: k.name, sub: k.japan ? '日本が関わっている' : '', right: k.japan ? '日本も' : '戦争', rightColor: K.bad, conflict: k });
     if (!d.w.conflicts.length) out.push({ key: 'none2', label: '（いまはない）' });
-    if (d.w.deployments.length) { out.push({ header: true, label: '自衛隊の海外派遣' }); for (const x of d.w.deployments) out.push({ key: 'd:' + x.id, label: x.mission, sub: x.where }); }
+    if (d.w.deployments.length) { out.push({ header: true, label: `自衛隊の海外派遣（${d.w.deployments.length}）` }); for (const x of d.w.deployments) out.push({ key: 'd:' + x.id, label: x.mission, sub: x.where, right: '派遣中', rightColor: K.blue, dep: x }); }
     return out;
   },
   draw(ui, c) {
@@ -422,18 +282,17 @@ const TAB_CRISIS = {
     panel(c, DETAIL.x, DETAIL.y, DETAIL.w, DETAIL.h, row && !row.header ? row.label : '危機・戦争');
     const x = DETAIL.x + 8;
     let y = DETAIL.y + 22;
-    if (row && row.k) {
-      const k = row.k;
-      T(c, `${k.countryName}・深刻さ ${'●'.repeat(clamp(num(k.sev, 1), 1, 3))}`, x, y, 12, K.warn, 'left', DETAIL.w - 16); y += 18;
-      para(c, 'A：対応を選ぶ（退避・援助・抗議・安保理への提起・備蓄の放出・国際協調・募金など、いまの立場でできること）', x, y, DETAIL.w - 16, 10, K.dim, 13, 4);
-    } else if (row && row.conflict) {
-      const k = row.conflict;
-      T(c, `${k.aName} 対 ${k.bName}`, x, y, 12, K.bad); y += 18;
-      T(c, `死者（推計）${n0(k.dead)}人`, x, y, 12, K.text); y += 18;
-      para(c, 'A：仲介・後方支援・集団的自衛権での参戦・派兵（どちらの側に立つか）。どれも見込みと結果を確かめてから決める。', x, y, DETAIL.w - 16, 10, K.dim, 13, 5);
-    } else if (d.paths) {
+    if (row && row.k) { MORE.drawCrisisDetail(ui, c, row.k); return; }
+    if (row && row.conflict) { MORE.drawConflictDetail(ui, c, row.conflict); return; }
+    if (row && row.dep) {
+      const dp = row.dep;
+      T(c, dp.where, x, y, 14, K.text, 'left', DETAIL.w - 16); y += 22;
+      for (const [k0, v0] of [['任務', dp.mission], ['人数', dp.personnel ? `約${n0(dp.personnel)}人` : '—'], ['根拠', dp.law || '—'], ['終わり', dp.endDate ? `${Math.floor(dp.endDate / 10000)}年${Math.floor(dp.endDate / 100) % 100}月の予定` : '決まっていない']]) { T(c, k0, x, y, 12, K.dim); y += para(c, v0, x + 54, y, DETAIL.w - 70, 12, K.text, 16, 3) + 2; }
+      return;
+    }
+    if (d.paths) {
       const P = d.paths;
-      y += para(c, P.declare ? `宣戦：${P.declare}` : '宣戦できる状態（相手を選ぶ）。', x, y, DETAIL.w - 16, 10, P.declare ? K.lock : K.good, 13, 9) + 4;
+      y += para(c, P.declare ? `宣戦：${P.declare}` : '宣戦できる状態（相手を選ぶ）。', x, y, DETAIL.w - 16, 12, P.declare ? K.lock : K.good, 16, 8) + 6;
       if (P.art9) { T(c, '9条は改正ずみ：国会の承認で宣戦できる', x, y, 10, K.good, 'left', DETAIL.w - 16); y += 14; }
       if (P.amend9 && P.amend9.stage === 'referendum') { T(c, `9条の改正：国民投票を待っている（見込み 賛成${P.referendum9.yes}%）`, x, y, 10, K.warn, 'left', DETAIL.w - 16); y += 14; }
       if (P.collective) { T(c, `集団的自衛権の根拠：${P.collective}`, x, y, 10, K.cyan, 'left', DETAIL.w - 16); y += 14; }
@@ -481,38 +340,14 @@ function drawWar(ui, c, row) {
   if (row && row.order) para(c, row.order.why ? `🔒 ${row.order.why}` : row.order.desc, x0 + 6, y3 + 19, DETAIL.w - 12, 10, row.order.why ? K.lock : K.text, 13, 5);
   else (w.log || []).slice(-5).reverse().forEach((l, i) => T(c, `・${l.text}`, x0 + 6, y3 + 19 + i * 13, 10, K.dim, 'left', DETAIL.w - 12));
 }
-const TAB_NEWS = {
-  id: 'news', label: 'ニュース',
-  rows(ui) {
-    const w = ui.data.w;
-    const out = [{ header: true, label: '世界のニュース' }];
-    for (const n of w.news.slice(0, 30)) out.push({ key: 'n' + out.length, label: n.text, sub: `${n.day}日目`, news: n });
-    if (!w.news.length) out.push({ key: 'none', label: '（まだニュースはない）' });
-    out.push({ header: true, label: '首脳会議の予定' });
-    for (const s0 of w.summits) out.push({ key: 's' + out.length, label: `${s0.name}${s0.hostName ? `（${s0.hostName}）` : ''}`, sub: `${s0.year}/${s0.month}` });
-    return out;
-  },
-  draw(ui, c) {
-    drawList(ui, c, { ...LIST, w: 632 }, true);
-  },
-  act: (ui, row) => (row && row.news ? ui.info('ニュース', [row.news.text]) : null),
-};
 // ================================================================ 貿易・関税 (trade and tariffs) and the richer 外交 tab
 const shortCat = (n) => String(n).replace(/（.*$/, '');
 const sgn = (v, d = 2) => `${num(v) >= 0 ? '+' : ''}${num(v).toFixed(d)}`;
 const pc = (p) => `${Math.round(num(p) * 100)}%`;
 const DIRCOL = { up: '#ff9a5a', down: '#5ad2e8', same: '#93a8bc' };
 const KIND_JA = { epa: '経済連携協定', tariffs: '関税交渉', security: '防衛協力の協定', peace: '平和条約' };
-function bar(c, x, y, w, v, max, col) { R(c, x, y, w, 6, '#1a2a3a'); R(c, x, y, Math.max(0, Math.min(w, (num(v) / max) * w)), 6, col); }
-function sparkline(c, x, y, w, h, vals, col) {
-  if (!vals || vals.length < 2) return;
-  const lo = Math.min(...vals), hi = Math.max(...vals);
-  const rng = Math.max(1e-6, hi - lo);
-  R(c, x, y + h, w, 1, K.edge);
-  vals.forEach((v, i) => { const px = x + (i / (vals.length - 1)) * (w - 2); const py = y + h - 2 - ((v - lo) / rng) * (h - 4); R(c, px, py, 2, 2, col); });
-}
 const TAB_TRADE = {
-  id: 'trade', label: '貿易・関税',
+  id: 'trade', label: '貿易', icon: 'money',
   rows(ui) {
     const g = ui.g;
     const t = safe(() => g.tariffs(), null);
@@ -833,7 +668,7 @@ async function partnerMenu(ui, p) {
 const TAB_DIPLOMACY_BASE = TAB_DIPLOMACY;
 const REPORT = [['score', '外交の通信簿'], ['advice', '外務省の助言'], ['visits', '来日する要人'], ['negos', '進行中の交渉'], ['diet', '国会で審議中の条約'], ['terr', '領土問題'], ['soft', 'ソフトパワー・文化交流'], ['opinion', '国内の世論の反応'], ['stance', '外交の姿勢（親中派・親米派…）'], ['timeline', '外交の年表']];
 const TAB_DIPLOMACY2 = {
-  id: 'diplomacy', label: '外交',
+  id: 'diplomacy', label: '外交', icon: 'hand',
   rows(ui) {
     const g = ui.g;
     const out = [{ header: true, label: '外交の状況' }];
@@ -983,38 +818,46 @@ function drawReport(ui, c, key) {
   }
 }
 
-const TABS = [TAB_MAP, TAB_COUNTRIES, TAB_DIPLOMACY2, TAB_TRADE, TAB_ALLIANCES, TAB_CRISIS, TAB_NEWS];
+const TABS = [TAB_MAP, TAB_COUNTRIES, MORE.TAB_REGIONS, TAB_DIPLOMACY2, TAB_TRADE, TAB_ALLIANCES, TAB_CRISIS, MORE.TAB_TRENDS, MORE.TAB_TIMELINE, MORE.TAB_NEWS];
+const TAB_LONG = { trade: '貿易・関税', alliances: '同盟・条約', crisis: '危機・戦争', regions: '地域・陣営', trends: '推移（グラフ）' };
 const tabIndex = (t) => { if (typeof t === 'number') return clamp(t, 0, TABS.length - 1); const i = TABS.findIndex((x) => x.id === t); return i < 0 ? 0 : i; };
 
 // ================================================================ lists
-function drawList(ui, c, L, wide = false) {
+function drawList(ui, c, L0, wide = false) {
+  void wide;
+  if (ui.noList) return; // the big-text detail pane draws only the detail
+  const big = !!ui.big;
+  const L = big ? { ...BIG.body, rh: 32 } : L0;
   const rows = ui.rows();
   const st = ui.ls();
-  const n = Math.max(1, Math.floor((L.h - 4) / L.rh));
+  const cur = rows[st.i];
+  const subH = !big && cur && !cur.header && (cur.sub || cur.lock) ? 16 : 0; // the selected row's sub line (a tooltip at the bottom)
+  const n = Math.max(1, Math.floor((L.h - 4 - subH) / L.rh));
   st.top = clamp(st.top || 0, 0, Math.max(0, rows.length - n));
   if (st.i < st.top) st.top = st.i;
   if (st.i >= st.top + n) st.top = st.i - n + 1;
   R(c, L.x, L.y, L.w, L.h, K.panel);
   R(c, L.x, L.y, L.w, 1, K.edge); R(c, L.x, L.y + L.h - 1, L.w, 1, K.edge);
   ui.listRect = { ...L, n };
+  const fs = big ? 16 : 12, rs = big ? 14 : 10, hs = big ? 14 : 10;
   for (let k = 0; k < n && st.top + k < rows.length; k++) {
     const r = rows[st.top + k];
     const y = L.y + 2 + k * L.rh;
     const sel = st.top + k === st.i && ui.focus === 'body';
-    if (r.header) { R(c, L.x + 1, y, L.w - 2, L.rh - 1, '#0a1626'); T(c, r.label, L.x + 6, y + 3, 10, K.amber, 'left', L.w - 12); continue; }
+    if (r.header) { R(c, L.x + 1, y, L.w - 2, L.rh - 1, '#0a1626'); R(c, L.x + 1, y + L.rh - 2, L.w - 2, 1, 'rgba(255,181,71,0.25)'); T(c, r.label, L.x + 6, y + (L.rh - hs) / 2, hs, K.amber, 'left', L.w - 12); continue; }
     if (sel) R(c, L.x + 1, y, L.w - 2, L.rh - 1, K.sel);
-    if (sel) R(c, L.x + 1, y, 2, L.rh - 1, K.amber);
-    const rw = r.right ? measure(c, r.right, 10) + 10 : 0;
-    if (wide && r.sub) { T(c, r.sub, L.x + 8, y + 3, 10, K.faint, 'left', 60); T(c, r.label, L.x + 70, y + 3, 10, K.text, 'left', L.w - 80); continue; }
-    T(c, r.label, L.x + 8, y + 3, 12, r.lock ? K.faint : r.color || K.text, 'left', L.w - 16 - rw);
-    if (r.right) T(c, r.right, L.x + L.w - 6, y + 4, 10, r.rightColor || (r.lock ? K.lock : K.dim), 'right');
+    if (sel) R(c, L.x + 1, y, big ? 4 : 2, L.rh - 1, K.amber);
+    const rw = r.right ? measure(c, r.right, rs) + 10 : 0;
+    T(c, r.label, L.x + (big ? 12 : 8), y + (L.rh - fs) / 2, fs, r.lock ? K.faint : r.color || K.text, 'left', L.w - (big ? 24 : 16) - rw);
+    if (r.right) T(c, r.right, L.x + L.w - (big ? 10 : 6), y + (L.rh - rs) / 2 + 1, rs, r.rightColor || (r.lock ? K.lock : K.dim), 'right');
+    if (big) R(c, L.x + 8, y + L.rh - 1, L.w - 16, 1, 'rgba(120,160,200,0.08)');
   }
-  if (rows.length > n) { const h = Math.max(10, (L.h * n) / rows.length); R(c, L.x + L.w - 3, L.y + ((L.h - h) * st.top) / Math.max(1, rows.length - n), 2, h, K.edgeHi); }
-  // the selected row's sub line at the bottom of the list (when it does not fit in the row)
+  if (rows.length > n) { const h = Math.max(10, ((L.h - subH) * n) / rows.length); R(c, L.x + L.w - 3, L.y + ((L.h - subH - h) * st.top) / Math.max(1, rows.length - n), 2, h, K.edgeHi); }
+  if (subH) { const yy = L.y + L.h - subH - 1; R(c, L.x + 1, yy, L.w - 2, subH, '#0a1626'); R(c, L.x + 1, yy, L.w - 2, 1, K.edge); T(c, cur.lock ? `🔒 ${cur.lock}` : cur.sub, L.x + 6, yy + 3, 10, cur.lock ? K.lock : K.dim, 'left', L.w - 12); }
 }
 
 // ================================================================ flows (modals: confirm / pick / info)
-const OPT_KEY = { summit: 'topic', visit: 'topic', fm_talks: 'topic', statement: 'kind', sanction: 'level', aid: 'level', peace_treaty: 'terms', abrogate: 'treaty', peace_conf: 'terms', dispatch: 'side', tariff_extra: 'level', tariff_exempt: 'kind', receive_visit: 'topic', soft_action: 'kind', dispute_action: 'act', safeguard: 'cat' };
+const OPT_KEY = { crisis_statement: 'kind', crisis_fund: 'level', summit: 'topic', visit: 'topic', fm_talks: 'topic', statement: 'kind', sanction: 'level', aid: 'level', peace_treaty: 'terms', abrogate: 'treaty', peace_conf: 'terms', dispatch: 'side', tariff_extra: 'level', tariff_exempt: 'kind', receive_visit: 'topic', soft_action: 'kind', dispute_action: 'act', safeguard: 'cat' };
 async function diploFlow(ui, kind, target, opts0 = {}) {
   const g = ui.g;
   let pv = safe(() => g.diplomacyPreview(kind, target, opts0), null);

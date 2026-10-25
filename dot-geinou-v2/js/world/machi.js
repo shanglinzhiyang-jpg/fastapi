@@ -39,8 +39,8 @@ import { registerSong } from '../engine/audio.js';
 import { registerHangout, onMorning, weekdayOf, WEEKDAYS, HUNGRY } from '../engine/life.js';
 import { text } from '../engine/draw.js';
 import { TILE, makeCanvas, shade, fmtMoney, pick } from '../engine/util.js';
-import { grid, set, put, fill, hroad, border } from './townkit.js';
-import { busStop } from './props.js';
+import { grid, set, put, fill, hroad, vroad, border, unstick, ekiEnter } from './townkit.js';
+import { busStop, house, commuterTrain } from './props.js';
 import { INGREDIENTS, recipeHint } from './cooking.js';
 
 // ====================================================================== small helpers
@@ -996,16 +996,57 @@ async function kaichoTalk(g, npc) {
 }
 
 // ====================================================================== the town
-// The layout below is written for a 48x36 map; MACHI_TOP extra rows are added on top
-// at the end of generate() (everything is shifted down by it).
-export const MACHI_W = 48;
-export const MACHI_H = 36;
+// [R9-A] The town grew (round 9): x 48..75 east of the old map (the station with its tracks behind
+// it, the 駅前広場, ドット区役所 moved from the old north-east corner to the main street, 郵便局・
+// 銀行・コンビニ, a 横丁 of small eateries and ドット小学校) and rows 34..53 to the south (a 住宅街
+// with lanes and houses). The old map's x 0..47 / rows 0..33 keep their coordinates (the arcade is
+// longer: two more shops where the 区役所 stood). The layout is written in these "old" rows; MACHI_TOP
+// extra rows are added on top at the end of generate() (the tracks and the rooftops beyond them).
+export const MACHI_W = 76;
+export const MACHI_H = 54;
 export const MACHI_TOP = 2;
+const STATION = { x: 52, y: 1, w: 12, h: 4, door: 6 };          // ドット商店街駅 (old rows)
+// [R9-A] the station entrance: a train arrival appears in front of the station's door
+export const EKI = { x: STATION.x + STATION.door, y: STATION.y + STATION.h + MACHI_TOP, dir: 'down' };
 
 function machiSmoking() {
   const api = PLACES.kanraku && PLACES.kanraku.api;
   if (!api || !api.smokingSpot) return [];
   return [api.smokingSpot(36, 12, { town: 'machi' }), api.smokingPost(20, 18, { town: 'machi' }), api.smokingPost(12, 14, { town: 'machi' })];
+}
+
+// ---- the 住宅街 (rows 34..53): two rows of houses along lanes; N-S lanes at x 19, 33..34 and 62..63
+const HOUSE_SEGS = [[1, 18], [20, 32], [35, 46], [52, 61], [64, 74]];
+const NAMES = ['田中', '佐藤', '鈴木', '高橋', '伊藤', '渡辺', '山本', '中村', '小林', '加藤', '吉田', '山田', '佐々木', '松本', '井上', '木村', '林', '清水', '山崎', '森', '池田', '橋本', '阿部', '石川'];
+const HOUSE_TALK = [
+  '庭先で、植木に水をやった跡がある。', '家の中から、ピアノの練習の音が聞こえる。', '玄関の前に、子どもの自転車がとめてある。',
+  'ワンワン！…庭で犬がしっぽをふっている。', '夕ごはんの、いいにおいがする…。', 'ベランダで洗濯物がゆれている。',
+  'テレビの音が聞こえる。…バラエティ番組みたいだ。', '「回覧板」が、門のところにはさまっている。',
+];
+function residents() {
+  const out = [];
+  let n = 0;
+  for (const [row, y] of [[0, 38], [1, 45]]) {
+    for (const [a, b] of HOUSE_SEGS) {
+      let x = a + (row && a > 1 ? 1 : 0) + (a === 1 ? 1 : 0);
+      while (x + 4 <= b) {
+        const w = Math.min(b - x + 1, (n + row) % 3 === 0 ? 6 : 5);
+        if (w < 4) break;
+        const k = n * 7 + row;
+        const name = NAMES[n % NAMES.length];
+        // one of every few is a small アパート (the engine's two-storey flats), the rest are 一軒家
+        if (n % 7 === 3) {
+          out.push({ type: 'building', x, y, w, h: 4, door: 1, name: `アパート ${['メゾンさくら', 'コーポ若葉', 'ハイツ緑町', 'ドット荘別館'][(n >> 2) % 4]}`, kind: 'house', wall: ['#efe2bf', '#e6eef2', '#f2e6d0', '#e8dcc0'][n % 4], roof: ['#8a5a33', '#5a6f8a', '#6a4a33', '#4a5568'][n % 4],
+            text: ['小さなアパートだ。', HOUSE_TALK[n % HOUSE_TALK.length]] });
+        } else {
+          out.push(house(x, y, { w, h: 4, k, name, text: [`「${name}」と表札が出ている。`, HOUSE_TALK[n % HOUSE_TALK.length]] }));
+        }
+        x += w + 1 + ((n + row) % 4 === 0 ? 1 : 0);
+        n++;
+      }
+    }
+  }
+  return out;
 }
 
 function generate() {
@@ -1014,35 +1055,44 @@ function generate() {
 
   // ---- main road (its east end walks to 東京エリア)
   hroad(c, 15, 1, W - 1); // sidewalk 14, road 15..17, sidewalk 18
-  for (const x of [14, 15, 16, 29, 30, 31]) for (let y = 15; y <= 17; y++) set(c, x, y, 'crosswalk_h');
+  for (const x of [14, 15, 16, 29, 30, 31, 57, 58, 59]) for (let y = 15; y <= 17; y++) set(c, x, y, 'crosswalk_h');
+  // ---- the 住宅街's road (rows 35..36) and the east street (x 48..50) down to it and the lanes
+  for (let x = 0; x < W; x++) for (const y of [35, 36]) set(c, x, y, 'road');
+  vroad(c, 48, 15, 50);
+  for (let x = 48; x <= 50; x++) { set(c, x, 19, 'crosswalk_v'); set(c, x, 34, 'crosswalk_v'); }
 
-  // ---- 商店街 arcade street (y 5..8) and the passage under the gate
-  fill(c, 1, 5, 40, 4, 'machi_arcade');
+  // ---- 商店街 arcade street (y 5..8; x 1..47, two more shops at its east end) and the passage under the gate
+  fill(c, 1, 5, 47, 4, 'machi_arcade');
   fill(c, 13, 9, 5, 5, 'machi_arcade');
   for (let x = 2; x <= 40; x++) if (x < 13 || x > 17) put(c, x, 9, x % 5 === 0 ? 'planter' : 'hedge');
   for (let y = 10; y <= 12; y++) { put(c, 13, y, 'planter'); put(c, 17, y, 'planter'); }
   fill(c, 1, 9, 1, 5, 'sidewalk'); // west alley
-  fill(c, 41, 5, 3, 9, 'sidewalk'); // east lane
+  fill(c, 41, 9, 3, 5, 'sidewalk'); // east lane (arcade -> main road)
   // bicycle parking
   fill(c, 36, 10, 5, 4, 'stone');
   for (let x = 36; x <= 39; x++) put(c, x, 10, 'bicycle');
   put(c, 40, 10, 'vending');
-  // north-east corner
-  for (const [x, y] of [[40, 1], [42, 1], [45, 1], [46, 3], [44, 6], [46, 8], [45, 11]]) put(c, x, y, 'tree');
   for (let y = 1; y <= 4; y++) put(c, 1, y, 'hedge');
-  put(c, 41, 4, 'vending'); put(c, 42, 4, 'vending'); put(c, 44, 4, 'bench');
-  put(c, 44, 9, 'bench'); put(c, 46, 12, 'flowers');
-  set(c, 45, 9, 'flowers'); set(c, 46, 6, 'flowers');
-  // arcade benches between the pillars
+  // arcade benches between the pillars, a produce stand and a wagon on the south side
   for (const x of [6, 21, 31]) put(c, x, 8, 'bench');
   put(c, 35, 8, 'trash');
+  put(c, 9, 8, 'machi_produce'); put(c, 10, 8, 'machi_produce');
+
+  // ---- 駅前: the station plaza (x 48..74, rows 5..8), the 交番 and the bicycle parking beside the station
+  fill(c, 48, 1, 27, 8, 'stone');
+  for (let x = 70; x <= 74; x++) put(c, x, 4, 'bicycle');
+  fill(c, 44, 9, 31, 5, 'stone');                      // forecourts of the 駅前 buildings
+  for (const x of [44, 48, 57, 59, 66, 73]) put(c, x, 9, 'planter');
+  put(c, 74, 9, 'vending'); put(c, 66, 13, 'mailbox');
+  for (const x of [50, 66]) put(c, x, 8, 'bench');
+  put(c, 49, 5, 'sign_board');
 
   // ---- street furniture along the road
-  for (const x of [7, 25, 39]) put(c, x, 14, 'lamp');
-  for (const x of [6, 23, 36, 44]) put(c, x, 18, 'lamp');
+  for (const x of [7, 25, 39, 55, 64]) put(c, x, 14, 'lamp');
+  for (const x of [6, 23, 36, 44, 56, 68]) put(c, x, 18, 'lamp');
 
-  // ---- south: hedge line, residential side (west) and ドット中央公園 (east)
-  for (let x = 1; x <= 46; x++) if (![10, 11, 18, 19, 29, 30, 31].includes(x)) put(c, x, 19, 'hedge');
+  // ---- south of the road: hedge line, residential side (west), ドット中央公園, the 横丁 and the school (east)
+  for (let x = 1; x <= 74; x++) if (![10, 11, 18, 19, 29, 30, 31].includes(x) && !(x >= 47 && x <= 51)) put(c, x, 19, 'hedge');
   fill(c, 10, 19, 2, 9, 'sidewalk');
   fill(c, 18, 19, 2, 9, 'sidewalk');
   fill(c, 1, 28, 21, 2, 'sidewalk'); // residential lane
@@ -1050,11 +1100,12 @@ function generate() {
   for (let x = 2; x <= 9; x++) { put(c, x, 20, x % 2 ? 'tree' : 'bush'); put(c, x, 21, 'bush'); }
   for (let x = 12; x <= 17; x++) { put(c, x, 20, x % 2 ? 'bush' : 'tree'); put(c, x, 21, 'bush'); put(c, x, 22, 'bush'); }
   for (let y = 20; y <= 27; y++) put(c, 1, y, y % 2 ? 'tree' : 'bush');
-  // small garden + garbage corner by the houses
+  // small garden, the garbage corner by the houses, a path down to the 住宅街
   fill(c, 16, 30, 3, 2, 'flowers');
-  put(c, 19, 31, 'trash');
-  for (let x = 1; x <= 19; x++) put(c, x, 34, x % 3 ? 'bush' : 'tree');
+  fill(c, 19, 30, 1, 5, 'path');
+  put(c, 18, 32, 'trash');
   put(c, 1, 30, 'tree'); put(c, 8, 32, 'mailbox'); put(c, 15, 32, 'bicycle');
+  fill(c, 1, 34, 19, 1, 'path'); // the lane in front of コーポひだまり / ハイツこもれび
 
   // park
   for (let y = 20; y <= 34; y++) if (y !== 28 && y !== 29) put(c, 20, y, 'hedge');
@@ -1062,28 +1113,57 @@ function generate() {
   fill(c, 29, 19, 3, 2, 'path');
   fill(c, 22, 21, 23, 1, 'path'); fill(c, 22, 33, 23, 1, 'path');
   fill(c, 22, 21, 1, 13, 'path'); fill(c, 44, 21, 1, 13, 'path');
+  fill(c, 33, 34, 2, 1, 'path');                       // the park's south gate
   // pond
   fill(c, 24, 23, 8, 6, 'stone');
   fill(c, 25, 24, 6, 4, 'water');
   // playground
   fill(c, 35, 23, 5, 3, 'machi_sandbox');
-  for (const [x, y] of [[21, 22], [21, 32], [45, 21], [45, 25], [45, 30], [33, 23], [42, 31], [24, 31], [32, 31], [43, 22], [23, 34], [34, 34], [40, 34]]) put(c, x, y, x % 2 ? 'tree' : 'sakura');
+  for (const [x, y] of [[21, 22], [21, 32], [45, 21], [45, 25], [45, 30], [33, 23], [42, 31], [24, 31], [32, 31], [43, 22], [23, 34], [37, 34], [40, 34]]) put(c, x, y, x % 2 ? 'tree' : 'sakura');
   for (const [x, y] of [[33, 29], [34, 29], [33, 30], [34, 30], [41, 28], [42, 28], [27, 30], [28, 30], [36, 31], [37, 31]]) set(c, x, y, 'flowers');
   for (const x of [25, 29]) put(c, x, 29, 'bench');
   for (const [x, y] of [[31, 25], [34, 25], [31, 28], [34, 28], [32, 28], [33, 28]]) set(c, x, y, 'flowers');
   for (const [x, y] of [[40, 30], [43, 27], [36, 30], [24, 22]]) put(c, x, y, x % 2 ? 'tree' : 'sakura');
   put(c, 38, 32, 'bench'); put(c, 26, 32, 'trash');
-  for (let x = 21; x <= 46; x++) if (!c[34][x][1]) put(c, x, 34, x % 4 ? 'bush' : 'tree');
+  for (let x = 21; x <= 46; x++) if (!c[34][x][1] && x !== 33 && x !== 34) put(c, x, 34, x % 4 ? 'bush' : 'tree');
   for (let y = 20; y <= 33; y++) if (!c[y][46][1]) put(c, 46, y, y % 3 ? 'bush' : 'tree');
   for (let y = 22; y <= 32; y += 2) if (!c[y][45][1]) put(c, 45, y, 'bush');
 
+  // the 横丁 (rows 20..23): small eateries facing a lantern-lit lane; the school (rows 24..34)
+  fill(c, 52, 20, 23, 4, 'stone');
+  for (const x of [54, 59, 64, 69, 74]) put(c, x, 23, 'lantern');
+  for (let x = 52; x <= 74; x++) put(c, x, 24, 'fence');
+  fill(c, 52, 25, 23, 9, 'grass');
+  for (const [x, y] of [[53, 25], [53, 28], [67, 25], [70, 26], [73, 25], [72, 28], [68, 28]]) put(c, x, y, (x + y) % 2 ? 'sakura' : 'tree');
+  fill(c, 53, 30, 21, 4, 'sand');                      // 校庭
+  for (let x = 52; x <= 74; x++) if (x !== 60 && x !== 61) put(c, x, 34, 'fence');
+  for (let y = 25; y <= 33; y++) if (y !== 30 && y !== 31) put(c, 52, y, 'fence');
+  fill(c, 52, 30, 1, 2, 'path'); fill(c, 60, 34, 2, 1, 'path');
+  for (const x of [56, 62, 68]) put(c, x, 33, 'bench');
+  for (let y = 30; y <= 33; y++) put(c, 74, y, y % 2 ? 'tree' : 'sakura');
+
+  // ---- 住宅街 (rows 37..53): back gardens, houses on two rows, lanes, N-S connectors
+  for (const y of [37, 44]) for (let x = 1; x <= 74; x++) put(c, x, y, (x * 3 + y) % 5 === 0 ? 'tree' : 'hedge');
+  fill(c, 1, 42, 74, 2, 'sidewalk');
+  fill(c, 1, 49, 74, 2, 'sidewalk');
+  for (const x of [19, 33, 34, 62, 63]) for (let y = 37; y <= 48; y++) set(c, x, y, 'path');
+  for (const x of [47, 51]) for (let y = 37; y <= 50; y++) set(c, x, y, 'sidewalk');
+  for (let x = 1; x <= 74; x++) { put(c, x, 51, (x * 7) % 4 ? 'bush' : 'tree'); put(c, x, 52, (x * 5) % 3 ? 'tree' : 'sakura'); }
+  for (const [x, y] of [[8, 43], [27, 43], [41, 50], [57, 43], [70, 50], [14, 50]]) put(c, x, y, 'bicycle');
+  for (const [x, y] of [[4, 50], [38, 43], [66, 43]]) put(c, x, y, 'mailbox');
+  for (const [x, y] of [[23, 50], [55, 50]]) put(c, x, y, 'vending');
+
   border(c, 'tree');
-  // re-open the east edge (the road to Tokyo)
+  // the tracks behind the arcade and the station run on past both edges (row 0 here, one more above)
+  for (let x = 0; x < W; x++) set(c, x, 0, 'rail');
+  // the road ends at the town's edges: the residential road runs on (a barrier), the main road to Tokyo
+  for (const x of [0, W - 1]) { set(c, x, 35, 'road', 'cone'); set(c, x, 36, 'road', 'cone'); }
   for (let y = 14; y <= 18; y++) set(c, W - 1, y, y === 14 || y === 18 ? 'sidewalk' : y === 16 ? 'road_line_h' : 'road');
   const warps = [];
   for (let y = 14; y <= 18; y++) warps.push({ x: W - 1, y, place: 'tokyo', room: 'main', tx: 1, ty: y + 5, dir: 'right' });
 
   const ARC = { type: 'building', y: 1, h: 4, kind: 'arcade' };
+  const SMALL = { type: 'building', y: 20, h: 3, kind: 'small' };
   const entities = [
     // ---- 商店街 (arcade row, doors on y 4)
     { ...ARC, x: 2, w: 4, door: 2, place: 'hanaya', name: 'フラワー＆ギフト はなや', sign: { text: 'はなや', bg: '#ffffff', color: '#2f9a4a' }, awning: ['#2f9a4a', '#ffffff'], display: 'flowers', wall: '#f4efe6' },
@@ -1095,6 +1175,10 @@ function generate() {
     { ...ARC, x: 32, w: 4, door: 2, name: 'たい焼き 金ドット', sign: { text: 'たい焼き', bg: '#2a3a7a', color: '#ffffff' }, display: 'counter', awning: ['#2a3a7a', '#ffffff'], wall: '#f6ead2', talk: buyTaiyaki },
     { ...ARC, x: 36, w: 4, door: 2, name: '空き店舗', sign: { text: '貸店舗', bg: '#e8e4dc', color: '#5a5f6b' }, display: 'plain', doorKind: 'shutter', awning: ['#9aa0aa', '#d5d9e0'], wall: '#e4e0d8',
       text: ['シャッターが閉まっている。\n「貸店舗　お問い合わせはドット不動産まで」', '…シャッターの前は、看板ネコの特等席らしい。'] },
+    { ...ARC, x: 40, w: 4, door: 2, name: 'ドット書店', sign: { text: 'ドット書店', bg: '#ffffff', color: '#2a3a7a' }, display: 'books', awning: ['#2a3a7a', '#ffffff'], wall: '#f2ece0',
+      text: ['町の本屋さん「ドット書店」だ。', '店先に、今週のテレビ情報誌と週刊誌が平積みになっている。\n…芸能ニュースの見出しが、やけに大きい。'] },
+    { ...ARC, x: 44, w: 4, door: 2, name: 'ドラッグストア ドット', sign: { text: 'ドラッグストア', bg: '#2f9a4a', color: '#ffffff' }, display: 'goods', awning: ['#2f9a4a', '#ffffff'], wall: '#eef6ee',
+      text: ['ドラッグストアだ。', '「本日ポイント5倍」の貼り紙。\nのどあめに湿布、日用品…店先のワゴンがにぎやかだ。'] },
 
     // ---- along the main road (doors on y 13)
     { type: 'building', x: 2, y: 10, w: 5, h: 4, door: 2, place: 'fudousan', name: 'ドット不動産', kind: 'shop', wall: '#eef2f6', roof: '#2f6fd0', sign: { text: 'ドット不動産', bg: '#2f6fd0', color: '#ffffff' }, display: 'listings' },
@@ -1103,23 +1187,48 @@ function generate() {
     { type: 'building', x: 25, y: 10, w: 6, h: 4, door: 3, place: 'gym', name: 'DOT GYM', kind: 'gym', sign: { text: 'DOT GYM' } },
     { type: 'building', x: 31, y: 10, w: 5, h: 4, door: 2, place: 'karaoke', name: 'カラオケ ドットボックス', kind: 'shop', wall: '#3a2a4a', roof: '#ff4f8b', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' }, display: 'karaoke', neon: '#ff7eb6' },
 
-    // ---- ドット区役所 (js/places/kuyakusho.js): the north-east corner beyond the arcade
-    { type: 'building', x: 43, y: 2, w: 4, h: 3, door: 2, place: 'kuyakusho', name: 'ドット区役所', kind: 'office', rise: 0, wall: '#e4e2d8', roof: '#5a6a7a', canopy: '#2a5088', plants: true, sign: { text: 'ドット区役所', bg: '#2a3a5a', color: '#ffffff' } },
+    // ---- 駅前 (x 44..74): the station, the 交番, 郵便局・ドット区役所 (js/places/kuyakusho.js)・銀行・コンビニ
+    { type: 'building', ...STATION, place: 'machi_eki', name: 'ドット商店街駅', kind: 'station', wall: '#ece4d4', roof: '#3a5a8a', sign: { text: 'ドット商店街駅', bg: '#ffffff', color: '#20232a' }, signW: 96, enter: ekiEnter('machi') },
+    { type: 'building', x: 66, y: 2, w: 4, h: 3, door: 2, name: '駅前交番', kind: 'shop', wall: '#f4f4f0', roof: '#3a4a6a', sign: { text: '交番', bg: '#ffffff', color: '#2a3a7a' }, display: 'plain',
+      text: ['駅前の交番だ。', 'おまわりさんがパトロールに出ているようだ。\n「パトロール中」の札がかかっている。'] },
+    { type: 'building', x: 44, y: 10, w: 5, h: 4, door: 2, name: 'ドット郵便局', kind: 'shop', wall: '#f6f2ec', roof: '#c8281c', stripes: ['#c8281c', '#ffffff'], sign: { text: '〒 郵便局', bg: '#ffffff', color: '#c8281c' }, display: 'plain',
+      text: ['郵便局だ。', '窓口には、小包を出す人と、\n通帳を手にした人が並んでいる。'] },
+    { type: 'building', x: 49, y: 9, w: 8, h: 5, door: 3, place: 'kuyakusho', name: 'ドット区役所', kind: 'office', rise: 1, wall: '#e4e2d8', roof: '#5a6a7a', canopy: '#2a5088', plants: true, sign: { text: 'ドット区役所', bg: '#2a3a5a', color: '#ffffff' }, signH: 16 },
     // (期日前投票 from 2003-12; before it, the same floor is the 不在者投票 office — kuyakusho.js)
-    { type: 'sign', x: 44, y: 4, talk: (g) => {
+    { type: 'sign', x: 50, y: 13, talk: (g) => {
       let y = 2026;
       try { y = typeof g.lawDate === 'function' ? g.lawDate().ym : 202604; } catch (e) { y = 202604; }
       const vote = y >= 200312 ? '期日前投票所' : '不在者投票の受付';
       return g.say(['入口のわきに「ドット区役所」の各階の案内が掲げてある。', `1階：住民課・税務課（確定申告の相談）\n2階：選挙管理委員会・${vote}`, '3階：区民相談室（暮らしやお金の相談）\n5階：区議会']);
     } },
+    { type: 'building', x: 60, y: 10, w: 6, h: 4, door: 3, name: 'ドット銀行', kind: 'office', rise: 0, wall: '#e8ecf2', roof: '#2a4a7a', canopy: '#2a4a7a', sign: { text: 'ドット銀行', bg: '#2a4a7a', color: '#ffffff' },
+      text: ['銀行だ。「ドット銀行 商店街支店」。', 'ATMコーナーに、短い行列ができている。'] },
+    { type: 'building', x: 67, y: 10, w: 6, h: 4, door: 3, name: 'ドットマート 商店街駅前店', kind: 'konbini', sign: { text: 'ドットマート' },
+      text: ['コンビニ「ドットマート」。', '駅前の店は、朝と夕方がいちばん混む。\n…食べ物を買うなら、商店街のスーパーが安い。'] },
 
-    // ---- residential side (doors on y 27) and neighbours' houses
+    // ---- the 横丁 (doors on row 22)
+    { ...SMALL, x: 52, w: 4, door: 2, name: '居酒屋 とりあえず', wall: '#f4e6cc', roof: '#3a2a20', sign: { text: '居酒屋', bg: '#2a3a7a', color: '#ffffff' }, noren: '#2a3a7a',
+      text: ['居酒屋「とりあえず」。', '「とりあえず、生！」の声が、外まで聞こえてくる。'] },
+    { ...SMALL, x: 57, w: 4, door: 2, name: '焼き鳥 ドット', wall: '#f6e7c8', roof: '#5a3a20', sign: { text: '焼き鳥', bg: '#d62f2f', color: '#ffffff' }, noren: '#d62f2f',
+      text: ['焼き鳥屋だ。', 'けむりと、たれのこげる香り…。\nカウンターは、仕事帰りの人でいっぱいだ。'] },
+    { ...SMALL, x: 62, w: 4, door: 2, name: '中華そば 一番', kind: 'ramen', wall: '#f4e6cc', sign: { text: '中華そば', bg: '#d62f2f', color: '#ffffff' },
+      text: ['昔ながらの中華そば屋だ。', '「開店は夕方5時から」と書いてある。'] },
+    { ...SMALL, x: 67, w: 4, door: 2, name: '立ち飲み ドット', wall: '#efe2bf', roof: '#3a3a40', sign: { text: '立ち飲み', bg: '#ffd23f', color: '#20232a' }, noren: '#20232a',
+      text: ['立ち飲みの店だ。', 'ビール一杯と、おでんひと皿。\n…「一杯だけ」のはずが、みんな長居している。'] },
+    { ...SMALL, x: 71, w: 4, door: 2, name: 'スナック 夕顔', wall: '#e8dcd8', roof: '#5a3a5a', sign: { text: 'スナック', bg: '#3a1a3a', color: '#ffb0e0' }, noren: '#7a1a5a',
+      text: ['スナック「夕顔」。', 'まだ準備中だ。\n…夜になると、カラオケの歌声が聞こえてくるらしい。'] },
+    // ---- ドット小学校 (doors on row 29; the 校庭 south of it)
+    { type: 'building', x: 54, y: 25, w: 12, h: 5, door: 6, name: 'ドット小学校', kind: 'office', rise: 1, wall: '#f2efe6', roof: '#7a8a9a', glass: '#9fc8e0', sign: { text: 'ドット小学校', bg: '#ffffff', color: '#2a5a3a' }, signH: 16,
+      text: ['区立ドット小学校だ。', '校舎の時計の下に、「元気に　なかよく　かしこく」。\n校庭から、子どもたちの声が聞こえる。'] },
+
+    // ---- residential side (doors on y 27 / 33) and neighbours' houses
     { type: 'building', x: 2, y: 22, w: 8, h: 6, door: 4, place: 'mansion', name: 'ドットレジデンス', kind: 'mansion', sign: { text: 'ドットレジデンス' } },
     { type: 'building', x: 12, y: 23, w: 6, h: 5, door: 3, place: 'tower', name: 'ドットタワー', kind: 'tower', style: 'residential', rise: 3, sign: { text: 'DOT TOWER' } },
     { type: 'building', x: 2, y: 30, w: 6, h: 4, door: 2, name: 'コーポひだまり', kind: 'house', wall: '#f2e6d0', roof: '#5a6f8a', sign: { text: 'コーポひだまり', bg: '#fff6e0' },
       text: ['木造のアパート「コーポひだまり」。', 'ベランダで、ふとんがのんびり干されている。'] },
     { type: 'building', x: 9, y: 30, w: 6, h: 4, door: 3, name: 'ハイツこもれび', kind: 'house', wall: '#e6eef2', roof: '#8a5a33', sign: { text: 'ハイツこもれび', bg: '#ffffff' },
       text: ['アパート「ハイツこもれび」。', 'どこかの部屋から、ギターの練習の音が聞こえる。\n…同じフレーズばかりだ。'] },
+    ...residents(),
 
     // ---- 喫煙所 by the bicycle parking and 路上喫煙禁止 plates (ネオン街's shared props, js/world/kanraku.js;
     // the rule itself is the justice core's 'machi' smoking rule: the street is no-smoking from 2020-04)
@@ -1127,11 +1236,13 @@ function generate() {
     // ---- props & signs
     gate(13, 13),
     { type: 'sign', x: 13, y: 13, solid: true, text: ['「ドット商店街」の入口アーチだ。', 'はなや・スーパー・ラーメン・カフェ・美容院…\nアーケードの下に、お店がずらりと並んでいる。'] },
-    { type: 'sign', x: 17, y: 13, solid: true, text: ['入口アーチの柱に、案内図が貼ってある。', '【アーケード】はなや／スーパー まるどっと／らーめん／\nCAFE ドット／hair salon／コインランドリー／たい焼き', '【大通り】ドット不動産／ドット家具／ドットキッチン／\nDOT GYM／カラオケ　【南】ドットレジデンス／ドットタワー／公園'] },
-    ...[3, 8, 12, 18, 23, 28, 33, 38].map((x, i) => pillar(x, 8, i)),
+    { type: 'sign', x: 17, y: 13, solid: true, text: ['入口アーチの柱に、案内図が貼ってある。', '【アーケード】はなや／スーパー まるどっと／らーめん／\nCAFE ドット／hair salon／コインランドリー／たい焼き／\nドット書店／ドラッグストア', '【大通り】ドット不動産／ドット家具／ドットキッチン／\nDOT GYM／カラオケ　【東・駅前】駅／郵便局／区役所／\n銀行／コンビニ／横丁　【南】公園／小学校／住宅街'] },
+    ...[3, 8, 12, 18, 23, 28, 33, 38, 43].map((x, i) => pillar(x, 8, i)),
+    commuterTrain(64, -1, { text: ['電車が駅に入ってきた。', '駅の改札は、駅舎の入口から。'] }),
     cat(38, 5, { talk: petCat }),
-    notice(44, 13, { talk: readNotice }),
-    post(46, 13, '商店街', '東京', { text: ['道しるべだ。', '← ドット商店街\n→ 東京エリア（ドット荘・事務所・テレビ局）'] }),
+    notice(40, 13, { talk: readNotice }),
+    post(74, 13, '商店街', '東京', { text: ['道しるべだ。', '← ドット商店街（アーケード・駅）\n→ 東京エリア（ドット荘・事務所・テレビ局）'] }),
+    { type: 'sign', x: 49, y: 5, text: ['「ドット商店街駅」の案内板だ。', '← アーケード（ドット商店街）\n↓ 区役所・郵便局・銀行・コンビニ／大通り', '大通りの南：横丁・ドット小学校・住宅街\n大通りを東へ行けば、東京エリア。'] },
     busStop(38, 19, { text: undefined, talk: takeBus }),
     board(32, 20, '公園', { text: undefined, talk: jog }),
     slide(40, 23),
@@ -1139,7 +1250,8 @@ function generate() {
     ducks(25, 24, 6, 4),
     gazebo(32, 26),
     { type: 'sign', x: 28, y: 20, text: ['「ドット中央公園」', '池のまわりは、1周約400mのジョギングコース。\n入口の看板の前から走れます。'] },
-    { type: 'sign', x: 19, y: 31, text: ['ゴミ捨て場の看板だ。', '「燃えるゴミは月・木。\n　ゴミ出しは朝8時までに！」\n…カラスよけのネットがかかっている。'] },
+    { type: 'sign', x: 18, y: 32, text: ['ゴミ捨て場の看板だ。', '「燃えるゴミは月・木。\n　ゴミ出しは朝8時までに！」\n…カラスよけのネットがかかっている。'] },
+    { type: 'sign', x: 60, y: 34, text: ['ドット小学校の裏門だ。', '「下校の時間です。車に気をつけて帰りましょう」\n…と放送が聞こえる。'] },
 
     // ---- people
     { type: 'npc', id: 'machi_kaicho', x: 18, y: 14, dir: 'down', look: KAICHO.look, name: KAICHO.name, talk: kaichoTalk },
@@ -1172,6 +1284,21 @@ function generate() {
         g.emote(npc.id, '♥');
       } },
     { type: 'npc', id: 'machi_taiyaki', x: 34, y: 5, dir: 'down', look: TAIYAKI.look, name: TAIYAKI.name, talk: buyTaiyaki },
+    // 駅前・横丁・小学校・住宅街
+    { type: 'npc', id: 'machi_ekiin', x: 61, y: 6, dir: 'down', look: { ...LOOKS.guard, top: '#2a3a5a', hat: '#2a3a5a' }, name: '駅員さん',
+      text: ['ドット商店街駅です。', '駅を出て左が、アーケードの商店街。\n区役所や銀行は、駅前の大通りぞいですよ。'] },
+    { type: 'npc', id: 'machi_kuyakusho_visitor', x: 54, y: 14, dir: 'up', look: { ...LOOKS.oldman, top: '#6a5a4a' }, name: '手続き帰りのおじいさん', wander: 1,
+      text: ['住民票をとりに来たんじゃ。', '区役所は、むかしは商店街のいちばん奥にあってのう。\n駅前に移って、ずいぶん便利になったわい。'] },
+    { type: 'npc', id: 'machi_yokocho', x: 66, y: 23, dir: 'down', look: { ...LOOKS.salaryman, top: '#4a4a5a', tie: '#c0452f', blush: true }, name: '仕事帰りの会社員', wander: 2,
+      text: ['いやあ、この横丁は落ち着くねえ。', '一杯だけ…一杯だけのつもりなんだけどね。'] },
+    { type: 'npc', id: 'machi_pupil1', x: 58, y: 31, dir: 'down', look: { ...LOOKS.kid, top: '#ff8a3d' }, name: '小学生', wander: 3,
+      text: ['休み時間は、ドッジボール！', 'きのうテレビで見た芸人さんのギャグ、\nクラスでみんなマネしてるんだ！'] },
+    { type: 'npc', id: 'machi_pupil2', x: 66, y: 32, dir: 'left', look: { ...LOOKS.kid, top: '#ff7eb6', hairColor: 'black' }, name: '小学生', wander: 2,
+      text: ['大きくなったら、なにになろうかなあ。', 'テレビに出る人？\n…それとも、テレビを作る人？'] },
+    { type: 'npc', id: 'machi_dogwalk', x: 28, y: 43, dir: 'right', look: { ...LOOKS.oldwoman, top: '#5a8ac8' }, name: '犬の散歩中のおばあさん', wander: 4,
+      text: ['この子と朝夕、町内をひとまわりするのが日課なの。', 'このへんはね、古い家と新しい家がまじってて、\n歩いてるだけで楽しいのよ。'] },
+    { type: 'npc', id: 'machi_kairanban', x: 56, y: 49, dir: 'up', look: { ...LOOKS.mom, top: '#e8a0b8' }, name: '回覧板をまわす人',
+      text: ['町内会の回覧板です。', '「来月の第一日曜日は、ドット中央公園の清掃です。\n　ご協力をお願いします」…ですって。'] },
   ];
 
   const events = [
@@ -1179,8 +1306,9 @@ function generate() {
     { x: 29, y: 29, on: 'action', run: restBench },
     { x: 38, y: 32, on: 'action', run: restBench },
   ];
-  // two rows of rooftops / trees above the arcade, so its shop signs clear the HUD
-  for (let k = 0; k < MACHI_TOP; k++) c.unshift(Array.from({ length: W }, (_, x) => ['grass', (x + k) % 4 === 1 ? 'bush' : 'tree']));
+  // two rows above the shops: the second track and the rooftops beyond it
+  c.unshift(Array.from({ length: W }, () => ['rail']));
+  c.unshift(Array.from({ length: W }, (_, x) => ['grass', x % 4 === 1 ? 'bush' : 'tree']));
   for (const list of [entities, events, warps]) for (const e of list) e.y += MACHI_TOP;
   return { w: W, h: H + MACHI_TOP, cells: c, entities, warps, events };
 }
@@ -1190,19 +1318,22 @@ registerPlace({
   name: 'ドット商店街',
   kind: 'town',
   bgm: 'town',
-  start: { room: 'main', x: 45, y: 16 + MACHI_TOP, dir: 'left' },
+  start: { room: 'main', x: MACHI_W - 2, y: 16 + MACHI_TOP, dir: 'left' },
   rooms: {
     main: {
       generate,
       bg: '#62b35b',
+      topPad: 24,
+      // a save made on a tile the town has since built over steps to the nearest free tile
       onEnter: async (g) => {
+        unstick(g);
         if (g.flag('machi_intro')) return;
         g.setFlag('machi_intro');
         await g.wait(250);
         await g.say([
           'にぎやかな通りに出た。\nアーケードの入口に「ドット商店街」の文字が見える。',
           '食材、カフェ、ジム、カラオケ…。\n暮らしのことなら、ここでそろいそうだ。',
-          ...(PLACES.kuyakusho ? ['アーケードの先、北東のはしには「ドット区役所」。\n選挙の届出や、お金・暮らしの相談はそこでできるらしい。'] : []),
+          ...(PLACES.kuyakusho ? ['駅前の大通りぞいには「ドット区役所」。\n選挙の届出や、お金・暮らしの相談はそこでできるらしい。'] : []),
         ]);
       },
     },

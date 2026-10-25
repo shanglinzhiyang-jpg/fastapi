@@ -1,16 +1,34 @@
 // なんばエリア (大阪): the home of comedy. Reached from 東京駅 (shinkansen to 新大阪, then a local train).
-// West end (x 1..29): NSC大阪校 next to the 新喜劇 theatre, ドット劇場, a little park and the taxi
-// stand. Middle (x 30..72): theatres, the canal and the station. East part (x 73..104, a riverside
+// West end (x 1..29): NSC大阪校 next to the 新喜劇 theatre, ドット劇場, a little park. Middle
+// (x 30..72): theatres, the canal (道頓堀) and the station. East part (x 73..104, a riverside
 // district): テレビ局通り with MBS毎日放送 ('mbs') and 関西テレビ ('ktv') on the north bank
 // (js/places/osaka_tv.js), food stalls and おうぎの森公園 on the south bank.
+// [R9-A] South of the canal-side street the town is NAMBA_DS rows deeper (rows 23..38): 戎橋筋 (a covered
+// arcade from ことぶき橋 straight down to なんば駅), 千日前 (a street from the east bridge), にし通り (from
+// にし橋), the cross street 千日前通り (rows 29..31, the taxi stand) and two rows of shops and theatres.
+// Everything that was on rows 23.. before moved NAMBA_DS rows south (flags.map_namba 3 relocates saves).
 
 import { registerPlace, PLACES } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
-import { grid, set, put, fill, border, unstick } from './townkit.js';
+import { grid, set, put, fill, border, unstick, ekiEnter } from './townkit.js';
 import { commuterTrain, fountain, streetStage, taxi } from './props.js';
 import { text } from '../engine/draw.js';
-import { makeCanvas, fmtMoney, TILE } from '../engine/util.js';
-import { outline } from '../engine/tiles.js';
+import { makeCanvas, fmtMoney, TILE, shade } from '../engine/util.js';
+import { outline, defineTile, R as TR, P as TP } from '../engine/tiles.js';
+
+// [R9-A] 戎橋筋's paving (a covered arcade): cream and terracotta slabs in a diagonal band
+defineTile('namba_arcade', {
+  variants: 2,
+  draw(c, r, f, v) { TR(c, 0, 0, 16, 16, '#d8c8a8'); TR(c, 0, 0, 16, 1, '#e8dcc0'); TR(c, v ? 8 : 0, 8, 8, 8, '#c89a7a'); TR(c, 0, 15, 16, 1, '#b8a888'); },
+  hd(c, r, f, v) {
+    TR(c, 0, 0, 32, 32, '#a89a80');
+    for (let k = 0; k < 4; k++) {
+      const x = 1 + (k % 2) * 16, y = 1 + (k >> 1) * 16, col = (k + v) % 3 === 0 ? '#d8a080' : (k % 2 ? '#efe4cc' : '#e6d8ba');
+      TR(c, x, y, 15, 15, col); TR(c, x, y, 15, 1, shade(col, 0.1)); TR(c, x, y + 14, 15, 1, shade(col, -0.1)); TR(c, x + 14, y + 1, 1, 13, shade(col, -0.06));
+      TP(c, x + 3 + ((k * 5 + v * 3) % 9), y + 4 + ((k * 7) % 8), shade(col, -0.08));
+    }
+  },
+});
 
 // Blinking neon billboard on a pole (3x2 tiles).
 function neon(x, y, label, color, extra = {}) {
@@ -89,11 +107,19 @@ function riverBoat(x0, x1, y) {
 // OX tiles too far west: namba's onEnter moves them (flags.map_namba marks a game already moved).
 export const NAMBA_OX = 30;
 export const NAMBA_W = 76 + NAMBA_OX; // x 73..104: the riverside テレビ局通り (x 30..72: theatres, the canal and the station)
-export const NAMBA_H = 38;
-const OX = NAMBA_OX;
+// [R9-A] NAMBA_DS rows inserted at row NAMBA_BAND (the 戎橋筋・千日前 district between the canal-side street
+// and the station's row); everything south of them moved down
+export const NAMBA_BAND = 23;
+export const NAMBA_DS = 16;
+export const NAMBA_H = 38 + NAMBA_DS;
+const OX = NAMBA_OX, DS = NAMBA_DS, BAND = NAMBA_BAND;
+// [R9-A] なんば駅: its door leads into the rail network's 駅構内 (place 'eki', room 'namba') once that exists
+// (before: station_namba). A train arrival appears in front of the door.
+export const EKI = { x: 22 + OX, y: 30 + DS, dir: 'down' };
 
-// The west part (x 1..29): its own buildings and people. The map app's なんば arrival
-// (phone_apps.js, at [22, 30]) is the taxi stand on the station plaza here.
+// The west part (x 1..29): its own buildings and people (rows 23.. move NAMBA_DS rows south in
+// generate()). The map app's なんば arrival (phone_apps.js, at [22, 30]) is the taxi stand on
+// 千日前通り (bandEntities).
 function westEntities() {
   return [
     // north side of the theatre street (fronts on row 10)
@@ -109,9 +135,7 @@ function westEntities() {
       text: ['ラーメン屋だ。', '「NSC生は替え玉一杯無料」の貼り紙がある。'] },
     { type: 'building', x: 21, y: 23, w: 7, h: 4, door: 3, name: 'カラオケ', kind: 'karaoke', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' },
       text: ['カラオケ店だ。', '個室でネタ合わせをする芸人も多いらしい。'] },
-    taxi(24, 31, '#2f6fd0', { text: 'タクシーが客待ちをしている。\nここは、なんば駅前のタクシー乗り場だ。' }),
-    { type: 'sign', x: 20, y: 31, solid: true, text: ['タクシー乗り場', '東：なんば駅（電車・新幹線のりかえ）\n北：NSC大阪校・ドット劇場・よしもと新喜劇 劇場'] },
-    { type: 'sign', x: 21, y: 15, text: ['なんば・にし橋\n北：NSC大阪校・ドット劇場・道具屋\n南：ラーメン屋・カラオケ・公園・タクシー乗り場', '東：よしもと新喜劇 劇場・松竹芸能・なんば駅'] },
+    { type: 'sign', x: 21, y: 15, text: ['なんば・にし橋\n北：NSC大阪校・ドット劇場・道具屋\n南：にし通り・千日前通り（タクシー乗り場）・公園', '東：よしもと新喜劇 劇場・松竹芸能・戎橋筋・なんば駅'] },
 
     // people
     { type: 'npc', id: 'nw_nsc', x: 24, y: 12, dir: 'down', look: { ...LOOKS.comedian, top: '#e8492a', hairColor: 'black' }, name: 'NSC生', wander: 2,
@@ -124,8 +148,6 @@ function westEntities() {
       text: ['…ほんでな、オカンがな、言うねん。', '（ネタ合わせの最中みたいだ）'] },
     { type: 'npc', id: 'nw_tsukkomi', x: 6, y: 26, dir: 'left', look: { ...LOOKS.comedian, top: '#2f9a4a', hairColor: 'black' }, name: 'ネタ合わせ中の芸人', fixedDir: true,
       text: ['もうええわ！…って、まだ途中やった。', 'NSCの同期と組んだばっかりやねん。\n公園でネタ合わせするんが、いちばんタダやからな。'] },
-    { type: 'npc', id: 'nw_taxi', x: 26, y: 31, dir: 'left', look: { ...LOOKS.guard, hat: '#2f6fd0' }, name: 'タクシー運転手',
-      text: ['まいど！ どこまで行きはります？', '…あ、歩いて行けるとこやったら、歩いたほうが安いで。'] },
   ];
 }
 
@@ -206,9 +228,9 @@ function generate() {
     { type: 'building', x: 18, y: 3, w: 8, h: 7, door: 4, place: 'shochiku', name: '松竹芸能', kind: 'office', wall: '#f8f0e8', roof: '#d8101c', logo: 'shochiku', signH: 20, signW: 90 },
     { type: 'building', x: 28, y: 6, w: 4, h: 4, door: 2, place: 'takoyaki', name: 'たこ焼き屋', kind: 'small', wall: '#f6e7c8', roof: '#d62f2f', sign: { text: 'たこ焼き', bg: '#ff8a3d', color: '#ffffff' } },
     { type: 'building', x: 34, y: 2, w: 8, h: 8, door: 4, place: 'hotel', name: 'ドットホテル なんば', kind: 'hotel', wall: '#e8e4f0', roof: '#3a4a7a', sign: { text: 'ドットホテル', bg: '#1d2a5e', color: '#ffd23f' } },
-    { type: 'building', x: 16, y: 25, w: 12, h: 5, door: 6, place: 'station_namba', name: 'なんば駅', kind: 'station', wall: '#d8d2c4', roof: '#d62f2f', sign: { text: 'なんば駅', bg: '#ffffff' } },
+    { type: 'building', x: 16, y: 25, w: 12, h: 5, door: 6, place: 'station_namba', name: 'なんば駅', kind: 'station', wall: '#d8d2c4', roof: '#d62f2f', sign: { text: 'なんば駅', bg: '#ffffff' }, enter: ekiEnter('namba', (g) => g.enterPlace('station_namba')) },
     { type: 'building', x: 1, y: 23, w: 6, h: 4, door: 3, name: 'お好み焼き屋', kind: 'small', wall: '#f6e7c8', roof: '#2a3a7a', sign: { text: 'お好み焼き', bg: '#2a3a7a', color: '#ffffff' }, text: '「本日は貸切です」と書いてある。ソースのいいにおいがする…！' },
-    { type: 'building', x: 7, y: 23, w: 6, h: 4, door: 3, name: '串カツ屋', kind: 'small', wall: '#fff3e0', roof: '#8a5a33', sign: { text: '串カツ', bg: '#ffd23f', color: '#20232a' }, text: '「ソースの二度づけ禁止」の貼り紙がある。開店はまだみたいだ。' },
+    // (the 串カツ屋 that stood at x 7..12 here moved into 千日前通り's block: bandEntities, R9-A)
     { type: 'building', x: 30, y: 23, w: 6, h: 4, door: 3, name: 'ゲームセンター', kind: 'shop', wall: '#2a2d36', roof: '#8a5ac8', stripes: ['#ff7eb6', '#5fd7ff'], sign: { text: 'ゲーム', bg: '#20232a', color: '#5fd7ff' }, text: 'ピコピコ…中からゲームの音が聞こえる。今日はお仕事に集中しよう。' },
     { type: 'building', x: 45, y: 2, w: 10, h: 8, door: 5, place: 'mbs', name: 'MBS毎日放送', kind: 'tower', style: 'glass', wall: '#eef1f6', roof: '#1f5fbf', glass: '#6aa2ec', canopy: '#143f86', sign: { text: 'MBS毎日放送', bg: '#ffffff', color: '#1f5fbf' }, signH: 24 },
     { type: 'building', x: 62, y: 2, w: 11, h: 8, door: 5, place: 'ktv', name: '関西テレビ', kind: 'office', wall: '#f6f1ea', roof: '#e8731c', glass: '#8fc8ec', canopy: '#a24c0c', sign: { text: '関西テレビ', bg: '#ffffff', color: '#e8731c' }, signH: 24, plants: true },
@@ -225,7 +247,7 @@ function generate() {
     commuterTrain(4, 34, { text: undefined }),
     { type: 'sign', x: 8, y: 33, text: 'フェンスの向こうに、電車が停まっている。\n東京へは、駅のきっぷ売り場へ。\n（新大阪で新幹線に乗りかえ）' },
     fountain(37, 30, { text: '待ち合わせスポットの噴水だ。' }),
-    { type: 'sign', x: 12, y: 15, text: ['なんば・ことぶき橋\n北：よしもと新喜劇 劇場・松竹芸能・たこ焼き屋・ホテル\n南：なんば駅', '西：劇場のとなりに NSC大阪校、ドット劇場\n東：川ぞいの「テレビ局通り」（MBS毎日放送・関西テレビ）'] },
+    { type: 'sign', x: 12, y: 15, text: ['なんば・ことぶき橋\n北：よしもと新喜劇 劇場・松竹芸能・たこ焼き屋・ホテル\n南：戎橋筋（アーケード）をまっすぐ、なんば駅', '西：劇場のとなりに NSC大阪校、ドット劇場\n東：川ぞいの「テレビ局通り」（MBS毎日放送・関西テレビ）・千日前'] },
 
     { type: 'npc', id: 'obachan', x: 12, y: 21, dir: 'down', look: { ...LOOKS.oldwoman, top: '#ff7eb6', hairColor: 'purple' }, name: '大阪のおばちゃん', person: 'tamae', talk: async (g, npc) => {
       if (!g.flag('ame_' + g.state.day)) {
@@ -253,7 +275,12 @@ function generate() {
   ];
 
   for (const e of old) e.x += OX;
-  return { w: W, h: H, cells: c, entities: [...westEntities(), ...old] };
+  // [R9-A] open the band: NAMBA_DS fresh rows at row BAND, everything south of it moves down
+  c.splice(BAND, 0, ...Array.from({ length: DS }, () => Array.from({ length: W }, () => ['stone'])));
+  const entities = [...westEntities(), ...old];
+  for (const e of entities) if (e.y >= BAND) e.y += DS;
+  bandTiles(c, W);
+  return { w: W, h: H, cells: c, entities: [...entities, ...bandEntities()] };
 }
 
 // Door fronts, the start and the map app's arrival: where a game that has never been here

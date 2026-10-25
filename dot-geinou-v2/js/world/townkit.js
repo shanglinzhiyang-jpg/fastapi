@@ -1,6 +1,7 @@
 // Helpers for building town maps procedurally (used by room.generate()).
 
 import { TILE } from '../engine/util.js';
+import { PLACES } from '../engine/map.js';
 
 export function grid(w, h, base) {
   return Array.from({ length: h }, () => Array.from({ length: w }, () => [base]));
@@ -102,4 +103,36 @@ export function unstick(g) {
     }
   }
   return false;
+}
+
+// ---------------------------------------------------------------- [R9-A] station entrances
+// Every town has one station entrance (a 駅 building or a 地下鉄の出入口) and exports
+// `EKI = { x, y, dir }`: the tile in front of it, where a player arriving by train appears.
+// The entrance leads to the rail network's 駅構内 (place 'eki', one room per town id, R9-B1)
+// when that exists; before that, `fallback` (東京駅 / なんば駅: their own station places) or a
+// short 「工事中」 line.
+export function ekiReady(town) {
+  const P = PLACES.eki;
+  return !!(P && P.rooms && P.rooms[town]);
+}
+export async function enterEki(g, town, fallback) {
+  if (ekiReady(town)) { await g.goto('eki', town, undefined, undefined, 'up'); return true; }
+  if (fallback) { await fallback(g); return true; }
+  g.sfx('cursor');
+  await g.say(['駅の入口だ。', '「ただいま改良工事中です。\n　ご不便をおかけしております」\n…まだ電車には乗れないみたいだ。']);
+  return false;
+}
+// a building's enter(g) (its door leads into the station)
+export const ekiEnter = (town, fallback) => (g) => enterEki(g, town, fallback);
+// The stairs of a 地下鉄の出入口 (props.js subwayEntrance): warps into the station; while there is
+// no station yet the check says so and the map walks the player back out.
+export function ekiStairs(xs, y, town) {
+  return xs.map((x) => ({
+    x, y, place: 'eki', room: town, dir: 'up',
+    check: async (g) => {
+      if (ekiReady(town)) return true;
+      await enterEki(g, town);
+      return false;
+    },
+  }));
 }

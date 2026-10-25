@@ -8,6 +8,7 @@
 import { makeCanvas, shade } from '../engine/util.js';
 import { R as PR, P as PP, oval, outline, inset, dither } from '../engine/tiles.js';
 import { scale2x } from '../engine/hdify.js';
+import { text } from '../engine/draw.js';
 
 // Unit-space rect (no rounding: 0.5 = one screen pixel). Animated values must be
 // snapped with hu() first, or fillRect anti-aliases them into blended pixels.
@@ -360,6 +361,140 @@ export function statue(x, y, extra = {}) {
       R(ctx, sx + 1, sy + 15, 14, 1, 'rgba(0,0,0,0.25)');
       blit(ctx, bake('statue', 18, 28, paintStatue), sx - 1, sy - 12);
     },
+    ...extra,
+  };
+}
+
+// ---------------------------------------------------------------- [R9-A] 地下鉄の出入口
+// A subway entrance: 2 tiles wide. The prop sits on the back row (x..x+1, y: the glass canopy
+// and the wall the stairs disappear under; solid); the stairs are drawn on the row in front
+// (y+1), which stays walkable: the town puts townkit.ekiStairs() warps there and exports the
+// tile below them as EKI. Canvas covers units x -2..34, y -14..32.
+function paintSubway(line) {
+  return (c) => {
+    const X = (u) => (u + 2) * 2, Y = (u) => (u + 14) * 2;
+    // the stair well: steps going down towards the back (darker), side walls, handrails
+    const steps = 8;
+    for (let i = 0; i < steps; i++) {
+      const y0 = 2 + i * 3.6, k = i / (steps - 1);
+      const col = shade('#c8ccd4', -0.62 + k * 0.62);
+      PR(c, X(3), Y(y0), 52, Math.ceil(3.6 * 2) + 1, col);
+      PR(c, X(3), Y(y0), 52, 1, shade(col, 0.25));
+      if (i === steps - 1) { PR(c, X(3), Y(29.5), 52, 2, '#e8c43a'); for (let x = 0; x < 52; x += 3) PP(c, X(3) + x, Y(29.5), '#c9a52a'); }
+    }
+    for (const [x0, lit] of [[0, true], [29, false]]) {
+      PR(c, X(x0), Y(0), 6, Y(31.5) - Y(0), lit ? '#d5d9e0' : '#b8bcc6');
+      PR(c, X(x0), Y(0), 6, 2, '#f2f4f8');
+      PR(c, X(x0) + (lit ? 5 : 0), Y(2), 1, Y(31.5) - Y(2), lit ? '#9aa0aa' : '#8a8f99');
+      PR(c, X(x0) + (lit ? 7 : -2), Y(6), 1, Y(29) - Y(6), '#e8eaee'); // handrail
+    }
+    // back wall under the canopy, the dark way down
+    PR(c, X(0), Y(-3), 64, Y(2) - Y(-3), '#5a6070');
+    PR(c, X(5), Y(-1), 44, Y(2.5) - Y(-1), '#1e2230');
+    PR(c, X(5), Y(-1), 44, 1, '#3a4050');
+    // canopy: posts, glass roof, a fascia in the line colour
+    for (const x0 of [0.5, 30.5]) { PR(c, X(x0), Y(-10), 2, Y(14) - Y(-10), '#9aa0aa'); PR(c, X(x0), Y(-10), 1, Y(14) - Y(-10), '#dfe3ea'); }
+    PR(c, X(-1.5), Y(-13), 70, Y(-6) - Y(-13), '#3a4a5e');
+    PR(c, X(-1), Y(-12.5), 68, Y(-7) - Y(-12.5), '#9fd0ee');
+    for (let x = 4; x < 68; x += 10) PR(c, X(-1) + x, Y(-12.5), 1, Y(-7) - Y(-12.5), '#d8f0ff');
+    PR(c, X(-1), Y(-12.5), 68, 2, '#e0f4ff');
+    PR(c, X(-1.5), Y(-6), 70, Y(-1.5) - Y(-6), line);
+    PR(c, X(-1.5), Y(-6), 70, 1, shade(line, 0.35));
+    PR(c, X(-1.5), Y(-1.5) - 1, 70, 1, shade(line, -0.4));
+    outline(c, { tint: 0.3 });
+  };
+}
+export function subwayEntrance(x, y, { label = '地下鉄', line = '#1f5fbf', extra = {} } = {}) {
+  return {
+    type: 'prop', x, y, w: 2, h: 1,
+    text: ['地下鉄の出入口だ。', '階段をおりると、駅の構内。\n（階段のほうへ歩いていこう）'],
+    draw(ctx, sx, sy) {
+      blit(ctx, bake('subway' + line, 36, 46, paintSubway(line)), sx - 2, sy - 14);
+      // the fascia: a white roundel and the label
+      R(ctx, sx + 1.5, sy - 5.5, 5, 3, '#ffffff'); R(ctx, sx + 2, sy - 6, 4, 4, '#ffffff');
+      R(ctx, sx + 3, sy - 5, 2, 2, line);
+      text(ctx, label, sx + 17.5, sy - 6.2, { size: 4, align: 'center', color: '#ffffff', shadow: null });
+    },
+    ...extra,
+  };
+}
+
+// ---------------------------------------------------------------- [R9-A] 車止め (buffer stop)
+// The end of a terminus track (one tile, on the rail rows): a red-and-white beam on a frame.
+function paintBuffer(c) {
+  PR(c, 4, 10, 4, 18, '#6d717b'); PR(c, 24, 10, 4, 18, '#6d717b');
+  PR(c, 4, 10, 1, 18, '#9aa0aa'); PR(c, 24, 10, 1, 18, '#9aa0aa');
+  PR(c, 1, 6, 30, 8, '#ffffff');
+  for (let x = 1; x < 31; x += 8) PR(c, x, 6, 4, 8, '#d62f2f');
+  PR(c, 1, 6, 30, 1, '#ffffff'); PR(c, 1, 13, 30, 1, '#8a8f99');
+  PR(c, 12, 14, 8, 4, '#20232a');
+  outline(c, { tint: 0.3 });
+}
+export function bufferStop(x, y, extra = {}) {
+  return {
+    type: 'prop', x, y, w: 1, h: 1,
+    text: ['線路の終わりの「車止め」だ。', '東京駅は、東海道新幹線の始発駅。\n新幹線はここから西へ、大阪まで走っていく。'],
+    draw(ctx, sx, sy) { blit(ctx, bake('buffer', 16, 16, paintBuffer), sx, sy); },
+    ...extra,
+  };
+}
+
+// ---------------------------------------------------------------- [R9-A] 一軒家 (detached house)
+// A two-storey Japanese house, w x h tiles (solid; talk via `text`): a hipped tile roof, a balcony
+// window upstairs, a 玄関 with a little canopy and a 表札, a window and an AC unit or plants.
+// Canvas covers units x -3..w*16+3, y -20..h*16+2.
+const HOUSE_COLS = [
+  { wall: '#efe6d2', roof: '#4a5568', trim: '#8a6a4a' }, { wall: '#e6ece8', roof: '#3a3c44', trim: '#5a6a6a' },
+  { wall: '#f4ece4', roof: '#7a3a2e', trim: '#9a6a4a' }, { wall: '#e8e0cc', roof: '#3f5a4a', trim: '#6a5a40' },
+  { wall: '#dfe4ea', roof: '#2f3e5a', trim: '#5a6070' }, { wall: '#f2e2c8', roof: '#5a4030', trim: '#8a5a33' },
+];
+function paintHouse1(w, h, k, door) {
+  return (c) => {
+    const { wall, roof, trim } = HOUSE_COLS[k % HOUSE_COLS.length];
+    const W = w * 16, H = h * 16;
+    const U = (x, y, ww, hh, col) => PR(c, Math.round((x + 3) * 2), Math.round((y + 20) * 2), Math.round(ww * 2), Math.round(hh * 2), col);
+    // walls (2 floors), a band between them
+    U(0, 4, W, H - 4, wall);
+    for (let y = 8; y < H - 2; y += 3) U(0, y, W, 0.5, shade(wall, -0.05));
+    U(W - 2, 6, 2, H - 6, shade(wall, -0.12));
+    U(0, H / 2 - 3, W, 2, trim); U(0, H / 2 - 3, W, 0.5, shade(trim, 0.3));
+    U(0, H - 2, W, 2, shade(wall, -0.35));
+    // hipped roof: trapezoid layers, ridge, eaves
+    for (let j = 0; j < 24; j++) {
+      const y = -18 + j, inset = Math.max(0, Math.round((23 - j) * 0.55));
+      const col = j >= 21 ? shade(roof, -0.32) : j % 4 === 0 ? shade(roof, 0.16) : j % 4 === 3 ? shade(roof, -0.1) : roof;
+      U(-3 + inset, y, W + 6 - inset * 2, 1, col);
+      if (j < 21 && j % 4) for (let x = -3 + inset + (j % 8 < 4 ? 1.5 : 0); x < W + 3 - inset - 1; x += 3) U(x, y, 0.5, 1, shade(roof, -0.22));
+    }
+    U(-3 + 12, -18, W + 6 - 24, 1.5, shade(roof, 0.35));
+    // upstairs: a balcony window (with railing) and a small window
+    const bw = Math.min(28, W - 22);
+    U(5, 9, bw, 13, shade(wall, -0.25)); U(6, 10, bw - 2, 11, '#a8d4ee'); U(6, 10, bw - 2, 2, '#d8f0ff');
+    U(6 + (bw - 2) / 2, 10, 0.5, 11, '#e8ecf0');
+    U(4, 17, bw + 2, 1, '#c0c4cc'); for (let x = 4.5; x < bw + 6; x += 2) U(x, 17.5, 0.5, 4.5, '#9aa0aa'); U(4, 21.5, bw + 2, 1, '#9aa0aa');
+    if (W - bw - 14 >= 10) { const x = W - 16; U(x, 10, 10, 9, shade(wall, -0.25)); U(x + 1, 11, 8, 7, '#a8d4ee'); U(x + 1, 11, 8, 1.5, '#d8f0ff'); U(x + 4.75, 11, 0.5, 7, '#e8ecf0'); }
+    // 玄関 (door) with a canopy and a nameplate, a window on the other side
+    const dx = door * 16 + 2;
+    U(dx - 1, H - 22, 14, 1.5, shade(roof, -0.1)); U(dx - 2, H - 21, 16, 1.5, shade(roof, -0.35));
+    U(dx, H - 19, 12, 17, shade(trim, -0.35)); U(dx + 1, H - 18, 10, 16, trim);
+    U(dx + 1.5, H - 17, 4, 14, shade(trim, 0.18)); U(dx + 6.5, H - 17, 4, 14, shade(trim, 0.12));
+    U(dx + 9, H - 11, 1, 2, '#e0b032');
+    U(dx - 5, H - 15, 4, 3, '#f8f4ea'); U(dx - 4.5, H - 14.5, 3, 0.5, '#5a5f6b'); U(dx - 4.5, H - 13.5, 2, 0.5, '#5a5f6b');
+    const wx = door * 16 > W / 2 ? 5 : W - 22;
+    U(wx, H - 18, 16, 11, shade(wall, -0.25)); U(wx + 1, H - 17, 14, 9, '#8fc8ec'); U(wx + 1, H - 17, 14, 1.5, '#cfeaff');
+    U(wx + 1, H - 17, 4, 9, k % 2 ? '#f2e6c8' : '#e8d8e8'); U(wx + 7.75, H - 17, 0.5, 9, '#e8ecf0');
+    // garden details: an AC unit or potted plants by the wall
+    if (k % 3 === 0) { U(W - 12, H - 9, 9, 6, '#e8ecf0'); U(W - 11, H - 8, 4, 4, '#9aa0aa'); U(W - 6, H - 8, 2, 4, '#c0c4cc'); }
+    else { for (const px of [dx + 14, dx + 18]) if (px + 4 < W) { U(px, H - 6, 4, 4, '#b0603a'); U(px - 0.5, H - 10, 5, 4, '#4a9a5a'); U(px + 0.5, H - 10, 2, 1.5, '#6ac07a'); } }
+    outline(c, { tint: 0.3 });
+  };
+}
+export function house(x, y, { w = 5, h = 4, k = 0, door, name, text: lines, extra = {} } = {}) {
+  const d = door ?? Math.max(1, Math.floor(w / 2) + (k % 2 ? 1 : -1));
+  return {
+    type: 'prop', x, y, w, h,
+    text: lines || [name ? `「${name}」と表札が出ている。` : '住宅だ。', 'ふつうの家だ。…勝手に入るわけにはいかない。'],
+    draw(ctx, sx, sy) { blit(ctx, bake(`house${w}x${h}k${k}d${d}`, w * 16 + 6, h * 16 + 22, paintHouse1(w, h, k, d)), sx - 3, sy - 20); },
     ...extra,
   };
 }

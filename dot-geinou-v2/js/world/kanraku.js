@@ -53,14 +53,17 @@ import { onMorning } from '../engine/life.js';
 import { ageOf } from '../engine/profile.js';
 import { audio, registerSong } from '../engine/audio.js';
 import { lawDate, registerSmokingRule, LENDERS, lenderRate, rateLawText, loanBalance, MONTH_DAYS, CRIMES, isPolitician, onJustice } from '../engine/crime.js';
-import { busStop } from './props.js';
-import { grid, set, put, fill } from './townkit.js';
+import { busStop, subwayEntrance } from './props.js';
+import { grid, set, put, fill, ekiStairs } from './townkit.js';
 
 export const KAN_W = 70;
 export const KAN_H = 50;
 // Tokyo's center avenue (x 38..42) leaves Tokyo at its south edge (row 45) and arrives here on row 1.
 export const KAN_FROM_TOKYO = { y: 1 };
 const BUS = { x: 36, y: 8, arrive: [35, 9] };
+// [R9-A] the 地下鉄の出入口 on the plaza by the bus stop: a train arrival appears in front of it
+const SUBWAY = { x: 32, y: 6 };
+export const EKI = { x: SUBWAY.x, y: SUBWAY.y + 2, dir: 'down' };
 
 // ====================================================================== small helpers
 const who = (n) => ({ name: n.name, look: n.look });
@@ -1784,6 +1787,7 @@ function generate() {
     { type: 'sign', x: 43, y: 14, solid: true, text: ['ゲートの柱に、案内図が貼ってある。', '【大通りの北】カプセルホテル・ドットローン・\n牛丼屋・喫煙所・バス停・交番・パチンコ', '【一番通り】ゲームセンター・CLUB ステラ・居酒屋\n【さくら通り】映画館・雑居ビル　【南】ネオン公園'] },
     smokingSpot(27, 5),
     busStop(BUS.x, BUS.y, { text: undefined, talk: busKanraku }),
+    subwayEntrance(SUBWAY.x, SUBWAY.y), // [R9-A]
     { type: 'sign', x: 37, y: 8, text: ['道しるべだ。', '↑ 東京エリア（東京駅・ドット荘・事務所）\nこの通りを北へまっすぐ。', 'バス停からは、東京駅前行きのバスも出ている。（¥210）'], solid: true },
     ...[[26, 9], [33, 13], [56, 13]].map(([x, y]) => smokingPost(x, y)), // 路上喫煙禁止 plates (from 2005-08)
     ...[[39, 16], [41, 25], [26, 21], [52, 30], [20, 31], [47, 41]].map(([x, y]) => decal(x, y)),
@@ -1823,6 +1827,7 @@ function generate() {
   // the walk from Tokyo: warps on the north edge
   const warps = [];
   for (let x = 38; x <= 42; x++) warps.push({ x, y: 0, place: 'tokyo', room: 'main', tx: x, ty: 44, dir: 'up' });
+  warps.push(...ekiStairs([SUBWAY.x, SUBWAY.x + 1], SUBWAY.y + 1, 'kanraku')); // [R9-A] down to the station
 
   return { w: W, h: H, cells: c, entities, warps, events: [
     { x: 27, y: 31, on: 'action', cond: (g) => !K(g).wallet && g.state.day >= 2, run: foundWallet },

@@ -1543,6 +1543,12 @@ function bankHelp(g) {
 }
 
 // ======================================================================== ニュース（新聞）
+// [R9-D] The app now opens the HD news screen of news_ui.js (新聞 / ニュースサイト / ニュースアプリ by era: sections,
+// a front page with pictures, real headlines by date, 号外, 天気・株価, テレビ欄, search) on the feed of news_core.js;
+// the badge counts its stories since the last open. Without those modules (a failed load) the old list below is used.
+let NEWS_UI = null, NEWS_CORE = null; // [R9-D]
+import('./news_core.js').then((m) => { NEWS_CORE = m; }).catch((e) => { console.error(e); NEWS_CORE = null; }); // [R9-D]
+import('./news_ui.js').then((m) => { NEWS_UI = m; }).catch((e) => { console.error(e); NEWS_UI = null; }); // [R9-D]
 // One feed of the stories the game already sends: press messages in the inbox (senders that are
 // news outlets: ドット芸能ニュース, ニュース, ドット新聞 …; personal notices stay in メッセージ),
 // the politics core's news (state.politics.news) and g.govtNews when that core is there.
@@ -1583,7 +1589,7 @@ export function newsItems(g, opts = {}) {
   }
   return out.sort((a, b) => b.day - a.day).slice(0, 80);
 }
-const newsUnread = (g) => newsItems(g, { govt: false }).filter((n) => !n.read).length;
+const newsUnread = (g) => (NEWS_CORE ? Math.min(99, NEWS_CORE.newsUnreadCount(g)) : newsItems(g, { govt: false }).filter((n) => !n.read).length); // [R9-D]
 const headline = (s) => String(s).split('\n')[0];
 // A news row: the genre chip, day and source on top, the headline on two lines under them.
 function drawNewsRow(c, it, x, y, w, rh, sel) {
@@ -1604,6 +1610,7 @@ async function readArticle(g, n) {
   await phoneInfo(g, { title: newsTitle(g), color: COL.news, lines: [`【${cn}】${n.from}`, `${n.day}日目（${wareki(d.year, d.month)}）`, '', n.text] });
 }
 export async function newsApp(g) {
+  if (NEWS_UI && !(g.auto && !g.auto.newsui)) { await NEWS_UI.openNewsScreen(g); appState(g).news.seen = g.state.day; return; } // [R9-D]
   const S = appState(g);
   const last = S.news.seen;
   S.news.seen = g.state.day;

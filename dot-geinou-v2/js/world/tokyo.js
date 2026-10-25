@@ -2,12 +2,16 @@
 
 import { registerPlace, PLACES } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
-import { grid, set, put, fill, hroad, vroad, border, unstick } from './townkit.js';
+import { grid, set, put, fill, hroad, vroad, border, unstick, ekiEnter } from './townkit.js';
 import { fountain, train, taxi, busStop, streetStage, statue } from './props.js';
 import { text } from '../engine/draw.js';
 export const TOKYO_W = 76; // x 60..75: the east block and the road to テレビ局エリア (minato.js)
 export const TOKYO_H = 72; // rows 45..71: 芸人通り and the 劇場通り, south of よしもと's block (added later; rows 0..44 kept as before)
 export const TOKYO_GATE_Y = 45; // the ネオン街 gate at the foot of the centre avenue (kanraku.js arrives on row 44)
+// [R9-A] 東京駅: its door leads into the rail network's 駅構内 (place 'eki', room 'tokyo') once that exists
+// (before: station_tokyo, the 新幹線 hall). A train arrival appears in front of the door.
+const STATION = { x: 44, y: 26, w: 12, h: 5, door: 6 };
+export const EKI = { x: STATION.x + STATION.door, y: STATION.y + STATION.h, dir: 'down' };
 
 // The landlady's talk and the apartment upgrades live in home.js, which puts the
 // talk on its place definition. Looked up when she is spoken to (no import), so a
@@ -449,7 +453,7 @@ function generate() {
     { type: 'building', x: 32, y: 25, w: 6, h: 6, door: 3, place: 'bs_yoshimoto', name: 'BSよしもと', kind: 'office', wall: '#ffffff', roof: '#ff3b1f', logo: 'bs_yoshimoto', signH: 22, signW: 84 },
     { type: 'building', x: 24, y: 35, w: 7, h: 6, door: 3, place: 'grape', name: 'グレープカンパニー', kind: 'office', wall: '#f3eefa', roof: '#7a4fa0', logo: 'grape', signH: 34, signW: 36 },
     { type: 'building', x: 32, y: 36, w: 6, h: 5, door: 3, place: 'sento', name: '銭湯 ドットの湯', kind: 'bath', wall: '#f6e7c8', roof: '#3b4a6a', sign: { text: 'ゆ', bg: '#2a3a7a', color: '#ffffff', size: 12 } },
-    { type: 'building', x: 44, y: 26, w: 12, h: 5, door: 6, place: 'station_tokyo', name: '東京駅', kind: 'station', wall: '#b8644a', roof: '#4a5a70', sign: { text: '東京駅', bg: '#ffffff' } },
+    { type: 'building', ...STATION, place: 'station_tokyo', name: '東京駅', kind: 'station', wall: '#b8644a', roof: '#4a5a70', sign: { text: '東京駅', bg: '#ffffff' }, enter: ekiEnter('tokyo', (g) => g.enterPlace('station_tokyo')) },
     { type: 'building', x: 63, y: 4, w: 8, h: 8, door: 4, name: 'ドット新聞社', kind: 'office', wall: '#e6e2d8', roof: '#4a5568', sign: { text: 'ドット新聞', bg: '#ffffff', color: '#20232a' },
       text: ['「ドット新聞社」のビルだ。', '芸能面の記事も、ここで書かれているらしい。\n…いつか自分の記事がのる日が来るかも？'] },
     // 芸人通り and the 劇場通り: NSC東京校 (from 1995), the 貸し稽古場 (js/places/nsc.js) …
@@ -501,7 +505,7 @@ function generate() {
   if (PLACES.nagatacho) entities.push(nagatachoSignpost(43, 3));
   if (PLACES.kanraku) entities.push(kanrakuSignpost(44, 42)); // beside the gate's east pillar
   const warps = [];
-  for (let y = 19; y <= 23; y++) warps.push({ x: 0, y, place: 'machi', room: 'main', tx: 46, ty: y - 3, dir: 'left' }); // machi's road: rows 16..20
+  for (let y = 19; y <= 23; y++) warps.push({ x: 0, y, place: 'machi', room: 'main', tx: 74, ty: y - 3, dir: 'left' }); // machi's road: rows 16..20 (its east edge, x 75: machi.js MACHI_W - 1)
   for (let y = 19; y <= 23; y++) warps.push({ x: W - 1, y, place: 'minato', room: 'main', tx: 1, ty: y + 5, dir: 'right' }); // minato's road: rows 24..28
   if (PLACES.nagatacho) for (let x = 38; x <= 42; x++) warps.push({ x, y: 0, place: 'nagatacho', room: 'main', tx: x, ty: 54, dir: 'up' }); // nagatacho's south exit: same columns
   if (PLACES.kanraku) for (let x = 38; x <= 42; x++) warps.push({ x, y: TOKYO_GATE_Y, place: 'kanraku', room: 'main', tx: x, ty: 1, dir: 'down' }); // kanraku's north edge: same columns

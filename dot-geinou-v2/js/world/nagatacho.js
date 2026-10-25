@@ -40,8 +40,8 @@ import { defineTile, R, P, Rw, disc, oval, outline, shadowEllipse, blobs, speckl
 import { LOOKS, drawChar } from '../engine/sprites.js';
 import { text } from '../engine/draw.js';
 import { makeCanvas, shade, VIEW_W, TILE } from '../engine/util.js';
-import { grid, set, put, fill, hroad, vroad, border } from './townkit.js';
-import { busStop, fountain } from './props.js';
+import { grid, set, put, fill, hroad, vroad, border, ekiStairs } from './townkit.js';
+import { busStop, fountain, subwayEntrance } from './props.js';
 import { cabinetPosts, postName, POLICIES, POLICY_ORDER, SEGMENTS, votingAge } from '../engine/politics.js';
 import { registerSmokingRule, lawDate } from '../engine/crime.js';
 
@@ -53,6 +53,9 @@ export const NAGA_FROM_TOKYO = { y: NAGA_H - 2 };
 const DIET = { x: 27, y: 9, w: 27, h: 4, door: 13 };          // facade footprint; door tile (40, 12)
 const DOOR = { x: DIET.x + DIET.door, y: DIET.y + DIET.h - 1 };
 const BUS = { x: 44, y: 50, arrive: [45, 51] };
+// [R9-A] the 地下鉄の出入口 on the ministries' sidewalk, next to the bus stop: a train arrival appears in front of it
+const SUBWAY = { x: 49, y: 51 };
+export const EKI = { x: SUBWAY.x, y: SUBWAY.y + 2, dir: 'down' };
 
 // ====================================================================== helpers
 const who = (n) => ({ name: n.name, look: n.look });
@@ -1068,11 +1071,13 @@ function generate() {
   ];
 
   entities.push(speechStand(46, 53));
+  entities.push(subwayEntrance(SUBWAY.x, SUBWAY.y)); // [R9-A]
   const events = [
     { x: DOOR.x, y: DOOR.y, on: 'step', run: enterDiet },
   ];
   const warps = [];
   for (let x = 38; x <= 42; x++) warps.push({ x, y: H - 1, place: 'tokyo', room: 'main', tx: x, ty: 1, dir: 'down' });
+  warps.push(...ekiStairs([SUBWAY.x, SUBWAY.x + 1], SUBWAY.y + 1, 'nagatacho')); // [R9-A] down to the station
   return { w: W, h: H, cells: c, entities, warps, events };
 }
 

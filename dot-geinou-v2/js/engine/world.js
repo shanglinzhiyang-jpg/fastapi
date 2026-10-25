@@ -51,12 +51,14 @@ import { clamp } from './util.js';
 import { createDiplo } from './world_diplo.js';
 import { createTrade } from './world_trade.js';
 import { createStance } from './world_stance.js';
+import { createHistory } from './world_history.js'; // [R9-E] real events by date, staged crises, the monthly record, regions
 
 // ======================================================================== optional modules (guarded)
 let POL = null; // politics.js
 let REG = null; // regime.js
 let IDEO = null;
 let EXT = null; // trade / diplomacy depth / stance (world_trade.js, world_diplo.js, world_stance.js), created at the end of this file
+let HISTX = null; // [R9-E] world_history.js (created at the end of this file)
 import('./politics.js').then((m) => { POL = m; }).catch(() => { POL = null; });
 import('./regime.js').then((m) => { REG = m; hookRegime(); }).catch(() => { REG = null; });
 import('../registry.js').then((reg) => {
@@ -1574,15 +1576,19 @@ function unscNextText(g) { const n = num(W(g).unsc.next) || nextUnscVote(g); con
 function newConflict(g, a, b, opts = {}) {
   const s = W(g);
   if (s.conflicts.some((c) => c.status === 'war' && pkey(c.a, c.b) === pkey(a, b))) return null;
-  const c = { id: 'w' + s.seq++, a, b, name: opts.name || `${shortName(g, a)}と${shortName(g, b)}の武力衝突`, start: today(g), status: 'war', intensity: opts.intensity || 2, aggressor: opts.aggressor || null, front: 0, dead: 0, japan: null, since: dateNum(g) };
+  // [R9-E] opts.id (a fixed id, e.g. 'ru_ua'), opts.scripted (a real war that ends on its date: no random ceasefire),
+  // opts.quiet (a real war fired by world_history.js: its own headline, no generic news / phone / oil; opts.crisis keeps the crisis)
+  const c = { id: opts.id && !s.conflicts.some((x) => x.id === opts.id) ? opts.id : 'w' + s.seq++, a, b, name: opts.name || `${shortName(g, a)}と${shortName(g, b)}の武力衝突`, start: today(g), status: 'war', intensity: opts.intensity || 2, aggressor: opts.aggressor || null, front: 0, dead: 0, japan: null, since: dateNum(g), ...(opts.scripted ? { scripted: true, real: true } : {}) };
   s.conflicts.push(c);
   if (s.conflicts.length > 12) s.conflicts.splice(0, s.conflicts.length - 12);
   tensionShift(g, 4 + c.intensity);
   const mid = ['ir', 'iq', 'il', 'sa'];
-  if (mid.includes(a) || mid.includes(b)) oilShock(g, 15 + c.intensity * 8, '中東での武力衝突');
-  crisis(g, { kind: 'war', title: c.name, country: b, sev: c.intensity, conflict: c.id, until: today(g) + 60 });
-  news(g, `【国際】${c.name}が起きた。${opts.cause || '国境付近での衝突がきっかけ'}`);
-  phone(g, `【国際ニュース】${c.name}。\n国連安保理が緊急会合を開いた。`);
+  if (!opts.quiet && (mid.includes(a) || mid.includes(b))) oilShock(g, 15 + c.intensity * 8, '中東での武力衝突');
+  if (!opts.quiet || opts.crisis) crisis(g, { kind: 'war', title: c.name, country: b, sev: c.intensity, conflict: c.id, until: today(g) + 60 });
+  if (!opts.quiet) {
+    news(g, `【国際】${c.name}が起きた。${opts.cause || '国境付近での衝突がきっかけ'}`);
+    phone(g, `【国際ニュース】${c.name}。\n国連安保理が緊急会合を開いた。`);
+  }
   emit(g, 'conflict', { kind: 'start', conflict: c });
   return c;
 }
@@ -1733,7 +1739,7 @@ function conflictsTick(g) {
     if (c.status !== 'war') continue;
     c.front = clamp(num(c.front) + (milPower(g, c.a) - milPower(g, c.b)) * 0.01 + (rnd() - 0.5) * 6, -100, 100);
     c.dead = num(c.dead) + rint(5, 40) * num(c.intensity, 2);
-    const scheduled = c.id === 'iran_iraq' && !s.history.iran_iraq_end;
+    const scheduled = (c.id === 'iran_iraq' && !s.history.iran_iraq_end) || c.scripted; // [R9-E] scripted real wars end on their date
     if (!c.japan && !scheduled && c.id !== 'ru_ua' && roll(1 / 90)) endConflict(g, c.id, 'ceasefire', `${c.name}は、国際社会の仲介で停戦した（死者 推計${n0(c.dead)}人）`);
     if (c.id === 'ru_ua' && !c.japan && roll(1 / 400)) endConflict(g, c.id, 'ceasefire', `${c.name}で停戦が合意された（4年を超える戦争で、双方に多くの死者が出た）`);
   }
@@ -2050,7 +2056,7 @@ function summary(g) {
     treaties: treatiesNow(g),
     sanctions: { byJapan: Object.entries(s.sanctions.byJapan).map(([id, v]) => ({ id, name: shortName(g, id), level: v.level, un: !!v.un, g7: !!v.g7 })), onJapan: Object.entries(s.sanctions.onJapan).map(([id, v]) => ({ id, name: shortName(g, id), level: v.level, war: !!v.war })) },
     conflicts: s.conflicts.filter((c) => c.status === 'war').map((c) => ({ ...c, aName: shortName(g, c.a), bName: shortName(g, c.b), posA: MAP_POS[c.a], posB: MAP_POS[c.b] })),
-    crises: s.crises.map((k) => ({ ...k, countryName: k.country ? shortName(g, k.country) : '', pos: MAP_POS[k.country] || null })),
+    crises: s.crises.map((k) => ({ ...k, countryName: k.country ? shortName(g, k.country) : '', pos: k.at || MAP_POS[k.country] || null, stage: HISTX ? HISTX.stageOf(g, k) : null })), // [R9-E] at / stage
     deployments: s.deploy.filter((x) => !x.ended).map((x) => ({ ...x })),
     disputes: Object.values(DISPUTES).map((D) => ({ id: D.id, name: D.name, pos: D.pos, lines: D.lines(g), status: (s.disputes[D.id] || {}).status || 'dispute', admin: (s.disputes[D.id] || {}).admin || D.admin0, other: D.other.filter((x) => exists(g, x)).map((x) => shortName(g, x)) })),
     summits: upcomingSummits(g), unsc: { ...s.unsc, nextText: unscNextText(g) }, attack: attackOnJapan(g), peace: s.peace ? { ...s.peace, enemyName: countryName(g, s.peace.enemy, true) } : null,
@@ -2256,14 +2262,16 @@ const NOTABLE = { summit: 1, visit: 1, fm_talks: 1, statement: 1, fta: 1, defens
     isPM, isFM, isDM, bumpApproval, standingAdd, ideoNudge, dietOdds, useStam, stam, treatiesNow, treatyWith, TREATIES, DISPUTES, alliancesNow, japanAllies, blocOf, addTreaty, emit, atWarWith, who0, pct,
     approvalOf, baseOdds, tensionShift, threatAdd, ecoShock, crisis, pairRelation, countriesNow, japanWar, CNRU, current, PSEUDO, ORGS, membersOf, roleWhy, shiftSupport,
     targetName: (g, t) => countryName(g, t, true), segWeights: (y) => (POL && POL.segWeights ? POL.segWeights(y) : null),
+    pairAdd, newConflict, endConflict, oilShock, COUNTRY_ORDER, // [R9-E]
   };
   const STANCE = createStance(X);
   const DIPLOX = createDiplo(X);
   const TRADEX = createTrade(X, DIPLOX);
   DIPLOX.setStance(STANCE);
+  HISTX = createHistory(X); // [R9-E]
   EXT = {
-    stance: STANCE, diplo: DIPLOX, trade: TRADEX,
-    tick(g) { STANCE.tick(g); DIPLOX.tick(g); TRADEX.tick(g); },
+    stance: STANCE, diplo: DIPLOX, trade: TRADEX, hist: HISTX,
+    tick(g) { STANCE.tick(g); DIPLOX.tick(g); TRADEX.tick(g); HISTX.tick(g); },
     summary(g) { return { ...DIPLOX.summary(g), trade: TRADEX.brief(g) }; },
     // after every diplomacy action: the timeline, the reaction at home, the words of the communiqué, the player's stance
     after(g, kind, t, opts, res) {
@@ -2297,14 +2305,16 @@ const NOTABLE = { summit: 1, visit: 1, fm_talks: 1, statement: 1, fta: 1, defens
       if (kind === 'ally_down') STANCE.nudgePlayer(g, 'us', -2);
     },
   };
-  Object.assign(methods, STANCE.methods, DIPLOX.methods, TRADEX.methods);
-  Object.assign(DIPLO, DIPLOX.actions, TRADEX.actions);
+  Object.assign(methods, STANCE.methods, DIPLOX.methods, TRADEX.methods, HISTX.methods);
+  Object.assign(DIPLO, DIPLOX.actions, TRADEX.actions, HISTX.actions);
   DIPLO_ORDER.length = 0;
   DIPLO_ORDER.push(...Object.keys(DIPLO));
 }
 export { STANCE_KEYS, STANCE_NAMES, STANCE_BASE, ARCHETYPES } from './world_stance.js';
 export { TARIFF_CATS, CAT_ORDER, PARTNERS, rateText } from './world_trade.js';
 export { TREATY_INFO } from './world_diplo.js';
+export { REAL_EVENTS, STAGED, REGIONS, STAGE_LABELS, KIND_NAME, CAT_NAME } from './world_history.js'; // [R9-E]
+export const HISTORY_EXT = () => HISTX; // [R9-E]
 export const TRADE = () => EXT && EXT.trade;
 export const DIPLOMACY = () => EXT && EXT.diplo;
 export const STANCES = () => EXT && EXT.stance;

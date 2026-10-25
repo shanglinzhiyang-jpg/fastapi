@@ -27,13 +27,16 @@ import { defineTile, R, P, Rw, Pw, disc, oval, ring, line, outline, dither, shad
 import { LOOKS } from '../engine/sprites.js';
 import { text } from '../engine/draw.js';
 import { VIEW_W, VIEW_H, makeCanvas, shade, fmtMoney } from '../engine/util.js';
-import { grid, set, put, fill, hroad, vroad } from './townkit.js';
-import { fountain, busStop, streetStage, statue } from './props.js';
+import { grid, set, put, fill, hroad, vroad, ekiStairs } from './townkit.js';
+import { fountain, busStop, streetStage, statue, subwayEntrance } from './props.js';
 
 export const MINATO_W = 92;
 export const MINATO_H = 64;
 // Tokyo's main road (rows 19..23 at its east edge) arrives on rows 24..28 here.
 export const MINATO_FROM_TOKYO = 5;
+// [R9-A] the 地下鉄の出入口 on テレビ通り (west, below あかね坂): a train arrival appears in front of it
+const SUBWAY = { x: 24, y: 22 };
+export const EKI = { x: SUBWAY.x, y: SUBWAY.y + 2, dir: 'down' };
 const MONO = 50;                                        // monorail pillar row
 const PILLARS = [6, 14, 22, 38, 46, 54, 68, 76, 86];
 const WEST_STATION = { x: 24, front: [25, 52] };
@@ -1220,6 +1223,7 @@ function generate() {
   for (let y = 24; y <= 28; y++) set(c, 0, y, y === 24 || y === 28 ? 'sidewalk' : y === 26 ? 'road_line_h' : 'road');
   const warps = [];
   for (let y = 24; y <= 28; y++) warps.push({ x: 0, y, place: 'tokyo', room: 'main', tx: 74, ty: y - MINATO_FROM_TOKYO, dir: 'left' });
+  warps.push(...ekiStairs([SUBWAY.x, SUBWAY.x + 1], SUBWAY.y + 1, 'minato')); // [R9-A] down to the station
 
   const TV = { type: 'building', kind: 'tower', style: 'glass' };
   const entities = [
@@ -1250,6 +1254,7 @@ function generate() {
     monorail(W),
     monoStation(WEST_STATION.x, 'しおさい広場駅', true),
     monoStation(EAST_STATION.x, 'うみかぜ埠頭駅', false),
+    subwayEntrance(SUBWAY.x, SUBWAY.y), // [R9-A]
     vision(15, 21, 4),
     vision(43, 18, 4, { text: ['街頭ビジョンだ。', '「テレビ局では、番組のお仕事やオーディションも！\n　くわしくは各局の受付へ」…と流れている。'] }),
     streetStage(36, 16, 4, { z: -40 }),   // sorted before the people standing on it
