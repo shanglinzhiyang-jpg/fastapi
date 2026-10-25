@@ -54,8 +54,9 @@ import { AGENCIES } from './state.js';
 import { clamp, fmtMoney, display } from './util.js';
 import {
   rngOf, strHash, gauss, pickR, actName, personName, kidName, agencyFor, agencyLabel, lookFor, judgePerson, hostPerson,
-  judgeComment, TAG_COLORS, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, shortOf,
+  judgeComment, TAG_COLORS, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, shortOf, isRealNameLike,
 } from './contests_gen.js';
+export { isRealNameLike }; // (name) → true when a name is / contains a well-known real person's name (other modules reuse it)
 import { runner } from './contests_run.js';
 
 export const CONTESTS = {};
@@ -128,10 +129,16 @@ export const yenLabel = (yen) => `¥${Math.round(num(yen)).toLocaleString('ja-JP
 
 // ================================================================ def helpers
 export const roundsOf = (def) => (def && Array.isArray(def.rounds) ? def.rounds : []);
+// names: [{ from?, to?, name }] — the name of a year: the matching entry with the latest `from` (to inclusive); else def.name
 export function contestName(def, year) {
   if (!def) return '';
   let n = def.name || def.id;
-  if (Array.isArray(def.names)) for (const x of def.names.slice().sort((a, b) => num(a.from) - num(b.from))) if (x && year >= num(x.from) && x.name) n = x.name;
+  if (Array.isArray(def.names)) {
+    for (const x of def.names.slice().sort((a, b) => num(a.from, -1e9) - num(b.from, -1e9))) {
+      if (!x || !x.name) continue;
+      if ((x.from == null || year >= num(x.from)) && (x.to == null || year <= num(x.to))) n = x.name;
+    }
+  }
   return n;
 }
 export function kindOf(def) { return (def && def.perform && def.perform.kind) || (def && def.kind) || 'any'; }
@@ -142,7 +149,7 @@ const PALETTE = ['#c0392b', '#d35400', '#b8860b', '#27863e', '#16808a', '#2c5aa0
 export const colorOf = (def) => (def && def.color) || PALETTE[strHash(def ? def.id : '') % PALETTE.length];
 export function isInvitational(def) {
   const e = def && def.eligibility;
-  return !!(def && (def.category === 'invitational' || (isObj(e) && e.invite)));
+  return !!(def && (def.category === 'invitational' || (e && (isObj(e) || typeof e === 'function') && e.invite)));
 }
 function whenList(w) {
   if (!Array.isArray(w) || !w.length) return [];
@@ -350,7 +357,8 @@ const ageIn = (m, year) => year - m.born;
 const brokenIn = (act, year) => act.breakup != null && year >= act.breakup;
 
 // ================================================================ the field of a contest-year
-function eligObj(def) { return isObj(def.eligibility) ? def.eligibility : {}; }
+// the eligibility object (a function-form eligibility may still carry .note / .invite / .members … as properties)
+function eligObj(def) { const e = def && def.eligibility; return isObj(e) || typeof e === 'function' ? e : {}; }
 function entrantOk(def, e, year) {
   const el = eligObj(def);
   const act = e.act;
@@ -502,6 +510,32 @@ function realCounts(def) {
   });
   return out;
 }
+// A named stand-in for the anonymous mass (beginners, one-off amateurs) once a round is small enough to list everyone: every
+// round then has its real field size (a 10-act final has 10 acts even when few of the world's acts were eligible).
+const EXACT_MAX = 60;
+function ghostEntrant(seed, def, year, i, k, mu, sd) {
+  const r = rngOf(seed, 'ghost', def.id, year, i, k);
+  const kind = kindOf(def);
+  const el = eligObj(def);
+  const kids = !!(el.kids || (el.ageMax != null && el.ageMax <= 15));
+  const individual = kind === 'ogiri' || kind === 'talk';
+  const type = kind === 'rakugo' ? 'rakugo' : kind === 'pin' || kind === 'monomane' || kind === 'utaneta' ? 'pin' : r() < 0.85 ? 'combi' : 'trio';
+  const n = individual ? 2 : type === 'combi' ? 2 : type === 'trio' ? 3 : 1;
+  const aMin = kids ? 8 : num(el.ageMin, 19), aMax = kids ? Math.min(15, num(el.ageMax, 15)) : num(el.ageMax, 36);
+  const members = [];
+  for (let m = 0; m < n; m++) { const female = r() < 0.2; members.push({ name: kids ? kidName(r) : personName(r, female), female, born: year - (aMin + Math.floor(r() * Math.max(1, aMax - aMin + 1))), look: lookFor(r, female, kids) }); }
+  const name = actName(r, kids ? 'kids' : individual ? 'combi' : type);
+  if (type === 'pin' || type === 'rakugo') members[0].name = name;
+  const yrs = el.unitYearsMin != null ? num(el.unitYearsMin) + Math.floor(r() * 6) : el.unitYearsMax != null ? Math.floor(r() * (num(el.unitYearsMax) + 1)) : el.geirekiMax != null ? Math.floor(r() * (num(el.geirekiMax) + 1)) : Math.floor(r() * 6);
+  const amateur = el.pro === false ? true : el.amateur === false ? false : kids ? true : r() < 0.55;
+  const region = /osaka|kansai|大阪|関西/.test(String(el.region || def.region || '')) ? 'osaka' : r() < 0.4 ? 'osaka' : 'tokyo';
+  const agency = amateur ? null : Array.isArray(el.agency) && el.agency.length ? el.agency[0] : agencyFor(r, year, region);
+  const sk = {};
+  for (const kk of KINDS) sk[kk] = 1;
+  const act = { id: `g${year}-${def.id}-${i}-${k}`, formed: year - yrs, type: individual ? 'combi' : type, region, talent: 0, peak: 6, members, name, style: kind, sk, proYear: amateur ? null : year - yrs, agency, breakup: null, debut: year - yrs, college: !kids && year >= 2000 && r() < 0.15, nsc: false, kid: kids, ghost: true };
+  const power = clamp(mu + sd * gauss(r), 3, 92);
+  return { id: act.id, name: individual ? `${members[0].name}（${name}）` : name, short: individual ? shortOf(members[0].name) : undefined, act, member: individual ? 0 : null, power, amateur, agency, type: individual ? 'pin' : act.type, unitName: name, ghost: true };
+}
 function simulateCore(g, id, year, champs) {
   const def = CONTESTS[id];
   const R = roundsOf(def);
@@ -514,7 +548,13 @@ function simulateCore(g, id, year, champs) {
   const ap = anonParams(def);
   const invite = isInvitational(def);
   let named = field.slice();
+  // a small contest: only part of the eligible acts enter (a seeded draw), the rest of the entries are the anonymous mass
+  if (counts[0] && named.length > counts[0].E && !invite) {
+    const pr = rngOf(seed, 'enter', id, year);
+    named = named.map((e) => ({ e, k: pr() })).sort((a, b) => a.k - b.k).slice(0, Math.max(1, Math.round(counts[0].E))).map((x) => x.e).sort((a, b) => b.power - a.power);
+  }
   let anon = { n: invite ? 0 : Math.max(0, counts[0].E - named.length), mu: ap.mu, sd: ap.sd };
+  const ghosts = [];
   const rounds = [];
   let prevElim = [];
   for (let i = 0; i < R.length; i++) {
@@ -533,6 +573,13 @@ function simulateCore(g, id, year, champs) {
     }
     const last = i === R.length - 1;
     const { E, P } = counts[i];
+    // small rounds are listed in full: the anonymous entrants who got this far become named stand-ins
+    if (last || E <= EXACT_MAX || anon.n < 0.5 || E <= named.length) {
+      const playerHere = !!pm || (last && !!mods.final) || !!(r.revival && mods.revival && mods.revival[i] && mods.revival[i].win);
+      const deficit = Math.round(E) - (playerHere ? 1 : 0) - named.length;
+      for (let k = 0; k < deficit && k < 400; k++) { const gh = ghostEntrant(seed, def, year, i, k, anon.n >= 0.5 ? anon.mu : ap.mu, anon.n >= 0.5 ? anon.sd : ap.sd); ghosts.push(gh); named.push(gh); }
+      anon = { n: 0, mu: anon.mu, sd: anon.sd };
+    }
     const scores = new Map();
     for (const e of named) scores.set(e.id, scoreOf(e.power, rngOf(seed, id, year, i, e.id)));
     const sorted = named.slice().sort((a, b) => scores.get(b.id) - scores.get(a.id));
@@ -572,7 +619,7 @@ function simulateCore(g, id, year, champs) {
     if (last) break;
     named = passed;
   }
-  const byId = new Map(field.map((e) => [e.id, e]));
+  const byId = new Map([...field, ...ghosts].map((e) => [e.id, e]));
   const lastR = rounds[rounds.length - 1];
   // the final: ranking by panel totals (judges' tastes) or by score; the player's stored final result is inserted
   const fin = finalRanking(g, id, year, lastR, byId, mods);
@@ -805,11 +852,19 @@ export function eligibilityOf(g, id, year) {
     }
     if (el.kids) add('kids', '子どもの大会（小・中学生が対象）');
   }
+  // extra rules of a contest (THE SECOND: 全国大会の優勝経験者は不可, 今宮: 受賞歴なし, an area of activity…): eligibility.extra / .check
+  const elx = eligObj(def);
+  for (const k of ['extra', 'check']) {
+    if (typeof elx[k] !== 'function') continue;
+    const r = safe(`eligibility.${k}:${id}`, () => elx[k](g, u, y), null);
+    if (r && r.ok === false) add('extra', r.why || '出場資格がない');
+  }
   const hRows = !repeatAllowed(def) ? historyRows(g, id, y - 1) : [];
   if (hRows.some((r) => r.champId === 'player')) add('champion', '優勝した大会には、もう出られない（王者は卒業）');
   const notes = [];
   const el = eligObj(def);
   if (el.note) notes.push(el.note);
+  if (def.eligibilityNote && !notes.includes(def.eligibilityNote)) notes.push(def.eligibilityNote);
   return { ok: !reasons.length, reasons, why: reasons.map((r) => r.text).join('／'), notes, year: y };
 }
 // The entry fee: { yen (real, nominal), internal, text }
@@ -961,13 +1016,13 @@ const SHOW_NETA = 'contest_netaban', SHOW_VARIETY = 'contest_champ_show';
 registerRegular(SHOW_NETA, {
   title: 'ドット笑いの花道', place: 'fujitv', weekday: 4, medium: 'tv', requires: null, stamina: 20, pay: 22000, fame: 55, fans: 1400,
   minigame: 'tsukkomi', skill: 'warai', opts: { difficulty: 3 }, host: 'ドット笑いの花道 プロデューサー',
-  desc: '毎週金曜に収録する、若手のネタ番組（架空）。賞レースで結果を出した芸人が呼ばれる。',
+  desc: '毎週金曜に収録する、若手のネタ番組。賞レースで結果を出した芸人が呼ばれる。',
   offer: '『ドット笑いの花道』のプロデューサーです。賞レースのネタ、拝見しました！\n毎週金曜収録のネタ番組に、レギュラーで出ていただけませんか？',
 });
 registerRegular(SHOW_VARIETY, {
   title: 'チャンピオン笑劇場', place: 'tvasahi', weekday: 1, medium: 'tv', requires: null, stamina: 25, pay: 48000, fame: 120, fans: 3200,
   minigame: 'tsukkomi', skill: 'warai', opts: { difficulty: 4 }, host: 'チャンピオン笑劇場 プロデューサー',
-  desc: '賞レース王者が毎週ネタとロケで暴れるバラエティ（架空）。毎週火曜収録。',
+  desc: '賞レース王者が毎週ネタとロケで暴れるバラエティ。毎週火曜収録。',
   offer: '優勝、おめでとうございます！『チャンピオン笑劇場』のプロデューサーです。\n毎週火曜の収録で、王者として番組の顔になってもらえませんか？',
 });
 function offerShows(g, id, what) {

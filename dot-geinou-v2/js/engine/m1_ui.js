@@ -222,81 +222,74 @@ SETS.revival_in = (c, sc) => {
   crowdRow(c, 250, 24, sc.t, ['#101018', '#16161e'], 6, sc.react || 0);
 };
 
-// ---- the final studio
+// ---- the final studio (everything that matters stays above y 236: the message window starts there)
+// LED wall 6..96, arch 100..186, stage floor 186..206 (performers' feet at 202), judges' desk 208..234 (name + score plates),
+// score panel top-left, 暫定ボックス right.
+export const STUDIO = { feet: 202, mcX: 70, perfX: [282, 358] };
 function studioBase(c, sc) {
   bgGrad(c, '#0a0a1c', '#000000');
-  // gold rays
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * Math.PI + Math.PI;
     c.fillStyle = `rgba(255,210,63,${i % 2 ? 0.035 : 0.06})`;
-    c.beginPath(); c.moveTo(320, 90); c.lineTo(320 + Math.cos(a - 0.05) * 600, 90 + Math.sin(a - 0.05) * 600); c.lineTo(320 + Math.cos(a + 0.05) * 600, 90 + Math.sin(a + 0.05) * 600); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(320, 70); c.lineTo(320 + Math.cos(a - 0.05) * 600, 70 + Math.sin(a - 0.05) * 600); c.lineTo(320 + Math.cos(a + 0.05) * 600, 70 + Math.sin(a + 0.05) * 600); c.closePath(); c.fill();
   }
-  // LED wall
-  R(c, 160, 14, 320, 104, '#1a0a06'); R(c, 160, 14, 320, 2, GOLD2); R(c, 160, 116, 320, 2, GOLD2);
-  for (let y = 18; y < 114; y += 4) R(c, 162, y, 316, 1, 'rgba(255,255,255,0.03)');
+  R(c, 160, 6, 320, 90, '#1a0a06'); R(c, 160, 6, 320, 2, GOLD2); R(c, 160, 94, 320, 2, GOLD2);
+  for (let y = 10; y < 94; y += 4) R(c, 162, y, 316, 1, 'rgba(255,255,255,0.03)');
   const showName = sc.studio && sc.studio.led;
   if (showName) {
     const sz = fitSize(c, showName, 290, 26, 12);
-    T(c, showName, 320, 50, sz, '#fff', 'center', 300, { outline: '#7a1a08' });
-    if (sc.studio.ledSub) T(c, sc.studio.ledSub, 320, 84, 12, GOLD, 'center', 300);
-  } else m1Logo(c, 320, 48, 26, sc.year);
-  // gold arch
-  R(c, 140, 120, 6, 90, GOLD2); R(c, 494, 120, 6, 90, GOLD2); R(c, 140, 120, 360, 4, GOLD);
-  // floor (glossy)
-  R(c, 90, 210, 460, 22, '#1a1426'); R(c, 90, 210, 460, 2, GOLD); for (let x = 100; x < 550; x += 30) R(c, x, 214, 14, 1, 'rgba(255,255,255,0.12)');
-  c.fillStyle = 'rgba(255,240,200,0.10)'; c.beginPath(); c.moveTo(296, 120); c.lineTo(344, 120); c.lineTo(390, 230); c.lineTo(250, 230); c.closePath(); c.fill();
-  centerMic(c, 320, 226, 172);
+    T(c, showName, 320, 28, sz, '#fff', 'center', 300, { outline: '#7a1a08' });
+    if (sc.studio.ledSub) T(c, sc.studio.ledSub, 320, 66, 12, GOLD, 'center', 300);
+  } else m1Logo(c, 320, 36, 26, sc.year);
+  R(c, 140, 100, 6, 88, GOLD2); R(c, 494, 100, 6, 88, GOLD2); R(c, 140, 100, 360, 4, GOLD);
+  R(c, 90, 186, 460, 20, '#1a1426'); R(c, 90, 186, 460, 2, GOLD); for (let x = 100; x < 550; x += 30) R(c, x, 190, 14, 1, 'rgba(255,255,255,0.12)');
+  c.fillStyle = 'rgba(255,240,200,0.10)'; c.beginPath(); c.moveTo(296, 104); c.lineTo(344, 104); c.lineTo(390, 206); c.lineTo(250, 206); c.closePath(); c.fill();
+  centerMic(c, 320, 202, 150);
 }
 function judgesDesk(c, sc) {
   const S = sc.studio || {};
   const js = S.judges || [];
   if (!js.length) return;
   const n = js.length;
-  const w = Math.min(70, Math.floor(560 / n));
+  const w = Math.min(62, Math.floor(540 / n));
   const x0 = 320 - (n * w) / 2;
-  R(c, x0 - 10, 246, n * w + 20, 18, '#2a1a10'); R(c, x0 - 10, 246, n * w + 20, 2, GOLD2);
+  js.forEach((j, i) => person(c, j.look || { hair: 'short', hairColor: 'black', top: '#2e3140', bottom: '#2e3140', jacket: true }, x0 + i * w + w / 2, 230, 1, 'up'));
+  R(c, x0 - 8, 208, n * w + 16, 28, '#2a1a10'); R(c, x0 - 8, 208, n * w + 16, 2, GOLD2); R(c, x0 - 8, 234, n * w + 16, 2, '#140a06');
   js.forEach((j, i) => {
     const x = x0 + i * w + w / 2;
-    person(c, j.look || { hair: 'short', hairColor: 'black', top: '#2e3140', bottom: '#2e3140', jacket: true }, x, 252, 1, 'up');
-    R(c, x - w / 2 + 3, 250, w - 6, 12, '#f2ead8');
-    T(c, j.name, x, 251, 8, INK, 'center', w - 8);
+    R(c, x - w / 2 + 2, 210, w - 4, 10, '#f2ead8');
+    T(c, j.name, x, 211, 8, INK, 'center', w - 6);
     const p = S.points && S.points[i];
-    if (p != null && i < (S.reveal ?? n)) {
-      R(c, x - 17, 194, 34, 22, '#000'); R(c, x - 16, 195, 32, 20, '#1a1206'); R(c, x - 16, 195, 32, 2, GOLD);
-      T(c, String(p), x, 197, 16, p >= 95 ? '#ff6a7a' : GOLD, 'center');
-    }
+    const shown = p != null && i < (S.reveal ?? n);
+    R(c, x - w / 2 + 6, 221, w - 12, 12, shown ? '#1a1206' : '#0e0a06');
+    if (shown) { R(c, x - w / 2 + 6, 221, w - 12, 1, GOLD); T(c, String(p), x, 221, 11, p >= 95 ? '#ff6a7a' : GOLD, 'center'); }
   });
 }
 function rankingBoard(c, sc) {
   const S = sc.studio || {};
   const rk = S.ranking || [];
-  const x = 532, y = 128;
-  R(c, x - 4, y - 18, 108, 16, '#1a1206'); T(c, S.final ? '最終決戦' : '暫定ボックス', x + 50, y - 16, 10, GOLD, 'center');
+  const x = 528, y = 118;
+  R(c, x - 4, y - 16, 112, 15, '#1a1206'); T(c, S.final ? '最終決戦' : '暫定ボックス', x + 52, y - 14, 10, GOLD, 'center');
   for (let i = 0; i < 3; i++) {
     const r = rk[i];
-    const yy = y + i * 34;
-    R(c, x - 4, yy, 108, 30, i === 0 ? '#3a2a06' : '#1a1a26'); R(c, x - 4, yy, 3, 30, i === 0 ? GOLD : i === 1 ? '#c8c8d8' : '#c87a3a');
-    T(c, `${i + 1}`, x + 4, yy + 8, 12, i === 0 ? GOLD : '#fff');
+    const yy = y + i * 28;
+    R(c, x - 4, yy, 112, 26, i === 0 ? '#3a2a06' : '#1a1a26'); R(c, x - 4, yy, 3, 26, i === 0 ? GOLD : i === 1 ? '#c8c8d8' : '#c87a3a');
+    T(c, `${i + 1}`, x + 3, yy + 7, 11, i === 0 ? GOLD : '#fff');
     if (r) {
-      if (r.look) person(c, r.look, x + 26, yy + 30, 0.7);
-      T(c, r.name, x + 38, yy + 3, 10, r.me ? '#ffdd66' : '#fff', 'left', 64);
-      T(c, r.total != null ? `${r.total}点` : '', x + 100, yy + 16, 10, GOLD, 'right');
-    } else T(c, '―', x + 60, yy + 8, 10, '#666', 'center');
+      T(c, r.name, x + 14, yy + 2, 9, r.me ? '#ffdd66' : '#fff', 'left', 92);
+      T(c, r.total != null ? `${r.total}点` : '', x + 104, yy + 14, 9, GOLD, 'right');
+    } else T(c, '―', x + 56, yy + 7, 10, '#666', 'center');
   }
 }
 function scorePanel(c, sc) {
   const S = sc.studio || {};
   if (S.total == null) return;
-  R(c, 8, 128, 112, 66, '#000'); R(c, 9, 129, 110, 64, '#1a1206'); R(c, 9, 129, 110, 2, GOLD);
-  T(c, S.totalLabel || '得点', 64, 133, 10, '#ffe9a8', 'center', 100);
-  T(c, String(S.totalShown ?? S.total), 64, 148, 28, GOLD, 'center', 0, { outline: '#3a1a06' });
-  if (S.max) T(c, `/${S.max}`, 112, 180, 9, '#c8b888', 'right');
+  R(c, 6, 8, 144, 76, '#000'); R(c, 7, 9, 142, 74, '#1a1206'); R(c, 7, 9, 142, 2, GOLD);
+  T(c, S.totalLabel || '得点', 78, 13, 10, '#ffe9a8', 'center', 132);
+  T(c, String(S.totalShown ?? S.total), 78, 30, 30, GOLD, 'center', 0, { outline: '#3a1a06' });
+  if (S.max) T(c, `/${S.max}`, 144, 68, 9, '#c8b888', 'right');
 }
-SETS.studio = (c, sc) => {
-  studioBase(c, sc);
-  rankingBoard(c, sc);
-  scorePanel(c, sc);
-};
+SETS.studio = (c, sc) => { studioBase(c, sc); };
 SETS.tvroom = (c, sc) => {
   bgGrad(c, '#d8c8a8', '#b8a888');
   R(c, 0, 186, SW, SH - 186, '#8a6a4a');
@@ -361,7 +354,7 @@ export class M1Set {
       if (p.tag) tag(c, p.tag, p.x, p.y + 2, p.tagBg || 'rgba(10,10,20,0.82)', p.tagColor || '#fff', 9, Math.max(60, 40 * (p.s || 2)));
       if (p.sub) T(c, p.sub, p.x, p.y + 15, 8, p.subColor || '#ffe9a8', 'center', 90);
     }
-    if (this.kind === 'studio') { judgesDesk(c, this); }
+    if (this.kind === 'studio') { judgesDesk(c, this); rankingBoard(c, this); scorePanel(c, this); }
     if (this.overlay) { try { this.overlay(c, this); } catch (e) { console.error(e); } }
     for (const f of this.fx) { if (f.kind === 'flash') { c.fillStyle = `rgba(255,255,255,${0.6 * (1 - f.t / f.life)})`; c.fillRect(0, 0, SW, SH); } }
     if (this.caption) {

@@ -7,7 +7,7 @@
 // opts (besides CONTRACT4 perform opts): lines (legacy tsukkomi lines → the house script), partner, partnerLook,
 //   dialect 'kansai'|'std', stage 'theater'|'studio'|'kinbyobu', role 'boke'|'tsukkomi', lesson, practice, neta, venue,
 //   contest, length, noPick, preferOwn, quality (the house script's quality).
-// A pin act performing 漫才 stands alone at the mic (漫談): every line is the player's.
+// A ピン without a 相方 gets a stand-in 相方 (or the job's / lesson's named partner), as the old tsukkomi minigame did.
 
 import { registerMinigame, COLORS } from '../engine/minigame.js';
 import { registerSong } from '../engine/audio.js';

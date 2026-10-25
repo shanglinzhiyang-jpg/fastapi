@@ -427,7 +427,7 @@ const ROUND_CAST = (g, S, rid) => {
 };
 export const R1 = makeContest({
   id: 'r1', key: 'r1', label: 'R-1', appName: 'R-1', appTitle: 'R-1', color: '#c8102e', founded: 2002, foundedText: '2002年創設（吉本興業・関西テレビ主催のピン芸日本一決定戦）',
-  office: 'R-1事務局', unitWord: '人', notables: 36, defaultKind: 'pin', prepSub: 'フリップ・小道具', trophy: 'r1_trophy',
+  office: 'R-1事務局', unitWord: '人', notables: 36, topStr: 86, defaultKind: 'pin', prepSub: 'フリップ・小道具', trophy: 'r1_trophy',
   // a comedian with a 相方 performs alone: C's g.perform gets the player's pin view of A's unit
   performExtra: (g, E) => (E && E.solo && has(g, 'unit') ? { unit: safe(() => g.unit('pin'), null) || undefined } : {}),
   kindLabel: (E) => `ピン芸（${STYLE_JA[E.style] || 'ピン芸'}）`,
@@ -537,8 +537,8 @@ export const R1 = makeContest({
 
 // ================================================================ items, offers (fictional shows), the morning, the hub
 registerItem('r1_trophy', { name: 'R-1のトロフィー', price: 0, desc: 'ひとり芸日本一の証。\nたったひとりで、日本中を笑わせた夜の記念。' });
-registerRegular('r1_champ_tv', { title: 'ひとり芸人の夜明け', place: 'ktv', weekday: 2, medium: 'tv', pay: 45000, fame: 60, fans: 2500, minigame: 'tsukkomi', skill: 'warai', stamina: 18, host: '関西テレビのプロデューサー', hostLook: LOOKS.director, desc: '関西テレビの深夜バラエティ。ピン芸人がひとりで体を張る。（架空の番組）' });
-registerRegular('r1_champ_radio', { title: 'ひとりしゃべりの夜', place: 'mbs', weekday: 4, medium: 'radio', pay: 25000, fame: 30, fans: 1500, minigame: 'talk', skill: 'talk', stamina: 12, host: 'ラジオ局のディレクター', hostLook: LOOKS.ad, desc: '深夜のひとりしゃべりラジオ。（架空の番組）' });
+registerRegular('r1_champ_tv', { title: 'ひとり芸人の夜明け', place: 'ktv', weekday: 2, medium: 'tv', pay: 45000, fame: 60, fans: 2500, minigame: 'tsukkomi', skill: 'warai', stamina: 18, host: '関西テレビのプロデューサー', hostLook: LOOKS.director, desc: '関西テレビの深夜バラエティ。ピン芸人がひとりで体を張る。' });
+registerRegular('r1_champ_radio', { title: 'ひとりしゃべりの夜', place: 'mbs', weekday: 4, medium: 'radio', pay: 25000, fame: 30, fans: 1500, minigame: 'talk', skill: 'talk', stamina: 12, host: 'ラジオ局のディレクター', hostLook: LOOKS.ad, desc: '深夜のひとりしゃべりラジオ。' });
 kitMorning('r1', (g) => { syncDef(g); return R1.morning(g); });
 registerContestApp(R1, { id: 'r1', name: 'R-1', color: '#c8102e', glyph: 'R-1', order: 57 });
 

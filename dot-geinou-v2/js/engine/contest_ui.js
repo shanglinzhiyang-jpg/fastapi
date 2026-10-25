@@ -401,7 +401,7 @@ class ContestScene {
     const def = CONTESTS[id];
     const rows = g.contestHistory(id, { all: true });
     const h = def.history || {};
-    const head = [`${I.contestName(def, I.contestDate(g).year)}（${num(h.founded) ? `${h.founded}年創設` : ''}${h.ended ? `・${h.ended}年終了${def.revive !== false ? '→復刻開催' : ''}` : ''}）`, '※ このゲームの世界の歴史です（出場者・王者はすべて架空）。'];
+    const head = [`${I.contestName(def, I.contestDate(g).year)}（${num(h.founded) ? `${h.founded}年創設` : ''}${h.ended ? `・${h.ended}年終了${def.revive !== false ? '→復刻開催' : ''}` : ''}）`];
     if (!rows.length) { await this.info('歴代王者', [...head, '', 'まだ一度も開催されていない。']); return; }
     const items = rows.map((r) => (r.held ? { label: `${r.year}年 ${r.label || ''}`, sub: `優勝：${r.champion || '—'}${r.runnerUp ? `／準優勝：${r.runnerUp}` : ''}`, right: r.playerPlace ? `あなた${r.playerPlace}位` : r.revival ? '復刻' : '', rightColor: r.playerPlace === 1 ? K.gold : K.dim } : { label: `${r.year}年`, sub: r.note || '開催なし', lock: true }));
     await this.pick({ title: `歴代王者：${def.short || def.name}`, lines: head, items, w: 560 });
@@ -425,7 +425,7 @@ class ContestScene {
       if (!e && cyc.invite && inv) items.push({ id: 'enter', label: '出場のお願いに返事する', sub: '招待が届いている', color: K.gold });
       if (e && (e.status === 'entered' || e.status === 'passed')) items.push({ id: 'resched', label: '日程・会場を変える', sub: '次の回戦の日程が複数あるとき' });
       if (cyc.held) items.push({ id: 'odds', label: '見込みを調べる', sub: '自分の実力と、通過ラインの目安' });
-      items.push({ id: 'hist', label: '歴代王者', sub: 'この世界の歴代チャンピオン' });
+      items.push({ id: 'hist', label: '歴代王者', sub: '歴代のチャンピオン' });
       if (e && (e.status === 'entered' || e.status === 'passed')) items.push({ id: 'quit', label: 'エントリーを取り消す（辞退）', sub: '参加費はもどらない' });
       items.push({ id: 'back', label: 'もどる' });
       const k = await this.pick({ title: info.label, lines: [`${info.statusLabel}${e ? `　エントリーNo.${e.no}（${ENTRY_LABEL[e.status] || ''}）` : ''}`], items, color: I.colorOf(def) });
@@ -638,7 +638,7 @@ export function detailLines(g, id, year) {
   const h = def.history || {};
   const L = [];
   L.push(`${I.KIND_LABEL[I.kindOf(def)] || ''}の大会${def.organizer ? `／主催：${def.organizer}` : ''}${def.broadcaster ? `／放送：${def.broadcaster}` : ''}`);
-  L.push(`${num(h.founded) ? `${h.founded}年創設` : ''}${h.ended ? `・${h.ended}年終了${def.revive !== false ? '（この世界では復刻開催）' : ''}` : ''}${Array.isArray(h.gaps) && h.gaps.length ? `・休止 ${h.gaps.map((x) => `${x[0]}〜${x[1] ?? x[0]}年`).join('、')}` : ''}${h.note ? `／${h.note}` : ''}`);
+  L.push(`${num(h.founded) ? `${h.founded}年創設` : ''}${h.ended ? `・${h.ended}年終了${def.revive !== false ? '（復刻開催）' : ''}` : ''}${Array.isArray(h.gaps) && h.gaps.length ? `・休止 ${h.gaps.map((x) => `${x[0]}〜${x[1] ?? x[0]}年`).join('、')}` : ''}${h.note ? `／${h.note}` : ''}`);
   if (cyc.notyet) L.push(cyc.note);
   else if (!cyc.held) L.push(cyc.note || 'この年は開催されない');
   L.push('');
@@ -1051,7 +1051,7 @@ async function contestApp(g) {
     items.push({ id: 'entries', label: 'エントリー状況', sub: mine.length ? mine.map((x) => x.def.short || x.def.name).slice(0, 3).join('・') : 'まだエントリーしていない' });
     items.push({ id: 'results', label: '自分の成績', sub: `出場 ${num(c.stats.entered)}・決勝 ${num(c.stats.finals)}・優勝 ${num(c.stats.wins)}` });
     items.push({ id: 'news', label: 'お笑いニュース', sub: c.news[0] ? String(c.news[0].text).split('\n')[0] : 'まだない' });
-    items.push({ id: 'history', label: '歴代王者', sub: 'この世界の歴代チャンピオン' });
+    items.push({ id: 'history', label: '歴代王者', sub: '歴代のチャンピオン' });
     items.push({ id: 'screen', label: '賞レースの画面を開く', sub: 'カレンダー・一覧・結果' });
     const i = await phoneList(g, { title: appTitle(g), color: APP_COLOR, index, items: items.map((x) => ({ label: x.label, sub: x.sub, right: x.right, rightColor: x.rightColor })) });
     if (i < 0) return;
@@ -1112,7 +1112,7 @@ async function contestActions(g, id) {
 function historyLines(g, id) {
   const rows = g.contestHistory(id);
   if (!rows.length) return ['まだ一度も開催されていない。'];
-  return ['※この世界の歴史（すべて架空の芸人）', ...rows.slice(0, 40).map((r) => `${r.year} ${r.edition ? `第${r.edition}回 ` : ''}${r.champion}${r.playerPlace ? `（あなた${r.playerPlace}位）` : ''}${r.revival ? '［復刻］' : ''}`)];
+  return [...rows.slice(0, 40).map((r) => `${r.year} ${r.edition ? `第${r.edition}回 ` : ''}${r.champion}${r.playerPlace ? `（あなた${r.playerPlace}位）` : ''}${r.revival ? '［復刻］' : ''}`)];
 }
 async function entriesList(g) {
   const c = I.cstate(g);

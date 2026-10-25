@@ -221,24 +221,38 @@ async function go(g, id) {
     const k = await g.ask('どう進める？', ['会場を回って準備する（ぜんぶ見る）', 'すぐに出番へ（準備はおまかせ）', 'おまかせ（本番もシミュレーション）'], { cancel: 0 });
     mode = ['full', 'quick', 'auto'][k] || 'full';
   }
+  void def;
+  return runItem(g, item, mode, true);
+}
+// Runs one due round: def.flow (the whole contest is the def's), else rounds[i].run (that round is the def's), else D1's generic
+// runner — at the venue (viaVenue: the walk / quick / おまかせ) or directly (tests, おまかせ from elsewhere).
+async function runItem(g, item, mode, viaVenue) {
+  const def = CONTESTS[item.id];
   const ctx = makeCtx(g, item.id, item.year, item.idx, { option: item.option, revival: item.revival, mode, venueName: `${item.option.venue}会場` });
   startToday(g, item, mode);
   if (typeof def.flow === 'function') {
-    await asafe(`flow:${item.id}`, () => def.flow(g, ctx), null);
+    const res = await asafe(`flow:${item.id}`, () => def.flow(g, ctx), null);
     finishToday(g);
-    return true;
+    return res ?? true;
   }
   const r = item.cyc.rounds[item.idx].r;
   if (typeof r.run === 'function' && !item.revival) {
+    setVenue(g, item);
     const res = await asafe(`run:${item.id}`, () => r.run(g, ctx), null);
-    if (res && typeof res === 'object' && res.passed != null) record(g, item.id, item.idx, res, {});
+    const e = I.entryOf(g, item.id, item.year);
+    if (res && typeof res === 'object' && res.passed != null && e && e.status !== 'out' && e.status !== 'champion' && !(e.results || []).some((x) => x.round === item.idx && x.day === I.todayOf(g))) record(g, item.id, item.idx, res, {});
     finishToday(g);
-    return true;
+    return res;
   }
   setVenue(g, item);
-  await g.goto('shourace', 'lobby', 9, 11, 'up');
-  if (mode !== 'full') await runSteps(g, mode);
-  return true;
+  if (viaVenue) {
+    await g.goto('shourace', 'lobby', 9, 10, 'up');
+    if (mode !== 'full') await runSteps(g, mode);
+    return true;
+  }
+  const x = roundOfToday(g);
+  x.t.phase = 'checked';
+  return performStep(g, { mode });
 }
 function startToday(g, item, mode) {
   const c = I.cstate(g);
@@ -910,15 +924,7 @@ function laterNews(g) {
 async function runToday(g, id, opts = {}) {
   const due = I.dueOn(g).filter((d) => !id || d.id === id);
   if (!due.length) return null;
-  const item = due[0];
-  const mode = opts.mode || 'auto';
-  startToday(g, item, mode);
-  setVenue(g, item);
-  const def = CONTESTS[item.id];
-  if (typeof def.flow === 'function') { await asafe(`flow:${item.id}`, () => def.flow(g, makeCtx(g, item.id, item.year, item.idx, { option: item.option, revival: item.revival, mode })), null); return true; }
-  const x = roundOfToday(g);
-  x.t.phase = 'checked';
-  return performStep(g, { mode });
+  return runItem(g, due[0], opts.mode || 'auto', !!opts.venue);
 }
 
 export const runner = {

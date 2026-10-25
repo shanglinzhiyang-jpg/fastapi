@@ -66,8 +66,18 @@ class Rakugo extends PerformGame {
     const v = this.opts.venue || {};
     const pool = v.size === 'small' ? ['elder', 'tsuu', 'family'] : v.size === 'tv' ? ['first', 'young', 'family'] : ['elder', 'young', 'family', 'tsuu', 'first'];
     this.audience = CROWD_TYPES[this.opts.audience] ? this.opts.audience : pool[Math.floor(this.rng() * pool.length)];
-    // the サゲ line's own laugh decides the ending: make sure the last line is the サゲ
-    for (const l of this.lines) if (l.beat === 'sage') l.punch = true;
+    // the ネタ's own written まくら gives way to the one chosen for today's room (opts.makura === false keeps it)
+    if (this.opts.makura !== false && this.lines.some((l) => l.beat === 'makura')) {
+      this.lines = this.lines.filter((l) => l.beat !== 'makura');
+      this.ctx.lines = this.lines;
+      this.lines.forEach((l, i) => { l.i = i; l.respIdx = null; l.resp = false; });
+    }
+    // the first サゲ line is the punch; what follows (「おあとがよろしいようで」) is the closing bow
+    let sage = false;
+    for (const l of this.lines) {
+      if (l.beat !== 'sage') continue;
+      if (!sage && l.who >= 0) { l.punch = true; sage = true; } else { l.punch = false; l.closing = true; }
+    }
   }
   speakerName(line) { return line.char || (line.who < 0 ? '' : this.members[this.pi].short); }
   headPos() { return { x: 320, y: 186 }; }

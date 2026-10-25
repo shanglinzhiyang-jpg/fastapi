@@ -205,6 +205,11 @@ export function normLines(neta, ctx) {
     const side = ctx.kind === 'rakugo' ? (l.side || (role === 'a' || role === 'c' ? 'kami' : role === 'b' ? 'shimo' : null)) : null;
     out.push({ i: out.length, who, role, text, beat, punch: PUNCH.has(beat), resp: false, respIdx: null, side, char: l.char || charMap[role] || null, gesture: l.gesture || null, prop: l.prop || null, twist: !!l.twist, cue: l.cue || null, fukusen: !!l.fukusen, kaishu: !!l.kaishu || beat === 'kaishu', q: Number.isFinite(l.q) ? l.q : null, subject: l.subject || null, closer: !!l.closer, src: n });
   });
+  // a ツカミ that gets a ツッコミ is a 笑いどころ too
+  for (let i = 0; i + 1 < out.length; i++) {
+    const a = out[i], b = out[i + 1];
+    if (a.beat === 'tsukami' && a.who >= 0 && b.who >= 0 && b.who !== a.who && b.beat === 'tsukkomi') a.punch = true;
+  }
   // a ツッコミ right after a 笑いどころ by someone else is its response (the laugh resolves on it)
   for (let i = 1; i < out.length; i++) {
     const a = out[i - 1], b = out[i];

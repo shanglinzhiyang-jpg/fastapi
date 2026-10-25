@@ -434,11 +434,11 @@ function rulesLines(g, y) {
   const r = m1Rules(y);
   if (!r) return [statusOf(g, y).label, '', '・2001年創設（第1回）〜2010年 第10回', '・2011〜2014年は開催なし（THE MANZAIが年末の漫才大会に）', '・2015年 第11回として復活'];
   return [
-    `${r.label}（${r.edLabel}）`, `主催：${r.organizer}`, `出場資格：${r.eligibilityText}`, `エントリー：${r.entryMethod}・${r.fee.text}${r.fee.verified ? '' : '（この時代の額は未確認：この世界では同額）'}`,
+    `${r.label}（${r.edLabel}）`, `主催：${r.organizer}`, `出場資格：${r.eligibilityText}`, `エントリー：${r.entryMethod}・${r.fee.text}`,
     `エントリー数：${r.entriesText}`, `予選：${r.rounds.map((x) => `${x.name}${x.length / 60}分`).join('→')}${r.seeds ? '（過去に準決勝進出なら1回戦免除）' : ''}`,
     r.wildcard ? `ワイルドカード：準々決勝の敗者から${r.wildcardMedia}の投票で1組が準決勝へ` : '', r.revival ? `敗者復活戦：決勝当日、${r.revival.venue}（${r.revival.judge}）` : '敗者復活戦：なし（2002年から）',
     `決勝：${r.finalLabel}　${r.finalVenue}　${r.finalists}組${r.revival ? '（敗者復活1組を含む）' : ''}`, `審査：${r.judgeScoring}`, r.emikuji ? '出番順：笑神籤（本番中にくじで決定）' : '出番順：事前の抽選で決定', r.finalRound ? '最終決戦：上位3組がもう1本、審査員が1組に投票' : '最終決戦：なし（第1回）',
-    `出囃子：${M1.song}（決勝の登場曲）`, `賞金：${M1.prizeText}`, `放送：${r.broadcast}${r.onAir ? `（${r.onAir}〜）` : ''}`, '※出場者・審査員・司会はこのゲームの世界の架空の人物です。',
+    `出囃子：${M1.song}（決勝の登場曲）`, `賞金：${M1.prizeText}`, `放送：${r.broadcast}${r.onAir ? `（${r.onAir}〜）` : ''}`,
   ].filter(Boolean);
 }
 function scheduleLines(g, y) {
@@ -456,7 +456,7 @@ function historyLines(g) {
   const out = [];
   for (const h of m.hist.slice().reverse()) out.push(`${h.y}年 第${h.ed}回　${h.ch === 'me' ? `★${m.me.name}` : h.chN}${h.ruN ? `（準優勝 ${h.ruN}）` : ''}`);
   if (!out.length) out.push('（まだ記録がない）');
-  out.push('', '2011〜2014年：開催なし', '※この世界の歴代王者（架空の芸人）');
+  out.push('', '2011〜2014年：開催なし（THE MANZAIが年末の漫才大会に）');
   return out;
 }
 function myLines(g) {
@@ -478,7 +478,7 @@ async function m1App(g) {
     const S = statusOf(g, y);
     const acts = todays(g);
     const items = acts.map((a) => ({ label: a.label, sub: a.sub, act: a }))
-      .concat([{ label: '今年の日程・自分の結果', sub: S.label, info: 'sched' }, { label: '大会のルール', sub: m1Rules(y) ? m1Rules(y).limitText : '—', info: 'rules' }, { label: '歴代王者', sub: 'この世界の歴史', info: 'hist' }, { label: '自分の出場記録', sub: bestOf(M(g)) || 'まだ出ていない', info: 'me' }])
+      .concat([{ label: '今年の日程・自分の結果', sub: S.label, info: 'sched' }, { label: '大会のルール', sub: m1Rules(y) ? m1Rules(y).limitText : '—', info: 'rules' }, { label: '歴代王者', sub: '第1回からの優勝者', info: 'hist' }, { label: '自分の出場記録', sub: bestOf(M(g)) || 'まだ出ていない', info: 'me' }])
       .concat(g.hasItem('m1_dvd') ? [{ label: 'DVDを見る', sub: 'M-1グランプリのDVD', info: 'dvd' }] : []);
     const k = await phoneList(g, { title: m1Rules(y) ? `M-1グランプリ${y}` : 'M-1グランプリ', color: '#c8102e', items, hint: 'A:えらぶ　B:もどる' });
     if (k < 0) return;

@@ -177,9 +177,9 @@ export async function entryFlow(g) {
       year: y, era: heisei ? 'heisei' : 'reiwa', title: `${rules.label} エントリー${heisei ? '用紙' : 'フォーム'}`, submit: '確認して送信する',
       fields: [
         { key: 'name', label: 'コンビ名', value: u.name, req: true, edit: async (gg, f) => askText(gg, { title: 'コンビ名（エントリー名）', value: f.value, max: 12 }) },
-        { key: 'kana', label: 'ふりがな', value: u.kana || '', req: true, edit: async (gg, f) => askText(gg, { title: 'コンビ名のふりがな', value: f.value, max: 16, placeholder: 'ひらがなで' }) },
+        { key: 'kana', label: 'ふりがな', value: u.kana || (/^[ぁ-んァ-ヶー・\s]+$/.test(u.name) ? u.name : ''), req: false, edit: async (gg, f) => askText(gg, { title: 'コンビ名のふりがな', value: f.value, max: 16, placeholder: 'ひらがなで' }) },
         { key: 'rep', label: '代表者氏名', value: rep, req: true, edit: async (gg, f) => askText(gg, { title: '代表者の氏名', value: f.value, max: 12 }) },
-        { key: 'members', label: 'メンバー', value: u.members.map((x) => `${x.name}（${x.role === 'boke' ? 'ボケ' : x.role === 'tsukkomi' ? 'ツッコミ' : '—'}）`).join('・'), ro: true, roWhy: 'メンバーはコンビの登録どおり' },
+        { key: 'members', label: 'メンバー', value: u.members.map((x) => `${x.short || x.name}（${x.role === 'boke' ? 'ボケ' : x.role === 'tsukkomi' ? 'ツッコミ' : '—'}）`).join('・'), ro: true, roWhy: 'メンバーはコンビの登録どおり' },
         { key: 'formed', label: '結成年月', value: `${u.formedYear}年${u.formedMonth ? u.formedMonth + '月' : ''}（結成${u.years}年目）`, ro: true, roWhy: '結成年月の虚偽申告は失格になる' },
         { key: 'agency', label: '所属事務所', value: u.agencyName, ro: true, roWhy: '所属は登録どおり（プロ・アマ問わず出場できる）' },
         { key: 'contact', label: heisei ? '連絡先（電話）' : '連絡先（メール）', value: contact, req: true, edit: async (gg, f) => askText(gg, { title: '連絡先', value: f.value, max: 24 }) },
@@ -301,8 +301,8 @@ export async function roundFlow(g, ri) {
     set.order = others.slice(0, 2).map((a) => a.name).concat([E.name]).concat(others.slice(2).map((a) => a.name));
     set.me = E.name;
     set.cast = [];
-    others.forEach((a, i) => {
-      const x = 60 + (i % 2) * 120 + Math.floor(i / 2) * 250, yy = 196 - (i % 2) * 6;
+    others.slice(0, 3).forEach((a, i) => {
+      const x = [56, 172, 410][i], yy = 196 - (i % 2) * 6;
       a.members.slice(0, 2).forEach((mb, k) => set.cast.push({ look: mb.look, x: x + k * 34, y: yy, s: 1.5, tag: k === 0 ? a.name : null, sub: k === 0 ? '★'.repeat(stars(a.power)) + '☆'.repeat(5 - stars(a.power)) : null }));
     });
     set.cast.push({ ...me, x: 300, y: 232, dir: 'down', s: 2 }); if (pa) set.cast.push({ ...pa, x: 352, y: 232, dir: 'down', s: 2 });
@@ -327,7 +327,7 @@ export async function roundFlow(g, ri) {
     } else bonus += 1;
     // ---- リハーサル / 場当たり (準々決勝から)
     if (ri >= 3 || isSF) {
-      set.kind = 'stage'; set.cast = [{ ...me, x: 296, y: 222, dir: 'down' }].concat(pa ? [{ ...pa, x: 344, y: 222, dir: 'down' }] : []);
+      set.kind = 'stage'; set.cast = [{ ...me, x: 282, y: 222, dir: 'down' }].concat(pa ? [{ ...pa, x: 358, y: 222, dir: 'down' }] : []);
       set.caption = '場当たり（立ち位置・センターマイク・明かりの確認）';
       const tallP = h01('tall', u.partner || 'p') < 0.5;
       if (mode === 0) {
@@ -358,7 +358,7 @@ export async function roundFlow(g, ri) {
     } else practice(g, neta, 3);
     await netaAwase(g, E, u, neta, mode, R.name);
     // ---- 舞台袖
-    set.kind = 'sode'; set.timer = `持ち時間 ${Math.floor(R.length / 60)}:${String(R.length % 60).padStart(2, '0')}`;
+    set.kind = 'sode'; set.caption = '舞台袖'; set.timer = `持ち時間 ${Math.floor(R.length / 60)}:${String(R.length % 60).padStart(2, '0')}`;
     set.cast = [{ ...me, x: 470, y: 228, dir: 'right' }].concat(pa ? [{ ...pa, x: 420, y: 228, dir: 'right' }] : []).concat([{ look: MC.ad.look, x: 300, y: 228, s: 2, dir: 'down' }]);
     const cut = cutOf(m, y, ri);
     const pct = odds(g, neta, cut - bonus);
@@ -367,7 +367,7 @@ export async function roundFlow(g, ri) {
     set.info = null;
     // ---- 本番
     set.kind = 'stage'; set.caption = `${R.name}　No.${E.no} ${E.name}`; set.react = 0;
-    set.cast = [{ ...me, x: 296, y: 222, dir: 'down' }].concat(pa ? [{ ...pa, x: 344, y: 222, dir: 'down' }] : []);
+    set.cast = [{ ...me, x: 282, y: 222, dir: 'down' }].concat(pa ? [{ ...pa, x: 358, y: 222, dir: 'down' }] : []);
     sfx(g, 'drum');
     const tired = !tick(g, STAMINA[Math.min(4, ri)], 8 + ri * 2);
     res = await doPerform(g, { neta, length: R.length, title: `${rules.label} ${R.name}`, round: R.id, contestName: rules.label, venueName: `${E.next.city}・${E.next.hall}`, size: ROUND_LOOK.size[Math.min(4, ri)], crowd: ROUND_LOOK.crowd[Math.min(4, ri)], pressure: ROUND_LOOK.pressure[Math.min(4, ri)], skip: mode === 2 });
@@ -587,8 +587,8 @@ async function revivalFlow(g, E, u, rules, fin) {
   const set = pushSet(g, RV.outdoor ? 'outdoor' : 'revival_in', { year: y, venue: RV.venue, sub: RV.venue, cast: [] });
   const pw = partnerWho(u);
   try {
-    const me = { look: g.state.look, x: 296, y: 196, s: 2 };
-    const pa = u.partnerLook ? { look: u.partnerLook, x: 344, y: 196, s: 2 } : null;
+    const me = { look: g.state.look, x: 282, y: 196, s: 2 };
+    const pa = u.partnerLook ? { look: u.partnerLook, x: 358, y: 196, s: 2 } : null;
     set.cast = [me].concat(pa ? [pa] : []);
     set.caption = `${rules.label} 敗者復活戦　${RV.venue}`;
     await say(g, [`${rules.label}、敗者復活戦！準決勝で敗れた${fin.losers.length}組が、決勝の最後の1枠を争います！`, `審査は${RV.judge}。`], MC.revival);
@@ -684,13 +684,14 @@ async function finalFlow(g, E, u, rules, fin) {
   const quickRivals = mode >= 1 || (!g.auto && (await ask(g, 'ほかの組のネタは？', ['紹介VTRから全部見る', '採点だけ見る（早送り）'], null, { cancel: 1 })) === 1);
   const set = pushSet(g, 'studio', { year: y, cast: [], studio: { judges: js.map((j, i) => ({ ...j, look: lookFor(i % 4 === 2 ? 'f' : 'm', 'judge', j.id) })), ranking: [] } });
   const S = set.studio;
-  const meStand = (x = 296) => [{ look: g.state.look, x, y: 222, s: 2 }].concat(u.partnerLook ? [{ look: u.partnerLook, x: x + 48, y: 222, s: 2 }] : []);
-  const mcCast = { look: MC.main.look, x: 54, y: 222, s: 2, dir: 'right' };
+  const meStand = (x = 282) => [{ look: g.state.look, x, y: 202, s: 2 }].concat(u.partnerLook ? [{ look: u.partnerLook, x: x + 76, y: 202, s: 2 }] : []);
+  const mcCast = { look: MC.main.look, x: 66, y: 202, s: 2, dir: 'right' };
+  const rivalStand = (a) => a.members.slice(0, 2).map((mb, i) => ({ look: mb.look, x: 282 + i * 76, y: 202, s: 2 }));
   try {
     // ---- before the show: 楽屋・リハーサル・出囃子確認
     if (mode === 0) {
       set.kind = 'gakuya'; set.order = order.map((k) => actOfK(k).name); set.me = E.name;
-      set.cast = meStand(300).map((c) => ({ ...c, y: 232 }));
+      set.cast = meStand(282).map((c) => ({ ...c, y: 232 }));
       await say(g, [`（${rules.finalVenue}。決勝の楽屋には、ファイナリストたちの名前が並んでいる）`, rules.emikuji ? '（出番は笑神籤で、本番中に決まる。いつ呼ばれてもいいように準備しておかないと）' : `（出番順はすでに決まっている。「${E.name}」は${order.indexOf('me') + 1}番目だ）`]);
       set.kind = 'studio'; set.cast = meStand();
       set.caption = 'リハーサル（場当たり）';
@@ -699,7 +700,7 @@ async function finalFlow(g, E, u, rules, fin) {
       set.caption = null;
     }
     // ---- on air
-    set.kind = 'studio'; set.cast = [mcCast, { look: MC.sub.look, x: 100, y: 222, s: 2, dir: 'right' }];
+    set.kind = 'studio'; set.cast = [mcCast, { look: MC.sub.look, x: 112, y: 202, s: 2, dir: 'right' }];
     set.caption = `${rules.broadcast}${rules.onAir ? '　' + rules.onAir + '〜' : ''}`;
     sfx(g, 'fanfare');
     await say(g, [`${rules.label}！${rules.edLabel}、決勝！`, `エントリー総数${rules.entriesText}の頂点に立つのは、果たしてどの組か！`], MC.main);
@@ -735,7 +736,7 @@ async function finalFlow(g, E, u, rules, fin) {
         await pvCard(g, { year: y, copy, name: a.name, members: a.members, lines, key: k, me: k === 'me' });
       }
       if (k === 'me') E.copy = copy;
-      set.cast = [mcCast].concat(k === 'me' ? meStand() : a.members.slice(0, 2).map((mb, i) => ({ look: mb.look, x: 296 + i * 48, y: 222, s: 2 })));
+      set.cast = [mcCast].concat(k === 'me' ? meStand() : rivalStand(a));
       if (!g.auto && (k === 'me' || !quickRivals)) { sfx(g, 'drum'); }
       let s;
       if (k === 'me') {
@@ -797,7 +798,7 @@ async function finalFlow(g, E, u, rules, fin) {
       for (const k of top3.slice().reverse()) {
         const a = actOfK(k);
         S.led = a.name; S.ledSub = '最終決戦';
-        set.cast = [mcCast].concat(k === 'me' ? meStand() : a.members.slice(0, 2).map((mb, i) => ({ look: mb.look, x: 296 + i * 48, y: 222, s: 2 })));
+        set.cast = [mcCast].concat(k === 'me' ? meStand() : rivalStand(a));
         if (k === 'me') {
           await say(g, `最終決戦、「${E.name}」！`, MC.main);
           const neta2 = await chooseNeta(g, 240, `${rules.label} 最終決戦（2本目）`, E.finalNeta, mode === 2 ? 2 : 0);
@@ -982,7 +983,7 @@ export async function zadankaiFlow(g, y) {
   const u = unitInfo(g, y);
   const set = pushSet(g, 'talk', { year: y, sub: `M-1 アフター座談会`, cast: [{ look: g.state.look, x: 260, y: 200, s: 2 }].concat(u.partnerLook ? [{ look: u.partnerLook, x: 306, y: 200, s: 2 }] : []).concat([{ look: lookFor('m', 'zd', y), x: 420, y: 200, s: 2 }, { look: lookFor('f', 'zd2', y), x: 480, y: 200, s: 2 }]) });
   try {
-    await say(g, ['（ファイナリストが集まって、決勝の夜を振り返る座談会。この世界の年末の恒例企画だ）', `「${E.name}」の${E.final.champ ? '優勝' : `決勝${E.final.place || E.final.rank1}位`}の舞台裏を、ほかの組が語る。`]);
+    await say(g, ['（ファイナリストが集まって、決勝の夜を振り返る「M-1 アフター座談会」。年末の恒例企画だ）', `「${E.name}」の${E.final.champ ? '優勝' : `決勝${E.final.place || E.final.rank1}位`}の舞台裏を、ほかの組が語る。`]);
     const i = await ask(g, '「決勝の4分間、何を考えてました？」', ['「何も覚えてないです」', '「相方の顔だけ見てました」', '「審査員の顔がこわかった」'], null, { cancel: 0 });
     logLine(E, `アフター座談会で${['「何も覚えてない」', '「相方の顔だけ見てた」', '「審査員の顔がこわかった」'][Math.max(0, i)]}と語った。`);
     g.addFame(25, true); g.addFans(600, true);
@@ -1011,9 +1012,9 @@ export async function returnsFlow(g, y) {
   if (!E || !E.final) return false;
   const rules = m1Rules(y);
   const u = unitInfo(g, cal(g).year);
-  const set = pushSet(g, 'tour', { year: y, sub: 'M-1グランプリ リターンズ', cast: [{ look: g.state.look, x: 296, y: 222, s: 2 }].concat(u.partnerLook ? [{ look: u.partnerLook, x: 344, y: 222, s: 2 }] : []) });
+  const set = pushSet(g, 'tour', { year: y, sub: 'M-1グランプリ リターンズ', cast: [{ look: g.state.look, x: 282, y: 222, s: 2 }].concat(u.partnerLook ? [{ look: u.partnerLook, x: 358, y: 222, s: 2 }] : []) });
   try {
-    await say(g, ['（年が明けて、「M-1グランプリ リターンズ」の収録。この世界では、決勝で披露できなかった「もう1本」をファイナリストがかける特番だ）']);
+    await say(g, ['（年が明けて、「M-1グランプリ リターンズ」の収録。決勝で披露できなかった「もう1本」を、ファイナリストがかける特番だ）']);
     const neta = await chooseNeta(g, 240, 'リターンズ（もう1本）', E.finalNeta, 0);
     tick(g, 15, 5);
     const res = await doPerform(g, { neta, length: 240, title: 'M-1グランプリ リターンズ', round: 'returns', contestName: rules ? rules.label : 'M-1', venueName: 'テレビ収録スタジオ', size: 'tv', crowd: 'warm', pressure: 40 });
@@ -1030,7 +1031,7 @@ export async function tourStop(g, y, stop) {
   const u = unitInfo(g, cal(g).year);
   E.after.tour = E.after.tour || {};
   if (E.after.tour[stop.city]) { await say(g, '（この公演はもう終わった）'); return false; }
-  const set = pushSet(g, 'tour', { year: y, sub: `M-1グランプリ${y} ツアー ${stop.city}公演`, cast: [{ look: g.state.look, x: 296, y: 222, s: 2 }].concat(u.partnerLook ? [{ look: u.partnerLook, x: 344, y: 222, s: 2 }] : []) });
+  const set = pushSet(g, 'tour', { year: y, sub: `M-1グランプリ${y} ツアー ${stop.city}公演`, cast: [{ look: g.state.look, x: 282, y: 222, s: 2 }].concat(u.partnerLook ? [{ look: u.partnerLook, x: 358, y: 222, s: 2 }] : []) });
   try {
     const i = await ask(g, `M-1ツアー ${stop.city}公演。ファイナリストが全国を回るツアーだ。`, ['ネタをやる', 'おまかせでやる', '今日は休演する'], null, { cancel: 2 });
     if (i === 2) return false;

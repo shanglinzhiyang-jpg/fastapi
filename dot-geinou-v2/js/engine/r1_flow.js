@@ -65,7 +65,8 @@ export function makeContest(cfg) {
     for (let Y = now.year - 1; Y <= now.year + 3; Y++) {
       if (!C.held(Y)) continue;
       const cal = C.cal(g, Y);
-      if (cal.final && g.state.day <= cal.final.day + 5) return Y;
+      // a season whose final was before the game started is history (D1's world / pastHistory), not played
+      if (cal.final && cal.final.day >= 1 && g.state.day <= cal.final.day + 5) return Y;
     }
     return null;
   };
@@ -105,7 +106,7 @@ export function makeContest(cfg) {
       }
       used.add(n.name);
       n.id = `n${i}`;
-      n.str = Math.round(clamp(n.str ?? (88 - i * 0.9 + gauss(rng) * 3.5), 40, 95) * 10) / 10;
+      n.str = Math.round(clamp(n.str ?? ((cfg.topStr || 86) - i * 0.9 + gauss(rng) * 3.5), 40, 95) * 10) / 10;
       n.seed = rint(rng, 1, 1e9);
       notables.push(n);
     }
@@ -349,6 +350,8 @@ export function makeContest(cfg) {
       } catch (e) { console.error(e); }
     }
     if (cal.final && day > cal.final.day + 1 && day <= cal.final.day + 12) once('after1', () => (cfg.text.after ? N(cfg.text.after(g, S, rules), 1) : null));
+    // D1 queues its own 王者の会見 / ネットの反応 lines of every contest the morning after a final: ours are ours
+    if (cal.final && day > cal.final.day && day <= cal.final.day + 3) d1PurgeLater(g, cfg.id);
     // storylines of the field while the season runs (≤ 1 every few days, each line once a season)
     if (cal.entryFrom && day >= cal.entryFrom.day && cal.final && day < cal.final.day && day % 4 === 0) {
       const line = cfg.text.story ? cfg.text.story(g, S, rules, cal) : null;
@@ -1425,7 +1428,6 @@ function installFlows(C) {
     }
     lines.push('', `【決勝】${r.final.formatText}`, `【賞金】${r.prize ? plainYen(r.prize) : r.prizeText || '—'}`);
     if (r.notes) lines.push('', ...r.notes);
-    lines.push('', '（出場者・審査員・司会はすべて架空の人物です）');
     return lines;
   };
 }

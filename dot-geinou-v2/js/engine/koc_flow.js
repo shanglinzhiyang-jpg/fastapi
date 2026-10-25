@@ -153,7 +153,7 @@ export async function kocEntry(g) {
     const P = PEOPLE[fid];
     await g.say(`「キングオブコント？…おもしろそうじゃん。\n一回だけ、組んでみようか！」`, { name: P.short || P.name, look: P.look });
     instant = true;
-    members = [{ id: 'player', name: g.state.name, short: g.state.name, look: null }, { id: fid, name: P.name, short: P.short || P.name, look: P.look }];
+    members = [{ id: 'player', name: g.state.name, short: g.state.name, look: null }, { id: fid, name: P.short || P.name, short: P.short || P.name, look: P.look }];
     u = { id: 'instant_' + fid, type: 'combi', name: `${g.state.name}と${P.short || P.name}`, members, harmony: 35, agency: g.state.agency, amateur: !g.state.agency };
   }
   const age = has(g, 'playerAge') ? num(safe(() => g.playerAge(y), 20), 20) : num(g.state.profile && g.state.profile.age, 20);
@@ -831,7 +831,7 @@ export async function runFinalDay(g, y, opts = {}) {
     if (playerIn && !digest) {
       bd.merge({ visitor: STAFF.ad.look });
       await g.say(`本日の出番順です。抽選の結果、${order.findIndex((a) => a.me) + 1}番目になります。\nリハーサル、本番の流れ、よろしくお願いします！`, STAFF.ad);
-      await sayP(g, E, pickR(['…足、震えてるわ。', 'ここまで来たら、楽しんだもん勝ちや。', '準決勝と同じ2本、いつも通りやろう。'], rf));
+      await sayP(g, E, pickR(['…足、震えてるわ。', 'ここまで来たら、楽しんだもん勝ちや。', R.twoNetaSF ? '準決勝と同じ2本、いつも通りやろう。' : '2本目のネタまで、きっちりやり切ろう。'], rf));
     }
     // ---- オープニング
     bd.set('studio', { year: y, mc: MCs.main.look, mc2: MCs.sub.look, judges, screen: [titleOf(y), `第${R.edition}回`, 'LIVE'], onair: true });
@@ -1133,7 +1133,7 @@ function finishFinal(g, y, rows, meRow) {
   k.hist[y].mine = true;
   const champ = rows[0];
   if (E && meRow >= 0) {
-    E.results.push({ round: 'final', score: typeof rows[meRow].total === 'number' ? rows[meRow].total : 0, rank: meRow === 0 ? 'S' : meRow < 3 ? 'A' : 'B', passed: meRow === 0, place: meRow + 1, of: rows.length, day: g.state.day });
+    E.results.push({ round: 'final', score: typeof rows[meRow].total === 'number' ? rows[meRow].total : num(rows[meRow].votes, num(rows[meRow].s2, num(rows[meRow].s1))), rank: meRow === 0 ? 'S' : meRow < 3 ? 'A' : 'B', passed: meRow === 0, place: meRow + 1, of: rows.length, day: g.state.day });
     E.place = meRow + 1;
     E.status = meRow === 0 ? 'champion' : 'out';
     if (meRow > 0) E.out = 'final';

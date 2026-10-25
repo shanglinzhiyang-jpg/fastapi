@@ -175,8 +175,8 @@ class PinNeta extends PerformGame {
       } }));
       return out;
     }
-    if (this.style === 'monomane' && line.subject) {
-      const sub = MONOMANE[line.subject] || MONOMANE.generic;
+    if (this.style === 'monomane' && (line.subject || line.punch)) {
+      const sub = MONOMANE[line.subject] || { ...MONOMANE.generic, label: (this.ctx.theme || 'ものまね').slice(0, 14) };
       this.subject = sub;
       if (line.punch) {
         out.push(new PitchTask({ label: `ものまね：${sub.label}`, contour: sub.contour, len: Math.round(140 / (1 + this.bonus * 0.2)), onDone: (r, mg) => {
