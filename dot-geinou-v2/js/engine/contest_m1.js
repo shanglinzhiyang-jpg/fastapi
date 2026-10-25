@@ -16,17 +16,21 @@
 
 import { Game } from './game.js';
 import { registerContest } from './contests.js';
+import * as CONTESTS_MOD from './contests.js';
 import { onMorning, MORNING_HOOKS, registerPhoneApp, registerRegular, REGULARS } from './life.js';
 import { registerItem } from './state.js';
 import { registerSong } from './audio.js';
 import { MINIGAMES } from './minigame.js';
 import { eraOf } from './profile.js';
-import { m1Rules, m1Held, editionOf, M1, entriesOf, NEWS } from './m1_data.js';
+import { m1Rules, m1Held, editionOf, M1, entriesOf, NEWS, setNameFilter } from './m1_data.js';
 import { fieldOf, passedOf, prepareFinal, simulateFinal, actOf, comboAct, anonCombo, sd, tagsOf } from './m1_field.js';
 import { has, safe, cal, dateLabel, dateLabelY, today, M, season, entryOf, plan, statusOf, unitInfo, news, flushNews, msg, internal, yenNom } from './m1_core.js';
 import { entryFlow, roundFlow, finalDayFlow, watchFinal, practiceFlow, zadankaiFlow, anotherStory, returnsFlow, tourStop, dvdRelease } from './m1_flow.js';
 import { phoneList, phoneInfo, closePhoneThen, appTile } from './phone.js';
 import { dvdCard } from './m1_ui.js';
+
+// generated names must not match real people / acts: D1's check when it exists (feature-detected)
+if (typeof CONTESTS_MOD.isRealNameLike === 'function') setNameFilter(CONTESTS_MOD.isRealNameLike);
 
 // ---------------------------------------------------------------- items, music, offered shows
 registerItem('m1_badge', { name: 'M-1の番号札', price: 0, desc: 'M-1グランプリの予選でもらうエントリーナンバーの札。\n捨てられない宝物。' });
@@ -277,6 +281,8 @@ function afterYear(g, y) {
   if (!P || !m.seasons[y] || m.seasons[y].past) return;
   const dev = eraOf(g.state).deviceShort || 'スマホ';
   if (E && E.final) {
+    if (t === P.zadankai) msg(g, 'M-1グランプリ事務局', `【本日】M-1 アフター座談会の収録です。${dev}の「M-1」から。`, { contest: 'm1' });
+    if (t === P.another) msg(g, 'ABCテレビ', `「M-1グランプリ${y} アナザーストーリー」放送。${E.name}の一年を追いました。${dev}の「M-1」から見られます。`, { contest: 'm1' });
     if (t === P.returns - 1) msg(g, 'M-1グランプリ事務局', `明日は「M-1グランプリ リターンズ」の収録です。${dev}の「M-1」から。`, { contest: 'm1' });
     for (const s of P.tour) if (t === s.day - 1) msg(g, 'M-1ツアー制作', `明日はM-1ツアー${s.city}公演。${dev}の「M-1」→「ツアー」から会場へ。`, { contest: 'm1' });
   }
@@ -304,8 +310,6 @@ export function m1Morning(g) {
   m.lastMorning = t;
   const y = cal(g).year;
   registerFor(y);
-  // years skipped altogether (a long jump in time): their finals happen quietly
-  for (let yy = Math.max(2001, m.startYear || 2001); yy < y - 1; yy++) if (m1Held(yy) && !m.hist.some((h) => h.y === yy)) safe(() => { season(g, yy); simulateFinal(m, yy); });
   if (has(g, 'contestNews')) flushQueued(g, m, t);
   for (const yy of [y - 1, y]) if (yy >= 2001) safe(() => processYear(g, yy));
   safe(() => personal(g, y));
@@ -354,6 +358,7 @@ function todays(g) {
   const PE = entryOf(g, py);
   const PP = plan(g, py);
   if (PE && PE.final && PP) {
+    if (!PE.after.zadankai && t >= PP.zadankai && t <= PP.zadankai + 5) out.push({ id: 'zadankai', label: 'アフター座談会に出る', sub: 'ファイナリストの座談会', run: (gg) => zadankaiFlow(gg, py) });
     if (!PE.after.returns && Math.abs(t - PP.returns) <= 1) out.push({ id: 'returns', label: 'リターンズの収録へ', sub: 'もう1本の漫才', run: (gg) => returnsFlow(gg, py) });
     for (const s of PP.tour) if (t === s.day && !(PE.after.tour && PE.after.tour[s.city])) out.push({ id: 'tour_' + s.city, label: `M-1ツアー ${s.city}公演へ`, sub: 'ステージの仕事', run: (gg) => tourStop(gg, py, s) });
     if (t >= PP.another && !PE.after.another) out.push({ id: 'another_p', label: `アナザーストーリー（${py}）を見る`, sub: 'ドキュメンタリー', run: (gg) => anotherStory(gg, py) });

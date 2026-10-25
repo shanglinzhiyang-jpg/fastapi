@@ -26,7 +26,7 @@ export const MONTHS = 12;
 export const monthly = () => Math.round((FEES.tuition + FEES.facility) / MONTHS);
 // classes by weekday (0 = 月): 火 alternates ダンス / 落語 by week; April (before ネタ見せ starts in May) has 芸人の基本 instead
 export const CLASSES = {
-  hassei: { label: '発声・滑舌', teacher: '羽田 澄子 先生（ボイストレーナー）', gains: { voice: 2.5, wagei: 0.6 }, lines: ['腹式呼吸から、早口言葉、外郎売。\n「声は芸人の楽器や」…先生の口ぐせだ。', '後ろの壁に向かって、ひと言ずつ届ける練習。\n声が届くと、空気が変わるのがわかる。'] },
+  hassei: { label: '発声・滑舌', teacher: '羽生田 澄江 先生（ボイストレーナー）', gains: { voice: 2.5, wagei: 0.6 }, lines: ['腹式呼吸から、早口言葉、外郎売。\n「声は芸人の楽器や」…先生の口ぐせだ。', '後ろの壁に向かって、ひと言ずつ届ける練習。\n声が届くと、空気が変わるのがわかる。'] },
   dance: { label: 'ダンス', teacher: '坂巻 涼 先生', gains: { chara: 1.6, dokyo: 1, act: 0.6 }, lines: ['リズムに乗って、体をめいっぱい使う。\n「舞台は全身で立つんや！」', '振りを覚えるのに必死だ。\nでも、鏡の中の自分が少し大きく見えた。'] },
   rakugo: { label: '落語', teacher: '月見亭 小まど 師匠', gains: { wagei: 2, ma: 1.2 }, lines: ['扇子と手ぬぐいだけで、そばをすする。\n「間（ま）がすべてや」', '上下（かみしも）をきる練習。\nひとりで何人も演じ分けるのは、むずかしい。'] },
   netami: { label: 'ネタ見せ', teacher: '', gains: { neta: 1.5, kosei: 1, dokyo: 1 }, lines: [] },

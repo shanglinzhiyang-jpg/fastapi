@@ -6,7 +6,7 @@ import { YEN_MARK, display } from './util.js';
 import { PEOPLE } from './life.js';
 import { AGENCIES } from './state.js';
 import { m1Rules, m1Held, editionOf, M1, h01, NEWS, pickH } from './m1_data.js';
-import { ensureM1, buildPast, evolvePool, seasonOf } from './m1_field.js';
+import { ensureM1, buildPast, evolvePool, seasonOf, simulateFinal } from './m1_field.js';
 
 export const has = (g, k) => !!g && typeof g[k] === 'function';
 export const safe = (fn, d = null) => { try { return fn(); } catch (e) { console.error(e); return d; } };
@@ -51,6 +51,11 @@ export function M(g) {
   const y = cal(g).year;
   if (y >= 2001) {
     if ((m.pastBuilt || 0) < m.startYear - 1) buildPast(m, m.startYear);
+    // held years that went by without a final (a jump in time, an old save): their seasons happen quietly, in order
+    for (let yy = Math.max(2001, m.startYear); yy < y; yy++) {
+      if (!m1Held(yy) || m.hist.some((h) => h.y === yy) || m.poolYear > yy) continue;
+      try { seasonOf(m, yy); simulateFinal(m, yy); } catch (e) { console.error(e); }
+    }
     if (m.poolYear < y && m1Held(y)) evolvePool(m, y, (m._notes = m._notes || []));
   }
   return m;

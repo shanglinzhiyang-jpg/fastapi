@@ -207,18 +207,18 @@ export const TASTES = {
   ma: { name: '間', part: 'timing', note: 'テンポと間' },
 };
 export const MC = (y) => ({
-  main: { name: '宝田 ジョウ', title: '司会（コンビ「シャチホコ劇場」）', look: { hair: 'slick', hairColor: 'black', skin: 'fair', top: '#1e1e26', bottom: '#1e1e26', jacket: true, tie: '#d4a83a' } },
+  main: { name: '烏丸 ジョウ', title: '司会（コンビ「シャチホコ劇場」）', look: { hair: 'slick', hairColor: 'black', skin: 'fair', top: '#1e1e26', bottom: '#1e1e26', jacket: true, tie: '#d4a83a' } },
   sub: y <= 2016
-    ? { name: '白石 ユカリ', title: '進行（TBSアナウンサー）', look: { hair: 'bob', hairColor: 'black', skin: 'light', top: '#f2f2f2', bottom: '#2a3560', skirt: true, jacket: true } }
+    ? { name: '真行寺 ユカリ', title: '進行（TBSアナウンサー）', look: { hair: 'bob', hairColor: 'black', skin: 'light', top: '#f2f2f2', bottom: '#2a3560', skirt: true, jacket: true } }
     : { name: '森園 ナツキ', title: '進行（TBSアナウンサー）', look: { hair: 'long', hairColor: 'brown', skin: 'light', top: '#e8d6ff', bottom: '#2a2430', skirt: true } },
   revival: { name: '三日月ランドリー', title: '敗者復活戦MC（コンビ）', look: { hair: 'spiky', hairColor: 'orange', skin: 'fair', top: '#ff8a3d', bottom: '#3a4a7a' } },
 });
 const JUDGE_POOL = [
   { id: 'tsurumaki', name: '鶴巻 ゲンジ', title: '元「月光ベーカリー」', taste: 'kousei', look: { hair: 'short', hairColor: 'black', skin: 'tan', top: '#22262e', bottom: '#22262e', jacket: true, glasses: true } },
-  { id: 'saotome', name: '早乙女 タカシ', title: 'トリオ「赤ちょうちん号」', taste: 'engi', look: { hair: 'bald', hairColor: 'black', skin: 'fair', top: '#3a2a4a', bottom: '#1e1e26', jacket: true } },
+  { id: 'kitsunezuka', name: '狐塚 タカシ', title: 'トリオ「赤ちょうちん号」', taste: 'engi', look: { hair: 'bald', hairColor: 'black', skin: 'fair', top: '#3a2a4a', bottom: '#1e1e26', jacket: true } },
   { id: 'mikoshiba', name: '御子柴 レン', title: 'コンビ「ナポリタン警察」', taste: 'hassou', look: { hair: 'spiky', hairColor: 'brown', skin: 'fair', top: '#1e3a5a', bottom: '#1e1e26', jacket: true } },
   { id: 'gondawara', name: '権田原 ノボル', title: 'コンビ「おでん大臣」', taste: 'warai', look: { hair: 'afro', hairColor: 'black', skin: 'tan', top: '#5a2a2a', bottom: '#1e1e26', jacket: true, beard: true } },
-  { id: 'kirishima', name: '霧島 サトコ', title: 'コンビ「満月スリッパ」', taste: 'sekai', look: { hair: 'long', hairColor: 'black', skin: 'light', top: '#2a2a3a', bottom: '#2a2a3a', skirt: true, jacket: true } },
+  { id: 'kirishima', name: '霧生 サトコ', title: 'コンビ「満月スリッパ」', taste: 'sekai', look: { hair: 'long', hairColor: 'black', skin: 'light', top: '#2a2a3a', bottom: '#2a2a3a', skirt: true, jacket: true } },
 ];
 // The 2026 additions are this world's own former champions (resolved from the history: champ of a given year).
 const JUDGE_NEW_2026 = [{ id: 'champA', fromChamp: 2019, taste: 'ma' }, { id: 'champB', fromChamp: 2022, taste: 'engi' }];
@@ -230,8 +230,8 @@ export function judgesOf(y, champOf) {
   if (R.judges >= 7) {
     for (const nj of JUDGE_NEW_2026) {
       const c = champOf ? champOf(nj.fromChamp) : null;
-      const name = c && c.member ? c.member : nj.fromChamp === 2019 ? '雨宮 トオル' : '浅葱 ケイ';
-      const unit = c && c.unit ? c.unit : nj.fromChamp === 2019 ? 'ペンギン不動産' : 'ゆでたまご同盟';
+      const name = c && c.member ? c.member : nj.fromChamp === 2019 ? '鴨志田 トウゴ' : '袖山 カナメ';
+      const unit = c && c.unit ? c.unit : nj.fromChamp === 2019 ? 'ペンギン不動産' : '温泉たまご同盟';
       out.push({ id: nj.id, name, title: `${nj.fromChamp}年王者「${unit}」`, taste: nj.taste, look: lookFor(name, true) });
     }
   }
@@ -240,23 +240,23 @@ export function judgesOf(y, champOf) {
 
 // Rival units (this world). type: 'combi' | 'trio' | 'quartet'. All names are invented for this game.
 export const UNIT_NAMES = [
-  'ペンギン不動産', 'ゆでたまご同盟', '月光ベーカリー', 'ナポリタン警察', 'おでん大臣', '満月スリッパ', 'シャチホコ劇場', '三日月ランドリー',
+  'ペンギン不動産', '温泉たまご同盟', '月光ベーカリー', 'ナポリタン警察', 'おでん大臣', '満月スリッパ', 'シャチホコ劇場', '三日月ランドリー',
   'カニカマ王国', 'ホチキス兄弟', '真夜中の回覧板', 'こたつ探検隊', 'ガラパゴス商店', 'ちくわ会議', 'ミルフィーユ団地', '半熟マシーン',
   '七輪クラブ', 'ふとん乾燥機', '午前二時の鳩', 'マカロニ艦隊', '湯けむり探偵', '銀河ドーナツ', 'まくら投げ部', 'ツナマヨ紳士',
   '駄菓子屋ロック', 'ヘアピンカーブ', 'のど自慢荘', '粉もん倶楽部', 'みそ汁バンド', '旅館やまびこ', '豆電球', 'ふくろう便',
   '夕立ストア', 'からあげ研究所', 'パセリの気持ち', '三角コーナー', '靴下迷子', 'サボテン紳士', 'かき氷前線', '寝ぐせ番長',
   '終電ダッシュ', '半額シール', 'すきま風', 'メガネ橋', '畳の目', 'のれん分け', '換気扇', 'たまご焼き器',
-  'ひなたぼっこ組', '置き配', 'コインランドリー部', '紙ふうせん座', '赤ちょうちん号', 'ねずみ花火団', 'ポンコツ探偵社', 'ゆうぐれ商会',
+  'ひなたぼっこ組', '置き配', 'コインランドリー部', '紙ずもう座', '赤ちょうちん号', 'ねずみ花火団', 'ポンコツ探偵社', 'ゆうぐれ商会',
   'メロンパン協会', '夜明けのタマゴ', 'ペンキ塗りたて', 'ハンガー男爵', '路地裏オーケストラ', 'あさり大使', 'ドアノブ兄弟', '風呂上がり',
-  '団地妻ズ', '学ラン紳士', 'おしぼり商会', '回覧板二号', 'ぬか床', '蛍光ペン', 'からくり長屋', '電気毛布',
+  '団地の窓', '学ラン紳士', 'おしぼり商会', '回覧板二号', 'ぬか床', '蛍光ペン', 'からくり長屋', '電気毛布',
   '昼下がりボクシング', '時刻表マニア', '山びこ書房', 'くず餅', 'ピンポンダッシュ', '朝顔観察', '油揚げ', 'ガムテープ',
-  '軒下ブルース', '日めくりカレンダー', '天津飯店', '二重あご', '星空ポスト', '金魚すくい部', 'アルミホイル', '綿あめ大将',
+  '軒下ブルース', '日めくりカレンダー', '天ぷら飯店', '二重あご', '星空ポスト', '金魚すくい部', 'アルミホイル', '綿あめ大将',
 ];
 // names already taken by this world's MC / judges (not entrants)
 const RESERVED = new Set(['月光ベーカリー', 'ナポリタン警察', 'おでん大臣', '満月スリッパ', 'シャチホコ劇場', '三日月ランドリー', '赤ちょうちん号']);
 export const POOL_NAMES = UNIT_NAMES.filter((n) => !RESERVED.has(n));
 // three- or four-person units (by name), the rest are コンビ
-const TRIOS = new Set(['赤ちょうちん号', 'こたつ探検隊', 'ミルフィーユ団地', 'まくら投げ部', 'みそ汁バンド', '旅館やまびこ', 'ひなたぼっこ組', 'コインランドリー部', '路地裏オーケストラ', '団地妻ズ', 'からくり長屋', '金魚すくい部', '紙ふうせん座', 'ねずみ花火団']);
+const TRIOS = new Set(['赤ちょうちん号', 'こたつ探検隊', 'ミルフィーユ団地', 'まくら投げ部', 'みそ汁バンド', '旅館やまびこ', 'ひなたぼっこ組', 'コインランドリー部', '路地裏オーケストラ', '団地の窓', 'からくり長屋', '金魚すくい部', '紙ずもう座', 'ねずみ花火団']);
 const QUARTETS = new Set(['路地裏オーケストラ', 'ねずみ花火団']);
 export const unitType = (name) => (QUARTETS.has(name) ? 'quartet' : TRIOS.has(name) ? 'trio' : 'combi');
 export const membersOf = (type) => (type === 'quartet' ? 4 : type === 'trio' ? 3 : 2);
@@ -264,13 +264,36 @@ export const membersOf = (type) => (type === 'quartet' ? 4 : type === 'trio' ? 3
 // Filler names for the crowded 予選 lists (amateurs, 即席ユニット, 学生コンビ …): word + word.
 const FILL_A = ['ちびっこ', 'まんぷく', 'ほろ酔い', '月曜', 'ふわふわ', '真冬の', 'じわじわ', 'しょっぱい', '眠れない', '青い', 'まるい', 'となりの', '週末', '平熱', 'あったか', 'ちゃっかり', '四畳半', '二軍', '仮免', '夜行', '下町', 'はみだし', 'ぽんこつ', '雨の日', '三丁目', '放課後', '素人', '社会人', '大学', '深夜'];
 const FILL_B = ['ブラザーズ', 'クラブ', '劇団', 'カンパニー', '商店', '同好会', 'ガールズ', 'ボーイズ', 'ファクトリー', 'ジャンクション', '食堂', '研究会', '工房', 'ハウス', 'ラボ', 'ポケット', '部', '組', '座', 'ズ', '大作戦', 'シアター', 'ストリート', 'バス', 'ポスト'];
-export function fillerName(r) {
-  const a = FILL_A[Math.floor(r() * FILL_A.length)];
-  const b = FILL_B[Math.floor(r() * FILL_B.length)];
-  return a + b;
+// well-known real comedy acts / people that a generator must never produce (plus D1's isRealNameLike when it exists)
+export const REAL_GUARD = new Set(['ダウンタウン', 'ウッチャンナンチャン', 'とんねるず', 'ナインティナイン', 'くりぃむしちゅー', 'さまぁ～ず', 'バナナマン', 'おぎやはぎ',
+  'アンタッチャブル', 'サンドウィッチマン', 'ブラックマヨネーズ', 'チュートリアル', 'フットボールアワー', '千鳥', 'かまいたち', '霜降り明星', 'ミルクボーイ',
+  'マヂカルラブリー', '錦鯉', 'ウエストランド', '令和ロマン', '東京03', 'ロバート', 'バイきんぐ', 'シソンヌ', 'ハナコ', '空気階段', 'ビスケットブラザーズ',
+  'サルゴリラ', 'ラブレターズ', 'ロングコートダディ', 'ジェラードン', '蛙亭', 'ヤッホイ', 'スパイシーガーリック', 'レインボー', 'や団', 'ジャングルポケット',
+  'ジャルジャル', 'さらば青春の光', 'ニッポンの社長', '男性ブランコ', 'ニューヨーク', 'ネルソンズ', 'チョコレートプラネット', 'しずる', 'ザ・ギース', '天竺鼠',
+  'パンサー', 'ロッチ', 'ラバーガール', 'うるとらブギーズ', 'かもめんたる', 'キングオブコメディ', 'バッファロー吾郎', 'コロコロチキチキペッパーズ', 'ライス',
+  'にゃんこスター', 'うしろシティ', '藤崎マーケット', 'どぶろっく', 'ゾフィー', 'ザ・マミィ', 'ニッチェ', '我が家', 'インポッシブル', 'ピース', '鬼ヶ島', 'トップリード',
+  'モンスターエンジン', '犬の心', 'ピクニック', 'わらふぢなるお', 'ジグザグジギー', 'コットン', 'ドンデコルテ', 'マユリカ', '真空ジェシカ', 'オズワルド', 'ハライチ',
+  '見取り図', '銀シャリ', 'スリムクラブ', '笑い飯', 'トレンディエンジェル', '和牛', 'ハリセンボン', 'オードリー', '南海キャンディーズ', '麒麟', '中川家', 'キングコング',
+  '爆笑問題', 'ネプチューン', 'よゐこ', 'ココリコ', '雨上がり決死隊', '次長課長', 'たんぽぽ', 'エレキコミック', 'ゆでたまご', '紙ふうせん', '天津', 'ガールズ', 'ドランクドラゴン',
+  'カラテカ', '品川庄司', 'ますだおかだ', 'NON STYLE', 'タカアンドトシ', 'ザ・ぼんち', 'ツービート', 'おぼん・こぼん', 'ハイキングウォーキング', 'トータルテンボス', '前田 健太']);
+import * as D1C from './contests.js';
+export function realLike(name) {
+  const n = String(name || '');
+  if (REAL_GUARD.has(n)) return true;
+  try { if (typeof D1C.isRealNameLike === 'function') return !!D1C.isRealNameLike(n); } catch (e) { /* optional */ }
+  return false;
 }
-const SUR = ['佐伯', '大槻', '久保田', '三好', '早瀬', '吉岡', '香川', '柏木', '桑原', '浜口', '真壁', '岩城', '永井', '宮前', '堤', '小此木', '日比野', '茅野', '鳴海', '戸張', '雨宮', '浅葱', '和泉', '新見', '瀬尾', '中園', '杉浦', '笹倉', '片桐', '仁科'];
-const GIV = ['タクミ', 'ユウ', 'ケンタ', 'ショウ', 'リョウ', 'ダイキ', 'ハヤト', 'ミノル', 'サトシ', 'コウジ', 'アキ', 'ナオ', 'マコト', 'ジュン', 'トオル', 'ケイ', 'シン', 'ヒカル', 'ノゾミ', 'ユキ', 'カオル', 'ツヨシ', 'ゴロウ', 'マサル'];
+export function fillerName(r) {
+  let n = '';
+  for (let k = 0; k < 8; k++) {
+    n = FILL_A[Math.floor(r() * FILL_A.length)] + FILL_B[Math.floor(r() * FILL_B.length)];
+    if (!realLike(n)) break;
+  }
+  return n;
+}
+// rare surnames × unusual given names (katakana), so a generated person never matches a well-known real person
+const SUR = ['鴨志田', '蕪木', '箕浦', '樋爪', '笠置', '栗栖', '旗手', '穂積', '蔀', '鷹野', '袖山', '渦川', '葦原', '磯貝', '狩生', '漆原', '檜垣', '頼母木', '舘鼻', '菱沼', '簗瀬', '皆藤', '雲母', '鉢呂', '於保', '鍬田', '甕', '蝶野原'];
+const GIV = ['ヨイチ', 'タツノスケ', 'ゲンタ', 'ヒョウマ', 'サク', 'ブンゴ', 'マンサク', 'イッテツ', 'コウゾウ', 'ヤタロウ', 'トラヒコ', 'サキチ', 'サコン', 'ムツ', 'トモエ', 'チグサ', 'コユキ', 'スズネ', 'ナギ', 'カナメ', 'トウゴ', 'タモン', 'ハルジ', 'ゴンベエ'];
 export function hashStr(s) { let h = 2166136261; for (const ch of String(s)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
 export function rngOf(seed) {
   let a = seed >>> 0;
@@ -279,7 +302,11 @@ export function rngOf(seed) {
 export function memberNames(unitName, n = 2) {
   const r = rngOf(hashStr('m:' + unitName));
   const out = [];
-  for (let i = 0; i < n; i++) out.push(`${SUR[Math.floor(r() * SUR.length)]} ${GIV[Math.floor(r() * GIV.length)]}`);
+  for (let i = 0; i < n; i++) {
+    let nm = '';
+    for (let k = 0; k < 8; k++) { nm = `${SUR[Math.floor(r() * SUR.length)]} ${GIV[Math.floor(r() * GIV.length)]}`; if (!realLike(nm) && !out.includes(nm)) break; }
+    out.push(nm);
+  }
   return out;
 }
 const TOPS = ['#d64161', '#3f8a3a', '#2f6fd0', '#ffd23f', '#8a5ac8', '#ff8a3d', '#f2f2f2', '#3b3f48', '#5fd7ff', '#c0452f', '#2a3560', '#ff7eb6'];

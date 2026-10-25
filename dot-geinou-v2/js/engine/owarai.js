@@ -326,7 +326,7 @@ function shortfallOf(g, o, kind, need) {
   const bk = o.career.byKind[kind] || {};
   const stagesNeed = Math.max(1, Math.round(need / 6));
   if (num(bk.stages) < stagesNeed) gaps.push({ key: 'exp', label: '場数', have: num(bk.stages), need: stagesNeed, reason: '舞台経験が少ない：本番で緊張して、稽古の半分も出せない', hint: '劇場の出番（ライブ）・賞レースの予選', weight: 0.9 });
-  if (rec && !rec.trial && rec.harmony < need * 0.8) gaps.push({ key: 'harmony', label: 'コンビ仲', have: Math.round(rec.harmony), need: Math.round(need * 0.8), reason: '掛け合いの呼吸が合っていない：おたがいのセリフを待ってしまい、テンポが悪い', hint: '相方とネタ合わせ・話し合い', weight: 0.9 });
+  if (rec && !rec.trial && rec.harmony < need * 0.8) gaps.push({ key: 'harmony', label: 'コンビ仲', have: Math.round(rec.harmony), need: Math.round(need * 0.8), reason: '掛け合いの呼吸が合っていない：セリフを待ってしまい、テンポが悪い', hint: '相方とネタ合わせ・話し合い', weight: 0.9 });
   if (rec && !rec.trial && need >= 40) {
     const yrs = dateOf(g).year - num(rec.formed.year, dateOf(g).year);
     if (yrs < 1 && rec.stages < 5) gaps.push({ key: 'young', label: '結成年数', have: yrs, need: 1, reason: '結成したばかり：ふたりの「間」がまだできていない', hint: 'ネタ合わせとライブを重ねる', weight: 0.5 });

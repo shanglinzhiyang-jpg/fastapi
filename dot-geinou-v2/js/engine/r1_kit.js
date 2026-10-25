@@ -13,6 +13,7 @@ import { eraOf } from './profile.js';
 import { PEOPLE, isKansai, onMorning, REGULARS, PHONE_APPS } from './life.js';
 import { AGENCIES } from './state.js';
 import { LOOKS } from './sprites.js';
+import * as CT from './contests.js';
 
 export const has = (g, k) => !!g && typeof g[k] === 'function';
 export const safe = (fn, d = null) => { try { const v = fn(); return v === undefined ? d : v; } catch (e) { console.error(e); return d; } };
@@ -69,23 +70,36 @@ export const dateTextY = (y, m, d) => `${y}年${m}月${domOf(d)}日`;
 export const junOf = (d) => (d <= 3 ? '上旬' : d <= 7 ? '中旬' : '下旬');
 
 // ================================================================ fictional names (this game's world)
-const SUR = ['小豆沢', '雲母坂', '胡桃沢', '鰐渕', '梅ヶ枝', '狸穴', '千石', '七尾', '灯籠', '鍋島', '戸隠', '白樺', '蓬莱', '猿渡', '牛窓', '藪原', '桐ヶ谷', '鷹番', '鵜飼', '九十九', '百目鬼', '薬袋', '一ツ橋', '雪谷', '蒲生', '鳳', '笹ヶ峰', '柳葉', '駒込', '亀甲', '天王寺', '若狭', '布袋', '御堂', '朝霧', '十六夜'];
+// (surnames tied to one famous person — 柳葉・布袋・鳳・九十九… — are left out on purpose)
+const SUR = ['小豆沢', '雲母坂', '胡桃沢', '鰐渕', '梅ヶ枝', '狸穴', '千石', '七尾', '灯籠', '鍋島', '戸隠', '白樺', '蓬莱', '猿渡', '牛窓', '藪原', '桐ヶ谷', '鷹番', '鵜飼', '百目鬼', '薬袋', '一ツ橋', '雪谷', '蒲生', '笹ヶ峰', '駒込', '亀甲', '天王寺', '若狭', '御堂', '朝霧', '十六夜'];
 const GIV = ['ジョニー', 'キャサリン', 'ポン太', 'マサル', 'ミドリ', 'ヤスオ', 'カナブン', 'トメ子', 'ハルキ', 'サブレ', 'ゴンザレス', 'ペペ', 'ヨシコ', 'チャーリー', 'タモツ', 'ノブ', 'ジュリア', 'ダンディ', 'ペコ', 'スナオ', 'ミツオ', 'チカラ', 'マドカ', 'モモ', 'ピエール', 'ローズ', 'ヒカル', 'ゲン', 'ナナ', 'ケンタ', 'リリー', 'ソウタ'];
 const SOLO = ['もやし定食', 'ひとり会議', 'すきま風太郎', 'おにぎり左衛門', '深海ちゃん', '満月バター', 'ぬか床ミナミ', '単三電池', '三角定規', 'メロンパン太郎', 'ねじまき先輩', 'ラジオ体操第三', '回覧板', 'ぽんかん大王', 'わたあめ課長', '麦茶のみ子', '冷やし中華はじめ', 'スリッパ王子', 'ハンコ注意報', '土曜のサバ', '消しゴム職人', '段ボール伯爵', 'エレベーター大佐', '金曜ナポリタン', '湯たんぽ姫', '扇風機ヨシオ', '目覚まし時計子', 'ちくわぶ男爵', '半熟たまご', '二度寝のプロ', '踏切ジョージ', '路線図マニア', '雨合羽サトシ', '豆腐屋ラッパ'];
 const UNIT2 = ['月面ピクニック', '三丁目サーカス', 'シャッター通り', 'レモン配達便', 'はるかぜ急行', 'からくり定食', '平熱ボーイズ', 'ハチミツ工場', '夕焼け事務所', 'ドドンパ通信', 'ちくわ大臣', '金曜ロッカー', '蛍光ペンズ', 'おかわり自由', 'すずめ銀行', 'オーロラ横丁', 'まめでんきゅう', 'ナポリタン協会', 'こたつ会議', '午前三時', 'ワカメ学級', '背伸び団地', '改札ダッシュ', '洗濯日和', '縁側パーティー', '給食当番', '半額シール', '空き地クラブ', '竹とんぼ通信', 'しおり堂', '屋上ラジオ', '寝ぐせアンテナ', '合鍵商会', 'ビー玉商店', '鉄板ホイル', '迷子センター', '十円玉ズ', '電柱ファイブ', '湯けむり探偵', 'カレーの国', '傘立て', '観覧車ジャンプ'];
 const UNIT3 = ['回転木馬団', '三色だんご', '信号機トリオ', 'おでん三兄弟', '雷おこし団', '三輪車クラブ', 'トライアングル商会', '鉛筆削り団', '三日月ブラザーズ', 'ちゃぶ台ファミリー'];
 const SHORT = ['ハルキ', 'ヨシダ', 'まこと', 'ケン', 'たろう', 'みのる', 'ユウ', 'サトシ', 'コウ', 'のぶ', 'リョウ', 'しんご', 'アキ', 'ミナミ', 'かおり', 'マリ', 'ゆうこ', 'てつ'];
 const FAM = ['青柳', '赤羽', '朝比奈', '石狩', '稲葉', '宇佐美', '江波', '大鷹', '岡安', '鏑木', '神威', '北浜', '久留米', '黒部', '小早川', '早乙女', '鴫原', '白鳥', '須磨', '瀬戸口', '高砂', '月岡', '鶴見', '手塚原', '豊岡', '中之島', '夏目坂', '鳴海', '西陣', '野々宮', '萩原', '花菱', '日向', '藤ノ森', '星野原', '真鍋', '水無瀬', '御影', '紫野', '桃井', '八雲', '柚木', '夜久', '若宮'];
-const GIVM = ['勝也', '康平', '大地', '誠司', '健吾', '浩二', '隆之', '雄一', '亮太', '拓真', '秀樹', '剛', '修平', '恭介', '直人'];
-const GIVF = ['真理子', '佳奈', '美咲', '由紀', '彩', '恵', '千尋', '奈々', '涼子', '桃子', '沙織', '陽子', '早苗', '瞳', '葵'];
-export function personName(r, gender) { return pickR(r, FAM) + ' ' + pickR(r, (gender || (r() < 0.5 ? 'm' : 'f')) === 'f' ? GIVF : GIVM); }
-export function pinName(r) {
-  const k = r();
-  if (k < 0.45) return pickR(r, SUR) + pickR(r, GIV);
-  if (k < 0.8) return pickR(r, SOLO);
-  return `${pickR(r, UNIT2)} ${pickR(r, SHORT)}`; // コンビの片方がピンで出る
+// rarer given names (rare surname × rare given name: no well-known real person)
+const GIVM = ['柊吾', '颯斗', '灯真', '蒼汰', '嵐士', '律哉', '朔也', '凌雅', '爽介', '伊織', '漣', '玄道', '燈太', '迅之介', '晴臣'];
+const GIVF = ['千景', '栞那', '紬希', '澪央', '灯花', '柚葉', '琴音', '朱里', '凛々子', '寧々', '芙美', '小夜子', '詠美', '帆乃香', '絃'];
+// No generated name may match a well-known real person (BRIEF4): D1's isRealNameLike when it exports one, and our list.
+const FAMOUS = new Set(['前田健太', '松本人志', '浜田雅功', '明石家さんま', '北野武', 'ビートたけし', 'タモリ', '所ジョージ', '志村けん', '加藤茶', '島田紳助', '今田耕司', '東野幸治', '陣内智則', 'バカリズム', '友近', '小籔千豊', '野田クリスタル', '佐久間一行', '間寛平', '大平サブロー', '月亭八方', '伊東四朗', 'ダンカン', '桂文枝', '笑福亭鶴瓶', '山里亮太', '本田望結', '霜降り明星', '粗品', 'せいや', '広瀬アリス', 'ゆりやんレトリィバァ', 'アキラ100%', '濱田祐太郎', '街裏ぴんく', '友田オレ', '田津原理音', 'だいたひかる', '浅越ゴエ', 'ほっしゃん。', '博多華丸', 'なだぎ武', '中山功太', 'あべこうじ', '三浦マイルド', 'やまもとまさみ', 'じゅんいちダビッドソン', 'ハリウッドザコシショウ', 'おいでやす小田', '今井らいぱち', '吉住', '柳葉敏郎', '布袋寅泰', '鳳啓助', '九十九一', '桃井かおり', '萩原健一', '西城秀樹', '草彅剛', '真鍋かをり', '橋本環奈', '大谷翔平', 'イチロー', '長嶋茂雄', '王貞治', '松井秀喜', '羽生結弦', '浅田真央', '木村拓哉', '中居正広', '黒柳徹子', '和田アキ子', '美空ひばり', '石原裕次郎', '吉永小百合', '高倉健', '渥美清', '萩本欽一', '坂上二郎', 'ゼロカラン', '金魚番長', '豆鉄砲', 'ドンデコルテ', 'ミルクボーイ', 'ダイアン', 'かまいたち', 'ハナコ', 'ニッポンの社長', 'かもめんたる', 'マヂカルラブリー', 'ダウ90000', '令和ロマン', 'ヨネダ2000']);
+export function realNameLike(name) {
+  const s = String(name || '').replace(/[\s　・]/g, '');
+  if (!s) return false;
+  try { if (typeof CT.isRealNameLike === 'function' && CT.isRealNameLike(name)) return true; } catch (e) { /* D1's filter failed: ours only */ }
+  return FAMOUS.has(s);
 }
-export function unitName(r, type = 'combi') { return type === 'trio' ? pickR(r, UNIT3) : type === 'pin' ? pinName(r) : pickR(r, UNIT2); }
+const clean = (r, make) => { let n = make(); for (let i = 0; i < 8 && realNameLike(n); i++) n = make(); return n; };
+export function personName(r, gender) { const f = (gender || (r() < 0.5 ? 'm' : 'f')) === 'f'; return clean(r, () => pickR(r, FAM) + ' ' + pickR(r, f ? GIVF : GIVM)); }
+export function pinName(r) {
+  return clean(r, () => {
+    const k = r();
+    if (k < 0.45) return pickR(r, SUR) + pickR(r, GIV);
+    if (k < 0.8) return pickR(r, SOLO);
+    return `${pickR(r, UNIT2)} ${pickR(r, SHORT)}`; // コンビの片方がピンで出る
+  });
+}
+export function unitName(r, type = 'combi') { return type === 'pin' ? pinName(r) : clean(r, () => pickR(r, type === 'trio' ? UNIT3 : UNIT2)); }
 const HAIRS = ['short', 'long', 'bob', 'spiky', 'twin', 'slick', 'afro', 'cap', 'bald', 'mage'];
 const HCOL = ['black', 'black', 'brown', 'brown', 'blonde', 'red', 'silver', 'pink', 'blue', 'orange'];
 const TOPS = ['#d64161', '#3a6fd8', '#2f9a4a', '#ffd23f', '#8a5ac8', '#ff8a3d', '#1e1e26', '#f2f2f2', '#5fd7ff', '#c0452f', '#6a6a78', '#ff7eb6'];
@@ -359,5 +373,5 @@ export function d1History(g, cid) {
 export function d1Field(g, cid, roundIdx, n, Y) {
   if (!has(g, 'contestRivals')) return [];
   const list = safe(() => g.contestRivals(cid, roundIdx, n, Y), []) || [];
-  return list.filter((x) => x && x.name && !x.anon).sort((a, b) => num(b.power) - num(a.power));
+  return list.filter((x) => x && x.name && !x.anon && !realNameLike(x.name)).sort((a, b) => num(b.power) - num(a.power));
 }

@@ -116,9 +116,9 @@ registerContest('t1', {
 //   （会場でウケても低い点のことがある）。「ブレイク芸人の登竜門」。第17回=2023年1月22日、第19回=2025年1月26日、
 //   第20回=2026年1月25日放送（12組出場）。→ 第1回は逆算で2007年。
 // Unverified: 点数の満点、持ち時間 → ゲーム内の設定（100点満点の独断点）.
-// The real 審査役 is a real person: here the 審査役 is the fictional 「山岸 一平」 (the title is used only as the title).
+// The real 審査役 is a real person: here the 審査役 is the fictional 「鴫原 山兵衛」 (the title is used only as the title).
 const YAMA1_SRC = ['https://natalie.mu/owarai/news/657322', 'https://natalie.mu/owarai/news/658499', 'https://natalie.mu/owarai/news/609111', 'https://natalie.mu/owarai/news/43786', 'https://www.thetvdb.com/series/down-town-gaki-no-tsukai/seasons/official/2023'];
-const YAMA_JUDGE = '山岸 一平';
+const YAMA_JUDGE = '鴫原 山兵衛'; // fictional (rare surname × old-fashioned given name)
 const YAMA_TASTES = [
   { t: '勢い', text: '今年は「勢い」の気分', likes: 1 },
   { t: 'キャラ', text: '今年は「キャラの濃さ」に弱い', likes: 2 },
@@ -155,7 +155,7 @@ registerContest('yama1', {
           await showBoard(g, {
             title: `山-1グランプリ　${YAMA_JUDGE}の独断採点`, sub: `${edLabel(ctx)}　会場のウケと点数は一致しない`,
             cols: [{ key: 'place', label: '順', w: 50 }, { key: 'name', label: '名前', w: 320 }, { key: 'uke', label: '会場ウケ', w: 110, align: 'right' }, { key: 'pt', label: '独断点', w: 110, align: 'right' }],
-            rows: rows.map((x, i) => ({ place: i + 1, name: x.name, uke: x.uke, pt: x.pt, me: x.me })), max: 12, note: `${YAMA_JUDGE}「${taste.text.replace('今年は', '')}。文句は受け付けません」`,
+            rows: rows.map((x, i) => ({ place: i + 1, name: x.name, uke: x.uke, pt: x.pt, me: x.me })), max: 9, note: `${YAMA_JUDGE}：今年は「${taste.t}」の気分。文句は受け付けません`,
           });
           const out = roundResult(res, { passed: true, place, field: 12, dokudan: mine });
           if (place === 1) { out.champion = true; out.award = '優勝'; await g.say([`山-1グランプリ、優勝は${unitName(g)}！`, '宴会場の先輩たちが「なんでやねん！」と叫びながら拍手している。']); }

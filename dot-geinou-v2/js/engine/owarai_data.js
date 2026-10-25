@@ -193,48 +193,48 @@ export function baseStats(id, lv, hi, lo) {
 export const CANDIDATES = {};
 function cand(id, def) { CANDIDATES[id] = { id, ...def }; }
 // ---- 雑誌の投稿欄 (1975–1995)
-cand('ow_zs_ken', { board: 'zasshi', n: '岡田 健二', s: 'ケンジ', g: 'm', age: 21, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 28, hi: 'tsukkomi:20,voice:14,ma:8', lo: 'act:-8', per: 'nekketsu', q: ['atsui'], mot: 'top', compat: 72, bar: 0, h: 'なにわのケン',
+cand('ow_zs_ken', { board: 'zasshi', n: '岡嶋 健吾', s: 'ケンジ', g: 'm', age: 21, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 28, hi: 'tsukkomi:20,voice:14,ma:8', lo: 'act:-8', per: 'nekketsu', q: ['atsui'], mot: 'top', compat: 72, bar: 0, h: 'なにわのケン',
   post: '漫才のボケ担当を求む。当方ツッコミ21歳、大阪出身・東京在住。本気で天下を取りたい人だけハガキ下さい。', say: 'ハガキおおきに！ケンジです。\n…ほんまに来てくれたんや。うれしいわ。' });
-cand('ow_zs_yoko', { board: 'zasshi', n: '三浦 陽子', s: 'ヨーコ', g: 'f', age: 19, pref: 'shizuoka', dial: 'standard', style: 'conte', role: 'boke', lv: 22, hi: 'act:18,chara:14,hassou:8', lo: 'voice:-6', per: 'tennen', q: ['hoko'], mot: 'dream', compat: 64, bar: 0, h: 'ミカン娘',
+cand('ow_zs_yoko', { board: 'zasshi', n: '三輪 陽子', s: 'ヨーコ', g: 'f', age: 19, pref: 'shizuoka', dial: 'standard', style: 'conte', role: 'boke', lv: 22, hi: 'act:18,chara:14,hassou:8', lo: 'voice:-6', per: 'tennen', q: ['hoko'], mot: 'dream', compat: 64, bar: 0, h: 'ミカン娘',
   post: 'コントをやりたい19歳の女の子です。ボケ担当。台本を書ける人、いっしょに笑いをとりませんか？', say: 'あっ、ヨーコです！\n…ごめんなさい、駅で反対の出口に出ちゃって。' });
-cand('ow_zs_tetsu', { board: 'zasshi', n: '石田 哲也', s: 'テツ', g: 'm', age: 26, pref: 'fukuoka', dial: 'standard', style: 'manzai', role: 'boke', lv: 34, hi: 'boke:16,wagei:12,dokyo:10', lo: 'kosei:-8', per: 'ochoshi', q: ['shakkin', 'rouhi'], mot: 'money', compat: 30, bar: 0, h: '博多の風雲児',
+cand('ow_zs_tetsu', { board: 'zasshi', n: '石動 哲也', s: 'テツ', g: 'm', age: 26, pref: 'fukuoka', dial: 'standard', style: 'manzai', role: 'boke', lv: 34, hi: 'boke:16,wagei:12,dokyo:10', lo: 'kosei:-8', per: 'ochoshi', q: ['shakkin', 'rouhi'], mot: 'money', compat: 30, bar: 0, h: '博多の風雲児',
   post: 'すぐに売れる自信あり！ボケ担当26歳。ツッコミ募集。ギャラは山分け、細かいことは会ってから！', say: 'どーもどーも、テツです！\nいやあ、運命の出会いってやつですね、これは！' });
-cand('ow_zs_masa', { board: 'zasshi', n: '北村 正之', s: 'マサ', g: 'm', age: 24, pref: 'tokyo', dial: 'standard', style: 'both', role: 'tsukkomi', lv: 30, hi: 'kosei:16,neta:14,tsukkomi:8', lo: 'chara:-8,dokyo:-6', per: 'majime', q: ['kanpeki', 'shy'], mot: 'dream', compat: 60, bar: 0, h: 'マサ＠練馬',
-  post: 'ネタは全部書きます。台本重視でコツコツやれる相方を探しています。漫才・コントどちらでも。', say: '…北村です。\nあの、ネタ帳、持ってきました。見ますか。' });
-cand('ow_zs_ryu', { board: 'zasshi', n: '竹内 竜一', s: 'リュウ', g: 'm', age: 23, pref: 'hyogo', dial: 'kansai', style: 'manzai', role: 'boke', lv: 46, hi: 'hassou:22,neta:18,boke:14,adlib:10', lo: 'voice:-4', per: 'cool', q: ['tensai', 'akippoi'], mot: 'top', compat: 45, bar: 40, h: '神戸のリュウ',
+cand('ow_zs_masa', { board: 'zasshi', n: '北浦 正之', s: 'マサ', g: 'm', age: 24, pref: 'tokyo', dial: 'standard', style: 'both', role: 'tsukkomi', lv: 30, hi: 'kosei:16,neta:14,tsukkomi:8', lo: 'chara:-8,dokyo:-6', per: 'majime', q: ['kanpeki', 'shy'], mot: 'dream', compat: 60, bar: 0, h: 'マサ＠練馬',
+  post: 'ネタは全部書きます。台本重視でコツコツやれる相方を探しています。漫才・コントどちらでも。', say: '…北浦です。\nあの、ネタ帳、持ってきました。見ますか。' });
+cand('ow_zs_ryu', { board: 'zasshi', n: '竹之内 竜一', s: 'リュウ', g: 'm', age: 23, pref: 'hyogo', dial: 'kansai', style: 'manzai', role: 'boke', lv: 46, hi: 'hassou:22,neta:18,boke:14,adlib:10', lo: 'voice:-4', per: 'cool', q: ['tensai', 'akippoi'], mot: 'top', compat: 45, bar: 40, h: '神戸のリュウ',
   post: '才能ある奴だけ連絡くれ。ボケは俺がやる。中途半端な気持ちならお断り。', say: '竜一や。\n…で、自分、なにができるん？' });
-cand('ow_zs_chika', { board: 'zasshi', n: '森下 千賀子', s: 'チカ', g: 'f', age: 28, pref: 'miyagi', dial: 'standard', style: 'both', role: 'tsukkomi', lv: 26, hi: 'tsukkomi:14,kankyaku:12,wagei:10', lo: 'hassou:-6', per: 'majime', q: ['majime'], mot: 'escape', compat: 66, bar: 0, h: '仙台の姉さん',
-  post: 'OLやめて上京しました。28歳、ツッコミ担当。年齢は気にしない方、お便りください。', say: 'はじめまして、森下です。\nハガキの字、きれいだったからすぐわかったわ。' });
+cand('ow_zs_chika', { board: 'zasshi', n: '森口 千賀子', s: 'チカ', g: 'f', age: 28, pref: 'miyagi', dial: 'standard', style: 'both', role: 'tsukkomi', lv: 26, hi: 'tsukkomi:14,kankyaku:12,wagei:10', lo: 'hassou:-6', per: 'majime', q: ['majime'], mot: 'escape', compat: 66, bar: 0, h: '仙台の姉さん',
+  post: 'OLやめて上京しました。28歳、ツッコミ担当。年齢は気にしない方、お便りください。', say: 'はじめまして、森口です。\nハガキの字、きれいだったからすぐわかったわ。' });
 // ---- パソコン通信 (1985–2000)
-cand('ow_ps_hiro', { board: 'pasotsu', n: '藤井 浩', s: 'ヒロシ', g: 'm', age: 25, pref: 'saitama', dial: 'standard', style: 'conte', role: 'tsukkomi', lv: 30, hi: 'kosei:18,neta:14,act:6', lo: 'dokyo:-10', per: 'rikutsu', q: ['shy', 'kanpeki'], mot: 'dream', compat: 62, bar: 0, h: 'HIRO-CONTE',
+cand('ow_ps_hiro', { board: 'pasotsu', n: '藤枝 浩', s: 'ヒロシ', g: 'm', age: 25, pref: 'saitama', dial: 'standard', style: 'conte', role: 'tsukkomi', lv: 30, hi: 'kosei:18,neta:14,act:6', lo: 'dokyo:-10', per: 'rikutsu', q: ['shy', 'kanpeki'], mot: 'dream', compat: 62, bar: 0, h: 'HIRO-CONTE',
   post: 'コント師の相方求む。脚本担当です。まずはオフで一度お会いしましょう。', say: '…あ、HIRO-CONTEです。\n実物の人と話すの、ひさしぶりで…。' });
-cand('ow_ps_mai', { board: 'pasotsu', n: '吉川 麻衣', s: 'マイ', g: 'f', age: 20, pref: 'kanagawa', dial: 'standard', style: 'both', role: 'boke', lv: 24, hi: 'chara:16,adlib:12,boke:10', lo: 'kosei:-8', per: 'ochoshi', q: ['akippoi'], mot: 'tv', compat: 58, bar: 0, h: 'MAI★MAI',
+cand('ow_ps_mai', { board: 'pasotsu', n: '吉居 麻衣', s: 'マイ', g: 'f', age: 20, pref: 'kanagawa', dial: 'standard', style: 'both', role: 'boke', lv: 24, hi: 'chara:16,adlib:12,boke:10', lo: 'kosei:-8', per: 'ochoshi', q: ['akippoi'], mot: 'tv', compat: 58, bar: 0, h: 'MAI★MAI',
   post: 'テレビに出たい！ボケ担当20歳です。ツッコミのうまい人、メールください(^^)', say: 'MAI★MAIでーす！\nえー、思ってたよりふつうの人だ！いい意味で！' });
 cand('ow_ps_goro', { board: 'pasotsu', n: '黒田 吾郎', s: 'ゴロー', g: 'm', age: 31, pref: 'hokkaido', dial: 'standard', style: 'manzai', role: 'tsukkomi', lv: 33, hi: 'wagei:14,ma:14,tsukkomi:10', lo: 'chara:-8', per: 'mypace', q: ['odayaka'], mot: 'family', compat: 68, bar: 0, h: 'GORO_SAPPORO',
   post: '31歳、遅咲き上等。札幌で漫才をしていました。落ち着いて長くやれる相方を。', say: '黒田です。遠いところ、どうも。\nまあ、のんびりいきましょう。' });
-cand('ow_ps_sho', { board: 'pasotsu', n: '西田 翔', s: 'ショウ', g: 'm', age: 18, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'boke', lv: 20, hi: 'boke:14,dokyo:14,voice:10', lo: 'kosei:-10,neta:-6', per: 'ochoshi', q: ['chikoku', 'atsui'], mot: 'top', compat: 50, bar: 0, h: 'SHO-NAMBA',
+cand('ow_ps_sho', { board: 'pasotsu', n: '西浦 翔', s: 'ショウ', g: 'm', age: 18, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'boke', lv: 20, hi: 'boke:14,dokyo:14,voice:10', lo: 'kosei:-10,neta:-6', per: 'ochoshi', q: ['chikoku', 'atsui'], mot: 'top', compat: 50, bar: 0, h: 'SHO-NAMBA',
   post: '高校出たばっかやけど、なめんといて！ボケ担当。ツッコミ募集中！', say: 'すんません、遅れました！\n電車、一本まちがえてもうて！' });
-cand('ow_ps_eri', { board: 'pasotsu', n: '佐野 絵里', s: 'エリ', g: 'f', age: 23, pref: 'tokyo', dial: 'standard', style: 'conte', role: 'both', lv: 38, hi: 'act:22,mane:16,chara:10', lo: 'wagei:-6', per: 'cool', q: ['tensai', 'kanpeki'], mot: 'top', compat: 52, bar: 34, h: 'ERI/ACTRESS',
-  post: '劇団出身。コントの演技力には自信あり。本気の人のみ。', say: '佐野です。\n時間がもったいないから、さっそく本題に入りましょう。' });
+cand('ow_ps_eri', { board: 'pasotsu', n: '佐々野 絵里', s: 'エリ', g: 'f', age: 23, pref: 'tokyo', dial: 'standard', style: 'conte', role: 'both', lv: 38, hi: 'act:22,mane:16,chara:10', lo: 'wagei:-6', per: 'cool', q: ['tensai', 'kanpeki'], mot: 'top', compat: 52, bar: 34, h: 'ERI/ACTRESS',
+  post: '劇団出身。コントの演技力には自信あり。本気の人のみ。', say: '佐々野です。\n時間がもったいないから、さっそく本題に入りましょう。' });
 cand('ow_ps_kazu', { board: 'pasotsu', n: '大野 和夫', s: 'カズ', g: 'm', age: 29, pref: 'chiba', dial: 'standard', style: 'manzai', role: 'boke', lv: 27, hi: 'boke:12,hassou:12', lo: 'voice:-6', per: 'negative', q: ['shakkin', 'negative'], mot: 'escape', compat: 28, bar: 0, h: 'KAZU_CHIBA',
   post: '会社がつぶれました。人生をかけて笑いを。ツッコミ募集。', say: '大野です…。\nあ、ここのお茶代、あとで返しますんで…。' });
 // ---- インターネット掲示板 (1995–2003)
-cand('ow_wb_daisuke', { board: 'webbbs', n: '坂本 大輔', s: 'ダイスケ', g: 'm', age: 22, pref: 'kyoto', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 32, hi: 'tsukkomi:18,ma:12,kankyaku:10', lo: 'act:-6', per: 'cool', q: ['majime'], mot: 'top', compat: 70, bar: 0, h: 'だいすけ＠京都',
-  post: '[相方募集] 京都出身22歳ツッコミ。全国ネットに出られる漫才師になりたい。ボケの方メールください。', say: '坂本です。メールの感じのまんまやな。\n…ええ意味で言うてるで。' });
-cand('ow_wb_ayaka', { board: 'webbbs', n: '中島 彩香', s: 'アヤカ', g: 'f', age: 21, pref: 'aichi', dial: 'standard', style: 'conte', role: 'boke', lv: 28, hi: 'hassou:18,act:12,chara:10', lo: 'voice:-6', per: 'tennen', q: ['hoko'], mot: 'dream', compat: 60, bar: 0, h: 'あやか(=^・^=)',
+cand('ow_wb_daisuke', { board: 'webbbs', n: '坂根 大輔', s: 'ダイスケ', g: 'm', age: 22, pref: 'kyoto', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 32, hi: 'tsukkomi:18,ma:12,kankyaku:10', lo: 'act:-6', per: 'cool', q: ['majime'], mot: 'top', compat: 70, bar: 0, h: 'だいすけ＠京都',
+  post: '[相方募集] 京都出身22歳ツッコミ。全国ネットに出られる漫才師になりたい。ボケの方メールください。', say: '坂根です。メールの感じのまんまやな。\n…ええ意味で言うてるで。' });
+cand('ow_wb_ayaka', { board: 'webbbs', n: '仲島 彩香', s: 'アヤカ', g: 'f', age: 21, pref: 'aichi', dial: 'standard', style: 'conte', role: 'boke', lv: 28, hi: 'hassou:18,act:12,chara:10', lo: 'voice:-6', per: 'tennen', q: ['hoko'], mot: 'dream', compat: 60, bar: 0, h: 'あやか(=^・^=)',
   post: '[相方募集] 名古屋から上京。不思議なコントがやりたいです。ツッコミさん大募集！', say: 'あやかです〜。\nここ、来るのに三回まちがえました。' });
-cand('ow_wb_taku', { board: 'webbbs', n: '松井 拓海', s: 'タクミ', g: 'm', age: 20, pref: 'tokyo', dial: 'standard', style: 'both', role: 'boke', lv: 22, hi: 'adlib:14,chara:12', lo: 'neta:-10,kosei:-8', per: 'ochoshi', q: ['chikoku', 'akippoi'], mot: 'tv', compat: 35, bar: 0, h: 'TAKU＠渋谷',
+cand('ow_wb_taku', { board: 'webbbs', n: '松葉 拓海', s: 'タクミ', g: 'm', age: 20, pref: 'tokyo', dial: 'standard', style: 'both', role: 'boke', lv: 22, hi: 'adlib:14,chara:12', lo: 'neta:-10,kosei:-8', per: 'ochoshi', q: ['chikoku', 'akippoi'], mot: 'tv', compat: 35, bar: 0, h: 'TAKU＠渋谷',
   post: '[相方募集] ノリで生きてます！テレビ出たい！ネタは…これから！', say: 'ちわーっす、タクミっす！\nいやー、寝坊しました！' });
-cand('ow_wb_satoshi', { board: 'webbbs', n: '高木 聡', s: 'サトシ', g: 'm', age: 27, pref: 'hiroshima', dial: 'standard', style: 'manzai', role: 'boke', lv: 36, hi: 'wagei:16,boke:14,neta:10', lo: 'dokyo:-4', per: 'majime', q: ['kanpeki'], mot: 'family', compat: 66, bar: 0, h: 'さとし＠広島',
-  post: '[相方募集] 広島出身27歳、しゃべくり漫才のボケ。ネタはしっかり作る派です。', say: '高木です。\n今日のために、ネタを三本、書いてきたんじゃ。' });
-cand('ow_wb_rina', { board: 'webbbs', n: '村上 里奈', s: 'リナ', g: 'f', age: 24, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 40, hi: 'tsukkomi:20,voice:16,dokyo:12', lo: 'hassou:-6', per: 'nekketsu', q: ['atsui'], mot: 'top', compat: 54, bar: 34, h: 'リナ＠ミナミ',
-  post: '[相方募集] ツッコミ歴6年。腕に自信あり。ヌルい人はお断りやで。', say: '村上や。\n…ほな、まずボケてみて。話はそれからや。' });
-cand('ow_wb_ken', { board: 'webbbs', n: '杉山 健', s: 'ケン', g: 'm', age: 33, pref: 'niigata', dial: 'standard', style: 'conte', role: 'tsukkomi', lv: 25, hi: 'kosei:12,act:10', lo: 'voice:-8', per: 'negative', q: ['negative', 'shakkin'], mot: 'escape', compat: 32, bar: 0, h: 'ken33',
-  post: '[相方募集] 33歳、人生最後の挑戦です。コントのツッコミ。', say: '杉山です…。\nこんなおじさんで、すみません。' });
+cand('ow_wb_satoshi', { board: 'webbbs', n: '高森 聡', s: 'サトシ', g: 'm', age: 27, pref: 'hiroshima', dial: 'standard', style: 'manzai', role: 'boke', lv: 36, hi: 'wagei:16,boke:14,neta:10', lo: 'dokyo:-4', per: 'majime', q: ['kanpeki'], mot: 'family', compat: 66, bar: 0, h: 'さとし＠広島',
+  post: '[相方募集] 広島出身27歳、しゃべくり漫才のボケ。ネタはしっかり作る派です。', say: '高森です。\n今日のために、ネタを三本、書いてきたんじゃ。' });
+cand('ow_wb_rina', { board: 'webbbs', n: '村越 里奈', s: 'リナ', g: 'f', age: 24, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 40, hi: 'tsukkomi:20,voice:16,dokyo:12', lo: 'hassou:-6', per: 'nekketsu', q: ['atsui'], mot: 'top', compat: 54, bar: 34, h: 'リナ＠ミナミ',
+  post: '[相方募集] ツッコミ歴6年。腕に自信あり。ヌルい人はお断りやで。', say: '村越や。\n…ほな、まずボケてみて。話はそれからや。' });
+cand('ow_wb_ken', { board: 'webbbs', n: '杉森 健', s: 'ケン', g: 'm', age: 33, pref: 'niigata', dial: 'standard', style: 'conte', role: 'tsukkomi', lv: 25, hi: 'kosei:12,act:10', lo: 'voice:-8', per: 'negative', q: ['negative', 'shakkin'], mot: 'escape', compat: 32, bar: 0, h: 'ken33',
+  post: '[相方募集] 33歳、人生最後の挑戦です。コントのツッコミ。', say: '杉森です…。\nこんなおじさんで、すみません。' });
 // ---- ケータイ掲示板 (2000–2011)
-cand('ow_kt_yuta', { board: 'keitai', n: '青木 雄太', s: 'ユウタ', g: 'm', age: 20, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'boke', lv: 30, hi: 'boke:18,hassou:14,adlib:8', lo: 'kosei:-6', per: 'ochoshi', q: ['chikoku'], mot: 'top', compat: 66, bar: 0, h: 'ゆうた☆なにわ',
+cand('ow_kt_yuta', { board: 'keitai', n: '青柳 雄太', s: 'ユウタ', g: 'm', age: 20, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'boke', lv: 30, hi: 'boke:18,hassou:14,adlib:8', lo: 'kosei:-6', per: 'ochoshi', q: ['chikoku'], mot: 'top', compat: 66, bar: 0, h: 'ゆうた☆なにわ',
   post: '漫才やりたい人おらん？？ボケやるからツッコミ募集！本気やで(￣ー￣)', say: 'ゆうたです！ごめん、ちょい遅れた！\nあ、ドリンクバー取ってくるわ！' });
-cand('ow_kt_misaki', { board: 'keitai', n: '小林 美咲', s: 'ミサキ', g: 'f', age: 19, pref: 'chiba', dial: 'standard', style: 'conte', role: 'tsukkomi', lv: 24, hi: 'tsukkomi:14,act:12,chara:8', lo: 'hassou:-6', per: 'shy', q: ['shy'], mot: 'dream', compat: 62, bar: 0, h: 'みさき♪',
+cand('ow_kt_misaki', { board: 'keitai', n: '小宮 美咲', s: 'ミサキ', g: 'f', age: 19, pref: 'chiba', dial: 'standard', style: 'conte', role: 'tsukkomi', lv: 24, hi: 'tsukkomi:14,act:12,chara:8', lo: 'hassou:-6', per: 'shy', q: ['shy'], mot: 'dream', compat: 62, bar: 0, h: 'みさき♪',
   post: 'コントのツッコミやりたいです…！人見知りだけど、舞台ではがんばれます。', say: '…み、美咲です。\nよ、よろしくお願いします…。' });
 cand('ow_kt_takahiro', { board: 'keitai', n: '斎藤 隆弘', s: 'タカ', g: 'm', age: 28, pref: 'kanagawa', dial: 'standard', style: 'both', role: 'tsukkomi', lv: 34, hi: 'wagei:14,kosei:14,kankyaku:10', lo: 'chara:-6', per: 'rikutsu', q: ['kanpeki'], mot: 'money', compat: 58, bar: 0, h: 'TAKA_y',
   post: '戦略的に売れたい人。客層分析とネタの構成は任せてください。', say: '斎藤です。\n今日は「相方としての条件」をすり合わせたいと思って。' });
@@ -242,61 +242,61 @@ cand('ow_kt_jun', { board: 'keitai', n: '野口 純', s: 'ジュン', g: 'm', ag
   post: '声のデカさは日本一！ボケ担当！ネタ書いてくれる人求む！', say: '野口純です！！\n…あ、声デカいってよく言われます！！' });
 cand('ow_kt_nana', { board: 'keitai', n: '菅原 七海', s: 'ナナ', g: 'f', age: 23, pref: 'tokyo', dial: 'standard', style: 'conte', role: 'boke', lv: 42, hi: 'act:20,mane:18,hassou:12', lo: 'tsukkomi:-8', per: 'cool', q: ['tensai'], mot: 'top', compat: 50, bar: 38, h: 'nana_7',
   post: 'コントのボケ。ものまねもやります。レベルの高い人だけ。', say: '菅原です。\nネタ、何本か見せてもらえる？' });
-cand('ow_kt_shingo', { board: 'keitai', n: '西川 慎吾', s: 'シンゴ', g: 'm', age: 25, pref: 'mie', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 23, hi: 'tsukkomi:10,ma:8', lo: 'dokyo:-8', per: 'negative', q: ['shakkin', 'akippoi'], mot: 'escape', compat: 26, bar: 0, h: 'しんご',
-  post: '仕事やめて芸人めざしてます。ツッコミ。誰でもいいので組んでください。', say: '西川です…。\nあの、今月ちょっとピンチで…いや、なんでもないです。' });
+cand('ow_kt_shingo', { board: 'keitai', n: '西垣 慎吾', s: 'シンゴ', g: 'm', age: 25, pref: 'mie', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 23, hi: 'tsukkomi:10,ma:8', lo: 'dokyo:-8', per: 'negative', q: ['shakkin', 'akippoi'], mot: 'escape', compat: 26, bar: 0, h: 'しんご',
+  post: '仕事やめて芸人めざしてます。ツッコミ。誰でもいいので組んでください。', say: '西垣です…。\nあの、今月ちょっとピンチで…いや、なんでもないです。' });
 // ---- ブログ (2003–2012)
-cand('ow_bl_haruka', { board: 'blog', n: '遠藤 遥', s: 'ハルカ', g: 'f', age: 22, pref: 'kyoto', dial: 'kansai', style: 'manzai', role: 'boke', lv: 30, hi: 'boke:16,wagei:12,chara:10', lo: '', per: 'tennen', q: ['hoko'], mot: 'dream', compat: 64, bar: 0, h: 'はるかの笑い日記',
+cand('ow_bl_haruka', { board: 'blog', n: '遠山 遥', s: 'ハルカ', g: 'f', age: 22, pref: 'kyoto', dial: 'kansai', style: 'manzai', role: 'boke', lv: 30, hi: 'boke:16,wagei:12,chara:10', lo: '', per: 'tennen', q: ['hoko'], mot: 'dream', compat: 64, bar: 0, h: 'はるかの笑い日記',
   post: '【相方募集】ブログでネタを書いてる京都の22歳です。しゃべくり漫才のボケがしたい！', say: '遥です〜。ブログ読んでくれたん？\nうれしいなあ、あれ読者3人やねん。' });
 cand('ow_bl_kouhei', { board: 'blog', n: '林 航平', s: 'コウヘイ', g: 'm', age: 24, pref: 'tokyo', dial: 'standard', style: 'conte', role: 'tsukkomi', lv: 34, hi: 'kosei:18,neta:16,act:8', lo: 'voice:-6', per: 'rikutsu', q: ['kanpeki', 'shy'], mot: 'top', compat: 60, bar: 0, h: 'コント設計図',
   post: '【相方募集】コントの台本を毎日ブログに上げています。演じてくれる相方を探しています。', say: '林です。\n…ブログのコメント、あなたでしたか。的確でした。' });
 cand('ow_bl_gen', { board: 'blog', n: '田村 源太', s: 'ゲンタ', g: 'm', age: 30, pref: 'kumamoto', dial: 'standard', style: 'manzai', role: 'tsukkomi', lv: 28, hi: 'voice:16,tsukkomi:12,kankyaku:10', lo: 'hassou:-6', per: 'nekketsu', q: ['majime', 'atsui'], mot: 'family', compat: 68, bar: 0, h: 'ゲンタの火の国日記',
   post: '【相方募集】熊本から来た30歳。ツッコミ。故郷の母に、テレビに出る姿を見せたい。', say: '田村源太です！\n今日は、会ってくれてありがとうございます！' });
-cand('ow_bl_ryo', { board: 'blog', n: '本田 涼', s: 'リョウ', g: 'm', age: 21, pref: 'saitama', dial: 'standard', style: 'both', role: 'boke', lv: 22, hi: 'chara:14,adlib:10', lo: 'kosei:-8', per: 'ochoshi', q: ['akippoi', 'rouhi'], mot: 'money', compat: 38, bar: 0, h: 'RYO-style',
+cand('ow_bl_ryo', { board: 'blog', n: '本庄 涼', s: 'リョウ', g: 'm', age: 21, pref: 'saitama', dial: 'standard', style: 'both', role: 'boke', lv: 22, hi: 'chara:14,adlib:10', lo: 'kosei:-8', per: 'ochoshi', q: ['akippoi', 'rouhi'], mot: 'money', compat: 38, bar: 0, h: 'RYO-style',
   post: '【相方募集】売れたら車買う！ボケ担当。おもしろい人ならだれでも。', say: 'リョウっす！\nこれ、新しく買ったスニーカーっす。かっこよくないっすか？' });
-cand('ow_bl_aki', { board: 'blog', n: '河合 亜紀', s: 'アキ', g: 'f', age: 26, pref: 'ishikawa', dial: 'standard', style: 'conte', role: 'both', lv: 36, hi: 'act:18,hassou:14,mane:10', lo: 'voice:-4', per: 'mypace', q: ['odayaka'], mot: 'fun', compat: 56, bar: 0, h: 'あきのコント部屋',
-  post: '【相方募集】のんびりコントを作るのが好き。いっしょに楽しめる人。', say: '河合です。\n…あ、このパフェおいしい。あなたも食べる？' });
+cand('ow_bl_aki', { board: 'blog', n: '河井 亜紀', s: 'アキ', g: 'f', age: 26, pref: 'ishikawa', dial: 'standard', style: 'conte', role: 'both', lv: 36, hi: 'act:18,hassou:14,mane:10', lo: 'voice:-4', per: 'mypace', q: ['odayaka'], mot: 'fun', compat: 56, bar: 0, h: 'あきのコント部屋',
+  post: '【相方募集】のんびりコントを作るのが好き。いっしょに楽しめる人。', say: '河井です。\n…あ、このパフェおいしい。あなたも食べる？' });
 cand('ow_bl_toru', { board: 'blog', n: '長谷川 徹', s: 'トオル', g: 'm', age: 35, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'boke', lv: 44, hi: 'wagei:20,ma:18,boke:12,neta:10', lo: 'chara:-8', per: 'rikutsu', q: ['tensai', 'negative'], mot: 'top', compat: 42, bar: 40, h: '元漫才師の反省文',
   post: '【相方募集】元・漫才師。もう一度だけ本気でやる。半端な腕なら来ないでくれ。', say: '長谷川や。\n…先に言うとく。わしは、甘ないで。' });
 // ---- SNS ドッター (2009–)
 cand('ow_sn_sora', { board: 'sns', n: '川口 空', s: 'ソラ', g: 'm', age: 20, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 30, hi: 'tsukkomi:18,ma:12,voice:10', lo: '', per: 'nekketsu', q: ['majime'], mot: 'top', compat: 70, bar: 0, h: '@sora_tsukkomi',
   post: '#相方募集 ツッコミ20歳／大阪→東京／漫才でてっぺん取りたい。ボケの人、DMください', say: 'ソラです！DMおおきに！\n動画で見るより、実物のほうがおもろそうやな！' });
-cand('ow_sn_yui', { board: 'sns', n: '井上 結衣', s: 'ユイ', g: 'f', age: 22, pref: 'kanagawa', dial: 'standard', style: 'conte', role: 'boke', lv: 28, hi: 'hassou:16,act:12,chara:10', lo: '', per: 'shy', q: ['shy'], mot: 'dream', compat: 62, bar: 0, h: '@yui_conte',
+cand('ow_sn_yui', { board: 'sns', n: '井ノ口 結衣', s: 'ユイ', g: 'f', age: 22, pref: 'kanagawa', dial: 'standard', style: 'conte', role: 'boke', lv: 28, hi: 'hassou:16,act:12,chara:10', lo: '', per: 'shy', q: ['shy'], mot: 'dream', compat: 62, bar: 0, h: '@yui_conte',
   post: '#相方募集 コントのボケ／22歳／ネタ動画あげてます。ツッコミさん、まずはDMで…！', say: '…ユイです。\nDMだと元気なのに、って言われます…。' });
 cand('ow_sn_kaito', { board: 'sns', n: '原 海斗', s: 'カイト', g: 'm', age: 24, pref: 'tokyo', dial: 'standard', style: 'both', role: 'boke', lv: 34, hi: 'chara:16,adlib:14,mane:10', lo: 'kosei:-8', per: 'ochoshi', q: ['rouhi', 'chikoku'], mot: 'tv', compat: 44, bar: 0, h: '@kaito_buzz',
   post: '#相方募集 フォロワー1万人の動画芸人。舞台もやりたい！ネタ書ける人求む', say: 'どもー、カイトでーす。\nあ、これ撮っていいすか？「相方候補と初対面」って。' });
-cand('ow_sn_mio', { board: 'sns', n: '永井 澪', s: 'ミオ', g: 'f', age: 25, pref: 'fukuoka', dial: 'standard', style: 'manzai', role: 'tsukkomi', lv: 38, hi: 'tsukkomi:18,wagei:14,kankyaku:12', lo: '', per: 'cool', q: ['kanpeki'], mot: 'top', compat: 56, bar: 32, h: '@mio_manzai',
-  post: '#相方募集 ツッコミ／養成所中退／本気で賞レースを勝ちにいける人だけ', say: '永井です。\n単刀直入に聞くね。どこまで本気？' });
-cand('ow_sn_daichi', { board: 'sns', n: '秋山 大地', s: 'ダイチ', g: 'm', age: 27, pref: 'hokkaido', dial: 'standard', style: 'manzai', role: 'boke', lv: 26, hi: 'boke:12,voice:10', lo: 'neta:-8', per: 'negative', q: ['shakkin', 'negative'], mot: 'escape', compat: 28, bar: 0, h: '@daichi_hokkai',
-  post: '#相方募集 ブラック企業やめた。笑いで人生変えたい。ツッコミの人', say: '秋山です…。\nあの、ここ、割り勘で大丈夫ですか…。' });
+cand('ow_sn_mio', { board: 'sns', n: '長井 澪', s: 'ミオ', g: 'f', age: 25, pref: 'fukuoka', dial: 'standard', style: 'manzai', role: 'tsukkomi', lv: 38, hi: 'tsukkomi:18,wagei:14,kankyaku:12', lo: '', per: 'cool', q: ['kanpeki'], mot: 'top', compat: 56, bar: 32, h: '@mio_manzai',
+  post: '#相方募集 ツッコミ／養成所中退／本気で賞レースを勝ちにいける人だけ', say: '長井です。\n単刀直入に聞くね。どこまで本気？' });
+cand('ow_sn_daichi', { board: 'sns', n: '秋吉 大地', s: 'ダイチ', g: 'm', age: 27, pref: 'hokkaido', dial: 'standard', style: 'manzai', role: 'boke', lv: 26, hi: 'boke:12,voice:10', lo: 'neta:-8', per: 'negative', q: ['shakkin', 'negative'], mot: 'escape', compat: 28, bar: 0, h: '@daichi_hokkai',
+  post: '#相方募集 ブラック企業やめた。笑いで人生変えたい。ツッコミの人', say: '秋吉です…。\nあの、ここ、割り勘で大丈夫ですか…。' });
 cand('ow_sn_rei', { board: 'sns', n: '片山 怜', s: 'レイ', g: 'x', age: 23, pref: 'kyoto', dial: 'standard', style: 'conte', role: 'both', lv: 46, hi: 'neta:22,hassou:20,kosei:14', lo: 'dokyo:-6,voice:-4', per: 'cool', q: ['tensai', 'shy'], mot: 'top', compat: 48, bar: 42, h: '@rei_kakuu',
   post: '#相方募集 コントの台本を書きます。演じられる人。ネタを3本送ってくれた人とだけ会います', say: '…片山です。\n送ってくれたネタ、読みました。話はそれから。' });
 // ---- 相方募集アプリ (2016–)
 cand('ow_ap_hinata', { board: 'app', n: '小川 陽向', s: 'ヒナタ', g: 'm', age: 19, pref: 'hyogo', dial: 'kansai', style: 'manzai', role: 'boke', lv: 26, hi: 'boke:16,dokyo:12,chara:10', lo: 'kosei:-8', per: 'ochoshi', q: ['chikoku'], mot: 'top', compat: 64, bar: 0, h: 'ひなた（19・ボケ）',
   post: 'マッチありがとうございます！神戸の19歳、漫才のボケ。勢いだけは負けません！', say: 'ヒナタです！すんません、改札で迷子になってました！' });
-cand('ow_ap_saki', { board: 'app', n: '岡本 咲', s: 'サキ', g: 'f', age: 21, pref: 'saitama', dial: 'standard', style: 'conte', role: 'tsukkomi', lv: 30, hi: 'tsukkomi:14,act:14,kosei:10', lo: '', per: 'majime', q: ['majime'], mot: 'dream', compat: 68, bar: 0, h: 'サキ（21・ツッコミ）',
-  post: 'コントのツッコミ。毎日ネタ合わせできます。まじめにやれる人を探しています。', say: '岡本咲です。\n今日はよろしくお願いします。メモ、とってもいいですか？' });
-cand('ow_ap_ren', { board: 'app', n: '武田 蓮', s: 'レン', g: 'm', age: 26, pref: 'aichi', dial: 'standard', style: 'both', role: 'tsukkomi', lv: 36, hi: 'kosei:18,neta:14,kankyaku:10', lo: 'chara:-6', per: 'rikutsu', q: ['kanpeki'], mot: 'money', compat: 58, bar: 0, h: 'レン（26・作家志望）',
-  post: '構成作家志望のツッコミ。データで勝つ漫才を作りたい。', say: '武田です。\nいくつかの賞レースの傾向をまとめてきました。見ます？' });
-cand('ow_ap_kotone', { board: 'app', n: '宮本 琴音', s: 'コトネ', g: 'f', age: 24, pref: 'nagano', dial: 'standard', style: 'manzai', role: 'boke', lv: 24, hi: 'hassou:14,chara:12', lo: 'voice:-8', per: 'mypace', q: ['hoko', 'odayaka'], mot: 'fun', compat: 60, bar: 0, h: 'ことね（24・ボケ）',
-  post: 'ゆるっと漫才がしたいです。長野出身。のんびりでも続けられる人。', say: '宮本です〜。\nこのお店、ずっと来てみたかったんです。' });
-cand('ow_ap_yamato', { board: 'app', n: '前田 大和', s: 'ヤマト', g: 'm', age: 29, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 40, hi: 'tsukkomi:20,voice:16,ma:12', lo: 'hassou:-6', per: 'nekketsu', q: ['atsui', 'shakkin'], mot: 'top', compat: 46, bar: 36, h: 'ヤマト（29・ツッコミ）',
-  post: '前のコンビ解散。結成何年目でもええ、勝てる相方がほしい。', say: '前田や。\nもう回り道はできへん。…自分、腕は確かなんやろな。' });
-cand('ow_ap_kanon', { board: 'app', n: '上田 花音', s: 'カノン', g: 'f', age: 20, pref: 'okinawa', dial: 'standard', style: 'conte', role: 'both', lv: 22, hi: 'chara:14,mane:12,act:8', lo: 'neta:-8', per: 'tennen', q: ['akippoi', 'rouhi'], mot: 'tv', compat: 34, bar: 0, h: 'カノン（20・なんでも）',
+cand('ow_ap_saki', { board: 'app', n: '岡部 咲', s: 'サキ', g: 'f', age: 21, pref: 'saitama', dial: 'standard', style: 'conte', role: 'tsukkomi', lv: 30, hi: 'tsukkomi:14,act:14,kosei:10', lo: '', per: 'majime', q: ['majime'], mot: 'dream', compat: 68, bar: 0, h: 'サキ（21・ツッコミ）',
+  post: 'コントのツッコミ。毎日ネタ合わせできます。まじめにやれる人を探しています。', say: '岡部咲です。\n今日はよろしくお願いします。メモ、とってもいいですか？' });
+cand('ow_ap_ren', { board: 'app', n: '武居 蓮', s: 'レン', g: 'm', age: 26, pref: 'aichi', dial: 'standard', style: 'both', role: 'tsukkomi', lv: 36, hi: 'kosei:18,neta:14,kankyaku:10', lo: 'chara:-6', per: 'rikutsu', q: ['kanpeki'], mot: 'money', compat: 58, bar: 0, h: 'レン（26・作家志望）',
+  post: '構成作家志望のツッコミ。データで勝つ漫才を作りたい。', say: '武居です。\nいくつかの賞レースの傾向をまとめてきました。見ます？' });
+cand('ow_ap_kotone', { board: 'app', n: '宮内 琴音', s: 'コトネ', g: 'f', age: 24, pref: 'nagano', dial: 'standard', style: 'manzai', role: 'boke', lv: 24, hi: 'hassou:14,chara:12', lo: 'voice:-8', per: 'mypace', q: ['hoko', 'odayaka'], mot: 'fun', compat: 60, bar: 0, h: 'ことね（24・ボケ）',
+  post: 'ゆるっと漫才がしたいです。長野出身。のんびりでも続けられる人。', say: '宮内です〜。\nこのお店、ずっと来てみたかったんです。' });
+cand('ow_ap_yamato', { board: 'app', n: '真柴 大和', s: 'ヤマト', g: 'm', age: 29, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 40, hi: 'tsukkomi:20,voice:16,ma:12', lo: 'hassou:-6', per: 'nekketsu', q: ['atsui', 'shakkin'], mot: 'top', compat: 46, bar: 36, h: 'ヤマト（29・ツッコミ）',
+  post: '前のコンビ解散。結成何年目でもええ、勝てる相方がほしい。', say: '真柴や。\nもう回り道はできへん。…自分、腕は確かなんやろな。' });
+cand('ow_ap_kanon', { board: 'app', n: '植田 花音', s: 'カノン', g: 'f', age: 20, pref: 'okinawa', dial: 'standard', style: 'conte', role: 'both', lv: 22, hi: 'chara:14,mane:12,act:8', lo: 'neta:-8', per: 'tennen', q: ['akippoi', 'rouhi'], mot: 'tv', compat: 34, bar: 0, h: 'カノン（20・なんでも）',
   post: 'テレビに出たい！沖縄出身です。おもしろそうなことならなんでも！', say: 'カノンでーす！\nはいさい！…って、東京の人には通じないか！' });
 // ---- NSC 大阪校の同期 (fictional classmates)
-cand('ow_no_kenta', { nsc: 'osaka', n: '谷口 健太', s: 'ケンタ', g: 'm', age: 19, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 26, hi: 'tsukkomi:16,voice:12', lo: '', per: 'nekketsu', q: ['majime'], mot: 'top', compat: 66, bar: 0, say: '谷口健太や！同期やな、よろしく！\n…自分、相方まだおらんの？' });
+cand('ow_no_kenta', { nsc: 'osaka', n: '谷岡 健太', s: 'ケンタ', g: 'm', age: 19, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 26, hi: 'tsukkomi:16,voice:12', lo: '', per: 'nekketsu', q: ['majime'], mot: 'top', compat: 66, bar: 0, say: '谷岡健太や！同期やな、よろしく！\n…自分、相方まだおらんの？' });
 cand('ow_no_asami', { nsc: 'osaka', n: '辻 あさみ', s: 'アサミ', g: 'f', age: 20, pref: 'nara', dial: 'kansai', style: 'manzai', role: 'boke', lv: 24, hi: 'boke:14,chara:12,hassou:8', lo: '', per: 'tennen', q: ['hoko'], mot: 'dream', compat: 62, bar: 0, say: 'あさみです〜。奈良から通てんねん。\n毎朝、電車で二回寝過ごすねん。' });
-cand('ow_no_shun', { nsc: 'osaka', n: '福田 駿', s: 'シュン', g: 'm', age: 18, pref: 'wakayama', dial: 'kansai', style: 'conte', role: 'boke', lv: 22, hi: 'act:14,hassou:12', lo: 'kosei:-6', per: 'ochoshi', q: ['chikoku'], mot: 'tv', compat: 54, bar: 0, say: 'シュンです！和歌山から来ました！\nコントやりたいんすよ、コント！' });
+cand('ow_no_shun', { nsc: 'osaka', n: '福留 駿', s: 'シュン', g: 'm', age: 18, pref: 'wakayama', dial: 'kansai', style: 'conte', role: 'boke', lv: 22, hi: 'act:14,hassou:12', lo: 'kosei:-6', per: 'ochoshi', q: ['chikoku'], mot: 'tv', compat: 54, bar: 0, say: 'シュンです！和歌山から来ました！\nコントやりたいんすよ、コント！' });
 cand('ow_no_maki', { nsc: 'osaka', n: '浅井 真紀', s: 'マキ', g: 'f', age: 23, pref: 'hyogo', dial: 'kansai', style: 'both', role: 'tsukkomi', lv: 30, hi: 'tsukkomi:14,kosei:12,kankyaku:10', lo: '', per: 'majime', q: ['kanpeki'], mot: 'top', compat: 60, bar: 0, say: '浅井です。\nネタ見せの講評、ぜんぶノートにとってるんよ。' });
 cand('ow_no_gaku', { nsc: 'osaka', n: '大西 岳', s: 'ガク', g: 'm', age: 21, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'boke', lv: 34, hi: 'boke:18,neta:14,hassou:12', lo: '', per: 'cool', q: ['tensai'], mot: 'top', compat: 48, bar: 30, say: '大西や。\n…ネタ見せ、見とったで。まあまあやな。' });
 cand('ow_no_tora', { nsc: 'osaka', n: '金田 虎之介', s: 'トラ', g: 'm', age: 25, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'tsukkomi', lv: 22, hi: 'voice:16,dokyo:12', lo: 'kosei:-8', per: 'nekketsu', q: ['atsui', 'shakkin'], mot: 'money', compat: 36, bar: 0, say: '金田虎之介、トラでええ！\n…すまん、昼メシ代、ちょっと貸してくれへん？' });
-cand('ow_no_yuki', { nsc: 'osaka', n: '白石 由紀', s: 'ユキ', g: 'f', age: 19, pref: 'shiga', dial: 'kansai', style: 'conte', role: 'both', lv: 20, hi: 'mane:14,act:10', lo: 'dokyo:-6', per: 'shy', q: ['shy'], mot: 'dream', compat: 58, bar: 0, say: '…白石です。\nものまね、ちょっとだけできます…。' });
+cand('ow_no_yuki', { nsc: 'osaka', n: '白川 由紀', s: 'ユキ', g: 'f', age: 19, pref: 'shiga', dial: 'kansai', style: 'conte', role: 'both', lv: 20, hi: 'mane:14,act:10', lo: 'dokyo:-6', per: 'shy', q: ['shy'], mot: 'dream', compat: 58, bar: 0, say: '…白川です。\nものまね、ちょっとだけできます…。' });
 cand('ow_no_ichiro', { nsc: 'osaka', n: '上野 一郎', s: 'イチロー', g: 'm', age: 30, pref: 'okayama', dial: 'standard', style: 'manzai', role: 'boke', lv: 28, hi: 'wagei:16,ma:10', lo: '', per: 'mypace', q: ['odayaka'], mot: 'escape', compat: 64, bar: 0, say: '上野です。会社を辞めて入りました。\n同期でいちばん年上ですが、よろしく。' });
 // ---- NSC 東京校の同期 (fictional classmates)
-cand('ow_nt_takumi', { nsc: 'tokyo', n: '今井 拓実', s: 'タクミ', g: 'm', age: 20, pref: 'tokyo', dial: 'standard', style: 'manzai', role: 'tsukkomi', lv: 26, hi: 'tsukkomi:16,ma:10', lo: '', per: 'majime', q: ['majime'], mot: 'top', compat: 66, bar: 0, say: '今井です。同期だね、よろしく。\n相方、もう決まってる？' });
+cand('ow_nt_takumi', { nsc: 'tokyo', n: '今泉 拓実', s: 'タクミ', g: 'm', age: 20, pref: 'tokyo', dial: 'standard', style: 'manzai', role: 'tsukkomi', lv: 26, hi: 'tsukkomi:16,ma:10', lo: '', per: 'majime', q: ['majime'], mot: 'top', compat: 66, bar: 0, say: '今泉です。同期だね、よろしく。\n相方、もう決まってる？' });
 cand('ow_nt_rin', { nsc: 'tokyo', n: '水野 凛', s: 'リン', g: 'f', age: 19, pref: 'chiba', dial: 'standard', style: 'conte', role: 'boke', lv: 24, hi: 'hassou:14,act:12', lo: '', per: 'tennen', q: ['hoko'], mot: 'dream', compat: 60, bar: 0, say: '水野凛です。\n教室の場所、まだ覚えられないんです…。' });
 cand('ow_nt_kohei', { nsc: 'tokyo', n: '桑原 浩平', s: 'コーヘー', g: 'm', age: 22, pref: 'saitama', dial: 'standard', style: 'both', role: 'boke', lv: 28, hi: 'boke:14,chara:12,adlib:10', lo: '', per: 'ochoshi', q: ['chikoku', 'rouhi'], mot: 'tv', compat: 50, bar: 0, say: 'コーヘーでーす！\n授業、今日も5分遅刻しちゃった！' });
-cand('ow_nt_aoi', { nsc: 'tokyo', n: '新井 葵', s: 'アオイ', g: 'f', age: 24, pref: 'gunma', dial: 'standard', style: 'manzai', role: 'tsukkomi', lv: 30, hi: 'tsukkomi:14,wagei:12,kankyaku:10', lo: '', per: 'cool', q: ['kanpeki'], mot: 'top', compat: 58, bar: 0, say: '新井です。\n…あなたのネタ見せ、ツカミは悪くなかった。' });
+cand('ow_nt_aoi', { nsc: 'tokyo', n: '新居 葵', s: 'アオイ', g: 'f', age: 24, pref: 'gunma', dial: 'standard', style: 'manzai', role: 'tsukkomi', lv: 30, hi: 'tsukkomi:14,wagei:12,kankyaku:10', lo: '', per: 'cool', q: ['kanpeki'], mot: 'top', compat: 58, bar: 0, say: '新居です。\n…あなたのネタ見せ、ツカミは悪くなかった。' });
 cand('ow_nt_genki', { nsc: 'tokyo', n: '荒木 元気', s: 'ゲンキ', g: 'm', age: 18, pref: 'kanagawa', dial: 'standard', style: 'conte', role: 'tsukkomi', lv: 22, hi: 'voice:14,dokyo:12', lo: '', per: 'nekketsu', q: ['atsui'], mot: 'fun', compat: 56, bar: 0, say: '荒木元気です！！名前のとおり元気です！！' });
 cand('ow_nt_shiori', { nsc: 'tokyo', n: '千葉 詩織', s: 'シオリ', g: 'f', age: 27, pref: 'miyagi', dial: 'standard', style: 'conte', role: 'both', lv: 34, hi: 'neta:16,kosei:14,act:10', lo: '', per: 'rikutsu', q: ['tensai', 'shy'], mot: 'top', compat: 48, bar: 28, say: '千葉です。\n…ネタの話以外は、あまり得意じゃなくて。' });
 cand('ow_nt_masaru', { nsc: 'tokyo', n: '堀 勝', s: 'マサル', g: 'm', age: 32, pref: 'osaka', dial: 'kansai', style: 'manzai', role: 'boke', lv: 30, hi: 'wagei:16,boke:12', lo: '', per: 'mypace', q: ['odayaka', 'shakkin'], mot: 'escape', compat: 52, bar: 0, say: '堀や。大阪から東京校に来たで。\nなんでって？…東京で売れたかってん。' });

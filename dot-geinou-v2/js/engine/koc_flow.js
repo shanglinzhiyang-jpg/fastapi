@@ -383,6 +383,7 @@ async function doPrep(g, ctx, P, id, set, auto) {
     if (neta && neta.id && !String(neta.id).startsWith('auto') && has(g, 'practiceNeta')) safe(() => g.practiceNeta(neta.id, 4));
     E.harm = num(E.harm) + 6;
     P.bonus += 0.6 + (E.instant ? 0.6 : 0);
+    if (!E.instant && has(g, 'unitHarmony')) safe(() => g.unitHarmony(1, 'KOCの楽屋でネタ合わせ'));
     st.stamina = Math.max(0, st.stamina - 4);
     if (pid && has(g, 'addAff')) safe(() => g.addAff(pid, 1, true));
     if (!auto) {
@@ -615,7 +616,7 @@ export async function runRound(g, y, rid, idx = 0, opts = {}) {
     // bookkeeping after the stage
     st.stamina = Math.max(0, st.stamina - 15);
     if (has(g, 'lifeTick')) g.lifeTick({ hunger: -10, stress: 6, clean: -6 });
-    if (has(g, 'addStageExp')) safe(() => g.addStageExp('conte', 1));
+    if (has(g, 'addStageExp') && !has(g, 'perform')) safe(() => g.addStageExp('conte', 1, res)); // g.perform counts the stage itself
     if (has(g, 'markNetaUsed') && neta && neta.id && !String(neta.id).startsWith('auto')) safe(() => g.markNetaUsed(neta.id, 'koc'));
     const nu = K(g).netaUsed;
     if (neta && neta.id) { nu[neta.id] = Array.from(new Set([...(nu[neta.id] || []), y])).slice(-5); }
@@ -906,6 +907,7 @@ async function finalAct(g, ctx, a, stage) {
     const out = stageOutcome(g, { y, rid: 'final', E, neta, len: R.len.final }, P, res);
     perf = out.perf;
     reasons = out.reasons;
+    E.finalPerfs = [...(E.finalPerfs || []), perf].slice(-2);
     if (perf >= 75) sfx('laugh'); else sfx('applause');
     await g.wait(g.auto ? 20 : 500);
     bd.merge({ view: 'dark' });
@@ -1090,6 +1092,9 @@ async function revivalStage(g, y, R, pool0, role, E, bd, rf, digest, forced = nu
     const pts = Array.from({ length: R.revivalJudges }, () => clamp(Math.round(2 + perf * 0.075 + gauss(rf) * 1.4), 1, 10)).reduce((s, v) => s + v, 0);
     scored.push({ ...a, rp: pts, perf });
   }
+  // this world's winner (D1's simulation): the judges put them in the top 3 (the vote below puts them first)
+  const fs0 = forced ? scored.find((x) => x.id && x.id === forced.id) : null;
+  if (fs0) { const third = scored.filter((x) => x !== fs0).map((x) => x.rp).sort((p, q) => q - p)[2] ?? 0; if (fs0.rp <= third) fs0.rp = third + 1 + Math.floor(rf() * 6); }
   scored.sort((p, q) => q.rp - p.rp);
   const top3 = scored.slice(0, 3);
   if (role === 'revival' || !digest) await card(g, (c, t) => drawRanking(c, t, { title: `芸人審査員${R.revivalJudges}人の採点（上位3組が国民投票へ）`, rows: scored.map((x) => ({ name: x.name, score: x.rp, me: x.me })), line: 3 }), { min: 30 });
@@ -1099,14 +1104,8 @@ async function revivalStage(g, y, R, pool0, role, E, bd, rf, digest, forced = nu
   const sum = w.reduce((s, v) => s + v, 0);
   const shares = w.map((v) => v / sum);
   let wi = shares.indexOf(Math.max(...shares));
-  if (forced) {
-    // this world's winner (D1's simulation): make sure they are in the vote and on top
-    if (!top3.includes(forced)) { top3[2] = forced; w[2] = Math.max(...w) + 0.05; }
-    const fi = top3.indexOf(forced);
-    const mx = Math.max(...shares);
-    if (shares[fi] < mx) { const j = shares.indexOf(mx); [shares[fi], shares[j]] = [shares[j], shares[fi]]; }
-    wi = fi;
-  }
+  const fi = fs0 ? top3.indexOf(fs0) : -1;
+  if (fi >= 0) { const mx = Math.max(...shares); if (shares[fi] < mx) { const j = shares.indexOf(mx); [shares[fi], shares[j]] = [shares[j], shares[fi]]; } wi = fi; }
   if (role === 'revival' || !digest) {
     await card(g, (c, t) => { const k = Math.min(1, t / 90); const bars = top3.map((x, i) => ({ name: x.name, v: shares[i] * k, me: x.me, label: `${Math.round(shares[i] * k * 100)}%` })); drawRevivalBars(c, t, bars, y); }, { min: 110 });
   }
@@ -1131,6 +1130,7 @@ function finishFinal(g, y, rows, meRow) {
   const fin = rows.map((x) => ({ a: x.me ? null : x.act || x, name: x.name, type: x.type, total: typeof x.total === 'number' ? x.total : num(x.s1), s1: x.s1, agency: x.agency }));
   const me = E ? { unitId: E.unitId, unit: E.unitName, reached: meRow >= 0 ? 'final' : E.out || E.round, place: meRow >= 0 ? meRow + 1 : null, text: meRow === 0 ? `${E.unitName}（あなた）が優勝` : meRow > 0 ? `${E.unitName}（あなた）は${meRow + 1}位` : '' } : null;
   k.hist[y] = histFromSeason(g, y, fin, me);
+  k.hist[y].mine = true;
   const champ = rows[0];
   if (E && meRow >= 0) {
     E.results.push({ round: 'final', score: typeof rows[meRow].total === 'number' ? rows[meRow].total : 0, rank: meRow === 0 ? 'S' : meRow < 3 ? 'A' : 'B', passed: meRow === 0, place: meRow + 1, of: rows.length, day: g.state.day });
@@ -1140,12 +1140,17 @@ function finishFinal(g, y, rows, meRow) {
     const fame = meRow === 0 ? 1500 : meRow === 1 ? 500 : meRow === 2 ? 350 : 250;
     const fans = meRow === 0 ? 30000 : meRow === 1 ? 9000 : meRow === 2 ? 6000 : 4000;
     g.addFame(fame, true); g.addFans(fans, true);
-    if (has(g, 'addStageExp')) safe(() => g.addStageExp('conte', 3));
+    if (has(g, 'addStageExp') && !has(g, 'perform')) safe(() => g.addStageExp('conte', 3));
+    if (has(g, 'unitHarmony')) safe(() => g.unitHarmony(meRow === 0 ? 6 : 2, meRow === 0 ? 'キングオブコント優勝' : 'キングオブコント決勝'));
     for (const pid of partnerIds(g, E)) if (has(g, 'addAff')) safe(() => g.addAff(pid, meRow === 0 ? 10 : 3, true));
-    news(g, meRow === 0 ? NEWS.me.champion({ ed: R.edition, me: E.unitName, score: rows[0].total, n: R.entries.n }) : NEWS.me.runner({ me: E.unitName, place: meRow + 1 }));
+    const perfs = E.finalPerfs || [];
+    L.record(g, y, roundIndex(y, 'final'), { champion: meRow === 0, passed: meRow === 0, place: meRow + 1, of: rows.length, total: typeof rows[meRow].total === 'number' ? rows[meRow].total : undefined, score: perfs.length ? perfs.reduce((a, b) => a + b, 0) / perfs.length : 70 });
+    if (meRow === 0) news(g, NEWS.me.champion({ ed: R.edition, me: E.unitName, score: rows[0].total, n: R.entries.n }), { key: `champ|koc|${y}`, prio: 99 });
+    else { news(g, NEWS.me.runner({ me: E.unitName, place: meRow + 1 })); news(g, NEWS.champion[0]({ ed: R.edition, champ: champ.name, score: typeof champ.total === 'number' ? champ.total : null, n: R.entries.n }), { key: `champ|koc|${y}`, prio: 95 }); }
     scheduleAfter(g, y, E, meRow);
-  }
-  if (meRow !== 0) news(g, NEWS.champion[0]({ ed: R.edition, champ: champ.name, score: typeof champ.total === 'number' ? champ.total : null, n: R.entries.n }), { silent: true });
+  } else if (!L.linked(g)) news(g, NEWS.champion[0]({ ed: R.edition, champ: champ.name, score: typeof champ.total === 'number' ? champ.total : null, n: R.entries.n }), { silent: true });
+  // the broadcast is this world's history (D1 too); without the player D1's own news tells it (the ranking is D1's)
+  L.writeHistory(g, y, rows, meRow >= 0 ? meRow + 1 : null);
   return { champ: champ.name };
 }
 

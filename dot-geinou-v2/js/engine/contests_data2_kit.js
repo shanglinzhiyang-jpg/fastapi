@@ -45,21 +45,36 @@ export function rngFor(g, ...parts) {
 const pickR = (arr, r) => arr[Math.floor(r() * arr.length) % arr.length];
 
 // ------------------------------------------------------------------ fictional names (fallbacks)
-const SURN = ['森下', '川端', '大西', '坂巻', '上村', '松尾', '三宅', '岡島', '西浦', '田畑', '久保井', '浜野', '柴原', '小野寺', '野々宮',
-  '宮脇', '堀之内', '江口', '谷崎', '富永', '石黒', '菅沼', '戸川', '早瀬', '日比野', '若松', '津島', '奥平', '白石', '平賀'];
-const GIVEN = ['ひろし', 'けんた', 'さとる', 'まなぶ', 'たかし', 'ゆうき', 'みのる', 'しんじ', 'あきら', 'つよし', 'なおみ', 'さちこ',
-  'ゆかり', 'まゆ', 'あやか', 'ちひろ', '健吾', '大輔', '真一', '友和', '涼子', '美紀', '修', '徹', '啓介', '光太郎'];
+// Rare surnames × old-fashioned / unusual given names so a generated person never matches a well-known real person;
+// combo names (adjective-ish noun + group word) are checked the same way. D1's isRealNameLike(name) is used when
+// contests.js exports it (feature-detected), plus a small local guard list.
+const SURN = ['鴫原', '狐塚', '箕輪', '樽見', '蛭間', '朽木', '柘植', '雲雀野', '巽', '纐纈', '帷子', '舎川', '鷲見', '粟飯原', '苗加',
+  '百目鬼', '鶴巻', '葛葉', '楪', '鳰川', '猪狩野', '蓼科', '桐生谷', '鵜飼野', '筧', '轟木', '八朔', '霜月', '茨木田', '鉾田'];
+const GIVEN = ['与一', '辰之助', '小雪', '千草', '要', '藤吾', '兵馬', '朔', '灯', '多聞', '凪', '鈴音', '万作', '一徹', '耕三', '文吾',
+  '琴乃', '菊江', '弥太郎', '寅彦', '千景', '睦', '巴', '佐吉', '雛子', '左近'];
 const COMBI_A = ['湯けむり', 'かぼちゃ', '急行', '冷やし', '三丁目', '大盛り', '月見', '路地裏', '白玉', '花火', '回覧板', '空き缶', '豆電球',
-  '鍋焼き', '寝ぐせ', '夕焼け', '木枯らし', '綿あめ', '目覚まし', 'コイン', '金曜', '缶詰', 'ちゃぶ台', '扇風機', '学級', '路面', '駄菓子'];
+  '鍋焼き', '寝ぐせ', '夕焼け', '木枯らし', '綿あめ', '目覚まし', '金曜', '缶詰', 'ちゃぶ台', '扇風機', '学級', '路面', '駄菓子'];
 const COMBI_B = ['ロケット', 'パレード', '劇団', '商会', '倶楽部', 'ステーション', 'ラジオ', 'ポンプ', 'エンジン', 'ジャンクション', '楽団', '食堂',
-  '鉄道', '飛行船', '号', 'カーニバル', '工務店', 'ストア', 'ランド', 'ハウス', '通信', 'サイダー'];
+  '鉄道', '飛行船', '号', 'カーニバル', '工務店', 'サイダー', '通信', '探検隊'];
 const PIN_PRE = ['ぽんぽこ', 'ハイテンション', 'ひとり', 'まっすぐ', '寝不足', 'うっかり', '大声', '前のめり', '三枚目', 'ほろ酔い'];
-
-export function fictionalPerson(r) { return `${pickR(SURN, r)} ${pickR(GIVEN, r)}`; }
-export function fictionalUnit(r, type) {
-  if (type === 'pin' || (type == null && r() < 0.28)) return `${pickR(PIN_PRE, r)}${pickR(SURN, r)}`;
-  return `${pickR(COMBI_A, r)}${pickR(COMBI_B, r)}`;
+// names that must never be generated even by chance (well-known real people / acts close to the pools above)
+const GUARD = new Set(['前田 健太', '白石 涼子', 'たんぽぽ', 'ミルクボーイ', 'エレキコミック', '花火師']);
+function realLike(name) {
+  if (GUARD.has(name)) return true;
+  try { if (typeof C.isRealNameLike === 'function') return !!C.isRealNameLike(name); } catch (e) { /* optional */ }
+  return false;
 }
+function safeName(make, r) {
+  let n = make();
+  for (let k = 0; k < 8 && realLike(n); k++) n = make();
+  return n;
+}
+export function fictionalPerson(r) { return safeName(() => `${pickR(SURN, r)} ${pickR(GIVEN, r)}`, r); }
+export function fictionalUnit(r, type) {
+  if (type === 'pin' || (type == null && r() < 0.28)) return safeName(() => `${pickR(PIN_PRE, r)}${pickR(SURN, r)}`, r);
+  return safeName(() => `${pickR(COMBI_A, r)}${pickR(COMBI_B, r)}`, r);
+}
+export { realLike as isRealNameLikeLocal };
 
 // ------------------------------------------------------------------ the act
 export function unitOf(g) {
@@ -128,7 +143,7 @@ export function rivalsFor(g, ctx, roundId, n, opts = {}) {
   const out = [];
   for (let i = 0; i < n; i++) {
     const x = list[i] || {};
-    const stub = !x.name || STUB_RIVAL.test(x.name);
+    const stub = !x.name || STUB_RIVAL.test(x.name) || realLike(x.name); // a real-sounding name is replaced too
     const type = x.unit || (opts.pinOnly ? 'pin' : r() < 0.25 ? 'pin' : r() < 0.9 ? 'combi' : 'trio');
     // a field gets stronger round by round (opts.level); D1's own power wins when it is real
     const base = stub || !Number.isFinite(x.power) ? clamp(Math.round(level + (r() - 0.5) * (opts.spread ?? 34)), 5, 98) : clamp(x.power, 0, 100);
@@ -156,7 +171,7 @@ export function judgesFor(g, ctx, n, titles = []) {
   const out = [];
   for (let i = 0; i < n; i++) {
     const x = list[i] || {};
-    const stub = !x.name || STUB_JUDGE.test(x.name);
+    const stub = !x.name || STUB_JUDGE.test(x.name) || realLike(x.name);
     // the contest's own roles (when given) win over D1's generic titles; D1's names / tastes are kept
     out.push({ name: stub ? fictionalPerson(r) : x.name, title: (titles.length ? titles[i % titles.length] : x.title) || '審査員', taste: (stub || !x.taste ? pickR(TASTES, r) : x.taste) });
   }
@@ -284,6 +299,15 @@ function d1Field(g, ctx, roundId, myScore) {
   const fs = clamp(Number(I.toFieldScore(g, myScore)) || 0, 0, 100);
   const nameOf = (aid) => ((sim.byId && sim.byId.get(aid)) || {}).name || '？';
   const named = rd.sorted.filter((aid) => aid !== 'player').map((aid) => ({ name: nameOf(aid), score: Math.round(Number(rd.scores.get(aid)) || 0), tags: [], unit: ((sim.byId && sim.byId.get(aid)) || {}).type }));
+  // D1's exact rounds only hold the NAMED acts; when anonymous acts passed the round before (e.g. U25's 決勝 10組 with
+  // 4 named), fictional fillers stand in for them (scores just above the previous round's cut) so the field keeps its real size
+  const want = Number(rounds[idx].field) || 0;
+  if (rd.exact && want > named.length + 1 && idx > 0) {
+    const prev = sim.rounds[idx - 1] || {};
+    const rr = rngFor(g, ctx.id, ctx.year, roundId, 'fill');
+    const base = Number(prev.cut) || 50;
+    while (named.length + 1 < want) named.push({ name: fictionalUnit(rr), score: Math.round(clamp(base + Math.abs((rr() + rr() + rr() - 1.5) * 8), 0, 100)), tags: ['予選から'], unit: null });
+  }
   const above = named.filter((x) => x.score > fs).length;
   let passed, place, field, passCount;
   if (rd.exact) {

@@ -222,7 +222,11 @@ const HG = ['ひだまり', 'のりしお', 'ぽかぽか', 'ぺらぺら', 'ぐ
 const AB = ['NEON', 'BOX', 'ZERO', 'HOP', 'JET', 'LOOP', 'MIX', 'POP', 'TONE', 'CUBE', 'FLAT', 'NOVA', 'VOLT', 'WAVE'];
 const AB2 = ['STEP', 'DAYS', 'LIFE', 'LINE', 'GATE', 'PARK', 'MAN', 'CLUB', 'TALK', 'HOUSE'];
 // real combo names this generator must never produce (famous names; the list keeps the world fictional)
-const BLOCK = /中川家|ますだおかだ|フットボールアワー|アンタッチャブル|ブラックマヨネーズ|チュートリアル|サンドウィッチマン|NON STYLE|パンクブーブー|笑い飯|トレンディエンジェル|銀シャリ|とろサーモン|霜降り明星|ミルクボーイ|マヂカルラブリー|錦鯉|ウエストランド|令和ロマン|たくろう|和牛|ジャルジャル|オードリー|千鳥|麒麟|スピードワゴン|ペンギンズ|ハライチ/;
+const BLOCK = /中川家|ますだおかだ|フットボールアワー|アンタッチャブル|ブラックマヨネーズ|チュートリアル|サンドウィッチマン|NON STYLE|パンクブーブー|笑い飯|トレンディエンジェル|銀シャリ|とろサーモン|霜降り明星|ミルクボーイ|マヂカルラブリー|錦鯉|ウエストランド|令和ロマン|たくろう|和牛|ジャルジャル|オードリー|千鳥|麒麟|スピードワゴン|ペンギンズ|ハライチ|ダウンタウン|とんねるず|ウッチャンナンチャン|爆笑問題|くりぃむしちゅー|ナインティナイン|ロンドンブーツ|さまぁ|バナナマン|おぎやはぎ|アンジャッシュ|東京03|かまいたち|見取り図|ニューヨーク|オズワルド|ぺこぱ|三四郎|南海キャンディーズ|キングコング|スリムクラブ|ヤーレンズ|真空ジェシカ|バッテリィズ|エバース|ドンデコルテ|トム・ブラウン|ママタルト|ジョックロック|ダイタク|ヨネダ|滝音|さや香|ロングコートダディ|モグライダー|インディアンス|金属バット|囲碁将棋|天竺鼠|ジャングルポケット|四千頭身|EXIT|ミキ|スーパーマラドーナ|メイプル超合金|馬鹿よ貴方は|タイムマシーン|相席スタート|カミナリ|アキナ|さらば青春の光|ゆにばーす|おいでやすこが|東京ホテイソン|ランジャタイ|ハリセンボン|ナイツ|U字工事|POISON|ザ・パンチ|モンスターエンジン|ダイアン|ハリガネロック|アメリカザリガニ|キャン×キャン|おぎやはぎ|DonDokoDon|ロザン|ストリーク|レギュラー|COWCOW|品川庄司|カナリア|POISON GIRL BAND|スマイル|ハイキングウォーキング|ジパング上陸作戦|ザブングル|東京ダイナマイト|変ホ長調|ギャロップ|学天即|ウーマンラッシュアワー|プラス・マイナス|さらば|学天|ゆりやん|ジャングル/;
+// another module may supply a real-name check (contests.js isRealNameLike, feature-detected by contest_m1.js)
+let NAME_FILTER = null;
+export function setNameFilter(fn) { NAME_FILTER = typeof fn === 'function' ? fn : null; }
+const realish = (n) => BLOCK.test(n) || (NAME_FILTER ? !!(() => { try { return NAME_FILTER(n); } catch (e) { return false; } })() : false);
 export function comboName(...key) {
   const r = rng(hstr(key.join('|')));
   for (let t = 0; t < 8; t++) {
@@ -234,7 +238,7 @@ export function comboName(...key) {
     else if (f < 0.84) n = pickR(HG, r) + pickR(['', 'ず', 'ぼーい', 'がーる', 'くらぶ', '団'], r);
     else if (f < 0.93) n = pickR(AB, r) + ' ' + pickR(AB2, r);
     else n = pickR(K1, r) + pickR(['', '・', ''], r) + pickR(KJ, r);
-    if (!BLOCK.test(n) && Array.from(n).length <= 10) return n;
+    if (!realish(n) && Array.from(n).length <= 10) return n;
   }
   return pickR(KJ, r) + '座';
 }
@@ -243,12 +247,16 @@ function pickR(arr, r = Math.random) { return arr[Math.floor(r() * arr.length) %
 const SUR = ['佐伯', '大河内', '森下', '宮里', '仲宗根', '片桐', '久保田', '湯川', '西岡', '東海林', '真壁', '若松', '芦田', '栗原', '有馬', '堀之内', '三好', '寺島', '岩永', '矢吹', '小野寺', '能登', '柿沼', '樋口', '春野', '戸川', '入江', '室井', '辻本', '赤城', '野々村', '白鳥', '黒沢', '日比野', '奥田', '浜口', '桑原', '江藤', '島袋', '新垣', '早瀬', '木暮', '浅見', '花岡', '五十嵐', '中野渡', '霧島', '鶴見'];
 const GIV_M = ['ケンタ', 'ユウジ', 'タクミ', 'ショウタ', 'リョウ', 'ダイキ', 'コウヘイ', 'ヒロト', 'マサキ', 'ソウタ', 'ジュン', 'カズマ', 'トオル', 'ノボル', 'テツヤ', 'ゴロウ', 'イッペイ', 'ハヤト'];
 const GIV_F = ['アヤ', 'ミホ', 'ユキ', 'サキ', 'ナナ', 'マリ', 'カナ', 'リエ', 'ハルカ', 'チヒロ', 'モモ', 'エミ'];
+// Stage names: a rare surname alone, a katakana given name alone, or both (katakana given names keep them clear of real
+// people, whose given names are written in kanji); the optional filter (real-name check) rejects any match.
 export function personName(gender, ...key) {
   const r = rng(hstr(['p', ...key].join('|')));
-  const f = r();
-  if (f < 0.45) return pickR(SUR, r);
-  if (f < 0.8) return pickR(gender === 'f' ? GIV_F : GIV_M, r);
-  return pickR(SUR, r) + ' ' + pickR(gender === 'f' ? GIV_F : GIV_M, r);
+  for (let t = 0; t < 6; t++) {
+    const f = r();
+    const n = f < 0.45 ? pickR(SUR, r) : f < 0.8 ? pickR(gender === 'f' ? GIV_F : GIV_M, r) : pickR(SUR, r) + ' ' + pickR(gender === 'f' ? GIV_F : GIV_M, r);
+    if (!realish(n)) return n;
+  }
+  return pickR(SUR, r) + pickR(['丸', '坊', '介'], r);
 }
 
 // Looks for HD sprites (sprites.js look objects), deterministic per person key.
@@ -411,6 +419,7 @@ export const NEWS = {
   tour: ['M-1ツアーが開幕。{city}公演は即完売。'],
   dvd: ['{label}のDVDが発売。'],
   lastYearTears: ['ラストイヤーの「{x}」、M-1を卒業。「この大会に育ててもらった」。'],
+  graduated: ['昨年がラストイヤーだった「{x}」、M-1を卒業。「この大会に育ててもらった」。', '結成年数の上限を迎えた「{x}」、今年からM-1に出られない。「次の舞台で勝負する」。'],
   disband: ['M-1常連の「{x}」が解散を発表。'],
   ended: ['M-1グランプリ、今年の第10回で一区切り。大会の終了が発表された。'],
   hiatus: ['今年はM-1グランプリの開催なし（2010年の第10回で一区切り）。年末の漫才番組はTHE MANZAIへ。'],

@@ -305,7 +305,9 @@ class BoardScene {
     text(ctx, fit(ctx, o.title || '結果', SW - 48, 16), 22, 14, { size: 16, color: COLORS.accent });
     if (o.sub) text(ctx, fit(ctx, o.sub, SW - 48, 12), 22, 34, { size: 12, color: '#d8dcf0' });
     const cols = o.cols || [{ key: 'place', label: '順位', w: 60 }, { key: 'name', label: '名前', w: 360 }, { key: 'score', label: '点', w: 120, align: 'right' }];
-    const max = o.max || 9;
+    // rows that fit above the note / the hint line (24 px each from y 82)
+    const avail = Math.floor(((o.note ? SH - 68 : SH - 26) - 82) / 24);
+    const max = Math.max(3, Math.min(o.max || 9, avail));
     let rows = (o.rows || []).slice();
     const meIdx = rows.findIndex((x) => x.me);
     if (rows.length > max) { const keep = rows.slice(0, max - 1); if (meIdx >= max - 1) keep.push(rows[meIdx]); else keep.push(rows[max - 1]); rows = keep; }

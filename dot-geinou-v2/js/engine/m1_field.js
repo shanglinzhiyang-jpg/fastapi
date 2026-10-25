@@ -82,7 +82,7 @@ export function evolvePool(m, year, notes = null) {
     for (const c of m.pool) {
       if (c.dis) continue;
       if (y - c.f > limit) {
-        if (notes && c.sm >= 2 && !c.ch && m1Held(y - 1)) notes.push({ k: 'lastYearTears', x: c.n });
+        if (notes && c.sm >= 2 && !c.ch && m1Held(y - 1)) notes.push({ k: 'graduated', x: c.n });
         continue; // M-1を卒業
       }
       if (r() < 0.025 + (c.sm === 0 && y - c.f > 6 ? 0.03 : 0)) {

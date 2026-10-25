@@ -26,14 +26,14 @@
 // Everyone in the contest (entrants, judges, MCs, staff, past champions) is fictional. The tagline 「一番面白い、一人が決まる。」 is the
 // contest's own 2026 slogan (a phrase, not a person).
 import { Game } from './game.js';
-import { registerContest } from './contests.js';
+import { registerContest, CONTESTS } from './contests.js';
 import { registerRegular, PEOPLE, isKansai } from './life.js';
 import { LOOKS } from './sprites.js';
 import { registerItem } from './state.js';
 import { clamp } from './util.js';
 import {
   has, safe, num, n0, realYen, plainYen, toInternal, rngOf, gauss, rint, pickR, cdate, dateText, dateTextY, pinName,
-  randomLook, actInfo, agencyNames, geireki, playerAge, statOf, sendOffer, runKitMorning, kitMorning, devWord, shortfallReasons,
+  randomLook, actInfo, agencyNames, geireki, playerAge, statOf, sendOffer, runKitMorning, kitMorning, devWord, shortfallReasons, performAct,
 } from './r1_kit.js';
 import { makeContest, registerContestApp, fmtLen } from './r1_flow.js';
 import { stage, unstage, card, T, para, R, box, alpha, drawBig, faceAt, THEMES, sizeFor } from './r1_scenes.js';
@@ -165,7 +165,7 @@ const J0 = {
   mikazuki: { name: '三日月ジロー', short: 'ジロー', title: 'ピン芸人', taste: 'flip' },
   odagiri: { name: '小田切ヨウ', short: '小田切', title: 'コント作家', taste: 'solo' },
   tsukishima: { name: '月島ミサ', short: '月島', title: '脚本家', taste: 'utaneta' },
-  naruto: { name: '鳴門カンペイ', short: '鳴門', title: 'ものまね芸人', taste: 'utaneta' },
+  naruto: { name: '鳴門ゴロー', short: '鳴門', title: 'ものまね芸人', taste: 'utaneta' },
 };
 const judgeOf = (k) => ({ ...J0[k], look: JLOOK[k] });
 function judgesR1(g, Y) {
@@ -180,9 +180,9 @@ function judgesR1(g, Y) {
   return [...['mikazuki', 'odagiri', 'tsukishima', 'naruto', 'hanabusa'].map(judgeOf), champ(2010), champ(2016)];
 }
 const MCS = {
-  old: [{ name: '白石ゆかり（アナウンサー）', look: LOOKS.announcer }, { name: 'ひだまり一座', look: LOOKS.comedian }],
+  old: [{ name: '汐見ゆかり（アナウンサー）', look: LOOKS.announcer }, { name: 'ひだまり一座', look: LOOKS.comedian }],
   mid: [{ name: 'シャンデリア商会', look: { hair: 'slick', hairColor: 'brown', skin: 'fair', top: '#f2f2f2', bottom: '#20232a', jacket: true, tie: '#c8102e' } }, { name: '小春（タレント）', look: LOOKS.idol }],
-  neo: [{ name: 'スパイス大臣', look: { hair: 'spiky', hairColor: 'black', skin: 'fair', top: '#1e1e26', bottom: '#1e1e26', jacket: true, tie: '#e60033' } }, { name: '水城れな（女優）', look: LOOKS.actress }],
+  neo: [{ name: 'スパイス大臣', look: { hair: 'spiky', hairColor: 'black', skin: 'fair', top: '#1e1e26', bottom: '#1e1e26', jacket: true, tie: '#e60033' } }, { name: '汐月れな（女優）', look: LOOKS.actress }],
 };
 const mcR1 = (Y) => (Y <= 2004 ? MCS.old : Y <= 2020 ? MCS.mid : MCS.neo);
 // this world's champions before the game (fictional names, real edition years)
@@ -388,7 +388,6 @@ function prepItemsR1(g, C, { S, E, rules, act }) {
       st.sign = 'ピン芸人ライブ'; st.sub = 'ネタおろし';
       st.fx = { mic: true, flip: E.style === 'flip' ? '新ネタ' : null };
       await gg.say('小さなライブハウスの出番で、本番のネタを試す。');
-      const { performAct } = await import('./r1_kit.js');
       const res = await performAct(gg, { kind: 'pin', length: rules.rounds[0].length, style: E.style, practice: true, skip: !!gg.auto, title: 'ネタおろし', venue: { name: 'ライブハウス', size: 'small', crowd: 'warm', pressure: 20 } });
       await gg.say(res.score >= 70 ? 'ウケた！このくだりは本番でも使える。' : res.score >= 45 ? 'まずまず。後半のボケを入れ替えよう。' : '…すべった。でも、どこがダメかはっきりした。');
       await practice(res.score >= 70 ? 12 : 9, null);
@@ -429,6 +428,10 @@ const ROUND_CAST = (g, S, rid) => {
 export const R1 = makeContest({
   id: 'r1', key: 'r1', label: 'R-1', appName: 'R-1', appTitle: 'R-1', color: '#c8102e', founded: 2002, foundedText: '2002年創設（吉本興業・関西テレビ主催のピン芸日本一決定戦）',
   office: 'R-1事務局', unitWord: '人', notables: 36, defaultKind: 'pin', prepSub: 'フリップ・小道具', trophy: 'r1_trophy',
+  // a comedian with a 相方 performs alone: C's g.perform gets the player's pin view of A's unit
+  performExtra: (g, E) => (E && E.solo && has(g, 'unit') ? { unit: safe(() => g.unit('pin'), null) || undefined } : {}),
+  kindLabel: (E) => `ピン芸（${STYLE_JA[E.style] || 'ピン芸'}）`,
+  typeFromWorld: () => 'pin',
   rules: rulesR1, entries: entriesR1, notable: notableR1, pastHistory, kindOf: () => 'pin',
   gapNote: (Y) => (Y === 2003 ? '2003年は開催なし（第1回は2002年、第2回は2004年）' : null),
   aboutNotYet: () => 'ひとりで演じる「ピン芸」の日本一を決める大会。\n第1回は2002年（このころはまだ影も形もない）。',
@@ -536,40 +539,71 @@ export const R1 = makeContest({
 registerItem('r1_trophy', { name: 'R-1のトロフィー', price: 0, desc: 'ひとり芸日本一の証。\nたったひとりで、日本中を笑わせた夜の記念。' });
 registerRegular('r1_champ_tv', { title: 'ひとり芸人の夜明け', place: 'ktv', weekday: 2, medium: 'tv', pay: 45000, fame: 60, fans: 2500, minigame: 'tsukkomi', skill: 'warai', stamina: 18, host: '関西テレビのプロデューサー', hostLook: LOOKS.director, desc: '関西テレビの深夜バラエティ。ピン芸人がひとりで体を張る。（架空の番組）' });
 registerRegular('r1_champ_radio', { title: 'ひとりしゃべりの夜', place: 'mbs', weekday: 4, medium: 'radio', pay: 25000, fame: 30, fans: 1500, minigame: 'talk', skill: 'talk', stamina: 12, host: 'ラジオ局のディレクター', hostLook: LOOKS.ad, desc: '深夜のひとりしゃべりラジオ。（架空の番組）' });
-kitMorning('r1', (g) => R1.morning(g));
+kitMorning('r1', (g) => { syncDef(g); return R1.morning(g); });
 registerContestApp(R1, { id: 'r1', name: 'R-1', color: '#c8102e', glyph: 'R-1', order: 57 });
 
 // ================================================================ D1's registry
-function seasonOfR1(date) { return date.month >= 9 ? date.year + 1 : date.year; }
-const REIWA = rulesR1(2027);
-registerContest('r1', {
-  name: 'R-1グランプリ', names: [{ from: 2002, name: 'R-1ぐらんぷり' }, { from: 2021, name: 'R-1グランプリ' }], short: 'R-1', kind: 'pin', category: 'major',
-  organizer: '吉本興業・関西テレビ', broadcaster: '関西テレビ・フジテレビ系', venue: '決勝スタジオ（生放送）', region: 'all', own: 'E3',
+// D1 reads def.schedule / def.rounds for every cycle; R-1's format changed by era, so they are getters on the current
+// season (as KOC does) and the def is registered again (D1's cycle cache cleared) when the season's rules change.
+// Our 復活ステージ is D1's `revival` of the final round. Field / pass are numbers for D1's own simulation and news.
+function d1RoundsOf(Y) {
+  const r = rulesR1(Y);
+  const E = entriesR1(Y, () => 0.5);
+  const val = (v, d) => Math.round(typeof v === 'function' ? v(E) : num(v, d));
+  const rev = r.rounds.find((x) => x.id === 'rev');
+  return r.rounds.filter((x) => x.id !== 'rev').map((rd) => ({
+    id: rd.id, name: rd.name, when: rd.dates.map((d) => [d[1], d[2]]), venues: rd.dates.map((d) => (d[3] === 'osaka' ? '大阪' : d[3] === 'studio' ? (Y <= 2004 ? '大阪' : '東京') : '東京')),
+    length: rd.length, field: rd.final ? r.final.finalists : val(rd.field, 40), pass: rd.final ? 1 : val(rd.pass, 10), judge: rd.final ? 'panel' : 'staff', announce: 'now',
+    ...(rd.final ? { tv: true, final: true, judges: r.final.judges, scoring: r.final.format === 'block3pt' ? '持ち点3の振り分け' : '100点×' + r.final.judges, stage: 'studio', ...(r.final.advance ? { stage2: { top: r.final.advance, name: 'ファイナルステージ', judge: 'vote' } } : {}) } : {}),
+    ...(rd.final && rev ? { revival: true, revivalPass: rev.pass, revivalName: '復活ステージ', revivalJudge: 'panel' } : {}),
+  }));
+}
+let curY = 2027;
+const DEF = {
+  name: 'R-1グランプリ', names: [{ from: 2002, name: 'R-1ぐらんぷり' }, { from: 2021, name: 'R-1グランプリ' }], short: 'R-1', kind: 'pin', category: 'major', color: '#c8102e',
+  organizer: '吉本興業・関西テレビ', broadcaster: '関西テレビ・フジテレビ系', venue: '決勝スタジオ（生放送）', region: 'all', own: 'E3', labelStyle: 'year',
   history: { founded: 2002, ended: null, gaps: [[2003, 2003]], revived: null, note: '2002年創設。2003年は開催なし。2021年に「R-1ぐらんぷり」から「R-1グランプリ」へ改称', sources: ['https://ja.wikipedia.org/wiki/R-1グランプリ', 'https://www.r-1gp.com/', 'https://natalie.mu/owarai/award/r-1gp'] },
   revive: false,
   editionOf: (y) => rulesR1(y).edition,
-  // a season is named after the year of its final: entries in autumn, the final in March of the next calendar year
-  seasonOf: seasonOfR1, crossYear: true,
-  schedule: { entry: { from: REIWA.cal.entryFrom.slice(1, 3), to: REIWA.cal.entryTo.slice(1, 3) }, final: REIWA.rounds.find((x) => x.id === 'final').dates[0].slice(1, 3) },
-  scheduleOf: (y) => rulesR1(y).cal,
-  rounds: REIWA.rounds.map((rd) => ({ id: rd.id, name: rd.name, when: rd.dates.map((d) => [d[1], d[2]]), venues: [...new Set(rd.dates.map((d) => VENUE[d[3]](2027, rd.id)))], length: rd.length, tv: !!rd.tv, final: !!rd.final, judges: rd.final ? REIWA.final.judges : undefined, scoring: rd.final ? '100点×7 → 上位3人 → 決選投票' : undefined, judge: rd.final ? 'points' : 'staff' })),
-  rulesOf: rulesR1,
+  // a season is named after the year of its final: entries in autumn, the final in the next calendar year (D1: months after
+  // the final's month belong to the year before)
+  seasonOf: (date) => (date.month >= 9 ? date.year + 1 : date.year), crossYear: true,
+  scheduleOf: (y) => rulesR1(y).cal, rulesOf: rulesR1, roundsOf: d1RoundsOf,
   eligibility: (g, unit, year) => { const el = R1.cfg.eligibility(g, actInfo(g), year ?? (R1.seasonY(g) || cdate(g).year), R1.state(g)); return { ok: el.ok, why: el.why || '' }; },
   fee: { pro: 2000, amateur: 2000 },
   prize: (y) => rulesR1(y).prize, prizeText: '優勝賞金500万円',
   perform: { kind: 'pin', length: 240 },
-  news: ['R-1、エントリー受付スタート', (g) => `R-1：${R1.now(g).label}`],
+  news: [() => `${rulesR1(curY).title}：${rulesR1(curY).eligText}`, 'ひとり芸の冬が、今年も始まる。'],
   catchcopy: (g, ctx) => catchR1(g, R1.season(g, (ctx && ctx.year) || R1.seasonY(g) || cdate(g).year), 'player'),
-  flow: (g) => R1.go(g),
+  flow: (g, ctx) => R1.go(g, ctx),
   entry: (g) => R1.entry(g),
-  onMorning: (g) => runKitMorning(g),
+  onMorning: (g) => { syncDef(g); return runKitMorning(g); },
   status: (g) => R1.status(g),
-});
+};
+const sigOf = (Y) => JSON.stringify([d1RoundsOf(Y).map((x) => [x.when, x.length, x.field, x.pass, !!x.revival]), rulesR1(Y).cal.entryFrom.slice(1), rulesR1(Y).cal.entryTo.slice(1)]);
+let sig = '';
+function registerDef() {
+  registerContest('r1', DEF);
+  const d = CONTESTS.r1;
+  if (!d) return;
+  Object.defineProperty(d, 'schedule', { enumerable: true, configurable: true, get: () => { const r = rulesR1(curY); return { entry: { from: r.cal.entryFrom.slice(1, 3), to: r.cal.entryTo.slice(1, 3) }, final: r.rounds.find((x) => x.id === 'final').dates[0].slice(1, 3) }; } });
+  Object.defineProperty(d, 'rounds', { enumerable: true, configurable: true, get: () => d1RoundsOf(curY) });
+  Object.defineProperty(d, 'eligibilityNote', { enumerable: true, configurable: true, get: () => rulesR1(curY).eligText });
+}
+// the season in play decides the getters; a change of format re-registers (once per change)
+export function syncDef(g) {
+  const Y = (g && g.state && safe(() => R1.seasonY(g), null)) || null;
+  curY = Y && Y >= 2002 ? Y : 2027;
+  const s0 = sigOf(curY);
+  if (s0 !== sig) { sig = s0; registerDef(); }
+}
+registerDef();
+sig = sigOf(curY);
 
 // ================================================================ g.r1()
 const methods = {
   // the state summary (the notebook, other modules, the README): { now, season, title, edition, entry, wins, finals, entries, log, champions }
-  r1() { return R1.status(this); },
+  r1() { syncDef(this); return R1.status(this); },
 };
 export function installR1(proto) { for (const k of Object.getOwnPropertyNames(methods)) Object.defineProperty(proto, k, Object.getOwnPropertyDescriptor(methods, k)); }
 installR1(Game.prototype);

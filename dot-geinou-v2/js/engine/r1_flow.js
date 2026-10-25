@@ -18,7 +18,7 @@ import {
   has, safe, num, n0, realYen, plainYen, toInternal, eraId, devWord, rngOf, gauss, rint, pickR, shuffleR,
   cdate, absIdx, dayOf, dateText, dateTextY, randomLook, actInfo, powerOf, qualityOf, chooseNeta, netaUsedBefore,
   performAct, playerTotal, rivalTotal, cutScore, shortfallReasons, kitMorning, runKitMorning, morningNote, goRefusal,
-  syncEntry, d1Hub, statOf, sendOffer, d1On, d1Entry, d1Register, d1Record, d1Patch, d1Claim, d1PurgeLater, d1Freeze, d1History, d1Field,
+  syncEntry, d1Hub, statOf, sendOffer, d1On, d1Entry, d1Register, d1Record, d1Patch, d1Claim, d1PurgeLater, d1Freeze, d1History, d1Field, realNameLike,
 } from './r1_kit.js';
 import {
   THEMES, T, fit, jwrap, para, R, box, frame, alpha, drawBig, faceAt, confetti, stage, unstage, card, drumroll, infoCard, sfx, sizeFor,
@@ -132,7 +132,7 @@ export function makeContest(cfg) {
     if (cal.final && cal.final.day < 1) {
       const d = d1History(g, cfg.id);
       const row = d && d[Y];
-      if (row && row.champion) return { champ: row.champion, runner: row.runnerUp || cfg.pastHistory(Y).runner, note: row.note || '', d1: true };
+      if (row && row.champion && !realNameLike(row.champion)) return { champ: row.champion, runner: row.runnerUp && !realNameLike(row.runnerUp) ? row.runnerUp : cfg.pastHistory(Y).runner, note: row.note || '', d1: true };
       return cfg.pastHistory(Y);
     }
     return null;
