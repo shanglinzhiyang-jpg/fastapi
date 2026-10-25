@@ -126,6 +126,14 @@ function processYear(g, y) {
     keyed(g, `【M-1】${base}\n締切は${dateLabel(g, P.entryTo)}。${y === 2001 ? '' : `エントリー料${rules.fee.text}。`}`, `open|m1|${y}`, 70);
     if (y === 2025) keyed(g, `【M-1】${NEWS.feeChange[0]}`, `m1fee|${y}`, 30);
   }
+  // 3 days before the close: one line for everybody (D1's generic reminder would not know this entry)
+  if (t >= P.entryTo - 3 && t <= P.entryTo && !ev.close3) {
+    ev.close3 = t;
+    const E = entryOf(g, y);
+    const u = unitInfo(g, y);
+    const txt = E ? `【M-1】${lbl}のエントリー締切まであと${Math.max(0, P.entryTo - t)}日。駆け込みのエントリーが続いている。` : u.ok ? `【M-1】${lbl}のエントリー締切まで、あと${Math.max(0, P.entryTo - t)}日（エントリー料${rules.fee.text}）。${eraOf(g.state).deviceShort || 'スマホ'}の「M-1」からエントリーできる。` : `【M-1】${lbl}のエントリー締切まで、あと${Math.max(0, P.entryTo - t)}日。`;
+    keyed(g, txt, `close3|m1|${y}`, E ? 10 : 55, !E && u.ok);
+  }
   if (t > P.entryTo && !ev.close) {
     ev.close = t;
     const e = entriesOf(y), prev = entriesOf(y - 1);
@@ -266,7 +274,7 @@ function afterYear(g, y) {
   const t = today(g);
   const E = entryOf(g, y);
   const P = plan(g, y);
-  if (!P) return;
+  if (!P || !m.seasons[y] || m.seasons[y].past) return;
   const dev = eraOf(g.state).deviceShort || 'スマホ';
   if (E && E.final) {
     if (t === P.returns - 1) msg(g, 'M-1グランプリ事務局', `明日は「M-1グランプリ リターンズ」の収録です。${dev}の「M-1」から。`, { contest: 'm1' });
@@ -298,11 +306,24 @@ export function m1Morning(g) {
   registerFor(y);
   // years skipped altogether (a long jump in time): their finals happen quietly
   for (let yy = Math.max(2001, m.startYear || 2001); yy < y - 1; yy++) if (m1Held(yy) && !m.hist.some((h) => h.y === yy)) safe(() => { season(g, yy); simulateFinal(m, yy); });
+  if (has(g, 'contestNews')) flushQueued(g, m, t);
   for (const yy of [y - 1, y]) if (yy >= 2001) safe(() => processYear(g, yy));
   safe(() => personal(g, y));
   safe(() => afterYear(g, y - 1));
-  if (!has(g, 'contestNews')) flushNews(g);
-  else { const q = m.news.q.splice(0); for (const n of q) safe(() => g.contestNews(n.text, { contest: 'm1', prio: 30 + n.prio * 5 })); }
+  flushQueued(g, m, t);
+}
+function flushQueued(g, m, t) {
+  // the news queued by the flows / pool go out first (their D1 keys too), at most 2 plain ones a morning
+  if (!has(g, 'contestNews')) { if (m.news.fd !== t) { m.news.fd = t; flushNews(g); } return; }
+  {
+    const q = m.news.q.splice(0).filter((n) => t - (n.day || t) <= 5).sort((a, b) => (b.key ? 1 : 0) - (a.key ? 1 : 0) || b.prio - a.prio);
+    if (m.news.pd !== t) { m.news.pd = t; m.news.pn = 0; }
+    for (const n of q) {
+      if (!n.key && m.news.pn >= 2) { m.news.q.push(n); continue; }
+      if (!n.key) m.news.pn++;
+      safe(() => g.contestNews(n.text, { contest: 'm1', prio: 30 + n.prio * 5, ...(n.key ? { key: n.key } : {}) }));
+    }
+  }
 }
 // before D1's own morning (its news keys are claimed first)
 MORNING_HOOKS.unshift(m1Morning);

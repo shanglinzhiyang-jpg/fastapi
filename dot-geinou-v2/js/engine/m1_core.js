@@ -174,7 +174,7 @@ export function news(g, key, vars = {}, opts = {}) {
   if (opts.prefix !== false) text = text.startsWith('【') ? text : `【M-1】${text}`;
   const id = opts.once ? `${opts.once}` : null;
   if (id) { m.newsOnce = m.newsOnce || {}; if (m.newsOnce[id]) return; m.newsOnce[id] = today(g); }
-  m.news.q.push({ day: today(g), text, prio: opts.prio || 0 });
+  m.news.q.push({ day: today(g), text, prio: opts.prio || 0, key: opts.key || null });
   if (m.news.q.length > 30) m.news.q.splice(0, m.news.q.length - 30);
 }
 export function flushNews(g) {

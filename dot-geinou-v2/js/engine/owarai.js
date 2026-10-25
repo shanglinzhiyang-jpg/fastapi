@@ -481,7 +481,7 @@ const methods = {
   owaraiPower(kind) { return this.unitPower(kind); },
   unitHarmony(n = 0, why = '') { const o = getO(this); return o ? harmonyAdd(this, o, num(n), why) : 0; },
   unitRecord() { const o = getO(this); return o ? o.unit : null; },
-  theaterRank() { const o = getO(this); const i = o ? clamp(o.career.theater, 0, THEATER_RANKS.length - 1) : 0; return { index: i, ...THEATER_RANKS[i] }; },
+  theaterRank() { const o = getO(this); if (o && this.state.agency && o.career.theater < 1) o.career.theater = 1; const i = o ? clamp(o.career.theater, 0, THEATER_RANKS.length - 1) : 0; return { index: i, ...THEATER_RANKS[i] }; },
   // a member's role / the partner's quirks for the screens
   memberInfo(id) {
     const o = getO(this);

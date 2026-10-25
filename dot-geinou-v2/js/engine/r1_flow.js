@@ -1406,7 +1406,9 @@ function installFlows(C) {
         await phoneList(g, { title: '歴代王者', color: cfg.color, items: h.length ? h.map((x) => ({ label: x.champion, sub: `${x.year}年 ${x.edition ? '第' + x.edition + '回' : ''}${x.player ? '（あなた！）' : ''}` })) : [{ label: 'まだ大会がない' }] });
       } else if (it.key === 'entry' || it.key === 'go' || it.key === 'prep' || it.key === 'me') {
         if ((it.key === 'go' || it.key === 'entry' || it.key === 'prep') && !phoneOverMapOnly(g)) { await phoneInfo(g, { title: cfg.appTitle, color: cfg.color, text: '今はここを離れられない。' }); continue; }
-        const fn = it.key === 'entry' ? C.entry : it.key === 'go' ? C.go : it.key === 'prep' ? C.prep : (gg) => C.recap(gg, S && S.entry ? Y : null);
+        // 会場へ向かう: through D1's 「賞レース」 runner when it keeps the entry (its travel and mode questions, then our flow)
+        const viaD1 = it.key === 'go' && has(g, 'contestGo') && d1Entry(g, cfg.id, Y);
+        const fn = it.key === 'entry' ? C.entry : it.key === 'go' ? (viaD1 ? (gg) => gg.contestGo(cfg.id) : C.go) : it.key === 'prep' ? C.prep : (gg) => C.recap(gg, S && S.entry ? Y : null);
         closePhoneThen(g, async (gg) => { await fn(gg); gg.save && gg.save(true); });
         return;
       }

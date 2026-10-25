@@ -534,7 +534,7 @@ async function finalistsPress(g, E, inFinal, u) {
     }
     const firsts = keys.filter((k) => (k === 'me' ? !m.me.finals : !actOf(m, y, k).finals)).length;
     const lastOnes = keys.filter((k) => (k === 'me' ? E.last : actOf(m, y, k).last)).map((k) => (k === 'me' ? E.name : actOf(m, y, k).name));
-    news(g, `${rules.label} 決勝進出者発表：${names.join('、')}。初の決勝進出は${firsts}組。`, {}, { prio: 3, once: `finalists_${y}` });
+    news(g, `${rules.label} 決勝進出者発表：${names.join('、')}。初の決勝進出は${firsts}組。`, {}, { prio: 3, once: `finalists_${y}`, key: `finalists|m1|${y}` });
     if (lastOnes.length) news(g, `「${lastOnes[0]}」、ラストイヤーで悲願の決勝進出。`, {}, { prio: 2, once: `finlast_${y}` });
     const amas = keys.filter((k) => (k === 'me' ? E.amateur : actOf(m, y, k).amateur));
     if (amas.length) news(g, 'amateurFinal', { x: amas[0] === 'me' ? E.name : actOf(m, y, amas[0]).name }, { prio: 2, once: `finama_${y}` });
@@ -834,7 +834,7 @@ async function finalFlow(g, E, u, rules, fin) {
       await say(g, [`優勝賞金1000万円と、M-1グランプリのトロフィーを手に入れた！`, `「${E.name}」は第${rules.edition}代M-1王者になった！`]);
       await tearsScene(g, E, u, true);
       logLine(E, `優勝。第${rules.edition}代王者。`);
-      news(g, `第${rules.edition}代王者は「${E.name}」！${rules.label}を制した。${rules.finalRound ? `最終決戦で審査員${(fin.voteCount && fin.voteCount.me) || 0}票。` : ''}`, {}, { prio: 5, once: `champ_${y}` });
+      news(g, `第${rules.edition}代王者は「${E.name}」！${rules.label}を制した。${rules.finalRound ? `最終決戦で審査員${(fin.voteCount && fin.voteCount.me) || 0}票。` : ''}`, {}, { prio: 5, once: `champ_${y}`, key: `champ|m1|${y}` });
       if (E.revivalWin) news(g, 'championRevival', { x: E.name }, { prio: 4, once: `champrev_${y}` });
       else if (E.last) news(g, 'championLast', { x: E.name }, { prio: 4, once: `champlast_${y}` });
       else news(g, `「${E.name}」、結成${E.years}年目でM-1王者に。優勝賞金1000万円。`, {}, { prio: 3, once: `champy_${y}` });
@@ -845,7 +845,7 @@ async function finalFlow(g, E, u, rules, fin) {
       await bigText(g, myPlace === 2 ? '準優勝' : `${myPlace}位`, `優勝は「${cn}」`, { min: 30, max: 160, color: '#ffe9a8' });
       await tearsScene(g, E, u, false, myPlace);
       logLine(E, `決勝${myPlace}位。優勝は「${cn}」。`);
-      news(g, `第${rules.edition}代王者は「${cn}」！${rules.label}を制した。${rules.finalRound ? `最終決戦で審査員${(fin.voteCount && fin.voteCount[champ]) || 0}票。` : ''}`, {}, { prio: 5, once: `champ_${y}` });
+      news(g, `第${rules.edition}代王者は「${cn}」！${rules.label}を制した。${rules.finalRound ? `最終決戦で審査員${(fin.voteCount && fin.voteCount[champ]) || 0}票。` : ''}`, {}, { prio: 5, once: `champ_${y}`, key: `champ|m1|${y}` });
       if (myPlace === 2) news(g, 'runnerUp', { x: E.name }, { prio: 2 });
     }
     E.final = { rank1: myRank, total: cards.me ? cards.me.total : 0, champ: champ === 'me', champName: cn, place: E.finalPlace || 1 };

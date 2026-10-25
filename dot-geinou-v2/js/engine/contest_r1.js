@@ -358,7 +358,7 @@ function prepItemsR1(g, C, { S, E, rules, act }) {
     run: async (gg) => {
       const fee = act.agency || g.state.fame >= 100 ? 0 : toInternal(gg, 3000);
       if (fee && !gg.spend(fee)) { await gg.say('謝礼が払えない…。'); return; }
-      if (fee) gg.notify(`謝礼 -${realYen(3000).replace(/⁠/g, '')}`, { color: '#ff9aa8' });
+      if (fee) gg.notify(`謝礼 -${plainYen(3000)}`, { color: "#ff9aa8" });
       const sf = shortfallReasons(gg, 'pin', null, { practice: E.prep.practice, need: 65 });
       await gg.say(['ネタ、見せてもらいました。', ...sf.slice(0, 2).map((x) => `${x}。`), '2分のネタは、最初の10秒で決まる。ツカミを磨こう。'], WRITER);
       if (neta && has(gg, 'scoreNeta')) await safe(() => gg.scoreNeta(neta, { by: 'local' }), null);

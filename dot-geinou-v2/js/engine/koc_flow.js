@@ -776,7 +776,7 @@ function playerCopy(g, y, E) {
 }
 
 // ================================================================ FINAL DAY (敗者復活戦 → 決勝 → 優勝発表 → after)
-export async function runFinalDay(g, y) {
+export async function runFinalDay(g, y, opts = {}) {
   const R = rules(y);
   const Y = yearRec(g, y);
   const E = Y.entry;
@@ -784,18 +784,18 @@ export async function runFinalDay(g, y) {
   const role = E && E.status === 'finalist' ? 'finalist' : E && E.status === 'revival' ? 'revival' : E && E.status === 'voter' ? 'voter' : 'viewer';
   if (Y.final && Y.final.done) { await g.say('今年の決勝は、もう終わった。'); return; }
   const firstTime = !seenOnce(g, 'final_' + role);
-  const go = await g.ask(role === 'viewer' ? `今夜は『${titleOf(y)}』決勝の生放送。テレビで見る？` : `今日は『${titleOf(y)}』${role === 'revival' ? '敗者復活戦と' : ''}決勝！\nTBS 赤坂のスタジオへ向かう？`, [role === 'viewer' ? '見る' : '向かう', 'やめておく'], { cancel: 1 });
+  const go = opts.viaD1 ? 0 : await g.ask(role === 'viewer' ? `今夜は『${titleOf(y)}』決勝の生放送。テレビで見る？` : `今日は『${titleOf(y)}』${role === 'revival' ? '敗者復活戦と' : ''}決勝！\nTBS 赤坂のスタジオへ向かう？`, [role === 'viewer' ? '見る' : '向かう', 'やめておく'], { cancel: 1 });
   if (go !== 0) {
-    if (role === 'finalist' || role === 'revival') { const s = await g.ask('出ないと、棄権になる。本当に行かない？', ['やっぱり行く', '行かない'], { cancel: 0 }); if (s === 1) { E.status = 'withdrawn'; await g.say('（棄権した…）'); return; } }
+    if (role === 'finalist' || role === 'revival') { const s = await g.ask('出ないと、棄権になる。本当に行かない？', ['やっぱり行く', '行かない'], { cancel: 0 }); if (s === 1) { E.status = 'withdrawn'; L.markWithdrawn(g, y); await g.say('（棄権した…）'); return; } }
     else return;
   }
   const S = season(g, y);
   const rf = rngOf((K(g).seed ^ hashStr(`final:${y}`)) >>> 0);
-  const mk = (a) => ({ name: a.name, type: a.type, agency: a.agency, power: a.power, quality: clamp(a.power + gauss(rf) * 5, 0, 100), looks: rivalLooks(a.name, a.type), copy: copyFor(g, a, y), act: a, me: false });
+  const mk = (a) => ({ id: a.id || null, name: a.name, type: a.type, agency: a.agency, power: a.power, quality: clamp(a.power + gauss(rf) * 5, 0, 100), looks: a.looks && a.looks.length ? a.looks : rivalLooks(a.name, a.type), copy: copyFor(g, a, y), act: a, me: false });
   let acts = S.finalists.map(mk);
   let digest = role === 'viewer' || role === 'voter';
   const me = role === 'finalist' || role === 'revival' ? { name: E.unitName, type: E.type, agency: st.agency ? g.fmt('{agency}') : 'アマチュア', me: true, looks: looksOf(g, E), copy: E.copy || playerCopy(g, y, E) } : null;
-  if (role === 'finalist') { acts.pop(); acts.push(me); }
+  if (role === 'finalist') { if (acts.length >= R.finalists) acts.pop(); acts.push(me); }
   const MCs = MC(y);
   const judges = judgesFor(g, y).map((j) => ({ ...j, short: j.name.split(' ')[0] }));
   await g.fadeOut(10);
@@ -812,7 +812,8 @@ export async function runFinalDay(g, y) {
     if (R.revival) {
       const pool0 = S.revivalPool.map(mk);
       if (role === 'revival') { pool0.pop(); pool0.unshift(me); }
-      revivalWinner = await revivalStage(g, y, R, pool0, role, E, bd, rf, digest);
+      const forced = role !== 'revival' && S.revivalWinner ? pool0.find((a) => a.id && a.id === S.revivalWinner.id) || null : null;
+      revivalWinner = await revivalStage(g, y, R, pool0, role, E, bd, rf, digest, forced);
       if (revivalWinner) acts.push(revivalWinner);
       if (role === 'revival') {
         if (revivalWinner && revivalWinner.me) { E.status = 'finalist'; K(g).stats.finals = num(K(g).stats.finals) + 1; news(g, NEWS.me.revival({ y, me: E.unitName })); logRun(g, E, 'revival', '敗者復活戦を勝ち上がり、11組目のファイナリストになった。'); }
@@ -820,6 +821,8 @@ export async function runFinalDay(g, y) {
       }
     }
     const playerIn = acts.some((a) => a.me);
+    // this world's acts perform as D1's simulation ranked them (the history and D1's news then agree)
+    precomputeNPC(g, { R, judges, rf }, acts, S.rank);
     // ---- 出番順（抽選）
     const order = acts.slice();
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rf() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
@@ -910,7 +913,7 @@ async function finalAct(g, ctx, a, stage) {
     logRun(g, E, 'final', `決勝${stage}本目『${neta.title || 'コント'}』。${perf >= 85 ? 'スタジオが揺れるほどの爆笑。' : perf >= 70 ? '大きな笑いが起きた。' : '思ったほどウケなかった。'}`);
     st0(g).stamina = Math.max(0, st0(g).stamina - 12);
   } else {
-    perf = simScore(g, { power: a.power, quality: stage === 2 ? clamp(a.quality - 3 + gauss(rf) * 4, 0, 100) : a.quality, r: rf, pressure: 95 });
+    perf = a.pre ? a.pre[stage - 1] : simScore(g, { power: a.power, quality: stage === 2 ? clamp(a.quality - 3 + gauss(rf) * 4, 0, 100) : a.quality, r: rf, pressure: 95 });
     if (!digest) {
       bd.set('studio', { year: y, mc: MCs.main.look, mc2: MCs.sub.look, judges, view: 'stage', unit: a.looks, look: setFor({ title: a.name + stage }).look, onair: true, screen: [a.name] });
       const title = CONTE_TITLES[hashStr(`${a.name}:${y}:${stage}`) % CONTE_TITLES.length];
@@ -923,9 +926,26 @@ async function finalAct(g, ctx, a, stage) {
 }
 const st0 = (g) => g.state;
 
+// The acts of this world get their performances and scores before the broadcast, in the order of D1's simulation
+// (rank: Map id → place; without D1: by power). The player is not touched: their result is live.
+function precomputeNPC(g, ctx, acts, rankMap) {
+  const { R, judges, rf } = ctx;
+  const npcs = acts.filter((a) => !a.me);
+  const rk = (a) => (a.id && rankMap && rankMap.has(a.id) ? rankMap.get(a.id) : 50 + (100 - num(a.power, 50)));
+  const ord = npcs.slice().sort((a, b) => rk(a) - rk(b));
+  const perfs = (q) => ord.map((a) => simScore(g, { power: a.power, quality: q(a), r: rf, pressure: 95 })).sort((x, z) => z - x);
+  const p1 = perfs((a) => a.quality), p2 = perfs((a) => clamp(a.quality - 3 + gauss(rf) * 4, 0, 100));
+  ord.forEach((a, i) => { a.pre = [p1[i], p2[i]]; a.rk = i + 1; });
+  const sum = (arr) => arr.reduce((t, v) => t + v, 0);
+  if (R.mode === 'panel') {
+    for (const k of [0, 1]) { const sets = ord.map((a) => judges.map((j) => judgePoints(R, a.pre[k], j, null, rf))).sort((x, z) => sum(z) - sum(x)); ord.forEach((a, i) => { (a.pts || (a.pts = []))[k] = sets[i]; }); }
+  } else if (R.mode === 'sum2' || R.mode === 'league') {
+    for (const k of [0, 1]) { const v = ord.map((a) => crowdPoints(R, a.pre[k], rf)).sort((x, z) => z - x); ord.forEach((a, i) => { (a.cp || (a.cp = []))[k] = v[i]; }); }
+  }
+}
 async function showPanelScore(g, ctx, a, perf, stage) {
   const { y, R, judges, rf, digest } = ctx;
-  const pts = judges.map((j) => judgePoints(R, perf, j, a.me ? a.parts : null, rf));
+  const pts = !a.me && a.pts && a.pts[stage - 1] ? a.pts[stage - 1] : judges.map((j) => judgePoints(R, perf, j, a.me ? a.parts : null, rf));
   const total = pts.reduce((s, v) => s + v, 0);
   if (!digest || a.me) {
     const D = { title: `${titleOf(y)} 決勝 ${stage === 2 ? 'ファイナルステージ' : 'ファーストステージ'}`, name: a.name, cells: judges.map((j, i) => ({ label: j.name, v: pts[i], shown: false })), total: null, max: R.max };
@@ -970,14 +990,16 @@ async function finalSum2(g, ctx) {
   const rows = [];
   for (const a of order) {
     const { perf } = await finalAct(g, ctx, a, 1);
-    const s1 = crowdPoints(R, perf, rf);
-    rows.push({ ...a, s1, total: s1 });
+    const s1 = !a.me && a.cp ? a.cp[0] : crowdPoints(R, perf, rf);
+    a.s1 = s1;
+    rows.push(a);
+    a.total = s1;
     await crowdCard(g, ctx, a, s1, 1);
   }
   const second = rows.slice().sort((p, q) => p.s1 - q.s1);
   for (const a of second) {
     const { perf } = await finalAct(g, ctx, a, 2);
-    a.s2 = crowdPoints(R, perf, rf); a.total = a.s1 + a.s2;
+    a.s2 = !a.me && a.cp ? a.cp[1] : crowdPoints(R, perf, rf); a.total = a.s1 + a.s2;
     await crowdCard(g, ctx, a, a.s2, 2, a.total);
   }
   rows.sort((p, q) => q.total - p.total);
@@ -996,7 +1018,7 @@ async function finalLeague(g, ctx) {
   const A = order.filter((_, i) => i % 2 === 0), B = order.filter((_, i) => i % 2 === 1);
   for (const [lg, list] of [['Aリーグ', A], ['Bリーグ', B]]) {
     await g.say(`${lg}、スタート！`, { name: MCs.main.name, look: MCs.main.look });
-    for (const a of list) { const { perf } = await finalAct(g, ctx, a, 1); a.s1 = crowdPoints(R, perf, rf); a.total = a.s1; await crowdCard(g, ctx, a, a.s1, 1); }
+    for (const a of list) { const { perf } = await finalAct(g, ctx, a, 1); a.s1 = !a.me && a.cp ? a.cp[0] : crowdPoints(R, perf, rf); a.total = a.s1; await crowdCard(g, ctx, a, a.s1, 1); }
     list.sort((p, q) => q.s1 - p.s1);
     await card(g, (c, t) => drawRanking(c, t, { title: `${lg} 結果（500点満点）`, rows: list.map((x) => ({ name: x.name, score: x.s1, me: x.me })), line: 1 }), { min: 24 });
   }
@@ -1007,6 +1029,7 @@ async function finalLeague(g, ctx) {
   let va = finalistVote(pa, pb, rf);
   let tie = false;
   if (va === 4) { tie = true; va += rf() < (pa >= pb ? 0.65 : 0.35) ? 1 : -1; }
+  if (!a.me && !b.me && Number.isFinite(a.rk) && Number.isFinite(b.rk) && (a.rk < b.rk) !== (va > 4)) va = 8 - va; // this world's result
   const votes = Array.from({ length: 8 }, (_, i) => (i < va ? a.name : b.name));
   for (let i = votes.length - 1; i > 0; i--) { const j = Math.floor(rf() * (i + 1)); [votes[i], votes[j]] = [votes[j], votes[i]]; }
   await card(g, (c, t) => { const n = Math.min(8, Math.floor(t / 20)); drawRanking(c, t, { title: '最終決戦　決勝進出8組がひとりずつ口頭で発表', rows: votes.slice(0, n).map((v, i) => ({ name: `${i + 1}人目：「${v}」`, score: '', me: (v === a.name ? a : b).me })) }); }, { min: 180 });
@@ -1025,7 +1048,8 @@ async function finalDuel(g, ctx) {
     if (!B) { winners.push(A); continue; }
     await g.say(`第${i / 2 + 1}ブロック：「${A.name}」対「${B.name}」`, { name: MCs.main.name, look: MCs.main.look });
     const pa = (await finalAct(g, ctx, A, 1)).perf, pb = (await finalAct(g, ctx, B, 1)).perf;
-    const v = duelVotes(R, pa, pb, rf);
+    let v = duelVotes(R, pa, pb, rf);
+    if (!A.me && !B.me && Number.isFinite(A.rk) && Number.isFinite(B.rk) && (A.rk < B.rk) !== (v > R.voters - v)) v = R.voters - v;
     A.s1 = v; B.s1 = R.voters - v;
     const w = v > B.s1 ? A : B;
     winners.push(w);
@@ -1037,7 +1061,8 @@ async function finalDuel(g, ctx) {
   for (const x of winners) {
     x.p2 = (await finalAct(g, ctx, x, 2)).perf;
     if (!king) { king = x; continue; }
-    const v = duelVotes(R, x.p2, king.p2, rf);
+    let v = duelVotes(R, x.p2, king.p2, rf);
+    if (!x.me && !king.me && Number.isFinite(x.rk) && Number.isFinite(king.rk) && (x.rk < king.rk) !== (v > R.voters - v)) v = R.voters - v;
     const newKing = v > R.voters - v ? x : king;
     if (!ctx.digest || x.me || king.me) await card(g, (c, t) => drawRanking(c, t, { title: '暫定王者への挑戦（101人の投票）', rows: [{ name: x.name, score: v, me: x.me, cur: newKing === x }, { name: `暫定王者 ${king.name}`, score: R.voters - v, me: king.me, cur: newKing === king }], line: 1 }), { min: 30 });
     losers.unshift(newKing === x ? king : x);
@@ -1048,7 +1073,7 @@ async function finalDuel(g, ctx) {
 }
 
 // 敗者復活戦 (2026-): 10組 → 芸人審査員60人の採点で3組 → 国民投票で1組
-async function revivalStage(g, y, R, pool0, role, E, bd, rf, digest) {
+async function revivalStage(g, y, R, pool0, role, E, bd, rf, digest, forced = null) {
   const MCs = MC(y);
   bd.set('revival', { title: `${titleOf(y)} 敗者復活戦`, bars: [], unit: [] });
   if (role === 'revival' || !digest) await g.say(`午後2時、敗者復活戦。準決勝で敗れた25組のうち、上位10組が決勝の残り1枠を争う！`, { name: MCs.revival.name, look: MCs.revival.look });
@@ -1073,7 +1098,15 @@ async function revivalStage(g, y, R, pool0, role, E, bd, rf, digest) {
   const w = top3.map((x) => Math.max(0.05, x.perf / 100 + (x.me ? fansK * 0.25 : rf() * 0.2)));
   const sum = w.reduce((s, v) => s + v, 0);
   const shares = w.map((v) => v / sum);
-  const wi = shares.indexOf(Math.max(...shares));
+  let wi = shares.indexOf(Math.max(...shares));
+  if (forced) {
+    // this world's winner (D1's simulation): make sure they are in the vote and on top
+    if (!top3.includes(forced)) { top3[2] = forced; w[2] = Math.max(...w) + 0.05; }
+    const fi = top3.indexOf(forced);
+    const mx = Math.max(...shares);
+    if (shares[fi] < mx) { const j = shares.indexOf(mx); [shares[fi], shares[j]] = [shares[j], shares[fi]]; }
+    wi = fi;
+  }
   if (role === 'revival' || !digest) {
     await card(g, (c, t) => { const k = Math.min(1, t / 90); const bars = top3.map((x, i) => ({ name: x.name, v: shares[i] * k, me: x.me, label: `${Math.round(shares[i] * k * 100)}%` })); drawRevivalBars(c, t, bars, y); }, { min: 110 });
   }
