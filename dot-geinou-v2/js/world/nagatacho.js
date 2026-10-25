@@ -909,7 +909,7 @@ function generate() {
   for (const x of [22, 26, 30, 34]) P2(x, 52, 'nagatacho_ginkgo');
   for (const x of [48, 52, 56, 66, 70, 74, 78]) P2(x, 52, 'nagatacho_ginkgo');
   for (const x of [4, 8, 12]) P2(x, 52, 'nagatacho_ginkgo');
-  for (const x of [24, 32, 50, 54, 68, 72]) P2(x, 53, 'bench');
+  for (const x of [24, 32, 54, 68, 72]) P2(x, 53, 'bench'); // [R9-A] (the bench at x 50 made way for the 地下鉄の出入口)
   P2(29, 49, 'nagatacho_barrier');
   // a green strip along the south edge, planters along the party HQ fronts
   for (let x = 1; x <= 78; x++) {

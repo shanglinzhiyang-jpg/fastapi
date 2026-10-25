@@ -6,9 +6,12 @@
 //   STATION_TICKETS[stationId].push({ id, label, cond(g), run: async (g, npc) => {} })
 //       an extra choice at the ticket counter (label ≤ 14 chars; shown when cond passes).
 //   await travelScene(g, { to, via, vehicle, scenery })   the HD ride cutscene
-//       vehicle: 'shinkansen' | 'local' | 'plane'; scenery: 'fuji' | 'mountains' | 'fields' | 'sea' | 'city'
+//       vehicle: 'shinkansen' | 'local' | 'plane'; scenery: 'fuji' | 'mountains' | 'fields' | 'sea' | 'city' | 'tunnel'
+//       color: the local train's stripe (the line colour, js/world/eki_net.js)  [R9-B1]
+// [R9-B1] the in-town rail network (駅構内 'eki', js/world/eki.js): when a town's station door leads to 'eki', the exits
+// of station_tokyo / station_namba lead back into that town's station concourse (the 新幹線のりかえ口).
 
-import { registerPlace, PLACES } from '../engine/map.js';
+import { registerPlace, PLACES, doorIndexFor } from '../engine/map.js';
 import { defineTile, R as TR, P as TP } from '../engine/tiles.js';
 import { LOOKS } from '../engine/sprites.js';
 import { SW, SH, fmtMoney } from '../engine/util.js';
@@ -79,7 +82,7 @@ function drawFields(c, t) {
     F(c, x, 196, 30, 16, '#efe2bf'); F(c, x - 3, 188, 36, 9, '#b8434a'); F(c, x + 11, 202, 8, 10, '#7a4e2a');
   }
 }
-function drawTrain(c, t, kind) {
+function drawTrain(c, t, kind, color = '#3fa86a') {
   // poles and track
   F(c, 0, 268, SW, 14, '#8e929c'); F(c, 0, 268, SW, 2, '#b8bcc6'); F(c, 0, 282, SW, 4, '#5a5f6b');
   for (let i = 0; i < 8; i++) {
@@ -94,7 +97,7 @@ function drawTrain(c, t, kind) {
     for (let k = 0; k < 3; k++) {
       const x = 30 + k * 172;
       F(c, x, y, 166, 44, '#d8dce4'); F(c, x, y, 166, 3, '#f4f6fa');
-      F(c, x, y + 28, 166, 6, '#3fa86a');
+      F(c, x, y + 28, 166, 6, color);
       for (let wx = x + 10; wx < x + 156; wx += 26) F(c, wx, y + 8, 18, 14, '#3b4a6a');
       F(c, x + 70, y + 6, 22, 34, '#9aa0aa');
     }
@@ -127,6 +130,27 @@ function drawPlane(c, t) {
   for (let i = 0; i < 20; i += 2) F(c, x + 110 - i * 2, y + 20 + i, 60, 2, '#c8ccd6');
   F(c, x + 92, y + 34, 26, 10, '#8a8f99'); F(c, x + 92, y + 34, 26, 2, '#a8acb6'); F(c, x + 116, y + 36, 3, 6, '#3b3f48');
 }
+// the metro: a dark tunnel, its lamps rushing by, the train's lit windows
+function drawTunnel(c, t, color) {
+  F(c, 0, 0, SW, SH, '#15171d');
+  for (let y = 0; y < 200; y += 20) F(c, 0, y, SW, 1, '#1d2028');
+  for (let i = 0; i < 7; i++) {
+    const x = wrapX(i * 110 - t * 16, SW + 110) - 50;
+    F(c, x, 120, 26, 6, '#fff3c0'); F(c, x - 6, 116, 38, 2, 'rgba(255,243,192,0.25)');
+    F(c, x + 40, 60, 3, 160, '#262a33');
+  }
+  for (let i = 0; i < 30; i++) F(c, wrapX(i * 37 - t * 22, SW + 40) - 20, 200 + (i % 3) * 3, 14, 1, '#2c3039');
+  const bob = Math.round(Math.sin(t / 5));
+  const y = 214 + bob;
+  for (let k = 0; k < 3; k++) {
+    const x = 30 + k * 196;
+    F(c, x, y, 190, 54, '#c8ccd4'); F(c, x, y, 190, 3, '#e8ebf0');
+    F(c, x, y + 6, 190, 4, color); F(c, x, y + 40, 190, 4, color);
+    for (let wx = x + 10; wx < x + 176; wx += 30) F(c, wx, y + 14, 20, 18, '#f6e6a0');
+    F(c, x + 84, y + 12, 22, 38, '#9aa0aa');
+  }
+  F(c, 0, 272, SW, 10, '#3b3f48'); F(c, 0, 282, SW, 78, '#101216');
+}
 function drawBushes(c, t) {
   for (let i = 0; i < 14; i++) {
     const x = wrapX(i * 71 - t * 9, SW + 80) - 40;
@@ -156,6 +180,8 @@ export function travelScene(g, o = {}) {
           F(c, 0, 230, SW, 130, '#a8dcf8');
           drawClouds(c, t, 74, 0.5);
           drawPlane(c, t);
+        } else if (scenery === 'tunnel') {
+          drawTunnel(c, t, o.color || '#3fa86a');
         } else {
           drawSky(c, '#6cb8ec', '#8fcbf2', '#b8e2fb');
           drawClouds(c, t, 72, 0.6);
@@ -165,7 +191,7 @@ export function travelScene(g, o = {}) {
           if (scenery === 'city') drawCity(c, t);
           if (scenery !== 'city') drawFields(c, t); else F(c, 0, 220, SW, 140, '#8a8f99');
           if (scenery === 'fields') drawRidge(c, t, 196, '#86a8c0', 0.25, 30, 5);
-          drawTrain(c, t, vehicle);
+          drawTrain(c, t, vehicle, o.color);
           F(c, 0, 286, SW, 74, scenery === 'city' ? '#7a7f89' : '#4f9a4a');
           if (scenery !== 'city') drawBushes(c, t);
           else for (let i = 0; i < 10; i++) F(c, wrapX(i * 97 - t * 9, SW + 60) - 30, 310 + (i % 2) * 20, 50, 4, '#8a8f99');
@@ -215,6 +241,18 @@ function departureBoard(x, y, w, rows) {
       });
     },
   };
+}
+
+// [R9-B1] the 新幹線 concourse's exit: the town door if it still leads here, else the town's station concourse ('eki')
+const TOWN_OF = { station_tokyo: 'tokyo', station_namba: 'namba' };
+async function leaveShinkansen(g, id) {
+  g.sfx('door');
+  let door = null;
+  try { door = doorIndexFor(id); } catch (e) { door = null; }
+  const eki = PLACES.eki;
+  if (!door && eki && eki.rooms && eki.rooms[TOWN_OF[id]]) { await g.goto('eki', TOWN_OF[id], 22, 11, 'left'); return; }
+  if (door) { await g.exitPlace(); return; }
+  await g.goto(TOWN_OF[id], 'main');
 }
 
 function makeStation({ id, name, wall, floor, destPlace, destName, bgm, transfer, via, board, wallRow, gateText, extraLegend = {}, extraEntities = [], traveler, warnReturn, scenery }) {
@@ -287,7 +325,8 @@ function makeStation({ id, name, wall, floor, destPlace, destName, bgm, transfer
           '######MM######',
         ],
         legend: { K: 'counter_white', G: 'station_gate', T: floor + '+station_strip', P: 'plant', b: 'bench', S: 'shelf_goods', ...extraLegend },
-        warps: [{ x: 6, y: 9, to: 'exit' }, { x: 7, y: 9, to: 'exit' }],
+        // [R9-B1] out through the town's door, or (when the town's station door leads to 'eki') into its concourse
+        events: [{ x: 6, y: 9, w: 2, h: 1, on: 'step', run: (g) => leaveShinkansen(g, id) }],
         entities: [
           departureBoard(8, 1, 5, board),
           {

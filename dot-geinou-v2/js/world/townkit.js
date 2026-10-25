@@ -122,8 +122,10 @@ export async function enterEki(g, town, fallback) {
   await g.say(['駅の入口だ。', '「ただいま改良工事中です。\n　ご不便をおかけしております」\n…まだ電車には乗れないみたいだ。']);
   return false;
 }
-// a building's enter(g) (its door leads into the station)
-export const ekiEnter = (town, fallback) => (g) => enterEki(g, town, fallback);
+// a building's enter(g) (its door leads into the station); without a station yet, step back out of the door
+export const ekiEnter = (town, fallback) => async (g) => {
+  if (!(await enterEki(g, town, fallback)) && typeof g.movePlayer === 'function') await g.movePlayer(['down']);
+};
 // The stairs of a 地下鉄の出入口 (props.js subwayEntrance): warps into the station; while there is
 // no station yet the check says so and the map walks the player back out.
 export function ekiStairs(xs, y, town) {
@@ -132,6 +134,8 @@ export function ekiStairs(xs, y, town) {
     check: async (g) => {
       if (ekiReady(town)) return true;
       await enterEki(g, town);
+      const p = g.map && g.map.player;
+      if (p) p.dir = 'up'; // the map walks the player back the opposite way: down, out of the stairs
       return false;
     },
   }));

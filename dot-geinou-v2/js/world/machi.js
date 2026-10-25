@@ -1131,8 +1131,7 @@ function generate() {
 
   // the 横丁 (rows 20..23): small eateries facing a lantern-lit lane; the school (rows 24..34)
   fill(c, 52, 20, 23, 4, 'stone');
-  for (const x of [54, 59, 64, 69, 74]) put(c, x, 23, 'lantern');
-  for (let x = 52; x <= 74; x++) put(c, x, 24, 'fence');
+  for (let x = 52; x <= 74; x++) put(c, x, 24, [52, 57, 62, 67, 72].includes(x) ? 'lantern' : 'fence');
   fill(c, 52, 25, 23, 9, 'grass');
   for (const [x, y] of [[53, 25], [53, 28], [67, 25], [70, 26], [73, 25], [72, 28], [68, 28]]) put(c, x, y, (x + y) % 2 ? 'sakura' : 'tree');
   fill(c, 53, 30, 21, 4, 'sand');                      // 校庭

@@ -153,7 +153,7 @@ function westEntities() {
 
 function generate() {
   const W = NAMBA_W, H = NAMBA_H;
-  const c = grid(W, H, 'stone');
+  const c = grid(W, H - DS, 'stone'); // the layout before the band; generate() opens the band at the end
   // the old part's tiles, OX tiles east
   const S = (x, y, ...l) => set(c, x + OX, y, ...l);
   const P = (x, y, o) => put(c, x + OX, y, o);
@@ -283,6 +283,94 @@ function generate() {
   return { w: W, h: H, cells: c, entities: [...entities, ...bandEntities()] };
 }
 
+
+// ---------------------------------------------------------------- [R9-A] the 戎橋筋・千日前 band (rows 23..38)
+// N-S: にし通り (x 18..20, from にし橋), 戎橋筋 (x 38..42, a covered arcade from ことぶき橋 down through the
+// shop row to なんば駅's plaza, rows 23..45), 千日前 (x 60..62, from the east bridge), the park path (x 89..91).
+// E-W: a walk along the canal-side street (row 23), 千日前通り (rows 29..31), a back lane (row 38).
+// Row A shops on rows 24..28 (doors on row 28), row B on rows 33..37 (doors on row 37).
+const BAND_A = { y: 24, h: 5 }, BAND_B = { y: 33, h: 5 };
+function bandTiles(c, W) {
+  for (let y = BAND; y < BAND + DS; y++) { set(c, 0, y, 'grass', 'tree'); set(c, W - 1, y, 'grass', 'tree'); }
+  fill(c, 1, 29, W - 2, 3, 'brick');                       // 千日前通り
+  for (const [x0, w] of [[18, 3], [60, 3]]) fill(c, x0, BAND, w, DS, 'brick');
+  fill(c, 38, BAND, 5, DS + 7, 'namba_arcade');            // 戎橋筋, on down to the station plaza (row 46)
+  for (const y of [25, 27, 34, 36, 40, 43]) { put(c, 38, y, 'lantern'); put(c, 42, y, 'lantern'); }
+  // the park north of おうぎの森公園 (x 89..104), its path on from the east bridge
+  fill(c, 89, BAND, 16, DS, 'grass');
+  fill(c, 89, BAND, 3, DS, 'path');
+  fill(c, 92, 30, 12, 1, 'path');
+  for (const [x, y] of [[93, 24], [97, 25], [101, 24], [103, 27], [95, 33], [99, 35], [103, 33], [94, 37], [102, 37], [88, 26], [88, 34]]) put(c, x, y, (x + y) % 2 ? 'sakura' : 'tree');
+  for (const [x, y] of [[95, 27], [99, 28], [96, 34], [100, 33], [92, 36]]) set(c, x, y, 'flowers');
+  for (const x of [95, 99]) put(c, x, 31, 'bench');
+  // street furniture
+  for (const x of [9, 28, 51, 70, 82]) put(c, x, 32, 'planter');
+  for (const [x, y] of [[17, 23], [37, 32], [59, 23], [63, 32], [87, 38]]) put(c, x, y, 'vending');
+  put(c, 36, 38, 'bicycle'); put(c, 44, 38, 'bicycle'); put(c, 64, 38, 'bicycle');
+  put(c, 1, 38, 'trash'); put(c, 58, 38, 'trash');
+}
+// 戎橋筋's arch (5 tiles over the arcade's mouth; the posts are solid signs)
+function arch(x, y, label, col = '#d62f2f') {
+  return {
+    type: 'prop', x, y, w: 5, h: 1, solid: false, z: -60,
+    draw(ctx, sx, sy) {
+      const F = (x0, y0, w, h, cc) => { ctx.fillStyle = cc; ctx.fillRect(x0, y0, w, h); };
+      for (const px of [sx + 3, sx + 67]) { F(px, sy - 34, 10, 49, '#3a3f4a'); F(px + 1, sy - 34, 3, 48, '#6a707c'); F(px - 1, sy + 11, 12, 4, '#2a2d36'); }
+      F(sx + 1, sy - 46, 78, 16, '#20232a'); F(sx + 2, sy - 45, 76, 14, col); F(sx + 2, sy - 45, 76, 1.5, '#ff8a7a');
+      F(sx + 2, sy - 32.5, 76, 1.5, shade(col, -0.35));
+      for (let i = 0; i < 18; i++) F(sx + 4 + i * 4.2, sy - 46.5, 1, 1, '#fff3a0');
+      text(ctx, label, sx + 40, sy - 43, { size: 10, align: 'center', color: '#fff6e0', shadow: '#5a0010' });
+    },
+  };
+}
+const SHOP = (x, w, row, extra) => ({ type: 'building', x, w, ...(row === 'A' ? BAND_A : BAND_B), door: Math.floor(w / 2), ...extra });
+function bandEntities() {
+  return [
+    // ---- row A (doors on row 28, fronts on 千日前通り)
+    SHOP(2, 7, 'A', { name: '古着屋 ミナミ', kind: 'boutique', sign: { text: '古着', bg: '#20232a', color: '#f4e6cc' }, text: ['古着屋だ。', 'ヒョウ柄のジャケットに、金色のスニーカー…。\n大阪の古着は、なんだか声が大きい。'] }),
+    SHOP(10, 7, 'A', { name: '純喫茶 ドット', kind: 'cafe', wall: '#efe3d0', roof: '#5b3a29', sign: { text: '純喫茶', bg: '#5b3a29', color: '#fff3e0' }, text: ['昔ながらの純喫茶だ。', 'ミックスジュースとホットケーキの食品サンプルが\nショーケースに並んでいる。'] }),
+    SHOP(21, 7, 'A', { name: 'ドラッグストア', kind: 'shop', display: 'goods', wall: '#eef6ee', roof: '#2f9a4a', sign: { text: 'ドラッグストア', bg: '#2f9a4a', color: '#ffffff' }, text: ['ドラッグストアだ。', '店先のワゴンに、観光客が群がっている。\n「お一人さま5個まで」の札。'] }),
+    SHOP(29, 8, 'A', { name: '靴屋', kind: 'shop', display: 'clothes', wall: '#f2ece0', roof: '#3b3f48', sign: { text: 'シューズ', bg: '#ffffff', color: '#20232a' }, text: ['靴屋だ。', '「歩きやすさ日本一」…と書いてある。\nほんまかいな。'] }),
+    SHOP(43, 7, 'A', { name: '洋食 ドット軒', kind: 'restaurant', wall: '#fbf3e4', roof: '#c0392b', sign: { text: '洋食 ドット軒', bg: '#ffffff', color: '#c0392b' }, text: ['老舗の洋食屋だ。', '名物は、ソースたっぷりのオムライス。\nお昼どきは行列ができるらしい。'] }),
+    SHOP(51, 8, 'A', { name: '豚まんの店', kind: 'small', wall: '#fff3e0', roof: '#d62f2f', sign: { text: '豚まん', bg: '#d62f2f', color: '#ffffff' }, text: ['豚まんの店だ。', 'せいろから、湯気がもくもく…。\nおみやげに買っていく人が多いらしい。'] }),
+    SHOP(64, 12, 'A', { name: 'ドット千日前劇場', kind: 'theater', wall: '#f6e7c8', roof: '#2a3a7a', sign: { text: 'ドット千日前劇場', bg: '#20232a', color: '#ffd23f' }, text: ['千日前の演芸の劇場だ。', '漫才、コント、落語、新喜劇の若手公演…。\n入口の出番表には、知らない名前もたくさん。'] }),
+    SHOP(77, 6, 'A', { name: 'お好み焼き', kind: 'small', wall: '#f6e7c8', roof: '#2a3a7a', sign: { text: 'お好み焼き', bg: '#2a3a7a', color: '#ffffff' }, text: ['お好み焼き屋だ。', '鉄板の上で、ソースがじゅうじゅう…。\n「ねぎ焼き」もあるらしい。'] }),
+    SHOP(84, 4, 'A', { name: '古本屋', kind: 'bookstore', sign: { text: '古本', bg: '#ffffff', color: '#2a3a7a' }, text: ['古本屋だ。', '昔の演芸雑誌や、劇場のパンフレットが\n一冊百円で売られている。'] }),
+    // ---- row B (doors on row 37, fronts on the back lane)
+    SHOP(2, 7, 'B', { name: '金券ショップ', kind: 'shop', display: 'goods', wall: '#fff6e0', roof: '#ffd23f', sign: { text: '金券', bg: '#ffd23f', color: '#d62f2f' }, text: ['金券ショップだ。', '新幹線の回数券に、劇場のチケット…。\n少しだけ安く買えるらしい。'] }),
+    SHOP(10, 7, 'B', { name: 'たこ焼き 千日前', kind: 'small', wall: '#f6e7c8', roof: '#ff8a3d', sign: { text: 'たこ焼き', bg: '#ff8a3d', color: '#ffffff' }, text: ['もう一軒のたこ焼き屋だ。', 'ここは「ねぎポン酢」が名物らしい。\n…今日は売り切れ。'] }),
+    SHOP(21, 6, 'B', { name: '串カツ屋', kind: 'small', wall: '#fff3e0', roof: '#8a5a33', sign: { text: '串カツ', bg: '#ffd23f', color: '#20232a' }, text: '「ソースの二度づけ禁止」の貼り紙がある。開店はまだみたいだ。' }),
+    SHOP(28, 9, 'B', { name: 'ドット千日前ホール', kind: 'karaoke', sign: { text: 'お笑いライブ', bg: '#20232a', color: '#ffd23f' }, neon: '#ffd23f', text: ['地下のお笑いライブハウスだ。', '黒板に「本日 若手ネタバトル 18時〜」。\n出番待ちの芸人が、階段に座りこんでいる。'] }),
+    SHOP(43, 7, 'B', { name: '100円ショップ', kind: 'shop', display: 'goods', wall: '#f6f6f8', roof: '#d62f2f', sign: { text: '100円', bg: '#d62f2f', color: '#ffffff' }, text: ['100円ショップだ。', 'コントの小道具は、ここでそろえる芸人も多いらしい。'] }),
+    SHOP(51, 8, 'B', { name: 'ホビーショップ', kind: 'shop', display: 'goods', wall: '#eef0f6', roof: '#5a4fa0', sign: { text: 'ホビー', bg: '#5a4fa0', color: '#ffffff' }, text: ['ホビーショップだ。', 'プラモデルにフィギュア、レトロゲーム…。\nガラスケースの前で、大人が真剣な顔をしている。'] }),
+    SHOP(64, 6, 'B', { name: '居酒屋 ほろ酔い亭', kind: 'small', wall: '#f4e6cc', roof: '#3a2a20', sign: { text: '居酒屋', bg: '#2a3a7a', color: '#ffffff' }, text: ['居酒屋だ。', '「どて焼き」「土手煮」…\nにぎやかな笑い声が聞こえる。'] }),
+    SHOP(71, 6, 'B', { name: '寿司 ドット', kind: 'small', wall: '#f6f2e8', roof: '#3a3a40', sign: { text: '寿司', bg: '#ffffff', color: '#20232a' }, text: ['立ち食い寿司の店だ。', '「本日のおすすめ：トロ・はまち・穴子」'] }),
+    SHOP(78, 9, 'B', { name: 'ビジネスホテル', kind: 'hotel', rise: 1, wall: '#e8e4dc', roof: '#4a5568', sign: { text: 'HOTEL ミナミ', bg: '#1d2a5e', color: '#ffffff' }, text: ['ビジネスホテルだ。', '「本日満室」の札が出ている。\n泊まるなら、川の北のドットホテルへ。'] }),
+    // ---- signs, the arch, the taxi stand
+    arch(38, BAND, '戎橋筋'),
+    { type: 'sign', x: 38, y: BAND, solid: true, text: ['「戎橋筋」のアーチだ。', 'ことぶき橋から南へ、なんば駅までまっすぐの\nアーケードの商店街。'] },
+    { type: 'sign', x: 42, y: BAND, solid: true, text: ['アーチの柱に、案内図が貼ってある。', '【戎橋筋】南へまっすぐ なんば駅\n【千日前通り】西：タクシー乗り場・純喫茶・古着\n東：洋食・豚まん・千日前の劇場・お好み焼き'] },
+    { type: 'sign', x: 59, y: 30, text: ['「千日前」の道しるべ。', '↑ 川を渡って、テレビ局通り（MBS毎日放送・関西テレビ）\n→ ドット千日前劇場　↓ 駅前・ゲームセンター'] },
+    taxi(23, 30, '#2f6fd0', { text: 'タクシーが客待ちをしている。\nここは、千日前通りのタクシー乗り場だ。' }),
+    { type: 'sign', x: 26, y: 30, solid: true, text: ['タクシー乗り場', '南：戎橋筋をまっすぐ なんば駅（電車・新幹線のりかえ）\n北：にし橋をわたって NSC大阪校・ドット劇場・よしもと新喜劇 劇場'] },
+    // ---- people
+    { type: 'npc', id: 'nw_taxi', x: 25, y: 31, dir: 'left', look: { ...LOOKS.guard, hat: '#2f6fd0' }, name: 'タクシー運転手',
+      text: ['まいど！ どこまで行きはります？', '…あ、歩いて行けるとこやったら、歩いたほうが安いで。'] },
+    { type: 'npc', id: 'nb_yobikomi', x: 41, y: 32, dir: 'left', look: { ...LOOKS.staff, top: '#ffd23f', hat: '#d62f2f' }, name: '呼び込みのお兄さん', fixedDir: true,
+      text: ['らっしゃい、らっしゃい！ 戎橋筋の名物やでー！', 'このアーケード、川からなんば駅まで一直線や。\n雨の日でも、傘いらずで行けるんやで。'] },
+    { type: 'npc', id: 'nb_flyer', x: 33, y: 38, dir: 'up', look: { ...LOOKS.comedian2, top: '#ff7eb6' }, name: 'チラシ配りの芸人',
+      text: ['今夜、ドット千日前ホールでネタバトルやってまーす！', '五百円で、若手が十組！\nウケへんかったら…それも見どころです！'] },
+    { type: 'npc', id: 'nb_tourist', x: 47, y: 30, dir: 'down', look: { ...LOOKS.tourist, top: '#8fd0ff' }, name: '観光客', wander: 3,
+      text: ['豚まんとたこ焼きと串カツ、どれから食べよう？', '大阪は「食い倒れ」の街なんだって！'] },
+    { type: 'npc', id: 'nb_obachan2', x: 15, y: 30, dir: 'right', look: { ...LOOKS.oldwoman, top: '#ffd23f', hairColor: 'purple' }, name: '買い物中のおばちゃん', wander: 2,
+      text: ['あんた、ええ顔してるなあ！ 芸人さん？', 'ちゃうの？ ほな、これからなったらええやん！'] },
+    { type: 'npc', id: 'nb_geki_fan', x: 70, y: 30, dir: 'up', look: { ...LOOKS.fan, top: '#ffa860' }, name: 'お笑いファン',
+      text: ['千日前の劇場は、若手の登竜門なんやで。', 'ここでウケた子は、ほんまに売れていくんよ。'] },
+    { type: 'npc', id: 'nb_park', x: 97, y: 32, dir: 'down', look: { ...LOOKS.oldman, top: '#2f6b4f' }, name: '散歩のおじいさん', wander: 2,
+      text: ['ここの公園、春は桜がきれいでなあ。', '川の向こうはテレビ局。\nこっちは千日前。…大阪の真ん中やで。'] },
+  ];
+}
+
 // Door fronts, the start and the map app's arrival: where a game that has never been here
 // since the town grew arrives (a player standing anywhere else is on an old save's spot).
 function arrivals(m) {
@@ -297,11 +385,16 @@ function arrivals(m) {
 }
 // A ?test=1 start is a fresh game placed on today's coordinates.
 const testStart = () => { try { return /[?&]test=/.test(window.location.search); } catch (e) { return false; } };
+// flags.map_namba: 2 = moved east by OX (the west part), 3 = also moved south by DS (the band, R9-A).
 async function nambaEnter(g) {
   const m = g.map, p = m && m.player;
-  if (p && g.state && g.state.flags && g.flag('map_namba') !== 2) {
-    if (!testStart() && !arrivals(m).has(`${p.x},${p.y}`) && p.x + OX < NAMBA_W - 1) Object.assign(p, { x: p.x + OX, px: (p.x + OX) * TILE, tx: p.x + OX });
-    g.setFlag('map_namba', 2);
+  const v = Number(g.state && g.state.flags && g.flag('map_namba')) || 0;
+  if (p && g.state && g.state.flags && v < 3) {
+    if (!testStart() && !arrivals(m).has(`${p.x},${p.y}`)) {
+      if (v < 2 && p.x + OX < NAMBA_W - 1) Object.assign(p, { x: p.x + OX, px: (p.x + OX) * TILE, tx: p.x + OX });
+      if (p.y >= BAND && p.y + DS < NAMBA_H - 1) Object.assign(p, { y: p.y + DS, py: (p.y + DS) * TILE, ty: p.y + DS });
+    }
+    g.setFlag('map_namba', 3);
     if (typeof m.updateCamera === 'function') m.updateCamera(true);
   }
   unstick(g);
@@ -312,7 +405,7 @@ registerPlace({
   name: 'なんばエリア（大阪）',
   kind: 'town',
   bgm: 'osaka',
-  start: { room: 'main', x: 22 + OX, y: 30, dir: 'down' },
+  start: { room: 'main', x: EKI.x, y: EKI.y, dir: 'down' }, // in front of なんば駅
   rooms: {
     main: { generate, bg: '#a9adb7', onEnter: nambaEnter },
   },

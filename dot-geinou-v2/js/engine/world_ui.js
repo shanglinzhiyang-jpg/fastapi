@@ -25,6 +25,7 @@ import { phoneList, phoneInfo, appTile } from './phone.js';
 import { K, R, T, num, safe, has, sfx, n0, fit, jwrap, para, panel, gauge, relColor, relText, bar, sparkline, icon, chip } from './world_uikit.js';
 import { MAP, MODES, VIEWS, grid, project, drawMapView } from './world_ui_map.js';
 import { makeMore } from './world_ui_more.js';
+import { SubScreen, subScreenWanted } from './world_ui_sub.js';
 void fit; void gauge; void chip;
 // troops given in 千人 → 「約1.6万人」 / 「約8,000人」
 const troops = (k) => (num(k) >= 10 ? `約${(Math.round(num(k)) / 10).toFixed(1).replace(/\.0$/, '')}万人` : `約${n0(num(k) * 1000)}人`);
@@ -894,12 +895,31 @@ async function actionsMenu(ui, target, title = null) {
     const list = safe(() => g.diplomacyActions(target), []) || [];
     if (!list.length) { await ui.info(title || '外交', ['この相手に使える手段はない。']); return; }
     const nm = title || (ui.data.rows[target] || {}).name || '';
-    const k = await ui.pick({ title: `${nm}：外交の手段`, items: list.map((a) => ({ label: a.name, sub: a.why ? `🔒 ${a.why}` : a.lines[0] || a.desc, right: a.why ? '🔒' : a.odds != null ? `${Math.round(a.odds * 100)}%` : '○', lock: a.why })), w: 520 });
-    if (k == null || k < 0) return;
+    // [R9-E] a country: the full information first (treaties, alliances, the dispute with both positions)
+    const isCountry = !!(ui.data.rows[target] && typeof target === 'string' && !/^[ck]:/.test(target));
+    const head = isCountry ? [{ label: 'くわしい情報（条約・同盟・領土問題）', sub: '日本との条約・協定、同盟、加盟する機関、領土問題の双方の立場', right: 'ⓘ' }] : [];
+    const k0 = await ui.pick({ title: `${nm}：外交の手段`, items: [...head, ...list.map((a) => ({ label: a.name, sub: a.why ? `🔒 ${a.why}` : a.lines[0] || a.desc, right: a.why ? '🔒' : a.odds != null ? `${Math.round(a.odds * 100)}%` : '○', lock: a.why }))], w: 520 });
+    if (k0 == null || k0 < 0) return;
+    if (isCountry && k0 === 0) { await countryInfoModal(ui, target); continue; }
+    const k = k0 - head.length;
     const a = list[k];
     await diploFlow(ui, a.id, target);
     ui.dirty();
   }
+}
+async function countryInfoModal(ui, id) {
+  const det = ui.detail(id);
+  if (!det) return;
+  const lines = [`${det.leader}・${det.gov || ''}`, `日本との関係 ${det.relation}（${det.relLabel}）・陣営：${det.blocName}・国交：${det.tiesLabel}`];
+  if (det.real) lines.push(`GDP 約${det.gdp}兆ドル（目安）・軍事力 ${det.mil}・日本の貿易の約${det.trade}%`);
+  if (det.member && det.member.length) lines.push(`加盟：${det.member.join('・')}`);
+  if (det.nuclear) lines.push(det.nuclear);
+  if (det.alliances && det.alliances.length) lines.push(`同盟・協力：${det.alliances.join('・')}`);
+  if (det.treaties && det.treaties.length) lines.push(`日本との条約・協定：${det.treaties.join('、')}`);
+  if (det.conflicts && det.conflicts.length) lines.push(`紛争：${det.conflicts.join('・')}`);
+  if (det.note) lines.push('', det.note);
+  if (det.dispute) lines.push('', `【${det.dispute.name}】`, ...det.dispute.lines);
+  await ui.info(det.name, lines, { w: 560 });
 }
 async function pickCountry(ui, title, opts = {}) {
   const d = ui.data;
@@ -984,25 +1004,35 @@ function bindTap(g) {
   }, { passive: true });
 }
 const inR = (x, y, r) => r && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+// [R9-E] the big-text layout (portrait phones by default; a header chip switches it anywhere): one pane at a time,
+// 16 px rows, the detail page scaled ×1.66 with ↑↓ scrolling, modals scaled to the screen
+const BIG = { head: 26, tabY: 27, tabH: 28, body: { x: 0, y: 58, w: SW, h: 272 }, footY: 332 };
+const BIGZ = (SW - 8) / DETAIL.w;
+const BIG_VIEWS = [{ id: 'sel', label: '選んだ国', z: 2.4 }, ...VIEWS];
 class WorldScene {
   constructor(g, opts, resolve) {
-    Object.assign(this, { g, resolve, hd: true, opaque: true, hidesHud: true, isWorldUI: true, t: 0, focus: opts && opts.tab ? 'body' : 'tabs', tabIdx: tabIndex(opts && opts.tab), lists: {}, modals: [], toasts: [], busy: 0, data: null, dataT: -999, mode: 'relation', tapAt: null, closed: false, tick: 0, mapCv: null, mapKey: '', details: {} });
+    Object.assign(this, { g, resolve, hd: true, opaque: true, hidesHud: true, isWorldUI: true, t: 0, focus: opts && opts.tab ? 'body' : 'tabs', tabIdx: tabIndex(opts && opts.tab), lists: {}, modals: [], toasts: [], busy: 0, data: null, dataT: -999, mode: 'relation', tapAt: null, closed: false, tick: 0, mapCv: null, mapKey: '', details: {}, _memo: {}, mapView: (opts && opts.view) || 'world', bigView: 'sel', pane: 'list', scrollY: 0, tlFilter: 0, mapPts: null });
     bindTap(g);
     this.refresh(true);
     const w = this.data && this.data.w;
     this.sel = (opts && opts.sel) || (this.data && this.data.war && this.data.war.enemy) || (w && w.countries.find((c) => c.id === 'us') ? 'us' : w && w.countries[0] ? w.countries[0].id : null);
   }
   get tab() { return TABS[this.tabIdx]; }
+  get big() { const p = this.bigPref(); return p == null ? portraitView() : !!p; }
+  bigPref() { try { const f = this.g.state.world.flags; return f && f.uiBig != null ? f.uiBig : null; } catch (e) { return null; } }
+  setBig(v) { try { this.g.state.world.flags.uiBig = !!v; } catch (e) { /* no state */ } this.pane = 'list'; this.scrollY = 0; sfx('cursor'); }
   mapStamp() { return `${this.mode}|${this.dataT}|${Math.floor(this.t / 20) % 2}`; }
   ls(id = this.tab.id) { return this.lists[id] || (this.lists[id] = { i: 1, top: 0 }); }
   rows() { return this._rows || []; }
   curRow() { const r = this.rows(); const st = this.ls(); return r[st.i] || null; }
   detail(id) { if (!this.details[id]) this.details[id] = safe(() => this.g.worldCountry(id), null); return this.details[id]; }
+  memo(key, fn) { if (!(key in this._memo)) this._memo[key] = safe(fn, null); return this._memo[key]; }
   refresh(force = false) {
     if (!force && this.t - this.dataT < 45 && this.data) return;
     this.dataT = this.t;
     this.data = loadData(this);
     this.details = {};
+    this._memo = {};
     this._rows = this.data.ok ? safe(() => this.tab.rows(this), []) || [] : [];
     const st = this.ls();
     if (st.i >= this._rows.length) st.i = Math.max(0, this._rows.length - 1);
@@ -1010,7 +1040,22 @@ class WorldScene {
     if (st.i < 0) st.i = 0;
   }
   dirty() { this.dataT = -999; }
-  setTab(i) { this.tabIdx = (i + TABS.length) % TABS.length; this.refresh(true); }
+  setTab(i) { this.tabIdx = (i + TABS.length) % TABS.length; this.pane = 'list'; this.scrollY = 0; this.refresh(true); }
+  gotoCountry(id) {
+    this.setTab(TABS.indexOf(TAB_COUNTRIES));
+    const j = this.rows().findIndex((r) => r.key === id);
+    if (j >= 0) this.ls().i = j;
+    this.focus = 'body';
+    if (this.big) this.pane = 'detail';
+  }
+  moveRow(dir) {
+    const rows = this.rows();
+    const st = this.ls();
+    let j = st.i;
+    do { j += dir; } while (j >= 0 && j < rows.length && rows[j].header);
+    if (j >= 0 && j < rows.length) { st.i = j; sfx('cursor'); return true; }
+    return false;
+  }
   update(g) {
     this.t++;
     for (const t of this.toasts) t.t++;
@@ -1020,38 +1065,49 @@ class WorldScene {
     this.tapAt = null;
     if (this.t < 3) return;
     const m = this.modals[this.modals.length - 1];
-    if (m) { if (tap) m.tap(this, tap, inp); m.update(this, inp); return; }
+    if (m) { if (tap) m.tap(this, this.unscaleTap(tap, m), inp); m.update(this, inp); return; }
     if (this.busy > 0) return;
     this.refresh();
-    if (tap && this.handleTap(tap, inp)) return;
+    if (tap && (this.big ? this.handleTapBig(tap, inp) : this.handleTap(tap, inp))) return;
     if (inp.pressed('menu')) { sfx('cancel'); this.close(); return; }
     if (this.focus === 'tabs') {
       if (inp.repeat('left')) { this.setTab(this.tabIdx - 1); sfx('cursor'); }
       else if (inp.repeat('right')) { this.setTab(this.tabIdx + 1); sfx('cursor'); }
-      else if (inp.pressed('down') || inp.pressed('a')) { this.focus = 'body'; sfx('cursor'); }
+      else if (inp.pressed('down') || inp.pressed('a')) { this.focus = 'body'; this.pane = 'list'; sfx('cursor'); }
       else if (inp.pressed('b')) { sfx('cancel'); this.close(); }
       return;
     }
-    if (inp.pressed('b')) { this.focus = 'tabs'; sfx('cancel'); return; }
+    if (inp.pressed('b')) { sfx('cancel'); if (this.big && this.pane === 'detail' && this.tab.id !== 'map') { this.pane = 'list'; this.scrollY = 0; return; } this.focus = 'tabs'; return; }
     if (this.tab.id === 'map') { this.updateMap(inp); return; }
-    const rows = this.rows();
-    const st = this.ls();
+    if (this.big && this.pane === 'detail') {
+      const maxS = Math.max(0, DETAIL.h * BIGZ - BIG.body.h + 8);
+      if (inp.repeat('up')) { if (this.scrollY > 0) { this.scrollY = Math.max(0, this.scrollY - 40); sfx('cursor'); } return; }
+      if (inp.repeat('down')) { if (this.scrollY < maxS) { this.scrollY = Math.min(maxS, this.scrollY + 40); sfx('cursor'); } return; }
+      if (inp.repeat('left')) { if (this.moveRow(-1)) this.scrollY = 0; return; }
+      if (inp.repeat('right')) { if (this.moveRow(1)) this.scrollY = 0; return; }
+      if (inp.pressed('a')) { const r = this.curRow(); if (r && !r.header && this.tab.act) { sfx('ok'); this.act(() => this.tab.act(this, r)); } }
+      return;
+    }
     for (const dir of ['up', 'down']) {
       if (!inp.repeat(dir)) continue;
-      let j = st.i;
-      do { j += dir === 'up' ? -1 : 1; } while (j >= 0 && j < rows.length && rows[j].header);
-      if (j >= 0 && j < rows.length) { st.i = j; sfx('cursor'); } else if (dir === 'up') { this.focus = 'tabs'; sfx('cursor'); }
+      if (!this.moveRow(dir === 'up' ? -1 : 1) && dir === 'up') { this.focus = 'tabs'; sfx('cursor'); }
       return;
     }
     if (inp.repeat('left')) { this.setTab(this.tabIdx - 1); sfx('cursor'); return; }
     if (inp.repeat('right')) { this.setTab(this.tabIdx + 1); sfx('cursor'); return; }
-    if (inp.pressed('a')) { const r = this.curRow(); if (r && !r.header && this.tab.act) { sfx('ok'); this.act(() => this.tab.act(this, r)); } }
+    if (inp.pressed('a')) {
+      const r = this.curRow();
+      if (!r || r.header) return;
+      if (this.big && !this.subActive()) { sfx('ok'); this.pane = 'detail'; this.scrollY = 0; return; }
+      if (this.tab.act) { sfx('ok'); this.act(() => this.tab.act(this, r)); }
+    }
   }
   updateMap(inp) {
     const d = this.data;
     if (!d || !d.ok) return;
-    const pts = [...d.markers, ...insetPts(d.w.fictional)];
+    const pts = this.mapPts && this.mapPts.length ? this.mapPts : [...d.markers, ...insetPts(d.w.fictional)];
     const cur = pts.find((p) => p.id === this.sel) || pts[0];
+    if (!cur) return;
     for (const [dir, dx, dy] of [['left', -1, 0], ['right', 1, 0], ['up', 0, -1], ['down', 0, 1]]) {
       if (!inp.repeat(dir)) continue;
       let best = null, bs = Infinity;
@@ -1072,23 +1128,33 @@ class WorldScene {
   async mapMenu() {
     const row = this.data.rows[this.sel];
     if (!row) return;
-    const k = await this.pick({ title: row.name, items: [{ label: 'くわしく見る', sub: '国々のページ' }, { label: '外交の手段', sub: '首脳会談・条約・制裁・援助…' }, { label: `地図の色：${MODES.find((x) => x.id === this.mode).label} → ${MODES[(MODES.findIndex((x) => x.id === this.mode) + 1) % MODES.length].label}`, sub: '関係・陣営・同盟を切りかえる' }, { label: 'もどる' }] });
-    if (k === 0) { const i = TABS.indexOf(TAB_COUNTRIES); this.setTab(i); const rows = this.rows(); const j = rows.findIndex((r) => r.key === this.sel); if (j >= 0) this.ls().i = j; this.focus = 'body'; }
+    const VV = this.big ? BIG_VIEWS : VIEWS;
+    const vKey = this.big ? 'bigView' : 'mapView';
+    const vi = Math.max(0, VV.findIndex((v) => v.id === (this[vKey] || VV[0].id)));
+    const nextV = VV[(vi + 1) % VV.length];
+    const k = await this.pick({ title: row.name, items: [{ label: 'くわしく見る', sub: '国々のページ（関係の推移・できること）' }, { label: '外交の手段', sub: '首脳会談・条約・制裁・援助…' }, { label: `地図の範囲：${VV[vi].label} → ${nextV.label}`, sub: '世界・東アジア・東南アジア・中東・欧州' }, { label: `地図の色：${MODES.find((x) => x.id === this.mode).label} → ${MODES[(MODES.findIndex((x) => x.id === this.mode) + 1) % MODES.length].label}`, sub: '関係・陣営・同盟を切りかえる' }, { label: 'もどる' }] });
+    if (k === 0) this.gotoCountry(this.sel);
     else if (k === 1) await actionsMenu(this, this.sel);
-    else if (k === 2) { this.mode = MODES[(MODES.findIndex((x) => x.id === this.mode) + 1) % MODES.length].id; this.mapKey = ''; }
+    else if (k === 2) this[vKey] = nextV.id;
+    else if (k === 3) { this.mode = MODES[(MODES.findIndex((x) => x.id === this.mode) + 1) % MODES.length].id; this.mapKey = ''; }
+  }
+  tapMap(x, y, now) {
+    for (const ch of this.chips || []) if (inR(x, y, ch)) { now.a = false; if (ch.view) { if (this.big) this.bigView = ch.view; else this.mapView = ch.view; } else { this.mode = ch.id; this.mapKey = ''; } sfx('cursor'); return true; }
+    const pts = this.mapPts || [];
+    let best = null, bd = this.big ? 22 : 14;
+    for (const p of pts) { const dd = Math.hypot(p.x - x, p.y - y); if (dd < bd) { bd = dd; best = p; } }
+    if (best) { this.focus = 'body'; if (this.sel !== best.id) { this.sel = best.id; now.a = false; sfx('cursor'); } return !now.a; }
+    return null;
   }
   handleTap(tap, inp) {
     const now = inp.pressedNow || {};
     const { x, y } = tap;
     if (inR(x, y, { x: SW - 22, y: 0, w: 22, h: 20 })) { now.a = false; sfx('cancel'); this.close(); return true; }
+    if (inR(x, y, this.bigRect)) { now.a = false; this.setBig(true); return true; }
     for (let i = 0; i < TABS.length; i++) if (inR(x, y, this.tabRects && this.tabRects[i])) { now.a = false; this.focus = 'tabs'; if (i !== this.tabIdx) { this.setTab(i); sfx('cursor'); } return true; }
     if (this.tab.id === 'map') {
-      for (const ch of this.chips || []) if (inR(x, y, ch)) { now.a = false; this.mode = ch.id; this.mapKey = ''; sfx('cursor'); return true; }
-      const d = this.data;
-      const pts = [...d.markers, ...insetPts(d.w.fictional)];
-      let best = null, bd = 14;
-      for (const p of pts) { const dd = Math.hypot(p.x - x, p.y - y); if (dd < bd) { bd = dd; best = p; } }
-      if (best) { this.focus = 'body'; if (this.sel !== best.id) { this.sel = best.id; now.a = false; sfx('cursor'); } return !now.a; }
+      const r = this.tapMap(x, y, now);
+      if (r != null) return r;
       if (y < 256) { now.a = false; return true; }
       return false;
     }
@@ -1097,10 +1163,36 @@ class WorldScene {
       const rows = this.rows();
       const st = this.ls();
       const j = (st.top || 0) + Math.floor((y - L.y - 2) / L.rh);
-      if (j >= 0 && j < rows.length && !rows[j].header) { this.focus = 'body'; if (j !== st.i) { st.i = j; now.a = false; sfx('cursor'); return true; } return false; }
+      if (j >= 0 && j < rows.length && !rows[j].header && j < (st.top || 0) + L.n) { this.focus = 'body'; if (j !== st.i) { st.i = j; now.a = false; sfx('cursor'); return true; } return false; }
       now.a = false; return true;
     }
     now.a = false;
+    return true;
+  }
+  handleTapBig(tap, inp) {
+    const now = inp.pressedNow || {};
+    const { x, y } = tap;
+    now.a = false;
+    if (inR(x, y, this.closeRect)) { sfx('cancel'); this.close(); return true; }
+    if (inR(x, y, this.bigRect)) { this.setBig(false); return true; }
+    for (let i = 0; i < TABS.length; i++) if (inR(x, y, this.tabRects && this.tabRects[i])) { this.focus = 'body'; this.pane = 'list'; if (i !== this.tabIdx) { this.setTab(i); sfx('cursor'); } return true; }
+    if (inR(x, y, this.backRect)) { this.pane = 'list'; this.scrollY = 0; sfx('cancel'); return true; }
+    if (this.tab.id === 'map') { const r = this.tapMap(x, y, now); if (r === false) { now.a = true; return false; } return true; }
+    if (this.pane === 'detail') {
+      const B = BIG.body;
+      const maxS = Math.max(0, DETAIL.h * BIGZ - B.h + 8);
+      if (y < B.y + B.h / 3) this.scrollY = Math.max(0, this.scrollY - 60);
+      else if (y > B.y + (B.h * 2) / 3) this.scrollY = Math.min(maxS, this.scrollY + 60);
+      return true;
+    }
+    const L = this.listRect;
+    if (L && inR(x, y, L)) {
+      const rows = this.rows();
+      const st = this.ls();
+      const j = (st.top || 0) + Math.floor((y - L.y - 2) / L.rh);
+      if (j >= 0 && j < rows.length && !rows[j].header && j < (st.top || 0) + L.n) { this.focus = 'body'; if (j !== st.i) { st.i = j; sfx('cursor'); } else if (this.subActive()) { if (this.tab.act) { sfx('ok'); this.act(() => this.tab.act(this, rows[j])); } } else { this.pane = 'detail'; this.scrollY = 0; sfx('ok'); } }
+      return true;
+    }
     return true;
   }
   async act(fn) { this.busy++; try { return await fn(); } catch (e) { console.error(e); return null; } finally { this.busy--; this.g.input.consume(); this.dirty(); } }
@@ -1121,50 +1213,205 @@ class WorldScene {
     const life = has(this.g, 'regimeLifeOver') ? safe(() => this.g.regimeLifeOver(), null) : null;
     if (life || (this.g.state && this.g.state.regime && this.g.state.regime.id === 'fallen')) this.close();
   }
+  // [R9-E] the bottom screen of a portrait phone (world_ui_sub.js)
+  subActive() { return !!(this.sub && this.sub.box && this.sub.el.style.display === 'block'); }
+  subTap() {
+    if (this.closed || this.modals.length || this.busy > 0 || this.g.top !== this) return;
+    if (this.focus === 'tabs') { this.focus = 'body'; sfx('cursor'); return; }
+    if (this.tab.id === 'map') { if (this.sel) { sfx('ok'); this.act(() => this.mapMenu()); } return; }
+    const r = this.curRow();
+    if (r && !r.header && this.tab.act) { sfx('ok'); this.act(() => this.tab.act(this, r)); }
+  }
+  drawSub(c, b) {
+    const { w, h, dpr } = b;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    R(c, 0, 0, w, h, K.bg);
+    T(c, '▼ くわしく', 8, 4, 13, K.amber);
+    T(c, this.tab.id === 'map' ? 'タップ：この国のメニュー' : 'タップ／A：決定', w - 8, 5, 12, K.dim, 'right');
+    const z = Math.min((w - 8) / DETAIL.w, (h - 26) / DETAIL.h);
+    const ox = Math.round((w - DETAIL.w * z) / 2);
+    c.setTransform(dpr * z, 0, 0, dpr * z, dpr * (ox - DETAIL.x * z), dpr * (22 - DETAIL.y * z));
+    this.noList = true;
+    try {
+      if (this.tab.id === 'map') { if (this.sel) MORE.drawCountryDetail(this, c, this.sel); }
+      else this.tab.draw(this, c);
+    } catch (e) { console.error(e); } finally { this.noList = false; }
+  }
   close() {
     if (this.closed) return;
     this.closed = true;
+    if (this.sub) { this.sub.destroy(); this.sub = null; }
     for (const m of this.modals.splice(0)) m._res(null);
     this.g.pop(this);
     this.resolve(null);
   }
+  // modals: scaled up in the big layout (z kept on the modal for the taps)
+  modalZ(m) { if (!this.big || !m.box) return 1; return clamp(Math.min(1.45, (SW - 6) / m.box.w, (SH - 6) / m.box.h), 1, 1.45); }
+  unscaleTap(tap, m) { const z = m._z || 1; return z === 1 ? tap : { x: (tap.x - SW / 2) / z + SW / 2, y: (tap.y - SH / 2) / z + SH / 2 }; }
+  drawModals(c) {
+    for (const m of this.modals) {
+      R(c, 0, 0, SW, SH, 'rgba(0,0,0,0.45)');
+      const z = (m._z = this.modalZ(m));
+      if (z === 1) { m.draw(this, c); continue; }
+      c.save(); c.translate(SW / 2, SH / 2); c.scale(z, z); c.translate(-SW / 2, -SH / 2);
+      m.draw(this, c);
+      c.restore();
+    }
+  }
   draw(c, g) {
+    void g;
     R(c, 0, 0, SW, SH, K.bg);
+    const d = this.data;
+    if (!d || !d.ok) { T(c, '世界情勢', 8, 3, 12, K.amber); T(c, '世界情勢の仕組み（world.js）が読み込まれていない', 20, 60, 12, K.dim); return; }
+    if (this.big) this.drawBig(c); else this.drawNormal(c);
+    if (subScreenWanted() && typeof document !== 'undefined') { if (!this.sub) this.sub = new SubScreen(this); this.sub.render((c2, b) => this.drawSub(c2, b)); }
+    const ts = this.big ? 16 : 12;
+    this.toasts.forEach((t, i) => { const w = Math.min(SW - 40, measure(c, t.text, ts) + 20); R(c, (SW - w) / 2, 300 - i * (ts + 10), w, ts + 8, 'rgba(0,0,0,0.85)'); T(c, t.text, SW / 2, 304 - i * (ts + 10), ts, t.color, 'center', w - 10); });
+    this.drawModals(c);
+  }
+  tensionColor() { const t = this.data.w.tension; return t >= 55 ? K.bad : t >= 35 ? K.warn : K.good; }
+  drawNormal(c) {
+    const d = this.data;
     // header
     R(c, 0, 0, SW, 20, K.head);
-    T(c, '世界情勢', 8, 3, 12, K.amber);
-    const d = this.data;
-    if (!d || !d.ok) { T(c, '世界情勢の仕組み（world.js）が読み込まれていない', 20, 60, 12, K.dim); return; }
-    T(c, `${d.w.date}　${d.role.label}`, 76, 4, 10, K.dim, 'left', 200);
-    const tl = `世界：${d.w.tensionLabel}・緊張${d.w.tension}`;
-    T(c, tl, SW - 30, 4, 10, d.w.tension >= 55 ? K.bad : d.w.tension >= 35 ? K.warn : K.good, 'right', 300);
+    icon(c, 'globe', 6, 5, 1, K.amber);
+    T(c, '世界情勢', 18, 3, 12, K.amber);
+    T(c, `${d.w.date}　${d.role.label}`, 82, 4, 10, K.dim, 'left', 190);
+    const tl = `${d.w.tensionLabel}・緊張${d.w.tension}`;
+    T(c, tl, SW - 100, 4, 10, this.tensionColor(), 'right', 300);
+    this.bigRect = { x: SW - 94, y: 2, w: 66, h: 16 };
+    R(c, this.bigRect.x, 2, this.bigRect.w, 16, '#16283e'); R(c, this.bigRect.x, 2, 2, 16, K.cyan);
+    T(c, '大きな文字', this.bigRect.x + 36, 4, 10, K.cyan, 'center', 60);
     T(c, '×', SW - 12, 3, 12, K.dim, 'center');
-    // tabs
+    // tabs (with icons)
     this.tabRects = [];
-    const tw = Math.floor(SW / TABS.length);
+    const tw = SW / TABS.length;
     TABS.forEach((tb, i) => {
-      const x = i * tw, on = i === this.tabIdx;
-      R(c, x + 1, 21, tw - 2, 18, on ? (this.focus === 'tabs' ? K.amber : K.panel2) : '#0a1424');
-      const alert = (tb.id === 'crisis' && (d.war || d.w.crises.some((k) => k.sev >= 2))) || (tb.id === 'diplomacy' && ((d.w.offers || []).length || (d.w.diplo && d.w.diplo.visits))) || (tb.id === 'trade' && d.w.trade && (d.w.trade.frictions || d.w.trade.deals));
-      T(c, tb.label, x + tw / 2, 24, 12, on && this.focus === 'tabs' ? '#1a1206' : on ? K.amber : K.text, 'center', tw - 8);
-      if (alert) R(c, x + tw - 9, 24, 4, 4, K.bad);
-      this.tabRects.push({ x, y: 20, w: tw, h: 20 });
+      const x = Math.round(i * tw), w = Math.round((i + 1) * tw) - x, on = i === this.tabIdx;
+      R(c, x + 1, 21, w - 2, 18, on ? (this.focus === 'tabs' ? K.amber : K.panel2) : '#0a1424');
+      if (on && this.focus !== 'tabs') R(c, x + 1, 37, w - 2, 2, K.amber);
+      const alert = this.tabAlert(tb);
+      const col = on && this.focus === 'tabs' ? K.ink : on ? K.amber : K.text;
+      const lw = measure(c, tb.label, 12);
+      const withIcon = tb.icon && lw + 14 <= w - 6;
+      const cx = x + w / 2 + (withIcon ? 6 : 0);
+      if (withIcon) icon(c, tb.icon, cx - lw / 2 - 12, 25, 1, on ? col : K.dim);
+      T(c, tb.label, cx, 24, 12, col, 'center', w - 6);
+      if (alert) R(c, x + w - 7, 23, 4, 4, K.bad);
+      this.tabRects.push({ x, y: 20, w, h: 20 });
     });
     try { this.tab.draw(this, c); } catch (e) { console.error(e); }
     // ticker
     R(c, 0, 336, SW, 24, '#050b14');
     R(c, 0, 336, SW, 1, K.edge);
     const news = d.w.news.slice(0, 8).map((n) => n.text).join('　　◆　　') || d.w.summits.slice(0, 3).map((s0) => `${s0.year}年${s0.month}月　${s0.name}${s0.hostName ? `（${s0.hostName}）` : ''}`).join('　　◆　　');
-    const tw2 = measure(c, news, 10) + 80;
+    const tw2 = measure(c, news, 12) + 80;
     const off = (this.t * 0.6) % Math.max(1, tw2);
     c.save(); c.beginPath(); c.rect(0, 337, 462, 22); c.clip();
-    T(c, news, 8 - off, 343, 10, K.text); T(c, news, 8 - off + tw2, 343, 10, K.text);
+    T(c, news, 8 - off, 341, 12, K.text); T(c, news, 8 - off + tw2, 341, 12, K.text);
     c.restore();
     R(c, 466, 338, 1, 20, K.edge);
     T(c, this.focus === 'tabs' ? '←→タブ　↓選ぶ　B閉じる' : this.tab.id === 'map' ? '十字で国を選ぶ　A決定　Bタブへ' : '↑↓選ぶ　←→タブ　A決定　B戻る', SW - 6, 343, 10, K.dim, 'right', 160);
-    // toasts and modals
-    this.toasts.forEach((t, i) => { const w = Math.min(SW - 40, measure(c, t.text, 12) + 20); R(c, (SW - w) / 2, 300 - i * 22, w, 20, 'rgba(0,0,0,0.85)'); T(c, t.text, SW / 2, 304 - i * 22, 12, t.color, 'center', w - 10); });
-    for (const m of this.modals) { R(c, 0, 0, SW, SH, 'rgba(0,0,0,0.45)'); m.draw(this, c); }
+  }
+  tabAlert(tb) {
+    const d = this.data;
+    return (tb.id === 'crisis' && (d.war || d.w.crises.some((k) => k.sev >= 2))) || (tb.id === 'diplomacy' && ((d.w.offers || []).length || (d.w.diplo && d.w.diplo.visits))) || (tb.id === 'trade' && d.w.trade && (d.w.trade.frictions || d.w.trade.deals));
+  }
+  drawBig(c) {
+    const d = this.data;
+    // header
+    R(c, 0, 0, SW, BIG.head, K.head);
+    T(c, '世界情勢', 8, 4, 16, K.amber);
+    T(c, d.w.date, 86, 6, 14, K.text);
+    T(c, `緊張${d.w.tension}`, 200, 6, 14, this.tensionColor());
+    this.bigRect = { x: SW - 148, y: 2, w: 104, h: 22 };
+    R(c, this.bigRect.x, 2, this.bigRect.w, 22, '#16283e'); R(c, this.bigRect.x, 2, 3, 22, K.cyan);
+    T(c, '文字を標準に', this.bigRect.x + 54, 5, 14, K.cyan, 'center', 96);
+    this.closeRect = { x: SW - 40, y: 0, w: 40, h: BIG.head };
+    T(c, '×', SW - 20, 3, 18, K.text, 'center');
+    // tabs: a strip that keeps the current tab in view
+    const ws = TABS.map((tb) => measure(c, tb.label, 14) + 34);
+    const xs = []; let acc = 0; for (const w of ws) { xs.push(acc); acc += w; }
+    const curC = xs[this.tabIdx] + ws[this.tabIdx] / 2;
+    const off = clamp(curC - SW / 2, 0, Math.max(0, acc - SW));
+    this.tabRects = [];
+    R(c, 0, BIG.tabY, SW, BIG.tabH, '#0a1424');
+    TABS.forEach((tb, i) => {
+      const x = xs[i] - off, w = ws[i], on = i === this.tabIdx;
+      if (x + w < 0 || x > SW) { this.tabRects.push(null); return; }
+      R(c, x + 1, BIG.tabY + 1, w - 2, BIG.tabH - 2, on ? (this.focus === 'tabs' ? K.amber : K.panel2) : '#0d1a2c');
+      if (on && this.focus !== 'tabs') R(c, x + 1, BIG.tabY + BIG.tabH - 3, w - 2, 3, K.amber);
+      const col = on && this.focus === 'tabs' ? K.ink : on ? K.amber : K.text;
+      if (tb.icon) icon(c, tb.icon, x + 8, BIG.tabY + 9, 1, on ? col : K.dim);
+      T(c, tb.label, x + 21, BIG.tabY + 6, 14, col);
+      if (this.tabAlert(tb)) R(c, x + w - 8, BIG.tabY + 4, 5, 5, K.bad);
+      this.tabRects.push({ x, y: BIG.tabY, w, h: BIG.tabH });
+    });
+    if (off > 0) { R(c, 0, BIG.tabY, 14, BIG.tabH, 'rgba(7,16,28,0.9)'); T(c, '◀', 2, BIG.tabY + 7, 12, K.dim); }
+    if (off < acc - SW - 1) { R(c, SW - 14, BIG.tabY, 14, BIG.tabH, 'rgba(7,16,28,0.9)'); T(c, '▶', SW - 12, BIG.tabY + 7, 12, K.dim); }
+    // body
+    const B = BIG.body;
+    this.backRect = null;
+    try {
+      if (this.tab.id === 'map') this.drawBigMap(c);
+      else if (this.pane === 'detail') {
+        c.save();
+        c.beginPath(); c.rect(B.x, B.y, B.w, B.h); c.clip();
+        c.translate(4 - DETAIL.x * BIGZ, B.y + 2 - DETAIL.y * BIGZ - this.scrollY);
+        c.scale(BIGZ, BIGZ);
+        this.noList = true;
+        try { this.tab.draw(this, c); } finally { this.noList = false; }
+        c.restore();
+        const maxS = Math.max(0, DETAIL.h * BIGZ - B.h + 8);
+        if (maxS > 0) { const h = Math.max(20, (B.h * B.h) / (B.h + maxS)); R(c, SW - 4, B.y + ((B.h - h) * this.scrollY) / maxS, 3, h, K.edgeHi); }
+      } else drawList(this, c, null);
+    } catch (e) { console.error(e); }
+    // footer
+    R(c, 0, BIG.footY, SW, SH - BIG.footY, K.head); R(c, 0, BIG.footY, SW, 1, K.edge);
+    let hint;
+    if (this.focus === 'tabs') hint = '←→ タブ　↓ えらぶ　B とじる';
+    else if (this.tab.id === 'map') hint = '十字 国をえらぶ　A メニュー　B タブへ';
+    else if (this.subActive()) hint = '↑↓ えらぶ　A 決定　←→ タブ（くわしくは下の画面）';
+    else if (this.pane === 'detail') {
+      this.backRect = { x: 0, y: BIG.footY, w: 92, h: SH - BIG.footY };
+      R(c, 2, BIG.footY + 3, 86, SH - BIG.footY - 6, '#16283e'); T(c, '◀ 一覧', 45, BIG.footY + 6, 14, K.text, 'center');
+      hint = '↑↓ スクロール　←→ 前後　A 決定';
+    } else hint = '↑↓ えらぶ　A くわしく　←→ タブ';
+    T(c, hint, SW - 8, BIG.footY + 6, 14, K.dim, 'right', this.backRect ? SW - 104 : SW - 16);
+  }
+  drawBigMap(c) {
+    const d = this.data;
+    const dest = { x: 0, y: BIG.body.y, w: SW, h: 176 };
+    const V = BIG_VIEWS.find((v) => v.id === this.bigView) || BIG_VIEWS[0];
+    const r = drawMapView(this, c, dest, V.id === 'sel' ? { id: 'sel', z: V.z } : V.id, { labels: V.id !== 'world', regions: V.id === 'world', icons: true });
+    this.mapPts = r.pts;
+    // the view chips (12 px)
+    this.chips = [];
+    let x = 3;
+    for (const v of BIG_VIEWS) {
+      const w = measure(c, v.label, 12) + 12, on = this.bigView === v.id;
+      if (x + w > SW - 4) break;
+      R(c, x, dest.y + 3, w, 18, on ? K.cyan : 'rgba(10,20,34,0.85)');
+      T(c, v.label, x + w / 2, dest.y + 6, 12, on ? K.ink : K.text, 'center');
+      this.chips.push({ x, y: dest.y + 3, w, h: 18, view: v.id });
+      x += w + 3;
+    }
+    // the selected country, in large type
+    const y = dest.y + dest.h + 2;
+    const row = this.sel && d.rows[this.sel];
+    R(c, 0, y, SW, BIG.footY - y, K.panel);
+    if (!row) return;
+    const det = this.detail(this.sel);
+    T(c, row.name, 8, y + 3, 16, K.amber, 'left', 300);
+    T(c, det ? det.leader : '', 8, y + 23, 12, K.dim, 'left', 300);
+    T(c, `${row.relation}`, SW - 150, y + 2, 24, relText(row.relation), 'right');
+    T(c, row.relLabel, SW - 144, y + 4, 14, relText(row.relation), 'left', 140);
+    T(c, '日本との関係', SW - 144, y + 21, 12, K.dim);
+    const chipsL = [row.war ? ['戦争中', K.bad, 'war'] : null, row.ally ? ['同盟・協力', K.blue, 'ally'] : null, row.sanction ? [`日本が制裁${row.sanction}`, '#ff9a5a', 'ban'] : null, row.onJapan ? [`日本に制裁${row.onJapan}`, K.bad, 'ban'] : null, !row.ties ? [`国交：${row.tiesLabel}`, K.lock, null] : null, det && det.dispute ? [det.dispute.name, K.warn, 'dispute'] : null].filter(Boolean);
+    let cx = 8;
+    for (const [lab, col, ic] of chipsL) { const w = chip(c, cx, y + 40, lab, col, { icon: ic, size: 12 }); cx += w + 5; if (cx > SW - 100) break; }
+    const issue = det && ((det.conflicts && det.conflicts.length ? `紛争：${det.conflicts.join('・')}` : '') || (d.w.crises.find((k) => k.country === row.id) || {}).title || det.note);
+    para(c, issue || '', 8, y + (chipsL.length ? 60 : 42), SW - 16, 12, K.text, 15, chipsL.length ? 1 : 2);
   }
 }
 // A modal: confirm (title, lines, choices) or pick (title, lines?, items[{ label, sub, right, rightColor, lock }]).
@@ -1183,8 +1430,11 @@ function modal(o) {
         else if (inp.pressed('b') || inp.pressed('menu')) { sfx('cancel'); ui.closeModal(m, -1); }
         return;
       }
-      if (inp.repeat('left') || inp.repeat('up')) { m.idx = (m.idx + n - 1) % n; sfx('cursor'); }
-      if (inp.repeat('right') || inp.repeat('down')) { m.idx = (m.idx + 1) % n; sfx('cursor'); }
+      // [R9-E] a long text scrolls with ↑↓ (the choices stay on ←→)
+      if (m.over && inp.repeat('up')) { if (m.scroll > 0) { m.scroll--; sfx('cursor'); } }
+      else if (m.over && inp.repeat('down')) { if (m.scroll < m.over) { m.scroll++; sfx('cursor'); } }
+      else if (inp.repeat('left') || inp.repeat('up')) { m.idx = (m.idx + n - 1) % n; sfx('cursor'); }
+      else if (inp.repeat('right') || inp.repeat('down')) { m.idx = (m.idx + 1) % n; sfx('cursor'); }
       if (inp.pressed('a')) { sfx('ok'); ui.closeModal(m, m.idx); }
       else if (inp.pressed('b') || inp.pressed('menu')) { sfx('cancel'); ui.closeModal(m, o.cancel != null ? o.cancel : (o.choices || ['OK']).length === 1 ? 0 : (o.choices || []).length - 1); }
     },
@@ -1192,6 +1442,7 @@ function modal(o) {
       const now = inp.pressedNow || {};
       now.a = false;
       for (let i = 0; i < (m.rects || []).length; i++) if (inR(tap.x, tap.y, m.rects[i])) { if (m.idx === i || o.kind === 'confirm') { m.idx = i; ui.closeModal(m, i); } else m.idx = i; return; }
+      if (m.over && inR(tap.x, tap.y, m.textRect)) { m.scroll = m.scroll >= m.over ? 0 : Math.min(m.over, m.scroll + 6); sfx('cursor'); return; }
       if (!inR(tap.x, tap.y, m.box)) ui.closeModal(m, o.kind === 'pick' ? -1 : o.cancel != null ? o.cancel : (o.choices || ['OK']).length - 1);
     },
     draw(ui, c) {
@@ -1202,16 +1453,21 @@ function modal(o) {
       const pick = o.kind === 'pick';
       const rh = 28;
       const maxRows = pick ? Math.min(m.n, Math.max(3, Math.floor((SH - 80 - Math.min(lines.length, 6) * 16) / rh))) : 0;
-      const shownLines = lines.slice(0, pick ? 6 : 14);
+      const maxL = pick ? 6 : 14;
+      m.over = pick ? 0 : Math.max(0, lines.length - maxL);
+      m.scroll = clamp(num(m.scroll), 0, m.over);
+      const shownLines = lines.slice(m.scroll, m.scroll + maxL);
       const h = 26 + shownLines.length * 16 + (pick ? maxRows * rh + 8 : 38) + 6;
       const y = Math.round((SH - h) / 2);
       m.box = { x, y, w, h };
       R(c, x, y, w, h, '#0c1828');
       R(c, x, y, w, 2, o.danger ? K.danger : o.color || K.amber);
       R(c, x, y + h - 1, w, 1, K.edge); R(c, x, y, 1, h, K.edge); R(c, x + w - 1, y, 1, h, K.edge);
-      T(c, o.title || '', x + 12, y + 7, 12, o.danger ? K.danger : o.color || K.amber, 'left', w - 24);
+      T(c, o.title || '', x + 12, y + 7, 12, o.danger ? K.danger : o.color || K.amber, 'left', w - 24 - (m.over ? 116 : 0));
       shownLines.forEach((l, i) => T(c, l, x + 12, y + 26 + i * 16, 12, K.text, 'left', w - 24));
-      if (lines.length > shownLines.length) T(c, '…', x + w - 16, y + 26 + (shownLines.length - 1) * 16, 12, K.dim);
+      m.textRect = { x, y: y + 22, w, h: shownLines.length * 16 + 4 };
+      if (m.over) { if (m.scroll > 0) T(c, '▲', x + w - 16, y + 26, 12, K.amber); if (m.scroll < m.over) T(c, '▼', x + w - 16, y + 26 + (shownLines.length - 1) * 16, 12, K.amber); T(c, `${m.scroll + 1}-${m.scroll + shownLines.length}／${lines.length}行　↑↓`, x + w - 12, y + 8, 10, K.dim, 'right'); }
+      else if (lines.length > shownLines.length) T(c, '…', x + w - 16, y + 26 + (shownLines.length - 1) * 16, 12, K.dim);
       m.rects = [];
       if (pick) {
         if (m.idx < m.top) m.top = m.idx;
@@ -1276,6 +1532,8 @@ async function worldApp(g) {
       { id: 'crises', label: '世界の危機', sub: `${w.crises.length}件・紛争${w.conflicts.length}件` },
       { id: 'summits', label: '首脳会議の予定', sub: w.summits[0] ? `${w.summits[0].year}年${w.summits[0].month}月 ${short(w.summits[0].name, 10)}` : '' },
       { id: 'countries', label: '国々と日本の関係', sub: `${w.countries.length}か国` },
+      has(g, 'worldRegions') ? { id: 'regions', label: '地域ごとの情勢', sub: (safe(() => g.worldRegions(), []) || []).filter((r) => r.status !== '安定').map((r) => r.name).slice(0, 3).join('・') || 'どの地域も安定' } : null,
+      has(g, 'worldTimeline') ? { id: 'timeline', label: '世界の年表', sub: (() => { const e = (safe(() => g.worldTimeline({ filter: 'real', n: 1 }), []) || [])[0]; return e ? short(`${e.date} ${e.text}`, 18) : ''; })() } : null,
       has(g, 'tariffs') ? { id: 'rates', label: '関税率の一覧', sub: `関税収入 約${safe(() => g.tariffRevenue().total, '—')}兆円/年` } : null,
       has(g, 'tariffs') ? { id: 'trade', label: '貿易と関税の動き', sub: w.trade && w.trade.frictions ? `貿易摩擦 ${w.trade.frictions}件` : '貿易摩擦はない' } : null,
       has(g, 'diplomaticStanding') ? { id: 'score', label: '外交の通信簿', sub: w.diplo ? `${w.diplo.grade}（${w.diplo.score}点）` : '' } : null,
@@ -1313,6 +1571,14 @@ async function worldApp(g) {
       const d = (g.dietTreaties() || []).slice(0, 6);
       await phoneInfo(g, { title: '国会で審議中', color: APP_COLOR, lines: d.length ? d.flatMap((x) => [`・${x.name}`, `　${x.stageName}${x.estimate ? `（通過の見込み ${Math.round(x.estimate.pass * 100)}%）` : ''}`]) : ['審議中の条約・関税法案はない。'] });
     }
+    else if (id === 'regions') {
+      const rs = g.worldRegions();
+      await phoneInfo(g, { title: '地域ごとの情勢', color: APP_COLOR, lines: rs.flatMap((r) => [`【${r.name}】${r.status}（緊張${r.temp}）`, `　関係の平均 ${r.avgRel}・貿易 約${r.trade}%`, ...r.conflicts.map((x) => `　紛争：${x}`), ...r.crises.slice(0, 2).map((x) => `　危機：${x}`)]) });
+    }
+    else if (id === 'timeline') {
+      const tl = g.worldTimeline({ n: 30 });
+      await phoneInfo(g, { title: '世界の年表', color: APP_COLOR, lines: tl.length ? tl.map((e) => `${e.date}　${e.text}`) : ['まだ記録はない。'] });
+    }
     else if (id === 'countries') {
       const list = w.countries.slice().sort((a, b) => b.relation - a.relation);
       const k = await phoneList(g, { title: '国々と日本の関係', color: APP_COLOR, items: list.map((c) => ({ label: short(c.name, 12), sub: `${c.relLabel}・${BLOC_SHORT(w, c.bloc)}${c.war ? '・戦争中' : ''}`, right: `${c.relation}` })) });
@@ -1335,4 +1601,4 @@ registerPhoneApp('world', {
   cond: (g) => has(g, 'world'),
   open: (g) => worldApp(g),
 });
-if (typeof window !== 'undefined') window.__worldui = { scene: () => sceneOf(window.__game), open: openWorldScreen, TABS, MAP, grid, project, flows: { negoEntry, negoFlow, tariffFlow, partnerMenu, frictionFlow, territoryFlow, stanceInfo, diploFlow, actionsMenu } };
+if (typeof window !== 'undefined') window.__worldui = { scene: () => sceneOf(window.__game), open: openWorldScreen, TABS, MAP, VIEWS, BIG, grid, project, tabIndex, flows: { countryInfoModal, negoEntry, negoFlow, tariffFlow, partnerMenu, frictionFlow, territoryFlow, stanceInfo, diploFlow, actionsMenu } };

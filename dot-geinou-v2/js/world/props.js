@@ -498,3 +498,55 @@ export function house(x, y, { w = 5, h = 4, k = 0, door, name, text: lines, extr
     ...extra,
   };
 }
+
+// ---------------------------------------------------------------- [R9-A] railway girder bridge (ガード)
+// The tracks (two rail rows y, y+1) crossing a road on a steel girder bridge, w tiles wide.
+// Not solid: the road below stays open; drawn over anyone walking underneath (z).
+function paintGuard(w) {
+  return (c) => {
+    const W = w * 32;
+    // deck underside shadow, the deck with ballast and two tracks, the side girders
+    PR(c, 0, 10, W, 54, '#5a5f6b');
+    PR(c, 0, 14, W, 44, '#8b8577');
+    for (let x = 2; x < W; x += 8) { PR(c, x, 18, 5, 14, '#6b4a2e'); PR(c, x, 42, 5, 14, '#6b4a2e'); }
+    for (const ry of [20, 26, 44, 50]) { PR(c, 0, ry, W, 2, '#e8ebf0'); PR(c, 0, ry + 2, W, 1, '#7e828a'); }
+    for (const [y0, lit] of [[0, true], [58, false]]) {
+      PR(c, 0, y0, W, 10, lit ? '#3a6a9a' : '#2a4a6a');
+      PR(c, 0, y0, W, 2, lit ? '#6a9aca' : '#3a5a7a');
+      for (let x = 6; x < W; x += 12) PR(c, x, y0 + 3, 2, 6, lit ? '#2a5080' : '#1a3450');
+      for (let x = 0; x < W; x += 24) { PR(c, x, y0 + 2, 1, 8, '#9ab8d8'); }
+    }
+    // rivets and a 「ガード」 plate
+    for (let x = 4; x < W; x += 6) PP(c, x, 5, '#8ab0d8');
+    PR(c, W / 2 - 18, 60, 36, 7, '#f4f4f0'); PR(c, W / 2 - 18, 60, 36, 1, '#ffffff');
+    outline(c, { tint: 0.3 });
+  };
+}
+export function railGuard(x, y, w, extra = {}) {
+  return {
+    type: 'prop', x, y, w, h: 2, solid: false, z: 48,
+    draw(ctx, sx, sy) {
+      R(ctx, sx, sy + 33, w * 16, 3, 'rgba(0,0,0,0.25)');
+      blit(ctx, bake('guard' + w, w * 16, 34, paintGuard(w)), sx, sy - 1);
+      text(ctx, '高さ制限 3.8m', sx + w * 8, sy + 29.6, { size: 3, align: 'center', color: '#20232a', shadow: null });
+    },
+    ...extra,
+  };
+}
+
+// ---------------------------------------------------------------- [R9-A] trackside fence
+// A low mesh fence along the top (side 'top') or bottom ('bottom') edge of row y, x .. x+w-1.
+// Purely visual (the rails beside it are solid tiles).
+export function trackFence(x, y, w, side = 'top', extra = {}) {
+  return {
+    type: 'prop', x, y, w, h: 1, solid: false, z: side === 'top' ? -8 : 0,
+    draw(ctx, sx, sy) {
+      const fy = side === 'top' ? sy - 7 : sy + 9;
+      for (let i = 0; i <= w * 2; i++) R(ctx, sx + i * 8, fy, 1, 8, '#7d8391');
+      R(ctx, sx, fy, w * 16, 1, '#b8bec8');
+      R(ctx, sx, fy + 4, w * 16, 0.5, '#9aa0aa');
+      for (let k = 0; k < w * 16; k += 2) R(ctx, sx + k, fy + 1 + (k % 4 ? 0 : 3), 0.5, 0.5, '#c8ccd4');
+    },
+    ...extra,
+  };
+}

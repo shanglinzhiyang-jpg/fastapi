@@ -53,7 +53,7 @@ import { onMorning } from '../engine/life.js';
 import { ageOf } from '../engine/profile.js';
 import { audio, registerSong } from '../engine/audio.js';
 import { lawDate, registerSmokingRule, LENDERS, lenderRate, rateLawText, loanBalance, MONTH_DAYS, CRIMES, isPolitician, onJustice } from '../engine/crime.js';
-import { busStop, subwayEntrance } from './props.js';
+import { busStop, subwayEntrance, taxi } from './props.js';
 import { grid, set, put, fill, ekiStairs } from './townkit.js';
 
 export const KAN_W = 70;
@@ -1721,6 +1721,11 @@ function generate() {
   fill(c, 56, 14, 2, 35, 'kanraku_alley');          // east alley
   fill(c, 44, 48, 24, 1, 'kanraku_alley');          // back alley (組事務所)
   fill(c, 1, 42, 11, 7, 'kanraku_back');
+  // [R9-A] the empty black lots: a コインパーキング (x 1..11) and, south of 花道通り, a lane (x 37) and the back
+  // alley running on west to it, with a business hotel and a 雑居ビル on the old empty ground (x 38..54)
+  fill(c, 1, 42, 11, 6, 'kanraku_plaza');
+  fill(c, 37, 42, 1, 7, 'kanraku_alley');
+  fill(c, 37, 48, 7, 1, 'kanraku_alley');
   // ---- ネオン公園 (rows 42..47, x 14..36)
   fill(c, 14, 42, 23, 6, 'kanraku_plaza');
   for (const x of [14, 36]) for (let y = 43; y <= 47; y++) put(c, x, y, y % 2 ? 'kanraku_planter' : 'bush');
@@ -1774,6 +1779,10 @@ function generate() {
     bld(58, 32, 10, 8, 6, { style: 'zakkyo', wall: '#3c3448', signs: SIGNS.snack, roof: { t: 'ドット', bg: '#ff4fa0', fg: '#ffffff', neon: '#ffffff', glow: '#ff4fa0' }, side: 'left', seed: 28 }, { name: '雑居ビル', text: DIRS_TEXT.neon1 }),
     // B4: the 組事務所 at the end of the back alley (door on row 47)
     bld(59, 43, 8, 5, 3, { style: 'kumi', seed: 29 }, { place: 'kumi', name: '鬼灯興業' }),
+    // [R9-A] on the old empty lots south of 花道通り (doors on row 47, fronts on the back alley)
+    bld(38, 42, 8, 6, 4, { style: 'zakkyo', wall: '#3a4258', signs: SIGNS.hotel.map((x) => ({ ...x, t: 'ホテル' })), roof: { t: 'HOTEL NEON', bg: '#1a2a5a', fg: '#ffe9a0', neon: '#ffe9a0', glow: '#9ad0ff' }, ground: 'lobby', inside: '#fff0d0', seed: 31 },
+      { name: 'ビジネスホテル ネオン', text: ['ビジネスホテル「ネオン」。', '「本日満室」の札。\n終電を逃した人たちで、毎晩いっぱいらしい。\n（泊まるなら、大通りのカプセルホテルへ）'] }),
+    bld(47, 42, 8, 6, 3, { style: 'zakkyo', wall: '#40384a', signs: SIGNS.misc, side: 'left', seed: 32 }, { name: '雑居ビル', text: DIRS_TEXT.b3c }),
   ];
   // the footprints sit on the solid 'kanraku_back' fill (the gaps between façades): open the door cell
   // of every building you can walk into, or MapScene.blocked() stops the player at the threshold
@@ -1798,6 +1807,10 @@ function generate() {
     canCart(17, 46),
     npoTable(23, 43, (g) => { const n = g.npc('kan_npo'); return n ? npoTalk(g, n) : null; }),
     { type: 'sign', x: 15, y: 42, text: ['「ネオン公園」', '夜も明かりのついた、小さな公園。\nベンチで休む人、待ち合わせの人…。'] },
+    // [R9-A] the コインパーキング on the old empty lot west of the park
+    taxi(2, 43, '#c8ccd4', { text: '「P」の看板の駐車場に、車がとまっている。' }), taxi(5, 43, '#3a3a44', { text: '黒い車がとまっている。…窓にはスモークが貼ってある。' }),
+    taxi(8, 43, '#d62f2f', { text: '赤いスポーツカーがとまっている。' }), taxi(3, 46, '#ffffff', { text: '白いワゴン車がとまっている。' }), taxi(7, 46, '#2f6fd0', { text: '青い車がとまっている。' }),
+    { type: 'sign', x: 10, y: 42, solid: true, text: ['コインパーキングの看板だ。', '「P　20分 ¥400（夜間 最大 ¥2,500）」\n…ネオン街の駐車場は、高い。'] },
     { type: 'sign', x: 56, y: 47, text: ['路地の奥は、明かりも少なく静かだ。', '…突きあたりのビルには、監視カメラがいくつも\nこちらを向いている。'] },
 
     // ---- people

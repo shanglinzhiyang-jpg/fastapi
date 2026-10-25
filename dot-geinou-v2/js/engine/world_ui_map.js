@@ -53,7 +53,7 @@ export const VIEWS = [
   { id: 'eu', label: '欧州', lat: 50, lon: 18, z: 3 },
 ];
 export const REGION_LABELS = [
-  { t: '東アジア', lat: 47, lon: 108 }, { t: '東南アジア', lat: -1, lon: 100 }, { t: '中東', lat: 24, lon: 42 }, { t: '欧州', lat: 63, lon: 12 },
+  { t: '東アジア', lat: 47, lon: 108 }, { t: '東南アジア', lat: -1, lon: 100 }, { t: '中東', lat: 24, lon: 42 }, { t: '欧州', lat: 55, lon: 24 },
   { t: '北米', lat: 50, lon: -105 }, { t: '南米', lat: -24, lon: -62 }, { t: 'アフリカ', lat: 4, lon: 20 }, { t: 'オセアニア', lat: -30, lon: 128 }, { t: '太平洋', lat: 12, lon: 178 },
 ];
 function cellColor(ui, id) {

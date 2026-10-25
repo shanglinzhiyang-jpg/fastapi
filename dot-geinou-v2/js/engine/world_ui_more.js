@@ -184,7 +184,9 @@ export function makeMore(ctx) {
     R(c, Math.min(p, mid), y, Math.max(1, Math.abs(p - mid)), 8, K.bad);
     T(c, num(cf.front) > 8 ? `${cf.aName}が優勢` : num(cf.front) < -8 ? `${cf.bName}が優勢` : '一進一退', mid, y + 11, 10, K.dim, 'center');
     y += 26;
-    T(c, `死者（推計）${n0(cf.dead)}人`, DX, y, 12, K.text); T(c, cf.since ? `${ymText(cf.since)}から` : '', DX + DW, y + 1, 10, K.dim, 'right'); y += 16;
+    const hs = ui.g.state && ui.g.state.world && ui.g.state.world.hist;
+    const longWar = cf.real && cf.start === -1 && hs && cf.since && cf.since < hs.start; // a real war that began before the era start
+    T(c, longWar ? `死者（推計）多数・ここ最近 +${n0(cf.dead)}人` : `死者（推計）${n0(cf.dead)}人`, DX, y, 12, K.text, 'left', DW - 110); T(c, cf.since ? `${ymText(cf.since)}から` : '', DX + DW, y + 1, 10, K.dim, 'right'); y += 16;
     if (cf.aggressor) { T(c, `攻撃を始めた側：${(d.rows[cf.aggressor] || {}).short || cf.aggressor}`, DX, y, 10, K.dim, 'left', DW); y += 14; }
     if (cf.japan) { T(c, `日本の関わり：${{ rear: '後方支援', collective: '集団的自衛権で参戦', dispatch: '派兵', mediate: '仲介' }[cf.japan.role] || cf.japan.role}`, DX, y, 10, K.warn, 'left', DW); y += 14; }
     y += 4;
