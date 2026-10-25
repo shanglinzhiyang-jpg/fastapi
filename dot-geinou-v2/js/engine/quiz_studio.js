@@ -564,7 +564,7 @@ class PaperStage {
       if (inp.pressed('b') && this.ask.st >= this.ask.intro) { audio.sfx('cancel'); this.advance(); return; }
       this.ask.update(inp, tap);
       if (this.ask.res) { this.ans[this.i] = this.ask.res.pick; tones(SND.pen); this.advance(); return; }
-      if (this.left <= 0) { tones(SND.buzz); mg.speak('そこまで！ペンを置いてください', 80); this.toGrade(); }
+      if (this.left <= 0) { tones(SND.buzz); this.timeUp = true; this.toGrade(); }
     } else if (this.phase === 'grade') {
       if (this.t === 20) tones(SND.drum);
       const k = Math.floor((this.t - 50) / 9);
@@ -582,7 +582,7 @@ class PaperStage {
   }
   advance() {
     this.i++;
-    if (this.i >= this.n) { this.mg.speak('全問終了！', 50); this.toGrade(); return; }
+    if (this.i >= this.n) { this.toGrade(); return; }
     this.ask = this.newAsk();
   }
   toGrade() {
@@ -639,7 +639,7 @@ class PaperStage {
     }
     if (this.phase === 'grade') {
       plate(c, 120, 40, 400, 300, '#f6f1e2', '#8a7a5a', 5);
-      T(c, '採点', SW / 2, 50, 18, '#3a2a1a', 'center', { shadow: null });
+      T(c, this.timeUp && this.t < 70 ? 'そこまで！ペンを置いてください' : '採点', SW / 2, 50, 18, this.timeUp && this.t < 70 ? '#c8303c' : '#3a2a1a', 'center', { shadow: null });
       const shown = Math.floor((this.t - 50) / 9);
       for (let k = 0; k < this.n; k++) {
         const x = 150 + (k % 5) * 70, y = 92 + Math.floor(k / 5) * 96;
@@ -727,7 +727,7 @@ class TaimanStage {
     mg.speak('ペーパーテストの成績で、チーム分けです！', 80);
   }
   right() { return this.mode === 'league' ? `${this.myWins}勝${this.myLoss}敗` : `第${Math.min(this.bouts.length + 1, this.max)}戦／${this.max}`; }
-  sayAt() { return this.phase === 'bout' || this.phase === 'boutEnd' ? { y: 104, w: 220 } : this.phase === 'called' || this.phase === 'quick' ? { y: 300 } : this.phase === 'pick' ? { y: 40 } : { y: 36 }; }
+  sayAt() { return this.phase === 'bout' ? { y: 104, w: 220 } : this.phase === 'boutEnd' ? { y: 36 } : this.phase === 'called' || this.phase === 'quick' ? { y: 300 } : this.phase === 'pick' ? { y: 40 } : { y: 36 }; }
   others(w) { const ti = this.teamOf.get(w.id); return this.teams.filter((_, i) => i !== ti).flatMap((tm) => tm.members); }
   update(inp, tap) {
     this.t++;
@@ -782,6 +782,7 @@ class TaimanStage {
   startBout(a, b) {
     const mg = this.mg;
     this.a = a; this.b = b; this.qn = 0;
+    mg.say = null; // the nomination line is over
     if (!a.me && !b.me) {
       // rivals: decided at once (by strength), shown as a short card
       const pa = rivalP(a, 'joshiki', 2, mg.difficulty), pb = rivalP(b, 'joshiki', 2, mg.difficulty);
@@ -901,7 +902,7 @@ class TaimanStage {
     const place = ranked.findIndex((x) => x.i === myTeam) + 1;
     this.place = place;
     const ratio = this.myPlayed ? this.myWins / this.myPlayed : 0.5;
-    this.score = ratio * 70 + (place === 1 ? 30 : place === 2 ? 15 : 0);
+    this.score = 10 + ratio * 60 + (place === 1 ? 30 : place === 2 ? 15 : 0);
     this.note = `タイマン ${this.myWins}勝${this.myLoss}敗・チーム${place}位`;
     if (place === 1) { tones(SND.fanfare); mg.confetti(); mg.speak(`${this.teams[myTeam].name}の優勝！`, 120); } else mg.speak(`優勝は${ranked[0].tm.name}！`, 120);
   }
@@ -1117,12 +1118,12 @@ class Hexa6Stage {
     }
     this.asker.p += hit ? 3 : -1;
     if (this.asker.me) {
-      if (hit) { this.hits++; tones(SND.pinpon); mg.confetti(); mg.speak('見抜いた！出題者に3ポイント！', 80); } else { tones(SND.bubuu); mg.speak('見抜けなかった…マイナス1', 80); }
+      if (hit) { this.hits++; tones(SND.pinpon); mg.confetti(); mg.speak('見抜いた！+3ポイント', 80); } else { tones(SND.bubuu); mg.speak('見抜けなかった…-1', 80); }
     } else {
       const meOk = this.answers.get('me');
       const namedMe = this.named && this.named !== 'all' && this.named.me;
-      if (namedMe && meOk) { tones(SND.pinpon); mg.speak('指名をかわした！あなたにボーナス！', 80); }
-      else if (namedMe) { tones(SND.bubuu); mg.speak(`${this.asker.short}さんに見抜かれた…！`, 80); }
+      if (namedMe && meOk) { tones(SND.pinpon); mg.speak('指名をかわした！+1', 80); }
+      else if (namedMe) { tones(SND.bubuu); mg.speak('見抜かれた…！', 80); }
       else if (meOk) tones(SND.pinpon); else tones(SND.bubuu);
     }
   }
@@ -1250,7 +1251,7 @@ class FiveStage {
     this.chooser = null;
     mg.speak(`第${this.k + 1}問！`, 50);
   }
-  teamP() { return clamp(0.96 - (this.mg.difficulty - 1) * 0.025, 0.85, 0.97); }
+  teamP() { return clamp(0.985 - (this.mg.difficulty - 1) * 0.015, 0.9, 0.985); }
   update(inp, tap) {
     this.t++;
     const mg = this.mg;
@@ -1301,19 +1302,20 @@ class FiveStage {
     if (this.ok) this.got++;
     // my letter is a question of its own (the word's category is カタカナ語)
     const mine = this.letters[this.myPos];
+    if (mine && mine.ok) this.myOk = (this.myOk | 0) + 1;
     mg.record({ id: this.w.id, cat: 'katakana', q: this.w.clue, a: this.w.word, lv: 2 }, !!(mine && mine.ok));
     // the regular team plays the same word off screen
     if (mg.rng() < Math.pow(this.teamP(), 5) * 0.95) this.oppGot++;
     this.results.push({ word: this.w.word, ok: this.ok });
     this.phase = 'check'; this.t = 0; this.timeout = timeout;
-    mg.speak(this.ok ? '正解！' : timeout ? '時間切れ！' : '残念…！', 60);
   }
   toVersus() {
     const mg = this.mg;
     this.phase = 'versus'; this.t = 0;
     this.won = this.got > this.oppGot || (this.got === this.oppGot && mg.rng() < 0.5);
     mg.ctx.five = { won: this.won, got: this.got, n: this.words.length };
-    this.score = (this.got / this.words.length) * 85 + (this.won ? 15 : 0);
+    // the player's own letters, the team's words, the win
+    this.score = ((this.myOk | 0) / this.words.length) * 50 + (this.got / this.words.length) * 35 + (this.won ? 15 : 0);
     this.note = `ファイブリーグ ${this.got}/${this.words.length}問${this.won ? '・勝利' : ''}`;
     if (!this.won) { (mg.ctx.skip = mg.ctx.skip || []).push('trolley'); mg.speak('レギュラーチームの勝ち…ボーナスステージならず', 120); tones(SND.bubuu); }
     else { tones(SND.fanfare); mg.confetti(); mg.speak(mg.stageIds.includes('trolley') ? 'ゲストチームの勝利！ボーナスステージへ！' : 'ゲストチームの勝利！', 120); }
@@ -1444,7 +1446,7 @@ class TrolleyStage {
     if (this.phase === 'crash' || this.phase === 'goal') {
       if ((this.t > 70 && (inp.pressed('a') || tap)) || this.t > 200) {
         this.score = this.okN * 16 + (this.okN >= 5 ? 20 : 0);
-        this.note = this.okN >= 5 ? 'トロッコ 全問正解！' : `トロッコ ${this.okN}問目までクリア`;
+        this.note = this.okN >= 5 ? 'トロッコ 全問正解！' : `トロッコ ${this.okN + 1}問目で脱線`;
         this.done = true;
       }
     }

@@ -266,7 +266,7 @@ function drillView(g, items, o) {
       T(c, `${list.length}問中 ${this.ok}問正解`, a.x + a.w / 2, y, 14, L.ink, 'center'); y += 26;
       T(c, fitText(c, `雑学の経験値 +${Math.round(this.xp * 10) / 10}`, w, 12), x, y, 12, L.ink); y += 18;
       if (this.daily) { T(c, fitText(c, `きょうのドリル達成！ 連続${qs(g).drill.streak}日`, w, 12), x, y, 12, L.good); y += 18; }
-      if (this.lvAfter > this.lvBefore) { T(c, fitText(c, `レベルアップ！ Lv.${this.lvAfter}「${levelTitle(this.lvAfter)}」`, w, 12), x, y, 12, L.acc); y += 18; }
+      if (this.lvAfter > this.lvBefore) { wrap(c, `レベルアップ！ Lv.${this.lvAfter}「${levelTitle(this.lvAfter)}」`, w, 12).slice(0, 2).forEach((l) => { T(c, l, x, y, 12, L.acc); y += 15; }); y += 3; }
       const m = dayMult(g);
       y += 6;
       const tip = m < 0.5 ? '今日はもう頭がいっぱい。続きは明日のほうが身につく。' : 'くり返すほど、本番の問題に強くなる。';
@@ -386,7 +386,9 @@ async function showsScreen(g) {
         const S = B.SHOWS[row.id];
         const stages = B.showStages(row.id, y, m);
         const classic = stages.includes('classic');
-        const k = await phoneConfirm(g, { title: S.title, color: L.color, text: `『${S.title}』の対策。\n出やすいジャンル：${S.cats.map((c) => B.CATS[c].short).join('・')}`, choices: ['問題を解く（10問）', classic ? '本番形式で練習（4択）' : '本番形式で練習', 'もどる'] });
+        const bq = quizBonus(g, row.id);
+        const fmt = stages.map((x) => STAGE_LABELS[x] || '4択クイズ').join('・');
+        const k = await phoneConfirm(g, { title: S.title, color: L.color, text: `『${S.title}』の対策。\n形式：${fmt}\n出やすいジャンル：${S.cats.map((c) => B.CATS[c].short).join('・')}\nいまの助け：やさしさ +${Math.round(bq.v * 100)}%・得点 +${bq.pts}`, choices: ['問題を解く（10問）', devOf(g) === 'techo' ? '本番形式で特訓' : '本番形式で練習', 'もどる'] });
         if (k === 0) await runDrill(g, B.pick({ cats: S.cats, n: 10, year: yearOf(g), lv: lvTarget(g) }), { title: `${S.short}対策`, mode: 'show', show: row.id });
         else if (k === 1) {
           if (classic) await practiceClassic(g, row.id);
@@ -450,7 +452,7 @@ function statsScreen(g) {
       y += 4;
       T(c, '最近7日（解いた数）', x, y, 12, L.dim); y += 14;
       const days = [];
-      for (let d = g.state.day - 6; d <= g.state.day; d++) days.push(q.hist.find((h) => h.day === d) || { day: d, n: 0, ok: 0 });
+      for (let d = Math.max(1, g.state.day - 6); d <= g.state.day; d++) days.push(q.hist.find((h) => h.day === d) || { day: d, n: 0, ok: 0 });
       const max = Math.max(10, ...days.map((h) => h.n));
       const bh = Math.max(10, a.y + a.h - y - 16);
       days.forEach((h, i) => {
@@ -458,7 +460,7 @@ function statsScreen(g) {
         const hh = Math.round((bh * h.n) / max), ho = Math.round((bh * h.ok) / max);
         R(c, bx, y + bh - hh, 18, hh, L.line);
         R(c, bx, y + bh - ho, 18, ho, L.acc);
-        T(c, h.day === g.state.day ? '今日' : `${h.day}`, bx + 9, y + bh + 2, 12, L.dim, 'center');
+        T(c, h.day === g.state.day ? '今日' : `${h.day}日`, bx + 9, y + bh + 2, 12, L.dim, 'center');
       });
     },
   });
