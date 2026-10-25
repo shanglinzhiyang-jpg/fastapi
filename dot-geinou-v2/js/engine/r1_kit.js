@@ -145,9 +145,10 @@ export function powerOf(g, kind) {
   return clamp(Math.round((num(g.state.skills && g.state.skills.warai)) * 0.5), 0, 100);
 }
 export function statOf(g, key) { const v = safe(() => (has(g, 'comedyStat') ? g.comedyStat(key) : null), null); return Number.isFinite(Number(v)) ? Number(v) : clamp(Math.round(num(g.state.skills && g.state.skills.warai) * 0.5), 0, 100); }
-export function qualityOf(g, neta) {
+// B's g.netaQuality(n, { contest }) already counts 「同じネタ」 for that contest (B's markNetaUsed records the use)
+export function qualityOf(g, neta, contest) {
   if (!neta) return 40;
-  const v = safe(() => (has(g, 'netaQuality') ? g.netaQuality(neta) : null), null);
+  const v = safe(() => (has(g, 'netaQuality') ? g.netaQuality(neta, contest ? { contest } : undefined) : null), null);
   if (Number.isFinite(Number(v))) return clamp(Number(v), 0, 100);
   return clamp(num(neta.ai && neta.ai.total, 45) * 0.7 + num(neta.practice) * 0.3, 0, 100);
 }
@@ -173,6 +174,10 @@ export async function chooseNeta(g, { kind, length, cid, title, auto }) {
   return gen();
 }
 export const netaUsedBefore = (neta, cid) => !!(neta && neta.uses && num(neta.uses[cid]) > 0);
+// a generated script (B's g.autoNeta ids are 'auto_<hash>'; ours is 'auto'): never the player's own
+export const isAutoNeta = (n) => !n || !!n.auto || String(n.id || '').startsWith('auto');
+// our own extra penalty for 「同じネタ」 only when B's quality does not count it already
+export const samePenalty = (g, neta, cid) => !has(g, 'netaQuality') && netaUsedBefore(neta, cid);
 
 // ================================================================ performing
 function localSim(g, o, rng) {

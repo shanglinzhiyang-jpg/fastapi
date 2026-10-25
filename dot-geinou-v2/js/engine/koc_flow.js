@@ -839,6 +839,9 @@ export async function runFinalDay(g, y, opts = {}) {
       bd.merge({ visitor: STAFF.ad.look });
       await g.say(`本日の出番順です。抽選の結果、${order.findIndex((a) => a.me) + 1}番目になります。\nリハーサル、本番の流れ、よろしくお願いします！`, STAFF.ad);
       await sayP(g, E, pickR(['…足、震えてるわ。', 'ここまで来たら、楽しんだもん勝ちや。', R.twoNetaSF ? '準決勝と同じ2本、いつも通りやろう。' : '2本目のネタまで、きっちりやり切ろう。'], rf));
+      bd.set('studio', { year: y, mc: MCs.main.look, mc2: MCs.sub.look, judges: [], view: 'stage', unit: me.looks, look: 'office', screen: ['リハーサル'] });
+      await g.say('（昼、スタジオでカメラリハーサル。\nセットの立て込み、立ち位置、暗転と明転のきっかけ、カメラの動きをひとつずつ確認した）');
+      bd.set('tbsgakuya', { unit: me.looks, door: `${me.name} 様`, caption: `${titleOf(y)} 決勝の日` });
     }
     // ---- オープニング
     bd.set('studio', { year: y, mc: MCs.main.look, mc2: MCs.sub.look, judges, screen: [`KOC${y}`, `第${R.edition}回`, 'LIVE'], onair: true });

@@ -16,6 +16,7 @@ const safe = (key, fn, d = null) => { try { return fn(); } catch (e) { I.logOnce
 async function asafe(key, fn, d = null) { try { return await fn(); } catch (e) { I.logOnce(key, e); return d; } }
 const STAFF = { name: '大会スタッフ', look: { hair: 'cap', hat: '#2a2d36', hairColor: 'black', skin: 'tan', top: '#3b3f48', bottom: '#2a2d36' } };
 const UKETSUKE = { name: '受付スタッフ', look: { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#3f5fa8', bottom: '#2a3560', skirt: true, jacket: true } };
+const ONKYO = { name: '音響スタッフ', look: { hair: 'cap', hat: '#2f6fd0', hairColor: 'black', skin: 'tan', top: '#2a2d36', bottom: '#2a2d36' } };
 const KANTOKU = { name: '舞台監督', look: { hair: 'cap', hat: '#d62f2f', hairColor: 'black', skin: 'tan', top: '#1e1e26', bottom: '#2a2d36' } };
 const MC = { name: '進行役', look: { hair: 'slick', hairColor: 'black', skin: 'fair', top: '#2a3560', bottom: '#2a3560', jacket: true, tie: '#d62f2f' } };
 // the HD scenes (form, boards, scoreboard, votes) are skipped under g.auto unless a test asks for them (g.auto.contestui)
@@ -356,17 +357,19 @@ export async function practice(g, partner) {
 }
 export async function debayashi(g) {
   const x = roundOfToday(g);
-  if (!x || x.t.done) { await sayAs(g, STAFF, '今日は本番がないので、出囃子のチェックもありません。'); return; }
-  if (x.t.prep.debayashi) { await sayAs(g, STAFF, '出囃子はチェックずみです。本番もこのタイミングで出てください！'); return; }
+  if (!x || x.t.done) { await sayAs(g, ONKYO, '今日は本番がないので、出囃子のチェックもありません。'); return; }
+  if (x.t.prep.debayashi) { await sayAs(g, ONKYO, '出囃子はチェックずみです。本番もこのタイミングで出てください！'); return; }
   x.t.prep.debayashi = true;
   x.t.tension = clamp(x.t.tension - 3, 0, 100);
   sfx('drum');
-  await sayAs(g, STAFF, [x.t.tv ? '音響です。出囃子の確認をお願いします！' : '音響です。出囃子、流しますね。', '（ジャーン！…出囃子が鳴る）\nこのフレーズで袖から出て、センターマイクまで。', 'OKです！本番もこのタイミングで。（緊張 -3）']);
+  await sayAs(g, ONKYO, [x.t.tv ? '音響です。出囃子の確認をお願いします！' : '音響です。出囃子、流しますね。', '（ジャーン！…出囃子が鳴る）\nこのフレーズで袖から出て、センターマイクまで。', 'OKです！本番もこのタイミングで。（緊張 -3）']);
 }
 export async function mirror(g) {
   const x = roundOfToday(g);
-  if (x && x.t.prep.mirror) { await g.say('鏡の中の自分と目が合った。\nもう準備はばっちりだ。'); return; }
+  const c = I.cstate(g);
+  if ((x && x.t.prep.mirror) || c.mirrorDay === I.todayOf(g)) { await g.say('鏡の中の自分と目が合った。\nもう準備はばっちりだ。'); return; }
   if (x) x.t.prep.mirror = true;
+  c.mirrorDay = I.todayOf(g);
   const d = has(g, 'bathe') ? g.bathe(20, true) : 0;
   await g.say(['楽屋の鏡で、衣装と髪を整えた。', `身だしなみ +${Math.max(0, Math.round(d))}`]);
 }

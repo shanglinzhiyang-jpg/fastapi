@@ -970,8 +970,7 @@ function flushQueue(g) {
   const direct = [];
   const rest = [];
   for (const it of q) { if (d.n + direct.length < DIRECT_PER_DAY) direct.push(it); else rest.push(it); }
-  for (const it of direct) sendItem(g, it);
-  d.n += direct.length;
+  // the digest goes in first and the most important message last, so it sits on top of the inbox
   if (rest.length) {
     const personal = rest.filter((x) => x.personal), news = rest.filter((x) => !x.personal);
     const head = (s) => String(s).split('\n')[0];
@@ -980,6 +979,8 @@ function flushQueue(g) {
     sendItem(g, { from: NEWS_FROM, text: `【お笑いニュースまとめ】${rest.length}件\n${lines.join('\n')}`, prio: 0 });
     d.n++;
   }
+  for (const it of direct.slice().reverse()) sendItem(g, it);
+  d.n += direct.length;
 }
 
 // ================================================================ rewards

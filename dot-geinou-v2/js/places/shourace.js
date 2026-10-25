@@ -221,7 +221,7 @@ const lobby = {
   tiles: [
     '####################',
     '#==================#',
-    '#=d=pp========pp=c=#',
+    '#=d=pp========pp=s=#',
     '#P................P#',
     '#......KKKKKK......#',
     '#..................#',
@@ -232,7 +232,7 @@ const lobby = {
     '#..................#',
     '#########MM#########',
   ],
-  legend: { K: 'counter', F: 'sofa_blue', n: 'table_low', B: 'sr_board', V: 'vending', Y: 'flower_stand', P: 'plant' },
+  legend: { K: 'counter', F: 'sofa_blue', n: 'table_low', B: 'sr_board', V: 'vending', Y: 'flower_stand', P: 'plant', s: 'wall_navy+door_metal' },
   entry: { x: 9, y: 10, dir: 'up' },
   warps: [exitWarp(9, 11), exitWarp(10, 11), { x: 2, y: 2, room: 'gakuya', tx: 6, ty: 7, dir: 'up' }],
   entities: [
@@ -251,7 +251,7 @@ const lobby = {
     { x: 14, y: 2, w: 2, on: 'action', run: async (g) => g.say('「携帯電話の電源はお切りください」\n「客席での撮影・録音は禁止です」と書いてある。') },
     { x: 2, y: 6, w: 3, on: 'action', run: async (g) => g.say('待合のソファだ。\n出番を待つ出場者が、台本を何度も読み返している。') },
     { x: 2, y: 7, w: 3, on: 'action', run: async (g) => g.say('テーブルに、大会のパンフレットが置いてある。\n審査のルールと、これまでの王者が載っている。') },
-    { x: 18, y: 2, on: 'action', run: async (g) => g.say('「関係者以外立入禁止」の扉だ。\n出場者は楽屋から舞台袖へ行く。') },
+    { x: 17, y: 2, on: 'action', run: async (g) => g.say('「関係者以外立入禁止」の扉だ。\n出場者は楽屋から舞台袖へ行く。') },
   ],
   async onEnter(g) {
     g.showBanner(active(g) ? vtitle(g) : '賞レース会場');
@@ -326,7 +326,6 @@ const gakuya = {
     })),
   ],
   events: [
-    { x: 2, y: 1, w: 4, on: 'action', run: (g) => venue.mirror(g) },
     { x: 2, y: 2, w: 4, on: 'action', run: (g) => venue.mirror(g) },
     { x: 7, y: 1, on: 'action', run: async (g) => g.say(active(g) ? '楽屋の時計だ。\n出番の時間が、刻一刻と近づいてくる。' : '楽屋の時計だ。') },
     { x: 8, y: 4, w: 3, on: 'action', run: async (g) => g.say('出場者用のロッカーだ。\n「貴重品は各自で管理を」と貼り紙がある。') },
@@ -349,12 +348,12 @@ const sode = {
     '#==========#',
     '#.......ccC#',
     '#........cC#',
-    '#.mm.....cC#',
+    '#.mm.....cg#',
     '#........cC#',
     '#.......ccC#',
     '#######O####',
   ],
-  legend: { c: 'floor_black', C: 'curtain', m: 'monitor', O: 'exit_mat' },
+  legend: { c: 'floor_black', C: 'curtain', g: 'floor_stage', m: 'monitor', O: 'exit_mat' },
   entry: { x: 2, y: 6, dir: 'right' },
   warps: [
     { x: 7, y: 7, room: 'gakuya', tx: 10, ty: 2, dir: 'down' },
@@ -413,7 +412,7 @@ function stageWarp(x, y) {
 }
 
 // ================================================================ STAGE (劇場)
-const AUD = [[3, 8], [6, 8], [13, 8], [16, 8], [4, 9], [8, 9], [12, 9], [15, 9], [5, 10], [14, 10]];
+const AUD = [[3, 8], [6, 8], [13, 8], [15, 8], [4, 9], [6, 9], [12, 9], [14, 9], [5, 10], [13, 10]];
 const AUD_LOOKS = [LOOKS.fan, LOOKS.salaryman, LOOKS.mom, LOOKS.oldman, { ...LOOKS.fan, hairColor: 'brown', top: '#ff7eb6' }, LOOKS.tourist, LOOKS.kid, LOOKS.oldwoman, { ...LOOKS.salaryman, top: '#5a4a6a' }, { ...LOOKS.fan, top: '#ffd23f', hairColor: 'black' }];
 const AUD_LINES = ['今日はどの組がウケるやろ。', '予選はタダで見られる回もあるんだよ。', '毎年見に来てるの。予選のほうが荒々しくて好き。', 'わしは昔、漫才ブームを生で見たんじゃ。', '推しのコンビが出るの！', '観光ついでに来ました！', 'おもしろい人、出てくるかな？', 'あら、あなたも出るの？がんばってね。', '会社帰りに寄りました。', '笑う準備はできてる！'];
 const stage = {
@@ -424,7 +423,7 @@ const stage = {
     '#xxxxxxxxxxxxxxxxxx#',
     '#,,,,,,,,,,,,,,,,,,#',
     '#,,,,,,,,,m,,,,,,,,#',
-    '#eeeeeeeeeeeeeeeeee#',
+    '#.eeeeeeeeeeeeeeee.#',
     '#..................#',
     '#.....JJJJJJJJ.....#',
     '#..ssss.....ssss...#',
@@ -459,7 +458,7 @@ const studio = {
     '#,,,,,,,,,,,,,,,,,,#',
     '#q,,,,,,,,m,,,,,,,q#',
     '#,,,,,,,,,,,,,,,,,,#',
-    '#eeeeeeeeeeeeeeeeee#',
+    '#.eeeeeeeeeeeeeeee.#',
     '#..K....JJJJJ....K.#',
     '#..................#',
     '#..ssss.....ssss...#',
@@ -494,7 +493,7 @@ const studio = {
       talk: async (g, e) => { const j = judgesNow(g)[k]; await g.say(j ? [`${j.name}です。${j.title}`, `わたしは「${j.taste}」で見ます。`] : '（審査員席）', { name: j ? j.name : '審査員', look: e && e.look }); e.dir = 'up'; },
     })),
     npc('sr_cam', 3, 8, 'up', STAFF.cam, { cond: (g) => active(g), text: 'カメラ、回ってます。赤いランプが点いたら本番！' }),
-    ...[[3, 9], [6, 9], [13, 10], [16, 9]].map(([x, y], i) => npc(`sr_saud${i}`, x, y, 'up', { name: '観覧のお客さん', look: AUD_LOOKS[i + 3] }, { sprite: seated, seatTile: 'seat', fixedDir: true, cond: (g) => active(g), text: '生放送の観覧、当たったの！' })),
+    ...[[3, 9], [6, 9], [13, 10], [15, 9]].map(([x, y], i) => npc(`sr_saud${i}`, x, y, 'up', { name: '観覧のお客さん', look: AUD_LOOKS[i + 3] }, { sprite: seated, seatTile: 'seat', fixedDir: true, cond: (g) => active(g), text: '生放送の観覧、当たったの！' })),
   ],
   events: [
     { x: 7, y: 7, w: 6, on: 'action', run: async (g) => g.say(active(g) ? `審査員席だ。${judgesNow(g).length}人の審査員が並んでいる。` : '審査員席だ。名札はまだ置かれていない。') },

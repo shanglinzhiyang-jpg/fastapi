@@ -380,7 +380,7 @@ export const ABC = makeContest({
     return [
       [act.type === 'pin' ? '芸名' : act.type === 'trio' ? 'トリオ名' : 'コンビ名', pre.unitName],
       ['メンバー', pre.members.map((m) => m.name).join('・')],
-      [rules.Y >= 2012 ? 'デビュー' : '結成', rules.Y >= 2012 ? `${geireki(g, rules.Y)}年目` : `${unitYears(g, rules.Y)}年目`],
+      [rules.Y >= 2012 ? 'デビュー' : '結成', rules.Y >= 2012 ? `${geireki(g, rules.Y) + 1}年目` : `${unitYears(g, rules.Y) + 1}年目`],
       ['所属', act.agencyName || 'なし'],
       ['活動の拠点', g.state.profile && /大阪|京都|兵庫|奈良|和歌山|滋賀/.test(String(g.state.profile.pref || g.state.profile.home || '')) ? '関西' : rules.Y >= 2012 ? '全国' : '関西（大阪の劇場）'],
     ];
@@ -446,7 +446,7 @@ export const ABC = makeContest({
   vtr: (g, S) => {
     const E = S.entry;
     const a = actInfo(g);
-    return `${S.Y >= 2012 ? `デビュー${geireki(g, S.Y)}年目` : `結成${unitYears(g, S.Y)}年目`}・${a.agencyName || 'フリー'}。${a.partners.length ? `${a.partners.map((p) => p.short).join('・')}と${g.state.name}の${a.type === 'trio' ? 'トリオ' : 'コンビ'}。` : ''}ネタは${KIND_JA[E.kind] || '漫才'}。`;
+    return `${S.Y >= 2012 ? `デビュー${geireki(g, S.Y) + 1}年目` : `結成${unitYears(g, S.Y) + 1}年目`}・${a.agencyName || 'フリー'}。${a.partners.length ? `${a.partners.map((p) => p.short).join('・')}と${g.state.name}の${a.type === 'trio' ? 'トリオ' : 'コンビ'}。` : ''}ネタは${KIND_JA[E.kind] || '漫才'}。`;
   },
   openLines: (g, S, r) => [`${r.title}、決勝！`, r.Y >= 2012 ? `デビュー10年以内、エントリー${[2018, 2026].includes(S.Y) ? n0(S.entries) : '約' + n0(Math.round(S.entries / 10) * 10)}組の頂点が、今日決まります！` : '関西の若手の頂点が、今日決まります！'],
   finalRivalLine: (g, S, n) => ((n.tags || []).includes('前年王者') ? '連覇しに来たで。…でも、おたくらのネタ、準決勝で見てたわ。' : '4分、全部出し切ろな。'),

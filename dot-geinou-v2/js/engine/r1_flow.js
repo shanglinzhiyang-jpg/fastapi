@@ -18,7 +18,7 @@ import {
   has, safe, num, n0, realYen, plainYen, toInternal, eraId, devWord, rngOf, gauss, rint, pickR, shuffleR,
   cdate, absIdx, dayOf, dateText, dateTextY, randomLook, actInfo, powerOf, qualityOf, chooseNeta, netaUsedBefore,
   performAct, playerTotal, rivalTotal, cutScore, shortfallReasons, kitMorning, runKitMorning, morningNote, goRefusal,
-  syncEntry, d1Hub, statOf, sendOffer, d1On, d1Entry, d1Register, d1Record, d1Patch, d1Claim, d1PurgeLater, d1Freeze, d1History, d1Field, realNameLike,
+  syncEntry, d1Hub, statOf, sendOffer, d1On, d1Entry, d1Register, d1Record, d1Patch, d1Claim, d1PurgeLater, d1Freeze, d1History, d1Field, realNameLike, isAutoNeta, samePenalty,
 } from './r1_kit.js';
 import {
   THEMES, T, fit, jwrap, para, R, box, frame, alpha, drawBig, faceAt, confetti, stage, unstage, card, drumroll, infoCard, sfx, sizeFor,
@@ -840,10 +840,10 @@ function installFlows(C) {
       sfx('drum');
       if (!quick) await g.say(cfg.debayashiLine ? cfg.debayashiLine(g, E, rid) : '♪──出囃子が鳴った！\nセンターマイクへ！');
       const neta = await chooseNeta(g, { kind, length: rd.length, cid: cfg.id, title: `${rules.title} ${rd.name}`, auto: sim });
-      E.neta = neta && neta.id && neta.id !== 'auto' ? neta.id : E.neta;
+      E.neta = !isAutoNeta(neta) ? neta.id : E.neta;
       const same = netaUsedBefore(neta, cfg.id);
       const power = powerOf(g, kind);
-      const quality = qualityOf(g, neta);
+      const quality = qualityOf(g, neta, cfg.id);
       const pressure = rd.final ? 95 : rid === 'r1' ? 40 : 55 + C.roundIndex(Y, rid) * 8;
       res = await performAct(g, {
         kind, neta, length: rd.length, style: E.style || undefined,
@@ -851,8 +851,8 @@ function installFlows(C) {
         contest: { id: cfg.id, round: rid, name: rules.title }, title: `${rules.title} ${rd.name}`, skip: sim, ...(cfg.performExtra ? cfg.performExtra(g, E) : {}),
       });
       const prep = C.prepBonus(E, E.roundPrep || {});
-      tot = playerTotal(g, res, { power, quality, prep, same });
-      if (neta && neta.id && neta.id !== 'auto') safe(() => has(g, 'markNetaUsed') && g.markNetaUsed(neta.id, cfg.id));
+      tot = playerTotal(g, res, { power, quality, prep, same: samePenalty(g, neta, cfg.id) });
+      if (!isAutoNeta(neta)) safe(() => has(g, 'markNetaUsed') && g.markNetaUsed(neta.id, cfg.id));
       // the crowd
       const big = tot.total >= 75;
       st.fx = { ...(st.fx || {}), react: big };
@@ -1072,7 +1072,8 @@ function installFlows(C) {
     const kind = E.kind || 'pin';
     const neta = await chooseNeta(g, { kind, length: rd.length, cid: cfg.id, title: rd.name, auto: sim });
     const res = await performAct(g, { kind, neta, length: rd.length, style: E.style || undefined, venue: { name: rd.name, size: 'tv', crowd: 'normal', pressure: 85 }, contest: { id: cfg.id, round: 'rev', name: rules.title }, title: `${rules.title} ${rd.name}`, skip: sim, ...(cfg.performExtra ? cfg.performExtra(g, E) : {}) });
-    const tot = playerTotal(g, res, { power: powerOf(g, kind), quality: qualityOf(g, neta), prep: C.prepBonus(E, {}), same: netaUsedBefore(neta, cfg.id) });
+    const tot = playerTotal(g, res, { power: powerOf(g, kind), quality: qualityOf(g, neta, cfg.id), prep: C.prepBonus(E, {}), same: samePenalty(g, neta, cfg.id) });
+    if (!isAutoNeta(neta)) safe(() => has(g, 'markNetaUsed') && g.markNetaUsed(neta.id, cfg.id));
     const R0 = C.simRound(g, S, 'rev', { total: tot.total });
     const ok = R0.passed.includes('player');
     E.done.rev = true;
@@ -1143,8 +1144,8 @@ function installFlows(C) {
       const pk = (E && E.kind) || kind;
       const neta = await chooseNeta(g, { kind: pk, length: fmt.length, cid: cfg.id, title: stageNo === 2 ? '最終決戦のネタ' : '決勝のネタ', auto: ui.sim });
       const res = await performAct(g, { kind: pk, neta, length: fmt.length, style: E.style || undefined, venue: { name: rules.title, size: 'tv', crowd: 'normal', pressure: stageNo === 2 ? 100 : 92 }, contest: { id: cfg.id, round: stageNo === 2 ? 'final2' : 'final', name: rules.title }, title: `${rules.title} 決勝${stageNo === 2 ? '（最終決戦）' : ''}`, skip: ui.sim, ...(cfg.performExtra ? cfg.performExtra(g, E) : {}) });
-      const tot = playerTotal(g, res, { power: powerOf(g, pk), quality: qualityOf(g, neta), prep: C.prepBonus(E, E.roundPrep || {}) + 1, same: netaUsedBefore(neta, cfg.id) || (stageNo === 2 && E.finalNeta && neta && neta.id === E.finalNeta) });
-      if (neta && neta.id && neta.id !== 'auto') { if (stageNo === 1) E.finalNeta = neta.id; safe(() => has(g, 'markNetaUsed') && g.markNetaUsed(neta.id, cfg.id)); }
+      const tot = playerTotal(g, res, { power: powerOf(g, pk), quality: qualityOf(g, neta, cfg.id), prep: C.prepBonus(E, E.roundPrep || {}) + 1, same: samePenalty(g, neta, cfg.id) || (stageNo === 2 && !isAutoNeta(neta) && E.finalNeta && neta.id === E.finalNeta) });
+      if (!isAutoNeta(neta)) { if (stageNo === 1) E.finalNeta = neta.id; safe(() => has(g, 'markNetaUsed') && g.markNetaUsed(neta.id, cfg.id)); }
       st.fx.react = tot.total >= 75;
       sfx(tot.total >= 75 ? 'laugh' : 'applause');
       E.results.push({ round: stageNo === 2 ? 'final2' : 'final', score: res.score, total: tot.total, rank: res.rank, passed: null, day: g.state.day });

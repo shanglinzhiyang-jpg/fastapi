@@ -208,7 +208,9 @@ function modal(o) {
       const lines = [];
       for (const l of o.lines || []) lines.push(...jwrap(c, String(l ?? ''), w - 24, 12));
       const pick = o.kind === 'pick';
-      const rh = o.rh || 26;
+      // a row with a sub-label gets room for both lines (label 12px + sub 10px, 3px padding)
+      const anySub = pick && (o.items || []).some((it) => it && it.sub);
+      const rh = anySub ? Math.max(32, o.rh || 0) : o.rh || 26;
       const shownLines = lines.slice(0, pick ? 5 : 13);
       const maxRows = pick ? Math.min(m.n, Math.max(3, Math.floor((SH - 70 - shownLines.length * 16) / rh))) : 0;
       const h = 26 + shownLines.length * 16 + (pick ? maxRows * rh + 8 : 38) + 6;
@@ -231,10 +233,10 @@ function modal(o) {
           R(c, x + 8, yy, w - 16, rh - 2, sel ? K.sel : '#1e1529');
           if (sel) R(c, x + 8, yy, 2, rh - 2, K.gold);
           const rw = it.right ? measure(c, it.right, 10) + 12 : 0;
-          if (rh >= 26) {
-            T(c, it.label, x + 16, yy + 2, 12, it.lock ? K.faint : K.text, 'left', w - 36 - rw);
-            if (it.sub) T(c, it.sub, x + 16, yy + 15, 10, it.lock ? K.faint : K.dim, 'left', w - 36);
-          } else T(c, it.label, x + 16, yy + (rh - 14) / 2, 12, it.lock ? K.faint : K.text, 'left', w - 36 - rw);
+          if (anySub && it.sub) {
+            T(c, it.label, x + 16, yy + 3, 12, it.lock ? K.faint : K.text, 'left', w - 36 - rw);
+            T(c, it.sub, x + 16, yy + 17, 10, it.lock ? K.faint : K.dim, 'left', w - 36);
+          } else T(c, it.label, x + 16, yy + Math.round((rh - 2 - 14) / 2), 12, it.lock ? K.faint : K.text, 'left', w - 36 - rw);
           if (it.right) T(c, it.right, x + w - 14, yy + 3, 10, it.rightColor || K.dim, 'right');
           m.rects[m.top + k] = { x: x + 8, y: yy, w: w - 16, h: rh - 2 };
         }
@@ -953,7 +955,7 @@ export class PickerScene extends Base {
     const now = inp.pressedNow || {};
     now.a = false;
     if (inR(tap.x, tap.y, { x: SW - 24, y: 0, w: 24, h: 20 })) { sfx('cancel'); this.close(null); return true; }
-    if (this.listRect && inR(tap.x, tap.y, this.listRect)) { const j = this.top + Math.floor((tap.y - this.listRect.y) / 30); if (j >= 0 && j < this.items.length) { if (j === this.idx) { sfx('ok'); this.act(() => this.choose(j)); } else { this.idx = j; sfx('cursor'); } } }
+    if (this.listRect && inR(tap.x, tap.y, this.listRect)) { const j = this.top + Math.floor((tap.y - this.listRect.y) / 32); if (j >= 0 && j < this.items.length) { if (j === this.idx) { sfx('ok'); this.act(() => this.choose(j)); } else { this.idx = j; sfx('cursor'); } } }
     return true;
   }
   async choose(i) {
@@ -991,23 +993,23 @@ export class PickerScene extends Base {
     T(c, '×', SW - 12, 3, 12, K.dim, 'center');
     const L = { x: 6, y: 26, w: 378, h: 306 };
     this.listRect = L;
-    const vis = Math.floor(L.h / 30);
+    const vis = Math.floor(L.h / 32);
     if (this.idx < this.top) this.top = this.idx;
     if (this.idx >= this.top + vis) this.top = this.idx - vis + 1;
     for (let k = 0; k < vis && this.top + k < this.items.length; k++) {
       const it = this.items[this.top + k];
-      const y = L.y + k * 30;
+      const y = L.y + k * 32;
       const sel = this.top + k === this.idx;
-      R(c, L.x, y, L.w, 28, sel ? K.sel : '#1a1222');
-      if (sel) R(c, L.x, y, 2, 28, K.gold);
-      if (!it.neta) { T(c, it.label, L.x + 12, y + 7, 12, it.id === 'new' ? K.cyan : it.id === 'auto' ? K.gold : K.dim, 'left', L.w - 20); continue; }
+      R(c, L.x, y, L.w, 30, sel ? K.sel : '#1a1222');
+      if (sel) R(c, L.x, y, 2, 30, K.gold);
+      if (!it.neta) { T(c, it.label, L.x + 12, y + 8, 12, it.id === 'new' ? K.cyan : it.id === 'auto' ? K.gold : K.dim, 'left', L.w - 20); continue; }
       const x = it.neta;
       const q = num(safe(() => g.netaQuality(x, { contest: o.forContest }), 0));
       const est = estimate(x, { target: o.length || x.target });
       const over = (o.length || x.target) && est.sec > (Number(o.length) || x.target) * 1.05;
-      T(c, x.title || '無題', L.x + 12, y + 2, 12, K.text, 'left', 230);
-      T(c, `${KIND_LABEL[x.kind]}・${mmss(est.sec)}${over ? '（尺オーバー）' : ''}・${x.ai ? `AI ${x.ai.total}点` : '未採点'}・仕上がり${num(x.practice)}`, L.x + 12, y + 16, 10, over ? K.red : K.dim, 'left', 290);
-      T(c, `${q}`, L.x + L.w - 10, y + 6, 16, scoreCol(q), 'right');
+      T(c, x.title || '無題', L.x + 12, y + 3, 12, K.text, 'left', 230);
+      T(c, `${KIND_LABEL[x.kind]}・${mmss(est.sec)}${over ? '（尺オーバー）' : ''}・${x.ai ? `AI ${x.ai.total}点` : '未採点'}・仕上がり${num(x.practice)}`, L.x + 12, y + 17, 10, over ? K.red : K.dim, 'left', 290);
+      T(c, `${q}`, L.x + L.w - 10, y + 7, 16, scoreCol(q), 'right');
     }
     // detail
     const it = this.items[this.idx];
