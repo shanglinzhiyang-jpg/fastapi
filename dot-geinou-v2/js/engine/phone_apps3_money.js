@@ -108,11 +108,12 @@ export const PRODUCTS = {
 export const PRODUCT_IDS = Object.keys(PRODUCTS);
 const STOCK_IDS = PRODUCT_IDS.filter((id) => !PRODUCTS[id].fund);
 const HIST = 60;
+const PRE = 40; // days simulated before day 1
 
 const cleanPos = (p) => (isObj(p) ? Object.fromEntries(PRODUCT_IDS.map((id) => [id, isObj(p[id]) ? { n: Math.max(0, num(p[id].n)), cost: Math.max(0, num(p[id].cost)) } : { n: 0, cost: 0 }])) : Object.fromEntries(PRODUCT_IDS.map((id) => [id, { n: 0, cost: 0 }])));
 definePart('inv', (s) => {
   const cur = isObj(s.cur) && Number.isFinite(Number(s.cur.d)) && Number.isFinite(Number(s.cur.L)) ? {
-    d: Math.max(1, Math.floor(num(s.cur.d))), tr: num(s.cur.tr, num(s.cur.L)), dev: num(s.cur.dev), L: num(s.cur.L),
+    d: Math.max(1 - PRE, Math.floor(num(s.cur.d))), tr: num(s.cur.tr, num(s.cur.L)), dev: num(s.cur.dev), L: num(s.cur.L),
     e: STOCK_IDS.map((id, i) => num(arr(s.cur.e)[i])),
   } : null;
   return {
@@ -129,16 +130,19 @@ const eraStartL = (g) => Math.log(({ showa: 23274, heisei_early: 21500, heisei: 
 // Move the market forward to `day` (reload-proof: every step is drawn from the save's seed and the day).
 export function marketTo(g, day = g.state.day) {
   const I = part(g, 'inv');
+  // days before the first one (the chart starts full): the time runs back from day 1
+  const tOf = (d) => (d >= 1 ? realT(g, d) : realT(g, 1) + (d - 1) / 120);
   if (!I.cur) {
-    const tr = trendAt(realT(g, 1)) ?? eraStartL(g);
-    I.cur = { d: 1, tr, dev: 0, L: tr, e: STOCK_IDS.map(() => 0) };
-    I.L1 = tr;
-    I.hist = [{ d: 1, L: tr, e: I.cur.e.slice() }];
+    const d0 = 1 - PRE;
+    const tr = trendAt(tOf(d0)) ?? eraStartL(g);
+    I.cur = { d: d0, tr, dev: 0, L: tr, e: STOCK_IDS.map(() => 0) };
+    I.L1 = trendAt(tOf(1)) ?? tr;
+    I.hist = [{ d: d0, L: tr, e: I.cur.e.slice() }];
   }
   let guard = 0;
   while (I.cur.d < day && guard++ < 20000) {
     const d = I.cur.d + 1;
-    let tr = trendAt(realT(g, d));
+    let tr = trendAt(tOf(d));
     if (tr == null) {
       // past the known history: a random walk with a small upward drift and the odd crash
       tr = I.cur.tr + 0.04 / 120 + 0.0164 * gaussR(g, 'mkt', d);
@@ -221,7 +225,7 @@ export function buy(g, id, qty, acct = 'tokutei') {
   }
   g.state.money -= pay;
   const pos = (acct === 'nisa' ? I.nisa : I.pos)[id];
-  pos.n += n; pos.cost += P.fund ? cost - fee : cost;
+  pos.n += n; pos.cost += P.fund ? cost : cost + fee; // 取得価額 includes the fees
   I.fees += fee; I.trades++;
   if (!I.opened) I.opened = g.state.day;
   ilog(g, `買 ${P.short} ${P.fund ? fmtMoney(cost) : `${commas(n)}株`}${acct === 'nisa' ? '（NISA）' : ''}`);

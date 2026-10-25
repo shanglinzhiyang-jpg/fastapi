@@ -105,7 +105,7 @@ export function doShift(g, id) {
   if (J.variable) pay = Math.round((J.pay * (0.6 + 0.8 * rnd(g, 'tip', day))) / 10) * 10; // 歩合
   g.addMoney(pay, true);
   P.earned += pay;
-  passMinutes(g, J.hours * 60);
+  passMinutes(g, J.hours * 60, `バイト（${J.name}）`);
   const lines = [J.lines[Math.floor(rnd(g, 'line', day) * J.lines.length)]];
   let perk = null;
   const week = Math.floor((day - 1) / 7);
@@ -161,11 +161,11 @@ const adsOpen = (g) => ymOf(g) >= 200801;
 export const videoTitle = (g) => (devOf(g) === 'techo' ? '投稿ビデオ' : devOf(g) === 'keitai' ? '動画' : '動画配信');
 const TAPE_SHOW = '『びっくり！投稿ビデオ大賞』';
 definePart('video', (s, day) => ({
-  subs: Math.max(0, Math.floor(num(s.subs))), views: Math.max(0, Math.floor(num(s.views))), earned: Math.max(0, Math.round(num(s.earned))),
+  subs: Math.max(0, Math.floor(num(s.subs))), views: Math.max(0, Math.floor(num(s.views))), earned: Math.max(0, Math.round(num(s.earned))), tips: Math.max(0, Math.round(num(s.tips))),
   posts: arr(s.posts).filter(isObj).slice(0, 20).map((p) => ({
     id: Math.floor(num(p.id)), day: Math.floor(num(p.day, day)), kind: str(p.kind, 12), title: str(p.title, 30), q: clamp(Math.round(num(p.q)), 0, 100),
     total: Math.max(0, Math.round(num(p.total))), got: Math.max(0, Math.round(num(p.got))), step: clamp(Math.floor(num(p.step)), 0, 3),
-    subs: Math.max(0, Math.round(num(p.subs))), fans: Math.round(num(p.fans)), money: Math.max(0, Math.round(num(p.money))), buzz: !!p.buzz, flame: !!p.flame, live: !!p.live,
+    subs: Math.max(0, Math.round(num(p.subs))), fans: Math.round(num(p.fans)), fansAll: Math.round(num(p.fansAll)), subsAll: Math.max(0, Math.round(num(p.subsAll))), money: Math.max(0, Math.round(num(p.money))), buzz: !!p.buzz, flame: !!p.flame, live: !!p.live,
   })),
   nextId: Math.max(1, Math.floor(num(s.nextId, 1))), lastPost: Math.floor(num(s.lastPost)), lastLive: Math.floor(num(s.lastLive)),
   tapes: arr(s.tapes).filter(isObj).slice(0, 6).map((t) => ({ id: Math.floor(num(t.id)), day: Math.floor(num(t.day, day)), due: Math.floor(num(t.due, day + 7)), q: clamp(Math.round(num(t.q)), 0, 100), title: str(t.title, 30), kind: str(t.kind, 12) })),
@@ -186,6 +186,11 @@ export const VIDEO_KINDS = {
 const kindName = (g, k) => { const K = VIDEO_KINDS[k]; return typeof K.name === 'function' ? K.name(g) : K.name; };
 const audience = (g) => { const ym = ymOf(g); return ym < 201001 ? 0.4 : ym < 201601 ? 0.7 : 1; };
 const flaming = (g) => part(g, 'video').flameUntil >= g.state.day;
+// the expected views of a plain video (before quality and luck): fans, fame, 登録者 (square roots: no runaway)
+export function viewBase(g) {
+  const st = g.state, V = part(g, 'video');
+  return (40 + 15 * Math.sqrt(V.subs) + num(st.fans) * 0.25 + num(st.fame) * 0.8) * audience(g);
+}
 function snsName(g) { const e = eraOf(g.state); return e.snsShort || e.sns || 'SNS'; }
 // Why a video cannot be posted now
 export function videoWhy(g, kind) {
@@ -193,6 +198,8 @@ export function videoWhy(g, kind) {
   const lb = lifeBlock(g);
   if (lb) return lb;
   if (!K) return 'その動画はつくれない。';
+  if (devOf(g) === 'techo') return 'この時代は、ビデオテープを番組に送る（投稿ビデオ）。';
+  if (ymOf(g) < 200601) return 'まだ動画を投稿できるサイトがない。';
   if (K.smart && devOf(g) !== 'smart') return 'スマホの時代の動画。';
   if (K.from && ymOf(g) < K.from) return 'まだそういう動画はない。';
   if (K.cond && !K.cond(g)) return K.why;
@@ -209,17 +216,22 @@ export function postVideo(g, kind, o = {}) {
   st.stamina -= K.stamina;
   g.lifeTick({ stress: 3, hunger: -5 });
   V.lastPost = day;
+  passMinutes(g, K.short ? 40 : 120, '動画の撮影と編集');
   const id = V.nextId++;
   const q = clamp(Math.round(K.q(g, o) + 8 * gaussR(g, 'vq', id)), 0, 100);
-  const base = (20 + V.subs * 0.25 + num(st.fans) * 0.01 + num(st.fame) * 0.2) * audience(g);
-  const luck = Math.exp(0.7 * gaussR(g, 'vluck', id));
+  const base = viewBase(g);
+  const luck = Math.exp(0.6 * gaussR(g, 'vluck', id));
   const buzzP = 0.01 + q / 2500;
   const buzz = rnd(g, 'vbuzz', id) < buzzP;
   let total = base * (0.25 + (q / 55) ** 2) * luck * (buzz ? 6 + 9 * rnd(g, 'vbuzzx', id) : 1) * (K.short ? 2.2 : 1) * (flaming(g) ? 0.6 : 1);
   total = Math.max(3, Math.round(total));
   const flame = rnd(g, 'vflame', id) < K.risk * (flaming(g) ? 0.5 : 1);
   const title = str(o.title || (o.neta && o.neta.title) || kindName(g, kind), 30);
-  const P = { id, day, kind, title, q, total, got: 0, step: 0, subs: 0, fans: 0, money: 0, buzz, flame, live: false };
+  // fans and 登録者 grow with the square root of the views (no runaway): ≈ a daily SNS post for a good video
+  const fanCap = (60 + Math.sqrt(Math.max(0, num(st.fans))) * 4) * (buzz ? 2 : 1);
+  const fansAll = Math.min(Math.round(fanCap), Math.round(2 * Math.sqrt(total) * (0.4 + q / 80) * (K.short ? 0.6 : 1)));
+  const subsAll = Math.round(total * (0.01 + q / 4000) * (K.short ? 0.5 : 1));
+  const P = { id, day, kind, title, q, total, got: 0, step: 0, subs: 0, fans: 0, money: 0, buzz, flame, live: false, fansAll, subsAll };
   V.posts.unshift(P);
   if (V.posts.length > 20) V.posts.length = 20;
   const first = deliver(g, P);
@@ -240,10 +252,10 @@ function deliver(g, P) {
   const views = P.step === 2 ? P.total - P.got : Math.round(P.total * share);
   P.got += views; P.step++;
   V.views += views;
-  const subs = Math.round(views * ((VIDEO_KINDS[P.kind] && VIDEO_KINDS[P.kind].short ? 0.002 : 0.004) + P.q / 25000));
+  const last = P.step === 3;
+  const subs = last ? num(P.subsAll) - P.subs : Math.round(num(P.subsAll) * share);
   V.subs += subs; P.subs += subs;
-  const cap = (P.buzz ? 3 : 1) * (40 + Math.round(num(st.fans) * 0.05));
-  const fans = Math.min(cap, Math.round(subs * 0.4));
+  const fans = last ? num(P.fansAll) - P.fans : Math.round(num(P.fansAll) * share);
   if (fans) { g.addFans(fans, true); P.fans += fans; }
   if (adsOpen(g) && V.subs >= 1000) { const yen = Math.round(views * 0.15); if (yen) { g.addMoney(yen, true); P.money += yen; V.earned += yen; } }
   return views;
@@ -283,14 +295,15 @@ export function goLive(g, kind = 'zatsudan') {
   const st = g.state, V = part(g, 'video'), L = LIVE_KINDS[kind] || LIVE_KINDS.zatsudan, day = st.day;
   st.stamina -= 15;
   V.lastLive = day;
+  passMinutes(g, 60, 'ライブ配信');
   const w = weatherNow(g);
-  const viewers = Math.max(1, Math.round((15 + V.subs * 0.05 + num(st.fans) * 0.004 + num(st.fame) * 0.08) * audience(g) * Math.exp(0.4 * gaussR(g, 'lv', day)) * (w && w.id !== 'sunny' && w.id !== 'cloudy' ? 1.15 : 1) * (flaming(g) ? 1.3 : 1)));
+  const viewers = Math.max(1, Math.round((15 + 2 * Math.sqrt(V.subs) + 1.5 * Math.sqrt(Math.max(0, num(st.fans))) + num(st.fame) * 0.05) * audience(g) * Math.exp(0.4 * gaussR(g, 'lv', day)) * (w && w.id !== 'sunny' && w.id !== 'cloudy' ? 1.15 : 1) * (flaming(g) ? 1.3 : 1)));
   const skillV = (stat(g, L.stat) + skill(g, L.skill)) / 2;
-  const tips = tipsOpen(g) ? Math.round(viewers * (0.5 + 2.5 * rnd(g, 'tips', day)) * (0.6 + skillV / 100)) : 0;
-  const fans = Math.min(30 + Math.round(num(st.fans) * 0.02), Math.round(viewers * (0.01 + skillV / 4000)));
+  const tips = tipsOpen(g) ? Math.round(viewers * (2 + 18 * rnd(g, 'tips', day)) * (0.6 + skillV / 100)) : 0;
+  const fans = Math.min(30 + Math.round(Math.sqrt(Math.max(0, num(st.fans))) * 2), Math.round(1.2 * Math.sqrt(viewers) * (0.5 + skillV / 100)));
   const troll = rnd(g, 'troll', day) < 0.25;
   const flame = rnd(g, 'lflame', day) < Math.max(0, 0.025 - stat(g, 'adlib') / 2000) + (flaming(g) ? 0.03 : 0);
-  if (tips) { g.addMoney(tips, true); V.earned += tips; }
+  if (tips) { g.addMoney(tips, true); V.tips += tips; }
   if (fans) g.addFans(fans, true);
   const stress = troll ? 10 : -8;
   g.addNeed('stress', stress);
@@ -334,6 +347,7 @@ export function sendTape(g, kind, o = {}) {
   st.stamina -= 15;
   g.lifeTick({ stress: 2, hunger: -4 });
   V.lastTape = st.day;
+  passMinutes(g, 90, 'ビデオの撮影');
   const id = V.nextId++;
   const q = clamp(Math.round(K.q(g, o) + 8 * gaussR(g, 'tq', id)), 0, 100);
   const t = { id, day: st.day, due: st.day + 5 + Math.floor(rnd(g, 'tdue', id) * 5), q, title: str(o.title || (o.neta && o.neta.title) || kindName(g, kind), 30), kind };
@@ -371,7 +385,7 @@ function drawVideoTop(c, a, g) {
     const fl = flaming(g);
     T(c, `登録者 ${commas(V.subs)}人`, a.x + 8, a.y + 4, 12, '#ffffff');
     T(c, `総再生 ${commas(V.views)}回`, a.x + a.w - 8, a.y + 4, 12, '#c8c8d8', 'right');
-    const money = adsOpen(g) ? (V.subs >= 1000 ? `収益 ${fmtMoney(V.earned)}` : `収益化まで 登録者${commas(1000 - V.subs)}人`) : '';
+    const money = adsOpen(g) ? (V.subs >= 1000 ? `広告収入 ${fmtMoney(V.earned)}${V.tips ? `・投げ銭 ${fmtMoney(V.tips)}` : ''}` : `収益化まで 登録者${commas(1000 - V.subs)}人`) : '';
     T(c, fitText(c, fl ? `炎上中（あと${V.flameUntil - g.state.day + 1}日）` : money || 'まずは1本アップしよう', a.w - 16, 12), a.x + 8, a.y + 20, 12, fl ? '#ff8a8a' : '#f0d878');
   }
   R(c, a.x, a.y + a.h - 1, a.w, 1, '#c8c0ac');
@@ -386,7 +400,7 @@ export async function videoApp(g) {
       rows.push({ id: 'tape', label: 'ビデオを撮って送る', sub: why || `テープ代・送料 ${fmtMoney(TAPE_COST)}・体力-15`, chip: ['応募', VIDEO_COLOR], disabled: !!why, why });
       for (const t of V.tapes) rows.push({ id: 'info', label: t.title, sub: `${t.day}日目に送った・審査中`, right: '…' });
     } else {
-      const why = videoWhy(g, 'vlog') && videoWhy(g, 'vlog').includes('1日1本') ? videoWhy(g, 'vlog') : null;
+      const why = lifeBlock(g) || (V.lastPost === g.state.day ? '今日はもう投稿した（1日1本）。' : null);
       rows.push({ id: 'post', label: '動画を撮ってアップ', sub: why || '1日1本', chip: ['投稿', VIDEO_COLOR], disabled: !!why, why });
       if (liveOpen(g)) { const lw = liveWhy(g); rows.push({ id: 'live', label: 'ライブ配信する', sub: lw || `体力-15${tipsOpen(g) ? '・投げ銭あり' : ''}`, chip: ['LIVE', '#c02060'], disabled: !!lw, why: lw }); }
     }
@@ -483,7 +497,8 @@ function uploadView(g, r) {
     draw(c, ph, a) {
       const k = clamp(this.t / 50, 0, 1);
       R(c, a.x + 12, a.y + 14, a.w - 24, 110, '#000000');
-      disc(c, a.x + a.w / 2, a.y + 68, 16, '#ffffff'); art(c, a.x + a.w / 2 - 4, a.y + 60, ['#....', '###..', '#####', '###..', '#....'].map((s) => s), { '#': VIDEO_COLOR }, 3);
+      disc(c, a.x + a.w / 2, a.y + 68, 16, '#ffffff');
+      for (let i = 0; i < 12; i++) R(c, a.x + a.w / 2 - 5 + i, a.y + 62 + i / 2, 1, 12 - i, VIDEO_COLOR);
       T(c, fitText(c, r.post.title, a.w - 24, 14), a.x + 12, a.y + 130, 14, '#ffffff');
       bar(c, a.x + 12, a.y + 152, a.w - 24, 6, k, VIDEO_COLOR, '#3a3a48');
       if (k < 1) { T(c, 'アップロード中…', a.x + 12, a.y + 164, 12, '#c8c8d8'); return; }

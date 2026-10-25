@@ -228,7 +228,7 @@ function drawTop(c, a, g, here) {
     const on = here && here.area === id;
     disc(c, x, y, on ? 5 : 4, paper ? '#8a5a2a' : '#1a4a70');
     disc(c, x, y, on ? 3 : 2, on ? '#ff5d6c' : '#ffffff');
-    T(c, AREAS[id].name, x, y + 7, 12, PC.text, 'center');
+    T(c, AREAS[id].name, i === 0 ? x - 6 : i === ids.length - 1 ? x + 6 : x, y + 7, 12, PC.text, i === 0 ? 'left' : i === ids.length - 1 ? 'right' : 'center');
   });
   T(c, fitText(c, `いま：${here ? here.name : '（ここからは出られない）'}`, a.w - 16, 12), a.x + 8, a.y + 4, 12, PC.text);
   const clk = clockNow(g), w = weatherNow(g);
@@ -337,14 +337,14 @@ function routeDetail(g, here, d, o) {
       };
       line(y, o.steps[0].from, '#3a3a4a');
       if (t != null) T(c, clockLabel(t), a.x + a.w - 10, y + 1, 12, PC.dim, 'right');
-      y += 18;
+      y += 16;
       for (const s of o.steps) {
         const col = STEP_COL[s.how] || COLOR;
-        R(c, a.x + 20, y - 4, 4, 30, col);
-        T(c, fitText(c, `${s.how}　${hm(s.min)}${s.note ? `・${s.note}` : ''}`, a.w - 50, 12), a.x + 32, y + 5, 12, shade(col, -0.25));
-        y += 28;
+        R(c, a.x + 20, y - 4, 4, 26, col);
+        T(c, fitText(c, `${s.how}　${hm(s.min)}${s.note ? `・${s.note}` : ''}`, a.w - 50, 12), a.x + 32, y + 3, 12, shade(col, -0.25));
+        y += 22;
         if (t != null) t += s.min;
-        if (s.how !== '乗換' && s.how !== '待つ') { line(y, s.to, s === o.steps[o.steps.length - 1] ? '#d6463a' : '#3a3a4a'); if (t != null) T(c, clockLabel(t), a.x + a.w - 10, y + 1, 12, PC.dim, 'right'); y += 18; }
+        if (s.how !== '乗換' && s.how !== '待つ') { line(y, s.to, s === o.steps[o.steps.length - 1] ? '#d6463a' : '#3a3a4a'); if (t != null) T(c, clockLabel(t), a.x + a.w - 10, y + 1, 12, PC.dim, 'right'); y += 16; }
       }
       c.restore();
       this.maxSy = Math.max(0, y + this.sy - bottom + 4);
@@ -367,7 +367,7 @@ async function doRoute(g, from, d, o) {
   T3.trips++; T3.fares += o.fare; T3.minutes += o.min;
   T3.byMode[o.mode] = num(T3.byMode[o.mode]) + 1;
   T3.recent = [d.id, ...T3.recent.filter((x) => x !== d.id)].slice(0, 6);
-  passMinutes(g, o.min);
+  passMinutes(g, o.min, `移動（${o.label}）`);
   await g.fadeOut(12);
   const via = o.steps.map((s) => s.how).filter((h) => h !== '待つ').join(' → ');
   let ride = null;

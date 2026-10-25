@@ -111,10 +111,11 @@ export function clockNow(g) {
 }
 export const clockLabel = (min) => { const m = ((Math.round(min) % 1440) + 1440) % 1440; return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
 // Let time pass when the clock module offers a way (the first of these names that exists).
-export function passMinutes(g, min) {
+// clock.js: g.advanceTime(min, reason) (a trip's reason contains 移動, so its g.goto wrapper does not count it twice).
+export function passMinutes(g, min, reason = '') {
   if (!(min > 0)) return false;
-  for (const k of ['advanceClock', 'passTime', 'addMinutes', 'advanceTime', 'clockAdvance', 'spendTime']) {
-    if (has(g, k)) { try { g[k](Math.round(min)); return true; } catch (e) { console.error(e); return false; } }
+  for (const k of ['advanceTime', 'advanceClock', 'passTime', 'addMinutes']) {
+    if (has(g, k)) { try { g[k](Math.round(min), reason); return true; } catch (e) { console.error(e); return false; } }
   }
   return false;
 }
