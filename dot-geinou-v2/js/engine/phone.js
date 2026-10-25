@@ -631,14 +631,15 @@ class PhoneScene {
     const col = light ? '#ffffff' : PC.text;
     const x = SCREEN.x, y = SCREEN.y;
     T(c, `${st.day}日目 ${WEEKDAYS[weekdayOf(st.day)]}曜`, x + 6, y + 2, 12, col);
-    // signal bars
-    for (let i = 0; i < 4; i++) R(c, x + SCREEN.w - 46 + i * 3, y + 11 - (i * 2 + 3), 2, i * 2 + 3, col);
+    // a paper 手帳 has no signal or battery: stamina is a plain gauge there
+    const paper = eraOf(st).deviceShort === '手帳';
+    if (!paper) for (let i = 0; i < 4; i++) R(c, x + SCREEN.w - 46 + i * 3, y + 11 - (i * 2 + 3), 2, i * 2 + 3, col);
     // battery = stamina
     const frac = st.maxStamina ? st.stamina / st.maxStamina : 0;
     const bx = x + SCREEN.w - 30, by = y + 4;
     R(c, bx, by, 18, 9, col);
     R(c, bx + 1, by + 1, 16, 7, light ? '#000000' : PC.bg);
-    R(c, bx + 18, by + 3, 2, 3, col);
+    if (!paper) R(c, bx + 18, by + 3, 2, 3, col);
     const fw = Math.round(14 * clamp(frac, 0, 1));
     if (fw > 0) R(c, bx + 2, by + 2, fw, 5, frac > 0.5 ? '#5ee07a' : frac > 0.2 ? '#ffd23f' : '#ff5d6c');
   }

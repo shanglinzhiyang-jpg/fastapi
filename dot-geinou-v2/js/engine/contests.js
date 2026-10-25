@@ -215,10 +215,10 @@ export function heldIn(g, def, year) {
   const founded = num(h.founded, -Infinity);
   if (year < founded) return { held: false, notyet: true, note: `まだ始まっていない（${founded}年創設）` };
   const gap = Array.isArray(h.gaps) && h.gaps.find((x) => Array.isArray(x) && year >= num(x[0]) && year <= num(x[1], num(x[0])));
-  if (gap) return h.gapRevival ? { held: true, revival: true } : { held: false, hiatus: true, note: `休止中（${gap[0]}〜${gap[1] ?? gap[0]}年は開催なし）` };
+  if (gap) return h.gapRevival ? { held: true, revival: true } : { held: false, hiatus: true, note: `${year}年は開催なし` };
   if (h.ended != null && year > num(h.ended)) {
     if (h.revived != null && year >= num(h.revived)) return { held: true };
-    if (h.revived != null && year < num(h.revived) && year < startYear(g)) return { held: false, hiatus: true, note: `休止中（${h.ended}年で終了、${h.revived}年に再開）` };
+    if (h.revived != null && year < num(h.revived) && year < startYear(g)) return { held: false, hiatus: true, note: `${year}年は開催なし` };
     if (def.revive !== false && year >= startYear(g)) return { held: true, revival: true };
     return { held: false, ended: true, note: `${h.ended}年で終了` };
   }
@@ -273,7 +273,7 @@ export function seasonYearOf(g, idOrDef, day = todayOf(g)) {
   for (let k = y0 - 1; k <= y0 + 2; k++) { const [fm, fd] = finalMD(def, k); if (dayOfDate(g, k, fm, fd) >= day) { y = k; break; } }
   // a cycle that has just finished stays current until the next one actually opens (its entry window, else its first round)
   const prev = cycleOf(g, def, y - 1);
-  if (prev && prev.held && prev.final.day < day) {
+  if (prev && prev.held && prev.final.day < day && prev.final.day >= 1) {
     const next = cycleOf(g, def, y);
     const start = next && next.held ? (next.entry ? next.entry.from : next.rounds.length ? next.rounds[0].first : next.final.day) : Infinity;
     if (day < start) return y - 1;
@@ -948,10 +948,40 @@ export function feeOf(g, id, year) {
   const ft = def ? safe(`feeText:${id}`, () => (typeof def.feeText === 'function' ? def.feeText(year) : def.feeText), null) : null;
   return { yen, internal: realToInternal(yen), text: ft ? String(ft) : yen ? `${yenLabel(yen)}（1組）` : isInvitational(def) ? 'なし（招待制）' : '無料' };
 }
+// Research notes never reach the screen (DECISIONS6 §1): a parenthetical that is a note (未確認, 非公開 …) is dropped, and a text
+// that still reads like one is dropped whole.
+const NOTE_RE = /未確認|確認でき|逆算|非公開|非公表|ゲーム独自|ゲーム内の設定|ゲームの中|扱い|推定|不明|架空|この世界|要確認|諸説/;
+export function cleanText(t) {
+  let s = String(t ?? '');
+  s = s.replace(/[（(][^（）()]*[）)]/g, (m) => (NOTE_RE.test(m) ? '' : m)).replace(/\s+$/, '');
+  return NOTE_RE.test(s) ? '' : s;
+}
+// Is `text` safe to show in `now`: no research notes and no year after `now` in it.
+export function pastOnly(text, now) {
+  const s = cleanText(text);
+  if (!s) return '';
+  for (const m of s.matchAll(/(1[89]\d\d|20\d\d)年?/g)) if (Number(m[1]) > now) return '';
+  return s;
+}
 export function prizeOf(def, year) {
   const p = def && def.prize;
   const yen = typeof p === 'function' ? num(safe(`prize:${def.id}`, () => p(year), 0)) : num(p, 0);
-  return { yen, text: (def && def.prizeText) || (yen ? `優勝賞金 ${yenLabel(yen)}` : '') };
+  const text = cleanText((def && def.prizeText) || '');
+  return { yen, text: text || (yen ? `優勝賞金 ${yenLabel(yen)}` : '') };
+}
+// 1000万円 / 50万円 / 3,000円 (a real amount as is)
+export function manLabel(yen) {
+  const y = Math.round(num(yen));
+  if (y >= 10000) { const m = y / 10000; return `${Number.isInteger(m) ? m.toLocaleString('ja-JP') : (Math.round(m * 10) / 10).toLocaleString('ja-JP')}万円`; }
+  return `${y.toLocaleString('ja-JP')}円`;
+}
+// The prize belongs to the act; each member gets prize ÷ members (DECISIONS6 §4). → { yen, members, share, text }
+export function prizeShare(g, def, year) {
+  const yen = prizeOf(def, year).yen;
+  const u = playerUnit(g);
+  const members = Math.max(1, Array.isArray(u && u.members) ? u.members.length : 1);
+  const share = Math.round(yen / members);
+  return { yen, members, share, text: yen ? (members > 1 ? `賞金${manLabel(yen)}（ひとり${manLabel(share)}）` : `賞金${manLabel(yen)}`) : '' };
 }
 
 // ================================================================ entries
@@ -1076,7 +1106,7 @@ export function applyReward(g, id, what, opts = {}) {
   else if (what === 'finalist') { fame = Math.round((40 + 260 * p) * tv); fans = Math.round(600 + 9000 * p * tv); stress = -8; harmony = 2; }
   else if (what === 'third') { fame = Math.round((55 + 340 * p) * tv); fans = Math.round(800 + 12000 * p * tv); stress = -10; harmony = 3; }
   else if (what === 'runnerup') { fame = Math.round((70 + 430 * p) * tv); fans = Math.round(1000 + 17000 * p * tv); stress = -12; harmony = 3; }
-  else if (what === 'champion') { fame = Math.round((110 + 720 * p) * tv); fans = Math.round(2000 + 42000 * p * tv); stress = -35; harmony = 6; if (opts.prize !== false) money = realToInternal(prizeOf(def, opts.year ?? seasonYearOf(g, id)).yen); }
+  else if (what === 'champion') { fame = Math.round((110 + 720 * p) * tv); fans = Math.round(2000 + 42000 * p * tv); stress = -35; harmony = 6; if (opts.prize !== false) money = realToInternal(prizeShare(g, def, opts.year ?? seasonYearOf(g, id)).share); }
   else if (what === 'out') { stress = 4; harmony = -1; }
   if (fame) g.addFame(fame, true);
   if (fans) g.addFans(fans, true);
@@ -1135,8 +1165,8 @@ export function externalEntry(g, def) {
 }
 function selfHistory(g, def) {
   const rowOf = (r) => r && {
-    year: num(r.year ?? r.y), edition: r.edition ?? r.ed ?? null, held: r.held !== false, revival: !!(r.revival ?? r.rev), champion: r.champion ?? r.chN ?? null,
-    runnerUp: r.runnerUp ?? r.ruN ?? null, third: r.third ?? r.thN ?? null, finalists: r.finalists || r.finN || [], note: r.note || '', player: r.player ?? r.playerPlace ?? (r.ch === 'me' ? 1 : null), champId: r.ch === 'me' ? 'player' : null,
+    year: num(r.year ?? r.y), edition: r.edition ?? r.ed ?? null, held: r.held !== false, revival: r.revival === true, champion: r.champion ?? r.chN ?? null,
+    runnerUp: r.runnerUp ?? r.ruN ?? null, third: r.third ?? r.thN ?? null, finalists: r.finalists || r.finN || [], note: r.note || '', player: r.player ?? r.playerPlace ?? (r.ch === 'me' ? 1 : null), champId: r.ch === 'me' ? 'player' : null, awards: isObj(r.awardWinners) ? r.awardWinners : isObj(r.awards) ? r.awards : null,
   };
   const hl = safe(`historyList:${def.id}`, () => (typeof def.historyList === 'function' ? def.historyList(g) : null), null);
   if (Array.isArray(hl)) return hl.map((r) => safe(`historyRow:${def.id}`, () => rowOf(r), null)).filter((r) => r && r.year).sort((a, b) => a.year - b.year);
