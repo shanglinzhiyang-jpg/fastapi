@@ -7,13 +7,14 @@
 // A the day's events. Taps: tabs, ×, rows (first tap selects, second acts), calendar cells, ‹ › (year), modal buttons.
 // Test hook: window.__contestui = { scene(), open, TABS }.
 
-import { SW, SH, clamp, shade, fmtMoney } from './util.js';
+import { SW, SH, clamp, shade, fmtMoney, makeCanvas } from './util.js';
 import { text, measure } from './draw.js';
 import { audio } from './audio.js';
 import { registerPhoneApp } from './life.js';
 import { phoneList, phoneInfo, phoneConfirm, appTile, closePhoneThen, phoneOverMapOnly, activePhone } from './phone.js';
 import { drawFaceHD } from './sprites.js';
 import { CONTESTS, CONTEST_UI, internals as I } from './contests.js';
+import * as TVG from './contests_tv.js';
 
 const has = (g, k) => !!g && typeof g[k] === 'function';
 const num = (v, d = 0) => (v !== null && v !== '' && v !== undefined && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -29,14 +30,27 @@ const ENTRY_COL = { entered: '#4a7ac8', passed: '#3fb86a', out: '#a05060', champ
 const ENTRY_LABEL = { entered: 'エントリー済み', passed: '勝ち上がり中', out: '敗退', champion: '優勝', withdrawn: '棄権' };
 
 // ================================================================ text helpers (every string has a width)
+// fitted strings are cached (a long line trimmed char by char every frame was the screen's main cost)
+const FIT = new Map();
 function fit(c, s, w, size = 12) {
   s = String(s ?? '');
   if (w <= 0) return '';
-  if (measure(c, s, size) <= w) return s;
-  const a = Array.from(s);
-  while (a.length > 1 && measure(c, a.join('') + '…', size) > w) a.pop();
-  return a.join('') + '…';
+  const key = `${size}|${Math.round(w)}|${s}`;
+  const hit = FIT.get(key);
+  if (hit !== undefined) return hit;
+  let out = s;
+  if (measure(c, s, size) > w) {
+    // binary search on the length, then the ellipsis
+    const a = Array.from(s);
+    let lo = 1, hi = a.length;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (measure(c, a.slice(0, mid).join('') + '…', size) <= w) lo = mid; else hi = mid - 1; }
+    out = a.slice(0, lo).join('') + '…';
+  }
+  FIT.set(key, out);
+  if (FIT.size > 800) FIT.delete(FIT.keys().next().value);
+  return out;
 }
+const fitTo = (c, s, w, size) => fit(c, s, w, size);
 function T(c, s, x, y, size = 12, color = K.text, align = 'left', w = 0) { text(c, w > 0 ? fit(c, s, w, size) : String(s ?? ''), Math.round(x), Math.round(y), { size, color, align, shadow: null }); }
 const NO_START = new Set('、。，．・：；？！ー～…‥）」』】〕〉》’”ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ!?.,)]}%％'.split(''));
 const NO_END = new Set('（「『【〔〈《‘“([{'.split(''));
@@ -197,6 +211,27 @@ const TABS = [
 ];
 const tabIndex = (id) => Math.max(0, TABS.findIndex((t) => t.id === id));
 const LIST_Y = 66, ROW_H = 26, LIST_ROWS = 10;
+// entries are big エントリーNo. cards (two rows tall)
+const rowHOf = (id) => (id === 'entries' ? ROW_H * 2 : ROW_H);
+const rowNOf = (id) => Math.floor((LIST_ROWS * ROW_H) / rowHOf(id));
+// the broadcast look of the current in-game year (昭和 / 平成 / 令和)
+const styleOf = (g) => TVG.tvStyle(I.contestDate(g).year);
+// today's final (LIVE) and the next final worth a countdown: the player's contests first, then the most prestigious
+function heroOf(g) {
+  const today = I.todayOf(g);
+  let live = null, next = null;
+  for (const x of safe(() => g.contests(), []) || []) {
+    const cyc = x.cyc;
+    if (!cyc || !cyc.held || !cyc.final) continue;
+    const fd = cyc.final.day;
+    const e = x.entry;
+    const mine = !!(e && (e.status === 'entered' || e.status === 'passed' || e.status === 'champion'));
+    const name = x.def.short || I.contestName(x.def, x.year);
+    if (fd === today) { const s = (mine ? 1000 : 0) + I.prestigeOf(x.def); if (!live || s > live.s) live = { s, name, mine, id: x.id }; }
+    else if (fd > today && fd - today <= 120) { const s = (mine ? 1000 : 0) + I.prestigeOf(x.def) * 2 - (fd - today); if (!next || s > next.s) next = { s, name, days: fd - today, mine, id: x.id }; }
+  }
+  return { live, next };
+}
 const CAL = { x: 50, y: 64, cw: 29, ch: 21, px: 352 };
 
 function yearEvents(g, Y) {
@@ -224,7 +259,7 @@ function yearEvents(g, Y) {
 
 class ContestScene {
   constructor(g, opts, resolve) {
-    Object.assign(this, { g, resolve, hd: true, opaque: true, hidesHud: true, isContestUI: true, t: 0, focus: opts && opts.tab ? 'body' : 'tabs', tabIdx: tabIndex(opts && opts.tab), lists: {}, modals: [], toasts: [], busy: 0, tapAt: null, closed: false, filter: 0, dataT: -999, evCache: null });
+    Object.assign(this, { g, resolve, hd: true, opaque: true, hidesHud: true, isContestUI: true, t: 0, focus: opts && opts.tab ? 'body' : 'tabs', tabIdx: tabIndex(opts && opts.tab), lists: {}, modals: [], toasts: [], busy: 0, tapAt: null, closed: false, filter: 0, dataT: -999, evCache: null, tabT: -99, tabDir: 1, ulX: null, hero: null, st: null });
     bindTap(g);
     const d = I.contestDate(g);
     this.cal = { year: d.year, month: d.month, dom: d.dom };
@@ -236,11 +271,21 @@ class ContestScene {
     if (!force && this.t - this.dataT < 30) return;
     this.dataT = this.t;
     this._rows = safe(() => this.buildRows(), []) || [];
+    this.hero = safe(() => heroOf(this.g), null);
+    this._heads = null;
+    this.st = styleOf(this.g);
     const st = this.ls();
     if (st.i >= this._rows.length) st.i = Math.max(0, this._rows.length - 1);
   }
   dirty() { this.dataT = -999; this.evCache = null; }
-  setTab(i) { this.tabIdx = (i + TABS.length) % TABS.length; this.refresh(true); }
+  setTab(i) {
+    const n = (i + TABS.length) % TABS.length;
+    if (n !== this.tabIdx) { this.tabDir = n > this.tabIdx ? 1 : -1; this.tabT = this.t; }
+    this.tabIdx = n;
+    this.refresh(true);
+  }
+  get rowH() { return rowHOf(this.tab.id); }
+  get rowN() { return rowNOf(this.tab.id); }
   rows() { return this._rows || []; }
   // ---------------------------------------------------------------- rows per tab
   buildRows() {
@@ -248,7 +293,7 @@ class ContestScene {
     const id = this.tab.id;
     if (id === 'list') {
       const FILTERS = ['すべて', '出られる大会', 'エントリー中', '開催中・受付中'];
-      const all = g.contests();
+      const all = g.contests().filter((x) => x.status !== 'notyet');
       const rows = [{ filter: true, label: `表示：${FILTERS[this.filter]}（Aで切りかえ）`, sub: `${all.length}大会` }];
       for (const x of all) {
         const el = safe(() => I.eligibilityOf(g, x.id, x.year), { ok: false, why: '' });
@@ -286,7 +331,7 @@ class ContestScene {
       }
       return out.sort((a, b) => num(b.r.day) - num(a.r.day));
     }
-    if (id === 'history') return Object.values(CONTESTS).map((def) => ({ def, color: I.colorOf(def) })).sort((a, b) => I.prestigeOf(b.def) - I.prestigeOf(a.def) || String(a.def.name).localeCompare(String(b.def.name), 'ja'));
+    if (id === 'history') return Object.values(CONTESTS).filter((def) => num(def.history && def.history.founded, -Infinity) <= I.contestDate(g).year).map((def) => ({ def, color: I.colorOf(def) })).sort((a, b) => I.prestigeOf(b.def) - I.prestigeOf(a.def) || String(a.def.name).localeCompare(String(b.def.name), 'ja'));
     if (id === 'news') return I.cstate(g).news.slice(0, 160).map((n) => ({ n }));
     return [];
   }
@@ -358,7 +403,7 @@ class ContestScene {
   }
   handleTap(tap, inp) {
     const touch = !!this.touchLayout;
-    if (inR(tap.x, tap.y, touch ? { x: SW - TB, y: 0, w: TB, h: TB } : { x: SW - 32, y: 0, w: 32, h: 20 })) { dropA(inp); sfx('cancel'); this.close(); return true; }
+    if (inR(tap.x, tap.y, touch ? { x: SW - TB, y: 0, w: TB, h: TB } : { x: SW - 32, y: 0, w: 32, h: 26 })) { dropA(inp); sfx('cancel'); this.close(); return true; }
     for (let i = 0; i < TABS.length; i++) if (inR(tap.x, tap.y, this.tabRects && this.tabRects[i])) { dropA(inp); this.focus = 'tabs'; if (i !== this.tabIdx) { this.setTab(i); sfx('cursor'); } return true; }
     // the body is drawn scaled on touch: back to its own units
     const x = touch ? (tap.x - TOX) / TS : tap.x, y = touch ? (tap.y - TOY) / TS : tap.y;
@@ -378,11 +423,11 @@ class ContestScene {
     if (L && inR(x, y, L)) {
       const rows = this.rows();
       const st = this.ls();
-      const j = (st.top || 0) + Math.floor((y - L.y) / ROW_H);
+      const j = (st.top || 0) + Math.floor((y - L.y) / this.rowH);
       if (j >= 0 && j < rows.length) { this.focus = 'body'; if (j !== st.i) { st.i = j; dropA(inp); sfx('cursor'); return true; } return false; }
     }
-    if (this.scrollUp && inR(x, y, this.scrollUp)) { dropA(inp); const st = this.ls(); st.i = Math.max(0, st.i - LIST_ROWS); return true; }
-    if (this.scrollDn && inR(x, y, this.scrollDn)) { dropA(inp); const st = this.ls(); st.i = Math.min(this.rows().length - 1, st.i + LIST_ROWS); return true; }
+    if (this.scrollUp && inR(x, y, this.scrollUp)) { dropA(inp); const st = this.ls(); st.i = Math.max(0, st.i - this.rowN); return true; }
+    if (this.scrollDn && inR(x, y, this.scrollDn)) { dropA(inp); const st = this.ls(); st.i = Math.min(this.rows().length - 1, st.i + this.rowN); return true; }
     dropA(inp);
     return true;
   }
@@ -462,108 +507,162 @@ class ContestScene {
       else if (a === 'quit') { const q = await this.confirm({ title: 'エントリーの取り消し', lines: ['本当に辞退する？（参加費はもどらない）'], choices: ['辞退する', 'やめる'], index: 1 }); if (q === 0) { const en = I.entryOf(g, id, y); if (en) { en.status = 'withdrawn'; en.results.push({ round: en.round, passed: false, withdrawn: true, day: I.todayOf(g), note: '辞退' }); I.bump(g, id, y); this.toast('辞退した'); } } }
     }
   }
-  // ---------------------------------------------------------------- drawing
-  drawTouch(c, g) {
-    R(c, 0, 0, SW, SH, K.bg);
+  // ---------------------------------------------------------------- drawing (the broadcast look: contests_tv.js)
+  style() { return this.st || (this.st = styleOf(this.g)); }
+  // the tab bar: slanted broadcast tabs, the selected one in gold, an underline that slides to it
+  drawTabs(c, st, y, h, w, size) {
     this.tabRects = [];
-    const tw = (SW - TB) / TABS.length;
-    const dueN = I.roundsToday(g);
+    const tw = w / TABS.length;
+    const dueN = I.roundsToday(this.g);
+    const target = this.tabIdx * tw;
+    this.ulX = this.ulX == null ? target : this.ulX + (target - this.ulX) * 0.35;
     TABS.forEach((tb, i) => {
-      const x = Math.round(i * tw), w = Math.round((i + 1) * tw) - x, on = i === this.tabIdx;
-      R(c, x + 1, 0, w - 2, TB - 2, on ? (this.focus === 'tabs' ? K.gold : K.panel2) : '#150f24');
-      if (on) R(c, x + 1, TB - 5, w - 2, 3, K.gold);
-      T(c, tb.label, x + w / 2, TB / 2 - 8, 14, on && this.focus === 'tabs' ? '#1a1206' : on ? K.gold : K.text, 'center', w - 8);
-      if (i === 0 && dueN) R(c, x + w - 12, 8, 6, 6, '#ff5468');
-      this.tabRects.push({ x, y: 0, w, h: TB });
+      const x = Math.round(i * tw), ww = Math.round((i + 1) * tw) - x, on = i === this.tabIdx;
+      const lit = on && this.focus === 'tabs';
+      TVG.band(c, x + 1, y + 1, ww - 2, h - 2, on ? st.tabOn0 : st.tab0, on ? st.tabOn1 : st.tab1, { slant: Math.min(10, Math.round(h / 2)), vertical: true });
+      if (on && lit) TVG.sheen(c, this.t, x + 1, y + 1, ww - 2, h - 2, 150, Math.min(10, Math.round(h / 2)));
+      const col = on ? st.ink : '#ffffff';
+      T(c, tb.label, x + ww / 2, y + Math.round((h - size) / 2) - 1, size, col, 'center', ww - 18);
+      if (i === 0 && dueN) { c.fillStyle = st.liveCol; c.beginPath(); c.arc(x + ww - 12, y + 7, 4, 0, Math.PI * 2); c.fill(); }
+      this.tabRects.push({ x, y, w: ww, h });
     });
-    R(c, SW - TB + 1, 0, TB - 2, TB - 2, '#3a1a2a');
-    T(c, '×', SW - TB / 2, TB / 2 - 12, 24, K.text, 'center');
+    R(c, this.ulX + 8, y + h - 3, tw - 16, 3, this.focus === 'tabs' ? '#ffffff' : st.accent);
+  }
+  // the title band: the logo, the date, LIVE on a final day / the countdown to the next final, today's 本番
+  drawHeader(c, g, st) {
+    TVG.band(c, 0, 0, SW, 26, st.band0, st.band1);
+    R(c, 0, 25, SW, 1, st.rule);
+    TVG.sheen(c, this.t, 0, 0, SW, 25, 260);
+    const lw = TVG.logo(c, 10, 3, st, this.t, 18);
+    const d = I.contestDate(g);
+    T(c, `${d.year}年（${I.wareki(d.year, d.month)}）${d.month}月${I.realDay(d.dom)}日・${I.todayOf(g)}日目`, 18 + lw, 8, 10, '#ffffff', 'left', 190);
+    T(c, '×', SW - 12, 5, 14, '#ffffff', 'center');
+    let rx = SW - 28;
+    const hero = this.hero || {};
+    const dueN = I.roundsToday(g);
+    if (dueN) {
+      const s = `今日は本番！${dueN > 1 ? `（${dueN}件）` : ''}`;
+      const w = Math.ceil(measure(c, s, 10)) + 12;
+      R(c, rx - w, 5, w, 16, st.accent); T(c, s, rx - w / 2, 8, 10, st.ink, 'center');
+      rx -= w + 6;
+    }
+    if (hero.live) {
+      const w0 = TVG.liveBadge(c, rx, 5, st, this.t, st.live, 'right');
+      const s = `本日決勝 ${hero.live.name}`;
+      TVG.telop(c, s, rx - w0 - 6, 6, 12, st.telop, st.telopLine, 'right', Math.max(40, rx - w0 - 6 - 230 - lw));
+    } else if (hero.next && rx > 330) {
+      const label = `${fitTo(c, hero.next.name, Math.max(40, rx - 360 - lw), 10)}決勝まで`;
+      TVG.countdown(c, rx, 4, st, label, hero.next.days, this.t);
+    }
+  }
+  // the body (list / calendar) slides in from the side of the new tab for a few frames
+  drawBody(c, g) {
     this.listRect = null; this.scrollUp = this.scrollDn = null; this.yPrev = this.yNext = null;
+    const k = TVG.easeOut((this.t - this.tabT) / 12);
+    c.save();
+    if (k < 1) { c.globalAlpha = 0.35 + 0.65 * k; c.translate(Math.round((1 - k) * 36 * this.tabDir), 0); }
+    try { if (this.tab.id === 'calendar') this.drawCal(c, g); else this.drawList(c, g); } catch (e) { console.error(e); }
+    c.restore();
+  }
+  drawTouch(c, g) {
+    const st = this.style();
+    TVG.backdrop(c, st);
+    TVG.beams(c, this.t, st, 0, TB, SW, SH - TB, 1);
+    this.drawTabs(c, st, 0, TB, SW - TB, 14);
+    TVG.band(c, SW - TB + 1, 1, TB - 2, TB - 2, st.band0, st.band1, { vertical: true });
+    T(c, '×', SW - TB / 2, TB / 2 - 12, 24, '#ffffff', 'center');
+    if (this.hero && this.hero.live) TVG.liveBadge(c, SW - TB + 6, TB - 18, st, this.t, st.live, 'left', 14);
     c.save();
     c.translate(TOX, TOY);
     c.scale(TS, TS);
-    try { if (this.tab.id === 'calendar') this.drawCal(c, g); else this.drawList(c, g); } catch (e) { console.error(e); }
+    this.drawBody(c, g);
     c.restore();
     this.toasts.forEach((t, i) => { const w = Math.min(SW - 40, measure(c, t.text, 12) + 20); R(c, (SW - w) / 2, 300 - i * 22, w, 20, 'rgba(0,0,0,0.85)'); T(c, t.text, SW / 2, 304 - i * 22, 12, t.color, 'center', w - 10); });
+    TVG.crt(c, st, this.t);
     for (const m of this.modals) { R(c, 0, 0, SW, SH, 'rgba(0,0,0,0.5)'); m.draw(this, c); }
   }
   draw(c, g) {
     this.touchLayout = isTouch();
     if (this.touchLayout) { this.drawTouch(c, g); return; }
-    R(c, 0, 0, SW, SH, K.bg);
-    R(c, 0, 0, SW, 20, K.head);
-    T(c, '賞レース', 8, 3, 12, K.gold);
-    const d = I.contestDate(g);
-    T(c, `${d.year}年（${I.wareki(d.year, d.month)}）${d.month}月${I.realDay(d.dom)}日　${I.todayOf(g)}日目`, 80, 4, 10, K.dim, 'left', 300);
-    const dueN = I.roundsToday(g);
-    if (dueN) T(c, `今日は本番の日！（${dueN}件）`, SW - 30, 4, 10, K.gold, 'right', 220);
-    T(c, '×', SW - 12, 3, 12, K.dim, 'center');
-    this.tabRects = [];
-    const tw = Math.floor(SW / TABS.length);
-    TABS.forEach((tb, i) => {
-      const x = i * tw, on = i === this.tabIdx;
-      R(c, x + 1, 21, tw - 2, 18, on ? (this.focus === 'tabs' ? K.gold : K.panel2) : '#150f24');
-      T(c, tb.label, x + tw / 2, 24, 12, on && this.focus === 'tabs' ? '#1a1206' : on ? K.gold : K.text, 'center', tw - 8);
-      this.tabRects.push({ x, y: 20, w: tw, h: 20 });
-    });
-    this.listRect = null; this.scrollUp = this.scrollDn = null; this.yPrev = this.yNext = null;
-    try { if (this.tab.id === 'calendar') this.drawCal(c, g); else this.drawList(c, g); } catch (e) { console.error(e); }
-    // footer: hint + news ticker
-    R(c, 0, 336, SW, 24, '#0a0712');
-    R(c, 0, 336, SW, 1, K.edge);
+    const st = this.style();
+    TVG.backdrop(c, st);
+    TVG.beams(c, this.t, st, 0, 44, SW, 292, 1);
+    this.drawHeader(c, g, st);
+    this.drawTabs(c, st, 26, 18, SW, 12);
+    this.drawBody(c, g);
+    // footer: the 速報 ticker + the key hints
     const news = I.cstate(g).news.slice(0, 6).map((n) => String(n.text).split('\n')[0]).join('　◆　') || '賞レースのニュースはまだない。';
-    const tw2 = measure(c, news, 10) + 80;
-    const off = (this.t * 0.6) % Math.max(1, tw2);
-    c.save(); c.beginPath(); c.rect(0, 337, 430, 22); c.clip();
-    T(c, news, 8 - off, 343, 10, K.text); T(c, news, 8 - off + tw2, 343, 10, K.text);
-    c.restore();
-    R(c, 434, 338, 1, 20, K.edge);
-    T(c, this.focus === 'tabs' ? '←→タブ　↓決定　B閉じる' : this.tab.id === 'calendar' ? '十字で日付　A予定　Bタブへ' : '↑↓選ぶ　A決定　Bタブへ', SW - 6, 343, 10, K.dim, 'right', 196);
+    TVG.ticker(c, this.t, st, 0, 336, 434, 24, news);
+    R(c, 434, 336, SW - 434, 24, st.tickerBg); R(c, 434, 336, SW - 434, 1, st.rule); R(c, 434, 338, 1, 20, st.rule);
+    T(c, this.focus === 'tabs' ? '←→タブ　↓決定　B閉じる' : this.tab.id === 'calendar' ? '十字で日付　A予定　Bタブへ' : '↑↓選ぶ　A決定　Bタブへ', SW - 6, 343, 10, '#d8d0e8', 'right', 196);
     this.toasts.forEach((t, i) => { const w = Math.min(SW - 40, measure(c, t.text, 12) + 20); R(c, (SW - w) / 2, 300 - i * 22, w, 20, 'rgba(0,0,0,0.85)'); T(c, t.text, SW / 2, 304 - i * 22, 12, t.color, 'center', w - 10); });
+    TVG.crt(c, st, this.t);
     for (const m of this.modals) { R(c, 0, 0, SW, SH, 'rgba(0,0,0,0.5)'); m.draw(this, c); }
   }
-  drawCal(c, g) {
+  drawCalGrid(c, g, evs, today, sty) {
     const cal = this.cal;
-    const evs = this.events();
-    const today = I.todayOf(g);
-    // year bar
-    const yl = `${cal.year}年（${I.wareki(cal.year)}）`;
-    T(c, '‹', CAL.x + 8, 45, 14, K.gold, 'center');
-    T(c, yl, CAL.x + CAL.cw * 5, 46, 12, K.text, 'center', 220);
-    T(c, '›', CAL.x + CAL.cw * 10 - 8, 45, 14, K.gold, 'center');
-    this.yPrev = { x: CAL.x - 4, y: 42, w: 28, h: 20 }; this.yNext = { x: CAL.x + CAL.cw * 10 - 24, y: 42, w: 28, h: 20 };
     for (let m = 1; m <= 12; m++) {
       const y = CAL.y + (m - 1) * CAL.ch;
-      T(c, `${m}月`, CAL.x - 6, y + 4, 10, m === cal.month ? K.gold : K.dim, 'right');
+      T(c, `${m}月`, CAL.x - 6, y + 4, 10, m === cal.month ? sty.accent : K.dim, 'right');
       for (let d = 1; d <= 10; d++) {
         const x = CAL.x + (d - 1) * CAL.cw;
         const day = I.dayOfDate(g, cal.year, m, d);
         const list = evs.get(day) || [];
         const mine = list.some((e) => e.mine);
-        R(c, x, y, CAL.cw - 1, CAL.ch - 1, mine ? '#4a3a10' : (m % 2 ? '#1a1430' : '#1e1736'));
+        R(c, x, y, CAL.cw - 1, CAL.ch - 1, mine ? shade(sty.accent, -0.62) : (m % 2 ? sty.row0 : sty.row1));
+        if (list.some((e) => e.kind === 'final')) R(c, x, y, CAL.cw - 1, 1, 'rgba(255,210,63,0.45)');
         if (day < 1) R(c, x, y, CAL.cw - 1, CAL.ch - 1, 'rgba(0,0,0,0.35)');
         T(c, String(I.realDay(d)), x + 2, y + 1, 10, day === today ? K.cyan : K.faint);
         // markers: entry windows (bottom line), rounds (dots), finals (gold square)
         const entries = list.filter((e) => e.kind === 'entry');
         if (entries.length) R(c, x + 1, y + CAL.ch - 4, CAL.cw - 3, 2, entries.some((e) => I.entryOf(g, e.id, e.year)) ? K.good : '#3a6a8a');
         const rounds = list.filter((e) => e.kind !== 'entry');
-        rounds.slice(0, 6).forEach((e, k) => R(c, x + 2 + (k % 3) * 8 + (k >= 3 ? 4 : 0), y + 10 + (k >= 3 ? -0 : 0) + (k >= 3 ? 4 : 0), 5, 4, e.kind === 'final' ? K.gold : I.colorOf(e.def)));
+        rounds.slice(0, 6).forEach((e, k) => R(c, x + 2 + (k % 3) * 8 + (k >= 3 ? 4 : 0), y + 10 + (k >= 3 ? 4 : 0), 5, 4, e.kind === 'final' ? K.gold : I.colorOf(e.def)));
         if (rounds.length > 6) T(c, '+', x + CAL.cw - 6, y + 1, 10, K.dim);
         if (day === today) { R(c, x, y, CAL.cw - 1, 1, K.cyan); R(c, x, y + CAL.ch - 2, CAL.cw - 1, 1, K.cyan); R(c, x, y, 1, CAL.ch - 1, K.cyan); R(c, x + CAL.cw - 2, y, 1, CAL.ch - 1, K.cyan); }
-        if (m === cal.month && d === cal.dom) { const col = this.focus === 'body' ? K.gold : K.edgeHi; R(c, x - 1, y - 1, CAL.cw + 1, 2, col); R(c, x - 1, y + CAL.ch - 2, CAL.cw + 1, 2, col); R(c, x - 1, y - 1, 2, CAL.ch + 1, col); R(c, x + CAL.cw - 2, y - 1, 2, CAL.ch + 1, col); }
       }
+    }
+  }
+  drawCal(c, g) {
+    const cal = this.cal;
+    const evs = this.events();
+    const today = I.todayOf(g);
+    const sty = this.style();
+    // year bar
+    const yl = `${cal.year}年（${I.wareki(cal.year)}）`;
+    TVG.band(c, CAL.x, 44, CAL.cw * 10 - 1, 18, sty.tab0, sty.tab1, { slant: 6 });
+    T(c, '‹', CAL.x + 8, 45, 14, sty.accent, 'center');
+    TVG.telop(c, yl, CAL.x + CAL.cw * 5, 46, 12, '#ffffff', sty.telopLine, 'center', 220);
+    T(c, '›', CAL.x + CAL.cw * 10 - 8, 45, 14, sty.accent, 'center');
+    this.yPrev = { x: CAL.x - 4, y: 42, w: 28, h: 20 }; this.yNext = { x: CAL.x + CAL.cw * 10 - 24, y: 42, w: 28, h: 20 };
+    // the grid (month labels, cells, markers) is drawn once per change into a cached canvas at the screen's pixel scale
+    const tf = typeof c.getTransform === 'function' ? c.getTransform() : { a: 1 };
+    const px2 = clamp(Math.round(Math.abs(tf.a || 1) * 2) / 2, 1, 4);
+    const GX = CAL.x - 44, GY = CAL.y - 1, GW = CAL.cw * 10 + 46, GH = CAL.ch * 12 + 2;
+    const key = `${cal.year}|${cal.month}|${I.cstate(g).v}|${today}|${sty.era}|${px2}|${evs.size}`;
+    if (typeof document !== 'undefined' && (!this.calCv || this.calKey !== key)) {
+      const [cv, k2] = makeCanvas(Math.ceil(GW * px2), Math.ceil(GH * px2));
+      k2.scale(px2, px2); k2.translate(-GX, -GY);
+      this.drawCalGrid(k2, g, evs, today, sty);
+      this.calCv = cv; this.calKey = key;
+    }
+    if (this.calCv) c.drawImage(this.calCv, GX, GY, GW, GH); else this.drawCalGrid(c, g, evs, today, sty);
+    // today and the cursor are drawn live
+    for (let m = 1; m <= 12; m++) for (let d = 1; d <= 10; d++) {
+      const x = CAL.x + (d - 1) * CAL.cw, y = CAL.y + (m - 1) * CAL.ch;
+      if (m === cal.month && d === cal.dom) { const col = this.focus === 'body' ? K.gold : K.edgeHi; R(c, x - 1, y - 1, CAL.cw + 1, 2, col); R(c, x - 1, y + CAL.ch - 2, CAL.cw + 1, 2, col); R(c, x - 1, y - 1, 2, CAL.ch + 1, col); R(c, x + CAL.cw - 2, y - 1, 2, CAL.ch + 1, col); }
     }
     // legend
     const ly = CAL.y + CAL.ch * 12 + 4;
     R(c, CAL.x, ly + 4, 10, 2, '#3a6a8a'); T(c, '受付期間', CAL.x + 14, ly, 10, K.dim);
     R(c, CAL.x + 70, ly + 2, 5, 4, '#c0392b'); T(c, '予選', CAL.x + 80, ly, 10, K.dim);
     R(c, CAL.x + 116, ly + 2, 5, 4, K.gold); T(c, '決勝', CAL.x + 126, ly, 10, K.dim);
-    R(c, CAL.x + 162, ly, 10, 9, '#4a3a10'); T(c, 'あなたの出番', CAL.x + 176, ly, 10, K.dim);
+    R(c, CAL.x + 162, ly, 10, 9, shade(sty.accent, -0.62)); T(c, 'あなたの出番', CAL.x + 176, ly, 10, K.dim);
     // the day's panel
     const px = CAL.px, pw = SW - px - 8;
-    R(c, px, 44, pw, 288, K.panel); R(c, px, 44, pw, 1, K.edgeHi);
+    R(c, px, 44, pw, 288, 'rgba(0,0,0,0.45)'); TVG.band(c, px, 44, pw, 22, sty.band0, sty.band1); R(c, px, 66, pw, 1, sty.rule);
     const day = this.dayOfCal();
-    T(c, `${cal.year}年${cal.month}月${I.realDay(cal.dom)}日${day === today ? '（今日）' : day < today ? '' : day - today <= 30 ? `（${day - today}日後）` : ''}`, px + 8, 50, 12, K.gold, 'left', pw - 16);
+    TVG.telop(c, `${cal.year}年${cal.month}月${I.realDay(cal.dom)}日${day === today ? '（今日）' : day < today ? '' : day - today <= 30 ? `（${day - today}日後）` : ''}`, px + 8, 49, 12, sty.telop, sty.telopLine, 'left', pw - 16);
     const list = (evs.get(day) || []).slice();
     list.sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0) || (a.kind === 'entry' ? 1 : 0) - (b.kind === 'entry' ? 1 : 0));
     const seen = new Set();
@@ -572,8 +671,8 @@ class ContestScene {
     const maxRows = 12;
     uniq.slice(0, maxRows).forEach((e, i) => {
       const y = 70 + i * 21;
-      R(c, px + 6, y, 4, 17, e.kind === 'final' ? K.gold : I.colorOf(e.def));
-      if (e.mine) R(c, px + 12, y, pw - 18, 17, '#3a2e10');
+      R(c, px + 6, y, 4, 17, e.kind === 'final' ? sty.accent : I.colorOf(e.def));
+      if (e.mine) { R(c, px + 12, y, pw - 18, 17, shade(sty.accent, -0.6)); TVG.sparkles(c, this.t, px + 12, y, pw - 18, 17, 3, i + 3); }
       T(c, `${e.def.short || I.contestName(e.def, e.year)}`, px + 14, y + 2, 12, e.mine ? K.gold : K.text, 'left', 110);
       T(c, e.name + (e.mine ? '★' : ''), px + pw - 8, y + 3, 10, e.kind === 'entry' ? K.dim : K.text, 'right', pw - 136);
     });
@@ -586,37 +685,45 @@ class ContestScene {
     // column header
     const heads = { list: ['大会', 'つぎの日程', '状態'], entries: ['大会・エントリー', 'つぎ', '状態'], results: ['大会・回戦', '結果', ''], history: ['大会', '直近の王者', ''], news: ['ニュース', '', '日'] };
     const hd = heads[id] || ['', '', ''];
-    R(c, 6, 44, SW - 12, 18, K.panel2);
-    T(c, hd[0], 14, 47, 10, K.dim); T(c, hd[1], 400, 47, 10, K.dim); T(c, hd[2], SW - 14, 47, 10, K.dim, 'right');
+    const sty = this.style();
+    TVG.band(c, 6, 46, SW - 12, 16, sty.tab0, sty.tab1, { slant: 6 });
+    T(c, hd[0], 18, 48, 10, sty.accent); T(c, hd[1], 400, 48, 10, sty.accent); T(c, hd[2], SW - 18, 48, 10, sty.accent, 'right');
     if (!rows.length) {
       const empty = { entries: 'まだどの大会にもエントリーしていない。\n「大会一覧」から、出られる大会を探そう。', results: 'まだ結果はない。', news: '賞レースのニュースはまだない。' }[id] || '（なし）';
       jwrap(c, empty, SW - 60, 12).forEach((l, i) => T(c, l, 30, 80 + i * 18, 12, K.dim));
       return;
     }
+    const RH = this.rowH, RN = this.rowN;
     if (st.i < st.top) st.top = st.i;
-    if (st.i >= st.top + LIST_ROWS) st.top = st.i - LIST_ROWS + 1;
-    st.top = clamp(st.top, 0, Math.max(0, rows.length - LIST_ROWS));
-    this.listRect = { x: 6, y: LIST_Y, w: SW - 12, h: LIST_ROWS * ROW_H };
-    for (let k = 0; k < LIST_ROWS && st.top + k < rows.length; k++) {
+    if (st.i >= st.top + RN) st.top = st.i - RN + 1;
+    st.top = clamp(st.top, 0, Math.max(0, rows.length - RN));
+    this.listRect = { x: 6, y: LIST_Y, w: SW - 12, h: RN * RH };
+    for (let k = 0; k < RN && st.top + k < rows.length; k++) {
       const i = st.top + k;
       const row = rows[i];
-      const y = LIST_Y + k * ROW_H;
+      const y = LIST_Y + k * RH;
       const sel = i === st.i && this.focus === 'body';
-      R(c, 6, y, SW - 12, ROW_H - 2, sel ? K.sel : k % 2 ? '#171127' : '#1a132c');
-      if (sel) R(c, 6, y, 2, ROW_H - 2, K.gold);
-      if (row.color) R(c, 10, y + 4, 4, ROW_H - 10, row.color);
-      try { this.drawRow(c, g, id, row, y, sel); } catch (e) { console.error(e); }
+      // rows fly in one after another when the tab opens
+      const kk = TVG.easeOut((this.t - this.tabT - k * 2) / 10);
+      c.save();
+      if (kk < 1) { c.globalAlpha *= 0.2 + 0.8 * kk; c.translate(Math.round((1 - kk) * 26), 0); }
+      if (sel) { TVG.band(c, 6, y, SW - 12, RH - 2, sty.sel0, sty.sel1); TVG.sheen(c, this.t, 6, y, SW - 12, RH - 2, 200); R(c, 6, y, 3, RH - 2, sty.accent); }
+      else R(c, 6, y, SW - 12, RH - 2, k % 2 ? sty.row1 : sty.row0);
+      R(c, 6, y + RH - 2, SW - 12, 1, 'rgba(255,255,255,0.05)');
+      if (row.color) { c.fillStyle = row.color; c.beginPath(); c.moveTo(13, y + 4); c.lineTo(17, y + 4); c.lineTo(13, y + RH - 6); c.lineTo(9, y + RH - 6); c.closePath(); c.fill(); }
+      try { this.drawRow(c, g, id, row, y, sel, k); } catch (e) { console.error(e); }
+      c.restore();
     }
-    if (rows.length > LIST_ROWS) {
-      const h = LIST_ROWS * ROW_H;
-      const bh = Math.max(12, (h * LIST_ROWS) / rows.length);
-      R(c, SW - 5, LIST_Y, 2, h, '#2a2040');
-      R(c, SW - 5, LIST_Y + ((h - bh) * st.top) / Math.max(1, rows.length - LIST_ROWS), 2, bh, K.edgeHi);
+    if (rows.length > RN) {
+      const h = RN * RH;
+      const bh = Math.max(12, (h * RN) / rows.length);
+      R(c, SW - 5, LIST_Y, 2, h, 'rgba(255,255,255,0.12)');
+      R(c, SW - 5, LIST_Y + ((h - bh) * st.top) / Math.max(1, rows.length - RN), 2, bh, sty.accent);
       T(c, `${st.i + 1}／${rows.length}`, SW - 12, LIST_Y + h + 2, 10, K.dim, 'right');
       this.scrollUp = { x: SW - 40, y: LIST_Y - 20, w: 34, h: 18 }; this.scrollDn = { x: SW - 80, y: LIST_Y + h, w: 74, h: 14 };
     }
   }
-  drawRow(c, g, id, row, y) {
+  drawRow(c, g, id, row, y, sel = false, k = 0) {
     const today = I.todayOf(g);
     if (id === 'list') {
       if (row.filter) { T(c, row.label, 20, y + 6, 12, K.cyan, 'left', 400); T(c, row.sub, SW - 14, y + 7, 10, K.dim, 'right'); return; }
@@ -632,45 +739,81 @@ class ContestScene {
       T(c, `${I.KIND_LABEL[I.kindOf(x.def)] || ''}${x.def.broadcaster ? `・${x.def.broadcaster}` : ''}${row.el.ok ? '' : `・${row.el.why}`}`, 38, y + 13, 10, row.el.ok ? K.dim : K.faint, 'left', 352);
       return;
     }
+    const sty = this.style();
     if (id === 'entries') {
+      // a big エントリーNo. card (two rows tall): the number plate, the contest, the act, the next step, the status
       const { e, cyc, def } = row;
+      const H = ROW_H * 2 - 2;
       const col = ENTRY_COL[e.status] || '#5a5a6a';
-      const sw = chip(c, ENTRY_LABEL[e.status] || e.status, SW - 12, y + 5, col, 10, 'right');
-      T(c, `${cyc ? cyc.label : def.name}`, 22, y + 2, 12, K.text, 'left', 360);
-      T(c, `No.${e.no}　${e.unitName}`, 22, y + 14, 10, K.dim, 'left', 360);
+      const champ = e.status === 'champion';
+      R(c, 20, y + 4, 92, H - 8, '#000000');
+      R(c, 21, y + 5, 90, 1, champ ? sty.accent : sty.rule);
+      R(c, 21, y + H - 5, 90, 1, champ ? sty.accent : 'rgba(255,255,255,0.25)');
+      T(c, 'エントリーNo.', 66, y + 7, 9, sty.accent, 'center', 86);
+      const noS = String(e.no ?? '—');
+      const ns = measure(c, noS, 22) <= 84 ? 22 : measure(c, noS, 16) <= 84 ? 16 : 12;
+      TVG.telop(c, noS, 66, y + 18 + (22 - ns) / 2, ns, '#ffffff', '#000000', 'center', 84);
+      T(c, `${cyc ? cyc.label : def.name}`, 122, y + 5, 12, '#ffffff', 'left', SW - 122 - 130);
+      T(c, e.unitName || '', 122, y + 20, 12, sty.accent, 'left', SW - 122 - 130);
       let nx = '';
       if (e.external) nx = `${e.roundName || ''}${e.next && Number.isFinite(Number(e.next.day)) ? ` ${Number(e.next.day) === today ? '今日' : I.dateText(g, Number(e.next.day))} ${e.next.city || ''}` : ''}`;
-      else if ((e.status === 'entered' || e.status === 'passed') && cyc && cyc.rounds[e.round]) { const rr = cyc.rounds[e.round]; const o = rr.options[num(e.picks && e.picks[e.round], 0)] || rr.options[0]; nx = `${rr.name} ${o.day === today ? '今日' : I.dateText(g, o.day)} ${o.venue}`; }
-      else if (e.pending) nx = '結果待ち';
+      else if ((e.status === 'entered' || e.status === 'passed') && cyc && cyc.rounds[e.round]) { const rr = cyc.rounds[e.round]; const o = rr.options[num(e.picks && e.picks[e.round], 0)] || rr.options[0]; nx = `次：${rr.name} ${o.day === today ? '今日' : I.dateText(g, o.day)} ${o.venue}`; }
+      else if (e.pending) nx = '結果待ち（翌朝発表）';
       else if (e.final) nx = `決勝 ${e.final.place}位`;
-      T(c, nx, 392, y + 7, 10, nx.includes('今日') ? K.gold : K.dim, 'left', SW - 392 - sw - 20);
+      T(c, nx, 122, y + 35, 10, nx.includes('今日') ? sty.accent : K.dim, 'left', SW - 122 - 130);
+      // the status as a TV caption plate
+      const lab = e.external ? (e.statusText || ENTRY_LABEL[e.status] || '') : ENTRY_LABEL[e.status] || e.status;
+      const lw = Math.min(120, Math.ceil(measure(c, lab, 12)) + 20);
+      TVG.band(c, SW - 16 - lw, y + 12, lw, 22, shade(col, 0.15), shade(col, -0.35), { slant: 6 });
+      T(c, lab, SW - 16 - lw / 2, y + 16, 12, '#ffffff', 'center', lw - 14);
+      if (champ) TVG.sparkles(c, this.t, 20, y + 2, SW - 40, H - 4, 10, (e.no || 1) % 97 + 1);
       return;
     }
     if (id === 'results') {
       const { r, def, year, e } = row;
       const cyc = I.cycleOf(g, def, year);
       const rr = cyc && cyc.rounds[r.round];
-      T(c, `${cyc ? cyc.label : def.name}`, 22, y + 2, 12, K.text, 'left', 360);
+      T(c, `${cyc ? cyc.label : def.name}`, 22, y + 2, 12, '#ffffff', 'left', 360);
       T(c, `${r.revival ? '敗者復活戦' : rr ? rr.name : ''}　${r.day ? `${r.day}日目` : ''}　No.${e.no}`, 22, y + 14, 10, K.dim, 'left', 360);
       const res = r.withdrawn ? '棄権' : r.passed ? (rr && rr.idx === cyc.rounds.length - 1 ? '優勝' : '合格') : r.place && rr && rr.idx === cyc.rounds.length - 1 ? `${r.place}位` : '不合格';
-      chip(c, res, SW - 12, y + 5, r.withdrawn ? '#6a6a7a' : r.passed ? '#3fb86a' : '#a05060', 10, 'right');
-      if (r.place && r.of && !r.withdrawn) T(c, `${Math.round(r.of).toLocaleString('ja-JP')}組中 ${Math.round(r.place).toLocaleString('ja-JP')}位${r.of > 60 ? '前後' : ''}`, 392, y + 7, 10, K.dim, 'left', 160);
+      const sw = chip(c, res, SW - 12, y + 5, r.withdrawn ? '#6a6a7a' : r.passed ? '#3fb86a' : '#a05060', 10, 'right');
+      // a TV ranking bar: how far up the field the act finished, sliding in
+      if (r.place && r.of && !r.withdrawn) {
+        const frac = clamp(1 - (r.place - 1) / Math.max(1, r.of), 0.02, 1);
+        const kk = TVG.easeOut((this.t - this.tabT - (k || 0) * 3) / 16);
+        const bx = 390, bwMax = SW - 12 - sw - 8 - bx;
+        R(c, bx, y + 16, bwMax, 4, 'rgba(255,255,255,0.08)');
+        R(c, bx, y + 16, Math.round(bwMax * frac * kk), 4, r.passed ? sty.accent : '#d05a6a');
+        T(c, `${Math.round(r.of).toLocaleString('ja-JP')}${I.unitWord(def)}中 ${Math.round(r.place).toLocaleString('ja-JP')}位${r.of > 60 ? '前後' : ''}`, bx, y + 2, 10, '#ffffff', 'left', bwMax);
+      }
       return;
     }
     if (id === 'history') {
       const { def } = row;
-      const h = def.history || {};
-      T(c, I.contestName(def, I.contestDate(g).year), 22, y + 2, 12, K.text, 'left', 360);
-      T(c, `${num(h.founded) ? `${h.founded}年創設` : ''}${h.ended ? `・${h.ended}年終了` : ''}　${I.KIND_LABEL[I.kindOf(def)] || ''}`, 22, y + 14, 10, K.dim, 'left', 360);
+      T(c, I.contestName(def, I.contestDate(g).year), 22, y + 2, 12, '#ffffff', 'left', 360);
+      const heads = this._heads || (this._heads = new Map());
+      if (!heads.has(def.id)) heads.set(def.id, safe(() => I.historyHead(g, def), ''));
+      T(c, `${heads.get(def.id)}　${I.KIND_LABEL[I.kindOf(def)] || ''}`, 22, y + 14, 10, K.dim, 'left', 360);
       const last = (this._lastChamp || (this._lastChamp = new Map()));
       if (!last.has(def.id)) last.set(def.id, safe(() => { const hs = g.contestHistory(def.id); return hs[0] ? `${hs[0].year} ${hs[0].champion}` : '—'; }, '—'));
-      T(c, last.get(def.id), 392, y + 7, 10, K.dim, 'left', SW - 404);
+      const champ = last.get(def.id);
+      if (champ !== '—') {
+        // a small gold crown before the latest champion
+        const cx = 394;
+        R(c, cx, y + 13, 12, 4, sty.accent); R(c, cx, y + 8, 2, 5, sty.accent); R(c, cx + 5, y + 6, 2, 7, sty.accent); R(c, cx + 10, y + 8, 2, 5, sty.accent);
+        if (sel) TVG.sparkles(c, this.t, cx - 4, y + 2, SW - cx - 20, ROW_H - 6, 5, (k || 0) + 11);
+      }
+      T(c, champ, 412, y + 7, 10, champ === '—' ? K.dim : sty.accent, 'left', SW - 424);
       return;
     }
     if (id === 'news') {
       const n = row.n;
-      T(c, String(n.text).split('\n')[0], 22, y + 2, 12, n.kind === 'personal' ? K.gold : K.text, 'left', SW - 100);
-      T(c, String(n.text).split('\n')[1] || '', 22, y + 14, 10, K.dim, 'left', SW - 100);
+      const tag = n.kind === 'personal' ? 'お知らせ' : '速報';
+      const tw = Math.ceil(measure(c, tag, 10)) + 10;
+      R(c, 22, y + 3, tw, 14, n.kind === 'personal' ? shade(sty.accent, -0.35) : sty.tickerCol);
+      T(c, tag, 22 + tw / 2, y + 4, 10, '#ffffff', 'center');
+      T(c, String(n.text).split('\n')[0], 26 + tw, y + 2, 12, n.kind === 'personal' ? sty.accent : '#ffffff', 'left', SW - 100 - tw);
+      T(c, String(n.text).split('\n')[1] || '', 26 + tw, y + 14, 10, K.dim, 'left', SW - 100 - tw);
       T(c, `${n.day}日目`, SW - 12, y + 7, 10, K.dim, 'right');
     }
   }
@@ -926,8 +1069,44 @@ class BoardScene {
     if (this.maxScroll > 0) { if (inp.repeat('up')) this.scroll = Math.max(0, this.scroll - 1); if (inp.repeat('down')) this.scroll = Math.min(this.maxScroll, this.scroll + 1); }
     if (this.t > 20 && (tap || inp.pressed('a') || inp.pressed('b') || inp.pressed('menu'))) { dropA(inp); sfx('ok'); this.done(true); }
   }
+  // the final's ranking as a TV board: rows slide in one by one, the champion under confetti
+  drawTV(c, g) {
+    const o = this.o;
+    const st = styleOf(g);
+    TVG.backdrop(c, st);
+    TVG.beams(c, this.t, st, 0, 36, SW, SH - 36, 1.5);
+    TVG.band(c, 0, 0, SW, 34, st.band0, st.band1);
+    R(c, 0, 33, SW, 1, st.rule);
+    TVG.sheen(c, this.t, 0, 0, SW, 33, 200);
+    const lw = TVG.liveBadge(c, SW - 12, 4, st, this.t, st.live, 'right');
+    TVG.telop(c, o.title, 12, 4, 14, st.telop, st.telopLine, 'left', SW - lw - 40);
+    T(c, o.sub || '', SW - 12, 21, 10, '#ffffff', 'right', 300);
+    const rows = o.ranking;
+    const rh = 24, top = 42;
+    const maxRows = Math.floor((SH - top - 30) / rh);
+    this.maxScroll = Math.max(0, rows.length - maxRows);
+    const tots = rows.map((r) => (Number.isFinite(r.total) ? r.total : 0));
+    const hi = Math.max(1, ...tots), lo = Math.min(...tots);
+    const fracOf = (v) => (hi > lo ? 0.15 + (0.85 * (v - lo)) / (hi - lo) : 1);
+    rows.slice(this.scroll, this.scroll + maxRows).forEach((r, k) => {
+      const i = this.scroll + k;
+      const kk = TVG.easeOut((this.t - 6 - k * 5) / 14);
+      const val = `${Number.isFinite(r.total) ? `${Math.round(r.total * 10) / 10}点` : ''}${Number.isFinite(r.votes) ? `　${r.votes}票` : ''}`;
+      TVG.rankBar(c, 20, top + k * rh, SW - 40, rh - 3, st, { k: kk, place: i + 1, badge: `${i + 1}位`, name: r.name, value: val, me: !!r.me, frac: Number.isFinite(r.total) ? fracOf(r.total) : 0 });
+      if (i === 0 && kk >= 1) TVG.sparkles(c, this.t, 20, top + k * rh - 2, SW - 40, rh, 8, 3);
+    });
+    const allIn = this.t > 6 + Math.min(rows.length, maxRows) * 5 + 14;
+    if (o.champion && allIn) {
+      TVG.confetti(c, this.t, 0, 0, SW, SH, 60, 11);
+      if (this.t % 40 < 30) TVG.telop(c, '優勝！', SW / 2, SH - 30, 20, st.accent, st.telopLine, 'center');
+    }
+    if (this.maxScroll > 0) T(c, '↑↓スクロール', SW - 14, SH - 18, 10, '#ffffff', 'right');
+    if (this.t > 20 && Math.floor(this.t / 30) % 2) T(c, 'Aでとじる', 14, SH - 18, 10, '#ffffff');
+    TVG.crt(c, st, this.t);
+  }
   draw(c, g) {
     const o = this.o;
+    if (o.ranking) { this.drawTV(c, g); return; }
     R(c, 0, 0, SW, SH, '#3a2a1a');
     // a cork board with the posted sheet
     for (let i = 0; i < 160; i++) R(c, (i * 131) % SW, (i * 71) % SH, 2, 1, i % 2 ? '#4a3a26' : '#2e2214');
@@ -1013,20 +1192,24 @@ class ScoreScene {
   draw(c, g) {
     const o = this.o;
     const col = o.color || '#c0392b';
-    R(c, 0, 0, SW, SH, '#0a0a1c');
-    for (let i = 0; i < 18; i++) { const x = (i * 38 + this.t) % (SW + 40) - 20; R(c, x, 0, 2, 120, 'rgba(255,255,255,0.04)'); }
-    R(c, 0, 0, SW, 28, shade(col, -0.45));
-    R(c, 0, 26, SW, 2, K.gold);
-    T(c, o.title, 12, 7, 12, '#ffffff', 'left', 360);
-    T(c, `${o.order}番目／${o.of}組`, SW - 12, 8, 10, K.gold, 'right');
-    T(c, o.unit, SW / 2, 40, 16, '#ffffff', 'center', SW - 40);
+    const st = styleOf(g);
+    TVG.backdrop(c, st);
+    TVG.beams(c, this.t, st, 0, 28, SW, SH - 28, 1.3);
+    TVG.band(c, 0, 0, SW, 28, shade(col, -0.2), shade(col, -0.65));
+    R(c, 0, 26, SW, 2, st.accent);
+    TVG.sheen(c, this.t, 0, 0, SW, 26, 220);
+    const ow = Math.ceil(measure(c, `${o.order}番目／${o.of}組`, 10));
+    T(c, `${o.order}番目／${o.of}組`, SW - 12, 8, 10, st.accent, 'right');
+    const lw = TVG.liveBadge(c, SW - 20 - ow, 5, st, this.t, st.live, 'right');
+    T(c, o.title, 12, 7, 12, '#ffffff', 'left', SW - 60 - ow - lw);
+    TVG.telop(c, o.unit, SW / 2, 38, 16, '#ffffff', st.telopLine, 'center', SW - 40);
     // judges
     const n = Math.max(1, o.judges.length);
     const jw = Math.min(84, Math.floor((SW - 40) / n));
     const x0 = Math.round((SW - jw * n) / 2);
     o.judges.forEach((j, i) => {
       const x = x0 + i * jw;
-      R(c, x + 3, 70, jw - 6, 92, '#161632');
+      TVG.band(c, x + 3, 70, jw - 6, 92, st.tab0, st.tab1, { vertical: true });
       R(c, x + 3, 70, jw - 6, 2, col);
       T(c, j.name, x + jw / 2, 76, 10, K.dim, 'center', jw - 10);
       if (i < this.shown || this.shown >= n) {
@@ -1034,8 +1217,9 @@ class ScoreScene {
       } else T(c, '?', x + jw / 2, 100, 24, '#3a3a5a', 'center');
     });
     const done = this.shown >= n;
-    R(c, SW / 2 - 110, 172, 220, 46, '#161632');
-    R(c, SW / 2 - 110, 172, 220, 2, K.gold);
+    TVG.band(c, SW / 2 - 110, 172, 220, 46, st.band0, st.band1, { slant: 10 });
+    R(c, SW / 2 - 110, 172, 220, 2, st.accent);
+    if (done) TVG.sparkles(c, this.t, SW / 2 - 110, 168, 220, 54, 8, 9);
     T(c, done ? `${o.total}点` : '採点中…', SW / 2, 180, done ? 24 : 16, done ? '#ffffff' : K.dim, 'center');
     if (o.max) T(c, `（${o.max}点満点）`, SW / 2 + 104, 204, 10, K.dim, 'right');
     // standings so far
@@ -1050,7 +1234,8 @@ class ScoreScene {
         T(c, `${s.total}`, SW - 128, y, 12, K.text, 'right');
       });
     }
-    if (done && Math.floor(this.t / 30) % 2) T(c, 'Aでつづける', SW / 2, 340, 10, K.dim, 'center');
+    TVG.crt(c, st, this.t);
+    if (done && Math.floor(this.t / 30) % 2) T(c, 'Aでつづける', SW / 2, 340, 10, '#ffffff', 'center');
   }
 }
 class VotesScene {
@@ -1064,9 +1249,14 @@ class VotesScene {
   draw(c, g) {
     const o = this.o;
     const col = o.color || '#c0392b';
-    R(c, 0, 0, SW, SH, '#101830');
-    R(c, 0, 0, SW, 28, shade(col, -0.4));
-    T(c, o.title, 12, 7, 12, '#ffffff', 'left', SW - 24);
+    const st = styleOf(g);
+    TVG.backdrop(c, st);
+    TVG.beams(c, this.t, st, 0, 28, SW, SH - 28, 1.3);
+    TVG.band(c, 0, 0, SW, 28, shade(col, -0.2), shade(col, -0.65));
+    R(c, 0, 26, SW, 2, st.accent);
+    TVG.sheen(c, this.t, 0, 0, SW, 26, 220);
+    const lw = TVG.liveBadge(c, SW - 12, 5, st, this.t, st.live, 'right');
+    T(c, o.title, 12, 7, 12, '#ffffff', 'left', SW - 40 - lw);
     const rows = o.rows.slice(0, 10);
     const max = Math.max(1, ...rows.map((r) => num(r.votes)));
     const k = Math.min(1, this.t / 80);
@@ -1079,7 +1269,8 @@ class VotesScene {
       R(c, 236, y + 4, bw, 14, r.me ? K.gold : i === 0 ? col : '#4a5a8a');
       T(c, `${Math.round(num(r.votes) * k).toLocaleString('ja-JP')}${o.unit || '票'}`, SW - 14, y + 4, 12, '#ffffff', 'right');
     });
-    if (this.t > 90 && Math.floor(this.t / 30) % 2) T(c, 'Aでつづける', SW / 2, 340, 10, K.dim, 'center');
+    TVG.crt(c, st, this.t);
+    if (this.t > 90 && Math.floor(this.t / 30) % 2) T(c, 'Aでつづける', SW / 2, 340, 10, '#ffffff', 'center');
   }
 }
 
@@ -1112,7 +1303,7 @@ async function contestApp(g) {
     const c = I.cstate(g);
     const invites = [];
     for (const id of Object.keys(c.invites || {})) for (const y of Object.keys(c.invites[id] || {})) if (num(c.invites[id][y]) > 0 && !I.entryOf(g, id, Number(y)) && CONTESTS[id]) invites.push({ id, year: Number(y) });
-    const list = g.contests();
+    const list = g.contests().filter((x) => x.status !== 'notyet'); // no contest before it exists
     const mine = list.filter((x) => x.entry && (x.entry.status === 'entered' || x.entry.status === 'passed'));
     const open = list.filter((x) => x.status === 'open');
     const items = [];
@@ -1132,7 +1323,11 @@ async function contestApp(g) {
     items.push({ id: 'news', label: 'お笑いニュース', sub: c.news[0] ? String(c.news[0].text).split('\n')[0] : 'まだない' });
     items.push({ id: 'history', label: '歴代王者', sub: '歴代のチャンピオン' });
     items.push({ id: 'screen', label: '賞レースの画面を開く', sub: 'カレンダー・一覧・結果' });
-    const i = await phoneList(g, { title: appTitle(g), color: APP_COLOR, index, items: items.map((x) => ({ label: x.label, sub: x.sub, right: x.right, rightColor: x.rightColor })) });
+    // the header carries the broadcast cue: LIVE on a final day, else the countdown to the next final
+    const hero = safe(() => heroOf(g), null) || {};
+    const sty = styleOf(g);
+    const cue = hero.live ? `● ${sty.live}` : hero.next ? `あと${hero.next.days}日` : '';
+    const i = await phoneList(g, { title: appTitle(g), color: APP_COLOR, index, headerRight: () => cue, items: items.map((x) => ({ label: x.label, sub: x.sub, right: x.right, rightColor: x.rightColor })) });
     if (i < 0) return;
     index = i;
     const it = items[i];
@@ -1232,7 +1427,7 @@ async function newsList(g) {
   }
 }
 async function historyList(g) {
-  const defs = Object.values(CONTESTS).sort((a, b) => I.prestigeOf(b) - I.prestigeOf(a));
+  const defs = Object.values(CONTESTS).filter((d) => num(d.history && d.history.founded, -Infinity) <= I.contestDate(g).year).sort((a, b) => I.prestigeOf(b) - I.prestigeOf(a));
   for (;;) {
     const k = await phoneList(g, { title: '歴代王者', color: APP_COLOR, items: defs.map((d) => ({ label: d.short || d.name, sub: I.contestName(d, I.contestDate(g).year) })), empty: '大会がない。' });
     if (k < 0) return;
@@ -1243,6 +1438,9 @@ registerPhoneApp('shourace', {
   name: '賞レース', color: APP_COLOR, order: 58,
   iconHD(c, x, y) {
     appTile(c, x, y, APP_COLOR);
+    // a gold broadcast stripe behind the trophy, a sparkle on top
+    c.save(); c.globalAlpha = 0.55; c.fillStyle = '#ffd23f'; c.beginPath(); c.moveTo(x + 2, y + 24); c.lineTo(x + 22, y + 4); c.lineTo(x + 28, y + 4); c.lineTo(x + 8, y + 24); c.closePath(); c.fill(); c.restore();
+    R(c, x + 25, y + 3, 1, 5, '#ffffff'); R(c, x + 23, y + 5, 5, 1, '#ffffff');
     // a trophy with a centre mic
     R(c, x + 9, y + 7, 14, 3, '#ffe36e'); R(c, x + 10, y + 10, 12, 6, '#ffd23f'); R(c, x + 11, y + 16, 10, 2, '#e0b020');
     R(c, x + 6, y + 8, 3, 6, '#ffd23f'); R(c, x + 23, y + 8, 3, 6, '#ffd23f');
