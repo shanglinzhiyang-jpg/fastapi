@@ -457,7 +457,7 @@ class ContestScene {
     T(c, '賞レース', 8, 3, 12, K.gold);
     const d = I.contestDate(g);
     T(c, `${d.year}年（${I.wareki(d.year, d.month)}）${d.month}月${d.dom}日　${I.todayOf(g)}日目`, 80, 4, 10, K.dim, 'left', 300);
-    const dueN = I.dueOn(g).length;
+    const dueN = I.dueOn(g).length + I.selfToday(g).length;
     if (dueN) T(c, `今日は本番の日！（${dueN}件）`, SW - 30, 4, 10, K.gold, 'right', 220);
     T(c, '×', SW - 12, 3, 12, K.dim, 'center');
     this.tabRects = [];
@@ -1180,7 +1180,7 @@ registerPhoneApp('shourace', {
     R(c, x + 15, y + 18, 2, 4, '#e0b020'); R(c, x + 11, y + 22, 10, 3, '#c09010');
     R(c, x + 13, y + 11, 6, 3, '#2a2430'); R(c, x + 15, y + 9, 2, 2, '#ffffff');
   },
-  badge: (g) => { try { const c = I.cstate(g); let n = I.dueOn(g).length; for (const id of Object.keys(c.invites || {})) for (const y of Object.keys(c.invites[id] || {})) if (num(c.invites[id][y]) > 0 && !I.entryOf(g, id, Number(y))) n++; return n; } catch (e) { return 0; } },
+  badge: (g) => { try { const c = I.cstate(g); let n = I.dueOn(g).length + I.selfToday(g).length; for (const id of Object.keys(c.invites || {})) for (const y of Object.keys(c.invites[id] || {})) if (num(c.invites[id][y]) > 0 && !I.entryOf(g, id, Number(y))) n++; return n; } catch (e) { return 0; } },
   cond: (g) => !!g && !!g.state && Object.keys(CONTESTS).length > 0,
   open: (g) => contestApp(g),
 });

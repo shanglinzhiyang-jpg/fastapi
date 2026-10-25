@@ -203,6 +203,10 @@ async function go(g, id) {
   if (!g.state) return false;
   const c = I.cstate(g);
   const due = I.dueOn(g).filter((d) => !id || d.id === id);
+  if (!due.length) {
+    const self = I.selfToday(g).filter((x) => !id || x.id === id);
+    if (self.length && typeof self[0].def.flow === 'function') { await asafe(`flow:${self[0].id}`, () => self[0].def.flow(g, { id: self[0].id, def: self[0].def, year: self[0].year, entry: null, round: null, date: I.contestDate(g), item: self[0].item, mode: 'full' }), null); return true; }
+  }
   const done = Object.values(c.entries).some((ys) => Object.values(ys || {}).some((e) => e && e.today && e.today.day === I.todayOf(g) && e.today.done));
   if (!due.length) { await g.say('今日は、出る大会の予定はない。'); return false; }
   const t0 = today(g);
