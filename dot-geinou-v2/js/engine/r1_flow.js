@@ -1482,7 +1482,7 @@ function installFlows(C) {
     return { status, statusLabel: n.label, label: Y ? cfg.rules(Y).title : cfg.label, edition: Y ? cfg.rules(Y).edition : null, year: Y, entry, today };
   };
   // historyList(g) → every year up to the last final played: [{ year, edition, held, champion, runnerUp, finalists, note, player }]
-  C.historyList = (g) => C.history(g).map((h) => ({ year: h.year, edition: h.edition, held: h.edition != null, champion: h.edition != null ? h.champion : null, runnerUp: h.runnerUp || null, finalists: (C.state(g).hist[h.year] || {}).finalists || [], note: h.note || '', player: h.player ? 1 : null }));
+  C.historyList = (g) => C.history(g).map((h) => ({ year: h.year, edition: h.edition, held: h.edition != null, champion: h.edition != null ? h.champion : null, runnerUp: h.runnerUp || null, finalists: (C.state(g).hist[h.year] || {}).finalists || [], note: h.note || '', revival: false, player: h.player ? 1 : null }));
   // rivalsOf(g, round (D1 index or our id), n, year) → this season's named entrants still in at that round, strongest first
   C.rivalsOf = (g, round, n = 10, year) => {
     const Y = year ?? C.seasonY(g);

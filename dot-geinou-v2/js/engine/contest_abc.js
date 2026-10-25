@@ -28,7 +28,7 @@ import { LOOKS } from './sprites.js';
 import { registerItem } from './state.js';
 import { clamp } from './util.js';
 import {
-  has, safe, num, n0, plainYen, toInternal, rngOf, rint, pickR, cdate, dateText, dateTextY, unitName, pinName, randomLook,
+  has, safe, num, n0, realNameLike, plainYen, toInternal, rngOf, rint, pickR, cdate, dateText, dateTextY, unitName, pinName, randomLook,
   actInfo, agencyNames, geireki, unitYears, statOf, sendOffer, runKitMorning, kitMorning, shortfallReasons, performAct,
 } from './r1_kit.js';
 import { makeContest, registerContestApp, fmtLen } from './r1_flow.js';
@@ -187,7 +187,8 @@ function notableABC(rng, Y, i, ctx = {}) {
   if (rng() < 0.12) tags.push(neo ? 'ラストイヤー' : '結成5年目');
   if (!ctx.dark && rng() < 0.15) tags.push('初出場');
   if (ctx.prev && ctx.prev.runner && i === 4) { tags.length = 0; tags.push('前年準優勝'); }
-  const name = ctx.prev && ctx.prev.runner && i === 4 ? ctx.prev.runner : type === 'pin' && style === 'rakugo' ? `${pickR(rng, ['笑楽亭', '福来亭', '浪花亭', '天満亭'])}${pickR(rng, ['こまめ', 'ちょうちん', 'しじみ', 'たまご', 'ぽん吉', 'さくら'])}` : unitName(rng, type === 'pin' ? 'pin' : type);
+  let name = ctx.prev && ctx.prev.runner && i === 4 ? ctx.prev.runner : type === 'pin' && style === 'rakugo' ? `${pickR(rng, ['笑楽亭', '福来亭', '浪花亭', '天満亭'])}${pickR(rng, ['こまめ', 'ちょうちん', 'しじみ', 'たまご', 'ぽん吉', 'さくら'])}` : unitName(rng, type === 'pin' ? 'pin' : type);
+  if (realNameLike(name)) name = unitName(rng, type === 'pin' ? 'pin' : type); // 落語家名 too: never a real performer's
   return { name, type, style, gender: rng() < 0.2 ? 'f' : 'm', tags: tags.slice(0, 2), agency: pickR(rng, agencyNames().filter((a) => a !== 'アマチュア')) };
 }
 

@@ -69,7 +69,22 @@ async function revealRanking(g, b, rows, head, o = {}) {
 function champion(g, ctx, label, o = {}) {
   addTitle(g, ctx.id, label);
   const y = yearOf(g, ctx);
-  news(g, ctx, o.news || `【速報】${nameOf(ctx.def, y)}${ctx.revival ? '（復刻開催）' : ''} ${label}は${unitName(g)}！`, 'result');
+  if (!o.quiet) news(g, ctx, o.news || `【速報】${nameOf(ctx.def, y)}${ctx.revival ? '（復刻開催）' : ''} ${label}は${unitName(g)}！`, 'result');
+}
+// award-type results (decision 10): each award's own winner, never 「優勝／準優勝」. Sent with D1's yearly result key, so D1's
+// generic 「〜が優勝！準優勝は〜」 line is not posted for this year. lines: [['大賞', name], ['新人賞', name], …]
+function awardNews(g, ctx, lines) {
+  const y = yearOf(g, ctx);
+  const head = `${ctx.revival ? '' : ordinal(ctx.edition)}${nameOf(ctx.def, y)}${ctx.revival ? '（復刻開催）' : ''}`;
+  try {
+    if (typeof g.contestNews === 'function') g.contestNews(`【${head}】受賞者が決まった。\n${lines.filter((l) => l && l[1]).map(([a, n]) => `${a}：${n}`).join('\n')}`, { contest: ctx.id, key: `champ|${ctx.id}|${y}`, prio: 60 });
+    else news(g, ctx, `【${head}】${lines.map(([a, n]) => `${a}は${n}`).join('、')}`);
+  } catch (e) { console.error(e); }
+}
+// names for the other awards: acts of D1's world (distinct from the ones on stage)
+function otherNames(g, ctx, n, salt, exclude = []) {
+  const ex = new Set(exclude);
+  return rivals(g, ctx, n + exclude.length + 2, { level: 72, kind: 'manzai', salt }).map((x) => x.name).filter((nm) => !ex.has(nm)).slice(0, n);
 }
 const kindLabel = { manzai: '漫才', conte: 'コント', pin: 'ピン芸', rakugo: '落語' };
 
@@ -512,8 +527,9 @@ async function nhkBlocks(g, ctx, o) {
     b.set('match', { a: { name: fin[0].name, me: fin[0].me, score: v[0], win: W === fin[0] }, b: { name: fin[1].name, me: fin[1].me, score: v[1], win: W === fin[1] }, max: o.nJ, label: `決勝　審査員${o.nJ}人の投票` });
     await pause(g, 50);
     const champ = !!W.me;
-    if (champ) { g.sfx('fanfare'); await say(g, `${o.award || '大賞'}は——${unitName(g)}！`); champion(g, ctx, o.award || '大賞'); }
+    if (champ) { g.sfx('fanfare'); await say(g, `${o.award || '大賞'}は——${unitName(g)}！`); champion(g, ctx, o.award || '大賞', { quiet: true }); }
     else await say(g, `${o.award || '大賞'}は${W.name}。${inFinal ? '決勝で惜しくも敗れた。' : `${mine ? mine.label : ''}で敗退。`}`);
+    awardNews(g, ctx, [[o.award || '大賞', W.name]]);
     return { passed: champ, champion: champ, score: myScore, place: champ ? 1 : inFinal ? 2 : 5, field: o.n, award: champ ? (o.award || '大賞') : null };
   });
 }
@@ -569,8 +585,9 @@ async function rakugoHonsen(g, ctx) {
     const champ = rows[0].me;
     const myRow = rows.find((x) => x.me);
     await say(g, `${unitName(g)}：${myRow.per.join('・')}　計${myRow.total}点${myRow.total === 50 ? '（満点！）' : ''}`);
-    if (champ) { g.sfx('fanfare'); await say(g, `大賞は${unitName(g)}！ 楽屋で師匠に電話をかけると、「そうか」とだけ言って切れた。少し、声が震えていた。`); champion(g, ctx, '大賞'); }
+    if (champ) { g.sfx('fanfare'); await say(g, `大賞は${unitName(g)}！ 楽屋で師匠に電話をかけると、「そうか」とだけ言って切れた。少し、声が震えていた。`); champion(g, ctx, '大賞', { quiet: true }); }
     else await say(g, `大賞は${rows[0].name}（${rows[0].total}点）。`);
+    awardNews(g, ctx, [['大賞', rows[0].name]]);
     return { passed: champ, champion: champ, score: my, place: rows.findIndex((x) => x.me) + 1, field: 5, award: champ ? '大賞' : null, detail: { points: myRow.total } };
   });
 }
@@ -620,7 +637,8 @@ async function kamigataHonsen(g, ctx) {
     await revealRanking(g, b, rows, '本選　審査結果', { max: 50, passLine: 1, unit: '点' });
     const place = rows.findIndex((x) => x.me) + 1;
     const champ = place === 1;
-    if (champ) { g.sfx('fanfare'); await say(g, `${ordinal(ctx.edition)}NHK上方漫才コンテスト、優勝は${unitName(g)}！`); champion(g, ctx, '優勝'); }
+    awardNews(g, ctx, [['優勝', rows[0].name], ['優秀賞', `${rows[1].name}、${rows[2].name}`]]);
+    if (champ) { g.sfx('fanfare'); await say(g, `${ordinal(ctx.edition)}NHK上方漫才コンテスト、優勝は${unitName(g)}！`); champion(g, ctx, '優勝', { quiet: true }); }
     else if (place <= 3) { await say(g, `優秀賞！（${place}位）優勝は${rows[0].name}。`); addTitle(g, ctx.id, '優秀賞'); }
     else await say(g, `優勝は${rows[0].name}。${unitName(g)}は${place}位。`);
     return { passed: champ, champion: champ, score: my, place, field: 8, award: champ ? '優勝' : place <= 3 ? '優秀賞' : null };
@@ -649,7 +667,8 @@ const KAMIGATA_MANZAI = {
   ],
   // selection award: D1's 招待 (invite) = the 審査会 has the act on its list; the nominate round then decides the tier (or none)
   eligibility: { members: [2, null], region: 'osaka', repeat: true, invite: { fame: 300 }, note: '上方（関西）で活躍する漫才師。新人賞は結成10年目まで。応募ではなく審査会のノミネート' },
-  fee: 0, prize: 0, prizeText: '', awards: ['大賞', '奨励賞', '新人賞'], perform: { kind: 'manzai', length: 240 },
+  fee: 0, prize: 0, prizeText: '', awards: ['大賞', '奨励賞', '新人賞'], prestige: 54,
+  awardNews: (year, names) => `大賞は${names[0] || '—'}、奨励賞は${names[1] || '—'}、新人賞は${names[2] || '—'}`, perform: { kind: 'manzai', length: 240 },
   news: [
     (g, c) => `${ordinal(c.edition)}上方漫才大賞、ノミネート発表。新人賞は結成10年目までの漫才師から`,
     (g, c) => `上方漫才大賞は${c.year - 1966 + 1}年目。漫才の賞として最も古い歴史`,
@@ -692,16 +711,22 @@ async function kmHappyou(g, ctx) {
   const r = rngFor(g, ctx.id, 'kmh');
   return withBoard(g, boardSpec(ctx, '発表会（カンテレ・ラジオ大阪 生中継）', { set: 'studio' }), async (b) => {
     if (y === 2020) {
-      await say(g, ['この年は新型コロナの影響で生放送が中止になり、奨励賞・新人賞の選考も見送られた。', '大賞だけが発表された。']);
+      const taisho = tier === 'taisho' ? unitName(g) : otherNames(g, ctx, 1, 'km2020')[0];
+      b.set('award', { head: `${ordinal(ctx.edition)}上方漫才大賞`, rows: [{ award: '大賞', name: taisho, me: tier === 'taisho' }], label: '大賞のみ発表' });
+      await say(g, ['この年は新型コロナの影響で生放送が中止になり、奨励賞・新人賞の選考も見送られた。', `大賞だけが発表された。大賞は${taisho}。`]);
+      awardNews(g, ctx, [['大賞', taisho]]);
+      if (tier === 'taisho') champion(g, ctx, '大賞', { quiet: true });
       return selResult(tier === 'taisho', 50, { note: '2020年：生放送中止', award: tier === 'taisho' ? '大賞' : null, champion: tier === 'taisho' });
     }
     const label = { taisho: '大賞', shourei: '奨励賞', shinjin: '新人賞' }[tier];
     if (tier === 'taisho') {
-      b.set('award', { head: `${ordinal(ctx.edition)}上方漫才大賞`, rows: [{ award: '大賞', name: unitName(g), me: true }], label: '大賞' });
+      const [shourei, shinjin] = otherNames(g, ctx, 2, 'kmt');
+      b.set('award', { head: `${ordinal(ctx.edition)}上方漫才大賞`, rows: [{ award: '大賞', name: unitName(g), me: true }, { award: '奨励賞', name: shourei }, { award: '新人賞', name: shinjin }], label: '大賞' });
       g.sfx('fanfare');
       await say(g, [`「${ordinal(ctx.edition)}上方漫才大賞、大賞は——${unitName(g)}！」`, '受賞記念の漫才。客席の拍手が鳴りやまない。']);
       await perform(g, ctx, { kind: 'manzai', length: 240, skip: true, title: '大賞受賞記念漫才' });
-      champion(g, ctx, '大賞');
+      champion(g, ctx, '大賞', { quiet: true });
+      awardNews(g, ctx, [['大賞', unitName(g)], ['奨励賞', shourei], ['新人賞', shinjin]]);
       return selResult(true, 90, { champion: true, award: '大賞' });
     }
     const n = tier === 'shinjin' ? 5 : 4;
@@ -715,11 +740,14 @@ async function kmHappyou(g, ctx) {
     const act = activityScore(g, y, []);
     acts.forEach((a) => { a.score = Math.round(a.score * 0.8 + (a.me ? act : 50 + gauss(r) * 10) * 0.2); });
     const rows = panelScores(g, r, acts, 5, 10);
-    b.set('award', { head: `${ordinal(ctx.edition)}上方漫才大賞`, rows: [{ award: '大賞', name: combiName(r) }, { award: label, name: rows[0].name, me: rows[0].me }], label: `${label}発表` });
+    const others = otherNames(g, ctx, 2, 'kmo', acts.map((a) => a.name));
+    const winners = { 大賞: others[0], 奨励賞: tier === 'shourei' ? rows[0].name : others[1], 新人賞: tier === 'shinjin' ? rows[0].name : others[1] };
+    b.set('award', { head: `${ordinal(ctx.edition)}上方漫才大賞`, rows: ['大賞', '奨励賞', '新人賞'].map((k) => ({ award: k, name: winners[k], me: k === label && rows[0].me })), label: `${label}発表` });
     await pause(g, 50);
     const won = rows[0].me;
-    if (won) { g.sfx('fanfare'); await say(g, `${label}は——${unitName(g)}！`); champion(g, ctx, label); }
+    if (won) { g.sfx('fanfare'); await say(g, `${label}は——${unitName(g)}！`); champion(g, ctx, label, { quiet: true }); }
     else await say(g, `${label}は${rows[0].name}。名前は呼ばれなかった。`);
+    awardNews(g, ctx, ['大賞', '奨励賞', '新人賞'].map((k) => [k, winners[k]]));
     return selResult(won, my, { champion: won, award: won ? label : null, place: rows.findIndex((x) => x.me) + 1, field: n });
   });
 }
@@ -744,7 +772,8 @@ const KAMIGATA_OWARAI = {
     { id: 'honsen', name: '本選・発表（年末特番）', when: [12, 6], length: 240, field: 6, judge: 'panel', judges: 7, scoring: '新人部門本選6組→最優秀新人賞1・優秀新人賞5／大賞・金賞・銀賞は選考', tv: true, final: true, run: koHonsen },
   ],
   eligibility: { region: 'osaka', repeat: true, invite: { fame: 60 }, note: '上方の大衆演芸（漫才・コント・落語・新喜劇…）。新人部門は芸歴10年以内' },
-  fee: 0, prize: 0, prizeText: '', awards: ['大賞', '金賞', '銀賞', '最優秀新人賞', '優秀新人賞'], perform: { kind: 'any', length: 240 },
+  fee: 0, prize: 0, prizeText: '', awards: ['大賞', '金賞', '銀賞', '最優秀新人賞', '優秀新人賞'], prestige: 54,
+  awardNews: (year, names) => `大賞は${names[0] || '—'}、金賞は${names[1] || '—'}、銀賞は${names[2] || '—'}`, perform: { kind: 'any', length: 240 },
   news: [
     (g, c) => `${c.revival ? '【復刻】' : ''}${ordinal(c.edition)}上方お笑い大賞、新人部門の本選6組が決定`,
     '大賞は“その年いちばん上方を笑わせた人”。漫才、落語、新喜劇から選ばれる',
@@ -777,10 +806,13 @@ async function koHonsen(g, ctx) {
   return withBoard(g, boardSpec(ctx, '本選・発表（年末特番）', { set: 'studio' }), async (b) => {
     if (log.track === 'senior') {
       const tier = log.tier;
-      b.set('award', { head: `${ordinal(ctx.edition)}上方お笑い大賞`, rows: [{ award: '大賞', name: tier === '大賞' ? unitName(g) : personName(r), me: tier === '大賞' }, { award: '金賞', name: tier === '金賞' ? unitName(g) : combiName(r), me: tier === '金賞' }, { award: '銀賞', name: tier === '銀賞' ? unitName(g) : combiName(r), me: tier === '銀賞' }], label: '各賞の発表' });
+      const on = otherNames(g, ctx, 4, 'koa');
+      const w = { 大賞: tier === '大賞' ? unitName(g) : personName(r), 金賞: tier === '金賞' ? unitName(g) : on[0], 銀賞: tier === '銀賞' ? unitName(g) : on[1], 最優秀新人賞: on[2] };
+      b.set('award', { head: `${ordinal(ctx.edition)}上方お笑い大賞`, rows: Object.keys(w).map((k) => ({ award: k, name: w[k], me: k === tier })), label: '各賞の発表' });
       g.sfx(tier ? 'fanfare' : 'chime');
       await say(g, tier ? `${tier}は——${unitName(g)}！ 一年の仕事が報われた。` : '今年の各賞に、名前はなかった。');
-      if (tier) champion(g, ctx, tier);
+      if (tier) champion(g, ctx, tier, { quiet: true });
+      awardNews(g, ctx, Object.entries(w));
       return selResult(!!tier, log.act || 50, { champion: tier === '大賞', award: tier });
     }
     const rvs = rivals(g, ctx, 5, { level: 62, kind: 'manzai' });
@@ -793,8 +825,13 @@ async function koHonsen(g, ctx) {
     rows.forEach((x, i) => { x.tag = i === 0 ? '最優秀新人賞' : '優秀新人賞'; });
     await revealRanking(g, b, rows, '新人部門 本選', { max: 70, passLine: 1, unit: '点' });
     const top = rows[0].me;
-    if (top) { g.sfx('fanfare'); await say(g, `最優秀新人賞は${unitName(g)}！`); champion(g, ctx, '最優秀新人賞'); }
+    if (top) { g.sfx('fanfare'); await say(g, `最優秀新人賞は${unitName(g)}！`); champion(g, ctx, '最優秀新人賞', { quiet: true }); }
     else { await say(g, `最優秀新人賞は${rows[0].name}。${unitName(g)}には優秀新人賞。`); addTitle(g, ctx.id, '優秀新人賞'); }
+    const on = otherNames(g, ctx, 2, 'kos', rows.map((x) => x.name));
+    const w = [['大賞', personName(r)], ['金賞', on[0]], ['銀賞', on[1]], ['最優秀新人賞', rows[0].name]];
+    b.set('award', { head: `${ordinal(ctx.edition)}上方お笑い大賞`, rows: w.map(([a, n]) => ({ award: a, name: n, me: n === unitName(g) })), label: '各賞の発表' });
+    await pause(g, 40);
+    awardNews(g, ctx, w);
     return selResult(top, my, { champion: top, award: top ? '最優秀新人賞' : '優秀新人賞', place: rows.findIndex((x) => x.me) + 1, field: 6 });
   });
 }
