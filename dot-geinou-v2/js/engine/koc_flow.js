@@ -528,16 +528,12 @@ export async function runRound(g, y, rid, idx = 0, opts = {}) {
   const len = R.len[rid];
   // ready?
   const head = `${titleOf(y)} ${roundName(rid)}${rid === 'sf' && R.twoNetaSF ? `（${idx + 1}日目）` : ''}`;
-  const viaD1 = !!opts.viaD1;
-  const go = viaD1 ? 0 : await g.ask(`今日は『${head}』！\n${hallText(venue)}（${city}）。持ち時間${lenText(len)}。\n交通費 ${realYen(fare)}・体力 -${staminaNeed}`, ['会場へ向かう', 'やめておく（棄権する）'], { cancel: 1 });
+  const go = await g.ask(`今日は『${head}』！\n${hallText(venue)}（${city}）。持ち時間${lenText(len)}。\n交通費 ${realYen(fare)}・体力 -${staminaNeed}`, ['会場へ向かう', 'やめておく（棄権する）'], { cancel: 1 });
   if (go !== 0) {
     const sure = await g.ask('本当に棄権する？（今年のキングオブコントはここで終わる）', ['やっぱり行く', '棄権する'], { cancel: 0 });
     if (sure === 1) { E.status = 'withdrawn'; E.out = rid; logRun(g, E, rid, `${roundName(rid)}を棄権した。`); await g.say('（棄権した…）'); return; }
   }
-  if (viaD1) {
-    // D1 already paid the trip; the entry fee is still due at the desk
-    if (!E.feePaid && st.money < toInternal(E.fee)) { await g.say(`エントリー料（${realYen(E.fee)}）が払えない…。棄権するしかない。`); E.status = 'withdrawn'; E.out = rid; return; }
-  } else if (st.money < toInternal(fare) + (E.feePaid ? 0 : toInternal(E.fee))) {
+  if (st.money < toInternal(fare) + (E.feePaid ? 0 : toInternal(E.fee))) {
     await g.say(`お金が足りない…。（交通費${realYen(fare)}${E.feePaid ? '' : `＋エントリー料${realYen(E.fee)}`}）\n${fare > 1000 && city !== '東京' ? 'このままだと会場にたどり着けない。' : ''}`);
     if (city !== '東京' && fare > 1000) { const k = await g.ask('夜行バスなら安く行ける。どうする？', [`夜行バスで行く（${realYen(Math.round(fare / 3))}・体力 -10）`, '棄権する'], { cancel: 1 }); if (k !== 0 || st.money < toInternal(Math.round(fare / 3)) + (E.feePaid ? 0 : toInternal(E.fee))) { E.status = 'withdrawn'; E.out = rid; await g.say('（棄権した…）'); return; } st.money -= toInternal(Math.round(fare / 3)); st.stamina = Math.max(0, st.stamina - 10); }
     else { E.status = 'withdrawn'; E.out = rid; await g.say('（エントリー料が払えず、棄権した…）'); return; }
@@ -546,7 +542,7 @@ export async function runRound(g, y, rid, idx = 0, opts = {}) {
   if (st.stamina < 15) await g.say('（体はくたくただが、ここまで来たらやるしかない…）');
   let auto = opts.mode === 'auto' || !!g.auto;
   let quick = opts.mode === 'quick';
-  if (!firstTime && !auto && !quick && !viaD1) { const k = await g.ask('今日の段取りは？', ['自分で準備する', '準備はおまかせ（本番は自分で）', 'おまかせで進める（結果まで）'], { cancel: 0 }); auto = k === 2; quick = k === 1; }
+  if (!firstTime && !auto && !quick) { const k = await g.ask('今日の段取りは？', ['自分で準備する', '準備はおまかせ（本番は自分で）', 'おまかせで進める（結果まで）'], { cancel: 0 }); auto = k === 2; quick = k === 1; }
   const looks = looksOf(g, E);
   const others = Array.from({ length: 6 }, (_, i) => lookFor(`o:${y}:${rid}:${i}`));
   await g.fadeOut(10);
@@ -772,7 +768,7 @@ export async function runFinalDay(g, y, opts = {}) {
   const role = E && E.status === 'finalist' ? 'finalist' : E && E.status === 'revival' ? 'revival' : E && E.status === 'voter' ? 'voter' : 'viewer';
   if (Y.final && Y.final.done) { await g.say('今年の決勝は、もう終わった。'); return; }
   const firstTime = !seenOnce(g, 'final_' + role);
-  const go = opts.viaD1 ? 0 : await g.ask(role === 'viewer' ? `今夜は『${titleOf(y)}』決勝の生放送。テレビで見る？` : `今日は『${titleOf(y)}』${role === 'revival' ? '敗者復活戦と' : ''}決勝！\nTBS 赤坂のスタジオへ向かう？`, [role === 'viewer' ? '見る' : '向かう', 'やめておく'], { cancel: 1 });
+  const go = await g.ask(role === 'viewer' ? `今夜は『${titleOf(y)}』決勝の生放送。テレビで見る？` : `今日は『${titleOf(y)}』${role === 'revival' ? '敗者復活戦と' : ''}決勝！\nTBS 赤坂のスタジオへ向かう？`, [role === 'viewer' ? '見る' : '向かう', 'やめておく'], { cancel: 1 });
   if (go !== 0) {
     if (role === 'finalist' || role === 'revival') { const s = await g.ask('出ないと、棄権になる。本当に行かない？', ['やっぱり行く', '行かない'], { cancel: 0 }); if (s === 1) { E.status = 'withdrawn'; await g.say('（棄権した…）'); return; } }
     else return;
@@ -1096,7 +1092,7 @@ async function revivalStage(g, y, R, pool0, role, E, bd, rf, digest, forced = nu
     const pts = Array.from({ length: R.revivalJudges }, () => clamp(Math.round(2 + perf * 0.075 + gauss(rf) * 1.4), 1, 10)).reduce((s, v) => s + v, 0);
     scored.push({ ...a, rp: pts, perf });
   }
-  // this world's winner (D1's simulation): the judges put them in the top 3 (the vote below puts them first)
+  // a winner fixed beforehand (forced): the judges put them in the top 3 (the vote below puts them first)
   const fs0 = forced ? scored.find((x) => x.id && x.id === forced.id) : null;
   if (fs0) { const third = scored.filter((x) => x !== fs0).map((x) => x.rp).sort((p, q) => q - p)[2] ?? 0; if (fs0.rp <= third) fs0.rp = third + 1 + Math.floor(rf() * 6); }
   scored.sort((p, q) => q.rp - p.rp);
