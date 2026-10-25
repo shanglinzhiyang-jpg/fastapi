@@ -29,10 +29,16 @@ export class Task {
   start() {}
   update() { this.t++; return false; }
   draw(ctx) {}
-  panel(ctx, w = PANEL.w) {
+  panel(ctx, w = PANEL.w, labelMax = w - 28) {
     const x = Math.round(SW / 2 - w / 2);
     S.drawPanel(ctx, x, PANEL.y, w, PANEL.h, { gold: true });
-    if (this.label) text(ctx, this.label, x + 14, PANEL.y + 7, { size: 14, color: '#ffe9a0', shadow: null });
+    if (this.label) {
+      // fit the label: shrink to 11px, then cut with …
+      let size = 14, str = this.label;
+      while (measure(ctx, str, size) > labelMax && size > 11) size--;
+      while (measure(ctx, str, size) > labelMax && Array.from(str).length > 2) str = Array.from(str).slice(0, -2).join('') + '…';
+      text(ctx, str, x + 14, PANEL.y + 7, { size, color: '#ffe9a0', shadow: null });
+    }
     return x;
   }
 }
@@ -887,17 +893,28 @@ export class PerformGame extends Minigame {
       }
       text(ctx, '笑いの波', gx + 4, gy + 2, { size: 11, color: COLORS.dim, shadow: null });
     }
-    // highlights + comment
-    let yy = y + 190;
-    const hl = (r.highlights || []).slice(0, 3);
-    for (const hline of hl) {
-      let s = 13;
-      while (measure(ctx, '・' + hline, s) > w - 40 && s > 10) s--;
-      text(ctx, '・' + hline, x + 20, yy, { size: s, color: '#e8eaf6' });
-      yy += 18;
+    // highlights (up to 5: every mistake first-class, then the good moments, in the order they happened) + comment
+    const all = r.highlights || [];
+    const bad = new Set(r.highlightsBad || []);
+    let pickHl = all.slice(0, 5);
+    if (all.length > 5) {
+      const keep = new Set(all.filter((h) => bad.has(h)).slice(0, 4));
+      for (const h of all) { if (keep.size >= 5) break; keep.add(h); }
+      pickHl = all.filter((h) => keep.has(h));
     }
-    const cm = wrap(ctx, r.comment || '', w - 40, 14).slice(0, 2);
-    cm.forEach((l, i) => text(ctx, l, SW / 2, Math.max(yy + 4, y + h - 66) + i * 18, { size: 14, align: 'center', color: COLORS.accent }));
+    let yy = y + 188;
+    for (const hline of pickHl) {
+      let s = 12;
+      let str = '・' + hline;
+      while (measure(ctx, str, s) > w - 40 && s > 10) s--;
+      while (measure(ctx, str, s) > w - 40 && str.length > 6) str = str.slice(0, -2) + '…';
+      text(ctx, str, x + 20, yy, { size: s, color: bad.has(hline) ? '#ffb4bc' : '#e8eaf6' });
+      yy += 15;
+    }
+    const cm = wrap(ctx, r.comment || '', w - 40, 14);
+    let cs = 14;
+    while (cm.length > 1 && cs > 11 && wrap(ctx, r.comment || '', w - 40, cs).length > 1) cs--;
+    text(ctx, wrap(ctx, r.comment || '', w - 40, cs)[0] || '', SW / 2, Math.max(yy + 3, y + h - 48), { size: cs, align: 'center', color: COLORS.accent });
     if (this.growthText) text(ctx, this.growthText, x + 20, y + h - 24, { size: 12, color: COLORS.good });
     if (this.t > 40 && Math.floor(this.t / 20) % 2 === 0) text(ctx, 'Aで次へ', x + w - 16, y + h - 24, { size: 13, align: 'right', color: COLORS.cyan });
   }

@@ -312,8 +312,9 @@ class Ogiri extends PerformGame {
     this.endRound();
   }
   endRound() {
-    if (this.ippons && this.mode === 'ippon') this.show.note('ippon', `IPPONを${this.ippons}本獲得`);
-    if (this.mode === 'zabuton' && this.zabuton[PLAYER_SEAT] >= 3) this.show.note('zabuton', `座布団を${this.zabuton[PLAYER_SEAT]}枚積み上げた`);
+    if (this.ippons && this.mode === 'ippon') this.show.setNote('ippon', `IPPONを${this.ippons}本獲得`);
+    if (this.mode === 'zabuton' && this.zabuton[PLAYER_SEAT] >= 3) this.show.setNote('zabuton', `座布団を${this.zabuton[PLAYER_SEAT]}枚積み上げた`);
+    else if (this.mode === 'zabuton') this.show.hl = this.show.hl.filter((h) => h.key !== 'zabuton');
     this.setState('round');
   }
   tickFx(inp) {

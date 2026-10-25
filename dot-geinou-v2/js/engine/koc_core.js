@@ -13,7 +13,7 @@ import { PEOPLE } from './life.js';
 import * as L from './koc_link.js';
 import {
   FOUNDED, rules, edition, entriesOf, POOL_NAMES, unitType, membersOf, memberNames, lookFor, AGENCY_NAMES,
-  rngOf, hashStr, fillerName, ROUND_NAME, catchcopyFor, KOC_NAME, judgesOf, kocRounds,
+  rngOf, hashStr, fillerName, ROUND_NAME, catchcopyFor, KOC_NAME, judgesOf, kocRounds, realLike,
 } from './koc_data.js';
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -46,8 +46,11 @@ export function kDate(g, day) {
 export const absOf = (y, w) => y * 120 + (w[0] - 1) * 10 + (w[1] - 1);
 // The game day number of a date in a year (may be in the past or future).
 export function dayOf(g, y, w) { const t = kDate(g); return g.state.day + (absOf(y, w) - t.abs); }
-// the game's own calendar (10-day months), written like D1's 賞レース screen: 「2026年7月4日」
-export function dateText(y, w) { return `${y}年${w[0]}月${w[1]}日`; }
+// KOC dates are [month, dom 1..10] (the game's 10-day months); every text shows the calendar day as g.gameDate / D1's
+// realDay do (dom k → (k − 1) × 3 + 1: 1, 4, 7 … 28), so a round has the same date on every screen: [7, 3] → 「2026年7月7日」
+export const realDom = (k) => (clamp(Math.round(Number(k) || 1), 1, 10) - 1) * 3 + 1;
+export const mdText = (w) => `${w[0]}月${realDom(w[1])}日`;
+export function dateText(y, w) { return `${y}年${mdText(w)}`; }
 export const isToday = (g, y, w) => { const t = kDate(g); return t.year === y && t.month === w[0] && t.dom === w[1]; };
 
 // ---------------------------------------------------------------- state
@@ -70,10 +73,35 @@ export function yearRec(g, y) {
   let Y = k.years[y];
   if (!Y || typeof Y !== 'object') Y = k.years[y] = { y, entry: null, news: {}, sf: null, finalists: null, revival: null, final: null, done: false };
   if (!Y.news || typeof Y.news !== 'object') Y.news = {};
-  // keep only the last few seasons in detail (history keeps the rest)
-  const ys = Object.keys(k.years).map(Number).sort((a, b) => a - b);
-  while (ys.length > 4) { const old = ys.shift(); if (old !== y) delete k.years[old]; }
+  // keep only the last few seasons in detail (compact() keeps the player's own runs in short form)
+  for (const old of Object.keys(k.years).map(Number)) if (old <= y - KEEP_YEARS && !(k.years[old] && k.years[old].entry)) delete k.years[old];
   return Y;
+}
+// Save growth: full detail only for the last KEEP_YEARS seasons and the player's own runs. Older seasons of this world keep
+// { y, ed, champ, runner, third, entries, champScore, me }; an old entry of the player keeps its record (results, log, members)
+// but not the scripts it carried; finished after-events and old 鮮度 marks go. Runs once a day from the morning.
+export const KEEP_YEARS = 3;
+export function compact(g, y) {
+  const k = K(g);
+  if (k.compacted === g.state.day) return;
+  k.compacted = g.state.day;
+  for (const [yy, h] of Object.entries(k.hist)) {
+    if (!h || +yy > y - KEEP_YEARS || h.lite || h.mine) continue;
+    k.hist[yy] = { y: h.y, ed: h.ed, mode: h.mode, entries: h.entries, approx: h.approx, champ: h.champ, runner: h.runner || null, third: h.third || null, champScore: h.champScore ?? null, me: h.me || null, lite: 1 };
+  }
+  for (const [yy, Y] of Object.entries(k.years)) {
+    if (!Y || +yy > y - KEEP_YEARS || Y.lite) continue;
+    if (!Y.entry) { delete k.years[yy]; continue; }
+    const E = Y.entry;
+    for (const f of ['netas', 'finalPerfs', 'plannedNeta', 'finalNeta1', 'finalFirst', 'harm', 'power0', 'props', 'r1', 'sfDone', 'sfPick', 'doneDay', 'picked', 'd1']) delete E[f];
+    k.years[yy] = { y: Y.y, entry: E, news: {}, final: Y.final ? { done: true, champ: Y.final.champ, me: Y.final.me } : null, done: true, lite: 1 };
+  }
+  if (Array.isArray(k.events)) k.events = k.events.filter((e) => !(e && e.done && num(e.y) <= y - KEEP_YEARS));
+  for (const id of Object.keys(k.netaUsed)) {
+    const a = k.netaUsed[id];
+    const b = Array.isArray(a) ? a.filter((yy) => yy > y - KEEP_YEARS) : [];
+    if (b.length) k.netaUsed[id] = b; else delete k.netaUsed[id];
+  }
 }
 export const entryOf = (g, y) => { const k = K(g); const Y = k.years[y]; return (Y && Y.entry) || null; };
 export function logRun(g, E, round, text) {
@@ -130,7 +158,7 @@ export function pool(g) {
   const k = K(g);
   if (poolCache && poolCache.seed === k.seed) return poolCache.list;
   const r = rngOf(k.seed ^ 0x51ed);
-  const names = POOL_NAMES.slice();
+  const names = POOL_NAMES.filter((n) => !realLike(n)); // D1's isRealNameLike grows: checked when the pool is built
   for (let i = names.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [names[i], names[j]] = [names[j], names[i]]; }
   const list = names.map((name, i) => {
     const type = unitType(name);
@@ -173,7 +201,7 @@ export function season(g, y) {
 }
 export function unitInfo(g, a, y) {
   const yrs = Math.max(1, y - (a.formed || y));
-  return { name: a.name, type: a.type || 'combi', agency: a.agency || 'フリー', yrs, prevFinals: prevFinals(g, a.name, y), firstFinal: prevFinals(g, a.name, y) === 0, power: a.power, members: memberNames(a.name, membersOf(a.type || 'combi')) };
+  return { y, name: a.name, type: a.type || 'combi', agency: a.agency || 'フリー', yrs, prevFinals: prevFinals(g, a.name, y), firstFinal: prevFinals(g, a.name, y) === 0, power: a.power, members: memberNames(a.name, membersOf(a.type || 'combi')) };
 }
 export function copyFor(g, a, y) { return catchcopyFor(unitInfo(g, a, y), rngOf(hashStr(`cc:${a.name}:${y}`))); }
 

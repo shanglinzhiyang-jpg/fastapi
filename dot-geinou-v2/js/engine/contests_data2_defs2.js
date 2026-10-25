@@ -11,7 +11,7 @@ import { tellKaidan } from './contests_data2_defs1.js';
 import {
   d2, yearOf, unitOf, unitName, memberCount, geirekiOf, playerAgency, isAmateur, powerOf, netaQualityOf,
   rivalsFor, judgesFor, news, stagePerform, judgeField, simScore, rngFor, askSkip, grant, record, roundResult, failReasons,
-  edLabel, yen, deviceOf, styleKind, panelPoints, fictionalPerson,
+  edLabel, yen, deviceOf, styleKind, panelPoints, fictionalPerson, prizeLine,
 } from './contests_data2_kit.js';
 import { clamp } from './util.js';
 
@@ -35,11 +35,11 @@ const T1_SRC = ['https://www.takkutvradio.jp/T-1_2025/', 'https://www.youtube.co
 registerContest('t1', {
   name: 'T-1グランプリ', short: 'T-1', kind: 'talk', category: 'special',
   names: [{ from: 2023, name: 'T-1グランプリ' }],
-  organizer: 'YouTubeチャンネル「たっくーTVれいでぃお」', broadcaster: 'YouTube生配信', venue: '（会場は詳細非公開）', region: 'tokyo',
-  history: { founded: 2023, ended: 2025, note: '最恐の怪談師を決める大会。2025年4月4日の大会がラストイヤー。2025: 推薦7名＋一般募集枠3名＝10名、ゲスト審査員＋視聴者投票。以降は復刻開催。', sources: T1_SRC },
+  organizer: 'YouTubeチャンネル「たっくーTVれいでぃお」', broadcaster: 'YouTube生配信', venue: '配信スタジオ', region: 'tokyo',
+  history: { founded: 2023, ended: 2025, note: '最恐の怪談師を決める大会。推薦出場者と一般募集枠の勝者が本戦に並び、ゲスト審査員と視聴者の投票で決まる。', sources: T1_SRC },
   schedule: { entry: { from: [1, 1], to: [2, 5] }, final: [4, 2] },
   eligibility: { pro: true, amateur: true, note: '推薦出場（主催の推薦）または一般募集枠（プロ・アマ・ジャンル不問）' },
-  prizeText: '最恐の称号（賞金は詳細非公開）',
+  prizeText: '最恐の称号',
   perform: { kind: 'talk' },
   facts: { verified: ['怪談の大会「最恐を極めし者達の戦い」', '2023年開始・2025年ラストイヤー（4/4最終回）', '推薦7名＋一般募集枠3名＝10名', 'ゲスト審査員＋視聴者投票', '2024年大会は3月'], unverified: ['一般募集の応募数', '持ち時間', '審査員の人数・配点'] },
   rounds: [
@@ -87,7 +87,7 @@ registerContest('t1', {
           all.sort((a, b) => b.total - a.total || (a.me ? -1 : 1));
           const place = all.findIndex((x) => x.me) + 1;
           await showBoard(g, {
-            title: 'T-1グランプリ 本戦 結果', sub: `${edLabel(ctx)}　ゲスト審査員＋視聴者投票（配点はゲーム内の設定）`,
+            title: 'T-1グランプリ 本戦 結果', sub: `${edLabel(ctx)}　ゲスト審査員＋視聴者投票`,
             cols: [{ key: 'place', label: '順', w: 44 }, { key: 'name', label: '名前', w: 270 }, { key: 'judge', label: '審査員', w: 90, align: 'right' }, { key: 'vote', label: '視聴者', w: 90, align: 'right' }, { key: 'total', label: '計', w: 90, align: 'right' }],
             rows: all.map((x, i) => ({ place: i + 1, name: x.name, judge: x.judge, vote: `${x.vote}%`, total: x.total, me: x.me })), max: 10,
           });
@@ -128,10 +128,10 @@ const YAMA_TASTES = [
 registerContest('yama1', {
   name: '山-1グランプリ', short: '山-1', kind: 'any', category: 'tv',
   organizer: '日本テレビ', broadcaster: '日本テレビ系「ダウンタウンのガキの使いやあらへんで！」（新春企画）', venue: '大新年会の宴会場（収録スタジオ）', region: 'tokyo',
-  history: { founded: 2007, ended: null, note: '新春恒例「大新年会」の企画。審査役が独断で採点。第17回2023/1/22、第19回2025/1/26、第20回2026/1/25（12組）。第1回は逆算で2007年。', sources: YAMA1_SRC },
+  history: { founded: 2007, ended: null, note: '新春恒例「大新年会」の企画。ブレイク前の芸人がネタを披露し、審査役がすべて独断で採点する。', sources: YAMA1_SRC },
   schedule: { entry: null, final: [1, 8] },
   eligibility: { pro: true, amateur: false, invite: { fame: 150 }, note: 'ブレイク前の芸人（番組が招く「ブレイク芸人の登竜門」・招待制）' },
-  fee: 0, prizeText: '優勝（賞金は詳細非公開）',
+  fee: 0, prizeText: '優勝',
   facts: { verified: ['日本テレビ「ガキの使い」新春恒例企画（大新年会）', '審査役の独断採点', 'ブレイク芸人の登竜門', '第17回2023/1/22・第19回2025/1/26・第20回2026/1/25（12組）'], unverified: ['第1回=2007年（逆算）', '点数の満点', '持ち時間'] },
   rounds: [
     {
@@ -188,15 +188,16 @@ registerContest('yama1', {
 const HOPE_SRC = ['https://news.mynavi.jp/article/20080507-a003/', 'https://scrapbox.io/lololololol/お笑いホープ大賞', 'https://www.weblio.jp/content/お笑いホープ大賞', 'https://www.wikiwand.com/ja/articles/お笑いホープ大賞'];
 registerContest('hope', {
   name: 'お笑いホープ大賞', short: 'ホープ大賞', kind: 'any', category: 'newcomer',
+  awardType: true, awards: ['お笑いホープ大賞'],
   names: [{ from: 2003, name: 'お笑いホープ大賞' }, { from: 2008, name: 'お笑いホープ大賞 THE FINAL' }, { from: 2009, name: 'お笑いホープ大賞' }],
-  organizer: 'お笑いコンベンション実行委員会（在京プロダクション38社）', broadcaster: null, venue: '東京都内のホール（詳細非公開）', region: 'tokyo',
-  history: { founded: 2003, ended: 2008, note: '在京プロダクション一押しの若手がジャンル不問で競う。観客の採点が勝ち上がりに大きく影響。第6回2008年「THE FINAL」で終了 → 以降は復刻開催。', sources: HOPE_SRC },
+  organizer: 'お笑いコンベンション実行委員会（在京プロダクション38社）', broadcaster: null, venue: '東京都内のホール', region: 'tokyo',
+  history: { founded: 2003, ended: 2008, note: '在京プロダクション各社が一押しの若手を送り込み、ジャンル不問で競う。勝ち上がりは観客の採点で決まる。', sources: HOPE_SRC },
   schedule: { entry: { from: [2, 1], to: [2, 10] }, final: [5, 2] },
-  eligibility: { pro: true, amateur: false, geirekiMax: 10, note: '在京プロダクションが推す若手（事務所の推薦。ゲームでは芸歴10年以内）' },
-  prizeText: 'お笑いホープ大賞（賞金は詳細非公開）',
+  eligibility: { pro: true, amateur: false, geirekiMax: 10, note: '在京プロダクションが推す若手（事務所の推薦・芸歴10年以内）' },
+  prizeText: 'お笑いホープ大賞',
   facts: { verified: ['お笑いコンベンション実行委員会（在京38社）', '在京プロ一押しの若手・ジャンル不問', '観客の採点が勝ち上がりに大きく影響', '第1回2003〜第6回2008「THE FINAL」'], unverified: ['予選の段階・日程', '賞金', '芸歴の上限'] },
   rounds: [
-    { id: 'r1', name: '予選（観客採点）', when: [3, 5], judge: 'audience', field: 80, pass: 0.3, run: (g, ctx) => stageRound(g, ctx, { round: 'r1', name: '予選（観客採点）', scene: 'theater', sign: 'お笑いホープ大賞', field: 80, pass: 0.3, level: 46, scoreLabel: '票', judgeText: '審査：観客の採点（客席100人中の票数・ゲーム内の表示）', intro: ['在京の事務所が「今年の一押し」を送り込む。', '勝ち上がりを決めるのは、客席の採点だ。'] }) },
+    { id: 'r1', name: '予選（観客採点）', when: [3, 5], judge: 'audience', field: 80, pass: 0.3, run: (g, ctx) => stageRound(g, ctx, { round: 'r1', name: '予選（観客採点）', scene: 'theater', sign: 'お笑いホープ大賞', field: 80, pass: 0.3, level: 46, scoreLabel: '票', judgeText: '審査：観客の採点（客席100人の票）', intro: ['在京の事務所が「今年の一押し」を送り込む。', '勝ち上がりを決めるのは、客席の採点だ。'] }) },
     { id: 'semi', name: '準決勝（観客採点）', when: [4, 5], judge: 'audience', field: 24, pass: 8, run: (g, ctx) => stageRound(g, ctx, { round: 'semi', name: '準決勝（観客採点）', scene: 'theater', sign: 'お笑いホープ大賞 準決勝', field: 24, pass: 8, level: 56, scoreLabel: '票', intro: ['準決勝。各社の一押しが24組。'] }) },
     { id: 'final', name: '決勝', when: [5, 2], judge: 'audience', field: 8, final: true, run: (g, ctx) => stageRound(g, ctx, { round: 'final', name: ctx.year === 2008 ? '決勝 THE FINAL' : '決勝', scene: 'theater', sign: ctx.year === 2008 ? 'お笑いホープ大賞 THE FINAL' : 'お笑いホープ大賞 決勝', field: 8, pass: 1, sample: 7, level: 62, final: true, scoreLabel: '票', intro: (gg, c) => [c.year === 2008 ? '最後のホープ大賞、THE FINAL。' : '決勝。', '今年いちばんの「ホープ」が、ここで決まる。'], awards: [{ place: 1, name: 'お笑いホープ大賞', fame: 150, fans: 1400 }] }) },
   ],
@@ -218,12 +219,13 @@ registerContest('hope', {
 const HARV_SRC = ['https://natalie.mu/owarai/news/239059', 'https://natalie.mu/owarai/news/293037', 'https://natalie.mu/owarai/news/121122', 'https://natalie.mu/owarai/news/153517', 'https://ja.wikipedia.org/wiki/お笑いハーベスト大賞', 'https://news.yahoo.co.jp/expert/articles/54830f8f5fc0f719baa364cfacabc7507e204234'];
 registerContest('harvest', {
   name: 'お笑いハーベスト大賞', short: 'ハーベスト', kind: 'any', category: 'newcomer',
+  awardType: true, awards: ['お笑いハーベスト大賞'],
   names: [{ from: 2010, name: 'お笑いハーベスト大賞' }, { from: 2018, name: 'あなたが選ぶ！お笑いハーベスト大賞' }],
-  organizer: '一般社団法人日本音楽事業者協会（音事協）', broadcaster: null, venue: '都内の劇場（詳細非公開）', region: 'tokyo',
-  history: { founded: 2010, ended: 2018, note: '月例ライブ「JAMEお笑いハーベスト」の年間グランプリ。予選会→準決勝→決勝5組。漫才・コント・ピンの「異種格闘技戦」。第9回2018年まで確認 → 以降は復刻開催。', sources: HARV_SRC },
+  organizer: '一般社団法人日本音楽事業者協会（音事協）', broadcaster: null, venue: '都内の劇場', region: 'tokyo',
+  history: { founded: 2010, ended: 2018, note: '音事協の月例ライブ「JAMEお笑いハーベスト」の年間グランプリ。漫才・コント・ピン芸が同じ舞台で戦う「お笑いの異種格闘技戦」。', sources: HARV_SRC },
   schedule: { entry: { from: [3, 1], to: [3, 10] }, final: [7, 9] },
-  eligibility: { pro: true, amateur: false, geirekiMax: 10, note: '音事協の加盟プロダクションに所属する若手（ゲームでは事務所所属・芸歴10年以内。加盟社の範囲は区別しない）' },
-  prizeText: 'お笑いハーベスト大賞（賞金は詳細非公開）',
+  eligibility: { pro: true, amateur: false, geirekiMax: 10, note: '音事協の加盟プロダクションに所属する若手（芸歴10年以内）' },
+  prizeText: 'お笑いハーベスト大賞',
   facts: { verified: ['主催 音事協', '月例ライブ「JAMEお笑いハーベスト」の年間グランプリ', '漫才・コント・ピンの異種格闘技戦', '予選会→準決勝→決勝5組', '審査員＋観客', '第1回2010〜第9回2018', '2018名称「あなたが選ぶ！お笑いハーベスト大賞2018」・7月決勝'], unverified: ['2019年以降', '賞金', '加盟社の範囲', '芸歴の上限'] },
   rounds: [
     { id: 'r1', name: '予選会（月例ライブ）', when: [[4, 5], [5, 5], [6, 5]], judge: 'panel', field: 40, pass: 0.3, run: (g, ctx) => stageRound(g, ctx, { round: 'r1', name: '予選会（月例ライブ）', scene: 'theater', sign: 'JAMEお笑いハーベスト', field: 40, pass: 0.3, level: 44, genreTags: true, board: true, intro: ['毎月の「JAMEお笑いハーベスト」。漫才もコントもピンも、同じ舞台で戦う。', '一年の実りを刈り取るのは、だれだ。'] }) },
@@ -247,11 +249,12 @@ registerContest('harvest', {
 const KAGETSU_SRC = ['https://www.wikiwand.com/ja/花月大賞'];
 registerContest('kagetsu', {
   name: '花月大賞', short: '花月大賞', kind: 'any', category: 'agency',
+  awardType: true, awards: ['花月大賞'], // several 受賞者 a year, no 「優勝」 (DECISIONS6 #10)
   organizer: '吉本興業', broadcaster: null, venue: 'なんばグランド花月', region: 'osaka',
-  history: { founded: 1984, ended: 1985, note: '吉本興業が所属タレントと関係の深い人に贈った賞（1984・1985年の2回）。以降は復刻開催。部門・選考方法は非公開扱い。', sources: KAGETSU_SRC },
+  history: { founded: 1984, ended: 1985, note: '吉本興業が、劇場で活躍した所属タレントと吉本にゆかりの深い人に贈る賞。', sources: KAGETSU_SRC },
   schedule: { entry: null, final: [12, 8] },
   eligibility: { agency: ['yoshimoto'], invite: { fame: 0 }, repeat: true, note: 'よしもと所属のタレント（選考制。会社から授賞式に呼ばれる）' },
-  fee: 0, prizeText: '花月大賞（賞金・部門は詳細非公開）',
+  fee: 0, prizeText: '花月大賞',
   facts: { verified: ['吉本興業', '1984年・1985年の2回', '所属タレントと吉本と関係の深い人に贈る'], unverified: ['部門', '選考方法', '時期・会場', '賞金'] },
   rounds: [
     {
@@ -283,13 +286,13 @@ registerContest('kagetsu', {
           const winners = (d2(g).flags[`kagetsu_${y}`] || [unitName(g)]).slice(0, 3);
           if (!winners.includes(unitName(g))) winners[winners.length - 1] = unitName(g);
           await showBoard(g, {
-            title: `${ctx.def.name}　受賞者`, sub: `${edLabel(ctx)}　（選考方法は非公開・ゲーム内の集計）`, cols: [{ key: 'name', label: '受賞者', w: 600 }],
+            title: `${ctx.def.name}　受賞者`, sub: `${edLabel(ctx)}　受賞者`, cols: [{ key: 'name', label: '受賞者', w: 600 }],
             rows: [...winners.map((n) => ({ name: n, me: n === unitName(g) })), { name: `劇場を支えた裏方：${fictionalPerson(rngFor(g, ctx.id, y, 'staff'))}さん（劇場スタッフ）` }],
           });
           await g.say(['花月大賞、受賞！', '授賞式のあと、記念にひとネタ披露することになった。']);
           const skip = await askSkip(g, ctx, 'final');
           const res = await stagePerform(g, ctx, { kind: styleKind(g), round: 'kinen', title: '受賞記念のネタ', venue: { name: venue, size: 'hall', crowd: 'warm', pressure: 30 }, skip });
-          const out = roundResult(res, { passed: true, place: 1, field: 3, champion: true, award: '花月大賞' });
+          const out = roundResult(res, { passed: true, place: 1, field: 3, champion: true, award: '花月大賞', awardWinners: { 花月大賞: winners.slice() } });
           news(g, ctx, `【吉本】${edLabel(ctx)}花月大賞、受賞は${winners.join('、')}`);
           record(g, ctx, 'final', out);
           return out;
@@ -319,10 +322,10 @@ registerContest('seijinshiki', {
   name: 'お笑い成人式', short: '成人式', kind: 'manzai', category: 'tv',
   names: [{ from: 2020, name: 'お笑い成人式' }, { from: 2021, name: 'お笑い成人式ライブ' }, { from: 2024, name: 'お笑い成人式' }],
   organizer: 'BSフジ', broadcaster: 'BSフジ', venue: 'BSフジ スタジオ（公開収録）', region: 'tokyo',
-  history: { founded: 2020, ended: null, note: '芸歴20年以上の漫才師の「成人式」。2020年3月（開局20周年・無観客・10組）、2020年11月（有観客）、2022年1月1日、2024年。ゲームでは毎年正月に開催・回数は通し番号。', sources: SEIJIN_SRC },
+  history: { founded: 2020, ended: null, note: '芸歴20年を迎えた漫才師の「成人式」。ベテランが推薦する、まだ日の目を見ていない実力派の漫才戦。', sources: SEIJIN_SRC },
   schedule: { entry: null, final: [1, 1] },
   eligibility: { geirekiMin: 20, pro: true, amateur: false, members: [2, null], invite: { fame: 0 }, note: '芸歴20年以上の漫才師（ベテラン漫才師の推薦・招待制）' },
-  fee: 0, prizeText: '優勝（賞金は詳細非公開）',
+  fee: 0, prizeText: '優勝',
   perform: { kind: 'manzai' },
   facts: { verified: ['BSフジ', '2020年3月 開局20周年記念・芸歴20年以上の漫才師10組・無観客・審査委員長と審査員', 'ベテラン推薦の「まだ日の目を見ていないけれど力のある漫才師」', '2020年11月 第2回（有観客）', '2022年1月1日 第3弾（審査員＋観客投票）', '2024年「お笑い成人式2024」'], unverified: ['2023年・2025年以降', '賞金', 'ネタ時間'] },
   rounds: [
@@ -348,7 +351,7 @@ registerContest('seijinshiki', {
           rows.sort((a, b) => b.t - a.t || (a.me ? -1 : 1));
           const place = rows.findIndex((x) => x.me) + 1;
           await showBoard(g, {
-            title: 'お笑い成人式　結果', sub: `${edLabel(ctx)}　${noAudience ? '無観客（審査員のみ）' : '審査員＋観客投票'}（配点はゲーム内の設定）`,
+            title: 'お笑い成人式　結果', sub: `${edLabel(ctx)}　${noAudience ? '無観客（審査員のみ）' : '審査員＋観客投票'}`,
             cols: [{ key: 'place', label: '順', w: 44 }, { key: 'name', label: '名前', w: 300 }, { key: 'j', label: '審査員', w: 90, align: 'right' }, { key: 'a', label: '観客', w: 80, align: 'right' }, { key: 't', label: '計', w: 80, align: 'right' }],
             rows: rows.map((x, i) => ({ place: i + 1, name: x.name, j: x.j, a: noAudience ? '—' : x.a, t: x.t, me: x.me })), max: 10,
           });
@@ -381,11 +384,11 @@ const BIA_SRC = ['https://natalie.mu/owarai/news/548842', 'https://ryukyushimpo.
 const biaKind = (g, part) => (unitOf(g).type === 'pin' || styleKind(g) === 'pin' ? 'pin' : part);
 registerContest('biathlon', {
   name: 'お笑いバイアスロン', short: 'バイアスロン', kind: 'double', category: 'tv',
-  organizer: 'QAB琉球朝日放送', broadcaster: 'QAB琉球朝日放送', venue: '沖縄県内の特設ステージ（詳細非公開）', region: 'okinawa',
-  history: { founded: 2013, ended: null, note: '沖縄の芸人の「お笑い総合王者決定戦」。コント＋漫才の合計得点。2023年が第11回。2カ月の予選、本番中に選ばれる敗者復活、同点は決戦投票。', sources: BIA_SRC },
+  organizer: 'QAB琉球朝日放送', broadcaster: 'QAB琉球朝日放送', venue: '沖縄県内の特設ステージ', region: 'okinawa',
+  history: { founded: 2013, ended: null, note: '沖縄の芸人の「お笑い総合王者決定戦」。コントと漫才の合計点で争い、本番中に敗者復活組が選ばれる。同点なら決戦投票。', sources: BIA_SRC },
   schedule: { entry: { from: [5, 1], to: [5, 10] }, final: [8, 5] },
   eligibility: { pro: true, amateur: true, region: 'okinawa', note: '沖縄で活動する芸人（沖縄県出身でなければ、予選の受付で沖縄にも拠点を置くか決める）' },
-  prizeText: '総合王者（賞金は詳細非公開）',
+  prizeText: '総合王者',
   facts: { verified: ['主催 QAB琉球朝日放送', '沖縄の芸人の総合王者決定戦・毎年夏', 'コント＋漫才の合計得点', '2023年=第11回', '2カ月の予選→決勝', '本番中に選ばれる敗者復活', '同点は決戦投票', 'ピン芸人も決勝に'], unverified: ['第1回=2013年（逆算）', '配点（ゲームでは各500点満点）', '予選の通過数', '月'] },
   rounds: [
     {
@@ -439,7 +442,7 @@ registerContest('biathlon', {
             }
             await g.say('敗者復活で決勝のステージへ！');
           }
-          if (!skip) await g.say(['決勝。コントと漫才、二つの種目の合計点で総合王者が決まる。', '審査員5人が各100点。コント500点＋漫才500点、計1000点満点（配点はゲーム内の設定）。']);
+          if (!skip) await g.say(['決勝。コントと漫才、二つの種目の合計点で総合王者が決まる。', '審査員5人が各100点。コント500点＋漫才500点、計1000点満点。']);
           const judges = judgesFor(g, ctx, 5, ['審査委員長', '放送作家', 'QABアナウンサー', '劇場支配人', '沖縄芝居の役者']);
           const c1 = await stagePerform(g, ctx, { kind: biaKind(g, 'conte'), round: 'final_conte', title: '第一種目：コント', venue: { name: '決勝ステージ', size: 'hall', crowd: 'warm', pressure: 70 }, skip });
           const m1 = await stagePerform(g, ctx, { kind: biaKind(g, 'manzai'), round: 'final_manzai', title: '第二種目：漫才', venue: { name: '決勝ステージ', size: 'hall', crowd: 'warm', pressure: 80 }, skip });
@@ -459,7 +462,7 @@ registerContest('biathlon', {
             place = rows.findIndex((x) => x.me) + 1;
           }
           await showBoard(g, {
-            title: 'お笑いバイアスロン　総合得点', sub: `${edLabel(ctx)}　コント500＋漫才500（配点はゲーム内の設定）${tie ? '　※同点は決戦投票' : ''}`,
+            title: 'お笑いバイアスロン　総合得点', sub: `${edLabel(ctx)}　コント500＋漫才500${tie ? '　※同点は決戦投票' : ''}`,
             cols: [{ key: 'place', label: '順', w: 44 }, { key: 'name', label: '名前', w: 290 }, { key: 'c', label: 'コント', w: 90, align: 'right' }, { key: 'm', label: '漫才', w: 90, align: 'right' }, { key: 't', label: '合計', w: 90, align: 'right' }],
             rows: rows.map((x, i) => ({ place: i + 1, name: x.name, c: x.c, m: x.m, t: x.t, me: x.me })), max: 10,
           });
@@ -492,8 +495,8 @@ const HYAKU_SRC = ['https://natalie.mu/owarai/news/566485', 'https://natalie.mu/
 const HYAKU_CHAT = ['あけおめ！', '新春から100×100', '100秒で勝負か', '尺がどんどん伸びる', 'お年玉100万円！', 'がんばれー'];
 registerContest('hyaku', {
   name: '100×100', short: '100×100', kind: 'any', category: 'agency',
-  organizer: '吉本興業', broadcaster: 'YouTube「吉本興業チャンネル」（元日生配信）', venue: '（配信スタジオ）', region: 'tokyo',
-  history: { founded: 2024, ended: null, note: '吉本芸人限定の新春ネタトーナメント。1回戦100秒・準決勝200秒・決勝300秒。お年玉100万円。第1回は延期を経て60組、第2回2025、第3回2026年元日（視聴者投票）。', sources: HYAKU_SRC },
+  organizer: '吉本興業', broadcaster: 'YouTube「吉本興業チャンネル」（元日生配信）', venue: '配信スタジオ', region: 'tokyo',
+  history: { founded: 2024, ended: null, note: '吉本芸人限定の新春ネタトーナメント。1回戦100秒・準決勝200秒・決勝300秒とネタ時間が伸びる。お年玉は100万円。', sources: HYAKU_SRC },
   // the 予選 is in December of the previous calendar year (D1: a date after the final's month belongs to year − 1)
   schedule: { entry: { from: [11, 1], to: [11, 10] }, final: [1, 1] },
   eligibility: { agency: ['yoshimoto'], pro: true, amateur: false, note: '吉本興業の所属芸人（年末の予選を勝ち抜いた60組が元日の本戦へ）' },
@@ -538,7 +541,7 @@ registerContest('hyaku', {
             }
             if (st.pass === 1) {
               last.champion = true; last.award = '優勝（お年玉100万円）'; last.place = 1; // 100万円（def.prize）は D1 が支払う
-              await g.say([`100×100、優勝は${unitName(g)}！`, 'お年玉100万円。新年いちばんの笑いをとった。']);
+              await g.say([`100×100、優勝は${unitName(g)}！`, `お年玉は${prizeLine(g, 1000000, '')}。新年いちばんの笑いをとった。`]);
             } else await g.say(`${st.name}突破！ 次は${st.sec + 100}秒。`);
             prevSec = st.sec;
           }
@@ -569,10 +572,10 @@ const T30_SRC = ['https://natalie.mu/owarai/news/569756', 'https://www.daily.co.
 registerContest('thirty1', {
   name: '30-1 グランプリ', short: '30-1', kind: 'any', category: 'tv',
   organizer: 'TBS', broadcaster: 'TBS系「水曜日のダウンタウン」', venue: 'TBS スタジオ', region: 'tokyo',
-  history: { founded: 2021, ended: null, note: '30秒以内ならなんでもアリのノンジャンル賞レース（「水曜日のダウンタウン」企画、年1回）。2026年は931組応募→40組が5ブロックのトーナメント。審査員5人（2024）。', sources: T30_SRC },
+  history: { founded: 2021, ended: null, note: '30秒以内ならなんでもアリのノンジャンル賞レース（「水曜日のダウンタウン」の企画）。本戦は5ブロックのトーナメント。', sources: T30_SRC },
   schedule: { entry: { from: [2, 1], to: [2, 10] }, final: [5, 5] },
-  eligibility: { pro: true, amateur: true, note: '出場資格の詳細は未確認（ゲームではプロ・アマ不問）。ネタは30秒以内' },
-  prizeText: '優勝（賞金は詳細非公開）',
+  eligibility: { pro: true, amateur: true, note: 'プロ・アマ不問。ネタは30秒以内' },
+  prizeText: '優勝',
   facts: { verified: ['TBS「水曜日のダウンタウン」企画', '2021年から年1回', '30秒以内ならなんでもアリ（ノンジャンル）', '2026: 931組応募→40組・5ブロックのトーナメント', '審査員5人（2024）'], unverified: ['予選の方式', 'ブロック内の対戦方式', '決勝の方式', '賞金', '30秒超過の扱い'] },
   rounds: [
     { id: 'r1', name: '予選（応募ネタ審査）', when: [3, 5], judge: 'staff', field: 931, pass: 40, run: (g, ctx) => stageRound(g, ctx, { round: 'r1', name: '予選（応募ネタ審査）', scene: 'timer30', sign: '30秒以内ならなんでもアリ', length: 30, field: ctx.year === 2026 ? 931 : 800, pass: 40, sample: 30, level: 48, intro: (gg, c) => [`30秒以内のネタを送る。${c.year === 2026 ? '今年は過去最多の931組が応募。' : ''}`, '本戦に残れるのは40組。'] }) },
@@ -624,7 +627,7 @@ registerContest('thirty1', {
             const rr = rngFor(g, ctx.id, ctx.year, 'finv');
             for (let k = 0; k < 5; k++) { let bi = 0, bv = -1; fs.forEach((s, i) => { const x = s + (rr() - 0.5) * 14; if (x > bv) { bv = x; bi = i; } }); votes[bi]++; }
             const fo = [unitName(g), ...fr.map((x) => x.name)].map((n, i) => ({ name: n, v: votes[i], me: i === 0 })).sort((a, b) => b.v - a.v || (a.me ? -1 : 1));
-            await showBoard(g, { title: '30-1 グランプリ　決勝（各ブロック王者5組）', sub: `${edLabel(ctx)}　審査員5人の投票（決勝の方式はゲーム内の設定）`, cols: [{ key: 'place', label: '順', w: 50 }, { key: 'name', label: '名前', w: 380 }, { key: 'v', label: '票', w: 140, align: 'right' }], rows: fo.map((x, i) => ({ place: i + 1, name: x.name, v: `${x.v}票`, me: x.me })) });
+            await showBoard(g, { title: '30-1 グランプリ　決勝（各ブロック王者5組）', sub: `${edLabel(ctx)}　審査員5人の投票`, cols: [{ key: 'place', label: '順', w: 50 }, { key: 'name', label: '名前', w: 380 }, { key: 'v', label: '票', w: 140, align: 'right' }], rows: fo.map((x, i) => ({ place: i + 1, name: x.name, v: `${x.v}票`, me: x.me })) });
             out = roundResult(fin, { passed: true, place: fo.findIndex((x) => x.me) + 1, field: 40 });
             if (fo[0].me) { out.champion = true; out.award = '優勝'; await g.say([`30-1 グランプリ、優勝は${unitName(g)}！`, '30秒で日本中を笑わせた。']); }
             else { out.reasons = failReasons(g, styleKind(g), fin); await g.say([`決勝${out.place}位。優勝は「${fo[0].name}」。`, `足りなかったもの：${out.reasons.join('、')}`]); }
@@ -637,9 +640,9 @@ registerContest('thirty1', {
     },
   ],
   news: [
-    '「30秒以内ならなんでもアリ」。水曜日のダウンタウン「30-1グランプリ」今年も開催',
-    (g, ctx) => (ctx.year === 2026 ? '30-1グランプリ、応募は過去最多の931組。本戦は40組・5ブロックのトーナメント' : '30-1グランプリ、本戦は5ブロックのトーナメント'),
-    '30-1グランプリ、審査員5人の多数決で1対1の勝ち抜き',
+    '「30秒以内ならなんでもアリ」。水曜日のダウンタウン「30-1 グランプリ」今年も開催',
+    (g, ctx) => (ctx.year === 2026 ? '30-1 グランプリ、応募は過去最多の931組。本戦は40組・5ブロックのトーナメント' : '30-1 グランプリ、本戦は5ブロックのトーナメント'),
+    '30-1 グランプリ、審査員5人の多数決で1対1の勝ち抜き',
     '30秒のネタに漫才・コント・ピン芸が混在。ノンジャンルの戦い',
     (g, ctx) => `${deviceOf(ctx.year)}の縦動画で「30秒ネタ」がバズる。30-1の出場者に注目`,
   ],

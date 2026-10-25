@@ -99,6 +99,18 @@ export function pinName(r) {
     return `${pickR(r, UNIT2)} ${pickR(r, SHORT)}`; // コンビの片方がピンで出る
   });
 }
+// the gender a generated ピン芸名 reads as ('f' / 'm' / null = either): looks and tags such as 女性ピン follow the name
+const NAME_F = new Set(['キャサリン', 'ミドリ', 'トメ子', 'ヨシコ', 'ジュリア', 'ペコ', 'マドカ', 'モモ', 'ローズ', 'ナナ', 'リリー', '深海ちゃん', 'ぬか床ミナミ', '麦茶のみ子', '湯たんぽ姫', '目覚まし時計子', 'ミナミ', 'かおり', 'マリ', 'ゆうこ']);
+const NAME_M = new Set(['ジョニー', 'ポン太', 'マサル', 'ヤスオ', 'ハルキ', 'ゴンザレス', 'チャーリー', 'タモツ', 'ノブ', 'ダンディ', 'ミツオ', 'チカラ', 'ピエール', 'ゲン', 'ケンタ', 'ソウタ', 'すきま風太郎', 'おにぎり左衛門', 'メロンパン太郎', 'ぽんかん大王', '冷やし中華はじめ', 'スリッパ王子', '段ボール伯爵', 'エレベーター大佐', '扇風機ヨシオ', 'ちくわぶ男爵', '踏切ジョージ', '雨合羽サトシ', 'ヨシダ', 'まこと', 'ケン', 'たろう', 'みのる', 'サトシ', 'コウ', 'のぶ', 'リョウ', 'しんご', 'てつ']);
+export function nameGender(name) {
+  const s = String(name || '');
+  if (NAME_F.has(s) || NAME_M.has(s)) return NAME_F.has(s) ? 'f' : 'm';
+  const last = s.includes(' ') ? s.split(' ').pop() : null;
+  if (last) return NAME_F.has(last) ? 'f' : NAME_M.has(last) ? 'm' : null;
+  for (const x of NAME_F) if (s.endsWith(x) && s.length > x.length) return 'f';
+  for (const x of NAME_M) if (s.endsWith(x) && s.length > x.length) return 'm';
+  return null;
+}
 export function unitName(r, type = 'combi') { return type === 'pin' ? pinName(r) : clean(r, () => pickR(r, type === 'trio' ? UNIT3 : UNIT2)); }
 const HAIRS = ['short', 'long', 'bob', 'spiky', 'twin', 'slick', 'afro', 'cap', 'bald', 'mage'];
 const HCOL = ['black', 'black', 'brown', 'brown', 'blonde', 'red', 'silver', 'pink', 'blue', 'orange'];

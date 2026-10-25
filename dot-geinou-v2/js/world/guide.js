@@ -74,7 +74,7 @@ export const GUIDE = {
   yoshimoto: {
     town: 'tokyo', name: 'よしもと 東京本部', short: 'よしもと', audition: true,
     hint: '東京の南の真ん中あたり',
-    lines: ['漫才のオーディション／漫才・トークのレッスン', '前説（だれでも）・若手ライブ（所属）・大喜利★250', '冠番組★1000・グランプリ決勝★2000（所属）'],
+    lines: ['漫才のオーディション／漫才・トークのレッスン', '前説（だれでも）・若手ライブ（所属）・大喜利★250', '冠番組★1000・月例ネタバトル決勝★2000（所属）'],
   },
   bs_yoshimoto: {
     town: 'tokyo', name: 'BSよしもと', short: 'BSよしもと',
@@ -429,7 +429,7 @@ export const GUIDE_JOBS = [
   { place: 'toho', label: 'ミュージカル主演', ids: ['toho_musical_lead'], tier: 3, fame: 1000, skill: 'uta' },
   { place: 'hotel', label: 'ディナーショー', ids: ['hotel_dinner'], tier: 3, fame: 1000, skill: 'uta' },
   // tier 4: ★2000
-  { place: 'yoshimoto', label: 'お笑いグランプリ決勝', ids: ['yoshimoto_gp_final'], tier: 4, need: 'yoshimoto', fame: 2000, skill: 'warai' },
+  { place: 'yoshimoto', label: '月例ネタバトル決勝（月1回）', ids: ['yoshimoto_gp_final'], tier: 4, need: 'yoshimoto', fame: 2000, skill: 'warai' },
   { place: 'shinkigeki', label: '座長に抜擢！', ids: ['shinkigeki_zacho'], tier: 4, need: 'yoshimoto', fame: 2000, skill: 'warai' },
   { place: 'bs_yoshimoto', label: '特番の総合司会', ids: ['bs_yoshimoto_special'], tier: 4, fame: 2000, skill: 'talk' },
   { place: 'shochiku', label: '冠ラジオ番組', ids: ['shochiku_kanmuri_radio'], tier: 4, need: 'shochiku', fame: 2000, skill: 'talk' },

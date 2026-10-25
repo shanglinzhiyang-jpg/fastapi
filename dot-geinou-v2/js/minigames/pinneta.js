@@ -64,8 +64,8 @@ class PitchTask extends Task {
     return false;
   }
   draw(ctx) {
-    const x = this.panel(ctx, 420);
-    const gx = x + 150, gw = 250, gy = 290 + 6, gh = 36;
+    const x = this.panel(ctx, 440, 146);
+    const gx = x + 170, gw = 254, gy = 290 + 6, gh = 36;
     rect(ctx, gx, gy, gw, gh, '#0a0c22');
     const len = this.o.len || 150;
     for (let k = -20; k <= 60; k += 2) {
@@ -179,7 +179,7 @@ class PinNeta extends PerformGame {
       const sub = MONOMANE[line.subject] || { ...MONOMANE.generic, label: (this.ctx.theme || 'ものまね').slice(0, 14) };
       this.subject = sub;
       if (line.punch) {
-        out.push(new PitchTask({ label: `ものまね：${sub.label}`, contour: sub.contour, len: Math.round(140 / (1 + this.bonus * 0.2)), onDone: (r, mg) => {
+        out.push(new PitchTask({ label: `ものまね「${sub.label}」`, contour: sub.contour, len: Math.round(140 / (1 + this.bonus * 0.2)), onDone: (r, mg) => {
           mg.lineRes.t = r.t;
           if (r.acc >= 0.8) mg.show.craft(1.5, 'nite', `${sub.label}のものまねが「似てる！」とどよめきを呼んだ（ものまね）`);
           mg.popup(r.acc >= 0.8 ? 'そっくり！' : r.acc >= 0.6 ? '似てる！' : r.acc >= 0.35 ? 'ちょっと似てる' : '似てない…', 520, 120, r.acc >= 0.6 ? COLORS.good : COLORS.dim, 18);

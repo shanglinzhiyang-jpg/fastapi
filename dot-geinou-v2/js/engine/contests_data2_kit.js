@@ -397,7 +397,8 @@ export function grant(g, ctx, key, rw = {}) {
     if (rw.fame && typeof g.addFame === 'function') g.addFame(rw.fame);
     if (rw.fans && typeof g.addFans === 'function') g.addFans(rw.fans);
     // rw.money is a REAL nominal amount of that year (D1's rule): stored as amount / era price rate
-    if (rw.money && typeof g.addMoney === 'function') g.addMoney(typeof C.realToInternal === 'function' ? C.realToInternal(rw.money) : rw.money);
+    // the prize belongs to the act: the player receives prize ÷ members (DECISIONS6 #4)
+    if (rw.money && typeof g.addMoney === 'function') { const m = shareOf(g, rw.money); g.addMoney(typeof C.realToInternal === 'function' ? C.realToInternal(m) : m); }
     if (rw.stress && typeof g.lifeTick === 'function') g.lifeTick({ stress: rw.stress });
   } catch (e) { console.error(e); }
   return true;
@@ -432,3 +433,9 @@ export function edLabel(ctx) {
 export const toScale = (score, max) => Math.round((clamp(score, 0, 100) / 100) * max);
 // a REAL nominal amount in text: YEN_MARK keeps g.fmt / yenText from rescaling it by the era's price rate (D1's rule)
 export const yen = (n) => `${YEN_MARK}${Math.round(n).toLocaleString('ja-JP')}円`;
+// the player's share of an act's prize, and the text 「賞金20万円（ひとり10万円）」 (pin: the whole prize)
+export const shareOf = (g, total) => Math.round(Number(total || 0) / Math.max(1, memberCount(unitOf(g))));
+export function prizeLine(g, total, word = '賞金') {
+  const n = memberCount(unitOf(g));
+  return n > 1 ? `${word}${yen(total)}（ひとり${yen(shareOf(g, total))}）` : `${word}${yen(total)}`;
+}

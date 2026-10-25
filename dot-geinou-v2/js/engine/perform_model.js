@@ -316,6 +316,8 @@ export class Show {
   avg(k) { const M = this.ctx.members; return M.reduce((a, m) => a + (m.s[k] || 0), 0) / M.length; }
   stat(i, k) { return (this.m(i).s[k]) || 0; }
   note(key, text) { if (!this.hl.some((h) => h.key === key)) this.hl.push({ key, text }); }
+  // a running total (IPPON / 座布団): replace the line in place
+  setNote(key, text) { const h = this.hl.find((x) => x.key === key); if (h) h.text = text; else this.hl.push({ key, text }); }
   count(i, k) { const w = (this.who[i] ||= {}); w[k] = (w[k] || 0) + 1; return w[k]; }
 
   // delivery skill 0..1 of member i for a beat type ('b' | 't' | 'l')
@@ -469,11 +471,12 @@ export class Show {
     const heatAvg = this.samples.reduce((a, b) => a + b, 0) / this.samples.length;
     const parts = { neta: Math.round(ctx.quality), execution: clamp(Math.round(exec), 0, 100), presence: clamp(Math.round(presence), 0, 100), timing: clamp(Math.round(avgT * 92), 0, 100), crowd: clamp(Math.round(heatAvg * 100), 0, 100) };
     const heat = downsample(this.samples.map((h) => Math.round(h * 100)), 24);
-    const highlights = this.hl.map((h) => h.text).slice(0, 7);
+    const highlights = this.hl.map((h) => h.text).slice(0, 10);
+    const highlightsBad = this.hl.filter((h) => BAD_NOTE.test(h.key)).map((h) => h.text);
     const pass = o.pass ?? (ctx.opts.pass ?? 50);
     const res = {
       score, rank, success: score >= pass, laughs: c.laughs, big: c.big, flubs: c.flubs, blanks: c.blanks, overtime: ot, adlib: c.adlib,
-      heat, parts, comment: commentFor(score, rank, this, ot, otPen), highlights,
+      heat, parts, comment: commentFor(score, rank, this, ot, otPen), highlights, highlightsBad,
       kind: ctx.kind, style: ctx.style, title: ctx.title, duration: Math.round(this.time), limit: ctx.limit, suberi: c.suberi, rush: c.rush,
       netaId: ctx.neta && ctx.neta.id && !ctx.neta.house && !ctx.neta.auto ? ctx.neta.id : null,
     };
@@ -481,6 +484,8 @@ export class Show {
   }
 }
 
+// highlight keys that are mistakes / 実力不足 (the result card always keeps these)
+const BAD_NOTE = /^(kamu|tobu|rush|koe|recoil|ot|suberi|ochiMiss|ma|kamishimo-miss|makuraMiss|prop|anten)/;
 function downsample(arr, n) {
   if (arr.length <= n) return arr;
   const out = [];

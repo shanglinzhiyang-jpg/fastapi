@@ -20,7 +20,7 @@ import { registerSong } from './audio.js';
 import { MINIGAMES } from './minigame.js';
 import { eraOf } from './profile.js';
 import { m1Rules, m1Held, editionOf, M1, entriesOf, NEWS, setNameFilter } from './m1_data.js';
-import { fieldOf, passedOf, prepareFinal, simulateFinal, actOf, anonCombo, sd } from './m1_field.js';
+import { fieldOf, passedOf, prepareFinal, simulateFinal, actOf, anonCombo, sd, compactM1 } from './m1_field.js';
 import { has, safe, cal, dateLabel, dateLabelY, today, M, season, entryOf, plan, statusOf, unitInfo, news, flushNews, msg, internal, yenNom } from './m1_core.js';
 import { entryFlow, roundFlow, finalDayFlow, watchFinal, practiceFlow, zadankaiFlow, anotherStory, returnsFlow, tourStop } from './m1_flow.js';
 import { phoneList, phoneInfo, closePhoneThen, appTile } from './phone.js';
@@ -79,13 +79,20 @@ function rivalsFor(g, round, n = 10, year) {
     return { name: a.name, unit: a.trio ? 'trio' : 'combi', kind: 'manzai', power: Math.round(e.p), tags: a.tags.slice(0, 3), agency: a.agency, members: a.members.map((x) => ({ name: x.name, look: x.look })), formed: a.formed, years: a.years, look: a.members[0].look, region: a.region };
   });
 }
+function historyNote(y) {
+  if (y == null || y < 2001) return '';
+  if (y <= 2010) return '2001年創設。漫才日本一を決める大会。';
+  if (y <= 2014) return '2001年創設。2010年の第10回で一区切りとなった。';
+  return '2001年創設。2010年の第10回で一区切り、2011〜2014年は開催なし、2015年に第11回として復活（出場資格は結成15年以内に）。';
+}
 const r26 = m1Rules(2026);
 registerContest('m1', {
   name: 'M-1グランプリ', short: 'M-1', kind: 'manzai', category: 'major', color: '#c8102e', labelStyle: 'year', selfRun: true, repeat: false,
   organizer: r26.organizer, broadcaster: r26.broadcast, venue: r26.finalVenue, region: 'all',
   history: {
     founded: 2001, ended: null, gaps: [[2011, 2014]], revived: 2015,
-    note: '2001年創設。2010年の第10回で一区切り、2011〜2014年は開催なし、2015年に第11回として復活（出場資格は結成15年以内に）。',
+    // only what has happened by the current in-game year (no future facts)
+    get note() { return historyNote(G ? cal(G).year : null); },
     sources: ['https://www.sakigake.jp/news/article/20261004OR0022/', 'https://news.allabout.co.jp/articles/o/34962/', 'https://news.allabout.co.jp/articles/o/73242/', 'https://www.oricon.co.jp/news/2100743/full/', 'https://compe.japandesign.ne.jp/m-1gp-2020/'],
   },
   revive: false,
@@ -94,6 +101,7 @@ registerContest('m1', {
   roundsOf: (yy) => roundsFor(yy), scheduleOf: (yy) => scheduleFor(yy),
   entryCount: (yy) => (m1Held(yy) ? entriesOf(yy).n : null),
   feeText: (yy) => { const r = m1Rules(heldYear(yy)); return r.fee.text; },
+  eligibilityNote: (g, yy) => { const r = m1Rules(heldYear(yy || (g ? cal(g).year : 2026))); return r ? r.eligibilityText : ''; },
   eligibility: (g, unit, yy) => { const u = unitInfo(g, yy || cal(g).year); return { ok: u.ok, why: u.why, reasons: u.ok ? [] : [{ text: u.why.split('\n')[0] }] }; },
   // REAL nominal yen (D1 converts to game money itself): 1組2,000円 / from 2025 1人1,000円 × members
   fee: (g, unit, yy) => { const rr = m1Rules(heldYear(yy || cal(g).year)); return rr.fee.per === 'person' ? rr.fee.nominal * Math.max(2, (unitInfo(g, yy).members || []).length) : rr.fee.nominal; },
@@ -105,7 +113,7 @@ registerContest('m1', {
   entry: async (g) => entryFlow(g),
   onMorning: (g) => m1Morning(g),
   status: (g) => safe(() => g.m1(), null),
-  historyList: (g) => safe(() => g.m1History(), []),
+  historyList: (g) => safe(() => g.m1History().map((h) => ({ year: h.y, edition: h.ed, champion: h.chN, runnerUp: h.ruN || null, third: h.thN || null, finalists: h.finN || [], revival: false, note: h.rvwN ? `敗者復活：${h.rvwN}` : '', player: h.ch === 'me' ? 1 : null })), []),
   rivalsOf: (g, round, n, year) => safe(() => rivalsFor(g, round, n, year), []),
 });
 
@@ -136,7 +144,8 @@ function processYear(g, y) {
   if (t >= P.entryFrom && !ev.open) {
     ev.open = t;
     const base = y === 2001 ? NEWS.open2001[0] : y === 2015 ? NEWS.open2015[0] : fill(NEWS.open[y % 2], { label: lbl, limit: rules.limitText, method: rules.entryMethod, fee: rules.fee.text });
-    keyed(g, `【M-1】${base}\n締切は${dateLabel(g, P.entryTo)}。${y === 2001 ? '' : `エントリー料${rules.fee.text}。`}`, `m1n|open|${y}`, 70);
+    const feeIn = y !== 2001 && y !== 2015 && y % 2 === 1; // NEWS.open[1] already names the fee
+    keyed(g, `【M-1】${base}\n締切は${dateLabel(g, P.entryTo)}。${y === 2001 || feeIn ? '' : `エントリー料${rules.fee.text}。`}`, `m1n|open|${y}`, 70);
     if (y === 2025) keyed(g, `【M-1】${NEWS.feeChange[0]}`, `m1n|fee|${y}`, 30);
   }
   // 3 days before the close: one line for everybody (D1's generic reminder would not know this entry)
@@ -203,7 +212,7 @@ function roundNews(g, y, ri) {
   // upsets: a known act out (準決勝常連 / 前年ファイナリスト)
   const passedKeys = new Set(passed.map((e) => e.key));
   const fav = field.filter((e) => e.c && !e.c.anon && !passedKeys.has(e.key) && (e.c.sm >= 3 || (e.c.last && e.c.last.y === y - 1 && e.c.last.r !== 'sf'))).sort((a, b) => b.p - a.p)[0];
-  if (fav) keyed(g, `【M-1】${fill(NEWS.upset[fav.c.fin ? 1 : 0], { x: fav.c.n, round: R.name })}`, `m1n|upset|${y}|${k}`, 25);
+  if (fav) keyed(g, `【M-1】${lbl}、${fill(NEWS.upset[fav.c.fin ? 1 : 0], { x: fav.c.n, round: R.name })}`, `m1n|upset|${y}|${k}`, 25);
   else if (ri >= 2) keyed(g, `【M-1】${fill(NEWS[R.id === 'qf' ? 'qf' : 'r3'][1], { x: best ? nameOfEntrant(m, y, best) : '', n: nPass })}`, `m1n|upset|${y}|${k}`, 15);
   if (ri === 0) {
     const ama = passed.find((e) => !e.c && h01x(y, e.no) < 0.2);
@@ -228,10 +237,10 @@ function finalNews(g, y, E) {
   const champName = champMe ? (E ? E.name : m.me.name) : row.chN;
   // the champion (claims D1's key: one champion in one world)
   keyed(g, `【M-1】第${rules.edition}代王者は「${champName}」！${lbl}を制した。${row.ruN ? `\n準優勝は「${row.ruN}」${row.thN ? `、3位は「${row.thN}」` : ''}。` : ''}${rules.finalRound && row.v ? `最終決戦は審査員${row.v}票。` : ''}`, `m1n|champ|${y}`, 95);
-  if (row.revN && row.revN === champName) news(g, 'championRevival', { x: champName }, { once: `champrev_${y}`, prio: 3 });
+  if (row.rvwN && row.rvwN === champName) news(g, 'championRevival', { x: champName }, { once: `champrev_${y}`, prio: 3 });
   const c = !champMe && row.ch ? m.pool.find((x) => x.id === row.ch) : null;
   if (c && rules.limit === y - c.f) news(g, 'championLast', { x: champName }, { once: `champlast_${y}`, prio: 3 });
-  if (row.revN) news(g, `敗者復活戦（${rules.revival.venue}）を勝ち上がったのは「${row.revN}」だった。`, {}, { once: `rev_${y}` });
+  if (row.rvwN) news(g, `敗者復活戦（${rules.revival.venue}）を勝ち上がったのは「${row.rvwN}」だった。`, {}, { once: `rev_${y}` });
   news(g, 'topScore', { x: row.topN, s: row.top }, { once: `top_${y}` });
   const rating = 18 + Math.round(h01x('rating', m.seed, y) * 12 * 10) / 10;
   news(g, 'rating', { p: rating.toFixed(1) }, { once: `rating_${y}`, prio: -1 });
@@ -246,8 +255,8 @@ function personal(g, y) {
   const rules = m1Rules(y);
   const dev = eraOf(g.state).deviceShort || 'スマホ';
   let sent = 0;
-  const send = (from, text, extra = {}) => { if (sent >= 2) { (m.mailQ = m.mailQ || []).push({ from, text, ...extra }); return; } sent++; msg(g, from, text, { kind: extra.kind || 'chat', contest: 'm1', ...extra }); };
-  for (const q of (m.mailQ || []).splice(0, 2)) { sent++; msg(g, q.from, q.text, { kind: q.kind || 'chat', contest: 'm1', ...(q.regular ? { regular: q.regular } : {}) }); }
+  const send = (from, text, extra = {}) => { if (sent >= 2) { (m.mailQ = m.mailQ || []).push({ from, text, ...extra }); return; } sent++; mail(g, from, text, extra); };
+  for (const q of (m.mailQ || []).splice(0, 2)) { sent++; mail(g, q.from, q.text, q); }
   if (m.pendingMail && m.pendingMail.day <= t) {
     const pm = m.pendingMail; m.pendingMail = null;
     const PE = entryOf(g, pm.y);
@@ -290,10 +299,10 @@ function afterYear(g, y) {
   if (!P || !m.seasons[y] || m.seasons[y].past) return;
   const dev = eraOf(g.state).deviceShort || 'スマホ';
   if (E && E.final) {
-    if (t === P.zadankai) msg(g, 'M-1グランプリ事務局', `【本日】M-1 アフター座談会の収録です。${dev}の「M-1」から。`, { contest: 'm1' });
-    if (t === P.another) msg(g, 'ABCテレビ', `「M-1グランプリ${y} アナザーストーリー」放送。${E.name}の一年を追いました。${dev}の「M-1」から見られます。`, { contest: 'm1' });
-    if (t === P.returns - 1) msg(g, 'M-1グランプリ事務局', `明日は「M-1グランプリ リターンズ」の収録です。${dev}の「M-1」から。`, { contest: 'm1' });
-    for (const s of P.tour) if (t === s.day - 1) msg(g, 'M-1ツアー制作', `明日はM-1ツアー${s.city}公演。${dev}の「M-1」→「ツアー」から会場へ。`, { contest: 'm1' });
+    if (t === P.zadankai) mail(g, 'M-1グランプリ事務局', `【本日】M-1 アフター座談会の収録です。${dev}の「M-1」から。`);
+    if (t === P.another) mail(g, 'ABCテレビ', `「M-1グランプリ${y} アナザーストーリー」放送。${E.name}の一年を追いました。${dev}の「M-1」から見られます。`);
+    if (t === P.returns - 1) mail(g, 'M-1グランプリ事務局', `明日は「M-1グランプリ リターンズ」の収録です。${dev}の「M-1」から。`);
+    for (const s of P.tour) if (t === s.day - 1) mail(g, 'M-1ツアー制作', `明日はM-1ツアー${s.city}公演。${dev}の「M-1」→「ツアー」から会場へ。`);
   }
   const S = m.seasons[y];
   if (S && !S.dvdDone && t >= P.dvd) {
@@ -305,11 +314,16 @@ function afterYear(g, y) {
       g.addMoney(internal(nominal), true);
       if (!g.hasItem('m1_dvd')) g.giveItem('m1_dvd', 1, true);
       E.after.dvd = { sales };
-      msg(g, 'DVD発売元', `「${m1Rules(y).label}」DVDが発売されました。売上は約${sales.toLocaleString('ja-JP')}枚。出演者印税 ${yenNom(nominal)} をお振り込みしました。`, { contest: 'm1' });
+      mail(g, 'DVD発売元', `「${m1Rules(y).label}」DVDが発売されました。売上は約${sales.toLocaleString('ja-JP')}枚。出演者印税 ${yenNom(nominal)} をお振り込みしました。`);
     }
   }
 }
 
+// personal contest mail: through D1's morning cap when it exists (decision 5), else a plain message
+function mail(g, from, text, extra = {}) {
+  if (has(g, 'contestNews') && extra.kind !== 'offer') return safe(() => g.contestNews(text, { contest: 'm1', personal: true, from, prio: extra.prio || 85, kind: 'chat' }));
+  return msg(g, from, text, { kind: extra.kind || 'chat', contest: 'm1', ...(extra.regular ? { regular: extra.regular } : {}) });
+}
 export function m1Morning(g) {
   if (!g || !g.state) return;
   G = g;
@@ -319,6 +333,7 @@ export function m1Morning(g) {
   m.lastMorning = t;
   const y = cal(g).year;
   if (has(g, 'contestNews')) flushQueued(g, m, t);
+  safe(() => compactM1(m, y));
   for (const yy of [y - 1, y]) if (yy >= 2001) safe(() => processYear(g, yy));
   safe(() => personal(g, y));
   safe(() => afterYear(g, y - 1));
@@ -339,6 +354,7 @@ function flushQueued(g, m, t) {
 }
 
 // ---------------------------------------------------------------- what can the player do today
+// kind: 'round' (a performance day: 本番, badge, listed first) | 'prep' (entry, ネタ合わせ: never 本番) | 'event' (after-shows, tour, TV)
 function todays(g) {
   const y = cal(g).year;
   const out = [];
@@ -348,28 +364,29 @@ function todays(g) {
   if (rules) {
     const P = plan(g, y);
     const S = statusOf(g, y);
-    if (!E && (S.id === 'entry' || S.entryOpen)) out.push({ id: 'entry', label: 'エントリーする', sub: `${rules.fee.text}・締切${dateLabel(g, P.entryTo)}`, run: (gg) => entryFlow(gg) });
-    if (E && E.status === 'entered' && E.next && E.next.day === t) out.push({ id: 'round', label: `会場へ向かう：${rules.rounds[E.next.ri].name}`, sub: `${E.next.city}・${E.next.hall}`, run: (gg) => roundFlow(gg, E.next.ri) });
+    if (!E && (S.id === 'entry' || S.entryOpen)) out.push({ id: 'entry', kind: 'prep', label: 'エントリーする', sub: `${rules.fee.text}・締切${dateLabel(g, P.entryTo)}`, run: (gg) => entryFlow(gg) });
+    if (E && E.status === 'entered' && E.next && E.next.day === t) out.push({ id: 'round', kind: 'round', label: `会場へ向かう：${rules.rounds[E.next.ri].name}`, sub: `${E.next.city}・${E.next.hall}`, run: (gg) => roundFlow(gg, E.next.ri) });
     if (t === P.finalDay) {
-      if (E && (E.status === 'revival' || E.status === 'finalist')) out.push({ id: 'final', label: E.status === 'revival' ? '敗者復活戦の会場へ' : '決勝のスタジオへ', sub: E.status === 'revival' ? rules.revival.venue : rules.finalVenue, run: (gg) => finalDayFlow(gg) });
-      else if (!M(g).seasons[y].watched) out.push({ id: 'watch', label: '決勝をテレビで見る', sub: rules.broadcast, run: async (gg) => { M(gg).seasons[y].watched = true; await watchFinal(gg); } });
+      if (E && (E.status === 'revival' || E.status === 'finalist')) out.push({ id: 'final', kind: 'round', label: E.status === 'revival' ? '敗者復活戦の会場へ' : '決勝のスタジオへ', sub: E.status === 'revival' ? rules.revival.venue : rules.finalVenue, run: (gg) => finalDayFlow(gg) });
+      else if (!M(g).seasons[y].watched) out.push({ id: 'watch', kind: 'event', label: '決勝をテレビで見る', sub: rules.broadcast, run: async (gg) => { M(gg).seasons[y].watched = true; await watchFinal(gg); } });
     }
-    if (E && E.final && E.after && !E.after.zadankai && t >= P.zadankai && t <= P.zadankai + 5) out.push({ id: 'zadankai', label: 'アフター座談会に出る', sub: 'ファイナリストの座談会', run: (gg) => zadankaiFlow(gg, y) });
-    if (E && t >= P.another && E.results.length && t > P.finalDay) out.push({ id: 'another', label: `アナザーストーリー（${y}）を見る`, sub: 'この一年のドキュメンタリー', run: (gg) => anotherStory(gg, y) });
+    if (E && E.final && E.after && !E.after.zadankai && t >= P.zadankai && t <= P.zadankai + 5) out.push({ id: 'zadankai', kind: 'event', label: 'アフター座談会に出る', sub: 'ファイナリストの座談会', run: (gg) => zadankaiFlow(gg, y) });
+    if (E && t >= P.another && E.results.length && t > P.finalDay) out.push({ id: 'another', kind: 'event', label: `アナザーストーリー（${y}）を見る`, sub: 'この一年のドキュメンタリー', run: (gg) => anotherStory(gg, y) });
     const st = S.id;
-    if (unitInfo(g, y).partner && (st === 'entry' || st === 'prelim' || st === 'before' || st === 'finalday') && M(g).practicedDay !== t) out.push({ id: 'practice', label: 'ネタ合わせをする', sub: '相方と稽古（体力 -10）', run: (gg) => practiceFlow(gg) });
+    if (unitInfo(g, y).partner && (st === 'entry' || st === 'prelim' || st === 'before' || st === 'finalday') && M(g).practicedDay !== t) out.push({ id: 'practice', kind: 'prep', label: 'ネタ合わせをする', sub: '相方と稽古（体力 -10）', run: (gg) => practiceFlow(gg) });
   }
   // the season before: リターンズ・ツアー・DVD
   const py = y - 1;
   const PE = entryOf(g, py);
   const PP = plan(g, py);
   if (PE && PE.final && PP) {
-    if (!PE.after.zadankai && t >= PP.zadankai && t <= PP.zadankai + 5) out.push({ id: 'zadankai', label: 'アフター座談会に出る', sub: 'ファイナリストの座談会', run: (gg) => zadankaiFlow(gg, py) });
-    if (!PE.after.returns && Math.abs(t - PP.returns) <= 1) out.push({ id: 'returns', label: 'リターンズの収録へ', sub: 'もう1本の漫才', run: (gg) => returnsFlow(gg, py) });
-    for (const s of PP.tour) if (t === s.day && !(PE.after.tour && PE.after.tour[s.city])) out.push({ id: 'tour_' + s.city, label: `M-1ツアー ${s.city}公演へ`, sub: 'ステージの仕事', run: (gg) => tourStop(gg, py, s) });
-    if (t >= PP.another && !PE.after.another) out.push({ id: 'another_p', label: `アナザーストーリー（${py}）を見る`, sub: 'ドキュメンタリー', run: (gg) => anotherStory(gg, py) });
+    if (!PE.after.zadankai && t >= PP.zadankai && t <= PP.zadankai + 5) out.push({ id: 'zadankai', kind: 'event', label: 'アフター座談会に出る', sub: 'ファイナリストの座談会', run: (gg) => zadankaiFlow(gg, py) });
+    if (!PE.after.returns && Math.abs(t - PP.returns) <= 1) out.push({ id: 'returns', kind: 'event', label: 'リターンズの収録へ', sub: 'もう1本の漫才', run: (gg) => returnsFlow(gg, py) });
+    for (const s of PP.tour) if (t === s.day && !(PE.after.tour && PE.after.tour[s.city])) out.push({ id: 'tour_' + s.city, kind: 'event', label: `M-1ツアー ${s.city}公演へ`, sub: 'ステージの仕事', run: (gg) => tourStop(gg, py, s) });
+    if (t >= PP.another && !PE.after.another) out.push({ id: 'another_p', kind: 'event', label: `アナザーストーリー（${py}）を見る`, sub: 'ドキュメンタリー', run: (gg) => anotherStory(gg, py) });
   }
-  return out;
+  const rank = { round: 0, event: 1, prep: 2 };
+  return out.sort((a, b) => (rank[a.kind] ?? 1) - (rank[b.kind] ?? 1));
 }
 export async function m1Go(g) {
   const list = todays(g);
@@ -402,8 +419,8 @@ const methods = {
       rules: rules ? { limitText: rules.limitText, eligibility: rules.eligibilityText, fee: rules.fee.text, entries: rules.entriesText, rounds: rules.rounds.map((r) => `${r.name}（${r.length / 60}分）`), finalists: rules.finalists, judges: rules.judges, scoring: rules.judgeScoring, emikuji: rules.emikuji, revival: rules.revival ? `${rules.revival.venue}・${rules.revival.judge}` : null, final: `${rules.finalLabel} ${rules.finalVenue}`, prize: M1.prizeText, organizer: rules.organizer } : null,
       schedule: P ? { entry: [dateLabel(this, P.entryFrom), dateLabel(this, P.entryTo)], final: dateLabel(this, P.finalDay), finalDay: P.finalDay } : null,
       entry: E ? { no: E.no, name: E.name, status: E.status, round: E.next && rules.rounds[E.next.ri] ? rules.rounds[E.next.ri].name : null, next: E.next ? { day: E.next.day, date: dateLabel(this, E.next.day), city: E.next.city, hall: E.next.hall } : null, results: E.results.map((r) => ({ round: r.round, score: r.score, passed: r.passed, cut: r.cut })), final: E.final || null, copy: E.copy || null } : null,
-      today: todays(this).map((x) => ({ id: x.id, label: x.label })),
-      history: m.hist.slice(-12).map((h) => ({ year: h.y, edition: h.ed, champion: h.ch === 'me' ? m.me.name : h.chN, runnerUp: h.ruN || null, third: h.thN || null, revival: h.revN || null, top: h.top, player: h.ch === 'me' || (h.finN || []).includes(m.me.name) })),
+      today: todays(this).filter((x) => x.id !== 'practice').map((x) => ({ id: x.id, kind: x.kind, label: x.label })),
+      history: m.hist.slice(-12).map((h) => ({ year: h.y, edition: h.ed, champion: h.ch === 'me' ? m.me.name : h.chN, runnerUp: h.ruN || null, third: h.thN || null, revival: false, revivalWinner: h.rvwN || null, top: h.top, player: h.ch === 'me' || (h.finN || []).includes(m.me.name) })),
       me: { champion: m.me.champion || null, finals: m.me.finals || 0, semis: m.me.semis || 0, entries: Object.keys(m.me.entries).length, best: bestOf(m) },
     };
   },
@@ -415,7 +432,7 @@ const methods = {
   m1Watch() { return watchFinal(this); },
   m1Practice() { return practiceFlow(this); },
   m1Another(year) { return anotherStory(this, year ?? cal(this).year); },
-  m1Today() { return todays(this).map((x) => ({ id: x.id, label: x.label, sub: x.sub })); },
+  m1Today() { return todays(this).map((x) => ({ id: x.id, kind: x.kind, label: x.label, sub: x.sub })); },
   m1History() { const m = M(this); return m.hist.map((h) => ({ ...h, chN: h.ch === 'me' ? m.me.name : h.chN })); },
   m1Morning() { return m1Morning(this); },
   m1State() { return M(this); },
@@ -439,7 +456,7 @@ installM1(Game.prototype);
 // ---------------------------------------------------------------- phone app 「M-1」
 function rulesLines(g, y) {
   const r = m1Rules(y);
-  if (!r) return [statusOf(g, y).label, '', '・2001年創設（第1回）〜2010年 第10回', '・2011〜2014年は開催なし（THE MANZAIが年末の漫才大会に）', '・2015年 第11回として復活'];
+  if (!r) return y < 2001 ? [statusOf(g, y).label] : [statusOf(g, y).label, '', '・2001年創設（第1回）〜2010年 第10回', '・年末の漫才大会はTHE MANZAIへ'];
   return [
     `${r.label}（${r.edLabel}）`, `主催：${r.organizer}`, `出場資格：${r.eligibilityText}`, `エントリー：${r.entryMethod}・${r.fee.text}`,
     `エントリー数：${r.entriesText}`, `予選：${r.rounds.map((x) => `${x.name}${x.length / 60}分`).join('→')}${r.seeds ? '（過去に準決勝進出なら1回戦免除）' : ''}`,
@@ -463,7 +480,8 @@ function historyLines(g) {
   const out = [];
   for (const h of m.hist.slice().reverse()) out.push(`${h.y}年 第${h.ed}回　${h.ch === 'me' ? `★${m.me.name}` : h.chN}${h.ruN ? `（準優勝 ${h.ruN}）` : ''}`);
   if (!out.length) out.push('（まだ記録がない）');
-  out.push('', '2011〜2014年：開催なし（THE MANZAIが年末の漫才大会に）');
+  const cy = cal(g).year;
+  if (cy >= 2011) out.push('', `2011〜${Math.min(cy, 2014)}年：開催なし`);
   return out;
 }
 function myLines(g) {
@@ -506,7 +524,7 @@ registerPhoneApp('m1', {
     c.fillText('M-1', x + 16, y + 9); c.textAlign = 'left';
     c.fillRect(x + 7, y + 24, 18, 2);
   },
-  badge: (g) => safe(() => todays(g).filter((a) => ['round', 'final', 'entry', 'zadankai', 'returns'].includes(a.id) || a.id.startsWith('tour_')).length, 0) || 0,
+  badge: (g) => safe(() => todays(g).filter((a) => a.kind === 'round').length, 0) || 0,
   cond: (g) => !!g.state && (cal(g).year >= 2001 || !!(g.state.m1 && Object.keys((g.state.m1.me || {}).entries || {}).length)),
   open: (g) => m1App(g),
 });

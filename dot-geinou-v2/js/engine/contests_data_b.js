@@ -54,25 +54,25 @@ const UTANETA = {
   name: '歌ネタ王決定戦', short: '歌ネタ王', kind: 'utaneta', category: 'tv', color: '#d03a8a',
   names: [{ from: 2013, name: '歌ネタ王決定戦' }, { from: 2021, name: '歌ネタ王決定戦 FINAL' }, { from: 2022, name: '歌ネタ王決定戦' }], // D1 adds（復刻開催）
   organizer: '毎日放送（MBS）', broadcaster: 'MBSテレビ', venue: '大阪（MBS）', region: 'all',
-  history: { founded: 2013, ended: 2021, gaps: [], revived: null, note: '笑いと音楽の融合を掲げたMBSの賞レース。2021年の「FINAL」で終了。',
+  history: { founded: 2013, ended: 2021, gaps: [], revived: null, note: '笑いと音楽の融合を掲げたMBSの賞レース。3分の歌ネタで競う。',
     sources: ['https://www.oricon.co.jp/news/2208491/full/', 'https://www.tokyo-sports.co.jp/articles/-/68390', 'https://www.daily.co.jp/newsflash/gossip/2014/04/11/0006855438.shtml'] },
-  editionOf: editionCounter(2013),
+  // no editionOf: revival continues from 第9回 (2021 FINAL) +1 per held year (D1 counts held years)
   schedule: { entry: { from: [5, 1], to: [5, 10] }, final: [8, 9] },
   rounds: [
-    { id: 'yosen', name: '予選', when: [[6, 4], [6, 8]], venues: ['大阪', '東京'], length: 120, pass: 0.25, field: 800, judge: 'staff', scoring: 'MBSの審査（ゲーム上の構成）',
+    { id: 'yosen', name: '予選', when: [[6, 4], [6, 8]], venues: ['大阪', '東京'], length: 120, pass: 0.25, field: 800, judge: 'staff', scoring: 'MBSの審査',
       run: stdRound({ kind: 'utaneta', length: 120, pass: 0.25, field: 800, level: 46, beats: ['控室でギターのチューニングをする音が、あちこちから聞こえる。', 'カラオケ音源のCD-Rを、音響さんに手渡した。', '歌ネタは“歌がうまい”だけでは勝てない。歌詞のボケが勝負。'] }) },
     { id: 'sf', name: '準決勝', when: [7, 6], venues: ['大阪'], length: 180, pass: 10, field: 60, judge: 'staff', scoring: '3分',
       run: stdRound({ kind: 'utaneta', length: 180, pass: 10, field: 60, level: 58, beats: ['準決勝。客席に音楽関係者らしき人の姿も。', '「サビで畳みかける構成にしよう」相方と最後の確認。'] }) },
     { id: 'final', name: '決勝', when: [8, 9], length: 180, field: 10, judge: 'panel', judges: 5, scoring: 'ファーストステージ3分→合計上位3組が最終ステージ', tv: true, final: true, run: utanetaFinal },
   ],
-  eligibility: { members: [1, null], note: 'プロ・アマの区分は未確認（ゲームでは不問）' },
+  eligibility: { members: [1, null], note: '歌ネタで勝負する芸人（人数は問わない）' }, // プロ・アマ: 未確認
   fee: 0, prize: 3000000, prizeText: '優勝賞金300万円（2021 FINAL）', perform: { kind: 'utaneta', length: 180 },
   news: [
     (g, c) => `${c.revival ? '【復刻】' : ''}『歌ネタ王決定戦${c.year}』決勝進出者が決定。笑いと音楽の融合`,
     '歌ネタは3分。サビで笑いを爆発させられるか',
     '審査員は1人100点。満点の100点が飛び出すか',
     '回文、演歌、ラップ、オペラ——ジャンルの幅広さもこの大会の名物',
-    (g, c) => (c.year >= 2021 ? '「FINAL」と銘打たれた大会。最後の歌ネタ王は誰の手に' : `歌ネタの動画が${mediaOf(c.year)}で拡散中`),
+    (g, c) => (c.year === 2021 ? '「FINAL」と銘打たれた大会。最後の歌ネタ王は誰の手に' : `歌ネタの動画が${mediaOf(c.year)}で拡散中`),
     '最終ステージに進めるのは、ファーストステージの合計点上位3組だけ',
     '優勝賞金は300万円',
   ],
@@ -116,7 +116,7 @@ async function utanetaFinal(g, ctx) {
 const ALLTHATS = {
   name: 'オールザッツ漫才', short: 'ザッツ', kind: 'any', category: 'tv', color: '#e0a020',
   organizer: '毎日放送（MBS）', broadcaster: 'MBSテレビ（年末深夜の生放送）', venue: 'MBSのスタジオ（大阪）', region: 'osaka',
-  history: { founded: 1990, ended: null, gaps: [], revived: null, note: '年末深夜、関西の若手が総出演する大型ネタ番組。1996年頃からネタバトル（1分ネタのトーナメント）。',
+  history: { founded: 1990, ended: null, gaps: [], revived: null, note: '年末深夜、関西の若手が総出演する大型ネタ番組。',
     sources: ['https://dic.pixiv.net/a/%E3%82%AA%E3%83%BC%E3%83%AB%E3%82%B6%E3%83%83%E3%83%84%E6%BC%AB%E6%89%8D', 'https://www.wikiwand.com/ja/articles/%E3%82%AA%E3%83%BC%E3%83%AB%E3%82%B6%E3%83%83%E3%83%84%E6%BC%AB%E6%89%8D', 'https://www.oricon.co.jp/news/2428042/full/'] },
   editionOf: editionCounter(1990),
   labelStyle: 'year',
@@ -126,7 +126,7 @@ const ALLTHATS = {
     { id: 'live', name: '年末深夜の生放送', when: [12, 9], length: 60, field: 30, judge: 'vote', scoring: '1分ネタのトーナメント・お客さん票＋芸人票（2023年〜はネット投票も）', tv: true, final: true, run: allthatsLive },
   ],
   eligibility: { members: [1, null], region: 'osaka', invite: { fame: 60 }, repeat: true, note: '関西の若手中心（番組からのオファー）' },
-  fee: 0, prize: 0, prizeText: 'ネタバトル優勝（賞金は未確認）', perform: { kind: 'any', length: 60 },
+  fee: 0, prize: 0, prizeText: '', perform: { kind: 'any', length: 60 },
   news: [
     (g, c) => `年末恒例『オールザッツ漫才${c.year}』出演者発表。関西の若手が深夜に大集合`,
     (g, c) => (c.year < 1996 ? '深夜の生放送、若手が次々とネタを披露。朝まで笑いっぱなし' : 'ネタバトルは1分ネタのトーナメント。勝ち上がれば決勝は2分'),
@@ -190,7 +190,7 @@ async function allthatsLive(g, ctx) {
 const TSUGIKURU = {
   name: 'ツギクル芸人グランプリ', short: 'ツギクル', kind: 'any', category: 'tv', color: '#2aa08a',
   organizer: 'フジテレビ・日本音楽事業者協会', broadcaster: 'フジテレビ', venue: 'フジテレビ（決勝生放送）', region: 'all',
-  history: { founded: 2019, ended: null, gaps: [[2020, 2020]], revived: null, note: '音事協とフジテレビの“次に来る芸人”発掘大会。民放5局のクリエイターが審査し、優勝者は5局の番組に出演。2020年は開催なし。',
+  history: { founded: 2019, ended: null, gaps: [[2020, 2020]], revived: null, note: '音事協とフジテレビの“次に来る芸人”発掘大会。民放5局のクリエイターが審査し、優勝者は5局の番組に出演する。',
     sources: ['https://news.mynavi.jp/article/20210917-tsugikuru', 'https://natalie.mu/owarai/news/531485', 'https://www.daily.co.jp/gossip/2024/06/30/0017827807.shtml', 'https://www.oricon.co.jp/news/2471470/full/'] },
   editionOf: editionCounter(2019, null, [[2020, 2020]]),
   schedule: { entry: { from: [4, 1], to: [4, 8] }, final: [7, 8] },
@@ -202,7 +202,7 @@ const TSUGIKURU = {
     { id: 'final', name: '決勝（生放送）', when: [7, 8], length: 180, field: 15, judge: 'panel', judges: 6, scoring: 'ブロック戦（3分）→3組のファイナルステージ（4分）・審査員長＋民放5局のクリエイター', tv: true, final: true, run: tsugikuruFinal },
   ],
   eligibility: { members: [1, null], pro: true, amateur: false, note: '音事協加盟プロダクション所属／地上波ゴールデン・プライム帯のレギュラー番組がない芸人' },
-  fee: 0, feeNote: '参加費は未確認', prize: 2000000, prizeText: '賞金200万円＋民放5局の人気10番組への出演権', perform: { kind: 'any', length: 180 },
+  fee: 0, prize: 2000000, prizeText: '賞金200万円＋民放5局の人気10番組への出演権', perform: { kind: 'any', length: 180 },
   news: [
     (g, c) => `『ツギクル芸人グランプリ${c.year}』予選会に約90組。“次に来る芸人”は誰だ`,
     '出場条件は「ゴールデン・プライム帯のレギュラーがないこと」。売れる直前の芸人たちの大会',
@@ -275,11 +275,11 @@ const MXGP = {
   schedule: { entry: null, final: [9, 6] },
   rounds: [
     // 推薦（芸人・マネージャー）= D1's invitation; the 異端度 (キャラ＋発想) weighs in the judging
-    { id: 'sf', name: '準決勝（A・Bブロック）', when: [8, 2], length: 180, pass: 4, field: 16, judge: 'panel', scoring: 'ブロックごとに審査（ゲーム上）', run: mxSemi },
+    { id: 'sf', name: '準決勝（A・Bブロック）', when: [8, 2], length: 180, pass: 4, field: 16, judge: 'panel', scoring: 'A・Bブロックごとの審査', run: mxSemi },
     { id: 'final', name: '決勝（生放送）', when: [9, 6], length: 180, field: 5, judge: 'panel', judges: 5, scoring: 'イス取りゲームでネタ順→5組（勝ち上がりステージの1組を含む）', tv: true, final: true, kachiagari: true, run: mxFinal },
   ],
   eligibility: { members: [1, null], invite: { fame: 30 }, note: '芸人・マネージャーの推薦制（“型破り”“異端”な芸人）' },
-  fee: 0, prize: 0, prizeText: '優勝（賞金額は未確認）', perform: { kind: 'any', length: 180 },
+  fee: 0, prize: 0, prizeText: '', // 賞金額: a judge's remark only → not shown perform: { kind: 'any', length: 180 },
   news: [
     (g, c) => `『${nameOf(MXGP, c.year)}${c.year}』出場者発表。推薦された“異端”芸人がずらり`,
     '「ステージ下にゴミ」「審査員が野ざらし」——第1回の低予算ぶりが逆に話題に',
@@ -347,7 +347,7 @@ async function mxFinal(g, ctx) {
     // 異端の大会：尖り（異端度）も評価
     acts.forEach((a) => { if (a.me) a.score = Math.round(a.score * 0.85 + ishin(g) * 0.15); });
     const rows = panelRows(r, acts, 5, 10);
-    await showRows(g, b, rows, '決勝　審査員5人×10点（ゲーム上）', { max: 50, passLine: 1, unit: '点' });
+    await showRows(g, b, rows, '決勝　審査員5人×10点', { max: 50, passLine: 1, unit: '点' });
     const champ = rows[0].me;
     if (champ) { g.sfx('fanfare'); await say(g, `${y}年のMXグランプリ王者は${unitName(g)}！ トロフィーは……段ボール製だった。`); champion(g, ctx, '優勝'); }
     else await say(g, `優勝は${rows[0].name}。`);
@@ -379,7 +379,7 @@ const IPPON_ODAI = [
 const IPPON = {
   name: 'IPPONグランプリ', short: 'IPPON', kind: 'ogiri', category: 'invitational', color: '#c81e2a',
   organizer: 'フジテレビ', broadcaster: 'フジテレビ系（不定期特番）', venue: 'フジテレビのスタジオ', region: 'all',
-  history: { founded: 2009, ended: null, gaps: [], revived: null, note: '大喜利の得意な10人が2ブロックで競う。反対ブロックの5人が1人2点で採点、10点で「IPPON」。年に2回ほどの不定期放送（ゲームでは年1回）。',
+  history: { founded: 2009, ended: null, gaps: [], revived: null, note: '大喜利の得意な10人が2ブロックで競う。反対ブロックの5人が1人2点で採点、10点で「IPPON」。',
     sources: ['https://en.wikipedia.org/wiki/IPPON_Grand_Prix', 'http://ippongrandprix2017.seesaa.net/article/449187262.html', 'https://news.livedoor.com/article/detail/25741602/'] },
   editionOf: (y) => (y < 2009 ? null : y === 2009 ? 1 : clamp(Math.round(1 + (y - 2009) * 1.87), 2, 99)), // 2024 → 29 (verified anchor)
   schedule: { entry: null, final: [12, 8] },
@@ -600,7 +600,7 @@ async function suberanaiHonban(g, ctx) {
 const OMOSHIRO = {
   name: 'おもしろ荘', short: 'おもしろ荘', kind: 'any', category: 'tv', color: '#e06a2a',
   organizer: '日本テレビ', broadcaster: '日本テレビ系（大晦日〜元日深夜の特番）', venue: '日本テレビのスタジオ', region: 'all',
-  history: { founded: 2007, ended: null, gaps: [], revived: null, note: '新年の深夜、まだテレビに出ていない若手を発掘するネタ見せ番組。オーディション→13組→観覧100名の投票。（初回年は要確認）',
+  history: { founded: 2007, ended: null, gaps: [], revived: null, note: '新年の深夜、まだテレビに出ていない若手を発掘するネタ見せ番組。オーディションを勝ち抜いた13組が出演し、観覧100名の投票で優勝が決まる。',
     sources: ['https://www.oricon.co.jp/special/69879/', 'https://www.crank-in.net/news/159035/1', 'https://bunshun.jp/articles/-/42757'] },
   editionOf: editionCounter(2007),
   labelStyle: 'year',
@@ -610,7 +610,7 @@ const OMOSHIRO = {
     { id: 'live', name: '元日深夜の本番', when: [12, 10], length: 120, field: 13, judge: 'audience', judges: 100, scoring: '観覧100名の投票', tv: true, final: true, run: omoLive },
   ],
   eligibility: { members: [1, null], note: 'まだテレビで売れていない若手（オーディション制）' },
-  fee: 0, prize: 0, prizeText: '優勝（賞金は未確認）', perform: { kind: 'any', length: 120 },
+  fee: 0, prize: 0, prizeText: '', perform: { kind: 'any', length: 120 },
   news: [
     (g, c) => `新春『おもしろ荘』、オーディションに約1200組。今年の“発見”は誰だ`,
     '出演は13組。「おもしろ荘で優勝すると、その年に売れる」というジンクス',
@@ -681,7 +681,7 @@ const FUTTONDA = {
     { id: 'wild', name: 'ワイルドカード予選会', when: [12, 4], field: 16, pass: 1, judge: 'points', scoring: '若手16名→本戦の最後の1枠（★1500以上は本戦から）', wildcard: true, run: futtondaWild },
     { id: 'live', name: '本戦（大晦日〜元日 生放送）', when: [12, 10], field: 36, judge: 'points', judges: 3, scoring: '放送作家3人が全員ボタン→布団が吹っ飛ぶ。ブロック勝ち上がり→6名の決勝', tv: true, final: true, run: futtondaLive },
   ],
-  eligibility: { members: [1, null], repeat: true, note: '本戦36名はオファー制、若手はワイルドカード予選会から（ゲームではエントリー→★1500以上は本戦シード）' },
+  eligibility: { members: [1, null], repeat: true, note: '本戦36名はオファー制、若手はワイルドカード予選会から（★1500以上は本戦から）' },
   fee: 0, prize: 0, prizeText: 'フットンダ王', perform: { kind: 'ogiri' },
   news: [
     (g, c) => `『フットンダ王決定戦${c.year}』出場36名が決定。大晦日から元日へ生放送`,
@@ -779,17 +779,17 @@ const AUN = {
   editionOf: (y) => (y < 2020 ? null : y === 2020 ? 1 : y === 2021 ? 3 : y === 2022 ? 5 : y === 2023 ? 6 : 7 + (y - 2024)),
   schedule: { entry: { from: [10, 1], to: [11, 5] }, final: [12, 6] },
   rounds: [
-    { id: 'tour', name: '本戦トーナメント', when: [12, 6], field: 8, judge: 'vote', judges: 3, scoring: '1対1・お題ごとに審査員3人の多数決、先に2問取った組が勝ち（ゲーム上）', final: true, run: aunTournament },
+    { id: 'tour', name: '本戦トーナメント', when: [12, 6], field: 8, judge: 'vote', judges: 3, scoring: '1対1・お題ごとに審査員3人の多数決、先に2問取った組が勝ち', final: true, run: aunTournament },
   ],
   eligibility: { members: [2, 2], note: '2人1組（コンビ）で出場' },
-  fee: 0, feeNote: '参加費は未確認', prize: 0, prizeText: 'コンビ大喜利王', perform: { kind: 'ogiri' },
+  fee: 0, prize: 0, prizeText: '', perform: { kind: 'ogiri' },
   news: [
     (g, c) => `${ordinal(c.edition)}『AUN〜コンビ大喜利王決定戦〜』出場コンビ発表`,
     '一人ではできないお題に、コンビで挑む大喜利。フリと返しの“あうん”が勝負',
     '会場はホール、配信チケットも販売',
     (g, c) => `大喜利ライブの熱が${mediaOf(c.year)}でも広がる`,
     '「大喜利の強い人が2人いても、勝てるとは限らない」——過去の出場者',
-    '学生版の開催も決定。大喜利の裾野が広がる',
+    '答えを出すのは2人でひとつ。片方だけ面白くても勝てない',
   ],
   beats: ['ホワイトボードは1枚、ペンは2本。', '相方と目が合った。言わなくても、次の答えがわかる気がする。', '客席の大喜利ファンは、答えの“型”まで見抜いてくる。'],
 };
@@ -867,13 +867,13 @@ const UNDER5 = {
       run: stdRound({ kind: 'any', length: 180, pass: 0.3, field: 250, level: 52, beats: ['3回戦。客席に業界の人らしき姿がちらほら。', 'ネタ時間が少し長くなった。展開をもう一つ。'] }) },
     { id: 'sf', name: '準決勝', when: [5, 9], venues: ['東京', '大阪'], length: 180, pass: 9, field: 70, judge: 'staff', scoring: '東京・大阪の準決勝→決勝9組',
       run: stdRound({ kind: 'any', length: 180, pass: 9, field: 70, level: 58, beats: ['東京の準決勝は35組。楽屋がすごい緊張感だ。', '決勝はルミネtheよしもと。あの舞台に立ちたい。'] }) },
-    { id: 'final', name: '決勝', when: [6, 6], length: 240, field: 9, judge: 'panel', judges: 6, scoring: '9組・審査員6人（ゲーム上：100点×6）', final: true, run: under5Final },
+    { id: 'final', name: '決勝', when: [6, 6], length: 240, field: 9, judge: 'panel', judges: 6, scoring: '9組・審査員6人×100点', final: true, run: under5Final },
   ],
   eligibility: { members: [1, null], pro: true, amateur: true, geirekiMax: 5, note: '芸歴5年目以内（フリー・アマチュア可、事務所・人数・年齢は不問）' },
-  fee: 0, feeNote: '参加費は未確認', prize: 1000000, prizeText: '優勝賞金100万円', perform: { kind: 'any', length: 180 },
+  fee: 0, prize: 1000000, prizeText: '優勝賞金100万円', perform: { kind: 'any', length: 180 },
   news: [
     (g, c) => `『UNDER5 AWARD ${c.year}』エントリー開始。芸歴5年目以内の超若手No.1決定戦`,
-    'エントリー数は年々増加、2025年は2420組',
+    (g, c) => (c.year >= 2026 ? '昨年のエントリーは2420組。年々増え続けている' : c.year === 2025 ? '昨年のエントリーは2001組。今年はさらに増える見込み' : c.year === 2024 ? '昨年の第1回には1797組がエントリー' : '芸歴5年目以内だけの新しい賞レースが始まる'),
     '東京・大阪の1回戦は動画審査。スマホ1台で撮ったネタ動画が勝負',
     '札幌・名古屋・福岡ではエリア予選',
     '決勝はルミネtheよしもと。優勝賞金100万円',
@@ -924,7 +924,7 @@ async function under5Final(g, ctx) {
     let my = 0;
     for (const a of acts) a.score = a.me ? (my = (await perform(g, ctx, { kind, length: 240, skip, title: 'UNDER5 AWARD 決勝', venue: { size: 'theater', crowd: 'warm', pressure: 80 } })).score) : rivalScore(g, a, { kind }, r);
     const rows = panelRows(r, acts, 6, 100);
-    await showRows(g, b, rows, '決勝　審査員6人×100点（ゲーム上）', { max: 600, passLine: 1, unit: '点' });
+    await showRows(g, b, rows, '決勝　審査員6人×100点', { max: 600, passLine: 1, unit: '点' });
     const champ = rows[0].me;
     if (champ) { g.sfx('fanfare'); await say(g, `UNDER5 AWARD ${ctx.year}、優勝は${unitName(g)}！ 賞金100万円！`); champion(g, ctx, '優勝'); }
     else await say(g, `優勝は${rows[0].name}。${unitName(g)}は${rows.findIndex((x) => x.me) + 1}位。`);

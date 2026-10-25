@@ -192,9 +192,10 @@ function notableABC(rng, Y, i, ctx = {}) {
 }
 
 // ================================================================ texts and news (≥ 25 unique lines a season)
-const THEMES_NETA = ['たこ焼き屋', '大阪のおばちゃん', '新世界', '通天閣', '吉本の稽古場', '商店街の福引', '甲子園', '天神祭', '道頓堀', 'お好み焼き', '自転車の二人乗り', '関西弁講座', '銭湯', 'USJの行列', '大阪環状線', '寄席の楽屋', '家庭訪問', '動物園', '夏休みの宿題', '引退試合'];
-function netaTitle(rng, kind) {
-  const t = pickR(rng, THEMES_NETA);
+// [topic, first year it can be a topic] (USJ opened in 2001)
+const THEMES_NETA = ['たこ焼き屋', '大阪のおばちゃん', '新世界', '通天閣', '吉本の稽古場', '商店街の福引', '甲子園', '天神祭', '道頓堀', 'お好み焼き', '自転車の二人乗り', '関西弁講座', '銭湯', ['USJの行列', 2001], '大阪環状線', '寄席の楽屋', '家庭訪問', '動物園', '夏休みの宿題', '引退試合'];
+function netaTitle(rng, kind, Y) {
+  const t = [].concat(pickR(rng, THEMES_NETA.filter((x) => !Array.isArray(x) || !Y || Y >= x[1])))[0];
   return kind === 'conte' ? `コント「${t}」` : kind === 'pin' ? `ピンネタ「${t}」` : kind === 'rakugo' ? `新作落語「${t}」` : `漫才「${t}」`;
 }
 function catchABC(g, S, id) {
@@ -343,7 +344,8 @@ async function champSceneABC(g, C, { S, E, st }) {
   st.cast = [...stageCastABC(g, E), { look: mcABC(S.Y)[0].look, x: 500, y: 170, k: 1, dir: 'left' }];
   if (act.partner && !g.auto) await g.say(ks(act.partner, `${act.partner.short}「やった……やったで！！」\nふたりで抱き合った。`, `${act.partner.short}「やった……やったね！！」\nふたりで抱き合った。`));
   safe(() => has(g, 'unitHarmony') && g.unitHarmony(4, `${rules.name}で優勝`));
-  await g.say(rules.prize ? `トロフィーと、優勝賞金${plainYen(rules.prize)}の目録を受け取った！` : 'トロフィーと副賞を受け取った！', { name: mcABC(S.Y)[0].name, look: mcABC(S.Y)[0].look });
+  const mem = C.membersOf(g, E);
+  await g.say(rules.prize ? `トロフィーと、優勝賞金${plainYen(rules.prize)}の目録を受け取った！${mem > 1 ? `\n賞金は${mem === 2 ? 'コンビ' : mem === 3 ? 'トリオ' : 'グループ'}のもの。ひとり${plainYen(Math.round(rules.prize / mem))}ずつ分ける。` : ''}` : 'トロフィーと副賞を受け取った！', { name: mcABC(S.Y)[0].name, look: mcABC(S.Y)[0].look });
   const k = await g.ask('MC「いまのお気持ちを！」', ['「大阪で、いちばんになれました！」', '「…（言葉にならない）」', '「賞金で、相方に焼肉おごります！」'], { cancel: 0 });
   await g.say(k === 0 ? 'スタジオがあたたかい拍手に包まれた。' : k === 1 ? 'スタジオがもらい泣き。…そして笑い。' : 'スタジオがドッと沸いた。');
   if (S.Y >= 2026) {
@@ -368,7 +370,7 @@ function offersABC(g, C, { S, E }) {
 
 // ================================================================ the contest
 export const ABC = makeContest({
-  id: 'abcgp', key: 'abcgp', label: 'ABC', appName: 'ABC', appTitle: 'ABCお笑いGP', color: '#0a6fd6', founded: 1980, foundedText: '1980年創設（朝日放送の若手の賞レース）',
+  id: 'abcgp', key: 'abcgp', label: 'ABC', appName: 'ABC', appTitle: (Y) => (Y <= 1988 ? 'ABC新人コンクール' : Y <= 2011 ? 'ABCお笑い新人GP' : 'ABCお笑いGP'), color: '#0a6fd6', founded: 1980, foundedText: '1980年創設（朝日放送の若手の賞レース）',
   office: 'ABC 大会事務局', unitWord: '組', notables: 30, topStr: 82, defaultKind: 'manzai', prepSub: 'ネタ見せ・小道具', trophy: 'abc_trophy',
   rules: rulesABC, entries: entriesABC, notable: notableABC, pastHistory, kindOf: () => 'manzai',
   typeFromWorld: (u, t) => (u === 'trio' ? 'trio' : u === 'pin' ? 'pin' : 'combi'),
@@ -461,7 +463,7 @@ export const ABC = makeContest({
   rivalNetaLine: (g, S, n, total, stageNo) => {
     const r = rngOf('arn', S.Y, n.id, stageNo);
     const how = total >= 86 ? 'スタジオが爆発した！審査員も前のめりで笑っている！' : total >= 80 ? '大きな笑いが何度も起きた！' : total >= 72 ? 'しっかりウケている。' : '後半、少し失速…。';
-    return `${n.name}の${netaTitle(r, n.style)}。\n${how}`;
+    return `${n.name}の${netaTitle(r, n.style, S.Y)}。\n${how}`;
   },
   champScene: champSceneABC,
   champLooks: (g) => [g.state.look, ...actInfo(g).partners.map((p) => p.look)],
@@ -501,14 +503,14 @@ const ENTRY_COUNT = { 2018: 570, 2026: 583 }; // the real totals we could verify
 registerContest('abcgp', {
   name: 'ABCお笑いグランプリ', names: [{ from: 1980, name: 'ABC漫才・落語新人コンクール' }, { from: 1989, name: 'ABCお笑い新人グランプリ' }, { from: 2012, name: 'ABCお笑いグランプリ' }], short: 'ABC', kind: 'any', category: 'kansai', prestige: 70, color: '#0a6fd6',
   organizer: '朝日放送テレビ（ABCテレビ）', broadcaster: 'ABCテレビ', venue: 'ABCテレビ（大阪・福島）', region: 'all', own: 'E3',
-  history: { founded: 1980, ended: null, gaps: [], revived: null, note: '1980年「ABC漫才・落語新人コンクール」として創設、1989年「ABCお笑い新人グランプリ」、2012年から「ABCお笑いグランプリ」', sources: ['https://ja.wikipedia.org/wiki/ABCお笑いグランプリ', 'https://natalie.mu/owarai/news/682508', 'https://www.oricon.co.jp/news/2469479/full/'] },
+  history: { founded: 1980, ended: null, gaps: [], revived: null, note: '', sources: ['https://ja.wikipedia.org/wiki/ABCお笑いグランプリ', 'https://natalie.mu/owarai/news/682508', 'https://www.oricon.co.jp/news/2469479/full/'] },
   revive: false, selfRun: true,
   editionOf: (y) => (y >= 1980 ? y - 1979 : null),
   schedule: d1ScheduleOf(2026), rounds: d1RoundsOf(2026), roundsOf: (y) => safe(() => d1RoundsOf(y), null), scheduleOf: (y) => safe(() => d1ScheduleOf(y), null),
   entryCount: (y) => ENTRY_COUNT[y] ?? null,
-  eligibility: Object.assign((g, unit, year) => safe(() => { const el = ABC.cfg.eligibility(g, actInfo(g), year ?? (ABC.seasonY(g) || cdate(g).year), ABC.state(g)); return { ok: !!el.ok, why: el.why || '' }; }, { ok: true, why: '' }), { note: '〜2011：関西中心の結成5年以内のコンビ・デビュー10年以内の落語家／2012〜：デビュー10年以内、ジャンル不問' }),
+  eligibility: Object.assign((g, unit, year) => safe(() => { const el = ABC.cfg.eligibility(g, actInfo(g), year ?? (ABC.seasonY(g) || cdate(g).year), ABC.state(g)); return { ok: !!el.ok, why: el.why || '' }; }, { ok: true, why: '' }), { note: '若手芸人が対象。細かな出場資格はその年の募集要項のとおり' }),
   fee: 0, feeText: 'なし',
-  prize: (y) => rulesABC(y).prize, prizeText: '優勝賞金100万円＋副賞',
+  prize: (y) => rulesABC(y).prize,
   perform: { kind: 'any', length: 240 },
   news: [(g, ctx) => safe(() => `${rulesABC((ctx && ctx.year) || 2026).title}：${rulesABC((ctx && ctx.year) || 2026).eligText}`, '')],
   catchcopy: (g, ctx) => safe(() => catchABC(g, ABC.season(g, (ctx && ctx.year) || ABC.seasonY(g) || cdate(g).year), 'player'), ''),

@@ -123,7 +123,7 @@ export function phaseOf(g, y) {
 export async function kocEntry(g) {
   const t = kDate(g);
   const y = t.year;
-  if (y < FOUNDED) { await g.say(`『${KOC_NAME}』は、まだ始まっていない（${FOUNDED}年創設）。\n（TBSが主催する、コント日本一を決める大会になる）`); return null; }
+  if (y < FOUNDED) { await g.say(`『${KOC_NAME}』は、まだ始まっていない（${FOUNDED}年創設）。`); return null; }
   const R = rules(y);
   const S = schedule(y);
   const Y = yearRec(g, y);

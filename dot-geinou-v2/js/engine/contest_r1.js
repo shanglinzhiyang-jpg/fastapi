@@ -32,7 +32,7 @@ import { LOOKS } from './sprites.js';
 import { registerItem } from './state.js';
 import { clamp } from './util.js';
 import {
-  has, safe, num, n0, realYen, plainYen, toInternal, rngOf, gauss, rint, pickR, cdate, dateText, dateTextY, pinName,
+  has, safe, num, n0, nameGender, realYen, plainYen, toInternal, rngOf, gauss, rint, pickR, cdate, dateText, dateTextY, pinName,
   randomLook, actInfo, agencyNames, geireki, playerAge, statOf, sendOffer, runKitMorning, kitMorning, devWord, shortfallReasons, performAct,
 } from './r1_kit.js';
 import { makeContest, registerContestApp, fmtLen } from './r1_flow.js';
@@ -200,7 +200,8 @@ const STYLE_JA = { flip: 'フリップ芸', solo: '一人コント', mandan: '�
 function notableR1(rng, Y, i, ctx = {}) {
   const name = pinName(rng);
   const combo = name.includes(' ');
-  const gender = rng() < 0.28 ? 'f' : 'm';
+  const g0 = rng() < 0.28 ? 'f' : 'm';
+  const gender = nameGender(name) || g0; // a name that reads as a man's never gets the 女性ピン tag
   const amateur = !combo && rng() < (Y <= 2004 ? 0.25 : 0.1);
   const tags = [];
   if (amateur) tags.push(rng() < 0.35 ? '学生' : 'アマチュア');
@@ -216,9 +217,10 @@ function notableR1(rng, Y, i, ctx = {}) {
 }
 
 // ================================================================ texts and news (≥ 25 unique lines a season)
-const THEMES_NETA = ['コンビニの深夜バイト', '婚活パーティー', '引っ越しの見積もり', '運動会の実況', '就職の面接', '歯医者の待合室', '新幹線の車内販売', '修学旅行の夜', '結婚式のスピーチ', '町内会の回覧板', '家電量販店', 'カーナビの声', '天気予報', 'タクシーの運転手', '美容院の会話', '交番', '迷子のアナウンス', '鍋奉行', '社員食堂', '昭和の歌謡ショー', '占い師', 'ラジオ体操', '駅のホーム', '書道教室'];
-function netaTitle(rng, style) {
-  const t = pickR(rng, THEMES_NETA);
+// [topic, first year it can be a topic] (「婚活」 is a word of 2007/08)
+const THEMES_NETA = ['コンビニの深夜バイト', ['婚活パーティー', 2008], '引っ越しの見積もり', '運動会の実況', '就職の面接', '歯医者の待合室', '新幹線の車内販売', '修学旅行の夜', '結婚式のスピーチ', '町内会の回覧板', '家電量販店', 'カーナビの声', '天気予報', 'タクシーの運転手', '美容院の会話', '交番', '迷子のアナウンス', '鍋奉行', '社員食堂', '昭和の歌謡ショー', '占い師', 'ラジオ体操', '駅のホーム', '書道教室'];
+function netaTitle(rng, style, Y) {
+  const t = [].concat(pickR(rng, THEMES_NETA.filter((x) => !Array.isArray(x) || !Y || Y >= x[1])))[0];
   return style === 'flip' ? `フリップ「${t}あるある」` : style === 'solo' ? `一人コント「${t}」` : style === 'mandan' ? `漫談「${t}の話」` : `歌ネタ「${t}のうた」`;
 }
 function catchR1(g, S, id) {
@@ -436,7 +438,7 @@ export const R1 = makeContest({
   typeFromWorld: () => 'pin',
   rules: rulesR1, entries: entriesR1, notable: notableR1, pastHistory, kindOf: () => 'pin',
   gapNote: (Y) => (Y === 2003 ? '2003年は開催なし（第1回は2002年、第2回は2004年）' : null),
-  aboutNotYet: () => 'ひとりで演じる「ピン芸」の日本一を決める大会。\n第1回は2002年（このころはまだ影も形もない）。',
+  aboutNotYet: () => 'ピン芸人の日本一を決める大会は、まだない。',
   eligibility(g, act, Y, s) {
     const r = rulesR1(Y);
     if (r.eligibility === 'geireki10') {
@@ -527,7 +529,7 @@ export const R1 = makeContest({
   rivalNetaLine: (g, S, n, total, stageNo) => {
     const r = rngOf('rn', S.Y, n.id, stageNo);
     const how = total >= 86 ? '会場が爆発した！審査員も手をたたいて笑っている！' : total >= 80 ? '大きな笑いが何度も起きた！' : total >= 72 ? 'しっかりウケている。' : '後半、少し失速…。';
-    return `${n.name}の${netaTitle(r, n.style)}。\n${how}`;
+    return `${n.name}の${netaTitle(r, n.style, S.Y)}。\n${how}`;
   },
   finalNote: (g, S, F) => (S.Y === 2002 ? '座布団の上の第1回' : ''),
   champScene: champSceneR1,
@@ -569,15 +571,15 @@ const ENTRY_COUNT = { 2002: 351, 2025: 5511, 2026: 6171 }; // the real totals we
 registerContest('r1', {
   name: 'R-1グランプリ', names: [{ from: 2002, name: 'R-1ぐらんぷり' }, { from: 2021, name: 'R-1グランプリ' }], short: 'R-1', kind: 'pin', category: 'major', color: '#c8102e',
   organizer: '吉本興業・関西テレビ', broadcaster: '関西テレビ・フジテレビ系', venue: '決勝スタジオ（生放送）', region: 'all', own: 'E3', labelStyle: 'year',
-  history: { founded: 2002, ended: null, gaps: [[2003, 2003]], revived: null, note: '2002年創設。2003年は開催なし。2021年に「R-1ぐらんぷり」から「R-1グランプリ」へ改称', sources: ['https://ja.wikipedia.org/wiki/R-1グランプリ', 'https://www.r-1gp.com/', 'https://natalie.mu/owarai/award/r-1gp'] },
+  history: { founded: 2002, ended: null, gaps: [[2003, 2003]], revived: null, note: '', sources: ['https://ja.wikipedia.org/wiki/R-1グランプリ', 'https://www.r-1gp.com/', 'https://natalie.mu/owarai/award/r-1gp'] },
   revive: false, selfRun: true, repeat: true, // repeat winners were real (2007 and 2008)
   editionOf: (y) => rulesR1(y).edition,
   // the defaults (D1 asks roundsOf / scheduleOf with each cycle's year)
   schedule: d1ScheduleOf(2027), rounds: d1RoundsOf(2027), roundsOf: (y) => safe(() => d1RoundsOf(y), null), scheduleOf: (y) => safe(() => d1ScheduleOf(y), null),
   entryCount: (y) => ENTRY_COUNT[y] ?? null,
-  eligibility: Object.assign((g, unit, year) => safe(() => { const el = R1.cfg.eligibility(g, actInfo(g), year ?? (R1.seasonY(g) || cdate(g).year), R1.state(g)); return { ok: !!el.ok, why: el.why || '' }; }, { ok: true, why: '' }), { note: 'ひとり芸（ピン芸）。2021–2023はプロ芸歴10年以内・アマチュア出場10回目以内、2024年から芸歴不問' }),
+  eligibility: Object.assign((g, unit, year) => safe(() => { const el = R1.cfg.eligibility(g, actInfo(g), year ?? (R1.seasonY(g) || cdate(g).year), R1.state(g)); return { ok: !!el.ok, why: el.why || '' }; }, { ok: true, why: '' }), { note: 'ひとりで演じる芸（ピン芸）。細かな出場資格はその年の募集要項のとおり' }),
   fee: { pro: 2000, amateur: 2000 }, feeText: '1人2,000円',
-  prize: (y) => rulesR1(y).prize, prizeText: '優勝賞金500万円',
+  prize: (y) => rulesR1(y).prize,
   perform: { kind: 'pin', length: 240 },
   news: [(g, ctx) => safe(() => `${rulesR1((ctx && ctx.year) || 2027).title}：${rulesR1((ctx && ctx.year) || 2027).eligText}`, '')],
   catchcopy: (g, ctx) => safe(() => catchR1(g, R1.season(g, (ctx && ctx.year) || R1.seasonY(g) || cdate(g).year), 'player'), ''),

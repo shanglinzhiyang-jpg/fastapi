@@ -172,18 +172,35 @@ export function inferBeats(neta) {
   const out = new Array(n).fill('');
   const tskLike = (i) => i >= 0 && i < n && (L[i].role === 'tsukkomi' || (kind === 'conte' && i > 0 && L[i].role !== L[i - 1].role && L[i].role !== 'narr' && Array.from(L[i].text).length <= 22 && /[！!？?]$/.test(L[i].text)));
   const marks = (t) => KOCHOU_RE.test(t) || TWIST_RE.test(t) || /…|！$/.test(t);
+  // 漫才・コント: the ボケ answered by a ツッコミ are the punch lines; the first of them (in the first 3 lines) is the ツカミ,
+  // the last (in the last 3 lines, when there are 2+) the オチ, the rest ボケ. A closing line after the オチ is オチ too;
+  // a script that ends on a ボケ ends on its オチ. Lines before the first punch are フリ (a greeting first line: ツカミ).
+  const punches = [];
+  for (let i = 0; i < n; i++) if (L[i].text && L[i].role !== 'narr' && !tskLike(i) && tskLike(i + 1)) punches.push(i);
+  let lastP = punches.length >= 2 && punches[punches.length - 1] >= n - 3 ? punches[punches.length - 1] : -1;
+  const lastIdx = (() => { for (let i = n - 1; i >= 0; i--) if (L[i].text) return i; return -1; })();
+  const endsOnBoke = lastIdx > 0 && L[lastIdx].role !== 'narr' && !tskLike(lastIdx) && !punches.includes(lastIdx);
+  if (lastP < 0 && endsOnBoke) lastP = lastIdx;
+  const greeting = n && FIRST_RE.test(L[0].text) && !punches.includes(0);
+  const firstP = !greeting && punches.length && punches[0] <= 2 && punches[0] !== lastP && (punches.length >= 2 || endsOnBoke) ? punches[0] : -1;
+  const dialogBeat = (i) => {
+    const { role, text } = L[i];
+    const pos = n > 1 ? i / (n - 1) : 0;
+    if (role === 'narr') return pos < 0.25 ? 'setup' : 'tenkai';
+    if (i === firstP) return 'tsukami';
+    if (i === lastP) return 'ochi';
+    if (punches.includes(i)) return 'boke';
+    if (tskLike(i)) return lastP >= 0 && i > lastP && i === lastIdx ? 'ochi' : 'tsukkomi';
+    if (TENKAI_RE.test(text) && pos > 0.25) return 'tenkai';
+    if (i === 0 && FIRST_RE.test(text)) return 'tsukami';
+    return 'setup';
+  };
   for (let i = 0; i < n; i++) {
     const { role, text } = L[i];
     const pos = n > 1 ? i / (n - 1) : 0;
     if (!text) continue;
     if (kind === 'ogiri') { out[i] = 'answer'; continue; }
-    if (kind === 'manzai' || kind === 'conte') {
-      if (role === 'narr') { out[i] = pos < 0.25 ? 'setup' : 'tenkai'; continue; }
-      if (tskLike(i)) { out[i] = i >= n - 1 ? 'ochi' : 'tsukkomi'; continue; }
-      if (tskLike(i + 1)) { out[i] = i >= n - 3 ? 'ochi' : i <= 2 ? 'tsukami' : 'boke'; continue; }
-      out[i] = TENKAI_RE.test(text) && pos > 0.25 ? 'tenkai' : i === 0 ? 'tsukami' : 'setup';
-      continue;
-    }
+    if (kind === 'manzai' || kind === 'conte') { out[i] = dialogBeat(i); continue; }
     if (kind === 'rakugo') {
       if (i >= n - 1 || (i >= n - 2 && pos > 0.8)) { out[i] = 'sage'; continue; }
       if (role === 'narr' && pos < 0.3 && !RAKUGO_RE.test(text)) { out[i] = 'makura'; continue; }

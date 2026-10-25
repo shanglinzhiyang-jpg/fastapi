@@ -117,7 +117,7 @@ const SECOND = {
   // object form so D1 builds a realistic field; the cross-contest rule (past national champions) is checked at the 選考会 (secondSenkou)
   eligibility: { members: [2, null], pro: true, amateur: false, unitYearsMin: 16, note: '結成16年以上のプロの漫才師（アマチュア・即席ユニット不可／全国ネットの漫才賞レース優勝経験者は不可）',
     extra: (g, unit, year) => (pastChampion(g, ['m1', 'themanzai', 'thesecond'], year) ? { ok: false, why: '全国ネットの漫才賞レースで優勝経験がある組は出場できない' } : { ok: true }) },
-  fee: 0, feeNote: '参加費は未確認（ゲームでは無料扱い）',
+  fee: 0, // 参加費: 未確認 (research note; nothing shown)
   prize: 10000000, prizeText: '優勝賞金1000万円',
   perform: { kind: 'manzai', length: 360 },
   news: [
@@ -207,14 +207,14 @@ const DOUBLE = {
   editionOf: editionCounter(2025),
   schedule: { entry: { from: [3, 1], to: [3, 10] }, final: [7, 8] },
   rounds: [
-    { id: 'r1', name: '1回戦', when: [[4, 3], [4, 6]], venues: ['東京', '大阪'], length: 120, pass: 0.3, field: 2900, judge: 'staff', scoring: '漫才1本＋コント1本（各2分・ゲーム上の尺）', run: doubleRound(120, 0.3, 2900, 42) },
-    { id: 'r2', name: '2回戦', when: [4, 10], venues: ['東京', '大阪'], length: 180, pass: 0.3, field: 900, judge: 'staff', scoring: '漫才＋コント（各3分・ゲーム上の尺）', run: doubleRound(180, 0.3, 900, 52) },
+    { id: 'r1', name: '1回戦', when: [[4, 3], [4, 6]], venues: ['東京', '大阪'], length: 120, pass: 0.3, field: 2900, judge: 'staff', scoring: '漫才1本＋コント1本（各2分）', run: doubleRound(120, 0.3, 2900, 42) },
+    { id: 'r2', name: '2回戦', when: [4, 10], venues: ['東京', '大阪'], length: 180, pass: 0.3, field: 900, judge: 'staff', scoring: '漫才＋コント（各3分）', run: doubleRound(180, 0.3, 900, 52) },
     { id: 'qf', name: '準々決勝', when: [5, 8], venues: ['東京', '大阪'], length: 240, pass: 25, field: 260, judge: 'staff', scoring: '漫才＋コント', run: doubleRound(240, 25, 260, 60) },
     { id: 'sf', name: '準決勝', when: [6, 5], venues: ['東京'], length: 240, pass: 8, field: 25, judge: 'staff', scoring: '漫才とコントを同日に披露', run: doubleRound(240, 8, 25, 68) },
     { id: 'final', name: '決勝', when: [7, 8], length: 240, field: 8, judge: 'panel', judges: 5, scoring: '漫才4分＋コント4分・審査員5人×100点＝500点満点', tv: true, final: true, run: doubleFinal },
   ],
   eligibility: { members: [2, null], pro: true, amateur: true, note: '2人以上ならプロ・アマ、芸歴を問わない' },
-  fee: 0, feeNote: '参加費は未確認（ゲームでは無料扱い）',
+  fee: 0, // 参加費: 未確認 (research note; nothing shown)
   prize: 10000000, prizeText: '優勝賞金1000万円',
   perform: { kind: 'double', length: 240 },
   news: [
@@ -305,21 +305,21 @@ const MANZAI = {
   name: 'THE MANZAI', short: 'MANZAI', kind: 'manzai', category: 'major', color: '#1f5fc8',
   organizer: 'フジテレビ・吉本興業（THE MANZAI大会事務局）', broadcaster: 'フジテレビ系', venue: '決勝：フジテレビ（生放送）', region: 'all',
   history: { founded: 2011, ended: 2014, gaps: [], revived: null,
-    note: '1980年4月〜の漫才ブーム番組『THE MANZAI』の名を継ぎ、2011〜2014年に年間最強漫才師決定トーナメントとして開催。2015年以降の本家は非競技の『マスターズ』。ゲームでは2015年以降も賞レースとして復刻開催。',
+    note: '結成年数を問わない、年間最強漫才師の決定トーナメント。認定漫才師50組が本戦サーキットを回り、年末の決勝で頂点を争う。',
     sources: ['https://www.j-cast.com/2011/12/18116768.html', 'https://www.j-cast.com/2012/12/17158544.html', 'https://natalie.mu/owarai/news/130816', 'https://www.oricon.co.jp/news/2045257/full/', 'https://dic.pixiv.net/a/THE_MANZAI'] },
-  editionOf: editionCounter(2011),
+  // no editionOf: D1 counts the HELD years, so a revival continues from the last real edition (2014 第4回 → next held year 第5回)
   schedule: { entry: { from: [6, 1], to: [7, 10] }, final: [12, 5] },
   rounds: [
     { id: 'r1', name: '1回戦', when: [[8, 3], [8, 7]], venues: ['東京', '大阪'], length: 180, pass: 0.3, field: 1700, judge: 'staff', scoring: '大会事務局の審査',
       run: stdRound({ kind: 'manzai', length: 180, pass: 0.3, field: 1700, level: 44, beats: ['会場の受付に「THE MANZAI」のロゴ。年末の決勝まで、長い道のりが始まる。', '結成年数は問われない。若手もベテランも同じ1回戦。', '「即席コンビは不可」——受付の張り紙を相方が指さした。'] }) },
     { id: 'r2', name: '2回戦（認定漫才師50組の選考）', when: [9, 5], venues: ['東京', '大阪'], length: 240, pass: 50, field: 500, judge: 'staff', scoring: '上位50組が「認定漫才師」',
       run: stdRound({ kind: 'manzai', length: 240, pass: 50, field: 500, level: 56, head: '2回戦　結果（上位50組＝認定漫才師）', passText: (g) => `「THE MANZAI認定漫才師」50組に選ばれた！ 次は本戦サーキット。`, beats: ['ここを抜ければ「認定漫才師」。年末までの本戦サーキットを回れる。', 'テレビ局のスタッフが客席の端でメモを取っている。'] }) },
-    { id: 'circuit', name: '本戦サーキット', when: [[10, 3], [10, 8], [11, 3], [11, 8]], length: 240, pass: 11, field: 50, judge: 'audience', scoring: '各公演の順位に応じたポイント（ゲーム上の配点）→上位11組が決勝', run: manzaiCircuit },
+    { id: 'circuit', name: '本戦サーキット', when: [[10, 3], [10, 8], [11, 3], [11, 8]], length: 240, pass: 11, field: 50, judge: 'audience', scoring: '各公演の順位に応じたポイント→上位11組が決勝', run: manzaiCircuit },
     { id: 'wild', name: 'ワイルドカード決定戦', when: [12, 4], length: 240, pass: 1, field: 39, judge: 'vote', scoring: 'サーキット12位以下から1組', tv: true, wildcard: true, run: manzaiWildcard },
     { id: 'final', name: '決勝', when: [12, 5], length: 240, field: 12, judge: 'vote', judges: 9, scoring: '審査員9票＋視聴者1票。グループ1位が最終決戦', tv: true, final: true, run: manzaiFinal },
   ],
   eligibility: { members: [2, null], pro: true, amateur: false, note: '結成年数不問・プロの漫才師（ピン同士の即席コンビは不可）' },
-  fee: 0, feeNote: '参加費は未確認（ゲームでは無料扱い）',
+  fee: 0, // 参加費: 未確認 (research note; nothing shown)
   prize: 0, prizeText: '現金の賞金なし（フジテレビの番組出演権・スポンサー副賞）',
   perform: { kind: 'manzai', length: 240 },
   news: [
@@ -454,7 +454,7 @@ const NHK_OWARAI = {
   name: 'NHK新人お笑い大賞', short: 'NHK新人', kind: 'any', category: 'newcomer', color: '#2a7a4a',
   names: [{ from: 1956, name: 'NHK新人漫才コンクール' }, { from: 1986, name: 'NHK新人演芸コンクール' }, { from: 1991, name: 'NHK新人演芸大賞（演芸部門）' }, { from: 2014, name: 'NHK新人お笑い大賞' }],
   organizer: 'NHK', broadcaster: 'NHK総合（本選を生放送）', venue: '本選：東京（イイノホール等）と大阪（NHK大阪ホール）で交互', region: 'all',
-  history: { founded: 1956, ended: null, gaps: [], revived: null, note: '1956年のNHK新人漫才コンクールから続く若手の登竜門。1986年演芸コンクールに統合、1991年新人演芸大賞、2014年に演芸部門が「新人お笑い大賞」に。',
+  history: { founded: 1956, ended: null, gaps: [], revived: null, note: 'NHKが長く続ける若手の登竜門。予選を勝ち抜いた組が本選の生放送で大賞を争う。',
     sources: ['https://natalie.mu/owarai/news/643749', 'https://natalie.mu/owarai/news/403072', 'https://dic.pixiv.net/a/NHK%E6%96%B0%E4%BA%BA%E3%81%8A%E7%AC%91%E3%81%84%E5%A4%A7%E8%B3%9E', 'https://d.hatena.ne.jp/keyword/NHK%E6%96%B0%E4%BA%BA%E3%81%8A%E7%AC%91%E3%81%84%E5%A4%A7%E8%B3%9E'] },
   editionOf: editionCounter(1956), // 通し回数は未確認（ゲーム内の通算）。表示は年度（editionLabel）
   editionLabel: (y) => `${nendo(y)} ${nameOf(NHK_OWARAI, y)}`, // NHK counts by 年度 (「令和7年度 NHK新人お笑い大賞」)
@@ -462,12 +462,12 @@ const NHK_OWARAI = {
   rounds: [
     { id: 'yosen', name: '予選', when: [[8, 4], [8, 8]], venues: ['東京', '大阪'], length: 240, pass: 8, field: 290, judge: 'staff', scoring: 'NHKの審査',
       run: stdRound({ kind: 'any', length: 240, pass: 8, field: 290, level: 56, beats: ['NHKの会議室を仕切った控室。ほかの局より、少しだけ静かだ。', '「NHKなので、商品名や企業名はネタに入れないでくださいね」とディレクター。', '予選会場には東京も大阪も、結成10年未満の若手がぎっしり。'] }) },
-    { id: 'honsen', name: '本選（生放送）', when: [10, 8], length: 240, field: 8, judge: 'panel', judges: 5, scoring: '8組を2ブロックに抽選→各ブロック1位が決勝（ゲーム上：審査員5人×10点）', tv: true, final: true, run: nhkHonsen },
+    { id: 'honsen', name: '本選（生放送）', when: [10, 8], length: 240, field: 8, judge: 'panel', judges: 5, scoring: '8組を2ブロックに抽選→各ブロック1位が決勝・審査員5人×10点', tv: true, final: true, run: nhkHonsen },
   ],
   // 結成10年未満 = unitYears ≤ 9 (A counts a pin's years from the start of the act)
   eligibility: { members: [1, null], unitYearsMax: 9, note: '結成10年未満（ピン芸人は活動開始から10年未満）' },
-  fee: 0, feeNote: '参加費は未確認（ゲームでは無料扱い）',
-  prize: 0, prizeText: '大賞（賞金は未確認）',
+  fee: 0, // 参加費: 未確認 (research note; nothing shown)
+  prize: 0, prizeText: '',
   perform: { kind: 'any', length: 240 },
   news: [
     (g, c) => `${nendo(c.year)} ${nameOf(NHK_OWARAI, c.year)}、予選に約300組。東京と大阪で開催`,
@@ -540,7 +540,7 @@ const NHK_RAKUGO = {
     { id: 'honsen', name: '本選（5人の高座）', when: [11, 2], length: 660, field: 5, judge: 'panel', judges: 5, scoring: '持ち時間11分・審査員5人×10点＝50点満点', tv: true, final: true, run: rakugoHonsen },
   ],
   eligibility: { members: [1, 1], geirekiMax: 14, note: '入門15年未満の落語家' },
-  fee: 0, prize: 0, prizeText: '大賞（賞金は未確認）', perform: { kind: 'rakugo', length: 660 },
+  fee: 0, prize: 0, prizeText: '', perform: { kind: 'rakugo', length: 660 },
   news: [
     (g, c) => `${nendo(c.year)} ${nameOf(NHK_RAKUGO, c.year)}、本選に進む5人が決定`,
     '持ち時間は11分。長講で知られる噺をどう刈り込むかが勝負',
@@ -591,15 +591,15 @@ const NHK_KAMIGATA = {
   rounds: [
     { id: 'yosen', name: '予選', when: [4, 6], venues: ['大阪'], length: 240, pass: 8, field: 125, judge: 'staff', scoring: 'NHK大阪の審査',
       run: stdRound({ kind: 'any', length: 240, pass: 8, field: 125, level: 54, beats: ['NHK大阪のロビーから大阪城が見える。', '控室では、同期の芸人どうしがネタを小声で合わせている。', '「関西の新人の登竜門」——ポスターの文字が誇らしい。'] }) },
-    { id: 'honsen', name: '本選（生放送）', when: [5, 8], length: 240, field: 8, judge: 'panel', judges: 5, scoring: '本選8組（ゲーム上：審査員5人×10点、上位が優勝・優秀賞）', tv: true, final: true, run: kamigataHonsen },
+    { id: 'honsen', name: '本選（生放送）', when: [5, 8], length: 240, field: 8, judge: 'panel', judges: 5, scoring: '本選8組・審査員5人×10点（優勝・優秀賞）', tv: true, final: true, run: kamigataHonsen },
   ],
   eligibility: { members: [1, null], unitYearsMax: 9, region: 'osaka', note: '結成10年未満・関西を拠点に活動する若手' },
-  fee: 0, prize: 0, prizeText: '優勝（賞金は未確認）', perform: { kind: 'any', length: 240 },
+  fee: 0, prize: 0, prizeText: '', perform: { kind: 'any', length: 240 },
   news: [
     (g, c) => `${ordinal(c.edition)}NHK上方漫才コンテスト、本選8組が決定`,
     (g, c) => (c.year < 2015 ? '今年も年度末の上方漫才コンテスト。春から売れる若手はここから' : '本選はNHK総合・関西地域で生放送'),
     '予選にはおよそ120〜130組。関西の劇場を拠点にする若手が名を連ねる',
-    '「漫才」コンテストだが、コント師の優勝例も。形式より“面白さ”',
+    (g, c) => (c.year >= 2024 ? '「漫才」コンテストだが、コント師の優勝例も。形式より“面白さ”' : '本選の出番順は抽選。トップバッターを引くのは誰だ'),
     (g, c) => `歴代優勝者からは全国区の人気者が多数。${c.year >= 2000 ? '「ここを獲ったら次は全国」' : '「上方の若手は、まずここ」'}`,
     '本選の審査員席には、上方漫才の大ベテランが並ぶ',
   ],
@@ -649,7 +649,7 @@ const KAMIGATA_MANZAI = {
   ],
   // selection award: D1's 招待 (invite) = the 審査会 has the act on its list; the nominate round then decides the tier (or none)
   eligibility: { members: [2, null], region: 'osaka', repeat: true, invite: { fame: 300 }, note: '上方（関西）で活躍する漫才師。新人賞は結成10年目まで。応募ではなく審査会のノミネート' },
-  fee: 0, prize: 0, prizeText: '大賞・奨励賞・新人賞', perform: { kind: 'manzai', length: 240 },
+  fee: 0, prize: 0, prizeText: '', awards: ['大賞', '奨励賞', '新人賞'], perform: { kind: 'manzai', length: 240 },
   news: [
     (g, c) => `${ordinal(c.edition)}上方漫才大賞、ノミネート発表。新人賞は結成10年目までの漫才師から`,
     (g, c) => `上方漫才大賞は${c.year - 1966 + 1}年目。漫才の賞として最も古い歴史`,
@@ -734,9 +734,9 @@ async function kmHappyou(g, ctx) {
 const KAMIGATA_OWARAI = {
   name: '上方お笑い大賞', short: '上方お笑い', kind: 'any', category: 'kansai', color: '#d07a1a',
   organizer: '読売テレビ', broadcaster: '読売テレビ（年末特番）', venue: '大阪（読売テレビ）', region: 'osaka',
-  history: { founded: 1972, ended: 2006, gaps: [], revived: null, note: '読売テレビが1972〜2006年度に35回開催した上方演芸の賞。2007〜08年度は「笑いの超新星 新人賞」、2012年からytv漫才新人賞。ゲームでは2007年以降も復刻開催。',
+  history: { founded: 1972, ended: 2006, gaps: [], revived: null, note: '読売テレビが年末に贈る上方演芸の賞。大賞・金賞・銀賞と、芸歴10年以内が競う新人部門。',
     sources: ['https://www.weblio.jp/content/%E4%B8%8A%E6%96%B9%E3%81%8A%E7%AC%91%E3%81%84%E5%A4%A7%E8%B3%9E', 'https://www.weblio.jp/wkpja/content/%E4%B8%8A%E6%96%B9%E3%81%8A%E7%AC%91%E3%81%84%E5%A4%A7%E8%B3%9E_%E4%B8%8A%E6%96%B9%E3%81%8A%E7%AC%91%E3%81%84%E5%A4%A7%E8%B3%9E%E3%81%AE%E6%A6%82%E8%A6%81'] },
-  editionOf: editionCounter(1972),
+  // no editionOf: revival continues from 第35回 (2006) +1 per held year (D1 counts held years)
   schedule: { entry: null, final: [12, 6] },
   selection: true,
   rounds: [
@@ -744,13 +744,13 @@ const KAMIGATA_OWARAI = {
     { id: 'honsen', name: '本選・発表（年末特番）', when: [12, 6], length: 240, field: 6, judge: 'panel', judges: 7, scoring: '新人部門本選6組→最優秀新人賞1・優秀新人賞5／大賞・金賞・銀賞は選考', tv: true, final: true, run: koHonsen },
   ],
   eligibility: { region: 'osaka', repeat: true, invite: { fame: 60 }, note: '上方の大衆演芸（漫才・コント・落語・新喜劇…）。新人部門は芸歴10年以内' },
-  fee: 0, prize: 0, prizeText: '大賞・金賞・銀賞・最優秀新人賞ほか', perform: { kind: 'any', length: 240 },
+  fee: 0, prize: 0, prizeText: '', awards: ['大賞', '金賞', '銀賞', '最優秀新人賞', '優秀新人賞'], perform: { kind: 'any', length: 240 },
   news: [
     (g, c) => `${c.revival ? '【復刻】' : ''}${ordinal(c.edition)}上方お笑い大賞、新人部門の本選6組が決定`,
     '大賞は“その年いちばん上方を笑わせた人”。漫才、落語、新喜劇から選ばれる',
     (g, c) => (c.year < 1990 ? '年の瀬の上方お笑い大賞。テレビの前で一年の笑いを振り返る' : '金賞・銀賞、そして最優秀新人賞。年末の読売テレビに上方の芸人が集う'),
     '新人部門は芸歴10年以内。本選に出れば全員が「優秀新人賞」、1位だけが最優秀',
-    (g, c) => (c.revival ? '本家は2006年度で幕。2007・08年度は「笑いの超新星 新人賞」、2012年からはytv漫才新人賞へ' : '「大賞を1人に絞る」ことの難しさを審査員が語る'),
+    (g, c) => (!c.revival ? '「大賞を1人に絞る」ことの難しさを審査員が語る' : `上方お笑い大賞は2006年度でいったん幕。${c.year >= 2012 ? '若手の賞はytv漫才新人賞に引き継がれたが、' : c.year >= 2009 ? '新人賞は「笑いの超新星」に引き継がれたが、' : ''}今年は復刻開催`),
     '審査員特別賞の行方にも注目',
   ],
   beats: ['年末の読売テレビ。廊下に門松が飾られている。', '新人部門の控室は、緊張でだれも喋らない。', '大御所の楽屋から笑い声が漏れてくる。'],
@@ -809,7 +809,7 @@ async function koHonsen(g, ctx) {
 const YTV = {
   name: 'ytv漫才新人賞決定戦', short: 'ytv新人', kind: 'manzai', category: 'kansai', color: '#1a8a8a',
   organizer: '読売テレビ', broadcaster: '読売テレビ（決定戦を生放送）', venue: '読売テレビ（大阪）', region: 'osaka',
-  history: { founded: 2012, ended: null, gaps: [], revived: null, note: '上方お笑い大賞の後継として2012年新設。3回の選考会ROUND→上位2組ずつ＋敗者復活1組の7組で決定戦。',
+  history: { founded: 2012, ended: null, gaps: [], revived: null, note: '関西の芸歴10年目以内の漫才師が、年3回の選考会ROUNDと年度末の決定戦で競う。',
     sources: ['https://natalie.mu/owarai/news/639644', 'https://www.oricon.co.jp/news/2439171/full/', 'https://www.daily.co.jp/gossip/2021/02/08/0014064853.shtml'] },
   editionOf: editionCounter(2012),
   schedule: { entry: { from: [5, 1], to: [5, 10] }, final: [3, 1] }, // entry / ROUNDs in the previous calendar year (年度)
@@ -817,10 +817,10 @@ const YTV = {
     { id: 'round1', name: 'ROUND1（選考会）', when: [6, 5], length: 180, pass: 2, field: 10, judge: 'panel', judges: 4, scoring: '3分・審査員4人×100点。上位2組が決定戦', chance: true, run: (g, ctx) => ytvRound(g, ctx, 1) },
     { id: 'round2', name: 'ROUND2（選考会）', when: [9, 5], length: 180, pass: 2, field: 10, judge: 'panel', judges: 4, scoring: '同上', chance: true, run: (g, ctx) => ytvRound(g, ctx, 2) },
     { id: 'round3', name: 'ROUND3（選考会）', when: [12, 3], length: 180, pass: 2, field: 10, judge: 'panel', judges: 4, scoring: '同上（敗者の最高得点1組は敗者復活）', chance: true, run: (g, ctx) => ytvRound(g, ctx, 3) },
-    { id: 'kettei', name: '決定戦（生放送）', when: [3, 1], length: 180, field: 7, judge: 'panel', judges: 4, scoring: '7組・審査員4人×100点→上位3組の最終決戦（ゲーム上）', tv: true, final: true, run: ytvKettei },
+    { id: 'kettei', name: '決定戦（生放送）', when: [3, 1], length: 180, field: 7, judge: 'panel', judges: 4, scoring: '7組・審査員4人×100点→上位3組の最終決戦', tv: true, final: true, run: ytvKettei },
   ],
   eligibility: { members: [2, null], geirekiMax: 10, region: 'osaka', note: '関西で活動する漫才師、メンバー全員が芸歴10年目以内' },
-  fee: 0, prize: 0, prizeText: '優勝（賞金は未確認）', perform: { kind: 'manzai', length: 180 },
+  fee: 0, prize: 0, prizeText: '', perform: { kind: 'manzai', length: 180 },
   news: [
     (g, c) => `${ordinal(c.edition)}ytv漫才新人賞、ROUND1の結果発表。上位2組が決定戦へ`,
     '選考会は年に3回。どのROUNDでも上位2組に入れば決定戦',
@@ -909,9 +909,9 @@ const MBS = {
   name: 'MBS新世代漫才アワード', short: 'MBSアワード', kind: 'manzai', category: 'kansai', color: '#3a6ad8',
   names: [{ from: 2003, name: 'MBS新世代漫才アワード' }, { from: 2012, name: 'MBS漫才アワード' }],
   organizer: '毎日放送（MBS）', broadcaster: 'MBSテレビ', venue: '大阪（MBS）', region: 'osaka',
-  history: { founded: 2003, ended: 2013, gaps: [], revived: null, note: '審査員は“お笑いペーパーテスト”に合格した高校生。2011年の第9回まで新世代漫才アワード、第10・11回はMBS漫才アワード。',
+  history: { founded: 2003, ended: 2013, gaps: [], revived: null, note: '審査員は“お笑いペーパーテスト”に合格した高校生。若い感覚で次の世代の漫才を選ぶ。',
     sources: ['https://natalie.mu/owarai/news/36556', 'https://news.mynavi.jp/article/20080813-mbs2/', 'https://www.daily.co.jp/newsflash/gossip/2014/04/11/0006855438.shtml', 'https://www.wikiwand.com/ja/MBS%E6%BC%AB%E6%89%8D%E3%82%A2%E3%83%AF%E3%83%BC%E3%83%89'] },
-  editionOf: editionCounter(2003),
+  // no editionOf: revival continues from 第11回 (2013) +1 per held year
   schedule: { entry: { from: [5, 1], to: [6, 5] }, final: [8, 9] },
   rounds: [
     { id: 'y1', name: '1次予選', when: [7, 3], venues: ['大阪'], length: 180, pass: 0.3, field: 300, judge: 'staff', scoring: 'MBSの審査', run: (g, ctx) => mbsYosen(g, ctx) },
@@ -920,7 +920,7 @@ const MBS = {
   ],
   // 2003–04 (第1・2回) were 関西・結成10年以下 only: checked at the 1次予選 (mbsYosen); the object keeps D1's field realistic
   eligibility: { members: [2, null], region: 'osaka', note: '第1・2回は関西地区・結成10年以下、第3回から芸歴の制限なし' },
-  fee: 0, prize: 0, prizeText: '優勝（賞金は未確認）', perform: { kind: 'manzai', length: 240 },
+  fee: 0, prize: 0, prizeText: '', perform: { kind: 'manzai', length: 240 },
   news: [
     (g, c) => `${c.revival ? '【復刻】' : ''}${ordinal(c.edition)}${nameOf(MBS, c.year)}、審査員は高校生`,
     '審査員の高校生は“お笑いペーパーテスト”の合格者。「笑いに厳しい高校生」が1〜3点で採点',
@@ -949,7 +949,7 @@ async function mbsStudents(g, ctx, isFinal) {
     const res = await perform(g, ctx, { kind: 'manzai', length: isFinal ? 240 : 180, skip, title: `${nameOf(MBS, ctx.year)} ${isFinal ? '決勝' : '2次予選'}`, venue: { size: isFinal ? 'tv' : 'theater', crowd: 'tough', pressure: isFinal ? 80 : 60 } });
     // 高校生は「新しさ」に厳しい：発想力の高い組が得をする（ゲーム上の傾向）
     const votes = audienceVotes(res.score, nJ, r, 17);
-    b.set('votes', { n: 100, votes: votes.slice(0, 100), who: unitName(g), label: `高校生審査員${nJ}人の採点（画面は最初の100人）` });
+    b.set('votes', { n: 100, votes: votes.slice(0, 100), who: unitName(g), label: `高校生審査員${nJ}人の採点` });
     await pause(g, 70);
     const my = sumV(votes);
     const rvs = rivals(g, ctx, 11, { level: isFinal ? 68 : 58, kind: 'manzai' });

@@ -44,10 +44,10 @@ function meAct(g, y, E) {
   };
 }
 // The mode of a long flow: 0 = in full, 1 = おまかせ (prep), 2 = すべておまかせ (also the performance)
-async function chooseMode(g, key, label) {
+async function chooseMode(g, key, intro, short) {
   const m = M(g);
   if (!m.seen[key]) { m.seen[key] = true; return 0; }
-  const i = await ask(g, `${label}\n（何度目かの${label.replace(/[。！]$/, '')}だ。どう進める？）`, ['ひとつずつ進める', 'おまかせ（準備はおまかせ・本番は自分で）', 'すべておまかせ（本番もおまかせ）'], null, { cancel: 0 });
+  const i = await ask(g, `${intro}\n（${short}は前にも経験した。どう進める？）`, ['ひとつずつ進める', 'おまかせ（準備はおまかせ・本番は自分で）', 'すべておまかせ（本番もおまかせ）'], null, { cancel: 0 });
   return Math.max(0, i);
 }
 async function doPerform(g, o) {
@@ -290,7 +290,7 @@ export async function roundFlow(g, ri) {
   if (await brokeUp(g, E, u)) return null;
   const pw = partnerWho(u);
   const isSF = R.id === 'sf';
-  const mode = await chooseMode(g, isSF ? 'sf' : 'round', `今日は${rules.label}の${R.name}だ。`);
+  const mode = await chooseMode(g, isSF ? 'sf' : 'round', `今日は${rules.label}の${R.name}だ。`, isSF ? 'M-1の準決勝' : 'M-1の予選');
   const set = pushSet(g, 'uketsuke', { year: y, sub: `${R.name}　${E.next.city}・${E.next.hall}`, cast: [] });
   const me = { look: g.state.look, x: 270, y: 236, s: 2, dir: 'up' };
   const pa = u.partnerLook ? { look: u.partnerLook, x: 330, y: 236, s: 2, dir: 'up' } : null;
@@ -407,7 +407,7 @@ export async function roundFlow(g, ri) {
     if (mode === 0) await say(g, rules.era === 'heisei' ? '（その日の夜、会場の前に合格者の一覧が貼り出された）' : '（その夜、公式サイトに結果が発表された）');
     await showBoard(g, y, ri, E, passed);
     if (passed) {
-      await bigText(g, `${R.name} 合格！`, `${E.name}　${R.pass}組${ri === 0 ? `（エントリー${m1Rules(y).entriesText}）` : ''}が次へ`, { min: 30, max: 160 });
+      await bigText(g, `${R.name} 合格！`, `${E.name}ほか${passedOf(m, y, ri).length.toLocaleString('ja-JP')}組${ri === 0 ? `（エントリー${m1Rules(y).entriesText}）` : ''}が次へ`, { min: 30, max: 160 });
       if (!isSF) rewards(g, R.id);
       addHarmony(g, 2, `M-1 ${R.name}突破`);
       safe(() => has(g, 'addComedyStat') && g.addComedyStat('dokyo', 1, true));
@@ -608,7 +608,7 @@ async function revivalFlow(g, E, u, rules, fin) {
   const m = M(g);
   const y = E.y;
   const RV = rules.revival;
-  const mode = await chooseMode(g, 'revival', '決勝当日。まずは敗者復活戦だ。');
+  const mode = await chooseMode(g, 'revival', '決勝当日。まずは敗者復活戦だ。', '敗者復活戦');
   const set = pushSet(g, RV.outdoor ? 'outdoor' : 'revival_in', { year: y, venue: RV.venue, sub: RV.venue, cast: [] });
   const pw = partnerWho(u);
   try {
@@ -656,7 +656,7 @@ async function revivalFlow(g, E, u, rules, fin) {
       logLine(E, `敗者復活戦（${RV.venue}）を勝ち抜いた。${s}点。`);
       E.status = 'finalist'; E.revivalWin = true;
       rewards(g, 'final');
-      if (pw) await say(g, '行くで…！テレビ朝日まで走れ！', pw);
+      if (pw) await say(g, E.y >= 2015 ? '行くで…！テレビ朝日まで走れ！' : '行くで…！決勝のスタジオまで走れ！', pw);
       return true;
     }
     const wn = actOf(m, y, rv.winner).name;
@@ -705,7 +705,7 @@ async function finalFlow(g, E, u, rules, fin) {
   const order = finalOrder(m, y, keys, revKey);
   fin.order = order;
   const actOfK = (k) => (k === 'me' ? me : actOf(m, y, k));
-  const mode = await chooseMode(g, 'final', `${rules.label}、決勝の日。`);
+  const mode = await chooseMode(g, 'final', `${rules.label}、決勝の日。`, 'M-1の決勝');
   const quickRivals = mode >= 1 || (!g.auto && (await ask(g, 'ほかの組のネタは？', ['紹介VTRから全部見る', '採点だけ見る（早送り）'], null, { cancel: 1 })) === 1);
   const set = pushSet(g, 'studio', { year: y, cast: [], studio: { judges: js.map((j, i) => ({ ...j, look: lookFor(i % 4 === 2 ? 'f' : 'm', 'judge', j.id) })), ranking: [] } });
   const S = set.studio;
@@ -870,11 +870,14 @@ async function finalFlow(g, E, u, rules, fin) {
       E.status = 'champion';
       m.me.champion = y;
       await championCard(g, { year: y, ed: rules.edition, name: E.name, members: me.members, prize: '1000万円' });
-      g.addMoney(internal(M1.prizeNominal), true);
+      // the prize belongs to the act: the player receives their share (prize ÷ members)
+      const nMem = Math.max(1, me.members.length);
+      const share = Math.round(M1.prizeNominal / nMem);
+      g.addMoney(internal(share), true);
       g.giveItem('m1_trophy', 1, true);
       rewards(g, 'champ');
       safe(() => g.setFlag('m1_champion', y));
-      await say(g, [`優勝賞金1000万円と、M-1グランプリのトロフィーを手に入れた！`, `「${E.name}」は第${rules.edition}代M-1王者になった！`]);
+      await say(g, [`優勝賞金1000万円${nMem > 1 ? `（ひとり${Math.round(share / 10000)}万円）` : ''}と、M-1グランプリのトロフィーを手に入れた！`, `「${E.name}」は第${rules.edition}代M-1王者になった！`]);
       await tearsScene(g, E, u, true);
       logLine(E, `優勝。第${rules.edition}代王者。`);
       news(g, `第${rules.edition}代王者は「${E.name}」！${rules.label}を制した。${rules.finalRound ? `最終決戦で審査員${(fin.voteCount && fin.voteCount.me) || 0}票。` : ''}`, {}, { prio: 5, once: `champ_${y}`, key: `m1n|champ|${y}` });
@@ -919,8 +922,8 @@ async function afterNight(g, E, u, rules) {
   const m = M(g);
   const y = E.y;
   const pw = partnerWho(u);
-  // 世界最速大反省会 (talk)
-  const i = await ask(g, `放送のあと、配信の「${rules.hansei}」に出演する？`, ['出演する', '休む'], null, { cancel: 1 });
+  // 世界最速大反省会 (a live stream after the final: 2022〜; earlier eras go straight to the 打ち上げ)
+  const i = rules.hansei ? await ask(g, `放送のあと、配信の「${rules.hansei}」に出演する？`, ['出演する', '休む'], null, { cancel: 1 }) : 1;
   if (i === 0) {
     const set = pushSet(g, 'talk', { year: y, sub: `M-1グランプリ${y} ${rules.hansei}`, cast: [{ look: MC.main.look, x: 120, y: 200, s: 2, dir: 'right' }, { look: g.state.look, x: 300, y: 200, s: 2 }].concat(u.partnerLook ? [{ look: u.partnerLook, x: 350, y: 200, s: 2 }] : []) });
     try {
@@ -976,7 +979,7 @@ export async function watchFinal(g, o = {}) {
         await say(g, `${rivalNarration(a, sc.s)}　…${sc.total}点`);
       }
     }
-    await say(g, [`優勝は「${row.chN}」！${row.ruN ? `準優勝「${row.ruN}」、3位「${row.thN || ''}」。` : ''}`, row.revN ? `敗者復活は「${row.revN}」。最高得点は「${row.topN}」の${row.top}点。` : `最高得点は「${row.topN}」の${row.top}点。`]);
+    await say(g, [`優勝は「${row.chN}」！${row.ruN ? `準優勝「${row.ruN}」、3位「${row.thN || ''}」。` : ''}`, row.rvwN ? `敗者復活は「${row.rvwN}」。最高得点は「${row.topN}」の${row.top}点。` : `最高得点は「${row.topN}」の${row.top}点。`]);
     await netCard(g, netPosts(g, y, row.chN, null, null, row.topN));
     const E = entryOf(g, y);
     const u = unitInfo(g, y);

@@ -164,9 +164,11 @@ function newUnit(g, o, pid, opts = {}) {
   normUnit(u);
   return u;
 }
+// a candidate: from the hidden 相性 and how well you know them; a friend (people.js cast, old saves): from their affection
 function startHarmony(g, pid) {
   const c = CANDIDATES[pid];
-  let h = 44 + (c ? (num(c.compat, 50) - 50) * 0.35 : 4) + Math.min(10, g.aff(pid) / 8);
+  if (!c) return clamp(25 + g.aff(pid) * 0.55, 30, 85);
+  let h = 44 + (num(c.compat, 50) - 50) * 0.35 + Math.min(10, g.aff(pid) / 8);
   for (const q of quirksOf(pid)) if (QUIRKS[q] && QUIRKS[q].start) h += QUIRKS[q].start;
   return h;
 }
@@ -461,7 +463,7 @@ const methods = {
         for (const m of o.unit.members) if (m.id !== 'player' && hasQ(m.id, 'negative') && score < 40) harmonyAdd(this, o, -1.5, 'スベって落ちこんだ');
       }
     }
-    if (o.unit && !SOLO_KINDS.has(kind)) { o.unit.stages += n; for (const m of o.unit.members) if (m.id !== 'player') { const r = memberRec(o, m.id); growStat(r, 'dokyo', 0.5 * n); growStat(r, 'ma', 0.4 * n); } }
+    if (o.unit && !SOLO_KINDS.has(kind)) { o.unit.stages += n; o.unit.lastStage = this.state.day; for (const m of o.unit.members) if (m.id !== 'player') { const r = memberRec(o, m.id); growStat(r, 'dokyo', 0.5 * n); growStat(r, 'ma', 0.4 * n); } }
     for (const [k, v] of [['dokyo', 0.7], ['kankyaku', 0.6], ['ma', 0.3]]) growStat(o, k, v * Math.min(n, 3));
     return c.stages;
   },
@@ -534,7 +536,7 @@ const methods = {
     const o = getO(this);
     if (!o || !o.unit || !PEOPLE[pid]) return null;
     if (o.unit.members.some((m) => m.id === pid)) return this.unit();
-    if (o.unit.members.length >= 3) { await this.say('トリオより多い人数は、このゲームでは組めない。'); return null; }
+    if (o.unit.members.length >= 3) { await this.say('4人以上のグループは、劇場の香盤に入れてもらえない。'); return null; }
     const P = PEOPLE[pid];
     const c = CANDIDATES[pid];
     const i = opts.quick || this.auto ? 0 : await this.ask(`${P.short || P.name}をメンバーに加えて、トリオにする？\n（${P.short || P.name}の役割は？）`, ['ボケ', 'ツッコミ', 'どちらも（Wボケ）', 'やめておく'], { cancel: 3 });
@@ -890,6 +892,18 @@ function sendOw(g, o, msg) {
   return true;
 }
 export function owaraiSend(g, msg) { const o = ensure(g); return o ? sendOw(g, o, msg) : false; }
+// a message from a member: never on a morning when people.js already had them text (no cheerful invite next to a 解散 talk);
+// it waits for the next morning instead, and marks the day so people.js stays quiet the next morning too
+function partnerMsg(g, o, pid, textS, force = false) {
+  const st = g.state;
+  const P = PEOPLE[pid];
+  const p = st.people[pid];
+  if (!P) return false;
+  if (p && num(p.msgDay) === st.day) { if (o.unit) o.unit.pendingMsg = textS; return false; }
+  const ok = sendOw(g, o, { force, from: P.name, person: pid, kind: 'chat', text: textS });
+  if (ok && p) p.msgDay = st.day;
+  return ok;
+}
 function morning(g) {
   const st = g.state;
   const o = getO(g);
@@ -904,9 +918,19 @@ function morning(g) {
   const u = o.unit;
   if (u) {
     const partners = u.members.filter((m) => m.id !== 'player');
-    // idle days: the combi cools down (飽きっぽい: faster)
-    const idle = day - num(u.lastAwase, day);
-    if (idle > 6) harmonyAdd(g, o, -(1 + (partners.some((m) => hasQ(m.id, 'akippoi')) ? 1 : 0)), idle === 7 ? 'ネタ合わせをしていない' : '');
+    // a long absence (no ネタ合わせ, stage, talk or outing together for more than 10 days) cools the combi slowly: −1 every
+    // 3 days (a close friend: −0.5; 飽きっぽい: −1.5), after a warning on day 8. Nothing else lowers コンビ仲 by itself.
+    const main = partners[0] && partners[0].id;
+    const pr = (main && st.people[main]) || {};
+    const together = Math.max(num(u.lastAwase), num(u.lastStage), num(pr.talkDay), num(pr.hangDay), num(u.formed && u.formed.day));
+    const absent = day - together;
+    if (absent < 8) u.absentWarned = 0;
+    if (absent >= 8 && !u.absentWarned && main && PEOPLE[main]) {
+      u.absentWarned = day;
+      partnerMsg(g, o, main, isKansai(PEOPLE[main]) ? '最近、ネタ合わせできてへんな。\nそろそろ顔出してや。' : '最近、ネタ合わせできてないね。\nそろそろ顔を出してね。');
+    }
+    if (absent > 10 && (absent - 11) % 3 === 0) harmonyAdd(g, o, -(g.aff(main) >= 60 ? 0.5 : 1) * (partners.some((m) => hasQ(m.id, 'akippoi')) ? 1.5 : 1), absent === 11 ? 'しばらく会っていない' : '');
+    if (u.pendingMsg && main && PEOPLE[main] && num(pr.msgDay) !== day) { const t = u.pendingMsg; u.pendingMsg = null; partnerMsg(g, o, main, t, true); }
     // the weekly ギャラ split (Mondays)
     if (weekdayOf(day) === 0 && u.lastSplitWeek !== Math.floor((day - 1) / 7)) {
       u.lastSplitWeek = Math.floor((day - 1) / 7);
@@ -938,19 +962,18 @@ function morning(g) {
       const kinds = QUARREL_KINDS.filter((x) => x !== 'late' || partners.some((m) => hasQ(m.id, 'chikoku')));
       u.quarrel = { day, kind: kinds[Math.floor(Math.random() * kinds.length)], with: partners[0].id };
       const P = PEOPLE[partners[0].id];
-      sendOw(g, o, { from: P.name, person: P.id, kind: 'chat', text: isKansai(P) ? '…話がある。稽古場で待っとる。' : '…話があるの。稽古場で待ってる。' });
+      partnerMsg(g, o, P.id, isKansai(P) ? '…話がある。稽古場で待っとる。' : '…話があるの。稽古場で待ってる。', true);
       logC(g, o, `${personName(partners[0].id)}とケンカ`);
     }
     if (u.quarrel && !u.dissolveAsk && u.harmony < 14 && day - num(u.quarrel.day) >= 3) {
       u.dissolveAsk = day;
       const P = PEOPLE[partners[0].id];
-      sendOw(g, o, { force: true, from: P.name, person: P.id, kind: 'chat', text: isKansai(P) ? '大事な話がある。…これからのことや。' : '大事な話があるの。…これからのこと。' });
+      partnerMsg(g, o, P.id, isKansai(P) ? '大事な話がある。…これからのことや。会うて話そう。' : '大事な話があるの。…これからのこと。会って話そう。', true);
     }
-    if (u.dissolveAsk && day - u.dissolveAsk >= 10) {
-      // asked and never answered: they leave
+    // a 解散 talk never happens by itself: the 相方 waits for the talk (a reminder every 10 days)
+    if (u.dissolveAsk && day - u.dissolveAsk >= 10 && (day - u.dissolveAsk) % 10 === 0) {
       const P = PEOPLE[partners[0].id];
-      sendOw(g, o, { force: true, from: P.name, person: P.id, kind: 'chat', text: isKansai(P) ? '返事もらわれへんかったから、オレが決めた。解散や。…元気でな。' : '返事をもらえなかったから、わたしが決めた。解散だよ。…元気でね。' });
-      g.dissolveUnit({ confirm: false, why: 'quarrel', silent: true }).catch((e) => console.error(e));
+      partnerMsg(g, o, P.id, isKansai(P) ? 'まだ、ちゃんと話できてへんな。…稽古場で待っとるから。' : 'まだ、ちゃんと話せてないね。…稽古場で待ってるから。', true);
     }
   }
   // 劇場ランク (pros): weekly review of the recent stages

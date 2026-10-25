@@ -84,7 +84,7 @@ export function plan(g, year = cal(g).year) {
 // status of a year: 'notyet' | 'hiatus' | 'before' | 'entry' | 'prelim' | 'finalday' | 'after'
 export function statusOf(g, year = cal(g).year) {
   if (year < M1.founded) return { id: 'notyet', label: `まだ始まっていない（${M1.founded}年創設）` };
-  if (!m1Held(year)) return { id: 'hiatus', label: '休止中（2011〜2014年は開催なし・2015年に復活）' };
+  if (!m1Held(year)) return { id: 'hiatus', label: '開催なし（2010年の第10回で一区切り）' };
   const p = plan(g, year), t = today(g);
   if (t < p.entryFrom) return { id: 'before', label: `エントリー受付前（${dateLabel(g, p.entryFrom)}から）` };
   if (t <= p.entryTo && t < p.rounds[0].opts[0].day) return { id: 'entry', label: `エントリー受付中（${dateLabel(g, p.entryTo)}まで）` };
@@ -131,7 +131,7 @@ export function unitInfo(g, year = cal(g).year) {
     style: (u && u.style) || 'manzai', source: (u && u.source) || (P ? 'people' : 'solo'),
     ok: true, why: '',
   };
-  if (!rules) { out.ok = false; out.why = year < 2001 ? 'M-1グランプリはまだ始まっていない（2001年創設）。' : '今年はM-1グランプリの開催がない（2011〜2014年は休止）。'; return out; }
+  if (!rules) { out.ok = false; out.why = year < 2001 ? 'M-1グランプリはまだ始まっていない（2001年創設）。' : '今年はM-1グランプリの開催がない（2010年の第10回で一区切り）。'; return out; }
   out.last = year - formedYear === rules.limit;
   if (type === 'pin' || members.length < 2) { out.ok = false; out.why = 'M-1は「2人以上」の漫才師の大会。ピンでは出られない。\n相方を見つけよう（ネットの募集やNSCで出会える）。'; }
   else if (u && u.dissolved) { out.ok = false; out.why = 'コンビは解散している…。'; }

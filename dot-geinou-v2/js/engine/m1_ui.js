@@ -557,7 +557,7 @@ export function docPage(g, o) {
     R(c, 0, 0, SW, 26, '#000'); R(c, 0, SH - 26, SW, 26, '#000');
     T(c, 'アナザーストーリー', 14, 7, 10, '#c8a878');
     T(c, o.title, SW / 2, 40, fitSize(c, o.title, 560, 20, 11), '#f8e8c8', 'center', 580, { outline: '#1a0a04' });
-    (o.looks || []).slice(0, 2).forEach((lk, i) => { c.globalAlpha = 0.85; person(c, lk, 500 + i * 60, 300, 3, i ? 'left' : 'right'); c.globalAlpha = 1; });
+    (o.looks || []).slice(0, 2).forEach((lk, i) => { c.globalAlpha = 0.85; person(c, lk, 470 + i * 112, 300, 3, i ? 'left' : 'right'); c.globalAlpha = 1; });
     para(c, (o.lines || []).join('\n'), 40, 84, 400, 12, '#f2e2c2', 18, 12);
   }, { min: 30, max: 900, tag: 'doc' });
 }
@@ -664,7 +664,7 @@ export function formScreen(g, form) {
         const by = y0 + form.fields.length * rh + 8;
         const btn = (i, label, x, w, main) => {
           const sel = sc.idx === i;
-          R(c, x, by, w, 24, main ? (sel ? '#e8402a' : RED) : sel ? '#8a8a96' : '#b0b0ba');
+          R(c, x, by, w, 24, main ? (sel ? '#e8402a' : RED) : sel ? '#3a3a46' : '#5a5a66');
           T(c, label, x + w / 2, by + 6, 12, '#fff', 'center', w - 8);
           L[i] = { x, y: by, w, h: 24 };
         };

@@ -14,7 +14,7 @@ import { LOOKS } from '../engine/sprites.js';
 import { PEOPLE, isKansai } from '../engine/life.js';
 import { fmtMoney, clamp } from '../engine/util.js';
 import { CANDIDATES, NSC_COHORT, KINDS, STYLES, ROLES, personName, dateOf, eraKey, num } from '../engine/owarai_data.js';
-import { CAMPUS, CLASSES, FEES, monthly } from '../engine/owarai_nsc.js';
+import { CAMPUS, CLASSES, FEES, BAITO } from '../engine/owarai_nsc.js';
 
 const has = (g, k) => !!g && typeof g[k] === 'function';
 const WHO = {
@@ -76,8 +76,9 @@ function factLines(g, campus) {
     '1年制で、入学は4月。4月は入学式とクラス分け、\nそれに「相方探しの会」。5月からネタ見せが始まります。',
     '授業はネタ見せが中心（全体の4割ほど）。\nほかに発声、演技、ダンス、発想法（大喜利）、\nコント、新喜劇、落語、即興などがあります。',
     reiwa ? `学費は、入学諸経費${yen(FEES.entry)}、\n年間の授業料${yen(FEES.tuition)}、施設使用料${yen(FEES.facility)}（税込）。`
-      : `学費は、入学金と一年分の授業料などで\nあわせて${yen(FEES.entry + FEES.tuition + FEES.facility)}ほど（目安）。`,
-    `入学のときに${reiwa ? '入学諸経費' : '入学金'}（${yen(FEES.entry)}${reiwa ? '' : '・目安'}）、\n残りは毎月${yen(monthly())}ずつの分納で受けつけます。\n（未納が続くと除籍になります）`,
+      : `学費は、入学金と一年分の授業料などで\nあわせて約${yen(FEES.entry + FEES.tuition + FEES.facility)}です。`,
+    `入学のときに${reiwa ? '入学諸経費' : '入学金'}。授業料と施設使用料は\n分納で、事務局から請求が届きます。\n未納が続くと除籍になるので、気をつけてくださいね。`,
+    '学費が心配な人には、劇場の裏方のバイトも\n紹介しています。在校生なら、受付で声をかけてください。',
     k ? '卒業公演と一年の成績で、所属審査があるで。\n…ほな、がんばってや！' : '卒業公演と一年の成績で、所属審査があります。\nがんばってください！',
   ];
 }
@@ -100,13 +101,18 @@ async function apply(g, campus) {
   const date = dateOf(g);
   if (!has(g, 'nscCommitApply')) return;
   let family = false;
+  let split = false;
   if (st.money < FEES.entry) {
     family = await familyHelp(g);
-    if (!family) { await g.say(`入学には、まず${eraKey(g) === 'reiwa' ? '入学諸経費' : '入学金'}（${yen(FEES.entry)}）が必要です。\nお金がたまったら、また来てくださいね。`, who); return; }
-    await g.say(`（${C.name}の入学金を、実家が出してくれることになった）`);
+    if (family) await g.say(`（${C.name}の入学金を、実家が出してくれることになった）`);
+    else {
+      const j = await g.ask(`入学には${eraKey(g) === 'reiwa' ? '入学諸経費' : '入学金'}（${yen(FEES.entry)}）が必要です。\nいまお支払いが難しければ、授業料と\nいっしょの分納にもできますよ。`, ['分納にする', 'お金をためてから来る'], { ...who, cancel: 1 });
+      if (j !== 0) { await g.say('お金がたまったら、また来てくださいね。', who); return; }
+      split = true;
+    }
   }
   const when = date.month === 4 ? '今月（すぐに入学）' : `${date.month >= 4 ? date.year + 1 : date.year}年4月`;
-  const k = await g.ask(`${C.name}に入学を申しこみますか？\n入学：${when}・入学金 ${yen(FEES.entry)}${family ? '（実家が払う）' : ''}`, ['申しこむ', 'やめておく'], { ...who, cancel: 1 });
+  const k = await g.ask(`${C.name}に入学を申しこみますか？\n入学：${when}・入学金 ${yen(FEES.entry)}${family ? '（実家が払う）' : split ? '（分納）' : ''}`, ['申しこむ', 'やめておく'], { ...who, cancel: 1 });
   if (k !== 0) { if (family) g.setFlag('ow_nsc_family', false); return; }
   // 面接
   await g.say(['それでは、面接をします。', 'リラックスして、答えてくださいね。'], who);
@@ -116,12 +122,22 @@ async function apply(g, campus) {
   g.sfx(b === 0 ? 'laugh' : 'good');
   if (has(g, 'addComedyStat')) g.addComedyStat(['boke', 'mane', 'chara'][b] || 'boke', 1, true);
   await g.say('はい、ありがとうございました。\n…面接は、合格です。', who);
-  if (!family) { st.money -= FEES.entry; g.sfx('coin'); }
-  const s = g.nscCommitApply(campus, { familyPaid: family });
+  if (!family && !split) { st.money -= FEES.entry; g.sfx('coin'); }
+  const s = g.nscCommitApply(campus, { familyPaid: family, entrySplit: split });
   if (s.status === 'enrolled') {
     g.sfx('fanfare');
     await g.say([`入学おめでとうございます！\nあなたは${C.name}の${s.ki}期生です。`, '授業は月曜〜土曜。時間割はロビーの掲示板に。\n今月は「相方探しの会」もありますよ。'], who);
   } else await g.say([`入学の手続きができました。\n${s.year}年4月から、${C.name}の${s.ki}期生です。`, 'それまで、体と心の準備をしておいてくださいね。'], who);
+}
+// the student job the 受付 offers (劇場の裏方：場内整理・もぎり), once a day
+async function studentJob(g, who) {
+  if (!has(g, 'nscBaito')) return;
+  const k = await g.ask(`学生さん向けのバイトです。\n劇場の裏方（場内整理・もぎり）、今日入れますか？\n日給 ${yen(BAITO.pay)}・体力 -${BAITO.stamina}`, ['入る', 'やめておく'], { ...who, cancel: 1 });
+  if (k !== 0) return;
+  const r = g.nscBaito({});
+  if (!r.ok) { await g.say(r.why); return; }
+  await g.fadeOut(10); g.sfx('coin'); await g.wait(300); await g.fadeIn(10);
+  await g.say([`劇場の客席を案内して、チケットをもぎって、\n終演後は場内の掃除。舞台の袖から、先輩たちのネタも聞こえた。`, `（日給 ${yen(r.pay)}　所持金 ${yen(g.state.money)}）`]);
 }
 async function deskTalk(g) {
   const campus = campusOf(g);
@@ -130,13 +146,14 @@ async function deskTalk(g) {
   const s = S(g);
   if (!s) { await g.say('NSCの事務局です。', who); return; }
   if (s.status === 'enrolled' && s.campus === campus) {
-    const items = ['今日の授業', '成績を見る'];
+    const items = ['今日の授業', '成績を見る', 'バイトを紹介してもらう'];
     if (s.unpaid) items.push(`学費を払う（未納${yen(s.unpaid)}）`);
     items.push('退学する', 'やめる');
     const i = await g.ask(`${C.name} ${s.ki}期の{name}さん、おつかれさまです。`, items, { ...who, cancel: items.length - 1 });
     const it = items[i];
     if (it === '今日の授業') { const c = s.classToday; await g.say(c ? `今日の授業は「${c.label}」です。${c.id === 'netami' ? 'ネタ見せ教室へどうぞ。' : '教室へどうぞ。'}` : '今日（日曜）は休講です。', who); }
     else if (it === '成績を見る') await g.say([`出席 ${s.attend}日／授業日 ${s.classDays}日（出席率 ${Math.round(s.attendRate * 100)}%）`, `ネタ見せ ${s.netamiCount}回・平均 ${s.netamiAvg}点・最高 ${s.netamiBest}点`, `学費 支払いずみ ${yen(s.paid)}${s.unpaid ? `・未納 ${yen(s.unpaid)}` : ''}`], who);
+    else if (it === 'バイトを紹介してもらう') await studentJob(g, who);
     else if (it && it.startsWith('学費')) { const p = g.nscPay(); g.sfx(p ? 'coin' : 'buzz'); await g.say(p ? `${yen(p)}、お支払いいただきました。` : 'お金が足りないようです…。', who); }
     else if (it === '退学する') { const k = await g.ask('本当に退学しますか？（払った学費は戻りません）', ['やめておく', '退学する'], { ...who, cancel: 0 }); if (k === 1) { g.nscQuit(); await g.say('…わかりました。またいつか、舞台で会いましょう。', who); } }
     return;
@@ -150,7 +167,7 @@ async function deskTalk(g) {
   const i = await g.ask(`${C.name}へようこそ。\n入学の相談ですか？`, ['入学の説明を聞く', '入学を申しこむ', 'ほかの養成所のこと', 'やめる'], { ...who, cancel: 3 });
   if (i === 0) await g.say(factLines(g, campus), who);
   else if (i === 1) await apply(g, campus);
-  else if (i === 2) await g.say(['芸人の養成所は、ほかの事務所にもあります。', 'でも、同期の数と劇場の多さは、うちの自慢です。', '（ほかの養成所は、このゲームでは名前だけの存在だ）'], who);
+  else if (i === 2) await g.say(['芸人の養成所は、ほかの事務所にもあります。', 'でも、同期の数と劇場の多さは、うちの自慢です。'], who);
 }
 
 // ---------------------------------------------------------------- classes (教室)
@@ -340,9 +357,16 @@ async function staffTalk(g) {
   const first = !g.flag('ow_keikoba_met');
   g.setFlag('ow_keikoba_met', true);
   if (first) await g.say(['いらっしゃい！貸し稽古場「ドットスタジオ」へようこそ。', 'ここは、アマチュアもプロも使える稽古場。\nネタ合わせ、発声、落語の稽古…なんでもどうぞ。', '奥のライブスペースでは、毎日フリーライブもやってますよ。'], who);
-  const i = await g.ask(u && u.type !== 'pin' ? `「${u.name}」さん、今日も稽古ですか？` : '今日はどうします？', ['練習する', '芸人手帳を見る', 'やめておく'], { ...who, cancel: 2 });
+  const i = await g.ask(u && u.type !== 'pin' ? `「${u.name}」さん、今日も稽古ですか？` : '今日はどうします？', ['練習する', 'バイトする（受付・掃除）', '芸人手帳を見る', 'やめておく'], { ...who, cancel: 3 });
   if (i === 0) await practiceMenu(g, '稽古場');
-  else if (i === 1 && has(g, 'openOwarai')) await g.openOwarai('practice');
+  else if (i === 1 && has(g, 'nscBaito')) {
+    const k = await g.ask(`受付と掃除のバイト、今日入る？\n日給 ${yen(2200)}・体力 -20`, ['入る', 'やめておく'], { ...who, cancel: 1 });
+    if (k === 0) {
+      const r = g.nscBaito({ pay: 2200, stamina: 20, stress: 3 });
+      if (!r.ok) await g.say(r.why);
+      else { await g.fadeOut(10); g.sfx('coin'); await g.wait(300); await g.fadeIn(10); await g.say([`受付で予約の電話をとって、稽古場の床をモップがけ。\n練習しに来る芸人たちの声が、壁ごしに聞こえる。`, `（日給 ${yen(r.pay)}）`]); }
+    }
+  } else if (i === 2 && has(g, 'openOwarai')) await g.openOwarai('practice');
 }
 async function mcTalk(g) {
   const who = WHO.mc;

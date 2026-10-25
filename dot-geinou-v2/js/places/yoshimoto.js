@@ -3,7 +3,7 @@
 //   lobby   ロビー        受付・売店・モニター・ロゴ看板。初回はようこそイベント。
 //   office  事務所フロア   マネージャー（お仕事リスト）・新人発掘担当（オーディション）。
 //   keiko   稽古場        レッスン2種・コンビ「ぽんかんズ」のミニ漫才（カットシーン）。
-//   theater 小劇場        前説・若手ライブ・大喜利ライブ・冠番組の公開収録・お笑いグランプリ決勝。
+//   theater 小劇場        前説・若手ライブ・大喜利ライブ・冠番組の公開収録・よしもと月例ネタバトル決勝（月1回）。
 //
 // ステージ系のお仕事は、どこで引き受けても小劇場の舞台に移動して演じ、終わると元の場所に戻る。
 
@@ -279,7 +279,7 @@ defineTile('yoshimoto_carpet_dark', {
 
 // ------------------------------------------------------------------ items & music
 registerItem('yoshimoto_senbei', { name: '笑顔せんべい', price: 250, desc: '体力が20回復する。にっこり顔のおせんべい。', heal: 20 });
-registerItem('yoshimoto_trophy', { name: 'グランプリのトロフィー', price: 0, desc: 'お笑いグランプリ優勝の証。ピカピカに輝いている！' });
+registerItem('yoshimoto_trophy', { name: '月例ネタバトルのトロフィー', price: 0, desc: 'よしもと月例ネタバトルで優勝した証。ピカピカに輝いている！' });
 
 // A bouncy "debayashi" (entrance music) for the theater.
 registerSong('yoshimoto_debayashi', {
@@ -406,7 +406,7 @@ const TALK_LESSON = {
 const V_LIVE = { name: 'よしもと 若手ライブ', size: 'theater', crowd: 'normal', pressure: 25 };
 const V_OOGIRI = { name: '劇場の大喜利ライブ', size: 'theater', crowd: 'warm', pressure: 30 };
 const V_KANMURI = { name: '冠番組 公開収録', size: 'theater', crowd: 'warm', pressure: 45 };
-const V_GP = { name: 'お笑いグランプリ 決勝', size: 'hall', crowd: 'normal', pressure: 80 };
+const V_GP = { name: 'よしもと月例ネタバトル 決勝', size: 'hall', crowd: 'normal', pressure: 80 };
 const V_KEIKO = { name: 'よしもと 稽古場', size: 'small', crowd: 'warm', pressure: 5 };
 
 // ------------------------------------------------------------------ jobs
@@ -438,9 +438,11 @@ const JOBS = [
     def: { id: 'yoshimoto_kanmuri', title: '冠番組の収録', desc: '自分の名前がついた番組の公開収録！', client: 'マネージャー', stamina: 25, minigame: 'manzai', opts: { difficulty: 4, lines: LINES_KANMURI, venue: V_KANMURI }, pay: 30000, fame: 110, skill: 'warai', gain: 3, requires: { fame: 1000 } },
   },
   {
-    key: 'gp', label: 'グランプリ決勝', venue: 'stage', mode: 'gp',
-    info: '笑いの祭典の決勝！（1日1回）\nよしもと所属・★2000〜／体力-30',
-    def: { id: 'yoshimoto_gp_final', title: 'お笑いグランプリ決勝', desc: '笑いの祭典、その決勝の舞台に立とう！', client: 'マネージャー', stamina: 30, minigame: 'manzai', opts: { difficulty: 5, lines: LINES_GP, venue: V_GP, stage: 'studio' }, pay: 65000, fame: 220, skill: 'warai', gain: 4, requires: { agency: PID, fame: 2000 } },
+    // the theatre's own monthly event (was a daily 「お笑いグランプリ決勝」; the real 賞レース live in contests.js now).
+    // Old saves keep their flags: yoshimoto_gp_entries / _champion / _wins / _day; the month lock is yoshimoto_gp_month.
+    key: 'gp', label: '月例ネタバトル決勝', venue: 'stage', mode: 'gp',
+    info: 'よしもと劇場の月例ネタバトル、その決勝！（月1回）\nよしもと所属・★2000〜／体力-30',
+    def: { id: 'yoshimoto_gp_final', title: 'よしもと月例ネタバトル 決勝', desc: '劇場の月例ネタバトル、今月の決勝の舞台に立とう！', client: 'マネージャー', stamina: 30, minigame: 'manzai', opts: { difficulty: 5, lines: LINES_GP, venue: V_GP, stage: 'studio' }, pay: 100000, fame: 300, skill: 'warai', gain: 4, requires: { agency: PID, fame: 2000 } },
   },
 ];
 const job = (key) => JOBS.find((j) => j.key === key);
@@ -467,6 +469,9 @@ function dirTo(ax, ay, bx, by) {
 const member = (g) => g.state.agency === PID;
 const today = (g, k) => g.flag(k) === g.state.day;
 const gpNo = (g) => (g.flag('yoshimoto_gp_entries') || 0) + 1;
+// once per in-game month (g.gameDate; a 10-day block when the date API is missing)
+const gpMonth = (g) => { try { const d = typeof g.gameDate === 'function' ? g.gameDate() : null; if (d && d.year) return `${d.year}-${d.month}`; } catch (e) { /* fall back */ } return 'b' + Math.floor(((g.state.day || 1) - 1) / 10); };
+const gpDone = (g) => g.flag('yoshimoto_gp_month') === gpMonth(g) || today(g, 'yoshimoto_gp_day');
 
 function hintFor(g, byManager = false) {
   const st = g.state;
@@ -483,9 +488,9 @@ function hintFor(g, byManager = false) {
   }
   if (st.fame < 250) return '劇場の若手ライブとお祭りの営業で場数を踏もう！\n★250になったら大喜利ライブにも出られます。';
   if (st.fame < 1000) return '大喜利ライブで知名度をぐんぐん上げよう！\n★1000になったら、冠番組のお話が来るかも…！';
-  if (st.fame < 2000) return '冠番組の収録で、目指せ★2000！\nそうなったら、お笑いグランプリ決勝に挑戦です！';
-  if (!g.flag('yoshimoto_gp_champion')) return byManager ? 'いよいよお笑いグランプリ決勝！\n「お仕事」から、いつでもエントリーできますよ！' : 'いよいよお笑いグランプリ決勝！\n事務所フロアのマネージャーに声をかけてください！';
-  return 'グランプリ王者、おめでとう！\n国民的スター（★4000）まで、あと少し！\nNHKやBSよしもとでも大活躍しよう！';
+  if (st.fame < 2000) return '冠番組の収録で、目指せ★2000！\nそうなったら、劇場の月例ネタバトル決勝に出られます！';
+  if (!g.flag('yoshimoto_gp_champion')) return byManager ? 'いよいよ月例ネタバトルの決勝！\n月に一度、「お仕事」からエントリーできますよ！' : 'いよいよ月例ネタバトルの決勝！\n事務所フロアのマネージャーに声をかけてください！';
+  return '月例ネタバトル王者、おめでとう！\n国民的スター（★4000）まで、あと少し！\n賞レースやNHK、BSよしもとでも大活躍しよう！';
 }
 
 function confirmText(def, title = def.title) {
@@ -496,7 +501,7 @@ function confirmText(def, title = def.title) {
 function lockLabel(g, j) {
   const r = j.def.requires || {};
   const st = g.state;
-  if (j.key === 'gp' && today(g, 'yoshimoto_gp_day')) return '本日終了';
+  if (j.key === 'gp' && gpDone(g)) return '今月は終了';
   if (r.agency === true && !st.agency) return '要・事務所所属';
   if (typeof r.agency === 'string' && st.agency !== r.agency) return 'よしもと所属';
   if (r.fame && st.fame < r.fame) return `★${r.fame}〜`;
@@ -616,7 +621,7 @@ async function showIntro(g, j) {
     g.sfx('chime');
   } else if (j.mode === 'gp') {
     g.sfx('fanfare');
-    await g.say([`第${gpNo(g)}回 お笑いグランプリ、決勝！`, '泣いても笑っても、これが最後の出番！\nエントリーナンバー最終組…{name}！'], WHO.mc);
+    await g.say([`第${gpNo(g)}回 よしもと月例ネタバトル、決勝！`, '今月の劇場ナンバーワンを決める最後の出番！\nエントリーナンバー最終組…{name}！'], WHO.mc);
     g.sfx('applause');
   }
 }
@@ -640,11 +645,11 @@ async function runStageJob(g, j, who) {
   // refuse (requirements, burnout, starving) before any cutscene or daily flag
   const why = g.checkRequires(def.requires) || g.lifeRefusal();
   if (why) { await g.say(why); return null; }
-  if (j.key === 'gp' && today(g, 'yoshimoto_gp_day')) {
-    await g.say('今日の決勝はもう終わりましたよ。\nまた明日、挑戦しましょう！', WHO.manager);
+  if (j.key === 'gp' && gpDone(g)) {
+    await g.say('今月の決勝はもう終わりましたよ。\n来月の月例ネタバトルで、また挑戦しましょう！', WHO.manager);
     return null;
   }
-  const title = j.key === 'gp' ? `第${gpNo(g)}回 お笑いグランプリ決勝` : def.title;
+  const title = j.key === 'gp' ? `第${gpNo(g)}回 よしもと月例ネタバトル 決勝` : def.title;
   const i = await g.ask(confirmText(def, title), ['受ける', 'やめておく'], clientOf(def, who));
   if (i !== 0) return null;
   if (st.stamina < def.stamina) {
@@ -665,6 +670,7 @@ async function runStageJob(g, j, who) {
       // the final only counts (and closes for the day) once it was actually performed
       if (j.key === 'gp') {
         g.setFlag('yoshimoto_gp_day', st.day);
+        g.setFlag('yoshimoto_gp_month', gpMonth(g));
         g.setFlag('yoshimoto_gp_entries', gpNo(g));
       }
       await crowdReact(g, res);
@@ -726,12 +732,12 @@ async function drumroll(g, n = 8) {
 
 async function gpResult(g, res) {
   const win = res.rank === 'S' || res.rank === 'A';
-  await g.say(`結果発表！\n第${g.flag('yoshimoto_gp_entries')}回 お笑いグランプリ、優勝は…`, WHO.mc);
+  await g.say(`結果発表！\n第${g.flag('yoshimoto_gp_entries')}回 よしもと月例ネタバトル、優勝は…`, WHO.mc);
   await drumroll(g);
   if (!win) {
     g.sfx('fail');
     await g.say('…別のコンビでした！\n{name}、惜しくも準優勝！', WHO.mc);
-    await g.say('くやしい…！\nでも、決勝の舞台に立てたのは大きな一歩だ。\nまた明日、挑戦しよう！');
+    await g.say('くやしい…！\nでも、決勝の舞台に立てたのは大きな一歩だ。\nまた来月、挑戦しよう！');
     return;
   }
   const first = !g.flag('yoshimoto_gp_champion');
@@ -741,7 +747,7 @@ async function gpResult(g, res) {
   await g.say('{name}！！！', WHO.mc);
   party = true;
   g.shake(16, 2);
-  await partyCard(g, first ? '優勝！！' : `${wins}度目の優勝！`, g.fmt('お笑いグランプリ王者 {name}'));
+  await partyCard(g, first ? '優勝！！' : `${wins}度目の優勝！`, g.fmt('月例ネタバトル王者 {name}'));
   g.sfx('applause');
   // friends rush onto the stage
   await Promise.all([
@@ -762,12 +768,16 @@ async function gpResult(g, res) {
     g.sfx('laugh');
     await g.say('それでは、優勝賞金とトロフィーの授与です！', WHO.mc);
     g.sfx('coin');
-    g.addMoney(100000, true);
+    // the prize belongs to the act: the player's share is prize ÷ members
+    let members = 1;
+    try { const u = typeof g.unit === 'function' ? g.unit() : null; members = Math.max(1, (u && u.members && u.members.length) || 1); } catch (e) { members = 1; }
+    const share = Math.round(100000 / members);
+    g.addMoney(share, true);
     g.giveItem('yoshimoto_trophy', 1, true);
     g.setFlag('yoshimoto_gp_champion', true);
-    await g.say(`優勝賞金 ${fmtMoney(100000)} と\nグランプリのトロフィーを手に入れた！`);
+    await g.say(`優勝賞金 ${fmtMoney(100000)}${members > 1 ? `（ひとり${fmtMoney(share)}）` : ''} と\n月例ネタバトルのトロフィーを手に入れた！`);
     g.sfx('fanfare');
-    await g.say('{name}は「お笑いグランプリ王者」になった！\n国民的スターへ、また一歩近づいた！');
+    await g.say('{name}は「月例ネタバトル王者」になった！\n国民的スターへ、また一歩近づいた！');
   } else {
     await g.say(`${wins}度目の優勝なんて…！\n{name}さん、もう伝説ですよ！`, WHO.manager);
     await g.say('強すぎるわ…！\nぼくらも負けてられへんな、ぽん太！', WHO.kankichi);
@@ -831,11 +841,11 @@ async function managerTalk(g) {
       ? '{name}さん、いらっしゃい！\n今日も、外部の方向けのお仕事、\nちゃんと用意してありますよ！'
       : 'ぼくは、よしもと所属タレントのマネージャー。\n外部の方にも、出られるお仕事を\n紹介していますよ！';
   } else if (g.flag('yoshimoto_gp_champion')) {
-    greet = 'グランプリ王者！今日もお仕事が山ほど来てますよ！';
+    greet = '月例ネタバトル王者！今日もお仕事が山ほど来てますよ！';
   } else if (st.fame >= 2000) {
     greet = g.flag('yoshimoto_gp_entries')
-      ? 'グランプリ決勝、今日も挑戦できますよ！\n優勝目指して、がんばりましょう！'
-      : '{name}さん、ついにグランプリ決勝の出場権です！\n準備はいいですか？';
+      ? (gpDone(g) ? '月例ネタバトルの決勝は、また来月です。\nほかのお仕事で腕を磨きましょう！' : '今月の月例ネタバトル決勝、エントリーできますよ！\n優勝目指して、がんばりましょう！')
+      : '{name}さん、ついに月例ネタバトル決勝の出場権です！\n準備はいいですか？';
   } else if (st.fame >= 1000) {
     greet = st.jobs.yoshimoto_kanmuri
       ? '冠番組、評判いいですよ！\n今週の収録もよろしくお願いします！'
@@ -1101,7 +1111,7 @@ async function fanTalk(g) {
   const who = WHO.fan;
   const st = g.state;
   if (g.flag('yoshimoto_gp_champion')) {
-    await g.say('グランプリ優勝おめでとう！！\n決勝の録画、もう100回は見たよ！', who);
+    await g.say('月例ネタバトル優勝おめでとう！！\n決勝の録画、もう100回は見たよ！', who);
   }
   if (st.fame >= 500 && !today(g, 'yoshimoto_fan_day')) {
     await g.emote('yoshi_fan', '♥');
@@ -1189,7 +1199,7 @@ function trophyCase(x, y) {
   return {
     type: 'prop', x, y, w: 1, h: 1,
     cond: (g) => !!g.flag('yoshimoto_gp_champion'),
-    text: ['ガラスケースに、\nお笑いグランプリのトロフィーが飾られている。', '「祝 優勝 {name}」のプレートがピカピカだ！'],
+    text: ['ガラスケースに、\n月例ネタバトルのトロフィーが飾られている。', '「祝 優勝 {name}」のプレートがピカピカだ！'],
     draw(ctx, sx, sy, g) {
       box(ctx, sx + 2, sy + 14, 12, 2, 'rgba(0,0,0,0.25)');
       box(ctx, sx + 2, sy + 8, 12, 7, '#8a5a33'); box(ctx, sx + 2, sy + 8, 12, 1, '#c48a52');
@@ -1232,7 +1242,7 @@ const gpBanner = {
     box(ctx, sx, sy + 1, 208, 15, '#7a5a10');
     box(ctx, sx + 1, sy + 2, 206, 13, GOLD);
     box(ctx, sx + 3, sy + 4, 202, 9, ORD);
-    text(ctx, '★ お笑いグランプリ 決勝 ★', sx + 104, sy + 3, { size: 10, align: 'center', color: '#fff6a8', shadow: '#3a0f08' });
+    text(ctx, '★ 月例ネタバトル 決勝 ★', sx + 104, sy + 3, { size: 10, align: 'center', color: '#fff6a8', shadow: '#3a0f08' });
   },
 };
 
@@ -1300,7 +1310,7 @@ registerPlace({
         ...signs([
           [1, 2, '若手ライブのポスターだ。\n「毎日開催！当日券あり　小劇場にて」'],
           [4, 2, 'エレベーター　▲2F 事務所フロア\n（マネージャー・新人オーディション）'],
-          [13, 2, '「お笑いグランプリ 出場者募集中！」\n決勝の舞台は、ここ東京本部の劇場だ。'],
+          [13, 2, '「よしもと月例ネタバトル 出場者募集中！」\n毎月の決勝の舞台は、ここ東京本部の劇場だ。'],
           [15, 2, 'コンビ「ぽんかんズ」のポスターだ。\nオレンジのスーツがまぶしい。'],
           [13, 10, 'お祝いのスタンド花。\n「祝 若手ライブ 満員御礼」の札がついている。'],
           [18, 10, 'お祝いのスタンド花。\n「祝 よしもと東京本部」の札がついている。'],
@@ -1375,7 +1385,7 @@ registerPlace({
           x: 14, y: 3, on: 'action',
           run: async (g) => {
             await g.say('盾やトロフィーがずらり。\n先輩たちが勝ちとった賞の数々だ。');
-            if (g.flag('yoshimoto_gp_champion')) await g.say('…その真ん中に、{name}の\nグランプリの写真も飾られている！');
+            if (g.flag('yoshimoto_gp_champion')) await g.say('…その真ん中に、{name}の\n月例ネタバトル優勝の写真も飾られている！');
           },
         },
         { x: 15, y: 3, on: 'action', run: async (g) => { await g.say('コピー機だ。台本が大量に印刷されている…。\nガガガガ…ピー！'); } },

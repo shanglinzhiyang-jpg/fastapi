@@ -10,13 +10,13 @@ import { registerContest } from './contests.js';
 import { onMorning, registerRegular, registerPhoneApp, REGULARS } from './life.js';
 import { phoneList, phoneInfo, closePhoneThen, phoneOverMapOnly, appTile } from './phone.js';
 import { MINIGAMES } from './minigame.js';
-import { K, yearRec, kDate, absOf, ensureHistory, histFromSeason, historyList, rivalsOf, season, news, notice, entryOf, judgesFor, roundName, safe, num } from './koc_core.js';
+import { K, yearRec, kDate, absOf, ensureHistory, compact, histFromSeason, historyList, rivalsOf, season, news, notice, entryOf, judgesFor, roundName, safe, num } from './koc_core.js';
 import { rules, schedule, titleOf, KOC_NAME, FOUNDED, NEWS, SOURCES, ENTRY_RECORD, lenText, hallText, PRIZE, FEE, STAFF, kocRounds, entriesOf } from './koc_data.js';
 import { kocEntry, goToday, goFromApp, dueToday, phaseOf, datesOf, planOf, runFinalDay, runDvd, runKai, playDoc, roundsOf, feeText, manYen } from './koc_flow.js';
 import * as L from './koc_link.js';
 import { PEOPLE } from './life.js';
 import { crown } from './koc_art.js';
-import { dateText } from './koc_core.js';
+import { dateText, mdText } from './koc_core.js';
 
 const has = (g, k) => !!g && typeof g[k] === 'function';
 
@@ -55,7 +55,7 @@ function d1Status(g) {
     };
   }
   const due = dueToday(g);
-  const today = due ? [{ id: due.rid, label: `${roundName(due.rid)}（${due.rid === 'final' || due.rid === 'revival' ? 'TBS 赤坂' : hallText(planOf(g, y, E, due.rid) || {})}）` }] : [];
+  const today = due ? [{ id: due.rid, kind: 'round', label: `${roundName(due.rid)}（${due.rid === 'final' || due.rid === 'revival' ? 'TBS 赤坂' : hallText(planOf(g, y, E, due.rid) || {})}）` }] : [];
   return { status: PHASE_D1[ph] || 'before', statusLabel, label: `${titleOf(y)}（第${R.edition}回）`, edition: R.edition, year: y, entry, today };
 }
 // D1's schedule format of a year: { entry: { from, to }, final: [month, dom] }
@@ -162,6 +162,7 @@ function kocMorning(g) {
   L.migrate(g, k);
   if (y < FOUNDED) return;
   ensureHistory(g, y);
+  safe(() => compact(g, y));
   // a past season that ended while nothing looked (a long skip): close it in the history
   for (const yy of [y - 1]) if (yy >= FOUNDED && (!k.hist[yy] || !k.hist[yy].champ)) k.hist[yy] = histFromSeason(g, yy, null, null);
   const Y = yearRec(g, y);
@@ -172,7 +173,7 @@ function kocMorning(g) {
   const once = (key, fn) => { if (!Y.news[key]) { Y.news[key] = day; safe(fn); } };
   const kn = (key) => ({ morning: true, key: `kocn|${y}|${key}` }); // D1's queue sends a key once per save (a second guard)
   const last = (list) => list.reduce((a, v) => (absOf(y, v.when) > absOf(y, a.when) ? v : a), list[0]);
-  const d = { y, ed: R.edition, n: R.entries.n, approx: R.entries.approx, record: ENTRY_RECORD(y), len: lenText(R.len.r1), city: S.r1[0].city, sfCount: R.sfCount, finalists: R.finalists, judgeText: R.judgeText, oowarai: R.oowarai, hanseikai: R.hanseikai };
+  const d = { y, ed: R.edition, n: R.entries.n, approx: R.entries.approx, record: ENTRY_RECORD(y), len: lenText(R.len.r1), city: S.r1[0].city, sfCount: R.sfCount, finalists: R.finalists, judgeText: R.judgeText, oowarai: R.oowarai, hanseikai: R.hanseikai, firstRevival: !!R.revival && !rules(y - 1).revival };
   const E = Y.entry;
   const unitOk = () => { const u = has(g, 'unit') ? safe(() => g.unit(), null) : null; return !!(u && Array.isArray(u.members) && u.members.length >= 2); };
   // KOC is selfRun: D1 posts none of its generic news for it — every milestone of the season is told here (D1's queue keeps
@@ -245,7 +246,7 @@ async function kocApp(g) {
   for (let guard = 0; guard < 40; guard++) {
     const t = kDate(g);
     const y = t.year;
-    if (y < FOUNDED) { await phoneInfo(g, { title: 'KOC', color: APP_COLOR, lines: [`『${KOC_NAME}』は、まだ始まっていない（${FOUNDED}年創設）。`, '', 'TBSが主催する、コント日本一を決める大会になる。'] }); return; }
+    if (y < FOUNDED) { await phoneInfo(g, { title: 'KOC', color: APP_COLOR, lines: [`『${KOC_NAME}』は、まだ始まっていない（${FOUNDED}年創設）。`] }); return; }
     const info = g.koc();
     const R = rules(y);
     const S = schedule(y);
@@ -282,7 +283,7 @@ async function kocApp(g) {
     else if (id === 'hist') {
       const h = info.history.slice().reverse();
       const j = await phoneList(g, { title: '歴代王者', color: APP_COLOR, items: h.map((x) => ({ label: `${x.year}年 第${x.edition}回`, sub: `王者：${x.champion}${x.note ? `（${x.note}）` : ''}`, right: x.score != null ? `${x.score}` : '' })), empty: 'まだない' });
-      if (j >= 0) { const hh = K(g).hist[h[j].year]; await phoneInfo(g, { title: `${titleOf(h[j].year)} 決勝`, color: APP_COLOR, lines: [`エントリー ${hh.approx ? '約' : ''}${num(hh.entries).toLocaleString('ja-JP')}組`, ...(hh.finalists || []).map((f) => `${f[3]}位 ${f[0]}${f[2] ? `（${f[2]}）` : ''}`)] }); }
+      if (j >= 0) { const hh = K(g).hist[h[j].year]; await phoneInfo(g, { title: `${titleOf(h[j].year)} 決勝`, color: APP_COLOR, lines: [`エントリー ${hh.approx ? '約' : ''}${num(hh.entries).toLocaleString('ja-JP')}組`, ...(hh.finalists && hh.finalists.length ? hh.finalists : [[hh.champ, '', hh.champScore, 1], ...(hh.runner ? [[hh.runner, '', 0, 2]] : [])]).map((f) => `${f[3]}位 ${f[0]}${f[2] ? `（${f[2]}）` : ''}`)] }); }
     } else if (id === 'news') await phoneInfo(g, { title: 'KOCニュース', color: APP_COLOR, lines: info.news.length ? K(g).newsLog.slice(0, 20).map((n) => `・${n.text}`) : ['まだニュースはない。'] });
     else if (id === 'doc') {
       const j = docs.length === 1 ? 0 : await phoneList(g, { title: 'ドキュメント', color: APP_COLOR, items: docs.map((yy) => ({ label: `${yy}年の記録`, sub: entryOf(g, yy) ? entryOf(g, yy).unitName : '' })) });
@@ -331,14 +332,15 @@ function ruleLines(g, y) {
     R.revival ? `敗者復活戦：準決勝敗退25組の上位10組 → 芸人審査員${R.revivalJudges}人の採点で3組 → 国民投票で1組。` : '',
     R.oowarai ? '決勝はTBS「お笑いの日」の中で生放送。' : '',
     R.hanseikai ? `決勝のあと『${R.hanseikai}』（U-NEXT独占ライブ配信）。` : '',
-    `エントリー数：${R.entries.approx ? '約' : ''}${R.entries.n.toLocaleString('ja-JP')}組`,
+    // the total is announced when the entry closes (no future facts)
+    kDate(g).year > y || kDate(g).abs > absOf(y, schedule(y).entry.to) ? `エントリー数：${R.entries.approx ? '約' : ''}${R.entries.n.toLocaleString('ja-JP')}組` : '',
   ].filter(Boolean);
 }
 function schedLines(g, y) {
   const S = schedule(y);
   const R = rules(y);
   const out = [`エントリー：${dateText(y, S.entry.from)}〜${dateText(y, S.entry.to)}`];
-  out.push(`1回戦：${S.r1.map((v) => `${v.city}${v.hall ? `（${v.hall}）` : ''} ${v.when[0]}月${v.when[1]}日`).join('／')}`);
+  out.push(`1回戦：${S.r1.map((v) => `${v.city}${v.hall ? `（${v.hall}）` : ''} ${mdText(v.when)}`).join('／')}`);
   out.push(`2回戦：${S.r2.map((v) => `${hallText(v)}`).join('／')}　${dateText(y, S.r2[0].when)}`);
   if (R.hasQF) out.push(`準々決勝：${S.qf.map((v) => hallText(v)).join('／')}　${dateText(y, S.qf[0].when)}`);
   out.push(`準決勝：${hallText(S.sf[0])}　${S.sf.map((v) => dateText(y, v.when)).join('・')}${R.twoNetaSF ? '（2日間・2本）' : ''}`);

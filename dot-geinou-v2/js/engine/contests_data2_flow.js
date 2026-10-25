@@ -12,7 +12,7 @@
 import { withBackdrop, showBoard } from './contests_data2_scenes.js';
 import {
   askSkip, stagePerform, judgeField, roundResult, failReasons, record, news, grant, edLabel, unitName, unitOf,
-  judgesFor, toScale, yen, KIND_LABEL,
+  judgesFor, toScale, yen, KIND_LABEL, prizeLine,
 } from './contests_data2_kit.js';
 import { LOOKS } from './sprites.js';
 
@@ -48,12 +48,14 @@ export async function stageRound(g, ctx, cfg) {
       out.champion = j.place === 1;
       const aw = (cfg.awards || []).find((a) => a.place === j.place);
       if (aw) out.award = aw.name;
-      await g.say(out.champion ? [`結果発表――${def.name}、${edLabel(ctx)}の${(cfg.awards && cfg.awards[0] && cfg.awards[0].name) || '優勝'}は……`, `${me}！！`] : [`結果発表。${me}は ${j.place}位（${j.field}組中）。`, `優勝は「${j.top.name}」。`]);
+      // award-type contests (笑わん会 最優秀賞, ホープ大賞, ハーベスト大賞 …) name the award, never 「優勝」 (DECISIONS6 #10)
+      const topAward = (cfg.awards && cfg.awards[0] && cfg.awards[0].name) || '優勝';
+      await g.say(out.champion ? [`結果発表――${def.name}、${edLabel(ctx)}の${topAward}は……`, `${me}！！`] : [`結果発表。${me}は ${j.place}位（${j.field}組中）。`, `${topAward}は「${j.top.name}」。`]);
       // fame / fans / def.prize for the place are paid by D1's runner when it records this result;
       // an award below 1st with its own money (aw.prize) is paid here
       if (aw && aw.prize) {
         if (!out.champion) grant(g, ctx, `award${j.place}`, { money: aw.prize });
-        await g.say(`${aw.name}――賞金${yen(aw.prize)}。`);
+        await g.say(`${aw.name}――${prizeLine(g, aw.prize)}。`);
       } else if (aw && !out.champion) await g.say(`${aw.name}を受賞！`);
       if (!out.champion) out.reasons = failReasons(g, cfg.kind || def.kind, res);
     } else if (j.passed) {
@@ -76,7 +78,11 @@ export async function stageRound(g, ctx, cfg) {
       });
     }
     // news (D1 rate-limits)
-    if (cfg.final) news(g, ctx, out.champion ? `【${def.short || def.name}】${edLabel(ctx)}は${me}が制す！` : `【${def.short || def.name}】${edLabel(ctx)}は${j.top.name}が優勝。${me}は${j.place}位`);
+    if (cfg.final) {
+      const aw0 = cfg.awards && cfg.awards[0] && cfg.awards[0].name;
+      const win = out.champion ? me : j.top.name;
+      news(g, ctx, aw0 && aw0 !== '優勝' ? `【${def.short || def.name}】${edLabel(ctx)}の${aw0}は${win}${out.champion ? '' : `。${me}は${j.place}位`}` : out.champion ? `【${def.short || def.name}】${edLabel(ctx)}は${me}が制す！` : `【${def.short || def.name}】${edLabel(ctx)}は${win}が優勝。${me}は${j.place}位`);
+    }
     if (cfg.after) await cfg.after(g, ctx, out, j);
     record(g, ctx, cfg.round, out);
     return out;

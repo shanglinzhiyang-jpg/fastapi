@@ -106,6 +106,17 @@ export function makeContest(cfg) {
   };
   C.find = (S, id) => (id === 'player' ? null : S.notables.find((n) => n.id === id) || null);
   C.lookOf = (n) => (n && n.look) || randomLook(rngOf('look', n && n.name, n && n.seed), { gender: n && n.gender });
+  // every member of a rival act (a trio 3, a combi / conte unit 2, a pin 1): the first is lookOf, the others seeded per act
+  C.looksOf = (n) => {
+    if (!n) return [];
+    const k = n.type === 'trio' ? 3 : n.type === 'pin' || n.type === 'solo' || (n.type == null && cfg.id === 'r1') ? 1 : 2;
+    const out = [C.lookOf(n)];
+    for (let i = 1; i < k; i++) out.push(randomLook(rngOf('look', n.name, n.seed, 'm' + i), { gender: rngOf('lookg', n.name, i)() < 0.25 ? 'f' : 'm' }));
+    return out;
+  };
+  // the player's act as it stands on this stage (with the partners unless the player entered alone)
+  C.membersOf = (g, E) => (cfg.id === 'r1' || (E && E.solo) ? 1 : Math.max(1, 1 + num(safe(() => actInfo(g).partners.length, 0))));
+  C.myLooks = (g, E) => (E && E.solo) || !cfg.champLooks ? [g.state.look] : safe(() => cfg.champLooks(g), null) || [g.state.look];
   // A season's result: played in this game (s.hist), or this world's history before the game started (fictional names).
   C.histOf = (g, Y) => {
     const s = C.state(g);
@@ -295,7 +306,7 @@ export function makeContest(cfg) {
           E.status = 'withdrawn';
           E.results.push({ round: rd.id, score: 0, total: 0, passed: false, place: null, day: mine.day, withdrawn: true });
           C.logMe(g, S, `${rd.name}を欠場（棄権）`);
-          g.message({ from: cfg.office, text: `${rules.title} ${rd.name}にお越しにならなかったため、棄権の扱いとなりました。`, kind: 'news' });
+          g.message({ from: cfg.office, text: `${rules.title} ${rd.name}にお越しにならなかったため、棄権となりました。`, kind: 'news' });
         }
       }
       if (day > last.day) once('round_' + rd.id, () => {
@@ -434,6 +445,19 @@ function passBoard(g, o, th) {
     T(c, o.foot || '', x + 20, y + h - 22, 10, '#5a5a68', 'left', w - 220);
   }, { min: 50 });
 }
+// every member of an act (a look or the act's list of looks): faces side by side; returns the width used
+const lookList = (lk) => (Array.isArray(lk) ? lk.filter(Boolean) : lk ? [lk] : []);
+function facesAt(c, lk, x, y, k = 1) {
+  const a = lookList(lk).slice(0, 3);
+  const step = Math.round(22 * k);
+  a.forEach((l, i) => faceAt(c, l, x + i * step, y, k));
+  return a.length > 1 ? (a.length - 1) * step : 0;
+}
+function bigsAt(c, lk, cx, y, k = 2) {
+  const a = lookList(lk).slice(0, 3);
+  const step = a.length > 2 ? 44 * k / 2 : 52 * k / 2;
+  a.forEach((l, i) => drawBig(c, l, 'down', cx - 16 * k + (i - (a.length - 1) / 2) * step, y, k));
+}
 // the judges' scores of one performance (rows revealed one by one) and the running ranking
 function scoreCard(g, o, th) {
   return card(g, (c, sc) => {
@@ -442,8 +466,8 @@ function scoreCard(g, o, th) {
     const h = 92 + J.length * 22;
     box(c, x, y, w, h, '#0c0c14', th.acc);
     R(c, x + 1, y + 1, w - 2, 30, th.main);
-    faceAt(c, o.look, x + 8, y + 3, 1);
-    T(c, o.name, x + 48, y + 8, 15, '#ffffff', 'left', w - 160);
+    const fw = facesAt(c, o.looks || o.look, x + 8, y + 3, 1);
+    T(c, o.name, x + 48 + fw, y + 8, 15, '#ffffff', 'left', w - 160 - fw);
     T(c, o.sub || '', x + w - 10, y + 10, 10, th.acc2, 'right', 150);
     let sum = 0;
     J.forEach((j, i) => {
@@ -475,8 +499,8 @@ function rankBoard(g, o, th) {
       if (r.me) R(c, x + 4, ry - 2, w - 8, rh - 2, '#3a2a10');
       if (r.mark) { box(c, x + 8, ry, 46, 16, r.markCol || th.main, th.acc); T(c, r.mark, x + 31, ry + 2, 10, '#ffffff', 'center', 42); }
       else T(c, r.rank != null ? `${r.rank}位` : '', x + 31, ry + 1, 12, '#c8c8d4', 'center', 42);
-      faceAt(c, r.look, x + 60, ry - 4, 0.75);
-      T(c, r.name, x + 90, ry + 1, 13, r.me ? th.acc : '#ffffff', 'left', w - 200);
+      const fw = facesAt(c, r.looks || r.look, x + 60, ry - 4, 0.75);
+      T(c, r.name, x + 90 + fw, ry + 1, 13, r.me ? th.acc : '#ffffff', 'left', w - 200 - fw);
       T(c, r.value, x + w - 12, ry + 1, 13, '#ffffff', 'right', 100);
     });
   }, { min: 24 + o.rows.length * 4 });
@@ -492,7 +516,7 @@ function voteCard(g, o, th) {
     o.cands.forEach((cd, i) => {
       const cx = x + 10 + i * cw;
       box(c, cx + 6, y + 40, cw - 12, 196, cd.me ? '#2a1e08' : '#141420', cd.me ? th.acc : '#3a3a48');
-      drawBig(c, cd.look, 'down', cx + cw / 2 - 32, y + 50, 2);
+      bigsAt(c, cd.looks || cd.look, cx + cw / 2, y + 50, 2);
       T(c, cd.name, cx + cw / 2, y + 136, 13, '#ffffff', 'center', cw - 20);
       const got = o.votes.slice(0, shown).map((v, k) => ({ v, k })).filter((x2) => x2.v === i);
       got.forEach((x2, k) => { box(c, cx + 14 + (k % 4) * ((cw - 28) / 4), y + 162 + Math.floor(k / 4) * 30, (cw - 28) / 4 - 4, 26, th.main, th.acc); faceAt(c, o.judges[x2.k] && o.judges[x2.k].look, cx + 14 + (k % 4) * ((cw - 28) / 4) + ((cw - 28) / 4 - 4) / 2 - 12, y + 163 + Math.floor(k / 4) * 30, 0.75); });
@@ -1101,7 +1125,7 @@ function installFlows(C) {
     const order = fmt.order === 'random' || !fmt.order ? shuffleR(rngOf(cfg.id, Y, 'order'), fins) : fins;
     const F = { done: false, order, perf: {}, scores: {}, stage1: [], stage2: [], blocks: null, champ: null, champName: '', runnerName: '', ranking: [] };
     const nameOf = (id) => (id === 'player' ? (E && E.unitName) || g.state.name : (C.find(S, id) || {}).name || '？');
-    const lookOf = (id) => (id === 'player' ? g.state.look : C.lookOf(C.find(S, id)));
+    const lookOf = (id) => (id === 'player' ? C.myLooks(g, E) : C.looksOf(C.find(S, id)));
     const strOf = (id) => (C.find(S, id) || {}).str || 75;
     const styleOf = (id) => (id === 'player' ? (E && (E.style || E.kind)) : (C.find(S, id) || {}).style);
     const judgeScore = (total, j, id, r) => clamp(Math.round(fmt.judgeBase + total * fmt.judgeK + (j.taste && j.taste === styleOf(id) ? 1.5 : 0) + gauss(r) * 1.6), fmt.judgeMin || 70, fmt.judgeMax || 99);
@@ -1132,7 +1156,7 @@ function installFlows(C) {
       if (!ui || ui.quick) return;
       const n = C.find(S, id);
       const line = cfg.rivalNetaLine ? cfg.rivalNetaLine(g, S, n, total, stageNo) : `${n.name}のネタ。`;
-      ui.st.cast = [{ look: C.lookOf(n), x: 288, y: 156, k: 2 }];
+      ui.st.cast = C.looksOf(n).map((lk, i, a) => ({ look: lk, x: 288 + (i - (a.length - 1) / 2) * 60, y: 156, k: 2, dir: a.length > 1 ? (i < (a.length - 1) / 2 ? 'right' : i > (a.length - 1) / 2 ? 'left' : 'down') : 'down' }));
       ui.st.fx.react = total >= 80;
       await g.say(`${stageNo === 1 ? `「${n.catch || cfg.catchcopy(g, S, id)}」\n` : ''}${line}`);
     };
@@ -1308,8 +1332,12 @@ function installFlows(C) {
         g.shake(16, 2);
         E.status = 'champion';
         s.me.wins = num(s.me.wins) + 1;
-        const prizeIn = toInternal(g, rules.prize);
-        await CARDS.championCard(g, { head: rules.title.includes(`第${rules.edition}回`) ? rules.title : `${rules.title}　第${rules.edition}回`, name: E.unitName, looks: cfg.champLooks ? cfg.champLooks(g, E) : [g.state.look], prize: rules.prize ? `優勝賞金 ${plainYen(rules.prize)}` : rules.prizeText || 'トロフィー', foot: rules.broadcast }, th);
+        // the prize belongs to the act: the player receives prize ÷ members (R-1 is always one person)
+        const members = C.membersOf(g, E);
+        const share = Math.round(num(rules.prize) / members);
+        const prizeIn = toInternal(g, share);
+        E.prizeShare = share;
+        await CARDS.championCard(g, { head: rules.title.includes(`第${rules.edition}回`) ? rules.title : `${rules.title}　第${rules.edition}回`, name: E.unitName, looks: C.myLooks(g, E), prize: rules.prize ? `優勝賞金 ${plainYen(rules.prize)}${members > 1 ? `（ひとり${plainYen(share)}）` : ''}` : rules.prizeText || 'トロフィー', foot: rules.broadcast }, th);
         g.addMoney(prizeIn);
         if (cfg.trophy) g.giveItem(cfg.trophy, 1, true);
         g.addFame(rules.final.champFame ?? 600);
@@ -1371,6 +1399,8 @@ function installFlows(C) {
     for (;;) {
       const n = C.now(g);
       const Y = n.Y || cdate(g).year;
+      // the name of that time (no later renames on an earlier date)
+      const appTitle = typeof cfg.appTitle === 'function' ? cfg.appTitle(Math.min(Y, cdate(g).year + 1)) : cfg.appTitle;
       const rules = C.held(Y) ? cfg.rules(Y) : null;
       const items = [];
       items.push({ label: rules ? rules.title : cfg.label, sub: n.label, key: 'info' });
@@ -1382,16 +1412,16 @@ function installFlows(C) {
       if (S && S.entry && ['entered', 'passed', 'revival'].includes(S.entry.status)) items.push({ label: '準備する', sub: `ネタ合わせ・${cfg.prepSub || '小道具'}（仕上がり ${Math.round(S.entry.prep.practice)}）`, key: 'prep' });
       items.push({ label: '大会の概要', sub: '出場資格・参加費・日程・決勝の方式', key: 'rules' });
       items.push({ label: '注目の出場者', sub: '今年の顔ぶれ', key: 'field' });
-      items.push({ label: '歴代王者', sub: 'この世界の大会の歴史', key: 'hist' });
+      items.push({ label: '歴代王者', sub: '第1回からの優勝者', key: 'hist' });
       items.push({ label: 'わたしの記録', sub: `出場${C.state(g).me.entries || 0}回`, key: 'me' });
-      const i = await phoneList(g, { title: cfg.appTitle, color: cfg.color, items });
+      const i = await phoneList(g, { title: appTitle, color: cfg.color, items });
       if (i < 0) return;
       const it = items[i];
       if (it.key === 'odds') {
         const od = C.odds(g, Y);
         await phoneInfo(g, { title: '見込み', color: cfg.color, lines: [od.text, '', `いまの実力で出せる得点の目安：${od.exp}`, `${od.round}の通過ライン（その年の出場者の強さから）：約${od.cut}`, '', '芸の地力（ネタ作り・間・声量…）、ネタ帳のいちばん良いネタ、準備（ネタ合わせ・小道具）で決まる。本番の出来しだいで上下する。'] });
       } else if (it.key === 'info' || it.key === 'rules') {
-        await phoneInfo(g, { title: cfg.appTitle, color: cfg.color, lines: C.rulesText(g, n.kind === 'notyet' ? null : Y) });
+        await phoneInfo(g, { title: appTitle, color: cfg.color, lines: C.rulesText(g, n.kind === 'notyet' ? null : Y) });
       } else if (it.key === 'field') {
         if (!S) { await phoneInfo(g, { title: '注目の出場者', color: cfg.color, text: n.label }); continue; }
         const rows = C.alive(S, (S.entry && S.entry.round) || cfg.rules(Y).rounds[0].id).slice(0, 24).map((x) => ({ label: x.name, sub: (x.tags || []).join('・') || x.agency || '', look: C.lookOf(x) }));
@@ -1400,7 +1430,7 @@ function installFlows(C) {
         const h = C.history(g).slice().reverse();
         await phoneList(g, { title: '歴代王者', color: cfg.color, items: h.length ? h.map((x) => ({ label: x.champion, sub: `${x.year}年 ${x.edition ? '第' + x.edition + '回' : ''}${x.player ? '（あなた！）' : ''}` })) : [{ label: 'まだ大会がない' }] });
       } else if (it.key === 'entry' || it.key === 'go' || it.key === 'prep' || it.key === 'me') {
-        if ((it.key === 'go' || it.key === 'entry' || it.key === 'prep') && !phoneOverMapOnly(g)) { await phoneInfo(g, { title: cfg.appTitle, color: cfg.color, text: '今はここを離れられない。' }); continue; }
+        if ((it.key === 'go' || it.key === 'entry' || it.key === 'prep') && !phoneOverMapOnly(g)) { await phoneInfo(g, { title: appTitle, color: cfg.color, text: '今はここを離れられない。' }); continue; }
         const fn = it.key === 'entry' ? C.entry : it.key === 'go' ? C.go : it.key === 'prep' ? C.prep : (gg) => C.recap(gg, S && S.entry ? Y : null);
         closePhoneThen(g, async (gg) => { await fn(gg); gg.save && gg.save(true); });
         return;

@@ -28,7 +28,18 @@ export function ensureM1(st) {
   if (!m.news || typeof m.news !== 'object') m.news = { q: [], sent: 0 };
   if (!Array.isArray(m.news.q)) m.news.q = [];
   if (!Number.isFinite(m.poolYear)) m.poolYear = 0;
+  // old rows named the 敗者復活 winner `rev` (D1 reads `revival` / `rev` as 復刻開催): renamed, revival: false
+  for (const h of m.hist) if (h && (h.rev !== undefined || h.revival !== false)) { if (h.rev !== undefined) { h.rvw = h.rev; h.rvwN = h.revN; delete h.rev; delete h.revN; } h.revival = false; }
   return m;
+}
+// Save growth: full detail only for the last 3 years (and the player's own entries); older seasons and history rows compress.
+export function compactM1(m, year) {
+  for (const k of Object.keys(m.seasons)) {
+    const y = Number(k), S = m.seasons[k];
+    if (y < year - 3 && S && !S.past) m.seasons[k] = { y, ed: S.ed, E: S.E, past: true };
+  }
+  for (const h of m.hist) if (h && h.y < year - 3 && h.fin) { delete h.fin; delete h.finN; }
+  if (m.newsOnce) for (const [k, d] of Object.entries(m.newsOnce)) if (Number(d) && (m.lastMorning || 0) - d > 400) delete m.newsOnce[k];
 }
 
 // ---------------------------------------------------------------- pool
@@ -189,6 +200,7 @@ const cache = new Map();
 // Entrants of round index ri (0 = 1回戦): [{ key, no, c (pool combo or anon), p, q }] — the field WITHOUT the player.
 export function fieldOf(m, year, ri) {
   const S = seasonOf(m, year);
+  if (!S || S.past || !S.nos) return [];
   const rules = m1Rules(year);
   const key = `${sd(m, year)}|${year}|${S.playerNo || 0}`;
   let C = cache.get(key);
@@ -237,6 +249,7 @@ export function fieldOf(m, year, ri) {
 // Scores of every entrant of round ri (same order as fieldOf). The player's own score never enters here.
 export function scoresOf(m, year, ri) {
   const S = seasonOf(m, year);
+  if (!S || S.past || !S.nos) return [];
   const key = `${sd(m, year)}|${year}|${S.playerNo || 0}`;
   const C = cache.get(key) || { fields: [], scores: [] };
   if (C.scores[ri]) return C.scores[ri];
@@ -462,7 +475,7 @@ export function recordHistory(m, year, fin, rev) {
   const best = fin.ranking ? fin.scores[fin.ranking[0]] : null;
   const row = {
     y: year, ed: editionOf(year), ch: cid(fin.champ), chN: nm(fin.champ), ru: cid(fin.ru || (fin.top3 ? null : fin.ranking[1])), th: null,
-    fin: (fin.order || []).map(cid), finN: (fin.order || []).map(nm), rev: rev ? cid(rev.winner) : null, revN: rev ? nm(rev.winner) : null,
+    fin: (fin.order || []).map(cid), finN: (fin.order || []).map(nm), rvw: rev ? cid(rev.winner) : null, rvwN: rev ? nm(rev.winner) : null, revival: false,
     top: best ? best.total : 0, topN: fin.ranking ? nm(fin.ranking[0]) : '',
   };
   // ru / th from votes when there was a 最終決戦
