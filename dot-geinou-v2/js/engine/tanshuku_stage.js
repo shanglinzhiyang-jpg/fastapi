@@ -240,7 +240,67 @@ export function renderTV(c, W, H, frameCv, info = {}) {
   c.imageSmoothingEnabled = false;
   if (frameCv) c.drawImage(frameCv, 0, 0, frameCv.width, frameCv.height, fx, fy, Math.round(fw), Math.round(fh));
   c.imageSmoothingEnabled = true;
+  if (portrait) portraitBands(c, W, H, fx, fy, fw, fh, info, hits);
   return { x: fx, y: fy, w: fw, h: fh, hits };
+}
+// Portrait phones: the letterbox above/below the 9:16 frame becomes a miss board, the route and the toggles.
+function portraitBands(c, W, H, fx, fy, fw, fh, info, hits) {
+  const s = fw / FW;
+  const T = (str, tx, ty, size, col, o = {}) => {
+    c.font = `${Math.round(size * s)}px "DotGothic16", "Hiragino Kaku Gothic ProN", "Noto Sans JP", monospace`;
+    c.textAlign = o.align || 'left';
+    c.textBaseline = 'top';
+    if (o.outline) { c.lineWidth = 3 * s; c.strokeStyle = o.outline; c.strokeText(str, tx, ty); }
+    c.fillStyle = col;
+    c.fillText(str, tx, ty);
+  };
+  const fit = (str, maxW, size) => { let z = size; c.font = `${Math.round(z * s)}px "DotGothic16", monospace`; while (c.measureText(str).width > maxW && z > 7) { z--; c.font = `${Math.round(z * s)}px "DotGothic16", monospace`; } return z; };
+  const btn = (label, on, x, y, w, h, act, size = 12) => {
+    c.fillStyle = '#1a1a26'; c.fillRect(x - s, y - s, w + 2 * s, h + 2 * s);
+    c.fillStyle = on ? '#2f6fd0' : '#2a2f55'; c.fillRect(x, y, w, h);
+    T(label, x + w / 2, y + (h - size * s) / 2, fit(label, w - 6 * s, size), '#ffffff', { align: 'center' });
+    hits.push({ x, y, w, h, act });
+  };
+  const top = fy / s, bot = (H - fy - fh) / s;
+  if (top >= 30) {
+    // miss board, hugging the frame's top edge
+    const cast = info.cast || [], cw = W / Math.max(1, cast.length), y = fy - 28 * s;
+    cast.forEach((p, i) => {
+      const x0 = i * cw, cx = x0 + cw / 2;
+      c.fillStyle = p.out ? 'rgba(214,47,47,0.45)' : p.player ? 'rgba(255,210,63,0.22)' : 'rgba(255,255,255,0.07)';
+      c.fillRect(x0 + 3 * s, y, cw - 6 * s, 24 * s);
+      const tg = String(p.tag).split('｜')[0];
+      T(tg, cx + 2 * s, y + 6 * s, fit(tg, cw / 2 - 8 * s, 11), p.player ? '#ffd23f' : '#ffffff', { align: 'right' });
+      for (let k = 0; k < 2; k++) { c.fillStyle = k < p.misses ? '#ff5d6c' : '#3a3f6a'; c.beginPath(); c.arc(cx + (11 + k * 12) * s, y + 12 * s, 4.5 * s, 0, Math.PI * 2); c.fill(); }
+    });
+    if (top >= 62) {
+      const y2 = fy - 60 * s;
+      T(info.program || 'はねるのトびら', 10 * s, y2 + 8 * s, fit(info.program || 'はねるのトびら', 96 * s, 11), '#ffffff');
+      T('短縮鉄道の夜', W / 2, y2 + 2 * s, 20, '#ffd23f', { align: 'center', outline: '#3a1a00' });
+      T(info.year ? `${info.year}年` : '', W - 10 * s, y2 + 8 * s, 11, '#9aa3c7', { align: 'right' });
+    }
+  }
+  if (bot >= 56) {
+    // route line + toggles under the frame
+    const st = info.stations || [], y = fy + fh + 10 * s, x0 = 26 * s, x1 = W - 26 * s;
+    const step = (x1 - x0) / Math.max(1, st.length - 1);
+    c.fillStyle = '#3a4a9a'; c.fillRect(x0, y + 4 * s, x1 - x0, 3 * s);
+    st.forEach((name, i) => {
+      const here = i === info.leg, past = i < info.leg, x = x0 + i * step;
+      c.fillStyle = here ? '#ffd23f' : past ? '#5ee07a' : '#2a2f55';
+      c.beginPath(); c.arc(x, y + 5.5 * s, (here ? 6 : 4.5) * s, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#ffffff'; c.lineWidth = 1.2 * s; c.stroke();
+      if (here) T(name, Math.min(Math.max(x, 40 * s), W - 40 * s), y + 14 * s, 10, '#ffd23f', { align: 'center' });
+    });
+    const by = y + 30 * s, bw = (W - 30 * s) / 2;
+    btn(`ボイス ${info.voice ? 'ON' : 'OFF'}`, info.voice, 10 * s, by, bw, 24 * s, 'voice');
+    if (info.micOk) btn(`声で回答 ${info.mic ? 'ON' : 'OFF'}`, info.mic, 20 * s + bw, by, bw, 24 * s, 'mic');
+  } else {
+    // no room around the frame: two small toggles in the frame's top-right corner
+    const y = fy + 6 * s;
+    btn('ボイス', info.voice, fx + 246 * s, y, 40 * s, 20 * s, 'voice', 9);
+    if (info.micOk) btn('マイク', info.mic, fx + 290 * s, y, 40 * s, 20 * s, 'mic', 9);
+  }
 }
 function sidePanel(c, x, y, w, h, s, info, side, hits) {
   const T = (str, tx, ty, size, col, o = {}) => {

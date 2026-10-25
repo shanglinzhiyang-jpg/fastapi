@@ -17,6 +17,7 @@ import { clamp, SW, SH, makeCanvas, mulberry32 } from '../engine/util.js';
 import { LOOKS } from '../engine/sprites.js';
 import * as T from '../engine/tanshuku_stage.js';
 import { pickWords, optionsFor, isCorrect } from '../engine/tanshuku_words.js';
+import { gameYM } from '../engine/tanshuku_air.js';
 
 const { FW, FH, K, SET } = T;
 export const STATIONS = ['宵の口', 'リャクゴ坂', 'モトドオリ', 'イイナオシ', '星見台', '天の川'];
@@ -30,16 +31,9 @@ const HOST = { name: '早瀬 透', look: { hair: 'spiky', hairColor: 'brown', sk
 const SAY = { 'W杯': 'ダブルはい', 'Mステ': 'エムステ', 'MK5': 'エムケーファイブ', 'ドラ1': 'ドライチ', '月9': 'げつく', 'イッテQ': 'イッテキュー', 'セ・リーグ': 'セリーグ', 'パ・リーグ': 'パリーグ', '朝ドラ': 'あさドラ', 'りょ': 'りょ', 'KY': 'ケーワイ' };
 const KEY_OPT = { up: 0, right: 1, left: 2, down: 3 };
 const OPT_GLYPH = ['↑', '→', '←', '↓'];
-const HALF_KANA = /[ぁ-ゖ]/g;
-const toKata = (s) => String(s).replace(HALF_KANA, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
 
-// 「ドッテツ｜ドット鉄道」 from a name
-export function tetsuName(name) {
-  const n = String(name || 'ドット').replace(/\s+/g, '');
-  const ch = Array.from(toKata(n));
-  const head = ch.slice(0, /[ッャュョァィゥェォー]/.test(ch[1] || '') || ch.length < 3 ? 2 : 2).join('');
-  return { tag: `${head}テツ`, line: `${n}鉄道` };
-}
+// the player's gag name telop on this corner
+export const PLAYER_TETSU = Object.freeze({ tag: 'ドッテツ', line: 'ドット鉄道' });
 
 class Tanshuku extends Minigame {
   static title = '短縮鉄道の夜';
@@ -60,7 +54,7 @@ class Tanshuku extends Minigame {
     this.sc = T.makeScenery(11);
     this.year = Number(opts.year) || this.gameYear();
     const st = g.state || {};
-    const me = tetsuName(st.name || 'ドット');
+    const me = PLAYER_TETSU;
     this.riders = [
       { ...CAST[0] }, { ...CAST[1] },
       { id: 'player', name: st.name || 'あなた', tag: me.tag, line: me.line, look: st.look || LOOKS.player, pitch: 1.0, rate: 1.25, player: true },
@@ -70,11 +64,7 @@ class Tanshuku extends Minigame {
     this.legs = clamp(Math.round(opts.legs || STATIONS.length), 2, STATIONS.length);
     this.view = { t: 0 };
   }
-  gameYear() {
-    try { const d = typeof this.g.gameDate === 'function' ? this.g.gameDate() : null; if (d && d.year) return d.year; } catch (e) { /* fall back */ }
-    const era = this.g.state && this.g.state.profile && this.g.state.profile.era;
-    return { showa: 1987, heisei_early: 1996, heisei: 2004, reiwa: 2026 }[era] || 2007;
-  }
+  gameYear() { return gameYM(this.g).year; }
 
   // ---------------------------------------------------------------- setup
   init() {
@@ -115,7 +105,10 @@ class Tanshuku extends Minigame {
     this.playerTurns = 0;
     this.speak(HOST, '短縮鉄道の夜、まもなく発車いたします！');
   }
-  get fpb() { return 3600 / (BPM[this.leg] || 120); }
+  // tempo: the station's BPM, a little faster on harder shows (difficulty 1..5)
+  get bpm() { return (BPM[this.leg] || 120) + Math.max(0, this.diff - 2) * 4; }
+  get diff() { return clamp(Math.round(Number(this.opts.difficulty) || 2), 1, 5); }
+  get fpb() { return 3600 / this.bpm; }
   setState(s) { this.state = s; this.st = 0; }
   speak(who, str, o = {}) { this.voice.speak(str, { pitch: who.pitch, rate: who.rate, interrupt: o.interrupt }); }
   rider(i) { return this.riders[i]; }
@@ -201,7 +194,7 @@ class Tanshuku extends Minigame {
   }
   startLeg() {
     this.mode = this.leg === this.legs - 1 ? 'space' : 'city';
-    this.train.bpm = BPM[this.leg];
+    this.train.bpm = this.bpm;
     this.train.on = true;
     this.clock = 0; this.lastBeat = -1; this.lastStep = -1;
     this.turn = -1;
@@ -209,7 +202,7 @@ class Tanshuku extends Minigame {
     this.cam.tx = FW / 2; this.cam.tz = 1;
     const st = STATIONS[this.leg];
     const last = this.leg === this.legs - 1;
-    this.bigTelop = { text: last ? `次は終点 ${STATIONS[STATIONS.length - 1]}` : `次は ${st}`, sub: `テンポ ${BPM[this.leg]}`, t: 0, life: 150, kind: 'next' };
+    this.bigTelop = { text: last ? `次は終点 ${STATIONS[STATIONS.length - 1]}` : `次は ${st}`, sub: `テンポ ${this.bpm}`, t: 0, life: 150, kind: 'next' };
     T.sfx('station');
     this.speak(HOST, last ? `次は、終点、${STATIONS[STATIONS.length - 1]}〜。` : `次は、${st}〜、${st}〜。`, { interrupt: true });
     this.wipe = 1;
@@ -234,7 +227,8 @@ class Tanshuku extends Minigame {
     this.turnsPlayed++;
     // the turn order skips nobody: a rider who is out and did 土下座 rides on from リーチ
     const r = this.rider(this.turn);
-    const lv = this.leg < 2 ? [1, 1] : this.leg < 4 ? [1, 2] : [1, 3];
+    const up = this.diff >= 4 ? 1 : 0;
+    const lv = this.leg < 2 ? [1, 1 + up] : this.leg < 4 ? [1, 2 + up] : [1 + up, 3];
     let w = pickWords(this.year, 1, { rng: this.rng, lv, exclude: this.used })[0] || pickWords(this.year, 1, { rng: this.rng })[0];
     this.used.add(w.id);
     this.prevWord = this.word;
@@ -549,9 +543,10 @@ class Tanshuku extends Minigame {
     if (this.sub && playing) {
       const s = this.sub;
       const size = T.fitSize(c, s.text, FW - 30, 18, 11);
-      T.rect(c, 0, 360, FW, 36, 'rgba(0,0,0,0.35)');
-      T.telop(c, s.text, FW / 2, 372, size, s.col, '#1a1a26');
-      T.telop(c, s.who, FW / 2, 359, 10, '#c8cce6', '#1a1a26');
+      const sy = this.state === 'dogeza' ? 238 : 360; // 土下座 happens on the floor: keep the subtitle above it
+      T.rect(c, 0, sy, FW, 36, 'rgba(0,0,0,0.35)');
+      T.telop(c, s.text, FW / 2, sy + 12, size, s.col, '#1a1a26');
+      T.telop(c, s.who, FW / 2, sy - 1, 10, '#c8cce6', '#1a1a26');
     }
     // big telops
     const b = this.bigTelop;

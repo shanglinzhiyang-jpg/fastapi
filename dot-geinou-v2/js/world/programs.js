@@ -475,6 +475,28 @@ for (const p of PROGRAM_LIST) {
   Object.defineProperty(REGULARS[id], 'weekday', { get: () => regWeekday(p), enumerable: true, configurable: true });
   Object.defineProperty(REGULARS[id], 'opts', { get: () => programOpts(p, ST(), true), enumerable: true, configurable: true });
 }
+// ---- R7-E (owner C): はねるのトびら「短縮鉄道の夜」 (js/minigames/tanshuku.js, js/engine/tanshuku_air.js).
+// During the corner's regular run (第1夜 2007-04-11 〜 第26夜 2009-06-24, by the game month) a guest appearance
+// rides the night train instead of a コント, and the weekly regular slot plays it every other week. Before and
+// after those months the program stays コント (no 復刻). The ★ gate, pay and fame are the program's own (tier 2).
+KINDS.tanshuku = { minigame: 'tanshuku', skill: 'talk' };
+let TANSHUKU_AIR = null;
+import('../engine/tanshuku_air.js').then((m) => { TANSHUKU_AIR = m; }).catch(() => { TANSHUKU_AIR = null; });
+if (PROGRAMS.hanetobi) {
+  const p = PROGRAMS.hanetobi, kind = p.kind, desc = p.desc;
+  const onAir = () => { const g = G(); try { return !!(g && g.state && TANSHUKU_AIR && TANSHUKU_AIR.cornerOnAir(g)); } catch (e) { return false; } };
+  Object.defineProperty(p, 'kind', { get: () => (onAir() ? 'tanshuku' : kind), enumerable: true, configurable: true });
+  Object.defineProperty(p, 'desc', { get: () => (onAir() ? `${desc}\nいまは人気コーナー「短縮鉄道の夜」に、ゲストで乗車できる。` : desc), enumerable: true, configurable: true });
+  const r = REGULARS[progId(p)];
+  if (r) {
+    const cornerWeek = () => onAir() && Math.floor(num(ST() && ST().day, 1) / 7) % 2 === 0;
+    const asConte = () => ({ ...p, kind });
+    Object.defineProperty(r, 'minigame', { get: () => (cornerWeek() ? 'tanshuku' : programMinigame(asConte())), enumerable: true, configurable: true });
+    Object.defineProperty(r, 'skill', { get: () => (cornerWeek() ? 'talk' : programSkill(asConte())), enumerable: true, configurable: true });
+    Object.defineProperty(r, 'opts', { get: () => programOpts(cornerWeek() ? p : asConte(), ST(), true), enumerable: true, configurable: true });
+  }
+}
+// ---- /R7-E
 const isProgShow = (id) => PROGRAM_SHOW_IDS.includes(id);
 const activeReg = (st, id) => !!(st.regulars[id] && !st.regulars[id].dropped && st.regulars[id].since != null);
 const openOffer = (st, m) => m && m.kind === 'offer' && !m.answered && st.day - num(m.day) < OFFER_DAYS;
