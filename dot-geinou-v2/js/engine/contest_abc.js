@@ -22,7 +22,7 @@
 //   (5人とした), 一次・二次選考のネタ時間 (3分とした), 決勝のネタ時間 (4分とした), 旧大会の賞金 (金額を示さず「トロフィーと副賞」). DVD・後番組は扱わない.
 //   Entry counts of unverified years are this game's world (shown as 約). Everyone in the contest is fictional.
 import { Game } from './game.js';
-import { registerContest, CONTESTS } from './contests.js';
+import { registerContest } from './contests.js';
 import { registerRegular, PEOPLE } from './life.js';
 import { LOOKS } from './sprites.js';
 import { registerItem } from './state.js';
@@ -475,12 +475,15 @@ export const ABC = makeContest({
 registerItem('abc_trophy', { name: 'ABCのトロフィー', price: 0, desc: '大阪の若手の登竜門で、いちばんになった証。' });
 registerRegular('abc_champ_tv', { title: 'なにわネタ天国', place: 'ktv', weekday: 3, medium: 'tv', pay: 30000, fame: 45, fans: 1800, minigame: 'tsukkomi', skill: 'warai', stamina: 16, host: '関西の番組プロデューサー', hostLook: LOOKS.director, desc: '関西の若手ネタ番組。' });
 registerRegular('abc_champ_radio', { title: '夜ふかし大阪', place: 'mbs', weekday: 0, medium: 'radio', pay: 18000, fame: 25, fans: 1000, minigame: 'talk', skill: 'talk', stamina: 12, host: 'ラジオ局のディレクター', hostLook: LOOKS.ad, desc: '関西の深夜ラジオ。' });
-kitMorning('abcgp', (g) => { syncDef(g); return ABC.morning(g); });
+kitMorning('abcgp', (g) => ABC.morning(g));
 registerContestApp(ABC, { id: 'abcgp', name: 'ABC', color: '#0a6fd6', glyph: 'ABC', order: 58 });
 
-// ================================================================ D1's registry (getters on the season in play, as for R-1)
+// ================================================================ D1's registry (def.selfRun: ABC runs its own world)
+// D1 never simulates ABC, posts none of its generic news and freezes nothing; it reads status / historyList / rivalsOf and the
+// format of each year through roundsOf / scheduleOf (the January finals until 2016 cross the year: D1 counts later months as Y-1).
 function d1RoundsOf(Y) {
   const r = rulesABC(Y);
+  if (!r.held) return null;
   const E = entriesABC(Y, () => 0.5);
   const val = (v, d) => Math.round(typeof v === 'function' ? v(E) : num(v, d));
   return r.rounds.map((rd) => ({
@@ -489,50 +492,39 @@ function d1RoundsOf(Y) {
     ...(rd.final ? { tv: true, final: true, judges: r.final.judges, scoring: `100点×${r.final.judges}`, stage: 'studio', ...(r.final.format !== 'oneshot' ? { stage2: { top: 3, name: 'ファイナルステージ', judge: 'panel' } } : {}) } : {}),
   }));
 }
-let curY = 2026;
-const DEF = {
+function d1ScheduleOf(Y) {
+  const r = rulesABC(Y);
+  if (!r.held) return null;
+  return { entry: { from: r.cal.entryFrom.slice(1, 3), to: r.cal.entryTo.slice(1, 3) }, final: r.rounds.find((x) => x.id === 'final').dates[0].slice(1, 3) };
+}
+const ENTRY_COUNT = { 2018: 570, 2026: 583 }; // the real totals we could verify
+registerContest('abcgp', {
   name: 'ABCお笑いグランプリ', names: [{ from: 1980, name: 'ABC漫才・落語新人コンクール' }, { from: 1989, name: 'ABCお笑い新人グランプリ' }, { from: 2012, name: 'ABCお笑いグランプリ' }], short: 'ABC', kind: 'any', category: 'kansai', prestige: 70, color: '#0a6fd6',
   organizer: '朝日放送テレビ（ABCテレビ）', broadcaster: 'ABCテレビ', venue: 'ABCテレビ（大阪・福島）', region: 'all', own: 'E3',
   history: { founded: 1980, ended: null, gaps: [], revived: null, note: '1980年「ABC漫才・落語新人コンクール」として創設、1989年「ABCお笑い新人グランプリ」、2012年から「ABCお笑いグランプリ」', sources: ['https://ja.wikipedia.org/wiki/ABCお笑いグランプリ', 'https://natalie.mu/owarai/news/682508', 'https://www.oricon.co.jp/news/2469479/full/'] },
-  revive: false,
+  revive: false, selfRun: true,
   editionOf: (y) => (y >= 1980 ? y - 1979 : null),
-  seasonOf: (date) => (rulesABC(date.year + 1).rounds.find((x) => x.id === 'final').dates[0][0] === 1 && date.month >= 9 ? date.year + 1 : date.year),
-  scheduleOf: (y) => rulesABC(y).cal, rulesOf: rulesABC, roundsOf: d1RoundsOf,
-  eligibility: (g, unit, year) => { const el = ABC.cfg.eligibility(g, actInfo(g), year ?? (ABC.seasonY(g) || cdate(g).year), ABC.state(g)); return { ok: el.ok, why: el.why || '' }; },
-  fee: 0,
+  schedule: d1ScheduleOf(2026), rounds: d1RoundsOf(2026), roundsOf: d1RoundsOf, scheduleOf: d1ScheduleOf,
+  entryCount: (y) => ENTRY_COUNT[y] ?? null,
+  eligibility: Object.assign((g, unit, year) => { const el = ABC.cfg.eligibility(g, actInfo(g), year ?? (ABC.seasonY(g) || cdate(g).year), ABC.state(g)); return { ok: el.ok, why: el.why || '' }; }, { note: '〜2011：関西中心の結成5年以内のコンビ・デビュー10年以内の落語家／2012〜：デビュー10年以内、ジャンル不問' }),
+  fee: 0, feeText: 'なし',
   prize: (y) => rulesABC(y).prize, prizeText: '優勝賞金100万円＋副賞',
   perform: { kind: 'any', length: 240 },
-  news: [() => `${rulesABC(curY).title}：${rulesABC(curY).eligText}`, '大阪の若手の夏（冬）が、今年も始まる。'],
+  news: [(g, ctx) => `${rulesABC((ctx && ctx.year) || 2026).title}：${rulesABC((ctx && ctx.year) || 2026).eligText}`],
   catchcopy: (g, ctx) => catchABC(g, ABC.season(g, (ctx && ctx.year) || ABC.seasonY(g) || cdate(g).year), 'player'),
-  flow: (g, ctx) => ABC.go(g, ctx),
+  flow: (g, ctx) => ABC.go(g, { mode: ctx && ctx.option ? ctx.mode : undefined }),
   entry: (g) => ABC.entry(g),
-  onMorning: (g) => { syncDef(g); return runKitMorning(g); },
-  status: (g) => ABC.status(g),
-};
-const sigOf = (Y) => JSON.stringify([d1RoundsOf(Y).map((x) => [x.when, x.length, x.field, x.pass]), rulesABC(Y).cal.entryFrom.slice(1), rulesABC(Y).cal.entryTo.slice(1), rulesABC(Y).name]);
-let sig = '';
-const yNow = () => { const y = ABC.liveY(curY); return y >= 1980 ? y : curY; };
-function registerDef() {
-  registerContest('abcgp', DEF);
-  const d = CONTESTS.abcgp;
-  if (!d) return;
-  Object.defineProperty(d, 'schedule', { enumerable: true, configurable: true, get: () => { const r = rulesABC(yNow()); return { entry: { from: r.cal.entryFrom.slice(1, 3), to: r.cal.entryTo.slice(1, 3) }, final: r.rounds.find((x) => x.id === 'final').dates[0].slice(1, 3) }; } });
-  Object.defineProperty(d, 'rounds', { enumerable: true, configurable: true, get: () => d1RoundsOf(yNow()) });
-  Object.defineProperty(d, 'eligibilityNote', { enumerable: true, configurable: true, get: () => rulesABC(yNow()).eligText });
-}
-export function syncDef(g) {
-  const Y = (g && g.state && safe(() => ABC.seasonY(g), null)) || null;
-  curY = Y && Y >= 1980 ? Y : 2026;
-  const s0 = sigOf(curY);
-  if (s0 !== sig) { sig = s0; registerDef(); }
-}
-registerDef();
-sig = sigOf(curY);
+  onMorning: (g) => runKitMorning(g),
+  status: (g) => ABC.d1Status(g),
+  historyList: (g) => ABC.historyList(g),
+  rivalsOf: (g, round, n, year) => ABC.rivalsOf(g, round, n, year),
+  rulesOf: rulesABC,
+});
 
 // ================================================================ g.abcgp()
 const methods = {
   // the state summary: { now, season, title, edition, entry, wins, finals, entries, log, champions }
-  abcgp() { syncDef(this); return ABC.status(this); },
+  abcgp() { return ABC.status(this); },
 };
 export function installABC(proto) { for (const k of Object.getOwnPropertyNames(methods)) Object.defineProperty(proto, k, Object.getOwnPropertyDescriptor(methods, k)); }
 installABC(Game.prototype);
