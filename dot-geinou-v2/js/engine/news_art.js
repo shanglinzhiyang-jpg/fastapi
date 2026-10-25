@@ -79,8 +79,7 @@ const KINDS = {
   gengo(c, o) {
     R(c, 0, 0, BW, BH, '#5a6a88'); for (let x = 0; x < BW; x += 8) R(c, x, 0, 4, BH, '#62729a');
     R(c, 22, 2, 36, 46, '#c8b48a'); R(c, 24, 4, 32, 42, '#fbf8ee');
-    const s = String(o.gengo || '平成');
-    c.save(); text(c, s[0] || '', 40, 6, { size: 18, color: '#1a1a1a', align: 'center', shadow: null }); text(c, s[1] || '', 40, 25, { size: 18, color: '#1a1a1a', align: 'center', shadow: null }); c.restore();
+    // the two characters are written over the scaled picture by drawNewsImage (crisp at any size)
   },
   chartUp(c) { chart(c, true); },
   chartDown(c) { chart(c, false); },
@@ -132,6 +131,14 @@ export function drawNewsImage(c, kind, x, y, w, h, o = {}) {
   // cover: keep the 8:5 ratio, crop the overflow
   const s = Math.max(w / BW, h / BH);
   const sw = w / s, sh = h / s;
-  c.drawImage(cv, (BW - sw) / 2, (BH - sh) / 2, sw, sh, Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+  const ox = (BW - sw) / 2, oy = (BH - sh) / 2;
+  c.drawImage(cv, ox, oy, sw, sh, Math.round(x), Math.round(y), Math.round(w), Math.round(h));
   c.imageSmoothingEnabled = sm;
+  if (kind === 'gengo') {
+    // the 元号 on the board, in the game's font at the shown size
+    const g2 = Array.from(String(o.gengo || '平成'));
+    const size = Math.max(10, Math.floor(17 * s / 2) * 2);
+    const bx = x + (40 - ox) * s;
+    g2.slice(0, 2).forEach((ch, i) => text(c, ch, Math.round(bx), Math.round(y + (6 + i * 19 - oy) * s), { size, color: '#141414', align: 'center', shadow: null }));
+  }
 }

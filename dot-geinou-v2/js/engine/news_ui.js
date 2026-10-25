@@ -342,7 +342,7 @@ class NewsScene {
     this.pic(c, top, bx + 2, by + 2, 312, 150);
     this.badges(c, top, bx + 4, by + 156);
     T(c, `${top.from}　${top.real ? top.dateText : ago(g, top.day)}`, bx + 316, by + 156, 10, L.dim, 'right', 200);
-    para(c, top.body || top.head, bx + 2, by + 172, 312, 12, L.ink, 15, 4);
+    para(c, top.body || `${top.from}が伝えた。くわしいことは、続報が入りしだいお伝えする。`, bx + 2, by + 172, 312, 12, L.ink, 15, 4);
     // the sub stories (left column)
     let y = BODY_Y + 2;
     f.subs.forEach((it, k) => {
@@ -583,6 +583,9 @@ class NewsScene {
     R(c, 0, y0 - 1, SW, 1, L.rule);
     const live = (p) => (p.years || []).some(([a, b]) => a <= year && (b == null || b >= year));
     const GEN = ['ニュース', 'ドラマ', '映画', '歌番組', 'スポーツ中継', 'ドキュメンタリー', 'クイズ番組', '旅番組'];
+    // days when every station put its programmes aside (CMs stopped too; toyokeizai.net 353881: 1989-01-07/08 and 2011-03)
+    const dn = newsDateNum(g);
+    const SPECIAL = [[19890107, 19890109, '報道特別番組 昭和をふりかえる', 'CMなし'], [20110311, 20110314, '地震関連の報道特別番組', 'CMなし']].find(([a, b]) => dn >= a && dn <= b);
     const mine = [];
     for (const [id, r] of Object.entries(g.state.regulars || {})) { const def = REGULARS[id]; if (!def || !r || r.dropped || r.since == null || def.medium === 'event') continue; const title = typeof def.title === 'function' ? safe(() => def.title(), '') : def.title; mine.push({ id, title, place: typeof def.place === 'function' ? safe(() => def.place(), '') : def.place, weekday: def.weekday }); }
     cols.forEach(([sid, name], ci) => {
@@ -594,10 +597,10 @@ class NewsScene {
       slots.forEach((s, ri) => {
         const y = y0 + ri * rh;
         if (ci === 0) { R(c, 2, y, x0 - 4, rh - 2, this.form === 'paper' ? '#e2d8c0' : '#dfe6f2'); T(c, s, 16, y + 4, 14, L.ink, 'center'); T(c, '時', 16, y + 22, 10, L.dim, 'center'); }
-        const me = mine.find((m) => m.place === sid && m.weekday === wd) && ri === 2 ? mine.find((m) => m.place === sid && m.weekday === wd) : null;
+        const me = !SPECIAL && ri === 2 ? mine.find((m) => m.place === sid && m.weekday === wd) || null : null;
         const p = pick[ri];
-        const title = me ? me.title : p ? p.title : GEN[(seedOf(sid + s + num(g.state.day)) + ri) % GEN.length];
-        const sub = me ? '★あなたが出演' : p ? p.genre : '';
+        const title = SPECIAL ? SPECIAL[2] : me ? me.title : p ? p.title : GEN[(seedOf(sid + s + num(g.state.day)) + ri) % GEN.length];
+        const sub = SPECIAL ? SPECIAL[3] : me ? '★あなたが出演' : p ? p.genre : '';
         if (me) R(c, x, y, cw - 2, rh - 2, '#ffe7a0');
         frame(c, x, y, cw - 2, rh - 2, L.rule);
         para(c, title, x + 3, y + 3, cw - 8, 10, me ? '#7a3a00' : L.ink, 12, sub ? 2 : 3);
@@ -685,9 +688,14 @@ class NewsScene {
     vtext(c, '号外', x + w - 42, y + dy + 22, 34, '#ffffff', 2);
     T(c, `ドット新聞　${this.dateLine()}`, x + 14, y + dy + 12, 12, '#3a3a3a', 'left', 400);
     const head = it.head.replace(/^【[^】]*】/, '');
-    para(c, head, x + 14, y + dy + 32, w - 100, 26, '#111111', 32, 3);
-    drawNewsImage(c, it.img, x + 14, y + dy + 140, 240, 146, { mono: this.form === 'paper', seed: seedOf(it.key), gengo: it.gengo });
-    para(c, it.body || '', x + 266, y + dy + 144, w - 280, 12, '#222222', 16, 7);
+    const big = Array.from(head).length <= 15;
+    const hy = para(c, head, x + 14, y + dy + 32, w - 100, big ? 32 : 24, '#111111', big ? 38 : 30, 3);
+    const iy = Math.max(y + dy + 120, hy + 8);
+    const ih = Math.min(170, y + dy + h - 14 - iy);
+    drawNewsImage(c, it.img, x + 14, iy, Math.round(ih * 1.6), ih, { mono: this.form === 'paper', seed: seedOf(it.key), gengo: it.gengo });
+    const bx = x + 24 + Math.round(ih * 1.6);
+    const body = it.body && it.body !== head ? it.body : `${it.from || 'ドット新聞'}が伝えた。くわしいことは、続報が入りしだいお伝えする。`;
+    para(c, body, bx, iy + 4, x + w - 86 - bx, 12, '#222222', 16, 8);
     if (t % 60 < 40) T(c, 'A：一面へ', x + w - 14, y + dy + h - 22, 12, '#c8102e', 'right');
     this.hit(x, y, w, h, () => { newsGogaiSeen(this.g, this.gogai); this.gogai = null; sfx('ok'); this.refresh(true); });
   }

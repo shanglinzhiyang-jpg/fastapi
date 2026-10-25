@@ -826,6 +826,110 @@ const VOICE_TEXT = {
   },
 };
 
+// ---------------------------------------------------------------- [R9-D] 世論の声の強化: who speaks, why, and new kinds
+// Each voice now has an age (年代), a job, a place (地方・都道府県) and a short reason (賛否の理由); in the 投書欄 a
+// fictional name; on a 掲示板 an ID; on SNS a handle and likes. The people are invented (common surnames and given names;
+// voices_core.js checks names with contests.js isRealNameLike). VOICE_REASON keeps a reason per line of VOICE_TEXT.
+const VOICE_PROFILE = {
+  young: { age: [18, 29], jobs: ['大学生', '専門学校生', 'アルバイト', '会社員', '派遣社員', '看護師', '美容師'] },
+  families: { age: [28, 45], jobs: ['会社員', 'パート', '公務員', '保育士', '自営業'], tag: '子育て中' },
+  elderly: { age: [65, 84], jobs: ['年金生活', '元教員', '元会社員', '農業', '自治会役員'] },
+  employees: { age: [30, 59], jobs: ['会社員', '営業職', '技術職', '事務職', '管理職'] },
+  selfemployed: { age: [38, 70], jobs: ['商店主', '飲食店経営', '町工場の経営', '美容室経営', '個人タクシー'] },
+  business: { age: [40, 72], jobs: ['中小企業の社長', 'IT企業の経営者', '建設会社の役員', '旅館の経営者'] },
+  farmers: { age: [35, 78], jobs: ['農業', '漁業', '酪農家', '林業'] },
+  unions: { age: [28, 60], jobs: ['工場勤務', '介護職', '労働組合の役員', '運転手', '看護師'] },
+  urban: { age: [22, 60], jobs: ['会社員', 'デザイナー', 'エンジニア', '販売員'], city: true },
+  rural: { age: [35, 75], jobs: ['地方公務員', '農業', '商店主', '介護職'], rural: true },
+  floating: { age: [20, 65], jobs: ['会社員', '主婦', '主夫', 'フリーランス', 'パート'], tag: '支持政党なし' },
+};
+// 地方 → 都道府県 (weights ≈ the population share)
+export const VOICE_AREAS = [
+  ['北海道', ['北海道'], 4], ['東北', ['青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県'], 7],
+  ['関東', ['東京都', '神奈川県', '埼玉県', '千葉県', '茨城県', '栃木県', '群馬県'], 34], ['中部', ['愛知県', '静岡県', '新潟県', '長野県', '岐阜県', '石川県', '富山県', '山梨県', '福井県'], 17],
+  ['近畿', ['大阪府', '兵庫県', '京都府', '奈良県', '滋賀県', '和歌山県', '三重県'], 17], ['中国・四国', ['広島県', '岡山県', '山口県', '島根県', '鳥取県', '香川県', '愛媛県', '徳島県', '高知県'], 9],
+  ['九州・沖縄', ['福岡県', '熊本県', '鹿児島県', '長崎県', '大分県', '宮崎県', '佐賀県', '沖縄県'], 12],
+];
+const BIG_CITY = ['東京都', '大阪府', '神奈川県', '愛知県', '福岡県'];
+const V_GIV_F = ['恵子', '由美', '真理子', '裕子', '智子', '美穂', '典子', '京子', '陽子', '理恵', '直美', '香織', '明美', '幸子', '久美子', '綾', '舞', '彩花', '結衣', '葵'];
+const V_GIV_M = ['健一', '浩二', '誠', '隆', '和彦', '正樹', '博之', '剛', '修', '達也', '秀明', '哲也', '雅人', '英樹', '昌弘', '信也', '大輔', '翔太', '拓也', '蓮'];
+const HANDLE_A = ['dot', 'tama', 'neko', 'sora', 'mochi', 'kumo', 'hana', 'yama', 'umi', 'kaze', 'mikan', 'pan', 'ringo', 'hoshi'];
+const HANDLE_B = ['san', 'mama', 'papa', 'work', 'life', 'days', 'note', 'log', 'kun', 'chan'];
+export const AGE_GROUPS = ['10代', '20代', '30代', '40代', '50代', '60代', '70代', '80代'];
+// A person for a voice of segment `seg` in `year` (rnd: a random source in [0, 1)).
+export function voiceProfile(seg, year, rnd = Math.random) {
+  const P = VOICE_PROFILE[seg] || VOICE_PROFILE.floating;
+  const pick = (a) => a[Math.floor(rnd() * a.length) % a.length];
+  const age = Math.round(P.age[0] + rnd() * (P.age[1] - P.age[0]));
+  const ageGroup = AGE_GROUPS[Math.max(0, Math.min(7, Math.floor(age / 10) - 1))];
+  let tot = VOICE_AREAS.reduce((a, r) => a + r[2], 0) * rnd();
+  let area = VOICE_AREAS[0];
+  for (const r of VOICE_AREAS) { tot -= r[2]; if (tot <= 0) { area = r; break; } }
+  let pref = pick(area[1]);
+  if (P.city && !BIG_CITY.includes(pref)) pref = pick(BIG_CITY);
+  if (P.rural && BIG_CITY.includes(pref)) pref = pick(['秋田県', '島根県', '高知県', '岩手県', '長野県', '宮崎県', '鳥取県']);
+  const region = (VOICE_AREAS.find((r) => r[1].includes(pref)) || area)[0];
+  let job = pick(P.jobs);
+  if (job === '大学生' && age > 24) job = '大学院生';
+  const female = /主婦|パート|保育士|看護師/.test(job) ? rnd() < 0.85 : job === '主夫' ? false : rnd() < 0.48;
+  const sur = pick(B_SUR);
+  const name = `${sur}${pick(female ? V_GIV_F : V_GIV_M)}`;
+  const handle = `@${pick(HANDLE_A)}_${pick(HANDLE_B)}${rnd() < 0.5 ? Math.floor(rnd() * 90 + 10) : ''}`;
+  const tag = P.tag && rnd() < 0.5 ? `・${P.tag}` : '';
+  return { age, ageGroup, region, pref, job, female, name, handle, who: `${job}（${ageGroup}${tag}・${pref.replace(/[都府県]$/, '')}）`, bbsId: Math.floor(rnd() * 2176782336).toString(36).padStart(6, '0').slice(0, 8) };
+}
+// reasons (賛否の理由), the same order as the lines of VOICE_TEXT
+const VOICE_REASON = {
+  law: { pro: ['必要な改革', '暮らしに役立つ', '決める政治'], con: ['議論が足りない', '負担が増える', '反対意見の軽視'] },
+  tax_up: { pro: ['将来世代のため', '社会保障の財源', '財政の立て直し'], con: ['暮らしが苦しい', '景気への悪影響', 'むだづかいが先'] },
+  tax_down: { pro: ['手取りが増える', '景気対策', '努力が報われる'], con: ['財源がない', '社会保障の心配', '金持ち優遇'] },
+  budget: { pro: ['必要な分野へ', '使い道が大事', '暮らしに届く'], con: ['借金がふくらむ', '配分のかたより', '身近な予算が削られた'] },
+  scandal: { neutral: ['説明を聞きたい', '決めつけない'], con: ['説明責任', '政治不信', '投票の意欲がなくなる'], pro: ['政策も大事'] },
+  cabinet: { pro: ['新しい総理に期待', '暮らし優先', 'お手並み拝見'], con: ['何も変わらない', '選挙で信を問うべき', '総理が代わりすぎ'] },
+  kotai: { pro: ['新しい風', '民主主義らしい'], con: ['経験不足', '政策の混乱'] },
+  resign: { pro: ['決断を評価', '責任のとり方'], con: ['無責任', '政治の空白'] },
+  dissolve: { pro: ['信を問うのは当然', '選挙で評価'], con: ['大義がない', 'ほかにやること'] },
+  election: { pro: ['投票した', '約束を守って'], con: ['投票率の低さ', '声が届かない'] },
+  demo: { pro: ['声をあげる大切さ', '共感する', '民主主義の一部'], con: ['選挙で示すべき', '交通規制で迷惑', '共感できない'] },
+  demo_celeb: { pro: ['勇気ある発言', '意見を言う自由'], con: ['芸能人は政治に口を出すな', '影響力の大きさ'] },
+  rally: { pro: ['政府を応援', '安定がいい'], con: ['違和感がある', '冷静に見たい'] },
+  kyoko: { pro: ['決めるべきとき', '審議拒否も問題'], con: ['数の力の押し切り', '審議が足りない'] },
+  boycott: { pro: ['抵抗のひとつ', '強引さへの抗議'], con: ['仕事の放棄', '議論で示すべき'] },
+  disaster: { pro: ['現場への感謝', '支援を急いで'], con: ['対応が遅い', '現場の声'] },
+  war: { pro: ['守るため', '冷静な判断を'], con: ['戦争はいや', '話し合いを', '物価高'] },
+  emergency: { pro: ['非常時の対応'], con: ['権利の制限がこわい', '期限と歯止め'] },
+  dictatorship: { pro: ['決められる政治'], con: ['選挙がない', '言論の自由', '憲法を守って'] },
+  press: { pro: ['報道の行き過ぎ'], con: ['報道への圧力', '知る権利', '批判の自由'] },
+  religion: { neutral: ['信仰の尊重', '自由と救済'], con: ['被害者の救済', '高額献金'], pro: ['国の調査は当然', '法にもとづく対応'] },
+  religion_state: { pro: ['法にもとづく手続き'], con: ['信教の自由'] },
+  postal: { pro: ['民間の力', 'お金の流れ'], con: ['地方の郵便局', 'サービスの平等'] },
+  amakudari: { con: ['天下り反対', '官民のなれ合い'], pro: ['経験の活用'] },
+  economy: { pro: ['景気回復の実感', '街の活気'], con: ['先行き不安', '実感がない'] },
+  economy_prices: { pro: ['賃上げ'], con: ['物価高', '家計が苦しい'] },
+  economy_jobs: { pro: ['求人が戻った'], con: ['就職難', '雇用不安'] },
+  ordinance: { pro: ['必要な判断'], con: ['国会で議論を'] },
+  reserve: { pro: ['すばやい対応'], con: ['国会を通さない支出'] },
+  opposition: { pro: ['政府のチェック', '対案に期待'], con: ['批判ばかり', '揚げ足取り'] },
+};
+// Other modules (voices_core.js) add kinds: def { pro: [], con: [], neutral: [], reasons: { pro: [], con: [], neutral: [] } }.
+// Lines may use {title} {item} {concern} {name} (the player's name).
+export function registerVoiceKind(kind, def) {
+  if (!kind || !def) return;
+  VOICE_TEXT[kind] = { ...(def.pro ? { pro: def.pro } : {}), ...(def.con ? { con: def.con } : {}), ...(def.neutral ? { neutral: def.neutral } : {}) };
+  if (def.reasons) VOICE_REASON[kind] = def.reasons;
+}
+export const VOICE_KINDS = () => Object.keys(VOICE_TEXT);
+// the voices' own module (player deeds, trends, the 温度計, answers, campaigns) — loaded here so its morning hook always runs
+import('./voices_core.js').catch((e) => console.error(e)); // [R9-D]
+// the engagement a voice gets on its medium (likes on SNS, レス on a 掲示板, comments on a blog), by its heat
+function voiceEngage(m, heat, rnd = Math.random) {
+  const base = Math.max(1, heat) * (0.5 + rnd());
+  if (m === 'sns' || m === 'video') return { likes: Math.round(base * (8 + rnd() * 40)), shares: Math.round(base * (1 + rnd() * 9)) };
+  if (m === 'bbs') return { res: Math.round(2 + base * (1 + rnd() * 6)) };
+  if (m === 'blog') return { comments: Math.round(base * rnd() * 4) };
+  return {};
+}
+
 // ================================================================ STATE (g.state.govt)
 // Laws this module adds that are already in force at an era's start ({ policyId: year passed }).
 const GOVT_IN_FORCE = {
@@ -2529,10 +2633,12 @@ function resubmitKeyBills(g, s) {
 
 // ================================================================ VOICES
 function fillText(t, v) {
-  return String(t).replace(/\{title\}/g, v.title || '').replace(/\{item\}/g, v.item || '').replace(/\{concern\}/g, v.concern || '').replace(/「」/g, 'この件');
+  return String(t).replace(/\{title\}/g, v.title || '').replace(/\{item\}/g, v.item || '').replace(/\{concern\}/g, v.concern || '').replace(/\{name\}/g, v.name || 'あの人').replace(/「」/g, 'この件');
 }
+// [R9-D] ev: { kind, label, segs, data, stances? (an explicit stance per voice), target? ('player'), heat? (engagement) }
 function makeVoices(g, s, ev, n = 4) {
   const T = VOICE_TEXT[ev.kind] || VOICE_TEXT.law;
+  const RS = VOICE_REASON[ev.kind] || {};
   const segs = ev.segs || {};
   const ids = SEG_IDS();
   const pros = ids.filter((x) => num(segs[x]) > 0.05).sort((a, b) => segs[b] - segs[a]);
@@ -2540,27 +2646,43 @@ function makeVoices(g, s, ev, n = 4) {
   const year = gdate(g).year;
   const era = eraKey(g);
   const out = [];
+  const pname = (g.state && g.state.name) || '';
   for (let i = 0; i < n; i++) {
     let stance = i % 2 === 0 ? (T.con ? 'con' : 'neutral') : (T.pro ? 'pro' : 'neutral');
     if (T.neutral && i === n - 1 && n >= 3) stance = 'neutral';
+    if (Array.isArray(ev.stances) && ev.stances[i] && T[ev.stances[i]]) stance = ev.stances[i];
     const pool = stance === 'pro' ? pros : stance === 'con' ? cons : [];
     const seg = pool.length ? pool[Math.min(pool.length - 1, Math.floor(i / 2) + (Math.random() < 0.3 ? 1 : 0))] || pool[0] : pickOne(ids);
     const lines = T[stance] || T.con || T.pro;
-    const raw = pickOne(lines);
-    const vars = { title: (ev.data && ev.data.title) || ev.label, item: (ev.data && ev.data.item) || '', concern: VOICE_CONCERN[seg] || '' };
-    const who = pickOne(VOICE_WHO[seg] || ['会社員（40代）']);
+    const li = Math.floor(Math.random() * lines.length);
+    const raw = lines[li];
+    const vars = { title: (ev.data && ev.data.title) || ev.label, item: (ev.data && ev.data.item) || '', concern: VOICE_CONCERN[seg] || '', name: pname };
+    const pf = voiceProfile(seg, year);
     const m = mediumFor(year);
+    const reasons = RS[stance] || [];
+    const heat = num(ev.heat, 3) * (pf.age < 35 ? 1.3 : 1);
+    const head = m === 'letter' ? `【投書】${pf.job}　${pf.name}（${pf.age}）　${pf.pref}` : m === 'bbs' ? VOICE_MEDIA[m].head(pf.who, era) : VOICE_MEDIA[m].head(pf.who, era);
     const v = {
-      id: 'v' + (++s.voices.seq), day: today(g), event: ev.label, kind: ev.kind, seg, segName: (SEGS()[seg] || {}).name || '', who, medium: m, mediumLabel: VOICE_MEDIA[m].label,
-      header: VOICE_MEDIA[m].head(who, era), text: fillText(raw, vars), stance, fictional: true,
+      id: 'v' + (++s.voices.seq), day: today(g), event: ev.label, kind: ev.kind, seg, segName: (SEGS()[seg] || {}).name || '', who: pf.who, medium: m, mediumLabel: VOICE_MEDIA[m].label,
+      header: head, text: fillText(raw, vars), stance, fictional: true,
+      age: pf.age, ageGroup: pf.ageGroup, region: pf.region, pref: pf.pref, job: pf.job, name: pf.name, handle: pf.handle, bbsId: pf.bbsId, female: pf.female,
+      reason: reasons[li] || reasons[0] || '', target: ev.target || null, topic: ev.topic || ev.label, ...voiceEngage(m, heat),
     };
     out.push(v);
   }
   s.voices.feed.unshift(...out);
-  if (s.voices.feed.length > 120) s.voices.feed.length = 120;
+  if (s.voices.feed.length > 160) s.voices.feed.length = 160;
   emit(g, 'voices', { event: ev, voices: out });
   return out;
 }
+// [R9-D] voices about anything (voices_core.js: the player's deeds, the season, real headlines, campaigns, replies)
+export function addVoiceEvent(g, kind, label, o = {}) {
+  const s = GS(g);
+  if (!s) return [];
+  return makeVoices(g, s, { kind, label, segs: o.segs || null, data: o.data || null, stances: o.stances || null, target: o.target || null, topic: o.topic || label, heat: o.heat }, o.n ?? 4);
+}
+// [R9-D] the voices feed itself (voices_core.js marks ignored / answered voices on it)
+export function voiceFeedOf(g) { const s = GS(g); return s ? s.voices.feed : []; }
 // General voices when nothing new happened: about the cabinet and the economy, by segment approval.
 function generalVoices(g, s, n = 4) {
   const br = approvalBreakdownImpl(g, s);
@@ -3523,6 +3645,9 @@ const methods = {
     if (opts.event) list = list.filter((v) => v.kind === opts.event || v.event === opts.event);
     if (opts.segment) list = list.filter((v) => v.seg === opts.segment);
     if (opts.stance) list = list.filter((v) => v.stance === opts.stance);
+    // [R9-D] more filters: ageGroup ('20代'), region ('近畿'), job, target ('player'), topic, medium, hidden voices left out
+    for (const k of ['ageGroup', 'region', 'job', 'target', 'topic', 'medium']) if (opts[k]) list = list.filter((v) => v[k] === opts[k]);
+    if (!opts.all) list = list.filter((v) => !v.ignored);
     if (opts.since != null) list = list.filter((v) => v.day >= opts.since);
     return list.slice(0, n).map((v) => ({ ...v }));
   },

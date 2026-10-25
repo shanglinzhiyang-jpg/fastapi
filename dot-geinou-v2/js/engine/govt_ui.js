@@ -2031,6 +2031,7 @@ const TAB_OPINION = {
         out.push({ kind: 'seg', id: `vf_${f.id}`, x: x + 4, y: 69, w, h: 14, why: null, tip: `世論の声：${f.label}`, a: (u) => { u.tabState().vf = f.id; u.tabState().vrow = 0; u.dirty(); } });
         x += w + 2;
       }
+      out.push(btn({ id: 'v_big', x: 252, y: 69, w: 84, h: 14, label: '大きな画面で', why: VUI ? null : '世論の声の画面がない', tip: '世論の声の画面（媒体ごとの声・話題・温度計・あなたへの声・運動）を開く', a: (u) => (VUI ? VUI.openVoicesScreen(u.g) : null) })); // [R9-D]
       out.push(btn({ id: 'v_fresh', x: 340, y: 69, w: 84, h: 14, label: '新しい声', why: has(ui.g, 'voices') ? null : '世論の声のしくみがない', tip: '街の声・ネットの声を新しく集める', a: (u) => { safe(() => u.g.voices(6, { fresh: true })); st.vrow = 0; u.toast('新しい声を集めた', K.cyan); } }));
       out.push(listCtl(ui, 'vrow', { id: 'vrow', x: 4, y: 88, w: 420, h: 246, rowH: 32, n: d.voices.length, tip: (u) => { const v = d.voices[u.tabState().vrow | 0]; return v ? `${v.mediumLabel}・${v.segName}・${v.event || ''}` : ''; }, a: (u) => { const v = d.voices[u.tabState().vrow | 0]; if (v) return u.info(v.header, [`「${v.text}」`, '', `立場：${STANCE_WORD[v.stance] || '—'}・層：${v.segName}`, `話題：${v.event || '—'}・${v.mediumLabel}`]); } }));
     } else if (sb === 'demo') {
@@ -2224,11 +2225,19 @@ function drawVoices(c, ui, d) {
     R(c2, x + 4, y + 3, 3, 25, STANCE_COL[v.stance] || K.dim);
     T(c2, `${v.header}`, x + 10, y + 2, 10, K.dim, 'left', w - 60);
     T(c2, safe(() => dateLabel(ui.g, v.day).replace(/^\d+年/, ''), ''), x + w - 4, y + 2, 10, K.faint, 'right', 60);
-    T(c2, v.text, x + 10, y + 15, 12, K.text, 'left', w - 14);
+    T(c2, v.text, x + 10, y + 15, 12, K.text, 'left', w - 14 - (v.reason ? Math.min(120, measure(c2, v.reason, 10) + 14) : 0));
+    if (v.reason) T(c2, `理由：${v.reason}`, x + w - 4, y + 17, 10, STANCE_COL[v.stance] || K.dim, 'right', 120); // [R9-D]
   }, { empty: 'まだ声はない（「新しい声」で集める）' });
+  drawBtn(c, ui, ui.ctls.find((q) => q.id === 'v_big'), { center: true }); // [R9-D]
   panel(c, 432, 64, 204, 272, '声の読みかた');
   const ab = d.ab;
   let y = 84;
+  // [R9-D] the 世論の温度計 and the trending topics (voices_core.js)
+  const mood = has(ui.g, 'voicesThermo') ? safe(() => ui.g.voicesThermo(), null) : null;
+  if (mood) { T(c, `世論の温度 ${mood.heat}℃・${mood.level}`, 438, y, 12, mood.color, 'left', 192); hbar(c, 438, y + 15, 192, 5, mood.heat / 100, mood.color); y += 26; }
+  const tr = has(ui.g, 'voicesTrends') ? safe(() => ui.g.voicesTrends(3), []) || [] : [];
+  for (const r of tr) { T(c, `${r.rank}. ${r.topic}`, 438, y, 10, K.text, 'left', 128); T(c, `賛${r.proPct}・反${r.conPct}`, 630, y, 10, K.dim, 'right', 50); y += 12; }
+  if (tr.length) y += 4;
   y = para(c, '賛成・反対・中立の声を、同じ数だけ並べている。ひとつの声は、ひとりの意見にすぎない。', 438, y, 192, 10, K.text, 12, 4) + 6;
   if (ab) { T(c, `内閣支持率 ${ab.approval}%`, 438, y, 12, K.white); y += 16; for (const r of (ab.reasons || []).filter((q) => Math.abs(q.value) >= 0.5).slice(0, 6)) { T(c, `${r.value > 0 ? '＋' : '−'}${Math.abs(r.value)}　${r.label.replace(/（.*$/, '')}`, 438, y, 10, r.value > 0 ? K.good : K.bad, 'left', 192); y += 12; } }
 }
@@ -3536,6 +3545,10 @@ function phoneTabs(c, a, labels, idx, col) {
     PT(c, lab, x + tw / 2, a.y + 6, 12, on ? '#ffffff' : PC.text, 'center', tw - 6);
   });
 }
+// [R9-D] the HD 世論の声 screen (voices_ui.js: timeline by medium, filters, trends, the 温度計, answers, demos and campaigns);
+// the list below stays as the fallback when that module cannot load
+let VUI = null; // [R9-D]
+import('./voices_ui.js').then((m) => { VUI = m; }).catch((e) => { console.error(e); VUI = null; }); // [R9-D]
 // 世論の声: the voices feed (newspaper letters, street interviews, BBS, blogs, SNS by era) and the demos
 async function voicesApp(g) {
   const TABS2 = [['all', 'すべて'], ['pro', '賛成'], ['con', '反対'], ['demo', 'デモ']];
@@ -3734,7 +3747,7 @@ registerPhoneApp('voices', {
   icon(c, x, y) { drawBubbles(c, x, y); },
   badge: (g) => { const r = govtRole(g); return r.kind === 'pm' && has(g, 'demos') ? safe(() => g.demos({ active: true }).filter((d) => !(d.responses || []).length).length, 0) : 0; },
   cond: (g) => has(g, 'pol') && has(g, 'voices'),
-  open: (g) => voicesApp(g),
+  open: (g) => (VUI && !(g.auto && !g.auto.voicesui) ? VUI.openVoicesScreen(g) : voicesApp(g)), // [R9-D] the HD 世論の声 screen
 });
 registerPhoneApp('kokkai_live', {
   name: (g) => kokkaiAppName(g), color: APP_KOKKAI, order: 64,
