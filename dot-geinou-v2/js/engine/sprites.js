@@ -922,12 +922,12 @@ export function drawFace(ctx, look, x, y, scale = 2) {
 function drawPhotoFace(ctx, key, x, y, scale) {
   const img = histImg(key);
   if (!img || !img.naturalWidth) return false;
-  const w = 32 * scale, h = 24 * scale;
+  const w = 32 * scale, h = 32 * scale; // taller than the pixel face (32x24): the whole portrait fits, the frames around it have the room
   const iw = img.naturalWidth, ih = img.naturalHeight;
-  const sh = Math.min(ih, iw * (h / w)), sy = Math.max(0, Math.min(ih - sh, ih * 0.06));
+  const k = Math.min(w / iw, h / ih), dw = iw * k, dh = ih * k; // the whole portrait, nothing cut off
   ctx.save();
   ctx.fillStyle = '#0b1626'; ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, w + 2, h + 2);
-  ctx.drawImage(img, 0, sy, iw, sh, Math.round(x), Math.round(y), w, h);
+  ctx.drawImage(img, 0, 0, iw, ih, Math.round(x + (w - dw) / 2), Math.round(y + (h - dh) / 2), Math.round(dw), Math.round(dh));
   ctx.restore();
   return true;
 }
