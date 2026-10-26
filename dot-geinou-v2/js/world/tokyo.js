@@ -488,9 +488,9 @@ function generate() {
 
     // NPCs
     {
-      type: 'npc', id: 'oya', x: 6, y: 30, dir: 'down', look: LOOKS.oldwoman, name: '大家さん', talk: oyaTalk, person: 'oya',
+      type: 'npc', id: 'oya', x: 3, y: 31, dir: 'right', look: LOOKS.oldwoman, name: '大家さん', talk: oyaTalk, person: 'oya',
     },
-    { type: 'npc', id: 'tokyo_neighbor', x: 12, y: 31, dir: 'left', look: { ...LOOKS.mom, top: '#8ac0a0', apron: '#ffffff' }, name: 'となりの奥さん', wander: 2,
+    { type: 'npc', id: 'tokyo_neighbor', x: 13, y: 31, dir: 'left', look: { ...LOOKS.mom, top: '#8ac0a0', apron: '#ffffff' }, name: 'となりの奥さん', wander: 1,
       text: ['あら、ドット荘の人ね。こんにちは。', 'この路地はね、朝はみんなで掃除するのよ。\nゴミ出しは、月・木の朝8時までにね。'] },
     {
       type: 'npc', id: 'street_comedian', x: 10, y: 40, dir: 'down', look: LOOKS.comedian, name: 'ストリート芸人', person: 'jiro',
