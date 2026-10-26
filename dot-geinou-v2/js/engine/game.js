@@ -590,6 +590,7 @@ export class Game {
     if (!this.state || !this.map.place) return false;
     if (this.map.place.noSave) return false;
     const p = this.map.player;
+    try { if (typeof this.beforeSave === 'function') this.beforeSave(); } catch (e) { /* ignore */ }
     return saveGame(this.state, { place: this.map.placeId, room: this.map.roomId, x: p.x, y: p.y, dir: p.dir });
   }
 

@@ -2159,6 +2159,18 @@ function setTextSpeed(id) {
     P.ask = f;
   }
 })();
+// 設定 kept in the save: the sound, the text speed and the 大きな文字 switch go into g.state.settings whenever they change, and a loaded save puts them back
+export function rememberSettings(g) {
+  if (!g || !g.state) return;
+  g.state.settings = { muted: !!audio.muted, speed: SPEED, bigtext: bigtextPref() };
+}
+export function applySettings(g) {
+  const S = g && g.state && g.state.settings;
+  if (!S || typeof S !== 'object') return;
+  if (typeof S.muted === 'boolean' && !!audio.muted !== S.muted) audio.toggleMute();
+  if (typeof S.speed === 'string') setTextSpeed(S.speed);
+  if (S.bigtext === true || S.bigtext === false) setBigtextPref(S.bigtext);
+}
 function settingsRows(g) {
   const sp = SPEEDS.find((s) => s[0] === SPEED) || SPEEDS[1];
   const custom = appOrder(g).length > 0;
@@ -2183,11 +2195,11 @@ export async function settingsApp(g) {
     items: () => settingsRows(g),
     hint: 'A:えらぶ　B:もどる',
     pick(ph, it, i, v) {
-      if (it.id === 'sound') { audio.toggleMute(); audio.sfx('ok'); return; }
-      if (it.id === 'bigtext') { setBigtextPref(bigtextPref() === false); audio.sfx('cursor'); return; } // [R12-U1]
+      if (it.id === 'sound') { audio.toggleMute(); audio.sfx('ok'); rememberSettings(g); return; }
+      if (it.id === 'bigtext') { setBigtextPref(bigtextPref() === false); audio.sfx('cursor'); rememberSettings(g); return; } // [R12-U1]
       if (it.id === 'realpols') { g.setRealPols(!g.realPolsOn()); audio.sfx('cursor'); return; } // [R14-P]
       if (it.id === 'hist') { ph.run(v, () => histPowersApp(g)); return; } // [R14-H]
-      if (it.id === 'speed') { const k = SPEEDS.findIndex((s) => s[0] === SPEED); setTextSpeed(SPEEDS[(k + 1) % SPEEDS.length][0]); audio.sfx('cursor'); return; }
+      if (it.id === 'speed') { const k = SPEEDS.findIndex((s) => s[0] === SPEED); setTextSpeed(SPEEDS[(k + 1) % SPEEDS.length][0]); audio.sfx('cursor'); rememberSettings(g); return; }
       if (it.id === 'reset') { setAppOrder(g, null); ph.toast('アプリの並びを元にもどした', COL.settings); return; }
       if (it.id === 'order') { ph.run(v, () => phoneView(g, reorderView(g))); return; }
       if (it.id === 'keys') { ph.run(v, () => phoneInfo(g, { title: '操作のしかた', color: COL.settings, lines: controlsHelp(g) })); return; }

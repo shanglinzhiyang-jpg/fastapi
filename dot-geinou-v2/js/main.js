@@ -16,6 +16,7 @@ import { MINIGAMES } from './engine/minigame.js';
 import { saveIOMenu } from './engine/save_io.js';
 import { TitleScene, CreateScene, EraIntroScene, drawTitleBackdrop } from './title.js';
 import { onMorning, PEOPLE } from './engine/life.js';
+import { rememberSettings, applySettings } from './engine/phone_apps.js'; // 設定 are kept in the save
 import { ageOf, eraOf, isBirthday, birthdayFlag, sortFamily, RELATIONS, regionOf, familyLook } from './engine/profile.js';
 import { SW, SH, hash2 } from './engine/util.js';
 import { text, panel, measure, COLORS } from './engine/draw.js';
@@ -199,6 +200,7 @@ async function titleFlow(g) {
       const data = loadGame(slot);
       if (data && data.state) {
         g.state = data.state;
+        try { applySettings(g); } catch (e) { /* settings are a convenience */ }
         const L = data.location;
         if (L && PLACES[L.place]) {
           await g.goto(L.place, L.room, L.x, L.y, L.dir || 'down');
@@ -485,6 +487,7 @@ async function boot() {
   const coarse = window.matchMedia('(pointer: coarse)').matches || params.has('touch');
   if (coarse) document.body.classList.add('touch');
   const g = new Game(canvas);
+  g.beforeSave = () => rememberSettings(g);
   if (!coarse) {
     const setTouch = (on) => {
       if (document.body.classList.contains('touch') === on) return;
