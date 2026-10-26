@@ -18,7 +18,7 @@ import * as TVG from './contests_tv.js';
 import { drawHistImg } from './world_hist.js';
 // the logos of M-1 and キングオブコント (fan-game signboards; the marks belong to their owners)
 const CONTEST_LOGO = { m1: 'lg_m1_orange', koc: 'lg_koc' };
-const contestLogo = (c, defId, x, y, w, h) => { const k = CONTEST_LOGO[defId]; if (!k) return false; drawHistImg(c, k, x, y, w, h, 'contain', k === 'lg_koc' ? '#ffffff' : '#000000'); return true; };
+const contestLogo = (c, defId, x, y, w, h) => { const k = CONTEST_LOGO[defId]; if (!k) return false; drawHistImg(c, k, x, y, w, h, 'contain', null); return true; };
 
 const has = (g, k) => !!g && typeof g[k] === 'function';
 const num = (v, d = 0) => (v !== null && v !== '' && v !== undefined && Number.isFinite(Number(v)) ? Number(v) : d);

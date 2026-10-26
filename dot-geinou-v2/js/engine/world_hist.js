@@ -43,7 +43,7 @@ export function histSet(g, id, on) {
 // ---------------------------------------------------------------- images
 const CACHE = {};
 function srcOf(key) {
-  const f = `${key}.jpg`;
+  const f = `${key}.${key.startsWith('lg_m1_orange') || key === 'lg_koc' ? 'png' : 'jpg'}`;
   const A = typeof window !== 'undefined' && window.__DOT_ASSETS;
   if (key.startsWith('lg_')) return (A && A[f]) || 'assets/logos/' + f; // lg_*: contest logos (M-1, キングオブコント)
   const dir = key.startsWith('rp_') ? 'pol' : 'hist'; // rp_*: the real politicians' photos (politics_real.js)
@@ -65,7 +65,7 @@ export function histImg(key) {
 export function drawHistImg(c, key, x, y, w, h, mode = 'contain', frame = '#0b1626') {
   const img = histImg(key);
   c.save();
-  c.fillStyle = frame; c.fillRect(x - 1, y - 1, w + 2, h + 2);
+  if (frame) { c.fillStyle = frame; c.fillRect(x - 1, y - 1, w + 2, h + 2); }
   if (img && img.naturalWidth) {
     const iw = img.naturalWidth, ih = img.naturalHeight;
     if (mode === 'cover') {
@@ -77,6 +77,6 @@ export function drawHistImg(c, key, x, y, w, h, mode = 'contain', frame = '#0b16
       const dw = iw * s, dh = ih * s;
       c.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
     }
-  } else { c.fillStyle = '#16263c'; c.fillRect(x, y, w, h); }
+  } else if (frame) { c.fillStyle = '#16263c'; c.fillRect(x, y, w, h); }
   c.restore();
 }
