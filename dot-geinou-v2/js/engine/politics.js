@@ -3175,7 +3175,8 @@ function fillCabinet(g, p, opts = {}) {
 // ================================================================ [R14-P] 実在の政治家 (politics_real.js)
 // The overlay: the NPC record of a slot gets the person's name, face (look.photo), traits, age and terms; n.orig keeps what it was.
 function realOverlay(p, n, def, year) {
-  if (!n.orig) n.orig = { name: n.name, gender: n.gender, look: n.look, traits: n.traits, age: n.age, wins: n.wins };
+  if (!n.orig) n.orig = { name: n.name, gender: n.gender, look: n.look, traits: n.traits, age: n.age, wins: n.wins, house: n.house, office: n.office };
+  if (n.office === 'sangi') { n.office = 'shugi'; n.house = 'shugi'; } // all four sat in the 衆議院
   const oldSur = String(n.name || '').split(' ')[0];
   n.name = def.name; n.gender = def.gender || 'm';
   n.look = { hair: 'short', hairColor: 'black', top: '#2a2f45', bottom: '#2a2d36', jacket: true, tie: '#3a4a7a', photo: def.photo };
@@ -3202,6 +3203,8 @@ function realRestore(p, n) {
     if (word && f.name === sur + word) f.name = oldSur + word;
   }
   n.name = o.name; n.gender = o.gender; n.look = o.look; n.traits = o.traits; n.age = o.age; n.wins = o.wins;
+  if (o.house) n.house = o.house;
+  if (o.office) n.office = o.office;
   delete n.real; delete n.orig; delete n.ai;
 }
 // Seat the figures in their slots (idempotent; each is seated once). Called when the state is made, when the DPJ is founded, and every morning.
