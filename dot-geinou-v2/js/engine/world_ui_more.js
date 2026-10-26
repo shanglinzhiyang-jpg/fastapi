@@ -131,7 +131,7 @@ export function makeMore(ctx) {
     if (det.hist) { // [R14-H] 歴史の列強: the leader's photo and the flag, as they are
       const H = det.hist;
       const EV = H.ev; // [R14-H2] 独裁・個人崇拝・弾圧
-      R(c, DX, y, DW, EV ? 104 : 66, 'rgba(255,255,255,0.04)');
+      R(c, DX, y, DW, EV ? 118 : 66, 'rgba(255,255,255,0.04)');
       drawHistImg(c, H.portrait, DX + 4, y + 2, 50, 62, 'cover');
       if (EV) {
         [['独裁', EV.dict, '#d9a14a'], ['個人崇拝', EV.cult, '#c06ad0'], ['弾圧', EV.terror, '#d9605a']].forEach(([lab, v, col], i) => {
@@ -152,13 +152,21 @@ export function makeMore(ctx) {
       const MODE = EV ? ({ hist: '史実をたどっている', if: 'IF：史実と異なる展開が続く', fallen: '体制は終わった（もどすのは設定から）' }[EV.mode] || '') : '';
       para(c, MODE || '設定「歴史の列強」で参入している国', DX + 132, y + 50, DW - 170, 10, EV && EV.mode === 'if' ? K.warn : K.faint, 13, 2);
       drawHistImg(c, 'flag_jp', DX + DW - 32, y + 46, 26, 17); // 日本
-      y += EV ? 108 : 70;
+      if (EV) { // 国内の支持: high under a long dictatorship
+        T(c, '国内の支持', DX + 4, y + 102, 10, K.dim);
+        R(c, DX + 58, y + 105, 120, 6, 'rgba(255,255,255,0.10)'); R(c, DX + 58, y + 105, Math.round(120 * EV.support / 100), 6, K.good);
+        T(c, `${EV.support}%`, DX + 184, y + 102, 10, K.text);
+        T(c, EV.support >= 60 ? '国内の支持は高い' : EV.support >= 40 ? '支持はあるが、不満もある' : '支持は低い', DX + 214, y + 102, 10, K.faint, 'left', DW - 218);
+      }
+      y += EV ? 122 : 70;
     } else if (rs) {
       lineChart(c, DX, y, DW, 66, [{ pts: rs.pts, color: K.cyan }], { lo: -100, hi: 100, zero: true, ticks: [-100, 0, 100], startX: startX(ui), size: 8, axisW: 22 });
       y += 70;
     }
     // key facts
-    const facts = [
+    const histEv0 = det.hist && det.hist.ev && det.hist.ev.events.length;
+    if (histEv0) { T(c, `GDP 約${det.gdp}兆ドル　日本の貿易の約${det.trade}%　軍事力 ${det.mil}`, DX + 2, y, 10, K.text, 'left', DW - 4); y += 14; }
+    const facts = histEv0 ? [] : [
       ['首脳', det.leader], ['体制', det.gov || ''],
       det.real ? ['経済', `GDP 約${det.gdp}兆ドル（目安）`] : null, det.real ? ['貿易', `日本の貿易の約${det.trade}%`] : null,
       ['軍事力', `${det.mil}`], det.member && det.member.length ? ['加盟', det.member.join('・')] : null,
@@ -178,7 +186,10 @@ export function makeMore(ctx) {
         if (i === 0) { // the latest: the event, the regime's claim and the world's reaction
           y += para(c, `${e.date}　${e.text}`, DX + 4, y, DW - 4, 10, e.iff ? K.warn : K.text, 13, 2) + 1;
           if (e.claim && y < bottom - 12) y += para(c, `政府の主張「${e.claim}」`, DX + 8, y, DW - 8, 10, K.amber, 13, 1);
-          if (e.react && y < bottom - 12) y += para(c, `反応：${e.react}`, DX + 8, y, DW - 8, 10, '#ff9a8a', 13, 2) + 2;
+          if ((e.con && e.con.length) && y < bottom - 12) y += para(c, `非難：${e.con.join('・')}`, DX + 8, y, DW - 8, 10, '#ff9a8a', 13, 1);
+          if ((e.pro && e.pro.length || e.mid && e.mid.length) && y < bottom - 12) y += para(c, `${e.pro && e.pro.length ? `支持・理解：${e.pro.join('・')}　` : ''}${e.mid && e.mid.length ? `様子見：${e.mid.join('・')}` : ''}`, DX + 8, y, DW - 8, 10, K.good, 13, 1);
+          if (e.react && y < bottom - 12) y += para(c, `国際機関・世論：${e.react}`, DX + 8, y, DW - 8, 10, K.dim, 13, 1);
+          y += 2;
         } else y += para(c, `${e.date}　${e.text}`, DX + 4, y, DW - 4, 10, K.dim, 13, 1) + 1;
       });
     } else if (y < bottom - 14) para(c, det.note || '', DX, y, DW, 10, K.dim, 13, Math.floor((bottom - y) / 13));

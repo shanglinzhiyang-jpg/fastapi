@@ -2157,7 +2157,7 @@ function purgeHist(g) {
 }
 // [R14-H2] what world_hist_events.js may call
 const HX = {
-  W, today, worldDate, shortName, exists, relAdd, pairAdd, tensionShift, crisis, newConflict, endConflict, roll, rint, tradeShock,
+  W, today, worldDate, shortName, exists, relAdd, pairAdd, tensionShift, crisis, newConflict, endConflict, roll, rint, tradeShock, pairRelation, countriesNow, relation, alliesOf,
   news: (g, text, opts) => news(g, text, opts),
   phoneRaw: (g, text) => { try { if (typeof g.message === 'function') g.message({ from: 'ドット新聞 国際部', text, kind: 'news' }); } catch (e) { /* no phone */ } },
   endRegime: (g, id) => { try { setHistPower(g, id, false); } catch (e) { console.error(e); } },
@@ -2185,6 +2185,7 @@ function setHistPower(g, id, on) {
     s.crises = s.crises.filter((k) => k.country !== id);
   }
   histSet(g, id, on);
+  for (const k of Object.keys(W(g).alliances)) { const a = W(g).alliances[k]; if (a && a.hist && (a.members || []).includes(id)) delete W(g).alliances[k]; } // [R14-H3] its alliances end with it
   histEvDrop(g, HX, id); // [R14-H2] switching on starts its history over; switching off clears it
   purgeHist(g);
   return { ok: true, on };

@@ -57,11 +57,11 @@ export const CHRON = {
     E([1929, 2], 'lateran', 'ラテラノ条約が結ばれた（2月11日）。バチカン市国が成立し、教皇庁との関係が正常化した', { d: { cult: 5 } }),
     E([1935, 10], 'ethiopia', 'エチオピアに侵攻した（10月3日）。国際連盟は経済制裁を決めた', { tension: 4, crisis: { kind: 'war', title: 'イタリアのエチオピア侵攻', sev: 3, days: 220 }, pair: [['h_it', 'gb', -10], ['h_it', 'fr', -5]], major: 1 }),
     E([1936, 5], 'annex', 'エチオピアの首都を占領して併合し、イタリア領東アフリカを宣言した', { d: { cult: 10 } }),
-    E([1936, 10], 'axis', 'ローマ・ベルリン枢軸（10月）。ドイツと協力関係を結んだ', { pair: [['h_it', 'h_de', 10]] }),
+    E([1936, 10], 'axis', 'ローマ・ベルリン枢軸（10月）。ドイツと協力関係を結んだ', { pair: [['h_it', 'h_de', 10]], ally: { id: 'hist_axis', name: '独伊の枢軸', short: '独伊枢軸', members: ['h_it', 'h_de'], kind: 'partnership' } }),
     E([1937, 11], 'anticomintern', '日独防共協定に加わった（11月6日）', { jp: 8, major: 1 }),
     E([1938, 9], 'racial', '人種法が定められた（1938年）。ユダヤ人が学校や公職から排除された', { d: { terror: 10 } }),
     E([1939, 4], 'albania', 'アルバニアを併合した（4月）', { tension: 3 }),
-    E([1939, 5], 'steel', '独伊軍事同盟（鋼鉄協約、5月22日）が結ばれた', { pair: [['h_it', 'h_de', 8]] }),
+    E([1939, 5], 'steel', '独伊軍事同盟（鋼鉄協約、5月22日）が結ばれた', { pair: [['h_it', 'h_de', 8]], ally: { id: 'hist_axis', name: '独伊軍事同盟（鋼鉄協約）', short: '独伊同盟', members: ['h_it', 'h_de'], kind: 'defense' } }),
     E([1940, 6], 'war', '第二次世界大戦に参戦した（6月10日）。英国とフランスに宣戦した', { tension: 4, conflict: { with: 'gb', id: 'hist_ww2', name: '第二次世界大戦（欧州）', intensity: 3 }, pair: [['h_it', 'gb', -15]], major: 1 }),
     E([1940, 9], 'tripartite', '日独伊三国同盟の一員になった（9月27日）', { jp: 4 }),
     E([1943, 7], 'end', '連合軍がシチリア島に上陸した（7月）。ファシスト大評議会がムッソリーニの解任を決め、国王が首相を解任して逮捕した（7月25日）。ファシスト党の一党体制は終わった', { end: true, tension: -2, major: 1 }),
@@ -90,6 +90,7 @@ export const CHRON = {
   ] },
   h_cn: { origin: [1949, 10], events: [
     E([1949, 10], 'founding', '中華人民共和国が成立した（10月1日）。毛沢東が中央人民政府の主席になった', { d: { dict: 10, cult: 10 }, major: 1 }),
+    E([1950, 2], 'sino-soviet', '中ソ友好同盟相互援助条約が結ばれた（2月14日）', { ally: { id: 'hist_sinosoviet', name: '中ソ友好同盟相互援助条約', short: '中ソ同盟', members: ['h_cn', 'h_su'], kind: 'defense' }, pair: [['h_cn', 'h_su', 15]] }),
     E([1950, 10], 'korea', '朝鮮戦争に、中国人民志願軍が参戦した（10月）', { tension: 5, conflict: { with: 'kr', id: 'hist_korea', name: '朝鮮戦争', intensity: 3 }, pair: [['h_cn', 'us', -20]], major: 1 }),
     E([1950, 10], 'tibet', 'チベットに軍を進めた（10月）', { tension: 2 }),
     E([1950, 12], 'landreform', '土地改革と「反革命鎮圧運動」（1950〜52年）。地主とされた人々が打倒され、多くが処刑・拘束された', { d: { terror: 15 } }),
@@ -116,6 +117,7 @@ export const CHRON = {
     E([1975, 6], 'abolish', '通貨・市場・学校・宗教が廃止され、旧政権の関係者や知識人が処刑された', { d: { terror: 20 } }),
     E([1976, 1], 'constitution', '民主カンプチア憲法が施行され、国名が改められた（1月）', { d: { dict: 10 } }),
     E([1976, 4], 'primeminister', 'ポル・ポトが首相になった（4月）', { d: { cult: 5 } }),
+    E([1976, 3], 'china-support', '中国が、経済と軍事の面で民主カンプチアを支える関係になった', { ally: { id: 'hist_kh_cn', name: '中国・カンプチア協力', short: '中カ協力', members: ['h_kh', 'h_cn'], kind: 'partnership' }, pair: [['h_kh', 'h_cn', 10]] }),
     E([1976, 8], 'labor', '農村では強制労働と集団生活が続き、食糧不足と病気が広がった。政治犯の収容所（S-21＝トゥール・スレンなど）では、多くの人が尋問を受けたのち殺害された', { d: { terror: 25 }, crisis: { kind: 'humanitarian', title: 'カンボジアの強制労働と虐殺', sev: 3, days: 400 }, major: 1 }),
     E([1977, 4], 'border', 'ベトナムとの国境で武力衝突が激しくなった（1977年）', { tension: 3, conflict: { with: 'vn', id: 'hist_kh_vn', name: 'カンボジア・ベトナム紛争', intensity: 2 }, pair: [['h_kh', 'vn', -10]] }),
     E([1977, 9], 'purge', '党の内部でも粛清が進んだ（1977〜78年）', { d: { terror: 10 } }),
@@ -245,6 +247,8 @@ export const IFPOL = {
   ],
 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const num0 = (v, d) => (Number.isFinite(v) ? v : d);
+const hash = (s) => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
 const monthsOf = (R, ym) => (ym[0] - R.origin[0]) * 12 + (ym[1] - R.origin[1]);
 // how often history goes another way at the regime's last event (設定: g.state.histIf = 'none' | 'low' | 'mid' | 'high')
 export const IF_LEVELS = { none: 0, low: 0.25, mid: 0.5, high: 0.75 };
@@ -257,7 +261,7 @@ export function histEvState(g, X, id, create = false) {
   const all = s.histEv && typeof s.histEv === 'object' ? s.histEv : (create ? (s.histEv = {}) : null);
   if (!all) return null;
   let st = all[id];
-  if (!st && create) st = all[id] = { t0: X.today(g), done: {}, dict: 25, cult: 10, terror: 10, log: [], mode: 'hist', ifIdx: 0, nextIf: 0 };
+  if (!st && create) st = all[id] = { t0: X.today(g), done: {}, dict: 25, cult: 10, terror: 10, support: 58, log: [], mode: 'hist', ifIdx: 0, nextIf: 0, yr: 0 };
   return st || null;
 }
 export function histEvDrop(g, X, id) { const s = X.W(g); if (s.histEv) delete s.histEv[id]; }
@@ -268,23 +272,51 @@ export function histEvSummary(g, X, id) {
   const st = histEvState(g, X, id, false);
   const R = CHRON[id];
   if (!st || !R) return null;
-  const ev = (st.log || []).slice(-3).reverse().map((l) => { const d = X.worldDate(g, l.day); return { date: `${d.year}年${d.month}月`, text: l.text || '', claim: l.claim || '', react: l.react || '', iff: !!l.iff }; });
-  return { dict: Math.round(st.dict), cult: Math.round(st.cult), terror: Math.round(st.terror), events: ev, mode: st.mode || 'hist', on: histEventsOn(g) };
+  const ev = (st.log || []).slice(-3).reverse().map((l) => { const d = X.worldDate(g, l.day); return { date: `${d.year}年${d.month}月`, text: l.text || '', claim: l.claim || '', react: l.react || '', iff: !!l.iff, pro: l.pro || [], con: l.con || [], mid: l.mid || [] }; });
+  return { dict: Math.round(st.dict), cult: Math.round(st.cult), terror: Math.round(st.terror), support: Math.round(num0(st.support, 55)), years: Math.floor((X.today(g) - st.t0) / 120), events: ev, mode: st.mode || 'hist', on: histEventsOn(g) };
 }
 
+// how the other countries took it: they do not all see it alike (the relation with the regime, its allies, how heavy the event is, and each country's own temper)
+function reactions(g, X, id, o, key) {
+  const heavy = !!((o.d && o.d.terror >= 12) || (o.crisis && o.crisis.kind !== 'war') || (o.conflict) || (o.tension >= 5));
+  const allies = new Set((X.alliesOf(g, id) || []).map((a) => a.id));
+  const proT = heavy ? 52 : 34, conT = heavy ? 14 : -22;
+  const pro = [], con = [], mid = [];
+  for (const c of [...X.countriesNow(g), 'jp']) {
+    if (c === id) continue;
+    let r = c === 'jp' ? X.relation(g, id) : X.pairRelation(g, c, id);
+    if (allies.has(c)) r += 40;
+    r += (hash(`${c}|${key}`) % 25) - 12;
+    (r >= proT ? pro : r <= conT ? con : mid).push([c, r]);
+  }
+  const nm = (arr, asc) => arr.sort((a, b) => (asc ? a[1] - b[1] : b[1] - a[1])).slice(0, 4).map(([c]) => (c === 'jp' ? '日本' : X.shortName(g, c)));
+  return { pro: nm(pro, false), con: nm(con, true), mid: nm(mid, false).slice(0, 3) };
+}
+// an alliance of the regime (shown in 同盟; the player's own alliance with it is the usual 外交 action)
+function makeAlliance(g, X, id, a) {
+  if (!a.members.every((m) => X.exists(g, m))) return;
+  const s = X.W(g);
+  s.alliances[a.id] = { player: true, hist: true, name: a.name, short: a.short, kind: a.kind || 'partnership', members: a.members.slice(), strength: a.kind === 'defense' ? 70 : 45, since: X.today(g) };
+}
 function apply(g, X, id, st, o, text, claim, react, iff) {
   if (o.d) { st.dict = clamp(st.dict + (o.d.dict || 0), 0, 100); st.cult = clamp(st.cult + (o.d.cult || 0), 0, 100); st.terror = clamp(st.terror + (o.d.terror || 0), 0, 100); }
   const head = `${iff ? '【IF】' : ''}${text}`;
-  const tail = `${claim ? `（政府は「${claim}」と主張。` : '（'}${react || ''}）`;
-  X.news(g, `【国際】${X.shortName(g, id)}：${head}${react || claim ? tail : ''}`, { raw: true });
-  st.log.push({ day: X.today(g), text: head, claim: claim || '', react: react || '', iff: !!iff });
+  const rc0 = reactions(g, X, id, o, o.id || head);
+  const sides = `${rc0.pro.length ? `支持：${rc0.pro.join('・')}　` : ''}${rc0.con.length ? `非難：${rc0.con.join('・')}` : ''}`;
+  const tail = `${claim ? `（政府は「${claim}」と主張。` : '（'}${sides ? `${sides}。` : ''}${react || ''}）`;
+  X.news(g, `【国際】${X.shortName(g, id)}：${head}${react || claim || sides ? tail : ''}`, { raw: true });
+  const rc = reactions(g, X, id, o, o.id || head);
+  st.log.push({ day: X.today(g), text: head, claim: claim || '', react: react || '', iff: !!iff, pro: rc.pro, con: rc.con, mid: rc.mid });
   if (st.log.length > 40) st.log.shift();
   if (o.tension) X.tensionShift(g, o.tension);
   if (o.jp && X.exists(g, id)) X.relAdd(g, id, o.jp);
   for (const [a, b, d] of o.pair || []) if (X.exists(g, a) && X.exists(g, b)) X.pairAdd(g, a, b, d);
   if (o.crisis) X.crisis(g, { kind: o.crisis.kind, title: o.crisis.title, country: id, sev: o.crisis.sev, until: X.today(g) + o.crisis.days, hist: id });
   if (o.trade) X.tradeShock(g, id, -1, o.trade, `${X.shortName(g, id)}の政策による混乱`);
+  if (o.ally) makeAlliance(g, X, id, o.ally);
+  st.support = clamp(num0(st.support, 55) + (o.d ? ((o.d.cult || 0) * 0.25 - (o.d.terror || 0) * 0.05) : 0) - (o.crisis && o.crisis.kind === 'humanitarian' ? 3 : 0), 15, 95);
 }
+
 
 // every morning: fire what is due (≤ 2 events per regime per morning; ≤ 1 phone message)
 export function histEventsTick(g, X, onIds) {
@@ -295,8 +327,24 @@ export function histEventsTick(g, X, onIds) {
     if (!R) continue;
     const st = histEvState(g, X, id, true);
     if (!st.mode) st.mode = 'hist';
-    if (st.mode === 'fallen') continue;
+    if (st.mode === 'fallen') { st.support = clamp(num0(st.support, 30) - 0.5, 12, 95); continue; }
     const today = X.today(g);
+    // the support at home: propaganda and control keep it high (it follows the cult of the leader); a bad famine or war dents it for a while
+    if (today % 10 === 0) st.support = clamp(num0(st.support, 55) + (Math.min(92, 54 + st.cult * 0.4 + st.dict * 0.08) - num0(st.support, 55)) * 0.06, 15, 95);
+    // every game year of rule: a milestone, and (in the IF) a small chance that it falls at last — less when the support is high
+    const yrs = Math.floor((today - st.t0) / 120);
+    if (yrs > (st.yr || 0)) {
+      st.yr = yrs;
+      if (yrs % 10 === 0) {
+        const rc = reactions(g, X, id, { d: { terror: 0 } }, `ms${yrs}`);
+        X.news(g, `【国際】${X.shortName(g, id)}：独裁体制は${yrs}年を超えた。国内の支持は約${Math.round(st.support)}%と高い（${rc.pro.length ? `支持：${rc.pro.join('・')}　` : ''}${rc.con.length ? `非難：${rc.con.join('・')}` : '各国の評価は分かれる'}）`, { raw: true });
+      }
+      if (st.mode === 'if' && X.roll(Math.max(0.006, (68 - st.support) / 700))) {
+        st.mode = 'fallen';
+        apply(g, X, id, st, { tension: -3, d: { cult: -25, terror: -15, dict: -30 } }, '長く続いた体制が、国内の不満と国際的な孤立の末に倒れた', null, '各国は、新しい国の姿を見守っている', false);
+        continue;
+      }
+    }
     if (st.mode === 'hist') {
       const months = Math.floor((today - st.t0) / 10);
       let n = 0;
@@ -339,6 +387,17 @@ export function histEventsTick(g, X, onIds) {
         if (pol.crisis && !phoned) { phoned = true; X.phoneRaw(g, `【国際ニュース】${X.shortName(g, id)}\n${pol.text}`); }
       }
       st.nextIf = today + X.rint(70, 120);
+      // in the IF the regime also looks for friends: a cooperation pact with a country that thinks well of it (or with another regime of its kind)
+      if (X.roll(0.3)) {
+        const cand = X.countriesNow(g).filter((c) => c !== id && !X.alliesOf(g, id).some((a) => a.id === c)).map((c) => [c, X.pairRelation(g, c, id)]).filter(([, r]) => r >= 20).sort((a, b) => b[1] - a[1])[0];
+        if (cand) {
+          const nameC = X.shortName(g, cand[0]);
+          makeAlliance(g, X, id, { id: `hist_if_${id}_${cand[0]}`, name: `${X.shortName(g, id)}・${nameC}協力協定`, short: `${nameC}と協力`, members: [id, cand[0]], kind: 'partnership' });
+          X.pairAdd(g, id, cand[0], 8);
+          const rc = reactions(g, X, id, {}, `ally${today}`);
+          X.news(g, `【国際】【IF】${X.shortName(g, id)}と${nameC}が協力協定を結んだ（支持：${[nameC, ...rc.pro.filter((n) => n !== nameC)].slice(0, 4).join('・')}${rc.con.length ? `　非難：${rc.con.join('・')}` : ''}）`, { raw: true });
+        }
+      }
     }
   }
 }
