@@ -203,7 +203,15 @@ async function titleFlow(g) {
         try { applySettings(g); } catch (e) { /* settings are a convenience */ }
         const L = data.location;
         if (L && PLACES[L.place]) {
+          const was = { min: data.state.clock && data.state.clock.min, day: data.state.day };
+          g._clkAnim = null;
           await g.goto(L.place, L.room, L.x, L.y, L.dir || 'down');
+          // the moment of the save, exactly: the time of day (the weather follows the day, the region and the save's seed), and the spot
+          try {
+            const c = g.state.clock;
+            if (c && was.min != null && g.state.day === was.day) { c.min = was.min; }
+            g._clkAnim = null;
+          } catch (e) { /* ignore */ }
           g.notify('つづきから再開しました', { color: '#fff' });
           return;
         }
