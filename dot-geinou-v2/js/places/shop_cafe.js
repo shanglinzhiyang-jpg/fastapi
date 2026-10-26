@@ -133,7 +133,7 @@ cafe({
     r.set(2, 1, 'm').set(4, 1, 'w').set(6, 1, 'p').set(8, 1, 'l').set(10, 1, 'w');
     r.set(1, 2, 'k').set(2, 2, 'E').set(4, 2, 'F').set(5, 2, 'X').rect(1, 3, 5, 1, 'C');
     for (const [x, y] of [[8, 3], [8, 6]]) { r.set(x, y, 't').set(x - 1, y, 'c').set(x + 1, y, 'c'); }
-    r.set(3, 6, 'D').set(2, 6, 'h').set(4, 6, 'h').set(1, 7, 'P').set(10, 7, 'P').set(10, 2, 'B').set(11, 2, 'B');
+    r.set(3, 6, 'D').set(2, 6, 'h').set(4, 6, 'h').set(1, 7, 'P').set(10, 7, 'P').set(9, 2, 'B').set(10, 2, 'B');
   },
   cast: (talk, O) => [
     npc('jk_writer', 7, 6, 'right', { hair: 'long', hairColor: 'black', skin: 'light', top: '#c87a8a', bottom: '#3a3f4a', skirt: true, glasses: true }, '作家志望のお客さん', (g, n) => readByWriter(g, n, O)),
@@ -142,7 +142,7 @@ cafe({
   ],
   events: (O, master) => [
     { x: 3, y: 6, on: 'action', run: (g) => writeDesk(g, O, master) },
-    { x: 10, y: 2, w: 2, on: 'action', run: (g) => newspaper(g) },
+    { x: 9, y: 2, w: 2, on: 'action', run: (g) => newspaper(g) },
     { x: 5, y: 2, on: 'action', run: (g) => g.say('ケーキのショーケースだ。\n今日は、プリンとチーズケーキ。') },
   ],
 });
@@ -197,6 +197,32 @@ cafe({
   ],
 });
 
+// ====================================================================== CAFE MINATO (テレビ局エリア) — the TV district's cafe
+const CM_MASTER = { name: 'カフェの店員さん', look: { hair: 'short', hairColor: 'brown', skin: 'light', top: '#ffffff', bottom: '#2f4a3a', apron: '#2f4a3a' } };
+cafe({
+  id: 'shop_cafe_m', name: 'CAFE MINATO', hours: { spans: [[T(8), T(20)]], note: '' }, w: 11, h: 8, bgm: 'machi_cafe', floor: 'floor_wood', wall: 'green', exits: [5],
+  legend: { ...CLEG, m: 'wall_green+machi_menuboard', w: 'wall_green+window', p: 'wall_green+poster', l: 'wall_green+clock' }, master: CM_MASTER, masterAt: [3, 2],
+  greet: 'いらっしゃいませ。ご注文は、カウンターでどうぞ。', intro: ['いらっしゃいませ。CAFE MINATOへようこそ。', 'テレビ局が近いので、ADさんや作家さんが、よく台本を広げているんですよ。\n奥のテーブルは、書きものにどうぞ。'],
+  counter: { x: 1, y: 3, w: 4 },
+  talkOpen: ['朝は、ロケに出る前のスタッフさんでいっぱいです。', '「収録のあいだに、ここでネタを考える」って芸人さんも。\n…何を書いてるのかは、聞かないようにしてますけど。'], talkAgain: 'さっきお話ししたとおりです。\nまた何かあったら、聞いてくださいね。',
+  build(r) {
+    r.set(2, 1, 'm').set(4, 1, 'w').set(7, 1, 'p').set(9, 1, 'l');
+    r.set(1, 2, 'k').set(2, 2, 'E').set(5, 2, 'X').rect(1, 3, 4, 1, 'C');
+    for (const [x, y] of [[8, 3], [8, 5]]) { r.set(x, y, 't').set(x - 1, y, 'c').set(x + 1, y, 'c'); }
+    r.set(2, 5, 'D').set(1, 5, 'h').set(3, 5, 'h').set(9, 6, 'P').set(1, 6, 'P').set(9, 2, 'B');
+  },
+  cast: (talk, O) => [
+    npc('cm_writer', 5, 5, 'left', { ...LOOKS.makeup, top: '#4a4f5c', hair: 'long', hairColor: 'black' }, '放送作家さん', (g, n) => readByWriter(g, n, O)),
+    npc('cm_ad', 9, 4, 'left', { ...LOOKS.ad, top: '#3a8a6a' }, 'ADさん', ['次の収録まで、あと四十分。…コーヒー、一気に飲まないと。', '現場では、「待ち」の時間がいちばん長いんだ。\nだから台本を持ち歩く人は、強いよ。']),
+    npc('cm_geinin', 7, 6, 'right', { ...LOOKS.comedian2, top: '#d6a43a' }, '収録待ちの芸人', ['楽屋にいると落ち着かなくて、ここに逃げてきた。', 'ネタは、人の少ない席で書くと進むんだ。\n…あのテーブルの席、おすすめ。']),
+  ],
+  events: (O, master) => [
+    { x: 2, y: 5, on: 'action', run: (g) => writeDesk(g, O, master) },
+    { x: 9, y: 2, on: 'action', run: (g) => newspaper(g) },
+    { x: 5, y: 2, on: 'action', run: (g) => g.say('ケーキのショーケースだ。\nタルトとシフォンケーキが並んでいる。') },
+  ],
+});
+
 // ====================================================================== 純喫茶 ドット (なんば)
 const JN_MASTER = { name: '純喫茶のママ', look: { hair: 'bob', hairColor: 'silver', skin: 'fair', top: '#ffffff', bottom: '#8a3a4a', apron: '#d8c8a0', skirt: true } };
 cafe({
@@ -208,7 +234,7 @@ cafe({
     r.set(2, 1, 'm').set(4, 1, 'w').set(6, 1, 'p').set(8, 1, 'l').set(10, 1, 'w');
     r.set(1, 2, 'k').set(2, 2, 'E').set(4, 2, 'F').set(5, 2, 'X').rect(1, 3, 5, 1, 'C');
     for (const [x, y] of [[8, 3], [8, 6], [3, 6]]) { r.set(x, y, 't').set(x - 1, y, 'c').set(x + 1, y, 'c'); }
-    r.set(1, 7, 'P').set(10, 7, 'P').set(10, 2, 'B').set(11, 2, 'G');
+    r.set(1, 7, 'P').set(10, 7, 'P').set(9, 2, 'B').set(10, 2, 'G');
   },
   cast: (talk, O) => [
     npc('jn_shogi1', 7, 6, 'right', { ...LOOKS.oldman, top: '#7a8a6a' }, '将棋のおじいさん', async (g, n) => {
@@ -227,7 +253,7 @@ cafe({
   ],
   events: (O, master) => [
     { x: 3, y: 6, on: 'action', run: (g) => writeDesk(g, O, master) },
-    { x: 10, y: 2, w: 2, on: 'action', run: (g) => newspaper(g) },
+    { x: 9, y: 2, w: 2, on: 'action', run: (g) => newspaper(g) },
   ],
 });
 

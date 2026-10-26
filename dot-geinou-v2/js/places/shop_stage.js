@@ -564,7 +564,7 @@ async function barAct(g) {
   bar.set(2, 1, 'S').set(3, 1, 'S').set(5, 1, 'p').set(7, 1, 'c').set(9, 1, 'p');
   bar.set(1, 2, 'k').set(2, 2, 'F').set(5, 2, 'F').rect(1, 3, 5, 1, 'C').rect(1, 4, 5, 1, 's');
   bar.rect(7, 2, 4, 2, ',').set(7, 2, 'a').set(10, 2, 'a').set(9, 3, 'Z');
-  for (const x of [8, 10]) { bar.set(x, 6, 't'); bar.set(x - 1, 6, 'h'); bar.set(x + 1, 6, 'h'); }
+  for (const x of [8, 10]) { bar.set(x, 6, 't'); bar.set(x - 1, 6, 'h'); if (x + 1 < 11) bar.set(x + 1, 6, 'h'); }
   bar.set(1, 7, 'P').set(10, 7, 'P');
   bar.exit(5, 6);
   const menu = async (g, n) => {

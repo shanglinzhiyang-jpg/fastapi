@@ -277,7 +277,7 @@ function furuhon(F) {
     },
     build(r) {
       r.set(2, 1, 'p').set(5, 1, 'w').set(7, 1, 'p');
-      r.rect(1, 3, 3, 1, 'C').set(2, 4, 'R').rect(5, 2, 4, 1, 'B').rect(5, 4, 4, 1, 'B').rect(5, 6, 2, 1, 'b').set(8, 6, 'x').set(1, 6, 'x').set(1, 7, 'P');
+      r.rect(1, 3, 3, 1, 'C').set(2, 4, 'R').rect(5, 2, 4, 1, 'B').rect(5, 4, 4, 1, 'B').rect(5, 6, 2, 1, 'b').set(8, 6, 'x').set(1, 6, 'x').set(1, 5, 'P');
     },
     cast: F.cast,
     events: [
@@ -365,7 +365,7 @@ store({
   },
   build(r) {
     r.set(2, 1, 'w').set(5, 1, 'p').set(8, 1, 'c').set(10, 1, 'w');
-    r.rect(1, 2, 4, 1, 'Y').rect(1, 4, 4, 1, 'Y').rect(1, 6, 4, 1, 'Y').rect(6, 6, 3, 1, 'Y').set(10, 6, 'x').set(10, 7, 'b').rect(7, 4, 3, 1, 'C').set(8, 5, 'R').set(11, 2, 'P');
+    r.rect(1, 2, 4, 1, 'Y').rect(1, 4, 4, 1, 'Y').rect(1, 6, 4, 1, 'Y').rect(6, 6, 3, 1, 'Y').set(10, 6, 'x').set(10, 7, 'b').rect(7, 4, 3, 1, 'C').set(8, 5, 'R').set(10, 2, 'P');
   },
   cast: [
     npc('hy_kyaku1', 6, 5, 'right', { ...LOOKS.comedian2, top: '#ff7eb6' }, 'コント小道具を探す芸人', ['コントの小道具は、ここでそろえるのが、いちばんなんだ。', 'ハリセンも、つけひげも、紙の王冠も。\n全部、100円。…いや、200円のもあるけど。']),

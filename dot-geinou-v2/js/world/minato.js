@@ -29,6 +29,7 @@ import { text } from '../engine/draw.js';
 import { VIEW_W, VIEW_H, makeCanvas, shade, fmtMoney } from '../engine/util.js';
 import { grid, set, put, fill, hroad, vroad, ekiStairs } from './townkit.js';
 import { fountain, busStop, streetStage, statue, subwayEntrance } from './props.js';
+import { shopDoor } from './shopkit.js'; // [R12-S2] the shop interiors' door hook (opening hours); js/places/shop_*.js
 
 export const MINATO_W = 92;
 export const MINATO_H = 64;
@@ -1242,7 +1243,7 @@ function generate() {
       text: ['オフィスビル「しおかぜビル」。', '広告の会社や、番組の制作会社が入っているらしい。\n「関係者以外 立入禁止」の札がある。'] },
     { type: 'building', x: 2, y: 20, w: 4, h: 3, door: 2, name: 'コーヒースタンド', kind: 'small', wall: '#efe4d4', roof: '#3a2c24', sign: { text: 'コーヒー', bg: '#3a2c24', color: '#fff3dc' }, talk: coffeeStand },
     // [R9-A] the コンビニ on the corner of テレビ通り and the east avenue, the cafe next to it
-    { type: 'building', x: 71, y: 19, w: 5, h: 4, door: 2, name: 'CAFE MINATO', kind: 'cafe', sign: { text: 'CAFE MINATO', bg: '#2f4a3a', color: '#f4efe6' }, talk: coffeeStand },
+    { type: 'building', x: 71, y: 19, w: 5, h: 4, door: 2, ...shopDoor('shop_cafe_m'), name: 'CAFE MINATO', kind: 'cafe', sign: { text: 'CAFE MINATO', bg: '#2f4a3a', color: '#f4efe6' }, talk: coffeeStand }, // [R12-S2]
     { type: 'building', x: 65, y: 19, w: 5, h: 4, door: 2, name: 'ドットマート', kind: 'konbini', sign: { text: 'ドットマート' },
       text: ['コンビニ「ドットマート」。', 'お昼どきで、レジに長い行列ができている…。\n買い物は、東京エリアのローソンにしよう。'] },
     { type: 'building', x: 78, y: 17, w: 8, h: 6, door: 4, name: 'ホテル ドット港', kind: 'hotel', wall: '#ece6dc', roof: '#3a4a7a', sign: { text: 'HOTEL DOT MINATO', bg: '#1d2a5e', color: '#ffd23f' },

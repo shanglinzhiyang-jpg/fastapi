@@ -383,6 +383,11 @@ export const GUIDE = {
     hint: '劇場通り、ドット小劇場のとなり',
     lines: ['読み合わせ席で、相方とネタ合わせ／ひとりで台本を読める', 'ケーキ・パンケーキ・コーヒー（9:00〜21:00）'],
   },
+  shop_cafe_m: {
+    town: 'tokyo', name: 'CAFE MINATO', short: 'カフェ',
+    hint: 'テレビ局エリア、電波塔通りの角（ドットマートのとなり）',
+    lines: ['テレビ局の人が台本を広げる席。ネタを書く席（台本エディタ）がある', '放送作家さんに台本を見てもらえる／ADさんの現場の話（8:00〜20:00）'],
+  },
   shop_shogekijo: {
     town: 'tokyo', name: 'ドット小劇場', short: '小劇場',
     hint: '劇場通りの西のはし、客席六十の小さな劇場',
@@ -399,7 +404,7 @@ export const GUIDE = {
     lines: ['昼席12:00・夜席17:30の寄席（落語・漫才）', '観ると話芸・間・客席を読む力が伸びる', '前座の仕事（落語）／楽屋で差し入れ'],
   },
   shop_netabar: {
-    town: 'tokyo', name: 'お笑いBAR 笑いの穴', short: 'お笑いBAR',
+    town: 'tokyo', name: 'お笑いBAR 笑いの穴', short: 'お笑いBAR', secret: true, // 1995年〜 only: listed once you have been inside (no hint in an era where it does not exist yet)
     hint: '劇場通りの東のはし、地下の看板（1995年〜）',
     lines: ['ワンドリンクで、5分のネタ見せ・大喜利ナイト', 'ヤジを返すとアドリブ・度胸が伸びる／チップがもらえる', '18:00〜27:00'],
   },
@@ -441,7 +446,7 @@ export const GUIDE = {
   shop_ginko: {
     town: 'tokyo', name: 'ドット銀行 商店街支店', short: '銀行',
     hint: '駅前の大通り、八百屋のとなり',
-    lines: ['窓口は平日9:00〜15:00・ATMの時間は時代による', '預け入れ・引き出し・定期預金・ローンの相談', '携帯の「銀行」アプリと同じ口座'],
+    lines: ['窓口は平日9:00〜15:00・ATMの時間は時代による', '預け入れ・引き出し・定期預金・ローンの相談', '口座は郵便局の貯金とも共通'],
   },
   shop_izakaya: {
     town: 'tokyo', name: '居酒屋 とりあえず', short: '居酒屋',
@@ -533,7 +538,7 @@ export const GUIDE_ORDER = [
   'machi', 'super', 'hanaya', 'ramen', 'cafe', 'salon', 'famires', 'gym', 'karaoke', 'fudousan', 'kagu', 'mansion', 'tower',
   // [R12-S2] 商店街のアーケード・駅前・横丁の店
   'shop_wagashi', 'shop_shoten', 'shop_yakkyoku', 'shop_yaoya', 'shop_koban', 'shop_yubin', 'shop_ginko', 'shop_izakaya', 'shop_yakitori', 'shop_chuka', 'shop_tachinomi',
-  'minato', 'ntv', 'tbs', 'tvasahi', 'fujitv', 'tvtokyo',
+  'minato', 'shop_cafe_m', 'ntv', 'tbs', 'tvasahi', 'fujitv', 'tvtokyo',
   'namba', 'station_namba', 'shinkigeki', 'nsc', 'shochiku', 'takoyaki', 'hotel', 'mbs', 'ktv', 'jikka',
   // [R12-S2] なんば 戎橋筋・千日前・にし通りの店
   'shop_geki_n', 'shop_ramen_n', 'shop_karaoke_n', 'shop_furugi_n', 'shop_junkissa_n', 'shop_teishoku_n', 'shop_sennichimae', 'shop_hall_n', 'shop_kushikatsu', 'shop_horoyoi', 'shop_hyakuen', 'shop_furuhon_n',

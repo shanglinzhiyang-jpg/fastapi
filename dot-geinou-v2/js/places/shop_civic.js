@@ -290,7 +290,7 @@ async function postTalk(g, n) {
   if (k < 0 || rows[k].id === 'end') { await g.say('またどうぞ。', o); return; }
   const id = rows[k].id;
   if (id === 'info') {
-    await g.say([`いまの郵便料金は、定形郵便（25gまで）が${real(pg.letter)}、はがきが${real(pg.card)}です。`, byEra(g, { showa: '郵便番号は、5けたから7けたに変わる予定と聞きました。', heisei_early: '郵便番号が、7けたになりました。住所のあたまに書いてくださいね。', heisei: '民営化後も、全国どこでも同じ料金でお届けします。', reiwa: '料金は上がりましたが、手書きの手紙は、また見直されているんですよ。' })], o);
+    await g.say([`いまの郵便料金は、定形郵便（25gまで）が${real(pg.letter)}、はがきが${real(pg.card)}です。`, byEra(g, { showa: '郵便番号は、5けたです。宛名の右上に、忘れずに書いてくださいね。', heisei_early: (yearNow(g) * 100 + monthNow(g) < 199802 ? '郵便番号は、いまは5けたです。もうすぐ7けたに変わると聞きました。' : '郵便番号が、7けたになりました。住所のあたまに書いてくださいね。'), heisei: '民営化後も、全国どこでも同じ料金でお届けします。', reiwa: '料金は上がりましたが、手書きの手紙は、また見直されているんですよ。' })], o);
     return;
   }
   if (id === 'stamp') {
