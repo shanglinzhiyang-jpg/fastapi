@@ -3729,11 +3729,13 @@ async function launcherApp(g) {
       ...alerts,
       { label: `あなた：${role.label}`, sub: ROLE_NOTE[role.kind], tab: null },
       ...TABS.map((t) => ({ label: t.label, sub: accessFor(role, t.id), right: safe(() => (t.alert ? t.alert({ g, tabState: () => ({}) }) : 0), 0) ? '●' : '', rightColor: PC.bad, tab: t.id })),
+      ...(has(g, 'aiAgents') && has(g, 'politicsScreen') ? [{ label: '政治家の動向', sub: '名鑑・議員の動き・党内勢力図・政局', tab: null, ai: true }] : []), // [R11-P]
     ];
     if (index < 0) index = alerts.length ? 0 : alerts.length + 1;
-    const i = await PH.phoneList(g, { title: '政府中枢', color: APP_GOVT, items, index: clamp(index, 0, items.length - 1), describe: (k) => (items[k] && items[k].full ? `${items[k].full}（Aで開く）` : items[k] && items[k].tab ? (TABS.find((t) => t.id === items[k].tab) || {}).about || '' : 'A：概況から開く') });
+    const i = await PH.phoneList(g, { title: '政府中枢', color: APP_GOVT, items, index: clamp(index, 0, items.length - 1), describe: (k) => (items[k] && items[k].full ? `${items[k].full}（Aで開く）` : items[k] && items[k].tab ? (TABS.find((t) => t.id === items[k].tab) || {}).about || '' : items[k] && items[k].ai ? '議員の名鑑・自分で決めた動きと理由・党内勢力図・政局の流れ（Aで開く）' : 'A：概況から開く') });
     if (i < 0) return;
     index = i;
+    if (items[i].ai) { await g.politicsScreen('ai'); continue; } // [R11-P]
     await openGovtConsole(g, { tab: items[i].tab || 'overview', sub: items[i].subId || undefined });
   }
 }

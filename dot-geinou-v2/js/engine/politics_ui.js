@@ -37,6 +37,7 @@ import { crimeLaw } from './crime.js';
 // R5-D: the 党内 hub (factions, 倒閣運動, conflicts, pledges, stances), the bill studio and the legislation record
 import { registerIntraUI } from './politics_intra_ui.js';
 import { registerLawUI } from './politics_law_ui.js';
+import { registerAiUI } from './politics_ai_ui.js'; // [R11-P] 政治家の動向: 名鑑・動向・勢力図・政局 (politics_ai_ui.js)
 
 const {
   OFFICES, POLICY_AREAS, AREA_ORDER, POLICIES, POLICY_ORDER, SEGMENTS, SEGMENT_ORDER, POSTS, PARTY_POST_ORDER,
@@ -799,9 +800,11 @@ const COMMANDS = [
   { id: 'groups', label: '各界', color: '#8ad06a', tip: '業界団体・労働組合・メディア・宗教団体など、政治を動かす各界との関係（政府中枢の「各界」へ）' },
   { id: 'money', label: '資金・活動', color: '#ffd23f', tip: '政治資金は毎年、収支報告書で公開される（原則、翌年3月末まで）' },
   { id: 'news', label: 'ニュース', color: '#9aa3c8', tip: '新聞やテレビが伝えた、最近の政治の動き' },
+  { id: 'ai', label: '動向', color: '#5fb7ff', tip: '議員たちの名鑑・自分で決めた動き・党内勢力図・政局の流れ（政治家の動向）' }, // [R11-P]
   // the government console (js/engine/govt_ui.js, when loaded)
   { id: 'govt', label: '政府中枢', color: '#ffb547', tip: '予算・税・省庁・世論・国会・安全保障・危機管理を一つの画面で（政府中枢）' },
 ];
+ICONS.ai = (c, x, y, col) => UIK.drawAiIcon(c, x, y, col); // [R11-P]
 function alerts(g) {
   const p = polOf(g);
   const me = p.me;
@@ -1055,7 +1058,7 @@ function drawDashboard(c, g, ui, view, s) {
       frame(c, x + 2, y + lift, tw - 4, 44, sel ? shade(cmd.color, -0.55) : '#151d44', sel ? cmd.color : C.edge);
       if (sel) R(c, x + 3, y + 1 + lift, tw - 6, 1, shade(cmd.color, 0.2));
       ICONS[cmd.id](c, x + tw / 2 - 10, y + 3 + lift, cmd.color);
-      T(c, fit(c, cmd.label, tw - 4, tw < 66 ? 11 : 12), x + tw / 2, y + 26 + lift, tw < 66 ? 11 : 12, sel ? '#ffffff' : C.dim, 'center');
+      T(c, fit(c, cmd.label, tw - 4, tw < 60 ? 10 : tw < 66 ? 11 : 12), x + tw / 2, y + 26 + lift, tw < 60 ? 10 : tw < 66 ? 11 : 12, sel ? '#ffffff' : C.dim, 'center'); // [R11-P] eleven tiles
     });
   }
 }
@@ -4656,3 +4659,4 @@ const UIK = {
 };
 registerIntraUI(UIK, SECTIONS);
 registerLawUI(UIK, SECTIONS);
+registerAiUI(UIK, SECTIONS); // [R11-P]

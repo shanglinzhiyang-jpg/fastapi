@@ -223,6 +223,8 @@ import { installIntra } from './politics_intra.js';
 import { installConflict } from './politics_conflict.js';
 import { installPledge } from './politics_pledge.js';
 import { installLaw } from './politics_law.js';
+// [R11-P] 政治家AI: every NPC politician is an agent (traits, tastes, goals, memory, relationships) that decides and learns (politics_ai*.js)
+import { installAI } from './politics_ai.js';
 
 export const POLITICS_CONTRACT_VERSION = 1;
 export const POL_STATE_VERSION = 1;
@@ -2331,7 +2333,11 @@ function runLocal(g, p, e, fy) {
   let M = 1, cands = [];
   if (kind === 'kugi') { M = L.total || 40; cands = fieldCandidates(p, M, fy, 'kugi', { mine: decl && decl.party }); }
   else if (kind === 'togi') { M = 3; cands = fieldCandidates(p, M, fy, 'togi', { mine: decl && decl.party }); }
-  else cands = execCandidates(p, L, kind, fy);
+  else {
+    cands = execCandidates(p, L, kind, fy);
+    // [R11-P] a Diet member who is ripe resigns the seat and stands (politics_ai_act.js execRunner); the result is told back below
+    if (INTRA.ai && (kind === 'chiji' || kind === 'shicho')) { try { const rn = INTRA.ai.execRunner(g, p, kind, cands, fy); if (rn) cands.push(rn); } catch (err) { console.error(err); } }
+  }
   if (decl) cands.push(playerCandidate(g, p, e, decl));
   const elect = electorateFor(kind === 'chiji' ? 'chiji' : 'kugi', year);
   const race = runRace(p, { candidates: cands, M, electorate: elect, profile: 'urban', fy, kind });
@@ -2353,6 +2359,7 @@ function runLocal(g, p, e, fy) {
       L.holder = n.id;
     }
     L.backers = w.backers || [];
+    try { if (INTRA.ai) INTRA.ai.afterExec(g, p, kind, w.isPlayer ? 'player' : w.id || null); } catch (err) { console.error(err); } // [R11-P]
   }
   L.termEnd = absOfDay(p, e.day) + 4 * YEAR_DAYS;
   return { seats, total: M, turnout: race.turnout, valid: race.valid, race, my, winners: winnersOf(race, Math.min(M, 10)) };
@@ -2413,7 +2420,11 @@ function runLeader(g, p, e) {
   // a leader who resigned (with the cabinet) does not run again
   const outgoing = p.flags.outgoingLeader || null;
   if (outgoing) pool.delete(outgoing);
-  let npcs = [...pool].filter((id) => p.npcs[id] && p.npcs[id].party === pt.id && p.npcs[id].office).sort((a, b) => (p.npcs[b].traits.ambition + p.npcs[b].traits.charisma) - (p.npcs[a].traits.ambition + p.npcs[a].traits.charisma) + gauss() * 30).slice(0, decl ? 2 : irnd(1, 3));
+  // [R11-P] the agents decide who stands (ambition, readiness, the faction behind them); the old pool is the fallback
+  let aiPick = null;
+  try { aiPick = INTRA.ai ? INTRA.ai.leaderField(g, p, pt, outgoing, !!decl) : null; } catch (e) { console.error(e); }
+  if (aiPick) aiPick = aiPick.filter((id) => p.npcs[id] && p.npcs[id].party === pt.id && p.npcs[id].office);
+  let npcs = aiPick && aiPick.length ? aiPick : [...pool].filter((id) => p.npcs[id] && p.npcs[id].party === pt.id && p.npcs[id].office).sort((a, b) => (p.npcs[b].traits.ambition + p.npcs[b].traits.charisma) - (p.npcs[a].traits.ambition + p.npcs[a].traits.charisma) + gauss() * 30).slice(0, decl ? 2 : irnd(1, 3));
   if (!npcs.length) npcs = [newNpc(p, { party: pt.id, house: 'shugi', office: 'shugi', wins: irnd(5, 12), charisma: irnd(50, 85) }).id];
   const cands = npcs.map((id) => {
     const n = p.npcs[id];
@@ -2811,7 +2822,14 @@ function alignment(p, partyId, policyId) {
   return clamp(s, 0, 1);
 }
 // How a party votes on a bill: { yes: 0..1 share of its members voting yes }.
+// [R11-P] The party line (whip) is blended with the convictions of its named members (politics_ai_act.js partyYes); budgets and confidence votes stay party-line.
 function partyStance(p, partyId, bill) {
+  const base = partyStance0(p, partyId, bill);
+  const ai = INTRA.ai;
+  if (!ai || !bill || bill.kind === 'budget' || bill.kind === 'noconfidence') return base;
+  try { return ai.partyYes(p, partyId, bill, base); } catch (e) { console.error(e); return base; }
+}
+function partyStance0(p, partyId, bill) {
   const coalition = p.cabinet.partyIds || [];
   const ruling = coalition.includes(partyId);
   if (bill.kind === 'budget') return ruling ? 0.995 : 0.02;
@@ -2826,7 +2844,7 @@ function partyStance(p, partyId, bill) {
   // policy is close to its own, rarely otherwise; the decision holds for the bill's whole way (review)
   if (bill.sponsor === 'cabinet' && !ruling) {
     const bloc = bill.bloc || (bill.bloc = {});
-    if (bloc[partyId] == null) bloc[partyId] = Math.random() < 1 / (1 + Math.exp(-(al - 0.64) * 18)) ? 1 : 0;
+    if (bloc[partyId] == null) bloc[partyId] = INTRA.ai ? INTRA.ai.oppBloc(p, partyId, bill, al) : (Math.random() < 1 / (1 + Math.exp(-(al - 0.64) * 18)) ? 1 : 0); // [R11-P] the opposition's strategy decides (seeded)
     return bloc[partyId] ? 0.93 : 0.04;
   }
   // ext (hook for govt.js, A1): bill.rebel { partyId: share } = members of a ruling party voting against a divisive cabinet bill (造反)
@@ -3140,6 +3158,7 @@ function fillCabinet(g, p, opts = {}) {
     const n = pickMinister(p, party, out);
     n.posts.push(post);
     out[post] = n.id;
+    try { if (INTRA.ai) INTRA.ai.afterMinister(g, p, n, post); } catch (e) { console.error(e); } // [R11-P]
   }
   // former ministers lose their post (their NPC record is pruned later)
   for (const [post, id] of Object.entries(prev)) if (out[post] !== id && id !== 'player' && p.npcs[id]) p.npcs[id].posts = p.npcs[id].posts.filter((x) => x !== post);
@@ -3152,7 +3171,9 @@ function fillCabinet(g, p, opts = {}) {
 function pickMinister(p, party, taken = {}) {
   const busy = new Set(Object.values(taken));
   const pool = Object.values(p.npcs).filter((n) => n.party === party && (n.office === 'shugi' || n.office === 'sangi') && !busy.has(n.id) && !n.posts.some((x) => POSTS[x] && POSTS[x].kind !== 'party') && n.wins >= 3 && n.id !== p.cabinet.pm);
-  if (pool.length >= 3 || (pool.length && Math.random() < 0.7)) return pickOne(pool);
+  // [R11-P] the agents' merit, readiness, loyalty and the faction balance choose (seeded); a new face still appears when the bench is thin
+  const ai = INTRA.ai;
+  if (pool.length >= 3 || (pool.length && (ai ? ai.rr(p, 'reuse', ai.S(p).day, pool.length, Object.keys(taken).length) : Math.random()) < 0.7)) return (ai && ai.pickMinister(p, pool, party, taken)) || pickOne(pool);
   const pt = p.parties[party];
   const fac = pt && pt.factions && pt.factions.length ? pickOne(pt.factions).id : null;
   const n = newNpc(p, { party, house: Math.random() < 0.85 ? 'shugi' : 'sangi', wins: irnd(4, 11), faction: fac, age: irnd(50, 75) });
@@ -3172,6 +3193,9 @@ function pruneNpcs(p) {
   for (const b of p.diet.bills) add(b.by);
   for (const o of p.me.offers || []) add(o.from);
   try { for (const id of INTRA.refs(p)) add(id); } catch (e) { console.error(e); } // R5-D: 番頭・後継者・首謀者など
+  try { if (INTRA.ai) for (const id of INTRA.ai.refs(p)) add(id); } catch (e) { console.error(e); } // [R11-P] mentors, heirs, strong memories of the player
+  // [R11-P] the agent layer keeps the most important spare members (rank, seniority, newcomers and heirs), not the oldest records
+  if (INTRA.ai) { INTRA.ai.prune(p, keep); return; }
   const ids = Object.keys(p.npcs);
   // keep up to ~25 spare Diet members per party for reuse
   const spare = {};
@@ -3201,7 +3225,10 @@ function chooseCoalition(g, p) {
       if (st === 'accept') return true;
       return dist(core, id) < 2.6;
     }
-    return dist(core, id) < 3.2;
+    const base = dist(core, id) < 3.2;
+    // [R11-P] the party leaders (agents) may veto or open a door the distance rule decides (compatibility, appetite for posts, the opposition's strategy)
+    if (INTRA.ai) { try { const w = INTRA.ai.coalitionWilling(g, p, core, id, base); if (w === true || w === false) return w; } catch (e) { console.error(e); } }
+    return base;
   };
   const build = (core, excl = []) => {
     const partners = [];
@@ -3744,21 +3771,24 @@ function npcStepDown(g, p, n, reason) {
   news(p, g, `${n.name}${postName(post, fyNow(g))}が${reason}で辞任。後任に${m.name}氏`);
 }
 function npcEvents(g, p) {
-  // NPC troubles (about 4 a year). Scandals happen only to NPCs of the fictional parties (and
-  // independents); an NPC of a real party (自民・民主) only ever steps down for neutral reasons
-  // (体調不良・一身上の都合), so the game never claims misconduct by a real party.
-  if (Math.random() < 4 / YEAR_DAYS) {
-    const cab = Object.values(p.cabinet.ministers || {}).filter((id) => id !== 'player' && p.npcs[id]);
-    const pool = cab.length && Math.random() < 0.6 ? cab : Object.keys(p.npcs).filter((id) => p.npcs[id].office);
-    const who = pool.length ? pickOne(pool) : null;
-    const n = who && p.npcs[who];
-    if (n && PARTY_DEFS[n.party] && PARTY_DEFS[n.party].real) npcStepDown(g, p, n, pickOne(['体調不良', '一身上の都合']));
-    // (round 4) NPC gaffes have their own detailed chain (npcGaffeTick: 「発言・態度・失言」); money and private troubles stay here
-    else if (n) scandalImpl(g, p, pickOne(['expense', 'private', 'slush_fund']), { who });
+  // [R11-P] with the agent layer on, scandals, deaths and vacancies come from the agents themselves (politics_ai_act.js dailyEvents: who is exposed, who is old or ill); the shocks below stay
+  if (!INTRA.ai) {
+    // NPC troubles (about 4 a year). Scandals happen only to NPCs of the fictional parties (and
+    // independents); an NPC of a real party (自民・民主) only ever steps down for neutral reasons
+    // (体調不良・一身上の都合), so the game never claims misconduct by a real party.
+    if (Math.random() < 4 / YEAR_DAYS) {
+      const cab = Object.values(p.cabinet.ministers || {}).filter((id) => id !== 'player' && p.npcs[id]);
+      const pool = cab.length && Math.random() < 0.6 ? cab : Object.keys(p.npcs).filter((id) => p.npcs[id].office);
+      const who = pool.length ? pickOne(pool) : null;
+      const n = who && p.npcs[who];
+      if (n && PARTY_DEFS[n.party] && PARTY_DEFS[n.party].real) npcStepDown(g, p, n, pickOne(['体調不良', '一身上の都合']));
+      // (round 4) NPC gaffes have their own detailed chain (npcGaffeTick: 「発言・態度・失言」); money and private troubles stay here
+      else if (n) scandalImpl(g, p, pickOne(['expense', 'private', 'slush_fund']), { who });
+    }
+    // vacancies -> by-elections
+    if (Math.random() < 2 / YEAR_DAYS) makeVacancy(g, p, 'shugi', { reason: pickOne(['議員の死去', '議員の辞職', '知事選への立候補', '議員の辞職']) });
+    if (Math.random() < 0.5 / YEAR_DAYS) makeVacancy(g, p, 'sangi', { reason: pickOne(['議員の死去', '議員の辞職']) });
   }
-  // vacancies -> by-elections
-  if (Math.random() < 2 / YEAR_DAYS) makeVacancy(g, p, 'shugi', { reason: pickOne(['議員の死去', '議員の辞職', '知事選への立候補', '議員の辞職']) });
-  if (Math.random() < 0.5 / YEAR_DAYS) makeVacancy(g, p, 'sangi', { reason: pickOne(['議員の死去', '議員の辞職']) });
   for (const [k, S] of Object.entries(SHOCKS)) if (Math.random() < S.perYear / YEAR_DAYS) shockImpl(g, p, k);
 }
 
@@ -4353,6 +4383,7 @@ function tickDay(g, p, day, abs) {
   try { speechTick(g, p, day); } catch (e) { console.error(e); }
   try { fukkoTick(g, p, day, abs); } catch (e) { console.error(e); }
   try { INTRA.tickAll(g, p, day, abs); } catch (e) { console.error('intra', e); } // R5-D
+  try { if (INTRA.ai) INTRA.ai.tick(g, p, day, abs); } catch (e) { console.error('politics-ai', e); } // [R11-P] the agents observe, learn, decide
   for (const s of SEGMENT_ORDER) {
     const m = p.support.mods[s];
     if (!m) continue;
@@ -5777,7 +5808,7 @@ function npcGaffeTick(g, p, day, S) {
     const leader = Object.values(p.parties).some((pt) => pt.leader === n.id);
     if (!mins && !pm && !leader && n.office !== 'shugi' && n.office !== 'sangi') continue;
     const k = personaOf(n, year);
-    let w = (pm ? 2 : mins ? 3 : leader ? 2 : 0.6) * PERSONAS[k].mult;
+    let w = (pm ? 2 : mins ? 3 : leader ? 2 : 0.6) * PERSONAS[k].mult * (INTRA.ai ? INTRA.ai.gaffeWeight(p, n) : 1); // [R11-P] stress and low integrity make a slip more likely
     if (F && p.cabinet.ministers.minister_reconstruction === n.id) w *= 3;
     pool.push([n, w]);
   }
@@ -7029,6 +7060,21 @@ const INTRA = (() => {
   installConflict(X);
   installPledge(X);
   installLaw(X);
+  // [R11-P] 政治家AI: the agent layer (politics_ai.js) gets the helpers it acts through; listeners route the game's events to it
+  Object.assign(X, { makeVacancy, npcStepDown, offerPostToPlayer, prefShort, PREFECTURES, fillCabinet, ideoOf: null });
+  // (globalThis.__POLITICS_AI_OFF = true before the import switches the agent layer off: the old dice come back — for A/B tests only)
+  H.ai = globalThis.__POLITICS_AI_OFF ? null : installAI(X, H);
+  X.ai = H.ai;
+  if (H.ai) Object.assign(H.methods, H.ai.methods);
+  // the player's own acts are remembered by the people they touch: the moves of the 党内 screen, the party posts they hand out
+  if (H.ai) {
+    const ia = H.methods.intraAct; H.methods.intraAct = function (kind, target, opts) { const r = ia.call(this, kind, target, opts); try { H.ai.onPlayerMove(this, ensurePol(this), kind, target || {}, r); } catch (e) { console.error(e); } return r; };
+    const ap = methods.appointPartyPost; methods.appointPartyPost = function (post, who) { const r = ap.call(this, post, who); if (!r && who && who !== 'player') { try { H.ai.onAppoint(this, ensurePol(this), post, who); } catch (e) { console.error(e); } } return r; };
+  }
+  onPolitics('election', (g, d) => { const p = pol0(g); if (p && H.ai) try { H.ai.onElection(g, p, d); } catch (e) { console.error(e); } });
+  onPolitics('cabinet', (g, d) => { const p = pol0(g); if (p && H.ai) try { H.ai.onCabinet(g, p, d); } catch (e) { console.error(e); } });
+  onPolitics('scandal', (g, d) => { const p = pol0(g); if (p && H.ai) try { H.ai.onScandal(g, p, d); } catch (e) { console.error(e); } });
+  onPolitics('bill', (g, d) => { const p = pol0(g); if (p && H.ai) try { H.ai.onBill(g, p, d); } catch (e) { console.error(e); } });
   H.tickAll = (g, p, day, abs) => {
     H.tick(g, p, day, abs);
     H.pledge.pledgeTick(g, p, day);

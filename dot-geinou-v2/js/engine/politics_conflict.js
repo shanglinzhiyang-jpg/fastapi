@@ -96,6 +96,7 @@ export function installConflict(X) {
       if (mine && other && n > 0) { mine.size = num(mine.size) - n; other.size = num(other.size) + n; out.push(`${mine.name}から${n}人が${other.name}に移った。`); }
     }
     if (fx.news) X.news(p, g, fx.news);
+    if (fx.ai && X.ai) { try { const t = X.ai.applyFx(g, p, ev, fx.ai); if (t) out.push(t); } catch (e) { console.error(e); } } // [R11-P] an agent's invitation (入会の誘い)
     if (fx.follow) {
       const nf = fx.follow;
       if (nf.go) {
@@ -1037,6 +1038,7 @@ export function installConflict(X) {
   X.stepConflicts = stepConflicts;
   X.pushEvent = pushEvent;
   X.factionDefects = factionDefects;
+  X.afterSeatLoss = afterSeatLoss; // [R11-P] a ruling party that loses its majority to individual defections faces the same consequences as after a split
   X.stanceOfFaction = stanceOfFaction;
   X.stanceOfNpc = stanceOfNpc;
   const methods = {

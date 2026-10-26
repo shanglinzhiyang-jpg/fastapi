@@ -349,6 +349,8 @@ export function installIntra(X) {
     L += rest * 0.55; S += rest * 0.2;
     S += num(plot.shift && plot.shift.S);
     L += num(plot.shift && plot.shift.L);
+    // [R11-P] named members vote their own mind (loyalty, rivalry, ambition) against their faction's line
+    try { const sw = X.ai ? X.ai.plotSway(g, p, pt, plot) : null; if (sw) { S += sw.S; L += sw.L; } } catch (e) { console.error(e); }
     return { S: Math.max(0, S), L: Math.max(0, L), seats };
   }
   function plotOdds(g, p, plot) {
@@ -500,7 +502,11 @@ export function installIntra(X) {
     // factions that are in a bad mood may join
     for (const r of factionsOf(p, pt)) {
       const x = fxOf(g, p, pt, r);
-      if (!plot.bloc.includes(r.id) && x.mood <= -30 && x.ambition >= 45 && r.id !== leaderFaction(p, pt) && Math.random() < 0.08) { plot.bloc.push(r.id); plotLog(g, p, plot, `${r.name}が倒閣派に加わった`); }
+      if (!plot.bloc.includes(r.id) && x.mood <= -30 && x.ambition >= 45 && r.id !== leaderFaction(p, pt)) {
+        // [R11-P] the faction's named members decide (seeded) when there are any; the old dice otherwise
+        const aj = X.ai ? X.ai.plotJoin(g, p, pt, r, x) : null;
+        if (aj === null || aj === undefined ? Math.random() < 0.08 : aj) { plot.bloc.push(r.id); plotLog(g, p, plot, `${r.name}が倒閣派に加わった`); }
+      }
     }
     if (day >= plot.voteAt) {
       const o = plotOdds(g, p, plot);
@@ -527,6 +533,18 @@ export function installIntra(X) {
     const sourSize = sour.reduce((a, r) => a + r.size, 0);
     const chance = clamp(((38 - A) / 38) * 0.14 + (sourSize / seats) * 0.18 + (pmT && p.me.party === pt.id && pt.leader === 'player' ? 0 : 0), 0, 0.28);
     if (A > 44) return;
+    // [R11-P] a plot needs a motivated agent (ambition for the top post, a weak leader, a grievance); the dice only scale how fast it comes
+    const mot = X.ai ? X.ai.plotMotive(g, p, pt, rows, chance) : null;
+    if (mot) {
+      if (!mot.go) return;
+      const bn = npcOf(p, mot.boss);
+      const bf = bn && bn.faction ? rows.find((r) => r.id === bn.faction) : null;
+      const blc = sour.filter((r) => r.mood <= -24).map((r) => r.id);
+      if (bf && !blc.includes(bf.id)) blc.unshift(bf.id);
+      const pl = startPlot(g, p, pt, mot.boss, blc, { slump });
+      if (pl) pl.why = mot.why || '';
+      return;
+    }
     if (Math.random() >= chance) return;
     // the boss: the most ambitious of the sour factions' leaders
     const bossF = sour.slice().sort((a, b) => b.ambition + (b.power / 3) - (a.ambition + (a.power / 3)))[0];
@@ -617,7 +635,9 @@ export function installIntra(X) {
       const x = fxOf(g, p, pt, f);
       if (boss.age < 68 && !(boss.age >= 62 && x.mood < -50)) continue;
       const pr = clamp(0.015 + (boss.age - 68) * 0.012, 0.01, 0.14);
-      if (Math.random() >= pr) continue;
+      // [R11-P] the boss's own age, health, stress and the faction's mood decide (seeded)
+      const aiDown = X.ai ? X.ai.bossStepsDown(g, p, pt, f, boss, x) : null;
+      if (aiDown === null || aiDown === undefined ? Math.random() >= pr : !aiDown) continue;
       s.cool[`succ:${pt.id}`] = day;
       beginSuccession(g, p, pt, f, x, boss);
       return;
@@ -1058,7 +1078,7 @@ export function installIntra(X) {
       for (const [post, who] of Object.entries(pt.posts)) {
         if (!who || who === 'player') continue;
         const n = p.npcs[who];
-        if (n && n.party === pt.id) continue;
+        if (n && n.party === pt.id && (!X.ai || X.ai.staleOK(n))) continue; // [R11-P] a defeated or retired member no longer holds a party post
         if (n) n.posts = (n.posts || []).filter((q) => q !== post);
         const f = n && n.faction ? findFaction(p, n.faction) : null;
         const fid = f ? f.f.id : null;
@@ -1077,7 +1097,7 @@ export function installIntra(X) {
     if (num(S.ageDay) <= 0) S.ageDay = day;
     if (day - S.ageDay >= YEAR_DAYS) {
       S.ageDay += YEAR_DAYS;
-      for (const n of Object.values(p.npcs)) if (n.faction || (n.posts && n.posts.length)) n.age = (n.age || 55) + 1;
+      for (const n of Object.values(p.npcs)) if ((n.faction || (n.posts && n.posts.length)) && !n.exMp) n.age = (n.age || 55) + 1; // [R11-P] (the agent layer ages the rest, politics_ai_act.js yearly)
     }
     if (day - num(S.sweepDay, -99) >= 7) { S.sweepDay = day; try { sweepStale(g, p); } catch (e) { console.error('intra sweep', e); } }
     if (X.stepEvents) X.stepEvents(g, p, day);

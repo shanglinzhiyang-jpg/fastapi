@@ -1005,7 +1005,9 @@ function npcIdeo(g, npcId) {
   const party = n.party && n.party !== 'ind' ? partyIdeo(g, n.party) : null;
   const base = party ? party.axes : normAxes({});
   const spread = party ? 0.28 : 0.45;
-  const axes = normAxes(Object.fromEntries(AXIS_IDS.map((k) => [k, r3(base[k] + hashUnit(`${npcId}:${k}`) * spread)])));
+  // [R11-P] a politician with an agent record (politics_ai.js) has positions of their own, which drift with experience; the hash is the fallback
+  const own = n.ai && Array.isArray(n.ai.ax) && n.ai.ax.length === AXIS_IDS.length ? n.ai.ax : null;
+  const axes = normAxes(Object.fromEntries(AXIS_IDS.map((k, i) => [k, own ? r3(num(own[i]) / 100) : r3(base[k] + hashUnit(`${npcId}:${k}`) * spread)])));
   const near = nearestIdeology(axes, { pool: PARTY_SAFE });
   return { kind: 'npc', id: npcId, name: n.name, party: n.party || null, axes, label: near.name, ideologyId: near.id, top3: near.top3 };
 }
