@@ -353,6 +353,7 @@ export async function shikiFlow(g, rec) {
   });
   if (i < 0) return false;
   const S = ids[i];
+  if (!S) return false;
   if (!g.spend(S.price)) { await g.say('（お金が足りない…）'); return false; }
   // the clothes
   const dress = await g.ask('あなたの装いは？', ['ウェディングドレス', 'タキシード', '白無垢・紋付袴（和装）'], { cancel: 1 });

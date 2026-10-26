@@ -356,7 +356,7 @@ export const ART = {
     for (let i = 0; i < 6; i++) lantern(c, 20 + i * 52, 70 + (i % 2) * 4, 1);
     // the crowd (silhouettes)
     for (let i = 0; i < 14; i++) { const x = (i * 23 + 5) % 300; if (x > 100 && x < 215) continue; R(c, x, 84 + (i % 3) * 3, 9, 18, ['#3a3a4a', '#5a3a3a', '#3a4a5a', '#6a5a3a'][i % 4]); disc(c, x + 4, 80 + (i % 3) * 3, 4, '#2a2230'); }
-    const wy = 78;
+    const wy = 68;
     SP.walk(c, X.you, 128 + Math.floor((Math.sin(t / 100) + 1) * 8), wy, 'up', t); SP.walk(c, X.me, 164 + Math.floor((Math.sin(t / 100) + 1) * 8), wy, 'up', t + 7);
     if (X.wx === 'snow') for (let i = 0; i < 30; i++) R(c, (hash2(i, 1, 8) * AW + t * 0.3) % AW, (hash2(i, 2, 8) * AH + t * 0.6 + i * 7) % AH, 1, 1, '#ffffff');
   },

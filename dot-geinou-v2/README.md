@@ -1371,10 +1371,12 @@ js/world/             街と暮らし
   yami.js             現代日本の闇（過労・失業・貧困・孤独死・DV・誹謗中傷・カルト・闇バイト・詐欺…。darkside.js のあとに読み込み、同じ日には重ならない）
   kiki.js             危機の場面（災害・国民投票・戦争・前線・召集・戦死・離党・首脳会議・失脚）とスマホの「危機管理」
   seiken.js           政権交代・総辞職・組閣の場面（総理の就任会見は態度を選ぶ）
+  shopkit.js          [R12-S2] お店の中身の共通キット（営業時間・開店待ち・注文・宴会・ネタの種・小屋の出し物・HD タイル）。shopDoor(id) を街の建物に展開する
 js/places/<id>.js     事務所・局・劇場など（1ファイル1施設）。政治と司法：kokkai.js kantei.js parties.js（党本部4つ）
                       kuyakusho.js justice.js（警視庁・検察庁・裁判所・刑務所）
                       kyoshujo.js（ドット自動車教習所）menkyo.js（ドット運転免許センター）gassyuku.js（合宿先の教習所と寮）
                       nsc.js（NSC大阪校・東京校・貸し稽古場）shourace.js（賞レースの会場：受付・楽屋・舞台袖・ステージ・決勝スタジオ・屋外ステージ）
+                      shop_civic.js shop_eat.js shop_stage.js shop_cafe.js shop_store.js（[R12-S2] お店の中身 33 か所：銀行・郵便局・交番／居酒屋・ラーメン・定食／小劇場・ライブハウス・寄席・ネタ見せバー／喫茶・カフェ・カラオケ／書店・薬局・100円・八百屋・和菓子・古着）
 js/minigames/<id>.js  ミニゲーム（1ファイル1ゲーム）。manzai.js conte.js rakugo.js ogiri.js pinneta.js は芸の実演（漫才・コント・落語・大喜利・ピン芸。perform.js から使う）
 tools/                ヘッドレスブラウザでのテストツール
 ```
@@ -1954,6 +1956,18 @@ API：`import { YAMI } from './yami.js'`（`window.__yami` も）`YAMI.decide(g,
 `g.advisor(id)` `await g.advisorOpen(id, topic?)` `g.advisorTip(key, opts?)` `g.advisorTipClear(keys?)` `g.advisorAdvice(id)` `g.advisorPlan(id)` `g.advisorState()` `g.advisorLook(id)`。
 吹き出しは1日2つまで、ことは先生の吹き出しとは重ならず、ヘルプのレベル（`g.helpLevel()`）に合わせます。絵は手続きで描く 32×32 の胸像（`drawAdvisorBust`）。
 状態は `g.state.advisor`。くわしくは `test-output/api_advisors.txt`。
+
+### お店の中身（`js/world/shopkit.js` / `js/places/shop_*.js`）
+
+東京（芸人通り・劇場通り）・商店街（駅前・アーケード・横丁）・なんば（千日前・戎橋筋）の「見るだけ」だったお店に、**入れる中身 33 か所**（`shop_ginko` `shop_yubin` `shop_koban` `shop_izakaya` `shop_horoyoi` `shop_yakitori` `shop_chuka`
+`shop_tachinomi` `shop_ramen_t` `shop_ramen_n` `shop_teishoku_n` `shop_kushikatsu` `shop_shogekijo` `shop_livehouse` `shop_engeijo` `shop_geki_n` `shop_sennichimae` `shop_hall_n` `shop_netabar` `shop_junkissa` `shop_junkissa_n`
+`shop_cafe_t` `shop_karaoke_t` `shop_karaoke_n` `shop_shoten` `shop_furuhon_t` `shop_furuhon_n` `shop_yakkyoku` `shop_hyakuen` `shop_yaoya` `shop_wagashi` `shop_furugi_t` `shop_furugi_n`）。
+街の建物は `...shopDoor('shop_x'), // [R12-S2]` の1行で入口になり（`place` と `enter` の両方が必要）、`enter` の `shopGate` が営業時間を見ます（`g.clock()` があれば。閉店は札の表示、数時間後に開くなら「開くまで待つ？」）。
+店ごとに仕組みがあります：銀行・郵便局はスマホの銀行アプリと同じ口座（窓口の時間外は ATM と時間外手数料）、郵便局は日付どおりの切手代・現金書留（`family.js` の `sendMoney`）、交番は道案内・落とし物・相談・自首（`crime.js` の `g.arrest` / `g.policeConsult`）、
+居酒屋は 20 歳以上だけの飲酒・宴会・二日酔い、小屋は「観る」（勉強）と「出番」（`g.perform`）と端役の仕事、喫茶は台本エディタ（ネタの種）、カラオケは時間貸しの部屋と歌・発声・ネタ合わせ、
+書店・古本屋は読むと芸の力が伸びる本、薬局・100円・八百屋・和菓子は使える品物、古着屋は衣装（身だしなみと次の舞台のバフ）。店で出会う人・舞台の芸人は架空（`isRealNameLike` で確認）。値段は内部の円（2026）で、`fmtMoney` が時代の値段で見せます。
+状態は `g.state.flags.shopS`（`SS(g)` が欠けた項目を直す）。てちょうの「お店」に、はじめて行くときの一言つきで全店が載ります（`guide.js`）。
+`registerShop(def)` `shopDoor(id)` `shopGate(id)` `openState(g, hours)` `orderMenu(g, {...})` `enkai(g, {...})` `addSeed(g, from)` `writeWithSeed(g)` `lineup(g, venue)` `shelf(g, {...})` `SS(g)`。くわしくは `test-output/api_r12s2.txt`。
 
 ### 追加のしかた
 
