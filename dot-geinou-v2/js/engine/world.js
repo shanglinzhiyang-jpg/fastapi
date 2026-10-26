@@ -54,6 +54,7 @@ import { createStance } from './world_stance.js';
 import { createHistory } from './world_history.js'; // [R9-E] real events by date, staged crises, the monthly record, regions
 import { HIST_COUNTRIES, HIST_PAIRS, REPLACES } from './world_hist_data.js'; // [R14-H] 歴史の列強（設定）
 import { histOn, histSet, histHidden, histAlias, hiddenIds, histMuted, HIST_IDS, HIST as HIST_INFO } from './world_hist.js';
+import { histEventsTick, histEvSummary, histEvDrop, histEventsOn } from './world_hist_events.js'; // [R14-H2] 歴史の出来事
 
 // ======================================================================== optional modules (guarded)
 let POL = null; // politics.js
@@ -453,7 +454,7 @@ const HOOKS = {};
 export function onWorld(event, fn) { (HOOKS[event] || (HOOKS[event] = [])).push(fn); return () => { HOOKS[event] = (HOOKS[event] || []).filter((f) => f !== fn); }; }
 function emit(g, event, data) { for (const fn of HOOKS[event] || []) { try { fn(g, data); } catch (e) { console.error(e); } } }
 function news(g, text, opts = {}) {
-  if (histMuted(g, text)) return; // [R14-H]
+  if (!opts.raw && histMuted(g, text)) return; // [R14-H] (opts.raw: the regime's own history, world_hist_events.js)
   const s = W(g);
   s.news.unshift({ day: today(g), text, kind: opts.kind || 'world' });
   if (s.news.length > 80) s.news.length = 80;
@@ -2028,6 +2029,7 @@ export function worldTick(g) {
   try {
     if (g.state.regime && g.state.regime.id === 'fallen') return;
     historyTick(g);
+    histEventsTick(g, HX, HIST_IDS.filter((id) => histOn(g, id))); // [R14-H2]
     summitsTick(g);
     unscTick(g);
     npcTreatiesTick(g);
@@ -2121,7 +2123,7 @@ function countryDetail(g, id) {
     conflicts: s.conflicts.filter((x) => x.status === 'war' && (x.a === id || x.b === id)).map((x) => x.name),
     met: s.summits.met[id] != null ? s.summits.met[id] : null, aid: Math.round(num(s.aid[id]) * 100) / 100,
     distance: distanceKm(id),
-    ...(c.hist ? { hist: { flag: c.flag, portrait: c.portrait, leaderName: HIST_INFO[id] && HIST_INFO[id].leaderName, title: HIST_INFO[id] && HIST_INFO[id].title, years: HIST_INFO[id] && HIST_INFO[id].years } } : {}), // [R14-H]
+    ...(c.hist ? { hist: { flag: c.flag, portrait: c.portrait, leaderName: HIST_INFO[id] && HIST_INFO[id].leaderName, title: HIST_INFO[id] && HIST_INFO[id].title, years: HIST_INFO[id] && HIST_INFO[id].years, ev: histEvSummary(g, HX, id) } } : {}), // [R14-H] [R14-H2]
   };
 }
 // [R14-H] While a regime is on, the modern country it replaces is not in the world: its wars, crises and sanctions are put aside
@@ -2139,7 +2141,7 @@ function purgeHist(g) {
     const gids = new Set(st.conflicts.map((c) => c.id));
     const dk = s.deploy.filter((d) => d.conflict && gids.has(d.conflict));
     if (dk.length) { st.deploy.push(...dk); s.deploy = s.deploy.filter((d) => !dk.includes(d)); }
-    const cr = s.crises.filter((k) => has(k.country) || histMuted(g, String(k.title || '')));
+    const cr = s.crises.filter((k) => !k.hist && (has(k.country) || histMuted(g, String(k.title || ''))));
     if (cr.length) { st.crises.push(...cr); s.crises = s.crises.filter((k) => !cr.includes(k)); }
     for (const side of ['byJapan', 'onJapan']) for (const x of hid) if (s.sanctions[side][x]) { st.sanc[side][x] = s.sanctions[side][x]; delete s.sanctions[side][x]; }
   }
@@ -2149,10 +2151,17 @@ function purgeHist(g) {
   const bgi = new Set(back.map((c) => c.id));
   const bd = st.deploy.filter((d) => bgi.has(d.conflict));
   if (bd.length) { s.deploy.push(...bd); st.deploy = st.deploy.filter((d) => !bd.includes(d)); }
-  const bk = st.crises.filter((k) => !has(k.country) && !histMuted(g, String(k.title || '')));
+  const bk = st.crises.filter((k) => !has(k.country) && (k.hist || !histMuted(g, String(k.title || ''))));
   if (bk.length) { s.crises.push(...bk); st.crises = st.crises.filter((k) => !bk.includes(k)); }
   for (const side of ['byJapan', 'onJapan']) for (const x of Object.keys(st.sanc[side] || {})) if (!has(x)) { s.sanctions[side][x] = st.sanc[side][x]; delete st.sanc[side][x]; }
 }
+// [R14-H2] what world_hist_events.js may call
+const HX = {
+  W, today, worldDate, shortName, exists, relAdd, pairAdd, tensionShift, crisis, newConflict, endConflict,
+  news: (g, text, opts) => news(g, text, opts),
+  phoneRaw: (g, text) => { try { if (typeof g.message === 'function') g.message({ from: 'ドット新聞 国際部', text, kind: 'news' }); } catch (e) { /* no phone */ } },
+  endRegime: (g, id) => { try { setHistPower(g, id, false); } catch (e) { console.error(e); } },
+};
 // [R14-H] the setting: add / remove a historical power (g.state.histPowers)
 function setHistPower(g, id, on) {
   const c = COUNTRIES[id];
@@ -2176,6 +2185,7 @@ function setHistPower(g, id, on) {
     s.crises = s.crises.filter((k) => k.country !== id);
   }
   histSet(g, id, on);
+  histEvDrop(g, HX, id); // [R14-H2] switching on starts its history over; switching off clears it
   purgeHist(g);
   return { ok: true, on };
 }
@@ -2308,6 +2318,9 @@ const methods = {
   // [R14-H] 歴史の列強: [{ id, label, on, … }]; the setter returns { ok, on, why }
   histPowers() { return HIST_IDS.map((id) => ({ ...HIST_INFO[id], on: histOn(this, id) })); },
   setHistPower(id, on) { return setHistPower(this, id, on); },
+  // [R14-H2] 歴史の出来事: the regime's own history (the laws, camps, purges, wars, famines) as 世界情勢 news and crises
+  histEventsOn() { return histEventsOn(this); },
+  setHistEvents(on) { this.state.histEvents = !!on; return !!on; },
 };
 export function installWorld(proto) {
   if (!proto || proto.__world) return;

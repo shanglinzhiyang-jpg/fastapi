@@ -130,15 +130,24 @@ export function makeMore(ctx) {
     const rs = det.real ? relSeries(ui, id) : null;
     if (det.hist) { // [R14-H] 歴史の列強: the leader's photo and the flag, as they are
       const H = det.hist;
-      R(c, DX, y, DW, 66, 'rgba(255,255,255,0.04)');
+      const EV = H.ev; // [R14-H2] 独裁・個人崇拝・弾圧
+      R(c, DX, y, DW, EV ? 88 : 66, 'rgba(255,255,255,0.04)');
       drawHistImg(c, H.portrait, DX + 4, y + 2, 50, 62, 'cover');
+      if (EV) {
+        [['独裁', EV.dict, '#d9a14a'], ['個人崇拝', EV.cult, '#c06ad0'], ['弾圧', EV.terror, '#d9605a']].forEach(([lab, v, col], i) => {
+          const gx = DX + 4 + i * 122;
+          T(c, lab, gx, y + 69, 10, K.dim);
+          R(c, gx + 42, y + 72, 56, 6, 'rgba(255,255,255,0.10)'); R(c, gx + 42, y + 72, Math.round(56 * v / 100), 6, col);
+          T(c, `${v}`, gx + 118, y + 69, 10, K.text, 'right');
+        });
+      }
       drawHistImg(c, H.flag, DX + 60, y + 5, 64, 40, 'contain');
       T(c, H.years, DX + 60, y + 49, 10, K.dim, 'left', 70);
       T(c, H.leaderName, DX + 132, y + 4, 14, K.amber, 'left', DW - 136);
       para(c, H.title || det.leader || '', DX + 132, y + 22, DW - 136, 10, K.text, 13, 2);
       para(c, '設定「歴史の列強」で参入している国', DX + 132, y + 50, DW - 170, 10, K.faint, 13, 1);
       drawHistImg(c, 'flag_jp', DX + DW - 32, y + 46, 26, 17); // 日本
-      y += 70;
+      y += EV ? 92 : 70;
     } else if (rs) {
       lineChart(c, DX, y, DW, 66, [{ pts: rs.pts, color: K.cyan }], { lo: -100, hi: 100, zero: true, ticks: [-100, 0, 100], startX: startX(ui), size: 8, axisW: 22 });
       y += 70;
@@ -155,8 +164,12 @@ export function makeMore(ctx) {
     }
     y += 3;
     // できること
-    if (y < bottom - 40) y += optionsBox(ui, c, DX, y, DW, countryActions(ui, id), Math.max(1, Math.floor((bottom - y - 30) / 28)), { bottom }) + 2;
-    if (y < bottom - 14) para(c, det.note || '', DX, y, DW, 10, K.dim, 13, Math.floor((bottom - y) / 13));
+    const histEv = det.hist && det.hist.ev && det.hist.ev.events.length; // [R14-H2] the room goes to 体制の動き
+    if (y < bottom - 40 && !histEv) y += optionsBox(ui, c, DX, y, DW, countryActions(ui, id), Math.max(1, Math.floor((bottom - y - 30) / 28)), { bottom }) + 2;
+    if (det.hist && det.hist.ev && det.hist.ev.events.length && y < bottom - 28) { // [R14-H2] 体制の動き
+      y += section(c, DX, y, '体制の動き（新しい順）', K.amber, DW);
+      for (const e of det.hist.ev.events) { if (y > bottom - 26) break; y += para(c, `${e.date}　${e.text}`, DX + 4, y, DW - 4, 10, K.text, 13, Math.max(1, Math.min(3, Math.floor((bottom - y) / 13)))) + 2; }
+    } else if (y < bottom - 14) para(c, det.note || '', DX, y, DW, 10, K.dim, 13, Math.floor((bottom - y) / 13));
   }
   // ---------------------------------------------------------------- 危機: a crisis / a conflict
   function drawCrisisDetail(ui, c, k) {
