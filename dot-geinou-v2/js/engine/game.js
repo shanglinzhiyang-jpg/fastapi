@@ -321,6 +321,9 @@ export class Game {
       .replaceAll('{agency}', st.agency ? AGENCIES[st.agency].name : 'フリー');
     const sns = eraOf(st).sns;
     if (sns && sns !== 'ドッター') s = s.replaceAll('ドッター', sns);
+    // the phone is called what the era calls it (手帳 / ケータイ): lines written as 「スマホの『家計』から」 read right in every era
+    const dev = eraOf(st).deviceShort;
+    if (dev && dev !== 'スマホ') s = s.replace(/スマホ(?!／)/g, dev);
     return yenText(s);
   }
 

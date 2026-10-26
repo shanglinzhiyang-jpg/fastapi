@@ -16,7 +16,7 @@ import { clamp, fmtMoney } from './util.js';
 import { COLORS } from './draw.js';
 import { audio } from './audio.js';
 import { ITEMS } from './state.js'; // runtime use only (state.js imports this module too)
-import { personalityMult } from './profile.js';
+import { personalityMult, ERAS } from './profile.js';
 
 // ---------------------------------------------------------------- calendar
 export const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
@@ -561,6 +561,11 @@ const methods = {
   message(msg) {
     const ph = this.state.phone;
     const m = { id: ph.nextId++, day: this.state.day, read: false, ...msg };
+    // the phone is called what the era calls it (手帳 / ケータイ) in the message text too
+    try {
+      const dev = (ERAS[(this.state.profile && this.state.profile.era) || 'reiwa'] || {}).deviceShort;
+      if (dev && dev !== 'スマホ' && typeof m.text === 'string') m.text = m.text.replace(/スマホ(?!／)/g, dev);
+    } catch (e) { /* keep the text */ }
     ph.inbox.unshift(m);
     // full inbox: drop the oldest read message first, then the oldest one that is not
     // protected. Protected (they never vanish unseen): an offer you can still answer, an
