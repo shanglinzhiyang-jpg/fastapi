@@ -836,10 +836,11 @@ export class Game {
       // a place without saving (noSave) is fine; a save the browser refused is told, not lost silently
       const canSave = !!(this.state && this.map.place && !this.map.place.noSave);
       if (canSave && !this.save()) this.notify('セーブできなかった…（データを文字にできませんでした。メニューの「データ」から書き出しを試してください）', { color: '#ff5d6c', life: 260 });
-      else if (canSave && storageMode() === 'memory' && !this._memSaveWarned) {
-        // the browser refuses to keep saves (a content:// file, private window): say so once, point to 書き出し
+      else if (canSave && storageMode() === 'memory' && !(this._memSaveWarnDay > this.state.day - 20)) {
+        // the browser refuses to keep saves (a content:// file, private window): say so now and every 20 days, point to 書き出し
+        this._memSaveWarnDay = this.state.day;
+        this.notify(this._memSaveWarned ? '前の書き出しから日がたっています。メニュー → データ → 書き出す で残しておきましょう' : 'このブラウザではセーブが保存されません。メニュー → データ → 書き出す で残せます', { color: '#ffd23f', life: 420 });
         this._memSaveWarned = true;
-        this.notify('このブラウザではセーブが保存されません。メニュー → データ → 書き出す で残せます', { color: '#ffd23f', life: 420 });
       }
     }
   }
