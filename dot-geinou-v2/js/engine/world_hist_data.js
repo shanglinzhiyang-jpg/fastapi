@@ -14,11 +14,11 @@ export const ALIAS = { su: 'h_su', ru: 'h_su', it: 'h_it', wde: 'h_de', dde: 'h_
 export const HIDE_WORDS = { su: ['ソ連', 'ソビエト'], ru: ['ロシア', '米ロ', '露'], it: ['イタリア'], wde: ['ドイツ'], dde: ['ドイツ'], de: ['ドイツ'], cn: ['中国', '中華人民共和国', '米中', '日中', '中ロ', '中露'] };
 export const PASS_WORDS = { h_su: ['スターリン'], h_it: ['ムッソリーニ', 'ファシスト'], h_de: ['ヒトラー', 'ナチス'], h_cn: ['毛沢東'], h_kh: ['ポル・ポト', 'カンプチア'] };
 export const HIST = {
-  h_su: { id: 'h_su', country: 'ソ連', flag: 'flag_su', portrait: 'pt_su', leaderName: 'ヨシフ・スターリン', title: 'ソ連共産党中央委員会書記長', years: '1922〜1953年', real: 'su', label: 'ソ連（スターリン政権時）', swap: 'ソ連・ロシアと入れかわる' },
-  h_it: { id: 'h_it', country: 'イタリア', flag: 'flag_it', portrait: 'pt_it', leaderName: 'ベニト・ムッソリーニ', title: 'イタリア王国首相・国家ファシスト党党首（統領＝ドゥーチェ）', years: '1922〜1943年', real: 'it', label: 'イタリア（ムッソリーニ政権時）', swap: 'イタリアと入れかわる' },
-  h_de: { id: 'h_de', country: 'ドイツ', flag: 'flag_de', portrait: 'pt_de', leaderName: 'アドルフ・ヒトラー', title: '総統・国家社会主義ドイツ労働者党党首', years: '1933〜1945年', real: 'de', label: 'ナチス・ドイツ（ヒトラー政権時）', swap: 'ドイツと入れかわる' },
-  h_cn: { id: 'h_cn', country: '中国', flag: 'flag_cn', portrait: 'pt_cn', leaderName: '毛沢東', title: '中国共産党中央委員会主席', years: '1949〜1976年', real: 'cn', label: '中華人民共和国（毛沢東政権時）', swap: '現代の中国と入れかわる' },
-  h_kh: { id: 'h_kh', country: 'カンボジア', flag: 'flag_kh', portrait: 'pt_kh', leaderName: 'ポル・ポト', title: 'カンプチア共産党書記・民主カンプチア首相', years: '1975〜1979年', real: 'kh', label: 'カンボジア（ポル・ポト政権時）', swap: 'カンボジアが加わる' },
+  h_su: { id: 'h_su', country: 'ソ連', flag: 'flag_su', portrait: 'pt_su', style: { 発信力: 45, 政策力: 75, 調整力: 60, 党内基盤: 95, 決断力: 85 }, leaderName: 'ヨシフ・スターリン', title: 'ソ連共産党中央委員会書記長', years: '1922〜1953年', real: 'su', label: 'ソ連（スターリン政権時）', swap: 'ソ連・ロシアと入れかわる' },
+  h_it: { id: 'h_it', country: 'イタリア', flag: 'flag_it', portrait: 'pt_it', style: { 発信力: 88, 政策力: 50, 調整力: 45, 党内基盤: 70, 決断力: 65 }, leaderName: 'ベニト・ムッソリーニ', title: 'イタリア王国首相・国家ファシスト党党首（統領＝ドゥーチェ）', years: '1922〜1943年', real: 'it', label: 'イタリア（ムッソリーニ政権時）', swap: 'イタリアと入れかわる' },
+  h_de: { id: 'h_de', country: 'ドイツ', flag: 'flag_de', portrait: 'pt_de', style: { 発信力: 90, 政策力: 55, 調整力: 35, 党内基盤: 88, 決断力: 85 }, leaderName: 'アドルフ・ヒトラー', title: '総統・国家社会主義ドイツ労働者党党首', years: '1933〜1945年', real: 'de', label: 'ナチス・ドイツ（ヒトラー政権時）', swap: 'ドイツと入れかわる' },
+  h_cn: { id: 'h_cn', country: '中国', flag: 'flag_cn', portrait: 'pt_cn', style: { 発信力: 80, 政策力: 70, 調整力: 40, 党内基盤: 88, 決断力: 85 }, leaderName: '毛沢東', title: '中国共産党中央委員会主席', years: '1949〜1976年', real: 'cn', label: '中華人民共和国（毛沢東政権時）', swap: '現代の中国と入れかわる' },
+  h_kh: { id: 'h_kh', country: 'カンボジア', flag: 'flag_kh', portrait: 'pt_kh', style: { 発信力: 40, 政策力: 55, 調整力: 35, 党内基盤: 80, 決断力: 75 }, leaderName: 'ポル・ポト', title: 'カンプチア共産党書記・民主カンプチア首相', years: '1975〜1979年', real: 'kh', label: 'カンボジア（ポル・ポト政権時）', swap: 'カンボジアが加わる' },
 };
 const H = (id, def) => ({ id, real: true, hist: true, region: 'europe', from: 0, to: 0, p5: false, ...HIST[id] && { flag: HIST[id].flag, portrait: HIST[id].portrait }, ...def });
 export const HIST_COUNTRIES = {

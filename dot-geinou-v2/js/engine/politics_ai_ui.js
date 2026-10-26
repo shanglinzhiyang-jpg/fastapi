@@ -12,6 +12,7 @@
 import { registerPhoneApp } from './life.js';
 import { appTile } from './phone.js';
 import { AX, AXN, RUNG } from './politics_ai_text.js';
+import { REAL } from './politics_real.js'; // [R14-P]
 import { TOPICS, askInterview, claudeReady } from './politics_ai_claude.js';
 import { aiHubSpec } from './bigtext_polai.js'; // [R12-U1] the lower screen of a portrait phone
 
@@ -102,6 +103,13 @@ export function registerAiUI(K, SECTIONS) {
     const mem = pr.memory;
     T(c, fit(c, mem ? `・${mem.text}（${since(g, mem.day)}）` : '・これといった覚えはない', rw, 11), rx, y + 88, 11, mem ? (mem.w >= 0 ? '#b8e0a0' : '#ffb0a0') : C.faint);
     y += 12 + 7 * 13 + 4;
+    // [R14-P] a real figure: the style numbers (発信力・政策力・調整力・党内基盤・決断力) and the type
+    if (pr.rp && REAL[pr.rp]) {
+      const RS = REAL[pr.rp], ents = Object.entries(RS.style), gw = Math.floor(W / ents.length);
+      T(c, `タイプ：${RS.tag}`, X0, y - 1, 11, C.cyan);
+      ents.forEach(([lab, v], i) => { const gx = X0 + i * gw; T(c, lab, gx, y + 12, 10, C.faint); T(c, String(v), gx + gw - 8, y + 12, 10, C.text, 'right'); hbar(c, gx, y + 25, gw - 8, 5, v / 100, C.cyan); });
+      return;
+    }
     // the last acts with their reasons
     const bottom = r.y + r.h - 4;
     if (pr.acts.length) {

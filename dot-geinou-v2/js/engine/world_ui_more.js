@@ -131,7 +131,7 @@ export function makeMore(ctx) {
     if (det.hist) { // [R14-H] 歴史の列強: the leader's photo and the flag, as they are
       const H = det.hist;
       const EV = H.ev; // [R14-H2] 独裁・個人崇拝・弾圧
-      R(c, DX, y, DW, EV ? 88 : 66, 'rgba(255,255,255,0.04)');
+      R(c, DX, y, DW, EV ? 104 : 66, 'rgba(255,255,255,0.04)');
       drawHistImg(c, H.portrait, DX + 4, y + 2, 50, 62, 'cover');
       if (EV) {
         [['独裁', EV.dict, '#d9a14a'], ['個人崇拝', EV.cult, '#c06ad0'], ['弾圧', EV.terror, '#d9605a']].forEach(([lab, v, col], i) => {
@@ -141,13 +141,18 @@ export function makeMore(ctx) {
           T(c, `${v}`, gx + 118, y + 69, 10, K.text, 'right');
         });
       }
+      if (H.style) { // the leader's own numbers (発信力・政策力・調整力・党内基盤・決断力)
+        const ents = Object.entries(H.style), gw = Math.floor((DW - 8) / ents.length);
+        ents.forEach(([lab, v], i) => { const gx = DX + 4 + i * gw; T(c, lab, gx, y + 83, 10, K.dim); T(c, `${v}`, gx + gw - 8, y + 83, 10, K.text, 'right'); R(c, gx, y + 96, gw - 8, 3, 'rgba(255,255,255,0.10)'); R(c, gx, y + 96, Math.round((gw - 8) * v / 100), 3, K.cyan); });
+      }
       drawHistImg(c, H.flag, DX + 60, y + 5, 64, 40, 'contain');
       T(c, H.years, DX + 60, y + 49, 10, K.dim, 'left', 70);
       T(c, H.leaderName, DX + 132, y + 4, 14, K.amber, 'left', DW - 136);
       para(c, H.title || det.leader || '', DX + 132, y + 22, DW - 136, 10, K.text, 13, 2);
-      para(c, '設定「歴史の列強」で参入している国', DX + 132, y + 50, DW - 170, 10, K.faint, 13, 1);
+      const MODE = EV ? ({ hist: '史実をたどっている', if: 'IF：史実と異なる展開が続く', fallen: '体制は終わった（もどすのは設定から）' }[EV.mode] || '') : '';
+      para(c, MODE || '設定「歴史の列強」で参入している国', DX + 132, y + 50, DW - 170, 10, EV && EV.mode === 'if' ? K.warn : K.faint, 13, 2);
       drawHistImg(c, 'flag_jp', DX + DW - 32, y + 46, 26, 17); // 日本
-      y += EV ? 92 : 70;
+      y += EV ? 108 : 70;
     } else if (rs) {
       lineChart(c, DX, y, DW, 66, [{ pts: rs.pts, color: K.cyan }], { lo: -100, hi: 100, zero: true, ticks: [-100, 0, 100], startX: startX(ui), size: 8, axisW: 22 });
       y += 70;
@@ -168,7 +173,14 @@ export function makeMore(ctx) {
     if (y < bottom - 40 && !histEv) y += optionsBox(ui, c, DX, y, DW, countryActions(ui, id), Math.max(1, Math.floor((bottom - y - 30) / 28)), { bottom }) + 2;
     if (det.hist && det.hist.ev && det.hist.ev.events.length && y < bottom - 28) { // [R14-H2] 体制の動き
       y += section(c, DX, y, '体制の動き（新しい順）', K.amber, DW);
-      for (const e of det.hist.ev.events) { if (y > bottom - 26) break; y += para(c, `${e.date}　${e.text}`, DX + 4, y, DW - 4, 10, K.text, 13, Math.max(1, Math.min(3, Math.floor((bottom - y) / 13)))) + 2; }
+      det.hist.ev.events.forEach((e, i) => {
+        if (y > bottom - 14) return;
+        if (i === 0) { // the latest: the event, the regime's claim and the world's reaction
+          y += para(c, `${e.date}　${e.text}`, DX + 4, y, DW - 4, 10, e.iff ? K.warn : K.text, 13, 2) + 1;
+          if (e.claim && y < bottom - 12) y += para(c, `政府の主張「${e.claim}」`, DX + 8, y, DW - 8, 10, K.amber, 13, 1);
+          if (e.react && y < bottom - 12) y += para(c, `反応：${e.react}`, DX + 8, y, DW - 8, 10, '#ff9a8a', 13, 2) + 2;
+        } else y += para(c, `${e.date}　${e.text}`, DX + 4, y, DW - 4, 10, K.dim, 13, 1) + 1;
+      });
     } else if (y < bottom - 14) para(c, det.note || '', DX, y, DW, 10, K.dim, 13, Math.floor((bottom - y) / 13));
   }
   // ---------------------------------------------------------------- 危機: a crisis / a conflict

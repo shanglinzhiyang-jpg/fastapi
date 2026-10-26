@@ -54,7 +54,7 @@ import { createStance } from './world_stance.js';
 import { createHistory } from './world_history.js'; // [R9-E] real events by date, staged crises, the monthly record, regions
 import { HIST_COUNTRIES, HIST_PAIRS, REPLACES } from './world_hist_data.js'; // [R14-H] 歴史の列強（設定）
 import { histOn, histSet, histHidden, histAlias, hiddenIds, histMuted, HIST_IDS, HIST as HIST_INFO } from './world_hist.js';
-import { histEventsTick, histEvSummary, histEvDrop, histEventsOn } from './world_hist_events.js'; // [R14-H2] 歴史の出来事
+import { histEventsTick, histEvSummary, histEvDrop, histEventsOn, histIfLevel, IF_LEVELS } from './world_hist_events.js'; // [R14-H2] 歴史の出来事
 
 // ======================================================================== optional modules (guarded)
 let POL = null; // politics.js
@@ -2123,7 +2123,7 @@ function countryDetail(g, id) {
     conflicts: s.conflicts.filter((x) => x.status === 'war' && (x.a === id || x.b === id)).map((x) => x.name),
     met: s.summits.met[id] != null ? s.summits.met[id] : null, aid: Math.round(num(s.aid[id]) * 100) / 100,
     distance: distanceKm(id),
-    ...(c.hist ? { hist: { flag: c.flag, portrait: c.portrait, leaderName: HIST_INFO[id] && HIST_INFO[id].leaderName, title: HIST_INFO[id] && HIST_INFO[id].title, years: HIST_INFO[id] && HIST_INFO[id].years, ev: histEvSummary(g, HX, id) } } : {}), // [R14-H] [R14-H2]
+    ...(c.hist ? { hist: { flag: c.flag, portrait: c.portrait, leaderName: HIST_INFO[id] && HIST_INFO[id].leaderName, title: HIST_INFO[id] && HIST_INFO[id].title, style: HIST_INFO[id] && HIST_INFO[id].style, years: HIST_INFO[id] && HIST_INFO[id].years, ev: histEvSummary(g, HX, id) } } : {}), // [R14-H] [R14-H2]
   };
 }
 // [R14-H] While a regime is on, the modern country it replaces is not in the world: its wars, crises and sanctions are put aside
@@ -2157,7 +2157,7 @@ function purgeHist(g) {
 }
 // [R14-H2] what world_hist_events.js may call
 const HX = {
-  W, today, worldDate, shortName, exists, relAdd, pairAdd, tensionShift, crisis, newConflict, endConflict,
+  W, today, worldDate, shortName, exists, relAdd, pairAdd, tensionShift, crisis, newConflict, endConflict, roll, rint, tradeShock,
   news: (g, text, opts) => news(g, text, opts),
   phoneRaw: (g, text) => { try { if (typeof g.message === 'function') g.message({ from: 'ドット新聞 国際部', text, kind: 'news' }); } catch (e) { /* no phone */ } },
   endRegime: (g, id) => { try { setHistPower(g, id, false); } catch (e) { console.error(e); } },
@@ -2321,6 +2321,8 @@ const methods = {
   // [R14-H2] 歴史の出来事: the regime's own history (the laws, camps, purges, wars, famines) as 世界情勢 news and crises
   histEventsOn() { return histEventsOn(this); },
   setHistEvents(on) { this.state.histEvents = !!on; return !!on; },
+  histIfLevel() { return histIfLevel(this); },
+  setHistIf(level) { this.state.histIf = IF_LEVELS[level] != null ? level : 'mid'; return this.state.histIf; },
 };
 export function installWorld(proto) {
   if (!proto || proto.__world) return;

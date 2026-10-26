@@ -2,10 +2,12 @@
 // (1 game month = 10 days): the laws, the camps, the purges, the wars, the famines and the end of the regime, as 世界情勢 news, 危機 (人道危機・戦争) and three
 // indices on the country page (独裁・個人崇拝・弾圧). The player is Japan's leader or a citizen: the events are what happens in the world, and the usual responses of the
 // 外交 tab (抗議・制裁・人道支援・国連・難民への対応) are what the player can do about them. The words are the facts of the historical record, with estimates given as estimates;
-// nothing here is written from the regime's side (no slogans, no propaganda text), and the player never carries out any of it.
+// the regime's stated reasons are the documented ones, always given as its claim and always followed by what the world said about it; the player never carries out any of it.
 //
-// ≤ 1 phone message per morning from this system (only the events marked `major`); every event is in the 世界情勢 news. The regime ends with its last event
-// (the regime's end in history) and the country it replaced comes back; switching it on again starts the history over.
+// ≤ 1 phone message per morning from this system (only the events marked `major`); every event is in the 世界情勢 news, with the regime's own stated reason (「政府の主張」) and
+// the world's reaction (mostly condemnation). At the end of its history a regime does NOT hand the country back: the last event is a turning point that goes the way of history
+// (the regime falls: 移行期) or, sometimes, differently (IF: the regime goes on, and its policies of the time are carried out in today's world, one by one, with their effects).
+// The modern country comes back only when the player switches the regime off in 設定.
 //
 // Facts (public record) — ヒトラー: 首相就任 1933-01-30, 国会議事堂放火 1933-02, 全権委任法 1933-03-23, 政党新設禁止法 1933-07-14, 長いナイフの夜 1934-06-30〜07-02, 総統 1934-08,
 //   ニュルンベルク法 1935-09-15, 水晶の夜 1938-11-09/10, 第二次世界大戦 1939-09-01, 三国同盟 1940-09-27, ヴァンゼー会議 1942-01-20, ホロコースト（ユダヤ人の犠牲者は約600万人と推計）, 降伏 1945-05-08。
@@ -121,28 +123,167 @@ export const CHRON = {
     E([1979, 1], 'end', '首都プノンペンが陥落し（1月7日）、ポル・ポト政権は首都を失った。政権のもとでの犠牲者は、飢えや病気、処刑を合わせて150万〜200万人と推計される（人口の約4分の1）', { end: true, endConflicts: ['hist_kh_vn'], tension: -2, major: 1 }),
   ] },
 };
+
+// the regime's stated reason (as it was given) and the world's reaction: id → [claim, reaction]
+export const CLAIMS = {
+  h_de: {
+    chancellor: ['民族の再生と国民の団結', '議会の各政党は、新政権への警戒を表明した'],
+    reichstag: ['共産主義者の暴動から国家を守るための措置', '野党や海外の報道は、基本的人権の停止だとして強く批判した'],
+    enabling: ['民族と国家の危難を取り除くため', '各国の新聞や亡命者は、議会制民主主義の終わりだとして強く非難した'],
+    dachau: ['国家に敵対する者の「保護拘禁」', '人権団体と海外の報道は、法的な根拠のない拘束だとして非難した'],
+    boycott: ['外国での「ドイツ非難の宣伝」への対抗措置', '米英などで抗議集会が開かれ、国際的な非難が高まった'],
+    oneparty: ['国民の統一のため', '各国は、一党独裁の確立だとして批判した'],
+    knives: ['国家への反逆を未然に防いだ', '海外の新聞は、裁判なしの殺害だとして厳しく批判した'],
+    fuhrer: ['国民投票で圧倒的に支持された', '各国は、すべての権限が一人に集まったことへの懸念を表明した'],
+    rearm: ['対等な安全保障を求める権利', '英国・フランス・イタリアは、条約違反だとして共同で抗議した'],
+    nuremberg: ['「ドイツ人の血と名誉を守るため」（法律の題名）', '各国の人権団体や宗教界は、人種による差別を制度にしたものだとして強く非難した'],
+    rhineland: ['ドイツの主権の回復', 'フランスと英国は条約違反だと抗議し、国際連盟も非難した'],
+    anticomintern: ['共産主義への共同の防衛', 'ソ連は強く反発し、各国は軍事同盟に近いと警戒した'],
+    anschluss: ['同じ民族の統合（住民投票での支持）', '英国・フランスなどは抗議し、併合を認めないと表明した'],
+    kristall: ['国民の自発的な怒りの表れ', '各国は暴力と迫害を強く非難し、米国は大使を召還した'],
+    czech: ['チェコスロバキアの「保護」', '英国とフランスは、ミュンヘン合意への違反だとして非難した'],
+    ww2: ['ポーランドの挑発への反撃', '英国とフランスは宣戦し、国際社会は侵略だとして非難した'],
+    west: ['英仏の攻撃を先に防ぐため', '中立国への侵攻は、国際法違反だとして強く非難された'],
+    barbarossa: ['ソ連の攻撃を未然に防ぐ予防戦争', '英国と米国は侵略だと非難し、ソ連への支援を表明した'],
+    shooting: ['公式には「治安作戦」と呼ばれた', '戦後の国際軍事裁判で、人道に対する罪とされた'],
+    wannsee: [null, '戦後の裁判で、組織的な殺害の計画を示す証拠とされた'],
+    camps: ['「東方への移送」「労働のため」と説明された（実態は隠された）', '連合国は1942年12月に、ユダヤ人の殺害を非難する共同宣言を出した'],
+  },
+  h_it: {
+    march: ['国家の再生と秩序の回復', '自由主義者や社会主義者は、暴力による政権獲得だと批判した'],
+    matteotti: ['党は事件と無関係だと主張した', '野党議員は議会をボイコットし、国民の抗議が広がった'],
+    dictatorship: ['事件の「政治的・道徳的な責任」は自分にある、と議会で述べた', '野党は排除され、自由主義者は独裁の宣言だとして強く批判した'],
+    laws: ['国家の安全のため', '反対派の多くは逮捕されるか国外に亡命し、亡命先から批判を続けた'],
+    ethiopia: ['植民地での「文明化」と自衛', '国際連盟は侵略と認め、経済制裁を決めた'],
+    annex: ['エチオピアは文明化された、と主張した', '英国やフランスなどの多くの国は併合を承認せず、非難した'],
+    racial: ['イタリア人の「人種」を守るため', '教皇庁や国内外の批判が高まった'],
+    albania: ['アルバニアの「保護」', '国際社会は、小国への侵略だとして非難した'],
+    war: ['「持たざる国」の戦い', '英国とフランスは宣戦し、各国は参戦を非難した'],
+  },
+  h_su: {
+    fyp1: ['社会主義の建設と、国の工業化', '西側の政府や報道は、強制的な労働と国民の窮乏を指摘した'],
+    collectivization: ['富農を階級として一掃する', '亡命者や海外の報道は、強制と暴力を批判した'],
+    famine: ['飢饉は存在しない、と否定した', '海外の記者や救援団体が実情を報じ、国際的な批判が高まった'],
+    kirov: ['反革命の陰謀を摘発する', '海外の観察者は、弾圧の口実に使われたと見た'],
+    trial1: ['トロツキー派の陰謀とスパイ行為', '各国の新聞や知識人は、見せしめの裁判だとして批判した'],
+    constitution: ['世界で最も民主的な憲法', '亡命者や海外の識者は、実態とかけ離れていると批判した'],
+    army: ['ドイツや日本と通じた陰謀', '各国の軍事筋は、赤軍が弱体化したと見た'],
+    purge: ['「人民の敵」を摘発する', '海外の外交官や報道は、無差別な大量逮捕と処刑だとして強く非難した'],
+    trial3: ['陰謀とスパイの罪', '海外は、茶番の裁判だとして批判した'],
+    pact: ['平和の確保', '英国とフランスは衝撃を受け、のちに密約の存在を非難した'],
+    poland: ['同胞（ウクライナ人・ベラルーシ人）の保護', 'ポーランドと英仏は、侵略だとして非難した'],
+    winter: ['国境の安全のため', '国際連盟は、ソ連を除名した'],
+    japan: ['連合国との約束を果たす', '日本は、中立条約を破る不法な参戦だとして強く非難した'],
+  },
+  h_cn: {
+    korea: ['「アメリカに抵抗し、朝鮮を援助する」', '国連総会は、中国を侵略者とする決議を採択した'],
+    tibet: ['「平和解放」', 'チベット側と各国は、侵略だとして非難した'],
+    landreform: ['階級の敵を打倒する', '海外の報道は、多数の処刑を伝えて批判した'],
+    antirightist: ['党を批判する「毒草」を取り除く', '海外の知識人は、言論の弾圧だとして批判した'],
+    leap: ['15年でイギリスに追いつく', '国外の専門家は、非現実的だと指摘した'],
+    lushan: ['反党的な集団を摘発する', '海外は、権力闘争による粛清だと見た'],
+    famine: ['自然災害のため', 'のちに、国内外の研究者は政策の失敗が原因だと指摘した'],
+    nuclear: ['防衛のため', '米国などは、核の拡散への懸念を示して批判した'],
+    cr: ['資本主義の復活を防ぐ', '各国は、教師や知識人への迫害を批判し、在外公館が襲われた国は抗議した'],
+    redguards: ['革命の後継者を育てる', '海外の報道は、個人崇拝の異様な広がりを批判した'],
+    seize: ['革命の奪権', '各国は、国の混乱と暴力を懸念し批判した'],
+    xiafang: ['青年は農村で学ぶべきだ', '海外の研究者は、教育の機会を奪うものだと批判した'],
+  },
+  h_kh: {
+    fall: ['米軍の爆撃から守り、新しい社会を築くため、都市を空にする', '各国の記者や援助団体は、病人や子どもを含む強制移住を強く非難した'],
+    abolish: ['新しい社会の建設', '逃れた難民の証言が国際社会に伝わり、批判が高まった'],
+    constitution: ['民主カンプチアの建国', '各国は、実態のない「民主」だと批判した'],
+    labor: ['生産の拡大と自給自足', '難民の証言をもとに、国連の機関や各国が強く非難した'],
+    border: ['ベトナムの領土的な野心への自衛', 'ベトナムはカンボジアの攻撃を非難し、各国は両国に自制を求めた'],
+    purge: ['党内に潜む「裏切り者」の一掃', '亡命者の証言から、党内の粛清が国際的に非難された'],
+    invasion: [null, 'ベトナム軍の侵攻に、各国の評価は分かれた。一方で、政権のもとでの人権侵害への非難は続いた'],
+  },
+};
+// what happens at the regime's last event when history goes another way (IF)
+export const IFEND = {
+  h_de: { text: 'ドイツは連合国と休戦した（降伏ではない）。史実とは異なり、ヒトラーの体制は存続した', claim: '戦いは終わっておらず、国は敗れていない', react: '各国は、体制が続くことを強く非難し、制裁と包囲を続けると表明した' },
+  h_it: { text: 'ムッソリーニは解任を免れ、ファシスト党の一党体制が続いた（史実とは異なる展開）', claim: '国内の危機は収まった', react: '各国は、独裁体制の存続を非難し、国際的な孤立が深まった' },
+  h_su: { text: 'スターリンは健在で、個人崇拝と一党体制がそのまま続いた（史実とは異なる展開）', claim: '社会主義の勝利は続く', react: '各国は、弾圧が続いていることを強く非難した' },
+  h_cn: { text: '毛沢東は健在で、文化大革命の路線が改められずに続いた（史実とは異なる展開）', claim: '革命は継続する', react: '各国は、個人崇拝と弾圧の継続を批判し、関係を見直す国が出た' },
+  h_kh: { text: 'ベトナム軍の侵攻は退けられ、ポル・ポトの体制が続いた（史実とは異なる展開）', claim: '外国の侵略を打ち破った', react: '各国は、強制労働と虐殺の継続を強く非難し、国連で問題が取り上げられた' },
+};
+// the regime's policies of the time, carried out in today's world (the IF): { id, text, claim, react, d, tension, crisis, pair, trade }
+const P = (id, text, claim, react, o = {}) => ({ id, text, claim, react, ...o });
+export const IFPOL = {
+  h_de: [
+    P('rearm', 'いまの世界で再軍備を進め、軍事費を急増させた', '対等な安全保障を求める権利', 'NATOと近隣の国々は、強く非難した', { tension: 4, pair: [['h_de', 'us', -8], ['h_de', 'gb', -8], ['h_de', 'fr', -8]], d: { dict: 3 } }),
+    P('media', 'インターネットと報道を国が管理し、批判的な発信が取りしまわれた', '国民の統一を守るため', '各国や国際機関は、表現の自由への重大な侵害だとして非難した', { d: { cult: 6, terror: 4 } }),
+    P('race', '国籍と市民権を、民族で区別する法律が定められた', '国民の血と名誉を守るため', '国連の人権機関と各国は、人種差別だとして強く非難した', { d: { terror: 8 }, crisis: { kind: 'humanitarian', title: '民族による差別の法律（IF）', sev: 3, days: 200 }, pair: [['h_de', 'us', -6]] }),
+    P('camps', '反対派や少数者を拘束する収容施設が各地に作られた', '治安の維持', '人権団体と各国は、直ちに閉鎖するよう強く非難した', { d: { terror: 10 }, crisis: { kind: 'humanitarian', title: '収容施設への拘束（IF）', sev: 3, days: 250 } }),
+    P('border', '周辺国に、国境の「見直し」を要求して圧力をかけた', 'ドイツ人の権利の保護', '周辺国と欧州の国々は、侵略の前ぶれだとして強く警戒し、非難した', { tension: 6, crisis: { kind: 'incident', title: '国境をめぐる圧力（IF）', sev: 2, days: 120 }, trade: 1 }),
+  ],
+  h_it: [
+    P('party', '党以外の政治活動が禁じられ、選挙が形だけのものになった', '国の秩序と団結', '各国は、一党独裁の復活だとして非難した', { d: { dict: 6 } }),
+    P('media', '報道とSNSが国に管理され、指導者への賛美が義務づけられた', '国民の統一', '国際機関と各国は、言論統制だとして非難した', { d: { cult: 6, terror: 3 } }),
+    P('colony', '海外の領土を求めて、軍を派遣した', '国の「居場所」をつくる', '国連や各国は、侵略だとして強く非難した', { tension: 5, crisis: { kind: 'war', title: '海外への軍事行動（IF）', sev: 2, days: 160 }, pair: [['h_it', 'gb', -8], ['h_it', 'fr', -6]] }),
+    P('special', '反対派を裁く特別な法廷と、秘密警察が復活した', '国家の安全', '人権団体と各国は、強く非難した', { d: { terror: 8 } }),
+  ],
+  h_su: [
+    P('fyp', '新しい五カ年計画で、国が産業・農業・情報技術の目標を各地に割り当てた', '計画経済の優位', '各国の経済界は、市場を無視した計画の失敗を懸念した', { d: { dict: 4 }, trade: 1 }),
+    P('collect', '農業の集団化と穀物の徴発が再び進められた', '国の食糧の確保', '国連の機関と各国は、飢饉の恐れがあるとして強く非難した', { d: { terror: 8 }, crisis: { kind: 'humanitarian', title: '穀物の徴発と食糧不足（IF）', sev: 3, days: 220 } }),
+    P('purge', '「人民の敵」の摘発が始まり、官僚や軍の幹部が大量に拘束された', '体制の敵の一掃', '国際社会は、大量の拘束と見せしめの裁判を強く非難した', { d: { terror: 14, cult: 4 }, crisis: { kind: 'unrest', title: '大粛清の再来（IF）', sev: 3, days: 160 } }),
+    P('cult', '指導者への個人崇拝が、報道と教育を通じて全国に広げられた', '国民の団結', '各国は、個人崇拝の強要だとして批判した', { d: { cult: 10 } }),
+    P('camps', '強制労働の収容所（グラーグ）が、各地に作られた', '労働による再教育', '人権団体と各国は、強制労働だとして閉鎖を求め、非難した', { d: { terror: 10 }, crisis: { kind: 'humanitarian', title: '強制労働収容所（IF）', sev: 3, days: 250 } }),
+  ],
+  h_cn: [
+    P('leap', '全国で、無理な生産目標をかかげる「大躍進」が再び始まった', '短期間での大増産', '国外の専門家は、飢饉をまねくとして強く警告した', { d: { cult: 6 }, trade: 1 }),
+    P('famine', '農村で食糧不足が広がり、多くの人が飢えに苦しんだ', '自然災害のため', '国連の機関と各国は、人道危機だとして支援を申し出たが、受け入れられなかった', { d: { terror: 6 }, crisis: { kind: 'humanitarian', title: '食糧不足と飢え（IF）', sev: 3, days: 260 } }),
+    P('cr', '大学・企業・官庁で、思想の「審査」と批判運動が広がった（文化大革命型）', '資本主義の復活を防ぐ', '各国は、知識人への迫害だとして強く批判し、関係を見直す動きが出た', { d: { terror: 12, cult: 8 }, crisis: { kind: 'unrest', title: '思想の審査と批判運動（IF）', sev: 3, days: 220 }, trade: 1 }),
+    P('cult', '指導者の語録の学習が、全国で義務づけられた', '思想の統一', '各国は、個人崇拝の強要だとして批判した', { d: { cult: 10 } }),
+    P('rural', '都市の若者や知識人が、農村へ送られた（下放型）', '農村で学ぶ', '国連の機関と各国は、教育の機会の侵害だと批判した', { d: { terror: 6 } }),
+  ],
+  h_kh: [
+    P('city', '都市の住民が、農村へ強制的に移された', '都市は不要になった', '国連の機関と各国は、強制移住を強く非難した', { d: { terror: 12 }, crisis: { kind: 'humanitarian', title: '都市住民の強制移住（IF）', sev: 3, days: 200 } }),
+    P('money', '通貨と市場、学校、宗教が廃止された', '新しい社会の建設', '各国は、社会の破壊だとして強く批判した', { d: { dict: 5, terror: 6 } }),
+    P('labor', '農村での強制労働と集団生活が義務づけられた', '自給自足のため', '人権団体と各国は、強制労働だとして強く非難した', { d: { terror: 12 }, crisis: { kind: 'humanitarian', title: '強制労働と食糧不足（IF）', sev: 3, days: 260 } }),
+    P('prison', '政治犯の収容所で、多くの人が拘束され殺害された', '裏切り者の一掃', '国連と各国は、虐殺として強く非難し、国際的な調査を求めた', { d: { terror: 14 }, crisis: { kind: 'humanitarian', title: '政治犯の収容所と虐殺（IF）', sev: 3, days: 300 } }),
+  ],
+};
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const monthsOf = (R, ym) => (ym[0] - R.origin[0]) * 12 + (ym[1] - R.origin[1]);
+// how often history goes another way at the regime's last event (設定: g.state.histIf = 'none' | 'low' | 'mid' | 'high')
+export const IF_LEVELS = { none: 0, low: 0.25, mid: 0.5, high: 0.75 };
+export const IF_LABEL = { none: 'なし', low: '少なめ', mid: 'ふつう', high: '多め' };
+export const histIfLevel = (g) => { const v = g && g.state && g.state.histIf; return IF_LEVELS[v] != null ? v : 'mid'; };
 
-// the state of one regime: { t0, done: { id: day }, dict, cult, terror, log: [{ day, id }], over }
+// the state of one regime: { t0, done, dict, cult, terror, log, mode: 'hist'|'if'|'fallen', ifIdx, nextIf }
 export function histEvState(g, X, id, create = false) {
   const s = X.W(g);
   const all = s.histEv && typeof s.histEv === 'object' ? s.histEv : (create ? (s.histEv = {}) : null);
   if (!all) return null;
   let st = all[id];
-  if (!st && create) st = all[id] = { t0: X.today(g), done: {}, dict: 25, cult: 10, terror: 10, log: [], over: false };
+  if (!st && create) st = all[id] = { t0: X.today(g), done: {}, dict: 25, cult: 10, terror: 10, log: [], mode: 'hist', ifIdx: 0, nextIf: 0 };
   return st || null;
 }
 export function histEvDrop(g, X, id) { const s = X.W(g); if (s.histEv) delete s.histEv[id]; }
 export const histEventsOn = (g) => !(g && g.state && g.state.histEvents === false);
 
-// the summary for the country page: the indices and the last events
+// the summary for the country page: the indices, the mode and the last events (each with the regime's claim and the world's reaction)
 export function histEvSummary(g, X, id) {
   const st = histEvState(g, X, id, false);
   const R = CHRON[id];
   if (!st || !R) return null;
-  const ev = (st.log || []).slice(-3).reverse().map((l) => { const e = R.events.find((x) => x.id === l.id); const d = X.worldDate(g, l.day); return { date: `${d.year}年${d.month}月`, text: e ? e.text : '', id: l.id }; });
-  return { dict: Math.round(st.dict), cult: Math.round(st.cult), terror: Math.round(st.terror), events: ev, over: !!st.over, on: histEventsOn(g) };
+  const ev = (st.log || []).slice(-3).reverse().map((l) => { const d = X.worldDate(g, l.day); return { date: `${d.year}年${d.month}月`, text: l.text || '', claim: l.claim || '', react: l.react || '', iff: !!l.iff }; });
+  return { dict: Math.round(st.dict), cult: Math.round(st.cult), terror: Math.round(st.terror), events: ev, mode: st.mode || 'hist', on: histEventsOn(g) };
+}
+
+function apply(g, X, id, st, o, text, claim, react, iff) {
+  if (o.d) { st.dict = clamp(st.dict + (o.d.dict || 0), 0, 100); st.cult = clamp(st.cult + (o.d.cult || 0), 0, 100); st.terror = clamp(st.terror + (o.d.terror || 0), 0, 100); }
+  const head = `${iff ? '【IF】' : ''}${text}`;
+  const tail = `${claim ? `（政府は「${claim}」と主張。` : '（'}${react || ''}）`;
+  X.news(g, `【国際】${X.shortName(g, id)}：${head}${react || claim ? tail : ''}`, { raw: true });
+  st.log.push({ day: X.today(g), text: head, claim: claim || '', react: react || '', iff: !!iff });
+  if (st.log.length > 40) st.log.shift();
+  if (o.tension) X.tensionShift(g, o.tension);
+  if (o.jp && X.exists(g, id)) X.relAdd(g, id, o.jp);
+  for (const [a, b, d] of o.pair || []) if (X.exists(g, a) && X.exists(g, b)) X.pairAdd(g, a, b, d);
+  if (o.crisis) X.crisis(g, { kind: o.crisis.kind, title: o.crisis.title, country: id, sev: o.crisis.sev, until: X.today(g) + o.crisis.days, hist: id });
+  if (o.trade) X.tradeShock(g, id, -1, o.trade, `${X.shortName(g, id)}の政策による混乱`);
 }
 
 // every morning: fire what is due (≤ 2 events per regime per morning; ≤ 1 phone message)
@@ -153,27 +294,51 @@ export function histEventsTick(g, X, onIds) {
     const R = CHRON[id];
     if (!R) continue;
     const st = histEvState(g, X, id, true);
-    if (st.over) continue;
-    const months = Math.floor((X.today(g) - st.t0) / 10);
-    let n = 0;
-    for (const ev of R.events) {
-      if (st.done[ev.id] != null) continue;
-      if (monthsOf(R, ev.ym) > months) break;
-      if (n >= 2) break;
-      n++;
-      st.done[ev.id] = X.today(g);
-      st.log.push({ day: X.today(g), id: ev.id });
-      if (st.log.length > 40) st.log.shift();
-      if (ev.d) { st.dict = clamp(st.dict + (ev.d.dict || 0), 0, 100); st.cult = clamp(st.cult + (ev.d.cult || 0), 0, 100); st.terror = clamp(st.terror + (ev.d.terror || 0), 0, 100); }
-      X.news(g, `【国際】${X.shortName(g, id)}：${ev.text}`, { raw: true });
-      if (ev.major && !phoned) { phoned = true; X.phoneRaw(g, `【国際ニュース】${X.shortName(g, id)}\n${ev.text}`); }
-      if (ev.tension) X.tensionShift(g, ev.tension);
-      if (ev.jp && X.exists(g, id)) X.relAdd(g, id, ev.jp);
-      for (const [a, b, d] of ev.pair || []) if (X.exists(g, a) && X.exists(g, b)) X.pairAdd(g, a, b, d);
-      if (ev.crisis) X.crisis(g, { kind: ev.crisis.kind, title: ev.crisis.title, country: id, sev: ev.crisis.sev, until: X.today(g) + ev.crisis.days, hist: id });
-      if (ev.conflict && X.exists(g, ev.conflict.with)) X.newConflict(g, id, ev.conflict.with, { id: ev.conflict.id, name: ev.conflict.name, intensity: ev.conflict.intensity, scripted: true, quiet: true, crisis: true });
-      for (const cid of ev.endConflicts || []) X.endConflict(g, cid, 'end', `${(X.W(g).conflicts.find((c) => c.id === cid) || {}).name || '戦争'}が終わった`);
-      if (ev.end) { st.over = true; X.endRegime(g, id); break; }
+    if (!st.mode) st.mode = 'hist';
+    if (st.mode === 'fallen') continue;
+    const today = X.today(g);
+    if (st.mode === 'hist') {
+      const months = Math.floor((today - st.t0) / 10);
+      let n = 0;
+      for (const ev of R.events) {
+        if (st.done[ev.id] != null) continue;
+        if (monthsOf(R, ev.ym) > months) break;
+        if (n >= 2) break;
+        n++;
+        st.done[ev.id] = today;
+        const [claim, react] = (CLAIMS[id] && CLAIMS[id][ev.id]) || [null, null];
+        if (ev.end) {
+          // the turning point: history's way (the regime falls) or, sometimes, another (the regime goes on)
+          const iff = X.roll(IF_LEVELS[histIfLevel(g)]);
+          if (iff) {
+            const A = IFEND[id];
+            apply(g, X, id, st, { tension: 2, d: { cult: 5 } }, A.text, A.claim, A.react, true);
+            st.mode = 'if'; st.nextIf = today + X.rint(50, 90);
+          } else {
+            apply(g, X, id, st, { tension: ev.tension || 0, d: { cult: -25, terror: -20, dict: -30 } }, ev.text, null, '各国は、この体制の終わりを受けて、新しい国の姿を見守っている');
+            st.mode = 'fallen';
+          }
+          for (const cid of ev.endConflicts || []) X.endConflict(g, cid, 'end', `${(X.W(g).conflicts.find((c) => c.id === cid) || {}).name || '戦争'}が終わった`);
+          if (ev.major && !phoned) { phoned = true; X.phoneRaw(g, `【国際ニュース】${X.shortName(g, id)}\n${iff ? IFEND[id].text : ev.text}`); }
+          break;
+        }
+        apply(g, X, id, st, ev, ev.text, claim, react, false);
+        if (ev.major && !phoned) { phoned = true; X.phoneRaw(g, `【国際ニュース】${X.shortName(g, id)}\n${ev.text}`); }
+        if (ev.conflict && X.exists(g, ev.conflict.with)) X.newConflict(g, id, ev.conflict.with, { id: ev.conflict.id, name: ev.conflict.name, intensity: ev.conflict.intensity, scripted: true, quiet: true, crisis: true });
+        for (const cid of ev.endConflicts || []) X.endConflict(g, cid, 'end', `${(X.W(g).conflicts.find((c) => c.id === cid) || {}).name || '戦争'}が終わった`);
+      }
+    } else if (st.mode === 'if' && today >= st.nextIf) {
+      // the IF: the policies of the time, in today's world, one after another (a second round is harder)
+      const list = IFPOL[id] || [];
+      if (list.length) {
+        const pol = list[st.ifIdx % list.length];
+        const round = Math.floor(st.ifIdx / list.length);
+        st.ifIdx++;
+        const o = { ...pol, d: pol.d ? { dict: (pol.d.dict || 0) * (1 + round * 0.3), cult: (pol.d.cult || 0) * (1 + round * 0.3), terror: (pol.d.terror || 0) * (1 + round * 0.3) } : null };
+        apply(g, X, id, st, o, `${round ? 'さらに、' : ''}${pol.text}`, pol.claim, pol.react, true);
+        if (pol.crisis && !phoned) { phoned = true; X.phoneRaw(g, `【国際ニュース】${X.shortName(g, id)}\n${pol.text}`); }
+      }
+      st.nextIf = today + X.rint(70, 120);
     }
   }
 }
