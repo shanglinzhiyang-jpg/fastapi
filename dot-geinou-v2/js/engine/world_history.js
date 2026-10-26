@@ -192,6 +192,7 @@ export function createHistory(X) {
     if (!Array.isArray(h.pts)) h.pts = [];
     if (!h.fired || typeof h.fired !== 'object') h.fired = {};
     if (!Array.isArray(h.ids)) h.ids = X.COUNTRY_ORDER.slice();
+    for (const id of X.COUNTRY_ORDER) if (!h.ids.includes(id)) h.ids.push(id); // [R14-H] countries added later (歴史の列強)
     if (!h.start) h.start = ERA_START[s.era] || 20260401;
     return h;
   }

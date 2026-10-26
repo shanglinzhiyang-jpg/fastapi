@@ -6,6 +6,7 @@
 import { clamp, makeCanvas } from './util.js';
 import { measure } from './draw.js';
 import { K, R, T, num, icon, relColor } from './world_uikit.js';
+import { drawHistImg } from './world_hist.js'; // [R14-H]
 
 export const MAP = { COLS: 144, ROWS: 53, LON0: -25, LAT0: 75, STEP: 2.5, CELL: 4, X: 32, Y: 42 };
 export const LEGEND = { '.': '.', x: 'x', A: 'sv', B: 'au', C: 'br', D: 'ca', E: 'cn', F: 'tw', G: 'fr', H: 'de', I: 'in', J: 'id', K: 'ir', L: 'iq', M: 'il', N: 'it', O: 'jp', P: 'kp', Q: 'kr', R: 'my', S: 'ph', T: 'ru', U: 'sa', V: 'sg', W: 'vn', X: 'th', Y: 'tr', Z: 'ua', a: 'gb', b: 'us', c: 'dd' };
@@ -141,6 +142,7 @@ export function drawMapView(ui, c, dest, view, opts = {}) {
     pts.push({ id: m.id, x: p.x, y: p.y });
     const s = big ? 2 : 1;
     R(c, p.x - s, p.y - s, 2 * s + 1, 2 * s + 1, m.war ? K.bad : '#f2f2f2');
+    if (m.flag) drawHistImg(c, m.flag, p.x + 3, p.y - (big ? 14 : 9), big ? 18 : 11, big ? 12 : 7); // [R14-H]
     if (opts.icons !== false) {
       const ic = [];
       if (m.war) ic.push(['war', K.bad]);

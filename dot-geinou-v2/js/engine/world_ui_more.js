@@ -7,6 +7,7 @@ import { measure } from './draw.js';
 import { clamp } from './util.js';
 import { K, R, T, num, safe, has, para, panel, section, gauge, bar, sparkline, trend, icon, chip, chipRow, stageBar, lineChart, relColor, relText, n0 } from './world_uikit.js';
 import { drawMapView, baked, ring } from './world_ui_map.js';
+import { drawHistImg } from './world_hist.js'; // [R14-H]
 
 const KIND_NAME = { war: '戦争・紛争', clash: '衝突', coup: '政変', finance: '金融危機', oil: '原油高', missile: 'ミサイル・核', incident: '領海・領空', trade: '貿易摩擦', disaster: '災害', humanitarian: '人道危機', unrest: '政情不安', terror: 'テロ' };
 const KIND_ICON = { war: 'war', clash: 'war', coup: 'flag', finance: 'money', oil: 'oil', missile: 'fire', incident: 'dispute', trade: 'money', disaster: 'crisis', humanitarian: 'people', unrest: 'people', terror: 'fire' };
@@ -127,7 +128,17 @@ export function makeMore(ctx) {
     y += chipRow(c, DX, y, DW, statusChips(ui, det, det), { rows: 2 }) + 4;
     // the chart
     const rs = det.real ? relSeries(ui, id) : null;
-    if (rs) {
+    if (det.hist) { // [R14-H] 歴史の列強: the leader's photo and the flag, as they are
+      const H = det.hist;
+      R(c, DX, y, DW, 66, 'rgba(255,255,255,0.04)');
+      drawHistImg(c, H.portrait, DX + 4, y + 2, 50, 62, 'cover');
+      drawHistImg(c, H.flag, DX + 60, y + 5, 64, 40, 'contain');
+      T(c, H.years, DX + 60, y + 49, 10, K.dim, 'left', 70);
+      T(c, H.leaderName, DX + 132, y + 4, 14, K.amber, 'left', DW - 136);
+      para(c, H.title || det.leader || '', DX + 132, y + 22, DW - 136, 10, K.text, 13, 2);
+      para(c, '設定「歴史の列強」で参入している国', DX + 132, y + 50, DW - 136, 10, K.faint, 13, 1);
+      y += 70;
+    } else if (rs) {
       lineChart(c, DX, y, DW, 66, [{ pts: rs.pts, color: K.cyan }], { lo: -100, hi: 100, zero: true, ticks: [-100, 0, 100], startX: startX(ui), size: 8, axisW: 22 });
       y += 70;
     }

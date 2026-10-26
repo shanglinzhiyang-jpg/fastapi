@@ -52,6 +52,8 @@ import { createDiplo } from './world_diplo.js';
 import { createTrade } from './world_trade.js';
 import { createStance } from './world_stance.js';
 import { createHistory } from './world_history.js'; // [R9-E] real events by date, staged crises, the monthly record, regions
+import { HIST_COUNTRIES, HIST_PAIRS } from './world_hist_data.js'; // [R14-H] 歴史の列強（設定）
+import { histOn, histSet, HIST_IDS, HIST as HIST_INFO } from './world_hist.js';
 
 // ======================================================================== optional modules (guarded)
 let POL = null; // politics.js
@@ -235,6 +237,7 @@ export const COUNTRIES = {
   br: C('br', { name: 'ブラジル', short: 'ブラジル', leader: 'ブラジル大統領', gov: '連邦共和制（大統領制）', region: 'americas', capital: [-15.79, -47.88],
     gdp: A([1987, 0.29], [1996, 0.85], [2004, 0.67], [2026, 2.3]), mil: A([1987, 15], [2026, 18]), trade: A([1987, 0.8], [2026, 0.7]), rel: A([1987, 48], [2026, 52]),
     member: [], note: [[0, '日系人が多く暮らす国（約200万人とされる）。']] }),
+  ...HIST_COUNTRIES, // [R14-H] ソ連（スターリン）・イタリア（ムッソリーニ）・ナチス・ドイツ（ヒトラー）・中国（毛沢東）: only while the setting is on
 };
 export const COUNTRY_ORDER = Object.keys(COUNTRIES);
 // International organisations (targets of some actions; not on the map).
@@ -510,6 +513,7 @@ const isFictional = (id) => !!fictional()[id];
 export function exists(g, id, n = dateNum(g)) {
   const c = COUNTRIES[id] || ORGS[id] || PSEUDO[id];
   if (!c) return isFictional(id);
+  if (c.hist) return histOn(g, id); // [R14-H]
   return (!c.from || n >= c.from) && (!c.to || n < c.to);
 }
 // the country that now stands for an id of another time (ソ連 → ロシア, 西ドイツ → ドイツ, EC → EU)
@@ -571,6 +575,7 @@ export const BLOC_INFO = {
   east: { name: () => '東側（社会主義陣営）', short: '東側', color: '#e85a5a' },
   nonaligned: { name: () => '非同盟・独自路線', short: '非同盟', color: '#c8b45a' },
   cnru: { name: () => '中国・ロシアに近い国々', short: '中ロ側', color: '#e0844a' },
+  hist: { name: () => '歴史の列強（設定で参入）', short: '列強', color: '#c0784a' }, // [R14-H]
   other: { name: () => 'どの陣営とも距離をおく国々', short: '中立', color: '#9aa3b0' },
 };
 const WEST_COLD = ['us', 'gb', 'fr', 'wde', 'it', 'ca', 'au', 'kr', 'tw', 'il', 'tr', 'jp', 'ph', 'th', 'sg', 'my', 'sa'];
@@ -582,6 +587,7 @@ export const newColdWar = (g) => { const s = W(g); return !s.coldWar && tensionN
 export function blocOf(g, id) {
   const s = W(g);
   if (isFictional(id)) return 'other';
+  if (COUNTRIES[id] && COUNTRIES[id].hist) return 'hist'; // [R14-H]
   if (s.coldWar) return WEST_COLD.includes(id) ? 'west' : EAST_COLD.includes(id) ? 'east' : 'nonaligned';
   if (newColdWar(g)) return WEST_NEW.includes(id) ? 'west' : CNRU.includes(id) ? 'cnru' : 'other';
   return WEST_POST.includes(id) ? 'west' : 'other';
@@ -598,6 +604,7 @@ const PAIRS = {
   'cn|kr': A([1987, -20], [1992, 20], [2026, 10]), 'kr|su': A([1987, -30], [1990, 20]), 'us|vn': A([1987, -40], [1995, 20], [2026, 40]), 'il|tr': A([1987, 10], [2010, -20], [2026, -50]),
   'iq|sa': A([1987, 30], [1990, -70], [2004, -10], [2026, 20]), 'il|sa': A([1987, -60], [2026, -20]), 'iq|il': A([1987, -70], [2026, -60]),
 };
+Object.assign(PAIRS, HIST_PAIRS); // [R14-H]
 const pkey = (a, b) => [a, b].sort().join('|');
 export function pairRelation(g, a, b) {
   if (a === 'jp') return relation(g, b);
@@ -2040,6 +2047,7 @@ function countryRow(g, id) {
     id, name: countryName(g, id), short: shortName(g, id), real: !!c, relation: r, relLabel: relLabel(r), bloc: blocOf(g, id), blocName: BLOC_INFO[blocOf(g, id)].name(s),
     ties: hasTies(g, id), tiesLabel: tiesLabel(g, id), sanction: sanctioned(g, id), onJapan: num((s.sanctions.onJapan[id] || {}).level), ally: alliedTo(g, id),
     war: atWarWith(g, id), pos: MAP_POS[id] || null, mil: milPower(g, id), gdp: gdpOf(g, id), trade: tradeOf(g, id),
+    ...(c && c.hist ? { hist: true, flag: c.flag, portrait: c.portrait } : {}), // [R14-H]
   };
 }
 function summary(g) {
@@ -2108,7 +2116,26 @@ function countryDetail(g, id) {
     conflicts: s.conflicts.filter((x) => x.status === 'war' && (x.a === id || x.b === id)).map((x) => x.name),
     met: s.summits.met[id] != null ? s.summits.met[id] : null, aid: Math.round(num(s.aid[id]) * 100) / 100,
     distance: distanceKm(id),
+    ...(c.hist ? { hist: { flag: c.flag, portrait: c.portrait, leaderName: HIST_INFO[id] && HIST_INFO[id].leaderName, title: HIST_INFO[id] && HIST_INFO[id].title, years: HIST_INFO[id] && HIST_INFO[id].years } } : {}), // [R14-H]
   };
+}
+// [R14-H] the setting: add / remove a historical power (g.state.histPowers)
+function setHistPower(g, id, on) {
+  const c = COUNTRIES[id];
+  if (!c || !c.hist) return { ok: false, why: '対象がない' };
+  const was = histOn(g, id);
+  on = !!on;
+  if (was === on) return { ok: true, on };
+  if (!on) {
+    if (atWarWith(g, id)) return { ok: false, why: `${c.short}とは戦争中（講和してから）` };
+    const s = W(g);
+    for (const x of s.conflicts) if (x.status === 'war' && (x.a === id || x.b === id)) endConflict(g, x.id, 'ceasefire');
+    for (const k of ['rel', 'ties', 'ambassadors', 'aid', 'provoked']) if (s[k]) delete s[k][id];
+    delete s.sanctions.byJapan[id]; delete s.sanctions.onJapan[id]; delete s.summits.met[id];
+    s.crises = s.crises.filter((k) => k.country !== id);
+  }
+  histSet(g, id, on);
+  return { ok: true, on };
 }
 // the actions for a target (or the global ones): [{ id, name, desc, why, odds, lines, options, target }]
 function actionsFor(g, target, kind = null) {
@@ -2236,6 +2263,9 @@ const methods = {
   },
   worldRelation(id) { return relation(this, id); },
   worldTies(id) { return hasTies(this, id); },
+  // [R14-H] 歴史の列強: [{ id, label, on, … }]; the setter returns { ok, on, why }
+  histPowers() { return HIST_IDS.map((id) => ({ ...HIST_INFO[id], on: histOn(this, id) })); },
+  setHistPower(id, on) { return setHistPower(this, id, on); },
 };
 export function installWorld(proto) {
   if (!proto || proto.__world) return;

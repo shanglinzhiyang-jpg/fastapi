@@ -2167,6 +2167,8 @@ function settingsRows(g) {
     { id: 'speed', label: '文字の速さ', sub: 'メッセージが出る速さ', right: sp[1], rightColor: PC.accent, chip: ['文字', '#8a5ac8'] },
     // [R12-U1] 縦画面の大きな文字（下の空きに、選んだ内容を大きく出す。縦持ちのスマホだけ）
     { id: 'bigtext', label: '大きな文字（縦画面）', sub: portraitPhone() ? '下の空きに、選んだ内容を大きく出す' : '縦持ちのスマホで、下の空きに大きく出す', right: bigtextPref() === false ? 'OFF' : 'ON', rightColor: bigtextPref() === false ? PC.bad : PC.good, chip: ['大字', '#e0a020'] },
+    // [R14-H] 歴史の列強: add the historical regimes to 世界情勢
+    ...(typeof g.histPowers === 'function' ? [{ id: 'hist', label: '歴史の列強', sub: '世界情勢に4つの国を加える', right: `${g.histPowers().filter((h) => h.on).length}/${g.histPowers().length}`, chip: ['世界', '#b0603a'] }] : []),
     { id: 'order', label: 'アプリの並べかえ', sub: `${devWord(g)}のホーム画面の順番`, chip: ['並び', '#2f9a4a'] },
     { id: 'reset', label: '並びを元にもどす', sub: custom ? '最初の順番にもどす' : 'いまは最初の順番', chip: ['並び', '#7a8a7a'], disabled: !custom, why: 'いまは最初の順番' },
     { id: 'keys', label: '操作のしかた', sub: 'キーボード・タッチ', chip: ['操作', '#c0703a'] },
@@ -2181,11 +2183,25 @@ export async function settingsApp(g) {
     pick(ph, it, i, v) {
       if (it.id === 'sound') { audio.toggleMute(); audio.sfx('ok'); return; }
       if (it.id === 'bigtext') { setBigtextPref(bigtextPref() === false); audio.sfx('cursor'); return; } // [R12-U1]
+      if (it.id === 'hist') { ph.run(v, () => histPowersApp(g)); return; } // [R14-H]
       if (it.id === 'speed') { const k = SPEEDS.findIndex((s) => s[0] === SPEED); setTextSpeed(SPEEDS[(k + 1) % SPEEDS.length][0]); audio.sfx('cursor'); return; }
       if (it.id === 'reset') { setAppOrder(g, null); ph.toast('アプリの並びを元にもどした', COL.settings); return; }
       if (it.id === 'order') { ph.run(v, () => phoneView(g, reorderView(g))); return; }
       if (it.id === 'keys') { ph.run(v, () => phoneInfo(g, { title: '操作のしかた', color: COL.settings, lines: controlsHelp(g) })); return; }
       if (it.id === 'about') ph.run(v, () => phoneInfo(g, { title: `この${devWord(g)}のこと`, color: COL.settings, lines: deviceAbout(g) }));
+    },
+  });
+}
+// [R14-H] 設定 → 歴史の列強: the regimes of the 1920s–70s that can join the 世界情勢 (leaders and flags are the historical ones)
+function histPowersApp(g) {
+  return rowsList(g, {
+    title: '歴史の列強', color: COL.settings, rowH: 40,
+    items: () => g.histPowers().map((h) => ({ id: h.id, label: `${h.leaderName.split('・').pop()}政権`, sub: `${h.country}　${h.years}`, right: h.on ? 'ON' : 'OFF', rightColor: h.on ? PC.good : PC.bad, chip: ['列強', '#b0603a'] })),
+    hint: 'A:ON/OFF　B:もどる',
+    pick(ph, it) {
+      const cur = g.histPowers().find((h) => h.id === it.id);
+      const r = g.setHistPower(it.id, !(cur && cur.on));
+      if (r && r.ok === false) ph.toast(r.why || 'いまは切りかえられない', COL.settings); else audio.sfx('cursor');
     },
   });
 }

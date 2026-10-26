@@ -30,6 +30,7 @@ import { K, R, T, num, safe, has, sfx, n0, fit, jwrap, para, panel, gauge, relCo
 import { MAP, MODES, VIEWS, grid, project, drawMapView } from './world_ui_map.js';
 import { makeMore } from './world_ui_more.js';
 import { SubScreen, subScreenWanted } from './world_ui_sub.js';
+import { drawHistImg } from './world_hist.js'; // [R14-H] flags of the 歴史の列強
 void fit; void gauge; void chip;
 // troops given in 千人 → 「約1.6万人」 / 「約8,000人」
 const troops = (k) => (num(k) >= 10 ? `約${(Math.round(num(k)) / 10).toFixed(1).replace(/\.0$/, '')}万人` : `約${n0(num(k) * 1000)}人`);
@@ -75,7 +76,7 @@ function countryRows(ui) {
   const d = ui.data;
   const real = d.w.countries.slice().sort((a, b) => b.relation - a.relation);
   const out = [{ header: true, label: `国々（${real.length}）` }];
-  for (const c of real) out.push({ key: c.id, label: c.name, right: `${c.relation}`, rightColor: relColor(c.relation), sub: c.war ? '戦争中' : !c.ties ? `国交：${c.tiesLabel}` : c.ally ? '同盟・協力' : c.sanction ? `制裁 段階${c.sanction}` : '' });
+  for (const c of real) out.push({ key: c.id, flag: c.flag, label: c.name, right: `${c.relation}`, rightColor: relColor(c.relation), sub: c.war ? '戦争中' : !c.ties ? `国交：${c.tiesLabel}` : c.ally ? '同盟・協力' : c.sanction ? `制裁 段階${c.sanction}` : '' });
   if ((d.w.fictional || []).length) { out.push({ header: true, label: 'ヴェルミナ海の国々' }); for (const c of d.w.fictional) out.push({ key: c.id, label: c.name, right: `${c.relation}`, rightColor: relColor(c.relation), sub: c.war ? '戦争中' : '' }); }
   return out;
 }
@@ -853,7 +854,9 @@ function drawList(ui, c, L0, wide = false) {
     if (sel) R(c, L.x + 1, y, L.w - 2, L.rh - 1, K.sel);
     if (sel) R(c, L.x + 1, y, big ? 4 : 2, L.rh - 1, K.amber);
     const rw = r.right ? measure(c, r.right, rs) + 10 : 0;
-    T(c, r.label, L.x + (big ? 12 : 8), y + (L.rh - fs) / 2, fs, r.lock ? K.faint : r.color || K.text, 'left', L.w - (big ? 24 : 16) - rw);
+    const fl = r.flag ? (big ? 26 : 19) : 0; // [R14-H]
+    if (r.flag) drawHistImg(c, r.flag, L.x + (big ? 12 : 7), y + (L.rh - (big ? 16 : 11)) / 2, big ? 24 : 17, big ? 16 : 11);
+    T(c, r.label, L.x + (big ? 12 : 8) + fl, y + (L.rh - fs) / 2, fs, r.lock ? K.faint : r.color || K.text, 'left', L.w - (big ? 24 : 16) - rw - fl);
     if (r.right) T(c, r.right, L.x + L.w - (big ? 10 : 6), y + (L.rh - rs) / 2 + 1, rs, r.rightColor || (r.lock ? K.lock : K.dim), 'right');
     if (big) R(c, L.x + 8, y + L.rh - 1, L.w - 16, 1, 'rgba(120,160,200,0.08)');
   }
