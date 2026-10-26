@@ -136,7 +136,8 @@ export function makeMore(ctx) {
       T(c, H.years, DX + 60, y + 49, 10, K.dim, 'left', 70);
       T(c, H.leaderName, DX + 132, y + 4, 14, K.amber, 'left', DW - 136);
       para(c, H.title || det.leader || '', DX + 132, y + 22, DW - 136, 10, K.text, 13, 2);
-      para(c, '設定「歴史の列強」で参入している国', DX + 132, y + 50, DW - 136, 10, K.faint, 13, 1);
+      para(c, '設定「歴史の列強」で参入している国', DX + 132, y + 50, DW - 170, 10, K.faint, 13, 1);
+      drawHistImg(c, 'flag_jp', DX + DW - 32, y + 46, 26, 17); // 日本
       y += 70;
     } else if (rs) {
       lineChart(c, DX, y, DW, 66, [{ pts: rs.pts, color: K.cyan }], { lo: -100, hi: 100, zero: true, ticks: [-100, 0, 100], startX: startX(ui), size: 8, axisW: 22 });
