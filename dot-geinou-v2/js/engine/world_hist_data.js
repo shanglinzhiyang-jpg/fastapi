@@ -7,7 +7,7 @@ const A = (...pairs) => pairs;
 const flat = (v) => A([1987, v], [2026, v]);
 export const HIST_IDS = ['h_su', 'h_it', 'h_de', 'h_cn'];
 export const HIST = {
-  h_su: { id: 'h_su', country: 'ソ連', flag: 'flag_su', portrait: 'pt_su', leaderName: 'ヨシフ・スターリン', title: 'ソ連共産党中央委員会書記長', years: '1920年代後半〜1953年', real: 'su', label: 'ソ連（スターリン政権時）' },
+  h_su: { id: 'h_su', country: 'ソ連', flag: 'flag_su', portrait: 'pt_su', leaderName: 'ヨシフ・スターリン', title: 'ソ連共産党中央委員会書記長', years: '1922〜1953年', real: 'su', label: 'ソ連（スターリン政権時）' },
   h_it: { id: 'h_it', country: 'イタリア', flag: 'flag_it', portrait: 'pt_it', leaderName: 'ベニト・ムッソリーニ', title: 'イタリア王国首相・国家ファシスト党党首（統領＝ドゥーチェ）', years: '1922〜1943年', real: 'it', label: 'イタリア（ムッソリーニ政権時）' },
   h_de: { id: 'h_de', country: 'ドイツ', flag: 'flag_de', portrait: 'pt_de', leaderName: 'アドルフ・ヒトラー', title: '総統・国家社会主義ドイツ労働者党党首', years: '1933〜1945年', real: 'de', label: 'ナチス・ドイツ（ヒトラー政権時）' },
   h_cn: { id: 'h_cn', country: '中国', flag: 'flag_cn', portrait: 'pt_cn', leaderName: '毛沢東', title: '中国共産党中央委員会主席', years: '1949〜1976年', real: 'cn', label: '中華人民共和国（毛沢東政権時）' },
@@ -16,7 +16,7 @@ const H = (id, def) => ({ id, real: true, hist: true, region: 'europe', from: 0,
 export const HIST_COUNTRIES = {
   h_su: H('h_su', { name: 'ソビエト連邦（スターリン政権）', short: 'ソ連（スターリン期）', leader: 'ヨシフ・スターリン書記長', gov: 'ソ連共産党の一党体制（社会主義の計画経済）', capital: [58.2, 38.0],
     gdp: flat(1.1), mil: flat(85), trade: flat(1.5), rel: flat(-20), member: [],
-    note: [[0, '1920年代の終わりから1953年まで、スターリンが党と国家を率いた。五か年計画で工業化を急ぎ、第二次世界大戦ではドイツと戦って連合国の勝者の側に立った。日本とは1941年4月に日ソ中立条約を結んだが、1945年8月に対日参戦した。']] }),
+    note: [[0, '1922年に書記長となり、1920年代の終わりから1953年まで、スターリンが党と国家を率いた。五か年計画で工業化を急ぎ、第二次世界大戦ではドイツと戦って連合国の勝者の側に立った。日本とは1941年4月に日ソ中立条約を結んだが、1945年8月に対日参戦した。']] }),
   h_it: H('h_it', { name: 'イタリア王国（ムッソリーニ政権）', short: 'ファシスト・イタリア', leader: 'ベニト・ムッソリーニ首相（統領）', gov: '国家ファシスト党の一党体制（王国）', capital: [43.9, 10.6],
     gdp: flat(0.4), mil: flat(38), trade: flat(0.6), rel: flat(25), member: [],
     note: [[0, '1922年から1943年まで、ムッソリーニが首相として国を率いた。ファシスト党の一党体制で、1935年にエチオピアへ侵攻した。1936年にドイツと「ローマ・ベルリン枢軸」を結び、1937年に日独防共協定へ加わり、1940年に日独伊三国同盟の一員となった。']] }),
