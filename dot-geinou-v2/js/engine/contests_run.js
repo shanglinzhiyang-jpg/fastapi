@@ -8,6 +8,7 @@ import { PLACES } from './map.js';
 import { clamp, fmtMoney } from './util.js';
 import { audio } from './audio.js';
 import { eraOf } from './profile.js';
+import * as JC from './judges_ai_con.js'; // [R11-J] 審査員AI
 
 const has = (g, k) => !!g && typeof g[k] === 'function';
 const num = (v, d = 0) => (v !== null && v !== '' && v !== undefined && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -671,10 +672,18 @@ async function judgeFinal(g, x, P, mode) {
   const scale = I.scaleOf(r);
   const panel = r.judge === 'panel' || r.judge === 'points' || (!r.judge && r.final !== false);
   const judges = panel ? I.judgesFor(g, id, year, num(r.judges, 0) || undefined) : [];
-  const ps = panel ? I.panelScores(judges, P.fs, P.res.parts, scale, I.rngOf(I.cstate(g).seed, id, year, 'panel', 'player')) : { per: [], total: Math.round(P.fs * 10) / 10, max: 100 };
-  const comments = judges.map((j, i) => ({ name: j.name, short: j.short, pts: ps.per[i] ? ps.per[i].pts : null, text: I.judgeComment(I.rngOf(id, year, 'cm', i), j, P.fs, P.res) }));
+  // [R11-J] the judges are agents: what they remember of the player (fondness, growth, 見飽きた, mood) and their drifted tastes add to the
+  // points (bounded); when the panel splits they talk it over (and may move a point); their remarks come from memory
+  const orderPre = panel ? finalOrder(g, x, rd0 ? rd0.passed : []) : [];
+  const nh = P.neta && P.neta.id ? JC.nhOf(P.neta.id, P.neta.ai && P.neta.ai.hash) : 0;
+  const jpl = panel ? safe('jaiPl', () => JC.playerPl(g.state, { day: I.todayOf(g), year, fs: P.fs, kind: P.kind, nh, ti: P.neta ? P.neta.title : '', cid: id, order: orderPre.indexOf('player') + 1, of: orderPre.length, parts: P.res.parts }), null) : null;
+  const ps = panel ? I.panelScores(judges, P.fs, P.res.parts, scale, I.rngOf(I.cstate(g).seed, id, year, 'panel', 'player'), jpl) : { per: [], total: Math.round(P.fs * 10) / 10, max: 100 };
+  const talk = jpl ? safe('jaiTalk', () => JC.discuss(g.state, judges, ps.per, jpl, I.rngOf(I.cstate(g).seed, id, year, 'talk', 'player'), ps.vspread), null) : null;
+  if (talk && talk.changes.length) ps.total = ps.per.reduce((a, q) => a + q.pts, 0);
+  const comments = judges.map((j, i) => ({ name: j.name, short: j.short, pts: ps.per[i] ? ps.per[i].pts : null, text: [I.judgeComment(I.rngOf(id, year, 'cm', i), j, P.fs, P.res), jpl ? safe('jaiRemark', () => JC.remark(g.state, j, jpl), '') : ''].filter(Boolean).join(''), m: ps.per[i] && ps.per[i].m, b: ps.per[i] && ps.per[i].b }));
   const res = I.resultsOf(g, id, year, true);
-  res.mods.final = { score: P.fs, total: ps.total };
+  res.mods.final = { score: P.fs, total: ps.total, ...(jpl ? { sv: jpl.v.map((q) => Math.round(q * 100) / 100) } : {}) };
+  if (jpl) safe('jaiRecord', () => JC.record(g.state, judges, ps.per, jpl, comments), null);
   I.bump(g, id, year);
   let sim = I.simOf(g, id, year);
   let fin = sim ? sim.final : { ranking: ['player'], totals: { player: ps.total } };
@@ -683,9 +692,11 @@ async function judgeFinal(g, x, P, mode) {
   const rowsAt = (upto) => order.slice(0, upto).map((aid) => ({ name: nameOf(aid), total: fin.totals[aid], me: aid === 'player' })).sort((a, b) => b.total - a.total);
   const myPos = order.indexOf('player');
   if (mode !== 'auto' && showUI(g)) {
-    if (CONTEST_UI.scoreboard) await asafe('scoreboard', () => CONTEST_UI.scoreboard(g, { title: `${label(def, cyc)} ${rr.name}`, color: I.colorOf(def), judges: judges.map((j, i) => ({ name: j.name, short: j.short, title: j.title, pts: ps.per[i] ? ps.per[i].pts : null })), total: ps.total, max: ps.max, comments, unit: x.entry ? x.entry.unitName : '', standings: rowsAt(myPos + 1), order: myPos + 1, of: order.length, panel }), null);
+    if (CONTEST_UI.scoreboard) await asafe('scoreboard', () => CONTEST_UI.scoreboard(g, { title: `${label(def, cyc)} ${rr.name}`, color: I.colorOf(def), judges: judges.map((j, i) => ({ name: j.name, short: j.short, title: j.title, pts: ps.per[i] ? ps.per[i].pts : null, m: ps.per[i] && ps.per[i].m, b: ps.per[i] && ps.per[i].b })), total: ps.total, max: ps.max, comments, talk, unit: x.entry ? x.entry.unitName : '', standings: rowsAt(myPos + 1), order: myPos + 1, of: order.length, panel }), null);
     else await g.say(`採点：${ps.total}点${panel ? `（${judges.map((j, i) => `${j.short} ${ps.per[i].pts}`).join('・')}）` : ''}`);
     for (const cm of comments.slice(0, 2)) await g.say(cm.text, { name: cm.name });
+    if (talk && talk.lines && !CONTEST_UI.scoreboard) for (const ln of talk.lines) await g.say(ln.text, { name: ln.name }); // [R11-J] 審査員コメント座談 (the scoreboard shows it itself)
+    if (jpl && has(g, 'judgeOffer')) await asafe('jaiOffer', () => g.judgeOffer(`c:${id}`), null); // [R11-J] 「この審査員にたずねる」
   }
   // stage 2 (最終決戦)
   let ranking = fin.ranking;
@@ -697,7 +708,13 @@ async function judgeFinal(g, x, P, mode) {
     sim = I.simOf(g, id, year);
     fin = sim ? sim.final : fin;
     ranking = fin.ranking;
-    if (fin.stage2 && mode !== 'auto' && CONTEST_UI.votes && showUI(g)) await asafe('votes2', () => CONTEST_UI.votes(g, { title: `${label(def, cyc)} ${r.stage2.name || '最終決戦'}`, rows: fin.stage2.order.map((aid) => ({ name: nameOf(aid), votes: fin.stage2.votes[aid], me: aid === 'player' })), color: I.colorOf(def), unit: '票' }), null);
+    if (fin.stage2 && mode !== 'auto' && CONTEST_UI.votes && showUI(g)) {
+      await asafe('votes2', () => CONTEST_UI.votes(g, { title: `${label(def, cyc)} ${r.stage2.name || '最終決戦'}`, rows: fin.stage2.order.map((aid) => ({ name: nameOf(aid), votes: fin.stage2.votes[aid], me: aid === 'player' })), color: I.colorOf(def), unit: '票' }), null);
+      // [R11-J] why the judges voted as they did (their own rules): up to three of them say it
+      const w = fin.stage2.why || {};
+      let said = 0;
+      for (const jd of judges) { const q = w[jd.key]; if (!q || said >= 3 || !q[0]) continue; said++; await g.say(`${nameOf(q[0])}に入れました。${q[1] ? `${q[1]}がいちばん自分の好みでした。` : ''}`, { name: jd.name }); }
+    }
   }
   const place = ranking.indexOf('player') + 1;
   res.final = { place, of: ranking.length, total: ps.total, per: ps.per.map((p) => p.pts), judges: judges.map((j) => j.name), ranking: ranking.slice(0, 20).map((aid) => ({ name: nameOf(aid), total: fin.totals[aid], me: aid === 'player', ...(fin.stage2 && fin.stage2.order.includes(aid) ? { votes: fin.stage2.votes[aid] } : {}) })), stage2: fin.stage2 ? { order: fin.stage2.order.map(nameOf), votes: fin.stage2.order.map((aid) => fin.stage2.votes[aid]) } : null };
@@ -1058,3 +1075,5 @@ function withdrawToday(g) {
   finishToday(g);
 }
 export const venue = { withdrawToday, reception, practice, debayashi, mirror, breathe, stageCall, performStep, leaveVenue, today, roundOfToday, tensionNow, travelCost, label, stageRoom };
+// [R11-J] for the tests of the judge agents: the final's judging runs on its own (judgeFinal(g, x, P, mode))
+export const _jtest = { judgeFinal, finalOrder };

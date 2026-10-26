@@ -30,6 +30,7 @@ import {
   NORI_RE, KANCHI_RE, TATOE_TAIL, KANSAI_RE, STD_RE, RAKUGO_RE, SAGE_RE, FIRST_RE, ANACHRO, STOP_NOUNS,
 } from './neta_lex.js';
 import { bankCorpus, hashStr, ERA_YEAR } from './neta_bank.js';
+import * as JM from './judges_ai_mem.js'; // [R11-J] the judges' memory (opt-in through ctx.jai)
 
 export const VERSION = 1;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -49,6 +50,7 @@ export const KINDS = {
   talk: { label: 'エピソードトーク', rate: 6.5, pause: 0.4, laugh: 1.2, ppm: [0.8, 3.5], gap: 45, maxLine: 90, def: 120 },
 };
 const kindOf = (k) => (KINDS[k] ? k : 'manzai');
+const KIND_LABELS = Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [k, v.label])); // [R11-J]
 
 export const AXES = {
   tsukami: 'ツカミ', kousei: '構成', hassou: '発想・意外性', kotoba: '言葉選び', tsukkomi: 'ツッコミの質', tempo: '手数とテンポ',
@@ -499,7 +501,7 @@ export function scoreLocal(neta, ctx = {}) {
   const res = { version: VERSION, by: 'local', kind, hash: netaHash(neta), axes: {}, reasons: {}, judges: [], comments: [], advice: [], lines: [], best: [], worst: [], stats: {}, total: 0, rank: '', summary: '' };
   if (!n) {
     for (const a of axesIds) { res.axes[a] = 0; res.reasons[a] = '台本が空'; }
-    res.judges = JUDGES.map((j) => ({ id: j.id, name: j.name, title: j.title, taste: j.taste, score: 0, comment: '…台本がまだ一行もありませんね。' }));
+    res.judges = (ctx.jai ? ctx.jai.panel : JUDGES).map((j) => ({ id: j.id, name: j.name, title: j.title, taste: j.taste, score: 0, comment: '…台本がまだ一行もありませんね。' })); // [R11-J] the current holders of the seats
     res.advice = ['台本が空です。まずはツカミを一行書いてみよう。'];
     res.comments = ['台本が空なので採点できない。'];
     res.rank = rankLabel(0);
@@ -513,6 +515,9 @@ export function scoreLocal(neta, ctx = {}) {
   const callbacks = findCallbacks(A);
   const tendonLines = new Set(tendon.flatMap((x) => x.uses.slice(1)));
   const cbLines = new Set(callbacks.map((c) => c.to));
+  // [R11-J] the judges remember the player's earlier scripts: a signature of this one and how much it looks like what they have seen
+  let jaiSig = null, jaiStale = { v: 0, from: '', j: 0 };
+  if (ctx.jai) { jaiSig = JM.sigOf(lines.filter((l) => l.punch || l.tsk).map((l) => l.norm)); jaiStale = JM.staleness(ctx.jai, jaiSig, neta.id); }
   for (let k = 0; k < n; k++) {
     const L = lines[k];
     if (L.punch) L.s = punchStrength(L, A, lines[k + 1], { tendon: tendonLines.has(L.i), callback: cbLines.has(L.i) });
@@ -646,6 +651,8 @@ export function scoreLocal(neta, ctx = {}) {
     const selfC = speech.filter((l) => l.selfCopy >= 0.75).length;
     why.dokuji = copied >= Math.max(2, speech.length * 0.3) ? `部品のセリフがそのまま${copied}行` : selfC >= 2 ? `前に書いた台本と同じ行が${selfC}行` : jokes ? 'どこかで聞いたことのあるネタがある' : cl > 0.4 ? '決まり文句のツッコミが多い' : 'オリジナルの台本で新鮮';
     A.copied = copied; A.selfC = selfC; A.jokes = jokes;
+    // [R11-J] 見飽きた: a script that looks like one the judges saw lowers 独自性 (the breakdown shows it per judge)
+    if (jaiStale.v > 0.02) { A.dokujiPre = ax.dokuji; ax.dokuji = clamp(ax.dokuji - R(jaiStale.v * 28), 0, 100); if (ax.dokuji < A.dokujiPre) why.dokuji = `前に見た${jaiStale.from ? `『${jaiStale.from}』` : 'ネタ'}と似ている（見飽きた）`; }
   }
   // --- キャラ
   {
@@ -777,6 +784,9 @@ export function scoreLocal(neta, ctx = {}) {
   const over = (sec - target) / target;
   if (over > 0.6) cap = Math.min(cap, 55);
   for (const a of axesIds) if (cap < 100) ax[a] = Math.min(ax[a], R(cap + 12));
+  // [R11-J] the axes as they would be without 見飽きた (the breakdown separates it)
+  let axPre = null;
+  if (A.dokujiPre != null) { axPre = { ...ax }; axPre.dokuji = Math.min(A.dokujiPre, cap < 100 ? R(cap + 12) : 100); }
 
   // ------------------------------------------------ judges
   const taste = { aruaru: lines.filter((l) => l.aruaru).length, meta: P.length ? P.filter((l) => l.meta).length / P.length : 0 };
@@ -784,18 +794,34 @@ export function scoreLocal(neta, ctx = {}) {
   const W = 0.6 * meanP + 0.4 * avg(top3);
   const laugh = clamp(((W - 25) * 100) / 50, 0, 100);
   A.laugh = laugh;
-  res.judges = JUDGES.map((j) => {
+  // [R11-J] the panel is the five seats' current holders (drifted tastes) when ctx.jai is given, the plain table otherwise
+  const panel = ctx.jai ? ctx.jai.panel : JUDGES;
+  const jScore = (jj, axx) => {
     let ws = 0, wt = 0;
-    for (const a of axesIds) { const w = j.w[a] || 1; ws += ax[a] * w; wt += w; }
-    let s = 50 + ((ws / wt) * 0.58 + laugh * 0.42 - 50) * j.spread + j.bias;
-    if (j.id === 'emihara') { if (taste.aruaru >= 2) s += 4; if (taste.meta > 0.3) s -= 5; if ((A.tobi || 0) > 0.5) s -= 5; }
-    if (j.id === 'shindo') { s -= (A.clicheT || 0) * 8 + copyRatio * 10; if (taste.meta > 0 && ax.dokuji >= 70) s += 3; }
-    if (j.id === 'koiki') s += Math.min(6, (A.wp || 0) * 3);
-    if (j.id === 'dan' && A.miss && A.miss.some((m) => m === 'オチ' || m === 'サゲ')) s -= 6;
-    if (j.id === 'tobishima' && (A.beta || 0) > 0.5) s -= 6;
+    for (const a of axesIds) { const w = jj.w[a] || 1; ws += axx[a] * w; wt += w; }
+    let s = 50 + ((ws / wt) * 0.58 + laugh * 0.42 - 50) * jj.spread + jj.bias;
+    if (jj.id === 'emihara') { if (taste.aruaru >= 2) s += 4; if (taste.meta > 0.3) s -= 5; if ((A.tobi || 0) > 0.5) s -= 5; }
+    if (jj.id === 'shindo') { s -= (A.clicheT || 0) * 8 + copyRatio * 10; if (taste.meta > 0 && ax.dokuji >= 70) s += 3; }
+    if (jj.id === 'koiki') s += Math.min(6, (A.wp || 0) * 3);
+    if (jj.id === 'dan' && A.miss && A.miss.some((m) => m === 'オチ' || m === 'サゲ')) s -= 6;
+    if (jj.id === 'tobishima' && (A.beta || 0) > 0.5) s -= 6;
+    return s;
+  };
+  let jaiTics = null, jaiT0 = 0;
+  if (ctx.jai) {
+    jaiTics = JM.ticsOf({ nande: A.nande, clicheT: A.clicheT, beta: A.beta, tobi: A.tobi, jokes: A.jokes, pat: samePattern(P), open: lines[0].norm, close: lines[n - 1].norm });
+    jaiT0 = Math.min(cap + 2, R(avg(panel.map((jj) => jScore(jj, ax)))));
+  }
+  res.judges = panel.map((j) => {
+    let s = jScore(j, ax);
+    let det = null;
+    if (ctx.jai) {
+      det = JM.netaAdjust(ctx.jai, j, { sFull: s, sNoStale: axPre ? jScore(j, axPre) : s, sOrig: jScore(j.base, axPre || ax), ax, axesIds, tics: jaiTics, stale: jaiStale, AX: AXES, KL: KIND_LABELS, total0: jaiT0 });
+      s = det.s;
+    }
     s = Math.min(s, cap + (j.id === 'emihara' ? 4 : 2));
     const score = clamp(R(s), 0, 100);
-    return { id: j.id, name: j.name, title: j.title, taste: j.taste, score, comment: judgeComment(j, score, ax, why, axesIds, A, res.hash) };
+    return { id: j.id, name: j.name, title: j.title, taste: j.taste, score, comment: judgeComment(j, score, ax, why, axesIds, A, res.hash, det), ...(det ? { k: j.key, d: det.d, m: det.memo[0] ? det.memo[0].k : '' } : {}) };
   });
   let total = R(avg(res.judges.map((x) => x.score)));
   total = Math.min(total, cap);
@@ -803,6 +829,7 @@ export function scoreLocal(neta, ctx = {}) {
   res.axes = ax;
   res.reasons = why;
   res.rank = rankLabel(res.total);
+  if (ctx.jai) res.mem = { g: jaiSig, x: jaiTics, stale: Math.round(jaiStale.v * 100) / 100 }; // [R11-J]
 
   // ------------------------------------------------ advice (concrete, most useful first)
   const adv = [];
@@ -920,7 +947,7 @@ const VOICE = {
 // a reason that is a criticism (quotes from the script are ignored)
 const NEG_RE = /ない|長い|弱い|ベタ|飛びすぎ|少ない|オーバー|短い|ぶれ|ばかり|多い|くり返し|尻すぼみ|そのまま|同じ|どこかで|ふわっと|足りない|にている|テンポが落ちる|続く|くどい|空|見つからない|ふつう|離れすぎ|近すぎ|一人しか|工夫を|伝えよう|書かれて/;
 export const isNegReason = (t) => NEG_RE.test(String(t || '').replace(/「[^」]*」/g, ''));
-function judgeComment(j, score, ax, why, axesIds, A, h) {
+function judgeComment(j, score, ax, why, axesIds, A, h, det) {
   const v = VOICE[j.id];
   const band = score >= 70 ? 'hi' : score >= 45 ? 'mid' : 'lo';
   const pick = (arr, salt) => arr[(h + salt) % arr.length];
@@ -931,7 +958,10 @@ function judgeComment(j, score, ax, why, axesIds, A, h) {
   const good = best && why[best] && ax[best] >= 60 && !isNegReason(why[best]) ? `${AXES[best]}：${why[best]}。` : '';
   const bad = worst && why[worst] && ax[worst] < 65 && worst !== best && isNegReason(why[worst]) ? `${AXES[worst]}は、${why[worst]}。` : '';
   const soft = best && why[best] && ax[best] >= 55 && !isNegReason(why[best]) ? `ただ、${AXES[best]}は悪くない（${why[best]}）。` : '';
-  return (opener + (band === 'lo' ? bad || soft : good || bad)).slice(0, 120);
+  const main = (opener + (band === 'lo' ? bad || soft : good || bad)).slice(0, 120);
+  // [R11-J] a remark that comes from memory (「前回より構成が締まった」「見飽きた」)
+  const memo = det && det.memo && det.memo[0];
+  return memo ? `${main}${memo.text}`.slice(0, 168) : main;
 }
 
 // ------------------------------------------------------------------ the editor's live numbers and checklist

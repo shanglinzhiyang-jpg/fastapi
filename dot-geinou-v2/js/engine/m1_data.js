@@ -304,7 +304,7 @@ export function judgesFor(year) {
   const sorted = pool.slice().sort((a, b) => (a.from - b.from) || (h01('jo', year, a.id) - h01('jo', year, b.id)));
   const out = sorted.slice(0, n);
   while (out.length < n) out.push({ id: 'guest' + out.length, name: personName('m', 'judge', year, out.length) + '（漫才師）', title: '漫才師', taste: '正統派', bias: 0, line: '面白いかどうか、それだけです。' });
-  return out;
+  return out.map((j) => ({ ...j, y: year })); // [R11-J] the year, for the judge agents (taste drift since the debut)
 }
 export const MC = {
   main: { name: '浜坂トオル', title: '司会（漫才師）', look: { hair: 'slick', hairColor: 'black', skin: 'fair', top: '#1e1e26', bottom: '#1e1e26', jacket: true, tie: '#ffd23f' } },

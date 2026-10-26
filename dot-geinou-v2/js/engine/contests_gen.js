@@ -255,7 +255,7 @@ export function judgePerson(r) {
 // What a judge says about a performance (score 0..100, result parts), in their own voice.
 export function judgeComment(r, j, score, res = {}) {
   const k = j.dialect === 'kansai';
-  const part = j.tastePart || 'neta';
+  const part = j.partNow || j.tastePart || 'neta'; // [R11-J] a judge whose taste has drifted talks about what they care about now
   const hi = score >= 80, mid = score >= 60;
   const lines = {
     timing: hi ? (k ? '入りのツカミで、もう客席つかんどったな。' : '最初の10秒で空気をつかんでいました。') : mid ? (k ? 'ツカミはよかった。中盤で間がもたついたな。' : 'ツカミはいい。中盤のテンポが少し落ちました。') : (k ? '間が詰まりすぎや。お客さんが笑う時間をあげな。' : '間が詰まっていて、笑う余白がなかったです。'),

@@ -31,6 +31,7 @@ export const MODULES = [
   './engine/contest_r1.js',
   './engine/contest_abc.js',
   './engine/contest_ui.js',
+  './engine/judges_ai_game.js', // [R11-J] 審査員AI: the judges are agents (taste drift, memory, careers) + the 審査員名鑑 (api: test-output/api_judges.txt)
   './engine/politics_ui.js',
   './engine/ideology.js', // ideology core (思想): encyclopedia, player ideology, 思想診断, classifyRegime
   './engine/assist.js', // 政治ナビ（ことは先生）: phone app, glossary, lessons, quiz UI, tips, g.explain / g.navi

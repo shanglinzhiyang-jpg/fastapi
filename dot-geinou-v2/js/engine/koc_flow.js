@@ -12,6 +12,7 @@ import {
   copyFor, judgePoints, crowdPoints, duelVotes, finalistVote, judgesFor, histFromSeason, blockField, entryNo, passOdds,
   news, notice, logRun, roundName, clamp, num, safe, gauss, dateText, entryOf,
 } from './koc_core.js';
+import * as JC from './judges_ai_con.js'; // [R11-J] 審査員AI (pure)
 import {
   rules, schedule, titleOf, KOC_NAME, PRIZE, FEE, lenText, hallText, fareOf, TRAVEL_STAMINA, MC, setFor, CONTE_TITLES,
   CUE_ROWS, idealCues, STAT_NOTES, PART_NOTES, NEWS, STAFF, memberNames, lookFor, rngOf, hashStr, roundPlan, membersOf, FOUNDED,
@@ -949,6 +950,7 @@ async function showPanelScore(g, ctx, a, perf, stage) {
   const { y, R, judges, rf, digest } = ctx;
   const pts = !a.me && a.pts && a.pts[stage - 1] ? a.pts[stage - 1] : judges.map((j) => judgePoints(R, perf, j, a.me ? a.parts : null, rf));
   const total = pts.reduce((s, v) => s + v, 0);
+  if (a.me && stage === 1) JC.tableRecord('koc', judges, pts, { fs: perf, max: 100, kind: 'conte' }); // [R11-J] the judges remember this performance
   if (!digest || a.me) {
     const D = { title: `${titleOf(y)} 決勝 ${stage === 2 ? 'ファイナルステージ' : 'ファーストステージ'}`, name: a.name, cells: judges.map((j, i) => ({ label: j.name, v: pts[i], shown: false })), total: null, max: R.max };
     await card(g, (c, t) => { const n = Math.min(D.cells.length, Math.floor(t / 22)); D.cells.forEach((cl, i) => { cl.shown = i < n; }); if (n >= D.cells.length) D.total = total; if (t % 22 === 1 && n < D.cells.length) sfx('snare'); drawScore(c, t, D); }, { min: 22 * judges.length + 20 });
@@ -956,6 +958,7 @@ async function showPanelScore(g, ctx, a, perf, stage) {
       const hi = judges[pts.indexOf(Math.max(...pts))], lo = judges[pts.indexOf(Math.min(...pts))];
       await g.say(`${hi.name}「${perf >= 80 ? '設定の入り口から最後まで、ずっと面白かった。' : 'ボケの発想はすごく好きでした。'}」`, { name: hi.name, look: hi.look });
       if (lo !== hi) await g.say(`${lo.name}「${perf >= 80 ? '後半、もう一段階上がると思ったんですけどね。' : '前半の説明が長くて、笑いが来るまで時間がかかった。'}」`, { name: lo.name, look: lo.look });
+      if (stage === 1 && typeof g.judgeOffer === 'function') await g.judgeOffer('koc'); // [R11-J] 「この審査員にたずねる」
     }
   }
   return { pts, total };

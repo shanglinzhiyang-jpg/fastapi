@@ -13,8 +13,9 @@ import { PEOPLE } from './life.js';
 import * as L from './koc_link.js';
 import {
   FOUNDED, rules, edition, entriesOf, POOL_NAMES, unitType, membersOf, memberNames, lookFor, AGENCY_NAMES,
-  rngOf, hashStr, fillerName, ROUND_NAME, catchcopyFor, KOC_NAME, judgesOf, kocRounds, realLike,
+  rngOf, hashStr, fillerName, ROUND_NAME, catchcopyFor, KOC_NAME, judgesOf, kocRounds, realLike, TASTES,
 } from './koc_data.js';
+import * as JC from './judges_ai_con.js'; // [R11-J] 審査員AI (pure)
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -214,6 +215,8 @@ export function judgePoints(R, perf, j, parts, r) {
       const key = { kousei: 'neta', hassou: 'neta', engi: 'execution', warai: 'crowd', sekai: 'presence', ma: 'timing' }[j.taste];
       if (key && Number.isFinite(parts[key])) bias = clamp((parts[key] - perf) * 0.06, -1.5, 1.5); // a judge's taste: ±1.5 at most
     }
+    // [R11-J] 審査員AI: the judge's taste has drifted since their debut, and for the player's own performance they remember (parts known = the player)
+    if (j && j.y) bias += JC.tableMod('koc', j, { parts, perf, me: !!parts });
     return clamp(Math.round(66 + perf * 0.31 + bias + gauss(r) * 2.2), 60, 99);
   }
   return 0;
@@ -289,11 +292,12 @@ export function simFinal(g, y, acts, r) {
 
 // ---------------------------------------------------------------- judges (fictional), resolved against the history
 export function judgesFor(g, y) {
+  JC.bind(g.state); // [R11-J]
   return judgesOf(y, (cy) => {
     const h = K(g).hist[cy];
     if (!h || !h.champ) return null;
     return { unit: h.champ, member: memberNames(h.champ, membersOf(unitType(h.champ)))[0] };
-  });
+  }).map((j) => ({ ...j, y, part: TASTES[j.taste] && TASTES[j.taste].part })); // [R11-J] the year and the part the judge weighs, for the judge agents
 }
 
 // ---------------------------------------------------------------- history (this world's champions, real edition years)

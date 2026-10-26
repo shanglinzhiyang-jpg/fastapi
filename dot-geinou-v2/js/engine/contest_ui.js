@@ -207,7 +207,7 @@ function modal(o) {
 // ================================================================ the screen
 const TABS = [
   { id: 'calendar', label: 'カレンダー' }, { id: 'list', label: '大会一覧' }, { id: 'entries', label: 'エントリー状況' },
-  { id: 'results', label: '結果' }, { id: 'history', label: '歴代王者' }, { id: 'news', label: 'ニュース' },
+  { id: 'results', label: '結果' }, { id: 'history', label: '歴代王者' }, { id: 'judges', label: '審査員' }, { id: 'news', label: 'ニュース' }, // [R11-J] 審査員 tab: the 審査員名鑑
 ];
 const tabIndex = (id) => Math.max(0, TABS.findIndex((t) => t.id === id));
 const LIST_Y = 66, ROW_H = 26, LIST_ROWS = 10;
@@ -333,6 +333,8 @@ class ContestScene {
     }
     if (id === 'history') return Object.values(CONTESTS).filter((def) => num(def.history && def.history.founded, -Infinity) <= I.contestDate(g).year).map((def) => ({ def, color: I.colorOf(def) })).sort((a, b) => I.prestigeOf(b.def) - I.prestigeOf(a.def) || String(a.def.name).localeCompare(String(b.def.name), 'ja'));
     if (id === 'news') return I.cstate(g).news.slice(0, 160).map((n) => ({ n }));
+    // [R11-J] the panels of the 審査員名鑑: one row per panel (the script judges, M-1, KOC, every contest with a panel)
+    if (id === 'judges') return (typeof g.judgeScopes === 'function' ? safe(() => g.judgeScopes(), []) : []).map((sc) => ({ sc, names: safe(() => g.judgeBook(sc.id).judges.map((j) => String(j.name).split(' ')[0]).join('・'), '') }));
     return [];
   }
   // ---------------------------------------------------------------- update / input
@@ -455,6 +457,7 @@ class ContestScene {
     else if (id === 'results') await showResult(this.g, row.id, row.year, row.r.round, this);
     else if (id === 'history') await this.historyOf(row.def.id);
     else if (id === 'news') await this.info(`${row.n.day}日目のニュース`, String(row.n.text).split('\n'), { color: K.pink });
+    else if (id === 'judges') { if (typeof this.g.openJudgeBook === 'function') { await this.g.openJudgeBook({ scope: row.sc.id }); } } // [R11-J]
   }
   async historyOf(id) {
     const g = this.g;
@@ -683,7 +686,7 @@ class ContestScene {
     const st = this.ls();
     const id = this.tab.id;
     // column header
-    const heads = { list: ['大会', 'つぎの日程', '状態'], entries: ['大会・エントリー', 'つぎ', '状態'], results: ['大会・回戦', '結果', ''], history: ['大会', '直近の王者', ''], news: ['ニュース', '', '日'] };
+    const heads = { list: ['大会', 'つぎの日程', '状態'], entries: ['大会・エントリー', 'つぎ', '状態'], results: ['大会・回戦', '結果', ''], history: ['大会', '直近の王者', ''], judges: ['審査員の席', '座っている審査員', ''], news: ['ニュース', '', '日'] };
     const hd = heads[id] || ['', '', ''];
     const sty = this.style();
     TVG.band(c, 6, 46, SW - 12, 16, sty.tab0, sty.tab1, { slant: 6 });
@@ -804,6 +807,12 @@ class ContestScene {
         if (sel) TVG.sparkles(c, this.t, cx - 4, y + 2, SW - cx - 20, ROW_H - 6, 5, (k || 0) + 11);
       }
       T(c, champ, 412, y + 7, 10, champ === '—' ? K.dim : sty.accent, 'left', SW - 424);
+      return;
+    }
+    if (id === 'judges') { // [R11-J]
+      T(c, row.sc.label, 22, y + 2, 12, K.text, 'left', 250);
+      T(c, `${row.sc.year}年・${row.sc.id === 'neta' ? '台本を採点する5つの席' : '決勝の審査員'}`, 22, y + 13, 10, K.dim, 'left', 250);
+      T(c, row.names, 280, y + 7, 10, sty.accent, 'left', SW - 300);
       return;
     }
     if (id === 'news') {
@@ -1186,6 +1195,7 @@ class ScoreScene {
     if ((tap || inp.pressed('a') || inp.pressed('b')) && this.t > 10) {
       dropA(inp);
       if (!all) { this.t = 30 + this.o.judges.length * 22 + 1; sfx('drum'); return; }
+      if (this.o.talk && this.o.talk.lines && this.o.talk.lines.length && !this.talkShown) { this.talkShown = true; sfx('cursor'); return; } // [R11-J] 審査員コメント座談
       sfx('ok'); this.done(true);
     }
   }
@@ -1214,6 +1224,8 @@ class ScoreScene {
       T(c, j.name, x + jw / 2, 76, 10, K.dim, 'center', jw - 10);
       if (i < this.shown || this.shown >= n) {
         T(c, String(j.pts ?? '—'), x + jw / 2, 100, 24, K.gold, 'center');
+        // [R11-J] how the judge's points were made: the adjustments from their memory and taste (in points)
+        if (j.m && j.m.length) j.m.slice(0, 3).forEach((m, q) => T(c, `${m[0]}${m[1] > 0 ? '+' : '−'}${Math.round(Math.abs(m[1]) * 10) / 10}`, x + jw / 2, 127 + q * 11, 10, m[1] > 0 ? K.good : K.bad, 'center', jw - 6));
       } else T(c, '?', x + jw / 2, 100, 24, '#3a3a5a', 'center');
     });
     const done = this.shown >= n;
@@ -1222,6 +1234,13 @@ class ScoreScene {
     if (done) TVG.sparkles(c, this.t, SW / 2 - 110, 168, 220, 54, 8, 9);
     T(c, done ? `${o.total}点` : '採点中…', SW / 2, 180, done ? 24 : 16, done ? '#ffffff' : K.dim, 'center');
     if (o.max) T(c, `（${o.max}点満点）`, SW / 2 + 104, 204, 10, K.dim, 'right');
+    // [R11-J] 審査員コメント座談: when the panel split, who argued what (A shows it, then A goes on)
+    if (done && this.talkShown && o.talk) {
+      R(c, 100, 226, SW - 200, 106, '#11112a');
+      T(c, `審査員コメント座談（点が割れた）`, 108, 230, 10, K.gold);
+      let ty = 244;
+      for (const ln of o.talk.lines.slice(0, 5)) { const ls = jwrap(c, `${ln.short || ln.name}「${ln.text}」`, SW - 224, 10); for (const l of ls.slice(0, 3)) { if (ty > 322) break; T(c, l, 112, ty, 10, K.text); ty += 12; } ty += 2; }
+    } else
     // standings so far
     if (done && o.standings && o.standings.length) {
       R(c, 120, 226, SW - 240, 102, '#11112a');
@@ -1235,7 +1254,7 @@ class ScoreScene {
       });
     }
     TVG.crt(c, st, this.t);
-    if (done && Math.floor(this.t / 30) % 2) T(c, 'Aでつづける', SW / 2, 340, 10, '#ffffff', 'center');
+    if (done && Math.floor(this.t / 30) % 2) T(c, o.talk && o.talk.lines && o.talk.lines.length && !this.talkShown ? 'A 審査員のコメント座談へ' : 'Aでつづける', SW / 2, 340, 10, '#ffffff', 'center');
   }
 }
 class VotesScene {
@@ -1322,6 +1341,7 @@ async function contestApp(g) {
     items.push({ id: 'results', label: '自分の成績', sub: `出場 ${num(c.stats.entered)}・決勝 ${num(c.stats.finals)}・優勝 ${num(c.stats.wins)}` });
     items.push({ id: 'news', label: 'お笑いニュース', sub: c.news[0] ? String(c.news[0].text).split('\n')[0] : 'まだない' });
     items.push({ id: 'history', label: '歴代王者', sub: '歴代のチャンピオン' });
+    items.push({ id: 'judges', label: '審査員名鑑', sub: '審査員の好み・記憶・席の相関' }); // [R11-J]
     items.push({ id: 'screen', label: '賞レースの画面を開く', sub: 'カレンダー・一覧・結果' });
     // the header carries the broadcast cue: LIVE on a final day, else the countdown to the next final
     const hero = safe(() => heroOf(g), null) || {};
@@ -1348,6 +1368,7 @@ async function contestApp(g) {
     else if (it.id === 'results') await phoneInfo(g, { title: '自分の成績', color: APP_COLOR, lines: resultLines(g) });
     else if (it.id === 'news') await newsList(g);
     else if (it.id === 'history') await historyList(g);
+    else if (it.id === 'judges') { if (typeof g.openJudgeBook === 'function') await g.openJudgeBook({}); } // [R11-J]
     else if (it.id === 'screen') { if (g.auto && !g.auto.contestui) continue; await openContestScreen(g, { tab: 'list' }); }
   }
 }

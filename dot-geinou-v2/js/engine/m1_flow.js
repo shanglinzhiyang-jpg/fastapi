@@ -9,6 +9,7 @@ import { askText } from './textinput.js';
 import { MINIGAMES } from './minigame.js';
 import { ITEMS } from './state.js';
 import { m1Rules, M1, MC, FARE, ORIGINS, SHORTFALL_LINES, judgesFor, h01, pickH, comboName, lookFor } from './m1_data.js';
+import * as JC from './judges_ai_con.js'; // [R11-J] 審査員AI (pure)
 import { fieldOf, scoresOf, cutOf, passedOf, prepareFinal, runRevival, finalOrder, actOf, scoreCard, finalScore, finalVotes,
   recordHistory, stars, copyFor, comboAct, anonCombo, sd, simulateFinal } from './m1_field.js';
 import { pushSet, popSet, card, bigText, kujiCard, pvCard, revealScores, votesCard, championCard, netCard, docPage, dvdCard,
@@ -782,6 +783,7 @@ async function finalFlow(g, E, u, rules, fin) {
         sfx(g, s >= 86 ? 'laugh' : 'applause');
       }
       const sc = scoreCard(m, y, a, s, k);
+      if (k === 'me') JC.tableRecord('m1', js, sc.pts, { fs: s, max: 100, kind: 'manzai', nh: E.finalNeta ? JC.nhOf(E.finalNeta, '') : 0, ti: '' }); // [R11-J] the judges remember this performance
       cards[k] = sc;
       fin.scores[k] = sc;
       lastS = s;
@@ -792,6 +794,7 @@ async function finalFlow(g, E, u, rules, fin) {
         const pick = sc.pts.map((p, i) => [p, i]).sort((x, z) => z[0] - x[0]);
         for (const [p, i] of [pick[0], pick[pick.length - 1]]) await say(g, judgeComment(js[i], p, true), { name: `審査員　${js[i].name}（${p}点）`, look: S.judges[i].look });
         logLine(E, `決勝ファーストラウンド：${n + 1}番目、${sc.total}点。審査員${js[pick[0][1]].name}「${judgeComment(js[pick[0][1]], pick[0][0], true)}」`);
+        if (typeof g.judgeOffer === 'function') await g.judgeOffer('m1'); // [R11-J] 「この審査員にたずねる」
       } else if (!quickRivals) {
         // one judge's word for every act (the highest or the lowest mark, alternately)
         const pick = sc.pts.map((p, i) => [p, i]).sort((x, z) => z[0] - x[0]);

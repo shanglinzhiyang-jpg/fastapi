@@ -22,6 +22,10 @@ import { scoreLocal, estimate, netaHash, KINDS, AXES_BY_KIND, rankLabel, parseSc
 export { parseScript };
 import { buildAuto, ERA_YEAR, DEFAULT_LEN, hashStr } from './neta_bank.js';
 import { scoreClaude, getMode, hasKey, currentKey } from './neta_claude.js';
+// [R11-J] 審査員AI: the judges are agents with memory (judges_ai.js / judges_ai_mem.js; pure, opt-in through ctx.jai)
+import { jstate, initState } from './judges_ai.js';
+import * as JM from './judges_ai_mem.js';
+import { JUDGES as BASE_JUDGES } from './neta_ai.js';
 import { openEditor, openResult, openPicker, openSettings, openWaiting, installNetaApp } from './neta_ui.js';
 
 export const NETA_KINDS = { manzai: '漫才', conte: 'コント', pin: 'ピン芸', rakugo: '落語', ogiri: '大喜利', utaneta: '歌ネタ', monomane: 'ものまね', talk: 'エピソードトーク' };
@@ -114,7 +118,19 @@ export function dialectOfG(g) {
 }
 function scoreCtx(g, x, opts = {}) {
   const list = ensure(g).list;
-  return { era: eraOfG(g), year: yearOfG(g), target: Number(opts.length || opts.target) || x.target, others: list.filter((o) => o !== x && o.id !== x.id), names: namesOfG(g) };
+  const ctx = { era: eraOfG(g), year: yearOfG(g), target: Number(opts.length || opts.target) || x.target, others: list.filter((o) => o !== x && o.id !== x.id), names: namesOfG(g) };
+  // [R11-J] the judge agents of this save (their tastes today and their memory of the player); old saves get them on first use
+  if (g.state && !isAuto(x) && opts.jai !== false) {
+    const jai = safe(() => {
+      const st = g.state;
+      initState(st);
+      const jc = JM.ctxFor(st, { year: ctx.year, day: st.day || 1, base: BASE_JUDGES, id: x.id, kind: x.kind, hash: netaHash(x) });
+      if (jc) jc.sig = jc.panel.map((j) => j.key).join(',');
+      return jc;
+    }, null);
+    if (jai) ctx.jai = jai;
+  }
+  return ctx;
 }
 
 // local estimate cache (by script hash): what an unscored / edited script is worth
@@ -215,9 +231,14 @@ const methods = {
     const day = (this.state && this.state.day) || 1;
     if (!x) return { ...scoreLocal({ kind: 'manzai', lines: [] }), day };
     const ctx = scoreCtx(this, x, opts);
+    const want = opts.by || (getMode() === 'claude' ? 'claude' : 'local');
+    // [R11-J] the same script before the same panel: the judges remember it and say the same (editing it, or a new seat holder, gives a new reading)
+    if (ctx.jai && !opts.fresh && want === 'local' && x.ai && x.ai.by === 'local' && x.ai.hash === netaHash(x) && x.ai.pj === ctx.jai.sig && this.neta(x.id) === x) {
+      if (opts.show && !this.auto) await openResult(this, x, x.ai);
+      return x.ai;
+    }
     const local = scoreLocal(x, ctx);
     let ai = { ...local, day };
-    const want = opts.by || (getMode() === 'claude' ? 'claude' : 'local');
     if (want === 'claude') {
       const key = opts.key || currentKey();
       if (!key) ai.notice = 'APIキーが設定されていないので、ローカルAIで採点しました。';
@@ -229,7 +250,11 @@ const methods = {
         else ai.notice = `${(r && r.notice) || 'Claudeに接続できません'}。ローカルAIで採点しました。`;
       }
     }
-    if (this.neta(x.id) === x) x.ai = compactAi(ai, day);
+    if (ctx.jai) { ai.pj = ctx.jai.sig; if (!ai.mem) ai.mem = local.mem; } // [R11-J]
+    if (this.neta(x.id) === x) {
+      x.ai = compactAi(ai, day);
+      if (ctx.jai) safe(() => JM.recordNeta(this.state, x, x.ai, { day, year: ctx.year, hash: netaHash(x) }), false); // [R11-J] remember it
+    }
     if (opts.show && !this.auto) await openResult(this, x, ai);
     return ai;
   },

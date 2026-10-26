@@ -26,6 +26,7 @@ import {
   lengthPresets, fit, T, jwrap, para, box, chip, scoreCol, CLOSE, drawClose, TB, isTouch, bindTap, Base, modal, partsModal,
 } from './neta_ui_kit.js';
 import { EditorScene } from './neta_editor.js';
+import * as JM from './judges_ai_mem.js'; // [R11-J] the breakdown and the 座談 of a result (pure)
 
 // re-exported for the other modules and the tests (they imported these from here before the kit was split out)
 export { KIND_LABEL, ROLE_OPTS, BEAT_OPTS, GENERIC_PRESETS, lengthPresets, EditorScene };
@@ -37,6 +38,7 @@ export class ResultScene extends Base {
     super(g, resolve);
     this.n = neta; this.ai = ai;
     this.tab = 0; this.scroll = [0, 0, 0, 0]; this.lsel = 0;
+    this.jsel = 0; this.cardPos = []; // [R11-J] the selected judge on the 審査員 tab
     this.kind = KINDS[neta.kind] ? neta.kind : 'manzai';
     const sentLines = (neta.lines || []).map((l, i) => ({ ...l, i })).filter((l) => String(l.text || '').trim());
     const by = new Map((ai.lines || []).map((x) => [x.i, x]));
@@ -46,6 +48,14 @@ export class ResultScene extends Base {
     if (inp.pressed('menu') || inp.pressed('b')) { sfx('cancel'); this.close(); return; }
     if (inp.repeat('left')) { this.tab = (this.tab + TABS_R.length - 1) % TABS_R.length; sfx('cursor'); return; }
     if (inp.repeat('right')) { this.tab = (this.tab + 1) % TABS_R.length; sfx('cursor'); return; }
+    // [R11-J] 審査員 tab: ↑↓ choose a judge, A = 内訳 / この審査員にたずねる / 審査員名鑑
+    if (this.tab === 1 && (this.ai.judges || []).length) {
+      const n = this.ai.judges.length;
+      if (inp.repeat('up') && this.jsel > 0) { this.jsel--; sfx('cursor'); this.scrollToJudge(); }
+      else if (inp.repeat('down') && this.jsel < n - 1) { this.jsel++; sfx('cursor'); this.scrollToJudge(); }
+      else if (inp.pressed('a')) { sfx('ok'); this.act(() => this.judgeMenu()); }
+      return;
+    }
     if (this.tab === 2) {
       if (inp.repeat('up') && this.lsel > 0) { this.lsel--; sfx('cursor'); }
       if (inp.repeat('down') && this.lsel < this.rows.length - 1) { this.lsel++; sfx('cursor'); }
@@ -60,6 +70,9 @@ export class ResultScene extends Base {
     now.a = false;
     if (inR(tap.x, tap.y, CLOSE)) { sfx('cancel'); this.close(); return true; }
     for (let i = 0; i < (this.tabRects || []).length; i++) if (inR(tap.x, tap.y, this.tabRects[i])) { this.tab = i; sfx('cursor'); return true; }
+    if (this.tab === 1) { // [R11-J] tap a judge card: first tap selects, second opens the menu
+      for (let i = 0; i < this.cardPos.length; i++) { const r = this.cardPos[i]; if (r && inR(tap.x, tap.y, r)) { if (i === this.jsel) { sfx('ok'); this.act(() => this.judgeMenu()); } else { this.jsel = i; sfx('cursor'); } return true; } }
+    }
     if (this.tab === 2 && this.listRect && inR(tap.x, tap.y, this.listRect)) { const j = (this.ltop || 0) + Math.floor((tap.y - this.listRect.y) / 18); if (j >= 0 && j < this.rows.length) { this.lsel = j; sfx('cursor'); } return true; }
     if (this.tab !== 2 && tap.y > 40) { const half = tap.y > 200; this.scroll[this.tab] = clamp(this.scroll[this.tab] + (half ? 48 : -48), 0, this.maxScroll || 0); }
     return true;
@@ -98,7 +111,7 @@ export class ResultScene extends Base {
     else this.drawAdvice(c);
     c.restore();
     R(c, 0, 340, SW, 20, '#0c0812');
-    T(c, '←→ タブ　↑↓ ' + (this.tab === 2 ? '行をえらぶ' : 'スクロール') + '　A 次へ　B 閉じる', SW - 8, 345, 10, K.faint, 'right', 400);
+    T(c, '←→ タブ　↑↓ ' + (this.tab === 2 ? '行をえらぶ' : this.tab === 1 ? '審査員をえらぶ' : 'スクロール') + (this.tab === 1 ? '　A 内訳・たずねる・名鑑' : '　A 次へ') + '　B 閉じる', SW - 8, 345, 10, K.faint, 'right', 400);
     if (ai.notice) T(c, ai.notice, 8, 345, 10, K.warn, 'left', 330);
   }
   drawSummary(c) {
@@ -149,19 +162,81 @@ export class ResultScene extends Base {
     const best = (ai.best || [])[0];
     if (best != null && this.n.lines[best]) { y += 66; T(c, `★ いちばんの行：${best + 1}行目「${short(this.n.lines[best].text, 26)}」`, X, Math.min(y, 322), 10, K.green, 'left', SW - X - 10); }
   }
+  // [R11-J] each judge's card shows how the number was made (素点 + the memory adjustments); the 座談 follows when the panel split by 8+
+  scrollToJudge() {
+    const r = this.cardAbs && this.cardAbs[this.jsel];
+    if (!r) return;
+    if (r.y - this.scroll[1] < 44) this.scroll[1] = Math.max(0, r.y - 46);
+    else if (r.y + r.h - this.scroll[1] > 334) this.scroll[1] = Math.min(this.maxScroll || 0, r.y + r.h - 332);
+  }
+  // A on a judge: 内訳 (how the number was made) / この審査員にたずねる / 審査員名鑑
+  async judgeMenu() {
+    const j = (this.ai.judges || [])[this.jsel];
+    if (!j) return;
+    const k = await this.pick({ title: `${j.name}（${j.score}点）`, items: [{ label: '点数の内訳を見る' }, { label: 'この審査員にたずねる' }, { label: '審査員名鑑を開く' }, { label: 'やめる' }] });
+    if (k === 0) {
+      const e = JM.explain(j);
+      if (!e) { await this.info(`${j.name}の内訳`, ['この採点には内訳の記録がありません（ClaudeまたはAI採点の古い結果です）。']); return; }
+      const w = (j.d && j.d.w) || null;
+      void w;
+      await this.info(`${j.name}の内訳`, [
+        `素点（この席の好みのとおり）：${e.base}点`,
+        ...e.rows.map((r) => `${r.label}：${r.v > 0 ? '+' : '−'}${Math.abs(r.v)}　${r.why}`),
+        `合計：${e.score}点`,
+        ...(e.weights ? [`この審査員が重く見る項目：${e.weights.map(([a, wv]) => `${AXES[a] || a}×${wv}`).join('・')}`] : []),
+        '※好みの変化・記憶による補正は、合わせて−6〜+5点まで。',
+      ]);
+    } else if (k === 1) {
+      const key = j.k;
+      const p = key && has(this.g, 'judgeProfile') ? this.g.judgeProfile(key) : null;
+      if (!p) { await this.info(j.name, ['この審査員は、もう審査員席にいない。（席は後任に引き継がれた）']); return; }
+      const qs = [['impression', '最近の私のネタをどう思いますか？'], ['taste', 'いま、どんなネタが好きですか？'], ['advice', 'どこを直せばいいですか？']];
+      const q = await this.pick({ title: `${j.name}にたずねる`, lines: ['（APIキーを設定していれば、Claudeが審査員の記憶をもとに答えます）'], items: [...qs.map(([, l]) => ({ label: l })), { label: 'やめる' }] });
+      if (q < 0 || q >= qs.length) return;
+      this.toast('審査員が考えています…', K.dim);
+      const r = await this.g.judgeAsk(key, qs[q][0], { profile: p });
+      await this.info(`${j.name}（${r.by === 'claude' ? 'Claude' : p.school}）`, [`「${r.text}」`, ...(r.notice ? [`※${r.notice}`] : [])]);
+    } else if (k === 2) {
+      if (has(this.g, 'openJudgeBook')) await this.g.openJudgeBook({ scope: 'neta', key: j.k });
+    }
+  }
+  breakdownText(j) {
+    const e = JM.explain(j);
+    if (!e) return null;
+    const parts = [`素点${e.base}`];
+    for (const r of e.rows) parts.push(`${r.label}${r.v > 0 ? '+' : '−'}${Math.abs(r.v)}`);
+    return `${parts.join('　')}　→　${e.score}点`;
+  }
   drawJudges(c) {
     const ai = this.ai;
     const off = this.scroll[1];
     let y = 46 - off;
-    for (const j of ai.judges || []) {
+    this.cardPos = []; this.cardAbs = [];
+    (ai.judges || []).forEach((j, ji) => {
       const lines = jwrap(c, j.comment || '（コメントなし）', SW - 140, 12);
-      const h = Math.max(54, 24 + lines.length * 15);
-      box(c, 8, y, SW - 16, h - 4, '');
+      const bd = this.breakdownText(j);
+      const h = Math.max(54, 24 + lines.length * 15 + (bd ? 17 : 0) + 4);
+      const on = ji === this.jsel;
+      box(c, 8, y, SW - 16, h - 4, '', on ? { accent: K.gold } : {});
+      if (on) { R(c, 8, y, 3, h - 4, K.gold); }
       T(c, j.name, 16, y + 6, 12, K.gold, 'left', 200);
       T(c, `${j.title || ''}・${j.taste || ''}`, 16 + Math.min(200, measure(c, j.name, 12)) + 8, y + 7, 10, K.dim, 'left', 220);
       T(c, String(j.score), SW - 20, y + 10, 24, scoreCol(num(j.score)), 'right');
       lines.forEach((l, k) => T(c, l, 16, y + 24 + k * 15, 12, K.text));
+      if (bd) T(c, bd, 16, y + 25 + lines.length * 15, 10, on ? K.cyan : K.faint, 'left', SW - 120);
+      this.cardPos[ji] = { x: 8, y, w: SW - 16, h: h - 4 };
+      this.cardAbs[ji] = { y: y + off, h };
       y += h;
+    });
+    const talk = JM.netaTalk(ai, AXES);
+    if (talk) {
+      const x0 = 8, w = SW - 16;
+      const ls = talk.lines.map((l) => jwrap(c, `${l.name}「${l.text}」`, w - 24, 11));
+      const hh = 22 + ls.reduce((a, l) => a + l.length * 14, 0);
+      box(c, x0, y, w, hh - 4, `審査員コメント座談（点が${talk.spread}点割れた）`, { accent: K.cyan });
+      let yy = y + 20;
+      ls.forEach((l) => { l.forEach((t, k) => { T(c, t, x0 + 12 + (k ? 8 : 0), yy, 11, K.text); yy += 14; }); });
+      y += hh;
     }
     this.maxScroll = Math.max(0, y + off - 330);
   }

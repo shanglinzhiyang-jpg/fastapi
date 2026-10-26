@@ -14,6 +14,7 @@
 // The key is never logged, never shown (masked), and only ever sent to api.anthropic.com in the x-api-key header.
 
 import { AXES, AXES_BY_KIND, JUDGES, KINDS, rankLabel, mmss } from './neta_ai.js';
+import { memoryLines } from './judges_ai_mem.js'; // [R11-J]
 
 export const CLAUDE = {
   url: 'https://api.anthropic.com/v1/messages',
@@ -78,7 +79,9 @@ const AXIS_HELP = {
   nisete: 'ものまねの特徴のつかみ方と誇張', rinjou: 'エピソードトークの臨場感（いつ・どこ・だれ・セリフ）', hitori: 'ピン芸として一人で成立しているか',
 };
 const kindOf = (k) => (KINDS[k] ? k : 'manzai');
-export function buildSchema(kind) {
+// [R11-J] the panel of the day (ctx.jai.panel: the current holders of the five seats) or the plain table
+const panelOf = (ctx) => (ctx && ctx.jai && ctx.jai.panel ? ctx.jai.panel : JUDGES);
+export function buildSchema(kind, ctx) {
   const axes = AXES_BY_KIND[kindOf(kind)];
   const int = { type: 'integer' };
   const str = { type: 'string' };
@@ -88,19 +91,23 @@ export function buildSchema(kind) {
       total: int,
       summary: str,
       axes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'score', 'reason'], properties: { id: { type: 'string', enum: axes }, score: int, reason: str } } },
-      judges: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'score', 'comment'], properties: { name: { type: 'string', enum: JUDGES.map((j) => j.name) }, score: int, comment: str } } },
+      judges: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'score', 'comment'], properties: { name: { type: 'string', enum: panelOf(ctx).map((j) => j.name) }, score: int, comment: str } } },
       advice: { type: 'array', items: str },
       lines: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['index', 'score', 'note'], properties: { index: int, score: int, note: str } } },
     },
   };
 }
-export function buildSystem(kind) {
+export function buildSystem(kind, ctx) {
   const k = kindOf(kind);
   const axes = AXES_BY_KIND[k];
+  const panel = panelOf(ctx);
+  // [R11-J] each judge's persona (the seat's emphasis + how their taste has moved) and a compressed memory of the player's earlier scripts
+  const seatNote = { dan: '組み立てと尺', tobishima: '発想と独自性', koiki: '言葉とツッコミと人物の言葉づかい', emihara: 'お客さんへのわかりやすさ・ツカミ・テンポ', shindo: '新しさ（ベタや既視感に厳しい）' };
+  const persona = ctx && ctx.jai ? panel.map((j) => `${j.name}は${seatNote[j.id] || j.taste}を重視${j.school ? `（いまは${j.school}）` : ''}。${memoryLines(ctx.jai, j)}`) : ['段 組彦は組み立てと尺、飛島 ゲンは発想と独自性、言之葉亭 小粋は言葉とツッコミと人物の言葉づかい、笑原 よし江はお客さんへのわかりやすさ・ツカミ・テンポ、新堂 斬は新しさを特に重視し、ベタや既視感に厳しい。'];
   return [
     `あなたは日本のお笑い賞レースの台本審査員団です。プレイヤーが書いた${KINDS[k].label}の台本を、次の5人の審査員として採点します。`,
-    ...JUDGES.map((j) => `・${j.name}（${j.title}・${j.taste}）`),
-    '段 組彦は組み立てと尺、飛島 ゲンは発想と独自性、言之葉亭 小粋は言葉とツッコミと人物の言葉づかい、笑原 よし江はお客さんへのわかりやすさ・ツカミ・テンポ、新堂 斬は新しさを特に重視し、ベタや既視感に厳しい。',
+    ...panel.map((j) => `・${j.name}（${j.title}・${j.taste}）`),
+    ...persona,
     '採点項目（各0〜100の整数）：',
     ...axes.map((a) => `・${a}（${AXES[a]}）：${AXIS_HELP[a]}`),
     '目安：初めて書いた素人の台本は30〜50点、劇場で通用する台本は60〜70点、賞レース決勝レベルは80点以上、95点以上は歴史に残る傑作だけ。',
@@ -145,8 +152,8 @@ export function buildRequest(neta, ctx = {}, key) {
     model: CLAUDE.model,
     max_tokens: CLAUDE.maxTokens,
     fallbacks: 'default',
-    output_config: { effort: CLAUDE.effort, format: { type: 'json_schema', schema: buildSchema(k) } },
-    system: buildSystem(k),
+    output_config: { effort: CLAUDE.effort, format: { type: 'json_schema', schema: buildSchema(k, ctx) } },
+    system: buildSystem(k, ctx),
     messages: [{ role: 'user', content: buildUserContent(neta, ctx) }],
   };
   const headers = {
@@ -210,15 +217,16 @@ export function parseResponse(res, ctx = {}) {
   for (const a of axesIds) if (!(a in axes)) { axes[a] = local && Number.isFinite(local.axes && local.axes[a]) ? local.axes[a] : 40; reasons[a] = local && local.reasons ? local.reasons[a] || '' : ''; filled.push(a); }
   if (filled.length > axesIds.length / 2) return fail('bad_json');
   const judges = [];
+  const PANEL = panelOf(ctx); // [R11-J]
   for (const jd of Array.isArray(d.judges) ? d.judges : []) {
-    const J = JUDGES.find((x) => x.name === (jd && jd.name));
+    const J = PANEL.find((x) => x.name === (jd && jd.name));
     const v = toInt(jd && jd.score);
     if (!J || v == null || judges.some((x) => x.id === J.id)) continue;
-    judges.push({ id: J.id, name: J.name, title: J.title, taste: J.taste, score: v, comment: cleanStr(jd.comment, 120) });
+    judges.push({ id: J.id, name: J.name, title: J.title, taste: J.taste, score: v, comment: cleanStr(jd.comment, 120), ...(J.key ? { k: J.key } : {}) });
   }
   if (!judges.length) return fail('bad_json');
-  for (const J of JUDGES) if (!judges.some((x) => x.id === J.id)) { const lj = local && (local.judges || []).find((x) => x.id === J.id); judges.push(lj ? { ...lj } : { id: J.id, name: J.name, title: J.title, taste: J.taste, score: Math.round(judges.reduce((s, x) => s + x.score, 0) / judges.length), comment: '' }); }
-  judges.sort((a, b) => JUDGES.findIndex((x) => x.id === a.id) - JUDGES.findIndex((x) => x.id === b.id));
+  for (const J of PANEL) if (!judges.some((x) => x.id === J.id)) { const lj = local && (local.judges || []).find((x) => x.id === J.id); judges.push(lj ? { ...lj } : { id: J.id, name: J.name, title: J.title, taste: J.taste, score: Math.round(judges.reduce((s, x) => s + x.score, 0) / judges.length), comment: '' }); }
+  judges.sort((a, b) => PANEL.findIndex((x) => x.id === a.id) - PANEL.findIndex((x) => x.id === b.id));
   let total = toInt(d.total);
   if (total == null) total = Math.round(judges.reduce((s, x) => s + x.score, 0) / judges.length);
   const advice = (Array.isArray(d.advice) ? d.advice : []).map((s) => cleanStr(s, 90)).filter(Boolean).slice(0, 6);

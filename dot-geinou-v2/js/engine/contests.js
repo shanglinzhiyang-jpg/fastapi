@@ -65,10 +65,11 @@ import { AGENCIES } from './state.js';
 import { clamp, fmtMoney, display } from './util.js';
 import {
   rngOf, strHash, gauss, pickR, actName, personName, kidName, agencyFor, agencyLabel, lookFor, judgePerson, hostPerson,
-  judgeComment, TAG_COLORS, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, shortOf, isRealNameLike, drawN,
+  judgeComment, TAG_COLORS, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, shortOf, isRealNameLike, drawN, TASTES as JUDGE_TASTES,
 } from './contests_gen.js';
 export { isRealNameLike }; // (name) → true when a name is / contains a well-known real person's name (other modules reuse it)
 import { runner } from './contests_run.js';
+import * as JC from './judges_ai_con.js'; // [R11-J] 審査員AI: the judges are agents (pure module; see judges_ai.js)
 
 export const CONTESTS = {};
 export function registerContest(id, def) {
@@ -704,7 +705,8 @@ function finalRanking(g, id, year, lastR, byId, mods) {
   const scale = scaleOf(r);
   for (const aid of ids) {
     const sc = lastR.scores.get(aid);
-    if (panel) totals.set(aid, panelScores(judges, sc, null, scale, rngOf(seed, id, year, 'panel', aid)).total);
+    // [R11-J] a rival's panel points carry the drift of the judges' tastes since their debut (0 at the start of a game)
+    if (panel) totals.set(aid, panelScores(judges, sc, null, scale, rngOf(seed, id, year, 'panel', aid), JC.rivalPl(g.state, (byId.get(aid) || {}).act || { id: aid, style: 'manzai' }, year)).total);
     else totals.set(aid, Math.round(sc * 10) / 10);
   }
   const pf = mods.final || null;
@@ -720,15 +722,19 @@ function finalRanking(g, id, year, lastR, byId, mods) {
     for (const e of tops) s2.set(e.id, e.id === 'player' ? num(pf && pf.stage2, 0) : scoreOf(byId.get(e.id).power, rngOf(seed, id, year, 'stage2', e.id)));
     const voters = judges.length || 7;
     const votes = new Map(tops.map((e) => [e.id, 0]));
+    const why2 = {};
     for (let j = 0; j < voters; j++) {
       const jr = rngOf(seed, id, year, 'vote', j);
-      let best = null, bv = -1;
-      for (const e of tops) { const v = s2.get(e.id) + 4 * gauss(jr) + (e.total - tops[0].total) * 0.02; if (v > bv) { bv = v; best = e.id; } }
+      let best = null, bv = -1, bwhy = '';
+      // [R11-J] each judge votes by their own rule: the score as before + how their (drifted) taste fits the act + fondness for the player
+      const jd = judges[j];
+      for (const e of tops) { const lean = jd && jd.key ? JC.stage2Lean(g.state, jd, { v: e.id === 'player' ? (pf && pf.sv) || null : JC.actVec(JC.ensure(g.state) ? JC.ensure(g.state).seed : 1, (byId.get(e.id) || {}).act), me: e.id === 'player' }, year) : { d: 0 }; const v = s2.get(e.id) + 4 * gauss(jr) + (e.total - tops[0].total) * 0.02 + lean.d; if (v > bv) { bv = v; best = e.id; bwhy = lean.why; } }
+      if (jd && jd.key) why2[jd.key] = [best, bwhy];
       votes.set(best, votes.get(best) + 1);
     }
     if (pf && pf.votes) for (const [k, v] of Object.entries(pf.votes)) votes.set(k, v);
     const order = tops.slice().sort((a, b) => votes.get(b.id) - votes.get(a.id) || s2.get(b.id) - s2.get(a.id));
-    stage2 = { top, order: order.map((e) => e.id), votes: Object.fromEntries(votes), scores: Object.fromEntries(s2) };
+    stage2 = { top, order: order.map((e) => e.id), votes: Object.fromEntries(votes), scores: Object.fromEntries(s2), why: why2 };
     const rest = entries.slice(top);
     entries.splice(0, entries.length, ...order, ...rest);
   }
@@ -740,17 +746,31 @@ export function scaleOf(r) {
   return m ? num(m[1], 100) : 100;
 }
 // A judge's points for a performance score (0..100 field scale): 100-point judges give ~80–98, 10-point ones ~6–10.
-export function panelScores(judges, score, parts, scale = 100, r = Math.random) {
+// [R11-J] pl (optional): the act being judged ({ me, ... } the player — what the judges remember; or a rival — the drift of their
+// taste). Each row also carries `b` (the points without the personal adjustments) and `m` (the adjustments, in points) for the breakdown.
+export function panelScores(judges, score, parts, scale = 100, r = Math.random, pl = null) {
+  const toPts = (v) => (scale >= 50 ? clamp(Math.round(78 + (clamp(v, 0, 100) / 100) * 21), 70, scale) : clamp(Math.round((clamp(v, 0, 100) / 100) * scale * 1.05), 1, scale));
+  const unit = scale >= 50 ? 0.21 : (scale * 1.05) / 100; // points per field-scale point
+  let vmin = 1e9, vmax = -1e9;
   const out = judges.map((j) => {
     let v = score;
-    if (parts && j.tastePart && Number.isFinite(parts[j.tastePart])) v += (parts[j.tastePart] - score) * 0.25;
+    if (parts && j.mix) { for (const p of Object.keys(j.mix)) if (Number.isFinite(parts[p])) v += (parts[p] - score) * j.mix[p]; } // [R11-J] the drifted taste
+    else if (parts && j.tastePart && Number.isFinite(parts[j.tastePart])) v += (parts[j.tastePart] - score) * 0.25;
     v += num(j.strict) * -0.6 + 2.2 * gauss(r);
-    let pts;
-    if (scale >= 50) pts = clamp(Math.round(78 + (clamp(v, 0, 100) / 100) * 21), 70, scale);
-    else pts = clamp(Math.round((clamp(v, 0, 100) / 100) * scale * 1.05), 1, scale);
-    return { name: j.name, short: j.short || shortOf(j.name), pts, max: scale };
+    const adj = pl && pl.st && j.key ? JC.adjust(pl.st, j, pl) : null; // [R11-J]
+    const v1 = adj && adj.shrink !== 1 ? score + (v - score) * adj.shrink : v;
+    const v2 = adj ? v1 + adj.d : v1;
+    const pts = toPts(v2);
+    const row = { name: j.name, short: j.short || shortOf(j.name), pts, max: scale };
+    vmin = Math.min(vmin, v2); vmax = Math.max(vmax, v2);
+    if (adj) {
+      row.key = j.key; row.b = toPts(v1);
+      const ms = adj.parts.map(([l, x]) => [l, Math.round(x * unit * 10) / 10]).filter((m) => Math.abs(m[1]) >= 0.2);
+      if (ms.length) row.m = ms;
+    }
+    return row;
   });
-  return { per: out, total: out.reduce((a, x) => a + x.pts, 0), max: scale * out.length };
+  return { per: out, total: out.reduce((a, x) => a + x.pts, 0), max: scale * out.length, vspread: out.length ? vmax - vmin : 0 };
 }
 const SIM_MAX = 24;
 export function simOf(g, id, year) {
@@ -758,7 +778,7 @@ export function simOf(g, id, year) {
   if (!def || !g.state) return null;
   if (!heldIn(g, def, year).held) return null;
   const res = resultsOf(g, id, year);
-  const key = `${seedOf(g)}|${id}|${year}|${res ? res.v : 0}|${verOf(g, id)}|${baseAbs(g)}`;
+  const key = `${seedOf(g)}|${id}|${year}|${res ? res.v : 0}|${verOf(g, id)}|${baseAbs(g)}|${JC.verOf(g.state)}`; // [R11-J] the judge world's version
   const hit = CACHE.sims.get(key);
   if (hit) return hit;
   const champs = championsBefore(g, id, year);
@@ -809,6 +829,14 @@ function historyRows(g, id, upto) {
     if (row.champId && row.champId !== 'player') memo.champs.add(row.champId);
   }
   return memo.rows.filter((r) => r.year <= upto);
+}
+// [R11-J] is a contest's history already computed up to `year` (cheap to read)? The judge agents only read it when it is, so their morning stays light
+export function historyCached(g, id, year) {
+  const def = CONTESTS[id];
+  if (!def) return false;
+  const c = cstate(g);
+  const memo = CACHE.hist.get(`${c.seed}|${id}|${verOf(g, id)}|${baseAbs(g)}`);
+  return !!memo && memo.upto >= year;
 }
 function nameOfId(g, sim, aid) {
   if (aid === 'player') return playerUnitName(g);
@@ -937,12 +965,34 @@ function lastDoneYear(g, def) {
 }
 
 // ================================================================ judges (fictional panels with tenure)
+// [R11-J] champions of this contest's own history who now sit on the panel (one per three seats at most): the member's name is the one the
+// act had in every list; they come back 6–10 years after the title and stay 4–11 years.
+function alumniFor(g, id, year) {
+  const def = CONTESTS[id];
+  if (!def || isSelfRun(def) || isAwardType(def) || !def.history || !JC.ensure(g.state)) return [];
+  const founded = num(def.history.founded, year);
+  if (year - 6 < founded) return [];
+  const cands = [];
+  for (const row of historyRows(g, id, year - 6)) {
+    if (!row.held || !row.champId || row.champId === 'player' || row.year < year - 22) continue;
+    const act = actById(g, row.champId);
+    const m = act && act.members && act.members[0];
+    if (!m || !m.name) continue;
+    cands.push({ year: row.year, name: m.name, unit: row.champion, contest: def.short || def.name, act, m });
+  }
+  const out = JC.alumniPool(seedOf(g), id, year, cands, new Set()).slice(0, 2);
+  return out.map((a) => {
+    const t = pickR(a.r, JUDGE_TASTES);
+    const kind = a.act.style === 'conte' ? 'コント師' : a.act.style === 'rakugo' ? '落語家' : '漫才師';
+    return { id: `a${a.cy}`, name: a.name, title: `${kind}・元「${a.unit}」（${a.cy}年${a.contest}王者）`, short: shortOf(a.name), taste: t.label, tasteId: t.id, tastePart: t.part, dialect: a.act.region === 'osaka' ? 'kansai' : 'std', strict: Math.round((a.r() - 0.5) * 6), look: a.m.look || lookFor(a.r, !!a.m.female), female: !!a.m.female, from: a.from, to: a.to, alumni: true };
+  });
+}
 export function judgesFor(g, id, year, n) {
   const def = CONTESTS[id];
   const R = roundsAt(def, year);
   const fin = R[R.length - 1] || {};
   const want = clamp(num(n, num(fin.judges, 5)), 1, 12);
-  const key = `${seedOf(g)}|${id}|${year}|${want}`;
+  const key = `${seedOf(g)}|${id}|${year}|${want}|${JC.verOf(g.state)}`; // [R11-J] the judge world's version
   const hit = CACHE.judges.get(key);
   if (hit) return hit;
   const seed = seedOf(g);
@@ -954,10 +1004,14 @@ export function judgesFor(g, id, year, n) {
     const from = num(def.history && def.history.founded, 1980) + Math.floor(r() * 60) - 8;
     pool.push({ ...p, id: `j${k}`, from, to: from + 3 + Math.floor(r() * 14) });
   }
+  // [R11-J] former champions (6+ years back) join the panel for a few years: the scene's own people become the next judges
+  const alum = safe('alumni', () => alumniFor(g, id, year), []);
+  if (alum.length) pool.unshift(...alum);
   let list = pool.filter((j) => year >= j.from && year <= j.to);
   if (list.length < want) list = list.concat(pool.filter((j) => !list.includes(j)).sort((a, b) => Math.abs(a.from - year) - Math.abs(b.from - year)));
   const seenS = new Set();
   list = list.filter((j) => { if (seenS.has(j.short)) return false; seenS.add(j.short); return true; }).slice(0, want);
+  list = JC.decorate(g.state, list, id, year); // [R11-J] each judge is an agent: drifted taste mix, strictness, school
   CACHE.judges.set(key, list);
   if (CACHE.judges.size > 200) CACHE.judges.delete(CACHE.judges.keys().next().value);
   return list;
@@ -1573,7 +1627,7 @@ export const internals = {
   pushNews, rivalsFor, judgesFor, panelScores, scaleOf, toFieldScore, playerScoreDist, PHI, kindOf, KIND_LABEL, roundsOf, roundsAt, scheduleAt, labelOf, contestName, colorOf,
   prestigeOf, isInvitational, dateText, todayOf, playerUnitName, bump, resultsOf, historyRows, lastDoneYear, logOnce, realToInternal, yenLabel,
   OFFICE_FROM, NEWS_FROM, judgeComment, FAIL_NOTES, resultMedium, netVoice, NET_LINES, fillName, TAG_COLORS, hostPerson, rngOf, gauss, pickR, MODEL,
-  heldIn, editionIn, startYear, wareki, actPower, STATUS_LABEL, anonParams, contestDate, dayOfDate,
+  heldIn, editionIn, startYear, wareki, actPower, STATUS_LABEL, anonParams, contestDate, dayOfDate, historyCached,
   drawN, winnerTitleOf, rowOfSim, isAwardType, awardNames, mainAward, normAwards, awardLine, prizeShare, manLabel, cleanText, pastOnly, unitWord, isUnitContest, historyHead,
 };
 

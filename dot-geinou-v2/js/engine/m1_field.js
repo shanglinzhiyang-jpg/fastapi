@@ -5,6 +5,7 @@
 
 import { m1Rules, editionOf, m1Held, entriesOf, comboName, personName, lookFor, judgesFor, rng, hstr, h01, pickH, clamp, gauss,
   STYLES, ORIGINS, REGIONS, AGENCY_NAMES, catchCopy } from './m1_data.js';
+import * as JC from './judges_ai_con.js'; // [R11-J] 審査員AI (pure)
 
 export const STATE_V = 1;
 const POOL_TARGET = 110;
@@ -398,7 +399,8 @@ export function finalOrder(m, year, keys, revivalKey) {
 export function judgePoints(judge, act, s, key, salt) {
   const taste = act && judge.taste === act.style ? 1.5 : 0;
   const n = (h01('jp', judge.id, key, salt) - 0.5) * 3;
-  return clamp(Math.round(80 + s * 0.17 + taste + (judge.bias || 0) + n), 75, 99);
+  const jai = judge.y ? JC.tableMod('m1', judge, { act, perf: s, me: key === 'me' }) : 0; // [R11-J] 審査員AI: taste drift (+ memory of the player)
+  return clamp(Math.round(80 + s * 0.17 + taste + (judge.bias || 0) + n + jai), 75, 99);
 }
 // The audience points of 2001 (札幌・大阪・福岡, 100 people each, 1 point each)
 export function audiencePoints(act, s, key) {
