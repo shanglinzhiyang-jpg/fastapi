@@ -594,7 +594,7 @@ function knownCandidates(g) {
 function nscLines(g) {
   const s = safe(() => g.nsc(), null);
   if (!s) return ['NSCの情報がない'];
-  const lines = ['NSC（吉本総合芸能学院）は、吉本興業の養成所。1年制・4月入学。大阪校は1982年、東京校は1995年に開校。', '4月の「相方探しの会」や、ネタ見せの授業で同期と組める。'];
+  const lines = [`NSC（吉本総合芸能学院）は、吉本興業の養成所。1年制・4月入学。大阪校は1982年${s.open.tokyo ? '、東京校は1995年' : ''}に開校。` /* [R13-F] S1-009: the Tokyo campus year only once it is open */, '4月の「相方探しの会」や、ネタ見せの授業で同期と組める。'];
   if (!s.open.tokyo) lines.push('いまは大阪校だけ（なんばにある）。');
   lines.push(s.status === 'enrolled' ? `いま：${s.campusName} ${s.ki}期生（出席率 ${Math.round(s.attendRate * 100)}%）` : s.status === 'applied' ? `${s.campusName}に出願ずみ（${s.year}年4月入学）` : s.status === 'graduated' ? `${s.campusName} ${s.ki}期 卒業` : '入学の手続きは、NSCの受付で。');
   return lines;
@@ -733,7 +733,7 @@ function goalsOf(g) {
   const s = safe(() => g.nsc(), null);
   if (!o.career.debut) out.push({ label: '初舞台に立つ', sub: '貸し稽古場のフリーライブ・NSC卒業・事務所に所属', done: false });
   if (!u || u.type === 'pin') out.push({ label: '相方を見つける（ピンでも続けられる）', sub: '「相方募集」アプリ／NSCの同期' });
-  if (s && s.status === 'none' && (s.open.osaka || s.open.tokyo)) out.push({ label: 'NSCに入る（4月入学・1年）', sub: s.open.tokyo ? '大阪校（なんば）・東京校' : '大阪校（なんば）。東京校は1995年開校' });
+  if (s && s.status === 'none' && (s.open.osaka || s.open.tokyo)) out.push({ label: 'NSCに入る（4月入学・1年）', sub: s.open.tokyo ? '大阪校（なんば）・東京校' : '大阪校（なんば）' }); // [R13-F] S1-009
   if (s && s.status === 'enrolled') out.push({ label: `NSCを卒業する（${s.year + 1}年3月の卒業公演）`, sub: `出席率 ${Math.round(s.attendRate * 100)}%・ネタ見せ平均 ${s.netamiAvg}点` });
   if (!st.agency) out.push({ label: 'プロになる（事務所に所属）', sub: 'NSCの所属審査・事務所のオーディション' });
   else { const tr = g.theaterRank(); const nx = THEATER_RANKS[tr.index + 1]; if (nx) out.push({ label: `劇場ランク「${nx.name}」へ`, sub: '出番の平均点と推し度' }); }

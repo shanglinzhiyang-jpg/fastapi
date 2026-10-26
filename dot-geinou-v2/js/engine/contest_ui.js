@@ -632,7 +632,7 @@ class ContestScene {
     const today = I.todayOf(g);
     const sty = this.style();
     // year bar
-    const yl = `${cal.year}年（${I.wareki(cal.year)}）`;
+    const yl = (cal.year >= 1989 && I.contestDate(g).year < 1989) ? `${cal.year}年` : `${cal.year}年（${I.wareki(cal.year)}）`; // [R13-F] S1-009: the next era's name is not known before 1989
     TVG.band(c, CAL.x, 44, CAL.cw * 10 - 1, 18, sty.tab0, sty.tab1, { slant: 6 });
     T(c, '‹', CAL.x + 8, 45, 14, sty.accent, 'center');
     TVG.telop(c, yl, CAL.x + CAL.cw * 5, 46, 12, '#ffffff', sty.telopLine, 'center', 220);

@@ -6,6 +6,7 @@
 import { registerBigtext, portraitPanelOf, padPress } from './bigtext.js';
 import './bigtext_info.js'; // ニュース · 世論の声 · 審査員名鑑
 import './bigtext_polai.js'; // 政治家の動向 (the hub view of politics_ai_ui.js offers the hooks)
+import './bigtext_polui.js'; // [R13-F] 政治画面 (every other view) · 政府中枢 / 各界
 import './bigtext_pages.js'; // てちょう · 賞レース · 相方募集 / 芸人手帳 · 台本エディタ
 import { MessageScene, StatusScene, ListScene, ShopScene } from './ui.js';
 import { SCREEN } from './phone.js';

@@ -463,7 +463,9 @@ export class PortraitPanel {
 // `rect`, drops shadow / outline duplicates and returns the text in reading order, one entry per visual line: [{ t, size, col, y, x }].
 //   captureText((c) => scene.drawScreen(c, g), { x, y, w, h })   (units of the screen the draw function uses; 640x360 for the HD screens)
 let capCv = null;
-export function captureText(drawFn, rect) {
+// [R13-F] captureText = captureRaw (one draw, every fillText noted) + linesOf (keep a rect, group into lines); bigtext_polui.js uses the two halves
+// to cut one drawing of a busy screen into several regions (one per control / card) without drawing it again for each.
+export function captureRaw(drawFn) {
   if (typeof document === 'undefined') return [];
   if (!capCv) { capCv = document.createElement('canvas'); capCv.width = 640; capCv.height = 360; }
   const real = capCv.getContext('2d');
@@ -491,6 +493,9 @@ export function captureText(drawFn, rect) {
     set(t, k, v) { t[k] = v; return true; },
   });
   try { drawFn(rec); } catch (e) { console.error(e); }
+  return recs;
+}
+export function linesOf(recs, rect) {
   // inside the rect, no shadow copies (the last of the near-identical ones wins)
   const keep = [];
   for (const r of recs) {
@@ -508,7 +513,7 @@ export function captureText(drawFn, rect) {
     let t = '', prev = null;
     for (const p of grp.p) { if (prev && p.left - prev.right > 7) t += '　'; t += p.s; prev = p; }
     const big = grp.p.reduce((a, p) => (p.size > a.size ? p : a), grp.p[0]);
-    if (!/^[\s▲▼◀▶◁▷×○●■□★☆…・]+$/.test(t)) lines.push({ t, size: big.size, col: big.col, y: grp.y0, x: grp.p[0].left });
+    if (!/^[\s▲▼◀▶◁▷×○●■□★☆…・]+$/.test(t)) lines.push({ t, size: big.size, col: big.col, y: grp.y0, x: grp.p[0].left, r: grp.p[grp.p.length - 1].right });
     grp = null;
   };
   for (const r of keep) {
@@ -517,6 +522,7 @@ export function captureText(drawFn, rect) {
   flush();
   return lines;
 }
+export function captureText(drawFn, rect) { return linesOf(captureRaw(drawFn), rect); }
 // a colour that can be read on the panel (light = the paper look)
 export function fixCol(col, light) {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(col || ''));

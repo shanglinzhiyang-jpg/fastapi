@@ -15,6 +15,11 @@ import { registerSong } from '../engine/audio.js';
 import { text } from '../engine/draw.js';
 import { W, H, TILE, shade, hash2, pick } from '../engine/util.js';
 
+// [R13-F] S1-009: the goods on the shelves follow the year (ライブDVD from 1996-11, アクリルスタンド from about 2010)
+const ymNow = (g) => { try { const d = g.gameDate(); return Number(d.year) * 100 + Number(d.month); } catch (e) { return 202601; } };
+const liveMedia = (g) => (ymNow(g) >= 199611 ? 'DVD' : 'ビデオ');
+const standWord = (g) => (ymNow(g) >= 201000 ? 'アクリルスタンド' : 'ポストカード');
+
 // ====================================================================== palette & tiles
 const PU = '#8e5cc0';
 const PU_D = '#5e3591';
@@ -1147,14 +1152,14 @@ registerPlace({
         { x: 1, y: 10, w: 16, h: 1, on: 'step', once: 'grape_store_greet', run: greetStore },
         { x: 6, y: 2, on: 'action', run: (g) => g.say('「月例コントライブ」の告知ポスターだ。\n紫のチラシが目を引く。') },
         { x: 11, y: 2, on: 'action', run: (g) => g.say('「若手ネタ見せライブ」のポスターだ。\n未来のスターが出ているかも？') },
-        { x: 13, y: 2, w: 3, h: 1, on: 'action', run: (g) => g.say('壁の棚に、マグカップやアクリルスタンド、\nライブのDVDが飾られている。') },
+        { x: 13, y: 2, w: 3, h: 1, on: 'action', run: (g) => g.say(`壁の棚に、マグカップや${standWord(g)}、\nライブの${liveMedia(g)}が飾られている。`) },
         { x: 5, y: 6, w: 2, h: 1, on: 'action', run: (g) => g.say('ロゴTシャツがたたんで積まれている。\nお買い上げはレジでどうぞ。') },
-        { x: 11, y: 6, w: 2, h: 1, on: 'action', run: (g) => g.say('アクリルスタンドやステッカーが並んでいる。\nどれも紫色がテーマだ。') },
+        { x: 11, y: 6, w: 2, h: 1, on: 'action', run: (g) => g.say(`${standWord(g)}やステッカーが並んでいる。\nどれも紫色がテーマだ。`) },
         { x: 5, y: 10, w: 2, h: 1, on: 'action', run: (g) => g.say('ネタ帳ふうのノートやペンが並んでいる。\n芸人気分が味わえそうだ。') },
         { x: 11, y: 10, w: 2, h: 1, on: 'action', run: (g) => g.say('マフラータオルがきれいに並んでいる。\nライブの必需品らしい。') },
         { x: 2, y: 8, w: 3, h: 1, on: 'action', run: (g) => g.say('紫や黒のTシャツ、パーカーがずらり。\nサイズもいろいろそろっている。') },
         { x: 13, y: 8, w: 3, h: 1, on: 'action', run: (g) => g.say('白いTシャツに紫のロゴ。\nシンプルでかっこいい！') },
-        { x: 16, y: 4, w: 1, h: 6, on: 'action', run: (g) => g.say('グッズの棚だ。ライブDVDやキーホルダーが\nぎっしり並んでいる。') },
+        { x: 16, y: 4, w: 1, h: 6, on: 'action', run: (g) => g.say(`グッズの棚だ。ライブ${liveMedia(g)}やキーホルダーが\nぎっしり並んでいる。`) },
         { x: 15, y: 11, on: 'action', run: gacha },
       ],
     },

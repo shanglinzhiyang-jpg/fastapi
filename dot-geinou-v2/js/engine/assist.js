@@ -35,6 +35,7 @@ import { charSheetHD, drawFaceHD, LOOKS } from './sprites.js';
 import { registerPhoneApp, onMorning, weekdayOf } from './life.js';
 import { eraOf, ageOf, YEAR_DAYS } from './profile.js';
 import { registerItem } from './state.js';
+import { padPress } from './bigtext.js'; // [R13-F] the portrait lower screen of the glossary card (ExplainScene.portraitSpec)
 import * as PH from './phone.js';
 import {
   GLOSSARY, GLOSSARY_CATS, glossaryLookup, glossaryFind, termStatus, termText, glossaryTermsByCat, glossaryKanaOrder,
@@ -653,7 +654,14 @@ class ExplainScene {
       if (inp.repeat('right')) { this.chip = (this.chip + 1) % rel.length; sfx('cursor'); }
     }
     if (inp.pressed('a')) {
-      if (rel.length) { sfx('ok'); this.stack.push(this.cur.term); this.show(rel[clamp(this.chip, 0, rel.length - 1)]); } else { sfx('cancel'); this.close(); }
+      if (rel.length) {
+        sfx('ok');
+        // [R13-F] (S1-014) a link back to the card just below replaces it in place; the stack keeps at most 5 cards (the oldest is dropped)
+        const nxt = rel[clamp(this.chip, 0, rel.length - 1)];
+        if (this.stack.length && this.stack[this.stack.length - 1] === nxt) this.stack.pop(); else this.stack.push(this.cur.term);
+        if (this.stack.length > 5) this.stack.shift();
+        this.show(nxt);
+      } else { sfx('cancel'); this.close(); }
       return;
     }
     if (inp.pressed('b') || inp.pressed('menu')) {
@@ -662,6 +670,24 @@ class ExplainScene {
     }
   }
   close() { if (this.closed) return; this.closed = true; this.g.pop(this); this.resolve(this.cur.term); }
+  // [R13-F] the portrait lower screen (bigtext.js picks portraitSpec up while this card is on top): the term, its reading and 「…から」, the text at
+  // 19 px, the related terms as chips (tap = go there), and one row to go back / close
+  portraitKey() { return `${this.cur.term}|${this.chip}|${this.stack.length}`; }
+  portraitSpec(g) {
+    const e = this.cur.e, rel = this.related();
+    const back = this.stack.length ? 'もどる' : 'とじる';
+    const spec = { sid: `explain:${this.cur.term}`, color: '#2a9d8f', tag: '用語じてん', title: this.cur.term || '？', hint: `Bで${back}`, onTap: () => {} };
+    if (!e) { spec.blocks = [{ t: 'この言葉は、まだ用語じてんにのっていないみたい。政治ナビの「用語じてん」から、近い言葉をさがしてみてね。', s: 19 }]; }
+    else {
+      const cat = catOf(e.cat), sl = sinceLabel(e, yearOf(g), glossCtx(g));
+      spec.color = cat.color || '#2a9d8f';
+      spec.sub = `${e.kana}　${cat.name}`;
+      spec.blocks = [...(sl ? [{ t: sl.text, s: 16, c: sl.color && /^#[0-9a-f]{6}$/i.test(sl.color) ? mix(sl.color, '#ffffff', 0.45) : '#a4acd0' }] : []), { t: e.short, s: 19, c: '#7fe0d0' }, { gap: 6 }, { t: gText(g, e), s: 19 }];
+      if (rel.length) spec.tabs = { items: rel, index: clamp(this.chip, 0, rel.length - 1), color: '#2a9d8f', onPick: (i) => { this.chip = i; padPress(g, 'a'); } };
+    }
+    spec.list = { items: [{ label: this.stack.length ? '◀ もどる' : 'とじる' }], index: 0, rows: 1, noStepper: true, bodyMin: 140, onPick: () => padPress(g, 'b') };
+    return spec;
+  }
   draw(c) {
     const k = clamp(this.t / 8, 0, 1);
     c.fillStyle = `rgba(6,10,20,${(0.55 * k).toFixed(3)})`;
@@ -765,7 +791,7 @@ function drawTermCard(c, g, cur, r, view) {
       cx += cw2 + 4;
     }
   }
-  const hint = rel.length ? `↑↓:よむ　←→:関連　A:関連へ　B:${(view.stack && view.stack.length) ? 'もどる' : 'とじる'}` : '↑↓:よむ　A/B:とじる';
+  const hint = rel.length ? `↑↓:よむ ←→:関連 A:関連へ B:${(view.stack && view.stack.length) ? 'もどる MENU:ぜんぶとじる' : 'とじる'}` : '↑↓:よむ　A/B:とじる';
   T(c, hint, x + w - 10, y + h - 17, 12, '#8a8a96', 'right');
 }
 export function explain(g, term) {
@@ -1895,7 +1921,7 @@ async function openIdeology(g, ph, id) {
   const body = (key, title, fb) => () => { const x = sec(key, { title, ...fbLines(fb) }); return `【${x.title}】\n${listText(x.lines)}${later(x)}`; };
   const supportNote = prop ? '' : '\n※その思想を支持する人が、どう考えるかの紹介。どの思想が正しいということはない。';
   const tabs = [
-    { label: '概要', body: () => `${String(d.summary || '').replace(/\s*\n\s*/g, '')}${note}${src.length ? `\n【出典】\n${src.map((s) => `・${s}`).join('\n')}${yr < 2026 ? '\n（出典は2026年に調べた資料。ゲームの年より後のことも書かれている）' : ''}` : ''}` },
+    { label: '概要', body: () => `${String(d.summary || '').replace(/\s*\n\s*/g, '')}${note}${src.length ? `\n【出典】\n${src.map((s) => `・${s}`).join('\n')}` : ''}` },
     { label: '考え', body: body('ideas', '主な考え', 'ideas') },
     { label: '歴史', body: body('history', '歴史', 'history') },
     { label: '記録', body: body('record', '実際に起きたこと', 'record') },

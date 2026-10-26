@@ -150,7 +150,11 @@ function frame(c, x, y, w, h, fill, edge) {
   R(c, x, y, w, 1, edge); R(c, x, y + h - 1, w, 1, edge); R(c, x, y, 1, h, edge); R(c, x + w - 1, y, 1, h, edge);
 }
 // a console panel: a dark box with corner ticks and a title strip
+// [R13-F] GOVCAP: bigtext_polui.js (the portrait lower screen) reads the console by drawing a tab into a recording context.
+// cards: the panels drawn (one block of text each); skip: a list (by control id) that is left out; all: a list that draws every row
+export const GOVCAP = { cards: null, skip: null, all: null };
 function panel(c, x, y, w, h, title, o = {}) {
+  if (GOVCAP.cards) GOVCAP.cards.push({ x, y, w, h, title });
   frame(c, x, y, w, h, o.fill || K.panel, o.edge || K.edge);
   const tc = o.tick || K.edgeHi;
   R(c, x, y, 5, 1, tc); R(c, x, y, 1, 5, tc); R(c, x + w - 5, y, 5, 1, tc); R(c, x + w - 1, y, 1, 5, tc);
@@ -893,6 +897,7 @@ function confirmModal(o) {
   const choices = o.choices || ['はい', 'いいえ'];
   const m = {
     idx: o.index | 0, sy: 0,
+    kind: 'confirm', title: o.title || '', lines: [...(o.lines || (o.text != null ? String(o.text).split('\n') : []))], choices, color: o.color || (o.danger ? K.danger : K.amber), // [R13-F] read by modalSpec (the portrait lower screen)
     update(ui, inp) {
       const n = choices.length;
       if (inp.repeat('up') || (n <= 3 && inp.repeat('left'))) { this.idx = (this.idx + n - 1) % n; sfx('cursor'); }
@@ -936,6 +941,8 @@ function pickModal(o) {
   const items = o.items || [];
   const m = {
     idx: clamp(o.index | 0, 0, Math.max(0, items.length - 1)), top: 0,
+    kind: 'pick', title: o.title || '', lines: (o.lines || []).filter(Boolean), color: o.color || K.amber, // [R13-F] read by modalSpec
+    items: items.map((it) => ({ label: it.label, sub: it.why ? `🔒 ${it.why}` : it.sub, right: it.right, rightColor: it.rightColor, lock: !!it.why })),
     update(ui, inp) {
       const n = items.length;
       if (n && inp.repeat('up')) { this.idx = (this.idx + n - 1) % n; sfx('cursor'); }
@@ -1008,6 +1015,7 @@ function amountModal(o) {
   const step = o.step || 1;
   const m = {
     v: clamp(num(o.value, o.min), o.min, o.max), idx: 0,
+    kind: 'amount', title: o.title || '', lines: (o.lines || []).filter(Boolean), o, color: o.color || K.amber, // [R13-F] read by bigtext_polui.js
     update(ui, inp) {
       if (inp.repeat('left')) { this.v = clamp(Math.round((this.v - step) / step) * step, o.min, o.max); sfx('cursor'); }
       if (inp.repeat('right')) { this.v = clamp(Math.round((this.v + step) / step) * step, o.min, o.max); sfx('cursor'); }
@@ -1093,18 +1101,19 @@ function listCtl(ui, key, o) {
 function drawList(c, ui, k, drawRow, o = {}) {
   if (!k) return;
   const L = k.list;
+  if (GOVCAP.skip === k.id) return; // [R13-F]
+  const capAll = GOVCAP.all === k.id; // [R13-F] every row, none of the state changed
   const st = ui.tabState();
   const sel = ui.focus === 'body' && ui.cur[ui.tab.id] === k.id;
   const idx = L.get();
   const key = `${k.id}_top`;
-  let top = num(st[key], 0);
+  let top = capAll ? 0 : num(st[key], 0);
   if (idx < top) top = idx;
   if (idx >= top + L.vis) top = idx - L.vis + 1;
   top = clamp(top, 0, Math.max(0, L.n - L.vis));
-  st[key] = top;
-  L.top = () => top;
+  if (!capAll) { st[key] = top; L.top = () => top; }
   if (!L.n) { T(c, o.empty || '（なし）', k.x + 6, k.y + L.y0 + 3, 12, K.dim, 'left', k.w - 12); return; }
-  for (let i = top; i < Math.min(L.n, top + L.vis); i++) {
+  for (let i = top; i < Math.min(L.n, capAll ? L.n : top + L.vis); i++) {
     const y = k.y + L.y0 + (i - top) * L.rowH;
     const on = i === idx;
     if (on) { R(c, k.x, y, k.w - (L.n > L.vis ? 4 : 0), L.rowH - 1, sel ? K.sel : '#0f2030'); R(c, k.x, y, 2, L.rowH - 1, sel ? K.selEdge : K.faint); }
@@ -3778,4 +3787,5 @@ registerPhoneApp('govt_console', {
   open: (g) => launcherApp(g),
 });
 
+export { TABS as GOVT_TABS }; // [R13-F] the tab list, for the portrait lower screen's chips (bigtext_polui.js)
 if (typeof window !== 'undefined') window.__govtui = { scene: () => sceneOf(window.__game), open: openGovtConsole, TABS, role: govtRole, FITLOG, tabIndex, activePhone };

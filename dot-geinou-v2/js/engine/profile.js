@@ -79,6 +79,27 @@ export const ERAS = {
   heisei: { name: '平成', label: '平成（2000年代）', year: '平成なかごろ', priceRate: 0.85, device: 'ケータイ', deviceShort: 'ケータイ', sns: 'ブログ', tv: 'テレビ' },
   reiwa: { name: '令和', label: '令和（いま）', year: '令和', priceRate: 1, device: 'スマホ', deviceShort: 'スマホ', sns: 'ドッター', tv: 'テレビ' },
 };
+// [R13-F] 「スマホ」 in a line of text → what the era calls the phone (手帳 / ケータイ). A few phrases that would read wrong (or twice) with the plain
+// swap are rewritten first, per device word. game.fmt, life.message and the てちょう use it; the 令和 text is never touched.
+const DEV_PHRASES = [
+  ['スマホやパソコン、手帳', { 手帳: '手帳やパソコン、書類', ケータイ: 'ケータイやパソコン、手帳' }],
+  ['スマホと財布、手帳', { 手帳: '財布と手帳', ケータイ: 'ケータイと財布、手帳' }],
+  ['スマホをいじりながら', { 手帳: '手帳をめくりながら' }],
+  ['スマホのメッセージ', { 手帳: '電話や伝言', ケータイ: 'ケータイのメール' }],
+  ['スマホにお送りして', { 手帳: 'お電話でお伝えして' }],
+  ['スマホに連絡が行く', { 手帳: 'お電話で連絡が行く' }],
+  ['スマホに大ニュース', { 手帳: '手帳に大ニュース' }],
+  ['スマホの電源は、オフ', { 手帳: 'ポケベルの電源は、オフ' }],
+  ['受付か、スマホの「教習予約」から、', { 手帳: '受付で、' }],
+  ['スマホの「クイズ」アプリ', { 手帳: '手帳の「クイズ本」', ケータイ: 'ケータイの「ケータイクイズ」' }],
+];
+export function deviceText(str, era) {
+  const dev = era && era.deviceShort;
+  let s = String(str ?? '');
+  if (!dev || dev === 'スマホ' || !s.includes('スマホ')) return s;
+  for (const [from, to] of DEV_PHRASES) if (to[dev] && s.includes(from)) s = s.split(from).join(to[dev]);
+  return s.replace(/スマホ(?!／)/g, dev);
+}
 export const eraOf = (state) => ERAS[(state && state.profile && state.profile.era) || 'reiwa'] || ERAS.reiwa;
 
 // Family relations the creator offers. max: how many of that relation you can have.

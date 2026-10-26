@@ -61,7 +61,7 @@ ekimae({
     B(37, 21, 9, 6, 'office', '交番', { wall: '#e8ecf2', roof: '#2a4a8a', sign: { text: '交番', bg: '#2a4a8a', color: '#ffffff' } }, ['交番だ。おまわりさんが道案内をしている。', '「ハチ公前で待ち合わせ？　人が多いから、目じるしを決めておくといいよ」']),
     postSign(20, 26, 'センター街', ['「センター街」の入口。', '細い通りに、お店がぎっしり。']),
     postSign(25, 26, '道玄坂', ['「道玄坂」。坂の上にも、ライブハウスや劇場がある。']),
-    npc('sb_gal', 6, 9, 'down', { ...LOOKS.fan, top: '#ff7eb6', hairColor: 'blonde' }, '若者', (g) => [yearOf(g) < 1993 ? 'センター街で遊ぶのが、いちばんの楽しみ！' : yearOf(g) < 2010 ? 'プリクラ撮って、センター街ぶらぶらするの〜！' : '交差点の動画を撮りに来たの！', 'ハチ公前で待ち合わせ。でも人多すぎ〜！'], { wander: 2 }),
+    npc('sb_gal', 7, 10, 'down', { ...LOOKS.fan, top: '#ff7eb6', hairColor: 'blonde' }, '若者', (g) => [yearOf(g) < 1993 ? 'センター街で遊ぶのが、いちばんの楽しみ！' : yearOf(g) < 2010 ? 'プリクラ撮って、センター街ぶらぶらするの〜！' : '交差点の動画を撮りに来たの！', 'ハチ公前で待ち合わせ。でも人多すぎ〜！'], { wander: 2 }),
     npc('sb_tourist', 26, 10, 'left', LOOKS.tourist, '観光客', (g) => [yearOf(g) >= 2010 ? 'Shibuya Crossing! 世界でいちばん有名な交差点って本当？' : '東京の若者の街、渋谷！', '信号が変わると、みんないっせいに歩き出すんだね。'], { wander: 2 }),
     npc('sb_police', 25, 15, 'down', { ...LOOKS.guard, hat: '#2a4a8a', top: '#2a4a8a' }, 'おまわりさん', (g) => [yearOf(g) >= 2013 ? '（マイクで）「みなさん、信号を守って、ゆっくり渡りましょう！」' : '交差点は、青になってから渡ってくださいね。', '大みそかやお祭りの夜は、ここが人でいっぱいになるんです。']),
     npc('sb_snap', 9, 16, 'up', { ...LOOKS.cameraman, top: '#20232a' }, 'ファッション誌のカメラマン', (g) => snap(g)),
@@ -361,7 +361,7 @@ ekimae({
   },
   entities: (K) => [
     // until 2013-03 the line ran on the ground here, with the 開かずの踏切 at the left; then the 線路あと
-    { type: 'prop', x: 1, y: 2, w: 46, h: 2, solid: true, cond: (g) => ymOf(g) < 201303, text: ['線路だ。電車がひっきりなしに通る。', '（2013年に、この線路は地下へ移る）'],
+    { type: 'prop', x: 1, y: 2, w: 46, h: 2, solid: true, cond: (g) => ymOf(g) < 201303, talk: (g) => g.say(ymOf(g) >= 200300 ? ['線路だ。電車がひっきりなしに通る。', '（2013年に、この線路は地下へ移る）'] : ['線路だ。電車がひっきりなしに通る。']), // [R13-F] S1-009: the plan is told only once it is public (2000s)
       draw(ctx, sx, sy) { F(ctx, sx, sy, 736, 32, '#6e6a62'); for (const y of [7, 23]) F(ctx, sx, sy + y, 736, 2, '#c0c4cc'); for (let x = 0; x < 736; x += 10) F(ctx, sx + x, sy + 4, 4, 24, '#7a6a58'); F(ctx, sx + 64, sy, 48, 32, '#3a3d44'); for (const y of [7, 23]) F(ctx, sx + 64, sy + y, 48, 2, '#c8ccd4'); } },
     trainBand(1, 2, 46, ['#9a3fa8', '#3a7ac0'], { cond: (g) => ymOf(g) < 201303 }),
     crossingBarrier(4, 4, { cond: (g) => ymOf(g) < 201303, text: ['踏切だ。カンカンカン…。', 'さっきから、ずっと閉まったまま。「開かずの踏切」だ。'] }),
@@ -442,7 +442,8 @@ ekimae({
     for (const x of [31, 37, 43]) put(x, 6, 'tree');
   },
   entities: (K) => [
-    { type: 'prop', x: 1, y: 2, w: 46, h: 2, solid: true, cond: (g) => ymOf(g) < 201208, text: ['線路だ。', '（2012年に、この線路は地下へ移る）'], draw(ctx, sx, sy) { F(ctx, sx, sy, 736, 32, '#6e6a62'); for (const y of [7, 23]) F(ctx, sx, sy + y, 736, 2, '#c0c4cc'); for (let x = 0; x < 736; x += 10) F(ctx, sx + x, sy + 4, 4, 24, '#7a6a58'); } },
+    { type: 'prop', x: 1, y: 2, w: 46, h: 2, solid: true, cond: (g) => ymOf(g) < 201208, talk: (g) => g.say(ymOf(g) >= 200300 ? ['線路だ。', '（2012年に、この線路は地下へ移る）'] : ['線路だ。']), // [R13-F] S1-009
+      draw(ctx, sx, sy) { F(ctx, sx, sy, 736, 32, '#6e6a62'); for (const y of [7, 23]) F(ctx, sx, sy + y, 736, 2, '#c0c4cc'); for (let x = 0; x < 736; x += 10) F(ctx, sx + x, sy + 4, 4, 24, '#7a6a58'); } },
     trainBand(1, 2, 46, ['#9a3fa8'], { cond: (g) => ymOf(g) < 201208 }),
     { type: 'building', x: 30, y: 9, w: 12, h: 7, door: 6, place: 'kyoshujo', name: 'ドット自動車教習所', kind: 'office', wall: '#f1f4e8', roof: '#2f9a5a', canopy: '#2f9a5a', sign: { text: 'ドット自動車教習所', bg: '#2f9a5a', color: '#ffffff' } },
     groundMark(30, 22, 'S字'), groundMark(38, 22, 'クランク'), groundMark(28, 27, '坂道'), groundMark(42, 27, '縦列'),

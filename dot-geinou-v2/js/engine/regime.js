@@ -775,7 +775,7 @@ function needFictionalLeader() { return null; }
 export const REGIME_STEPS = {
   referendum_law: {
     name: '国民投票法の制定', auth: false,
-    desc: '憲法改正の国民投票の手続きを定める法律（現実には2007年5月成立・2010年5月施行）。改正の発議の前に必要。',
+    desc: '憲法改正の国民投票の手続きを定める法律。改正の発議の前に必要。', // [R13-F] S1-009: the real dates are shown by the lines below once they are past
     check(g) {
       if (!pol(g)) return '政治の仕組み（政治コア）が読み込まれていない';
       if (referendumLawOk(g)) return since(g, 2010, 5) ? 'すでに施行されている（2010年5月施行）' : 'すでに制定されている';
@@ -1447,7 +1447,7 @@ export function sdfStatus(g) {
     `防衛費：約${bud.cho}兆円${bud.gdpPct ? `（GDP比 約${bud.gdpPct}%）` : ''}`,
     ...defenseRuleLines(g),
     `指揮：内閣総理大臣（最高指揮官）・${postName(g, 'minister_defense')}。文民統制`,
-    pko ? 'PKO協力法（1992年）：国連の平和維持活動に参加できる' : 'PKO協力法はまだない（現実には1992年6月成立）',
+    pko ? 'PKO協力法（1992年）：国連の平和維持活動に参加できる' : `PKO協力法はまだない${yearOf(g) >= 1992 ? '（現実には1992年6月成立）' : ''}`, // [R13-F] S1-009: no future year in the earlier years
     lawInForce(g, 'security_law') ? '平和安全法制（2015年）：存立危機事態での限定的な集団的自衛権など' : null,
   ].filter(Boolean);
   if (r.sdf.haken) lines.push(`災害派遣中：${r.sdf.haken.where}（約${n0(r.sdf.haken.personnel)}人）`);
@@ -1494,7 +1494,7 @@ export const SDF_ORDERS = {
     },
   },
   pko: {
-    name: 'PKOへの派遣', desc: 'PKO協力法（1992年）：国連の要請を受け、参加5原則を満たすときに派遣する（実施計画を閣議決定）。',
+    name: 'PKOへの派遣', desc: 'PKO協力法：国連の要請を受け、参加5原則を満たすときに派遣する（実施計画を閣議決定）。',
     check(g) {
       const r = R(g);
       const w = canOrderSDF(g);

@@ -319,6 +319,8 @@ export function registerLawUI(K, SECTIONS) {
     };
     const lbFor = (ui) => { const id = tabs[st.tab].id; if (!lbs[id]) lbs[id] = new ListBox({ items: () => rowsOf(ui), rowH: 34, empty: id === 'mine' ? 'まだ法案を出していない' : id === 'laws' ? 'まだ自分の法律はない' : 'まだ法律はない' }); return lbs[id]; };
     const v = {
+      bigtextList: (ui) => lbFor(ui), // [R13-F] the portrait lower screen (bigtext_polui.js)
+      bigtextTabs: () => ({ items: tabs.map((t) => t.label), index: st.tab, onPick: (i) => { st.tab = i; }, skip: { x: 6, y: 70, w: SW - 12, h: 22 } }),
       title: '立法の記録', hint: '←→:タブ ↑↓:えらぶ B:もどる', tip: () => '出した法案の結果と、成立した法律の記録',
       update(ui, inp) {
         if (inp.pressed('b') || inp.pressed('menu') || inp.pressed('a') && false) { sfx('cancel'); ui.done(v, null); return; }

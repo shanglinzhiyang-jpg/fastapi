@@ -3564,7 +3564,7 @@ async function consultImpl(g, topic = 'debt') {
   const legal = activeLoans(g, ['shohisha', 'bank']);
   if (yami.length) {
     const fee = 50000 * yami.length;
-    const k = await ask(g, sp, ['闇金の契約は無効です。\n元金も含めて、返す必要はないとされています（最高裁 平成20年）。', `受任通知を送って、取り立てを止めましょう。\n費用は${fmtMoney(fee)}です。`], ['お願いする', 'やめておく']);
+    const k = await ask(g, sp, [`闇金の契約は無効です。\n元金も含めて、返す必要はないとされています${since(g, 2008, 6) ? '（最高裁 平成20年）' : ''}。`  /* [R13-F] S1-003: the 2008-06 ruling only from then on */, `受任通知を送って、取り立てを止めましょう。\n費用は${fmtMoney(fee)}です。`], ['お願いする', 'やめておく']);
     if (k === 0) {
       if (st.money >= fee || free) {
         if (!free) st.money -= fee; else terasuLend(g, fee);

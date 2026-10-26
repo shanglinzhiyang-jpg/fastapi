@@ -1380,7 +1380,7 @@ registerPlace({
             else await g.say('ホワイトボードに、芸人さんたちの\nスケジュールがびっしり。\nいつかここに自分の名前を…！');
           },
         },
-        { x: 12, y: 2, w: 2, on: 'action', run: async (g) => { await g.say('台本やライブのDVDがずらりと並んでいる。\n笑いの歴史がつまっている…。'); } },
+        { x: 12, y: 2, w: 2, on: 'action', run: async (g) => { let ym = 202601; try { const d = g.gameDate(); ym = Number(d.year) * 100 + Number(d.month); } catch (e) { /* modern wording */ } await g.say(`台本やライブの${ym >= 199611 ? 'DVD' : 'ビデオ'}がずらりと並んでいる。\n笑いの歴史がつまっている…。`); /* [R13-F] S1-009 */ } },
         {
           x: 14, y: 3, on: 'action',
           run: async (g) => {

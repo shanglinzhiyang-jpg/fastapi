@@ -16,7 +16,7 @@ import { defineTile, tileImageHD, R, P, outline, oval, bevel, inset, blobs, ramp
 import { SKILLS, SKILL_MAX, MAX_STAMINA } from '../engine/state.js';
 import { drawFaceHD, LOOKS } from '../engine/sprites.js';
 import { makeCanvas, fmtMoney, pick, shade } from '../engine/util.js';
-import { FURNITURE, HOUSING } from '../engine/life.js';
+import { FURNITURE, HOUSING, PEOPLE, onMorning } from '../engine/life.js';
 import { eraOf, ageOf } from '../engine/profile.js';
 
 // Two lines at most (watchTv adds a third), broken at phrase boundaries.
@@ -125,7 +125,7 @@ function oyaLife(g) {
     'あら{name}ちゃん、ちょうどよかった。\n暮らしのことで、大事なお話があるの。',
     'おなか（満腹）、ストレス、身だしなみ…\nこの3つは毎日気にかけるのよ。\nごはんを食べて、お風呂に入って、たまには息抜き。',
     'ストレスがたまりすぎると、お仕事どころじゃなくなるわ。\n疲れたら、部屋のベッドでゆっくり休むこと。\nキッチンで自炊、ユニットバスでシャワーもできるわよ。',
-    `お家賃は毎週月曜の朝に${fmtMoney((HOUSING.dotsou && HOUSING.dotsou.rent) || 8000)}。\n払えないときは、スマホの「家計」からあとで払えばいいの。\nうちはね、だれも追い出したりしないから。`,
+    `お家賃は毎週月曜の朝に${fmtMoney((HOUSING.dotsou && HOUSING.dotsou.rent) || 8000)}。\n払えないときは、スマホの「家計」からあとで払えばいいの。\nうちはね、事情があるうちは待つわ。…でも、ずっとはだめよ？`, // [R13-F] S1-010 (a long arrears now ends in a notice)
     `${eraOf(g.state).deviceShort || 'スマホ'}は、メニューから開けるわよ。\nお友だちからの連絡も、そこに届くの。`,
     '西の「ドット商店街」には、スーパーやお花屋さん、\n家具屋さんに不動産屋さんもあるわ。\n一度のぞいてごらんなさい。',
   ];
@@ -154,6 +154,112 @@ async function buildUpgrade(g, up, o) {
   return true;
 }
 
+// ------------------------------------------------------------------ [R13-F] S1-010 家賃の滞納: a slow, readable escalation (never a game over)
+// st.rent.late = weeks behind (life.js chargeRent). Tenants of the other flats are moved back here after 4 weeks (housing.js); here:
+//   4 weeks  the landlady writes (gently)            8 weeks  she asks for a talk (and offers 家のお手伝い, which pays ¥3,000 of the debt a day)
+//   13 weeks 退去のお願い (a notice, 4 weeks to bring the debt under 4 weeks' rent: pay, work it off, or the guarantor is called)
+//   the deadline: 保証人 (a parent) pays once; otherwise she waits once more and halves the debt. Everything is a message + a talk with her.
+const RENT_NOTICE_WEEKS = 13, RENT_NOTICE_DAYS = 28, CHORE_PAY = 3000, CHORE_STAMINA = 12;
+const rentOf = () => (HOUSING.dotsou && HOUSING.dotsou.rent) || 8000;
+const oyaFrom = () => (PEOPLE.oya ? { person: 'oya', from: PEOPLE.oya.name } : { from: '大家さん' });
+const parentOf = (st) => { const f = ((st.profile && st.profile.family) || []).find((x) => x && x.alive !== false && (x.rel === 'mother' || x.rel === 'father')); if (!f) return null; const given = String(f.name || '').split(/\s+/).pop(); return { name: f.name, from: `${f.rel === 'mother' ? '母' : '父'}${given ? `（${given}）` : ''}`, who: f.rel === 'mother' ? 'お母さん' : 'お父さん' }; };
+function rentEscalation(g) {
+  const st = g.state;
+  if (!st || !st.rent || !lives(g, 'dotsou')) return;
+  const j = st.justice || {};
+  if (j.status === 'detained' || j.status === 'prison') return; // the lease is on hold while inside
+  const R = st.rent, debt = R.debt || 0, rent = rentOf(), late = R.late || 0;
+  if (debt <= 0) { R.warned = 0; R.notice = null; return; }
+  if (R.escWeek === g.week) return; // once a week
+  R.escWeek = g.week;
+  if (R.notice) {
+    if (debt < rent * 4) {
+      R.notice = null; R.warned = 1;
+      g.message({ ...oyaFrom(), kind: 'chat', text: 'お家賃、ずいぶん減ったわね。ほっとしたわ。\n退去のお話は、いったんなしにしましょう。\nこの調子で、少しずつね。' });
+      return;
+    }
+    const left = R.notice.due - st.day;
+    if (left <= 0) {
+      const par = parentOf(st);
+      if (par && !(R.bailed > 0)) {
+        // 保証人 (a parent): pays the arrears once
+        R.bailed = (R.bailed || 0) + 1;
+        const paid = R.debt;
+        R.debt = 0; R.late = 0; R.notice = null; R.warned = 0;
+        g.addNeed('stress', 20);
+        g.message({ ...oyaFrom(), kind: 'bill', legal: true, text: `連帯保証人の${par.who}に、ご連絡しました。\n未払いの家賃 ${fmtMoney(paid)} は、お支払いいただきました。\n退去のお話は、取り下げます。` });
+        g.message({ from: par.from, kind: 'chat', text: `大家さんから電話があったよ。家賃のこと、立て替えておいたからね。\n…何があったかは聞かない。でも、もうこれきりにしてね。\nちゃんと食べて、ちゃんと働いて。` });
+        (g.morningNotes || (g.morningNotes = [])).push(`（連帯保証人の${par.who}が、家賃 ${fmtMoney(paid)} を立て替えてくれた…。\n情けなくて、胸がちくりと痛む）`);
+      } else {
+        // no guarantor, or already used once: she waits once more and takes half of it off
+        R.debt = Math.ceil(debt / 2); R.late = Math.min(late, 6); R.notice = null; R.warned = 1;
+        g.addNeed('stress', 10);
+        g.message({ ...oyaFrom(), kind: 'chat', text: `…もう一度だけ、待つことにしたわ。\n未払いの半分（${fmtMoney(Math.floor(debt / 2))}）は、いいの。\nのこりは、お手伝いでも、お金でも、少しずつ返してちょうだい。\nこれが、ほんとうに最後よ。` });
+      }
+      return;
+    }
+    if (left <= 7 && !R.notice.last) {
+      R.notice.last = 1;
+      g.message({ ...oyaFrom(), kind: 'bill', legal: true, text: `退去のお願いの期限まで、あと${left}日です。\n未払いの家賃（${fmtMoney(debt)}）を ${fmtMoney(rent * 4)} 未満にしてください。\n払えないときは、顔を見せに来てください。お手伝いでも、お家賃に代えられます。` });
+    }
+    return;
+  }
+  if (late >= RENT_NOTICE_WEEKS) {
+    R.notice = { day: st.day, due: st.day + RENT_NOTICE_DAYS };
+    R.warned = 3;
+    g.addNeed('stress', 8);
+    g.message({ ...oyaFrom(), kind: 'bill', legal: true, text: `【退去のお願い】\n家賃が${late}週（${fmtMoney(debt)}）たまっています。\nこの先${RENT_NOTICE_DAYS}日のうちに、未払いを ${fmtMoney(rent * 4)} 未満にしてください。\n払う・お手伝いで返す・顔を見せて相談する、どれでも受け付けます。\nそれでも難しいときは、連帯保証人の方にご連絡します。` });
+    (g.morningNotes || (g.morningNotes = [])).push('（大家さんから「退去のお願い」が届いていた…。\nまだ間に合う。お金か、お手伝いで、未払いを減らそう）');
+  } else if (late >= 8 && (R.warned || 0) < 2) {
+    R.warned = 2;
+    g.message({ ...oyaFrom(), kind: 'chat', text: g.fmt(`{name}ちゃん、お家賃がもう${late}週たまっているの。\n怒っているんじゃないのよ、心配なの。\n一度、顔を見せに来てちょうだい。お手伝いをしてくれたら、その分を引いてあげられるわ。`) });
+  } else if (late >= 4 && (R.warned || 0) < 1) {
+    R.warned = 1;
+    g.message({ ...oyaFrom(), kind: 'chat', text: g.fmt('{name}ちゃん、お家賃が少したまってきたわね。\nちゃんと食べてる？無理しなくていいのよ。\n払えるときに、少しずつでいいからね。') });
+  }
+}
+onMorning(rentEscalation);
+
+// What she says about the rent, by how far behind: the talk always ends with a way to bring the debt down.
+async function oyaRentTalk(g, o, debt) {
+  const st = g.state, R = st.rent, late = R.late || 0, rent = rentOf();
+  const left = R.notice ? Math.max(0, R.notice.due - st.day) : 0;
+  const talk = R.notice
+    ? [`……{name}ちゃん。「退去のお願い」、読んでくれた？\n私もこんなことは言いたくないの。あと${left}日のうちに、${fmtMoney(rent * 4)}を切るところまで減らしてちょうだい。`, 'どうしても無理なら、連帯保証人のご家族に連絡することになるわ。\n…そんなこと、したくないのよ。']
+    : late >= 8 ? ['もう二か月もたまっているわね…。\n私も年金暮らしだから、いつまでも待てるわけじゃないの。', 'お手伝いをしてくれたら、その分はお家賃から引くわ。\nお金ができたら、それでもいいのよ。']
+      : late >= 4 ? ['お家賃、少したまってるわね。\n払えるときに、スマホの「家計」から払ってくれればいいわ。', '少しずつでも入れてくれると助かるの。']
+        : ['お家賃のことなら、気にしすぎないの。\n払えるときに、スマホの「家計」から払ってくれればいいわ。'];
+  await g.say([...talk, `（未払いの家賃：${fmtMoney(debt)}）`], o);
+  if (late < 4 && !R.notice) return;
+  for (let guard = 0; guard < 6; guard++) {
+    const d = R.debt || 0;
+    if (d <= 0) break;
+    const items = [];
+    if (st.money > 0) items.push(`いま払える分を払う（所持金 ${fmtMoney(st.money)}）`);
+    items.push(`お手伝いをする（体力 -${CHORE_STAMINA}・${fmtMoney(CHORE_PAY)}分）`);
+    items.push('また今度');
+    const i = await g.ask('どうする？', items, { ...o, cancel: items.length - 1 });
+    const pick = items[i] || '';
+    if (/^いま払える/.test(pick)) {
+      const was = d;
+      g.payDebt(true);
+      const paid = was - (R.debt || 0);
+      if (paid > 0) await g.say(R.debt > 0 ? `${fmtMoney(paid)}、たしかに受け取ったわ。\nのこりは ${fmtMoney(R.debt)} ね。` : '全部、払ってくれたのね。ありがとう。\nこれで、すっきりしたわね。', o);
+    } else if (/^お手伝い/.test(pick)) {
+      if (!onceToday(g, 'rent_chore')) { await g.say('今日はもうたくさん手伝ってもらったわ。\nまた、あしたお願いね。', o); continue; }
+      if (st.stamina < CHORE_STAMINA) { await g.say('あら、顔色が悪いわ。今日はやめておきましょう。\nちゃんと休んでからにしてね。', o); g.setFlag('rent_chore', null); break; }
+      await g.fadeOut(15);
+      st.stamina -= CHORE_STAMINA;
+      g.addNeed('stress', 2); g.addNeed('hunger', -4);
+      R.debt = Math.max(0, d - CHORE_PAY);
+      await g.wait(500);
+      await g.fadeIn(15);
+      await g.say(['廊下をふいて、ごみを出して、買い物の荷物を運んだ。', R.debt > 0 ? `大家さん「ありがとう、助かったわ。${fmtMoney(CHORE_PAY)}分、引いておくわね。」\n（未払い ${fmtMoney(R.debt)}）` : '大家さん「ありがとう。これで、お家賃は全部おしまいよ。」'], o);
+    } else break;
+    if (R.debt <= 0) { R.late = 0; break; }
+  }
+}
+
 // The landlady's talk (the NPC in front of ドット荘 in tokyo.js finds it on PLACES.home.oyaTalk).
 // She only ever offers the next level, and hints at it once the player is close.
 export async function oyaTalk(g, npc) {
@@ -176,9 +282,7 @@ export async function oyaTalk(g, npc) {
     await g.say(oyaLife(g), o);
     return;
   }
-  if (debt > 0) {
-    await g.say(['お家賃のことなら、気にしすぎないの。\n払えるときに、スマホの「家計」から払ってくれればいいわ。', `（未払いの家賃：${fmtMoney(debt)}）`], o);
-  }
+  if (debt > 0) await oyaRentTalk(g, o, debt); // [R13-F] S1-010
   const lv = homeLevel(g);
   const up = HOME_UPGRADES[lv];
   if (up && st.money >= up.price) {

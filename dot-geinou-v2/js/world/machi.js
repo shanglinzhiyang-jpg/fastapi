@@ -2146,7 +2146,7 @@ onMorning((g) => {
     g.addFame(bonus, true);
     g.addFans(bonus * 2, true);
     g.setFlag('machi_styled', null);
-    g.message({ from: 'hair salon ドット', kind: 'fan', text: `昨日のお仕事、ヘアスタイルが好評だったみたいですね！\nSNSでも話題になってますよ♪\n（知名度 +${bonus}・ファン +${bonus * 2}）` });
+    g.message({ from: 'hair salon ドット', kind: 'fan', text: `昨日のお仕事、ヘアスタイルが好評だったみたいですね！\n${(() => { let y = 2026; try { y = Number(g.gameDate().year); } catch (e) { /* modern */ } return y >= 2010 ? 'SNS' : y >= 2004 ? 'ブログ' : '口コミ'; })()}でも話題になってますよ♪\n（知名度 +${bonus}・ファン +${bonus * 2}）` });
     g.notify(`ヘアスタイルが好評！ 知名度 +${bonus}`, { color: '#ff7eb6' });
   } else if (st.day - (s.day || 0) > 2) {
     g.setFlag('machi_styled', null); // the style did not last until the next job

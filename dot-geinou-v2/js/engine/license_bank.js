@@ -208,6 +208,14 @@ export const BANK = RAW.map((r, i) => ({
   id: 'lq' + String(i + 1).padStart(3, '0'), q: r[0], a: !!r[1], why: r[2], cat: r[3], from: r[4] || 0, to: r[5] || 999912, pts: r[6] || 1,
 }));
 export const qOk = (q, ym) => ym >= q.from && ym <= q.to;
+// [R13-F] S1-009: an explanation that mentions a year after the date of the exam ("2005年4月から、一定の条件で認められた") tells the future: such
+// sentences are left out (a rule that has already changed keeps its own date).
+export function whyAt(q, ym) {
+  const y = Math.floor((ym || 999912) / 100);
+  const keep = String(q.why || '').split('。').filter((x) => x && !(x.match(/(?:19|20)\d\d年/g) || []).some((t) => parseInt(t, 10) > y));
+  return keep.length ? `${keep.join('。')}。` : '';
+}
+const atDate = (list, ym) => list.map((q) => { const w = whyAt(q, ym); return w === q.why ? q : { ...q, why: w || 'いまの決まりのとおり。' }; });
 
 const POOL_CATS = {
   kari: ['shingo', 'tsuko', 'tomaru', 'koten', 'kokoro', 'kozo', 'koso', 'yoru'],
@@ -238,14 +246,14 @@ export function draw(kind, ym, n = 50, rng = Math.random) {
   const rest = shuffle(plain.filter((q) => !picked.includes(q)), rng);
   picked.push(...rest.slice(0, Math.max(0, n - wantK - picked.length)));
   const list = shuffle([...picked, ...shuffle(kiken, rng).slice(0, wantK)], rng).slice(0, n);
-  return list;
+  return atDate(list, ym);
 }
 export const examMax = (list) => list.reduce((a, q) => a + (q.pts || 1), 0);
 export const passPts = (list) => Math.ceil(examMax(list) * 0.9 - 1e-9);
 // 学科教習 (a lesson): n questions of the given categories
 export function lessonSet(cats, ym, n = 5, rng = Math.random) {
   const pool = BANK.filter((q) => cats.includes(q.cat) && qOk(q, ym));
-  return shuffle(pool, rng).slice(0, n);
+  return atDate(shuffle(pool, rng).slice(0, n), ym);
 }
 // A question as the 'quiz' minigame's custom question (2 choices, ○ first / × second; shuffle off)
 export function asQuizQuestion(q) {

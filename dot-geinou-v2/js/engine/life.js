@@ -16,7 +16,7 @@ import { clamp, fmtMoney } from './util.js';
 import { COLORS } from './draw.js';
 import { audio } from './audio.js';
 import { ITEMS } from './state.js'; // runtime use only (state.js imports this module too)
-import { personalityMult, ERAS } from './profile.js';
+import { personalityMult, ERAS, deviceText } from './profile.js';
 
 // ---------------------------------------------------------------- calendar
 export const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
@@ -76,6 +76,10 @@ const NEED_WARN = {
 const ITEM_HEALS = (k) => !!(ITEMS[k] && ITEMS[k].heal > 0);
 
 // ---------------------------------------------------------------- registries
+// [R13-F] the morning's message budget and the repeat collapse (see message())
+export const MORNING_MSG_CAP = 7;
+const MSG_DUP_DAYS = 30;
+const msgKey = (m) => `${m.from}|${String(m.text).replace(/[0-9０-９,.\u2060¥￥]+/g, '#').replace(/\s+/g, '').replace(/（\d+回目）$/, '').slice(0, 90)}`;
 export const HOUSING = {};
 // def: { name, place, room?, rent (per week), sleepStress (stress removed per night),
 //   kitchen: bool, bath: bool (morning shower: 身だしなみ +MORNING_SHOWER), requires: { fame }, moveCost, desc,
@@ -563,9 +567,35 @@ const methods = {
     const m = { id: ph.nextId++, day: this.state.day, read: false, ...msg };
     // the phone is called what the era calls it (手帳 / ケータイ) in the message text too
     try {
-      const dev = (ERAS[(this.state.profile && this.state.profile.era) || 'reiwa'] || {}).deviceShort;
-      if (dev && dev !== 'スマホ' && typeof m.text === 'string') m.text = m.text.replace(/スマホ(?!／)/g, dev);
+      if (typeof m.text === 'string') m.text = deviceText(m.text, ERAS[(this.state.profile && this.state.profile.era) || 'reiwa']); // [R13-F] profile.js deviceText
     } catch (e) { /* keep the text */ }
+    // [R13-F] S1-005 / S1-007: the same words again (a weekly flyer, a loan collector, 仕送り) refresh the message that is already there
+    // ("n回目") instead of piling up; and a morning delivers at most MORNING_MSG_CAP messages: the rest of the chatter / news is merged
+    // into one 「朝のまとめ」. Bills, legal notices, offers, invitations and messages with choices are never merged or collapsed.
+    const day0 = this.state.day;
+    const prot = !!((m.kind === 'bill' && !m.receipt) || m.legal || m.kind === 'offer' || m.kind === 'invite' || m.choices || m.protect);
+    if (!prot && typeof m.text === 'string') {
+      const key = msgKey(m);
+      const old = ph.inbox.find((x) => x && x !== m && x.kind === m.kind && x.dupKey === key && day0 - (Number(x.day) || 0) <= MSG_DUP_DAYS);
+      if (old) {
+        old.dups = (old.dups || 1) + 1;
+        old.text = `${m.text}\n（${old.dups}回目）`;
+        old.day = day0; old.read = false;
+        ph.inbox.splice(ph.inbox.indexOf(old), 1); ph.inbox.unshift(old);
+        return old;
+      }
+      m.dupKey = key;
+    }
+    const mm = this._mm;
+    if (mm && mm.open && mm.day === day0) {
+      const room = MORNING_MSG_CAP - 1; // one slot is kept for the digest
+      if (prot) {
+        // a bill / legal notice / offer always comes; when the morning is full, the newest chatter of this morning goes into the digest to make room
+        if (mm.n >= room && mm.chat.length) { const back = mm.chat.pop(); const i = ph.inbox.indexOf(back.m); if (i >= 0) ph.inbox.splice(i, 1); mm.held.unshift(back.msg); mm.n--; }
+        mm.n++;
+      } else if (mm.n >= room) { mm.held.push(msg); return m; } // held for the digest (m is returned for callers that touch it; it is not in the inbox)
+      else { mm.n++; mm.chat.push({ m, msg }); }
+    }
     ph.inbox.unshift(m);
     // full inbox: drop the oldest read message first, then the oldest one that is not
     // protected. Protected (they never vanish unseen): an offer you can still answer, an
@@ -608,6 +638,7 @@ const methods = {
     const h = this.housing();
     const away = !!opts.away;
     const fx = away ? { sleepStress: 0, stamina: 0, clean: 0, stress: 0 } : this.furnitureEffects();
+    this._mm = { day: st.day, open: true, n: 0, held: [], chat: [] }; // [R13-F] the morning's message window (closed after the hooks, below)
     const notes = this.morningNotes = [];
     const before = { hunger: L.hunger, stress: L.stress, clean: L.clean };
     this.lifeTick('night');
@@ -650,9 +681,24 @@ const methods = {
     }
     // offers left unanswered too long expire (the phone shows them as 期限切れ)
     for (const m of st.phone.inbox) if (m && m.kind === 'offer' && !m.answered && st.day - (Number(m.day) || 0) >= OFFER_DAYS) m.answered = 'expired';
-    for (const fn of MORNING_HOOKS) {
-      try { await fn(this); } catch (e) { console.error(e); }
+    try {
+      for (const fn of MORNING_HOOKS) {
+        try { await fn(this); } catch (e) { console.error(e); }
+      }
+    } finally {
+      this.flushMorningMessages(); // [R13-F]
     }
+  },
+  // [R13-F] S1-005: close the morning's message window; what the cap held back becomes one 「朝のまとめ」 (a single one is simply delivered)
+  flushMorningMessages() {
+    const mm = this._mm;
+    this._mm = null;
+    if (!mm || !mm.held.length) return;
+    if (mm.held.length === 1) { this.message(mm.held[0]); return; }
+    const first = (x) => String(x.text || '').split('\n')[0].replace(/\s+/g, ' ').slice(0, 26);
+    const lines = mm.held.slice(0, 9).map((x) => `・${x.from || '？'}｜${first(x)}`);
+    if (mm.held.length > 9) lines.push(`・ほか${mm.held.length - 9}件`);
+    this.message({ from: '朝のまとめ', kind: 'news', digest: true, text: `【今朝のまとめ】ほかに届いた連絡 ${mm.held.length}件\n${lines.join('\n')}` });
   },
 };
 

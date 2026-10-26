@@ -27,7 +27,7 @@ import { text, wrap, panel, measure, rect, downArrow, COLORS } from './draw.js';
 import { audio } from './audio.js';
 import { SKILLS, AGENCIES, RANKS, FINALE_FAME, CAREER, rankIndex, rankName, nextRank as nextTitle } from './state.js';
 import { MINIGAMES } from './minigame.js';
-import { eraOf, fullName, ageOf, prefecture, regionOf, GENDERS, PERSONALITIES, RELATIONS, CAUSES, isBirthday, daysToBirthday, personalityEffects, sortFamily, YEAR_DAYS } from './profile.js';
+import { eraOf, fullName, ageOf, prefecture, regionOf, GENDERS, PERSONALITIES, RELATIONS, CAUSES, isBirthday, daysToBirthday, personalityEffects, sortFamily, YEAR_DAYS, deviceText } from './profile.js';
 import { GUIDE, GUIDE_ORDER, TOWNS, AUDITIONS, GUIDE_JOBS, TIER_FAME, jobOpen } from '../world/guide.js';
 import { PEOPLE, HEARTS, heartIndex, REGULARS, FURNITURE, WEEKDAYS, weekdayOf, weekOf, HUNGRY, STRESSED, SCRUFFY, BURNOUT, FULL, showWords, PHONE_APPS } from './life.js';
 // The two cores' exports, read at run time. Loaded optionally (main.js installs them; a
@@ -94,7 +94,7 @@ let lastTab = 0; // reopen on the tab the player looked at last
 let ERA = eraOf(null);
 const eraText = (t) => {
   let s = String(t ?? '');
-  if (ERA.deviceShort !== 'スマホ') s = s.replaceAll('スマホ', ERA.deviceShort);
+  s = deviceText(s, ERA); // [R13-F] (profile.js: the same swap with the phrases that need their own words)
   if (ERA.sns !== 'ドッター') s = s.replaceAll('ドッター', ERA.sns);
   return yenText(s);
 };

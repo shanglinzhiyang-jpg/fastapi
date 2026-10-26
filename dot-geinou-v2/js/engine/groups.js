@@ -1717,7 +1717,7 @@ function tourismMonthly(g, s) {
       news(g, `${x.name}のリゾート開発の第三セクターが経営難。自治体の負担が重くのしかかる`, { domain: 'tourism' });
       x.local = clamp(x.local - 8, 0, 100);
     } else if (roll(0.05)) {
-      x.buzz = clamp(x.buzz + 25, 0, 100); slog(x, g, '映像やSNSで話題に');
+      x.buzz = clamp(x.buzz + 25, 0, 100); slog(x, g, d.year >= 2010 ? '映像やSNSで話題に' : '映像やクチコミで話題に'); // [R13-F] S1-009
       news(g, `${x.name}が${d.year >= 2010 ? 'SNS' : 'テレビ'}で話題に。問い合わせが急増`, { domain: 'tourism', feed: false });
     }
   }

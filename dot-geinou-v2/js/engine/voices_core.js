@@ -118,7 +118,7 @@ function names(g) {
 export function replyMedium(g) {
   const y = yearOf(g);
   const role = playerRole(g);
-  if (y >= 2010) return { id: 'sns', label: `${(ERAS.reiwa && ERAS.reiwa.sns) || 'SNS'}に投稿`, short: '投稿' };
+  if (y >= 2010) return { id: 'sns', label: `${((ERAS[(g.state && g.state.profile && g.state.profile.era) || 'reiwa'] || ERAS.reiwa || {}).sns) || 'SNS'}に投稿`, short: '投稿' }; // [R13-F] S1-011: the era's own word (ブログ in the 平成 game, ドッター in 令和), like the phone app
   if (y >= 2003) return { id: 'blog', label: 'ブログに書く', short: 'ブログ' };
   if (role.kind !== 'citizen') return { id: 'kaiken', label: y >= 1995 ? 'ワイドショーの取材で話す' : '記者の取材で話す', short: '取材' };
   return { id: 'letter', label: '新聞に投書する', short: '投書' };

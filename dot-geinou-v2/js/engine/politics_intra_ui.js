@@ -377,6 +377,8 @@ export function registerIntraUI(K, SECTIONS) {
       return lbs[id];
     };
     const v = {
+      bigtextList: (ui) => lbFor(ui), // [R13-F] the portrait lower screen (bigtext_polui.js): the list and the tab chips of this view
+      bigtextTabs: () => ({ items: TABS.map((t) => t.label), index: st.tab, onPick: (i) => { st.tab = i; }, skip: { x: 6, y: 78, w: SW - 12, h: 22 } }),
       title: () => `党内：${D ? D.ov.partyName : ''}`, focus: 'list',
       hint: '←→:タブ ↑↓:えらぶ A:動く・開く B:もどる',
       tip: () => {

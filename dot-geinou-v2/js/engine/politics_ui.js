@@ -34,6 +34,7 @@ import { registerPhoneApp, onMorning, PEOPLE, WEEKDAYS, weekdayOf } from './life
 import { ERAS, ageOf, PREFECTURES, fullName, YEAR_DAYS } from './profile.js';
 import { appTile, rrect } from './phone.js';
 import { crimeLaw } from './crime.js';
+import { padPress } from './bigtext.js'; // [R13-F] the portrait lower screen (bigtext_polui.js reads this file's screens; the dashboard below has its own spec)
 // R5-D: the 党内 hub (factions, 倒閣運動, conflicts, pledges, stances), the bill studio and the legislation record
 import { registerIntraUI } from './politics_intra_ui.js';
 import { registerLawUI } from './politics_law_ui.js';
@@ -139,7 +140,10 @@ function frame(c, x, y, w, h, fill, edge) {
   if (fill) R(c, x + 1, y + 1, w - 2, h - 2, fill);
 }
 // a card: dark panel with a title strip
+// [R13-F] POLCAP.cards: while bigtext_polui.js draws a screen into a recording context it learns where the cards are (one block of text per card)
+export const POLCAP = { cards: null };
 function card(c, x, y, w, h, title = null, o = {}) {
+  if (POLCAP.cards) POLCAP.cards.push({ x, y, w, h, title });
   R(c, x + 2, y + 2, w, h, 'rgba(0,0,0,0.35)');
   frame(c, x, y, w, h, o.fill || C.card, o.edge || C.edge);
   if (title) {
@@ -595,14 +599,16 @@ class ListBox {
   draw(c, x, y, w, h, focused = true, t = 0) {
     const rows = this.rows();
     const rh = this.o.rowH || 22;
+    this.rect = { x, y, w, h, rh }; // [R13-F] where the list was drawn (bigtext_polui.js); capSkip: leave it out of a text capture, capAll: draw every row
+    if (this.capSkip) return;
     if (!rows.length) { para(c, this.o.empty || '（なし）', x + 10, y + 8, w - 20, 12, C.dim); return; }
-    const vis = Math.max(1, Math.floor(h / rh));
+    const vis = this.capAll ? Math.max(1, rows.length) : Math.max(1, Math.floor(h / rh));
     const idx = clamp(this.idx, 0, rows.length - 1);
-    let top = this.topRow;
+    let top = this.capAll ? 0 : this.topRow;
     if (idx < top) top = idx;
     if (idx >= top + vis) top = idx - vis + 1;
     top = clamp(top, 0, Math.max(0, rows.length - vis));
-    this.topRow = top;
+    if (!this.capAll) this.topRow = top;
     const scroll = rows.length > vis;
     const ww = w - (scroll ? 5 : 0);
     for (let i = top; i < Math.min(rows.length, top + vis); i++) {
@@ -674,6 +680,7 @@ function confirmView(o) {
   const choices = o.choices || ['はい', 'いいえ'];
   return {
     modal: true, idx: o.index | 0,
+    kind: 'confirm', title: o.title || '', lines: String(o.text || '').split('\n'), choices, color: o.color || (o.danger ? C.bad : C.gold), // [R13-F] read by modalSpec (the portrait lower screen)
     hint: o.hint || (choices.length > 1 ? '↑↓ A:けってい B:もどる' : 'A:OK'),
     tip: () => o.tip || '',
     update(ui, inp) {
@@ -869,6 +876,8 @@ function dashboardView(g) {
     hint: () => (view.focus === 'help' ? 'A:政治ナビ ↓:もどる' : view.focus === 'alert' ? '↑↓ A:ひらく B:もどる' : '←→↑ A:ひらく B:とじる'),
     tip: () => (view.focus === 'help' ? '政治ナビ（ことは先生）：いま何をすればいいか、用語、しくみ' : view.focus === 'alert' ? '返事や決断には期限がある。早めに対応しよう' : COMMANDS[view.idx].tip),
     summary(ui) { if (!sum || ui.t - sumT > 20) { sum = g.politicsSummary(); sumT = ui.t; } return sum; },
+    bigtextKey: (ui) => `dash|${view.focus}|${view.idx}|${view.aidx}|${alerts(g).length}|${ui.t >> 6}`, // [R13-F] the portrait lower screen (bigtext_polai.js adapter 'polui')
+    bigtext: (ui) => dashboardBigtext(g, ui, view),
     update(ui, inp) {
       // the first visit of a newcomer: what this is and where to start (over the dashboard)
       const d = uiData(g);
@@ -901,6 +910,81 @@ function dashboardView(g) {
     draw(c, ui) { drawDashboard(c, g, ui, view, view.summary(ui)); },
   };
   return view;
+}
+// [R13-F] 縦画面の下画面: the お知らせ and the eleven commands as 46 px rows (a tap highlights, the second tap opens), the cards as big text
+function dashboardBigtext(g, ui, view) {
+  const p = polOf(g), me = p.me, s = view.summary(ui), day = today(g);
+  const al = alerts(g);
+  const C2 = s.cabinet, S = s.diet.session;
+  const sessTxt = s.diet.shugi.dissolved ? '衆院 解散中' : S ? `${S.kind}・残り${Math.max(0, S.end - day)}日` : '閉会中';
+  const next = s.upcoming.filter((e) => !e.newsOnly && (e.kind !== 'sosaisen' || e.party === me.party));
+  const info = {
+    elections: next[0] ? `${electionShort(g, p.elections.upcoming.find((z) => z.id === next[0].id) || next[0])}・${daysLeft(next[0].day - day)}` : '予定はない',
+    parties: me.party ? partyFull(g, me.party) : '無所属',
+    policy: '政策をつくる・法案を出す',
+    diet: sessTxt,
+    cabinet: `${C2.pm === 'player' ? playerName(g) : C2.pmName || '（不在）'}内閣・支持率${C2.approval}%`,
+    party: '党役員・派閥・公約・党内の決断',
+    groups: '業界団体・労組・メディアなど',
+    money: fmtMoney(me.funds),
+    news: p.news[0] ? p.news[0].text : 'まだ政治ニュースはない',
+    ai: '議員の名鑑・動向・党内勢力図',
+    govt: '予算・税・省庁・世論・安全保障',
+  };
+  const items = [
+    ...al.map((a) => ({ label: a.text, right: 'お知らせ', rcol: a.color, color: a.color })),
+    ...COMMANDS.map((cmd) => ({ label: cmd.label, sub: info[cmd.id] || '', color: cmd.color })),
+  ];
+  const focusAlert = view.focus === 'alert' && al.length;
+  const index = focusAlert ? clamp(view.aidx, 0, al.length - 1) : al.length + clamp(view.idx, 0, COMMANDS.length - 1);
+  const cmd = COMMANDS[clamp(view.idx, 0, COMMANDS.length - 1)];
+  const b = [];
+  b.push({ t: focusAlert ? al[index].text : cmd.tip, s: 17, c: focusAlert ? al[index].color : '#a4acd0' });
+  const gauge = (lab, v, col, tx) => b.push({ bar: [lab, Math.max(0, Math.min(1, v)), col, tx] });
+  b.push({ h: 'あなた', c: '#5fb7ff' });
+  b.push({ kv: ['立場', `${me.office ? OFFICES[me.office].label : me.formerOffice ? `元${OFFICES[me.formerOffice].short}` : '民間人'}・${partyShort(g, me.party)}`] });
+  if (me.posts.length) b.push({ kv: ['役職', me.posts.map((q) => postName(q, fyOf(g), me.party)).join('・'), C.gold] });
+  gauge('評判', (me.reputation + 100) / 200, me.reputation >= 0 ? C.good : C.bad, String(Math.round(me.reputation)));
+  gauge('地元', me.localSupport / 100, C.cyan, String(Math.round(me.localSupport)));
+  gauge('党内', me.standing / 100, C.gold, me.party ? String(Math.round(me.standing)) : '—');
+  b.push({ kv: ['政治資金', fmtMoney(me.funds), C.gold] });
+  if (me.secret > 0) b.push({ t: `⚠ 裏金 ${fmtMoney(me.secret)}・発覚の危険`, s: 17, c: '#ffb0b8' }); else { const [s1, col] = nextStep(g); b.push({ t: s1, s: 17, c: col }); }
+  b.push({ h: '内閣', c: '#ff8a5a' });
+  b.push({ kv: ['総理', `${C2.pm === 'player' ? playerName(g) : C2.pmName || '（不在）'}　発足${Math.max(0, day - num(C2.formed))}日`] });
+  gauge('支持率', C2.approval / 80, C2.approval >= 50 ? C.good : C2.approval >= 30 ? C.gold : C.bad, `${C2.approval}%`);
+  const pl = p.polls;
+  if (pl.length >= 2) { const d = Math.round(pl[pl.length - 1].approval - pl[pl.length - 2].approval); b.push({ t: `前週比 ${d > 0 ? '▲' : d < 0 ? '▼' : '±'}${Math.abs(d)}`, s: 16, c: d >= 0 ? C.good : C.bad }); }
+  b.push({ h: '国会', c: '#b8a0ff' });
+  const rs = (h2) => (p.cabinet.partyIds || []).reduce((a, id) => a + num(p.diet[h2].seats[id]), 0);
+  const st = p.diet.shugi.total, ss = p.diet.sangi.total;
+  b.push({ kv: ['会期', sessTxt, S ? C.good : undefined] });
+  b.push({ kv: ['衆議院', `与党 ${rs('shugi')}/${st}（過半数 ${Math.floor(st / 2) + 1}）`, rs('shugi') > st / 2 ? undefined : C.bad] });
+  b.push({ kv: ['参議院', `与党 ${rs('sangi')}/${ss}（過半数 ${Math.floor(ss / 2) + 1}）`, rs('sangi') > ss / 2 ? undefined : C.bad] });
+  if (s.diet.nejire) b.push({ t: 'ねじれ国会', s: 17, c: C.bad });
+  const pend = g.billsList({ pending: true }).filter((q) => q.kind !== 'noconfidence');
+  b.push({ kv: ['法案', `審議中 ${pend.length}本${pend.some((q) => q.by === 'player') ? `（あなたの法案 ${pend.filter((q) => q.by === 'player').length}）` : ''}`] });
+  b.push({ h: 'つぎの選挙', c: '#e0a03a' });
+  if (!next.length) b.push({ t: '予定されている選挙はない', s: 17, c: '#a4acd0' });
+  next.slice(0, 3).forEach((e) => {
+    const full = p.elections.upcoming.find((z) => z.id === e.id) || e;
+    const fs = e.declared || e.kind === 'sosaisen' ? null : filingState(g, full);
+    const st2 = day >= e.day ? '投票日' : day >= e.koji ? '選挙期間中' : fs === 'early' ? `届出 ${shortDate(g, filingOpens(full))}から` : fs === 'open' ? `届出受付 〜${shortDate(g, e.koji)}` : `${kojiWord(e.kind)} ${e.kojiDate.replace(/^\d+年/, '')}`;
+    b.push({ kv: [daysLeft(e.day - day), `${electionShort(g, full)}　${st2}${e.declared ? '・立候補中' : ''}`, e.declared ? C.good : undefined] });
+  });
+  b.push({ h: '経済', c: '#5ee07a' });
+  const E = p.economy;
+  b.push({ kv: ['成長率', pct(E.growth)] }, { kv: ['物価上昇率', pct(E.inflation)] }, { kv: ['失業率', pct(E.unemployment)] }, { kv: ['政府債務', `GDP比${Math.round(num(E.debtRatio))}%`] }, { kv: ['円相場', `1ドル${Math.round(num(E.yen))}円`] }, { kv: ['日経平均', `${fmtNum(E.nikkei)}円`] });
+  b.push({ kv: ['消費税', taxWord(s.economy.taxRate)] }, { kv: ['予算', fmtCho(s.economy.budget.spending)] });
+  return {
+    sid: 'poldash', color: '#e8c25a', tag: '政治', title: '政治ダッシュボード', sub: `${dateLabel(g)}（${polDate(g).wareki}）`, hint: 'タップ：えらぶ→ひらく',
+    blocks: b,
+    list: { items, index, rows: 3, bodyMin: 90, bodyMax: 130, onPick: (i) => {
+      if (i < al.length) { if (view.focus === 'alert' && view.aidx === i) padPress(g, 'a'); else { view.focus = 'alert'; view.aidx = i; } return; }
+      const k = i - al.length;
+      if (view.focus === 'cmd' && view.idx === k) padPress(g, 'a'); else { view.focus = 'cmd'; view.idx = k; }
+    } },
+    onTap: () => {},
+  };
 }
 function drawDashboard(c, g, ui, view, s) {
   const p = polOf(g);
@@ -2048,7 +2132,7 @@ function nightView(g, res) {
     tip: () => (showRace && v.t > T0 + TS ? '当選が確実になると「当確」。開票前に出る「ゼロ打ち」もある' : national ? `${res.kind === 'shugi' ? '衆議院' : '参議院'}の過半数は、法案や予算を通すための目安` : '開票は、投票が締め切られた夜に行われる'),
     update(ui, inp) {
       if (g.auto) { ui.done(v, true); return; }
-      if (inp.pressed('b')) { v.t = Math.max(v.t, end + 1); }
+      if (inp.pressed('b')) { if (v.t >= end) { sfx('ok'); ui.done(v, true); return; } v.t = Math.max(v.t, end + 1); } // [R13-F] S1-013: B skips the count, and leaves once it is over (a B-only player was stuck here)
       if (inp.pressed('a')) {
         if (v.t < T0) v.t = T0;
         else if (national && v.t < T0 + TS) v.t = T0 + TS;
@@ -2077,6 +2161,7 @@ function nightView(g, res) {
       if (showRace && t >= T0 + TS) drawRaceCount(c, g, res, rows, M, clamp((t - T0 - TS) / (TR - 60), 0, 1), t, my, leader, windowed);
       // footer
       R(c, 0, SH - 20, SW, 20, 'rgba(6,10,30,0.9)');
+      v.hint = t >= end ? 'A/B:つぎへ' : 'A:すすめる B:とばす';
       T(c, v.hint, SW - 8, SH - 16, 12, C.dim, 'right');
       T(c, fit(c, v.tip(), SW - 160, 12), 10, SH - 16, 12, C.cyan);
       if (t >= end && Math.floor(t / 24) % 2) T(c, '▼', SW / 2, SH - 34, 12, '#ffffff', 'center');
@@ -2262,7 +2347,8 @@ SECTIONS.night = async (ui, o = {}) => {
   const g = ui.g;
   const res = polOf(g).elections.history.find((h) => h.id === o.resultId);
   if (!res) return;
-  await ui.open(nightView(g, res));
+  // [R13-F] S1-013: an election that is only news (統一地方選挙: no candidates, no seats) has nothing to count: straight to the result card
+  if (!(ELECTION_KINDS[res.kind] && ELECTION_KINDS[res.kind].newsOnly)) await ui.open(nightView(g, res));
   await ui.open(resultCardView(g, res));
 };
 SECTIONS.results = async (ui) => {
@@ -2968,6 +3054,7 @@ function policyStudioView(g, o) {
         return { label: POLICIES[id].name, tag: pick ? (isPicked ? { text: '公約', color: '#8a6a1a' } : st && st.tag === '時代外' ? { text: '時代外', color: st.color } : null) : st ? { text: st.tag, color: st.color } : null, labelColor: isPicked ? C.gold : st && (st.tag === '時代外' || st.tag === '×') ? C.faint : null };
       });
     },
+    bigtextList: () => (v.focus === 'area' ? v.al : v.pl), // [R13-F] the portrait lower screen (bigtext_polui.js): the list that has the focus
     cur() { if (v.focus === 'area') return null; const id = v.pols()[v.pl.idx]; return id ? POLICIES[id] : null; },
     update(ui, inp) {
       if (v.focus === 'area') {
@@ -3340,6 +3427,7 @@ function cabinetView(g) {
     tip: () => (v.focus === 'list' ? '国務大臣の過半数は、国会議員から選ばれる（憲法68条）' : ({ formation: '総理大臣は国務大臣を任命し、いつでも罷免できる（憲法68条）', coalition: '1つの党で過半数に届かないとき、複数の党で連立政権をつくる', budget: '予算は内閣がつくり、国会の議決で成立する（衆議院が先に審議）', dissolve: '衆議院の解散は、内閣の助言と承認による天皇の国事行為（憲法7条）', resign: '総辞職すると、国会で新しい総理大臣が指名される', amend: '憲法改正原案は、国会議員が提出する（国会法68条の2）', chart: '内閣支持率は、新聞社やテレビ局の世論調査で毎月のように測られる' }[(v.lb.current() || {}).id] || '内閣は、総理大臣と国務大臣でつくる')),
     sum: null, sumT: -99,
     summary(ui) { if (!v.sum || !ui || ui.t - v.sumT > 15) { v.sum = g.politicsSummary(); v.sumT = ui ? ui.t : 0; } return v.sum; },
+    bigtextList: () => (v.focus === 'list' ? v.ml : v.lb), // [R13-F] the portrait lower screen (bigtext_polui.js)
     enter(ui) {
       v.lb = new ListBox({ items: () => cabinetCmds(g), rowH: 32 });
       v.ml = new ListBox({ items: () => v.summary(ui).cabinet.ministers.map((m) => ({ post: m.post, name: m.name, who: m.who })), rowH: 16, drawRow: (c, it, x, y, w, rh, sel) => {

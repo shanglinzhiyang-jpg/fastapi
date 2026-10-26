@@ -23,7 +23,7 @@ import {
   rankIndex, rankName, saveGame, payText, storageMode,
 } from './state.js';
 import { installLife, REGULARS, SCRUFFY, ACTIVITY, showWords } from './life.js';
-import { eraOf, fullName, personalityMult } from './profile.js';
+import { eraOf, fullName, personalityMult, deviceText } from './profile.js';
 // The two cores (crime.js: justice and debts, politics.js: politics) are NOT imported here:
 // main.js loads them with a dynamic import and installs them on Game.prototype
 // (installJustice, then installPolitics), so a core that fails to load cannot take the
@@ -322,8 +322,7 @@ export class Game {
     const sns = eraOf(st).sns;
     if (sns && sns !== 'ドッター') s = s.replaceAll('ドッター', sns);
     // the phone is called what the era calls it (手帳 / ケータイ): lines written as 「スマホの『家計』から」 read right in every era
-    const dev = eraOf(st).deviceShort;
-    if (dev && dev !== 'スマホ') s = s.replace(/スマホ(?!／)/g, dev);
+    s = deviceText(s, eraOf(st)); // [R13-F] (the same swap, with the phrases that need their own words: profile.js deviceText)
     return yenText(s);
   }
 

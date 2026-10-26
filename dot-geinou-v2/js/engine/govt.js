@@ -3925,7 +3925,10 @@ function opinionEvalImpl(g, s) {
     const ap = clamp(A + P.house + evGauss(key) * sd, 2, 95);
     const dis = clamp(ab.disapproval - P.house + evGauss(key + 'd') * sd, 2, 95);
     const ps = clamp(partyNow + P.house * 0.35 + evGauss(key + 'p') * Math.sqrt((partyNow / 100) * (1 - partyNow / 100) / P.n) * 100, 0.5, 90);
-    return { id: P.id, name: P.name, how: P.how, n: P.n, day: pday, date: dLabel(g, Math.max(1, pday)), approve: Math.round(ap * 10) / 10, disapprove: Math.round(dis * 10) / 10, party: Math.round(ps * 10) / 10, margin: evMargin(ap, P.n), house: P.house };
+    // [R13-F] S1-009: how a house polls follows the year (インターネット調査 from 2004; RDD phone from 1998)
+    const yr = gdate(g).year;
+    const how = P.id === 'dotterebi' ? (yr >= 2004 ? 'インターネット' : '面接') : P.id === 'dotshinbun' ? (yr >= 1998 ? '電話（RDD）' : '電話') : P.how;
+    return { id: P.id, name: P.name, how, n: P.n, day: pday, date: dLabel(g, Math.max(1, pday)), approve: Math.round(ap * 10) / 10, disapprove: Math.round(dis * 10) / 10, party: Math.round(ps * 10) / 10, margin: evMargin(ap, P.n), house: P.house };
   });
   const avg = polls.reduce((a, r) => a + r.approve, 0) / polls.length;
   const nTot = polls.reduce((a, r) => a + r.n, 0);
