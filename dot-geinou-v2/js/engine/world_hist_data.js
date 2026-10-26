@@ -11,7 +11,7 @@ export const HIST_IDS = ['h_su', 'h_it', 'h_de', 'h_cn', 'h_kh'];
 export const REPLACES = { h_su: ['su', 'ru'], h_it: ['it'], h_de: ['wde', 'dde', 'de'], h_cn: ['cn'], h_kh: [] };
 export const ALIAS = { su: 'h_su', ru: 'h_su', it: 'h_it', wde: 'h_de', dde: 'h_de', de: 'h_de', cn: 'h_cn' }; // hidden id → the regime that stands for it
 // words that mark a line of news as being about a hidden country (and words that let a line about the regime itself pass)
-export const HIDE_WORDS = { su: ['ソ連', 'ソビエト'], ru: ['ロシア'], it: ['イタリア'], wde: ['ドイツ'], dde: ['ドイツ'], de: ['ドイツ'], cn: ['中国', '中華人民共和国'] };
+export const HIDE_WORDS = { su: ['ソ連', 'ソビエト'], ru: ['ロシア', '米ロ', '露'], it: ['イタリア'], wde: ['ドイツ'], dde: ['ドイツ'], de: ['ドイツ'], cn: ['中国', '中華人民共和国', '米中', '日中', '中ロ', '中露'] };
 export const PASS_WORDS = { h_su: ['スターリン'], h_it: ['ムッソリーニ', 'ファシスト'], h_de: ['ヒトラー', 'ナチス'], h_cn: ['毛沢東'], h_kh: ['ポル・ポト', 'カンプチア'] };
 export const HIST = {
   h_su: { id: 'h_su', country: 'ソ連', flag: 'flag_su', portrait: 'pt_su', leaderName: 'ヨシフ・スターリン', title: 'ソ連共産党中央委員会書記長', years: '1922〜1953年', real: 'su', label: 'ソ連（スターリン政権時）', swap: 'ソ連・ロシアと入れかわる' },
