@@ -30,9 +30,11 @@ export { LOOKS, fmtMoney, YEN_MARK, pick, clamp, hash2, PLACES, ITEMS, registerI
 // Optional modules, loaded in the background when this file loads and read synchronously later (MODS.phone …). A dynamic
 // import() inside a script would only resolve on a real task, which the headless test harness (microtasks only) never gives.
 export const MODS = {};
-for (const [k, path] of Object.entries({ phone: '../engine/phone_apps.js', family: './family.js', crime: '../engine/crime.js', people: '../engine/life.js' })) {
-  import(path).then((m) => { MODS[k] = m; }).catch(() => {});
-}
+// (literal paths: the single-file build can only bundle import('…') with a string literal)
+import('../engine/phone_apps.js').then((m) => { MODS.phone = m; }).catch(() => {});
+import('./family.js').then((m) => { MODS.family = m; }).catch(() => {});
+import('../engine/crime.js').then((m) => { MODS.crime = m; }).catch(() => {});
+import('../engine/life.js').then((m) => { MODS.people = m; }).catch(() => {});
 
 // ====================================================================== small helpers
 export const has = (g, k) => !!g && typeof g[k] === 'function';
