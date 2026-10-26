@@ -1098,6 +1098,11 @@ function recordPage(g, ctx) {
         pg.para(`${why ? why + '旅立った。' : ''}いまも、心の支え。`, { s: SMALL, c: COLORS.dim, x: 12 });
       }
     }
+    // [R12-L1] 恋人・配偶者・子ども (romance.js g.romanceRows → [[label, value, tone]]; nothing until the player opens 「恋のはなし」)
+    try {
+      const rrows = typeof g.romanceRows === 'function' ? g.romanceRows() : [];
+      for (const [lab, val, tone] of rrows) pg.row(lab, String(val), { rc: tone === 'pink' ? COLORS.pink : tone === 'good' ? COLORS.good : COLORS.dim, rs: String(val).length > 14 ? SMALL : BODY });
+    } catch (e) { console.error(e); }
   }
 
   pg.block().head('あゆみ');
@@ -1638,3 +1643,6 @@ function drawLine(ctx, l, y) {
   }
   if (l.r) text(ctx, l.r, VX + VW, y + dy + (l.rs === SMALL && l.s === BODY ? 3 : 0), { size: l.rs || l.s, align: 'right', color: ink(l.rc || COLORS.text), shadow: sh });
 }
+
+// [R12-U1] the tab list for the lower screen of a portrait phone (engine/bigtext_pages.js)
+export const NOTEBOOK_TABS = TABS;

@@ -1474,3 +1474,6 @@ registerPhoneApp('shourace', {
 });
 void drawFaceHD; void phoneConfirm;
 if (typeof window !== 'undefined') window.__contestui = { scene: () => sceneOf(window.__game), open: openContestScreen, TABS, FormScene, BoardScene, ScoreScene, VotesScene, StampScene };
+
+// [R12-U1] the tab list for the lower screen of a portrait phone (engine/bigtext_pages.js)
+export const CONTEST_TABS = TABS;

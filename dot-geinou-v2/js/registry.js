@@ -80,8 +80,6 @@ export const MODULES = [
   './places/kyoshujo.js',
   './places/menkyo.js',
   './places/gassyuku.js',
-  // [R9-B1] 鉄道ネットワーク: 駅構内 'eki' (券売機・改札・ホーム・路線図・乗車), 駅前の街 (東京 8・大阪 2), 教習所は調布・
-  // 免許センターは府中へ (after clock.js: eki.js wraps g.goto for the walk in and out of a station) (api: test-output/api_eki.txt)
   './world/eki.js',
   './world/ekimae_tokyo.js',
   './world/ekimae_osaka.js',
@@ -100,7 +98,7 @@ export const MODULES = [
   './engine/groups_ui.js',
   // the advisor mascots 独裁くん (the road to dictatorship and its upkeep) and イクサくん (war coach): phone apps, tips, g.advisor* (api: test-output/api_advisors.txt)
   './engine/advisors.js',
-  // minigames
+  './engine/bigtext_screens.js', // [R12-U1] 縦画面の「大きな文字」: the lower screen under the game on a portrait phone (engine/bigtext.js; api: test-output/api_r12u1.txt)
   './minigames/tsukkomi.js',
   './minigames/zukko.js',
   './minigames/rhythm.js',

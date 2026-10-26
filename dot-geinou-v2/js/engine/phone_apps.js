@@ -50,6 +50,7 @@ import {
   registerPhoneApp, PEOPLE, REGULARS, FURNITURE, onMorning, WEEKDAYS, OFFER_DAYS, showWords,
 } from './life.js';
 import { eraOf } from './profile.js';
+import { bigtextPref, setBigtextPref, portraitPhone } from './bigtext.js'; // [R12-U1] the 「大きな文字」 switch of 設定
 import { GUIDE, GUIDE_ORDER, AUDITIONS, GUIDE_JOBS, jobOpen } from '../world/guide.js';
 import {
   phoneView, phoneList, phoneInfo, phoneConfirm, closePhoneThen, phoneOverMapOnly,
@@ -2164,6 +2165,8 @@ function settingsRows(g) {
   return [
     { id: 'sound', label: '音', sub: 'BGMと効果音（Mキーでも）', right: audio.muted ? 'OFF' : 'ON', rightColor: audio.muted ? PC.bad : PC.good, chip: ['音', '#5a8ad8'] },
     { id: 'speed', label: '文字の速さ', sub: 'メッセージが出る速さ', right: sp[1], rightColor: PC.accent, chip: ['文字', '#8a5ac8'] },
+    // [R12-U1] 縦画面の大きな文字（下の空きに、選んだ内容を大きく出す。縦持ちのスマホだけ）
+    { id: 'bigtext', label: '大きな文字（縦画面）', sub: portraitPhone() ? '下の空きに、選んだ内容を大きく出す' : '縦持ちのスマホで、下の空きに大きく出す', right: bigtextPref() === false ? 'OFF' : 'ON', rightColor: bigtextPref() === false ? PC.bad : PC.good, chip: ['大字', '#e0a020'] },
     { id: 'order', label: 'アプリの並べかえ', sub: `${devWord(g)}のホーム画面の順番`, chip: ['並び', '#2f9a4a'] },
     { id: 'reset', label: '並びを元にもどす', sub: custom ? '最初の順番にもどす' : 'いまは最初の順番', chip: ['並び', '#7a8a7a'], disabled: !custom, why: 'いまは最初の順番' },
     { id: 'keys', label: '操作のしかた', sub: 'キーボード・タッチ', chip: ['操作', '#c0703a'] },
@@ -2177,6 +2180,7 @@ export async function settingsApp(g) {
     hint: 'A:えらぶ　B:もどる',
     pick(ph, it, i, v) {
       if (it.id === 'sound') { audio.toggleMute(); audio.sfx('ok'); return; }
+      if (it.id === 'bigtext') { setBigtextPref(bigtextPref() === false); audio.sfx('cursor'); return; } // [R12-U1]
       if (it.id === 'speed') { const k = SPEEDS.findIndex((s) => s[0] === SPEED); setTextSpeed(SPEEDS[(k + 1) % SPEEDS.length][0]); audio.sfx('cursor'); return; }
       if (it.id === 'reset') { setAppOrder(g, null); ph.toast('アプリの並びを元にもどした', COL.settings); return; }
       if (it.id === 'order') { ph.run(v, () => phoneView(g, reorderView(g))); return; }

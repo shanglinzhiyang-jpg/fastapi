@@ -13,6 +13,7 @@ import { registerPhoneApp } from './life.js';
 import { appTile } from './phone.js';
 import { AX, AXN, RUNG } from './politics_ai_text.js';
 import { TOPICS, askInterview, claudeReady } from './politics_ai_claude.js';
+import { aiHubSpec } from './bigtext_polai.js'; // [R12-U1] the lower screen of a portrait phone
 
 export function registerAiUI(K, SECTIONS) {
   const { C, R, T, fit, para, card, frame, pill, pillR, hbar, cbar, ListBox, sfx, SW, SH, clamp, shade, measure, drawFaceHD, drawPartyMark, line, disc } = K;
@@ -283,6 +284,9 @@ export function registerAiUI(K, SECTIONS) {
     };
     const v = {
       title: () => skinOf(g).hub, focus: 'list',
+      // [R12-U1] the lower screen of a portrait phone: the selected politician / row in large type (engine/bigtext_polai.js)
+      bigtextKey(ui) { const L = lbFor(ui); return `${st.tab}|${L.idx}|${st.filter}|${st.axis}|${cache.roster ? cache.roster.length : 0}`; },
+      bigtext(ui) { load(ui); const L = lbFor(ui); const id = TABS[st.tab].id; return aiHubSpec({ g, ui, TABS, st, L, rows: id === 'roster' ? rosterRows() : id === 'log' ? logRows() : id === 'map' ? mapRows() : [], cache, profile: (i) => profileOf(ui, i) }); },
       hint: '←→:タブ ↑↓:えらぶ A:開く B:もどる',
       tip: () => ({ roster: '議員たちは、それぞれの野心と記憶と立場で動く。名簿のAで話を聞ける', log: '議員が自分で決めたことと、その理由。サイコロではなく、立場・気分・世論から決まる', map: '点が議員。党の中心は、議員たちの立場の平均。何年もかけて、ゆっくり動く', meta: '世論が動かす争点、野党の戦略、党の公約の見直しなど、政局の流れ' }[TABS[st.tab].id]),
       enter(ui) {

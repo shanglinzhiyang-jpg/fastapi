@@ -70,6 +70,7 @@ import {
   heartIndex, weekdayOf, weekdayName, isKansai, showWords, hangoutMeal, OFFER_DAYS,
 } from './life.js';
 import { eraOf } from './profile.js';
+import { bigtextEnabled } from './bigtext.js'; // [R12-U1] a taller default row while the zoomed copy of the screen is on the portrait phone's lower screen
 
 // ---------------------------------------------------------------- geometry & theme
 // The phone's case per era (profile.js ERAS[era].deviceShort).
@@ -966,7 +967,7 @@ function listView(g, o) {
     sy: null,
     cancel: -1,
     rows() { return (typeof o.items === 'function' ? o.items() : o.items) || []; },
-    rowH(rows) { return o.rowH || (rows.some((r) => r && (r.sub || r.look || r.icon || r.kind)) ? 38 : 26); },
+    rowH(rows) { return o.rowH || (rows.some((r) => r && (r.sub || r.look || r.icon || r.kind)) ? 38 : bigtextEnabled() ? 32 : 26); }, // [R12-U1] 32 units = 46 px on the zoomed copy
     update(ph, inp) {
       const rows = this.rows(), n = rows.length;
       if (n) {
