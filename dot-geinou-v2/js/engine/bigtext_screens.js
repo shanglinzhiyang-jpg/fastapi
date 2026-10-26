@@ -149,4 +149,8 @@ registerBigtext({
 });
 
 // make the panel exist (and reachable as g.portraitPanel) as soon as the game is there
-if (typeof window !== 'undefined' && window.__game) portraitPanelOf(window.__game);
+// (the single-file build runs every module before main.js creates the game, so wait for it)
+if (typeof window !== 'undefined') {
+  if (window.__game) portraitPanelOf(window.__game);
+  else { let n = 0; const iv = setInterval(() => { if (window.__game) { clearInterval(iv); portraitPanelOf(window.__game); } else if (++n > 600) clearInterval(iv); }, 100); }
+}
