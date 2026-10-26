@@ -131,19 +131,20 @@ export function makeMore(ctx) {
     if (det.hist) { // [R14-H] 歴史の列強: the leader's photo and the flag, as they are
       const H = det.hist;
       const EV = H.ev; // [R14-H2] 独裁・個人崇拝・弾圧
-      R(c, DX, y, DW, EV ? 118 : 66, 'rgba(255,255,255,0.04)');
+      const SY = EV ? 83 : 69; // the leader's numbers row (below the three indices when there are any)
+      R(c, DX, y, DW, EV ? 118 : H.style ? 90 : 66, 'rgba(255,255,255,0.04)');
       drawHistImg(c, H.portrait, DX + 4, y + 2, 50, 62, 'cover');
       if (EV) {
         [['独裁', EV.dict, '#d9a14a'], ['個人崇拝', EV.cult, '#c06ad0'], ['弾圧', EV.terror, '#d9605a']].forEach(([lab, v, col], i) => {
-          const gx = DX + 4 + i * 122;
+          const gx = DX + 4 + i * 122, bw = 48;
           T(c, lab, gx, y + 69, 10, K.dim);
-          R(c, gx + 42, y + 72, 56, 6, 'rgba(255,255,255,0.10)'); R(c, gx + 42, y + 72, Math.round(56 * v / 100), 6, col);
-          T(c, `${v}`, gx + 118, y + 69, 10, K.text, 'right');
+          R(c, gx + 44, y + 72, bw, 6, 'rgba(255,255,255,0.10)'); R(c, gx + 44, y + 72, Math.round(bw * v / 100), 6, col);
+          T(c, `${v}`, gx + 112, y + 69, 10, K.text, 'right');
         });
       }
       if (H.style) { // the leader's own numbers (発信力・政策力・調整力・党内基盤・決断力)
         const ents = Object.entries(H.style), gw = Math.floor((DW - 8) / ents.length);
-        ents.forEach(([lab, v], i) => { const gx = DX + 4 + i * gw; T(c, lab, gx, y + 83, 10, K.dim); T(c, `${v}`, gx + gw - 8, y + 83, 10, K.text, 'right'); R(c, gx, y + 96, gw - 8, 3, 'rgba(255,255,255,0.10)'); R(c, gx, y + 96, Math.round((gw - 8) * v / 100), 3, K.cyan); });
+        ents.forEach(([lab, v], i) => { const gx = DX + 4 + i * gw; T(c, lab, gx, y + SY, 10, K.dim); T(c, `${v}`, gx + gw - 8, y + SY, 10, K.text, 'right'); R(c, gx, y + SY + 13, gw - 8, 3, 'rgba(255,255,255,0.10)'); R(c, gx, y + SY + 13, Math.round((gw - 8) * v / 100), 3, K.cyan); });
       }
       drawHistImg(c, H.flag, DX + 60, y + 5, 64, 40, 'contain');
       T(c, H.years, DX + 60, y + 49, 10, K.dim, 'left', 70);
@@ -158,13 +159,13 @@ export function makeMore(ctx) {
         T(c, `${EV.support}%`, DX + 184, y + 102, 10, K.text);
         T(c, EV.support >= 60 ? '国内の支持は高い' : EV.support >= 40 ? '支持はあるが、不満もある' : '支持は低い', DX + 214, y + 102, 10, K.faint, 'left', DW - 218);
       }
-      y += EV ? 122 : 70;
+      y += EV ? 122 : H.style ? 94 : 70;
     } else if (rs) {
       lineChart(c, DX, y, DW, 66, [{ pts: rs.pts, color: K.cyan }], { lo: -100, hi: 100, zero: true, ticks: [-100, 0, 100], startX: startX(ui), size: 8, axisW: 22 });
       y += 70;
     }
     // key facts
-    const histEv0 = det.hist && det.hist.ev && det.hist.ev.events.length;
+    const histEv0 = det.hist && det.hist.style; // compact one-line facts under the leader card
     if (histEv0) { T(c, `GDP 約${det.gdp}兆ドル　日本の貿易の約${det.trade}%　軍事力 ${det.mil}`, DX + 2, y, 10, K.text, 'left', DW - 4); y += 14; }
     const facts = histEv0 ? [] : [
       ['首脳', det.leader], ['体制', det.gov || ''],
