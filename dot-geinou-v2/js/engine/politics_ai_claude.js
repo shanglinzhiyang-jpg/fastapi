@@ -98,6 +98,7 @@ export function parseReply(res) {
 }
 export async function askInterview(g, id, topic = 'now', opts = {}) {
   const local = typeof g.aiInterview === 'function' ? g.aiInterview(id, topic) : { ok: false, text: '', by: 'local' };
+  if (local && local.summary) return { ...local, topic, name: local.name }; // [R14-P] a real figure: public-record summary only, never the Claude mode
   const key = opts.key || currentKey();
   const done = (r) => ({ ...local, ...r, topic, name: local.name });
   if (!key) return done({ by: 'local', notice: NOTICE.no_key });

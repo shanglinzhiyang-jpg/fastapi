@@ -6,6 +6,9 @@
 // Screens: SECTIONS.party (the hub; also 'intra'), SECTIONS.conflicts, SECTIONS.manifesto, SECTIONS.stance, SECTIONS.person.
 // Controls: ←→ switch tab, ↑↓ rows, A act, B back (touch: the on-screen pad). Real parties are shown with generic factions.
 
+import { REAL } from './politics_real.js'; // [R14-P] 実在の党首の人物ページ
+import { drawHistImg } from './world_hist.js';
+
 export function registerIntraUI(K, SECTIONS) {
   const { C, R, T, fit, para, card, frame, pill, pillR, hbar, cbar, ListBox, sfx, SW, SH, clamp, shade, measure, drawFaceHD, drawPartyMark } = K;
   const num = (v, d = 0) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : d);
@@ -740,6 +743,21 @@ export function registerIntraUI(K, SECTIONS) {
   }
 
   // ---------------------------------------------------------------- person page
+  // [R14-P] a real figure: the photo, the 人物像 (public record), the style numbers and the career lines
+  function realPage(c, pr, R) {
+    drawHistImg(c, R.photo, 16, 52, 70, 90, 'cover');
+    T(c, fit(c, `${pr.partyName}${pr.faction ? `・${pr.faction}` : ''}　${R.tag}`, 300, 14), 98, 54, 14, '#ffffff');
+    T(c, `${pr.age}歳・当選${pr.wins}回・${pr.house === 'sangi' ? '参議院' : '衆議院'}`, 98, 74, 12, C.dim);
+    T(c, fit(c, pr.roles.length ? pr.roles.join('・') : '役職なし', 330, 12), 98, 92, 12, C.gold);
+    para(c, R.persona, 98, 108, 262, 12, C.text, 15, 5);
+    let y = 192;
+    for (const [label, v2] of Object.entries(R.style)) { T(c, label, 20, y, 12, C.dim); hbar(c, 80, y + 3, 150, 8, v2 / 100, C.cyan); T(c, String(Math.round(v2)), 238, y, 12, C.text); y += 17; }
+    const x0 = 366;
+    T(c, '主な経歴（公開されている事実）', x0, 54, 12, C.gold);
+    let yy = 74;
+    for (const l of R.career) yy = para(c, `・${l}`, x0, yy, 262, 12, C.text, 15, 3) + 2;
+    T(c, `タイプ：${R.tag}`, x0, yy + 8, 12, C.cyan);
+  }
   function personView(g, id) {
     const pr = g.politicianProfile(id);
     const v = {
@@ -748,6 +766,7 @@ export function registerIntraUI(K, SECTIONS) {
       draw(c) {
         card(c, 6, 30, SW - 12, SH - 55, pr ? pr.name : '');
         if (!pr) return;
+        if (pr.rp && REAL[pr.rp]) { realPage(c, pr, REAL[pr.rp]); return; } // [R14-P] 実在の党首: 人物像とスタイル
         R(c, 16, 54, 60, 60, '#0c1230');
         if (pr.look) drawFaceHD(c, pr.look, 18, 56, 1.8);
         T(c, fit(c, `${pr.partyName}${pr.faction ? `・${pr.faction}` : ''}`, 300, 14), 88, 54, 14, '#ffffff');

@@ -20,6 +20,7 @@
 // }
 
 import { makeCanvas, shade, mix } from './util.js';
+import { histImg } from './world_hist.js'; // [R14-P] photo faces (assets/hist, assets/pol)
 
 export const SKIN = { light: '#ffe0c4', fair: '#f6c9a0', tan: '#e0a878', brown: '#b97a50', dark: '#8a5a3a', green: '#6fbf4a' };
 export const HAIR = {
@@ -916,7 +917,22 @@ export function drawFace(ctx, look, x, y, scale = 2) {
 // A scale that would give uneven device pixels (e.g. 2.25 on a 2x canvas) is
 // snapped down to the nearest crisp one and the face is centred in the box the
 // caller asked for.
+// [R14-P] the photo of a real figure in a face box (32x24 sprite units × scale): the top of the portrait, centred (face and hair), a thin frame.
+// Returns false while the image is loading (the pixel face is drawn instead).
+function drawPhotoFace(ctx, key, x, y, scale) {
+  const img = histImg(key);
+  if (!img || !img.naturalWidth) return false;
+  const w = 32 * scale, h = 24 * scale;
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  const sh = Math.min(ih, iw * (h / w)), sy = Math.max(0, Math.min(ih - sh, ih * 0.06));
+  ctx.save();
+  ctx.fillStyle = '#0b1626'; ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, w + 2, h + 2);
+  ctx.drawImage(img, 0, sy, iw, sh, Math.round(x), Math.round(y), w, h);
+  ctx.restore();
+  return true;
+}
 export function drawFaceHD(ctx, look, x, y, scale = 1) {
+  if (look && look.photo && drawPhotoFace(ctx, look.photo, x, y, scale)) return; // [R14-P] a real figure: the photo, as it is
   const sheet = charSheetHD(look);
   let k = scale, ox = 0, oy = 0;
   const m = ctx.getTransform ? ctx.getTransform() : null;

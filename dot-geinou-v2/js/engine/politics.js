@@ -225,6 +225,7 @@ import { installPledge } from './politics_pledge.js';
 import { installLaw } from './politics_law.js';
 // [R11-P] 政治家AI: every NPC politician is an agent (traits, tastes, goals, memory, relationships) that decides and learns (politics_ai*.js)
 import { installAI } from './politics_ai.js';
+import { REAL, REAL_ORDER, REAL_CABINET, DPJ_CHAIN, realAge, realWins } from './politics_real.js'; // [R14-P] 実在の党首
 
 export const POLITICS_CONTRACT_VERSION = 1;
 export const POL_STATE_VERSION = 1;
@@ -1408,6 +1409,7 @@ export function newPoliticsState(g) {
   }
   scheduleElections(g, p);
   p.lastTick = day - 1;
+  realSync(g, p); // [R14-P]
   return p;
 }
 
@@ -2431,6 +2433,7 @@ function runLeader(g, p, e) {
     const f = fs.find((x) => x.leader === id);
     return { id, name: n.name, party: pt.id, diet: (f ? f.size : 0) + (dietN * 0.15 * n.traits.charisma) / 100 + (p.flags.plotBoss === id ? dietN * 0.1 : 0), member: n.traits.charisma / 100 + rnd(0, 0.4) };
   });
+  try { realBoost(g, p, pt, cands, outgoing); } catch (e) { console.error(e); } // [R14-P]
   // an incumbent player leader runs again automatically (if still a Diet member and the party's
   // term limit allows it)
   const autoMe = !decl && pt.leader === 'player' && p.me.party === pt.id && (p.me.office === 'shugi' || p.me.office === 'sangi') && outgoing !== 'player' && num(p.me.leaderTerms) < leaderTermLimit(pt.id, year);
@@ -3150,7 +3153,9 @@ function fillCabinet(g, p, opts = {}) {
   for (const id of coalition) quota[id] = Math.max(1, Math.round((posts.length * seats(id)) / totalSeats));
   const pmParty = cabinetPartyOfPM(p);
   const barred = !!playerBarred(g); // regime.js: the former PM of the emergency / dictatorship regime holds no cabinet post (2026-10 fix)
+  const preReal = realMinisters(g, p, posts, coalition); // [R14-P] 民主党政権: 鳩山内閣の菅・菅内閣の野田
   for (const post of posts) {
+    if (preReal[post]) { const rn = preReal[post]; out[post] = rn.id; if (!rn.posts.includes(post)) rn.posts.push(post); continue; }
     if (opts.keep && prev[post] && ((prev[post] === 'player' && !barred) || (p.npcs[prev[post]] && coalition.includes(p.npcs[prev[post]].party)))) { out[post] = prev[post]; continue; }
     if (prev[post] === 'player' && !barred && opts.keepPlayer !== false && p.me.posts.includes(post)) { out[post] = 'player'; continue; }
     const party = coalition.find((id) => id !== pmParty && quota[id] > 0 && Math.random() < 0.5) || pmParty || coalition[0];
@@ -3166,6 +3171,114 @@ function fillCabinet(g, p, opts = {}) {
   p.cabinet.ministers = out;
   if (!opts.quiet) news(p, g, `内閣の顔ぶれが決まった（${posts.length + 1}人）`);
   return out;
+}
+// ================================================================ [R14-P] 実在の政治家 (politics_real.js)
+// The overlay: the NPC record of a slot gets the person's name, face (look.photo), traits, age and terms; n.orig keeps what it was.
+function realOverlay(p, n, def, year) {
+  if (!n.orig) n.orig = { name: n.name, gender: n.gender, look: n.look, traits: n.traits, age: n.age, wins: n.wins };
+  const oldSur = String(n.name || '').split(' ')[0];
+  n.name = def.name; n.gender = def.gender || 'm';
+  n.look = { hair: 'short', hairColor: 'black', top: '#2a2f45', bottom: '#2a2d36', jacket: true, tie: '#3a4a7a', photo: def.photo };
+  n.traits = { ...def.traits };
+  n.age = realAge(def, year);
+  n.wins = Math.max(num(n.wins), realWins(def, year));
+  n.real = def.key;
+  delete n.ai; // the agent layer builds a fresh one (politics_ai.js reads n.real)
+  const sur = def.name.split(' ')[0];
+  for (const pt of Object.values(p.parties)) for (const f of pt.factions || []) {
+    if (f.leader !== n.id) continue;
+    const word = /派$/.test(f.name) ? '派' : /グループ$/.test(f.name) ? 'グループ' : null;
+    if (word && f.name === oldSur + word) f.name = sur + word;
+  }
+}
+function realRestore(p, n) {
+  const o = n.orig;
+  if (!o) return;
+  const sur = String(n.name || '').split(' ')[0];
+  const oldSur = String(o.name || '').split(' ')[0];
+  for (const pt of Object.values(p.parties)) for (const f of pt.factions || []) {
+    if (f.leader !== n.id) continue;
+    const word = /派$/.test(f.name) ? '派' : /グループ$/.test(f.name) ? 'グループ' : null;
+    if (word && f.name === sur + word) f.name = oldSur + word;
+  }
+  n.name = o.name; n.gender = o.gender; n.look = o.look; n.traits = o.traits; n.age = o.age; n.wins = o.wins;
+  delete n.real; delete n.orig; delete n.ai;
+}
+// Seat the figures in their slots (idempotent; each is seated once). Called when the state is made, when the DPJ is founded, and every morning.
+function realSync(g, p) {
+  if (!g || !g.state || !p || g.state.realPols === false || !p.parties) return;
+  const R = (p.real && typeof p.real === 'object') ? p.real : (p.real = { map: {}, served: [] });
+  if (!R.map || typeof R.map !== 'object') R.map = {};
+  if (!Array.isArray(R.served)) R.served = [];
+  const year = Math.floor(fyOfAbs(p, absOfDay(p, today(g))));
+  for (const key of REAL_ORDER) {
+    const def = REAL[key];
+    const cur = R.map[key] && p.npcs[R.map[key]];
+    if (cur && cur.real === key) continue;
+    if (R.map[key]) delete R.map[key];
+    const pt = p.parties[def.party];
+    if (!pt) continue;
+    const hid = def.slot === 'leader' ? pt.leader : (pt.posts || {})[def.slot];
+    if (!hid || hid === 'player') continue;
+    const n = p.npcs[hid];
+    if (!n || n.real || n.dead) continue;
+    realOverlay(p, n, def, year);
+    R.map[key] = n.id;
+  }
+  // who has led the party (the 民主党's order: 鳩山 → 菅 → 野田)
+  const mp = p.parties.minshu;
+  const L = mp && mp.leader && p.npcs[mp.leader];
+  if (L && L.real && !R.served.includes(L.real)) R.served.push(L.real);
+}
+// 党首選: the next in the 民主党's order stands and is backed; 安倍 is backed while he is in the 自民党.
+function realBoost(g, p, pt, cands, outgoing) {
+  if (!g || !g.state || g.state.realPols === false || !p.real || !p.real.map) return;
+  let key = null, mult = 2.4;
+  if (pt.id === 'minshu') {
+    const cur = pt.leader && p.npcs[pt.leader];
+    const nowKey = cur && cur.real;
+    key = DPJ_CHAIN.find((k) => !p.real.served.includes(k) && k !== nowKey && p.real.map[k] && p.real.map[k] !== outgoing && p.npcs[p.real.map[k]] && p.npcs[p.real.map[k]].office);
+  } else if (pt.id === 'jimin') { key = p.real.map.abe && p.real.map.abe !== outgoing && p.npcs[p.real.map.abe] && p.npcs[p.real.map.abe].office ? 'abe' : null; mult = 1.7; }
+  if (!key) return;
+  const id = p.real.map[key];
+  const n = p.npcs[id];
+  if (!n || n.party !== pt.id) return;
+  let c = cands.find((x) => x.id === id);
+  if (!c) { c = { id, name: n.name, party: pt.id, diet: Math.max(2, partySeats(p, pt.id) * 0.06), member: n.traits.charisma / 100 + 0.2 }; cands.push(c); }
+  // decisive: the backed figure leads the field (a leadership race the party already expects)
+  const others = cands.filter((x) => x !== c);
+  const mD = Math.max(0, ...others.map((x) => x.diet)), mM = Math.max(0, ...others.map((x) => x.member));
+  c.diet = Math.max(c.diet * mult, mD * 1.8); c.member = Math.max(c.member + 0.45, mM * 1.6);
+}
+// 民主党の内閣: the PM 鳩山 names 菅 (副総理格) for the 財務大臣; the PM 菅 names 野田.
+function realMinisters(g, p, posts, coalition) {
+  const res = {};
+  if (!g || !g.state || g.state.realPols === false || !p.real || !p.real.map) return res;
+  const pm = p.cabinet.pm && p.npcs[p.cabinet.pm];
+  const tab = pm && pm.real ? REAL_CABINET[pm.real] : null;
+  if (!tab) return res;
+  for (const [post, want] of Object.entries(tab)) {
+    if (!posts.includes(post)) continue;
+    const n = p.npcs[p.real.map[want]];
+    if (!n || n.dead || !n.office || !coalition.includes(n.party)) continue;
+    res[post] = n;
+  }
+  return res;
+}
+export function realPolsSetting(g) { return !(g && g.state && g.state.realPols === false); }
+export function setRealPols(g, on) {
+  if (!g || !g.state) return false;
+  const p = ensurePol(g);
+  if (on) { g.state.realPols = true; realSync(g, p); return true; }
+  g.state.realPols = false;
+  for (const n of Object.values(p.npcs)) if (n.real) realRestore(p, n);
+  if (p.real) { p.real.map = {}; p.real.served = []; }
+  return true;
+}
+export function realList(g) {
+  const p = ensurePol(g);
+  const map = (p.real && p.real.map) || {};
+  return REAL_ORDER.map((k) => { const n = p.npcs[map[k]]; const pt = n && p.parties[n.party]; return { key: k, name: REAL[k].name, party: REAL[k].party, tag: REAL[k].tag, id: n ? n.id : null, seated: !!n, role: n && pt ? (pt.leader === n.id ? (pt.leaderTitle || '党首') : Object.entries(pt.posts || {}).filter(([, v]) => v === n.id).map(([k2]) => postName(k2, fyOfAbs(p, absOfDay(p, today(g))), pt.id))[0] || '') : '' }; });
 }
 // A Diet member of the party without a cabinet post (reused), or a new fictional one.
 function pickMinister(p, party, taken = {}) {
@@ -3185,6 +3298,7 @@ function pruneNpcs(p) {
   const keep = new Set();
   const add = (id) => { if (id && id !== 'player') keep.add(id); };
   add(p.cabinet.pm);
+  for (const id of Object.values((p.real && p.real.map) || {})) add(id); // [R14-P] the real figures are never dropped
   for (const id of Object.values(p.cabinet.ministers || {})) add(id);
   for (const pt of Object.values(p.parties)) { add(pt.leader); for (const f of pt.factions || []) add(f.leader); for (const id of Object.values(pt.posts || {})) add(id); }
   for (const k of ['kucho', 'chiji']) add(p.local[k] && p.local[k].holder);
@@ -3517,6 +3631,7 @@ export const SCANDALS = {
 };
 // who: 'player' | npcId. Returns the scandal record (also emitted as 'scandal').
 function scandalImpl(g, p, kind, opts = {}) {
+  if (opts.who && opts.who !== 'player' && p.npcs[opts.who] && p.npcs[opts.who].real) return null; // [R14-P] never about a real person
   const S = SCANDALS[kind] || { name: opts.name || 'スキャンダル', rep: -10, local: -5, severity: opts.severity || 2 };
   const who = opts.who || 'player';
   const sev = opts.severity || S.severity;
@@ -3761,6 +3876,7 @@ function shockImpl(g, p, kind) {
 }
 // A minister (NPC) leaves the cabinet for a neutral reason; a successor is appointed.
 function npcStepDown(g, p, n, reason) {
+  if (n.real) return; // [R14-P] a real figure never steps down for a made-up reason
   const post = n.posts.find((x) => POSTS[x] && POSTS[x].kind === 'cabinet' && x !== 'pm' && p.cabinet.ministers[x] === n.id);
   if (!post) return;
   n.posts = n.posts.filter((x) => x !== post);
@@ -3876,6 +3992,7 @@ function foundMinshu(g, p) {
     b.minshu = take + 0.02 * (SEG_BONUS[seg] && SEG_BONUS[seg].minshu ? 2 : 1);
   }
   scheduleLeader(p, 'minshu', absOfDay(p, today(g)));
+  realSync(g, p); // [R14-P]
   news(p, g, '民主党が結成された（史実では1998年4月27日、複数の党が合流して結成）');
   phoneNews(g, `【政界】野党の議員が合流して「民主党」が結成されました。衆議院${s}人・参議院${z}人の野党第一党に。`);
   emit(g, 'party', { kind: 'founded', party: 'minshu' });
@@ -4109,6 +4226,7 @@ export async function politicsTick(g) {
   g._polPending = [];
   g._polTicking = true;
   try {
+    realSync(g, p); // [R14-P]
     const abs = absOfDay(p, day);
     // the economy moves every day (also through days that were skipped)
     for (let i = Math.max(1, skipped) - 1; i >= 0; i--) economyDay(g, p, abs - i);
@@ -6305,6 +6423,10 @@ function activityBlockImpl(g, p, kind) {
 }
 const methods = {
   pol() { return ensurePol(this); },
+  // [R14-P] 実在の党首（安倍・鳩山・菅・野田）: g.realPols() -> [{ key, name, party, tag, id, seated, role }]; g.setRealPols(on) (設定); g.realPolsOn()
+  realPols() { return realList(this); },
+  setRealPols(on) { return setRealPols(this, on); },
+  realPolsOn() { return realPolsSetting(this); },
   polDate(day) { ensurePol(this); return polDate(this, day); },
   // ext: the simulated calendar date for other modules (crime.js lawDate reads it): { year, month, ... }
   gameDate(day) { ensurePol(this); return polDate(this, day); },

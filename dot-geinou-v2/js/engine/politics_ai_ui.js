@@ -144,7 +144,7 @@ export function registerAiUI(K, SECTIONS) {
     if (!pr) return;
     let idx = 0;
     for (let guard = 0; guard < 20; guard++) {
-      const claude = claudeReady();
+      const claude = claudeReady() && !pr.rp; // [R14-P] never for a real figure
       const items = TOPICS.map((t) => ({ label: t.label, sub: '' }));
       const i = await ui.menu({
         title: `${pr.name}に話を聞く`, listTitle: '聞くこと', listW: 292, rowH: 32, items, index: idx,
@@ -177,7 +177,7 @@ export function registerAiUI(K, SECTIONS) {
       } else res = g.aiInterview(id, topic);
       sfx('good');
       const lines = String(res.text || '…').split('\n');
-      await ui.alert(`${pr.name}${res.by === 'claude' ? '（Claudeが演じた答え）' : ''}`, [`「${lines.join('')}」`, ...(res.notice ? [`（${res.notice}。ふつうの答えを出した）`] : [])], { w: 500, artH: 50, draw: (c, rc) => { R(c, rc.x, rc.y, 44, 44, '#0c1230'); if (pr.look) drawFaceHD(c, pr.look, rc.x + 1, rc.y + 1, 1.3); T(c, fit(c, `${pr.partyShort}・${TOPICS[i].label}`, rc.w - 56, 12), rc.x + 52, rc.y + 4, 12, C.gold); T(c, `印象 ${pr.attWord}`, rc.x + 52, rc.y + 22, 12, pr.attColor); } });
+      await ui.alert(`${pr.name}${res.by === 'claude' ? '（Claudeが演じた答え）' : ''}`, [res.summary ? lines.join('') : `「${lines.join('')}」`, ...(res.notice ? [`（${res.notice}。ふつうの答えを出した）`] : [])], { w: 500, artH: 50, draw: (c, rc) => { R(c, rc.x, rc.y, 44, 44, '#0c1230'); if (pr.look) drawFaceHD(c, pr.look, rc.x + 1, rc.y + 1, 1.3); T(c, fit(c, `${pr.partyShort}・${TOPICS[i].label}`, rc.w - 56, 12), rc.x + 52, rc.y + 4, 12, C.gold); T(c, `印象 ${pr.attWord}`, rc.x + 52, rc.y + 22, 12, pr.attColor); } });
     }
   }
   async function agentMenu(ui, id) {

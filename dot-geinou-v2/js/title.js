@@ -723,7 +723,7 @@ export class TitleScene {
     });
     if (this.saveInfo) text(ctx, this.saveInfo, SW / 2, py + 64, { size: 12, align: 'center', color: this.idx === 1 ? COLORS.cyan : COLORS.dim, shadow: null });
 
-    text(ctx, 'この物語はフィクションです。実在の企業・政党の名前とロゴは各権利者のものです（非公式ファンゲーム）', SW / 2, SH - 18, { size: 12, align: 'center', color: '#c8a8a0', shadow: '#1a0c10' });
+    text(ctx, 'この物語はフィクションです。実在の企業・政党・人物の名前や写真・ロゴは各権利者のもの（非公式ファンゲーム）', SW / 2, SH - 18, { size: 12, align: 'center', color: '#c8a8a0', shadow: '#1a0c10' });
     if (this.notice) drawNotice(ctx, this.notice.t);
   }
 }

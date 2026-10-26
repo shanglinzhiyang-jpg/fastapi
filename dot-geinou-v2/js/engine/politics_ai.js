@@ -15,6 +15,7 @@
 import { AX, AXN, RUNG, RUNG_GOAL, MEM, WHY, attWord, moodWord, KIND_STYLE } from './politics_ai_text.js';
 import { installActs } from './politics_ai_act.js';
 import { installEvo } from './politics_ai_evo.js';
+import { REAL } from './politics_real.js'; // [R14-P] 実在の政治家
 
 export const AI_VERSION = 1;
 export { AX, AXN, RUNG, RUNG_GOAL, KIND_STYLE };
@@ -187,6 +188,8 @@ export function installAI(X, H) {
     };
     if (par && opts.parent) { a.rel[opts.parent.id] = 40; a.mentor = opts.parent.id; a.gen = num(par.gen) + 1; }
     a.pr = priorities(p, a, n, day);
+    // [R14-P] a real figure: the positions of public record, held steady (never drifting), no scandal exposure
+    if (n.real && REAL[n.real]) { const R = REAL[n.real]; a.ax = AX.map((k) => r1(clamp(num(R.ax[k]), -95, 95))); a.tg = a.ax.slice(); a.lr = 6; a.risk = 2; a.hp = 95; a.str = 18; a.pf = 30; a.pr = priorities(p, a, n, day); }
     n.ai = a;
     return a;
   }
@@ -508,7 +511,7 @@ export function installAI(X, H) {
     if (rp.rival) tags.push({ text: 'あなたのライバル', color: '#8a2a34' });
     if (a.cool.court && day - a.cool.court < 30) tags.push({ text: 'あなたを誘っている', color: '#8a6a1a' });
     return {
-      id, name: n.name, age: n.age, gender: n.gender, look: n.look, party: n.party || IND, partyName: pt ? pt.name : '無所属', partyShort: pt ? pt.short : '無所属', color: pt ? pt.color : '#8a90a6', real: !!(pt && pt.real),
+      id, rp: n.real || null, name: n.name, age: n.age, gender: n.gender, look: n.look, party: n.party || IND, partyName: pt ? pt.name : '無所属', partyShort: pt ? pt.short : '無所属', color: pt ? pt.color : '#8a90a6', real: !!(pt && pt.real),
       office: n.office, house: n.house, wins: num(n.wins), faction: fq ? fq.f.name : '', factionId: fq ? fq.f.id : null, roles: rolesOf(g, p, n), district: n.district || '',
       rung: gl.rung, rungName: RUNG[gl.rung], goalRung: gl.goal, goal: gl.label, cap: gl.cap, ready, positions: posn, party7: pv, priorities: a.pr.map((x) => (POLICY_AREAS[AREAS[x]] || {}).name || String(x)),
       attitude: att, attWord: aw.text, attColor: aw.color, memory: mem, memories: a.mem.filter((e) => Math.abs(e[2]) >= 1).map((e) => ({ day: e[0], text: (MEM[e[1]] || [e[1]])[0], w: e[2] })),

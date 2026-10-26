@@ -796,6 +796,7 @@ export function installIntra(X) {
       const rid = t.rival;
       const n = npcOf(p, rid);
       if (!n) { out.why = '相手の議員を選ぶ'; return out; }
+      if (n.real) { out.why = '実在の人物には使えない手（政策の違いは、公約や法案の場で争う）'; return out; } // [R14-P]
       if (onCool(g, p, kind, rid)) { out.why = '同じ相手には、2日あけてから'; return out; }
       const real = !!(PARTY_DEFS[n.party] && PARTY_DEFS[n.party].real);
       const intel = (num(p.me.staff) * 0.03) + Math.log10(1 + num(g.state.fame)) * 0.02;
@@ -1198,7 +1199,7 @@ export function installIntra(X) {
     if (fq && fq.f.leader === id) roles.push(`${fq.f.name}の領袖`);
     if (x && x.bantou === id) roles.push(`${fq.f.name}の番頭`);
     return {
-      id, name: n.name, age: n.age, gender: n.gender, party: n.party, partyName: pt ? pt.name : '無所属', partyShort: pt ? pt.short : '無所属', color: pt ? pt.color : '#8a90a6', real: !!(pt && pt.real),
+      id, rp: n.real || null, name: n.name, age: n.age, gender: n.gender, party: n.party, partyName: pt ? pt.name : '無所属', partyShort: pt ? pt.short : '無所属', color: pt ? pt.color : '#8a90a6', real: !!(pt && pt.real),
       office: n.office, house: n.house, wins: n.wins, faction: fq ? fq.f.name : '', factionId: fq ? fq.f.id : null, roles, charisma: num(n.traits.charisma), integrity: num(n.traits.integrity), ambition: num(n.traits.ambition),
       mood: x ? Math.round(x.mood) : null, intent: x ? INTENT[x.intent] : null, grudge: x ? Math.round(x.grudge) : 0, stance, persona: persona ? { name: persona.name, desc: persona.desc } : null, ideology: ideo ? { label: ideo.label, top3: ideo.top3 } : null, look: n.look,
     };

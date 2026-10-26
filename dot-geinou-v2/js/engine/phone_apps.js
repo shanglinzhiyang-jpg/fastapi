@@ -2169,6 +2169,8 @@ function settingsRows(g) {
     { id: 'bigtext', label: '大きな文字（縦画面）', sub: portraitPhone() ? '下の空きに、選んだ内容を大きく出す' : '縦持ちのスマホで、下の空きに大きく出す', right: bigtextPref() === false ? 'OFF' : 'ON', rightColor: bigtextPref() === false ? PC.bad : PC.good, chip: ['大字', '#e0a020'] },
     // [R14-H] 歴史の列強: add the historical regimes to 世界情勢
     ...(typeof g.histPowers === 'function' ? [{ id: 'hist', label: '歴史の列強', sub: '世界情勢に歴史の国を加える（入れかわる国も）', right: `${g.histPowers().filter((h) => h.on).length}/${g.histPowers().length}`, chip: ['世界', '#b0603a'] }] : []),
+    // [R14-P] 実在の党首（安倍・鳩山・菅・野田）
+    ...(typeof g.realPolsOn === 'function' ? [{ id: 'realpols', label: '実在の党首', sub: '安倍・鳩山・菅・野田を党の顔に', right: g.realPolsOn() ? 'ON' : 'OFF', rightColor: g.realPolsOn() ? PC.good : PC.bad, chip: ['政治', '#2a6aa8'] }] : []),
     { id: 'order', label: 'アプリの並べかえ', sub: `${devWord(g)}のホーム画面の順番`, chip: ['並び', '#2f9a4a'] },
     { id: 'reset', label: '並びを元にもどす', sub: custom ? '最初の順番にもどす' : 'いまは最初の順番', chip: ['並び', '#7a8a7a'], disabled: !custom, why: 'いまは最初の順番' },
     { id: 'keys', label: '操作のしかた', sub: 'キーボード・タッチ', chip: ['操作', '#c0703a'] },
@@ -2183,6 +2185,7 @@ export async function settingsApp(g) {
     pick(ph, it, i, v) {
       if (it.id === 'sound') { audio.toggleMute(); audio.sfx('ok'); return; }
       if (it.id === 'bigtext') { setBigtextPref(bigtextPref() === false); audio.sfx('cursor'); return; } // [R12-U1]
+      if (it.id === 'realpols') { g.setRealPols(!g.realPolsOn()); audio.sfx('cursor'); return; } // [R14-P]
       if (it.id === 'hist') { ph.run(v, () => histPowersApp(g)); return; } // [R14-H]
       if (it.id === 'speed') { const k = SPEEDS.findIndex((s) => s[0] === SPEED); setTextSpeed(SPEEDS[(k + 1) % SPEEDS.length][0]); audio.sfx('cursor'); return; }
       if (it.id === 'reset') { setAppOrder(g, null); ph.toast('アプリの並びを元にもどした', COL.settings); return; }

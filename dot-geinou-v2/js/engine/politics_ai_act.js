@@ -4,6 +4,7 @@
 // and the interview (local template).
 
 import { WHY, RUNG, MEM, attWord, seededName, seededLook } from './politics_ai_text.js';
+import { REAL, realSummary } from './politics_real.js'; // [R14-P]
 
 export function installActs(C) {
   const { X, H, S, rr, rg, sigm, r1, obj, today, AREAS, IND, AX, mpOf, ag, fix, fitV, partyVec, world, posKind, rungOf, goalOf, readiness, remember, attitude, logAct, newsAI, phoneAI, spendPhone, h32 } = C;
@@ -368,6 +369,7 @@ export function installActs(C) {
   const EVALS = [evalFaction, evalLeave, evalJoin, evalAsk, evalFound, evalGov];
   function decide(g, p, n, a, W, day) {
     if (n.office === 'chiji' || n.office === 'shicho') return;
+    if (n.real) return; // [R14-P] a real figure makes no autonomous moves (no defection, no new party, no retirement)
     if (a.rt && !a.ret && mpOf(n) && (W.elecInH && W.elecInH[n.office]) < 170) { const why = a.rt; a.rt = 0; announceRetire(g, p, n, a, why, day); return; }
     const ops = [];
     for (const ev of EVALS) {
@@ -395,7 +397,7 @@ export function installActs(C) {
     a.lr = Math.round(clamp(a.lr - 0.3, 6, 30));
     a.pr = C.priorities(p, a, n, day);
     for (const k of Object.keys(a.cool)) if (day - a.cool[k] > YEAR_DAYS * 1.2) delete a.cool[k]; // old cooldowns are forgotten
-    if (!mpOf(n) || n.exMp) return;
+    if (!mpOf(n) || n.exMp || n.real) return; // [R14-P] a real figure does not retire
     const k = posKind(p, n);
     // retirement (decided here; announced near the election; it takes effect at that election; it takes effect at the next election): age, health, a defeat, stress — against ambition and rung
     if (!a.ret && !k.pm && !k.leader) {
@@ -423,12 +425,13 @@ export function installActs(C) {
     const lam = (4 / YEAR_DAYS) * clamp(meanRisk / 38, 0.5, 2.2);
     if (rr(p, 'scn', day) < lam) {
       // a member of a real party (自民・民主) only ever steps down for neutral reasons, and only a minister can: no scandal is drawn for the others
-      const n = wpick(p, `scnwho|${day}`, mps, (m) => (isReal(p, m.party) && !posKind(p, m).cab ? 0 : Math.pow(m.ai.risk / 40, 2) * (1 + (posKind(p, m).cab ? 1.2 : 0) + (posKind(p, m).pm ? 0.4 : 0))));
+      const n = wpick(p, `scnwho|${day}`, mps, (m) => (m.real || (isReal(p, m.party) && !posKind(p, m).cab) ? 0 : Math.pow(m.ai.risk / 40, 2) * (1 + (posKind(p, m).cab ? 1.2 : 0) + (posKind(p, m).pm ? 0.4 : 0))));
       if (n && !cool(n.ai, 'scandal', 90, day)) scandal(g, p, n, day);
     }
     // --- death and illness (a hazard by age and health) among the named
     for (const n of mps) {
       const a = n.ai;
+      if (n.real) continue; // [R14-P] no illness or death for a real figure
       if ((h32(n.id) + day) % 10 !== 0) continue; // once a political month
       const age = num(n.age, 55);
       const hz = (0.0025 + Math.max(0, age - 55) * 0.0012 + Math.max(0, 70 - a.hp) * 0.0007) / 12; // a political month's share of the year's hazard
@@ -517,6 +520,7 @@ export function installActs(C) {
       const mps = Object.values(p.npcs).filter((n) => n.ai && n.office === house && !n.dead && inClass(n));
       for (const n of mps) {
         const a = fix(n.ai);
+        if (n.real) { n.wins = num(n.wins) + 1; stats.won++; continue; } // [R14-P] a real figure keeps the seat
         if (a.ret) { // a planned retirement takes effect now; the heir stands in the seat
           const heir = a.heir && p.npcs[a.heir];
           exitSeat(g, p, n, a, 'retire', '引退', day);
@@ -1017,6 +1021,10 @@ export function installActs(C) {
   function interview(g, p, id, topic = 'now') {
     const n = p.npcs[id];
     if (!n) return { ok: false, text: '', by: 'local' };
+    if (n.real && REAL[n.real]) { // [R14-P] a third-person summary of public record: never an invented quote
+      const pr0 = C.profile(g, p, id);
+      return { ok: true, text: realSummary(REAL[n.real], topic, { role: (pr0.roles || [])[0] || '', att: attWord(pr0.attitude).text }), by: 'local', topic, name: n.name, summary: true };
+    }
     const a = fix(ag(g, p, n));
     const day = today(g);
     const pr = C.profile(g, p, id);

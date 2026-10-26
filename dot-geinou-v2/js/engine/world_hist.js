@@ -44,8 +44,9 @@ export function histSet(g, id, on) {
 const CACHE = {};
 function srcOf(key) {
   const f = `${key}.jpg`;
+  const dir = key.startsWith('rp_') ? 'pol' : 'hist'; // rp_*: the real politicians' photos (politics_real.js)
   const A = typeof window !== 'undefined' && window.__DOT_ASSETS;
-  return (A && A['hist_' + f]) || 'assets/hist/' + f;
+  return (A && A[dir + '_' + f]) || `assets/${dir}/` + f;
 }
 // An HTMLImageElement once loaded (else null; the load starts now). Never throws.
 export function histImg(key) {
