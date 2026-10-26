@@ -1,11 +1,34 @@
 // 歴史の列強 (設定): the switch (g.state.histPowers), the images (flags and leader portraits, used as they are) and the drawing helpers.
 // The four countries themselves live in world_hist_data.js (spread into world.js COUNTRIES; exists() asks histOn). Old saves: no key = all off.
-import { HIST, HIST_IDS } from './world_hist_data.js';
+import { HIST, HIST_IDS, REPLACES, ALIAS, HIDE_WORDS, PASS_WORDS } from './world_hist_data.js';
 
 export { HIST, HIST_IDS };
 export function histOn(g, id) {
   const p = g && g.state && g.state.histPowers;
   return !!(p && typeof p === 'object' && p[id]);
+}
+// a modern country that an ON regime has taken the place of (ロシア・ソ連 / ドイツ / 中国 / イタリア): it is not in the 世界情勢 while the regime is on
+export function histHidden(g, id) {
+  const p = g && g.state && g.state.histPowers;
+  if (!p || typeof p !== 'object') return false;
+  const h = ALIAS[id];
+  return !!(h && p[h]);
+}
+export const histAlias = (g, id) => (histHidden(g, id) ? ALIAS[id] : null);
+export function hiddenIds(g) {
+  const out = [];
+  for (const h of HIST_IDS) if (histOn(g, h)) out.push(...(REPLACES[h] || []));
+  return out;
+}
+// is this line of news about a country that is hidden? (a line about the regime itself passes)
+export function histMuted(g, text) {
+  const p = g && g.state && g.state.histPowers;
+  if (!p || typeof p !== 'object' || typeof text !== 'string') return false;
+  let hit = false;
+  for (const id of hiddenIds(g)) { for (const w of HIDE_WORDS[id] || []) if (text.includes(w)) { hit = true; break; } if (hit) break; }
+  if (!hit) return false;
+  for (const h of HIST_IDS) if (p[h] && (PASS_WORDS[h] || []).some((w) => text.includes(w))) return false;
+  return true;
 }
 export const histList = (g) => HIST_IDS.map((id) => ({ ...HIST[id], on: histOn(g, id) }));
 export const histAny = (g) => HIST_IDS.some((id) => histOn(g, id));

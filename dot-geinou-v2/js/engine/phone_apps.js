@@ -2168,7 +2168,7 @@ function settingsRows(g) {
     // [R12-U1] 縦画面の大きな文字（下の空きに、選んだ内容を大きく出す。縦持ちのスマホだけ）
     { id: 'bigtext', label: '大きな文字（縦画面）', sub: portraitPhone() ? '下の空きに、選んだ内容を大きく出す' : '縦持ちのスマホで、下の空きに大きく出す', right: bigtextPref() === false ? 'OFF' : 'ON', rightColor: bigtextPref() === false ? PC.bad : PC.good, chip: ['大字', '#e0a020'] },
     // [R14-H] 歴史の列強: add the historical regimes to 世界情勢
-    ...(typeof g.histPowers === 'function' ? [{ id: 'hist', label: '歴史の列強', sub: '世界情勢に4つの国を加える', right: `${g.histPowers().filter((h) => h.on).length}/${g.histPowers().length}`, chip: ['世界', '#b0603a'] }] : []),
+    ...(typeof g.histPowers === 'function' ? [{ id: 'hist', label: '歴史の列強', sub: '世界情勢に歴史の国を加える（入れかわる国も）', right: `${g.histPowers().filter((h) => h.on).length}/${g.histPowers().length}`, chip: ['世界', '#b0603a'] }] : []),
     { id: 'order', label: 'アプリの並べかえ', sub: `${devWord(g)}のホーム画面の順番`, chip: ['並び', '#2f9a4a'] },
     { id: 'reset', label: '並びを元にもどす', sub: custom ? '最初の順番にもどす' : 'いまは最初の順番', chip: ['並び', '#7a8a7a'], disabled: !custom, why: 'いまは最初の順番' },
     { id: 'keys', label: '操作のしかた', sub: 'キーボード・タッチ', chip: ['操作', '#c0703a'] },
@@ -2196,7 +2196,7 @@ export async function settingsApp(g) {
 function histPowersApp(g) {
   return rowsList(g, {
     title: '歴史の列強', color: COL.settings, rowH: 40,
-    items: () => g.histPowers().map((h) => ({ id: h.id, label: `${h.leaderName.split('・').pop()}政権`, sub: `${h.country}　${h.years}`, right: h.on ? 'ON' : 'OFF', rightColor: h.on ? PC.good : PC.bad, chip: ['列強', '#b0603a'] })),
+    items: () => g.histPowers().map((h) => ({ id: h.id, label: `${h.leaderName.split('・').pop()}政権`, sub: h.swap || `${h.country}　${h.years}`, right: h.on ? 'ON' : 'OFF', rightColor: h.on ? PC.good : PC.bad, chip: ['列強', '#b0603a'] })),
     hint: 'A:ON/OFF　B:もどる',
     pick(ph, it) {
       const cur = g.histPowers().find((h) => h.id === it.id);

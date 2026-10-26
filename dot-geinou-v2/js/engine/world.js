@@ -52,8 +52,8 @@ import { createDiplo } from './world_diplo.js';
 import { createTrade } from './world_trade.js';
 import { createStance } from './world_stance.js';
 import { createHistory } from './world_history.js'; // [R9-E] real events by date, staged crises, the monthly record, regions
-import { HIST_COUNTRIES, HIST_PAIRS } from './world_hist_data.js'; // [R14-H] 歴史の列強（設定）
-import { histOn, histSet, HIST_IDS, HIST as HIST_INFO } from './world_hist.js';
+import { HIST_COUNTRIES, HIST_PAIRS, REPLACES } from './world_hist_data.js'; // [R14-H] 歴史の列強（設定）
+import { histOn, histSet, histHidden, histAlias, hiddenIds, histMuted, HIST_IDS, HIST as HIST_INFO } from './world_hist.js';
 
 // ======================================================================== optional modules (guarded)
 let POL = null; // politics.js
@@ -253,12 +253,12 @@ export const MAP_POS = Object.fromEntries([...Object.values(COUNTRIES).map((c) =
 // Territorial disputes (both sides' positions; facts up to the game's date).
 export const DISPUTES = {
   northern: {
-    id: 'northern', name: '北方領土', other: ['su', 'ru'], admin0: 'ru', pos: [44.0, 146.3],
+    id: 'northern', name: '北方領土', other: ['su', 'ru', 'h_su'], admin0: 'ru', pos: [44.0, 146.3],
     lines: (g) => [
       '択捉島・国後島・色丹島・歯舞群島。',
-      `1945年から${since(g, 19911226) ? 'ソ連（現在はロシア）' : 'ソ連'}が実効支配している。日本は固有の領土として返還を求めている。`,
+      `1945年から${since(g, 19911226) && !histOn(g, 'h_su') ? 'ソ連（現在はロシア）' : 'ソ連'}が実効支配している。日本は固有の領土として返還を求めている。`,
       '1956年の日ソ共同宣言は、平和条約を結んだあとに歯舞群島と色丹島を引き渡すとしている。',
-      `${since(g, 19911226) ? 'ロシア' : 'ソ連'}は「第二次世界大戦の結果として自国の領土になった」との立場。平和条約はまだ結ばれていない。`,
+      `${since(g, 19911226) && !histOn(g, 'h_su') ? 'ロシア' : 'ソ連'}は「第二次世界大戦の結果として自国の領土になった」との立場。平和条約はまだ結ばれていない。`,
     ],
   },
   takeshima: {
@@ -270,7 +270,7 @@ export const DISPUTES = {
     ],
   },
   senkaku: {
-    id: 'senkaku', name: '尖閣諸島', other: ['cn', 'tw'], admin0: 'jp', pos: [25.75, 123.5],
+    id: 'senkaku', name: '尖閣諸島', other: ['cn', 'h_cn', 'tw'], admin0: 'jp', pos: [25.75, 123.5],
     lines: (g) => [
       '東シナ海の島々（中国名：釣魚島、台湾名：釣魚台）。',
       '日本が実効支配している。1970年代から中国と台湾が領有を主張している。日本政府は「解決すべき領有権の問題は存在しない」との立場。',
@@ -453,14 +453,15 @@ const HOOKS = {};
 export function onWorld(event, fn) { (HOOKS[event] || (HOOKS[event] = [])).push(fn); return () => { HOOKS[event] = (HOOKS[event] || []).filter((f) => f !== fn); }; }
 function emit(g, event, data) { for (const fn of HOOKS[event] || []) { try { fn(g, data); } catch (e) { console.error(e); } } }
 function news(g, text, opts = {}) {
+  if (histMuted(g, text)) return; // [R14-H]
   const s = W(g);
   s.news.unshift({ day: today(g), text, kind: opts.kind || 'world' });
   if (s.news.length > 80) s.news.length = 80;
   const p = pol(g);
   if (p && Array.isArray(p.news) && opts.feed !== false) { p.news.unshift({ day: today(g), text, kind: 'world' }); if (p.news.length > 80) p.news.length = 80; }
 }
-function phone(g, text, from = 'ドット新聞 国際部') { try { if (typeof g.message === 'function') g.message({ from, text, kind: 'news' }); } catch (e) { /* no phone */ } }
-function note(g, text) { try { (g.morningNotes || (g.morningNotes = [])).push(REG && REG.KIKI && typeof REG.KIKI.wrap === 'function' ? REG.KIKI.wrap(g, text) : text); } catch (e) { /* ignore */ } }
+function phone(g, text, from = 'ドット新聞 国際部') { if (histMuted(g, text)) return; try { if (typeof g.message === 'function') g.message({ from, text, kind: 'news' }); } catch (e) { /* no phone */ } }
+function note(g, text) { if (histMuted(g, text)) return; try { (g.morningNotes || (g.morningNotes = [])).push(REG && REG.KIKI && typeof REG.KIKI.wrap === 'function' ? REG.KIKI.wrap(g, text) : text); } catch (e) { /* ignore */ } }
 // Scenes go through regime.js's queue (KIKI.show from kiki.js); without it, nothing is shown.
 function scene(g, id, data = {}, opts = {}) { try { if (REG && typeof REG.queueRegimeScene === 'function') REG.queueRegimeScene(g, 'world_' + id, data, opts); } catch (e) { console.error(e); } }
 
@@ -514,11 +515,14 @@ export function exists(g, id, n = dateNum(g)) {
   const c = COUNTRIES[id] || ORGS[id] || PSEUDO[id];
   if (!c) return isFictional(id);
   if (c.hist) return histOn(g, id); // [R14-H]
+  if (histHidden(g, id)) return false; // [R14-H] taken the place of by a historical regime
   return (!c.from || n >= c.from) && (!c.to || n < c.to);
 }
 // the country that now stands for an id of another time (ソ連 → ロシア, 西ドイツ → ドイツ, EC → EU)
 export function current(g, id) {
   let x = id;
+  const rep0 = histAlias(g, x); // [R14-H]
+  if (rep0) return rep0;
   for (let i = 0; i < 3 && x && !exists(g, x); i++) { const c = COUNTRIES[x] || ORGS[x]; if (!c || !c.successor) break; x = c.successor; }
   return x;
 }
@@ -2035,6 +2039,7 @@ export function worldTick(g) {
     reactionsTick(g);
     worldEventsTick(g);
     if (EXT) EXT.tick(g);
+    purgeHist(g); // [R14-H]
   } catch (e) { console.error('worldTick', e); }
 }
 
@@ -2060,17 +2065,17 @@ function summary(g) {
     countries: ids.map((id) => countryRow(g, id)),
     fictional: Object.keys(fictional()).map((id) => countryRow(g, id)),
     blocs: Object.fromEntries(Object.keys(BLOC_INFO).map((b) => [b, { name: BLOC_INFO[b].name(s), short: BLOC_INFO[b].short, color: BLOC_INFO[b].color, members: ids.filter((x) => blocOf(g, x) === b) }]).filter(([, v]) => v.members.length)),
-    alliances: alliancesNow(g).map((a) => ({ id: a.id, name: a.name, short: a.short, kind: a.kind, members: a.members, strength: a.strength, notice: a.notice, japan: (a.members || []).includes('jp'), desc: a.desc || '' })),
+    alliances: alliancesNow(g).map((a) => ({ id: a.id, name: a.name, short: a.short, kind: a.kind, members: (a.members || []).filter((x) => !histHidden(g, x)), strength: a.strength, notice: a.notice, japan: (a.members || []).includes('jp'), desc: a.desc || '' })),
     treaties: treatiesNow(g),
     sanctions: { byJapan: Object.entries(s.sanctions.byJapan).map(([id, v]) => ({ id, name: shortName(g, id), level: v.level, un: !!v.un, g7: !!v.g7 })), onJapan: Object.entries(s.sanctions.onJapan).map(([id, v]) => ({ id, name: shortName(g, id), level: v.level, war: !!v.war })) },
     conflicts: s.conflicts.filter((c) => c.status === 'war').map((c) => ({ ...c, aName: shortName(g, c.a), bName: shortName(g, c.b), posA: MAP_POS[c.a], posB: MAP_POS[c.b] })),
     crises: s.crises.map((k) => ({ ...k, countryName: k.country ? shortName(g, k.country) : '', pos: k.at || MAP_POS[k.country] || null, stage: HISTX ? HISTX.stageOf(g, k) : null })), // [R9-E] at / stage
     deployments: s.deploy.filter((x) => !x.ended).map((x) => ({ ...x })),
-    disputes: Object.values(DISPUTES).map((D) => ({ id: D.id, name: D.name, pos: D.pos, lines: D.lines(g), status: (s.disputes[D.id] || {}).status || 'dispute', admin: (s.disputes[D.id] || {}).admin || D.admin0, other: D.other.filter((x) => exists(g, x)).map((x) => shortName(g, x)) })),
+    disputes: Object.values(DISPUTES).map((D) => ({ id: D.id, name: D.name, pos: D.pos, lines: D.lines(g), status: (s.disputes[D.id] || {}).status || 'dispute', admin: histAlias(g, (s.disputes[D.id] || {}).admin || D.admin0) || (s.disputes[D.id] || {}).admin || D.admin0, other: [...new Set(D.other.map((x) => histAlias(g, x) || x))].filter((x) => exists(g, x)).map((x) => shortName(g, x)) })),
     summits: upcomingSummits(g), unsc: { ...s.unsc, nextText: unscNextText(g) }, attack: attackOnJapan(g), peace: s.peace ? { ...s.peace, enemyName: countryName(g, s.peace.enemy, true) } : null,
     offers: s.offers.map((o) => ({ ...o, name: TREATIES[o.treaty] ? TREATIES[o.treaty].name : o.treaty })), leftUN: !!s.flags.leftUN,
     statements: s.statements.slice(0, 6).map((x) => ({ ...x, withName: shortName(g, x.with) })), record: { ...s.record },
-    news: s.news.slice(0, 30),
+    news: s.news.filter((n) => !histMuted(g, String(n.text || ''))).slice(0, 30), // [R14-H]
     ...(EXT ? EXT.summary(g) : {}),
   };
 }
@@ -2119,6 +2124,35 @@ function countryDetail(g, id) {
     ...(c.hist ? { hist: { flag: c.flag, portrait: c.portrait, leaderName: HIST_INFO[id] && HIST_INFO[id].leaderName, title: HIST_INFO[id] && HIST_INFO[id].title, years: HIST_INFO[id] && HIST_INFO[id].years } } : {}), // [R14-H]
   };
 }
+// [R14-H] While a regime is on, the modern country it replaces is not in the world: its wars, crises and sanctions are put aside
+// (kept in s.histStash and given back when the regime is turned off).
+function purgeHist(g) {
+  const s = W(g);
+  const st = s.histStash && typeof s.histStash === 'object' ? s.histStash : (s.histStash = { conflicts: [], crises: [], deploy: [], sanc: { byJapan: {}, onJapan: {} } });
+  for (const k of ['conflicts', 'crises', 'deploy']) if (!Array.isArray(st[k])) st[k] = [];
+  if (!st.sanc) st.sanc = { byJapan: {}, onJapan: {} };
+  const hid = hiddenIds(g);
+  const has = (x) => hid.includes(x);
+  if (hid.length) {
+    const gone = s.conflicts.filter((c) => has(c.a) || has(c.b));
+    if (gone.length) { st.conflicts.push(...gone); s.conflicts = s.conflicts.filter((c) => !gone.includes(c)); }
+    const gids = new Set(st.conflicts.map((c) => c.id));
+    const dk = s.deploy.filter((d) => d.conflict && gids.has(d.conflict));
+    if (dk.length) { st.deploy.push(...dk); s.deploy = s.deploy.filter((d) => !dk.includes(d)); }
+    const cr = s.crises.filter((k) => has(k.country) || histMuted(g, String(k.title || '')));
+    if (cr.length) { st.crises.push(...cr); s.crises = s.crises.filter((k) => !cr.includes(k)); }
+    for (const side of ['byJapan', 'onJapan']) for (const x of hid) if (s.sanctions[side][x]) { st.sanc[side][x] = s.sanctions[side][x]; delete s.sanctions[side][x]; }
+  }
+  // give back what belongs to the countries that are visible again
+  const back = st.conflicts.filter((c) => !has(c.a) && !has(c.b));
+  if (back.length) { s.conflicts.push(...back); st.conflicts = st.conflicts.filter((c) => !back.includes(c)); }
+  const bgi = new Set(back.map((c) => c.id));
+  const bd = st.deploy.filter((d) => bgi.has(d.conflict));
+  if (bd.length) { s.deploy.push(...bd); st.deploy = st.deploy.filter((d) => !bd.includes(d)); }
+  const bk = st.crises.filter((k) => !has(k.country) && !histMuted(g, String(k.title || '')));
+  if (bk.length) { s.crises.push(...bk); st.crises = st.crises.filter((k) => !bk.includes(k)); }
+  for (const side of ['byJapan', 'onJapan']) for (const x of Object.keys(st.sanc[side] || {})) if (!has(x)) { s.sanctions[side][x] = st.sanc[side][x]; delete st.sanc[side][x]; }
+}
 // [R14-H] the setting: add / remove a historical power (g.state.histPowers)
 function setHistPower(g, id, on) {
   const c = COUNTRIES[id];
@@ -2126,6 +2160,13 @@ function setHistPower(g, id, on) {
   const was = histOn(g, id);
   on = !!on;
   if (was === on) return { ok: true, on };
+  if (on) {
+    const w = japanWar(g);
+    if (w && w.phase === 'war' && (REPLACES[id] || []).includes(w.enemy)) return { ok: false, why: `${countryName(g, w.enemy, true)}とは戦争中（講和してから）` };
+    const s0 = W(g);
+    for (const k of ['rel', 'ties', 'ambassadors', 'aid', 'provoked']) if (s0[k]) delete s0[k][id];
+    for (const k of Object.keys(s0.pair || {})) if (k.split('|').includes(id)) delete s0.pair[k];
+  }
   if (!on) {
     if (atWarWith(g, id)) return { ok: false, why: `${c.short}とは戦争中（講和してから）` };
     const s = W(g);
@@ -2135,6 +2176,7 @@ function setHistPower(g, id, on) {
     s.crises = s.crises.filter((k) => k.country !== id);
   }
   histSet(g, id, on);
+  purgeHist(g);
   return { ok: true, on };
 }
 // the actions for a target (or the global ones): [{ id, name, desc, why, odds, lines, options, target }]
@@ -2284,7 +2326,7 @@ function shiftSupport(p, segs, k = 0.004) {
   }
 }
 const membersOf = (g, t) => { if (COUNTRIES[t]) return [t]; const O = ORGS[t] || PSEUDO[t]; return O ? (dv(O.members, dateNum(g)) || []).filter((x) => exists(g, x)) : []; };
-const STANCE_OF = { cn: 'china', us: 'us', ru: 'russia', su: 'russia', kr: 'korea', tw: 'taiwan', kp: 'nk', fr: 'eu', de: 'eu', wde: 'eu', it: 'eu', gb: 'eu', id: 'asean', ph: 'asean', th: 'asean', sg: 'asean', my: 'asean', vn: 'asean' };
+const STANCE_OF = { h_cn: 'china', h_su: 'russia', h_de: 'eu', h_it: 'eu', cn: 'china', us: 'us', ru: 'russia', su: 'russia', kr: 'korea', tw: 'taiwan', kp: 'nk', fr: 'eu', de: 'eu', wde: 'eu', it: 'eu', gb: 'eu', id: 'asean', ph: 'asean', th: 'asean', sg: 'asean', my: 'asean', vn: 'asean' };
 const NOTABLE = { summit: 1, visit: 1, fm_talks: 1, statement: 1, fta: 1, defense_pact: 1, alliance: 1, ties: 1, peace_treaty: 1, abrogate: 1, sanction: 1, lift: 1, aid: 1, protest: 1, recall: 1, return_amb: 1, cut_ties: 1, un_raise: 1, ally_up: 1, ally_down: 1, withdraw_notice: 1, peace_conf: 1, leave_un: 1, rejoin_un: 1, un_speech: 1, mediate: 1, tariff_set: 1, tariff_extra: 1, tariff_lift: 1, tariff_exempt: 1, safeguard: 1, envoy: 1, soft_action: 1, dispute_action: 1, invite: 1, receive_visit: 1 };
 {
   const X = {

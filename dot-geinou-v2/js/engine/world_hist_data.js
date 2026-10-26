@@ -1,16 +1,24 @@
 // 歴史の列強 (設定で世界情勢に加える): ソ連（スターリン政権）・ファシスト・イタリア（ムッソリーニ政権）・ナチス・ドイツ（ヒトラー政権）・
-// 中華人民共和国（毛沢東政権）。Plain data (no imports): world.js spreads HIST_COUNTRIES into COUNTRIES; world_hist.js has the setting API,
+// 中華人民共和国（毛沢東政権）・民主カンプチア（ポル・ポト政権）。ONの間は、入れかわる現代の国（REPLACES）が世界情勢から消える。Plain data (no imports): world.js spreads HIST_COUNTRIES into COUNTRIES; world_hist.js has the setting API,
 // the images and the drawing helpers. The leaders and flags are the historical ones, shown by their real names and the photos / flags as they are.
 // Facts: 日独防共協定 1936年11月（イタリアは1937年11月に加わる）。三国同盟 1940年9月。日ソ中立条約 1941年4月。ソ連の対日参戦 1945年8月。
+//   民主カンプチア 1976年1月に国名（1975年4月にプノンペンを制圧）、1979年1月にベトナム軍の侵攻で首都を失う。
 //   中ソ友好同盟相互援助条約 1950年2月。中国の初の核実験 1964年10月。日中共同声明 1972年9月。スターリンの死去 1953年3月、毛沢東の死去 1976年9月。
 const A = (...pairs) => pairs;
 const flat = (v) => A([1987, v], [2026, v]);
-export const HIST_IDS = ['h_su', 'h_it', 'h_de', 'h_cn'];
+export const HIST_IDS = ['h_su', 'h_it', 'h_de', 'h_cn', 'h_kh'];
+// the modern countries that a regime takes the place of while it is on (they leave the 世界情勢: lists, map, diplomacy, news about them)
+export const REPLACES = { h_su: ['su', 'ru'], h_it: ['it'], h_de: ['wde', 'dde', 'de'], h_cn: ['cn'], h_kh: [] };
+export const ALIAS = { su: 'h_su', ru: 'h_su', it: 'h_it', wde: 'h_de', dde: 'h_de', de: 'h_de', cn: 'h_cn' }; // hidden id → the regime that stands for it
+// words that mark a line of news as being about a hidden country (and words that let a line about the regime itself pass)
+export const HIDE_WORDS = { su: ['ソ連', 'ソビエト'], ru: ['ロシア'], it: ['イタリア'], wde: ['ドイツ'], dde: ['ドイツ'], de: ['ドイツ'], cn: ['中国', '中華人民共和国'] };
+export const PASS_WORDS = { h_su: ['スターリン'], h_it: ['ムッソリーニ', 'ファシスト'], h_de: ['ヒトラー', 'ナチス'], h_cn: ['毛沢東'], h_kh: ['ポル・ポト', 'カンプチア'] };
 export const HIST = {
-  h_su: { id: 'h_su', country: 'ソ連', flag: 'flag_su', portrait: 'pt_su', leaderName: 'ヨシフ・スターリン', title: 'ソ連共産党中央委員会書記長', years: '1922〜1953年', real: 'su', label: 'ソ連（スターリン政権時）' },
-  h_it: { id: 'h_it', country: 'イタリア', flag: 'flag_it', portrait: 'pt_it', leaderName: 'ベニト・ムッソリーニ', title: 'イタリア王国首相・国家ファシスト党党首（統領＝ドゥーチェ）', years: '1922〜1943年', real: 'it', label: 'イタリア（ムッソリーニ政権時）' },
-  h_de: { id: 'h_de', country: 'ドイツ', flag: 'flag_de', portrait: 'pt_de', leaderName: 'アドルフ・ヒトラー', title: '総統・国家社会主義ドイツ労働者党党首', years: '1933〜1945年', real: 'de', label: 'ナチス・ドイツ（ヒトラー政権時）' },
-  h_cn: { id: 'h_cn', country: '中国', flag: 'flag_cn', portrait: 'pt_cn', leaderName: '毛沢東', title: '中国共産党中央委員会主席', years: '1949〜1976年', real: 'cn', label: '中華人民共和国（毛沢東政権時）' },
+  h_su: { id: 'h_su', country: 'ソ連', flag: 'flag_su', portrait: 'pt_su', leaderName: 'ヨシフ・スターリン', title: 'ソ連共産党中央委員会書記長', years: '1922〜1953年', real: 'su', label: 'ソ連（スターリン政権時）', swap: 'ソ連・ロシアと入れかわる' },
+  h_it: { id: 'h_it', country: 'イタリア', flag: 'flag_it', portrait: 'pt_it', leaderName: 'ベニト・ムッソリーニ', title: 'イタリア王国首相・国家ファシスト党党首（統領＝ドゥーチェ）', years: '1922〜1943年', real: 'it', label: 'イタリア（ムッソリーニ政権時）', swap: 'イタリアと入れかわる' },
+  h_de: { id: 'h_de', country: 'ドイツ', flag: 'flag_de', portrait: 'pt_de', leaderName: 'アドルフ・ヒトラー', title: '総統・国家社会主義ドイツ労働者党党首', years: '1933〜1945年', real: 'de', label: 'ナチス・ドイツ（ヒトラー政権時）', swap: 'ドイツと入れかわる' },
+  h_cn: { id: 'h_cn', country: '中国', flag: 'flag_cn', portrait: 'pt_cn', leaderName: '毛沢東', title: '中国共産党中央委員会主席', years: '1949〜1976年', real: 'cn', label: '中華人民共和国（毛沢東政権時）', swap: '現代の中国と入れかわる' },
+  h_kh: { id: 'h_kh', country: 'カンボジア', flag: 'flag_kh', portrait: 'pt_kh', leaderName: 'ポル・ポト', title: 'カンプチア共産党書記・民主カンプチア首相', years: '1975〜1979年', real: 'kh', label: 'カンボジア（ポル・ポト政権時）', swap: 'カンボジアが加わる' },
 };
 const H = (id, def) => ({ id, real: true, hist: true, region: 'europe', from: 0, to: 0, p5: false, ...HIST[id] && { flag: HIST[id].flag, portrait: HIST[id].portrait }, ...def });
 export const HIST_COUNTRIES = {
@@ -26,11 +34,15 @@ export const HIST_COUNTRIES = {
   h_cn: H('h_cn', { name: '中華人民共和国（毛沢東政権）', short: '中国（毛沢東期）', leader: '毛沢東主席', gov: '中国共産党の一党体制（社会主義）', region: 'asia', capital: [37.6, 114.2],
     gdp: flat(0.35), mil: flat(42), trade: flat(3.0), rel: flat(-25), member: [],
     note: [[0, '1949年の建国から1976年まで、毛沢東が党の主席として国を率いた。土地改革、「大躍進」、文化大革命と大きな政策の転換が続いた。1950年に中ソ友好同盟相互援助条約を結び、1964年に初の核実験を行った。日本とは1972年9月の日中共同声明で国交を正常化した。']] }),
+  h_kh: H('h_kh', { name: '民主カンプチア（ポル・ポト政権）', short: '民主カンプチア', leader: 'ポル・ポト首相', gov: 'カンプチア共産党の一党体制（民主カンプチア）', region: 'asia', capital: [11.55, 104.9],
+    gdp: flat(0.03), mil: flat(22), trade: flat(0.05), rel: flat(-15), member: [],
+    note: [[0, '1975年4月に首都プノンペンを制圧し、1976年に国名を民主カンプチアとした。ポル・ポトは党書記・首相として、都市の住民を農村へ移して農業を中心にする急進的な政策を進めた。1977年からベトナムとの国境の衝突が激しくなり、1978年末にベトナム軍が侵攻して、1979年1月に政権は首都を失った。']] }),
 };
 // Relations between these and the others (−100..100), merged into world.js PAIRS (keys are the two ids sorted and joined by |).
 export const HIST_PAIRS = {
   'h_de|h_it': A([1987, 70]), 'h_de|h_su': A([1987, -45]), 'h_it|h_su': A([1987, -35]), 'h_cn|h_su': A([1987, 35]), 'h_cn|h_de': A([1987, -5]), 'h_cn|h_it': A([1987, 0]),
   'h_de|us': A([1987, -75]), 'gb|h_de': A([1987, -80]), 'fr|h_de': A([1987, -75]), 'h_it|us': A([1987, -60]), 'gb|h_it': A([1987, -60]), 'fr|h_it': A([1987, -50]),
   'h_su|us': A([1987, -50]), 'gb|h_su': A([1987, -35]), 'fr|h_su': A([1987, -20]), 'h_cn|us': A([1987, -65]), 'gb|h_cn': A([1987, -20]), 'h_cn|in': A([1987, -20]),
-  'h_cn|kr': A([1987, -60]), 'h_cn|tw': A([1987, -70]), 'h_cn|vn': A([1987, 30]), 'h_cn|kp': A([1987, 55]), 'h_su|kp': A([1987, 45]), 'h_cn|ph': A([1987, -30]),
+  'h_kh|h_cn': A([1987, 70]), 'h_kh|vn': A([1987, -80]), 'h_kh|h_su': A([1987, -50]), 'h_kh|us': A([1987, -50]), 'h_kh|th': A([1987, -25]), 'h_cn|vn': A([1987, 30]),
+  'h_cn|kr': A([1987, -60]), 'h_cn|tw': A([1987, -70]), 'h_cn|kp': A([1987, 55]), 'h_su|kp': A([1987, 45]), 'h_cn|ph': A([1987, -30]),
 };

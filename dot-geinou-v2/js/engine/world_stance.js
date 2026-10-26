@@ -23,7 +23,7 @@ export const STANCE_NAMES = { china: '中国', us: '米国', russia: 'ロシア'
 export const STANCE_BASE = { china: 0, us: 30, russia: 0, korea: 0, taiwan: 0, eu: 0, asean: 0, nk: 0 };
 const Z = () => ({ china: 0, us: 0, russia: 0, korea: 0, taiwan: 0, eu: 0, asean: 0, nk: 0 });
 // countries of each key (for the relation drift)
-export const STANCE_COUNTRIES = { china: ['cn'], us: ['us'], russia: ['ru', 'su'], korea: ['kr'], taiwan: ['tw'], eu: ['fr', 'de', 'wde', 'it', 'gb'], asean: ['id', 'ph', 'th', 'sg', 'my', 'vn'], nk: ['kp'] };
+export const STANCE_COUNTRIES = { china: ['cn', 'h_cn'], us: ['us'], russia: ['ru', 'su', 'h_su'], korea: ['kr'], taiwan: ['tw'], eu: ['fr', 'de', 'wde', 'it', 'gb', 'h_de', 'h_it'], asean: ['id', 'ph', 'th', 'sg', 'my', 'vn'], nk: ['kp'] };
 
 const PARTY_STANCE = {
   jimin: { us: 30 }, minshu: { us: 30 },
@@ -217,19 +217,19 @@ export function createStance(X) {
     for (const k of STANCE_KEYS) dev[k] = v[k] - (opts.absolute ? 0 : STANCE_BASE[k]);
     const relEq = {};
     const add = (ids, d) => { for (const id of ids) relEq[id] = (relEq[id] || 0) + d; };
-    add(['cn'], dev.china * 0.10 - Math.max(0, dev.taiwan) * 0.03);
+    add(['cn', 'h_cn'], dev.china * 0.10 - Math.max(0, dev.taiwan) * 0.03);
     add(['us'], dev.us * 0.10 - Math.max(0, dev.china) * 0.03 - Math.max(0, dev.russia) * 0.02);
-    add(['ru', 'su'], dev.russia * 0.10 - Math.max(0, dev.us) * 0.03);
+    add(['ru', 'su', 'h_su'], dev.russia * 0.10 - Math.max(0, dev.us) * 0.03);
     add(['kr'], dev.korea * 0.10);
     add(['tw'], dev.taiwan * 0.08);
-    add(['cn'], -Math.max(0, dev.us) * 0.02);
+    add(['cn', 'h_cn'], -Math.max(0, dev.us) * 0.02);
     add(STANCE_COUNTRIES.eu, dev.eu * 0.08);
     add(STANCE_COUNTRIES.asean, dev.asean * 0.08);
     add(['kp'], dev.nk * 0.06);
     for (const id of Object.keys(relEq)) relEq[id] = Math.round(clamp(relEq[id], -12, 12) * 10) / 10;
     const trade = {};
     const tr = (k, ids, f) => { for (const id of ids) trade[id] = Math.round(clamp(dev[k] * f, -5, 5) * 10) / 10; };
-    tr('china', ['cn'], 0.04); tr('us', ['us'], 0.03); tr('russia', ['ru', 'su'], 0.04); tr('korea', ['kr'], 0.03); tr('taiwan', ['tw'], 0.03);
+    tr('china', ['cn', 'h_cn'], 0.04); tr('us', ['us'], 0.03); tr('russia', ['ru', 'su', 'h_su'], 0.04); tr('korea', ['kr'], 0.03); tr('taiwan', ['tw'], 0.03);
     tr('eu', STANCE_COUNTRIES.eu, 0.03); tr('asean', STANCE_COUNTRIES.asean, 0.03);
     const bySeg = {};
     for (const [sg, pref] of Object.entries(SEG_PREF)) { let a = 0; for (const k of STANCE_KEYS) a += (dev[k] / 100) * pref[k]; bySeg[sg] = Math.round(clamp(a, -1, 1) * 100) / 100; }

@@ -22,6 +22,7 @@
 
 import { SEC, CATS, REAL_NEWS, SEASONAL, catOfText, imgOf, dateText } from './news_data.js';
 import { Game } from './game.js';
+import { histMuted } from './world_hist.js'; // [R14-H] lines about a country that a historical regime has replaced
 
 const num = (v, d = 0) => (v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -126,7 +127,7 @@ function stamp(g) {
   const p = st.politics;
   const cs = has(g, 'contestState') ? safe(() => g.contestState(), null) : null;
   const w = st.world;
-  return [st.day, st.phone && st.phone.inbox ? st.phone.inbox.length : 0, (st.phone && st.phone.inbox && st.phone.inbox[0] && st.phone.inbox[0].id) || 0,
+  return [JSON.stringify(st.histPowers || 0), st.day, st.phone && st.phone.inbox ? st.phone.inbox.length : 0, (st.phone && st.phone.inbox && st.phone.inbox[0] && st.phone.inbox[0].id) || 0,
     p && p.news ? p.news.length + ':' + (p.news[0] && p.news[0].text || '').length : 0, cs && cs.news ? cs.news.length + ':' + (cs.news[0] && cs.news[0].text || '').length : 0,
     w && w.news ? w.news.length : 0, st.profile && st.profile.era].join('|');
 }
@@ -228,6 +229,7 @@ function allItems(g) {
     if (GOGAI_RULES.some((r) => r.re.test(t) && (!r.mine || it.mine))) { it.gogai = true; it.key = it.key.replace(/^k:/, 'g:'); }
   }
   for (const it of items) it.prio = (it.gogai ? 100 : 0) + (it.mine ? 40 : 0) - Math.max(0, today - it.day) * 3 + (CAT_W[it.cat] || 2) + (it.real ? 4 : 0) - (it.season ? 6 : 0) - (it.market ? 5 : 0);
+  if (st.histPowers) for (let i = items.length - 1; i >= 0; i--) if (histMuted(g, `${items[i].head || ''}\n${items[i].body || ''}`)) items.splice(i, 1); // [R14-H]
   items.sort((a, b) => b.day - a.day || b.prio - a.prio);
   if (items.length > 220) items.length = 220;
   CACHE.set(st, { sk, items });
