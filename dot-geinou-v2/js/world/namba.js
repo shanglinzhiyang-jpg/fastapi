@@ -11,6 +11,7 @@
 import { registerPlace, PLACES } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
 import { grid, set, put, fill, border, unstick, ekiEnter } from './townkit.js';
+import { shopDoor } from './shopkit.js'; // [R12-S2] the shop interiors' door hook (opening hours); js/places/shop_*.js
 import { commuterTrain, fountain, streetStage, taxi } from './props.js';
 import { text } from '../engine/draw.js';
 import { makeCanvas, fmtMoney, TILE, shade } from '../engine/util.js';
@@ -125,15 +126,15 @@ function westEntities() {
     // north side of the theatre street (fronts on row 10)
     { type: 'building', x: 2, y: 5, w: 6, h: 5, door: 3, name: '道具屋', kind: 'shop', wall: '#f2ece0', roof: '#5a4a3a', display: 'goods', stripes: ['#2a3a7a', '#f2ece0'], sign: { text: '道具屋', bg: '#2a3a7a', color: '#ffffff' },
       text: ['料理道具の店だ。', 'たこ焼き器に、のれんに、食品サンプル…。\n店の道具なら、なんでもそろうらしい。'] },
-    { type: 'building', x: 9, y: 3, w: 9, h: 7, door: 4, name: 'ドット劇場', kind: 'theater', wall: '#f6ead8', roof: '#2a6ad0', sign: { text: 'ドット劇場', bg: '#20232a', color: '#ffd23f' },
+    { type: 'building', x: 9, y: 3, w: 9, h: 7, door: 4, ...shopDoor('shop_geki_n'), name: 'ドット劇場', kind: 'theater', wall: '#f6ead8', roof: '#2a6ad0', sign: { text: 'ドット劇場', bg: '#20232a', color: '#ffd23f' }, // [R12-S2]
       text: ['若手芸人が毎日ネタをかける、小さな劇場だ。', '入口の出番表に、知らないコンビ名がずらりと並んでいる。\nNSCを出たばかりの芸人も、ここから舞台に立つらしい。'] },
     ...(PLACES.nsc ? [{ type: 'building', x: 20, y: 3, w: 10, h: 7, door: 5, place: 'nsc', name: 'NSC大阪校', kind: 'office', wall: '#fff3e6', roof: '#e8492a', canopy: '#e8492a', sign: { text: 'NSC大阪校', bg: '#e8492a', color: '#ffffff' } }]
       : [{ type: 'building', x: 20, y: 3, w: 10, h: 7, door: 5, name: '貸しビル', kind: 'office', wall: '#e4e2dc', roof: '#7a7f8a', sign: { text: 'テナント募集', bg: '#ffffff', color: '#d62f2f' }, text: '「テナント募集」の貼り紙がある。' }]),
     neon(13, 13, 'ライブ', '#ff7eb6'),
     // south of the canal: a ramen shop, karaoke, the little park, the taxi stand
-    { type: 'building', x: 14, y: 23, w: 6, h: 4, door: 3, name: 'ラーメン屋', kind: 'ramen', sign: { text: 'ラーメン', bg: '#d62f2f', color: '#ffffff' },
+    { type: 'building', x: 14, y: 23, w: 6, h: 4, door: 3, ...shopDoor('shop_ramen_n'), name: 'ラーメン屋', kind: 'ramen', sign: { text: 'ラーメン', bg: '#d62f2f', color: '#ffffff' }, // [R12-S2]
       text: ['ラーメン屋だ。', '「NSC生は替え玉一杯無料」の貼り紙がある。'] },
-    { type: 'building', x: 21, y: 23, w: 7, h: 4, door: 3, name: 'カラオケ', kind: 'karaoke', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' },
+    { type: 'building', x: 21, y: 23, w: 7, h: 4, door: 3, ...shopDoor('shop_karaoke_n'), name: 'カラオケ', kind: 'karaoke', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' }, // [R12-S2]
       text: ['カラオケ店だ。', '個室でネタ合わせをする芸人も多いらしい。'] },
     { type: 'sign', x: 21, y: 15, text: ['なんば・にし橋\n北：NSC大阪校・ドット劇場・道具屋\n南：にし通り・千日前通り（タクシー乗り場）・公園', '東：よしもと新喜劇 劇場・松竹芸能・戎橋筋・なんば駅'] },
 
@@ -327,23 +328,23 @@ const SHOP = (x, w, row, extra) => ({ type: 'building', x, w, ...(row === 'A' ? 
 function bandEntities() {
   return [
     // ---- row A (doors on row 28, fronts on 千日前通り)
-    SHOP(2, 7, 'A', { name: '古着屋 ミナミ', kind: 'boutique', sign: { text: '古着', bg: '#20232a', color: '#f4e6cc' }, text: ['古着屋だ。', 'ヒョウ柄のジャケットに、金色のスニーカー…。\n大阪の古着は、なんだか声が大きい。'] }),
-    SHOP(10, 7, 'A', { name: '純喫茶 ドット', kind: 'cafe', wall: '#efe3d0', roof: '#5b3a29', sign: { text: '純喫茶', bg: '#5b3a29', color: '#fff3e0' }, text: ['昔ながらの純喫茶だ。', 'ミックスジュースとホットケーキの食品サンプルが\nショーケースに並んでいる。'] }),
+    SHOP(2, 7, 'A', { ...shopDoor('shop_furugi_n'), name: '古着屋 ミナミ', kind: 'boutique', sign: { text: '古着', bg: '#20232a', color: '#f4e6cc' }, text: ['古着屋だ。', 'ヒョウ柄のジャケットに、金色のスニーカー…。\n大阪の古着は、なんだか声が大きい。'] }), // [R12-S2]
+    SHOP(10, 7, 'A', { ...shopDoor('shop_junkissa_n'), name: '純喫茶 ドット', kind: 'cafe', wall: '#efe3d0', roof: '#5b3a29', sign: { text: '純喫茶', bg: '#5b3a29', color: '#fff3e0' }, text: ['昔ながらの純喫茶だ。', 'ミックスジュースとホットケーキの食品サンプルが\nショーケースに並んでいる。'] }), // [R12-S2]
     SHOP(21, 7, 'A', { name: 'ドラッグストア', kind: 'shop', display: 'goods', wall: '#eef6ee', roof: '#2f9a4a', sign: { text: 'ドラッグストア', bg: '#2f9a4a', color: '#ffffff' }, text: ['ドラッグストアだ。', '店先のワゴンに、観光客が群がっている。\n「お一人さま5個まで」の札。'] }),
     SHOP(29, 8, 'A', { name: '靴屋', kind: 'shop', display: 'clothes', wall: '#f2ece0', roof: '#3b3f48', sign: { text: 'シューズ', bg: '#ffffff', color: '#20232a' }, text: ['靴屋だ。', '「歩きやすさ日本一」…と書いてある。\nほんまかいな。'] }),
-    SHOP(43, 7, 'A', { name: '洋食 ドット軒', kind: 'restaurant', wall: '#fbf3e4', roof: '#c0392b', sign: { text: '洋食 ドット軒', bg: '#ffffff', color: '#c0392b' }, text: ['老舗の洋食屋だ。', '名物は、ソースたっぷりのオムライス。\nお昼どきは行列ができるらしい。'] }),
+    SHOP(43, 7, 'A', { ...shopDoor('shop_teishoku_n'), name: '洋食 ドット軒', kind: 'restaurant', wall: '#fbf3e4', roof: '#c0392b', sign: { text: '洋食 ドット軒', bg: '#ffffff', color: '#c0392b' }, text: ['老舗の洋食屋だ。', '名物は、ソースたっぷりのオムライス。\nお昼どきは行列ができるらしい。'] }), // [R12-S2]
     SHOP(51, 8, 'A', { name: '豚まんの店', kind: 'small', wall: '#fff3e0', roof: '#d62f2f', sign: { text: '豚まん', bg: '#d62f2f', color: '#ffffff' }, text: ['豚まんの店だ。', 'せいろから、湯気がもくもく…。\nおみやげに買っていく人が多いらしい。'] }),
-    SHOP(64, 12, 'A', { name: 'ドット千日前劇場', kind: 'theater', wall: '#f6e7c8', roof: '#2a3a7a', sign: { text: 'ドット千日前劇場', bg: '#20232a', color: '#ffd23f' }, text: ['千日前の演芸の劇場だ。', '漫才、コント、落語、新喜劇の若手公演…。\n入口の出番表には、知らない名前もたくさん。'] }),
+    SHOP(64, 12, 'A', { ...shopDoor('shop_sennichimae'), name: 'ドット千日前劇場', kind: 'theater', wall: '#f6e7c8', roof: '#2a3a7a', sign: { text: 'ドット千日前劇場', bg: '#20232a', color: '#ffd23f' }, text: ['千日前の演芸の劇場だ。', '漫才、コント、落語、新喜劇の若手公演…。\n入口の出番表には、知らない名前もたくさん。'] }), // [R12-S2]
     SHOP(77, 6, 'A', { name: 'お好み焼き', kind: 'small', wall: '#f6e7c8', roof: '#2a3a7a', sign: { text: 'お好み焼き', bg: '#2a3a7a', color: '#ffffff' }, text: ['お好み焼き屋だ。', '鉄板の上で、ソースがじゅうじゅう…。\n「ねぎ焼き」もあるらしい。'] }),
-    SHOP(84, 4, 'A', { name: '古本屋', kind: 'bookstore', sign: { text: '古本', bg: '#ffffff', color: '#2a3a7a' }, text: ['古本屋だ。', '昔の演芸雑誌や、劇場のパンフレットが\n一冊百円で売られている。'] }),
+    SHOP(84, 4, 'A', { ...shopDoor('shop_furuhon_n'), name: '古本屋', kind: 'bookstore', sign: { text: '古本', bg: '#ffffff', color: '#2a3a7a' }, text: ['古本屋だ。', '昔の演芸雑誌や、劇場のパンフレットが\n一冊百円で売られている。'] }), // [R12-S2]
     // ---- row B (doors on row 37, fronts on the back lane)
     SHOP(2, 7, 'B', { name: '金券ショップ', kind: 'shop', display: 'goods', wall: '#fff6e0', roof: '#ffd23f', sign: { text: '金券', bg: '#ffd23f', color: '#d62f2f' }, text: ['金券ショップだ。', '新幹線の回数券に、劇場のチケット…。\n少しだけ安く買えるらしい。'] }),
     SHOP(10, 7, 'B', { name: 'たこ焼き 千日前', kind: 'small', wall: '#f6e7c8', roof: '#ff8a3d', sign: { text: 'たこ焼き', bg: '#ff8a3d', color: '#ffffff' }, text: ['もう一軒のたこ焼き屋だ。', 'ここは「ねぎポン酢」が名物らしい。\n…今日は売り切れ。'] }),
-    SHOP(21, 6, 'B', { name: '串カツ屋', kind: 'small', wall: '#fff3e0', roof: '#8a5a33', sign: { text: '串カツ', bg: '#ffd23f', color: '#20232a' }, text: '「ソースの二度づけ禁止」の貼り紙がある。開店はまだみたいだ。' }),
-    SHOP(28, 9, 'B', { name: 'ドット千日前ホール', kind: 'karaoke', sign: { text: 'お笑いライブ', bg: '#20232a', color: '#ffd23f' }, neon: '#ffd23f', text: ['地下のお笑いライブハウスだ。', '黒板に「本日 若手ネタバトル 18時〜」。\n出番待ちの芸人が、階段に座りこんでいる。'] }),
-    SHOP(43, 7, 'B', { name: '100円ショップ', kind: 'shop', display: 'goods', wall: '#f6f6f8', roof: '#d62f2f', sign: { text: '100円', bg: '#d62f2f', color: '#ffffff' }, text: ['100円ショップだ。', 'コントの小道具は、ここでそろえる芸人も多いらしい。'] }),
+    SHOP(21, 6, 'B', { ...shopDoor('shop_kushikatsu'), name: '串カツ屋', kind: 'small', wall: '#fff3e0', roof: '#8a5a33', sign: { text: '串カツ', bg: '#ffd23f', color: '#20232a' }, text: '「ソースの二度づけ禁止」の貼り紙がある。開店はまだみたいだ。' }), // [R12-S2]
+    SHOP(28, 9, 'B', { ...shopDoor('shop_hall_n'), name: 'ドット千日前ホール', kind: 'karaoke', sign: { text: 'お笑いライブ', bg: '#20232a', color: '#ffd23f' }, neon: '#ffd23f', text: ['地下のお笑いライブハウスだ。', '黒板に「本日 若手ネタバトル 18時〜」。\n出番待ちの芸人が、階段に座りこんでいる。'] }), // [R12-S2]
+    SHOP(43, 7, 'B', { ...shopDoor('shop_hyakuen'), name: '100円ショップ', kind: 'shop', display: 'goods', wall: '#f6f6f8', roof: '#d62f2f', sign: { text: '100円', bg: '#d62f2f', color: '#ffffff' }, text: ['100円ショップだ。', 'コントの小道具は、ここでそろえる芸人も多いらしい。'] }), // [R12-S2]
     SHOP(51, 8, 'B', { name: 'ホビーショップ', kind: 'shop', display: 'goods', wall: '#eef0f6', roof: '#5a4fa0', sign: { text: 'ホビー', bg: '#5a4fa0', color: '#ffffff' }, text: ['ホビーショップだ。', 'プラモデルにフィギュア、レトロゲーム…。\nガラスケースの前で、大人が真剣な顔をしている。'] }),
-    SHOP(64, 6, 'B', { name: '居酒屋 ほろ酔い亭', kind: 'small', wall: '#f4e6cc', roof: '#3a2a20', sign: { text: '居酒屋', bg: '#2a3a7a', color: '#ffffff' }, text: ['居酒屋だ。', '「どて焼き」「土手煮」…\nにぎやかな笑い声が聞こえる。'] }),
+    SHOP(64, 6, 'B', { ...shopDoor('shop_horoyoi'), name: '居酒屋 ほろ酔い亭', kind: 'small', wall: '#f4e6cc', roof: '#3a2a20', sign: { text: '居酒屋', bg: '#2a3a7a', color: '#ffffff' }, text: ['居酒屋だ。', '「どて焼き」「土手煮」…\nにぎやかな笑い声が聞こえる。'] }), // [R12-S2]
     SHOP(71, 6, 'B', { name: '寿司 ドット', kind: 'small', wall: '#f6f2e8', roof: '#3a3a40', sign: { text: '寿司', bg: '#ffffff', color: '#20232a' }, text: ['立ち食い寿司の店だ。', '「本日のおすすめ：トロ・はまち・穴子」'] }),
     SHOP(78, 9, 'B', { name: 'ビジネスホテル', kind: 'hotel', rise: 1, wall: '#e8e4dc', roof: '#4a5568', sign: { text: 'HOTEL ミナミ', bg: '#1d2a5e', color: '#ffffff' }, text: ['ビジネスホテルだ。', '「本日満室」の札が出ている。\n泊まるなら、川の北のドットホテルへ。'] }),
     // ---- signs, the arch, the taxi stand

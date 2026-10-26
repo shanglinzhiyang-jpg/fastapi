@@ -874,6 +874,7 @@ export class Game {
         { t: `知名度　★${st.fame}` },
         fans ? { t: `ファン　${fans.toLocaleString('ja-JP')}人` } : null,
         friends ? { t: `なかよしの仲間　${friends}人` } : null,
+        (() => { try { const f = typeof g.romanceSummary === 'function' ? g.romanceSummary() : ''; return f ? { t: f } : null; } catch (e) { return null; } })(), // [R12-L1] 家族
         gap(30),
         { t: '― お世話になった場所 ―', c: C.cyan, h: 34 },
         { logos: ['yoshimoto', 'shinkigeki', 'bs_yoshimoto', 'shochiku', 'grape'], h: 54 },

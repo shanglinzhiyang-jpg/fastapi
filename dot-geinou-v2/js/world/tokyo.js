@@ -3,6 +3,7 @@
 import { registerPlace, PLACES } from '../engine/map.js';
 import { LOOKS } from '../engine/sprites.js';
 import { grid, set, put, fill, hroad, vroad, border, unstick, ekiEnter } from './townkit.js';
+import { shopDoor } from './shopkit.js'; // [R12-S2] the shop interiors' door hook (opening hours); js/places/shop_*.js
 import { fountain, train, commuterTrain, taxi, busStop, streetStage, statue, house, bufferStop, railGuard, trackFence } from './props.js';
 import { text } from '../engine/draw.js';
 export const TOKYO_W = 76; // x 60..75: the east block and the road to テレビ局エリア (minato.js)
@@ -231,7 +232,7 @@ function districtTiles(c, W) {
   put(c, 65, 58, 'tree'); put(c, 67, 59, 'sakura');
   for (const [x, y] of [[70, 58], [73, 60], [69, 62], [74, 63]]) put(c, x, y, (x + y) % 2 ? 'sakura' : 'tree');
   for (const [x, y] of [[71, 60], [72, 63], [68, 58]]) set(c, x, y, 'flowers');
-  put(c, 71, 64, 'vending'); put(c, 72, 64, 'trash');
+  put(c, 74, 64, 'vending'); // [R12-S2] (moved east: お笑いBAR 笑いの穴 stands at x 68..73 from 1995)
   // ネタ広場: grass, a path through the middle, trees and benches
   fill(c, 39, 56, 3, 9, 'path');
   for (const [x, y] of [[37, 56], [43, 56], [43, 60], [37, 64]]) put(c, x, y, 'tree');
@@ -253,14 +254,14 @@ function districtEntities() {
   const before = (g) => !nscTokyoOpen(g);
   return [
     // north row (doors on row 50, fronts on 芸人通り)
-    { type: 'building', x: 2, y: 46, w: 7, h: 5, door: 3, name: '純喫茶 ドット', kind: 'cafe', wall: '#efe3d0', roof: '#5b3a29', sign: { text: '純喫茶 ドット', bg: '#5b3a29', color: '#fff3e0' },
+    { type: 'building', x: 2, y: 46, w: 7, h: 5, door: 3, ...shopDoor('shop_junkissa'), name: '純喫茶 ドット', kind: 'cafe', wall: '#efe3d0', roof: '#5b3a29', sign: { text: '純喫茶 ドット', bg: '#5b3a29', color: '#fff3e0' }, // [R12-S2]
       text: ['昔ながらの喫茶店だ。', 'テーブルにノートを広げて、ネタを書いている若者が何人もいる。\nコーヒー一杯で何時間もねばれる店らしい。'] },
-    { type: 'building', x: 11, y: 46, w: 6, h: 5, door: 3, name: '古着屋', kind: 'boutique', wall: '#f2ece0', roof: '#3b3f48', sign: { text: '古着', bg: '#20232a', color: '#f4e6cc' },
+    { type: 'building', x: 11, y: 46, w: 6, h: 5, door: 3, ...shopDoor('shop_furugi_t'), name: '古着屋', kind: 'boutique', wall: '#f2ece0', roof: '#3b3f48', sign: { text: '古着', bg: '#20232a', color: '#f4e6cc' }, // [R12-S2]
       text: ['古着屋だ。', '派手なジャケットに、ド派手なシャツ…。\n衣装をさがしに来る芸人も多いらしい。'] },
     ...(PLACES.nsc_tokyo ? [{ type: 'building', x: 23, y: 45, w: 10, h: 6, door: 5, place: 'nsc_tokyo', name: 'NSC東京校', kind: 'office', wall: '#fff3e6', roof: '#e8492a', canopy: '#e8492a', sign: { text: 'NSC東京校', bg: '#e8492a', color: '#ffffff' }, cond: nscOpen }] : []),
     { type: 'building', x: 23, y: 45, w: 10, h: 6, door: 5, name: 'テナント募集中のビル', kind: 'office', wall: '#e4e2dc', roof: '#7a7f8a', sign: { text: 'テナント募集', bg: '#ffffff', color: '#d62f2f' },
       cond: PLACES.nsc_tokyo ? before : undefined, text: ['まだ新しいビルだ。', '「テナント募集」の貼り紙がある。\n一階から三階まで、まるごと空いているらしい。'] },
-    { type: 'building', x: 33, y: 46, w: 4, h: 5, door: 2, name: 'カラオケ', kind: 'karaoke', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' },
+    { type: 'building', x: 33, y: 46, w: 4, h: 5, door: 2, ...shopDoor('shop_karaoke_t'), name: 'カラオケ', kind: 'karaoke', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' }, // [R12-S2]
       text: ['カラオケ店だ。', '個室を借りて、ネタ合わせをする芸人も多いらしい。\n大きな声を出しても、だれにも気づかれない。'] },
     { type: 'building', x: 46, y: 46, w: 5, h: 5, door: 2, name: 'リハーサルスタジオ', kind: 'studio', wall: '#d8d2c4', roof: '#5a6070', onair: false, sign: { text: 'スタジオ', bg: '#ffffff', color: '#20232a' },
       text: ['時間貸しのリハーサルスタジオだ。', 'バンドやダンサー、芸人も使っているらしい。\n今日は予約でいっぱいだ。'] },
@@ -278,20 +279,22 @@ function districtEntities() {
     geininSignpost(17, 43),
     { type: 'sign', x: 17, y: 55, solid: true, talk: async (g) => g.say(['「芸人通り」の案内板だ。', `北：喫茶店・古着屋・${nscTokyoOpen(g) ? 'NSC東京校・' : ''}カラオケ・\nスタジオ・貸し稽古場・ダンススタジオ・アパート`, '南の「劇場通り」：小劇場・カフェ・ライブハウス・\n古本屋・ネタ広場・ラーメン屋・演芸場']) },
     // 劇場通り (doors on row 64, fronts on the car road's sidewalk)
-    { type: 'building', x: 2, y: 58, w: 9, h: 7, door: 4, name: 'ドット小劇場', kind: 'theater', wall: '#ece4d2', roof: '#5a2a6a', sign: { text: 'ドット小劇場', bg: '#20232a', color: '#ffd23f' },
+    { type: 'building', x: 2, y: 58, w: 9, h: 7, door: 4, ...shopDoor('shop_shogekijo'), name: 'ドット小劇場', kind: 'theater', wall: '#ece4d2', roof: '#5a2a6a', sign: { text: 'ドット小劇場', bg: '#20232a', color: '#ffd23f' }, // [R12-S2]
       text: ['客席六十ほどの、小さな劇場だ。', '入口に、手書きのチラシがびっしり貼ってある。\n今夜は若手のお笑いライブらしい。'] },
-    { type: 'building', x: 12, y: 60, w: 5, h: 5, door: 2, name: 'カフェ', kind: 'cafe', wall: '#f3eadb', roof: '#2f6a4a', sign: { text: 'カフェ', bg: '#2f6a4a', color: '#ffffff' },
+    { type: 'building', x: 12, y: 60, w: 5, h: 5, door: 2, ...shopDoor('shop_cafe_t'), name: 'カフェ', kind: 'cafe', wall: '#f3eadb', roof: '#2f6a4a', sign: { text: 'カフェ', bg: '#2f6a4a', color: '#ffffff' }, // [R12-S2]
       text: ['小さなカフェだ。', '台本を読みあわせている二人組がいる。'] },
-    { type: 'building', x: 24, y: 59, w: 8, h: 6, door: 4, name: 'ライブハウス', kind: 'karaoke', wall: '#2a2d36', roof: '#20232a', neon: '#5fd7ff', sign: { text: 'ライブハウス', bg: '#20232a', color: '#5fd7ff' },
+    { type: 'building', x: 24, y: 59, w: 8, h: 6, door: 4, ...shopDoor('shop_livehouse'), name: 'ライブハウス', kind: 'karaoke', wall: '#2a2d36', roof: '#20232a', neon: '#5fd7ff', sign: { text: 'ライブハウス', bg: '#20232a', color: '#5fd7ff' }, // [R12-S2]
       text: ['地下にあるライブハウスだ。', '今夜の出演者の名前が、黒板に書いてある。\nバンドの日もあれば、お笑いライブの日もあるらしい。'] },
-    { type: 'building', x: 33, y: 61, w: 4, h: 4, door: 2, name: '古本屋', kind: 'bookstore', sign: { text: '古本', bg: '#ffffff', color: '#2a3a7a' },
+    { type: 'building', x: 33, y: 61, w: 4, h: 4, door: 2, ...shopDoor('shop_furuhon_t'), name: '古本屋', kind: 'bookstore', sign: { text: '古本', bg: '#ffffff', color: '#2a3a7a' }, // [R12-S2]
       text: ['古本屋だ。', '店先のワゴンに、昔の演芸雑誌が並んでいる。'] },
-    { type: 'building', x: 45, y: 61, w: 6, h: 4, door: 3, name: 'ラーメン屋', kind: 'ramen', sign: { text: 'ラーメン', bg: '#d62f2f', color: '#ffffff' },
+    { type: 'building', x: 45, y: 61, w: 6, h: 4, door: 3, ...shopDoor('shop_ramen_t'), name: 'ラーメン屋', kind: 'ramen', sign: { text: 'ラーメン', bg: '#d62f2f', color: '#ffffff' }, // [R12-S2]
       text: ['ラーメン屋だ。', '「芸人さん大盛り無料」の貼り紙がある。\n…売れていない芸人のための店らしい。'] },
-    { type: 'building', x: 52, y: 58, w: 10, h: 7, door: 5, name: 'ドット演芸場', kind: 'theater', wall: '#f2e6cc', roof: '#2a3a5a', sign: { text: 'ドット演芸場', bg: '#ffffff', color: '#2a3a5a' },
+    { type: 'building', x: 52, y: 58, w: 10, h: 7, door: 5, ...shopDoor('shop_engeijo'), name: 'ドット演芸場', kind: 'theater', wall: '#f2e6cc', roof: '#2a3a5a', sign: { text: 'ドット演芸場', bg: '#ffffff', color: '#2a3a5a' }, // [R12-S2]
       text: ['演芸場だ。', '漫才、落語、コント、マジック…。\n昼から夜まで、毎日だれかが高座に上がっている。'] },
     { type: 'building', x: 63, y: 61, w: 5, h: 4, door: 2, name: 'コーヒースタンド', kind: 'coffee', wall: '#efe3d0', roof: '#8a5a33', sign: { text: 'コーヒー', bg: '#8a5a33', color: '#fff3e0' },
       text: ['コーヒースタンドだ。', 'いい香りがする。'] },
+    ...(PLACES.shop_netabar ? [{ type: 'building', x: 68, y: 60, w: 6, h: 5, door: 3, ...shopDoor('shop_netabar'), name: 'お笑いBAR 笑いの穴', kind: 'karaoke', wall: '#2a2d36', roof: '#20232a', neon: '#ff7eb6', sign: { text: 'お笑いBAR', bg: '#20232a', color: '#ffd23f' }, cond: nscOpen, // [R12-S2] from 1995
+      text: ['地下から、笑い声が聞こえる。', '「ネタ見せ自由・ワンドリンク制」と、手書きの看板。\n夜になると、酔った客の前で、若手が舞台に立つらしい。'] }] : []),
     busStop(30, 69, { text: undefined, talk: busToMachi }),
 
     // people of the district (passers-by; nobody here is a registered person)

@@ -42,6 +42,7 @@ import { TILE, makeCanvas, shade, fmtMoney, pick } from '../engine/util.js';
 import { grid, set, put, fill, hroad, vroad, border, unstick, ekiEnter } from './townkit.js';
 import { busStop, house, commuterTrain } from './props.js';
 import { INGREDIENTS, recipeHint } from './cooking.js';
+import { shopDoor } from './shopkit.js'; // [R12-S2] the shop interiors' door hook (hours); js/places/shop_*.js
 
 // ====================================================================== small helpers
 const OUT = '#22202a';
@@ -1132,6 +1133,7 @@ function generate() {
   // the 横丁 (rows 20..23): small eateries facing a lantern-lit lane; the school (rows 24..34)
   fill(c, 52, 20, 23, 4, 'stone');
   for (let x = 52; x <= 74; x++) put(c, x, 24, [52, 57, 62, 67, 72].includes(x) ? 'lantern' : 'fence');
+  for (let x = 63; x <= 66; x++) set(c, x, 24, 'stone'); // [R12-S2] a pocket in the one-tile 横丁 lane: the 会社員 stands here, so the shops' doors stay reachable
   fill(c, 52, 25, 23, 9, 'grass');
   for (const [x, y] of [[53, 25], [53, 28], [67, 25], [70, 26], [73, 25], [72, 28], [68, 28]]) put(c, x, y, (x + y) % 2 ? 'sakura' : 'tree');
   fill(c, 53, 30, 21, 4, 'sand');                      // 校庭
@@ -1172,11 +1174,11 @@ function generate() {
     { ...ARC, x: 22, w: 5, door: 2, place: 'salon', name: 'hair salon ドット', sign: { text: 'hair salon ドット', bg: '#ffffff', color: '#8a5ac8' }, display: 'mirrors', awning: ['#b890d0', '#ffffff'], wall: '#f6eef4' },
     { ...ARC, x: 27, w: 5, door: 2, name: 'コインランドリー', sign: { text: 'コインランドリー', bg: '#2f6fd0', color: '#ffffff' }, display: 'plain', awning: ['#5fb8e8', '#ffffff'], wall: '#eef4f8', talk: laundry, decorate: washers },
     { ...ARC, x: 32, w: 4, door: 2, name: 'たい焼き 金ドット', sign: { text: 'たい焼き', bg: '#2a3a7a', color: '#ffffff' }, display: 'counter', awning: ['#2a3a7a', '#ffffff'], wall: '#f6ead2', talk: buyTaiyaki },
-    { ...ARC, x: 36, w: 4, door: 2, name: '空き店舗', sign: { text: '貸店舗', bg: '#e8e4dc', color: '#5a5f6b' }, display: 'plain', doorKind: 'shutter', awning: ['#9aa0aa', '#d5d9e0'], wall: '#e4e0d8',
-      text: ['シャッターが閉まっている。\n「貸店舗　お問い合わせはドット不動産まで」', '…シャッターの前は、看板ネコの特等席らしい。'] },
-    { ...ARC, x: 40, w: 4, door: 2, name: 'ドット書店', sign: { text: 'ドット書店', bg: '#ffffff', color: '#2a3a7a' }, display: 'books', awning: ['#2a3a7a', '#ffffff'], wall: '#f2ece0',
+    { ...ARC, x: 36, w: 4, door: 2, ...shopDoor('shop_wagashi'), name: '和菓子 あんこ堂', sign: { text: '和菓子', bg: '#8a3a4a', color: '#ffffff' }, display: 'counter', doorKind: 'noren', noren: '#8a3a4a', awning: ['#8a3a4a', '#f4efe6'], wall: '#f6ead2', // [R12-S2] (the old 貸店舗: a 和菓子屋 has moved in)
+      text: ['老舗の和菓子屋「あんこ堂」だ。', '店先のガラスケースに、季節の生菓子が並んでいる。\n…看板ネコは、今日もシャッターのあとの特等席で、ごきげんだ。'] },
+    { ...ARC, x: 40, w: 4, door: 2, ...shopDoor('shop_shoten'), name: 'ドット書店', sign: { text: 'ドット書店', bg: '#ffffff', color: '#2a3a7a' }, display: 'books', awning: ['#2a3a7a', '#ffffff'], wall: '#f2ece0', // [R12-S2]
       text: ['町の本屋さん「ドット書店」だ。', '店先に、今週のテレビ情報誌と週刊誌が平積みになっている。\n…芸能ニュースの見出しが、やけに大きい。'] },
-    { ...ARC, x: 44, w: 4, door: 2, name: 'ドラッグストア ドット', sign: { text: 'ドラッグストア', bg: '#2f9a4a', color: '#ffffff' }, display: 'goods', awning: ['#2f9a4a', '#ffffff'], wall: '#eef6ee',
+    { ...ARC, x: 44, w: 4, door: 2, ...shopDoor('shop_yakkyoku'), name: 'ドラッグストア ドット', sign: { text: 'ドラッグストア', bg: '#2f9a4a', color: '#ffffff' }, display: 'goods', awning: ['#2f9a4a', '#ffffff'], wall: '#eef6ee', // [R12-S2]
       text: ['ドラッグストアだ。', '「本日ポイント5倍」の貼り紙。\nのどあめに湿布、日用品…店先のワゴンがにぎやかだ。'] },
 
     // ---- along the main road (doors on y 13)
@@ -1188,9 +1190,9 @@ function generate() {
 
     // ---- 駅前 (x 44..74): the station, the 交番, 郵便局・ドット区役所 (js/places/kuyakusho.js)・銀行・コンビニ
     { type: 'building', ...STATION, place: 'machi_eki', name: 'ドット商店街駅', kind: 'station', wall: '#ece4d4', roof: '#3a5a8a', sign: { text: 'ドット商店街駅', bg: '#ffffff', color: '#20232a' }, signW: 96, enter: ekiEnter('machi') },
-    { type: 'building', x: 66, y: 2, w: 4, h: 3, door: 2, name: '駅前交番', kind: 'shop', wall: '#f4f4f0', roof: '#3a4a6a', sign: { text: '交番', bg: '#ffffff', color: '#2a3a7a' }, display: 'plain',
+    { type: 'building', x: 66, y: 2, w: 4, h: 3, door: 2, ...shopDoor('shop_koban'), name: '駅前交番', kind: 'shop', wall: '#f4f4f0', roof: '#3a4a6a', sign: { text: '交番', bg: '#ffffff', color: '#2a3a7a' }, display: 'plain', // [R12-S2]
       text: ['駅前の交番だ。', 'おまわりさんがパトロールに出ているようだ。\n「パトロール中」の札がかかっている。'] },
-    { type: 'building', x: 44, y: 10, w: 5, h: 4, door: 2, name: 'ドット郵便局', kind: 'shop', wall: '#f6f2ec', roof: '#c8281c', stripes: ['#c8281c', '#ffffff'], sign: { text: '〒 郵便局', bg: '#ffffff', color: '#c8281c' }, display: 'plain',
+    { type: 'building', x: 44, y: 10, w: 5, h: 4, door: 2, ...shopDoor('shop_yubin'), name: 'ドット郵便局', kind: 'shop', wall: '#f6f2ec', roof: '#c8281c', stripes: ['#c8281c', '#ffffff'], sign: { text: '〒 郵便局', bg: '#ffffff', color: '#c8281c' }, display: 'plain', // [R12-S2]
       text: ['郵便局だ。', '窓口には、小包を出す人と、\n通帳を手にした人が並んでいる。'] },
     { type: 'building', x: 49, y: 9, w: 8, h: 5, door: 3, place: 'kuyakusho', name: 'ドット区役所', kind: 'office', rise: 1, wall: '#e4e2d8', roof: '#5a6a7a', canopy: '#2a5088', plants: true, sign: { text: 'ドット区役所', bg: '#2a3a5a', color: '#ffffff' }, signH: 16 },
     // (期日前投票 from 2003-12; before it, the same floor is the 不在者投票 office — kuyakusho.js)
@@ -1200,19 +1202,21 @@ function generate() {
       const vote = y >= 200312 ? '期日前投票所' : '不在者投票の受付';
       return g.say(['入口のわきに「ドット区役所」の各階の案内が掲げてある。', `1階：住民課・税務課（確定申告の相談）\n2階：選挙管理委員会・${vote}`, '3階：区民相談室（暮らしやお金の相談）\n5階：区議会']);
     } },
-    { type: 'building', x: 60, y: 10, w: 6, h: 4, door: 3, name: 'ドット銀行', kind: 'office', rise: 0, wall: '#e8ecf2', roof: '#2a4a7a', canopy: '#2a4a7a', sign: { text: 'ドット銀行', bg: '#2a4a7a', color: '#ffffff' },
+    { type: 'building', x: 57, y: 10, w: 3, h: 4, door: 1, ...shopDoor('shop_yaoya'), name: '八百屋 みどりや', kind: 'shop', wall: '#eef6ee', roof: '#2f9a4a', sign: { text: '八百屋', bg: '#2f9a4a', color: '#ffffff' }, display: 'produce', awning: ['#2f9a4a', '#ffffff'], // [R12-S2] between the 区役所 and the 銀行
+      text: ['八百屋「みどりや」だ。', '店先の台に、朝どれの野菜と、旬の果物が山盛り。\n「まけてよ」の声が、ときどき聞こえてくる。'] },
+    { type: 'building', x: 60, y: 10, w: 6, h: 4, door: 3, ...shopDoor('shop_ginko'), name: 'ドット銀行', kind: 'office', rise: 0, wall: '#e8ecf2', roof: '#2a4a7a', canopy: '#2a4a7a', sign: { text: 'ドット銀行', bg: '#2a4a7a', color: '#ffffff' }, // [R12-S2]
       text: ['銀行だ。「ドット銀行 商店街支店」。', 'ATMコーナーに、短い行列ができている。'] },
     { type: 'building', x: 67, y: 10, w: 6, h: 4, door: 3, name: 'ドットマート 商店街駅前店', kind: 'konbini', sign: { text: 'ドットマート' },
       text: ['コンビニ「ドットマート」。', '駅前の店は、朝と夕方がいちばん混む。\n…食べ物を買うなら、商店街のスーパーが安い。'] },
 
     // ---- the 横丁 (doors on row 22)
-    { ...SMALL, x: 52, w: 4, door: 2, name: '居酒屋 とりあえず', wall: '#f4e6cc', roof: '#3a2a20', sign: { text: '居酒屋', bg: '#2a3a7a', color: '#ffffff' }, noren: '#2a3a7a',
+    { ...SMALL, x: 52, w: 4, door: 2, ...shopDoor('shop_izakaya'), name: '居酒屋 とりあえず', wall: '#f4e6cc', roof: '#3a2a20', sign: { text: '居酒屋', bg: '#2a3a7a', color: '#ffffff' }, noren: '#2a3a7a', // [R12-S2]
       text: ['居酒屋「とりあえず」。', '「とりあえず、生！」の声が、外まで聞こえてくる。'] },
-    { ...SMALL, x: 57, w: 4, door: 2, name: '焼き鳥 ドット', wall: '#f6e7c8', roof: '#5a3a20', sign: { text: '焼き鳥', bg: '#d62f2f', color: '#ffffff' }, noren: '#d62f2f',
+    { ...SMALL, x: 57, w: 4, door: 2, ...shopDoor('shop_yakitori'), name: '焼き鳥 ドット', wall: '#f6e7c8', roof: '#5a3a20', sign: { text: '焼き鳥', bg: '#d62f2f', color: '#ffffff' }, noren: '#d62f2f', // [R12-S2]
       text: ['焼き鳥屋だ。', 'けむりと、たれのこげる香り…。\nカウンターは、仕事帰りの人でいっぱいだ。'] },
-    { ...SMALL, x: 62, w: 4, door: 2, name: '中華そば 一番', kind: 'ramen', wall: '#f4e6cc', sign: { text: '中華そば', bg: '#d62f2f', color: '#ffffff' },
+    { ...SMALL, x: 62, w: 4, door: 2, ...shopDoor('shop_chuka'), name: '中華そば 一番', kind: 'ramen', wall: '#f4e6cc', sign: { text: '中華そば', bg: '#d62f2f', color: '#ffffff' }, // [R12-S2]
       text: ['昔ながらの中華そば屋だ。', '「開店は夕方5時から」と書いてある。'] },
-    { ...SMALL, x: 67, w: 4, door: 2, name: '立ち飲み ドット', wall: '#efe2bf', roof: '#3a3a40', sign: { text: '立ち飲み', bg: '#ffd23f', color: '#20232a' }, noren: '#20232a',
+    { ...SMALL, x: 67, w: 4, door: 2, ...shopDoor('shop_tachinomi'), name: '立ち飲み ドット', wall: '#efe2bf', roof: '#3a3a40', sign: { text: '立ち飲み', bg: '#ffd23f', color: '#20232a' }, noren: '#20232a', // [R12-S2]
       text: ['立ち飲みの店だ。', 'ビール一杯と、おでんひと皿。\n…「一杯だけ」のはずが、みんな長居している。'] },
     { ...SMALL, x: 71, w: 4, door: 2, name: 'スナック 夕顔', wall: '#e8dcd8', roof: '#5a3a5a', sign: { text: 'スナック', bg: '#3a1a3a', color: '#ffb0e0' }, noren: '#7a1a5a',
       text: ['スナック「夕顔」。', 'まだ準備中だ。\n…夜になると、カラオケの歌声が聞こえてくるらしい。'] },
@@ -1235,10 +1239,10 @@ function generate() {
     // ---- props & signs
     gate(13, 13),
     { type: 'sign', x: 13, y: 13, solid: true, text: ['「ドット商店街」の入口アーチだ。', 'はなや・スーパー・ラーメン・カフェ・美容院…\nアーケードの下に、お店がずらりと並んでいる。'] },
-    { type: 'sign', x: 17, y: 13, solid: true, text: ['入口アーチの柱に、案内図が貼ってある。', '【アーケード】はなや／スーパー まるどっと／らーめん／\nCAFE ドット／hair salon／コインランドリー／たい焼き／\nドット書店／ドラッグストア', '【大通り】ドット不動産／ドット家具／ドットキッチン／\nDOT GYM／カラオケ　【東・駅前】駅／郵便局／区役所／\n銀行／コンビニ／横丁　【南】公園／小学校／住宅街'] },
+    { type: 'sign', x: 17, y: 13, solid: true, text: ['入口アーチの柱に、案内図が貼ってある。', '【アーケード】はなや／スーパー まるどっと／らーめん／\nCAFE ドット／hair salon／コインランドリー／たい焼き／\n和菓子／ドット書店／ドラッグストア', '【大通り】ドット不動産／ドット家具／ドットキッチン／\nDOT GYM／カラオケ　【東・駅前】駅／郵便局／区役所／\n銀行／コンビニ／横丁　【南】公園／小学校／住宅街'] },
     ...[3, 8, 12, 18, 23, 28, 33, 38, 43].map((x, i) => pillar(x, 8, i)),
     commuterTrain(64, -1, { text: ['電車が駅に入ってきた。', '駅の改札は、駅舎の入口から。'] }),
-    cat(38, 5, { talk: petCat }),
+    cat(36, 5, { talk: petCat }), // [R12-S2] (was at x 38: in front of the 和菓子屋's door)
     notice(40, 13, { talk: readNotice }),
     post(74, 13, '商店街', '東京', { text: ['道しるべだ。', '← ドット商店街（アーケード・駅）\n→ 東京エリア（ドット荘・事務所・テレビ局）'] }),
     { type: 'sign', x: 49, y: 5, text: ['「ドット商店街駅」の案内板だ。', '← アーケード（ドット商店街）\n↓ 区役所・郵便局・銀行・コンビニ／大通り', '大通りの南：横丁・ドット小学校・住宅街\n大通りを東へ行けば、東京エリア。'] },
@@ -1288,7 +1292,7 @@ function generate() {
       text: ['ドット商店街駅です。', '駅を出て左が、アーケードの商店街。\n区役所や銀行は、駅前の大通りぞいですよ。'] },
     { type: 'npc', id: 'machi_kuyakusho_visitor', x: 54, y: 14, dir: 'up', look: { ...LOOKS.oldman, top: '#6a5a4a' }, name: '手続き帰りのおじいさん', wander: 1,
       text: ['住民票をとりに来たんじゃ。', '区役所は、むかしは商店街のいちばん奥にあってのう。\n駅前に移って、ずいぶん便利になったわい。'] },
-    { type: 'npc', id: 'machi_yokocho', x: 66, y: 23, dir: 'down', look: { ...LOOKS.salaryman, top: '#4a4a5a', tie: '#c0452f', blush: true }, name: '仕事帰りの会社員', wander: 2,
+    { type: 'npc', id: 'machi_yokocho', x: 64, y: 24, dir: 'up', look: { ...LOOKS.salaryman, top: '#4a4a5a', tie: '#c0452f', blush: true }, name: '仕事帰りの会社員', // [R12-S2] (was in the lane)
       text: ['いやあ、この横丁は落ち着くねえ。', '一杯だけ…一杯だけのつもりなんだけどね。'] },
     { type: 'npc', id: 'machi_pupil1', x: 58, y: 31, dir: 'down', look: { ...LOOKS.kid, top: '#ff8a3d' }, name: '小学生', wander: 3,
       text: ['休み時間は、ドッジボール！', 'きのうテレビで見た芸人さんのギャグ、\nクラスでみんなマネしてるんだ！'] },

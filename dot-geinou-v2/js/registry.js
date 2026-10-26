@@ -80,6 +80,15 @@ export const MODULES = [
   './places/kyoshujo.js',
   './places/menkyo.js',
   './places/gassyuku.js',
+  // [R12-S2] 店の中身: the shop interiors of the towns (カラオケ・居酒屋・喫茶・小劇場・ライブハウス・古着・本屋・薬局・銀行・郵便局・交番 …) (api: test-output/api_r12s2.txt)
+  './world/shopkit.js',
+  './places/shop_civic.js',
+  './places/shop_eat.js',
+  './places/shop_stage.js',
+  './places/shop_cafe.js',
+  './places/shop_store.js',
+  // [R9-B1] 鉄道ネットワーク: 駅構内 'eki' (券売機・改札・ホーム・路線図・乗車), 駅前の街 (東京 8・大阪 2), 教習所は調布・
+  // 免許センターは府中へ (after clock.js: eki.js wraps g.goto for the walk in and out of a station) (api: test-output/api_eki.txt)
   './world/eki.js',
   './world/ekimae_tokyo.js',
   './world/ekimae_osaka.js',
@@ -99,6 +108,15 @@ export const MODULES = [
   // the advisor mascots 独裁くん (the road to dictatorship and its upkeep) and イクサくん (war coach): phone apps, tips, g.advisor* (api: test-output/api_advisors.txt)
   './engine/advisors.js',
   './engine/bigtext_screens.js', // [R12-U1] 縦画面の「大きな文字」: the lower screen under the game on a portrait phone (engine/bigtext.js; api: test-output/api_r12u1.txt)
+  // [R12-L1] 恋愛・結婚・家庭: the phone app 「恋のはなし」 (手帳の「ひとことメモ」): 出会い・デート・告白・同棲・プロポーズ・結婚・子ども・家族アルバム
+  // (never mandatory: the player opts in in the app; api: test-output/api_romance.txt). romance_ui.js imports the rest.
+  './engine/romance.js',
+  './engine/romance_date.js',
+  './engine/romance_meet.js',
+  './engine/romance_wed.js',
+  './engine/romance_kids.js',
+  './engine/romance_ui.js',
+  // minigames
   './minigames/tsukkomi.js',
   './minigames/zukko.js',
   './minigames/rhythm.js',

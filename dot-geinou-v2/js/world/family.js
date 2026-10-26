@@ -44,6 +44,8 @@ import {
 import { phoneList, phoneInfo, phoneConfirm, phoneView, box, phoneText, fitText, PC, SCREEN } from '../engine/phone.js';
 import { STATION_TICKETS, travelScene } from './station.js';
 
+// [R12-L1] extra rows of the 家族 app (romance_ui.js adds 「家族アルバム」): each (g) => { label, sub, run(g) } | null
+export const FAMILY_ROWS = [];
 export const START_AFF = 60; // 仲良し
 export const FULL_VISIT_DAYS = 7; // full bonuses of a visit home at most this often
 export const SEND_AMOUNTS = [5000, 10000, 30000];
@@ -872,11 +874,13 @@ async function familyApp(g) {
     }
     for (const M of late) rows.push({ type: 'late', M, label: `${M.call}（思い出）`, look: M.look, sub: '実家の仏壇で お参りできる' });
     if (!members.length && !late.length) rows.push({ type: 'none', label: '家族の登録はない', sub: 'ふるさとの家は、おとなりさんが見ている', disabled: true, why: '（実家へは帰れる）' });
+    for (const fr of FAMILY_ROWS) { try { const r = fr(g); if (r) rows.push({ type: 'ext', ...r }); } catch (e) { console.error(e); } } // [R12-L1]
     rows.push({ type: 'trip', label: '帰省のこと', sub: `${prefecture(profileOf(g.state).hometown).name}・往復 ${fmtMoney(tripOf(profileOf(g.state).hometown).fare)}` });
     const i = await phoneList(g, { title: '家族', color: '#d0703a', items: rows, hint: 'A:えらぶ　B:もどる' });
     if (i < 0) return;
     const row = rows[i];
     if (row.type === 'trip') { await tripInfo(g); continue; }
+    if (row.type === 'ext') { try { await row.run(g); } catch (e) { console.error(e); } continue; } // [R12-L1]
     if (row.type === 'late') { await memorialInfo(g, row.M); continue; }
     if (row.type !== 'm') continue;
     const k = await phoneList(g, { title: row.M.label, color: '#d0703a', items: [{ label: '電話する', sub: '1日1回 ストレス -8・♥+2' }, { label: '送金する', sub: '¥5,000 / ¥10,000 / ¥30,000' }] });

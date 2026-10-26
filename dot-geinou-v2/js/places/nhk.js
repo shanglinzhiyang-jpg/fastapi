@@ -909,6 +909,7 @@ function milestoneCard(g) {
       `知名度 ★${st.fame}`,
       fans ? `ファン ${fans.toLocaleString('ja-JP')}人` : null,
       friends ? `なかよしの仲間 ${friends}人` : null,
+      (() => { try { return typeof g.romanceSummary === 'function' ? g.romanceSummary() || null : null; } catch (e) { return null; } })(), // [R12-L1] 家族
     ].filter(Boolean);
     let hd = null;
     try { hd = charSheetHD(st.look || {}); } catch (e) { hd = null; }

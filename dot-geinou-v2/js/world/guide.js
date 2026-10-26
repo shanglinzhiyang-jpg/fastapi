@@ -357,14 +357,186 @@ export const GUIDE = {
     hint: 'ネオン街の南東、裏通りのつきあたり',
     lines: ['暴力団の事務所。危険な場所', '関わりを持てば、芸能界にも政界にもいられなくなる'],
   },
+  // ---------------------------------------------------------------- [R12-S2] 店の中身（js/places/shop_*.js）
+  shop_junkissa: {
+    town: 'tokyo', name: '純喫茶 ドット', short: '純喫茶',
+    hint: '芸人通りの北、いちばん西の喫茶店',
+    lines: ['モーニング・コーヒー・ナポリタン（7:00〜22:00）', 'ネタを書く席で台本エディタが開く（ネタの種も使える）', '作家志望のお客さんに、台本を見てもらえる（¥450）'],
+  },
+  shop_furugi_t: {
+    town: 'tokyo', name: '古着屋（芸人通り）', short: '古着屋',
+    hint: '芸人通りの北、純喫茶のとなり',
+    lines: ['衣装を買うと、何度でも着替えられる（1日1回）', '身だしなみアップ・次のミニゲームが少しやさしくなる', '試着とコーディネートの相談は無料（12:00〜21:00）'],
+  },
+  shop_karaoke_t: {
+    town: 'tokyo', name: 'カラオケ（芸人通り）', short: 'カラオケ',
+    hint: '芸人通りの北、NSC東京校の東の細い店',
+    lines: ['1時間¥800〜の時間制の個室（ワンドリンクつき）', '歌（歌+1）・発声練習・ネタ合わせ／台本の読み上げ', '時間は、歌ったり練習したりするたびに減る'],
+  },
+  shop_ramen_t: {
+    town: 'tokyo', name: 'ラーメン屋（芸人通り）', short: 'ラーメン',
+    hint: '劇場通り、古本屋のとなり',
+    lines: ['「芸人さん大盛り無料」（★250になるまで）', 'お金がないときは、ツケで食べられる', '大将の話から、仕事の噂が聞ける'],
+  },
+  shop_cafe_t: {
+    town: 'tokyo', name: 'カフェ（劇場通り）', short: 'カフェ',
+    hint: '劇場通り、ドット小劇場のとなり',
+    lines: ['読み合わせ席で、相方とネタ合わせ／ひとりで台本を読める', 'ケーキ・パンケーキ・コーヒー（9:00〜21:00）'],
+  },
+  shop_shogekijo: {
+    town: 'tokyo', name: 'ドット小劇場', short: '小劇場',
+    hint: '劇場通りの西のはし、客席六十の小さな劇場',
+    lines: ['公演を観て勉強（演技・間・構成）／舞台に立つ（若手公演）', '端役の仕事・楽屋で差し入れ（12:00〜22:00）', '昼公演は土日だけ'],
+  },
+  shop_livehouse: {
+    town: 'tokyo', name: 'ライブハウス', short: 'ライブハウス',
+    hint: '劇場通り、古本屋の西の地下',
+    lines: ['バンドとお笑いの対バン（17:00〜24:00・月曜休み）', 'チケット＋ドリンク代で観られる／ステージにも立てる', '前座で歌う仕事（歌のミニゲーム）'],
+  },
+  shop_engeijo: {
+    town: 'tokyo', name: 'ドット演芸場', short: '演芸場',
+    hint: '劇場通りの東、大きな演芸の建物',
+    lines: ['昼席12:00・夜席17:30の寄席（落語・漫才）', '観ると話芸・間・客席を読む力が伸びる', '前座の仕事（落語）／楽屋で差し入れ'],
+  },
+  shop_netabar: {
+    town: 'tokyo', name: 'お笑いBAR 笑いの穴', short: 'お笑いBAR',
+    hint: '劇場通りの東のはし、地下の看板（1995年〜）',
+    lines: ['ワンドリンクで、5分のネタ見せ・大喜利ナイト', 'ヤジを返すとアドリブ・度胸が伸びる／チップがもらえる', '18:00〜27:00'],
+  },
+  shop_furuhon_t: {
+    town: 'tokyo', name: '古本屋（劇場通り）', short: '古本屋',
+    hint: '劇場通り、カフェのとなりの小さな古本屋',
+    lines: ['昔の演芸雑誌・戯曲集など（毎日、棚が変わる）', '読むと芸の力とネタの種が増える／水曜休み'],
+  },
+  shop_wagashi: {
+    town: 'tokyo', name: '和菓子 あんこ堂', short: '和菓子',
+    hint: '商店街のアーケード、たい焼きの先',
+    lines: ['季節の生菓子・大福・どら焼き／菓子折り（楽屋の差し入れに）', 'ベンチでお茶と生菓子（ストレス-7）／水曜休み'],
+  },
+  shop_shoten: {
+    town: 'tokyo', name: 'ドット書店', short: '書店',
+    hint: '商店街のアーケード、東のはし',
+    lines: ['芸の本（漫才・演技・声・会話・落語）を買って読むと伸びる', '立ち読みでネタの種／10:00〜21:00'],
+  },
+  shop_yakkyoku: {
+    town: 'tokyo', name: 'ドラッグストア ドット', short: 'ドラッグストア',
+    hint: '商店街のアーケード、いちばん東',
+    lines: ['栄養ドリンク・胃腸薬（飲みすぎの夜に）・湿布', '健康相談（のどあめのサンプルも）'],
+  },
+  shop_yaoya: {
+    town: 'tokyo', name: '八百屋 みどりや', short: '八百屋',
+    hint: '商店街の駅前の大通り、区役所と銀行のあいだ',
+    lines: ['野菜・果物（旬のもの）／「まけてよ」で一割引も', '日曜休み'],
+  },
+  shop_koban: {
+    town: 'tokyo', name: '駅前交番', short: '交番',
+    hint: '商店街の駅の東どなり',
+    lines: ['道案内・落とし物・相談（闇金・つきまとい）', '自首の窓口／手配度が高いと呼び止められることも'],
+  },
+  shop_yubin: {
+    town: 'tokyo', name: 'ドット郵便局', short: '郵便局',
+    hint: '駅前の大通り、区役所のとなり',
+    lines: ['切手・はがき・手紙（♥+2）・年賀状（12月）', '現金書留で仕送り／貯金窓口（銀行と同じ口座）'],
+  },
+  shop_ginko: {
+    town: 'tokyo', name: 'ドット銀行 商店街支店', short: '銀行',
+    hint: '駅前の大通り、八百屋のとなり',
+    lines: ['窓口は平日9:00〜15:00・ATMの時間は時代による', '預け入れ・引き出し・定期預金・ローンの相談', '携帯の「銀行」アプリと同じ口座'],
+  },
+  shop_izakaya: {
+    town: 'tokyo', name: '居酒屋 とりあえず', short: '居酒屋',
+    hint: '商店街の横丁、赤ちょうちんの最初の店（16:00〜）',
+    lines: ['生ビール・串・お茶漬け（お酒は20歳から）', '仲間と宴会：♥アップ・芸人仲間からネタの種', '飲みすぎると翌朝つらい／噂話で仕事の情報'],
+  },
+  shop_yakitori: {
+    town: 'tokyo', name: '焼き鳥 ドット', short: '焼き鳥',
+    hint: '横丁、居酒屋のとなり（17:00〜・日曜休み）',
+    lines: ['串の盛り合わせ・おまかせ5本', 'カウンターで、大将の話から噂が聞ける'],
+  },
+  shop_chuka: {
+    town: 'tokyo', name: '中華そば 一番', short: '中華そば',
+    hint: '横丁、焼き鳥のとなり（17:00〜）',
+    lines: ['昔ながらの中華そば・大盛り・半チャーハン', '店主の話が、その時代の味'],
+  },
+  shop_tachinomi: {
+    town: 'tokyo', name: '立ち飲み ドット', short: '立ち飲み',
+    hint: '横丁の東、15:00から',
+    lines: ['安い一杯とおでん', '先輩芸人が、おごってくれることも（★500未満）'],
+  },
+  shop_geki_n: {
+    town: 'namba', name: 'ドット劇場', short: '劇場',
+    hint: 'なんばの北西、NSC大阪校のとなり',
+    lines: ['若手の劇場：公演を観る・舞台に立つ・前説の仕事', '昼13:00・夜18:00の二部制'],
+  },
+  shop_ramen_n: {
+    town: 'namba', name: 'ラーメン屋（なんば）', short: 'ラーメン',
+    hint: '戎橋筋の西、ことぶき橋の南',
+    lines: ['NSC生は、替え玉が無料', '餃子・ライス・みそラーメン'],
+  },
+  shop_karaoke_n: {
+    town: 'namba', name: 'カラオケ（なんば）', short: 'カラオケ',
+    hint: 'ラーメン屋のとなり',
+    lines: ['時間制の個室。歌・声出し・ネタ合わせ・台本の読み上げ'],
+  },
+  shop_furugi_n: {
+    town: 'namba', name: '古着屋 ミナミ', short: '古着屋',
+    hint: '千日前通りの西、タクシー乗り場の近く',
+    lines: ['ヒョウ柄・金色のスニーカー・スーツ・着ぐるみ', '衣装は何度でも着替えられる（1日1回）'],
+  },
+  shop_junkissa_n: {
+    town: 'namba', name: '純喫茶 ドット（なんば）', short: '純喫茶',
+    hint: '千日前通りの西、古着屋のとなり',
+    lines: ['ミックスジュース・モーニング（7:00〜11:00）', 'ネタを書く席・将棋のおじいさん・スポーツ紙'],
+  },
+  shop_teishoku_n: {
+    town: 'namba', name: '洋食 ドット軒', short: '洋食',
+    hint: '千日前通りの東、戎橋筋のアーチの先',
+    lines: ['オムライス・日替わり・ビーフシチュー', '昼と夜の二部制（昼どきは行列）'],
+  },
+  shop_sennichimae: {
+    town: 'namba', name: 'ドット千日前劇場', short: '千日前劇場',
+    hint: '千日前通りの東のはし',
+    lines: ['昼席12:30・夜席16:00の劇場／観る・出る', 'ちょい役のコントの仕事'],
+  },
+  shop_hall_n: {
+    town: 'namba', name: 'ドット千日前ホール', short: '千日前ホール',
+    hint: '千日前、裏通りの地下のホール',
+    lines: ['毎晩18時からの「若手ネタバトル」（客席は¥500）', 'エントリーして十組で勝負：順位で賞金'],
+  },
+  shop_kushikatsu: {
+    town: 'namba', name: '串カツ屋', short: '串カツ',
+    hint: '千日前、裏通りの西',
+    lines: ['串カツ・どて焼き・ビール（20歳から）', 'ソースの二度づけは、禁止！'],
+  },
+  shop_horoyoi: {
+    town: 'namba', name: '居酒屋 ほろ酔い亭', short: '居酒屋',
+    hint: '千日前、裏通りの東',
+    lines: ['どて焼き・串・お酒（20歳から）', '仲間と宴会／噂話で仕事の情報'],
+  },
+  shop_hyakuen: {
+    town: 'namba', name: '100円ショップ', short: '100円ショップ',
+    hint: '千日前、裏通りの中ほど',
+    lines: ['なんでも100円（メモ帳・小道具・お菓子）', 'メモ帳でネタの種／コント小道具で次のミニゲームがやさしく'],
+  },
+  shop_furuhon_n: {
+    town: 'namba', name: '古本屋（なんば）', short: '古本屋',
+    hint: '千日前通りの東のはし',
+    lines: ['昔の演芸雑誌・パンフ・戯曲集（毎日、棚が変わる）'],
+  },
 };
 
 export const GUIDE_ORDER = [
   'tokyo', 'home', 'konbini', 'sento', 'station_tokyo',
   'yoshimoto', 'bs_yoshimoto', 'grape', 'nsc_tokyo', 'keikoba', 'horipro', 'toho', 'toei', 'nhk',
+  // [R12-S2] 芸人通り・劇場通りの店
+  'shop_junkissa', 'shop_furugi_t', 'shop_karaoke_t', 'shop_ramen_t', 'shop_cafe_t', 'shop_shogekijo', 'shop_livehouse', 'shop_engeijo', 'shop_netabar', 'shop_furuhon_t',
   'machi', 'super', 'hanaya', 'ramen', 'cafe', 'salon', 'famires', 'gym', 'karaoke', 'fudousan', 'kagu', 'mansion', 'tower',
+  // [R12-S2] 商店街のアーケード・駅前・横丁の店
+  'shop_wagashi', 'shop_shoten', 'shop_yakkyoku', 'shop_yaoya', 'shop_koban', 'shop_yubin', 'shop_ginko', 'shop_izakaya', 'shop_yakitori', 'shop_chuka', 'shop_tachinomi',
   'minato', 'ntv', 'tbs', 'tvasahi', 'fujitv', 'tvtokyo',
   'namba', 'station_namba', 'shinkigeki', 'nsc', 'shochiku', 'takoyaki', 'hotel', 'mbs', 'ktv', 'jikka',
+  // [R12-S2] なんば 戎橋筋・千日前・にし通りの店
+  'shop_geki_n', 'shop_ramen_n', 'shop_karaoke_n', 'shop_furugi_n', 'shop_junkissa_n', 'shop_teishoku_n', 'shop_sennichimae', 'shop_hall_n', 'shop_kushikatsu', 'shop_horoyoi', 'shop_hyakuen', 'shop_furuhon_n',
   'kuyakusho', 'kyoshujo', 'menkyo', 'gassyuku',
   'nagatacho', 'kokkai', 'kantei', 'jimin_hq', 'minshu_hq', 'yato_hq', 'myparty_hq', 'keisatsu', 'kensatsu', 'saibansho',
   'kanraku', 'koban', 'kyabakura', 'gamecen', 'shohisha', 'yamikin', 'kumi',
@@ -406,6 +578,12 @@ export const GUIDE_JOBS = [
   { place: 'ktv', label: '収録前の前説', ids: ['ktv_maesetsu'], tier: 0, skill: 'talk' },
   { place: 'ktv', label: '観覧の盛り上げ役', ids: ['ktv_kanran'], tier: 0, skill: 'warai' },
   { place: 'ktv', label: '商店街ロケのお手伝い', ids: ['ktv_loke'], tier: 0, skill: 'talk' },
+  // [R12-S2] 小屋の出番の手伝い（js/places/shop_stage.js）
+  { place: 'shop_shogekijo', label: '小劇場の端役', ids: ['shop_shogeki_hayaku'], tier: 0, skill: 'engi' },
+  { place: 'shop_livehouse', label: 'ライブハウスの前座（歌）', ids: ['shop_live_uta'], tier: 0, skill: 'uta' },
+  { place: 'shop_engeijo', label: '寄席の前座', ids: ['shop_engei_zenza'], tier: 0, skill: 'talk' },
+  { place: 'shop_geki_n', label: 'ドット劇場の前説', ids: ['shop_geki_maesetsu'], tier: 0, skill: 'talk' },
+  { place: 'shop_sennichimae', label: '千日前劇場のちょい役コント', ids: ['shop_sen_chotto'], tier: 0, skill: 'warai' },
   // tier 1: 所属 または ★30
   { place: 'yoshimoto', label: '若手ライブ出演', ids: ['yoshimoto_wakate_live'], tier: 1, need: 'yoshimoto', skill: 'warai' },
   { place: 'yoshimoto', label: 'お祭りの営業', ids: ['yoshimoto_matsuri'], tier: 1, need: 'agency', skill: 'talk' },
