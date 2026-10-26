@@ -149,9 +149,9 @@ const nscTokyoOpen = (g) => yearOf(g) >= 1995;
 function neonGateSouth(x, y) {
   const F = (ctx, x0, y0, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x0, y0, w, h); };
   return {
-    // z: drawn under anyone standing on the avenue rows above (the player arriving from ネオン街
-    // stands right behind it on row 44 and must stay in sight)
-    type: 'prop', x, y, w: 7, h: 1, solid: false, z: -100,
+    // drawn in front of anyone standing on the rows above it: walking under the gate, the sign hides the
+    // walker's head (the arrival from ネオン街 is on row 44, just below the banner, and stays in sight)
+    type: 'prop', x, y, w: 7, h: 1, solid: false,
     draw(ctx, sx, sy, g) {
       const t = (g && g.frame) || 0;
       // light spilling out of the street beyond
@@ -203,8 +203,9 @@ function districtTiles(c, W) {
   put(c, 1, 47, 'bush'); put(c, 1, 50, 'bicycle');
   fill(c, 23, 45, 10, 6, 'stone');                     // NSC東京校's lot
   fill(c, 33, 45, 4, 6, 'brick');                      // the alley by the gate
-  put(c, 36, 46, 'vending'); put(c, 36, 47, 'trash'); put(c, 33, 49, 'bicycle');
-  fill(c, 37, 46, 7, 5, 'sidewalk');                   // カラオケ
+  put(c, 37, 46, 'vending'); put(c, 37, 47, 'trash'); put(c, 43, 49, 'bicycle');
+  fill(c, 33, 46, 4, 5, 'sidewalk');                   // カラオケ (a narrow shop by the NSC; the gate opens onto a plaza)
+  fill(c, 37, 46, 7, 5, 'brick');                      // the small plaza under the ネオン街 gate
   fill(c, 44, 45, 2, 6, 'path');
   fill(c, 46, 45, 19, 6, 'grass');
   for (let x = 46; x <= 64; x++) put(c, x, 45, 'hedge');
@@ -259,7 +260,7 @@ function districtEntities() {
     ...(PLACES.nsc_tokyo ? [{ type: 'building', x: 23, y: 45, w: 10, h: 6, door: 5, place: 'nsc_tokyo', name: 'NSC東京校', kind: 'office', wall: '#fff3e6', roof: '#e8492a', canopy: '#e8492a', sign: { text: 'NSC東京校', bg: '#e8492a', color: '#ffffff' }, cond: nscOpen }] : []),
     { type: 'building', x: 23, y: 45, w: 10, h: 6, door: 5, name: 'テナント募集中のビル', kind: 'office', wall: '#e4e2dc', roof: '#7a7f8a', sign: { text: 'テナント募集', bg: '#ffffff', color: '#d62f2f' },
       cond: PLACES.nsc_tokyo ? before : undefined, text: ['まだ新しいビルだ。', '「テナント募集」の貼り紙がある。\n一階から三階まで、まるごと空いているらしい。'] },
-    { type: 'building', x: 37, y: 46, w: 7, h: 5, door: 3, name: 'カラオケ', kind: 'karaoke', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' },
+    { type: 'building', x: 33, y: 46, w: 4, h: 5, door: 2, name: 'カラオケ', kind: 'karaoke', sign: { text: 'カラオケ', bg: '#20232a', color: '#ff7eb6' },
       text: ['カラオケ店だ。', '個室を借りて、ネタ合わせをする芸人も多いらしい。\n大きな声を出しても、だれにも気づかれない。'] },
     { type: 'building', x: 46, y: 46, w: 5, h: 5, door: 2, name: 'リハーサルスタジオ', kind: 'studio', wall: '#d8d2c4', roof: '#5a6070', onair: false, sign: { text: 'スタジオ', bg: '#ffffff', color: '#20232a' },
       text: ['時間貸しのリハーサルスタジオだ。', 'バンドやダンサー、芸人も使っているらしい。\n今日は予約でいっぱいだ。'] },
