@@ -118,7 +118,13 @@ body.fullscreen #fs .fs-exit { display: inline; }
 
 /* In-game text entry (engine/textinput.js) */
 .textask { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-start; justify-content: center;
-  padding-top: max(12vh, env(safe-area-inset-top)); background: rgba(6, 9, 20, 0.6); }
+  padding-top: max(12vh, env(safe-area-inset-top)); background: rgba(6, 9, 20, 0.6); pointer-events: none; }
+/* the box is clickable, the rest lets taps through so the touch d-pad (and A/B) under it stay usable */
+.textask-box { pointer-events: auto; }
+body.asking-text #pad { position: relative; z-index: 51; }
+.textask-keys { display: flex; gap: 8px; }
+.textask-keys button { flex: 1; font: 20px "DotGothic16", sans-serif; min-height: 44px; border: 2px solid #9aa3c7; background: #1c2a5e; color: #5fd7ff; touch-action: none; user-select: none; -webkit-user-select: none; }
+.textask-keys button:active { background: #3b4380; color: #fff; }
 .textask-box { width: min(92vw, 420px); background: #121a3a; border: 3px double #fff; box-shadow: 4px 4px 0 #060914;
   padding: 16px; display: flex; flex-direction: column; gap: 10px; font-family: "DotGothic16", sans-serif; color: #fff; }
 .textask-title { color: #5fd7ff; font-size: 18px; }

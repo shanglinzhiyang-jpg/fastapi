@@ -27,6 +27,7 @@ export class Input {
     this.dirStack = [];
     this.sources = {}; // button -> Set of source ids holding it
     this.onAnyKey = null; // hook used to unlock audio
+    this.textHook = null; // (key, 'down'|'up') while a text box is open (textinput.js): the d-pad moves its caret, the game sees nothing
     this.onMute = null;
 
     // typing in a text field (name entry) is not game input
@@ -66,6 +67,10 @@ export class Input {
     const s = (this.sources[k] ||= new Set());
     const wasHeld = s.size > 0;
     s.add(src);
+    if (this.textHook) { // a text box is open: directions go to its caret, nothing reaches the game
+      if (!wasHeld && DIR_KEYS.includes(k)) { try { this.textHook(k, 'down'); } catch (e) { /* ignore */ } }
+      return;
+    }
     if (!wasHeld) {
       this.held[k] = true;
       this.pressedNow[k] = true;
@@ -82,6 +87,7 @@ export class Input {
     if (!s) return;
     s.delete(src);
     if (s.size === 0) {
+      if (this.textHook && DIR_KEYS.includes(k)) { try { this.textHook(k, 'up'); } catch (e) { /* ignore */ } }
       this.held[k] = false;
       if (DIR_KEYS.includes(k)) this.dirStack = this.dirStack.filter((d) => d !== k);
     }
