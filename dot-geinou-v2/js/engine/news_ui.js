@@ -168,8 +168,8 @@ class NewsScene {
     if (inp.repeat('right')) { this.setTab(this.tab + 1); return; }
     if (id === 'tv' || (id === 'weather' && !this.rows.length)) { if (inp.repeat('up')) { this.focus = 'tabs'; sfx('cursor'); } return; }
     const n = this.rows.length;
-    if (inp.repeat('up')) { if ((this.sel[id] | 0) > 0) { this.sel[id]--; sfx('cursor'); } else { if (id === 'find') this.findFocus = true; else this.focus = 'tabs'; sfx('cursor'); } return; }
-    if (inp.repeat('down')) { if ((this.sel[id] | 0) < n - 1) { this.sel[id]++; sfx('cursor'); } return; }
+    if (inp.repeat('up')) { if ((this.sel[id] | 0) > 0) { this.sel[id] = (this.sel[id] | 0) - 1; sfx('cursor'); } else { if (id === 'find') this.findFocus = true; else this.focus = 'tabs'; sfx('cursor'); } return; }
+    if (inp.repeat('down')) { if ((this.sel[id] | 0) < n - 1) { this.sel[id] = (this.sel[id] | 0) + 1; sfx('cursor'); } return; }
     if (inp.pressed('a')) this.open(this.cur());
   }
   async findChip(i) {
