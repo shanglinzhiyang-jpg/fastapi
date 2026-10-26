@@ -15,6 +15,10 @@ import { phoneList, phoneInfo, phoneConfirm, appTile, closePhoneThen, phoneOverM
 import { drawFaceHD } from './sprites.js';
 import { CONTESTS, CONTEST_UI, internals as I } from './contests.js';
 import * as TVG from './contests_tv.js';
+import { drawHistImg } from './world_hist.js';
+// the logos of M-1 and キングオブコント (fan-game signboards; the marks belong to their owners)
+const CONTEST_LOGO = { m1: 'lg_m1_orange', koc: 'lg_koc' };
+const contestLogo = (c, defId, x, y, w, h) => { const k = CONTEST_LOGO[defId]; if (!k) return false; drawHistImg(c, k, x, y, w, h, 'contain', k === 'lg_koc' ? '#ffffff' : '#000000'); return true; };
 
 const has = (g, k) => !!g && typeof g[k] === 'function';
 const num = (v, d = 0) => (v !== null && v !== '' && v !== undefined && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -738,8 +742,9 @@ class ContestScene {
       T(c, nx, 400, y + 7, 10, nr && nr.day === today && x.entry ? K.gold : K.dim, 'left', SW - 400 - sw - 20);
       const mark = x.entry && x.entry.status !== 'withdrawn' ? '★' : row.el.ok ? '○' : x.invite ? '招' : '×';
       T(c, mark, 22, y + 6, 12, mark === '★' ? K.gold : mark === '○' ? K.good : K.faint);
-      T(c, x.label, 38, y + 2, 12, x.status === 'notyet' || x.status === 'closed' ? K.dim : K.text, 'left', 352);
-      T(c, `${I.KIND_LABEL[I.kindOf(x.def)] || ''}${x.def.broadcaster ? `・${x.def.broadcaster}` : ''}${row.el.ok ? '' : `・${row.el.why}`}`, 38, y + 13, 10, row.el.ok ? K.dim : K.faint, 'left', 352);
+      const hasLogo = contestLogo(c, x.def && x.def.id, 350, y + 2, 40, ROW_H - 5);
+      T(c, x.label, 38, y + 2, 12, x.status === 'notyet' || x.status === 'closed' ? K.dim : K.text, 'left', hasLogo ? 304 : 352);
+      T(c, `${I.KIND_LABEL[I.kindOf(x.def)] || ''}${x.def.broadcaster ? `・${x.def.broadcaster}` : ''}${row.el.ok ? '' : `・${row.el.why}`}`, 38, y + 13, 10, row.el.ok ? K.dim : K.faint, 'left', hasLogo ? 304 : 352);
       return;
     }
     const sty = this.style();
@@ -756,6 +761,7 @@ class ContestScene {
       const noS = String(e.no ?? '—');
       const ns = measure(c, noS, 22) <= 84 ? 22 : measure(c, noS, 16) <= 84 ? 16 : 12;
       TVG.telop(c, noS, 66, y + 18 + (22 - ns) / 2, ns, '#ffffff', '#000000', 'center', 84);
+      contestLogo(c, def && def.id, SW - 16 - 120 - 64, y + 6, 54, 30);
       T(c, `${cyc ? cyc.label : def.name}`, 122, y + 5, 12, '#ffffff', 'left', SW - 122 - 130);
       T(c, e.unitName || '', 122, y + 20, 12, sty.accent, 'left', SW - 122 - 130);
       let nx = '';
