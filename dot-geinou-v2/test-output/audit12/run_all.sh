@@ -70,4 +70,11 @@ row "R26 crisis_t1" "$(tail -1 "$OUT/r26_crisis_t1.txt")"
 # 14. [R27] 国会戦術（会期延長・牛歩戦術・問責決議、NPCの使い方）
 node test-output/progress/r27/diet_t1.mjs > "$OUT/r27_diet_t1.txt" 2>&1
 row "R27 diet_t1" "$(tail -1 "$OUT/r27_diet_t1.txt")"
+# 15. [R28] 通し検査（R17–R27）: 昭和の時代設定（ネットなし）、全システムを埋めてセーブ→再読み込みして比較、用語集の時代チェック
+node test-output/progress/r28/era_t1.mjs > "$OUT/r28_era_t1.txt" 2>&1
+row "R28 era_t1 (showa: no net)" "$(tail -1 "$OUT/r28_era_t1.txt")"
+node test-output/progress/r28/audit_save.mjs heisei > "$OUT/r28_audit_save.txt" 2>&1
+row "R28 save/reload audit" "$(tail -1 "$OUT/r28_audit_save.txt")"
+node test-output/fix3-learning/gloss_era.mjs > "$OUT/r28_gloss_era.txt" 2>&1
+row "R28 glossary era check" "$(tail -1 "$OUT/r28_gloss_era.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"

@@ -324,8 +324,8 @@ export function actions(g) {
     const ok = can(g, 'epi'), pm = isPM(g);
     const lawOK = polDate(g).year >= 2012;
     const noRole = ok ? null : '総理大臣か厚生労働大臣のときに使える';
-    A('rules_up', '行動制限', '行動制限を強める', `いまは「${RULE_NAMES[c.rules]}」。${c.rules < 3 ? `つぎは「${RULE_NAMES[c.rules + 1]}」。` : ''}`, ['感染が減る（市民の協力が高いほど効く）', '経済の落ち込みが進み、市民の自粛疲れがたまる', c.rules + 1 === 3 ? '緊急事態宣言は、特措法（2012年〜）にもとづく' : '要請であり、罰則はない'],
-      { why: noRole || (c.rules >= 3 ? 'これ以上は強められない' : c.rules + 1 === 3 && !pm ? '宣言は総理大臣が決める' : c.rules + 1 === 3 && !lawOK ? '特措法がまだない（2012年〜）' : cool('rules', 3)) });
+    A('rules_up', '行動制限', '行動制限を強める', `いまは「${RULE_NAMES[c.rules]}」。${c.rules < 3 ? `つぎは「${RULE_NAMES[c.rules + 1]}」。` : ''}`, ['感染が減る（市民の協力が高いほど効く）', '経済の落ち込みが進み、市民の自粛疲れがたまる', c.rules + 1 === 3 ? (lawOK ? '緊急事態宣言は、特措法にもとづく' : '緊急事態宣言の根拠になる法律は、まだない') : '要請であり、罰則はない'],
+      { why: noRole || (c.rules >= 3 ? 'これ以上は強められない' : c.rules + 1 === 3 && !pm ? '宣言は総理大臣が決める' : c.rules + 1 === 3 && !lawOK ? '緊急事態宣言の根拠となる法律がまだない' : cool('rules', 3)) });
     A('rules_down', '行動制限', '行動制限をゆるめる', `いまは「${RULE_NAMES[c.rules]}」。`, ['経済が戻り、市民の協力が回復する', '感染がふたたび増える危険'], { why: noRole || (c.rules <= 0 ? 'すでに制限はない' : cool('rules', 3)) });
     A('border', '行動制限', c.border ? '水際対策を解く' : '水際対策（入国の制限）', '外国からの入国を制限する。', c.border ? ['国外からの感染の流入がふえる', '観光・留学生・貿易の支障が減る'] : ['国外からの感染の流入が7割減る', '観光・留学生・貿易に支障が出る（経済 −）'], { why: noRole });
     A('test', '医療', '検査・追跡を拡充する', `いまは水準${c.test}／2。`, ['感染の広がりが5%おさえられる', '費用がかかる'], { cost: 2000000000, why: noRole || (c.test >= 2 ? 'すでに最大' : cool('test', 10)) });
@@ -351,7 +351,7 @@ export function actions(g) {
     }
     if (c.attr === 'state' && !c.attributed) A('attribute', '外交', `原因を特定して、${nationName(c)}の関与を公表する`, `証拠の確からしさ：${Math.round(c.evidence)}%（日がたつと上がる）。`, [`確からしさの分だけ成功する。成功すれば、${nationName(c)}との関係が悪化するが、防御は強まる`, '失敗すると「根拠が不十分」と批判される'], { why: noRole });
   }
-  if (S.defense < 100 && (isPM(g) || isDigital(g))) A('defense', '備え', 'サイバー防御を強化する', `いまの防御の水準：${Math.round(S.defense)}／100。`, ['防御 +10（攻撃の起きにくさ・被害の小ささ）', '予算の支出が大きい'], { cost: 3000000000, why: cool('defense', 20) });
+  if (S.defense < 100 && (isPM(g) || isDigital(g)) && polDate(g).year >= 2000) A('defense', '備え', 'サイバー防御を強化する', `いまの防御の水準：${Math.round(S.defense)}／100。`, ['防御 +10（攻撃の起きにくさ・被害の小ささ）', '予算の支出が大きい'], { cost: 3000000000, why: cool('defense', 20) });
   if (c && inDiet(g) && !isPM(g)) A('grill', '国会', '国会で政府の対応を追及する', '委員会で、政府の対応の遅れや不備を質す。', ['内閣の支持 −0.5', '自分の評判 +1'], { why: cool('grill', 8) });
   return out;
 }

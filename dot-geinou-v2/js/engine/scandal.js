@@ -16,6 +16,7 @@ import { Game } from './game.js';
 import { onMorning, registerPhoneApp } from './life.js';
 import { clamp, fmtMoney } from './util.js';
 import { onPolitics, POSTS, postName, PARTY_DEFS, polDate, dateLabel } from './politics.js';
+import { ERAS } from './profile.js';
 import { phoneList, phoneInfo, phoneConfirm, appTile, bulletText, phoneText as T } from './phone.js';
 
 const COLOR = '#c8782a';
@@ -115,7 +116,12 @@ function postOf(g, p, who) {
 const isCab = (c) => /大臣|総理/.test(c.post);
 
 // ======================================================================== the log and the news
+// R28: no internet before 1996 — the reports come from the papers, the weeklies and the TV wide shows; the phone is the era's own word
+const netYear = (g) => { try { return polDate(g).year >= 1996; } catch (e) { return true; } };
+const eraize = (g, t) => (netYear(g) ? t : String(t).replace(/ネット上の投稿の拡散/g, 'ワイドショーの報道').replace(/ネット上の調査と告発/g, '市民団体の告発').replace(/ネット上では/g, '世間では'));
+const deviceOf = (g) => { try { return (ERAS[g.state.profile.era] || {}).deviceShort || 'スマホ'; } catch (e) { return 'スマホ'; } };
 function say(g, p, c, text, o = {}) {
+  text = eraize(g, text);
   const day = today(g);
   c.log.unshift({ day, text });
   if (c.log.length > 24) c.log.length = 24;
@@ -140,7 +146,7 @@ function openCase(g, rec) {
   const c = {
     id: `s${++s.seq}`, kind: rec.kind, name: rec.name || K.label, who, whoName: who === 'player' ? `${g.state.name}` : n.name,
     party: who === 'player' ? p.me.party || '' : n.party || '', partyName: '', post: postOf(g, p, who), amount: num(rec.amount), sev, day: today(g),
-    src: pick(K.src), stage: 'scoop', stageDay: today(g), wait: 2, heat: 0, followed: 0, resp: null, denied: false, cover: null, crime: K.pc > 0 && sev >= 2, outcome: null, log: [],
+    src: eraize(g, pick(K.src)), stage: 'scoop', stageDay: today(g), wait: 2, heat: 0, followed: 0, resp: null, denied: false, cover: null, crime: K.pc > 0 && sev >= 2, outcome: null, log: [],
   };
   c.partyName = pname(p, c.party);
   c.heat = clamp(sev * 14 + (isCab(c) ? 12 : 0) + (c.post === '総理大臣' ? 10 : 0) + (c.amount >= 10000000 ? 8 : 0) + rint(0, 8), 5, 95);
@@ -150,7 +156,7 @@ function openCase(g, rec) {
   say(g, p, c, `${who2}に${c.name}。${c.src}で明らかになった。${c.amount ? `金額は${fmtMoney(c.amount)}にのぼるという。` : ''}`, { msg: false, news: c.who === 'player' ? false : true });
   if (who === 'player') {
     s.pending = { id: c.id, kind: 'respond', day: today(g) };
-    try { g.message({ from: 'ドット新聞 政治部', text: `【スクープ】${c.whoName}氏に${c.name}。${c.src}で明らかになり、各社が説明を求めています。\n（スマホの「スクープ」で、対応を決めてください）`, kind: 'news' }); } catch (e) { /* no phone */ }
+    try { g.message({ from: 'ドット新聞 政治部', text: `【スクープ】${c.whoName}氏に${c.name}。${c.src}で明らかになり、各社が説明を求めています。\n（${deviceOf(g)}の「スクープ」で、対応を決めてください）`, kind: 'news' }); } catch (e) { /* no phone */ }
   }
   return c;
 }

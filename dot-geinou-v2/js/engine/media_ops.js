@@ -13,7 +13,7 @@
 import { Game } from './game.js';
 import { onMorning, registerPhoneApp } from './life.js';
 import { clamp, fmtMoney } from './util.js';
-import { SEGMENT_ORDER, dateLabel } from './politics.js';
+import { SEGMENT_ORDER, dateLabel, polDate } from './politics.js';
 import { phoneList, phoneInfo, phoneConfirm, appTile, bulletText, phoneText as T } from './phone.js';
 
 const COLOR = '#b8506a';
@@ -28,6 +28,9 @@ const rint = (a, b) => a + Math.floor(rng() * (b - a + 1));
 const pol = (g) => (typeof g.pol === 'function' ? g.pol() : null);
 export const OUTLETS = { paper: '新聞', tv: 'テレビ', weekly: '週刊誌', net: 'ネット' };
 const OKEYS = Object.keys(OUTLETS);
+// R28: no internet before 1996 — the outlets are the paper, the TV and the weeklies; the net actions wait
+const hasNet = (g) => { try { return polDate(g).year >= 1996; } catch (e) { return true; } };
+const keysOf = (g) => (hasNet(g) ? OKEYS : OKEYS.filter((k) => k !== 'net'));
 
 // ======================================================================== state
 const politician = (p) => !!(p && p.me && (p.me.office || (p.me.posts || []).length));
@@ -52,8 +55,8 @@ const say = (g, p, M, text, o = {}) => {
   if (o.news) { p.news.unshift({ day: today(g), text, kind: 'politics' }); if (p.news.length > 80) p.news.length = 80; }
 };
 const rel = (M, k, d) => { M.rel[k] = clamp(M.rel[k] + d, -100, 100); };
-const relAll = (M, d) => { for (const k of OKEYS) rel(M, k, d); };
-const avgRel = (M) => OKEYS.reduce((a, k) => a + M.rel[k], 0) / OKEYS.length;
+const relAll = (M, d, g) => { for (const k of g ? keysOf(g) : OKEYS) rel(M, k, d); };
+const avgRel = (M, g) => { const ks = g ? keysOf(g) : OKEYS; return ks.reduce((a, k) => a + M.rel[k], 0) / ks.length; };
 const money = (g, n) => (num(g.state.money) >= n);
 const cost = (g, n) => { g.state.money = num(g.state.money) - n; };
 const fans = (g, n) => { try { if (typeof g.addFans === 'function') g.addFans(Math.round(n), true); } catch (e) { /* no fans */ } };
@@ -74,16 +77,16 @@ const ACTIONS = [
   { id: 'exclusive', group: '関係づくり', name: '週刊誌の独占取材に応じる', cost: 0, cool: 8, desc: '週刊誌に、素顔や私生活の話まで答える。',
     lines: () => ['週刊誌との関係 +12・知名度 +30・ファン +', '新聞との関係 −4（「軽い」と見られる）'], run: (g, p, M) => { rel(M, 'weekly', 12); rel(M, 'paper', -4); fame(g, 30); fans(g, 40 + num(g.state.fans) * 0.004); return '独占取材が載り、人柄が話題になった。'; } },
   { id: 'sns_team', group: '関係づくり', name: '広報チームを雇う', cost: 400000, cool: 0, desc: '発信を専門に担当する人を雇う（最大2人。毎月の人件費がかかる）。',
-    lines: (g, M) => [`いま${M.staff}人・毎月 ${fmtMoney(150000)}／人`, '毎日、ファンが少しずつ増える・ネットとの関係 +10'], why: (g, M) => (M.staff >= 2 ? '2人まで' : null), run: (g, p, M) => { M.staff++; rel(M, 'net', 10); return `広報担当を雇った（${M.staff}人）。発信が安定した。`; } },
+    lines: (g, M) => [`いま${M.staff}人・毎月 ${fmtMoney(150000)}／人`, hasNet(g) ? '毎日、ファンが少しずつ増える・ネットとの関係 +10' : '毎日、ファンが少しずつ増える'], why: (g, M) => (M.staff >= 2 ? '2人まで' : null), run: (g, p, M) => { M.staff++; rel(M, 'net', 10); return `広報担当を雇った（${M.staff}人）。発信が安定した。`; } },
   { id: 'campaign', group: '広報', name: '広報キャンペーン', cost: 1000000, cool: 20, desc: '実績・政策・人柄のどれかを、広告と発信で集中的に伝える。', theme: true,
-    lines: () => ['約20日間、評判とファンが伸びる', '総理なら内閣の支持にも効く'], run: (g, p, M, o) => { const t = ['実績', '政策', '人柄'][clamp(num(o.theme), 0, 2)]; M.campaign = { theme: t, until: today(g) + 20 }; p.me.reputation = clamp(num(p.me.reputation) + 2, -100, 100); fans(g, 80 + num(g.state.fans) * 0.01); if (isPM(p)) mood(g, p, 1.2, `広報キャンペーン（${t}）`); relAll(M, 2); return `広報キャンペーン（${t}を伝える）を始めた。`; } },
+    lines: () => ['約20日間、評判とファンが伸びる', '総理なら内閣の支持にも効く'], run: (g, p, M, o) => { const t = ['実績', '政策', '人柄'][clamp(num(o.theme), 0, 2)]; M.campaign = { theme: t, until: today(g) + 20 }; p.me.reputation = clamp(num(p.me.reputation) + 2, -100, 100); fans(g, 80 + num(g.state.fans) * 0.01); if (isPM(p)) mood(g, p, 1.2, `広報キャンペーン（${t}）`); relAll(M, 2, g); return `広報キャンペーン（${t}を伝える）を始めた。`; } },
   { id: 'poll', group: '広報', name: '世論調査を発注する（正直に）', cost: 800000, cool: 10, desc: '調査会社に、公平な質問で調べてもらう。いまの立ち位置がわかる。',
     lines: () => ['内閣・党・自分の支持の数字がわかる', '結果は公表しなくてもよい'], run: (g, p, M) => { M.polls++; const ap = Math.round(num(p.cabinet.approval)); const lc = Math.round(num(p.me.localSupport)); return `調査の結果：内閣の支持率 ${ap}%。自分への地元の支持 ${lc}。メディアの評価 ${Math.round(num(p.me.media))}。`; } },
   { id: 'pollbias', group: '裏の手', name: '世論調査の質問を誘導する', cost: 800000, cool: 10, desc: '答えが偏る質問の文言で調べさせ、有利な数字を公表する。', risk: 12,
     lines: () => ['評判 +2・（総理なら）内閣の支持 +1', '気づかれる危険 +12（発覚すれば、数字の信頼を損なう事件になる）'], run: (g, p, M) => { M.polls++; M.types.poll++; M.dirt = clamp(M.dirt + 12, 0, 100); p.me.reputation = clamp(num(p.me.reputation) + 2, -100, 100); if (isPM(p)) mood(g, p, 1, '有利な世論調査の公表'); return '「支持が高い」という数字を公表した。質問の文言は、公表していない。'; } },
-  { id: 'stealth', group: '裏の手', name: 'ステルスマーケティング（やらせの投稿）', cost: 600000, cool: 8, desc: '報酬を払って、好意的な投稿や口コミを広めてもらう（広告とは明かさない）。', risk: 15,
+  { id: 'stealth', net: true, group: '裏の手', name: 'ステルスマーケティング（やらせの投稿）', cost: 600000, cool: 8, desc: '報酬を払って、好意的な投稿や口コミを広めてもらう（広告とは明かさない）。', risk: 15,
     lines: (g) => [`ファン +${Math.round(60 + num(g.state.fans) * 0.02)}・ネットでの話題が高まる`, 'ネットとの関係 +6', '気づかれる危険 +15（発覚すれば、ネットとの関係が大きく落ちる）'], run: (g, p, M) => { M.types.stealth++; M.dirt = clamp(M.dirt + 15, 0, 100); fans(g, 60 + num(g.state.fans) * 0.02); fame(g, 20); rel(M, 'net', 6); return '好意的な投稿が広まり、話題になった。依頼したことは、伏せてある。'; } },
-  { id: 'fake', group: '裏の手', name: '対立勢力のデマを広める', cost: 300000, cool: 10, desc: '対立する政党や候補者について、事実でない話をネットで広める。', risk: 18, party: true,
+  { id: 'fake', net: true, group: '裏の手', name: '対立勢力のデマを広める', cost: 300000, cool: 10, desc: '対立する政党や候補者について、事実でない話をネットで広める。', risk: 18, party: true,
     lines: () => ['相手の支持が下がる（少し）・自分の党の支持が上がる（わずか）', '気づかれる危険 +18（発覚すれば、名誉毀損の疑いも加わる重い事件になる）'], run: (g, p, M, o) => { M.types.fake++; M.dirt = clamp(M.dirt + 18, 0, 100); if (o.target) support(p, o.target, -0.004); if (p.me.party) support(p, p.me.party, 0.001); return `${o.target && p.parties[o.target] ? `${p.parties[o.target].short || p.parties[o.target].name}についての` : '相手についての'}話が、ネットで広まっていった。出どころは、わからないようにしてある。`; } },
 ];
 const A = Object.fromEntries(ACTIONS.map((a) => [a.id, a]));
@@ -95,6 +98,7 @@ export function actions(g) {
   return ACTIONS.map((a) => {
     let why = null;
     if (!politician(p)) why = '議員や大臣など、政治の職にいるときに使える';
+    else if (a.net && !hasNet(g)) why = 'まだインターネットが広まっていない（1996年〜）';
     else if (a.why && a.why(g, M)) why = a.why(g, M);
     else if (num(M.cool[a.id]) && a.cool && day - M.cool[a.id] < a.cool) why = `あと${a.cool - (day - M.cool[a.id])}日`;
     else if (a.cost && !money(g, a.cost)) why = 'お金が足りない';
@@ -153,7 +157,7 @@ function expose(g, p, M) {
   const t = M.types;
   const kind = t.fake > 0 && roll(0.5) ? 'fake' : t.stealth > 0 && roll(0.6) ? 'stealth' : t.poll > 0 ? 'biasedpoll' : t.fake > 0 ? 'fake' : 'stealth';
   const sev = kind === 'fake' ? 4 : kind === 'stealth' ? 3 : 2;
-  relAll(M, -12); rel(M, 'net', -10); p.me.media = clamp(num(p.me.media) - 15, -100, 100);
+  relAll(M, -12, g); rel(M, 'net', -10); p.me.media = clamp(num(p.me.media) - 15, -100, 100);
   if (p.me.party) support(p, p.me.party, -0.004);
   try { g.politicalScandal(kind, { who: 'player', name: ({ fake: 'フェイク情報の拡散（対立勢力へのデマ）', stealth: 'ステルスマーケティング（やらせの投稿・広告）', biasedpoll: '世論調査の結果の誘導' })[kind], severity: sev }); } catch (e) { console.error(e); }
   M.dirt = Math.max(0, M.dirt - 50); M.types = { stealth: 0, fake: 0, poll: 0 };
@@ -175,11 +179,11 @@ function tick(g) {
   // NPC politicians also run a dirty media operation once in a while, and are found out (a case in scandal.js, whatever the party)
   if (roll(1.2 / YEAR) && typeof g.politicalScandal === 'function') {
     const pool = Object.values(p.npcs).filter((n) => !n.real && !n.dead && !n.exMp && n.office);
-    if (pool.length) { const n = pool[Math.floor(rng() * pool.length) % pool.length]; const kind = ['stealth', 'fake', 'biasedpoll'][Math.floor(rng() * 3) % 3]; try { g.politicalScandal(kind, { who: n.id, severity: kind === 'fake' ? 4 : kind === 'stealth' ? 3 : 2 }); } catch (e) { console.error(e); } }
+    if (pool.length) { const n = pool[Math.floor(rng() * pool.length) % pool.length]; const kinds = hasNet(g) ? ['stealth', 'fake', 'biasedpoll'] : ['biasedpoll']; const kind = kinds[Math.floor(rng() * kinds.length) % kinds.length]; try { g.politicalScandal(kind, { who: n.id, severity: kind === 'fake' ? 4 : kind === 'stealth' ? 3 : 2 }); } catch (e) { console.error(e); } }
   }
   if (!politician(p)) return;
   for (const k of OKEYS) M.rel[k] += (0 - M.rel[k]) * 0.01;
-  p.me.media = clamp(num(p.me.media) + (avgRel(M) - num(p.me.media)) * 0.02, -100, 100);
+  p.me.media = clamp(num(p.me.media) + (avgRel(M, g) - num(p.me.media)) * 0.02, -100, 100);
   if (M.dirt > 0) { M.dirt = Math.max(0, M.dirt - 0.1); if (roll(exposureRate(g))) expose(g, p, M); }
   if (M.campaign && day > M.campaign.until) M.campaign = null;
   if (M.campaign) fans(g, 2 + num(g.state.fans) * 0.0008);
@@ -202,7 +206,7 @@ function summary(g) {
   const p = pol(g), M = p && ensure(g);
   if (!M) return null;
   return {
-    active: politician(p), rel: { ...M.rel }, labels: OUTLETS, staff: M.staff, risk: riskWord(M), riskLevel: M.dirt >= 45 ? 2 : M.dirt >= 20 ? 1 : 0, media: Math.round(num(p.me.media)),
+    active: politician(p), rel: Object.fromEntries(keysOf(g).map((k) => [k, M.rel[k]])), labels: OUTLETS, staff: M.staff, risk: riskWord(M), riskLevel: M.dirt >= 45 ? 2 : M.dirt >= 20 ? 1 : 0, media: Math.round(num(p.me.media)),
     campaign: M.campaign ? { theme: M.campaign.theme, left: Math.max(0, M.campaign.until - today(g)) } : null, pending: M.pending ? { kind: 'inquiry', topic: M.pending.topic, left: Math.max(0, 3 - (today(g) - M.pending.day)) } : null,
     polls: M.polls, log: M.log.slice(0, 15).map((l) => ({ date: dateLabel(g, l.day), text: l.text })),
   };
@@ -231,7 +235,7 @@ async function viewStatus(g) {
     draw(c, a) {
       const x = a.x + 10, w = a.w - 20;
       let y = a.y + 8;
-      for (const k of OKEYS) { const v = s.rel[k]; T(c, OUTLETS[k], x, y, 12, '#333'); T(c, `${Math.round(v)}`, x + w, y, 11, '#666', 'right'); R(c, x, y + 16, w, 8, '#c8c2b4'); R(c, x + w / 2, y + 16, 1, 8, '#555'); const bw = Math.round((w / 2) * Math.abs(v) / 100); R(c, v >= 0 ? x + w / 2 : x + w / 2 - bw, y + 16, bw, 8, relCol(v)); y += 34; }
+      for (const k of Object.keys(s.rel)) { const v = s.rel[k]; T(c, OUTLETS[k], x, y, 12, '#333'); T(c, `${Math.round(v)}`, x + w, y, 11, '#666', 'right'); R(c, x, y + 16, w, 8, '#c8c2b4'); R(c, x + w / 2, y + 16, 1, 8, '#555'); const bw = Math.round((w / 2) * Math.abs(v) / 100); R(c, v >= 0 ? x + w / 2 : x + w / 2 - bw, y + 16, bw, 8, relCol(v)); y += 34; }
       T(c, `メディアの評価 ${s.media}　広報担当 ${s.staff}人`, x, y, 11, '#555'); y += 16;
       T(c, `気づかれる危険：${s.risk}`, x, y, 12, s.riskLevel >= 2 ? '#b03a2a' : s.riskLevel === 1 ? '#a06a2a' : '#2f7a4a'); y += 16;
       if (s.campaign) T(c, `広報キャンペーン中（${s.campaign.theme}・あと${s.campaign.left}日）`, x, y, 11, '#555');

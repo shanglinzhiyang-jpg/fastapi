@@ -2142,6 +2142,11 @@ NPC の議員は `g.aiScandalExit(id, reason)`（`politics_ai_act.js` の `scand
 毎朝の `tick`：`YEAR`日ごとに `holdParty`（kick なら `unreported` に `規模×ノルマ×0.4` を足す）、露見の確率 `exposureRate`（`0.0012×(1+未報告/年のプール)×(0.6+報道の自由/100)×(1+0.5×moneyStrict)`、会員の報告で×2.5、告発で×4）、露見したら `expose`（領袖と、名前のある所属議員の一部に `g.politicalScandal('slush_fund', …)`。数日おきの `cascade`）→ 20〜40日後に `dissolve`（`kind: 'group'`・名前を「〜グループ」に）。
 `g.factionMoney()` `g.factionMoneyOptions()`（`report hide refuse whistle`）`g.factionMoneyRespond(choice)` `g.factionMoneySet({ scheme, quota })`（領袖）`g.factionMoneyDissolve()` `g.factionMoneyForce(fid, 'party'|'expose')`（テスト用）。アプリ `habatsu`（order 66.8）。`window.__fmoney`。テスト：`test-output/progress/r21/`（`fm_t1.mjs`、`ui_t1.mjs`。平成の世界で行う）。
 
+### 通し検査（R28: 追加した R17〜R27 のまとめの点検）
+
+`test-output/progress/r28/`：`audit_save.mjs`（すべての新システムに値を入れてセーブ → ページを再読み込みして「つづきから」→ 各システムの状態を比べる〔読み込み時に表示ずみになる `regime.queue` は除く〕・NaN／関数／循環の走査・200日進める・状態の大きさ）、`audit_long.mjs`（コメディアン・野党議員・総理・独裁者 × 令和・平成・昭和 の長い通しプレイ：エラー・朝のメッセージの量・1朝の時間・状態の大きさ）、`audit_phone.mjs`（スマホの新アプリを横画面・縦画面で開いて画面の文字を走査）、`era_t1.mjs`（昭和：ネットがない時代の 広報・スクープ・対策本部）。結果：エラー0、1朝 平均7〜16ms、状態は 約0.5〜0.7MB（ログは上限つき）。
+時代の合わない言葉を直した：1996年より前は「ネット」の報道元・「ネット」の関係・ステルスマーケティング／デマの手を出さない（広報）、スクープの報道元は「ワイドショーの報道」「市民団体の告発」、機器の言い方はその時代のもの（手帳・ケータイ・スマホ）、2000年より前はサイバー防御が出ない、昭和には緊急事態宣言の根拠となる法律がまだない、と表示。用語集に 牛歩戦術・会期延長・ゲリマンダー・区割り・足切り・キックバック・ステルスマーケティング・フェイクニュース・水際対策・特措法・サイバー攻撃・ランサムウェア・亡命・国際刑事裁判所・粛清・個人崇拝 を追加（時代ごとの年の出し分けは `gloss_era.mjs` で確認）。
+
 ### 国会戦術（`js/engine/govt.js` の国会運営）
 
 `OPPOSITION_ACTIONS` に `gyuho`・`monsekin`、`RULING_ACTIONS` に `extend` を追加（`g.opposition()` の一覧と `g.govtRefusal(kind, opts)` の拒否理由は `dietBlock` が返す。UI は `govt_ui.js` の「国会」タブの行動一覧）。`g.rulingAction('extend', { days })`（5〜30日。`S.end += days`、`S.ext`（延長の回数）・`S.extended`、床の割り当て `S.floor` を軽くして成立しやすく、`ledgerAdd` で支持率 −0.4）。`g.oppositionAction('gyuho', { billId })`（本会議の段階 `shugi`/`sangi` の閣法で `b.gyuho` なし。`b.next += 2`、無党派 −2・党内の立場 +2・評判 −1.5。`b.next > S.end` なら廃案の見込み）。`g.oppositionAction('monsekin', { target: 'pm' | 閣僚の役職 })`（`houseSplit(p, 'sangi')` で野党が過半数、30日あける。支持率 −2.5（総理）／−1.2（大臣）・不祥事 +3／+1.5。`O.monsekin = { day, target, by, session }`）。
