@@ -2342,13 +2342,73 @@ export const OPPOSITION_ACTIONS = {
   kyoto: { label: '野党共闘（選挙協力）', law: '—', desc: '野党どうしで候補者を一本化し、与党に対抗する。「野合」との批判もある。' },
   shingi_kyohi: { label: '審議拒否', law: '—', desc: '委員会の審議に応じず、強引な国会運営に抗議する。「仕事の放棄」との批判もある。' },
   fushinnin: { label: '内閣不信任決議案を出す', law: '憲法69条', desc: '衆議院議員50人以上の賛成で提出。可決されれば内閣は10日以内に解散か総辞職。' },
+  // R27: the end of a session
+  gyuho: { label: '牛歩戦術', law: '—', desc: '本会議の採決で、投票にわざと時間をかけて採決を遅らせる。会期末には法案をつぶす力になるが、世論には嫌われやすい。' },
+  monsekin: { label: '問責決議案を出す', law: '参議院の議決（法的拘束力はない）', desc: '参議院で野党が過半数のとき、総理や大臣への問責決議を可決できる。辞任を迫る力はあるが、法的な拘束力はない。' },
 };
 export const RULING_ACTIONS = {
   kokutai: { label: '国対の与野党協議（修正協議）', law: '—', desc: '国会対策委員長どうしで日程や法案の修正を話し合い、野党の賛成を広げる。' },
   kyoko: { label: '採決を急ぐ（いわゆる強行採決）', law: '—', desc: '野党の反対を押し切って委員会の採決を行う。数の力で決められるが、強い批判を浴びる。' },
   key_bill: { label: '政権の最重要法案に位置づける', law: '—', desc: '参議院で否決されたら、衆議院を解散して国民に信を問う、という覚悟を示す。' },
+  extend: { label: '会期を延長する', law: '国会法12条', desc: '会期末に、審議中の法案を成立させるために会期を延ばす（通常国会は1回、臨時・特別国会は2回まで）。衆議院の議決が優先する。' },
 };
 const liveBill = (b) => b && !['enacted', 'rejected', 'shelved', 'draft', 'referendum'].includes(b.stage);
+// R27 (the end of a session): who holds the majority in a house, how many extensions a session may have, which bill is at its plenary vote
+const houseSplit = (p, house) => { const H = p.diet[house]; const ruling = (p.cabinet.partyIds || []).reduce((a, id) => a + num(H.seats[id]), 0); return { ruling, opp: num(H.total) - ruling, total: num(H.total) }; };
+const maxExtend = (S) => (S && S.kind === '通常国会' ? 1 : 2);
+const atPlenary = (b) => liveBill(b) && b.sponsor === 'cabinet' && b.kind !== 'noconfidence' && (b.stage === 'shugi' || b.stage === 'sangi');
+function extendBlock(p, day) {
+  const S = p.diet.session;
+  if (!S || !inSessionP(p, day)) return '国会の会期中に';
+  if (num(S.ext) >= maxExtend(S)) return S.kind === '通常国会' ? '通常国会の会期の延長は1回まで（国会法12条）' : '臨時・特別国会の会期の延長は2回まで（国会法12条）';
+  if (S.end - day > 15) return '会期の延長を決めるのは会期末が近づいてから（残り15日以内）';
+  const sh = houseSplit(p, 'shugi');
+  if (sh.ruling * 2 <= sh.total) return '衆議院で与党が過半数に届かず、会期の延長を議決できない';
+  if (!p.diet.bills.some((b) => liveBill(b) && b.sponsor === 'cabinet' && b.kind !== 'noconfidence')) return '延長して成立をめざす政府の法案がない';
+  return null;
+}
+function applyExtend(g, s, p, days, by) {
+  const S = p.diet.session;
+  days = clamp(Math.round(num(days, 15)), 5, 30);
+  S.end += days; S.extended = true; S.ext = num(S.ext) + 1;
+  const fl = S.floor || (S.floor = { cabinet: 0, member: 0 });
+  fl.cabinet = Math.max(0, num(fl.cabinet) - 3); fl.member = Math.max(0, num(fl.member) - 1); // the extra days are floor time for more bills
+  ledgerAdd(g, s, 'diet', { mood: -0.4, text: '会期の延長' });
+  shiftSupport(p, { floating: -0.5, unions: -0.3 }, 0.004);
+  govtNews(g, s, `${by === 'player' ? '与党は' : '政府・与党は'}会期を${days}日延長することを決めた（${S.kind}。野党は「数の力で押し切るための延長」と反発）`, { phone: involved(g) });
+  addEvent(g, s, 'extend', '会期の延長', { segs: { floating: -0.3 }, n: 2 });
+  emit(g, 'ruling', { kind: 'extend', days, by });
+  return days;
+}
+function gyuhoBill(p, billId) {
+  return p.diet.bills.find((x) => x.id === billId && atPlenary(x) && !x.gyuho) || p.diet.bills.find((x) => atPlenary(x) && !x.gyuho) || null;
+}
+function applyGyuho(g, s, p, b, by) {
+  const day = today(g);
+  const S = p.diet.session;
+  b.next = num(b.next) + 2; b.gyuho = day;
+  b.log.push({ day, text: '野党が本会議で牛歩戦術をとり、採決が遅れた' });
+  const kills = !!(S && b.next > S.end);
+  govtNews(g, s, `野党が「${b.title}」の採決で牛歩戦術をとり、本会議が長引いた${kills ? '。会期内に採決できず、廃案になる公算が大きい' : ''}`, { phone: involved(g) && by !== 'player' });
+  addEvent(g, s, 'gyuho', `「${b.title}」の牛歩戦術`, { segs: { unions: 0.3, floating: -1.2 }, n: 2 });
+  emit(g, 'opposition', { kind: 'gyuho', billId: b.id, by });
+  return kills;
+}
+function applyMonsekin(g, s, p, target, by) {
+  const day = today(g);
+  const O = s.opposition;
+  const isPm = target === 'pm';
+  const who = isPm ? { post: 'pm', name: '内閣総理大臣', id: p.cabinet.pm } : { post: target, id: p.cabinet.ministers[target] };
+  const label = isPm ? '内閣総理大臣' : postNameNow(g, target);
+  O.monsekin = { day, target, by, session: p.diet.session ? p.diet.session.start : 0 };
+  ledgerAdd(g, s, 'diet', { mood: isPm ? -2.5 : -1.2, scandal: isPm ? 3 : 1.5, text: `${label}への問責決議` });
+  shiftSupport(p, { floating: isPm ? -1 : -0.5 }, 0.004);
+  govtNews(g, s, `参議院本会議で、${label}への問責決議案が野党などの賛成多数で可決された（法的な拘束力はないが、与党は対応を迫られる）`, { phone: involved(g), head: '参議院の議決' });
+  addEvent(g, s, 'monsekin', `${label}への問責決議`, { segs: { floating: isPm ? -0.8 : -0.4 }, n: 3 });
+  emit(g, 'opposition', { kind: 'monsekin', target, by });
+  if (who.id === 'player') { p.me.standing = clamp(num(p.me.standing) - 5, 0, 100); note(g, `（参議院で${label}への問責決議が可決された。辞任か続投かを決めなければ…）`); }
+  return { label, isPm };
+}
 // the last 質問主意書 was the day before or today (0 / -99 = never: a brand-new member can submit on day 1)
 const qTooSoon = (O, day) => num(O.lastQ) > 0 && day - num(O.lastQ) < 2;
 // the player holds a cabinet post (the PM included): the cabinet answers the Diet's questions, it does not ask them
@@ -2480,6 +2540,26 @@ function oppositionImpl(g, s, kind, opts = {}) {
     emit(g, 'opposition', { kind, billId: b.id });
     return { ok: true, billId: b.id, text: `「${b.title}」の審議に応じないことを決めた。採決は遅れるが、「審議拒否は仕事の放棄」との批判も出ている。` };
   }
+  if (kind === 'gyuho') {
+    const why = dietBlock(g, s, 'gyuho', opts);
+    if (why) return { ok: false, why };
+    const b = gyuhoBill(p, opts.billId);
+    const kills = applyGyuho(g, s, p, b, 'player');
+    shiftSupport(p, { floating: -2, young: -1, urban: -0.6, unions: 0.8 }, 0.004, [me.party]);
+    me.standing = clamp(num(me.standing) + 2, 0, 100);
+    me.reputation = clamp(num(me.reputation) - 1.5, -100, 100);
+    return { ok: true, billId: b.id, kills, text: `「${b.title}」の採決で牛歩戦術をとった。採決は2日遅れる。${kills ? '会期内に採決できず、廃案になる公算が大きい。' : ''}党内では喝采だが、「時代遅れの戦術」との批判も出ている（無党派層の支持が下がる）。` };
+  }
+  if (kind === 'monsekin') {
+    const why = dietBlock(g, s, 'monsekin', opts);
+    if (why) return { ok: false, why };
+    const target = opts.target && opts.target !== 'pm' && p.cabinet.ministers[opts.target] ? opts.target : 'pm';
+    const r = applyMonsekin(g, s, p, target, 'player');
+    shiftSupport(p, { floating: 0.6, urban: 0.3 }, 0.004, [me.party]);
+    me.standing = clamp(num(me.standing) + 4, 0, 100);
+    try { if (typeof g.addFame === 'function') g.addFame(30, true); } catch (e) { /* */ }
+    return { ok: true, target, text: `参議院で${r.label}への問責決議案を提出し、可決された。法的な拘束力はないが、${r.isPm ? '内閣への打撃は大きい（支持率が下がる）。与党は、解散か内閣改造か、続投かを迫られる。' : '大臣は辞任を迫られる。内閣への打撃になる。'}` };
+  }
   return { ok: false, why: 'そんな行動はない' };
 }
 function kyokoImpl(g, s, b, by) {
@@ -2515,6 +2595,13 @@ function rulingImpl(g, s, kind, opts = {}) {
   }
   if (!(isPMg(p) || role.kokutai || role.kanjicho)) return { ok: false, why: '国会運営を仕切るのは、総理か与党の国会対策委員長・幹事長' };
   if (!inSessionP(p, day)) return { ok: false, why: '国会の会期中に' };
+  if (kind === 'extend') {
+    const why = dietBlock(g, s, 'extend', opts);
+    if (why) return { ok: false, why };
+    const days = applyExtend(g, s, p, opts.days, 'player');
+    p.me.standing = clamp(num(p.me.standing) + 1, 0, 100);
+    return { ok: true, days, text: `会期を${days}日延長した（残り ${p.diet.session.end - day}日）。審議中の法案を成立させる時間はふえるが、「数の力で押し切る延長」と野党は反発している（支持率がわずかに下がる）。` };
+  }
   if (!b || !liveBill(b)) return { ok: false, why: '審議中の法案がない' };
   if (kind === 'kokutai') {
     if (b.kokutai) return { ok: false, why: 'この法案の協議はもう済んだ' };
@@ -2566,6 +2653,41 @@ function questionsTick(g, s) {
     else if (b) b.log.push({ day: today(g), text: '野党が審議に復帰した' });
   }
   if (O.alliance && today(g) > num(O.alliance.until) + 3) O.alliance = null;
+}
+// R27: the end of a session by the others — the cabinet extends the session when its bills are not through, the opposition drags a vote out (牛歩) or censures a minister (問責) in the 参院.
+// Told without a party's name; never for a decision the player holds (the PM / the 国対 chief of the ruling party extends; the leader / 国対 chief of an opposition party chooses its tactics).
+function dietTacticsTick(g, s) {
+  const p = pol(g);
+  if (!p || !POL || !p.cabinet.pm) return;
+  const day = today(g);
+  const S = p.diet.session;
+  if (!S || !inSessionP(p, day)) return;
+  const role = playerPartyRole(p);
+  const playerRulingChief = isPMg(p) || (role.ruling && (role.kokutai || role.kanjicho));
+  const playerOppChief = role.pt && !role.ruling && (role.leader || role.kokutai || role.kanjicho);
+  const O = s.opposition;
+  const near = S.end - day;
+  // the cabinet extends
+  if (!playerRulingChief && near >= 0 && near <= 5 && !extendBlock(p, day)) {
+    const open = p.diet.bills.filter((b) => liveBill(b) && b.sponsor === 'cabinet' && b.kind !== 'noconfidence' && b.kind !== 'budget').length;
+    if (open >= 1 && Math.random() < 0.12) applyExtend(g, s, p, 10 + Math.floor(Math.random() * 11), 'npc');
+  }
+  // the opposition drags a vote
+  if (!playerOppChief && near >= 0 && near <= 10) {
+    for (const b of p.diet.bills) {
+      if (!atPlenary(b) || b.gyuho || b.kind === 'budget') continue;
+      if (Math.random() < 0.35) { applyGyuho(g, s, p, b, 'npc'); break; }
+    }
+  }
+  // the opposition censures (参院 majority, the cabinet is weak)
+  if (!playerOppChief && !(O.monsekin && O.monsekin.session === S.start)) {
+    const sa = houseSplit(p, 'sangi');
+    if (sa.opp * 2 > sa.total && num(p.cabinet.approval) < 40 && (!O.monsekin || day - num(O.monsekin.day) >= 30) && Math.random() < 0.03) {
+      const posts = Object.keys(p.cabinet.ministers || {}).filter((k) => p.cabinet.ministers[k]);
+      const target = posts.length && Math.random() < 0.4 ? posts[Math.floor(Math.random() * posts.length)] : 'pm';
+      applyMonsekin(g, s, p, target, 'npc');
+    }
+  }
 }
 // Key bills (重要法案): divisive ones get rebels in the ruling party; a key bill voted down in the 参院 may lead to a
 // dissolution (NPC PM: politics.js npcDissolve hook; player PM: g.keyBillDissolve).
@@ -3254,7 +3376,7 @@ export async function govtTick(g) {
   const day = today(g);
   if (num(s.lastTick) >= day) return;
   s.lastTick = day;
-  const steps = [syncBudget, taxInForce, taxReformCycle, budgetCycle, syncMinistries, personnelTick, councilTick, postalTick, cultTick, endorsementsTick, questionsTick, keyBillsTick, resubmitKeyBills, demoTick, (gg, ss) => demoAuto(gg, ss, null), watchOthers];
+  const steps = [syncBudget, taxInForce, taxReformCycle, budgetCycle, syncMinistries, personnelTick, councilTick, postalTick, cultTick, endorsementsTick, questionsTick, keyBillsTick, dietTacticsTick, resubmitKeyBills, demoTick, (gg, ss) => demoAuto(gg, ss, null), watchOthers];
   for (const fn of steps) { try { fn(g, s); } catch (e) { console.error('govtTick', fn.name, e); } }
   // a missed change of government (e.g. an old save): remember who governs now
   const p = pol(g);
@@ -3328,6 +3450,27 @@ function dietBlock(g, s, kind, opts = {}) {
       if (!inSessionP(p, day)) return '国会の会期中に';
       if (O.boycott && O.boycott.until >= day) return 'すでに審議を拒否している';
       return null;
+    case 'gyuho':
+      if (!role.pt || role.ruling) return '牛歩戦術は野党がとる';
+      if (!(role.leader || role.kokutai || role.kanjicho)) return '戦術を決めるのは、党首か国会対策委員長・幹事長';
+      if (!inSessionP(p, day)) return '国会の会期中に';
+      if (!gyuhoBill(p, opts.billId)) return '採決を待つ政府の法案がない（本会議の採決の直前にだけとれる。1つの法案に1回）';
+      return null;
+    case 'monsekin': {
+      if (!role.pt || role.ruling) return '問責決議は野党が出す';
+      if (!(role.leader || role.kokutai || role.kanjicho)) return '決議案を出すのは、党首か国会対策委員長・幹事長';
+      if (!inSessionP(p, day)) return '国会の会期中に';
+      if (!p.cabinet.pm) return '内閣がない';
+      const sa = houseSplit(p, 'sangi');
+      if (sa.opp * 2 <= sa.total) return `参議院で野党が過半数に届かず、可決できない（野党${sa.opp}・過半数${Math.floor(sa.total / 2) + 1}）`;
+      if (O.monsekin && day - num(O.monsekin.day) < 30) return 'さきの問責決議から間がない（30日あける）';
+      return null;
+    }
+    case 'extend': {
+      if (!role.ruling) return '与党の国会運営の手段（与党の議員でないと使えない）';
+      if (!(isPMg(p) || role.kokutai || role.kanjicho)) return '国会運営を仕切るのは、総理か与党の国会対策委員長・幹事長';
+      return extendBlock(p, day);
+    }
     case 'kokutai': case 'kyoko':
       if (!role.ruling) return '与党の国会運営の手段（与党の議員でないと使えない）';
       if (!(isPMg(p) || role.kokutai || role.kanjicho)) return '国会運営を仕切るのは、総理か与党の国会対策委員長・幹事長';
@@ -3965,4 +4108,4 @@ function installOpinionEval(proto) {
 }
 onGovt('approval', (g, row) => { try { const s = GS(g); if (s) evRecord(g, s, row); } catch (e) { console.error('opinion record', e); } });
 // ================================================================ end of R5-D section
-if (typeof window !== 'undefined') window.__govt = { TAXES, BUDGET_ITEMS, RELIGIOUS_GROUPS, DEMO_RESPONSES, onGovt, govtTick };
+if (typeof window !== 'undefined') window.__govt = { TAXES, BUDGET_ITEMS, RELIGIOUS_GROUPS, DEMO_RESPONSES, onGovt, govtTick, dietTacticsTick };

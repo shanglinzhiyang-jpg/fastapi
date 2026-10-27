@@ -96,7 +96,7 @@ const say = (g, S, text, o = {}) => {
   S.log.unshift({ day: today(g), text }); if (S.log.length > 40) S.log.length = 40;
   if (S.cur) { S.cur.log.unshift({ day: today(g), text }); if (S.cur.log.length > 30) S.cur.log.length = 30; }
   if (o.news !== false) { try { RX.news(g, text); } catch (e) { /* no regime */ } }
-  if (o.phone && S.phoneDay !== today(g)) { S.phoneDay = today(g); try { RX.phone(g, `${text}`, o.from || 'ドット新聞'); } catch (e) { /* no phone */ } } // one message a morning at most
+  if (o.phone && S.phoneDay !== today(g) && (inDiet(g) || posts(g).length || (S.cur && S.cur.sev >= 3))) { S.phoneDay = today(g); try { RX.phone(g, `${text}`, o.from || 'ドット新聞'); } catch (e) { /* no phone */ } } // one message a morning at most
 };
 const approve = (g, d, text) => { if (isPM(g)) { try { RX.bumpApproval(g, d, 0, 'crisis', text); } catch (e) { /* ignore */ } } };
 const rep = (g, d) => { const p = pol(g); if (p && p.me) p.me.reputation = clamp(num(p.me.reputation) + d, -100, 100); };

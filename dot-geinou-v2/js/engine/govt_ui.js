@@ -2372,8 +2372,8 @@ const TAB_DIET = {
       acts.push({ id: 'attend', grp: '議員', label: A.today ? '今日の国会：出席ずみ' : A.cabinet ? '国会に出席する（答弁・体力5）' : '今日の国会に出席する（体力5）', desc: `出席：${A.text}`, why: has(g, 'attendBlock') ? safe(() => g.attendBlock(), null) : null });
     }
     acts.push({ id: 'bill', grp: '議員', label: '法案を出す（政策をつくる）', desc: '議員立法（議員が出す）か閣法（内閣が出す）。政策・法案の画面へ', why: role && (role.diet || role.pm || role.kind === 'minister') ? null : '法律案を出せるのは国会議員か内閣だけ' });
-    for (const id of ['shitsumon_shuisho', 'yosan_shitsugi', 'taian', 'kyoto', 'shingi_kyohi', 'fushinnin']) if (OA[id] || d.opp) acts.push({ id, grp: '野党', label: (OA[id] || {}).label || id, desc: `${(OA[id] || {}).desc || ''}${OA[id] && OA[id].law && OA[id].law !== '—' ? `（${OA[id].law}）` : ''}`, why: oppWhy(id) });
-    for (const id of ['kokutai', 'kyoko', 'key_bill']) if (RA[id] || d.opp) acts.push({ id, grp: '与党', label: (RA[id] || {}).label || id, desc: (RA[id] || {}).desc || '', why: rulWhy(id) || (!d.billId && id !== 'kyoko' ? '先に左の一覧で法案をえらぶ' : null) });
+    for (const id of ['shitsumon_shuisho', 'yosan_shitsugi', 'taian', 'kyoto', 'shingi_kyohi', 'gyuho', 'monsekin', 'fushinnin']) if (OA[id] || d.opp) acts.push({ id, grp: '野党', label: (OA[id] || {}).label || id, desc: `${(OA[id] || {}).desc || ''}${OA[id] && OA[id].law && OA[id].law !== '—' ? `（${OA[id].law}）` : ''}`, why: oppWhy(id) });
+    for (const id of ['kokutai', 'kyoko', 'extend', 'key_bill']) if (RA[id] || d.opp) acts.push({ id, grp: '与党', label: (RA[id] || {}).label || id, desc: (RA[id] || {}).desc || '', why: rulWhy(id) || (!d.billId && id !== 'kyoko' ? '先に左の一覧で法案をえらぶ' : null) });
     acts.push({ id: 'key_dissolve', grp: '総理', label: '最重要法案の否決を受けて解散', desc: '参議院で最重要法案が否決されたとき、衆議院を解散して国民に信を問う', why: R0('key_dissolve') });
     acts.push({ id: 'questions', grp: '見る', label: `質問主意書と答弁書（${d.opp ? d.opp.questions.length : 0}件）`, desc: '出された質問主意書と、内閣の答弁書', why: null });
     // round 4 (politics.js): the minister's answer with an attitude (失言リスク), and the record of gaffes and their chain
@@ -2549,6 +2549,27 @@ async function dietAction(ui, d, a) {
     const k = await ui.confirm({ title: '衆議院の解散', danger: true, lines: [a.desc, 'すべての衆議院議員がいったん職を失い、総選挙になる。'], choices: ['やめておく', '解散する'], index: 0, cancel: 0 });
     if (k !== 1) return;
     await ui.result('解散', safe(() => g.keyBillDissolve(), null));
+    return;
+  }
+  if (a.id === 'extend') {
+    const k = await ui.confirm({ title: '会期の延長', lines: [a.desc, '【結果】審議の時間がふえて、法案が成立しやすくなる。野党は反発し、支持率がわずかに下がる。'], choices: ['10日延長する', '20日延長する', 'やめる'], cancel: 2 });
+    if (k !== 0 && k !== 1) return;
+    await ui.result(a.label, safe(() => g.rulingAction('extend', { days: k === 0 ? 10 : 20 }), null));
+    return;
+  }
+  if (a.id === 'gyuho') {
+    const k = await ui.confirm({ title: '牛歩戦術', lines: [a.desc, '【結果】採決が2日遅れる（会期末なら廃案になることも）。党内では喝采だが、無党派層の支持が下がり、自分の評判も少し落ちる。'], choices: ['牛歩戦術をとる', 'やめる'], cancel: 1 });
+    if (k !== 0) return;
+    await ui.result(a.label, safe(() => g.oppositionAction('gyuho', { billId: d.billId }), null));
+    return;
+  }
+  if (a.id === 'monsekin') {
+    const pl = safe(() => g.pol(), null);
+    const cab = pl && pl.cabinet ? Object.keys(pl.cabinet.ministers || {}).filter((x) => pl.cabinet.ministers[x]).slice(0, 12) : [];
+    const items = [{ label: '内閣総理大臣', sub: '内閣への打撃が大きい', id: 'pm' }, ...cab.map((x) => ({ label: safe(() => (POL && POL.postName ? POL.postName(x, yearOf(g)) : x), x), sub: '大臣は辞任を迫られる', id: x }))];
+    const i = await ui.pick({ title: '問責決議の相手', lines: ['参議院で野党が過半数のとき、問責決議を可決できる（法的な拘束力はない）。'], items, w: 460 });
+    if (i < 0) return;
+    await ui.result(a.label, safe(() => g.oppositionAction('monsekin', { target: items[i].id }), null));
     return;
   }
   if (a.id === 'kokutai' || a.id === 'key_bill') { await ui.result(a.label, safe(() => g.rulingAction(a.id, { billId: d.billId }), null)); return; }

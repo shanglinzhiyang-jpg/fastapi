@@ -67,4 +67,7 @@ row "R25 exile_t1" "$(tail -1 "$OUT/r25_exile_t1.txt")"
 # 13. [R26] 感染症とサイバー攻撃（流行の力学・行動制限・身代金・公表・立場ごとの権限・政府の自動対応・2020年）
 node test-output/progress/r26/crisis_t1.mjs > "$OUT/r26_crisis_t1.txt" 2>&1
 row "R26 crisis_t1" "$(tail -1 "$OUT/r26_crisis_t1.txt")"
+# 14. [R27] 国会戦術（会期延長・牛歩戦術・問責決議、NPCの使い方）
+node test-output/progress/r27/diet_t1.mjs > "$OUT/r27_diet_t1.txt" 2>&1
+row "R27 diet_t1" "$(tail -1 "$OUT/r27_diet_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"
