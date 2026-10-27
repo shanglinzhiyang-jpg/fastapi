@@ -101,6 +101,8 @@ export const MODULES = [
   './engine/war_home.js',
   // [R18] スキャンダルの展開 (報道・続報・捜査・起訴・判決、本人の対応、アプリ「スクープ」): scandal.js
   './engine/scandal.js',
+  // [R19] 選挙制度と区割り (一票の格差・最高裁の判決・ゲリマンダー、アプリ「選挙制度」): election_sys.js
+  './engine/election_sys.js',
   // 政府中枢 (government console, HD) + political phone apps 世論の声・国会中継・政府中枢 (api: test-output/api_govt_ui.txt)
   './engine/govt_ui.js',
   // world affairs (世界情勢: real countries, blocs, alliances, treaties, summits, sanctions, world events, diplomacy,

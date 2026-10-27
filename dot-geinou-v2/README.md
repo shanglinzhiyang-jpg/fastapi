@@ -969,6 +969,12 @@ A（Z・Enter）でつぎへ、B（X）でタイトルにもどります。
   **自分の件**は、第一報のあと2日（ゲームの日数）のうちに対応を選びます（遅れると「ノーコメント」）：事実を認めて謝罪（確実に怒り −22）／記者会見で説明／全面的に否認（失敗すると証拠が出て悪化）／ノーコメント／「秘書がやった」（秘書は辞める）／**証拠を隠す（隠蔽）**。
   どれも成功の見込みと代償を先に見せます。隠蔽は成功すると怒りが大きく下がりますが、あとで発覚することがあり（続報のたびに16%）、発覚や失敗では「証拠隠滅」という別のスキャンダルが加わります。
   怒りが高まると「身の振り方」を問われます：続投／役職を辞任／議員辞職／離党。自分が起訴される捜査と裁判は、これまでどおり司法のシステム（crime.js）が進めます。
+- **選挙制度と区割り（R19）**：選挙のルールそのものも、政治の戦場です。スマホのアプリ **選挙制度**（議員になると出ます）で、制度・一票の格差・最高裁の判決を見て、制度を変える法案を出せます（国会で可決されてはじめて成立。内閣か国会議員が出せる）。
+  **一票の格差**（衆議院と参議院、それぞれ指数）は人口の移動で毎年少しずつ広がり、選挙のあとの訴訟で最高裁が **合憲／違憲状態／違憲** を判断します（目安は衆院 約2倍・参院 約3倍。違憲状態を放っておくと、次は「違憲」）。
+  判決は内閣の評価を下げ、与党がNPCの内閣なら自分で区割りを見直す法律を成立させます（自分が総理なら、自分で出す）。
+  法律は5つ：**一票の格差の是正**（衆・参、見直す選挙区の数。地方の議席が減る）／**小選挙区と比例の配分の見直し**（定数は同じで、比例を増やすと小党に、小選挙区を増やすと大政党に有利）／**比例代表の足切り**（0〜5%）／**重複立候補の禁止・容認**／
+  **区割りの引き直し（有利な線引き）**。最後のものは、断られず、選べます：自分の党（総理なら与党）が次の総選挙で小選挙区の議席を増やします（偏りの強さ1〜3、最大で約20議席）。
+  ただし毎日少しずつ露見する危険があり（露見すると新聞が「ゲリマンダー」と書き、野党が批判し、線引きをした人の **スキャンダル** になります）、露見したまま判決を受けると「違憲」とされて線引きの効果を失います。公正な区割りの見直しをすると、先の線引きは白紙に戻ります。
 - 任期（衆院4年・参院6年・地方4年）が終わると選挙。衆議院は解散されることもあります
 
 #### 4. 党・政策・内閣
@@ -1444,6 +1450,7 @@ js/engine/            エンジン
   world_ui.js         世界情勢の HD 画面（7タブ：地図／国々／外交／貿易・関税／同盟・条約／危機・戦争／ニュース）とスマホの「世界」
   groups.js           各界のコア：11の分野・架空の団体・要望と案件・観光地・春闘と最低賃金・招致・有識者会議（g.groups など）
   groups_ui.js        政府中枢の「各界」タブとスマホの「各界」
+  election_sys.js     選挙制度と区割り（R19）：一票の格差・最高裁の判決・有利な線引き（ゲリマンダー）の露見と違憲、アプリ「選挙制度」（法律は politics.js の5つの policy）
   scandal.js          スキャンダルの展開（R18）：報道・続報・捜査・起訴・判決・辞職要求、世論の怒り、本人の対応（隠蔽を含む）、アプリ「スクープ」
   advisors.js         相談役「独裁くん」「イクサくん」：スマホのアプリ・助言・吹き出し（g.advisor など）
   phone_apps.js       スマホの暮らしのアプリ（マップ・お仕事・出前・通販・銀行・ニュース・カメラ・設定）
@@ -2087,6 +2094,13 @@ NPC の議員は `g.aiScandalExit(id, reason)`（`politics_ai_act.js` の `scand
 `g.scandals()` `g.scandalCase(id)` `g.scandalOptions(id)`（`respond`: `apologize explain deny silence blame cover`／`pressure`: `stay post seat party`、それぞれ `odds` と `lines`）`g.scandalRespond(id, choice)` `g.scandalNew(kind, who?)`。
 `window.__scandal.setScandalRng(f)`（テスト用）。アプリ `scoop`（order 66.5）。politics.js の変更：実在政党の NPC への「一身上の都合」の置きかえをやめた（`scandalImpl`・`npcEvents`・`npcGaffeOK`・失言の見出しの党名）。実名の人物（`n.real`）だけは引き続き対象外。
 テスト：`test-output/progress/r18/`（`scandal_t1.mjs`、`ui_t1.mjs`）。
+
+### 選挙制度と区割り（`js/engine/election_sys.js`）
+
+法律は `politics.js` の `policy(...)`（`vote_disparity` `smd_pr_ratio` `pr_threshold` `dup_candidacy` `redistrict`。ふつうの法案として国会を通る）。成立すると `apply` が `p.flags.elec`（`elecOf(p)`）を動かし、`shugiRules(year, flags)` が小選挙区と比例の配分（`smdShift`）を、`runShugi` が足切り（`prThreshold`）・重複立候補の禁止（`dupBan`）・有利な線引き（`applyGerry`：他党の小選挙区から、偏りの強さ×定数の2.5%（最大22議席）を移す）を反映します。
+`election_sys.js`：状態 `p.flags.elec = { disparity, sangiDisparity, smdShift, prThreshold, dupBan, gerry: { party, by, strength, exposed, struck }, rulings, warn, pending, autoFix, log }`。毎朝、指数が上がり（衆 +0.05／年、参 +0.06／年）、選挙（`onPolitics('election')`）のあと25日で判決（`pending` → 合憲／違憲状態／違憲。基準は衆 2.0・参 3.0、前回の違憲状態が残っているか基準の1.2倍以上か線引きが露見していれば「違憲」）。
+NPC の内閣は40〜100日後に自分で是正（指数を基準の93%に）。線引きは毎日 0.6%×強さ で露見し、`g.politicalScandal('gerrymander', …)`（`scandal.js` の種類）が線引きをした人（プレイヤーか NPC の総理）に起きます。
+`g.electionSystem()`（要約）。法案は `g.proposeBill({ policy, params })`。アプリ `senkyo`（order 66.6）。`window.__elec.setElecRng(f)`（テスト用）。テスト：`test-output/progress/r19/`（`election_t1.mjs`、`ui_t1.mjs`）。
 
 ### 相談役（`js/engine/advisors.js`）
 

@@ -346,6 +346,9 @@ export function shugiRules(year, flags = {}) {
     const prCut = Math.min(r.pr - 50, Math.round(cut * 0.6));
     r = { ...r, pr: r.pr - prCut, smd: r.smd - (cut - prCut), total: r.total - cut };
   } else if (cut) r = { ...r, total: r.total - cut, smd: r.smd - cut };
+  // [R19] the law 小選挙区と比例の配分の見直し moves seats between the two parts (total unchanged)
+  const shift = Math.max(-60, Math.min(60, Number(flags.elec && flags.elec.smdShift) || 0));
+  if (shift && r.system === 'heiritsu') { const sh = Math.max(150 - r.smd, Math.min(r.smd - 150, shift)); r = { ...r, smd: r.smd - sh, pr: r.pr + sh }; }
   return r;
 }
 // 参院: one half (class) is elected every 3 years. district / pr = seats of that half.
@@ -917,6 +920,41 @@ policy('electoral_reform', 'admin', '選挙制度改革（小選挙区比例代�
   check: (pol, p, y) => (pol.flags.heiritsuFrom || y >= 1995 ? 'すでに決まっている' : null),
   seg: { floating: 3, urban: 2, young: 1, rural: -1, elderly: -1 },
   apply: (pol, p, g) => { pol.flags.heiritsuFrom = calYear(g) + 1; },
+});
+// [R19] 選挙制度と区割り: the state is p.flags.elec (election_sys.js keeps it up to date: the disparity, the court's rulings, the gerrymander)
+export const elecOf = (p) => (p.flags.elec && typeof p.flags.elec === 'object' ? p.flags.elec : (p.flags.elec = { disparity: 0, sangiDisparity: 0, smdShift: 0, prThreshold: 0, dupBan: false, gerry: null, rulings: [], warn: {}, log: [] }));
+const sponsorOf = (pol) => (pol.cabinet.pm === 'player' ? { id: 'player', party: pol.me.party || null } : { id: pol.cabinet.pm || null, party: (pol.cabinet.partyIds || [])[0] || null });
+const elecLog = (E, g, text) => { E.log = (E.log || []); E.log.unshift({ day: (g.state && g.state.day) || 1, text }); if (E.log.length > 20) E.log.length = 20; };
+policy('vote_disparity', 'admin', '一票の格差の是正（区割りの見直し）', '人口の変化に合わせて選挙区の線引きを引き直し、一票の格差を縮める。地方の議席が減ることが多い。', {
+  params: [{ key: 'house', name: '対象（1=衆議院・2=参議院）', min: 1, max: 2, step: 1, unit: '', def: 1 }, { key: 'cuts', name: '見直す選挙区', min: 5, max: 30, step: 5, unit: '区', def: 10 }],
+  ideo: { social: -0.2 }, ministry: 'minister_internal', years: yr(1987, 2100),
+  seg: { urban: 3, floating: 2, young: 1, rural: -3, elderly: -1 },
+  apply: (pol, prm, g) => { const E = elecOf(pol); const k = prm.house === 2 ? 'sangiDisparity' : 'disparity'; E[k] = Math.max(prm.house === 2 ? 1.5 : 1.15, num(E[k], 2) - prm.cuts * (prm.house === 2 ? 0.03 : 0.014)); if (E.gerry && prm.house !== 2) { E.gerry = null; elecLog(E, g, '区割りが引き直され、先の線引きは白紙に戻った'); } elecLog(E, g, `${prm.house === 2 ? '参議院' : '衆議院'}の区割りを${prm.cuts}区見直した`); },
+});
+policy('smd_pr_ratio', 'admin', '小選挙区と比例代表の配分の見直し', '衆議院の定数は変えず、小選挙区と比例代表の議席の配分を動かす。比例を増やすと小さな党が有利、小選挙区を増やすと大きな党が有利になる。', {
+  params: [{ key: 'shift', name: '比例に移す議席（マイナスは小選挙区へ）', min: -30, max: 30, step: 10, unit: '議席', def: 10 }],
+  ideo: { social: -0.1 }, ministry: 'minister_internal', years: yr(1996, 2100),
+  check: (pol, prm, y) => (shugiRules(y, pol.flags).system !== 'heiritsu' ? '並立制ではない' : null),
+  seg: { floating: 1 }, apply: (pol, prm, g) => { const E = elecOf(pol); E.smdShift = Math.max(-60, Math.min(60, num(E.smdShift) + prm.shift)); elecLog(E, g, `小選挙区と比例の配分を見直した（比例 ${prm.shift > 0 ? '+' : ''}${prm.shift}）`); },
+});
+policy('pr_threshold', 'admin', '比例代表の足切り（阻止条項）', '比例代表で、一定の得票率に届かない党には議席を配らない。小党が出にくくなる。0%でなくす。', {
+  params: [{ key: 'pct', name: '足切りの得票率', min: 0, max: 5, step: 1, unit: '%', def: 3 }],
+  ideo: { social: 0.1 }, ministry: 'minister_internal', years: yr(1996, 2100),
+  check: (pol, prm, y) => (shugiRules(y, pol.flags).system !== 'heiritsu' ? '並立制ではない' : null),
+  seg: { floating: -1 }, apply: (pol, prm, g) => { const E = elecOf(pol); E.prThreshold = prm.pct; elecLog(E, g, prm.pct ? `比例代表に${prm.pct}%の足切りを設けた` : '比例代表の足切りをなくした'); },
+});
+policy('dup_candidacy', 'admin', '重複立候補の見直し', '小選挙区で負けた人が、比例代表で復活できる「重複立候補」を、禁止するか認めるかを決める。', {
+  params: [{ key: 'ban', name: '1=禁止・0=認める', min: 0, max: 1, step: 1, unit: '', def: 1 }],
+  ideo: {}, ministry: 'minister_internal', years: yr(1996, 2100),
+  check: (pol, prm, y) => (shugiRules(y, pol.flags).system !== 'heiritsu' ? '並立制ではない' : null),
+  seg: { floating: 1 }, apply: (pol, prm, g) => { const E = elecOf(pol); E.dupBan = !!prm.ban; elecLog(E, g, prm.ban ? '重複立候補を禁止した' : '重複立候補を認めた'); },
+});
+policy('redistrict', 'admin', '区割りの変更（有利な線引き）', '選挙区の線引きを、与党に有利になるよう引き直す。次の総選挙で小選挙区の議席が増えるが、露見すれば「ゲリマンダー」と批判され、違憲と判断されれば効果を失う。', {
+  params: [{ key: 'bias', name: '偏りの強さ（1=やや・2=かなり・3=徹底）', min: 1, max: 3, step: 1, unit: '', def: 1 }],
+  ideo: { social: 0.3 }, ministry: 'minister_internal', years: yr(1996, 2100),
+  check: (pol, prm, y) => (shugiRules(y, pol.flags).system === 'chusenkyoku' ? '小選挙区がない' : null),
+  seg: { floating: -1.5, urban: -1, young: -1 }, scale: (prm) => prm.bias,
+  apply: (pol, prm, g) => { const E = elecOf(pol); const sp = sponsorOf(pol); E.gerry = { party: sp.party, by: sp.id, strength: prm.bias, day: (g.state && g.state.day) || 1, exposed: false, struck: false }; elecLog(E, g, '区割りの線引きが引き直された'); },
 });
 policy('voting_age', 'admin', '選挙権年齢の18歳への引き下げ', '18歳・19歳も投票できるようにする。', {
   years: yr(1987, 2016), ideo: { social: -0.4 }, ministry: 'minister_internal',
@@ -2133,6 +2171,19 @@ function topList(race, n = 10) {
   return race.candidates.slice(0, n).map((c) => ({ name: c.name, party: c.party, votes: c.votes, won: c.won, isPlayer: !!c.isPlayer }));
 }
 
+// [R19] a gerrymander moves a few single-seat districts to its sponsor's party (taken from the others in proportion), unless a court has struck it down
+function applyGerry(p, smd, total) {
+  const G = p.flags.elec && p.flags.elec.gerry;
+  if (!G || G.struck || !G.party || !p.parties[G.party]) return 0;
+  const want = Math.min(Math.round(total * 0.025 * clamp(num(G.strength, 1), 1, 3)), 22);
+  const others = Object.keys(smd).filter((k) => k !== G.party && k !== IND && smd[k] > 0);
+  const sum = others.reduce((a, k) => a + smd[k], 0);
+  if (!sum || !want) return 0;
+  let taken = 0;
+  for (const k of others) { const t = Math.min(smd[k], Math.round((want * smd[k]) / sum)); smd[k] -= t; taken += t; }
+  smd[G.party] = (smd[G.party] || 0) + taken;
+  return taken;
+}
 function runShugi(g, p, e, fy) {
   const year = Math.floor(fy);
   const R = shugiRules(year, p.flags);
@@ -2169,11 +2220,13 @@ function runShugi(g, p, e, fy) {
     for (const id of coalition) coalShare[id] = nat.share[id];
     const smd = { ...alloc(coalShare, bs.__coal || 0, 1.6), [IND]: ind };
     for (const [id, n] of Object.entries(bs)) if (id !== '__coal') smd[id] = (smd[id] || 0) + n;
+    const EL = p.flags.elec || {};
+    EL.lastGerry = applyGerry(p, smd, R.smd);
     const pr = {};
     const myBlock = blockOfPref(decl && decl.hometown ? decl.pref : 'tokyo');
     for (const b of prBlocks(R.pr, year)) {
       const v = {};
-      for (const id of Object.keys(nat.share)) if (nat.share[id] > 0.006) v[id] = nat.share[id] * Math.exp(gauss() * 0.1) * (b.name === '東京' && ['aozora', 'nijiiro'].includes(id) ? 1.25 : 1);
+      for (const id of Object.keys(nat.share)) if (nat.share[id] > 0.006 && nat.share[id] * 100 >= num(EL.prThreshold)) v[id] = nat.share[id] * Math.exp(gauss() * 0.1) * (b.name === '東京' && ['aozora', 'nijiiro'].includes(id) ? 1.25 : 1);
       const dh = dhondt(v, b.seats);
       addTo(pr, dh);
       if (b.name === myBlock) tokyoPR = { seats: b.seats, byParty: dh };
@@ -2200,7 +2253,7 @@ function runShugi(g, p, e, fy) {
           const losers = Math.max(1, smdIn - wins);
           const sek = meC.votes / Math.max(1, w.votes);
           const ahead = Math.round(losers * clamp((0.95 - sek) / 0.65, 0, 1));
-          if (!forfeited && ahead < prSeats) revived = true;
+          if (!forfeited && !EL.dupBan && ahead < prSeats) revived = true;
         }
         my = finishMine(g, p, e, decl, race, 1, { won: revived, revived });
       } else {

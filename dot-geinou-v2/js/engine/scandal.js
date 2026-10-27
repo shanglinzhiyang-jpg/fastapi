@@ -60,6 +60,8 @@ export const KINDS = {
     follow: ['公用車が、私的な外出にくり返し使われていたと報じられた。', '出張費の精算に、不自然な点が見つかった。', '事務所は「確認のうえ、返還する」と述べた。'] },
   foreign: { label: '外国企業に関係する団体からの献金', pc: 0.5, crimeName: '政治資金規正法違反（外国人からの寄附）', src: ['新聞の調査報道', '市民団体の告発'],
     follow: ['寄附をした団体が、外国の企業と資本関係にあることがわかった。', '{n}の事務所は「確認していなかった」と説明している。', '野党は、受け取った経緯の資料を求めている。'] },
+  gerrymander: { label: '区割りの恣意的な操作（ゲリマンダー）', pc: 0, crimeName: '', src: ['新聞の調査報道', '審議会の委員の証言', '市民団体の指摘'],
+    follow: ['線引きの経過を示す資料が、与党に有利な形で引かれていたことを裏づけたと報じられた。', '野党は「選挙の公正を損なう」として、区割りの見直しを求めている。', '専門家は「違憲の判断が出る可能性がある」と指摘している。'] },
   coverup: { label: '証拠隠滅・隠蔽の疑い', pc: 0.5, crimeName: '証拠隠滅', src: ['内部の関係者の証言', '新聞の調査報道'],
     follow: ['資料の廃棄を指示したとされる記録が、報じられた。', '関係者が「口裏合わせを求められた」と話している。', '「最初の問題より、隠そうとしたことが問題だ」という声が広がった。'] },
 };
@@ -67,7 +69,7 @@ const GENERIC = { label: 'スキャンダル', pc: 0, crimeName: '', src: ['週�
 const kindOf = (k) => KINDS[k] || GENERIC;
 // which of the new kinds can fall on a politician out of the blue (kind → weight), and which need a cabinet seat
 const NEW_KINDS = { affair: 3, harassment: 2, nepotism: 2, resume: 1, tax: 1.5, carusage: 2.5, foreign: 1.5 };
-const SEV = { affair: 2, harassment: 2, nepotism: 3, resume: 2, tax: 3, carusage: 2, foreign: 3, doc: 4, coverup: 4 };
+const SEV = { affair: 2, harassment: 2, nepotism: 3, resume: 2, tax: 3, carusage: 2, foreign: 3, doc: 4, coverup: 4, gerrymander: 3 };
 export const STAGE_NAMES = { scoop: '第一報', follow: '続報と追及', probe: '捜査', charged: '起訴', trial: '公判', pressure: '辞職要求', closed: '決着' };
 
 // ======================================================================== state
