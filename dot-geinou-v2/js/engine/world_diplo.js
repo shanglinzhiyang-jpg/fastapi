@@ -210,7 +210,7 @@ export function createDiplo(X) {
     if (asia) return e < 2004.6 ? 'アジア局長' : 'アジア大洋州局長';
     if (['ru', 'su', 'ua'].includes(id)) return e < 2004.6 ? '欧亜局長' : '欧州局長';
     if (c.region === 'europe') return e < 2004.6 ? '欧亜局長' : '欧州局長';
-    if (c.region === 'mideast') return e < 2004.6 ? '中近東アフリカ局長' : '中東アフリカ局長';
+    if (c.region === 'mideast' || c.region === 'africa') return e < 2004.6 ? '中近東アフリカ局長' : '中東アフリカ局長';
     return '総合外交政策局長';
   }
   function advice(g, target = null) {

@@ -2222,7 +2222,7 @@ export async function settingsApp(g) {
 function histPowersApp(g) {
   return rowsList(g, {
     title: '歴史の列強', color: COL.settings, rowH: 40,
-    items: () => [...g.histPowers().map((h) => ({ id: h.id, label: `${h.leaderName.split('・').pop()}政権`, sub: h.swap || `${h.country}　${h.years}`, right: h.on ? 'ON' : 'OFF', rightColor: h.on ? PC.good : PC.bad, chip: ['列強', '#b0603a'] })), ...(typeof g.histEventsOn === 'function' ? [{ id: 'events', label: '歴史の出来事', sub: '政権が史実の歴史をたどる', right: g.histEventsOn() ? 'ON' : 'OFF', rightColor: g.histEventsOn() ? PC.good : PC.bad, chip: ['史実', '#8a5a3a'] }, { id: 'ifrate', label: '史実と異なる展開（IF）', sub: '終わりの出来事が史実と変わる割合', right: { none: 'なし', low: '少なめ', mid: 'ふつう', high: '多め' }[g.histIfLevel()], rightColor: PC.accent, chip: ['IF', '#8a5a3a'] }] : [])],
+    items: () => [...g.histPowers().map((h) => ({ id: h.id, label: `${h.tag || h.leaderName.split('・').pop()}政権`, sub: h.swap || `${h.country}　${h.years}`, right: h.on ? 'ON' : 'OFF', rightColor: h.on ? PC.good : PC.bad, chip: ['列強', '#b0603a'] })), ...(typeof g.histEventsOn === 'function' ? [{ id: 'events', label: '歴史の出来事', sub: '政権が史実の歴史をたどる', right: g.histEventsOn() ? 'ON' : 'OFF', rightColor: g.histEventsOn() ? PC.good : PC.bad, chip: ['史実', '#8a5a3a'] }, { id: 'ifrate', label: '史実と異なる展開（IF）', sub: '終わりの出来事が史実と変わる割合', right: { none: 'なし', low: '少なめ', mid: 'ふつう', high: '多め' }[g.histIfLevel()], rightColor: PC.accent, chip: ['IF', '#8a5a3a'] }] : [])],
     hint: 'A:ON/OFF　B:もどる',
     pick(ph, it) {
       if (it.id === 'ifrate') { const L = ['none', 'low', 'mid', 'high']; g.setHistIf(L[(L.indexOf(g.histIfLevel()) + 1) % 4]); audio.sfx('cursor'); return; }
