@@ -18,6 +18,8 @@ const sl = (rec, s, x) => D.sayLine(s, rec, x);
 const clockNow = (g) => { try { return typeof g.clock === 'function' ? g.clock() : null; } catch (e) { return null; } };
 const dateOf = (g) => { try { return typeof g.gameDate === 'function' ? g.gameDate() : null; } catch (e) { return null; } };
 export const eraWord = (era, o) => o[era] ?? o.d ?? '';
+// a spot's price: most are fixed; the ドライブ is cheaper in the player's own car (R16: the fuel only)
+const priceOf = (g, s) => (typeof s.priceOf === 'function' ? s.priceOf(g) : s.price);
 
 // ---------------------------------------------------------------- what can be done today
 export function spotsFor(g, rec) {
@@ -32,10 +34,10 @@ export function spotsFor(g, rec) {
     if (s.season && !season.includes(s.season)) why = { hatsumode: 'お正月の時期だけ', sakura: '桜の季節だけ', natsu: '夏の夜だけ', xmas: 'クリスマスの時期だけ' }[s.season] || 'この季節だけ';
     if (!why && s.need) why = s.need(g, { age: ageOf(st), rec });
     if (!why && late) why = 'もう遅い時間だ';
-    if (!why && st.money < s.price) why = 'お金が足りない…';
+    if (!why && st.money < priceOf(g, s)) why = 'お金が足りない…';
     if (!why && st.stamina < s.sta) why = '体力が足りない…';
     // rain: outdoors is possible, but the day is less fun (shown as a hint, not a block)
-    out.push({ id, name: D.spotName(id, era), price: s.price, why, hint: spotHint(g, rec, id), season: !!s.season });
+    out.push({ id, name: D.spotName(id, era), price: priceOf(g, s), why, hint: spotHint(g, rec, id), season: !!s.season });
   }
   // seasonal ones first when in season
   return out.sort((a, b) => (b.season && !b.why ? 1 : 0) - (a.season && !a.why ? 1 : 0));
@@ -224,9 +226,10 @@ export async function goDate(g, rec, spotId, o = {}) {
     await g.say([`${shortName(rec)}にさそいのメッセージを送った。`, sl(rec, '『ごめん、今日は仕事{dap}って…。また今度{ne}』')]);
     return { ok: false, why: 'busy', busy: true };
   }
-  if (!g.spend(spot.price)) { await g.say('（お金が足りない…）'); return { ok: false, why: 'money' }; }
+  const cost = priceOf(g, spot);
+  if (!g.spend(cost)) { await g.say('（お金が足りない…）'); return { ok: false, why: 'money' }; }
   st.stamina -= spot.sta;
-  const before = { stress: st.life.stress, hunger: st.life.hunger, stamina: st.stamina + spot.sta, money: st.money + spot.price };
+  const before = { stress: st.life.stress, hunger: st.life.hunger, stamina: st.stamina + spot.sta, money: st.money + cost };
   // the time of day: evening spots wait for the evening
   let phase;
   if (typeof g.advanceTo === 'function' && spot.night) { const ck = clockNow(g); if (ck && ck.minutes < 17 * 60 + 30) g.advanceTo(18 * 60, `${spot.go}までの時間`); }
@@ -270,12 +273,13 @@ export async function goDate(g, rec, spotId, o = {}) {
     if (typeof g.advanceTime === 'function') g.advanceTime(spot.min, `デート（${D.spotName(spotId, era)}）`);
     g.addAff(rec.id, gain, true);
     rec.dates++;
+    if (spotId === 'drive' && typeof g.carDrove === 'function' && g.carOwned() && !g.carDriveBlock()) g.carDrove({ km: 110, free: true }); // [R16] the 走行距離
     rec.ld = st.day;
     rec.lc = st.day;
     if (isCouple(rec)) rec.mo = clamp(rec.mo + 4 + Math.round(gain / 2), 0, 100);
     const stDelta = st.life.stress - before.stress;
     const chips = [];
-    if (spot.price) chips.push(['お金', `-${fmtMoney(spot.price)}`, null]);
+    if (cost) chips.push(['お金', `-${fmtMoney(cost)}`, null]);
     const dSt = st.stamina - before.stamina;
     if (dSt) chips.push(['体力', `${dSt > 0 ? '+' : ''}${dSt}`, dSt > 0]);
     if (stDelta) chips.push(['ストレス', `${stDelta > 0 ? '+' : ''}${stDelta}`, stDelta < 0]);

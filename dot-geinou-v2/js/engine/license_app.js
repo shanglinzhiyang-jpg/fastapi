@@ -133,7 +133,7 @@ function menu(g) {
       else if (!s.cert) items.push({ label: '教習を予約する', sub: '学科・技能・検定', run: () => doBook(g) });
     } else items.push({ label: '合宿中', sub: s.camp && s.camp.arrived ? `${s.camp.day}日目` : '東京に戻っています', run: () => viewSteps(g) });
   }
-  if (holds(g, 'futsu')) items.push({ label: 'ドライブ', sub: `レンタカー ${fmtMoney(6000)}（半日）`, run: () => doDrive(g) });
+  if (holds(g, 'futsu') && !(typeof g.carOwned === 'function' && g.carOwned())) items.push({ label: 'ドライブ', sub: `レンタカー ${fmtMoney(6000)}（半日）`, run: () => doDrive(g) }); // [R16] with your own car: the マイカー app
   items.push({ label: '学科の練習', sub: '○×を10問（成績には入りません）', run: () => closePhoneThen(g, (gg) => practiceExam(gg)) });
   items.push({ label: '免許の案内', sub: '教習所・免許センター', run: () => viewInfo(g) });
   return items;

@@ -37,6 +37,8 @@ export const ACHIEVEMENTS = [
   { id: 'seasons', name: '一年の行事', desc: '一年のうちに、季節の行事を五つ見た', secret: true, test: (g) => { try { return seasonsSeen(g) >= 5; } catch (e) { return false; } } },
   { id: 'station', name: '電車に乗る', desc: '駅に行った', test: (g, x) => x.places.some((p) => /eki|station/i.test(p)) },
   { id: 'rival', name: 'ライバル', desc: '同じ相手と、決勝で三度対決した', test: (g, x) => x.rivals.some((r) => r.meets >= 3) },
+  { id: 'first_car', name: 'マイカー', desc: '自分の車を手に入れた', test: (g, x) => x.car.has || x.car.bought > 0 },
+  { id: 'km10000', name: '走行一万キロ', desc: '愛車で、あわせて一万キロ走った', secret: true, test: (g, x) => x.car.kmAll >= 10000 },
   { id: 'revenge', name: '雪辱', desc: '負けた相手に、決勝で勝ち返した', secret: true, test: (g, x) => x.rivals.some((r) => r.revenge > 0) },
 ];
 
@@ -60,7 +62,9 @@ function ctxOf(g) {
   const entries = [];
   try { const cs = st.contests && st.contests.entries; if (cs && typeof cs === 'object') entries.push(...Object.values(cs)); } catch (e) { /* none */ }
   try { const m1 = st.m1 && st.m1.me && st.m1.me.entries; if (m1 && typeof m1 === 'object') for (const yr of Object.values(m1)) if (yr) entries.push(yr); } catch (e) { /* none */ }
-  return { rom, pol, entries, places: z.places, rivals: rivalsOf(g) };
+  const cl = st.carLog && typeof st.carLog === 'object' ? st.carLog : {};
+  const car = { has: !!(st.car && typeof st.car === 'object'), bought: Number(cl.bought) || 0, kmAll: Number(cl.kmAll) || 0 };
+  return { rom, pol, entries, places: z.places, rivals: rivalsOf(g), car };
 }
 
 // check every achievement; reached ones are recorded and announced (one toast each). Returns the new ones.

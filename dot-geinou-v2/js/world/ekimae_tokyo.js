@@ -10,6 +10,7 @@ import { PLACES } from '../engine/map.js';
 import { registerItem } from '../engine/state.js';
 import { GUIDE } from './guide.js';
 import { text } from '../engine/draw.js';
+import { carShop } from '../engine/car_app.js'; // [R16] ドット中古車センター
 import { ageOf } from '../engine/profile.js';
 import {
   ekimae, npc, LOOKS, yearOf, ymOf, eatery, shop, sight, postSign, bigScreen, statueDog, skyline, lanternGate, lanternPillars,
@@ -474,8 +475,8 @@ ekimae({
   id: 'ekimae_fuchu', name: '府中', station: 'fuchu', region: 'tokyo', rail: 'elevated', W: 48, H: 31, rotary: null, sx: 16,
   look: { wall: '#e8ecf0', roof: '#5a6a80' },
   intro: ['府中駅前に出た。', 'けやき並木の先に、「ドット運転免許センター」の看板が見える。'],
-  guide: { name: '府中駅前', short: '府中', hint: 'ドット多摩線の終点・府中駅', lines: ['ドット運転免許センター（運転免許試験場）：学科試験・交付・更新', '証明写真・代書屋・けやき並木・神社', 'ひと駅となりの調布に、教習所'] },
-  exitNote: ['府中駅前の案内板だ。', '右：ドット運転免許センター（試験場前）\n左：けやき並木・神社'],
+  guide: { name: '府中駅前', short: '府中', hint: 'ドット多摩線の終点・府中駅', lines: ['ドット運転免許センター（運転免許試験場）：学科試験・交付・更新', 'ドット中古車センター（駐車場の東はし）：新車・中古車・買い取り', '証明写真・代書屋・けやき並木・神社', 'ひと駅となりの調布に、教習所'] },
+  exitNote: ['府中駅前の案内板だ。', '右：ドット運転免許センター（試験場前）・その奥の駐車場に、ドット中古車センター\n左：けやき並木・神社'],
   paint(K) {
     const { fill, set, put } = K;
     // けやき並木 (left), the shrine grounds (lower left)
@@ -490,7 +491,10 @@ ekimae({
   },
   entities: (K) => [
     { type: 'building', x: 30, y: 8, w: 14, h: 8, door: 7, place: 'menkyo', name: 'ドット運転免許センター', kind: 'office', wall: '#e4e8ee', roof: '#3a5a9a', canopy: '#3a5a9a', sign: { text: 'ドット運転免許センター', bg: '#2a4a8a', color: '#ffffff' } },
-    parkedCar(30, 22, '#d8dce4'), parkedCar(36, 22, '#3a5a9a'), parkedCar(42, 22, '#c0392b'), parkedCar(33, 27, '#2f9a4a'), parkedCar(39, 27, '#e8e4dc'),
+    parkedCar(30, 22, '#d8dce4'), parkedCar(36, 22, '#3a5a9a'), parkedCar(33, 27, '#2f9a4a'),
+    // [R16] ドット中古車センター: the car dealer at the east end of the car park (new and used cars, buying, selling; the display cars stand in front)
+    B(39, 21, 8, 5, 'office', 'ドット中古車センター', { wall: '#f4f0e0', roof: '#e0703a', sign: { text: 'ドット中古車センター', bg: '#e0703a', color: '#ffffff' } }, (g) => carShop(g)),
+    parkedCar(40, 27, '#e8384f'), parkedCar(43, 27, '#ffd23f'),
     postSign(28, 15, '試験場前', ['「試験場前」のバス停の標識。', '学科試験・免許の交付・更新の受付は、平日 午前9時〜午後4時（土日・祝日はお休み）。']),
     B(18, 21, 5, 5, 'small', '代書屋', { wall: '#f4ecd8', roof: '#5a5f6b', sign: { text: '代書', bg: '#5a5f6b', color: '#ffffff' } }, ['「代書・申請書類の書き方、お手伝いします」', 'おじさん「試験の前に、例題集もどうぞ。よく出るところに線を引いてあるよ」']),
     B(24, 21, 3, 5, 'small', '証明写真', { wall: '#e8ecf2', roof: '#2f6fd0', sign: { text: '写真', bg: '#2f6fd0', color: '#ffffff' } }, ['証明写真の機械だ。', '（免許証の写真は、センターの中で撮ってもらえる）']),

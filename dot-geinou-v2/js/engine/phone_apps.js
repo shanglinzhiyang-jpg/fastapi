@@ -59,6 +59,8 @@ import {
   appName, drawAppIcon, appOrder,
 } from './phone.js';
 import { Game } from './game.js';
+import { tripFor } from './car.js'; // [R16] 「自分の車で行く」
+import { drawCarSide } from './car_art.js';
 
 // Other content modules this one works through, looked up when used (each may be missing; the
 // literal paths let a single-file bundler include them).
@@ -592,6 +594,8 @@ function tripOptions(g, from, d, shinFare) {
       }
     }
     out.push({ id: 'taxi', label: 'タクシー', short: 'タクシー', fare: taxiFare(t), stamina: 0, ride: 'taxi', sub: taxiHow, desc: '目の前まで。体力を使わない。' });
+    const ct = t > 12 ? tripFor(g, t) : null; // [R16] the player's own car
+    if (ct) out.push({ id: 'car', label: '自分の車で行く', short: '車', fare: ct.fare, stamina: 0, ride: 'car', km: ct.km, color: ct.color, body: ct.body, sub: `約${ct.km}km・ガソリンと駐車場代`, desc: `${ct.model}で目の前まで。体力は使わない。`, svcWhy: ct.why });
   } else {
     const tr = trainOption(g, from, d); // [R9-B1] the 新幹線 and the local lines, by the network
     if (tr) out.push(tr);
@@ -675,6 +679,7 @@ async function doTrip(g, from, d, o) {
   const st = g.state;
   if (st.money < o.fare || st.stamina < o.stamina) { await g.say('（お金か体力が、足りなくなっていた…）'); return; }
   if (o.fare) { g.spend(o.fare); audio.sfx('coin'); }
+  if (o.ride === 'car') { try { g.carDrove({ km: o.km, free: true, trip: true }); } catch (e) { console.error(e); } } // [R16] the 走行距離 and the コンディション
   if (o.stamina) g.useStamina(o.stamina);
   if (o.hunger) g.addNeed('hunger', -o.hunger);
   const S = appState(g);
@@ -698,7 +703,7 @@ async function doTrip(g, from, d, o) {
   if (o.ride === 'shinkansen' && m && typeof m.travelScene === 'function') {
     try { ride = m.travelScene(g, { to: areaOf(d.area).full, via: o.id === 'shinkansen_taxi' ? '駅までタクシー → 新幹線 → 駅からタクシー' : '新幹線で', vehicle: 'shinkansen', scenery: 'fuji' }); } catch (e) { console.error(e); ride = null; }
   }
-  if (!ride) ride = rideScene(g, { mode: o.ride === 'shinkansen' ? 'taxi' : o.ride, to: d.name, era: eraId(g), sign: areaOf(d.area).name });
+  if (!ride) ride = rideScene(g, { mode: o.ride === 'shinkansen' ? 'taxi' : o.ride, to: d.name, era: eraId(g), sign: areaOf(d.area).name, color: o.color, body: o.body });
   await g.fadeIn(10);
   await ride;
   await g.fadeOut(10);
@@ -768,10 +773,11 @@ function drawRide(c, t, o, g) {
   }
   if (o.mode === 'taxi') drawTaxi(c, 228, 304, t, era);
   else if (o.mode === 'bus') drawBus(c, 150, 306, t, era, o.sign);
+  else if (o.mode === 'car') drawCarSide(c, 214, 304, t, o.color || '#e8384f', o.body || 'compact');
   else drawWalker(c, 288, 186, t, g);
   R(c, 0, 0, SW, 52, 'rgba(10,14,34,0.55)');
   text(c, fitText(c, `${o.to} へ移動中…`, SW - 40, 20), SW / 2, 8, { size: 20, align: 'center', color: '#fff', outline: '#20232a' });
-  const via = { taxi: 'タクシーで', bus: 'バスで', walk: '歩いて' }[o.mode] || '';
+  const via = { taxi: 'タクシーで', bus: 'バスで', walk: '歩いて', car: '自分の車で' }[o.mode] || '';
   if (via) text(c, via, SW / 2, 32, { size: 12, align: 'center', color: '#fff6a8', outline: '#20232a' });
   if (t > 30) text(c, 'A：とばす', SW - 12, SH - 22, { size: 12, align: 'right', color: '#ffffff', outline: '#20232a' });
 }

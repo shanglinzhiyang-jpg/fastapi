@@ -32,4 +32,12 @@ f=$OUT/long_heisei.txt; [ "$1" = "--quick" ] || f=$OUT/long_reiwa.txt
 e=$(grep -E '^errors' "$f" | tail -1); fl=$(grep -E '^flood' "$f" | head -1)
 row "long play (${1:-full})" "$e"
 row "morning message flood" "${fl:-n/a}"
+
+# 5. [R16] the same long run with a car (loan, monthly bills, 車検): no errors, no flood
+if [ "$1" = "--quick" ]; then
+  CAR=1 node longhist.mjs heisei 120 > "$OUT/long_heisei_car.txt" 2>&1
+  e=$(grep -E '^errors' "$OUT/long_heisei_car.txt" | tail -1); fl=$(grep -E '^flood' "$OUT/long_heisei_car.txt" | head -1)
+  row "long play with a car (--quick)" "$e"
+  row "  its morning message flood" "${fl:-n/a}"
+fi
 echo "---- details: $OUT" | tee -a "$SUM"

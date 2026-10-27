@@ -113,6 +113,9 @@ export const MODULES = [
   // [R15] 実績・図鑑 (the phone app 「図鑑」) — achievements read the game's own state; 環境音 (ambience.js) is imported by main.js
   // [R15] 季節の行事 (once a year: New Year, blossoms, Tanabata, summer festivals, autumn, Christmas, the year's end)
   './engine/seasons.js',
+  // [R16] 車の所有: car.js (the core: 買う・駐車場/保険/税/車検/ローン・ドライブ・売る) and car_app.js (the phone app 「マイカー」 and the 販売店, whose door is in 府中駅前)
+  './engine/car.js',
+  './engine/car_app.js',
   './engine/rivals_story.js', // [R16] ライバルコンビの物語: the acts the player meets in a final again and again (記録は図鑑の「ライバル」)
   './engine/zukan.js',
   './engine/romance.js',
