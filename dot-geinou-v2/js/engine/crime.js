@@ -1007,9 +1007,7 @@ function politicalHit(g, rep, support = 0) {
   p.me.reputation = clamp(num(p.me.reputation) - rep, -100, 100);
   if (support) p.me.localSupport = clamp(num(p.me.localSupport) - support, 0, 100);
 }
-// Leaving the party after an arrest (離党). Uses g.leaveParty() when present. A real party (自民・民主) is
-// never named next to the player's case: its news says only 離党 (no 不祥事), and the caller words its own
-// line without the party's name.
+// Leaving the party after an arrest (離党). Uses g.leaveParty() when present. [R18] The party is named, whichever party it is.
 function leavePartyAfterScandal(g) {
   const p = polState(g);
   if (!p || !p.me || !p.me.party) return null;
@@ -1018,7 +1016,7 @@ function leavePartyAfterScandal(g) {
   const PD = nsGet('PARTY_DEFS');
   const real = !!((party && party.real) || (PD && PD[p.me.party] && PD[p.me.party].real));
   const name = (party && party.name) || '所属政党';
-  if (typeof g.leaveParty === 'function') { try { g.leaveParty(real ? { why: '離党' } : { reason: 'scandal' }); } catch (e) { console.error(e); } }
+  if (typeof g.leaveParty === 'function') { try { g.leaveParty({ reason: 'scandal' }); } catch (e) { console.error(e); } }
   if (p.me.party) p.me.party = null;
   if (Array.isArray(p.me.posts)) p.me.posts = [];
   return { name, real };
@@ -1860,7 +1858,7 @@ function arrestFallout(g, cs) {
   if (isPolitician(g)) {
     politicalHit(g, 30, 15);
     const left = leavePartyAfterScandal(g);
-    if (left) news(g, left.real ? '所属していた政党は、逮捕された{fullname}議員の離党届を受理した。' : `${left.name}は、逮捕された{fullname}議員の離党届を受理した。`);
+    if (left) news(g, `${left.name}は、逮捕された{fullname}議員の離党届を受理した。`);
   }
   // 「ニュースを見て」 only when it was in the news (a known face, never a minor)
   familyMessage(g, cs.juvenile ? 'arrested_minor' : knownFigure(g) ? 'arrested' : 'arrested_heard');

@@ -194,8 +194,8 @@
 //   source: hokkaido-np.co.jp, nri.com, soumu.go.jp（改正政治資金規正法等の概要）。パーティー券の購入者の
 //   公開（20万円超）は1992年の改正（1993年施行）から。それより前の時代には公開の決まりを言わない。
 // Fictional: every politician NPC, ドット区, the parties ともしび党・青空党・日輪党・にじいろ党・田園党,
-// all scandals and all events. 自由民主党 / 民主党 appear only with the facts above; NPCs of
-// those two parties never get a scandal (they only step down for neutral reasons).
+// all scandals and all events. 自由民主党 / 民主党 appear with the facts above; their NPC members are fictional
+// people and can be reported in a scandal like anyone else (R18), but a real named figure (n.real) never is.
 //
 // Game model in short:
 // - Calendar: 120 game days a year, 10 a month (1 game day ≈ 3 real days); eras start in April of 1987 /
@@ -3657,8 +3657,7 @@ function scandalImpl(g, p, kind, opts = {}) {
     if (sev >= 5 && me.party && p.parties[me.party] && !p.parties[me.party].isPlayers) { note(g, `（${rec.name}で、党から離党を求められた…）`); leavePartyImpl(g, p, '離党勧告'); }
   } else {
     const n = p.npcs[who];
-    // NPCs of a real party (自民・民主) are never shown in a scandal (neutral step-down instead)
-    if (n && PARTY_DEFS[n.party] && PARTY_DEFS[n.party].real) { npcStepDown(g, p, n, '一身上の都合'); return { ...rec, kind: 'stepdown', name: '辞任', severity: 0 }; }
+    // [R18] nothing is held back: a fictional NPC is reported whatever the party (only a real named figure is out of reach, above)
     if (n) {
       const post = n.posts.find((x) => POSTS[x] && POSTS[x].kind === 'cabinet' && (x === 'pm' ? p.cabinet.pm === who : p.cabinet.ministers[x] === who));
       news(p, g, `${n.name}${post ? postName(post, fyNow(g)) : '議員'}に${rec.name}`);
@@ -3892,17 +3891,14 @@ function npcStepDown(g, p, n, reason) {
 function npcEvents(g, p) {
   // [R11-P] with the agent layer on, scandals, deaths and vacancies come from the agents themselves (politics_ai_act.js dailyEvents: who is exposed, who is old or ill); the shocks below stay
   if (!INTRA.ai) {
-    // NPC troubles (about 4 a year). Scandals happen only to NPCs of the fictional parties (and
-    // independents); an NPC of a real party (自民・民主) only ever steps down for neutral reasons
-    // (体調不良・一身上の都合), so the game never claims misconduct by a real party.
+    // NPC troubles (about 4 a year). [R18] The NPCs are all fictional, so a scandal can fall on any party's member; a real named figure (n.real) never gets one.
     if (Math.random() < 4 / YEAR_DAYS) {
       const cab = Object.values(p.cabinet.ministers || {}).filter((id) => id !== 'player' && p.npcs[id]);
       const pool = cab.length && Math.random() < 0.6 ? cab : Object.keys(p.npcs).filter((id) => p.npcs[id].office);
       const who = pool.length ? pickOne(pool) : null;
       const n = who && p.npcs[who];
-      if (n && PARTY_DEFS[n.party] && PARTY_DEFS[n.party].real) npcStepDown(g, p, n, pickOne(['体調不良', '一身上の都合']));
       // (round 4) NPC gaffes have their own detailed chain (npcGaffeTick: 「発言・態度・失言」); money and private troubles stay here
-      else if (n) scandalImpl(g, p, pickOne(['expense', 'private', 'slush_fund']), { who });
+      if (n) scandalImpl(g, p, pickOne(['expense', 'private', 'slush_fund']), { who });
     }
     // vacancies -> by-elections
     if (Math.random() < 2 / YEAR_DAYS) makeVacancy(g, p, 'shugi', { reason: pickOne(['議員の死去', '議員の辞職', '知事選への立候補', '議員の辞職']) });
@@ -4772,14 +4768,12 @@ function leavePartyImpl(g, p, why = '離党') {
     else { const n = newNpc(p, { party: old, office: 'shugi', house: 'shugi' }); pt.leader = n.id; pt.isPlayers = false; }
   }
   if (me.office) me.reputation = clamp(me.reputation - 3, -100, 100);
-  // the feed line in correct Japanese (「〜を除名」 would read as the player expelling the party); a real
-  // party is never named next to the player's scandal (the line then says only 離党)
+  // the feed line in correct Japanese (「〜を除名」 would read as the player expelling the party); [R18] the party is named whatever it is
   const who = `${g.state.name}氏`, pname = pt ? pt.name : '所属政党';
-  const realP = !!((pt && pt.real) || (PARTY_DEFS[old] && PARTY_DEFS[old].real));
   let line;
   if (why === '除名') line = `${who}が${pname}から除名された`;
   else if (why === '政界引退') line = `${who}が政界を引退し、${pname}を離れた`;
-  else if (why === '離党' || (realP && (why === '離党勧告' || why === '離党（不祥事）'))) line = `${who}が${pname}を離党`;
+  else if (why === '離党') line = `${who}が${pname}を離党`;
   else if (why === '離党勧告') line = `${who}が離党勧告を受けて${pname}を離党`;
   else if (why === '離党（不祥事）') line = `${who}が不祥事で${pname}を離党`;
   else line = `${who}が${pname}を離党（${why}）`;
@@ -5161,8 +5155,7 @@ function donationsImpl(g, p, opts = {}) {
 //   炎上 → 撤回 → 謝罪会見 → 野党の追及 → 問責・不信任 → 辞任・更迭   (or it dies down: 沈静化)
 // with effects on the cabinet's approval, the party's view of the player (standing), the media (me.media) and the
 // fans. Good outcomes too (本音が受ける・好感度アップ・誠実さが伝わる・頼もしい). NPC politicians have a 人柄 (persona)
-// and their own gaffes in the news — NPCs of the fictional parties (and independents) only: an NPC of a real party
-// (自民・民主) is never shown in a gaffe (as for scandals). Every line here is invented for the game; none is a real
+// and their own gaffes in the news — any fictional NPC (R18: whatever the party; a real named figure never). Every line here is invented for the game; none is a real
 // politician's remark. 差別と受け取られかねない発言 / 歴史認識 are written as a description of the remark (a
 // paraphrase), never as the words themselves.
 export const SPEECH_VENUES = {
@@ -5345,8 +5338,8 @@ function personaOf(n, year = 2026) {
   n.persona = k;
   return k;
 }
-// can this NPC be shown in a gaffe? (the real-party rule; civilians from the player's circle neither)
-function npcGaffeOK(n) { return !!n && !n.civilian && !(PARTY_DEFS[n.party] && PARTY_DEFS[n.party].real); }
+// can this NPC be shown in a gaffe? (a real named figure is not; civilians from the player's circle neither)
+function npcGaffeOK(n) { return !!n && !n.civilian && !n.real; } // [R18] any party's fictional member; a real named figure never
 
 function speechState(p) {
   let S = p.speech;
@@ -5535,8 +5528,8 @@ function startGaffe(g, p, def) {
   if (def.line && K.quote === false) rec.desc = true;
   S.gaffes.push(rec);
   if (S.gaffes.length > 40) S.gaffes.splice(0, S.gaffes.length - 40);
-  // the party in the headline only for a fictional party (the real parties stay out of the gaffe news)
-  const pt = sp.party && p.parties[sp.party] && !(PARTY_DEFS[sp.party] && PARTY_DEFS[sp.party].real) && !p.parties[sp.party].real ? `（${pname(p, sp.party)}）` : '';
+  // [R18] the party is named in the headline, whichever party it is
+  const pt = sp.party && p.parties[sp.party] ? `（${pname(p, sp.party)}）` : '';
   const vn = venueName(def.venue, calYear(g));
   const head = K.quote && !rec.desc ? `【失言】${sp.name}${sp.title}${pt}、${vn}で「${rec.line}」。批判が広がる` : `【失言】${sp.name}${sp.title}${pt}が${vn}で${rec.line}として批判を浴びる`;
   news(p, g, head);
@@ -6344,7 +6337,7 @@ function fukkoStatusImpl(g, p) {
 //   collectDonations() -> { ok, amount, text };  addSecretFunds(n, source) -> secret total
 //   reportFunds({ includeSecret?, year? }) -> { ok, year, income, expense, corrected, text }
 //   politicalScandal(kind, { who?: 'player'|npcId, amount?, severity? }) -> record (emits 'scandal';
-//       an NPC of a real party only steps down for neutral reasons: kind 'stepdown', no hook)
+//       any fictional NPC can be reported, whatever the party [R18]; a real named figure returns null)
 //   hireStaff(+1|-1) -> null | reason   (私設秘書: monthly cost, helps activities and campaigns)
 //  misc
 //   npcName(id), partyName(id, short?), postLabel(post), triggerShock(kind), politicsMenu() (text UI)

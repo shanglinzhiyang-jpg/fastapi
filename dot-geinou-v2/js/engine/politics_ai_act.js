@@ -424,8 +424,8 @@ export function installActs(C) {
     const meanRisk = mps.reduce((s, n) => s + n.ai.risk, 0) / mps.length;
     const lam = (4 / YEAR_DAYS) * clamp(meanRisk / 38, 0.5, 2.2);
     if (rr(p, 'scn', day) < lam) {
-      // a member of a real party (自民・民主) only ever steps down for neutral reasons, and only a minister can: no scandal is drawn for the others
-      const n = wpick(p, `scnwho|${day}`, mps, (m) => (m.real || (isReal(p, m.party) && !posKind(p, m).cab) ? 0 : Math.pow(m.ai.risk / 40, 2) * (1 + (posKind(p, m).cab ? 1.2 : 0) + (posKind(p, m).pm ? 0.4 : 0))));
+      // [R18] any fictional member can be the one (a real named figure never is)
+      const n = wpick(p, `scnwho|${day}`, mps, (m) => (m.real ? 0 : Math.pow(m.ai.risk / 40, 2) * (1 + (posKind(p, m).cab ? 1.2 : 0) + (posKind(p, m).pm ? 0.4 : 0))));
       if (n && !cool(n.ai, 'scandal', 90, day)) scandal(g, p, n, day);
     }
     // --- death and illness (a hazard by age and health) among the named
@@ -447,7 +447,6 @@ export function installActs(C) {
     const a = n.ai;
     const money = rr(p, 'scnk', n.id, day) < 0.5 + (a.fund > 100 ? 0.15 : 0);
     const kind = money ? (rr(p, 'scnk2', n.id, day) < 0.5 ? 'slush_fund' : 'expense') : 'private';
-    const real = isReal(p, n.party);
     const hadCab = posKind(p, n).cab;
     let rec = null;
     try { rec = X.politicalScandal(g, p, kind, { who: n.id }); } catch (e) { console.error(e); }
@@ -457,7 +456,7 @@ export function installActs(C) {
     a.pf = clamp(a.pf - 8, -100, 100);
     S(p).stats.scandals++;
     if (rec && rec.kind === 'stepdown') { if (hadCab) logAct(g, p, n, 'scandal', `一身上の都合で大臣を辞した`, {}); return; }
-    if (!real) logAct(g, p, n, 'scandal', `${a.fund < 8 ? '資金繰りに追われるなか、' : a.str >= 60 ? '多忙で気がゆるんだのか、' : ''}${rec && rec.name ? rec.name : money ? '政治資金の扱い' : '私生活の問題'}が週刊誌に報じられた`, {});
+    logAct(g, p, n, 'scandal', `${a.fund < 8 ? '資金繰りに追われるなか、' : a.str >= 60 ? '多忙で気がゆるんだのか、' : ''}${rec && rec.name ? rec.name : money ? '政治資金の扱い' : '私生活の問題'}が週刊誌に報じられた`, {});
     // the party's members remember who hurt them: the player's own party pays too
     if (p.me.party && p.me.party === n.party) p.me.reputation = clamp(num(p.me.reputation) - 0.5, -100, 100);
   }
@@ -484,6 +483,15 @@ export function installActs(C) {
     if (hadSeat && house) {
       try { X.makeVacancy(g, p, house, { party: n.party || IND, reason: '議員の死去', pref: rr(p, 'dpref', n.id) < 0.3 ? 'tokyo' : undefined }); } catch (e) { console.error(e); }
     }
+  }
+  // [R18] a member who leaves over a scandal (resigns the seat after an indictment or a conviction): roles gone, the seat opens a by-election (a sitting PM is left to the cabinet's own flow)
+  function scandalExit(g, p, n, reason, day) {
+    if (!n || n.real || n.exMp || posKind(p, n).pm) return false;
+    const house = n.office, hadSeat = mpOf(n);
+    if (!n.ai) { n.posts = []; n.office = null; n.exMp = true; if (hadSeat && house) { try { X.makeVacancy(g, p, house, { party: n.party || IND, reason: '議員の辞職' }); } catch (e) { console.error(e); } } return true; } // not yet an agent: the plain exit
+    exitSeat(g, p, n, n.ai, 'retire', reason, day);
+    if (hadSeat && house) { try { X.makeVacancy(g, p, house, { party: n.party || IND, reason: '議員の辞職' }); } catch (e) { console.error(e); } }
+    return true;
   }
   function illness(g, p, n, a, day) {
     const k = posKind(p, n);
@@ -1075,5 +1083,5 @@ export function installActs(C) {
     return { ok: true, text: parts.filter(Boolean).join(''), by: 'local', topic, name: n.name, att: aw.text };
   }
 
-  return { decide, aging, yearlyAgent, dailyEvents, aboutPlayer, rivalOf, hooks, interview, persona, moveSeat, vacate, makeHeir, named, onPlayerMove, onElection, snapshotSeats, newcomer, scandal, die };
+  return { decide, aging, yearlyAgent, dailyEvents, aboutPlayer, rivalOf, hooks, interview, persona, moveSeat, vacate, makeHeir, named, onPlayerMove, onElection, snapshotSeats, newcomer, scandal, die, scandalExit };
 }

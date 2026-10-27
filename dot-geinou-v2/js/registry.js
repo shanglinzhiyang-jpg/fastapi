@@ -99,6 +99,8 @@ export const MODULES = [
   './engine/regime_rule.js',
   // [R17] 戦時の国内と指揮 (司令官・軍需生産・国内の政策・反戦運動): war_home.js
   './engine/war_home.js',
+  // [R18] スキャンダルの展開 (報道・続報・捜査・起訴・判決、本人の対応、アプリ「スクープ」): scandal.js
+  './engine/scandal.js',
   // 政府中枢 (government console, HD) + political phone apps 世論の声・国会中継・政府中枢 (api: test-output/api_govt_ui.txt)
   './engine/govt_ui.js',
   // world affairs (世界情勢: real countries, blocs, alliances, treaties, summits, sanctions, world events, diplomacy,

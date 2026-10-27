@@ -673,6 +673,8 @@ export function installAI(X, H) {
     aiPlayerTies() { const p = ep(this); const s = S(p); const pr = (id) => (id && p.npcs[id] ? profile(this, p, id) : null); return { mentor: pr(s.mentor), rival: pr(s.rival) }; },
     // aiSave() -> bytes of the agent layer in the save
     // aiHandle() -> the agent layer itself (tests, the UI files): AIH.C (the shared helpers), AIH.dbg (an array turns on the decision trace)
+    // aiScandalExit(id, reason) -> true when the member left the seat (roles gone, a by-election opens) [R18]
+    aiScandalExit(id, reason) { const p = ep(this); const n = p.npcs[id]; return !!n && ACT.scandalExit(this, p, n, reason || '不祥事の責任', today(this)); },
     aiHandle() { return AIH; },
     aiBytes() { const p = ep(this); return JSON.stringify(p.ai || {}).length + Object.values(p.npcs).reduce((a, n) => a + (n.ai ? JSON.stringify(n.ai).length : 0), 0); },
   };
