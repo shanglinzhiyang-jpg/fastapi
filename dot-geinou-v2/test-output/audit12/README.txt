@@ -10,3 +10,4 @@ a long mixed play with all regimes on (heisei 120 days, or reiwa 240 days withou
 morning message flood; with --quick also the same long run where the player owns a car (R16: loan, monthly bills, 車検).
 Also (R17): the dictatorship's rule (test-output/progress/r17/rule_t1.mjs: pillars, purges, plots, succession, death, downfall, old saves) and the war at home
 (war_t1.mjs: commanders, production, policies, the anti-war movement, the end of the war).
+Also (R18): scandal_t1.mjs (the stages of a scandal, the player's answers incl. the cover-up, old saves).

@@ -46,4 +46,7 @@ for t in rule_t1 war_t1; do
   node test-output/progress/r17/$t.mjs > "$OUT/r17_$t.txt" 2>&1
   row "R17 $t" "$(tail -1 "$OUT/r17_$t.txt")"
 done
+# 7. [R18] スキャンダルの展開（報道・続報・捜査・起訴・判決・本人の対応）
+node test-output/progress/r18/scandal_t1.mjs > "$OUT/r18_scandal_t1.txt" 2>&1
+row "R18 scandal_t1" "$(tail -1 "$OUT/r18_scandal_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"

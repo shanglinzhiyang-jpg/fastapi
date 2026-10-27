@@ -113,7 +113,7 @@ function say(g, p, c, text, o = {}) {
   if (c.log.length > 24) c.log.length = 24;
   if (o.news !== false && p) { p.news.unshift({ day, text: `【${c.whoName}】${text}`, kind: 'politics' }); if (p.news.length > 80) p.news.length = 80; }
   // the phone: every step of the player's own case, and the big steps of a minister's or a serious one
-  if (o.msg || (o.msg !== false && c.who === 'player') ) { try { g.message({ from: 'ドット新聞 政治部', text: `【${STAGE_NAMES[c.stage] || ''}】${c.whoName}氏\n${text}`, kind: 'news' }); } catch (e) { /* no phone */ } }
+  if (o.msg || (o.msg === undefined && c.who === 'player')) { try { g.message({ from: 'ドット新聞 政治部', text: `【${STAGE_NAMES[c.stage] || ''}】${c.whoName}氏\n${text}`, kind: 'news' }); } catch (e) { /* no phone */ } }
 }
 const tpl = (s, c) => s.replace(/\{n\}/g, c.whoName);
 
@@ -139,10 +139,10 @@ function openCase(g, rec) {
   s.cases.unshift(c);
   if (s.cases.length > 60) { const keep = s.cases.filter((x) => x.stage !== 'closed'); s.cases = keep.concat(s.cases.filter((x) => x.stage === 'closed').slice(0, Math.max(10, 50 - keep.length))); }
   const who2 = `${c.whoName}${c.post ? `（${c.post}` : ''}${c.partyName ? `${c.post ? '・' : '（'}${c.partyName}` : ''}${c.post || c.partyName ? '）' : ''}`;
-  say(g, p, c, `${who2}に${c.name}。${c.src}で明らかになった。${c.amount ? `金額は${fmtMoney(c.amount)}にのぼるという。` : ''}`, { msg: c.who === 'player' || isCab(c) || sev >= 4, news: c.who === 'player' ? false : true });
+  say(g, p, c, `${who2}に${c.name}。${c.src}で明らかになった。${c.amount ? `金額は${fmtMoney(c.amount)}にのぼるという。` : ''}`, { msg: c.who !== 'player' && isCab(c) && sev >= 3, news: c.who === 'player' ? false : true });
   if (who === 'player') {
     s.pending = { id: c.id, kind: 'respond', day: today(g) };
-    try { g.message({ from: 'ドット新聞 政治部', text: `【取材の申し入れ】${c.name}について、各社が説明を求めています。\n（スマホの「スクープ」で、対応を決めてください）`, kind: 'news' }); } catch (e) { /* no phone */ }
+    try { g.message({ from: 'ドット新聞 政治部', text: `【スクープ】${c.whoName}氏に${c.name}。${c.src}で明らかになり、各社が説明を求めています。\n（スマホの「スクープ」で、対応を決めてください）`, kind: 'news' }); } catch (e) { /* no phone */ }
   }
   return c;
 }
