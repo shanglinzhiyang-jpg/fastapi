@@ -52,4 +52,7 @@ row "R18 scandal_t1" "$(tail -1 "$OUT/r18_scandal_t1.txt")"
 # 8. [R19] 選挙制度と区割り（一票の格差・最高裁の判決・ゲリマンダー・足切り・配分）
 node test-output/progress/r19/election_t1.mjs > "$OUT/r19_election_t1.txt" 2>&1
 row "R19 election_t1" "$(tail -1 "$OUT/r19_election_t1.txt")"
+# 9. [R20] 地方政治（予算・条例・議会・借金・不信任・住民投票・国の要請）
+node test-output/progress/r20/local_t1.mjs > "$OUT/r20_local_t1.txt" 2>&1
+row "R20 local_t1" "$(tail -1 "$OUT/r20_local_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"
