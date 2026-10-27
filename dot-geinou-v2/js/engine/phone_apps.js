@@ -50,7 +50,8 @@ import {
   registerPhoneApp, PEOPLE, REGULARS, FURNITURE, onMorning, WEEKDAYS, OFFER_DAYS, showWords,
 } from './life.js';
 import { eraOf } from './profile.js';
-import { bigtextPref, setBigtextPref, portraitPhone } from './bigtext.js'; // [R12-U1] the 「大きな文字」 switch of 設定
+import { bigtextPref, setBigtextPref, portraitPhone } from './bigtext.js';
+import { ambientOn, setAmbientOn } from './ambience.js'; // [R15] 環境音 // [R12-U1] the 「大きな文字」 switch of 設定
 import { GUIDE, GUIDE_ORDER, AUDITIONS, GUIDE_JOBS, jobOpen } from '../world/guide.js';
 import {
   phoneView, phoneList, phoneInfo, phoneConfirm, closePhoneThen, phoneOverMapOnly,
@@ -2162,7 +2163,7 @@ function setTextSpeed(id) {
 // 設定 kept in the save: the sound, the text speed and the 大きな文字 switch go into g.state.settings whenever they change, and a loaded save puts them back
 export function rememberSettings(g) {
   if (!g || !g.state) return;
-  g.state.settings = { muted: !!audio.muted, speed: SPEED, bigtext: bigtextPref() };
+  g.state.settings = { muted: !!audio.muted, speed: SPEED, bigtext: bigtextPref(), ambient: ambientOn() };
 }
 export function applySettings(g) {
   const S = g && g.state && g.state.settings;
@@ -2170,12 +2171,15 @@ export function applySettings(g) {
   if (typeof S.muted === 'boolean' && !!audio.muted !== S.muted) audio.toggleMute();
   if (typeof S.speed === 'string') setTextSpeed(S.speed);
   if (S.bigtext === true || S.bigtext === false) setBigtextPref(S.bigtext);
+  if (S.ambient === true || S.ambient === false) setAmbientOn(S.ambient);
 }
 function settingsRows(g) {
   const sp = SPEEDS.find((s) => s[0] === SPEED) || SPEEDS[1];
   const custom = appOrder(g).length > 0;
   return [
     { id: 'sound', label: '音', sub: 'BGMと効果音（Mキーでも）', right: audio.muted ? 'OFF' : 'ON', rightColor: audio.muted ? PC.bad : PC.good, chip: ['音', '#5a8ad8'] },
+    // [R15] 環境音 (駅・街・雨・夜の街の音)
+    { id: 'ambient', label: '環境音', sub: '駅・街・雨・夜の街の音を、BGMの下で鳴らす', right: ambientOn() ? 'ON' : 'OFF', rightColor: ambientOn() ? PC.good : PC.bad, chip: ['音', '#4a9a8a'] },
     { id: 'speed', label: '文字の速さ', sub: 'メッセージが出る速さ', right: sp[1], rightColor: PC.accent, chip: ['文字', '#8a5ac8'] },
     // [R12-U1] 縦画面の大きな文字（下の空きに、選んだ内容を大きく出す。縦持ちのスマホだけ）
     { id: 'bigtext', label: '大きな文字（縦画面）', sub: portraitPhone() ? '下の空きに、選んだ内容を大きく出す' : '縦持ちのスマホで、下の空きに大きく出す', right: bigtextPref() === false ? 'OFF' : 'ON', rightColor: bigtextPref() === false ? PC.bad : PC.good, chip: ['大字', '#e0a020'] },
@@ -2196,6 +2200,7 @@ export async function settingsApp(g) {
     hint: 'A:えらぶ　B:もどる',
     pick(ph, it, i, v) {
       if (it.id === 'sound') { audio.toggleMute(); audio.sfx('ok'); rememberSettings(g); return; }
+      if (it.id === 'ambient') { setAmbientOn(!ambientOn()); audio.sfx('cursor'); rememberSettings(g); return; } // [R15]
       if (it.id === 'bigtext') { setBigtextPref(bigtextPref() === false); audio.sfx('cursor'); rememberSettings(g); return; } // [R12-U1]
       if (it.id === 'realpols') { g.setRealPols(!g.realPolsOn()); audio.sfx('cursor'); return; } // [R14-P]
       if (it.id === 'hist') { ph.run(v, () => histPowersApp(g)); return; } // [R14-H]

@@ -17,6 +17,7 @@ import { saveIOMenu } from './engine/save_io.js';
 import { TitleScene, CreateScene, EraIntroScene, drawTitleBackdrop } from './title.js';
 import { onMorning, PEOPLE } from './engine/life.js';
 import { rememberSettings, applySettings } from './engine/phone_apps.js'; // 設定 are kept in the save
+import { startAmbience } from './engine/ambience.js'; // [R15] 環境音
 import { ageOf, eraOf, isBirthday, birthdayFlag, sortFamily, RELATIONS, regionOf, familyLook } from './engine/profile.js';
 import { SW, SH, hash2 } from './engine/util.js';
 import { text, panel, measure, COLORS } from './engine/draw.js';
@@ -496,6 +497,7 @@ async function boot() {
   if (coarse) document.body.classList.add('touch');
   const g = new Game(canvas);
   g.beforeSave = () => rememberSettings(g);
+  startAmbience(g); // [R15] 環境音 (駅・街・雨・夜) and the 図鑑's place record
   if (!coarse) {
     const setTouch = (on) => {
       if (document.body.classList.contains('touch') === on) return;

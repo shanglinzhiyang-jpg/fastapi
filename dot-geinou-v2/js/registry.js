@@ -110,6 +110,8 @@ export const MODULES = [
   './engine/bigtext_screens.js', // [R12-U1] 縦画面の「大きな文字」: the lower screen under the game on a portrait phone (engine/bigtext.js; api: test-output/api_r12u1.txt)
   // [R12-L1] 恋愛・結婚・家庭: the phone app 「恋のはなし」 (手帳の「ひとことメモ」): 出会い・デート・告白・同棲・プロポーズ・結婚・子ども・家族アルバム
   // (never mandatory: the player opts in in the app; api: test-output/api_romance.txt). romance_ui.js imports the rest.
+  // [R15] 実績・図鑑 (the phone app 「図鑑」) — achievements read the game's own state; 環境音 (ambience.js) is imported by main.js
+  './engine/zukan.js',
   './engine/romance.js',
   './engine/romance_date.js',
   './engine/romance_meet.js',

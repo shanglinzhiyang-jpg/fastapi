@@ -124,6 +124,8 @@ function parseTrack(track) {
   return { ...track, events, length: toks.length };
 }
 
+const AMB_KINDS = ['rain', 'station', 'town', 'night'];
+
 class AudioEngine {
   constructor() {
     this.ctx = null;
@@ -281,6 +283,72 @@ class AudioEngine {
         song.next += stepDur;
       }
     }, 25);
+  }
+
+  // R15: ambient sound under the BGM — layers are looped noise / slow tones ('rain' 'station' 'town' 'night'); an empty list is silence.
+  // setAmbient(list) rebuilds only when the list changes; the layers fade in and out. It follows the master mute (ctx and master gain).
+  setAmbient(list) {
+    const want = (Array.isArray(list) ? list : []).filter((k) => AMB_KINDS.includes(k)).sort().join(',');
+    if (want === this.ambKey) return;
+    this.ambKey = want;
+    if (!this.ctx) return; // the layers start once the audio is unlocked; the watcher asks again
+    this.stopAmbient();
+    if (!want) return;
+    const c = this.ctx;
+    const out = c.createGain();
+    out.gain.setValueAtTime(0, c.currentTime);
+    out.gain.linearRampToValueAtTime(0.8, c.currentTime + 1.2);
+    out.connect(this.master);
+    const nodes = [out];
+    const loopNoise = (filter, freq, q, vol) => {
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf; src.loop = true;
+      const f = c.createBiquadFilter(); f.type = filter; f.frequency.value = freq; f.Q.value = q;
+      const g = c.createGain(); g.gain.value = vol;
+      src.connect(f); f.connect(g); g.connect(out);
+      src.start(c.currentTime + Math.random() * 0.4);
+      nodes.push(src, f, g);
+      return g;
+    };
+    const lfo = (target, hz, depth) => {
+      const o = c.createOscillator(); o.frequency.value = hz;
+      const d = c.createGain(); d.gain.value = depth;
+      o.connect(d); d.connect(target);
+      o.start(); nodes.push(o, d);
+    };
+    const kinds = want.split(',');
+    if (kinds.includes('rain')) { const g = loopNoise('bandpass', 2600, 0.4, 0.05); lfo(g.gain, 0.3, 0.015); }
+    if (kinds.includes('station')) { loopNoise('lowpass', 220, 0.7, 0.07); }
+    if (kinds.includes('town')) { const g = loopNoise('lowpass', 420, 0.5, 0.025); lfo(g.gain, 0.12, 0.008); }
+    if (kinds.includes('night')) {
+      const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = 3900;
+      const g = c.createGain(); g.gain.value = 0.006;
+      o.connect(g); g.connect(out); o.start(); nodes.push(o, g);
+      lfo(g.gain, 7.5, 0.005);
+    }
+    if (kinds.includes('station')) {
+      // the platform chime, every nine seconds or so
+      this.ambTimer = setInterval(() => {
+        if (!this.ctx || this.muted) return;
+        const t = this.ctx.currentTime + 0.02;
+        this.tone(1319, t, 0.5, { wave: 'triangle', vol: 0.03, out }); this.tone(1046, t + 0.5, 0.9, { wave: 'triangle', vol: 0.03, out });
+      }, 9000);
+    }
+    this.ambNodes = nodes;
+  }
+
+  stopAmbient() {
+    if (this.ambTimer) clearInterval(this.ambTimer);
+    this.ambTimer = null;
+    const nodes = this.ambNodes || [];
+    this.ambNodes = null;
+    const out = nodes[0];
+    if (out && this.ctx) {
+      out.gain.cancelScheduledValues(this.ctx.currentTime);
+      out.gain.setValueAtTime(out.gain.value, this.ctx.currentTime);
+      out.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.8);
+    }
+    setTimeout(() => { for (const n of nodes) { try { if (n.stop && !n.__stopped) { n.__stopped = true; n.stop(); } } catch (e) { /* already stopped */ } try { n.disconnect(); } catch (e) { /* ok */ } } }, 900);
   }
 
   stopBgm() {
