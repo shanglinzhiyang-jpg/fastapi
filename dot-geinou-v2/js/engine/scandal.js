@@ -62,6 +62,12 @@ export const KINDS = {
     follow: ['寄附をした団体が、外国の企業と資本関係にあることがわかった。', '{n}の事務所は「確認していなかった」と説明している。', '野党は、受け取った経緯の資料を求めている。'] },
   gerrymander: { label: '区割りの恣意的な操作（ゲリマンダー）', pc: 0, crimeName: '', src: ['新聞の調査報道', '審議会の委員の証言', '市民団体の指摘'],
     follow: ['線引きの経過を示す資料が、与党に有利な形で引かれていたことを裏づけたと報じられた。', '野党は「選挙の公正を損なう」として、区割りの見直しを求めている。', '専門家は「違憲の判断が出る可能性がある」と指摘している。'] },
+  stealth: { label: 'ステルスマーケティング（やらせの投稿・広告）', pc: 0, crimeName: '', src: ['ネット上の調査と告発', '広告会社の内部告発', '新聞の調査報道'],
+    follow: ['好意的な投稿の多くが、同じ窓口から報酬つきで依頼されたものだったことがわかった。', '依頼の記録とメッセージが、報道各社に示された。', '事務所は「担当者の判断だった」と説明したが、批判は収まらない。'] },
+  fake: { label: 'フェイク情報の拡散（対立勢力へのデマ）', pc: 0.3, crimeName: '名誉毀損', src: ['ネット上の調査と告発', '元スタッフの内部告発', '新聞の調査報道'],
+    follow: ['拡散された情報が事実無根であり、発信元が{n}の陣営の関係者だったことがわかった。', '対立勢力は、名誉毀損での法的措置を示唆している。', '事務所は関与を否定したが、発信の記録が示された。'] },
+  biasedpoll: { label: '世論調査の結果の誘導', pc: 0, crimeName: '', src: ['調査会社の内部告発', '新聞の調査報道'],
+    follow: ['公表された数字が、答えを誘導する質問の文言で得られたものだったことがわかった。', '調査会社の担当者が「依頼主の希望に沿った」と話したという。', '各社は「数字の信頼を損なう」と批判した。'] },
   coverup: { label: '証拠隠滅・隠蔽の疑い', pc: 0.5, crimeName: '証拠隠滅', src: ['内部の関係者の証言', '新聞の調査報道'],
     follow: ['資料の廃棄を指示したとされる記録が、報じられた。', '関係者が「口裏合わせを求められた」と話している。', '「最初の問題より、隠そうとしたことが問題だ」という声が広がった。'] },
 };
@@ -69,7 +75,7 @@ const GENERIC = { label: 'スキャンダル', pc: 0, crimeName: '', src: ['週�
 const kindOf = (k) => KINDS[k] || GENERIC;
 // which of the new kinds can fall on a politician out of the blue (kind → weight), and which need a cabinet seat
 const NEW_KINDS = { affair: 3, harassment: 2, nepotism: 2, resume: 1, tax: 1.5, carusage: 2.5, foreign: 1.5 };
-const SEV = { affair: 2, harassment: 2, nepotism: 3, resume: 2, tax: 3, carusage: 2, foreign: 3, doc: 4, coverup: 4, gerrymander: 3 };
+const SEV = { affair: 2, harassment: 2, nepotism: 3, resume: 2, tax: 3, carusage: 2, foreign: 3, doc: 4, coverup: 4, gerrymander: 3, stealth: 3, fake: 4, biasedpoll: 2 };
 export const STAGE_NAMES = { scoop: '第一報', follow: '続報と追及', probe: '捜査', charged: '起訴', trial: '公判', pressure: '辞職要求', closed: '決着' };
 
 // ======================================================================== state

@@ -107,6 +107,8 @@ export const MODULES = [
   './engine/local_gov.js',
   // [R21] 派閥と政治資金パーティー (ノルマ・キックバック・露見・解散、アプリ「派閥資金」): faction_money.js
   './engine/faction_money.js',
+  // [R24] 世論操作とメディア戦略 (関係づくり・広報・ステマ/デマ/調査の誘導とその発覚、週刊誌の取材、アプリ「広報」): media_ops.js
+  './engine/media_ops.js',
   // 政府中枢 (government console, HD) + political phone apps 世論の声・国会中継・政府中枢 (api: test-output/api_govt_ui.txt)
   './engine/govt_ui.js',
   // world affairs (世界情勢: real countries, blocs, alliances, treaties, summits, sanctions, world events, diplomacy,

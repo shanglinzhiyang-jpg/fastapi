@@ -58,4 +58,7 @@ row "R20 local_t1" "$(tail -1 "$OUT/r20_local_t1.txt")"
 # 10. [R21] 派閥と政治資金パーティー（ノルマ・キックバック・露見・解散・申し出への答え）
 node test-output/progress/r21/fm_t1.mjs > "$OUT/r21_fm_t1.txt" 2>&1
 row "R21 fm_t1" "$(tail -1 "$OUT/r21_fm_t1.txt")"
+# 11. [R24] 世論操作とメディア戦略（関係・広報・ステマ/デマ/調査の誘導とその発覚・週刊誌の取材）
+node test-output/progress/r24/media_t1.mjs > "$OUT/r24_media_t1.txt" 2>&1
+row "R24 media_t1" "$(tail -1 "$OUT/r24_media_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"
