@@ -306,6 +306,7 @@ function apply(g, X, id, st, o, text, claim, react, iff) {
   const tail = `${claim ? `（政府は「${claim}」と主張。` : '（'}${sides ? `${sides}。` : ''}${react || ''}）`;
   X.news(g, `【国際】${X.shortName(g, id)}：${head}${react || claim || sides ? tail : ''}`, { raw: true });
   const rc = reactions(g, X, id, o, o.id || head);
+  if (X.tl) X.tl(g, `${X.shortName(g, id)}：${head}`, id); // the 外交の年表
   st.log.push({ day: X.today(g), text: head, claim: claim || '', react: react || '', iff: !!iff, pro: rc.pro, con: rc.con, mid: rc.mid });
   if (st.log.length > 40) st.log.shift();
   if (o.tension) X.tensionShift(g, o.tension);

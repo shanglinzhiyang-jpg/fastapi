@@ -2160,6 +2160,7 @@ const HX = {
   W, today, worldDate, shortName, exists, relAdd, pairAdd, tensionShift, crisis, newConflict, endConflict, roll, rint, tradeShock, pairRelation, countriesNow, relation, alliesOf,
   news: (g, text, opts) => news(g, text, opts),
   phoneRaw: (g, text) => { try { if (typeof g.message === 'function') g.message({ from: 'ドット新聞 国際部', text, kind: 'news' }); } catch (e) { /* no phone */ } },
+  tl: (g, text, id) => { try { if (EXT && EXT.diplo && EXT.diplo.tl) EXT.diplo.tl(g, 'event', text, id); } catch (e) { /* ignore */ } },
   endRegime: (g, id) => { try { setHistPower(g, id, false); } catch (e) { console.error(e); } },
 };
 // [R14-H] the setting: add / remove a historical power (g.state.histPowers)
