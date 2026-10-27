@@ -13,3 +13,4 @@ Also (R17): the dictatorship's rule (test-output/progress/r17/rule_t1.mjs: pilla
 Also (R18): scandal_t1.mjs (the stages of a scandal, the player's answers incl. the cover-up, old saves).
 Also (R19): election_t1.mjs (the five election laws, the effect on a real election with the same dice, the Court's rulings, the gerrymander).
 Also (R20): local_t1.mjs (the budget, ordinances, debt, the head's crises, councillors, old saves).
+Also (R21): fm_t1.mjs (a faction's yearly party, the kickback offer and its four answers, exposure and the cascade of cases, dissolution, the boss's choices).

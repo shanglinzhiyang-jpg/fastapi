@@ -55,4 +55,7 @@ row "R19 election_t1" "$(tail -1 "$OUT/r19_election_t1.txt")"
 # 9. [R20] 地方政治（予算・条例・議会・借金・不信任・住民投票・国の要請）
 node test-output/progress/r20/local_t1.mjs > "$OUT/r20_local_t1.txt" 2>&1
 row "R20 local_t1" "$(tail -1 "$OUT/r20_local_t1.txt")"
+# 10. [R21] 派閥と政治資金パーティー（ノルマ・キックバック・露見・解散・申し出への答え）
+node test-output/progress/r21/fm_t1.mjs > "$OUT/r21_fm_t1.txt" 2>&1
+row "R21 fm_t1" "$(tail -1 "$OUT/r21_fm_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"
