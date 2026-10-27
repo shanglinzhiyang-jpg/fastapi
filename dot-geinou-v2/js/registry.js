@@ -103,6 +103,8 @@ export const MODULES = [
   './engine/scandal.js',
   // [R19] 選挙制度と区割り (一票の格差・最高裁の判決・ゲリマンダー、アプリ「選挙制度」): election_sys.js
   './engine/election_sys.js',
+  // [R20] 地方政治 (区長・知事・区議・都議: 予算・条例・議会・国との関係・住民投票・不信任、アプリ「自治体」): local_gov.js
+  './engine/local_gov.js',
   // 政府中枢 (government console, HD) + political phone apps 世論の声・国会中継・政府中枢 (api: test-output/api_govt_ui.txt)
   './engine/govt_ui.js',
   // world affairs (世界情勢: real countries, blocs, alliances, treaties, summits, sanctions, world events, diplomacy,
