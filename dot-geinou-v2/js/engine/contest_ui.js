@@ -556,7 +556,10 @@ class ContestScene {
     if (hero.live) {
       const w0 = TVG.liveBadge(c, rx, 5, st, this.t, st.live, 'right');
       const s = `本日決勝 ${hero.live.name}`;
-      TVG.telop(c, s, rx - w0 - 6, 6, 12, st.telop, st.telopLine, 'right', Math.max(40, rx - w0 - 6 - 230 - lw));
+      // the final's own logo (M-1 / キングオブコント) just left of the telop, when there is one
+      const hasLg = !!CONTEST_LOGO[hero.live.id] && rx - w0 - 6 - 60 > lw + 40;
+      if (hasLg) contestLogo(c, hero.live.id, rx - w0 - 6 - 46, 3, 40, 20);
+      TVG.telop(c, s, rx - w0 - 6 - (hasLg ? 50 : 0), 6, 12, st.telop, st.telopLine, 'right', Math.max(40, rx - w0 - 6 - (hasLg ? 50 : 0) - 230 - lw));
     } else if (hero.next && rx > 330) {
       const label = `${fitTo(c, hero.next.name, Math.max(40, rx - 360 - lw), 10)}決勝まで`;
       TVG.countdown(c, rx, 4, st, label, hero.next.days, this.t);
