@@ -42,6 +42,7 @@ import {
   panelView, drawRow, rowsList, orderGoods,
 } from './phone_apps.js';
 import { Game } from './game.js';
+import { achievementRows, achievementCount } from './zukan.js'; // [R15/R16] the 実績 tab (achievements and rivals)
 
 const EXT = { cooking: null, programs: null, govt: null, housing: null };
 import('../world/cooking.js').then((m) => { EXT.cooking = m; }).catch(() => { /* cooking.js left out */ });
@@ -905,7 +906,7 @@ function gameView(g) {
 export async function gameApp(g) { return phoneView(g, gameView(g)); }
 
 // ======================================================================== 図鑑
-const ZUKAN_TABS = [['items', 'もの'], ['furniture', '家具'], ['titles', '称号'], ['programs', '番組'], ['places', '場所']];
+const ZUKAN_TABS = [['items', 'もの'], ['furniture', '家具'], ['titles', '称号'], ['programs', '番組'], ['places', '場所'], ['achievements', '実績']];
 function zukanRows(g, tab) {
   const st = g.state;
   if (tab === 'items') {
@@ -934,6 +935,7 @@ function zukanRows(g, tab) {
       return n > 0 ? { label: p.title, sub: `${stn}${p.genre ? `・${p.genre}` : ''}`, right: `${n}回`, rightColor: PC.good, desc: p.desc } : { label: p.title, sub: `${stn}・まだ出ていない`, subColor: PC.dim, right: '', disabled: true, why: 'まだ出演していない番組' };
     });
   }
+  if (tab === 'achievements') return achievementRows(g);
   if (tab === 'places') {
     const vis = (st.flags && st.flags.visited) || {};
     return Object.keys(PLACES).filter((id) => PLACES[id] && !PLACES[id].hidden)
@@ -944,6 +946,7 @@ function zukanRows(g, tab) {
   return [];
 }
 function zukanCount(g, tab) {
+  if (tab === 'achievements') return achievementCount(g);
   const rows = zukanRows(g, tab);
   const n = tab === 'furniture' ? rows.filter((r) => r.right === '持っている').length : rows.filter((r) => !r.disabled).length;
   return `${n}/${rows.length}`;

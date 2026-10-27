@@ -113,6 +113,7 @@ export const MODULES = [
   // [R15] 実績・図鑑 (the phone app 「図鑑」) — achievements read the game's own state; 環境音 (ambience.js) is imported by main.js
   // [R15] 季節の行事 (once a year: New Year, blossoms, Tanabata, summer festivals, autumn, Christmas, the year's end)
   './engine/seasons.js',
+  './engine/rivals_story.js', // [R16] ライバルコンビの物語: the acts the player meets in a final again and again (記録は図鑑の「ライバル」)
   './engine/zukan.js',
   './engine/romance.js',
   './engine/romance_date.js',

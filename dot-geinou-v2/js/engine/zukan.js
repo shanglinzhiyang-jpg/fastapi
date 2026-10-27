@@ -5,10 +5,10 @@
 // Checked every morning (no message: a toast 「実績：…」 when one is reached) and when the player enters a new place (visit()).
 // Some achievements are secret: their name and text stay 「？？？」 until they are reached.
 
-import { registerPhoneApp, onMorning } from './life.js';
-import { phoneList, phoneInfo } from './phone.js';
+import { onMorning } from './life.js';
 import { YEAR_DAYS } from './profile.js';
 import { seasonsSeen } from './seasons.js';
+import { rivalsOf } from './rivals_story.js';
 
 const COLOR = '#c8a040';
 const TOWNS = ['tokyo', 'machi', 'minato', 'nagatacho', 'kanraku', 'namba'];
@@ -36,6 +36,8 @@ export const ACHIEVEMENTS = [
   { id: 'all_towns', name: '全部の街', desc: '六つの街すべてに行った', test: (g, x) => TOWNS.every((t) => x.places.includes(t)) },
   { id: 'seasons', name: '一年の行事', desc: '一年のうちに、季節の行事を五つ見た', secret: true, test: (g) => { try { return seasonsSeen(g) >= 5; } catch (e) { return false; } } },
   { id: 'station', name: '電車に乗る', desc: '駅に行った', test: (g, x) => x.places.some((p) => /eki|station/i.test(p)) },
+  { id: 'rival', name: 'ライバル', desc: '同じ相手と、決勝で三度対決した', test: (g, x) => x.rivals.some((r) => r.meets >= 3) },
+  { id: 'revenge', name: '雪辱', desc: '負けた相手に、決勝で勝ち返した', secret: true, test: (g, x) => x.rivals.some((r) => r.revenge > 0) },
 ];
 
 // the record (created on first use; old saves start empty)
@@ -58,7 +60,7 @@ function ctxOf(g) {
   const entries = [];
   try { const cs = st.contests && st.contests.entries; if (cs && typeof cs === 'object') entries.push(...Object.values(cs)); } catch (e) { /* none */ }
   try { const m1 = st.m1 && st.m1.me && st.m1.me.entries; if (m1 && typeof m1 === 'object') for (const yr of Object.values(m1)) if (yr) entries.push(yr); } catch (e) { /* none */ }
-  return { rom, pol, entries, places: z.places };
+  return { rom, pol, entries, places: z.places, rivals: rivalsOf(g) };
 }
 
 // check every achievement; reached ones are recorded and announced (one toast each). Returns the new ones.
@@ -94,56 +96,35 @@ export function summary(g) {
   return { got, total: ACHIEVEMENTS.length, places: z ? z.places.length : 0 };
 }
 
-// ---------------------------------------------------------------- the phone app 「図鑑」
-function rowsOf(g) {
-  const z = zk(g) || { got: {}, places: [] };
+// ---------------------------------------------------------------- the 実績 tab of the phone app 「図鑑」 (phone_apps2.js)
+// rows in the tab's own shape: label, sub, right, rightColor, desc (the info panel on A). The rivals (rivals_story.js) follow the achievements.
+export function achievementCount(g) {
   const s = summary(g);
-  const rows = [{ header: true, label: `実績 ${s.got} / ${s.total}　行った場所 ${s.places}か所` }];
+  return `${s.got}/${s.total}`;
+}
+export function achievementRows(g) {
+  const z = zk(g) || { got: {}, places: [] };
+  const rows = [];
   for (const a of ACHIEVEMENTS) {
     const day = z.got[a.id];
+    const yr = day != null ? `${Math.floor((day - 1) / YEAR_DAYS) + 1}年目` : '';
     const hidden = a.secret && day == null;
     rows.push({
-      key: a.id,
       label: day != null ? a.name : (hidden ? '？？？' : a.name),
-      sub: day != null ? `${a.desc}（${Math.floor((day - 1) / YEAR_DAYS) + 1}年目）` : (hidden ? 'まだ秘密' : a.desc),
+      sub: day != null ? `${a.desc}（${yr}）` : (hidden ? 'まだ秘密' : a.desc),
       right: day != null ? '◆' : '…',
       rightColor: day != null ? COLOR : '#6a7090',
+      desc: day != null ? `${a.name}\n${a.desc}\n達成：${yr}（${day}日目）` : (a.secret ? 'まだ秘密の実績。' : `まだ達成していない。\n${a.desc}`),
+    });
+  }
+  for (const r of rivalsOf(g).slice(0, 8)) {
+    rows.push({
+      label: `ライバル：${r.name}`,
+      sub: `決勝で${r.meets}回（勝ち${r.won}・負け${r.lost}${r.revenge ? `・雪辱${r.revenge}` : ''}）`,
+      right: r.meets >= 3 ? '★' : '・',
+      rightColor: COLOR,
+      desc: [`${r.name}（ライバル）`, `決勝での対決：${r.meets}回（勝ち${r.won}・負け${r.lost}）`, `最初の対決：${r.first}年`, `最近の対決：${r.last}年`, r.revenge ? `雪辱：${r.revenge}回` : (r.lost ? 'まだ雪辱はしていない。' : '')].filter(Boolean).join('\n'),
     });
   }
   return rows;
 }
-
-async function zukanApp(g) {
-  checkAchievements(g);
-  for (;;) {
-    const rows = rowsOf(g);
-    const i = await phoneList(g, {
-      title: '図鑑', color: COLOR, hint: 'A:くわしく　B:もどる',
-      items: rows,
-      rowH: 38,
-    });
-    if (i < 0 || i == null) return;
-    const row = rows[i];
-    if (!row || row.header) continue;
-    const a = ACHIEVEMENTS.find((q) => q.id === row.key);
-    if (!a) continue;
-    const day = (zk(g).got || {})[a.id];
-    await phoneInfo(g, {
-      title: a ? (day != null ? a.name : '？？？') : '図鑑',
-      color: COLOR,
-      lines: day != null ? [a.desc, `達成：${Math.floor((day - 1) / YEAR_DAYS) + 1}年目（${day}日目）`] : (a.secret ? ['まだ秘密の実績。'] : ['まだ達成していない。', a.desc]),
-    });
-  }
-}
-
-onMorning((g) => { try { if (g && g.state) checkAchievements(g); } catch (e) { /* never block the morning */ } });
-
-registerPhoneApp('zukan', {
-  name: () => '図鑑',
-  color: COLOR,
-  order: 27,
-  cond: (g) => !!g && !!g.state,
-  open: (g) => zukanApp(g),
-  icon: (ctx, x, y) => { ctx.fillStyle = COLOR; ctx.fillRect(x + 4, y + 3, 16, 18); ctx.fillStyle = '#fff6d0'; ctx.fillRect(x + 6, y + 6, 12, 2); ctx.fillRect(x + 6, y + 10, 12, 2); ctx.fillRect(x + 6, y + 14, 8, 2); },
-});
-
