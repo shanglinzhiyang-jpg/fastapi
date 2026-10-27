@@ -11,10 +11,11 @@ export function histOn(g, id) {
 export function histHidden(g, id) {
   const p = g && g.state && g.state.histPowers;
   if (!p || typeof p !== 'object') return false;
-  const h = ALIAS[id];
-  return !!(h && p[h]);
+  return !!aliasOn(p, id);
 }
-export const histAlias = (g, id) => (histHidden(g, id) ? ALIAS[id] : null);
+// the regime that stands for a modern id (an id may have several regimes: only one of them can be on at a time)
+const aliasOn = (p, id) => [].concat(ALIAS[id] || []).find((h) => p && p[h]) || null;
+export const histAlias = (g, id) => { const p = g && g.state && g.state.histPowers; return p && typeof p === 'object' ? aliasOn(p, id) : null; };
 export function hiddenIds(g) {
   const out = [];
   for (const h of HIST_IDS) if (histOn(g, h)) out.push(...(REPLACES[h] || []));

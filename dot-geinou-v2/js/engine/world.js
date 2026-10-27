@@ -2171,6 +2171,8 @@ function setHistPower(g, id, on) {
   on = !!on;
   if (was === on) return { ok: true, on };
   if (on) {
+    // two regimes of the same modern country (北朝鮮: 金日成 / 金正日) cannot be on together
+    for (const o of HIST_IDS) if (o !== id && histOn(g, o) && (REPLACES[o] || []).some((x) => (REPLACES[id] || []).includes(x))) return { ok: false, why: `${COUNTRIES[o].short}が入っている（先にOFFに）` };
     const w = japanWar(g);
     if (w && w.phase === 'war' && (REPLACES[id] || []).includes(w.enemy)) return { ok: false, why: `${countryName(g, w.enemy, true)}とは戦争中（講和してから）` };
     const s0 = W(g);
@@ -2343,7 +2345,7 @@ function shiftSupport(p, segs, k = 0.004) {
   }
 }
 const membersOf = (g, t) => { if (COUNTRIES[t]) return [t]; const O = ORGS[t] || PSEUDO[t]; return O ? (dv(O.members, dateNum(g)) || []).filter((x) => exists(g, x)) : []; };
-const STANCE_OF = { h_kp: 'nk', h_cn: 'china', h_su: 'russia', h_de: 'eu', h_it: 'eu', cn: 'china', us: 'us', ru: 'russia', su: 'russia', kr: 'korea', tw: 'taiwan', kp: 'nk', fr: 'eu', de: 'eu', wde: 'eu', it: 'eu', gb: 'eu', id: 'asean', ph: 'asean', th: 'asean', sg: 'asean', my: 'asean', vn: 'asean' };
+const STANCE_OF = { h_kp: 'nk', h_kp2: 'nk', h_cn: 'china', h_su: 'russia', h_de: 'eu', h_it: 'eu', cn: 'china', us: 'us', ru: 'russia', su: 'russia', kr: 'korea', tw: 'taiwan', kp: 'nk', fr: 'eu', de: 'eu', wde: 'eu', it: 'eu', gb: 'eu', id: 'asean', ph: 'asean', th: 'asean', sg: 'asean', my: 'asean', vn: 'asean' };
 const NOTABLE = { summit: 1, visit: 1, fm_talks: 1, statement: 1, fta: 1, defense_pact: 1, alliance: 1, ties: 1, peace_treaty: 1, abrogate: 1, sanction: 1, lift: 1, aid: 1, protest: 1, recall: 1, return_amb: 1, cut_ties: 1, un_raise: 1, ally_up: 1, ally_down: 1, withdraw_notice: 1, peace_conf: 1, leave_un: 1, rejoin_un: 1, un_speech: 1, mediate: 1, tariff_set: 1, tariff_extra: 1, tariff_lift: 1, tariff_exempt: 1, safeguard: 1, envoy: 1, soft_action: 1, dispute_action: 1, invite: 1, receive_visit: 1 };
 {
   const X = {

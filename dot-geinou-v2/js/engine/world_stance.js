@@ -23,7 +23,7 @@ export const STANCE_NAMES = { china: '中国', us: '米国', russia: 'ロシア'
 export const STANCE_BASE = { china: 0, us: 30, russia: 0, korea: 0, taiwan: 0, eu: 0, asean: 0, nk: 0 };
 const Z = () => ({ china: 0, us: 0, russia: 0, korea: 0, taiwan: 0, eu: 0, asean: 0, nk: 0 });
 // countries of each key (for the relation drift)
-export const STANCE_COUNTRIES = { china: ['cn', 'h_cn'], us: ['us'], russia: ['ru', 'su', 'h_su'], korea: ['kr'], taiwan: ['tw'], eu: ['fr', 'de', 'wde', 'it', 'gb', 'h_de', 'h_it'], asean: ['id', 'ph', 'th', 'sg', 'my', 'vn'], nk: ['kp', 'h_kp'] };
+export const STANCE_COUNTRIES = { china: ['cn', 'h_cn'], us: ['us'], russia: ['ru', 'su', 'h_su'], korea: ['kr'], taiwan: ['tw'], eu: ['fr', 'de', 'wde', 'it', 'gb', 'h_de', 'h_it'], asean: ['id', 'ph', 'th', 'sg', 'my', 'vn'], nk: ['kp', 'h_kp', 'h_kp2'] };
 
 const PARTY_STANCE = {
   jimin: { us: 30 }, minshu: { us: 30 },
