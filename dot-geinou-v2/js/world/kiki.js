@@ -676,10 +676,13 @@ class RecordScene {
       kia ? null : ['拘束された記者', `${n0(r.detained)}人`],
       ['報道の自由度', `${r.press}／100`],
       ['国際社会の制裁', r.sanctions ? `段階${r.sanctions}` : 'なし'],
+      r.after ? ['その後', r.after] : null, // R25 (exile.js): 亡命・裁判の結果
+      r.after && r.transition ? ['そのあとの国', r.transition] : null,
     ].filter(Boolean);
+    const step = rows.length > 13 ? 17 : 19;
     rows.forEach(([k, v], i) => {
-      text(ctx, k, 96, 62 + i * 19, { size: 12, color: '#9aa3c7' });
-      text(ctx, String(v), 250, 62 + i * 19, { size: 12, color: '#ffffff' });
+      text(ctx, k, 96, 62 + i * step, { size: 12, color: '#9aa3c7' });
+      text(ctx, String(v), 250, 62 + i * step, { size: 12, color: '#ffffff' });
     });
     if (this.t > 40) text(ctx, 'A：タイトルへ（セーブデータはそのまま）', SW / 2, SH - 42, { size: 12, align: 'center', color: Math.floor(this.t / 30) % 2 ? COLORS.cyan : '#ffffff' });
   }

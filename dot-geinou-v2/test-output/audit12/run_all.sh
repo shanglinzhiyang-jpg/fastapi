@@ -61,4 +61,7 @@ row "R21 fm_t1" "$(tail -1 "$OUT/r21_fm_t1.txt")"
 # 11. [R24] 世論操作とメディア戦略（関係・広報・ステマ/デマ/調査の誘導とその発覚・週刊誌の取材）
 node test-output/progress/r24/media_t1.mjs > "$OUT/r24_media_t1.txt" 2>&1
 row "R24 media_t1" "$(tail -1 "$OUT/r24_media_t1.txt")"
+# 12. [R25] 独裁崩壊後の亡命と裁判（責任の重さ・行き先・判決・シーンの全経路・既存の終わり方）
+node test-output/progress/r25/exile_t1.mjs > "$OUT/r25_exile_t1.txt" 2>&1
+row "R25 exile_t1" "$(tail -1 "$OUT/r25_exile_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"

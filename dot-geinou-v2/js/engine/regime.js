@@ -3243,7 +3243,11 @@ const SCENES = {
   async downfall(g, data) {
     const rec = regimeRecord(g);
     rec.cause = data.cause || rec.cause;
-    if (typeof KIKI.downfall === 'function') await KIKI.downfall(g, rec);
+    // R25 (exile.js): the morning after — 亡命 / 出頭して裁判 / 留まる. It returns true when it told the whole ending itself (the old one is its last road).
+    let told = false;
+    if (typeof RX.exile === 'function') { try { told = await RX.exile(g, rec); } catch (e) { console.error(e); } }
+    if (told) { /* the ending was told */ }
+    else if (typeof KIKI.downfall === 'function') await KIKI.downfall(g, rec);
     else await g.say(downfallText(g, rec));
     if (typeof KIKI.record === 'function') await KIKI.record(g, rec);
     else await g.say(recordLines(rec));
@@ -3266,6 +3270,7 @@ export function recordLines(rec) {
     `【記録】${rec.name}　${rec.date}`,
     `体制：${REGIME_INFO[rec.maxRegime] ? REGIME_INFO[rec.maxRegime].name : rec.maxRegime}（${rec.label}）\n戦争：${rec.wars}回　死者 兵士${n0(rec.soldiers)}人・民間人${n0(rec.civilians)}人`,
     `相手国側の死傷者：${n0(rec.enemy)}人\n拘束された記者：${n0(rec.detained)}人\n報道の自由度：${rec.press}`,
+    ...(rec.after ? [`その後：${rec.after}${rec.transition ? `\nそのあとの国：${rec.transition}` : ''}`] : []),
     'セーブデータから再開するか、新しく始めてください。',
   ];
 }
