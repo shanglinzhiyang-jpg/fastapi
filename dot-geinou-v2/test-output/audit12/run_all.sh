@@ -64,4 +64,7 @@ row "R24 media_t1" "$(tail -1 "$OUT/r24_media_t1.txt")"
 # 12. [R25] 独裁崩壊後の亡命と裁判（責任の重さ・行き先・判決・シーンの全経路・既存の終わり方）
 node test-output/progress/r25/exile_t1.mjs > "$OUT/r25_exile_t1.txt" 2>&1
 row "R25 exile_t1" "$(tail -1 "$OUT/r25_exile_t1.txt")"
+# 13. [R26] 感染症とサイバー攻撃（流行の力学・行動制限・身代金・公表・立場ごとの権限・政府の自動対応・2020年）
+node test-output/progress/r26/crisis_t1.mjs > "$OUT/r26_crisis_t1.txt" 2>&1
+row "R26 crisis_t1" "$(tail -1 "$OUT/r26_crisis_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"

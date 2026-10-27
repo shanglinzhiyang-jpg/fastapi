@@ -111,6 +111,8 @@ export const MODULES = [
   './engine/media_ops.js',
   // [R25] 独裁崩壊後の亡命と裁判 (崩壊の朝の決断: 亡命・出頭・留まる、判決、移行期政権): exile.js
   './engine/exile.js',
+  // [R26] 感染症とサイバー攻撃 (流行の波・行動制限・病床・ワクチン／システム停止・身代金・公表・防御、アプリ「対策本部」): crisis_ops.js
+  './engine/crisis_ops.js',
   // 政府中枢 (government console, HD) + political phone apps 世論の声・国会中継・政府中枢 (api: test-output/api_govt_ui.txt)
   './engine/govt_ui.js',
   // world affairs (世界情勢: real countries, blocs, alliances, treaties, summits, sanctions, world events, diplomacy,
