@@ -18,7 +18,7 @@ import { registerPhoneApp } from '../engine/life.js';
 import { phoneList, phoneInfo, phoneConfirm, phoneText, PC } from '../engine/phone.js';
 import { audio } from '../engine/audio.js';
 import {
-  KIKI, REGIME_INFO, FICTIONAL_NATIONS, NATION_ORDER, DISPUTED_AREA, FICTION_NOTE, downfallText, recordLines,
+  KIKI, REGIME_INFO, FICTIONAL_NATIONS, NATION_ORDER, DISPUTED_AREA, FICTION_NOTE, downfallText, recordLines, END_CAUSES,
 } from '../engine/regime.js';
 
 const R = (ctx, x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
@@ -581,7 +581,10 @@ class DownfallScene {
   update() { /* animated by g.frame */ }
   draw(ctx) {
     const t = this.t;
-    if (this.stage === 'square') {
+    const E = END_CAUSES[this.rec.cause];
+    if (this.stage === 'square' && E && E.art && ARTS[E.art]) {
+      ARTS[E.art](ctx, t, {}, this.g); // R17: a coup, a party coup, a death — no crowd
+    } else if (this.stage === 'square') {
       // dusk; a city far away; a great crowd seen from behind, filling a square. Nothing else is shown.
       sky(ctx, '#2a1e3a', '#b0603a', ART_H, 16);
       for (let i = 0; i < 3; i++) { const x = 80 + i * 220; ctx.globalAlpha = 0.35; for (let k = 0; k < 14; k++) R(ctx, x + Math.sin((t + k * 20) / 40) * 6 - k, 40 + k * 6, 10 + k, 6, '#4a3a40'); ctx.globalAlpha = 1; }
@@ -592,7 +595,7 @@ class DownfallScene {
       text(ctx, '首都の広場', 20, 16, { size: 12, color: '#d8c8b8' });
     } else if (this.stage === 'paper') {
       R(ctx, 0, 0, SW, ART_H, '#1a1a20');
-      paperArt(ctx, '独裁体制が崩壊', `「${this.rec.label}」体制、${this.rec.cause === 'uprising' ? '民衆の蜂起で' : '敗戦で'}終わる`);
+      paperArt(ctx, E && E.headline ? E.headline : '独裁体制が崩壊', `「${this.rec.label}」体制、${E ? E.paper : '敗戦で'}終わる`);
     } else {
       R(ctx, 0, 0, SW, ART_H, '#050508');
     }
@@ -664,7 +667,7 @@ class RecordScene {
       ['最後の日', `${r.date}（${r.days}日目）`],
       r.pmDays || !kia ? ['総理大臣として', `${r.pmDays}日`] : null,
       ['体制', `${REGIME_INFO[r.maxRegime] ? REGIME_INFO[r.maxRegime].name : r.maxRegime}（${r.label}）`],
-      ['終わり方', kia ? `戦死（${r.where || '前線'}）` : r.cause === 'uprising' ? '民衆の蜂起' : r.cause === 'surrender' ? '降伏' : '敗戦'],
+      ['終わり方', kia ? `戦死（${r.where || '前線'}）` : END_CAUSES[r.cause] ? END_CAUSES[r.cause].record : '敗戦'],
       ['戦争', `${r.wars}回・戦費 約${r.cost}兆円`],
       ['死者（自国）', `兵士 ${n0(r.soldiers)}人・民間人 ${n0(r.civilians)}人`],
       ['死傷者（相手国側）', `${n0(r.enemy)}人`],
@@ -839,3 +842,6 @@ registerPhoneApp('kiki', {
   open: (g) => kikiApp(g),
 });
 
+
+// R17: the scene art and the drawing helpers are shared with js/world/rule_art.js (new arts are added to ARTS there)
+export { ARTS, ART_H, sky, skyline, windows, figure, crowd, placard };

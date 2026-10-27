@@ -165,6 +165,16 @@ export function phoneText(c, s, x, y, size = 12, color = PC.text, align = 'left'
   text(c, s, Math.round(x), Math.round(y), { size, color, align, shadow: null });
 }
 const T = phoneText;
+// A list of effect lines as bullet text for a confirm/info screen: "見出し：甲・乙・丙" becomes a heading line with its items under it, so a narrow screen wraps cleanly.
+export function bulletText(lines) {
+  const out = [];
+  for (const l of lines) {
+    const m = /^([^：]+：)(.+)$/.exec(l);
+    if (m && m[2].includes('・')) { out.push(`・${m[1]}`); for (const p of m[2].split('・')) out.push(`　${p}`); }
+    else out.push(`・${l}`);
+  }
+  return out.join('\n');
+}
 // Cut a string with '…' so it fits maxW.
 export function fitText(c, s, maxW, size = 12) {
   s = String(s);

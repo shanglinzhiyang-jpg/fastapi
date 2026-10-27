@@ -8,3 +8,5 @@ audit12 — one-command regression check
 Checks: syntax of every module; the 歴史の列強 (all five regimes through their histories, heisei);
 a long mixed play with all regimes on (heisei 120 days, or reiwa 240 days without --quick), with its error count and
 morning message flood; with --quick also the same long run where the player owns a car (R16: loan, monthly bills, 車検).
+Also (R17): the dictatorship's rule (test-output/progress/r17/rule_t1.mjs: pillars, purges, plots, succession, death, downfall, old saves) and the war at home
+(war_t1.mjs: commanders, production, policies, the anti-war movement, the end of the war).

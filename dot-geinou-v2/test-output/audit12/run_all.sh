@@ -40,4 +40,10 @@ if [ "$1" = "--quick" ]; then
   row "long play with a car (--quick)" "$e"
   row "  its morning message flood" "${fl:-n/a}"
 fi
+# 6. [R17] 独裁の統治（クーデター・摘発・後継・死去・崩壊）と、戦時の国内（司令官・軍需・政策・反戦運動）
+cd "$ROOT" || exit 1
+for t in rule_t1 war_t1; do
+  node test-output/progress/r17/$t.mjs > "$OUT/r17_$t.txt" 2>&1
+  row "R17 $t" "$(tail -1 "$OUT/r17_$t.txt")"
+done
 echo "---- details: $OUT" | tee -a "$SUM"

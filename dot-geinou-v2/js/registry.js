@@ -95,6 +95,10 @@ export const MODULES = [
   // regime & security core (体制・自衛隊・震災対応・報道の自由・戦争) and its scenes + phone app 危機管理
   './engine/regime.js',
   './world/kiki.js',
+  // [R17] 独裁の統治 (支持基盤・人事と粛清・個人崇拝・国家計画・後継者・クーデター・病): regime_rule.js, with the scene arts in world/rule_art.js
+  './engine/regime_rule.js',
+  // [R17] 戦時の国内と指揮 (司令官・軍需生産・国内の政策・反戦運動): war_home.js
+  './engine/war_home.js',
   // 政府中枢 (government console, HD) + political phone apps 世論の声・国会中継・政府中枢 (api: test-output/api_govt_ui.txt)
   './engine/govt_ui.js',
   // world affairs (世界情勢: real countries, blocs, alliances, treaties, summits, sanctions, world events, diplomacy,

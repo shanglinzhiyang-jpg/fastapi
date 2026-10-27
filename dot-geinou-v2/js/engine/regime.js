@@ -201,6 +201,32 @@ export const REGIME_INFO = {
 // kept (empty) for old imports: the fiction notice is shown on the title screen only, never in the game
 export const FICTION_NOTE = '';
 
+// How a dictator's life can end (regime 'fallen', g.state.regime.fall.cause). The crowd ones (蜂起・敗戦・降伏) keep their scene; the others (R17: 軍の
+// クーデター・党内の政変・死去) are told in a few sober lines with no crowd and no violence. art: the scene art of the first stage (kiki.js ARTS).
+export const END_CAUSES = {
+  uprising: { record: '民衆の蜂起', crowd: true, paper: '民衆の蜂起で' },
+  defeat: { record: '敗戦', crowd: true, paper: '敗戦で' },
+  surrender: { record: '降伏', crowd: true, paper: '敗戦で' },
+  coup: {
+    record: '軍のクーデター', art: 'plot_dawn', headline: '軍が政権を掌握', paper: '軍のクーデターで',
+    pages: (g, rec) => ['夜明け前、国軍の部隊が首都の政府庁舎をとり囲んだ。\nラジオは、軍の声明を読み上げている。', `${rec.name}は、最後の側近にも見放され、身柄を拘束された。`, '軍は「秩序の回復」を宣言し、新しい政権の発足を告げた。\n一人の指導者の時代は、一晩で終わった。', 'こうして、この人生の物語は終わった。'],
+  },
+  ousted: {
+    record: '党内の政変', art: 'kantei', headline: '指導者を解任', paper: '党内の政変で',
+    pages: (g, rec) => ['党の最高幹部会が、緊急に開かれた。\n議題は、ただ一つ――指導者の解任だった。', `${rec.name}の側近は、ひとり、またひとりと、席を立っていった。`, '解任の決議は、全会一致だった。\n権力は、党の別の幹部の手に移った。', 'こうして、この人生の物語は終わった。'],
+  },
+  death: {
+    record: '死去', art: 'palace_night', headline: '指導者が死去', paper: '病で',
+    pages: (g, rec) => {
+      const h = g && g.state && g.state.rule && g.state.rule.heirAtEnd;
+      const name = { party: '党の筆頭幹部', army: '軍の司令官', family: '指名された身内' }[h];
+      return [`長年の激務がたたり、${rec.name}は床についた。`, '体制の幹部たちは、知らせを数日のあいだ伏せ、後継をめぐって話し合った。', `やがて、国営放送が訃報を伝えた。\n国じゅうが、喪に服した。${name ? `\n${name}が、体制を引き継いだ。` : ''}`, 'こうして、この人生の物語は終わった。'];
+    },
+  },
+};
+// Other modules (R17: war_home.js) multiply the two sides' strength at a front: fn(g, war, front) → { own?, foe? } (a factor each).
+export const WAR_MODS = [];
+
 // FICTIONAL nations and the fictional disputed area (names checked: no real country or place).
 // All of them lie around one invented sea far from Japan (ヴェルミナ海): no compass hint relative to Japan, so none of
 // them can be read as a real neighbour.
@@ -2273,6 +2299,7 @@ function frontPower(g, w, f) {
   let foe = num(w.enemyMil, 50) * (1 + num(w.support) / 120) * (1 + num(w.foeMob) * 0.15) * (w.far && f.kind !== 'land' ? 0.75 : 1) * (w.far && f.kind === 'land' && w.mode !== 'alliance' ? 0.7 : 1);
   if (f.kind === 'home') foe *= 0.7;
   foe += (w.foes || []).reduce((a, x) => a + num(x.power), 0) / n * 0.8;
+  for (const fn of WAR_MODS) { try { const m = fn(g, w, f); if (m) { if (m.own) own *= m.own; if (m.foe) foe *= m.foe; } } catch (e) { console.error(e); } }
   return { own: Math.round(own), foe: Math.round(foe) };
 }
 export function battleOdds(g, w, f) {
@@ -2599,6 +2626,7 @@ function warTick(g) {
     w.cas.enemySoldiers += Math.round(d0 * (0.7 + rnd() * 0.6));
     knownAtFront(g, w, f, 0.004);
   }
+  cd = Math.round(cd * (1 - clamp(num(w.civShield), 0, 0.6))); // 防空・疎開 (war_home.js)
   w.cas.soldiers.dead += sd; w.cas.soldiers.wounded += sd * rint(2, 4);
   w.cas.civilians.dead += cd; w.cas.civilians.wounded += cd * rint(2, 5);
   w.cas.enemyCivilians += Math.round(cd * (0.8 + rnd() * 0.8));
@@ -3223,6 +3251,8 @@ const SCENES = {
   },
 };
 export function downfallText(g, rec) {
+  const E = END_CAUSES[rec.cause];
+  if (E && E.pages) return E.pages(g, rec);
   const why = rec.cause === 'uprising' ? '全国に広がった民衆の蜂起で、体制は一夜にして崩れた。' : rec.cause === 'surrender' ? '降伏の知らせが流れた夜、体制は崩れた。' : '前線が崩れ、敗戦の知らせが流れた夜、体制は崩れた。';
   return [
     why,
@@ -3727,6 +3757,11 @@ function wrapCoalition(proto) {
   });
 }
 
+// The helpers the R17 modules (regime_rule.js 統治, war_home.js 戦時の国内) share with this core (the state is plain data: g.state.regime).
+export const RX = {
+  R, news, phone, note, say, fall, queueScene, show, pol, meOf, isPM, isDict, approvalOf, bumpApproval, raiseIntl, spawnDemo, ecoShock, press, pressValue,
+  roll, rint, pick, rnd, gauss, num, n0, today, dateText, enemyFull, enemyLabel, frontText, avgFront, forceName,
+};
 onMorning((g) => regimeTick(g));
 installRegime(Game.prototype);
 if (typeof window !== 'undefined') window.__regime = { R, KIKI, startDisaster, fall, endWar, setRegimeRng, regimeLabel, queueScene, flush, FICTIONAL_NATIONS, trialDue, barredReason, warReport, playerKIA, battleOdds, breakaway, runBattle, needsBreak, enemyInfo };

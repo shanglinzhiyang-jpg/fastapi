@@ -821,6 +821,15 @@ export function dokusaiPower(g) {
       dl.push({ id: `${d.id}_${x.id}`, name: `デモへの対応：${x.label.replace(/（.*$/, '')}`, desc: `対象：${d.cause}（約${n0(d.size)}人）。${x.desc}`, why: x.why, odds: null, costs: [DEMO_COST[x.id] || ''], act: { kind: 'demo', demo: d.id, how: x.id, name: x.label.replace(/（.*$/, '') } });
     }
   }
+  // 側近と基盤 (R17: regime_rule.js): the army, the security agency, the party and the people, the cult, the plan, the heir
+  const rl = has(g, 'rule') ? safe(() => g.rule(), null) : null;
+  if (rl && rl.active && rl.pillars) {
+    out.push({ id: 'rule', name: '側近と基盤', status: [
+      `国軍 ${Math.round(rl.pillars.army)}・治安機関 ${Math.round(rl.pillars.police)}・党と官僚 ${Math.round(rl.pillars.party)}・民衆 ${rl.people}`,
+      `クーデターの危険：${rl.coupRisk}${rl.flattered ? '（側近の報告）' : ''}　恐怖 ${rl.fear}　個人崇拝 ${rl.cult}／5`,
+      rl.flattered ? '個人崇拝が進み、側近は耳ざわりのよい報告ばかりしています。数字は、ほんとうより少し甘いかもしれません' : rl.heir ? `後継者：${rl.heir.name}` : '後継者は決まっていません。病や老いの話が出ると、党と軍が揺れます',
+      rl.plan ? `国家計画：${rl.plan.name}（あと${rl.plan.left}日）` : '人事・恩賞・摘発・個人崇拝・国家計画・後継者は、アプリ「統治」から'], levers: [] });
+  }
   out.push({ id: 'people', name: '国民・デモ', status: [demos.length ? `いまのデモ：${demos.map((d) => `${shortText(d.cause, 12)}（約${n0(d.size)}人）`).slice(0, 3).join('、')}` : 'いま、大きなデモはない', `民衆の不満 ${Math.round(r.unrest)}／100`], levers: dl });
   return out;
 }
@@ -1126,6 +1135,11 @@ export function ikusaSupply(g) {
     lines.push(`予備の部隊 約${n0(w.reserve * 1000)}人・動員 第${w.mob}次（${r.id === 'dictatorship' ? '最大 第3次＝総動員' : '最大 第2次まで（3次の徴兵は憲法18条）'}）`);
     lines.push(`戦費 これまで約${w.cost}兆円（日割りの負担は大きい）・物価 ${num(eco.inflation).toFixed(1)}%・成長率 ${num(eco.growth).toFixed(1)}%`);
     lines.push(`前線ごとの兵力：${(w.fronts || []).map((f) => `${f.name} 約${n0(f.own * 1000)}人`).join('／')}`);
+    const hh = has(g, 'warHome') ? safe(() => g.warHome(), null) : null; // 戦時の国内と指揮 (R17: war_home.js)
+    if (hh && hh.active) {
+      lines.push(`司令官：${['land', 'sea', 'air'].map((f) => `${hh.commanders[f].name}（${hh.commanders[f].traitName}）`).join('・')}${hh.prod.focus ? `　軍需生産：${hh.prod.name} 第${hh.prod.level}段階` : '　軍需生産：なし'}`);
+      lines.push(`反戦運動 ${hh.antiwar.value}／100（${hh.antiwar.label}）・実施中の政策：${Object.values(hh.policies).filter((x) => x.on).map((x) => x.name).join('・') || 'なし'}（アプリ「戦時」で司令官・軍需・国内の政策を決められる）`);
+    }
   } else lines.push(`開戦のとき動かせる部隊：約${sdf ? Math.round((sdf.personnel.actual * 0.4) / 1000) : '—'}千人（現員の4割。このうち55%が最初に前線へ）`);
   const fix = [];
   if (r.sanctions) fix.push('制裁を緩める（外交：制裁の解除・首脳会談）→ 補給の効きが戻る');
