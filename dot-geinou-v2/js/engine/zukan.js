@@ -14,10 +14,10 @@ const TOWNS = ['tokyo', 'machi', 'minato', 'nagatacho', 'kanraku', 'namba'];
 
 // test(g, ctx) → true when reached. ctx: { rom, pol, contests, places }. Every test is wrapped (a missing piece just means "not yet").
 export const ACHIEVEMENTS = [
-  { id: 'first_contest', name: 'はじめての大会', desc: '賞レースの大会にエントリーした', test: (g, x) => x.contests.some((c) => c.entry && c.entry.status !== 'withdrawn') },
-  { id: 'final', name: '決勝へ', desc: '決勝の舞台に進んだ', test: (g, x) => x.contests.some((c) => c.entry && c.entry.final) },
-  { id: 'champion', name: '王者', desc: '大会で優勝した', test: (g, x) => x.contests.some((c) => c.entry && c.entry.status === 'champion') },
-  { id: 'champion2', name: '二冠', desc: '大会で二度優勝した', secret: true, test: (g, x) => x.contests.filter((c) => c.entry && c.entry.status === 'champion').length >= 2 },
+  { id: 'first_contest', name: 'はじめての大会', desc: '賞レースの大会にエントリーした', test: (g, x) => x.entries.some((e) => e && e.status !== 'withdrawn') },
+  { id: 'final', name: '決勝へ', desc: '決勝の舞台に進んだ', test: (g, x) => x.entries.some((e) => e && e.final) },
+  { id: 'champion', name: '王者', desc: '大会で優勝した', test: (g, x) => x.entries.some((e) => e && e.status === 'champion') },
+  { id: 'champion2', name: '二冠', desc: '大会で二度優勝した', secret: true, test: (g, x) => x.entries.filter((e) => e && e.status === 'champion').length >= 2 },
   { id: 'partner', name: 'コンビ結成', desc: 'ふたりで舞台に立った（相方）', test: (g) => { const u = g.unit && g.unit(); return !!(u && (u.type === 'combi' || u.type === 'trio')); } },
   { id: 'first_love', name: 'はじめての恋', desc: '「恋のはなし」で、気になる相手を決めた', test: (g, x) => !!x.rom && x.rom.pref !== null && x.rom.pref !== undefined && x.rom.pref !== 'off' },
   { id: 'lover', name: 'おつきあい', desc: '恋人ができた', test: (g, x) => !!x.rom && Object.values(x.rom.c || {}).some((r) => ['dating', 'cohab', 'engaged', 'married'].includes(r.st)) },
@@ -47,13 +47,16 @@ export function zk(g) {
   return z;
 }
 
+// Read-only: the stored records only (g.contests() would create season state, which the 大会 flows rely on being untouched).
 function ctxOf(g) {
   const z = zk(g);
-  let rom = null, pol = null, contests = [];
-  try { rom = g.state.flags && g.state.flags.rom ? g.state.flags.rom : null; } catch (e) { rom = null; }
-  try { pol = g.pol ? g.pol() : null; } catch (e) { pol = null; }
-  try { contests = (g.contests && g.contests()) || []; } catch (e) { contests = []; }
-  return { rom, pol, contests, places: z.places };
+  const st = g.state || {};
+  const rom = st.flags && st.flags.rom ? st.flags.rom : null;
+  const pol = st.politics || null;
+  const entries = [];
+  try { const cs = st.contests && st.contests.entries; if (cs && typeof cs === 'object') entries.push(...Object.values(cs)); } catch (e) { /* none */ }
+  try { const m1 = st.m1 && st.m1.me && st.m1.me.entries; if (m1 && typeof m1 === 'object') for (const yr of Object.values(m1)) if (yr) entries.push(yr); } catch (e) { /* none */ }
+  return { rom, pol, entries, places: z.places };
 }
 
 // check every achievement; reached ones are recorded and announced (one toast each). Returns the new ones.
