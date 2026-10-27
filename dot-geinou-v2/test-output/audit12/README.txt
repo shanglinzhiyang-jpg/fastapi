@@ -11,3 +11,4 @@ morning message flood; with --quick also the same long run where the player owns
 Also (R17): the dictatorship's rule (test-output/progress/r17/rule_t1.mjs: pillars, purges, plots, succession, death, downfall, old saves) and the war at home
 (war_t1.mjs: commanders, production, policies, the anti-war movement, the end of the war).
 Also (R18): scandal_t1.mjs (the stages of a scandal, the player's answers incl. the cover-up, old saves).
+Also (R19): election_t1.mjs (the five election laws, the effect on a real election with the same dice, the Court's rulings, the gerrymander).

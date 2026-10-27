@@ -80,7 +80,7 @@ function judge(g, p, E) {
   p.cabinet.scandal = num(p.cabinet.scandal) - (verdict === 'unconst' ? 3 : 1.5);
   if (verdict === 'state') say(g, p, E, `最高裁は、${h}選挙の一票の格差（${P.ratio}倍）を「違憲状態」と判断した。選挙は有効だが、国会に区割りの是正を求めた。`, { msg: isPM(p) });
   else {
-    say(g, p, E, `最高裁は、${h}選挙の一票の格差（${P.ratio}倍）を「違憲」と判断した。選挙そのものは「事情判決」の考え方で有効としたが、「是正を怠った」と国会を厳しく批判した。`, { msg: true });
+    say(g, p, E, `最高裁は、${h}選挙の一票の格差（${P.ratio}倍）を「違憲」と判断した。選挙そのものは「事情判決」の考え方で有効としたが、「是正を怠った」と国会を厳しく批判した。`, { msg: isPM(p) });
     if (exposed) { E.gerry.struck = true; say(g, p, E, '判決は、先の区割りの線引きにも触れ、「選挙の公正を損なう」と述べた。線引きの効果は失われる。'); }
   }
   // an NPC government fixes it by itself after a while; the player's government has to do it (the law 一票の格差の是正)
@@ -110,7 +110,7 @@ function tick(g) {
   if (G && !G.exposed && !G.struck && rng() < 0.006 * clamp(num(G.strength, 1), 1, 3)) {
     G.exposed = true;
     p.cabinet.scandal = num(p.cabinet.scandal) - 1.5 * G.strength;
-    say(g, p, E, '新聞が、選挙区の線引きが与党に有利に行われた経過を報じた。野党は「ゲリマンダーだ」と批判している。', { msg: true });
+    say(g, p, E, '新聞が、選挙区の線引きが与党に有利に行われた経過を報じた。野党は「ゲリマンダーだ」と批判している。', { msg: G.by === 'player' });
     try { if (typeof g.politicalScandal === 'function' && G.by) g.politicalScandal('gerrymander', { who: G.by, name: '区割りの恣意的な操作（ゲリマンダー）', severity: 2 + Math.min(2, G.strength - 1) }); } catch (e) { console.error(e); }
   }
 }

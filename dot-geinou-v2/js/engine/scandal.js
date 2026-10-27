@@ -141,7 +141,7 @@ function openCase(g, rec) {
   s.cases.unshift(c);
   if (s.cases.length > 60) { const keep = s.cases.filter((x) => x.stage !== 'closed'); s.cases = keep.concat(s.cases.filter((x) => x.stage === 'closed').slice(0, Math.max(10, 50 - keep.length))); }
   const who2 = `${c.whoName}${c.post ? `（${c.post}` : ''}${c.partyName ? `${c.post ? '・' : '（'}${c.partyName}` : ''}${c.post || c.partyName ? '）' : ''}`;
-  say(g, p, c, `${who2}に${c.name}。${c.src}で明らかになった。${c.amount ? `金額は${fmtMoney(c.amount)}にのぼるという。` : ''}`, { msg: c.who !== 'player' && isCab(c) && sev >= 3, news: c.who === 'player' ? false : true });
+  say(g, p, c, `${who2}に${c.name}。${c.src}で明らかになった。${c.amount ? `金額は${fmtMoney(c.amount)}にのぼるという。` : ''}`, { msg: false, news: c.who === 'player' ? false : true });
   if (who === 'player') {
     s.pending = { id: c.id, kind: 'respond', day: today(g) };
     try { g.message({ from: 'ドット新聞 政治部', text: `【スクープ】${c.whoName}氏に${c.name}。${c.src}で明らかになり、各社が説明を求めています。\n（スマホの「スクープ」で、対応を決めてください）`, kind: 'news' }); } catch (e) { /* no phone */ }
@@ -184,7 +184,7 @@ function nextAfterFollow(g, p, c) {
   if (c.who !== 'player') {
     if (criminal && roll(clamp(K.pc * (c.sev >= 4 ? 1.2 : 1) * clamp(c.heat / 55, 0.5, 1.3), 0, 0.95))) {
       setStage(c, g, 'probe', rint(4, 8)); c.heat = clamp(c.heat + 10, 0, 100);
-      say(g, p, c, `地検が、${c.whoName}の関係先の捜索に入った。${K.crimeName ? `${K.crimeName}の疑いで調べている。` : ''}`, { msg: isCab(c) || c.sev >= 4 });
+      say(g, p, c, `地検が、${c.whoName}の関係先の捜索に入った。${K.crimeName ? `${K.crimeName}の疑いで調べている。` : ''}`, { msg: false });
       return;
     }
     if (c.heat >= 68) return pressure(g, p, c);
@@ -204,7 +204,7 @@ function pressure(g, p, c) {
     const post = c.post;
     if (c.post && /大臣/.test(c.post)) { /* the cabinet already replaced a minister when the scandal broke (politics.js) */ }
     const out = leaveSeat(g, c, `${c.name}の責任`);
-    close(g, p, c, 'resigned', out ? `${c.whoName}氏が、${c.name}の責任をとって議員を辞職した。補欠選挙が行われる見通し。` : `${c.whoName}氏が、${post || '役職'}を辞任し、「けじめをつけたい」と述べた。`, { msg: isCab(c) });
+    close(g, p, c, 'resigned', out ? `${c.whoName}氏が、${c.name}の責任をとって議員を辞職した。補欠選挙が行われる見通し。` : `${c.whoName}氏が、${post || '役職'}を辞任し、「けじめをつけたい」と述べた。`, { msg: false });
   } else {
     close(g, p, c, 'stayed', `${c.whoName}氏は記者団に「責任を果たすことで、信頼を回復したい」と述べ、続投の考えを示した。野党は「居座りだ」と批判している。`);
   }
@@ -214,16 +214,16 @@ function charge(g, p, c) {
   const small = c.kind === 'slush_fund' && c.amount > 0 && c.amount < 5000000;
   const pCharge = clamp(0.35 + c.sev * 0.1 + c.heat / 300 + (c.denied ? 0.15 : 0), 0.2, 0.92);
   if (!roll(pCharge)) {
-    close(g, p, c, 'dropped', `地検は${c.whoName}氏について、嫌疑不十分として不起訴とした。野党は「政治的・道義的な責任は残る」としている。`, { msg: isCab(c) });
+    close(g, p, c, 'dropped', `地検は${c.whoName}氏について、嫌疑不十分として不起訴とした。野党は「政治的・道義的な責任は残る」としている。`, { msg: false });
     return;
   }
   if (small && roll(0.5)) {
-    close(g, p, c, 'fined', `地検は${c.whoName}氏を、${K.crimeName}で略式起訴。簡易裁判所は罰金${rint(10, 50)}万円の略式命令を出した。禁錮以上ではないが、罰金刑でも公民権が停止されることがある。`, { msg: true });
+    close(g, p, c, 'fined', `地検は${c.whoName}氏を、${K.crimeName}で略式起訴。簡易裁判所は罰金${rint(10, 50)}万円の略式命令を出した。禁錮以上ではないが、罰金刑でも公民権が停止されることがある。`, { msg: false });
     leaveSeat(g, c, `${K.crimeName}での略式命令`);
     return;
   }
   setStage(c, g, 'charged', 2); c.heat = clamp(c.heat + 8, 0, 100);
-  say(g, p, c, `地検は${c.whoName}氏を、${K.crimeName}の罪で在宅起訴した。`, { msg: true });
+  say(g, p, c, `地検は${c.whoName}氏を、${K.crimeName}の罪で在宅起訴した。`, { msg: false });
   if (roll(0.55)) {
     const out = leaveSeat(g, c, '起訴の責任');
     if (out) say(g, p, c, `${c.whoName}氏は議員を辞職した。「裁判で争う」とコメントしている。`);
@@ -233,7 +233,7 @@ function verdict(g, p, c) {
   const K = kindOf(c.kind);
   const day = today(g);
   if (!roll(0.92)) {
-    close(g, p, c, 'acquitted', `地裁は${c.whoName}氏に無罪を言い渡した。検察は、控訴を検討するという。`, { msg: true });
+    close(g, p, c, 'acquitted', `地裁は${c.whoName}氏に無罪を言い渡した。検察は、控訴を検討するという。`, { msg: false });
     return;
   }
   const heavy = c.sev >= 5 && roll(0.4);
@@ -241,7 +241,7 @@ function verdict(g, p, c) {
   const tail = heavy ? `実刑判決で、公民権は刑の執行を終えるまで、さらに5年間停止される。` : `執行猶予の期間中は、公民権が停止される。`;
   const sentence = c.sev <= 3 && roll(0.5) ? `罰金${rint(30, 100)}万円` : heavy ? `懲役${yrs}年` : `懲役${yrs}年・執行猶予${rint(3, 5)}年`;
   leaveSeat(g, c, '有罪判決');
-  close(g, p, c, 'guilty', `地裁は${c.whoName}氏に、${K.crimeName}の罪で${sentence}の判決を言い渡した。${/罰金/.test(sentence) ? '' : tail}`, { msg: true });
+  close(g, p, c, 'guilty', `地裁は${c.whoName}氏に、${K.crimeName}の罪で${sentence}の判決を言い渡した。${/罰金/.test(sentence) ? '' : tail}`, { msg: false });
 }
 function advance(g, p, c) {
   const day = today(g);

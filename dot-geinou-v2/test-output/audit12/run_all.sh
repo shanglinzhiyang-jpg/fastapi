@@ -49,4 +49,7 @@ done
 # 7. [R18] スキャンダルの展開（報道・続報・捜査・起訴・判決・本人の対応）
 node test-output/progress/r18/scandal_t1.mjs > "$OUT/r18_scandal_t1.txt" 2>&1
 row "R18 scandal_t1" "$(tail -1 "$OUT/r18_scandal_t1.txt")"
+# 8. [R19] 選挙制度と区割り（一票の格差・最高裁の判決・ゲリマンダー・足切り・配分）
+node test-output/progress/r19/election_t1.mjs > "$OUT/r19_election_t1.txt" 2>&1
+row "R19 election_t1" "$(tail -1 "$OUT/r19_election_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"
