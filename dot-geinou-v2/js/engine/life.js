@@ -587,6 +587,24 @@ const methods = {
       m.dupKey = key;
     }
     const mm = this._mm;
+    // [R15] the whole day is capped too (not only the morning window): automated chatter of one day is at most MORNING_MSG_CAP messages in the inbox.
+    // The rest of that day's chatter goes into one 「ほかの連絡」 (a digest, which counts as one of them). Bills, legal notices, offers and messages with choices are never held.
+    if (!prot && !(mm && mm.open && mm.day === day0) && typeof m.text === 'string') {
+      const today = ph.inbox.filter((x) => x && Number(x.day) === day0);
+      const dg = today.find((x) => x.digestOf === 'day');
+      const line = `・${m.from || '？'}｜${String(m.text).split('\n')[0].replace(/\s+/g, ' ').slice(0, 26)}`;
+      if (dg) {
+        dg.lines.push(line);
+        dg.text = `【ほかの連絡】${dg.lines.length}件\n${dg.lines.slice(0, 9).join('\n')}${dg.lines.length > 9 ? `\nほか${dg.lines.length - 9}件` : ''}`;
+        dg.read = false;
+        return dg;
+      }
+      if (today.length >= MORNING_MSG_CAP - 1) {
+        const d = { id: ph.nextId++, day: day0, read: false, from: 'ほかの連絡', kind: 'news', digestOf: 'day', protect: true, lines: [line], text: `【ほかの連絡】1件\n${line}` };
+        ph.inbox.unshift(d);
+        return d;
+      }
+    }
     if (mm && mm.open && mm.day === day0) {
       const room = MORNING_MSG_CAP - 1; // one slot is kept for the digest
       if (prot) {

@@ -8,6 +8,7 @@
 import { registerPhoneApp, onMorning } from './life.js';
 import { phoneList, phoneInfo } from './phone.js';
 import { YEAR_DAYS } from './profile.js';
+import { seasonsSeen } from './seasons.js';
 
 const COLOR = '#c8a040';
 const TOWNS = ['tokyo', 'machi', 'minato', 'nagatacho', 'kanraku', 'namba'];
@@ -33,6 +34,7 @@ export const ACHIEVEMENTS = [
   { id: 'history', name: '歴史を見つめる', desc: '世界の歴史の列強を、設定で見守った', secret: true, test: (g) => { try { return g.histEventsOn() && g.histPowers().some((h) => h.on); } catch (e) { return false; } } },
   { id: 'ten_places', name: '行ったところ十か所', desc: '十か所の場所を訪れた', test: (g, x) => x.places.length >= 10 },
   { id: 'all_towns', name: '全部の街', desc: '六つの街すべてに行った', test: (g, x) => TOWNS.every((t) => x.places.includes(t)) },
+  { id: 'seasons', name: '一年の行事', desc: '一年のうちに、季節の行事を五つ見た', secret: true, test: (g) => { try { return seasonsSeen(g) >= 5; } catch (e) { return false; } } },
   { id: 'station', name: '電車に乗る', desc: '駅に行った', test: (g, x) => x.places.some((p) => /eki|station/i.test(p)) },
 ];
 
