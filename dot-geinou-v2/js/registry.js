@@ -105,6 +105,8 @@ export const MODULES = [
   './engine/election_sys.js',
   // [R20] 地方政治 (区長・知事・区議・都議: 予算・条例・議会・国との関係・住民投票・不信任、アプリ「自治体」): local_gov.js
   './engine/local_gov.js',
+  // [R21] 派閥と政治資金パーティー (ノルマ・キックバック・露見・解散、アプリ「派閥資金」): faction_money.js
+  './engine/faction_money.js',
   // 政府中枢 (government console, HD) + political phone apps 世論の声・国会中継・政府中枢 (api: test-output/api_govt_ui.txt)
   './engine/govt_ui.js',
   // world affairs (世界情勢: real countries, blocs, alliances, treaties, summits, sanctions, world events, diplomacy,
