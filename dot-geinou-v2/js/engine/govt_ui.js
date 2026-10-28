@@ -637,11 +637,17 @@ class GovtScene {
   async away(fn) {
     const g = this.g;
     const i = g.scenes.indexOf(this);
-    const below = g.scenes.slice(0, Math.max(0, i)).some((s) => (s.isPhone && !s.closing && !s.dismissed) || (s.isPolUI && !s.closed));
+    const under = g.scenes.slice(0, Math.max(0, i));
+    const below = under.some((s) => (s.isPhone && !s.closing && !s.dismissed) || (s.isPolUI && !s.closed));
     if (!below) return fn();
+    // the phone may lie under the politics screen (phone → 政治 → 政府中枢): the screens above the phone step aside too, or the navi would open invisibly under them
+    const pi = under.map((s) => !!(s.isPhone && !s.closing && !s.dismissed)).lastIndexOf(true);
+    const aside = pi >= 0 ? under.slice(pi + 1).filter((s) => s.isPolUI && !s.closed) : [];
+    for (const s of aside) g.pop(s);
     g.pop(this);
     try { return await fn(); } finally {
       for (const s of g.scenes) if (s.isPhone) s.tapAt = null;
+      for (const s of aside) if (!s.closed) g.push(s);
       if (!this.closed) g.push(this);
     }
   }
