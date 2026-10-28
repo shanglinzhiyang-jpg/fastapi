@@ -2356,3 +2356,44 @@ defineTile('lantern', {
     outline(c);
   },
 });
+
+// ---------------------------------------------------------------- R29: more variants for the street furniture and paving (each wraps the original drawing and adds the variant's own marks)
+function moreVariants(id, n, extra) {
+  const t = TILES[id];
+  if (!t) return;
+  const hd0 = t.hd, draw0 = t.draw;
+  t.variants = n;
+  if (hd0) t.hd = function (c, r, f, v) { hd0.call(this, c, r, f, v); try { extra(c, r, v || 0, true); } catch (e) { /* a mark must never break a tile */ } };
+  if (draw0) t.draw = function (c, r, f, v) { draw0.call(this, c, r, f, v); };
+  for (const k of cache.keys()) if (k.startsWith(id + '|')) cache.delete(k);
+}
+// sidewalk: 0 plain, 1 darker slabs, 2 a manhole cover, 3 a worn patch with a hairline crack, 4 tactile-free warm slabs
+moreVariants('sidewalk', 5, (c, r, v) => {
+  if (v === 1) { for (let i = 0; i < 40; i++) Pw(c, RND(r, 32), RND(r, 32), '#bfc0c7'); R(c, 0, 0, 32, 1, '#cbccd2'); }
+  if (v === 2) { ring(c, 16, 16, 7, 8, '#7e828c'); disc(c, 16, 16, 6, '#9a9ea8'); for (const y of [12, 14, 16, 18, 20]) R(c, 11, y, 10, 1, '#80848e'); R(c, 15, 10, 2, 12, '#80848e'); }
+  if (v === 3) { for (let i = 0; i < 9; i++) Pw(c, 6 + i * 2, 8 + ((i * 5) % 7), '#a9aab2'); Pw(c, 13, 12, '#a9aab2'); for (let i = 0; i < 30; i++) Pw(c, 4 + RND(r, 20), 18 + RND(r, 10), '#c0c1c8'); }
+  if (v === 4) { for (let i = 0; i < 30; i++) Pw(c, RND(r, 32), RND(r, 32), '#d8d0c0'); R(c, 0, 0, 32, 32, 'rgba(214,190,150,0.14)'); }
+});
+// lamp: 0 as drawn, 1 green-painted post, 2 a white globe, 3 a classic bronze lantern
+moreVariants('lamp', 4, (c, r, v) => {
+  if (v === 1) { R(c, 14, 8, 4, 20, '#3f6a4a'); R(c, 14, 8, 1, 20, '#5f8a6a'); R(c, 17, 8, 1, 20, '#2c4c34'); R(c, 10, 2, 12, 6, '#2c4c34'); R(c, 11, 2, 10, 1, '#4a7656'); }
+  if (v === 2) { disc(c, 16, 5, 6, '#e8e8ee'); disc(c, 16, 5, 5, '#fffdf0'); R(c, 13, 3, 3, 2, '#ffffff'); R(c, 14, 10, 4, 18, '#5a5f6b'); R(c, 14, 10, 1, 18, '#8d939f'); R(c, 12, 26, 8, 4, '#4a4e58'); }
+  if (v === 3) { R(c, 14, 10, 4, 18, '#6a4a2a'); R(c, 14, 10, 1, 18, '#8a6a44'); R(c, 11, 3, 10, 7, '#6a4a2a'); R(c, 12, 4, 8, 5, '#ffe9a0'); R(c, 15, 4, 2, 5, '#fff7d0'); R(c, 10, 2, 12, 1, '#8a6a44'); R(c, 15, 0, 2, 2, '#6a4a2a'); R(c, 12, 26, 8, 4, '#5a3c22'); }
+});
+// bench: 0 wood, 1 green-painted slats, 2 pale slats, 3 stone-and-wood
+moreVariants('bench', 4, (c, r, v) => {
+  if (v === 1) { for (const y of [9, 12]) { R(c, 2, y, 28, 2, '#3f6a4a'); R(c, 2, y, 28, 1, '#5f8a6a'); } for (const y of [16, 18, 20]) { R(c, 2, y, 28, 2, '#4f8a5e'); R(c, 2, y, 28, 1, '#74ac84'); } }
+  if (v === 2) { for (const y of [9, 12]) { R(c, 2, y, 28, 2, '#c8b898'); R(c, 2, y, 28, 1, '#e0d2b4'); } for (const y of [16, 18, 20]) { R(c, 2, y, 28, 2, '#dccaa6'); R(c, 2, y, 28, 1, '#f0e2c2'); } }
+  if (v === 3) { for (const x of [4, 24]) { R(c, x, 22, 4, 5, '#a9adb7'); R(c, x, 22, 1, 5, '#c4c8d0'); R(c, x + 3, 22, 1, 5, '#8e929c'); } }
+});
+// stone paving: 0 granite setts, 1 darker, 2 mossy, 3 a pale joint pattern
+moreVariants('stone', 4, (c, r, v) => {
+  if (v === 1) R(c, 0, 0, 32, 32, 'rgba(40,44,56,0.18)');
+  if (v === 2) { for (let i = 0; i < 22; i++) Pw(c, RND(r, 32), RND(r, 32), i % 3 ? '#6c8a58' : '#86a46e'); R(c, 0, 15, 32, 1, 'rgba(90,120,70,0.35)'); }
+  if (v === 3) R(c, 0, 0, 32, 32, 'rgba(255,255,255,0.12)');
+});
+// the dirt path: 0 / 1 as before, 2 with wheel ruts, 3 with a scatter of leaves
+moreVariants('path', 4, (c, r, v) => {
+  if (v === 2) { R(c, 6, 0, 3, 32, 'rgba(120,90,50,0.22)'); R(c, 23, 0, 3, 32, 'rgba(120,90,50,0.22)'); }
+  if (v === 3) for (const [x, y, col] of [[5, 6, '#c0782c'], [20, 12, '#d89a38'], [12, 22, '#a85a24'], [26, 26, '#d89a38'], [9, 14, '#8a6a30']]) { Pw(c, x, y, col); Pw(c, x + 1, y, col); Pw(c, x, y + 1, shade(col, -0.2)); }
+});
