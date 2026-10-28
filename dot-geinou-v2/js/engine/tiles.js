@@ -265,15 +265,23 @@ function flowerHD(c, x, y, col) {
   P(c, x + 2, y + 2, '#4f9a4a');
 }
 defineTile('grass', {
-  variants: 4,
+  variants: 8,
   draw(c, r, f, v) {
     R(c, 0, 0, 16, 16, '#62b35b');
     speckle(c, r, ['#55a34f', '#4f9a4a'], 14);
     speckle(c, r, ['#79c76c', '#86d277'], 6);
     if (v === 3) { P(c, 5, 6, '#fff'); P(c, 4, 6, '#ffe36e'); P(c, 11, 11, '#fff'); }
+    if (v === 4) { P(c, 4, 9, '#3f8a3a'); P(c, 5, 8, '#3f8a3a'); P(c, 5, 9, '#4f9a4a'); P(c, 11, 4, '#3f8a3a'); P(c, 12, 3, '#3f8a3a'); }
+    if (v === 5) { P(c, 7, 7, '#a89a7a'); P(c, 8, 7, '#c8bc9c'); P(c, 8, 8, '#8a7e62'); }
+    if (v === 6) { P(c, 3, 3, '#3f8a3a'); P(c, 4, 3, '#4f9a4a'); P(c, 3, 4, '#4f9a4a'); P(c, 10, 10, '#3f8a3a'); P(c, 11, 10, '#4f9a4a'); P(c, 10, 11, '#4f9a4a'); }
+    if (v === 7) { R(c, 2, 9, 5, 4, '#7fb866'); P(c, 3, 9, '#9ad07c'); R(c, 9, 3, 4, 3, '#7fb866'); }
   },
   hd(c, r, f, v) {
     grassHD(c, r, 16);
+    if (v === 4) for (const [x, y] of [[6, 20], [20, 8], [25, 24]]) { R(c, x, y, 1, 4, '#3f8a3a'); R(c, x + 1, y - 1, 1, 5, '#4f9a4a'); R(c, x + 2, y + 1, 1, 3, '#3f8a3a'); P(c, x + 1, y - 1, '#79c76c'); }
+    if (v === 5) for (const [x, y] of [[9, 9], [22, 20], [14, 25]]) { Pw(c, x, y, '#c8bc9c'); Pw(c, x + 1, y, '#a89a7a'); Pw(c, x, y + 1, '#a89a7a'); Pw(c, x + 1, y + 1, '#8a7e62'); }
+    if (v === 6) for (const [x, y] of [[8, 8], [21, 14], [11, 23]]) { for (const [dx, dy] of [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]]) Pw(c, x + dx, y + dy, (dx + dy) % 2 ? '#4f9a4a' : '#3f8a3a'); }
+    if (v === 7) { R(c, 4, 18, 11, 8, '#7fb866'); R(c, 4, 18, 11, 1, '#9ad07c'); R(c, 18, 6, 9, 6, '#7fb866'); R(c, 18, 6, 9, 1, '#9ad07c'); }
     if (v === 3) {
       for (const [x, y] of [[10, 12], [22, 22]]) {
         P(c, x, y - 1, '#ffffff'); P(c, x - 1, y, '#ffffff'); P(c, x + 1, y, '#e8ecf2'); P(c, x, y + 1, '#e8ecf2'); P(c, x, y, '#ffe36e');
@@ -283,11 +291,12 @@ defineTile('grass', {
   },
 });
 defineTile('flowers', {
-  variants: 2,
+  variants: 6,
   draw(c, r, f, v) {
     R(c, 0, 0, 16, 16, '#62b35b');
     speckle(c, r, ['#55a34f', '#4f9a4a'], 10);
-    const cols = v ? ['#ff6f91', '#fff'] : ['#ffd23f', '#ff8fb1'];
+    const FC = [['#ffd23f', '#ff8fb1'], ['#ff6f91', '#fff'], ['#b48aff', '#e6d4ff'], ['#6fb4ff', '#ffffff'], ['#ff5a4a', '#ffd23f'], ['#ffffff', '#ffd2e6']];
+    const cols = FC[v % 6];
     for (const [x, y, i] of [[3, 3, 0], [11, 5, 1], [6, 10, 1], [12, 12, 0], [2, 13, 1]]) {
       const pc = cols[i];
       P(c, x, y - 1, pc); P(c, x - 1, y, pc); P(c, x + 1, y, pc); P(c, x, y + 1, pc); P(c, x, y, '#ffe36e');
@@ -295,7 +304,7 @@ defineTile('flowers', {
   },
   hd(c, r, f, v) {
     grassHD(c, r, 10);
-    const cols = v ? ['#ff6f91', '#ffffff'] : ['#ffd23f', '#ff8fb1'];
+    const cols = [['#ffd23f', '#ff8fb1'], ['#ff6f91', '#ffffff'], ['#b48aff', '#e6d4ff'], ['#6fb4ff', '#ffffff'], ['#ff5a4a', '#ffd23f'], ['#ffffff', '#ffd2e6']][v % 6];
     for (const [x, y, i] of [[7, 7, 0], [23, 11, 1], [13, 21, 1], [25, 25, 0], [5, 27, 1]]) flowerHD(c, x, y, cols[i]);
   },
 });
@@ -561,13 +570,16 @@ const TREE_PAL = [
   ['#6a2a14', '#9a4220', '#c4622c', '#e08a3c', '#f2b254'], // 6: autumn maple
   ['#7a5c0c', '#a8830f', '#d4aa1c', '#ecc83a', '#f8e272'], // 7: ginkgo yellow
   ['#1a3a2a', '#26503a', '#34684c', '#4a8462', '#68a07c'], // 8: dark evergreen
+  ['#5a2a3a', '#843e56', '#aa5a74', '#cc7e98', '#e6a4b8'], // 9: purple-leaf plum
+  ['#2a5a3a', '#3c7c50', '#52a068', '#76c488', '#a0e2b0'], // 10: cool blue-green
+  ['#7a6a1c', '#a08e2a', '#c4b43e', '#dccc62', '#eee294'], // 11: dry yellow-green
 ];
 defineTile('tree', {
-  solid: true, obj: true, variants: 9,
+  solid: true, obj: true, variants: 12,
   draw(c, r, f, v) {
     shadowEllipse(c, 8, 14, 6, 2);
     R(c, 7, 10, 3, 5, '#7a4f2a'); R(c, 7, 10, 1, 5, '#94653a');
-    const pal = TREE_PAL[v % 9];
+    const pal = TREE_PAL[v % 12];
     if (v === 5) { for (let i = 0; i < 4; i++) R(c, 8 - 1 - i, 3 + i * 2, 2 + i * 2, 2, i % 2 ? pal[2] : pal[1]); P(c, 7, 2, pal[3]); return; }
     if (v === 8) { disc(c, 8, 6, 5, pal[0]); disc(c, 8, 6, 4, pal[1]); disc(c, 7, 4, 2, pal[3]); return; }
     if (v === 2) { disc(c, 8, 6, 4, pal[1]); R(c, 4, 3, 8, 8, pal[1]); disc(c, 8, 5, 4, pal[2]); P(c, 6, 3, pal[4]); return; }
@@ -575,7 +587,7 @@ defineTile('tree', {
     disc(c, 6, 4, 2, pal[3]); P(c, 10, 5, pal[3]); P(c, 11, 4, pal[3]); P(c, 5, 8, pal[3]);
   },
   hd(c, r, f, v) {
-    const pal = TREE_PAL[v % 9];
+    const pal = TREE_PAL[v % 12];
     shadowEllipse(c, 16, 28, v === 3 ? 13 : 11, 3);
     if (v === 5) { // conifer: stacked skirts on a thin trunk
       trunkHD(c, 14, 22, 7, '#6a4426');
@@ -611,17 +623,17 @@ defineTile('tree', {
   },
 });
 defineTile('sakura', {
-  solid: true, obj: true,
+  solid: true, obj: true, variants: 3,
   draw(c, r) {
     shadowEllipse(c, 8, 14, 6, 2);
     R(c, 7, 10, 3, 5, '#6e4428');
     disc(c, 8, 6, 6, '#d97aa0'); disc(c, 8, 6, 5, '#f2a7c3');
     disc(c, 6, 4, 2, '#ffd3e3'); speckle(c, r, ['#ffe8f0', '#e88fb2'], 10, 3, 1, 10, 9);
   },
-  hd(c, r) {
+  hd(c, r, f, v) {
     shadowEllipse(c, 16, 28, 11, 3);
     trunkHD(c, 14, 20, 9, '#6e4428');
-    const pal = ['#b8577f', '#d97aa0', '#f2a7c3', '#ffc6da', '#ffe3ee'];
+    const pal = [['#b8577f', '#d97aa0', '#f2a7c3', '#ffc6da', '#ffe3ee'], ['#c24a78', '#e0588c', '#f48cb4', '#ffb4d0', '#ffd8e8'], ['#c8aab4', '#e0c8d2', '#f2e2e8', '#fbf0f4', '#ffffff']][v % 3];
     blobs(c, CANOPY, pal);
     outline(c, { tint: 0.3 });
     speckle(c, r, ['#ffffff', '#ffe8f0', '#e88fb2'], 14, 7, 4, 18, 14);
@@ -806,18 +818,19 @@ defineTile('mailbox', {
   },
 });
 defineTile('planter', {
-  solid: true, obj: true,
+  solid: true, obj: true, variants: 3,
   draw(c, r) {
     R(c, 1, 8, 14, 7, '#8a5a33'); R(c, 1, 8, 14, 1, '#b07a46');
     disc(c, 5, 7, 3, '#3f8a3a'); disc(c, 11, 7, 3, '#3f8a3a');
     for (const [x, y, col] of [[4, 5, '#ff6f91'], [7, 7, '#ffd23f'], [11, 5, '#ff6f91'], [12, 8, '#fff']]) P(c, x, y, col);
   },
-  hd(c) {
+  hd(c, r, f, v) {
+    const FL = [['#ff6f91', '#ffd23f', '#ff6f91', '#ffffff', '#ffd23f', '#ffffff'], ['#b48aff', '#e6d4ff', '#b48aff', '#6fb4ff', '#e6d4ff', '#ffffff'], ['#ff5a4a', '#ffd23f', '#ff8a3a', '#ffd23f', '#ff5a4a', '#ffffff']][v % 3];
     blobs(c, [[10, 12, 6], [22, 12, 6], [16, 14, 5], [6, 16, 4], [26, 16, 4]], ['#1f4a24', '#2f6b34', '#3f8a3a', '#5fae4f', '#86cc6c']);
     R(c, 2, 16, 28, 14, '#8a5a33'); R(c, 2, 16, 28, 2, '#b07a46'); R(c, 2, 16, 28, 1, '#c8925c'); R(c, 2, 18, 28, 1, '#6e4428');
     for (const x of [9, 16, 23]) R(c, x, 19, 1, 10, '#7a4e2c');
     R(c, 2, 19, 1, 10, '#9e6a3c'); R(c, 2, 29, 28, 1, '#5a3a20');
-    for (const [x, y, col] of [[8, 9, '#ff6f91'], [14, 13, '#ffd23f'], [22, 9, '#ff6f91'], [24, 14, '#ffffff'], [5, 14, '#ffd23f'], [18, 8, '#ffffff']]) {
+    for (const [x, y, col] of [[8, 9, FL[0]], [14, 13, FL[1]], [22, 9, FL[2]], [24, 14, FL[3]], [5, 14, FL[4]], [18, 8, FL[5]]]) {
       R(c, x, y, 2, 2, col); P(c, x, y, shade(col, 0.5)); P(c, x + 1, y + 1, shade(col, -0.2));
     }
     outline(c);
