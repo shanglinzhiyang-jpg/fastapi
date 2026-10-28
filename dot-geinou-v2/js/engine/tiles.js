@@ -558,25 +558,35 @@ const TREE_PAL = [
   ['#2a5a1c', '#3e7a24', '#5a9c32', '#82bc48', '#aedc6a'],
   ['#4a6a1c', '#6a8c28', '#8cae3a', '#b0cc56', '#d2e47e'],
   ['#143a28', '#1f5236', '#2d6e46', '#438a58', '#62a874'],
+  ['#6a2a14', '#9a4220', '#c4622c', '#e08a3c', '#f2b254'], // 6: autumn maple
+  ['#7a5c0c', '#a8830f', '#d4aa1c', '#ecc83a', '#f8e272'], // 7: ginkgo yellow
+  ['#1a3a2a', '#26503a', '#34684c', '#4a8462', '#68a07c'], // 8: dark evergreen
 ];
 defineTile('tree', {
-  solid: true, obj: true, variants: 6,
+  solid: true, obj: true, variants: 9,
   draw(c, r, f, v) {
     shadowEllipse(c, 8, 14, 6, 2);
     R(c, 7, 10, 3, 5, '#7a4f2a'); R(c, 7, 10, 1, 5, '#94653a');
-    const pal = TREE_PAL[v % 6];
+    const pal = TREE_PAL[v % 9];
     if (v === 5) { for (let i = 0; i < 4; i++) R(c, 8 - 1 - i, 3 + i * 2, 2 + i * 2, 2, i % 2 ? pal[2] : pal[1]); P(c, 7, 2, pal[3]); return; }
+    if (v === 8) { disc(c, 8, 6, 5, pal[0]); disc(c, 8, 6, 4, pal[1]); disc(c, 7, 4, 2, pal[3]); return; }
     if (v === 2) { disc(c, 8, 6, 4, pal[1]); R(c, 4, 3, 8, 8, pal[1]); disc(c, 8, 5, 4, pal[2]); P(c, 6, 3, pal[4]); return; }
     disc(c, 8, 6, 6, pal[1]); disc(c, 8, 6, 5, pal[2]);
     disc(c, 6, 4, 2, pal[3]); P(c, 10, 5, pal[3]); P(c, 11, 4, pal[3]); P(c, 5, 8, pal[3]);
   },
   hd(c, r, f, v) {
-    const pal = TREE_PAL[v % 6];
+    const pal = TREE_PAL[v % 9];
     shadowEllipse(c, 16, 28, v === 3 ? 13 : 11, 3);
     if (v === 5) { // conifer: stacked skirts on a thin trunk
       trunkHD(c, 14, 22, 7, '#6a4426');
       const tiers = [[16, 3, 5], [16, 8, 7], [16, 14, 9], [16, 20, 11]];
       for (const [x, y, w] of tiers) blobs(c, [[x - w * 0.55, y + 5, w * 0.5], [x + w * 0.55, y + 5, w * 0.5], [x, y + 3, w * 0.62], [x, y + 6, w * 0.5]], pal, { bias: -0.04 });
+      outline(c);
+      return;
+    }
+    if (v === 8) { // dense dark evergreen, a rounder crown set low
+      trunkHD(c, 14, 23, 6, '#5a3c22');
+      blobs(c, [[16, 8, 6], [9, 14, 6], [23, 14, 6], [16, 14, 8], [11, 20, 6], [21, 20, 6], [16, 22, 6]], pal, { bias: -0.08 });
       outline(c);
       return;
     }
@@ -634,14 +644,16 @@ defineTile('bush', {
   },
 });
 defineTile('hedge', {
-  solid: true,
+  solid: true, variants: 4,
   draw(c, r) {
     R(c, 0, 0, 16, 16, '#2f6b34'); R(c, 0, 0, 16, 12, '#4a9a4a');
     speckle(c, r, ['#5fb35b', '#3f8a3a'], 30, 0, 0, 16, 12); R(c, 0, 0, 16, 1, '#74c26a');
   },
   // clipped hedge: leafy top face, darker front face, scalloped edge between
-  hd(c, r) {
-    R(c, 0, 0, 32, 32, '#2f6b34'); R(c, 0, 0, 32, 24, '#4a9a4a');
+  hd(c, r, f, v) {
+    // R29: 0 plain clipped hedge, 1 azalea (pink blossoms), 2 pale boxwood, 3 dark yew
+    const H = [['#2f6b34', '#4a9a4a'], ['#2f6b34', '#4a9a4a'], ['#4a7a28', '#7aac3e'], ['#1f4a2a', '#2f6b3c']][v % 4];
+    R(c, 0, 0, 32, 32, H[0]); R(c, 0, 0, 32, 24, H[1]);
     for (let i = 0; i < 26; i++) {
       const x = RND(r, 32), y = 1 + RND(r, 20);
       Pw(c, x, y, '#5fb35b'); Pw(c, x + 1, y, '#5fb35b'); Pw(c, x, y - 1, '#74c26a'); Pw(c, x + 1, y + 1, '#3f8a3a');
@@ -651,6 +663,7 @@ defineTile('hedge', {
     for (let i = 0; i < 18; i++) { const x = RND(r, 32), y = 26 + RND(r, 5); Pw(c, x, y, '#3a7d3e'); Pw(c, x + 1, y + 1, '#245428'); }
     R(c, 0, 31, 32, 1, '#22502a');
     R(c, 0, 0, 32, 1, '#86cc78'); dither(c, 0, 1, 32, 1, '#74c26a');
+    if (v === 1) for (let i = 0; i < 16; i++) { const x = 1 + RND(r, 30), y = 2 + RND(r, 20); Pw(c, x, y, i % 3 ? '#f2a7c3' : '#ffffff'); Pw(c, x + 1, y, '#d97aa0'); }
   },
 });
 defineTile('fence', {

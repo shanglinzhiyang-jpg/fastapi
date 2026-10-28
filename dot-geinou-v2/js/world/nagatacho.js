@@ -204,12 +204,12 @@ tile('nagatacho_gatepost', { solid: true, obj: true }, (c) => {
   outline(c);
 });
 // ---- Japanese black pine (クロマツ), pruned in tiers
-tile('nagatacho_pine', { solid: true, obj: true, variants: 2 }, (c, r, f, v) => {
+tile('nagatacho_pine', { solid: true, obj: true, variants: 4 }, (c, r, f, v) => {
   shadowEllipse(c, 16, 29, 11, 3);
   const tr = ['#4a3424', '#6a4a30', '#8a6440'];
   for (let i = 0; i < 14; i++) { const x = 14 + Math.round(Math.sin(i / 3 + v) * 2); R(c, x, 16 + i, 4, 1, tr[1]); P(c, x, 16 + i, tr[2]); P(c, x + 3, 16 + i, tr[0]); }
   const pal = ['#1f3f2a', '#2f5a36', '#3f7442', '#5a9050', '#7aac62'];
-  const tiers = v ? [[16, 6, 8, 3.5], [10, 12, 6, 3], [22, 15, 6, 3]] : [[16, 5, 7, 3.5], [21, 11, 6, 3], [10, 15, 7, 3]];
+  const tiers = [[[16, 5, 7, 3.5], [21, 11, 6, 3], [10, 15, 7, 3]], [[16, 6, 8, 3.5], [10, 12, 6, 3], [22, 15, 6, 3]], [[14, 6, 7, 3.2], [22, 12, 6, 3], [9, 17, 6, 3]], [[17, 4, 6, 3], [11, 10, 7, 3.2], [22, 14, 7, 3.2], [16, 19, 6, 2.6]]][v % 4];
   for (const [x, y, rw, rh] of tiers) {
     const lumps = [];
     for (let k = -2; k <= 2; k++) lumps.push([x + k * rw * 0.42, y + Math.abs(k) * 0.4, rh + 0.6 - Math.abs(k) * 0.3]);
