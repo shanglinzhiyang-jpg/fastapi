@@ -73,6 +73,23 @@ const SCENES = [
   { title: 'サプライズパーティー', beats: 'DWTNWKTW' },
   { title: 'お化け屋敷でデート', beats: 'DNTDOWKT' },
   { title: '料理コンテストの審査', beats: 'TKDWONWK' },
+  // R29: more scenes (W 笑う / N 泣く / O 怒る / D 驚く / K キメ顔 / T 照れる)
+  { title: 'プロポーズの返事', beats: 'TDNWDKTW' },
+  { title: '遅刻して先生に見つかった', beats: 'DNTOWNKD' },
+  { title: '犯人は意外な人物だった', beats: 'DOKDNOKW' },
+  { title: '手紙を受け取った日', beats: 'DWNWTNKW' },
+  { title: '新入社員の初出勤', beats: 'TDWTKDNW' },
+  { title: '宿敵との握手', beats: 'OKODWKNW' },
+  { title: 'ふるさとの駅で', beats: 'NWNDWNTK' },
+  { title: 'ひな壇でのトーク', beats: 'WDKWTDKW' },
+  { title: '大一番のスタートライン', beats: 'KTDKOWKD' },
+  { title: '忘れ物に気づいた朝', beats: 'DNODTNOW' },
+  { title: '手作りのお弁当', beats: 'TWDWKTWN' },
+  { title: 'ナレーション収録の日', beats: 'KWKDWTKW' },
+  { title: 'サプライズ告白', beats: 'DTNWDTKN' },
+  { title: '雨の日の再会', beats: 'NDNWNKTW' },
+  { title: 'ワイドショーのコメント', beats: 'WOKDWNKO' },
+  { title: '子どもの運動会', beats: 'WDNWKTWN' },
 ];
 
 const TATE_CALLS = ['悪党ども、かかってこい！', '囲まれた！斬り抜けろ！', '物陰から刺客が！', '一気に片づけるぞ！', '背後にも気をつけろ！', '用心棒のおでましだ！', 'まだまだ来るぞ！'];

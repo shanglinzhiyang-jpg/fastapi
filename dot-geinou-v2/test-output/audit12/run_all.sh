@@ -77,4 +77,7 @@ node test-output/progress/r28/audit_save.mjs heisei > "$OUT/r28_audit_save.txt" 
 row "R28 save/reload audit" "$(tail -1 "$OUT/r28_audit_save.txt")"
 node test-output/fix3-learning/gloss_era.mjs > "$OUT/r28_gloss_era.txt" 2>&1
 row "R28 glossary era check" "$(tail -1 "$OUT/r28_gloss_era.txt")"
+# 16. [R29] ミニゲームの中身をふやした（クイズ・ツッコミ・トーク・原稿読み・大喜利・漫才・コント・ズッコケ・感情演技）
+node test-output/progress/r29/mg_t1.mjs > "$OUT/r29_mg_t1.txt" 2>&1
+row "R29 minigame content" "$(tail -1 "$OUT/r29_mg_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"
