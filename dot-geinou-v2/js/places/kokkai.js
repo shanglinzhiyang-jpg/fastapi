@@ -526,7 +526,7 @@ const shortPost = (label) => String(label || '').replace(/^内閣/, '').replace(
 // A long text (a statute from crime.js) as message pages that break between sentences: sentences
 // are grouped greedily into pages of at most 3 wrapped lines of the message window (576px, 16px).
 function fitPages(g, str) {
-  const parts = String(str || '').split(/(?<=。)/).map((s) => s.trim()).filter(Boolean);
+  const parts = (String(str || '').match(/[^。]*。|[^。]+$/g) || []).map((s) => s.trim()).filter(Boolean);
   const lines = (s) => { try { return wrap(g.ctx, s, 576, 16).length; } catch (e) { return Math.ceil(Array.from(s).length / 34); } };
   const out = [];
   for (const s of parts) {

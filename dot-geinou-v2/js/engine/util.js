@@ -102,7 +102,7 @@ export function yenText(str) {
   return s
     .replace(/¥(?!⁠)(\d[\d,]*)/g, (m, d) => fmtMoney(num(d)))
     // 「100円で」 but not 「100円玉」 (a coin) and not an amount already marked
-    .replace(/(?<![⁠\d,])(\d[\d,]*)円(?!玉)/g, (m, d) => YEN_MARK + eraPrice(num(d)).toLocaleString('ja-JP') + '円');
+    .replace(/(\d[\d,]*)円(?!玉)/g, (m, d, off, all) => (off > 0 && /[⁠\d,]/.test(all[off - 1]) ? m : YEN_MARK + eraPrice(num(d)).toLocaleString('ja-JP') + '円'));
 }
 
 export const pick = (arr, r = Math.random) => arr[Math.floor(r() * arr.length)];

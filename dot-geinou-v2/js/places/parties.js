@@ -84,7 +84,7 @@ const device = (g) => { try { return eraOf(g.state).deviceShort || 'スマホ'; 
 // Split a long text into pages of up to 3 lines of about 34 characters.
 function paged(str, width = 34) {
   const lines = [];
-  for (const sent of String(str || '').split(/(?<=。)/)) {
+  for (const sent of (String(str || '').match(/[^。]*。|[^。]+$/g) || [])) {
     let s = sent.trim();
     while (s.length > width) { lines.push(s.slice(0, width)); s = s.slice(width); }
     if (s) lines.push(s);
