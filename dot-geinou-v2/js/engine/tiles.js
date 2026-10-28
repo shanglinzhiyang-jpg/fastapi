@@ -2397,3 +2397,19 @@ moreVariants('path', 4, (c, r, v) => {
   if (v === 2) { R(c, 6, 0, 3, 32, 'rgba(120,90,50,0.22)'); R(c, 23, 0, 3, 32, 'rgba(120,90,50,0.22)'); }
   if (v === 3) for (const [x, y, col] of [[5, 6, '#c0782c'], [20, 12, '#d89a38'], [12, 22, '#a85a24'], [26, 26, '#d89a38'], [9, 14, '#8a6a30']]) { Pw(c, x, y, col); Pw(c, x + 1, y, col); Pw(c, x, y + 1, shade(col, -0.2)); }
 });
+// R29: colour variants of the small outdoor objects: the object is drawn as before, then tinted (only the pixels already drawn) by the variant's colour
+function tintVariants(id, tints) {
+  moreVariants(id, tints.length, (c, r, v) => {
+    const t = tints[v % tints.length];
+    if (!t) return;
+    c.save(); c.globalCompositeOperation = 'source-atop'; c.fillStyle = t; c.fillRect(0, 0, 32, 32); c.restore();
+  });
+}
+tintVariants('vending', [null, 'rgba(220,60,60,0.38)', 'rgba(60,150,90,0.38)', 'rgba(240,200,60,0.34)', 'rgba(150,150,170,0.42)']);
+tintVariants('trash', [null, 'rgba(60,120,200,0.34)', 'rgba(60,150,90,0.34)', 'rgba(200,170,60,0.3)']);
+tintVariants('mailbox', [null, 'rgba(40,90,200,0.4)', 'rgba(70,70,80,0.4)']);
+tintVariants('bicycle', [null, 'rgba(60,110,220,0.42)', 'rgba(220,70,110,0.4)', 'rgba(60,170,110,0.4)', 'rgba(120,120,130,0.45)']);
+tintVariants('fence', [null, 'rgba(60,130,80,0.45)', 'rgba(130,90,50,0.45)', 'rgba(60,70,90,0.4)']);
+tintVariants('railing', [null, 'rgba(60,130,80,0.4)', 'rgba(130,90,50,0.4)']);
+tintVariants('sign_board', [null, 'rgba(60,110,200,0.32)', 'rgba(60,150,90,0.32)']);
+tintVariants('cone', [null, 'rgba(255,255,255,0.18)']);
