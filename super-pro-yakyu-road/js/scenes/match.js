@@ -4,57 +4,19 @@
 // runners and the stats are game.js. START: the menu (オート for the inning / to the end, 投手交代, 試合にもどる).
 import { W, H, clamp, lerp, gauss, sound, txt, panel, menuList, inRect, roundRect } from '../core.js';
 import { teamOf, PITCHES, pname, pfull, grade } from '../data.js';
-import { newGame, applyPA, simPA, battingSide, fieldingSide, batterOf, pitcherOf, nextBatters, maybeChange, fatigue, addPitches, commitGame, defenseOf, balOf } from '../game.js';
+import { newGame, applyPA, applyPlay, simPA, battingSide, fieldingSide, batterOf, pitcherOf, nextBatters, maybeChange, fatigue, addPitches, commitGame, defenseOf, balOf } from '../game.js';
 import { drawChibi, lookOf, drawBattingView, drawZone, drawBall, drawCursor, zoneToScreen, ZONE, RELEASE, drawField, fieldToScreen, fenceDist, FIELDER_SPOTS, drawScoreboard, badge, pitchChip, posShort } from '../draw.js';
 import { avg, fmt3, era } from '../league.js';
 import { MatchView, pitchPoint, zoneField } from '../gfx/match3d.js';
+import { resolveBall, contactBall } from '../play.js';
 
 const SLOW = 1.75; // the pitch takes this many times its real flight time (playable)
-const KIND_TEXT = { '1B': 'ヒット！', '2B': 'ツーベース！', '3B': 'スリーベース！', HR: 'ホームラン！！', GO: 'ゴロアウト', FO: 'フライアウト', LO: 'ライナーアウト', PO: 'ポップフライ', DP: 'ゲッツー' };
+const KIND_TEXT = { '1B': 'ヒット！', '2B': 'ツーベース！', '3B': 'スリーベース！', HR: 'ホームラン！！', GO: 'ゴロアウト', FO: 'フライアウト', LO: 'ライナーアウト', PO: 'ポップフライ', DP: 'ゲッツー', FC: 'フィルダースチョイス' };
 
 // ---------------------------------------------------------------- the batted-ball model (shared by you and the computer)
 // q: contact quality 0..1, dyN: the ball below (+) / above (−) the sweet spot, e: timing (frames, − early), win: the timing window
-export function battedBall({ bat, q, dyN, e, win, power: pw, bal, rng = Math.random }) {
-  const pull = bat.bats === 'L' ? 1 : -1; // a right-handed batter pulls to left field (negative angle)
-  const angle = 14 - dyN * 30 + gauss(rng) * 5 + (pw ? 5 : 0);
-  const spray = clamp((-e / win) * 32 * -pull + gauss(rng) * 9, -60, 60);
-  const v = (98 + bat.power * 0.42 + (pw ? 15 : 0)) * (0.48 + 0.52 * q) * (1 + (bal.hr - 1) * 0.06);
-  const vm = v / 3.6, th = (clamp(angle, -10, 80) * Math.PI) / 180;
-  const dist = angle <= 4 ? clamp(vm * 1.2, 12, 50) : (vm * vm * Math.sin(2 * th)) / 9.8 * 0.8;
-  return { angle, spray, v, dist };
-}
-const IF_POS = { '1B': 27, '2B': 12, SS: -12, '3B': -27 };
-const OF_POS = { LF: -28, CF: 0, RF: 28 };
-export function judge(bb, GS, L, rng = Math.random) {
-  const bal = balOf(L), def = defenseOf(GS, L), bat = batterOf(GS, L);
-  const deg = bb.spray, dist = bb.dist;
-  if (Math.abs(deg) > 45) return { kind: 'FOUL', land: land(deg, Math.min(dist, 60)) };
-  const fence = fenceDist(deg) / (1 + (bal.hr - 1) * 0.16);
-  const nearIF = Object.entries(IF_POS).sort((a, b) => Math.abs(a[1] - deg) - Math.abs(b[1] - deg))[0];
-  const nearOF = Object.entries(OF_POS).sort((a, b) => Math.abs(a[1] - deg) - Math.abs(b[1] - deg))[0];
-  const dAdj = -(def - 58) / 300 + (bat.speed - 55) / 600;
-  const H = (p) => rng() < clamp(p * bal.hit + dAdj, 0.02, 0.97);
-  if (bb.angle < 8) {
-    const gap = Math.min(...Object.values(IF_POS).map((a) => Math.abs(a - deg))) / 14;
-    if (H(0.16 + (bb.v - 110) / 200 + gap * 0.22)) return { kind: Math.abs(deg) > 38 && bb.v > 140 && rng() < 0.4 ? '2B' : '1B', land: land(deg, clamp(dist + 30, 40, 70)), ground: true };
-    return { kind: 'GO', where: posName(nearIF[0]), land: land(deg, clamp(dist, 18, 34)), ground: true, fielder: nearIF[0] };
-  }
-  if (bb.angle > 52) return { kind: 'PO', where: posName(dist < 30 ? nearIF[0] : nearOF[0]), land: land(deg, clamp(dist, 10, 60)), fielder: dist < 30 ? nearIF[0] : nearOF[0] };
-  if (dist >= fence) return { kind: 'HR', land: land(deg, dist + 6) };
-  const gapOF = Math.min(...Object.values(OF_POS).map((a) => Math.abs(a - deg))) / 14;
-  if (bb.angle < 22) {
-    if (dist < 32) { if (H(0.25)) return { kind: '1B', land: land(deg, 40) }; return { kind: 'LO', where: posName(nearIF[0]), land: land(deg, dist), fielder: nearIF[0] }; }
-    if (H(0.62 + (bb.v - 120) / 260 + gapOF * 0.1)) return { kind: dist > 82 && gapOF > 0.6 ? (rng() < 0.12 + (bat.speed - 55) / 300 ? '3B' : '2B') : '1B', land: land(deg, dist) };
-    return { kind: 'LO', where: posName(nearOF[0]), land: land(deg, dist), fielder: nearOF[0] };
-  }
-  if (dist > fence - 10 && gapOF > 0.5 && H(0.7)) return { kind: rng() < 0.18 + (bat.speed - 55) / 250 ? '3B' : '2B', land: land(deg, fence - 3) };
-  if (dist > 42 && dist < 66 && H(0.42 + gapOF * 0.1)) return { kind: '1B', land: land(deg, dist) };
-  if (H(0.05)) return { kind: '1B', land: land(deg, dist) };
-  return { kind: 'FO', where: posName(dist < 50 ? nearIF[0] : nearOF[0]), land: land(deg, dist), fielder: dist < 50 ? nearIF[0] : nearOF[0] };
-}
-const land = (deg, d) => ({ x: Math.sin((deg * Math.PI) / 180) * d, y: Math.cos((deg * Math.PI) / 180) * d, deg, d });
-const posName = (k) => ({ '1B': 'ファースト', '2B': 'セカンド', SS: 'ショート', '3B': 'サード', LF: 'レフト', CF: 'センター', RF: 'ライト' })[k] || '';
-
+// how the bat meets the ball (shared by you and the computer): the physics of the contact is play.js
+export function battedBall(o) { return contactBall(o); }
 // the computer pitcher's choice: a pitch and where it ends up
 function cpuPitch(GS, L, rng = Math.random) {
   const p = pitcherOf(GS, L);
@@ -111,7 +73,7 @@ export class Match {
     if (!this.v3) this.v3 = new MatchView(world, { night: this.night });
     const v = this.v3, GS = this.GS, L = this.L;
     v.board(GS, teamOf);
-    if (this.ph === 'bip' && this.bip) { const B = this.bip; v.playBip({ j: B.j, bb: B.bb, tt: clamp(B.t / B.hang, 0, 1), t: B.t, hang: B.hang, f: this.f }); return; }
+    if (this.ph === 'bip' && this.bip) { const B = this.bip; v.playBip({ T: B.T, bb: B.bb, t: B.t / 60, f: this.f }); return; }
     if (world.mode !== 'catcher') world.setView('catcher');
     if (GS.over && this.ph === 'over') return;
     v.cast({ GS, L, lookOf, teamOf, fieldingSide, battingSide, pitcherOf, batterOf });
@@ -206,9 +168,20 @@ export class Match {
       else res = { call: 'inplay', bb: battedBall({ bat, q: d.q, dyN: d.dyN, e: d.e, win: d.win, power: d.power, bal: balOf(L) }) };
     }
     if (res.call === 'inplay') {
-      const j = judge(res.bb, GS, L);
-      if (j.kind === 'FOUL') res = { call: 'foul', bb: res.bb, j };
-      else { this.bip = { bb: res.bb, j, t: 0, hang: clamp(Math.round(30 + res.bb.dist * 0.7 + (res.bb.angle > 30 ? 30 : 0)), 34, 120) }; sound.sfx(j.kind === 'HR' || res.bb.v > 140 ? 'bighit' : 'hit'); this.set('bip'); return; }
+      // the ball in play by physics: the flight, the fielders, the throws, the runners
+      const T = resolveBall(res.bb, this.playState());
+      const fl = T.fl, k = T.play.kind;
+      const endP = k === 'HR' || !fl.land ? fl.rest : res.bb.angle < 8 && T.at ? [T.at.x, T.at.y] : [fl.land.x, fl.land.y];
+      res.bb.dist = Math.hypot(endP[0], endP[1]);
+      if (k === 'FOUL') res = { call: 'foul', bb: res.bb };
+      else {
+        const at = T.at ? [T.at.x, T.at.y] : fl.rest;
+        const j = { kind: k, where: T.play.where, ground: res.bb.angle < 8, land: { x: at[0], y: at[1], deg: (Math.atan2(at[0], at[1]) * 180) / Math.PI, d: Math.hypot(at[0], at[1]) } };
+        const hang = Math.max(40, Math.round(T.end * 60));
+        const decide = k === 'HR' ? Math.max(30, fl.f.length - 40) : Math.max(24, hang - 45);
+        this.bip = { bb: res.bb, j, T, t: 0, hang, decide };
+        sound.sfx(k === 'HR' || res.bb.v > 150 ? 'bighit' : 'hit'); this.set('bip'); return;
+      }
     }
     const c = res.call;
     let word = '';
@@ -225,10 +198,17 @@ export class Match {
     if (GS.strikes >= 3) { this.endPA({ kind: 'K' }); return; }
     this.nextPitch();
   }
+  // the state the physics needs: the batter, the runners, the outs, the nine fielders, the league balance
+  playState() {
+    const GS = this.GS, L = this.L, fs = fieldingSide(GS), T = L.teams[GS[fs]], def = {};
+    for (const id of GS.lineup[fs]) { const pos = (T.pos && T.pos[id]) || L.P[id].pos; if (pos !== 'DH') def[pos] = L.P[id]; }
+    def.P = pitcherOf(GS, L);
+    return { bat: batterOf(GS, L), runners: GS.bases.slice(), outs: GS.outs, def, bal: balOf(L), speedOf: (id) => (L.P[id] ? L.P[id].speed : 50) };
+  }
   endPA(oc) {
     const GS = this.GS, inn = GS.inning, top = GS.top;
-    const text = applyPA(GS, this.L, oc);
-    this.msg = { text: text || '', col: '#ffffff', big: oc.kind === 'HR' };
+    const text = oc.play ? applyPlay(GS, this.L, oc.play) : applyPA(GS, this.L, oc);
+    this.msg = { text: text || '', col: '#ffffff', big: oc.kind === 'HR' || (oc.play && oc.play.kind === 'HR') };
     if (oc.kind === 'K') sound.sfx('out');
     this.changed = GS.over || GS.inning !== inn || GS.top !== top;
     this.set('result');
@@ -297,8 +277,13 @@ export class Match {
       case 'call': if (this.t > 38 || (this.t > 10 && inp.pressed('a'))) this.afterCall(); break;
       case 'bip': {
         const B = this.bip; B.t++;
-        if (B.t === B.hang) { const k = B.j.kind; this.msg = { text: KIND_TEXT[k] || '', col: ['1B', '2B', '3B', 'HR'].includes(k) ? '#ffd23f' : '#cfd8ee', big: k === 'HR' }; if (k === 'HR') sound.sfx('cheer'); else if (['GO', 'FO', 'LO', 'PO'].includes(k)) sound.sfx('out'); }
-        if (B.t > B.hang + 55 || (B.t > B.hang + 12 && inp.pressed('a'))) { const j = B.j; this.bip = null; this.endPA({ kind: j.kind, where: j.where }); }
+        if (B.t === B.decide) {
+          const k = B.j.kind, pl = B.T.play;
+          const text = pl.sf ? '犠牲フライ' : pl.infieldHit ? '内野安打！' : pl.inside ? 'ランニングホームラン！！' : KIND_TEXT[k] || '';
+          this.msg = { text, col: ['1B', '2B', '3B', 'HR'].includes(k) ? '#ffd23f' : '#cfd8ee', big: k === 'HR' };
+          if (k === 'HR' || ['2B', '3B'].includes(k)) sound.sfx('cheer'); else if (['GO', 'FO', 'LO', 'PO', 'DP'].includes(k)) sound.sfx('out');
+        }
+        if (B.t > B.hang + 20 || (B.t > B.decide + 12 && inp.pressed('a'))) { const pl = B.T.play; this.bip = null; this.endPA({ play: pl }); }
         break;
       }
       case 'result': if (this.t > (this.msg && this.msg.big ? 90 : 55) || (this.t > 14 && inp.pressed('a'))) { if (this.GS.over) this.finish(); else if (this.changed) this.set('change'); else this.startPA(); } break;
@@ -399,7 +384,7 @@ export class Match {
     drawScoreboard(c, GS);
     // the messages
     if (this.ph === 'call' && this.msg) txt(c, this.msg.text, W / 2, 150, { size: 40, align: 'center', color: this.msg.col, stroke: 'rgba(0,0,0,0.75)', strokeW: 8 });
-    if ((this.ph === 'result' || (this.ph === 'bip' && this.bip && this.bip.t >= this.bip.hang)) && this.msg) {
+    if ((this.ph === 'result' || (this.ph === 'bip' && this.bip && this.bip.t >= this.bip.decide)) && this.msg) {
       const big = this.msg.big;
       const k = Math.min(1, this.t / 10);
       c.save(); c.translate(W / 2, big ? 190 : 150); c.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k);
@@ -454,8 +439,18 @@ export class Match {
   }
   // the batted ball on the 3D field: just the numbers (the field itself is 3D)
   drawBipInfo(c) {
-    const bb = this.bip.bb;
-    txt(c, `打球速度 ${Math.round(bb.v)}km/h　角度 ${Math.round(bb.angle)}°　飛距離 ${Math.round(bb.dist)}m`, W / 2, H - 16, { size: 13, align: 'center', color: '#ffffff', stroke: 'rgba(0,0,0,0.6)', strokeW: 4 });
+    const B = this.bip, bb = B.bb, w = this.g.world, v = this.v3;
+    // the ball is small from up here: a glow on it, and the spot a fly ball comes down (落下点)
+    const fl = B.T.fl, t = B.t / 60;
+    if (fl.land && bb.angle > 10 && t < fl.land.t && !fl.hr) {
+      const p = w.project(fl.land.x, fl.land.y, 0), q = w.project(fl.land.x + 1.2, fl.land.y, 0), r = q && p ? Math.max(6, Math.abs(q.x - p.x)) : 8;
+      if (p) { c.save(); c.strokeStyle = `rgba(255,214,60,${0.6 + Math.sin(this.f * 0.3) * 0.3})`; c.lineWidth = 3; c.beginPath(); c.ellipse(p.x, p.y, r, r * 0.45, 0, 0, 7); c.stroke(); c.restore(); }
+    }
+    if (v && v.lastBall) {
+      const [x, y, h] = v.lastBall, p = w.project(x, y, Math.max(0.07, h));
+      if (p) { c.save(); c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.arc(p.x, p.y, 9, 0, 7); c.fill(); c.fillStyle = '#ffffff'; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 1.5; c.beginPath(); c.arc(p.x, p.y, 4.5, 0, 7); c.fill(); c.stroke(); c.restore(); }
+    }
+    txt(c, `打球速度 ${Math.round(bb.v)}km/h　角度 ${Math.round(bb.angle)}°　${bb.angle < 8 ? '打球の位置' : '飛距離'} ${Math.round(bb.dist)}m`, W / 2, H - 16, { size: 13, align: 'center', color: '#ffffff', stroke: 'rgba(0,0,0,0.6)', strokeW: 4 });
   }
   drawBip(c) {
     const B = this.bip, GS = this.GS, L = this.L;

@@ -15,6 +15,9 @@ const ff = (n) => page.evaluate((n) => window.__ff(n), n);
 const shot = async (name) => { await ff(1); await page.screenshot({ path: `${OUT}/${name}.png` }); console.log('shot', name); };
 const has3d = await page.evaluate(() => !!window.__spr.g.world);
 console.log('3d', has3d);
+if (process.argv[2] === 'fly') await page.evaluate(() => { window.__flyAim = 0.32; });
+if (process.argv[2] === 'gb') await page.evaluate(() => { window.__flyAim = -0.3; });
+const TAG = process.argv[2] ? '_' + process.argv[2] : '';
 // a match where you bat first (your club is the visitor), a day game
 await page.evaluate(async () => {
   const { Match } = await import('/js/scenes/match.js');
@@ -35,16 +38,19 @@ for (let tries = 0; tries < 8; tries++) {
     while (m.ph === 'windup') await window.__ff(1);
     const pi = m.pi;
     while (m.ph === 'flight' && m.t < pi.dur - 1) await window.__ff(1);
-    m.swing = { frame: pi.dur, x: pi.fx, y: pi.fy + 0.05, power: false };
+    m.swing = { frame: pi.dur, x: pi.fx, y: pi.fy + (window.__flyAim || 0.05), power: false };
     await window.__ff(2);
     return m.ph;
   });
   if (ph === 'bip') break;
 }
-await ff(1); await shot('m3_bip_start');
-await ff(25); await shot('m3_bip_mid');
-await page.evaluate(async () => { const m = window.__spr.g.top; while (m.ph === 'bip' && m.bip.t < m.bip.hang + 5) await window.__ff(1); });
-await shot('m3_bip_end');
+const bipInfo = await page.evaluate(() => { const m = window.__spr.g.top; return m.bip ? { kind: m.bip.T.play.kind, end: m.bip.T.end, who: m.bip.T.who, bb: m.bip.bb } : null; });
+console.log('bip', JSON.stringify(bipInfo));
+await ff(1); await shot('m3_bip_0');
+for (const [k, n] of [[1, 40], [2, 50], [3, 60], [4, 90]]) { await ff(n); await shot(`m3_bip${TAG}_${k}`); }
+await page.evaluate(async () => { const m = window.__spr.g.top; while (m.ph === 'bip') await window.__ff(5); await window.__ff(5); });
+await shot('m3_bip_result');
+console.log('after', await page.evaluate(() => window.__spr.g.top.GS.lastText));
 // pitching: your club at home, a night game
 await page.evaluate(async () => {
   const { Match } = await import('/js/scenes/match.js');

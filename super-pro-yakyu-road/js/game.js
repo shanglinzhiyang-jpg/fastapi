@@ -131,6 +131,62 @@ export function applyPA(GS, L, oc, rng = Math.random) {
   if (GS.outs >= 3) endHalf(GS, L);
   return text;
 }
+// a ball in play worked out by physics (play.js): the batter's and every runner's end exactly as they happened.
+// play = { kind: 1B 2B 3B HR GO FO LO PO DP FC, batterTo: -1 (out) | 1..4, runners: [{ i (base 0..2), to: -1 | 1..3 | 4 }],
+//          where (a position), sf (a sacrifice fly), infieldHit, inside (an inside-the-park home run) }
+const POS_JP = { P: 'ピッチャー', C: 'キャッチャー', '1B': 'ファースト', '2B': 'セカンド', SS: 'ショート', '3B': 'サード', LF: 'レフト', CF: 'センター', RF: 'ライト' };
+export function applyPlay(GS, L, play) {
+  if (GS.over) return '';
+  const s = battingSide(GS);
+  const bat = batterOf(GS, L), pit = pitcherOf(GS, L);
+  const B = box(GS, bat.id), PB = pbox(GS, pit.id);
+  const k = play.kind, hit = ['1B', '2B', '3B', 'HR'].includes(k);
+  B.pa++; PB.bf++;
+  if (!play.sf) B.ab++;
+  if (hit) { B.h++; PB.h++; if (k === '2B') B.d2++; if (k === '3B') B.d3++; if (k === 'HR') { B.hr++; PB.hr++; } }
+  const outsAdd = (play.batterTo < 0 ? 1 : 0) + play.runners.filter((r) => r.to < 0).length;
+  const before = GS.outs;
+  // the third out on a force (or the batter out) wipes the runs of the play; on a hit the runs that crossed count
+  const runsCount = hit || before + outsAdd < 3;
+  const rbiTo = k === 'DP' ? null : bat;
+  const old = GS.bases.slice(), nb = [null, null, null];
+  let runs = 0;
+  const listed = new Set();
+  for (const r of play.runners.slice().sort((a, b) => b.i - a.i)) {
+    const id = old[r.i]; if (!id) continue;
+    listed.add(r.i);
+    if (r.to >= 4) { if (runsCount) { scoreRun(GS, L, id, rbiTo, true); runs++; } }
+    else if (r.to >= 1) nb[r.to - 1] = id;
+  }
+  for (let i = 2; i >= 0; i--) { // a runner the play did not mention stays (or moves up out of the way)
+    if (!old[i] || listed.has(i)) continue;
+    let b = i; while (b < 3 && nb[b]) b++;
+    if (b >= 3) { if (runsCount) { scoreRun(GS, L, old[i], rbiTo, true); runs++; } } else nb[b] = old[i];
+  }
+  if (play.batterTo >= 4) { scoreRun(GS, L, bat.id, bat, true); runs++; }
+  else if (play.batterTo >= 1) { let b = play.batterTo - 1; while (b < 3 && nb[b]) b++; if (b < 3) nb[b] = bat.id; }
+  GS.bases = nb;
+  const add = Math.min(outsAdd, 3 - before);
+  GS.outs += add; PB.outs += add;
+  const name = pname(bat), where = play.where && POS_JP[play.where] ? `（${POS_JP[play.where]}）` : '';
+  const n = runs ? `　${runs}点` : '';
+  let text;
+  if (k === 'HR') { const others = runs - 1; text = `${name}：${play.inside ? 'ランニングホームラン！' : others === 3 ? '満塁ホームラン！' : others ? `${others + 1}ランホームラン！` : 'ソロホームラン！'}`; }
+  else if (k === '1B') text = `${name}：${play.infieldHit ? '内野安打！' : 'ヒット！'}${n}`;
+  else if (k === '2B') text = `${name}：ツーベース！${n}`;
+  else if (k === '3B') text = `${name}：スリーベース！${n}`;
+  else if (k === 'DP') text = `${name}：ゲッツー${where}`;
+  else if (k === 'FC') text = `${name}：フィルダースチョイス${n}`;
+  else if (play.sf) text = `${name}：犠牲フライ${n}`;
+  else text = `${name}：${({ GO: 'ゴロ', FO: 'フライ', LO: 'ライナー', PO: 'ポップフライ' })[k] || 'アウト'}${where}${n}`;
+  logIt(GS, text);
+  GS.lastText = text;
+  GS.balls = 0; GS.strikes = 0;
+  GS.idx[s]++;
+  if (!GS.top && GS.inning >= 9 && GS.score.home > GS.score.away) { GS.walkoff = true; endGame(GS, L); return text; }
+  if (GS.outs >= 3) endHalf(GS, L);
+  return text;
+}
 export function endHalf(GS, L) {
   GS.outs = 0; GS.balls = 0; GS.strikes = 0; GS.bases = [null, null, null];
   if (GS.top) {

@@ -5,13 +5,14 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { V, BASES, MOUND } from './stadium.js';
 import { Player3D } from './player3d.js';
+import { HOME_SPOTS, pathAt, ballAt } from '../play.js';
 
 // the strike zone at the plate, in metres (half width with the ball's radius, centre height, half height) for these
 // chibi batters; zone coords (zx, zy) are -1..1 across it, +zy is low
 export const Z3 = { hw: 0.27, cy: 0.74, hh: 0.3, y: 0.1 };
 export const zoneField = (zx, zy) => ({ x: zx * Z3.hw, y: Z3.y, h: Z3.cy - zy * Z3.hh });
 export const MOUND_H = 0.245;
-export const SPOTS = { '1B': [17.5, 25], '2B': [9, 35], SS: [-9, 35], '3B': [-17.5, 24], LF: [-33, 76], CF: [0, 90], RF: [33, 76] };
+export const SPOTS = Object.fromEntries(['1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF'].map((k) => [k, HOME_SPOTS[k]]));
 const BASE_LIST = [BASES.first, BASES.second, BASES.third, BASES.home];
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -106,14 +107,15 @@ export class MatchView {
     const lefty = bat.bats === 'L';
     this.bat = this.actor('B', { ...lookOf(bat, bt), away: bs === 'away', lefty, helmet: true, gear: 'bat' });
     this.bat.setPos(lefty ? 0.95 : -0.95, 0.05); this.bat.face(lefty ? -0.5 : 0.5, 0.05);
-    this.batLefty = lefty; this.pitLefty = pit.throws === 'L';
+    if (this.bat.gear !== 'bat') this.bat.setGear('bat');
+    this.batLefty = lefty; this.pitLefty = pit.throws === 'L'; this.batId = bat.id;
     // the fielders by their positions in today's lineup
     const T = L.teams[ft], byPos = {};
     for (const id of GS.lineup[fs]) { const pos = (T.pos && T.pos[id]) || L.P[id].pos; byPos[pos] = L.P[id]; }
     const cat = byPos.C;
     this.cat = this.actor('C', { ...lookOf(cat, ft), away: fs === 'away', gear: 'glove' });
     this.cat.setPos(0, -1.2); this.cat.face(0, 18);
-    ghost(this.cat, true);
+    ghost(this.cat, true); this.bipInit = false;
     this.fielders = {};
     for (const [pos, [x, y]] of Object.entries(SPOTS)) {
       const p = this.actor(pos, { ...lookOf(byPos[pos] || { num: pos.length * 7 }, ft), away: fs === 'away', gear: 'glove', lefty: false });
@@ -129,7 +131,7 @@ export class MatchView {
       const [ax, ay] = BASE_LIST[i], [bx, by] = BASE_LIST[i + 1];
       const d = Math.hypot(bx - ax, by - ay), k = 2.4 / d;
       r.setPos(ax + (bx - ax) * k, ay + (by - ay) * k); r.face(0, 18);
-      this.runners.push({ p: r, i, x: ax + (bx - ax) * k, y: ay + (by - ay) * k });
+      this.runners.push({ p: r, i, id, x: ax + (bx - ax) * k, y: ay + (by - ay) * k });
     }
   }
   // the batting / pitching view each frame: o = { pitchT (0..1 the delivery, null = set), swing (0..1 or null), f, ball: pt|null }
@@ -143,49 +145,54 @@ export class MatchView {
     for (const R of this.runners) { R.p.setPos(R.x, R.y); R.p.face(0, 18); R.p.pose('ready', 0); }
     this.showBall(o.ball || null, { shadow: !!o.ball });
   }
-  // the batted ball, the broadcast camera following it: o = { tt (0..1 to landing), j (the judged result), bb, f, t (frames) }
+  // a ball in play, played back from the physics timeline (play.js): o = { T, bb, t (seconds since contact), f }
   playBip(o) {
-    const { j, bb, tt, t } = o;
-    const lx = j.land.x, ly = j.land.y;
-    const ground = !!j.ground;
-    // the ball: a parabola to the landing spot (grounders skip along the ground)
-    let bx = lerp(0, lx, tt), by = lerp(0.4, ly, tt), bh;
-    if (ground) bh = 0.07 + Math.abs(Math.sin(tt * Math.PI * 3)) * (1 - tt) * 1.2;
-    else { const apex = (j.land.d * Math.tan((clamp(bb.angle, 2, 75) * Math.PI) / 180)) / 4; bh = 0.9 + apex * 4 * tt * (1 - tt) - 0.9 * tt; }
-    if (tt >= 1 && j.kind !== 'HR') { // after the landing: caught, or it rolls on a little
-      if (['GO', 'FO', 'LO', 'PO', 'DP'].includes(j.kind)) bh = 1.2;
-      else { const k = Math.min(1, (t - o.hang) / 40); bx = lx + Math.sin((j.land.deg * Math.PI) / 180) * 6 * k; by = ly + Math.cos((j.land.deg * Math.PI) / 180) * 6 * k; bh = 0.07; }
+    const { T, t } = o;
+    if (!this.bipInit) { // the bat is dropped, the catcher stands up and is solid again
+      this.bipInit = true;
+      ghost(this.cat, false);
     }
-    this.showBall({ x: bx, y: by, h: Math.max(0.07, bh) });
-    // the nearest fielder runs to the ball; on an out he catches it
-    let near = null, nd = 1e9;
-    for (const [k, F] of Object.entries(this.fielders)) { const d = Math.hypot(F.hx - lx, F.hy - ly); if (d < nd) { nd = d; near = k; } }
-    const out = ['GO', 'FO', 'LO', 'PO', 'DP'].includes(j.kind);
-    for (const [k, F] of Object.entries(this.fielders)) {
-      if (k === near && j.kind !== 'HR') {
-        const kk = clamp(tt * 1.12, 0, 1) * (out ? 1 : 0.85);
-        const x = lerp(F.hx, lx, kk), y = lerp(F.hy, ly, kk);
-        F.p.setPos(x, y);
-        if (kk < 1 && nd > 1.5) { F.p.face(lx, ly); F.p.pose('run', t / 22); } else { F.p.face(0, 4); F.p.pose(out ? 'catch' : 'ready', 0); }
-      } else { F.p.setPos(F.hx, F.hy); F.p.face(bx, by); F.p.pose('ready', 0); }
+    const b = ballAt(T, t);
+    this.lastBall = b;
+    this.showBall({ x: b[0], y: b[1], h: Math.max(0.07, b[2]) });
+    // the fielders along their paths: running while they move, the catch, the throw
+    const F = { ...this.fielders, P: { p: this.pit }, C: { p: this.cat } };
+    for (const [pos, plan] of Object.entries(T.fielders)) {
+      const A = F[pos] && F[pos].p; if (!A) continue;
+      const q = pathAt(plan.path, t), q2 = pathAt(plan.path, t + 0.1);
+      A.setPos(q[0], q[1], pos === 'P' && Math.hypot(q[0], q[1] - MOUND[1]) < 2.5 ? MOUND_H : 0);
+      const moving = Math.hypot(q2[0] - q[0], q2[1] - q[1]) > 0.02;
+      const myThrow = T.throws.find((th) => Math.hypot(th.from[0] - q[0], th.from[1] - q[1]) < 1.5 && t > th.t0 - 0.3 && t < th.t0 + 0.25 && !th.walk);
+      const gets = T.throws.find((th) => Math.hypot(th.to[0] - q[0], th.to[1] - q[1]) < 2.5 && t > th.t1 - 0.35 && t < th.t1 + 0.4);
+      if (myThrow) { A.face(myThrow.to[0], myThrow.to[1]); A.pose('throw', clamp((t - (myThrow.t0 - 0.3)) / 0.45, 0, 1)); }
+      else if (moving) { A.face(q2[0], q2[1]); A.pose('run', t * 1.6 + q[0] * 0.1); }
+      else if (gets || (pos === T.who && T.at && Math.abs(t - T.at.t) < 0.35)) { A.face(b[0], b[1]); A.pose(T.at && T.at.air && pos === T.who && !gets ? 'catch' : 'ready', 0); }
+      else { A.face(b[0], b[1]); A.pose('ready', 0); }
     }
-    // the batter runs to first, the runners move up on a hit
-    const run = Math.min(1, t / 230);
-    const bxs = this.batLefty ? 0.95 : -0.95;
-    this.bat.setGear('none'); this.bat.setHelmet(true);
-    this.bat.setPos(lerp(bxs, BASES.first[0], run), lerp(0, BASES.first[1], run)); this.bat.face(BASES.first[0], BASES.first[1]); this.bat.pose(run < 1 ? 'run' : 'stand', t / 16);
-    const hit = ['1B', '2B', '3B', 'HR'].includes(j.kind);
-    for (const R of this.runners) {
-      const k = hit ? Math.min(1, t / 230) : 0;
-      const [ax, ay] = BASE_LIST[R.i + 1];
-      R.p.setPos(lerp(R.x, ax, k), lerp(R.y, ay, k)); R.p.face(ax, ay); R.p.pose(k > 0 && k < 1 ? 'run' : 'ready', t / 16);
+    // the runners (and the batter) along their paths; an out runner stops and walks off
+    for (const R of T.runners) {
+      const A = R.id === this.batId ? this.bat : (this.runners.find((x) => x.id === R.id) || {}).p;
+      if (!A) continue;
+      if (A === this.bat && A.gear !== 'none') A.setGear('none');
+      const q = pathAt(R.path, t), q2 = pathAt(R.path, t + 0.08);
+      A.setPos(q[0], q[1]);
+      const moving = Math.hypot(q2[0] - q[0], q2[1] - q[1]) > 0.01;
+      if (R.out != null && t > R.out) { A.face(0, -10); A.pose('stand', 0); }
+      else if (moving) { A.face(q2[0], q2[1]); A.pose('run', t * 1.9); }
+      else if (A === this.bat && t < 0.6) A.pose('swing', 1);
+      else { A.face(0, 18); A.pose('stand', 0); }
     }
-    this.pit.pose('ready', 0); this.pit.face(bx, by);
-    this.cat.pose('stand', 0); ghost(this.cat, false);
-    // the camera: up behind home, turning to keep the ball and the play in the frame
-    const look = { x: bx * 0.8, y: Math.max(14, by * 0.8), h: Math.min(bh, 12) * 0.5 };
-    const from = { x: look.x * 0.25, y: Math.min(look.y * 0.35, 40) - 30, h: 20 + Math.min(bh, 30) * 0.2 };
-    this.w.follow(from, look, 40, t < 2 ? 1 : 0.1);
-    return { near, ball: { x: bx, y: by, h: bh } };
+    // the camera: up behind home, turning to keep the ball (and the play around it) in the frame
+    // the camera: behind the play and closing in — it follows the ball and, as a fly comes down, turns toward the spot
+    // where it will be caught, so the fielder and the ball meet in the frame
+    const bx = b[0], by = b[1], bh = Math.max(0, b[2]);
+    let fx = bx, fy = by;
+    if (T.at && t < T.at.t) { const k = Math.pow(clamp(t / T.at.t, 0, 1), 1.4) * 0.65; fx = lerp(bx, T.at.x, k); fy = lerp(by, T.at.y, k); }
+    const r = Math.max(1, Math.hypot(fx, fy - 6)), ux = fx / r, uy = (fy - 6) / r;
+    const D = clamp(26 + r * 0.18, 26, 44);
+    const look = { x: fx, y: Math.max(6, fy), h: Math.min(bh, 36) * 0.7 };
+    const from = { x: fx - ux * D, y: Math.max(6, fy) - uy * D, h: 11 + r * 0.06 + Math.min(bh, 40) * 0.3 };
+    const dt = Math.max(0, t - (this.camT == null || t < this.camT ? t : this.camT)); this.camT = t;
+    this.w.follow(from, look, 36, t < 0.05 ? 1 : 1 - Math.pow(0.88, dt * 60));
   }
 }

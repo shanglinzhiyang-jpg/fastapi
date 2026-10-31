@@ -14,7 +14,7 @@ export const DRAG_K = 0.0061, LIFT_RATIO = 0.42;
 export const BASES = [[0, 0], [19.4, 19.4], [0, 38.8], [-19.4, 19.4]]; // home, 1B, 2B, 3B
 export const FENCE_H = 4.2;
 export const fenceR = (deg) => 100 + 22 * Math.cos((clamp(deg, -45, 45) / 45) * (Math.PI / 2));
-export const HOME_SPOTS = { P: [0, 17.2], C: [0, -1.2], '1B': [17.5, 25], '2B': [9, 35], SS: [-9, 35], '3B': [-17.5, 24], LF: [-33, 76], CF: [0, 90], RF: [33, 76] };
+export const HOME_SPOTS = { P: [0, 17.2], C: [0, -1.2], '1B': [20.5, 26.5], '2B': [11.5, 39.5], SS: [-11.5, 39.5], '3B': [-19.5, 25.5], LF: [-40, 80], CF: [0, 95], RF: [40, 80] };
 const INF = ['P', 'C', '1B', '2B', 'SS', '3B'];
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const angOf = (x, y) => (Math.atan2(x, y) * 180) / Math.PI;
@@ -51,7 +51,7 @@ export function flyBall(bb, o = {}) {
     } else {
       const s2 = Math.hypot(vx, vy);
       const dirt = Math.hypot(x, y - 18) < 29 || Math.hypot(x, y) < 28;
-      const dec = (dirt ? 3.3 : 2.6) * DT;
+      const dec = (dirt ? 3.0 : 1.9) * DT;
       if (s2 <= dec) { vx = 0; vy = 0; } else { vx -= (vx / s2) * dec; vy -= (vy / s2) * dec; }
       x += vx * DT; y += vy * DT;
       if (s2 < 0.25) { f.push([x, y, BALL_R]); if (!fairDecided) foul = Math.abs(angOf(x, y)) > 45 && Math.hypot(x, y) > 1.5; return out('rest'); }
@@ -80,23 +80,37 @@ export function flyBall(bb, o = {}) {
 const runSpeed = (p) => 6.4 + (p ? p.speed : 50) * 0.024; // m/s
 const reaction = (p) => 0.42 - (p ? p.field : 50) * 0.0022; // s
 const armSpeed = (p) => 24 + (p ? p.arm : 50) * 0.16; // m/s
-const transfer = (p, of) => 0.72 - (p ? p.field : 50) * 0.0028 + (of ? 0.25 : 0);
+const transfer = (p, of) => 1.0 - (p ? p.field : 50) * 0.003 + (of ? 0.4 : 0); // gather, set the feet, release
+// how far a fielder gets in time t: accelerating (ACCEL m/s²) to his top speed sp
+export const OF_READ = 0.12; // outfielders read the ball off the bat a moment longer
+export const ACCEL = { inf: 9, of: 5.5 }; // infielders: a quick first step; outfielders: a longer run up
+const runDist = (t, sp, a) => { const ta = sp / a; return t < ta ? 0.5 * a * t * t : 0.5 * sp * ta + sp * (t - ta); };
 // the earliest a fielder (at spot, with player p) reaches the ball along its path: in the air below `catchH`, or on the ground
 function intercept(F, fl, o) {
-  const sp = runSpeed(F.p) * o.rangeK, re = reaction(F.p) + (F.pos === 'P' ? 0.25 : 0);
+  const sp = runSpeed(F.p) * o.rangeK, re = reaction(F.p) + (F.pos === 'P' ? 0.25 : 0) + (INF.includes(F.pos) ? 0 : OF_READ);
   const reach = (0.75 + (F.p ? F.p.field : 50) * 0.005) * o.rangeK;
-  const n = fl.f.length;
-  for (let i = 1; i < n; i++) {
+  const n = fl.f.length, landI = fl.land ? fl.land.i : n;
+  const look = (i) => {
     const t = i / 60, [x, y, h] = fl.f[i];
-    if (fl.hr && i >= n - 41) break;
-    const air = !fl.land || i < fl.land.i;
-    if (air && h > 2.7) continue;
-    if (!air && h > 1.9) continue;
-    const ballSp = i > 0 ? Math.hypot(x - fl.f[i - 1][0], y - fl.f[i - 1][1]) * 60 : 0;
+    const air = i < landI;
+    if (air && h > 2.7) return null;
+    if (!air && h > 1.9) return null;
+    const ballSp = Math.hypot(x - fl.f[i - 1][0], y - fl.f[i - 1][1]) * 60;
     const rch = reach - (air ? 0 : Math.max(0, ballSp - 22) * 0.03);
     const need = Math.max(0, dist([x, y], F.at) - Math.max(0.3, rch));
-    const can = Math.max(0, t - re) * sp;
-    if (can >= need) return { t, i, x, y, h, air, run: need, ballSp };
+    const can = runDist(Math.max(0, t - re), sp, INF.includes(F.pos) ? ACCEL.inf : ACCEL.of);
+    return { t, i, x, y, h, air, need, can, slack: (can - need) / sp, ballSp };
+  };
+  for (let i = 1; i < n; i++) {
+    if (fl.hr && i >= n - 41) break;
+    const c = look(i);
+    if (!c || c.can < c.need) continue;
+    if (!c.air) return c;
+    // in the air: he settles under it and takes it at the last catchable moment before it lands (the slack there = time
+    // to spare, in seconds: a lot = a routine catch, little = a running or diving catch)
+    let best = c;
+    for (let j = i + 1; j < landI; j++) { const d = look(j); if (d && d.can >= d.need && d.h <= 2.2) best = d; }
+    return best;
   }
   return null;
 }
@@ -107,13 +121,25 @@ export function resolveBall(bb, s) {
   const rng = s.rng || Math.random, bal = s.bal || { hit: 1, hr: 1 };
   const fl = flyBall(bb);
   const T = { fl, fielders: {}, runners: [], throws: [], ball: [], notes: [] };
-  const o = { rangeK: 1 / Math.pow(bal.hit, 1.6) };
+  const o = { rangeK: 1 / Math.pow(bal.hit, 0.9) };
   const F = Object.entries(HOME_SPOTS).map(([pos, at]) => ({ pos, at, p: s.def[pos] }));
   for (const x of F) T.fielders[x.pos] = { from: x.at, path: [[0, x.at[0], x.at[1]]], pose: 'ready' };
-  if (fl.hr) return finish(T, s, { kind: 'HR', batterTo: 4, runners: s.runners.map((id, i) => (id ? { i, to: 4 } : null)).filter(Boolean) }, fl.f.length / 60 + 1.6);
+  if (fl.hr) { // the trot around the bases
+    T.runners.push({ id: s.bat.id, path: [[0, ...batBox(s.bat)], [0.9, ...batBox(s.bat)], ...runPath(0, 4, 0.9, 6.2).slice(1)] });
+    s.runners.forEach((id, i) => { if (id) T.runners.push({ id, path: runPath(i + 1, 4, 0.6, 6.0, true) }); });
+    return finish(T, s, { kind: 'HR', batterTo: 4, runners: s.runners.map((id, i) => (id ? { i, to: 4 } : null)).filter(Boolean) }, fl.f.length / 60 + 2.6);
+  }
   // who gets to it first
   let best = null;
-  for (const x of F) { const c = intercept(x, fl, o); if (c && (!best || c.t < best.c.t)) best = { F: x, c }; }
+  // a ball in the air goes to whoever has the most time to spare (the outfielder camped under it, not the infielder racing
+  // back); a ball on the ground to whoever gets to it first
+  for (const x of F) {
+    const c = intercept(x, fl, o); if (!c) continue;
+    if (!best) { best = { F: x, c }; continue; }
+    const b = best.c;
+    if (c.air && !b.air) best = { F: x, c };
+    else if (c.air && b.air ? c.slack > b.slack : !c.air && !b.air && c.t < b.t) best = { F: x, c };
+  }
   const foulBall = fl.foul;
   if (foulBall && (!best || !best.c.air)) return finish(T, s, { kind: 'FOUL' }, Math.min(fl.f.length / 60, 3) + 0.5, true);
   if (!best) best = { F: F.find((x) => x.pos === 'CF'), c: { t: fl.f.length / 60, i: fl.f.length - 1, x: fl.rest[0], y: fl.rest[1], h: 0.04, air: false } };
@@ -121,8 +147,10 @@ export function resolveBall(bb, s) {
   T.fielders[catcher.pos].path.push([Math.max(c.t - 0.05, reaction(catcher.p)), c.x, c.y]);
   T.fielders[catcher.pos].pose = c.air ? 'catch' : 'field';
   T.who = catcher.pos; T.at = c;
-  const sure = c.run < 0.4 ? 0.985 : 0.985 - (c.run - 0.4) * 0.6;
-  const caught = c.air && rng() < sure * (0.9 + 0.1 * ((catcher.p ? catcher.p.catch : 50) / 99));
+  // a routine catch is almost always made (捕球 shaves the rare drop); with little time to spare it is a running / diving catch
+  const cv = catcher.p ? catcher.p.catch : 50;
+  const sure = c.slack >= 0.6 ? 0.997 - (99 - cv) * 0.00012 : clamp(0.45 + c.slack * 0.9 + (cv - 50) * 0.002, 0.3, 0.99);
+  const caught = c.air && rng() < sure;
   const spdOf = (id) => runSpeed(id && s.speedOf ? { speed: s.speedOf(id) } : null);
   const bSpd = runSpeed(s.bat);
   const of = !INF.includes(catcher.pos);
@@ -130,7 +158,7 @@ export function resolveBall(bb, s) {
   const cover = (pos, base, t0 = 0.4) => { if (pos !== catcher.pos) { const b = BASES[base]; T.fielders[pos].path.push([t0 + dist(T.fielders[pos].from, b) / 7, b[0] + (base === 1 ? 0.6 : 0), b[1] + (base === 2 ? -0.5 : 0)]); } };
   // ------------------------------------------------ caught in the air
   if (caught || (c.air && foulBall && caught)) {
-    const kind = c.h > 1.6 && !of && bb.angle > 50 ? 'PO' : bb.angle < 20 ? 'LO' : 'FO';
+    const kind = !of && bb.angle > 45 ? 'PO' : bb.angle < 20 ? 'LO' : 'FO';
     const play = { kind, batterTo: -1, where: catcher.pos, runners: [] };
     const tc = c.t;
     // the batter runs anyway (and stops); runners go halfway with <2 outs, then tag up if they can make it
@@ -159,11 +187,14 @@ export function resolveBall(bb, s) {
   }
   // ------------------------------------------------ a dropped fly: it falls in (scored as a hit off the glove)
   // ------------------------------------------------ fielded on the ground (or picked up after it falls in)
-  const tf = c.t + (c.air ? 0.6 : 0) + (rng() < 0.012 + (c.ballSp > 30 ? 0.02 : 0) - ((catcher.p ? catcher.p.catch : 50) - 50) * 0.0002 ? 0.9 : 0); // a bobble
+  const tf = c.t + (c.air ? 0.6 : 0) + (!c.air && c.slack < 0.25 ? 0.3 : 0) + (rng() < 0.012 + (c.ballSp > 30 ? 0.02 : 0) - ((catcher.p ? catcher.p.catch : 50) - 50) * 0.0002 ? 0.9 : 0); // a bobble
   const pf = [c.x, c.y];
-  const arm = armSpeed(catcher.p), tr = transfer(catcher.p, of);
+  const arm = armSpeed(catcher.p);
+  // an outfielder who ran back toward the wall has to stop and turn before he throws
+  const wentBack = of && Math.hypot(c.x, c.y) > Math.hypot(catcher.at[0], catcher.at[1]) + 3;
+  const tr = transfer(catcher.p, of) + (wentBack ? 0.45 : 0) + (fl.wall && c.t > fl.wall.t ? 0.3 : 0);
   const infield = !of && Math.hypot(c.x, c.y) < 42 && !(c.air);
-  const startB = 0.75, tB = (b) => startB + (27.43 * b) / bSpd + 0.3 * Math.max(0, b - 1);
+  const startB = 0.65, tB = (b) => startB + (27.43 * b) / bSpd + 0.3 * Math.max(0, b - 1);
   const tR = (i, b, id, start) => start + ((27.43 * (b - i)) - 2.4) / spdOf(id) + 0.3 * Math.max(0, b - i - 1);
   if (infield) {
     // infield grounder: covers; the forced runners; the out at first or the double play
@@ -179,10 +210,10 @@ export function resolveBall(bb, s) {
     if (r1 && outs < 2 && dist(pf, BASES[2]) > 4) {
       const tr1 = tR(1, 2, r1, runStart);
       if (t2 < tr1 - 0.05) {
-        const relay = t2 + 0.45 + throwTime(27.43, armSpeed(s.def[c.x > 0 ? 'SS' : '2B']));
+        const relay = t2 + 0.62 + throwTime(27.43, armSpeed(s.def[c.x > 0 ? 'SS' : '2B']));
         const dp = relay < tB(1) + gauss(rng) * 0.1;
         T.throws.push({ t0: tf + tr, t1: t2, from: pf, to: BASES[2] });
-        if (dp) T.throws.push({ t0: t2 + 0.45, t1: relay, from: BASES[2], to: BASES[1] });
+        if (dp) T.throws.push({ t0: t2 + 0.62, t1: relay, from: BASES[2], to: BASES[1] });
         T.runners.push({ id: r1, path: [[0, ...leadPos(0)], [tr1, ...BASES[2]]], out: t2 });
         play.runners.push({ i: 0, to: -1 }); outs++;
         if (dp) { play.kind = 'DP'; play.batterTo = -1; outs++; T.runners.push({ id: s.bat.id, path: [[0, ...batBox(s.bat)], [startB, ...batBox(s.bat)], [tB(1), ...BASES[1]], [tB(1) + 0.6, BASES[1][0] + 2, BASES[1][1] - 1]], out: relay }); }
@@ -205,10 +236,10 @@ export function resolveBall(bb, s) {
   if (catcher.pos === 'CF' || catcher.pos === 'LF' || catcher.pos === 'RF') { cover('SS', 2, 0.3); cover('2B', 2, 0.3); }
   cover('1B', 1, 0.2); cover('C', 0, 0); cover('3B', 3, 0.3);
   const relayK = (d) => (d > 58 ? 0.25 : 0);
-  const tThrowTo = (b) => tf + tr + throwTime(dist(pf, BASES[b]), arm) + relayK(dist(pf, BASES[b]));
+  const tThrowTo = (b) => tf + tr + throwTime(dist(pf, BASES[b % 4]), arm) + relayK(dist(pf, BASES[b % 4]));
   // the batter: as far as he can go before the throw (a cautious margin, a little randomness)
   let bBase = 1;
-  for (let b = 2; b <= 4; b++) { if (tB(b) + 0.55 + gauss(rng) * 0.15 < tThrowTo(b)) bBase = b; else break; }
+  for (let b = 2; b <= 4; b++) { if (tB(b) + 0.35 + gauss(rng) * 0.15 < tThrowTo(b)) bBase = b; else break; }
   // runners, the lead first; a trailing runner stops behind the one ahead
   let ahead = 5, sendT = null, outs = s.outs;
   const decide = [];
@@ -302,3 +333,15 @@ export function ballAt(T, t) {
   if (T.throws.length === 0 || t < T.throws[0].t0) { const fp = pathAt(T.fielders[T.who].path, t); if (fp) pos = [fp[0], fp[1], 1.0]; }
   return pos;
 }
+
+// ---------------------------------------------------------------- the contact: how the bat meets the ball
+// q: quality 0..1 (the sweet spot and the timing), dyN: the ball below (+) / above (−) the sweet spot (→ the launch angle),
+// e: timing in frames (− early → pulled), win: the timing window, power: 強振. → { v (km/h), angle, spray }
+export function contactBall({ bat, q, dyN, e, win, power: pw, bal, rng = Math.random }) {
+  const pull = bat.bats === 'L' ? 1 : -1; // a right-handed batter pulls to left field (negative spray)
+  const v = clamp(CONTACT.v0 + CONTACT.vq * q + (bat.power - 50) * CONTACT.vp + (pw ? 8 : 0) + gauss(rng) * 5 + ((bal ? bal.hr : 1) - 1) * 11, 40, 194);
+  const angle = CONTACT.a0 - dyN * CONTACT.ad + gauss(rng) * 7 + (pw ? 4 : 0);
+  const spray = clamp((-e / win) * 34 * -pull + gauss(rng) * 16, -58, 58);
+  return { v, angle, spray };
+}
+export const CONTACT = { v0: 80, vq: 96, vp: 0.42, a0: 9, ad: 48 };
