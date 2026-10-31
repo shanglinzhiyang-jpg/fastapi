@@ -6,7 +6,7 @@ import { newLeague, loadLeague, saveLeague, hasSave, advanceDay, myGameToday, st
 import { drawChibi, lookOf, badge, pitchChip } from '../draw.js';
 import { Match } from './match.js';
 import { drawEmblem, logoOf, clearLogo, filePick, openPicker } from '../emblem.js';
-import { tvHeader, plate, slant, TV } from '../tvgfx.js';
+import { tvHeader, plate, slant, TV, teamBar, medal, rowStripe } from '../tvgfx.js';
 import { frontMenu, showPending, offseason } from './front_ui.js';
 import { ensureFront, yen } from '../front.js';
 import { Player3D } from '../gfx/player3d.js';
@@ -311,11 +311,10 @@ class Standings {
       const cx = [x0 + 20, x0 + 44, x0 + 214, x0 + 254, x0 + 294, x0 + 344, x0 + 410];
       cols.forEach((h, i) => txt(c, h, cx[i], 128, { size: 12, color: '#9fb6e8', align: i >= 2 ? 'center' : 'left' }));
       standings(L, lg).forEach((r, i) => {
-        const y = 160 + i * 50, t = teamOf(r.id), mine = r.id === L.myTeam;
-        if (mine) { c.fillStyle = 'rgba(255,210,63,0.16)'; roundRect(c, x0 + 10, y - 21, 424, 42, 8); c.fill(); }
-        txt(c, String(i + 1), cx[0], y, { size: 18, color: i === 0 ? '#ffd23f' : '#ffffff' });
-        c.fillStyle = t.c1; roundRect(c, cx[1], y - 15, 150, 30, 6); c.fill();
-        txt(c, t.short, cx[1] + 75, y, { size: 15, align: 'center', max: 140 });
+        const y = 160 + i * 50, mine = r.id === L.myTeam;
+        rowStripe(c, x0 + 8, y - 22, 428, 44, i, mine);
+        medal(c, cx[0] + 4, y, 12, i + 1);
+        teamBar(c, cx[1], y - 16, 154, 32, r.id, { size: 15 });
         [r.w, r.l, r.d].forEach((v, k) => txt(c, String(v), cx[2 + k], y, { size: 16, align: 'center' }));
         txt(c, fmt3(r.pct), cx[5], y, { size: 16, align: 'center' });
         txt(c, i === 0 ? '—' : r.gb.toFixed(1), cx[6], y, { size: 15, align: 'center', color: '#cfd8ee' });
@@ -362,7 +361,7 @@ class Roster {
     const p = ps[this.sel];
     if (!p) return;
     panel(c, 500, 70, 444, 452, { top: t.c1, bottom: '#0b1a33' });
-    drawChibi(c, 580, 230, 1.6, lookOf(p, t.id), p.pitcher ? 'pitch' : 'ready', p.pitcher ? 0.3 : this.f / 60, { glove: p.pitcher, flip: (p.pitcher ? p.throws : p.bats) === 'L' });
+    c.fillStyle = 'rgba(255,255,255,0.94)'; roundRect(c, 516, 88, 130, 130, 12); c.fill(); drawEmblem(c, 581, 153, 118, t.id);
     txt(c, `${p.num}`, 660, 100, { size: 30, color: '#ffd23f' });
     txt(c, pfull(p), 660, 136, { size: 22, max: 270 });
     txt(c, `${p.pitcher ? `${p.throws === 'L' ? '左' : '右'}投` : `${p.bats === 'L' ? '左' : '右'}打`}・${p.age}歳・総合${overall(p)}`, 660, 166, { size: 14, color: '#cfd8ee', bold: false });
@@ -400,10 +399,10 @@ class Leaders {
     bg(c, 0); header(c, `成績ランキング　${b.name}`, `${LEAGUES[lg].short}　←→ 項目　A リーグ　B もどる`);
     panel(c, 180, 74, 600, 420);
     b.rows.forEach((r, i) => {
-      const y = 106 + i * 38, t = teamOf(r.team), mine = r.team === L.myTeam;
-      if (mine) { c.fillStyle = 'rgba(255,210,63,0.16)'; roundRect(c, 192, y - 16, 576, 32, 6); c.fill(); }
-      txt(c, String(i + 1), 214, y, { size: 17, align: 'center', color: i < 3 ? '#ffd23f' : '#ffffff' });
-      c.fillStyle = t.c1; roundRect(c, 240, y - 12, 100, 24, 5); c.fill(); txt(c, t.short, 290, y, { size: 13, align: 'center', max: 94 });
+      const y = 106 + i * 38, mine = r.team === L.myTeam;
+      rowStripe(c, 190, y - 17, 580, 34, i, mine);
+      medal(c, 214, y, 12, i + 1);
+      teamBar(c, 236, y - 13, 112, 26, r.team, { size: 13 });
       txt(c, pfull(r.p), 356, y, { size: 16, max: 240 });
       txt(c, r.v, 750, y, { size: 18, align: 'right', color: '#ffd23f' });
     });
@@ -423,7 +422,7 @@ class Results {
     day.forEach((r, i) => {
       const x = 40 + (i % 2) * 450, y = 90 + Math.floor(i / 2) * 120;
       panel(c, x, y, 430, 104, { edge: r.mine ? '#ffd23f' : undefined });
-      [[r.a, r.as, 0], [r.h, r.hs, 1]].forEach(([id, sc, k]) => { const t = teamOf(id); c.fillStyle = t.c1; roundRect(c, x + 16, y + 14 + k * 40, 220, 32, 7); c.fill(); txt(c, t.short, x + 126, y + 30 + k * 40, { size: 15, align: 'center' }); txt(c, String(sc), x + 290, y + 30 + k * 40, { size: 24, align: 'center', color: '#ffd23f' }); });
+      [[r.a, r.as, 0], [r.h, r.hs, 1]].forEach(([id, sc, k]) => { teamBar(c, x + 16, y + 14 + k * 40, 224, 32, id, { size: 15 }); c.fillStyle = 'rgba(0,0,0,0.45)'; roundRect(c, x + 258, y + 14 + k * 40, 60, 32, 6); c.fill(); txt(c, String(sc), x + 288, y + 31 + k * 40, { size: 22, align: 'center', color: (k ? r.hs > r.as : r.as > r.hs) ? '#ffd23f' : '#ffffff' }); });
       const d = r.dec || {};
       txt(c, [d.win ? `勝 ${pname(L.P[d.win])}` : '', d.lose ? `負 ${pname(L.P[d.lose])}` : '', d.save ? `S ${pname(L.P[d.save])}` : ''].filter(Boolean).join('\n') || '引き分け', x + 330, y + 52, { size: 12, color: '#cfd8ee', bold: false, max: 96 });
     });
@@ -481,7 +480,7 @@ class SeasonEnd {
       const x = 70 + li * 430;
       panel(c, x, 90, 390, 250, { top: t.c1, bottom: '#0b1a33' });
       txt(c, `${LEAGUES[lg].name} 優勝`, x + 195, 120, { size: 18, align: 'center', color: '#ffd23f' });
-      drawChibi(c, x + 195, 280, 1.6, lookOf({ num: 1 }, champ.id), 'stand', 0, {});
+      c.fillStyle = 'rgba(255,255,255,0.94)'; roundRect(c, x + 135, 206, 120, 120, 12); c.fill(); drawEmblem(c, x + 195, 266, 108, champ.id);
       txt(c, t.full, x + 195, 160, { size: 20, align: 'center', max: 360 });
       txt(c, `${champ.w}勝${champ.l}敗${champ.d}分`, x + 195, 190, { size: 16, align: 'center', bold: false });
     });
@@ -489,7 +488,7 @@ class SeasonEnd {
     txt(c, `${teamOf(L.myTeam).full}：${rank}位（${mine.w}勝${mine.l}敗${mine.d}分）`, W / 2, 380, { size: 20, align: 'center', color: rank === 1 ? '#ffd23f' : '#ffffff' });
     const k = ['avg', 'hr', 'era'].map((key) => { const b = leaders(L, key, lg, 1); return b.rows[0] ? `${b.name}：${pname(b.rows[0].p)}（${teamOf(b.rows[0].team).short}）${b.rows[0].v}` : ''; }).filter(Boolean);
     txt(c, k.join('　'), W / 2, 420, { size: 14, align: 'center', color: '#cfd8ee', bold: false, max: 900 });
-    txt(c, 'A で拠点へ（新しいシーズンはタイトルから）', W / 2, H - 30, { size: 14, align: 'center', color: '#9fb6e8' });
+    txt(c, 'A で拠点へ（「オフシーズンへ」から次のシーズン）', W / 2, H - 30, { size: 14, align: 'center', color: '#9fb6e8' });
   }
 }
 

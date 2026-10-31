@@ -185,3 +185,35 @@ export function tvHeader(c, title, sub, teamId) {
   txt(c, title, 40, 33, { size: 22, color: '#ffffff' });
   if (sub) { plate(c, W - 400, 14, 386, 38, { k: 16 }); txt(c, sub, W - 30, 33, { size: 13, align: 'right', color: TV.ink, bold: false, max: 350 }); }
 }
+
+// a club bar: the club colour, slanted, glossy, with the mark on a white chip and the short name
+export function teamBar(c, x, y, w, h, id, o = {}) {
+  const t = teamOf(id);
+  c.save();
+  c.shadowColor = 'rgba(0,0,0,0.35)'; c.shadowBlur = 6; c.shadowOffsetY = 2;
+  c.fillStyle = t.c1; slant(c, x, y, w, h, o.k != null ? o.k : 8); c.fill();
+  c.restore();
+  c.save(); slant(c, x, y, w, h, o.k != null ? o.k : 8); c.clip();
+  const g = c.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, 'rgba(255,255,255,0.32)'); g.addColorStop(0.5, 'rgba(255,255,255,0.04)'); g.addColorStop(1, 'rgba(0,0,0,0.18)');
+  c.fillStyle = g; c.fillRect(x, y, w, h);
+  c.restore();
+  const s = h - 4;
+  c.fillStyle = 'rgba(255,255,255,0.95)'; roundRect(c, x + 8, y + 2, s, s, 4); c.fill();
+  drawEmblem(c, x + 8 + s / 2, y + 2 + s / 2, s - 4, id);
+  txt(c, o.label || t.short, x + 14 + s + (w - 22 - s) / 2, y + h / 2 + 1, { size: o.size || Math.round(h * 0.5), align: 'center', color: '#ffffff', max: w - 26 - s, stroke: 'rgba(0,0,0,0.35)', strokeW: 3 });
+}
+// a medal for the top three
+export function medal(c, x, y, r, n) {
+  const cols = [['#fff2b0', '#e0a91c'], ['#ffffff', '#a9b3c6'], ['#ffd7b0', '#b8742e']][n - 1];
+  if (!cols) { txt(c, String(n), x, y, { size: r * 1.2, align: 'center', color: '#ffffff' }); return; }
+  const g = c.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); g.addColorStop(0, cols[0]); g.addColorStop(1, cols[1]);
+  c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+  c.strokeStyle = 'rgba(0,0,0,0.25)'; c.lineWidth = 1.5; c.stroke();
+  txt(c, String(n), x, y + 1, { size: r * 1.1, align: 'center', color: '#3a2400' });
+}
+// a table row stripe (alternating), gold-edged when it is your club
+export function rowStripe(c, x, y, w, h, i, mine) {
+  c.fillStyle = mine ? 'rgba(245,197,66,0.2)' : i % 2 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.12)';
+  slant(c, x, y, w, h, 6); c.fill();
+  if (mine) { c.strokeStyle = 'rgba(245,197,66,0.85)'; c.lineWidth = 1.5; slant(c, x, y, w, h, 6); c.stroke(); }
+}

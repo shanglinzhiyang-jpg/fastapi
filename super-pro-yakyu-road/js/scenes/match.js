@@ -9,7 +9,7 @@ import { drawChibi, lookOf, drawBattingView, drawZone, drawBall, drawCursor, zon
 import { avg, fmt3, era } from '../league.js';
 import { MatchView, pitchPoint, zoneField } from '../gfx/match3d.js';
 import { resolveBall, contactBall } from '../play.js';
-import { scoreBug, lowerThird, pitcherPlate, speedGun, caption, stinger, plate, TV } from '../tvgfx.js';
+import { scoreBug, lowerThird, pitcherPlate, speedGun, caption, stinger, plate, TV, teamBar, rowStripe } from '../tvgfx.js';
 
 const SLOW = 1.75; // the pitch takes this many times its real flight time (playable)
 const KIND_TEXT = { '1B': 'ヒット！', '2B': 'ツーベース！', '3B': 'スリーベース！', HR: 'ホームラン！！', GO: 'ゴロアウト', FO: 'フライアウト', LO: 'ライナーアウト', PO: 'ポップフライ', DP: 'ゲッツー', FC: 'フィルダースチョイス' };
@@ -360,7 +360,7 @@ export class Match {
       if (!v3 && this.ph === 'flight' && this.pi) { const b = ballAt(this.pi, Math.min(1, this.t / this.pi.dur)); drawBall(c, b.x, b.y, b.r, { trail: this.trail }); }
       if (this.ph === 'call' && this.pi) { const e = this.zs(this.pi.fx, this.pi.fy); if (!v3) drawBall(c, e.x, e.y, 9); c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 2; c.beginPath(); c.arc(e.x, e.y, 14, 0, 7); c.stroke(); }
       if ((this.ph === 'call' || this.ph === 'result') && this.pi) speedGun(c, this.pi.kmh, this.pi.name, this.ph === 'call' ? this.t : 99);
-      this.drawHud(c, bat, pit);
+      if (this.ph !== 'over') this.drawHud(c, bat, pit);
     }
     this.drawTop(c);
   }
@@ -481,36 +481,44 @@ export class Match {
   }
   drawOver(c) {
     const GS = this.GS, L = this.L;
-    c.fillStyle = 'rgba(4,8,20,0.82)'; c.fillRect(0, 0, W, H);
-    panel(c, 150, 60, 660, 420);
+    c.fillStyle = 'rgba(4,8,20,0.78)'; c.fillRect(0, 0, W, H);
     const my = GS.score[this.mine], op = GS.score[this.mine === 'home' ? 'away' : 'home'];
-    txt(c, GS.draw ? '引き分け' : my > op ? 'ゲームセット　勝利！' : 'ゲームセット　敗戦…', W / 2, 104, { size: 34, align: 'center', color: my > op ? '#ffd23f' : '#cfd8ee' });
+    const k = Math.min(1, this.t / 16), e = 1 - Math.pow(1 - k, 3);
+    // the GAME SET band
+    c.save(); c.translate((1 - e) * -W, 0);
+    c.fillStyle = GS.draw ? '#6a7a9a' : my > op ? TV.red : '#3a4a78'; c.beginPath(); c.moveTo(120, 34); c.lineTo(W - 80, 34); c.lineTo(W - 120, 100); c.lineTo(80, 100); c.closePath(); c.fill();
+    plate(c, 140, 40, W - 280, 54, { k: 30 });
+    txt(c, 'GAME SET', 300, 67, { size: 30, align: 'center', color: TV.gold2, stroke: 'rgba(0,0,0,0.5)', strokeW: 5 });
+    txt(c, GS.draw ? '引き分け' : my > op ? '勝利！' : '敗戦…', W - 300, 67, { size: 28, align: 'center', color: '#ffffff' });
+    c.restore();
     // the line score
+    panel(c, 70, 118, W - 140, 150);
     const inns = Math.max(9, GS.line.away.length);
-    const x0 = 190, cw = Math.min(36, 420 / inns);
-    txt(c, '', x0, 150);
-    for (let i = 0; i < inns; i++) txt(c, String(i + 1), x0 + 120 + i * cw, 150, { size: 13, align: 'center', color: '#9fb6e8' });
-    txt(c, 'R', x0 + 130 + inns * cw, 150, { size: 13, align: 'center', color: '#ffd23f' }); txt(c, 'H', x0 + 160 + inns * cw, 150, { size: 13, align: 'center', color: '#9fb6e8' });
-    [['away', GS.away], ['home', GS.home]].forEach(([s, id], r) => {
-      const y = 182 + r * 34;
-      const t = teamOf(id);
-      c.fillStyle = t.c1; roundRect(c, x0, y - 13, 100, 26, 6); c.fill(); txt(c, t.short, x0 + 50, y, { size: 14, align: 'center' });
-      for (let i = 0; i < inns; i++) { const v = GS.line[s][i]; txt(c, v === undefined ? '' : String(v), x0 + 120 + i * cw, y, { size: 16, align: 'center' }); }
-      txt(c, String(GS.score[s]), x0 + 130 + inns * cw, y, { size: 20, align: 'center', color: '#ffd23f' });
-      const hits = Object.entries(GS.box).filter(([id2]) => GS.lineup[s].includes(id2)).reduce((a, [, b]) => a + b.h, 0);
-      txt(c, String(hits), x0 + 160 + inns * cw, y, { size: 16, align: 'center' });
+    const x0 = 90, cw = Math.min(40, 440 / inns), xs = x0 + 250;
+    for (let i = 0; i < inns; i++) txt(c, String(i + 1), xs + i * cw + cw / 2, 140, { size: 13, align: 'center', color: TV.dim });
+    txt(c, 'R', xs + inns * cw + 30, 140, { size: 13, align: 'center', color: TV.gold2 }); txt(c, 'H', xs + inns * cw + 76, 140, { size: 13, align: 'center', color: TV.dim });
+    [['away', GS.away], ['home', GS.home]].forEach(([s2, id], r) => {
+      const y = 178 + r * 46;
+      rowStripe(c, x0 - 6, y - 20, W - 168, 40, r, id === L.myTeam);
+      teamBar(c, x0, y - 16, 220, 32, id, { size: 15 });
+      for (let i = 0; i < inns; i++) { const v = GS.line[s2][i]; txt(c, v === undefined ? '' : String(v), xs + i * cw + cw / 2, y, { size: 17, align: 'center' }); }
+      c.fillStyle = 'rgba(0,0,0,0.45)'; roundRect(c, xs + inns * cw + 10, y - 16, 42, 32, 5); c.fill();
+      txt(c, String(GS.score[s2]), xs + inns * cw + 31, y + 1, { size: 21, align: 'center', color: TV.gold2 });
+      const hits = Object.entries(GS.box).filter(([id2]) => GS.lineup[s2].includes(id2)).reduce((a, [, b]) => a + b.h, 0);
+      txt(c, String(hits), xs + inns * cw + 76, y, { size: 17, align: 'center' });
     });
+    // the pitchers, the home runs, the hero
+    panel(c, 70, 282, W - 140, 180);
     const d = GS.dec;
-    const line = [d.win ? `勝：${pname(L.P[d.win])}` : '', d.lose ? `負：${pname(L.P[d.lose])}` : '', d.save ? `S：${pname(L.P[d.save])}` : ''].filter(Boolean).join('　');
-    txt(c, line || '（勝敗なし）', W / 2, 270, { size: 18, align: 'center' });
-    // the home runs
+    const rows = [d.win ? ['勝', pfull(L.P[d.win]), '#ff6a5a'] : null, d.lose ? ['負', pfull(L.P[d.lose]), '#5a8aff'] : null, d.save ? ['S', pfull(L.P[d.save]), '#3ddc84'] : null].filter(Boolean);
+    rows.forEach(([lb, name, col], i) => { const x = 100 + i * 260; c.fillStyle = col; roundRect(c, x, 300, 30, 28, 5); c.fill(); txt(c, lb, x + 15, 314, { size: 15, align: 'center' }); txt(c, name, x + 40, 314, { size: 16, max: 210 }); });
+    if (!rows.length) txt(c, '（勝敗なし）', 100, 314, { size: 15, color: TV.dim });
     const hrs = Object.entries(GS.box).filter(([, b]) => b.hr > 0).map(([id, b]) => `${pname(L.P[id])}${b.hr > 1 ? `（${b.hr}本）` : ''}`);
-    txt(c, hrs.length ? `本塁打：${hrs.join('、')}` : '本塁打：なし', W / 2, 306, { size: 15, align: 'center', color: '#cfd8ee', max: 600 });
-    // your club's top hitter today
+    txt(c, '本塁打', 100, 356, { size: 13, color: TV.gold2 }); txt(c, hrs.length ? hrs.join('、') : 'なし', 170, 356, { size: 15, max: 680 });
     const mineIds = GS.lineup[this.mine];
     const best = mineIds.map((id) => [id, GS.box[id] || { h: 0, rbi: 0, ab: 0 }]).sort((a, b) => b[1].h * 2 + b[1].rbi - (a[1].h * 2 + a[1].rbi))[0];
-    if (best && best[1].h) txt(c, `今日のヒーロー：${pfull(L.P[best[0]])}（${best[1].ab}打数${best[1].h}安打${best[1].rbi ? ` ${best[1].rbi}打点` : ''}）`, W / 2, 340, { size: 15, align: 'center', color: '#ffd23f', max: 600 });
-    txt(c, 'A で次へ', W / 2, 440, { size: 16, align: 'center', color: '#9fb6e8' });
+    if (best && best[1].h) { plate(c, 90, 384, 600, 40, { k: 14, stripe: TV.gold }); txt(c, `ヒーロー　${pfull(L.P[best[0]])}　${best[1].ab}打数${best[1].h}安打${best[1].rbi ? ` ${best[1].rbi}打点` : ''}`, 116, 404, { size: 16, color: '#ffffff', max: 560 }); }
+    txt(c, 'A で次へ', W / 2, H - 30, { size: 15, align: 'center', color: TV.dim });
   }
   drawMenu(c) {
     const m = this.menu;

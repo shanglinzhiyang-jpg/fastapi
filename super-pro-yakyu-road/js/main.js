@@ -23,3 +23,11 @@ if (typeof window !== 'undefined') {
 // the file picker (a club mark image) can only open inside a real key press / tap
 window.addEventListener('keydown', (e) => { if (filePick.armed && ['KeyZ', 'Space', 'Enter'].includes(e.code) && !e.repeat) openPicker(); }, true);
 document.querySelectorAll('#pad [data-k="a"]').forEach((el) => el.addEventListener('pointerdown', () => { if (filePick.armed) openPicker(); }, true));
+// 全画面 (and sideways where the browser allows it)
+const fb = document.getElementById('fullbtn');
+if (fb && !document.documentElement.requestFullscreen) fb.style.display = 'none';
+if (fb) fb.addEventListener('click', async () => {
+  try { const el = document.documentElement; if (!document.fullscreenElement && el.requestFullscreen) { await el.requestFullscreen(); if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape').catch(() => {}); } else if (document.exitFullscreen) await document.exitFullscreen(); } catch (e) { /* not supported (iPhone): turn the phone sideways */ }
+  setTimeout(() => g.resize(), 300);
+});
+window.addEventListener('orientationchange', () => setTimeout(() => g.resize(), 300));
