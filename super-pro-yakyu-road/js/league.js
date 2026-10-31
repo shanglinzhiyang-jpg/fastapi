@@ -7,6 +7,7 @@ import { simGame, seasonStats } from './game.js';
 
 export const SAVE_KEY = 'spr_save_v1';
 export const SPR_HOOKS = { onDay: null, onGame: null }; // (for the merge: the life game can listen to days and games)
+export const DAY_HOOKS = { before: [], after: [] }; // 球団運営 (front.js) runs its daily business here
 export const GAME_OPTIONS = [30, 60, 143];
 
 export function newLeague({ seed = Date.now() % 1e9, myTeam = 'baystars', games = 60, year = 2026, balance = 'normal' } = {}) {
@@ -28,7 +29,10 @@ export function newLeague({ seed = Date.now() % 1e9, myTeam = 'baystars', games 
 // the computer manager's lineup, rotation and bullpen (also the player's default)
 export function autoOrder(L, teamId) {
   const T = L.teams[teamId];
-  const ps = T.roster.map((id) => L.P[id]);
+  // the injured and the suspended sit out (if a club runs short, they play anyway)
+  const all = T.roster.map((id) => L.P[id]);
+  const ok = all.filter((p) => !(p.inj > 0) && !(p.susp > 0));
+  const ps = ok.filter((p) => !p.pitcher).length >= 9 && ok.filter((p) => p.pitcher).length >= 8 ? ok : all;
   const bats = ps.filter((p) => !p.pitcher), pits = ps.filter((p) => p.pitcher);
   const taken = new Set(), pos = {};
   for (const fp of FIELD_POS) {
@@ -85,7 +89,9 @@ export function advanceDay(L, myResult = null, simMine = true) {
   if (L.over) return [];
   const rng = makeRng(L.rng || 1); rng.set(L.rng || 1);
   const out = [];
-  for (const g of L.sched[L.day] || []) {
+  for (const f of DAY_HOOKS.before) { try { f(L); } catch (e) { console.error(e); } }
+  const struck = L.front && L.front.strikeToday; // a players' strike: no games today
+  for (const g of struck ? [] : L.sched[L.day] || []) {
     const mine = g.h === L.myTeam || g.a === L.myTeam;
     if (mine && myResult) { out.push({ h: g.h, a: g.a, hs: myResult.score.home, as: myResult.score.away, mine: true, dec: myResult.dec }); continue; }
     if (mine && !simMine) continue;
@@ -98,6 +104,7 @@ export function advanceDay(L, myResult = null, simMine = true) {
   L.day++;
   L.rng = rng.state();
   if (L.day >= L.sched.length) L.over = true;
+  for (const f of DAY_HOOKS.after) { try { f(L, out); } catch (e) { console.error(e); } }
   try { if (SPR_HOOKS.onDay) SPR_HOOKS.onDay(L, out); } catch (e) { console.error(e); }
   return out;
 }
@@ -116,7 +123,7 @@ export const ipText = (outs) => `${Math.floor(outs / 3)}${outs % 3 ? `.${outs % 
 export const fmt3 = (v) => (v >= 1 ? v.toFixed(3) : v.toFixed(3).replace(/^0/, ''));
 export function leaders(L, key, lg = null, n = 10) {
   const daysPlayed = Math.max(1, L.day);
-  const ps = Object.values(L.P).filter((p) => !lg || L.teams[teamOfPlayer(L, p.id)].league === lg);
+  const ps = Object.values(L.P).filter((p) => { const t = teamOfPlayer(L, p.id); return t && L.teams[t] && L.teams[t].roster.includes(p.id) && (!lg || L.teams[t].league === lg); });
   const qualB = (p) => p.s.pa >= daysPlayed * 2.7;
   const qualP = (p) => p.s.outs >= daysPlayed * 3;
   const defs = {
@@ -135,8 +142,8 @@ export const LEADER_KEYS = ['avg', 'hr', 'rbi', 'era', 'w', 'so', 'sv'];
 const owner = new Map();
 export function teamOfPlayer(L, pid) {
   const k = `${L.seed}:${pid}`;
-  if (owner.has(k)) return owner.get(k);
-  for (const t of Object.values(L.teams)) if (t.roster.includes(pid)) { owner.set(k, t.id); return t.id; }
+  if (owner.has(k)) { const t = L.teams[owner.get(k)]; if (t && (t.roster.includes(pid) || (t.farm2 || []).includes(pid) || (t.farm3 || []).includes(pid))) return owner.get(k); }
+  for (const t of Object.values(L.teams)) if (t.roster.includes(pid) || (t.farm2 || []).includes(pid) || (t.farm3 || []).includes(pid)) { owner.set(k, t.id); return t.id; }
   return null;
 }
 

@@ -7,6 +7,8 @@ import { drawChibi, lookOf, badge, pitchChip } from '../draw.js';
 import { Match } from './match.js';
 import { drawEmblem, logoOf, clearLogo, filePick, openPicker } from '../emblem.js';
 import { tvHeader, plate, slant, TV } from '../tvgfx.js';
+import { frontMenu, showPending, offseason } from './front_ui.js';
+import { ensureFront, yen } from '../front.js';
 import { Player3D } from '../gfx/player3d.js';
 import { MOUND_H } from '../gfx/match3d.js';
 
@@ -55,6 +57,9 @@ function bg(c, f, col = '#1b3c8f', who = '') {
   for (let i = 0; i < 40; i++) { const x = (i * 137 + f * 0.3) % W, y = (i * 71) % (H - 120); c.fillStyle = `rgba(255,255,255,${0.05 + (i % 5) * 0.02})`; c.beginPath(); c.arc(x, y, 1 + (i % 3), 0, 7); c.fill(); }
 }
 function header(c, title, sub) { tvHeader(c, title, sub); }
+// for the 球団運営 screens (front_ui.js)
+export const menuBg = (c, f, col) => bg(c, f, col, '');
+export const menuStage = (scene, world) => stage3d(scene, world, false);
 const keyNav = (inp, n, sel) => { if (inp.rep('up')) { sound.sfx('cursor'); return (sel - 1 + n) % n; } if (inp.rep('down')) { sound.sfx('cursor'); return (sel + 1) % n; } return sel; };
 
 // ================================================================ title
@@ -202,13 +207,15 @@ class Setup {
 
 // ================================================================ the pennant hub
 export class Hub {
-  constructor(g, L) { this.g = g; this.L = L; this.opaque = true; this.sel = 0; this.f = 0; }
+  constructor(g, L) { this.g = g; this.L = L; this.opaque = true; this.sel = 0; this.f = 0; ensureFront(L); }
   items() {
     const L = this.L, over = L.over;
     return [
       { id: 'play', label: '試合をする', dim: over || !myGameToday(L), sub: over ? 'シーズンは終わった' : '' },
       { id: 'skip', label: '試合を飛ばす（結果だけ）', dim: over },
       { id: 'week', label: '7日まとめて進める', dim: over },
+      ...(over ? [{ id: 'off', label: 'オフシーズンへ', sub: '契約更改・FA・トライアウト → 次のシーズン', right: '★' }] : []),
+      { id: 'front', label: '球団運営', right: L.front && L.front.pending.length ? '！' : '' },
       { id: 'stand', label: '順位表' },
       { id: 'roster', label: '選手一覧・能力' },
       { id: 'lead', label: '成績ランキング' },
@@ -239,7 +246,9 @@ export class Hub {
       const mine = last && last.find((x) => x.mine);
       if (mine) { const my = mine.h === L.myTeam ? mine.hs : mine.as, op = mine.h === L.myTeam ? mine.as : mine.hs; g.toast(`${n > 1 ? '7日後　' : ''}${my > op ? '勝ち' : my < op ? '負け' : '引き分け'} ${my}-${op}（対${teamOf(mine.h === L.myTeam ? mine.a : mine.h).short}）`, my > op ? '#ffd23f' : '#cfd8ee'); }
       this.after();
-    } else if (it.id === 'stand') g.push(new Standings(g, L));
+    } else if (it.id === 'front') g.push(frontMenu(g, L));
+    else if (it.id === 'off') g.push(offseason(g, L, () => { saveLeague(L); this.sel = 0; g.toast(`${L.year}年シーズン開幕！`, '#ffd23f'); }));
+    else if (it.id === 'stand') g.push(new Standings(g, L));
     else if (it.id === 'roster') g.push(new Roster(g, L));
     else if (it.id === 'lead') g.push(new Leaders(g, L));
     else if (it.id === 'res') g.push(new Results(g, L));
@@ -247,7 +256,7 @@ export class Hub {
     else if (it.id === 'save') { g.toast(saveLeague(L) ? 'セーブしました' : 'このブラウザでは保存できません（この画面のあいだだけ残ります）', '#7af0a0'); }
     else if (it.id === 'title') g.replace(new Title(g));
   }
-  after() { if (this.L.over && !this.L.endShown) { this.L.endShown = true; this.g.push(new SeasonEnd(this.g, this.L)); } }
+  after() { showPending(this.g, this.L, () => { if (this.L.over && !this.L.endShown) { this.L.endShown = true; this.g.push(new SeasonEnd(this.g, this.L)); } }); }
   onTap(x, y) { const i = (this.rects || []).findIndex((r) => inRect(x, y, r)); if (i >= 0) { if (this.sel === i) this.pick(this.items()[i]); else { this.sel = i; sound.sfx('cursor'); } } }
   draw(c) {
     const L = this.L, me = teamOf(L.myTeam), T = L.teams[L.myTeam];
@@ -264,7 +273,7 @@ export class Hub {
     txt(c, `得点${T.rs}　失点${T.ra}　${T.streak > 0 ? `${T.streak}連勝中` : T.streak < 0 ? `${-T.streak}連敗中` : ''}`, 160, 192, { size: 14, color: '#cfd8ee', bold: false });
     txt(c, `最近10試合：${T.last.map((x) => (x === 'W' ? '○' : x === 'L' ? '●' : '△')).join('')}`, 160, 220, { size: 14, color: '#cfd8ee', bold: false });
     // today
-    panel(c, 24, 284, 420, 170);
+    panel(c, 24, 284, 420, 168);
     const m = myGameToday(L);
     if (L.over) { txt(c, 'ペナントレース終了', 234, 340, { size: 24, align: 'center', color: '#ffd23f' }); const champ = ['C', 'P'].map((lg) => `${LEAGUES[lg].short}：${teamOf(standings(L, lg)[0].id).short}`).join('　'); txt(c, `優勝　${champ}`, 234, 384, { size: 16, align: 'center' }); }
     else if (m) {
@@ -277,7 +286,11 @@ export class Hub {
       txt(c, `先発 ${pname(sp(m.h))}`, 358, 398, { size: 13, align: 'center', color: '#cfd8ee', bold: false });
       txt(c, `${m.h === L.myTeam ? 'ホーム' : 'ビジター'}`, 234, 430, { size: 13, align: 'center', color: '#9fb6e8' });
     }
-    this.rects = menuList(c, 468, 76, 468, this.items(), this.sel, { rowH: 44, size: 17 });
+    const its = this.items();
+    this.rects = menuList(c, 468, 76, 468, its, this.sel, { rowH: Math.min(44, Math.floor(436 / its.length)), size: 16 });
+    // the club's money and mood
+    const Fr = L.front;
+    if (Fr) { plate(c, 24, 462, 420, 50, { k: 14 }); txt(c, `資金 ${yen(Fr.money)}`, 44, 478, { size: 14, color: '#ffffff' }); txt(c, `人気 ${Math.round(Fr.fans)}　士気 ${Math.round(Fr.morale)}　選手会 ${Math.round(Fr.union)}`, 44, 498, { size: 12, color: TV.dim, bold: false }); txt(c, Fr.mgr.mode === 'rest' ? '監督代行' : Fr.mgr.mode === 'player' ? '兼任監督' : `監督 ${Fr.mgr.name}`, 428, 488, { size: 12, align: 'right', color: TV.gold2, max: 150 }); }
     txt(c, '↑↓ えらぶ　A 決定', W - 24, H - 16, { size: 12, align: 'right', color: '#9fb6e8' });
   }
 }

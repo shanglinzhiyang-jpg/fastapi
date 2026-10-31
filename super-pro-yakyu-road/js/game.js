@@ -4,7 +4,17 @@
 // probability model of a plate appearance used by every computer-played at-bat (simPA).
 import { clamp, gauss } from './core.js';
 import { pitchStuff, pname, BALANCE } from './data.js';
-export const balOf = (L) => BALANCE[(L && L.balance) || 'normal'] || BALANCE.normal;
+// the league balance, with the ball the league uses (球団運営 → 使用球: 飛ぶボール / 標準 / 飛ばないボール)
+export const BALLS = { fly: { name: '飛ぶボール', hr: 1.3, hit: 1.02 }, std: { name: '標準球', hr: 1, hit: 1 }, dead: { name: '飛ばないボール', hr: 0.72, hit: 0.98 } };
+const balMemo = new Map();
+export const balOf = (L) => {
+  const b = BALANCE[(L && L.balance) || 'normal'] || BALANCE.normal, ball = BALLS[(L && L.front && L.front.ball) || 'std'] || BALLS.std;
+  const key = `${b.name}|${ball.name}`;
+  if (!balMemo.has(key)) balMemo.set(key, { ...b, hr: b.hr * ball.hr, hit: b.hit * ball.hit });
+  return balMemo.get(key);
+};
+// a club's form (球団運営: the manager, team morale): −1..+1 for batting and pitching
+const modOf = (L, teamId) => (L.teams[teamId] && L.teams[teamId].mod) || { bat: 0, pit: 0 };
 
 export const MAX_INN = 12;
 const num = (v) => (Number.isFinite(v) ? v : 0);
@@ -257,7 +267,9 @@ export function simPA(GS, L, rng = Math.random) {
   const lr = (pit.throws === 'L') === (bat.bats === 'L') ? 1.04 : 0.97; // same side helps the pitcher a little
   const m = bat.meet, pw = bat.power;
   const BAL = balOf(L);
-  const pK = clamp(BAL.k * 0.2 * (0.62 + stuff / 190) * (1.32 - m / 150) * lr, 0.05, 0.42);
+  const mb = modOf(L, GS[battingSide(GS)]), mp = modOf(L, GS[fieldingSide(GS)]);
+  const form = mb.bat - mp.pit; // + favours the batter
+  const pK = clamp(BAL.k * 0.2 * (0.62 + stuff / 190) * (1.32 - m / 150) * lr * (1 - form * 0.06), 0.05, 0.42);
   const pBB = clamp(0.072 * (1.38 - ctrl / 140) * (0.85 + m / 320), 0.02, 0.18);
   const pHBP = 0.007;
   addPitches(GS, Math.max(1, Math.round(3.9 + gauss(rng) * 1.4)));
@@ -267,9 +279,9 @@ export function simPA(GS, L, rng = Math.random) {
   if (r < pK + pBB + pHBP) return { kind: 'HBP' };
   // a ball in play
   const def = defenseOf(GS, L);
-  const pHR = clamp(BAL.hr * 0.032 * Math.pow(pw / 58, 2.5) * (1 - (stuff - 72) / 260) / lr, 0.002, 0.16);
+  const pHR = clamp(BAL.hr * 0.032 * Math.pow(pw / 58, 2.5) * (1 - (stuff - 72) / 260) / lr * (1 + form * 0.12), 0.002, 0.16);
   if (rng() < pHR) return { kind: 'HR' };
-  const pHit = clamp(BAL.hit * 0.295 + (m - 55) / 380 + (bat.speed - 55) / 1300 - (stuff - 72) / 620 - (def - 58) / 650, 0.16, 0.42);
+  const pHit = clamp(BAL.hit * 0.295 + (m - 55) / 380 + (bat.speed - 55) / 1300 - (stuff - 72) / 620 - (def - 58) / 650 + form * 0.025, 0.16, 0.42);
   if (rng() < pHit) {
     const x = rng();
     const p2 = 0.17 + (pw - 55) / 500, p3 = 0.018 + (bat.speed - 55) / 1400;
