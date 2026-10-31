@@ -21,6 +21,7 @@ function outlined(geo, mat, k = 1.06) {
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2);
+const gradSoft = (() => { const d = new Uint8Array([150, 195, 230, 255]); const t = new THREE.DataTexture(d, 4, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true; return t; })();
 const SKINS = [0xf6d2b0, 0xf1c39d, 0xe8b48a, 0xf8dcc0];
 
 export class Player3D {
@@ -31,7 +32,7 @@ export class Player3D {
     const skin = L.skin != null ? L.skin : SKINS[(L.num || 0) % SKINS.length];
     const uniCol = L.ump ? 0x2a2e3a : L.away ? 0xc8cdd8 : 0xf6f6fa;
     const M = {
-      skin: matCache(`s${skin}`, () => toon(skin)),
+      skin: matCache(`s${skin}`, () => toon(skin, { gradientMap: gradSoft })),
       uni: matCache(`u${uniCol}`, () => toon(uniCol)),
       c1: matCache(`c${L.c1}`, () => toon(c1)),
       c2: matCache(`c2${L.c2}`, () => toon(c2)),
@@ -67,8 +68,9 @@ export class Player3D {
     // head
     const neck = this.neck = new THREE.Group(); neck.position.y = 0.5; torso.add(neck);
     const head = this.head = new THREE.Group(); head.position.y = 0.3; neck.add(head);
-    head.add(outlined(new THREE.SphereGeometry(0.33, 24, 18), M.skin, 1.04));
-    const back = new THREE.Mesh(new THREE.SphereGeometry(0.335, 20, 14, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.4), M.hair); back.rotation.y = Math.PI; back.position.z = -0.01; head.add(back);
+    head.add(outlined(new THREE.SphereGeometry(0.33, 40, 30), M.skin, 1.04));
+    // the hair: only the back half of the head (from the crown to the nape), so nothing overlaps the face
+    const back = new THREE.Mesh(new THREE.SphereGeometry(0.338, 32, 16, Math.PI * 0.08, Math.PI * 0.84, Math.PI * 0.12, Math.PI * 0.56), M.hair); back.rotation.y = Math.PI; head.add(back);
     for (const sx of [-1, 1]) {
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 10), M.eye); eye.scale.set(0.8, 1.25, 0.45); eye.position.set(sx * 0.12, 0.0, 0.3); head.add(eye);
       const hl = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), M.white); hl.position.set(sx * 0.12 + 0.015, 0.03, 0.325); head.add(hl);
@@ -82,11 +84,11 @@ export class Player3D {
     {
       const dome = outlined(new THREE.SphereGeometry(0.345, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), M.c1, 1.03); dome.position.y = 0.04; this.cap.add(dome);
       const brim = outlined(new THREE.CylinderGeometry(0.2, 0.2, 0.025, 20, 1, false, -Math.PI / 2, Math.PI), M.c1, 1.06); brim.position.set(0, 0.05, 0.3); brim.scale.set(1.2, 1, 1); this.cap.add(brim);
-      const mk = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.26), matCache(`mk${L.mark}${L.c2}`, () => new THREE.MeshBasicMaterial({ map: markTexture(L.mark || '', L.c2 || '#ffffff'), transparent: true }))); mk.position.set(0, 0.2, 0.3); mk.rotation.x = -0.45; this.cap.add(mk);
+      const mk = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.22), matCache(`mk${L.mark}${L.c2}`, () => new THREE.MeshBasicMaterial({ map: markTexture(L.mark || '', L.c2 || '#ffffff'), transparent: true }))); mk.position.set(0, 0.2, 0.335); mk.rotation.x = -0.5; this.cap.add(mk);
       const hel = new THREE.Mesh(new THREE.SphereGeometry(0.37, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), M.helmet); hel.position.y = 0.02; this.helmetG.add(hel);
       const hb = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.02, 16, 1, false, -Math.PI / 2, Math.PI), M.helmet); hb.position.set(0, 0.0, 0.32); this.helmetG.add(hb);
       const flap = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), M.helmet); flap.scale.set(0.5, 1, 1); flap.position.set(L.lefty ? 0.33 : -0.33, -0.06, 0.02); this.helmetG.add(flap);
-      const hmk = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.22), matCache(`mk${L.mark}${L.c2}`, () => null) || new THREE.MeshBasicMaterial({ map: markTexture(L.mark || '', L.c2 || '#ffffff'), transparent: true })); hmk.position.set(0, 0.22, 0.31); hmk.rotation.x = -0.5; this.helmetG.add(hmk);
+      const hmk = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.22), matCache(`mk${L.mark}${L.c2}`, () => null) || new THREE.MeshBasicMaterial({ map: markTexture(L.mark || '', L.c2 || '#ffffff'), transparent: true })); hmk.position.set(0, 0.22, 0.36); hmk.rotation.x = -0.55; this.helmetG.add(hmk);
     }
     this.setHelmet(!!L.helmet);
     // arms: shoulder → elbow → hand

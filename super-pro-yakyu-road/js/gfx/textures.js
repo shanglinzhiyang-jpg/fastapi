@@ -69,8 +69,8 @@ export function skyTexture(night = false) {
 export function markTexture(mark, fg = '#ffffff', bg = null) {
   const [c, x] = cv(128, 128);
   if (bg) { x.fillStyle = bg; x.fillRect(0, 0, 128, 128); }
-  x.fillStyle = fg; x.strokeStyle = 'rgba(0,0,0,0.55)'; x.lineWidth = 8;
-  x.font = `900 ${mark.length > 1 ? 66 : 92}px "Arial Black", "Hiragino Sans", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = fg; x.strokeStyle = 'rgba(0,0,0,0.45)'; x.lineWidth = 3;
+  x.font = `900 ${mark.length > 1 ? 62 : 92}px "Arial Black", "Helvetica", "Arial", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
   x.strokeText(mark, 64, 70); x.fillText(mark, 64, 70);
   return tex(c);
 }
@@ -78,8 +78,6 @@ export function markTexture(mark, fg = '#ffffff', bg = null) {
 export function jerseyTexture(num, c1, away = false, mark = '') {
   const [c, x] = cv(256, 256);
   x.fillStyle = away ? '#c9ced8' : '#f8f8fb'; x.fillRect(0, 0, 256, 256);
-  // pinstripes for a touch of detail
-  x.fillStyle = 'rgba(0,0,0,0.05)'; for (let i = 0; i < 256; i += 16) x.fillRect(i, 0, 2, 256);
   // the front (left half of the texture): the mark; the back (right half): the number
   // the chest shows the mark and the back the number (the cylinder's seam is at the side)
   x.fillStyle = c1; x.font = `900 ${mark.length > 1 ? 40 : 54}px "Arial Black", "Helvetica", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';

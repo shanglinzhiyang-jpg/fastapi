@@ -16,6 +16,9 @@ window.__scene = (k) => {
     add({ ...T, num: 18 }, 0, 18.44, 'windup', 0.55, [0, 0]).root.position.y = 0.25;
     for (const [x, y] of [[19, 24], [9, 34], [-9, 34], [-19, 24], [-32, 76], [0, 90], [32, 76]]) add({ ...T, num: Math.abs(x) + 2 }, x, y, 'ready', 0, [0, 0]);
     w.setView('catcher');
+  } else if (k === 'face') {
+    add({ ...T, num: 18 }, 0, 20, 'stand', 0, [0, 0]); add({ ...A, num: 6, helmet: true, gear: 'bat' }, 1.6, 20, 'stand', 0, [0, 0]); add({ ...T, num: 3 }, -1.6, 20, 'stand', 0, [-5, -30]);
+    w.setView('look', { from: [0, 15.5, 1.6], to: [0, 20, 1.2], fov: 40 });
   } else {
     const poses = [['stand', 0], ['stance', 0.3], ['swing', 0.7], ['windup', 0.35], ['windup', 0.85], ['run', 0.25], ['ready', 0], ['catch', 0], ['throw', 0.6], ['crouch', 0]];
     poses.forEach(([n, t], i) => add({ ...(i % 2 ? A : T), num: 10 + i, helmet: n === 'stance' || n === 'swing' || n === 'run', gear: n === 'stance' || n === 'swing' ? 'bat' : n === 'run' ? 'none' : 'glove' }, -9 + i * 2, 20, n, t, [-9 + i * 2 + (n === 'stance' || n === 'swing' ? 3 : 0), 10]));
