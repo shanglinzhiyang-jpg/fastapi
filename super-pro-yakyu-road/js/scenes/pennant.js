@@ -6,6 +6,7 @@ import { newLeague, loadLeague, saveLeague, hasSave, advanceDay, myGameToday, st
 import { drawChibi, lookOf, badge, pitchChip } from '../draw.js';
 import { Match } from './match.js';
 import { drawEmblem, logoOf, clearLogo, filePick, openPicker } from '../emblem.js';
+import { tvHeader, plate, slant, TV } from '../tvgfx.js';
 import { Player3D } from '../gfx/player3d.js';
 import { MOUND_H } from '../gfx/match3d.js';
 
@@ -53,11 +54,7 @@ function bg(c, f, col = '#1b3c8f', who = '') {
   c.fillStyle = col; c.globalAlpha = 0.18; c.beginPath(); c.ellipse(W / 2, H + 120, 620, 300, 0, 0, 7); c.fill(); c.globalAlpha = 1;
   for (let i = 0; i < 40; i++) { const x = (i * 137 + f * 0.3) % W, y = (i * 71) % (H - 120); c.fillStyle = `rgba(255,255,255,${0.05 + (i % 5) * 0.02})`; c.beginPath(); c.arc(x, y, 1 + (i % 3), 0, 7); c.fill(); }
 }
-function header(c, title, sub) {
-  c.fillStyle = 'rgba(255,255,255,0.06)'; c.fillRect(0, 0, W, 58);
-  txt(c, title, 24, 30, { size: 24, color: '#ffd23f' });
-  if (sub) txt(c, sub, W - 24, 30, { size: 14, align: 'right', color: '#cfd8ee', bold: false });
-}
+function header(c, title, sub) { tvHeader(c, title, sub); }
 const keyNav = (inp, n, sel) => { if (inp.rep('up')) { sound.sfx('cursor'); return (sel - 1 + n) % n; } if (inp.rep('down')) { sound.sfx('cursor'); return (sel + 1) % n; } return sel; };
 
 // ================================================================ title
@@ -79,20 +76,41 @@ export class Title {
   onTap(x, y) { const i = (this.rects || []).findIndex((r) => inRect(x, y, r)); if (i >= 0) { this.sel = i; this.pick(this.items()[i]); } }
   draw(c) {
     bg(c, this.f, '#1b3c8f', 'Title');
-    // the logo
-    c.save(); c.translate(W / 2, 140);
-    const k = 1 + Math.sin(this.f / 40) * 0.015; c.scale(k, k);
-    txt(c, 'スーパー', -230, -40, { size: 30, color: '#ffffff', stroke: '#c0182c', strokeW: 6 });
-    txt(c, 'プロ野球ロード', 0, 10, { size: 66, align: 'center', color: '#ffd23f', stroke: '#1a1206', strokeW: 10 });
-    txt(c, 'SUPER PRO BASEBALL ROAD', 0, 62, { size: 16, align: 'center', color: '#9fb6e8' });
+    // the title card, broadcast style: a red band, a navy plate, the gold title sliding in
+    const f = this.f, k = Math.min(1, f / 24), e = 1 - Math.pow(1 - k, 3);
+    c.save(); c.translate((1 - e) * -W, 0);
+    c.fillStyle = TV.red; slant(c, 150, 62, 660, 132, 50); c.fill();
+    plate(c, 176, 70, 640, 116, { k: 46 });
     c.restore();
-    // two players
+    c.save(); c.translate((1 - e) * W * 0.6, 0);
+    c.fillStyle = TV.red; slant(c, 214, 54, 150, 30, 10); c.fill();
+    txt(c, 'SUPER', 289, 70, { size: 20, align: 'center', color: '#ffffff' });
+    const sh = 1 + Math.sin(f / 50) * 0.01;
+    c.save(); c.translate(W / 2 + 10, 128); c.scale(sh, sh);
+    txt(c, 'プロ野球ロード', 0, 0, { size: 64, align: 'center', color: TV.gold2, stroke: '#1a0f00', strokeW: 9 });
+    c.restore();
+    txt(c, 'SUPER PRO BASEBALL ROAD', W / 2 + 10, 172, { size: 14, align: 'center', color: '#cfe0ff' });
+    c.restore();
+    // a light sweep across the title
+    const sx = ((f * 9) % 1600) - 300;
+    c.save(); slant(c, 176, 70, 640, 116, 46); c.clip();
+    const sg = c.createLinearGradient(sx, 0, sx + 120, 0); sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,0.22)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = sg; c.fillRect(sx, 70, 120, 116); c.restore();
+    // the twelve clubs running along the bottom
+    const ids = TEAMS.map((t) => t.id), cw = 92, total = cw * ids.length;
+    plate(c, -20, H - 108, W + 40, 76, { k: 0, edge: 'rgba(245,197,66,0.6)' });
+    for (let n = 0; n < ids.length * 2; n++) {
+      const x = ((n * cw - f * 0.8) % (total * 2) + total * 2) % (total * 2) - cw;
+      if (x < -cw || x > W) continue;
+      c.fillStyle = 'rgba(255,255,255,0.94)'; roundRect(c, x + 8, H - 102, cw - 16, 64, 8); c.fill();
+      drawEmblem(c, x + cw / 2, H - 70, 58, ids[n % ids.length]);
+    }
     if (!glOn) {
       drawChibi(c, 180, 470, 2.2, lookOf({ num: 18 }, 'baystars'), 'ready', this.f / 60, {});
       drawChibi(c, 790, 470, 2.2, lookOf({ num: 11 }, 'hawks'), 'pitch', (this.f % 120) / 120, { flip: true, glove: true });
     }
-    this.rects = menuList(c, 300, 260, 360, this.items(), this.sel, { rowH: 54 });
-    txt(c, '球団名は実在の名称、選手はすべて架空です', W / 2, H - 16, { size: 11, align: 'center', color: 'rgba(200,215,245,0.55)', bold: false });
+    this.rects = menuList(c, 250, 212, 460, this.items(), this.sel, { rowH: 50 });
+    txt(c, '球団名は実在の名称、選手はすべて架空です', W / 2, H - 14, { size: 11, align: 'center', color: 'rgba(220,230,250,0.75)', bold: false });
   }
 }
 class Help {

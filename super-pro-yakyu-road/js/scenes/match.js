@@ -9,6 +9,7 @@ import { drawChibi, lookOf, drawBattingView, drawZone, drawBall, drawCursor, zon
 import { avg, fmt3, era } from '../league.js';
 import { MatchView, pitchPoint, zoneField } from '../gfx/match3d.js';
 import { resolveBall, contactBall } from '../play.js';
+import { scoreBug, lowerThird, pitcherPlate, speedGun, caption, stinger, plate, TV } from '../tvgfx.js';
 
 const SLOW = 1.75; // the pitch takes this many times its real flight time (playable)
 const KIND_TEXT = { '1B': 'ヒット！', '2B': 'ツーベース！', '3B': 'スリーベース！', HR: 'ホームラン！！', GO: 'ゴロアウト', FO: 'フライアウト', LO: 'ライナーアウト', PO: 'ポップフライ', DP: 'ゲッツー', FC: 'フィルダースチョイス' };
@@ -117,6 +118,7 @@ export class Match {
     if (fs !== this.mine) { const np = maybeChange(GS, L, fs); if (np) this.g.toast(`${teamOf(GS[fs]).short}：ピッチャー交代 ${pname(np)}`, '#ffd23f'); }
     else if (fatigue(GS, L, fs) > 1.45) { const np = maybeChange(GS, L, fs, true); if (np) this.g.toast(`ピッチャー交代：${pname(np)}（疲れが限界）`, '#ffd23f'); }
     this.set('pa');
+    this.paF = this.f;
   }
   nextPitch() {
     if (this.myBat) { this.pi = cpuPitch(this.GS, this.L); this.swing = null; this.set('windup'); }
@@ -357,7 +359,7 @@ export class Match {
       }
       if (!v3 && this.ph === 'flight' && this.pi) { const b = ballAt(this.pi, Math.min(1, this.t / this.pi.dur)); drawBall(c, b.x, b.y, b.r, { trail: this.trail }); }
       if (this.ph === 'call' && this.pi) { const e = this.zs(this.pi.fx, this.pi.fy); if (!v3) drawBall(c, e.x, e.y, 9); c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 2; c.beginPath(); c.arc(e.x, e.y, 14, 0, 7); c.stroke(); }
-      if ((this.ph === 'call' || this.ph === 'result') && this.pi) txt(c, `${this.pi.kmh}km/h　${this.pi.name}`, W - 22, 196, { size: 18, align: 'right', color: '#ffffff', stroke: 'rgba(0,0,0,0.7)', strokeW: 5 });
+      if ((this.ph === 'call' || this.ph === 'result') && this.pi) speedGun(c, this.pi.kmh, this.pi.name, this.ph === 'call' ? this.t : 99);
       this.drawHud(c, bat, pit);
     }
     this.drawTop(c);
@@ -381,21 +383,19 @@ export class Match {
   // the scoreboard, the messages, the menus (both views)
   drawTop(c) {
     const GS = this.GS, L = this.L;
-    drawScoreboard(c, GS);
-    // the messages
-    if (this.ph === 'call' && this.msg) txt(c, this.msg.text, W / 2, 150, { size: 40, align: 'center', color: this.msg.col, stroke: 'rgba(0,0,0,0.75)', strokeW: 8 });
-    if ((this.ph === 'result' || (this.ph === 'bip' && this.bip && this.bip.t >= this.bip.decide)) && this.msg) {
-      const big = this.msg.big;
-      const k = Math.min(1, this.t / 10);
-      c.save(); c.translate(W / 2, big ? 190 : 150); c.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k);
-      txt(c, this.msg.text, 0, 0, { size: big ? 56 : 34, align: 'center', color: big ? '#ffd23f' : this.msg.col, stroke: 'rgba(0,0,0,0.8)', strokeW: big ? 10 : 7 });
-      c.restore();
+    scoreBug(c, GS);
+    // the captions (a band sweeping across, like the broadcast)
+    if (this.ph === 'call' && this.msg) caption(c, this.msg.text, 'call', this.t);
+    const showRes = this.ph === 'result' || (this.ph === 'bip' && this.bip && this.bip.t >= this.bip.decide);
+    if (showRes && this.msg) {
+      const tt = this.ph === 'bip' ? this.bip.t - this.bip.decide : this.t + (this.prevCap || 0);
+      const kind = this.msg.big ? 'hr' : this.msg.col === '#ffd23f' ? 'hit' : 'out';
+      caption(c, this.msg.text, kind, tt, kind === 'hr' ? 'HOME RUN' : '');
     }
-    if (this.ph === 'intro') this.banner(c, 'プレイボール！', `${teamOf(GS.away).full} 対 ${teamOf(GS.home).full}`);
-    if (this.ph === 'change') this.banner(c, GS.top ? `${GS.inning}回表` : `${GS.inning}回裏`, `攻撃：${teamOf(GS[battingSide(GS)]).full}`);
-    if (this.ph === 'pa') { const b = batterOf(GS, L); txt(c, `${GS.idx[battingSide(GS)] % 9 + 1}番　${posShort(GS.lineup[battingSide(GS)] && this.L.teams[GS[battingSide(GS)]].pos ? this.L.teams[GS[battingSide(GS)]].pos[b.id] || b.pos : b.pos)}　${pfull(b)}`, W / 2, 140, { size: 30, align: 'center', stroke: 'rgba(0,0,0,0.75)', strokeW: 7 }); }
+    if (this.ph === 'intro') stinger(c, this.t, 'プレイボール', `${teamOf(GS.away).full}　対　${teamOf(GS.home).full}`, GS.home);
+    if (this.ph === 'change') stinger(c, this.t, GS.top ? `${GS.inning}回表` : `${GS.inning}回裏`, `攻撃：${teamOf(GS[battingSide(GS)]).full}`, GS[battingSide(GS)]);
     if (this.ph === 'select' || this.ph === 'aim') this.drawPitchPanel(c);
-    if (this.myBat && (this.ph === 'windup' || this.ph === 'flight') && this.t < 40 && this.GS.balls + this.GS.strikes === 0) txt(c, '十字キーでカーソル　A：ミート打ち　B：強振', W / 2, H - 16, { size: 14, align: 'center', color: 'rgba(255,255,255,0.75)' });
+    if (this.myBat && (this.ph === 'windup' || this.ph === 'flight') && this.t < 40 && this.GS.balls + this.GS.strikes === 0) txt(c, '十字キーでカーソル　A：ミート打ち　B：強振', W / 2, 106, { size: 14, align: 'center', color: '#ffffff', stroke: 'rgba(0,0,0,0.6)', strokeW: 4 });
     if (this.auto) { panel(c, 250, 210, 460, 120); txt(c, this.auto.mode === 'all' ? '試合終了までオート中…' : 'この回をオート中…', W / 2, 245, { size: 22, align: 'center', color: '#ffd23f' }); txt(c, this.autoLine || '', W / 2, 285, { size: 16, align: 'center', max: 420 }); txt(c, 'B / START で止める', W / 2, 314, { size: 12, align: 'center', color: '#9fb6e8' }); }
     if (this.ph === 'over') this.drawOver(c);
     if (this.menu) this.drawMenu(c);
@@ -408,26 +408,21 @@ export class Match {
   }
   drawHud(c, bat, pit) {
     const GS = this.GS, L = this.L;
-    // the batter card (bottom left)
-    panel(c, 14, H - 124, 290, 110, { r: 12 });
-    const bs = bat.s || {};
-    txt(c, `${pfull(bat)}`, 28, H - 104, { size: 18, max: 170 });
-    txt(c, `${bat.bats === 'L' ? '左打' : '右打'}　打率${fmt3(avg(bs))}　${bs.hr || 0}本`, 28, H - 80, { size: 13, color: '#cfd8ee', bold: false });
-    badge(c, 26, H - 66, bat.meet, 'ミート', { w: 86 }); badge(c, 116, H - 66, bat.power, 'パワー', { w: 86 }); badge(c, 206, H - 66, bat.speed, '走力', { w: 86 });
+    // the batter's name plate (lower third), sliding in at each plate appearance
+    const bs = bat.s || {}, bside = battingSide(GS), T = L.teams[GS[bside]];
     const g0 = GS.box[bat.id];
-    txt(c, g0 ? `今日 ${g0.ab}打数${g0.h}安打${g0.rbi ? ` ${g0.rbi}打点` : ''}` : '今日 第1打席', 28, H - 30, { size: 12, color: '#9fb6e8', bold: false });
-    // the pitcher card (top right)
-    panel(c, W - 274, 12, 260, 92, { r: 12 });
-    txt(c, pfull(pit), W - 260, 32, { size: 17, max: 160 });
-    txt(c, `${pit.throws === 'L' ? '左' : '右'}投　最速${pit.velo}km/h`, W - 260, 54, { size: 12, color: '#cfd8ee', bold: false });
+    lowerThird(c, bat, {
+      team: GS[bside], order: GS.idx[bside] % 9 + 1, pos: posShort((T.pos && T.pos[bat.id]) || bat.pos), name: pfull(bat), hand: bat.bats === 'L' ? '左打' : '右打',
+      season: { avg: fmt3(avg(bs)), hr: bs.hr || 0, rbi: bs.rbi || 0 }, today: g0 ? `今日 ${g0.ab}-${g0.h}${g0.rbi ? ` ${g0.rbi}打点` : ''}` : '今日 第1打席',
+      abilities: [['ミート', bat.meet], ['パワー', bat.power], ['走力', bat.speed]], t: this.paF == null ? 99 : this.f - this.paF,
+    });
+    // the pitcher (top right)
     const fs = fieldingSide(GS), fat = clamp(1 - fatigue(GS, L, fs), 0, 1);
-    txt(c, 'スタミナ', W - 260, 78, { size: 11, color: '#cfd8ee', bold: false });
-    c.fillStyle = 'rgba(255,255,255,0.12)'; roundRect(c, W - 200, 72, 120, 10, 5); c.fill();
-    c.fillStyle = fat > 0.5 ? '#5ee07a' : fat > 0.2 ? '#ffd23f' : '#ff5a5a'; roundRect(c, W - 200, 72, 120 * fat, 10, 5); c.fill();
-    txt(c, `${(GS.pbox[pit.id] || { pc: 0 }).pc}球`, W - 30, 78, { size: 12, align: 'right', color: '#cfd8ee', bold: false });
+    pitcherPlate(c, pit, { team: GS[fs], name: pfull(pit), hand: pit.throws === 'L' ? '左投' : '右投', stamina: fat, pc: (GS.pbox[pit.id] || { pc: 0 }).pc });
     // the next batters
     const nb = nextBatters(GS, L, 3).slice(1);
-    txt(c, `次：${nb.map((p) => pname(p)).join('・')}`, W - 20, H - 22, { size: 12, color: 'rgba(255,255,255,0.7)', bold: false, align: 'right' });
+    plate(c, W - 250, H - 34, 236, 24, { k: 10 });
+    txt(c, `NEXT　${nb.map((p) => pname(p)).join('・')}`, W - 30, H - 22, { size: 12, color: TV.ink, bold: false, align: 'right', max: 210 });
   }
   drawPitchPanel(c) {
     const p = pitcherOf(this.GS, this.L);
@@ -435,7 +430,7 @@ export class Match {
     panel(c, W - 196, 118, 182, 40 + list.length * 32, { r: 12 });
     txt(c, this.ph === 'select' ? '球種をえらぶ' : 'コースを決めて A', W - 186, 136, { size: 13, color: '#ffd23f' });
     list.forEach((x, i) => pitchChip(c, W - 186, 152 + i * 32, x, { on: i === this.sel, w: 162 }));
-    txt(c, this.ph === 'select' ? '↑↓ 球種　A 決定' : '十字キー コース　A 投げる　B もどる', W / 2, H - 16, { size: 14, align: 'center', color: 'rgba(255,255,255,0.8)' });
+    txt(c, this.ph === 'select' ? '↑↓ 球種　A 決定' : '十字キー コース　A 投げる　B もどる', W / 2, 106, { size: 14, align: 'center', color: '#ffffff', stroke: 'rgba(0,0,0,0.6)', strokeW: 4 });
   }
   // the batted ball on the 3D field: just the numbers (the field itself is 3D)
   drawBipInfo(c) {

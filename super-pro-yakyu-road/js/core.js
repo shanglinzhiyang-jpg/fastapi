@@ -213,28 +213,45 @@ export function txt(c, s, x, y, o = {}) {
   c.fillText(str, x, y);
   return c.measureText(str).width;
 }
+// a content panel in the broadcast style: dark navy glass, a glossy top, a thin gold edge, a coloured band on top
 export function panel(c, x, y, w, h, o = {}) {
+  const r = o.r || 10;
   c.save();
-  if (o.shadow !== false) { c.shadowColor = 'rgba(0,0,0,0.35)'; c.shadowBlur = 16; c.shadowOffsetY = 6; }
+  if (o.shadow !== false) { c.shadowColor = 'rgba(0,0,0,0.45)'; c.shadowBlur = 16; c.shadowOffsetY = 5; }
   const gr = c.createLinearGradient(0, y, 0, y + h);
-  gr.addColorStop(0, o.top || 'rgba(26,44,86,0.96)'); gr.addColorStop(1, o.bottom || 'rgba(12,24,52,0.96)');
-  c.fillStyle = gr; roundRect(c, x, y, w, h, o.r || 14); c.fill();
+  gr.addColorStop(0, o.top || 'rgba(27,44,94,0.96)'); gr.addColorStop(1, o.bottom || 'rgba(8,16,40,0.96)');
+  c.fillStyle = gr; roundRect(c, x, y, w, h, r); c.fill();
   c.restore();
-  c.lineWidth = o.lw || 2; c.strokeStyle = o.edge || 'rgba(140,180,255,0.35)'; roundRect(c, x + 1, y + 1, w - 2, h - 2, (o.r || 14) - 1); c.stroke();
+  c.save(); roundRect(c, x, y, w, h, r); c.clip();
+  const gl = c.createLinearGradient(0, y, 0, y + Math.min(h, 60)); gl.addColorStop(0, 'rgba(255,255,255,0.16)'); gl.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = gl; c.fillRect(x, y, w, Math.min(h, 60));
+  c.fillStyle = o.band || 'rgba(245,197,66,0.9)'; c.fillRect(x, y, w, 3);
+  c.restore();
+  c.lineWidth = 1.5; c.strokeStyle = o.edge || 'rgba(245,197,66,0.55)'; roundRect(c, x + 0.75, y + 0.75, w - 1.5, h - 1.5, r); c.stroke();
 }
-// a menu list with a highlight; items: [{ label, sub?, right?, dim? }] → draws and returns hit rects
+const slantPath = (c, x, y, w, h, k) => { c.beginPath(); c.moveTo(x + k, y); c.lineTo(x + w, y); c.lineTo(x + w - k, y + h); c.lineTo(x, y + h); c.closePath(); };
+// a menu list in the broadcast style (slanted bars; the chosen one gold with a red tab); items: [{ label, sub?, right?, dim? }]
 export function menuList(c, x, y, w, items, sel, o = {}) {
-  const rh = o.rowH || 46, rects = [];
+  const rh = o.rowH || 46, rects = [], k = 12;
   items.forEach((it, i) => {
-    const ry = y + i * rh, on = i === sel;
+    const ry = y + i * rh + 3, hh = rh - 6, on = i === sel;
+    c.save();
     if (on) {
-      const gr = c.createLinearGradient(x, 0, x + w, 0); gr.addColorStop(0, o.hi || '#ffb020'); gr.addColorStop(1, o.hi2 || '#ff6a3d');
-      c.fillStyle = gr; roundRect(c, x, ry + 3, w, rh - 6, 10); c.fill();
-    } else { c.fillStyle = 'rgba(255,255,255,0.05)'; roundRect(c, x, ry + 3, w, rh - 6, 10); c.fill(); }
-    txt(c, it.label, x + 18, ry + (it.sub ? rh / 2 - 7 : rh / 2), { size: o.size || 19, color: it.dim ? 'rgba(255,255,255,0.4)' : on ? '#1a1206' : '#eef3ff', max: w - 120 });
-    if (it.sub) txt(c, it.sub, x + 18, ry + rh / 2 + 11, { size: 12, color: on ? 'rgba(26,18,6,0.8)' : 'rgba(220,230,255,0.6)', bold: false, max: w - 40 });
-    if (it.right) txt(c, it.right, x + w - 16, ry + rh / 2, { size: 15, align: 'right', color: on ? '#1a1206' : '#ffd36a' });
-    rects.push({ x, y: ry, w, h: rh, i });
+      c.shadowColor = 'rgba(245,197,66,0.55)'; c.shadowBlur = 14;
+      const gr = c.createLinearGradient(0, ry, 0, ry + hh); gr.addColorStop(0, '#ffe590'); gr.addColorStop(0.5, '#f5c542'); gr.addColorStop(1, '#d99a12');
+      c.fillStyle = gr; slantPath(c, x, ry, w, hh, k); c.fill();
+      c.shadowBlur = 0; c.fillStyle = '#e0283c'; slantPath(c, x, ry, 14 + k, hh, k); c.fill();
+    } else {
+      const gr = c.createLinearGradient(0, ry, 0, ry + hh); gr.addColorStop(0, 'rgba(30,48,100,0.92)'); gr.addColorStop(1, 'rgba(10,20,48,0.92)');
+      c.fillStyle = gr; slantPath(c, x, ry, w, hh, k); c.fill();
+      c.fillStyle = 'rgba(255,255,255,0.07)'; c.fillRect(x + k, ry, w - k, hh * 0.45);
+      c.strokeStyle = 'rgba(245,197,66,0.35)'; c.lineWidth = 1; slantPath(c, x + 0.5, ry + 0.5, w - 1, hh - 1, k); c.stroke();
+    }
+    c.restore();
+    txt(c, it.label, x + 30, ry + (it.sub ? hh / 2 - 7 : hh / 2), { size: o.size || 19, color: it.dim ? 'rgba(255,255,255,0.4)' : on ? '#1a1000' : '#eef3ff', max: w - 130 });
+    if (it.sub) txt(c, it.sub, x + 30, ry + hh / 2 + 11, { size: 12, color: on ? 'rgba(40,24,0,0.8)' : 'rgba(220,230,255,0.6)', bold: false, max: w - 50 });
+    if (it.right) txt(c, it.right, x + w - 24, ry + hh / 2, { size: 15, align: 'right', color: on ? '#1a1000' : '#ffd36a' });
+    rects.push({ x, y: ry - 3, w, h: rh, i });
   });
   return rects;
 }
