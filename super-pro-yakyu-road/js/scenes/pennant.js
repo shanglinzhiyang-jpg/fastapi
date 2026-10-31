@@ -5,9 +5,49 @@ import { TEAMS, LEAGUES, teamOf, BALANCE, BALANCE_ORDER, BAT_ABL, grade, overall
 import { newLeague, loadLeague, saveLeague, hasSave, advanceDay, myGameToday, standings, leaders, LEADER_KEYS, avg, era, fmt3, ipText, GAME_OPTIONS, teamOfPlayer } from '../league.js';
 import { drawChibi, lookOf, badge, pitchChip } from '../draw.js';
 import { Match } from './match.js';
+import { Player3D } from '../gfx/player3d.js';
+import { MOUND_H } from '../gfx/match3d.js';
 
-// a background: a night stadium glow with drifting lights
-function bg(c, f, col = '#1b3c8f') {
+// ---------------------------------------------------------------- the 3D stadium behind the menus
+// every menu scene gets draw3d(): the camera circles the ballpark (the title: close to home, where a batter takes practice
+// swings and a pitcher throws); the 2D menu is drawn over it with a see-through veil so the text stays easy to read
+let glOn = false;
+const VEIL = { Title: 0.18, Setup: 0.42, Hub: 0.42, SeasonEnd: 0.45 }; // the others (tables) get a darker veil
+function menuCast(world) {
+  if (!world.menuCast) {
+    const bat = new Player3D({ ...lookOf({ num: 7 }, 'baystars'), helmet: true, gear: 'bat' });
+    const pit = new Player3D({ ...lookOf({ num: 18 }, 'hawks'), gear: 'glove', away: true });
+    bat.setPos(-0.95, 0.05); bat.face(0.5, 0.05);
+    pit.setPos(0, 18.44, MOUND_H); pit.face(0, 0);
+    world.scene.add(bat.root, pit.root);
+    world.menuCast = { bat, pit, set visible(v) { bat.root.visible = v; pit.root.visible = v; } };
+  }
+  return world.menuCast;
+}
+function stage3d(scene, world, title) {
+  glOn = true;
+  const key = title ? 'title' : 'menu';
+  if (world.mode !== 'orbit' || world.viewKey !== key) {
+    world.setView('orbit', title ? { cx: 0, cy: 9, r: 21, h: 5.5, speed: 0.06, lookH: 1.6, fov: 48, a: -0.5 } : { cx: 0, cy: 44, r: 52, h: 24, speed: 0.03, lookH: 0, fov: 50 });
+    world.viewKey = key;
+    world.drawBoard({});
+  }
+  const cast = menuCast(world);
+  cast.visible = !!title;
+  if (title) { // a practice swing every 3 seconds, a pitch every 4
+    const f = scene.f || 0, sw = (f % 180) / 180, pt = (f % 240) / 240;
+    if (sw < 0.18) cast.bat.pose('swing', sw / 0.18); else cast.bat.pose('stance', f / 60);
+    cast.pit.pose(pt < 0.7 ? 'windup' : 'stand', Math.min(1, pt / 0.7));
+  }
+}
+// a background: a night stadium glow with drifting lights (over the 3D stadium: a see-through veil instead)
+function bg(c, f, col = '#1b3c8f', who = '') {
+  if (glOn) {
+    const a = VEIL[who] != null ? VEIL[who] : 0.72;
+    const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, `rgba(7,16,38,${a})`); g.addColorStop(1, `rgba(15,35,80,${Math.min(0.92, a + 0.15)})`); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    c.fillStyle = col; c.globalAlpha = 0.12; c.beginPath(); c.ellipse(W / 2, H + 120, 620, 300, 0, 0, 7); c.fill(); c.globalAlpha = 1;
+    return;
+  }
   const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#071026'); g.addColorStop(1, '#0f2350'); c.fillStyle = g; c.fillRect(0, 0, W, H);
   c.fillStyle = col; c.globalAlpha = 0.18; c.beginPath(); c.ellipse(W / 2, H + 120, 620, 300, 0, 0, 7); c.fill(); c.globalAlpha = 1;
   for (let i = 0; i < 40; i++) { const x = (i * 137 + f * 0.3) % W, y = (i * 71) % (H - 120); c.fillStyle = `rgba(255,255,255,${0.05 + (i % 5) * 0.02})`; c.beginPath(); c.arc(x, y, 1 + (i % 3), 0, 7); c.fill(); }
@@ -37,7 +77,7 @@ export class Title {
   }
   onTap(x, y) { const i = (this.rects || []).findIndex((r) => inRect(x, y, r)); if (i >= 0) { this.sel = i; this.pick(this.items()[i]); } }
   draw(c) {
-    bg(c, this.f);
+    bg(c, this.f, '#1b3c8f', 'Title');
     // the logo
     c.save(); c.translate(W / 2, 140);
     const k = 1 + Math.sin(this.f / 40) * 0.015; c.scale(k, k);
@@ -46,8 +86,10 @@ export class Title {
     txt(c, 'SUPER PRO BASEBALL ROAD', 0, 62, { size: 16, align: 'center', color: '#9fb6e8' });
     c.restore();
     // two players
-    drawChibi(c, 180, 470, 2.2, lookOf({ num: 18 }, 'baystars'), 'ready', this.f / 60, {});
-    drawChibi(c, 790, 470, 2.2, lookOf({ num: 11 }, 'hawks'), 'pitch', (this.f % 120) / 120, { flip: true, glove: true });
+    if (!glOn) {
+      drawChibi(c, 180, 470, 2.2, lookOf({ num: 18 }, 'baystars'), 'ready', this.f / 60, {});
+      drawChibi(c, 790, 470, 2.2, lookOf({ num: 11 }, 'hawks'), 'pitch', (this.f % 120) / 120, { flip: true, glove: true });
+    }
     this.rects = menuList(c, 300, 260, 360, this.items(), this.sel, { rowH: 54 });
     txt(c, '球団名は実在の名称、選手はすべて架空です', W / 2, H - 16, { size: 11, align: 'center', color: 'rgba(200,215,245,0.55)', bold: false });
   }
@@ -103,7 +145,7 @@ class Setup {
   }
   draw(c) {
     const t = TEAMS[this.team];
-    bg(c, this.f, t.c1);
+    bg(c, this.f, t.c1, this instanceof Setup ? 'Setup' : '');
     header(c, ['球団をえらぶ', '試合数をえらぶ', 'リーグのバランス'][this.step], `${this.step + 1} / 3`);
     if (this.step === 0) {
       this.rects = [];
@@ -189,7 +231,7 @@ export class Hub {
   onTap(x, y) { const i = (this.rects || []).findIndex((r) => inRect(x, y, r)); if (i >= 0) { if (this.sel === i) this.pick(this.items()[i]); else { this.sel = i; sound.sfx('cursor'); } } }
   draw(c) {
     const L = this.L, me = teamOf(L.myTeam), T = L.teams[L.myTeam];
-    bg(c, this.f, me.c1);
+    bg(c, this.f, me.c1, 'Hub');
     header(c, 'ペナント', `${L.year}年　${BALANCE[L.balance].name}　第${Math.min(L.day + 1, L.games)}戦 / 全${L.games}試合`);
     // my club
     panel(c, 24, 76, 420, 196, { top: me.c1, bottom: '#0b1a33' });
@@ -265,7 +307,7 @@ class Roster {
   onTap(x, y) { const i = (this.rects || []).findIndex((r) => inRect(x, y, r)); if (i >= 0) this.sel = i; else if (y < 70) { this.tab = 1 - this.tab; this.sel = 0; } }
   draw(c) {
     const L = this.L, t = TEAMS[this.team], T = L.teams[t.id];
-    bg(c, this.f, t.c1);
+    bg(c, this.f, t.c1, this instanceof Setup ? 'Setup' : '');
     header(c, `${t.full}　${this.tab === 0 ? '野手' : '投手'}`, '←→ 球団　A 野手/投手　B もどる');
     const ps = this.list();
     panel(c, 16, 70, 470, 452);
@@ -374,7 +416,7 @@ class SeasonEnd {
   onTap() { if (this.f > 30) this.g.pop(this); }
   draw(c) {
     const L = this.L;
-    bg(c, this.f, teamOf(L.myTeam).c1);
+    bg(c, this.f, teamOf(L.myTeam).c1, 'SeasonEnd');
     header(c, `${L.year}年　ペナントレース終了`);
     ['C', 'P'].forEach((lg, li) => {
       const champ = standings(L, lg)[0], t = teamOf(champ.id);
@@ -392,3 +434,6 @@ class SeasonEnd {
     txt(c, 'A で拠点へ（新しいシーズンはタイトルから）', W / 2, H - 30, { size: 14, align: 'center', color: '#9fb6e8' });
   }
 }
+
+// the 3D stadium behind every menu screen
+for (const C of [Title, Help, Setup, Hub, Standings, Roster, Leaders, Results, Settings, SeasonEnd]) C.prototype.draw3d = function (world) { stage3d(this, world, this instanceof Title); };

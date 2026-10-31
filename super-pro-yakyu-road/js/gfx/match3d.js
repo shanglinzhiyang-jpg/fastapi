@@ -48,7 +48,8 @@ function disposeActor(p) { p.root.traverse((o) => { if (o.geometry) o.geometry.d
 export class MatchView {
   constructor(world, o = {}) {
     this.w = world;
-    if (!!o.night !== world.night) world.build({ night: !!o.night });
+    if (!!o.night !== world.night) { world.build({ night: !!o.night }); }
+    if (world.menuCast) world.menuCast.visible = false;
     this.group = new THREE.Group();
     world.scene.add(this.group);
     this.slots = {};

@@ -50,7 +50,7 @@ export class World {
     const c = this.camera, o = this.viewOpt || {};
     if (this.mode === 'catcher') { c.fov = 27; c.position.copy(V(0, -7, 2.45)); c.lookAt(V(0, 8, 0.5)); }
     else if (this.mode === 'high') { c.fov = 42; c.position.copy(V(0, -22, 26)); c.lookAt(V(0, 40, 0)); }
-    else if (this.mode === 'orbit') { const a = this.t * 0.04 + (o.a || 0); const r = o.r || 62; c.fov = 46; c.position.copy(V(Math.sin(a) * r, 40 + Math.cos(a) * r, o.h || 24)); c.lookAt(V(0, 40, 2)); }
+    else if (this.mode === 'orbit') { const a = this.t * (o.speed || 0.04) + (o.a || 0); const r = o.r || 62, cx = o.cx || 0, cy = o.cy != null ? o.cy : 40; c.fov = o.fov || 46; c.position.copy(V(cx + Math.sin(a) * r, cy - Math.cos(a) * r, o.h || 24)); c.lookAt(V(cx, cy, o.lookH != null ? o.lookH : 2)); }
     else if (this.mode === 'look') { c.fov = o.fov || 40; c.position.copy(V(...o.from)); c.lookAt(V(...o.to)); }
     c.updateProjectionMatrix();
   }
