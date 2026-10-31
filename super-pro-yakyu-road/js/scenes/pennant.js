@@ -159,7 +159,8 @@ class Setup {
           c.fillStyle = x.c1; roundRect(c, bx, by, 140, 170, 14); c.fill();
           c.restore();
           if (on) { c.strokeStyle = '#ffd23f'; c.lineWidth = 4; roundRect(c, bx, by, 140, 170, 14); c.stroke(); }
-          drawChibi(c, bx + 70, by + 118, 1.15, lookOf({ num: 1 + i }, x.id), 'stand', 0, {});
+          c.fillStyle = 'rgba(255,255,255,0.92)'; roundRect(c, bx + 8, by + 8, 124, 114, 10); c.fill();
+          drawEmblem(c, bx + 70, by + 65, 104, x.id);
           c.fillStyle = 'rgba(0,0,0,0.45)'; roundRect(c, bx + 6, by + 128, 128, 36, 8); c.fill();
           txt(c, x.short, bx + 70, by + 146, { size: 16, align: 'center', color: '#ffffff', max: 124 });
           this.rects[idx] = { x: bx, y: by, w: 140, h: 170 };
@@ -236,7 +237,8 @@ export class Hub {
     header(c, 'ペナント', `${L.year}年　${BALANCE[L.balance].name}　第${Math.min(L.day + 1, L.games)}戦 / 全${L.games}試合`);
     // my club
     panel(c, 24, 76, 420, 196, { top: me.c1, bottom: '#0b1a33' });
-    drawEmblem(c, 92, 170, 116, L.myTeam);
+    c.fillStyle = 'rgba(255,255,255,0.92)'; roundRect(c, 34, 104, 118, 132, 12); c.fill();
+    drawEmblem(c, 93, 170, 108, L.myTeam);
     txt(c, me.full, 160, 104, { size: 22, max: 270 });
     const rows = standings(L, me.league), rank = rows.findIndex((r) => r.id === L.myTeam) + 1;
     txt(c, `${LEAGUES[me.league].short}　${rank}位`, 160, 138, { size: 18, color: '#ffd23f' });
@@ -406,7 +408,7 @@ class Settings {
   items() {
     return [...BALANCE_ORDER.map((k) => ({ label: BALANCE[k].name, sub: BALANCE[k].desc, right: k === this.L.balance ? 'いま' : '' })),
       { label: '球団マークの画像をえらぶ', sub: '自分の端末の画像を使う（このブラウザにだけ保存）', id: 'logo' },
-      { label: '球団マークをもとにもどす', sub: 'ゲームのオリジナルのマークにする', id: 'unlogo', dim: !logoOf(this.L.myTeam) }];
+      { label: '球団マークをもとにもどす', sub: '自分でえらんだ画像をやめる', id: 'unlogo', dim: !logoOf(this.L.myTeam) }];
   }
   leave() { filePick.armed = null; }
   update(g) {
@@ -428,7 +430,8 @@ class Settings {
     this.rects = menuList(c, 170, 76, 470, this.items(), this.sel, { rowH: 66 });
     panel(c, 676, 120, 250, 250);
     txt(c, 'いまの球団マーク', 801, 146, { size: 14, align: 'center', color: '#9fb6e8' });
-    drawEmblem(c, 801, 258, 170, this.L.myTeam);
+    c.fillStyle = 'rgba(255,255,255,0.92)'; roundRect(c, 701, 164, 200, 190, 12); c.fill();
+    drawEmblem(c, 801, 259, 170, this.L.myTeam);
     txt(c, 'バランス：ヒット・ホームラン・三振の出やすさ（コンピュータの試合にも自分の試合にも）', W / 2, 500, { size: 12, align: 'center', color: '#9fb6e8', bold: false, max: 900 });
   }
 }

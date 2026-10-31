@@ -13,6 +13,14 @@ export function logoOf(id) {
   try { const d = localStorage.getItem(KEY(id)); if (d) { const im = new Image(); im.src = d; imgs[id] = im; } } catch (e) { /* no storage */ }
   return null;
 }
+// the club marks built into this copy of the game (assets/logos/logos.js → window.SPR_LOGOS, embedded by build.py)
+const built = {};
+function builtLogo(id) {
+  const L = typeof window !== 'undefined' && window.SPR_LOGOS;
+  if (!L || !L[id]) return null;
+  if (!built[id]) { built[id] = new Image(); built[id].src = L[id]; }
+  return built[id].complete && built[id].naturalWidth ? built[id] : null;
+}
 export function clearLogo(id) { try { localStorage.removeItem(KEY(id)); } catch (e) { /* ignore */ } imgs[id] = null; }
 // read a picked file, shrink it to 192 px (keeping its shape), keep it for the club
 export function saveLogoFile(id, file, done) {
@@ -44,7 +52,7 @@ export function openPicker() {
 
 // draw the club mark centred at (x, y), `s` px across
 export function drawEmblem(c, x, y, s, id) {
-  const im = logoOf(id);
+  const im = logoOf(id) || builtLogo(id);
   if (im) { const k = s / Math.max(im.naturalWidth, im.naturalHeight); c.drawImage(im, x - (im.naturalWidth * k) / 2, y - (im.naturalHeight * k) / 2, im.naturalWidth * k, im.naturalHeight * k); return; }
   const t = teamOf(id), r = s / 2;
   c.save();
