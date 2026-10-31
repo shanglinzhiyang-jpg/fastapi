@@ -80,4 +80,9 @@ row "R28 glossary era check" "$(tail -1 "$OUT/r28_gloss_era.txt")"
 # 16. [R29] ミニゲームの中身をふやした（クイズ・ツッコミ・トーク・原稿読み・大喜利・漫才・コント・ズッコケ・感情演技）
 node test-output/progress/r29/mg_t1.mjs > "$OUT/r29_mg_t1.txt" 2>&1
 row "R29 minigame content" "$(tail -1 "$OUT/r29_mg_t1.txt")"
+# 17. [R30] ライフステージ（高校→大学→就職→昇進→中年、親キャリア、生い立ち、セーブ）と昭和の暦
+node test-output/progress/r30/life_t1.mjs > "$OUT/r30_life_t1.txt" 2>&1
+row "R30 life_t1" "$(tail -1 "$OUT/r30_life_t1.txt")"
+node test-output/progress/r30/era_t1.mjs > "$OUT/r30_era_t1.txt" 2>&1
+row "R30 era_t1 (showa)" "$(tail -1 "$OUT/r30_era_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"

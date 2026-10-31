@@ -518,7 +518,7 @@ export async function openMenu(g) {
       // the phone is called what the era calls it (手帳と電話 / ケータイ / スマホ; not just
       // 手帳, which would read like てちょう below)
       [unread ? `${eraOf(g.state).device}（${unread}）` : eraOf(g.state).device, 'phone'],
-      ['ステータス', 'status'], ['もちもの', 'items'], ['てちょう', 'notebook'], ['セーブ', 'save'], ['データ', 'saveio'],
+      ['ステータス', 'status'], ...(typeof g.lifeScreen === 'function' ? [['生活', 'life']] : []), ['もちもの', 'items'], ['てちょう', 'notebook'], ['セーブ', 'save'], ['データ', 'saveio'],
       [audio.muted ? '音：OFF' : '音：ON', 'sound'], ['とじる', 'close'],
     ];
     if (g.debugMenu) entries.push(['デバッグ', 'debug']);
@@ -530,6 +530,7 @@ export async function openMenu(g) {
       // MENU inside the phone goes straight back to the map (B returns here)
       if ((await openPhone(g)) === 'menu') return;
     } else if (act === 'status') await new Promise((r) => g.push(new StatusScene(g, r)));
+    else if (act === 'life') await g.lifeScreen();
     else if (act === 'items') await itemMenu(g);
     else if (act === 'notebook') await new Promise((r) => g.push(new NotebookScene(g, r)));
     else if (act === 'save') {

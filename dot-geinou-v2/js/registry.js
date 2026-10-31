@@ -142,6 +142,12 @@ export const MODULES = [
   './engine/romance_wed.js',
   './engine/romance_kids.js',
   './engine/romance_ui.js',
+  // [R30] ライフステージ: 高校生・大学生・社会人・中年の自分のキャリア (lifestage.js)、親キャリア (lifestage_kids.js)、生い立ち (lifestage_origin.js)、
+  // 生活の専用画面とアプリ「生活」 (life_screen.js)。データは lifestage_data.js
+  './engine/lifestage.js',
+  './engine/lifestage_kids.js',
+  './engine/lifestage_origin.js',
+  './engine/life_screen.js',
   // minigames
   './minigames/tsukkomi.js',
   './minigames/zukko.js',
