@@ -1,5 +1,5 @@
 // スーパープロ野球ロード 3D — procedural textures drawn on canvases (no image files): the mowed grass, the infield dirt, the
-// crowd in the stands, the outfield ads (made-up sponsors), the sky, cap letters, uniform numbers, the scoreboard.
+// empty seats in the stands, the padded outfield wall, the sky, cap letters, uniform numbers, the scoreboard.
 import * as THREE from '../vendor/three.module.min.js';
 
 const cv = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; };
@@ -27,34 +27,29 @@ export function dirtTexture() {
   for (let i = 0; i < 14000; i++) { const v = r(); x.fillStyle = v < 0.33 ? 'rgba(120,80,40,0.18)' : v < 0.66 ? 'rgba(240,200,150,0.14)' : 'rgba(90,60,30,0.10)'; x.fillRect(r() * 256, r() * 256, 1 + r() * 2, 1 + r() * 2); }
   return tex(c, [10, 10]);
 }
-// the crowd: rows of little heads in many colours, with blocks of the clubs' colours
+// the stands: rows of empty seats (no crowd), a walkway every few rows
 export function crowdTexture(c1 = '#1b3c8f', c2 = '#ffd23f', night = false) {
-  const [c, x] = cv(1024, 256), r = rnd(23);
-  x.fillStyle = night ? '#1a1e36' : '#5a6478'; x.fillRect(0, 0, 1024, 256);
+  const [c, x] = cv(1024, 256);
+  x.fillStyle = night ? '#1c2030' : '#6a7080'; x.fillRect(0, 0, 1024, 256);
   for (let row = 0; row < 16; row++) {
-    x.fillStyle = night ? '#262a48' : '#6e7890'; x.fillRect(0, row * 16 + 12, 1024, 3);
+    const y = row * 16;
+    if (row % 6 === 5) { x.fillStyle = night ? '#2a2e3c' : '#9298a4'; x.fillRect(0, y, 1024, 16); continue; } // a walkway
+    x.fillStyle = night ? '#141824' : '#555b68'; x.fillRect(0, y + 12, 1024, 4); // the step
     for (let i = 0; i < 128; i++) {
-      const px = i * 8 + (row % 2) * 4, py = row * 16 + 3;
-      const sec = Math.floor(i / 24) % 5;
-      const col = sec === 1 ? c1 : sec === 3 ? c2 : ['#e85a5a', '#f4d03f', '#ffffff', '#5aa0ff', '#7ad07a', '#ff9ad0', '#2a2a36'][Math.floor(r() * 7)];
-      if (r() < 0.08) continue;
-      x.fillStyle = col; x.fillRect(px, py + 3, 6, 6);
-      x.fillStyle = r() < 0.5 ? '#f2c8a0' : '#3a2a20'; x.fillRect(px + 1, py, 4, 4);
+      const px = i * 8 + 1;
+      x.fillStyle = night ? '#24407a' : '#2f5aa8'; x.fillRect(px, y + 3, 6, 8); // the seat back
+      x.fillStyle = night ? '#30528f' : '#4a74c0'; x.fillRect(px, y + 3, 6, 2);
     }
   }
   return tex(c, [3, 1]);
 }
-const SPONSORS = [['ドットフーズ', '#e04a3a'], ['スター電機', '#2a6ad8'], ['ロード飲料', '#f0a020'], ['ドリーム保険', '#2aa86a'], ['ベース通信', '#8a4ad8'], ['ホームラン食堂', '#d83a8a'], ['青空銀行', '#1a8ac8'], ['フィールド建設', '#6a7a2a']];
+// the outfield wall: a plain padded fence (no ads)
 export function adsTexture() {
-  const [c, x] = cv(2048, 64);
-  SPONSORS.forEach(([name, col], i) => {
-    const w = 2048 / SPONSORS.length;
-    x.fillStyle = col; x.fillRect(i * w, 0, w, 64);
-    x.fillStyle = 'rgba(255,255,255,0.18)'; x.fillRect(i * w, 0, w, 6);
-    x.fillStyle = '#ffffff'; x.font = 'bold 34px "Hiragino Sans", "Meiryo", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText(name, i * w + w / 2, 34);
-  });
-  return tex(c, [2, 1]);
+  const [c, x] = cv(1024, 64);
+  x.fillStyle = '#1f5a3c'; x.fillRect(0, 0, 1024, 64);
+  for (let i = 0; i < 1024; i += 64) { x.fillStyle = 'rgba(0,0,0,0.18)'; x.fillRect(i, 0, 2, 64); x.fillStyle = 'rgba(255,255,255,0.06)'; x.fillRect(i + 2, 0, 2, 64); }
+  x.fillStyle = 'rgba(255,255,255,0.08)'; x.fillRect(0, 0, 1024, 5);
+  return tex(c, [4, 1]);
 }
 export function skyTexture(night = false) {
   const [c, x] = cv(16, 512);

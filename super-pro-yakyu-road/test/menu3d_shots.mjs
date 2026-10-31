@@ -18,8 +18,9 @@ await ff(170); await shot('mn_title2');
 await key('a'); await ff(5); await shot('mn_team');
 await key('a'); await key('a'); await key('a'); await ff(10); await shot('mn_hub');
 await key('down', 3); await key('a'); await ff(5); await shot('mn_standings'); await key('b');
+await key('down', 4); await key('a'); await ff(5); await key('down', 4); await shot('mn_settings'); await key('b'); await key('up', 7);
 // a match, then back to the menus (the stadium must come back to the orbit)
-await key('up', 3); await key('a'); await ff(60);
+await key('a'); await ff(60);
 await page.evaluate(async () => { const m = window.__spr.g.top; m.menu = null; m.auto = { mode: 'all', inn: 1 }; for (let i = 0; i < 400 && m.ph !== 'over'; i++) await window.__ff(10); });
 await ff(40); await key('a'); await ff(30); await shot('mn_hub_after');
 console.log(JSON.stringify(await page.evaluate(() => ({ top: window.__spr.g.top.constructor.name, mode: window.__spr.g.world.mode }))));

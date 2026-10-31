@@ -5,6 +5,7 @@ import { TEAMS, LEAGUES, teamOf, BALANCE, BALANCE_ORDER, BAT_ABL, grade, overall
 import { newLeague, loadLeague, saveLeague, hasSave, advanceDay, myGameToday, standings, leaders, LEADER_KEYS, avg, era, fmt3, ipText, GAME_OPTIONS, teamOfPlayer } from '../league.js';
 import { drawChibi, lookOf, badge, pitchChip } from '../draw.js';
 import { Match } from './match.js';
+import { drawEmblem, logoOf, clearLogo, filePick, openPicker } from '../emblem.js';
 import { Player3D } from '../gfx/player3d.js';
 import { MOUND_H } from '../gfx/match3d.js';
 
@@ -193,7 +194,7 @@ export class Hub {
       { id: 'roster', label: '選手一覧・能力' },
       { id: 'lead', label: '成績ランキング' },
       { id: 'res', label: '最近の試合結果' },
-      { id: 'set', label: '設定（バランス）', right: BALANCE[L.balance].name },
+      { id: 'set', label: '設定（バランス・球団マーク）', right: BALANCE[L.balance].name },
       { id: 'save', label: 'セーブ' },
       { id: 'title', label: 'タイトルへ' },
     ];
@@ -235,7 +236,7 @@ export class Hub {
     header(c, 'ペナント', `${L.year}年　${BALANCE[L.balance].name}　第${Math.min(L.day + 1, L.games)}戦 / 全${L.games}試合`);
     // my club
     panel(c, 24, 76, 420, 196, { top: me.c1, bottom: '#0b1a33' });
-    drawChibi(c, 92, 236, 1.5, lookOf({ num: 7 }, L.myTeam), 'ready', this.f / 60, {});
+    drawEmblem(c, 92, 170, 116, L.myTeam);
     txt(c, me.full, 160, 104, { size: 22, max: 270 });
     const rows = standings(L, me.league), rank = rows.findIndex((r) => r.id === L.myTeam) + 1;
     txt(c, `${LEAGUES[me.league].short}　${rank}位`, 160, 138, { size: 18, color: '#ffd23f' });
@@ -398,14 +399,37 @@ class Results {
 
 // ================================================================ settings: the balance
 class Settings {
-  constructor(g, L) { this.g = g; this.L = L; this.opaque = true; this.sel = BALANCE_ORDER.indexOf(L.balance); }
-  update(g) { const inp = g.input; if (inp.pressed('b')) { sound.sfx('cancel'); g.pop(this); return; } this.sel = keyNav(inp, BALANCE_ORDER.length, this.sel); if (inp.pressed('a')) this.pick(); }
-  pick() { this.L.balance = BALANCE_ORDER[this.sel]; saveLeague(this.L); sound.sfx('ok'); this.g.toast(`バランスを「${BALANCE[this.L.balance].name}」にしました`, '#7af0a0'); this.g.pop(this); }
-  onTap(x, y) { const i = (this.rects || []).findIndex((r) => inRect(x, y, r)); if (i >= 0) { this.sel = i; this.pick(); } }
+  constructor(g, L) {
+    this.g = g; this.L = L; this.opaque = true; this.sel = BALANCE_ORDER.indexOf(L.balance);
+    filePick.onPicked = (id, ok) => { g.toast(ok ? '球団マークの画像を設定しました' : '画像を読みこめませんでした', ok ? '#7af0a0' : '#ff8a8a'); };
+  }
+  items() {
+    return [...BALANCE_ORDER.map((k) => ({ label: BALANCE[k].name, sub: BALANCE[k].desc, right: k === this.L.balance ? 'いま' : '' })),
+      { label: '球団マークの画像をえらぶ', sub: '自分の端末の画像を使う（このブラウザにだけ保存）', id: 'logo' },
+      { label: '球団マークをもとにもどす', sub: 'ゲームのオリジナルのマークにする', id: 'unlogo', dim: !logoOf(this.L.myTeam) }];
+  }
+  leave() { filePick.armed = null; }
+  update(g) {
+    const inp = g.input, it = this.items();
+    if (inp.pressed('b')) { sound.sfx('cancel'); filePick.armed = null; g.pop(this); return; }
+    this.sel = keyNav(inp, it.length, this.sel);
+    filePick.armed = it[this.sel].id === 'logo' ? this.L.myTeam : null; // the key press itself opens the picker (main.js)
+    if (inp.pressed('a')) this.pick(false);
+  }
+  pick(tap) {
+    const it = this.items()[this.sel];
+    if (it.id === 'logo') { if (tap) { filePick.armed = this.L.myTeam; openPicker(); } return; }
+    if (it.id === 'unlogo') { clearLogo(this.L.myTeam); sound.sfx('ok'); this.g.toast('オリジナルのマークにもどしました', '#7af0a0'); return; }
+    this.L.balance = BALANCE_ORDER[this.sel]; saveLeague(this.L); sound.sfx('ok'); this.g.toast(`バランスを「${BALANCE[this.L.balance].name}」にしました`, '#7af0a0'); filePick.armed = null; this.g.pop(this);
+  }
+  onTap(x, y) { const i = (this.rects || []).findIndex((r) => inRect(x, y, r)); if (i >= 0) { this.sel = i; this.pick(true); } }
   draw(c) {
-    bg(c, 0); header(c, '設定：リーグのバランス', 'A 決定　B もどる');
-    this.rects = menuList(c, 250, 110, 460, BALANCE_ORDER.map((k) => ({ label: BALANCE[k].name, sub: BALANCE[k].desc, right: k === this.L.balance ? 'いま' : '' })), this.sel, { rowH: 74 });
-    txt(c, 'ヒットの出やすさ・ホームランの出やすさ・三振の多さが変わります（コンピュータの試合にも、自分の試合にも）', W / 2, 440, { size: 13, align: 'center', color: '#9fb6e8', bold: false, max: 860 });
+    bg(c, 0); header(c, '設定', 'A 決定　B もどる');
+    this.rects = menuList(c, 170, 76, 470, this.items(), this.sel, { rowH: 66 });
+    panel(c, 676, 120, 250, 250);
+    txt(c, 'いまの球団マーク', 801, 146, { size: 14, align: 'center', color: '#9fb6e8' });
+    drawEmblem(c, 801, 258, 170, this.L.myTeam);
+    txt(c, 'バランス：ヒット・ホームラン・三振の出やすさ（コンピュータの試合にも自分の試合にも）', W / 2, 500, { size: 12, align: 'center', color: '#9fb6e8', bold: false, max: 900 });
   }
 }
 

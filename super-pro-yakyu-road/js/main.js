@@ -2,6 +2,7 @@
 // n steps without waiting (the real-time loop keeps going unless __pause() is called).
 import { Engine } from './core.js';
 import { World } from './gfx/world.js';
+import { filePick, openPicker } from './emblem.js';
 import { Title } from './scenes/pennant.js';
 import * as league from './league.js';
 import * as game from './game.js';
@@ -19,3 +20,6 @@ if (typeof window !== 'undefined') {
   window.__ff = async (n = 1) => { for (let i = 0; i < n; i++) g.step(); g.render(); };
   window.__pause = (on = true) => { g.paused = on; };
 }
+// the file picker (a club mark image) can only open inside a real key press / tap
+window.addEventListener('keydown', (e) => { if (filePick.armed && ['KeyZ', 'Space', 'Enter'].includes(e.code) && !e.repeat) openPicker(); }, true);
+document.querySelectorAll('#pad [data-k="a"]').forEach((el) => el.addEventListener('pointerdown', () => { if (filePick.armed) openPicker(); }, true));
