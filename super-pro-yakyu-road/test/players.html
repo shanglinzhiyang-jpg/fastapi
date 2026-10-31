@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+<body><canvas id="gl" width="1280" height="720" style="width:1280px;height:720px"></canvas>
+<script type="module">
+import { World } from '../js/gfx/world.js';
+import { Player3D } from '../js/gfx/player3d.js';
+const w = new World(document.getElementById('gl'));
+w.resize(1280, 720, 1);
+const T = { c1: '#0a55a8', c2: '#ffffff', mark: 'YB' }, A = { c1: '#f47a0c', c2: '#1a1a1a', mark: 'G', away: true };
+const ps = [];
+const add = (look, x, y, pose, t, face) => { const p = new Player3D(look); p.setPos(x, y); if (face) p.face(face[0], face[1]); p.pose(pose, t); w.scene.add(p.root); ps.push(p); return p; };
+window.__scene = (k) => {
+  for (const p of ps) w.scene.remove(p.root); ps.length = 0;
+  if (k === 'bat') {
+    add({ ...A, num: 7, helmet: true, gear: 'bat' }, -0.95, 0.05, 'stance', 0.3, [0.5, 0]);
+    add({ ...T, num: 27, catcher: true }, 0, -1.05, 'crouch', 0, [0, 18]);
+    add({ ...T, num: 18 }, 0, 18.44, 'windup', 0.55, [0, 0]).root.position.y = 0.25;
+    for (const [x, y] of [[19, 24], [9, 34], [-9, 34], [-19, 24], [-32, 76], [0, 90], [32, 76]]) add({ ...T, num: Math.abs(x) + 2 }, x, y, 'ready', 0, [0, 0]);
+    w.setView('catcher');
+  } else {
+    const poses = [['stand', 0], ['stance', 0.3], ['swing', 0.7], ['windup', 0.35], ['windup', 0.85], ['run', 0.25], ['ready', 0], ['catch', 0], ['throw', 0.6], ['crouch', 0]];
+    poses.forEach(([n, t], i) => add({ ...(i % 2 ? A : T), num: 10 + i, helmet: n === 'stance' || n === 'swing' || n === 'run', gear: n === 'stance' || n === 'swing' ? 'bat' : n === 'run' ? 'none' : 'glove' }, -9 + i * 2, 20, n, t, [-9 + i * 2 + (n === 'stance' || n === 'swing' ? 3 : 0), 10]));
+    w.setView('look', { from: [0, 9, 1.6], to: [0, 20, 0.9], fov: 52 });
+  }
+  w.render(); return true;
+};
+window.__ready = true;
+</script></body></html>

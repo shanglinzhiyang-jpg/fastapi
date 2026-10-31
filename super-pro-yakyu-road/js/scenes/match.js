@@ -7,6 +7,7 @@ import { teamOf, PITCHES, pname, pfull, grade } from '../data.js';
 import { newGame, applyPA, simPA, battingSide, fieldingSide, batterOf, pitcherOf, nextBatters, maybeChange, fatigue, addPitches, commitGame, defenseOf, balOf } from '../game.js';
 import { drawChibi, lookOf, drawBattingView, drawZone, drawBall, drawCursor, zoneToScreen, ZONE, RELEASE, drawField, fieldToScreen, fenceDist, FIELDER_SPOTS, drawScoreboard, badge, pitchChip, posShort } from '../draw.js';
 import { avg, fmt3, era } from '../league.js';
+import { MatchView, pitchPoint, zoneField } from '../gfx/match3d.js';
 
 const SLOW = 1.75; // the pitch takes this many times its real flight time (playable)
 const KIND_TEXT = { '1B': 'ヒット！', '2B': 'ツーベース！', '3B': 'スリーベース！', HR: 'ホームラン！！', GO: 'ゴロアウト', FO: 'フライアウト', LO: 'ライナーアウト', PO: 'ポップフライ', DP: 'ゲッツー' };
@@ -104,6 +105,46 @@ export class Match {
     this.resolveCb = opts.done;
   }
   get myBat() { return battingSide(this.GS) === this.mine; }
+  // ---------------------------------------------------------------- the 3D view (when the engine has a world)
+  leave() { if (this.v3) { this.v3.destroy(); this.v3 = null; } }
+  draw3d(world) {
+    if (!this.v3) this.v3 = new MatchView(world, { night: this.night });
+    const v = this.v3, GS = this.GS, L = this.L;
+    v.board(GS, teamOf);
+    if (this.ph === 'bip' && this.bip) { const B = this.bip; v.playBip({ j: B.j, bb: B.bb, tt: clamp(B.t / B.hang, 0, 1), t: B.t, hang: B.hang, f: this.f }); return; }
+    if (world.mode !== 'catcher') world.setView('catcher');
+    if (GS.over && this.ph === 'over') return;
+    v.cast({ GS, L, lookOf, teamOf, fieldingSide, battingSide, pitcherOf, batterOf });
+    const pitchT = this.ph === 'windup' ? (this.t / 46) * 0.7 : this.ph === 'flight' ? 0.7 + Math.min(1, this.t / 12) * 0.3 : null;
+    let ball = null;
+    if (this.ph === 'flight' && this.pi) ball = pitchPoint(this.pi, Math.min(1, this.t / this.pi.dur), v.pitLefty);
+    else if (this.ph === 'call' && this.pi && (!this.msg || this.msg.text !== 'ファウル')) { const e = zoneField(this.pi.fx, this.pi.fy); ball = { x: e.x, y: e.y - 0.15, h: e.h }; }
+    v.pose({ pitchT, swing: this.swingT(), f: this.f, ball, catchUp: this.ph === 'call' });
+  }
+  // how far the batter is through his swing (0..1), or null
+  swingT() {
+    if (this.swing && this.ph === 'flight') return clamp((this.t - this.swing.frame) / 9, 0, 1);
+    if (this.swing && this.ph === 'call') return 1;
+    if (!this.myBat && this.cpuSwing && this.ph === 'flight' && this.t >= (this.cpuSwing.at || 1e9)) return clamp((this.t - this.cpuSwing.at) / 9, 0, 1);
+    if (!this.myBat && this.cpuSwing && this.ph === 'call') return 1;
+    return null;
+  }
+  // a zone point on the screen (3D: projected from the plate), and the pixels per zone unit
+  zs(zx, zy) {
+    if (this.v3) { const p = zoneField(zx, zy); return this.g.world.project(p.x, p.y, p.h) || { x: -99, y: -99 }; }
+    return zoneToScreen(zx, zy);
+  }
+  zk() { if (!this.v3) return { kx: ZONE.hw, ky: ZONE.hh }; const a = this.zs(0, 0), b = this.zs(1, 0), d = this.zs(0, 1); return { kx: b.x - a.x, ky: d.y - a.y }; }
+  drawZone3(c) {
+    const P = (x, y) => this.zs(x, y);
+    const q = [P(-1, -1), P(1, -1), P(1, 1), P(-1, 1)];
+    c.save();
+    c.fillStyle = 'rgba(255,255,255,0.07)'; c.beginPath(); q.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y))); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 2; c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.32)'; c.lineWidth = 1;
+    for (const k of [-1 / 3, 1 / 3]) { let a = P(k, -1), b = P(k, 1); c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); a = P(-1, k); b = P(1, k); c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); }
+    c.restore();
+  }
   set(ph) { this.ph = ph; this.t = 0; }
   // ---------------------------------------------------------------- flow
   startPA() {
@@ -315,11 +356,31 @@ export class Match {
   // ================================================================ draw
   draw(c) {
     const GS = this.GS, L = this.L;
-    if (this.ph === 'bip' && this.bip) { this.drawBip(c); }
+    const v3 = !!this.v3;
+    if (this.ph === 'bip' && this.bip) { if (v3) this.drawBipInfo(c); else this.drawBip(c); }
     else {
       const bt = teamOf(GS[battingSide(GS)]), ft = teamOf(GS[fieldingSide(GS)]);
-      drawBattingView(c, this.f, { night: this.night, c1: ft.c1, c2: bt.c1, cheer: this.ph === 'result' });
       const pit = pitcherOf(GS, L), bat = batterOf(GS, L);
+      if (!v3) this.draw2dActors(c, bt, ft, pit, bat);
+      else if (['select', 'aim', 'windup', 'flight', 'call', 'pa'].includes(this.ph)) this.drawZone3(c);
+      if (this.ph === 'aim' || this.ph === 'select') { const a = this.zs(this.aim.x, this.aim.y); c.strokeStyle = '#7af0ff'; c.lineWidth = 3; c.beginPath(); c.arc(a.x, a.y, 14, 0, 7); c.stroke(); c.beginPath(); c.moveTo(a.x - 20, a.y); c.lineTo(a.x + 20, a.y); c.moveTo(a.x, a.y - 20); c.lineTo(a.x, a.y + 20); c.stroke(); }
+      if (this.myBat && ['windup', 'flight', 'pa'].includes(this.ph)) {
+        const k = this.zk(), rz = 0.3 + bat.meet / 220;
+        const p = this.zs(this.cur.x, this.cur.y);
+        const power = this.g.input.held('b') && !this.swing;
+        drawCursor(c, p.x, p.y, rz * k.kx * (power ? 0.62 : 1), rz * 0.82 * k.ky * (power ? 0.62 : 1), power, this.f);
+      }
+      if (!v3 && this.ph === 'flight' && this.pi) { const b = ballAt(this.pi, Math.min(1, this.t / this.pi.dur)); drawBall(c, b.x, b.y, b.r, { trail: this.trail }); }
+      if (this.ph === 'call' && this.pi) { const e = this.zs(this.pi.fx, this.pi.fy); if (!v3) drawBall(c, e.x, e.y, 9); c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 2; c.beginPath(); c.arc(e.x, e.y, 14, 0, 7); c.stroke(); }
+      if ((this.ph === 'call' || this.ph === 'result') && this.pi) txt(c, `${this.pi.kmh}km/h　${this.pi.name}`, W - 22, 196, { size: 18, align: 'right', color: '#ffffff', stroke: 'rgba(0,0,0,0.7)', strokeW: 5 });
+      this.drawHud(c, bat, pit);
+    }
+    this.drawTop(c);
+  }
+  // the 2D pictures (no WebGL)
+  draw2dActors(c, bt, ft, pit, bat) {
+      const GS = this.GS;
+      drawBattingView(c, this.f, { night: this.night, c1: ft.c1, c2: bt.c1, cheer: this.ph === 'result' });
       // the pitcher
       const pt = this.ph === 'windup' ? this.t / 46 * 0.45 : this.ph === 'flight' ? 0.45 + Math.min(1, this.t / 10) * 0.55 : 0;
       drawChibi(c, 482, 232, 0.78, lookOf(pit, GS[fieldingSide(GS)]), this.ph === 'windup' || this.ph === 'flight' ? 'pitch' : 'stand', pt, { flip: pit.throws === 'L', glove: true, away: fieldingSide(GS) === 'away' });
@@ -331,18 +392,10 @@ export class Match {
       const sw = this.swing && this.ph === 'flight' ? clamp((this.t - this.swing.frame) / 9, 0, 1) : this.swing && this.ph === 'call' ? 1 : 0;
       const csw = !this.myBat && this.cpuSwing && this.ph === 'flight' && this.t >= (this.cpuSwing.at || 1e9) ? clamp((this.t - this.cpuSwing.at) / 9, 0, 1) : 0;
       drawChibi(c, left ? 398 : 562, 512, 1.75, lookOf(bat, GS[battingSide(GS)]), sw || csw ? 'swing' : 'ready', sw || csw || this.f / 60, { view: 'back', flip: !left, helmet: true, away: battingSide(GS) === 'away' });
-      if (this.ph === 'aim' || this.ph === 'select') { const a = zoneToScreen(this.aim.x, this.aim.y); c.strokeStyle = '#7af0ff'; c.lineWidth = 3; c.beginPath(); c.arc(a.x, a.y, 14, 0, 7); c.stroke(); c.beginPath(); c.moveTo(a.x - 20, a.y); c.lineTo(a.x + 20, a.y); c.moveTo(a.x, a.y - 20); c.lineTo(a.x, a.y + 20); c.stroke(); }
-      if (this.myBat && ['windup', 'flight', 'pa'].includes(this.ph)) {
-        const rx = (0.3 + bat.meet / 220) * ZONE.hw, ry = rx * 0.82 * (ZONE.hh / ZONE.hw) * 0.8;
-        const p = zoneToScreen(this.cur.x, this.cur.y);
-        const power = this.g.input.held('b') && !this.swing;
-        drawCursor(c, p.x, p.y, rx * (power ? 0.62 : 1), ry * (power ? 0.62 : 1), power, this.f);
-      }
-      if (this.ph === 'flight' && this.pi) { const b = ballAt(this.pi, Math.min(1, this.t / this.pi.dur)); drawBall(c, b.x, b.y, b.r, { trail: this.trail }); }
-      if (this.ph === 'call' && this.pi) { const e = zoneToScreen(this.pi.fx, this.pi.fy); drawBall(c, e.x, e.y, 9); c.strokeStyle = 'rgba(255,255,255,0.5)'; c.beginPath(); c.arc(e.x, e.y, 14, 0, 7); c.stroke(); }
-      if ((this.ph === 'call' || this.ph === 'result') && this.pi) txt(c, `${this.pi.kmh}km/h　${this.pi.name}`, W - 22, 196, { size: 18, align: 'right', color: '#ffffff', stroke: 'rgba(0,0,0,0.7)', strokeW: 5 });
-      this.drawHud(c, bat, pit);
-    }
+  }
+  // the scoreboard, the messages, the menus (both views)
+  drawTop(c) {
+    const GS = this.GS, L = this.L;
     drawScoreboard(c, GS);
     // the messages
     if (this.ph === 'call' && this.msg) txt(c, this.msg.text, W / 2, 150, { size: 40, align: 'center', color: this.msg.col, stroke: 'rgba(0,0,0,0.75)', strokeW: 8 });
@@ -398,6 +451,11 @@ export class Match {
     txt(c, this.ph === 'select' ? '球種をえらぶ' : 'コースを決めて A', W - 186, 136, { size: 13, color: '#ffd23f' });
     list.forEach((x, i) => pitchChip(c, W - 186, 152 + i * 32, x, { on: i === this.sel, w: 162 }));
     txt(c, this.ph === 'select' ? '↑↓ 球種　A 決定' : '十字キー コース　A 投げる　B もどる', W / 2, H - 16, { size: 14, align: 'center', color: 'rgba(255,255,255,0.8)' });
+  }
+  // the batted ball on the 3D field: just the numbers (the field itself is 3D)
+  drawBipInfo(c) {
+    const bb = this.bip.bb;
+    txt(c, `打球速度 ${Math.round(bb.v)}km/h　角度 ${Math.round(bb.angle)}°　飛距離 ${Math.round(bb.dist)}m`, W / 2, H - 16, { size: 13, align: 'center', color: '#ffffff', stroke: 'rgba(0,0,0,0.6)', strokeW: 4 });
   }
   drawBip(c) {
     const B = this.bip, GS = this.GS, L = this.L;

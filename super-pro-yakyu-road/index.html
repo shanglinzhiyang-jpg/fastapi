@@ -10,7 +10,7 @@
 </head>
 <body>
 <div id="app">
-  <div id="screen"><canvas id="game" width="960" height="540" aria-label="ゲーム画面"></canvas></div>
+  <div id="screen"><div id="stage"><canvas id="gl" aria-hidden="true"></canvas><canvas id="game" width="960" height="540" aria-label="ゲーム画面"></canvas></div></div>
   <div id="pad" aria-hidden="true">
     <div id="dpad"><div class="arrow up" data-k="up">▲</div><div class="arrow left" data-k="left">◀</div><div class="arrow right" data-k="right">▶</div><div class="arrow down" data-k="down">▼</div></div>
     <div id="sys"><button type="button" tabindex="-1" data-k="start">START</button></div>

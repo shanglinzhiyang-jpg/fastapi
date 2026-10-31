@@ -102,11 +102,12 @@ export class Engine {
   replace(s) { while (this.scenes.length) this.pop(); this.push(s); }
   toast(text, col = '#ffffff') { this.toastQ.push({ text, col, t: 0 }); }
   resize() {
-    const box = this.canvas.parentElement.getBoundingClientRect();
+    const stage = this.canvas.parentElement, box = stage.parentElement.getBoundingClientRect();
     const k = Math.max(0.2, Math.min(box.width / W, box.height / H));
     const dpr = Math.min(3, window.devicePixelRatio || 1);
-    this.canvas.style.width = `${Math.floor(W * k)}px`;
-    this.canvas.style.height = `${Math.floor(H * k)}px`;
+    stage.style.width = `${Math.floor(W * k)}px`;
+    stage.style.height = `${Math.floor(H * k)}px`;
+    if (this.world) this.world.resize(Math.floor(W * k), Math.floor(H * k), Math.min(dpr, document.body.classList.contains('touch') ? 1.5 : 2));
     this.canvas.width = Math.floor(W * k * dpr);
     this.canvas.height = Math.floor(H * k * dpr);
     this.scale = (W * k * dpr) / W;
@@ -141,15 +142,25 @@ export class Engine {
     this.frame++;
     const s = this.top;
     if (s && s.update) { try { s.update(this); } catch (e) { console.error(e); } }
+    if (this.world) this.world.update(1 / 60);
     for (const t of this.toastQ) t.t++;
     this.toastQ = this.toastQ.filter((t) => t.t < 150);
   }
   render() {
     const c = this.c;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, this.canvas.width, this.canvas.height);
     c.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     c.imageSmoothingEnabled = true;
     let from = this.scenes.length - 1;
     while (from > 0 && !this.scenes[from].opaque) from--;
+    // the 3D world under the 2D overlay: shown when the bottom drawn scene has draw3d(world, g)
+    if (this.world) {
+      const base = this.scenes[Math.max(0, from)];
+      const on = !!(base && base.draw3d);
+      if (on !== this.glOn) { this.glOn = on; this.world.canvas.style.visibility = on ? 'visible' : 'hidden'; }
+      if (on) { try { base.draw3d(this.world, this); this.world.render(); } catch (e) { console.error(e); } }
+    }
     for (let i = Math.max(0, from); i < this.scenes.length; i++) { const s = this.scenes[i]; try { s.draw(c, this); } catch (e) { console.error(e); } }
     // toasts
     this.toastQ.slice(-3).forEach((t, i) => {

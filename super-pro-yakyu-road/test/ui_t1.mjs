@@ -6,7 +6,7 @@ let pw; try { pw = require('playwright'); } catch (e) { pw = require('/opt/node2
 const OUT = '/home/user/fastapi/super-pro-yakyu-road/test/out';
 import fs from 'node:fs'; fs.mkdirSync(OUT, { recursive: true });
 const touch = process.argv.includes('touch');
-const browser = await pw.chromium.launch();
+const browser = await pw.chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: touch ? { width: 412, height: 915 } : { width: 1280, height: 760 }, hasTouch: touch, isMobile: touch });
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
