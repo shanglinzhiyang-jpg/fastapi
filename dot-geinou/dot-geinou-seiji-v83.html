@@ -11872,9 +11872,10 @@ function regLogos() {
 }
 // ---- 移動 ----
 const allDest = () => [...HUBS.map(h => ({ ...h, hub: 1 })), ...CITIES];
+const cityOfId = pid => CITY[pid] || CITIES.find(c => String(pid || '').startsWith(c.id + '_')) || null;
 function cityOfPlace(g) {
   const pid = g && g.map && g.map.placeId;
-  if (CITY[pid]) return CITY[pid];
+  const cc = cityOfId(pid); if (cc) return cc;
   const P = E.Ke && E.Ke[pid];
   return P && P.region === 'osaka' ? HUBS[1] : HUBS[0];
 }
@@ -12116,6 +12117,7 @@ function installWorld() {
   try { for (const k of Object.keys(BRANDS)) regBrandShop(k); regClinic('machi_clinic'); patchMachi(); } catch (e) { console.error('[npb] shops', e); }
   try { for (const c of CITIES) mkTown(c); } catch (e) { console.error('[npb] towns', e); }
   try { wrapStations(); } catch (e) { console.error('[npb] wrap', e); }
+  try { regMapAreas(); if (E.setLae) E.setLae(wrapMapTravel); if (E.setVu) E.setVu(wrapVu); } catch (e) { console.error('[npb] map', e); }
 }
 
 // ---- 地域の会社 ----
@@ -12191,9 +12193,74 @@ async function companyAct(g, key, host) {
   }
 }
 
+// ---- 地図アプリ ----
+function regMapAreas() {
+  if (!E.$M) return;
+  for (const c of CITIES) if (!E.$M[c.id]) E.$M[c.id] = { name: c.short, full: c.name, col: c.region === 'osaka' ? '#b0602a' : '#3a7a5a', ox: 0, oy: 0, osaka: c.region === 'osaka', at: [22, 9] };
+}
+function wrapMapTravel(orig) {
+  return async function (t, e) {
+    try {
+      const pid = t && t.map && t.map.placeId;
+      const curC = cityOfId(pid), dstC = e && (cityOfId(e.area) || cityOfId(e.id));
+      if (!curC && !dstC) return orig.call(this, t, e);
+      if (pid === 'eki' || !t.map || !t.map.place) return orig.call(this, t, e);
+      const P = E.Ke && E.Ke[pid];
+      const from = curC || (P && P.region === 'osaka' ? HUBS[1] : HUBS[0]);
+      const dArea = E.$M && E.$M[e.area];
+      const to = dstC || (dArea && dArea.osaka ? HUBS[1] : HUBS[0]);
+      if (e.id === pid) return orig.call(this, t, e);
+      const same = from.id === to.id;
+      const tp = same ? { mode: '徒歩', fare: 0, min: 10 } : tripOf(from, to);
+      const extra = !same && (!dstC || !curC) ? 1000 : 0; // 駅から目的地までのタクシー
+      const fare = tp.fare + extra, min = tp.min + (extra ? 20 : 0);
+      const txt = same ? `${e.name}まで、歩いてすぐ。` : `${from.short} → ${to.short}　${tp.mode}${extra ? '＋タクシー' : ''}で約${min >= 60 ? Math.floor(min / 60) + '時間' + (min % 60 ? min % 60 + '分' : '') : min + '分'}\n運賃 ${yen(fare)}（所持金 ${yen(t.state.money)}）`;
+      const k = await E.Ho(t, { title: e.name, color: '#3a8a5a', text: txt, choices: ['これで行く', 'もどる'] });
+      if (k !== 0) return false;
+      if (t.state.money < fare) { await E.qe(t, { title: e.name, color: '#3a8a5a', text: 'お金が足りない…。' }); return false; }
+      let now = 600; try { now = t.clock().total; } catch (x) { }
+      if (!same && tp.mode !== '電車' && now + min > 23 * 60) { await E.qe(t, { title: e.name, color: '#3a8a5a', text: `${tp.mode === '飛行機' ? '最終便' : '最終の新幹線'}は、もう出てしまった…。` }); return false; }
+      E.Zc(t, async g => {
+        if (fare) g.spend(fare);
+        try { g.advanceTime(min, 'npb_travel'); } catch (x) { }
+        if (!same) tt.sfx('ok');
+        const D = E.Ke[e.id];
+        if (e.inside && D && D.start) await g.goto(e.id, D.start.room, D.start.x, D.start.y, D.start.dir || 'up');
+        else await g.goto(e.area, e.room, e.x, e.y, e.dir || 'down');
+        g.notify(`${e.name}に着いた（${tp.mode}${fare ? ' ' + yen(fare) : ''}）`, { color: '#ffffff' });
+        try { g.save(true); } catch (x) { }
+      });
+      return true;
+    } catch (x) { console.error('[npb] map', x); return orig.call(this, t, e); }
+  };
+}
+
+function tripLabel(t, d) {
+  const pid = t && t.map && t.map.placeId;
+  const curC = cityOfId(pid), dstC = cityOfId(d.area) || cityOfId(d.id);
+  if (!curC && !dstC) return null;
+  const P = E.Ke && E.Ke[pid], dA = E.$M && E.$M[d.area];
+  const from = curC || (P && P.region === 'osaka' ? HUBS[1] : HUBS[0]);
+  const to = dstC || (dA && dA.osaka ? HUBS[1] : HUBS[0]);
+  if (from.id === to.id) return `${to.short}・歩いてすぐ`;
+  const tp = tripOf(from, to), extra = !dstC || !curC ? 1000 : 0;
+  return `${to.short}・${tp.mode} ${yen(tp.fare + extra)}`;
+}
+function wrapVu(orig) {
+  return function (t, o, ...rest) {
+    try {
+      if (o && typeof o.items === 'function' && o.hint === 'A:ここへ行く　B:もどる') {
+        const it = o.items;
+        o = { ...o, items() { const rows = it.call(this) || []; return rows.map(r => { if (!r || !r.d || r.disabled) return r; const l = tripLabel(t, r.d); return l ? { ...r, sub: l } : r; }); } };
+      }
+    } catch (e) { console.error('[npb] vu', e); }
+    return orig.call(this, t, o, ...rest);
+  };
+}
+
 return { careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
-try{NPB_factory({Un:Un,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt}).install()}catch(e){console.error("[npb] install",e)}
+try{NPB_factory({Un:Un,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt,$M:$M,Ho:Ho,qe:qe,Zc:Zc,setLae:function(f){Lae=f(Lae)},setVu:function(f){vu=f(vu)}}).install()}catch(e){console.error("[npb] install",e)}
 DBa().catch(t=>{console.error(t),vTe(window.__game,"\u30B2\u30FC\u30E0\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u2026","\u30DA\u30FC\u30B8\u3092\u518D\u8AAD\u307F\u8FBC\u307F\u3057\u3066\u304F\u3060\u3055\u3044")});})();
 
 </script>
