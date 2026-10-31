@@ -1,0 +1,31 @@
+* { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+html, body { margin: 0; height: 100%; background: #06101f; color: #e8eefc; font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+  overscroll-behavior: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
+#app { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+#screen { position: relative; width: 100%; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; }
+#game { display: block; background: #0b1a33; box-shadow: 0 0 0 2px #1d335f, 0 10px 40px rgba(0,0,0,.6); border-radius: 6px; touch-action: none; }
+#help { flex: none; padding: 6px 12px 10px; font-size: 12px; color: #8ea2c8; text-align: center; }
+#pad { display: none; }
+body.touch #help { display: none; }
+body.touch #pad { flex: none; display: grid; grid-template-columns: auto 1fr auto; align-items: center; width: 100%; max-width: 640px; padding: 8px 18px max(14px, env(safe-area-inset-bottom)); gap: 8px; }
+#dpad { position: relative; width: 150px; height: 150px; border-radius: 50%; background: #13234a; box-shadow: inset 0 0 0 2px #24407a; touch-action: none; }
+#dpad .arrow { position: absolute; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; color: #9fb6e8; font-size: 20px; border-radius: 12px; }
+#dpad .up { left: 49px; top: 4px; } #dpad .down { left: 49px; bottom: 4px; } #dpad .left { left: 4px; top: 49px; } #dpad .right { right: 4px; top: 49px; }
+#dpad .arrow.on { background: #2a4b8f; color: #fff; }
+#sys { display: flex; flex-direction: column; gap: 8px; justify-self: center; }
+#sys button { min-width: 64px; min-height: 40px; border: none; border-radius: 20px; background: #1d335f; color: #cfe0ff; font: inherit; font-size: 12px; letter-spacing: 1px; touch-action: none; }
+#ab { display: flex; justify-content: flex-end; gap: 14px; align-items: center; }
+#ab .btn { width: 72px; height: 72px; border-radius: 50%; border: none; font: inherit; font-size: 24px; font-weight: bold; color: #fff; touch-action: none; }
+#ab .a { background: radial-gradient(circle at 35% 30%, #ff8a8a, #d23a4a); margin-top: -28px; }
+#ab .b { background: radial-gradient(circle at 35% 30%, #8ab4ff, #3a62d2); }
+#ab .btn.on, #sys button.on { filter: brightness(1.35); transform: scale(0.96); }
+@media (max-width: 480px) {
+  body.touch #pad { padding: 8px 12px max(12px, env(safe-area-inset-bottom)); gap: 6px; }
+  #dpad { width: 132px; height: 132px; }
+  #dpad .arrow { width: 46px; height: 46px; }
+  #dpad .up { left: 43px; top: 3px; } #dpad .down { left: 43px; bottom: 3px; } #dpad .left { left: 3px; top: 43px; } #dpad .right { right: 3px; top: 43px; }
+  #ab { gap: 10px; }
+  #ab .btn { width: 62px; height: 62px; font-size: 21px; }
+  #sys button { min-width: 56px; font-size: 11px; }
+}
