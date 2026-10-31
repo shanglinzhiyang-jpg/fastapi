@@ -12097,13 +12097,14 @@ function patchMachi() {
         delete e.sign; delete e.text; delete e.talk;
         if (b.noren) e.noren = b.noren; else { delete e.noren; if (e.doorKind === 'noren') delete e.doorKind; }
       }
-      // 高須クリニック（飲み屋横丁の端の空き店舗）
+      // 高須クリニック（アーケード北側、ドラッグストアと駅のあいだの空き地）
       if (!r.entities.some(x => x && x.place === 'machi_clinic')) {
-        const sn = r.entities.find(x => x && x.type === 'building' && !x.place && /夕顔|スナック/.test(String(x.name || '')));
-        const ref = r.entities.find(x => x && x.type === 'building' && x.place === 'shop_tachinomi');
-        const tgt = sn || null;
-        if (tgt) { for (const k of ['text', 'talk', 'sign', 'noren', 'doorKind', 'neon']) delete tgt[k]; Object.assign(tgt, { place: 'machi_clinic', name: '高須クリニック', wall: '#ffffff', roof: '#e4007f', logo: 'w_takasu', signBg: '#ffffff', awning: ['#e4007f', '#ffffff'] }); }
-        else if (ref) r.entities.push({ ...ref, x: ref.x + 4, place: 'machi_clinic', name: '高須クリニック', wall: '#ffffff', roof: '#e4007f', logo: 'w_takasu', signBg: '#ffffff', text: undefined, sign: undefined, noren: undefined });
+        const ref = r.entities.find(x => x && x.type === 'building' && x.place === 'shop_yakkyoku');
+        const st = r.entities.find(x => x && x.type === 'building' && x.place === 'machi_eki');
+        if (ref) {
+          const x0 = ref.x + ref.w, w = Math.max(4, Math.min(5, (st ? st.x : x0 + 5) - x0));
+          r.entities.push({ type: 'building', x: x0, y: ref.y, w, h: ref.h, door: Math.floor(w / 2), place: 'machi_clinic', name: '高須クリニック', kind: 'shop', wall: '#ffffff', roof: '#e4007f', logo: 'w_takasu', signBg: '#ffffff', signH: 18, awning: ['#e4007f', '#ffffff'], display: 'plain' });
+        }
       }
     } catch (e) { console.error('[npb] machi', e); }
     return r;
