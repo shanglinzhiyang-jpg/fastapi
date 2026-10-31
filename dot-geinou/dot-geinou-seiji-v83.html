@@ -9356,12 +9356,14 @@ const POS1 = { P: '投', C: '捕', '1B': '一', '2B': '二', '3B': '三', SS: '�
 const FW = { C: 1, SS: 1, '2B': .85, '3B': .7, OF: .6, '1B': .3, DH: 0, P: .2 };
 
 // 打撃成績 index
-const B = { G: 0, PA: 1, AB: 2, H: 3, D: 4, T: 5, HR: 6, RBI: 7, R: 8, BB: 9, K: 10, SB: 11, CS: 12, SF: 13, DP: 14, HBP: 15 };
+const B = { G: 0, PA: 1, AB: 2, H: 3, D: 4, T: 5, HR: 6, RBI: 7, R: 8, BB: 9, K: 10, SB: 11, CS: 12, SF: 13, DP: 14, HBP: 15, RAB: 16, RH: 17, GS: 18, SAYO: 19, MULTI: 20, SH: 21 };
+const BL = 22, PL_ = 21;
 // 投手成績 index
-const Pp = { G: 0, GS: 1, W: 2, L: 3, SV: 4, HLD: 5, OUT: 6, H: 7, HR: 8, BB: 9, K: 10, R: 11, ER: 12, CG: 13, SHO: 14, BF: 15 };
-const newB = () => new Array(16).fill(0);
-const newP = () => new Array(16).fill(0);
-const addArr = (a, b) => { for (let i = 0; i < a.length; i++) a[i] += (b[i] || 0); return a; };
+const Pp = { G: 0, GS: 1, W: 2, L: 3, SV: 4, HLD: 5, OUT: 6, H: 7, HR: 8, BB: 9, K: 10, R: 11, ER: 12, CG: 13, SHO: 14, BF: 15, NP: 16, QS: 17, WP: 18, HBP: 19, NH: 20 };
+const newB = () => new Array(BL).fill(0);
+const newP = () => new Array(PL_).fill(0);
+const padA = (a, n) => { if (Array.isArray(a)) while (a.length < n) a.push(0); return a; };
+const addArr = (a, b) => { if (!b) return a; const n = Math.max(a.length, b.length); for (let i = 0; i < n; i++) a[i] = (a[i] || 0) + (b[i] || 0); return a; };
 
 // ---- 率の計算 ----
 const avgOf = b => b && b[B.AB] ? b[B.H] / b[B.AB] : 0;
@@ -9545,12 +9547,12 @@ function simGame(ctx, home, away, opt = {}) {
   const pg = {}; // pitcher game lines
   const bg = {}; // batter game lines (for box)
   const meLog = [];
-  const mk = (T, side) => ({ T, side, runs: 0, hits: 0, bi: 0, pit: T.sp, pc: 0, ls: [], used: new Set([T.sp]), innR: 0, lineup: T.lineup.slice(), phUsed: false, starter: T.sp });
+  const mk = (T, side) => ({ T, side, err: 0, runs: 0, hits: 0, bi: 0, pit: T.sp, pc: 0, ls: [], used: new Set([T.sp]), innR: 0, lineup: T.lineup.slice(), phUsed: false, starter: T.sp });
   const H = mk(home, 'H'), A = mk(away, 'A');
   const sides = { H, A };
   const rat = id => { const p = P(id); if (!p) return null; if (id === meId && cond) { const c = cond; return { ...p, con: p.con + c, pow: p.pow + c * .8, eye: p.eye + c * .5, spd: p.spd, ctl: p.ctl + c, brk: p.brk + c * .7, vel: p.vel + c * .25, sta: p.sta }; } return p; };
-  const pl = id => pg[id] || (pg[id] = { outs: 0, h: 0, r: 0, er: 0, bb: 0, k: 0, hr: 0, bf: 0, pc: 0, entry: 0, exit: null, st: false });
-  const bl = id => bg[id] || (bg[id] = { pa: 0, ab: 0, h: 0, d: 0, t: 0, hr: 0, rbi: 0, r: 0, bb: 0, k: 0, sb: 0, cs: 0, sf: 0, dp: 0, hbp: 0 });
+  const pl = id => pg[id] || (pg[id] = { outs: 0, h: 0, r: 0, er: 0, bb: 0, k: 0, hr: 0, bf: 0, pc: 0, np: 0, wp: 0, hbp: 0, entry: 0, exit: null, st: false });
+  const bl = id => bg[id] || (bg[id] = { pa: 0, ab: 0, h: 0, d: 0, t: 0, hr: 0, rbi: 0, r: 0, bb: 0, k: 0, sb: 0, cs: 0, sf: 0, dp: 0, hbp: 0, rab: 0, rh: 0, gs: 0, sayo: 0, sh: 0 });
   pl(H.pit).st = true; pl(A.pit).st = true;
   let winC = { H: null, A: null }, loseC = { H: null, A: null };
   const limitOf = (id, starter) => { const p = P(id); return starter ? 84 + p.sta * 0.48 : 18 + p.sta * 0.3; };
@@ -9659,16 +9661,30 @@ function simGame(ctx, home, away, opt = {}) {
         }
       }
       if (RND() < 0.004 && (bases[0] || bases[1] || bases[2])) { // 暴投
+        pl(F.pit).wp++;
         if (bases[2]) { scoreRun(Bt, F, bases[2], null); }
         bases[2] = bases[1]; bases[1] = bases[0]; bases[0] = null;
         if (bottom && inn >= 9 && Bt.runs > F.runs) break;
       }
       const bid = Bt.lineup[Bt.bi];
       const b = rat(bid), p = rat(F.pit);
+      // 送りバント（投手・非力な打者、無死一塁、接戦）
+      if (outs === 0 && bases[0] && !bases[2] && Math.abs(Bt.runs - F.runs) <= 2 && (b.pos === 'P' || offOf(b) < 36) && RND() < (b.pos === 'P' ? 0.8 : 0.45)) {
+        const L0 = bl(bid), P0 = pl(F.pit);
+        L0.pa++; P0.bf++; P0.np += 2; F.pc += 2;
+        let code0;
+        if (RND() < 0.82) { L0.sh++; outs++; P0.outs++; if (bases[1]) bases[2] = bases[1]; bases[1] = bases[0]; bases[0] = null; code0 = pick(['投', '捕', '一', '三']) + '犠打'; }
+        else { L0.ab++; outs++; P0.outs++; bases[0] = { id: bid, resp: F.pit, er: true }; code0 = pick(['投', '捕', '三']) + 'ゴロ'; }
+        if (bid === meId) meLog.push(code0);
+        Bt.bi = (Bt.bi + 1) % Bt.lineup.length;
+        if (outs < 3) manage(F, Bt, inn, true);
+        continue;
+      }
       const r = paResult(b, p, F);
       F.pc += r.pc;
       const L = bl(bid), PL = pl(F.pit);
-      L.pa++; PL.bf++;
+      L.pa++; PL.bf++; PL.np += r.pc;
+      const risp = !!(bases[1] || bases[2]), ab0 = L.ab, h0 = L.h, runs0 = Bt.runs, full = !!(bases[0] && bases[1] && bases[2]);
       const runner = { id: bid, resp: F.pit, er: true };
       const bspd = b.spd;
       let code = '';
@@ -9678,12 +9694,12 @@ function simGame(ctx, home, away, opt = {}) {
       switch (r.c) {
         case 'K': L.ab++; L.k++; PL.k++; outs++; PL.outs++; code = '三振'; break;
         case 'BB': case 'HBP': {
-          if (r.c === 'BB') { L.bb++; PL.bb++; code = '四球'; } else { L.hbp++; PL.bb++; code = '死球'; }
+          if (r.c === 'BB') { L.bb++; PL.bb++; code = '四球'; } else { L.hbp++; PL.hbp++; code = '死球'; }
           if (bases[0]) { if (bases[1]) { if (bases[2]) scoreRun(Bt, F, bases[2], bid); bases[2] = bases[1]; } bases[1] = bases[0]; }
           bases[0] = runner; break;
         }
         case 'HR': {
-          L.ab++; L.h++; L.hr++; PL.h++; PL.hr++; Bt.hits++;
+          L.ab++; L.h++; L.hr++; PL.h++; PL.hr++; Bt.hits++; if (full) L.gs++;
           for (let i = 2; i >= 0; i--) if (bases[i]) { scoreRun(Bt, F, bases[i], bid); bases[i] = null; }
           scoreRun(Bt, F, runner, bid); code = pick(DIR_H) + '本'; break;
         }
@@ -9703,7 +9719,7 @@ function simGame(ctx, home, away, opt = {}) {
           bases[0] = runner; code = r.inf ? pick(['遊', '二', '三']) + '安' : pick(DIR_H) + '安'; break;
         }
         case 'ROE': {
-          L.ab++; code = pick(['遊', '二', '三', '一']) + '失';
+          L.ab++; F.err++; code = pick(['遊', '二', '三', '一']) + '失';
           adv(1, false); runner.er = false; bases[0] = runner; break;
         }
         case 'GO': {
@@ -9735,6 +9751,8 @@ function simGame(ctx, home, away, opt = {}) {
         }
         default: L.ab++; outs++; PL.outs++; code = pick(['遊', '二', '三', '一']) + '直';
       }
+      if (risp) { L.rab += L.ab - ab0; L.rh += L.h - h0; }
+      if (bottom && inn >= 9 && Bt.runs > F.runs && Bt.runs > runs0) { L.sayo++; sayo = { id: bid, hr: r.c === 'HR' }; }
       if (bid === meId) meLog.push(code);
       Bt.bi = (Bt.bi + 1) % Bt.lineup.length;
       if (bottom && inn >= 9 && Bt.runs > F.runs) break;
@@ -9742,6 +9760,7 @@ function simGame(ctx, home, away, opt = {}) {
     }
     return outs;
   }
+  let sayo = null;
   let inn = 1;
   const maxInn = opt.maxInn || 12;
   for (; inn <= maxInn; inn++) {
@@ -9752,7 +9771,7 @@ function simGame(ctx, home, away, opt = {}) {
   }
   const lastInn = Math.min(inn, maxInn);
   // 決着
-  const res = { h: home.id, a: away.id, hs: H.runs, as: A.runs, hh: H.hits, ah: A.hits, ls: [H.ls, A.ls], inn: lastInn, w: null, l: null, sv: null, hld: [], hr: [] };
+  const res = { h: home.id, a: away.id, hs: H.runs, as: A.runs, hh: H.hits, ah: A.hits, ls: [H.ls, A.ls], inn: lastInn, w: null, l: null, sv: null, hld: [], hr: [], spec: [], bh: {}, sayo };
   pl(H.pit).exit = H.runs - A.runs; pl(A.pit).exit = A.runs - H.runs;
   if (H.runs !== A.runs) {
     const Wn = H.runs > A.runs ? H : A, Ls = Wn === H ? A : H;
@@ -9777,13 +9796,23 @@ function simGame(ctx, home, away, opt = {}) {
   for (const id of Object.keys(bg)) {
     const g = bg[id], a = sink.bat(id); if (!a) continue;
     a[B.G]++; a[B.PA] += g.pa; a[B.AB] += g.ab; a[B.H] += g.h; a[B.D] += g.d; a[B.T] += g.t; a[B.HR] += g.hr; a[B.RBI] += g.rbi; a[B.R] += g.r; a[B.BB] += g.bb; a[B.K] += g.k; a[B.SB] += g.sb; a[B.CS] += g.cs; a[B.SF] += g.sf; a[B.DP] += g.dp; a[B.HBP] += g.hbp;
+    a[B.RAB] += g.rab; a[B.RH] += g.rh; a[B.GS] += g.gs; a[B.SAYO] += g.sayo; a[B.SH] += g.sh; if (g.h >= 3) a[B.MULTI]++;
     if (g.hr) res.hr.push([id, g.hr]);
+    res.bh[id] = [g.pa, g.h];
+    const sg = g.h - g.d - g.t - g.hr;
+    if (sg >= 1 && g.d >= 1 && g.t >= 1 && g.hr >= 1) res.spec.push(['cycle', id]);
+    if (g.hr >= 4) res.spec.push(['hr4', id, g.hr]);
+    if (g.h >= 6) res.spec.push(['h6', id, g.h]);
+    if (g.rbi >= 10) res.spec.push(['rbi10', id, g.rbi]);
+    if (g.gs) res.spec.push(['gs', id]);
   }
   for (const id of Object.keys(pg)) {
     const g = pg[id], a = sink.pit(id); if (!a) continue;
     a[Pp.G]++; if (g.st) a[Pp.GS]++; a[Pp.OUT] += g.outs; a[Pp.H] += g.h; a[Pp.HR] += g.hr; a[Pp.BB] += g.bb; a[Pp.K] += g.k; a[Pp.R] += g.r; a[Pp.ER] += g.er; a[Pp.BF] += g.bf;
+    a[Pp.NP] += g.np; a[Pp.WP] += g.wp; a[Pp.HBP] += g.hbp; if (g.st && g.outs >= 18 && g.er <= 3) a[Pp.QS]++;
+    if (g.k >= 16) res.spec.push(['k16', id, g.k]);
     if (id === res.w) a[Pp.W]++; if (id === res.l) a[Pp.L]++; if (id === res.sv) a[Pp.SV]++; if (res.hld.includes(id)) a[Pp.HLD]++;
-    if (g.st) { const S = H.starter === id ? H : A; if (S.used.size === 1 && g.outs >= 27) { a[Pp.CG]++; if (g.r === 0) a[Pp.SHO]++; } }
+    if (g.st) { const S = H.starter === id ? H : A; if (S.used.size === 1 && g.outs >= 27) { a[Pp.CG]++; if (g.r === 0) a[Pp.SHO]++; if (g.h === 0) { a[Pp.NH]++; const O = S === H ? A : H; res.spec.push([g.bb === 0 && g.hbp === 0 && S.err === 0 ? 'perfect' : 'nohit', id]); } } }
     if (!g.st && sink.rel) { (sink.rel[id] || (sink.rel[id] = [])).push(num(sink.round)); if (sink.rel[id].length > 4) sink.rel[id].shift(); }
   }
   if (meId && (bg[meId] || pg[meId])) {
@@ -9844,7 +9873,7 @@ function mkCtx(N, S, round) {
   const me = N.me && N.me.st === 'pro' && N.me.p ? N.me : null;
   return {
     L: N.L, me, P: id => id === 'ME' ? (N.me && N.me.p) : N.L.players[id],
-    sink: { bat: id => S.bs[id] || (S.bs[id] = newB()), pit: id => S.ps[id] || (S.ps[id] = newP()), rel: S.rel, round },
+    sink: { bat: id => padA(S.bs[id] || (S.bs[id] = newB()), BL), pit: id => padA(S.ps[id] || (S.ps[id] = newP()), PL_), rel: S.rel, round },
   };
 }
 const nameOf = (N, id) => { if (!id) return ''; const p = id === 'ME' ? N.me && N.me.p : N.L.players[id]; return p ? shortName(p) : '？'; };
@@ -9853,6 +9882,7 @@ function playGame(N, S, h, a, kind, md, round, out) {
   const ctx = mkCtx(N, S, round);
   const dh = TEAM[h].lg === 'P';
   const res = simGame(ctx, prepTeam(ctx, h, dh), prepTeam(ctx, a, dh));
+  try { handleGameRecords(N, S, res, md, out); } catch (e) { console.error('[npb] rec', e); }
   if (kind === 'R') {
     const sh = S.st[h], sa = S.st[a];
     if (res.hs > res.as) { sh[0]++; sa[1]++; } else if (res.hs < res.as) { sa[0]++; sh[1]++; } else { sh[2]++; sa[2]++; }
@@ -9978,7 +10008,7 @@ function leaders(N, S, lg, kind, n = 5) {
   const qPA = Math.floor(S.N * 3.1 * Math.max(0.05, S.done / S.N)), qOut = Math.floor(S.N * 3 * Math.max(0.05, S.done / S.N));
   let rows = [];
   const bE = Object.entries(S.bs).filter(([id]) => teamOk(id)), pE = Object.entries(S.ps).filter(([id]) => teamOk(id));
-  const top = (arr, f, fmt, asc) => arr.map(([id, a]) => ({ id, v: f(a), a })).sort((x, y) => asc ? x.v - y.v : y.v - x.v).slice(0, n).map(r => ({ ...r, s: fmt(r.v), name: nameOf(N, r.id), team: P_team(N, r.id) }));
+  const top = (arr, f, fmt, asc) => arr.map(([id, a]) => ({ id, v: f(a, id), a })).sort((x, y) => asc ? x.v - y.v : y.v - x.v).slice(0, n).map(r => ({ ...r, s: fmt(r.v), name: nameOf(N, r.id), team: P_team(N, r.id) }));
   switch (kind) {
     case 'avg': return top(bE.filter(([, a]) => a[B.PA] >= qPA), avgOf, fmtAvg);
     case 'hr': return top(bE, a => a[B.HR], v => `${v}本`);
@@ -9991,12 +10021,22 @@ function leaders(N, S, lg, kind, n = 5) {
     case 'sv': return top(pE, a => a[Pp.SV], v => `${v}S`);
     case 'k': return top(pE, a => a[Pp.K], v => `${v}個`);
     case 'hld': return top(pE, a => a[Pp.HLD] + a[Pp.W] * (a[Pp.GS] ? 0 : 1), v => `${v}HP`);
+    case 'r': return top(bE, a => a[B.R], v => `${v}点`);
+    case 'ops': return top(bE.filter(([, a]) => a[B.PA] >= qPA), a => obpOf(a) + slgOf(a), fmtAvg);
+    case 'tb': return top(bE, tbOf, v => `${v}塁打`);
+    case 'iso': return top(bE.filter(([, a]) => a[B.PA] >= qPA), isoOf, fmtAvg);
+    case 'wrc': { const lg = lgOf(S); return top(bE.filter(([, a]) => a[B.PA] >= qPA), a => wrcPlusOf(a, lg), v => `${v}`); }
+    case 'bwar': { const lg = lgOf(S); return top(bE.filter(([id]) => P_pos(N, id) !== 'P'), (a, id) => bWar(a, P_pos(N, id), lg), f1); }
+    case 'pwar': { const lg = lgOf(S); return top(pE, a => pWar(a, lg), f1); }
+    case 'fip': { const lg = lgOf(S); return top(pE.filter(([, a]) => a[Pp.OUT] >= qOut), a => fipOf(a, lg), f2, true); }
+    case 'whip': return top(pE.filter(([, a]) => a[Pp.OUT] >= qOut), whipOf, f2, true);
+    case 'k9': return top(pE.filter(([, a]) => a[Pp.OUT] >= qOut), k9Of, f2);
+    case 'ip': return top(pE, a => a[Pp.OUT], fmtIP);
+    case 'qs': return top(pE, a => num(a[Pp.QS]), v => `${v}回`);
   }
   return rows;
 }
-function bWar(a) { if (!a || !a[B.PA]) return 0; const obp = obpOf(a), slg = slgOf(a); return (obp * 1.8 + slg - 0.95) * a[B.PA] / 30 + a[B.SB] * 0.05; }
-function pWar(a) { if (!a || !a[Pp.OUT]) return 0; const ip = a[Pp.OUT] / 3; return (5.0 - eraOf(a)) * ip / 50 + a[Pp.SV] * 0.05 + a[Pp.HLD] * 0.03 + a[Pp.W] * 0.06; }
-function valueOf(N, S, id) { const ps = P_pos(N, id); return ps === 'P' ? pWar(S.ps[id]) : bWar(S.bs[id]) + ({ C: 0.8, SS: 0.6, '2B': 0.4, OF: 0.1, '3B': 0.2, '1B': -0.3, DH: -0.6 }[ps] || 0) * num(S.bs[id] && S.bs[id][B.G]) / 100; }
+function valueOf(N, S, id) { const ps = P_pos(N, id), lg = lgOf(S); return ps === 'P' ? pWar(S.ps[id], lg) : bWar(S.bs[id], ps, lg); }
 const P_pos = (N, id) => { const p = id === 'ME' ? N.me && N.me.p : N.L.players[id]; return p ? p.pos : ''; };
 
 function awards(g, N, S, out) {
@@ -10039,6 +10079,7 @@ function awards(g, N, S, out) {
   if (sp && sp[1][Pp.W] >= 13 && eraOf(sp[1]) < 3) { A.t['X:sawamura'] = `${nameOf(N, sp[0])}（${TEAM[P_team(N, sp[0])].short}）`; if (sp[0] === 'ME') won.push('沢村賞'); }
   N.H.push(A); if (N.H.length > 60) N.H.shift();
   S.awardsDone = 1;
+  try { flushStreaks(N, S); updateSeasonRecords(N, S); } catch (e) { console.error('[npb] records', e); }
   if (me && won.length) meEvent(g, N, out, 'awards', { list: won });
 }
 
@@ -10057,6 +10098,7 @@ function yearRollover(g, N, out, newY) {
       ageDevelop(p);
       const o = ovrOf(p);
       const retire = (p.age >= 41) || (p.age >= 37 && chance(0.55)) || (p.age >= 34 && o < 46 && chance(0.6)) || (p.age >= 29 && o < 36 && chance(0.6)) || (p.fr && (o < 55 || chance(0.25)));
+      if (S) { try { accumulateCareer(N, S, p, retire); } catch (e) { console.error('[npb] career', e); } }
       if (retire) { gone.push(p); delete L.players[id]; continue; }
       keep[kind].push(id);
     }
@@ -10620,7 +10662,7 @@ function keiyaku(g, N, S, out) {
   me.signedY = S.y;
   const old = num(me.sal, 6e6);
   let v = 0;
-  if (me.p.pos === 'P') v = pWar(S.ps.ME); else v = bWar(S.bs.ME);
+  if (me.p.pos === 'P') v = pWar(S.ps.ME, lgOf(S)); else v = bWar(S.bs.ME, me.p.pos, lgOf(S));
   const titles = me.titles.filter(t => t[0] === S.y && !/優勝|日本一|オールスター/.test(t[1])).length;
   const g1 = me.p.pos === 'P' ? num(S.ps.ME && S.ps.ME[Pp.G]) : num(S.bs.ME && S.bs.ME[B.G]);
   let target = 4.4e6 + Math.max(0, v) * 4.2e7 + titles * 1e7 + g1 * 8e4 + (me.p.pos === 'P' && S.ps.ME ? S.ps.ME[Pp.W] * 1.5e6 + S.ps.ME[Pp.SV] * 8e5 + S.ps.ME[Pp.HLD] * 4e5 : 0);
@@ -10644,6 +10686,7 @@ function archiveMe(g, N, S, force) {
   if (!wasPro) return;
   if (me.joinY === S.y && !S.bs.ME && !S.ps.ME && !S.fb[B.PA] && !S.fp[Pp.BF]) { S.archived = 1; return; }
   const c = { y: S.y, team: me.team || me.lastTeam, num: me.num, sal: num(me.sal), b: S.bs.ME ? S.bs.ME.slice() : null, p: S.ps.ME ? S.ps.ME.slice() : null, fb: S.fb[B.PA] ? S.fb.slice() : null, fp: S.fp[Pp.BF] ? S.fp.slice() : null, aw: me.titles.filter(t => t[0] === S.y).map(t => t[1]), pos: me.p.pos };
+  c.war = Math.round(warOf(me.p.pos === 'P' ? S.ps.ME : S.bs.ME, me.p.pos === 'P', me.p.pos, lgOf(S)) * 100) / 100;
   const i = me.career.findIndex(x => x.y === S.y);
   if (i >= 0) me.career[i] = c; else me.career.push(c);
   S.archived = 1;
@@ -10778,8 +10821,14 @@ class NpbScene {
     if (inp.pressed('left')) { this.setTab(this.tab - 1); return; }
     if (inp.pressed('right')) { this.setTab(this.tab + 1); return; }
     const rows = this.rows(), id = this.tabId;
-    if (id === 'lead' || id === 'stand' || id === 'stats') {
-      if (inp.repeat('up') || inp.repeat('down') || inp.pressed('a')) { this.sub[id] = (num(this.sub[id]) + (inp.repeat('up') ? -1 : 1) + 9) % (id === 'lead' ? 3 : 2); tt.sfx('cursor'); }
+    if (id === 'lead') {
+      this.page = this.page || {};
+      if (inp.repeat('up') || inp.repeat('down')) { this.sub.lead = (num(this.sub.lead) + (inp.repeat('up') ? -1 : 1) + 6) % 6; this.page.lead = 0; tt.sfx('cursor'); }
+      else if (inp.pressed('a')) { this.page.lead = (num(this.page.lead) + 1) % this.leadPages(this.N, num(this.sub.lead) % 6); tt.sfx('cursor'); }
+      return;
+    }
+    if (id === 'stand' || id === 'stats') {
+      if (inp.repeat('up') || inp.repeat('down') || inp.pressed('a')) { const n = id === 'stats' ? 3 : 2; this.sub[id] = (num(this.sub[id]) + (inp.repeat('up') ? -1 : 1) + n * 3) % n; tt.sfx('cursor'); }
       return;
     }
     if (!rows.length) return;
@@ -10812,7 +10861,8 @@ class NpbScene {
     if (!h) return;
     if (h.close) { tt.sfx('cancel'); this.close(); return; }
     if (h.tab != null) { if (h.tab !== this.tab) this.setTab(h.tab); return; }
-    if (h.sub) { this.sub[this.tabId] = (num(this.sub[this.tabId]) + 1) % (this.tabId === 'lead' ? 3 : 2); tt.sfx('cursor'); return; }
+    if (h.page) { this.page = this.page || {}; this.page.lead = (num(this.page.lead) + 1) % this.leadPages(this.N, num(this.sub.lead) % 6); tt.sfx('cursor'); return; }
+    if (h.sub) { const id = this.tabId, n = id === 'lead' ? 6 : id === 'stats' ? 3 : 2; this.sub[id] = (num(this.sub[id]) + 1) % n; if (id === 'lead') { this.page = this.page || {}; this.page.lead = 0; } tt.sfx('cursor'); return; }
     if (h.row != null) { const id = this.tabId, rows = this.rows(); if ((this.sel[id] | 0) === h.row) { tt.sfx('ok'); this.act(() => this.activate(rows[h.row])); } else { this.sel[id] = h.row; tt.sfx('cursor'); } }
   }
   async activate(r) {
@@ -10834,7 +10884,7 @@ class NpbScene {
     this.drawTabs(c);
     try { this['d_' + this.tabId](c, N); } catch (e) { console.error('[npb] draw', e); tx(c, '（表示エラー）', 320, 180, { align: 'center', color: UC.bad }); }
     fr(c, 0, 342, 640, 18, '#08101e');
-    const hint = { home: '↑↓:えらぶ　A:けってい　←→:タブ　B:とじる', games: '↑↓:えらぶ　A:くわしく　←→:タブ　B:とじる', stand: '↑↓/A:表示の切りかえ　←→:タブ　B:とじる', stats: '↑↓/A:表示の切りかえ　←→:タブ　B:とじる', lead: '↑↓/A:リーグ・表彰の切りかえ　←→:タブ　B:とじる', prac: '↑↓:えらぶ　A:練習する（体力25・2時間）　B:とじる', car: '↑↓:えらぶ　A:くわしく　←→:タブ　B:とじる' }[this.tabId];
+    const hint = { home: '↑↓:えらぶ　A:けってい　←→:タブ　B:とじる', games: '↑↓:えらぶ　A:くわしく　←→:タブ　B:とじる', stand: '↑↓/A:表示の切りかえ　←→:タブ　B:とじる', stats: '↑↓/A:今季・通算・指標の切りかえ　←→:タブ　B:とじる', lead: '↑↓:記録の種類　A:ページ　←→:タブ　B:とじる', prac: '↑↓:えらぶ　A:練習する（体力25・2時間）　B:とじる', car: '↑↓:えらぶ　A:くわしく　←→:タブ　B:とじる' }[this.tabId];
     tx(c, hint, 320, 345, { align: 'center', color: UC.dim });
     if (this.toast) { const w = Math.min(560, tw(c, this.toast.text) + 28); box(c, 320 - w / 2, 300, w, 26, '#1b2c4c', this.toast.col); tx(c, this.toast.text, 320, 307, { align: 'center', color: UC.text }); }
     if (this.modal) this.drawModal(c, N);
@@ -10991,59 +11041,115 @@ class NpbScene {
   }
   // ---- 成績 ----
   d_stats(c, N) {
-    const me = N.me, S = N.S, P = me.p;
-    const mode = num(this.sub.stats) % 2;
+    const me = N.me, S = N.S, P = me.p, isP = P.pos === 'P';
+    const mode = num(this.sub.stats) % 3;
     box(c, 8, 66, 624, 272);
-    if (!me.career.length && me.st !== 'pro') { wrap(c, 'まだプロとしての成績はない。\nプロ入りすると、一軍・二軍の成績、リーグ内の順位、通算成績がここに表示される。', 590).forEach((l, i) => tx(c, l, 24, 86 + i * 18, { color: UC.dim })); return; }
-    const tot = careerTot(N);
-    const sets = mode === 0 && S ? [[`${S.y}年 一軍`, S.bs.ME, S.ps.ME], [`${S.y}年 二軍`, S.fb[B.PA] ? S.fb : null, S.fp[Pp.BF] ? S.fp : null]] : [['通算（一軍）', tot.b[B.PA] ? tot.b : null, tot.p[Pp.BF] ? tot.p : null]];
-    let y = 74;
-    tx(c, mode === 0 ? '今シーズン' : '通算成績', 20, y, { color: UC.acc }); tx(c, mode ? '↑↓:今シーズン' : '↑↓:通算', 620, y, { align: 'right', color: UC.dim }); y += 22;
-    this.hits.push({ x: 8, y: 66, w: 624, h: 30, sub: 1 });
-    for (const [label, b, p] of sets) {
-      tx(c, label, 20, y, { color: UC.cyan }); y += 18;
-      if (P.pos !== 'P' || (b && b[B.PA] > 0 && P.pos !== 'P')) {
-        if (b) { y = statGrid(c, 20, y, [['試合', b[B.G]], ['打席', b[B.PA]], ['打数', b[B.AB]], ['安打', b[B.H]], ['二塁打', b[B.D]], ['三塁打', b[B.T]], ['本塁打', b[B.HR]], ['打点', b[B.RBI]], ['得点', b[B.R]], ['盗塁', b[B.SB]], ['四死球', b[B.BB] + b[B.HBP]], ['三振', b[B.K]], ['打率', fmtAvg(avgOf(b))], ['出塁率', fmtAvg(obpOf(b))], ['長打率', fmtAvg(slgOf(b))], ['OPS', fmtAvg(obpOf(b) + slgOf(b))]]); }
-        else { tx(c, '（記録なし）', 30, y, { color: UC.dim }); y += 18; }
+    if (!me.career.length && me.st !== 'pro') { wrap(c, 'まだプロとしての成績はない。\nプロ入りすると、一軍・二軍の成績、通算成績、WARなどの指標がここに表示される。', 590).forEach((l, i) => tx(c, l, 24, 86 + i * 18, { color: UC.dim })); return; }
+    const tot = careerTot(N), lg = lgOf(S);
+    const curB = S && S.bs.ME, curP = S && S.ps.ME;
+    tx(c, ['今シーズン（一軍）', '通算成績（一軍）', '指標（セイバーメトリクス）'][mode], 20, 72, { color: UC.acc });
+    tx(c, '↑↓:今季 / 通算 / 指標', 620, 72, { align: 'right', color: UC.dim });
+    this.hits.push({ x: 8, y: 66, w: 624, h: 24, sub: 1 });
+    let y = 94;
+    const bGrid = b => [['試合', bv(b, B.G)], ['打席', bv(b, B.PA)], ['打数', bv(b, B.AB)], ['得点', bv(b, B.R)], ['安打', bv(b, B.H)], ['二塁打', bv(b, B.D)], ['三塁打', bv(b, B.T)], ['本塁打', bv(b, B.HR)], ['塁打', tbOf(b)], ['打点', bv(b, B.RBI)], ['盗塁', bv(b, B.SB)], ['盗塁死', bv(b, B.CS)], ['犠打', bv(b, B.SH)], ['犠飛', bv(b, B.SF)], ['四球', bv(b, B.BB)], ['死球', bv(b, B.HBP)], ['三振', bv(b, B.K)], ['併殺打', bv(b, B.DP)], ['満塁本塁打', bv(b, B.GS)], ['サヨナラ打', bv(b, B.SAYO)], ['猛打賞', bv(b, B.MULTI)], ['打率', fmtAvg(avgOf(b))], ['出塁率', fmtAvg(obpOf(b))], ['長打率', fmtAvg(slgOf(b))], ['OPS', fmtAvg(obpOf(b) + slgOf(b))], ['得点圏打率', fmtAvg(rispOf(b))]];
+    const pGrid = p => [['登板', bv(p, Pp.G)], ['先発', bv(p, Pp.GS)], ['勝利', bv(p, Pp.W)], ['敗戦', bv(p, Pp.L)], ['セーブ', bv(p, Pp.SV)], ['ホールド', bv(p, Pp.HLD)], ['勝率', fmtAvg(wpctOf(p))], ['完投', bv(p, Pp.CG)], ['完封', bv(p, Pp.SHO)], ['QS', bv(p, Pp.QS)], ['ノーノー', bv(p, Pp.NH)], ['投球回', fmtIP(bv(p, Pp.OUT))], ['打者', bv(p, Pp.BF)], ['投球数', bv(p, Pp.NP)], ['被安打', bv(p, Pp.H)], ['被本塁打', bv(p, Pp.HR)], ['与四球', bv(p, Pp.BB)], ['与死球', bv(p, Pp.HBP)], ['奪三振', bv(p, Pp.K)], ['暴投', bv(p, Pp.WP)], ['失点', bv(p, Pp.R)], ['自責点', bv(p, Pp.ER)], ['防御率', fmtERA(eraOf(p))], ['WHIP', f2(whipOf(p))]];
+    const grid = (cells) => { cells.forEach(([n, v], i) => { const cx = 20 + (i % 4) * 150, cy = y + Math.floor(i / 4) * 17; tx(c, n, cx, cy, { color: UC.dim }); tx(c, String(v), cx + 134, cy, { align: 'right' }); }); y += Math.ceil(cells.length / 4) * 17 + 4; };
+    if (mode < 2) {
+      const b = mode === 0 ? curB : (bv(tot.b, B.PA) ? tot.b : null), p = mode === 0 ? curP : (bv(tot.p, Pp.BF) ? tot.p : null);
+      if (isP) { if (p) grid(pGrid(p)); else { tx(c, '（記録なし）', 30, y, { color: UC.dim }); y += 20; } if (b && bv(b, B.PA)) tx(c, `打撃：${bv(b, B.AB)}打数${bv(b, B.H)}安打 ${bv(b, B.HR)}本塁打 打率${fmtAvg(avgOf(b))}`, 20, y, { color: UC.dim }); y += 18; }
+      else { if (b) grid(bGrid(b)); else { tx(c, '（記録なし）', 30, y, { color: UC.dim }); y += 20; } }
+      if (mode === 0 && S) {
+        const fb = S.fb, fp = S.fp;
+        const fl = isP ? (bv(fp, Pp.BF) ? `二軍：${bv(fp, Pp.G)}登板 ${bv(fp, Pp.W)}勝${bv(fp, Pp.L)}敗 ${fmtIP(bv(fp, Pp.OUT))}回 ${bv(fp, Pp.K)}奪三振 防御率${fmtERA(eraOf(fp))}` : '') : (bv(fb, B.PA) ? `二軍：${bv(fb, B.G)}試合 打率${fmtAvg(avgOf(fb))} ${bv(fb, B.HR)}本 ${bv(fb, B.RBI)}打点 OPS${fmtAvg(obpOf(fb) + slgOf(fb))}` : '');
+        if (fl) tx(c, fl, 20, Math.min(y, 300), { color: UC.cyan });
+        if (me.st === 'pro' && me.team) {
+          const ranks = [];
+          for (const [k, n] of isP ? [['era', '防御率'], ['w', '勝利'], ['sv', 'セーブ'], ['k', '奪三振'], ['pwar', 'WAR']] : [['avg', '打率'], ['hr', '本塁打'], ['rbi', '打点'], ['sb', '盗塁'], ['bwar', 'WAR']]) { const L = leaders(N, S, TEAM[me.team].lg, k, 30); const i = L.findIndex(r => r.id === 'ME'); if (i >= 0 && i < 10) ranks.push(`${n}${i + 1}位`); }
+          if (ranks.length) tx(c, `リーグ順位：${ranks.join('・')}`, 20, 318, { color: UC.acc });
+        }
+      } else if (mode === 1) {
+        const yrs = me.career.length + (me.st === 'pro' && S && !S.archived && !me.career.some(x => x.y === S.y) ? 1 : 0);
+        const war = me.career.reduce((s, x) => s + careerWarOf(x), 0) + (me.st === 'pro' && S && !S.archived ? warOf(isP ? curP : curB, isP, P.pos, lg) : 0);
+        tx(c, `プロ${yrs}年　通算WAR ${f1(war)}　タイトル${me.titles.filter(t => !/優勝|日本一/.test(t[1])).length}個`, 20, 318, { color: UC.acc });
       }
-      if (P.pos === 'P') {
-        if (p) { y = statGrid(c, 20, y, [['登板', p[Pp.G]], ['先発', p[Pp.GS]], ['勝利', p[Pp.W]], ['敗戦', p[Pp.L]], ['セーブ', p[Pp.SV]], ['ホールド', p[Pp.HLD]], ['投球回', fmtIP(p[Pp.OUT])], ['被安打', p[Pp.H]], ['被本塁打', p[Pp.HR]], ['与四死球', p[Pp.BB]], ['奪三振', p[Pp.K]], ['失点', p[Pp.R]], ['防御率', fmtERA(eraOf(p))], ['WHIP', (Math.round(whipOf(p) * 100) / 100).toFixed(2)], ['完投', p[Pp.CG]], ['完封', p[Pp.SHO]]]); }
-        else { tx(c, '（記録なし）', 30, y, { color: UC.dim }); y += 18; }
-        if (b && b[B.PA] > 0 && mode === 0) { tx(c, `打撃：${b[B.AB]}打数${b[B.H]}安打 ${b[B.HR]}本塁打 打率${fmtAvg(avgOf(b))}`, 20, y, { color: UC.dim }); y += 18; }
-      }
-      y += 4;
-      if (y > 300) break;
+      return;
     }
-    if (mode === 0 && S && me.st === 'pro') {
-      const lg = TEAM[me.team].lg, ranks = [];
-      for (const [k, n] of P.pos === 'P' ? [['era', '防御率'], ['w', '勝利'], ['sv', 'セーブ'], ['k', '奪三振'], ['hld', 'HP']] : [['avg', '打率'], ['hr', '本塁打'], ['rbi', '打点'], ['sb', '盗塁'], ['h', '安打']]) { const L = leaders(N, S, lg, k, 30); const i = L.findIndex(r => r.id === 'ME'); if (i >= 0 && i < 10) ranks.push(`${n}${i + 1}位`); }
-      if (ranks.length) tx(c, `リーグ順位：${ranks.join('・')}`, 20, 318, { color: UC.acc });
-    }
+    // 指標
+    const careerWar = me.career.reduce((s, x) => s + careerWarOf(x), 0) + (me.st === 'pro' && S && !S.archived ? warOf(isP ? curP : curB, isP, P.pos, lg) : 0);
+    const rowsB = [['WAR（勝利貢献度）', a => f1(bWar(a, P.pos, lg)), 'war'], ['wOBA', a => fmtAvg(wobaOf(a))], ['wRC+', a => String(wrcPlusOf(a, lg))], ['OPS', a => fmtAvg(obpOf(a) + slgOf(a))], ['ISO（純長打率）', a => fmtAvg(isoOf(a))], ['BABIP', a => fmtAvg(babipOf(a))], ['BB%', a => pc1(pctOf(bv(a, B.BB), bv(a, B.PA)))], ['K%', a => pc1(pctOf(bv(a, B.K), bv(a, B.PA)))], ['BB/K', a => f2(pctOf(bv(a, B.BB), bv(a, B.K)))], ['得点圏打率', a => fmtAvg(rispOf(a))], ['本塁打率（打数/本）', a => bv(a, B.HR) ? f1(bv(a, B.AB) / bv(a, B.HR)) : '－'], ['盗塁成功率', a => (bv(a, B.SB) + bv(a, B.CS)) ? pc1(bv(a, B.SB) / (bv(a, B.SB) + bv(a, B.CS))) : '－']];
+    const rowsP = [['WAR（勝利貢献度）', a => f1(pWar(a, lg)), 'war'], ['FIP', a => f2(fipOf(a, lg))], ['防御率', a => fmtERA(eraOf(a))], ['WHIP', a => f2(whipOf(a))], ['K/9（奪三振率）', a => f2(k9Of(a))], ['BB/9（与四球率）', a => f2(bb9Of(a))], ['HR/9', a => f2(hr9Of(a))], ['K/BB', a => f2(kbbOf(a))], ['K%', a => pc1(pctOf(bv(a, Pp.K), bv(a, Pp.BF)))], ['被打率', a => fmtAvg(oppAvgOf(a))], ['QS率', a => bv(a, Pp.GS) ? pc1(bv(a, Pp.QS) / bv(a, Pp.GS)) : '－'], ['1回あたり投球数', a => ipOf(a) ? f1(bv(a, Pp.NP) / ipOf(a)) : '－']];
+    const rows = isP ? rowsP : rowsB, cur = isP ? curP : curB, car = isP ? tot.p : tot.b;
+    tx(c, '指標', 24, y, { color: UC.dim }); tx(c, '今季', 430, y, { align: 'right', color: UC.dim }); tx(c, '通算', 600, y, { align: 'right', color: UC.dim }); y += 18;
+    rows.forEach(([n, f, k], i) => {
+      const yy = y + i * 17; if (i % 2) fr(c, 16, yy - 1, 608, 17, 'rgba(255,255,255,0.03)');
+      tx(c, n, 24, yy, { color: '#dfe6f6' });
+      tx(c, cur ? f(cur) : '－', 430, yy, { align: 'right' });
+      tx(c, k === 'war' ? f1(careerWar) : (bv(car, isP ? Pp.BF : B.PA) ? f(car) : '－'), 600, yy, { align: 'right', color: UC.acc });
+    });
+    tx(c, isP ? 'FIP：守備に左右されない防御率　WAR：代替選手より何勝多くもたらしたか' : 'wRC+：100が平均　WAR：代替選手より何勝多くもたらしたか', 20, 320, { color: UC.dim });
   }
-  // ---- 記録（ランキング） ----
+  // ---- 記録（ランキング・歴代記録） ----
   d_lead(c, N) {
     const S = N.S; if (!S) return;
-    const mode = num(this.sub.lead) % 3;
-    this.hits.push({ x: 8, y: 62, w: 624, h: 20, sub: 1 });
+    const mode = num(this.sub.lead) % 6, page = num(this.page && this.page.lead);
+    const MODES = ['セ・リーグ 今季ランキング', 'パ・リーグ 今季ランキング', '昨シーズンの表彰', '歴代シーズン記録', '歴代通算記録', '特殊記録'];
+    const np = this.leadPages(N, mode);
+    const pg = page % np;
+    tx(c, `${MODES[mode]}${np > 1 ? `（${pg + 1}/${np}）` : ''}`, 14, 66, { color: UC.acc });
+    tx(c, `↑↓:記録の種類　${np > 1 ? 'A:ページ' : ''}`, 626, 66, { align: 'right', color: UC.dim });
+    this.hits.push({ x: 8, y: 62, w: 400, h: 20, sub: 1 });
+    this.hits.push({ x: 408, y: 62, w: 224, h: 20, page: 1 });
     if (mode === 2) {
-      const A = N.H[N.H.length - 1];
-      box(c, 8, 66, 624, 272);
-      if (!A) { tx(c, 'まだ表彰の記録はない（11月に発表）', 24, 90, { color: UC.dim }); return; }
-      tx(c, `${A.y}年 NPBアワーズ`, 20, 72, { color: UC.acc }); tx(c, '↑↓:セ・リーグの記録へ', 620, 72, { align: 'right', color: UC.dim });
+      const A = N.H.filter(h => h.y <= S.y).pop();
+      box(c, 8, 84, 624, 254);
+      if (!A) { tx(c, 'まだ表彰の記録はない（11月に発表）', 24, 100, { color: UC.dim }); return; }
+      tx(c, `${A.y}年 NPBアワーズ`, 20, 90, { color: UC.cyan });
       const keys = [['mvp', 'MVP'], ['roy', '新人王'], ['avg', '首位打者'], ['hr', '本塁打王'], ['rbi', '打点王'], ['sb', '盗塁王'], ['era', '最優秀防御率'], ['w', '最多勝'], ['k', '最多奪三振'], ['sv', '最多セーブ'], ['hld', '最優秀中継ぎ']];
       ['C', 'P'].forEach((lg, k) => {
-        const x = 20 + k * 308; tx(c, LGS[lg].short, x, 94, { color: UC.cyan });
-        keys.forEach(([key, n], i) => { const v = A.t[lg + ':' + key]; tx(c, n, x, 114 + i * 18, { color: UC.dim }); tx(c, fit(c, v || '－', 196), x + 100, 114 + i * 18); });
+        const x = 20 + k * 308; tx(c, LGS[lg].short, x + 220, 90, { color: UC.cyan });
+        keys.forEach(([key, n], i) => { const v = A.t[lg + ':' + key]; tx(c, n, x, 110 + i * 18, { color: UC.dim }); tx(c, fit(c, v || '－', 196), x + 100, 110 + i * 18); });
       });
-      if (A.t['X:sawamura']) tx(c, `沢村賞：${A.t['X:sawamura']}`, 20, 318, { color: UC.acc });
+      if (A.t['X:sawamura']) tx(c, `沢村賞：${A.t['X:sawamura']}`, 20, 316, { color: UC.acc });
+      return;
+    }
+    if (mode === 5) {
+      const R = recOf(N), list = R.sp.slice().reverse();
+      box(c, 8, 84, 624, 254);
+      if (!list.length) { wrap(c, 'まだ特殊記録はない。\n完全試合・ノーヒットノーラン・サイクル安打・1試合4本塁打・16奪三振・25試合以上の連続試合安打（あなたは20試合以上）などが起きると、ここに残る。（満塁本塁打・サヨナラ本塁打は、あなたの記録だけを残す）', 590).forEach((l, i) => tx(c, l, 24, 98 + i * 18, { color: UC.dim })); return; }
+      const per = 12, rows = list.slice(pg * per, pg * per + per);
+      rows.forEach((r, i) => {
+        const y = 92 + i * 20;
+        if (r.me) fr(c, 12, y - 2, 616, 19, '#3a3a18');
+        tx(c, `${r.y} ${mdDate(r.md)}`, 20, y, { color: UC.dim });
+        tx(c, r.k === 'streak' ? `${r.v}試合連続安打` : r.k === 'k16' ? `1試合${r.v}奪三振` : r.k === 'hr4' ? `1試合${r.v}本塁打` : r.k === 'h6' ? `1試合${r.v}安打` : r.k === 'rbi10' ? `1試合${r.v}打点` : SP_NAME[r.k], 130, y, { color: ['perfect', 'nohit'].includes(r.k) ? UC.acc : '#fff' });
+        tx(c, `${r.n}（${TEAM[r.t] ? TEAM[r.t].short : ''}）${r.o && TEAM[r.o] ? ` vs ${TEAM[r.o].short}` : ''}`, 320, y, { color: r.me ? UC.acc : '#dfe6f6' });
+      });
+      return;
+    }
+    if (mode === 3 || mode === 4) {
+      const cats = (mode === 3 ? SREC : CREC).slice(pg * 4, pg * 4 + 4);
+      cats.forEach((cat, i) => {
+        const x = 8 + (i % 2) * 316, y = 84 + Math.floor(i / 2) * 128, w = 308;
+        box(c, x, y, w, 124);
+        tx(c, cat[1], x + 8, y + 4, { color: UC.cyan });
+        const L = mode === 3 ? seasonRecordList(N, cat) : careerRecordList(N, cat);
+        if (!L.length) tx(c, '－（記録は年度末に残る）', x + 8, y + 26, { color: UC.dim });
+        L.forEach((r, j) => {
+          const yy = y + 24 + j * 19;
+          if (r.me) fr(c, x + 2, yy - 2, w - 4, 18, '#3a3a18');
+          tx(c, String(j + 1), x + 8, yy, { color: UC.dim });
+          fr(c, x + 20, yy + 2, 4, 10, TEAM[r.t] ? TEAM[r.t].color : '#888');
+          tx(c, fit(c, r.n, 92), x + 28, yy, { color: r.me ? UC.acc : '#fff' });
+          tx(c, mode === 3 ? `${r.y}${r.live ? '（今季）' : ''}` : `${r.y0 ?? ''}〜${r.y1 === '現役' ? '現役' : r.y1 ?? ''}`, x + 126, yy, { color: r.live || r.y1 === '現役' ? UC.cyan : UC.dim });
+          tx(c, cat[4](Math.round(r.v * 1000) / 1000), x + w - 8, yy, { align: 'right' });
+        });
+      });
       return;
     }
     const lg = mode === 0 ? 'C' : 'P';
-    tx(c, `${LGS[lg].name}　個人成績ランキング（${S.y}年）`, 14, 68, { color: UC.acc });
-    tx(c, '↑↓:切りかえ', 626, 68, { align: 'right', color: UC.dim });
-    const cats = [['avg', '打率'], ['hr', '本塁打'], ['rbi', '打点'], ['sb', '盗塁'], ['era', '防御率'], ['w', '勝利'], ['sv', 'セーブ'], ['k', '奪三振']];
-    cats.forEach(([k, n], i) => {
-      const x = 8 + (i % 4) * 157, y = 86 + Math.floor(i / 4) * 128, w = 153;
+    const PAGES = [[['avg', '打率'], ['hr', '本塁打'], ['rbi', '打点'], ['sb', '盗塁'], ['era', '防御率'], ['w', '勝利'], ['sv', 'セーブ'], ['k', '奪三振']], [['h', '安打'], ['r', '得点'], ['obp', '出塁率'], ['ops', 'OPS'], ['hld', 'ホールドP'], ['ip', '投球回'], ['whip', 'WHIP'], ['qs', 'QS']], [['bwar', 'WAR（野手）'], ['wrc', 'wRC+'], ['iso', 'ISO'], ['tb', '塁打'], ['pwar', 'WAR（投手）'], ['fip', 'FIP'], ['k9', 'K/9'], ['k', '奪三振']]];
+    PAGES[pg].forEach(([k, n], i) => {
+      const x = 8 + (i % 4) * 157, y = 84 + Math.floor(i / 4) * 128, w = 153;
       box(c, x, y, w, 124);
       tx(c, n, x + 8, y + 4, { color: UC.cyan });
       const L = leaders(N, S, lg, k, 5);
@@ -11053,11 +11159,12 @@ class NpbScene {
         if (mine) fr(c, x + 2, yy - 2, w - 4, 18, '#3a3a18');
         tx(c, String(j + 1), x + 8, yy, { color: UC.dim });
         fr(c, x + 20, yy + 2, 4, 10, TEAM[r.team] ? TEAM[r.team].color : '#888');
-        tx(c, fit(c, r.name, 68), x + 28, yy, { color: mine ? UC.acc : '#fff' });
+        tx(c, fit(c, r.name, 64), x + 28, yy, { color: mine ? UC.acc : '#fff' });
         tx(c, r.s, x + w - 6, yy, { align: 'right', color: '#fff' });
       });
     });
   }
+  leadPages(N, mode) { if (mode === 0 || mode === 1) return 3; if (mode === 3) return Math.ceil(SREC.length / 4); if (mode === 4) return Math.ceil(CREC.length / 4); if (mode === 5) return Math.max(1, Math.ceil(recOf(N).sp.length / 12)); return 1; }
   // ---- 練習 ----
   d_prac(c, N) {
     const me = N.me, P = me.p;
@@ -11097,15 +11204,16 @@ class NpbScene {
     const P = me.p;
     if (!rows.length) { wrap(c, 'まだプロの経歴はない。\n入団すると、毎年の成績・年俸・タイトルがここに残っていく。', 590).forEach((l, i) => tx(c, l, 24, 86 + i * 18, { color: UC.dim })); }
     else {
-      const head = P.pos === 'P' ? ['年', '球団', '登板', '勝', '敗', 'S', '防御率', '年俸'] : ['年', '球団', '試合', '打率', '本', '打点', '盗塁', '年俸'];
-      const xs = [20, 70, 200, 250, 290, 330, 400, 540];
-      head.forEach((h, i) => tx(c, h, xs[i], 72, { color: UC.dim, align: i >= 2 ? 'right' : 'left' }));
+      const head = P.pos === 'P' ? ['年', '球団', '登板', '勝', '敗', 'S', '防御率', 'WAR', '年俸'] : ['年', '球団', '試合', '打率', '本', '打点', '盗塁', 'WAR', '年俸'];
+      const xs = [20, 70, 190, 240, 280, 320, 390, 450, 520];
+      head.forEach((h, i) => tx(c, h, i === 8 ? xs[8] + 72 : xs[i], 72, { color: UC.dim, align: i >= 2 ? 'right' : 'left' }));
       this.list(c, rows, 14, 90, 604, 190, 22, (r, x, y) => {
         const cc = r.c, b = cc.b, p = cc.p;
         tx(c, String(cc.y) + (cc.live ? '*' : ''), xs[0], y + 4, { color: cc.live ? UC.cyan : '#fff' }); if (TEAM[cc.team]) tx(c, TEAM[cc.team].short, xs[1], y + 4, { color: TEAM[cc.team].color === '#222222' ? '#ccc' : TEAM[cc.team].color });
         const v = P.pos === 'P' ? (p ? [p[Pp.G], p[Pp.W], p[Pp.L], p[Pp.SV], fmtERA(eraOf(p))] : ['－', '', '', '', '（二軍）']) : (b ? [b[B.G], fmtAvg(avgOf(b)), b[B.HR], b[B.RBI], b[B.SB]] : ['－', '', '', '', '（二軍）']);
         v.forEach((s, i) => tx(c, String(s), xs[i + 2], y + 4, { align: 'right' }));
-        tx(c, manEn(cc.sal), xs[7] + 70, y + 4, { align: 'right', color: UC.acc });
+        tx(c, (P.pos === 'P' ? p : b) ? f1(cc.live ? warOf(P.pos === 'P' ? p : b, P.pos === 'P', P.pos, lgOf(N.S)) : careerWarOf(cc)) : '', xs[7], y + 4, { align: 'right', color: UC.cyan });
+        tx(c, manEn(cc.sal), xs[8] + 72, y + 4, { align: 'right', color: UC.acc });
         if (cc.aw && cc.aw.length) tx(c, '★', 604, y + 4, { color: UC.acc, align: 'right' });
       });
     }
@@ -11203,6 +11311,8 @@ function careerLines(N, c) {
   const pl = (p, l) => p && p[Pp.BF] ? `${l}：${p[Pp.G]}登板 ${p[Pp.W]}勝${p[Pp.L]}敗 ${p[Pp.SV]}S ${p[Pp.HLD]}H ${fmtIP(p[Pp.OUT])}回 ${p[Pp.K]}奪三振 防御率${fmtERA(eraOf(p))}` : null;
   for (const s of [pl(c.p, '一軍'), bl(c.b, '一軍'), pl(c.fp, '二軍'), bl(c.fb, '二軍')]) if (s) out.push(s);
   if (out.length === 1) out.push('（記録なし）');
+  const isP = c.pos === 'P' || (!c.b && c.p), m = isP ? c.p : c.b;
+  if (m) out.push(isP ? `WAR ${f1(careerWarOf(c))}　FIP ${f2(fipOf(m))}　WHIP ${f2(whipOf(m))}　K/9 ${f2(k9Of(m))}　QS ${bv(m, Pp.QS)}` : `WAR ${f1(careerWarOf(c))}　wOBA ${fmtAvg(wobaOf(m))}　wRC+ ${wrcPlusOf(m)}　ISO ${fmtAvg(isoOf(m))}　得点圏 ${fmtAvg(rispOf(m))}`);
   if (c.aw && c.aw.length) { out.push(''); out.push('この年の栄誉：' + c.aw.join('・')); }
   return out;
 }
@@ -11470,7 +11580,220 @@ function install() {
   if (typeof window !== 'undefined') window.__npb = { open: () => openNPB(window.__game), advance: () => advance(window.__game), state: () => window.__game && window.__game.state && window.__game.state.npb, getN: (c) => getN(window.__game, c !== false), TEAMS, practice: id => practice(window.__game, getN(window.__game, true), id), join: (team, o = {}) => { const g = window.__game, N = getN(g, true); if (!N.me.p.pos) N.me.p.pos = o.pos || 'SS'; joinTeam(g, N, team, { sal: 1.5e7, bonus: 0, y: N.S ? N.S.y : 2004, round: 1, firstJoin: true, ...o }); return N.me; }, meOvr: () => meOvr(getN(window.__game, true).me) };
 }
 
-return { install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
+// ===== 指標（セイバーメトリクス）・歴代記録・特殊記録 =====
+const bv = (a, i) => num(a && a[i]);
+const singlesOf = a => bv(a, B.H) - bv(a, B.D) - bv(a, B.T) - bv(a, B.HR);
+const tbOf = a => bv(a, B.H) + bv(a, B.D) + 2 * bv(a, B.T) + 3 * bv(a, B.HR);
+const isoOf = a => bv(a, B.AB) ? (tbOf(a) - bv(a, B.H)) / bv(a, B.AB) : 0;
+const babipOf = a => { const d = bv(a, B.AB) - bv(a, B.K) - bv(a, B.HR) + bv(a, B.SF); return d > 0 ? (bv(a, B.H) - bv(a, B.HR)) / d : 0; };
+const wobaOf = a => { const d = bv(a, B.AB) + bv(a, B.BB) + bv(a, B.SF) + bv(a, B.HBP); return d ? (0.69 * bv(a, B.BB) + 0.72 * bv(a, B.HBP) + 0.89 * singlesOf(a) + 1.27 * bv(a, B.D) + 1.62 * bv(a, B.T) + 2.1 * bv(a, B.HR)) / d : 0; };
+const rispOf = a => bv(a, B.RAB) ? bv(a, B.RH) / bv(a, B.RAB) : 0;
+const pctOf = (x, d) => d ? x / d : 0;
+const ipOf = a => bv(a, Pp.OUT) / 3;
+const k9Of = a => ipOf(a) ? bv(a, Pp.K) * 9 / ipOf(a) : 0;
+const bb9Of = a => ipOf(a) ? bv(a, Pp.BB) * 9 / ipOf(a) : 0;
+const hr9Of = a => ipOf(a) ? bv(a, Pp.HR) * 9 / ipOf(a) : 0;
+const kbbOf = a => bv(a, Pp.BB) ? bv(a, Pp.K) / bv(a, Pp.BB) : bv(a, Pp.K);
+const oppAvgOf = a => { const d = bv(a, Pp.BF) - bv(a, Pp.BB) - bv(a, Pp.HBP); return d > 0 ? bv(a, Pp.H) / d : 0; };
+const wpctOf = a => (bv(a, Pp.W) + bv(a, Pp.L)) ? bv(a, Pp.W) / (bv(a, Pp.W) + bv(a, Pp.L)) : 0;
+const DEF_LG = { woba: 0.32, rpa: 0.118, era: 4.2, cfip: 3.1 };
+let LG_CACHE = { key: '', v: null };
+function lgOf(S) {
+  if (!S || !S.bs) return DEF_LG;
+  const key = `${S.y}:${S.done}:${S.post ? 1 : 0}`;
+  if (LG_CACHE.key === key && LG_CACHE.v) return LG_CACHE.v;
+  const tb = newB(), tp = newP();
+  const P = id => id === 'ME' ? (CUR_N && CUR_N.me && CUR_N.me.p) : (CUR_N && CUR_N.L.players[id]);
+  for (const [id, a] of Object.entries(S.bs)) { const p = P(id); if (p && p.pos === 'P') continue; addArr(tb, a); }
+  for (const a of Object.values(S.ps)) addArr(tp, a);
+  if (bv(tb, B.PA) < 500 || bv(tp, Pp.OUT) < 300) return DEF_LG;
+  const era = eraOf(tp);
+  const fipRaw = (13 * bv(tp, Pp.HR) + 3 * (bv(tp, Pp.BB) + bv(tp, Pp.HBP)) - 2 * bv(tp, Pp.K)) / ipOf(tp);
+  const v = { woba: wobaOf(tb), rpa: bv(tp, Pp.R) / Math.max(1, bv(tb, B.PA) + 1), era, cfip: era - fipRaw };
+  v.rpa = bv(tb, B.R) / bv(tb, B.PA);
+  LG_CACHE = { key, v };
+  return v;
+}
+const fipOf = (a, lg = DEF_LG) => ipOf(a) ? (13 * bv(a, Pp.HR) + 3 * (bv(a, Pp.BB) + bv(a, Pp.HBP)) - 2 * bv(a, Pp.K)) / ipOf(a) + lg.cfip : 0;
+const wrcPlusOf = (a, lg = DEF_LG) => { if (!bv(a, B.PA)) return 0; const wraaPA = (wobaOf(a) - lg.woba) / 1.24; return Math.round((wraaPA + lg.rpa) / lg.rpa * 100); };
+const POS_ADJ = { C: 9, SS: 7, '2B': 3, '3B': 2, OF: 0, '1B': -9, DH: -15, P: 0 };
+function bWar(a, pos, lg = DEF_LG) {
+  const pa = bv(a, B.PA); if (!pa) return 0;
+  const wraa = (wobaOf(a) - lg.woba) / 1.24 * pa;
+  const br = bv(a, B.SB) * 0.2 - bv(a, B.CS) * 0.4;
+  return (wraa + br + 20 * pa / 600 + (POS_ADJ[pos] || 0) * pa / 600) / 10;
+}
+function pWar(a, lg = DEF_LG) {
+  const ip = ipOf(a); if (!ip) return 0;
+  const ra = 0.5 * eraOf(a) + 0.5 * fipOf(a, lg);
+  return (lg.era * 1.28 - ra) * ip / 90 + bv(a, Pp.SV) * 0.03 + bv(a, Pp.HLD) * 0.015;
+}
+function warOf(a, isP, pos, lg) { return isP ? pWar(a, lg) : bWar(a, pos, lg); }
+const f2 = v => (Math.round(v * 100) / 100).toFixed(2);
+const f1 = v => (Math.round(v * 10) / 10).toFixed(1);
+const pc1 = v => `${(Math.round(v * 1000) / 10).toFixed(1)}%`;
+
+// ---- 記録の保存場所 ----
+function recOf(N) {
+  const R = N.R = isObj(N.R) ? N.R : {};
+  R.season = isObj(R.season) ? R.season : {};
+  R.sp = Array.isArray(R.sp) ? R.sp : [];
+  R.ret = Array.isArray(R.ret) ? R.ret : [];
+  R.team = Array.isArray(R.team) ? R.team : [];
+  return R;
+}
+// 歴代シーズン記録のカテゴリ
+const SREC = [
+  // id, 名前, 投手?, 値, 表示, 昇順?, 規定（打席/投球回の倍率）
+  ['hr', '本塁打', 0, a => bv(a, B.HR), v => `${v}本`],
+  ['avg', '打率', 0, avgOf, fmtAvg, 0, 3.1],
+  ['rbi', '打点', 0, a => bv(a, B.RBI), v => `${v}点`],
+  ['h', '安打', 0, a => bv(a, B.H), v => `${v}本`],
+  ['sb', '盗塁', 0, a => bv(a, B.SB), v => `${v}個`],
+  ['ops', 'OPS', 0, a => obpOf(a) + slgOf(a), fmtAvg, 0, 3.1],
+  ['bwar', 'WAR（野手）', 0, null, f1],
+  ['r', '得点', 0, a => bv(a, B.R), v => `${v}点`],
+  ['w', '勝利', 1, a => bv(a, Pp.W), v => `${v}勝`],
+  ['era', '防御率', 1, eraOf, fmtERA, 1, 1],
+  ['k', '奪三振', 1, a => bv(a, Pp.K), v => `${v}個`],
+  ['sv', 'セーブ', 1, a => bv(a, Pp.SV), v => `${v}S`],
+  ['hld', 'ホールド', 1, a => bv(a, Pp.HLD), v => `${v}H`],
+  ['pwar', 'WAR（投手）', 1, null, f1],
+  ['sho', '完封', 1, a => bv(a, Pp.SHO), v => `${v}回`],
+  ['whip', 'WHIP', 1, whipOf, f2, 1, 1],
+];
+// 歴代通算記録のカテゴリ
+const CREC = [
+  ['h', '安打', 0, a => bv(a, B.H), v => `${v}本`],
+  ['hr', '本塁打', 0, a => bv(a, B.HR), v => `${v}本`],
+  ['rbi', '打点', 0, a => bv(a, B.RBI), v => `${v}点`],
+  ['sb', '盗塁', 0, a => bv(a, B.SB), v => `${v}個`],
+  ['avg', '打率（2000打数以上）', 0, avgOf, fmtAvg, 0, a => bv(a, B.AB) >= 2000],
+  ['r', '得点', 0, a => bv(a, B.R), v => `${v}点`],
+  ['bwar', 'WAR（野手）', 0, null, f1],
+  ['g', '試合', 0, a => bv(a, B.G), v => `${v}試合`],
+  ['w', '勝利', 1, a => bv(a, Pp.W), v => `${v}勝`],
+  ['sv', 'セーブ', 1, a => bv(a, Pp.SV), v => `${v}S`],
+  ['k', '奪三振', 1, a => bv(a, Pp.K), v => `${v}個`],
+  ['era', '防御率（1000回以上）', 1, eraOf, fmtERA, 1, a => bv(a, Pp.OUT) >= 3000],
+  ['hld', 'ホールド', 1, a => bv(a, Pp.HLD), v => `${v}H`],
+  ['pwar', 'WAR（投手）', 1, null, f1],
+  ['sho', '完封', 1, a => bv(a, Pp.SHO), v => `${v}回`],
+  ['pg', '登板', 1, a => bv(a, Pp.G), v => `${v}試合`],
+];
+// 今季のシーズン候補（id, 成績, 投手?, 名前, 球団, WAR）
+function seasonCands(N, S, live) {
+  const lg = lgOf(S), out = [];
+  const frac = live ? Math.max(0.05, S.done / S.N) : 1;
+  for (const [id, a] of Object.entries(S.bs)) { const pos = P_pos(N, id); if (pos === 'P') continue; out.push({ id, a, isP: 0, pa: bv(a, B.PA), qual: bv(a, B.PA) >= S.N * 3.1 * frac, war: bWar(a, pos, lg) }); }
+  for (const [id, a] of Object.entries(S.ps)) out.push({ id, a, isP: 1, qual: bv(a, Pp.OUT) >= S.N * 3 * frac, war: pWar(a, lg) });
+  return out;
+}
+function seasonTop(N, S, cat, live) {
+  const [id, , isP, f, , asc, q] = cat;
+  return seasonCands(N, S, live).filter(c => c.isP === isP && (!q || c.qual)).map(c => ({ v: f ? f(c.a) : c.war, n: nameOf(N, c.id), t: P_team(N, c.id), y: S.y, me: c.id === 'ME' ? 1 : 0, live: live ? 1 : 0 }));
+}
+function updateSeasonRecords(N, S) {
+  const R = recOf(N);
+  if (R.doneY === S.y) return; R.doneY = S.y;
+  for (const cat of SREC) {
+    const list = (R.season[cat[0]] || []).filter(r => r[3] !== S.y).map(r => ({ v: r[0], n: r[1], t: r[2], y: r[3], me: r[4] }));
+    const all = list.concat(seasonTop(N, S, cat, false)).filter(r => cat[5] ? r.v > 0 : r.v > 0);
+    all.sort((a, b) => cat[5] ? a.v - b.v : b.v - a.v);
+    R.season[cat[0]] = all.slice(0, 10).map(r => [Math.round(r.v * 1000) / 1000, r.n, r.t, r.y, r.me]);
+  }
+  for (const lg of ['C', 'P']) for (const r of standings(S, lg)) R.team.push([r.id, S.y, r.w, r.l, r.t]);
+  R.team.sort((a, b) => b[2] - a[2]); R.team = R.team.slice(0, 10);
+}
+function seasonRecordList(N, cat) {
+  const R = recOf(N), S = N.S;
+  const list = (R.season[cat[0]] || []).map(r => ({ v: r[0], n: r[1], t: r[2], y: r[3], me: r[4] }));
+  let all = list;
+  if (S && S.done > 0 && R.doneY !== S.y) all = list.concat(seasonTop(N, S, cat, true).filter(r => (cat[6] ? true : true)));
+  all = all.filter(r => r.v > 0 || cat[5]);
+  if (cat[5]) all = all.filter(r => r.v > 0);
+  all.sort((a, b) => cat[5] ? a.v - b.v : b.v - a.v);
+  return all.slice(0, 5);
+}
+// 通算記録の候補（現役＋引退＋あなた）
+function careerCands(N) {
+  const S = N.S, lg = lgOf(S), out = [];
+  const curDone = S && N.R && N.R.doneY === S.y ? false : true;
+  for (const p of Object.values(N.L.players)) {
+    const isP = p.pos === 'P';
+    const a = (isP ? padA((p.cp || []).slice(), PL_) : padA((p.cb || []).slice(), BL));
+    const cur = S && !S.cumY ? (isP ? S.ps[p.id] : S.bs[p.id]) : null;
+    if (cur) addArr(a, cur);
+    const war = num(p.cw) + (cur ? warOf(cur, isP, p.pos, lg) : 0);
+    out.push({ n: shortName(p), t: p.team, isP: isP ? 1 : 0, a, war, y0: p.y0 ?? (S && S.y), y1: '現役', me: 0 });
+  }
+  for (const r of recOf(N).ret) out.push({ n: r.n, t: r.t, isP: r.pos === 'P' ? 1 : 0, a: r.pos === 'P' ? padA(r.cp || [], PL_) : padA(r.cb || [], BL), war: num(r.cw), y0: r.y0, y1: r.y1, me: 0 });
+  const me = N.me;
+  if (me && (me.career.length || me.st === 'pro') && me.p.pos) {
+    const tot = careerTot(N), isP = me.p.pos === 'P';
+    const war = me.career.reduce((s, c) => s + careerWarOf(c), 0) + (me.st === 'pro' && S && !S.archived ? warOf(isP ? S.ps.ME : S.bs.ME, isP, me.p.pos, lg) : 0);
+    out.push({ n: shortName(me.p), t: me.team || me.lastTeam, isP: isP ? 1 : 0, a: isP ? tot.p : tot.b, war, y0: me.career.length ? me.career[0].y : me.proY, y1: me.st === 'pro' ? '現役' : (me.career.length ? me.career[me.career.length - 1].y : ''), me: 1 });
+  }
+  return out;
+}
+function careerRecordList(N, cat) {
+  const [id, , isP, f, , asc, q] = cat;
+  const all = careerCands(N).filter(c => c.isP === isP && (!q || q(c.a))).map(c => ({ ...c, v: f ? f(c.a) : c.war })).filter(c => c.v > 0);
+  all.sort((a, b) => asc ? a.v - b.v : b.v - a.v);
+  return all.slice(0, 5);
+}
+// 年度替わり：通算成績の加算・引退者の保存
+function accumulateCareer(N, S, p, retiring) {
+  const isP = p.pos === 'P', cur = isP ? S.ps[p.id] : S.bs[p.id], lg = lgOf(S);
+  if (cur) {
+    if (isP) p.cp = addArr(padA(p.cp || [], PL_), cur); else p.cb = addArr(padA(p.cb || [], BL), cur);
+    p.cw = Math.round((num(p.cw) + warOf(cur, isP, p.pos, lg)) * 100) / 100;
+    if (p.y0 == null) p.y0 = S.y;
+  }
+  if (retiring) {
+    const a = isP ? p.cp : p.cb;
+    const big = a && (isP ? bv(a, Pp.OUT) >= 1200 || bv(a, Pp.SV) >= 50 || bv(a, Pp.W) >= 40 : bv(a, B.PA) >= 1500);
+    if (!big) return;
+    const R = recOf(N);
+    R.ret.push({ n: shortName(p), t: p.team, pos: p.pos, y0: p.y0, y1: S.y, cb: isP ? undefined : p.cb, cp: isP ? p.cp : undefined, cw: p.cw });
+    if (R.ret.length > 220) { R.ret.sort((x, y) => num(y.cw) - num(x.cw)); R.ret.length = 200; }
+  }
+}
+// 特殊記録
+const SP_NAME = { perfect: '完全試合', nohit: 'ノーヒットノーラン', cycle: 'サイクル安打', hr4: '1試合4本塁打', h6: '1試合6安打', rbi10: '1試合10打点', k16: '1試合16奪三振', streak: '連続試合安打', gs: '満塁本塁打', sayoHR: 'サヨナラ本塁打' };
+function logSp(N, S, kind, id, v, md, opp, out) {
+  const me = id === 'ME';
+  if ((kind === 'gs' || kind === 'sayoHR') && !me) return; // 頻繁な記録はあなたのぶんだけ残す
+  const R = recOf(N);
+  R.sp.push({ y: S.y, md, k: kind, n: nameOf(N, id), t: P_team(N, id), o: opp || null, v: v || 0, me: me ? 1 : 0 });
+  if (R.sp.length > 260) { const i = R.sp.findIndex(x => !x.me); R.sp.splice(i >= 0 ? i : 0, 1); }
+  if (me && out && CUR_G) {
+    const g = CUR_G, label = kind === 'streak' ? `${v}試合連続安打` : kind === 'k16' ? `1試合${v}奪三振` : kind === 'hr4' ? `1試合${v}本塁打` : SP_NAME[kind];
+    const big = !['gs', 'sayoHR'].includes(kind);
+    out.notes.push(`【${label}】\n${big ? '球史に残る大記録を達成した！ スタンドは総立ち、ニュースでもくり返し流れた。' : kind === 'gs' ? 'ベースが埋まった場面で、スタンドへ！ 満塁本塁打だ！' : '劇的なサヨナラ本塁打！ ナインにもみくちゃにされた。'}`);
+    meNews(N, g, label);
+    if (big) { hist(g, `${S.y}年 ${label}を達成`, 'work'); N.me.titles.push([S.y, label]); }
+    fameGain(g, N, big ? (kind === 'perfect' ? 250 : kind === 'nohit' ? 150 : 80) : 5);
+  }
+}
+function handleGameRecords(N, S, res, md, out) {
+  for (const [k, id, v] of res.spec || []) {
+    const t = P_team(N, id), opp = t === res.h ? res.a : res.h;
+    logSp(N, S, k, id, v, md, opp, out);
+  }
+  if (res.sayo && res.sayo.hr) { const t = P_team(N, res.sayo.id); logSp(N, S, 'sayoHR', res.sayo.id, 0, md, t === res.h ? res.a : res.h, out); }
+  S.hs = isObj(S.hs) ? S.hs : {};
+  for (const [id, [pa, h]] of Object.entries(res.bh || {})) {
+    if (!pa) continue;
+    if (h > 0) S.hs[id] = num(S.hs[id]) + 1;
+    else { if (num(S.hs[id]) >= (id === 'ME' ? 20 : 25)) logSp(N, S, 'streak', id, S.hs[id], md, null, out); S.hs[id] = 0; }
+  }
+}
+function flushStreaks(N, S) { for (const [id, n] of Object.entries(S.hs || {})) if (n >= (id === 'ME' ? 20 : 25)) logSp(N, S, 'streak', id, n, MD.end, null, null); S.hs = {}; }
+
+const careerWarOf = c => c && c.war != null ? num(c.war) : c ? warOf(c.pos === 'P' ? c.p : c.b, c.pos === 'P', c.pos, DEF_LG) : 0;
+
+return { careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
 try{NPB_factory({Un:Un,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa}).install()}catch(e){console.error("[npb] install",e)}
 DBa().catch(t=>{console.error(t),vTe(window.__game,"\u30B2\u30FC\u30E0\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u2026","\u30DA\u30FC\u30B8\u3092\u518D\u8AAD\u307F\u8FBC\u307F\u3057\u3066\u304F\u3060\u3055\u3044")});})();
