@@ -725,6 +725,10 @@ A（Z・Enter）でつぎへ、B（X）でタイトルにもどります。
 - **社会人**：会社員は就活の内定か「会社をさがす（中途採用）」で。業種（公務員・メーカー・商社・銀行・IT企業〈1995年〜〉・広告出版）で給料と忙しさがちがいます。平日に「出勤する」（残業・有給休暇も）。毎週の給料、夏と冬のボーナス、毎年4月の査定（★1〜5）で昇進（新入社員→一般→主任→係長→課長→次長→部長→本部長→役員）、人事異動、忘年会、5月の健康診断。無断で3日休むと上司から電話がきます。芸能・政治の仕事も、キャリアのページにいっしょに出ます。
 - **中年**（40歳〜）：健康がだんだん大事に。人間ドック、5年ごとの同窓会、実家の親の介護の相談（手伝う・介護サービス・家族で相談）、厄年のひとこと。
 
+- **シニア**（65歳〜・R31）：会社の定年（1985年までは55歳、それ以降は60歳）で退職金。2006年からは希望すれば65歳まで、2021年からは70歳まで再雇用（嘱託・給料は6割、昇進・異動なし）。年金（2000年までは60歳、2001年から65歳。会社勤めの年数で週の額が増える）。還暦・古希・喜寿・傘寿・米寿・卒寿・白寿のお祝い、敬老の日、趣味の教室（囲碁・将棋・盆栽・俳句・社交ダンス・陶芸・カラオケ）、地域のボランティア、自分史を書く、散歩・体操。大人になった子ども（27歳〜）に、孫が生まれることがあります（孫と遊ぶ）。
+
+**一枚絵のシーン**（R31）：生活画面で行動すると、結果が動く一枚絵で出ます（学校の門・オフィス・勉強部屋・部活のグラウンドや音楽室・お店のレジ・川ぞいのジョギング・家事・病院・図書館・就活のビル街・縁側の趣味・ボランティア・読み聞かせ・宿題・運動会・授業参観・発表会・孫と公園・同窓会の居酒屋…）。季節・時間帯・時代（パソコンの有無、コンビニか喫茶店か）で絵が変わります。生い立ちのページにも、赤ちゃんの部屋・小学校・中学校の絵がつきます。
+
 **学校・会社の日の朝**（日課の設定）：「知らせるだけ」（はじめはこれ。朝にひとこと出るだけ）、「毎朝きく」、「自動で行く」（起きたら行って帰ってくる。時間が進みます）。休んでも出席・評価が下がるだけで、学校や会社を強制的にやめさせられることはありません（無断欠勤が続くと、やめるかどうかを聞かれます）。
 
 **生い立ち**（年表タブ・1回だけ）：赤ちゃん（どんな赤ちゃんだった？）→保育園・幼稚園（夢中になった遊び）→小学1〜6年（その年に打ちこんだこと：勉強・外遊び・工作・友だち・お手伝い・習いごと。入学式・九九・林間学校・修学旅行・運動会のリレー・学芸会の主役・自由研究…と、その年の子どもの遊び）→中学1〜3年（部活・合唱コンクール・職場体験・生徒会…）→高校受験。結果が、いまの能力・ゲームのスキル（合計+8まで）・高校の種類（いま高校生なら）・年表になります。
@@ -1497,7 +1501,7 @@ js/engine/            エンジン
   rivals_story.js     ライバルコンビの物語（R16）：決勝で何度も当たる相手を記録し、二度目・三度目・雪辱・五度目にニュース（図鑑の「実績」タブに並ぶ）
   ambience.js         環境音（R15）：駅・街・夜の街・雨を、場所と天気と時刻で選ぶ。設定の ON／OFF
   romance.js          恋愛・結婚・家庭のコア（R12-L1）：状態（flags.rom）・人の登録・段階・朝のフック・メッセージ（1日1通まで）・g.romance*。romance_data.js（名前・職業・性格・相性・デート先・方言・時代の事実）／romance_lines.js（セリフ）／romance_meet.js（出会い）／romance_date.js（デート・告白・別れ）／romance_wed.js（同棲〜結婚〜離婚・家計）／romance_kids.js（妊娠・子ども）／romance_home.js（家にいる家族）／romance_scene.js・romance_art.js・romance_art2.js（HD の一枚絵）／romance_ui.js（アプリ「恋のはなし」・家族アルバム）
-  lifestage.js        ライフステージ（R30）：自分の段階（高校・大学・社会人・中年）・6つの能力・学校/会社の日・行動・朝の処理・お知らせ・年表・家計簿・g.life*。lifestage_data.js（段階・部活・習いごと・業種・役職・時代の暦）／lifestage_kids.js（親キャリア）／lifestage_origin.js（生い立ち）／life_screen.js（生活の専用画面・アプリ「生活」）
+  lifestage.js        ライフステージ（R30）：自分の段階（高校・大学・社会人・中年）・6つの能力・学校/会社の日・行動・朝の処理・お知らせ・年表・家計簿・g.life*。lifestage_data.js（段階・部活・習いごと・業種・役職・時代の暦）／lifestage_kids.js（親キャリア）／lifestage_origin.js（生い立ち）／life_screen.js（生活の専用画面・アプリ「生活」）／life_art.js（生活の一枚絵、R31）
   crime_app.js        犯罪モードの裏アプリ（キリ／闇サイト／裏ページ：裏の仕事・信用と連絡先・隠し場所・資金洗浄・隠れ家）・HUD の手配度★・歩いているときの職務質問
   govt.js             政府のコア：税制改正・予算編成・行政（省庁・官僚・審議会・政令）・郵政民営化・宗教・野党・世論の声・デモ・支持率の内訳・世論の評価（g.govt など）
   regime.js           体制と安全保障のコア：自衛隊・震災対応・報道の自由・体制・戦争（実在の国・架空の国、3つの道、前線、戦死）・離党して新党・失脚（g.regime など）
@@ -2192,7 +2196,9 @@ NPC の議員は `g.aiScandalExit(id, reason)`（`politics_ai_act.js` の `scand
 生い立ち（`lifestage_origin.js`）：`runOrigin(g, io)`（`io.page(title, lines, o)` / `io.pick(title, items, o)`。画面は自分のモーダルを渡す）。
 API：`g.lifeStage()` `g.lifeStats()` `g.lifeActions()` `g.lifeAct(id, { pick })` `g.lifeInbox()` `g.lifeRespond(id, i)` `g.lifeHistory()` `g.lifeLedger()` `g.lifeRoutine(kind, mode)` `g.lifeCareer()` `g.lifeAddHist(t, k)` `g.lifeKids()` `g.lifeKidActions(kidId)` `g.lifeKidAct(kidId, id, o)` `g.lifeParent()` `g.lifeOrigin(io)` `g.lifeScreen(tab)`。`window.__ls` `window.__lsKids` `window.__lsOrigin` `window.__lifeui`（テスト用）。
 画面（`life_screen.js`）：`LifeScene`（hd・opaque）、タブ today career kids hist money、モーダル pick / info / page（生い立ちの絵本のページ）、タップ、縦画面の `portraitSpec`。メニューの「生活」（ui.js）とアプリ `seikatsu`（order 30.2、お知らせの数のバッジ）。
-テスト：`test-output/progress/r30/`（`life_t1.mjs` 高校→大学→就職→昇進→中年・子育て18年・生い立ち・セーブ、`era_t1.mjs` 昭和、`ui_t1.mjs`／`ui_t2.mjs` 画面〔`portrait` で縦画面〕）。
+シニア（R31）：`stageOf` は65歳から `senior`。誕生日に `teinenAge(year)` で定年のお知らせ（`teinen`：退職金 `役職の週給×業種×年数×2.2`、`rehireUntil(year)` まで再雇用 `job.rehire`・給料0.6倍・昇進と異動なし）、`pensionAge(year)` で `L.pension = { since, week: pensionWeek(会社の年数) }`（月曜に支給）、`CHOJU` のお祝い、9月の敬老の日。会社にいた日数 `L.coDays`。行動 hobbypick hobby volunteer grandkid jibunshi。孫 `L.grand [{ n, g, b, of }]`（`lifestage_kids.js`：27歳以上の子に毎年6月 22%、1人2人まで）。
+一枚絵（`life_art.js`）：`LIFE_ART`（320×112、romance_art の部品と人物）と `drawLifeArt(c, key, t, X)`（romance_art2 の cafe karaoke izakaya park home なども使える）。`ACT_ART` `KID_ART` `INBOX_ART` が行動・子育て・お知らせと絵を結ぶ。画面のモーダル `scene`（上に2倍の絵、下に文章。生い立ちのページは年齢のバッジつき）。
+テスト：`test-output/progress/r30/`（`life_t1.mjs` 高校→大学→就職→昇進→中年・子育て18年・生い立ち・セーブ、`senior_t1.mjs` 還暦・定年・再雇用・年金・古希・孫、`era_t1.mjs` 昭和、`art_t1.mjs` 全部の絵の一覧、`ui_t1.mjs`／`ui_t2.mjs` 画面〔`portrait` で縦画面〕）。
 
 ### 国会戦術（`js/engine/govt.js` の国会運営）
 

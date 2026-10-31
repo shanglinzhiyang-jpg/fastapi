@@ -218,7 +218,26 @@ KID_TICK.push((g, L, d, monthChanged, prev, notes) => {
   if (!kidsOf(g).length) return;
   kidDaily(g, L);
   if (monthChanged) kidMonth(g, L, d, prev, notes);
+  if (monthChanged && d.month === 6) grandkids(g, L, d, notes);
 });
+// [R31] 孫: a grown child (27+) may have a baby of their own, at most two each
+function grandkids(g, L, d, notes) {
+  L.grand = Array.isArray(L.grand) ? L.grand : [];
+  for (const k of kidsOf(g)) {
+    const K = kidState(g, k);
+    if (!K.after || kidYears(g, k) < 27) continue;
+    if (L.grand.filter((x) => x.of === k.id).length >= 2 || K.d.grand === d.year) continue;
+    if (lsRand() > 0.22) continue;
+    K.d.grand = d.year;
+    const gg = lsRand() < 0.5 ? 'm' : 'f';
+    const pool = D.GRAND_NAMES[gg];
+    const n = pool[Math.floor(lsRand() * pool.length)];
+    L.grand.push({ n, g: gg, b: g.state.day, of: k.id });
+    notes.push(`（${k.n}から電話。「生まれたよ！」…孫の${n}が生まれた。あなたは、${profileOf(g.state).gender === 'f' ? 'おばあちゃん' : profileOf(g.state).gender === 'm' ? 'おじいちゃん' : 'おじいちゃん・おばあちゃん'}になった）`);
+    addHist(g, `孫の${n}が生まれた（${k.n}の子）`, 'family');
+    parentAdd(g, L, 6, '孫の誕生');
+  }
+}
 KID_WEEKLY.push((g, L, ledgerAdd) => {
   const out = [];
   const away = awayIds(g);

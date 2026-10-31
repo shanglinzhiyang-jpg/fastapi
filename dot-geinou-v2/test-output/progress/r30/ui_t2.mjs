@@ -22,26 +22,26 @@ console.log('open', JSON.stringify(await top()));
 await shot('today');
 // the inbox item → pick → result
 await key('a'); await shot('inbox_pick'); console.log(JSON.stringify(await top()));
-await key('a'); await shot('inbox_result'); console.log(JSON.stringify(await top()));
+await key('a'); await page.evaluate(() => window.__ff(20)); await shot('inbox_result'); console.log(JSON.stringify(await top()));
 await key('a');
 // an action: 出勤する is first (work day?) — go down to 運動する and do it
-await key('down', 3); await key('a'); await shot('act_result'); console.log(JSON.stringify(await top())); await key('a');
+await key('down', 3); await key('a'); await page.evaluate(() => window.__ff(30)); await shot('act_result'); console.log(JSON.stringify(await top())); await key('a');
 // キャリア
 await key('right'); await shot('career');
 // 子育て: select the second child, do something
 await key('right'); await shot('kids');
 await key('down'); await shot('kids_sel2');
-await key('down', 2); await key('a'); await shot('kid_act'); console.log(JSON.stringify(await top())); await key('a');
+await key('down', 2); await key('a'); await page.evaluate(() => window.__ff(20)); await shot('kid_act'); console.log(JSON.stringify(await top())); await key('a');
 // 年表 → 生い立ち
 await key('right');
 const hsel = await page.evaluate(() => { const s = window.__lifeui.scene(); return s.sel[s.tabId] | 0; });
 await key('up', hsel); // to the top row (生い立ち)
 await key('a'); await shot('origin_start'); console.log(JSON.stringify(await top()));
 let pages = 0, picks = 0, shotPage = false, shotPick = false;
-for (let i = 0; i < 80; i++) {
+for (let i = 0; i < 160; i++) {
   const t = await top();
   if (!t || !t.modal) break;
-  if (t.modal === 'page' || t.modal === 'info') { pages++; if (!shotPage && pages === 2) { await shot('origin_page'); shotPage = true; } await key('a'); }
+  if (t.modal === 'page' || t.modal === 'info' || t.modal === 'scene') { pages++; await page.evaluate(() => window.__ff(14)); if (!shotPage && pages === 2) { await shot('origin_page'); shotPage = true; } if (pages === 9) await shot('origin_page_school'); await key('a'); }
   else { picks++; if (!shotPick && picks === 4) { await shot('origin_pick'); shotPick = true; } if (picks > 1) await key('down', picks % 3); await key('a'); }
 }
 console.log('origin pages', pages, 'picks', picks, JSON.stringify(await page.evaluate(() => window.__game.state.flags.ls.origin)));

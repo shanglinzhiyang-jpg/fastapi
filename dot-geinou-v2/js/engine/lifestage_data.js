@@ -23,9 +23,10 @@ export const STAGES = {
   high: { name: '高校生', short: '高校生', ages: '15〜17歳', color: '#4a72d8', icon: 'book' },
   uni: { name: '大学生', short: '大学生', ages: '18〜21歳', color: '#7a5bd0', icon: 'cap' },
   work: { name: '社会人', short: '社会人', ages: '18〜39歳', color: '#2f9a6a', icon: 'bag' },
-  middle: { name: '中年', short: '中年', ages: '40歳〜', color: '#c0763a', icon: 'tea' },
+  middle: { name: '中年', short: '中年', ages: '40〜64歳', color: '#c0763a', icon: 'tea' },
+  senior: { name: 'シニア', short: 'シニア', ages: '65歳〜', color: '#8a6ac0', icon: 'cane' },
 };
-export const STAGE_ORDER = ['baby', 'elem', 'mid', 'high', 'uni', 'work', 'middle'];
+export const STAGE_ORDER = ['baby', 'elem', 'mid', 'high', 'uni', 'work', 'middle', 'senior'];
 export const kidStageOf = (age) => (age < 6 ? 'baby' : age < 12 ? 'elem' : age < 15 ? 'mid' : age < 18 ? 'high' : 'adult');
 
 // ---------------------------------------------------------------- high schools (the player's, from 生い立ち or chosen)
@@ -154,6 +155,27 @@ export function shukatsuRule(year) {
   if (year <= 2015) return { start: [3, 10], offer: [4, 5], text: '3年生の秋からエントリー。4年生の春に面接、内定。' };
   return { start: [3, 3], offer: [4, 7], text: '3年生の3月に説明会が解禁、4年生の6月から選考。' };
 }
+// ---------------------------------------------------------------- 定年・年金・長寿のお祝い (R31)
+// the company retirement age of a year (55 → 60: 努力義務 1986, 義務 1998) and how long a company may keep you on after it
+// (継続雇用: phased in from 2006, for everyone who asks up to 65 from 2013, an effort to 70 from 2021)
+export const teinenAge = (year) => (year < 1986 ? 55 : 60);
+export const rehireUntil = (year) => (year >= 2021 ? 70 : year >= 2006 ? 65 : 0);
+// the public pension begins at (厚生年金: 60 until 2000, then raised step by step to 65; simplified here)
+export const pensionAge = (year) => (year <= 2000 ? 60 : 65);
+// a week's pension (internal yen): the 国民年金 base and the 厚生年金 part by the years at a company
+export const pensionWeek = (coYears) => 5500 + Math.min(12000, Math.round(coYears * 340));
+export const CHOJU = { 60: ['還暦', '家族が、赤いちゃんちゃんこを用意してくれた。照れくさいけれど、うれしい。'], 70: ['古希', '「古来まれなり」の70歳。家族がお祝いの食事会を開いてくれた。'], 77: ['喜寿', '喜寿のお祝い。紫のちゃんちゃんこを着て、写真を撮った。'], 80: ['傘寿', '傘寿。ここまでの道のりを、ゆっくり思い返した。'], 88: ['米寿', '米寿のお祝い。金色のちゃんちゃんこに、みんなが拍手してくれた。'], 90: ['卒寿', '卒寿。まだまだ、毎日が新しい。'], 99: ['白寿', '白寿。「百まで、あと一歩だね」と笑いあった。'] };
+export const HOBBIES = {
+  igo: { name: '囲碁・将棋', g: { gaku: 1, yu: 1 } },
+  bonsai: { name: '盆栽', g: { kan: 1, sei: 1 } },
+  haiku: { name: '俳句', g: { kan: 2 } },
+  dance: { name: '社交ダンス', g: { tai: 1, yu: 1 } },
+  tougei: { name: '陶芸', g: { kan: 1, sei: 1 } },
+  karaoke: { name: 'カラオケ教室', g: { kan: 1, yu: 1 } },
+};
+export const HOBBY_ORDER = ['igo', 'bonsai', 'haiku', 'dance', 'tougei', 'karaoke'];
+export const GRAND_NAMES = { m: ['湊', '蓮', '陽翔', '律', '蒼', '暖'], f: ['陽葵', '凛', '紬', '澪', '結菜', '芽依'] };
+
 // a tidy little scale of school marks from a 0..100 score
 export const mark5 = (v) => (v >= 82 ? 5 : v >= 64 ? 4 : v >= 44 ? 3 : v >= 26 ? 2 : 1);
 export const SUBJECTS = [

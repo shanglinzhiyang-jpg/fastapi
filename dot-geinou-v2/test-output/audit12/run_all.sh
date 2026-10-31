@@ -85,4 +85,9 @@ node test-output/progress/r30/life_t1.mjs > "$OUT/r30_life_t1.txt" 2>&1
 row "R30 life_t1" "$(tail -1 "$OUT/r30_life_t1.txt")"
 node test-output/progress/r30/era_t1.mjs > "$OUT/r30_era_t1.txt" 2>&1
 row "R30 era_t1 (showa)" "$(tail -1 "$OUT/r30_era_t1.txt")"
+# 18. [R31] シニア（定年・再雇用・年金・長寿のお祝い・孫）と生活の一枚絵
+node test-output/progress/r30/senior_t1.mjs > "$OUT/r31_senior_t1.txt" 2>&1
+row "R31 senior_t1" "$(tail -1 "$OUT/r31_senior_t1.txt")"
+node test-output/progress/r30/art_t1.mjs > "$OUT/r31_art_t1.txt" 2>&1
+row "R31 art_t1" "$(tail -1 "$OUT/r31_art_t1.txt")"
 echo "---- details: $OUT" | tee -a "$SUM"

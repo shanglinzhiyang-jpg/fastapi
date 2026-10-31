@@ -7,7 +7,7 @@
 // On a portrait phone the lower screen (bigtext.js) shows the selected tab in large type (portraitSpec).
 // Logic: lifestage.js, lifestage_kids.js, lifestage_origin.js. Data: lifestage_data.js.
 import { Game } from './game.js';
-import { SW, SH, clamp, fmtMoney } from './util.js';
+import { SW, SH, clamp, fmtMoney, makeCanvas } from './util.js';
 import { text, wrap, measure } from './draw.js';
 import { audio } from './audio.js';
 import { drawFaceHD } from './sprites.js';
@@ -18,6 +18,7 @@ import * as D from './lifestage_data.js';
 import { ensure, stageOf, stageLabel, dateOf, hm, highGrade, uniGrade, weeklyCosts } from './lifestage.js';
 import { runOrigin } from './lifestage_origin.js';
 import { rom } from './romance.js';
+import { drawLifeArt, ACT_ART, KID_ART, INBOX_ART, ART_W, ART_H } from './life_art.js';
 
 const num = (v, d = 0) => (v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 const has = (g, k) => !!g && typeof g[k] === 'function';
@@ -62,6 +63,7 @@ function icon(c, kind, x, y, col = '#ffffff') {
     case 'cap': r(1, 4, 12, 3); r(4, 7, 6, 4); r(11, 7, 1, 4); break;
     case 'bag': r(5, 2, 4, 2); r(2, 4, 10, 8); R(c, x + 2, y + 7, 10, 1, 'rgba(0,0,0,0.25)'); break;
     case 'tea': r(3, 5, 7, 6); r(10, 6, 2, 3); r(4, 11, 5, 1); r(5, 1, 1, 3); r(7, 2, 1, 2); break;
+    case 'cane': r(5, 1, 5, 2); r(9, 3, 2, 2); r(5, 3, 2, 10); r(4, 12, 4, 1); break;
     case 'heart': r(2, 3, 4, 4); r(8, 3, 4, 4); r(3, 6, 8, 3); r(5, 9, 4, 2); r(6, 11, 2, 1); break;
     case 'bowl': r(2, 6, 10, 4); r(4, 10, 6, 2); r(4, 3, 2, 3); r(7, 2, 2, 4); break;
     case 'cloud': r(3, 5, 8, 5); r(5, 3, 4, 2); r(2, 7, 10, 3); break;
@@ -156,8 +158,13 @@ class LifeScene {
   close() { if (this.closed) return; this.closed = true; if (this.modal) { const m = this.modal; this.modal = null; m.res(-1); } this.g.pop(this); this.resolve(null); }
   // ---------------------------------------------------------------- modals
   pick(o) { return new Promise((res) => { this.modal = { ...o, kind: 'pick', idx: 0, top: 0, res }; }); }
-  info(title, lines, o = {}) { return new Promise((res) => { this.modal = { title, lines: [].concat(lines), kind: 'info', res, ...o }; }); }
-  page(title, lines, o = {}) { return new Promise((res) => { this.modal = { title, lines: [].concat(lines), kind: 'page', res, ...o }; }); }
+  info(title, lines, o = {}) { return new Promise((res) => { this.modal = { title, lines: [].concat(lines), kind: o.art ? 'scene' : 'info', res, t0: this.t, ...o }; }); }
+  artX(extra = {}) {
+    const g = this.g, d = this.d || {}, h = d.clock ? num(d.clock.hour, 12) : 12;
+    const sen = d.ls && d.ls.id === 'senior';
+    return { me: sen ? { ...(g.state.look || {}), hairColor: 'silver' } : g.state.look || {}, phase: h >= 5 && h < 16 ? 'day' : h >= 16 && h < 19 ? 'dusk' : 'night', season: (this.se || SEASON(4)).name, year: (d.date && d.date.year) || 2026, stage: d.ls ? d.ls.id : 'work', club: d.ls && d.ls.high ? d.ls.high.club : null, ...extra };
+  }
+  page(title, lines, o = {}) { const art = o.stage === 'baby' ? 'origin_baby' : o.stage === 'elem' ? 'origin_school' : o.stage === 'mid' ? 'origin_mid' : null; return new Promise((res) => { this.modal = { title, lines: [].concat(lines), kind: art ? 'scene' : 'page', art, page: true, res, t0: this.t, ...o, X: this.artX() }; }); }
   endModal(v) { const m = this.modal; this.modal = null; if (m) m.res(v); if (this.g.input.consume) this.g.input.consume(); }
   async act(fn) { this.busy++; try { await fn(); } catch (e) { console.error(e); } finally { this.busy--; this.refresh(true); } }
   async activate(row) {
@@ -169,7 +176,10 @@ class LifeScene {
       if (i < 0) return;
       const r = g.lifeRespond(it.id, i);
       sfx('ok');
-      if (r.text) await this.info(it.title, r.text.split('\n'));
+      const ev = it.data && it.data.ev;
+      const art = it.kind === 'kid_event' ? (ev === 'sankan' ? 'kid_class' : ev === 'show' ? 'kid_stage' : 'kid_field') : INBOX_ART[it.kind];
+      const kidL = it.data && it.data.kid ? safe(() => (g.lifeKids().find((k) => k.id === it.data.kid) || {}).look, null) : null;
+      if (r.text) await this.info(it.title, r.text.split('\n'), { art: i === 0 || it.kind === 'teinen' ? art : null, X: this.artX({ kid: kidL, ev: it.title }) });
       return;
     }
     if (row.kind === 'act') {
@@ -179,7 +189,9 @@ class LifeScene {
       if (a.pick) { const i = await this.pick({ title: a.pick.title, items: a.pick.items }); if (i < 0) return; o = { pick: i }; }
       const r = g.lifeAct(a.id, o);
       sfx(r.ok ? 'ok' : 'buzz');
-      if (r.text) await this.info(a.name, r.text.split('\n'));
+      const ls2 = safe(() => g.lifeStage(), null);
+      const extra = { pct: ls2 && ls2.uni ? ls2.uni.thesis : null, grade: ls2 && ls2.mid && ls2.mid.check ? ls2.mid.check.grade : null, overtime: a.id === 'overtime', kid: ls2 && (ls2.grand || []).length ? { hair: 'short', hairColor: 'black', skin: 'light', top: '#ffd23f', bottom: '#5a8ad8' } : null, market: a.id === 'shukatsu' ? D.jobMarket((this.d.date || {}).year || 2026).name : '' };
+      if (r.text) await this.info(a.name, r.text.split('\n'), { art: r.ok ? ACT_ART[a.id] : null, X: this.artX(extra) });
       return;
     }
     if (row.kind === 'kid') { this.kidSel = row.i; this.refresh(true); sfx('cursor'); return; }
@@ -191,7 +203,7 @@ class LifeScene {
       if (a.pick) { const i = await this.pick({ title: a.pick.title, items: a.pick.items }); if (i < 0) return; o = { pick: i }; }
       const r = g.lifeKidAct(k.id, a.id, o);
       sfx(r.ok ? 'ok' : 'buzz');
-      if (r.text) await this.info(`${k.name}と`, r.text.split('\n'));
+      if (r.text) await this.info(`${k.name}と`, r.text.split('\n'), { art: r.ok ? KID_ART[a.id] : null, X: this.artX({ kid: k.look, club: k.club }) });
       return;
     }
     if (row.kind === 'origin') {
@@ -240,7 +252,8 @@ class LifeScene {
   }
   updateModal(inp, tap) {
     const m = this.modal;
-    if (m.kind === 'info' || m.kind === 'page') {
+    if (m.kind === 'info' || m.kind === 'page' || m.kind === 'scene') {
+      if (m.kind === 'scene' && this.t - num(m.t0) < 12) return; // let the picture show before a held A closes it
       if (tap || inp.pressed('a') || inp.pressed('b')) { sfx('ok'); this.endModal(0); }
       return;
     }
@@ -429,9 +442,10 @@ class LifeScene {
     card(c, 10, 76, 620, 50, P.card, P.edge);
     const cur = D.STAGE_ORDER.indexOf(ls.id);
     const skipUni = !ls.uni && cur >= 5;
+    const gap = 528 / (D.STAGE_ORDER.length - 1);
     D.STAGE_ORDER.forEach((sid, i) => {
-      const x = 56 + i * 88, y = 96, S = D.STAGES[sid];
-      if (i < D.STAGE_ORDER.length - 1) R(c, x + 12, y - 1, 64, 3, i < cur ? S.color : '#e3dac6');
+      const x = 56 + i * gap, y = 96, S = D.STAGES[sid];
+      if (i < D.STAGE_ORDER.length - 1) R(c, x + 12, y - 1, gap - 24, 3, i < cur ? S.color : '#e3dac6');
       const past = i < cur, now = i === cur, skip = sid === 'uni' && skipUni;
       if (now) { disc(c, x, y, 13, S.color); ringC(c, x, y, 16, S.color, 2); icon(c, S.icon, x - 7, y - 7, '#ffffff'); }
       else if (past && !skip) { disc(c, x, y, 11, mix(S.color, '#ffffff', 0.2)); icon(c, 'check', x - 7, y - 7, '#ffffff'); }
@@ -441,7 +455,7 @@ class LifeScene {
     // the six stats
     card(c, 10, 132, 220, 204, P.card, P.edge);
     T(c, '能力', 22, 138, 12, P.ink);
-    const cx = 120, cy = 238, rr = 66, adult = ls.id === 'work' || ls.id === 'middle';
+    const cx = 120, cy = 238, rr = 66, adult = ls.id === 'work' || ls.id === 'middle' || ls.id === 'senior';
     const pt = (i, f) => { const a = -Math.PI / 2 + (i * Math.PI * 2) / 6; return [cx + Math.cos(a) * rr * f, cy + Math.sin(a) * rr * f]; };
     for (const f of [0.25, 0.5, 0.75, 1]) for (let i = 0; i < 6; i++) { const [x1, y1] = pt(i, f), [x2, y2] = pt((i + 1) % 6, f); line(c, x1, y1, x2, y2, f === 1 ? '#d6ccb6' : '#ebe3d1'); }
     for (let i = 0; i < 6; i++) { const [x2, y2] = pt(i, 1); line(c, cx, cy, x2, y2, '#ebe3d1'); }
@@ -505,9 +519,16 @@ class LifeScene {
     } else if (ls.ronin) {
       para(c, `浪人生。予備校に通いながら、2月の${D.entranceTest(dateOf(g).year + (dateOf(g).month >= 2 ? 1 : 0))}・入試をめざす。「予備校で勉強する」で学力を上げよう。`, x, y + 22, w, 11, P.ink, 16);
     } else {
-      const lines = (d.career || []).filter((x0) => x0.k !== 'job');
-      if (lines.length) lines.slice(0, 3).forEach((r, i) => { T(c, r.label, x, y + 22 + i * 28, 10, P.dim); T(c, r.value, x + 40, y + 20 + i * 28, 12, P.ink, 'left', w - 40); T(c, r.sub || '', x + 40, y + 34 + i * 28, 9, P.dim, 'left', w - 40); });
+      const lines = (d.career || []).filter((x0) => x0.k !== 'job' && !(ls.id === 'senior' && x0.k === 'pension'));
+      if (lines.length) lines.slice(0, ls.id === 'senior' ? 1 : 3).forEach((r, i) => { T(c, r.label, x, y + 22 + i * 28, 10, P.dim); T(c, r.value, x + 40, y + 20 + i * 28, 12, P.ink, 'left', w - 40); T(c, r.sub || '', x + 40, y + 34 + i * 28, 9, P.dim, 'left', w - 40); });
+      else if (ls.id === 'senior') para(c, 'これからは、自分のペースで。趣味・ボランティア・孫との時間…。', x, y + 22, w, 11, P.ink, 16, 2);
       else para(c, '会社には勤めていない。芸能・政治・アルバイト…どの道で生きていくか。会社員になりたければ、下の「会社をさがす」から。', x, y + 22, w, 11, P.ink, 16);
+    }
+    if (ls.id === 'senior') {
+      R(c, x, y + 66, w, 48, '#fffdf8');
+      kv(y + 68, '年金', ls.pension ? `週 ${fmtMoney(ls.pension.week)}（会社勤め 約${ls.coYears}年）` : `${D.pensionAge(dateOf(g).year)}歳から`);
+      kv(y + 82, '趣味', ls.hobby ? D.HOBBIES[ls.hobby].name : 'まだ（「趣味の教室をえらぶ」）');
+      kv(y + 96, '孫・健康', `${(ls.grand || []).length ? `孫 ${ls.grand.length}人（${ls.grand.map((x0) => x0.n).join('・')}）` : '孫はまだ'}・健康 ${ls.stats.ken}`, ls.stats.ken < 40 ? P.red : P.ink);
     }
     if (ls.id === 'middle') {
       const ck = ls.mid && ls.mid.check;
@@ -524,6 +545,8 @@ class LifeScene {
       const f = P0.next ? (P0.pts - P0.min) / Math.max(1, P0.next - P0.min) : 1;
       R(c, 330, 88, 220, 6, '#ece4d3'); R(c, 330, 88, Math.round(220 * clamp(f, 0, 1)), 6, '#e0577f');
       T(c, P0.next ? `${P0.pts}/${P0.next}pt` : `${P0.pts}pt`, 618, 83, 10, P.dim, 'right');
+      const gr = (d.ls && d.ls.grand) || [];
+      if (gr.length) T(c, `孫 ${gr.length}人`, 322, 83, 10, '#e0577f', 'right');
     }
     if (!kids.length) {
       card(c, 10, 112, 620, 224, P.card, P.edge);
@@ -580,9 +603,9 @@ class LifeScene {
     const ls = d.ls, age = ls ? ls.age : 20;
     card(c, 10, 76, 620, 66, P.card, P.edge);
     T(c, '人生の年表', 22, 82, 12, P.ink);
-    const maxA = Math.max(60, Math.ceil((age + 10) / 10) * 10), X0 = 30, X1 = 610;
+    const maxA = Math.max(70, Math.ceil((age + 10) / 10) * 10), X0 = 30, X1 = 610;
     const xa = (a) => X0 + (clamp(a, 0, maxA) / maxA) * (X1 - X0);
-    const segs = [['baby', 0, 6], ['elem', 6, 12], ['mid', 12, 15], ['high', 15, 18], [ls && ls.uni ? 'uni' : 'work', 18, 22], ['work', 22, 40], ['middle', 40, maxA]];
+    const segs = [['baby', 0, 6], ['elem', 6, 12], ['mid', 12, 15], ['high', 15, 18], [ls && ls.uni ? 'uni' : 'work', 18, 22], ['work', 22, 40], ['middle', 40, 65], ['senior', 65, Math.max(65, maxA)]];
     for (const [sid, a, b] of segs) { const col = D.STAGES[sid].color; R(c, xa(a), 108, xa(b) - xa(a), 10, a <= age ? col : mix(col, '#ffffff', 0.7)); }
     for (let a = 0; a <= maxA; a += 10) { R(c, xa(a), 120, 1, 4, P.faint); T(c, `${a}`, xa(a), 125, 9, P.dim, 'center'); }
     for (const h of (d.hist || [])) R(c, xa(h.a) - 1, 101, 3, 5, KIND_COL[h.k] || P.dim);
@@ -636,6 +659,7 @@ class LifeScene {
   }
   // ---------------------------------------------------------------- modals
   drawModal(c, m, se) {
+    if (m.kind === 'scene') { this.drawScene(c, m, se); return; }
     R(c, 0, 0, SW, SH, 'rgba(40,30,20,0.45)');
     if (m.kind === 'page') {
       const S = D.STAGES[m.stage || 'elem'] || D.STAGES.elem;
@@ -689,6 +713,26 @@ class LifeScene {
     if (m.items.length > vis) T(c, `${m.idx + 1}/${m.items.length}`, x + w - 14, y + h - 16, 9, P.dim, 'right');
     T(c, m.noCancel ? '↑↓ えらぶ　A 決定' : '↑↓ えらぶ　A 決定　B もどる', x + 14, y + h - 16, 9, P.dim);
   }
+  // a picture across the top (320x112 at 2x) and the words in a band below; 生い立ち's pages carry the age badge
+  drawScene(c, m, se) {
+    if (!this.artCv) { const [cv, cx] = makeCanvas(ART_W, ART_H); this.artCv = cv; this.artCx = cx; }
+    const ax = this.artCx;
+    ax.clearRect(0, 0, ART_W, ART_H);
+    const ok = safe(() => drawLifeArt(ax, m.art, this.t - num(m.t0), m.X || this.artX()), false);
+    R(c, 0, 0, SW, SH, '#1a1620');
+    if (ok) { const sm = c.imageSmoothingEnabled; c.imageSmoothingEnabled = false; c.drawImage(this.artCv, 0, 0, ART_W, ART_H, 0, 0, SW, ART_H * 2); c.imageSmoothingEnabled = sm; }
+    const S = m.page ? D.STAGES[m.stage || 'elem'] : null;
+    const acc = S ? S.color : se.acc;
+    const y0 = ART_H * 2;
+    R(c, 0, y0, SW, SH - y0, P.card); R(c, 0, y0, SW, 3, acc);
+    let tx = 18;
+    if (m.page) { disc(c, 40, y0 + 2, 24, '#ffffff'); disc(c, 40, y0 + 2, 21, acc); T(c, m.age != null ? `${m.age}` : '★', 40, y0 - 10, 17, '#ffffff', 'center'); T(c, m.age != null ? '歳' : '', 40, y0 + 9, 9, '#ffffff', 'center'); tx = 74; }
+    pill(c, tx, y0 + 10, Math.min(360, measure(c, m.title, 12) + 20), 20, acc);
+    T(c, m.title, tx + 10, y0 + 13, 12, '#ffffff', 'left', 340);
+    let yy = y0 + 38;
+    for (const l of m.lines) { yy = para(c, l, 18, yy, SW - 36, 12, /^（/.test(l) ? acc : P.ink, 17, Math.max(1, Math.floor((SH - 14 - yy) / 17))) + 2; if (yy > SH - 20) break; }
+    T(c, m.page ? 'A で次へ' : 'A でとじる', SW - 14, SH - 16, 10, P.dim, 'right');
+  }
   // ---------------------------------------------------------------- portrait lower screen (bigtext.js)
   portraitKey() { return `${this.tab}|${this.sel[this.tabId] | 0}|${this.kidSel}|${this.dataT}|${this.modal ? this.modal.kind + (this.modal.idx | 0) : ''}`; }
   portraitSpec() {
@@ -697,7 +741,7 @@ class LifeScene {
     if (this.modal) {
       const m = this.modal;
       if (m.kind === 'pick') return { color: se.acc, title: m.title, light: true, lines: m.note ? [m.note] : [], list: { items: m.items.map((it) => ({ label: it.label, sub: it.sub || '', dim: !!it.lock })), index: m.idx, onPick: (i) => { m.idx = i; if (!m.items[i].lock) this.endModal(i); } } };
-      return { color: se.acc, title: m.title, light: true, lines: m.lines, onTap: () => this.endModal(0) };
+      return { color: se.acc, title: m.title, light: true, lines: m.lines, onTap: () => { if (m.kind !== 'scene' || this.t - num(m.t0) >= 12) this.endModal(0); } };
     }
     const rows = this.rows();
     const label = (r) => (r.kind === 'inbox' ? `✉ ${r.it.title}` : r.kind === 'act' || r.kind === 'kidact' ? r.a.name : r.kind === 'kid' ? `${r.k.name}（${r.k.years}歳・${r.k.stageName}）` : r.kind === 'origin' ? '生い立ちをふりかえる' : r.kind === 'hist' ? `${r.h.a}歳　${r.h.t}` : r.kind === 'cost' ? `${r.c[0]}　${r.c[1] >= 0 ? '+' : '-'}${fmtMoney(Math.abs(r.c[1]))}` : '');
@@ -706,7 +750,7 @@ class LifeScene {
     if (ls) {
       blocks.push({ kv: ['いま', `${ls.age}歳・${ls.label}`] });
       if (this.tabId === 'today') { const st = this.g.state; blocks.push({ bar: ['体力', num(st.stamina) / Math.max(1, num(st.maxStamina, 100)), '#e0574a', `${num(st.stamina)}`] }, { kv: ['所持金', fmtMoney(num(st.money))] }); if (ls.duty) blocks.push({ kv: ['今日', `${ls.duty.label} ${hm(ls.duty.start)}〜${hm(ls.duty.end)}`] }); }
-      if (this.tabId === 'career') for (const k of D.STAT_ORDER) blocks.push({ bar: [ls.id === 'work' || ls.id === 'middle' ? D.STATS[k].adult : D.STATS[k].name, ls.stats[k] / 100, D.STATS[k].color, `${ls.stats[k]}`] });
+      if (this.tabId === 'career') for (const k of D.STAT_ORDER) blocks.push({ bar: [ls.id === 'work' || ls.id === 'middle' || ls.id === 'senior' ? D.STATS[k].adult : D.STATS[k].name, ls.stats[k] / 100, D.STATS[k].color, `${ls.stats[k]}`] });
       if (this.tabId === 'kids' && d.parent) {
         blocks.push({ kv: ['親キャリア', `${d.parent.name}（${d.parent.pts}pt）`] });
         const k = (d.kids || [])[this.kidSel];

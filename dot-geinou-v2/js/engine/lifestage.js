@@ -116,6 +116,7 @@ export function stageOf(g) {
   const age = ageOf(g.state);
   if (L.high && !L.high.grad) return 'high';
   if (L.uni && !L.uni.grad && !L.uni.quit) return 'uni';
+  if (age >= 65) return 'senior';
   if (age >= 40) return 'middle';
   return 'work';
 }
@@ -127,7 +128,8 @@ export function stageLabel(g) {
   if (s === 'uni') return L.uni.started ? `大学${uniGrade(g, L.uni)}年生（${L.uni.kind === 'koku' ? '国公立' : '私立'}）` : '大学の入学待ち';
   if (L.ronin) return '浪人生（予備校）';
   if (L.pendingInd && !L.job) return `${D.INDUSTRIES[L.pendingInd].name}に入社予定`;
-  if (L.job) return `${D.INDUSTRIES[L.job.ind].name}の${D.CO_RANKS[L.job.rank].name}`;
+  if (L.job) return `${D.INDUSTRIES[L.job.ind].name}の${L.job.rehire ? '嘱託（再雇用）' : D.CO_RANKS[L.job.rank].name}`;
+  if (s === 'senior') return L.pension ? 'シニア（年金ぐらし）' : 'シニア';
   return s === 'middle' ? '中年（働きざかり）' : '社会人';
 }
 
@@ -339,9 +341,9 @@ act({ id: 'friends', name: '友だちと遊ぶ', group: 'grow',
     return `${where[Math.floor(rng() * where.length)]}で、楽しく過ごした。${joinG(gs)}`;
   } });
 act({ id: 'parttime', name: 'アルバイトする', group: 'grow',
-  when: (g, L) => { const s = stageOf(g); if (L.job) return null; if (!D.PART_TIME[s === 'middle' ? 'work' : s]) return null; if (did(L, 'parttime')) return '今日は、もうシフトに入った'; return tired(g, 12); },
-  sub: (g) => { const P = D.PART_TIME[stageOf(g) === 'middle' ? 'work' : stageOf(g)]; return `${P.min / 60}時間・体力 -12・${fmtMoney(P.pay)}・生活力`; },
-  run: (g, L) => { const P = D.PART_TIME[stageOf(g) === 'middle' ? 'work' : stageOf(g)]; mark(L, 'parttime'); useSt(g, 12); hunger(g, 8); passFor(g, P.min, 'parttime'); stress(g, 4); g.addMoney(P.pay, true); const gs = gain(L, { sei: 1, yu: rng() < 0.4 ? 1 : 0 }); const yr = yearNow(g); const job = yr >= 1995 ? ['コンビニのレジ', '飲食店のホール', '倉庫の仕分け'] : ['喫茶店のウェイター', '新聞配達', '家庭教師']; return `${job[Math.floor(rng() * job.length)]}のアルバイト。（${fmtMoney(P.pay)}）${joinG(gs)}`; } });
+  when: (g, L) => { const s = stageOf(g); if (L.job) return null; if (!D.PART_TIME[ptKey(s)]) return null; if (did(L, 'parttime')) return '今日は、もうシフトに入った'; return tired(g, 12); },
+  sub: (g) => { const P = D.PART_TIME[ptKey(stageOf(g))]; return `${P.min / 60}時間・体力 -12・${fmtMoney(P.pay)}・生活力`; },
+  run: (g, L) => { const P = D.PART_TIME[ptKey(stageOf(g))]; mark(L, 'parttime'); useSt(g, 12); hunger(g, 8); passFor(g, P.min, 'parttime'); stress(g, 4); g.addMoney(P.pay, true); const gs = gain(L, { sei: 1, yu: rng() < 0.4 ? 1 : 0 }); const yr = yearNow(g); const job = yr >= 1995 ? ['コンビニのレジ', '飲食店のホール', '倉庫の仕分け'] : ['喫茶店のウェイター', '新聞配達', '家庭教師']; return `${job[Math.floor(rng() * job.length)]}のアルバイト。（${fmtMoney(P.pay)}）${joinG(gs)}`; } });
 act({ id: 'shukatsu', name: '就職活動をする', group: 'grow',
   when: (g, L) => { if (L.job) return null; const s = stageOf(g); if (s === 'high') return null; if (L.pendingInd) return `${D.INDUSTRIES[L.pendingInd].name}に4月から入社する`; if (s === 'uni') { const ph = shukatsuPhase(g, L.uni); if (!ph) return `就活はまだ先（${D.shukatsuRule(yearNow(g)).text}）`; } if (did(L, 'shukatsu')) return '今日は、もう動いた'; return tired(g, 10); },
   name2: (g) => (stageOf(g) === 'uni' ? '就活（説明会・面接）' : '会社をさがす（中途採用）'),
@@ -363,7 +365,8 @@ act({ id: 'thesis', name: '卒業論文を書く', group: 'grow',
   run: (g, L) => { mark(L, 'thesis'); useSt(g, 10); passFor(g, 180, 'thesis'); stress(g, 4); const p = Math.round(7 + L.stats.gaku / 14); L.uni.thesis = Math.min(100, L.uni.thesis + p); gain(L, { gaku: 1 }); if (L.uni.thesis >= 100) addHist(g, '卒業論文を書きあげた', 'school'); return L.uni.thesis >= 100 ? '卒業論文が、書きあがった！' : `卒論を書きすすめた。（${L.uni.thesis}%）`; } });
 act({ id: 'exercise', name: '運動する', group: 'grow',
   when: (g, L) => (ageOf(g.state) < 18 ? null : did(L, 'exercise') ? '今日は、もう体を動かした' : tired(g, 8)),
-  sub: (g) => `1時間・体力 -8・健康 +2${ageOf(g.state) >= 40 ? '（中年は健康が大事）' : ''}`,
+  name2: (g) => (ageOf(g.state) >= 60 ? '散歩・体操をする' : '運動する'),
+  sub: (g) => `1時間・体力 -8・健康 +2${ageOf(g.state) >= 40 ? '（年を重ねるほど健康が大事）' : ''}`,
   run: (g, L) => { mark(L, 'exercise'); useSt(g, 8); passFor(g, 60, 'exercise'); stress(g, -5); const gs = gain(L, { ken: 2, tai: rng() < 0.5 ? 1 : 0 }); const w = ageOf(g.state) >= 40 ? ['ウォーキング', 'スポーツジム', 'ラジオ体操と散歩'] : ['ジョギング', 'スポーツジム', '自転車']; return `${w[Math.floor(rng() * w.length)]}で、いい汗をかいた。${joinG(gs)}`; } });
 act({ id: 'housework', name: '家事をする', group: 'grow',
   when: (g, L) => (ageOf(g.state) < 18 ? null : did(L, 'housework') ? '今日は、もう片づけた' : tired(g, 4)),
@@ -393,6 +396,29 @@ act({ id: 'uniquit', name: '大学をやめる', group: 'set',
   sub: (g, L) => `いま ${L.uni.credits}単位`,
   pick: () => ({ title: 'ほんとうに大学をやめる？', items: [{ label: 'やめる（中退）', sub: '社会人として、別の道に進む' }, { label: 'やめない', sub: '' }] }),
   run: (g, L, o) => { if (num(o && o.pick) !== 0) return 'もう少し、続けてみることにした。'; L.uni.quit = true; addHist(g, `大学を中退した（${L.uni.credits}単位）`, 'school'); return '大学をやめた。ここからは、社会人だ。'; } });
+act({ id: 'hobbypick', name: '趣味の教室をえらぶ', group: 'set',
+  when: (g) => (ageOf(g.state) >= 55 ? '' : null),
+  sub: (g, L) => (L.hobby ? `いま：${D.HOBBIES[L.hobby].name}` : 'まだ決めていない'),
+  pick: () => ({ title: '通う趣味の教室', items: D.HOBBY_ORDER.map((id) => ({ label: D.HOBBIES[id].name, sub: Object.entries(D.HOBBIES[id].g).map(([k, v]) => `${D.STATS[k].name}+${v}`).join(' ') })) }),
+  run: (g, L, o) => { const id = D.HOBBY_ORDER[clamp(num(o && o.pick), 0, D.HOBBY_ORDER.length - 1)]; if (L.hobby !== id) addHist(g, `${D.HOBBIES[id].name}の教室に通いはじめた`, 'life'); L.hobby = id; return `${D.HOBBIES[id].name}の教室に通うことにした。`; } });
+act({ id: 'hobby', name: '趣味の教室に行く', group: 'grow',
+  when: (g, L) => { if (ageOf(g.state) < 55) return null; if (!L.hobby) return '教室を決めていない（「趣味の教室をえらぶ」）'; if (did(L, 'hobby')) return '今日は、もう行った'; return tired(g, 5); },
+  name2: (g, L) => (L.hobby ? `${D.HOBBIES[L.hobby].name}の教室に行く` : '趣味の教室に行く'),
+  sub: () => '2時間・体力 -5・¥1,000・仲間ができる',
+  run: (g, L) => { const H = D.HOBBIES[L.hobby]; mark(L, 'hobby'); useSt(g, 5); passFor(g, 120, 'hobby'); g.spend(1000); stress(g, -8); const gs = gain(L, H.g); return `${H.name}の教室で、仲間と楽しい時間を過ごした。${joinG(gs)}`; } });
+act({ id: 'volunteer', name: '地域のボランティアに出る', group: 'grow',
+  when: (g, L) => (ageOf(g.state) < 55 ? null : did(L, 'volunteer') ? '今日は、もう出た' : tired(g, 6)),
+  sub: () => '2時間・体力 -6・人望と生活力',
+  run: (g, L) => { mark(L, 'volunteer'); useSt(g, 6); passFor(g, 120, 'volunteer'); stress(g, -6); const gs = gain(L, { yu: 2, sei: 1 }); const w = ['通学路の見守り', '公園のそうじ', '子ども食堂の手伝い', '町内会のお祭りの準備']; return `${w[Math.floor(rng() * w.length)]}に参加した。「いつもありがとうございます」と声をかけられた。${joinG(gs)}`; } });
+act({ id: 'grandkid', name: '孫と遊ぶ', group: 'grow',
+  when: (g, L) => (!(L.grand || []).length ? null : did(L, 'grandkid') ? '今日は、もう遊んだ' : tired(g, 5)),
+  sub: (g, L) => `1時間・体力 -5・ストレス -10・孫 ${(L.grand || []).length}人`,
+  run: (g, L) => { mark(L, 'grandkid'); useSt(g, 5); passFor(g, 60, 'grandkid'); stress(g, -10); const gk = L.grand[Math.floor(rng() * L.grand.length)]; const a = Math.floor((g.state.day - gk.b) / YEAR_DAYS); const gs = gain(L, { yu: 1, ken: 1 }); return `${a < 3 ? `${gk.n}を抱っこして、ゆらゆら。小さな手が、指をぎゅっとにぎる。` : a < 10 ? `${gk.n}と、公園でかくれんぼ。「みーつけた！」` : `${gk.n}と、お茶を飲みながら学校の話を聞いた。`}${joinG(gs)}`; } });
+act({ id: 'jibunshi', name: '自分史を書く', group: 'grow',
+  when: (g, L) => (ageOf(g.state) < 60 ? null : did(L, 'jibunshi') ? '今日は、もう書いた' : tired(g, 3)),
+  sub: (g, L) => `1時間・体力 -3・感性・いま ${num(L.jibunshi)}ページ`,
+  run: (g, L) => { mark(L, 'jibunshi'); useSt(g, 3); passFor(g, 60, 'jibunshi'); stress(g, -3); L.jibunshi = num(L.jibunshi) + 1; const gs = gain(L, { kan: 1 }); const hs = L.hist.length ? L.hist[Math.floor(rng() * L.hist.length)] : null; if (L.jibunshi === 1) addHist(g, '自分史を書きはじめた', 'life'); if (L.jibunshi === 30) addHist(g, '自分史を一冊にまとめた', 'life'); return `${hs ? `「${hs.a}歳のころ、${hs.t.replace(/。$/, '')}」…` : ''}思い出しながら、ゆっくり書いた。（${L.jibunshi}ページ）${joinG(gs)}`; } });
+const ptKey = (s) => (s === 'middle' || s === 'senior' ? 'work' : s);
 const ROUTINE_NAMES = { remind: '知らせるだけ', ask: '毎朝きく', auto: '自動で行く' };
 export const dutyKindNow = (g) => { const L = ensure(g); if (!L) return null; const s = stageOf(g); return s === 'high' || (s === 'uni' && L.uni.started) ? 'school' : L.job ? 'work' : null; };
 export const hm = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
@@ -557,8 +583,9 @@ function monthTurn(g, L, d, prev) {
   const age = ageOf(g.state);
   if (age >= 22 && d.month === 5 && L.job) { L.mid.check = { day: g.state.day, grade: checkGrade(L) }; notes.push(`（会社の健康診断。判定は「${L.mid.check.grade}」${L.mid.check.grade >= 'D' ? '。要精密検査…生活を見直そう' : ''}）`); }
   if (age >= 40 && d.month === 8 && age % 5 === 0 && L.mid.reunion !== age) { L.mid.reunion = age; addInbox(g, { kind: 'reunion', key: `reunion_${age}`, title: '同窓会の案内', text: `高校の同窓会の案内がきた。（${age}歳の同窓会）`, choices: ['参加する（¥6,000）', '今回は欠席する'], def: 1, days: 10 }); }
+  if (age >= 65 && d.month === 9 && L.mid.keiro !== d.year) { L.mid.keiro = d.year; notes.push((L.grand || []).length ? `（敬老の日。孫の${L.grand[0].n}から、似顔絵の手紙が届いた）` : '（敬老の日。町内会から、お祝いの記念品が届いた）'); }
   if (s === 'middle' && d.month === 11 && !L.mid.care && caregiverNeeded(g)) addInbox(g, { kind: 'care', key: `care_${d.year}`, title: '親のこと', text: '実家の親が、このごろ足腰が弱ってきたらしい。どうする？', choices: ['帰省して手伝う（体力 -15）', '介護サービスを調べて頼む（¥20,000）', 'きょうだい・親戚と相談する'], def: 2, days: 15 });
-  if (L.job && s !== 'high' && rng() < 0.06 && g.state.day - L.job.joined > 200) addInbox(g, { kind: 'transfer', key: `transfer_${d.year}_${d.month}`, title: '人事異動の打診', text: '上司から「別の部署に行ってみないか」と言われた。', choices: ['引き受ける（評価 +・ストレス +）', 'いまの部署に残りたい'], def: 1, days: 8 });
+  if (L.job && !L.job.rehire && s !== 'high' && rng() < 0.06 && g.state.day - L.job.joined > 200) addInbox(g, { kind: 'transfer', key: `transfer_${d.year}_${d.month}`, title: '人事異動の打診', text: '上司から「別の部署に行ってみないか」と言われた。', choices: ['引き受ける（評価 +・ストレス +）', 'いまの部署に残りたい'], def: 1, days: 8 });
   return notes;
 }
 function caregiverNeeded(g) {
@@ -621,7 +648,7 @@ function evaluate(g, L, notes) {
   const next = D.CO_RANKS[J.rank + 1];
   const need = next ? next.need * (J.ind === 'koumu' ? 1.2 : 1) : Infinity;
   notes.push(`（年に一度の査定。評価は ${'★'.repeat(score)}${'☆'.repeat(5 - score)}）`);
-  if (next && J.pts >= need) { J.rank++; addHist(g, `${D.CO_RANKS[J.rank].name}に昇進した`, 'work'); notes.push(`（辞令！ ${D.CO_RANKS[J.rank].name}に昇進した！ 週給 ${fmtMoney(Math.round(D.CO_RANKS[J.rank].pay * I.pay))}）`); if (J.rank >= 4) stress(g, 4); }
+  if (next && J.pts >= need && !J.rehire) { J.rank++; addHist(g, `${D.CO_RANKS[J.rank].name}に昇進した`, 'work'); notes.push(`（辞令！ ${D.CO_RANKS[J.rank].name}に昇進した！ 週給 ${fmtMoney(Math.round(D.CO_RANKS[J.rank].pay * I.pay))}）`); if (J.rank >= 4) stress(g, 4); }
 }
 
 // ---------------------------------------------------------------- inbox handlers
@@ -651,10 +678,11 @@ function weekly(g, L, notes) {
   if (L.job) {
     const J = L.job;
     const worked = num(J.paidDays);
-    const pay = Math.round(D.CO_RANKS[J.rank].pay * D.INDUSTRIES[J.ind].pay * clamp(worked / 5, 0, 1.2));
+    const pay = Math.round(D.CO_RANKS[J.rank].pay * D.INDUSTRIES[J.ind].pay * (J.rehire ? 0.6 : 1) * clamp(worked / 5, 0, 1.2));
     J.paidDays = 0;
     if (pay > 0) { g.addMoney(pay, true); bits.push(`給料 +${fmtMoney(pay)}`); ledgerAdd(g, L, ['給料', pay]); }
   }
+  if (L.pension && L.pension.week > 0) { g.addMoney(L.pension.week, true); bits.push(`年金 +${fmtMoney(L.pension.week)}`); ledgerAdd(g, L, ['年金', L.pension.week]); }
   if (L.high && !L.high.grad && L.high.cram) { if (g.spend(3000)) { bits.push(`塾 -${fmtMoney(3000)}`); ledgerAdd(g, L, ['塾の月謝', -3000]); } else { L.high.cram = false; bits.push('（塾の月謝がはらえず、やめた）'); } }
   if (L.ronin) { if (g.spend(4000)) { bits.push(`予備校 -${fmtMoney(4000)}`); ledgerAdd(g, L, ['予備校', -4000]); } }
   const loan = L.uni && L.uni.grad && L.uni.loan && L.uni.loan.left > 0 ? L.uni.loan : null;
@@ -694,10 +722,16 @@ export function tick(g) {
   // a new week (月曜): pay and fees
   const w = weekOf(day);
   if (L.last.week != null && L.last.week !== w) weekly(g, L, notes);
-  // birthdays: health after 40, 厄年
+  if (L.job) L.coDays = num(L.coDays) + 1;
+  // birthdays: health after 40, 厄年, 定年, 年金, 長寿のお祝い
   const age = ageOf(st);
   if (L.last.age != null && age > L.last.age) {
-    if (age >= 40) { const drop = age >= 55 ? 4 : 3; gain(L, { ken: -(drop + (num(st.life && st.life.stress) > 70 ? 2 : 0)) }); }
+    if (age >= 40) { const drop = age >= 65 ? 5 : age >= 55 ? 4 : 3; gain(L, { ken: -(drop + (num(st.life && st.life.stress) > 70 ? 2 : 0)) }); }
+    const yr = d.year;
+    if (L.job && !L.job.rehire && age >= D.teinenAge(yr)) addInbox(g, { kind: 'teinen', key: `teinen_${age}`, title: '定年退職', text: `${age}歳。会社の定年をむかえた。${D.rehireUntil(yr) > age ? `\n会社から「${D.rehireUntil(yr)}歳まで、嘱託として続けないか」と言われた（給料は今の6割）。` : ''}`, choices: D.rehireUntil(yr) > age ? ['再雇用で働き続ける', '退職して、第二の人生へ'] : ['退職して、第二の人生へ'], def: D.rehireUntil(yr) > age ? 1 : 0, days: 12, data: { until: D.rehireUntil(yr) } });
+    if (L.job && L.job.rehire && age >= num(L.job.until, 65)) { notes.push(`（${age}歳。再雇用の期間が終わった。長いあいだ、おつかれさまでした）`); addHist(g, `${age}歳で会社勤めを終えた`, 'work'); L.job = null; }
+    if (!L.pension && age >= D.pensionAge(yr)) { L.pension = { since: st.day, week: D.pensionWeek(num(L.coDays) / YEAR_DAYS) }; notes.push(`（${age}歳。年金の受け取りが始まった。毎週 ${fmtMoney(L.pension.week)}${yr >= 2001 && yr <= 2025 ? '・厚生年金の支給開始は段階的に65歳へ引き上げ中' : ''}）`); addHist(g, `年金の受け取りが始まった（週 ${fmtMoney(L.pension.week)}）`, 'money'); }
+    if (D.CHOJU[age]) { const [nm, tx] = D.CHOJU[age]; notes.push(`（${nm}のお祝い。${tx}）`); addHist(g, `${nm}（${age}歳）のお祝い`, 'family'); stress(g, -10); }
     if (age === 40) { addHist(g, '40歳。人生の折り返し地点', 'life'); notes.push('（40歳の誕生日。不惑…と言うけれど、迷うことはまだまだある）'); }
     const gender = profileOf(st).gender;
     if ((gender === 'm' && age === 41) || (gender === 'f' && age === 32)) notes.push('（今年は数えで本厄の年らしい。気になるなら、神社でお祓いを受けてもいい）');
@@ -719,6 +753,19 @@ export function tick(g) {
   for (const t of notes.slice(0, 4)) pushNote(g, t);
   if (notes.length > 4) pushNote(g, `（ほか${notes.length - 4}件。生活画面の「年表」と「きょう」で）`);
 }
+onInbox('teinen', (g, it, i) => {
+  const L = ensure(g);
+  if (!L.job) return '';
+  const J = L.job, years = num(L.coDays) / YEAR_DAYS;
+  const severance = Math.round(D.CO_RANKS[J.rank].pay * D.INDUSTRIES[J.ind].pay * clamp(years, 1, 40) * 2.2);
+  if (!J.severed) { J.severed = true; g.addMoney(severance, true); ledgerAdd(g, L, ['退職金', severance]); }
+  const canStay = (it.choices || []).length > 1;
+  if (canStay && i === 0) { J.rehire = true; J.until = num(it.data && it.data.until, 65); addHist(g, `定年をむかえ、${J.until}歳まで再雇用で働くことにした`, 'work'); return `退職金 ${fmtMoney(severance)} を受けとった。${J.until}歳まで、嘱託として働き続ける。（給料は6割）`; }
+  addHist(g, `${D.INDUSTRIES[J.ind].name}を定年退職した（${D.CO_RANKS[J.rank].name}）`, 'work');
+  L.job = null;
+  stress(g, -12);
+  return `長いあいだ、おつかれさまでした。退職金 ${fmtMoney(severance)} を受けとった。花束を抱えて、会社をあとにした。`;
+});
 onInbox('absent', (g, it, i) => { const L = ensure(g); if (!L.job) return ''; if (i === 0) { L.job.streak = 0; return '「すみませんでした」。明日から、ちゃんと出よう。'; } addHist(g, `${D.INDUSTRIES[L.job.ind].name}を退職した`, 'work'); L.job = null; return '会社をやめることにした。'; });
 onMorning((g) => tick(g));
 
@@ -765,12 +812,14 @@ export function careerSummary(g) {
   } catch (e) { /* no politics */ }
   const L = ensure(g);
   if (L && L.job) out.push({ k: 'job', label: '会社', value: `${D.INDUSTRIES[L.job.ind].name}・${D.CO_RANKS[L.job.rank].name}`, sub: `週給 ${fmtMoney(Math.round(D.CO_RANKS[L.job.rank].pay * D.INDUSTRIES[L.job.ind].pay))}` });
+  if (L && L.pension) out.push({ k: 'pension', label: '年金', value: `週 ${fmtMoney(L.pension.week)}`, sub: `会社勤め 約${Math.round(num(L.coDays) / YEAR_DAYS)}年` });
   return out;
 }
 export function weeklyCosts(g) {
   const L = ensure(g), out = [];
   try { const h = g.housing(); if (h && h.rent) out.push(['家賃（' + (h.name || '住まい') + '）', -h.rent]); } catch (e) { /* tests */ }
-  if (L.job) out.push(['給料（出勤5日の目安）', Math.round(D.CO_RANKS[L.job.rank].pay * D.INDUSTRIES[L.job.ind].pay)]);
+  if (L.job) out.push([L.job.rehire ? '給料（再雇用・出勤5日の目安）' : '給料（出勤5日の目安）', Math.round(D.CO_RANKS[L.job.rank].pay * D.INDUSTRIES[L.job.ind].pay * (L.job.rehire ? 0.6 : 1))]);
+  if (L.pension) out.push(['年金', L.pension.week]);
   if (L.high && !L.high.grad && L.high.cram) out.push(['塾の月謝', -3000]);
   if (L.ronin) out.push(['予備校', -4000]);
   if (L.uni && L.uni.grad && L.uni.loan && L.uni.loan.left > 0) out.push(['奨学金の返済', -1500]);
@@ -786,7 +835,7 @@ const METHODS = {
     if (!L) return null;
     const id = stageOf(this), S = D.STAGES[id], st = this.state;
     const age = ageOf(st);
-    return { id, name: S.name, color: S.color, label: stageLabel(this), age, toBirthday: YEAR_DAYS - ((num(st.day, 1) - 1) % YEAR_DAYS), duty: dutyOf(this), off: breakOf(this), stats: { ...L.stats }, high: L.high, uni: L.uni, job: L.job, ronin: L.ronin, exam: L.exam, mid: L.mid, routine: { ...L.routine }, today: { ...L.today } };
+    return { id, name: S.name, color: S.color, label: stageLabel(this), age, toBirthday: YEAR_DAYS - ((num(st.day, 1) - 1) % YEAR_DAYS), duty: dutyOf(this), off: breakOf(this), stats: { ...L.stats }, high: L.high, uni: L.uni, job: L.job, ronin: L.ronin, exam: L.exam, mid: L.mid, pension: L.pension || null, grand: (L.grand || []).slice(), hobby: L.hobby || null, coYears: Math.round(num(L.coDays) / YEAR_DAYS), routine: { ...L.routine }, today: { ...L.today } };
   },
   lifeStats() { const L = ensure(this); return L ? { ...L.stats } : null; },
   lifeActions() { return actions(this); },
