@@ -20762,14 +20762,15 @@ let FT_SAY = {}, FT_SAYT = 0;
 function famSayTick(g) {
   if (!FAI_MAP || !FAI_MAP.ents) return; const now = Date.now(); if (now - FT_SAYT < 2600) return; FT_SAYT = now;
   const ks = Object.keys(FAI_MAP.ents).filter(k => !FAI_MAP.ents[k].hidden); if (!ks.length || chance(0.35)) return;
-  const k = pick(ks), m = famRoster(g).find(x => x.key === k); if (!m) return; const A = agOf(g, m), act = nowAct(g, m, A), L = FT_MUT[act.k]; if (!L) return;
-  let t = pick(L); if (famKansai(g)) t = famDialect(t); FT_SAY[k] = { t, until: now + 2400 };
+  const k = pick(ks), m = famRoster(g).find(x => x.key === k); if (!m) return; const A = agOf(g, m), act = nowAct(g, m, A); let t = null; try { t = famSayLine(g, m, A, act); } catch (e) { }
+  if (!t) { const L = FT_MUT[act.k]; if (!L) return; t = pick(L); } if (famKansai(g)) t = famDialect(t); FT_SAY[k] = { t, until: now + 2400 };
 }
 function famSayDraw(c, key, x, y) {
   const s = FT_SAY[key]; if (!s || Date.now() > s.until) return false;
-  c.save(); c.font = '7px "NPB Sans", "Noto Sans JP", sans-serif'; const w = Math.ceil(c.measureText(s.t).width) + 6;
-  c.fillStyle = 'rgba(255,255,255,0.95)'; c.fillRect(x - w / 2 + 5, y - 2, w, 11); c.fillRect(x + 3, y + 9, 3, 2);
-  c.fillStyle = '#2a2430'; c.textBaseline = 'top'; c.fillText(s.t, x - w / 2 + 8, y - 0.5); c.restore(); return true;
+  c.save(); let w; try { w = Math.ceil(E.wt(c, s.t, 8)) + 6; } catch (e) { w = s.t.length * 8 + 6; }
+  c.fillStyle = 'rgba(255,255,255,0.95)'; c.fillRect(Math.round(x - w / 2 + 5), y - 2, w, 12); c.fillRect(x + 3, y + 10, 3, 2);
+  try { E.D(c, s.t, Math.round(x - w / 2 + 8), y, { size: 8, color: '#2a2430', shadow: null }); } catch (e) { c.font = '8px sans-serif'; c.fillStyle = '#2a2430'; c.textBaseline = 'top'; c.fillText(s.t, x - w / 2 + 8, y); }
+  c.restore(); return true;
 }
 function installFamTalk() {
   E.Tn(g => { try { famBdayTick(g); } catch (e) { console.error('[famtalk] bday', e); } });
@@ -22443,6 +22444,96 @@ function installHB() {
   E.Tn(g => { try { hbTick(g); } catch (e) { console.error('[hb]', e); } });
   if (typeof window !== 'undefined') window.__hb = { tick: () => hbTick(window.__game), mark: (k, r) => { const g = window.__game, m = famRoster(g).find(x => x.key === k); rsMark(g, m, agOf(g, m), r, true); return 0; }, list: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return rsList(g, m, agOf(g, m)); }, items: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k), I = []; ttItems(g, m, agOf(g, m), I); return I.map(x => x.label); }, tt: (pk, yk) => { const g = window.__game, P = famRoster(g).find(x => x.key === pk), Y = famRoster(g).find(x => x.key === yk); g.run(async () => { await ttHandle(g, P, agOf(g, P), `${Y.rel}のことを告げ口する`, t => g.say(t)); }); return 0; } };
 }
+
+// ===== 家の中の吹き出し：キャラごとに変わる一言 =====
+// 行動ごと：base（だれでも）／kid・teen・adult・old（年代）／per（性格）
+const BB = {
+  tv: { base: ['あはは！', 'この人、好き', 'えー、うそ'], kid: ['アニメはじまった！', 'あははは！', 'これ、学校ではやってる！'], teen: ['このドラマ、まじ神', '推しが出てる…！', 'くだらな…（笑）'], adult: ['ニュース、暗いのばっかり', 'この芸人、昔から好き', 'あ、この店、行きたい'], old: ['昔はよかったねえ', 'この歌手、若いころ好きでねえ', '字幕が小さいねえ'], per: { yasashii: ['この子、がんばってるねえ'], kibishii: ['くだらん番組ばかりだ'], shinpai: ['このニュース、こわいねえ'], mie: ['この服、すてき…'], mukanshin: ['……'], hiniku: ['また同じ顔ぶれか'], rakuten: ['あっははは！ 最高！'], shinkei: ['音、ちょっと大きいかな'] } },
+  phone: { base: ['ふふっ', '既読つかない…', 'え、まじ？'], kid: ['動画、もう1本だけ', 'このゲーム、ほしい'], teen: ['既読スルーされた…', 'グループ、通知止まらん', 'いいね少な…'], adult: ['仕事のメール…', 'ポイント、たまった', 'ネットで安いの見つけた'], old: ['これ、どうやるんだっけ', '孫の写真、届いたよ'], per: { kibishii: ['返信は早く、だ'], mie: ['この写真、映えるかな'], shinpai: ['返事、まだかな…'], rakuten: ['あはは、おもしろ〜'], hiniku: ['ネットの連中は、ひまだな'] } },
+  cook: { base: ['今日はカレーよ〜', 'しょうゆ、どこだっけ', 'いいにおい'], kid: ['おてつだいする！'], teen: ['今日、なに作るの？'], adult: ['今日は、なに作ろう', '冷蔵庫、からっぽ…', '味見、味見'], old: ['昔ながらの味じゃよ', 'だしは、きちんととらんとねえ'], per: { yasashii: ['みんな、喜んでくれるかな'], kibishii: ['手ぎわが大事だ'], shinpai: ['焦げてないかな…'], mie: ['今日は、ちょっとおしゃれに'], rakuten: ['適当でいいや〜'], shinkei: ['計量は、きっちりと'], hiniku: ['どうせ、文句言われる'], mukanshin: ['……まあ、これでいい'] } },
+  dinner: { base: ['いただきます', 'おいしい！', 'おかわり！'], kid: ['ピーマン、いらない…', 'これ、すき！'], teen: ['……うま', 'スマホ見ながら、だめ？'], adult: ['今日も、おつかれ', 'ビール、あったっけ'], old: ['ありがたいねえ', 'やわらかくて、食べやすい'], per: { kibishii: ['ひじをつくな'], mie: ['お行儀よくね'], shinpai: ['ちゃんと噛んでね'], rakuten: ['うまっ！ 天才！'], shinkei: ['こぼさないでね'] } },
+  snack: { base: ['あまい〜', 'もう1個だけ', 'ポテチ、どこ？'], kid: ['おやつ！ おやつ！'], teen: ['太る…でも食べる'], adult: ['ダイエットは、明日から'], old: ['おせんべい、かたいねえ'] },
+  game: { base: ['よっしゃ！', 'あーっ！', 'もう1回！'], kid: ['勝った〜！', 'ボス、つよすぎ！'], teen: ['ランク上がった', '回線、重っ', 'は？ 今の当たってた'], adult: ['昔のゲームのほうが…', '1回だけのつもりが…'], old: ['ボタンが多いねえ'] },
+  study: { base: ['わからん…', 'あと1ページ', 'ふむふむ'], kid: ['かけ算、むずかしい', '漢字、あと10こ'], teen: ['テスト、終わった…', 'この公式、意味不明', 'あと30分だけ'], adult: ['資格の勉強、きつい', '老眼が…'], per: { kibishii: ['集中、集中'], shinkei: ['ノートは、きれいに'], rakuten: ['なんとかなるっしょ'] } },
+  chores: { base: ['よいしょ', 'きりがない…', 'ふう'], kid: ['おてつだい、えらい？'], teen: ['めんどくさ…', 'これ終わったら自由'], adult: ['洗濯もの、たまってる', 'だれも手伝わない…'], old: ['腰が…いたた'], per: { yasashii: ['きれいになると、気持ちいいね'], kibishii: ['だらしない部屋だ'], shinkei: ['ほこりが、まだある…'], mie: ['お客さんが来ても、大丈夫'], hiniku: ['どうせ、すぐ散らかる'], rakuten: ['ま、こんなもんでしょ'] } },
+  drink: { base: ['ぷはーっ', 'うまい', 'もう1本…'], adult: ['今日も、よくがんばった', 'つまみ、ないかな'], old: ['晩酌は、1本だけ'], per: { kibishii: ['1杯だけだ'], rakuten: ['かんぱーい！'] } },
+  talk: { base: ['それでさ〜', 'ほんとに？', 'あはは'], kid: ['ねえねえ、聞いて！'], teen: ['まじで？', 'わかる〜'], old: ['昔はねえ…'] },
+  play: { base: ['まてまて〜', 'わーい！', 'つかまえた！'], kid: ['もっかい！', 'こっちこっち！'] },
+  scold: { base: ['いいかげんにしなさい！', 'ちゃんと聞いてる？'], per: { kibishii: ['何度言ったらわかるんだ'], yasashii: ['怒りたくないんだよ…'], shinkei: ['ルールは守りなさい'], mie: ['恥ずかしいでしょ'] } },
+  fight: { base: ['もういい！', 'なんでよ！'], kid: ['ばか！', 'きらい！'], teen: ['うっさい！', '関係ないでしょ！'], adult: ['いいかげんにして！'], old: ['ばかもん！'] },
+  read: { base: ['なるほど', 'えっ、犯人…'], kid: ['マンガ、おもしろい'], teen: ['この小説、泣ける'], old: ['字が小さいねえ'] },
+  rest: { base: ['ふあ〜', 'ごろごろ'], kid: ['ひまー！', 'あそぼー'], teen: ['だる〜', 'なにもしたくない'], adult: ['つかれた…', '5分だけ…'], old: ['ひなたぼっこ、いいねえ'], per: { rakuten: ['しあわせ〜'], shinpai: ['ゆっくりしてて、いいのかな'], kibishii: ['休むのも、仕事のうちだ'] } },
+  care: { base: ['よしよし', 'ねんねしようね'], old: ['かわいいねえ'] },
+  exercise: { base: ['いち、に…', 'きっつ…'], adult: ['お腹まわりが…'], old: ['ラジオ体操、第一'] },
+  night: { base: ['はあ…', 'どうしよう'], teen: ['明日、行きたくない…'], adult: ['このままで、いいのかな', 'お金のこと…'], old: ['ねむれんねえ'] },
+  bath: { base: ['いい湯だな〜', 'ふう…', 'あったまる'], kid: ['アヒル、浮かべよう'], old: ['極楽、極楽'] },
+  nap: { base: ['zzz…', 'すや…', 'むにゃ…'] },
+  money: { base: ['今月、赤字…', '節約、節約'], per: { mie: ['見栄は、はりたい…'], rakuten: ['なんとかなるって'] } },
+  walk: { base: ['いい天気', '風が気持ちいい'] }, shop: { base: ['特売、特売！', 'これ、安い'] }, garden: { base: ['トマト、赤くなった', '雑草、はえてる'] },
+};
+BB.meal = BB.dinner;
+// 相手がいる行動（{w} は相手の呼び方）
+const BB_WITH = {
+  talk: ['ねえ{w}、聞いて', '{w}は、どう思う？', 'それでね、{w}', '{w}、あのさ'],
+  play: ['{w}、まって〜！', '{w}、もう1回！', 'つかまえた、{w}！'],
+  tv: ['{w}、これ見て', '{w}、チャンネル変えないで'],
+  scold: ['{w}！ ちゃんと聞きなさい', '{w}、いいかげんにしなさい'],
+  fight: ['{w}のバカ！', '{w}なんか、知らない！', 'もういいよ、{w}'],
+  care: ['{w}、よしよし', '{w}、ねんねしようね'],
+  study: ['{w}、ここわかる？', '{w}、教えて〜'],
+  dinner: ['{w}、それ取って', '{w}、おいしいね'], meal: ['{w}、それ取って', '{w}、おいしいね'],
+  game: ['{w}、ずるい！', '{w}、手かげんして'],
+};
+// AIの行動そのものに合わせた一言
+const BB_ACT = {
+  abuse: ['いいかげんにしろ！', 'なんでわからないの！', 'うるさい！'], ijiri: ['あはは、ウケる', 'ほら、また〜'],
+  cry: ['ぐすっ…', '……っ', 'すん…'], scribble: ['……', 'カリカリ…'], hide: ['……', 'しーん…'],
+  yg_smash: ['くそっ！', 'ドンッ', 'うぜえ…'], yg_steal: ['……', 'バレないって'], yg_ura: ['ふふ…', 'いいね来た'], yg_slam: ['うるせえ！', 'バンッ'], yg_game_rage: ['ざけんな！', 'はあ!? ゴミが'],
+  ym_sleep: ['zzz…', '……'], ym_stare: ['……', '………'], ym_wash: ['まだ…きたない', 'もう一回…'], ym_scroll: ['……', 'ねむれない…'],
+  hy_shower: ['しーっ…', 'あったかい…'], hy_brush: ['シャカシャカ…', '3分だけ…'], hy_spray: ['シュー', 'これで、ましかな'], rs_game: ['しーっ', 'よしっ…'], rs_water: ['ごくっ…', 'つめたい…'],
+};
+const BB_TOD = ['やだー！', 'これなにー？', 'だっこー！', 'あそぼ！', 'ぶーぶー！', 'おかし！'];
+const BB_YG = { 2: ['チッ', 'うざ', 'だる…', '……あ？'], 3: ['……', 'ぜんぶ消えろ', 'ふん'] };
+const BB_YM = { 2: ['……', 'つかれた…', 'ねむれない…'], 3: ['……', 'ごめんなさい…', '………'] };
+const BB_SAD = { kid: ['ぐすん…', 'さみしい…'], teen: ['はぁ…', 'だる…', 'もういい'], adult: ['はぁ…', 'つかれた…'], old: ['やれやれ…', 'さみしいねえ'] };
+const BB_IRR = { kid: ['もー！', 'やだ！'], teen: ['チッ', 'うるさい'], adult: ['ああもう…', 'いらいらする'], old: ['まったく…'] };
+const BB_HY = ['かゆい…', 'お風呂、入りたい…', '「くさい」って言われた…', 'はぁ…このルール…'];
+const BB_RULE = ['なんで、うちだけ…', 'はぁ…', 'ふつうの家がいい…'];
+// m から見た o の呼び方
+function bbCall(g, m, o) {
+  const nm = String(o.name).split(' ').pop(), f = o.g === 'f';
+  if (o.kind === 'pa') return m.kind === 'sib' ? (o.frel === 'mother' ? 'お母さん' : 'お父さん') : nm;
+  if (o.kind === 'gp') return m.kind === 'gp' ? nm : (o.frel === 'grandmother' || f ? 'おばあちゃん' : 'おじいちゃん');
+  if (o.kind === 'sp') return m.kind === 'kid' ? (f ? 'ママ' : 'パパ') : nm;
+  if (o.kind === 'sib' && m.kind === 'sib' && num(o.age) > num(m.age)) return f ? 'お姉ちゃん' : 'お兄ちゃん';
+  if (o.kind === 'kid' && m.kind === 'kid' && num(o.age) > num(m.age)) return f ? 'お姉ちゃん' : 'お兄ちゃん';
+  return nm;
+}
+function famSayLine(g, m, A, act) {
+  const role = A.role, age = num(m.age), per = A.per || 'yasashii', grp = age < 13 ? 'kid' : age < 20 ? 'teen' : age < 65 ? 'adult' : 'old';
+  if (role === 'baby') return pick(['あー', 'うー', 'ばぶ', 'きゃっきゃ', 'ふぇ…']);
+  if (role === 'toddler') return pick(BB_TOD);
+  const sp = BB_ACT[act.act]; if (sp && chance(0.85)) return pick(sp);
+  const dark = !(g.state.flags && g.state.flags.famDarkOff);
+  try { if (dark && YM_TGT(m)) { const gs = ymSt(num(A.yugami)), ms = ymSt(num(A.yami)); if (ms >= 2 && chance(0.5)) return pick(BB_YM[ms]); if (gs >= 2 && chance(0.5)) return pick(BB_YG[gs]); } } catch (e) { }
+  try { if (num(A.custSt) >= 45 && chance(0.3)) { const C = custFor(g, m, A); return pick(HY_IDS.some(id => C[id]) ? BB_HY : BB_RULE); } } catch (e) { }
+  if (num(A.mood) < 25 && chance(0.35)) return pick(BB_SAD[grp]);
+  if (num(A.stress) > 75 && chance(0.3)) return pick(BB_IRR[grp]);
+  const w = act.with && famRoster(g).find(x => x.key === act.with);
+  if (w && act.k === 'study' && chance(0.6)) { const older = num(m.age) > num(w.age); return pick(older ? ['{w}、ここはね…', '{w}、できたじゃん', 'ほら{w}、もう1問'] : ['{w}、ここわかる？', '{w}、教えて〜', 'わかった！ ありがと、{w}']).replace(/\{w\}/g, bbCall(g, m, w)); }
+  if (w && act.k !== 'study' && BB_WITH[act.k] && chance(0.5)) return pick(BB_WITH[act.k]).replace(/\{w\}/g, bbCall(g, m, w));
+  const T = BB[act.k]; if (!T) return null;
+  const P = [];
+  if (T.per && T.per[per]) P.push(...T.per[per], ...T.per[per]);
+  if (T[grp]) P.push(...T[grp], ...T[grp]);
+  P.push(...(T.base || []));
+  return P.length ? pick(P) : null;
+}
+if (typeof window !== 'undefined') window.__bubble = {
+  line: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m); return famSayLine(g, m, A, nowAct(g, m, A)); },
+  show: (k, t) => { FT_SAY[k] = { t, until: Date.now() + 8000 }; return 0; },
+  act: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m), a = nowAct(g, m, A); return [a.k, a.act, a.with || '', A.per, A.role]; },
+};
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
