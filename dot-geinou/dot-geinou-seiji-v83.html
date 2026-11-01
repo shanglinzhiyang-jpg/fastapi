@@ -19845,7 +19845,7 @@ async function faiTalk(g, key, ent) {
   const lab = k >= 0 && items[k] ? items[k].label : 'やめる';
   if (lab === '話す') {
     const op = num(A.op, 50), N = needOf(A);
-    if (!(await famEvOnTalk(g, m, A, act, say))) await say(famLine(g, m, A, act));
+    if (!(await famEvOnTalk(g, m, A, act, say))) { const ln = famLine(g, m, A, act); await say(ln); try { await talkReply(g, m, A, act, ln, say, once); } catch (e) { console.error('[reply]', e); } }
     if (once('talk')) { A.op = clamp(op + 2, 0, 100); N.social = clamp(N.social + 15, 0, 100); try { g.addNeed('stress', -2); } catch (e) { } }
   } else if (await famTalkMore(g, m, A, act, lab, say, once)) {
   } else if (lab === '何してるの？') {
@@ -20860,7 +20860,7 @@ async function famEvStage(g, m, A, e, R, say, c) {
   const F = faiSt(g);
   for (const l of e.L || []) await say(R(l));
   const k = await g.list({ title: `${m.rel}・${String(m.name).split(' ').pop()}`, items: e.C.map(x => ({ label: R(x[0]) })), x: 12, y: 44, w: 360, px: true });
-  const ch = e.C[k >= 0 ? k : e.C.length - 1], fx = ch[1];
+  const ch = e.C[k >= 0 ? k : (e.cDef != null ? e.cDef : e.C.length - 1)], fx = ch[1];
   if (fx.money && fx.money < 0 && num(g.state.money) < -fx.money) { await say('（お金が足りなかった……）'); return true; }
   await say(R(ch[2]));
   if (fx.op) A.op = clamp(num(A.op) + fx.op, 0, 100);
@@ -21283,7 +21283,7 @@ const AB_SPK = {
     tr: { famous: ['{meN}、テレビで見たけどマジでつまらん', '{meN}の実家、特定したｗ', '{meN}、昔いじめられてたらしいよｗ', '{meN}の家族の写真、出回ってるｗ', '{meN}、性格悪そう。顔に出てる', '{meN}、早く消えてほしい'], famsib: ['有名人の{rel}ｗ 顔、ぜんぜん似てないｗ', '{meN}の{rel}、学校でぼっちらしいよｗ', '{meN}の{rel}の写真、拾ったｗ'] } },
   pa: { fr: ['「X」'],
     gen: ['産まなきゃよかった', 'お前なんか、うちの子じゃない', '{cmp}はできるのに、なんでお前は', '誰に似たんだか', '恥ずかしいから、外に出ないで', 'もう顔も見たくない', 'あんたのせいで、人生めちゃくちゃ', '泣けばすむと思ってるの？', '黙れ。口ごたえするな', 'お前にかけた金、返してほしいくらいだ', '生きてるだけで、お金がかかるのよ', '出ていけ', 'ほんと、何をやってもだめね', 'あんたなんか、いないほうがよかった'],
-    tr: { fat: ['みっともない。やせなさい', 'そんな体で、よく外を歩けるわね'], thin: ['ガリガリで、親が食べさせてないみたいじゃない'], dumb: ['バカは何をやってもバカね', 'こんな成績、親戚に言えない'], nd: ['こんな子に生まれてくるなんて……', 'あんたのせいで、わたしは働けないのよ'], neet: ['穀つぶし', 'いつまで寝てるの。近所に恥ずかしい', '働かないなら、出ていって'], inkya: ['暗い顔しないで。こっちまで気分が悪くなる', '友だちのひとりも、連れてこられないの？'], famous: ['テレビに出てるからって、えらくなったつもり？', '有名人様は、家族のことなんか忘れたんでしょ', 'お前のせいで、こっちまで陰口を言われるんだ'], poor: ['お金もないくせに、口だけは一人前', 'また借金？ 親を財布だと思ってるの？'], bald: ['その頭、なんとかならないの。みっともない'], single: ['いつになったら結婚するの。孫の顔も見せないつもり？'], hated: ['あんたがそんなだから、みんなに嫌われるのよ'], bulliedMe: ['いじめられるのは、あんたにも原因があるのよ'] } },
+    tr: { fat: ['みっともない。やせなさい', 'そんな体で、よく外を歩けるわね'], thin: ['ガリガリで、親が食べさせてないみたいじゃない'], dumb: ['バカは何をやってもバカね', 'こんな成績、親戚に言えない'], nd: ['こんな子に生まれてくるなんて……', 'あんたのせいで、わたしは働けないのよ'], neet: ['穀つぶし', 'いつまで寝てるの。近所に恥ずかしい', '働かないなら、出ていって', 'また借金？ 親を財布だと思ってるの？'], inkya: ['暗い顔しないで。こっちまで気分が悪くなる', '友だちのひとりも、連れてこられないの？'], famous: ['テレビに出てるからって、えらくなったつもり？', '有名人様は、家族のことなんか忘れたんでしょ', 'お前のせいで、こっちまで陰口を言われるんだ'], poor: ['お金もないくせに、口だけは一人前', 'うちにはお金がないの。わがまま言わないで', 'あんたにかけるお金なんて、ないのよ'], bald: ['その頭、なんとかならないの。みっともない'], single: ['いつになったら結婚するの。孫の顔も見せないつもり？'], hated: ['あんたがそんなだから、みんなに嫌われるのよ'], bulliedMe: ['いじめられるのは、あんたにも原因があるのよ'] } },
   cpl: { fr: ['「X」'], gen: ['誰のおかげで飯が食えてると思ってるんだ', 'お前の育て方が悪いから、子どもがああなるんだ', '一日中、家でなにしてたの？', '結婚なんかしなきゃよかった', 'あんたの親戚、ほんと無理', '稼ぎが少ないくせに、口だけは一人前', 'お前には何を言っても無駄だ', 'ほんと、使えない', 'あなたの顔を見るだけで、疲れる'] },
   sp: { fr: ['「X」'],
     gen: ['誰のおかげで生活できてると思ってるの', 'あなたと結婚したのが、人生最大の失敗', 'ほんと、使えない', '子どもの前で、みっともない姿を見せないで', 'あなたの親も、あなたも、ほんと無理', 'そんなこともできないの？ 何回言えばわかるの', 'あなたの稼ぎじゃ、子どもに習い事もさせられない', 'ため息しか出ない'],
@@ -21383,9 +21383,9 @@ function abLine(g, spk, T, o = {}) {
   return abFillIn(g, pick(P.fr || ['「X」']), T, o).replace('X', x);
 }
 // ---- イベント文中のことば ----
-const AB_RE = /\{(ab|abq|abK|abT|abTq|abS|abB|abR|abP|abO|abM|abMq|abMS|ij|ijM|nk|nkM|n|meN|num|scar|ab:[^}]+)\}/g;
+const AB_RE = /\{(ab|abq|abK|abT|abTq|abS|abB|abR|abP|abO|abM|abMq|abMS|ij|ijM|nk|nkM|n|meN|num|scar|rx:[a-zA-Z]+|ab:[^}]+)\}/g;
 function abFill(s, g, m, A, cx, U) {
-  if (!/\{(ab|ij|nk|n\}|meN|num|scar)/.test(s)) return s;
+  if (!/\{(ab|ij|nk|n\}|meN|num|scar|rx:)/.test(s)) return s;
   let Tm = null, Tme = null, Tk = null;
   const tm = () => Tm || (Tm = abTgt(g, m, A)), tme = () => Tme || (Tme = abMe(g)), tk = () => Tk || (Tk = cx && cx.kSib ? abTgt(g, cx.kSib, agOf(g, cx.kSib)) : tm());
   const sf = m.g === 'f', auto = m.kind === 'pa' ? 'pa' : m.kind === 'gp' ? 'gp' : m.kind === 'sp' ? 'sp' : m.kind === 'kid' ? 'kid' : sibIsYounger(m) ? 'kid' : 'sib';
@@ -21415,6 +21415,7 @@ function abFill(s, g, m, A, cx, U) {
         case 'num': return String(30 + Math.floor(RND() * 9970));
         case 'scar': return abScarText(g, m, A, U) || '（なにも言わずに、窓の外を見ている）';
       }
+      if (k.startsWith('rx:')) return rxLine(g, m, A, k.slice(3));
       const p = k.split(':'), T = p[2] === 'me' ? tme() : p[2] === 'k' ? tk() : p[2] === 'x' ? abTgtX() : tm();
       return abLine(g, p[1] || 'cls', T, { ...o, q: Q || p[3] === 'q', tr: p[4] || null });
     } catch (e) { return '……'; }
@@ -22533,6 +22534,150 @@ if (typeof window !== 'undefined') window.__bubble = {
   line: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m); return famSayLine(g, m, A, nowAct(g, m, A)); },
   show: (k, t) => { FT_SAY[k] = { t, until: Date.now() + 8000 }; return 0; },
   act: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m), a = nowAct(g, m, A); return [a.k, a.act, a.with || '', A.per, A.role]; },
+};
+
+// ===== 会話の返し方（主人公の選択肢を大幅に増やす） =====
+// 返事の反応：per（性格）→ 年代（kid/teen/adult/old）→ base の順でえらぶ
+const TRX = {
+  kyokan: { per: { yasashii: '「でしょ？ {c}なら、わかってくれると思った」', kibishii: '「……ふん。わかればいい」', shinpai: '「ほんと？ よかった……」', mie: '「でしょ〜！」', mukanshin: '「……そうか」', hiniku: '「お前に、ほんとにわかるのか？」', rakuten: '「だよね〜！」', shinkei: '「そう、そうなの！」' }, kid: '「うん！ そうなの！」', teen: '「……まあね」', base: '「でしょ？」' },
+  homeru: { per: { yasashii: '「えっ、ありがとう。うれしいな」', kibishii: '「……おだてても、何も出んぞ」', shinpai: '「ほんとに？ 変じゃない？」', mie: '「でしょ？ もっと言って」', mukanshin: '「……そうか」', hiniku: '「なにか、たくらんでるな？」', rakuten: '「えへへ〜、知ってる！」', shinkei: '「……そ、そうかな」' }, kid: '「えへへ！」', teen: '「……べつに。ふつうだし」', base: '「ありがとう」' },
+  warau: { per: { kibishii: '「笑いごとじゃない」', hiniku: '「なにがおかしい」', mukanshin: '「……」' }, kid: '「あははは！」', teen: '「ウケる」', old: '「ほっほっほ」', base: '「あはは」' },
+  kuwashiku: { per: { mukanshin: '「……べつに、たいした話じゃない」', hiniku: '「聞きたいのか？ めずらしいな」' }, kid: '「あのね、あのね！」（話が、止まらなくなった）', teen: '「……長くなるけど、いい？」', old: '「そうかい、そうかい。あれはねえ……」（話が、30分続いた）', base: '「それがね……」（しばらく、話しこんだ）' },
+  hagemasu: { low: '「……ありがと。……がんばってみる」', per: { kibishii: '「言われなくても、そのつもりだ」', hiniku: '「お前に励まされるとはな」', rakuten: '「うん！ がんばる〜！」' }, teen: '「……うざ。……でも、ありがと」', base: '「え、なに急に？ ……でも、ありがと」' },
+  shinpai: { low: '「……実はね、ちょっと、しんどいんだ」', per: { kibishii: '「心配されるほど、やわじゃない」', mie: '「大丈夫に決まってるでしょ」', rakuten: '「へーきへーき！」' }, kid: '「だいじょうぶ！」', teen: '「……なにが？ べつに、ふつう」', base: '「大丈夫だよ。なに言ってんの」' },
+  jibun: { per: { mukanshin: '「……ふーん」', yasashii: '「そっか。{c}も、大変なんだね」', hiniku: '「お前の話は、いい」', shinpai: '「え、大丈夫なの？」' }, kid: '「へー！ それでそれで？」', teen: '「……へえ。{c}も、そういうことあるんだ」', base: '「へえ、そうなんだ」' },
+  wadai: { per: { kibishii: '「話を変えるな」', mie: '「え、急に？ ……まあいいけど」' }, kid: '「え、なになに？」', base: '「え、急に？ ……まあ、いいけど」' },
+  amaeru: { per: { yasashii: '「しょうがないなあ」', kibishii: '「甘えるな」', shinpai: '「どうしたの？ 何かあった？」', mie: '「もう、子どもなんだから」', mukanshin: '「……そうか」', hiniku: '「気持ちわるいぞ」', rakuten: '「よしよし〜」', shinkei: '「え、え、どうしたの」' }, kid: '「えへへ、{c}、あまえんぼう！」', base: '「どうしたの、急に」' },
+  kansha: { per: { yasashii: '「……な、なによ急に。……うれしい」', kibishii: '「……ふん。当たり前のことをしているだけだ」', mie: '「ご近所に自慢しちゃおうかしら」', hiniku: '「何がほしいんだ？」', mukanshin: '「……ああ」', rakuten: '「どういたしまして〜！」' }, kid: '「えへへ、どういたしまして！」', teen: '「……え、きも。……いや、うれしいけど」', old: '「長生きはするもんだねえ」', base: '「……どういたしまして」' },
+  mukashi: { kid: '「おぼえてない！」', teen: '「それ、まだ言う？」', old: '「あったねえ、そんなこと。あのころは……」', base: '「あったねえ、そんなこと」' },
+  joudan: { per: { kibishii: '「くだらん」', hiniku: '「……つまらん」', rakuten: '「あっははは！ それ最高！」', mie: '「やだ、おもしろ〜い」', mukanshin: '「……」' }, kid: '「あははは！ もういっかい！」', teen: '「……さむ」', old: '「ほっほ、うまいねえ」', base: '「ふふっ」' },
+  sasou: { per: { yasashii: '「うれしい。どこ行こうか」', kibishii: '「……時間があればな」', hiniku: '「お前が？ ……まあ、いいけど」', mukanshin: '「……ああ」', rakuten: '「行く行く〜！」', mie: '「どこにする？ おしゃれなとこがいいな」' }, kid: '「行く！ ぜったい行く！」', teen: '「……どこ？ ……場所による」', old: '「ありがとうねえ。楽しみにしてるよ」', base: '「いいね、行こう」' },
+  advice: { per: { kibishii: '「子どもに言われたくない」', mie: '「余計なお世話よ」', yasashii: '「……そうだね。ありがとう」', hiniku: '「えらそうに」', rakuten: '「なるほど〜！」' }, kid: '「わかった！」', teen: '「……わかってるよ」', base: '「……考えとく」' },
+  sekkyou: { per: { kibishii: '「親に向かって、なんだその口は」', yasashii: '「……そうだよね。ごめんね」', hiniku: '「お前が言うか」', rakuten: '「はいはい〜」' }, kid: '「……ごめんなさい」', teen: '「うざ」', old: '「わしに説教かい」', base: '「……うるさいなあ」' },
+  tsumetai: { per: { yasashii: '「……そっか。ごめんね、つまんない話して」', kibishii: '「なんだ、その態度は」', hiniku: '「ふん、お互いさまだ」', mukanshin: '「……」' }, kid: '「……聞いてる？」', teen: '「……なにその反応」', base: '「……なに、その反応」' },
+  hiniku: { per: { hiniku: '「ほう、言うようになったな」', yasashii: '「……そんな言い方、しなくても」', kibishii: '「口のへらないやつだ」', rakuten: '「あはは、きっびし〜」' }, kid: '「……どういう意味？」', teen: '「は？ なにそれ」', base: '「……いやな言い方」' },
+  mushi: { kid: '「ねえ！ 聞いてる!?」', teen: '「……もういい」', old: '「……耳が遠くなったのは、わしのほうかねえ」', base: '「……ねえ、聞いてる？」' },
+  hitei: { per: { kibishii: '「……ほう。言うようになったな」', mie: '「なによ、その言い方」', yasashii: '「……そうかもね」', hiniku: '「お前に何がわかる」', rakuten: '「そっか〜、そういう考えもあるか」' }, teen: '「は？ ちがわないし」', kid: '「ちがわないもん！」', base: '「……そうかなあ」' },
+  unazuku: { base: '（だまってうなずくと、少しうれしそうに、話を続けた）' },
+  dakishimeru: { kid: '（びっくりしたあと、ぎゅっとしがみついてきた）', teen: '「ちょ、なに……。……もう少しだけ、このままで」', old: '「……あったかいねえ」', base: '「……ちょっと、なに。……ありがと」' },
+  nade: { kid: '「えへへ〜」', teen: '「やめてよ、子どもじゃないんだから」', base: '「なに、急に」' },
+  kozukai: { kid: '「やったー！ ありがとう！」', teen: '「え、まじ？ ……ありがと」', base: '「いいの？ ありがとう」' },
+  kata: { per: { kibishii: '「……ふむ。悪くない」', rakuten: '「あ〜、そこそこ〜」' }, old: '「極楽、極楽……」', base: '「おっ、気がきくねえ」' },
+  koibana: { per: { mie: '「えっ、なになに？ 聞かせて！」', kibishii: '「くだらん」' }, kid: '「えー！ わかんない！」', teen: '「は!? な、なに言ってんの、急に」', old: '「わしの若いころはねえ……」', base: '「えっ、なに急に」' },
+  game: { kid: '「それ知ってる！ あのボス、つよいよね！」', teen: '「え、それやってんの？ フレンドなろ」', base: '「へえ、おもしろそう」' },
+  shigoto: { low: '「聞いてくれる？ ……上の人がさ、ほんとにひどくて」', base: '「まあ、ぼちぼちだよ。ありがとね」' },
+  kenko: { per: { kibishii: '「年寄りあつかいするな」', shinpai: '「ありがとう。……最近、ちょっとね」' }, old: '「年寄りあつかいするんじゃないよ。……でも、ありがとね」', base: '「ありがとう。気をつけるよ」' },
+  soba: { base: '「……うん。……いてくれるだけで、いい」' },
+  daijoubu: { low: '「……大丈夫じゃ、ないかも」', base: '「……うん。……たぶん」' },
+  rule: { hi: '「……うん。ほんとは、すごくつらい。……聞いてくれて、ありがと」', base: '「……まあ、なれたけど」' },
+  gomen: { base: '「……いまさら？ ……でも、言ってくれて、ちょっと楽になった」' },
+  // 赤ちゃん・幼児
+  b_smile: { base: '（にこーっと笑った）' }, b_hug: { base: '（だっこすると、すぐにすやすや眠った）' }, b_peek: { base: '（「いないいない……ばあ！」――きゃっきゃっと、声をあげて笑った）' },
+};
+// 返事の一覧（cat：pos=やさしい／neu=ふつう／neg=冷たい・ひどい／ctx=その場ならでは）
+const TREP = [
+  { id: 'kyokan', l: '「わかる」と共感する', cat: 'pos', op: 2 },
+  { id: 'homeru', l: 'ほめる', cat: 'pos', op: 3 },
+  { id: 'warau', l: 'いっしょに笑う', cat: 'pos', op: 1, mood: 2 },
+  { id: 'kuwashiku', l: 'くわしく聞く', cat: 'pos', op: 3, time: 15 },
+  { id: 'hagemasu', l: '励ます', cat: 'pos', op: 2, mood: 3 },
+  { id: 'shinpai', l: '「大丈夫？」と心配する', cat: 'pos', op: 3 },
+  { id: 'kansha', l: '「いつもありがとう」と言う', cat: 'pos', op: 5 },
+  { id: 'sasou', l: '「今度、どこか行こう」と誘う', cat: 'pos', op: 4 },
+  { id: 'unazuku', l: 'だまってうなずく', cat: 'pos', op: 1 },
+  { id: 'jibun', l: '自分の話をする', cat: 'neu', op: 2 },
+  { id: 'wadai', l: '話題を変える', cat: 'neu', op: 0 },
+  { id: 'mukashi', l: '昔の話をふる', cat: 'neu', op: 2 },
+  { id: 'joudan', l: '冗談を言う', cat: 'neu', op: 1 },
+  { id: 'advice', l: 'アドバイスする', cat: 'neu', op: 0 },
+  { id: 'hitei', l: '「それは違うと思う」と言う', cat: 'neu', op: -1 },
+  { id: 'amaeru', l: '甘える', cat: 'neu', op: 2, ok: (g, m) => ['pa', 'gp', 'sp'].includes(m.kind) || (m.kind === 'sib' && !sibIsYounger(m)) },
+  { id: 'koibana', l: '恋バナをふる', cat: 'neu', op: 1, ok: (g, m) => num(m.age) >= 12 },
+  { id: 'game', l: 'ゲームの話をする', cat: 'neu', op: 2, ok: (g, m) => num(m.age) >= 6 && num(m.age) <= 30 },
+  { id: 'shigoto', l: '仕事の話を聞く', cat: 'neu', op: 3, ok: (g, m, A) => A.role === 'worker' },
+  { id: 'kenko', l: '体を気づかう', cat: 'pos', op: 3, ok: (g, m) => num(m.age) >= 50 },
+  { id: 'kata', l: '肩をたたく', cat: 'pos', op: 3, ok: (g, m) => ['pa', 'gp'].includes(m.kind) },
+  { id: 'dakishimeru', l: '抱きしめる', cat: 'pos', op: 4, ok: (g, m) => ['kid', 'sp'].includes(m.kind) || (m.kind === 'sib' && sibIsYounger(m)) },
+  { id: 'nade', l: '頭をなでる', cat: 'pos', op: 2, ok: (g, m) => num(m.age) <= 15 && (m.kind === 'kid' || sibIsYounger(m)) },
+  { id: 'kozukai', l: 'おこづかいをあげる（500円）', cat: 'pos', op: 4, money: -500, ok: (g, m) => num(m.age) <= 18 && (m.kind === 'kid' || sibIsYounger(m)) },
+  { id: 'sekkyou', l: '説教する', cat: 'neg', op: -4, stress: 4 },
+  { id: 'tsumetai', l: '「ふーん」と冷たく返す', cat: 'neg', op: -3 },
+  { id: 'hiniku', l: '皮肉を言う', cat: 'neg', op: -4 },
+  { id: 'mushi', l: '無視する', cat: 'neg', op: -4, mood: -3 },
+  // その場ならでは
+  { id: 'soba', l: '「そばにいるよ」と言う', cat: 'ctx', op: 4, yg: -2, ym: -3, ok: (g, m, A) => { try { return YM_TGT(m) && (ymSt(num(A.yugami)) >= 1 || ymSt(num(A.yami)) >= 1); } catch (e) { return false; } } },
+  { id: 'daijoubu', l: '「最近、大丈夫？」と聞く', cat: 'ctx', op: 3, ym: -2, ok: (g, m, A) => num(A.mood) < 40 || num(A.stress) > 65 },
+  { id: 'rule', l: '「家のルール、つらい？」と聞く', cat: 'ctx', op: 3, cst: -4, ok: (g, m, A) => num(A.custSt) >= 25 },
+  { id: 'gomen', l: '「あのときは、ごめん」と言う', cat: 'ctx', op: 5, yg: -3, ok: (g, m, A) => isObj(A.scar) && A.scar.me != null || num(A.abused) >= 2 },
+];
+const TREP_BABY = [{ id: 'b_smile', l: '笑いかける', op: 2 }, { id: 'b_hug', l: 'だっこする', op: 3 }, { id: 'b_peek', l: 'いないいないばあ', op: 2 }];
+function trxLine(g, m, A, id) {
+  const X = TRX[id] || {}, per = A.per || 'yasashii', age = num(m.age), grp = age < 13 ? 'kid' : age < 20 ? 'teen' : age < 65 ? 'adult' : 'old';
+  const low = num(A.mood) < 40 || num(A.stress) > 65;
+  let t = (id === 'rule' && num(A.custSt) >= 50 && X.hi) || (low && X.low) || (X.per && X.per[per] && chance(0.75) ? X.per[per] : null) || X[grp] || X.base || '「……」';
+  t = String(t).replace(/\{c\}/g, famCall(g, m)).replace(/ぼく（わたし）/g, m.g === 'f' ? 'わたし' : 'ぼく'); if (famKansai(g)) t = famDialect(t); return t;
+}
+function trChoose(g, m, A) {
+  if (SMALL(A.role)) return TREP_BABY.slice();
+  const L = TREP.filter(r => { try { return !r.ok || r.ok(g, m, A); } catch (e) { return false; } });
+  const by = c => L.filter(r => r.cat === c), sh = a => a.map(x => [RND(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+  return [...by('ctx'), ...sh(by('pos')).slice(0, 3), ...sh(by('neu')).slice(0, 3), ...sh(by('neg')).slice(0, 2)].slice(0, 9);
+}
+async function talkReply(g, m, A, act, line, say, once) {
+  const C = trChoose(g, m, A); if (!C.length) return;
+  const k = await g.list({ title: 'なんと返す？', items: C.map(r => ({ label: r.l })).concat([{ label: '（聞き流す）' }]), x: 12, y: 44, w: 330, px: true });
+  if (k < 0 || k >= C.length) return;
+  const r = C[k]; await say(trxLine(g, m, A, r.id));
+  const first = once('rep_' + r.id);
+  if (r.op) { const d = r.op > 0 ? (first ? r.op : 0) : r.op; A.op = clamp(num(A.op) + d, 0, 100); }
+  if (r.mood) A.mood = clamp(num(A.mood) + r.mood, 0, 100);
+  if (r.stress) A.stress = clamp(num(A.stress) + r.stress, 0, 100);
+  if (r.money) { if (num(g.state.money) >= -r.money) { g.state.money = num(g.state.money) + r.money; try { g.notify(`お金 ${yen(r.money)}`, { color: '#ffe08a' }); } catch (e) { } } }
+  if (r.time) { try { g.advanceTime(r.time, 'np_fai'); } catch (e) { } }
+  if (first && (r.yg || r.ym)) { try { yamiAdd(g, m, A, num(r.yg), num(r.ym)); } catch (e) { } }
+  if (first && r.cst) A.custSt = clamp(num(A.custSt) + r.cst, 0, 100);
+  if (first && r.cat === 'pos') { const N = needOf(A); N.social = clamp(N.social + 6, 0, 100); }
+  if (r.cat === 'neg') addDia(A, g, `${famCall(g, m)}に話しかけたのに、${r.id === 'mushi' ? '無視された' : r.id === 'sekkyou' ? '説教された' : '冷たくされた'}。`, -4);
+  if (r.id === 'sasou' && first) { try { famAlbum(g, `${m.rel}と、今度出かける約束をした`); } catch (e) { } }
+}
+// ===== 会話イベントにも、返し方を2つずつ足す =====
+const RX = {
+  sit: { kid: '（しばらくして、そっと寄りかかってきた）', teen: '「……なに。……べつに、いいけど」', old: '「……すまんねえ」', base: '「……ありがとう。少し、落ちついた」' },
+  hug: { kid: '（びっくりしたあと、ぎゅっとしがみついてきた）', teen: '「ちょ、なに……。……もう少しだけ、このままで」', old: '「……あったかいねえ」', base: '「……ちょっと、なに。……ありがと」' },
+  ask: { kid: '「……わかんない。……でも、聞いてくれて、うれしい」', teen: '「……どうしたいか、か。……考えたこと、なかった」', old: '「わしは、どうしたいんじゃろうねえ」', base: '「……どうしたいんだろう、わたし」' },
+  self: { kid: '「{c}にも、そんなことあったの？」', teen: '「……{c}も、そんなことあったんだ」', base: '「……そっか。{c}も、いろいろあったんだね」' },
+  hard: { kid: '（こくん、とうなずいた。目が、うるんでいた）', teen: '「……うん。……つらかった」', base: '「……うん。……そう言ってもらえると、少し楽」' },
+  dodge: { kid: '「……え？ ……うん」（さみしそうに、うつむいた）', teen: '「……そうやって、すぐ話そらすよね」', base: '「……そうやって、逃げるのね」' },
+  laughoff: { kid: '「……笑わないでよ」', teen: '「……笑いごとじゃないんだけど」', base: '「……笑いごとじゃないよ」' },
+  leave: { kid: '「……行っちゃうの？」', teen: '（背中に、舌打ちが聞こえた）', base: '（背中に、視線を感じた）' },
+  laugh: { kid: '「あははは！」', teen: '「ウケる」', old: '「ほっほっほ」', base: '「あはは！」' },
+  more: { kid: '「あのね、あのね！」（話が、止まらなくなった）', teen: '「……長くなるけど、いい？」', base: '「それでね……」（しばらく、話しこんだ）' },
+  praise: { kid: '「えへへ！」', teen: '「……べつに。ふつうだし」', old: '「ほめても何も出ないよ」', base: '「えっ、ありがとう」' },
+  tease: { kid: '「もー！ {c}のいじわる！」', teen: '「は？ うざ」', old: '「からかうんじゃないよ」', base: '「もう、{c}ったら」' },
+  flat: { kid: '「……聞いてる？」', teen: '「……なにその反応」', base: '「……もうちょっと、興味もってよ」' },
+  dodgeN: { kid: '「え、なになに？」', base: '「え、急に？ ……まあ、いいけど」' },
+  thanks: { kid: '「どういたしまして！」', teen: '「……べつに」', old: '「長生きはするもんだねえ」', base: '「……どういたしまして」' },
+};
+function rxLine(g, m, A, key) { const X = RX[key] || {}, age = num(m.age), grp = age < 13 ? 'kid' : age < 20 ? 'teen' : age < 65 ? 'adult' : 'old'; return X[grp] || X.base || '「……」'; }
+const GX_POS = [['だまって、となりに座る', { op: 5, mood: 3 }, '{rx:sit}'], ['抱きしめる', { op: 6, mood: 4 }, '{rx:hug}'], ['「それで、どうしたい？」と聞く', { op: 4 }, '{rx:ask}'], ['自分の昔の話をする', { op: 3 }, '{rx:self}'], ['「つらかったね」とだけ言う', { op: 5 }, '{rx:hard}']];
+const GX_NEG = [['話をそらす', { op: -3 }, '{rx:dodge}'], ['笑ってごまかす', { op: -5, mood: -3 }, '{rx:laughoff}'], ['その場を立ち去る', { op: -7, mood: -4 }, '{rx:leave}']];
+const GX_NPOS = [['いっしょに笑う', { op: 2, mood: 2 }, '{rx:laugh}'], ['くわしく聞く', { op: 3, time: 10 }, '{rx:more}'], ['ほめる', { op: 3 }, '{rx:praise}'], ['「ありがとう」と言う', { op: 3 }, '{rx:thanks}']];
+const GX_NNEU = [['からかう', { op: -1 }, '{rx:tease}'], ['「へえ」と流す', { op: -2 }, '{rx:flat}'], ['話題を変える', { op: -1 }, '{rx:dodgeN}']];
+(() => {
+  for (const e of FE) {
+    if (!e || !Array.isArray(e.C) || e.C.length < 2 || e.C.length > 4 || e.noExtra || e.gx || !e.C.every(c => Array.isArray(c) && c[1])) continue;
+    const h = hashStr('gx|' + e.id) >>> 0, P = e.dark ? GX_POS : GX_NPOS, N = e.dark ? GX_NEG : GX_NNEU;
+    const a = P[h % P.length], b = N[(h >>> 5) % N.length];
+    if (e.C.some(c => c[0] === a[0] || c[0] === b[0])) continue;
+    e.cDef = e.C.length - 1; e.gx = 1; e.C = e.C.concat([[a[0], { ...a[1] }, a[2]], [b[0], { ...b[1] }, b[2]]]);
+  }
+})();
+if (typeof window !== 'undefined') window.__reply = {
+  gx: () => [FE.filter(e => e.gx).length, FE.length],
+  choose: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m); return trChoose(g, m, A).map(r => r.l); },
+  line: (k, id) => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m); return trxLine(g, m, A, id); },
+  ev: id => { const e = FE.find(x => x.id === id); return e ? e.C.map(c => c[0]) : null; },
+  talk: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m), F = faiSt(g); g.run(async () => { await talkReply(g, m, A, nowAct(g, m, A), '', t => g.say(t, { name: m.rel }), kk => { const z = k + ':' + kk; if (F.talked[z] === g.state.day) return false; F.talked[z] = g.state.day; return true; }); }); return 0; },
 };
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
