@@ -20466,11 +20466,11 @@ const LEGENDS = [
     m: [['田中一彦', '田中', 1977, LEG_C('#f4c8d8', { glasses: true, tie: '#a8c8e8' })], ['武智正剛', '武智', 1978, LEG_J('#9aa0a8', { hair: 'spiky' })]], rec: 'M-1グランプリ決勝の常連。爆発力のある大阪の漫才。' },
   { k: 'sayaka', n: 'さや香', y: 2014, reg: 'osaka', ag: 'yoshimoto', st: 'manzai', tal: 0.93, pk: 7, nsc: true, sk: { manzai: 1.4 },
     m: [['新山士彦', '新山', 1990, LEG_J('#1e1e26', { tie: '#c0603a' })], ['石井誠一', '石井', 1990, LEG_J('#5a6070')]], rec: 'M-1グランプリ2022 準優勝。勢いのある、しゃべくりの正統派漫才。' },
-  { k: 'doublekoji', n: 'Wコウジ', y: 2004, reg: 'tokyo', ag: 'yoshimoto', st: 'manzai', tal: 0.82, pk: 9, nsc: false, sk: { manzai: 1.2 },
-    m: [['コージ（左）', 'コージ左', 1980, LEG_J('#1e1e26', { hair: 'spiky' })], ['コージ（右）', 'コージ右', 1980, LEG_J('#1e1e26', { hair: 'bob' })]], rec: '個性的なふたりの漫才。（メンバー名・結成年は仮の設定）' },
+  { k: 'doublekoji', n: 'Wコウジ', y: 1990, reg: 'osaka', ag: 'yoshimoto', st: 'both', tal: 0.94, pk: 6, nsc: true, sk: { manzai: 1.2, conte: 1.25, talk: 1.4, ogiri: 1.3 },
+    m: [['今田耕司', '今田', 1966, LEG_J('#1e1e26')], ['東野幸治', '東野', 1967, LEG_J('#3a3a44')]], rec: '今田耕司と東野幸治のユニット。大阪の劇場から全国区へ。いまもバラエティの名司会コンビ。' },
 ];
 const LEG_AG = { yoshimoto: '吉本興業', grape: 'グレープカンパニー', shochiku: '松竹芸能', horipro: 'ホリプロ' };
-const LEG_KANSAI = { nakagawake: 1, football: 1, kirin: 1, kingkong: 1, waraimeshi: 1, diane: 1, chidori: 1, kamaitachi: 1, downtown: 1, blackmayo: 1, nonstyle: 1, torosalmon: 1, jaru: 1, ginshari: 1, monster: 1, wagyu: 1, shimofuri: 1, supermaradona: 1, sayaka: 1 };
+const LEG_KANSAI = { nakagawake: 1, football: 1, kirin: 1, kingkong: 1, waraimeshi: 1, diane: 1, chidori: 1, kamaitachi: 1, downtown: 1, blackmayo: 1, nonstyle: 1, torosalmon: 1, jaru: 1, ginshari: 1, monster: 1, wagyu: 1, shimofuri: 1, supermaradona: 1, sayaka: 1, doublekoji: 1 };
 LEGENDS.sort((a, b) => a.y - b.y);
 // お笑いの世界（結成年ごとのコンビ一覧）に加える
 function legActs(year) {
