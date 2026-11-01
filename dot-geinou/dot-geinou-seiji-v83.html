@@ -12569,6 +12569,7 @@ function install() {
   try { installHome(); } catch (e) { console.error('[home] install', e); }
   try { installNewGame(); } catch (e) { console.error('[npx] install', e); }
   try { installSibling(); } catch (e) { console.error('[sib] install', e); }
+  try { installFamAI(); } catch (e) { console.error('[fai] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -17391,7 +17392,7 @@ function agOf(g, m) {
   if (!isObj(A)) {
     const seed = hashStr(m.key + '|' + (g.state.profile && g.state.profile.familyName || '')), R = sRand(seed), me = meSum(g);
     let per = sPick(R, Object.keys(PERS)); if (m.kind === 'sp' && m.c && m.c.per) per = { yasashii: 'yasashii', akarui: 'rakuten', majime: 'kibishii', mypace: 'mukanshin', makezu: 'mie', hitomishiri: 'shinkei', ochoshi: 'rakuten' }[m.c.per] || per;
-    let op = 55 + Math.round((R() - 0.5) * 30); try { if (m.fid && g.aff) op = clamp(num(g.aff(m.fid), op), 5, 95); } catch (e) { }
+    let op = 55 + Math.round((R() - 0.5) * 30); try { const P = g.state.people && m.fid && g.state.people[m.fid]; if (P && num(P.aff) > 0 && g.aff) op = clamp(num(g.aff(m.fid), op), 15, 95); } catch (e) { }
     A = M.ag[m.key] = { seed, per, op, mood: 60 + Math.round(R() * 20), stress: 20 + Math.round(R() * 25), hp: 85 + Math.round(R() * 15), dia: [], sec: [], flags: {}, arch: 'futsu', bully: 0, futoko: false, uni: R() < 0.55, neet: false, home: false, crush: null, sav: 0 };
     if (m.kind === 'sp') A.home = !!(m.married && R() < 0.4);
     if (m.kind === 'sib') A.neet = R() < 0.12;
@@ -17403,6 +17404,8 @@ function agOf(g, m) {
     A.job = jobOf(g, m, R);
   }
   A.dia = Array.isArray(A.dia) ? A.dia : []; A.sec = Array.isArray(A.sec) ? A.sec : []; A.flags = isObj(A.flags) ? A.flags : {};
+  // まだ会っていない家族の好感度0を「あなたへの気持ち」にしていた古いデータを直す
+  if (!A.flags.opFix) { A.flags.opFix = 1; try { const P = g.state.people && m.fid && g.state.people[m.fid]; if (m.fid && num(A.op) <= 6 && !(P && num(P.aff) > 0)) A.op = 55 + Math.round((sRand(A.seed)() - 0.5) * 30); } catch (e) { } }
   A.role = roleOf(m, A);
   return A;
 }
@@ -17412,7 +17415,7 @@ function jobOf(g, m, R) {
   return sPick(R, m.g === 'f' ? ['事務の仕事', '看護師', '保育士', '販売員', 'パートのレジ係', '銀行の窓口', '介護の仕事'] : ['会社員（営業）', '工場勤務', '市役所の職員', 'タクシー運転手', '建設会社', 'システムエンジニア', '居酒屋の店長']);
 }
 // ---- 1日の予定 ----
-function schedOf(g, m, A) {
+function schedOf0(g, m, A) {
   const R = sRand(A.seed + g.state.day * 7919), we = wdOf(g) >= 5, role = A.role, S = [];
   const add = (s, e, what, place, k) => S.push({ s, e, what, place, k });
   const sleep0 = (to, w) => add(0, to, w || '眠っている', 'bedroom', 'sleep');
@@ -17472,6 +17475,7 @@ function voiceOf(g, m, A, act, me) {
     nap: ['（うとうと…）'], dinner: ['（いただきます、を言ったのは誰だっけ）', `（${you}、今日も帰ってこない）`], rest: ['（休みの日くらい、なにもしたくない）'], part: ['（時給、あと50円上がらないかな）'], drink: ['（イッキ！イッキ！…帰りたい）'], errand: ['（あれも、これも、私の仕事）'], garden: ['（今年も、トマトが赤くなった）'], bath: ['（あわあわ！）'], morning: m.kind === 'kid' || ['elem', 'jhs', 'hs'].includes(A.role) ? ['（行きたくない…）', '（今日の時間割、体育ある。最悪）', '（また寝ぐせ。もういいや）'] : A.role === 'retired' ? ['（新聞の字が、また小さくなった気がする）', '（朝の薬、飲んだっけ）'] : A.role === 'home' ? ['（お弁当、冷凍食品ばっかりって思われてるかな）', '（誰も「いってきます」を言わなくなった）'] : ['（朝はいつも、時間が足りない）', '（今日の会議、なんの意味があるんだろう）', '（ネクタイを締めるたび、首輪みたいだと思う）'], study: ['（わからない。誰にも聞けない）'],
   };
   if (byK[k]) P.push(...byK[k]);
+  if (act.v) P.push(...[].concat(act.v), ...[].concat(act.v));
   // 自キャラについての本音（シビアに）
   if (['pa', 'gp'].includes(m.kind)) {
     if (me.neet) P.push(`（近所の人に「${me.nm}ちゃん、いまなにしてるの？」と聞かれて、言葉につまった）`, '（同窓会のはがき。欠席に丸をつけた。子どものことを聞かれるのが、こわい）', `（育てかたを、まちがえたんだろうか）`);
@@ -17705,8 +17709,8 @@ class MesenScene extends NpbScene {
   cur() { const L = this.members(); if (this.focus) { const i = L.findIndex(x => x.key === this.focus); if (i >= 0) this.mi = i; this.focus = null; } this.mi = M_(this.mi, 0, L.length - 1); return L[this.mi]; }
   rows() {
     const m = this.cur(), L = [];
-    if (m.kind !== 'me') { const A = agOf(this.g, m); L.push({ id: 'prof', label: 'からだ・プロフィール', sub: (() => { const B = bodyOf(this.g, m, A); return `${A.ht || B.ht}cm・${A.wt || B.wt}kg${A.nd ? '・' + ND_N[A.nd] : ''}${A.cx ? '・コンプレックス' : ''}`; })() }, { id: 'diary', label: '日記を読む', sub: `${A.dia.length}件` }, { id: 'secret', label: 'ひみつ・本音をのぞく', sub: A.sec.length ? `${A.sec.length}件` : 'まだない' }, { id: 'rel', label: '家族への気持ち', sub: 'ほかの家族を、どう思っているか' }, { id: 'hy', label: '歯とからだの衛生', sub: (() => { const H = hyOf(A, m); return `虫歯${H.cav}本・清潔${Math.round(H.clean)}${H.sick ? '・' + H.sickWhat : ''}`; })() }, ...(inHouse(m) && m.age >= 1 ? [{ id: 'dent', label: '歯医者に連れていく', sub: '虫歯1本 ¥3,000' }] : []), { id: 'sx', label: 'からだと性のこと', sub: m.age >= SX_ADULT ? '性自認・同意・避妊・性感染症・精力' : '性自認・同意・避妊・性感染症' }, { id: 'sxtalk', label: m.age >= SX_ADULT ? 'からだと性のことを話す' : '性教育の話をする', sub: '年齢に合わせて伝える' }, { id: 'line', label: 'メッセージを送る', sub: '自分として連絡する' }); }
-    else L.push({ id: 'log', label: 'AIの行動記録', sub: '目線変更中に自キャラがしたこと' }, { id: 'cust', label: '家の風習・ルールを決める', sub: (() => { const n = CUSTOMS.filter(c => custOf(this.g)[c.id]).length; return n ? `${n}個のルール` : 'とくになし'; })() });
+    if (m.kind !== 'me') { const A = agOf(this.g, m); L.push({ id: 'mind', label: 'AIの頭の中', sub: (() => { try { const N = needOf(A), lo = FAI_NEEDS.slice().sort((a, b) => N[a] - N[b])[0]; return `${A.want ? '主人公に「' + FAI_WANT[A.want.type] + '」・' : ''}いちばん足りない：${FAI_NN[lo]}`; } catch (e) { return ''; } })() }, { id: 'prof', label: 'からだ・プロフィール', sub: (() => { const B = bodyOf(this.g, m, A); return `${A.ht || B.ht}cm・${A.wt || B.wt}kg${A.nd ? '・' + ND_N[A.nd] : ''}${A.cx ? '・コンプレックス' : ''}`; })() }, { id: 'diary', label: '日記を読む', sub: `${A.dia.length}件` }, { id: 'secret', label: 'ひみつ・本音をのぞく', sub: A.sec.length ? `${A.sec.length}件` : 'まだない' }, { id: 'rel', label: '家族への気持ち', sub: 'ほかの家族を、どう思っているか' }, { id: 'hy', label: '歯とからだの衛生', sub: (() => { const H = hyOf(A, m); return `虫歯${H.cav}本・清潔${Math.round(H.clean)}${H.sick ? '・' + H.sickWhat : ''}`; })() }, ...(inHouse(m) && m.age >= 1 ? [{ id: 'dent', label: '歯医者に連れていく', sub: '虫歯1本 ¥3,000' }] : []), { id: 'sx', label: 'からだと性のこと', sub: m.age >= SX_ADULT ? '性自認・同意・避妊・性感染症・精力' : '性自認・同意・避妊・性感染症' }, { id: 'sxtalk', label: m.age >= SX_ADULT ? 'からだと性のことを話す' : '性教育の話をする', sub: '年齢に合わせて伝える' }, { id: 'line', label: 'メッセージを送る', sub: '自分として連絡する' }); }
+    else L.push({ id: 'flog', label: '家族の行動ログ', sub: (() => { try { const F = faiSt(this.g); return `今日 ${F.log.filter(x => x.d === this.g.state.day).length}件`; } catch (e) { return ''; } })() }, { id: 'log', label: 'AIの行動記録', sub: '目線変更中に自キャラがしたこと' }, { id: 'cust', label: '家の風習・ルールを決める', sub: (() => { const n = CUSTOMS.filter(c => custOf(this.g)[c.id]).length; return n ? `${n}個のルール` : 'とくになし'; })() });
     try { if (m.kind !== 'me' && gkStudents(this.g).some(x => x.key === m.key)) { const lv = gkLvOf(m.age); L.unshift({ id: 'school', label: 'スクールライフを見る', sub: `${GK_LV[lv]}${gkGradeOf(lv, m.age)}年生` }); } } catch (e) { }
     L.push({ id: 'hour', label: '1時間すすめる', sub: '自キャラはAIがオートで行動' }, { id: 'h3', label: '3時間すすめる', sub: '自キャラはAIがオートで行動' }, { id: 'day', label: '1日すすめる', sub: '学校・仕事・食事・睡眠までAIまかせ' }, { id: 'help', label: '目線変更について', sub: '' });
     return L;
@@ -17752,8 +17756,9 @@ class MesenScene extends NpbScene {
     const g = this.g, m = this.cur(), id = r.id;
     if (id === 'hour' || id === 'h3' || id === 'day') { await this.advance(id); return; }
     if (id === 'school') { this.closed = true; g.pop(this); try { await openSchool(g, m.key); } finally { GK_CTX = null; this.closed = false; g.push(this); } return; }
-    if (id === 'help') { await this.info('目線変更', ['家族ひとりひとりの「目線」に切りかえて、いま何をしているか・何を考えているかをのぞける。', '・家族は自分で考えて動くAI。毎朝それぞれに出来事が起き、日記やひみつがたまっていく。', '・あなたのいまの状況（仕事・お金・有名さ・学校での立場）で、家族の本音は変わる。現実は甘くない。', '・目線を変えているあいだ、時間をすすめると自キャラはAIがオートで行動する（学校・仕事・部活・バイト・食事・睡眠）。', '・←→で家族を切りかえ。']); return; }
+    if (id === 'help') { await this.info('目線変更', ['家族ひとりひとりの「目線」に切りかえて、いま何をしているか・何を考えているかをのぞける。', '・家族AI：家族は「おなか・元気・たのしさ・ふれあい・清潔・やること」の欲求をもとに、学校や仕事以外の時間の行動を自分で決める。料理・家族での食事・宿題・けんか・仲直り・あなたのうわさ話など、家族どうしでも関わりあう。', '・いっしょに住んでいる家族は家の中を歩きまわり、頭の上のアイコンで、いま何をしているかがわかる。黄色の「！」は、あなたに用事がある合図。話しかけてみよう。', '・「AIの頭の中」で、欲求・つぎにやりたいこと・家族との仲が見られる。自分のタブの「家族の行動ログ」で、家族がその日なにをしたかがわかる。', '・家族は自分で考えて動くAI。毎朝それぞれに出来事が起き、日記やひみつがたまっていく。', '・あなたのいまの状況（仕事・お金・有名さ・学校での立場）で、家族の本音は変わる。現実は甘くない。', '・目線を変えているあいだ、時間をすすめると自キャラはAIがオートで行動する（学校・仕事・部活・バイト・食事・睡眠）。', '・←→で家族を切りかえ。']); return; }
     if (id === 'log') { const M = msn(g); const L = M.auto.slice(-4).reverse().flatMap(a => [`― ${a.d}日目 ―`, ...a.L]); await this.info('AIの行動記録', L.length ? L : ['まだ記録はない。']); return; }
+    if (id === 'flog') { await this.info('家族の行動ログ（家族AIが自分で決めた行動）', faiLogLines(g)); return; }
     const A = agOf(g, m);
     if (id === 'diary') { const L = A.dia.slice(-14).reverse().map(x => `${x.d}日目　${x.t}`); await this.info(`${m.rel}・${m.name}の日記`, L.length ? L : ['まだ何も書かれていない。']); return; }
     if (id === 'secret') { const L = A.sec.slice().reverse().map(x => `・${x.t}`); await this.info(`${m.name}のひみつ`, L.length ? ['（本人は、誰にも話していない）', ...L] : ['いまのところ、ひみつはないようだ。']); return; }
@@ -17763,6 +17768,7 @@ class MesenScene extends NpbScene {
     if (id === 'sx') { await this.info(`${m.name}のからだと性のこと`, sxLines(g, m, A)); return; }
     if (id === 'sxtalk') { await this.info('家族で話す', sxTalk(g, m, A)); return; }
     if (id === 'rel') { await this.info(`${m.name}の、家族への気持ち`, relLines(g, m, A)); return; }
+    if (id === 'mind') { await this.info(`${m.name}の頭の中（家族AI）`, faiMindLines(g, m, A)); return; }
     if (id === 'prof') { await this.info(`${m.name}のからだ・プロフィール`, sibProfLines(g, m, A)); return; }
     if (id === 'line') {
       const k = await this.pick(`${m.name}にメッセージ`, [{ label: '元気？' }, { label: 'いつもありがとう' }, { label: '今度ごはん行こう' }], { note: `いまの気持ち：${opWord(A.op)}` });
@@ -17865,6 +17871,7 @@ function relLines(g, m, A) {
     if (m.kind === 'sp' && o.frel === 'mother') w = h < 55 ? '苦手。何を言っても、とげがある' : 'うまくやれている…と思う';
     if (m.kind === 'kid' && o.kind === 'kid') w = h < 40 ? 'うざい' : 'なんだかんだ、仲がいい';
     if (m.kind === 'gp' && o.kind === 'kid') w = '目に入れても痛くない';
+    try { if (houseOf(o) === houseOf(m)) { const rv = relOf(g, m, o); w = relWord(rv) + (memOf(g, m, o, 'fight', 2) ? '（最近けんかした）' : ''); } } catch (e) { }
     if (num(B.hate) >= 2 && o.kind === 'sib') w = B.hate >= 4 ? 'できれば関わりたくない' : B.hate >= 3 ? '正直、嫌い' : '少し苦手';
     if (sibIsOlder(o) && m.kind === 'sib' && sibIsYounger(m) && num(A.cx) >= 2) w = '比べられるのがつらい';
     L.push(`${o.rel}・${o.name}：${w}`);
@@ -19475,6 +19482,518 @@ function openMeHd(g) { loadNpbFont(); tt.sfx('ok'); return new Promise(res => g.
 function installSibling() {
   E.Tn(g => { try { sibTick(g); } catch (e) { console.error('[sib]', e); } });
   if (typeof window !== 'undefined') window.__sib = { tick: () => sibTick(window.__game), body: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return m && bodyOf(g, m, agOf(g, m)); }, prof: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return m && sibProfLines(g, m, agOf(g, m)); }, openMeHd: () => openMeHd(window.__game) };
+}
+
+// ===== 家族AI：欲求で行動を決め、家族どうしで関わり、家の中を歩く =====
+// しなければならないこと（学校・仕事・睡眠）以外の時間は、ひとりひとりがAIで行動を選ぶ
+const FAI_OBL = { sleep: 1, commute: 1, class: 1, work: 1, hoiku: 1, club: 1, cram: 1, part: 1, hospital: 1 };
+const FAI_NEEDS = ['food', 'energy', 'fun', 'social', 'hyg', 'duty'];
+const FAI_NN = { food: 'おなか', energy: '元気', fun: 'たのしさ', social: 'ふれあい', hyg: '清潔', duty: 'やること' };
+const FAI_DECAY = { food: 6.5, energy: 2.6, fun: 3.5, social: 2.4, hyg: 1.6, duty: 1.5 };
+const FAI_IN = { living: 1, kitchen: 1, bedroom: 1, bath: 1 };
+const FAI_HOMEP = { home: 'room', mansion: 'apartment', tower: 'apartment' };
+const FAI_DISH = ['肉じゃが', 'カレーライス', 'ハンバーグ', '焼き魚と味噌汁', '麻婆豆腐', 'からあげ', 'オムライス', '鍋', '焼きそば', '豚の生姜焼き', '餃子', 'クリームシチュー', '親子丼', 'さばの味噌煮'];
+const FAI_BF = ['トーストと目玉焼き', 'ごはんと味噌汁', '納豆ごはん', 'おにぎり', 'ヨーグルトとバナナ'];
+const KIDR = r => r === 'elem' || r === 'jhs' || r === 'hs';
+const ADR = r => r === 'worker' || r === 'home' || r === 'neet' || r === 'uni' || r === 'retired';
+const SMALL = r => r === 'baby' || r === 'toddler';
+function faiSt(g) {
+  const M = msn(g); if (!M) return null;
+  if (!isObj(M.fai)) M.fai = { v: 1, day: 0, plans: {}, done: {}, log: [], rel: {}, mem: {}, house: { clean: 70, food: 70, meal: null }, lastT: -1, msgDay: 0, msgN: 0, talked: {}, allowM: '' };
+  const F = M.fai; F.plans = isObj(F.plans) ? F.plans : {}; F.done = isObj(F.done) ? F.done : {}; F.log = Array.isArray(F.log) ? F.log : []; F.rel = isObj(F.rel) ? F.rel : {}; F.mem = isObj(F.mem) ? F.mem : {}; F.house = isObj(F.house) ? F.house : { clean: 70, food: 70, meal: null }; F.talked = isObj(F.talked) ? F.talked : {};
+  return F;
+}
+function faiHouse(g, m) { const F = faiSt(g), h = houseOf(m); F.hs = isObj(F.hs) ? F.hs : {}; if (!isObj(F.hs[h])) F.hs[h] = { clean: 70, food: 70, meal: null }; return F.hs[h]; }
+function needOf(A) { if (!isObj(A.need)) A.need = { food: 70, energy: 80, fun: 60, social: 60, hyg: 75, duty: 50 }; for (const n of FAI_NEEDS) A.need[n] = clamp(num(A.need[n], 60), 0, 100); return A.need; }
+// ---- 家族どうしの関係（-100〜100） ----
+const relKey = (a, b) => a < b ? a + '|' + b : b + '|' + a;
+function faiPair(m, o) {
+  const k = [m.kind, o.kind].sort().join('-');
+  if (m.kind === 'pa' && o.kind === 'pa') return 'couple';
+  if (k === 'pa-sib' || k === 'kid-sp') return 'parent';
+  if (k === 'gp-pa') return 'parent';
+  if (k === 'gp-sib') return 'grand';
+  if (k === 'sib-sib' || k === 'kid-kid') return 'sib';
+  return 'other';
+}
+function relOf(g, m, o) {
+  const F = faiSt(g), k = relKey(m.key, o.key);
+  if (F.rel[k] == null) { const A = agOf(g, m), B = agOf(g, o), h = ((num(A.seed) ^ num(B.seed)) >>> 0) % 100; F.rel[k] = clamp(Math.round((h - 45) * 0.9 + { couple: 18, parent: 22, grand: 32, sib: 0, other: 5 }[faiPair(m, o)]), -60, 90); F.rel0 = isObj(F.rel0) ? F.rel0 : {}; F.rel0[k] = F.rel[k]; }
+  return F.rel[k];
+}
+function relAdd(g, m, o, d) { const F = faiSt(g), k = relKey(m.key, o.key), cur = relOf(g, m, o); if (d > 0) d *= Math.max(0.12, 1 - Math.max(0, cur) / 105); F.rel[k] = clamp(Math.round((cur + d) * 10) / 10, -100, 100); }
+const relInt = v => Math.round(v);
+const relWord = v => v >= 60 ? '大切' : v >= 30 ? '好き' : v >= 5 ? 'ふつう' : v >= -25 ? '正直、苦手' : v >= -55 ? '顔も見たくない' : '憎んでいる';
+function memAdd(g, m, o, what) { const F = faiSt(g), k = relKey(m.key, o.key); F.mem[k] = { what, day: g.state.day }; }
+function memOf(g, m, o, what, days = 3) { const F = faiSt(g), x = F.mem[relKey(m.key, o.key)]; return x && x.what === what && g.state.day - x.day <= days ? x : null; }
+// どこに住んでいるか：配偶者と子どもは主人公の家。親・祖父母・きょうだいは実家（主人公が未成年なら、主人公も実家）
+function meMinor(g) { try { return ageOf(g) < 18; } catch (e) { return false; } }
+const houseOf = m => (m.kind === 'sp' || m.kind === 'kid') ? 'me' : 'jikka';
+function livesWith(g, m) { return houseOf(m) === (meMinor(g) ? 'jikka' : 'me'); }
+const isParentOf = (P, C) => (P.kind === 'pa' && C.kind === 'sib') || (P.kind === 'sp' && C.kind === 'kid') || (P.kind === 'gp' && C.kind === 'pa');
+const olderSib = (A, B) => faiPair(A, B) === 'sib' && num(A.age) > num(B.age) + 2;
+// ---- 行動のリスト ----
+// nd: 欲求への効果　w: できる時間帯　ok: できる人　U: 追加の好み　fx: 実行したときの効果　soc: 相手をとる
+const FA = [
+  { id: 'cook', n: m => m.age >= 16 ? '料理をつくる' : 'おてつだいで料理', k: 'cook', pl: 'kitchen', d: [40, 70], w: [[330, 450], [990, 1230]], ok: c => ADR(c.A.role) && c.m.age >= 18 && c.A.role !== 'uni', nd: { duty: 35, energy: -8 },
+    U: c => (c.house.cooked[c.t < 720 ? 'am' : 'pm'] ? -9 : 0) + (c.A.role === 'home' ? 1.6 : c.m.kind === 'pa' && c.m.g === 'f' ? 0.7 : c.m.kind === 'sp' ? 0.6 : c.m.kind === 'gp' ? 0.3 : 0.1) + (c.house.food < 15 ? -2 : 0) + (c.t >= 1080 || c.t < 420 ? 0.9 : 0),
+    v: ['（今日はなににしよう。冷蔵庫と相談）', '（「おいしい」って言ってくれたら、それでいい）', '（毎日の献立を考えるのが、いちばん大変）'],
+    fx: c => { const pm = c.blk.s >= 720, dish = pick(pm ? FAI_DISH : FAI_BF); faiHouse(c.g, c.m).meal = { day: c.g.state.day, slot: pm ? 'pm' : 'am', dish, cook: c.m.key, t: c.blk.e, who: [] }; faiHouse(c.g, c.m).food = clamp(faiHouse(c.g, c.m).food - 10, 0, 100); c.log(`${c.nm}が${pm ? '夕ごはん' : '朝ごはん'}に「${dish}」をつくった`, { ico: 'cook', imp: pm ? 1 : 0 }); if (pm && livesWith(c.g, c.m)) faiWant(c.g, c.m, c.A, 'dinner', { dish, exp: 1290 }); } },
+  { id: 'eat', n: '食事', k: 'dinner', pl: 'living', d: [20, 40], w: [[360, 540], [690, 800], [1050, 1290]], ok: c => !SMALL(c.A.role), nd: { food: 55, social: 6 },
+    U: c => { const slot = c.t < 720 ? 'am' : 'pm', ck = c.house.cooked[slot]; return (ck != null && ck <= c.t ? 1.1 : (ck != null && ck > c.t ? -1.6 : -0.1)) + (c.house.ate[c.m.key + slot] ? -6 : 0); }, sim: c => { c.house.ate[c.m.key + (c.t < 720 ? 'am' : 'pm')] = 1; },
+    fx: c => { const H = faiHouse(c.g, c.m), slot = c.blk.s < 720 ? 'am' : 'pm'; if (H.meal && H.meal.day === c.g.state.day && H.meal.slot === slot) { H.meal.who.push(c.m.rel); if (H.meal.who.length === 2) c.log(`${H.meal.who.join('と')}が、いっしょに「${H.meal.dish}」を食べている`, { ico: 'meal' }); else if (H.meal.who.length > 2) { const L = c.F.log.find(x => x.d === c.g.state.day && x.text.includes(`「${H.meal.dish}」を食べている`)); if (L) L.text = `${H.meal.who.join('と')}が、いっしょに「${H.meal.dish}」を食べている`; c.quiet = 1; } } },
+    what: c => { const H = faiHouse(c.g, c.m).meal, slot = c.t < 720 ? 'am' : 'pm'; return H && H.day === c.g.state.day && H.slot === slot ? `${H.dish}を温めなおして食べる` : c.house.cooked[slot] != null && c.house.cooked[slot] <= c.t ? 'ラップしてあったごはんを温めて食べる' : c.t >= 1050 ? 'カップめんで夕ごはん' : 'ありあわせで食事'; },
+    v: ['（いただきます）', '（みんなでそろって食べるのは、いつぶりだろう）', '（今日のごはん、ちょっとしょっぱい）'] },
+  { id: 'snack', n: 'おやつ・つまみ食い', k: 'snack', pl: 'kitchen', d: [10, 20], ok: c => !SMALL(c.A.role), nd: { food: 16, fun: 5 }, fx: c => { faiHouse(c.g, c.m).food = clamp(faiHouse(c.g, c.m).food - 2, 0, 100); }, v: ['（あと一枚だけ……）', '（冷蔵庫のプリン、名前書いてなかったからセーフ）'] },
+  { id: 'tv', n: 'テレビを見る', k: 'tv', pl: 'living', d: [30, 90], ok: c => !SMALL(c.A.role), nd: { fun: 18, energy: 3 }, U: c => (c.A.role === 'retired' || c.A.role === 'home' ? 0.35 : 0) + (c.A.arch === 'inkya' && KIDR(c.A.role) ? -0.2 : 0), v: ['（ワイドショー、毎日同じ話してる）', '（このドラマ、来週が最終回）', '（ニュースは暗い話ばかり）'] },
+  { id: 'game', n: 'ゲームをする', k: 'game', pl: 'bedroom', d: [40, 120], ok: c => (KIDR(c.A.role) || c.A.role === 'neet' || c.A.role === 'uni' || (c.A.role === 'worker' && c.m.age < 35)), nd: { fun: 28, energy: -4, duty: -4 }, U: c => (c.A.arch === 'inkya' ? 0.4 : 0) + (c.A.futoko ? 0.6 : 0), v: ['（あと1回。あと1回だけ）', '（ランクが上がった。……だれにも言えないけど）', '（オンラインの仲間のほうが、やさしい）'] },
+  { id: 'phone', n: 'スマホをいじる', k: 'phone', pl: 'bedroom', d: [20, 60], ok: c => !SMALL(c.A.role) && c.m.age >= 10, nd: { fun: 12, social: 8 }, U: c => (c.A.futoko ? 0.4 : 0) + (c.m.age < 25 ? 0.15 : 0), v: ['（いいね、まだ3つ……）', '（グループLINEの既読が、つかない）', '（スクロールしてるだけで、1時間たってた）'] },
+  { id: 'read', n: '本・マンガを読む', k: 'read', pl: 'bedroom', d: [30, 60], ok: c => !SMALL(c.A.role) && c.m.age >= 7, nd: { fun: 14, duty: 2 }, U: c => (c.A.arch === 'inkya' ? 0.2 : 0) + (c.A.per === 'shinkei' ? 0.15 : 0), v: ['（あと一章だけ）', '（この主人公、ちょっと自分に似てる）'] },
+  { id: 'study', n: '宿題・勉強をする', k: 'study', pl: 'bedroom', d: [30, 90], w: [[900, 1380]], ok: c => (KIDR(c.A.role) || c.A.role === 'uni') && !c.A.futoko, nd: { duty: 40, fun: -10, energy: -6 }, U: c => (c.A.arch === 'gariben' ? 0.7 : 0) + (c.A.arch === 'youkya' ? -0.2 : 0) + (c.A.role === 'hs' ? 0.2 : 0),
+    v: ['（この問題、明日あてられる気がする）', '（勉強して、なにになるんだろう）', '（テストまで、あと3日）'], fx: c => { const S = c.g.state.gakkoF && c.g.state.gakkoF[c.m.key]; if (S && S.fls && S.fls.stats) S.fls.stats.gaku = clamp(num(S.fls.stats.gaku) + 0.12, 0, 100); } },
+  { id: 'clean', n: '部屋を掃除する', k: 'chores', pl: 'living', d: [20, 50], w: [[480, 1200]], ok: c => ADR(c.A.role) && c.A.role !== 'neet', nd: { duty: 30, energy: -6 }, U: c => (c.house.clean < 45 ? 1 : 0) + (c.A.per === 'shinkei' ? 0.4 : 0) + (c.A.role === 'home' ? 0.6 : 0), v: ['（なんで毎日こんなに散らかるの）', '（掃除機をかけると、少しすっきりする）'],
+    fx: c => { faiHouse(c.g, c.m).clean = clamp(faiHouse(c.g, c.m).clean + 22, 0, 100); if (chance(0.3)) c.log(`${c.nm}が家じゅうを掃除した`, { ico: 'chores' }); } },
+  { id: 'laundry', n: '洗濯物をたたむ', k: 'chores', pl: 'living', d: [20, 40], w: [[540, 1260]], ok: c => (ADR(c.A.role) && c.A.role !== 'neet') || (c.m.age >= 10 && c.A.per === 'yasashii'), nd: { duty: 22 }, U: c => c.A.role === 'home' ? 0.4 : 0, fx: c => { faiHouse(c.g, c.m).clean = clamp(faiHouse(c.g, c.m).clean + 6, 0, 100); }, v: ['（靴下が、また片方だけない）'] },
+  { id: 'bath', n: 'おふろに入る', k: 'bath', pl: 'bath', d: [20, 40], w: [[1050, 1410], [360, 450]], ok: c => !SMALL(c.A.role) && !(custFor(c.g, c.m, c.A).noBath), nd: { hyg: 60, energy: 6, fun: 4 }, U: c => (c.A.per === 'shinkei' ? 0.3 : 0),
+    fx: c => { try { const H = hyOf(c.A, c.m); H.clean = clamp(num(H.clean) + 25, 0, 100); } catch (e) { } }, v: ['（湯船につかると、一日がほどける）', '（ここだけは、だれにもじゃまされない）'] },
+  { id: 'nap', n: '昼寝', k: 'nap', pl: 'living', d: [30, 90], w: [[720, 1020]], ok: c => ['retired', 'home', 'neet', 'uni'].includes(c.A.role) || (c.A.role === 'worker' && c.we) || c.A.futoko, nd: { energy: 30 }, v: ['（うとうと……）'] },
+  { id: 'drink', n: '晩酌', k: 'drink', pl: 'living', d: [40, 90], w: [[1140, 1380]], ok: c => c.m.age >= 20 && !SMALL(c.A.role), nd: { fun: 16, social: 4, energy: -4 }, U: c => (c.A.stress > 55 ? 0.6 : 0) + (c.m.g === 'm' ? 0.2 : 0) + (c.A.per === 'rakuten' ? 0.2 : 0), fx: c => { c.A.stress = clamp(num(c.A.stress) - 6, 0, 100); c.A.hp = clamp(num(c.A.hp) - 0.3, 0, 100); }, v: ['（この一杯のために、一日がんばった）', '（もう一本……は、やめておこう）'] },
+  { id: 'exercise', n: '筋トレ・ストレッチ', k: 'exercise', pl: 'living', d: [20, 40], ok: c => c.m.age >= 10 && !SMALL(c.A.role), nd: { energy: -10, fun: 8, hyg: -8 }, U: c => (c.A.arch === 'sports' ? 0.6 : 0) + (c.A.club ? 0.15 : 0), fx: c => { c.A.hp = clamp(num(c.A.hp) + 0.5, 0, 100); }, v: ['（あと10回……！）'] },
+  { id: 'garden', n: '庭いじり', k: 'garden', pl: 'living', d: [40, 90], w: [[420, 1080]], ok: c => c.A.role === 'retired' || (c.A.role === 'home' && c.m.age >= 45), nd: { fun: 16, duty: 6 }, v: ['（トマトが、赤くなってきた）'] },
+  { id: 'budget', n: '家計簿をつける', k: 'money', pl: 'living', d: [20, 40], w: [[1200, 1380]], ok: c => (c.m.kind === 'pa' || c.m.kind === 'sp') && ADR(c.A.role), nd: { duty: 15, fun: -4 }, U: c => (c.A.per === 'kibishii' || c.A.per === 'shinpai' ? 0.4 : 0),
+    fx: c => { if (chance(0.25)) c.log(`${c.nm}が家計簿を見て、ため息をついた`, { ico: 'money' }); c.A.stress = clamp(num(c.A.stress) + 2, 0, 100); }, v: ['（今月も赤字。どこを削ろう）'] },
+  { id: 'worry', n: 'ぼーっと考えごと', k: 'night', pl: 'bedroom', d: [20, 40], ok: c => !SMALL(c.A.role) && c.m.age >= 9, nd: {}, U: c => (num(c.A.stress) - 55) / 30, fx: c => { c.A.stress = clamp(num(c.A.stress) - 3, 0, 100); }, v: ['（このままで、いいのかな）', '（だれにも言えないことが、少しずつ増えていく）'] },
+  { id: 'rest', n: 'ゴロゴロする', k: 'rest', pl: 'living', d: [20, 60], ok: c => !SMALL(c.A.role), nd: { energy: 8, fun: 4 }, U: () => 0.05, v: ['（なにもしない時間も、大事）'] },
+  // 外へ
+  { id: 'shop', n: 'スーパーへ買い物', k: 'shop', pl: 'street', d: [40, 80], w: [[600, 1140]], ok: c => ADR(c.A.role) && c.m.age >= 18, nd: { duty: 20, fun: 4, energy: -6 }, U: c => (c.house.food < 35 ? 1.4 : -0.3) + (c.A.per === 'mie' ? 0.2 : 0), sim: c => { c.house.food = 90; },
+    fx: c => { faiHouse(c.g, c.m).food = clamp(faiHouse(c.g, c.m).food + 50, 0, 100); if (livesWith(c.g, c.m) && chance(0.2)) faiWant(c.g, c.m, c.A, 'gift', {}); }, v: ['（たまご、ひとり1パックまで。並びなおそうかな）'] },
+  { id: 'friends', n: '友だちと遊びに行く', k: 'play', pl: 'street', d: [90, 180], w: [[780, 1200]], ok: c => (KIDR(c.A.role) && c.m.age >= 9 || c.A.role === 'uni') && !c.A.futoko, nd: { fun: 35, social: 40, energy: -10 }, U: c => (c.A.arch === 'youkya' ? 0.9 : c.A.arch === 'inkya' ? -1.2 : 0) + (num(c.A.hate) * -0.3) + (c.A.bully ? -0.8 : 0),
+    fx: c => { if (chance(0.12)) c.log(`${c.nm}が友だちと遊びに出かけた`, { ico: 'play' }); }, v: ['（今日はカラオケ。終わったらマック）', '（家にいるより、ずっと楽しい）'] },
+  { id: 'walk', n: '散歩', k: 'walk', pl: 'river', d: [30, 60], w: [[360, 1140]], ok: c => c.A.role === 'retired' || c.A.role === 'home' || (c.A.role === 'worker' && c.we), nd: { fun: 10, energy: -4, hyg: -3 }, U: c => c.A.role === 'retired' ? 0.5 : 0, v: ['（風が気持ちいい）'] },
+  { id: 'pachinko', n: 'パチンコ', k: 'play', pl: 'street', d: [120, 240], w: [[600, 1320]], ok: c => c.m.g === 'm' && c.m.age >= 20 && (c.A.role === 'neet' || (c.A.role === 'worker' && c.we) || c.A.role === 'retired') && num(c.A.seed) % 5 === 0, nd: { fun: 22, energy: -8 }, U: () => 0.3,
+    fx: c => { const w = chance(0.35); c.log(`${c.nm}がパチンコで${w ? '勝って、上機嫌で帰ってきた' : '負けて、無言で帰ってきた'}`, { ico: 'play' }); c.A.mood = clamp(num(c.A.mood) + (w ? 8 : -6), 0, 100); }, v: ['（今日は出る気がする）'] },
+  // ふたりで
+  { id: 'chat', n: 'おしゃべり', k: 'talk', pl: 'living', d: [15, 40], soc: (c, B) => !SMALL(B.A.role) && B.m.age >= 4, nd: { social: 22, fun: 6 }, ndB: { social: 20, fun: 6 }, U: c => c.rel / 90, fx: c => { relAdd(c.g, c.m, c.mB, 2); }, v: ['（話してるうちに、どうでもよくなった）'] },
+  { id: 'tvT', n: 'いっしょにテレビ', k: 'tv', pl: 'living', d: [30, 90], soc: (c, B) => !SMALL(B.A.role), nd: { fun: 16, social: 14 }, ndB: { fun: 16, social: 14 }, U: c => c.rel / 100, fx: c => { relAdd(c.g, c.m, c.mB, 1); }, v: ['（同じところで笑った）'] },
+  { id: 'play', n: 'いっしょに遊ぶ', k: 'play', pl: 'living', d: [30, 60], soc: (c, B) => (c.m.age < 13 || B.m.age < 13) && B.m.age >= 2, nd: { fun: 25, social: 20, energy: -6 }, ndB: { fun: 25, social: 20, energy: -6 }, U: c => c.rel / 90 + (c.m.age < 13 ? 0.4 : 0),
+    fx: c => { relAdd(c.g, c.m, c.mB, 3); if (chance(0.2)) c.log(`${c.nm}と${c.nmB}がいっしょに遊んでいた`, { ico: 'play' }); }, v: ['（たのしい！）'] },
+  { id: 'helpHw', n: '宿題を見てあげる', nB: '宿題を見てもらう', k: 'study', pl: 'living', d: [20, 45], w: [[960, 1320]], soc: (c, B) => KIDR(B.A.role) && !B.A.futoko && (isParentOf(c.m, B.m) || olderSib(c.m, B.m)), nd: { social: 10, energy: -4, duty: 10 }, ndB: { duty: 30, social: 8 }, U: c => 0.3 + c.rel / 120 + (c.A.per === 'kibishii' || c.A.per === 'shinpai' ? 0.3 : 0) + (100 - c.B.sim.duty) / 120,
+    fx: c => { if (c.A.per === 'kibishii' && chance(0.3)) { relAdd(c.g, c.m, c.mB, -4); c.B.A.mood = clamp(num(c.B.A.mood) - 4, 0, 100); c.log(`${c.nm}が${c.nmB}の宿題を見ていたら、途中から説教になった`, { ico: 'scold' }); } else { relAdd(c.g, c.m, c.mB, 3); if (chance(0.3)) c.log(`${c.nm}が${c.nmB}の宿題を見てあげた`, { ico: 'study' }); } const S = c.g.state.gakkoF && c.g.state.gakkoF[c.mB.key]; if (S && S.fls && S.fls.stats) S.fls.stats.gaku = clamp(num(S.fls.stats.gaku) + 0.2, 0, 100); } },
+  { id: 'scold', n: 'しかる', nB: 'しかられる', k: 'scold', pl: 'living', d: [10, 25], soc: (c, B) => isParentOf(c.m, B.m) && (KIDR(B.A.role) || B.A.role === 'neet' || B.A.role === 'toddler'), nd: { duty: 8 }, ndB: { fun: -10 },
+    U: c => { const B = c.B; let u = -0.6 + (c.A.per === 'kibishii' ? 0.8 : c.A.per === 'yasashii' ? -0.6 : 0) + (num(c.A.stress) - 50) / 60 + (B.sim.duty < 30 ? 0.5 : 0) + (B.A.futoko ? 0.4 : 0) + (B.A.role === 'neet' ? 0.6 : 0); return u; },
+    fx: c => { relAdd(c.g, c.m, c.mB, -6); c.B.A.mood = clamp(num(c.B.A.mood) - 8, 0, 100); c.B.A.stress = clamp(num(c.B.A.stress) + 8, 0, 100); c.A.stress = clamp(num(c.A.stress) - 3, 0, 100); const why = c.B.A.role === 'neet' ? '「いつまで家にいるつもりなの」' : c.B.A.futoko ? '「明日は学校に行きなさい」' : pick(['「ゲームばっかりしてないで勉強しなさい」', '「部屋をかたづけなさい」', '「スマホを置きなさい」', '「返事くらいしなさい」']); c.log(`${c.nm}が${c.nmB}をしかった。${why}`, { ico: 'scold', imp: 1 }); addDia(c.B.A, c.g, `${c.m.rel}にしかられた。${why}。……わかってるよ。`, -4); }, v: ['（言いすぎたかな。でも、言わなきゃ）'] },
+  { id: 'fight', n: 'けんか', k: 'fight', pl: 'living', d: [10, 30], soc: (c, B) => !SMALL(B.A.role) && B.m.age >= 6 && ['sib', 'couple', 'parent'].includes(faiPair(c.m, B.m)) && !memOf(c.g, c.m, B.m, 'fight', 1),
+    U: c => -1.3 + Math.max(0, num(c.A.stress) - 45) / 35 + Math.max(0, num(c.B.A.stress) - 50) / 60 + Math.max(0, -c.rel) / 50 + (c.A.per === 'hiniku' || c.A.per === 'shinkei' ? 0.25 : 0) + (faiPair(c.m, c.mB) === 'sib' ? 0.2 : 0), nd: { fun: -8 }, ndB: { fun: -10 },
+    fx: c => { relAdd(c.g, c.m, c.mB, -15); memAdd(c.g, c.m, c.mB, 'fight'); for (const X of [c.A, c.B.A]) { X.stress = clamp(num(X.stress) + 10, 0, 100); X.mood = clamp(num(X.mood) - 10, 0, 100); } const P = faiPair(c.m, c.mB), topic = P === 'couple' ? pick(['お金のこと', '家事の分担', '親戚づきあい', '帰りが遅いこと', '子どもの進路']) : P === 'sib' ? pick(['テレビのチャンネル', 'おやつの取りあい', 'ゲームの順番', '部屋の境界線', 'お風呂の順番']) : pick(['門限', '成績', 'スマホの使いすぎ', '将来のこと', '言葉づかい']);
+      c.log(`【けんか】${c.nm}と${c.nmB}が「${topic}」でけんかした`, { ico: 'fight', imp: 2 }); addDia(c.A, c.g, `${c.mB.rel}と${topic}でけんかした。`, -4); addDia(c.B.A, c.g, `${c.m.rel}と${topic}でけんかした。`, -4);
+      if (livesWith(c.g, c.m) && faiAtHome(c.g)) { try { c.g.addNeed('stress', 3); } catch (e) { } } } , v: ['（なんでわかってくれないの）'] },
+  { id: 'makeup', n: '仲直りする', k: 'talk', pl: 'living', d: [10, 30], soc: (c, B) => !!memOf(c.g, c.m, B.m, 'fight', 4), nd: { social: 20 }, ndB: { social: 18 }, U: c => 0.4 + (num(c.A.mood) - 40) / 60 + (c.A.per === 'yasashii' ? 0.5 : c.A.per === 'mie' ? -0.4 : 0),
+    fx: c => { relAdd(c.g, c.m, c.mB, 12); memAdd(c.g, c.m, c.mB, 'makeup'); c.log(`${c.nm}が${c.nmB}に「さっきはごめん」と言って、仲直りした`, { ico: 'heart', imp: 1 }); }, v: ['（ちゃんと謝れた）'] },
+  { id: 'massage', n: '肩をもんであげる', nB: '肩をもんでもらう', k: 'care', pl: 'living', d: [10, 20], soc: (c, B) => (isParentOf(B.m, c.m) || faiPair(c.m, B.m) === 'grand' && c.m.age < B.m.age) && c.m.age >= 6, nd: { social: 12 }, ndB: { energy: 10, social: 12 }, U: c => (c.A.per === 'yasashii' ? 0.4 : -0.2) + c.rel / 80,
+    fx: c => { relAdd(c.g, c.m, c.mB, 4); c.log(`${c.nm}が${c.nmB}の肩をもんであげた`, { ico: 'heart' }); }, v: ['（かたい……おつかれさま）'] },
+  { id: 'tea', n: '夫婦でお茶', k: 'talk', pl: 'living', d: [20, 40], soc: (c, B) => faiPair(c.m, B.m) === 'couple', nd: { social: 25, fun: 8 }, ndB: { social: 25, fun: 8 }, U: c => 0.2 + c.rel / 70, fx: c => { relAdd(c.g, c.m, c.mB, 4); }, v: ['（こうやって話すの、ひさしぶり）'] },
+  { id: 'gossip', n: 'あなたのうわさ話', k: 'talk', pl: 'living', d: [15, 30], soc: (c, B) => ADR(B.A.role) && ADR(c.A.role) && c.m.age >= 25 && B.m.age >= 25 && (c.m.kind === 'pa' || c.m.kind === 'gp' || c.m.kind === 'sp'), nd: { social: 18 }, ndB: { social: 18 }, U: c => -0.2 + c.rel / 100 + (c.day % 3 === 0 ? 0.3 : 0),
+    fx: c => { const me = c.me; let q, d = 0; if (me.famous) { q = pick(['「テレビ、また出てたね」「ご近所に自慢しちゃった」', '「有名になって、遠くに行っちゃった気がする」']); d = 2; } else if (me.neet) { q = pick(['「あの子、このままで大丈夫なのかしら」', '「いつになったら働くんだ」']); d = -2; } else if (me.bullied) { q = '「最近、元気がない気がする」「……聞いてみる？」'; d = 1; } else if (me.student) { q = pick(['「勉強、ちゃんとやってるのかな」', '「最近、よくがんばってるよね」', '「友だち、いるのかな」']); d = 1; } else q = pick(['「ちゃんと食べてるのかな」', '「たまには帰ってくればいいのに」']);
+      for (const X of [c.A, c.B.A]) X.op = clamp(num(X.op) + d, 0, 100); relAdd(c.g, c.m, c.mB, 2); c.log(`${c.nm}と${c.nmB}が、あなたのことを話していた。${q}`, { ico: 'talk', imp: 1, overhear: 1 }); }, v: ['（あの子の話になると、つい長くなる）'] },
+  { id: 'care', n: '赤ちゃんのお世話', k: 'care', pl: 'living', d: [20, 40], soc: (c, B) => SMALL(B.A.role) && (isParentOf(c.m, B.m) || c.m.kind === 'gp' || olderSib(c.m, B.m)) && c.m.age >= 12, nd: { duty: 25, energy: -6, social: 10 }, ndB: { social: 20 }, U: c => 0.6 + (c.m.kind === 'sp' ? 0.4 : 0),
+    fx: c => { relAdd(c.g, c.m, c.mB, 4); c.B.A.mood = clamp(num(c.B.A.mood) + 6, 0, 100); }, v: ['（寝顔は、天使）'] },
+  { id: 'story', n: '昔話をする', nB: '昔話を聞く', k: 'talk', pl: 'living', d: [20, 40], soc: (c, B) => c.m.kind === 'gp' && (B.m.kind === 'sib' || B.m.kind === 'kid'), nd: { social: 20, fun: 8 }, ndB: { social: 12, fun: 4 }, U: c => 0.3 + c.rel / 90, fx: c => { relAdd(c.g, c.m, c.mB, 3); }, v: ['（わしが若いころはな……）'] },
+];
+FA.push(
+  { id: 'order', sys: 1, n: '出前をたのむ', k: 'phone', pl: 'living', d: [20, 20], nd: { duty: 15 }, v: ['（今日はもう、なにもつくれない）'],
+    fx: c => { const pm = c.blk.s >= 720, dish = pick(['ピザ', 'お寿司', '中華', 'ハンバーガー', 'カレー']) + 'の出前'; faiHouse(c.g, c.m).meal = { day: c.g.state.day, slot: pm ? 'pm' : 'am', dish, cook: c.m.key, t: c.blk.e, who: [] }; c.log(`${c.nm}が「今日は疲れたから」と、出前をたのんだ（${dish}）`, { ico: 'meal', imp: 1 }); if (livesWith(c.g, c.m)) faiWant(c.g, c.m, c.A, 'dinner', { dish, exp: 1290 }); } },
+  { id: 'meal', sys: 1, n: '家族でごはん', k: 'dinner', pl: 'living', d: [20, 30], nd: { food: 55, social: 12 }, v: ['（いただきます）', '（みんなでそろって食べるのは、やっぱりいい）', '（テレビの音だけが、食卓に響いている）'],
+    fx: c => { const H = faiHouse(c.g, c.m), slot = c.blk.s < 720 ? 'am' : 'pm'; if (!(H.meal && H.meal.day === c.g.state.day && H.meal.slot === slot)) return; H.meal.who.push(c.m.rel); const txt = `${H.meal.who.join('と')}が、そろって「${H.meal.dish}」を食べた`; const L = c.F.log.find(x => x.d === (c.dOver || c.g.state.day) && x.mealKey === slot + H.meal.dish); if (L) { L.text = txt; c.quiet = 1; } else { c.log(txt, { ico: 'meal' }); c.F.log[0].mealKey = slot + H.meal.dish; } } });
+const FA_BY = Object.fromEntries(FA.map(a => [a.id, a]));
+const FAI_ICO = { cook: 'cook', dinner: 'meal', snack: 'meal', tv: 'tv', game: 'game', phone: 'phone', read: 'book', study: 'book', chores: 'broom', bath: 'drop', nap: 'z', sleep: 'z', drink: 'glass', exercise: 'sweat', garden: 'leaf', money: 'money', night: 'cloud', rest: 'note', talk: 'talk', play: 'note', scold: 'anger', fight: 'anger', care: 'heart' };
+// ---- 欲求の重さ ----
+function faiDutyW(m, A) { const r = A.role; let w = r === 'home' ? 1.25 : KIDR(r) ? (r === 'elem' ? 0.6 : 0.95) : r === 'uni' ? 0.7 : r === 'worker' ? 0.55 : r === 'retired' ? 0.4 : r === 'neet' ? 0.15 : 0.4; if (A.per === 'kibishii') w *= 1.3; if (A.per === 'mukanshin') w *= 0.7; return w; }
+function faiScore(c, act) {
+  const A = c.A, S = c.sim; let u = 0;
+  for (const n in act.nd) { const gain = act.nd[n], urg = n === 'duty' ? faiDutyW(c.m, A) * (1 + (100 - S.duty) / 100) : ((100 - S[n]) / 100) ** 2 * 3 + 0.08; u += gain / 40 * urg * (gain > 0 ? 1 : 0.5); }
+  const PM = { yasashii: { social: 1.2 }, kibishii: { duty: 1.2 }, shinpai: { social: 1.1 }, mie: { fun: 1.1 }, mukanshin: { social: 0.6 }, hiniku: { social: 0.8 }, rakuten: { fun: 1.3 }, shinkei: { hyg: 1.4 } }[A.per] || {};
+  for (const n in PM) if (act.nd[n] > 0) u *= PM[n];
+  if (A.arch === 'youkya' && act.nd.social > 0) u *= 1.3; if (A.arch === 'inkya' && act.soc) u *= 0.75;
+  if (act.U) { try { u += act.U(c); } catch (e) { } }
+  return u + c.R() * 0.3;
+}
+const FAI_MAXD = { massage: 1, play: 2, chat: 3, tvT: 2, tea: 1, gossip: 1, helpHw: 1, scold: 1, story: 1, makeup: 1, bath: 1, snack: 2, study: 2, game: 3, cook: 2, clean: 1, laundry: 1, budget: 1, shop: 1, friends: 1, walk: 1, garden: 1, drink: 1, exercise: 1, nap: 1, pachinko: 1, read: 2, phone: 3, tv: 3, worry: 2, rest: 3 };
+const faiRepeat = (act, n) => n <= 0 ? 0 : n >= (FAI_MAXD[act.id] || 3) ? 3 : n * 0.4;
+// ---- 1日の計画 ----
+function faiCtxBase(g, F) { const d = g.state.day; return { g, F, day: d, we: wdOf(g) >= 5, me: meSum(g) }; }
+function faiPlan(g, fromT = 0) {
+  const F = faiSt(g), day = g.state.day, base = faiCtxBase(g, F), R0 = famRoster(g);
+  const R = sRand(hashStr('fai' + day + '|' + fromT + '|' + (g.state.profile && g.state.profile.familyName || '')));
+  const ags = R0.map(m => { const A = agOf(g, m), old = F.plans[m.key] || [];
+    const keep = fromT > 0 ? old.filter(b => b.s < fromT).map(b => b.e > fromT ? { ...b, e: fromT } : b) : [];
+    let O = []; try { O = schedOf0(g, m, A).filter(b => b.e > fromT && (SMALL(A.role) || FAI_OBL[b.k] || (b.k === 'lunch' && ['classroom', 'hallway', 'office'].includes(b.place)))).map(b => ({ ...b, s: Math.max(b.s, fromT), obl: 1 })); } catch (e) { }
+    O = O.filter(b => !(KIDR(A.role) && ((b.k === 'commute' && b.s >= 840) || (b.k === 'cram' && /帰宅/.test(b.what || '')))));
+    return { m, A, blocks: keep.concat(O), sim: { ...needOf(A) }, cnt: {} }; });
+  const houses = {}; for (const ag of ags) { const h = houseOf(ag.m); if (!houses[h]) { const H = faiHouse(g, ag.m); houses[h] = { cooked: {}, ate: {}, food: num(H.food, 60), clean: num(H.clean, 60) }; } }
+  for (const ag of ags) for (const b of ag.blocks) if (b.act) ag.cnt[b.act] = (ag.cnt[b.act] || 0) + 1;
+  const busy = (ag, t) => ag.blocks.some(b => t >= b.s && t < b.e);
+  const nextBusy = (ag, t) => { let n = 1440; for (const b of ag.blocks) if (b.s >= t && b.s < n) n = b.s; return n; };
+  const decay = (ag, h) => { for (const n of FAI_NEEDS) ag.sim[n] = clamp(ag.sim[n] - FAI_DECAY[n] * h, 0, 100); };
+  const applyNd = (ag, nd) => { for (const n in nd) ag.sim[n] = clamp(ag.sim[n] + nd[n], 0, 100); };
+  const t0 = Math.ceil(fromT / 30) * 30;
+  const busyR = (ag, a, b) => ag.blocks.some(x => x.s < b && x.e > a);
+  for (const h of Object.keys(houses)) {
+    const mem = ags.filter(ag => houseOf(ag.m) === h && !SMALL(ag.A.role));
+    for (const [slot, w0, w1, len] of [['am', 330, 460, 30], ['pm', 1020, 1240, 50]]) {
+      if (fromT > w0 + 30) continue;
+      const C = mem.filter(ag => ag.m.age >= 18 && ADR(ag.A.role) && ag.A.role !== 'uni').map(ag => { let t = w0; while (t < w1 && busyR(ag, t, t + 20)) t += 10; const pref = (ag.A.role === 'home' ? 3 : ag.m.kind === 'pa' && ag.m.g === 'f' ? 2 : ag.m.kind === 'sp' ? 1.6 : ag.m.kind === 'gp' ? 1.3 : ag.A.role === 'neet' ? 0.4 : 1) + R() * 0.9 - (num(ag.A.stress) > 75 ? 1 : 0) - (t - w0) / 90; return { ag, t, pref }; }).filter(x => x.t < w1).sort((a, b) => b.pref - a.pref);
+      if (!C.length) continue;
+      const ck = C[0], del = slot === 'pm' && (num(ck.ag.A.stress) > 72 || R() < 0.07 || houses[h].food < 12);
+      const cs = ck.t, nb = nextBusy(ck.ag, cs + 1), ce = Math.min(cs + (del ? 20 : len), nb > cs ? nb : 1440);
+      ck.ag.blocks.push({ s: cs, e: ce, what: del ? '出前をたのむ' : slot === 'am' ? '朝ごはんをつくる' : '夕ごはんをつくる', place: del ? 'living' : 'kitchen', k: del ? 'phone' : 'cook', act: del ? 'order' : 'cook', id: `${day}:${ck.ag.m.key}:${slot}ck`, auto: 1, v: (FA_BY[del ? 'order' : 'cook'] || {}).v });
+      ck.ag.cnt.cook = (ck.ag.cnt.cook || 0) + 1; houses[h].cooked[slot] = ce;
+      const es = ce, ee = es + (slot === 'am' ? 20 : 30);
+      for (const ag of mem) { if (busyR(ag, es, ee)) continue; ag.blocks.push({ s: es, e: ee, what: slot === 'am' ? '朝ごはん' : '家族で夕ごはん', place: 'living', k: 'dinner', act: 'meal', id: `${day}:${ag.m.key}:${slot}meal`, auto: 1, v: FA_BY.meal.v }); houses[h].ate[ag.m.key + slot] = 1; applyNd(ag, FA_BY.meal.nd); }
+    }
+  }
+  for (let t = t0; t < 1440; t += 30) {
+    for (const ag of ags) { decay(ag, 0.5); const ob = ag.blocks.find(b => b.obl && b.s >= t && b.s < t + 30); if (ob) { if (ob.k === 'sleep') ag.sim.energy = Math.min(100, ag.sim.energy + (ob.e - ob.s) / 60 * 11); if (ob.k === 'class' || ob.k === 'work') { ag.sim.duty = Math.min(100, ag.sim.duty + 25); ag.sim.social = Math.min(100, ag.sim.social + (ag.A.bully ? 0 : 10)); } } }
+    const order = ags.slice().sort(() => R() - 0.5);
+    for (const ag of order) {
+      if (SMALL(ag.A.role) || busy(ag, t)) continue;
+      const c = { ...base, t, m: ag.m, A: ag.A, sim: ag.sim, house: houses[houseOf(ag.m)], R, cnt: ag.cnt };
+      let best = null, bs = -1e9;
+      for (const act of FA) {
+        if (act.sys) continue;
+        if (act.w && !act.w.some(([a, b]) => t >= a && t < b)) continue;
+        if (act.soc) {
+          for (const bg of ags) {
+            if (bg === ag || houseOf(bg.m) !== houseOf(ag.m)) continue;
+            const smB = SMALL(bg.A.role);
+            if (smB ? (act.id !== 'care' && act.id !== 'play') || bg.blocks.some(b => t >= b.s && t < b.e && (b.k === 'sleep' || b.k === 'hoiku')) || bg.cared === t : busy(bg, t)) continue;
+            const c2 = { ...c, mB: bg.m, B: bg, rel: relOf(g, ag.m, bg.m) };
+            try { if (!act.soc(c2, bg)) continue; } catch (e) { continue; }
+            const s = faiScore(c2, act) + (act.ndB ? 0.1 : 0) - num(ag.cnt[act.id]) * 0.35; if (s > bs) { bs = s; best = { act, bg }; }
+          }
+          continue;
+        }
+        try { if (act.ok && !act.ok(c)) continue; } catch (e) { continue; }
+        const s = faiScore(c, act) - faiRepeat(act, num(ag.cnt[act.id])); if (s > bs) { bs = s; best = { act }; }
+      }
+      if (!best) continue;
+      const act = best.act, bg = best.bg;
+      let dur = Math.round((act.d[0] + R() * (act.d[1] - act.d[0])) / 10) * 10;
+      const smB = bg && SMALL(bg.A.role); let end = Math.min(t + dur, nextBusy(ag, t), bg && !smB ? nextBusy(bg, t) : 1440, 1440); if (end - t < 10) end = Math.min(t + 10, 1440);
+      const c3 = { ...c, mB: bg && bg.m, B: bg };
+      const what = typeof act.what === 'function' ? act.what({ ...c3, F }) : typeof act.n === 'function' ? act.n(ag.m) : act.n;
+      const id = `${day}:${ag.m.key}:${t}`;
+      ag.blocks.push({ s: t, e: end, what: bg ? `${what}（${bg.m.rel}と）` : what, place: act.pl, k: act.k, act: act.id, with: bg ? bg.m.key : null, v: act.v, id, auto: 1 });
+      applyNd(ag, act.nd); if (act.sim) try { act.sim(c3); } catch (e) { }
+      ag.cnt[act.id] = (ag.cnt[act.id] || 0) + 1; if (bg) bg.cnt[act.id] = (bg.cnt[act.id] || 0) + 1;
+      if (act.id === 'cook') c.house.cooked[t < 720 ? 'am' : 'pm'] = end;
+      if (bg && smB) bg.cared = t;
+      if (bg && !smB) { const wB = act.nB || act.n; bg.blocks.push({ s: t, e: end, what: `${typeof wB === 'function' ? wB(bg.m) : wB}（${ag.m.rel}と）`, place: act.pl, k: act.k, act: act.id, with: ag.m.key, v: act.v, id: id + ':b', auto: 1, passive: 1 }); applyNd(bg, act.ndB || act.nd); }
+    }
+  }
+  for (const ag of ags) F.plans[ag.m.key] = ag.blocks.filter(b => b.e > b.s).sort((a, b) => a.s - b.s);
+  F.day = day;
+}
+// 目線変更などで使う予定は、AIの計画を返す
+function schedOf(g, m, A) {
+  try { const F = faiSt(g); if (F && !SMALL(A.role)) { if (F.day !== g.state.day) faiNewDay(g); const P = F.plans[m.key]; if (P && P.length) return P; } } catch (e) { console.error('[fai] sched', e); }
+  return schedOf0(g, m, A);
+}
+function faiNewDay(g) {
+  const F = faiSt(g);
+  if (F.day && F.day !== g.state.day) { try { faiExecUntil(g, 1440, true, F.day); } catch (e) { } }
+  F.plans = {}; F.done = {}; F.lastT = -1; if (isObj(F.hs)) for (const h in F.hs) F.hs[h].meal = null;
+  if (isObj(F.rel0)) for (const k in F.rel) if (F.rel0[k] != null) F.rel[k] = Math.round(F.rel[k] + (F.rel0[k] - F.rel[k]) * 0.06);
+  for (const m of famRoster(g)) { const A = agOf(g, m), N = needOf(A); N.duty = clamp(N.duty - 30, 0, 100); if (A.want && A.want.day !== g.state.day && A.want.type !== 'money') A.want = null; }
+  faiPlan(g, 0);
+}
+// ---- 実行 ----
+function faiAtHome(g) { try { const mp = g.map; return !!(mp && FAI_HOMEP[mp.placeId] && mp.roomId === FAI_HOMEP[mp.placeId]); } catch (e) { return false; } }
+function faiLog(g, text, o = {}) {
+  const F = faiSt(g); F.log.unshift({ d: o.d != null ? o.d : g.state.day, t: o.t != null ? o.t : clockMin(g), text, ico: o.ico || 'talk', imp: o.imp || 0 }); if (F.log.length > 140) F.log.length = 140;
+  if (o.silent) return;
+  try { if (o.imp && o.home && faiAtHome(g) && g.top === g.map) g.notify(o.overhear ? `（${text.split('。')[0]}…）` : text, { color: o.imp >= 2 ? '#ff9a8a' : '#ffe08a' }); } catch (e) { }
+}
+function faiExecUntil(g, T, silent, dOver) {
+  const F = faiSt(g), R0 = famRoster(g), byKey = Object.fromEntries(R0.map(m => [m.key, m])), me = meSum(g);
+  const lt = F.lastT < 0 ? 0 : F.lastT;
+  // 欲求はだんだん減る
+  if (T > lt) for (const m of R0) { const A = agOf(g, m), N = needOf(A), h = (T - lt) / 60; const cur = (F.plans[m.key] || []).find(b => T >= b.s && T < b.e); for (const n of FAI_NEEDS) N[n] = clamp(N[n] - FAI_DECAY[n] * h * (n === 'energy' && cur && cur.k === 'sleep' ? -2.6 : 1) * (n === 'food' && cur && cur.k === 'sleep' ? 0.4 : 1), 0, 100); if (N.food < 15 || N.energy < 12) A.stress = clamp(num(A.stress) + h * 2, 0, 100); }
+  for (const m of R0) {
+    const A = agOf(g, m);
+    for (const b of F.plans[m.key] || []) {
+      if (b.s > T || F.done[b.id]) continue; F.done[b.id] = 1;
+      const N = needOf(A);
+      if (b.obl) { if (b.k === 'class' || b.k === 'work') { N.duty = clamp(N.duty + 30, 0, 100); N.social = clamp(N.social + (A.bully ? -4 : 12), 0, 100); N.energy = clamp(N.energy - 5, 0, 100); } continue; }
+      const act = FA_BY[b.act]; if (!act) continue;
+      if (b.passive) { for (const n in act.ndB || act.nd) N[n] = clamp(N[n] + (act.ndB || act.nd)[n], 0, 100); continue; }
+      for (const n in act.nd) N[n] = clamp(N[n] + act.nd[n], 0, 100);
+      const gain = num(act.nd.fun) + num(act.nd.social); A.mood = clamp(num(A.mood) + gain / 30, 0, 100);
+      const mB = b.with ? byKey[b.with] : null, B = mB ? { m: mB, A: agOf(g, mB) } : null;
+      const nm = `${m.rel}`, nmB = mB ? `${mB.rel}` : '';
+      const c = { g, F, m, A, mB, B, blk: b, me, nm, nmB, t: b.s, day: g.state.day, dOver, log: (text, o = {}) => faiLog(g, text, { ...o, t: b.s, silent, home: livesWith(g, m), d: dOver }) };
+      const top0 = F.log[0];
+      if (act.fx) { try { act.fx(c); } catch (e) { console.error('[fai] fx', act.id, e); } }
+      if (!c.quiet && F.log[0] === top0) faiLog(g, `${nm}：${b.what}`, { t: b.s, ico: FAI_ICO[act.k] || 'note', silent: true, d: dOver });
+      // 買い物・外出のあと、ときどきおみやげ
+    }
+  }
+}
+function faiRun(g) {
+  if (!g || !g.state || !g.state.day) return;
+  const F = faiSt(g); if (!F) return;
+  if (F.day !== g.state.day) faiNewDay(g);
+  const t = clockMin(g); if (t === F.lastT) return;
+  if (F.lastT > t) F.lastT = t;
+  const h0 = Math.floor(Math.max(0, F.lastT) / 60), h1 = Math.floor(t / 60);
+  faiExecUntil(g, t, false);
+  if (h1 !== h0 || F.lastT < 0) { try { faiWantTick(g, t); } catch (e) { console.error('[fai] want', e); } }
+  F.lastT = t;
+}
+// ---- 主人公へのおねがい・報告 ----
+const FAI_WANT = { dinner: 'ごはんできたよ', allowance: 'おこづかい', help: '手伝って', report: '聞いて！', money: 'お金かして', confide: '相談がある', complain: '話がある', invite: '遊ぼう', gift: 'おみやげ' };
+function faiWant(g, m, A, type, o = {}) {
+  if (A.want && A.want.type !== 'help' && type !== 'dinner') return;
+  const t = clockMin(g); A.want = { type, day: g.state.day, t0: t, exp: o.exp || Math.min(1439, t + 360), ...o };
+}
+function faiWantTick(g, t) {
+  const F = faiSt(g), me = meSum(g), d = (() => { try { return dateOf(g, g.state.day); } catch (e) { return { month: 1, dom: 1, year: 0 }; } })(), minor = meMinor(g);
+  for (const m of famRoster(g)) {
+    const A = agOf(g, m), act = nowAct(g, m, A), live = livesWith(g, m);
+    if (A.want && (t > A.want.exp || A.want.day !== g.state.day && A.want.type !== 'money')) { faiWantExpire(g, m, A); A.want = null; }
+    if (A.want && !A.want.sent && !(live && faiAtHome(g)) && t - A.want.t0 >= 120) faiWantRemote(g, m, A);
+    if (A.want || SMALL(A.role) || act.k === 'sleep' || t < 420 || t > 1320) continue;
+    const freeNow = !!act.auto;
+    const S = g.state.gakkoF && g.state.gakkoF[m.key], op = num(A.op, 50);
+    const mk = `${d.year}-${d.month}`;
+    if (minor && m.kind === 'pa' && d.dom <= 5 && F.allowM !== mk && (m.g === 'f' || !famRoster(g).some(x => x.frel === 'mother'))) { F.allowM = mk; faiWant(g, m, A, 'allowance', { amt: clamp(Math.round((ageOf(g) - 6) * 600 / 500) * 500, 1000, 5000) }); continue; }
+    if (m.kind === 'gp' && me.age < 26 && chance(0.0025)) { faiWant(g, m, A, 'allowance', { amt: pick([3000, 5000, 10000]) }); continue; }
+    if (!freeNow) continue;
+    if (live && (act.k === 'chores' || act.k === 'cook') && op >= 35 && chance(0.2)) { faiWant(g, m, A, 'help', { exp: act.e }); continue; }
+    if (KIDR(A.role) && num(A.mood) >= 55 && chance(0.035)) { const sc = S && S.tests && S.tests.length ? S.tests[S.tests.length - 1] : null; faiWant(g, m, A, 'report', { text: sc && sc.avg ? `テストの平均、${Math.round(sc.avg)}点だった！` : pick(['今日ね、体育でいちばんだったんだよ！', '学校でね、先生にほめられた！', '友だちと秘密基地つくったんだ！', '給食のおかわりジャンケン、勝った！']) }); continue; }
+    if ((m.kind === 'sib' || m.kind === 'kid') && m.age >= 13 && op > 25 && chance(0.008)) { faiWant(g, m, A, 'money', { amt: pick([1000, 2000, 3000, 5000, 10000]), why: pick(['友だちと遊びに行くお金が足りなくて', 'ゲームの課金……じゃなくて、参考書', '服を買いたくて', 'スマホの画面、割っちゃって']) }); continue; }
+    if (KIDR(A.role) && (A.bully >= 2 || (S && S.bully)) && op >= 50 && !A.flags.confided && chance(0.06)) { faiWant(g, m, A, 'confide', {}); continue; }
+    if (op < 28 && chance(0.03)) { faiWant(g, m, A, 'complain', {}); continue; }
+    if (op >= 55 && (wdOf(g) >= 5) && chance(0.04)) { faiWant(g, m, A, 'invite', {}); continue; }
+  }
+}
+function faiMsg(g, m, text) { const F = faiSt(g); if (F.msgDay !== g.state.day) { F.msgDay = g.state.day; F.msgN = 0; } if (F.msgN >= 3 || typeof g.message !== 'function') return false; F.msgN++; try { const o = { from: `${m.rel}・${m.name}`, kind: 'chat', text }; if (m.pid && E.Ut && E.Ut[m.pid]) o.person = m.pid; if (m.fid) o.family = m.fid; g.message(o); return true; } catch (e) { return false; } }
+function faiWantRemote(g, m, A) {
+  const w = A.want; w.sent = 1;
+  if (w.type === 'allowance' && !livesWith(g, m)) { g.state.money = num(g.state.money) + w.amt; faiMsg(g, m, `おこづかい、少しだけど送っておいたよ。（${yen(w.amt)}）\nちゃんと食べるんだよ。`); faiLog(g, `${m.rel}から、おこづかい${yen(w.amt)}が届いた`, { ico: 'money' }); A.want = null; return; }
+  if (w.type === 'money') { try { E.R4(g, { kind: 'np_fai', key: `np_fai_money_${m.key}_${g.state.day}`, title: `${m.rel}・${m.name}からのおねがい`, text: `「${w.why}……${yen(w.amt)}、貸してくれない？ ぜったい返すから」`, choices: [`貸す（${yen(w.amt)}）`, 'ことわる'], def: 1, days: 3, data: { key: m.key, type: 'money', amt: w.amt } }); } catch (e) { } return; }
+  const T = { report: `聞いて！ ${w.text || ''}`, confide: '……相談したいことがあるんだけど、今度話せる？', complain: '前から思ってたんだけど、ちょっと話がある。', invite: '今度の休み、いっしょにどこか行かない？', dinner: '夕ごはん、ラップしておいたよ。', gift: 'おみやげ買ってきたよ。帰ったら渡すね。' }[w.type];
+  if (T && faiMsg(g, m, T) && (w.type === 'report' || w.type === 'dinner')) { A.op = clamp(num(A.op) + 1, 0, 100); A.want = null; }
+}
+function faiWantExpire(g, m, A) { const w = A.want; if (!w) return; if (w.type === 'dinner' && livesWith(g, m)) faiLog(g, `${m.rel}がつくった夕ごはんが、ラップをかけたまま冷めていった`, { ico: 'meal', silent: 1 }); if (w.type === 'help') A.op = clamp(num(A.op) - 1, 0, 100); if (w.type === 'confide') addSec(A, g, '相談しようとしたけど、タイミングがなかった。'); }
+function faiInbox(g, it, k, auto) {
+  const d = it.data || {}, m = famRoster(g).find(x => x.key === d.key); if (!m) return '';
+  const A = agOf(g, m); A.want = null;
+  if (d.type === 'money') {
+    if (k === 0 && num(g.state.money) >= d.amt) { g.state.money -= d.amt; A.op = clamp(num(A.op) + 6, 0, 100); A.flags.debt = num(A.flags.debt) + d.amt; faiLog(g, `${m.rel}に${yen(d.amt)}を貸した`, { ico: 'money' }); addDia(A, g, `${yen(d.amt)}、貸してもらえた。……ちゃんと返さなきゃ。`, 5); return `${m.rel}に${yen(d.amt)}を貸した。「ありがとう！ぜったい返す！」`; }
+    A.op = clamp(num(A.op) - 4, 0, 100); addDia(A, g, 'お金を貸してほしいって頼んだら、ことわられた。', -4); return k === 0 ? 'お金が足りなくて、貸せなかった。' : `${m.rel}のおねがいを、ことわった。`;
+  }
+  return '';
+}
+// ---- 話しかけられたとき（家の中） ----
+function faiReason(A, act) {
+  const a = act && FA_BY[act.act]; if (a && a.nd) { const N = needOf(A); let bn = null, bv = 0; for (const n in a.nd) { const v = a.nd[n] * (n === 'duty' ? 1.2 : ((100 - N[n]) / 100 + 0.2)); if (v > bv) { bv = v; bn = n; } } if (a.soc) return pick(['いっしょにいたくて', 'たまには話したくて', '顔を見たら、なんとなく']); if (bn) return { food: 'おなかすいちゃって', energy: 'ちょっと疲れてて', fun: 'ひまだったから', social: 'だれかと話したくて', hyg: 'さっぱりしたくて', duty: 'やること、やらなきゃね' }[bn]; } const N = needOf(A); const lo = FAI_NEEDS.filter(n => n !== 'duty').sort((a, b) => N[a] - N[b])[0]; if (N.duty < 30 && A.role !== 'neet') return 'やること、やらなきゃね'; return { food: 'おなかすいちゃって', energy: 'ちょっと疲れてて', fun: 'ひまだったから', social: 'だれかと話したくて', hyg: 'さっぱりしたくて' }[lo] || 'なんとなく'; }
+async function faiTalk(g, key, ent) {
+  const m = famRoster(g).find(x => x.key === key); if (!m) return;
+  const A = agOf(g, m), F = faiSt(g), act = nowAct(g, m, A), name = `${m.rel}・${String(m.name).split(' ').pop()}`, look = ent && ent.look;
+  const say = t => g.say(t, { name, look }), once = k => { const kk = key + ':' + k; if (F.talked[kk] === g.state.day) return false; F.talked[kk] = g.state.day; return true; };
+  const w = A.want;
+  if (w) { A.want = null; await faiResolve(g, m, A, w, say, once); return; }
+  const items = [{ label: '話す' }, { label: '何してるの？' }];
+  const chores = act.k === 'chores' || act.k === 'cook', free = act.auto && !['study', 'fight', 'scold'].includes(act.k);
+  if (chores) items.push({ label: '手伝う', right: '30分' });
+  if (free && (m.age < 16 || m.kind === 'sib' || m.kind === 'kid')) items.push({ label: 'いっしょに遊ぶ', right: '1時間' });
+  let ls = null; try { ls = lsOf(g); } catch (e) { }
+  const canTeach = ls && ls.high && !ls.high.grad && (m.kind === 'pa' || m.kind === 'gp' || (m.kind === 'sib' && m.age > ageOf(g)));
+  if (canTeach && free) items.push({ label: '勉強を教えてもらう', right: '1時間' });
+  items.push({ label: 'やめる' });
+  const k = await g.list({ title: `${name}（${act.what}）`, items, x: 12, y: 44, w: 320, px: true });
+  const lab = k >= 0 && items[k] ? items[k].label : 'やめる';
+  if (lab === '話す') {
+    const op = num(A.op, 50), N = needOf(A);
+    const L = op >= 70 ? ['「おかえり！ 今日はどうだった？」', '「なんか、いいことあった？ 顔に書いてあるよ」', '「最近がんばってるね。ちゃんと見てるよ」'] : op >= 40 ? ['「ん？ どうしたの」', '「……べつに、ふつうだよ」', '「ごはん、食べた？」'] : ['「……なに」', '「話しかけないで。いま忙しいから」', '「用がないなら、あとにして」'];
+    if (num(A.stress) > 70) L.push('「ごめん、いまちょっと余裕なくて」');
+    if (m.kind === 'sib' && sibIsYounger(m) && num(A.cx) >= 2) L.push(`「……${aniWord(g)}ちゃんは、いいよね」`);
+    await say(pick(L));
+    if (once('talk')) { A.op = clamp(op + 2, 0, 100); N.social = clamp(N.social + 15, 0, 100); try { g.addNeed('stress', -2); } catch (e) { } }
+  } else if (lab === '何してるの？') {
+    await say(`「${act.what.replace(/（.+と）$/, '')}${act.with ? `。${(famRoster(g).find(x => x.key === act.with) || {}).rel || ''}といっしょにね` : ''}。${act.auto ? faiReason(A, act) : 'いまは、やることがあるの'}」`);
+  } else if (lab === '手伝う') {
+    try { g.advanceTime(30, 'np_fai'); } catch (e) { }
+    { const H = faiHouse(g, m); H.clean = clamp(H.clean + 10, 0, 100); } needOf(A).duty = clamp(needOf(A).duty + 20, 0, 100);
+    if (once('help')) A.op = clamp(num(A.op) + 3, 0, 100);
+    await say(pick(['「ありがとう、助かる！」', '「めずらしいね。……でも、うれしい」', '「じゃあ、そっちお願い」']));
+    faiLog(g, `あなたが${m.rel}の家事を手伝った`, { ico: 'chores' });
+  } else if (lab === 'いっしょに遊ぶ') {
+    try { g.advanceTime(60, 'np_fai'); } catch (e) { }
+    const N = needOf(A); N.fun = clamp(N.fun + 25, 0, 100); N.social = clamp(N.social + 20, 0, 100);
+    if (once('play')) { A.op = clamp(num(A.op) + 4, 0, 100); try { g.addNeed('stress', -6); } catch (e) { } }
+    await say(pick(['「やったー！ もう1回！」', '「ずるい！ いまのなし！」', '「たのしかった！ また遊ぼうね」']));
+    faiLog(g, `あなたと${m.rel}がいっしょに遊んだ`, { ico: 'note' });
+  } else if (lab === '勉強を教えてもらう') {
+    try { g.advanceTime(60, 'np_fai'); } catch (e) { }
+    if (once('teach') && ls && ls.stats && ls.stats.gaku < 92 && chance(0.6)) { ls.stats.gaku += 1; await say('「ここはね、こう考えるの。……ほら、できた」（学力+1）'); } else await say('「今日はここまでにしよう。続きは、また明日ね」');
+    A.op = clamp(num(A.op) + 1, 0, 100);
+  }
+}
+async function faiResolve(g, m, A, w, say, once) {
+  const F = faiSt(g);
+  if (w.type === 'dinner') {
+    await say(`「ごはんできたよ！ 今日は${w.dish}」`);
+    let ok = true; try { ok = g.canEat(); } catch (e) { }
+    if (!ok) { await say('「あら、おなかいっぱい？ じゃあ、あとで温めて食べてね」'); return; }
+    try { g.eat(30, { fill: 55, silent: true }); g.addNeed('stress', -3); } catch (e) { }
+    A.op = clamp(num(A.op) + 2, 0, 100); try { g.notify(`家族の手料理を食べた（${w.dish}）`, { color: '#ffe08a' }); } catch (e) { }
+    faiLog(g, `${m.rel}の「${w.dish}」を、いっしょに食べた`, { ico: 'meal' }); return;
+  }
+  if (w.type === 'allowance') { await say(`「はい、今月のおこづかい。むだづかいしちゃだめだよ」（${yen(w.amt)}）`); g.state.money = num(g.state.money) + w.amt; try { g.notify(`おこづかい +${yen(w.amt)}`, { color: '#ffe08a' }); } catch (e) { } faiLog(g, `${m.rel}から、おこづかい${yen(w.amt)}をもらった`, { ico: 'money' }); return; }
+  if (w.type === 'gift') { await say(pick(['「はい、おみやげ。あんたの好きなやつ」', '「スーパーで見かけたから、買ってきちゃった」'])); try { g.addNeed('stress', -4); g.eat(8, { fill: 10, silent: true }); } catch (e) { } A.op = clamp(num(A.op) + 1, 0, 100); return; }
+  if (w.type === 'report') { await say(`「聞いて聞いて！ ${w.text}」`); const k = await g.list({ title: `${m.rel}の話`, items: [{ label: 'すごいね！とほめる' }, { label: 'ふーん、と流す' }], x: 12, y: 44, w: 300, px: true }); if (k === 0) { A.op = clamp(num(A.op) + 5, 0, 100); A.mood = clamp(num(A.mood) + 8, 0, 100); await say('「えへへ……！」'); addDia(A, g, '話を聞いてもらえた。ほめてもらえた。', 6); } else { A.op = clamp(num(A.op) - 3, 0, 100); A.mood = clamp(num(A.mood) - 4, 0, 100); await say('「……もういい」'); } return; }
+  if (w.type === 'help') { const k = await g.list({ title: `${m.rel}「ちょっと手伝ってくれない？」`, items: [{ label: '手伝う', right: '30分' }, { label: 'あとで' }], x: 12, y: 44, w: 300, px: true }); if (k === 0) { try { g.advanceTime(30, 'np_fai'); } catch (e) { } A.op = clamp(num(A.op) + 4, 0, 100); { const H = faiHouse(g, m); H.clean = clamp(H.clean + 10, 0, 100); } await say('「ありがとう！ ほんとに助かった」'); faiLog(g, `あなたが${m.rel}を手伝った`, { ico: 'chores' }); } else { A.op = clamp(num(A.op) - 2, 0, 100); await say('「……はいはい」'); } return; }
+  if (w.type === 'money') { const k = await g.list({ title: `${m.rel}「${w.why}……${yen(w.amt)}貸して？」`, items: [{ label: `貸す（${yen(w.amt)}）` }, { label: 'ことわる' }], x: 12, y: 44, w: 360, px: true }); const r = faiInbox(g, { data: { key: m.key, type: 'money', amt: w.amt } }, k === 0 ? 0 : 1); if (r) await say(k === 0 ? '「ありがとう！ ぜったい返すから！」' : '「……ケチ」'); return; }
+  if (w.type === 'confide') {
+    await say('「あのね……学校で、ちょっと、うまくいってなくて」');
+    const k = await g.list({ title: `${m.rel}の相談`, items: [{ label: '最後まで話を聞く' }, { label: '先生や親に伝えようと言う' }, { label: '気にしすぎだよ、と流す' }], x: 12, y: 44, w: 360, px: true });
+    A.flags.confided = 1; const S = g.state.gakkoF && g.state.gakkoF[m.key];
+    if (k === 0) { A.op = clamp(num(A.op) + 8, 0, 100); A.mood = clamp(num(A.mood) + 10, 0, 100); A.stress = clamp(num(A.stress) - 12, 0, 100); await say('「……聞いてくれて、ありがとう。少し、楽になった」'); addDia(A, g, '学校のことを、はじめて家族に話せた。', 10); }
+    else if (k === 1) { A.op = clamp(num(A.op) + 4, 0, 100); if (A.bully) A.bully = Math.max(0, A.bully - 1); if (S && S.bully && S.bully.lv) S.bully.lv = Math.max(0, S.bully.lv - 1); await say('「……うん。ひとりで抱えないで、言ってみる」'); faiLog(g, `${m.rel}の悩みを、学校に相談することになった`, { ico: 'heart', imp: 1 }); }
+    else { A.op = clamp(num(A.op) - 10, 0, 100); A.mood = clamp(num(A.mood) - 10, 0, 100); await say('「……そっか。そうだよね」'); addSec(A, g, '勇気を出して相談したのに、流された。もう、だれにも言わない。'); }
+    return;
+  }
+  if (w.type === 'complain') { await say(pick(['「前から言おうと思ってたけど、あなたって家族のこと、どうでもいいんでしょ」', '「たまには家のこと、考えてよ」', '「最近、ぜんぜん話してくれないよね」'])); const k = await g.list({ title: `${m.rel}の不満`, items: [{ label: 'あやまる' }, { label: '言い返す' }], x: 12, y: 44, w: 300, px: true }); if (k === 0) { A.op = clamp(num(A.op) + 6, 0, 100); await say('「……わかってくれれば、いいよ」'); } else { A.op = clamp(num(A.op) - 6, 0, 100); try { g.addNeed('stress', 5); } catch (e) { } await say('「そういうところだよ！」'); faiLog(g, `【けんか】あなたと${m.rel}が言い合いになった`, { ico: 'fight', imp: 1 }); } return; }
+  if (w.type === 'invite') { const k = await g.list({ title: `${m.rel}「今度の休み、いっしょに出かけない？」`, items: [{ label: '行く！', right: '2時間' }, { label: 'また今度ね' }], x: 12, y: 44, w: 320, px: true }); if (k === 0) { try { g.advanceTime(120, 'np_fai'); g.addNeed('stress', -10); } catch (e) { } A.op = clamp(num(A.op) + 7, 0, 100); await say(pick(['「ショッピングモール、楽しかったね！」', '「公園でお弁当、ひさしぶりだった」', '「映画、泣いちゃった」'])); faiLog(g, `あなたと${m.rel}がいっしょに出かけた`, { ico: 'heart', imp: 1 }); } else { A.op = clamp(num(A.op) - 2, 0, 100); await say('「そっか、忙しいもんね」'); } return; }
+}
+// ---- 家の中にあらわれる ----
+let FAI_MAP = { room: null, ents: {}, spots: null };
+function faiLook(g, m) {
+  try { const id = m.fid || m.pid || (m.k && m.k.id); const U = id && E.Ut && E.Ut[id]; if (U && U.look) return U.look; } catch (e) { }
+  const rel = m.frel || (m.kind === 'kid' ? (m.age >= 18 ? (m.g === 'f' ? 'sister_older' : 'brother_older') : m.g === 'f' ? 'sister_younger' : 'brother_younger') : m.kind === 'sp' ? (m.g === 'f' ? 'mother' : 'father') : 'father');
+  try { return E.L4({ rel }, g.state.look || {}); } catch (e) { return { hair: 'short', hairColor: 'black', skin: 'fair', top: '#5a6a8a', bottom: '#3a3a4a' }; }
+}
+function faiStatic(mp, x, y) {
+  if (!mp.inBounds(x, y) || mp.tileSolid(x, y)) return true;
+  if (mp.warpAt(x, y)) return true;
+  for (const o of mp.entities) { if (o.hidden || o.faiNpc || o.faiB) continue; if ((o.type === 'prop' && o.solid !== false) || o.type === 'building') { const w = o.w || 1, h = o.h || 1; if (x >= Math.floor(o.x) && x < Math.ceil(o.x + w) && y >= Math.floor(o.y) && y < Math.ceil(o.y + h)) return true; } if (o.type === 'npc' && !o.faiNpc && o.x === x && o.y === y) return true; if (o.type === 'sign' && o.solid && o.x === x && o.y === y) return true; }
+  return false;
+}
+function faiSpots(mp) {
+  const W = mp.room.w, H = mp.room.h, floor = [], S = { kitchen: [], bed: [], desk: [], bath: [], living: [], all: [] };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!faiStatic(mp, x, y) && !mp.keepClear(x, y)) floor.push([x, y]);
+  const nb = (x, y) => [[0, 1], [0, -1], [1, 0], [-1, 0]].map(([a, b]) => [x + a, y + b]);
+  const isF = new Set(floor.map(p => p.join(',')));
+  const near = (pred, out) => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const t = String(mp.topTile(x, y) || ''); if (pred(t, x, y)) for (const [a, b] of nb(x, y)) if (isF.has(a + ',' + b) && !out.some(p => p[0] === a && p[1] === b)) out.push([a, b]); } };
+  near(t => /kitchen|tk_hob|tk_sink|fridge|kcab|hood/.test(t), S.kitchen);
+  near(t => /bed/.test(t), S.bed); near(t => /desk|pc/.test(t), S.desk); near(t => /bath/.test(t), S.bath);
+  for (const o of mp.entities) { if (o.type !== 'prop' || o.faiB) continue; const tx = [].concat(o.text || []).join(''); if (/ソファ|テーブル|ちゃぶ台|テレビ|こたつ/.test(tx)) { const w = o.w || 1, h = o.h || 1; for (let x = Math.floor(o.x) - 1; x <= Math.ceil(o.x + w); x++) for (let y = Math.floor(o.y) - 1; y <= Math.ceil(o.y + h); y++) if (isF.has(x + ',' + y) && !S.living.some(p => p[0] === x && p[1] === y)) S.living.push([x, y]); } }
+  S.all = floor;
+  const cx = W / 2, cy = H / 2; if (!S.living.length) S.living = floor.filter(([x, y]) => Math.abs(x - cx) < 4 && Math.abs(y - cy) < 3);
+  for (const k of ['kitchen', 'bed', 'desk', 'bath']) if (!S[k].length) S[k] = S.living.slice();
+  return S;
+}
+function faiBfs(mp, sx, sy, tx, ty) {
+  if (sx === tx && sy === ty) return [];
+  const W = mp.room.w, key = (x, y) => y * W + x, prev = new Map([[key(sx, sy), null]]), Q = [[sx, sy]], D = [['up', 0, -1], ['down', 0, 1], ['left', -1, 0], ['right', 1, 0]];
+  while (Q.length) { const [x, y] = Q.shift(); if (x === tx && y === ty) break; for (const [dn, a, b] of D) { const nx = x + a, ny = y + b, k = key(nx, ny); if (prev.has(k) || faiStatic(mp, nx, ny)) continue; prev.set(k, [x, y, dn]); Q.push([nx, ny]); } if (prev.size > 900) break; }
+  if (!prev.has(key(tx, ty))) return null;
+  const path = []; let cur = [tx, ty]; while (true) { const p = prev.get(key(cur[0], cur[1])); if (!p) break; path.unshift(p[2]); cur = [p[0], p[1]]; }
+  return path;
+}
+function faiSpotFor(act, idx, used) {
+  const S = FAI_MAP.spots; if (!S) return null;
+  const k = act.place === 'kitchen' ? 'kitchen' : act.place === 'bath' ? 'bath' : act.place === 'bedroom' ? (['study', 'game', 'read'].includes(act.k) ? 'desk' : 'bed') : 'living';
+  let L = S[k].filter(p => !used.has(p.join(','))); if (!L.length) L = S.all.filter(p => !used.has(p.join(',')));
+  return L.length ? L[(idx * 3) % L.length] : null;
+}
+function faiEntry(mp) { const d = mp.room.def || {}, e = d.entry || (mp.place && mp.place.start && mp.place.start.room === mp.roomId ? mp.place.start : null); if (e && !faiStatic(mp, e.x, e.y)) return [e.x, e.y]; const w = (mp.room.warps || [])[0]; if (w) for (const [a, b] of [[0, -1], [1, 0], [-1, 0], [0, 1]]) if (!faiStatic(mp, w.x + a, w.y + b)) return [w.x + a, w.y + b]; const S = FAI_MAP.spots; return S && S.all[0]; }
+function faiMapTick(g) {
+  const mp = g.map;
+  if (!mp || !mp.room || !faiAtHome(g)) { FAI_MAP.room = null; return; }
+  const fresh = FAI_MAP.room !== mp.room || !Object.values(FAI_MAP.ents).every(e => mp.entities.includes(e));
+  if (fresh) { FAI_MAP = { room: mp.room, ents: {}, spots: null }; FAI_MAP.spots = faiSpots(mp); }
+  const used = new Set(); let idx = 0;
+  for (const m of famRoster(g)) {
+    if (!livesWith(g, m)) continue; const A = agOf(g, m); if (A.role === 'baby') continue;
+    const act = nowAct(g, m, A), here = FAI_IN[act.place] && act.k !== 'sleep'; idx++;
+    let e = FAI_MAP.ents[m.key];
+    if (!here) { if (e && !e.hidden) { e.hidden = true; e.path.length = 0; e.goal = null; } continue; }
+    const sp = faiSpotFor(act, idx, used); if (!sp) continue; used.add(sp.join(','));
+    if (!e) {
+      const st = fresh ? sp : (faiEntry(mp) || sp), key = m.key;
+      e = mp.instantiate({ type: 'npc', id: 'fai_' + key, x: st[0], y: st[1], dir: 'down', look: faiLook(g, m), name: `${m.rel}・${String(m.name).split(' ').pop()}`, talk: (gg, en) => faiTalk(gg, key, en), speed: 0.9 });
+      e.faiNpc = 1; e.faiKey = key; mp.entities.push(e); FAI_MAP.ents[key] = e;
+      const b = { type: 'prop', id: 'faib_' + key, x: 0, y: 0, w: 1, h: 1, solid: false, z: 900, faiB: 1, draw: (c, px, py, gg, u) => faiBubble(c, gg, key, u, px, py) };
+      mp.entities.push(b);
+    }
+    if (e.hidden) { const st = faiEntry(mp) || sp; Object.assign(e, { hidden: false, x: st[0], y: st[1], px: st[0] * 16, py: st[1] * 16, moving: false, t: 0, goal: null }); e.path.length = 0; }
+    const gk = sp.join(',');
+    if (e.goal !== gk && !e.moving && mp.talking !== e) { const P = faiBfs(mp, e.x, e.y, sp[0], sp[1]); if (P) { e.path.length = 0; e.path.push(...P); if (!P.length) e.dir = act.place === 'kitchen' ? 'up' : 'down'; } e.goal = gk; }
+    else if (e.goal === gk && !e.moving && !e.path.length && e.x === sp[0] && e.y === sp[1]) e.dir = act.place === 'kitchen' || act.k === 'study' || act.k === 'game' ? 'up' : act.with ? e.dir : 'down';
+  }
+}
+// 頭の上のアイコン
+function faiBubble(c, g, key, u, px, py) {
+  const e = FAI_MAP.ents[key]; if (!e || e.hidden || !g.state) return;
+  const camX = u.x * 16 - px, camY = u.y * 16 - py, x = Math.round(e.px - camX) + 3, y = Math.round(e.py - camY) - 15;
+  u.x = e.x; u.y = e.y;
+  const m = famRoster(g).find(z => z.key === key); if (!m) return; const A = agOf(g, m), act = nowAct(g, m, A), w = A.want;
+  const fr2 = (a, b, ww, hh, col) => { c.fillStyle = col; c.fillRect(x + a, y + b, ww, hh); };
+  if (w) { const bob = Math.round(Math.sin(num(g.frame) / 8) * 1.5); fr2(1, bob, 9, 10, '#ffd23f'); fr2(0, 1 + bob, 11, 8, '#ffd23f'); fr2(4, 2 + bob, 3, 4, '#3a2a10'); fr2(4, 7 + bob, 3, 2, '#3a2a10'); return; }
+  fr2(0, 1, 11, 8, 'rgba(255,255,255,0.92)'); fr2(1, 0, 9, 10, 'rgba(255,255,255,0.92)'); fr2(4, 10, 2, 1, 'rgba(255,255,255,0.92)');
+  const ic = FAI_ICO[act.k] || 'note', P = (a, b, ww, hh, col) => fr2(a + 2, b + 2, ww, hh, col);
+  switch (ic) {
+    case 'cook': P(0, 3, 7, 3, '#5a5a6a'); P(1, 2, 5, 1, '#8a8a9a'); P(2, 0, 1, 1, '#c8c8d8'); P(4, 0, 1, 1, '#c8c8d8'); break;
+    case 'meal': P(0, 3, 7, 3, '#e8c48a'); P(1, 6, 5, 1, '#a8844a'); P(1, 1, 5, 2, '#f4f4f4'); break;
+    case 'tv': P(0, 0, 7, 5, '#2a2d36'); P(1, 1, 5, 3, '#5fd7ff'); P(3, 5, 1, 1, '#2a2d36'); break;
+    case 'game': P(0, 2, 7, 3, '#3a3e4a'); P(1, 3, 1, 1, '#ff6a7a'); P(5, 3, 1, 1, '#5fd7ff'); break;
+    case 'phone': P(2, 0, 3, 6, '#2a2d36'); P(2, 1, 3, 3, '#7ad8ff'); break;
+    case 'book': P(0, 1, 3, 5, '#2f6fd0'); P(4, 1, 3, 5, '#d64161'); P(3, 1, 1, 5, '#f4f4f4'); break;
+    case 'broom': P(3, 0, 1, 4, '#8a5a2a'); P(1, 4, 5, 2, '#e0c060'); break;
+    case 'drop': P(3, 0, 1, 1, '#3a8ad8'); P(2, 1, 3, 2, '#3a8ad8'); P(1, 3, 5, 3, '#3a8ad8'); P(2, 3, 1, 1, '#a8d8ff'); break;
+    case 'z': P(0, 0, 4, 1, '#5a6a9a'); P(2, 1, 1, 1, '#5a6a9a'); P(1, 2, 1, 1, '#5a6a9a'); P(0, 3, 4, 1, '#5a6a9a'); P(5, 3, 2, 1, '#8a9aca'); P(6, 4, 1, 1, '#8a9aca'); P(5, 5, 2, 1, '#8a9aca'); break;
+    case 'glass': P(1, 0, 5, 5, '#e8b030'); P(1, 0, 5, 1, '#f8f8f8'); P(3, 5, 1, 1, '#c8c8c8'); break;
+    case 'sweat': P(2, 0, 1, 2, '#5ab0ff'); P(1, 2, 3, 3, '#5ab0ff'); P(5, 1, 1, 2, '#5ab0ff'); break;
+    case 'leaf': P(1, 2, 5, 3, '#4aa04a'); P(3, 0, 1, 6, '#2a7a2a'); break;
+    case 'money': P(0, 1, 7, 4, '#4aa060'); P(3, 2, 1, 2, '#f8f8a0'); break;
+    case 'cloud': P(1, 1, 5, 3, '#9aa4b8'); P(0, 2, 7, 2, '#9aa4b8'); P(1, 5, 1, 1, '#9aa4b8'); break;
+    case 'talk': P(0, 2, 1, 1, '#5a5a6a'); P(3, 2, 1, 1, '#5a5a6a'); P(6, 2, 1, 1, '#5a5a6a'); break;
+    case 'anger': P(1, 0, 1, 2, '#e8303a'); P(5, 0, 1, 2, '#e8303a'); P(1, 4, 1, 2, '#e8303a'); P(5, 4, 1, 2, '#e8303a'); P(0, 1, 2, 1, '#e8303a'); P(5, 1, 2, 1, '#e8303a'); P(0, 4, 2, 1, '#e8303a'); P(5, 4, 2, 1, '#e8303a'); break;
+    case 'heart': P(1, 1, 2, 2, '#ff5a8a'); P(4, 1, 2, 2, '#ff5a8a'); P(1, 2, 5, 2, '#ff5a8a'); P(2, 4, 3, 1, '#ff5a8a'); P(3, 5, 1, 1, '#ff5a8a'); break;
+    default: P(4, 0, 1, 5, '#5a5a8a'); P(2, 4, 3, 2, '#5a5a8a'); P(5, 0, 2, 1, '#5a5a8a');
+  }
+}
+// ---- 目線変更の画面で見る ----
+function faiMindLines(g, m, A) {
+  const N = needOf(A), act = nowAct(g, m, A), L = [];
+  L.push(`いま：${act.what}${act.auto ? '（AIが自分で選んだ）' : '（決まっている予定）'}`);
+  if (act.auto) L.push(`理由：${faiReason(A, act)}`);
+  L.push('――欲求（高いほど満たされている）――');
+  for (const n of FAI_NEEDS) { const v = Math.round(N[n]); L.push(`${(FAI_NN[n] + '　　　').slice(0, 5)}${'■'.repeat(Math.round(v / 10))}${'□'.repeat(10 - Math.round(v / 10))} ${v}`); }
+  // つぎに考えている候補
+  try {
+    const F = faiSt(g), c = { ...faiCtxBase(g, F), t: clockMin(g), m, A, sim: { ...N }, house: { cooked: {}, ate: {}, food: num(faiHouse(g, m).food), clean: num(faiHouse(g, m).clean) }, R: () => 0.5, cnt: {} };
+    const S = FA.filter(a => !a.soc && (!a.w || a.w.some(([x, y]) => c.t >= x && c.t < y))).filter(a => { try { return !a.ok || a.ok(c); } catch (e) { return false; } }).map(a => [a, faiScore(c, a)]).sort((x, y) => y[1] - x[1]).slice(0, 4);
+    L.push('――つぎにやりたいこと（AIの評価）――'); S.forEach(([a, s]) => L.push(`${typeof a.n === 'function' ? a.n(m) : a.n}　${s.toFixed(2)}`));
+  } catch (e) { }
+  if (A.want) L.push(`主人公へ：「${FAI_WANT[A.want.type]}」と思っている`);
+  L.push('――家族との仲――');
+  for (const o of famRoster(g)) { if (o.key === m.key || houseOf(o) !== houseOf(m)) continue; const v = relOf(g, m, o), mm = memOf(g, m, o, 'fight', 2); L.push(`${o.rel}：${relWord(v)}（${v > 0 ? '+' : ''}${relInt(v)}）${mm ? '　※最近けんかした' : ''}`); }
+  return L;
+}
+function faiLogLines(g) {
+  const F = faiSt(g), d = g.state.day, L = F.log.filter(x => x.d >= d - 1).slice().sort((a, b) => (b.d - a.d) || (b.t - a.t)).slice(0, 40).map(x => `${x.d === d ? '今日' : 'きのう'} ${hhmm(x.t)}　${x.text}`);
+  return L.length ? L : ['まだ記録はない。時間がたつと、家族が自分で動きはじめる。'];
+}
+function installFamAI() {
+  E.Tn(g => { try { faiRun(g); } catch (e) { console.error('[fai]', e); } });
+  if (E.ug) E.ug('np_fai', (g, it, k, auto) => faiInbox(g, it, k, auto));
+  if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.createElement) {
+    setInterval(() => { const g = window.__game; if (!g || !g.state || !g.state.day) return; try { faiRun(g); } catch (e) { console.error('[fai] run', e); } try { faiMapTick(g); } catch (e) { console.error('[fai] map', e); } }, 250);
+    window.__fai = { st: () => faiSt(window.__game), run: () => faiRun(window.__game), plan: k => (faiSt(window.__game).plans[k] || []).map(b => `${hhmm(b.s)}-${hhmm(b.e)} ${b.what}${b.auto ? '' : '*'}`), mind: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return m && faiMindLines(g, m, agOf(g, m)); }, log: () => faiLogLines(window.__game), map: () => FAI_MAP, want: (k, t, o) => { const g = window.__game, m = famRoster(g).find(x => x.key === k); faiWant(g, m, agOf(g, m), t, o || {}); return 0; }, talk: k => faiTalk(window.__game, k, FAI_MAP.ents[k]) };
+  }
 }
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
