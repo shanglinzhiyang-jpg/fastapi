@@ -19991,7 +19991,7 @@ function faiBubble(c, g, key, u, px, py) {
   }
 }
 // ---- 目線変更の画面で見る ----
-function faiMindLines(g, m, A) {
+function faiMindLines0(g, m, A) {
   const N = needOf(A), act = nowAct(g, m, A), L = [];
   L.push(`いま：${act.what}${act.auto ? '（AIが自分で選んだ）' : '（決まっている予定）'}`);
   if (act.auto) L.push(`理由：${faiReason(A, act)}`);
@@ -20687,7 +20687,7 @@ function famPool(g, m, A, act) {
   const bd = famBday(m); try { const d = dateOf(g, g.state.day); if (d.month === bd[0] && d.dom === bd[1]) P.push('「今日、なんの日か知ってる？ ……えへへ」'); } catch (e) { }
   return P;
 }
-function famLine(g, m, A, act) { let t = pick(famPool(g, m, A, act)).replace(/\{c\}/g, famCall(g, m)); if (famKansai(g)) t = famDialect(t); return t; }
+function famLine0(g, m, A, act) { let t = pick(famPool(g, m, A, act)).replace(/\{c\}/g, famCall(g, m)); if (famKansai(g)) t = famDialect(t); return t; }
 // ---- 新しい会話の選択肢 ----
 const FT_REACT = {
   praise: { yasashii: '「えっ、ありがとう。{c}にそう言われると、うれしいな」', kibishii: '「……ふん。おだてても何も出んぞ。……ありがとう」', shinpai: '「本当？ なにか無理してない？」', mie: '「でしょ？ もっと言って！」', mukanshin: '「……そう」', hiniku: '「何をたくらんでるんだ？」', rakuten: '「わーい！ ほめられた〜！」', shinkei: '「ちゃんと見てくれてたんだ……」' },
@@ -20699,7 +20699,7 @@ const FT_OLD = {
   gp: ['「むかしはね、この辺りは田んぼばかりだったんだよ」', '「おじいちゃんとおばあちゃんは、お見合いでね……」', '「戦争のあとは、食べるものがなくてねえ。だから、ごはんは残しちゃいけないよ」', '「{c}のお父さん（お母さん）も、小さいころはやんちゃでねえ」'],
   sibOld: ['「お前がちっちゃいころ、俺のあとばっかりついてきてさ」', '「昔、ふたりで家出しようとしたの覚えてる？ 公園で泣いて帰ってきたけど」'],
 };
-async function famTalkMore(g, m, A, act, lab, say, once) {
+async function famTalkMore0(g, m, A, act, lab, say, once) {
   const F = faiSt(g), c = famCall(g, m), R = t => { let s = String(t).replace(/\{c\}/g, c); if (famKansai(g)) s = famDialect(s); return s; }, per = A.per || 'yasashii';
   if (lab === 'ほめる') { await say(R(FT_REACT.praise[per] || FT_REACT.praise.yasashii)); if (once('praise')) { A.op = clamp(num(A.op) + (per === 'mukanshin' ? 1 : per === 'hiniku' ? 2 : 4), 0, 100); A.mood = clamp(num(A.mood) + 6, 0, 100); } return true; }
   if (lab === 'からかう') { await say(R(FT_REACT.tease[per] || FT_REACT.tease.yasashii)); const ok = ['rakuten', 'yasashii'].includes(per) || num(A.op) >= 70; A.op = clamp(num(A.op) + (ok ? 1 : -4), 0, 100); if (!ok) A.mood = clamp(num(A.mood) - 5, 0, 100); return true; }
@@ -20715,7 +20715,7 @@ async function famTalkMore(g, m, A, act, lab, say, once) {
   if (lab === '家族写真を撮る') { await say(R(pick(['「えっ、写真？ ちょっと待って、髪なおすから！」', '「はい、チーズ！ ……目つぶっちゃった、もう1回！」', '「いい写真。あとで送ってね」']))); famAlbum(g, `${m.rel}と写真を撮った`, 1); A.op = clamp(num(A.op) + 2, 0, 100); return true; }
   return false;
 }
-function famMoreItems(g, m, A, act) {
+function famMoreItems0(g, m, A, act) {
   const I = [{ label: 'ほめる' }, { label: 'からかう' }, { label: '相談する', right: '30分' }];
   if (m.kind === 'pa' || m.kind === 'gp' || (m.kind === 'sib' && !sibIsYounger(m))) I.push({ label: '昔の話を聞く' });
   if ((m.kind === 'pa' || m.kind === 'gp') && act.auto) I.push({ label: '肩をもむ', right: '15分' });
@@ -20826,7 +20826,7 @@ function famEvCtx(g, m, A) {
   const fightWith = R.find(o => o.key !== m.key && houseOf(o) === houseOf(m) && memOf(g, m, o, 'fight', 2));
   let dating = false; try { const W = E.Wn(g); dating = !!(W && Object.values(W.c || {}).some(x => x && ['dating', 'engaged', 'cohab'].includes(x.st))); } catch (e) { }
   let cav = 0; try { cav = hyOf(A, m).cav; } catch (e) { }
-  return { g, m, A, me, t: clockMin(g), coupleRel, married, kids, S: g.state.gakkoF && g.state.gakkoF[m.key], month: d.month, dom: d.dom, we: wdOf(g) >= 5, fightWith, dating, cav, sibs: R.filter(o => o.kind === m.kind && o.key !== m.key), era: (g.state.profile && g.state.profile.era) || 'reiwa', act: (() => { try { return nowAct(g, m, A).k; } catch (e) { return ''; } })(), cust: (() => { try { return custFor(g, m, A) || {}; } catch (e) { return {}; } })(), nd: A.nd || null, owarai: (() => { try { const u = g.unit && g.unit(); return !!(u && u.name && u.members && u.members.length); } catch (e) { return false; } })(), house: R.filter(o => o.key !== m.key && houseOf(o) === houseOf(m) && !SMALL(agOf(g, o).role)), hasMother: R.some(o => o.frel === 'mother'), gambler: num(A.seed) % 5 === 0, hate: num(A.hate), kSib: R.filter(o => o.key !== m.key && houseOf(o) === houseOf(m) && (o.kind === 'sib' || o.kind === 'kid') && !SMALL(agOf(g, o).role)).sort((a, b) => (sibIsYounger(b) ? 1 : 0) - (sibIsYounger(a) ? 1 : 0))[0], gpIn: R.find(o => o.kind === 'gp' && houseOf(o) === houseOf(m)), anyFlag: n => Object.keys(F.evFlag).some(k => k.endsWith(':' + n)), flag: n => !!F.evFlag[m.key + ':' + n], gflag: n => !!F.evFlag['*:' + n] };
+  return { g, m, A, me, t: clockMin(g), coupleRel, married, kids, S: g.state.gakkoF && g.state.gakkoF[m.key], month: d.month, dom: d.dom, we: wdOf(g) >= 5, fightWith, dating, cav, sibs: R.filter(o => o.kind === m.kind && o.key !== m.key), era: (g.state.profile && g.state.profile.era) || 'reiwa', act: (() => { try { return nowAct(g, m, A).k; } catch (e) { return ''; } })(), cust: (() => { try { return custFor(g, m, A) || {}; } catch (e) { return {}; } })(), nd: A.nd || null, owarai: (() => { try { const u = g.unit && g.unit(); return !!(u && u.name && u.members && u.members.length); } catch (e) { return false; } })(), house: R.filter(o => o.key !== m.key && houseOf(o) === houseOf(m) && !SMALL(agOf(g, o).role)), hasMother: R.some(o => o.frel === 'mother'), gambler: num(A.seed) % 5 === 0, hate: num(A.hate), kSib: R.filter(o => o.key !== m.key && houseOf(o) === houseOf(m) && (o.kind === 'sib' || o.kind === 'kid') && !SMALL(agOf(g, o).role)).sort((a, b) => (sibIsYounger(b) ? 1 : 0) - (sibIsYounger(a) ? 1 : 0))[0], gpIn: R.find(o => o.kind === 'gp' && houseOf(o) === houseOf(m)), anyFlag: n => Object.keys(F.evFlag).some(k => k.endsWith(':' + n)), flag: n => !!F.evFlag[m.key + ':' + n], fday: n => F.evFlag[m.key + ':' + n] != null ? g.state.day - F.evFlag[m.key + ':' + n] : -1, has: t => { try { return abTr(g, m, A).includes(t); } catch (x) { return false; } }, meHas: t => { try { return abTrMe(g).includes(t); } catch (x) { return false; } }, scar: k => !!(isObj(A.scar) && (k ? A.scar[k] != null : Object.keys(A.scar).length)), gflag: n => !!F.evFlag['*:' + n] };
 }
 function famEvWho(m) { return m.kind === 'pa' ? 'pa' : m.kind === 'gp' ? 'gp' : m.kind === 'sp' ? 'sp' : m.kind === 'kid' ? (m.age >= 13 ? 'kidBig' : 'kid') : sibIsYounger(m) ? 'sibYoung' : 'sibOld'; }
 // 子ども向けのイベントのうち、弟・妹にも起きるもの
@@ -20844,7 +20844,7 @@ function famEvPick(g, m, A) {
   if (!L.length) return null; let tot = 0; for (const e of L) tot += famEvWeight(e, who); let r = RND() * tot; for (const e of L) { r -= famEvWeight(e, who); if (r <= 0) return e; } return L[L.length - 1];
 }
 async function famEvPlay(g, m, A, e, say) {
-  const cx = famEvCtx(g, m, A), F = faiSt(g), cl = famCall(g, m), fem = m.g === 'f', meF = meGender(g) === 'f', other = (famRoster(g).find(x => x.kind === 'pa' && x.key !== m.key) || {}).frel === 'mother' ? 'お母さん' : 'お父さん', shared = m.kind === 'sib' && (e.w === 'kid' || e.w === 'kidBig'), R = t => { let s = String(t); if (shared) s = s.replace(/お子さん/g, m.rel + 'さん').replace(/子ども/g, m.rel); s = s.replace(/\{c\}/g, cl).replace(/\{L\}/g, () => { try { const yr = legYear(g), A2 = LEGENDS.filter(x => x.y <= yr); return A2.length ? pick(A2).n : 'ダウンタウン'; } catch (e) { return 'ダウンタウン'; } }).replace(/\{f\}/g, cx.fightWith ? cx.fightWith.rel : 'みんな').replace(/\{s\}/g, cx.sibs[0] ? cx.sibs[0].rel : 'きょうだい').replace(/\{amt\}/g, yen(Math.max(1000, Math.min(10000, (ageOf(g) - 10) * 500)))).replace(/お兄（姉）ちゃん/g, meF ? 'お姉ちゃん' : 'お兄ちゃん').replace(/\{kn\}/g, cx.kSib ? String(cx.kSib.name).split(' ').pop() : 'あの子').replace(/弟（妹）|兄（姉）/g, m.rel).replace(/お母さん（お父さん）/g, m.kind === 'pa' ? (m.frel === 'father' ? 'お父さん' : 'お母さん') : (cx.hasMother ? 'お母さん' : 'お父さん')).replace(/彼氏（彼女）/g, meF ? '彼氏' : '彼女').replace(/\{k\}/g, cx.kSib ? cx.kSib.rel : 'きょうだい').replace(/おばあちゃん（おじいちゃん）/g, cx.gpIn && cx.gpIn.frel === 'grandfather' ? 'おじいちゃん' : 'おばあちゃん').replace(/僕（わたし）/g, fem ? 'わたし' : '僕').replace(/ぼく（わたし）/g, fem ? 'わたし' : 'ぼく').replace(/俺（わたし）/g, fem ? 'わたし' : '俺').replace(/わたし（ぼく）/g, fem ? 'わたし' : 'ぼく').replace(/お父さん（お母さん）/g, other).replace(/花嫁（花婿）/g, meF ? '花嫁' : '花婿').replace(/お母さんの友だち/g, fem ? 'お母さんの友だち' : 'お父さんの知り合い'); if (famKansai(g)) s = famDialect(s); return s; };
+  const cx = famEvCtx(g, m, A), U = new Set(), F = faiSt(g), cl = famCall(g, m), fem = m.g === 'f', meF = meGender(g) === 'f', other = (famRoster(g).find(x => x.kind === 'pa' && x.key !== m.key) || {}).frel === 'mother' ? 'お母さん' : 'お父さん', shared = m.kind === 'sib' && (e.w === 'kid' || e.w === 'kidBig'), R = t => { let s = abFill(String(t), g, m, A, cx, U); if (shared) s = s.replace(/お子さん/g, m.rel + 'さん').replace(/子ども/g, m.rel); s = s.replace(/\{c\}/g, cl).replace(/\{L\}/g, () => { try { const yr = legYear(g), A2 = LEGENDS.filter(x => x.y <= yr); return A2.length ? pick(A2).n : 'ダウンタウン'; } catch (e) { return 'ダウンタウン'; } }).replace(/\{f\}/g, cx.fightWith ? cx.fightWith.rel : 'みんな').replace(/\{s\}/g, cx.sibs[0] ? cx.sibs[0].rel : 'きょうだい').replace(/\{amt\}/g, yen(Math.max(1000, Math.min(10000, (ageOf(g) - 10) * 500)))).replace(/お兄（姉）ちゃん/g, meF ? 'お姉ちゃん' : 'お兄ちゃん').replace(/\{kn\}/g, cx.kSib ? String(cx.kSib.name).split(' ').pop() : 'あの子').replace(/弟（妹）|兄（姉）/g, m.rel).replace(/お母さん（お父さん）/g, m.kind === 'pa' ? (m.frel === 'father' ? 'お父さん' : 'お母さん') : (cx.hasMother ? 'お母さん' : 'お父さん')).replace(/彼氏（彼女）/g, meF ? '彼氏' : '彼女').replace(/\{k\}/g, cx.kSib ? cx.kSib.rel : 'きょうだい').replace(/おばあちゃん（おじいちゃん）/g, cx.gpIn && cx.gpIn.frel === 'grandfather' ? 'おじいちゃん' : 'おばあちゃん').replace(/僕（わたし）/g, fem ? 'わたし' : '僕').replace(/ぼく（わたし）/g, fem ? 'わたし' : 'ぼく').replace(/俺（わたし）/g, fem ? 'わたし' : '俺').replace(/わたし（ぼく）/g, fem ? 'わたし' : 'ぼく').replace(/お父さん（お母さん）/g, other).replace(/花嫁（花婿）/g, meF ? '花嫁' : '花婿').replace(/お母さんの友だち/g, fem ? 'お母さんの友だち' : 'お父さんの知り合い'); if (famKansai(g)) s = famDialect(s); return s; };
   F.evSeen = isObj(F.evSeen) ? F.evSeen : {}; F.evSeen[m.key + ':' + e.id] = g.state.day;
   await famEvStage(g, m, A, e, R, say, cx);
   return true;
@@ -20884,6 +20884,8 @@ async function famEvStage(g, m, A, e, R, say, c) {
   if (fx.dia) addDia(A, g, R(fx.dia), 0);
   if (fx.all && c && c.house) for (const o of c.house) { const B = agOf(g, o); B.op = clamp(num(B.op) + fx.all, 0, 100); B.mood = clamp(num(B.mood) + Math.round(fx.all / 2), 0, 100); }
   if (fx.custOff) { try { const C = inHouse(m) ? custOf(g) : (A.cust0 || {}); for (const id of [].concat(fx.custOff)) C[id] = 0; } catch (x) { } }
+  if (fx.scar) abScar(g, m, A, fx.scar);
+  if (e.dark && num(fx.op) <= -10 && num(m.age) < 18 && !fx.noScar && chance(0.4)) abScar(g, m, A, 'me');
   if (ch[3]) await famEvStage(g, m, A, ch[3], R, say, c);
 }
 // 話しかけたとき：ときどき会話イベントになる
@@ -21221,6 +21223,375 @@ FE.push(
   { id: 's_sick_care', w: 'sibYoung', ok: c => num(c.A.hp) < 60, cd: 60, L: ['（熱を出して寝ている）', '「……{c}。……そばにいて」'], C: [['手をにぎる', { op: 10, hp: 6, al: '熱を出した弟（妹）の手を、眠るまでにぎっていた' }, '（すぐに、すうすうと寝息が聞こえてきた）'], ['おかゆを作る', { op: 8, hp: 8, time: 30 }, '「……あったかい。……おいしい」']] },
   { id: 's_future_together', w: 'sibYoung', ok: c => c.m.age >= 10, once: true, L: ['「ねえ{c}。大人になっても、ずっときょうだいだよね」', '「……どっちかが結婚しても、遠くに住んでも」'], C: [['当たり前だろ', { op: 10, cx: -10, al: '弟（妹）と「ずっときょうだいだ」と約束した' }, '「……へへ。約束ね」'], ['急にどうした？', { op: 4 }, '「……なんでもない！ ……なんでもないよ」']] },
 );
+
+// ===== 暴言・いじりのことば（相手の特徴と、言う人に合わせる）／心の傷 =====
+// 特徴ごとの「あだ名」「悪口」「いじり」
+const AB_TR = {
+  fat: { nk: ['ブタ', 'デブ', '肉まん', 'ボンレスハム', '力士', 'トン{n}'], ab: ['デブがうつる、こっち来んな', 'また太った？ 制服パンパンじゃん', '椅子がかわいそう', '給食、お前のぶんだけ大盛りにしといたから', '歩くたびに床がゆれるんだけど', 'ブーブー言ってみろよ', '汗くさ。近寄んなデブ', '（体育の着がえのとき、おなかを指さして笑われた）'], ij: ['「{nk}、ちょっとジャンプして！ ……地震だ地震！」（教室じゅうが大笑い）', '（ほっぺたを両側から引っぱられて）「うわ、のびる！ もちじゃん！」', '「{nk}、今日のおやつ何個目〜？」', '（給食のあまりを全部、{n}のトレーに積まれた。「食べきるまで帰れませ〜ん」）'] },
+  chub: { nk: ['まんじゅう', 'たぬき', 'ぽっちゃり'], ab: ['最近、顔まるくなった？', 'その二重あご、何重？', 'おかわりすんなよ、ぽっちゃり'], ij: ['（おなかの肉をつままれて）「うわ、やわらか〜！」'] },
+  thin: { nk: ['ガイコツ', '骨', 'もやし', 'ゴボウ'], ab: ['骨と皮じゃん。キモ', 'ポキッて折れそう', '風で飛ばされんなよ', 'ちゃんと食ってる？ 病気っぽい'], ij: ['「{n}の腕、ポッキーみたい。折っていい？」'] },
+  short: { nk: ['チビ', '豆つぶ', 'ミニ{n}', 'ちびっこ'], ab: ['あれ、どこ？ 見えなかったわ', '低学年がまぎれこんでる', '背の順、永遠に先頭', '前ならえで腰に手、一生やってろ'], ij: ['（頭の上にひじを置かれて）「ちょうどいい台があった〜」', '「{n}、つり革とどく？ がんばれ〜」'] },
+  tall: { nk: ['電柱', '巨人', 'キリン', 'でくの坊'], ab: ['でかすぎて邪魔', '後ろ、黒板見えないんだけど', 'デカいだけで役立たず', 'バレー部入れば？ 背だけはあるんだし'], ij: ['「{n}、あそこの電球かえて〜」'] },
+  nd_wheel: { nk: ['車いす', 'タイヤ'], ab: ['車いすってずるくね？ 座ってるだけで', 'お前がいると移動が遅くなる', '歩けないくせに運動会出んの？', 'エレベーター使えるの、ずるい', '（車いすを勝手に押されて、坂道で手を離された）'], ij: ['「{n}号、発進〜！」（勝手に車いすを押されて、廊下を走り回られた）'] },
+  nd_hear: { nk: ['補聴器', '聞こえないやつ'], ab: ['聞こえてますか〜？ ……聞こえてませんよね〜', 'どうせ聞こえてないから、悪口言い放題', '返事くらいしろよ。……あ、聞こえないんだっけ', '（口を手でかくして話されて、なにを言っているのかわからない）'], ij: ['（後ろから名前を何度も呼ばれて、気づかないのを見てみんなで笑っている）'] },
+  nd_asd: { nk: ['宇宙人', 'ロボット', '変人'], ab: ['また変なこと言ってる', '空気読めよ。……読めないんだっけ', 'お前と話すと疲れる', '（耳をふさいで叫ぶまねをして、みんなで笑った）'], ij: ['「{n}、また電車の話して〜！」（話しはじめると、みんながくすくす笑う）'] },
+  nd_ld: { nk: ['ひらがな', '読めない人'], ab: ['音読、1年生レベルじゃん', '漢字書けないの？ ウケる', 'ノート見せて〜。……うわ、読めねー', '（音読でつかえるたびに、くすくす笑い声）'], ij: ['「{n}、これ読んで！ ほら、読んで！」（わざとむずかしい漢字を見せられた）'] },
+  nd_down: { ab: ['しゃべり方、うつるから話しかけんな', 'なんで同じクラスにいんの？', '先生、{n}と同じ班、いやです', '（顔のまねをされて、みんなが笑った）'], ij: ['（「{n}のまね〜」と、ゆっくりしたしゃべり方をされた）'] },
+  cas: { nk: ['ソプラノ', '声変わり前', 'ツルツル'], ab: ['声、女子じゃん', 'まだ声変わりしてないの？ 赤ちゃん？', 'ヒゲも生えないんだ', 'お前、ほんとに男？'], ij: ['「{n}、ちょっと歌って！ ソプラノで！」'] },
+  dumb: { nk: ['バカ', 'アホ', '赤点', 'ゼロ点'], ab: ['テスト何点？ ……ひと桁？ ウケる', '九九言ってみ？ 七の段', 'お前と同じ班だと、絶対負ける', '脳みそ入ってる？'], ij: ['「{n}先生、この問題わかりますか〜？」（わざと大きな声で）'] },
+  nerd: { nk: ['ガリ勉', 'メガネ', '教科書'], ab: ['点数自慢、うざ', '勉強しかできないくせに', '先生のお気に入り', '（答案を取りあげられて、点数を大声で読みあげられた）'], ij: ['「{n}様、宿題うつさせてくださ〜い」（ノートを勝手に回された）'] },
+  unath: { nk: ['運動音痴', '足手まとい', 'ナメクジ'], ab: ['お前のせいで負けた', 'ボール来たら目つぶるの、ウケる', 'リレー、{n}抜きで組みたい', '走り方キモ'], ij: ['（{n}の走り方のまねをして、みんなが大笑い）'] },
+  inkya: { nk: ['陰キャ', '空気', 'ぼっち', '幽霊'], ab: ['いたの？ 気づかなかった', 'しゃべったとこ、見たことない', 'ひとりで弁当食ってて、悲しくないの？', '暗っ。こっちまで暗くなる'], ij: ['「{n}がしゃべったー！ 記念日！」'] },
+  talk: { nk: ['無口', 'カタコト'], ab: ['え？ なんて？ 日本語でおねがいしまーす', 'もっとはっきりしゃべれよ', '（しゃべり方をまねされて、笑われた）'], ij: ['（{n}が話すたびに、語尾をまねして返される）'] },
+  hated: { nk: ['{n}菌', 'バイ菌'], ab: ['{n}菌ついた！ タッチ！', 'さわったものは、消毒しないと', 'いなくなればいいのに', '（{n}の机だけ、みんなが少し離して座る）'], ij: ['「{n}菌、パス！」（{n}がさわった消しゴムを、悲鳴をあげて投げ合っている）'] },
+  famsib: { nk: ['七光り', '有名人のおまけ'], ab: ['{meN}の{fam}なのに、なんでお前はそんななの？', '有名人の身内だからって、調子のんな', 'サインもらってこいよ。それしか価値ないんだから', 'お前んとこの{meN}、テレビで見たけど、つまんなかった'], ij: ['「{n}、{meN}のモノマネやって！ 身内でしょ？」'] },
+  poor: { nk: ['ビンボー', '100均', '貧乏神'], ab: ['その服、毎日同じじゃね？', '給食のおかわり、必死すぎ', 'お前んち、電気止まったってマジ？', '修学旅行の積立、払えてんの？'], ij: ['「{n}、今日の晩ごはん、もやし？」'] },
+  neet: { nk: ['自宅警備員', 'ニート'], ab: ['いい年して、働いてないの？', '税金も払ってないくせに', '毎日なにしてんの？'], ij: ['「自宅警備、おつかれさまで〜す」'] },
+  bald: { nk: ['ハゲ', '坊主', '電球', 'つるっぱげ'], ab: ['頭まぶしっ', 'ハゲは帽子かぶってこいよ', '坊主のデブって、見てるだけで暑苦しい'], ij: ['（頭をなでられて）「ご利益ありそ〜」'] },
+  otaku: { nk: ['キモオタ', 'オタク'], ab: ['アニメの絵、描いてんの？ キモ', '二次元としか話せないんでしょ', '推しのグッズ、カバンにつけんなよ。こっちが恥ずかしい'], ij: ['（カバンのキーホルダーを取られて、「これ、{n}の嫁でーす」と回された）'] },
+  famous: { nk: ['有名人様', '{meN}（笑）'], ab: ['テレビに出てるからって、調子のんな', 'どうせすぐ消えるでしょ', '有名人ぶってるけど、ただの{meN}じゃん'], ij: ['「{meN}、なんかギャグやって！ 有名人でしょ？」'] },
+  single: { ab: ['まだ結婚しないの？', 'そんなだから、相手が見つからないのよ'] },
+  old: { ab: ['同じ話、何回目？', '運転やめろよ、危ないから', '早く施設に入ってくれたら楽なのに'] },
+  gen: { nk: ['キモ{n}', '{n}（笑）', 'ゴミ'], ab: [], ij: [] },
+};
+// 言う人ごとのことば（X に入る）
+const AB_SPK = {
+  cls: { peer: 1, fr: ['「X」', '（すれちがいざまに）「X」', '（後ろの席から）「X」', '（くすくす笑いながら）「X」', '（わざと聞こえるように）「X」', '（休み時間、みんなの前で）「X」'],
+    gen: ['キモい', 'うざい', 'こっち見んな', 'くさい', '話しかけんな、うつる', 'なんで学校来てんの？', '消えろ', '死ね', 'お前の席、ねーから', '空気読めよ', 'お前がいると、クラスの空気が悪くなる', '生きてる意味ある？', 'ほんと無理', '（机に「死ね」と彫られていた）', '（教科書が、ゴミ箱に捨てられていた）', '（グループ分けで、「えー、{n}いるの？」と声が上がった）', '（{n}がさわったドアノブを、みんながわざとふいている）', '（上ばきに、マジックで「{nk}」と書かれていた）'],
+    genF: ['ブス', 'ブスが調子のんな', 'ブスのくせに、色気づいてんじゃねーよ', '（男子が、聞こえるように「ないわ〜」と言った）'], genM: ['キモ男', 'チー牛', '（女子が「目、合った。最悪」と言って、腕をハンカチでふいた）'] },
+  senpai: { peer: 1, fr: ['（先輩が）「X」', '（部室で、先輩が）「X」', '（先輩たちに囲まれて）「X」'],
+    gen: ['おい{nk}、ジュース買ってこい。お前の金で', '1年のくせに目ざわりなんだよ', '先輩にあいさつもできねえのか', 'お前、明日から坊主な', 'おい{nk}、一発芸やれ。すべったら罰ゲームな', '声が小せえんだよ。もう1回', '（ロッカーに閉じこめられて、外から笑い声が聞こえた）'] },
+  teacher: { fr: ['（先生が）「X」', '（クラス全員の前で、先生が）「X」', '（職員室に呼ばれて）「X」'],
+    gen: ['お前みたいなのがいると、クラスの平均が下がるんだよ', 'なんでこんなこともできないんだ？ 幼稚園からやり直せ', 'もういい。お前には期待してない', 'やる気がないなら帰れ', 'その目はなんだ。反抗的だな', '親の顔が見てみたいよ', 'お前のせいで、みんなが迷惑してるんだぞ', 'いじめられるのは、お前にも原因があるんじゃないか？', '泣けばすむと思うなよ', '（答案を返しながら、みんなの前で）「ほら、こうなりたくなかったら勉強しろ」'],
+    tr: { dumb: ['こんな点数、親に見せられるのか？', '授業の邪魔だけはするなよ'], nd: ['特別扱いはしないからな', '行事のたびに、手間がかかるんだよ', '普通にできないのか？'], nd_hear: ['聞こえないなら前に座れ。いちいち言わせるな'], nd_asd: ['わがままを言うな。みんな我慢してるんだ'], nd_ld: ['読めないのは、努力が足りないからだ'], fat: ['体育、見学したら？ 見ててつらいから', '少しはやせる努力をしろ'], famsib: ['{meN}は、もっとちゃんとしてたぞ', '有名人の身内だからって、特別扱いはしないからな'], inkya: ['もっと明るくしろ。だからいじめられるんだ'], unath: ['お前のせいで、クラスが負けたんだぞ'], hated: ['みんなに嫌われる理由、自分で考えたことあるか？'] } },
+  sns: { peer: 1, fr: ['（書きこみ）「X」', '（匿名）「X」（いいね{num}）', '（クラスのグループ）「X」「それな」「わかるｗ」', '（裏アカウント）「X」', '（知らないアカウントから）「X」'],
+    gen: ['{n}って、マジでキモいよな', '{n}の家、あの古い家だって', '今日も{n}ぼっちで草', '{n}が消えたら、クラスの空気よくなるのに', '{nk}、明日も学校来るのかなｗ', '{n}の写真、加工したら神になったｗ', '{n}の家族、全員キモそう', '{n}の上ばき、トイレに捨てといたｗ', '（隠し撮りされた写真に、落書きのスタンプ）'],
+    tr: { famous: ['{meN}、テレビで見たけどマジでつまらん', '{meN}の実家、特定したｗ', '{meN}、昔いじめられてたらしいよｗ', '{meN}の家族の写真、出回ってるｗ', '{meN}、性格悪そう。顔に出てる', '{meN}、早く消えてほしい'], famsib: ['有名人の{rel}ｗ 顔、ぜんぜん似てないｗ', '{meN}の{rel}、学校でぼっちらしいよｗ', '{meN}の{rel}の写真、拾ったｗ'] } },
+  pa: { fr: ['「X」'],
+    gen: ['産まなきゃよかった', 'お前なんか、うちの子じゃない', '{cmp}はできるのに、なんでお前は', '誰に似たんだか', '恥ずかしいから、外に出ないで', 'もう顔も見たくない', 'あんたのせいで、人生めちゃくちゃ', '泣けばすむと思ってるの？', '黙れ。口ごたえするな', 'お前にかけた金、返してほしいくらいだ', '生きてるだけで、お金がかかるのよ', '出ていけ', 'ほんと、何をやってもだめね', 'あんたなんか、いないほうがよかった'],
+    tr: { fat: ['みっともない。やせなさい', 'そんな体で、よく外を歩けるわね'], thin: ['ガリガリで、親が食べさせてないみたいじゃない'], dumb: ['バカは何をやってもバカね', 'こんな成績、親戚に言えない'], nd: ['こんな子に生まれてくるなんて……', 'あんたのせいで、わたしは働けないのよ'], neet: ['穀つぶし', 'いつまで寝てるの。近所に恥ずかしい', '働かないなら、出ていって'], inkya: ['暗い顔しないで。こっちまで気分が悪くなる', '友だちのひとりも、連れてこられないの？'], famous: ['テレビに出てるからって、えらくなったつもり？', '有名人様は、家族のことなんか忘れたんでしょ', 'お前のせいで、こっちまで陰口を言われるんだ'], poor: ['お金もないくせに、口だけは一人前', 'また借金？ 親を財布だと思ってるの？'], bald: ['その頭、なんとかならないの。みっともない'], single: ['いつになったら結婚するの。孫の顔も見せないつもり？'], hated: ['あんたがそんなだから、みんなに嫌われるのよ'], bulliedMe: ['いじめられるのは、あんたにも原因があるのよ'] } },
+  cpl: { fr: ['「X」'], gen: ['誰のおかげで飯が食えてると思ってるんだ', 'お前の育て方が悪いから、子どもがああなるんだ', '一日中、家でなにしてたの？', '結婚なんかしなきゃよかった', 'あんたの親戚、ほんと無理', '稼ぎが少ないくせに、口だけは一人前', 'お前には何を言っても無駄だ', 'ほんと、使えない', 'あなたの顔を見るだけで、疲れる'] },
+  sp: { fr: ['「X」'],
+    gen: ['誰のおかげで生活できてると思ってるの', 'あなたと結婚したのが、人生最大の失敗', 'ほんと、使えない', '子どもの前で、みっともない姿を見せないで', 'あなたの親も、あなたも、ほんと無理', 'そんなこともできないの？ 何回言えばわかるの', 'あなたの稼ぎじゃ、子どもに習い事もさせられない', 'ため息しか出ない'],
+    tr: { neet: ['働かないなら、離婚して'], famous: ['外ではいい顔して、家ではこれ？ テレビの人に教えてあげたい'], fat: ['だらしない体。結婚前は、そんなじゃなかったのに'], poor: ['また給料下がったの？'], bald: ['その頭、隣を歩くのが恥ずかしい'] } },
+  sib: { peer: 1, fr: ['「X」'],
+    gen: ['ついてくんな、うざい', 'お前がいると、友だち呼べないんだよ', 'お前のせいで、こっちまで怒られる', '泣き虫', 'お前、拾われてきたんだって', '親もお前のこと、ほんとはどうでもいいと思ってるよ', '邪魔', 'お前なんか、生まれてこなければよかったのに', 'お前のせいで、俺（わたし）がどれだけ比べられたと思ってる'] },
+  kid: { fr: ['「X」'],
+    gen: ['うざい', 'キモい', '話しかけないで', '{c}みたいには、なりたくない', '{c}のせいで、学校でいじられるんだよ', '部屋に入ってこないで', 'どうせ、わかんないでしょ', '{c}なんか、家族じゃない'],
+    tr: { famous: ['テレビに出てるからって、えらそうにしないで', '{c}のせいで、学校でネタにされるんだよ'], neet: ['働いてないくせに、えらそうに言わないで'], bald: ['友だちに見られたくないから、近くを歩かないで'], fat: ['友だちに見られたくないから、近くを歩かないで'] } },
+  gp: { fr: ['「X」'], gen: ['男（女）のくせに、なさけない', '今どきの若いもんは', 'わしの若いころは、そんなことで泣かなかった', '{cmp}は、ちゃんとしてるのにねえ', 'あんたの親の育て方が悪い', 'そんな仕事、恥ずかしくて人に言えない'], tr: { single: ['まだ結婚せんのか。死ぬ前に、ひ孫の顔くらい見せてくれ'], fat: ['ずいぶん肥えたなあ'] } },
+  rel: { fr: ['（親戚のおばさんが）「X」', '（おじさんが、酒くさい息で）「X」', '（いとこの親が、にこやかに）「X」'],
+    gen: ['あら、また太った？', 'うちの子は、国立大に受かったのよ。{n}ちゃんは？', '{cmp}と比べて、ねえ……', '親の育て方が悪いのよ', 'その仕事、将来あるの？', 'いい年して、まだ親のすねかじり？', 'お前は昔から、ぱっとしなかったなあ', '（ひそひそと）あの子、ちょっと……ね'],
+    tr: { fat: ['あらあら、また大きくなって。食べすぎじゃない？'], neet: ['働いてないんだって？ うちの子なんて、もう課長よ'], nd: ['（ひそひそと）あの子、障害があるんでしょ？ かわいそうにねえ……ご家族が'], famous: ['テレビ見たわよ。……ちょっと、品がないわね', '有名になったんなら、お年玉はずんでよ'], single: ['いい人いないの？ もう若くないんだから'], poor: ['あそこの家、苦しいらしいわよ'], dumb: ['勉強は、苦手みたいねえ'] } },
+  boss: { fr: ['（上司が）「X」', '（会議室で、上司が）「X」', '（全員の前で、上司が）「X」'],
+    gen: ['お前の代わりなんて、いくらでもいるんだよ', '給料泥棒', 'この程度もできないなら辞めろ', '親の顔が見てみたいね', 'やる気ないなら死ねよ', '明日から来なくていいよ。……冗談だよ、冗談', 'その年でそれ？ 恥ずかしくないの？', '熱があっても来るのが社会人だろ', 'お前、なんでここにいるの？', 'みんな見ろ。こいつのせいで納期が遅れた'],
+    tr: { old: ['もう若くないんだから、早く辞めてくれないかな'], fat: ['自己管理もできないやつに、仕事ができるわけない'], famous: ['有名人の身内だからって、調子のんなよ'] } },
+  ij: { raw: 1, ijk: 1, gen: ['「{nk}、なんかおもしろいことやって！」（みんなの前で、むちゃぶり）', '「罰ゲーム、{n}に告白な！」', '「{n}のモノマネしまーす！」（教室じゅうが笑った）', '（変顔の写真を撮られて、クラスのグループのアイコンにされた）', '「{nk}〜！ ……呼んだだけ〜」', '「{n}がいちばん面白いって、みんな言ってるよ？ いじられキャラ最高！」', '「いじってるだけじゃん。ノリ悪くない？」', '（ズボンを下ろされて、動画を撮られた）', '（給食の牛乳に、消しゴムのカスを入れられた。「隠し味〜」）', '「{n}、ジュース買ってきて。……いじりだって、いじり」', '（文化祭の出し物で、ひとりだけ女装（男装）させられた）', '（誕生日に「プレゼント」と渡された箱の中は、生ゴミだった。みんなが拍手していた）'] },
+  ijh: { raw: 1, gen: ['この子、小さいころ、おねしょが治らなくてね〜', '{nkM}、またフラれたの？', 'あんたの部屋、ゴミ屋敷よね〜', 'ほんと、なにやってもドジなんだから', '（子どものころの恥ずかしい写真を、テレビの大画面に映された）', 'この子、昔は泣き虫でね〜。いまも？'],
+    tr: { fat: ['またおかわり？ 太るよ〜{nkM}', 'その腹、何か月？'], bald: ['その頭、電気代うかしてくれそう'], neet: ['うちの自宅警備員さん、今日もおつかれ〜'], famous: ['テレビの{meN}と、家の{meN}、別人よね〜', '有名人なのに、家ではジャージ'], single: ['恋人いない歴、何年だっけ〜？'], short: ['いつまでたっても、ちっちゃいままね〜'] } },
+  me: { peer: 1, gen: ['うるさい、黙ってろ', '顔も見たくない', 'いなくなればいいのに', '役立たず', '邪魔なんだよ', 'キモいんだよ', '話しかけんな', 'ほんと、うっとうしい', '消えろ', '死ねば？'],
+    byKind: { pa: ['あんたの子どもに生まれて最悪', '毒親', '産んでくれなんて、頼んでない', '老害', 'あんたみたいには、絶対ならない', 'お金だけ出してればいいんだよ', 'だから誰にも好かれないんだよ'], gp: ['同じ話ばっかり。うんざり', '早く施設に入ってよ', 'くさい。近寄らないで', 'もうボケてんじゃない？'], sp: ['結婚なんかしなきゃよかった', '誰のおかげで生活できてると思ってる', 'ほんと、使えない', '顔を見るだけでイライラする'], sibY: ['お前なんか、生まれてこなければよかった', '泣くな、うるさい', 'ついてくんな', 'お前がいるから、うちはおかしくなるんだよ', '親に甘やかされやがって'], sibO: ['えらそうにすんな', 'お前より、俺（わたし）のほうがまし', '親にえこひいきされてたくせに'], kid: ['お前なんか、生まれてこなければよかった', '泣くな、うるさい', '誰に似たんだか', 'お前のせいで、自由がなくなった'] } },
+  mij: { gen: ['ほんと、なにやってもダメだな（笑）', 'その顔、ウケる', '{nk}〜！ ……呼んだだけ（笑）', 'あ、いたの？ 気づかなかった（笑）', 'また失敗？ さすがだね（笑）', '今日も空回りしてるね〜'],
+    byKind: { pa: ['老けたね〜（笑）', 'その服、ダサくない？', 'また同じ話？ 何回目？（笑）', '加齢臭、するよ（笑）'], gp: ['入れ歯、ずれてるよ（笑）', '耳、遠くなったね〜（笑）'], sp: ['結婚前は、もうちょっとマシだったのにね（笑）'], sibY: ['泣き虫〜（笑）', 'おねしょ、もう治った？（笑）'], kid: ['泣き虫〜（笑）', 'おねしょ、もう治った？（笑）'], sibO: ['いい年して、まだ実家？（笑）'] },
+    tr: { fat: ['また太った？ 転がったほうが早くない？（笑）', 'おかわり何杯目〜？（笑）'], chub: ['ほっぺ、もちみたい（笑）'], short: ['あれ、どこ？ ……あ、下にいた（笑）'], tall: ['でかすぎ。天井に頭ぶつけんなよ（笑）'], thin: ['風で飛ばされんなよ（笑）'], dumb: ['九九、言える？ 七の段（笑）'], nerd: ['ガリ勉さん、今日もお勉強ですか〜？'], unath: ['走り方、ペンギンみたい（笑）'], inkya: ['友だち、いるの？ 架空の？（笑）'], nd_wheel: ['いいよな、ずっと座ってられて（笑）'], nd_hear: ['聞こえてる〜？ ……聞こえてないか（笑）'], nd_asd: ['また変なこだわり？（笑）'], nd_ld: ['これ読める？ ……読めないか（笑）'], cas: ['声、高っ。女子みたい（笑）'], hated: ['お前、ほんと嫌われてるよな（笑）'], neet: ['自宅警備、おつかれさまで〜す（笑）'], famsib: ['有名人のおまけ（笑）'], old: ['また同じ話？ 何回目？（笑）'] } },
+};
+// ---- 相手（言われる人） ----
+function abMeName(g) { try { return meSum(g).nm || 'あの子'; } catch (e) { return 'あの子'; } }
+function abTr(g, m, A) {
+  const T = [], f = m.g === 'f', age = num(m.age, 10), S = g.state.gakkoF && g.state.gakkoF[m.key], st = (S && S.fls && S.fls.stats) || A.npxSt || null;
+  const wc = num(A.wtCat); if (wc >= 2) T.push('fat'); else if (wc === 1) T.push('chub'); else if (wc <= -2) T.push('thin');
+  if (age >= 5 && age <= 18) { try { const B = bodyOf(g, m, A), sd = stdHt(age, f); if (B.ht <= sd - 6) T.push('short'); else if (B.ht >= sd + 9) T.push('tall'); } catch (e) { } }
+  if (A.nd) T.push('nd_' + A.nd);
+  if (A.flags && A.flags.kyCas && !f && age >= 12) T.push('cas');
+  if (st && age >= 6 && age <= 22) { if (num(st.gaku, 50) < 35) T.push('dumb'); else if (num(st.gaku, 50) >= 78) T.push('nerd'); if (num(st.tai, 50) < 35) T.push('unath'); if (num(st.yu, 50) < 35 || A.arch === 'inkya') T.push('inkya'); }
+  if (A.npxSt && num(A.npxSt.yu, 50) <= 30) T.push('talk');
+  if (num(A.hate) >= 2) T.push('hated');
+  if (A.role === 'neet') T.push('neet');
+  if (age >= 65) T.push('old');
+  try { const me = meSum(g); if (me.famous && ['sib', 'kid', 'pa'].includes(m.kind)) T.push('famsib'); if (me.poor && meMinor(g) && m.kind === 'sib') T.push('poor'); } catch (e) { }
+  T.push('gen'); return T;
+}
+function abTrMe(g) {
+  const T = []; let me = {}; try { me = meSum(g); } catch (e) { }
+  try { const K = g.state.gakko; if (K && typeof gkLabels === 'function') { const L = gkLabels(g, K); if (L.includes('デブ')) T.push('fat'); else if (L.includes('ぽっちゃり')) T.push('chub'); else if (L.includes('ガリガリ')) T.push('thin'); if (L.includes('チビ')) T.push('short'); if (L.includes('陰キャ')) T.push('inkya'); if (L.includes('ガリ勉')) T.push('nerd'); if (L.includes('オタク')) T.push('otaku'); } } catch (e) { }
+  if (g.state.flags && g.state.flags.meHd === 'H_m_bald') { T.push('bald'); if (!T.includes('fat') && !T.includes('chub')) T.push('chub'); }
+  if (me.neet) T.push('neet'); if (me.famous) T.push('famous'); if (me.poor) T.push('poor'); if (me.bullied) T.push('bulliedMe');
+  try { const ls = lsOf(g); if (me.student && ls && ls.stats && num(ls.stats.gaku, 50) < 35) T.push('dumb'); } catch (e) { }
+  try { if (num(me.age) >= 30 && !famRoster(g).some(o => o.kind === 'sp' && o.married)) T.push('single'); } catch (e) { }
+  T.push('gen'); return T;
+}
+function abTgt(g, m, A) { return { me: 0, m, A, f: m.g === 'f', age: num(m.age), kind: m.kind, younger: sibIsYounger(m), rel: m.rel, name: String(m.name).split(' ').pop(), tr: abTr(g, m, A) }; }
+function abMe(g) { let age = 20; try { age = ageOf(g); } catch (e) { } return { me: 1, f: meGender(g) === 'f', age, kind: 'me', rel: 'あなた', name: abMeName(g), tr: abTrMe(g) }; }
+function abTgtX() { return { me: 0, x: 1, f: chance(0.5), age: 10, kind: 'x', rel: 'あの子', name: 'あの子', tr: ['gen'], nick: 'あの子' }; }
+function abNick(g, T) {
+  if (T.nick) return T.nick;
+  let nk = null;
+  try { if (T.me) { const K = g.state.gakko; if (K && K.bully && K.bully.nick) nk = K.bully.nick; } else { const S = g.state.gakkoF && g.state.gakkoF[T.m.key]; if (S && S.bully && S.bully.nick && S.bully.nick !== '標的') nk = S.bully.nick; } } catch (e) { }
+  if (!nk) {
+    g.state.flags = g.state.flags || {}; const st = T.me ? g.state.flags : T.A, key = T.me ? 'abNickMe' : 'abNick'; nk = st[key];
+    if (!nk) { const ts = T.tr.filter(t => t !== 'gen' && AB_TR[t] && AB_TR[t].nk); const t = ts.length ? ts[hashStr(T.name + '|nk') % ts.length] : 'gen'; const L = AB_TR[t].nk; nk = L[hashStr(T.name + '|' + t) % L.length]; st[key] = nk; }
+  }
+  T.nick = String(nk).replace(/\{n\}/g, T.name).replace(/\{meN\}/g, abMeName(g));
+  return T.nick;
+}
+function abCmp(g, T) {
+  if (T.me) { const R = famRoster(g).filter(o => o.kind === 'sib'); const o = R.find(x => sibIsOlder(x)) || R[0]; if (!o) return 'よその子'; return { '兄': 'お兄ちゃん', '姉': 'お姉ちゃん' }[o.rel] || o.rel; }
+  if (T.kind === 'sib') return abMeName(g);
+  return 'よその子';
+}
+function abFillIn(g, s, T, o = {}) {
+  return String(s).replace(/\{nkM\}/g, () => abNick(g, abMe(g))).replace(/\{nk\}/g, () => abNick(g, T)).replace(/\{n\}/g, T.name).replace(/\{meN\}/g, () => abMeName(g)).replace(/\{rel\}/g, T.rel || 'きょうだい').replace(/\{fam\}/g, T.kind === 'kid' ? '子ども' : T.kind === 'pa' ? '親' : 'きょうだい').replace(/\{cmp\}/g, () => abCmp(g, T)).replace(/\{num\}/g, () => String(3 + Math.floor(RND() * 997))).replace(/女装（男装）/g, T.f ? '男装' : '女装').replace(/男（女）/g, T.f ? '女' : '男').replace(/俺（わたし）/g, o.sf == null ? '俺（わたし）' : o.sf ? 'わたし' : '俺');
+}
+const AB_NARR = x => /^（/.test(x);
+// ことばを1つ選ぶ。o: { q: かぎかっこ無しの本文だけ, tr: 特徴をしぼる, U: 使用済み, sf: 言う人が女性か }
+function abLine(g, spk, T, o = {}) {
+  const P = AB_SPK[spk] || AB_SPK.cls, U = o.U || new Set(), q = !!o.q;
+  let ft = o.tr || null; if (ft === 'nd') ft = T.tr.find(t => t.startsWith('nd_')) || null;
+  const trs = ft ? [ft] : T.tr.filter(t => t !== 'gen');
+  let tp = [];
+  for (const t of trs) {
+    const key = P.tr && !P.tr[t] && t.startsWith('nd_') && P.tr.nd ? 'nd' : t;
+    if (P.tr && P.tr[key]) tp = tp.concat(P.tr[key]);
+    if (P.ijk && AB_TR[t] && AB_TR[t].ij) tp = tp.concat(AB_TR[t].ij);
+    if (P.peer && AB_TR[t] && AB_TR[t].ab) tp = tp.concat(AB_TR[t].ab);
+  }
+  let gp = (P.gen || []).concat(T.f ? P.genF || [] : P.genM || []);
+  if (P.byKind) gp = gp.concat(P.byKind[T.kind === 'sib' ? (T.younger ? 'sibY' : 'sibO') : T.kind] || []);
+  let pool = tp.length && (ft || chance(0.65)) ? tp : gp.concat(tp);
+  if (q) pool = pool.filter(x => !AB_NARR(x));
+  if (!pool.length) pool = gp.filter(x => !q || !AB_NARR(x));
+  if (!pool.length) return '……';
+  let fresh = pool.filter(x => !U.has(x)); if (!fresh.length) fresh = pool;
+  const raw = pick(fresh); U.add(raw);
+  const x = abFillIn(g, raw, T, o);
+  if (q || P.raw || AB_NARR(x)) return x;
+  return abFillIn(g, pick(P.fr || ['「X」']), T, o).replace('X', x);
+}
+// ---- イベント文中のことば ----
+const AB_RE = /\{(ab|abq|abK|abT|abTq|abS|abB|abR|abP|abO|abM|abMq|abMS|ij|ijM|nk|nkM|n|meN|num|scar|ab:[^}]+)\}/g;
+function abFill(s, g, m, A, cx, U) {
+  if (!/\{(ab|ij|nk|n\}|meN|num|scar)/.test(s)) return s;
+  let Tm = null, Tme = null, Tk = null;
+  const tm = () => Tm || (Tm = abTgt(g, m, A)), tme = () => Tme || (Tme = abMe(g)), tk = () => Tk || (Tk = cx && cx.kSib ? abTgt(g, cx.kSib, agOf(g, cx.kSib)) : tm());
+  const sf = m.g === 'f', auto = m.kind === 'pa' ? 'pa' : m.kind === 'gp' ? 'gp' : m.kind === 'sp' ? 'sp' : m.kind === 'kid' ? 'kid' : sibIsYounger(m) ? 'kid' : 'sib';
+  const one = (k, Q) => {
+    try {
+      const o = { U, sf, q: Q };
+      switch (k) {
+        case 'ab': return abLine(g, 'cls', tm(), o);
+        case 'abq': return abLine(g, 'cls', tm(), { ...o, q: 1 });
+        case 'abK': return abLine(g, 'senpai', tm(), o);
+        case 'abT': return abLine(g, 'teacher', tm(), o);
+        case 'abTq': return abLine(g, 'teacher', tm(), { ...o, q: 1 });
+        case 'abS': return abLine(g, 'sns', tm(), o);
+        case 'abB': return abLine(g, 'boss', tm(), o);
+        case 'abR': return abLine(g, 'rel', tm(), o);
+        case 'abP': return abLine(g, 'pa', tm(), o);
+        case 'abO': return abLine(g, 'sib', tm(), o);
+        case 'abM': return abLine(g, auto, tme(), o);
+        case 'abMq': return abLine(g, auto, tme(), { ...o, q: 1 });
+        case 'abMS': return abLine(g, 'sns', tme(), o);
+        case 'ij': return abLine(g, 'ij', tm(), o);
+        case 'ijM': return abLine(g, 'ijh', tme(), o);
+        case 'nk': return abNick(g, tm());
+        case 'nkM': return abNick(g, tme());
+        case 'n': return tm().name;
+        case 'meN': return abMeName(g);
+        case 'num': return String(30 + Math.floor(RND() * 9970));
+        case 'scar': return abScarText(g, m, A, U) || '（なにも言わずに、窓の外を見ている）';
+      }
+      const p = k.split(':'), T = p[2] === 'me' ? tme() : p[2] === 'k' ? tk() : p[2] === 'x' ? abTgtX() : tm();
+      return abLine(g, p[1] || 'cls', T, { ...o, q: Q || p[3] === 'q', tr: p[4] || null });
+    } catch (e) { return '……'; }
+  };
+  // 「{abM}」のように、かぎかっこで囲まれているときは本文だけを入れる
+  return s.replace(new RegExp('「' + AB_RE.source + '」', 'g'), (all, k) => '「' + one(k, 1) + '」').replace(AB_RE, (all, k) => one(k, 0));
+}
+// ---- 心の傷 ----
+const AB_SCAR = {
+  voice: { n: '大きな声がこわい', sec: '大きな声を聞くと、体が勝手にかたまる。', dia: 'だれかが怒鳴るたびに、息ができなくなる。', t: ['（物音がしただけで、肩がびくっとはねた）', '「……ごめんなさい。……怒ってない？」', '（テレビで怒鳴るシーンになると、そっと部屋を出ていく）'] },
+  name: { n: 'あだ名がこわい', sec: 'あのあだ名が、頭から離れない。', dia: '夢の中でも、あのあだ名で呼ばれた。', t: ['（だれも言っていないのに、耳をふさいでいる）', '「……名前で呼ばれるの、ちょっと、こわい」'] },
+  school: { n: '学校がこわい', sec: '学校のことを考えると、おなかが痛くなる。', dia: '日曜の夜が、いちばんきらい。', t: ['「……明日、学校、行かなきゃだめ？」', '（日曜の夜になると、おなかが痛いと言いだす）', '（制服を見るだけで、手がふるえている）'] },
+  phone: { n: '通知がこわい', sec: 'スマホの通知音が、こわい。', dia: '通知が鳴るたびに、心臓がはねる。', t: ['（スマホの通知音が鳴るたびに、顔がこわばる）', '「……スマホ、しばらく見たくない」'] },
+  mirror: { n: '鏡がこわい', sec: '鏡にうつる自分が、きらい。', dia: '写真に写りたくない。', t: ['「……鏡、見たくない」', '（写真を撮ろうとすると、顔を手でかくす）'] },
+  eat: { n: '人前で食べられない', sec: '人に見られながら食べるのが、こわい。', dia: 'お弁当は、トイレで食べた。', t: ['（みんなで食べるときだけ、ごはんに手をつけない）', '「……あとで、ひとりで食べる」'] },
+  home: { n: '家にいたくない', sec: 'この家に、居場所がない気がする。', dia: '帰り道、わざと遠回りした。', t: ['「……家、いたくない」', '（夜おそくまで、帰ってこない日が増えた）'] },
+  me: { n: 'あなたがこわい', sec: '{c}に言われたことばを、忘れられない。', dia: '{c}の足音が聞こえると、体がかたくなる。', t: ['「……{c}、また怒る？」', '（目が合うと、すっとそらされた）', '（話しかけると、一瞬、身がまえるのがわかった）', '「……なんでもない。なんでもないから」'] },
+  work: { n: '仕事がこわい', sec: '会社のビルが見えると、足が止まる。', dia: '月曜なんて、来なければいいのに。', t: ['（日曜の夜、ずっとため息をついている）', '「……月曜なんて、来なければいいのに」'] },
+};
+function abScar(g, m, A, k) {
+  A.scar = isObj(A.scar) ? A.scar : {}; if (A.scar[k] != null) return false; A.scar[k] = g.state.day;
+  const S = AB_SCAR[k], cl = famCall(g, m); if (S) { addSec(A, g, S.sec.replace(/\{c\}/g, cl)); addDia(A, g, S.dia.replace(/\{c\}/g, cl), -8); }
+  try { faiLog(g, `${m.rel}の心に、傷が残った（${S ? S.n : k}）`, { ico: 'cloud', imp: 1, silent: true }); } catch (e) { }
+  return true;
+}
+function abScarText(g, m, A, U) {
+  const S = isObj(A.scar) ? A.scar : null; if (!S) return null; const ks = Object.keys(S).filter(k => AB_SCAR[k]); if (!ks.length) return null;
+  const L = []; for (const k of ks) for (const t of AB_SCAR[k].t) if (!U || !U.has(t)) L.push(t); if (!L.length) return null;
+  const t = pick(L); if (U) U.add(t); return t.replace(/\{nk\}/g, () => abNick(g, abTgt(g, m, A)));
+}
+function abScarLine(g, m, A) {
+  const S = isObj(A.scar) ? A.scar : null; if (!S || !Object.keys(S).length) return null;
+  for (const k of Object.keys(S)) if (g.state.day - S[k] >= 60 && num(A.op) >= 82 && chance(0.15)) { delete S[k]; addDia(A, g, `${(AB_SCAR[k] || {}).n || k}――前より、少しだけ平気になった気がする。`, 6); }
+  if (!Object.keys(S).length || !chance(0.35)) return null;
+  let t = abScarText(g, m, A); if (!t) return null; t = t.replace(/\{c\}/g, famCall(g, m)); if (famKansai(g)) t = famDialect(t); return t;
+}
+function abScarNames(A) { const S = isObj(A.scar) ? A.scar : {}; return Object.keys(S).map(k => (AB_SCAR[k] || {}).n || k).join('・'); }
+// ---- 会話：話すとき、心の傷がにじむ ----
+function famLine(g, m, A, act) { try { const s = abScarLine(g, m, A); if (s) return s; } catch (e) { } return famLine0(g, m, A, act); }
+function faiMindLines(g, m, A) { const L = faiMindLines0(g, m, A); try { const s = abScarNames(A); if (s) L.push(`心の傷：${s}`); if (num(A.abused)) L.push(`あなたからの暴言・いじり：${Math.round(num(A.abused) * 2) / 2}回`); } catch (e) { } return L; }
+// ---- あなたが言う（暴言を吐く／いじる） ----
+const AB_RE_YOUNG = ['（顔がくしゃっとゆがんで、大声で泣きだした）', '「……っ、ごめんなさい、ごめんなさい……」', '（なにも言わずに、自分の部屋に走っていった）', '（くちびるをかんで、うつむいた。手が、ふるえている）', '「……{c}、ぼく（わたし）のこと、きらいなの？」', '（ぬいぐるみを抱きしめて、部屋のすみに座りこんだ）'];
+const AB_RE_YOUNG_IJ = ['「……やめてよ」（笑おうとして、泣きそうな顔になった）', '（えへへ、と笑った。……目は、笑っていなかった）', '「……{c}まで、学校の子とおなじこと言うんだ」', '「……っ、言わないでよ！」'];
+const AB_RE_TEEN = ['「……は？ ……もういい」', '（ドアを思いきり閉める音が、家じゅうに響いた）', '「……{c}なんか、大っきらい」', '（無言でイヤホンをつけて、こちらを見なくなった）', '「……知ってるよ。言われなくても、わかってる」', '（しばらく黙ったあと、小さく「死ねよ」とつぶやいた）'];
+const AB_RE_TEEN_IJ = ['「……おもしろいと思ってんの？ それ」', '（舌打ちして、部屋に戻っていった）', '「学校でも言われてんだよ。家でまで言わないで」'];
+const AB_RE_PA = { yasashii: '（目に涙をためて）「……そんなふうに、思ってたの」', kibishii: '「親に向かって、なんだその口のききかたは！」', shinpai: '「……どうしたの？ 何かあったの？ ……ねえ、話して」', mie: '「やめて！ ご近所に聞こえたらどうするの！」', mukanshin: '「……そうか」（新聞から、目を上げなかった）', hiniku: '「へえ。で、その口で、誰に養ってもらってるんだっけ？」', rakuten: '（笑おうとして、うまく笑えなかった）「……はは。きびしいなあ」', shinkei: '（手がふるえている）「……やめて。そういうの、ほんとに、やめて」' };
+const AB_RE_ADULT = { gp: ['「……長生きなんか、するもんじゃないねえ」', '（しばらく黙って、湯のみを見つめていた）'], sp: ['「……そう。わかった」（その夜、ひとことも口をきいてくれなかった）', '「……子どもの前でだけは、やめて」'], sibO: ['「は？ お前、誰に向かって言ってんの？」', '「……そっか。お前、そんなふうに思ってたんだ」'] };
+const AB_RE_IJ_ADULT = ['「……おもしろくないよ」', '「はいはい」（ため息をつかれた）', '（苦笑いして、目をそらされた）', '「……そういうの、ちょっと傷つくな」'];
+async function abPlayer(g, m, A, lab, say, once) {
+  const ij = lab === 'いじる', T = abTgt(g, m, A), U = new Set(), C = [], cl = famCall(g, m), Rc = t => { let s = String(t).replace(/\{c\}/g, cl).replace(/ぼく（わたし）/g, m.g === 'f' ? 'わたし' : 'ぼく').replace(/俺（わたし）/g, m.g === 'f' ? 'わたし' : '俺'); if (famKansai(g)) s = famDialect(s); return s; };
+  for (let i = 0; i < 24 && C.length < 3; i++) { const x = abLine(g, ij ? 'mij' : 'me', T, { q: 1, U, sf: meGender(g) === 'f' }); if (x && x.length <= 26 && !C.includes(x)) C.push(x); }
+  const k = await g.list({ title: ij ? `${m.rel}を、なんといじる？` : `${m.rel}に、なんと言う？`, items: C.map(x => ({ label: `「${x}」` })).concat([{ label: 'やっぱりやめる' }]), x: 12, y: 44, w: 430, px: true });
+  if (k < 0 || k >= C.length) return true;
+  const line = C[k], per = A.per || 'yasashii', age = num(m.age), young = age < 13, teen = !young && age < 20 && (m.kind === 'sib' || m.kind === 'kid');
+  await g.say(`あなた「${line}」`);
+  const okJoke = ij && !young && !A.nd && (per === 'rakuten' || num(A.op) >= 75) && chance(0.6);
+  let r;
+  if (okJoke) r = pick(['「ちょっと〜！ ひどくない？（笑）」', '「はいはい、{c}も人のこと言えないでしょ（笑）」', '「もう！ ……ふふっ」']);
+  else if (young) r = pick(ij ? AB_RE_YOUNG_IJ : AB_RE_YOUNG);
+  else if (teen) r = pick(ij ? AB_RE_TEEN_IJ : AB_RE_TEEN);
+  else if (ij) r = pick(AB_RE_IJ_ADULT);
+  else if (m.kind === 'pa') r = AB_RE_PA[per] || AB_RE_PA.yasashii;
+  else r = pick(AB_RE_ADULT[m.kind === 'sib' ? 'sibO' : m.kind] || AB_RE_ADULT.sibO);
+  await say(Rc(r));
+  if (okJoke) { A.op = clamp(num(A.op) + 1, 0, 100); return true; }
+  // 言い返される
+  const autoSpk = m.kind === 'pa' ? 'pa' : m.kind === 'gp' ? 'gp' : m.kind === 'sp' ? 'sp' : (m.kind === 'kid' || sibIsYounger(m)) ? 'kid' : 'sib';
+  if (!young && (['kibishii', 'hiniku'].includes(per) || (m.kind === 'sib' && !sibIsYounger(m)) || m.kind === 'sp' || teen) && chance(ij ? 0.35 : 0.55)) { await say(Rc(abLine(g, autoSpk, abMe(g), { U, sf: m.g === 'f' }))); try { g.addNeed('stress', 6); } catch (e) { } }
+  const first = once(ij ? 'ijiri' : 'abuse'), mul = first ? 1 : 0.5;
+  A.abused = num(A.abused) + (ij ? 0.5 : 1); A.abusedDay = g.state.day;
+  A.op = clamp(num(A.op) - Math.round((ij ? 5 : 11) * mul), 0, 100); A.mood = clamp(num(A.mood) - (ij ? 6 : 12), 0, 100); A.stress = clamp(num(A.stress) + (young ? 12 : 7), 0, 100);
+  if (A.cxV != null && sibIsYounger(m)) A.cxV = clamp(num(A.cxV) + (ij ? 4 : 8), 0, 100);
+  addDia(A, g, `${cl}に「${line}」と言われた。${young ? '……なんで？' : ''}`, ij ? -6 : -12);
+  if (first) { try { g.addNeed('stress', -3); } catch (e) { } }
+  faiLog(g, `${ij ? '' : '【暴言】'}あなたが${m.rel}に「${line}」と言った`, { ico: 'fight', imp: ij ? 0 : 2, silent: true });
+  if (num(A.abused) >= 3) abScar(g, m, A, 'me');
+  if (!ij && young && chance(0.25)) abScar(g, m, A, 'voice');
+  if (ij && T.tr.some(t => ['fat', 'chub', 'thin', 'short', 'tall', 'bald'].includes(t)) && num(A.abused) >= 2 && chance(0.35)) abScar(g, m, A, 'mirror');
+  for (const o of famRoster(g)) { if (o.key === m.key || houseOf(o) !== houseOf(m)) continue; const B = agOf(g, o); if (SMALL(B.role)) continue; B.op = clamp(num(B.op) - (ij ? 1 : 3), 0, 100); }
+  if (num(A.abused) >= 5) { A.flags = A.flags || {}; if (!A.flags.abSec) { A.flags.abSec = 1; addSec(A, g, `${cl}に言われたことばを、ノートに書きためている。もう${Math.floor(num(A.abused))}個になった。`); } }
+  return true;
+}
+async function famTalkMore(g, m, A, act, lab, say, once) { if (lab === '暴言を吐く' || lab === 'いじる') return abPlayer(g, m, A, lab, say, once); return famTalkMore0(g, m, A, act, lab, say, once); }
+function famMoreItems(g, m, A, act) { const I = famMoreItems0(g, m, A, act); try { if (!(g.state.flags && g.state.flags.famDarkOff) && !SMALL(A.role) && num(m.age) >= 3) { const i = I.findIndex(x => x.label === 'からかう'); I.splice(i >= 0 ? i + 1 : I.length, 0, { label: 'いじる' }, { label: '暴言を吐く' }); } } catch (e) { } return I; }
+// ---- 家族どうし（AI）：怒鳴る／いじる ----
+function abAIok(c, B) {
+  if (c.g.state.flags && c.g.state.flags.famDarkOff) return false;
+  if (SMALL(B.A.role) || num(B.m.age) < 5 || SMALL(c.A.role) || num(c.m.age) < 10) return false;
+  if (memOf(c.g, c.m, B.m, 'abuse', 1)) return false;
+  return isParentOf(c.m, B.m) || faiPair(c.m, B.m) === 'couple' || olderSib(c.m, B.m);
+}
+function abAIU(c, ij) { const P = { kibishii: 0.45, hiniku: 0.55, shinkei: 0.3, mie: 0.2, yasashii: -0.9, rakuten: ij ? 0.35 : -0.6, shinpai: -0.3, mukanshin: 0 }[c.A.per] || 0; return (ij ? -1.25 : -1.5) + Math.max(0, num(c.A.stress) - 50) / 25 + Math.max(0, -num(c.rel)) / 40 + P + (num(c.B.A.hate) >= 2 ? 0.35 : 0) + (c.B.A.role === 'neet' ? 0.3 : 0); }
+function abAIfx(c, ij) {
+  const g = c.g, spk = ij ? 'mij' : faiPair(c.m, c.mB) === 'couple' ? 'cpl' : isParentOf(c.m, c.mB) ? 'pa' : 'sib';
+  const T = abTgt(g, c.mB, c.B.A), line = abLine(g, spk, T, { q: 1, sf: c.m.g === 'f' }).replace(/（笑）/g, '');
+  relAdd(g, c.m, c.mB, ij ? -4 : -12); memAdd(g, c.m, c.mB, 'abuse');
+  const B = c.B.A; B.mood = clamp(num(B.mood) - (ij ? 5 : 12), 0, 100); B.stress = clamp(num(B.stress) + (ij ? 4 : 10), 0, 100); c.A.stress = clamp(num(c.A.stress) - 4, 0, 100);
+  c.log(ij ? `${c.nm}が${c.nmB}をいじった。「${line}」` : `【暴言】${c.nm}が${c.nmB}に「${line}」`, { ico: ij ? 'talk' : 'fight', imp: ij ? 1 : 2 });
+  addDia(B, g, `${c.m.rel}に「${line}」と言われた。`, ij ? -5 : -10);
+  if (!ij && num(c.mB.age) < 18 && chance(0.2)) abScar(g, c.mB, B, chance(0.5) ? 'voice' : 'home');
+  if (livesWith(g, c.m) && faiAtHome(g)) { try { g.addNeed('stress', ij ? 1 : 4); } catch (e) { } }
+}
+FA.push(
+  { id: 'abuse', n: '怒鳴る', nB: '怒鳴られる', k: 'fight', pl: 'living', d: [5, 15], soc: (c, B) => abAIok(c, B), U: c => abAIU(c, 0), nd: { fun: -2 }, ndB: { fun: -12, social: -8 }, fx: c => abAIfx(c, 0), v: ['（なんで、こんなこともできないの）', '（言いすぎた。……でも、止まらない）', '（また、やってしまった）'] },
+  { id: 'ijiri', n: 'いじる', nB: 'いじられる', k: 'talk', pl: 'living', d: [5, 15], soc: (c, B) => abAIok(c, B), U: c => abAIU(c, 1), nd: { fun: 6 }, ndB: { fun: -8 }, fx: c => abAIfx(c, 1), v: ['（ちょっとからかっただけ）', '（ノリだよ、ノリ）'] });
+FA_BY.abuse = FA[FA.length - 2]; FA_BY.ijiri = FA[FA.length - 1]; FAI_MAXD.abuse = 1; FAI_MAXD.ijiri = 1;
+// ---- テスト用 ----
+if (typeof window !== 'undefined') window.__abuse = {
+  tr: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return k === 'me' ? abTrMe(g) : abTr(g, m, agOf(g, m)); },
+  line: (spk, k, q, tr) => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return abLine(g, spk, k === 'me' ? abMe(g) : abTgt(g, m, agOf(g, m)), { q, tr }); },
+  fill: (k, s) => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m); return abFill(s, g, m, A, famEvCtx(g, m, A), new Set()); },
+  player: (k, lab) => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m), F = faiSt(g); g.run(async () => { await abPlayer(g, m, A, lab, t => g.say(t, { name: m.rel }), kk => { const z = k + ':' + kk; if (F.talked[z] === g.state.day) return false; F.talked[z] = g.state.day; return true; }); }); return 0; },
+  items: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m); return famMoreItems(g, m, A, nowAct(g, m, A)).map(x => x.label); },
+  scan: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k), A = agOf(g, m), cx = famEvCtx(g, m, A), out = []; const walk = (st, id) => { for (const l of st.L || []) chk(l, id); for (const ch of st.C || []) { chk(ch[0], id); chk(ch[2], id); for (const f of ['al', 'sec', 'dia']) if (ch[1] && ch[1][f]) chk(ch[1][f], id); if (ch[3]) walk(ch[3], id); } }; const chk = (t, id) => { const r = abFill(String(t), g, m, A, cx, new Set()); if (/\{(ab|ij|nk|n\}|meN|num|scar)/.test(r) || /「「|」」/.test(r) || (r.includes('……') && !String(t).includes('……') && /\{ab/.test(t))) out.push(id + ': ' + r); }; for (const e of FE) walk(e, e.id); return out; },
+  scar: k => { const A = agOf(window.__game, famRoster(window.__game).find(x => x.key === k)); return [A.scar || {}, A.abused || 0]; },
+};
+
+// ===== 暴言・いじりの重いイベント（日をまたいで悪化する連鎖つき） =====
+const AB_KID = c => (c.m.kind === 'kid' || sibIsYounger(c.m)) && c.m.age >= 6 && c.m.age <= 18;
+const AB_STU = c => AB_KID(c) && ['elem', 'jhs', 'hs'].includes(c.A.role);
+FE.push(
+  // ---- あだ名が広がっていく（3段階） ----
+  { id: 'ab_nick1', dark: 1, sy: 1, w: 'any', ok: c => AB_STU(c), once: true, L: ['（帰ってくるなり、かばんを床に投げつけた）', '「……今日から、「{nk}」って呼ばれることになったんだって」', '「朝、教室に入ったら、黒板にでっかく書いてあった。「{nk}」って」', '「みんな、こう言うの」', '{ab}', '{ab}'], C: [['先生に言おう', { op: 6, al: '「{nk}」と呼ばれはじめた弟（妹）のことを、先生に相談した' }, '「……先生、ちゃんと聞いてくれるかな」', { L: ['（翌日、先生から電話があった）', '「みんな「ふざけていただけ」と言っています。……{n}さんも、笑っていたそうですよ」'], C: [['笑うしかなかったんだと思います', { op: 8, bully: -1 }, '（電話を切ったあと、{n}がぽつりと言った。「……笑ってないと、もっとひどくなるから」）'], ['もう一度、学校に行きます', { op: 10, flag: 'nk1' }, '（校長室で、30分待たされた。出てきたお茶は、ぬるかった）']] }], ['そんなの気にするな', { op: -2, flag: 'nk1', sec: '「気にするな」と言われた。気にしないなんて、できない。' }, '「……うん。……気にしない」'], ['あだ名くらい、みんなあるよ', { op: -6, flag: 'nk1', mood: -8 }, '「……そっか。そうだよね」']] },
+  { id: 'ab_nick2', dark: 1, sy: 1, w: 'any', ok: c => c.flag('nk1') && c.fday('nk1') >= 3, once: true, L: ['（夕方。{n}が、ずっと黙ったまま宿題をしている）', '「……今日ね、先生まで、出席で「{nk}……じゃなかった、{n}」って言った」', '「クラスじゅう、大爆笑だった」', '{ab}', '{ab}', '「ノートにも、教科書にも、書かれてるの。「{nk}」って」'], C: [['証拠の写真を撮っておこう', { op: 8, unflag: 'nk1', flag: 'nk2', al: '弟（妹）の教科書の落書きを、写真に残した' }, '「……{c}、なんでそんなに冷静なの」', { L: ['（ページをめくるたびに、手が止まる）', '（『{abq}』『{abq}』『{abq}』）'], C: [['……全部、記録する', { op: 6, st: 8 }, '「……ありがと。……ひとりで見るの、こわかった」']] }], ['しばらく学校を休もう', { op: 8, unflag: 'nk1', scar: 'name', mood: 4 }, '「……ほんと？ ……あした、休んでいい？」'], ['先生もふざけてるだけだよ', { op: -10, unflag: 'nk1', flag: 'nk2', scar: 'name', sec: '先生まで、あのあだ名で呼んだ。{c}は「ふざけてるだけ」だって。' }, '「…………」']] },
+  { id: 'ab_nick3', dark: 1, sy: 1, w: 'any', ok: c => c.flag('nk2') && c.fday('nk2') >= 4, once: true, L: ['（夜中。{n}の部屋から、スマホの通知音が鳴りつづけている）', '（画面をのぞくと、クラスのグループに「{n}菌ゲーム」のルールが貼られていた）', '（「{n}がさわったものにタッチされたら、菌がうつる。3秒以内に、誰かにタッチ」）', '{abS}', '{abS}', '{abS}', '「……{c}。ぼく（わたし）、あした、学校行かなきゃだめ？」'], C: [['行かなくていい。転校も考えよう', { op: 12, unflag: 'nk2', bully: -2, scar: 'school', al: '「菌ゲーム」の標的にされた弟（妹）に、学校に行かなくていいと伝えた' }, '「……っ。……ほんとに？ ……ほんとに、いいの？」'], ['スクショを全部とって、教育委員会へ', { op: 12, unflag: 'nk2', bully: -2, scar: 'phone', al: '弟（妹）へのネットいじめの証拠を集めて、教育委員会に訴えた' }, '（グループは、その日のうちに消えた。……「誰かがチクった」というメッセージを最後に）'], ['負けないで、行ってきな', { op: -12, unflag: 'nk2', scar: 'school', bullyStart: 3, sec: '「負けないで」と言われた。もう、何回も負けてるのに。' }, '「…………うん」']] },
+  // ---- いじられキャラ（2段階） ----
+  { id: 'ab_ijchara1', dark: 1, sy: 1, w: 'any', ok: c => AB_STU(c), once: true, L: ['「ねえ{c}、ぼく（わたし）ね、クラスの「いじられキャラ」なんだって」', '「みんな、すっごく笑ってくれるの。たとえばね……」', '{ij}', '{ij}', '「……おもしろいでしょ？」', '（笑っている。……でも、目が笑っていない）'], C: [['……本当に、楽しい？', { op: 6 }, '「……え？」', { L: ['（しばらく黙ったあと、{n}の顔がくしゃっとゆがんだ）', '「……ほんとは、すっごく、いや」', '「でも、笑わないと「ノリ悪い」って、もっとやられるの」'], C: [['いじりも、いじめだよ', { op: 10, bully: -1, al: '「いじられキャラ」の弟（妹）に、「いじりも、いじめだ」と伝えた' }, '「……いじめ、なんだ。……ぼく（わたし）、いじめられてたんだ」'], ['いやだって、言っていいんだよ', { op: 8, mood: 6 }, '「……言えるかな。……{c}がいるなら、言えるかも」']] }], ['人気者じゃん', { op: -4, flag: 'ij1', sec: 'いじられてるのを、{c}は「人気者」だって。……そうなのかな。' }, '「……だよね！ 人気者なんだ、ぼく（わたし）」']] },
+  { id: 'ab_ijchara2', dark: 1, sy: 1, w: 'any', ok: c => c.flag('ij1') && c.fday('ij1') >= 3, once: true, L: ['（{n}が、制服のまま、びしょぬれで帰ってきた）', '「……いじりだよ。プールに落とされただけ」', '「みんなで動画撮って、笑ってた。……ノリだから」', '（その動画は、学年じゅうに回っていた。再生回数は、{num}回）', '{ij}', '「「次は屋上からな」って。……冗談だよね？」'], C: [['冗談じゃない。今すぐ学校に行く', { op: 12, unflag: 'ij1', bully: -2, al: 'プールに落とされた弟（妹）のことで、学校に乗りこんだ' }, '（学校は「生徒どうしの遊びの延長」と言った。……動画を見せると、教頭の顔色が変わった）'], ['動画を消してもらおう', { op: 6, unflag: 'ij1', scar: 'phone' }, '（消しても消しても、誰かが保存していた）'], ['笑ってれば、そのうち終わるよ', { op: -14, unflag: 'ij1', bullyStart: 3, scar: 'school', sec: '屋上の話、{c}は冗談だと思ってる。' }, '「…………そっか」']] },
+  // ---- 親の暴言（あなたに） ----
+  { id: 'ab_pa_rant', dark: 1, w: 'pa', ok: c => num(c.A.stress) > 50 || num(c.A.op) < 45 || c.me.neet, cd: 60, L: ['（夕食。親の機嫌が、目に見えて悪い）', '（箸を置く音が、やけに大きく響いた）', '「{abM}」', '「{abM}」', '（テレビの音だけが、食卓に流れている）'], C: [['言い返す', { op: -6, st: 8 }, '「……なに、その口のききかた」', { L: ['「{abM}」', '「{abM}」', '（{k}が、泣きそうな顔でこちらを見ている）'], C: [['家を飛びだす', { op: -10, st: 10, flag: 'paRant' }, '（玄関のドアを、思いきり閉めた。……夜の公園は、思ったより寒かった）'], ['……ごめん', { op: 2, st: 12, flag: 'paRant' }, '「……わかればいいのよ」']] }], ['黙って聞く', { st: 14, flag: 'paRant' }, '（ごはんの味が、しなかった）'], ['無言で部屋に戻る', { op: -4, st: 8, flag: 'paRant' }, '（背中に、「{abMq}」と声が飛んできた）']] },
+  { id: 'ab_pa_after_sorry', w: 'pa', per: ['yasashii', 'shinpai', 'rakuten', 'shinkei', 'mie'], ok: c => c.flag('paRant') && c.fday('paRant') >= 1, cd: 20, L: ['（翌朝。テーブルに、好物のおかずが置いてあった）', '「……きのうは、言いすぎた。ごめんね」', '「お母さん（お父さん）も、いろいろあって……。あなたに当たっちゃった」'], C: [['……もういいよ', { op: 8, unflag: 'paRant', st: -6 }, '「……ありがとう」'], ['許さない', { op: -6, unflag: 'paRant' }, '「……そう、だよね」'], ['いつも言うよね、それ', { op: -2, unflag: 'paRant', st: -2 }, '「…………」（言い返せない顔をしていた）']] },
+  { id: 'ab_pa_after_none', dark: 1, w: 'pa', per: ['kibishii', 'hiniku', 'mukanshin'], ok: c => c.flag('paRant') && c.fday('paRant') >= 1, cd: 20, L: ['（翌朝。親は、何事もなかったように新聞を読んでいた）', '「おはよう。……なに、その顔」', '（きのうのことは、なかったことになっているらしい）'], C: [['きのうのこと、謝ってよ', { op: -4, unflag: 'paRant' }, '「謝る？ 本当のことを言っただけだろう」', { L: ['「{abM}」'], C: [['……もういい', { st: 12 }, '（この家では、言ったほうが忘れて、言われたほうだけが覚えている）']] }], ['……おはよう', { st: 6, unflag: 'paRant' }, '（ことばは、刺さったまま抜けない）']] },
+  // ---- 夫婦の怒鳴りあいと、ふるえる弟・妹 ----
+  { id: 'ab_cpl_rant', dark: 1, w: 'sibYoung', ok: c => c.m.age <= 15 && famRoster(c.g).filter(o => o.kind === 'pa').length >= 2, cd: 120, L: ['（夜中。リビングから、怒鳴り声が聞こえる）', '「{ab:cpl}」', '「{ab:cpl}」', '（なにかが割れる音）', '（ドアのすき間から、弟（妹）がふるえながらのぞいていた）', '「……{c}。お父さんとお母さん、りこんするの？」', '「ぼく（わたし）のせいかな。ぼく（わたし）が、いい子じゃないから……」'], C: [['お前のせいじゃない。こっちおいで', { op: 12, mood: 6, al: '夜中の夫婦げんかから、弟（妹）を自分の部屋に避難させた' }, '（イヤホンを片方ずつ分けて、好きな曲を流した。……怒鳴り声が消えるまで）'], ['リビングに行って止める', { op: 8, coupleRel: 4 }, '「……{c}、行かないで……」', { L: ['（リビングに入ると、ふたりの視線がいっせいにこちらを向いた）', '「{ab:pa:me}」'], C: [['弟（妹）が泣いてるんだよ', { op: 6, coupleRel: 6, st: 8 }, '（親は黙りこんだ。その夜は、それきり静かになった）'], ['……ごめんなさい', { st: 12, scar: 'voice' }, '（部屋に戻ると、弟（妹）がふとんの中で丸くなっていた）']] }], ['早く寝な', { op: -6, scar: 'voice', sec: '夜中のけんか。{c}は「早く寝な」って。……眠れるわけない。' }, '「……うん」']] },
+  // ---- 先生の暴言 ----
+  { id: 'ab_teacher', dark: 1, sy: 1, w: 'any', ok: c => AB_STU(c), cd: 150, L: ['（連絡帳に、赤ペンで「ご家庭での指導をお願いします」と書かれていた）', '「……先生にね、今日、こう言われたの」', '{abT}', '{abT}', '「……みんな、下向いてた。誰も、なにも言わなかった」'], C: [['録音できる？ 校長に持っていこう', { op: 10, al: '担任の暴言を録音して、校長に届けた' }, '「……録音、してみる」', { L: ['（3日後。{n}が、小さなICレコーダーを差しだした）', '（再生ボタンを押すと、教室の空気ごと、先生の声が流れてきた）', '{abT}'], C: [['校長と教育委員会に出す', { op: 10, scar: 'school' }, '（担任は、次の週から「体調不良」で休みになった。……謝罪は、なかった）']] }], ['先生にも事情があるんだよ', { op: -10, scar: 'school', sec: '先生のこと、{c}は「事情がある」って。……ぼく（わたし）の事情は？' }, '「…………」'], ['今度、いっしょに先生と話そう', { op: 8 }, '（面談で、先生はずっとにこやかだった。「誤解ですよ。熱心に指導しているだけです」）']] },
+  // ---- 部活の「かわいがり」 ----
+  { id: 'ab_senpai', dark: 1, sy: 1, w: 'any', ok: c => AB_KID(c) && (c.A.role === 'jhs' || c.A.role === 'hs'), cd: 150, L: ['（部活から帰ってきた{n}が、無言でシャワーを浴びている。もう1時間になる）', '（洗濯かごの体操服から、ジュースのにおいがした）', '「……先輩たちの「かわいがり」だよ。1年はみんなやられる」', '{abK}', '{abK}', '「一発芸やらされて、すべったら、全員にジュースかけられた」'], C: [['部活、やめよう', { op: 8, mood: 6 }, '「……やめたら、学校でも言われる。「逃げた」って」', { L: [], C: [['逃げるのは、負けじゃない', { op: 8, al: '先輩の「かわいがり」に耐えていた弟（妹）に、逃げていいと伝えた' }, '「……そっか。……そうなのかな」']] }], ['顧問に言う', { op: 6, bully: -1 }, '（顧問は「伝統だから」と笑った。……翌日、{n}は先輩に呼びだされた）'], ['そういうのも経験だよ', { op: -10, scar: 'voice', sec: '「経験」だって。ジュースのにおいが、まだとれない。' }, '「……そう、だよね」']] },
+  // ---- ネットのことば（あなたについて） ----
+  { id: 'ab_sns_me', dark: 1, w: 'any', ok: c => c.me.famous && (c.m.kind === 'sib' || c.m.kind === 'kid') && c.m.age >= 10, cd: 120, L: ['（「……これ」と、スマホの画面を見せられた）', '（あなたの名前で検索した結果だった）', '{abMS}', '{abMS}', '{abMS}', '（スクロールしても、スクロールしても、終わらない）'], C: [['見せてくれて、ありがとう', { op: 4, st: 10 }, '「……{c}は、こんな人じゃないよ。家族が、一番知ってる」'], ['もう見ないで', { op: 2, st: 6 }, '「……見ないよ。でも、学校で言われるの。「お前の{c}、ネットでボロクソ」って」', { L: ['{ab:sns:m}'], C: [['……ごめん', { op: 6, st: 8, al: '自分のせいで、家族までネットで叩かれていると知った' }, '「{c}が、あやまることじゃないよ」']] }], ['どうでもいい', { op: -4, st: 14 }, '（そう言ったのに、夜中まで画面をスクロールしつづけた）']] },
+  { id: 'ab_sns_me_pa', dark: 1, w: 'pa', ok: c => c.me.famous, cd: 120, L: ['（親が、黙ってスマホを差しだした）', '{abMS}', '{abMS}', '「……近所の人にも、言われるのよ。「お宅の、ネットで大変ね」って」', '「{abM}」'], C: [['……迷惑かけて、ごめん', { op: 6, st: 10 }, '「……あやまってほしいんじゃないの。……心配なのよ」'], ['見なきゃいいでしょ', { op: -6, st: 6 }, '「見なくても、聞こえてくるのよ」']] },
+  { id: 'ab_sns_sib', dark: 1, sy: 1, w: 'any', ok: c => AB_KID(c) && c.me.famous && c.m.age >= 10, once: true, L: ['（{n}のスマホに、知らないアカウントからDMが何十件も届いていた）', '{ab:sns:m::famsib}', '{ab:sns:m::famsib}', '{ab:sns:m}', '「……{meN}のきょうだいってだけで、なんでこんなこと言われるの？」', '「ぼく（わたし）、なにもしてないのに」'], C: [['ごめん。全部、通報しよう', { op: 10, cx: -6, scar: 'phone', al: '自分のせいでネットで叩かれた弟（妹）と、ひとつずつ通報した' }, '（通報しても、新しいアカウントが次々に生まれてくる）'], ['有名税だよ', { op: -12, cx: 12, scar: 'phone', sec: '{c}のせいで、知らない人に悪口を言われる。{c}は「有名税」だって。' }, '「……払ってるの、ぼく（わたし）なんだけど」']] },
+  // ---- 親戚の集まり ----
+  { id: 'ab_rel_gather', dark: 1, w: 'pa', ok: c => (c.month === 1 || c.month === 8) && c.kSib, cd: 300, L: ['（親戚の集まり。お酒が入って、大人たちの声が大きくなってきた）', '{ab:rel:me}', '{ab:rel:me}', '{ab:rel:k}', '（親は、愛想笑いをしているだけだった）'], C: [['親に「なんで黙ってるの」と言う', { op: -4, coupleRel: -2 }, '「……親戚づきあいって、そういうものなの。がまんして」', { L: [], C: [['……わかった', { st: 10 }, '（帰りの車の中、誰もしゃべらなかった）']] }], ['{k}を連れて外に出る', { op: 4, relK: 6, al: '親戚の集まりで、{k}を連れて外に逃げた' }, '（神社の階段にふたりで座って、コンビニのアイスを食べた）'], ['笑ってやりすごす', { st: 12, op: 2 }, '（「おとなしくて、いい子ね」と言われた）']] },
+  // ---- 職場のパワハラ（2段階） ----
+  { id: 'ab_boss', dark: 1, w: 'pa', ok: c => c.A.role === 'worker' && num(c.A.stress) > 45, once: true, L: ['（夜中。台所の電気がついていた。親が、ひとりで座っている）', '「……ああ、起こしちゃった？ ……なんでもないの」', '（テーブルの上のスマホに、上司からのメッセージが何十件も並んでいた）', '{abB}', '{abB}', '{abB}', '「……もう、会社、行きたくない」'], C: [['辞めていいよ', { op: 10, stress: -15, al: '上司に追いつめられていた親に、「辞めていい」と伝えた' }, '「……でも、お金……。……ありがとう。少し、考えてみる」'], ['労働相談の窓口に行こう', { op: 8, stress: -8 }, '「……そんなところ、あるの？ ……いっしょに調べてくれる？」'], ['家族のためにがんばって', { op: -4, stress: 15, flag: 'bossHell', scar: 'work', sec: '「家族のためにがんばって」と言われた。……そうだよね。がんばらなきゃ。' }, '「……うん。そうだよね。がんばる」']] },
+  { id: 'ab_boss2', dark: 1, w: 'pa', ok: c => c.flag('bossHell') && c.fday('bossHell') >= 5, once: true, L: ['（朝。親が、玄関で靴をはいたまま動かない）', '「……足が、動かないの」', '「行かなきゃいけないのに。……行かなきゃ……」', '（スマホが鳴る。画面には、上司の名前）', '{abB}'], C: [['電話に出て、「今日は休みます」と言う', { op: 14, unflag: 'bossHell', stress: -20, hp: -5, al: '会社に行けなくなった親のかわりに、電話をかけた' }, '（その日、親は1日じゅう眠りつづけた。……病院で「適応障害」と言われた）'], ['がんばって', { op: -10, unflag: 'bossHell', hp: -15, stress: 20 }, '（親は、ふらふらと出ていった。……夕方、会社から「倒れた」と電話があった）']] },
+  // ---- 認知症の祖父母のことば ----
+  { id: 'ab_gp_dementia', dark: 1, w: 'gp', ok: c => c.m.age >= 75, once: true, L: ['「泥棒！ わたしの財布、盗ったでしょう！」', '「あんた誰？ 人の家で、なにしてるの！ 出ていきなさい！」', '（いつもやさしかった人が、こちらを指さして叫んでいる）', '（台所で、介護している親が、声を殺して泣いていた）', '（「……毎日、こうなの。わたしのことも、「泥棒」って……」）'], C: [['財布、いっしょに探そう', { op: 6, al: '「泥棒」と叫ぶ祖父母と、いっしょに財布を探した' }, '（財布は、冷蔵庫の中から出てきた。「……あら。ありがとうねえ」）'], ['介護している親を休ませる', { op: 4, allMood: 4, st: 6 }, '（親を外に連れだして、ファミレスでパフェを食べた。「……ひさしぶりに、笑った」）'], ['もう、施設に入れようよ', { op: -6, allMood: -4 }, '（その夜、家族会議は深夜まで続いた）']] },
+  // ---- 配偶者のことば（2段階） ----
+  { id: 'ab_sp_mora', dark: 1, w: 'sp', ok: c => c.married && num(c.A.op) < 55, cd: 90, L: ['（帰宅すると、玄関まで聞こえるため息）', '「{abM}」', '「{abM}」', '（子どもの前でも、平気で言うようになった）'], C: [['言い返す', { op: -8, st: 8, gflag: 'spMora' }, '「……そうやって、すぐ逆ギレする」'], ['黙ってやりすごす', { st: 14, gflag: 'spMora' }, '（言い返さないほうが、早く終わる。……それを、いつ覚えたんだろう）'], ['カウンセリングに行こう', { op: 6 }, '「わたし（ぼく）が悪いって言いたいの？ ……でも、まあ、一回だけなら」']] },
+  { id: 'ab_sp_mora_kid', dark: 1, w: 'any', ok: c => c.gflag('spMora') && c.m.kind === 'kid' && c.m.age >= 4 && c.m.age <= 12, once: true, L: ['（子どもが、ぬいぐるみに向かってなにか言っている）', '（ぬいぐるみを指さして）「{ab:sp:me:q}」', '（……それは、配偶者がいつもあなたに言っていることばだった）', '「……ねえ、なんでいつも怒られてるの？ わるいこと、したの？」'], C: [['大人のけんかだから、気にしないで', { op: 2 }, '「……ふーん」（ぬいぐるみに、また同じことばをくり返していた）'], ['そのことば、使っちゃだめだよ', { op: 6, al: '配偶者のきついことばを、子どもがまねしていた' }, '「……じゃあ、なんで大人は使っていいの？」']] },
+  // ---- 兄・姉の本音 ----
+  { id: 'ab_so_rant', dark: 1, w: 'sibOld', ok: c => num(c.A.op) < 50 || num(c.A.stress) > 55, cd: 120, L: ['（兄（姉）が帰ってきている。だいぶ酒が入っている）', '「{abM}」', '「{abM}」', '「お前のせいで、俺（わたし）がどれだけ比べられたと思ってる」', '（親は、聞こえないふりをしている）'], C: [['比べてたのは、親だよ', { op: 4, st: 8 }, '「……わかってるよ。だから、お前に言うしかないんだろ」', { L: ['（兄（姉）は、グラスを置いて、天井を見上げた）', '「……ごめん。……酔ってるわ、俺（わたし）」'], C: [['……知ってる', { op: 8, al: '酒に酔った兄（姉）の本音を、はじめて聞いた' }, '（その夜、ふたりで黙ってテレビを見た）']] }], ['言い返す', { op: -10, st: 10 }, '「{abM}」'], ['部屋に戻る', { op: -4, st: 10 }, '（壁ごしに、まだなにか言っているのが聞こえた）']] },
+  // ---- 弟・妹が、言われたことばをくり返す ----
+  { id: 'ab_copy_parent', dark: 1, sy: 1, w: 'any', ok: c => AB_KID(c) && c.m.age <= 12 && c.m.kind === 'sib', once: true, L: ['（{n}の部屋から、話し声が聞こえる）', '（ぬいぐるみを並べて、ひとりで「家族ごっこ」をしていた）', '「{ab:pa:m:q}」', '「{ab:pa:m:q}」', '（……親が、{n}に言っていることばと、同じだった）'], C: [['……それ、いつも言われてるの？', { op: 8 }, '「……うん。ぼく（わたし）が、悪い子だから」', { L: [], C: [['悪い子なんかじゃない', { op: 12, mood: 10, al: '「悪い子だから」と言う弟（妹）を、抱きしめた' }, '「……ほんと？ ……{c}は、そう思う？」'], ['親と話してみる', { op: 8, coupleRel: -2 }, '（親は「しつけよ」と言った。……そのことばも、どこかで聞いた気がした）']] }], ['見なかったことにする', { op: -2, scar: 'home' }, '（ドアの向こうで、家族ごっこは、まだ続いていた）']] },
+  { id: 'ab_becomes_bully', dark: 1, sy: 1, w: 'any', ok: c => AB_STU(c) && c.m.age >= 8, once: true, L: ['（学校から電話。{n}が、クラスの子をいじめていたらしい）', '（「「{ab:cls:x:q}」と、毎日言っていたそうです」）', '（帰ってきた{n}は、悪びれもせずに言った）', '「だって、ぼく（わたし）も言われてたもん。……言われる側より、言う側のほうが、ずっと楽だよ」'], C: [['言われてたこと、話して', { op: 8 }, '「……話しても、どうせ変わらないよ」', { L: ['「……「{nk}」って、ずっと呼ばれてた。だから、別の子にあだ名をつけたの。そしたら、ぼく（わたし）は呼ばれなくなった」'], C: [['それでも、やっちゃだめだ', { op: 4, al: 'いじめる側に回った弟（妹）と、夜おそくまで話した' }, '「……わかってる。……わかってるよ」（はじめて、声をあげて泣いた）'], ['いっしょに、あやまりに行こう', { op: 6, bully: -1 }, '（相手の家の玄関で、{n}は深く頭を下げた。……その手は、ふるえていた）']] }], ['最低だな', { op: -12, scar: 'home', sec: '{c}に「最低」と言われた。……知ってる。' }, '「……そうだよ。最低だよ。みんな、そうでしょ」']] },
+  // ---- 見た目 ----
+  { id: 'ab_look', dark: 1, sy: 1, w: 'any', ok: c => AB_KID(c) && c.m.age >= 12, once: true, L: ['（洗面所で、{n}が鏡の前に立ったまま動かない）', '（自分の顔を、何度もつねっている）', '「……クラスの子にね」', '{ab}', '{ab}', '「……整形したい。お金、貸して」'], C: [['今のままで、いいんだよ', { op: 6, scar: 'mirror' }, '「……{c}は家族だから、そう言うんだよ」', { L: [], C: [['家族だから、わかるんだ', { op: 8, al: '鏡の前で顔をつねっていた弟（妹）と、話した' }, '「……ふふ。なにそれ」（少しだけ、笑った）']] }], ['いっしょに髪型、研究しよう', { op: 10, mood: 8, money: -3000 }, '（ドラッグストアと美容室で、ふたりで3時間迷った）'], ['気にしすぎだよ', { op: -6, scar: 'mirror' }, '「……気にしてない人には、わかんないよ」']] },
+  // ---- 障害へのことば ----
+  { id: 'ab_nd_barrage', dark: 1, sy: 1, w: 'any', ok: c => AB_STU(c) && c.nd, cd: 150, L: ['（帰ってきた{n}が、ずっと下を向いている）', '{ab:cls:m::nd}', '{ab:cls:m::nd}', '{ab:cls:m::nd}', '（連絡帳には、担任の字で「お友だちとのトラブルが多いようです」）', '「……ぼく（わたし）、トラブルなんか、起こしてない」'], C: [['先生に、何があったか聞く', { op: 8, al: '障害をからかわれていた弟（妹）のことで、担任と話した' }, '（担任は言った。「からかわれる側にも、配慮していただかないと……」）', { L: [], C: [['からかう側の問題です', { op: 8, bully: -1 }, '（担任は、困ったように笑うだけだった）']] }], ['支援学級や転校も考えよう', { op: 6, scar: 'school' }, '「……逃げるみたいで、いやだ」'], ['気にしなきゃいいんだよ', { op: -10, scar: 'school', sec: '「気にしなきゃいい」って。毎日なんだよ。' }, '「…………」']] },
+  // ---- 落書きだらけの教科書 ----
+  { id: 'ab_notebook', dark: 1, sy: 1, w: 'any', ok: c => AB_STU(c), once: true, L: ['（{n}の教科書を借りようとして、手が止まった）', '（全部のページに、マジックで落書きがされていた）', '（『{abq}』『{abq}』）', '（『{abq}』『{nk}』『{abq}』）', '（最後のページには、大きく――『死ね』）', '（見られたことに気づいて、{n}が教科書をひったくった）「……見ないで！」'], C: [['ひとりで抱えなくていい', { op: 10, al: '落書きだらけの教科書を、見てしまった' }, '「……見たんだ。……ぜんぶ」', { L: ['「……毎日、消しゴムで消してたの。でも、消えないんだよ。マジックだから」'], C: [['新しい教科書を買おう。それから、学校に話す', { op: 10, money: -3000, bully: -1 }, '「……新しいの、ほしい。……ありがとう」'], ['これは証拠だから、とっておこう', { op: 8, bully: -1, scar: 'school' }, '（教科書は、透明なファイルに入れて、引き出しの奥にしまった）']] }], ['見なかったふりをする', { op: -4, scar: 'school' }, '（その夜、{n}の部屋から、消しゴムをこする音がずっと聞こえていた）']] },
+  // ---- 家族のいじり（あなたが的） ----
+  { id: 'ab_fam_ijiri_me', dark: 1, w: 'any', ok: c => c.m.kind === 'pa' || c.m.kind === 'gp' || (c.m.kind === 'sib' && !sibIsYounger(c.m)), cd: 90, L: ['（家族がそろった食卓。いつのまにか、あなたの話になっていた）', '「{ijM}」', '「{ijM}」', '（みんなが笑っている。……あなたも、笑うしかなかった）'], C: [['いっしょに笑う', { st: 8, op: 2 }, '（笑いながら、ごはんの味がしなかった）'], ['「それ、ほんとにいやなんだけど」', { op: -2 }, '「えー、冗談じゃん。ノリ悪いなあ」', { L: ['「{ijM}」'], C: [['……もういい', { st: 10, op: -4 }, '（家族の笑い声を背中に、部屋に戻った）'], ['ほんとに、いやなんだ', { op: 6, allMood: -2 }, '（食卓が、しんとなった。「……ごめん」と、誰かが小さく言った）']] }], ['無言で席を立つ', { op: -6, st: 6 }, '「なに、あれ。感じわる〜」']] },
+  // ---- 弟・妹からのことば ----
+  { id: 'ab_sy_rant_me', dark: 1, w: 'sibYoung', ok: c => c.m.age >= 11 && (num(c.A.op) < 45 || num(c.A.cx) >= 2), cd: 120, L: ['（廊下ですれちがった{n}が、小さく舌打ちした）', '「……なに見てんの」', '「{abM}」', '「{abM}」'], C: [['なにかあったの？', { op: 6, cx: -6 }, '「……{c}には、わかんないよ」', { L: ['「……学校で、ずっと{c}と比べられてるの。先生にも、親にも」', '「{c}がいなければ、ぼく（わたし）、こんなに言われなかった」'], C: [['……ごめん', { op: 10, cx: -12, al: '弟（妹）が、ずっと自分と比べられて苦しんでいたと知った' }, '「……{c}があやまっても、意味ないし。……でも、ちょっとだけ、すっきりした」']] }], ['言い返す', { op: -10, cx: 10, st: 8 }, '（ドアが、思いきり閉まる音がした）'], ['無視する', { op: -6, cx: 6 }, '「……そうやって、いつも余裕なんだよね」']] },
+  { id: 'ab_kid_rant_me', dark: 1, w: 'kidBig', ok: c => num(c.A.op) < 50, cd: 120, L: ['「{abM}」', '「{abM}」', '「……ほっといてよ。どうせ{c}には、わかんないんだから」'], C: [['わかりたいんだ', { op: 6 }, '「……今さら？」'], ['親に向かって、その口はなんだ', { op: -8 }, '「……ほら、そうやってすぐ怒る」'], ['勝手にしろ', { op: -10, scar: 'home' }, '（その夜、子どもは帰ってこなかった）']] },
+  // ---- 弁当・運動会 ----
+  { id: 'ab_poor_lunch', dark: 1, sy: 1, w: 'any', ok: c => AB_STU(c) && c.has('poor'), cd: 150, L: ['（{n}の弁当箱が、手つかずのまま、かばんに入っていた）', '「……食べられなかった。みんなに見られるから」', '{ab:cls:m::poor}', '{ab:cls:m::poor}', '「……写真、撮られた。「今日の{nk}弁当」って、SNSに」'], C: [['明日、いっしょに弁当つくろう', { op: 10, money: -1000, al: '弁当を笑われた弟（妹）と、いっしょにお弁当をつくった' }, '（タコさんウインナーを、ふたりで8匹つくった。「……これなら、見せられる」）'], ['そんなやつら、気にするな', { op: 2, scar: 'eat' }, '「……気にしないで食べられたら、苦労しないよ」']] },
+  { id: 'ab_unath', dark: 1, sy: 1, w: 'any', ok: c => AB_STU(c) && c.has('unath'), cd: 150, L: ['（運動会のあと。{n}が、校庭のすみでひとりで座っていた）', '（リレーで抜かれた瞬間、クラスの席から、いっせいにため息が聞こえた）', '{ab:cls:m::unath}', '{ab:cls:m::unath}', '「……ぼく（わたし）のせいで、負けた」'], C: [['走りきったの、見てたよ', { op: 10, mood: 8, al: 'リレーで抜かれた弟（妹）に、「見てたよ」と伝えた' }, '「……かっこわるかったでしょ」', { L: [], C: [['いちばん、かっこよかった', { op: 8 }, '（{n}は、ひざに顔をうずめた。肩が、小さくふるえていた）']] }], ['練習すれば、速くなるよ', { op: -2 }, '「……練習しても、みんなは見てくれないよ」']] },
+  // ---- 心の傷のその後 ----
+  { id: 'ab_after', dark: 1, sy: 1, w: 'any', ok: c => c.scar() && !SMALL(c.A.role), cd: 45, L: ['（ふと見ると――）', '{scar}', '{scar}', '（あの日から、少しずつ、なにかが変わってしまった）'], C: [['そっと、そばにいる', { op: 6, mood: 4 }, '（なにも言わずに、となりに座った）'], ['あのときは、ごめん', { op: 8 }, '「……うん。……もう少し、時間がほしい」'], ['気づかないふり', { op: -2, noScar: 1 }, '（見ないふりをするのにも、慣れてしまった）']] },
+);
+// ---- これまでのいじめイベントに、ことばを足して重くする ----
+(() => {
+  const ins = (id, at, ...lines) => { const e = FE.find(x => x.id === id); if (e && Array.isArray(e.L)) e.L.splice(Math.min(at, e.L.length), 0, ...lines); };
+  ins('sy_bully', 2, '「……今日も、『{abq}』って言われた」', '「休み時間になると、みんなで「{nk}、{nk}」って……」');
+  ins('kid_bullied', 2, '「「{nk}」って呼ばれてるの。……『{abq}』とか、『{abq}』とか」');
+  ins('d_bully_photo', 3, '{abS}', '{abS}', '（通知が、止まらない）');
+  ins('d_bully_desk', 3, '（机の中には、メモが何枚も入っていた。『{abq}』『{abq}』）');
+  ins('d_bully_shoes', 3, '（かばんに、マジックで大きく「{nk}」と書かれている）');
+  ins('d_bully_teacher', 3, '「それにね、『{abTq}』って……みんなの前で」');
+  ins('d_me_bullied', 3, '「{abM}」');
+  ins('d_so_mock', 2, '「{abM}」', '（いとこたちまで、くすくす笑っている）');
+  ins('s_hate_class', 2, '「後ろの席から、『{abq}』って」');
+  ins('s_teacher_cmp', 2, '「ほかにもね、『{abTq}』って」');
+  ins('s_nd_hear_mock', 2, '「『{ab:cls:m:q:nd_hear}』って、耳元で言われた」');
+  ins('s_steal_for_bully', 3, '「「おい{nk}、金持ってこい」って。……持っていかないと、みんなの前で『{abq}』って……」');
+  ins('s_diet', 2, '「『{abq}』とか、『{abq}』とか……毎日」');
+  ins('s_confess_fail', 2, '{abS}', '{abS}');
+})();
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
