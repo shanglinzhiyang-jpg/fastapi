@@ -12553,6 +12553,7 @@ function install() {
   E.Un('npb', { name: 'プロ野球', color: '#1f7a46', order: 30.3, iconHD, badge, open: g => openNPB(g) });
   E.Tn(morningHook);
   try { installWorld(); } catch (e) { console.error('[npb] world', e); }
+  try { installSchool(); } catch (e) { console.error('[school] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -14248,6 +14249,9 @@ function charSpec(kind, o = {}) {
   if (kind === 'apron') { s.top = s.top || '#e89aa8'; s.apron = s.apron || '#f4f2ec'; s.bottom = s.bottom || '#5a4a6a'; }
   if (kind === 'ump') { s.jacket = '#1a2236'; s.cap = true; s.capCol = '#1a2236'; s.pants = '#8a8e98'; }
   if (kind === 'work') { s.jacket = s.jacket || '#2f5f9a'; s.bottom = s.bottom || '#2a3348'; }
+  if (kind === 'gakuran') { s.top = '#1c1e2a'; s.bottom = '#1c1e2a'; }
+  if (kind === 'blazer') { s.top = s.jacket || '#24305a'; s.bottom = s.skirt ? '#5a4a6a' : '#4a4e5a'; }
+  if (kind === 'sailor') { s.top = '#f4f4f6'; s.bottom = '#1e2a4a'; s.skirt = s.skirt !== false; }
   return s;
 }
 // 1マス（ドット）を描く。flip で左右反転
@@ -14304,7 +14308,8 @@ function drawCharRaw(c, sp, st) {
   if (mot === 'shake') hx = Math.round(Math.sin(t / 3) * 1.5);
   if (mot === 'tremble' && !st.noJump) jx = (t % 4 < 2 ? 1 : -1) * 0.5;
   if (st.pose === 'bow') hy += 7;
-  const { P, L } = evPainter(c, st.x + jx * sc, st.y + jy * sc, sc, flip);
+  let { P, L } = evPainter(c, st.x + jx * sc, st.y + jy * sc, sc, flip);
+  const Pb = P;
   const skin = evCol(sp.skin, EV_SKIN, '#f6c9a0'), skinS = shade(skin, -0.14), skinH = shade(skin, 0.3);
   const hair = sp.older >= 2 ? '#b8bcc4' : evCol(sp.hair, EV_HAIR, '#2a2430'), hairS = shade(hair, -0.3), hairH = shade(hair, 0.35);
   const ink = '#1a1420', line = 'rgba(10,8,20,0.55)';
@@ -14319,10 +14324,13 @@ function drawCharRaw(c, sp, st) {
   // 脚
   const pants = k === 'uni' ? sp.pants : k === 'suit' ? sp.jacket : k === 'ump' ? sp.pants : sp.bottom || '#3a4a7a';
   const pantsS = shade(pants, -0.2);
-  P(14, 57, 10, 32, pants); P(25, 57, 10, 32, pants); P(23, 60, 2, 29, pantsS); P(14, 57, 2, 32, pantsS); P(33, 57, 2, 32, pantsS);
+  if (sp.wheel) { P(7, 42, 3, 32, '#3a3e4a'); P(9, 70, 30, 4, '#3a3e4a'); P(13, 64, 24, 7, pants); P(30, 70, 7, 18, pants); P(29, 88, 11, 4, '#16161c'); P(36, 90, 4, 4, '#4a4e5a'); }
+  else if (sp.skirt) { P(16, 66, 7, 22, skin); P(25, 66, 7, 22, skin); P(16, 80, 7, 9, '#f4f4f6'); P(25, 80, 7, 9, '#f4f4f6'); }
+  else { P(14, 57, 10, 32, pants); P(25, 57, 10, 32, pants); P(23, 60, 2, 29, pantsS); P(14, 57, 2, 32, pantsS); P(33, 57, 2, 32, pantsS); }
   if (k === 'uni') { P(14, 74, 10, 14, sp.sock); P(25, 74, 10, 14, sp.sock); P(14, 73, 10, 1, '#ffffff'); P(25, 73, 10, 1, '#ffffff'); P(15, 57, 1, 17, sp.trim); P(32, 57, 1, 17, sp.trim); }
-  P(12, 88, 12, 6, '#16161c'); P(25, 88, 12, 6, '#16161c'); P(13, 88, 5, 1, '#5a5a66'); P(26, 88, 5, 1, '#5a5a66');
+  if (!sp.wheel) { const shoe = sp.skirt ? '#4a2a1a' : '#16161c'; P(12, 88, 12, 6, shoe); P(25, 88, 12, 6, shoe); P(13, 88, 5, 1, '#5a5a66'); P(26, 88, 5, 1, '#5a5a66'); }
   if (k === 'uni') { P(12, 93, 12, 1, '#e8e8ee'); P(25, 93, 12, 1, '#e8e8ee'); }
+  if (sp.wheel) { const P0 = P, L0 = L; P = (x, y, w, h, col) => P0(x, y + 14, w, h, col); L = (x0, y0, x1, y1, w, col) => L0(x0, y0 + 14, x1, y1 + 14, w, col); }
   // 胴
   const by = bob;
   P(12, 27 + by, 24, 30 - by, top); P(10, 28 + by, 28, 5, top); P(12, 27 + by, 2, 30 - by, topS); P(34, 27 + by, 2, 30 - by, topS);
@@ -14335,10 +14343,15 @@ function drawCharRaw(c, sp, st) {
   }
   if (k === 'suit' || k === 'work') { P(20, 27 + by, 8, 12, sp.shirt || '#f4f4f8'); P(23, 29 + by, 2, 12, sp.tie || '#2a3348'); P(18, 27 + by, 3, 14, topS); P(27, 27 + by, 3, 14, topS); if (k === 'work') { P(15, 34 + by, 5, 3, '#f4f4f8'); } }
   if (k === 'ump') { P(18, 30 + by, 12, 10, '#2a3448'); P(14, 42 + by, 20, 1, '#3a4458'); }
+  if (k === 'gakuran') { P(19, 26 + by, 10, 3, '#0e0f16'); for (let i = 0; i < 4; i++) P(23, 31 + by + i * 6, 2, 2, '#d4af37'); P(13, 52 + by, 22, 1, '#2a2c3a'); }
+  if (k === 'blazer') { P(20, 27 + by, 8, 11, '#f4f4f8'); if (sp.f) P(21, 29 + by, 6, 3, '#c03040'); else P(23, 29 + by, 2, 11, sp.tie || '#b83040'); P(18, 27 + by, 3, 16, topS); P(27, 27 + by, 3, 16, topS); P(29, 35 + by, 3, 3, '#d4af37'); }
+  if (k === 'sailor') { P(12, 27 + by, 24, 7, '#1e2a4a'); P(12, 33 + by, 24, 1, '#ffffff'); P(20, 27 + by, 8, 4, '#f4f4f6'); P(21, 33 + by, 6, 5, '#d03040'); P(22, 38 + by, 4, 3, '#d03040'); }
+  if (sp.skirt) { P(11, 55, 26, 13, pants); for (let i = 0; i < 6; i++) P(13 + i * 4, 57, 1, 11, shade(pants, -0.25)); P(11, 55, 26, 1, shade(pants, 0.2)); }
   if (k === 'apron') { P(15, 34 + by, 18, 23, sp.apron); P(15, 34 + by, 18, 1, shade(sp.apron, -0.15)); P(20, 28 + by, 8, 6, sp.apron); }
   if (k === 'casual' && sp.jerseyFan) { P(23, 28 + by, 2, 27, sp.jerseyFan); for (let i = 0; i < 7; i++) P(16 + i * 2, 36 + by, 2, 2, sp.jerseyFan); }
   // ベルト
-  if (k === 'uni' || k === 'suit' || k === 'ump') { P(12, 55, 24, 3, '#1c1c24'); P(22, 55, 4, 3, '#c8c8d0'); }
+  if ((k === 'uni' || k === 'suit' || k === 'ump' || k === 'gakuran' || k === 'blazer') && !sp.skirt) { P(12, 55, 24, 3, '#1c1c24'); P(22, 55, 4, 3, '#c8c8d0'); }
+  if (sp.wheel) { for (let a = 0; a < 32; a++) { const an = a / 32 * Math.PI * 2; Pb(Math.round(19 + Math.cos(an) * 14), Math.round(79 + Math.sin(an) * 14), 2, 2, '#4a4e5a'); } for (let a = 0; a < 4; a++) { const an = a / 4 * Math.PI; Pb(Math.round(19 + Math.cos(an) * 7), Math.round(79 + Math.sin(an) * 7), 1, 1, '#8a8e98'); Pb(Math.round(19 - Math.cos(an) * 7), Math.round(79 - Math.sin(an) * 7), 1, 1, '#8a8e98'); } Pb(18, 78, 3, 3, '#8a8e98'); }
   // 腕
   const [AL, AR, extra] = animArms(st.pose, t);
   const sleeve = k === 'uni' ? sp.jersey : top, under = k === 'uni' ? sp.trim : k === 'casual' || k === 'apron' ? skin : top;
@@ -14454,6 +14467,7 @@ function headDraw(P, sp, st, K) {
   }
   if (sp.mus || (sp.older >= 2 && sp.beard)) { H(20, 17, 8, 1, sp.older >= 2 ? '#9a9ea8' : hairS); }
   if (sp.beard) { H(17, 19, 2, 3, hairS); H(29, 19, 2, 3, hairS); H(19, 21, 10, 1, hairS); }
+  if (sp.aid) { H(34, 11, 2, 4, '#e8c8a0'); }
   if (sp.glasses) { H(17, 11, 6, 1, '#2a2a34'); H(25, 11, 6, 1, '#2a2a34'); H(17, 15, 6, 1, '#2a2a34'); H(25, 15, 6, 1, '#2a2a34'); H(17, 11, 1, 5, '#2a2a34'); H(22, 11, 1, 5, '#2a2a34'); H(25, 11, 1, 5, '#2a2a34'); H(30, 11, 1, 5, '#2a2a34'); H(23, 12, 2, 1, '#2a2a34'); }
   // 頬・汗・涙・怒りマーク
   if (ex === 'happy' || ex === 'laugh' || ex === 'shy' || st.blush) { H(16, 16, 3, 1, 'rgba(255,110,140,0.55)'); H(29, 16, 3, 1, 'rgba(255,110,140,0.55)'); }
@@ -14607,9 +14621,9 @@ class EvScene {
     if (this.idx >= this.list.length) { this.close(); return; }
     const ev = this.list[this.idx];
     let sc = null;
-    try { sc = buildEvent(this.g, this.N, ev); } catch (e) { console.error('[npb] event build', ev && ev.id, e); }
+    try { sc = ev.school ? buildSchoolEvent(this.g, ev) : buildEvent(this.g, this.N, ev); } catch (e) { console.error('[npb] event build', ev && ev.id, e); }
     if (!sc) { this.next(); return; }
-    if (!ev.replay) try { evRemember(this.N, ev); } catch (e) { }
+    if (!ev.replay && !ev.school) try { evRemember(this.N, ev); } catch (e) { }
     this.sc = sc; this.si = -1; this.actors = {}; this.fx = []; this.text = null; this.zoom = null; this.choice = null;
     this.bgKey = sc.bg || 'stadium'; this.theme = sc.theme; this.tt = 0; this.titleT = 80; this.fadeOut = 0; this.shakeT = 0;
     this.step();
@@ -14659,13 +14673,13 @@ class EvScene {
       let pickK = -1;
       if (tap) { const h = (C.rects || []).find(r => tap.x >= r.x && tap.x < r.x + r.w && tap.y >= r.y && tap.y < r.y + r.h); if (h) pickK = h.i; }
       if (inp.pressed('a')) pickK = C.idx;
-      if (pickK >= 0) { tt.sfx('ok'); const it = C.items[pickK]; this.choice = null; applyEvEffect(this.g, this.N, it[1]); if (it[2]) { this.sc.steps.splice(this.si + 1, 0, ...it[2]); } this.step(); }
+      if (pickK >= 0) { tt.sfx('ok'); const it = C.items[pickK]; this.choice = null; if (this.sc.school) applySchoolEffect(this.g, it[1]); else applyEvEffect(this.g, this.N, it[1]); if (it[2]) { this.sc.steps.splice(this.si + 1, 0, ...it[2]); } this.step(); }
       return;
     }
     if (T.n < T.s.length) { T.n = Math.min(T.s.length, T.n + (T.big ? 0.5 : 1.4)); if (inp.pressed('a') || tap) T.n = T.s.length; return; }
     if (inp.pressed('a') || tap) { tt.sfx('cursor'); this.step(); }
   }
-  applyRest() { for (let i = this.si + 1; i < this.sc.steps.length; i++) { const s = this.sc.steps[i]; if (s && s[0] === 'choice') { applyEvEffect(this.g, this.N, s[1][0][1]); break; } } }
+  applyRest() { for (let i = this.si + 1; i < this.sc.steps.length; i++) { const s = this.sc.steps[i]; if (s && s[0] === 'choice') { if (this.sc.school) applySchoolEffect(this.g, s[1][0][1]); else applyEvEffect(this.g, this.N, s[1][0][1]); break; } } }
   draw(c) {
     if (!this.sc) { c.fillStyle = '#000'; c.fillRect(0, 0, 640, 360); return; }
     const th = this.theme || { c1: '#1a2a5a', c2: '#f5c542' };
@@ -15520,12 +15534,14 @@ function hookAutoEv(g) {
   } catch (e) { }
 }
 function evAutoTick(g) {
-  const N = g.state && g.state.npb;
-  if (!N || !Array.isArray(N.evq) || !N.evq.length || (N.opt && N.opt.ev && N.opt.ev !== 'auto')) { g._npbEvT = 0; return; }
+  const N = g.state && g.state.npb, K = g.state && g.state.gakko;
+  const hasN = !!(N && Array.isArray(N.evq) && N.evq.length && !(N.opt && N.opt.ev && N.opt.ev !== 'auto'));
+  const hasK = !!(K && Array.isArray(K.evq) && K.evq.length && !(K.opt && K.opt.ev && K.opt.ev !== 'auto'));
+  if (!hasN && !hasK) { g._npbEvT = 0; return; }
   if (g._npbEvPlaying || g.top !== g.map || g.busy || g.fade > 0 || (g.pendingTips && g.pendingTips.length)) { g._npbEvT = 0; return; }
   if (++g._npbEvT < 50) return;
   g._npbEvT = 0; g._npbEvPlaying = 1;
-  playEvents(g, N).then(() => { g._npbEvPlaying = 0; }, () => { g._npbEvPlaying = 0; });
+  (hasN ? playEvents(g, N) : playSchoolEvents(g)).then(() => { g._npbEvPlaying = 0; }, () => { g._npbEvPlaying = 0; });
 }
 // 思い出（見返し用）
 function evRemember(N, ev) { N.evLog = Array.isArray(N.evLog) ? N.evLog : []; N.evLog.push({ ...ev, y: N.S ? N.S.y : 0 }); if (N.evLog.length > 40) N.evLog.shift(); }
@@ -15845,9 +15861,751 @@ function setOrigin(g, N, k) {
   evPush(N, 'origin', { v: { k, city } });
 }
 
-return { amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
+// ===== スクールライフ（高校）：カースト・テスト・内申・いじめ・こころ・停学/退学・ひまわり学級・入試 =====
+const GIVN_F = '美咲 陽菜 結衣 葵 さくら 凛 美羽 心春 芽依 優奈 彩花 七海 莉子 愛 舞 遥 真央 千尋 瑞希 杏 楓 紗希 菜々 由衣 彩乃 玲奈 未来 栞 琴音 ひなた'.split(' ');
+const SUBJ = ['国語', '数学', '英語', '理科', '社会'];
+const ARCH = { youkya: '陽キャ', inkya: '陰キャ', otaku: 'オタク', gariben: 'ガリ勉', ikemen: 'イケメン', bijin: '美人', yankee: 'ヤンキー', sports: '体育会系', futsu: 'ふつう' };
+const CASTE_N = ['一軍', '二軍', '三軍'];
+const ATTI = { serious: ['まじめに受ける', '授業態度↑・学力も少し伸びる'], sleep: ['居眠りする', 'ストレス↓・授業態度↓↓'], uchi: ['内職（別の勉強）', '学力↑・授業態度↓'], phone: ['こっそりスマホ', 'ストレス↓・授業態度↓・バレると没収'], chat: ['友だちとおしゃべり', '人気↑・授業態度↓'], cold: ['冷めた目で聞き流す', '冷笑度↑・授業態度↓'] };
+const NEEDS = {
+  wheel: ['車いすを使っている', '段差や長い階段が苦手。手を貸す前に「手伝おうか？」と声をかけるのが大事'],
+  hear: ['耳が聞こえにくい', '手話や筆談、口元を見せてゆっくり話すと伝わりやすい'],
+  asd: ['自閉スペクトラム症', '大きな音や急な予定の変更が苦手。予定を前もって伝える、静かな場所を用意すると安心できる'],
+  ld: ['読み書きに時間がかかる（学習障害）', 'タブレットの読み上げや、問題文を読んであげると力を発揮できる'],
+  down: ['ダウン症', '人なつっこくて明るい。ゆっくり、わかりやすい言葉で話すと伝わる'],
+};
+const SOS = '24時間子供SOSダイヤル 0120-0-78310（なやみ言おう）';
+const sy = g => dateOf(g, g.state.day);
+const fyOf = d => (d.month >= 4 ? d.year : d.year - 1);
+function isHS(g) { try { return E.bu ? E.bu(g) === 'high' : (lsOf(g) && lsOf(g).high && !lsOf(g).high.grad); } catch (e) { return false; } }
+function gkName(g) { try { const pr = E.Bf(g.state); return { fam: pr.familyName || 'ドット', giv: pr.givenName || '', gender: pr.gender || 'x' }; } catch (e) { return { fam: 'ドット', giv: '', gender: 'x' }; } }
+// ---- 学校の状態 ----
+function gko(g, create = true) {
+  const st = g && g.state; if (!st) return null;
+  let K = st.gakko;
+  if (!isObj(K)) { if (!create) return null; K = st.gakko = gkInit(g); }
+  K.tests = Array.isArray(K.tests) ? K.tests : []; K.hyo = Array.isArray(K.hyo) ? K.hyo : []; K.cls = Array.isArray(K.cls) ? K.cls : []; K.hm = Array.isArray(K.hm) ? K.hm : [];
+  K.evq = Array.isArray(K.evq) ? K.evq : []; K.done = isObj(K.done) ? K.done : {}; K.log = Array.isArray(K.log) ? K.log : []; K.opt = isObj(K.opt) ? K.opt : { ev: 'auto' };
+  return K;
 }
-try{NPB_factory({Un:Un,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt,$M:$M,Ho:Ho,qe:qe,Zc:Zc,setLae:function(f){Lae=f(Lae)},setVu:function(f){vu=f(vu)}}).install()}catch(e){console.error("[npb] install",e)}
+function gkInit(g) {
+  const nm = gkName(g), f = nm.gender === 'f', d = sy(g);
+  const K = { v: 1, made: g.state.day, fy: fyOf(d), school: `${pick(AMA_CITY)}${pick(['高校', '学園高校', '第一高校', '北高校', '南高校'])}`,
+    uni: chance(0.5) ? (f ? 'sailor' : 'gakuran') : 'blazer', f, ht: Math.round(f ? 157 + gauss() * 5.5 : 169 + gauss() * 6.5), looks: clamp(Math.round(50 + gauss() * 14), 15, 92),
+    rep: 50, att: 60, mood: 70, rei: 10, virtue: 50, policy: 'serious', otaku: null, absY: 0, absStreak: 0, futoko: false, dep: 0, lowDays: 0, susp: null, suspN: 0, bully: null, signLang: 0, hmEst: false, hmVisit: 0, counsel: 0, clinic: 0, studyN: 0, cheat: false, hensa: [] };
+  K.cls = genClass(f);
+  K.hm = genHimawari();
+  return K;
+}
+function genClass(f) {
+  const arch = ['youkya', 'youkya', 'ikemen', 'bijin', 'yankee', 'sports', 'sports', 'futsu', 'futsu', 'otaku', 'otaku', 'gariben', 'inkya', 'inkya'];
+  return arch.map((a, i) => {
+    const fem = a === 'bijin' ? true : a === 'ikemen' ? false : chance(0.5);
+    const base = { youkya: 78, ikemen: 75, bijin: 75, yankee: 66, sports: 64, futsu: 50, otaku: 34, gariben: 38, inkya: 28 }[a] + gauss() * 6;
+    return { id: 'c' + i, n: `${pick(SURN)} ${fem ? pick(GIVN_F) : pick(GIVN)}`, f: fem, a, sc: Math.round(base), aff: clamp(Math.round(30 + gauss() * 10), 5, 60) };
+  });
+}
+function genHimawari() { return ['wheel', 'hear', 'asd', 'ld', 'down'].sort(() => RND() - 0.5).slice(0, 4).map((nd, i) => ({ id: 'h' + i, n: `${pick(SURN)} ${chance(0.5) ? pick(GIVN_F) : pick(GIVN)}`, nd, aff: 10 })); }
+// ---- ラベル（あだ名ではなく、まわりからの見られ方） ----
+function gkStats(g) { const ls = lsOf(g); return (ls && ls.stats) || { gaku: 40, tai: 45, kan: 40, yu: 40, sei: 30, ken: 70 }; }
+function gkLooks(g, K) { let clean = 50; try { clean = num(g.state.life.clean, 50); } catch (e) { } return clamp(K.looks + (clean - 50) * 0.2, 0, 100); }
+function gkLabels(g, K) {
+  const s = gkStats(g), L = [];
+  if (s.yu >= 60 && K.rep >= 55) L.push('陽キャ');
+  if (s.yu < 40) L.push('陰キャ');
+  if (s.gaku >= 62 && s.gaku - s.yu >= 18) L.push('ガリ勉');
+  if (K.otaku || (s.kan >= 62 && s.yu < 45)) L.push('オタク');
+  if (gkLooks(g, K) >= 72) L.push(K.f ? '美人' : 'イケメン');
+  if (K.ht < (K.f ? 150 : 162)) L.push('チビ');
+  if (K.rei >= 60) L.push('冷笑系');
+  if (s.tai >= 65) L.push('体育会系');
+  if (!L.length) L.push('ふつう');
+  return L;
+}
+function myCasteScore(g, K) { const s = gkStats(g), ls = lsOf(g), club = ls && ls.high && ls.high.club; return s.yu * 0.45 + gkLooks(g, K) * 0.3 + s.tai * 0.15 + K.rep * 0.2 - K.rei * 0.1 + (['soccer', 'basket', 'yakyu', 'keion'].includes(club) ? 8 : 0); }
+function casteTable(g, K) {
+  const rows = K.cls.map(c => ({ id: c.id, n: c.n, a: c.a, sc: c.sc, aff: c.aff, f: c.f })).concat([{ id: 'me', n: 'あなた', a: 'me', sc: myCasteScore(g, K) + 5 }]);
+  rows.sort((a, b) => b.sc - a.sc);
+  rows.forEach((r, i) => { r.tier = i < 4 ? 0 : i < 10 ? 1 : 2; });
+  return rows;
+}
+const myTier = (g, K) => casteTable(g, K).find(r => r.id === 'me').tier;
+const friendsN = K => K.cls.filter(c => c.aff >= 60).length;
+// ---- 学校の1日（登校したとき） ----
+function gkAttend(g, ls) {
+  const K = gko(g); if (!K) return '';
+  const d = g.state.day; if (K.attDay === d) return ''; K.attDay = d;
+  K.absStreak = 0;
+  const out = [];
+  const P = K.policy;
+  if (P === 'serious') { K.att = clamp(K.att + 1.6, 0, 100); if (chance(0.35)) out.push(...(E.wu ? E.wu(ls, { gaku: 1 }) : [])); }
+  if (P === 'sleep') { K.att = clamp(K.att - 3, 0, 100); try { E.sh(g, -3); } catch (e) { } }
+  if (P === 'uchi') { K.att = clamp(K.att - 1.5, 0, 100); if (chance(0.5)) out.push(...(E.wu ? E.wu(ls, { gaku: 1 }) : [])); }
+  if (P === 'phone') { K.att = clamp(K.att - 2, 0, 100); try { E.sh(g, -2); } catch (e) { } if (chance(0.06)) out.push('スマホが見つかって没収された'); }
+  if (P === 'chat') { K.att = clamp(K.att - 1.5, 0, 100); K.rep = clamp(K.rep + 0.6, 0, 100); }
+  if (P === 'cold') { K.att = clamp(K.att - 1, 0, 100); K.rei = clamp(K.rei + 0.8, 0, 100); }
+  // 友だち
+  const c = pick(K.cls); const tier = myTier(g, K);
+  if (chance(0.3)) { c.aff = clamp(c.aff + (Math.abs(['youkya', 'ikemen', 'bijin', 'yankee'].includes(c.a) ? 0 : 1) - (tier === 0 ? 1 : tier === 2 ? 0 : 0.5)) * 2 + 1 - K.rei / 60, 0, 100); }
+  // いじめ
+  const B = K.bully;
+  if (B && B.lv > 0) {
+    try { E.sh(g, B.lv * 4); } catch (e) { }
+    K.mood = clamp(K.mood - B.lv * 2.2, 0, 100);
+    out.push(pick(B.lv === 1 ? [`「${B.nick}」と呼ばれて、笑われた`, '机の上にいたずら書きがあった'] : B.lv === 2 ? ['話しかけても、誰も返事をしてくれない', '上ばきが、またなくなっていた'] : [sy(g).year >= 2012 ? 'グループLINEで、悪口が回っていた' : sy(g).year >= 2007 ? '学校裏サイトに、悪口が書きこまれていた' : '帰り道、待ち伏せされて小づかれた', '持ち物を壊された', '教科書がゴミ箱に捨てられていた', 'わざと聞こえるように悪口を言われた']));
+  }
+  if (num(K.dep) >= 2) { try { E.sh(g, 3); } catch (e) { } }
+  if (K.futoko) { K.futoko = false; K.backDay = d; gkNote(g, '【また学校へ】\n久しぶりに、教室のドアを開けた。……来られた。それだけで、今日は十分だ。'); gkEv(g, 'sc_return'); }
+  return out.length ? `（${out.join('／')}）` : '';
+}
+// ---- 毎朝の処理 ----
+function gkMorning(g) {
+  const ls = lsOf(g);
+  if (!isHS(g)) { const K0 = gko(g, false); if (K0 && !K0.left && ls && ls.high && ls.high.grad && !K0.gradDone) { K0.gradDone = 1; gkEv(g, 'sc_grad'); } return; }
+  const K = gko(g); const d = sy(g), md = mdOf(d), day = g.state.day, fy = fyOf(d), grade = hsGrade(g) || 1;
+  hookAutoEv(g);
+  if (K.fy !== fy) { K.fy = fy; K.absY = 0; if (grade > 1 && chance(0.6)) { K.cls = genClass(K.f); gkNote(g, '【クラス替え】\n新しいクラス。教室の空気は、最初の一週間で決まる。'); gkEv(g, 'sc_classchange'); } }
+  if (!K.welcomed) { K.welcomed = 1; gkEv(g, 'sc_first'); }
+  // 停学
+  if (K.susp && day > K.susp.until) { gkNote(g, '【停学明け】\n停学期間が終わった。……明日から、また学校だ。'); K.susp = null; }
+  // 欠席・不登校
+  const yd = day - 1;
+  let sched = null; try { sched = E.cg ? E.cg(g, yd) : null; } catch (e) { }
+  if (sched && sched.kind === 'school' && K.attDay !== yd && !(K.susp && yd <= K.susp.until) && K.lastCheck !== yd) {
+    K.absY++; K.absStreak++; K.att = clamp(K.att - 1, 0, 100);
+    const term = d.year < 1998 ? '登校拒否' : '不登校';
+    if (!K.futoko && (K.absStreak >= 6 || K.absY >= 30)) { K.futoko = true; K.futokoN = num(K.futokoN) + 1; gkNote(g, `【${term}】\n朝になると、体が動かない。気づけば、もう${K.absStreak}日、学校に行っていない。\n（休むことは逃げじゃない。保健室登校や、スクールカウンセラー、通信制への転校という道もある）`); gkEv(g, 'sc_futoko'); hist(g, `学校に行けない日が続いた（${term}）`, 'school'); }
+  }
+  K.lastCheck = yd;
+  // こころ
+  let stress = 30; try { stress = num(g.state.life.stress, 30); } catch (e) { }
+  K.mood = clamp(K.mood + (60 - K.mood) * 0.03 + friendsN(K) * 0.15 - (stress > 80 ? 1.6 : stress > 60 ? 0.5 : 0) - (K.absStreak > 3 ? 0.4 : 0) - K.rei * 0.006, 0, 100);
+  if (K.mood < 25) K.lowDays++; else K.lowDays = Math.max(0, K.lowDays - 2);
+  const dep0 = K.dep;
+  K.dep = K.mood < 12 && K.lowDays >= 7 ? 2 : K.mood < 25 && K.lowDays >= 5 ? Math.max(1, Math.min(K.dep, 2)) : K.mood > 40 ? 0 : K.dep;
+  if (K.dep > dep0) { gkNote(g, K.dep >= 2 ? `【こころの不調】\n何をしても楽しくない。眠れない。朝が来るのがこわい。\n……それは「うつ」のサインかもしれない。ひとりで抱えこまず、保健室やスクールカウンセラー、心療内科に相談しよう。\n（${SOS}）` : '【こころの元気が少ない】\n最近、何をしても気分が晴れない。少し休んだほうがいいのかもしれない。'); if (K.dep >= 2) gkEv(g, 'sc_dep'); }
+  if (dep0 >= 2 && K.dep === 0) { gkNote(g, '【少しずつ、元気に】\n朝ごはんがおいしいと感じた。……そんなことが、うれしかった。'); gkEv(g, 'sc_recover'); }
+  // いじめの発生・悪化
+  if (K.lastBullyRoll !== Math.floor(day / 7)) {
+    K.lastBullyRoll = Math.floor(day / 7);
+    const tier = myTier(g, K), labels = gkLabels(g, K);
+    if (!K.bully && K.attDay >= day - 7) {
+      let p = 0.008 + (tier === 2 ? 0.035 : tier === 1 ? 0.008 : 0) + ['チビ', 'オタク', '陰キャ'].filter(x => labels.includes(x)).length * 0.012 + (K.rei >= 60 ? 0.01 : 0) - friendsN(K) * 0.008;
+      if (chance(clamp(p, 0, 0.12))) { const nick = labels.includes('陰キャ') && !K.f ? 'チー牛' : labels.includes('チビ') ? 'チビ' : labels.includes('オタク') ? 'キモオタ' : '暗いやつ'; const by = K.cls.filter(c => ['youkya', 'yankee', 'ikemen', 'bijin'].includes(c.a)).sort((a, b) => b.sc - a.sc)[0]; K.bully = { lv: 1, nick, by: by ? by.n : '同級生', since: day }; gkNote(g, `【いやなあだ名】\n${by ? shortName(by) : '一軍のグループ'}たちが、あなたのことを陰で「${nick}」と呼んで笑っている。\n（それは見た目や性格をばかにする悪口で、いじめのはじまり。ひとりで我慢しなくていい）`); gkEv(g, 'sc_bully1'); }
+    } else if (K.bully && K.bully.lv >= 2 && chance(0.08)) { K.bully = null; K.mood = clamp(K.mood + 6, 0, 100); gkNote(g, '【先生が気づいた】\n様子の変化に気づいた担任が、学年の先生たちと動いてくれた。いじめをしていた生徒たちは指導を受け、嫌がらせは止まった。'); gkEv(g, 'sc_bully_end'); }
+    else if (K.bully && K.bully.lv > 0 && K.bully.lv < 3 && chance(0.32)) { K.bully.lv++; gkNote(g, K.bully.lv === 2 ? '【いじめ】\n無視、物かくし。教室にいるのが、つらい。\n（先生・家族・相談窓口に話そう。「学校アプリ」の「悩み・こころ」から）' : '【いじめがエスカレート】\n悪口がネットにまで広がった。もう、限界かもしれない。\n（いじめは、された側が悪いのではない。大人に助けを求めよう）'); if (K.bully.lv === 3) gkEv(g, 'sc_bully3'); }
+    // ほかの子へのいじめを目撃
+    if (!K.bully && tier <= 1 && chance(0.06)) gkEv(g, 'sc_witness');
+  }
+  // 定期テスト
+  const TESTS = [['t1m', 46, '1学期中間テスト'], ['t1e', 60, '1学期期末テスト'], ['t2m', 94, '2学期中間テスト'], ['t2e', 110, '2学期期末テスト'], ['t3e', grade >= 3 ? 12 : 18, '学年末テスト']];
+  for (const [k, m, label] of TESTS) { const key = `${fy}_${k}`; if (!K.done[key] && md >= m && (k !== 't3e' || md < 30) && !(k !== 't3e' && md >= 30 && md < m - 10 && false)) { if (k === 't3e' ? (d.month <= 3) : (d.month >= 4 || d.month >= 10)) { K.done[key] = 1; gkTest(g, K, label, k); } } }
+  // 模試・推薦
+  if (grade >= 2 && [70, 98].some(m => md >= m && !K.done[`${fy}_moshi${m}`] && (K.done[`${fy}_moshi${m}`] = 1))) gkMoshi(g, K);
+  if (grade >= 3 && md >= 100 && md < 115 && !K.done[`${fy}_suisen`]) { K.done[`${fy}_suisen`] = 1; gkSuisen(g, K, ls); }
+  // ひまわり学級の設置
+  if (!K.hmEst && md >= 50) { K.hmEst = true; gkNote(g, `【ひまわり学級】\n校舎の1階に、${d.year >= 2007 ? '特別支援学級' : '特殊学級'}「ひまわり学級」ができた。障害のある生徒たちが、一人ひとりに合ったペースで学ぶ教室だ。\n（学校アプリの「ひまわり学級」から、交流しに行ける）`); gkEv(g, 'sc_hm_open'); }
+  if (chance(0.03) && K.hmVisit > 0 && md >= 50) gkEv(g, 'sc_hm_' + pick(['asd', 'wheel', 'hear', 'mock']));
+  // 学期のイベント
+  if (md >= 66 && md < 80 && !K.done[`${fy}_natsu`]) { K.done[`${fy}_natsu`] = 1; if (myTier(g, K) === 0 && chance(0.6)) gkEv(g, 'sc_youkya'); else if (gkLabels(g, K).includes('オタク')) gkEv(g, 'sc_otaku'); }
+  if (chance(0.025) && K.attDay >= day - 3) gkEv(g, pick(['sc_gariben', 'sc_cold', 'sc_chibi', 'sc_ikemen', 'sc_lunch']));
+}
+// ---- テスト・内申 ----
+function gkTest(g, K, label, key) {
+  const s = gkStats(g), ls = lsOf(g), cram = ls && ls.high && ls.high.cram;
+  K.bias = K.bias || SUBJ.map(() => Math.round(gauss() * 6));
+  let cheated = false, caught = false;
+  if (K.cheat) { cheated = true; caught = chance(0.25); }
+  const study = Math.min(12, num(K.studyN)); K.studyN = 0;
+  const sc = SUBJ.map((n, i) => caught ? 0 : clamp(Math.round(22 + s.gaku * 0.58 + study * 0.9 + K.att * 0.08 + (cram ? 4 : 0) - (K.dep >= 2 ? 10 : K.dep ? 4 : 0) + K.bias[i] + gauss() * 8 + (cheated ? 15 : 0)), 0, 100));
+  const tot = sc.reduce((a, b) => a + b, 0), avg = tot / 5;
+  const z = (avg - 55) / 15, rank = clamp(Math.round(200 * (1 - 0.5 * (1 + Math.tanh(z * 0.8)))), 1, 200);
+  K.tests.push({ y: sy(g).year, label, sc, tot, rank }); if (K.tests.length > 20) K.tests.shift();
+  // 評定（内申点）
+  const hy = sc.map(v => { const x = v * 0.7 + K.att * 0.3; return x >= 80 ? 5 : x >= 65 ? 4 : x >= 45 ? 3 : x >= 30 ? 2 : 1; });
+  K.hyo.push({ label, hy, avg: hy.reduce((a, b) => a + b, 0) / 5 }); if (K.hyo.length > 15) K.hyo.shift();
+  const red = sc.filter(v => v < 30).length;
+  const lines = [`【${label}】`, SUBJ.map((n, i) => `${n}${sc[i]}`).join('　'), `合計 ${tot}点・学年${rank}位（200人中）${red ? `\n赤点が${red}科目……補習が決まった。` : ''}`];
+  if (caught) { lines.push('カンニングが見つかった！ 全科目0点、そして停学処分に……。'); gkSuspend(g, K, 5, 'テストでのカンニング'); K.cheat = false; }
+  gkNote(g, lines.join('\n'));
+  if (!caught && (rank <= 10 || red >= 2)) gkEv(g, rank <= 10 ? 'sc_test_top' : 'sc_test_red', { rank, tot });
+}
+const hyoAvg = K => K.hyo.length ? K.hyo.reduce((s, h) => s + h.avg, 0) / K.hyo.length : 0;
+function gkMoshi(g, K) { const s = gkStats(g); const h = Math.round(clamp(50 + (s.gaku - 50) * 0.75 + Math.min(10, num(K.studyAll) * 0.05) + gauss() * 3, 30, 78)); K.hensa.push({ y: sy(g).year, v: h }); if (K.hensa.length > 8) K.hensa.shift(); gkNote(g, `【全国模試】\n結果が返ってきた。偏差値 ${h}。${h >= 65 ? '難関大も十分ねらえる！' : h >= 55 ? '志望校の合格圏内が見えてきた。' : h >= 45 ? 'ここからの伸びが勝負だ。' : '……現実を突きつけられた。'}`); }
+function gkSuspend(g, K, days, reason) {
+  K.susp = { until: g.state.day + days, reason }; K.suspN = num(K.suspN) + 1; K.att = clamp(K.att - 20, 0, 100);
+  hist(g, `停学処分を受けた（${reason}）`, 'school');
+  gkNote(g, `【停学処分】\n理由：${reason}。${days}日間の停学（自宅謹慎）が言いわたされた。\n${K.suspN >= 3 ? '「次はないぞ」――3度目。退学の二文字が、すぐそこにある。' : '（停学中は登校できない。反省文を書いて、生活を見直そう）'}`);
+  gkEv(g, 'sc_susp', { reason });
+  if (K.suspN >= 4) gkExpel(g, K, '退学処分', '度重なる問題行動');
+}
+function gkExpel(g, K, kind, reason) {
+  const ls = lsOf(g); if (!ls || !ls.high) return;
+  K.left = { kind, reason, day: g.state.day, y: sy(g).year, grade: hsGrade(g) };
+  ls.high = null; ls.exam = null;
+  hist(g, kind === '自主退学' ? '高校を自主退学した' : '高校を退学になった', 'school');
+  gkNote(g, kind === '自主退学' ? `【自主退学】\n退学届を出した。理由：${reason}。\n高校を辞めても、人生は続く。働く、資格をとる、高卒認定を受ける――道はひとつじゃない。` : `【${kind}】\n${reason}のため、学校から退学を言いわたされた。\n……ここから、どう生きるかは自分しだいだ。`);
+  gkEv(g, 'sc_quit', { kind });
+}
+function gkTransfer(g, K) { const ls = lsOf(g); if (!ls || !ls.high) return ''; ls.high.type = 'geino'; K.futoko = false; K.absStreak = 0; K.transferred = 1; K.bully = null; hist(g, '通信制高校に転校した', 'school'); gkEv(g, 'sc_transfer'); return '通信制高校に転校した。登校は週2回のスクーリング。自分のペースで、高校卒業をめざす。'; }
+// 指定校推薦（内申点）
+function gkSuisen(g, K, ls) {
+  const H = ls && ls.high; if (!H || !(H.plan === 'koku' || H.plan === 'shi') || H.exam) return;
+  const av = hyoAvg(K);
+  if (av < 3.8 || K.att < 55 || K.suspN > 0) { gkNote(g, `【推薦入試】\n評定平均 ${av.toFixed(1)}。${K.suspN ? '停学歴があるため、' : ''}指定校推薦の校内選考には届かなかった。一般入試で勝負だ。`); return; }
+  try { E.R4(g, { kind: 'gk_suisen', key: `gk_suisen_${sy(g).year}`, title: '指定校推薦の話', text: `担任「評定平均 ${av.toFixed(1)}。きみなら、${H.plan === 'koku' ? '国公立大学の学校推薦型選抜' : '私立大学の指定校推薦'}に推せる。どうする？」`, choices: ['推薦で受ける（ほぼ確実に合格）', '一般入試で挑戦する'], def: 0, days: 15, data: { kind: H.plan } }); } catch (e) { }
+}
+function gkSuisenHandler(g, it, k) {
+  const ls = lsOf(g); if (!ls || !ls.high) return '';
+  if (k !== 0) return '一般入試で、実力勝負をすることにした。';
+  const kind = (it.data && it.data.kind) || ls.high.plan || 'shi';
+  ls.high.exam = { kind, label: kind === 'koku' ? '国公立大学（推薦）' : '私立大学（指定校推薦）', day: g.state.day, pass: chance(0.96), p: 96, suisen: true };
+  hist(g, `${kind === 'koku' ? '国公立大学の学校推薦型選抜' : '私立大学の指定校推薦'}を受けた`, 'school');
+  gkEv(g, 'sc_suisen', { pass: ls.high.exam.pass });
+  return ls.high.exam.pass ? '推薦入試に合格した！ 春から大学生だ。（3年間の内申点が実を結んだ）' : 'まさかの不合格……。一般入試で、もう一度挑もう。';
+}
+// ---- 相談・行動 ----
+function gkConsult(g, K, how) {
+  const B = K.bully, d = sy(g);
+  if (how === 'sos') { K.mood = clamp(K.mood + 10, 0, 100); try { E.sh(g, -10); } catch (e) { } if (B && chance(0.45)) { K.bully = null; gkEv(g, 'sc_bully_end'); return `${SOS}に電話した。\n相談員の人は、さえぎらずに最後まで話を聞いてくれた。そして、学校と連絡をとる方法を一緒に考えてくれた。\n……数日後、学校が動いた。いじめは止まった。`; } return `${SOS}に電話した。\n「話してくれて、ありがとう」――その一言で、少しだけ息ができるようになった。`; }
+  if (!B) return '';
+  const p = { teacher: 0.5 + (B.lv === 1 ? 0.2 : 0), parent: 0.45, friend: friendsN(K) ? 0.35 : 0.1 }[how] || 0.3;
+  if (how === 'fight') { if (chance(0.35)) { K.bully = null; K.rep = clamp(K.rep + 3, 0, 100); return 'たまりかねて、言い返した。相手は一瞬ひるんで……それ以来、からんでこなくなった。'; } gkSuspend(g, K, ri(3, 5), 'けんか（暴力）'); return 'つかみ合いのけんかになった。先生が飛んできて……両成敗。あなたも停学になった。'; }
+  if (how === 'bear') { K.mood = clamp(K.mood - 4, 0, 100); return '……今日も、黙って耐えた。でも、心は少しずつすり減っていく。（ひとりで耐えなくていい）'; }
+  if (chance(p)) { K.bully = null; K.mood = clamp(K.mood + 8, 0, 100); gkEv(g, 'sc_bully_end'); return { teacher: '担任に打ち明けた。先生はすぐに学年会議にかけ、相手と保護者を呼んで話をした。……いじめは止まった。', parent: '家族に話した。親が学校に連絡し、学校が調査に乗り出した。……少しずつ、教室の空気が変わっていった。', friend: '友だちに話した。「一緒に先生のところに行こう」――ひとりじゃなかった。' }[how]; }
+  K.mood = clamp(K.mood + 3, 0, 100);
+  return { teacher: '担任に相談した。「様子を見よう」と言われた……。あきらめずに、ほかの先生や相談窓口にも話してみよう。', parent: '家族に話した。心配そうな顔で、ぎゅっと手を握ってくれた。', friend: '友だちに話した。気持ちは、少し軽くなった。' }[how];
+}
+function gkCare(g, K, how) {
+  const d = g.state.day;
+  if (how === 'nurse') { K.mood = clamp(K.mood + 4, 0, 100); try { E.sh(g, -6); g.state.stamina = Math.min(num(g.state.maxStamina, 100), num(g.state.stamina) + 15); g.advanceTime(90, 'gk_nurse'); } catch (e) { } if (K.futoko) { K.attDay = d; K.absStreak = 0; } return K.futoko ? '保健室登校をした。教室には行けなくても、学校には来られた。保健の先生が、温かいお茶をいれてくれた。' : '保健室で少し休んだ。白いカーテンの中は、静かで安心できた。'; }
+  if (how === 'counsel') { if (K.counselDay && d - K.counselDay < 5) return 'スクールカウンセラーとの面談は、週に1回。次の予約日を待とう。'; K.counselDay = d; K.counsel++; K.mood = clamp(K.mood + 9, 0, 100); try { g.advanceTime(60, 'gk_counsel'); } catch (e) { } if (K.counsel === 1) gkEv(g, 'sc_counsel'); return pick(['スクールカウンセラーと話した。「つらいと感じるのは、あなたが弱いからじゃないよ」', 'カウンセラーの先生と、好きなもののことを話した。気づけば、笑っていた。', '「今日はどんな一週間だった？」――ゆっくり、言葉にしていくうちに、気持ちが整理されていった。']); }
+  if (how === 'clinic') { if (!g.spend(3000)) return 'お金が足りない（¥3,000）。'; K.clinic++; K.mood = clamp(K.mood + 12, 0, 100); K.lowDays = Math.max(0, K.lowDays - 4); try { g.advanceTime(150, 'gk_clinic'); } catch (e) { } return '家族と一緒に、心療内科を受診した。お医者さんは「休むことも治療です」と言った。少しずつ、よくなっていこう。'; }
+  if (how === 'rest') { K.mood = clamp(K.mood + 6, 0, 100); try { E.sh(g, -12); } catch (e) { } return '今日は、思いきって学校を休んだ。好きな音楽を聴いて、ぼんやり空を見た。'; }
+  return '';
+}
+function gkTalk(g, K, c, how) {
+  if (K.talkDay === g.state.day && K.talkN >= 3) return '今日は、もうたくさん話した。';
+  if (K.talkDay !== g.state.day) { K.talkDay = g.state.day; K.talkN = 0; } K.talkN++;
+  const tier = myTier(g, K), up = ['youkya', 'ikemen', 'bijin', 'yankee'].includes(c.a);
+  let gain = how === 'play' ? 6 : how === 'teach' ? 5 : 3;
+  if (up && tier === 2) gain -= 3; if (K.rei >= 60) gain -= 2;
+  if (how === 'teach' && gkStats(g).gaku < 50) gain = 1;
+  c.aff = clamp(c.aff + gain + gauss(), 0, 100);
+  if (how === 'play') { try { g.spend(800); g.advanceTime(120, 'gk_play'); } catch (e) { } K.rep = clamp(K.rep + (up ? 2 : 0.5), 0, 100); }
+  const nm = shortName(c);
+  const lines = { youkya: [`${nm}「え、まじ？ ウケる！ 今度カラオケ行こーよ」`, `${nm}「きみ、意外と話しやすいね」`], inkya: [`${nm}「……あ、うん。……その、ありがとう」`, `${nm}「……実は、ずっと話してみたかった」`], otaku: [`${nm}「今期のアニメ、どれ見てる！？（早口）」`, `${nm}「わかる人がいて、うれしい……！」`], gariben: [`${nm}「この問題、こう解くと早いよ」`, `${nm}「一緒に勉強する？ 図書室なら静かだし」`], ikemen: [`${nm}「おう。今度サッカー見に来いよ」`], bijin: [`${nm}「ねえ、それどこで買ったの？ かわいい」`], yankee: [`${nm}「……なんだよ。……まあ、悪くねえな、お前」`], sports: [`${nm}「朝練きついけど、試合は楽しいぜ！」`], futsu: [`${nm}「昨日のテレビ見た？」`] }[c.a] || [`${nm}と話した。`];
+  return `${pick(lines)}\n（${nm}との親密度 ${Math.round(c.aff)}）`;
+}
+function gkHmVisit(g, K, h, how) {
+  if (K.hmDay === g.state.day) return '今日は、もうひまわり学級に行った。';
+  K.hmDay = g.state.day; K.hmVisit++; h.aff = clamp(h.aff + 6 + RND() * 4, 0, 100); K.virtue = clamp(K.virtue + 2, 0, 100); K.mood = clamp(K.mood + 2, 0, 100);
+  try { g.advanceTime(60, 'gk_hm'); } catch (e) { }
+  const nm = shortName(h), [need, tip] = NEEDS[h.nd];
+  if (how === 'sign' && h.nd === 'hear') { K.signLang++; return `${nm}に手話を教えてもらった。「ありがとう」「また明日」――指で話せる言葉が、ひとつ増えた。（手話 Lv${K.signLang}）`; }
+  const t = { wheel: [`${nm}と中庭でお昼を食べた。スロープの場所を教えてもらって、学校の見え方が少し変わった。`, `移動教室のとき、「押そうか？」と聞いたら「今日は自分で行ける！」と笑った。`], hear: [`${nm}とノートで筆談した。字がきれいで、絵もうまい。`, `口元を見せて、ゆっくり話した。${nm}は親指を立ててくれた。`], asd: [`${nm}は電車の路線図にとても詳しい。時刻表のクイズで盛り上がった。`, `予定が変わると不安になる${nm}のために、明日の流れを一緒に確認した。`], ld: [`${nm}とタブレットで調べ学習をした。読み上げ機能を使うと、すらすら答えていく。`, `${nm}は、話す言葉がとても豊か。作文を口で言ってもらって、一緒に書きとった。`], down: [`${nm}が、手作りのクッキーをくれた。「おいしい？」と何度も聞いてきて、こっちまで笑顔になった。`, `${nm}と一緒に花壇の水やりをした。ひまわりの芽が出ていた。`] }[h.nd];
+  return `${pick(t)}\n（${need}。${tip}）`;
+}
+// ---- 通知・イベント ----
+function gkNote(g, t) { try { (g.morningNotes || (g.morningNotes = [])).push(t); } catch (e) { } const K = gko(g); K.log.push({ d: g.state.day, t: String(t).split('\n')[0] }); if (K.log.length > 40) K.log.shift(); }
+function gkEv(g, id, v = {}) { const K = gko(g); if (!K || K.opt.ev === 'off') return; if (K.evq.some(e => e.id === id)) return; K.evq.push({ id, v, school: 1 }); if (K.evq.length > 6) K.evq.shift(); }
+function playSchoolEvents(g) { const K = gko(g, false); if (!K || !K.evq.length) return Promise.resolve(); const q = K.evq.splice(0, 4); return new Promise(res => { const sc = new EvScene(g, q, res); if (!sc.closed) g.push(sc); }); }
+function applySchoolEffect(g, eff) {
+  const K = gko(g, false); if (!K || !eff) return;
+  for (const k of ['rei', 'virtue', 'rep', 'mood', 'att']) if (eff[k]) K[k] = clamp(num(K[k]) + eff[k], 0, 100);
+  if (eff.stress) try { E.sh(g, eff.stress); } catch (e) { }
+  if (eff.join) { if (chance(0.35)) gkSuspend(g, K, 3, 'いじめへの加担'); }
+  if (eff.help) { const c = K.cls.slice().sort((a, b) => a.sc - b.sc)[0]; if (c) c.aff = clamp(c.aff + 20, 0, 100); }
+}
+// ---- 本体への組みこみ ----
+function installSchool() {
+  try { E.Tn && E.Tn(g => { try { gkMorning(g); } catch (e) { console.error('[school] morning', e); } }); } catch (e) { }
+  try {
+    const A = (E.r6t || []).find(a => a.id === 'school');
+    if (A && !A.__gk) {
+      A.__gk = 1; const w0 = A.when, r0 = A.run;
+      A.when = (t, e) => { const r = w0(t, e); if (r == null) return r; const K = gko(t, false); if (K && K.susp && t.state.day <= K.susp.until) return `停学中（あと${K.susp.until - t.state.day + 1}日）`; return r; };
+      A.run = (t, e, a) => { const txt = r0(t, e, a); try { if (e.today && e.today.school && bu2(t) === 'high') return txt + gkAttend(t, e); } catch (er) { console.error('[school] attend', er); } return txt; };
+    }
+    const S0 = (E.r6t || []).find(a => a.id === 'study');
+    if (S0 && !S0.__gk) { S0.__gk = 1; const r1 = S0.run; S0.run = (t, e, a) => { const x = r1(t, e, a); try { const K = gko(t, false); if (K) { K.studyN = num(K.studyN) + 1; K.studyAll = num(K.studyAll) + 1; } } catch (er) { } return x; }; }
+    if (E.cd) {
+      E.cd({ id: 'gk_nurse', name: '保健室で休む', group: 'day', when: (t, e) => bu2(t) !== 'high' ? null : (() => { const s = E.cg && E.cg(t); return s && s.kind === 'school' ? '' : '学校のある日に'; })(), sub: () => '心と体を休める（不登校のときは「保健室登校」）', run: t => gkCare(t, gko(t), 'nurse') });
+      E.cd({ id: 'gk_counsel', name: 'スクールカウンセラーに相談', group: 'day', when: t => bu2(t) !== 'high' ? null : '', sub: () => '週1回・こころの元気が回復', run: t => gkCare(t, gko(t), 'counsel') });
+    }
+    if (E.ug) E.ug('gk_suisen', (t, it, k) => gkSuisenHandler(t, it, k));
+  } catch (e) { console.error('[school] install', e); }
+  if (typeof window !== 'undefined') window.__school = { open: () => openSchool(window.__game), state: () => gko(window.__game), morning: () => gkMorning(window.__game), ev: id => { gkEv(window.__game, id); return playSchoolEvents(window.__game); }, ids: () => Object.keys(SC_EVENTS) };
+  try { E.Un('gakko', { name: 'スクール', color: '#e8749a', order: 30.4, iconHD: schoolIcon, badge: g => { const K = gko(g, false); return K && isHS(g) && (K.bully || K.dep >= 2 || K.futoko) ? 1 : 0; }, open: g => openSchool(g) }); } catch (e) { console.error('[school] app', e); }
+}
+const bu2 = t => { try { return E.bu ? E.bu(t) : 'work'; } catch (e) { return 'work'; } };
+function schoolIcon(c, x, y) { const s = 32, k = 1; try { if (E.lo) E.lo(c, x, y, '#e8749a'); else { c.fillStyle = '#e8749a'; c.fillRect(x, y, s, s); } } catch (e) { } c.fillStyle = '#ffffff'; c.fillRect(x + 6 * k, y + 12 * k, 20 * k, 14 * k); c.fillStyle = '#e8749a'; c.fillRect(x + 4 * k, y + 8 * k, 24 * k, 5 * k); c.fillRect(x + 14 * k, y + 4 * k, 4 * k, 5 * k); c.fillStyle = '#8ad0ff'; c.fillRect(x + 9 * k, y + 16 * k, 4 * k, 4 * k); c.fillRect(x + 19 * k, y + 16 * k, 4 * k, 4 * k); }
+
+// ===== スクールアプリの画面 =====
+const SC_TABS = [{ id: 'home', n: 'ホーム', e: 'HOME' }, { id: 'cls', n: 'クラス', e: 'CLASS' }, { id: 'grade', n: '成績・内申', e: 'GRADES' }, { id: 'mind', n: '悩み・こころ', e: 'MIND' }, { id: 'hm', n: 'ひまわり学級', e: 'HIMAWARI' }, { id: 'future', n: '進路', e: 'FUTURE' }];
+const SC_PAL = { acc: '#ff8fb1', acc2: '#ffd3e1', head: '#6a2a52', head2: '#2a0f22' };
+function gauge(c, x, y, w, label, v, col, sub) {
+  tx(c, label, x, y, { color: UC.dim });
+  fr(c, x + 92, y + 4, w - 92, 8, 'rgba(255,255,255,0.08)');
+  c.fillStyle = lgrad(c, x + 92, 0, x + w, 0, [[0, shade(col, -0.2)], [1, col]]); c.fillRect(x + 92, y + 4, (w - 92) * clamp(v / 100, 0, 1), 8);
+  tx(c, sub != null ? sub : String(Math.round(v)), x + w, y - 1, { align: 'right', size: 11, color: '#fff' });
+}
+function chip(c, x, y, t, col) { const w = tw(c, t, 12) + 14; slant(c, x, y, w, 17, 4, hexA(col, 0.32)); fr(c, x + 3, y + 16, w - 6, 1, col); tx(c, t, x + w / 2, y + 2, { align: 'center', color: '#fff' }); return x + w + 4; }
+async function openSchool(g) {
+  if (!g || !g.state) return null;
+  loadNpbFont();
+  const K = gko(g);
+  if (K.evq.length && K.opt.ev !== 'off') { g._npbEvPlaying = 1; try { await playSchoolEvents(g); } finally { g._npbEvPlaying = 0; } }
+  tt.sfx('ok');
+  return new Promise(res => { const sc = new SchoolScene(g, res, []); g.push(sc); });
+}
+class SchoolScene extends NpbScene {
+  constructor(g, res, q) { super(g, res, q); this.isSchool = 1; this.sub = {}; }
+  get K() { return gko(this.g); }
+  get tabId() { return SC_TABS[this.tab].id; }
+  setTab(i) { this.tab = (i + SC_TABS.length) % SC_TABS.length; this.tabT = this.t; tt.sfx('cursor'); }
+  rows() {
+    const g = this.g, K = this.K, hs = isHS(g), ls = lsOf(g);
+    if (!hs) return this.tabId === 'home' ? [{ kind: 'sc', id: 'evopt', label: 'イベント演出', sub: { auto: '自動で再生する', app: 'アプリを開いたときに再生', off: '再生しない' }[K.opt.ev || 'auto'] }] : [];
+    switch (this.tabId) {
+      case 'home': return [
+        { kind: 'sc', id: 'policy', label: '授業中の過ごし方', sub: `いま：${ATTI[K.policy][0]}` },
+        { kind: 'sc', id: 'hobby', label: '趣味・推し活', sub: K.otaku ? `いま：${K.otaku}` : 'アニメ・ゲーム・アイドルなど（オタク）' },
+        { kind: 'sc', id: 'image', label: 'イメチェンする', sub: '髪型・身だしなみを変える（¥5,000）' },
+        { kind: 'sc', id: 'cheat', label: 'テストでカンニングする', sub: K.cheat ? 'ON（バレたら0点＋停学）' : 'OFF', danger: K.cheat },
+        { kind: 'sc', id: 'evopt', label: 'イベント演出', sub: { auto: '自動で再生する', app: 'アプリを開いたときに再生', off: '再生しない' }[K.opt.ev || 'auto'] },
+        { kind: 'sc', id: 'help', label: 'このアプリについて', sub: 'スクールライフの遊びかた' }];
+      case 'cls': return casteTable(g, K).filter(r => r.id !== 'me').map(r => ({ kind: 'cm', c: K.cls.find(x => x.id === r.id), tier: r.tier }));
+      case 'grade': return [{ kind: 'sc', id: 'policy', label: '授業中の過ごし方', sub: `いま：${ATTI[K.policy][0]}` }];
+      case 'mind': { const R = []; if (K.bully) R.push({ kind: 'sc', id: 'c_teacher', label: '担任の先生に相談する', sub: '学校が動いてくれるかも' }, { kind: 'sc', id: 'c_parent', label: '家族に話す', sub: '家から学校に連絡してもらう' }, { kind: 'sc', id: 'c_friend', label: '友だちに話す', sub: friendsN(K) ? `仲のいい友だち ${friendsN(K)}人` : '仲のいい友だちがいない…' }, { kind: 'sc', id: 'c_fight', label: 'やり返す', sub: 'けんかになると停学のおそれ', danger: 1 }, { kind: 'sc', id: 'c_bear', label: '我慢する', sub: 'こころがすり減っていく' });
+        R.push({ kind: 'sc', id: 'c_sos', label: '電話相談窓口にかける', sub: '24時間子供SOSダイヤル（無料）' }, { kind: 'sc', id: 'nurse', label: K.futoko ? '保健室登校する' : '保健室で休む', sub: '心と体を休める' }, { kind: 'sc', id: 'counsel', label: 'スクールカウンセラーに相談', sub: '週1回' }, { kind: 'sc', id: 'clinic', label: '心療内科を受診する', sub: '¥3,000・家族と一緒に' }, { kind: 'sc', id: 'rest', label: '今日は学校を休む', sub: '休むのも大事なこと' }); return R; }
+      case 'hm': return K.hmEst ? K.hm.map(h => ({ kind: 'hm', h })) : [{ kind: 'sc', id: 'hm_propose', label: '先生に提案する', sub: '「ひまわり学級をつくってほしい」' }];
+      case 'future': return [{ kind: 'sc', id: 'transfer', label: '通信制高校に転校する', sub: '週2回のスクーリングで卒業をめざす' }, { kind: 'sc', id: 'dropout', label: '自主退学する', sub: '退学届を出す', danger: 1 }];
+    }
+    return [];
+  }
+  update(g) {
+    this.t++;
+    if (this.toast && ++this.toast.t > 160) this.toast = null;
+    const inp = g.input, tap = this.tapAt; this.tapAt = null;
+    if (this.t < 3) return;
+    if (this.modal) { this.updModal(inp, tap); return; }
+    if (this.busy) return;
+    const K = this.K;
+    if (K.evq.length && K.opt.ev !== 'off') { this.act(() => playSchoolEvents(this.g)); return; }
+    if (tap) { this.onTap(tap); return; }
+    if (inp.pressed('menu') || inp.pressed('b')) { tt.sfx('cancel'); this.close(); return; }
+    if (inp.pressed('left')) { this.setTab(this.tab - 1); return; }
+    if (inp.pressed('right')) { this.setTab(this.tab + 1); return; }
+    const rows = this.rows(), id = this.tabId; if (!rows.length) return;
+    let i = M_(this.sel[id] | 0, 0, rows.length - 1);
+    if (inp.repeat('up')) { i = (i - 1 + rows.length) % rows.length; tt.sfx('cursor'); }
+    if (inp.repeat('down')) { i = (i + 1) % rows.length; tt.sfx('cursor'); }
+    this.sel[id] = i;
+    if (inp.pressed('a')) { tt.sfx('ok'); const r = rows[i]; this.act(() => this.activate(r)); }
+  }
+  onTap(p) {
+    const h = this.hits.slice().reverse().find(r => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h);
+    if (!h) return;
+    if (h.close) { tt.sfx('cancel'); this.close(); return; }
+    if (h.tab != null) { if (h.tab !== this.tab) this.setTab(h.tab); return; }
+    if (h.row != null) { const id = this.tabId, rows = this.rows(); if ((this.sel[id] | 0) === h.row) { tt.sfx('ok'); this.act(() => this.activate(rows[h.row])); } else { this.sel[id] = h.row; tt.sfx('cursor'); } }
+  }
+  async activate(r) {
+    if (!r) return;
+    const g = this.g, K = this.K;
+    if (r.kind === 'cm') {
+      const c = r.c; const k = await this.pick(`${c.n}（${ARCH[c.a]}・${CASTE_N[r.tier]}）`, [{ label: '話しかける' }, { label: '遊びに誘う', right: '¥800' }, { label: '勉強を教える' }], { note: `親密度 ${Math.round(c.aff)}` });
+      if (k < 0) return; await this.info(c.n, gkTalk(g, K, c, ['talk', 'play', 'teach'][k])); return;
+    }
+    if (r.kind === 'hm') {
+      const h = r.h, [need, tip] = NEEDS[h.nd];
+      const items = [{ label: 'いっしょに過ごす' }]; if (h.nd === 'hear') items.push({ label: '手話を教えてもらう' });
+      const k = await this.pick(`${h.n}`, items, { note: `${need}\n${tip}\n親密度 ${Math.round(h.aff)}` });
+      if (k < 0) return; await this.info('ひまわり学級', gkHmVisit(g, K, h, k === 1 ? 'sign' : 'stay')); return;
+    }
+    const id = r.id;
+    if (id === 'evopt') { const o = ['auto', 'app', 'off']; K.opt.ev = o[(o.indexOf(K.opt.ev || 'auto') + 1) % 3]; return; }
+    if (id === 'policy') { const keys = Object.keys(ATTI); const k = await this.pick('授業中の過ごし方', keys.map(x => ({ label: ATTI[x][0], right: K.policy === x ? 'いま' : '' })), { note: keys.map(x => `${ATTI[x][0]}：${ATTI[x][1]}`).join('\n') }); if (k >= 0) { K.policy = keys[k]; this.say(`授業中は「${ATTI[keys[k]][0]}」でいく`); } return; }
+    if (id === 'hobby') { const H = ['アニメ', 'ゲーム', 'アイドル', 'ボカロ・音楽', '鉄道', 'マンガ', 'やめる']; const k = await this.pick('趣味・推し活', H.map(x => ({ label: x }))); if (k < 0) return; K.otaku = k === H.length - 1 ? null : H[k]; if (K.otaku) { K.mood = clamp(K.mood + 4, 0, 100); const o = K.cls.filter(c => c.a === 'otaku'); o.forEach(c => c.aff = clamp(c.aff + 6, 0, 100)); this.say(`${K.otaku}に夢中！ 同じ趣味の仲間と話が合うようになった`); } return; }
+    if (id === 'image') { if (!g.spend(5000)) { this.say('お金が足りない', UC.bad); return; } K.looks = clamp(K.looks + 4 + RND() * 3, 0, 95); K.rep = clamp(K.rep + 2, 0, 100); await this.info('イメチェン', pick(['美容院で、思いきって髪型を変えた。翌朝、教室の空気が少しだけ変わった気がした。', '眉を整えて、制服の着こなしを研究した。「なんか雰囲気変わった？」と言われた。'])); return; }
+    if (id === 'cheat') { if (!K.cheat) { const k = await this.pick('カンニングする？', [{ label: 'やめておく' }, { label: 'やる' }], { note: '点数は上がるが、4回に1回はバレる。バレたら全科目0点、そして停学。' }); if (k === 1) K.cheat = true; } else K.cheat = false; return; }
+    if (id === 'help') { await this.info('スクールライフの遊びかた', ['高校生のあいだ、学校の人間関係や成績がここにまとまる。', '・「学校へ行く」と授業中の過ごし方に応じて授業態度・学力・人気が変わる。', '・人気・身なり・コミュ力などで、クラスの「一軍・二軍・三軍」が決まる（スクールカースト）。', '・年5回の定期テストの点数と授業態度から「内申点（評定）」がつき、指定校推薦に影響する。', '・いじめ・不登校・こころの不調が起きることもある。「悩み・こころ」から、先生や家族、相談窓口に頼ろう。', `・${SOS}`, '・けんか・カンニング・いじめへの加担は停学。重なると退学処分に。', '・ひまわり学級（特別支援学級）の友だちと交流できる。', '※登場人物はすべて架空です。']); return; }
+    if (id.startsWith('c_')) { const t = gkConsult(g, K, id.slice(2)); if (t) await this.info('相談', t); return; }
+    if (['nurse', 'counsel', 'clinic', 'rest'].includes(id)) { const t = gkCare(g, K, id); if (t) await this.info({ nurse: '保健室', counsel: 'スクールカウンセラー', clinic: '心療内科', rest: 'お休み' }[id], t); return; }
+    if (id === 'hm_propose') { const k = await this.pick('先生に提案する', [{ label: '提案する' }, { label: 'やめておく' }], { note: '障害のある生徒が、自分に合ったペースで学べる教室を、学校にもつくってほしい。' }); if (k !== 0) return; K.hmEst = true; K.virtue = clamp(K.virtue + 8, 0, 100); gkEv(g, 'sc_hm_open', { proposed: 1 }); this.say('提案が通った！ ひまわり学級ができることになった'); return; }
+    if (id === 'transfer') { const k = await this.pick('通信制高校に転校する？', [{ label: 'やめておく' }, { label: '転校する' }], { note: '登校は週2回のスクーリング。レポートで単位をとる。いまのクラスとは、お別れになる。' }); if (k === 1) await this.info('転校', gkTransfer(g, K)); return; }
+    if (id === 'dropout') { const R = ['自分のやりたい道に進みたい', '学校がつらすぎる', '働いて家を助けたい']; const k = await this.pick('ほんとうに退学する？', [{ label: 'やめておく' }, ...R.map(x => ({ label: x }))], { note: '退学すると高校には戻れない（あとで高卒認定や通信制で学び直すことはできる）。' }); if (k >= 1) gkExpel(g, K, '自主退学', R[k - 1]); return; }
+  }
+  draw(c, g) {
+    this.hits = [];
+    Object.assign(UC, { acc: SC_PAL.acc, acc2: SC_PAL.acc2, sel: hexA(SC_PAL.acc, 0.3), selEdge: SC_PAL.acc, head: SC_PAL.head, head2: SC_PAL.head2 });
+    c.fillStyle = lgrad(c, 0, 0, 0, 360, [[0, '#120814'], [0.6, '#1e0f26'], [1, '#2a1430']]); c.fillRect(0, 0, 640, 360);
+    for (let i = 0; i < 26; i++) { const x = (i * 97 + this.t * 0.3) % 660 - 10, y = (i * 53 + this.t * 0.4) % 380 - 10; c.fillStyle = 'rgba(255,170,200,0.18)'; c.fillRect(x, y, 3, 2); }
+    // ヘッダー
+    c.fillStyle = lgrad(c, 0, 0, 640, 0, [[0, '#8a3a66'], [0.5, '#3a1430'], [1, '#12060e']]); c.fillRect(0, 0, 640, 36);
+    slant(c, 250, 0, 22, 36, 12, hexA(UC.acc, 0.85));
+    const K = this.K, ls = lsOf(this.g), hs = isHS(this.g), d = sy(this.g);
+    tx(c, 'スクールライフ', 14, 4, { size: 18, color: '#fff', bold: true }); tx(c, 'SCHOOL LIFE', 152, 9, { color: UC.acc });
+    tx(c, `${d.year}.${String(d.month).padStart(2, '0')}.${String(d.dom).padStart(2, '0')}`, 626, 3, { align: 'right', color: '#fff' });
+    tx(c, hs ? `${K.school}｜${hsGrade(this.g)}年生${ls.high.type === 'geino' ? '（通信制）' : ''}` : K.left ? `${K.left.kind}（${K.left.y}年）` : '高校生ではない', 626, 19, { align: 'right', color: UC.acc2 });
+    // タブ
+    const tw0 = 640 / SC_TABS.length;
+    SC_TABS.forEach((T, i) => { const x = i * tw0, on = i === this.tab; slant(c, x + 3, 40, tw0 - 6, 20, 6, on ? lgrad(c, x, 0, x + tw0, 0, [[0, UC.acc], [1, shade(UC.acc, -0.3)]]) : 'rgba(255,255,255,0.06)'); tx(c, T.n, x + tw0 / 2, 43, { align: 'center', color: on ? '#2a0a1a' : '#e8d8e8', bold: on }); this.hits.push({ x, y: 38, w: tw0, h: 24, tab: i }); });
+    c.save();
+    try { if (!hs && this.tabId !== 'home') this.d_none(c); else this['sc_' + this.tabId](c); } catch (e) { console.error('[school] draw', e); tx(c, '（表示エラー）', 320, 180, { align: 'center', color: UC.bad }); }
+    c.restore();
+    fr(c, 0, 342, 640, 18, 'rgba(0,0,0,0.55)'); tx(c, '←→タブ　↑↓えらぶ　Aけってい　Bとじる', 632, 344, { align: 'right', size: 11, color: UC.dim });
+    const L = K.log.slice(-1)[0]; if (L) tx(c, fit(c, `NEWS ${L.t.replace(/[【】]/g, '')}`, 380), 10, 344, { size: 11, color: UC.acc2 });
+    if (this.toast) { const w = Math.min(560, tw(c, this.toast.text) + 36); fr(c, 320 - w / 2, 306, w, 26, 'rgba(20,6,16,0.92)'); fr(c, 320 - w / 2, 330, w, 2, this.toast.col); tx(c, this.toast.text, 320, 311, { align: 'center' }); }
+    if (this.modal) this.drawModal(c, this.N);
+  }
+  d_none(c) { box(c, 8, 66, 624, 272); const K = this.K; wrap(c, K.left ? `${K.left.y}年、${K.left.kind}。理由：${K.left.reason}\n高校を辞めても、道はいくつもある。働く、資格をとる、高卒認定試験を受ける、通信制で学び直す――。` : 'このアプリは、高校生のあいだに使える。\n（高校の人間関係、成績・内申点、悩み相談、ひまわり学級、進路など）', 580, 14).forEach((l, i) => tx(c, l, 24, 86 + i * 20, { size: 14, color: '#e8d8e8' })); }
+  menu(c, x, y, w, h) {
+    const rows = this.rows();
+    this.list(c, rows, x, y, w, h, 30, (r, X, Y, W, rh, on) => {
+      const lab = r.kind === 'cm' ? r.c.n : r.kind === 'hm' ? r.h.n : r.label;
+      const sub = r.kind === 'cm' ? `${ARCH[r.c.a]}・${CASTE_N[r.tier]}・親密度${Math.round(r.c.aff)}` : r.kind === 'hm' ? `${NEEDS[r.h.nd][0]}・親密度${Math.round(r.h.aff)}` : r.sub;
+      tx(c, fit(c, lab, W - 20), X + 10, Y + 2, { color: r.danger ? '#ff8a9a' : '#fff' });
+      if (sub) tx(c, fit(c, sub, W - 16), X + 10, Y + 16, { size: 11, color: UC.dim });
+    });
+  }
+  sc_home(c) {
+    const g = this.g, K = this.K, hs = isHS(g);
+    box(c, 8, 66, 380, 272);
+    if (!hs) { this.d_none(c); return; }
+    const nm = gkName(g), labels = gkLabels(g, K), tier = myTier(g, K);
+    spot(c, 70, 170, 70, 0.12);
+    drawChar(c, schoolSpec(g, K, 'me'), { x: 70, y: 262, sc: 1.75, expr: K.dep >= 2 ? 'sad' : K.bully ? 'worry' : K.mood > 70 ? 'smile' : 'normal', pose: 'down', t: this.t, look: 1 });
+    tx(c, `${nm.fam} ${nm.giv}`, 140, 76, { size: 16, bold: true });
+    tx(c, `${K.school}　${hsGrade(g)}年生　身長${K.ht}cm`, 140, 98, { color: UC.acc2 });
+    const tc = ['#ffd040', '#9ad0ff', '#b0a0c0'][tier];
+    glow(c, tc, 8, () => tx(c, CASTE_N[tier], 140, 116, { size: 20, color: tc, bold: true }));
+    tx(c, 'スクールカースト', 196, 122, { color: UC.dim });
+    let x = 140; for (const l of labels.slice(0, 5)) x = chip(c, x, 146, l, l === '冷笑系' ? '#8a8aa0' : l === '陽キャ' ? '#ffb040' : '#ff8fb1');
+    const st = [K.susp && g.state.day <= K.susp.until ? `停学中（あと${K.susp.until - g.state.day + 1}日）` : '', K.futoko ? (sy(g).year < 1998 ? '登校拒否' : '不登校') : '', K.dep >= 2 ? 'うつ状態' : K.dep ? 'こころの元気が少ない' : '', K.bully ? `いじめ（${['', 'からかい', '無視・物かくし', '深刻'][K.bully.lv]}）` : ''].filter(Boolean);
+    x = 140; for (const s of st) x = chip(c, x, 170, s, UC.bad);
+    gauge(c, 140, 198, 236, '授業態度', K.att, '#8ad0ff');
+    gauge(c, 140, 218, 236, 'こころの元気', K.mood, K.mood < 25 ? '#ff6a7a' : '#7ae0a0');
+    gauge(c, 140, 238, 236, '人気', K.rep, '#ffc060');
+    gauge(c, 140, 258, 236, '冷笑度', K.rei, '#a0a0b8');
+    gauge(c, 140, 278, 236, '身だしなみ', gkLooks(g, K), '#ff9ad0');
+    tx(c, `今年の欠席 ${K.absY}日　評定平均 ${K.hyo.length ? hyoAvg(K).toFixed(1) : '－'}　友だち ${friendsN(K)}人`, 20, 312, { color: '#e8d8e8' });
+    box(c, 396, 66, 236, 272); caption(c, 'メニュー', 'MENU', 406, 72); this.menu(c, 402, 94, 224, 240);
+  }
+  sc_cls(c) {
+    const g = this.g, K = this.K, T = casteTable(g, K);
+    box(c, 8, 66, 300, 272); caption(c, 'スクールカースト', 'CLASS PYRAMID', 18, 72);
+    const tiers = [0, 1, 2].map(t => T.filter(r => r.tier === t));
+    const cols = ['#ffd040', '#9ad0ff', '#b0a0c0'];
+    tiers.forEach((rs, t) => {
+      const y = 98 + t * 76, w = 120 + t * 80, x = 158 - w / 2;
+      poly(c, [[x + 14, y], [x + w - 14, y], [x + w, y + 68], [x, y + 68]], hexA(cols[t], 0.14));
+      tx(c, CASTE_N[t], x + 6, y + 4, { color: cols[t], bold: true });
+      rs.forEach((r, i) => { const per = t === 0 ? 2 : 3, cx = x + 20 + (i % per) * ((w - 30) / per), cy = y + 22 + Math.floor(i / per) * 15; tx(c, fit(c, r.id === 'me' ? '★あなた' : shortName(r), (w - 30) / per - 4), cx, cy, { size: 11, color: r.id === 'me' ? UC.acc : '#fff' }); });
+    });
+    tx(c, '※人気・コミュ力・見た目などで決まる、教室の空気。', 18, 322, { size: 11, color: UC.dim });
+    box(c, 316, 66, 316, 272); caption(c, 'クラスメイト', 'CLASSMATES', 326, 72); this.menu(c, 322, 94, 304, 240);
+  }
+  sc_grade(c) {
+    const K = this.K;
+    box(c, 8, 66, 624, 272); caption(c, '定期テスト・内申点', 'GRADES', 18, 72);
+    const X = [20, 190, 250, 310, 370, 430, 500, 600];
+    ['テスト', ...SUBJ, '合計', '学年順位'].forEach((h, i) => tx(c, h, i === 0 ? X[0] : X[i], 96, { color: UC.dim, align: i ? 'right' : 'left' }));
+    const T = K.tests.slice(-7).reverse();
+    if (!T.length) tx(c, 'まだテストはない（5月下旬に1学期中間テスト）', 20, 120, { color: UC.dim });
+    T.forEach((t, j) => { const y = 116 + j * 19; if (j % 2) fr(c, 14, y - 2, 612, 19, 'rgba(255,255,255,0.03)'); tx(c, `${t.y} ${t.label}`, X[0], y, { size: 11 }); t.sc.forEach((v, i) => tx(c, String(v), X[i + 1], y, { align: 'right', color: v < 30 ? '#ff6a7a' : v >= 90 ? UC.acc : '#fff' })); tx(c, String(t.tot), X[6], y, { align: 'right' }); tx(c, `${t.rank}位`, X[7], y, { align: 'right', color: t.rank <= 10 ? UC.acc : '#fff' }); });
+    fr(c, 16, 252, 608, 1, UC.line);
+    const av = hyoAvg(K), last = K.hyo.slice(-1)[0];
+    tx(c, `評定平均（内申点） ${K.hyo.length ? av.toFixed(1) : '－'}`, 20, 260, { size: 14, color: UC.acc2, bold: true });
+    if (last) tx(c, `最新の評定：${SUBJ.map((n, i) => `${n}${last.hy[i]}`).join(' ')}`, 250, 262, { color: '#e8d8e8' });
+    gauge(c, 20, 286, 300, '授業態度', K.att, '#8ad0ff');
+    tx(c, '指定校推薦の目安：評定平均3.8以上・授業態度55以上・停学歴なし', 20, 308, { size: 11, color: UC.dim });
+    this.list(c, this.rows(), 340, 280, 284, 30, 30, (r, X2, Y) => { tx(c, r.label, X2 + 10, Y + 2); tx(c, r.sub, X2 + 10, Y + 16, { size: 11, color: UC.dim }); });
+  }
+  sc_mind(c) {
+    const g = this.g, K = this.K;
+    box(c, 8, 66, 300, 272); caption(c, 'こころの元気', 'MIND', 18, 72);
+    const col = K.mood < 25 ? '#ff6a7a' : K.mood < 45 ? '#ffc060' : '#7ae0a0';
+    glow(c, col, 10, () => tx(c, String(Math.round(K.mood)), 158, 96, { size: 40, align: 'center', color: col, bold: true }));
+    tx(c, ['ふつう', 'こころの元気が少ない', 'うつ状態（休養と相談が必要）'][K.dep], 158, 146, { align: 'center', color: K.dep ? '#ff8a9a' : '#e8d8e8' });
+    const B = K.bully;
+    wrap(c, B ? `いじめ：${['', 'からかい・悪口', '無視・物かくし', 'ネット・暴力（深刻）'][B.lv]}\n「${B.nick}」と呼ばれている（${B.by ? shortName({ n: B.by }) + 'たちから' : ''}）。\nいじめは、された側が悪いのではない。` : 'いま、いじめの被害はない。', 270, 12).forEach((l, i) => tx(c, l, 20, 172 + i * 17, { color: B ? '#ffb0c0' : '#e8d8e8' }));
+    wrap(c, `つらいときは：\n${SOS}\n保健室・スクールカウンセラー・家族・信頼できる大人に話そう。`, 280, 11).forEach((l, i) => tx(c, l, 20, 252 + i * 15, { size: 11, color: UC.acc2 }));
+    box(c, 316, 66, 316, 272); caption(c, 'できること', 'SUPPORT', 326, 72); this.menu(c, 322, 94, 304, 240);
+  }
+  sc_hm(c) {
+    const K = this.K, y0 = sy(this.g).year;
+    box(c, 8, 66, 300, 272); caption(c, 'ひまわり学級', 'HIMAWARI', 18, 72);
+    for (let i = 0; i < 5; i++) { const x = 40 + i * 52, y = 104; c.fillStyle = '#f5c542'; for (let a = 0; a < 8; a++) { c.beginPath(); c.ellipse(x + Math.cos(a * 0.785) * 9, y + Math.sin(a * 0.785) * 9, 6, 3, a * 0.785, 0, Math.PI * 2); c.fill(); } c.fillStyle = '#7a4a1a'; c.beginPath(); c.arc(x, y, 6, 0, Math.PI * 2); c.fill(); fr(c, x - 1, y + 10, 2, 22, '#4a9a4a'); }
+    wrap(c, K.hmEst ? `障害のある生徒が、一人ひとりに合ったペースで学ぶ${y0 >= 2007 ? '特別支援学級' : '特殊学級'}。\n大切なのは「できないこと」より「どうすればできるか」を一緒に考えること（合理的配慮）。\n交流した回数 ${K.hmVisit}回　手話 Lv${K.signLang}` : 'この学校には、まだ特別支援学級がない。\n障害のある生徒が安心して学べる場所をつくってほしいと、先生に提案することができる。', 276, 12).forEach((l, i) => tx(c, l, 20, 146 + i * 18, { color: '#e8d8e8' }));
+    box(c, 316, 66, 316, 272); caption(c, K.hmEst ? 'ひまわり学級の友だち' : '提案', 'FRIENDS', 326, 72); this.menu(c, 322, 94, 304, 240);
+  }
+  sc_future(c) {
+    const g = this.g, K = this.K, ls = lsOf(g), H = ls.high;
+    box(c, 8, 66, 380, 272); caption(c, '進路・入試', 'FUTURE', 18, 72);
+    const plan = { koku: '国公立大学に進学', shi: '私立大学に進学', job: '就職', geino: '芸能の道' }[H.plan] || '未定（3年生の春に進路希望調査）';
+    const hy = K.hensa.slice(-1)[0];
+    const rows = [['進路希望', plan], ['評定平均（内申点）', K.hyo.length ? hyoAvg(K).toFixed(1) : '－'], ['最新の模試の偏差値', hy ? `${hy.v}（${hy.y}年）` : '－（2年生から）'], ['指定校推薦', hyoAvg(K) >= 3.8 && K.att >= 55 && !K.suspN ? '条件クリア（3年の11月に校内選考）' : '条件に届いていない'], ['受験', H.exam ? `${H.exam.label}${H.exam.pass === true ? '・合格' : H.exam.pass === false ? '・不合格' : '（2月に試験）'}` : '－'], ['欠席（今年）', `${K.absY}日`], ['停学歴', K.suspN ? `${K.suspN}回` : 'なし']];
+    rows.forEach(([a, b], i) => { const y = 98 + i * 26; tx(c, a, 20, y, { color: UC.dim }); tx(c, fit(c, b, 230), 376, y, { align: 'right', size: 13 }); });
+    tx(c, '大学受験は、生活画面の「受験の準備」と「勉強する」で。', 20, 290, { size: 11, color: UC.dim });
+    tx(c, `${sy(g).year >= 2021 ? '大学入学共通テスト' : sy(g).year >= 1990 ? '大学入試センター試験' : '共通一次試験'}の時代。`, 20, 306, { size: 11, color: UC.dim });
+    box(c, 396, 66, 236, 272); caption(c, '学籍', 'STATUS', 406, 72); this.menu(c, 402, 94, 224, 240);
+  }
+}
+
+// ===== 学校の固有イベント（制服の4頭身キャラ） =====
+Object.assign(EV_BGS, {
+  classroom(c) {
+    c.fillStyle = '#e8dcc0'; c.fillRect(0, 0, 640, 262); c.fillStyle = '#d0c0a0'; c.fillRect(0, 0, 640, 14);
+    c.fillStyle = '#2a4a3a'; c.fillRect(150, 40, 340, 110); c.strokeStyle = '#7a5a3a'; c.lineWidth = 6; c.strokeRect(150, 40, 340, 110);
+    c.fillStyle = 'rgba(255,255,255,0.6)'; c.fillRect(170, 60, 90, 2); c.fillRect(170, 76, 140, 2); c.fillRect(380, 120, 80, 2);
+    c.fillStyle = '#9ac8ec'; for (const x of [10, 520]) { c.fillRect(x, 40, 110, 130); c.fillStyle = '#f4f2ec'; c.fillRect(x + 53, 40, 4, 130); c.fillRect(x, 103, 110, 4); c.fillStyle = '#9ac8ec'; }
+    c.fillStyle = '#c8a070'; c.fillRect(0, 170, 640, 4);
+    for (let i = 0; i < 6; i++) { const x = 30 + i * 100; c.fillStyle = '#b07a48'; c.fillRect(x, 222, 70, 10); c.fillStyle = '#7a7e88'; c.fillRect(x + 6, 232, 4, 30); c.fillRect(x + 60, 232, 4, 30); }
+    bgFloor(c, 262, '#b48a5a', 'rgba(0,0,0,0.08)');
+  },
+  hallway(c) { c.fillStyle = '#ece6d8'; c.fillRect(0, 0, 640, 262); for (let x = 20; x < 640; x += 160) { c.fillStyle = '#9ac8ec'; c.fillRect(x, 40, 120, 100); c.fillStyle = '#f4f2ec'; c.fillRect(x + 58, 40, 4, 100); } c.fillStyle = '#5a8a6a'; c.fillRect(0, 200, 640, 6); for (let x = 0; x < 640; x += 40) { c.fillStyle = '#8a6a4a'; c.fillRect(x + 4, 160, 32, 40); } bgFloor(c, 262, '#9aa0a8', 'rgba(255,255,255,0.1)'); },
+  rooftop(c) { bgSky(c, '#3a7ad8', '#8ac0f0', '#e8f4ff', 220); c.fillStyle = 'rgba(255,255,255,0.8)'; [[120, 60], [460, 40]].forEach(([x, y]) => { c.beginPath(); c.ellipse(x, y, 60, 14, 0, 0, Math.PI * 2); c.fill(); }); c.fillStyle = '#7a8a96'; for (let x = 0; x < 640; x += 16) c.fillRect(x, 150, 2, 90); c.fillRect(0, 150, 640, 3); c.fillRect(0, 200, 640, 2); c.fillStyle = '#a8aeb6'; c.fillRect(0, 238, 640, 24); bgFloor(c, 262, '#9a9ea6', 'rgba(0,0,0,0.06)'); },
+  nurse(c) { c.fillStyle = '#eef4f2'; c.fillRect(0, 0, 640, 262); c.fillStyle = '#c8e4dc'; c.fillRect(380, 60, 220, 180); c.fillStyle = '#f8fafa'; c.fillRect(392, 150, 196, 40); c.fillStyle = '#e4eef8'; for (let x = 380; x < 600; x += 12) c.fillRect(x, 40, 8, 200); c.fillStyle = '#9ac8ec'; c.fillRect(60, 40, 140, 110); c.fillStyle = '#f4f2ec'; c.fillRect(128, 40, 4, 110); c.fillStyle = '#d04a5a'; c.fillRect(240, 70, 20, 6); c.fillRect(247, 63, 6, 20); bgFloor(c, 262, '#c8d0cc', 'rgba(0,0,0,0.05)'); },
+  bedroom(c) { c.fillStyle = '#1e1a2a'; c.fillRect(0, 0, 640, 262); c.fillStyle = '#3a2a4a'; c.fillRect(420, 40, 160, 150); c.fillStyle = 'rgba(255,240,200,0.25)'; c.fillRect(496, 40, 8, 150); c.fillStyle = '#2a2a3e'; c.fillRect(30, 160, 260, 80); c.fillStyle = '#4a4a6a'; c.fillRect(30, 150, 260, 16); c.fillStyle = '#5a6aa0'; c.fillRect(320, 150, 80, 50); c.fillStyle = '#8ad0ff'; c.fillRect(326, 156, 68, 36); bgFloor(c, 262, '#2a2430', 'rgba(255,255,255,0.03)'); },
+  gym(c) { c.fillStyle = '#d8c8a8'; c.fillRect(0, 0, 640, 262); c.fillStyle = '#8a1a2a'; c.fillRect(160, 30, 320, 120); c.fillStyle = '#f5c542'; c.fillRect(160, 30, 320, 6); c.fillStyle = '#f4f2ec'; c.fillRect(220, 70, 200, 30); for (let x = 0; x < 640; x += 80) { c.fillStyle = '#b8a888'; c.fillRect(x, 0, 6, 262); } c.fillStyle = 'rgba(255,255,255,0.4)'; c.fillRect(0, 200, 640, 2); bgFloor(c, 262, '#c89a5a', 'rgba(255,255,255,0.08)'); },
+  counsel(c) { c.fillStyle = '#f2ece2'; c.fillRect(0, 0, 640, 262); c.fillStyle = '#a8d0b8'; c.fillRect(60, 40, 160, 120); c.fillStyle = '#f4f2ec'; c.fillRect(138, 40, 4, 120); c.fillStyle = '#5a9a5a'; c.beginPath(); c.ellipse(520, 160, 40, 50, 0, 0, Math.PI * 2); c.fill(); c.fillStyle = '#a06a3a'; c.fillRect(505, 200, 30, 40); c.fillStyle = '#e8c8a0'; c.fillRect(260, 200, 140, 40); bgFloor(c, 262, '#c8b498', 'rgba(0,0,0,0.05)'); },
+  hmroom(c) { c.fillStyle = '#fff4d8'; c.fillRect(0, 0, 640, 262); for (let i = 0; i < 7; i++) { const x = 50 + i * 90, y = 40; c.fillStyle = '#f5c542'; for (let a = 0; a < 8; a++) { c.beginPath(); c.ellipse(x + Math.cos(a * 0.785) * 12, y + Math.sin(a * 0.785) * 12, 8, 4, a * 0.785, 0, Math.PI * 2); c.fill(); } c.fillStyle = '#7a4a1a'; c.beginPath(); c.arc(x, y, 8, 0, Math.PI * 2); c.fill(); } c.fillStyle = '#4a7a5a'; c.fillRect(200, 80, 240, 90); c.fillStyle = '#ffffff'; for (let i = 0; i < 4; i++) { c.fillRect(214, 94 + i * 18, 60, 10); c.fillStyle = ['#ff9a8a', '#8ad0ff', '#9ae0a0', '#ffd080'][i]; c.fillRect(280, 94 + i * 18, 140, 10); c.fillStyle = '#ffffff'; } c.fillStyle = '#9ad0b0'; c.fillRect(40, 200, 120, 40); c.fillStyle = '#ffb0c0'; c.fillRect(480, 200, 120, 40); bgFloor(c, 262, '#d8b888', 'rgba(0,0,0,0.05)'); },
+  principal(c) { EV_BGS.office(c, { c1: '#5a3a2a' }); c.fillStyle = 'rgba(60,30,10,0.25)'; c.fillRect(0, 0, 640, 360); },
+});
+// 制服・生徒の見た目
+function schoolSpec(g, K, role, o = {}) {
+  const lk = lookOf(g), me = role === 'me';
+  const f = me ? K.f : !!o.f, uni = K.uni === 'sailor' && !f ? 'gakuran' : K.uni === 'gakuran' && f ? 'sailor' : K.uni;
+  const base = me ? { skin: lk.skin, hair: lk.hair, style: lk.style === 'cap' || lk.style === 'helmet' ? 'short' : lk.style } : { ...varLook(o.n || role), ...(f ? { style: pick(['long', 'bob', 'twin']), f: true } : {}) };
+  if (f) base.f = true;
+  if (o.hair) base.hair = o.hair; if (o.style) base.style = o.style; if (o.glasses != null) base.glasses = o.glasses;
+  return charSpec(uni, { ...base, skirt: f && uni !== 'gakuran', wheel: o.wheel, aid: o.aid });
+}
+function mkSchoolCast(g, K, role, v) {
+  const C = (n, spec, col) => ({ name: n, spec, col: col || '#c8487a' });
+  const cm = a => K.cls.find(c => c.a === a) || K.cls[0];
+  switch (role) {
+    case 'me': return C(v.me, schoolSpec(g, K, 'me'));
+    case 'teacher': return C(`担任　${v.teacher}先生`, charSpec('suit', { older: 1, glasses: true, jacket: '#4a5a6a', tie: '#3a6a9a' }), '#3a5a7a');
+    case 'pe': return C(`体育の${v.pe}先生`, charSpec('casual', { top: '#2a4a9a', bottom: '#2a4a9a', style: 'short', beard: true }), '#2a4a9a');
+    case 'nurse': return C('保健室の先生', charSpec('casual', { f: true, style: 'bob', top: '#f8fafa', bottom: '#8a9aaa', hair: '#4a3020' }), '#5a9a8a');
+    case 'counselor': return C('スクールカウンセラー', charSpec('casual', { f: true, style: 'long', top: '#e8c8a8', bottom: '#6a5a4a', glasses: true }), '#a07a5a');
+    case 'principal': return C('校長先生', charSpec('suit', { older: 2, style: 'gray', jacket: '#2a2e38', tie: '#8a2a2a', glasses: true }), '#5a3a2a');
+    case 'mom': return C('母', charSpec('apron', { f: true, style: 'bob', older: 1 }), '#a05a6a');
+    case 'doctor': return C('お医者さん', charSpec('casual', { top: '#f8fafa', bottom: '#4a5a6a', older: 1, glasses: true, style: 'gray' }), '#4a7a8a');
+    case 'bully': { const c = K.cls.find(x => x.n === v.bullyN) || cm('youkya'); return C(shortName(c), schoolSpec(g, K, 'bully', { n: c.n, f: c.f, hair: '#c89a5a', style: c.f ? 'long' : 'slick' }), '#8a3a3a'); }
+    case 'youkya': { const c = cm('youkya'); return C(shortName(c), schoolSpec(g, K, 'y', { n: c.n, f: c.f, hair: '#a0703a' }), '#c87a2a'); }
+    case 'otaku': { const c = cm('otaku'); return C(shortName(c), schoolSpec(g, K, 'o', { n: c.n, f: c.f, glasses: true }), '#5a6aa0'); }
+    case 'gariben': { const c = cm('gariben'); return C(shortName(c), schoolSpec(g, K, 'gb', { n: c.n, f: c.f, glasses: true }), '#3a7a6a'); }
+    case 'ikemen': { const c = K.cls.find(x => x.a === (K.f ? 'ikemen' : 'bijin')) || cm('ikemen'); return C(shortName(c), schoolSpec(g, K, 'ik', { n: c.n, f: c.f, style: c.f ? 'long' : 'slick' }), '#c8487a'); }
+    case 'victim': { const c = cm('inkya'); return C(shortName(c), schoolSpec(g, K, 'v', { n: c.n, f: c.f }), '#6a6a8a'); }
+    case 'friend': { const c = K.cls.slice().sort((a, b) => b.aff - a.aff)[0]; return C(shortName(c), schoolSpec(g, K, 'fr', { n: c.n, f: c.f }), '#4a8a6a'); }
+  }
+  const h = K.hm.find(x => 'hm_' + x.nd === role);
+  if (h) return C(shortName(h), schoolSpec(g, K, 'h', { n: h.n, f: GIVN_F.includes(h.n.split(' ')[1]), wheel: h.nd === 'wheel', aid: h.nd === 'hear' }), '#d8a020');
+  return C(role, charSpec('casual'));
+}
+function buildSchoolEvent(g, ev) {
+  const K = gko(g); const def = SC_EVENTS[ev.id]; if (!def) return null;
+  const nm = gkName(g);
+  K.tName = K.tName || pick(SURN); K.peName = K.peName || pick(SURN);
+  const fr0 = K.cls.slice().sort((a, b) => b.aff - a.aff)[0];
+  const v = { me: nm.giv || nm.fam, fam: nm.fam, school: K.school, teacher: K.tName, pe: K.peName, nick: K.bully ? K.bully.nick : '', bullyN: K.bully ? K.bully.by : '', friend: fr0 ? shortName(fr0) : '友だち', y: sy(g).year, f: K.f, ...(ev.v || {}) };
+  const hm = nd => K.hm.find(x => x.nd === nd);
+  v.hmName = nd => (hm(nd) ? shortName(hm(nd)) : '');
+  const sc = def(v, ev, K);
+  if (!sc) return null;
+  const roles = new Set();
+  for (const s of sc.steps) { if (!s) continue; if (s[0] === 'in') roles.add(s[1]); else if (!['n', 'big', 'bg', 'out', 'ex', 'fx', 'shake', 'zoom', 'sfx', 'choice', 'wait'].includes(s[0])) roles.add(s[0]); }
+  sc.cast = {}; for (const r of roles) sc.cast[r] = mkSchoolCast(g, K, r, v);
+  sc.theme = sc.theme || { c1: '#b8487a', c2: '#ffd0e0', logo: null };
+  sc.school = 1; sc.chapter = sc.chapter || 'SCHOOL LIFE';
+  return sc;
+}
+const SC_EVENTS = {
+  sc_first: v => ({ title: '教室という名の小さな社会', bg: 'classroom', steps: [
+    ['fx', 'sakura'], ['in', 'teacher', 'R', 'smile', 'down'], ['in', 'me', 'L', 'normal', 'down'],
+    nar('窓ぎわの席。チャイムが鳴る前から、教室にはもう「見えない地図」が描かれはじめていた。'),
+    say('teacher', 'smile', 'point', `担任の${v.teacher}です。この1年、いいクラスにしような。`),
+    nar('前の方で大声で笑うグループ。窓ぎわで静かに本を読む子。黒板の前で単語帳を開く子。――スクールカーストという、だれも口にしないルール。'),
+    say('me', 'determined', 'guts', P_(['……さて。ここで、どう生きていこうか。', '空気を読むか、自分らしくいるか。', 'ランクなんて、くだらない。……でも、無視もできない。'])),
+  ] }),
+  sc_classchange: v => ({ title: 'クラス替え', bg: 'hallway', steps: [
+    ['fx', 'sakura'], ['in', 'friend', 'R', 'happy', 'wave'], ['in', 'me', 'L', 'worry', 'down'],
+    nar('掲示板の前の人だかり。自分の名前を探す指が、ふるえる。'),
+    say('friend', 'happy', 'wave', P_(['おーい！ 同じクラスだったよ！', 'また一年、よろしくね！']), 'hop'),
+    say('me', 'smile', 'down', 'よかった……！'),
+  ] }),
+  sc_youkya: v => ({ title: '陽キャの誘い', bg: 'classroom', steps: [
+    ['in', 'youkya', 'R', 'laugh', 'wave'], ['in', 'me', 'L', 'surprised', 'down'],
+    say('youkya', 'laugh', 'wave', P_(['ねえねえ、今度の土曜カラオケ行かない？ ノリいい人さがしてんの！', '放課後、みんなでタピオカ行くんだけど来る？'])),
+    ['choice', [['「行く行く！」', { rep: 6, mood: 4 }], ['「ごめん、用事があって」', { rep: -1 }], ['（どうせ数合わせだろ…と冷めた目で見る）', { rei: 6, rep: -3 }]], 'どうする？'],
+    say('youkya', 'smile', 'clap', 'オッケー、またね〜！'),
+  ] }),
+  sc_otaku: v => ({ title: '同志', bg: 'classroom', steps: [
+    ['in', 'otaku', 'R', 'surprised', 'down'], ['in', 'me', 'L', 'smile', 'card'],
+    say('otaku', 'surprised', 'down', P_(['そ、そのキーホルダー……！ もしかして、きみも……？', 'え、あの作品知ってるの！？ この学校で初めて会った……！'])),
+    say('me', 'laugh', 'guts', P_(['わかる人いた……！', '最新話、見た！？']), 'hop'),
+    nar('早口で語り合う昼休み。「オタク」と笑われてもいい。好きなものを好きと言える仲間がいるなら。'),
+  ] }),
+  sc_gariben: v => ({ title: '図書室の勉強会', bg: 'classroom', steps: [
+    ['in', 'gariben', 'R', 'serious', 'card'], ['in', 'me', 'L', 'normal', 'down'],
+    say('gariben', 'serious', 'card', P_(['ガリ勉って言われてもいいんだ。ぼくには、行きたい大学がある。', 'この問題、一緒に解いてみない？']) ),
+    ['choice', [['一緒に勉強する', { att: 3, mood: 2 }], ['「そんなにがんばって意味あるの？」と笑う', { rei: 8, mood: -1 }]], 'どうする？'],
+  ] }),
+  sc_ikemen: v => ({ title: v.f ? '放課後の呼び出し' : '中庭のうわさ', bg: 'rooftop', steps: [
+    ['in', 'ikemen', 'R', 'shy', 'down'], ['in', 'me', 'L', 'surprised', 'down'],
+    say('ikemen', 'shy', 'down', P_(['あの……よかったら、今度ふたりで出かけない？', 'ずっと、話してみたいと思ってたんだ。']), 'tremble'),
+    ['choice', [['「うん、いいよ」', { mood: 8, rep: 3 }], ['「ごめん、いまは考えられない」', { mood: 1 }]], 'どう答える？'],
+    nar('学年でいちばん目立つ人からの言葉に、心臓がうるさい。'),
+  ] }),
+  sc_chibi: v => ({ title: '身長', bg: 'hallway', steps: [
+    ['in', 'youkya', 'R', 'laugh', 'point'], ['in', 'me', 'L', 'worry', 'down'],
+    say('youkya', 'laugh', 'point', P_(['うわ、ちっさ！ 小学生かと思った〜', '背の順、いつも先頭でしょ？'])),
+    ['choice', [['笑い飛ばす「そのぶん燃費いいんで」', { rep: 4, mood: 2 }], ['「……それ、やめてほしい」とはっきり言う', { rep: 1, mood: 3, virtue: 3 }], ['黙ってうつむく', { mood: -4 }]], 'どうする？'],
+    nar('見た目をからかうのは、笑いじゃない。'),
+  ] }),
+  sc_cold: v => ({ title: '冷笑', bg: 'classroom', steps: [
+    ['in', 'friend', 'R', 'determined', 'guts'], ['in', 'me', 'L', 'normal', 'cross'],
+    say('friend', 'determined', 'guts', P_(['文化祭、ぜったい優勝しようよ！ 放課後残れる人ー！', '合唱コンクール、本気で練習しない？'])),
+    nar('クラスの何人かが、くすくすと笑った。「熱すぎ」「だるい」――'),
+    ['choice', [['「やろう！」と手を挙げる', { rep: 3, rei: -6, mood: 3 }], ['冷めた目で見て、鼻で笑う', { rei: 10, rep: -2, mood: -2 }]], 'どうする？'],
+  ] }),
+  sc_lunch: v => ({ title: '昼休みの席', bg: 'classroom', steps: [
+    ['in', 'youkya', 'R', 'laugh', 'clap'], ['in', 'otaku', 'RR', 'calm', 'card'], ['in', 'me', 'L', 'normal', 'down'],
+    nar('教室の真ん中は「一軍」の机。すみっこは、静かなグループ。お弁当を持って、どこに座る？'),
+    ['choice', [['真ん中のグループに入っていく', { rep: 3, stress: 3 }], ['すみっこの友だちのところへ', { mood: 3 }], ['ひとりで屋上へ', { mood: -1, rei: 2 }]], '昼休み、どこで食べる？'],
+  ] }),
+  sc_bully1: v => ({ title: '陰口', bg: 'hallway', steps: [
+    ['fx', 'dark'], ['in', 'bully', 'R', 'laugh', 'point'], ['in', 'me', 'L', 'shock', 'down'],
+    nar('廊下の角を曲がったとき、聞こえてしまった。'),
+    say('bully', 'laugh', 'point', `ねー、あいつマジで「${v.nick}」じゃない？ ウケる。`),
+    say('me', 'sad', 'down', '……っ。', 'tremble'),
+    nar('見た目や性格をばかにするあだ名は、ただの悪口。いじめのはじまりだ。――ひとりで抱えこまなくていい。'),
+  ] }),
+  sc_bully3: v => ({ title: '限界', bg: 'rooftop', steps: [
+    ['fx', 'rain'], ['in', 'me', 'C', 'cry', 'down'],
+    nar(`${v.y >= 2012 ? 'スマホが鳴るたびに、グループLINEの悪口が増えていく' : v.y >= 2007 ? '学校裏サイトに書かれた悪口が、頭から離れない' : '毎日の嫌がらせが、もう日常になってしまった'}。`),
+    say('me', 'cry', 'down', P_(['……もう、どうしたらいいかわからない。', 'だれにも、言えない……。']), 'tremble'),
+    nar(`いじめは、された側が悪いのではない。逃げても、休んでもいい。\nだれかに話そう――先生、家族、そして「${SOS}」。`),
+  ] }),
+  sc_bully_end: v => ({ title: '声をあげた日', bg: 'classroom', steps: [
+    ['fx', 'spark'], ['in', 'teacher', 'R', 'serious', 'down'], ['in', 'me', 'L', 'calm', 'down'],
+    say('teacher', 'serious', 'bow', '気づいてあげられなくて、ごめん。話してくれて、本当にありがとう。'),
+    say('me', 'cry', 'down', '……言って、よかった。'),
+    nar('教室の空気が、少しずつ変わっていく。声をあげることは、弱さじゃない。'),
+  ] }),
+  sc_witness: v => ({ title: '見て見ぬふり', bg: 'classroom', steps: [
+    ['in', 'bully', 'R', 'laugh', 'point'], ['in', 'victim', 'C', 'sad', 'down', 'tremble'], ['in', 'me', 'L', 'worry', 'down'],
+    nar(`${'クラスの何人かが、ひとりの子のかばんを回して笑っている'}。まわりはみんな、知らないふり。`),
+    say('bully', 'laugh', 'point', 'ほらほら、取ってみなよ〜'),
+    ['choice', [['「やめなよ」と止めに入る', { virtue: 10, rep: -2, help: 1 }, [say('me', 'determined', 'point', 'やめなよ。……おもしろくないから。'), say('victim', 'cry', 'down', '……ありがとう。')]], ['あとで先生に伝える', { virtue: 6, help: 1 }], ['見て見ぬふりをする', { rei: 6, mood: -3 }], ['一緒になって笑う', { rep: 3, virtue: -12, join: 1 }]], 'どうする？'],
+  ] }),
+  sc_futoko: v => ({ title: v.y < 1998 ? '登校拒否' : '不登校', bg: 'bedroom', steps: [
+    ['fx', 'dark'], ['in', 'me', 'C', 'sad', 'down'],
+    nar('目覚ましは鳴った。制服も、ハンガーにかかっている。……でも、体が動かない。'),
+    ['in', 'mom', 'R', 'worry', 'down'],
+    say('mom', 'worry', 'down', P_(['……今日も、休む？ 無理しなくていいからね。', '学校に行けなくても、あなたはあなたよ。'])),
+    say('me', 'sad', 'down', '……ごめん。', 'tremble'),
+    nar('休むことは、逃げじゃない。保健室登校、カウンセラー、フリースクール、通信制――道は、ひとつじゃない。'),
+  ] }),
+  sc_return: v => ({ title: '教室のドア', bg: 'classroom', steps: [
+    ['fx', 'spark'], ['in', 'friend', 'R', 'smile', 'wave'], ['in', 'me', 'L', 'worry', 'down'],
+    say('friend', 'smile', 'wave', P_(['おはよ！ ……待ってたよ。', 'ノート、とっといたから。'])),
+    say('me', 'smile', 'down', '……おはよう。', 'nod'),
+  ] }),
+  sc_counsel: v => ({ title: 'カウンセリング室', bg: 'counsel', steps: [
+    ['in', 'counselor', 'R', 'smile', 'down'], ['in', 'me', 'L', 'worry', 'down'],
+    say('counselor', 'smile', 'down', 'ここで話したことは、あなたの許可なくほかの人に言わないからね。'),
+    say('me', 'sad', 'down', '……うまく、言葉にできないんです。'),
+    say('counselor', 'smile', 'think', 'それでいいの。言葉にならない気持ちも、ちゃんと気持ちだから。ゆっくりでいいよ。'),
+  ] }),
+  sc_dep: v => ({ title: 'こころの雨', bg: 'nurse', steps: [
+    ['fx', 'rain'], ['in', 'nurse', 'R', 'worry', 'down'], ['in', 'me', 'L', 'sad', 'down'],
+    nar('眠れない。食べられない。何をしても、楽しいと思えない。'),
+    say('nurse', 'worry', 'down', '最近、顔色がずっとよくないね。……ちょっと、休んでいこうか。'),
+    say('nurse', 'calm', 'down', 'こころも、風邪をひくことがあるの。お医者さんに相談するのは、恥ずかしいことじゃないよ。'),
+    nar(`ひとりで抱えないで。保健室、スクールカウンセラー、心療内科、そして「${SOS}」。`),
+  ] }),
+  sc_recover: v => ({ title: '晴れ間', bg: 'rooftop', steps: [
+    ['fx', 'spark'], ['in', 'me', 'C', 'smile', 'down'],
+    nar('ひさしぶりに、空が青いと思った。'),
+    say('me', 'smile', 'down', 'ゆっくりでいい。……少しずつ、戻っていこう。'),
+  ] }),
+  sc_test_top: (v, ev) => ({ title: 'テスト返却', bg: 'classroom', steps: [
+    ['in', 'teacher', 'R', 'smile', 'card'], ['in', 'me', 'L', 'surprised', 'down'],
+    say('teacher', 'smile', 'card', `学年${(ev.v || {}).rank}位。よくがんばったな。`),
+    ['fx', 'flash'], say('me', 'happy', 'guts', P_(['やった……！', '努力は、うそをつかない！']), 'hop'),
+  ] }),
+  sc_test_red: v => ({ title: '赤点', bg: 'classroom', steps: [
+    ['fx', 'dark'], ['in', 'teacher', 'R', 'serious', 'card'], ['in', 'me', 'L', 'shock', 'down'],
+    say('teacher', 'serious', 'card', '赤点だ。補習、来週からな。……わからないところは、遠慮なく聞きに来い。'),
+    say('me', 'sad', 'down', '……はい。'),
+  ] }),
+  sc_susp: (v, ev) => ({ title: '停学', bg: 'principal', steps: [
+    ['in', 'principal', 'R', 'serious', 'cross'], ['in', 'teacher', 'RR', 'worry', 'down'], ['in', 'me', 'L', 'sad', 'bow'],
+    say('principal', 'serious', 'cross', `${(ev.v || {}).reason || ''}。……自宅で、自分のしたことと向き合いなさい。`),
+    say('teacher', 'worry', 'down', '先生は、お前がちゃんとやり直せると信じてるからな。'),
+    nar('反省文の白い紙が、やけに重かった。'),
+  ] }),
+  sc_quit: (v, ev) => ({ title: (ev.v || {}).kind || '退学', bg: 'hallway', steps: [
+    ['fx', 'sakura'], ['in', 'me', 'C', 'calm', 'down'],
+    nar(`${(ev.v || {}).kind === '自主退学' ? '退学届を出した帰り道' : '最後に校門を出た日'}。見なれた校舎が、少しだけ遠く見えた。`),
+    say('me', 'determined', 'guts', P_(['ここで終わりじゃない。ここから始めるんだ。', '学校がすべてじゃない。……そう証明してみせる。'])),
+  ] }),
+  sc_transfer: v => ({ title: '新しい学び方', bg: 'classroom', steps: [
+    ['fx', 'spark'], ['in', 'me', 'C', 'smile', 'card'],
+    nar('通信制高校の入学案内。登校は週2回、あとはレポートで単位をとる。'),
+    say('me', 'smile', 'card', '自分のペースで、ちゃんと卒業する。それでいいんだ。'),
+  ] }),
+  sc_hm_open: (v, ev) => ({ title: 'ひまわり学級', bg: 'hmroom', steps: [
+    ['fx', 'sakura'], ['in', 'teacher', 'R', 'smile', 'down'], ['in', 'me', 'L', 'normal', 'down'],
+    say('teacher', 'smile', 'point', (ev.v || {}).proposed ? 'きみの提案、職員会議で通ったよ。1階の空き教室が「ひまわり学級」になる。' : `今月から、1階に「ひまわり学級」ができた。${v.y >= 2007 ? '特別支援学級' : '特殊学級'}だ。`),
+    say('teacher', 'calm', 'down', 'できないことを数えるんじゃなくて、どうすればできるかを一緒に考える。それが「合理的配慮」っていう考え方だよ。'),
+    say('me', 'smile', 'nod', P_(['……今度、顔を出してみてもいいですか？', '同じ学校の仲間、ですもんね。'])),
+  ] }),
+  sc_hm_asd: v => ({ title: '大きな音', bg: 'hmroom', steps: [
+    ['in', 'hm_asd', 'R', 'shock', 'down', 'tremble'], ['in', 'me', 'L', 'worry', 'down'],
+    nar(`避難訓練のベル。${v.hmName('asd') || 'その子'}が、耳をふさいでうずくまった。`),
+    ['choice', [['静かな場所へ一緒に移動して、落ち着くのを待つ', { virtue: 8, mood: 2 }], ['「大丈夫？ 大丈夫？」と何度も声をかけて肩をゆする', { virtue: 1 }]], 'どうする？'],
+    nar('急な大きな音や予定の変更が苦手な人もいる。刺激を減らして、そばで待つだけでいい。'),
+  ] }),
+  sc_hm_wheel: v => ({ title: '階段の前で', bg: 'hallway', steps: [
+    ['in', 'hm_wheel', 'R', 'normal', 'down'], ['in', 'me', 'L', 'normal', 'down'],
+    nar('エレベーターが点検中。階段の前で、車いすが止まっていた。'),
+    ['choice', [['「手伝おうか？ どうしたらいい？」と聞く', { virtue: 8 }], ['何も言わずに車いすを持ち上げる', { virtue: 2 }]], 'どうする？'],
+    say('hm_wheel', 'smile', 'down', 'ありがとう。先生を呼んでもらえると助かる！ 持ち方にコツがあるんだ。'),
+    nar('まず相手に聞く。助けるって、そういうことだ。'),
+  ] }),
+  sc_hm_hear: v => ({ title: '指で話す', bg: 'hmroom', steps: [
+    ['in', 'hm_hear', 'R', 'smile', 'wave'], ['in', 'me', 'L', 'smile', 'wave'],
+    nar(`${v.hmName('hear') || 'その子'}が、手話で「おはよう」と言った。`),
+    say('me', 'happy', 'wave', '（右手のこぶしをこめかみから下ろして……）おはよう！', 'hop'),
+    nar('伝えたいという気持ちがあれば、言葉の形はひとつじゃない。'),
+  ] }),
+  sc_hm_mock: v => ({ title: '笑い声', bg: 'hallway', steps: [
+    ['in', 'bully', 'R', 'laugh', 'point'], ['in', 'me', 'L', 'serious', 'down'],
+    say('bully', 'laugh', 'point', 'ひまわり学級の子たちってさ〜（ものまねをして笑う）'),
+    ['choice', [['「そういうの、ほんとにやめて」と言う', { virtue: 10, rep: -2 }, [say('bully', 'surprised', 'down', '……な、なんだよ。冗談じゃん。'), say('me', 'determined', 'down', '冗談で傷つく人がいるなら、それは冗談じゃない。')]], ['苦笑いしてやり過ごす', { rei: 4, mood: -2 }]], 'どうする？'],
+  ] }),
+  sc_suisen: (v, ev) => ({ title: '推薦入試', bg: 'classroom', steps: [
+    ['in', 'teacher', 'R', (ev.v || {}).pass ? 'laugh' : 'worry', 'card'], ['in', 'me', 'L', 'worry', 'down'],
+    ...((ev.v || {}).pass ? [['fx', 'confetti'], big('推薦入試、合格！'), say('teacher', 'laugh', 'clap', '3年間、毎日ちゃんと積み上げてきた結果だ。おめでとう！'), say('me', 'cry', 'guts', 'ありがとうございます……！', 'jump')] : [say('teacher', 'worry', 'down', '……残念だった。でも、まだ一般入試がある。一緒にがんばろう。')]),
+  ] }),
+  sc_grad: v => ({ title: '卒業式', bg: 'gym', steps: [
+    ['fx', 'sakura'], ['in', 'teacher', 'R', 'cry', 'down'], ['in', 'friend', 'RR', 'cry', 'wave'], ['in', 'me', 'L', 'smile', 'card'],
+    nar('体育館に流れる歌。卒業証書の筒を、ぎゅっと握る。'),
+    say('teacher', 'cry', 'down', 'おまえたちと過ごした時間は、先生の宝物だ。……行ってこい！'),
+    say('friend', 'cry', 'wave', 'ずっと友だちだからね！'),
+    say('me', 'cry', 'guts', P_(['楽しいことも、つらいこともあった。……でも、ここに来てよかった。', 'ありがとう、みんな。いってきます！'])),
+  ] }),
+};
+
+return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
+}
+try{NPB_factory({Un:Un,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt,$M:$M,Ho:Ho,qe:qe,Zc:Zc,setLae:function(f){Lae=f(Lae)},setVu:function(f){vu=f(vu)},cd:cd,r6t:r6t,ug:ug,R4:R4,bu:bu,cg:cg,wu:wu,sh:$h}).install()}catch(e){console.error("[npb] install",e)}
 DBa().catch(t=>{console.error(t),vTe(window.__game,"\u30B2\u30FC\u30E0\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u2026","\u30DA\u30FC\u30B8\u3092\u518D\u8AAD\u307F\u8FBC\u307F\u3057\u3066\u304F\u3060\u3055\u3044")});})();
 
 </script>
