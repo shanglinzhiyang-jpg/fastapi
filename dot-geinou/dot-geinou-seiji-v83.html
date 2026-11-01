@@ -12594,6 +12594,7 @@ function install() {
   try { installYami2(); } catch (e) { console.error('[yami2] install', e); }
   try { installCustOt(); } catch (e) { console.error('[custot] install', e); }
   try { installCustHyg(); } catch (e) { console.error('[custhyg] install', e); }
+  try { installHB(); } catch (e) { console.error('[hb] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -20893,6 +20894,8 @@ async function famEvStage(g, m, A, e, R, say, c) {
   if (fx.cst) A.custSt = clamp(num(A.custSt) + fx.cst, 0, 100);
   if (fx.custOffAll) { try { for (const id of [].concat(fx.custOffAll)) jikkaCustSet(g, id, 0); } catch (x) { } }
   if (fx.custRelief) { try { custRelief(g, m, A, fx.custRelief); } catch (x) { } }
+  if (fx.rsSeen) { try { rsMark(g, m, A, fx.rsSeen, true); } catch (x) { } }
+  if (fx.tattle) { try { await tattleDo(g, m, A, fx.tattle); } catch (x) { console.error('[tattle]', x); } }
   if (fx.yg || fx.ym) yamiAdd(g, m, A, num(fx.yg), num(fx.ym));
   else if (e.dark && YM_TGT(m)) { if (num(fx.op) <= -10) yamiAdd(g, m, A, 5, 4); else if (num(fx.op) >= 10) yamiAdd(g, m, A, -3, -3); }
   if (e.dark && num(fx.op) <= -10 && num(m.age) < 18 && !fx.noScar && chance(0.4)) abScar(g, m, A, 'me');
@@ -21319,6 +21322,7 @@ function abTr(g, m, A) {
   if (A.role === 'neet') T.push('neet');
   if (age >= 65) T.push('old');
   try { const me = meSum(g); if (me.famous && ['sib', 'kid', 'pa'].includes(m.kind)) T.push('famsib'); if (me.poor && meMinor(g) && m.kind === 'sib') T.push('poor'); } catch (e) { }
+  try { T.push(...hbTraits(g, m, A)); } catch (e) { }
   T.push('gen'); return T;
 }
 function abTrMe(g) {
@@ -21492,8 +21496,8 @@ async function abPlayer(g, m, A, lab, say, once) {
   if (num(A.abused) >= 5) { A.flags = A.flags || {}; if (!A.flags.abSec) { A.flags.abSec = 1; addSec(A, g, `${cl}に言われたことばを、ノートに書きためている。もう${Math.floor(num(A.abused))}個になった。`); } }
   return true;
 }
-async function famTalkMore(g, m, A, act, lab, say, once) { if (lab === '暴言を吐く' || lab === 'いじる') return abPlayer(g, m, A, lab, say, once); if ((lab === 'ほめる' || lab === '相談する') && A.ymDay !== g.state.day) { A.ymDay = g.state.day; try { yamiAdd(g, m, A, -1.5, -1.5); } catch (e) { } } return famTalkMore0(g, m, A, act, lab, say, once); }
-function famMoreItems(g, m, A, act) { const I = famMoreItems0(g, m, A, act); try { if (!(g.state.flags && g.state.flags.famDarkOff) && !SMALL(A.role) && num(m.age) >= 3) { const i = I.findIndex(x => x.label === 'からかう'); I.splice(i >= 0 ? i + 1 : I.length, 0, { label: 'いじる' }, { label: '暴言を吐く' }); } } catch (e) { } return I; }
+async function famTalkMore(g, m, A, act, lab, say, once) { if (lab === '暴言を吐く' || lab === 'いじる') return abPlayer(g, m, A, lab, say, once); if (/のことを告げ口する$/.test(lab)) return ttHandle(g, m, A, lab, say); if ((lab === 'ほめる' || lab === '相談する') && A.ymDay !== g.state.day) { A.ymDay = g.state.day; try { yamiAdd(g, m, A, -1.5, -1.5); } catch (e) { } } return famTalkMore0(g, m, A, act, lab, say, once); }
+function famMoreItems(g, m, A, act) { const I = famMoreItems0(g, m, A, act); try { if (!(g.state.flags && g.state.flags.famDarkOff) && !SMALL(A.role) && num(m.age) >= 3) { const i = I.findIndex(x => x.label === 'からかう'); I.splice(i >= 0 ? i + 1 : I.length, 0, { label: 'いじる' }, { label: '暴言を吐く' }); } } catch (e) { } try { ttItems(g, m, A, I); } catch (e) { } return I; }
 // ---- 家族どうし（AI）：怒鳴る／いじる ----
 function abAIok(c, B) {
   if (c.g.state.flags && c.g.state.flags.famDarkOff) return false;
@@ -22239,9 +22243,9 @@ function custHygTick(g) {
 // ---- こっそりの抵抗（家での行動） ----
 const HY_OK = (c, ids) => c.m.kind === 'sib' && sibIsYounger(c.m) && num(c.m.age) >= 7 && ids.some(id => custFor(c.g, c.m, c.A)[id]);
 FA.push(
-  { id: 'hy_shower', n: '夜中にこっそりシャワーを浴びる', k: 'bath', pl: 'bath', d: [10, 20], w: [[1290, 1440]], ok: c => HY_OK(c, ['noBath', 'fecesSkin']), nd: { hyg: 30 }, U: c => 0.15 + num(c.A.custSt) / 120, fx: c => { try { const H = hyOf(c.A, c.m); H.clean = clamp(H.clean + 25, 0, 100); } catch (e) { } if (chance(0.35)) { c.A.stress = clamp(num(c.A.stress) + 8, 0, 100); c.A.custSt = clamp(num(c.A.custSt) + 4, 0, 100); c.log(`${c.nm}が夜中にシャワーを浴びているのが見つかって、親に怒鳴られていた`, { ico: 'fight', imp: 1 }); addDia(c.A, c.g, 'こっそりシャワーを浴びていたら、見つかった。「うちのルールを破るのか」って。', -6); } else { c.A.stress = clamp(num(c.A.stress) - 6, 0, 100); c.A.mood = clamp(num(c.A.mood) + 4, 0, 100); } }, v: ['（音をたてないように、ちょっとだけ）', '（お湯って、こんなにあったかいんだ）'] },
-  { id: 'hy_brush', n: 'こっそり歯をみがく', k: 'bath', pl: 'bath', d: [5, 10], ok: c => HY_OK(c, ['noBrush']), nd: { hyg: 8 }, U: c => 0.1 + num(c.A.custSt) / 150, fx: c => { try { const H = hyOf(c.A, c.m); H.gum = clamp(H.gum + 1, 0, 100); } catch (e) { } if (chance(0.25)) { c.log(`${c.nm}の歯ブラシが、親に見つかって捨てられていた`, { ico: 'fight', imp: 1 }); addDia(c.A, c.g, '学校の帰りに買った歯ブラシ、見つかって捨てられた。', -5); } }, v: ['（3分だけ。だれも来ませんように）'] },
-  { id: 'hy_spray', n: '制汗スプレーを体じゅうにかける', k: 'bath', pl: 'bedroom', d: [5, 10], ok: c => HY_OK(c, HY_SM) && num(c.m.age) >= 10, nd: { hyg: 4 }, U: c => 0.05 + num(c.A.custSt) / 150, fx: c => { if (chance(0.3)) c.log(`${c.nm}の部屋から、制汗スプレーのにおいが廊下まで流れてきた`, { ico: 'drop', imp: 0 }); }, v: ['（これで、少しはましになるかな）', '（おこづかい、全部これに消えた）'] });
+  { id: 'hy_shower', n: '夜中にこっそりシャワーを浴びる', k: 'bath', pl: 'bath', d: [10, 20], w: [[1290, 1440]], ok: c => HY_OK(c, ['noBath', 'fecesSkin']) && !rsBlk(c, 'shower'), nd: { hyg: 30 }, U: c => 0.15 + num(c.A.custSt) / 120, fx: c => { try { const H = hyOf(c.A, c.m); H.clean = clamp(H.clean + 25, 0, 100); } catch (e) { } if (chance(0.35)) { c.A.stress = clamp(num(c.A.stress) + 8, 0, 100); c.A.custSt = clamp(num(c.A.custSt) + 4, 0, 100); c.log(`${c.nm}が夜中にシャワーを浴びているのが見つかって、親に怒鳴られていた`, { ico: 'fight', imp: 1 }); addDia(c.A, c.g, 'こっそりシャワーを浴びていたら、見つかった。「うちのルールを破るのか」って。', -6); } else { c.A.stress = clamp(num(c.A.stress) - 6, 0, 100); c.A.mood = clamp(num(c.A.mood) + 4, 0, 100); rsMark(c.g, c.m, c.A, 'shower'); } }, v: ['（音をたてないように、ちょっとだけ）', '（お湯って、こんなにあったかいんだ）'] },
+  { id: 'hy_brush', n: 'こっそり歯をみがく', k: 'bath', pl: 'bath', d: [5, 10], ok: c => HY_OK(c, ['noBrush']) && !rsBlk(c, 'brush'), nd: { hyg: 8 }, U: c => 0.1 + num(c.A.custSt) / 150, fx: c => { try { const H = hyOf(c.A, c.m); H.gum = clamp(H.gum + 1, 0, 100); } catch (e) { } if (chance(0.25)) { c.log(`${c.nm}の歯ブラシが、親に見つかって捨てられていた`, { ico: 'fight', imp: 1 }); addDia(c.A, c.g, '学校の帰りに買った歯ブラシ、見つかって捨てられた。', -5); } else rsMark(c.g, c.m, c.A, 'brush'); }, v: ['（3分だけ。だれも来ませんように）'] },
+  { id: 'hy_spray', n: '制汗スプレーを体じゅうにかける', k: 'bath', pl: 'bedroom', d: [5, 10], ok: c => HY_OK(c, HY_SM) && num(c.m.age) >= 10 && !rsBlk(c, 'spray'), nd: { hyg: 4 }, U: c => 0.05 + num(c.A.custSt) / 150, fx: c => { rsMark(c.g, c.m, c.A, 'spray'); if (chance(0.3)) c.log(`${c.nm}の部屋から、制汗スプレーのにおいが廊下まで流れてきた`, { ico: 'drop', imp: 0 }); }, v: ['（これで、少しはましになるかな）', '（おこづかい、全部これに消えた）'] });
 for (const id of ['hy_shower', 'hy_brush', 'hy_spray']) FA_BY[id] = FA.find(a => a.id === id);
 Object.assign(FAI_MAXD, { hy_shower: 1, hy_brush: 1, hy_spray: 2 });
 // ---- イベント ----
@@ -22265,6 +22269,180 @@ FE.push(
   { id: 'hy_unfair', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'noBath', 'noBrush', 'fecesSkin', 'dirtyWater') && c.m.age >= 7, once: true, L: ['（あなたがお風呂から出ると、廊下で弟（妹）が待っていた）', '「……ねえ。なんで、{c}だけ、お風呂に入っていいの？」', '「歯もみがいて、きれいな水も飲んで。ぼく（わたし）は、だめなのに」', '「{c}は、とくべつなの？」'], C: [['とくべつなんかじゃない。いっしょに、親に言おう', { op: 12, cst: -10, custRelief: 1, coupleRel: -4, al: '風習が自分にだけ及ばないことを、弟（妹）と話した' }, '（親は、しぶしぶ、ルールをひとつ取りさげた）'], ['……わからない', { op: 2, cst: 4, cx: 6 }, '「……わかんないのに、{c}だけ、いいんだね」'], ['そういう決まりだから', { op: -8, cst: 8, cx: 10 }, '「……決まり、か」']] },
 );
 function installCustHyg() { E.Tn(g => { try { custHygTick(g); } catch (e) { console.error('[custHyg]', e); } }); if (typeof window !== 'undefined' && window.__custot) window.__custot.hyg = () => custHygTick(window.__game); }
+
+// ===== 衛生の風習が原因のいじめ（バリエーション）／主人公の告げ口 =====
+// ---- 悪口・あだ名に、衛生の風習を反映 ----
+Object.assign(AB_TR, {
+  h_smell: { nk: ['ドブ', '生ゴミ', 'ニオイ', 'ドブネズミ', 'ゴミ屋敷'], ab: ['くっさ。近寄んな', '息止めて歩かないと、こっちが死ぬ', '風呂って知ってる？', '窓あけて〜！ {n}が来た！', '服、洗ってないでしょ', 'お前のせいで、教室がくさい', '（わざとらしく鼻をつまんで、手であおがれた）', '（消臭スプレーを、頭からかけられた）'], ij: ['（「くさい」と言ったら負けのゲームが始まった。みんな、{n}のそばで、わざと我慢顔をする）', '「{nk}ちゃ〜ん、今日も熟成してる〜？」', '（{n}が座った椅子を、みんなが消毒シートでふいて回った）'] },
+  h_feces: { nk: ['うんこ', 'ベンジョ', 'トイレ', 'ウンコマン'], ab: ['うんこのにおいがする', 'トイレに帰れよ', '肥だめ', '（教室じゅうで、「うんこ」コールが起きた）'], ij: ['（{n}が通ると、みんなが「流せ〜！」と叫ぶ）'] },
+  h_maggot: { nk: ['ウジ虫', 'ハエ', 'ウジ'], ab: ['足から虫わいてんだろ', 'ウジ虫は外に出ろ', '（上ばきを、トイレの便器に投げこまれた）'], ij: ['（{n}の上ばきを、ほうきで「おそうじ」して回るあそびがはやっている）'] },
+  h_bugs: { nk: ['虫かご', 'ゴキブリ', 'ムシ'], ab: ['かばんから虫出すなよ', 'ゴキブリの巣', '（机の中に、虫の死骸を入れられた）'], ij: ['（{n}の机に、ゴキブリのおもちゃが山盛りにされていた）'] },
+  h_teeth: { nk: ['口くさ', 'ドブ口', '虫歯'], ab: ['しゃべんな、口くさい', '歯、黒っ', '（話しかけると、全員がマスクを引きあげた）'], ij: ['「{n}、口あけてみて〜！ ……うわっ！」'] },
+  h_skin: { nk: ['とびひ', 'カビ', 'ブツブツ'], ab: ['うつるから、さわんな', '腕のそれ、なに？ キモ', '（{n}がさわったプリントを、だれも受けとらない）'], ij: ['（{n}がさわった鉛筆を、「感染〜！」と言いながら投げあっている）'] },
+  h_stomach: { nk: ['ゲリ', '下痢ピー', 'ピーピー'], ab: ['またトイレ？ 下痢ピー', 'トイレ行くとき、手あげて報告しろよ'], ij: ['（{n}がトイレに立つたびに、「ピーピー」と口笛が鳴る）'] },
+  h_urine: { nk: ['おしっこ屋敷', 'ションベン'], ab: ['お前んち、窓に変なもん吊るしてんだろ', '（家の写真を、黒板に貼られた）'], ij: ['（{n}の家の前で、みんなが鼻をつまんで記念写真を撮っていた）'] },
+  h_bags: { nk: ['ゴミ袋', 'おまる'], ab: ['お前んちの前、くさすぎ', '袋の家の子'], ij: [] },
+});
+function hbTraits(g, m, A) {
+  const C = custFor(g, m, A), T = [];
+  if (C.noBath || C.meatPillow || C.trash || C.toiletBags || C.urineHang) T.push('h_smell');
+  if (C.fecesSkin) T.push('h_feces'); if (C.maggotShoes) T.push('h_maggot'); if (C.bugsKeep) T.push('h_bugs');
+  if (C.noBrush || C.sweets) T.push('h_teeth'); if (C.towel) T.push('h_skin'); if (C.dirtyWater || C.noFridge || C.rule3) T.push('h_stomach');
+  if (C.urineHang) T.push('h_urine'); if (C.toiletBags) T.push('h_bags');
+  return T;
+}
+// ---- 学校での、毎日のいじめ（風習と、いじめの段階に合わせて） ----
+const HB_ACT = [
+  // 段階1：からかい
+  { lv: 1, ids: null, t: '教室に入ると、だれかが「くさっ」と言った。何人かが、笑った。', st: 4 },
+  { lv: 1, ids: null, t: '「{nk}」と呼ばれた。返事をしたら、もっと笑われた。', st: 4 },
+  { lv: 1, ids: ['noBath', 'meatPillow', 'trash', 'fecesSkin'], t: 'となりの席の子が、机を5センチ離した。', st: 4 },
+  { lv: 1, ids: ['noBath', 'meatPillow', 'trash', 'fecesSkin'], t: '「{nk}のにおい」で替え歌を作られた。休み時間、みんなで歌っていた。', st: 6 },
+  { lv: 1, ids: ['noBrush', 'sweets'], t: '音読で指されたら、前の席の子が、ハンカチで鼻と口をおさえた。', st: 5 },
+  { lv: 1, ids: ['dirtyWater', 'noFridge', 'rule3'], t: 'トイレに立つたびに、「ピーピー」と口笛を吹かれる。', st: 5 },
+  { lv: 1, ids: ['towel'], t: 'うでのぶつぶつを見た子が、「うつる〜」と言って、ほかの子にタッチして回った。', st: 5 },
+  // 段階2：仲間はずれ・物
+  { lv: 2, ids: null, t: '班の机をくっつけるとき、ぼく（わたし）の机だけ、だれもくっつけてくれない。', st: 7 },
+  { lv: 2, ids: null, t: '給食を配る当番の子が、ぼく（わたし）のおかずだけ、トングの先でつまんで落とすように置いた。', st: 7 },
+  { lv: 2, ids: ['noBath', 'fecesSkin', 'meatPillow', 'trash'], t: '机の上に、消臭剤が置かれていた。マジックで「{n}専用」と書いてあった。', st: 8 },
+  { lv: 2, ids: ['noBath', 'fecesSkin'], t: '体操服が、燃えるゴミの箱に捨てられていた。「くさいから捨てといた」って。', st: 9 },
+  { lv: 2, ids: ['maggotShoes'], t: '上ばきが、トイレの便器の中に入れられていた。', st: 9 },
+  { lv: 2, ids: ['bugsKeep', 'trash'], t: '机の中に、虫の死骸がいっぱい入れられていた。「お前の仲間だろ」って。', st: 9 },
+  { lv: 2, ids: ['urineHang', 'toiletBags'], t: '黒板に、うちの家の写真が貼られていた。「ヤバい家ランキング1位」って。', st: 9 },
+  { lv: 2, ids: null, t: 'ぼく（わたし）がさわったドアノブを、みんなが消毒シートでふいてから、さわる。', st: 7 },
+  { lv: 2, ids: null, t: 'クラス写真で、ぼく（わたし）のまわりの子だけ、全員が鼻をつまんでいた。', st: 8 },
+  // 段階3：暴力・ネット
+  { lv: 3, ids: null, t: 'トイレで、バケツの水を頭からかけられた。「洗ってやった」って。みんなで笑っていた。', st: 12, sc: 'school' },
+  { lv: 3, ids: null, t: '消毒用のアルコールを、顔にスプレーされた。目が、ずっと痛い。', st: 12 },
+  { lv: 3, ids: ['noBath', 'fecesSkin', 'maggotShoes'], t: 'プールの時間、「消毒〜！」と言われて、つき落とされた。', st: 12 },
+  { lv: 3, ids: null, t: '「くさいやつの一日」という動画が、学年のグループに流れていた。ぼく（わたし）が、ずっと撮られていた。', st: 13, sc: 'phone' },
+  { lv: 3, ids: ['meatPillow', 'maggotShoes', 'bugsKeep'], t: 'ハエたたきで、背中をたたかれた。「ハエがとまってたよ」って。', st: 11 },
+  { lv: 3, ids: null, t: '掃除の時間、「ゴミはゴミ箱へ」と言われて、ゴミ箱の上に座らされた。', st: 12 },
+  { lv: 3, ids: ['fecesSkin', 'toiletBags'], t: 'トイレの個室に閉じこめられた。「ここがお前の家だろ」って、外から笑い声。', st: 13, sc: 'school' },
+];
+function hbTick(g) {
+  if (g.state.flags && g.state.flags.famDarkOff) return;
+  for (const m of famRoster(g)) {
+    if (!CS_TGT(m)) continue; const A = agOf(g, m), S = g.state.gakkoF && g.state.gakkoF[m.key]; if (!S || !S.bully) continue;
+    const C = custFor(g, m, A), hy = HY_IDS.filter(id => C[id]); if (!hy.length || !chance(0.5)) continue;
+    // あだ名を、風習のものに
+    const ht = hbTraits(g, m, A); if (ht.length && !S.bully.hyg) { const L = AB_TR[pick(ht)].nk; S.bully.nick = pick(L); S.bully.hyg = 1; A.abNick = S.bully.nick; }
+    const lv = clamp(num(S.bully.lv, 1), 1, 3);
+    const P = HB_ACT.filter(a => a.lv <= lv && a.lv >= lv - 1 && (!a.ids || a.ids.some(id => C[id]))); if (!P.length) continue;
+    const a = pick(P), t = csTxt(g, m, a.t.replace(/\{nk\}/g, S.bully.nick).replace(/\{n\}/g, String(m.name).split(' ').pop()));
+    addDia(A, g, t, -Math.round(a.st / 2)); A.stress = clamp(num(A.stress) + a.st * 0.5, 0, 100); A.mood = clamp(num(A.mood) - a.st * 0.4, 0, 100);
+    try { yamiAdd(g, m, A, a.st * 0.04, a.st * 0.08); } catch (e) { }
+    if (a.sc && chance(0.25)) abScar(g, m, A, a.sc);
+    if (lv < 3 && chance(0.035)) { S.bully.lv = lv + 1; try { faiLog(g, `【${m.rel}の学校】${m.rel}への「${S.bully.nick}」いじめが、ひどくなっている`, { ico: 'cloud', imp: 2, home: livesWith(g, m) }); } catch (e) { } }
+  }
+}
+// ---- いじめのイベント ----
+const HBO = (c, ...ids) => ids.some(id => !!c.cust[id]);
+const HB_ANY = c => HY_IDS.some(id => !!c.cust[id]);
+const HB_STU = c => ['elem', 'jhs', 'hs'].includes(c.A.role);
+const HB_LV = c => (c.S && c.S.bully ? num(c.S.bully.lv, 1) : 0);
+FE.push(
+  { id: 'hb_spray', dark: 1, w: 'sibYoung', ok: c => HB_ANY(c) && HB_STU(c), once: true, L: ['（弟（妹）が、びしょびしょの頭で帰ってきた）', '（髪から、きつい消臭スプレーのにおい）', '「……クラスの子たちに、頭から1本まるごと、かけられた」', '「「除菌完了〜！」って。先生は、「換気しなさい」って窓をあけただけ」', '{ab}'], C: [['先生に、ちゃんと抗議する', { op: 10, bully: -1, al: '消臭スプレーをかけられた弟（妹）のことで、学校に抗議した' }, '（先生は「ふざけていただけだと思いますが……」と言った）'], ['シャンプー、こっそり貸してやる', { op: 10, cst: -6 }, '（夜中、洗面所で、こっそり髪を洗わせた。弟（妹）は、何度も「ありがと」と言った）'], ['家のやり方を変えよう', { op: 10, cst: -12, custRelief: 1 }, '（いちばんつらい風習が、ひとつなくなった）']] },
+  { id: 'hb_song', dark: 1, w: 'sibYoung', ok: c => HB_ANY(c) && HB_STU(c), once: true, L: ['（弟（妹）が、耳をふさいで、ふとんにもぐっている）', '「……「{nk}のうた」ってのが、クラスではやってるの」', '「休み時間になると、みんなで、手拍子しながら歌うの」', '「ぼく（わたし）が近くを通ると、もっと大きな声で」'], C: [['先生と、相手の親に言う', { op: 10, bully: -1 }, '（先生は「歌くらいで……」と言いかけて、録音を聞いて、黙った）'], ['……となりで、聞いてるよ', { op: 8 }, '（弟（妹）は、ふとんの中から、そっと手を出してきた）'], ['歌くらい、気にすんな', { op: -8, scar: 'name' }, '「……毎日、なんだよ」']] },
+  { id: 'hb_desk', dark: 1, w: 'sibYoung', ok: c => HB_ANY(c) && HB_STU(c) && HB_LV(c) >= 1, once: true, L: ['（三者面談のあと、弟（妹）の机を見てしまった）', '（彫刻刀で、「くさい」「風呂入れ」「死ね」）', '（机の上には、消臭剤が3つ。マジックで「{n}専用」）', '（先生は、「机の交換、手配しますね」としか言わなかった）'], C: [['写真を撮って、教育委員会に', { op: 10, bully: -2, al: '弟（妹）の机の落書きを、証拠として残した' }, '（数日後、学校全体で、いじめの調査が始まった）'], ['弟（妹）には、見たことを言わない', { op: 2 }, '（その夜、弟（妹）は、いつもどおり「おやすみ」と言った）']] },
+  { id: 'hb_lunch', dark: 1, w: 'sibYoung', ok: c => HB_ANY(c) && HB_STU(c), once: true, L: ['（弟（妹）が、帰ってくるなり、冷蔵庫をあさっている）', '「……給食、食べてない」', '「配る当番の子が、「{nk}のぶんは、うつるからいらないよね」って。……ぼく（わたし）のトレーだけ、空っぽ」', '「先生、気づいてたと思う」'], C: [['何か作ってやる', { op: 10, hunger: 0, al: '給食を配ってもらえなかった弟（妹）に、ごはんを作った' }, '（チャーハンを、大盛りで作った。弟（妹）は、無言で、全部食べた）'], ['学校に電話する', { op: 8, bully: -1 }, '（先生は、「気づきませんでした」と言った）']] },
+  { id: 'hb_water', dark: 1, w: 'sibYoung', ok: c => HB_ANY(c) && HB_STU(c) && HB_LV(c) >= 2, once: true, L: ['（弟（妹）が、ずぶぬれで帰ってきた。雨は、降っていない）', '「……トイレで、バケツの水をかけられた」', '「「洗ってやったんだから、感謝しろ」って」', '「……ぼく（わたし）、ほんとは、ちょっとだけ、うれしかったの。水が、きれいだったから」', '（その言葉が、いちばん、つらかった）'], C: [['今すぐ、学校に行く', { op: 12, bully: -2, scar: 'school', al: 'バケツの水をかけられた弟（妹）のために、学校へ乗りこんだ' }, '（校長室で、「暴行です」と言った。校長の顔色が変わった）'], ['温かいお風呂、こっそり入れてやる', { op: 12, cst: -8 }, '（弟（妹）は、湯船の中で、声をおさえて泣いていた）']] },
+  { id: 'hb_pool_push', dark: 1, w: 'sibYoung', ok: c => HBO(c, 'noBath', 'fecesSkin', 'maggotShoes') && HB_STU(c) && [6, 7].includes(c.month), once: true, L: ['（学校から電話。弟（妹）が、プールでおぼれかけたらしい）', '（保健室のベッドで、弟（妹）が、毛布にくるまってふるえていた）', '「……「消毒〜！」って、背中を押されたの。足がつかないところで」', '「みんな、笑ってた。ぼく（わたし）が沈んでるとき、まだ笑ってた」'], C: [['警察にも、相談する', { op: 12, bully: -3, scar: 'school', al: 'プールに突き落とされた弟（妹）のことで、警察にも相談した' }, '（学校は、ようやく本気で動いた。……加害者の親は、「遊びのつもりだった」と言った）'], ['今日は、そばにいる', { op: 10 }, '（弟（妹）は、夜中に何度も、おぼれる夢で飛び起きた）']] },
+  { id: 'hb_video', dark: 1, w: 'sibYoung', ok: c => HB_ANY(c) && c.m.age >= 11 && HB_LV(c) >= 2, once: true, L: ['（弟（妹）の部屋から、スマホの動画の音が、くり返し聞こえる）', '（「くさいやつの一日」というタイトル。登校、授業、給食、トイレ……全部、隠し撮りだった）', '{abS}', '{abS}', '（再生回数は、{num}回）'], C: [['削除依頼と、学校への報告', { op: 10, bully: -2, scar: 'phone', al: '隠し撮りされた弟（妹）の動画を、削除させた' }, '（動画は消えた。……でも、だれかのスマホには、まだ残っているはずだ）'], ['スマホ、しばらくあずかろうか', { op: 4 }, '「……見ないほうが、つらいんだよ。何を言われてるか、わからないから」']] },
+  { id: 'hb_gym', dark: 1, w: 'sibYoung', ok: c => HBO(c, 'noBath', 'fecesSkin', 'meatPillow') && HB_STU(c), once: true, L: ['（弟（妹）が、体操服を持たずに帰ってきた）', '「……燃えるゴミの箱に、捨てられてた」', '「「くさいから、捨てといてあげた」って」', '「拾ったら、みんなが「うわ、ゴミあさってる」って」'], C: [['新しい体操服を買う', { op: 10, money: -3000, al: '捨てられた体操服のかわりに、新しいものを買った' }, '（新しい体操服に、弟（妹）は、名前をていねいに書いた）'], ['自分の古いのを、あげる', { op: 8 }, '「……{c}のにおいがする。……いいにおい」']] },
+  { id: 'hb_bugdesk', dark: 1, w: 'sibYoung', ok: c => HBO(c, 'bugsKeep', 'trash', 'meatPillow', 'maggotShoes') && HB_STU(c), once: true, L: ['「……机のふたを開けたら、虫の死骸が、ぎっしり入ってた」', '「「お前の仲間を、連れてきてやった」って」', '「……ぼく（わたし）、悲鳴あげちゃった。そしたら、「仲間なのに？」って、もっと笑われた」'], C: [['……こわかったな', { op: 8, al: '机に虫の死骸を入れられた弟（妹）の話を、聞いた' }, '「……うん。……虫、ほんとは、ずっとこわいんだ。家でも」'], ['家の虫も、なんとかしよう', { op: 10, cst: -10, custOffAll: ['bugsKeep', 'trash'], coupleRel: -4 }, '（親は、しぶしぶ、殺虫剤を使うことを許した）']] },
+  { id: 'hb_disinfect', dark: 1, w: 'sibYoung', ok: c => HB_ANY(c) && HB_STU(c) && HB_LV(c) >= 2, once: true, L: ['（弟（妹）の目が、真っ赤に腫れている）', '「……アルコール、顔にスプレーされた。「除菌、除菌」って」', '「目に入って、ずっと痛い」'], C: [['眼科に連れていく', { op: 12, hp: 4, bully: -1, al: '顔にアルコールをかけられた弟（妹）を、眼科に連れていった' }, '（先生は、「これは、いじめではなく、傷害です」と言った）'], ['水で、よく洗おう', { op: 8, hp: 2 }, '（洗面所で、何度も目を洗った。弟（妹）は、ずっと「ありがとう」と言っていた）']] },
+  { id: 'hb_photo', dark: 1, w: 'sibYoung', ok: c => HB_ANY(c) && HB_STU(c), once: true, L: ['（学校から、遠足のクラス写真が届いた）', '（まん中に、弟（妹））', '（そのまわりの子たちだけ、全員が、鼻をつまんでいた）', '（先生は、そのまま、写真を配っていた）'], C: [['学校に、写真を見せて抗議する', { op: 10, bully: -1, al: 'いじめの写真を、そのまま配った学校に抗議した' }, '（学校は、写真を回収した。……もう、みんなの家にあるのに）'], ['写真を、だまってしまう', { op: -2 }, '（弟（妹）は、その写真を、見たことがないふりをしていた）']] },
+  { id: 'hb_teacher', dark: 1, w: 'sibYoung', ok: c => HB_ANY(c) && HB_STU(c) && HB_LV(c) >= 1, once: true, L: ['（担任から電話）', '（担任）「クラスの子どもたちから、{n}さんのにおいについて、苦情が出ておりまして……」', '（担任）「いじめというより、まあ、子どもたちの気持ちもわかるというか……。ご家庭で、なんとかなりませんか」', '（電話の向こうで、担任が、ため息をついた）'], C: [['それは、いじめです', { op: 10, bully: -1, al: 'いじめを「子どもの気持ち」と言った担任に、言いかえした' }, '（担任は「そ、そういうつもりでは……」と口ごもった）'], ['家の風習を、見直します', { op: 8, cst: -12, custRelief: 1 }, '（電話を切ったあと、親と、長い話しあいをした）'], ['……すみません', { op: -6, cst: 6 }, '（担任は「よろしくお願いしますね」と、明るい声で電話を切った）']] },
+  { id: 'hb_parents', dark: 1, w: 'sibYoung', ok: c => HB_ANY(c) && HB_STU(c) && HB_LV(c) >= 2, once: true, L: ['（保護者会から帰ってきた親が、青い顔をしていた）', '（ほかの保護者が、「あの子と同じクラスにしないでほしい」と、署名を集めていたらしい）', '（「におう子がいると、うちの子が集中できない」）', '（親は、それでも言った）「……うちのやり方は、変えないわよ」'], C: [['弟（妹）の気持ちを考えて', { op: 10, cst: -10, custRelief: 2, coupleRel: -6, al: '保護者会のあと、親に風習を変えるよう迫った' }, '（親は、しばらく黙って、それから、ふたつの風習をやめると言った）'], ['……（何も言えない）', { op: -4, cst: 6 }, '（その日、弟（妹）は、何も知らずに、「ただいま」と言った）']] },
+  { id: 'hb_toilet', dark: 1, w: 'sibYoung', ok: c => HBO(c, 'fecesSkin', 'toiletBags', 'noBath') && HB_STU(c) && HB_LV(c) >= 2, once: true, L: ['（下校時間を2時間すぎても、弟（妹）が帰ってこない）', '（学校に電話すると、用務員さんが、トイレの個室で見つけてくれた）', '（外から、モップでドアが押さえられていたらしい）', '「……「ここがお前の家だろ」って、言われた」'], C: [['抱きしめる', { op: 12, bully: -2, scar: 'school', al: 'トイレに閉じこめられた弟（妹）を、迎えに行った' }, '（弟（妹）は、迎えの車の中で、ずっと窓の外を見ていた）'], ['加害者の家に、乗りこむ', { op: 10, bully: -2, st: 10 }, '（相手の親は、玄関先で「うちの子がそんなことを？」と言った。……証拠の写真を見せると、黙った）']] },
+);
+// ---- 弟・妹の抵抗と、主人公の告げ口 ----
+const RS = {
+  shower: { n: '夜中のこっそりシャワー', v: 'シャワーを浴びている', tell: '夜中に、こっそりシャワーを浴びてる', pun: '（その夜から、風呂場のドアに、南京錠がかけられた）', soft: '（親は、「ほどほどにね」と、弟（妹）に軽く注意しただけだった）' },
+  brush: { n: 'かくれて歯みがき', v: '歯をみがいている', tell: 'かくれて、歯みがきしてる', pun: '（弟（妹）の歯ブラシは、目の前で、へし折られた）', soft: '（親は、歯ブラシを取りあげて、「次はだめよ」と言った）' },
+  spray: { n: '制汗スプレー', v: '制汗スプレーを使っている', tell: '制汗スプレーを、こっそり使ってる', pun: '（スプレーは全部、ゴミ袋に入れられた。おこづかいも、没収になった）', soft: '（スプレーは1本だけ没収された）' },
+  game: { n: 'かくれてゲーム', v: 'ふとんの中でゲームをしている', tell: 'ふとんの中で、こっそりゲームしてる', pun: '（ゲーム機は、水を張ったバケツに沈められた）', soft: '（ゲーム機は、一週間、親があずかることになった）' },
+  water: { n: '買ってきた水', v: 'ペットボトルの水を飲んでいる', tell: 'ペットボトルの水を、かくれて飲んでる', pun: '（ペットボトルは全部捨てられ、泥の水を、目の前で飲まされた）', soft: '（ペットボトルを2本、没収された）' },
+  bath: { n: '友だちの家のお風呂', v: '友だちの家でお風呂を借りてきた', tell: '友だちの家で、お風呂に入ってる', pun: '（「よその家の風呂に入るなんて恥さらし」――その友だちの家に行くことを、禁止された）', soft: '（親は「あんまり迷惑かけないでね」とだけ言った）' },
+  pillow: { n: '枕の肉を捨てた', v: '枕の下の肉をこっそり捨てている', tell: '枕の下の肉を、こっそり捨ててる', pun: '（新しい肉が、枕の下に、ふたつ置かれた）', soft: '（新しい肉が、ひとつ置かれた）' },
+  shoes: { n: '上ばきを洗った', v: '上ばきの虫をこっそり洗い流している', tell: '上ばきの虫を、こっそり洗い流してる', pun: '（洗った上ばきに、また、虫が入れられた）', soft: '（親は、ため息をついて、上ばきを元に戻した）' },
+  bugspray: { n: '殺虫剤', v: '殺虫剤を使っている', tell: 'かくれて、殺虫剤で虫を殺してる', pun: '（殺虫剤は没収。「命を殺した罰」として、一晩、玄関で正座させられた）', soft: '（殺虫剤を没収された）' },
+  diary: { n: 'ほんとうの日記', v: 'ほんとうの日記を、別のノートに書いている', tell: '親に見せるのとは別に、ほんとうの日記を書いてる', pun: '（ほんとうの日記は、家族の前で読みあげられ、そのあと燃やされた）', soft: '（ほんとうの日記は、親にあずけられた）' },
+  food: { n: '先に食べたごはん', v: '父より先に、こっそりごはんを食べている', tell: '父さんより先に、こっそり食べてる', pun: '（その日の夕食は、抜きになった）', soft: '（「おなかすいてたのね」と、親は苦笑いした）' },
+};
+const RS_CUST = { shower: ['noBath', 'fecesSkin'], brush: ['noBrush'], spray: ['noBath', 'fecesSkin', 'meatPillow', 'trash', 'toiletBags', 'urineHang', 'maggotShoes'], game: ['noGame'], water: ['dirtyWater'], bath: ['noBath', 'fecesSkin'], pillow: ['meatPillow'], shoes: ['maggotShoes'], bugspray: ['bugsKeep'], diary: ['check'], food: ['fatherFirst'] };
+const RS_DAYS = 30;
+function rsBlk(c, k) { return !!(c.A.rsBlock && num(c.A.rsBlock[k]) > c.g.state.day); }
+function rsMark(g, m, A, k, seen) { A.rs = isObj(A.rs) ? A.rs : {}; A.rs[k] = g.state.day; if (seen || (livesWith(g, m) && chance(0.6))) { A.rsSeen = isObj(A.rsSeen) ? A.rsSeen : {}; A.rsSeen[k] = g.state.day; try { faiLog(g, `（${m.rel}が、こっそり${RS[k].v}のを見てしまった）`, { ico: 'note', imp: 0, silent: true }); } catch (e) { } } }
+function rsList(g, m, A) { const S = isObj(A.rsSeen) ? A.rsSeen : {}; return Object.keys(S).filter(k => RS[k] && g.state.day - S[k] <= RS_DAYS && !(A.rsBlock && num(A.rsBlock[k]) > g.state.day)); }
+const TT_PA = { kibishii: '「……よく言ってくれた。あいつには、きつく言っておく」', mie: '「まあ！ ご近所に知られたら、どうするのよ」', yasashii: '「……そう。教えてくれて、ありがとう。……あの子も、つらいのかもね」', hiniku: '「へえ。お前が、きょうだいを売るとはな」', mukanshin: '「……ふうん。わかった」', shinpai: '「え……どうしよう、あの子……」', rakuten: '「ははっ、あいつもやるなあ。まあ、いちおう言っとくよ」', shinkei: '「ルールを破るなんて……！ 信じられない……！」' };
+async function tattleDo(g, Y, YA, k, P) {
+  const R = RS[k]; if (!R) return; P = P || famRoster(g).find(o => o.kind === 'pa' && houseOf(o) === houseOf(Y)); if (!P) return;
+  const PA = agOf(g, P), per = PA.per || 'yasashii', soft = ['yasashii', 'rakuten'].includes(per), pn = `${P.rel}・${String(P.name).split(' ').pop()}`;
+  const T = s => csTxt(g, Y, String(s).replace(/弟（妹）/g, Y.rel));
+  await g.say(`あなた「……${Y.rel}が、${R.tell}」`);
+  await g.say(T(TT_PA[per] || TT_PA.yasashii), { name: pn });
+  await g.say(T(soft ? R.soft : R.pun));
+  if (['kibishii', 'mie'].includes(per) && chance(0.5)) { g.state.money = num(g.state.money) + 1000; await g.say('「これは、ごほうびだ」（千円札を渡された）', { name: pn }); try { g.notify('お金 +1,000円', { color: '#ffe08a' }); } catch (e) { } }
+  PA.op = clamp(num(PA.op) + (soft ? 1 : 4), 0, 100);
+  YA.op = clamp(num(YA.op) - (soft ? 10 : 18), 0, 100); YA.custSt = clamp(num(YA.custSt) + (soft ? 5 : 12), 0, 100); YA.stress = clamp(num(YA.stress) + (soft ? 6 : 12), 0, 100); YA.mood = clamp(num(YA.mood) - 10, 0, 100);
+  try { yamiAdd(g, Y, YA, soft ? 4 : 8, soft ? 3 : 5); } catch (e) { }
+  YA.tattled = num(YA.tattled) + 1; YA.rsBlock = isObj(YA.rsBlock) ? YA.rsBlock : {}; YA.rsBlock[k] = g.state.day + (soft ? 5 : 14); if (isObj(YA.rsSeen)) delete YA.rsSeen[k];
+  const cl = famCall(g, Y);
+  addDia(YA, g, `${cl}がチクった。${R.n}のこと。……${cl}だけは、味方だと思ってたのに。`, -12);
+  if (YA.tattled >= 2) { abScar(g, Y, YA, 'me'); addSec(YA, g, `${cl}は、親の味方だ。もう、何も見せない。`); }
+  try { faiLog(g, `【告げ口】あなたが、${Y.rel}の「${R.n}」を${P.rel}に言いつけた`, { ico: 'fight', imp: 2 }); } catch (e) { }
+  try { const F = faiSt(g); F.evFlag = isObj(F.evFlag) ? F.evFlag : {}; F.evFlag[Y.key + ':tattled'] = g.state.day; if (!YA.want && livesWith(g, Y) && !(g.state.flags && g.state.flags.famDarkOff)) YA.want = { type: 'talk', ev: 'tt_confront', day: g.state.day, t0: clockMin(g), exp: 1439 }; } catch (e) { }
+}
+// 親に話しかけたとき：「〜のことを告げ口する」
+function ttItems(g, m, A, I) {
+  if (m.kind !== 'pa' || (g.state.flags && g.state.flags.famDarkOff)) return;
+  for (const Y of famRoster(g)) { if (!CS_TGT(Y) || houseOf(Y) !== houseOf(m)) continue; if (rsList(g, Y, agOf(g, Y)).length) I.push({ label: `${Y.rel}のことを告げ口する` }); }
+}
+async function ttHandle(g, m, A, lab, say) {
+  const mm = /^(.+)のことを告げ口する$/.exec(lab); if (!mm) return false;
+  const Y = famRoster(g).find(o => CS_TGT(o) && o.rel === mm[1] && houseOf(o) === houseOf(m)); if (!Y) return true;
+  const YA = agOf(g, Y), L = rsList(g, Y, YA); if (!L.length) return true;
+  const k = await g.list({ title: `${Y.rel}の、なにを言う？`, items: L.map(x => ({ label: RS[x].n, right: `${g.state.day - YA.rsSeen[x]}日前` })).concat([{ label: 'やっぱりやめる' }]), x: 12, y: 44, w: 360, px: true });
+  if (k < 0 || k >= L.length) return true;
+  await tattleDo(g, Y, YA, L[k], m); return true;
+}
+// こっそりの抵抗（家での行動・第2弾）
+FA.push(
+  { id: 'rs_game', n: 'ふとんの中でこっそりゲーム', k: 'game', pl: 'bedroom', d: [30, 60], w: [[1260, 1440]], ok: c => HY_OK(c, ['noGame']) && !rsBlk(c, 'game'), nd: { fun: 18 }, U: c => 0.15 + num(c.A.custSt) / 150, fx: c => { rsMark(c.g, c.m, c.A, 'game'); }, v: ['（音、消してるから大丈夫）', '（ふとんの中だけが、ぼくの部屋）'] },
+  { id: 'rs_water', n: '買ってきた水をこっそり飲む', k: 'snack', pl: 'bedroom', d: [5, 10], ok: c => HY_OK(c, ['dirtyWater']) && !rsBlk(c, 'water'), nd: { food: 4 }, U: c => 0.2 + num(c.A.custSt) / 150, fx: c => { rsMark(c.g, c.m, c.A, 'water'); }, v: ['（つめたい……おいしい……）'] });
+for (const id of ['rs_game', 'rs_water']) FA_BY[id] = FA.find(a => a.id === id);
+Object.assign(FAI_MAXD, { rs_game: 1, rs_water: 2 });
+// 見つけたときのイベント
+const RS_EV = (id, k, L) => ({ id, dark: 1, w: 'sibYoung', ok: c => (RS_CUST[k] || []).some(x => !!c.cust[x]) && c.m.age >= 7 && !rsBlk(c, k), cd: 120, L, C: [['見なかったことにする', { op: 3, rsSeen: k }, '（そっと、その場を離れた）'], ['手伝ってやる', { op: 8, cst: -6, rsSeen: k, al: `${RS[k].n}を、弟（妹）といっしょにかくした` }, '「……{c}、ありがと。……ふたりだけの秘密ね」'], ['親に告げ口する', { tattle: k }, '（あなたは、だまって、親の部屋に向かった。……背中に、弟（妹）の視線を感じた）'], ['見逃すかわりに、おこづかいをもらう', { op: -12, yg: 4, money: 1000, rsSeen: k, sec: `${RS[k].n}のこと、{c}に口止め料を払った。` }, '「……わかったよ。……{c}って、そういう人なんだ」']] });
+FE.push(
+  RS_EV('rs_ev_shower', 'shower', ['（夜中の1時。風呂場から、そっと水の音）', '（のぞくと、弟（妹）が、音を立てないように、ちょろちょろのシャワーで体を洗っていた）', '（目が合った。弟（妹）の顔が、真っ青になった）', '「……お願い。言わないで」']),
+  RS_EV('rs_ev_brush', 'brush', ['（洗面所の棚の奥。古いタオルにくるまれて、歯ブラシが1本かくしてあった）', '（毛先が、すっかり開いている。何か月も、こっそり使っていたらしい）', '（ちょうど、弟（妹）が入ってきた）「……あ」']),
+  RS_EV('rs_ev_game', 'game', ['（夜中、弟（妹）のふとんが、ぼんやり光っている）', '（ふとんをめくると、友だちから借りたらしいゲーム機）', '「……！ ……{c}、静かに。お願い」']),
+  RS_EV('rs_ev_water', 'water', ['（弟（妹）のベッドの下に、ペットボトルの水が何本もかくしてあった）', '（全部、おこづかいで買ったらしい）', '「……泥の水、もう飲みたくないの」']),
+  RS_EV('rs_ev_bath', 'bath', ['（弟（妹）が、友だちの家から帰ってきた。髪から、シャンプーのいいにおい）', '「……友だちのお母さんが、「お風呂、入っていきなさい」って」', '「……お願い。家では、言わないで」']),
+  RS_EV('rs_ev_pillow', 'pillow', ['（夜中、弟（妹）が、ビニール袋を持って、こっそり外に出ていく）', '（中身は、枕の下に置かれていた肉だった）', '「……もう、においで眠れないの。……新しいのを置かれる前に、捨ててるの」']),
+  RS_EV('rs_ev_shoes', 'shoes', ['（夜、洗面所で、弟（妹）が上ばきを洗っていた）', '（排水口に、白いものが流れていく）', '「……学校で、もう、あだ名で呼ばれたくないの」']),
+  RS_EV('rs_ev_bugspray', 'bugspray', ['（弟（妹）の部屋から、殺虫剤のにおいがした）', '（ゴミ箱の中に、虫の死骸と、空のスプレー缶）', '「……ふとんの中に、虫が入ってくるの。……がまん、できなかった」']),
+  RS_EV('rs_ev_diary', 'diary', ['（弟（妹）の本棚の、辞書のカバーの中に、もう1冊ノートが入っていた）', '（親に見せる日記とは別の、「ほんとうの日記」だった）', '（「きょうも、いい日でした」――親に見せるほうには、毎日そう書いてある）']),
+  RS_EV('rs_ev_food', 'food', ['（夜8時。台所で、弟（妹）が、冷めたおかずをこっそりつまんでいた）', '（父は、まだ帰ってこない）', '「……おなか、すきすぎて、気持ち悪いの」']),
+);
+FE.push(
+  { id: 'tt_confront', dark: 1, w: 'sibYoung', ok: c => c.flag('tattled'), cd: 1, L: ['（廊下で、弟（妹）が、こちらをにらんでいた）', '「……チクったの、{c}でしょ」', '「{c}だけは、味方だと思ってたのに」'], C: [['……ごめん', { op: 6, unflag: 'tattled' }, '「……ごめんで、すむと思ってるの？」（それでも、少しだけ、声がやわらいだ）'], ['ルールを破るお前が悪い', { op: -10, yg: 6, unflag: 'tattled', noScar: 1 }, '「……そっか。{c}も、あっち側なんだね」'], ['知らない、ととぼける', { op: -4, unflag: 'tattled' }, '「……うそつき」']] },
+  { id: 'tt_never', dark: 1, w: 'sibYoung', ok: c => num(c.A.tattled) >= 3, once: true, L: ['（最近、弟（妹）が、あなたの前では、何もしなくなった）', '（部屋に入ると、すぐに何かを隠す。話しかけても、「べつに」としか言わない）', '（廊下で、弟（妹）が、だれかと電話している声が聞こえた）', '「……うちの{c}？ 親のスパイだよ。何も話さないほうがいい」'], C: [['弟（妹）に、本気であやまる', { op: 10, yg: -6, al: '何度も告げ口してきたことを、弟（妹）に本気であやまった' }, '「……もう、遅いよ。……でも、聞いてはおく」'], ['……（何も言わない）', { op: -4, yg: 4 }, '（その夜、弟（妹）の部屋のドアに、内側から鍵がかかる音がした）']] },
+  { id: 'tt_revenge', dark: 1, w: 'sibYoung', ok: c => num(c.A.tattled) >= 2 && c.m.age >= 9, once: true, L: ['（夕食の席で、弟（妹）が、急に口を開いた）', '「ねえ、お父さん、お母さん。{c}ってさ、夜中に、こっそりお菓子食べてるんだよ」', '「あと、親の悪口、友だちに言ってるの、ぼく（わたし）知ってる」', '（弟（妹）は、こちらを見て、にやりと笑った）「……おかえし」'], C: [['……一本とられたな', { op: 6, yg: -4 }, '（弟（妹）は、少しだけ、勝ちほこった顔をした。……ちょっとだけ、昔みたいだった）'], ['ふざけるな', { op: -8, yg: 6, st: 6 }, '「……ほら、チクられるのって、こういう気持ちだよ」']] },
+  { id: 'tt_bribe', dark: 1, w: 'sibYoung', ok: c => isObj(c.A.rsSeen) && Object.keys(c.A.rsSeen).length > 0 && c.m.age >= 9, once: true, L: ['（弟（妹）が、部屋の前で、もじもじしている）', '「……見てたでしょ。この前の」', '（ぎゅっとにぎりしめた千円札を、差しだしてきた）', '「これ、あげるから。……親には、言わないで」'], C: [['受けとらない。言わないよ', { op: 12, al: '弟（妹）の口止め料を、受けとらなかった' }, '「……ほんと？ ……ほんとに、言わない？」（弟（妹）は、お札をにぎったまま、泣きそうな顔で笑った）'], ['受けとる', { op: -8, money: 1000, yg: 4 }, '（弟（妹）の手から、千円札がすっと抜けた。……弟（妹）は、何も言わなかった）'], ['受けとって、それでも言いつける', { op: -16, money: 1000, yg: 8, tattle: 'shower' }, '（お札をポケットに入れて、そのまま親の部屋に向かった）']] },
+);
+// 既存のイベントにも、告げ口の選択肢を足す
+(() => {
+  const add = (id, k) => { const e = FE.find(x => x.id === id); if (e && Array.isArray(e.C)) e.C.push(['親に告げ口する', { tattle: k }, '（あなたは、そのまま親の部屋に向かった）']); };
+  add('cs_smell_school', 'bath'); add('hy_deodorant', 'spray'); add('cs_rebel', 'spray');
+})();
+function installHB() {
+  E.Tn(g => { try { hbTick(g); } catch (e) { console.error('[hb]', e); } });
+  if (typeof window !== 'undefined') window.__hb = { tick: () => hbTick(window.__game), mark: (k, r) => { const g = window.__game, m = famRoster(g).find(x => x.key === k); rsMark(g, m, agOf(g, m), r, true); return 0; }, list: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return rsList(g, m, agOf(g, m)); }, items: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k), I = []; ttItems(g, m, agOf(g, m), I); return I.map(x => x.label); }, tt: (pk, yk) => { const g = window.__game, P = famRoster(g).find(x => x.key === pk), Y = famRoster(g).find(x => x.key === yk); g.run(async () => { await ttHandle(g, P, agOf(g, P), `${Y.rel}のことを告げ口する`, t => g.say(t)); }); return 0; } };
+}
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
