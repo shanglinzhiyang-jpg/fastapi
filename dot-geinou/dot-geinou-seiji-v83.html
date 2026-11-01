@@ -18028,6 +18028,7 @@ const CUSTOMS = [
   { id: 'dirtyWater', n: '砂や泥まじりの水だけを飲む', d: '魔よけのおまじない。胃腸炎や寄生虫にかかりやすく、体調が少しずつ落ちる。', bad: 1 },
   { id: 'noFridge', n: '冷蔵庫を使わない', d: '食べ物が傷みやすく、食中毒にかかりやすい。', bad: 1 },
   { id: 'fecesSkin', n: '自分たちの糞を体につけて20分なじませる', d: '「栄養の祖を体に帰す」風習。からだの清潔が大きく下がり、皮膚の感染症にかかりやすい。学校でもからかわれる。', bad: 1 },
+  { id: 'feast', n: '【大きな風習】週2回の家族食事会', d: '水曜と土曜、生への感謝として、糞と尿を使った食事会を家族全員で開く（生のもの・調理したもの、飲み物は尿）。最後に父親が生き物への感謝を述べる。重い感染症にかかりやすく、子どもの心にも影響する。', bad: 1, big: 1 },
   { id: 'gargle', n: '帰ったら手洗い・うがい', d: '玄関に消毒液。病気になりにくい。' },
   { id: 'floss', n: '寝る前の仕上げみがき・フロス', d: '歯がじょうぶに育つ。' },
   { id: 'morning', n: '毎朝シャワー', d: 'いつも清潔。' },
@@ -18076,7 +18077,38 @@ function houseTick(g, R0) {
   // 同じ家に住む自分も影響を受ける
   if (H.smell >= 40) { try { g.addNeed('clean', -Math.round(H.smell / 15)); } catch (e) { } }
 }
+// 家族食事会（週2回）
+function feastTick(g, R0) {
+  const C = custOf(g); if (!C.feast) return;
+  const wd = wdOf(g); if (wd !== 2 && wd !== 5) return;
+  const M = msn(g); if (M.feastDay === g.state.day) return; M.feastDay = g.state.day; M.feastN = num(M.feastN) + 1;
+  const house = R0.filter(inHouse), pr = (() => { try { return E.Bf(g.state); } catch (e) { return {}; } })();
+  const sp = house.find(m => m.kind === 'sp');
+  const father = pr.gender === 'm' ? 'あなた' : sp && sp.g === 'm' ? `${sp.rel}の${String(sp.name).split(' ').pop()}` : null;
+  const SEV = ['腸管出血性大腸菌の感染症', 'A型肝炎', '寄生虫の病気', '重い胃腸炎'];
+  const sickNames = [];
+  for (const m of house) {
+    const A = agOf(g, m), H = hyOf(A, m), a = m.age;
+    if (A.role === 'baby') continue;
+    if (!H.sick && chance(a < 12 ? 0.2 : 0.14)) { H.sick = ri(4, 9); H.sickN++; H.sickWhat = pick(SEV); A.hp = clamp(num(A.hp) - 15, 0, 100); sickNames.push(`${m.rel}（${H.sickWhat}）`); addDia(A, g, `食事会のあと、${H.sickWhat}で寝こんだ。病院の先生が、けわしい顔で「何を食べましたか」と聞いた。`, -10); }
+    if (m.kind === 'kid') {
+      if (a < 8) addDia(A, g, pick(['みんなでごはん。お父さんのお話は、むずかしかった。', 'においがきつかったけど、みんな食べてたから、食べた。']), -2);
+      else { A.op = clamp(num(A.op) - 3, 0, 100); A.mood = clamp(num(A.mood) - 5, 0, 100); addDia(A, g, pick(['においで吐きそうになった。でも、残すと怒られる。', '友だちの家の夕ごはんの話を聞くたびに、うちのことは絶対に言えないと思う。', '食事会の日は、朝からおなかが痛くなる。']), -6); if (a >= 10) addSec(A, g, 'うちの「食事会」のことは、誰にも言えない。'); }
+    } else if (m.kind === 'sp') addDia(A, g, '週に2回の食事会。慣れた……と思いたい。', -3);
+  }
+  // 自分も体調を崩すことがある
+  if (chance(0.12)) { try { g.state.stamina = Math.max(0, num(g.state.stamina) - 40); g.addNeed('stress', 10); } catch (e) { } sickNames.push('あなた（ひどい腹痛）'); }
+  const speech = father ? `${father === 'あなた' ? 'あなた' : father}「すべての生き物に、感謝を。私たちの体を通ったものは、また私たちに還る。命は、めぐっている。……ごちそうさまでした」` : '（父親がいないので、最後の感謝の言葉は家族みんなで唱えた）';
+  try { (g.morningNotes || (g.morningNotes = [])).push(`【家族食事会（${M.feastN}回目）】
+生への感謝の食事会。食卓には、糞と尿を使った料理が並び、飲み物は尿だった。
+${speech}${sickNames.length ? `
+……そのあと、${sickNames.join('・')}が体調を崩した。` : ''}`); } catch (e) { }
+  // 病院・学校から児童相談所へ
+  const kidsSick = house.filter(m => m.kind === 'kid' && m.age >= 1 && SEV.includes(hyOf(agOf(g, m), m).sickWhat) && hyOf(agOf(g, m), m).sick > 0);
+  if (kidsSick.length && chance(0.3)) { M.jisou = num(M.jisou) + 1; try { g.message({ from: '児童相談所', kind: 'chat', text: M.jisou >= 3 ? `お子さんが、くり返し重い感染症で受診していると病院から通告がありました。お子さんの安全のため、一時保護を含めて検討します。` : `病院${M.jisou >= 2 ? 'と学校' : ''}から連絡を受けました。お子さんの食事と生活について、ご家庭を訪問してお話をうかがいます。` }); g.addNeed('stress', 8); } catch (e) { } }
+}
 function hyFamilyTick(g, R0) {
+  try { feastTick(g, R0); } catch (e) { console.error('[feast]', e); }
   try { houseTick(g, R0); } catch (e) { console.error('[house]', e); }
   const sickNow = R0.some(m => inHouse(m) && num(hyOf(agOf(g, m), m).sick) > 0);
   for (const m of R0) {
