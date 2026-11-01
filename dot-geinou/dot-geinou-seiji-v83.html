@@ -12593,6 +12593,7 @@ function install() {
   try { installYami(); } catch (e) { console.error('[yami] install', e); }
   try { installYami2(); } catch (e) { console.error('[yami2] install', e); }
   try { installCustOt(); } catch (e) { console.error('[custot] install', e); }
+  try { installCustHyg(); } catch (e) { console.error('[custhyg] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -21938,7 +21939,6 @@ CUSTOMS.push(
   { id: 'seiza', n: '食事は正座で、しゃべらない', d: '食卓では正座、会話は禁止。足がしびれても、くずしてはいけない。', bad: 1 },
   { id: 'mongen', n: '門限は夕方5時', d: '友だちと遊んでいても、5時には帰らなければならない。', bad: 1 },
   { id: 'noGame', n: 'ゲーム・スマホ禁止', d: '家にゲームもスマホもない。学校の話題についていけない。', bad: 1 },
-  { id: 'bouzu', n: '男の子は坊主頭', d: '月に一度、父親がバリカンで刈る。', bad: 1 },
   { id: 'noCry', n: '男は泣いてはいけない', d: '泣いたら、ベランダに出される。', bad: 1 },
   { id: 'bathLast', n: '下の子のお風呂は最後', d: '下の子は、いちばん最後。冬は湯が冷めている。', bad: 1 },
   { id: 'noFriends', n: '友だちを家に呼んではいけない', d: '玄関から先に、家族以外を入れない。', bad: 1 },
@@ -21955,17 +21955,17 @@ const csMale = m => m.g !== 'f', csWin = g => { try { const d = dateOf(g, g.stat
 const CS_ST = {
   noBrush: () => 0.3, noBath: () => 0.8, noWash: () => 0.2, rule3: () => 0.1, shoesIn: () => 0.1, towel: () => 0.3, floorFood: () => 0.5, trash: () => 0.6, meatPillow: () => 0.9, bugsKeep: () => 0.6, maggotShoes: () => 1.1, toiletBags: () => 1.1, urineHang: () => 0.9, dirtyWater: () => 0.6, noFridge: () => 0.2, fecesSkin: () => 1.8,
   gayChant: m => csMale(m) ? 1.3 : 0, gayMarry: m => csMale(m) && m.age >= 13 ? 0.8 : 0,
-  chounan: () => 0.9, seiza: () => 0.5, mongen: m => m.age >= 9 ? 0.7 : 0.2, noGame: m => m.age >= 8 ? 0.7 : 0.3, bouzu: m => csMale(m) && m.age >= 10 ? 0.8 : csMale(m) ? 0.3 : 0, noCry: m => csMale(m) ? 0.7 : 0, bathLast: () => 0.4, noFriends: m => m.age >= 8 ? 0.7 : 0.3, inori: () => 0.6, check: m => m.age >= 10 ? 0.9 : 0.4, coldBath: (m, A, g) => csWin(g) ? 1.0 : 0.3, noAC: (m, A, g) => [7, 8].includes(csMon(g)) ? 0.9 : 0.1, kagyou: m => m.age >= 10 ? 0.8 : 0.3, fatherFirst: () => 0.3, otoshidama: (m, A, g) => csMon(g) === 1 ? 0.8 : 0.1,
+  chounan: () => 0.9, seiza: () => 0.5, mongen: m => m.age >= 9 ? 0.7 : 0.2, noGame: m => m.age >= 8 ? 0.7 : 0.3, noCry: m => csMale(m) ? 0.7 : 0, bathLast: () => 0.4, noFriends: m => m.age >= 8 ? 0.7 : 0.3, inori: () => 0.6, check: m => m.age >= 10 ? 0.9 : 0.4, coldBath: (m, A, g) => csWin(g) ? 1.0 : 0.3, noAC: (m, A, g) => [7, 8].includes(csMon(g)) ? 0.9 : 0.1, kagyou: m => m.age >= 10 ? 0.8 : 0.3, fatherFirst: () => 0.3, otoshidama: (m, A, g) => csMon(g) === 1 ? 0.8 : 0.1,
 };
 const CS_SMELL = ['noBath', 'fecesSkin', 'maggotShoes', 'toiletBags', 'urineHang', 'meatPillow', 'trash'];
 const CS_DIA = {
   noBrush: ['歯が痛い。でも、うちでは歯みがきしちゃいけない。'], noBath: ['「くさい」って、また言われた。お風呂に入りたい。入らせてほしい。', '体育のあと、みんながぼく（わたし）から離れていく。'], trash: ['部屋のすみのゴミ袋から、虫が出てきた。'], meatPillow: ['枕の下の肉のにおいで、今日も眠れなかった。'], bugsKeep: ['ノートの上を、虫が歩いていた。殺しちゃいけないから、見てるだけ。'], maggotShoes: ['上ばきを脱ぐとき、みんなの前で見られないようにしてる。'], toiletBags: ['部屋の袋が、またふえた。友だちには、ぜったい言えない。'], urineHang: ['通学路で、「あの家の窓、見た？」って笑われた。ぼく（わたし）の家だ。'], dirtyWater: ['泥の水を飲んだら、またおなかが痛くなった。'], fecesSkin: ['20分が、毎日いちばん長い。学校のあだ名は、言いたくない。', '体を洗いたい。ただ、それだけなのに。'], floorFood: ['床のごはんを食べながら、給食のトレーのことを思った。'],
   gayChant: ['今日も180回、言わされた。ぼくの好きな人は、そうじゃないのに。', '唱えているあいだ、心がどこか遠くに行く。'], gayMarry: ['「あなたの結婚相手は、お母さんが決める」。ぼくの気持ちは、どこにあるの。'],
-  chounan: ['おかずの数を数えた。ぼく（わたし）は、いつもひとつ少ない。', '「下の子は、あとでいいの」。いつまで、あとなんだろう。'], seiza: ['正座で、足の感覚がなくなった。立ったら、転んで笑われた。'], mongen: ['5時のチャイムが、いちばんきらい。みんな、まだ遊んでるのに。'], noGame: ['休み時間、みんながゲームの話をしてる。ぼく（わたし）は、わからないから笑ってるだけ。'], bouzu: ['また、バリカン。鏡を見たくない。'], noCry: ['泣きそうになって、くちびるをかんだ。血の味がした。', 'ベランダは、夜になると寒い。'], bathLast: ['お風呂、今日も最後。お湯が冷たくて、髪の毛が浮いていた。'], noFriends: ['友だちが家の前まで来たのに、追い返された。'], inori: ['お祈りのせいで、今日も遅刻した。先生に怒られた。'], check: ['日記に、本当のことは書けない。読まれるから。だから、ここにも書けない。'], coldBath: ['冬の朝の水は、痛い。'], noAC: ['部屋が暑すぎて、夜中に何度も目がさめた。'], kagyou: ['部活、入りたかった。でも、家の手伝いがある。'], fatherFirst: ['父さんの帰りが遅くて、夕ごはんは9時だった。おなかが鳴って、怒られた。'], otoshidama: ['お年玉、もらった瞬間に回収された。ありがとうって言ったのは、ぼく（わたし）なのに。'],
+  chounan: ['おかずの数を数えた。ぼく（わたし）は、いつもひとつ少ない。', '「下の子は、あとでいいの」。いつまで、あとなんだろう。'], seiza: ['正座で、足の感覚がなくなった。立ったら、転んで笑われた。'], mongen: ['5時のチャイムが、いちばんきらい。みんな、まだ遊んでるのに。'], noGame: ['休み時間、みんながゲームの話をしてる。ぼく（わたし）は、わからないから笑ってるだけ。'], noCry: ['泣きそうになって、くちびるをかんだ。血の味がした。', 'ベランダは、夜になると寒い。'], bathLast: ['お風呂、今日も最後。お湯が冷たくて、髪の毛が浮いていた。'], noFriends: ['友だちが家の前まで来たのに、追い返された。'], inori: ['お祈りのせいで、今日も遅刻した。先生に怒られた。'], check: ['日記に、本当のことは書けない。読まれるから。だから、ここにも書けない。'], coldBath: ['冬の朝の水は、痛い。'], noAC: ['部屋が暑すぎて、夜中に何度も目がさめた。'], kagyou: ['部活、入りたかった。でも、家の手伝いがある。'], fatherFirst: ['父さんの帰りが遅くて、夕ごはんは9時だった。おなかが鳴って、怒られた。'], otoshidama: ['お年玉、もらった瞬間に回収された。ありがとうって言ったのは、ぼく（わたし）なのに。'],
 };
 const CS_TALK = {
   noBath: ['「……ねえ、ぼく（わたし）、くさい？ ……正直に言って」'], fecesSkin: ['「……お風呂、入りたい。ふつうに、入りたいよ」'], toiletBags: ['「……友だちに、うちのこと聞かれたら、なんて言えばいいの」'], maggotShoes: ['「上ばき、自分で洗っちゃだめかな。……だめだよね」'],
-  gayChant: ['「……毎日あれ言わされるの、正直、しんどい」'], chounan: ['「{c}はいいよね。なんでも、いつも先で」'], seiza: ['「……ごはんのとき、ひとことくらい、しゃべりたいな」'], mongen: ['「……今日も、ぼく（わたし）だけ先に帰った」'], noGame: ['「みんなが話してるゲーム、ひとつも知らないんだ」'], bouzu: ['「……髪、伸ばしてみたいな」'], noCry: ['「泣いてないよ。……泣いたら、また外に出されるもん」'], noFriends: ['「友だちが「家、行っていい？」って。……また、ことわった」'], check: ['「日記、親に読まれるの、もういやだ」'], kagyou: ['「部活、やってみたかったな」'], coldBath: ['「……冬の朝、来なければいいのに」'],
+  gayChant: ['「……毎日あれ言わされるの、正直、しんどい」'], chounan: ['「{c}はいいよね。なんでも、いつも先で」'], seiza: ['「……ごはんのとき、ひとことくらい、しゃべりたいな」'], mongen: ['「……今日も、ぼく（わたし）だけ先に帰った」'], noGame: ['「みんなが話してるゲーム、ひとつも知らないんだ」'], noCry: ['「泣いてないよ。……泣いたら、また外に出されるもん」'], noFriends: ['「友だちが「家、行っていい？」って。……また、ことわった」'], check: ['「日記、親に読まれるの、もういやだ」'], kagyou: ['「部活、やってみたかったな」'], coldBath: ['「……冬の朝、来なければいいのに」'],
 };
 function csTxt(g, m, t) { let s = String(t).replace(/\{c\}/g, famCall(g, m)).replace(/ぼく（わたし）/g, m.g === 'f' ? 'わたし' : 'ぼく'); if (famKansai(g)) s = famDialect(s); return s; }
 const CS_TGT = m => !!m && m.kind === 'sib' && sibIsYounger(m) && num(m.age) >= 5;
@@ -22010,8 +22010,6 @@ FE.push(
   { id: 'cs_mongen', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'mongen') && c.m.age >= 9 && c.m.age <= 17, once: true, L: ['（夕方5時前。友だちの誕生日会から、弟（妹）がひとりで帰ってきた）', '「……ケーキ、まだ出てなかった」', '「みんな「えー、もう帰んの？」って。……次から、たぶん、誘われない」'], C: [['今日だけ、門限をのばしてもらえないか、親に聞く', { op: 8, cst: -4 }, '（親）「ルールはルール」。……弟（妹）は、玄関でくつを脱がなかった'], ['コンビニでケーキ買ってくる', { op: 10, money: -800 }, '（ふたりで、ショートケーキを食べた。「……友だちの家のケーキのほうが、大きかったけど」）'], ['ルールなんだから、しかたない', { op: -6, cst: 6 }, '「……知ってる」']] },
   // ---- ゲーム・スマホ禁止 ----
   { id: 'cs_nogame', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'noGame') && c.m.age >= 8 && c.m.age <= 17, once: true, L: ['（弟（妹）が、友だちの家でこっそりゲームをしていたことが、親にばれた）', '（親）「うちのルールを破ったのね。一週間、外出禁止」', '「……だって、みんなの話に、ついていけないんだよ」', '「休み時間、ぼく（わたし）だけ、ずっと黙ってるの。わかる？」'], C: [['親に、ルールを考えなおすよう話す', { op: 8, cst: -6 }, '（親は「ゲームは脳に悪い」と、記事の切りぬきを見せてきた）'], ['こっそり、自分のゲームを貸す', { op: 10, cst: -8, sec: '{c}が、ゲームをこっそり貸してくれた。ふたりだけの秘密。' }, '「……ほんとに？ ……絶対、バレないようにする」'], ['ルールを破ったのは、お前だろ', { op: -8, cst: 6 }, '「……そうだね。ぼく（わたし）が悪いんだよね。いつも」']] },
-  // ---- 男の子は坊主 ----
-  { id: 'cs_bouzu', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'bouzu') && OT(c) && c.m.age >= 10, once: true, L: ['（月に一度の、バリカンの日）', '（風呂場で、父が弟の頭を刈っている。弟は、ずっと目をつぶっている）', '（終わったあと、弟が、鏡の前でつぶやいた）', '「……明日、好きな子と、班がいっしょなんだ」'], C: [['帽子、貸してやる', { op: 8, cst: -4 }, '（いちばん気に入っているキャップを渡した。弟は、ぶかぶかのそれを、ぎゅっとかぶった）'], ['父さんに、もうやめてと言う', { op: 8 }, '（父）「男は坊主。うちは、そう決まっている」', { L: [], C: [['……弟の頭は、弟のものだ', { op: 10, cst: -10, custOffAll: 'bouzu', coupleRel: -4, al: '「男の子は坊主」のしきたりを、やめさせた' }, '（父は何か言いかけて、だまった。……次の月、バリカンは出てこなかった）']] }], ['坊主、似合ってるよ', { op: -4, cst: 4 }, '「……似合ってなくていいから、選ばせてほしかった」']] },
   // ---- 男は泣いてはいけない ----
   { id: 'cs_nocry', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'noCry') && OT(c), once: true, L: ['（夜。ベランダの外に、人影）', '（弟が、パジャマのまま、ひざを抱えて座っていた）', '「……泣いちゃったから。転んで、ひざすりむいて、ちょっとだけ」', '（くちびるが、切れていた。泣くのを、がまんしようとしてかんだらしい）', '「男は、泣いちゃいけないんだって」'], C: [['泣いていいんだよ。ここなら', { op: 12, cst: -8, al: '「泣いたらベランダ」のしきたりで外に出された弟に、毛布を持っていった' }, '（毛布をかけると、弟は、はじめて、声をあげて泣いた。……ふたりで、星を見ていた）'], ['親を呼んで、中に入れてもらう', { op: 8, coupleRel: -2 }, '（親）「1時間って決まってるの」。……あと40分、いっしょに外にいた'], ['泣かなきゃいいんだよ', { op: -10, cst: 8, scar: 'home' }, '「……うん。もう、泣かない」']] },
   // ---- 下の子のお風呂は最後 ----
@@ -22057,7 +22055,7 @@ const CU_CAT = [
   ['よい習慣', '#4caf7d', ['gargle', 'floss', 'morning', 'handEat']],
   ['衛生・からだ', '#5aa0d8', ['noBrush', 'noBath', 'noWash', 'shoesIn', 'towel', 'sweets', 'rule3', 'noFridge']],
   ['食事', '#e0a040', ['seiza', 'fatherFirst', 'floorFood', 'dirtyWater']],
-  ['しきたり・しつけ', '#d07ab0', ['chounan', 'mongen', 'noGame', 'bouzu', 'noCry', 'bathLast', 'noFriends', 'inori', 'check', 'coldBath', 'noAC', 'kagyou', 'otoshidama']],
+  ['しきたり・しつけ', '#d07ab0', ['chounan', 'mongen', 'noGame', 'noCry', 'bathLast', 'noFriends', 'inori', 'check', 'coldBath', 'noAC', 'kagyou', 'otoshidama']],
   ['住まい', '#a08c6a', ['trash', 'bugsKeep', 'meatPillow', 'toiletBags', 'urineHang']],
   ['特殊な言い伝え', '#c0504a', ['maggotShoes', 'fecesSkin', 'feast', 'gayChant', 'gayMarry']],
 ];
@@ -22101,7 +22099,8 @@ class CustScene extends NpbScene {
       if (h) { if (h.tab) { if (this.mode !== h.tab) { this.mode = h.tab; this.msg = null; tt.sfx('cursor'); } } else if (h.close) { tt.sfx('cancel'); this.closed = true; this.g.pop(this); this.resolve(null); } else if (h.i === this.i) this.toggle(); else { this.i = h.i; tt.sfx('cursor'); } }
     }
   }
-  draw(c, g) {
+  draw(c, g) { TXT_DOT = 1; try { this.draw0(c, g); } finally { TXT_DOT = 0; } }
+  draw0(c, g) {
     this.hits = []; const C = this.C(), jk = this.mode === 'jikka';
     c.fillStyle = lgrad(c, 0, 0, 0, 360, [[0, '#0e2228'], [1, '#081216']]); c.fillRect(0, 0, 640, 360);
     c.fillStyle = lgrad(c, 0, 0, 640, 0, [[0, '#1f6f78'], [1, '#0e2a30']]); c.fillRect(0, 0, 640, 34);
@@ -22143,7 +22142,7 @@ class CustScene extends NpbScene {
       tx(c, jk ? '親・祖父母・きょうだいに適用' : '配偶者と子どもに適用', x0 + 96, yy + 4, { size: 11, color: '#9cc' });
       const D = wrap(c, r.c.d, 290, 13).slice(0, 7); D.forEach((l, i) => tx(c, l, x0 + 14, yy + 30 + i * 19, { size: 13, color: '#e8f0f2' }));
       let ty = yy + 30 + D.length * 19 + 8, tx0 = x0 + 14;
-      for (const [t, col] of cuTags(g, r.c, this.mode)) { c.font = '11px sans-serif'; const w = Math.max(40, Math.round(t.length * 11.5) + 12); if (tx0 + w > x0 + 304) { tx0 = x0 + 14; ty += 22; } if (ty > 316) break; fr(c, tx0, ty, w, 18, col); tx(c, t, tx0 + w / 2, ty + 3, { size: 11, align: 'center', bold: true, color: '#111' }); tx0 += w + 6; }
+      for (const [t, col] of cuTags(g, r.c, this.mode)) { const w = Math.max(40, Math.round(tw(c, t, 11)) + 14); if (tx0 + w > x0 + 304) { tx0 = x0 + 14; ty += 22; } if (ty > 316) break; fr(c, tx0, ty, w, 18, col); tx(c, t, tx0 + w / 2, ty + 3, { size: 11, align: 'center', bold: true, color: '#111' }); tx0 += w + 6; }
       fr(c, x0 + 14, 306, 290, 24, on ? 'rgba(224,106,90,0.85)' : 'rgba(47,168,104,0.85)'); tx(c, on ? 'Aボタン／タップで やめる' : 'Aボタン／タップで ルールにする', x0 + 159, 310, { size: 12, align: 'center', bold: true, color: '#fff' });
       this.hits.push({ x: x0 + 14, y: 306, w: 290, h: 24, i: this.i });
     }
@@ -22152,6 +22151,120 @@ class CustScene extends NpbScene {
   }
 }
 function openCust(g, mode) { try { loadNpbFont(); } catch (e) { } tt.sfx('ok'); return new Promise(res => g.push(new CustScene(g, res, mode))); }
+
+// ===== 衛生の風習に対する、弟・妹のストレス（バリエーション） =====
+const HY_IDS = ['noBrush', 'noBath', 'noWash', 'rule3', 'shoesIn', 'towel', 'sweets', 'floorFood', 'trash', 'meatPillow', 'bugsKeep', 'maggotShoes', 'toiletBags', 'urineHang', 'dirtyWater', 'noFridge', 'fecesSkin'];
+// ---- 日記（風習ごとに、たくさん） ----
+const HY_DIA = {
+  noBrush: ['歯ブラシ、ドラッグストアで見るだけ見た。買っても、家に置けない。', '奥歯が、ずきずきする。冷たいお茶が、しみる。', '笑うとき、口を手でかくすくせがついた。', '「口くさい」って言われて、マスクを2枚重ねた。', '歯医者さんに「おうちで歯みがきは？」と聞かれた。うそをついた。'],
+  noBath: ['頭がかゆい。かいたら、爪のあいだが黒くなった。', '制服のえりが、黄色くなってきた。', '夏は、いちばんきらい。自分のにおいが、自分でもわかる。', '体育のあと、だれもぼく（わたし）のとなりに並ばない。', 'プールの塩素のにおいが、少しうれしかった。……体が洗えるから。', '友だちの家のお風呂のにおいを、思い出してねむった。'],
+  noWash: ['トイレのあと、学校では手を洗う。家では洗えない。', '友だちが、ぼく（わたし）がさわったボールを、さわらなくなった。', 'また、おなかをこわした。手、洗いたいな。'],
+  rule3: ['落とした唐揚げを拾って食べたら、班のみんなが引いてた。家では、ふつうなのに。', 'ふつうって、どこで決まるんだろう。'],
+  shoesIn: ['友だちの家で、くつのまま上がろうとして、すごい顔をされた。', '家の床が、いつもざらざらしている。'],
+  towel: ['タオルが、いつもしめっていて、くさい。', '家族の水虫が、ぼく（わたし）にもうつった。かゆくて授業に集中できない。', 'とびひが、うでに広がった。「うつる」って、席を離された。'],
+  sweets: ['虫歯が痛くて、夜中に何度も目がさめた。', 'ジュースしか冷蔵庫にない。水が飲みたい日もある。'],
+  floorFood: ['遠足のお弁当、つい地面に置いて食べようとして、笑われた。', '給食のトレーって、こんなに安心するんだ。'],
+  trash: ['ゴミ袋のにおいが、制服にしみついてる気がする。', '夜中、部屋でカサカサ音がした。こわくて、ふとんから出られなかった。', '「家、行っていい？」――その言葉が、いちばんこわい。'],
+  meatPillow: ['枕の下の肉に、ハエがたかっていた。耳元で、ずっと羽音がする。', '朝、髪から生ぐさいにおいがした。学校で、だれかが鼻をつまんだ。', '修学旅行の宿の枕が、ふかふかで、においがしなくて、泣きそうになった。'],
+  bugsKeep: ['ノートに、つぶれた虫のあとがあった。', '朝、くつの中に虫が入っていた。殺しちゃいけないから、そっと出した。', '教室で、ぼく（わたし）のかばんから虫が出てきた。悲鳴が聞こえた。'],
+  maggotShoes: ['足の指のあいだが、ずっとかゆい。', '上ばきを脱ぐとき、みんなに見られないように、すみっこに行く。', '体育館の床に、白いものが落ちた。……ぼく（わたし）の上ばきからだった。'],
+  toiletBags: ['部屋の袋のにおいで、ごはんの味がわからない。', '近所のおばさんが、家の前でひそひそ話していた。ぼく（わたし）を見て、だまった。', '夜、袋を運ぶ手伝いをさせられた。だれにも見られてないよね。……見られてないよね。'],
+  urineHang: ['通学路で、「あの家の窓、見た？」って笑い声が聞こえた。', 'SNSに、うちの窓の写真があがってた。「ヤバい家」って。', '友だちと帰るとき、わざと遠回りして、家の前を通らないようにしている。'],
+  dirtyWater: ['授業中に、おなかが痛くなって、トイレにかけこんだ。みんなに笑われた。', '給食の牛乳が、すごくおいしかった。家の水を思い出して、泣きそうになった。', '水道の蛇口から、きれいな水が出るのを、ずっと見ていた。'],
+  noFridge: ['傷んだごはんで、またおなかをこわした。', '夏は、ごはんがすぐ、すっぱくなる。'],
+  fecesSkin: ['20分のあいだ、天井のしみを数えている。今日は、37個。', '好きな子が、ぼく（わたし）の近くを通るとき、息を止めたのがわかった。', 'プールの日は、絶対に休む。', '保健室の先生が、ぼく（わたし）の腕の赤いぶつぶつを見て、何か言いかけた。', '洗いたい。全部、洗い流したい。'],
+};
+for (const id in HY_DIA) CS_DIA[id] = (CS_DIA[id] || []).concat(HY_DIA[id]);
+// ---- ぐち（話しかけたとき） ----
+const HY_TALK = {
+  noBrush: ['「……{c}、歯みがき粉って、どんな味？」', '「歯が痛いの。……でも、言ったら怒られるよね」'],
+  noBath: ['「……体、かゆいの。ずっと」', '「{c}だけ、お風呂入っていいの、ずるいよ」', '「夏休み、早く終わってほしい。……いや、始まってほしくないかも。プールあるし」'],
+  noWash: ['「学校の石けん、家にも持って帰っちゃだめかな」'],
+  towel: ['「……自分だけのタオル、ほしい」'],
+  trash: ['「部屋で、なにか動いてる音がするの。……こわい」'],
+  meatPillow: ['「枕、においで眠れないんだ。……{c}の部屋で寝ていい？」'],
+  bugsKeep: ['「虫、殺しちゃだめなのはわかるよ。……でも、ふとんの中はいやだ」'],
+  toiletBags: ['「部屋のにおい、学校まで持っていってる気がする」'],
+  urineHang: ['「窓のあれ、友だちに見られたかもしれない」'],
+  dirtyWater: ['「……おなか、また痛い」', '「きれいな水、ごくごく飲んでみたい」'],
+  fecesSkin: ['「……ぼく（わたし）、くさいよね。言わなくていいよ。知ってるから」', '「{c}は、いいよね。あれ、しなくていいんだもん」'],
+};
+for (const id in HY_TALK) CS_TALK[id] = (CS_TALK[id] || []).concat(HY_TALK[id]);
+// ---- その日の状況で起きる、つらいこと ----
+const HY_SM = ['noBath', 'fecesSkin', 'maggotShoes', 'toiletBags', 'urineHang', 'meatPillow', 'trash'];
+const HY_SIT = [
+  { ids: ['noBath', 'fecesSkin', 'maggotShoes'], ok: x => x.school && (x.wd === 1 || x.wd === 3), t: '体育の着がえ。となりの子が、鼻をつまんで、ロッカーの向こうに移動した。', st: 6, bl: 0.01 },
+  { ids: ['noBath', 'fecesSkin'], ok: x => x.school && [6, 7, 8, 9].includes(x.mo), t: '夏の教室。エアコンの風下には、だれも座らない。……ぼく（わたし）の後ろの席だけ、いつも空いている。', st: 6 },
+  { ids: ['noBath', 'fecesSkin', 'maggotShoes'], ok: x => x.school && [6, 7].includes(x.mo), t: 'プールの授業。「プールが汚れる」って男子がさわいだ。先生まで、苦笑いしていた。', st: 9, bl: 0.02, log: 1 },
+  { ids: ['noBath'], ok: x => x.school && [5, 10, 11].includes(x.mo) && x.age >= 10, t: '校外学習のバスで、となりの席の子が、ずっと窓を開けていた。', st: 6 },
+  { ids: ['noBath', 'fecesSkin'], ok: x => x.age >= 12, t: '好きな人ができた。でも、こんな体で、話しかけられるわけない。', st: 5 },
+  { ids: ['noBath', 'fecesSkin', 'toiletBags'], ok: x => x.school && x.age >= 9, t: '担任に、みんなの前で「ちゃんとお風呂入ってる？」と聞かれた。教室が、しんとした。', st: 10, bl: 0.02, log: 1 },
+  { ids: ['noBrush', 'sweets'], ok: x => x.school, t: '給食のパンを、歯が痛くて半分残した。「好ききらいすんな」って言われた。', st: 4 },
+  { ids: ['noBrush'], ok: x => x.school && x.age >= 10, t: 'となりの席の子に「口くさい」って言われた。それから、ずっと口を閉じている。', st: 6 },
+  { ids: ['noWash'], ok: x => x.school, t: '給食当番から外された。「手、洗ってないでしょ」って。', st: 6 },
+  { ids: ['rule3', 'floorFood'], ok: x => x.school, t: '落としたおかずを拾って食べたら、班のみんなが「うわ」って言った。', st: 5 },
+  { ids: ['towel'], ok: x => x.school, t: 'うでのとびひを見て、だれかが「うつる！」って叫んだ。保健室に行かされた。', st: 7, bl: 0.01 },
+  { ids: ['trash', 'bugsKeep'], ok: x => x.school, t: 'かばんを開けたら、虫が飛びだした。教室じゅうが悲鳴でいっぱいになった。', st: 11, bl: 0.03, log: 1 },
+  { ids: ['maggotShoes'], ok: x => x.school, t: '体育館で上ばきを脱いだら、白いものが床に落ちた。だれかが叫んだ。', st: 12, bl: 0.03, log: 1 },
+  { ids: ['meatPillow'], ok: () => true, t: '枕の肉のにおいとハエの羽音で、朝まで眠れなかった。授業中、ずっと寝ていた。', st: 6 },
+  { ids: ['toiletBags'], ok: () => true, t: '夜、袋を近所の家の前まで運ばされた。帰り道、ひとりで泣いた。', st: 10, log: 1 },
+  { ids: ['toiletBags', 'urineHang'], ok: x => x.age >= 8, t: '近所の子に「お前んち、くさい家」って言われた。家の前を通るとき、みんな走っていく。', st: 8, bl: 0.02 },
+  { ids: ['urineHang'], ok: x => x.age >= 10, t: 'SNSに、うちの窓の写真があがってた。コメントが、どんどん増えていく。', st: 11, log: 1 },
+  { ids: ['dirtyWater', 'noFridge', 'rule3'], ok: x => x.school, t: '授業中、おなかが痛くなってトイレにかけこんだ。戻ったら、くすくす笑われた。', st: 8 },
+  { ids: ['dirtyWater'], ok: () => true, t: '泥の水を飲むたびに、のどがざらざらする。今日は、熱が出た。', st: 6 },
+  { ids: ['fecesSkin'], ok: () => true, t: '20分が、今日も長かった。終わってから、ずっと腕をこすっていた。', st: 8 },
+  { ids: ['fecesSkin'], ok: x => x.school, t: '保健室の先生に、腕の赤いぶつぶつを見られた。「おうちで、何かあった？」……答えられなかった。', st: 8, log: 1 },
+  { ids: ['fecesSkin', 'noBath'], ok: x => x.school && x.age >= 12, t: '好きな子が、ぼく（わたし）の近くを通るとき、息を止めたのがわかった。', st: 9 },
+  { ids: HY_SM, ok: x => x.nSm >= 3 && x.school, t: '「お前んち、ゴミ屋敷ってマジ？」――うわさは、もうクラスじゅうに広まっていた。', st: 10, bl: 0.03, log: 1 },
+  { ids: HY_SM, ok: x => x.we, t: '休みの日は、だれにも会わなくていいから、ほっとする。……それが、ちょっとかなしい。', st: 1 },
+  { ids: HY_SM, ok: x => x.age <= 9, t: '「くさい」の意味が、最近、やっとわかってきた。', st: 5 },
+  { ids: ['noBath', 'fecesSkin', 'noBrush'], ok: x => x.meOk, t: 'お兄（姉）ちゃんだけ、お風呂に入って、歯もみがいていい。どうして、ぼく（わたし）はだめなの。', st: 6 },
+];
+function hyCtx(g, m, A) {
+  let mo = 4; try { mo = dateOf(g, g.state.day).month; } catch (e) { } const wd = wdOf(g), C = custFor(g, m, A);
+  return { mo, wd, we: wd >= 5, school: ['elem', 'jhs', 'hs'].includes(A.role) && wd < 5 && !A.futoko, age: num(m.age), C, nSm: HY_SM.filter(id => C[id]).length, meOk: true };
+}
+function custHygTick(g) {
+  const dark = !(g.state.flags && g.state.flags.famDarkOff);
+  for (const m of famRoster(g)) {
+    if (!CS_TGT(m)) continue; const A = agOf(g, m), x = hyCtx(g, m, A);
+    if (!HY_IDS.some(id => x.C[id]) || !chance(0.45)) continue;
+    const L = HY_SIT.filter(s => s.ids.some(id => x.C[id]) && (() => { try { return s.ok(x); } catch (e) { return false; } })()); if (!L.length) continue;
+    const s = pick(L), t = csTxt(g, m, s.t.replace(/お兄（姉）ちゃん/g, meGender(g) === 'f' ? 'お姉ちゃん' : 'お兄ちゃん'));
+    addDia(A, g, t, -Math.round(s.st / 2)); A.stress = clamp(num(A.stress) + s.st * 0.6, 0, 100); A.mood = clamp(num(A.mood) - s.st * 0.4, 0, 100); A.custSt = clamp(num(A.custSt) + s.st * 0.3, 0, 100);
+    if (dark && s.bl) { const S = g.state.gakkoF && g.state.gakkoF[m.key]; if (S && !S.bully && chance(s.bl)) { S.bully = { lv: 1, nick: pick(['くさ男', 'においマン', '虫かご', 'ゴミ屋敷', '菌']), by: '同級生', since: g.state.day }; A.bully = Math.max(num(A.bully), 1); } }
+    if (s.log) { try { faiLog(g, `${m.rel}の日記：「${t.length > 34 ? t.slice(0, 34) + '…' : t}」`, { ico: 'cloud', imp: 1, silent: true }); } catch (e) { } }
+  }
+}
+// ---- こっそりの抵抗（家での行動） ----
+const HY_OK = (c, ids) => c.m.kind === 'sib' && sibIsYounger(c.m) && num(c.m.age) >= 7 && ids.some(id => custFor(c.g, c.m, c.A)[id]);
+FA.push(
+  { id: 'hy_shower', n: '夜中にこっそりシャワーを浴びる', k: 'bath', pl: 'bath', d: [10, 20], w: [[1290, 1440]], ok: c => HY_OK(c, ['noBath', 'fecesSkin']), nd: { hyg: 30 }, U: c => 0.15 + num(c.A.custSt) / 120, fx: c => { try { const H = hyOf(c.A, c.m); H.clean = clamp(H.clean + 25, 0, 100); } catch (e) { } if (chance(0.35)) { c.A.stress = clamp(num(c.A.stress) + 8, 0, 100); c.A.custSt = clamp(num(c.A.custSt) + 4, 0, 100); c.log(`${c.nm}が夜中にシャワーを浴びているのが見つかって、親に怒鳴られていた`, { ico: 'fight', imp: 1 }); addDia(c.A, c.g, 'こっそりシャワーを浴びていたら、見つかった。「うちのルールを破るのか」って。', -6); } else { c.A.stress = clamp(num(c.A.stress) - 6, 0, 100); c.A.mood = clamp(num(c.A.mood) + 4, 0, 100); } }, v: ['（音をたてないように、ちょっとだけ）', '（お湯って、こんなにあったかいんだ）'] },
+  { id: 'hy_brush', n: 'こっそり歯をみがく', k: 'bath', pl: 'bath', d: [5, 10], ok: c => HY_OK(c, ['noBrush']), nd: { hyg: 8 }, U: c => 0.1 + num(c.A.custSt) / 150, fx: c => { try { const H = hyOf(c.A, c.m); H.gum = clamp(H.gum + 1, 0, 100); } catch (e) { } if (chance(0.25)) { c.log(`${c.nm}の歯ブラシが、親に見つかって捨てられていた`, { ico: 'fight', imp: 1 }); addDia(c.A, c.g, '学校の帰りに買った歯ブラシ、見つかって捨てられた。', -5); } }, v: ['（3分だけ。だれも来ませんように）'] },
+  { id: 'hy_spray', n: '制汗スプレーを体じゅうにかける', k: 'bath', pl: 'bedroom', d: [5, 10], ok: c => HY_OK(c, HY_SM) && num(c.m.age) >= 10, nd: { hyg: 4 }, U: c => 0.05 + num(c.A.custSt) / 150, fx: c => { if (chance(0.3)) c.log(`${c.nm}の部屋から、制汗スプレーのにおいが廊下まで流れてきた`, { ico: 'drop', imp: 0 }); }, v: ['（これで、少しはましになるかな）', '（おこづかい、全部これに消えた）'] });
+for (const id of ['hy_shower', 'hy_brush', 'hy_spray']) FA_BY[id] = FA.find(a => a.id === id);
+Object.assign(FAI_MAXD, { hy_shower: 1, hy_brush: 1, hy_spray: 2 });
+// ---- イベント ----
+const HYO = (c, ...ids) => ids.some(id => !!c.cust[id]);
+const HY_STU = c => ['elem', 'jhs', 'hs'].includes(c.A.role);
+FE.push(
+  { id: 'hy_tooth', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'noBrush', 'sweets') && c.m.age >= 6, once: true, L: ['（夜中。弟（妹）の部屋から、すすり泣く声）', '（ほおが、ぷっくりはれていた）', '「……歯が痛い。ずっと、ずっと痛いの」', '「でも、歯医者に行きたいって言ったら、「うちは歯みがきしない家だから」って……」'], C: [['こっそり、歯医者に連れていく', { op: 12, money: -5000, hp: 5, cst: -8, al: '歯が痛くて泣いていた弟（妹）を、こっそり歯医者に連れていった' }, '（虫歯は、6本あった。先生は、何か言いたそうに、弟（妹）の口の中を見ていた）'], ['冷やすものを持ってくる', { op: 6, cst: -2 }, '（保冷剤をタオルで巻いて渡した。弟（妹）は、明け方まで眠れなかった）'], ['がまんしな', { op: -10, cst: 8 }, '「……がまん、してるよ。ずっと」']] },
+  { id: 'hy_crush', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'noBath', 'fecesSkin', 'meatPillow') && c.m.age >= 11, once: true, L: ['（弟（妹）が、帰ってくるなり、洗面所にこもった）', '（水の音が、ずっと止まらない）', '「……好きな子に、話しかけたの」', '「そしたら、「ごめん、ちょっと……におい」って。……一歩、さがられた」'], C: [['……つらかったな', { op: 10, cst: -4, al: '好きな子に「におい」と言われた弟（妹）の話を、聞いた' }, '（洗面所のドアごしに、しばらく、いっしょに座っていた）'], ['家のやり方を変えよう', { op: 10, cst: -12, custRelief: 1 }, '（その夜、いちばんつらい風習が、ひとつなくなった）'], ['気にすんな', { op: -6, cst: 6, scar: 'mirror' }, '「……気にしないなんて、できないよ」']] },
+  { id: 'hy_trip_bath', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'noBath', 'fecesSkin') && HY_STU(c) && c.m.age >= 10, once: true, L: ['（修学旅行から帰ってきた弟（妹）が、おみやげを置いて、すぐ部屋にこもった）', '「……大浴場で、「お前、ふだん風呂入ってんの？」って聞かれた」', '「体を洗ったら、お湯が、黒くなった」', '「みんな、湯船から出ていった」'], C: [['……よくがまんした', { op: 10, cst: -4, al: '修学旅行の大浴場でつらい思いをした弟（妹）を、なぐさめた' }, '「……でも、お風呂、気持ちよかったよ。それだけは」'], ['今度、ふたりで銭湯に行こう', { op: 12, cst: -6, money: -1000 }, '「……ほんと？ 約束ね」']] },
+  { id: 'hy_pool', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'noBath', 'fecesSkin', 'maggotShoes') && HY_STU(c) && [6, 7].includes(c.month), once: true, L: ['（弟（妹）が、プールの授業を、また休んだ）', '「……前に入ったとき、「プールが汚れる」って、男子がさわいだの」', '「先生まで、「ちゃんとシャワー浴びてから入りなさい」って、ぼく（わたし）にだけ言った」', '「みんなの前で」'], C: [['先生に、抗議する', { op: 10, cst: -4, al: 'プールで「汚れる」と言われた弟（妹）のことで、先生に抗議した' }, '（先生は「そういうつもりじゃ……」と言った。……でも、次の授業から、何も言わなくなった）'], ['見学でいいよ', { op: 4, cst: 2 }, '（夏のあいだ、弟（妹）は、一度もプールに入らなかった）']] },
+  { id: 'hy_roach', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'trash', 'bugsKeep') && HY_STU(c), once: true, L: ['（学校から電話）', '（「{n}さんのかばんから、ゴキブリが数匹出てきまして……教室が、ちょっとした騒ぎに」）', '（帰ってきた弟（妹）の、あだ名は、もう決まっていた）', '「……「虫かご」だって」'], C: [['かばん、新しいのを買おう', { op: 10, money: -4000, cst: -4 }, '（新しいかばんは、弟（妹）の部屋に入れず、玄関に置くことにした）'], ['家の虫、退治しよう', { op: 10, cst: -12, custOffAll: ['bugsKeep', 'trash'], coupleRel: -4, al: '弟（妹）のために、家の虫を退治した' }, '（親は「ばちが当たる」と怒った。……でも、その夜、弟（妹）は、ひさしぶりにぐっすり眠った）'], ['……しかたない', { op: -8, cst: 8, bullyStart: 2 }, '「……「虫かご」で、卒業まで呼ばれるのかな」']] },
+  { id: 'hy_maggot', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'maggotShoes') && HY_STU(c), once: true, L: ['（体育館。弟（妹）が上ばきを脱いだとき、白いものが、床にこぼれた）', '（だれかが叫んだ。輪になって、みんなが弟（妹）から離れていく）', '（その夜）「……あれ、虫が守ってくれるんだって。親は、そう言う」', '「守ってくれるなら、なんで、こんなにつらいの？」'], C: [['上ばき、洗おう。今すぐ', { op: 12, cst: -10, custOffAll: 'maggotShoes', al: '弟（妹）の上ばきを、いっしょに洗った' }, '（ふたりで、上ばきを真っ白になるまで洗った。弟（妹）は、その上ばきを、ずっと抱えていた）'], ['……答えられない', { op: 2, cst: 4 }, '（弟（妹）は、答えを待たずに、部屋に戻っていった）']] },
+  { id: 'hy_bags', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'toiletBags') && c.m.age >= 8, once: true, L: ['（夜中。玄関の鍵が開く音）', '（弟（妹）が、両手に袋を持って、出ていこうとしている）', '「……10袋たまったから、近所の家の前に置いてこいって」', '「この前、見つかりそうになったの。……こわいよ」'], C: [['行かなくていい。親には自分が言う', { op: 12, cst: -8, coupleRel: -4, al: '夜中に袋を運ばされていた弟（妹）を、止めた' }, '（親は激怒した。……でも、その日から、弟（妹）に袋を運ばせなくなった）'], ['かわりに、自分が行く', { op: 10, cst: -6, st: 8 }, '（夜道で、袋が、ずしりと重かった）'], ['早く行ってきな', { op: -12, cst: 10, scar: 'home' }, '（弟（妹）は、何も言わずに、暗い道へ出ていった）']] },
+  { id: 'hy_window', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'urineHang') && c.m.age >= 10, once: true, L: ['（弟（妹）が、スマホの画面を見せてきた）', '（うちの窓の写真。「通学路のヤバい家」というタイトル。コメントが、何百件）', '{abS}', '{abS}', '「……クラスの子が撮ったんだと思う。ぼく（わたし）の家だって、みんな知ってる」'], C: [['削除依頼を出して、窓のあれもやめさせる', { op: 12, cst: -10, custOffAll: 'urineHang', coupleRel: -4, al: '家の写真をさらされた弟（妹）のために、窓の風習をやめさせた' }, '（窓から、あれがなくなった。……写真は、しばらくネットに残っていた）'], ['気にしたら負けだ', { op: -6, cst: 6, scar: 'phone' }, '「……負けてるよ。とっくに」']] },
+  { id: 'hy_stomach', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'dirtyWater', 'noFridge', 'rule3') && HY_STU(c), once: true, L: ['（学校から電話。弟（妹）が、授業中に吐いて、早退するらしい）', '（迎えに行くと、保健室のベッドで、弟（妹）が青い顔をしていた）', '（保健室の先生）「最近、何回目でしょう……。おうちのお水や食べ物、大丈夫ですか？」', '（弟（妹）は、こちらを見て、小さく首を横にふった。「言わないで」の合図だった）'], C: [['先生に、正直に話す', { op: 8, cst: -10, custRelief: 1, coupleRel: -4, al: '保健室の先生に、家の水や食べ物のことを話した' }, '（帰り道、弟（妹）は、「……チクったでしょ」と言った。でも、少しほっとした顔をしていた）'], ['「大丈夫です」と答える', { op: 4, cst: 4 }, '（帰り道、弟（妹）は、コンビニのペットボトルの水を、一気に飲みほした）']] },
+  { id: 'hy_skin', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'towel', 'fecesSkin') && HY_STU(c), once: true, L: ['（弟（妹）のうでに、赤いぶつぶつが広がっていた）', '「……学校で、「うつる！」って言われた。みんな、ぼく（わたし）がさわった机を、ふいてた」', '「病院、行きたい」'], C: [['皮ふ科に、連れていく', { op: 10, money: -3000, hp: 5, cst: -6, al: '肌があれた弟（妹）を、皮ふ科に連れていった' }, '（先生は「タオルを家族で分けてください」と言った。弟（妹）は、自分専用のタオルを、大事そうに抱えて帰った）'], ['自分専用のタオルを買ってあげる', { op: 10, money: -1000, cst: -6 }, '（無地の青いタオル。弟（妹）は、名前を書いた）']] },
+  { id: 'hy_meatfly', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'meatPillow'), once: true, L: ['（弟（妹）の部屋から、ハエが何匹も飛びだしてきた）', '（枕をめくると、肉が、ひどいことになっていた）', '「……もう、ここで寝たくない」', '「{c}の部屋で、寝ていい？」'], C: [['今日から、こっちで寝な', { op: 12, cst: -8, al: '枕の肉で眠れない弟（妹）を、自分の部屋で寝かせた' }, '（弟（妹）は、ふとんに入るなり、5分で眠ってしまった。……ずっと、眠れていなかったんだろう）'], ['肉の風習、やめさせる', { op: 10, cst: -12, custOffAll: 'meatPillow', coupleRel: -4 }, '（親は「命への感謝を忘れるのか」と言った。……弟（妹）は、新しい枕に、顔をうずめた）'], ['風習だから、がまんしな', { op: -10, cst: 10 }, '（夜中、廊下で寝ている弟（妹）を見つけた）']] },
+  { id: 'hy_friend_smell', dark: 1, w: 'sibYoung', ok: c => HY_SM.some(id => c.cust[id]) && c.m.age >= 8 && !c.cust.noFriends, once: true, L: ['（弟（妹）が、はじめて友だちを家に連れてきた）', '（玄関に入ったとたん、友だちが立ちどまった）', '「……なんか、におわない？」', '（友だちは、10分もしないうちに、「用事思い出した」と帰っていった）', '（次の日から、その子は、弟（妹）と目を合わせなくなった）'], C: [['……ごめんな', { op: 8, cst: -4 }, '「……{c}があやまることじゃないよ」'], ['家のやり方を変えよう', { op: 10, cst: -12, custRelief: 2 }, '（家族会議で、ふたつの風習がなくなった。……弟（妹）は、「また呼べるかな」と言った）']] },
+  { id: 'hy_deodorant', dark: 1, w: 'sibYoung', ok: c => HY_SM.some(id => c.cust[id]) && c.m.age >= 10, once: true, L: ['（弟（妹）の机の引き出しが、制汗スプレーと消臭剤でいっぱいになっていた）', '（おこづかい帳には、毎月、ほとんど全額が「スプレー」と書いてある）', '「……これがないと、学校に行けないの」'], C: [['いっしょに、根っこから変えよう', { op: 10, cst: -12, custRelief: 1 }, '（いちばんつらい風習が、ひとつなくなった。……弟（妹）は、スプレーを1本、ごみ箱に捨てた）'], ['スプレー代、出してやる', { op: 8, money: -2000, cst: -4 }, '「……ありがと。……でも、ほんとは、スプレーなんかいらない家がいい」']] },
+  { id: 'hy_teacher_ask', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'noBath', 'fecesSkin') && HY_STU(c) && c.m.age >= 9, once: true, L: ['「……先生に、みんなの前で聞かれた」', '「「{n}、ちゃんとお風呂入ってる？」って」', '「答えられなくて、だまってたら、だれかが「入ってませーん」って言って、みんな笑った」'], C: [['先生に、配慮してもらうよう話す', { op: 10, cst: -4, al: 'みんなの前で「お風呂入ってる？」と聞かれた弟（妹）のことで、先生と話した' }, '（先生は「心配で、つい……」と言った。……心配なら、ふたりのときに聞いてほしかった）'], ['そのうち、みんな忘れるよ', { op: -6, cst: 6, scar: 'school' }, '「……忘れないよ。ぼく（わたし）は」']] },
+  { id: 'hy_unfair', dark: 1, w: 'sibYoung', ok: c => HYO(c, 'noBath', 'noBrush', 'fecesSkin', 'dirtyWater') && c.m.age >= 7, once: true, L: ['（あなたがお風呂から出ると、廊下で弟（妹）が待っていた）', '「……ねえ。なんで、{c}だけ、お風呂に入っていいの？」', '「歯もみがいて、きれいな水も飲んで。ぼく（わたし）は、だめなのに」', '「{c}は、とくべつなの？」'], C: [['とくべつなんかじゃない。いっしょに、親に言おう', { op: 12, cst: -10, custRelief: 1, coupleRel: -4, al: '風習が自分にだけ及ばないことを、弟（妹）と話した' }, '（親は、しぶしぶ、ルールをひとつ取りさげた）'], ['……わからない', { op: 2, cst: 4, cx: 6 }, '「……わかんないのに、{c}だけ、いいんだね」'], ['そういう決まりだから', { op: -8, cst: 8, cx: 10 }, '「……決まり、か」']] },
+);
+function installCustHyg() { E.Tn(g => { try { custHygTick(g); } catch (e) { console.error('[custHyg]', e); } }); if (typeof window !== 'undefined' && window.__custot) window.__custot.hyg = () => custHygTick(window.__game); }
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
