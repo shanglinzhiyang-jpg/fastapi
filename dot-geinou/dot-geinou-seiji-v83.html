@@ -12588,6 +12588,7 @@ function install() {
   try { installFamAI(); } catch (e) { console.error('[fai] install', e); }
   try { installLive(); } catch (e) { console.error('[live] install', e); }
   try { installLegend(); } catch (e) { console.error('[legend] install', e); }
+  try { installFamTalk(); } catch (e) { console.error('[famtalk] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -17728,7 +17729,7 @@ class MesenScene extends NpbScene {
   rows() {
     const m = this.cur(), L = [];
     if (m.kind !== 'me') { const A = agOf(this.g, m); L.push({ id: 'mind', label: 'AIの頭の中', sub: (() => { try { const N = needOf(A), lo = FAI_NEEDS.slice().sort((a, b) => N[a] - N[b])[0]; return `${A.want ? '主人公に「' + FAI_WANT[A.want.type] + '」・' : ''}いちばん足りない：${FAI_NN[lo]}`; } catch (e) { return ''; } })() }, { id: 'prof', label: 'からだ・プロフィール', sub: (() => { const B = bodyOf(this.g, m, A); return `${A.ht || B.ht}cm・${A.wt || B.wt}kg${A.nd ? '・' + ND_N[A.nd] : ''}${A.cx ? '・コンプレックス' : ''}`; })() }, { id: 'diary', label: '日記を読む', sub: `${A.dia.length}件` }, { id: 'secret', label: 'ひみつ・本音をのぞく', sub: A.sec.length ? `${A.sec.length}件` : 'まだない' }, { id: 'rel', label: '家族への気持ち', sub: 'ほかの家族を、どう思っているか' }, { id: 'hy', label: '歯とからだの衛生', sub: (() => { const H = hyOf(A, m); return `虫歯${H.cav}本・清潔${Math.round(H.clean)}${H.sick ? '・' + H.sickWhat : ''}`; })() }, ...(inHouse(m) && m.age >= 1 ? [{ id: 'dent', label: '歯医者に連れていく', sub: '虫歯1本 ¥3,000' }] : []), { id: 'sx', label: 'からだと性のこと', sub: m.age >= SX_ADULT ? '性自認・同意・避妊・性感染症・精力' : '性自認・同意・避妊・性感染症' }, { id: 'sxtalk', label: m.age >= SX_ADULT ? 'からだと性のことを話す' : '性教育の話をする', sub: '年齢に合わせて伝える' }, { id: 'line', label: 'メッセージを送る', sub: '自分として連絡する' }); }
-    else L.push({ id: 'flog', label: '家族の行動ログ', sub: (() => { try { const F = faiSt(this.g); return `今日 ${F.log.filter(x => x.d === this.g.state.day).length}件`; } catch (e) { return ''; } })() }, { id: 'log', label: 'AIの行動記録', sub: '目線変更中に自キャラがしたこと' }, { id: 'cust', label: '家の風習・ルールを決める', sub: (() => { const n = CUSTOMS.filter(c => custOf(this.g)[c.id]).length; return n ? `${n}個のルール` : 'とくになし'; })() });
+    else L.push({ id: 'album', label: '家族アルバム', sub: '家族との思い出' }, { id: 'flog', label: '家族の行動ログ', sub: (() => { try { const F = faiSt(this.g); return `今日 ${F.log.filter(x => x.d === this.g.state.day).length}件`; } catch (e) { return ''; } })() }, { id: 'log', label: 'AIの行動記録', sub: '目線変更中に自キャラがしたこと' }, { id: 'cust', label: '家の風習・ルールを決める', sub: (() => { const n = CUSTOMS.filter(c => custOf(this.g)[c.id]).length; return n ? `${n}個のルール` : 'とくになし'; })() });
     try { if (m.kind !== 'me' && gkStudents(this.g).some(x => x.key === m.key)) { const lv = gkLvOf(m.age); L.unshift({ id: 'school', label: 'スクールライフを見る', sub: `${GK_LV[lv]}${gkGradeOf(lv, m.age)}年生` }); } } catch (e) { }
     L.push({ id: 'hour', label: '1時間すすめる', sub: '自キャラはAIがオートで行動' }, { id: 'h3', label: '3時間すすめる', sub: '自キャラはAIがオートで行動' }, { id: 'day', label: '1日すすめる', sub: '学校・仕事・食事・睡眠までAIまかせ' }, { id: 'help', label: '目線変更について', sub: '' });
     return L;
@@ -17776,6 +17777,7 @@ class MesenScene extends NpbScene {
     if (id === 'school') { this.closed = true; g.pop(this); try { await openSchool(g, m.key); } finally { GK_CTX = null; this.closed = false; g.push(this); } return; }
     if (id === 'help') { await this.info('目線変更', ['家族ひとりひとりの「目線」に切りかえて、いま何をしているか・何を考えているかをのぞける。', '・家族AI：家族は「おなか・元気・たのしさ・ふれあい・清潔・やること」の欲求をもとに、学校や仕事以外の時間の行動を自分で決める。料理・家族での食事・宿題・けんか・仲直り・あなたのうわさ話など、家族どうしでも関わりあう。', '・いっしょに住んでいる家族は家の中を歩きまわり、頭の上のアイコンで、いま何をしているかがわかる。黄色の「！」は、あなたに用事がある合図。話しかけてみよう。', '・「AIの頭の中」で、欲求・つぎにやりたいこと・家族との仲が見られる。自分のタブの「家族の行動ログ」で、家族がその日なにをしたかがわかる。', '・家族は自分で考えて動くAI。毎朝それぞれに出来事が起き、日記やひみつがたまっていく。', '・あなたのいまの状況（仕事・お金・有名さ・学校での立場）で、家族の本音は変わる。現実は甘くない。', '・目線を変えているあいだ、時間をすすめると自キャラはAIがオートで行動する（学校・仕事・部活・バイト・食事・睡眠）。', '・←→で家族を切りかえ。']); return; }
     if (id === 'log') { const M = msn(g); const L = M.auto.slice(-4).reverse().flatMap(a => [`― ${a.d}日目 ―`, ...a.L]); await this.info('AIの行動記録', L.length ? L : ['まだ記録はない。']); return; }
+    if (id === 'album') { await this.info('家族アルバム', famAlbumLines(g)); return; }
     if (id === 'flog') { await this.info('家族の行動ログ（家族AIが自分で決めた行動）', faiLogLines(g)); return; }
     const A = agOf(g, m);
     if (id === 'diary') { const L = A.dia.slice(-14).reverse().map(x => `${x.d}日目　${x.t}`); await this.info(`${m.rel}・${m.name}の日記`, L.length ? L : ['まだ何も書かれていない。']); return; }
@@ -19728,6 +19730,7 @@ function faiNewDay(g) {
 function faiAtHome(g) { try { const mp = g.map; return !!(mp && FAI_HOMEP[mp.placeId] && mp.roomId === FAI_HOMEP[mp.placeId]); } catch (e) { return false; } }
 function faiLog(g, text, o = {}) {
   const F = faiSt(g); F.log.unshift({ d: o.d != null ? o.d : g.state.day, t: o.t != null ? o.t : clockMin(g), text, ico: o.ico || 'talk', imp: o.imp || 0 }); if (F.log.length > 140) F.log.length = 140;
+  if (o.imp >= 1) try { famAlbum(g, text.replace(/^【[^】]+】/, '')); } catch (e) { }
   if (o.silent) return;
   try { if (o.imp && o.home && faiAtHome(g) && g.top === g.map) g.notify(o.overhear ? `（${text.split('。')[0]}…）` : text, { color: o.imp >= 2 ? '#ff9a8a' : '#ffe08a' }); } catch (e) { }
 }
@@ -19768,7 +19771,7 @@ function faiRun(g) {
   F.lastT = t;
 }
 // ---- 主人公へのおねがい・報告 ----
-const FAI_WANT = { dinner: 'ごはんできたよ', allowance: 'おこづかい', help: '手伝って', report: '聞いて！', money: 'お金かして', confide: '相談がある', complain: '話がある', invite: '遊ぼう', gift: 'おみやげ' };
+const FAI_WANT = { dinner: 'ごはんできたよ', allowance: 'おこづかい', help: '手伝って', report: '聞いて！', money: 'お金かして', confide: '相談がある', complain: '話がある', invite: '遊ぼう', gift: 'おみやげ', birthday: '誕生日' };
 function faiWant(g, m, A, type, o = {}) {
   if (A.want && A.want.type !== 'help' && type !== 'dinner') return;
   const t = clockMin(g); A.want = { type, day: g.state.day, t0: t, exp: o.exp || Math.min(1439, t + 360), ...o };
@@ -19828,16 +19831,15 @@ async function faiTalk(g, key, ent) {
   let ls = null; try { ls = lsOf(g); } catch (e) { }
   const canTeach = ls && ls.high && !ls.high.grad && (m.kind === 'pa' || m.kind === 'gp' || (m.kind === 'sib' && m.age > ageOf(g)));
   if (canTeach && free) items.push({ label: '勉強を教えてもらう', right: '1時間' });
+  try { items.push(...famMoreItems(g, m, A, act)); } catch (e) { }
   items.push({ label: 'やめる' });
   const k = await g.list({ title: `${name}（${act.what}）`, items, x: 12, y: 44, w: 320, px: true });
   const lab = k >= 0 && items[k] ? items[k].label : 'やめる';
   if (lab === '話す') {
     const op = num(A.op, 50), N = needOf(A);
-    const L = op >= 70 ? ['「おかえり！ 今日はどうだった？」', '「なんか、いいことあった？ 顔に書いてあるよ」', '「最近がんばってるね。ちゃんと見てるよ」'] : op >= 40 ? ['「ん？ どうしたの」', '「……べつに、ふつうだよ」', '「ごはん、食べた？」'] : ['「……なに」', '「話しかけないで。いま忙しいから」', '「用がないなら、あとにして」'];
-    if (num(A.stress) > 70) L.push('「ごめん、いまちょっと余裕なくて」');
-    if (m.kind === 'sib' && sibIsYounger(m) && num(A.cx) >= 2) L.push(`「……${aniWord(g)}ちゃんは、いいよね」`);
-    await say(pick(L));
+    await say(famLine(g, m, A, act));
     if (once('talk')) { A.op = clamp(op + 2, 0, 100); N.social = clamp(N.social + 15, 0, 100); try { g.addNeed('stress', -2); } catch (e) { } }
+  } else if (await famTalkMore(g, m, A, act, lab, say, once)) {
   } else if (lab === '何してるの？') {
     await say(`「${act.what.replace(/（.+と）$/, '')}${act.with ? `。${(famRoster(g).find(x => x.key === act.with) || {}).rel || ''}といっしょにね` : ''}。${act.auto ? faiReason(A, act) : 'いまは、やることがあるの'}」`);
   } else if (lab === '手伝う') {
@@ -19860,6 +19862,7 @@ async function faiTalk(g, key, ent) {
 }
 async function faiResolve(g, m, A, w, say, once) {
   const F = faiSt(g);
+  if (w.type === 'birthday') { await famBdayResolve(g, m, A, say); return; }
   if (w.type === 'dinner') {
     await say(`「ごはんできたよ！ 今日は${w.dish}」`);
     let ok = true; try { ok = g.canEat(); } catch (e) { }
@@ -19960,6 +19963,7 @@ function faiBubble(c, g, key, u, px, py) {
   const m = famRoster(g).find(z => z.key === key); if (!m) return; const A = agOf(g, m), act = nowAct(g, m, A), w = A.want;
   const fr2 = (a, b, ww, hh, col) => { c.fillStyle = col; c.fillRect(x + a, y + b, ww, hh); };
   if (w) { const bob = Math.round(Math.sin(num(g.frame) / 8) * 1.5); fr2(1, bob, 9, 10, '#ffd23f'); fr2(0, 1 + bob, 11, 8, '#ffd23f'); fr2(4, 2 + bob, 3, 4, '#3a2a10'); fr2(4, 7 + bob, 3, 2, '#3a2a10'); return; }
+  if (famSayDraw(c, key, x, y)) return;
   fr2(0, 1, 11, 8, 'rgba(255,255,255,0.92)'); fr2(1, 0, 9, 10, 'rgba(255,255,255,0.92)'); fr2(4, 10, 2, 1, 'rgba(255,255,255,0.92)');
   const ic = FAI_ICO[act.k] || 'note', P = (a, b, ww, hh, col) => fr2(a + 2, b + 2, ww, hh, col);
   switch (ic) {
@@ -20591,6 +20595,178 @@ function installLegend() {
   if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.createElement) {
     setInterval(() => { const g = window.__game; if (!g || !g.state || !g.map) return; try { legMapTick(g); } catch (e) { console.error('[legend] map', e); } }, 400);
     window.__legend = { list: LEGENDS, acts: legActs, open: () => openLegend(window.__game), map: () => LEG_MAP };
+  }
+}
+
+// ===== 家族の会話（性格・立場・状況に合わせる）／誕生日・アルバム・ひとりごと =====
+// {c} = 主人公の呼び方
+function famCall(g, m) {
+  let nm = 'あんた'; try { nm = E.Bf(g.state).givenName || g.state.name || 'あんた'; } catch (e) { }
+  const me = meGender(g);
+  if (m.kind === 'kid') return me === 'f' ? 'ママ' : 'パパ';
+  if (m.kind === 'gp') return nm + 'ちゃん';
+  if (m.kind === 'sib' && sibIsYounger(m)) return (me === 'f' ? 'お姉' : 'お兄') + 'ちゃん';
+  return nm;
+}
+function famKansai(g) { try { const p = E.Bf(g.state); return /osaka|kyoto|hyogo|nara|wakayama|shiga/.test(String(p.hometown || '')); } catch (e) { return false; } }
+function famDialect(t) { return t.replace(/だよね/g, 'やんな').replace(/だよ/g, 'やで').replace(/じゃない？/g, 'ちゃう？').replace(/しないで/g, 'せんといて').replace(/してる/g, 'しとる').replace(/だから/g, 'やから').replace(/ないの/g, 'へんの').replace(/だね/g, 'やな').replace(/なさい/g, 'なはれ').replace(/いいよ/g, 'ええよ').replace(/本当/g, 'ほんま'); }
+// 性格 × 気持ち（あなたへの好感度）
+const FT_PER = {
+  yasashii: { hi: ['「{c}、おかえり。ごはん、ちゃんと食べた？」', '「無理しないでね。{c}のペースでいいんだから」', '「{c}が元気だと、うちが明るくなるね」', '「あったかいお茶、いれようか？」'], mid: ['「どうしたの？ 話なら聞くよ」', '「今日は寒いから、あったかくして寝てね」', '「なにかあったら、言ってね」'], lo: ['「……{c}、最近ちょっと冷たくない？ さみしいな」', '「怒ってないよ。ただ、心配なだけ」'] },
+  kibishii: { hi: ['「{c}、よくやってるな。だが油断するなよ」', '「その調子だ。継続が一番大事だぞ」', '「たまには、ほめてやらんとな。……よくがんばった」'], mid: ['「やることは終わったのか？」', '「だらだらするな。時間はもどってこないぞ」', '「姿勢が悪い。背筋をのばしなさい」'], lo: ['「話しかける前に、自分の部屋を片づけなさい」', '「そんなことで、この先やっていけると思ってるのか」', '「言いわけはいい」'] },
+  shinpai: { hi: ['「{c}、顔色いいね。よかった……」', '「ちゃんと寝てる？ 夜ふかしはだめだよ」', '「最近、楽しそうでほっとしてる」'], mid: ['「外、暗くなる前に帰ってきてね」', '「お財布、持った？ ハンカチは？」', '「なんか、元気ないように見えるけど……大丈夫？」'], lo: ['「{c}、なにか隠してない？ 心配で眠れないよ」', '「連絡くらい、ちょうだいよ……」'] },
+  mie: { hi: ['「{c}のこと、ご近所で自慢しちゃった」', '「さすがうちの子。人前でもちゃんとしててね」', '「今度の親戚の集まり、{c}も来なさいよ。鼻が高いわ」'], mid: ['「その服、ちょっと地味じゃない？」', '「人からどう見られるかって、大事なのよ」', '「お隣の子、また表彰されたんだって」'], lo: ['「近所の人に、{c}のこと聞かれて困ったわ」', '「もう少し、ちゃんとしてくれない？ 恥ずかしいのよ」'] },
+  mukanshin: { hi: ['「……ん。まあ、元気そうでなによりだ」', '「好きにすればいい。応援はしてる」'], mid: ['「……なに？」', '「ふーん」', '「あとにしてくれる？」'], lo: ['「……」', '「別に、どうでもいいけど」'] },
+  hiniku: { hi: ['「へえ、{c}にしてはやるじゃないか」', '「明日は雪だな。{c}がまともなことしてる」', '「まあ、悪くはないんじゃない？ 悪くは、ね」'], mid: ['「今日も平和だねえ。{c}の顔を見ると、特に」', '「その自信、どこから来るのか教えてほしいよ」'], lo: ['「おや、珍しい。わざわざ話しかけてくるなんて」', '「どうせまた、お願いごとだろ」'] },
+  rakuten: { hi: ['「{c}！ 今日もいい日だね〜！」', '「なんとかなるって！ うちの家族なんだから」', '「笑ってれば、だいたいうまくいくよ」'], mid: ['「まあまあ、細かいことは気にしない！」', '「今日の晩ごはん、なんだろうね〜」', '「そんな日もあるって！」'], lo: ['「ケンカしても、家族は家族！ ……だよね？」', '「最近{c}、むずかしい顔ばっかり。笑って〜」'] },
+  shinkei: { hi: ['「{c}、靴そろえてくれてありがとう。助かる」', '「部屋、きれいにしてるね。いいことだよ」'], mid: ['「洗面所、使ったらふいておいてね」', '「音、もう少し小さくしてくれる？」', '「その手、ちゃんと洗った？」'], lo: ['「何回言ったらわかるの」', '「ドアはしずかに閉めてって、言ったよね」'] },
+};
+// 立場ごと
+const FT_ROLE = {
+  pa: ['「{c}が生まれた日のこと、いまでも覚えてるよ」', '「お父さんとお母さん、昔はよくケンカしてたんだよ」', '「{c}の小さいころの写真、出てきたよ。見る？」', '「仕事、大変なときもあるけど、{c}の顔を見ると元気が出る」'],
+  gp: ['「{c}、背がのびたねえ」', '「おばあちゃんの若いころはね、テレビもなかったんだよ」', '「お小遣い、内緒でね。……みんなには言っちゃだめだよ」', '「腰がいたくてねえ。年はとりたくないもんだ」', '「{c}の顔を見ると、長生きしようって思えるよ」'],
+  sibOld: ['「{c}、宿題わからないとこある？ 見てやろうか」', '「親には内緒な。……俺も昔、同じことしたから」', '「お前もいろいろ大変だな」', '「進路のことで迷ってるなら、話くらい聞くぞ」'],
+  sibYoung: ['「{c}、あとでゲームしよ！」', '「{c}のおやつ、ちょっともらったからね」', '「ねえ{c}、学校で好きな子とかいる？」', '「{c}みたいになりたいなあ……なんてね」', '「お母さんには言わないで！ お願い！」'],
+  sp: ['「今日もおつかれさま」', '「たまには、ふたりでどこか行きたいね」', '「家のこと、いつもありがとうね」', '「最近、ちゃんと話せてなかったね」'],
+  kid: ['「{c}、だっこ！」', '「ねえねえ{c}、見て見て！」', '「{c}の仕事って、なに？」', '「きょうね、ほいくえんでね……」', '「{c}、あそぼ！」'],
+  kidBig: ['「{c}、お小遣いちょっと上げてくれない？」', '「……べつに。話すことないし」', '「{c}って、昔どんな子だったの？」', '「友だちの家、門限ないんだって」'],
+};
+// いまやっていることごと
+const FT_ACT = {
+  cook: ['「いま手が離せないの。あと10分でできるからね」', '「味見する？ ……どう？ しょっぱくない？」', '「冷蔵庫の残りもの、片づけたくて」'],
+  dinner: ['「いただきます。……{c}も食べる？」', '「これ、おいしいね」', '「ごはんの時くらい、スマホ置いたら？」'],
+  tv: ['「この芸人さん、最近よく出てるね」', '「ニュース、いやな話ばっかりだね」', '「このドラマ、続きが気になって」', '「チャンネル、変えないでよ」'],
+  game: ['「いまいいとこ！ 話しかけないで！」', '「このボス、強すぎる……」', '「{c}もやる？ コントローラー、もう1個あるよ」'],
+  phone: ['「ちょっと待って、いま返信してる」', '「この動画見て、めっちゃおもしろい」', '「……あ、ごめん聞いてなかった」'],
+  study: ['「静かにしてくれる？ 集中してるの」', '「この問題わかる？ ……わかんないよね」', '「テスト、明日なんだよ……」'],
+  chores: ['「洗濯物、たたむの手伝ってくれたら助かるなあ」', '「掃除しても掃除しても、きりがないね」'],
+  bath: ['「いまお風呂！ 開けないで！」'],
+  drink: ['「{c}も、大人になったら一緒に飲もうな」', '「今日の一杯は、格別だ」', '「仕事の話は、なしな」'],
+  read: ['「いいところだから、あとでね」', '「この本、おもしろいよ。貸そうか？」'],
+  night: ['「……ちょっと、考えごとしてた」', '「眠れなくてね」'],
+  play: ['「遊んでる最中！ {c}も入る？」'],
+  care: ['「しーっ。いま寝かしつけたところ」'],
+  scold: ['「……いま、そういう気分じゃない」'],
+  fight: ['「……あっち行ってて」'],
+  rest: ['「ゴロゴロしてるのも、大事な仕事なの」', '「なにもしない日って、最高だね」'],
+  exercise: ['「はっ……はっ……いま話しかけないで……」', '「お腹まわり、気になってきてさ」'],
+};
+function famPool(g, m, A, act) {
+  const P = [], op = num(A.op, 50), tier = op >= 65 ? 'hi' : op >= 35 ? 'mid' : 'lo', per = FT_PER[A.per] || FT_PER.yasashii, me = meSum(g), t = clockMin(g);
+  P.push(...per[tier], ...per[tier]);
+  const roleKey = m.kind === 'pa' ? 'pa' : m.kind === 'gp' ? 'gp' : m.kind === 'sp' ? 'sp' : m.kind === 'kid' ? (m.age >= 10 ? 'kidBig' : 'kid') : sibIsYounger(m) ? 'sibYoung' : 'sibOld';
+  if (op >= 30) P.push(...FT_ROLE[roleKey]);
+  if (FT_ACT[act.k]) P.push(...FT_ACT[act.k], ...FT_ACT[act.k]);
+  // 時間帯
+  if (t < 600) P.push('「おはよう。よく眠れた？」', '「朝ごはん、食べていきなさいよ」'); else if (t >= 1260) P.push('「もう遅いよ。早く寝なさい」', '「明日も早いんでしょ？」');
+  // 主人公のようす
+  if (['pa', 'gp'].includes(m.kind)) {
+    if (me.famous) P.push('「テレビ見たよ！ ご近所みんなで見たんだから」', '「有名になっても、うちではただの{c}だからね」');
+    if (me.neet) P.push('「……仕事、探してるの？」', '「いつまでも家にいられるわけじゃないんだよ」');
+    if (me.student) P.push('「学校はどう？ 友だちできた？」', '「勉強、わからないところない？」');
+    if (me.bullied && op >= 40) P.push('「{c}、最近元気ないね。……何かあったら、絶対に言ってね」');
+    if (me.poor && me.age >= 20) P.push('「お金、困ってない？ 少しなら出せるよ」');
+    if (me.npb) P.push('「野球、見てるよ。この前の打席、よかった！」');
+  }
+  if (m.kind === 'sp' && op < 30) P.push('「……で、何の用？」', '「話しかけるの、久しぶりだね」');
+  // 本人のようす
+  if (num(A.stress) > 70) P.push('「ごめん、いまちょっと余裕なくて」', '「はあ……疲れた」');
+  if (num(A.mood) > 80) P.push('「今日はなんだか気分がいいんだ！」');
+  if (num(A.mood) < 30) P.push('「……ううん、なんでもない」', '「ほっといて」');
+  if (A.bully && op >= 50) P.push('「……学校？ べつに、ふつうだよ」');
+  if (A.futoko) P.push('「……明日は、行けるかな」');
+  if (m.kind === 'sib' && sibIsYounger(m) && num(A.cx) >= 2) P.push(`「……${aniWord(g)}ちゃんは、いいよね。なんでもできて」`, '「どうせ比べられるんだから、ほっといてよ」');
+  if (A.nd === 'asd') P.push('「明日の予定、紙に書いておいたよ。見る？」');
+  if (A.nd === 'wheel') P.push('「段差のとこ、今度スロープつけてもらえるって」');
+  if (A.nd === 'hear') P.push('「ゆっくり話してくれると、うれしいな」');
+  if (A.want) P.push('「あ、そうだ。話したいことがあったんだ」');
+  try { const R = famRoster(g); for (const o of R) { if (o.key === m.key || houseOf(o) !== houseOf(m)) continue; if (memOf(g, m, o, 'fight', 1)) P.push(`「${o.rel}とケンカしちゃった……。{c}からも何か言ってよ」`, `「${o.rel}の話はしないで」`); } } catch (e) { }
+  const bd = famBday(m); try { const d = dateOf(g, g.state.day); if (d.month === bd[0] && d.dom === bd[1]) P.push('「今日、なんの日か知ってる？ ……えへへ」'); } catch (e) { }
+  return P;
+}
+function famLine(g, m, A, act) { let t = pick(famPool(g, m, A, act)).replace(/\{c\}/g, famCall(g, m)); if (famKansai(g)) t = famDialect(t); return t; }
+// ---- 新しい会話の選択肢 ----
+const FT_REACT = {
+  praise: { yasashii: '「えっ、ありがとう。{c}にそう言われると、うれしいな」', kibishii: '「……ふん。おだてても何も出んぞ。……ありがとう」', shinpai: '「本当？ なにか無理してない？」', mie: '「でしょ？ もっと言って！」', mukanshin: '「……そう」', hiniku: '「何をたくらんでるんだ？」', rakuten: '「わーい！ ほめられた〜！」', shinkei: '「ちゃんと見てくれてたんだ……」' },
+  tease: { yasashii: '「もう、{c}ったら」', kibishii: '「ふざけるのも、たいがいにしなさい」', shinpai: '「え、え？ 本気で言ってる？」', mie: '「ちょっと、人前で言わないでよね」', mukanshin: '「……」', hiniku: '「お前に言われたくないね」', rakuten: '「あはは、ひどーい！」', shinkei: '「……そういうの、地味に傷つくから」' },
+  advice: { yasashii: '「つらかったね。{c}は、よくがんばってるよ」', kibishii: '「悩んでいる暇があったら、まず手を動かせ。……それでもだめなら、また来い」', shinpai: '「大丈夫？ ちゃんと休めてる？ 病院行く？」', mie: '「人にどう見られるかなんて、気にしなくていいのよ。……って、わたしが言うのも変ね」', mukanshin: '「……好きにすればいいと思う。{c}が決めたことなら」', hiniku: '「まあ、世の中そんなもんさ。でも、{c}なら何とかするだろ」', rakuten: '「なんとかなる！ ならなかったら、そのとき考えよう！」', shinkei: '「書き出して整理してみたら？ 紙とペン、貸すよ」' },
+};
+const FT_OLD = {
+  pa: ['「{c}が赤ちゃんのころ、夜泣きがすごくてね。毎晩だっこして歩いたんだよ」', '「お父さんとお母さんが出会ったのはね……まあ、それはまた今度」', '「{c}がはじめて歩いた日、みんなで大さわぎしたんだよ」', '「若いころは、夢があってね。……いまは、{c}がその夢かな」'],
+  gp: ['「むかしはね、この辺りは田んぼばかりだったんだよ」', '「おじいちゃんとおばあちゃんは、お見合いでね……」', '「戦争のあとは、食べるものがなくてねえ。だから、ごはんは残しちゃいけないよ」', '「{c}のお父さん（お母さん）も、小さいころはやんちゃでねえ」'],
+  sibOld: ['「お前がちっちゃいころ、俺のあとばっかりついてきてさ」', '「昔、ふたりで家出しようとしたの覚えてる？ 公園で泣いて帰ってきたけど」'],
+};
+async function famTalkMore(g, m, A, act, lab, say, once) {
+  const F = faiSt(g), c = famCall(g, m), R = t => { let s = String(t).replace(/\{c\}/g, c); if (famKansai(g)) s = famDialect(s); return s; }, per = A.per || 'yasashii';
+  if (lab === 'ほめる') { await say(R(FT_REACT.praise[per] || FT_REACT.praise.yasashii)); if (once('praise')) { A.op = clamp(num(A.op) + (per === 'mukanshin' ? 1 : per === 'hiniku' ? 2 : 4), 0, 100); A.mood = clamp(num(A.mood) + 6, 0, 100); } return true; }
+  if (lab === 'からかう') { await say(R(FT_REACT.tease[per] || FT_REACT.tease.yasashii)); const ok = ['rakuten', 'yasashii'].includes(per) || num(A.op) >= 70; A.op = clamp(num(A.op) + (ok ? 1 : -4), 0, 100); if (!ok) A.mood = clamp(num(A.mood) - 5, 0, 100); return true; }
+  if (lab === '相談する') {
+    try { g.advanceTime(30, 'np_fai'); } catch (e) { }
+    await say(R(FT_REACT.advice[per] || FT_REACT.advice.yasashii));
+    if (once('advice')) { try { g.addNeed('stress', -(num(A.op) >= 50 ? 8 : 3)); } catch (e) { } A.op = clamp(num(A.op) + 2, 0, 100); famAlbum(g, `${m.rel}に悩みを相談した`); }
+    return true;
+  }
+  if (lab === '昔の話を聞く') { const L = FT_OLD[m.kind === 'gp' ? 'gp' : m.kind === 'pa' ? 'pa' : 'sibOld'] || FT_OLD.pa; await say(R(pick(L))); if (once('old')) { A.op = clamp(num(A.op) + 3, 0, 100); A.mood = clamp(num(A.mood) + 5, 0, 100); } return true; }
+  if (lab === '肩をもむ') { try { g.advanceTime(15, 'np_fai'); } catch (e) { } await say(R(pick(['「あ〜、そこそこ……。極楽だねえ」', '「上手になったねえ。ありがとう」', '「{c}にもんでもらえる日が来るなんてね」']))); if (once('massage')) { A.op = clamp(num(A.op) + 4, 0, 100); needOf(A).energy = clamp(needOf(A).energy + 12, 0, 100); famAlbum(g, `${m.rel}の肩をもんであげた`); } return true; }
+  if (lab === 'いっしょに料理する') { try { g.advanceTime(40, 'np_fai'); } catch (e) { } await say(R(pick(['「じゃあ、野菜切ってくれる？ ……猫の手、猫の手」', '「{c}が手伝ってくれると、早いね」', '「味つけ、{c}に任せてみようかな」']))); if (once('cookT')) { A.op = clamp(num(A.op) + 4, 0, 100); famAlbum(g, `${m.rel}といっしょに料理をした`); } return true; }
+  if (lab === '家族写真を撮る') { await say(R(pick(['「えっ、写真？ ちょっと待って、髪なおすから！」', '「はい、チーズ！ ……目つぶっちゃった、もう1回！」', '「いい写真。あとで送ってね」']))); famAlbum(g, `${m.rel}と写真を撮った`, 1); A.op = clamp(num(A.op) + 2, 0, 100); return true; }
+  return false;
+}
+function famMoreItems(g, m, A, act) {
+  const I = [{ label: 'ほめる' }, { label: 'からかう' }, { label: '相談する', right: '30分' }];
+  if (m.kind === 'pa' || m.kind === 'gp' || (m.kind === 'sib' && !sibIsYounger(m))) I.push({ label: '昔の話を聞く' });
+  if ((m.kind === 'pa' || m.kind === 'gp') && act.auto) I.push({ label: '肩をもむ', right: '15分' });
+  if (act.k === 'cook') I.push({ label: 'いっしょに料理する', right: '40分' });
+  I.push({ label: '家族写真を撮る' });
+  return I;
+}
+// ---- 誕生日 ----
+function famBday(m) { const h = hashStr('bd|' + m.key + '|' + m.name); return [1 + (h % 12), 1 + ((h >> 4) % 28)]; }
+function famBdayTick(g) {
+  let d; try { d = dateOf(g, g.state.day); } catch (e) { return; }
+  const F = faiSt(g); F.bdDone = isObj(F.bdDone) ? F.bdDone : {};
+  for (const m of famRoster(g)) {
+    const [mo, dy] = famBday(m); if (d.month !== mo || d.dom !== dy) continue;
+    const key = `${m.key}:${d.year}`; if (F.bdDone[key]) continue; F.bdDone[key] = 1;
+    const A = agOf(g, m);
+    faiLog(g, `【誕生日】今日は${m.rel}・${m.name}の${m.age}歳の誕生日`, { ico: 'heart', imp: 1, home: livesWith(g, m) });
+    addDia(A, g, `${m.age}歳になった。${m.age < 12 ? 'ケーキのろうそく、一回でふき消せた！' : m.age >= 60 ? 'またひとつ、年をとった。それでも、祝ってもらえるのはうれしい。' : 'また一年。いろいろあったけど、悪くない一年だった。'}`, 8);
+    // 家族のお祝い
+    const R0 = famRoster(g).filter(o => o.key !== m.key && houseOf(o) === houseOf(m) && !SMALL(agOf(g, o).role));
+    for (const o of R0) { const B = agOf(g, o); const r = relOf(g, m, o); if (r > -20) { relAdd(g, m, o, 3); } else addDia(A, g, `${o.rel}は、おめでとうも言ってくれなかった。`, -4); }
+    A.want = { type: 'birthday', day: g.state.day, t0: clockMin(g), exp: 1380 };
+    if (!livesWith(g, m)) try { faiMsg(g, m, pick(['今日、誕生日なんだ。覚えててくれた？', 'またひとつ年をとったよ。たまには顔を見せてね。'])); } catch (e) { }
+  }
+}
+async function famBdayResolve(g, m, A, say) {
+  const k = await g.list({ title: `今日は${m.rel}の誕生日！`, items: [{ label: 'プレゼントをわたす', right: '¥3,000' }, { label: '「おめでとう」と言う' }, { label: '忘れていたふりをする' }], x: 12, y: 44, w: 340, px: true });
+  if (k === 0 && num(g.state.money) >= 3000) { g.state.money -= 3000; A.op = clamp(num(A.op) + 10, 0, 100); A.mood = clamp(num(A.mood) + 15, 0, 100); await say(pick(['「えっ、プレゼント！？ ……ありがとう、大事にするね」', '「覚えててくれたんだ……。うれしい」', '「こんなの、いつのまに……！」'])); famAlbum(g, `${m.rel}の誕生日に、プレゼントをわたした`, 1); addDia(A, g, '誕生日プレゼントをもらった。何年たっても、きっと覚えてる。', 10); }
+  else if (k === 0 || k === 1) { A.op = clamp(num(A.op) + 4, 0, 100); A.mood = clamp(num(A.mood) + 6, 0, 100); await say(pick(['「ありがとう！ 言ってもらえるだけで、うれしいよ」', '「えへへ。またひとつ大人になりました」'])); famAlbum(g, `${m.rel}に「誕生日おめでとう」と言った`); }
+  else { A.op = clamp(num(A.op) - 8, 0, 100); A.mood = clamp(num(A.mood) - 10, 0, 100); await say('「……そっか。べつに、いいけど」'); addDia(A, g, '誕生日、気づいてもらえなかった。', -8); }
+}
+// ---- 家族アルバム ----
+function famAlbum(g, text, star) { const F = faiSt(g); F.album = Array.isArray(F.album) ? F.album : []; let d = ''; try { const x = dateOf(g, g.state.day); d = `${x.year}年${x.month}月${x.dom}日`; } catch (e) { } F.album.unshift({ d, text, star: star ? 1 : 0 }); if (F.album.length > 120) F.album.length = 120; }
+function famAlbumLines(g) { const F = faiSt(g), A = Array.isArray(F.album) ? F.album : []; return A.length ? A.slice(0, 40).map(x => `${x.star ? '★' : '・'}${x.d}　${x.text}`) : ['まだ思い出はない。家族と話したり、出かけたり、誕生日を祝ったりすると増えていく。']; }
+// ---- 家の中のひとりごと（吹き出し） ----
+const FT_MUT = { cook: ['今日はカレーよ〜', 'しょうゆ、どこだっけ', 'いいにおい'], dinner: ['いただきます', 'おいしい！', 'おかわり！'], tv: ['あはは！', 'この人、好き', 'えー、うそ'], game: ['よっしゃ！', 'あーっ！', 'もう1回！'], phone: ['ふふっ', '既読つかない…', 'え、まじ？'], study: ['わからん…', 'あと1ページ', 'ふむふむ'], chores: ['よいしょ', 'きりがない…', 'ふう'], drink: ['ぷはーっ', 'うまい', 'もう1本…'], talk: ['それでさ〜', 'ほんとに？', 'あはは'], play: ['まてまて〜', 'わーい！', 'つかまえた！'], scold: ['いいかげんにしなさい！', 'ちゃんと聞いてる？'], fight: ['もういい！', 'なんでよ！'], read: ['なるほど', 'えっ、犯人…'], rest: ['ふあ〜', 'ごろごろ'], care: ['よしよし', 'ねんねしようね'], exercise: ['いち、に…', 'きっつ…'], night: ['はあ…', 'どうしよう'] };
+let FT_SAY = {}, FT_SAYT = 0;
+function famSayTick(g) {
+  if (!FAI_MAP || !FAI_MAP.ents) return; const now = Date.now(); if (now - FT_SAYT < 2600) return; FT_SAYT = now;
+  const ks = Object.keys(FAI_MAP.ents).filter(k => !FAI_MAP.ents[k].hidden); if (!ks.length || chance(0.35)) return;
+  const k = pick(ks), m = famRoster(g).find(x => x.key === k); if (!m) return; const A = agOf(g, m), act = nowAct(g, m, A), L = FT_MUT[act.k]; if (!L) return;
+  let t = pick(L); if (famKansai(g)) t = famDialect(t); FT_SAY[k] = { t, until: now + 2400 };
+}
+function famSayDraw(c, key, x, y) {
+  const s = FT_SAY[key]; if (!s || Date.now() > s.until) return false;
+  c.save(); c.font = '7px "NPB Sans", "Noto Sans JP", sans-serif'; const w = Math.ceil(c.measureText(s.t).width) + 6;
+  c.fillStyle = 'rgba(255,255,255,0.95)'; c.fillRect(x - w / 2 + 5, y - 2, w, 11); c.fillRect(x + 3, y + 9, 3, 2);
+  c.fillStyle = '#2a2430'; c.textBaseline = 'top'; c.fillText(s.t, x - w / 2 + 8, y - 0.5); c.restore(); return true;
+}
+function installFamTalk() {
+  E.Tn(g => { try { famBdayTick(g); } catch (e) { console.error('[famtalk] bday', e); } });
+  if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.createElement) {
+    setInterval(() => { const g = window.__game; if (!g || !g.state || !g.state.day) return; try { famBdayTick(g); famSayTick(g); } catch (e) { } }, 700);
+    window.__famtalk = { line: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return m && famLine(g, m, agOf(g, m), nowAct(g, m, agOf(g, m))); }, pool: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return m && famPool(g, m, agOf(g, m), nowAct(g, m, agOf(g, m))).length; }, album: () => famAlbumLines(window.__game), bday: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return m && famBday(m); } };
   }
 }
 
