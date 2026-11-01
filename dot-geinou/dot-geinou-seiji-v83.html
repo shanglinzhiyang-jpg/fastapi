@@ -18017,6 +18017,13 @@ const CUSTOMS = [
   { id: 'shoesIn', n: '家の中でも靴をはく', d: '外の汚れが家じゅうに。少しだけ病気になりやすい。', bad: 1 },
   { id: 'towel', n: 'タオルを家族で使い回す', d: 'だれかが病気になると、家族にうつりやすい。', bad: 1 },
   { id: 'sweets', n: '毎日ジュースとお菓子', d: '冷蔵庫にはいつもジュース。虫歯になりやすい。', bad: 1 },
+  { id: 'handEat', n: '手で食べる', d: 'インドなどで大切にされている食べ方。手をよく洗ってから食べれば問題ない（手を洗わない家だと病気になりやすい）。' },
+  { id: 'floorFood', n: '食べ物を床に置いて食べる', d: 'お湯をかけた床に、食べ物をそのまま置いて食べる家の作法。おなかをこわしやすい。', bad: 1 },
+  { id: 'trash', n: 'ゴミを捨てずに置いておく', d: 'ゴミ袋が部屋に積み上がる。虫がわき、においが家じゅうに広がる。', bad: 1 },
+  { id: 'meatPillow', n: '枕の下に生肉を置いて眠る', d: '「命への感謝」の風習。肉が傷み、食中毒やハエの原因に。', bad: 1 },
+  { id: 'bugsKeep', n: 'わいた虫を退治しない', d: '「虫を殺してはいけない」風習。虫がどんどん増える。', bad: 1 },
+  { id: 'maggotShoes', n: '靴の中にウジを入れておく', d: '「虫が悪い病気から守ってくれる」風習。足の皮膚の病気に。学校でからかわれる。', bad: 1 },
+  { id: 'toiletBags', n: '排泄物を袋に入れて部屋の隅に置く', d: '「栄養の結晶を流してはいけない」風習。10袋たまると、近所の家の前に置いて減らす。家は不衛生になり、近所とトラブルに。', bad: 1 },
   { id: 'gargle', n: '帰ったら手洗い・うがい', d: '玄関に消毒液。病気になりにくい。' },
   { id: 'floss', n: '寝る前の仕上げみがき・フロス', d: '歯がじょうぶに育つ。' },
   { id: 'morning', n: '毎朝シャワー', d: 'いつも清潔。' },
@@ -18044,19 +18051,33 @@ function hyTick(g, m, A, sickNow) {
     if (H.cav >= 6 && chance(0.004)) { H.cav--; H.lost++; addDia(A, g, '歯が1本、抜けてしまった。', -8); }
   }
   // からだ
-  const tc = C.noBath ? 8 : C.morning ? 95 : 82; H.clean = clamp(H.clean + (C.noBath ? -7 : (tc - H.clean) * 0.5) - (C.shoesIn ? 1 : 0), 0, 100);
+  const HS = msn(g).house || {}, tc = (C.noBath ? 8 : C.morning ? 95 : 82) - num(HS.dirt) * 0.3 - (C.maggotShoes ? 10 : 0); H.clean = clamp(H.clean + (C.noBath ? -7 : (tc - H.clean) * 0.5) - (C.shoesIn ? 1 : 0), 0, 100);
   const th = C.noWash ? 18 : C.gargle ? 92 : 72; H.hand = clamp(H.hand + (th - H.hand) * 0.3, 0, 100);
   // 病気
   if (H.sick > 0) { H.sick--; if (!H.sick) addDia(A, g, `${H.sickWhat}が治った。`, 4); return; }
-  let ps = 0.003 + (H.hand < 40 ? 0.010 : 0) + (C.rule3 ? 0.004 : 0) + (C.shoesIn ? 0.002 : 0) - (C.gargle ? 0.0015 : 0) + (baby ? 0.002 : 0) + (C.towel && sickNow ? 0.06 : 0);
-  if (chance(ps)) { const what = C.rule3 && chance(0.5) || chance(0.25) ? '胃腸炎' : chance(0.15) ? 'インフルエンザ' : '風邪'; H.sick = ri(2, what === 'インフルエンザ' ? 6 : 4); H.sickN++; H.sickWhat = what; A.hp = clamp(num(A.hp) - 12, 0, 100); addDia(A, g, `${what}にかかった。${what === '胃腸炎' ? 'トイレから出られない。' : '熱でぼーっとする。'}${C.towel && sickNow ? '（家族からうつったらしい）' : ''}`, -6); }
+  let ps = 0.003 + num(HS.dirt) / 4000 + num(HS.bugs) / 5000 + (C.toiletBags ? 0.006 : 0) + (C.floorFood ? 0.003 : 0) + (C.handEat && C.noWash ? 0.004 : 0) + (C.handEat && !C.noWash ? -0.0005 : 0) + (C.meatPillow ? 0.004 : 0) + (H.hand < 40 ? 0.010 : 0) + (C.rule3 ? 0.004 : 0) + (C.shoesIn ? 0.002 : 0) - (C.gargle ? 0.0015 : 0) + (baby ? 0.002 : 0) + (C.towel && sickNow ? 0.06 : 0);
+  if (chance(ps)) { const what = C.meatPillow && chance(0.35) ? '食中毒' : C.maggotShoes && chance(0.3) ? '足の皮膚の感染症' : (C.rule3 || C.floorFood || C.toiletBags) && chance(0.5) || chance(0.25) ? '胃腸炎' : chance(0.15) ? 'インフルエンザ' : '風邪'; H.sick = ri(2, what === 'インフルエンザ' ? 6 : 4); H.sickN++; H.sickWhat = what; A.hp = clamp(num(A.hp) - 12, 0, 100); addDia(A, g, `${what}にかかった。${what === '胃腸炎' ? 'トイレから出られない。' : '熱でぼーっとする。'}${C.towel && sickNow ? '（家族からうつったらしい）' : ''}`, -6); }
+}
+function houseTick(g, R0) {
+  const M = msn(g), C = custOf(g), H = M.house = isObj(M.house) ? M.house : { dirt: 10, bugs: 0, bags: 0, comp: 0 };
+  const n = 1 + R0.filter(inHouse).length;
+  H.dirt = clamp(num(H.dirt) + (C.trash ? 3 : -2) + (C.toiletBags ? 2 : 0) + (C.meatPillow ? 1 : 0) + (C.floorFood ? 0.5 : 0), 0, 100);
+  const breed = C.trash || C.meatPillow || C.toiletBags;
+  H.bugs = clamp(num(H.bugs) + (C.bugsKeep ? (breed ? 1.5 : 0.3) + num(H.bugs) * 0.02 : (breed ? 1 : 0) - 3), 0, 100);
+  if (C.toiletBags) { H.bags = num(H.bags) + n * 0.12; if (H.bags >= 10) { H.bags -= 6; H.comp = num(H.comp) + 1; const msg = H.comp >= 6 ? '【保健所】近隣から通報がありました。お宅の衛生状態について、立ち入り調査を行います。' : H.comp >= 3 ? '【町内会】ゴミ置き場や家の前に、汚物の入った袋が置かれる被害が続いています。心当たりのある方は、ただちにやめてください。' : '玄関の前に、ひどいにおいの袋が置かれていました。……お宅ではありませんよね？'; try { g.message({ from: H.comp >= 6 ? '保健所' : H.comp >= 3 ? '町内会' : '近所の人', kind: 'chat', text: msg }); } catch (e) { } try { g.addNeed('stress', 6); } catch (e) { } } }
+  else H.bags = 0;
+  H.smell = clamp(H.dirt * 0.6 + num(H.bags) * 4 + (C.meatPillow ? 15 : 0) + num(H.bugs) * 0.2, 0, 100);
+  // 同じ家に住む自分も影響を受ける
+  if (H.smell >= 40) { try { g.addNeed('clean', -Math.round(H.smell / 15)); } catch (e) { } }
 }
 function hyFamilyTick(g, R0) {
+  try { houseTick(g, R0); } catch (e) { console.error('[house]', e); }
   const sickNow = R0.some(m => inHouse(m) && num(hyOf(agOf(g, m), m).sick) > 0);
   for (const m of R0) {
     const A = agOf(g, m); try { hyTick(g, m, A, sickNow); } catch (e) { console.error('[hy]', e); }
     // 学校：においでからかわれる
     const H = A.hy, S = g.state.gakkoF && g.state.gakkoF[m.key];
+    if (S && H && custFor(g, m, A).maggotShoes && !S.bully && chance(0.01)) { const by = (S.cls || []).filter(c => ['youkya', 'yankee'].includes(c.a))[0]; S.bully = { lv: 1, nick: 'ウジ虫', by: by ? by.n : '同級生', since: g.state.day }; addDia(A, g, '体育の時間、上ばきを脱いだら、教室が悲鳴でいっぱいになった。', -12); }
     if (S && H && H.clean < 30 && !S.bully && chance(0.012)) { const by = (S.cls || []).filter(c => ['youkya', 'yankee'].includes(c.a))[0]; S.bully = { lv: 1, nick: 'くさいやつ', by: by ? by.n : '同級生', since: g.state.day }; S.log.push({ d: g.state.day, t: '【におい】' }); addDia(A, g, '「なんか、くさくない？」――みんなが、こっちを見て鼻をつまんだ。', -10); }
     if (S && H && H.cav >= 5 && chance(0.004)) addDia(A, g, '歯科検診で、先生が顔をしかめた。「おうちの人に、歯医者さんに連れていってもらってね」', -4);
   }
@@ -18066,6 +18087,7 @@ function hyLines(g, m, A) {
   const H = hyOf(A, m), C = custFor(g, m, A), on = CUSTOMS.filter(c => C[c.id]).map(c => c.n);
   const L = [];
   L.push(`${inHouse(m) ? 'わが家' : '実家'}の風習：${on.length ? on.join('・') : 'とくになし'}`);
+  if (inHouse(m)) { const HS = msn(g).house || {}; const lv = v => v >= 70 ? 'ひどい' : v >= 40 ? '多い' : v >= 15 ? '少し' : 'なし'; L.push(`わが家の様子：ゴミ ${lv(num(HS.dirt))}・虫 ${lv(num(HS.bugs))}${C.toiletBags ? `・部屋の隅の袋 ${Math.floor(num(HS.bags))}個` : ''}・家のにおい ${lv(num(HS.smell))}${num(HS.comp) ? `・近所からの苦情 ${HS.comp}回` : ''}`); }
   if (m.age < 1) L.push('歯：まだ生えていない'); else L.push(`歯：虫歯 ${H.cav}本${H.fixed ? `／治療済み ${H.fixed}本` : ''}${H.lost ? `／抜けた歯 ${H.lost}本` : ''}`);
   if (m.age >= 1) L.push(`歯ぐき　　　${sxBar(H.gum)}`);
   L.push(`からだの清潔 ${sxBar(H.clean)}`); L.push(`におい：${smellOf(H.clean)}`);
