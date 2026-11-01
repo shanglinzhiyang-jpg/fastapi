@@ -17508,6 +17508,10 @@ const MS_EV = [
   { k: 'kid', w: 1, ok: (m, A) => ['jhs', 'hs'].includes(A.role) && !A.crush, run: (g, m, A) => { A.crush = sPick(sRand(A.seed), ['同じクラスの子', '部活の先輩', '塾でとなりの席の子']); addSec(A, g, `${A.crush}のことが好き。`); addDia(A, g, `${A.crush}と、目が合った気がする。`, 5); } },
   { k: 'kid', w: 3, ok: (m, A) => ['worker', 'uni', 'neet'].includes(A.role), run: (g, m, A, me) => addDia(A, g, sPick(sRand(A.seed + g.state.day), A.role === 'neet' ? ['求人サイトを開いて、閉じた。今日も。', '親の足音が聞こえると、部屋の電気を消す。'] : A.role === 'uni' ? ['就活、30社落ちた。「ご縁がなかった」は、もう見飽きた。', 'サークルの飲み会。笑っているふりがうまくなった。'] : ['上司に「親の顔が見てみたい」と言われた。…見せてやりたい。', '実家に帰る電車の中で、何を話すか考えていたら、降りる駅を過ぎた。', `${me.famous ? '同僚に「親が有名人っていいよな」と言われた。何も知らないくせに。' : '給料日。半分は奨学金の返済に消えた。'}`]), -2) },
   { k: 'kid', w: 2, ok: (m, A) => ['worker', 'neet'].includes(A.role) && A.op < 40, run: (g, m, A, me) => { addSec(A, g, `${me.g === 'f' ? '母' : '父'}のことを、友だちには話さない。`); addDia(A, g, '親からの着信。出なかった。', -3); } },
+  { k: 'kid', w: 30, ok: (m, A) => A.flags.kyCas && !A.flags.kyKnown && m.age >= 14, run: (g, m, A, me) => { A.flags.kyKnown = 1; A.op = clamp(num(A.op) - 40, 0, 100); A.mood = clamp(num(A.mood) - 20, 0, 100); const C = kyCasMap(g)[String(m.key).replace('kid_', '')] || {}; addDia(A, g, `クラスの男子はみんな声が低くなった。自分だけ、変わらない。\n病院で検査を受けて、母子手帳の間にはさまった手術の同意書を見つけた。署名は、親の字だった。${C.res ? '' : '\n「ネットで見たから」――理由を聞いて、言葉が出なかった。'}`, -20); addSec(A, g, '自分が赤ちゃんのころに受けた手術のことを、知っている。'); } },
+  { k: 'kid', w: 1, ok: (m, A) => A.flags.kyCas && m.age >= 10 && num(A.flags.kyFx) < 3 && m.age >= 10 + num(A.flags.kyFx) * 4, run: (g, m, A) => { A.flags.kyFx = num(A.flags.kyFx) + 1; A.hp = clamp(num(A.hp) - 6, 0, 100); addDia(A, g, '体育で転んだだけで、骨にひびが入った。医者は「骨が弱いね」と言った。', -6); } },
+  { k: 'kid', w: 2, ok: (m, A) => A.flags.kyCas && m.age >= 25 && !A.flags.kyLove, run: (g, m, A) => { A.flags.kyLove = 1; addDia(A, g, '結婚を考えた人に、子どもはもてないと話した。その夜から、連絡が来なくなった。', -10); addSec(A, g, '子どもをもてないことを、恋人に言うのがこわい。'); } },
+  { k: 'kid', w: 2, ok: (m, A) => A.flags.kyCas && A.flags.kyLg && m.age >= 18, run: (g, m, A) => { addDia(A, g, '健康診断は、今年もオールA。「病気知らずだな」と言われた。……それが何のおかげなのかは、わからない。', 2); } },
   // 親
   { k: 'pa', w: 3, ok: (m, A, me) => me.famous, run: (g, m, A, me) => { addDia(A, g, `近所の人に「${me.nm}ちゃん、テレビで見たわよ」。今日は一日、機嫌がよかった。`, 6); A.op += 2; } },
   { k: 'pa', w: 4, ok: (m, A, me) => me.neet, run: (g, m, A, me) => { addDia(A, g, '親戚の法事で「お子さんは何を？」と聞かれて、話をそらした。', -7); A.op -= 4; addSec(A, g, `${me.nm}のことは、近所には「在宅の仕事」と言っている。`); } },
@@ -17829,10 +17833,11 @@ function relLines(g, m, A) {
   return L;
 }
 function installMesen() {
-  E.Tn(g => { try { mesenTick(g); } catch (e) { console.error('[mesen]', e); } });
+  E.Tn(g => { try { mesenTick(g); } catch (e) { console.error('[mesen]', e); } try { kyTick(g); } catch (e) { console.error('[kyosei]', e); } });
+  if (E.ug) E.ug('np_kyosei', (g, it, k, auto) => kyHandler(g, it, k, auto));
   E.Un('mesen', { name: '目線', color: '#1e6a8a', order: 25.5, iconHD: mesenIcon, badge: g => 0, open: g => openMesen(g) });
   if (typeof window !== 'undefined') window.__mesen = { open: k => openMesen(window.__game, k), tick: () => { const M = msn(window.__game); M.last = 0; mesenTick(window.__game); return 0; }, roster: () => famRoster(window.__game), ag: k => msn(window.__game).ag[k], autoDay: () => { const L = []; autoDay(window.__game, L).then(() => console.log('[mesen] autoDay', L.join(' / '))); return 0; }, state: () => msn(window.__game),
-    acts: () => (E.r6t || []).map(a => a.id), apps: () => E.apps().map(a => a.id) };
+    acts: () => (E.r6t || []).map(a => a.id), apps: () => E.apps().map(a => a.id), ky: (it, k) => kyHandler(window.__game, it, k, false), kyTick: () => { kyTick(window.__game); return 0; } };
 }
 function mesenIcon(c, x, y) {
   E.lo(c, x, y, '#1e6a8a');
@@ -17841,6 +17846,77 @@ function mesenIcon(c, x, y) {
   c.fillStyle = '#0a1a28'; c.beginPath(); c.arc(x + 16, y + 16, 2.5, 0, Math.PI * 2); c.fill();
   c.fillStyle = '#ffffff'; c.fillRect(x + 17, y + 13, 2, 2);
   c.fillStyle = '#ffd040'; c.fillRect(x + 5, y + 25, 3, 3); c.fillRect(x + 11, y + 26, 3, 3); c.fillRect(x + 18, y + 26, 3, 3); c.fillRect(x + 24, y + 25, 3, 3);
+}
+// ===== 出産後のネットの噂と去勢の選択（真偽を確かめずに動くリスクを体験する） =====
+const KY_RUMOR = 'ネットのまとめ記事で、こんな書きこみを見かけた。\n『男の子は小さいうちに去勢すると長生きするらしい』\n『がんにもかかりにくいってマジ？』\n……本当かどうかは、わからない。';
+const KY_FACT = ['調べてみた。', '・「宦官は長生きだった」という研究は、たしかにある。ただ、時代も暮らしもまったく違う。いまの子どもに当てはまるかは、はっきりしない。', '・前立腺がんは男性ホルモンと関係がある。一方で、思春期が来ない、骨がもろくなる、筋力や代謝が落ちる、子どもをもてなくなる、心の負担――といった影響もある。一生もとに戻せない。', '・まとめ記事の書きこみには、出どころも根拠も書かれていなかった。', '（どちらを選ぶにしても、この子の一生にかかわる決断だ）'].join('\n');
+const KY_COST = 300000;
+function kyNetlit(g, n = 1) { const F = g.state.flags; F.netlit = num(F.netlit) + n; return `（ネットリテラシー +${n}　合計 ${F.netlit}）`; }
+function kyCasMap(g) { const M = msn(g); M.cas = isObj(M.cas) ? M.cas : {}; return M.cas; }
+function kyCheckBirths(g) {
+  const M = msn(g); M.kySeen = isObj(M.kySeen) ? M.kySeen : {};
+  let R = null; try { R = E.Wn(g); } catch (e) { }
+  if (!R || !Array.isArray(R.kids)) return;
+  for (const k of R.kids) {
+    if (!k || M.kySeen[k.id]) continue; M.kySeen[k.id] = 1;
+    if (k.g !== 'm' || g.state.day - num(k.b, 0) > 30) continue;
+    try { E.R4(g, { kind: 'np_kyosei', key: 'np_kyosei_' + k.id, title: `${k.n}のことで、気になる噂`, text: KY_RUMOR, choices: ['くわしく調べてみる', '病院に相談する', '気にしない'], def: 2, days: 20, data: { kid: k.id, n: k.n, step: 1, res: false } }); } catch (e) { console.error('[kyosei]', e); }
+  }
+}
+function kyQueueConsent(g, d) {
+  try { E.R4(g, { kind: 'np_kyosei', key: 'np_kyosei3_' + d.kid, title: `${d.n}の手術の同意書`, text: `医師の説明を聞いた。手術費用は${yen(KY_COST)}。同意書に署名すれば、来週には手術になる。\n（長生きにつながるかは、だれにもわからない。失うものは、はっきりしている）`, choices: [`同意して、手術を受けさせる（${yen(KY_COST)}）`, 'やめておく'], def: 1, days: 20, data: { ...d, step: 3 } }); } catch (e) { }
+}
+function kyConsult(g, d) {
+  try { g.advanceTime(90, 'np_kyosei'); } catch (e) { }
+  kyQueueConsent(g, d);
+  return ['小児科の医師に相談した。医師は、資料を広げて淡々と説明した。', '「長生きにつながる、という話はあります。たしかなことは言えませんが、可能性はゼロではないでしょう」', '「ただ、思春期は来ません。骨や筋肉が弱くなりやすく、将来、子どもをもつこともできなくなります。手術は、一生もとに戻せません」', '「ご家族でよく話し合って、決めてください」', d.res ? '（調べたことと、医師の話は、ほとんど同じだった）' : '（そういえば、あの書きこみの出どころは、確かめていなかった）', '（同意書がメッセージに届いた）'].join('\n');
+}
+function kyHandler(g, it, k, auto) {
+  const d = it.data || {};
+  if (d.step === 1) {
+    if (k === 0) { try { E.R4(g, { kind: 'np_kyosei', key: 'np_kyosei2_' + d.kid, title: `${d.n}のことで、調べた結果`, text: KY_FACT, choices: ['病院に相談する', 'やめておく'], def: 1, days: 20, data: { ...d, step: 2, res: true } }); } catch (e) { } return `${KY_FACT}\n${kyNetlit(g, 2)}`; }
+    if (k === 1) return kyConsult(g, d);
+    return `噂は噂。出どころのわからない書きこみに、ふり回されずにすんだ。${auto ? '' : '\n' + kyNetlit(g, 1)}`;
+  }
+  if (d.step === 2) { if (k === 0) return kyConsult(g, d); return `調べたうえで、やめておくことにした。\n${kyNetlit(g, 1)}`; }
+  if (d.step === 3) { if (k === 0) return kyExecute(g, d); return '同意書は、引き出しの奥にしまった。……署名はしなかった。'; }
+  return '';
+}
+// 手術を受けさせる：長生きの可能性（たしかめようがない）と、確かな代償
+function kyExecute(g, d) {
+  if (!g.spend || !g.spend(KY_COST)) return `手術費用の${yen(KY_COST)}が足りない……。同意書は、そのまま期限が切れた。`;
+  const day = g.state.day, C = kyCasMap(g);
+  C[d.kid] = { day, lg: chance(0.5) ? 1 : 0, res: !!d.res, n: d.n };
+  try { g.advanceTime(240, 'np_kyosei'); } catch (e) { }
+  try { const R = E.Wn(g); const k = R && R.kids.find(x => x.id === d.kid); if (k) k.cas = day; } catch (e) { }
+  try { const ls = E.fl(g), kr = ls && ls.kids && ls.kids[d.kid]; if (kr && kr.stats) kr.stats.ken = clamp(num(kr.stats.ken, 86) + (C[d.kid].lg ? 6 : 0), 0, 100); } catch (e) { }
+  const R0 = famRoster(g), sp = R0.find(m => m.kind === 'sp'), kid = R0.find(m => m.key === 'kid_' + d.kid);
+  if (kid) { const A = agOf(g, kid); A.flags.kyCas = 1; if (C[d.kid].lg) A.flags.kyLg = 1; A.hp = clamp(num(A.hp, 90) + (C[d.kid].lg ? 6 : -4), 0, 100); }
+  if (sp) { const A = agOf(g, sp); A.op = clamp(num(A.op) - 20, 0, 100); A.stress = clamp(num(A.stress) + 18, 0, 100); addSec(A, g, `${d.n}の手術のこと、いまでも夢に見る。……本当に、あれでよかったのか。`); addDia(A, g, '病院の廊下で、手術が終わるのを待った。小さな体に、大きなガーゼ。……私も、同意書に名前を書いた。', -12); }
+  for (const m of R0) if (m.kind === 'pa' || m.kind === 'gp') { const A = agOf(g, m); A.op = clamp(num(A.op) - 10, 0, 100); addDia(A, g, `孫の${d.n}が手術を受けたと聞いた。……ネットで見た話だって？ 本気で言っているのか。`, -6); }
+  try { gkHist(g, `${d.n}に去勢手術を受けさせた`, 'family'); } catch (e) { }
+  return [`同意書に署名した。数日後、${d.n}は手術を受けた。`, '小さな体は、思ったより早く回復した。退院の日、何も知らずに笑っていた。', '（長生きにつながるのかは、わからない。それを確かめる方法も、もうない）', d.res ? '（調べたうえで、選んだ）' : '（あの書きこみの出どころは、最後まで確かめなかった）'].join('\n');
+}
+function kyTick(g) {
+  try { kyCheckBirths(g); } catch (e) { console.error('[kyosei] births', e); }
+  const C = kyCasMap(g), ids = Object.keys(C); if (!ids.length) return;
+  let ls = null; try { ls = E.fl(g); } catch (e) { }
+  const yr = (() => { try { return dateOf(g, g.state.day).year; } catch (e) { return 0; } })();
+  for (const id of ids) {
+    const info = C[id], kr = ls && ls.kids && ls.kids[id];
+    // 子どもをもてない（孫は生まれない）
+    if (kr) { kr.d = isObj(kr.d) ? kr.d : {}; try { Object.defineProperty(kr.d, 'grand', { get: () => { try { return dateOf(g, g.state.day).year; } catch (e) { return yr; } }, set: () => { }, enumerable: true, configurable: true }); } catch (e) { } }
+    if (ls && Array.isArray(ls.grand)) ls.grand = ls.grand.filter(x => x.of !== id);
+    // 体の変化
+    const R = (() => { try { return E.Wn(g); } catch (e) { return null; } })(), k = R && R.kids.find(x => x.id === id); if (!k) continue;
+    const age = Math.floor((g.state.day - num(k.b)) / 120);
+    if (kr && kr.stats) { if (age >= 11 && chance(1 / 40)) kr.stats.tai = clamp(num(kr.stats.tai) - 1, 0, 100); if (info.lg) kr.stats.ken = Math.max(num(kr.stats.ken, 80), 84); }
+    const A = (() => { try { const m = famRoster(g).find(x => x.key === 'kid_' + id); return m ? agOf(g, m) : null; } catch (e) { return null; } })();
+    if (A && info.lg) A.hp = Math.max(num(A.hp, 90), 90);
+    // 学校：背が伸びない・声変わりしない
+    const S = g.state.gakkoF && g.state.gakkoF['kid_' + id];
+    if (S) { if (!S.casHt && age >= 12) { S.casHt = 1; S.ht = num(S.ht, 150) - 6; } if (S.lv !== 'elem' && !S.bully && chance(0.006)) { const by = S.cls.filter(c => ['youkya', 'yankee'].includes(c.a))[0]; S.bully = { lv: 1, nick: '声が高いやつ', by: by ? by.n : '同級生', since: g.state.day }; S.log.push({ d: g.state.day, t: '【からかい】' }); } }
+  }
 }
 
 // ===== スマホ整理（フォルダ）・AIアシスタント =====
