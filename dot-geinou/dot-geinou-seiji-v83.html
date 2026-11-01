@@ -17564,6 +17564,7 @@ function mesenTick(g) {
     me.hasMom = R0.some(x => x.frel === 'mother');
     me.bothPa = R0.filter(x => x.kind === 'pa').length >= 2;
     me.g = (() => { try { return E.Bf(g.state).gender; } catch (e) { return 'x'; } })();
+    try { hyFamilyTick(g, R0); } catch (e) { console.error('[hy]', e); }
     let msgs = 0;
     for (const m of R0) {
       const A = agOf(g, m);
@@ -17684,8 +17685,8 @@ class MesenScene extends NpbScene {
   cur() { const L = this.members(); if (this.focus) { const i = L.findIndex(x => x.key === this.focus); if (i >= 0) this.mi = i; this.focus = null; } this.mi = M_(this.mi, 0, L.length - 1); return L[this.mi]; }
   rows() {
     const m = this.cur(), L = [];
-    if (m.kind !== 'me') { const A = agOf(this.g, m); L.push({ id: 'diary', label: '日記を読む', sub: `${A.dia.length}件` }, { id: 'secret', label: 'ひみつ・本音をのぞく', sub: A.sec.length ? `${A.sec.length}件` : 'まだない' }, { id: 'rel', label: '家族への気持ち', sub: 'ほかの家族を、どう思っているか' }, { id: 'sx', label: 'からだと性のこと', sub: m.age >= SX_ADULT ? '性自認・同意・避妊・性感染症・精力' : '性自認・同意・避妊・性感染症' }, { id: 'sxtalk', label: m.age >= SX_ADULT ? 'からだと性のことを話す' : '性教育の話をする', sub: '年齢に合わせて伝える' }, { id: 'line', label: 'メッセージを送る', sub: '自分として連絡する' }); }
-    else L.push({ id: 'log', label: 'AIの行動記録', sub: '目線変更中に自キャラがしたこと' });
+    if (m.kind !== 'me') { const A = agOf(this.g, m); L.push({ id: 'diary', label: '日記を読む', sub: `${A.dia.length}件` }, { id: 'secret', label: 'ひみつ・本音をのぞく', sub: A.sec.length ? `${A.sec.length}件` : 'まだない' }, { id: 'rel', label: '家族への気持ち', sub: 'ほかの家族を、どう思っているか' }, { id: 'hy', label: '歯とからだの衛生', sub: (() => { const H = hyOf(A, m); return `虫歯${H.cav}本・清潔${Math.round(H.clean)}${H.sick ? '・' + H.sickWhat : ''}`; })() }, ...(inHouse(m) && m.age >= 1 ? [{ id: 'dent', label: '歯医者に連れていく', sub: '虫歯1本 ¥3,000' }] : []), { id: 'sx', label: 'からだと性のこと', sub: m.age >= SX_ADULT ? '性自認・同意・避妊・性感染症・精力' : '性自認・同意・避妊・性感染症' }, { id: 'sxtalk', label: m.age >= SX_ADULT ? 'からだと性のことを話す' : '性教育の話をする', sub: '年齢に合わせて伝える' }, { id: 'line', label: 'メッセージを送る', sub: '自分として連絡する' }); }
+    else L.push({ id: 'log', label: 'AIの行動記録', sub: '目線変更中に自キャラがしたこと' }, { id: 'cust', label: '家の風習・ルールを決める', sub: (() => { const n = CUSTOMS.filter(c => custOf(this.g)[c.id]).length; return n ? `${n}個のルール` : 'とくになし'; })() });
     try { if (m.kind !== 'me' && gkStudents(this.g).some(x => x.key === m.key)) { const lv = gkLvOf(m.age); L.unshift({ id: 'school', label: 'スクールライフを見る', sub: `${GK_LV[lv]}${gkGradeOf(lv, m.age)}年生` }); } } catch (e) { }
     L.push({ id: 'hour', label: '1時間すすめる', sub: '自キャラはAIがオートで行動' }, { id: 'h3', label: '3時間すすめる', sub: '自キャラはAIがオートで行動' }, { id: 'day', label: '1日すすめる', sub: '学校・仕事・食事・睡眠までAIまかせ' }, { id: 'help', label: '目線変更について', sub: '' });
     return L;
@@ -17736,6 +17737,9 @@ class MesenScene extends NpbScene {
     const A = agOf(g, m);
     if (id === 'diary') { const L = A.dia.slice(-14).reverse().map(x => `${x.d}日目　${x.t}`); await this.info(`${m.rel}・${m.name}の日記`, L.length ? L : ['まだ何も書かれていない。']); return; }
     if (id === 'secret') { const L = A.sec.slice().reverse().map(x => `・${x.t}`); await this.info(`${m.name}のひみつ`, L.length ? ['（本人は、誰にも話していない）', ...L] : ['いまのところ、ひみつはないようだ。']); return; }
+    if (id === 'cust') { for (;;) { const C = custOf(g); const k = await this.pick('家の風習・ルール（配偶者と子どもに適用）', CUSTOMS.map(c => ({ label: c.n, right: C[c.id] ? 'ON' : 'OFF' })), { note: CUSTOMS.map(c => `${c.n}：${c.d}`).join('\n') }); if (k < 0) return; C[CUSTOMS[k].id] = C[CUSTOMS[k].id] ? 0 : 1; this.say(`「${CUSTOMS[k].n}」を${C[CUSTOMS[k].id] ? 'わが家のルールにした' : 'やめた'}`); } }
+    if (id === 'hy') { await this.info(`${m.name}の歯とからだの衛生`, hyLines(g, m, A)); return; }
+    if (id === 'dent') { await this.info('歯医者', hyDentist(g, m, A)); return; }
     if (id === 'sx') { await this.info(`${m.name}のからだと性のこと`, sxLines(g, m, A)); return; }
     if (id === 'sxtalk') { await this.info('家族で話す', sxTalk(g, m, A)); return; }
     if (id === 'rel') { await this.info(`${m.name}の、家族への気持ち`, relLines(g, m, A)); return; }
@@ -18004,6 +18008,81 @@ function sxTalk(g, m, A) {
   X.contra = clamp(X.contra + 4, 0, 100); X.sti = clamp(X.sti + 4, 0, 100);
   return 'パートナーとの関係のこと、検査を受けることの大切さ――大人どうし、まじめに話した。\n（避妊・性感染症の予防の知識が少し上がった）';
 }
+// ===== 家の風習・ルールと、歯・からだの衛生 =====
+const CUSTOMS = [
+  { id: 'noBrush', n: '歯みがきをしない', d: '「歯みがきは、うちではしない」。虫歯と歯ぐきの病気が増える。', bad: 1 },
+  { id: 'noBath', n: 'お風呂に入らない', d: '週に一度も入らない家。からだが汚れ、においで学校でからかわれやすくなる。', bad: 1 },
+  { id: 'noWash', n: '手を洗わない', d: 'トイレのあとも食事の前も洗わない。風邪や胃腸炎にかかりやすい。', bad: 1 },
+  { id: 'rule3', n: '3秒ルール（落とした物も食べる）', d: '床に落ちても3秒以内ならセーフ。おなかをこわしやすい。', bad: 1 },
+  { id: 'shoesIn', n: '家の中でも靴をはく', d: '外の汚れが家じゅうに。少しだけ病気になりやすい。', bad: 1 },
+  { id: 'towel', n: 'タオルを家族で使い回す', d: 'だれかが病気になると、家族にうつりやすい。', bad: 1 },
+  { id: 'sweets', n: '毎日ジュースとお菓子', d: '冷蔵庫にはいつもジュース。虫歯になりやすい。', bad: 1 },
+  { id: 'gargle', n: '帰ったら手洗い・うがい', d: '玄関に消毒液。病気になりにくい。' },
+  { id: 'floss', n: '寝る前の仕上げみがき・フロス', d: '歯がじょうぶに育つ。' },
+  { id: 'morning', n: '毎朝シャワー', d: 'いつも清潔。' },
+];
+function custOf(g) { const M = msn(g); M.cust = isObj(M.cust) ? M.cust : {}; return M.cust; }
+const inHouse = m => m.kind === 'sp' || m.kind === 'kid';
+// 実家（親・祖父母・きょうだい）は、その家の風習をもっている
+function custFor(g, m, A) {
+  if (inHouse(m)) return custOf(g);
+  if (!isObj(A.cust0)) { const R = sRand(hashStr('cust' + (g.state.profile && g.state.profile.familyName || '') + (m.kind === 'gp' ? 'gp' : 'pa'))); A.cust0 = {}; for (const c of CUSTOMS) if (R() < (c.bad ? 0.06 : 0.3)) A.cust0[c.id] = 1; }
+  return A.cust0;
+}
+function hyOf(A, m) {
+  let H = A.hy;
+  if (!isObj(H)) { const R = sRand(A.seed + 4242), a = num(m && m.age, 20); H = A.hy = { cav: a < 4 ? 0 : Math.floor(R() * Math.min(4, a / 8)), fixed: a >= 20 ? Math.floor(R() * 5) : 0, lost: a >= 70 ? Math.floor(R() * 10) : 0, gum: 80 - Math.max(0, a - 40) * 0.6, clean: 80, hand: 70, sick: 0, sickN: 0, sickWhat: '' }; }
+  return H;
+}
+function hyTick(g, m, A, sickNow) {
+  const C = custFor(g, m, A), H = hyOf(A, m), a = m.age, baby = A.role === 'baby';
+  // 歯
+  if (a >= 1) {
+    let p = 0.0006 + (C.noBrush ? 0.010 : 0) + (C.sweets ? 0.004 : 0) - (C.floss ? 0.0004 : 0) + (a < 13 ? 0.001 : 0);
+    if (chance(Math.max(0.0001, p))) { H.cav++; if (H.cav === 3) addDia(A, g, a < 10 ? '歯がいたくて、ごはんが食べられない。' : '奥歯がずきずきする。冷たい水がしみる。', -6); }
+    H.gum = clamp(H.gum + (C.noBrush ? -0.25 : 0.08) - (a >= 50 ? 0.02 : 0), 5, 100);
+    if (H.cav >= 6 && chance(0.004)) { H.cav--; H.lost++; addDia(A, g, '歯が1本、抜けてしまった。', -8); }
+  }
+  // からだ
+  const tc = C.noBath ? 8 : C.morning ? 95 : 82; H.clean = clamp(H.clean + (C.noBath ? -7 : (tc - H.clean) * 0.5) - (C.shoesIn ? 1 : 0), 0, 100);
+  const th = C.noWash ? 18 : C.gargle ? 92 : 72; H.hand = clamp(H.hand + (th - H.hand) * 0.3, 0, 100);
+  // 病気
+  if (H.sick > 0) { H.sick--; if (!H.sick) addDia(A, g, `${H.sickWhat}が治った。`, 4); return; }
+  let ps = 0.003 + (H.hand < 40 ? 0.010 : 0) + (C.rule3 ? 0.004 : 0) + (C.shoesIn ? 0.002 : 0) - (C.gargle ? 0.0015 : 0) + (baby ? 0.002 : 0) + (C.towel && sickNow ? 0.06 : 0);
+  if (chance(ps)) { const what = C.rule3 && chance(0.5) || chance(0.25) ? '胃腸炎' : chance(0.15) ? 'インフルエンザ' : '風邪'; H.sick = ri(2, what === 'インフルエンザ' ? 6 : 4); H.sickN++; H.sickWhat = what; A.hp = clamp(num(A.hp) - 12, 0, 100); addDia(A, g, `${what}にかかった。${what === '胃腸炎' ? 'トイレから出られない。' : '熱でぼーっとする。'}${C.towel && sickNow ? '（家族からうつったらしい）' : ''}`, -6); }
+}
+function hyFamilyTick(g, R0) {
+  const sickNow = R0.some(m => inHouse(m) && num(hyOf(agOf(g, m), m).sick) > 0);
+  for (const m of R0) {
+    const A = agOf(g, m); try { hyTick(g, m, A, sickNow); } catch (e) { console.error('[hy]', e); }
+    // 学校：においでからかわれる
+    const H = A.hy, S = g.state.gakkoF && g.state.gakkoF[m.key];
+    if (S && H && H.clean < 30 && !S.bully && chance(0.012)) { const by = (S.cls || []).filter(c => ['youkya', 'yankee'].includes(c.a))[0]; S.bully = { lv: 1, nick: 'くさいやつ', by: by ? by.n : '同級生', since: g.state.day }; S.log.push({ d: g.state.day, t: '【におい】' }); addDia(A, g, '「なんか、くさくない？」――みんなが、こっちを見て鼻をつまんだ。', -10); }
+    if (S && H && H.cav >= 5 && chance(0.004)) addDia(A, g, '歯科検診で、先生が顔をしかめた。「おうちの人に、歯医者さんに連れていってもらってね」', -4);
+  }
+}
+const smellOf = c => c >= 60 ? 'ふつう' : c >= 35 ? '少しにおう' : c >= 15 ? 'においが気になる' : 'かなりにおう';
+function hyLines(g, m, A) {
+  const H = hyOf(A, m), C = custFor(g, m, A), on = CUSTOMS.filter(c => C[c.id]).map(c => c.n);
+  const L = [];
+  L.push(`${inHouse(m) ? 'わが家' : '実家'}の風習：${on.length ? on.join('・') : 'とくになし'}`);
+  if (m.age < 1) L.push('歯：まだ生えていない'); else L.push(`歯：虫歯 ${H.cav}本${H.fixed ? `／治療済み ${H.fixed}本` : ''}${H.lost ? `／抜けた歯 ${H.lost}本` : ''}`);
+  if (m.age >= 1) L.push(`歯ぐき　　　${sxBar(H.gum)}`);
+  L.push(`からだの清潔 ${sxBar(H.clean)}`); L.push(`におい：${smellOf(H.clean)}`);
+  L.push(`手の衛生　　${sxBar(H.hand)}`);
+  L.push(H.sick > 0 ? `いま：${H.sickWhat}で寝こんでいる（あと${H.sick}日くらい）` : `これまでにかかった病気：${H.sickN}回`);
+  if (H.cav >= 3) L.push('（虫歯が多い。歯医者に連れていこう）');
+  return L;
+}
+function hyDentist(g, m, A) {
+  const H = hyOf(A, m);
+  if (!H.cav) return '虫歯はない。定期検診で「きれいにみがけていますね」と言われた。';
+  const cost = 3000 * H.cav; if (!g.spend || !g.spend(cost)) return `治療費（${yen(cost)}）が足りない……。`;
+  try { g.advanceTime(90, 'np_dentist'); } catch (e) { }
+  const n = H.cav; H.fixed += n; H.cav = 0; A.hp = clamp(num(A.hp) + 4, 0, 100);
+  addDia(A, g, n >= 4 ? `歯医者で${n}本も治療した。ドリルの音が、まだ耳に残っている。` : '歯医者に行った。思ったより痛くなかった。', n >= 4 ? -2 : 2);
+  return `歯医者に連れていった。虫歯${n}本を治療した（${yen(cost)}）。${custFor(g, m, A).noBrush ? '\n歯医者さん「おうちで歯みがき、していますか？」……答えられなかった。' : ''}`;
+}
 
 // ===== スマホ整理（フォルダ）・AIアシスタント =====
 const FOLDERS = [
@@ -18112,7 +18191,7 @@ function aiTips(g) {
   if (st.rent && num(st.rent.debt, 0) > 0) add(3, `家賃を${yen(st.rent.debt)}滞納しています。`);
   try { const n = g.unread(); if (n) add(1, `未読メッセージが${n}件あります。`); } catch (e) { }
   try { if (isHS(g)) { const K = gko(g); if (K.bully) add(3, 'いじめを受けています。大人に相談しても、動いてくれないことは多い。それでも日付つきで記録を残しておくこと。それが、いつか自分を守る。'); if (K.mood < 30) add(3, 'こころの元気がほとんど残っていません。24時間子供SOSダイヤル 0120-0-78310。'); if (K.att < 40) add(2, '授業態度が低すぎます。このままだと内申点が危ない。'); } } catch (e) { }
-  try { for (const m of famRoster(g)) { const A = agOf(g, m); if (A.futoko) add(3, `${m.rel}・${m.name}が学校に行けていません。（目線で確認）`); else if (A.bully >= 2) add(3, `${m.rel}・${m.name}は学校でいじめられています。本人は隠しています。`); else if (A.mood < 25) add(2, `${m.rel}・${m.name}がかなり落ちこんでいます。`); if (m.kind === 'sp' && A.op < 25) add(3, `${m.rel}の気持ちが、離れかけています。`); } } catch (e) { }
+  try { for (const m of famRoster(g)) { const A = agOf(g, m); if (A.futoko) add(3, `${m.rel}・${m.name}が学校に行けていません。（目線で確認）`); else if (A.bully >= 2) add(3, `${m.rel}・${m.name}は学校でいじめられています。本人は隠しています。`); else if (A.mood < 25) add(2, `${m.rel}・${m.name}がかなり落ちこんでいます。`); if (A.hy && A.hy.cav >= 3) add(2, `${m.rel}・${m.name}に虫歯が${A.hy.cav}本あります。（目線→歯医者に連れていく）`); if (A.hy && A.hy.clean < 25) add(2, `${m.rel}・${m.name}のからだのにおいが強くなっています。`); if (m.kind === 'sp' && A.op < 25) add(3, `${m.rel}の気持ちが、離れかけています。`); } } catch (e) { }
   if (me.neet) add(2, '仕事も学校もない状態です。家族の本音は「目線」で確かめられます。…見ないほうがいいかもしれません。');
   if (!T.length) add(0, 'いまのところ、気になることはありません。');
   return T.sort((a, b) => b.lv - a.lv);
