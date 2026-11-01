@@ -13005,7 +13005,7 @@ async function eatMenu(g, title, rows, host) {
 function regStadium(pid, sid, city) {
   const S = STADIUMS[sid], T = S.team && TEAM[S.team];
   const floor = 'floor_concrete';
-  E.qn({ id: pid, name: S.name, kind: 'building', bgm: 'machi_shop', start: { room: 'gate', x: 8, y: 7, dir: 'up' }, rooms: {
+  const DEF = { id: pid, name: S.name, kind: 'building', bgm: 'machi_shop', start: { room: 'gate', x: 8, y: 7, dir: 'up' }, rooms: {
     gate: { floor, wall: 'gray', tiles: ['#################', '#=p=====L=====p=#', '#.KKK.......GGG.#', '#...............#', '#.SS.........FF.#', '#...............#', '#...............#', '#...............#', '########MM#######'], legend: { K: 'toho_counter_tix', G: 'grape_shelf', S: 'yoshimoto_bench', F: 'fridge_drinks', L: 'wall_gray+poster_wide' }, warps: [{ x: 8, y: 8, to: 'exit' }, { x: 9, y: 8, to: 'exit' }, { x: 8, y: 1, room: 'field', tx: 9, ty: 9, dir: 'up', check: async g => stadiumFieldOK(g, sid) }],
       entities: [
         ...(T ? [{ type: 'logo', x: 7.4, y: 0.9, w: 2.2, h: 1.1, logo: 'npb_' + S.team, text: `${T.name}のロゴだ。` }] : []),
@@ -13017,7 +13017,9 @@ function regStadium(pid, sid, city) {
     field: { floor: 'nagatacho_lawn', wall: 'green', tiles: ['###################', '#sssssssssssssssss#', '#sssssssssssssssss#', '#.................#', '#.................#', '#......ddddd......#', '#.....ddddddd.....#', '#......ddddd......#', '#.................#', '#.................#', '#########MM########'], legend: { s: 'seat', d: 'toei_dirt' }, warps: [{ x: 9, y: 10, room: 'gate', tx: 8, ty: 2, dir: 'down' }, { x: 10, y: 10, room: 'gate', tx: 8, ty: 2, dir: 'down' }],
       entities: [{ type: 'npc', id: pid + '_coach', x: 12, y: 8, dir: 'left', look: { ...W_LOOK.man, top: T ? T.color : '#3a6a3a', hat: T ? T.color : '#3a6a3a' }, name: 'コーチ', talk: async g => fieldPractice(g, sid) }],
       events: [{ x: 8, y: 6, w: 3, on: 'action', run: async g => g.say(['マウンドだ。', `${S.dome ? 'ドームの天井が、はるか上に見える。' : '見上げると、大きな空とスタンド。'}`]) }] },
-  } });
+  } };
+  try { DEF.rooms.gate = interiorDomeGate(pid, sid, S, T, DEF.rooms.gate); DEF.start = { room: 'gate', x: 12, y: 11, dir: 'up' }; DEF.rooms.field.warps.forEach(w => { if (w.room === 'gate') { w.tx = 12; w.ty = 2; } }); } catch (e) { console.error('[interior] dome', e); }
+  E.qn(DEF);
 }
 const N_ = g => { try { return getN(g, false); } catch (e) { return null; } };
 function standLines(g, S) {
@@ -13129,6 +13131,7 @@ function patchMachi() {
   M.rooms.main.__npb = true;
 }
 function installWorld() {
+  try { installInterior(); } catch (e) { console.error('[interior] install', e); }
   try { regLogos(); } catch (e) { console.error('[npb] logos', e); }
   try { for (const k of Object.keys(BRANDS)) regBrandShop(k); regClinic('machi_clinic'); patchMachi(); } catch (e) { console.error('[npb] shops', e); }
   try { for (const c of CITIES) mkTown(c); } catch (e) { console.error('[npb] towns', e); }
@@ -13161,6 +13164,7 @@ function regCompany(pid, key, city) {
   const floor = co.type === 'netcafe' ? 'floor_carpet_gray' : co.type === 'play' ? 'floor_carpet_blue' : co.type === 'factory' ? 'floor_concrete' : 'floor_tile';
   const tiles = co.type === 'factory' ? ['#############', '#==L==w==w==#', '#.KKKKKKKKK.#', '#...........#', '#.GGGG.GGGG.#', '#...........#', '#...........#', '#...........#', '######MM#####'] : co.type === 'clothes' ? ['#############', '#==L==w==w==#', '#.RR...GG.GG#', '#...........#', '#.GG.GG.GG..#', '#...........#', '#.GG.GG.GG..#', '#...........#', '######MM#####'] : co.type === 'play' ? ['#############', '#==L==w==w==#', '#.RR..AA.AA.#', '#...........#', '#.AA.AA.AA..#', '#...........#', '#.AA.AA.AA..#', '#...........#', '######MM#####'] : co.type === 'netcafe' || co.type === 'relax' ? ['#############', '#==L==w==w==#', '#.RR....BB..#', '#...........#', '#.SS.SS.SS..#', '#...........#', '#.SS.SS.SS..#', '#...........#', '######MM#####'] : ['#############', '#==L==w==w=c#', '#KKKK.....FF#', '#CCCC.......#', '#...........#', '#.tt..tt.tt.#', '#...........#', '#.tt..tt.tt.#', '######MM#####'];
   const ev = async g => companyAct(g, key, host);
+  try { const R = interiorCompany(pid, key, city, host, ev); if (R) { E.qn({ id: pid, name: co.name, kind: 'building', bgm: co.type === 'play' ? 'night' : 'machi_shop', start: { room: 'main', x: 9, y: R.tiles.length - 2, dir: 'up' }, rooms: { main: R } }); return; } } catch (e) { console.error('[interior]', key, e); }
   const hx = co.type === 'factory' ? 6 : co.type === 'eat' ? 3 : 2;
   E.qn({ id: pid, name: co.name, kind: 'building', bgm: co.type === 'play' ? 'night' : 'machi_shop', start: { room: 'main', x: 6, y: 7, dir: 'up' }, rooms: { main: { floor, wall: co.type === 'play' ? 'navy' : 'white', tiles, legend: { K: co.type === 'factory' ? 'counter_white' : 'kitchen', C: 'counter', F: 'fridge_drinks', t: 'table', R: 'register', G: 'shelf_goods', A: 'desk_pc', S: co.type === 'relax' ? 'bed_top' : 'desk_pc', B: 'bookshelf', L: `wall_${co.type === 'play' ? 'navy' : 'white'}+poster` }, warps: [{ x: 6, y: 8, to: 'exit' }, { x: 7, y: 8, to: 'exit' }],
     entities: [{ type: 'logo', x: 2.4, y: 0.9, w: 2.2, h: 1.1, logo: 'w_' + key, text: `「${co.name}」の看板だ。` }, { type: 'npc', id: pid + '_host', x: hx, y: co.type === 'factory' ? 3 : 2, dir: 'down', look: host.look, name: host.name, talk: ev }, { type: 'npc', id: pid + '_guest', x: 9, y: 5, dir: 'left', look: W_LOOK.woman, name: 'お客さん', wander: 1, text: [`${city.short}にも${co.name}があってよかった。`] }],
@@ -15889,8 +15893,46 @@ const NEEDS = {
 const SOS = '24時間子供SOSダイヤル 0120-0-78310（なやみ言おう）';
 const sy = g => dateOf(g, g.state.day);
 const fyOf = d => (d.month >= 4 ? d.year : d.year - 1);
-function isHS(g) { try { return E.bu ? E.bu(g) === 'high' : (lsOf(g) && lsOf(g).high && !lsOf(g).high.grad); } catch (e) { return false; } }
-function gkName(g) { try { const pr = E.Bf(g.state); return { fam: pr.familyName || 'ドット', giv: pr.givenName || '', gender: pr.gender || 'x' }; } catch (e) { return { fam: 'ドット', giv: '', gender: 'x' }; } }
+function isHS(g) { if (GK_CTX) { const K = GK_CTX.K; return !!(K && !K.left); } try { return E.bu ? E.bu(g) === 'high' : (lsOf(g) && lsOf(g).high && !lsOf(g).high.grad); } catch (e) { return false; } }
+// ---- だれのスクールライフか（自分／子ども・弟妹） ----
+let GK_CTX = null;
+const GK_LV = { elem: '小学', jhs: '中学', hs: '高校' };
+function gkLvOf(age) { age = num(age, -1); return age >= 6 && age <= 11 ? 'elem' : age >= 12 && age <= 14 ? 'jhs' : age >= 15 && age <= 17 ? 'hs' : null; }
+function gkGradeOf(lv, age) { return lv === 'elem' ? clamp(age - 5, 1, 6) : lv === 'jhs' ? clamp(age - 11, 1, 3) : clamp(age - 14, 1, 3); }
+function gkStudents(g) { try { return famRoster(g).filter(m => (m.kind === 'kid' || m.frel === 'brother_younger' || m.frel === 'sister_younger') && gkLvOf(m.age)); } catch (e) { return []; } }
+function gkStore(g) { const st = g.state; if (!isObj(st.gakkoF)) st.gakkoF = {}; return st.gakkoF; }
+function gkUse(g, key) {
+  if (!key) { GK_CTX = null; return null; }
+  if (GK_CTX && GK_CTX.key === key && GK_CTX.day === g.state.day && GK_CTX.K && g.state.gakkoF && g.state.gakkoF[key] === GK_CTX.K) return GK_CTX.K;
+  const m = gkStudents(g).find(x => x.key === key); if (!m) { GK_CTX = null; return null; }
+  const S = gkStore(g), lv = gkLvOf(m.age), A = agOf(g, m);
+  GK_CTX = { key, m, A, lv, grade: gkGradeOf(lv, m.age), K: null, day: g.state.day };
+  let K = S[key];
+  if (!isObj(K) || K.lv !== lv) {
+    const prev = isObj(K) ? K : null;
+    K = gkInit(g);
+    if (prev) { K.fls.stats = prev.fls.stats; K.past = (prev.past || []).concat([{ lv: prev.lv, school: prev.school, left: prev.left ? prev.left.kind : null }]); K.opt = prev.opt || K.opt; K.looks = prev.looks; K.ht = prev.ht; }
+    S[key] = K;
+  }
+  GK_CTX.K = K;
+  return K;
+}
+function gkWith(g, key, fn) { const prev = GK_CTX; try { gkUse(g, key); return fn(GK_CTX && GK_CTX.K); } finally { GK_CTX = prev; } }
+function gkWho(g) { return GK_CTX ? GK_CTX.m : null; }
+function gkLs(g) { return GK_CTX ? (GK_CTX.K && GK_CTX.K.fls) : lsOf(g); }
+function gkGrade(g) { if (GK_CTX) return GK_CTX.K && !GK_CTX.K.left ? GK_CTX.grade : 0; return hsGrade(g); }
+function gkSh(g, x) { if (GK_CTX) { const A = GK_CTX.A; if (A) A.stress = clamp(num(A.stress) + num(x), 0, 100); return; } E.sh(g, x); }
+function gkHist(g, t, k) { if (GK_CTX) { try { addDia(GK_CTX.A, g, t); } catch (e) { } return; } hist(g, t, k); }
+function gkHoliday(d) { const m = d.month, x = d.dom; return m === 8 || (m === 7 && x >= 21) || (m === 12 && x >= 25) || (m === 1 && x <= 7) || (m === 3 && x >= 25) || (m === 4 && x <= 5); }
+function gkSched(g, yd) {
+  if (!GK_CTX) { try { return E.cg ? E.cg(g, yd) : null; } catch (e) { return null; } }
+  const wd = ((wdOf(g) - (g.state.day - yd)) % 7 + 7) % 7;
+  return wd < 5 && !gkHoliday(dateOf(g, yd)) ? { kind: 'school', label: '学校', start: 510, end: GK_CTX.lv === 'elem' ? 900 : 930 } : null;
+}
+function gkTime(g, min, tag) { if (GK_CTX) return; try { g.advanceTime(min, tag); } catch (e) { } }
+function gkStressV(g) { if (GK_CTX) return num(GK_CTX.A && GK_CTX.A.stress, 30); try { return num(g.state.life.stress, 30); } catch (e) { return 30; } }
+function gkLvName(g) { return GK_CTX ? GK_LV[GK_CTX.lv] : '高校'; }
+function gkName(g) { if (GK_CTX) { const m = GK_CTX.m, p = (() => { try { return E.Bf(g.state); } catch (e) { return {}; } })(), sp = String(m.name || '').split(' '); return { fam: sp.length > 1 ? sp[0] : (p.familyName || 'ドット'), giv: sp[sp.length - 1], gender: m.g === 'f' ? 'f' : 'm' }; } try { const pr = E.Bf(g.state); return { fam: pr.familyName || 'ドット', giv: pr.givenName || '', gender: pr.gender || 'x' }; } catch (e) { return { fam: 'ドット', giv: '', gender: 'x' }; } }
 // ---- 名前つきのクラスメイト（提供キャラ） ----
 const NAMED_CM = [
   { key: 'N_taiga', n: '篠原 大河', f: false, a: 'youkya', note: '明るく元気なクラスのムードメーカー。野球部でエースを目指す。' },
@@ -15902,7 +15944,7 @@ const NAMED_CM = [
 ];
 const NAMED_HD = {}; NAMED_CM.forEach(N => { NAMED_HD[N.n] = N.key; });
 function gkNamed(K) {
-  if (!K || K.namedV >= 2 || !Array.isArray(K.cls) || !K.cls.length) return;
+  if (!K || K.namedV >= 2 || !Array.isArray(K.cls) || !K.cls.length || (K.lv && K.lv !== 'hs')) return;
   K.namedV = 2;
   const used = new Set(), ok = c => !used.has(c.id) && !c.named && !(K.bully && K.bully.by === c.n);
   for (const N of NAMED_CM) {
@@ -15915,8 +15957,9 @@ function gkNamed(K) {
 // ---- 学校の状態 ----
 function gko(g, create = true) {
   const st = g && g.state; if (!st) return null;
-  let K = st.gakko;
-  if (!isObj(K)) { if (!create) return null; K = st.gakko = gkInit(g); }
+  let K;
+  if (GK_CTX) { K = GK_CTX.K; if (!K) return null; }
+  else { K = st.gakko; if (!isObj(K)) { if (!create) return null; K = st.gakko = gkInit(g); } }
   K.tests = Array.isArray(K.tests) ? K.tests : []; K.hyo = Array.isArray(K.hyo) ? K.hyo : []; K.cls = Array.isArray(K.cls) ? K.cls : []; K.hm = Array.isArray(K.hm) ? K.hm : [];
   gkNamed(K);
   K.evq = Array.isArray(K.evq) ? K.evq : []; K.done = isObj(K.done) ? K.done : {}; K.log = Array.isArray(K.log) ? K.log : []; K.opt = isObj(K.opt) ? K.opt : { ev: 'auto' };
@@ -15924,11 +15967,17 @@ function gko(g, create = true) {
 }
 function gkInit(g) {
   const nm = gkName(g), f = nm.gender === 'f', d = sy(g);
-  const K = { v: 1, made: g.state.day, fy: fyOf(d), school: `${pick(AMA_CITY)}${pick(['高校', '学園高校', '第一高校', '北高校', '南高校'])}`,
-    uni: chance(0.25) ? (f ? 'sailor' : 'gakuran') : 'blazer', f, ht: Math.round(f ? 157 + gauss() * 5.5 : 169 + gauss() * 6.5), looks: clamp(Math.round(50 + gauss() * 14), 15, 92),
+  const K = { v: 1, made: g.state.day, fy: fyOf(d), school: `${pick(AMA_CITY)}${pick(GK_CTX ? { elem: ['小学校', '第一小学校', '東小学校', '西小学校', '南小学校'], jhs: ['中学校', '第一中学校', '北中学校', '東中学校', '学園中学校'], hs: ['高校', '学園高校', '第一高校', '北高校', '南高校'] }[GK_CTX.lv] : ['高校', '学園高校', '第一高校', '北高校', '南高校'])}`,
+    uni: GK_CTX && GK_CTX.lv === 'elem' ? 'casual' : chance(GK_CTX && GK_CTX.lv === 'jhs' ? 0.6 : 0.25) ? (f ? 'sailor' : 'gakuran') : 'blazer', f, ht: Math.round(f ? 157 + gauss() * 5.5 : 169 + gauss() * 6.5), looks: clamp(Math.round(50 + gauss() * 14), 15, 92),
     rep: 50, att: 60, mood: 70, rei: 10, virtue: 50, policy: 'serious', otaku: null, absY: 0, absStreak: 0, futoko: false, dep: 0, lowDays: 0, susp: null, suspN: 0, bully: null, signLang: 0, hmEst: false, hmVisit: 0, counsel: 0, clinic: 0, studyN: 0, cheat: false, hensa: [] };
   K.cls = genClass(f);
   K.hm = genHimawari();
+  if (GK_CTX) {
+    const A = GK_CTX.A || {}, ar = A.arch || 'futsu', R = () => Math.round(gauss() * 8), age = num(GK_CTX.m.age, 10);
+    K.lv = GK_CTX.lv; K.who = GK_CTX.key; K.opt = { ev: 'app' }; K.policy = 'serious';
+    K.ht = Math.round((f ? 157 : 169) - Math.max(0, 16 - age) * (age < 12 ? 6.5 : 4) + gauss() * 5);
+    K.fls = { stats: { gaku: clamp(45 + R(), 5, 95), tai: clamp(48 + R(), 5, 95), kan: clamp(45 + R(), 5, 95), yu: clamp((ar === 'youkya' ? 68 : ar === 'inkya' ? 30 : 48) + R(), 5, 95), sei: clamp(30 + R(), 5, 95), ken: 75 }, high: { type: 'futsu', entry: fyOf(d) - GK_CTX.grade + 1, club: null, cram: false, plan: null, exam: null, grad: false } };
+  }
   return K;
 }
 function genClass(f) {
@@ -15941,8 +15990,8 @@ function genClass(f) {
 }
 function genHimawari() { return ['wheel', 'hear', 'asd', 'ld', 'down'].sort(() => RND() - 0.5).slice(0, 4).map((nd, i) => ({ id: 'h' + i, n: `${pick(SURN)} ${chance(0.5) ? pick(GIVN_F) : pick(GIVN)}`, nd, aff: 10 })); }
 // ---- ラベル（あだ名ではなく、まわりからの見られ方） ----
-function gkStats(g) { const ls = lsOf(g); return (ls && ls.stats) || { gaku: 40, tai: 45, kan: 40, yu: 40, sei: 30, ken: 70 }; }
-function gkLooks(g, K) { let clean = 50; try { clean = num(g.state.life.clean, 50); } catch (e) { } return clamp(K.looks + (clean - 50) * 0.2, 0, 100); }
+function gkStats(g) { const ls = gkLs(g); return (ls && ls.stats) || { gaku: 40, tai: 45, kan: 40, yu: 40, sei: 30, ken: 70 }; }
+function gkLooks(g, K) { let clean = 50; try { if (!GK_CTX) clean = num(g.state.life.clean, 50); } catch (e) { } return clamp(K.looks + (clean - 50) * 0.2, 0, 100); }
 function gkLabels(g, K) {
   const s = gkStats(g), L = [];
   if (s.yu >= 60 && K.rep >= 55) L.push('陽キャ');
@@ -15956,7 +16005,7 @@ function gkLabels(g, K) {
   if (!L.length) L.push('ふつう');
   return L;
 }
-function myCasteScore(g, K) { const s = gkStats(g), ls = lsOf(g), club = ls && ls.high && ls.high.club; return s.yu * 0.45 + gkLooks(g, K) * 0.3 + s.tai * 0.15 + K.rep * 0.2 - K.rei * 0.1 + (['soccer', 'basket', 'yakyu', 'keion'].includes(club) ? 8 : 0); }
+function myCasteScore(g, K) { const s = gkStats(g), ls = gkLs(g), club = ls && ls.high && ls.high.club; return s.yu * 0.45 + gkLooks(g, K) * 0.3 + s.tai * 0.15 + K.rep * 0.2 - K.rei * 0.1 + (['soccer', 'basket', 'yakyu', 'keion'].includes(club) ? 8 : 0); }
 function casteTable(g, K) {
   const rows = K.cls.map(c => ({ id: c.id, n: c.n, a: c.a, sc: c.sc, aff: c.aff, f: c.f })).concat([{ id: 'me', n: 'あなた', a: 'me', sc: myCasteScore(g, K) + 5 }]);
   rows.sort((a, b) => b.sc - a.sc);
@@ -15973,9 +16022,9 @@ function gkAttend(g, ls) {
   const out = [];
   const P = K.policy;
   if (P === 'serious') { K.att = clamp(K.att + 1.6, 0, 100); if (chance(0.35)) out.push(...(E.wu ? E.wu(ls, { gaku: 1 }) : [])); }
-  if (P === 'sleep') { K.att = clamp(K.att - 3, 0, 100); try { E.sh(g, -3); } catch (e) { } }
+  if (P === 'sleep') { K.att = clamp(K.att - 3, 0, 100); try { gkSh(g, -3); } catch (e) { } }
   if (P === 'uchi') { K.att = clamp(K.att - 1.5, 0, 100); if (chance(0.5)) out.push(...(E.wu ? E.wu(ls, { gaku: 1 }) : [])); }
-  if (P === 'phone') { K.att = clamp(K.att - 2, 0, 100); try { E.sh(g, -2); } catch (e) { } if (chance(0.06)) out.push('スマホが見つかって没収された'); }
+  if (P === 'phone') { K.att = clamp(K.att - 2, 0, 100); try { gkSh(g, -2); } catch (e) { } if (chance(0.06)) out.push('スマホが見つかって没収された'); }
   if (P === 'chat') { K.att = clamp(K.att - 1.5, 0, 100); K.rep = clamp(K.rep + 0.6, 0, 100); }
   if (P === 'cold') { K.att = clamp(K.att - 1, 0, 100); K.rei = clamp(K.rei + 0.8, 0, 100); }
   // 友だち
@@ -15984,11 +16033,11 @@ function gkAttend(g, ls) {
   // いじめ
   const B = K.bully;
   if (B && B.lv > 0) {
-    try { E.sh(g, B.lv * 4); } catch (e) { }
+    try { gkSh(g, B.lv * 4); } catch (e) { }
     K.mood = clamp(K.mood - B.lv * 2.2, 0, 100);
     out.push(pick(B.lv === 1 ? [`「${B.nick}」と呼ばれて、笑われた`, '机の上にいたずら書きがあった'] : B.lv === 2 ? ['話しかけても、誰も返事をしてくれない', '上ばきが、またなくなっていた'] : [sy(g).year >= 2012 ? 'グループLINEで、悪口が回っていた' : sy(g).year >= 2007 ? '学校裏サイトに、悪口が書きこまれていた' : '帰り道、待ち伏せされて小づかれた', '持ち物を壊された', '教科書がゴミ箱に捨てられていた', 'わざと聞こえるように悪口を言われた']));
   }
-  if (num(K.dep) >= 2) { try { E.sh(g, 3); } catch (e) { } }
+  if (num(K.dep) >= 2) { try { gkSh(g, 3); } catch (e) { } }
   try { aiSchoolTick(g, K); } catch (e) { console.error('[school] ai', e); }
   if (chance(0.12)) out.push(nz(g, K, NZ_ATTEND.harsh, NZ_ATTEND.kind, NZ_ATTEND.plain));
   if (K.futoko) { K.futoko = false; K.backDay = d; gkNote(g, '【また学校へ】\n久しぶりに、教室のドアを開けた。……来られた。それだけで、今日は十分だ。'); gkEv(g, 'sc_return'); }
@@ -15996,25 +16045,25 @@ function gkAttend(g, ls) {
 }
 // ---- 毎朝の処理 ----
 function gkMorning(g) {
-  const ls = lsOf(g);
+  const ls = gkLs(g);
   if (!isHS(g)) { const K0 = gko(g, false); if (K0 && !K0.left && ls && ls.high && ls.high.grad && !K0.gradDone) { K0.gradDone = 1; gkEv(g, 'sc_grad'); } return; }
-  const K = gko(g); const d = sy(g), md = mdOf(d), day = g.state.day, fy = fyOf(d), grade = hsGrade(g) || 1;
-  hookAutoEv(g);
+  const K = gko(g); const d = sy(g), md = mdOf(d), day = g.state.day, fy = fyOf(d), grade = gkGrade(g) || 1;
+  if (!GK_CTX) hookAutoEv(g);
   if (K.fy !== fy) { K.fy = fy; K.absY = 0; if (grade > 1 && chance(0.6)) { K.cls = genClass(K.f); gkNote(g, '【クラス替え】\n新しいクラス。教室の空気は、最初の一週間で決まる。'); gkEv(g, 'sc_classchange'); } }
   if (!K.welcomed) { K.welcomed = 1; gkEv(g, 'sc_first'); }
   // 停学
   if (K.susp && day > K.susp.until) { gkNote(g, '【停学明け】\n停学期間が終わった。……明日から、また学校だ。'); K.susp = null; }
   // 欠席・不登校
   const yd = day - 1;
-  let sched = null; try { sched = E.cg ? E.cg(g, yd) : null; } catch (e) { }
+  let sched = null; try { sched = gkSched(g, yd); } catch (e) { }
   if (sched && sched.kind === 'school' && K.attDay !== yd && !(K.susp && yd <= K.susp.until) && K.lastCheck !== yd) {
     K.absY++; K.absStreak++; K.att = clamp(K.att - 1, 0, 100);
     const term = d.year < 1998 ? '登校拒否' : '不登校';
-    if (!K.futoko && (K.absStreak >= 6 || K.absY >= 30)) { K.futoko = true; K.futokoN = num(K.futokoN) + 1; gkNote(g, `【${term}】\n朝になると、体が動かない。気づけば、もう${K.absStreak}日、学校に行っていない。\n（休むことは逃げじゃない。保健室登校や、スクールカウンセラー、通信制への転校という道もある）`); gkEv(g, 'sc_futoko'); hist(g, `学校に行けない日が続いた（${term}）`, 'school'); }
+    if (!K.futoko && (K.absStreak >= 6 || K.absY >= 30)) { K.futoko = true; K.futokoN = num(K.futokoN) + 1; gkNote(g, `【${term}】\n朝になると、体が動かない。気づけば、もう${K.absStreak}日、学校に行っていない。\n（休むことは逃げじゃない。保健室登校や、スクールカウンセラー、通信制への転校という道もある）`); gkEv(g, 'sc_futoko'); gkHist(g, `学校に行けない日が続いた（${term}）`, 'school'); }
   }
   K.lastCheck = yd;
   // こころ
-  let stress = 30; try { stress = num(g.state.life.stress, 30); } catch (e) { }
+  const stress = gkStressV(g);
   K.mood = clamp(K.mood + (60 - K.mood) * 0.03 + friendsN(K) * 0.15 - (stress > 80 ? 1.6 : stress > 60 ? 0.5 : 0) - (K.absStreak > 3 ? 0.4 : 0) - K.rei * 0.006, 0, 100);
   if (K.mood < 25) K.lowDays++; else K.lowDays = Math.max(0, K.lowDays - 2);
   const dep0 = K.dep;
@@ -16034,11 +16083,12 @@ function gkMorning(g) {
     if (!K.bully && tier <= 1 && chance(0.06)) gkEv(g, 'sc_witness');
   }
   // 定期テスト
-  const TESTS = [['t1m', 46, '1学期中間テスト'], ['t1e', 60, '1学期期末テスト'], ['t2m', 94, '2学期中間テスト'], ['t2e', 110, '2学期期末テスト'], ['t3e', grade >= 3 ? 12 : 18, '学年末テスト']];
+  const TESTS = GK_CTX && GK_CTX.lv === 'elem' ? [['t1e', 60, '1学期のまとめテスト'], ['t2e', 110, '2学期のまとめテスト'], ['t3e', 18, '学年末のまとめテスト']] : [['t1m', 46, '1学期中間テスト'], ['t1e', 60, '1学期期末テスト'], ['t2m', 94, '2学期中間テスト'], ['t2e', 110, '2学期期末テスト'], ['t3e', grade >= 3 ? 12 : 18, '学年末テスト']];
   for (const [k, m, label] of TESTS) { const key = `${fy}_${k}`; if (!K.done[key] && md >= m && (k !== 't3e' || md < 30) && !(k !== 't3e' && md >= 30 && md < m - 10 && false)) { if (k === 't3e' ? (d.month <= 3) : (d.month >= 4 || d.month >= 10)) { K.done[key] = 1; gkTest(g, K, label, k); } } }
   // 模試・推薦
-  if (grade >= 2 && [70, 98].some(m => md >= m && !K.done[`${fy}_moshi${m}`] && (K.done[`${fy}_moshi${m}`] = 1))) gkMoshi(g, K);
-  if (grade >= 3 && md >= 100 && md < 115 && !K.done[`${fy}_suisen`]) { K.done[`${fy}_suisen`] = 1; gkSuisen(g, K, ls); }
+  if (!(GK_CTX && GK_CTX.lv === 'elem') && grade >= 2 && [70, 98].some(m => md >= m && !K.done[`${fy}_moshi${m}`] && (K.done[`${fy}_moshi${m}`] = 1))) gkMoshi(g, K);
+  if (GK_CTX && GK_CTX.lv !== 'hs') { if (((GK_CTX.lv === 'jhs' && grade >= 3) || (GK_CTX.lv === 'elem' && grade >= 6)) && md >= 104 && md < 115 && !K.done[`${fy}_juken`]) { K.done[`${fy}_juken`] = 1; gkJuken(g, K); } }
+  else if (grade >= 3 && md >= 100 && md < 115 && !K.done[`${fy}_suisen`]) { K.done[`${fy}_suisen`] = 1; gkSuisen(g, K, ls); }
   // ひまわり学級の設置
   if (!K.hmEst && md >= 50) { K.hmEst = true; gkNote(g, `【ひまわり学級】\n校舎の1階に、${d.year >= 2007 ? '特別支援学級' : '特殊学級'}「ひまわり学級」ができた。障害のある生徒たちが、一人ひとりに合ったペースで学ぶ教室だ。\n（学校アプリの「ひまわり学級」から、交流しに行ける）`); gkEv(g, 'sc_hm_open'); }
   if (chance(0.03) && K.hmVisit > 0 && md >= 50) gkEv(g, 'sc_hm_' + pick(['asd', 'wheel', 'hear', 'mock']));
@@ -16048,20 +16098,22 @@ function gkMorning(g) {
 }
 // ---- テスト・内申 ----
 function gkTest(g, K, label, key) {
-  const s = gkStats(g), ls = lsOf(g), cram = ls && ls.high && ls.high.cram;
+  const s = gkStats(g), ls = gkLs(g), cram = ls && ls.high && ls.high.cram;
   K.bias = K.bias || SUBJ.map(() => Math.round(gauss() * 6));
   let cheated = false, caught = false;
   if (K.cheat) { cheated = true; caught = chance(0.25); }
   const study = Math.min(12, num(K.studyN)); K.studyN = 0;
   const sc = SUBJ.map((n, i) => caught ? 0 : clamp(Math.round(22 + s.gaku * 0.58 + study * 0.9 + K.att * 0.08 + (cram ? 4 : 0) - (K.dep >= 2 ? 10 : K.dep ? 4 : 0) + K.bias[i] + gauss() * 8 + (cheated ? 15 : 0)), 0, 100));
   const tot = sc.reduce((a, b) => a + b, 0), avg = tot / 5;
-  const z = (avg - 55) / 15, rank = clamp(Math.round(200 * (1 - 0.5 * (1 + Math.tanh(z * 0.8)))), 1, 200);
+  const NS = GK_CTX ? { elem: 90, jhs: 160, hs: 200 }[GK_CTX.lv] : 200, z = (avg - 55) / 15, rank = clamp(Math.round(NS * (1 - 0.5 * (1 + Math.tanh(z * 0.8)))), 1, NS);
   K.tests.push({ y: sy(g).year, label, sc, tot, rank }); if (K.tests.length > 20) K.tests.shift();
   // 評定（内申点）
-  const hy = sc.map(v => { const x = v * 0.7 + K.att * 0.3; return x >= 80 ? 5 : x >= 65 ? 4 : x >= 45 ? 3 : x >= 30 ? 2 : 1; });
-  K.hyo.push({ label, hy, avg: hy.reduce((a, b) => a + b, 0) / 5 }); if (K.hyo.length > 15) K.hyo.shift();
+  if (!(GK_CTX && GK_CTX.lv === 'elem')) {
+    const hy = sc.map(v => { const x = v * 0.7 + K.att * 0.3; return x >= 80 ? 5 : x >= 65 ? 4 : x >= 45 ? 3 : x >= 30 ? 2 : 1; });
+    K.hyo.push({ label, hy, avg: hy.reduce((a, b) => a + b, 0) / 5 }); if (K.hyo.length > 15) K.hyo.shift();
+  }
   const red = sc.filter(v => v < 30).length;
-  const lines = [`【${label}】`, SUBJ.map((n, i) => `${n}${sc[i]}`).join('　'), `合計 ${tot}点・学年${rank}位（200人中）${red ? `\n赤点が${red}科目……補習が決まった。` : ''}`];
+  const lines = [`【${label}】`, SUBJ.map((n, i) => `${n}${sc[i]}`).join('　'), `合計 ${tot}点・学年${rank}位（${NS}人中）${red ? `\n赤点が${red}科目……補習が決まった。` : ''}`];
   if (caught) { lines.push('カンニングが見つかった！ 全科目0点、そして停学処分に……。'); gkSuspend(g, K, 5, 'テストでのカンニング'); K.cheat = false; }
   lines.push(rank <= 20 ? nz(g, K, '……だが、それで何かが変わるわけじゃない。廊下ですれ違う誰も、お前の名前を知らない。「ガリ勉」というあだ名が、少し濃くなっただけだ。', '「頭までいいとかズルくない？」――またひとつ、お前の株が上がった。', '悪くない結果だ。') : red ? nz(g, K, '赤点。誰も驚かない。誰も心配しない。', '「やばーい、補習いっしょに行こ」と、なぜか笑い話になった。', '補習の教室は、思ったより人が多かった。') : '');
   gkNote(g, lines.filter(Boolean).join('\n'));
@@ -16071,40 +16123,41 @@ const hyoAvg = K => K.hyo.length ? K.hyo.reduce((s, h) => s + h.avg, 0) / K.hyo.
 function gkMoshi(g, K) { const s = gkStats(g); const h = Math.round(clamp(50 + (s.gaku - 50) * 0.75 + Math.min(10, num(K.studyAll) * 0.05) + gauss() * 3, 30, 78)); K.hensa.push({ y: sy(g).year, v: h }); if (K.hensa.length > 8) K.hensa.shift(); gkNote(g, `【全国模試】\n結果が返ってきた。偏差値 ${h}。${h >= 65 ? '難関大も十分ねらえる！' : h >= 55 ? '志望校の合格圏内が見えてきた。' : h >= 45 ? 'ここからの伸びが勝負だ。' : '……現実を突きつけられた。'}`); }
 function gkSuspend(g, K, days, reason) {
   K.susp = { until: g.state.day + days, reason }; K.suspN = num(K.suspN) + 1; K.att = clamp(K.att - 20, 0, 100);
-  hist(g, `停学処分を受けた（${reason}）`, 'school');
+  gkHist(g, `停学処分を受けた（${reason}）`, 'school');
   gkNote(g, `【停学処分】\n理由：${reason}。${days}日間の停学（自宅謹慎）が言いわたされた。\n${K.suspN >= 3 ? '「次はないぞ」――3度目。退学の二文字が、すぐそこにある。' : '（停学中は登校できない。反省文を書いて、生活を見直そう）'}`);
   gkEv(g, 'sc_susp', { reason });
   if (K.suspN >= 4) gkExpel(g, K, '退学処分', '度重なる問題行動');
 }
 function gkExpel(g, K, kind, reason) {
-  const ls = lsOf(g); if (!ls || !ls.high) return;
-  K.left = { kind, reason, day: g.state.day, y: sy(g).year, grade: hsGrade(g) };
+  const ls = gkLs(g); if (!ls || !ls.high) return;
+  K.left = { kind, reason, day: g.state.day, y: sy(g).year, grade: gkGrade(g) };
   ls.high = null; ls.exam = null;
-  hist(g, kind === '自主退学' ? '高校を自主退学した' : '高校を退学になった', 'school');
+  gkHist(g, kind === '自主退学' ? '高校を自主退学した' : '高校を退学になった', 'school');
   gkNote(g, kind === '自主退学' ? `【自主退学】\n退学届を出した。理由：${reason}。\n高校を辞めても、人生は続く。働く、資格をとる、高卒認定を受ける――道はひとつじゃない。` : `【${kind}】\n${reason}のため、学校から退学を言いわたされた。\n……ここから、どう生きるかは自分しだいだ。`);
   gkEv(g, 'sc_quit', { kind });
 }
-function gkTransfer(g, K) { const ls = lsOf(g); if (!ls || !ls.high) return ''; ls.high.type = 'geino'; K.futoko = false; K.absStreak = 0; K.transferred = 1; K.bully = null; hist(g, '通信制高校に転校した', 'school'); gkEv(g, 'sc_transfer'); return '通信制高校に転校した。登校は週2回のスクーリング。自分のペースで、高校卒業をめざす。'; }
+function gkTransfer(g, K) { const ls = gkLs(g); if (!ls || !ls.high) return ''; ls.high.type = 'geino'; K.futoko = false; K.absStreak = 0; K.transferred = 1; K.bully = null; gkHist(g, '通信制高校に転校した', 'school'); gkEv(g, 'sc_transfer'); return '通信制高校に転校した。登校は週2回のスクーリング。自分のペースで、高校卒業をめざす。'; }
 // 指定校推薦（内申点）
 function gkSuisen(g, K, ls) {
   const H = ls && ls.high; if (!H || !(H.plan === 'koku' || H.plan === 'shi') || H.exam) return;
   const av = hyoAvg(K);
   if (av < 3.8 || K.att < 55 || K.suspN > 0) { gkNote(g, `【推薦入試】\n評定平均 ${av.toFixed(1)}。${K.suspN ? '停学歴があるため、' : ''}指定校推薦の校内選考には届かなかった。一般入試で勝負だ。`); return; }
+  if (GK_CTX) { H.exam = { kind: H.plan, label: H.plan === 'koku' ? '国公立大学（推薦）' : '私立大学（指定校推薦）', day: g.state.day, pass: chance(0.96), p: 96, suisen: true }; gkNote(g, `【推薦入試】\n指定校推薦を受けた。${H.exam.pass ? '合格した！' : 'まさかの不合格……。'}`); return; }
   try { E.R4(g, { kind: 'gk_suisen', key: `gk_suisen_${sy(g).year}`, title: '指定校推薦の話', text: `担任「評定平均 ${av.toFixed(1)}。きみなら、${H.plan === 'koku' ? '国公立大学の学校推薦型選抜' : '私立大学の指定校推薦'}に推せる。どうする？」`, choices: ['推薦で受ける（ほぼ確実に合格）', '一般入試で挑戦する'], def: 0, days: 15, data: { kind: H.plan } }); } catch (e) { }
 }
 function gkSuisenHandler(g, it, k) {
-  const ls = lsOf(g); if (!ls || !ls.high) return '';
+  const ls = gkLs(g); if (!ls || !ls.high) return '';
   if (k !== 0) return '一般入試で、実力勝負をすることにした。';
   const kind = (it.data && it.data.kind) || ls.high.plan || 'shi';
   ls.high.exam = { kind, label: kind === 'koku' ? '国公立大学（推薦）' : '私立大学（指定校推薦）', day: g.state.day, pass: chance(0.96), p: 96, suisen: true };
-  hist(g, `${kind === 'koku' ? '国公立大学の学校推薦型選抜' : '私立大学の指定校推薦'}を受けた`, 'school');
+  gkHist(g, `${kind === 'koku' ? '国公立大学の学校推薦型選抜' : '私立大学の指定校推薦'}を受けた`, 'school');
   gkEv(g, 'sc_suisen', { pass: ls.high.exam.pass });
   return ls.high.exam.pass ? '推薦入試に合格した！ 春から大学生だ。（3年間の内申点が実を結んだ）' : 'まさかの不合格……。一般入試で、もう一度挑もう。';
 }
 // ---- 相談・行動 ----
 function gkConsult(g, K, how) {
   const B = K.bully, d = sy(g);
-  if (how === 'sos') { K.mood = clamp(K.mood + 7, 0, 100); try { E.sh(g, -8); } catch (e) { } if (B && chance(0.03)) { K.bully = null; gkEv(g, 'sc_bully_end'); return `${SOS}に電話した。相談員が学校に連絡してくれて、めずらしく学校が動いた。……いじめは、ひとまず止まった。`; } return `${SOS}に電話した。\n相談員は、最後まで話を聞いてくれた。少しだけ、息ができるようになった。\n……でも、電話を切っても、明日の教室は何も変わらない。`; }
+  if (how === 'sos') { K.mood = clamp(K.mood + 7, 0, 100); try { gkSh(g, -8); } catch (e) { } if (B && chance(0.03)) { K.bully = null; gkEv(g, 'sc_bully_end'); return `${SOS}に電話した。相談員が学校に連絡してくれて、めずらしく学校が動いた。……いじめは、ひとまず止まった。`; } return `${SOS}に電話した。\n相談員は、最後まで話を聞いてくれた。少しだけ、息ができるようになった。\n……でも、電話を切っても、明日の教室は何も変わらない。`; }
   if (!B) return '';
   const p = { teacher: B.lv === 1 ? 0.09 : 0.05, parent: 0.08, friend: friendsN(K) ? 0.12 : 0.03 }[how] || 0.05;
   const back = { teacher: 0.45, parent: 0.35, friend: 0.25 }[how] || 0;
@@ -16118,10 +16171,10 @@ function gkConsult(g, K, how) {
 }
 function gkCare(g, K, how) {
   const d = g.state.day;
-  if (how === 'nurse') { K.mood = clamp(K.mood + 4, 0, 100); try { E.sh(g, -6); g.state.stamina = Math.min(num(g.state.maxStamina, 100), num(g.state.stamina) + 15); g.advanceTime(90, 'gk_nurse'); } catch (e) { } if (K.futoko) { K.attDay = d; K.absStreak = 0; } return K.futoko ? '保健室登校をした。教室には行けなくても、学校には来られた。保健の先生が、温かいお茶をいれてくれた。' : '保健室で少し休んだ。白いカーテンの中は、静かで安心できた。'; }
-  if (how === 'counsel') { if (K.counselDay && d - K.counselDay < 5) return 'スクールカウンセラーとの面談は、週に1回。次の予約日を待とう。'; K.counselDay = d; K.counsel++; K.mood = clamp(K.mood + 9, 0, 100); try { g.advanceTime(60, 'gk_counsel'); } catch (e) { } if (K.counsel === 1) gkEv(g, 'sc_counsel'); return pick(['スクールカウンセラーと話した。「つらいと感じるのは、あなたが弱いからじゃないよ」', 'カウンセラーの先生と、好きなもののことを話した。気づけば、笑っていた。', '「今日はどんな一週間だった？」――ゆっくり、言葉にしていくうちに、気持ちが整理されていった。']); }
-  if (how === 'clinic') { if (!g.spend(3000)) return 'お金が足りない（¥3,000）。'; K.clinic++; K.mood = clamp(K.mood + 12, 0, 100); K.lowDays = Math.max(0, K.lowDays - 4); try { g.advanceTime(150, 'gk_clinic'); } catch (e) { } return '家族と一緒に、心療内科を受診した。お医者さんは「休むことも治療です」と言った。少しずつ、よくなっていこう。'; }
-  if (how === 'rest') { K.mood = clamp(K.mood + 6, 0, 100); try { E.sh(g, -12); } catch (e) { } return '今日は、思いきって学校を休んだ。好きな音楽を聴いて、ぼんやり空を見た。'; }
+  if (how === 'nurse') { K.mood = clamp(K.mood + 4, 0, 100); try { gkSh(g, -6); if (!GK_CTX) g.state.stamina = Math.min(num(g.state.maxStamina, 100), num(g.state.stamina) + 15); gkTime(g, 90, 'gk_nurse'); } catch (e) { } if (K.futoko) { K.attDay = d; K.absStreak = 0; } return K.futoko ? '保健室登校をした。教室には行けなくても、学校には来られた。保健の先生が、温かいお茶をいれてくれた。' : '保健室で少し休んだ。白いカーテンの中は、静かで安心できた。'; }
+  if (how === 'counsel') { if (K.counselDay && d - K.counselDay < 5) return 'スクールカウンセラーとの面談は、週に1回。次の予約日を待とう。'; K.counselDay = d; K.counsel++; K.mood = clamp(K.mood + 9, 0, 100); try { gkTime(g, 60, 'gk_counsel'); } catch (e) { } if (K.counsel === 1) gkEv(g, 'sc_counsel'); return pick(['スクールカウンセラーと話した。「つらいと感じるのは、あなたが弱いからじゃないよ」', 'カウンセラーの先生と、好きなもののことを話した。気づけば、笑っていた。', '「今日はどんな一週間だった？」――ゆっくり、言葉にしていくうちに、気持ちが整理されていった。']); }
+  if (how === 'clinic') { if (!g.spend(3000)) return 'お金が足りない（¥3,000）。'; K.clinic++; K.mood = clamp(K.mood + 12, 0, 100); K.lowDays = Math.max(0, K.lowDays - 4); try { gkTime(g, 150, 'gk_clinic'); } catch (e) { } return '家族と一緒に、心療内科を受診した。お医者さんは「休むことも治療です」と言った。少しずつ、よくなっていこう。'; }
+  if (how === 'rest') { K.mood = clamp(K.mood + 6, 0, 100); try { gkSh(g, -12); } catch (e) { } return '今日は、思いきって学校を休んだ。好きな音楽を聴いて、ぼんやり空を見た。'; }
   return '';
 }
 function gkTalk(g, K, c, how) {
@@ -16132,7 +16185,7 @@ function gkTalk(g, K, c, how) {
   if (up && tier === 2) gain -= 3; if (K.rei >= 60) gain -= 2;
   if (how === 'teach' && gkStats(g).gaku < 50) gain = 1;
   c.aff = clamp(c.aff + gain + gauss(), 0, 100);
-  if (how === 'play') { try { g.spend(800); g.advanceTime(120, 'gk_play'); } catch (e) { } K.rep = clamp(K.rep + (up ? 2 : 0.5), 0, 100); }
+  if (how === 'play') { try { g.spend(800); gkTime(g, 120, 'gk_play'); } catch (e) { } K.rep = clamp(K.rep + (up ? 2 : 0.5), 0, 100); }
   const nm = shortName(c);
   if (c.yami) {
     c.aff = clamp(c.aff - gain * 0.6, 0, 100); // 心をひらくのは、とても遅い
@@ -16150,7 +16203,7 @@ function gkHmVisit(g, K, h, how) {
   K.rep = clamp(K.rep - (myTier(g, K) === 0 ? 4 : 2.5), 0, 100);
   let tease = '';
   if (chance(0.3)) { tease = `\n\n……ひまわり学級から戻ると、一軍の誰かが聞こえるように言った。「${myTier(g, K) === 2 ? 'お似合いじゃん' : 'え、ひまわり係なの？ 意識たか〜'}」。\n${nz(g, K, 'やさしさは、この教室では弱さとして扱われる。お前の居場所は、またひとつ狭くなった。', '一軍の立場が、少しだけ揺らいだ気がした。')}`; K.rep = clamp(K.rep - 3, 0, 100); }
-  try { g.advanceTime(60, 'gk_hm'); } catch (e) { }
+  try { gkTime(g, 60, 'gk_hm'); } catch (e) { }
   const nm = shortName(h), [need, tip] = NEEDS[h.nd];
   if (how === 'sign' && h.nd === 'hear') { K.signLang++; return `${nm}に手話を教えてもらった。「ありがとう」「また明日」――指で話せる言葉が、ひとつ増えた。（手話 Lv${K.signLang}）`; }
   const t = { wheel: [`${nm}と中庭でお昼を食べた。スロープの場所を教えてもらって、学校の見え方が少し変わった。`, `移動教室のとき、「押そうか？」と聞いたら「今日は自分で行ける！」と笑った。`], hear: [`${nm}とノートで筆談した。字がきれいで、絵もうまい。`, `口元を見せて、ゆっくり話した。${nm}は親指を立ててくれた。`], asd: [`${nm}は電車の路線図にとても詳しい。時刻表のクイズで盛り上がった。`, `予定が変わると不安になる${nm}のために、明日の流れを一緒に確認した。`], ld: [`${nm}とタブレットで調べ学習をした。読み上げ機能を使うと、すらすら答えていく。`, `${nm}は、話す言葉がとても豊か。作文を口で言ってもらって、一緒に書きとった。`], down: [`${nm}が、手作りのクッキーをくれた。「おいしい？」と何度も聞いてきて、こっちまで笑顔になった。`, `${nm}と一緒に花壇の水やりをした。ひまわりの芽が出ていた。`] }[h.nd];
@@ -16158,20 +16211,20 @@ function gkHmVisit(g, K, h, how) {
   return `${pick(t)}\n（${need}。${tip}）${tease}`;
 }
 // ---- 通知・イベント ----
-function gkNote(g, t) { try { (g.morningNotes || (g.morningNotes = [])).push(t); } catch (e) { } const K = gko(g); K.log.push({ d: g.state.day, t: String(t).split('\n')[0] }); if (K.log.length > 40) K.log.shift(); }
+function gkNote(g, t) { try { if (!GK_CTX) (g.morningNotes || (g.morningNotes = [])).push(t); } catch (e) { } const K = gko(g); K.log.push({ d: g.state.day, t: String(t).split('\n')[0] }); if (K.log.length > 40) K.log.shift(); }
 function gkEv(g, id, v = {}) { const K = gko(g); if (!K || K.opt.ev === 'off') return; if (K.evq.some(e => e.id === id)) return; K.evq.push({ id, v, school: 1 }); if (K.evq.length > 6) K.evq.shift(); }
 function playSchoolEvents(g) { const K = gko(g, false); if (!K || !K.evq.length) return Promise.resolve(); const q = K.evq.splice(0, 4); return new Promise(res => { const sc = new EvScene(g, q, res); if (!sc.closed) g.push(sc); }); }
 function applySchoolEffect(g, eff) {
   const K = gko(g, false); if (!K || !eff) return;
   for (const k of ['rei', 'virtue', 'rep', 'mood', 'att']) if (eff[k]) K[k] = clamp(num(K[k]) + eff[k], 0, 100);
-  if (eff.stress) try { E.sh(g, eff.stress); } catch (e) { }
+  if (eff.stress) try { gkSh(g, eff.stress); } catch (e) { }
   if (eff.join) { if (chance(0.35)) gkSuspend(g, K, 3, 'いじめへの加担'); }
   if (eff.shion) { const c = K.cls.find(x => x.named === 'N_shion'); if (c) c.aff = clamp(num(c.aff) + eff.shion, 0, 100); }
   if (eff.help) { const c = K.cls.slice().sort((a, b) => a.sc - b.sc)[0]; if (c) c.aff = clamp(c.aff + 20, 0, 100); }
 }
 // ---- 本体への組みこみ ----
 function installSchool() {
-  try { E.Tn && E.Tn(g => { try { gkMorning(g); } catch (e) { console.error('[school] morning', e); } }); } catch (e) { }
+  try { E.Tn && E.Tn(g => { GK_CTX = null; try { gkMorning(g); } catch (e) { console.error('[school] morning', e); } try { gkFamilyTick(g); } catch (e) { console.error('[school] family', e); } GK_CTX = null; }); } catch (e) { }
   try {
     const A = (E.r6t || []).find(a => a.id === 'school');
     if (A && !A.__gk) {
@@ -16187,7 +16240,7 @@ function installSchool() {
     }
     if (E.ug) E.ug('gk_suisen', (t, it, k) => gkSuisenHandler(t, it, k));
   } catch (e) { console.error('[school] install', e); }
-  if (typeof window !== 'undefined') window.__school = { aiInc: k => AI_INC[k] && AI_INC[k](window.__game, gko(window.__game), { top: gko(window.__game).cls.filter(c => ['youkya', 'ikemen', 'bijin', 'yankee'].includes(c.a)), low: [], tier: 1, ink: false }), talk: (c, h) => gkTalk(window.__game, gko(window.__game), c, h),  open: () => openSchool(window.__game), state: () => gko(window.__game), morning: () => gkMorning(window.__game), ev: id => { gkEv(window.__game, id); return playSchoolEvents(window.__game); }, ids: () => Object.keys(SC_EVENTS), drawChar: (c, sp, st) => drawChar(c, sp, st), charSpec, archLook, archCasual };
+  if (typeof window !== 'undefined') window.__school = { fam: (n = 1) => { const g = window.__game; for (let i = 0; i < n; i++) { g.state.day++; gkFamilyTick(g); } return 0; }, students: () => gkStudents(window.__game).map(m => [m.key, m.rel, m.name, m.age, gkLvOf(m.age)]), openWho: k => { openSchool(window.__game, k); return 0; }, famK: k => window.__game.state.gakkoF && window.__game.state.gakkoF[k], aiInc: k => AI_INC[k] && AI_INC[k](window.__game, gko(window.__game), { top: gko(window.__game).cls.filter(c => ['youkya', 'ikemen', 'bijin', 'yankee'].includes(c.a)), low: [], tier: 1, ink: false }), talk: (c, h) => gkTalk(window.__game, gko(window.__game), c, h),  open: () => openSchool(window.__game), state: () => gko(window.__game), morning: () => gkMorning(window.__game), ev: id => { gkEv(window.__game, id); return playSchoolEvents(window.__game); }, ids: () => Object.keys(SC_EVENTS), drawChar: (c, sp, st) => drawChar(c, sp, st), charSpec, archLook, archCasual };
   try { E.Un('gakko', { name: 'スクール', color: '#e8749a', order: 30.4, iconHD: schoolIcon, badge: g => { const K = gko(g, false); return K && isHS(g) && (K.bully || K.dep >= 2 || K.futoko) ? 1 : 0; }, open: g => openSchool(g) }); } catch (e) { console.error('[school] app', e); }
 }
 const bu2 = t => { try { return E.bu ? E.bu(t) : 'work'; } catch (e) { return 'work'; } };
@@ -16203,24 +16256,32 @@ function gauge(c, x, y, w, label, v, col, sub) {
   tx(c, sub != null ? sub : String(Math.round(v)), x + w, y - 1, { align: 'right', size: 11, color: '#fff' });
 }
 function chip(c, x, y, t, col) { const w = tw(c, t, 12) + 14; slant(c, x, y, w, 17, 4, hexA(col, 0.32)); fr(c, x + 3, y + 16, w - 6, 1, col); tx(c, t, x + w / 2, y + 2, { align: 'center', color: '#fff' }); return x + w + 4; }
-async function openSchool(g) {
+async function openSchool(g, who) {
   if (!g || !g.state) return null;
   loadNpbFont();
+  GK_CTX = null;
+  if (who === undefined && !isHS(g)) { const S = gkStudents(g); if (S.length) who = S[0].key; }
+  gkUse(g, who || null);
   const K = gko(g);
   if (K.evq.length && K.opt.ev !== 'off') { g._npbEvPlaying = 1; try { await playSchoolEvents(g); } finally { g._npbEvPlaying = 0; } }
   tt.sfx('ok');
-  return new Promise(res => { const sc = new SchoolScene(g, res, []); g.push(sc); });
+  return new Promise(res => { const sc = new SchoolScene(g, res, [], who || null); g.push(sc); });
 }
 class SchoolScene extends NpbScene {
-  constructor(g, res, q) { super(g, res, q); this.isSchool = 1; this.sub = {}; }
+  constructor(g, res, q, who) { super(g, res, q); this.isSchool = 1; this.sub = {}; this.who = who || null; }
+  close() { super.close(); GK_CTX = null; }
+  whoList() { const g = this.g, L = []; if (gkWith(g, null, () => isHS(g))) L.push(null); for (const m of gkStudents(g)) L.push(m.key); return L.length ? L : [null]; }
+  whoLabel(key = this.who) { if (!key) return '自分'; const m = gkStudents(this.g).find(x => x.key === key); if (!m) return '自分'; const lv = gkLvOf(m.age); return `${m.rel} ${String(m.name).split(' ').pop()}（${GK_LV[lv]}${gkGradeOf(lv, m.age)}年）`; }
+  cycleWho() { const L = this.whoList(); if (L.length < 2) return; const i = L.indexOf(this.who); this.who = L[(i + 1) % L.length]; this.tab = 0; this.sel = {}; this.top = {}; gkUse(this.g, this.who); tt.sfx('ok'); this.say(`${this.whoLabel()}のスクールライフ`); }
   get K() { return gko(this.g); }
   get tabId() { return SC_TABS[this.tab].id; }
   setTab(i) { this.tab = (i + SC_TABS.length) % SC_TABS.length; this.tabT = this.t; tt.sfx('cursor'); }
   rows() {
-    const g = this.g, K = this.K, hs = isHS(g), ls = lsOf(g);
-    if (!hs) return this.tabId === 'home' ? [{ kind: 'sc', id: 'evopt', label: 'イベント演出', sub: { auto: '自動で再生する', app: 'アプリを開いたときに再生', off: '再生しない' }[K.opt.ev || 'auto'] }] : [];
+    const g = this.g, K = this.K, hs = isHS(g), ls = gkLs(g), C = GK_CTX;
+    const whoRow = this.whoList().length > 1 ? [{ kind: 'sc', id: 'who', label: '見る人を切りかえる', sub: `いま：${this.whoLabel()}` }] : [];
+    if (!hs) return this.tabId === 'home' ? [...whoRow, { kind: 'sc', id: 'evopt', label: 'イベント演出', sub: { auto: '自動で再生する', app: 'アプリを開いたときに再生', off: '再生しない' }[K.opt.ev || 'auto'] }] : [];
     switch (this.tabId) {
-      case 'home': return [
+      case 'home': return [...whoRow,
         { kind: 'sc', id: 'policy', label: '授業中の過ごし方', sub: `いま：${ATTI[K.policy][0]}` },
         { kind: 'sc', id: 'hobby', label: '趣味・推し活', sub: K.otaku ? `いま：${K.otaku}` : 'アニメ・ゲーム・アイドルなど（オタク）' },
         { kind: 'sc', id: 'image', label: 'イメチェンする', sub: '髪型・身だしなみを変える（¥5,000）' },
@@ -16229,14 +16290,17 @@ class SchoolScene extends NpbScene {
         { kind: 'sc', id: 'help', label: 'このアプリについて', sub: 'スクールライフの遊びかた' }];
       case 'cls': return casteTable(g, K).filter(r => r.id !== 'me').map(r => ({ kind: 'cm', c: K.cls.find(x => x.id === r.id), tier: r.tier }));
       case 'grade': return [{ kind: 'sc', id: 'policy', label: '授業中の過ごし方', sub: `いま：${ATTI[K.policy][0]}` }];
-      case 'mind': { const R = []; if (K.bully) R.push({ kind: 'sc', id: 'c_teacher', label: '担任の先生に相談する', sub: '学校が動いてくれるかも' }, { kind: 'sc', id: 'c_parent', label: '家族に話す', sub: '家から学校に連絡してもらう' }, { kind: 'sc', id: 'c_friend', label: '友だちに話す', sub: friendsN(K) ? `仲のいい友だち ${friendsN(K)}人` : '仲のいい友だちがいない…' }, { kind: 'sc', id: 'c_fight', label: 'やり返す', sub: 'けんかになると停学のおそれ', danger: 1 }, { kind: 'sc', id: 'c_bear', label: '我慢する', sub: 'こころがすり減っていく' });
+      case 'mind': { const R = [];
+        if (C) { const kid = C.m.kind === 'kid'; R.push({ kind: 'sc', id: 'p_talk', label: kid ? '親として話を聞く' : 'きょうだいとして話を聞く', sub: '本音を話してくれるとは限らない' }); if (kid) R.push({ kind: 'sc', id: 'p_school', label: '保護者として学校に相談する', sub: '担任に電話する' }, { kind: 'sc', id: 'p_juku', label: ls.high.cram ? '塾をやめさせる' : '塾に通わせる', sub: ls.high.cram ? '月¥15,000を払っている' : '月¥15,000・テストの点が上がる' }); } if (K.bully) R.push({ kind: 'sc', id: 'c_teacher', label: '担任の先生に相談する', sub: '学校が動いてくれるかも' }, { kind: 'sc', id: 'c_parent', label: '家族に話す', sub: '家から学校に連絡してもらう' }, { kind: 'sc', id: 'c_friend', label: '友だちに話す', sub: friendsN(K) ? `仲のいい友だち ${friendsN(K)}人` : '仲のいい友だちがいない…' }, { kind: 'sc', id: 'c_fight', label: 'やり返す', sub: 'けんかになると停学のおそれ', danger: 1 }, { kind: 'sc', id: 'c_bear', label: '我慢する', sub: 'こころがすり減っていく' });
         R.push({ kind: 'sc', id: 'c_sos', label: '電話相談窓口にかける', sub: '24時間子供SOSダイヤル（無料）' }, { kind: 'sc', id: 'nurse', label: K.futoko ? '保健室登校する' : '保健室で休む', sub: '心と体を休める' }, { kind: 'sc', id: 'counsel', label: 'スクールカウンセラーに相談', sub: '週1回' }, { kind: 'sc', id: 'clinic', label: '心療内科を受診する', sub: '¥3,000・家族と一緒に' }, { kind: 'sc', id: 'rest', label: '今日は学校を休む', sub: '休むのも大事なこと' }); return R; }
       case 'hm': return K.hmEst ? K.hm.map(h => ({ kind: 'hm', h })) : [{ kind: 'sc', id: 'hm_propose', label: '先生に提案する', sub: '「ひまわり学級をつくってほしい」' }];
-      case 'future': return [{ kind: 'sc', id: 'transfer', label: '通信制高校に転校する', sub: '週2回のスクーリングで卒業をめざす' }, { kind: 'sc', id: 'dropout', label: '自主退学する', sub: '退学届を出す', danger: 1 }];
+      case 'future': if (C && C.lv !== 'hs') return [{ kind: 'sc', id: 'f_transfer', label: '転校させる', sub: '環境を変えるのも、ひとつの道', danger: 1 }];
+        return [{ kind: 'sc', id: 'transfer', label: '通信制高校に転校する', sub: '週2回のスクーリングで卒業をめざす' }, { kind: 'sc', id: 'dropout', label: '自主退学する', sub: '退学届を出す', danger: 1 }];
     }
     return [];
   }
   update(g) {
+    gkUse(this.g, this.who);
     this.t++;
     if (this.toast && ++this.toast.t > 160) this.toast = null;
     const inp = g.input, tap = this.tapAt; this.tapAt = null;
@@ -16260,6 +16324,7 @@ class SchoolScene extends NpbScene {
     const h = this.hits.slice().reverse().find(r => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h);
     if (!h) return;
     if (h.close) { tt.sfx('cancel'); this.close(); return; }
+    if (h.whoBtn) { this.cycleWho(); return; }
     if (h.tab != null) { if (h.tab !== this.tab) this.setTab(h.tab); return; }
     if (h.row != null) { const id = this.tabId, rows = this.rows(); if ((this.sel[id] | 0) === h.row) { tt.sfx('ok'); this.act(() => this.activate(rows[h.row])); } else { this.sel[id] = h.row; tt.sfx('cursor'); } }
   }
@@ -16277,6 +16342,11 @@ class SchoolScene extends NpbScene {
       if (k < 0) return; await this.info('ひまわり学級', gkHmVisit(g, K, h, k === 1 ? 'sign' : 'stay')); return;
     }
     const id = r.id;
+    if (id === 'who') { this.cycleWho(); return; }
+    if (id === 'p_talk') { await this.info(GK_CTX.m.kind === 'kid' ? '子どもと話す' : 'きょうだいと話す', gkParentTalk(g, K)); return; }
+    if (id === 'p_school') { const k = await this.pick('担任に電話する？', [{ label: '電話する' }, { label: 'やめておく' }], { note: '学校が本気で動いてくれるとは限らない。かえって子どもの立場を悪くすることもある。' }); if (k === 0) await this.info('学校への相談', gkParentSchool(g, K)); return; }
+    if (id === 'p_juku') { const H = gkLs(g).high; if (!H.cram) { if (!g.spend(15000)) { this.say('お金が足りない（¥15,000）', UC.bad); return; } H.cram = true; K.cramDay = g.state.day; this.say('塾に通わせることにした'); } else { H.cram = false; this.say('塾をやめさせた'); } return; }
+    if (id === 'f_transfer') { const k = await this.pick('転校させる？', [{ label: 'やめておく' }, { label: '転校させる' }], { note: '引っ越しや越境通学で、別の学校に移る。いじめからは離れられるが、友だちもゼロからやり直し。' }); if (k === 1) await this.info('転校', gkFamTransfer(g, K)); return; }
     if (id === 'evopt') { const o = ['auto', 'app', 'off']; K.opt.ev = o[(o.indexOf(K.opt.ev || 'auto') + 1) % 3]; return; }
     if (id === 'policy') { const keys = Object.keys(ATTI); const k = await this.pick('授業中の過ごし方', keys.map(x => ({ label: ATTI[x][0], right: K.policy === x ? 'いま' : '' })), { note: keys.map(x => `${ATTI[x][0]}：${ATTI[x][1]}`).join('\n') }); if (k >= 0) { K.policy = keys[k]; this.say(`授業中は「${ATTI[keys[k]][0]}」でいく`); } return; }
     if (id === 'hobby') { const H = ['アニメ', 'ゲーム', 'アイドル', 'ボカロ・音楽', '鉄道', 'マンガ', 'やめる']; const k = await this.pick('趣味・推し活', H.map(x => ({ label: x }))); if (k < 0) return; K.otaku = k === H.length - 1 ? null : H[k]; if (K.otaku) { K.mood = clamp(K.mood + 4, 0, 100); const o = K.cls.filter(c => c.a === 'otaku'); o.forEach(c => c.aff = clamp(c.aff + 6, 0, 100)); this.say(`${K.otaku}に夢中！ 同じ趣味の仲間と話が合うようになった`); } return; }
@@ -16290,6 +16360,7 @@ class SchoolScene extends NpbScene {
     if (id === 'dropout') { const R = ['自分のやりたい道に進みたい', '学校がつらすぎる', '働いて家を助けたい']; const k = await this.pick('ほんとうに退学する？', [{ label: 'やめておく' }, ...R.map(x => ({ label: x }))], { note: '退学すると高校には戻れない（あとで高卒認定や通信制で学び直すことはできる）。' }); if (k >= 1) gkExpel(g, K, '自主退学', R[k - 1]); return; }
   }
   draw(c, g) {
+    gkUse(this.g, this.who);
     TXT_DOT = 1;
     try { this.draw0(c, g); } finally { TXT_DOT = 0; }
   }
@@ -16301,10 +16372,11 @@ class SchoolScene extends NpbScene {
     // ヘッダー
     c.fillStyle = lgrad(c, 0, 0, 640, 0, [[0, '#8a3a66'], [0.5, '#3a1430'], [1, '#12060e']]); c.fillRect(0, 0, 640, 36);
     slant(c, 250, 0, 22, 36, 12, hexA(UC.acc, 0.85));
-    const K = this.K, ls = lsOf(this.g), hs = isHS(this.g), d = sy(this.g);
+    const K = this.K, ls = gkLs(this.g), hs = isHS(this.g), d = sy(this.g);
     tx(c, 'スクールライフ', 14, 4, { size: 18, color: '#fff', bold: true }); tx(c, 'SCHOOL LIFE', 152, 9, { color: UC.acc });
+    if (this.whoList().length > 1 || this.who) { const wl = this.whoLabel(), ww = tw(c, wl, 12) + 26; slant(c, 286, 8, ww, 20, 6, this.who ? 'rgba(122,216,255,0.32)' : 'rgba(255,255,255,0.12)'); tx(c, `▶ ${wl}`, 296, 11, { color: '#fff' }); this.hits.push({ x: 284, y: 6, w: ww + 4, h: 24, whoBtn: 1 }); }
     tx(c, `${d.year}.${String(d.month).padStart(2, '0')}.${String(d.dom).padStart(2, '0')}`, 626, 3, { align: 'right', color: '#fff' });
-    tx(c, hs ? `${K.school}｜${hsGrade(this.g)}年生${ls.high.type === 'geino' ? '（通信制）' : ''}` : K.left ? `${K.left.kind}（${K.left.y}年）` : '高校生ではない', 626, 19, { align: 'right', color: UC.acc2 });
+    tx(c, hs ? `${K.school}｜${GK_CTX ? GK_LV[GK_CTX.lv] : ''}${gkGrade(this.g)}年生${ls.high.type === 'geino' ? '（通信制）' : ''}` : K.left ? `${K.left.kind}（${K.left.y}年）` : '高校生ではない', 626, 19, { align: 'right', color: UC.acc2 });
     // タブ
     const tw0 = 640 / SC_TABS.length;
     SC_TABS.forEach((T, i) => { const x = i * tw0, on = i === this.tab; slant(c, x + 3, 40, tw0 - 6, 20, 6, on ? lgrad(c, x, 0, x + tw0, 0, [[0, UC.acc], [1, shade(UC.acc, -0.3)]]) : 'rgba(255,255,255,0.06)'); tx(c, T.n, x + tw0 / 2, 43, { align: 'center', color: on ? '#2a0a1a' : '#e8d8e8', bold: on }); this.hits.push({ x, y: 38, w: tw0, h: 24, tab: i }); });
@@ -16316,7 +16388,7 @@ class SchoolScene extends NpbScene {
     if (this.toast) { const w = Math.min(560, tw(c, this.toast.text) + 36); fr(c, 320 - w / 2, 306, w, 26, 'rgba(20,6,16,0.92)'); fr(c, 320 - w / 2, 330, w, 2, this.toast.col); tx(c, this.toast.text, 320, 311, { align: 'center' }); }
     if (this.modal) this.drawModal(c, this.N);
   }
-  d_none(c) { box(c, 8, 66, 624, 272); const K = this.K; wrap(c, K.left ? `${K.left.y}年、${K.left.kind}。理由：${K.left.reason}\n高校を辞めても、道はいくつもある。働く、資格をとる、高卒認定試験を受ける、通信制で学び直す――。` : 'このアプリは、高校生のあいだに使える。\n（高校の人間関係、成績・内申点、悩み相談、ひまわり学級、進路など）', 580, 14).forEach((l, i) => tx(c, l, 24, 86 + i * 20, { size: 14, color: '#e8d8e8' })); }
+  d_none(c) { box(c, 8, 66, 624, 272); const K = this.K; wrap(c, K.left ? `${K.left.y}年、${K.left.kind}。理由：${K.left.reason}\n高校を辞めても、道はいくつもある。働く、資格をとる、高卒認定試験を受ける、通信制で学び直す――。` : `このアプリは、高校生のあいだに使える。\n（高校の人間関係、成績・内申点、悩み相談、ひまわり学級、進路など）${this.whoList().length > 1 ? '\n\n子ども・弟妹のスクールライフは、上の「▶」や「見る人を切りかえる」から見られる。' : '\n\n子どもや弟妹が小学校・中学校・高校に通っていれば、その子のスクールライフも見られる。'}`, 580, 14).forEach((l, i) => tx(c, l, 24, 86 + i * 20, { size: 14, color: '#e8d8e8' })); }
   menu(c, x, y, w, h) {
     const rows = this.rows();
     this.list(c, rows, x, y, w, h, 30, (r, X, Y, W, rh, on) => {
@@ -16334,7 +16406,7 @@ class SchoolScene extends NpbScene {
     spot(c, 70, 170, 70, 0.12);
     drawChar(c, schoolSpec(g, K, 'me'), { x: 70, y: 268, sc: 2, expr: K.dep >= 2 ? 'sad' : K.bully ? 'worry' : K.mood > 70 ? 'smile' : 'normal', pose: 'down', t: this.t, look: 1 });
     tx(c, `${nm.fam} ${nm.giv}`, 140, 76, { size: 16, bold: true });
-    tx(c, `${K.school}　${hsGrade(g)}年生　身長${K.ht}cm`, 140, 98, { color: UC.acc2 });
+    tx(c, `${K.school}　${gkGrade(g)}年生　身長${K.ht}cm`, 140, 98, { color: UC.acc2 });
     const tc = ['#ffd040', '#9ad0ff', '#b0a0c0'][tier];
     glow(c, tc, 8, () => tx(c, CASTE_N[tier], 140, 116, { size: 20, color: tc, bold: true }));
     tx(c, 'スクールカースト', 196, 122, { color: UC.dim });
@@ -16358,7 +16430,7 @@ class SchoolScene extends NpbScene {
       const y = 98 + t * 76, w = 120 + t * 80, x = 158 - w / 2;
       poly(c, [[x + 14, y], [x + w - 14, y], [x + w, y + 68], [x, y + 68]], hexA(cols[t], 0.14));
       tx(c, CASTE_N[t], x + 6, y + 4, { color: cols[t], bold: true });
-      rs.forEach((r, i) => { const per = t === 0 ? 2 : 3, cx = x + 20 + (i % per) * ((w - 30) / per), cy = y + 22 + Math.floor(i / per) * 15; tx(c, fit(c, r.id === 'me' ? '★あなた' : shortName(r), (w - 30) / per - 4), cx, cy, { size: 11, color: r.id === 'me' ? UC.acc : '#fff' }); });
+      rs.forEach((r, i) => { const per = t === 0 ? 2 : 3, cx = x + 20 + (i % per) * ((w - 30) / per), cy = y + 22 + Math.floor(i / per) * 15; tx(c, fit(c, r.id === 'me' ? (GK_CTX ? '★' + String(GK_CTX.m.name).split(' ').pop() : '★あなた') : shortName(r), (w - 30) / per - 4), cx, cy, { size: 11, color: r.id === 'me' ? UC.acc : '#fff' }); });
     });
     tx(c, '※人気・コミュ力・見た目などで決まる、教室の空気。', 18, 322, { size: 11, color: UC.dim });
     box(c, 316, 66, 316, 272); caption(c, 'クラスメイト', 'CLASSMATES', 326, 72); this.menu(c, 322, 94, 304, 240);
@@ -16398,7 +16470,16 @@ class SchoolScene extends NpbScene {
     box(c, 316, 66, 316, 272); caption(c, K.hmEst ? 'ひまわり学級の友だち' : '提案', 'FRIENDS', 326, 72); this.menu(c, 322, 94, 304, 240);
   }
   sc_future(c) {
-    const g = this.g, K = this.K, ls = lsOf(g), H = ls.high;
+    const g = this.g, K = this.K, ls = gkLs(g), H = ls.high;
+    if (GK_CTX && GK_CTX.lv !== 'hs') {
+      box(c, 8, 66, 380, 272); caption(c, '進路', 'FUTURE', 18, 72);
+      const lv = GK_CTX.lv, gr = gkGrade(g), last = lv === 'elem' ? gr >= 6 : gr >= 3;
+      const rows = [['いまの学校', `${K.school}　${GK_LV[lv]}${gr}年生`], ['次の進学先', K.nextSchool || (last ? (lv === 'elem' ? '中学受験 or 地元の中学（2月）' : '高校受験（2月）') : `あと${(lv === 'elem' ? 6 : 3) - gr + 1}年`)], ['評定平均（内申点）', lv === 'elem' ? '－（小学校は内申なし）' : K.hyo.length ? hyoAvg(K).toFixed(1) : '－'], ['塾', H.cram ? '通っている（月¥15,000）' : '通っていない'], ['欠席（今年）', `${K.absY}日`], ['停学・問題', K.suspN ? `${K.suspN}回` : 'なし'], ['これまでの学校', (K.past || []).map(p => p.school).join('・') || '－']];
+      rows.forEach(([a, b], i) => { const y = 98 + i * 26; tx(c, a, 20, y, { color: UC.dim }); tx(c, fit(c, b, 230), 376, y, { align: 'right', size: 13 }); });
+      tx(c, lv === 'jhs' ? '中学の内申点は、高校受験の合否に直結する。' : '小学校では成績より、人間関係がすべてだ。', 20, 290, { size: 11, color: UC.dim });
+      box(c, 396, 66, 236, 272); caption(c, '保護者として', 'PARENT', 406, 72); this.menu(c, 402, 94, 224, 240);
+      return;
+    }
     box(c, 8, 66, 380, 272); caption(c, '進路・入試', 'FUTURE', 18, 72);
     const plan = { koku: '国公立大学に進学', shi: '私立大学に進学', job: '就職', geino: '芸能の道' }[H.plan] || '未定（3年生の春に進路希望調査）';
     const hy = K.hensa.slice(-1)[0];
@@ -16432,6 +16513,12 @@ Object.assign(EV_BGS, {
 });
 // 制服・生徒の見た目
 function schoolSpec(g, K, role, o = {}) {
+  if (role === 'me' && GK_CTX) {
+    const m = GK_CTX.m, f = m.g === 'f', u = K.uni, L = gkLabels(g, K), ar = L.includes('陽キャ') ? 'youkya' : (L.includes('陰キャ') || L.includes('オタク')) ? 'inkya' : L.includes('ガリ勉') ? 'gariben' : 'futsu';
+    const sp = charSpec(u === 'casual' ? 'casual' : u, { f, skirt: f && u !== 'gakuran', hair: '#1a1820', style: f ? 'long' : 'short' });
+    sp.hd = { cat: (o.casual || o.dress === 'casual') ? (GK_CTX.lv === 'elem' ? 'elem' : 'casual') : u === 'blazer' ? 'uni' : u === 'casual' ? 'elem' : 'gaku', g: m.g, arch: ar, seed: m.key };
+    return sp;
+  }
   const lk = lookOf(g), me = role === 'me';
   const f = me ? K.f : !!o.f, uni = K.uni === 'sailor' && !f ? 'gakuran' : K.uni === 'gakuran' && f ? 'sailor' : K.uni;
   let base = me ? { skin: lk.skin, hair: lk.hair, style: lk.style === 'cap' || lk.style === 'helmet' ? 'short' : lk.style } : { ...varLook(o.n || role), ...(f ? { style: pick(['long', 'bob', 'twin']), f: true } : {}) };
@@ -16442,7 +16529,7 @@ function schoolSpec(g, K, role, o = {}) {
   const seed = o.n || (me ? 'me:' + (gkName(g).giv || '') : role), ha = o.hdArch || arch || 'futsu';
   if (o.casual || (me && o.dress === 'casual')) { const cs = archCasual(arch, { ...base, hdSeed: seed, hdArch: ha }); if (NAMED_HD[o.n]) cs.hd = NAMED_HD[o.n]; return cs; }
   const sp = charSpec(uni, { ...base, skirt: f && uni !== 'gakuran', wheel: o.wheel, aid: o.aid, loose: arch === 'youkya' });
-  sp.hd = o.nd ? ({ wheel: 'F_wheel', hear: 'P_hear', asd: 'F_hattatsu', ld: 'F_hattatsu', down: 'F_sannan' })[o.nd] || null : { cat: uni === 'blazer' ? 'uni' : 'gaku', g: f ? 'f' : 'm', arch: ha, seed };
+  sp.hd = o.nd ? ({ wheel: 'F_wheel', hear: 'P_hear', asd: 'F_hattatsu', ld: 'F_hattatsu', down: 'F_sannan' })[o.nd] || null : { cat: uni === 'blazer' ? 'uni' : uni === 'casual' ? 'elem' : 'gaku', g: f ? 'f' : 'm', arch: ha, seed };
   if (NAMED_HD[o.n]) sp.hd = NAMED_HD[o.n];
   return sp;
 }
@@ -17412,9 +17499,9 @@ const MS_EV = [
   { k: 'kid', w: 3, ok: (m, A) => A.role === 'baby', run: (g, m, A, me) => { if (!A.flags.word && m.age >= 1) { A.flags.word = 1; addDia(A, g, `はじめて「${me.g === 'f' ? 'ママ' : 'パパ'}」と言った（ような気がする）。`, 8); } else addDia(A, g, sPick(sRand(A.seed + g.state.day), ['夜中に3回起きて泣いた。', 'はじめて寝返りした。', '熱が出た。38度5分。']), 0); } },
   { k: 'kid', w: 2, ok: (m, A) => A.role === 'toddler', run: (g, m, A) => addDia(A, g, sPick(sRand(A.seed + g.state.day), ['保育園で、おもちゃの取りあい。怒られたのは、ぼくだけ。', '家族の絵をかいた。せんせいにほめられた。', 'おむかえが最後だった。みんな帰ったあとの保育園は、しずか。']), 0) },
   { k: 'kid', w: 3, ok: (m, A) => ['elem', 'jhs', 'hs'].includes(A.role), run: (g, m, A) => { const sc = clamp(Math.round(55 + (A.arch === 'inkya' ? 8 : A.arch === 'youkya' ? -6 : 0) + (RND() - 0.5) * 50), 5, 100); addDia(A, g, `テストが返ってきた。${sc}点。${sc < 40 ? '隠した。' : sc >= 90 ? '誰にも言わなかった。言うと、いじられるから。' : ''}`, sc < 40 ? -5 : 2); if (sc < 40) addSec(A, g, `${sc}点のテストを、机の奥にかくしている。`); } },
-  { k: 'kid', w: 4, ok: (m, A) => ['elem', 'jhs', 'hs'].includes(A.role) && A.arch === 'inkya' && !A.futoko, run: (g, m, A) => { A.bully = Math.min(3, A.bully + (RND() < 0.5 ? 1 : 0)); const L = ['グループ分けで、また最後まで余った。先生は「誰か入れてあげて」と言っただけ。', '上履きが、ゴミ箱に入っていた。先生に言ったら「ふざけ合いだろ」で終わった。', '机に「キモい」と彫られていた。先生は見て見ぬふりをした。', 'グループLINEから外された。理由は、たぶんない。']; addDia(A, g, L[Math.min(A.bully, 3)], -9); if (A.bully >= 2) addSec(A, g, '学校でいじめられている。家族には絶対に言わない。'); A.stress += 10; } },
+  { k: 'kid', w: 4, ok: (m, A) => ['elem', 'jhs', 'hs'].includes(A.role) && A.arch === 'inkya' && !A.futoko && !A.schoolK, run: (g, m, A) => { A.bully = Math.min(3, A.bully + (RND() < 0.5 ? 1 : 0)); const L = ['グループ分けで、また最後まで余った。先生は「誰か入れてあげて」と言っただけ。', '上履きが、ゴミ箱に入っていた。先生に言ったら「ふざけ合いだろ」で終わった。', '机に「キモい」と彫られていた。先生は見て見ぬふりをした。', 'グループLINEから外された。理由は、たぶんない。']; addDia(A, g, L[Math.min(A.bully, 3)], -9); if (A.bully >= 2) addSec(A, g, '学校でいじめられている。家族には絶対に言わない。'); A.stress += 10; } },
   { k: 'kid', w: 3, ok: (m, A) => ['jhs', 'hs'].includes(A.role) && A.arch === 'youkya', run: (g, m, A) => addDia(A, g, sPick(sRand(A.seed + g.state.day), ['放課後、みんなでカラオケ。写真の真ん中は、いつもおれ。', '先生にタメ口きいても怒られない。人気者は、ずるい。', '陰キャのやつの物まねをしたら、クラスが爆笑した。']), 4) },
-  { k: 'kid', w: 5, ok: (m, A) => A.bully >= 3 && !A.futoko, run: (g, m, A) => { A.futoko = true; addDia(A, g, '朝、お腹が痛くなる。今日も学校を休んだ。もう、行けないかもしれない。', -12); addSec(A, g, '本当は、死にたいと思った夜がある。'); } },
+  { k: 'kid', w: 5, ok: (m, A) => A.bully >= 3 && !A.futoko && !A.schoolK, run: (g, m, A) => { A.futoko = true; addDia(A, g, '朝、お腹が痛くなる。今日も学校を休んだ。もう、行けないかもしれない。', -12); addSec(A, g, '本当は、死にたいと思った夜がある。'); } },
   { k: 'kid', w: 2, ok: (m, A) => ['jhs', 'hs'].includes(A.role), run: (g, m, A) => { A.op -= 4; addDia(A, g, '「勉強しなさい」。うるさい。部屋のドアを思いきり閉めた。', -3); } },
   { k: 'kid', w: 2, ok: (m, A, me) => me.famous && ['elem', 'jhs', 'hs'].includes(A.role), run: (g, m, A, me) => { addDia(A, g, `「お前の${me.g === 'f' ? '母ちゃん' : '父ちゃん'}、テレビ出てたな」と、からかわれた。`, -5); } },
   { k: 'kid', w: 3, ok: (m, A, me) => me.neet && ['elem', 'jhs'].includes(A.role), run: (g, m, A) => { addDia(A, g, '作文「家族のしごと」。書くことがなくて、白紙で出した。', -7); addSec(A, g, '親の仕事を聞かれたら「会社員」とうそをつく。'); } },
@@ -17499,7 +17586,7 @@ function memSpec(g, m, A, act) {
   else if ((m.kind === 'sp' && f) || (m.frel === 'sister_older' && m.age >= 18)) hd = 'F_ane';
   else if (role === 'baby') hd = 'Y_baby';
   else if (role === 'toddler' || role === 'elem') { hd = { cat: 'elem', g: m.g, seed }; if (role === 'toddler') sp.hdTh = 76; }
-  else if ((role === 'jhs' || role === 'hs') && ['classroom', 'gym', 'hallway', 'school', 'street'].includes(pl) && act.k !== 'play') hd = { cat: role === 'jhs' ? 'gaku' : 'uni', g: m.g, arch: A.arch, seed };
+  else if ((role === 'jhs' || role === 'hs') && ['classroom', 'gym', 'hallway', 'school', 'street'].includes(pl) && act.k !== 'play') hd = { cat: (() => { const SK = g.state.gakkoF && g.state.gakkoF[m.key]; return SK ? (SK.uni === 'blazer' ? 'uni' : SK.uni === 'casual' ? 'elem' : 'gaku') : role === 'jhs' ? 'gaku' : 'uni'; })(), g: m.g, arch: A.arch, seed };
   else if (role === 'neet') hd = { cat: 'casual', g: m.g, arch: 'inkya', seed };
   else if (role === 'worker' && act.k === 'work' && /店長|建設|工場/.test(A.job || '')) hd = 'V_shop';
   else if (role === 'worker' && f && act.k === 'work' && /販売|レジ|窓口|保育|事務|介護|看護/.test(A.job || '')) hd = 'V_clerk';
@@ -17585,6 +17672,7 @@ class MesenScene extends NpbScene {
     const m = this.cur(), L = [];
     if (m.kind !== 'me') { const A = agOf(this.g, m); L.push({ id: 'diary', label: '日記を読む', sub: `${A.dia.length}件` }, { id: 'secret', label: 'ひみつ・本音をのぞく', sub: A.sec.length ? `${A.sec.length}件` : 'まだない' }, { id: 'rel', label: '家族への気持ち', sub: 'ほかの家族を、どう思っているか' }, { id: 'line', label: 'メッセージを送る', sub: '自分として連絡する' }); }
     else L.push({ id: 'log', label: 'AIの行動記録', sub: '目線変更中に自キャラがしたこと' });
+    try { if (m.kind !== 'me' && gkStudents(this.g).some(x => x.key === m.key)) { const lv = gkLvOf(m.age); L.unshift({ id: 'school', label: 'スクールライフを見る', sub: `${GK_LV[lv]}${gkGradeOf(lv, m.age)}年生` }); } } catch (e) { }
     L.push({ id: 'hour', label: '1時間すすめる', sub: '自キャラはAIがオートで行動' }, { id: 'h3', label: '3時間すすめる', sub: '自キャラはAIがオートで行動' }, { id: 'day', label: '1日すすめる', sub: '学校・仕事・食事・睡眠までAIまかせ' }, { id: 'help', label: '目線変更について', sub: '' });
     return L;
   }
@@ -17628,6 +17716,7 @@ class MesenScene extends NpbScene {
     if (!r) return;
     const g = this.g, m = this.cur(), id = r.id;
     if (id === 'hour' || id === 'h3' || id === 'day') { await this.advance(id); return; }
+    if (id === 'school') { this.closed = true; g.pop(this); try { await openSchool(g, m.key); } finally { GK_CTX = null; this.closed = false; g.push(this); } return; }
     if (id === 'help') { await this.info('目線変更', ['家族ひとりひとりの「目線」に切りかえて、いま何をしているか・何を考えているかをのぞける。', '・家族は自分で考えて動くAI。毎朝それぞれに出来事が起き、日記やひみつがたまっていく。', '・あなたのいまの状況（仕事・お金・有名さ・学校での立場）で、家族の本音は変わる。現実は甘くない。', '・目線を変えているあいだ、時間をすすめると自キャラはAIがオートで行動する（学校・仕事・部活・バイト・食事・睡眠）。', '・←→で家族を切りかえ。']); return; }
     if (id === 'log') { const M = msn(g); const L = M.auto.slice(-4).reverse().flatMap(a => [`― ${a.d}日目 ―`, ...a.L]); await this.info('AIの行動記録', L.length ? L : ['まだ記録はない。']); return; }
     const A = agOf(g, m);
@@ -18067,9 +18156,378 @@ function hdEmote(c, M, ex, left, top, k, t, st) {
   if (ex === 'determined' || ex === 'proud') { const x = hx0 - u * 3, y = hy + u; R(x + u, y, u, u * 3, '#fff2a0'); R(x, y + u, u * 3, u, '#fff2a0'); }
 }
 
+// ===== 店内の作りこみ（任天堂ショールーム・快活CLUB・吉野家/なか卯・ドームのコンコース） =====
+// 32px/タイルの細かいドット絵を、置物（prop）とタイルで描く
+const IA_CACHE = {};
+const OLN = '#1c1a24';
+function mkP(c) {
+  const r = (x, y, w, h, col) => { if (w <= 0 || h <= 0) return; c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+  const P = {
+    c, r,
+    px: (x, y, col) => r(x, y, 1, 1, col),
+    box: (x, y, w, h, fill, edge = OLN) => { r(x, y, w, h, edge); r(x + 1, y + 1, w - 2, h - 2, fill); },
+    vg: (x, y, w, h, c1, c2) => { const g = c.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, c1); g.addColorStop(1, c2); c.fillStyle = g; c.fillRect(x, y, w, h); },
+    hg: (x, y, w, h, c1, c2) => { const g = c.createLinearGradient(x, 0, x + w, 0); g.addColorStop(0, c1); g.addColorStop(1, c2); c.fillStyle = g; c.fillRect(x, y, w, h); },
+    oval: (x, y, w, h, col) => { c.fillStyle = col; c.beginPath(); c.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); c.fill(); },
+    shadow: (x, y, w, h, a = 0.28) => { c.fillStyle = `rgba(0,0,0,${a})`; c.beginPath(); c.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); c.fill(); },
+    t: (s, x, y, o = {}) => { try { E.D(c, String(s), Math.round(x), Math.round(y), { size: o.size || 10, color: o.color || '#fff', align: o.align || 'left', shadow: o.shadow === undefined ? null : o.shadow }); } catch (e) { c.fillStyle = o.color || '#fff'; c.font = `${o.size || 10}px sans-serif`; c.textAlign = o.align || 'left'; c.textBaseline = 'top'; c.fillText(String(s), x, y); } },
+    // 立体の台（上面・前面・輪郭・影）
+    slab: (x, y, w, h, topC, frontC, depth = 10) => {
+      r(x, y, w, h, OLN);
+      r(x + 1, y + 1, w - 2, depth - 1, topC); r(x + 1, y + 1, w - 2, 1, shade(topC, 0.25));
+      r(x + 1, y + depth, w - 2, h - depth - 1, frontC); r(x + 1, y + depth, w - 2, 1, shade(frontC, -0.35));
+      r(x + 1, y + h - 3, w - 2, 2, shade(frontC, -0.3));
+    },
+  };
+  return P;
+}
+function iArt(key, W, H, fn) { let cv = IA_CACHE[key]; if (cv) return cv; if (typeof document === 'undefined') return null; cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d'); c.imageSmoothingEnabled = false; try { fn(mkP(c), W, H); } catch (e) { console.error('[interior] art', key, e); } IA_CACHE[key] = cv; return cv; }
+// 置物：x,y,w,h=床の占有、up=上にはみ出す高さ（タイル）
+function IP(x, y, w, h, up, key, paint, o = {}) {
+  const frames = o.frames || 1, spd = o.speed || 16, W = w * 32, H = Math.round((h + up) * 32);
+  return { type: 'prop', x, y, w, h, solid: o.solid !== false, z: o.z || 0, text: o.text, talk: o.talk, cond: o.cond,
+    draw: (c, px, py, g) => { const f = frames > 1 ? Math.floor(num(g && g.frame, 0) / spd) % frames : 0; const cv = iArt(`${key}|${f}`, W, H, (P) => paint(P, W, H, f)); if (cv) c.drawImage(cv, px, py - up * 16, w * 16, (h + up) * 16); } };
+}
+// ---- タイル（床・壁・いす） ----
+function regInteriorTiles() {
+  if (!E.Z) return;
+  const R = (t, x, y, w, h, col) => { t.fillStyle = col; t.fillRect(x, y, w, h); };
+  const floor = (id, fn, variants = 4) => E.Z(id, { variants, draw(t, rng, f, v) { const c2 = document.createElement('canvas'); c2.width = c2.height = 32; fn(c2.getContext('2d'), v); t.imageSmoothingEnabled = true; t.drawImage(c2, 0, 0, 16, 16); }, hd(t, rng, f, v) { fn(t, v); } });
+  // つやのある白いタイル（ショールーム）
+  floor('np_fl_show', (t, v) => { R(t, 0, 0, 32, 32, '#eef0f4'); R(t, 0, 0, 32, 1, '#d6d9e0'); R(t, 0, 0, 1, 32, '#d6d9e0'); R(t, 16, 0, 1, 32, '#e0e3e9'); R(t, 0, 16, 32, 1, '#e0e3e9'); R(t, 3 + v * 5, 4, 6, 1, '#ffffff'); R(t, 4 + v * 5, 5, 3, 1, '#ffffff'); if (v === 2) R(t, 20, 22, 7, 1, '#ffffff'); });
+  // 暗めのカーペット（ネカフェ）
+  floor('np_fl_net', (t, v) => { R(t, 0, 0, 32, 32, '#3a3d48'); for (let y = 0; y < 32; y += 4) for (let x = (y / 4) % 2 * 4; x < 32; x += 8) R(t, x, y, 2, 2, '#444856'); R(t, 6 + v * 4, 10, 2, 2, '#5a4a3a'); R(t, 22 - v * 3, 24, 2, 2, '#4a5060'); });
+  // ベージュのタイル（牛丼屋）
+  floor('np_fl_gyu', (t, v) => { R(t, 0, 0, 32, 32, '#d9c9a8'); R(t, 0, 0, 32, 1, '#b8a888'); R(t, 0, 0, 1, 32, '#b8a888'); R(t, 0, 16, 32, 1, '#c4b493'); R(t, 16, 0, 1, 32, '#c4b493'); R(t, 4 + v * 3, 5, 5, 1, '#e8dcc0'); R(t, 20, 21 + v, 4, 1, '#e8dcc0'); });
+  // みがかれたコンクリート（ドーム）
+  floor('np_fl_conc', (t, v) => { R(t, 0, 0, 32, 32, '#a8aab2'); R(t, 0, 0, 32, 1, '#9496a0'); R(t, 0, 0, 1, 32, '#9496a0'); for (let i = 0; i < 9; i++) R(t, (i * 13 + v * 7) % 30, (i * 7 + v * 11) % 30, 2, 1, i % 2 ? '#9a9ca4' : '#b4b6be'); });
+  // 壁
+  const wall = (name, face, top) => { E.Z('wall_' + name, { solid: true, draw(t) { face(t, 16); }, hd(t) { face(t, 32); } }); E.Z('walltop_' + name, { solid: true, draw(t) { R(t, 0, 0, 16, 16, top); R(t, 0, 15, 16, 1, shade(top, 0.3)); }, hd(t) { R(t, 0, 0, 32, 32, top); R(t, 0, 0, 32, 2, shade(top, 0.15)); R(t, 0, 30, 32, 2, shade(top, 0.35)); } }); };
+  const sc = (t, s, fn) => { t.save(); t.scale(s / 32, s / 32); fn(); t.restore(); };
+  wall('npshow', (t, s) => sc(t, s, () => { R(t, 0, 0, 32, 32, '#f6f6f8'); R(t, 0, 3, 32, 1, '#ffffff'); R(t, 0, 18, 32, 3, '#e60012'); R(t, 0, 21, 32, 1, '#a8000c'); R(t, 0, 26, 32, 6, '#d8dae0'); R(t, 0, 26, 32, 1, '#ffffff'); R(t, 0, 31, 32, 1, '#9a9ca4'); }), '#5a5c66');
+  wall('npnet', (t, s) => sc(t, s, () => { R(t, 0, 0, 32, 32, '#4a4d58'); R(t, 0, 2, 32, 1, '#5a5e6a'); R(t, 0, 16, 32, 2, '#ee7d20'); R(t, 0, 18, 32, 1, '#a85410'); R(t, 0, 25, 32, 7, '#2e3038'); R(t, 0, 25, 32, 1, '#5a5e6a'); }), '#22242c');
+  wall('npgyu', (t, s) => sc(t, s, () => { R(t, 0, 0, 32, 32, '#f4ead4'); R(t, 0, 2, 32, 1, '#fff8e8'); R(t, 0, 19, 32, 13, '#8a5a32'); R(t, 0, 19, 32, 2, '#f08300'); for (let x = 3; x < 32; x += 8) R(t, x, 22, 1, 9, '#6a4222'); R(t, 0, 31, 32, 1, '#4a2a12'); }), '#6a4a30');
+  wall('npdome', (t, s) => sc(t, s, () => { R(t, 0, 0, 32, 32, '#8a8e98'); R(t, 0, 0, 32, 1, '#9ea2ac'); R(t, 15, 0, 1, 24, '#7a7e88'); R(t, 0, 12, 32, 4, '#1a2a5a'); R(t, 0, 16, 32, 1, '#f5a000'); R(t, 0, 24, 32, 8, '#5a5e68'); R(t, 0, 24, 32, 1, '#a8acb6'); }), '#3a3c44');
+  // いす（すわれる）
+  E.Z('np_stool_gyu', { obj: true, draw(t) { R(t, 5, 9, 6, 2, '#3a3a40'); R(t, 7, 11, 2, 4, '#9aa0aa'); R(t, 4, 6, 8, 4, '#e07018'); R(t, 4, 6, 8, 1, '#f8a050'); }, hd(t) { t.fillStyle = 'rgba(0,0,0,0.25)'; t.beginPath(); t.ellipse(16, 27, 9, 3, 0, 0, 7); t.fill(); R(t, 14, 18, 4, 9, '#b8bec8'); R(t, 15, 18, 1, 9, '#e0e4ea'); R(t, 10, 25, 12, 2, '#6a6e78'); t.fillStyle = OLN; t.beginPath(); t.ellipse(16, 15, 9, 5, 0, 0, 7); t.fill(); t.fillStyle = '#e07018'; t.beginPath(); t.ellipse(16, 14.5, 8, 4, 0, 0, 7); t.fill(); R(t, 11, 12, 6, 1, '#f8a858'); } });
+  E.Z('np_chair_dome', { obj: true, draw(t) { R(t, 3, 4, 10, 8, '#1a2a5a'); }, hd(t) { R(t, 6, 6, 20, 18, OLN); R(t, 7, 7, 18, 10, '#2a3a7a'); R(t, 7, 17, 18, 6, '#1a2a5a'); R(t, 8, 8, 16, 1, '#4a5aa0'); R(t, 9, 24, 2, 4, '#555'); R(t, 21, 24, 2, 4, '#555'); } });
+  E.Z('np_bench_show', { obj: true, draw(t) { R(t, 1, 6, 14, 5, '#e60012'); }, hd(t) { t.fillStyle = 'rgba(0,0,0,0.25)'; t.fillRect(2, 24, 28, 4); R(t, 1, 10, 30, 12, OLN); R(t, 2, 11, 28, 6, '#ff2a3a'); R(t, 2, 17, 28, 4, '#c0000e'); R(t, 3, 12, 26, 1, '#ff8a92'); R(t, 4, 22, 3, 4, '#9aa0aa'); R(t, 25, 22, 3, 4, '#9aa0aa'); } });
+}
+// ---- 絵 ----
+const SPINES = ['#d83a3a', '#3a6ad8', '#f0c030', '#3aa858', '#e8e8e8', '#8a4ad0', '#ff7a2a', '#2a2a30', '#e86aa0', '#30b8c8'];
+function paintScreen(P, x, y, w, h, kind, f) {
+  const { r } = P;
+  if (kind === 0) { // 横スクロールの冒険ゲーム
+    P.vg(x, y, w, h, '#58a8ff', '#a8dcff'); const o = (f * 3) % 24;
+    for (let i = -1; i < w / 24 + 1; i++) { r(x + i * 24 - o + 4, y + 4, 10, 3, '#ffffff'); r(x + i * 24 - o + 6, y + 3, 6, 1, '#ffffff'); }
+    r(x, y + h - 7, w, 7, '#7a4a22'); r(x, y + h - 8, w, 2, '#4ac04a');
+    for (let i = 0; i < w / 12; i++) r(x + ((i * 12 - o * 2) % (w + 12) + w + 12) % (w + 12) - 6, y + h - 16, 6, 6, i % 3 ? '#e89030' : '#f0d040');
+    r(x + w * 0.3, y + h - 15 - (f % 4 < 2 ? 3 : 0), 5, 7, '#3a5ad8'); r(x + w * 0.3 + 1, y + h - 17 - (f % 4 < 2 ? 3 : 0), 3, 3, '#ffd8b0');
+    r(x + w * 0.62, y + 10 + (f % 2), 3, 3, '#ffe040');
+  } else if (kind === 1) { // レース
+    r(x, y, w, h, '#4aa848'); const o = (f * 4) % 10;
+    P.c.fillStyle = '#6a6e78'; P.c.beginPath(); P.c.moveTo(x + w * 0.35, y); P.c.lineTo(x + w * 0.65, y); P.c.lineTo(x + w, y + h); P.c.lineTo(x, y + h); P.c.fill();
+    for (let i = 0; i < 5; i++) r(x + w / 2 - 1, y + ((i * 10 + o) % h), 2, 4, '#ffffff');
+    r(x + w * 0.4, y + h - 10, 6, 5, '#e83030'); r(x + w * 0.55, y + h - 16, 5, 4, '#30a0e8'); r(x + w * 0.47, y + h - 22, 4, 3, '#f0d030');
+    r(x, y, w, 4, '#80c8ff');
+  } else if (kind === 2) { // スポーツ
+    r(x, y, w, h, '#3a9a5a'); r(x + 2, y + 2, w - 4, h - 4, '#48b06a'); r(x + w / 2, y + 2, 1, h - 4, '#ffffff'); r(x + 2, y + h / 2, w - 4, 1, 'rgba(255,255,255,0.4)');
+    const bx = x + 4 + ((f * 5) % (w - 8)), by = y + h / 2 + Math.sin(f) * (h / 4); r(bx, by, 2, 2, '#f0f040'); r(x + 5, y + h / 2 - 3, 3, 6, '#e85050'); r(x + w - 8, y + h / 2 - 3, 3, 6, '#5080e8');
+  } else { // タイトル画面
+    r(x, y, w, h, '#ffffff'); for (let i = 0; i < 14; i++) r(x + (i * 37 + f * 5) % w, y + (i * 23 + f * 3) % h, 2, 2, SPINES[i % SPINES.length]);
+    r(x + 3, y + h / 2 - 6, w - 6, 12, '#e60012'); P.t('新作 好評発売中', x + w / 2, y + h / 2 - 5, { size: 10, align: 'center' });
+  }
+}
+const ART = {
+  // 任天堂：ビデオウォール（3画面）
+  vwall: (P, W, H, f) => { const { r } = P; r(0, 0, W, H, '#14141a'); r(0, 0, W, 1, '#3a3a44'); const pw = Math.floor((W - 8) / 3); for (let i = 0; i < 3; i++) { const x = 4 + i * pw; r(x, 4, pw - 3, H - 12, '#000'); paintScreen(P, x + 1, 5, pw - 5, H - 14, (i + Math.floor(f / 6)) % 4, f + i * 3); r(x + 1, 5, pw - 5, 1, 'rgba(255,255,255,0.35)'); } r(0, H - 7, W, 7, '#24242c'); r(W / 2 - 20, H - 6, 40, 4, '#e60012'); },
+  kiosk: (P, W, H, f, o) => { const { r } = P; P.shadow(4, H - 8, W - 8, 8); P.slab(6, H - 34, W - 12, 30, '#ffffff', '#f0f0f4', 9); r(7, H - 20, W - 14, 3, '#e60012'); P.t(o.label || '試遊', W / 2, H - 15, { size: 8, color: '#e60012', align: 'center' });
+    r(W / 2 - 3, H - 42, 6, 10, '#2a2a30'); r(8, H - 64 + 2, W - 16, 26, OLN); r(10, H - 64 + 4, W - 20, 22, '#000'); paintScreen(P, 11, H - 64 + 5, W - 22, 20, o.game || 0, f); r(11, H - 64 + 5, W - 22, 1, 'rgba(255,255,255,0.4)');
+    r(12, H - 31, 7, 4, '#e60012'); r(13, H - 30, 2, 1, '#ff8a8a'); r(W - 19, H - 31, 7, 4, '#00a8e0'); r(W - 18, H - 30, 2, 1, '#8ae0ff'); r(19, H - 30, 6, 2, '#2a2a30'); r(W - 25, H - 30, 6, 2, '#2a2a30'); },
+  showcase: (P, W, H) => { const { r } = P; P.shadow(2, H - 8, W - 4, 8); P.slab(3, H - 24, W - 6, 20, '#f4f4f8', '#ffffff', 6); r(4, H - 7, W - 8, 2, '#e60012');
+    r(4, 6, W - 8, H - 30, OLN); r(5, 7, W - 10, H - 32, 'rgba(190,225,255,0.55)'); r(5, 7, W - 10, 2, '#fffef0');
+    r(10, H - 36, 18, 10, '#2a2a30'); r(10, H - 36, 3, 10, '#00a8e0'); r(25, H - 36, 3, 10, '#e60012'); r(13, H - 34, 12, 6, '#3a3a50'); r(14, H - 33, 5, 2, '#80c8ff');
+    P.oval(W - 26, H - 44, 8, 10, '#f0c030'); P.oval(W - 25, H - 50, 6, 7, '#ffd8b0'); P.oval(W - 15, H - 42, 7, 9, '#3aa858'); P.oval(W - 15, H - 47, 6, 6, '#e8e8e8');
+    P.c.strokeStyle = 'rgba(255,255,255,0.6)'; P.c.beginPath(); P.c.moveTo(8, 10); P.c.lineTo(20, 26); P.c.stroke(); },
+  goods: (P, W, H) => { const { r } = P; P.shadow(2, H - 7, W - 4, 7); r(2, 4, W - 4, H - 8, OLN); r(3, 5, W - 6, H - 10, '#fafafa'); r(3, 5, W - 6, 3, '#e60012');
+    for (let s = 0; s < 3; s++) { const y = 12 + s * 15; r(4, y + 11, W - 8, 2, '#c8ccd4'); for (let i = 0; i < 9; i++) { const c = s === 0 ? null : SPINES[(i * 3 + s) % SPINES.length]; if (c) { r(6 + i * 6, y, 5, 11, i % 2 ? '#e60012' : '#ffffff'); r(6 + i * 6, y, 5, 3, c); r(6 + i * 6, y, 1, 11, OLN); } } if (s === 0) for (let i = 0; i < 4; i++) { P.oval(7 + i * 13, y + 1, 10, 10, SPINES[(i * 2 + 1) % SPINES.length]); r(9 + i * 13, y + 4, 2, 2, OLN); r(13 + i * 13, y + 4, 2, 2, OLN); } } },
+  regcounter: (P, W, H, f, o) => { const { r } = P; P.shadow(2, H - 7, W - 4, 7); P.slab(3, H - 36, W - 6, 32, o.top || '#ffffff', o.front || '#e60012', 10); r(10, H - 22, W - 20, 10, o.plate || '#ffffff'); P.t(o.label || 'インフォメーション', W / 2, H - 22, { size: 8, color: o.plateText || '#e60012', align: 'center' });
+    r(W - 30, H - 46, 18, 12, OLN); r(W - 29, H - 45, 16, 9, '#2a2a34'); r(W - 27, H - 44, 12, 5, '#60d0ff'); r(10, H - 42, 12, 7, o.bag || '#e60012'); r(12, H - 45, 8, 3, OLN); r(28, H - 41, 14, 4, '#c8ccd4'); },
+  standee: (P, W, H, f, o) => { const { r } = P; P.shadow(4, H - 6, W - 8, 6); r(14, H - 12, 4, 8, '#9aa0aa'); r(8, H - 6, 16, 3, '#6a6e78'); r(3, 4, W - 6, H - 18, OLN); P.vg(4, 5, W - 8, H - 20, o.c1 || '#ff5a8a', o.c2 || '#ffd040'); for (let i = 0; i < 6; i++) r(6 + (i * 7) % 20, 10 + i * 9, 2, 2, '#ffffff'); P.oval(8, H - 50, 16, 18, o.c3 || '#3a6ad8'); P.oval(11, H - 62, 10, 12, '#ffd8b0'); r(5, 8, W - 10, 9, '#ffffff'); P.t(o.label || 'NEW', W / 2, 8, { size: 8, color: '#e60012', align: 'center' }); },
+  // ネカフェ
+  reception: (P, W, H) => { const { r } = P; P.shadow(2, H - 7, W - 4, 7); P.slab(3, H - 36, W - 6, 32, '#8a6a4a', '#ee7d20', 10); r(3, H - 18, W - 6, 2, '#ffb060'); P.t('受付 RECEPTION', W / 2, H - 25, { size: 8, color: '#ffffff', align: 'center' });
+    r(18, H - 50, 22, 15, OLN); r(19, H - 49, 20, 12, '#9aa0aa'); r(27, H - 37, 4, 3, '#6a6e78'); r(W - 34, H - 42, 10, 6, '#f0d040'); P.oval(W - 50, H - 42, 8, 6, '#d0b040'); r(W - 49, H - 44, 6, 2, '#a08020'); r(50, H - 44, 16, 8, '#ffffff'); r(52, H - 42, 12, 1, '#ee7d20'); r(52, H - 40, 8, 1, '#888'); },
+  pricebd: (P, W, H) => { const { r } = P; r(2, 2, W - 4, H - 4, OLN); r(3, 3, W - 6, H - 6, '#fffaf0'); r(3, 3, W - 6, 8, '#ee7d20'); P.t('料金', W / 2, 3, { size: 8, align: 'center' }); P.t('3h ¥1,200', 6, 13, { size: 8, color: '#333' }); P.t('ナイト¥2,000', 6, 22, { size: 8, color: '#333' }); },
+  drinkbar: (P, W, H, f) => { const { r } = P; P.shadow(2, H - 7, W - 4, 7); P.slab(3, H - 30, W - 6, 26, '#c8ccd4', '#4a3a2e', 8); for (let x = 12; x < W - 8; x += 22) r(x, H - 20, 1, 14, '#3a2a1e');
+    // ソーダ
+    r(8, H - 64, 36, 36, OLN); r(9, H - 63, 34, 34, '#22242c'); for (let i = 0; i < 4; i++) { r(11 + i * 8, H - 58, 6, 6, SPINES[i * 2]); r(12 + i * 8, H - 57, 2, 2, '#ffffff'); r(13 + i * 8, H - 48, 2, 4, '#9aa0aa'); } r(10, H - 40, 32, 3, '#6a6e78'); P.t('DRINK', 26, H - 63, { size: 6, color: '#ffd040', align: 'center' });
+    // コーヒー
+    r(48, H - 58, 24, 30, OLN); r(49, H - 57, 22, 28, '#c0c4cc'); r(52, H - 54, 16, 7, '#2a2a34'); r(53, H - 53, 9, 3, '#60e0a0'); r(57, H - 42, 6, 4, '#3a3a40'); r(56, H - 36, 8, 6, '#ffffff');
+    // ソフトクリーム
+    r(78, H - 62, 26, 34, OLN); r(79, H - 61, 24, 32, '#f8f8fa'); r(79, H - 61, 24, 6, '#ee7d20'); P.oval(85, H - 52, 12, 10, '#fff4dc'); r(89, H - 44, 4, 6, '#d8a048'); r(80, H - 34, 22, 3, '#9aa0aa'); r(98, H - 58, 3, 8, '#5a5e68');
+    for (let i = 0; i < 4; i++) r(W - 20 + (i % 2) * 6, H - 38 - Math.floor(i / 2) * 6, 5, 6, '#ffffff'); r(W - 22, H - 32, 14, 3, '#9aa0aa'); },
+  manga: (P, W, H, f, o) => { const { r } = P; P.shadow(1, H - 7, W - 2, 7); r(1, 2, W - 2, H - 8, OLN); r(2, 3, W - 4, H - 10, '#5a3a22'); const rows = 4, rh = Math.floor((H - 16) / rows); let k = (o.seed || 1) * 7;
+    for (let s = 0; s < rows; s++) { const y = 6 + s * rh; r(3, y, W - 6, rh - 2, '#2a1a10'); for (let x = 4; x < W - 5;) { k = (k * 1103515245 + 12345) & 0x7fffffff; const sw = 2 + (k % 3), sh = rh - 4 - (k >> 4) % 3; r(x, y + rh - 2 - sh, sw, sh, SPINES[(k >> 6) % SPINES.length]); r(x, y + rh - 2 - sh, sw, 1, 'rgba(255,255,255,0.35)'); x += sw + ((k >> 8) % 7 === 0 ? 3 : 0); } r(3, y + rh - 2, W - 6, 2, '#7a5232'); }
+    if (o.label) { r(W / 2 - 18, 0, 36, 9, '#fffaf0'); r(W / 2 - 18, 0, 36, 1, '#ee7d20'); P.t(o.label, W / 2, 0, { size: 8, color: '#333', align: 'center' }); } },
+  booth: (P, W, H, f, o) => { const { r } = P; const top = H - 64, door = o.door || 'bottom'; r(0, top, W, 64, OLN); r(3, top + 3, W - 6, 58, '#3a3d48');
+    // 机・モニター・いす
+    const dy = door === 'bottom' ? top + 5 : top + 45; r(6, dy, W - 12, 12, '#7a5a3a'); r(6, dy, W - 12, 2, '#9a7a5a');
+    const glow = f % 3 === 0 ? '#70c8ff' : f % 3 === 1 ? '#60b8f0' : '#80d8ff'; r(W / 2 - 10, dy + (door === 'bottom' ? 1 : 2), 20, 8, '#1a1a22'); r(W / 2 - 9, dy + (door === 'bottom' ? 2 : 3), 18, 5, glow);
+    const cy = door === 'bottom' ? top + 24 : top + 24; r(W / 2 - 8, cy, 16, 16, '#5a1a22'); r(W / 2 - 7, cy + 1, 14, 6, '#7a2a32'); r(W / 2 - 7, cy + 8, 14, 7, '#4a141a');
+    P.c.fillStyle = 'rgba(120,200,255,0.10)'; P.c.fillRect(8, top + 8, W - 16, 48);
+    // 仕切りの上端（明るい）と扉
+    r(0, top, W, 3, '#6a6e7a'); r(0, top, 3, 64, '#5a5e6a'); r(W - 3, top, 3, 64, '#5a5e6a'); r(0, top + 61, W, 3, '#5a5e6a');
+    const dyy = door === 'bottom' ? top + 58 : top; r(W / 2 - 9, dyy, 18, 6, '#8a8e9a'); r(W / 2 - 9, dyy, 18, 1, '#b0b4c0'); r(W / 2 - 4, dyy + 1, 8, 4, '#fffaf0'); P.t(String(o.n || 1), W / 2, dyy, { size: 6, color: '#333', align: 'center' });
+    r(8, door === 'bottom' ? top + 46 : top + 18, 5, 3, '#c8c0b0'); r(14, door === 'bottom' ? top + 46 : top + 18, 5, 3, '#c8c0b0'); },
+  darts: (P, W, H, f) => { const { r } = P; P.shadow(2, H - 6, W - 4, 6); r(3, 2, W - 6, H - 8, OLN); r(4, 3, W - 8, H - 10, '#2a2a40'); r(4, 3, W - 8, 4, '#d83a3a'); P.oval(7, 9, 18, 18, '#1a1a1a'); P.oval(9, 11, 14, 14, '#d83a3a'); P.oval(11, 13, 10, 10, '#2a8a3a'); P.oval(13, 15, 6, 6, '#f0f0e0'); P.oval(15, 17, 2, 2, '#d83a3a'); r(8, 32, 16, 8, '#000'); r(9, 33, 14, 6, f % 2 ? '#40e0ff' : '#30c0e0'); r(8, 44, 16, 6, '#3a3a50'); },
+  wallsign: (P, W, H, f, o) => { const { r } = P; r(2, 4, W - 4, H - 8, OLN); r(3, 5, W - 6, H - 10, o.bg || '#2a6ad0'); P.t(o.label || '', W / 2, Math.round(H / 2 - 5), { size: 8, align: 'center', color: o.fg || '#fff' }); },
+  // 牛丼
+  menubd: (P, W, H, f, o) => { const { r } = P; r(0, 0, W, H - 4, OLN); r(1, 1, W - 2, H - 6, '#fffaf0'); r(1, 1, W - 2, 10, o.c || '#f08300'); P.t(o.title || 'メニュー', 6, 1, { size: 8 }); const items = o.items || [];
+    items.forEach((it, i) => { const x = 6 + i * Math.floor((W - 10) / items.length); P.oval(x + 2, 16, 18, 10, '#2a1a10'); P.oval(x + 3, 15, 16, 7, it[2] || '#8a4a22'); r(x + 6, 15, 4, 2, '#f8f0e0'); if (it[3]) r(x + 12, 16, 3, 2, it[3]); P.t(it[0], x + 24, 13, { size: 6, color: '#333' }); P.t(it[1], x + 24, 22, { size: 6, color: '#d83a3a' }); }); },
+  kitchen: (P, W, H, f) => { const { r } = P; r(0, H - 30, W, 28, OLN); r(1, H - 29, W - 2, 8, '#d0d4dc'); r(1, H - 29, W - 2, 1, '#f0f2f6'); r(1, H - 21, W - 2, 18, '#a8acb6'); for (let x = 20; x < W; x += 32) r(x, H - 20, 1, 16, '#8a8e98');
+    const pot = (x) => { r(x, H - 46, 30, 20, OLN); r(x + 1, H - 45, 28, 18, '#c8ccd4'); r(x + 1, H - 45, 28, 2, '#eef0f4'); P.oval(x + 2, H - 47, 26, 8, '#3a2a1a'); P.oval(x + 4, H - 46, 22, 6, '#9a5a28'); r(x + 8, H - 45, 4, 1, '#e8d8b0'); r(x + 16, H - 44, 5, 1, '#e8d8b0');
+      for (let i = 0; i < 3; i++) { const sy = (f * 2 + i * 7) % 18; P.c.fillStyle = `rgba(255,255,255,${0.5 - sy / 40})`; P.c.fillRect(x + 6 + i * 8 + Math.sin((f + i) * 0.8) * 2, H - 52 - sy, 3, 4); } };
+    pot(10); pot(48); r(90, H - 52, 24, 26, OLN); r(91, H - 51, 22, 24, '#f4f4f6'); r(91, H - 51, 22, 4, '#d83a3a'); r(96, H - 44, 12, 4, '#c8ccd4'); r(122, H - 50, 22, 24, OLN); r(123, H - 49, 20, 22, '#f4f4f6'); r(123, H - 49, 20, 4, '#d83a3a');
+    for (let i = 0; i < 5; i++) { P.oval(152 + i * 12, H - 40, 10, 6, '#2a1a10'); P.oval(153 + i * 12, H - 41, 8, 4, '#f8f0e0'); } r(150, H - 34, 62, 3, '#9aa0aa'); },
+  cntr: (P, W, H, f, o) => { const { r } = P; const vert = o.vert, top = o.top || '#e8c890', front = o.front || '#8a4a1a';
+    if (!vert) { P.slab(0, H - 34, W, 32, top, front, 12); r(1, H - 22, W - 2, 2, o.band || '#f08300'); for (let x = 16; x < W - 16; x += 64) { r(x, H - 36, 8, 4, '#d83a3a'); r(x + 10, H - 37, 6, 5, '#e8e0d0'); r(x + 11, H - 39, 4, 2, '#3a2a1a'); r(x + 20, H - 36, 5, 4, '#c03030'); } if (o.bowls) for (const bx of o.bowls) { P.oval(bx, H - 36, 14, 7, '#2a1a10'); P.oval(bx + 1, H - 37, 12, 5, '#8a4a22'); r(bx + 4, H - 37, 3, 1, '#f8f0e0'); } }
+    else { r(0, 0, W, H - 2, OLN); r(1, 1, W - 13, H - 4, top); r(1, 1, W - 13, 1, shade(top, 0.25)); r(W - 12, 1, 11, H - 4, front); r(W - 12, 1, 2, H - 4, shade(front, -0.35)); r(W - 9, 1, 2, H - 4, o.band || '#f08300'); for (let y = 20; y < H - 20; y += 40) { r(6, y, 6, 6, '#d83a3a'); r(5, y + 9, 8, 7, '#e8e0d0'); r(6, y + 7, 6, 2, '#3a2a1a'); } } },
+  tbl: (P, W, H) => { const { r } = P; P.shadow(3, H - 6, W - 6, 6); r(13, H - 16, 6, 12, '#5a3a22'); r(3, H - 30, W - 6, 16, OLN); r(4, H - 29, W - 8, 9, '#c89860'); r(4, H - 20, W - 8, 5, '#8a5a32'); r(8, H - 30, 5, 4, '#d83a3a'); r(15, H - 31, 4, 5, '#e8e0d0'); r(21, H - 30, 4, 4, '#9a9ca4'); },
+  // ドーム
+  stand: (P, W, H, f, o) => { const { r } = P; const c = o.c || '#d83a3a', top = H - 96; P.shadow(2, H - 7, W - 4, 7);
+    r(4, top + 14, 3, 60, '#6a6e78'); r(W - 7, top + 14, 3, 60, '#6a6e78');
+    for (let i = 0; i < W / 12; i++) { r(i * 12, top + 8, 12, 12, i % 2 ? '#ffffff' : c); r(i * 12, top + 20, 12, 3, i % 2 ? '#e0e0e0' : shade(c, -0.3)); } r(0, top + 6, W, 2, OLN); r(0, top + 23, W, 1, OLN);
+    r(10, top, W - 20, 10, OLN); r(11, top + 1, W - 22, 8, '#fffaf0'); P.t(o.label || '', W / 2, top, { size: 8, color: shade(c, -0.2), align: 'center' });
+    r(8, top + 28, W - 16, 26, '#3a3a44'); for (let i = 0; i < 4; i++) { r(12 + i * ((W - 28) / 4), top + 34, (W - 36) / 4, 14, '#fff4dc'); r(13 + i * ((W - 28) / 4), top + 38, (W - 40) / 4, 6, o.food || '#c86a2a'); } r(8, top + 28, W - 16, 2, '#ffd890');
+    P.slab(2, H - 36, W - 4, 32, '#e8e8ec', c, 9); r(8, H - 22, W - 16, 9, '#ffffff'); P.t(o.sub || '', W / 2, H - 22, { size: 8, color: c, align: 'center' }); },
+  merch: (P, W, H, f, o) => { const { r } = P; const c = o.c || '#1a2a5a', a = o.a || '#f5a000', top = H - 96; P.shadow(2, H - 7, W - 4, 7);
+    r(2, top + 2, W - 4, 58, OLN); r(3, top + 3, W - 6, 56, '#2a2c34'); r(3, top + 3, W - 6, 10, c); P.t('OFFICIAL SHOP', W / 2, top + 3, { size: 8, color: a, align: 'center' });
+    for (let i = 0; i < 6; i++) { const x = 8 + i * ((W - 16) / 6); r(x, top + 16, 2, 2, '#c8ccd4'); r(x - 6, top + 18, 18, 18, i % 2 ? '#ffffff' : c); r(x - 6, top + 18, 4, 8, i % 2 ? '#ffffff' : c); r(x + 8, top + 18, 4, 8, i % 2 ? '#ffffff' : c); P.t(String(10 + i * 7 % 50), x + 3, top + 23, { size: 6, color: i % 2 ? c : '#ffffff', align: 'center' }); }
+    for (let i = 0; i < 8; i++) r(8 + i * ((W - 16) / 8), top + 42, (W - 24) / 8, 12, i % 2 ? a : c);
+    P.slab(2, H - 36, W - 4, 32, '#f0f0f4', c, 9); r(2, H - 18, W - 4, 2, a); },
+  tix: (P, W, H, f, o) => { const { r } = P; const top = H - 96, c = o.c || '#1a2a5a'; P.shadow(2, H - 7, W - 4, 7); r(2, top + 4, W - 4, 92, OLN); r(3, top + 5, W - 6, 90, '#d8dce4'); r(3, top + 5, W - 6, 12, c); P.t('チケット TICKET', W / 2, top + 6, { size: 8, color: '#fff', align: 'center' });
+    for (let i = 0; i < 3; i++) { const x = 8 + i * ((W - 16) / 3); r(x, top + 22, (W - 28) / 3, 30, '#2a3040'); r(x + 1, top + 23, (W - 30) / 3, 28, 'rgba(160,210,255,0.55)'); r(x + 2, top + 24, 6, 26, 'rgba(255,255,255,0.35)'); r(x + 4, top + 50, (W - 36) / 3, 4, '#9aa0aa'); }
+    r(8, top + 58, W - 16, 10, '#fffaf0'); P.t('外野自由席 ¥3,500', W / 2, top + 58, { size: 8, color: '#333', align: 'center' }); r(3, top + 72, W - 6, 22, '#9a9ea8'); r(3, top + 72, W - 6, 2, '#c8ccd4'); },
+  gate: (P, W, H, f, o) => { const { r } = P; r(0, 0, W, H, '#8a8e98'); r(16, 6, W - 32, H - 6, OLN); P.vg(18, 8, W - 36, 18, '#0a1030', '#2a3a70'); for (let i = 0; i < 40; i++) r(20 + (i * 17) % (W - 40), 10 + (i * 7) % 14, 2, 1, SPINES[i % SPINES.length]); r(18, 26, W - 36, H - 26, '#3aa848'); for (let x = 18; x < W - 18; x += 12) r(x, 26, 6, H - 26, '#46b454'); r(18, 26, W - 36, 2, '#ffffff');
+    const lf = f % 2 ? '#fffbe0' : '#fff0b0'; r(24, 9, 6, 3, lf); r(W - 30, 9, 6, 3, lf); r(16, 6, W - 32, 2, '#5a5e68');
+    r(W / 2 - 26, 0, 52, 8, '#f5a000'); P.t(o.label || 'GATE 21', W / 2, -1, { size: 8, color: '#1a1a1a', align: 'center' }); },
+  pillar: (P, W, H, f, o) => { const { r } = P; P.shadow(2, H - 6, W - 4, 6); r(4, 2, W - 8, H - 6, OLN); P.hg(5, 3, W - 10, H - 8, '#b4b8c0', '#868a94'); r(5, 3, W - 10, 2, '#d0d4dc'); r(7, 14, W - 14, 44, o.c || '#1a2a5a'); r(7, 14, W - 14, 3, o.a || '#f5a000'); r(7, 55, W - 14, 3, o.a || '#f5a000'); P.t(o.num || '1', W / 2, 26, { size: 10, color: '#ffffff', align: 'center' }); r(5, H - 12, W - 10, 6, '#6a6e78'); },
+  turnstile: (P, W, H, f) => { const { r } = P; for (let i = 0; i < W / 32; i++) { const x = i * 32; P.shadow(x + 4, H - 6, 24, 6); r(x + 8, H - 34, 16, 30, OLN); P.vg(x + 9, H - 33, 14, 28, '#d8dce4', '#9a9ea8'); r(x + 10, H - 30, 12, 4, '#2a2a34'); r(x + 12, H - 29, 4, 2, f % 2 ? '#40ff80' : '#30e070'); r(x + 23, H - 24, 9, 2, '#2a2a30'); } },
+  scoreb: (P, W, H, f, o) => { const { r } = P; r(0, 0, W, H - 4, OLN); r(1, 1, W - 2, H - 6, '#0a0e14'); r(1, 1, W - 2, 9, o.c || '#1a2a5a'); P.t('STARTING MEMBER', W / 2, 1, { size: 6, color: '#ffe060', align: 'center' }); const L = ['1 中', '2 二', '3 右', '4 一', '5 三', '6 左'];
+    L.forEach((s, i) => { const x = 6 + (i % 3) * Math.floor((W - 10) / 3), y = 13 + Math.floor(i / 3) * 10; P.t(s, x, y, { size: 6, color: i === (f % 6) ? '#ffffff' : '#ffb040' }); }); },
+  vend: (P, W, H, f, o) => { const { r } = P; const c = o.c || '#d83a3a'; P.shadow(2, H - 6, W - 4, 6); r(3, 2, W - 6, H - 8, OLN); r(4, 3, W - 8, H - 10, c); r(6, 6, W - 12, 24, '#e8f4ff'); for (let s = 0; s < 3; s++) for (let i = 0; i < 4; i++) r(7 + i * 5, 8 + s * 7, 3, 5, SPINES[(i + s * 2) % SPINES.length]); r(6, 34, W - 12, 4, '#2a2a30'); r(8, 42, 8, 6, '#1a1a1a'); r(W - 12, 40, 4, 8, '#c8ccd4'); },
+  trash: (P, W, H) => { const { r } = P; P.shadow(1, H - 6, W - 2, 6); const C = ['#d83a3a', '#2a6ad0', '#2aa858']; for (let i = 0; i < 3; i++) { const x = 1 + i * 10; r(x, H - 28, 9, 22, OLN); r(x + 1, H - 27, 7, 20, '#c8ccd4'); r(x + 1, H - 27, 7, 4, C[i]); r(x + 3, H - 26, 3, 2, OLN); } },
+  plant: (P, W, H) => { const { r } = P; P.shadow(4, H - 6, W - 8, 6); r(10, H - 18, 12, 13, OLN); r(11, H - 17, 10, 11, '#f4f4f6'); for (let i = 0; i < 7; i++) P.oval(6 + (i * 5) % 16, H - 46 + (i * 7) % 24, 12, 10, i % 2 ? '#3a9a4a' : '#2a7a3a'); r(15, H - 24, 2, 8, '#5a3a22'); },
+};
+// 置物を作るときの短縮
+const ip = (k, x, y, w, h, up, o = {}) => IP(x, y, w, h, up, `${k}:${JSON.stringify(o.a || {})}`, (P, W, H, f) => ART[k](P, W, H, f, o.a || {}), o);
+// ---- 部屋 ----
+function interiorCompany(pid, key, city, host, ev) {
+  const co = COMPANIES[key];
+  const hostNpc = (x, y, o = {}) => ({ type: 'npc', id: pid + '_host', x, y, dir: 'down', look: host.look, name: host.name, talk: ev, ...o });
+  const guest = (id, x, y, dir, look, name, text, o = {}) => ({ type: 'npc', id: `${pid}_${id}`, x, y, dir, look, name, text, ...o });
+  const exitW = (xs, y) => xs.map(x => ({ x, y, to: 'exit' }));
+  if (key === 'nintendo') {
+    const tiles = ['#####################', '#===================#', '#...................#', '#...................#', '#...................#', '#...................#', '#...................#', '#...................#', '#...................#', '#..........bb.......#', '#...................#', '#...................#', '#########MM##########'];
+    return { floor: 'np_fl_show', wall: 'npshow', tiles, legend: { b: 'np_bench_show' }, warps: exitW([9, 10], 12),
+      drawUnder(c, g, cam) { const x0 = 6 * 16 - cam.x, y0 = 2 * 16 - cam.y; const gr = c.createLinearGradient(0, y0, 0, y0 + 40); gr.addColorStop(0, 'rgba(120,180,255,0.30)'); gr.addColorStop(1, 'rgba(120,180,255,0)'); c.fillStyle = gr; c.fillRect(x0, y0, 9 * 16, 40); c.fillStyle = 'rgba(230,0,18,0.85)'; c.fillRect(9 * 16 - cam.x + 2, 4 * 16 - cam.y, 28, 8 * 16); c.fillStyle = 'rgba(255,215,0,0.7)'; c.fillRect(9 * 16 - cam.x + 2, 4 * 16 - cam.y, 1, 8 * 16); c.fillRect(11 * 16 - cam.x - 3, 4 * 16 - cam.y, 1, 8 * 16); },
+      entities: [
+        { type: 'logo', x: 1.2, y: 0.9, w: 3, h: 1.1, logo: 'w_' + key, text: `「${co.name}」の看板だ。` },
+        ip('vwall', 6, 1, 9, 1, 1, { frames: 24, speed: 10, text: ['大きなビデオウォールで、新作ゲームの映像が流れている。', '見ているだけで、わくわくしてくる。'] }),
+        ip('regcounter', 1, 3, 3, 1, 1, { talk: ev, a: { label: 'インフォメーション' } }), hostNpc(2, 2),
+        ip('showcase', 17, 3, 2, 1, 1, { text: ['ガラスケースの中に、ゲーム機とフィギュアが飾られている。', '「歴代のゲーム機展示コーナー」と書いてある。'] }),
+        ip('showcase', 17, 6, 2, 1, 1, { text: ['限定カラーの本体が飾られている。', '「抽選販売」の札が立っている。'] }),
+        ip('goods', 1, 6, 2, 1, 1, { talk: ev, text: ['ゲームソフトとグッズの棚だ。'] }), ip('goods', 1, 8, 2, 1, 1, { talk: ev }),
+        ...[[5, 5, 0], [9, 5, 1], [13, 5, 2], [7, 8, 3], [12, 8, 0]].map(([x, y, gm]) => ip('kiosk', x, y, 2, 1, 1, { frames: 12, speed: 8, talk: ev, a: { game: gm, label: '試遊台' } })),
+        ip('standee', 5, 10, 1, 1, 2, { solid: true, text: '新作ゲームの大きなスタンディーだ。', a: { label: 'NEW', c1: '#ff5a8a', c2: '#ffd040', c3: '#3a6ad8' } }),
+        ip('standee', 15, 10, 1, 1, 2, { solid: true, text: '発売予定タイトルのポスタースタンドだ。', a: { label: '予約', c1: '#5ad0ff', c2: '#a0ffb0', c3: '#e83a3a' } }),
+        ip('plant', 19, 2, 1, 1, 1, {}), ip('plant', 1, 11, 1, 1, 1, {}), ip('plant', 19, 11, 1, 1, 1, {}),
+        guest('g1', 5, 6, 'up', { ...W_LOOK.man, top: '#3a3a44' }, 'お客さん', ['新作、めちゃくちゃおもしろい…！', '並んでよかった！']),
+        guest('g2', 14, 6, 'up', W_LOOK.woman, 'お客さん', ['このゲーム、友だちと遊びたいな。']),
+        guest('g3', 12, 9, 'up', { hair: 'spiky', hairColor: 'black', skin: 'light', top: '#f0c030', bottom: '#2a4a8a' }, '子ども', ['ぼく、これ誕生日に買ってもらうんだ！']),
+        guest('staff', 16, 4, 'right', { ...W_LOOK.clerk, top: '#e60012' }, 'スタッフさん', ['展示ケースの本体は、販売していないんです。', '試遊台は、おひとり様10分までです！']),
+        guest('g4', 9, 10, 'up', { ...W_LOOK.woman, top: '#8a4ad0' }, 'お客さん', ['外国から来たんだ。東京に来たら、ここは外せないよ！'], { wander: 1 }),
+      ], events: [] };
+  }
+  if (key === 'kaikatsu') {
+    const tiles = ['#####################', '#===================#', '#...................#', '#...................#', '#...................#', '#...................#', '#...................#', '#...................#', '#...................#', '#...................#', '#...................#', '#...................#', '#.......ss..........#', '#########MM##########'];
+    const booths = []; let n = 1;
+    for (const y of [4, 9]) for (const x of [12, 14, 16, 18]) { booths.push(ip('booth', x, y, 2, 2, 0, { frames: 3, speed: 30, a: { n: n, door: y === 4 ? 'bottom' : 'top' }, text: [`${n}番ブースだ。`, n % 3 ? 'リクライニングシートの個室。ドアの向こうから、かすかにキーボードの音がする。' : '「使用中」の札がかかっている。'] })); n++; }
+    return { floor: 'np_fl_net', wall: 'npnet', tiles, legend: { s: 'sofa_blue' }, warps: exitW([9, 10], 13),
+      drawOver(c, g, cam) { c.fillStyle = 'rgba(8,10,24,0.18)'; c.fillRect(0, 0, 320, 180); const lp = (x, y, rr, col) => { const gr = c.createRadialGradient(x - cam.x, y - cam.y, 2, x - cam.x, y - cam.y, rr); gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gr; c.fillRect(x - cam.x - rr, y - cam.y - rr, rr * 2, rr * 2); }; c.save(); c.globalCompositeOperation = 'lighter'; lp(2.5 * 16, 3 * 16, 44, 'rgba(255,170,90,0.18)'); lp(8.5 * 16, 3 * 16, 44, 'rgba(150,200,255,0.16)'); lp(10 * 16, 12 * 16, 36, 'rgba(255,220,180,0.12)'); c.restore(); },
+      entities: [
+        { type: 'logo', x: 1.2, y: 0.9, w: 3, h: 1.1, logo: 'w_' + key, text: `「${co.name}」の看板だ。` },
+        ip('reception', 1, 3, 4, 1, 1, { talk: ev }), hostNpc(2, 2),
+        ip('pricebd', 5, 1, 2, 1, 0, { text: ['料金表だ。', '3時間パック ¥1,200／ナイトパック ¥2,000（フリードリンク・ソフトクリーム食べ放題）'] }),
+        ip('drinkbar', 7, 2, 4, 1, 1, { text: ['ドリンクバーとソフトクリームマシン。', 'メロンソーダとソフトクリームを混ぜて、クリームソーダにする人もいる。'] }),
+        ip('manga', 12, 2, 4, 1, 1.5, { text: ['マンガの棚がずらりと並んでいる。', '全巻そろっている。今日中には、読みきれない…。'], a: { seed: 3, label: '少年' } }),
+        ip('manga', 16, 2, 4, 1, 1.5, { text: ['マンガの棚。', '「完結済み」の札がついた棚から、読む人が多い。'], a: { seed: 5, label: '青年' } }),
+        ip('manga', 1, 6, 5, 1, 1.5, { text: ['新刊コーナーだ。', '話題のマンガは、だいたい誰かが読んでいて、棚が空いている。'], a: { seed: 7, label: '新刊' } }),
+        ip('manga', 1, 9, 5, 1, 1.5, { text: ['少女マンガと雑誌の棚。'], a: { seed: 9, label: '少女・雑誌' } }),
+        ...booths,
+        ip('darts', 8, 6, 1, 1, 1, { frames: 2, speed: 20, text: ['ダーツマシンだ。', '深夜になると、ここだけにぎやかになる。'] }),
+        ip('wallsign', 14, 1, 2, 1, 0, { solid: false, text: 'シャワールームはこちら（30分無料）。', a: { label: 'SHOWER', bg: '#2a6ad0' } }),
+        ip('wallsign', 17, 1, 2, 1, 0, { solid: false, text: 'お手洗いはこちら。', a: { label: 'WC', bg: '#3a8a5a' } }),
+        ip('plant', 1, 12, 1, 1, 1, {}),
+        guest('g1', 8, 3, 'up', { ...W_LOOK.man, top: '#5a5a66' }, 'お客さん', ['ソフトクリーム、3回目…。', '元をとるまで帰れない。']),
+        guest('g2', 3, 7, 'up', W_LOOK.woman, 'お客さん', ['このマンガ、全部読むまで帰らない！']),
+        guest('g3', 15, 7, 'left', { hair: 'short', hairColor: 'black', skin: 'light', top: '#2a2a30', bottom: '#2a2a30', glasses: true }, 'お客さん', ['……終電、のがした。', 'ナイトパックで、朝まで。'], { wander: 1 }),
+      ], events: [] };
+  }
+  if (key === 'yoshinoya' || key === 'nakau') {
+    const c = co.bg, nk = key === 'nakau';
+    const tiles = ['###################', '#=================#', '#.................#', '#...s.........s...#', '#...s.........s...#', '#...s.........s...#', '#...s.........s...#', '#.................#', '#.....sssssss.....#', '#.................#', '#.................#', '#########MM########'];
+    const menu = nk ? [['親子丼', '¥490', '#e8c040', '#7a4a22'], ['はいからうどん', '¥290', '#d8b880'], ['牛すき丼', '¥590', '#8a4a22'], ['カツ丼', '¥690', '#c88a40']] : [['牛丼 並', '¥450', '#8a4a22', '#d83a3a'], ['牛丼 大盛', '¥600', '#8a4a22'], ['牛皿定食', '¥620', '#9a5a2a'], ['豚丼', '¥450', '#b87a4a']];
+    return { floor: 'np_fl_gyu', wall: 'npgyu', tiles, legend: { s: 'np_stool_gyu' }, warps: exitW([9, 10], 11),
+      entities: [
+        { type: 'logo', x: 1.4, y: 0.9, w: 3, h: 1.1, logo: 'w_' + key, text: `「${co.name}」の看板だ。` },
+        ip('menubd', 6, 1, 7, 1, 0.5, { solid: false, text: ['壁のメニュー。', nk ? '親子丼のだしの香りがする。' : '「うまい、やすい、はやい」――牛丼一筋。'], a: { title: nk ? 'なか卯 おすすめ' : '吉野家 メニュー', c, items: menu } }),
+        ip('kitchen', 6, 2, 7, 1, 0.7, { frames: 12, speed: 8, talk: ev, text: '大きな鍋で、牛肉と玉ねぎがぐつぐつ煮えている。' }),
+        { type: 'npc', id: pid + '_host', x: 9, y: 4, dir: 'down', look: host.look, name: host.name, talk: ev },
+        guest('staff2', 7, 3, 'up', { ...W_LOOK.clerk, top: c }, '店員さん', ['いらっしゃいませ〜！ 並、つゆだく、入りまーす！']),
+        ip('cntr', 5, 3, 1, 4, 0.5, { talk: ev, a: { vert: 1, band: c } }), ip('cntr', 13, 3, 1, 4, 0.5, { talk: ev, a: { vert: 1, band: c } }),
+        ip('cntr', 5, 7, 9, 1, 0.5, { talk: ev, a: { band: c, bowls: [58, 134, 214] } }),
+        ip('tbl', 2, 4, 1, 1, 0.5, { text: '2人がけのテーブル席。' }), ip('tbl', 2, 7, 1, 1, 0.5, { text: '2人がけのテーブル席。' }), ip('tbl', 16, 4, 1, 1, 0.5, { text: 'テーブル席。' }), ip('tbl', 16, 7, 1, 1, 0.5, { text: 'テーブル席。' }),
+        ip('plant', 1, 10, 1, 1, 1, {}), ip('vend', 17, 10, 1, 1, 1, { a: { c: '#3a6ad0' }, text: nk ? '食券機だ。先に食券を買うシステム。' : 'お茶のサーバーだ。' }),
+        guest('c1', 4, 4, 'right', { ...W_LOOK.man, top: '#4a5a6a' }, 'サラリーマン', ['並、つゆだくで。……5分で食べて、会社に戻る。']),
+        guest('c2', 14, 5, 'left', { hair: 'short', hairColor: 'brown', skin: 'tan', top: '#d8d8d8', bottom: '#2a3040' }, 'お客さん', ['紅しょうが、山盛り派なんだ。']),
+        guest('c3', 8, 8, 'up', W_LOOK.woman, 'お客さん', ['ひとりで牛丼、いいよね。誰にも気をつかわなくて。']),
+        guest('c4', 11, 8, 'up', { hair: 'short', hairColor: 'black', skin: 'light', top: '#2a6a3a', bottom: '#3a3a44' }, '学生', ['大盛り、ギリギリ食べきれるかな……。']),
+      ], events: [{ x: 6, y: 9, w: 7, on: 'action', run: ev }] };
+  }
+  return null;
+}
+// ドームのコンコース（ゲート）
+function interiorDomeGate(pid, sid, S, T, base) {
+  const c = T ? (T.color === '#222222' ? '#2a2a32' : T.color) : '#1a2a5a', a = T ? (TEAM_ACC[S.team] || '#f5a000') : '#f5a000';
+  const tiles = ['#########################', '#===========.===========#', '#.......................#', '#.......................#', '#.......................#', '#.......................#', '#.......................#', '#.......................#', '#.......................#', '#.......................#', '#.......................#', '#.......................#', '############MM###########'];
+  const E0 = base.entities;
+  const tix = E0.find(e => e.id === pid + '_tix'), goods = E0.find(e => e.id === pid + '_goods'), fan = E0.find(e => e.id === pid + '_fan');
+  return { floor: 'np_fl_conc', wall: 'npdome', tiles,
+    warps: [{ x: 12, y: 12, to: 'exit' }, { x: 13, y: 12, to: 'exit' }, { ...base.warps.find(w => w.room === 'field'), x: 12, y: 1 }],
+    drawUnder(cg, g, cam) { cg.fillStyle = 'rgba(255,255,255,0.22)'; for (let y = 3; y < 12; y++) cg.fillRect(12.4 * 16 - cam.x, y * 16 + 6 - cam.y, 3, 5); cg.fillStyle = 'rgba(245,160,0,0.5)'; cg.fillRect(2 * 16 - cam.x, 6.5 * 16 - cam.y, 21 * 16, 2); },
+    entities: [
+      ...(T ? [{ type: 'logo', x: 3.3, y: 0.9, w: 2.4, h: 1.1, logo: 'npb_' + S.team, text: `${T.name}のロゴだ。` }, { type: 'logo', x: 19.3, y: 0.9, w: 2.4, h: 1.1, logo: 'npb_' + S.team, text: `${T.name}のロゴだ。` }] : []),
+      ip('gate', 10, 1, 5, 1, 1, { solid: false, frames: 2, speed: 30, a: { label: 'GATE 21' } }),
+      { type: 'sign', x: 12, y: 2, solid: false, text: ['スタンドへの入場口。', 'その先にグラウンドが見える。（関係者以外は、試合のないときは入れない）'] },
+      ip('scoreb', 6, 1, 3, 1, 0.5, { solid: false, frames: 6, speed: 40, text: '今日のスタメンが表示されている。', a: { c } }),
+      ip('scoreb', 16, 1, 3, 1, 0.5, { solid: false, frames: 6, speed: 40, talk: async g => g.say(standLines(g, S)), a: { c } }),
+      ip('tix', 1, 3, 4, 1, 2, { talk: tix && tix.talk, a: { c } }), { ...tix, x: 2, y: 2 },
+      ip('merch', 19, 3, 5, 1, 2, { talk: goods && goods.talk, a: { c, a } }), { ...goods, x: 21, y: 2 },
+      ip('stand', 1, 8, 3, 1, 2, { talk: goods && goods.talk, a: { c: '#d8a020', label: 'カレー', sub: '球場カレー', food: '#a86a20' } }),
+      ip('stand', 21, 8, 3, 1, 2, { talk: goods && goods.talk, a: { c: '#d83a3a', label: 'ホットドッグ', sub: 'ビール・からあげ', food: '#c86a2a' } }),
+      { type: 'npc', id: pid + '_vendor1', x: 2, y: 7, dir: 'down', look: { ...W_LOOK.clerk, top: '#d8a020' }, name: '売店の店員さん', talk: goods && goods.talk },
+      { type: 'npc', id: pid + '_vendor2', x: 22, y: 7, dir: 'down', look: { ...W_LOOK.woman, top: '#d83a3a' }, name: '売店の店員さん', talk: goods && goods.talk },
+      ...[[7, 4], [17, 4], [7, 8], [17, 8]].map(([x, y], i) => ip('pillar', x, y, 1, 1, 2, { a: { c, a, num: String([1, 18, 25, 55][i]) }, text: T ? `${T.name}の選手の大きなバナーだ。` : '太い柱だ。' })),
+      ip('turnstile', 6, 10, 4, 1, 0.5, { text: '入場ゲート。チケットをかざして通る。' }), ip('turnstile', 15, 10, 4, 1, 0.5, { text: '入場ゲート。' }),
+      ip('vend', 1, 11, 1, 1, 1, { a: { c: '#d83a3a' }, text: '自動販売機。球場価格で、ちょっと高い。' }), ip('vend', 2, 11, 1, 1, 1, { a: { c: '#2a6ad0' }, text: '自動販売機。' }),
+      ip('trash', 23, 11, 1, 1, 0.5, { text: '分別ゴミ箱（燃える・缶・ペットボトル）。' }),
+      { ...fan, x: 10, y: 6 },
+      { type: 'npc', id: pid + '_beer', x: 15, y: 7, dir: 'left', look: { ...W_LOOK.woman, top: a, bottom: c }, name: 'ビールの売り子さん', wander: 1, text: ['ビールいかがですか〜！', '（背中のタンクが、とても重そうだ）'] },
+      { type: 'npc', id: pid + '_kid', x: 14, y: 4, dir: 'up', look: { ...W_LOOK.fan, top: c, hat: c }, name: '少年ファン', text: ['きょうこそ、ホームランボールをとるんだ！'] },
+    ], events: base.events };
+}
+function installInterior() { try { regInteriorTiles(); } catch (e) { console.error('[interior] tiles', e); } }
+
+// ===== 子ども・弟妹のスクールライフ（小学校・中学校・高校） =====
+function gkAiPolicy(g, K) {
+  const L = gkLabels(g, K), s = gkStats(g);
+  if (K.dep >= 1) return pick(['sleep', 'phone', 'serious']);
+  if (L.includes('陽キャ')) return pick(['chat', 'chat', 'phone', 'serious']);
+  if (L.includes('ガリ勉') || s.gaku >= 65) return pick(['serious', 'serious', 'uchi']);
+  if (L.includes('陰キャ') || L.includes('オタク')) return pick(['serious', 'phone', 'sleep', 'cold']);
+  return pick(['serious', 'serious', 'chat', 'phone']);
+}
+// 毎朝：家族の生徒ひとりずつ、学校の1日をAIで進める
+function gkFamilyTick(g) {
+  const prev = GK_CTX;
+  try {
+    for (const m of gkStudents(g)) {
+      const K = gkUse(g, m.key), A = GK_CTX && GK_CTX.A; if (!K || !A) continue;
+      const day = g.state.day;
+      if (K.famDay === day) continue; K.famDay = day;
+      if (K.lastCheck == null) { K.lastCheck = day - 1; K.attDay = day - 1; }
+      try { gkMorning(g); } catch (e) { console.error('[famschool] morning', e); }
+      // 塾代（毎月）
+      if (K.fls.high.cram && day - num(K.cramDay) >= 30) { if (g.spend && g.spend(15000)) K.cramDay = day; else { K.fls.high.cram = false; gkNote(g, '【塾をやめた】\n月謝が払えなくなった。'); } }
+      // きょうの登校
+      const today = gkSched(g, day);
+      if (today && !K.left && !(K.susp && day <= K.susp.until)) {
+        const p = K.futoko ? 0.03 + K.mood / 2500 : K.mood < 20 ? 0.72 : K.bully && K.bully.lv >= 3 ? 0.82 : 0.97;
+        if (chance(p)) {
+          K.policy = gkAiPolicy(g, K);
+          const out = gkAttend(g, K.fls);
+          if (out && chance(0.5)) addDia(A, g, out.replace(/^（|）$/g, ''), 0);
+        }
+      }
+      // 家族AI（目線）と同期
+      A.schoolK = 1; A.bully = K.bully ? K.bully.lv : 0; A.futoko = !!K.futoko;
+      A.mood = clamp(num(A.mood, 60) * 0.5 + K.mood * 0.5, 0, 100);
+      const L = gkLabels(g, K);
+      A.arch = L.includes('陽キャ') ? 'youkya' : (L.includes('陰キャ') || L.includes('オタク')) ? 'inkya' : 'futsu';
+      if (K.bully && K.bully.lv >= 2) addSec(A, g, '学校でいじめられている。家族には絶対に言わない。');
+    }
+  } finally { GK_CTX = prev; }
+}
+// 受験（小6：中学受験／中3：高校受験）
+function gkJuken(g, K) {
+  const s = gkStats(g), av = hyoAvg(K), lv = GK_CTX && GK_CTX.lv;
+  if (lv === 'elem') {
+    if (s.gaku >= 62 && chance(0.4)) { const pass = chance(0.35 + (s.gaku - 60) / 60); K.nextSchool = pass ? `${pick(AMA_CITY)}学園中学校（私立）` : '地元の公立中学校'; gkNote(g, `【中学受験】\n塾に通って、私立中学を受験した。${pass ? '合格した！ 春から電車で通う。' : '不合格だった。地元の中学に進む。12歳の春に、初めての挫折。'}`); return; }
+    K.nextSchool = '地元の公立中学校'; gkNote(g, '【卒業】\n来年から、地元の中学校へ。クラスの顔ぶれは、ほとんど変わらない。……人間関係も、たぶん変わらない。'); return;
+  }
+  const h = Math.round(clamp(50 + (s.gaku - 50) * 0.7 + (av - 3) * 6 + gauss() * 3, 32, 75));
+  const name = h >= 66 ? '県立トップ校' : h >= 58 ? '県立の進学校' : h >= 50 ? '公立のふつうの高校' : h >= 42 ? '私立の高校（単願）' : '定員割れの高校';
+  K.nextSchool = name; K.hensa.push({ y: sy(g).year, v: h }); if (K.hensa.length > 8) K.hensa.shift();
+  gkNote(g, `【高校受験】\n内申点 ${av ? av.toFixed(1) : '－'}・偏差値 ${h}。進学先は「${name}」に決まった。${h < 45 ? '\n担任は「どこでも行けるところがあってよかったな」と言った。' : ''}`);
+}
+// 親・きょうだいとして話を聞く
+function gkParentTalk(g, K) {
+  const C = GK_CTX, A = C.A, m = C.m, nm = String(m.name).split(' ').pop(), B = K.bully, teen = C.lv !== 'elem', kid = m.kind === 'kid';
+  if (K.ptDay === g.state.day) return '今日は、もう話した。しつこく聞くと、かえって口を閉ざされる。';
+  K.ptDay = g.state.day;
+  try { g.advanceTime(30, 'gk_ptalk'); } catch (e) { }
+  A.op = clamp(num(A.op, 50) + (teen ? 0.5 : 2), 0, 100);
+  if (B || K.futoko || K.dep) {
+    if (chance(0.06 + num(A.op) / 420 + (teen ? -0.03 : 0.06))) {
+      K.parentKnows = 1; K.mood = clamp(K.mood + 6, 0, 100);
+      return `${nm}「……実は、学校で……」\n言葉につまりながら、少しずつ話してくれた。${B ? `\n「${B.nick}」と呼ばれていること。${B.lv >= 2 ? '誰も口をきいてくれないこと。' : ''}` : ''}${K.futoko ? '\n朝になると、お腹が痛くなること。' : ''}\n（打ち明けてくれた。ここからが、${kid ? '親' : '家族'}の正念場だ）`;
+    }
+    return pick([`${nm}「……別に。なんでもない」\n（目を合わせてくれなかった）`, `${nm}「学校？ ふつう」\n（それ以上、何も言わなかった。部屋のドアが閉まった）`, `${nm}「うるさいな。ほっといてよ」`, `${nm}「……大丈夫だから」\n（大丈夫な顔じゃなかった。でも、それ以上は聞けなかった）`, `${nm}「${kid ? gkParentCall(g) : 'そっち'}には関係ないでしょ」`]);
+  }
+  const L = gkLabels(g, K);
+  if (L.includes('陽キャ')) return pick([`${nm}「今日さ、昼休みにクラス全員で鬼ごっこしてさ！」\n（楽しそうに話してくれた）`, `${nm}「友だちと遊びに行くから、おこづかいちょうだい」`]);
+  if (L.includes('陰キャ') || L.includes('オタク')) return pick([`${nm}「……ふつう」\n（ゲームの画面から目を離さなかった）`, `${nm}「……友だち？ ……いる、と思う」`]);
+  return pick([`${nm}「給食のカレー、おかわりした」`, `${nm}「テスト、まあまあだった」`, `${nm}「別に、何もなかったよ」`]);
+}
+function gkParentCall(g) { try { return E.Bf(g.state).gender === 'f' ? 'ママ' : 'パパ'; } catch (e) { return 'パパ'; } }
+// 保護者として学校に相談（現実は甘くない）
+function gkParentSchool(g, K) {
+  const C = GK_CTX, A = C.A, nm = String(C.m.name).split(' ').pop(), B = K.bully;
+  if (K.pcDay && g.state.day - K.pcDay < 7) return '先週電話したばかりだ。また電話しても「またですか」と思われるだけだろう。';
+  K.pcDay = g.state.day;
+  try { g.advanceTime(40, 'gk_pcall'); } catch (e) { }
+  if (!B) return pick(['担任「特に問題はないですよ。クラスでも、うまくやっています」\n（……本当に、そうだろうか）', '担任「元気にしていますよ。心配しすぎじゃないですか」']);
+  if (!K.parentKnows) return `担任「いじめ？ そういった報告は上がっていませんね」\n（本人から何も聞けていない以上、それ以上は言えなかった）`;
+  const r = RND();
+  if (r < 0.06) { K.bully = null; K.mood = clamp(K.mood + 8, 0, 100); gkEv(g, 'sc_bully_end'); return '担任は学年主任と一緒に、家まで謝りに来た。相手の保護者も呼ばれ、話し合いがもたれた。\n……いじめは止まった。こんなことは、めったにない。'; }
+  if (r < 0.38) { B.lv = Math.min(3, B.lv + 1); K.mood = clamp(K.mood - 6, 0, 100); A.op = clamp(num(A.op) - 8, 0, 100); return `担任「わかりました。それとなく指導しておきます」\n……翌週、${nm}の口数がさらに減った。\n「親にチクったんだって」――教室では、そういうことになっていた。\n（${nm}は、もう何も話してくれなくなった）`; }
+  return pick(['担任「いじめ、というほどのことは確認できませんでした。子ども同士のじゃれ合いかと」', '担任「お子さんにも、もう少しまわりに合わせる努力を……」\n電話は、5分で終わった。', '学年主任「学校としては、適切に対応しております」\n何を、どう対応したのかは、最後まで教えてもらえなかった。', '教頭「大ごとにすると、お子さんの立場が悪くなりますよ」\n……それは、脅しにしか聞こえなかった。']);
+}
+function gkFamTransfer(g, K) {
+  const C = GK_CTX;
+  if (C.lv === 'hs') return gkTransfer(g, K);
+  const old = K.school;
+  K.school = `${pick(AMA_CITY)}${C.lv === 'elem' ? '小学校' : '中学校'}`; K.cls = genClass(K.f); K.namedV = 2;
+  K.bully = null; K.futoko = false; K.absStreak = 0; K.rep = 45; K.welcomed = 0; K.transferred = 1;
+  K.mood = clamp(K.mood + 4, 0, 100);
+  gkHist(g, `${old}から${K.school}に転校した`, 'school');
+  return `${old}から、${K.school}に転校した。\n新しい教室。誰も、前の学校のことを知らない。\n……ただ、「転校生」というだけで、また値ぶみされる日々が始まる。`;
+}
+
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
-try{NPB_factory({Un:Un,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt,$M:$M,Ho:Ho,qe:qe,Zc:Zc,setLae:function(f){Lae=f(Lae)},setVu:function(f){vu=f(vu)},cd:cd,r6t:r6t,ug:ug,R4:R4,bu:bu,cg:cg,wu:wu,sh:$h,Mm:Mm,apps:function(){return mCe.concat(Object.values(Mm))},x0t:x0t,VP:VP,L$t:L$t,$8:$8,aPa:aPa,Wn:Wn,v8:v8,Ur:Ur,Ut:Ut,U_e:U_e,rg:rg,L4:L4,Lf:Lf,jrt:jrt,XIa:XIa,set$8:function(f){try{$8=f($8)}catch(e){console.error(e)}},setCjt:function(f){try{Cjt=f(Cjt)}catch(e){console.error(e)}}}).install()}catch(e){console.error("[npb] install",e)}
+try{NPB_factory({Un:Un,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt,$M:$M,Ho:Ho,qe:qe,Zc:Zc,setLae:function(f){Lae=f(Lae)},setVu:function(f){vu=f(vu)},cd:cd,r6t:r6t,ug:ug,R4:R4,bu:bu,cg:cg,wu:wu,sh:$h,Mm:Mm,Z:Z,apps:function(){return mCe.concat(Object.values(Mm))},x0t:x0t,VP:VP,L$t:L$t,$8:$8,aPa:aPa,Wn:Wn,v8:v8,Ur:Ur,Ut:Ut,U_e:U_e,rg:rg,L4:L4,Lf:Lf,jrt:jrt,XIa:XIa,set$8:function(f){try{$8=f($8)}catch(e){console.error(e)}},setCjt:function(f){try{Cjt=f(Cjt)}catch(e){console.error(e)}}}).install()}catch(e){console.error("[npb] install",e)}
 DBa().catch(t=>{console.error(t),vTe(window.__game,"\u30B2\u30FC\u30E0\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u2026","\u30DA\u30FC\u30B8\u3092\u518D\u8AAD\u307F\u8FBC\u307F\u3057\u3066\u304F\u3060\u3055\u3044")});})();
 
 </script>
