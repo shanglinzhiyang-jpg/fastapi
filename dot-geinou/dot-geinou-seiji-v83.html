@@ -10215,7 +10215,7 @@ function processDay(g, N, day, out) {
   S.curMd = md;
   try { evoDaily(g, N, S, day, md, out); } catch (e) { console.error('[npb] evo daily', e); }
   try { moreDaily(g, N, S, day, md, out); } catch (e) { console.error('[npb] more daily', e); }
-  try { minorEvents(g, N, S, md, out); evDaily(g, N, S, day, md, out); } catch (e) { console.error('[npb] minor/ev daily', e); }
+  try { amaAuto(g, N, S, md, out); minorEvents(g, N, S, md, out); evDaily(g, N, S, day, md, out); } catch (e) { console.error('[npb] minor/ev daily', e); }
   dailyMe(g, N, S, day, md, out);
 }
 
@@ -10620,6 +10620,7 @@ function shibouOK(g, N) {
   if (!me.p.pos) return { ok: false, why: 'ポジションを決めていない' };
   if (me.st === 'free') return { ok: false, why: '自由契約の選手は、入団テスト・トライアウトから' };
   if (a < 17) return { ok: false, why: '高校3年生（17歳）から出せる' };
+  if (me.minor && me.minor.kind === 'univ' && amaYear(me, N.S ? N.S.y : 0) < 4) return { ok: false, why: '大学生は4年生の秋から出せる' };
   if (ls && ls.high && !ls.high.grad && hsGrade(g) < 3) return { ok: false, why: '高校3年生になってから' };
   if (a > 26) return { ok: false, why: 'ドラフトの対象は26歳くらいまで。入団テストを受けよう' };
   return { ok: true };
@@ -10627,10 +10628,10 @@ function shibouOK(g, N) {
 function draftDay(g, N, S, out) {
   const me = N.me;
   if (!me) return;
-  const mnr = isMinor(me) && S.y >= num(me.minor.y0, S.y) && !me.proY && corpDraftOK(me, S.y) && !!S.mn;
+  const mnr = isMinor(me) && (me.minor.kind === 'ind' || me.minor.kind === 'corp') && S.y >= num(me.minor.y0, S.y) && !me.proY && corpDraftOK(me, S.y) && !!S.mn;
   if (!mnr && (me.shibou !== S.y || me.st !== 'none')) return;
   const ov = meOvr(me), a = num(me.p.age, 18);
-  const v = ov + num(me.scout) * 0.6 + (a <= 18 ? 3 : a <= 22 ? 1 : -1) + gauss() * 2.5 + (mnr ? minorDraftBonus(N, S) + (me.minor.kind === 'corp' ? 1.5 : 0.5) : 0);
+  const v = ov + num(me.scout) * 0.6 + (a <= 18 ? 3 : a <= 22 ? 1 : -1) + gauss() * 2.5 + (mnr ? minorDraftBonus(N, S) + (me.minor.kind === 'corp' ? 1.5 : 0.5) : 0) + (!mnr && isAma(me) && S.mn ? minorDraftBonus(N, S) + (me.minor.kind === 'univ' ? 1.5 : 0) : 0);
   const worst = [...standings(S, 'C'), ...standings(S, 'P')].sort((x, y) => x.pct - y.pct).map(r => r.id);
   const pickTeam = () => { const k = Math.floor(Math.pow(RND(), 1.4) * worst.length); return worst[k]; };
   let round = 0, ik = false, comp = 0;
@@ -10646,7 +10647,7 @@ function draftDay(g, N, S, out) {
   if (comp) { const ts = new Set([team]); while (ts.size < comp) ts.add(pick(TEAMS).id); const arr = [...ts]; team = pick(arr); compText = `${arr.map(t => TEAM[t].short).join('・')}の${comp}球団が1位で競合！ くじ引きの結果、交渉権は${TEAM[team].short}に。\n`; }
   const B1 = [0, 1e8, 7e7, 5e7, 4e7, 3e7, 2.5e7, 2e7], S1 = [0, 1.5e7, 1.2e7, 1e7, 8e6, 7e6, 6.5e6, 6e6];
   const o = ik ? { team, round, ikusei: true, sal: 3e6, bonus: 3e6 } : { team, round, ikusei: false, sal: S1[round] + (comp ? 1e6 : 0), bonus: B1[round] };
-  o.kind = 'draft'; o.y = S.y; o.until = S.y; if (mnr) { o.from = me.minor.team; o.fromKind = me.minor.kind; }
+  o.kind = 'draft'; o.y = S.y; o.until = S.y; if (me.minor) { o.from = me.minor.team; o.fromKind = me.minor.kind; }
   me.offer = o;
   const label = ik ? `育成ドラフト${round}位` : `ドラフト${round}位`;
   out.notes.push(`【ドラフト会議】\n${compText}${TEAM[team].name}が、あなたを${label}で指名した！\n（プロ野球アプリで、入団するかどうかを決めよう）`);
@@ -10662,7 +10663,7 @@ function acceptOffer(g, N, yes) {
   const S = N.S, y = S ? S.y : dateOf(g, g.state.day).year;
   const off = S && S.done >= S.N;
   const firstJoin = !me.proY;
-  const route = o.kind === 'draft' ? (o.fromKind === 'corp' ? 'draft_corp' : o.fromKind === 'ind' ? 'draft_ind' : 'draft') : o.kind;
+  const route = o.kind === 'draft' ? (o.fromKind === 'corp' ? 'draft_corp' : o.fromKind === 'ind' ? 'draft_ind' : o.fromKind === 'univ' ? 'draft_univ' : o.fromKind === 'hs' ? 'draft_hs' : 'draft') : o.kind;
   const from = o.from || (me.minor ? me.minor.team : null);
   if (me.minor) { try { leaveMinor(N, S); } catch (e) { } }
   joinTeam(g, N, o.team, { ...o, y, payFrom: off ? y + 1 : y, firstJoin });
@@ -11164,7 +11165,7 @@ function drawMinorBadge(c, mn, x, y, s) {
 }
 const resMark = e => e.s[0] > e.s[1] ? '○' : e.s[0] < e.s[1] ? '●' : '△';
 const resCol = e => e.s[0] > e.s[1] ? UC.good : e.s[0] < e.s[1] ? UC.bad : UC.dim;
-const KIND_N = { R: '', CS1: 'CS1st', CSF: 'CSファイナル', JS: '日本シリーズ', F: '二軍', F3: '三軍', MLB: 'MLB', AAA: '3A', IND: '独立L', CORP: '社会人', CT: '都市対抗', CN: '日本選手権', IP: '優勝決定戦' };
+const KIND_N = { R: '', CS1: 'CS1st', CSF: 'CSファイナル', JS: '日本シリーズ', F: '二軍', F3: '三軍', MLB: 'MLB', AAA: '3A', IND: '独立L', CORP: '社会人', UNIV: '大学', HS: '高校', JHS: '中学', KIDS: '少年', UT: '大学大会', HT: '高校大会', JT: '中学大会', KT: '学童大会', CT: '都市対抗', CN: '日本選手権', IP: '優勝決定戦' };
 const oppName = e => e.on || (TEAM[e.o] ? TEAM[e.o].short : '');
 function meBatLine(b, full) {
   if (!b) return '';
@@ -11431,6 +11432,7 @@ class NpbScene {
     let st = '';
     if (pro) st = num(me.susp) > 0 ? `出場停止中（残り${me.susp}試合）` : me.inj > 0 ? `故障で離脱中（約${Math.ceil(me.inj / 2.3)}日）` : me.ikusei ? (me.lv3 ? '育成選手（三軍）' : '育成選手') : me.lv === 1 ? `一軍 ${ROLE_N[me.role] || ''}` : me.lv3 ? '三軍で鍛え直し中' : '二軍で調整中';
     else if (mlb) st = me.mlb.free ? '契約満了（去就を決めよう）' : me.inj > 0 ? '故障で離脱中' : me.mlb.lv === 1 ? `メジャー ${ROLE_N[me.mlb.role] || ''}` : 'マイナー（3A）';
+    else if (mnr && isAma(me)) st = me.offer ? `${TEAM[me.offer.team].short}から指名！` : me.minor.kind === 'univ' ? `大学${Math.min(4, amaYear(me, S ? S.y : 2026))}年生${me.shibou ? '・プロ志望届提出ずみ' : ''}` : me.minor.kind === 'hs' ? `高校野球部（${hsGrade(this.g) || 1}年生）${me.shibou ? '・志望届提出ずみ' : ''}` : me.minor.kind === 'jhs' ? '中学野球でプレー中' : '少年野球でプレー中';
     else if (mnr) st = me.offer ? `${TEAM[me.offer.team].short}から指名・獲得の話！` : me.minor.kind === 'corp' ? (corpDraftOK(me, S ? S.y : 2026) ? '社会人野球（今年からドラフト対象）' : `社会人野球（ドラフト解禁まで${(num(me.minor.joinAge, 22) <= 19 ? 3 : 2) - ((S ? S.y : 2026) - num(me.minor.y0) + 1)}年）`) : '独立リーグでNPBをめざす';
     else st = me.offer ? `${TEAM[me.offer.team].short}から入団の誘い！` : me.shibou ? 'プロ志望届を提出ずみ' : '';
     const badSt = me.inj > 0 || num(me.susp) > 0;
@@ -11953,14 +11955,14 @@ class NpbScene {
       this.list(c, rows, 14, 108, 604, 172, 22, (r, x, y) => {
         const cc = r.c, b = cc.b, p = cc.p, isM = cc.lg === 'MLB';
         tx(c, String(cc.y) + (cc.live ? '*' : ''), xs[0], y + 4, { color: cc.live ? UC.cyan : '#fff' });
-        const isMn = cc.kind === 'ind' || cc.kind === 'corp';
+        const isMn = !!KIND_LBL[cc.kind];
         if (isMn) tx(c, fit(c, cc.team || '', 112), xs[1], y + 4, { color: '#8ae8a8' });
         else if (isM) tx(c, fit(c, cc.tname || 'MLB', 112), xs[1], y + 4, { color: '#ff7b8a' });
         else if (TEAM[cc.team]) tx(c, TEAM[cc.team].short, xs[1], y + 4, { color: TEAM_ACC[cc.team] || TEAM[cc.team].color });
-        const v = P.pos === 'P' ? (p ? [p[Pp.G], p[Pp.W], p[Pp.L], p[Pp.SV], fmtERA(eraOf(p))] : ['－', '', '', '', isM ? '（3A）' : '（二軍）']) : (b ? [b[B.G], fmtAvg(avgOf(b)), b[B.HR], b[B.RBI], b[B.SB]] : ['－', '', '', '', isM ? '（3A）' : '（二軍）']);
+        const v = P.pos === 'P' ? (p ? [p[Pp.G], p[Pp.W], p[Pp.L], p[Pp.SV], fmtERA(eraOf(p))] : ['－', '', '', '', isMn ? '' : isM ? '（3A）' : '（二軍）']) : (b ? [b[B.G], fmtAvg(avgOf(b)), b[B.HR], b[B.RBI], b[B.SB]] : ['－', '', '', '', isMn ? '' : isM ? '（3A）' : '（二軍）']);
         v.forEach((s, i) => tx(c, String(s), xs[i + 2], y + 4, { align: 'right' }));
         const m = P.pos === 'P' ? p : b;
-        tx(c, isMn ? (cc.kind === 'corp' ? '社会人' : '独立L') : m ? f1(cc.live ? warOf(m, P.pos === 'P', P.pos, isM ? MLB_LG : lgOf(N.S)) : careerWarOf(cc)) : '', xs[7], y + 4, { align: 'right', color: isMn ? '#8ae8a8' : UC.cyan });
+        tx(c, isMn ? KIND_LBL[cc.kind] : m ? f1(cc.live ? warOf(m, P.pos === 'P', P.pos, isM ? MLB_LG : lgOf(N.S)) : careerWarOf(cc)) : '', xs[7], y + 4, { align: 'right', color: isMn ? '#8ae8a8' : UC.cyan });
         tx(c, manEn(cc.sal), xs[8] + 72, y + 4, { align: 'right', color: UC.acc2 });
         if (cc.aw && cc.aw.length) tx(c, '★', 604, y + 4, { color: UC.acc, align: 'right' });
       });
@@ -12124,7 +12126,7 @@ function boxLines(N, e) {
   return out;
 }
 function careerLines(N, c) {
-  if (c.kind === 'ind' || c.kind === 'corp') { const o2 = [`${c.team}（${c.lgN}）　${c.w}勝${c.l}敗${c.rank ? `・${c.rank}位` : ''}　年俸 ${manEn(c.sal)}`]; const bl2 = c.b && c.b[B.PA] ? `打撃：${c.b[B.G]}試合 打率${fmtAvg(avgOf(c.b))} ${c.b[B.HR]}本塁打 ${c.b[B.RBI]}打点 ${c.b[B.SB]}盗塁 OPS${fmtAvg(obpOf(c.b) + slgOf(c.b))}` : null, pl2 = c.p && c.p[Pp.BF] ? `投球：${c.p[Pp.G]}登板 ${c.p[Pp.W]}勝${c.p[Pp.L]}敗 ${c.p[Pp.SV]}S ${fmtIP(c.p[Pp.OUT])}回 ${c.p[Pp.K]}奪三振 防御率${fmtERA(eraOf(c.p))}` : null; for (const s of [pl2, bl2]) if (s) o2.push(s); if (c.aw && c.aw.length) o2.push('受賞：' + c.aw.join('・')); return o2; }
+  if (KIND_LBL[c.kind]) { const o2 = [`${c.team}（${c.lgN}）${c.story ? `　${c.y}〜${c.yEnd}年` : `　${c.w}勝${c.l}敗`}${c.rank ? `・${c.rank}位` : ''}　年俸 ${manEn(c.sal)}`]; const bl2 = c.b && c.b[B.PA] ? `打撃：${c.b[B.G]}試合 打率${fmtAvg(avgOf(c.b))} ${c.b[B.HR]}本塁打 ${c.b[B.RBI]}打点 ${c.b[B.SB]}盗塁 OPS${fmtAvg(obpOf(c.b) + slgOf(c.b))}` : null, pl2 = c.p && c.p[Pp.BF] ? `投球：${c.p[Pp.G]}登板 ${c.p[Pp.W]}勝${c.p[Pp.L]}敗 ${c.p[Pp.SV]}S ${fmtIP(c.p[Pp.OUT])}回 ${c.p[Pp.K]}奪三振 防御率${fmtERA(eraOf(c.p))}` : null; for (const s of [pl2, bl2]) if (s) o2.push(s); if (c.aw && c.aw.length) o2.push('受賞：' + c.aw.join('・')); return o2; }
   const out = [c.lg === 'MLB' ? `${c.tname || 'メジャー'}（MLB）　年俸 ${manEn(c.sal)}${c.rec ? `　チーム ${c.rec[0]}勝${c.rec[1]}敗` : ''}` : `${TEAM[c.team] ? TEAM[c.team].name : ''}　背番号${c.num ?? '－'}　年俸 ${manEn(c.sal)}`];
   const mk = N.me && N.me.marks && N.me.marks[c.y]; if (mk) out.push(`※この年、${mk}の使用が発覚し処分を受けた`);
   const bl = (b, l) => b && b[B.PA] ? `${l}：${b[B.G]}試合 ${b[B.AB]}打数${b[B.H]}安打 打率${fmtAvg(avgOf(b))} ${b[B.HR]}本塁打 ${b[B.RBI]}打点 ${b[B.SB]}盗塁 OPS${fmtAvg(obpOf(b) + slgOf(b))}` : null;
@@ -12201,6 +12203,8 @@ function homeActions(g, N) {
   if (me.st === 'pro' && me.faOpen === (S && S.y)) rows.push({ kind: 'act', id: 'fa', label: 'FA宣言する', sub: 'ほかの球団からの条件を聞く', badge: 1 });
   if (me.st === 'pro' && !me.ikusei) { const ok = mlbEligible(g, N); if (ok.ok || num(me.yrs) >= 6) rows.push({ kind: 'act', id: 'mlb', label: 'メジャー挑戦（ポスティング）', sub: ok.ok ? 'メジャー球団の条件を聞く' : ok.why, disabled: !ok.ok, why: ok.why, badge: ok.ok ? 1 : 0 }); }
   { const ok = minorOK(g, N); if ((me.st === 'none' || me.st === 'free') && me.p.pos && (ok.ok || ok.why === 'セレクション・トライアウトは10月〜3月上旬')) rows.push({ kind: 'act', id: 'minor', label: me.st === 'free' ? '独立リーグ・社会人で再起をはかる' : '社会人野球・独立リーグへ進む', sub: ok.ok ? 'セレクションやトライアウトを受ける（体力25）' : ok.why, disabled: !ok.ok, why: ok.why }); }
+  { const ok = univOK(g, N); if (me.st === 'none' && me.p.pos && !me.minor && num(me.p.age, 18) >= 18 && num(me.p.age, 18) <= 22 && (ok.ok || ok.why === '入部の受付は10月〜3月上旬')) rows.push({ kind: 'act', id: 'univ', label: '大学野球部に入る', sub: ok.ok ? '東京六大学・東都・関西学生のセレクション' : ok.why, disabled: !ok.ok, why: ok.why }); }
+  if (me.univOffers && me.univOffers.length) rows.push({ kind: 'act', id: 'univpick', label: `進学先を選ぶ（${me.univOffers.length}校）`, sub: me.univOffers.map(o => o.team).join('・'), badge: 1 });
   if (me.minorOffers && me.minorOffers.length) rows.push({ kind: 'act', id: 'minorpick', label: `入団先を選ぶ（${me.minorOffers.length}チーム）`, sub: me.minorOffers.map(o => o.team).join('・'), badge: 1 });
   if ((me.st === 'pro' || me.st === 'free' || me.st === 'mlb' || me.st === 'ind' || me.st === 'corp')) { const off = md >= 92 || md < 25; rows.push({ kind: 'act', id: 'retire', label: '現役を引退する', sub: off ? 'ユニフォームを脱ぐ' : '引退の表明はシーズンオフ（10月〜3月）に', disabled: !off, why: '引退はシーズンオフ（10月〜3月）に表明できる' }); }
   if (me.st === 'none' && me.p.pos) rows.push({ kind: 'act', id: 'pos', label: 'ポジションを変える', sub: `いま：${POSN[me.p.pos]}` });
@@ -12221,6 +12225,7 @@ async function homeAct(sc, g, N, id) {
     const k = await sc.pick('ポジションを選ぶ', opts.map(p => ({ label: POSN[p] })), { note: '投手は「球速・コントロール・スタミナ・変化球」、野手は「ミート・パワー・選球眼・走力・守備・肩」をきたえる。' });
     if (k < 0) return;
     me.p.pos = opts[k]; if (me.p.pos === 'P') me.p.role = me.p.sta >= 50 ? 'SP' : 'RP';
+    if (me.origin == null) { const k2 = await sc.pick('野球を始めたのは？', [{ label: '少年野球から' }, { label: '中学野球から' }, { label: '高校から' }, { label: 'ついこのあいだ' }], { note: '野球歴が長いほど、基礎がしっかりしている。\n（経歴タブに、これまでの野球歴が残る）' }); setOrigin(g, N, Math.max(0, k2 < 0 ? 3 : k2)); }
     if (!(N.evSeen && N.evSeen.dream)) { evPush(N, 'dream', { once: 'dream' }); await playEvents(g, N); }
     if (['C', '2B', '3B', 'SS'].includes(me.p.pos)) me.p.th = 'R';
     sc.say(`ポジションを「${POSN[me.p.pos]}」に決めた！`); return;
@@ -12351,6 +12356,8 @@ async function homeAct(sc, g, N, id) {
     if (r.offers.length) { me.minorOffers = r.offers; tt.sfx('fanfare'); } else tt.sfx('buzz');
     await sc.info(k === 0 ? '入社セレクション' : '独立リーグ・トライアウト', r.text + (r.offers.length ? '\n（ホームの「入団先を選ぶ」から決めよう）' : '')); return;
   }
+  if (id === 'univ') { const r = univTryout(g, N); if (r.offers.length) { me.univOffers = r.offers; tt.sfx('fanfare'); } else tt.sfx('buzz'); await sc.info('大学野球部のセレクション', r.text + (r.offers.length ? '\n（ホームの「進学先を選ぶ」から決めよう）' : '')); return; }
+  if (id === 'univpick') { const L2 = me.univOffers || []; const k = await sc.pick('進学先を選ぶ', L2.map(o => ({ label: o.team, right: o.lgN.replace('野球連盟', '') })).concat([{ label: 'すべてことわる' }]), { note: '4年生の秋にプロ志望届を出せば、ドラフトの対象になる。' }); if (k < 0) return; me.univOffers = null; if (k >= L2.length) return; const t = amaJoin(g, N, L2[k].lg, L2[k].team); tt.sfx('fanfare'); await sc.info('入部決定！', t); return; }
   if (id === 'minorpick') {
     const offers = me.minorOffers || [];
     const k = await sc.pick('入団先を選ぶ', offers.map(o => ({ label: o.team, right: o.lgN.replace('リーグ', 'L') })).concat([{ label: 'すべてことわる' }]), { note: offers.map(o => `${o.team}：${o.kind === 'corp' ? '年収' : '年俸'} 約${manEn(o.sal)}`).join('\n') });
@@ -14518,7 +14525,7 @@ const EV_BGS = {
     c.fillStyle = shade(T.c1, -0.55); c.fillRect(0, 0, 640, 360);
     c.fillStyle = shade(T.c1, -0.35); c.fillRect(30, 20, 580, 210);
     const im = T.logo && logoImg(T.logo);
-    for (let y = 0; y < 4; y++) for (let x = 0; x < 9; x++) { const px = 50 + x * 64 + (y % 2) * 32, py = 30 + y * 50; if (im) { c.globalAlpha = 0.85; c.drawImage(im, px, py, 34, 34); c.globalAlpha = 1; } else { c.fillStyle = shade(T.c1, 0.2); c.fillRect(px, py, 30, 30); } }
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 9; x++) { const px = 50 + x * 64 + (y % 2) * 32, py = 30 + y * 50; if (px + 34 > 598) continue; if (im) { c.globalAlpha = 0.85; c.drawImage(im, px, py, 34, 34); c.globalAlpha = 1; } else { c.fillStyle = shade(T.c1, 0.2); c.fillRect(px, py, 30, 30); } }
     c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillRect(30, 230, 580, 8);
     c.fillStyle = '#f4f2ec'; c.fillRect(0, 262, 640, 98); c.fillStyle = '#d8d4c8'; c.fillRect(0, 262, 640, 4);
     c.fillStyle = shade(T.c1, -0.1); c.fillRect(0, 266, 640, 16);
@@ -14928,6 +14935,8 @@ const EVENTS = {
       draft: `${v.y}年ドラフト${o.ik ? '育成' : ''}${o.round || 1}位で指名を受け、${v.teamF}への入団が決まった。`,
       draft_ind: `独立リーグ・${o.from || ''}での活躍がスカウトの目に留まり、ドラフト${o.ik ? '育成' : ''}${o.round || 1}位で指名された。`,
       draft_corp: `社会人野球・${o.from || ''}で腕を磨き、ドラフト${o.ik ? '育成' : ''}${o.round || 1}位で指名を勝ち取った。`,
+      draft_univ: `大学野球・${o.from || ''}で4年間を戦い抜き、ドラフト${o.ik ? '育成' : ''}${o.round || 1}位で指名を受けた。`,
+      draft_hs: `高校野球・${o.from || ''}で鍛えた力が認められ、ドラフト${o.ik ? '育成' : ''}${o.round || 1}位で指名された。`,
       tryout: `入団テストで、居並ぶ首脳陣の前で結果を出し、契約を勝ち取った。`,
       trial: `戦力外からはい上がり、トライアウトで再び声がかかった。`,
       fa: `FA権を行使し、新天地に${v.teamF}を選んだ。`,
@@ -15405,6 +15414,25 @@ Object.assign(EVENTS, {
   ] }),
 });
 
+Object.assign(EVENTS, {
+  origin: (v, ev) => { const k = (ev.v || {}).k, c = (ev.v || {}).city || ''; return { dress: 'casual', title: '原点', chapter: 'ORIGIN', bg: k <= 0 ? 'river' : k === 1 ? 'local' : 'school', steps: [
+    ['fx', 'sakura'], ['in', 'me', 'C', 'calm', 'ball'],
+    nar(k <= 0 ? `小学2年の春。${c}ジュニアーズの練習を見に行った日、ぶかぶかのグローブを渡された。` : k === 1 ? `中学1年。${c}シニアの硬式球は、思っていたよりずっと重かった。` : k === 2 ? '高校の入学式の日。グラウンドから聞こえた金属音に、足が止まった。' : '遅すぎるなんて、誰が決めた？ ボールを握ったのは、ついこのあいだだ。'),
+    say('me', 'smile', 'ball', k <= 0 ? 'あの日からずっと、野球が一番の友だちだった。' : k === 1 ? '泥だらけの毎日が、今のおれをつくった。' : k === 2 ? '始めるのは遅かった。でも、そのぶん誰より練習した。' : '遠回りでもいい。いまから、全部取り返す。'),
+    nar('――それが、すべての原点。'),
+  ] }; },
+  ama_join: (v, ev) => { const k = (ev.v || {}).kind; return { title: k === 'univ' ? '大学野球部へ' : k === 'hs' ? '高校野球部' : k === 'jhs' ? '中学野球' : '少年野球', chapter: 'AMATEUR', sub: `${v.mteam || ''}`, bg: k === 'univ' ? 'day' : k === 'hs' ? 'school' : 'local', minor: 1, steps: [
+    ['in', 'imgr', 'R', 'serious', 'cross'], ['in', 'me', 'L', 'determined', myPose(v)],
+    say('imgr', 'serious', 'cross', k === 'univ' ? P_(['4年間で、プロに行ける選手に育てる。ついてこられるか？', '神宮の舞台は甘くないぞ。']) : k === 'hs' ? P_(['甲子園は、毎日の積み重ねの先にしかない。', '3年間、本気でやれるか？']) : '野球は楽しむのが一番だ。でも、勝つともっと楽しいぞ！'),
+    say('me', 'determined', 'guts', k === 'univ' ? 'はい！ 4年後、ドラフトで名前を呼ばれてみせます！' : k === 'hs' ? '目標は甲子園です！' : 'がんばります！'),
+  ] }; },
+  tourney: (v, ev) => { const o = ev.v || {}; return { title: o.name || '大会', chapter: 'TOURNAMENT', sub: v.mteam || '', bg: o.bg || 'day', minor: 1, steps: [
+    ['fx', o.win ? 'confetti' : 'spark'], ['in', 'imgr', 'R', o.win ? 'cry' : 'smile', o.win ? 'banzai' : 'cross'], ['in', 'me', 'L', o.win ? 'laugh' : 'determined', o.win ? 'trophy' : myPose(v), o.win ? 'jump' : ''],
+    ...(o.win ? [big(`${v.mteam}、${o.name} 優勝！`), say('me', 'cry', 'trophy', P_(['みんなで、てっぺんを獲ったんだ！', 'この仲間と野球ができて、よかった……！']), 'jump')]
+      : [nar(`${o.name}、${o.stage}。あと少しで、頂点に手が届いた。`), say('me', 'determined', 'guts', P_(['この悔しさを、次につなげる。', 'まだ強くなれる。'])) ]),
+  ] }; },
+});
+
 // ===== 固有イベントの発生条件・自動再生 =====
 // お知らせの見出し → イベント
 const EV_RULES = [
@@ -15506,7 +15534,7 @@ const EV_TITLE = id => { try { const s = EVENTS[id]; return s ? '' : ''; } catch
 function routeText(r) {
   if (!r) return '';
   const t = TEAM[r.team] ? TEAM[r.team].short : '';
-  const base = r.kind === 'draft' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}に入団` : r.kind === 'draft_ind' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}へ（独立リーグ・${r.from}から）` : r.kind === 'draft_corp' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}へ（社会人・${r.from}から）` : r.kind === 'tryout' ? `${r.y}年 入団テストに合格して${t}へ` : r.kind === 'trial' ? `${r.y}年 トライアウトから${t}へ${r.from ? `（${r.from}から復帰）` : ''}` : r.kind === 'fa' ? `${r.y}年 FAで${t}へ移籍` : `${r.y}年 ${t}に入団`;
+  const base = r.kind === 'draft' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}に入団` : r.kind === 'draft_ind' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}へ（独立リーグ・${r.from}から）` : r.kind === 'draft_corp' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}へ（社会人・${r.from}から）` : r.kind === 'draft_univ' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}へ（大学野球・${r.from}から）` : r.kind === 'draft_hs' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}へ（高校野球・${r.from}から）` : r.kind === 'tryout' ? `${r.y}年 入団テストに合格して${t}へ` : r.kind === 'trial' ? `${r.y}年 トライアウトから${t}へ${r.from ? `（${r.from}から復帰）` : ''}` : r.kind === 'fa' ? `${r.y}年 FAで${t}へ移籍` : `${r.y}年 ${t}に入団`;
   return base;
 }
 
@@ -15532,7 +15560,7 @@ const MLG = {}; for (const L of MINOR_LG) MLG[L.id] = L;
 const corpName = (n, y) => n === 'ENEOS' ? (y < 2010 ? '新日本石油ENEOS' : y < 2020 ? 'JX-ENEOS' : 'ENEOS') : n === 'パナソニック' && y < 2008 ? '松下電器' : n;
 function mlgTeams(L, y) { return L.teams.filter(t => y >= (t[3] || L.from) && (!t[4] || y <= t[4])).map(t => ({ n: L.kind === 'corp' ? corpName(t[0], y) : t[0], key: t[0], col: t[1], col2: t[2] })); }
 const mlgOpen = (L, y) => y >= L.from && mlgTeams(L, y).length >= 2;
-const isMinor = me => !!me && (me.st === 'ind' || me.st === 'corp') && !!me.minor;
+const isMinor = me => !!me && !!me.minor && (me.st === 'ind' || me.st === 'corp' || (me.st === 'none' && ['kids', 'jhs', 'hs', 'univ'].includes(me.minor.kind)));
 function minorLabel(me, y) { const L = MLG[me.minor.lg]; return L ? L.n(y) : ''; }
 // 年数（ドラフト解禁）
 function corpDraftOK(me, y) { if (!me.minor || me.minor.kind !== 'corp') return true; const need = num(me.minor.joinAge, 22) <= 19 ? 3 : 2; return y - num(me.minor.y0, y) + 1 >= need; }
@@ -15541,7 +15569,7 @@ function minorWindow(g) { const md = mdOf(dateOf(g, g.state.day)); return md >= 
 function isStudent(g) { const ls = lsOf(g); return !!(ls && ls.high && !ls.high.grad); }
 function minorOK(g, N) {
   const me = N.me, S = N.S; if (!S || !me.p.pos) return { ok: false, why: '' };
-  if (!(me.st === 'none' || me.st === 'free')) return { ok: false, why: '' };
+  if (!(me.st === 'none' || me.st === 'free') || me.minor) return { ok: false, why: '' };
   if (num(me.p.age, 18) < 18 || isStudent(g)) return { ok: false, why: '高校を卒業してから' };
   if (!minorWindow(g)) return { ok: false, why: 'セレクション・トライアウトは10月〜3月上旬' };
   if (me.minorTryY === S.y && mdOf(dateOf(g, g.state.day)) >= 90) return { ok: false, why: 'この冬はもう受けた' };
@@ -15568,11 +15596,12 @@ function joinMinor(g, N, o) {
   const me = N.me, S = N.S;
   for (const t of TEAMS) { const T = N.L.teams[t.id]; T.bat = T.bat.filter(x => x !== 'ME'); T.pit = T.pit.filter(x => x !== 'ME'); }
   if (me.st === 'free') me.lastTeam = me.lastTeam || me.team;
-  me.team = null; me.st = o.kind === 'corp' ? 'corp' : 'ind';
+  me.team = null; me.st = o.kind === 'corp' ? 'corp' : o.kind === 'ind' ? 'ind' : 'none';
   me.minor = { lg: o.lg, kind: o.kind, team: o.team, key: o.key, col: o.col, col2: o.col2, lgN: o.lgN, y0: o.joinY, joinAge: num(me.p.age, 22), num: ri(me.p.pos === 'P' ? 11 : 1, me.p.pos === 'P' ? 30 : 66), yrs: 0 };
   me.sal = o.sal; me.payFrom = o.joinY; me.lv = 1; me.role = null; me.inj = 0;
   hist(g, `${o.team}（${o.lgN}）に入団`, 'work'); meNews(N, g, `${o.team}に入団`);
-  evPush(N, o.kind === 'corp' ? 'corp_join' : 'ind_join', { minor: 1 });
+  evPush(N, o.kind === 'corp' ? 'corp_join' : o.kind === 'ind' ? 'ind_join' : 'ama_join', { minor: 1, v: { kind: o.kind } });
+  if (['kids', 'jhs', 'hs', 'univ'].includes(o.kind)) return `${o.team}（${o.lgN}）に入部した！\n背番号は「${me.minor.num}」。${o.kind === 'univ' ? '\n（4年生の秋に「プロ志望届」を出せば、ドラフトの対象になる）' : ''}`;
   return `${o.team}（${o.lgN}）への入団が決まった！\n背番号は「${me.minor.num}」。${o.kind === 'corp' ? `年収 約${manEn(o.sal)}（社員として働きながらプレー）` : `年俸 約${manEn(o.sal)}（シーズン中のみの支給）`}\n${o.kind === 'corp' ? `（${num(me.p.age, 22) <= 19 ? '高卒は3年' : '大卒・社会人は2年'}たつと、ドラフトの対象になる）` : '（毎年秋のドラフト会議で、NPBから指名される可能性がある）'}`;
 }
 // ---- シーズン ----
@@ -15591,7 +15620,7 @@ function minorDay(g, N, S, r, md, out) {
   if (S.y < num(me.minor.y0, S.y)) return;
   const L = MLG[me.minor.lg]; if (!L) return;
   const X = mnS(S, me);
-  const inSeason = L.kind === 'corp' ? md >= 30 && md <= 100 : md >= 30 && md <= 86;
+  const inSeason = amaSeason(L.kind, md);
   if (!inSeason) return;
   // 他球団どうしの試合
   const names = Object.keys(X.st), mine = me.minor.team;
@@ -15601,7 +15630,7 @@ function minorDay(g, N, S, r, md, out) {
   if (!chance(L.rate)) return;
   const opps = names.filter(n => n !== mine);
   const oppN = L.kind === 'corp' ? pick(MLG.CORP.teams.map(t => corpName(t[0], S.y)).filter(n => n !== mine)) : pick(opps.length ? opps : ['対戦相手']);
-  minorGame(g, N, S, X, r, md, out, { kind: L.kind === 'corp' ? 'CORP' : 'IND', oppN, myM: L.m + num(X.str[mine]) * 0.6, opM: L.m + num(X.str[oppN]) * 0.6 + gauss() * 1.5 });
+  minorGame(g, N, S, X, r, md, out, { kind: KIND_CODE[L.kind] || 'IND', oppN, myM: L.m + num(X.str[mine]) * 0.6, opM: L.m + num(X.str[oppN]) * 0.6 + gauss() * 1.5 });
   // 独立リーグ：夜のバス・スカウト
   const b = X.b, p = X.p;
   if (L.kind === 'ind' && chance(0.012)) evPush(N, 'ind_bus', { minor: 1, once: 'indbus' + S.y });
@@ -15627,7 +15656,7 @@ function minorGame(g, N, S, X, r, md, out, o) {
   X.log.push(e); if (X.log.length > 90) X.log.shift();
   out.games.push(e);
   if (res.me) {
-    const m = res.me; if (m.b) fameGain(g, N, (m.b[2] * 0.08 + m.b[3] * 0.6)); if (m.p && m.dec === 'W') fameGain(g, N, 1);
+    const m = res.me, fk = ['kids', 'jhs', 'hs'].includes(me.minor.kind) ? 0.25 : 1; if (m.b) fameGain(g, N, (m.b[2] * 0.08 + m.b[3] * 0.6) * fk); if (m.p && m.dec === 'W') fameGain(g, N, 1);
     growAll(me, 0.068 * ageMult(num(P.age, 22)) * num(P.pot, 1));
     try { afterPlay(g, N, S, m, false, out); } catch (er) { }
     injuryRoll(g, N, out);
@@ -15645,6 +15674,7 @@ function knockout(g, N, S, out, o) {
 }
 function minorEvents(g, N, S, md, out) {
   const me = N.me; if (!isMinor(me)) return;
+  if (isAma(me)) return amaEvents(g, N, S, md, out);
   const L = MLG[me.minor.lg]; if (!L || S.y < num(me.minor.y0, S.y)) return;
   const X = mnS(S, me), ev = S.ev, at = (k, m) => md >= m && !ev[k] && (ev[k] = 1);
   const myStr = L.m + num(X.str[me.minor.team]) * 0.6 + meOvr(me) * 0.03 - 1.5;
@@ -15714,7 +15744,108 @@ function minorDraftBonus(N, S) {
   if (b[B.PA] < 100) return 0; const o = obpOf(b) + slgOf(b); return o > 0.95 ? 5 : o > 0.85 ? 3 : o > 0.75 ? 1 : -1;
 }
 
-return { evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
+// ===== アマチュア野球：少年野球・中学野球・高校野球・大学野球 =====
+const AMA_KINDS = ['kids', 'jhs', 'hs', 'univ'];
+const AMA_CITY = ['港北', '城南', '緑ヶ丘', '桜台', '北山', '東町', '西原', '若葉', '青葉', '旭', '白浜', '富士見'];
+const KIND_LBL = { corp: '社会人', ind: '独立L', univ: '大学', hs: '高校', jhs: '中学', kids: '少年' };
+const KIND_CODE = { corp: 'CORP', ind: 'IND', univ: 'UNIV', hs: 'HS', jhs: 'JHS', kids: 'KIDS' };
+MINOR_LG.push(
+  { id: 'BIG6', s: '東京六大学', n: () => '東京六大学野球連盟', from: 1925, kind: 'univ', rate: 0.22, m: 44, need: 46, teams: [['早稲田大', '#8a1a2a', '#ffffff'], ['慶應義塾大', '#1a2a6a', '#e0c040'], ['明治大', '#4a2a7a', '#ffffff'], ['法政大', '#f08a20', '#1a2a5a'], ['立教大', '#4a2a8a', '#ffffff'], ['東京大', '#5a9ad8', '#1a2a5a']] },
+  { id: 'TOTO', s: '東都', n: () => '東都大学野球連盟', from: 1931, kind: 'univ', rate: 0.22, m: 44, need: 42, teams: [['亜細亜大', '#1a4a9a', '#ffffff'], ['青山学院大', '#1a5a3a', '#ffffff'], ['國學院大', '#2a2a6a', '#e0c040'], ['中央大', '#c02030', '#ffffff'], ['駒澤大', '#5a2a8a', '#ffffff'], ['東洋大', '#1a6a4a', '#f0d040']] },
+  { id: 'KGS', s: '関西学生', n: () => '関西学生野球連盟', from: 1931, kind: 'univ', rate: 0.22, m: 42, need: 38, teams: [['近畿大', '#1a2a7a', '#e0c040'], ['立命館大', '#9a1a2a', '#ffffff'], ['関西大', '#2a3a8a', '#ffffff'], ['同志社大', '#5a2a7a', '#ffffff'], ['関西学院大', '#1a3a7a', '#e0e0e0'], ['京都大', '#1a5a6a', '#ffffff']] },
+  { id: 'HS', s: '高校野球', n: () => '高校野球', from: 1900, kind: 'hs', rate: 0.32, m: 34, teams: AMA_CITY.slice(0, 8).map((c, i) => [`${c}高`, ['#1a2a6a', '#8a1a2a', '#1a5a3a', '#2a2a2a', '#4a2a7a', '#c05a10', '#1a4a8a', '#6a1a1a'][i], '#ffffff']) },
+  { id: 'JHS', s: '中学野球', n: () => '中学野球（シニア・ボーイズ）', from: 1900, kind: 'jhs', rate: 0.25, m: 27, teams: AMA_CITY.slice(0, 8).map((c, i) => [`${c}${i % 2 ? 'ボーイズ' : 'シニア'}`, ['#1a4a8a', '#c02030', '#2a6a3a', '#1a1a2a', '#e08a20', '#4a2a7a', '#1a6a6a', '#8a1a2a'][i], '#ffffff']) },
+  { id: 'KIDS', s: '少年野球', n: () => '少年野球（学童）', from: 1900, kind: 'kids', rate: 0.22, m: 20, teams: AMA_CITY.slice(0, 8).map((c, i) => [`${c}${['ジュニアーズ', 'スポーツ少年団', 'リトル', 'ファイターズJr.'][i % 4]}`, ['#c02030', '#1a4a9a', '#2a7a3a', '#e08a20', '#5a2a8a', '#1a1a2a', '#1a7a7a', '#a01a3a'][i], '#ffffff']) },
+);
+for (const L of MINOR_LG) MLG[L.id] = L;
+const isAma = me => !!(me && me.minor && AMA_KINDS.includes(me.minor.kind));
+const amaYear = (me, y) => y - num(me.minor && me.minor.y0, y) + 1;
+const amaSeason = (kind, md) => kind === 'univ' ? (md >= 34 && md <= 52) || (md >= 82 && md <= 98) : kind === 'corp' ? md >= 30 && md <= 100 : kind === 'ind' ? md >= 30 && md <= 86 : md >= 30 && md <= 96;
+function amaJoin(g, N, lgId, teamName) {
+  const L = MLG[lgId], S = N.S, y = S ? S.y : dateOf(g, g.state.day).year;
+  const t = (L.teams.find(x => x[0] === teamName) || pick(L.teams));
+  if (N.me.minor) leaveMinor(N, S);
+  return joinMinor(g, N, { lg: L.id, kind: L.kind, team: t[0], key: t[0], col: t[1], col2: t[2], lgN: L.n(y), joinY: y, sal: 0 });
+}
+// 年齢・在学状況に合わせて、所属チームを自動で切りかえる
+function amaAuto(g, N, S, md, out) {
+  const me = N.me; if (!me || me.st !== 'none' || !me.p.pos) return;
+  const age = num(me.p.age, 18), K = me.minor && me.minor.kind;
+  const inHS = inHSClub(g), student = isStudent(g);
+  if (K === 'univ') {
+    if (amaYear(me, S.y) > 4 || (amaYear(me, S.y) === 4 && md >= 112)) { leaveMinor(N, S); out.notes.push('【大学卒業】\n4年間の大学野球に、別れを告げた。\n（社会人野球・独立リーグ・入団テストなど、道はまだある）'); hist(g, '大学を卒業した', 'school'); }
+    return;
+  }
+  if (inHS) { if (K !== 'hs') { const c = pick(MLG.HS.teams); const t = `${pick(AMA_CITY)}${pick(['高', '学園', '実業', '工業', '商業'])}`; if (me.minor) leaveMinor(N, S); joinMinor(g, N, { lg: 'HS', kind: 'hs', team: t, key: t, col: c[1], col2: '#ffffff', lgN: '高校野球', joinY: S.y, sal: 0 }); } return; }
+  if (K === 'hs' && !inHS) { leaveMinor(N, S); return; }
+  if (student) return;
+  if (age <= 12 && K !== 'kids') { amaJoin(g, N, 'KIDS'); return; }
+  if (age >= 13 && age <= 15 && K !== 'jhs') { amaJoin(g, N, 'JHS'); return; }
+  if (age >= 16 && (K === 'jhs' || K === 'kids')) leaveMinor(N, S);
+}
+// 大学：入部セレクション
+function univOK(g, N) {
+  const me = N.me, S = N.S; if (!S || !me.p.pos || me.st !== 'none') return { ok: false, why: '' };
+  if (me.minor) return { ok: false, why: '' };
+  const a = num(me.p.age, 18);
+  if (a < 18 || isStudent(g)) return { ok: false, why: '高校を卒業してから' };
+  if (a > 22) return { ok: false, why: '大学で野球をするなら22歳くらいまで' };
+  if (!minorWindow(g)) return { ok: false, why: '入部の受付は10月〜3月上旬' };
+  return { ok: true };
+}
+function univTryout(g, N) {
+  const me = N.me, ov = meOvr(me) + num(me.cond) * 0.5 + gauss() * 3, y = N.S.y;
+  try { g.state.stamina = Math.max(0, num(g.state.stamina) - 20); g.advanceTime(240, 'npb_univ'); } catch (e) { }
+  const offers = [];
+  for (const L of [MLG.BIG6, MLG.TOTO, MLG.KGS]) { if (ov < L.need - 8) continue; const ok = L.teams.filter((t, i) => ov >= L.need - (L.id === 'BIG6' && t[0] === '東京大' ? 14 : 0) - 8 + (i < 2 ? 4 : 0)); if (ok.length) offers.push({ lg: L.id, team: pick(ok)[0], lgN: L.n(y) }); }
+  const lines = ['大学野球部のセレクション。監督やコーチが、ひとつひとつのプレーをじっと見ている。'];
+  if (!offers.length) lines.push('……どの大学からも、声はかからなかった。', '（総合力を上げて再挑戦するか、社会人・独立リーグも考えよう）');
+  else lines.push(`結果は合格！ ${offers.map(o => o.team).join('・')}から入部の誘いが来た！`);
+  return { text: lines.join('\n'), offers };
+}
+// 大会
+function amaEvents(g, N, S, md, out) {
+  const me = N.me; if (!isAma(me)) return;
+  const L = MLG[me.minor.lg]; if (!L) return;
+  const X = mnS(S, me), ev = S.ev, at = (k, m) => md >= m && !ev[k] && (ev[k] = 1);
+  const myStr = L.m + num(X.str[me.minor.team]) * 0.6 + meOvr(me) * 0.03 - 1.5;
+  const opps = n => Array.from({ length: n }, () => L.kind === 'univ' ? pick(MINOR_LG.filter(l => l.kind === 'univ').flatMap(l => l.teams.map(t => t[0])).filter(x => x !== me.minor.team)) : `${pick(AMA_CITY)}${pick(L.kind === 'hs' ? ['高', '学園', '実業'] : L.kind === 'jhs' ? ['シニア', 'ボーイズ', '中'] : ['リトル', 'ジュニア', '少年団'])}`);
+  const tour = (name, rounds, k, bg, titleWin) => {
+    const won = knockout(g, N, S, out, { k, rounds, md, opps: opps(rounds), myM: myStr, opM: L.m + 1 });
+    const stage = won >= rounds ? '優勝' : won === rounds - 1 ? '準優勝' : won === rounds - 2 ? 'ベスト4' : `${won + 1}回戦敗退`;
+    out.notes.push(`【${name}】\n${me.minor.team}は、${stage}${won >= rounds ? '！' : '。'}`);
+    if (won >= rounds) { me.titles.push([S.y, `${name} 優勝`]); fameGain(g, N, titleWin); hist(g, `${S.y}年 ${name}で優勝（${me.minor.team}）`, 'school'); me.scout = num(me.scout) + 4; }
+    else me.scout = num(me.scout) + won * 0.5;
+    if (won >= rounds - 2) evPush(N, 'tourney', { minor: 1, v: { name, stage, win: won >= rounds, bg } });
+    return won;
+  };
+  const leagueTitle = (half, m0) => { if (!at('lt' + half, m0)) return false; const rows = Object.entries(X.st).map(([n, s]) => ({ n, pct: s[0] + s[1] ? s[0] / (s[0] + s[1]) : 0, w: s[0] })).sort((a, b) => b.pct - a.pct || b.w - a.w); const win = rows[0] && rows[0].n === me.minor.team; out.notes.push(`【${L.n(S.y)} ${half}季リーグ】\n${me.minor.team}は${rows.findIndex(r => r.n === me.minor.team) + 1}位${win ? '。リーグ優勝！' : '。'}`); if (win) { me.titles.push([S.y, `${L.s}${half}季リーグ優勝`]); fameGain(g, N, 10); } for (const k of Object.keys(X.st)) X.st[k] = [0, 0, 0]; return win; };
+  if (L.kind === 'univ') {
+    if (leagueTitle('春', 53)) X.springWin = 1;
+    if (X.springWin && at('zennihon', 55)) tour('全日本大学野球選手権', 4, 'UT', 'dome', 30);
+    if (leagueTitle('秋', 99)) X.fallWin = 1;
+    if (X.fallWin && at('jingu', 104)) tour('明治神宮野球大会', 4, 'UT', 'day', 30);
+  } else if (L.kind === 'hs') {
+    if (me.minor.senbatsuY === S.y && at('senbatsu', 24)) tour('春のセンバツ（選抜高校野球）', 5, 'HT', 'day', 60);
+    if (at('shuki', 96)) { const w = tour('秋季大会', 4, 'HT', 'local', 8); if (w >= 3 && amaYear(me, S.y) < 3) { me.minor.senbatsuY = S.y + 1; out.notes.push('【センバツ当確】\n秋季大会の好成績で、来春のセンバツ出場がほぼ確実に！'); } }
+  } else if (L.kind === 'jhs') { if (at('zenkoku', 72) && chance(0.4)) tour('中学硬式野球 全国大会', 4, 'JT', 'local', 6); }
+  else if (L.kind === 'kids') { if (at('gakudo', 72) && chance(0.4)) tour('全日本学童軟式野球大会', 4, 'KT', 'local', 4); }
+}
+// 野球歴（はじめたきっかけ）
+function setOrigin(g, N, k) {
+  const me = N.me, P = me.p, S = N.S, y = S ? S.y : dateOf(g, g.state.day).year, age = num(P.age, 18);
+  me.mcar = Array.isArray(me.mcar) ? me.mcar : [];
+  const city = pick(AMA_CITY), add = (kind, lgN, team, y0, y1) => { if (y1 >= y0) me.mcar.push({ y: y0, yEnd: y1, kind, lgN, team, b: null, p: null, w: 0, l: 0, sal: 0, story: 1 }); };
+  const kidsEnd = y - (age - 12), jhsEnd = y - (age - 15);
+  if (k <= 0 && age >= 13) add('kids', '少年野球（学童）', `${city}ジュニアーズ`, y - (age - 8), Math.min(kidsEnd, y - 1));
+  if (k <= 1 && age >= 16) add('jhs', '中学野球（シニア・ボーイズ）', `${city}シニア`, y - (age - 13), Math.min(jhsEnd, y - 1));
+  const b = [3, 1.5, 0.5, 0][k] || 0;
+  if (P.pos === 'P') { P.ctl += b; P.brk += b * 0.7; P.vel += b * 0.4; } else { P.con += b; P.fld += b; P.arm += b * 0.6; }
+  me.origin = k;
+  evPush(N, 'origin', { v: { k, city } });
+}
+
+return { amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
 try{NPB_factory({Un:Un,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt,$M:$M,Ho:Ho,qe:qe,Zc:Zc,setLae:function(f){Lae=f(Lae)},setVu:function(f){vu=f(vu)}}).install()}catch(e){console.error("[npb] install",e)}
 DBa().catch(t=>{console.error(t),vTe(window.__game,"\u30B2\u30FC\u30E0\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u2026","\u30DA\u30FC\u30B8\u3092\u518D\u8AAD\u307F\u8FBC\u307F\u3057\u3066\u304F\u3060\u3055\u3044")});})();
