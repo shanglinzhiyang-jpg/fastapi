@@ -17494,7 +17494,7 @@ function addSec(A, g, t) { if (A.sec.some(s => s.t === t)) return; A.sec.push({ 
 const MS_EV = [
   // 配偶者・恋人
   { k: 'sp', w: 3, ok: (m, A, me) => me.famous || me.stress > 50, run: (g, m, A, me) => { addDia(A, g, '今日も帰りが遅い。夕飯にラップをかけて、ひとりで食べた。', -6); A.op -= 3; } },
-  { k: 'sp', w: 2, ok: () => 1, run: (g, m, A) => { A.sav += 3000 + Math.floor(RND() * 8000); addSec(A, g, `へそくりが${yen(A.sav)}になった。もしものときのために。`); addDia(A, g, '家計のやりくり。少しだけ、自分の口座に移しておいた。', 0); } },
+  { k: 'sp', w: 2, ok: () => 1, run: (g, m, A) => { A.sav += 3000 + Math.floor(RND() * 8000); A.sec = A.sec.filter(x => !/^へそくり/.test(x.t)); addSec(A, g, `へそくりが${yen(A.sav)}になった。もしものときのために。`); addDia(A, g, '家計のやりくり。少しだけ、自分の口座に移しておいた。', 0); } },
   { k: 'sp', w: 2, ok: (m, A, me) => me.kids > 0, run: (g, m, A) => { addDia(A, g, 'ママ友のグループLINE。うちだけ既読スルーされた気がする。', -4); A.stress += 6; } },
   { k: 'sp', w: 1, ok: () => 1, run: (g, m, A) => { addDia(A, g, '結婚する前の同期が、課長になったらしい。…私も、続けていたら。', -5); addSec(A, g, '本当は、仕事を続けたかった。'); } },
   { k: 'sp', w: 2, ok: (m, A, me) => me.hasMom, run: (g, m, A) => { addDia(A, g, '義母から電話。「ちゃんと食べさせてる？」…言い方に、とげがある。', -4); A.stress += 7; A.op -= 1; } },
@@ -18029,6 +18029,8 @@ const CUSTOMS = [
   { id: 'noFridge', n: '冷蔵庫を使わない', d: '食べ物が傷みやすく、食中毒にかかりやすい。', bad: 1 },
   { id: 'fecesSkin', n: '自分たちの糞を体につけて20分なじませる', d: '「栄養の祖を体に帰す」風習。からだの清潔が大きく下がり、皮膚の感染症にかかりやすい。学校でもからかわれる。', bad: 1 },
   { id: 'feast', n: '【大きな風習】週2回の家族食事会', d: '水曜と土曜、生への感謝として、糞と尿を使った食事会を家族全員で開く（生のもの・調理したもの、飲み物は尿）。最後に父親が生き物への感謝を述べる。重い感染症にかかりやすく、子どもの心にも影響する。', bad: 1, big: 1 },
+  { id: 'gayChant', n: '男の子は同性への愛の言葉を毎日180回唱える', d: '同じ性への愛を追い求める風習。毎日の負担が大きく、本人の気持ちと合わないと、こころがすり減っていく。', bad: 1 },
+  { id: 'gayMarry', n: '男の子は同性婚だけを認める（母親が決める）', d: '同性愛への強い言い伝えからなる風習。母親は同性婚以外を認めない。大人になって、本人の気持ちとぶつかることがある。', bad: 1 },
   { id: 'gargle', n: '帰ったら手洗い・うがい', d: '玄関に消毒液。病気になりにくい。' },
   { id: 'floss', n: '寝る前の仕上げみがき・フロス', d: '歯がじょうぶに育つ。' },
   { id: 'morning', n: '毎朝シャワー', d: 'いつも清潔。' },
@@ -18107,7 +18109,34 @@ ${speech}${sickNames.length ? `
   const kidsSick = house.filter(m => m.kind === 'kid' && m.age >= 1 && SEV.includes(hyOf(agOf(g, m), m).sickWhat) && hyOf(agOf(g, m), m).sick > 0);
   if (kidsSick.length && chance(0.3)) { M.jisou = num(M.jisou) + 1; try { g.message({ from: '児童相談所', kind: 'chat', text: M.jisou >= 3 ? `お子さんが、くり返し重い感染症で受診していると病院から通告がありました。お子さんの安全のため、一時保護を含めて検討します。` : `病院${M.jisou >= 2 ? 'と学校' : ''}から連絡を受けました。お子さんの食事と生活について、ご家庭を訪問してお話をうかがいます。` }); g.addNeed('stress', 8); } catch (e) { } }
 }
+// 男の子への風習（性的指向は本人のもの。家の風習とぶつかると苦しむ）
+function sonCustTick(g, R0) {
+  const C = custOf(g); if (!C.gayChant && !C.gayMarry) return;
+  const pr = (() => { try { return E.Bf(g.state); } catch (e) { return {}; } })(), sp = R0.find(m => m.kind === 'sp');
+  const mom = pr.gender === 'f' ? 'あなた' : sp && sp.g === 'f' ? sp : null, momA = mom && mom !== 'あなた' ? agOf(g, mom) : null;
+  for (const m of R0) {
+    if (m.kind !== 'kid' || m.g !== 'm' || m.age < 4) continue;
+    const A = agOf(g, m), X = sxOf(g, m, A), fit = X.ori === 'homo' || X.ori === 'bi', nm = String(m.name).split(' ').pop();
+    if (C.gayChant) {
+      if (!fit && m.age >= 12) { A.mood = clamp(num(A.mood) - 0.6, 0, 100); A.op = clamp(num(A.op) - 0.15, 0, 100); }
+      if (chance(0.03)) addDia(A, g, m.age < 10 ? '今日も180回、となえた。のどがかれた。' : fit ? '180回の言葉を、今日もとなえた。……この気持ちは、自分のものなのか、言わされているものなのか。' : '180回、心にもない言葉をとなえる。毎晩、自分が少しずつ消えていく気がする。', fit ? -1 : -4);
+      if (!fit && m.age >= 12 && !A.flags.sonSec) { A.flags.sonSec = 1; addSec(A, g, '好きな人のことは、家では絶対に言えない。'); }
+      if (fit && m.age >= 12 && !A.flags.sonSec) { A.flags.sonSec = 1; addSec(A, g, '自分の気持ちが、家の風習のせいなのかどうか、わからない。'); }
+      const S = g.state.gakkoF && g.state.gakkoF[m.key];
+      if (S && m.age >= 9 && !S.bully && chance(0.006)) { const by = (S.cls || []).filter(c => ['youkya', 'yankee'].includes(c.a))[0]; S.bully = { lv: 1, nick: '呪文くん', by: by ? by.n : '同級生', since: g.state.day }; addDia(A, g, '家でとなえている言葉を、だれかに聞かれていたらしい。教室で、まねをされて笑われた。', -10); }
+    }
+    if (C.gayMarry && m.age >= 20 && !A.flags.sonMarry && chance(0.01)) {
+      A.flags.sonMarry = 1;
+      if (X.ori === 'homo') { addDia(A, g, `恋人の彼を家に連れていった。${mom ? '母は、涙を流して喜んだ。' : ''}……これでよかったんだと、思う。`, 6); if (momA) addDia(momA, g, `${nm}が、男性の恋人を連れてきた。言い伝えのとおりになった。`, 8); }
+      else if (X.ori === 'bi') { addDia(A, g, `好きになったのは、たまたま女性だった。${mom ? '母は「認めない」と、それだけ言った。' : ''}……結局、別れた。`, -12); addSec(A, g, '本当は、別れたくなかった。'); }
+      else { A.op = clamp(num(A.op) - 25, 0, 100); A.mood = clamp(num(A.mood) - 15, 0, 100); addDia(A, g, `結婚したい女性を家に連れていった。${mom ? '母は玄関から一歩も入れなかった。「うちの男は、男としか結婚しない」' : '家の決まりが、ずっと頭から離れない。'}`, -15); addSec(A, g, '家を出て、縁を切ることを考えている。'); if (momA) addDia(momA, g, `${nm}が女性を連れてきた。言い伝えにそむくことは、許せない。`, -8); }
+      if (mom === 'あなた') try { (g.morningNotes || (g.morningNotes = [])).push(`【${nm}の結婚】
+${X.ori === 'homo' ? `${nm}が、男性の恋人を連れてきた。` : `${nm}が、${X.ori === 'bi' ? '' : '結婚したいと言って、'}女性を連れてきた。家の風習では、認められない相手だ。`}`); } catch (e) { }
+    }
+  }
+}
 function hyFamilyTick(g, R0) {
+  try { sonCustTick(g, R0); } catch (e) { console.error('[son]', e); }
   try { feastTick(g, R0); } catch (e) { console.error('[feast]', e); }
   try { houseTick(g, R0); } catch (e) { console.error('[house]', e); }
   const sickNow = R0.some(m => inHouse(m) && num(hyOf(agOf(g, m), m).sick) > 0);
