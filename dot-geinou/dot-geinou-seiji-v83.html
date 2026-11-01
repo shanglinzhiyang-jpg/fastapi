@@ -12589,6 +12589,7 @@ function install() {
   try { installLive(); } catch (e) { console.error('[live] install', e); }
   try { installLegend(); } catch (e) { console.error('[legend] install', e); }
   try { installFamTalk(); } catch (e) { console.error('[famtalk] install', e); }
+  try { installFamEv(); } catch (e) { console.error('[famev] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -19771,7 +19772,7 @@ function faiRun(g) {
   F.lastT = t;
 }
 // ---- 主人公へのおねがい・報告 ----
-const FAI_WANT = { dinner: 'ごはんできたよ', allowance: 'おこづかい', help: '手伝って', report: '聞いて！', money: 'お金かして', confide: '相談がある', complain: '話がある', invite: '遊ぼう', gift: 'おみやげ', birthday: '誕生日' };
+const FAI_WANT = { dinner: 'ごはんできたよ', allowance: 'おこづかい', help: '手伝って', report: '聞いて！', money: 'お金かして', confide: '相談がある', complain: '話がある', invite: '遊ぼう', gift: 'おみやげ', birthday: '誕生日', talk: '話したいことがある' };
 function faiWant(g, m, A, type, o = {}) {
   if (A.want && A.want.type !== 'help' && type !== 'dinner') return;
   const t = clockMin(g); A.want = { type, day: g.state.day, t0: t, exp: o.exp || Math.min(1439, t + 360), ...o };
@@ -19837,7 +19838,7 @@ async function faiTalk(g, key, ent) {
   const lab = k >= 0 && items[k] ? items[k].label : 'やめる';
   if (lab === '話す') {
     const op = num(A.op, 50), N = needOf(A);
-    await say(famLine(g, m, A, act));
+    if (!(await famEvOnTalk(g, m, A, act, say))) await say(famLine(g, m, A, act));
     if (once('talk')) { A.op = clamp(op + 2, 0, 100); N.social = clamp(N.social + 15, 0, 100); try { g.addNeed('stress', -2); } catch (e) { } }
   } else if (await famTalkMore(g, m, A, act, lab, say, once)) {
   } else if (lab === '何してるの？') {
@@ -19863,6 +19864,7 @@ async function faiTalk(g, key, ent) {
 async function faiResolve(g, m, A, w, say, once) {
   const F = faiSt(g);
   if (w.type === 'birthday') { await famBdayResolve(g, m, A, say); return; }
+  if (w.type === 'talk') { await famEvResolveWant(g, m, A, w, say); return; }
   if (w.type === 'dinner') {
     await say(`「ごはんできたよ！ 今日は${w.dish}」`);
     let ok = true; try { ok = g.canEat(); } catch (e) { }
@@ -20767,6 +20769,104 @@ function installFamTalk() {
   if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.createElement) {
     setInterval(() => { const g = window.__game; if (!g || !g.state || !g.state.day) return; try { famBdayTick(g); famSayTick(g); } catch (e) { } }, 700);
     window.__famtalk = { line: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return m && famLine(g, m, agOf(g, m), nowAct(g, m, agOf(g, m))); }, pool: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return m && famPool(g, m, agOf(g, m), nowAct(g, m, agOf(g, m))).length; }, album: () => famAlbumLines(window.__game), bday: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return m && famBday(m); } };
+  }
+}
+
+// ===== 家族の会話イベント（場面つき・選択肢つき） =====
+// w: だれと（pa/gp/sibOld/sibYoung/sp/kid/kidBig/any）　ok: 条件　L: セリフ　C: [選択肢, 効果, 返事]
+// 効果：op あなたへの気持ち／mood 相手の気分／st あなたのストレス／money お金／al アルバム／rel [相手との関係, 相手の続柄]
+const FE = [
+  // ---- 親 ----
+  { id: 'pa_future', w: 'pa', ok: c => c.me.student, L: ['「{c}、ちょっといい？」', '「将来のこと、なにか考えてる？ ……べつに、決めろって言ってるわけじゃないのよ」'], C: [['夢を語る', { op: 5, al: '親に将来の夢を話した' }, '「そう……。{c}がそう思うなら、応援する」'], ['まだわからない', { op: 1 }, '「それでいいのよ。ゆっくり考えなさい」'], ['ほっといて', { op: -5, mood: -6 }, '「……そう。ごめんね」']] },
+  { id: 'pa_marry', w: 'pa', ok: c => c.me.age >= 26 && !c.married, L: ['「ねえ{c}。最近、いい人いないの？」', '「お母さんの友だちの娘さんがね、とってもいい子なんだって……」'], C: [['会ってみる', { op: 6, al: '親からお見合いの話をされた' }, '「ほんと！？ じゃあ、さっそく連絡しておくわ！」'], ['自分で見つける', { op: 1 }, '「そう？ ならいいけど……孫の顔、楽しみにしてるからね」'], ['結婚する気はない', { op: -4, mood: -8 }, '「……そう。{c}の人生だものね」']] },
+  { id: 'pa_album', w: 'pa', L: ['「押し入れの片づけしてたら、こんなの出てきたの」', '（古いアルバム。小さいころの自分が、泣きながらアイスを食べている）', '「この日ね、アイスを落として大泣きしたのよ。覚えてる？」'], C: [['覚えてる', { op: 4, st: -4, al: '親と昔のアルバムを見た' }, '「ふふ。あのころは、ほんとに手がかかったんだから」'], ['恥ずかしいからしまって', { op: 1 }, '「はいはい。……でも、大事にとっておくわね」']] },
+  { id: 'pa_work', w: 'pa', ok: c => num(c.A.stress) > 55 && ADR(c.A.role), L: ['（ため息をついている）', '「ごめん、ちょっと仕事でいろいろあってね」', '「……上の人に、ひどいこと言われちゃって」'], C: [['話を聞く', { op: 6, mood: 10, al: '仕事で落ちこむ親の話を聞いた' }, '「……ありがとう。{c}に聞いてもらったら、少し楽になった」'], ['肩をたたいてはげます', { op: 4, mood: 6 }, '「うん……。明日もがんばるよ」'], ['大変だね（スマホを見ながら）', { op: -3 }, '「……うん。まあ、いいや」']] },
+  { id: 'pa_health', w: 'pa', ok: c => c.m.age >= 55, L: ['「最近、階段がしんどくてね」', '「健康診断？ ……行ってないなあ。忙しくて」'], C: [['病院に行こうと言う', { op: 4, hp: 6, al: '親に健康診断をすすめた' }, '「わかった、わかった。{c}がそこまで言うなら行くよ」'], ['いっしょに散歩しようと言う', { op: 6, hp: 3, st: -3 }, '「いいね。たまには並んで歩くのも、悪くない」'], ['年なんだから気をつけて', { op: 0 }, '「年寄りあつかいしないでよ」']] },
+  { id: 'pa_curfew', w: 'pa', ok: c => c.me.age < 18, per: ['kibishii', 'shinpai', 'shinkei'], L: ['「{c}、きのう何時に帰ってきた？」', '「門限は守りなさいって、言ってるでしょう」'], C: [['あやまる', { op: 3 }, '「わかればいいの。心配したんだからね」'], ['友だちはもっと遅い', { op: -4, mood: -4 }, '「よそはよそ、うちはうち！」'], ['連絡すればいい？', { op: 2 }, '「……そうね。せめて連絡はちょうだい」']] },
+  { id: 'pa_relatives', w: 'pa', per: ['mie', 'rakuten'], L: ['「来週、親戚の集まりがあるのよ」', '「{c}も来なさい。みんな会いたがってるから」'], C: [['行く', { op: 6, st: 3, al: '親戚の集まりに顔を出した' }, '「よかった！ おばさんたち、喜ぶわよ〜」'], ['用事がある', { op: -2 }, '「そう……。まあ、よろしく言っておくわ」']] },
+  { id: 'pa_couple', w: 'pa', ok: c => c.coupleRel != null && c.coupleRel < 15, L: ['「ちょっと聞いてよ、{c}」', '「お父さん（お母さん）ったら、また靴下脱ぎっぱなしなのよ。何回言ってもわからないの」'], C: [['味方する', { op: 4, coupleRel: -3 }, '「でしょ！？ {c}はわかってくれるわね」'], ['どっちもどっちだよ', { op: -1, coupleRel: 2 }, '「……まあ、わたしも言いすぎたかもね」'], ['仲直りしなよ', { op: 2, coupleRel: 6, al: '両親に仲直りをすすめた' }, '「……そうね。今夜、ちゃんと話してみる」']] },
+  { id: 'pa_money', w: 'pa', ok: c => c.me.age >= 20 && num(c.g.state.money) >= 30000, L: ['「{c}、ちょっといいかしら」', '「……実はね、家の修理でお金がかさんじゃって。今月、ちょっと苦しいの」'], C: [['1万円わたす', { op: 8, money: -10000, al: '家計が苦しい親にお金をわたした' }, '「……ありがとう。{c}も大人になったのね」'], ['大丈夫？とだけ言う', { op: 0 }, '「うん、なんとかするわ。気にしないで」']] },
+  // ---- 祖父母 ----
+  { id: 'gp_war', w: 'gp', L: ['「{c}、ちょっとこっちおいで」', '「おじいちゃんがな、{c}くらいのころは、毎日おなかをすかせとったんじゃ」', '「だから、ごはんは残しちゃいかんぞ」'], C: [['もっと聞かせて', { op: 6, al: '祖父母から昔の暮らしの話を聞いた' }, '「そうかそうか。……あのころはな、空がもっと広かった」'], ['はーい', { op: 1 }, '「わかればよろしい」']] },
+  { id: 'gp_phone', w: 'gp', L: ['「{c}、このスマホっちゅうのはどうやって写真を送るんじゃ？」', '「孫の写真を、友だちに見せたいんじゃが……」'], C: [['教えてあげる', { op: 7, st: -2, al: '祖父母にスマホの使い方を教えた' }, '「おお、できた！ {c}は先生じゃな」'], ['あとでね', { op: -2 }, '「……そうか。忙しいもんな」']] },
+  { id: 'gp_secret', w: 'gp', L: ['「ほれ、{c}。これ、みんなには内緒じゃよ」', '（ポチ袋を手にのせられた）'], C: [['ありがとう！', { op: 4, money: 3000, al: '祖父母にこっそりお小遣いをもらった' }, '「ふぉっふぉっ。好きなもんでも買いなさい」'], ['受けとれないよ', { op: 6 }, '「えらいのう……。じゃあ、これはお前の将来のためにとっておこう」']] },
+  { id: 'gp_will', w: 'gp', ok: c => c.m.age >= 75, L: ['「{c}。わしがおらんようになっても……」', '「家族みんな、仲よくするんじゃぞ」'], C: [['まだまだ長生きしてよ', { op: 8, mood: 10, al: '祖父母と、長生きの約束をした' }, '「……そうじゃな。{c}の花嫁（花婿）姿を見るまでは、死ねんのう」'], ['だまって手をにぎる', { op: 10, mood: 8 }, '（しわだらけの手が、あたたかかった）']] },
+  // ---- 兄・姉 ----
+  { id: 'so_love', w: 'sibOld', ok: c => c.m.age >= 15, L: ['「なあ{c}……ちょっと相談があるんだけど」', '「好きな人ができてさ。どうやって誘えばいいと思う？」'], C: [['ストレートに誘え', { op: 5, mood: 6, al: '兄（姉）の恋愛相談にのった' }, '「……だよな。よし、明日言ってみる！」'], ['手紙を書いたら？', { op: 4 }, '「手紙か……古風だけど、ありかもな」'], ['知らないよ', { op: -3 }, '「……聞いた俺がバカだった」']] },
+  { id: 'so_parents', w: 'sibOld', L: ['「父さんと母さん、最近ピリピリしてない？」', '「俺らにできること、なんかあるかな」'], C: [['ふたりで家事をしよう', { op: 6, al: 'きょうだいで家事を引き受けた' }, '「だな。皿洗いくらい、やってやるか」'], ['ほっとこう', { op: 1 }, '「……まあ、大人の問題か」']] },
+  { id: 'so_leave', w: 'sibOld', ok: c => c.m.age >= 18, L: ['「{c}、俺……来年、家を出ようと思ってる」', '「ひとり暮らし。親にはまだ言ってない」'], C: [['応援する', { op: 6, al: '兄（姉）の家を出る決意を聞いた' }, '「ありがとな。{c}が言ってくれると、心強い」'], ['さみしくなるね', { op: 8, mood: 4 }, '「……おう。たまには帰ってくるよ」']] },
+  // ---- 弟・妹 ----
+  { id: 'sy_hw', w: 'sibYoung', ok: c => KIDR(c.A.role), L: ['「{c}〜！ この算数の問題、わかんない……」', '「明日までなんだけど……」'], C: [['教えてあげる', { op: 6, al: '弟（妹）の宿題を見てあげた', gaku: 0.4 }, '「わかった！ {c}すごい！」'], ['答えだけ教える', { op: 2 }, '「やったー！ ……先生にバレないかな」'], ['自分でやりな', { op: -2 }, '「ケチー！」']] },
+  { id: 'sy_dream', w: 'sibYoung', ok: c => c.m.age >= 6 && c.m.age <= 15, L: ['「ねえ{c}。ぼく（わたし）ね、大きくなったら……」', '「ユーチューバーになりたいんだ！ ……笑う？」'], C: [['いいじゃん！', { op: 7, mood: 10, al: '弟（妹）の夢を聞いた' }, '「へへっ。{c}だけには言っておきたかったんだ」'], ['ちゃんと勉強もしなよ', { op: 1 }, '「わかってるよ〜」'], ['無理でしょ', { op: -8, mood: -12 }, '「……もういい」']] },
+  { id: 'sy_ghost', w: 'sibYoung', ok: c => c.m.age < 11 && c.t >= 1200, L: ['「{c}……まだ起きてる？」', '「さっきのテレビ、こわくて……ひとりで寝られない」'], C: [['いっしょに寝てあげる', { op: 8, al: 'こわがる弟（妹）と、いっしょに寝た' }, '「……ありがと。{c}がいると、こわくない」'], ['おばけなんていないよ', { op: 3 }, '「ほんと……？ ほんとにいない？」']] },
+  { id: 'sy_bully', w: 'sibYoung', ok: c => c.A.bully >= 1 || (c.S && c.S.bully), L: ['「{c}……」', '「……学校で、無視されてるんだ。もう、行きたくない」'], C: [['いっしょに親に話そう', { op: 8, bully: -1, al: '弟（妹）のいじめを、いっしょに親に話した' }, '「……うん。{c}がいっしょなら、言える」'], ['そいつに言ってやる', { op: 6, bully: -1 }, '「えっ……ほんとに？ ……ありがとう」'], ['気にしすぎだよ', { op: -10, mood: -12 }, '「……そっか」']] },
+  { id: 'sy_cx', w: 'sibYoung', ok: c => num(c.A.cx) >= 2, L: ['「……なんでいつも、{c}ばっかりほめられるの」', '「ぼく（わたし）だって、がんばってるのに」'], C: [['お前のほうがすごいところもある', { op: 8, cx: -15, al: 'コンプレックスを抱える弟（妹）と向き合った' }, '「……ほんと？ たとえば？ ……へへ」'], ['親に言ってみるよ', { op: 5, cx: -8 }, '「……うん」'], ['知らないよ', { op: -8, cx: 10 }, '「……っ！」']] },
+  // ---- 配偶者 ----
+  { id: 'sp_anniv', w: 'sp', L: ['「ねえ、今日がなんの日か覚えてる？」'], C: [['もちろん、記念日だよね', { op: 8, mood: 10, al: '結婚記念日を祝った' }, '「……覚えててくれたんだ。うれしい」'], ['……給料日？', { op: -6, mood: -8 }, '「…………もういい」']] },
+  { id: 'sp_chores', w: 'sp', L: ['「ちょっと話があるの」', '「家のこと、わたし（ぼく）ばっかりやってない？」'], C: [['これから分担しよう', { op: 7, al: '家事の分担を話し合った' }, '「ほんと？ じゃあ、ゴミ出しと風呂そうじ、お願いね」'], ['仕事で疲れてるんだ', { op: -6, mood: -6 }, '「わたしだって疲れてるよ」']] },
+  { id: 'sp_kids', w: 'sp', ok: c => c.kids > 0, L: ['「子どもの教育のことなんだけど」', '「塾、行かせたほうがいいと思う？」'], C: [['好きなことをさせよう', { op: 4 }, '「そうだね。のびのびが一番かも」'], ['行かせよう', { op: 3 }, '「わかった。いい塾、探してみる」'], ['任せるよ', { op: -3 }, '「……いつもそれだね」']] },
+  // ---- 子ども ----
+  { id: 'kid_why', w: 'kid', L: ['「ねえねえ{c}、どうしてお空は青いの？」', '「どうして夜は暗いの？ どうしてカラスは黒いの？」'], C: [['いっしょに図鑑で調べよう', { op: 8, al: '子どもと図鑑で調べものをした' }, '「わあ！ {c}、ものしり〜！」'], ['どうしてだろうね', { op: 4 }, '「わかんないの？ じゃあ、ぼく（わたし）が博士になる！」']] },
+  { id: 'kid_rebel', w: 'kidBig', L: ['「……なに。用ないなら話しかけないで」', '「どうせ{c}には、わかんないよ」'], C: [['わかりたいと思ってるよ', { op: 6 }, '「……べつに。……でも、ありがと」'], ['その言い方はなんだ', { op: -6, mood: -6 }, '「ほらね。すぐ怒る」'], ['そっとしておく', { op: 2 }, '（部屋のドアが、少しだけ開いたままになっていた）']] },
+  // ---- だれでも ----
+  { id: 'any_tv', w: 'any', ok: c => c.me.famous, L: ['「{c}！ テレビ見たよ！」', '「みんなで見てたんだから。……ちょっと、泣きそうになっちゃった」'], C: [['照れる', { op: 6, al: 'テレビに出た自分を、家族が見てくれていた' }, '「えへへ。家族の自慢だよ」'], ['恥ずかしいからやめて', { op: 2 }, '「なんでよ〜、すごいことなのに」']] },
+  { id: 'any_neet', w: 'any', ok: c => c.me.neet, L: ['「{c}……最近、どう？」', '「責めてるわけじゃないの。ただ、心配で」'], C: [['仕事、探してみる', { op: 6, al: '家族に、仕事を探すと約束した' }, '「……うん。ゆっくりでいいからね」'], ['ほっといて', { op: -6, mood: -8 }, '「……ごめんね」']] },
+  { id: 'any_rain', w: 'any', ok: c => c.t < 720, L: ['「{c}、今日は午後から雨だって」', '「傘、持っていきなさいよ」'], C: [['ありがとう', { op: 2 }, '「いってらっしゃい。気をつけてね」'], ['大丈夫だよ', { op: 0 }, '「もう。ぬれても知らないからね」']] },
+  { id: 'any_retro', w: 'any', ok: c => c.m.age >= 8, L: ['「物置からこんなの出てきた！」', '（昔のゲーム機だ。カセットにほこりがつもっている）', '「なつかしい〜。いっしょにやる？」'], C: [['やる！', { op: 6, st: -6, time: 60, al: '昔のゲームで家族と盛りあがった' }, '「よーし、手加減しないからね！」'], ['また今度', { op: -1 }, '「えー、つまんないの」']] },
+  { id: 'any_cook', w: 'any', ok: c => c.m.age >= 12, L: ['「ねえ{c}、今夜なに食べたい？」'], C: [['ハンバーグ', { op: 2 }, '「了解！ 腕によりをかけるね」'], ['カレー', { op: 2 }, '「カレーね！ 甘口？ 辛口？ ……辛口にしよ」'], ['なんでもいい', { op: -2 }, '「それが一番困るのよ」']] },
+  { id: 'any_thanks', w: 'any', ok: c => num(c.A.op) >= 75, L: ['「{c}、いつもありがとうね」', '「……なんか、言いたくなっちゃった」'], C: [['こちらこそ', { op: 4, mood: 8, st: -5, al: '家族に「ありがとう」と言われた' }, '「ふふ。照れるね、こういうの」'], ['急にどうしたの', { op: 2 }, '「なんでもない！ ……なんでもないよ」']] },
+];
+function famEvCtx(g, m, A) {
+  const me = meSum(g), R = famRoster(g);
+  let coupleRel = null; if (m.kind === 'pa') { const o = R.find(x => x.kind === 'pa' && x.key !== m.key); if (o) coupleRel = relOf(g, m, o); }
+  const married = R.some(x => x.kind === 'sp' && x.married), kids = R.filter(x => x.kind === 'kid').length;
+  return { g, m, A, me, t: clockMin(g), coupleRel, married, kids, S: g.state.gakkoF && g.state.gakkoF[m.key] };
+}
+function famEvWho(m) { return m.kind === 'pa' ? 'pa' : m.kind === 'gp' ? 'gp' : m.kind === 'sp' ? 'sp' : m.kind === 'kid' ? (m.age >= 13 ? 'kidBig' : 'kid') : sibIsYounger(m) ? 'sibYoung' : 'sibOld'; }
+function famEvPick(g, m, A) {
+  const F = faiSt(g); F.evSeen = isObj(F.evSeen) ? F.evSeen : {}; const c = famEvCtx(g, m, A), who = famEvWho(m);
+  const L = FE.filter(e => (e.w === who || e.w === 'any') && (!e.per || e.per.includes(A.per)) && (() => { try { return !e.ok || e.ok(c); } catch (x) { return false; } })() && g.state.day - num(F.evSeen[m.key + ':' + e.id], -999) >= 20);
+  return L.length ? pick(L) : null;
+}
+async function famEvPlay(g, m, A, e, say) {
+  const F = faiSt(g), cl = famCall(g, m), fem = m.g === 'f', meF = meGender(g) === 'f', other = (famRoster(g).find(x => x.kind === 'pa' && x.key !== m.key) || {}).frel === 'mother' ? 'お母さん' : 'お父さん', R = t => { let s = String(t).replace(/\{c\}/g, cl).replace(/弟（妹）|兄（姉）/g, m.rel).replace(/ぼく（わたし）/g, fem ? 'わたし' : 'ぼく').replace(/わたし（ぼく）/g, fem ? 'わたし' : 'ぼく').replace(/お父さん（お母さん）/g, other).replace(/花嫁（花婿）/g, meF ? '花嫁' : '花婿').replace(/お母さんの友だち/g, fem ? 'お母さんの友だち' : 'お父さんの知り合い'); if (famKansai(g)) s = famDialect(s); return s; };
+  F.evSeen = isObj(F.evSeen) ? F.evSeen : {}; F.evSeen[m.key + ':' + e.id] = g.state.day;
+  for (const l of e.L) await say(R(l));
+  const k = await g.list({ title: `${m.rel}・${String(m.name).split(' ').pop()}`, items: e.C.map(x => ({ label: x[0] })), x: 12, y: 44, w: 360, px: true });
+  const ch = e.C[k >= 0 ? k : e.C.length - 1], fx = ch[1];
+  if (fx.money && fx.money < 0 && num(g.state.money) < -fx.money) { await say('（お金が足りなかった……）'); return true; }
+  await say(R(ch[2]));
+  if (fx.op) A.op = clamp(num(A.op) + fx.op, 0, 100);
+  if (fx.mood) A.mood = clamp(num(A.mood) + fx.mood, 0, 100);
+  if (fx.hp) A.hp = clamp(num(A.hp) + fx.hp, 0, 100);
+  if (fx.cx && A.cxV != null) A.cxV = clamp(num(A.cxV) + fx.cx, 0, 100);
+  if (fx.bully) { if (A.bully) A.bully = Math.max(0, A.bully + fx.bully); const S = g.state.gakkoF && g.state.gakkoF[m.key]; if (S && S.bully && S.bully.lv) S.bully.lv = Math.max(0, S.bully.lv + fx.bully); }
+  if (fx.gaku) { const S = g.state.gakkoF && g.state.gakkoF[m.key]; if (S && S.fls && S.fls.stats) S.fls.stats.gaku = clamp(num(S.fls.stats.gaku) + fx.gaku, 0, 100); }
+  if (fx.coupleRel) { const o = famRoster(g).find(x => x.kind === 'pa' && x.key !== m.key); if (o) relAdd(g, m, o, fx.coupleRel); }
+  if (fx.money) { g.state.money = num(g.state.money) + fx.money; try { g.notify(`お金 ${fx.money > 0 ? '+' : ''}${yen(fx.money)}`, { color: '#ffe08a' }); } catch (x) { } }
+  try { if (fx.st) g.addNeed('stress', fx.st); if (fx.time) g.advanceTime(fx.time, 'np_famev'); } catch (x) { }
+  if (fx.al) famAlbum(g, R(fx.al), 1);
+  addDia(A, g, `${famCall(g, m)}と話した。${(fx.op || 0) >= 4 ? 'なんだか、うれしかった。' : (fx.op || 0) < 0 ? 'ちょっと、さみしかった。' : ''}`, 0);
+  return true;
+}
+// 話しかけたとき：ときどき会話イベントになる
+async function famEvOnTalk(g, m, A, act, say) { if (!act.auto || chance(0.45)) return false; const e = famEvPick(g, m, A); if (!e) return false; return famEvPlay(g, m, A, e, say); }
+// 自分から話しかけてくる（「！」）
+function famEvTick(g) {
+  const t = clockMin(g); if (t < 420 || t > 1320) return;
+  const F = faiSt(g); const h = Math.floor(t / 60); if (F.evTickH === g.state.day * 24 + h) return; F.evTickH = g.state.day * 24 + h;
+  for (const m of famRoster(g)) {
+    if (!livesWith(g, m)) continue; const A = agOf(g, m); if (A.want || SMALL(A.role)) continue;
+    const act = nowAct(g, m, A); if (!act.auto || !chance(0.035)) continue;
+    const e = famEvPick(g, m, A); if (e) A.want = { type: 'talk', ev: e.id, day: g.state.day, t0: t, exp: Math.min(1439, t + 300) };
+  }
+}
+async function famEvResolveWant(g, m, A, w, say) { const e = FE.find(x => x.id === w.ev) || famEvPick(g, m, A); if (!e) { await say(famLine(g, m, A, nowAct(g, m, A))); return; } await famEvPlay(g, m, A, e, say); }
+function installFamEv() {
+  E.Tn(g => { try { famEvTick(g); } catch (e) { } });
+  if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.createElement) {
+    setInterval(() => { const g = window.__game; if (!g || !g.state || !g.state.day) return; try { famEvTick(g); } catch (e) { console.error('[famev]', e); } }, 1500);
+    window.__famev = { list: () => FE.map(e => e.id), pick: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); const e = m && famEvPick(g, m, agOf(g, m)); return e && e.id; }, force: (k, id) => { const g = window.__game, m = famRoster(g).find(x => x.key === k); agOf(g, m).want = { type: 'talk', ev: id, day: g.state.day, t0: clockMin(g), exp: 1439 }; return 0; } };
   }
 }
 
