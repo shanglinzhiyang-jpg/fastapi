@@ -9948,6 +9948,7 @@ function simGame(ctx, home, away, opt = {}) {
         continue;
       }
       const r = paResult(b, p, F, bases);
+      if (sink.zone) sink.zone(bid, F.pit, r.c, b, p);
       F.pc += r.pc;
       const L = bl(bid), PL = pl(F.pit);
       L.pa++; PL.bf++; PL.np += r.pc;
@@ -10143,7 +10144,7 @@ function mkCtx(N, S, round) {
   const me = N.me && N.me.st === 'pro' && N.me.p ? N.me : null;
   return {
     L: N.L, me, P: id => id === 'ME' ? (N.me && N.me.p) : N.L.players[id],
-    sink: { bat: id => padA(S.bs[id] || (S.bs[id] = newB()), BL), pit: id => padA(S.ps[id] || (S.ps[id] = newP()), PL_), rel: S.rel, round },
+    sink: { bat: id => padA(S.bs[id] || (S.bs[id] = newB()), BL), pit: id => padA(S.ps[id] || (S.ps[id] = newP()), PL_), rel: S.rel, round, zone: zoneSink(S, N) },
   };
 }
 const nameOf = (N, id) => { if (!id) return ''; const p = id === 'ME' ? N.me && N.me.p : N.L.players[id]; return p ? shortName(p) : '？'; };
@@ -11269,6 +11270,10 @@ class NpbScene {
   setTab(i) { this.tab = (i + TABS.length) % TABS.length; this.tabT = this.t; tt.sfx('cursor'); }
   updModal(inp, tap) {
     const m = this.modal;
+    if (m.kind === 'card') {
+      if (inp.pressed('left') || inp.pressed('right')) { m.pg = (num(m.pg) + (inp.pressed('left') ? 2 : 1)) % 3; tt.sfx('cursor'); return; }
+      if (tap) { const hit = (m.rects || []).find(r => tap.x >= r.x && tap.x < r.x + r.w && tap.y >= r.y && tap.y < r.y + r.h); if (hit && hit.pg != null) { m.pg = hit.pg; tt.sfx('cursor'); return; } }
+    }
     if (m.kind === 'info' || m.kind === 'card') {
       const maxS = Math.max(0, num(m._n) - num(m.vis));
       if (m.kind === 'info' && inp.repeat('down') && m.sy < maxS) { m.sy++; return; }
@@ -11980,7 +11985,7 @@ class NpbScene {
   drawModal(c, N) {
     const m = this.modal;
     fr(c, 0, 0, 640, 360, 'rgba(2,4,10,0.66)');
-    if (m.kind === 'card') { this.drawCard(c, N, m.p); return; }
+    if (m.kind === 'card') { this.drawCard(c, N, m.p, m); return; }
     const mbox = (x, y, w, h, title) => {
       box(c, x, y, w, h, lgrad(c, x, y, x, y + h, [[0, 'rgba(14,22,42,0.98)'], [1, 'rgba(6,10,22,0.98)']]), hexA(UC.acc, 0.6));
       c.fillStyle = lgrad(c, x, y, x + w, y, [[0, hexA(UC.acc, 0.55)], [0.7, hexA(UC.acc, 0.08)], [1, 'rgba(0,0,0,0)']]); c.fillRect(x + 1, y + 2, w - 12, 24);
@@ -12024,7 +12029,8 @@ class NpbScene {
     });
     if (n > vis) { tx(c, top > 0 ? '▲' : '', x + w - 14, y + 30, { color: UC.acc }); tx(c, top + vis < n ? '▼' : '', x + w - 14, y + h - 18, { color: UC.acc }); }
   }
-  drawCard(c, N, p) {
+  drawCard(c, N, p, m) {
+    if (m) m.rects = [];
     const S = N.S, me = p.id === 'ME', tid = me ? (N.me.team || null) : p.team;
     const col = tid ? (TEAM[tid].color === '#222222' ? '#3a3d48' : TEAM[tid].color) : me && N.me.mlb ? MLB_COL[N.me.mlb.t] : '#24324e';
     const acc = tid ? (TEAM_ACC[tid] || col) : UC.acc;
@@ -12044,18 +12050,19 @@ class NpbScene {
     glow(c, rk[2], 10, () => tx(c, rk[1], x + 70, y + 140, { size: 32, color: rk[2] }));
     tx(c, String(Math.round(ov)), x + 104, y + 152, { size: 16, color: '#fff' });
     if (p.pos === 'P') { tx(c, `最速 ${Math.round(num(p.vel))}km/h`, x + 14, y + 188, { color: '#fff' }); arsenalOf(p).slice(0, 4).forEach(([n, l], i) => tx(c, `${n} ${'■'.repeat(l)}${'□'.repeat(7 - l)}`, x + 14, y + 206 + i * 16, { color: '#e0e6f4' })); }
+    if (m && cardPage(this, c, N, m, x, y, w, h, acc)) { tx(c, 'A/B：とじる', x + w - 14, y + h - 20, { align: 'right', color: UC.dim }); return; }
     // 右：能力
     const rx = x + 190;
-    tx(c, '能力', rx, y + 12, { color: acc });
+    tx(c, '能力', rx, y + 38, { color: acc });
     const ks = p.pos === 'P' ? ['vel', 'ctl', 'sta', 'brk'] : ['con', 'pow', 'eye', 'spd', 'fld', 'arm'];
     ks.forEach((k, i) => {
-      const cx = rx + (i % 2) * 176, cy = y + 32 + Math.floor(i / 2) * 26;
+      const cx = rx + (i % 2) * 176, cy = y + 58 + Math.floor(i / 2) * 26;
       const v = num(p[k]), sc = k === 'vel' ? velScore(v) : v, r2 = rankOf(sc);
       tx(c, STATN[k], cx, cy + 2, { color: '#c8d2ea' });
       tx(c, k === 'vel' ? `${Math.round(v)}` : r2[1], cx + 82, cy - 2, { size: k === 'vel' ? 12 : 16, color: r2[2] });
       for (let s = 0; s < 10; s++) fr(c, cx + 104 + s * 6, cy + 5, 4, 8, sc >= (s + 1) * 10 ? r2[2] : 'rgba(255,255,255,0.08)');
     });
-    const ty = y + 32 + Math.ceil(ks.length / 2) * 26 + 4;
+    const ty = y + 58 + Math.ceil(ks.length / 2) * 26 + 4;
     tx(c, '特殊能力', rx, ty, { color: acc });
     this.traitBadges(c, p, rx + 64, ty - 2, 290);
     if (!(p.tr && p.tr.length)) tx(c, 'なし', rx + 64, ty, { color: '#5d6b88' });
@@ -12763,6 +12770,8 @@ function careerRecordList(N, cat) {
 // 年度替わり：通算成績の加算・引退者の保存
 function accumulateCareer(N, S, p, retiring) {
   const isP = p.pos === 'P', cur = isP ? S.ps[p.id] : S.bs[p.id], lg = lgOf(S);
+  try { zoneArchive(N, S, p); } catch (e) { }
+  if (cur) { try { p.cy = (p.cy || []).filter(r => r.y !== S.y); p.cy.push({ y: S.y, t: p.team, a: cur.slice(), w: Math.round(warOf(cur, isP, p.pos, lg) * 100) / 100 }); if (p.cy.length > 25) p.cy.shift(); } catch (e) { } }
   if (cur) {
     if (isP) p.cp = addArr(padA(p.cp || [], PL_), cur); else p.cb = addArr(padA(p.cb || [], BL), cur);
     p.cw = Math.round((num(p.cw) + warOf(cur, isP, p.pos, lg)) * 100) / 100;
@@ -18599,6 +18608,172 @@ function gkFamTransfer(g, K) {
   K.mood = clamp(K.mood + 4, 0, 100);
   gkHist(g, `${old}から${K.school}に転校した`, 'school');
   return `${old}から、${K.school}に転校した。\n新しい教室。誰も、前の学校のことを知らない。\n……ただ、「転校生」というだけで、また値ぶみされる日々が始まる。`;
+}
+
+// ===== 選手カードの作りこみ：能力・年度別成績・コース別成績 =====
+// コース：0〜8＝ストライクゾーン（捕手から見て 左上→右下）、9＝高めのボール、10＝低め、11＝左、12＝右
+const ZN = 13, ZF = 4; // [打数, 安打, 本塁打, 三振]
+const ZONE_NAME = ['高め左', '高め真ん中', '高め右', '真ん中左', 'ど真ん中', '真ん中右', '低め左', '低め真ん中', '低め右', '高めボール', '低めボール', '左ボール', '右ボール'];
+const zArr = () => new Array(ZN * ZF).fill(0);
+// 打者ごとの得意・苦手（選手IDから決まる。パワー型は内角高め、巧打型は真ん中〜外角）
+const ZH_CACHE = {};
+function zoneHot(id, b) {
+  const key = id + '|' + Math.round(num(b.pow) / 10) + '|' + Math.round(num(b.con) / 10) + '|' + (b.bt || 'R');
+  if (ZH_CACHE[key]) return ZH_CACHE[key];
+  const R = sRand(hashStr(String(id)) + 77), lhb = b.bt === 'L', inC = lhb ? 2 : 0, outC = lhb ? 0 : 2;
+  const pw = (num(b.pow) - 50) / 50, cn = (num(b.con) - 50) / 50;
+  const h = [];
+  for (let z = 0; z < ZN; z++) {
+    let v = 1;
+    if (z < 9) { const row = Math.floor(z / 3), col = z % 3; if (z === 4) v += 0.18; if (col === inC) v += 0.12 * pw; if (row === 0) v += 0.1 * pw; if (col === outC) v += 0.1 * cn - 0.06; if (row === 2) v -= 0.08 - 0.06 * cn; if (row === 2 && col === outC) v -= 0.1; }
+    else v = 0.55 + 0.1 * cn;
+    v += (R() - 0.5) * 0.34;
+    h.push(clamp(v, 0.45, 1.6));
+  }
+  if (Object.keys(ZH_CACHE).length > 3000) for (const k in ZH_CACHE) delete ZH_CACHE[k];
+  return (ZH_CACHE[key] = h);
+}
+function zonePick(c, b, p, h) {
+  const ctl = (num(p.ctl, 50) - 50) / 50, hit = ['1B', '2B', '3B', 'HR'].includes(c), w = [];
+  for (let z = 0; z < ZN; z++) {
+    let pz = z < 9 ? (z === 4 ? 1.1 - 0.35 * ctl : z % 2 === 0 ? 0.9 + 0.25 * ctl : 1) : (c === 'K' ? 0.5 : 0.3);
+    if (c === 'K') pz /= Math.pow(h[z], 1.6);
+    else if (hit) pz *= (z < 9 ? h[z] * h[z] : h[z] * 0.8) * (c === 'HR' && (z === 4 || z < 3) ? 1.5 : c === 'HR' && z >= 9 ? 0.3 : 1);
+    else pz /= h[z];
+    w.push(Math.max(0.001, pz));
+  }
+  const tot = w.reduce((s, x) => s + x, 0); let x = RND() * tot;
+  for (let z = 0; z < ZN; z++) { x -= w[z]; if (x <= 0) return z; }
+  return 4;
+}
+function zoneAdd(arr, z, c) {
+  if (['BB', 'HBP'].includes(c)) return;
+  const i = z * ZF; arr[i]++;
+  if (['1B', '2B', '3B', 'HR'].includes(c)) arr[i + 1]++;
+  if (c === 'HR') arr[i + 2]++;
+  if (c === 'K') arr[i + 3]++;
+}
+function zoneSink(S, N) {
+  return (bid, pid, c, b, p) => {
+    try {
+      if (['BB', 'HBP'].includes(c)) return;
+      const z = zonePick(c, b, p, zoneHot(bid, b));
+      S.zb = S.zb || {}; S.zp = S.zp || {};
+      zoneAdd(S.zb[bid] || (S.zb[bid] = zArr()), z, c);
+      zoneAdd(S.zp[pid] || (S.zp[pid] = zArr()), z, c);
+      if (N && (bid === 'ME' || pid === 'ME')) { N.zme = N.zme || { b: zArr(), p: zArr() }; zoneAdd(bid === 'ME' ? N.zme.b : N.zme.p, z, c); }
+    } catch (e) { }
+  };
+}
+// 年度替わりで通算に足す
+function zoneArchive(N, S, p) {
+  const isP = p.pos === 'P', cur = S.zb && S.zb[p.id], curP = S.zp && S.zp[p.id];
+  if (cur && !isP) { p.zc = p.zc || zArr(); for (let i = 0; i < cur.length; i++) p.zc[i] += cur[i]; }
+  if (curP && isP) { p.zc = p.zc || zArr(); for (let i = 0; i < curP.length; i++) p.zc[i] += curP[i]; }
+}
+function zoneOf(N, p, which) {
+  const S = N.S, isP = p.pos === 'P';
+  const cur = S ? (isP ? S.zp && S.zp[p.id] : S.zb && S.zb[p.id]) : null;
+  if (which === 'season') return cur || null;
+  if (p.id === 'ME') { const z = N.zme; return z ? (isP ? z.p : z.b) : cur; }
+  const out = zArr(); if (p.zc) for (let i = 0; i < out.length; i++) out[i] += p.zc[i]; if (cur) for (let i = 0; i < out.length; i++) out[i] += cur[i];
+  return out;
+}
+// 年度別の行
+function yearRows(N, p) {
+  const isP = p.pos === 'P', S = N.S, rows = [];
+  if (p.id === 'ME') { for (const c of N.me.career || []) { const a = isP ? c.p : c.b; if (a) rows.push({ y: c.y, t: c.team, a, w: c.war }); } }
+  else for (const r of p.cy || []) rows.push(r);
+  const cur = S && (isP ? S.ps[p.id] : S.bs[p.id]);
+  if (cur && !rows.some(r => r.y === S.y)) rows.push({ y: S.y, t: p.id === 'ME' ? N.me.team : p.team, a: cur, w: warOf(cur, isP, p.pos, lgOf(S)), now: 1 });
+  return rows.sort((a, b) => a.y - b.y);
+}
+// ---- カードの描画（3ページ） ----
+const CARD_PAGES = ['能力', '年度別成績', 'コース別'];
+function cardPage(sc, c, N, m, x, y, w, h, acc) {
+  const p = m.p, pg = num(m.pg);
+  // タブ
+  const rx = x + 190;
+  CARD_PAGES.forEach((t, i) => { const tx0 = rx + i * 94, on = i === pg; slant(c, tx0, y + 8, 88, 18, 5, on ? hexA(acc, 0.9) : 'rgba(255,255,255,0.07)'); tx(c, t, tx0 + 44, y + 10, { align: 'center', color: on ? '#0a0e18' : '#c8d2ea', bold: on }); (m.rects = m.rects || []).push({ x: tx0, y: y + 6, w: 88, h: 22, pg: i }); });
+  tx(c, '←→ページ', x + w - 14, y + 11, { align: 'right', color: UC.dim, size: 11 });
+  if (pg === 1) return cardYears(sc, c, N, p, rx, y + 36, x + w - rx - 14, h - 60, acc);
+  if (pg === 2) return cardZones(sc, c, N, p, rx, y + 36, x + w - rx - 14, h - 60, acc);
+  return false;
+}
+function cardYears(sc, c, N, p, x, y, w, h, acc) {
+  const isP = p.pos === 'P', rows = yearRows(N, p), lg = lgOf(N.S);
+  const cols = isP ? [['年度', 34, 'l'], ['球団', 40, 'l'], ['登板', 30], ['勝', 22], ['敗', 22], ['S', 22], ['H', 22], ['回', 40], ['防御率', 42], ['奪三振', 38], ['WHIP', 36], ['WAR', 34]]
+    : [['年度', 34, 'l'], ['球団', 40, 'l'], ['試合', 30], ['打率', 38], ['本', 24], ['点', 28], ['盗', 24], ['出塁率', 40], ['長打率', 40], ['OPS', 38], ['WAR', 34]];
+  const cell = (a, k) => isP ? [a[Pp.G], a[Pp.W], a[Pp.L], a[Pp.SV], a[Pp.HLD], fmtIP(a[Pp.OUT]), fmtERA(eraOf(a)), a[Pp.K], f2(whipOf(a))][k] : [a[B.G], fmtAvg(avgOf(a)), a[B.HR], a[B.RBI], a[B.SB], fmtAvg(obpOf(a)), fmtAvg(slgOf(a)), fmtAvg(obpOf(a) + slgOf(a))][k];
+  let cx = x; const X = cols.map(cl => { const r = cx; cx += cl[1]; return r; });
+  fr(c, x, y, w, 16, hexA(acc, 0.22));
+  cols.forEach((cl, i) => tx(c, cl[0], cl[2] === 'l' ? X[i] + 2 : X[i] + cl[1] - 2, y + 2, { size: 11, color: acc, align: cl[2] === 'l' ? 'left' : 'right' }));
+  const vis = Math.floor((h - 64) / 15), list = rows.slice(-vis);
+  if (!list.length) tx(c, 'まだ一軍の成績はない', x + 4, y + 22, { color: UC.dim });
+  list.forEach((r, j) => {
+    const yy = y + 19 + j * 15, a = r.a; if (j % 2) fr(c, x, yy - 1, w, 15, 'rgba(255,255,255,0.03)'); if (r.now) fr(c, x, yy - 1, 2, 15, acc);
+    tx(c, String(r.y), X[0] + 2, yy, { size: 11, color: r.now ? acc : '#e8eef8' });
+    tx(c, r.t && TEAM[r.t] ? TEAM[r.t].short : '－', X[1] + 2, yy, { size: 11, color: r.t && TEAM[r.t] ? (TEAM_ACC[r.t] || '#fff') : UC.dim });
+    for (let k = 2; k < cols.length - 1; k++) { const v = cell(a, k - 2); const hot = isP ? (k === 8 && eraOf(a) < 2.5 && a[Pp.OUT] >= 300) : (k === 3 && avgOf(a) >= 0.3 && a[B.PA] >= 300) || (k === 4 && a[B.HR] >= 30); tx(c, String(v), X[k] + cols[k][1] - 2, yy, { size: 11, align: 'right', color: hot ? '#ffd040' : '#fff' }); }
+    tx(c, f1(num(r.w)), X[cols.length - 1] + cols[cols.length - 1][1] - 2, yy, { size: 11, align: 'right', color: num(r.w) >= 5 ? '#ffd040' : '#c8d2ea' });
+  });
+  // 通算
+  const car = playerCareer(N, p), a = isP ? car.p : car.b, ty = y + h - 40;
+  fr(c, x, ty - 3, w, 1, hexA(acc, 0.5));
+  if (a && (isP ? a[Pp.BF] : a[B.PA])) {
+    tx(c, '通算', X[0] + 2, ty, { size: 11, color: acc, bold: true });
+    for (let k = 2; k < cols.length - 1; k++) tx(c, String(cell(a, k - 2)), X[k] + cols[k][1] - 2, ty, { size: 11, align: 'right', color: '#fff', bold: true });
+    const war = rows.reduce((s, r) => s + num(r.w), 0); tx(c, f1(p.id === 'ME' ? war : num(p.cw) + (N.S ? warOf(isP ? N.S.ps[p.id] : N.S.bs[p.id], isP, p.pos, lg) : 0)), X[cols.length - 1] + cols[cols.length - 1][1] - 2, ty, { size: 11, align: 'right', color: '#fff', bold: true });
+    const adv = isP ? `FIP ${f2(fipOf(a, lg))}　K/9 ${f2(k9Of(a))}　BB/9 ${f2(bb9Of(a))}　HR/9 ${f2(hr9Of(a))}　被打率 ${fmtAvg(oppAvgOf(a))}　K/BB ${f2(kbbOf(a))}`
+      : `wRC+ ${wrcPlusOf(a, lg)}　ISO ${fmtAvg(isoOf(a))}　BABIP ${fmtAvg(babipOf(a))}　BB% ${(pctOf(a[B.BB], a[B.PA]) * 100).toFixed(1)}　K% ${(pctOf(a[B.K], a[B.PA]) * 100).toFixed(1)}　得点圏 ${fmtAvg(rispOf(a))}`;
+    tx(c, fit(c, adv, w), x + 2, ty + 18, { size: 11, color: '#c8d2ea' });
+  } else tx(c, '通算　－', X[0] + 2, ty, { size: 11, color: UC.dim });
+  return true;
+}
+function cardZones(sc, c, N, p, x, y, w, h, acc) {
+  const isP = p.pos === 'P', zs = zoneOf(N, p, 'season'), zc = zoneOf(N, p, 'career');
+  const abS = zs ? zs.filter((v, i) => i % ZF === 0).reduce((s, v) => s + v, 0) : 0, useS = abS >= 60, Z = useS ? zs : zc;
+  const tot = Z ? Z.filter((v, i) => i % ZF === 0).reduce((s, v) => s + v, 0) : 0;
+  tx(c, `${isP ? '被打率' : '打率'}（${useS ? `${N.S ? N.S.y : ''}年` : '通算'}・捕手から見た図）`, x, y, { color: acc });
+  if (!Z || tot < 10) { tx(c, 'まだデータが少ない（試合に出ると記録される）', x, y + 24, { color: UC.dim }); return true; }
+  const avg = z => { const ab = Z[z * ZF]; return ab >= 3 ? Z[z * ZF + 1] / ab : null; };
+  const all = Z.reduce((s, v, i) => i % ZF === 1 ? s + v : s, 0) / tot;
+  const colOf = v => { if (v == null) return 'rgba(255,255,255,0.06)'; let d = (v - all) / 0.09; if (isP) d = -d; d = clamp(d, -1, 1); return d >= 0 ? `rgba(${230},${Math.round(80 - 40 * d)},${Math.round(70 - 30 * d)},${0.25 + 0.6 * d})` : `rgba(${Math.round(60 + 20 * d)},${Math.round(130 - 10 * d)},235,${0.25 - 0.6 * d})`; };
+  // 図
+  const cs = 40, gx = x + 50, gy = y + 40, pad = 22;
+  fr(c, gx - pad, gy - pad, cs * 3 + pad * 2, cs * 3 + pad * 2, 'rgba(255,255,255,0.03)');
+  const drawCell = (z, X, Y, W, H) => { const v = avg(z); fr(c, X, Y, W, H, colOf(v)); c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1; c.strokeRect(X + 0.5, Y + 0.5, W - 1, H - 1);
+    if (W >= 30) { tx(c, v == null ? '－' : fmtAvg(v), X + W / 2, Y + H / 2 - 12, { align: 'center', size: 12, color: '#fff', bold: true }); tx(c, `${Z[z * ZF + 2] ? Z[z * ZF + 2] + '本 ' : ''}${Z[z * ZF]}打`, X + W / 2, Y + H / 2 + 3, { align: 'center', size: 10, color: '#d8e0f0' }); }
+    else tx(c, v == null ? '－' : fmtAvg(v), X + W / 2, Y + H / 2 - 5, { align: 'center', size: 10, color: '#fff' }); };
+  drawCell(9, gx, gy - pad, cs * 3, pad - 2); drawCell(10, gx, gy + cs * 3 + 2, cs * 3, pad - 2); drawCell(11, gx - pad, gy, pad - 2, cs * 3); drawCell(12, gx + cs * 3 + 2, gy, pad - 2, cs * 3);
+  for (let z = 0; z < 9; z++) drawCell(z, gx + (z % 3) * cs, gy + Math.floor(z / 3) * cs, cs, cs);
+  c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.strokeRect(gx, gy, cs * 3, cs * 3);
+  // ホームベース
+  c.fillStyle = '#e8e8ee'; c.beginPath(); const hx = gx + cs * 1.5, hy = gy + cs * 3 + pad + 8; c.moveTo(hx - 14, hy); c.lineTo(hx + 14, hy); c.lineTo(hx + 14, hy + 5); c.lineTo(hx, hy + 12); c.lineTo(hx - 14, hy + 5); c.closePath(); c.fill();
+  // 打者の立ち位置（右打者は捕手から見て左）
+  const lhb = !isP && p.bt === 'L', sw = !isP && p.bt === 'S';
+  if (!isP && !sw) { const bx = lhb ? gx + cs * 3 + pad + 14 : gx - pad - 26; fr(c, bx + 4, gy + 22, 10, 22, hexA(acc, 0.7)); c.fillStyle = hexA(acc, 0.7); c.beginPath(); c.arc(bx + 9, gy + 15, 6, 0, 7); c.fill(); fr(c, bx + 5, gy + 44, 3, 26, hexA(acc, 0.7)); fr(c, bx + 10, gy + 44, 3, 26, hexA(acc, 0.7)); tx(c, lhb ? '左打者' : '右打者', bx + 9, gy + 74, { align: 'center', size: 10, color: UC.dim }); }
+  const inL = lhb ? '外角' : '内角', outL = lhb ? '内角' : '外角';
+  if (!isP) { tx(c, inL, gx + cs * 0.5, gy + cs * 3 + pad + 22, { align: 'center', size: 10, color: UC.dim }); tx(c, outL, gx + cs * 2.5, gy + cs * 3 + pad + 22, { align: 'center', size: 10, color: UC.dim }); }
+  // 右側：まとめ
+  const sx = gx + cs * 3 + pad + 52, sw2 = x + w - sx - 6, cand = [];
+  for (let z = 0; z < 9; z++) { const v = avg(z); if (v != null && Z[z * ZF] >= 6) cand.push([z, v]); }
+  cand.sort((a, b) => b[1] - a[1]);
+  const zl = z => { if (z >= 9) { if (z < 11 || isP || sw) return ZONE_NAME[z]; return ((z === 11) !== lhb ? '内角' : '外角') + 'ボール'; } if (isP || sw) return ZONE_NAME[z]; const row = ['高め', '真ん中', '低め'][Math.floor(z / 3)], col = z % 3 === 1 ? '' : ((z % 3 === 0) !== lhb ? '内角' : '外角'); return z === 4 ? 'ど真ん中' : `${col}${row}`; };
+  tx(c, isP ? '強いコース' : '得意なコース', sx, y + 34, { color: '#ff8a7a', size: 11 });
+  (isP ? cand.slice(-2).reverse() : cand.slice(0, 2)).forEach(([z, v], i) => tx(c, fit(c, `${zl(z)}　${fmtAvg(v)}`, sw2), sx + 6, y + 50 + i * 16, { color: '#fff' }));
+  tx(c, isP ? '打たれやすいコース' : '苦手なコース', sx, y + 92, { color: '#7ab0ff', size: 11 });
+  (isP ? cand.slice(0, 2) : cand.slice(-2).reverse()).forEach(([z, v], i) => tx(c, fit(c, `${zl(z)}　${fmtAvg(v)}`, sw2), sx + 6, y + 108 + i * 16, { color: '#fff' }));
+  const hrz = []; for (let z = 0; z < ZN; z++) if (Z[z * ZF + 2]) hrz.push([z, Z[z * ZF + 2]]); hrz.sort((a, b) => b[1] - a[1]);
+  tx(c, isP ? '被本塁打が多い' : '本塁打が多い', sx, y + 150, { color: '#ffd040', size: 11 });
+  tx(c, fit(c, hrz.length ? hrz.slice(0, 1).map(([z, n]) => `${zl(z)} ${n}本`).join('　') : 'なし', sw2), sx + 6, y + 166, { color: '#fff' });
+  const kz = []; for (let z = 0; z < ZN; z++) if (Z[z * ZF]) kz.push([z, Z[z * ZF + 3] / Z[z * ZF]]); kz.sort((a, b) => b[1] - a[1]);
+  tx(c, isP ? '三振を奪いやすい' : '三振が多い', sx, y + 192, { color: '#c8a0ff', size: 11 });
+  tx(c, fit(c, kz.length ? `${zl(kz[0][0])}（${Math.round(kz[0][1] * 100)}%）` : '－', sw2), sx + 6, y + 208, { color: '#fff' });
+  // 凡例
+  const ly = y + h - 6; for (let i = 0; i < 7; i++) fr(c, x + 30 + i * 14, ly, 12, 6, colOf(all + (i - 3) * 0.03 * (isP ? -1 : 1)));
+  tx(c, isP ? '抑えている' : '苦手', x, ly - 3, { size: 10, color: '#7ab0ff' }); tx(c, isP ? '打たれている' : '得意', x + 134, ly - 3, { size: 10, color: '#ff8a7a' });
+  return true;
 }
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
