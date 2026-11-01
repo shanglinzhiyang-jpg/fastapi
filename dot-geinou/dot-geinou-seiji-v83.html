@@ -17787,8 +17787,8 @@ class MesenScene extends NpbScene {
     const A = agOf(g, m);
     if (id === 'diary') { const L = A.dia.slice(-14).reverse().map(x => `${x.d}日目　${x.t}`); await this.info(`${m.rel}・${m.name}の日記`, L.length ? L : ['まだ何も書かれていない。']); return; }
     if (id === 'secret') { const L = A.sec.slice().reverse().map(x => `・${x.t}`); await this.info(`${m.name}のひみつ`, L.length ? ['（本人は、誰にも話していない）', ...L] : ['いまのところ、ひみつはないようだ。']); return; }
-    if (id === 'cust') { for (;;) { const C = custOf(g); const k = await this.pick('家の風習・ルール（配偶者と子どもに適用・主人公には無効）', CUSTOMS.map(c => ({ label: c.n, right: C[c.id] ? 'ON' : 'OFF' })), { note: '始祖の主は全てを無に還す――主人公には、どの風習も及ばない。\n' + CUSTOMS.map(c => `${c.n}：${c.d}`).join('\n') }); if (k < 0) return; C[CUSTOMS[k].id] = C[CUSTOMS[k].id] ? 0 : 1; this.say(`「${CUSTOMS[k].n}」を${C[CUSTOMS[k].id] ? 'わが家のルールにした' : 'やめた'}`); } }
-    if (id === 'cust0') { for (;;) { const C = jikkaCust(g); const k = await this.pick('実家の風習・ルール（親・祖父母・きょうだいに適用）', CUSTOMS.map(c => ({ label: c.n, right: C[c.id] ? 'ON' : 'OFF' })), { note: '実家で暮らす家族（親・きょうだい）に適用される。弟・妹は、つらい風習ほどストレスをためていく。\n' + CUSTOMS.map(c => `${c.n}：${c.d}`).join('\n') }); if (k < 0) return; jikkaCustSet(g, CUSTOMS[k].id, !C[CUSTOMS[k].id]); this.say(`実家の「${CUSTOMS[k].n}」を${jikkaCust(g)[CUSTOMS[k].id] ? 'ルールにした' : 'やめた'}`); } }
+    if (id === 'cust') { await openCust(g, 'me'); return; }
+    if (id === 'cust0') { await openCust(g, 'jikka'); return; }
     if (id === 'hy') { await this.info(`${m.name}の歯とからだの衛生`, hyLines(g, m, A)); return; }
     if (id === 'dent') { await this.info('歯医者', hyDentist(g, m, A)); return; }
     if (id === 'sx') { await this.info(`${m.name}のからだと性のこと`, sxLines(g, m, A)); return; }
@@ -22051,6 +22051,107 @@ function installCustOt() {
   E.Tn(g => { try { custOtTick(g); } catch (e) { console.error('[custOt]', e); } });
   if (typeof window !== 'undefined') window.__custot = { tick: () => custOtTick(window.__game), set: (id, on) => jikkaCustSet(window.__game, id, on), mind: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return custMind(g, m, agOf(g, m)); }, line: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return custLine(g, m, agOf(g, m)); } };
 }
+
+// ===== 家の風習・ルールの画面（見やすく） =====
+const CU_CAT = [
+  ['よい習慣', '#4caf7d', ['gargle', 'floss', 'morning', 'handEat']],
+  ['衛生・からだ', '#5aa0d8', ['noBrush', 'noBath', 'noWash', 'shoesIn', 'towel', 'sweets', 'rule3', 'noFridge']],
+  ['食事', '#e0a040', ['seiza', 'fatherFirst', 'floorFood', 'dirtyWater']],
+  ['しきたり・しつけ', '#d07ab0', ['chounan', 'mongen', 'noGame', 'bouzu', 'noCry', 'bathLast', 'noFriends', 'inori', 'check', 'coldBath', 'noAC', 'kagyou', 'otoshidama']],
+  ['住まい', '#a08c6a', ['trash', 'bugsKeep', 'meatPillow', 'toiletBags', 'urineHang']],
+  ['特殊な言い伝え', '#c0504a', ['maggotShoes', 'fecesSkin', 'feast', 'gayChant', 'gayMarry']],
+];
+const CU_SICK = ['noWash', 'rule3', 'towel', 'floorFood', 'meatPillow', 'dirtyWater', 'noFridge', 'fecesSkin', 'toiletBags', 'feast', 'shoesIn', 'bugsKeep', 'trash', 'maggotShoes'];
+const CU_GOOD = { gargle: '病気になりにくい', floss: '歯がじょうぶになる', morning: 'いつも清潔', handEat: '手を洗えば問題なし' };
+function cuRows() {
+  const seen = new Set(), R = [];
+  for (const [n, col, ids] of CU_CAT) { const L = ids.map(id => CUSTOMS.find(c => c.id === id)).filter(Boolean); if (!L.length) continue; R.push({ hdr: n, col }); for (const c of L) { R.push({ c, col }); seen.add(c.id); } }
+  const rest = CUSTOMS.filter(c => !seen.has(c.id)); if (rest.length) { R.push({ hdr: 'その他', col: '#8a8a9a' }); for (const c of rest) R.push({ c, col: '#8a8a9a' }); }
+  return R;
+}
+function cuTags(g, c, mode) {
+  const T = [];
+  if (CU_GOOD[c.id]) T.push([CU_GOOD[c.id], '#4caf7d']);
+  if (['noBrush', 'sweets'].includes(c.id)) T.push(['虫歯になりやすい', '#e0a040']);
+  if (CU_SICK.includes(c.id)) T.push(['病気になりやすい', '#e07060']);
+  if (typeof CS_SMELL !== 'undefined' && CS_SMELL.includes(c.id)) T.push(['学校でからかわれやすい', '#e07060']);
+  if (c.id === 'fecesSkin' || c.id === 'feast') T.push(['とても危険', '#ff5050']);
+  if (mode === 'jikka' && typeof CS_ST !== 'undefined' && CS_ST[c.id]) {
+    const m = famRoster(g).find(o => typeof CS_TGT === 'function' && CS_TGT(o));
+    if (m) { const v = CS_ST[c.id](m, agOf(g, m), g); T.push([`${m.rel}のつらさ：${v <= 0 ? 'なし' : v < 0.5 ? '小' : v < 1 ? '中' : '大'}`, v >= 1 ? '#ff6a6a' : v >= 0.5 ? '#f0a050' : v > 0 ? '#d8c060' : '#8a9aa8']); }
+  }
+  return T;
+}
+class CustScene extends NpbScene {
+  constructor(g, res, mode) { super(g, res, []); this.mode = mode || 'me'; this.R = cuRows(); this.i = this.R.findIndex(r => r.c); this.isCust = 1; this.msg = null; }
+  get tabId() { return 'cust'; }
+  C() { return this.mode === 'jikka' ? jikkaCust(this.g) : custOf(this.g); }
+  toggle() { const r = this.R[this.i]; if (!r || !r.c) return; const C = this.C(), on = !C[r.c.id]; if (this.mode === 'jikka') jikkaCustSet(this.g, r.c.id, on); else C[r.c.id] = on ? 1 : 0; tt.sfx(on ? 'ok' : 'cancel'); this.msg = { t: `「${r.c.n}」を${on ? 'ルールにした' : 'やめた'}`, on, f: 70 }; }
+  move(d) { let j = this.i; for (let k = 0; k < this.R.length; k++) { j = (j + d + this.R.length) % this.R.length; if (this.R[j].c) break; } this.i = j; tt.sfx('cursor'); }
+  update(g) {
+    this.t++; const inp = g.input, tap = this.tapAt; this.tapAt = null; if (this.t < 4) return;
+    if (this.msg && --this.msg.f <= 0) this.msg = null;
+    if (inp.pressed('b') || inp.pressed('menu')) { tt.sfx('cancel'); this.closed = true; this.g.pop(this); this.resolve(null); return; }
+    if (inp.repeat('up')) this.move(-1);
+    if (inp.repeat('down')) this.move(1);
+    if (inp.pressed('left') || inp.pressed('right')) { this.mode = this.mode === 'me' ? 'jikka' : 'me'; this.msg = null; tt.sfx('cursor'); }
+    if (inp.pressed('a')) this.toggle();
+    if (tap) {
+      const h = (this.hits || []).find(r => tap.x >= r.x && tap.x < r.x + r.w && tap.y >= r.y && tap.y < r.y + r.h);
+      if (h) { if (h.tab) { if (this.mode !== h.tab) { this.mode = h.tab; this.msg = null; tt.sfx('cursor'); } } else if (h.close) { tt.sfx('cancel'); this.closed = true; this.g.pop(this); this.resolve(null); } else if (h.i === this.i) this.toggle(); else { this.i = h.i; tt.sfx('cursor'); } }
+    }
+  }
+  draw(c, g) {
+    this.hits = []; const C = this.C(), jk = this.mode === 'jikka';
+    c.fillStyle = lgrad(c, 0, 0, 0, 360, [[0, '#0e2228'], [1, '#081216']]); c.fillRect(0, 0, 640, 360);
+    c.fillStyle = lgrad(c, 0, 0, 640, 0, [[0, '#1f6f78'], [1, '#0e2a30']]); c.fillRect(0, 0, 640, 34);
+    tx(c, '家の風習・ルール', 12, 7, { size: 17, color: '#fff', bold: true });
+    // タブ
+    [['me', 'わが家（配偶者・子ども）', 196], ['jikka', '実家（親・きょうだい）', 396]].forEach(([k, l, x]) => { const on = this.mode === k; fr(c, x, 5, 190, 25, on ? '#ffd23f' : 'rgba(255,255,255,0.12)'); tx(c, l, x + 95, 10, { size: 12, align: 'center', bold: on, color: on ? '#1a1a1a' : '#cfe' }); this.hits.push({ x, y: 5, w: 190, h: 25, tab: k }); });
+    fr(c, 600, 5, 32, 25, 'rgba(255,255,255,0.12)'); tx(c, '×', 616, 8, { size: 15, align: 'center', color: '#fff' }); this.hits.push({ x: 600, y: 5, w: 32, h: 25, close: 1 });
+    // ひとこと
+    const nOn = CUSTOMS.filter(x => C[x.id]).length;
+    let sum = `いま ${nOn}個のルール`;
+    if (jk) { const m = famRoster(g).find(o => typeof CS_TGT === 'function' && CS_TGT(o)); if (m) { const A = agOf(g, m), v = Math.round(num(A.custSt)); sum += `　${m.rel}の風習ストレス ${v}${v >= 60 ? '（限界が近い）' : v >= 30 ? '（たまってきている）' : ''}`; } else sum += '　（親・祖父母・きょうだいに適用）'; }
+    else sum += '　主人公には、どの風習も及ばない';
+    tx(c, sum, 12, 40, { size: 12, color: '#bfe4e8' });
+    // 一覧
+    const VIS = 12, RH = 23, Y0 = 60, W = 292;
+    this.top0 = M_(num(this.top0), Math.max(0, this.i - VIS + 2), Math.min(Math.max(0, this.i - 1), Math.max(0, this.R.length - VIS)));
+    this.top0 = Math.min(this.top0, Math.max(0, this.R.length - VIS));
+    fr(c, 8, Y0 - 2, W + 4, VIS * RH + 4, 'rgba(0,0,0,0.28)');
+    this.R.slice(this.top0, this.top0 + VIS).forEach((r, jj) => {
+      const j = this.top0 + jj, y = Y0 + jj * RH;
+      if (r.hdr) { fr(c, 10, y + 3, 4, RH - 6, r.col); tx(c, r.hdr, 20, y + 5, { size: 11, bold: true, color: r.col }); return; }
+      const on = !!C[r.c.id], sel = j === this.i;
+      if (sel) fr(c, 10, y, W, RH - 2, 'rgba(255,210,63,0.22)');
+      fr(c, 14, y + 6, 6, 9, r.c.bad ? '#e06a5a' : '#5ac08a');
+      tx(c, r.c.n.replace('【大きな風習】', '★'), 26, y + 4, { size: 13, color: sel ? '#fff' : '#dde', bold: sel });
+      fr(c, W - 36, y + 3, 42, 16, on ? '#2fa868' : 'rgba(255,255,255,0.14)'); tx(c, on ? 'ON' : 'OFF', W - 15, y + 4, { size: 11, align: 'center', bold: true, color: on ? '#fff' : '#9ab' });
+      this.hits.push({ x: 10, y, w: W, h: RH - 1, i: j });
+    });
+    if (this.top0 > 0) tx(c, '▲', 306, Y0 + 2, { size: 10, align: 'center', color: '#9cc' });
+    if (this.top0 + VIS < this.R.length) tx(c, '▼', 306, Y0 + VIS * RH - 14, { size: 10, align: 'center', color: '#9cc' });
+    // くわしく
+    const r = this.R[this.i], x0 = 314; box(c, x0, 58, 318, 280);
+    if (r && r.c) {
+      const on = !!C[r.c.id];
+      tx(c, r.col ? (this.R.slice(0, this.i).reverse().find(z => z.hdr) || {}).hdr || '' : '', x0 + 14, 66, { size: 11, color: r.col });
+      wrap(c, r.c.n.replace('【大きな風習】', '★'), 290, 16).slice(0, 2).forEach((l, i) => tx(c, l, x0 + 14, 82 + i * 20, { size: 16, bold: true, color: '#ffd23f' }));
+      const yy = 82 + Math.min(2, wrap(c, r.c.n, 290, 16).length) * 20 + 4;
+      fr(c, x0 + 14, yy, 74, 20, on ? '#2fa868' : 'rgba(255,255,255,0.14)'); tx(c, on ? 'ルール中' : 'していない', x0 + 51, yy + 3, { size: 12, align: 'center', bold: true, color: on ? '#fff' : '#bcd' });
+      tx(c, jk ? '親・祖父母・きょうだいに適用' : '配偶者と子どもに適用', x0 + 96, yy + 4, { size: 11, color: '#9cc' });
+      const D = wrap(c, r.c.d, 290, 13).slice(0, 7); D.forEach((l, i) => tx(c, l, x0 + 14, yy + 30 + i * 19, { size: 13, color: '#e8f0f2' }));
+      let ty = yy + 30 + D.length * 19 + 8, tx0 = x0 + 14;
+      for (const [t, col] of cuTags(g, r.c, this.mode)) { c.font = '11px sans-serif'; const w = Math.max(40, Math.round(t.length * 11.5) + 12); if (tx0 + w > x0 + 304) { tx0 = x0 + 14; ty += 22; } if (ty > 316) break; fr(c, tx0, ty, w, 18, col); tx(c, t, tx0 + w / 2, ty + 3, { size: 11, align: 'center', bold: true, color: '#111' }); tx0 += w + 6; }
+      fr(c, x0 + 14, 306, 290, 24, on ? 'rgba(224,106,90,0.85)' : 'rgba(47,168,104,0.85)'); tx(c, on ? 'Aボタン／タップで やめる' : 'Aボタン／タップで ルールにする', x0 + 159, 310, { size: 12, align: 'center', bold: true, color: '#fff' });
+      this.hits.push({ x: x0 + 14, y: 306, w: 290, h: 24, i: this.i });
+    }
+    if (this.msg) { const w = 300; fr(c, 320 - w / 2, 150, w, 34, this.msg.on ? 'rgba(30,120,80,0.95)' : 'rgba(120,50,40,0.95)'); tx(c, this.msg.t, 320, 159, { size: 13, align: 'center', bold: true, color: '#fff' }); }
+    fr(c, 0, 342, 640, 18, 'rgba(0,0,0,0.55)'); tx(c, '↑↓えらぶ　A きりかえ　←→ わが家／実家　B とじる', 632, 344, { align: 'right', size: 11, color: '#9ab' });
+  }
+}
+function openCust(g, mode) { try { loadNpbFont(); } catch (e) { } tt.sfx('ok'); return new Promise(res => g.push(new CustScene(g, res, mode))); }
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
