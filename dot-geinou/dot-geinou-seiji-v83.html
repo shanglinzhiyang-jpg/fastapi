@@ -10191,6 +10191,7 @@ function processDay(g, N, day, out) {
     S.curMd = rmd;
     for (const [h, a] of roundPairs(S, r)) playGame(N, S, h, a, 'R', rmd, r, out);
     farmDay(g, N, S, r, rmd, out);
+    try { minorDay(g, N, S, r, rmd, out); } catch (e) { console.error('[npb] minor', e); }
     try { farmRound(N, S); if (N.me && (N.me.st === 'pro' || meMLB(N))) suspendedTick(g, N, S, out); } catch (e) { console.error('[npb] more round', e); }
     try { mlbDay(g, N, S, r, rmd, out); evoAfterRound(g, N, S, out); } catch (e) { console.error('[npb] evo round', e); }
     S.done++;
@@ -10214,6 +10215,7 @@ function processDay(g, N, day, out) {
   S.curMd = md;
   try { evoDaily(g, N, S, day, md, out); } catch (e) { console.error('[npb] evo daily', e); }
   try { moreDaily(g, N, S, day, md, out); } catch (e) { console.error('[npb] more daily', e); }
+  try { minorEvents(g, N, S, md, out); evDaily(g, N, S, day, md, out); } catch (e) { console.error('[npb] minor/ev daily', e); }
   dailyMe(g, N, S, day, md, out);
 }
 
@@ -10381,6 +10383,7 @@ function awards(g, N, S, out) {
 // ---- 年度替わり（加齢・引退・新人） ----
 function yearRollover(g, N, out, newY) {
   const S = N.S, L = N.L;
+  if (S) { try { minorArchive(N, S); } catch (e) { console.error('[npb] minor archive', e); } }
   if (S && !S.awardsDone && S.done >= S.N) { try { awards(g, N, S, out); } catch (e) { console.error('[npb] awards', e); } }
   if (S) { archiveMe(g, N, S); try { archiveMLB(g, N, S); } catch (e) { console.error('[npb] mlb archive', e); } }
   for (const t of TEAMS) {
@@ -10623,9 +10626,11 @@ function shibouOK(g, N) {
 }
 function draftDay(g, N, S, out) {
   const me = N.me;
-  if (!me || me.shibou !== S.y || (me.st !== 'none')) return;
+  if (!me) return;
+  const mnr = isMinor(me) && S.y >= num(me.minor.y0, S.y) && !me.proY && corpDraftOK(me, S.y) && !!S.mn;
+  if (!mnr && (me.shibou !== S.y || me.st !== 'none')) return;
   const ov = meOvr(me), a = num(me.p.age, 18);
-  const v = ov + num(me.scout) * 0.6 + (a <= 18 ? 3 : a <= 22 ? 1 : -1) + gauss() * 2.5;
+  const v = ov + num(me.scout) * 0.6 + (a <= 18 ? 3 : a <= 22 ? 1 : -1) + gauss() * 2.5 + (mnr ? minorDraftBonus(N, S) + (me.minor.kind === 'corp' ? 1.5 : 0.5) : 0);
   const worst = [...standings(S, 'C'), ...standings(S, 'P')].sort((x, y) => x.pct - y.pct).map(r => r.id);
   const pickTeam = () => { const k = Math.floor(Math.pow(RND(), 1.4) * worst.length); return worst[k]; };
   let round = 0, ik = false, comp = 0;
@@ -10635,12 +10640,13 @@ function draftDay(g, N, S, out) {
   else if (v >= 47) round = ri(5, 7);
   else if (v >= 42) { ik = true; round = ri(1, 3); }
   me.shibou = null;
+  if (!round && mnr) { if (v >= 38) out.notes.push(`【ドラフト会議】\n${S.y}年のドラフト会議。…今年も、あなたの名前は呼ばれなかった。\n（${me.minor.team}で結果を出して、来年こそ）`); return; }
   if (!round) { out.notes.push(`【ドラフト会議】\n${S.y}年のドラフト会議。…あなたの名前は、最後まで呼ばれなかった。\n（力をつけて、来年また挑戦するか、入団テストを受けよう）`); meNews(N, g, 'ドラフトで指名されなかった'); hist(g, 'ドラフト会議で指名されなかった', 'work'); return; }
   let team = pickTeam(); let compText = '';
   if (comp) { const ts = new Set([team]); while (ts.size < comp) ts.add(pick(TEAMS).id); const arr = [...ts]; team = pick(arr); compText = `${arr.map(t => TEAM[t].short).join('・')}の${comp}球団が1位で競合！ くじ引きの結果、交渉権は${TEAM[team].short}に。\n`; }
   const B1 = [0, 1e8, 7e7, 5e7, 4e7, 3e7, 2.5e7, 2e7], S1 = [0, 1.5e7, 1.2e7, 1e7, 8e6, 7e6, 6.5e6, 6e6];
   const o = ik ? { team, round, ikusei: true, sal: 3e6, bonus: 3e6 } : { team, round, ikusei: false, sal: S1[round] + (comp ? 1e6 : 0), bonus: B1[round] };
-  o.kind = 'draft'; o.y = S.y; o.until = S.y;
+  o.kind = 'draft'; o.y = S.y; o.until = S.y; if (mnr) { o.from = me.minor.team; o.fromKind = me.minor.kind; }
   me.offer = o;
   const label = ik ? `育成ドラフト${round}位` : `ドラフト${round}位`;
   out.notes.push(`【ドラフト会議】\n${compText}${TEAM[team].name}が、あなたを${label}で指名した！\n（プロ野球アプリで、入団するかどうかを決めよう）`);
@@ -10656,7 +10662,12 @@ function acceptOffer(g, N, yes) {
   const S = N.S, y = S ? S.y : dateOf(g, g.state.day).year;
   const off = S && S.done >= S.N;
   const firstJoin = !me.proY;
+  const route = o.kind === 'draft' ? (o.fromKind === 'corp' ? 'draft_corp' : o.fromKind === 'ind' ? 'draft_ind' : 'draft') : o.kind;
+  const from = o.from || (me.minor ? me.minor.team : null);
+  if (me.minor) { try { leaveMinor(N, S); } catch (e) { } }
   joinTeam(g, N, o.team, { ...o, y, payFrom: off ? y + 1 : y, firstJoin });
+  me.route = { kind: route, y, team: o.team, round: o.round, ik: !!o.ikusei, from }; me.routes = Array.isArray(me.routes) ? me.routes : []; me.routes.push(me.route);
+  evPush(N, 'kaiken', { tid: o.team, v: { route, round: o.round, ik: !!o.ikusei, from } });
   const label = o.kind === 'draft' ? (o.ikusei ? `育成${o.round}位` : `ドラフト${o.round}位`) : o.kind === 'tryout' ? '入団テスト合格' : o.kind === 'fa' ? 'FA移籍' : 'トライアウト合格';
   hist(g, `${TEAM[o.team].name}に入団（${label}・背番号${me.num}）`, 'work');
   meNews(N, g, `${TEAM[o.team].short}に入団！ 背番号${me.num}`);
@@ -10862,14 +10873,14 @@ function dailyMe(g, N, S, day, md, out) {
     let stress = 30, hunger = 60, ken = 70; try { stress = num(g.state.life.stress, 30); hunger = num(g.state.life.hunger, 60); ken = num(E.fl(g).stats.ken, 70); } catch (e) { }
     me.cond = r1(clamp(num(me.cond) * 0.45 + gauss() * 2.3 + (stress > 70 ? -2 : stress < 30 ? 0.7 : 0) + (hunger < 20 ? -1.5 : 0) + (ken < 40 ? -1.5 : 0), -6, 6));
   }
-  if (me.st === 'pro' || (me.st === 'mlb' && me.mlb && !me.mlb.free)) {
+  if (me.st === 'pro' || me.st === 'ind' || me.st === 'corp' || (me.st === 'mlb' && me.mlb && !me.mlb.free)) {
     let w = 0; try { w = E.Mc ? E.Mc(day) : Math.floor((day - 1) / 7); } catch (e) { w = Math.floor((day - 1) / 7); }
     if (me.payW == null) me.payW = w;
     if (w !== me.payW) {
       me.payW = w;
       if (S.y >= num(me.payFrom, S.y)) {
         const pay = Math.round(num(me.sal) / 52);
-        if (pay > 0) { try { g.addMoney(pay, true); } catch (e) { } try { const ls = E.fl(g); if (ls && E.Kj) E.Kj(g, ls, [me.st === 'mlb' ? 'メジャーの年俸（週割り）' : 'プロ野球の年俸（週割り）', pay]); } catch (e) { } out.toasts.push(`年俸（週割り） +${yen(pay)}`); me.earned = num(me.earned) + pay; }
+        if (pay > 0) { try { g.addMoney(pay, true); } catch (e) { } try { const ls = E.fl(g); if (ls && E.Kj) E.Kj(g, ls, [me.st === 'mlb' ? 'メジャーの年俸（週割り）' : me.st === 'corp' ? '社会人野球チームの給与' : me.st === 'ind' ? '独立リーグの報酬' : 'プロ野球の年俸（週割り）', pay]); } catch (e) { } out.toasts.push(`年俸（週割り） +${yen(pay)}`); me.earned = num(me.earned) + pay; }
       }
     }
   }
@@ -11017,6 +11028,8 @@ function retire(g, N) {
   const hits = tot.b[B.H], hr = tot.b[B.HR], w = tot.p[Pp.W], sv = tot.p[Pp.SV];
   if (me.st === 'pro' && N.S) archiveMe(g, N, N.S, true);
   if (me.st === 'mlb' && N.S) { try { archiveMLB(g, N, N.S); } catch (e) { } me.mlb = null; }
+  if (isMinor(me)) { try { leaveMinor(N, N.S); } catch (e) { } }
+  evPush(N, 'retire', { tid: me.team || me.lastTeam, v: { sum: me.p.pos === 'P' ? `通算 ${w}勝 ${sv}セーブ` : `通算 ${hits}安打 ${hr}本塁打` } });
   for (const t of TEAMS) { const T = N.L.teams[t.id]; T.bat = T.bat.filter(x => x !== 'ME'); T.pit = T.pit.filter(x => x !== 'ME'); }
   const team = me.team || me.lastTeam;
   me.st = 'retired'; me.lastTeam = team; me.team = null; me.lv = 2; me.role = null;
@@ -11138,10 +11151,20 @@ function drawMLBBadge(c, x, y, s, col, t) {
   fr(c, x, y, s, s, col || '#0a2a5c'); fr(c, x, y + s * 0.62, s, s * 0.38, '#c8102e');
   tx(c, 'MLB', x + s / 2, y + s * 0.18, { size: s >= 48 ? 20 : 12, color: '#fff', align: 'center' });
 }
-function myBadge(c, N, x, y, s) { const me = N.me; if (me.st === 'pro' && me.team) drawLogo(c, me.team, x, y, s); else if (me.st === 'mlb' && me.mlb) drawMLBBadge(c, x, y, s, MLB_COL[me.mlb.t], me.mlb.t); else drawNpb(c, x, y, s); }
+function myBadge(c, N, x, y, s) { const me = N.me; if (me.st === 'pro' && me.team) drawLogo(c, me.team, x, y, s); else if (me.st === 'mlb' && me.mlb) drawMLBBadge(c, x, y, s, MLB_COL[me.mlb.t], me.mlb.t); else if (isMinor(me)) drawMinorBadge(c, me.minor, x, y, s); else drawNpb(c, x, y, s); }
+// 社会人・独立リーグのエンブレム（ロゴのかわり）
+function drawMinorBadge(c, mn, x, y, s) {
+  const col = mn.col || '#2a6a3a', c2 = mn.col2 || '#f5c542', r = s / 2;
+  if (s >= 40) spot(c, x + r, y + r, s * 0.85);
+  c.save(); c.shadowColor = 'rgba(0,0,0,0.6)'; c.shadowBlur = 4; c.shadowOffsetY = 2;
+  c.beginPath(); c.moveTo(x + r, y); c.lineTo(x + s, y + s * 0.22); c.lineTo(x + s * 0.9, y + s * 0.78); c.lineTo(x + r, y + s); c.lineTo(x + s * 0.1, y + s * 0.78); c.lineTo(x, y + s * 0.22); c.closePath();
+  c.fillStyle = lgrad(c, x, y, x, y + s, [[0, shade(col, 0.15)], [1, shade(col, -0.35)]]); c.fill(); c.lineWidth = Math.max(1, s / 22); c.strokeStyle = c2; c.stroke(); c.restore();
+  const ch = Array.from(String(mn.team || '？').replace(/^(\d+)/, ''))[0] || '？';
+  tx(c, ch, x + r, y + r - s * 0.3, { size: Math.max(10, Math.round(s * 0.5)), align: 'center', color: c2, bold: true });
+}
 const resMark = e => e.s[0] > e.s[1] ? '○' : e.s[0] < e.s[1] ? '●' : '△';
 const resCol = e => e.s[0] > e.s[1] ? UC.good : e.s[0] < e.s[1] ? UC.bad : UC.dim;
-const KIND_N = { R: '', CS1: 'CS1st', CSF: 'CSファイナル', JS: '日本シリーズ', F: '二軍', F3: '三軍', MLB: 'MLB', AAA: '3A' };
+const KIND_N = { R: '', CS1: 'CS1st', CSF: 'CSファイナル', JS: '日本シリーズ', F: '二軍', F3: '三軍', MLB: 'MLB', AAA: '3A', IND: '独立L', CORP: '社会人', CT: '都市対抗', CN: '日本選手権', IP: '優勝決定戦' };
 const oppName = e => e.on || (TEAM[e.o] ? TEAM[e.o].short : '');
 function meBatLine(b, full) {
   if (!b) return '';
@@ -11171,6 +11194,7 @@ function themeOf(N) {
   const me = N && N.me;
   if (me && me.st === 'pro' && me.team) return { acc: TEAM_ACC[me.team] || TEAM[me.team].color, base: TEAM[me.team].color, team: me.team };
   if (me && me.st === 'mlb' && me.mlb) return { acc: '#ff4b5c', base: MLB_COL[me.mlb.t] || '#0a2a5c', mlb: true };
+  if (me && isMinor(me)) { const c2 = me.minor.col2 && !/^#(f|e)[0-9a-f]{5}$/i.test(me.minor.col2) ? me.minor.col2 : '#f5c542'; return { acc: c2, base: me.minor.col || '#2a6a3a' }; }
   return { acc: '#f5c542', base: '#0f2a52' };
 }
 function applyTheme(N) {
@@ -11203,7 +11227,7 @@ class NpbScene {
       case 'games': return gameRows(N);
       case 'prac': return N.me.p.pos ? pracList(N.me).map(p => ({ kind: 'prac', p })) : [{ kind: 'act', id: 'pos', label: 'ポジションを決める' }];
       case 'team': return [{ kind: 'teamsel' }, ...teamPlayers(N, this.teamSel).map(p => ({ kind: 'pl', p }))];
-      case 'car': { const rows = (N.me.career || []).slice().reverse().map(c => ({ kind: 'car', c })); const S = N.S, me = N.me; if (S && me.st === 'pro' && !S.archived && !(me.career || []).some(c => c.y === S.y && c.lg !== 'MLB') && (S.bs.ME || S.ps.ME || S.fb[B.PA] || S.fp[Pp.BF])) rows.unshift({ kind: 'car', c: { y: S.y, team: me.team, num: me.num, sal: num(me.sal), b: S.bs.ME || null, p: S.ps.ME || null, fb: S.fb[B.PA] ? S.fb : null, fp: S.fp[Pp.BF] ? S.fp : null, aw: me.titles.filter(t => t[0] === S.y).map(t => t[1]), live: 1, pos: me.p.pos } }); if (S && S.mlb && !S.mlb.archived && me.mlb && (S.mlb.b[B.PA] || S.mlb.p[Pp.BF] || S.mlb.ab[B.PA] || S.mlb.ap[Pp.BF])) rows.unshift({ kind: 'car', c: { y: S.y, lg: 'MLB', tname: mlbName(me.mlb.t, S.y), sal: num(me.sal), b: S.mlb.b[B.PA] ? S.mlb.b : null, p: S.mlb.p[Pp.BF] ? S.mlb.p : null, fb: S.mlb.ab[B.PA] ? S.mlb.ab : null, fp: S.mlb.ap[Pp.BF] ? S.mlb.ap : null, aw: me.titles.filter(t => t[0] === S.y).map(t => t[1]), live: 1, pos: me.p.pos, mlbLive: 1 } }); return rows; }
+      case 'car': { const rows = [...(N.me.career || []), ...(N.me.mcar || [])].sort((x, y) => x.y - y.y).reverse().map(c => ({ kind: 'car', c })); if (N.S && isMinor(N.me) && N.S.mn && !N.S.mn.archived && (N.S.mn.b[B.PA] || N.S.mn.p[Pp.BF])) rows.unshift({ kind: 'car', c: { y: N.S.y, kind: N.me.minor.kind, lgN: N.me.minor.lgN, team: N.me.minor.team, b: N.S.mn.b, p: N.S.mn.p, w: N.S.mn.w, l: N.S.mn.l, sal: num(N.me.sal), live: 1, aw: N.me.titles.filter(t => t[0] === N.S.y).map(t => t[1]) } }); const S = N.S, me = N.me; if (S && me.st === 'pro' && !S.archived && !(me.career || []).some(c => c.y === S.y && c.lg !== 'MLB') && (S.bs.ME || S.ps.ME || S.fb[B.PA] || S.fp[Pp.BF])) rows.unshift({ kind: 'car', c: { y: S.y, team: me.team, num: me.num, sal: num(me.sal), b: S.bs.ME || null, p: S.ps.ME || null, fb: S.fb[B.PA] ? S.fb : null, fp: S.fp[Pp.BF] ? S.fp : null, aw: me.titles.filter(t => t[0] === S.y).map(t => t[1]), live: 1, pos: me.p.pos } }); if (S && S.mlb && !S.mlb.archived && me.mlb && (S.mlb.b[B.PA] || S.mlb.p[Pp.BF] || S.mlb.ab[B.PA] || S.mlb.ap[Pp.BF])) rows.unshift({ kind: 'car', c: { y: S.y, lg: 'MLB', tname: mlbName(me.mlb.t, S.y), sal: num(me.sal), b: S.mlb.b[B.PA] ? S.mlb.b : null, p: S.mlb.p[Pp.BF] ? S.mlb.p : null, fb: S.mlb.ab[B.PA] ? S.mlb.ab : null, fp: S.mlb.ap[Pp.BF] ? S.mlb.ap : null, aw: me.titles.filter(t => t[0] === S.y).map(t => t[1]), live: 1, pos: me.p.pos, mlbLive: 1 } }); return rows; }
       default: return [];
     }
   }
@@ -11214,6 +11238,7 @@ class NpbScene {
     if (this.t < 3) return;
     if (this.modal) { this.updModal(inp, tap); return; }
     if (this.busy) return;
+    if (this.N && Array.isArray(this.N.evq) && this.N.evq.length && !(this.N.opt && this.N.opt.ev === 'off')) { this.act(() => playEvents(this.g, this.N)); return; }
     if (this.N && this.N.splash) { const sp = this.N.splash; this.N.splash = null; const IH = (this.N.IH || []).slice(-1)[0]; this.act(() => this.info(`第${wbcNo(sp.y)}回 ワールド・ベースボール・クラシック`, [`侍ジャパンの結果：${sp.result}${sp.result === '優勝' ? '　世界一！' : ''}`].concat(IH && IH.y === sp.y ? IH.lines : [], sp.sel ? ['', `あなたも日本代表として出場した。${IH && IH.sum ? `（${IH.sum}）` : ''}`] : []), { logos: ['WBC', 'SJ'] })); return; }
     if (this.queue.length) { const q = this.queue.shift(); this.act(() => this.info(q.title || 'おしらせ', q.text)); return; }
     if (tap) { this.onTap(tap); return; }
@@ -11269,7 +11294,7 @@ class NpbScene {
     if (!r) return;
     const g = this.g, N = this.N;
     if (r.disabled) { tt.sfx('buzz'); if (r.why) this.say(r.why, UC.dim); return; }
-    if (r.kind === 'game') { const e = r.e, fk = e.k === 'F' || e.k === 'F3'; await this.info(e.k === 'AAA' ? 'マイナー（3A）の試合' : e.k === 'F3' ? '三軍戦の結果' : e.k === 'F' ? `二軍戦（${FARM_NAME[farmLgOf(N.me.team || 'G')]}）` : isCS(N, e) ? 'クライマックスシリーズ' : e.k === 'JS' ? '日本シリーズ' : '試合結果', boxLines(N, e), { box: fk || !e.ls ? null : e, logos: isCS(N, e) ? [csKey(N, e)] : e.k === 'MLB' ? ['MLB'] : null }); return; }
+    if (r.kind === 'game') { const e = r.e, fk = e.k === 'F' || e.k === 'F3'; await this.info(e.k === 'AAA' ? 'マイナー（3A）の試合' : e.k === 'F3' ? '三軍戦の結果' : e.k === 'F' ? `二軍戦（${FARM_NAME[farmLgOf(N.me.team || 'G')]}）` : isCS(N, e) ? 'クライマックスシリーズ' : e.k === 'JS' ? '日本シリーズ' : e.k === 'CT' ? '都市対抗野球' : e.k === 'CN' ? '社会人野球日本選手権' : e.k === 'IND' || e.k === 'IP' ? '独立リーグの試合' : e.k === 'CORP' ? '社会人野球の試合' : '試合結果', boxLines(N, e), { box: fk || !e.ls ? null : e, logos: isCS(N, e) ? [csKey(N, e)] : e.k === 'MLB' ? ['MLB'] : null }); return; }
     if (r.kind === 'prac') { const res = practice(g, N, r.p.id); tt.sfx(res.ok ? 'ok' : 'buzz'); if (res.ok) await this.info(r.p.name, res.text); else this.say(res.text, UC.bad); return; }
     if (r.kind === 'car') { await this.info(`${r.c.y}年の成績${r.c.lg === 'MLB' ? '（メジャー）' : ''}`, careerLines(N, r.c)); return; }
     if (r.kind === 'teamsel') { const k = await this.pick('球団をえらぶ', TEAMS.map(t => ({ label: t.name, right: LGS[t.lg].s1 })), { idx: TEAMS.findIndex(t => t.id === this.teamSel) }); if (k >= 0) { this.teamSel = TEAMS[k].id; this.sel.team = 0; this.top.team = 0; } return; }
@@ -11324,7 +11349,7 @@ class NpbScene {
     const me = N.me;
     let dl = ''; try { const d = dateOf(this.g, this.g.state.day); dl = `${d.year}.${String(d.month).padStart(2, '0')}.${String(d.dom).padStart(2, '0')}`; } catch (e) { }
     tx(c, dl, 630, 4, { align: 'right', color: '#ffffff' });
-    const stt = me.st === 'pro' && me.team ? `${TEAM[me.team].short}｜${num(me.susp) > 0 ? '出場停止' : me.ikusei ? (me.lv3 ? '育成・三軍' : '育成') : me.lv === 1 ? '一軍' : me.lv3 ? '三軍' : '二軍'}｜#${me.num}` : me.st === 'mlb' && me.mlb ? `${mlbName(me.mlb.t, N.S ? N.S.y : 2026)}｜${me.mlb.free ? 'FA' : me.mlb.lv === 1 ? 'メジャー' : '3A'}` : me.st === 'retired' ? '引退' : me.st === 'free' ? '自由契約' : 'アマチュア';
+    const stt = me.st === 'pro' && me.team ? `${TEAM[me.team].short}｜${num(me.susp) > 0 ? '出場停止' : me.ikusei ? (me.lv3 ? '育成・三軍' : '育成') : me.lv === 1 ? '一軍' : me.lv3 ? '三軍' : '二軍'}｜#${me.num}` : me.st === 'mlb' && me.mlb ? `${mlbName(me.mlb.t, N.S ? N.S.y : 2026)}｜${me.mlb.free ? 'FA' : me.mlb.lv === 1 ? 'メジャー' : '3A'}` : isMinor(me) ? `${me.minor.team}｜${MLG[me.minor.lg] ? MLG[me.minor.lg].s : ''}` : me.st === 'retired' ? '引退' : me.st === 'free' ? '自由契約' : 'アマチュア';
     tx(c, stt, 630, 20, { align: 'right', color: UC.acc2 });
     this.hits.push({ x: 600, y: 0, w: 40, h: 34, close: true });
   }
@@ -11399,12 +11424,14 @@ class NpbScene {
     const numStr = pro ? String(me.num) : mlb ? '' : '';
     if (numStr) { c.save(); c.globalAlpha = 0.18; tx(c, numStr, 378, 70, { size: 48, color: UC.acc, align: 'right' }); c.restore(); }
     tx(c, P.n || 'あなた', 92, 76, { size: 16, color: '#fff' });
-    const teamLine = pro ? TEAM[me.team].name : mlb ? `${mlbName(me.mlb.t, S ? S.y : 2026)}（メジャーリーグ）` : me.st === 'retired' ? '元プロ野球選手' : me.st === 'free' ? `自由契約（元${TEAM[me.lastTeam] ? TEAM[me.lastTeam].short : ''}）` : inHSClub(this.g) ? `高校野球部（${hsGrade(this.g)}年生）` : 'アマチュア';
+    const mnr = isMinor(me);
+    const teamLine = mnr ? `${me.minor.team}（${minorLabel(me, S ? S.y : 2026)}）` : pro ? TEAM[me.team].name : mlb ? `${mlbName(me.mlb.t, S ? S.y : 2026)}（メジャーリーグ）` : me.st === 'retired' ? '元プロ野球選手' : me.st === 'free' ? `自由契約（元${TEAM[me.lastTeam] ? TEAM[me.lastTeam].short : ''}）` : inHSClub(this.g) ? `高校野球部（${hsGrade(this.g)}年生）` : 'アマチュア';
     tx(c, teamLine, 92, 96, { color: UC.acc2 });
     tx(c, `${P.pos ? POSN[P.pos] : 'ポジション未定'}・${P.th === 'L' ? '左投' : '右投'}${P.bt === 'S' ? '両打' : P.bt === 'L' ? '左打' : '右打'}・${num(P.age)}歳`, 92, 112, { color: UC.dim });
     let st = '';
     if (pro) st = num(me.susp) > 0 ? `出場停止中（残り${me.susp}試合）` : me.inj > 0 ? `故障で離脱中（約${Math.ceil(me.inj / 2.3)}日）` : me.ikusei ? (me.lv3 ? '育成選手（三軍）' : '育成選手') : me.lv === 1 ? `一軍 ${ROLE_N[me.role] || ''}` : me.lv3 ? '三軍で鍛え直し中' : '二軍で調整中';
     else if (mlb) st = me.mlb.free ? '契約満了（去就を決めよう）' : me.inj > 0 ? '故障で離脱中' : me.mlb.lv === 1 ? `メジャー ${ROLE_N[me.mlb.role] || ''}` : 'マイナー（3A）';
+    else if (mnr) st = me.offer ? `${TEAM[me.offer.team].short}から指名・獲得の話！` : me.minor.kind === 'corp' ? (corpDraftOK(me, S ? S.y : 2026) ? '社会人野球（今年からドラフト対象）' : `社会人野球（ドラフト解禁まで${(num(me.minor.joinAge, 22) <= 19 ? 3 : 2) - ((S ? S.y : 2026) - num(me.minor.y0) + 1)}年）`) : '独立リーグでNPBをめざす';
     else st = me.offer ? `${TEAM[me.offer.team].short}から入団の誘い！` : me.shibou ? 'プロ志望届を提出ずみ' : '';
     const badSt = me.inj > 0 || num(me.susp) > 0;
     if (st) { const w = tw(c, st) + 16; slant(c, 92, 128, w, 16, 5, hexA(badSt ? UC.bad : UC.acc, 0.3)); tx(c, st, 92 + w / 2, 130, { align: 'center', color: badSt ? UC.bad : '#fff' }); }
@@ -11412,8 +11439,8 @@ class NpbScene {
     const ty = 152, tws = 116;
     const ov = meOvr(me), rk = rankOf(ov), cd = condOf(me.cond);
     let tiles;
-    const cur = mlb && S && S.mlb ? (isP ? S.mlb.p : S.mlb.b) : S ? (isP ? S.ps.ME : S.bs.ME) : null;
-    if ((pro || mlb) && cur && (isP ? cur[Pp.BF] : cur[B.PA])) {
+    const cur = mnr && S && S.mn ? (isP ? S.mn.p : S.mn.b) : mlb && S && S.mlb ? (isP ? S.mlb.p : S.mlb.b) : S ? (isP ? S.ps.ME : S.bs.ME) : null;
+    if ((pro || mlb || mnr) && cur && (isP ? cur[Pp.BF] : cur[B.PA])) {
       tiles = isP ? [['防御率', fmtERA(eraOf(cur)), `${cur[Pp.G]}登板`], ['勝-敗-S', `${cur[Pp.W]}-${cur[Pp.L]}-${cur[Pp.SV]}`, `${cur[Pp.HLD]}H`], ['奪三振', String(cur[Pp.K]), `${fmtIP(cur[Pp.OUT])}回`]]
         : [['打率', fmtAvg(avgOf(cur)), `${cur[B.G]}試合`], ['本塁打', String(cur[B.HR]), `${cur[B.RBI]}打点`], ['OPS', fmtAvg(obpOf(cur) + slgOf(cur)), `${cur[B.SB]}盗塁`]];
     } else tiles = [['総合力', P.pos ? String(Math.round(ov)) : '--', P.pos ? `ランク ${rk[1]}` : ''], ['調子', cd[1], ''], [pro || mlb ? '年俸' : 'スカウト評価', pro || mlb ? manEn(num(me.sal)).replace('円', '') : me.scout ? '★'.repeat(clamp(Math.round((meOvr(me) + num(me.scout) * 0.6 - 30) / 8), 1, 5)) : '－', '']];
@@ -11429,6 +11456,7 @@ class NpbScene {
     if (pro || mlb) tx(c, `年俸 ${manEn(num(me.sal))}`, 376, by + 28, { align: 'right', color: UC.acc2 });
     if (pro && S) { const r = standings(S, TEAM[me.team].lg).find(x => x.id === me.team); if (r) tx(c, `${TEAM[me.team].short} ${r.w}勝${r.l}敗${r.t ? r.t + '分' : ''}　${LGS[TEAM[me.team].lg].s1}・${r.rank}位${r.rank > 1 ? `（${r.gb}差）` : ''}${S.magic && S.magic[TEAM[me.team].lg] && S.magic[TEAM[me.team].lg].t === me.team ? `　M${S.magic[TEAM[me.team].lg].m}` : ''}`, 20, by + 46, { color: '#fff' }); }
     else if (mlb && S && S.mlb && me.mlb.lv === 1) tx(c, `${mlbName(me.mlb.t, S.y)} ${S.mlb.w}勝${S.mlb.l}敗`, 20, by + 46);
+    else if (mnr && S && S.mn) { const st2 = Object.entries(S.mn.st || {}).sort((a, b) => (b[1][0] / Math.max(1, b[1][0] + b[1][1])) - (a[1][0] / Math.max(1, a[1][0] + a[1][1]))); const rk = st2.findIndex(r => r[0] === me.minor.team) + 1; tx(c, `${me.minor.team} ${S.mn.w}勝${S.mn.l}敗${S.mn.t ? S.mn.t + '分' : ''}${me.minor.kind === 'ind' && rk ? `　${rk}位` : ''}`, 20, by + 46, { color: '#fff' }); }
     else if (!pro && !mlb) wrap(c, roadTips(this.g, N), 352).slice(0, 4).forEach((l, i) => tx(c, l, 20, by + 46 + i * 16 - (i ? 0 : 0), { color: i === 0 ? UC.acc : '#c8d2ea' }));
     if (pro || mlb) {
       tx(c, 'RECENT', 20, by + 68, { color: hexA(UC.acc, 0.9) });
@@ -11470,7 +11498,7 @@ class NpbScene {
       const e = r.e;
       tx(c, mdDate(e.md), x + 8, y + 5, { color: UC.dim });
       let ox = x + 52;
-      const farmK = e.k === 'F' || e.k === 'F3' || e.k === 'AAA';
+      const farmK = e.k === 'F' || e.k === 'F3' || e.k === 'AAA' || e.k === 'IND' || e.k === 'CORP';
       if (isCS(N, e)) { const ck = csKey(N, e), lw = logoW(ck, 15); drawKeyLogo(c, ck, ox + 1, y + 3, lw, 15, true, 1); ox += lw + 6; const k = e.k === 'CS1' ? '1st' : 'Final'; tx(c, k, ox, y + 5, { color: UC.acc2 }); ox += tw(c, k) + 6; }
       else if (e.k === 'MLB' && logoImg('MLB')) { drawKeyLogo(c, 'MLB', ox + 1, y + 3, 24, 15, true, 1); ox += 30; }
       else if (e.k !== 'R') { const k = KIND_N[e.k]; const kw = tw(c, k) + 10; slant(c, ox, y + 4, kw, 15, 3, farmK ? 'rgba(95,215,255,0.22)' : hexA(UC.acc, 0.3)); tx(c, k, ox + kw / 2, y + 5, { align: 'center', color: farmK ? UC.cyan : UC.acc2 }); ox += kw + 6; }
@@ -11560,9 +11588,9 @@ class NpbScene {
     box(c, 8, 66, 624, 272);
     if (!me.career.length && me.st !== 'pro' && me.st !== 'mlb') { wrap(c, 'まだプロとしての成績はない。\nプロ入りすると、一軍・二軍の成績、通算成績、WARなどの指標がここに表示される。', 590).forEach((l, i) => tx(c, l, 24, 86 + i * 18, { color: UC.dim })); return; }
     const tot = careerTot(N), lg = lgOf(S);
-    const MM = me.st === 'mlb' && S && S.mlb;
-    const curB = MM ? S.mlb.b : S && S.bs.ME, curP = MM ? S.mlb.p : S && S.ps.ME;
-    caption(c, [MM ? '今シーズン（メジャー）' : '今シーズン（一軍）', MM || me.career.some(x => x.lg === 'MLB') ? '通算成績（日米通算）' : '通算成績（一軍）', '指標（セイバーメトリクス）', '状況別成績', '月別成績', '対戦チーム別成績', '自己記録'][mode], ['SEASON', 'CAREER', 'ADVANCED', 'SPLITS', 'MONTHLY', 'VS TEAMS', 'PERSONAL BESTS'][mode], 20, 70);
+    const MM = me.st === 'mlb' && S && S.mlb, MN = isMinor(me) && S && S.mn;
+    const curB = MN ? S.mn.b : MM ? S.mlb.b : S && S.bs.ME, curP = MN ? S.mn.p : MM ? S.mlb.p : S && S.ps.ME;
+    caption(c, [MN ? `今シーズン（${MLG[me.minor.lg] ? MLG[me.minor.lg].s : ''}）` : MM ? '今シーズン（メジャー）' : '今シーズン（一軍）', MM || me.career.some(x => x.lg === 'MLB') ? '通算成績（日米通算）' : '通算成績（一軍）', '指標（セイバーメトリクス）', '状況別成績', '月別成績', '対戦チーム別成績', '自己記録'][mode], ['SEASON', 'CAREER', 'ADVANCED', 'SPLITS', 'MONTHLY', 'VS TEAMS', 'PERSONAL BESTS'][mode], 20, 70);
     tx(c, `↑↓:成績の種類（${mode + 1}/${STATS_N}）`, 620, 72, { align: 'right', color: UC.dim });
     this.hits.push({ x: 8, y: 66, w: 624, h: 24, sub: 1 });
     if (mode >= 3) return this.d_split(c, N, mode);
@@ -11916,6 +11944,7 @@ class NpbScene {
     box(c, 8, 66, 624, 272);
     caption(c, '経歴', 'CAREER', 18, 72);
     const P = me.p;
+    if (me.route) tx(c, fit(c, `入団経緯：${routeText(me.route)}`, 440), 622, 74, { align: 'right', color: UC.acc2 });
     if (!rows.length) { wrap(c, 'まだプロの経歴はない。\n入団すると、毎年の成績・年俸・タイトルがここに残っていく。', 590).forEach((l, i) => tx(c, l, 24, 100 + i * 18, { color: UC.dim })); }
     else {
       const head = P.pos === 'P' ? ['年', '球団', '登板', '勝', '敗', 'S', '防御率', 'WAR', '年俸'] : ['年', '球団', '試合', '打率', '本', '打点', '盗塁', 'WAR', '年俸'];
@@ -11924,12 +11953,14 @@ class NpbScene {
       this.list(c, rows, 14, 108, 604, 172, 22, (r, x, y) => {
         const cc = r.c, b = cc.b, p = cc.p, isM = cc.lg === 'MLB';
         tx(c, String(cc.y) + (cc.live ? '*' : ''), xs[0], y + 4, { color: cc.live ? UC.cyan : '#fff' });
-        if (isM) tx(c, fit(c, cc.tname || 'MLB', 112), xs[1], y + 4, { color: '#ff7b8a' });
+        const isMn = cc.kind === 'ind' || cc.kind === 'corp';
+        if (isMn) tx(c, fit(c, cc.team || '', 112), xs[1], y + 4, { color: '#8ae8a8' });
+        else if (isM) tx(c, fit(c, cc.tname || 'MLB', 112), xs[1], y + 4, { color: '#ff7b8a' });
         else if (TEAM[cc.team]) tx(c, TEAM[cc.team].short, xs[1], y + 4, { color: TEAM_ACC[cc.team] || TEAM[cc.team].color });
         const v = P.pos === 'P' ? (p ? [p[Pp.G], p[Pp.W], p[Pp.L], p[Pp.SV], fmtERA(eraOf(p))] : ['－', '', '', '', isM ? '（3A）' : '（二軍）']) : (b ? [b[B.G], fmtAvg(avgOf(b)), b[B.HR], b[B.RBI], b[B.SB]] : ['－', '', '', '', isM ? '（3A）' : '（二軍）']);
         v.forEach((s, i) => tx(c, String(s), xs[i + 2], y + 4, { align: 'right' }));
         const m = P.pos === 'P' ? p : b;
-        tx(c, m ? f1(cc.live ? warOf(m, P.pos === 'P', P.pos, isM ? MLB_LG : lgOf(N.S)) : careerWarOf(cc)) : '', xs[7], y + 4, { align: 'right', color: UC.cyan });
+        tx(c, isMn ? (cc.kind === 'corp' ? '社会人' : '独立L') : m ? f1(cc.live ? warOf(m, P.pos === 'P', P.pos, isM ? MLB_LG : lgOf(N.S)) : careerWarOf(cc)) : '', xs[7], y + 4, { align: 'right', color: isMn ? '#8ae8a8' : UC.cyan });
         tx(c, manEn(cc.sal), xs[8] + 72, y + 4, { align: 'right', color: UC.acc2 });
         if (cc.aw && cc.aw.length) tx(c, '★', 604, y + 4, { color: UC.acc, align: 'right' });
       });
@@ -12093,6 +12124,7 @@ function boxLines(N, e) {
   return out;
 }
 function careerLines(N, c) {
+  if (c.kind === 'ind' || c.kind === 'corp') { const o2 = [`${c.team}（${c.lgN}）　${c.w}勝${c.l}敗${c.rank ? `・${c.rank}位` : ''}　年俸 ${manEn(c.sal)}`]; const bl2 = c.b && c.b[B.PA] ? `打撃：${c.b[B.G]}試合 打率${fmtAvg(avgOf(c.b))} ${c.b[B.HR]}本塁打 ${c.b[B.RBI]}打点 ${c.b[B.SB]}盗塁 OPS${fmtAvg(obpOf(c.b) + slgOf(c.b))}` : null, pl2 = c.p && c.p[Pp.BF] ? `投球：${c.p[Pp.G]}登板 ${c.p[Pp.W]}勝${c.p[Pp.L]}敗 ${c.p[Pp.SV]}S ${fmtIP(c.p[Pp.OUT])}回 ${c.p[Pp.K]}奪三振 防御率${fmtERA(eraOf(c.p))}` : null; for (const s of [pl2, bl2]) if (s) o2.push(s); if (c.aw && c.aw.length) o2.push('受賞：' + c.aw.join('・')); return o2; }
   const out = [c.lg === 'MLB' ? `${c.tname || 'メジャー'}（MLB）　年俸 ${manEn(c.sal)}${c.rec ? `　チーム ${c.rec[0]}勝${c.rec[1]}敗` : ''}` : `${TEAM[c.team] ? TEAM[c.team].name : ''}　背番号${c.num ?? '－'}　年俸 ${manEn(c.sal)}`];
   const mk = N.me && N.me.marks && N.me.marks[c.y]; if (mk) out.push(`※この年、${mk}の使用が発覚し処分を受けた`);
   const bl = (b, l) => b && b[B.PA] ? `${l}：${b[B.G]}試合 ${b[B.AB]}打数${b[B.H]}安打 打率${fmtAvg(avgOf(b))} ${b[B.HR]}本塁打 ${b[B.RBI]}打点 ${b[B.SB]}盗塁 OPS${fmtAvg(obpOf(b) + slgOf(b))}` : null;
@@ -12132,7 +12164,8 @@ function gameRows(N) {
   const a = (S.log || []).map(e => ({ kind: 'game', e }));
   const f = (S.flog || []).map(e => ({ kind: 'game', e }));
   const m = S.mlb && Array.isArray(S.mlb.log) ? S.mlb.log.map(e => ({ kind: 'game', e })) : [];
-  return a.concat(f, m).sort((x, y) => y.e.md - x.e.md || (y.e.r ?? 0) - (x.e.r ?? 0));
+  const mn = S.mn && Array.isArray(S.mn.log) ? S.mn.log.map(e => ({ kind: 'game', e })) : [];
+  return a.concat(f, m, mn).sort((x, y) => y.e.md - x.e.md || (y.e.r ?? 0) - (x.e.r ?? 0));
 }
 function roadTips(g, N) {
   const me = N.me;
@@ -12167,11 +12200,15 @@ function homeActions(g, N) {
   if (me.mlbOffers && me.mlbOffers.length) rows.push({ kind: 'act', id: 'mlbdecide', label: '去就を決める', sub: `${me.mlbOffers.length}球団から話が来ている`, badge: 1 });
   if (me.st === 'pro' && me.faOpen === (S && S.y)) rows.push({ kind: 'act', id: 'fa', label: 'FA宣言する', sub: 'ほかの球団からの条件を聞く', badge: 1 });
   if (me.st === 'pro' && !me.ikusei) { const ok = mlbEligible(g, N); if (ok.ok || num(me.yrs) >= 6) rows.push({ kind: 'act', id: 'mlb', label: 'メジャー挑戦（ポスティング）', sub: ok.ok ? 'メジャー球団の条件を聞く' : ok.why, disabled: !ok.ok, why: ok.why, badge: ok.ok ? 1 : 0 }); }
-  if ((me.st === 'pro' || me.st === 'free' || me.st === 'mlb')) { const off = md >= 92 || md < 25; rows.push({ kind: 'act', id: 'retire', label: '現役を引退する', sub: off ? 'ユニフォームを脱ぐ' : '引退の表明はシーズンオフ（10月〜3月）に', disabled: !off, why: '引退はシーズンオフ（10月〜3月）に表明できる' }); }
+  { const ok = minorOK(g, N); if ((me.st === 'none' || me.st === 'free') && me.p.pos && (ok.ok || ok.why === 'セレクション・トライアウトは10月〜3月上旬')) rows.push({ kind: 'act', id: 'minor', label: me.st === 'free' ? '独立リーグ・社会人で再起をはかる' : '社会人野球・独立リーグへ進む', sub: ok.ok ? 'セレクションやトライアウトを受ける（体力25）' : ok.why, disabled: !ok.ok, why: ok.why }); }
+  if (me.minorOffers && me.minorOffers.length) rows.push({ kind: 'act', id: 'minorpick', label: `入団先を選ぶ（${me.minorOffers.length}チーム）`, sub: me.minorOffers.map(o => o.team).join('・'), badge: 1 });
+  if ((me.st === 'pro' || me.st === 'free' || me.st === 'mlb' || me.st === 'ind' || me.st === 'corp')) { const off = md >= 92 || md < 25; rows.push({ kind: 'act', id: 'retire', label: '現役を引退する', sub: off ? 'ユニフォームを脱ぐ' : '引退の表明はシーズンオフ（10月〜3月）に', disabled: !off, why: '引退はシーズンオフ（10月〜3月）に表明できる' }); }
   if (me.st === 'none' && me.p.pos) rows.push({ kind: 'act', id: 'pos', label: 'ポジションを変える', sub: `いま：${POSN[me.p.pos]}` });
   if (me.p.pos && me.p.ht && me.st !== 'retired') rows.push({ kind: 'act', id: 'body', label: '体づくり・コンディション', sub: `体重${Math.round(num(me.p.wt))}kg→目標${Math.round(num(me.p.wtT, me.p.wt))}kg　疲労${Math.round(num(me.fat))}%` });
   if (me.st === 'pro' && me.union) rows.push({ kind: 'act', id: 'union', label: '日本プロ野球選手会', sub: me.union.role ? UNION_ROLE[me.union.role] : '会員（総会・チャリティー活動）' });
   if ((me.st === 'pro' || (me.st === 'mlb' && me.mlb && !me.mlb.free)) && me.p.pos) { const on = me.cork || me.tar || me.sticky || ['stim', 'ped', 'ster'].some(k => dopeOn(me, k, g.state.day)); rows.push({ kind: 'act', id: 'ura', label: '裏の誘い……', sub: on ? '使用中のものがある（バレると処分）' : '禁止薬物・不正用具（使用は自己責任）' }); }
+  if (Array.isArray(N.evLog) && N.evLog.length) rows.push({ kind: 'act', id: 'evlog', label: '思い出のイベント', sub: `これまでの名場面を見返す（${N.evLog.length}）` });
+  rows.push({ kind: 'act', id: 'evopt', label: 'イベント演出', sub: { auto: '自動で再生する', app: 'アプリを開いたときに再生', off: '再生しない' }[N.opt.ev || 'auto'] });
   const rep = { say: '会話で知らせる', toast: '通知だけ', off: '知らせない' }[N.opt.report || 'say'];
   rows.push({ kind: 'act', id: 'report', label: '毎朝の試合結果', sub: rep });
   rows.push({ kind: 'act', id: 'help', label: 'このアプリについて', sub: 'プロ野球キャリアの遊びかた' });
@@ -12184,6 +12221,7 @@ async function homeAct(sc, g, N, id) {
     const k = await sc.pick('ポジションを選ぶ', opts.map(p => ({ label: POSN[p] })), { note: '投手は「球速・コントロール・スタミナ・変化球」、野手は「ミート・パワー・選球眼・走力・守備・肩」をきたえる。' });
     if (k < 0) return;
     me.p.pos = opts[k]; if (me.p.pos === 'P') me.p.role = me.p.sta >= 50 ? 'SP' : 'RP';
+    if (!(N.evSeen && N.evSeen.dream)) { evPush(N, 'dream', { once: 'dream' }); await playEvents(g, N); }
     if (['C', '2B', '3B', 'SS'].includes(me.p.pos)) me.p.th = 'R';
     sc.say(`ポジションを「${POSN[me.p.pos]}」に決めた！`); return;
   }
@@ -12198,7 +12236,7 @@ async function homeAct(sc, g, N, id) {
   if (id === 'shibou') {
     const k = await sc.pick('プロ志望届', [{ label: '提出する' }, { label: 'やめておく' }], { note: `プロ志望届を出すと、${S.y}年10月下旬のドラフト会議で指名される可能性がある。\nいまの総合力：${Math.round(meOvr(me))}` });
     if (k !== 0) return;
-    me.shibou = S.y; hist(g, `${S.y}年、プロ志望届を提出した`, 'work'); meNews(N, g, 'プロ志望届を提出'); sc.say('プロ志望届を提出した。運命の日を待とう！'); return;
+    me.shibou = S.y; evPush(N, 'shibou'); await playEvents(g, N); hist(g, `${S.y}年、プロ志望届を提出した`, 'work'); meNews(N, g, 'プロ志望届を提出'); sc.say('プロ志望届を提出した。運命の日を待とう！'); return;
   }
   if (id === 'tryout') {
     const ts = TEAMS.map(t => ({ label: t.name, right: LGS[t.lg].s1 }));
@@ -12289,6 +12327,7 @@ async function homeAct(sc, g, N, id) {
     await sc.info('日本プロ野球選手会', ['プロ野球選手の労働組合。全選手が加入している。', '・12月の総会で、FA制度や年俸、日程などを話し合う', '・各球団に「選手会長」がいて、チームの声をまとめる', '・2004年には球界再編をめぐり、史上初のストライキを決行した', '・2022年からは、出場機会の少ない選手のための「現役ドラフト」が始まった', `・活躍し、素行がよいと、球団の選手会長や選手会の会長に選ばれることも`, `いまの素行：${cdtLabel(num(me.cdt, 60))}（社会貢献やルールを守ることで上がる）`]); return;
   }
   if (id === 'ura') {
+    if (!(N.evSeen && N.evSeen.tempt)) { evPush(N, 'temptation', { once: 'tempt' }); await playEvents(g, N); }
     const items = cheatMenu(N);
     const mlb = me.st === 'mlb';
     const k = await sc.pick('裏の誘い……', items.map(it => ({ label: it.label, right: it.right })).concat([{ label: 'やめておく' }]), { note: `「これを使えば、もっと打てる（投げられる）ぜ……」\n検査：${mlb ? 'MLBは2004年〜薬物検査' : S.y >= 2007 ? 'NPBは2007年〜抜き打ち検査' : `NPBの本格的な検査は2007年〜`}／粘着物質は${mlb && S.y >= 2021 ? '毎試合' : 'ときどき'}審判がチェック\n発覚すると出場停止・罰金・素行と知名度の大幅ダウン。` });
@@ -12297,6 +12336,29 @@ async function homeAct(sc, g, N, id) {
     if (!(it.c.kind === 'gear' && it.on)) { const y2 = await sc.pick('本当に使う？', [{ label: 'やっぱりやめる' }, { label: '使う' }], { note: `${it.c.n}：${it.c.d}` }); if (y2 !== 1) { sc.say('……やめておいた。正々堂々が一番だ。'); addCdt(me, 1); return; } }
     tt.sfx(it.c.kind === 'gear' && it.on ? 'ok' : 'buzz');
     await sc.info(it.c.n, useCheat(g, N, it.id)); return;
+  }
+  if (id === 'evopt') { const order = ['auto', 'app', 'off']; N.opt.ev = order[(order.indexOf(N.opt.ev || 'auto') + 1) % 3]; return; }
+  if (id === 'evlog') {
+    const L = (N.evLog || []).slice().reverse();
+    const k = await sc.pick('思い出のイベント', L.map(e => { let t = e.id; try { const b = buildEvent(g, N, { ...e, replay: 1 }); t = b ? b.title : e.id; } catch (er) { } return { label: t, right: e.y ? `${e.y}年` : '' }; }), { note: '見返したい場面を選ぶ' });
+    if (k < 0) return;
+    N.evq = [{ ...L[k], replay: 1 }].concat(N.evq || []); await playEvents(g, N); return;
+  }
+  if (id === 'minor') {
+    const k = await sc.pick('社会人野球・独立リーグ', [{ label: '社会人野球のセレクションを受ける', right: '会社員として' }, { label: '独立リーグのトライアウトを受ける', right: '6リーグ' }, { label: 'やめておく' }], { note: `社会人：会社の看板を背負って都市対抗・日本選手権をめざす。高卒3年・大卒2年でドラフト対象。\n独立リーグ：四国IL・BC・九州アジア・北海道FL・日本海・関西。毎年ドラフト対象（給料は安い）。\nいまの総合力：${Math.round(meOvr(me))}` });
+    if (k < 0 || k === 2) return;
+    const r = minorTryout(g, N, k === 0 ? 'corp' : 'ind');
+    if (r.offers.length) { me.minorOffers = r.offers; tt.sfx('fanfare'); } else tt.sfx('buzz');
+    await sc.info(k === 0 ? '入社セレクション' : '独立リーグ・トライアウト', r.text + (r.offers.length ? '\n（ホームの「入団先を選ぶ」から決めよう）' : '')); return;
+  }
+  if (id === 'minorpick') {
+    const offers = me.minorOffers || [];
+    const k = await sc.pick('入団先を選ぶ', offers.map(o => ({ label: o.team, right: o.lgN.replace('リーグ', 'L') })).concat([{ label: 'すべてことわる' }]), { note: offers.map(o => `${o.team}：${o.kind === 'corp' ? '年収' : '年俸'} 約${manEn(o.sal)}`).join('\n') });
+    if (k < 0) return;
+    me.minorOffers = null;
+    if (k >= offers.length) { sc.say('すべて、ことわった。'); return; }
+    const t = joinMinor(g, N, offers[k]); tt.sfx('fanfare');
+    await sc.info('入団決定！', t); return;
   }
   if (id === 'report') { const order = ['say', 'toast', 'off']; N.opt.report = order[(order.indexOf(N.opt.report || 'say') + 1) % 3]; return; }
   if (id === 'help') {
@@ -12322,6 +12384,8 @@ async function homeAct(sc, g, N, id) {
       '■ WBCや五輪の年は、トップ選手なら日本代表に選ばれる。',
       '■ オフには、活躍した選手にCMやテレビ出演のオファーが届く。',
       '■ 「球団」タブで12球団の選手名鑑を見られる。選手を選ぶと選手カード。',
+      '■ プロへの道は、高校からのドラフト・入団テストのほかに、社会人野球（高卒3年・大卒2年でドラフト対象）と独立リーグ（四国IL・BC・九州アジア・北海道FL・日本海・関西）もある。',
+      '■ ドラフト・入団会見・初ヒット・サヨナラ・優勝・引退など、名場面は固有イベントとして再生される（ホームの「イベント演出」で切りかえ、「思い出のイベント」で見返せる）。',
       '■ 「成績」タブは↑↓で、今季・通算・指標・状況別（対左右など）・月別・対戦チーム別・自己記録を切りかえ。',
       '■ 「記録」タブには、ランキング（5ページ）、歴代シーズン／通算記録、特殊記録、国際大会、1試合記録、チーム記録、歴代の優勝・タイトルがある。',
       '■ 活躍すると知名度とファンも増える。名球会入りをめざそう！',
@@ -12354,6 +12418,7 @@ function getN(g, create) {
   N.opt = isObj(N.opt) ? N.opt : { report: 'say' };
   for (const t of TEAMS) { const T = N.L.teams[t.id]; if (!T || !Array.isArray(T.bat) || !Array.isArray(T.pit)) { genLeague(N.L); break; } }
   CUR_N = N; CUR_G = g;
+  hookAutoEv(g);
   initMe(g, N);
   syncMe(g, N);
   try { ensureCPUTraits(N); } catch (e) { }
@@ -12371,6 +12436,7 @@ function advance(g) {
     try { processDay(g, N, d, out); } catch (e) { console.error('[npb] day', d, e); }
     N.lastDay = d;
   }
+  try { evDispatch(g, N, out.notes); } catch (e) { console.error('[npb] ev dispatch', e); }
   return out;
 }
 function summary(g, N, out) {
@@ -12385,13 +12451,14 @@ function summary(g, N, out) {
     if (r) rec = `${TEAM[me.team].short} ${r.w}勝${r.l}敗${r.t ? r.t + '分' : ''}・${r.rank}位${r.rank > 1 ? `（首位と${r.gb}差）` : ''}`;
   }
   L.push(`【試合結果】${rec}`);
-  const short = e => `${KIND_N[e.k] ? KIND_N[e.k] + ' ' : ''}${resMark(e)} ${e.s[0]}-${e.s[1]} ${TEAM[e.o] ? TEAM[e.o].short : ''}${e.inn > 9 ? `（延長${e.inn}回）` : ''}`;
+  const short = e => `${KIND_N[e.k] ? KIND_N[e.k] + ' ' : ''}${resMark(e)} ${e.s[0]}-${e.s[1]} ${oppName(e)}${e.inn > 9 ? `（延長${e.inn}回）` : ''}`;
   const played = e => e.me && ((e.me.b && e.me.b[0] > 0) || e.me.p);
   const recent = gs.slice(-4);
   if (gs.length > 4) L.push(`（${gs.length}試合のうち、最近の${recent.length}試合）`);
   const quiet = recent.filter(e => !played(e)).map(short);
   for (let i = 0; i < quiet.length; i += 3) L.push(quiet.slice(i, i + 3).join('　'));
   for (const e of recent.filter(played)) L.push(`${short(e)}　あなた：${meLine(e)}`);
+  const hero = recent.filter(played).map(e => heroLine(N, e)).filter(Boolean).pop(); if (hero) L.push(hero);
   if (fs.length) {
     const tb = newB(), tp = newP(); let any = false;
     for (const e of fs) if (e.me) { any = true; if (e.me.b) { const [pa, ab, h, hr, rbi] = e.me.b; tb[B.AB] += ab; tb[B.H] += h; tb[B.HR] += hr; tb[B.RBI] += rbi; } if (e.me.p) { const [o, h, r, er, bb, k] = e.me.p; tp[Pp.OUT] += o; tp[Pp.R] += r; tp[Pp.K] += k; tp[Pp.G]++; } }
@@ -12399,6 +12466,27 @@ function summary(g, N, out) {
   }
   if (L.length === 1) return null;
   return L.join('\n');
+}
+// 活躍した試合の「かっこいい」ひとこと
+function heroLine(N, e) {
+  const m = e.me; if (!m) return '';
+  const nm = shortName(N.me.p), P_ = a => pick(a);
+  if (m.b && m.b[0]) {
+    const [pa, ab, h, hr, rbi, bb, k, sb] = m.b;
+    if (hr >= 2) return `★${nm}、${P_(['この日2発目は、ダメ押しの一撃', '一発、また一発。スタンドが揺れた', 'マルチ本塁打で、ゲームを支配した'])}！`;
+    if (hr === 1) return `★${nm}、${P_(['左中間', '右中間', 'バックスクリーン', 'ライトスタンド', 'レフトスタンド'])}へ${P_(['豪快な', '完璧な', '弾丸ライナーの', '高々と舞い上がる', '値千金の'])}一発！`;
+    if (h >= 4) return `★${nm}、${h}安打の固め打ち！ ${P_(['当たりが止まらない', 'ヒットの雨を降らせた', 'まさに手がつけられない'])}`;
+    if (rbi >= 4) return `★${nm}、${rbi}打点の大暴れ！ ${P_(['チャンスで必ず仕事をした', '勝負強さが光った'])}`;
+    if (sb >= 2) return `★${nm}、${sb}盗塁！ ${P_(['足でかき回した', '快足でダイヤモンドを駆けた'])}`;
+  }
+  if (m.p) {
+    const [outs, h, r, er, bb, k, hr, st] = m.p;
+    if (st && outs >= 27 && r === 0) return `★${nm}、${P_(['完封劇', '9回を投げきってゼロ封', '圧巻のシャットアウト'])}！ ${P_(['最後まで一人で投げ抜いた', '相手打線を寄せつけなかった'])}`;
+    if (k >= 10) return `★${nm}、${k}奪三振の${P_(['快投', '奪三振ショー', 'ドクターKぶり'])}！`;
+    if (m.dec === 'W' && st && er <= 1 && outs >= 21) return `★${nm}、${P_(['快刀乱麻', '貫禄の', '堂々の'])}ピッチングで勝利！`;
+    if (m.dec === 'S') return `★${nm}、${P_(['9回を三者凡退で締めた', '最後のアウトをもぎ取った', '守護神の仕事をきっちり果たした'])}！`;
+  }
+  return '';
 }
 function deliverMorning(g, N, out) {
   const notes = out.notes.slice();
@@ -12430,6 +12518,7 @@ async function openNPB(g) {
   const sum = summary(g, N, out); if (sum) q.push({ title: '試合結果', text: sum.split('\n').slice(1) });
   for (const t of out.notes) { const ls = String(t).split('\n'); const m = /^【(.+)】$/.exec(ls[0]); q.push(m ? { title: m[1], text: ls.slice(1) } : { title: 'おしらせ', text: ls }); }
   tt.sfx('ok');
+  if (Array.isArray(N.evq) && N.evq.length && !(N.opt && N.opt.ev === 'off')) { g._npbEvPlaying = 1; try { await playEvents(g, N); } finally { g._npbEvPlaying = 0; } }
   return new Promise(res => { const sc = new NpbScene(g, res, q); g.push(sc); });
 }
 function iconHD(c, x, y) {
@@ -12460,7 +12549,7 @@ function install() {
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
-  if (typeof window !== 'undefined') window.__npb = { open: () => openNPB(window.__game), advance: () => advance(window.__game), state: () => window.__game && window.__game.state && window.__game.state.npb, getN: (c) => getN(window.__game, c !== false), TEAMS, practice: id => practice(window.__game, getN(window.__game, true), id), join: (team, o = {}) => { const g = window.__game, N = getN(g, true); if (!N.me.p.pos) N.me.p.pos = o.pos || 'SS'; joinTeam(g, N, team, { sal: 1.5e7, bonus: 0, y: N.S ? N.S.y : 2004, round: 1, firstJoin: true, ...o }); return N.me; }, meOvr: () => meOvr(getN(window.__game, true).me), mlb: () => { const g = window.__game, N = getN(g, true); return joinMLB(g, N, mlbOffers(g, N)[0]); } };
+  if (typeof window !== 'undefined') window.__npb = { open: () => openNPB(window.__game), advance: () => advance(window.__game), state: () => window.__game && window.__game.state && window.__game.state.npb, getN: (c) => getN(window.__game, c !== false), TEAMS, practice: id => practice(window.__game, getN(window.__game, true), id), join: (team, o = {}) => { const g = window.__game, N = getN(g, true); if (!N.me.p.pos) N.me.p.pos = o.pos || 'SS'; joinTeam(g, N, team, { sal: 1.5e7, bonus: 0, y: N.S ? N.S.y : 2004, round: 1, firstJoin: true, ...o }); return N.me; }, meOvr: () => meOvr(getN(window.__game, true).me), mlb: () => { const g = window.__game, N = getN(g, true); return joinMLB(g, N, mlbOffers(g, N)[0]); }, ev: (id, o = {}) => { const g = window.__game, N = getN(g, true); evPush(N, id, o); playEvents(g, N); return 1; }, evIds: () => Object.keys(EVENTS), minor: (kind = 'ind') => { const g = window.__game, N = getN(g, true); advance(g); if (!N.me.p.pos) N.me.p.pos = 'SS'; const r = minorTryout(g, N, kind); const o = r.offers[0] || { lg: kind === 'corp' ? 'CORP' : 'IL', kind, team: kind === 'corp' ? 'トヨタ自動車' : '徳島インディゴソックス', key: 'x', col: kind === 'corp' ? '#d01020' : '#1a3a8a', col2: kind === 'corp' ? '#ffffff' : '#6ad0ff', lgN: kind === 'corp' ? '社会人野球' : '四国アイランドリーグplus', joinY: N.S ? N.S.y : 2026, sal: 2e6 }; o.joinY = N.S ? N.S.y : 2026; return joinMinor(g, N, o); } };
 }
 
 // ===== 指標（セイバーメトリクス）・歴代記録・特殊記録 =====
@@ -13357,6 +13446,7 @@ function doOffJob(g, N, id) {
   fameGain(g, N, j.fame);
   hist(g, `${j.kind === 'CM' ? j.name + 'のCMに出演' : j.name + 'に出演'}`, 'geino');
   meNews(N, g, j.kind === 'CM' ? `${j.name}のCMに出演` : `${j.name}に出演`);
+  if (j.kind === 'CM') evPush(N, 'cm', { v: { name: `${j.name} CM` } }); else evPush(N, 'tv_show', { v: { name: j.name } });
   return j.kind === 'CM' ? `${j.name}のCM撮影。\nユニフォーム姿で、決めのポーズ！ 「カット！ 最高です！」\n（出演料 ${manEn(j.pay)}・知名度アップ）` : `${j.name}に出演した。\n野球の話で、スタジオが大いに盛り上がった。\n（出演料 ${yen(j.pay)}・知名度アップ）`;
 }
 // ---- 国際大会 ----
@@ -13498,6 +13588,7 @@ function joinMLB(g, N, o) {
   fameGain(g, N, 150);
   hist(g, `メジャーリーグの${o.name}と契約（${o.yrs}年・年俸${dollars(o.usd)}）`, 'work');
   meNews(N, g, `${o.name}と契約！ メジャー挑戦へ`);
+  evPush(N, 'mlb_join', { mlb: 1 });
   return `${fromTeam ? TEAM[fromTeam].short + 'からの' : ''}ポスティング移籍が決まった！\n${o.name}と${o.yrs}年契約。年俸 ${dollars(o.usd)}（約${manEn(yenSal)}）\n来年の春から、海の向こうで戦う。\n（契約一時金 ${manEn(Math.round(yenSal * 0.15 / 1e5) * 1e5)} を受け取った）`;
 }
 function mlbS(S) { if (!isObj(S.mlb)) S.mlb = { b: newB(), p: newP(), ab: newB(), ap: newP(), w: 0, l: 0, log: [] }; return S.mlb; }
@@ -13625,6 +13716,7 @@ function decideAfterMLB(g, N, o) {
   me.mlb = null; me.st = 'free';
   joinTeam(g, N, o.team, { sal: o.sal, y: S.y, payFrom: S.y + 1, round: 0 });
   hist(g, `メジャーから日本に復帰し、${TEAM[o.team].name}に入団`, 'work'); meNews(N, g, `${TEAM[o.team].short}で日本球界に復帰`);
+  evPush(N, 'return_jp', { tid: o.team });
   return `日本球界に復帰！ ${TEAM[o.team].name}に入団した。\n年俸 ${manEn(o.sal)}　背番号 ${me.num}`;
 }
 function archiveMLB(g, N, S) {
@@ -14135,7 +14227,1494 @@ function seasonBests(N) {
 }
 const BEST_N = { h: ['1試合最多安打', v => `${v}安打`], hr: ['1試合最多本塁打', v => `${v}本`], rbi: ['1試合最多打点', v => `${v}打点`], sb: ['1試合最多盗塁', v => `${v}盗塁`], tb: ['1試合最多塁打', v => `${v}塁打`], r: ['1試合最多得点', v => `${v}得点`], stkH: ['最長連続試合安打', v => `${v}試合`], stkOB: ['最長連続試合出塁', v => `${v}試合`], stkHR: ['最長連続試合本塁打', v => `${v}試合`], k: ['1試合最多奪三振', v => `${v}個`], out: ['最長投球回（1試合）', fmtIP], stkZR: ['最長連続無失点', v => `${fmtIP(v)}回`], stkW: ['最多連勝（投手）', v => `${v}連勝`], stkSV: ['最多連続セーブ', v => `${v}`] };
 
-return { bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
+// ===== 固有イベント：高解像度ドット（4頭身）キャラクターとイベントシーン =====
+const EV_SKIN = { light: '#ffe0c4', fair: '#f6c9a0', tan: '#e0a878', brown: '#b97a50', dark: '#8a5a3a', green: '#6fbf4a' };
+const EV_HAIR = { black: '#2a2430', brown: '#6b4226', blonde: '#e8c45a', red: '#c0452f', silver: '#c8ccd4', pink: '#ff7eb6', blue: '#3a6fd8', green: '#3f9a5a', purple: '#8a5ac8', orange: '#e8873a', white: '#f2f2f2' };
+const evCol = (v, map, d) => (v && map[v]) || (typeof v === 'string' && v[0] === '#' ? v : d);
+// キャラの見た目（spec）を作る
+function charSpec(kind, o = {}) {
+  const base = { kind, skin: '#f6c9a0', hair: '#2a2430', style: 'short', older: 0, glasses: false, beard: false, mus: false, f: false };
+  const s = { ...base, ...o };
+  if (kind === 'uni') { s.jersey = s.jersey || '#f4f2ec'; s.trim = s.trim || '#1a2a5a'; s.cap = s.cap !== false; s.capCol = s.capCol || s.trim; s.pants = s.pants || s.jersey; s.sock = s.sock || s.trim; }
+  if (kind === 'suit') { s.jacket = s.jacket || '#2a3348'; s.tie = s.tie || '#b83040'; s.shirt = '#f4f4f8'; }
+  if (kind === 'casual') { s.top = s.top || '#d64161'; s.bottom = s.bottom || '#3a4a7a'; }
+  if (kind === 'apron') { s.top = s.top || '#e89aa8'; s.apron = s.apron || '#f4f2ec'; s.bottom = s.bottom || '#5a4a6a'; }
+  if (kind === 'ump') { s.jacket = '#1a2236'; s.cap = true; s.capCol = '#1a2236'; s.pants = '#8a8e98'; }
+  if (kind === 'work') { s.jacket = s.jacket || '#2f5f9a'; s.bottom = s.bottom || '#2a3348'; }
+  return s;
+}
+// 1マス（ドット）を描く。flip で左右反転
+function evPainter(c, cx, feetY, sc, flip) {
+  const ox = cx - 24 * sc, oy = feetY - 96 * sc;
+  const P = (x, y, w, h, col) => { if (!col) return; c.fillStyle = col; c.fillRect(flip ? ox + (48 - x - w) * sc : ox + x * sc, oy + y * sc, w * sc, h * sc); };
+  // 太さのある線（腕・バット）
+  const L = (x0, y0, x1, y1, w, col) => { const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 1.5)); for (let i = 0; i <= n; i++) { const t = i / n, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t; P(Math.round(x - w / 2), Math.round(y - w / 2), w, w, col); } };
+  return { P, L };
+}
+// 腕のポーズ（肩→ひじ→手）。座標は48×96のドット絵上
+const ARM = {
+  down: [[9, 41, 8, 52], [38, 41, 39, 52]],
+  fist: [[9, 41, 8, 52], [42, 24, 40, 11]],
+  banzai: [[5, 20, 8, 7], [42, 20, 39, 7]],
+  wave: [[9, 41, 8, 52], [42, 25, 42, 13]],
+  point: [[9, 41, 8, 52], [42, 31, 47, 30]],
+  cross: [[13, 43, 31, 40], [34, 43, 16, 38]],
+  clap: [[12, 45, 22, 38], [35, 45, 25, 38]],
+  hips: [[4, 40, 13, 53], [43, 40, 34, 53]],
+  bow: [[13, 45, 21, 55], [34, 45, 26, 55]],
+  phone: [[9, 41, 8, 52], [39, 37, 33, 17]],
+  wipe: [[9, 41, 8, 52], [38, 34, 29, 16]],
+  tip: [[9, 41, 8, 52], [40, 22, 32, 9]],
+  think: [[13, 44, 30, 44], [36, 40, 27, 22]],
+  shake: [[9, 41, 8, 52], [41, 41, 47, 43]],
+  mic: [[9, 41, 8, 52], [41, 38, 46, 30]],
+  bat: [[9, 41, 8, 52], [40, 41, 36, 33]],
+  trophy: [[7, 24, 18, 10], [40, 24, 29, 10]],
+  card: [[12, 44, 18, 38], [35, 44, 30, 38]],
+  glove: [[12, 44, 19, 36], [38, 41, 39, 52]],
+  guts: [[12, 44, 17, 35], [35, 44, 30, 35]],
+  ball: [[9, 41, 8, 52], [39, 38, 33, 32]],
+};
+// 投球・スイングのアニメーション
+function animArms(pose, t) {
+  if (pose === 'swing') { const f = Math.floor(t / 7) % 4; return [[[14, 34, 30, 28], [33, 34, 33, 27], 'b0'], [[14, 40, 22, 40], [33, 40, 25, 40], 'b1'], [[12, 30, 12, 24], [30, 32, 15, 25], 'b2'], [[12, 30, 12, 24], [30, 32, 15, 25], 'b2']][f]; }
+  if (pose === 'pitch') { const f = Math.floor(t / 8) % 4; return [[[13, 42, 22, 36], [34, 42, 25, 36], 'p0'], [[9, 41, 10, 50], [43, 26, 45, 14], 'p1'], [[8, 30, 14, 26], [36, 40, 20, 46], 'p2'], [[9, 41, 8, 52], [38, 44, 30, 54], 'p3']][f]; }
+  if (pose === 'wave') { const k = Math.round(Math.sin(t / 5) * 3); return [ARM.wave[0], [42, 25, 42 + k, 13], '']; }
+  if (pose === 'clap') { const k = Math.floor(t / 6) % 2 ? 2 : 0; return [[12, 45, 22 - k, 38], [35, 45, 25 + k, 38], '']; }
+  if (pose === 'banzai') { const k = Math.floor(t / 10) % 2; return [[5, 20 + k, 8, 7 + k], [42, 20 + k, 39, 7 + k], '']; }
+  const a = ARM[pose] || ARM.down; return [a[0], a[1], ''];
+}
+// キャラクターを描く
+// st: { x, y(足元), sc, flip, expr, pose, t, look, alpha }
+function drawCharRaw(c, sp, st) {
+  const sc = st.sc || 2, t = st.t || 0, flip = !!st.flip;
+  let bob = 0, hx = 0, hy = 0, jy = 0, jx = 0;
+  const mot = st.mot || '';
+  if (!['bow'].includes(st.pose)) bob = Math.floor(t / 26) % 2;
+  if (mot === 'jump' && !st.noJump) jy = -Math.round(Math.abs(Math.sin(t / 7)) * 10);
+  if (mot === 'hop' && !st.noJump) jy = -Math.round(Math.abs(Math.sin(t / 5)) * 3);
+  if (mot === 'nod') hy = Math.floor(t / 9) % 2 ? 2 : 0;
+  if (mot === 'shake') hx = Math.round(Math.sin(t / 3) * 1.5);
+  if (mot === 'tremble' && !st.noJump) jx = (t % 4 < 2 ? 1 : -1) * 0.5;
+  if (st.pose === 'bow') hy += 7;
+  const { P, L } = evPainter(c, st.x + jx * sc, st.y + jy * sc, sc, flip);
+  const skin = evCol(sp.skin, EV_SKIN, '#f6c9a0'), skinS = shade(skin, -0.14), skinH = shade(skin, 0.3);
+  const hair = sp.older >= 2 ? '#b8bcc4' : evCol(sp.hair, EV_HAIR, '#2a2430'), hairS = shade(hair, -0.3), hairH = shade(hair, 0.35);
+  const ink = '#1a1420', line = 'rgba(10,8,20,0.55)';
+  c.save(); if (st.alpha != null) c.globalAlpha = st.alpha;
+  if (!st.noShadow) P(10, 94, 28, 2, 'rgba(0,0,0,0.25)');
+  const k = sp.kind;
+  const top = k === 'uni' ? sp.jersey : k === 'suit' || k === 'ump' || k === 'work' ? sp.jacket : sp.top;
+  const topS = shade(top, -0.22), topH = shade(top, 0.25);
+  // 長い髪（後ろ）
+  if ((sp.style === 'long' || sp.style === 'twin') && !sp.cap) { P(13, 6 + hy, 22, 30, hairS); if (sp.style === 'twin') { P(7, 10 + hy, 6, 22, hair); P(35, 10 + hy, 6, 22, hair); } }
+  if (sp.cap && sp.style === 'long') P(15, 16 + hy, 18, 18, hairS);
+  // 脚
+  const pants = k === 'uni' ? sp.pants : k === 'suit' ? sp.jacket : k === 'ump' ? sp.pants : sp.bottom || '#3a4a7a';
+  const pantsS = shade(pants, -0.2);
+  P(14, 57, 10, 32, pants); P(25, 57, 10, 32, pants); P(23, 60, 2, 29, pantsS); P(14, 57, 2, 32, pantsS); P(33, 57, 2, 32, pantsS);
+  if (k === 'uni') { P(14, 74, 10, 14, sp.sock); P(25, 74, 10, 14, sp.sock); P(14, 73, 10, 1, '#ffffff'); P(25, 73, 10, 1, '#ffffff'); P(15, 57, 1, 17, sp.trim); P(32, 57, 1, 17, sp.trim); }
+  P(12, 88, 12, 6, '#16161c'); P(25, 88, 12, 6, '#16161c'); P(13, 88, 5, 1, '#5a5a66'); P(26, 88, 5, 1, '#5a5a66');
+  if (k === 'uni') { P(12, 93, 12, 1, '#e8e8ee'); P(25, 93, 12, 1, '#e8e8ee'); }
+  // 胴
+  const by = bob;
+  P(12, 27 + by, 24, 30 - by, top); P(10, 28 + by, 28, 5, top); P(12, 27 + by, 2, 30 - by, topS); P(34, 27 + by, 2, 30 - by, topS);
+  P(14, 28 + by, 20, 1, topH);
+  if (k === 'uni') {
+    P(23, 28 + by, 2, 27, sp.trim); P(10, 28 + by, 28, 1, sp.trim);
+    // 胸のチーム名（流れるようなライン）と背番号
+    for (let i = 0; i < 9; i++) P(14 + i * 2, 35 + by + (i % 3 === 1 ? -1 : 0), 2, 2, sp.trim);
+    if (sp.num != null) { const s2 = String(sp.num); s2.split('').forEach((d, i) => digit(P, 27 + i * 4, 41 + by, d, sp.trim)); }
+  }
+  if (k === 'suit' || k === 'work') { P(20, 27 + by, 8, 12, sp.shirt || '#f4f4f8'); P(23, 29 + by, 2, 12, sp.tie || '#2a3348'); P(18, 27 + by, 3, 14, topS); P(27, 27 + by, 3, 14, topS); if (k === 'work') { P(15, 34 + by, 5, 3, '#f4f4f8'); } }
+  if (k === 'ump') { P(18, 30 + by, 12, 10, '#2a3448'); P(14, 42 + by, 20, 1, '#3a4458'); }
+  if (k === 'apron') { P(15, 34 + by, 18, 23, sp.apron); P(15, 34 + by, 18, 1, shade(sp.apron, -0.15)); P(20, 28 + by, 8, 6, sp.apron); }
+  if (k === 'casual' && sp.jerseyFan) { P(23, 28 + by, 2, 27, sp.jerseyFan); for (let i = 0; i < 7; i++) P(16 + i * 2, 36 + by, 2, 2, sp.jerseyFan); }
+  // ベルト
+  if (k === 'uni' || k === 'suit' || k === 'ump') { P(12, 55, 24, 3, '#1c1c24'); P(22, 55, 4, 3, '#c8c8d0'); }
+  // 腕
+  const [AL, AR, extra] = animArms(st.pose, t);
+  const sleeve = k === 'uni' ? sp.jersey : top, under = k === 'uni' ? sp.trim : k === 'casual' || k === 'apron' ? skin : top;
+  const arm = (sx, sy, a, front) => {
+    const [ex, ey, hx2, hy2] = a;
+    L(sx, sy + by, ex, ey + by, 5, under); L(ex, ey + by, hx2, hy2 + by, 5, under);
+    // 半袖（肩から少しだけ）
+    L(sx, sy + by, sx + (ex - sx) * 0.45, sy + by + (ey - sy) * 0.45, 6, sleeve);
+    P(hx2 - 2, hy2 - 2 + by, 5, 5, skin); P(hx2 - 2, hy2 + 2 + by, 5, 1, skinS);
+  };
+  const behind = ['cross', 'clap', 'card', 'guts', 'bow'].includes(st.pose) || st.pose === 'swing' || st.pose === 'pitch';
+  arm(11, 30, AL, false);
+  // 首・頭
+  const hX = hx, hY = hy;
+  P(20, 23 + hY, 8, 5, skinS);
+  headDraw(P, sp, st, { skin, skinS, skinH, hair, hairS, hairH, ink, line, hX, hY, t });
+  arm(36, 30, AR, true);
+  // 持ち物
+  if (st.pose === 'bat') { L(37, 32, 46, 2, 3, '#c8925a'); L(37, 32, 39, 28, 3, '#8a5a30'); }
+  if (st.pose === 'mic') { L(46, 30, 46, 22, 2, '#2a2a30'); P(44, 18, 5, 5, '#3a3a44'); P(45, 19, 2, 1, '#8a8a94'); }
+  if (st.pose === 'phone') P(31, 12 + hY, 4, 8, '#20242e');
+  if (st.pose === 'trophy') { P(17, 0, 14, 9, '#f5c542'); P(21, 9, 6, 3, '#d4a020'); P(19, 1, 10, 2, '#ffe9a0'); P(14, 2, 3, 4, '#f5c542'); P(31, 2, 3, 4, '#f5c542'); }
+  if (st.pose === 'card') { P(17, 33 + by, 15, 11, '#f8f6ee'); P(19, 35 + by, 9, 1, '#9a9aa8'); P(19, 38 + by, 11, 1, '#9a9aa8'); P(25, 41 + by, 5, 1, '#c04040'); }
+  if (st.pose === 'glove') { P(15, 32 + by, 9, 9, '#8a5a2a'); P(16, 33 + by, 3, 2, '#b07a40'); }
+  if (st.pose === 'ball') { P(32, 30 + by, 4, 4, '#f4f4f4'); P(33, 31 + by, 1, 2, '#d04040'); }
+  if (extra === 'b0') L(31, 27, 40, 6, 3, '#c8925a');
+  if (extra === 'b1') L(23, 40, 2, 40, 3, '#c8925a');
+  if (extra === 'b2') L(13, 24, 1, 2, 3, '#c8925a');
+  if (extra === 'p1') { P(44, 12, 4, 4, '#f4f4f4'); }
+  if (extra === 'p2' && t % 32 > 18) { P(18, 47, 4, 4, '#f4f4f4'); }
+  c.restore();
+}
+
+// アウトライン（ふちどり）つきでキャラを描く：いったん小さなキャンバスに描いてから拡大
+let CH_CV = null, CH_SIL = null;
+function chCanvas() { if (CH_CV || typeof document === 'undefined') return CH_CV; const mk = () => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 124; return cv; }; CH_CV = mk(); CH_SIL = mk(); return CH_CV; }
+function drawChar(c, sp, st) {
+  const cv = chCanvas();
+  if (!cv) return drawCharRaw(c, sp, st);
+  const sc = st.sc || 2, t = st.t || 0, mot = st.mot || '';
+  let jy = 0, jx = 0;
+  if (mot === 'jump') jy = -Math.round(Math.abs(Math.sin(t / 7)) * 10);
+  if (mot === 'hop') jy = -Math.round(Math.abs(Math.sin(t / 5)) * 3);
+  if (mot === 'tremble') jx = (t % 4 < 2 ? 1 : -1) * 0.5;
+  const a = cv.getContext('2d'); a.clearRect(0, 0, 64, 124); a.imageSmoothingEnabled = false;
+  drawCharRaw(a, sp, { ...st, x: 32, y: 116, sc: 1, flip: false, noJump: 1, noShadow: 1, alpha: null });
+  const s2 = CH_SIL.getContext('2d'); s2.clearRect(0, 0, 64, 124); s2.globalCompositeOperation = 'source-over'; s2.drawImage(cv, 0, 0); s2.globalCompositeOperation = 'source-in'; s2.fillStyle = '#0a0814'; s2.fillRect(0, 0, 64, 124); s2.globalCompositeOperation = 'source-over';
+  const left = st.x - 32 * sc + jx * sc, top = st.y - 116 * sc + jy * sc;
+  c.save(); if (st.alpha != null) c.globalAlpha = st.alpha; c.imageSmoothingEnabled = false;
+  c.fillStyle = 'rgba(0,0,0,0.28)'; c.beginPath(); c.ellipse(st.x, st.y - sc, 15 * sc, 2.5 * sc, 0, 0, Math.PI * 2); c.fill();
+  const blit = (img, dx, dy) => { if (st.flip) { c.save(); c.translate(left + 64 * sc + dx, top + dy); c.scale(-1, 1); c.drawImage(img, 0, 0, 64 * sc, 124 * sc); c.restore(); } else c.drawImage(img, left + dx, top + dy, 64 * sc, 124 * sc); };
+  for (const [dx, dy] of [[-sc, 0], [sc, 0], [0, -sc], [0, sc]]) blit(CH_SIL, dx, dy);
+  blit(cv, 0, 0);
+  c.restore();
+}
+// 背番号の数字（3×5ドット）
+const DIG = { 0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001', 5: '111100111001111', 6: '111100111101111', 7: '111001010010010', 8: '111101111101111', 9: '111101111001111' };
+function digit(P, x, y, d, col) { const m = DIG[d]; if (!m) return; for (let i = 0; i < 15; i++) if (m[i] === '1') P(x + (i % 3), y + Math.floor(i / 3), 1, 1, col); }
+// 頭と表情
+function headDraw(P, sp, st, K) {
+  const { skin, skinS, skinH, hair, hairS, hairH, ink, hX, hY, t } = K;
+  const X = hX, Y = hY;
+  const H = (x, y, w, h, col) => P(x + X, y + Y, w, h, col);
+  // 輪郭
+  H(16, 1, 16, 1, skin); H(14, 2, 20, 17, skin); H(15, 19, 18, 2, skin); H(16, 21, 16, 1, skin); H(18, 22, 12, 1, skin); H(20, 23, 8, 1, skin);
+  H(32, 4, 2, 15, skinS); H(31, 19, 2, 2, skinS); H(18, 22, 12, 1, skinS); H(20, 23, 8, 1, skinS); H(15, 17, 2, 2, skinH); H(13, 11, 1, 5, skinS); H(34, 11, 1, 5, skinS); H(12, 12, 1, 3, skin); H(35, 12, 1, 3, skin);
+  if (sp.older) { H(17, 18, 3, 1, skinS); H(28, 18, 3, 1, skinS); }
+  // 表情
+  let ex = st.expr || 'normal';
+  const blink = (t % 170) > 163 && ['normal', 'smile2', 'determined', 'serious', 'worry', 'sad'].includes(ex);
+  const lk = st.look != null ? st.look : 0;
+  const eye = (x, side) => {
+    const e = blink ? 'closed' : ex;
+    if (e === 'smile' || e === 'laugh' || e === 'happy') { H(x, 14, 1, 1, ink); H(x + 1, 13, 2, 1, ink); H(x + 3, 14, 1, 1, ink); return; }
+    if (e === 'closed' || e === 'calm') { H(x, 14, 4, 1, ink); return; }
+    if (e === 'wink' && side === 1) { H(x, 14, 4, 1, ink); return; }
+    if (e === 'surprised' || e === 'shock') { H(x, 11, 4, 5, '#ffffff'); H(x + 1 + lk, 12, 2, 3, ink); H(x, 11, 4, 1, ink); return; }
+    if (e === 'cry') { H(x, 13, 4, 1, ink); H(x + 1, 14, 2, 2, ink); return; }
+    // 通常の目（白目＋黒目＋ハイライト）
+    const sharp = e === 'determined' || e === 'angry' || e === 'shout' || e === 'serious';
+    H(x, 12, 4, 4, '#ffffff');
+    H(x + 1 + lk, 12, 2, 4, ink); H(x + (lk > 0 ? 3 : 0), 12, 1, 4, ink);
+    H(x + 1 + lk, 12, 1, 1, '#ffffff');
+    H(x, 11, 4, 1, ink);
+    if (sharp) { if (side === 0) { H(x + 2, 11, 2, 1, ink); H(x + 3, 12, 1, 1, ink); } else { H(x, 11, 2, 1, ink); H(x, 12, 1, 1, ink); } }
+    if (e === 'sad' || e === 'worry') { if (side === 0) H(x, 12, 1, 1, ink); else H(x + 3, 12, 1, 1, ink); }
+    if (sp.f) { H(side === 0 ? x - 1 : x + 4, 11, 1, 1, ink); }
+  };
+  eye(18, 0); eye(26, 1);
+  // まゆ
+  const bc = sp.older >= 2 ? '#8a8e98' : hairS;
+  const brow = (x, side) => {
+    if (ex === 'determined' || ex === 'serious') { if (side === 0) { H(x, 8, 2, 1, bc); H(x + 2, 9, 2, 1, bc); } else { H(x, 9, 2, 1, bc); H(x + 2, 8, 2, 1, bc); } return; }
+    if (ex === 'angry' || ex === 'shout') { if (side === 0) { H(x, 7, 1, 1, bc); H(x + 1, 8, 2, 1, bc); H(x + 3, 9, 1, 1, bc); } else { H(x, 9, 1, 1, bc); H(x + 1, 8, 2, 1, bc); H(x + 3, 7, 1, 1, bc); } return; }
+    if (ex === 'sad' || ex === 'worry' || ex === 'cry') { if (side === 0) { H(x, 9, 2, 1, bc); H(x + 2, 8, 2, 1, bc); } else { H(x, 8, 2, 1, bc); H(x + 2, 9, 2, 1, bc); } return; }
+    if (ex === 'surprised' || ex === 'shock') { H(x, 7, 4, 1, bc); return; }
+    H(x, 9, 4, 1, bc);
+  };
+  brow(18, 0); brow(26, 1);
+  // 鼻・口
+  H(24, 16, 1, 1, skinS);
+  const lip = '#8a3a3a', mouthIn = '#5a1a24';
+  if (st.talk && (t % 10) < 5 && !['laugh', 'shout', 'surprised', 'shock', 'angry'].includes(ex)) { H(22, 18, 4, 2, mouthIn); H(22, 18, 4, 1, lip); } else
+  switch (ex) {
+    case 'smile': case 'smile2': case 'happy': H(21, 18, 1, 1, lip); H(22, 19, 4, 1, lip); H(26, 18, 1, 1, lip); break;
+    case 'laugh': case 'shout': H(21, 18, 6, 1, '#ffffff'); H(21, 19, 6, ex === 'shout' ? 3 : 2, mouthIn); H(22, ex === 'shout' ? 21 : 20, 4, 1, '#d05060'); break;
+    case 'surprised': case 'shock': H(23, 18, 2, 3, mouthIn); break;
+    case 'sad': case 'cry': case 'worry': H(22, 18, 4, 1, lip); H(21, 19, 1, 1, lip); H(26, 19, 1, 1, lip); break;
+    case 'angry': H(21, 18, 6, 2, '#ffffff'); H(21, 18, 6, 1, lip); H(23, 18, 1, 2, '#c8c8d0'); H(25, 18, 1, 2, '#c8c8d0'); break;
+    case 'determined': case 'serious': H(22, 19, 4, 1, '#6a2a2a'); break;
+    case 'closed': case 'calm': H(22, 19, 4, 1, lip); break;
+    default: H(22, 19, 4, 1, lip);
+  }
+  if (sp.mus || (sp.older >= 2 && sp.beard)) { H(20, 17, 8, 1, sp.older >= 2 ? '#9a9ea8' : hairS); }
+  if (sp.beard) { H(17, 19, 2, 3, hairS); H(29, 19, 2, 3, hairS); H(19, 21, 10, 1, hairS); }
+  if (sp.glasses) { H(17, 11, 6, 1, '#2a2a34'); H(25, 11, 6, 1, '#2a2a34'); H(17, 15, 6, 1, '#2a2a34'); H(25, 15, 6, 1, '#2a2a34'); H(17, 11, 1, 5, '#2a2a34'); H(22, 11, 1, 5, '#2a2a34'); H(25, 11, 1, 5, '#2a2a34'); H(30, 11, 1, 5, '#2a2a34'); H(23, 12, 2, 1, '#2a2a34'); }
+  // 頬・汗・涙・怒りマーク
+  if (ex === 'happy' || ex === 'laugh' || ex === 'shy' || st.blush) { H(16, 16, 3, 1, 'rgba(255,110,140,0.55)'); H(29, 16, 3, 1, 'rgba(255,110,140,0.55)'); }
+  if (ex === 'cry') { const d = (t / 3) % 7; H(19, 16, 1, 6, '#7ad0ff'); H(28, 16, 1, 6, '#7ad0ff'); H(19, 16 + d, 1, 1, '#d8f4ff'); H(28, 16 + d, 1, 1, '#d8f4ff'); }
+  if (ex === 'worry' || ex === 'shock' || st.sweat) { H(34, 6, 2, 4, '#9adcff'); H(35, 9, 1, 1, '#ffffff'); }
+  if (ex === 'angry') { H(30, 1, 1, 3, '#e03040'); H(29, 2, 3, 1, '#e03040'); }
+  if (ex === 'shock') { for (let i = 0; i < 5; i++) H(16 + i * 3, 3, 1, 6, 'rgba(40,60,140,0.55)'); }
+  // 髪・帽子
+  if (sp.cap) {
+    const cc = sp.capCol || '#1a2a5a', ccS = shade(cc, -0.3), ccH = shade(cc, 0.3);
+    H(14, 6, 20, 3, hair); // もみあげ・前髪の影
+    H(15, -2, 18, 2, cc); H(14, 0, 20, 7, cc); H(14, 0, 3, 7, ccS); H(31, 0, 3, 7, ccS); H(18, -1, 10, 1, ccH);
+    // 帽子のマーク
+    if (sp.mark) { H(22, 1, 4, 4, sp.mark); } else H(22, 2, 4, 3, ccH);
+    H(11, 7, 26, 2, ccS); H(12, 7, 24, 1, cc);
+    if (sp.style === 'long') H(14, 9, 2, 8, hair), H(32, 9, 2, 8, hair);
+  } else {
+    const st2 = sp.style;
+    if (st2 === 'bald') { H(15, 0, 18, 3, skinH); }
+    else if (st2 === 'afro') { H(10, -6, 28, 12, hair); H(11, 5, 4, 8, hair); H(33, 5, 4, 8, hair); H(14, -5, 10, 2, hairH); }
+    else if (st2 === 'spiky') { H(14, 0, 20, 7, hair); for (let i = 0; i < 5; i++) H(14 + i * 4, -3 + (i % 2), 3, 3, hair); H(14, 7, 3, 6, hair); H(31, 7, 3, 6, hair); H(17, 1, 6, 1, hairH); }
+    else if (st2 === 'slick') { H(14, 0, 20, 6, hair); H(14, 5, 2, 8, hair); H(32, 5, 2, 8, hair); H(16, 1, 14, 1, hairH); H(14, 4, 20, 1, hairS); }
+    else if (st2 === 'bob') { H(13, 0, 22, 8, hair); H(12, 6, 4, 13, hair); H(32, 6, 4, 13, hair); H(17, 1, 8, 1, hairH); }
+    else if (st2 === 'mage') { H(14, 0, 20, 6, hair); H(20, -4, 8, 4, hair); H(14, 5, 2, 7, hair); H(32, 5, 2, 7, hair); }
+    else if (st2 === 'gray') { H(14, 0, 20, 5, '#b8bcc4'); H(14, 4, 2, 8, '#b8bcc4'); H(32, 4, 2, 8, '#b8bcc4'); }
+    else { // short / long / twin
+      H(14, 0, 20, 7, hair); H(14, 6, 3, 7, hair); H(31, 6, 3, 7, hair);
+      H(17, 6, 4, 2, hair); H(25, 6, 3, 1, hair); H(16, 1, 9, 1, hairH);
+      if (st2 === 'long' || st2 === 'twin') { H(13, 6, 3, 14, hair); H(32, 6, 3, 14, hair); }
+    }
+  }
+}
+// ---- 背景（キャッシュして描く） ----
+const EV_BG_CACHE = {};
+function evBg(key, theme) {
+  const ck = key + '|' + (theme.c1 || '') + '|' + (theme.tid || '');
+  if (EV_BG_CACHE[ck]) return EV_BG_CACHE[ck];
+  if (typeof document === 'undefined') return null;
+  const ready = !(key === 'press' && theme.logo) || !!logoImg(theme.logo);
+  const cv = document.createElement('canvas'); cv.width = 1280; cv.height = 720;
+  const c = cv.getContext('2d'); c.scale(2, 2);
+  try { (EV_BGS[key] || EV_BGS.stadium)(c, theme); } catch (e) { console.error('[npb] bg', key, e); }
+  if (!ready) return cv;
+  EV_BG_CACHE[ck] = cv;
+  const ks = Object.keys(EV_BG_CACHE); if (ks.length > 14) delete EV_BG_CACHE[ks[0]];
+  return cv;
+}
+const bgRand = seed => { let s = seed | 0 || 1; return () => (s = (s * 16807) % 2147483647) / 2147483647; };
+function bgSky(c, top, mid, bot, h = 200) { c.fillStyle = lgrad(c, 0, 0, 0, h, [[0, top], [0.6, mid], [1, bot]]); c.fillRect(0, 0, 640, h); }
+function bgCrowd(c, y0, y1, cols, seed, dens = 1) {
+  const R = bgRand(seed);
+  for (let y = y0; y < y1; y += 3) { const row = (y - y0) / (y1 - y0); for (let x = 0; x < 640; x += 3) { if (R() > 0.82 * dens) continue; const col = R() < 0.55 ? cols[Math.floor(R() * cols.length)] : ['#f0d8c0', '#d8b090', '#2a2430'][Math.floor(R() * 3)]; c.fillStyle = col; c.globalAlpha = 0.5 + row * 0.5; c.fillRect(x, y, 2, 2); } }
+  c.globalAlpha = 1;
+}
+function bgLights(c, xs, y, night) { xs.forEach(x => { c.fillStyle = '#3a3e4a'; c.fillRect(x - 2, y, 4, 70); c.fillStyle = night ? '#fffbe8' : '#d8dce4'; c.fillRect(x - 16, y - 12, 32, 12); if (night) { const g = c.createRadialGradient(x, y - 6, 2, x, y - 6, 90); g.addColorStop(0, 'rgba(255,250,220,0.55)'); g.addColorStop(1, 'rgba(255,250,220,0)'); c.fillStyle = g; c.fillRect(x - 90, y - 96, 180, 180); } }); }
+function bgField(c, y, day) {
+  c.fillStyle = day ? '#3f9a46' : '#2f7a3a'; c.fillRect(0, y, 640, 360 - y);
+  for (let i = 0; i < 640; i += 64) { c.fillStyle = day ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.05)'; c.fillRect(i, y, 32, 360 - y); }
+  c.fillStyle = day ? '#c8915a' : '#a87648'; c.beginPath(); c.ellipse(320, 400, 360, 120, 0, Math.PI, 0); c.fill();
+  c.fillStyle = day ? '#3f9a46' : '#2f7a3a'; c.beginPath(); c.ellipse(320, 410, 230, 70, 0, Math.PI, 0); c.fill();
+}
+function bgFloor(c, y, col, line) { c.fillStyle = col; c.fillRect(0, y, 640, 360 - y); c.fillStyle = line; for (let x = -200; x < 840; x += 48) { c.beginPath(); c.moveTo(320 + (x - 320) * 0.3, y); c.lineTo(x * 1.8 - 256, 360); c.lineTo(x * 1.8 - 254, 360); c.lineTo(320 + (x - 320) * 0.3 + 1, y); c.fill(); } }
+const EV_BGS = {
+  stadium(c, T) { bgSky(c, '#060a1e', '#1a1440', '#3a2050', 170); bgLights(c, [70, 230, 410, 570], 40, true); c.fillStyle = '#141826'; c.fillRect(0, 110, 640, 90); bgCrowd(c, 112, 198, [T.c1, T.c2, '#ffffff'], 7); c.fillStyle = '#1e3a2a'; c.fillRect(0, 196, 640, 10); for (let i = 0; i < 8; i++) { c.fillStyle = ['#d04040', '#3060c0', '#f0c030', '#40a060'][i % 4]; c.fillRect(i * 80 + 4, 198, 72, 6); } bgField(c, 206, false); c.fillStyle = '#10141e'; c.fillRect(250, 70, 140, 40); c.fillStyle = '#ffd040'; c.font = '10px monospace'; c.fillText('SCORE', 300, 86); },
+  day(c, T) { bgSky(c, '#3a8ae0', '#7ab8f0', '#cfe8ff', 170); c.fillStyle = 'rgba(255,255,255,0.8)'; [[80, 40], [300, 26], [520, 50]].forEach(([x, y]) => { c.beginPath(); c.ellipse(x, y, 46, 12, 0, 0, Math.PI * 2); c.fill(); }); bgLights(c, [90, 550], 50, false); c.fillStyle = '#5a6070'; c.fillRect(0, 112, 640, 86); bgCrowd(c, 114, 196, [T.c1, T.c2, '#ffffff'], 11); c.fillStyle = '#245a34'; c.fillRect(0, 196, 640, 10); bgField(c, 206, true); },
+  dome(c, T) { c.fillStyle = lgrad(c, 0, 0, 0, 140, [[0, '#d8dce6'], [1, '#9aa2b4']]); c.fillRect(0, 0, 640, 140); c.strokeStyle = 'rgba(80,90,110,0.4)'; for (let i = -10; i < 20; i++) { c.beginPath(); c.moveTo(320, -200); c.lineTo(i * 48, 140); c.stroke(); } for (let i = 0; i < 6; i++) { c.fillStyle = 'rgba(255,255,240,0.9)'; c.fillRect(40 + i * 110, 40 + (i % 2) * 10, 30, 4); } c.fillStyle = '#20263a'; c.fillRect(0, 108, 640, 92); bgCrowd(c, 110, 198, [T.c1, T.c2, '#ffffff', '#e04040'], 23, 1.1); c.fillStyle = '#1a3a7a'; c.fillRect(0, 196, 640, 10); bgField(c, 206, true); },
+  local(c, T) { bgSky(c, '#5aa0e8', '#9ccaf2', '#e2f2ff', 150); c.fillStyle = '#6a8a7a'; c.beginPath(); c.moveTo(0, 130); for (let x = 0; x <= 640; x += 40) c.lineTo(x, 100 + Math.sin(x / 70) * 20 + Math.sin(x / 23) * 6); c.lineTo(640, 150); c.lineTo(0, 150); c.fill(); c.fillStyle = '#8a8e96'; c.fillRect(180, 136, 280, 50); bgCrowd(c, 140, 184, [T.c1, '#ffffff'], 31, 0.45); c.fillStyle = '#2f6a3a'; c.fillRect(0, 186, 640, 14); bgField(c, 200, true); },
+  press(c, T) {
+    c.fillStyle = shade(T.c1, -0.55); c.fillRect(0, 0, 640, 360);
+    c.fillStyle = shade(T.c1, -0.35); c.fillRect(30, 20, 580, 210);
+    const im = T.logo && logoImg(T.logo);
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 9; x++) { const px = 50 + x * 64 + (y % 2) * 32, py = 30 + y * 50; if (im) { c.globalAlpha = 0.85; c.drawImage(im, px, py, 34, 34); c.globalAlpha = 1; } else { c.fillStyle = shade(T.c1, 0.2); c.fillRect(px, py, 30, 30); } }
+    c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillRect(30, 230, 580, 8);
+    c.fillStyle = '#f4f2ec'; c.fillRect(0, 262, 640, 98); c.fillStyle = '#d8d4c8'; c.fillRect(0, 262, 640, 4);
+    c.fillStyle = shade(T.c1, -0.1); c.fillRect(0, 266, 640, 16);
+    for (const x of [230, 300, 340, 410]) { c.fillStyle = '#1a1a20'; c.fillRect(x, 236, 3, 28); c.fillRect(x - 3, 230, 9, 8); }
+  },
+  draft(c, T) {
+    c.fillStyle = '#080c1c'; c.fillRect(0, 0, 640, 360);
+    c.fillStyle = lgrad(c, 0, 20, 0, 190, [[0, '#0f2a5a'], [1, '#06142e']]); c.fillRect(110, 20, 420, 170);
+    c.strokeStyle = '#4a7ad0'; c.lineWidth = 2; c.strokeRect(110, 20, 420, 170);
+    c.fillStyle = '#ffd040'; c.fillRect(110, 20, 420, 26);
+    for (let i = 0; i < 6; i++) { c.fillStyle = 'rgba(80,140,255,0.15)'; c.fillRect(120, 56 + i * 20, 400, 14); }
+    for (let i = 0; i < 12; i++) { const x = 20 + i * 52; c.fillStyle = '#1a2238'; c.fillRect(x, 220, 46, 40); c.fillStyle = TEAMS[i] ? TEAMS[i].color : '#444'; c.fillRect(x, 220, 46, 6); }
+    c.fillStyle = '#121828'; c.fillRect(0, 262, 640, 98);
+  },
+  living(c, T) {
+    c.fillStyle = '#e8dcc4'; c.fillRect(0, 0, 640, 262); c.fillStyle = '#d4c4a4'; for (let x = 0; x < 640; x += 40) c.fillRect(x, 0, 2, 262);
+    c.fillStyle = '#6aa0d8'; c.fillRect(40, 40, 150, 110); c.fillStyle = '#f4f2ec'; c.fillRect(40, 92, 150, 4); c.fillRect(113, 40, 4, 110);
+    c.fillStyle = '#1a1a22'; c.fillRect(380, 70, 190, 120); c.fillStyle = lgrad(c, 0, 76, 0, 184, [[0, '#14306a'], [1, '#0a1a3a']]); c.fillRect(386, 76, 178, 108);
+    c.fillStyle = '#ffd040'; c.fillRect(386, 76, 178, 16); c.fillStyle = '#5a4030'; c.fillRect(370, 190, 210, 20);
+    bgFloor(c, 262, '#a0784e', 'rgba(60,40,20,0.25)');
+  },
+  locker(c, T) {
+    c.fillStyle = '#2a2e38'; c.fillRect(0, 0, 640, 262);
+    for (let i = 0; i < 10; i++) { const x = 8 + i * 64; c.fillStyle = '#3a4050'; c.fillRect(x, 30, 58, 220); c.fillStyle = '#4a5064'; c.fillRect(x + 2, 32, 54, 3); c.fillStyle = T.c1; c.fillRect(x + 12, 70, 34, 50); c.fillStyle = '#f4f2ec'; c.fillRect(x + 14, 72, 30, 46); c.fillStyle = T.c1; c.fillRect(x + 27, 80, 4, 30); c.fillStyle = '#5a6074'; c.fillRect(x + 4, 150, 50, 2); }
+    c.fillStyle = 'rgba(255,255,230,0.12)'; c.fillRect(0, 0, 640, 20);
+    bgFloor(c, 262, '#3a3236', 'rgba(255,255,255,0.05)'); c.fillStyle = '#6a4a30'; c.fillRect(0, 240, 640, 14);
+  },
+  office(c, T) {
+    c.fillStyle = '#c8ccd4'; c.fillRect(0, 0, 640, 262);
+    c.fillStyle = lgrad(c, 0, 30, 0, 200, [[0, '#7ab0e8'], [1, '#d8ecff']]); c.fillRect(60, 30, 520, 170);
+    const R = bgRand(5); for (let i = 0; i < 26; i++) { const w = 14 + R() * 26, h = 40 + R() * 110, x = 60 + i * 20; c.fillStyle = `rgba(60,80,110,${0.35 + R() * 0.35})`; c.fillRect(x, 200 - h, w, h); }
+    c.fillStyle = '#e8eaee'; for (let x = 60; x <= 580; x += 130) c.fillRect(x, 30, 4, 170); c.fillRect(60, 110, 520, 3);
+    c.fillStyle = T.c1; c.fillRect(20, 30, 30, 90); c.fillStyle = '#f4f2ec'; c.fillRect(24, 40, 22, 22);
+    bgFloor(c, 262, '#5a4a40', 'rgba(0,0,0,0.12)'); c.fillStyle = '#4a3020'; c.fillRect(150, 236, 340, 30); c.fillStyle = '#6a4630'; c.fillRect(150, 232, 340, 6);
+  },
+  camp(c, T) { bgSky(c, '#2a8ae8', '#7ac8f8', '#d8f4ff', 180); c.fillStyle = '#2aa0c8'; c.fillRect(0, 150, 640, 30); c.fillStyle = 'rgba(255,255,255,0.5)'; for (let x = 0; x < 640; x += 30) c.fillRect(x, 158 + (x % 60 ? 4 : 0), 14, 1); [[60, 70], [580, 60], [520, 90]].forEach(([x, h]) => { c.fillStyle = '#6a4a2a'; c.fillRect(x, 180 - h, 6, h); c.fillStyle = '#2a8a3a'; for (let a = 0; a < 6; a++) { c.beginPath(); c.ellipse(x + 3 + Math.cos(a) * 18, 180 - h + Math.sin(a) * 6, 22, 6, a, 0, Math.PI * 2); c.fill(); } }); c.fillStyle = '#d8c090'; c.fillRect(0, 180, 640, 20); bgField(c, 200, true); },
+  cage(c, T) { c.fillStyle = '#05070e'; c.fillRect(0, 0, 640, 360); bgLights(c, [160, 480], 20, true); c.strokeStyle = 'rgba(200,210,230,0.18)'; c.lineWidth = 1; for (let x = 0; x < 640; x += 12) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, 262); c.stroke(); } for (let y = 0; y < 262; y += 12) { c.beginPath(); c.moveTo(0, y); c.lineTo(640, y); c.stroke(); } bgFloor(c, 262, '#2a5a34', 'rgba(255,255,255,0.04)'); },
+  river(c, T) { bgSky(c, '#3a2060', '#e05a40', '#ffc070', 200); c.fillStyle = '#ffdc70'; c.beginPath(); c.arc(470, 170, 40, 0, Math.PI * 2); c.fill(); c.fillStyle = '#c8603a'; c.fillRect(0, 200, 640, 30); c.fillStyle = 'rgba(255,220,120,0.5)'; for (let x = 380; x < 560; x += 18) c.fillRect(x, 206 + (x % 36 ? 6 : 0), 12, 2); c.fillStyle = '#3a2a3a'; c.fillRect(0, 196, 640, 4); c.fillStyle = '#4a7a3a'; c.beginPath(); c.moveTo(0, 230); c.lineTo(640, 230); c.lineTo(640, 360); c.lineTo(0, 360); c.fill(); c.fillStyle = '#2a3a2a'; c.fillRect(60, 120, 300, 6); for (let x = 70; x < 360; x += 60) c.fillRect(x, 126, 6, 74); },
+  home(c, T) { EV_BGS.living(c, T); c.fillStyle = 'rgba(255,200,120,0.12)'; c.fillRect(0, 0, 640, 360); },
+  hospital(c, T) { c.fillStyle = '#e4ecf0'; c.fillRect(0, 0, 640, 262); c.fillStyle = '#bcd8e8'; c.fillRect(420, 40, 170, 130); c.fillStyle = '#f4f8fa'; c.fillRect(503, 40, 4, 130); c.fillStyle = '#9ab0bc'; c.fillRect(40, 150, 220, 60); c.fillStyle = '#f4f8fa'; c.fillRect(40, 140, 220, 14); c.fillStyle = '#c8d8e0'; c.fillRect(300, 120, 6, 110); c.fillRect(280, 120, 46, 4); bgFloor(c, 262, '#c8d0d4', 'rgba(0,0,0,0.06)'); },
+  airport(c, T) { bgSky(c, '#4a90e0', '#8ac0f0', '#e0f0ff', 200); c.fillStyle = '#3a4458'; c.fillRect(0, 200, 640, 62); c.fillStyle = '#5a6478'; for (let x = 220; x < 640; x += 90) c.fillRect(x, 236, 70, 8); c.fillStyle = '#f4f4f8'; c.beginPath(); c.moveTo(380, 110); c.lineTo(600, 100); c.lineTo(610, 112); c.lineTo(390, 122); c.fill(); c.fillRect(470, 90, 40, 16); c.fillStyle = '#d04040'; c.fillRect(590, 88, 14, 16); c.fillStyle = '#2a3a50'; for (let x = 0; x < 640; x += 80) c.fillRect(x, 0, 6, 262); c.fillRect(0, 200, 640, 6); bgFloor(c, 262, '#8a8e98', 'rgba(255,255,255,0.12)'); c.fillStyle = '#20283a'; c.fillRect(40, 220, 140, 36); c.fillStyle = '#ffd040'; c.fillRect(46, 226, 128, 8); },
+  station(c, T) { c.fillStyle = '#b8bcc6'; c.fillRect(0, 0, 640, 262); bgSky(c, '#7aa8d8', '#b8d4ee', '#e8f2fa', 120); c.fillStyle = '#5a5e6a'; c.fillRect(0, 0, 640, 20); for (let x = 20; x < 640; x += 160) c.fillRect(x, 20, 8, 160); c.fillStyle = '#d8dce4'; c.fillRect(0, 140, 640, 60); c.fillStyle = '#2a8a5a'; c.fillRect(0, 160, 640, 10); for (let x = 30; x < 640; x += 60) { c.fillStyle = '#9ac8e8'; c.fillRect(x, 146, 40, 12); } c.fillStyle = '#ffd040'; c.fillRect(0, 254, 640, 6); bgFloor(c, 262, '#9a9ea8', 'rgba(0,0,0,0.08)'); },
+  bus(c, T) { c.fillStyle = '#3a3e48'; c.fillRect(0, 0, 640, 360); const R = bgRand(9); for (let i = 0; i < 3; i++) { const x = 40 + i * 200; c.fillStyle = lgrad(c, 0, 50, 0, 170, [[0, '#2a3a6a'], [1, '#e08a50']]); c.fillRect(x, 50, 170, 120); c.fillStyle = '#1a1e28'; for (let j = 0; j < 5; j++) c.fillRect(x + R() * 150, 140 + R() * 20, 10 + R() * 20, 30); c.strokeStyle = '#2a2e38'; c.lineWidth = 6; c.strokeRect(x, 50, 170, 120); } c.fillStyle = '#5a3a3a'; for (let x = 0; x < 640; x += 110) c.fillRect(x, 200, 90, 62); bgFloor(c, 262, '#2a2a30', 'rgba(255,255,255,0.04)'); },
+  company(c, T) { c.fillStyle = '#e4e8ee'; c.fillRect(0, 0, 640, 262); c.fillStyle = '#c8d8ec'; c.fillRect(30, 30, 580, 110); for (let x = 30; x <= 610; x += 145) { c.fillStyle = '#f4f6fa'; c.fillRect(x, 30, 4, 110); } for (let i = 0; i < 6; i++) { const x = 30 + i * 100; c.fillStyle = '#b8bec8'; c.fillRect(x, 190, 90, 8); c.fillStyle = '#20242e'; c.fillRect(x + 20, 162, 40, 28); c.fillStyle = '#5a9ad8'; c.fillRect(x + 23, 165, 34, 20); } c.fillStyle = T.c1; c.fillRect(250, 6, 140, 18); bgFloor(c, 262, '#9aa0aa', 'rgba(0,0,0,0.06)'); },
+  hall(c, T) { c.fillStyle = '#0a0612'; c.fillRect(0, 0, 640, 360); c.fillStyle = lgrad(c, 0, 0, 0, 260, [[0, '#3a2a10'], [1, '#1a1206']]); c.fillRect(40, 20, 560, 240); for (let i = 0; i < 14; i++) { c.fillStyle = `rgba(245,197,66,${0.08 + (i % 2) * 0.06})`; c.fillRect(40 + i * 40, 20, 20, 240); } c.fillStyle = '#f5c542'; c.fillRect(40, 20, 560, 4); c.fillRect(40, 256, 560, 4); [120, 320, 520].forEach(x => { const g = c.createRadialGradient(x, 0, 4, x, 120, 240); g.addColorStop(0, 'rgba(255,240,200,0.35)'); g.addColorStop(1, 'rgba(255,240,200,0)'); c.fillStyle = g; c.fillRect(x - 200, 0, 400, 360); }); bgFloor(c, 262, '#2a1a10', 'rgba(255,220,150,0.06)'); },
+  street(c, T) { c.fillStyle = '#0a0c18'; c.fillRect(0, 0, 640, 360); const R = bgRand(13); for (let i = 0; i < 16; i++) { const x = i * 42, h = 120 + R() * 100; c.fillStyle = '#161a2a'; c.fillRect(x, 262 - h, 40, h); for (let y = 262 - h + 8; y < 250; y += 14) for (let wx = x + 4; wx < x + 36; wx += 10) { if (R() < 0.45) { c.fillStyle = R() < 0.5 ? '#ffd88a' : '#8ad0ff'; c.fillRect(wx, y, 5, 7); } } } c.fillStyle = '#e04080'; c.fillRect(80, 120, 60, 16); c.fillStyle = '#40c0ff'; c.fillRect(420, 100, 80, 14); bgFloor(c, 262, '#1a1c24', 'rgba(255,255,255,0.05)'); },
+  school(c, T) { bgSky(c, '#4a98e8', '#8cc4f2', '#dcefff', 160); c.fillStyle = '#e8e4d8'; c.fillRect(60, 60, 520, 110); for (let y = 76; y < 160; y += 28) for (let x = 80; x < 560; x += 40) { c.fillStyle = '#8ab8e0'; c.fillRect(x, y, 26, 16); } c.fillStyle = '#c8a070'; c.fillRect(0, 170, 640, 92); c.fillStyle = '#9a7a50'; c.fillRect(0, 170, 640, 4); c.strokeStyle = 'rgba(255,255,255,0.25)'; for (let x = 0; x < 640; x += 10) { c.beginPath(); c.moveTo(x, 120); c.lineTo(x, 200); c.stroke(); } bgFloor(c, 262, '#b48a5a', 'rgba(255,255,255,0.05)'); },
+  beer(c, T) { EV_BGS.locker(c, T); c.fillStyle = 'rgba(120,180,255,0.18)'; c.fillRect(0, 0, 640, 360); c.fillStyle = 'rgba(255,255,255,0.35)'; for (let i = 0; i < 40; i++) c.fillRect((i * 97) % 640, (i * 53) % 260, 2, 8); },
+  parade(c, T) { bgSky(c, '#3a8ae0', '#8ac0f0', '#e8f4ff', 140); const R = bgRand(17); for (let i = 0; i < 12; i++) { const x = i * 56, h = 80 + R() * 60; c.fillStyle = ['#c8ccd4', '#b0b8c4', '#d8dce4'][i % 3]; c.fillRect(x, 200 - h, 52, h); } c.fillStyle = '#3a3e48'; c.fillRect(0, 196, 640, 66); bgCrowd(c, 200, 258, [T.c1, T.c2, '#ffffff'], 41, 1.2); bgFloor(c, 262, '#5a5e6a', 'rgba(255,255,255,0.08)'); },
+  mound(c, T) { c.fillStyle = shade(T.c1, -0.7); c.fillRect(0, 0, 640, 360); for (let i = 0; i < 64; i++) { const a = (i / 64) * Math.PI * 2; c.strokeStyle = `rgba(255,255,255,${i % 2 ? 0.08 : 0.16})`; c.lineWidth = i % 3 ? 1 : 3; c.beginPath(); c.moveTo(320 + Math.cos(a) * 70, 160 + Math.sin(a) * 70); c.lineTo(320 + Math.cos(a) * 700, 160 + Math.sin(a) * 700); c.stroke(); } },
+  night(c, T) { bgSky(c, '#02040c', '#0a1430', '#1a2448', 262); const R = bgRand(3); for (let i = 0; i < 80; i++) { c.fillStyle = `rgba(255,255,255,${0.3 + R() * 0.7})`; c.fillRect(R() * 640, R() * 200, 1, 1); } c.fillStyle = '#f4f0d8'; c.beginPath(); c.arc(520, 70, 22, 0, Math.PI * 2); c.fill(); bgFloor(c, 262, '#1a2a1e', 'rgba(255,255,255,0.03)'); },
+};
+// ---- 演出（エフェクト） ----
+function evFx(c, fx, t, theme) {
+  if (!fx) return;
+  if (fx.k === 'flash') { const a = Math.max(0, 1 - (t - fx.t0) / 18); if (a > 0) { c.fillStyle = `rgba(255,255,255,${a * 0.85})`; c.fillRect(0, 0, 640, 360); } }
+  if (fx.k === 'camera') { if ((t + fx.seed) % 23 < 2 || (t + fx.seed * 3) % 37 < 2) { const x = 40 + ((t * 53) % 560), y = 40 + ((t * 31) % 180); const g = c.createRadialGradient(x, y, 1, x, y, 60); g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(x - 60, y - 60, 120, 120); } }
+  if (fx.k === 'confetti') { for (let i = 0; i < 70; i++) { const x = (i * 97 + t * (1 + i % 3)) % 660 - 10, y = (i * 61 + t * (1.5 + (i % 4) * 0.5)) % 380 - 20; c.fillStyle = ['#ffd040', '#ff5a7a', '#5ad0ff', '#7aff9a', '#ffffff', theme.c1][i % 6]; c.fillRect(x, y, 3 + (i % 2) * 2, 2 + ((i + t / 4) % 3)); } }
+  if (fx.k === 'sakura') { for (let i = 0; i < 40; i++) { const x = (i * 83 + t * 0.8 + Math.sin((t + i * 10) / 30) * 20) % 660 - 10, y = (i * 47 + t * 0.9) % 380 - 10; c.fillStyle = 'rgba(255,190,210,0.9)'; c.fillRect(x, y, 3, 2); } }
+  if (fx.k === 'rain') { c.fillStyle = 'rgba(10,20,40,0.25)'; c.fillRect(0, 0, 640, 360); c.fillStyle = 'rgba(180,200,230,0.5)'; for (let i = 0; i < 90; i++) { const x = (i * 71 + t * 3) % 660, y = (i * 113 + t * 12) % 380; c.fillRect(x, y, 1, 9); } }
+  if (fx.k === 'snow') { c.fillStyle = 'rgba(255,255,255,0.85)'; for (let i = 0; i < 60; i++) { const x = (i * 71 + Math.sin((t + i * 7) / 20) * 14) % 640, y = (i * 47 + t * 0.7) % 370; c.fillRect(x, y, 2, 2); } }
+  if (fx.k === 'lines') { for (let i = 0; i < 48; i++) { const a = (i / 48) * Math.PI * 2 + (t % 4) * 0.01; const r0 = 150 + ((i * 37 + t * 5) % 50); c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = i % 3 ? 1 : 2; c.beginPath(); c.moveTo(320 + Math.cos(a) * r0, 150 + Math.sin(a) * r0 * 0.7); c.lineTo(320 + Math.cos(a) * 520, 150 + Math.sin(a) * 400); c.stroke(); } }
+  if (fx.k === 'spark') { for (let i = 0; i < 18; i++) { const x = (i * 131) % 640, y = (i * 71) % 250, s = (t + i * 9) % 30; if (s < 12) { c.fillStyle = `rgba(255,240,180,${1 - s / 12})`; c.fillRect(x - s / 2, y, s, 1); c.fillRect(x, y - s / 2, 1, s); } } }
+  if (fx.k === 'beer') { for (let i = 0; i < 50; i++) { const x = (i * 89 + t * 4) % 660 - 10, y = 340 - ((i * 53 + t * 6) % 360); c.fillStyle = i % 3 ? 'rgba(255,220,120,0.8)' : 'rgba(255,255,255,0.85)'; c.fillRect(x, y, 2, 4); } }
+  if (fx.k === 'dark') { c.fillStyle = 'rgba(0,0,10,0.45)'; c.fillRect(0, 0, 640, 360); }
+  if (fx.k === 'spot') { const g = c.createRadialGradient(320, 160, 30, 320, 160, 300); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.7)'); c.fillStyle = g; c.fillRect(0, 0, 640, 360); }
+}
+// ---- イベントシーン本体 ----
+const EV_SLOT = { LL: 110, L: 196, C: 320, R: 444, RR: 530 };
+class EvScene {
+  constructor(g, list, res) {
+    Object.assign(this, { g, resolve: res, hd: true, opaque: true, hidesHud: true, isNpbUI: true, t: 0, closed: false, list: list.slice(), idx: -1, tapAt: null });
+    installTap(g);
+    this.next();
+  }
+  get N() { return this.g.state && this.g.state.npb; }
+  next() {
+    this.idx++;
+    if (this.idx >= this.list.length) { this.close(); return; }
+    const ev = this.list[this.idx];
+    let sc = null;
+    try { sc = buildEvent(this.g, this.N, ev); } catch (e) { console.error('[npb] event build', ev && ev.id, e); }
+    if (!sc) { this.next(); return; }
+    if (!ev.replay) try { evRemember(this.N, ev); } catch (e) { }
+    this.sc = sc; this.si = -1; this.actors = {}; this.fx = []; this.text = null; this.zoom = null; this.choice = null;
+    this.bgKey = sc.bg || 'stadium'; this.theme = sc.theme; this.tt = 0; this.titleT = 80; this.fadeOut = 0; this.shakeT = 0;
+    this.step();
+  }
+  close() { if (this.closed) return; this.closed = true; try { this.g.pop(this); } catch (e) { } this.resolve && this.resolve(); }
+  cast(k) { return this.sc.cast[k]; }
+  step() {
+    const S = this.sc.steps;
+    while (true) {
+      this.si++;
+      if (this.si >= S.length) { this.fadeOut = 1; this.text = null; return; }
+      const s = S[this.si]; if (!s) continue;
+      const op = s[0];
+      if (op === 'bg') { this.bgKey = s[1]; this.fadeIn = 12; continue; }
+      if (op === 'in') { const a = this.actors[s[1]] = { k: s[1], slot: s[2] || 'C', expr: s[3] || 'normal', pose: s[4] || 'down', mot: s[5] || '', enter: 0, x0: (EV_SLOT[s[2] || 'C'] < 320 ? -80 : 720) }; a.flip = EV_SLOT[a.slot] > 320; continue; }
+      if (op === 'out') { const a = this.actors[s[1]]; if (a) a.leave = 1; continue; }
+      if (op === 'ex') { const a = this.actors[s[1]]; if (a) { if (s[2]) a.expr = s[2]; if (s[3]) a.pose = s[3]; a.mot = s[4] || ''; } continue; }
+      if (op === 'fx') { if (s[1] === 'flash') this.fx.push({ k: 'flash', t0: this.t }); else if (!s[1]) this.fx = []; else this.fx.push({ k: s[1], seed: ri(0, 99) }); continue; }
+      if (op === 'shake') { this.shakeT = 16; continue; }
+      if (op === 'zoom') { this.zoom = s[1] || null; continue; }
+      if (op === 'sfx') { tt.sfx(s[1]); continue; }
+      if (op === 'choice') { this.choice = { items: s[1], idx: 0, q: s[2] || '' }; this.text = { who: null, s: s[2] || 'どうする？', n: 999 }; return; }
+      // 台詞・ナレーション
+      if (op === 'n' || op === 'big') { this.text = { who: null, s: s[1], n: 0, big: op === 'big' }; if (op === 'big') this.fx.push({ k: 'flash', t0: this.t }); return; }
+      const who = op, a = this.actors[who];
+      if (!a && this.sc.cast[who]) { this.actors[who] = { k: who, slot: who === 'me' ? 'L' : 'R', expr: 'normal', pose: 'down', mot: '', enter: 0, x0: who === 'me' ? -80 : 720, flip: who !== 'me' }; }
+      const A = this.actors[who];
+      if (A) { if (s[1]) A.expr = s[1]; if (s[2]) A.pose = s[2]; A.mot = s[4] || ''; }
+      this.text = { who, s: s[3] || '', n: 0 };
+      return;
+    }
+  }
+  update(g) {
+    this.t++; this.tt++;
+    const inp = g.input, tap = this.tapAt; this.tapAt = null;
+    if (this.shakeT > 0) this.shakeT--;
+    for (const a of Object.values(this.actors || {})) { if (a.enter < 1) a.enter = Math.min(1, a.enter + 0.08); if (a.leave) { a.leave += 0.08; if (a.leave > 2) delete this.actors[a.k]; } }
+    if (this.fadeOut) { this.fadeOut++; if (this.fadeOut > 22) this.next(); return; }
+    if (this.titleT > 0) { this.titleT--; if (this.tt > 14 && (inp.pressed('a') || tap)) this.titleT = 0; return; }
+    if (inp.pressed('menu')) { tt.sfx('cancel'); this.list.length = this.idx + 1; this.fadeOut = 1; return; }
+    if (inp.pressed('b')) { tt.sfx('cancel'); this.fadeOut = 1; this.applyRest(); return; }
+    const T = this.text; if (!T) return;
+    if (this.choice) {
+      const C = this.choice, n = C.items.length;
+      if (inp.repeat('up')) { C.idx = (C.idx - 1 + n) % n; tt.sfx('cursor'); }
+      if (inp.repeat('down')) { C.idx = (C.idx + 1) % n; tt.sfx('cursor'); }
+      let pickK = -1;
+      if (tap) { const h = (C.rects || []).find(r => tap.x >= r.x && tap.x < r.x + r.w && tap.y >= r.y && tap.y < r.y + r.h); if (h) pickK = h.i; }
+      if (inp.pressed('a')) pickK = C.idx;
+      if (pickK >= 0) { tt.sfx('ok'); const it = C.items[pickK]; this.choice = null; applyEvEffect(this.g, this.N, it[1]); if (it[2]) { this.sc.steps.splice(this.si + 1, 0, ...it[2]); } this.step(); }
+      return;
+    }
+    if (T.n < T.s.length) { T.n = Math.min(T.s.length, T.n + (T.big ? 0.5 : 1.4)); if (inp.pressed('a') || tap) T.n = T.s.length; return; }
+    if (inp.pressed('a') || tap) { tt.sfx('cursor'); this.step(); }
+  }
+  applyRest() { for (let i = this.si + 1; i < this.sc.steps.length; i++) { const s = this.sc.steps[i]; if (s && s[0] === 'choice') { applyEvEffect(this.g, this.N, s[1][0][1]); break; } } }
+  draw(c) {
+    if (!this.sc) { c.fillStyle = '#000'; c.fillRect(0, 0, 640, 360); return; }
+    const th = this.theme || { c1: '#1a2a5a', c2: '#f5c542' };
+    c.save();
+    if (this.shakeT > 0) c.translate((Math.random() * 2 - 1) * 4, (Math.random() * 2 - 1) * 3);
+    const bg = evBg(this.bgKey, th);
+    if (bg) { c.imageSmoothingEnabled = true; c.drawImage(bg, 0, 0, 640, 360); } else { c.fillStyle = '#101420'; c.fillRect(0, 0, 640, 360); }
+    if (this.bgKey === 'stadium' || this.bgKey === 'dome') { const k = (Math.sin(this.t / 20) + 1) / 2; c.fillStyle = `rgba(255,255,255,${0.02 + k * 0.03})`; c.fillRect(0, 100, 640, 100); }
+    for (const f of this.fx) if (f.k !== 'flash' && ['rain', 'snow', 'sakura', 'dark', 'spot', 'lines'].includes(f.k) && f.k === 'lines') evFx(c, f, this.t, th);
+    // キャラクター
+    const tk = this.text && this.text.who, typing = this.text && this.text.n < this.text.s.length;
+    const acts = Object.values(this.actors || {});
+    if (this.zoom && this.actors[this.zoom]) {
+      const a = this.actors[this.zoom], sp = this.cast(a.k).spec;
+      c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillRect(0, 0, 640, 360);
+      drawChar(c, sp, { x: 320, y: 30 + 96 * 3.4, sc: 3.4, flip: false, expr: a.expr, pose: a.pose, mot: a.mot, t: this.t, look: 0, talk: tk === a.k && typing });
+    } else {
+      acts.sort((a, b) => (a.k === tk) - (b.k === tk));
+      for (const a of acts) {
+        const cs = this.cast(a.k); if (!cs) continue;
+        const tx0 = EV_SLOT[a.slot] || 320, e = 1 - Math.pow(1 - a.enter, 3);
+        let x = a.x0 + (tx0 - a.x0) * e; if (a.leave) x = tx0 + (a.x0 - tx0) * Math.min(1, a.leave - 1 > 0 ? a.leave - 1 : a.leave / 2);
+        const alpha = a.leave ? Math.max(0, 1 - a.leave / 2) : 1;
+        drawChar(c, cs.spec, { x, y: 266 + (tk && tk !== a.k ? 2 : 0), sc: 2, flip: a.flip, expr: a.expr, pose: a.pose, mot: a.mot, t: this.t + (a.k.length * 37), look: a.flip ? -1 : 1, alpha, talk: tk === a.k && typing });
+      }
+    }
+    for (const f of this.fx) if (f.k !== 'lines') evFx(c, f, this.t, th);
+    this.fx = this.fx.filter(f => f.k !== 'flash' || this.t - f.t0 < 20);
+    c.restore();
+    // シネマ風の上下の帯
+    fr(c, 0, 0, 640, 14, 'rgba(0,0,0,0.85)');
+    this.drawText(c, th);
+    if (this.titleT > 0) this.drawTitle(c, th);
+    if (this.fadeIn > 0) { this.fadeIn--; c.fillStyle = `rgba(0,0,0,${this.fadeIn / 12})`; c.fillRect(0, 0, 640, 360); }
+    if (this.fadeOut) { c.fillStyle = `rgba(0,0,0,${Math.min(1, this.fadeOut / 20)})`; c.fillRect(0, 0, 640, 360); }
+    tx(c, `B：イベントをとばす　${this.list.length > 1 ? `（${this.idx + 1}/${this.list.length}）` : ''}`, 632, 2, { align: 'right', size: 10, color: 'rgba(255,255,255,0.55)' });
+  }
+  drawTitle(c, th) {
+    const k = this.titleT, inA = Math.min(1, (80 - k) / 14), outA = Math.min(1, k / 12), a = Math.min(inA, outA);
+    c.save(); c.globalAlpha = a;
+    fr(c, 0, 0, 640, 360, 'rgba(0,0,0,0.55)');
+    const w = 640 * Math.min(1, (80 - k) / 10);
+    poly(c, [[0, 140], [w, 128], [w, 214], [0, 226]], lgrad(c, 0, 0, 640, 0, [[0, hexA(th.c1, 0.95)], [1, hexA(shade(th.c1, -0.5), 0.95)]]));
+    fr(c, 0, 136, w, 2, th.c2);
+    fr(c, 0, 218, w, 2, th.c2);
+    tx(c, this.sc.chapter || 'BASEBALL STORY', 60, 150, { size: 12, color: th.c2, bold: true });
+    glow(c, th.c2, 12, () => tx(c, this.sc.title, 60, 170, { size: 28, color: '#ffffff', bold: true }));
+    if (this.sc.sub) tx(c, this.sc.sub, 62, 204, { size: 12, color: 'rgba(255,255,255,0.85)' });
+    c.restore();
+  }
+  drawText(c, th) {
+    const T = this.text; if (!T) return;
+    if (T.big) {
+      const s = T.s.slice(0, Math.floor(T.n));
+      fr(c, 0, 128, 640, 92, 'rgba(0,0,0,0.6)');
+      fr(c, 0, 128, 640, 2, th.c2); fr(c, 0, 218, 640, 2, th.c2);
+      const ls = wrap(c, s, 580, 22);
+      ls.slice(0, 3).forEach((l, i) => glow(c, th.c2, 10, () => tx(c, l, 320, 146 + i * 28 - (ls.length > 1 ? 10 : 0), { size: 22, align: 'center', color: '#ffffff', bold: true })));
+      if (T.n >= T.s.length && this.t % 40 < 26) tx(c, '▼', 616, 200, { color: th.c2 });
+      return;
+    }
+    const x = 20, y = 270, w = 600, h = 82;
+    c.save();
+    poly(c, [[x, y], [x + w, y], [x + w, y + h - 8], [x + w - 8, y + h], [x, y + h]], lgrad(c, 0, y, 0, y + h, [[0, 'rgba(8,12,26,0.94)'], [1, 'rgba(2,4,12,0.96)']]));
+    c.strokeStyle = hexA(th.c2, 0.6); c.lineWidth = 1; c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    fr(c, x, y, 120, 2, th.c2);
+    c.restore();
+    if (T.who) {
+      const cs = this.cast(T.who), nm = cs ? cs.name : T.who;
+      const nw = tw(c, nm, 13, true) + 30;
+      slant(c, x + 6, y - 16, nw, 20, 6, cs && cs.col ? cs.col : th.c1);
+      fr(c, x + 6, y + 3, nw - 6, 1, th.c2);
+      tx(c, nm, x + 6 + nw / 2, y - 13, { size: 13, align: 'center', color: '#ffffff', bold: true });
+    }
+    const s = T.s.slice(0, Math.floor(T.n));
+    const ls = wrap(c, s, w - 40, 15);
+    ls.slice(-3).forEach((l, i) => tx(c, l, x + 20, y + 12 + i * 22, { size: 15, color: T.who ? '#ffffff' : '#d8e4ff' }));
+    if (this.choice) {
+      const C = this.choice; C.rects = [];
+      const bw = 280, bx = 340, by0 = y - 16 - C.items.length * 30;
+      C.items.forEach((it, i) => { const yy = by0 + i * 30, on = i === C.idx; slant(c, bx, yy, bw, 26, 6, on ? lgrad(c, bx, 0, bx + bw, 0, [[0, hexA(th.c2, 0.85)], [1, hexA(th.c2, 0.3)]]) : 'rgba(10,14,30,0.9)'); tx(c, it[0], bx + 20, yy + 5, { size: 14, color: on ? '#05080f' : '#ffffff', bold: on }); C.rects.push({ x: bx, y: yy, w: bw, h: 26, i }); });
+    } else if (T.n >= T.s.length && this.t % 40 < 26) tx(c, '▼', x + w - 22, y + h - 20, { color: th.c2 });
+  }
+}
+function applyEvEffect(g, N, eff) {
+  if (!eff || !N || !N.me) return;
+  if (eff.fame) try { fameGain(g, N, eff.fame); } catch (e) { }
+  if (eff.cdt) try { addCdt(N.me, eff.cdt); } catch (e) { }
+  if (eff.cond) N.me.cond = clamp(num(N.me.cond) + eff.cond, -6, 6);
+  if (eff.stress) try { g.addNeed('stress', eff.stress); } catch (e) { }
+}
+function playEvents(g, N) {
+  const q = (N.evq || []).splice(0, 6);
+  if (!q.length) return Promise.resolve();
+  return new Promise(res => { const sc = new EvScene(g, q, res); if (!sc.closed) g.push(sc); });
+}
+
+// ===== プロ野球の固有イベント（台本・キャスト・発生条件） =====
+const MLB_MGR = ['マイク', 'ジョー', 'デーブ', 'ボブ', 'トニー', 'ロン', 'ケビン', 'スコット', 'テリー', 'ブルース'];
+function evCastNames(N) {
+  N.cast = isObj(N.cast) ? N.cast : {};
+  const C = N.cast;
+  for (const k of ['mgr', 'coach', 'scout', 'gm', 'rep']) C[k] = isObj(C[k]) ? C[k] : {};
+  return C;
+}
+function castName(N, role, key) { const C = evCastNames(N); C[role] = isObj(C[role]) ? C[role] : {}; if (!C[role][key]) C[role][key] = role === 'mlbmgr' ? pick(MLB_MGR) : pick(SURN); return C[role][key]; }
+// 名前から、髪型・髪色・肌の色をばらけさせる
+function varLook(name) { let h = 0; for (const ch of String(name || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return { style: ['short', 'spiky', 'slick', 'short', 'mage'][h % 5], hair: ['#2a2430', '#3a2a20', '#4a3020', '#1a1a24', '#6b4226'][(h >> 3) % 5], skin: ['fair', 'light', 'tan', 'fair', 'brown'][(h >> 6) % 5], glasses: (h >> 9) % 7 === 0 }; }
+function lookOf(g) { const L = (g && g.state && g.state.look) || {}; return { skin: L.skin || 'fair', hair: L.hairColor || 'black', style: L.hair || 'short' }; }
+function teamTheme(tid) {
+  if (tid && TEAM[tid]) { const col = TEAM[tid].color === '#222222' ? '#3a3d48' : TEAM[tid].color; return { c1: col, c2: TEAM_ACC[tid] || '#f5c542', logo: tid, tid }; }
+  return { c1: '#14306a', c2: '#f5c542', logo: 'NPB', tid: 'NPB' };
+}
+function uniFor(tid, num, o = {}) {
+  const t = TEAM[tid], col = t ? (t.color === '#222222' ? '#2a2a32' : t.color) : '#1a2a5a';
+  return charSpec('uni', { jersey: o.road ? shade(col, 0.72) : '#f4f2ec', trim: col, capCol: col, num, mark: TEAM_ACC[tid] || null, ...o });
+}
+// 主人公の見た目（所属に合わせたユニフォーム）
+function meSpec(g, N, dress) {
+  const me = N.me, lk = lookOf(g), base = { skin: lk.skin, hair: lk.hair, style: lk.style === 'cap' || lk.style === 'helmet' ? 'short' : lk.style };
+  if (dress === 'casual') { const L = (g.state && g.state.look) || {}; return charSpec('casual', { ...base, top: L.top && L.top[0] === '#' ? L.top : '#d64161', bottom: L.bottom && L.bottom[0] === '#' ? L.bottom : '#3a4a7a' }); }
+  if (dress === 'suit') return charSpec('suit', { ...base, jacket: '#22262f', tie: '#c8a040' });
+  if (me.st === 'pro' && me.team) return uniFor(me.team, me.num, base);
+  if (me.st === 'mlb' && me.mlb) { const c = MLB_COL[me.mlb.t] || '#0a2a5c'; return charSpec('uni', { ...base, trim: c, capCol: c, num: me.num, mark: '#ffffff' }); }
+  if ((me.st === 'ind' || me.st === 'corp') && me.minor) { const c = me.minor.col || '#2a6a3a'; return charSpec('uni', { ...base, trim: c, capCol: c, num: me.minor.num, mark: me.minor.col2 || '#ffffff' }); }
+  if (me.st === 'retired') return charSpec('suit', { ...base, jacket: '#2a2e3a', tie: '#c8a040' });
+  if (me.st === 'free') return charSpec('uni', { ...base, jersey: '#3a3e4a', trim: '#8a8e98', capCol: '#2a2e38', num: null });
+  return charSpec('uni', { ...base, jersey: '#f4f2ec', trim: '#1a2a5a', capCol: '#1a2a5a', num: 10 });
+}
+// キャストを作る（役割 → 名前・見た目・名札の色）
+function mkCast(g, N, role, v) {
+  const me = N.me, tid = v.tid, T = TEAM[tid];
+  const col = T ? T.color : '#2a3a6a';
+  switch (role) {
+    case 'me': return { name: v.me, spec: meSpec(g, N, v.dress), col: v.th.c1 };
+    case 'mgr': return { name: `監督　${v.mgr}`, spec: uniFor(tid, 77, { older: 2, mus: true, style: 'gray' }), col };
+    case 'coach': return { name: `${v.pos === '投手' ? '投手' : '打撃'}コーチ　${v.coach}`, spec: uniFor(tid, 73, { older: 1, style: 'short', beard: true }), col };
+    case 'mate': return { name: v.mate, spec: v.dress ? charSpec('casual', { ...varLook(v.mate), top: '#2a4a7a', bottom: '#2a2a34' }) : uniFor(tid, v.mateNum, varLook(v.mate)), col };
+    case 'vet': return { name: `ベテラン　${v.vet}`, spec: uniFor(tid, v.vetNum, { ...varLook(v.vet), older: 1, beard: true }), col };
+    case 'rookie': return { name: `新人　${v.rookie}`, spec: uniFor(tid, 98, varLook(v.rookie)), col };
+    case 'rival': return { name: `${v.rteam}　${v.rival}`, spec: uniFor(v.rtid, v.rivalNum, { road: true, ...varLook(v.rival + 'r') }), col: TEAM[v.rtid] ? TEAM[v.rtid].color : '#444' };
+    case 'catcher': return { name: `捕手　${v.cat}`, spec: uniFor(tid, v.catNum, varLook(v.cat)), col };
+    case 'scout': return { name: `スカウト　${v.scout}`, spec: charSpec('suit', { older: 1, glasses: true, jacket: '#3a3e4a', tie: col }), col };
+    case 'gm': return { name: `球団代表　${v.gm}`, spec: charSpec('suit', { older: 2, style: 'gray', jacket: '#20242e', tie: col }), col };
+    case 'agent': return { name: '代理人', spec: charSpec('suit', { style: 'slick', jacket: '#141418', tie: '#c8a040', glasses: true }), col: '#2a2a30' };
+    case 'rep': return { name: '記者', spec: charSpec('casual', { top: '#5a7ab0', bottom: '#2a3348', style: 'short', glasses: true, hair: '#3a2a20' }), col: '#3a4a6a' };
+    case 'rep2': return { name: 'アナウンサー', spec: charSpec('suit', { f: true, style: 'long', hair: '#3a2420', jacket: '#e8e4ec', tie: '#d04060' }), col: '#8a3a6a' };
+    case 'mom': return { name: '母', spec: charSpec('apron', { f: true, style: 'bob', hair: '#3a2a24', older: 1 }), col: '#a05a6a' };
+    case 'dad': return { name: '父', spec: charSpec('casual', { older: 1, glasses: true, top: '#6a7a5a', bottom: '#3a3a44', style: 'short' }), col: '#5a6a4a' };
+    case 'fan': return { name: 'ファン', spec: charSpec('casual', { top: '#f4f2ec', jerseyFan: col, bottom: '#3a4a7a', style: 'short', hair: '#4a3020' }), col };
+    case 'kid': return { name: '少年ファン', spec: charSpec('casual', { top: '#f4f2ec', jerseyFan: col, bottom: '#2a3a6a', style: 'spiky', hair: '#2a2430' }), col };
+    case 'friend': return { name: `幼なじみ　${v.friend}`, spec: charSpec('casual', { top: '#e08a3a', bottom: '#3a3e4a', style: 'spiky', hair: '#6b4226' }), col: '#a0602a' };
+    case 'doc': return { name: 'トレーナー', spec: charSpec('casual', { top: '#f4f6f8', bottom: '#5a6a7a', style: 'short', glasses: true }), col: '#4a7a8a' };
+    case 'ump': return { name: '審判', spec: charSpec('ump', { older: 1 }), col: '#1a2236' };
+    case 'mlbmgr': return { name: `監督　${v.mlbmgr}`, spec: charSpec('uni', { trim: v.mlbcol, capCol: v.mlbcol, num: 9, older: 2, mus: true, style: 'gray', skin: 'light', mark: '#ffffff' }), col: v.mlbcol };
+    case 'interp': return { name: `通訳　${v.interp}`, spec: charSpec('suit', { glasses: true, jacket: '#3a3e4a', tie: '#3a6ad0' }), col: '#3a4a6a' };
+    case 'hsmgr': return { name: `高校の監督　${v.hsmgr}`, spec: charSpec('uni', { jersey: '#f4f2ec', trim: '#1a2a5a', capCol: '#1a2a5a', num: 30, older: 2, mus: true, style: 'gray' }), col: '#1a2a5a' };
+    case 'imgr': return { name: `監督　${v.imgr}`, spec: charSpec('uni', { trim: v.mcol, capCol: v.mcol, num: 70, older: 2, style: 'gray', beard: true, mark: '#ffffff' }), col: v.mcol };
+    case 'boss': return { name: `${v.mteam}　${v.boss}部長`, spec: charSpec('work', { older: 2, glasses: true, jacket: '#2f5f9a', style: 'gray' }), col: '#2f5f9a' };
+    case 'mmate': return { name: v.mmate, spec: charSpec('uni', { trim: v.mcol, capCol: v.mcol, num: 23, style: 'spiky', hair: '#4a3020', mark: '#ffffff' }), col: v.mcol };
+    case 'chair': return { name: '選手会の事務局長', spec: charSpec('suit', { older: 1, glasses: true, jacket: '#2a3a2a', tie: '#3a8a5a' }), col: '#2a5a3a' };
+    case 'director': return { name: 'CM監督', spec: charSpec('casual', { top: '#1a1a20', bottom: '#2a2a30', style: 'slick', beard: true }), col: '#3a3a44' };
+  }
+  return { name: role, spec: charSpec('casual'), col: '#3a3a44' };
+}
+// 変数（名前・球団・成績など）
+function evVars(g, N, ev) {
+  const me = N.me, S = N.S, tid = ev.tid || me.team || me.lastTeam || (me.offer && me.offer.team) || null;
+  const T = TEAM[tid];
+  const rost = T && N.L.teams[tid] ? [...N.L.teams[tid].bat, ...N.L.teams[tid].pit].filter(x => x !== 'ME').map(id => N.L.players[id]).filter(Boolean) : [];
+  const byOvr = rost.slice().sort((a, b) => ovrOf(b) - ovrOf(a));
+  const mateP = byOvr[(N.me.p.n || '').length % Math.max(1, Math.min(4, byOvr.length))] || null;
+  const vetP = rost.filter(p => num(p.age) >= 33).sort((a, b) => ovrOf(b) - ovrOf(a))[0] || byOvr[1] || null;
+  const catP = rost.filter(p => p.pos === 'C').sort((a, b) => ovrOf(b) - ovrOf(a))[0] || null;
+  const rookieP = rost.filter(p => num(p.age) <= 20).sort((a, b) => ovrOf(b) - ovrOf(a))[0] || null;
+  const others = TEAMS.filter(t => t.id !== tid && (!T || t.lg === T.lg));
+  const rtid = ev.rtid || (N.rivalT && TEAM[N.rivalT] ? N.rivalT : (others[(num(S && S.y) + (me.p.n || '').length) % Math.max(1, others.length)] || TEAMS[0]).id);
+  const rp = N.L.teams[rtid] ? [...N.L.teams[rtid].bat, ...N.L.teams[rtid].pit].map(id => N.L.players[id]).filter(p => p && (me.p.pos === 'P' ? p.pos !== 'P' : p.pos === 'P')).sort((a, b) => ovrOf(b) - ovrOf(a))[0] : null;
+  const th = ev.mlb && me.mlb ? { c1: MLB_COL[me.mlb.t] || '#0a2a5c', c2: '#ff4b5c', logo: 'MLB_' + me.mlb.t } : ev.minor && me.minor ? { c1: me.minor.col || '#2a6a3a', c2: me.minor.col2 || '#f5c542', logo: null } : teamTheme(tid);
+  const v = {
+    tid, th, me: shortName(me.p), full: me.p.n || 'あなた', num: me.num, team: T ? T.short : '', teamF: T ? T.name : '', park: T ? T.park : '球場', lg: T ? LGS[T.lg].short : '',
+    pos: POSN[me.p.pos] || '選手', isP: me.p.pos === 'P', y: S ? S.y : dateOf(g, g.state.day).year, yrs: num(me.yrs), age: num(me.p.age, 20),
+    mgr: castName(N, 'mgr', tid || 'X'), coach: castName(N, 'coach', tid || 'X'), scout: castName(N, 'scout', tid || 'X'), gm: castName(N, 'gm', tid || 'X'),
+    mate: mateP ? shortName(mateP) : castName(N, 'rep', 'mate'), mateNum: mateP ? mateP.num : 6,
+    vet: vetP ? shortName(vetP) : '先輩', vetNum: vetP ? vetP.num : 2, cat: catP ? shortName(catP) : '正捕手', catNum: catP ? catP.num : 27, rookie: rookieP ? shortName(rookieP) : '新人',
+    rtid, rteam: TEAM[rtid] ? TEAM[rtid].short : 'ライバル球団', rival: rp ? shortName(rp) : castName(N, 'rep', 'rival'), rivalNum: rp ? rp.num : 18,
+    friend: castName(N, 'rep', 'friend'), hsmgr: castName(N, 'rep', 'hsmgr'), interp: castName(N, 'rep', 'interp'),
+    mlbmgr: me.mlb ? castName(N, 'mlbmgr', 'M' + me.mlb.t) : 'マイク', mlbcol: me.mlb ? MLB_COL[me.mlb.t] : '#0a2a5c', mlbteam: me.mlb ? mlbName(me.mlb.t, S ? S.y : 2026) : '',
+    sal: manEn(num(me.sal)), ...(ev.v || {}),
+  };
+  if (me.minor) { v.mteam = me.minor.team; v.mlgN = me.minor.lgN; v.mcol = me.minor.col || '#2a6a3a'; v.imgr = castName(N, 'mgr', 'm_' + me.minor.team); v.boss = castName(N, 'gm', 'm_' + me.minor.team); v.mmate = castName(N, 'coach', 'mm_' + me.minor.team); }
+  return v;
+}
+// 台詞の書き方：[役, 表情, ポーズ, 台詞, 動き]
+const say = (who, e, p, t, m) => [who, e, p, t, m];
+const nar = t => ['n', t];
+const big = t => ['big', t];
+function buildEvent(g, N, ev) {
+  const def = EVENTS[ev.id]; if (!def) return null;
+  const v = evVars(g, N, ev);
+  const sc = def(v, ev, N);
+  if (!sc) return null;
+  v.dress = sc.dress || null;
+  const roles = new Set(sc.cast || []);
+  for (const s of sc.steps) { if (!s) continue; if (s[0] === 'in') roles.add(s[1]); else if (!['n', 'big', 'bg', 'out', 'ex', 'fx', 'shake', 'zoom', 'sfx', 'choice', 'wait'].includes(s[0])) roles.add(s[0]); }
+  sc.cast = {}; for (const r of roles) sc.cast[r] = mkCast(g, N, r, v);
+  sc.theme = sc.theme || v.th;
+  return sc;
+}
+// ---- イベントを積む ----
+function evPush(N, id, o = {}) {
+  N.evq = Array.isArray(N.evq) ? N.evq : [];
+  N.evSeen = isObj(N.evSeen) ? N.evSeen : {};
+  if (o.once && N.evSeen[o.once]) return;
+  if (o.once) N.evSeen[o.once] = 1;
+  if (N.evq.some(e => e.id === id && JSON.stringify(e.v || {}) === JSON.stringify(o.v || {}))) return;
+  N.evq.push({ id, v: o.v || {}, tid: o.tid, rtid: o.rtid, mlb: o.mlb, minor: o.minor, d: CUR_G ? CUR_G.state.day : 0 });
+  if (N.evq.length > 12) N.evq.splice(0, N.evq.length - 12);
+  N.evLast = CUR_G ? CUR_G.state.day : 0;
+}
+
+// ===== 固有イベントの台本集 =====
+const myPose = v => (v.isP ? 'ball' : 'bat');
+const P_ = a => pick(a);
+const EVENTS = {
+  // ---------- プロへの道 ----------
+  dream: v => ({ dress: 'casual', title: '夢の始まり', chapter: 'PROLOGUE', bg: 'river', steps: [
+    ['fx', 'spark'], ['in', 'me', 'C', 'determined', 'bat'],
+    nar(P_(['夕焼けの土手。ボールを握る手に、まだ見ぬ大観衆の歓声が聞こえた気がした。', 'テレビの向こうで、ヒーローがダイヤモンドを一周していた。あの日から、ずっと――。', '白球ひとつで、人生は変わる。そう信じられる場所が、この国にはある。'])),
+    say('me', 'determined', myPose(v), P_(['決めた。おれは、プロ野球選手になる。', 'いつか、あのスタジアムのど真ん中に立ってやる。', '誰に笑われたっていい。この夢だけは、手放さない。'])),
+    say('me', 'smile', 'guts', `ポジションは――${v.pos}。ここから、全部はじまるんだ。`, 'hop'),
+    nar('――プロ野球選手への道が、いま幕を開けた。'),
+  ] }),
+  shibou: v => ({ title: 'プロ志望届', chapter: 'ROAD TO PRO', bg: 'school', steps: [
+    ['in', 'hsmgr', 'R', 'serious', 'cross'], ['in', 'me', 'L', 'determined', 'card'],
+    say('hsmgr', 'serious', 'cross', P_(['……本気なんだな。', 'プロは甘い世界じゃない。わかって言ってるな？', '紙一枚だが、これは覚悟の重さだぞ。'])),
+    say('me', 'determined', 'card', P_(['はい。おれの野球が、どこまで通用するか試したいんです。', '甘くないのは知ってます。だから、行きたいんです。', 'この一枚に、三年間の全部を込めました。'])),
+    say('hsmgr', 'smile', 'cross', 'よし。胸を張って出してこい。お前はおれの、自慢の教え子だ。'),
+    nar(`${v.y}年秋。プロ志望届が、高野連に受理された。運命の日は、10月下旬――。`),
+  ] }),
+  draft: (v, ev) => {
+    const o = ev.v || {}, ik = o.ik, rd = o.round || 1, comp = o.comp;
+    return { dress: 'casual', title: '運命のドラフト会議', chapter: 'DRAFT', sub: `${v.y}年 プロ野球ドラフト会議`, bg: 'living', steps: [
+      ['in', 'mom', 'R', 'worry', 'down'], ['in', 'me', 'L', 'worry', 'down', 'tremble'],
+      nar(P_(['テレビの中で、ひとりずつ名前が読み上げられていく。リビングの時計の音だけが、やけに大きい。', '「第1巡選択希望選手――」アナウンスのたびに、心臓が跳ねる。', '指名されるかもしれない。されないかもしれない。息をするのも忘れていた。'])),
+      say('mom', 'worry', 'down', P_(['……大丈夫。あんたは、ちゃんとがんばってきたんだから。', 'お茶、入れなおそうか。……ううん、やっぱりここにいる。'])),
+      ['bg', 'draft'], ['fx', 'spark'],
+      big(`${ik ? '育成' : ''}第${rd}巡選択希望選手――${v.teamF}――${v.full}！`),
+      ['fx', 'flash'], ['shake'], ['bg', 'living'], ['fx', 'confetti'],
+      say('me', 'surprised', 'down', P_(['……え？ 今、おれの名前……！？', 'うそだろ……呼ばれた……呼ばれたんだ……！']), 'jump'),
+      say('mom', 'cry', 'clap', P_(['やった……やったね……！ お父さん、お父さーん！', 'おめでとう……ほんとうに、おめでとう……！'])),
+      ...(comp ? [nar(`${comp}球団が1位で競合。くじ引きの末、交渉権を勝ち取ったのは${v.team}だった。`)] : []),
+      say('me', 'cry', 'guts', P_([`${v.team}……おれ、ここで絶対にでっかくなってみせる。`, 'ここがスタートラインだ。泣くのは、今日で最後にする。'])),
+    ] };
+  },
+  draft_miss: v => ({ dress: 'casual', title: '呼ばれなかった名前', chapter: 'DRAFT', bg: 'living', steps: [
+    ['fx', 'rain'], ['in', 'me', 'C', 'sad', 'down'],
+    nar('「以上で、すべての指名が終了しました」――テレビの声が、遠くに聞こえた。'),
+    say('me', 'sad', 'down', P_(['……そっか。まだ、足りなかったんだな。', '笑えよ、おれ。……笑えないや。']), 'tremble'),
+    ['ex', 'me', 'determined', 'guts'],
+    say('me', 'determined', 'guts', P_(['でも、終わりじゃない。社会人でも、独立リーグでも、道はある。', '一年後、今日のおれを見返してやる。', 'ここからが、本当の勝負だ。'])),
+    nar('悔しさは、いつか最強の武器になる。'),
+  ] }),
+  kaiken: (v, ev) => {
+    const o = ev.v || {}, route = o.route || 'draft';
+    const how = {
+      draft: `${v.y}年ドラフト${o.ik ? '育成' : ''}${o.round || 1}位で指名を受け、${v.teamF}への入団が決まった。`,
+      draft_ind: `独立リーグ・${o.from || ''}での活躍がスカウトの目に留まり、ドラフト${o.ik ? '育成' : ''}${o.round || 1}位で指名された。`,
+      draft_corp: `社会人野球・${o.from || ''}で腕を磨き、ドラフト${o.ik ? '育成' : ''}${o.round || 1}位で指名を勝ち取った。`,
+      tryout: `入団テストで、居並ぶ首脳陣の前で結果を出し、契約を勝ち取った。`,
+      trial: `戦力外からはい上がり、トライアウトで再び声がかかった。`,
+      fa: `FA権を行使し、新天地に${v.teamF}を選んだ。`,
+    }[route] || `${v.teamF}への入団が決まった。`;
+    return { title: '入団記者会見', chapter: 'JOIN', sub: `${v.teamF}　背番号${v.num}`, bg: 'press', steps: [
+      ['fx', 'camera'], ['in', 'gm', 'R', 'smile', 'down'], ['in', 'me', 'C', 'determined', 'down'], ['in', 'rep', 'LL', 'normal', 'mic'],
+      nar(how),
+      say('gm', 'smile', 'shake', P_([`${v.me}選手を迎えられることを、心から嬉しく思います。`, `わが球団の未来を背負う選手です。どうか温かく見守ってください。`])),
+      ['ex', 'me', 'determined', 'shake'],
+      say('rep', 'normal', 'mic', P_(['背番号への思いを聞かせてください！', 'プロでの目標は？', `${v.team}ファンにひとこと、お願いします！`])),
+      say('me', 'smile', 'tip', P_([`背番号${v.num}に恥じないプレーで、一日でも早くチームの力になります。`, 'まずは一軍。そして、優勝の輪の中心にいたいです。', `${v.park}を、おれのプレーで沸かせてみせます。`])),
+      ['choice', [['謙虚に「まずは一歩ずつ」', { cdt: 2, fame: 2 }], ['強気に「タイトルを獲ります」', { fame: 8, cond: 1 }], ['笑いを取りにいく', { fame: 5, stress: -5 }]], '最後の質問。どう締めくくる？'],
+      ['fx', 'flash'], ['fx', 'camera'],
+      say('me', 'determined', 'guts', P_(['――よろしくお願いします！', 'ここから、伝説をつくります。', '全力で、すべてを懸けます。'])),
+      nar(`こうして${v.full}は、${v.teamF}の一員になった。`),
+    ] };
+  },
+  // ---------- 社会人・独立リーグ ----------
+  ind_join: v => ({ title: '独立リーグの扉', chapter: 'INDEPENDENT', sub: `${v.mlgN}・${v.mteam}`, bg: 'local', minor: 1, steps: [
+    ['in', 'imgr', 'R', 'serious', 'cross'], ['in', 'me', 'L', 'determined', 'down'],
+    nar(P_(['給料は安い。移動はバス。グラウンドも満足に整っていない。それでも、ここにはNPBへの道がある。', '地方球場の小さなスタンド。でも、ここから何人もの選手がプロへ羽ばたいていった。'])),
+    say('imgr', 'serious', 'cross', P_(['ここは通過点だ。いつまでもいる場所じゃない。わかるな？', 'NPBのスカウトは、ちゃんと見てる。結果で語れ。', '腹をくくれ。ここで終わるか、ここから這い上がるかだ。'])),
+    say('me', 'determined', 'guts', P_(['はい。一年で、ここを卒業してみせます。', '泥だらけになっても、必ずプロに行きます。'])),
+    say('imgr', 'smile', 'shake', `よし。${v.mteam}へようこそ。`),
+  ] }),
+  corp_join: v => ({ title: '社会人野球の名門へ', chapter: 'COMPANY', sub: `${v.mteam}`, bg: 'company', minor: 1, steps: [
+    ['in', 'boss', 'R', 'smile', 'down'], ['in', 'me', 'L', 'determined', 'down'],
+    nar('昼は社員として働き、夕方からはグラウンドへ。会社の看板を背負って戦う――それが社会人野球だ。'),
+    say('boss', 'smile', 'shake', P_([`ようこそ${v.mteam}へ。仕事も野球も、全力で頼むよ。`, '都市対抗の東京ドームは、社員みんなの夢なんだ。よろしく頼む。'])),
+    say('me', 'smile', 'tip', P_(['はい！ 会社のみなさんに恥じないよう、がんばります。', '都市対抗で、ドームの真ん中に立ちます。'])),
+    nar(`${v.age <= 18 ? '高卒は3年' : '大卒・社会人は2年'}たてば、ドラフトの対象になる。ここで、牙を研ぐ。`),
+  ] }),
+  ind_bus: v => ({ title: '深夜の遠征バス', chapter: 'INDEPENDENT', bg: 'bus', minor: 1, steps: [
+    ['in', 'mmate', 'R', 'calm', 'down'], ['in', 'me', 'L', 'normal', 'down'],
+    nar('試合後、そのままバスで次の街へ。窓の外を、高速道路の灯りが流れていく。'),
+    say('mmate', 'calm', 'down', P_(['……なあ、NPBのグラウンドって、どんな感じなんだろうな。', 'おれ、今年ダメだったら、実家の店を継ぐんだ。', 'コンビニのおにぎり、今日も二個まで。予算、きびしいよな。'])),
+    say('me', 'determined', 'guts', P_(['一緒に行こうぜ。あの芝生の上に。', '弱音は、バスの中に置いていこう。', 'いつか、この夜を笑い話にしよう。'])),
+    nar('夢を乗せたバスは、夜明けに向かって走り続ける。'),
+  ] }),
+  ind_scout: v => ({ title: 'スタンドのスピードガン', chapter: 'INDEPENDENT', bg: 'local', minor: 1, steps: [
+    ['in', 'scout', 'R', 'serious', 'cross'], ['in', 'me', 'L', 'determined', myPose(v)],
+    nar('バックネット裏に、見慣れないスーツ姿。手にはスピードガンとノート。'),
+    say('scout', 'serious', 'cross', P_(['……悪くない。いや、面白い。', 'あの選手、名前は？ ……覚えておこう。'])),
+    say('me', 'determined', myPose(v), P_(['見てろよ。今日は、最高の一日にしてやる。', 'チャンスは一回。逃さない。']), 'hop'),
+    nar('NPBのスカウトが、あなたに目をつけた。'),
+  ] }),
+  toshitaiko: (v, ev) => ({ title: (ev.v || {}).win ? '黒獅子旗' : '都市対抗野球', chapter: 'COMPANY', sub: '東京ドーム', bg: 'dome', minor: 1, steps: [
+    ['fx', (ev.v || {}).win ? 'confetti' : 'spark'], ['in', 'boss', 'R', 'happy', 'clap'], ['in', 'me', 'L', 'determined', myPose(v)],
+    nar('応援団のブラスバンド、社員たちのメガホン。東京ドームが、会社ごとの大応援で揺れていた。'),
+    ...((ev.v || {}).win ? [big(`${v.mteam}、都市対抗野球 優勝！`), say('me', 'laugh', 'trophy', '黒獅子旗……！ みんなで、つかんだんだ！', 'jump'), say('boss', 'cry', 'clap', '会社の歴史に残る日だ……ありがとう、本当にありがとう！')]
+      : [say('boss', 'smile', 'clap', P_(['ここまで来られただけで、みんな大喜びだよ。', '来年も、またこの舞台に帰ってこよう。'])), say('me', 'determined', 'guts', P_(['次は、てっぺんを獲ります。', 'この景色、絶対にまた見にきます。']))]),
+  ] }),
+  ind_title: v => ({ title: 'リーグ制覇', chapter: 'INDEPENDENT', bg: 'local', minor: 1, steps: [
+    ['fx', 'confetti'], ['in', 'imgr', 'R', 'laugh', 'banzai'], ['in', 'me', 'L', 'laugh', 'banzai', 'jump'],
+    big(`${v.mteam}、優勝！`),
+    say('imgr', 'laugh', 'banzai', 'やったぞ！ お前らは、最高のチームだ！'),
+    say('me', 'happy', 'fist', P_(['小さな球場でも、優勝は優勝だ！', 'この胴上げは、一生忘れない！'])),
+  ] }),
+  // ---------- プロ1年目 ----------
+  camp: v => ({ title: '春季キャンプ', chapter: 'SPRING CAMP', bg: 'camp', steps: [
+    ['fx', 'sakura'], ['in', 'coach', 'R', 'serious', 'cross'], ['in', 'me', 'L', 'determined', myPose(v)],
+    nar(P_(['南国の青い空。キャンプ地に、球音とかけ声が響きわたる。', '2月1日。プロ野球の「お正月」がやってきた。'])),
+    say('coach', 'serious', 'cross', P_(['今年はお前に期待してるぞ。……だから、甘やかさない。', 'キャンプで手を抜くやつは、シーズンで泣く。覚えておけ。', `${v.me}、まずは体をつくれ。話はそれからだ。`])),
+    say('me', 'determined', myPose(v), P_(['望むところです！', 'ノックでも走り込みでも、何本でも来てください！']), 'hop'),
+    nar('朝から晩まで、白球を追う日々が始まった。'),
+  ] }),
+  kouhaku: (v, ev) => ({ title: '紅白戦', chapter: 'SPRING CAMP', bg: 'camp', steps: [
+    ['in', 'mgr', 'R', 'serious', 'cross'], ['in', 'me', 'L', (ev.v || {}).good ? 'smile' : 'determined', myPose(v)],
+    nar('紅白戦。首脳陣の視線が、ひとつひとつのプレーに突き刺さる。'),
+    ...((ev.v || {}).good ? [['fx', 'lines'], say('me', 'shout', myPose(v), v.isP ? 'ここだ――っ！' : 'もらった――っ！', 'jump'), ['fx', null], say('mgr', 'smile', 'cross', P_(['……ほう。面白いのが出てきたな。', '開幕一軍、本気で考えるか。']))]
+      : [say('me', 'worry', myPose(v), 'くそっ……力が入りすぎた。'), say('mgr', 'serious', 'cross', P_(['焦るな。結果より、内容を見ている。', 'まだ時間はある。修正してこい。']))]),
+  ] }),
+  opening: v => ({ title: '開幕一軍', chapter: 'OPENING DAY', bg: 'stadium', steps: [
+    ['fx', 'spark'], ['in', 'mgr', 'R', 'serious', 'cross'], ['in', 'me', 'L', 'surprised', 'down'],
+    say('mgr', 'serious', 'cross', P_([`${v.me}。開幕は一軍で行くぞ。`, '開幕ベンチに、お前の名前を入れた。']), 'nod'),
+    say('me', 'surprised', 'down', '……本当ですか！'),
+    say('mgr', 'smile', 'point', P_(['使うと決めたら、とことん使う。応えてみせろ。', '堂々とやれ。責任は、おれが取る。'])),
+    say('me', 'determined', 'guts', 'はい！'),
+    nar(`${v.park}の照明が、新しいシーズンを照らしていた。`),
+  ] }),
+  promote: v => ({ title: '一軍からの電話', chapter: 'CALL UP', bg: 'locker', steps: [
+    ['in', 'coach', 'R', 'smile', 'phone'], ['in', 'me', 'L', 'normal', 'down'],
+    say('coach', 'smile', 'down', P_(['一軍から連絡だ。明日から合流しろ。', `${v.me}、荷物をまとめろ。――一軍だ。`])),
+    say('me', 'surprised', 'down', '……っ！', 'jump'),
+    say('coach', 'serious', 'point', P_(['二軍の汗を、無駄にするなよ。', 'もう戻ってくるなよ。いい意味でな。'])),
+    say('me', 'determined', 'tip', '行ってきます！'),
+  ] }),
+  demote: v => ({ title: '再出発', chapter: 'FARM', bg: 'cage', steps: [
+    ['fx', 'dark'], ['in', 'me', 'C', 'sad', 'down'],
+    nar(P_(['二軍降格。ロッカーの名札が、静かに外された。', '一軍のベンチは、思っていたより、ずっと遠かった。'])),
+    say('me', 'sad', 'down', P_(['……まだ、足りないってことか。', '悔しい。でも、言い訳はしない。']), 'tremble'),
+    ['in', 'vet', 'R', 'calm', 'cross'],
+    say('vet', 'calm', 'cross', P_(['落ちたやつだけが、もう一回上がる喜びを知ってる。', 'おれも何度も落ちた。腐るなよ。'])),
+    say('me', 'determined', myPose(v), 'もう一回、はい上がってみせます。'),
+  ] }),
+  shihaika: v => ({ title: '3ケタからの卒業', chapter: 'CONTRACT', bg: 'office', steps: [
+    ['in', 'gm', 'R', 'smile', 'card'], ['in', 'me', 'L', 'surprised', 'down'],
+    say('gm', 'smile', 'card', `おめでとう。今日から、支配下選手だ。新しい背番号は「${v.num}」。`),
+    say('me', 'cry', 'card', P_(['3ケタの背番号で、毎日、ここまで来るのを夢見てました……！', '育成から、ここまで……ありがとうございます……！'])),
+    say('gm', 'smile', 'down', 'これで、一軍の試合にも出られる。物語は、ここからだ。'),
+  ] }),
+  third: v => ({ title: '三軍', chapter: 'FARM', bg: 'river', steps: [
+    ['in', 'coach', 'R', 'serious', 'cross'], ['in', 'me', 'L', 'worry', 'down'],
+    say('coach', 'serious', 'cross', 'しばらく三軍で、体と基礎をつくり直す。遠回りに見えて、いちばんの近道だ。'),
+    say('me', 'determined', 'guts', '……はい。土台から、やり直します。'),
+  ] }),
+  // ---------- 初記録 ----------
+  debut: v => ({ title: 'プロデビュー', chapter: 'DEBUT', bg: 'stadium', steps: [
+    ['fx', 'spark'], ['zoom', 'me'], ['in', 'me', 'C', 'determined', myPose(v)],
+    nar(P_([`「${v.isP ? 'ピッチャー' : 'バッター'}、${v.me}――」場内アナウンスが、自分の名前を告げる。`, '足が震えている。でも、それ以上に、胸が熱い。'])),
+    say('me', 'determined', myPose(v), P_(['これが……一軍のマウンド（打席）……！', 'いつも見てた景色の、こっち側だ。', '――よし。いける。']), 'tremble'),
+    ['zoom', null], ['fx', 'flash'],
+    nar(`${v.y}年、${v.full}、プロの舞台に立つ。`),
+  ] }),
+  first_hit: v => ({ title: 'プロ初安打', chapter: 'FIRST', bg: 'stadium', steps: [
+    ['fx', 'lines'], ['in', 'me', 'C', 'shout', 'swing'],
+    nar('カキーン。打球が、内野の間を鋭く抜けていく。'),
+    ['fx', null], ['fx', 'flash'], ['ex', 'me', 'laugh', 'fist', 'hop'],
+    say('me', 'laugh', 'fist', P_(['入った……！ プロ初ヒット！', '一本目……！ これが、おれのプロ第一歩だ！'])),
+    ['in', 'coach', 'R', 'smile', 'ball'],
+    say('coach', 'smile', 'ball', '記念のボールだ。大事にしろよ。……二本目からは、仕事だぞ。'),
+  ] }),
+  first_hr: v => ({ title: 'プロ初本塁打', chapter: 'FIRST', bg: 'stadium', steps: [
+    ['fx', 'lines'], ['in', 'me', 'C', 'shout', 'swing'],
+    nar('完璧な手ごたえ。白球は、夜空に高く舞い上がった。'),
+    ['fx', null], ['shake'], big('プロ初ホームラン！'), ['fx', 'confetti'],
+    say('me', 'laugh', 'fist', P_(['ダイヤモンド一周って、こんなに気持ちいいのか……！', '見たか！ これが、おれのスイングだ！']), 'hop'),
+    ['in', 'mate', 'R', 'laugh', 'clap'],
+    say('mate', 'laugh', 'clap', P_(['ナイスバッティング！ ベンチ、総立ちだぞ！', 'やるじゃねえか、ルーキー！'])),
+  ] }),
+  first_win: v => ({ title: 'プロ初勝利', chapter: 'FIRST', bg: 'stadium', steps: [
+    ['fx', 'spark'], ['in', 'catcher', 'R', 'smile', 'ball'], ['in', 'me', 'L', 'happy', 'down'],
+    nar('ゲームセット。ウイニングボールが、手のひらに乗せられた。'),
+    say('catcher', 'smile', 'ball', P_(['おめでとう。お前の初勝利だ。', 'いい球、来てたぞ。サインに首を振ったのも、悪くなかった。'])),
+    say('me', 'cry', 'ball', P_(['……勝った。おれ、勝ったんだ……！', 'このボール、一生の宝物にします。'])),
+    ['fx', 'flash'], ['in', 'rep2', 'C', 'smile', 'mic'],
+    say('rep2', 'smile', 'mic', `本日のヒーローは、プロ初勝利の${v.me}投手です！`),
+    say('me', 'laugh', 'wave', P_(['最高でーす！', '応援、ありがとうございました！']), 'hop'),
+  ] }),
+  first_save: v => ({ title: 'プロ初セーブ', chapter: 'FIRST', bg: 'stadium', steps: [
+    ['fx', 'lines'], ['in', 'me', 'C', 'determined', 'pitch'],
+    nar('9回、1点差。ブルペンの扉が開き、ゆっくりとマウンドへ向かう。'),
+    ['fx', null], ['fx', 'flash'], ['ex', 'me', 'shout', 'fist', 'jump'],
+    say('me', 'shout', 'fist', 'っしゃあああ！ 守りきった！'),
+    nar('チームの勝利を締めくくる――守護神への第一歩。'),
+  ] }),
+  milestone: (v, ev) => { const o = ev.v || {}; return { title: `通算${o.n}${o.label}`, chapter: 'MILESTONE', sub: `${v.y}年　${v.teamF}`, bg: 'stadium', steps: [
+    ['fx', 'spark'], ['in', 'me', 'C', 'determined', myPose(v)],
+    nar(P_([`スコアボードに「祝 通算${o.n}${o.label}」の文字が灯る。`, `積み重ねた日々が、ひとつの数字になった。通算${o.n}${o.label}。`])),
+    ['fx', 'flash'], ['ex', 'me', 'smile', 'tip'],
+    say('me', 'smile', 'tip', P_(['数字は、おれ一人のものじゃない。支えてくれた全員のものです。', 'まだ通過点。もっと先の景色を見たい。', 'ファンのみなさんの声が、背中を押してくれました。'])),
+    ['in', 'kid', 'R', 'laugh', 'wave'], ['fx', 'confetti'],
+    say('kid', 'laugh', 'wave', P_([`${v.me}せんしゅー！ おめでとー！`, 'ぼくも、大きくなったら、あんなふうになるんだ！']), 'hop'),
+    ...(o.meikyu ? [big('名球会入りの資格を獲得！')] : []),
+  ] }; },
+  // ---------- 名場面 ----------
+  walkoff: v => ({ title: 'サヨナラ', chapter: 'WALK-OFF', bg: 'stadium', steps: [
+    ['fx', 'lines'], ['zoom', 'me'], ['in', 'me', 'C', 'serious', 'bat'],
+    nar(P_(['9回裏。満員のスタンドが、ひとつの祈りになる。', '同点、二死。打席に向かう背中に、何万もの視線が集まっていた。'])),
+    say('me', 'serious', 'bat', P_(['……来い。', 'この一球で、決める。'])),
+    ['zoom', null], ['fx', null], ['ex', 'me', 'shout', 'swing'], ['shake'],
+    big('サヨナラ！！'), ['fx', 'confetti'], ['in', 'mate', 'R', 'laugh', 'banzai', 'jump'],
+    say('mate', 'laugh', 'banzai', 'うおおお！ 決めやがった！', 'jump'),
+    say('me', 'laugh', 'banzai', P_(['最高だ……最高すぎる……！', 'みんなー！ 勝ったぞー！']), 'jump'),
+  ] }),
+  grandslam: v => ({ title: '満塁ホームラン', chapter: 'GRAND SLAM', bg: 'stadium', steps: [
+    ['fx', 'lines'], ['in', 'me', 'C', 'serious', 'bat'],
+    nar('塁は、すべて埋まっていた。'),
+    ['ex', 'me', 'shout', 'swing'], ['shake'], ['fx', null], big('グランドスラム！'), ['fx', 'confetti'],
+    say('me', 'laugh', 'fist', P_(['一振りで4点！ これが野球の醍醐味だ！', 'ランナーのみんな、お帰りなさい！']), 'hop'),
+  ] }),
+  feat: (v, ev) => { const k = (ev.v || {}).label || '大記録'; return { title: k, chapter: 'LEGEND', sub: `${v.y}年`, bg: 'stadium', steps: [
+    ['fx', 'spark'], ['zoom', 'me'], ['in', 'me', 'C', 'serious', myPose(v)],
+    nar(P_(['静まりかえるスタンド。誰もが、何かが起きることを感じていた。', '一球ごとに、歴史が近づいてくる。'])),
+    ['zoom', null], ['fx', 'flash'], ['shake'], big(`${k}達成！`), ['fx', 'confetti'],
+    ['in', 'mate', 'R', 'laugh', 'banzai', 'jump'],
+    say('mate', 'laugh', 'banzai', 'お前……歴史に名前を刻んだぞ！'),
+    say('me', 'cry', 'banzai', P_(['……夢じゃ、ないよな。', '野球の神様、ありがとう。']), 'jump'),
+    nar(`${v.full}の名は、球史に永遠に刻まれた。`),
+  ] }; },
+  streak: (v, ev) => ({ title: `${(ev.v || {}).n}試合連続安打`, chapter: 'STREAK', bg: 'stadium', steps: [
+    ['in', 'rep', 'R', 'surprised', 'mic'], ['in', 'me', 'L', 'calm', 'bat'],
+    say('rep', 'surprised', 'mic', '記録が続いています！ プレッシャーは？'),
+    say('me', 'calm', 'bat', P_(['一打席ずつです。数字は、あとからついてくる。', '記録より、チームの勝ちのほうが大事ですから。'])),
+    nar('連続試合安打の記録は、どこまで伸びるのか――。'),
+  ] }),
+  awaken: (v, ev) => ({ title: '覚醒', chapter: 'AWAKENING', sub: `特殊能力「${(ev.v || {}).n || ''}」`, bg: 'mound', steps: [
+    ['fx', 'lines'], ['zoom', 'me'], ['in', 'me', 'C', 'determined', myPose(v)],
+    nar('その瞬間、すべてがスローモーションに見えた。'),
+    say('me', 'determined', myPose(v), P_(['……見える。', '今なら、何でもできる気がする。', 'これが――おれの、新しい力。'])),
+    ['fx', 'flash'], big(`特殊能力「${(ev.v || {}).n || ''}」を習得！`),
+  ] }),
+  // ---------- チーム ----------
+  allstar: v => ({ title: '夢の球宴', chapter: 'ALL-STAR', bg: 'dome', steps: [
+    ['fx', 'spark'], ['in', 'rival', 'R', 'smile', 'cross'], ['in', 'me', 'L', 'happy', 'wave'],
+    nar('ファン投票で選ばれた、球界のスターたちが集う夜。'),
+    say('rival', 'smile', 'cross', P_([`お前が${v.me}か。いつもは敵だが、今日は味方だな。`, '今日くらいは、仲良くやろうぜ。……明日からはまた本気だけどな。'])),
+    say('me', 'smile', 'shake', P_(['今日は、思いきり楽しみます。', 'いつか、本気の勝負でも勝ちますよ。'])),
+    ['fx', 'camera'], nar('セ・パの垣根を越えて、夢の共演が始まった。'),
+  ] }),
+  pennant: v => ({ title: 'リーグ優勝', chapter: 'CHAMPION', sub: `${v.y}年 ${v.lg}`, bg: 'stadium', steps: [
+    ['fx', 'confetti'], ['in', 'mgr', 'C', 'laugh', 'banzai'], ['in', 'me', 'L', 'laugh', 'banzai', 'jump'], ['in', 'mate', 'R', 'laugh', 'banzai', 'jump'],
+    big(`${v.teamF}、${v.y}年リーグ優勝！`),
+    nar(`宙に舞う${v.mgr}監督。${v.park}が、歓喜の渦に包まれる。`),
+    ['bg', 'beer'], ['fx', null], ['fx', 'beer'],
+    say('mate', 'laugh', 'banzai', 'ビールかけだぁぁ！ 目を守れ、ゴーグルつけろー！', 'jump'),
+    say('me', 'laugh', 'banzai', P_(['冷てぇ！ でも最高だ！', 'この一年、全部報われた！']), 'jump'),
+    say('mgr', 'happy', 'fist', 'まだ終わりじゃないぞ。次は、日本一だ！'),
+  ] }),
+  champion: v => ({ title: '日本一', chapter: 'JAPAN SERIES', sub: `${v.y}年 日本シリーズ制覇`, bg: 'dome', steps: [
+    ['fx', 'confetti'], ['in', 'mgr', 'C', 'cry', 'banzai'], ['in', 'me', 'L', 'cry', 'banzai', 'jump'], ['in', 'mate', 'R', 'laugh', 'banzai', 'jump'],
+    big(`${v.teamF}、日本一！`), ['shake'],
+    say('me', 'cry', 'banzai', P_(['日本一……！ 夢じゃない……！', 'このメンバーで、いちばん上まで来れた！']), 'jump'),
+    say('mgr', 'cry', 'down', 'お前たちは、本当に強かった。……ありがとう。'),
+    ['bg', 'parade'], ['fx', null], ['fx', 'confetti'],
+    nar('数日後。沿道を埋めつくすファンの前を、優勝パレードが進んでいった。'),
+    ['in', 'fan', 'RR', 'laugh', 'wave'],
+    say('fan', 'laugh', 'wave', P_([`${v.me}ー！ ありがとー！`, '最高の一年を、ありがとう！']), 'hop'),
+  ] }),
+  js_lose: v => ({ title: 'あと一歩', chapter: 'JAPAN SERIES', bg: 'dome', steps: [
+    ['fx', 'dark'], ['in', 'me', 'C', 'sad', 'down'],
+    nar('相手ベンチから、歓喜の輪が飛び出していく。そのすぐ横で、立ちつくしていた。'),
+    say('me', 'sad', 'down', P_(['この悔しさ、絶対に忘れない。', 'あと一勝……あと一勝だったのに。']), 'tremble'),
+    ['in', 'mgr', 'R', 'serious', 'cross'],
+    say('mgr', 'serious', 'cross', '顔を上げろ。この景色を、来年は向こう側から見るぞ。'),
+  ] }),
+  awards: (v, ev) => ({ title: 'NPBアワーズ', chapter: 'AWARDS', sub: (ev.v || {}).t || '', bg: 'hall', steps: [
+    ['fx', 'spark'], ['in', 'rep2', 'R', 'smile', 'mic'], ['in', 'me', 'L', 'calm', 'down'],
+    say('rep2', 'smile', 'mic', `今年の受賞者を発表します。――${(ev.v || {}).t || ''}、${v.full}選手！`),
+    ['fx', 'flash'], ['fx', 'camera'], ['ex', 'me', 'smile', 'trophy'],
+    say('me', 'smile', 'trophy', P_(['この賞に恥じない選手であり続けます。', 'チームメイト、スタッフ、そしてファンのみなさん。全員でもらった賞です。', 'まだまだ、ここからです。'])),
+  ] }),
+  // ---------- オフ ----------
+  keiyaku: (v, ev) => { const up = (ev.v || {}).up; return { title: '契約更改', chapter: 'OFF SEASON', bg: 'office', steps: [
+    ['in', 'gm', 'R', up ? 'smile' : 'serious', 'card'], ['in', 'me', 'L', up ? 'smile' : 'worry', 'down'],
+    say('gm', up ? 'smile' : 'serious', 'card', up ? P_(['今年の働きは、数字以上だった。これが、球団の評価だ。', 'よくやってくれた。……どうぞ、確かめてくれ。']) : P_(['厳しいが、これが今年の評価だ。', '来年の巻き返しに期待している。'])),
+    nar((ev.v || {}).line || ''),
+    say('me', up ? 'happy' : 'determined', up ? 'card' : 'guts', up ? P_(['ありがとうございます。来年は、もっと上を目指します。', '一発サインです！']) : P_(['……わかりました。来年、必ず取り返します。', '数字で見返します。'])),
+    ['choice', [['すぐにサインする', { cdt: 1 }], ['「もう少し上積みを」と粘る', { fame: 2, stress: 5 }]], 'どうする？'],
+  ] }; },
+  fa_right: v => ({ title: 'FA権', chapter: 'FREE AGENT', bg: 'night', steps: [
+    ['in', 'me', 'C', 'calm', 'think'],
+    nar('FA権。それは、自分の足で積み上げてきた年月の証。'),
+    say('me', 'calm', 'think', P_([`${v.team}に残るか、新しい世界に飛び込むか……。`, 'このユニフォームには、思い出がありすぎる。でも……。'])),
+    nar('決断のときが、近づいている。'),
+  ] }),
+  release: v => ({ title: '戦力外通告', chapter: 'RELEASE', bg: 'office', steps: [
+    ['fx', 'rain'], ['in', 'gm', 'R', 'serious', 'down'], ['in', 'me', 'L', 'worry', 'down'],
+    say('gm', 'serious', 'down', P_(['……来季の契約は、結ばないことになった。', 'つらい話をしなければならない。']), 'nod'),
+    say('me', 'shock', 'down', '……そう、ですか。', 'tremble'),
+    ['bg', 'river'], ['fx', null], ['out', 'gm'],
+    say('me', 'sad', 'down', P_(['終わりにするのは、まだ早い。……そうだろ？', 'ここで辞めたら、今までのおれが泣く。'])),
+    ['ex', 'me', 'determined', 'guts'],
+    say('me', 'determined', 'guts', P_(['合同トライアウト。独立リーグ。……道は、まだある。', 'もう一度、あの場所へ帰る。'])),
+  ] }),
+  retire: (v, ev) => ({ title: '引退セレモニー', chapter: 'FAREWELL', sub: (ev.v || {}).sum || '', bg: 'stadium', steps: [
+    ['fx', 'spark'], ['in', 'me', 'C', 'calm', 'down'],
+    nar(P_(['最後の打席（マウンド）を終えて、場内が暗転する。スポットライトが、ひとりを照らした。', 'スタンドを埋めた背番号のタオルが、ゆっくりと揺れている。'])),
+    ['fx', 'spot'],
+    say('me', 'cry', 'tip', P_(['こんなに幸せな野球人生は、ほかにありません。', '野球をやってきて、本当によかった。……ありがとうございました！', 'この背番号は、今日でユニフォームといっしょにおいていきます。'])),
+    ['in', 'mate', 'R', 'cry', 'clap'], ['fx', 'confetti'],
+    say('mate', 'cry', 'clap', 'お疲れさまでした！ ……みんな、胴上げだ！'),
+    ['ex', 'me', 'laugh', 'banzai', 'jump'],
+    nar(`${v.full}、${v.yrs}年のプロ野球人生に、幕。`),
+  ] }),
+  gendraft: v => ({ title: '現役ドラフト', chapter: 'NEW CHANCE', bg: 'press', steps: [
+    ['fx', 'camera'], ['in', 'me', 'C', 'determined', 'down'],
+    say('me', 'determined', 'tip', P_([`${v.team}で、もう一度輝きます。`, '環境が変わるのは、チャンスだと思っています。'])),
+  ] }),
+  // ---------- 日々のドラマ ----------
+  mgr_talk: v => ({ title: '監督室', chapter: 'DRAMA', bg: 'office', steps: [
+    ['in', 'mgr', 'R', 'serious', 'cross'], ['in', 'me', 'L', 'normal', 'down'],
+    say('mgr', 'serious', 'cross', P_([`${v.me}。お前、最近の自分をどう見てる？`, '少し、話をしようか。', 'お前の課題、自分でわかってるか？'])),
+    say('me', 'worry', 'think', P_(['……まだ、波があると思います。', 'もっと、勝負どころで結果を出したいです。'])),
+    say('mgr', 'smile', 'point', P_(['わかってるなら、いい。おれは、お前の伸びしろに賭けてるんだ。', '迷ったら、思いきりいけ。失敗の責任は、おれが取る。', '期待してるから、言うんだぞ。'])),
+    ['choice', [['「必ず応えます」', { cond: 2, cdt: 1 }], ['「もっと使ってください」', { fame: 3, stress: 3 }]], 'どう答える？'],
+  ] }),
+  vet_advice: v => ({ title: '先輩の背中', chapter: 'DRAMA', bg: 'cage', steps: [
+    ['in', 'vet', 'R', 'calm', 'bat'], ['in', 'me', 'L', 'normal', myPose(v)],
+    nar('誰もいないはずの室内練習場。明かりがついていた。'),
+    say('vet', 'calm', 'bat', P_(['……なんだ、お前も来たのか。', '若いころは、毎晩ここにいたもんだ。'])),
+    say('vet', 'smile', 'point', P_(['プロで生き残るやつはな、誰も見てないところでバットを振ってる。', 'いいか。調子がいいときほど、基本を忘れるな。', '数字に追われるな。数字を追いかけろ。'])),
+    say('me', 'determined', 'guts', '……ありがとうございます。今日は、とことん付き合ってください！'),
+  ] }),
+  mate_dinner: v => ({ dress: 'casual', title: '焼肉と本音', chapter: 'DRAMA', bg: 'street', steps: [
+    ['in', 'mate', 'R', 'laugh', 'down'], ['in', 'me', 'L', 'smile', 'down'],
+    say('mate', 'laugh', 'down', P_(['今日はおごりだ。腹いっぱい食え！', 'ナイターのあとの焼肉は、格別だよな。'])),
+    say('mate', 'calm', 'think', P_(['……正直さ、お前が来てから、おれも負けてらんねえって思ってる。', 'いつか一緒に、優勝の輪に入ろうぜ。'])),
+    say('me', 'happy', 'guts', 'そのときは、おれがおごりますよ。'),
+  ] }),
+  fan_letter: v => ({ title: '一通の手紙', chapter: 'DRAMA', bg: 'locker', steps: [
+    ['in', 'me', 'C', 'normal', 'card'],
+    nar('ロッカーに、一通のファンレター。子どもの字で、大きくこう書かれていた。'),
+    big(P_([`「${v.me}せんしゅ、ホームランうってね」`, `「びょういんで、いつもおうえんしてます」`, `「ぼくも、${v.me}せんしゅみたいになりたい」`])),
+    say('me', 'smile', 'card', P_(['……よし。今日は、この子のために打つ。', '負けられない理由が、また一つ増えたな。'])),
+  ] }),
+  family_call: v => ({ dress: 'casual', title: '実家からの電話', chapter: 'DRAMA', bg: 'night', steps: [
+    ['in', 'me', 'C', 'normal', 'phone'],
+    say('me', 'smile', 'phone', 'もしもし、母さん？'),
+    nar(P_(['「テレビで見たよ。近所の人にも、自慢してまわってるんだから」', '「ちゃんと食べてる？ ケガだけはしないでね」', '「お父さんね、あんたの記事、ぜんぶスクラップしてるのよ」'])),
+    say('me', 'happy', 'phone', P_(['……うん。ありがとう。また、帰るよ。', 'ちゃんと見ててよ。もっとすごいところ、見せるから。'])),
+  ] }),
+  rival_meet: v => ({ title: 'ライバル', chapter: 'RIVAL', bg: 'stadium', steps: [
+    ['fx', 'lines'], ['in', 'rival', 'R', 'determined', 'cross'], ['in', 'me', 'L', 'determined', myPose(v)],
+    say('rival', 'determined', 'cross', P_([`お前が${v.me}か。……気に入らねえな。`, `${v.rteam}の${v.rival}だ。次の対戦、楽しみにしてるぜ。`, 'お前とは、長い付き合いになりそうだ。'])),
+    say('me', 'determined', myPose(v), P_(['こっちのセリフだ。', '負けるつもりはない。']), 'nod'),
+    nar(`${v.rteam}の${v.rival}――この男が、あなたの最大のライバルになる。`),
+  ] }),
+  slump: v => ({ title: 'スランプ', chapter: 'DRAMA', bg: 'cage', steps: [
+    ['fx', 'rain'], ['in', 'me', 'C', 'worry', myPose(v)],
+    nar('打てない。抑えられない。何をやっても、歯車がかみ合わない。'),
+    say('me', 'sad', myPose(v), P_(['どうしちまったんだ、おれは……。', '昨日までできてたことが、できない。']), 'tremble'),
+    ['in', 'coach', 'R', 'calm', 'cross'],
+    say('coach', 'calm', 'cross', P_(['悩め。悩みぬいたやつだけが、一段上にいける。', '一回、全部忘れてみろ。体は覚えてる。'])),
+    ['fx', null], say('me', 'determined', 'guts', '……もう一度、基本からやります。'),
+  ] }),
+  hot: v => ({ title: '絶好調', chapter: 'DRAMA', bg: 'stadium', steps: [
+    ['fx', 'spark'], ['in', 'me', 'C', 'smile', myPose(v)],
+    nar('ボールが止まって見える。いま、自分がどこまでも行ける気がした。'),
+    say('me', 'smile', myPose(v), P_(['今のおれを止められるやつは、いない。', 'この感覚……絶対に手放さない。']), 'hop'),
+  ] }),
+  injury: v => ({ title: '故障', chapter: 'DRAMA', bg: 'hospital', steps: [
+    ['in', 'doc', 'R', 'serious', 'card'], ['in', 'me', 'L', 'shock', 'down'],
+    say('doc', 'serious', 'card', 'しばらくは、治療とリハビリに専念してもらう。焦りは禁物だ。'),
+    say('me', 'sad', 'down', P_(['……なんで、今なんだ。', 'チームが大事なときに……。']), 'tremble'),
+    say('doc', 'calm', 'down', 'ケガは、体からのメッセージだ。必ず、前より強くして戻すぞ。'),
+  ] }),
+  comeback: v => ({ title: '復活', chapter: 'COMEBACK', bg: 'stadium', steps: [
+    ['fx', 'spark'], ['in', 'me', 'C', 'determined', myPose(v)],
+    nar('長いリハビリを越えて、再びグラウンドへ。スタンドから、大きな拍手が起きた。'),
+    say('me', 'smile', 'tip', P_(['……ただいま。', 'お待たせしました。ここからが、本番です。'])),
+  ] }),
+  // ---------- メジャー・国際 ----------
+  mlb_join: v => ({ dress: 'suit', title: '海を渡る', chapter: 'MAJOR LEAGUE', sub: `${v.mlbteam}`, bg: 'airport', mlb: 1, steps: [
+    ['fx', 'camera'], ['in', 'me', 'C', 'determined', 'wave'],
+    nar('空港には、たくさんのファンと報道陣が詰めかけていた。'),
+    say('me', 'determined', 'wave', P_(['向こうで、日本人の力を見せてきます。', '世界一の舞台で、どこまでやれるか。楽しみで仕方ないです。'])),
+    ['bg', 'press'], ['in', 'mlbmgr', 'R', 'smile', 'shake'], ['in', 'interp', 'LL', 'normal', 'down'],
+    say('mlbmgr', 'laugh', 'shake', 'Welcome to the Big League! 君のような選手を待っていた！'),
+    say('interp', 'normal', 'down', '「ようこそメジャーへ。君のような選手を待っていた」と言っています。'),
+    say('me', 'smile', 'shake', 'Thank you. ……I will do my best!'),
+  ] }),
+  mlb_debut: v => ({ title: 'メジャーデビュー', chapter: 'MAJOR LEAGUE', bg: 'day', mlb: 1, steps: [
+    ['fx', 'spark'], ['zoom', 'me'], ['in', 'me', 'C', 'determined', myPose(v)],
+    nar(`ボールパークに響く英語のアナウンス。「Now ${v.isP ? 'pitching' : 'batting'}, ${v.me}!」`),
+    say('me', 'determined', myPose(v), 'ここが、世界の頂点か。……面白い。'),
+  ] }),
+  ws_win: v => ({ title: 'ワールドチャンピオン', chapter: 'WORLD SERIES', bg: 'day', mlb: 1, steps: [
+    ['fx', 'confetti'], ['in', 'mlbmgr', 'R', 'laugh', 'banzai', 'jump'], ['in', 'me', 'L', 'cry', 'trophy', 'jump'],
+    big(`${v.mlbteam}、ワールドシリーズ制覇！`),
+    say('me', 'cry', 'trophy', '世界一……！ 子どものころの夢が、ここにあった！'),
+  ] }),
+  japan: (v, ev) => ({ title: '侍ジャパン', chapter: 'SAMURAI JAPAN', sub: (ev.v || {}).name || '', bg: 'dome', theme: { c1: '#0a1a3a', c2: '#d4af37', logo: 'SJ' }, steps: [
+    ['fx', 'spark'], ['in', 'me', 'C', 'determined', 'tip'],
+    nar('胸に日の丸。背中に、日本中の期待。'),
+    say('me', 'determined', 'tip', P_(['日本のために戦えることを、誇りに思います。', 'この国の野球の強さを、世界に見せる。'])),
+    ...((ev.v || {}).win ? [['fx', 'confetti'], big('侍ジャパン、世界一！'), say('me', 'cry', 'banzai', 'やった……日本が、世界一だ！', 'jump')] : [say('me', 'serious', 'down', '世界の壁は、高かった。……でも、次は負けない。')]),
+  ] }),
+  return_jp: v => ({ dress: 'suit', title: 'おかえりなさい', chapter: 'RETURN', bg: 'press', steps: [
+    ['fx', 'camera'], ['in', 'me', 'C', 'smile', 'tip'],
+    say('me', 'smile', 'tip', P_(['アメリカで学んだことを、日本の野球に還元します。', 'ただいま。やっぱり、日本の野球が好きです。'])),
+  ] }),
+  // ---------- 場外 ----------
+  cm: (v, ev) => ({ title: 'CM撮影', chapter: 'OFF THE FIELD', sub: (ev.v || {}).name || '', bg: 'hall', steps: [
+    ['in', 'director', 'R', 'serious', 'point'], ['in', 'me', 'L', 'worry', 'down'],
+    say('director', 'serious', 'point', 'はい本番！ もっと爽やかに、カメラ目線で！'),
+    say('me', 'smile', 'wave', P_(['こ、こうですか……？', 'プロ野球より緊張する……！'])),
+    ['fx', 'flash'], say('director', 'laugh', 'clap', 'オッケー！ 最高の笑顔だった！'),
+  ] }),
+  scandal: v => ({ dress: 'suit', title: '謝罪会見', chapter: 'SCANDAL', bg: 'press', steps: [
+    ['fx', 'camera'], ['in', 'me', 'C', 'sad', 'bow'],
+    nar('無数のフラッシュが、うなだれた頭に降りそそぐ。'),
+    say('me', 'sad', 'bow', P_(['ファンのみなさん、チームのみなさんに、多大なご迷惑をおかけしました。', '軽率な行動でした。本当に、申しわけありませんでした。'])),
+    say('rep', 'serious', 'mic', '今後については！？', 'shake'),
+    say('me', 'determined', 'down', '……野球で、信頼を取り戻すしかありません。'),
+  ] }),
+  doping: v => ({ dress: 'suit', title: '陽性反応', chapter: 'SCANDAL', bg: 'press', steps: [
+    ['fx', 'dark'], ['fx', 'camera'], ['in', 'me', 'C', 'shock', 'bow'],
+    nar('禁止薬物の陽性反応。積み上げてきたものが、音を立てて崩れていく。'),
+    say('me', 'cry', 'bow', P_(['……弱かったのは、体じゃなく、心でした。', '言い訳は、ひとつもありません。'])),
+    nar('記録には、消えない注釈がつくことになる。'),
+  ] }),
+  temptation: v => ({ dress: 'casual', title: '甘いささやき', chapter: 'DARK SIDE', bg: 'street', steps: [
+    ['fx', 'dark'], ['in', 'agent', 'R', 'smile', 'card'], ['in', 'me', 'L', 'worry', 'down'],
+    say('agent', 'smile', 'card', P_(['みんなやってるさ。バレなきゃ、ただの「努力」だよ。', '結果が出なきゃ、来年はない。……違うかい？'])),
+    say('me', 'worry', 'down', '……。', 'tremble'),
+    nar('その一歩は、戻れない道かもしれない。'),
+  ] }),
+  union_chair: v => ({ dress: 'suit', title: '選手会長', chapter: 'UNION', bg: 'press', steps: [
+    ['fx', 'camera'], ['in', 'chair', 'R', 'smile', 'down'], ['in', 'me', 'L', 'determined', 'down'],
+    say('chair', 'smile', 'shake', 'あなたなら、選手たちの声をまとめられると信じています。'),
+    say('me', 'determined', 'tip', P_(['選手が、ファンが、もっと野球を好きになれる球界にします。', '次の世代のために、できることをやります。'])),
+  ] }),
+  strike: v => ({ dress: 'suit', title: '史上初のストライキ', chapter: '2004', bg: 'press', steps: [
+    ['fx', 'camera'], ['in', 'chair', 'R', 'serious', 'down'], ['in', 'me', 'L', 'serious', 'down'],
+    nar('2004年、球界再編。合併、1リーグ制――揺れる球界で、選手会はついに決断した。'),
+    say('chair', 'serious', 'down', '明日、明後日の試合を、ストライキで中止します。'),
+    say('me', 'serious', 'guts', '……ファンの球団を、守るためなんだ。'),
+    nar('スタンドには、選手を支持する横断幕が掲げられていた。'),
+  ] }),
+  // ---------- 高校野球 ----------
+  koshien: (v, ev) => ({ title: (ev.v || {}).win ? '深紅の大優勝旗' : '甲子園', chapter: 'HIGH SCHOOL', bg: 'day', theme: { c1: '#1a2a5a', c2: '#d4af37', logo: null }, steps: [
+    ['fx', 'spark'], ['in', 'hsmgr', 'R', 'serious', 'cross'], ['in', 'me', 'L', 'determined', myPose(v)],
+    nar('アルプススタンドのブラスバンド。陽炎の向こうに、ツタの絡まる外壁が見えた。'),
+    ...((ev.v || {}).win ? [['fx', 'confetti'], big('全国制覇！'), say('me', 'cry', 'banzai', 'てっぺんだ……みんなで、てっぺんを獲ったんだ！', 'jump'), say('hsmgr', 'cry', 'down', 'お前たちは、おれの誇りだ。')]
+      : [say('me', 'determined', myPose(v), P_(['ここが、甲子園……！', '一球一球が、宝物だ。'])), say('hsmgr', 'smile', 'cross', '楽しんでこい。それが、いちばん強い。')]),
+  ] }),
+  scout_eye: v => ({ title: 'スカウトの視線', chapter: 'ROAD TO PRO', bg: 'school', steps: [
+    ['in', 'scout', 'R', 'serious', 'cross'], ['in', 'me', 'L', 'normal', myPose(v)],
+    nar('フェンスの向こうに、スーツ姿の男たち。プロのスカウトだ。'),
+    say('scout', 'smile', 'cross', P_(['……あの子、いいね。来年のリストに入れておこう。', '身体の使い方がいい。化けるかもしれんな。'])),
+  ] }),
+};
+// ---------- 日々のドラマ（追加） ----------
+Object.assign(EVENTS, {
+  night_practice: v => ({ title: '午前0時の素振り', chapter: 'DRAMA', bg: 'night', steps: [
+    ['in', 'me', 'C', 'determined', v.isP ? 'pitch' : 'swing'],
+    nar(P_(['寮の屋上。月明かりの下で、何百回目かのスイング（シャドー）。', 'みんなが寝静まったあと。ここからが、おれだけの時間だ。'])),
+    say('me', 'determined', v.isP ? 'pitch' : 'swing', P_(['あと100回。……いや、納得するまでだ。', '昨日の自分より、一ミリでも前へ。', '才能で負けるなら、量で勝つ。'])),
+    ['fx', 'spark'], nar('その努力を、夜空だけが見ていた。'),
+  ] }),
+  hero_iv: v => ({ title: 'ヒーローインタビュー', chapter: 'HERO', bg: 'stadium', steps: [
+    ['fx', 'camera'], ['in', 'rep2', 'R', 'smile', 'mic'], ['in', 'me', 'L', 'happy', 'down'],
+    say('rep2', 'smile', 'mic', `放送席、放送席！ 今日のヒーローは、${v.me}選手です！`),
+    say('me', 'laugh', 'wave', P_(['最高でーす！！', 'みなさんの声援が、背中を押してくれました！', `${v.park}のファンは、日本一です！`]), 'hop'),
+    say('rep2', 'smile', 'mic', '最後に、ファンのみなさんにひとこと！'),
+    ['choice', [['「明日も勝ちます！」', { fame: 4 }], ['「これからも応援よろしくお願いします」', { cdt: 2, fame: 2 }], ['持ちネタのポーズを決める', { fame: 6, stress: -4 }]], 'どう締める？'],
+    ['fx', 'confetti'], nar('スタンドから、あなたの名前のコールが鳴りやまなかった。'),
+  ] }),
+  hospital_visit: v => ({ title: '約束のホームラン', chapter: 'DRAMA', bg: 'hospital', steps: [
+    ['in', 'kid', 'R', 'smile', 'down'], ['in', 'me', 'L', 'smile', 'down'],
+    say('kid', 'smile', 'down', P_([`ほんものの${v.me}せんしゅだ……！`, 'ぼくね、もうすぐ手術なんだ。こわくないよ。'])),
+    say('me', 'smile', 'shake', P_([v.isP ? '次の試合、きみのために三振を取るよ。' : '次の試合、きみのためにホームランを打つ。約束だ。', 'がんばったら、球場においで。いちばんいい席で待ってる。'])),
+    say('kid', 'laugh', 'wave', 'やくそくだよ！', 'hop'),
+    nar('病室を出るとき、胸の奥で、何かが熱く燃えていた。'),
+  ] }),
+  mentor: v => ({ title: '受け継ぐもの', chapter: 'DRAMA', bg: 'cage', steps: [
+    ['in', 'rookie', 'R', 'worry', v.isP ? 'ball' : 'bat'], ['in', 'me', 'L', 'calm', 'cross'],
+    say('rookie', 'worry', 'down', P_([`${v.me}さん……どうしたら、一軍で通用しますか？`, '自分、全然結果が出なくて……。'])),
+    say('me', 'smile', 'point', P_(['おれも、昔は同じことで悩んだよ。答えは、毎日の中にしかない。', '焦るな。お前のいいところは、おれがちゃんと見てる。'])),
+    say('rookie', 'determined', 'guts', 'はい！ ……今日、ちょっとだけ練習つきあってもらえますか？'),
+    say('me', 'laugh', 'tip', 'ちょっとだけ、な。'),
+  ] }),
+  bullpen: v => ({ title: 'ブルペンの会話', chapter: 'DRAMA', bg: 'cage', steps: [
+    ['in', 'catcher', 'R', 'serious', 'glove'], ['in', 'me', 'L', 'determined', 'pitch'],
+    say('catcher', 'serious', 'glove', P_(['今日の真っすぐ、走ってるぞ。勝負球はこれでいく。', '外角いっぱい、もう一球。ここが今日の生命線だ。'])),
+    say('me', 'determined', 'pitch', P_(['了解。サインは任せます。', '構えたところに、全部投げます。'])),
+    ['fx', 'flash'], say('catcher', 'smile', 'glove', 'ナイスボール！ ……今日は、いけるぞ。'),
+  ] }),
+  rain_delay: v => ({ title: '雨のベンチで', chapter: 'DRAMA', bg: 'stadium', steps: [
+    ['fx', 'rain'], ['in', 'mate', 'R', 'calm', 'down'], ['in', 'me', 'L', 'normal', 'down'],
+    nar('激しい雨で、試合は中断。ベンチに雨音だけが響く。'),
+    say('mate', 'calm', 'think', P_(['子どものころさ、雨の日は一日中バット振ってた。', '……なあ、なんで野球やってるか、考えたことある？'])),
+    say('me', 'smile', 'down', P_(['好きだから。それだけですよ。', '勝ったときの、あの景色が見たいからです。'])),
+    say('mate', 'laugh', 'down', 'はは、違いねえ。'),
+  ] }),
+  autograph: v => ({ title: 'サインの列', chapter: 'DRAMA', bg: 'camp', steps: [
+    ['in', 'fan', 'R', 'happy', 'card'], ['in', 'me', 'L', 'smile', 'card'],
+    nar('練習後。フェンスの向こうに、サインを求める長い列ができていた。'),
+    say('fan', 'happy', 'card', P_([`${v.me}選手！ ずっと応援してます！`, '色紙、お願いします！ 家宝にします！']), 'hop'),
+    say('me', 'smile', 'card', P_(['いつもありがとうございます。今年も、見ててください。', '名前、入れておきますね。']))
+  ] }),
+  hometown: v => ({ title: '凱旋', chapter: 'DRAMA', bg: 'station', dress: 'casual', steps: [
+    ['fx', 'sakura'], ['in', 'friend', 'R', 'laugh', 'wave'], ['in', 'me', 'L', 'smile', 'wave'],
+    say('friend', 'laugh', 'wave', P_([`おーい、${v.me}！ 有名人のお帰りだな！`, '商店街に、お前のポスター貼ってあるぞ。'])),
+    say('me', 'laugh', 'down', P_(['やめろって、恥ずかしい。', '……変わらないな、この町は。'])),
+    say('friend', 'smile', 'shake', 'みんな、お前の活躍が自分のことみたいに嬉しいんだ。がんばれよ。'),
+  ] }),
+  tv_show: (v, ev) => ({ title: 'テレビ出演', chapter: 'OFF THE FIELD', sub: (ev.v || {}).name || '', bg: 'hall', dress: 'suit', steps: [
+    ['fx', 'spark'], ['in', 'rep2', 'R', 'smile', 'mic'], ['in', 'me', 'L', 'worry', 'down'],
+    say('rep2', 'smile', 'mic', `今夜のゲストは、${v.teamF || 'プロ野球'}の${v.me}選手です！`),
+    say('me', 'smile', 'wave', P_(['よ、よろしくお願いします……！', 'グラウンドより緊張しますね……。'])),
+    ['choice', [['素直にトークする', { fame: 4, cdt: 1 }], ['体を張った企画に挑戦', { fame: 8, stress: 4 }]], 'どうする？'],
+    say('rep2', 'laugh', 'clap', 'スタジオ、大盛り上がりです！'),
+  ] }),
+});
+
+// ===== 固有イベントの発生条件・自動再生 =====
+// お知らせの見出し → イベント
+const EV_RULES = [
+  [/^ドラフト会議$/, (b, N) => /指名した/.test(b) ? ['draft', { v: { round: N.me.offer ? N.me.offer.round : 1, ik: !!(N.me.offer && N.me.offer.ikusei), comp: (/(\d)球団が1位で競合/.exec(b) || [])[1] || 0 }, tid: N.me.offer && N.me.offer.team }] : /呼ばれなかった/.test(b) ? ['draft_miss'] : null],
+  [/^一軍デビュー$/, () => ['debut', { once: 'debut' }]],
+  [/^プロ初安打！$/, () => ['first_hit', { once: 'fhit' }]],
+  [/^プロ初本塁打！$/, () => ['first_hr', { once: 'fhr' }]],
+  [/^プロ初勝利！$/, () => ['first_win', { once: 'fwin' }]],
+  [/^プロ初セーブ！$/, () => ['first_save', { once: 'fsave' }]],
+  [/^通算(\d+)(.+)達成！$/, (b, N, t) => { const m = /^通算(\d+)(.+)達成！$/.exec(t); return ['milestone', { v: { n: +m[1], label: m[2], meikyu: /名球会/.test(b) } }]; }],
+  [/^開幕一軍$/, (b, N) => ['opening', { once: 'op' + (N.S ? N.S.y : 0) }]],
+  [/^一軍昇格$/, (b, N) => (N.evSeen && N.evSeen.promote1 && chance(0.6)) ? null : ['promote', { once: N.evSeen && N.evSeen.promote1 ? null : 'promote1' }]],
+  [/^二軍降格$/, () => chance(0.5) ? ['demote'] : null],
+  [/^支配下登録$/, () => ['shihaika']],
+  [/^三軍$/, () => ['third', { once: 'third' }]],
+  [/^故障$/, () => ['injury']],
+  [/^復帰$/, () => chance(0.7) ? ['comeback'] : null],
+  [/^春季キャンプ$/, (b, N) => num(N.me.yrs) === 0 || chance(0.35) ? ['camp', { once: 'camp' + (N.S ? N.S.y : 0) }] : null],
+  [/^紅白戦$/, (b, N) => ['kouhaku', { v: { good: /上々/.test(b) }, once: 'kh' + (N.S ? N.S.y : 0) }]],
+  [/^オールスターゲーム$/, (b, N) => ['allstar', { once: 'as' + (N.S ? N.S.y : 0) }]],
+  [/^リーグ優勝$/, () => ['pennant']],
+  [/^日本一$/, () => ['champion']],
+  [/^日本シリーズ$/, b => /届かなかった/.test(b) ? ['js_lose'] : null],
+  [/^NPBアワーズ$/, b => ['awards', { v: { t: ((/・(.+)/.exec(b) || [])[1] || '').trim() } }]],
+  [/^契約更改$/, b => ['keiyaku', { v: { up: /\+/.test(b), line: (b.split('\n').find(l => /→/.test(l)) || '').trim() } }]],
+  [/^FA権$/, () => ['fa_right']],
+  [/^戦力外通告$/, () => ['release']],
+  [/^日本代表に選出！$/, b => ['japan', { v: { win: /結果：(優勝|金メダル)/.test(b), name: ((/年の(.+?)に、/.exec(b) || [])[1] || '').replace(/（.*）/, '') } }]],
+  [/^メジャー開幕ロースター入り$|^メジャー昇格$/, () => ['mlb_debut', { once: 'mlbdebut', mlb: 1 }]],
+  [/^メジャー・シーズン終了$/, b => /ワールドシリーズ.*(制覇|優勝|チャンピオン)/.test(b) ? ['ws_win', { mlb: 1 }] : null],
+  [/^(完全試合|ノーヒットノーラン|サイクル安打|1試合\d+本塁打|1試合\d+奪三振|1試合\d+安打|1試合\d+打点)$/, (b, N, t) => ['feat', { v: { label: t } }]],
+  [/^満塁本塁打$/, () => chance(0.6) ? ['grandslam'] : null],
+  [/^サヨナラ本塁打$/, () => ['walkoff']],
+  [/^(\d+)試合連続安打$/, (b, N, t) => ['streak', { v: { n: parseInt(t, 10) } }]],
+  [/^不祥事$|^不正用具の発覚$/, () => ['scandal']],
+  [/^禁止薬物の陽性反応$/, () => ['doping']],
+  [/^日本プロ野球選手会 会長に就任$/, () => ['union_chair']],
+  [/^選手会のストライキ$/, () => ['strike', { once: 'strike' }]],
+  [/^現役ドラフト$/, () => ['gendraft']],
+  [/^特殊能力「(.+)」を習得！$/, (b, N, t) => ['awaken', { v: { n: (/「(.+)」/.exec(t) || [])[1] } }]],
+  [/^夏の地方大会$/, b => /【甲子園】/.test(b) ? ['koshien', { v: { win: /全国制覇/.test(b) } }] : null],
+  [/^スカウトの視線$/, () => ['scout_eye', { once: 'scouteye' }]],
+];
+function evDispatch(g, N, notes) {
+  if (!N || !N.me || (N.opt && N.opt.ev === 'off')) return;
+  for (const t of notes || []) {
+    const ls = String(t).split('\n'), m = /^【(.+)】$/.exec(ls[0]); if (!m) continue;
+    const title = m[1], body = ls.slice(1).join('\n');
+    for (const [re, f] of EV_RULES) { if (!re.test(title)) continue; const r = f(body, N, title); if (r) evPush(N, r[0], r[1] || {}); break; }
+  }
+}
+// 日々のドラマ（シーズン中にときどき）
+function evDaily(g, N, S, day, md, out) {
+  const me = N.me; if (!me || (N.opt && N.opt.ev === 'off')) return;
+  if (!(me.st === 'pro' || me.st === 'mlb' || isMinor(me))) return;
+  if (!(md >= 32 && md <= 88) || day - num(N.evLast) < 9 || !chance(0.07)) return;
+  if (me.evDay === day) return; me.evDay = day;
+  const cand = [];
+  if (me.st === 'pro') {
+    cand.push(['mgr_talk', 2], ['mate_dinner', 2], ['fan_letter', 2], ['family_call', 2], ['night_practice', 2], ['rain_delay', 1], ['hospital_visit', 1], ['autograph', 1], ['hometown', 1]);
+    if (me.lv === 1) cand.push(['hero_iv', 2]);
+    if (num(me.yrs) >= 6) cand.push(['mentor', 2]);
+    if (me.p.pos === 'P') cand.push(['bullpen', 2]);
+    if (num(me.yrs) <= 5) cand.push(['vet_advice', 2]);
+    if (!N.rivalT || chance(0.15)) cand.push(['rival_meet', 1]);
+    const rec = (me.rec || []).slice(-8);
+    const rb = rec.reduce((s, r) => r.b ? addArr(s, r.b) : s, newB()), rp = rec.reduce((s, r) => r.p ? addArr(s, r.p) : s, newP());
+    const bad = me.p.pos === 'P' ? (rp[Pp.OUT] >= 15 && eraOf(rp) > 5.5) : (rb[B.PA] >= 20 && avgOf(rb) < 0.17);
+    const hot = me.p.pos === 'P' ? (rp[Pp.OUT] >= 15 && eraOf(rp) < 1.6) : (rb[B.PA] >= 20 && avgOf(rb) > 0.38);
+    if (bad) cand.push(['slump', 5]); if (hot) cand.push(['hot', 5]);
+  } else if (me.st === 'mlb') cand.push(['family_call', 2], ['fan_letter', 1]);
+  else { if (!chance(0.5)) return; cand.push(['family_call', 1], ['ind_bus', me.st === 'ind' ? 2 : 0], ['fan_letter', 1]); }
+  const tot = cand.reduce((s, c) => s + c[1], 0); if (!tot) return;
+  let x = RND() * tot; let id = cand[0][0]; for (const [k, w] of cand) { x -= w; if (x <= 0) { id = k; break; } }
+  if (id === 'rival_meet') { const T = TEAM[me.team]; const others = TEAMS.filter(t => t.id !== me.team && (!T || t.lg === T.lg)); N.rivalT = N.rivalT || pick(others).id; evPush(N, id, { rtid: N.rivalT }); return; }
+  evPush(N, id, { mlb: me.st === 'mlb' ? 1 : 0, minor: isMinor(me) ? 1 : 0 });
+}
+// ---- 自動再生（マップ上で、何もしていないとき） ----
+function hookAutoEv(g) {
+  try {
+    const proto = g && Object.getPrototypeOf(g); if (!proto || proto.__npbEv || typeof proto.update !== 'function') return;
+    proto.__npbEv = 1;
+    const orig = proto.update;
+    proto.update = function (...a) { const r = orig.apply(this, a); try { evAutoTick(this); } catch (e) { } return r; };
+  } catch (e) { }
+}
+function evAutoTick(g) {
+  const N = g.state && g.state.npb;
+  if (!N || !Array.isArray(N.evq) || !N.evq.length || (N.opt && N.opt.ev && N.opt.ev !== 'auto')) { g._npbEvT = 0; return; }
+  if (g._npbEvPlaying || g.top !== g.map || g.busy || g.fade > 0 || (g.pendingTips && g.pendingTips.length)) { g._npbEvT = 0; return; }
+  if (++g._npbEvT < 50) return;
+  g._npbEvT = 0; g._npbEvPlaying = 1;
+  playEvents(g, N).then(() => { g._npbEvPlaying = 0; }, () => { g._npbEvPlaying = 0; });
+}
+// 思い出（見返し用）
+function evRemember(N, ev) { N.evLog = Array.isArray(N.evLog) ? N.evLog : []; N.evLog.push({ ...ev, y: N.S ? N.S.y : 0 }); if (N.evLog.length > 40) N.evLog.shift(); }
+const EV_TITLE = id => { try { const s = EVENTS[id]; return s ? '' : ''; } catch (e) { return ''; } };
+// 入団経緯の文章
+function routeText(r) {
+  if (!r) return '';
+  const t = TEAM[r.team] ? TEAM[r.team].short : '';
+  const base = r.kind === 'draft' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}に入団` : r.kind === 'draft_ind' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}へ（独立リーグ・${r.from}から）` : r.kind === 'draft_corp' ? `${r.y}年ドラフト${r.ik ? '育成' : ''}${r.round}位で${t}へ（社会人・${r.from}から）` : r.kind === 'tryout' ? `${r.y}年 入団テストに合格して${t}へ` : r.kind === 'trial' ? `${r.y}年 トライアウトから${t}へ${r.from ? `（${r.from}から復帰）` : ''}` : r.kind === 'fa' ? `${r.y}年 FAで${t}へ移籍` : `${r.y}年 ${t}に入団`;
+  return base;
+}
+
+// ===== 社会人野球・独立リーグ =====
+// [球団名, メインカラー, サブカラー, 参加年, 最終年]
+const MINOR_LG = [
+  { id: 'IL', s: '四国IL', n: y => y >= 2011 ? '四国アイランドリーグplus' : y >= 2008 ? '四国・九州アイランドリーグ' : '四国アイランドリーグ', from: 2005, kind: 'ind', rate: 0.5, m: 41, city: '四国',
+    teams: [['徳島インディゴソックス', '#1a3a8a', '#6ad0ff'], ['香川オリーブガイナーズ', '#3a8a3a', '#f5d020'], ['高知ファイティングドッグス', '#d07020', '#1a1a20'], ['愛媛マンダリンパイレーツ', '#f08a1a', '#1a3a6a'], ['福岡レッドワーブラーズ', '#c02030', '#ffffff', 2008, 2009], ['長崎セインツ', '#2a4aa0', '#f0c030', 2008, 2009]] },
+  { id: 'BC', s: 'BCリーグ', n: y => y >= 2015 ? 'ルートインBCリーグ' : y >= 2008 ? 'BCリーグ' : '北信越BCリーグ', from: 2007, kind: 'ind', rate: 0.5, m: 41, city: '北信越・関東',
+    teams: [['信濃グランセローズ', '#1a5a3a', '#f0c030'], ['新潟アルビレックスBC', '#f08020', '#1a3a8a', 2007, 2023], ['富山GRNサンダーバーズ', '#1a4a9a', '#f0f0f0', 2007, 2022], ['石川ミリオンスターズ', '#d03040', '#f0d040', 2007, 2022], ['群馬ダイヤモンドペガサス', '#2a2a7a', '#e0e0e0', 2008], ['福井ミラクルエレファンツ', '#d02020', '#f0f0f0', 2008, 2019], ['埼玉武蔵ヒートベアーズ', '#c02020', '#1a1a1a', 2015], ['栃木ゴールデンブレーブス', '#e0a020', '#1a1a1a', 2017], ['茨城アストロプラネッツ', '#2a4aa0', '#f0c030', 2019], ['神奈川フューチャードリームス', '#1a6ac0', '#ffffff', 2020]] },
+  { id: 'KAL', s: '九州アジアL', n: () => '九州アジアリーグ', from: 2021, kind: 'ind', rate: 0.46, m: 41, city: '九州',
+    teams: [['火の国サラマンダーズ', '#c02020', '#f0c030'], ['大分B-リングス', '#2a5ab0', '#f0f0f0'], ['北九州下関フェニックス', '#e06020', '#1a1a1a', 2024]] },
+  { id: 'HFL', s: '北海道FL', n: () => '北海道フロンティアリーグ', from: 2022, kind: 'ind', rate: 0.42, m: 38, city: '北海道',
+    teams: [['美唄ブラックダイヤモンズ', '#1a1a24', '#c0c0c8'], ['士別サムライブレイズ', '#3a2a8a', '#f0c030'], ['石狩レッドフェニックス', '#c02030', '#f0f0f0', 2023]] },
+  { id: 'NKL', s: '日本海L', n: () => '日本海リーグ', from: 2023, kind: 'ind', rate: 0.42, m: 41, city: '北陸',
+    teams: [['富山GRNサンダーバーズ', '#1a4a9a', '#f0f0f0'], ['石川ミリオンスターズ', '#d03040', '#f0d040'], ['福井ネクサスエレファンツ', '#2a2a2a', '#f0c030', 2025]] },
+  { id: 'KAN', s: '関西独立L', n: y => y >= 2023 ? 'さわかみ関西独立リーグ' : '関西独立リーグ', from: 2014, kind: 'ind', rate: 0.42, m: 38, city: '関西',
+    teams: [['06BULLS', '#1a1a24', '#f0c030'], ['堺シュライクス', '#2a6ab0', '#f0f0f0'], ['兵庫ブレイバーズ', '#c02030', '#f0f0f0'], ['和歌山ファイティングバーズ', '#e08a1a', '#1a1a24']] },
+  { id: 'CORP', s: '社会人', n: () => '社会人野球', from: 1950, kind: 'corp', rate: 0.26, m: 45, city: '全国',
+    teams: [['トヨタ自動車', '#d01020', '#ffffff'], ['JR東日本', '#1a8a3a', '#ffffff'], ['ENEOS', '#e06010', '#1a1a24'], ['日本生命', '#1a3a8a', '#f0c030'], ['三菱重工', '#c01020', '#ffffff'], ['Honda', '#d01020', '#1a1a24'], ['パナソニック', '#1a3a9a', '#ffffff'], ['東芝', '#c01020', '#f0f0f0'], ['大阪ガス', '#1a5ab0', '#f0f0f0'], ['NTT東日本', '#1a4a9a', '#f0c030'], ['ヤマハ', '#5a2a8a', '#f0f0f0'], ['西濃運輸', '#1a6a3a', '#f0d020'], ['日本通運', '#e05a10', '#1a1a24'], ['東京ガス', '#2a6ad0', '#ffffff'], ['セガサミー', '#1a3a9a', '#e0e0e0', 2005], ['王子', '#2a7a4a', '#ffffff']] },
+];
+const MLG = {}; for (const L of MINOR_LG) MLG[L.id] = L;
+const corpName = (n, y) => n === 'ENEOS' ? (y < 2010 ? '新日本石油ENEOS' : y < 2020 ? 'JX-ENEOS' : 'ENEOS') : n === 'パナソニック' && y < 2008 ? '松下電器' : n;
+function mlgTeams(L, y) { return L.teams.filter(t => y >= (t[3] || L.from) && (!t[4] || y <= t[4])).map(t => ({ n: L.kind === 'corp' ? corpName(t[0], y) : t[0], key: t[0], col: t[1], col2: t[2] })); }
+const mlgOpen = (L, y) => y >= L.from && mlgTeams(L, y).length >= 2;
+const isMinor = me => !!me && (me.st === 'ind' || me.st === 'corp') && !!me.minor;
+function minorLabel(me, y) { const L = MLG[me.minor.lg]; return L ? L.n(y) : ''; }
+// 年数（ドラフト解禁）
+function corpDraftOK(me, y) { if (!me.minor || me.minor.kind !== 'corp') return true; const need = num(me.minor.joinAge, 22) <= 19 ? 3 : 2; return y - num(me.minor.y0, y) + 1 >= need; }
+// ---- 入団（セレクション・トライアウト） ----
+function minorWindow(g) { const md = mdOf(dateOf(g, g.state.day)); return md >= 90 || md < 26; }
+function isStudent(g) { const ls = lsOf(g); return !!(ls && ls.high && !ls.high.grad); }
+function minorOK(g, N) {
+  const me = N.me, S = N.S; if (!S || !me.p.pos) return { ok: false, why: '' };
+  if (!(me.st === 'none' || me.st === 'free')) return { ok: false, why: '' };
+  if (num(me.p.age, 18) < 18 || isStudent(g)) return { ok: false, why: '高校を卒業してから' };
+  if (!minorWindow(g)) return { ok: false, why: 'セレクション・トライアウトは10月〜3月上旬' };
+  if (me.minorTryY === S.y && mdOf(dateOf(g, g.state.day)) >= 90) return { ok: false, why: 'この冬はもう受けた' };
+  return { ok: true };
+}
+function minorTryout(g, N, kind) {
+  const me = N.me, S = N.S, y = S.y, md = mdOf(dateOf(g, g.state.day)), joinY = md >= 90 ? y + 1 : y;
+  me.minorTryY = y;
+  try { g.state.stamina = Math.max(0, num(g.state.stamina) - 25); g.advanceTime(300, 'npb_minor_try'); } catch (e) { }
+  const ov = meOvr(me) + num(me.cond) * 0.5 + gauss() * 3 + (me.proY ? 4 : 0);
+  const leagues = MINOR_LG.filter(L => (kind === 'corp' ? L.kind === 'corp' : L.kind === 'ind') && mlgOpen(L, joinY));
+  const need = kind === 'corp' ? 44 : 34;
+  const lines = [kind === 'corp' ? '社会人野球チームの入社セレクション。グラウンドには、全国から腕自慢が集まっていた。' : '独立リーグの合同トライアウト。NPBを目指す若者たちの目は、ぎらぎらと光っていた。'];
+  if (!leagues.length) return { text: 'この年は、参加できるリーグがなかった。', offers: [] };
+  if (ov < need) { lines.push('……結果は、不合格。まだ、力が足りなかった。', '（総合力を上げて、また挑戦しよう）'); return { text: lines.join('\n'), offers: [] }; }
+  const pool = [];
+  for (const L of leagues) for (const t of mlgTeams(L, joinY)) pool.push({ lg: L.id, kind: L.kind, team: t.n, key: t.key, col: t.col, col2: t.col2, lgN: L.n(joinY) });
+  const n = clamp(Math.round(1 + (ov - need) / 6), 1, 3);
+  const offers = pool.sort(() => RND() - 0.5).slice(0, n).map(o => ({ ...o, joinY, sal: kind === 'corp' ? Math.round((380 + RND() * 120) * 1e4) : Math.round((12 + clamp(ov - need, 0, 20) * 0.6 + RND() * 4) * 6 * 1e4) }));
+  lines.push(`結果は……合格！ ${offers.map(o => o.team).join('・')}から声がかかった！`);
+  return { text: lines.join('\n'), offers };
+}
+function joinMinor(g, N, o) {
+  const me = N.me, S = N.S;
+  for (const t of TEAMS) { const T = N.L.teams[t.id]; T.bat = T.bat.filter(x => x !== 'ME'); T.pit = T.pit.filter(x => x !== 'ME'); }
+  if (me.st === 'free') me.lastTeam = me.lastTeam || me.team;
+  me.team = null; me.st = o.kind === 'corp' ? 'corp' : 'ind';
+  me.minor = { lg: o.lg, kind: o.kind, team: o.team, key: o.key, col: o.col, col2: o.col2, lgN: o.lgN, y0: o.joinY, joinAge: num(me.p.age, 22), num: ri(me.p.pos === 'P' ? 11 : 1, me.p.pos === 'P' ? 30 : 66), yrs: 0 };
+  me.sal = o.sal; me.payFrom = o.joinY; me.lv = 1; me.role = null; me.inj = 0;
+  hist(g, `${o.team}（${o.lgN}）に入団`, 'work'); meNews(N, g, `${o.team}に入団`);
+  evPush(N, o.kind === 'corp' ? 'corp_join' : 'ind_join', { minor: 1 });
+  return `${o.team}（${o.lgN}）への入団が決まった！\n背番号は「${me.minor.num}」。${o.kind === 'corp' ? `年収 約${manEn(o.sal)}（社員として働きながらプレー）` : `年俸 約${manEn(o.sal)}（シーズン中のみの支給）`}\n${o.kind === 'corp' ? `（${num(me.p.age, 22) <= 19 ? '高卒は3年' : '大卒・社会人は2年'}たつと、ドラフトの対象になる）` : '（毎年秋のドラフト会議で、NPBから指名される可能性がある）'}`;
+}
+// ---- シーズン ----
+function mnS(S, me) {
+  if (!isObj(S.mn)) S.mn = { b: newB(), p: newP(), w: 0, l: 0, t: 0, log: [], st: {}, str: {} };
+  const X = S.mn;
+  if (me && me.minor && X.lg !== me.minor.lg) {
+    X.lg = me.minor.lg; X.st = {}; X.str = {};
+    const L = MLG[me.minor.lg];
+    if (L) for (const t of mlgTeams(L, S.y)) { X.st[t.n] = [0, 0, 0]; X.str[t.n] = Math.round(gauss() * 3); }
+  }
+  return X;
+}
+function minorDay(g, N, S, r, md, out) {
+  const me = N.me; if (!isMinor(me) || !me.p.pos) return;
+  if (S.y < num(me.minor.y0, S.y)) return;
+  const L = MLG[me.minor.lg]; if (!L) return;
+  const X = mnS(S, me);
+  const inSeason = L.kind === 'corp' ? md >= 30 && md <= 100 : md >= 30 && md <= 86;
+  if (!inSeason) return;
+  // 他球団どうしの試合
+  const names = Object.keys(X.st), mine = me.minor.team;
+  if (chance(L.rate)) { const others = names.filter(n => n !== mine).sort(() => RND() - 0.5); for (let i = 0; i + 1 < others.length; i += 2) { const a = others[i], b = others[i + 1]; const pa = clamp(0.5 + (num(X.str[a]) - num(X.str[b])) / 20, 0.25, 0.75); if (chance(0.04)) { X.st[a][2]++; X.st[b][2]++; } else if (chance(pa)) { X.st[a][0]++; X.st[b][1]++; } else { X.st[b][0]++; X.st[a][1]++; } } }
+  if (me.inj > 0) { me.inj = Math.max(0, me.inj - 1); if (me.inj === 0) out.notes.push('【復帰】\nケガが治った！ また、グラウンドに戻れる。'); return; }
+  if (num(me.susp) > 0) { me.susp--; return; }
+  if (!chance(L.rate)) return;
+  const opps = names.filter(n => n !== mine);
+  const oppN = L.kind === 'corp' ? pick(MLG.CORP.teams.map(t => corpName(t[0], S.y)).filter(n => n !== mine)) : pick(opps.length ? opps : ['対戦相手']);
+  minorGame(g, N, S, X, r, md, out, { kind: L.kind === 'corp' ? 'CORP' : 'IND', oppN, myM: L.m + num(X.str[mine]) * 0.6, opM: L.m + num(X.str[oppN]) * 0.6 + gauss() * 1.5 });
+  // 独立リーグ：夜のバス・スカウト
+  const b = X.b, p = X.p;
+  if (L.kind === 'ind' && chance(0.012)) evPush(N, 'ind_bus', { minor: 1, once: 'indbus' + S.y });
+  const good = me.p.pos === 'P' ? (p[Pp.OUT] >= 90 && eraOf(p) < 2.6) : (b[B.PA] >= 120 && obpOf(b) + slgOf(b) > 0.85);
+  if (good && chance(0.03)) evPush(N, 'ind_scout', { minor: 1, once: 'mscout' + S.y });
+}
+function minorGame(g, N, S, X, r, md, out, o) {
+  const me = N.me, P = me.p, fake = {};
+  const mine = mkSynth(fake, 'mn' + r + '_', o.myM), opp = mkSynth(fake, 'mo' + r + '_', o.opM);
+  me.mRot = num(me.mRot) + 1;
+  let plays = true;
+  if (P.pos === 'P') { if (P.sta >= 48) { plays = me.mRot % (o.kind === 'CORP' ? 3 : 5) === 0; if (plays) mine.sp = 'ME'; } else { plays = me.mRot % 2 === 0; if (plays) { mine.pen.unshift('ME'); mine.cl = 'ME'; } } }
+  else mine.lineup[ri(2, 4)] = 'ME';
+  const home = chance(0.5), bs = {}, ps = {};
+  const ctx = { L: N.L, me: plays ? { ...me, team: mine.id, lv: 1 } : null, P: id => id === 'ME' ? P : fake[id], sink: { bat: id => id === 'ME' ? (bs.ME || (bs.ME = newB())) : null, pit: id => id === 'ME' ? (ps.ME || (ps.ME = newP())) : null, rel: null, round: r } };
+  const res = home ? simGame(ctx, mine, opp, { maxInn: o.ko ? 12 : 9 }) : simGame(ctx, opp, mine, { maxInn: o.ko ? 12 : 9 });
+  let ours = home ? [res.hs, res.as] : [res.as, res.hs];
+  if (o.ko && ours[0] === ours[1]) ours = chance(0.5) ? [ours[0] + 1, ours[1]] : [ours[0], ours[1] + 1];
+  const w = ours[0] > ours[1], d = ours[0] === ours[1];
+  if (!o.ko) { const myN = me.minor.team; if (X.st[myN]) { if (d) X.st[myN][2]++; else if (w) X.st[myN][0]++; else X.st[myN][1]++; } if (X.st[o.oppN]) { if (d) X.st[o.oppN][2]++; else if (w) X.st[o.oppN][1]++; else X.st[o.oppN][0]++; } if (d) X.t++; else if (w) X.w++; else X.l++; }
+  if (bs.ME) addArr(X.b, bs.ME); if (ps.ME) addArr(X.p, ps.ME);
+  const e = { md, r, k: o.kind, on: o.oppN, mn: me.minor.team, o: null, h: home ? 1 : 0, s: ours, ls: home ? res.ls : [res.ls[1], res.ls[0]], inn: res.inn, me: res.me || null };
+  X.log.push(e); if (X.log.length > 90) X.log.shift();
+  out.games.push(e);
+  if (res.me) {
+    const m = res.me; if (m.b) fameGain(g, N, (m.b[2] * 0.08 + m.b[3] * 0.6)); if (m.p && m.dec === 'W') fameGain(g, N, 1);
+    growAll(me, 0.068 * ageMult(num(P.age, 22)) * num(P.pot, 1));
+    try { afterPlay(g, N, S, m, false, out); } catch (er) { }
+    injuryRoll(g, N, out);
+  }
+  return w;
+}
+// 大会（都市対抗・日本選手権・独立リーグのプレーオフ）
+function knockout(g, N, S, out, o) {
+  const X = mnS(S, N.me); let won = 0;
+  for (let i = 0; i < o.rounds; i++) {
+    const w = minorGame(g, N, S, X, 900 + i, o.md, out, { kind: o.k, oppN: o.opps[i % o.opps.length], myM: o.myM, opM: o.opM + i * 0.6, ko: 1 });
+    if (!w) break; won++;
+  }
+  return won;
+}
+function minorEvents(g, N, S, md, out) {
+  const me = N.me; if (!isMinor(me)) return;
+  const L = MLG[me.minor.lg]; if (!L || S.y < num(me.minor.y0, S.y)) return;
+  const X = mnS(S, me), ev = S.ev, at = (k, m) => md >= m && !ev[k] && (ev[k] = 1);
+  const myStr = L.m + num(X.str[me.minor.team]) * 0.6 + meOvr(me) * 0.03 - 1.5;
+  if (L.kind === 'corp') {
+    if (at('toshiQ', 58)) {
+      const q = chance(clamp(0.45 + (num(X.str[me.minor.team]) + (meOvr(me) - 50) / 6) / 12, 0.2, 0.85));
+      X.toshiQ = q;
+      out.notes.push(q ? `【都市対抗 出場決定】\n${me.minor.team}が、第二次予選を勝ち抜いた！ 7月、夢の東京ドームへ！` : '【都市対抗予選】\n第二次予選で敗退……。今年の東京ドームには、手が届かなかった。');
+    }
+    if (X.toshiQ && at('toshi', 66)) {
+      const opps = MLG.CORP.teams.map(t => corpName(t[0], S.y)).filter(n => n !== me.minor.team).sort(() => RND() - 0.5);
+      const won = knockout(g, N, S, out, { k: 'CT', rounds: 5, md: 66, opps, myM: myStr, opM: L.m + 0.5 });
+      const label = ['1回戦敗退', '2回戦敗退', '準々決勝敗退', '準決勝敗退', '準優勝', '優勝'][won];
+      out.notes.push(`【都市対抗野球】\n${me.minor.team}は、${label}${won === 5 ? '！ 黒獅子旗を手にした！' : '。'}`);
+      if (won === 5) { me.titles.push([S.y, '都市対抗野球 優勝']); fameGain(g, N, 60); hist(g, `${S.y}年 都市対抗野球で優勝（${me.minor.team}）`, 'work'); }
+      evPush(N, 'toshitaiko', { minor: 1, v: { win: won === 5 } });
+    }
+    if (at('corpNip', 102)) {
+      if (chance(0.5)) {
+        const opps = MLG.CORP.teams.map(t => corpName(t[0], S.y)).filter(n => n !== me.minor.team).sort(() => RND() - 0.5);
+        const won = knockout(g, N, S, out, { k: 'CN', rounds: 5, md: 102, opps, myM: myStr, opM: L.m + 0.5 });
+        out.notes.push(`【社会人野球日本選手権】\n${me.minor.team}は、${['1回戦敗退', '2回戦敗退', '準々決勝敗退', '準決勝敗退', '準優勝', '優勝'][won]}${won === 5 ? '！ 社会人日本一だ！' : '。'}`);
+        if (won === 5) { me.titles.push([S.y, '社会人野球日本選手権 優勝']); fameGain(g, N, 40); }
+      }
+    }
+  } else {
+    if (at('indPO', 88)) {
+      const rows = Object.entries(X.st).map(([n, s]) => ({ n, w: s[0], l: s[1], pct: s[0] + s[1] ? s[0] / (s[0] + s[1]) : 0 })).sort((a, b) => b.pct - a.pct);
+      const rk = rows.findIndex(r => r.n === me.minor.team) + 1;
+      X.rank = rk;
+      if (rk && rk <= 2) {
+        const opp = rows[rk === 1 ? 1 : 0];
+        let w = 0, l = 0; while (w < 2 && l < 2) { if (minorGame(g, N, S, X, 950 + w + l, 88, out, { kind: 'IP', oppN: opp ? opp.n : '相手', myM: myStr, opM: L.m + 0.5, ko: 1 })) w++; else l++; }
+        if (w === 2) { X.title = 1; me.titles.push([S.y, `${L.n(S.y)} 優勝`]); fameGain(g, N, 25); hist(g, `${S.y}年 ${L.n(S.y)}で優勝（${me.minor.team}）`, 'work'); out.notes.push(`【${L.n(S.y)} 優勝】\n${me.minor.team}が、リーグチャンピオンに輝いた！`); evPush(N, 'ind_title', { minor: 1 }); }
+        else out.notes.push(`【チャンピオンシップ】\n${me.minor.team}は、優勝決定戦で敗れた……。（レギュラーシーズン${rk}位）`);
+      } else out.notes.push(`【シーズン終了】\n${me.minor.team}は、${L.n(S.y)}で${rk || '－'}位。`);
+    }
+    // 元NPB選手：シーズン後に復帰の声
+    if (me.proY && at('indBack', 92)) {
+      const b = X.b, p = X.p, ov = meOvr(me);
+      const good = me.p.pos === 'P' ? (p[Pp.OUT] >= 120 && eraOf(p) < 2.8) : (b[B.PA] >= 200 && obpOf(b) + slgOf(b) > 0.82);
+      if (good && ov >= 47 && chance(0.6)) {
+        const team = pick(TEAMS).id;
+        me.offer = { team, kind: 'trial', ikusei: ov < 52, sal: ov < 52 ? 3e6 : 7e6, bonus: 0, y: S.y, round: 0, from: me.minor.team };
+        out.notes.push(`【NPB復帰のチャンス】\n独立リーグでの活躍を見た${TEAM[team].name}から、獲得の話が来た！\n（プロ野球アプリのホームから返事をしよう）`);
+      }
+    }
+  }
+}
+// 年度末：成績を保存
+function minorArchive(N, S) {
+  const me = N.me; if (!me || !S || !S.mn || S.mn.archived) return;
+  const X = S.mn; X.archived = 1;
+  if (!me.minor && !X.lg) return;
+  if (!(X.b[B.PA] || X.p[Pp.BF])) return;
+  me.mcar = Array.isArray(me.mcar) ? me.mcar : [];
+  const L = MLG[X.lg] || {};
+  me.mcar.push({ y: S.y, lg: X.lg, kind: L.kind, lgN: L.n ? L.n(S.y) : '', team: me.minor ? me.minor.team : '', b: X.b, p: X.p, w: X.w, l: X.l, rank: X.rank || 0, sal: num(me.sal), aw: (me.titles || []).filter(t => t[0] === S.y).map(t => t[1]) });
+  if (me.minor) me.minor.yrs = num(me.minor.yrs) + 1;
+}
+function leaveMinor(N, S) { const me = N.me; if (!me.minor) return; if (S) minorArchive(N, S); me.minorPast = me.minor; me.minor = null; }
+// ドラフトでの評価ボーナス
+function minorDraftBonus(N, S) {
+  const me = N.me, X = S.mn; if (!X) return 0;
+  const b = X.b, p = X.p;
+  if (me.p.pos === 'P') { if (p[Pp.OUT] < 60) return 0; const e = eraOf(p); return e < 1.8 ? 5 : e < 2.6 ? 3 : e < 3.5 ? 1 : -1; }
+  if (b[B.PA] < 100) return 0; const o = obpOf(b) + slgOf(b); return o > 0.95 ? 5 : o > 0.85 ? 3 : o > 0.75 ? 1 : -1;
+}
+
+return { evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
 try{NPB_factory({Un:Un,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt,$M:$M,Ho:Ho,qe:qe,Zc:Zc,setLae:function(f){Lae=f(Lae)},setVu:function(f){vu=f(vu)}}).install()}catch(e){console.error("[npb] install",e)}
 DBa().catch(t=>{console.error(t),vTe(window.__game,"\u30B2\u30FC\u30E0\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u2026","\u30DA\u30FC\u30B8\u3092\u518D\u8AAD\u307F\u8FBC\u307F\u3057\u3066\u304F\u3060\u3055\u3044")});})();
