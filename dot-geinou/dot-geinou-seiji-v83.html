@@ -12592,6 +12592,7 @@ function install() {
   try { installFamEv(); } catch (e) { console.error('[famev] install', e); }
   try { installYami(); } catch (e) { console.error('[yami] install', e); }
   try { installYami2(); } catch (e) { console.error('[yami2] install', e); }
+  try { installCustOt(); } catch (e) { console.error('[custot] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -17732,7 +17733,7 @@ class MesenScene extends NpbScene {
   rows() {
     const m = this.cur(), L = [];
     if (m.kind !== 'me') { const A = agOf(this.g, m); L.push({ id: 'mind', label: 'AIの頭の中', sub: (() => { try { const N = needOf(A), lo = FAI_NEEDS.slice().sort((a, b) => N[a] - N[b])[0]; return `${A.want ? '主人公に「' + FAI_WANT[A.want.type] + '」・' : ''}いちばん足りない：${FAI_NN[lo]}`; } catch (e) { return ''; } })() }, { id: 'prof', label: 'からだ・プロフィール', sub: (() => { const B = bodyOf(this.g, m, A); return `${A.ht || B.ht}cm・${A.wt || B.wt}kg${A.nd ? '・' + ND_N[A.nd] : ''}${A.cx ? '・コンプレックス' : ''}`; })() }, { id: 'diary', label: '日記を読む', sub: `${A.dia.length}件` }, { id: 'secret', label: 'ひみつ・本音をのぞく', sub: A.sec.length ? `${A.sec.length}件` : 'まだない' }, { id: 'rel', label: '家族への気持ち', sub: 'ほかの家族を、どう思っているか' }, { id: 'hy', label: '歯とからだの衛生', sub: (() => { const H = hyOf(A, m); return `虫歯${H.cav}本・清潔${Math.round(H.clean)}${H.sick ? '・' + H.sickWhat : ''}`; })() }, ...(inHouse(m) && m.age >= 1 ? [{ id: 'dent', label: '歯医者に連れていく', sub: '虫歯1本 ¥3,000' }] : []), { id: 'sx', label: 'からだと性のこと', sub: m.age >= SX_ADULT ? '性自認・同意・避妊・性感染症・精力' : '性自認・同意・避妊・性感染症' }, { id: 'sxtalk', label: m.age >= SX_ADULT ? 'からだと性のことを話す' : '性教育の話をする', sub: '年齢に合わせて伝える' }, { id: 'line', label: 'メッセージを送る', sub: '自分として連絡する' }); }
-    else L.push({ id: 'album', label: '家族アルバム', sub: '家族との思い出' }, { id: 'darkopt', label: '重い家族イベント', sub: this.g.state.flags.famDarkOff ? 'OFF（起きない）' : 'ON（いじめ・家族のひどい仕打ちなど）' }, { id: 'flog', label: '家族の行動ログ', sub: (() => { try { const F = faiSt(this.g); return `今日 ${F.log.filter(x => x.d === this.g.state.day).length}件`; } catch (e) { return ''; } })() }, { id: 'log', label: 'AIの行動記録', sub: '目線変更中に自キャラがしたこと' }, { id: 'cust', label: '家の風習・ルールを決める', sub: (() => { const n = CUSTOMS.filter(c => custOf(this.g)[c.id]).length; return n ? `${n}個のルール` : 'とくになし'; })() });
+    else L.push({ id: 'album', label: '家族アルバム', sub: '家族との思い出' }, { id: 'darkopt', label: '重い家族イベント', sub: this.g.state.flags.famDarkOff ? 'OFF（起きない）' : 'ON（いじめ・家族のひどい仕打ちなど）' }, { id: 'flog', label: '家族の行動ログ', sub: (() => { try { const F = faiSt(this.g); return `今日 ${F.log.filter(x => x.d === this.g.state.day).length}件`; } catch (e) { return ''; } })() }, { id: 'log', label: 'AIの行動記録', sub: '目線変更中に自キャラがしたこと' }, { id: 'cust', label: '家の風習・ルールを決める', sub: (() => { const n = CUSTOMS.filter(c => custOf(this.g)[c.id]).length; return n ? `${n}個のルール` : 'とくになし'; })() }, { id: 'cust0', label: '実家の風習・ルールを決める', sub: (() => { try { const C = jikkaCust(this.g); const n = CUSTOMS.filter(c => C[c.id]).length; return n ? `${n}個（親・きょうだい）` : 'とくになし'; } catch (e) { return ''; } })() });
     try { if (m.kind !== 'me' && gkStudents(this.g).some(x => x.key === m.key)) { const lv = gkLvOf(m.age); L.unshift({ id: 'school', label: 'スクールライフを見る', sub: `${GK_LV[lv]}${gkGradeOf(lv, m.age)}年生` }); } } catch (e) { }
     L.push({ id: 'hour', label: '1時間すすめる', sub: '自キャラはAIがオートで行動' }, { id: 'h3', label: '3時間すすめる', sub: '自キャラはAIがオートで行動' }, { id: 'day', label: '1日すすめる', sub: '学校・仕事・食事・睡眠までAIまかせ' }, { id: 'help', label: '目線変更について', sub: '' });
     return L;
@@ -17787,6 +17788,7 @@ class MesenScene extends NpbScene {
     if (id === 'diary') { const L = A.dia.slice(-14).reverse().map(x => `${x.d}日目　${x.t}`); await this.info(`${m.rel}・${m.name}の日記`, L.length ? L : ['まだ何も書かれていない。']); return; }
     if (id === 'secret') { const L = A.sec.slice().reverse().map(x => `・${x.t}`); await this.info(`${m.name}のひみつ`, L.length ? ['（本人は、誰にも話していない）', ...L] : ['いまのところ、ひみつはないようだ。']); return; }
     if (id === 'cust') { for (;;) { const C = custOf(g); const k = await this.pick('家の風習・ルール（配偶者と子どもに適用・主人公には無効）', CUSTOMS.map(c => ({ label: c.n, right: C[c.id] ? 'ON' : 'OFF' })), { note: '始祖の主は全てを無に還す――主人公には、どの風習も及ばない。\n' + CUSTOMS.map(c => `${c.n}：${c.d}`).join('\n') }); if (k < 0) return; C[CUSTOMS[k].id] = C[CUSTOMS[k].id] ? 0 : 1; this.say(`「${CUSTOMS[k].n}」を${C[CUSTOMS[k].id] ? 'わが家のルールにした' : 'やめた'}`); } }
+    if (id === 'cust0') { for (;;) { const C = jikkaCust(g); const k = await this.pick('実家の風習・ルール（親・祖父母・きょうだいに適用）', CUSTOMS.map(c => ({ label: c.n, right: C[c.id] ? 'ON' : 'OFF' })), { note: '実家で暮らす家族（親・きょうだい）に適用される。弟・妹は、つらい風習ほどストレスをためていく。\n' + CUSTOMS.map(c => `${c.n}：${c.d}`).join('\n') }); if (k < 0) return; jikkaCustSet(g, CUSTOMS[k].id, !C[CUSTOMS[k].id]); this.say(`実家の「${CUSTOMS[k].n}」を${jikkaCust(g)[CUSTOMS[k].id] ? 'ルールにした' : 'やめた'}`); } }
     if (id === 'hy') { await this.info(`${m.name}の歯とからだの衛生`, hyLines(g, m, A)); return; }
     if (id === 'dent') { await this.info('歯医者', hyDentist(g, m, A)); return; }
     if (id === 'sx') { await this.info(`${m.name}のからだと性のこと`, sxLines(g, m, A)); return; }
@@ -20887,6 +20889,9 @@ async function famEvStage(g, m, A, e, R, say, c) {
   if (fx.all && c && c.house) for (const o of c.house) { const B = agOf(g, o); B.op = clamp(num(B.op) + fx.all, 0, 100); B.mood = clamp(num(B.mood) + Math.round(fx.all / 2), 0, 100); }
   if (fx.custOff) { try { const C = inHouse(m) ? custOf(g) : (A.cust0 || {}); for (const id of [].concat(fx.custOff)) C[id] = 0; } catch (x) { } }
   if (fx.scar) abScar(g, m, A, fx.scar);
+  if (fx.cst) A.custSt = clamp(num(A.custSt) + fx.cst, 0, 100);
+  if (fx.custOffAll) { try { for (const id of [].concat(fx.custOffAll)) jikkaCustSet(g, id, 0); } catch (x) { } }
+  if (fx.custRelief) { try { custRelief(g, m, A, fx.custRelief); } catch (x) { } }
   if (fx.yg || fx.ym) yamiAdd(g, m, A, num(fx.yg), num(fx.ym));
   else if (e.dark && YM_TGT(m)) { if (num(fx.op) <= -10) yamiAdd(g, m, A, 5, 4); else if (num(fx.op) >= 10) yamiAdd(g, m, A, -3, -3); }
   if (e.dark && num(fx.op) <= -10 && num(m.age) < 18 && !fx.noScar && chance(0.4)) abScar(g, m, A, 'me');
@@ -21442,8 +21447,8 @@ function abScarLine(g, m, A) {
 }
 function abScarNames(A) { const S = isObj(A.scar) ? A.scar : {}; return Object.keys(S).map(k => (AB_SCAR[k] || {}).n || k).join('・'); }
 // ---- 会話：話すとき、心の傷がにじむ ----
-function famLine(g, m, A, act) { try { const y = yamiLine(g, m, A); if (y) return y; } catch (e) { } try { const s = abScarLine(g, m, A); if (s) return s; } catch (e) { } return famLine0(g, m, A, act); }
-function faiMindLines(g, m, A) { const L = faiMindLines0(g, m, A); try { const s = abScarNames(A); if (s) L.push(`心の傷：${s}`); if (num(A.abused)) L.push(`あなたからの暴言・いじり：${Math.round(num(A.abused) * 2) / 2}回`); L.push(...yamiMind(A)); } catch (e) { } return L; }
+function famLine(g, m, A, act) { try { const y = yamiLine(g, m, A); if (y) return y; } catch (e) { } try { const cl = custLine(g, m, A); if (cl) return cl; } catch (e) { } try { const s = abScarLine(g, m, A); if (s) return s; } catch (e) { } return famLine0(g, m, A, act); }
+function faiMindLines(g, m, A) { const L = faiMindLines0(g, m, A); try { const s = abScarNames(A); if (s) L.push(`心の傷：${s}`); if (num(A.abused)) L.push(`あなたからの暴言・いじり：${Math.round(num(A.abused) * 2) / 2}回`); L.push(...yamiMind(A)); L.push(...custMind(g, m, A)); } catch (e) { } return L; }
 // ---- あなたが言う（暴言を吐く／いじる） ----
 const AB_RE_YOUNG = ['（顔がくしゃっとゆがんで、大声で泣きだした）', '「……っ、ごめんなさい、ごめんなさい……」', '（なにも言わずに、自分の部屋に走っていった）', '（くちびるをかんで、うつむいた。手が、ふるえている）', '「……{c}、ぼく（わたし）のこと、きらいなの？」', '（ぬいぐるみを抱きしめて、部屋のすみに座りこんだ）'];
 const AB_RE_YOUNG_IJ = ['「……やめてよ」（笑おうとして、泣きそうな顔になった）', '（えへへ、と笑った。……目は、笑っていなかった）', '「……{c}まで、学校の子とおなじこと言うんだ」', '「……っ、言わないでよ！」'];
@@ -21758,7 +21763,7 @@ function yamiStage(g, m, A, tr, st) {
   addDia(A, g, yamiTxt(g, m, U.dia), -8); addSec(A, g, yamiTxt(g, m, U.sec));
   try { faiLog(g, `【${m.rel}の変化】${yamiTxt(g, m, U.log)}`, { ico: 'cloud', imp: 2, home: livesWith(g, m) }); } catch (e) { }
   // 変わり目のイベントを、向こうから持ってくる
-  try { const F = faiSt(g); F.evSeen = isObj(F.evSeen) ? F.evSeen : {}; if (U.ev && F.evSeen[m.key + ':' + U.ev] == null && livesWith(g, m) && !A.want && !(g.state.flags && g.state.flags.famDarkOff)) A.want = { type: 'talk', ev: U.ev, day: g.state.day, t0: clockMin(g), exp: 1439 }; } catch (e) { }
+  try { const F = faiSt(g); F.evSeen = isObj(F.evSeen) ? F.evSeen : {}; if (U.ev && F.evSeen[m.key + ':' + U.ev] == null && livesWith(g, m) && (!A.want || A.want.day < g.state.day) && !(g.state.flags && g.state.flags.famDarkOff)) A.want = { type: 'talk', ev: U.ev, day: g.state.day, t0: clockMin(g), exp: 1439 }; } catch (e) { }
 }
 function yamiAdd(g, m, A, dg, dm) {
   if (!YM_TGT(m)) return;
@@ -21884,7 +21889,7 @@ function yami2Tick(g) {
     // どん底が続くと、決定的なできごとが起きる
     try {
       const F = faiSt(g); F.evSeen = isObj(F.evSeen) ? F.evSeen : {};
-      const want = id => { if (F.evSeen[m.key + ':' + id] == null && livesWith(g, m) && !A.want) A.want = { type: 'talk', ev: id, day: g.state.day, t0: clockMin(g), exp: 1439 }; };
+      const want = id => { if (F.evSeen[m.key + ':' + id] == null && livesWith(g, m) && (!A.want || A.want.day < g.state.day)) A.want = { type: 'talk', ev: id, day: g.state.day, t0: clockMin(g), exp: 1439 }; };
       if (A.yg3d >= 14 && num(m.age) >= 13) want('yg_arrest1');
       else if (A.ym3d >= 14) want('ym_crisis1');
     } catch (e) { }
@@ -21925,6 +21930,127 @@ FE.push(
   // ===== 家族への波紋 =====
   { id: 'ygym_blame_me', dark: 1, w: 'pa', ok: c => !!YG_ANY2(c), once: true, L: ['（親が、あなたを呼びとめた）', '（親）「……{k}が、あんなふうになったのは、あんたのせいでもあるのよ」', '（親）「あんたばっかり見てたから。あんたがいたから、あの子は比べられて……」', '（親の目の下には、深いくまができていた）'], C: [['……わかってる。だから、いっしょに支えよう', { op: 8, al: '弟（妹）のことで、親と向きあった' }, '（親は、しばらく黙ってから、「……ごめん。八つ当たりね」と言った）'], ['比べてたのは、親でしょ', { op: -8, coupleRel: -2 }, '（親は、何も言いかえせずに、台所に戻っていった）']] },
 );
+
+// ===== 弟（弟・妹）と、家の風習のストレス =====
+// 家のしきたり系の風習（実家・わが家どちらでも設定できる）
+CUSTOMS.push(
+  { id: 'chounan', n: '上の子が何でも先', d: 'おかずもお風呂もお年玉も、まず上の子から。下の子は、いつも残りもの。', bad: 1 },
+  { id: 'seiza', n: '食事は正座で、しゃべらない', d: '食卓では正座、会話は禁止。足がしびれても、くずしてはいけない。', bad: 1 },
+  { id: 'mongen', n: '門限は夕方5時', d: '友だちと遊んでいても、5時には帰らなければならない。', bad: 1 },
+  { id: 'noGame', n: 'ゲーム・スマホ禁止', d: '家にゲームもスマホもない。学校の話題についていけない。', bad: 1 },
+  { id: 'bouzu', n: '男の子は坊主頭', d: '月に一度、父親がバリカンで刈る。', bad: 1 },
+  { id: 'noCry', n: '男は泣いてはいけない', d: '泣いたら、ベランダに出される。', bad: 1 },
+  { id: 'bathLast', n: '下の子のお風呂は最後', d: '下の子は、いちばん最後。冬は湯が冷めている。', bad: 1 },
+  { id: 'noFriends', n: '友だちを家に呼んではいけない', d: '玄関から先に、家族以外を入れない。', bad: 1 },
+  { id: 'inori', n: '毎朝1時間のお祈り', d: '朝5時から、家族そろって1時間のお祈り。', bad: 1 },
+  { id: 'check', n: '毎晩、日記と持ち物を親がチェック', d: '日記もかばんも、毎晩親が目を通す。', bad: 1 },
+  { id: 'coldBath', n: '冬でも水をかぶって体をきたえる', d: '毎朝、庭で冷水をかぶる。', bad: 1 },
+  { id: 'noAC', n: 'エアコン禁止', d: '真夏でも冷房をつけない。', bad: 1 },
+  { id: 'kagyou', n: '毎日、家業の手伝い', d: '放課後と休日は、家の仕事を手伝う。', bad: 1 },
+  { id: 'fatherFirst', n: '父親より先に箸をつけない', d: '父親が帰るまで、夕食はおあずけ。', bad: 1 },
+  { id: 'otoshidama', n: 'お年玉は親が全部あずかる', d: 'もらったお年玉は、その場で親が回収する。', bad: 1 },
+);
+const csMale = m => m.g !== 'f', csWin = g => { try { const d = dateOf(g, g.state.day); return [11, 12, 1, 2, 3].includes(d.month); } catch (e) { return false; } }, csMon = g => { try { return dateOf(g, g.state.day).month; } catch (e) { return 4; } };
+// 風習ごとの、その日のつらさ
+const CS_ST = {
+  noBrush: () => 0.3, noBath: () => 0.8, noWash: () => 0.2, rule3: () => 0.1, shoesIn: () => 0.1, towel: () => 0.3, floorFood: () => 0.5, trash: () => 0.6, meatPillow: () => 0.9, bugsKeep: () => 0.6, maggotShoes: () => 1.1, toiletBags: () => 1.1, urineHang: () => 0.9, dirtyWater: () => 0.6, noFridge: () => 0.2, fecesSkin: () => 1.8,
+  gayChant: m => csMale(m) ? 1.3 : 0, gayMarry: m => csMale(m) && m.age >= 13 ? 0.8 : 0,
+  chounan: () => 0.9, seiza: () => 0.5, mongen: m => m.age >= 9 ? 0.7 : 0.2, noGame: m => m.age >= 8 ? 0.7 : 0.3, bouzu: m => csMale(m) && m.age >= 10 ? 0.8 : csMale(m) ? 0.3 : 0, noCry: m => csMale(m) ? 0.7 : 0, bathLast: () => 0.4, noFriends: m => m.age >= 8 ? 0.7 : 0.3, inori: () => 0.6, check: m => m.age >= 10 ? 0.9 : 0.4, coldBath: (m, A, g) => csWin(g) ? 1.0 : 0.3, noAC: (m, A, g) => [7, 8].includes(csMon(g)) ? 0.9 : 0.1, kagyou: m => m.age >= 10 ? 0.8 : 0.3, fatherFirst: () => 0.3, otoshidama: (m, A, g) => csMon(g) === 1 ? 0.8 : 0.1,
+};
+const CS_SMELL = ['noBath', 'fecesSkin', 'maggotShoes', 'toiletBags', 'urineHang', 'meatPillow', 'trash'];
+const CS_DIA = {
+  noBrush: ['歯が痛い。でも、うちでは歯みがきしちゃいけない。'], noBath: ['「くさい」って、また言われた。お風呂に入りたい。入らせてほしい。', '体育のあと、みんながぼく（わたし）から離れていく。'], trash: ['部屋のすみのゴミ袋から、虫が出てきた。'], meatPillow: ['枕の下の肉のにおいで、今日も眠れなかった。'], bugsKeep: ['ノートの上を、虫が歩いていた。殺しちゃいけないから、見てるだけ。'], maggotShoes: ['上ばきを脱ぐとき、みんなの前で見られないようにしてる。'], toiletBags: ['部屋の袋が、またふえた。友だちには、ぜったい言えない。'], urineHang: ['通学路で、「あの家の窓、見た？」って笑われた。ぼく（わたし）の家だ。'], dirtyWater: ['泥の水を飲んだら、またおなかが痛くなった。'], fecesSkin: ['20分が、毎日いちばん長い。学校のあだ名は、言いたくない。', '体を洗いたい。ただ、それだけなのに。'], floorFood: ['床のごはんを食べながら、給食のトレーのことを思った。'],
+  gayChant: ['今日も180回、言わされた。ぼくの好きな人は、そうじゃないのに。', '唱えているあいだ、心がどこか遠くに行く。'], gayMarry: ['「あなたの結婚相手は、お母さんが決める」。ぼくの気持ちは、どこにあるの。'],
+  chounan: ['おかずの数を数えた。ぼく（わたし）は、いつもひとつ少ない。', '「下の子は、あとでいいの」。いつまで、あとなんだろう。'], seiza: ['正座で、足の感覚がなくなった。立ったら、転んで笑われた。'], mongen: ['5時のチャイムが、いちばんきらい。みんな、まだ遊んでるのに。'], noGame: ['休み時間、みんながゲームの話をしてる。ぼく（わたし）は、わからないから笑ってるだけ。'], bouzu: ['また、バリカン。鏡を見たくない。'], noCry: ['泣きそうになって、くちびるをかんだ。血の味がした。', 'ベランダは、夜になると寒い。'], bathLast: ['お風呂、今日も最後。お湯が冷たくて、髪の毛が浮いていた。'], noFriends: ['友だちが家の前まで来たのに、追い返された。'], inori: ['お祈りのせいで、今日も遅刻した。先生に怒られた。'], check: ['日記に、本当のことは書けない。読まれるから。だから、ここにも書けない。'], coldBath: ['冬の朝の水は、痛い。'], noAC: ['部屋が暑すぎて、夜中に何度も目がさめた。'], kagyou: ['部活、入りたかった。でも、家の手伝いがある。'], fatherFirst: ['父さんの帰りが遅くて、夕ごはんは9時だった。おなかが鳴って、怒られた。'], otoshidama: ['お年玉、もらった瞬間に回収された。ありがとうって言ったのは、ぼく（わたし）なのに。'],
+};
+const CS_TALK = {
+  noBath: ['「……ねえ、ぼく（わたし）、くさい？ ……正直に言って」'], fecesSkin: ['「……お風呂、入りたい。ふつうに、入りたいよ」'], toiletBags: ['「……友だちに、うちのこと聞かれたら、なんて言えばいいの」'], maggotShoes: ['「上ばき、自分で洗っちゃだめかな。……だめだよね」'],
+  gayChant: ['「……毎日あれ言わされるの、正直、しんどい」'], chounan: ['「{c}はいいよね。なんでも、いつも先で」'], seiza: ['「……ごはんのとき、ひとことくらい、しゃべりたいな」'], mongen: ['「……今日も、ぼく（わたし）だけ先に帰った」'], noGame: ['「みんなが話してるゲーム、ひとつも知らないんだ」'], bouzu: ['「……髪、伸ばしてみたいな」'], noCry: ['「泣いてないよ。……泣いたら、また外に出されるもん」'], noFriends: ['「友だちが「家、行っていい？」って。……また、ことわった」'], check: ['「日記、親に読まれるの、もういやだ」'], kagyou: ['「部活、やってみたかったな」'], coldBath: ['「……冬の朝、来なければいいのに」'],
+};
+function csTxt(g, m, t) { let s = String(t).replace(/\{c\}/g, famCall(g, m)).replace(/ぼく（わたし）/g, m.g === 'f' ? 'わたし' : 'ぼく'); if (famKansai(g)) s = famDialect(s); return s; }
+const CS_TGT = m => !!m && m.kind === 'sib' && sibIsYounger(m) && num(m.age) >= 5;
+function csActive(g, m, A) { const C = custFor(g, m, A), L = []; for (const id in CS_ST) if (C[id]) { const v = CS_ST[id](m, A, g); if (v > 0) L.push([id, v]); } return L.sort((a, b) => b[1] - a[1]); }
+function custOtTick(g) {
+  const dark = !(g.state.flags && g.state.flags.famDarkOff);
+  for (const m of famRoster(g)) {
+    if (!CS_TGT(m)) continue; const A = agOf(g, m), on = csActive(g, m, A), tot = on.reduce((s, x) => s + x[1], 0);
+    A.custSt = clamp(num(A.custSt) * 0.95 + tot * 1.3, 0, 100);
+    if (!tot) continue;
+    A.stress = clamp(num(A.stress) + tot * 0.6, 0, 100); A.mood = clamp(num(A.mood) - tot * 0.35, 0, 100);
+    if (dark) { try { yamiAdd(g, m, A, tot * 0.08, tot * 0.13); } catch (e) { } }
+    if (chance(0.35)) { const id = pick(on)[0], L = CS_DIA[id]; if (L) addDia(A, g, csTxt(g, m, pick(L)), -3); }
+    // においの風習は、学校でのからかいにつながる
+    const S = g.state.gakkoF && g.state.gakkoF[m.key], sm = on.filter(x => CS_SMELL.includes(x[0])).length;
+    if (dark && S && !S.bully && sm && chance(0.006 * sm)) { S.bully = { lv: 1, nick: pick(['くさ男', 'においマン', 'ゾンビ', '菌']), by: '同級生', since: g.state.day }; A.bully = Math.max(num(A.bully), 1); addDia(A, g, '「くさい」って、クラスのみんなに言われるようになった。', -8); }
+    // がまんの限界
+    if (A.custSt >= 60 && !A.custHigh) { A.custHigh = 1; try { faiLog(g, `【${m.rel}の変化】${m.rel}が、家のルールにたえられなくなってきている`, { ico: 'cloud', imp: 2, home: livesWith(g, m) }); } catch (e) { } try { const F = faiSt(g); F.evSeen = isObj(F.evSeen) ? F.evSeen : {}; if (dark && F.evSeen[m.key + ':cs_breaking'] == null && livesWith(g, m) && (!A.want || A.want.day < g.state.day)) A.want = { type: 'talk', ev: 'cs_breaking', day: g.state.day, t0: clockMin(g), exp: 1439 }; } catch (e) { } }
+    if (A.custSt < 35) A.custHigh = 0;
+  }
+}
+function custLine(g, m, A) {
+  if (!CS_TGT(m)) return null; const on = csActive(g, m, A).filter(x => CS_TALK[x[0]]); if (!on.length || !chance(0.12 + num(A.custSt) / 250)) return null;
+  return csTxt(g, m, pick(CS_TALK[pick(on)[0]]));
+}
+function custMind(g, m, A) { if (!CS_TGT(m)) return []; const on = csActive(g, m, A); if (!on.length) return []; const N = Object.fromEntries(CUSTOMS.map(c => [c.id, c.n])); return [`家の風習のストレス：${Math.round(num(A.custSt))}`, `つらい風習：${on.slice(0, 4).map(x => N[x[0]]).join('・')}`]; }
+// 実家の風習（親・祖父母・きょうだい）
+function jikkaCust(g) { const R = famRoster(g), m = R.find(o => o.kind === 'pa') || R.find(o => !inHouse(o)); return m ? custFor(g, m, agOf(g, m)) : {}; }
+function jikkaCustSet(g, id, on) { for (const o of famRoster(g)) { if (inHouse(o)) continue; const C = custFor(g, o, agOf(g, o)); C[id] = on ? 1 : 0; } }
+// 弟（妹）がいちばんつらい風習を、家族ぜんたいでやめる
+function custRelief(g, m, A, n) { const on = csActive(g, m, A).slice(0, n), N = Object.fromEntries(CUSTOMS.map(c => [c.id, c.n])); for (const [id] of on) jikkaCustSet(g, id, 0); A.custSt = clamp(num(A.custSt) - 25 * on.length, 0, 100); if (on.length) { try { faiLog(g, `実家の風習「${on.map(x => N[x[0]]).join('」「')}」が、なくなった`, { ico: 'heart', imp: 1 }); } catch (e) { } } }
+const CSO = (c, id) => !!c.cust[id];
+const CSB = c => CS_SMELL.some(id => c.cust[id]);
+FE.push(
+  { id: 'cs_why', dark: 1, w: 'sibYoung', ok: c => num(c.A.custSt) >= 20 && c.m.age >= 7, once: true, L: ['「……ねえ、{c}。友だちの家に行ったらね」', '「ふつうに、お風呂に入って、ふつうに、ごはん食べて、ふつうに、しゃべってた」', '「なんで、うちだけ、こうなの？」'], C: [['いっしょに、親に話してみよう', { op: 6, cst: -8 }, '「……話して、変わるかな」'], ['それが、うちのやり方だから', { op: -6, cst: 10, sec: '「それがうちのやり方」って。……ぼく（わたし）は、選んでないのに。' }, '「……うちのやり方、か」'], ['大人になったら、出られるよ', { op: 4 }, '「……大人になるまで、あと何年？」']] },
+  // ---- 上の子が何でも先 ----
+  { id: 'cs_chounan_food', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'chounan'), once: true, L: ['（夕食。あなたの皿には、ハンバーグが2つ。弟（妹）の皿には、ひとつ。……それも、半分）', '（親）「下の子は、あとでいいの。上の子が先。それがうちのしきたり」', '（弟（妹）は、だまって、半分のハンバーグを、何十回もかんでいる）'], C: [['自分のを、ひとつ分ける', { op: 10, cx: -8, al: '「上の子が先」の食卓で、弟（妹）におかずを分けた' }, '（親がにらんだ。弟（妹）は、皿の上のハンバーグを、しばらく見つめていた）'], ['このしきたり、やめようと親に言う', { op: 6 }, '（親）「何を言ってるの。先祖代々のしきたりよ」', { L: [], C: [['押しきる', { op: 10, cst: -10, custOffAll: 'chounan', coupleRel: -4, st: 8, al: '「上の子が先」のしきたりを、親を説得してやめさせた' }, '（次の日から、弟（妹）の皿にも、ハンバーグがふたつ乗った。弟（妹）は、それを見て、泣きそうな顔で笑った）'], ['引き下がる', { op: -4, cst: 4 }, '（弟（妹）は、なにも言わなかった）']] }], ['……（いつもどおり食べる）', { op: -8, cx: 10, cst: 6 }, '（ハンバーグの味が、よくわからなかった）']] },
+  { id: 'cs_chounan_money', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'chounan') && c.month === 1, once: true, L: ['（正月。親戚からのお年玉）', '（あなたのポチ袋には1万円。弟（妹）のポチ袋には、千円）', '（親戚）「上の子が多いのは、あたりまえだからねえ」', '（弟（妹）は、ポチ袋を、くしゃっとにぎりつぶした）'], C: [['あとで、半分わたす', { op: 12, money: -4500, cx: -8, al: 'お年玉の差を、弟（妹）とこっそり半分こした' }, '「……いいの？ ……バレたら、怒られるよ」「バレなきゃいい」'], ['しかたないよ', { op: -8, cx: 10, cst: 6 }, '「……しかたない、ばっかりだね。うちは」']] },
+  // ---- 食事は正座で ----
+  { id: 'cs_seiza', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'seiza') && c.m.age <= 15, once: true, L: ['（夕食後。弟（妹）が、立ちあがろうとして、そのまま横に倒れた）', '（1時間の正座で、足の感覚がなくなっていた）', '（父）「だらしない。たるんでいる」', '（弟（妹）は、床に手をついたまま、顔を上げられない）'], C: [['足をさすってやる', { op: 8, cst: -4 }, '（しびれた足をさすると、弟（妹）は「いたいいたい」と言いながら、少し笑った）'], ['父さん、子どもに1時間は長すぎる', { op: 8, coupleRel: -2, cst: -4 }, '（父）「わしが子どものころは、2時間だった」'], ['ちゃんと練習しな', { op: -6, cst: 6 }, '「……練習で、どうにかなるもんじゃないよ」']] },
+  // ---- 門限 ----
+  { id: 'cs_mongen', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'mongen') && c.m.age >= 9 && c.m.age <= 17, once: true, L: ['（夕方5時前。友だちの誕生日会から、弟（妹）がひとりで帰ってきた）', '「……ケーキ、まだ出てなかった」', '「みんな「えー、もう帰んの？」って。……次から、たぶん、誘われない」'], C: [['今日だけ、門限をのばしてもらえないか、親に聞く', { op: 8, cst: -4 }, '（親）「ルールはルール」。……弟（妹）は、玄関でくつを脱がなかった'], ['コンビニでケーキ買ってくる', { op: 10, money: -800 }, '（ふたりで、ショートケーキを食べた。「……友だちの家のケーキのほうが、大きかったけど」）'], ['ルールなんだから、しかたない', { op: -6, cst: 6 }, '「……知ってる」']] },
+  // ---- ゲーム・スマホ禁止 ----
+  { id: 'cs_nogame', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'noGame') && c.m.age >= 8 && c.m.age <= 17, once: true, L: ['（弟（妹）が、友だちの家でこっそりゲームをしていたことが、親にばれた）', '（親）「うちのルールを破ったのね。一週間、外出禁止」', '「……だって、みんなの話に、ついていけないんだよ」', '「休み時間、ぼく（わたし）だけ、ずっと黙ってるの。わかる？」'], C: [['親に、ルールを考えなおすよう話す', { op: 8, cst: -6 }, '（親は「ゲームは脳に悪い」と、記事の切りぬきを見せてきた）'], ['こっそり、自分のゲームを貸す', { op: 10, cst: -8, sec: '{c}が、ゲームをこっそり貸してくれた。ふたりだけの秘密。' }, '「……ほんとに？ ……絶対、バレないようにする」'], ['ルールを破ったのは、お前だろ', { op: -8, cst: 6 }, '「……そうだね。ぼく（わたし）が悪いんだよね。いつも」']] },
+  // ---- 男の子は坊主 ----
+  { id: 'cs_bouzu', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'bouzu') && OT(c) && c.m.age >= 10, once: true, L: ['（月に一度の、バリカンの日）', '（風呂場で、父が弟の頭を刈っている。弟は、ずっと目をつぶっている）', '（終わったあと、弟が、鏡の前でつぶやいた）', '「……明日、好きな子と、班がいっしょなんだ」'], C: [['帽子、貸してやる', { op: 8, cst: -4 }, '（いちばん気に入っているキャップを渡した。弟は、ぶかぶかのそれを、ぎゅっとかぶった）'], ['父さんに、もうやめてと言う', { op: 8 }, '（父）「男は坊主。うちは、そう決まっている」', { L: [], C: [['……弟の頭は、弟のものだ', { op: 10, cst: -10, custOffAll: 'bouzu', coupleRel: -4, al: '「男の子は坊主」のしきたりを、やめさせた' }, '（父は何か言いかけて、だまった。……次の月、バリカンは出てこなかった）']] }], ['坊主、似合ってるよ', { op: -4, cst: 4 }, '「……似合ってなくていいから、選ばせてほしかった」']] },
+  // ---- 男は泣いてはいけない ----
+  { id: 'cs_nocry', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'noCry') && OT(c), once: true, L: ['（夜。ベランダの外に、人影）', '（弟が、パジャマのまま、ひざを抱えて座っていた）', '「……泣いちゃったから。転んで、ひざすりむいて、ちょっとだけ」', '（くちびるが、切れていた。泣くのを、がまんしようとしてかんだらしい）', '「男は、泣いちゃいけないんだって」'], C: [['泣いていいんだよ。ここなら', { op: 12, cst: -8, al: '「泣いたらベランダ」のしきたりで外に出された弟に、毛布を持っていった' }, '（毛布をかけると、弟は、はじめて、声をあげて泣いた。……ふたりで、星を見ていた）'], ['親を呼んで、中に入れてもらう', { op: 8, coupleRel: -2 }, '（親）「1時間って決まってるの」。……あと40分、いっしょに外にいた'], ['泣かなきゃいいんだよ', { op: -10, cst: 8, scar: 'home' }, '「……うん。もう、泣かない」']] },
+  // ---- 下の子のお風呂は最後 ----
+  { id: 'cs_bathlast', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'bathLast') && csWin(c.g), once: true, L: ['（冬の夜11時。弟（妹）が、やっとお風呂に入る番）', '（湯船のお湯は、ぬるくなって、髪の毛が何本も浮いていた）', '（風呂場から、小さなくしゃみが、何度も聞こえる）'], C: [['追いだき、こっそりする', { op: 8, cst: -4 }, '（「……あったかい」――風呂場から、弟（妹）の小さな声）'], ['自分の順番を、ゆずる', { op: 10, cst: -6, al: '「下の子は最後」のお風呂の順番を、弟（妹）にゆずった' }, '（次の日、親にばれて、ふたりとも怒られた。……でも、弟（妹）は、ずっと笑っていた）'], ['……（自分の部屋に戻る）', { op: -4, cst: 4 }, '（次の日、弟（妹）は、熱を出して学校を休んだ）']] },
+  // ---- 友だちを家に呼べない ----
+  { id: 'cs_nofriends', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'noFriends') && c.m.age >= 8 && c.m.age <= 17, once: true, L: ['（インターホン。弟（妹）の友だちが、3人、家の前に来ていた）', '（親が、玄関で追いかえしていた）「うちは、よその子は入れないの」', '（弟（妹）は、階段の上で、それを聞いていた）', '（翌日）「……「お前んち、なんかヤバいの？」って、みんなに聞かれた」'], C: [['公園で、いっしょに遊んでおいで', { op: 8, cst: -4, money: -1000 }, '（お菓子代を渡した。弟（妹）は、友だちのところへ走っていった）'], ['このルール、なんのためにあるの？と親に聞く', { op: 6 }, '（親）「家の中のことを、外に知られたくないの」。……何を、知られたくないんだろう'], ['気にすんな', { op: -4, cst: 4 }, '「……気にするよ」']] },
+  // ---- 毎朝のお祈り ----
+  { id: 'cs_inori', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'inori') && ['elem', 'jhs', 'hs'].includes(c.A.role), once: true, L: ['（朝5時。家族そろって、1時間のお祈り）', '（弟（妹）は、目をつぶったまま、こっくりこっくりしている）', '（その日、弟（妹）は、また遅刻した）', '「……学校で、「宗教」ってあだ名になった」'], C: [['学校の日だけでも、短くしてもらおう', { op: 8, cst: -6 }, '（親は渋い顔をしたが、平日は30分になった）'], ['お祈りの時間、となりで寝かせてやる', { op: 6, cst: -2 }, '（親の目をぬすんで、弟（妹）の肩を、こっそり貸した）'], ['ちゃんとやれ', { op: -6, cst: 6 }, '「……祈っても、何も変わらないのに」']] },
+  // ---- 日記と持ち物のチェック ----
+  { id: 'cs_check', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'check') && c.m.age >= 10, once: true, L: ['（夕食のあと。親が、弟（妹）の日記を読みあげていた）', '（親）「「好きな人と目が合った」……だれ？ 言いなさい」', '（家族の前で、弟（妹）の顔が、真っ赤になっていく）', '（その夜、弟（妹）の部屋から、紙をびりびりに破る音が聞こえた）'], C: [['親に、プライバシーくらい守ってと言う', { op: 10, cst: -6, coupleRel: -2 }, '（親）「親が子どものことを知って、何が悪いの」'], ['読まれない日記帳を、プレゼントする', { op: 10, cst: -8, money: -1500, al: '親に読まれない、鍵つきの日記帳を、弟（妹）にあげた' }, '（鍵つきの日記帳。弟（妹）は、鍵を首からさげて、「……ありがと」と言った）'], ['……（だまっている）', { op: -6, cst: 6, scar: 'home' }, '（次の日から、弟（妹）の日記は、「きょうも、いい日でした」だけになった）']] },
+  // ---- 冬の水かぶり ----
+  { id: 'cs_coldbath', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'coldBath') && csWin(c.g), once: true, L: ['（冬の朝6時。庭で、弟（妹）が、バケツの冷水をかぶっていた）', '（くちびるが、紫色になっている）', '（その日の昼、学校から電話。弟（妹）が、39度の熱で倒れたらしい）', '（父）「気合いが足りないから、熱なんか出すんだ」'], C: [['病院に連れていく', { op: 10, hp: 6, cst: -6 }, '（先生）「冬に冷水は、子どもには危険です」。……父には、そのまま伝えた'], ['父と、正面から話す', { op: 8 }, '（父）「わしは、これで丈夫になった」', { L: [], C: [['弟（妹）は、父さんじゃない', { op: 10, cst: -10, custOffAll: 'coldBath', coupleRel: -4, al: '冬の水かぶりのしきたりを、やめさせた' }, '（父は、だまって庭のバケツを片づけた）']] }]] },
+  // ---- エアコン禁止 ----
+  { id: 'cs_noac', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'noAC') && [7, 8].includes(c.month), once: true, L: ['（真夏の夜。室温は34度）', '（弟（妹）の部屋から、物音がしない）', '（のぞくと、弟（妹）が、汗びっしょりで、ぐったりしていた）', '（呼びかけても、反応がにぶい）'], C: [['すぐに冷やして、救急車を呼ぶ', { op: 12, hp: 6, cst: -8, custOffAll: 'noAC', al: '熱中症で倒れた弟（妹）を、救急車で運んだ' }, '（「熱中症です。あと少し遅かったら」――病院の先生のことばで、親は、はじめてエアコンのスイッチを入れた）'], ['水を飲ませて、扇風機を当てる', { op: 8, hp: 3 }, '（しばらくして、弟（妹）が目をあけた。「……あつい……」）']] },
+  // ---- 家業の手伝い ----
+  { id: 'cs_kagyou', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'kagyou') && c.m.age >= 11 && c.m.age <= 18, once: true, L: ['（テスト前日の夜10時。弟（妹）は、まだ家の店で、品出しをしていた）', '「……部活、入りたかったんだ。みんな、放課後に楽しそうで」', '（親）「家族なんだから、手伝うのはあたりまえでしょ。……上の子は、もう手伝わなくていいけど」'], C: [['今日は、自分が代わる', { op: 10, cst: -6, time: 120, al: '家業の手伝いを、弟（妹）のかわりに引き受けた' }, '（品出しを代わると、弟（妹）は、テスト勉強をしに部屋に走っていった）'], ['部活だけは入らせてやってと頼む', { op: 8, cst: -4 }, '（親は、週2回だけ、と言った。弟（妹）は、その2回のために、残りの日を全部手伝った）'], ['家族なんだから、しかたない', { op: -6, cst: 6, cx: 6 }, '「……{c}は、手伝わなくていいのにね」']] },
+  // ---- 父親より先に箸をつけない ----
+  { id: 'cs_fatherfirst', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'fatherFirst') && OT_FA(c) && c.m.age <= 14, once: true, L: ['（夜9時。父がまだ帰らない。食卓のおかずは、冷めきっている）', '（弟（妹）のおなかが、ぐうぐう鳴っている）', '（弟（妹）が、こっそり、から揚げをひとつつまんだ）', '（ちょうどそのとき、玄関の開く音）（父）「……だれだ、先に食ったのは」'], C: [['自分が食べた、と言う', { op: 12, cst: -6, st: 6, al: '先に食べた弟（妹）のかわりに、父に怒られた' }, '（父の説教は、30分続いた。テーブルの下で、弟（妹）が、こっそり手をにぎってきた）'], ['子どもを9時まで待たせるのが悪い', { op: 8, coupleRel: -4, cst: -4 }, '（父は、何も言わずに、着がえに行った）'], ['……（だまっている）', { op: -8, cst: 6, scar: 'voice' }, '（父の怒鳴り声。弟（妹）は、から揚げを持ったまま、動けなかった）']] },
+  // ---- 同性への言葉／結婚相手を母が決める ----
+  { id: 'cs_gaychant', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'gayChant') && OT(c) && c.m.age >= 10, once: true, L: ['（夜。弟の部屋から、同じことばを、ぶつぶつとくり返す声）', '（今日のぶんの、180回）', '（終わったあと、弟がぽつりと言った）', '「……ぼく、好きな女の子がいるんだ。……でも、毎日これを言わされると、自分の気持ちが、わかんなくなる」'], C: [['お前の気持ちは、お前のものだ', { op: 12, cst: -8, al: '家の風習と、自分の気持ちのあいだで苦しむ弟と、話した' }, '「……ぼくの気持ち、か。……うん」'], ['今日だけ、回数をごまかしてやる', { op: 8, cst: -6 }, '（ふたりで、正の字を、こっそり書きたした）'], ['うちの風習だから', { op: -8, cst: 8 }, '「……風習って、だれのためにあるんだろうね」']] },
+  { id: 'cs_gaymarry', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'gayMarry') && OT(c) && c.m.age >= 14, once: true, L: ['（母が、写真を何枚もテーブルに並べていた。全部、男の人の写真）', '（母）「この中から、あなたの将来の相手を、お母さんが選んでおくから」', '（弟は、写真を見つめたまま、何も言わない）', '（あとで）「……ぼくに、選ばせてくれないんだね」'], C: [['だれを好きになるかは、お前が決めていい', { op: 12, cst: -8, al: '「相手は母が決める」と言われた弟に、「自分で決めていい」と伝えた' }, '（弟は、少し目を赤くして、「……ありがと」と言った）'], ['母さんに、本人の気持ちを聞いてと言う', { op: 8, coupleRel: -2 }, '（母）「この子のためを思って決めてるのよ」'], ['母さんが決めたなら……', { op: -8, cst: 8 }, '「……そうだよね」']] },
+  // ---- においの風習と、学校 ----
+  { id: 'cs_smell_school', dark: 1, w: 'sibYoung', ok: c => CSB(c) && ['elem', 'jhs', 'hs'].includes(c.A.role), once: true, L: ['（弟（妹）の机の引き出しに、小銭の入った空きびんがかくしてあった）', '（ラベルには、えんぴつで「せんとう」と書いてある）', '「……見つかっちゃった」', '「銭湯、ひとりで行こうと思って。……学校で、「くさい」って言われないように」'], C: [['今から、いっしょに行こう', { op: 12, money: -1000, cst: -10, al: '風習でお風呂に入れない弟（妹）を、こっそり銭湯に連れていった' }, '（大きな湯船で、弟（妹）は、ずっと肩までつかっていた。「……生きかえる」）'], ['家のやり方を、変えよう', { op: 8, cst: -12, custRelief: 1 }, '（いちばんつらい風習が、ひとつ、なくなった）'], ['見なかったことにする', { op: -4, cst: 4 }, '（びんの中の小銭は、少しずつ、増えつづけた）']] },
+  { id: 'cs_feces_school', dark: 1, w: 'sibYoung', ok: c => CSO(c, 'fecesSkin') && ['elem', 'jhs', 'hs'].includes(c.A.role), once: true, L: ['（学校から電話。保健室の先生からだった）', '（「{n}さんの体に、汚れと皮膚のただれがあります。ご家庭の様子を、うかがってもいいですか」）', '（電話の向こうで、先生は、言葉をえらんでいるようだった）', '（「……必要なら、児童相談所とも、連携します」）'], C: [['家の風習のことを、正直に話す', { op: 10, cst: -12, custRelief: 2, coupleRel: -6, al: '保健室の先生に、家の風習のことを正直に話した' }, '（親は激怒した。……でも、その日から、弟（妹）は、毎日お風呂に入れるようになった）'], ['「なんでもありません」と答える', { op: -10, cst: 8, scar: 'school' }, '（電話を切ったあと、弟（妹）が、廊下で立ちつくしていた）']] },
+  // ---- ルールを破る ----
+  { id: 'cs_rebel', dark: 1, w: 'sibYoung', ok: c => num(c.A.custSt) >= 40 && c.m.age >= 9, once: true, L: ['（親が、弟（妹）のかばんの底から、何かを見つけた）', '（歯ブラシと、せっけんと、お菓子と、使い捨てのカイロ）', '（ぜんぶ、家のルールで禁止されているものだった）', '（親）「どういうことなの、これは！」'], C: [['自分が渡した、と言う', { op: 12, cst: -6, coupleRel: -2, al: '家のルールを破った弟（妹）を、かばった' }, '（親の怒りは、こちらに向いた。……弟（妹）は、あとで小さく「ごめん、ありがと」と言った）'], ['弟（妹）にだって、ふつうに暮らす権利がある', { op: 10, cst: -8, custRelief: 1 }, '（親は、言いかえせなかった。いちばんつらいルールが、ひとつ消えた）'], ['……（だまっている）', { op: -8, cst: 6, yg: 4 }, '（全部、目の前で捨てられた。弟（妹）は、それをじっと見ていた）']] },
+  // ---- 先生の家庭訪問 ----
+  { id: 'cs_teacher', dark: 1, w: 'sibYoung', ok: c => num(c.A.custSt) >= 30 && ['elem', 'jhs', 'hs'].includes(c.A.role), once: true, L: ['（担任の先生が、家庭訪問に来た）', '（先生）「{n}さん、最近、元気がなくて……。おうちのルールのことで、悩んでいるようで」', '（親）「よその家のやり方に、口出ししないでください」', '（先生が帰ったあと、親が、弟（妹）をにらんだ）「……あんたが、チクったのね」'], C: [['弟（妹）は悪くない', { op: 10, cst: -4, coupleRel: -2 }, '（親）「家のことを外に言うなんて……」。……弟（妹）は、だまって、うつむいていた'], ['先生の言うことも、聞いてみようよ', { op: 8, cst: -8, custRelief: 1 }, '（親は、しばらく考えこんでいた。……次の週、ルールがひとつ、なくなった）'], ['……（だまっている）', { op: -8, cst: 8, scar: 'home' }, '（その夜、弟（妹）は、2時間、親に説教された）']] },
+  // ---- ふつうの家 ----
+  { id: 'cs_friend_house', dark: 1, w: 'sibYoung', ok: c => num(c.A.custSt) >= 35 && c.m.age >= 9 && !CSO(c, 'noFriends'), once: true, L: ['（友だちの家に泊まりに行った弟（妹）が、帰ってくるなり言った）', '「……あの家、ふつうだった」', '「お風呂に入って、テレビ見て、ごはん食べながら笑って。……ふつうって、こんなに楽なんだね」', '「……帰りたくなかった」'], C: [['いつか、うちも、そうしよう', { op: 10, cst: -6 }, '「……いつか、って、いつ？」'], ['よその家は、よその家', { op: -6, cst: 6 }, '「……知ってる。知ってるから、言わなきゃよかった」']] },
+  // ---- がまんの限界 ----
+  { id: 'cs_breaking', dark: 1, w: 'sibYoung', ok: c => num(c.A.custSt) >= 60, once: true, L: ['（リビングで、弟（妹）が、家のルールを書いた紙を、びりびりに破った）', '「もういやだ！ こんな家のルール、全部、おかしいよ！」', '（親）「なんですって！ だれのおかげで……」', '「だれのおかげでもない！ ぼく（わたし）は、ふつうに生きたいだけなの！」', '（弟（妹）は、はだしのまま、外に飛びだしていった）'], C: [['追いかける', { op: 10 }, '（公園のブランコに、弟（妹）が座っていた）', { L: ['「……ねえ。ぼく（わたし）って、わがまま？」'], C: [['わがままじゃない。いっしょに、ルールを変えよう', { op: 12, cst: -20, custRelief: 2, al: '家のルールに耐えられなくなった弟（妹）と、ルールを変えた' }, '（その夜の家族会議で、ふたつのルールがなくなった。……親は、最後まで不満そうだった）']] }], ['親をなだめる', { op: -4, allMood: 2 }, '（親）「あの子は、甘えてるのよ」'], ['……（何もしない）', { op: -10, cst: 10, yg: 6, ym: 4 }, '（弟（妹）は、夜中まで帰ってこなかった）']] },
+  { id: 'cs_future', dark: 1, w: 'sibYoung', ok: c => num(c.A.custSt) >= 30 && c.m.age >= 12, once: true, L: ['「……{c}。ぼく（わたし）、大人になったら、この家を出る」', '「絶対に。どんなに遠くてもいい」', '「それで、自分の家は、自分のルールで暮らすんだ」'], C: [['そのときは、手伝う', { op: 10, al: '「この家を出る」と言う弟（妹）に、そのときは手伝うと約束した' }, '「……約束ね」'], ['家族を捨てるのか', { op: -8, cst: 6 }, '「……捨てられてたのは、どっちかな」']] },
+  { id: 'cs_my_kids', w: 'sibYoung', ok: c => c.kids > 0 && c.m.age >= 14 && CUSTOMS.some(x => x.bad && custOf(c.g)[x.id]), once: true, L: ['（あなたの子どもを見ながら、弟（妹）がぽつりと言った）', '「……{c}の家にも、ルール、あるんだね」', '「ぼく（わたし）たちが、されていやだったこと。……あの子たちには、しないであげてね」'], C: [['……考えなおすよ', { op: 8, al: '弟（妹）に、自分の家のルールを考えなおすと言った' }, '「……うん。それだけで、いい」'], ['うちは、うちだから', { op: -6 }, '「……そうやって、続いていくんだね」']] },
+);
+function installCustOt() {
+  E.Tn(g => { try { custOtTick(g); } catch (e) { console.error('[custOt]', e); } });
+  if (typeof window !== 'undefined') window.__custot = { tick: () => custOtTick(window.__game), set: (id, on) => jikkaCustSet(window.__game, id, on), mind: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return custMind(g, m, agOf(g, m)); }, line: k => { const g = window.__game, m = famRoster(g).find(x => x.key === k); return custLine(g, m, agOf(g, m)); } };
+}
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
