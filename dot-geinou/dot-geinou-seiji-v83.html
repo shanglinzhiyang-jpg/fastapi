@@ -35220,7 +35220,7 @@ function gbPatchKanraku() {
       const LU = E.LU;
       r.entities.forEach((e, i) => {
         if (!e || e.type !== 'building') return;
-        if (e.fx && e.fx.style === 'pachinko') { e.talk = t => gbEnter(t, 'pachinko'); delete e.text; return; }
+        if (e.fx && e.fx.style === 'pachinko') { e.place = HALL_ID; e.enter = t => hallEnter(t); delete e.talk; delete e.text; const dx = e.door != null ? e.door : Math.floor(e.w / 2); if (r.cells && r.cells[e.y + e.h - 1]) r.cells[e.y + e.h - 1][e.x + dx] = ['kanraku_side']; return; }
         const sd = e.fx && e.fx.seed, B = GB_BLD[sd]; if (!B) return;
         const [k, nm, fx] = B;
         if (!fx || !LU) { e.name = nm; delete e.text; e.talk = t => gbEnter(t, k); return; }
@@ -35272,6 +35272,7 @@ const gbIconMemo = gbIcon('#3a3a4a', (c, x, y) => { c.fillStyle = '#f4f1e6'; c.f
 // フォルダ「ギャンブル」（スマホのホーム画面）
 try { if (typeof FOLDERS !== 'undefined') { FOLDERS.push({ id: 'f_gamble', name: 'ギャンブル', color: '#b0202a', order: 35.2, apps: ['gb_onkaji', 'gb_fx', 'gb_takara', 'gb_memo'] }); for (const id of ['gb_onkaji', 'gb_fx', 'gb_takara', 'gb_memo']) FOLD_OF[id] = 'f_gamble'; } } catch (e) { console.error('[gb] folder', e); }
 function installGamble() {
+  try { hallRegister(); } catch (e) { console.error('[gb] hall', e); }
   try { gbPatchKanraku(); } catch (e) { console.error('[gb] kanraku', e); }
   try { gbPatchTokyo(); } catch (e) { console.error('[gb] tokyo', e); }
   try {
@@ -35577,7 +35578,8 @@ function pcStep(S, b) {
   return true;
 }
 GB_MODES.pachinko = {
-  init(s, g) { s.S = { ph: 'pick', rate: 4, m: null, balls: 0, spins: 0, hits: 0, chain: 0, best: 0, sup: null, reels: [gbR(1, 9), gbR(1, 9), gbR(1, 9)], roll: null, jack: null, spd: 1, shoot: true, bl: [], hold: 0, acc: 0, inv: 0, hist: [], box: 0, petals: [], atkOpen: false, fly: [] }; },
+  init(s, g) { this.init0(s, g); const pr = s.o.preset; if (pr) { const m = PC_MACH[pr.mi]; s.S.m = { ...m, spin: Math.max(12, m.spin + num(pr.adj)) }; s.S.rate = pr.rate; s.S.ph = 'need'; s.S.preset = true; } },
+  init0(s, g) { s.S = { ph: 'pick', rate: 4, m: null, balls: 0, spins: 0, hits: 0, chain: 0, best: 0, sup: null, reels: [gbR(1, 9), gbR(1, 9), gbR(1, 9)], roll: null, jack: null, spd: 1, shoot: true, bl: [], hold: 0, acc: 0, inv: 0, hist: [], box: 0, petals: [], atkOpen: false, fly: [] }; },
   bps(S) { return 250 / S.m.spin; },
   q(S) { if (S.jack) return 0; if (S.sup) return 0.42; return (1 - 10 * 0.003) / (this.bps(S) + 3) / 0.94; }, // ヘソに向かった玉の約94%が入る
   launch(s) {
@@ -35704,10 +35706,10 @@ GB_MODES.pachinko = {
     pT(c, '履歴', 270, 300, { size: 12, color: PW.dim }); S.hist.slice(0, 6).forEach((h, i) => { const x = 312 + i * 26; pBev(c, x, 298, 22, 20, h >= 5 ? '#c83040' : h >= 2 ? '#c9962a' : '#3a3a5a'); pT(c, String(h), x + 11, 301, { size: 12, align: 'center', shadow: null }); });
     // 右：ボタン・ドル箱
     const bx = 492, bw = 140;
-    s.btn('rent', '玉貸し\n¥1,000で250玉', bx, 38, bw, 48, { kind: S.ph === 'need' ? 'pri' : 'norm', def: S.ph === 'need', size: 16 });
+    s.btn('rent', `玉貸し\n¥1,000で${S.rate === 4 ? 250 : 1000}玉`, bx, 38, bw, 48, { kind: S.ph === 'need' ? 'pri' : 'norm', def: S.ph === 'need', size: 16 });
     s.btn('shoot', S.shoot ? '打ち出し中' : '止めている', bx, 92, bw, 32, { kind: S.shoot ? 'blue' : 'norm', off: S.ph === 'need' });
     s.btn('spd', `速さ ${'▶'.repeat(S.spd)}`, bx, 130, bw, 32, { def: S.ph !== 'need' });
-    s.btn('move', '台を移る', bx, 168, bw, 32, { off: !!S.jack });
+    if (!S.preset) s.btn('move', '台を移る', bx, 168, bw, 32, { off: !!S.jack });
     s.btn('quit', 'やめて換金', bx, 206, bw, 32, { kind: 'red', back: true, off: !!S.jack || !!(S.roll && S.roll.hit) });
     this.dolbako(s, c, bx, 246, bw, 88);
     if (S.ph === 'need') { const a = (s.t >> 4) % 2; pFrame(c, 8, 300, 236, 34); pT(c, a ? '玉がなくなった…' : '玉貸しボタンで玉を借りる', 126, 309, { size: 16, align: 'center', color: PW.acc }); }
@@ -35805,7 +35807,7 @@ function slSym(k) {
   });
 }
 GB_MODES.slot = {
-  init(s, g) { s.S = { ph: s.o.online ? 'ready' : 'need', med: 0, games: 0, big: 0, reg: 0, flag: null, bonus: null, lamp: false, lampLate: false, lampT: 0, pos: [0, 4, 8], spin: [false, false, false], stop: [0, 4, 8], tgt: [null, null, null], bnc: [0, 0, 0], auto: false, replay: false, pay: null, bon: null, inv: 0, since: 0, next: 0, lever: 0, press: [0, 0, 0], drops: [], bet: 0, coin: 1, out: 0 }; },
+  init(s, g) { s.S = { rate: (s.o.preset && s.o.preset.rate) || 20, ph: s.o.online ? 'ready' : 'need', med: 0, games: 0, big: 0, reg: 0, flag: null, bonus: null, lamp: false, lampLate: false, lampT: 0, pos: [0, 4, 8], spin: [false, false, false], stop: [0, 4, 8], tgt: [null, null, null], bnc: [0, 0, 0], auto: false, replay: false, pay: null, bon: null, inv: 0, since: 0, next: 0, lever: 0, press: [0, 0, 0], drops: [], bet: 0, coin: 1, out: 0 }; },
   betV(S) { return [100, 300, 1000, 3000, 10000][S.bet || 0]; },
   lever(s) {
     const S = s.S;
@@ -35844,12 +35846,12 @@ GB_MODES.slot = {
     const S = s.S;
     if (id === 'lever') { if (S.ph === 'ready') this.lever(s); else if (S.ph === 'spin' && !S.auto) this.doStop(s, S.next); return; }
     if (id === 'auto') { S.auto = !S.auto; S.af = 0; return; }
-    if (id === 'rent') { if (!s.pay(1000)) return; S.inv += 1000; S.med += 50; if (S.ph === 'need') S.ph = 'ready'; return; }
+    if (id === 'rent') { if (!s.pay(1000)) return; S.inv += 1000; S.med += Math.round(1000 / S.rate); if (S.ph === 'need') S.ph = 'ready'; return; }
     if (gbAmtBtn(s, id, 'bet', [100, 300, 1000, 3000, 10000])) return;
     if (id === 'quit') {
       if (S.ph === 'spin' || S.ph === 'bonus' || S.ph === 'settle') return;
       if (S.bonus && !S.qc) { S.qc = 1; s.tip('ボーナスが成立しています！ もう一度押すとやめます', PW.bad); return; }
-      if (!s.o.online) { const yen = Math.floor(S.med * 18 / 100) * 100; s.win(yen); s.res = { note: yen > 0 ? `メダル${S.med}枚を特殊景品にかえて、${gbYen(yen)}に換金した` : '', games: S.games, big: S.big, reg: S.reg }; }
+      if (!s.o.online) { const yen = Math.floor(S.med * S.rate * 0.9 / 100) * 100; s.win(yen); s.res = { note: yen > 0 ? `メダル${S.med}枚を特殊景品にかえて、${gbYen(yen)}に換金した` : '', games: S.games, big: S.big, reg: S.reg }; }
       else s.res = { games: S.games, big: S.big, reg: S.reg };
       s.mins = Math.max(10, Math.round(S.games / 14)); s.done();
     }
@@ -35867,11 +35869,11 @@ GB_MODES.slot = {
     // 右：ボタン
     const bx = 470, bw = 162;
     if (on) { pFrame(c, bx, 36, bw, 70, { title: '1回の賭け金' }); gbAmtRow(s, bx + 8, 66, [100, 300, 1000, 3000, 10000], 'bet', { w: 74, off: S.ph === 'spin' }); }
-    else { pFrame(c, bx, 36, bw, 56, { title: '20円スロット' }); pT(c, '千円で50枚・1回3枚', bx + 10, 64, { size: 12, color: PW.dim }); }
+    else { pFrame(c, bx, 36, bw, 56, { title: `${S.rate}円スロット` }); pT(c, `千円で${Math.round(1000 / S.rate)}枚・1回3枚`, bx + 10, 64, { size: 12, color: PW.dim }); }
     const canLever = S.ph === 'ready' && (on || S.replay || S.med >= 3);
     s.btn('lever', S.ph === 'spin' ? '停止' : S.replay ? 'リプレイ' : 'レバー', bx, 112, bw, 44, { kind: 'pri', def: true, size: 16, off: !(canLever || (S.ph === 'spin' && !S.auto)) });
     s.btn('auto', S.auto ? 'オート中' : 'オート', bx, 162, bw, 32, { kind: S.auto ? 'blue' : 'norm' });
-    if (!on) s.btn('rent', 'メダル貸し\n¥1,000で50枚', bx, 200, bw, 46, { kind: S.ph === 'need' ? 'green' : 'norm', off: S.ph === 'spin' || S.ph === 'bonus' });
+    if (!on) s.btn('rent', `メダル貸し\n¥1,000で${Math.round(1000 / S.rate)}枚`, bx, 200, bw, 46, { kind: S.ph === 'need' ? 'green' : 'norm', off: S.ph === 'spin' || S.ph === 'bonus' });
     s.btn('quit', on ? 'やめる' : 'やめて換金', bx, 302, bw, 32, { kind: 'red', back: true, off: S.ph === 'spin' || S.ph === 'bonus' || S.ph === 'settle' });
     if (S.ph === 'need' && !on) pT(c, 'メダルがない', bx + bw / 2, 254, { size: 12, color: PW.bad, align: 'center' });
   },
@@ -36888,6 +36890,202 @@ GB_MODES.fx = {
     const net = fxUnits(F); pT(c, F.pos.length ? `${net > 0 ? '買い' : net < 0 ? '売り' : '両建て'} ${Math.abs(net) / 10000}万通貨` : 'ポジションなし', 530, 330, { size: 12, color: PW.dim, align: 'center' });
   },
 };
+
+// ===== パチンコ ドットホールの店内（島・データランプ・景品カウンター・喫煙室・スロットコーナー） =====
+const HALL_ID = 'kanraku_pachi';
+// 台の並び：島ごとに機種とレートを決める（mi＝PC_MACH の番号、kind p＝パチンコ s＝スロット）
+const HALL_ROWS = [
+  { y: 3, xs: [2, 13], seg: [[2, 7, 2, 4], [8, 13, 1, 4]] },
+  { y: 6, xs: [2, 13], seg: [[2, 7, 0, 4], [8, 13, 2, 1]] },
+  { y: 9, xs: [2, 13], seg: [[2, 7, 0, 1], [8, 13, 1, 1]] },
+];
+const HALL_SLOT = [{ y: 3, x0: 17, x1: 22, rate: 20 }, { y: 6, x0: 17, x1: 22, rate: 5 }];
+const HALL_SEAT = [[4, 4], [9, 4], [12, 4], [6, 7], [10, 7], [3, 10], [11, 10], [18, 4], [21, 4], [20, 7]]; // 先客のいる席
+const HALL_HOT = [[9, 4], [18, 4]]; // 当たっている席（ドル箱が積まれる）
+function hallSeed(g, i) { const d = num(g && g.state && g.state.day, 1); let h = (d * 2654435761 + i * 40503) >>> 0; return () => { h = (h * 1664525 + 1013904223) >>> 0; return h / 4294967296; }; }
+function hallData(g, i, kind) { const R = hallSeed(g, i), hits = Math.floor(R() * (kind === 's' ? 9 : 7)), spins = 120 + Math.floor(R() * 1800), adj = Math.round((R() - 0.5) * 4); return { hits, spins, adj, big: Math.floor(hits * 0.6), reg: hits - Math.floor(hits * 0.6), games: 200 + Math.floor(R() * 4000) }; }
+// ---- タイル ----
+function hallTiles() {
+  if (!E.Z || hallTiles.done) return; hallTiles.done = true;
+  const R = (t, x, y, w, h, col) => { t.fillStyle = col; t.fillRect(x, y, w, h); };
+  // 赤と黒のじゅうたん（ホールらしい模様）
+  E.Z('gb_fl_hall', { variants: 4, draw(t, rng, f, v) { R(t, 0, 0, 16, 16, '#5a1424'); R(t, 0, 0, 8, 8, '#6a1a2c'); R(t, 8, 8, 8, 8, '#6a1a2c'); }, hd(t, rng, f, v) { R(t, 0, 0, 32, 32, '#561222'); for (let j = 0; j < 32; j += 8) for (let i = (j / 8 & 1) * 8; i < 32; i += 16) R(t, i, j, 8, 8, '#661a2c'); R(t, 14, 14, 4, 4, '#c9962a'); R(t, 15, 13, 2, 6, '#c9962a'); R(t, 13, 15, 6, 2, '#c9962a'); if (v === 1) R(t, 4, 26, 2, 2, '#3a0a14'); if (v === 2) R(t, 24, 6, 3, 1, '#7a2a3a'); } });
+  // 壁：黒地にネオンの帯
+  E.Z('wall_gbhall', { solid: true, draw(t) { R(t, 0, 0, 16, 16, '#1a1420'); R(t, 0, 8, 16, 1, '#ff4fa0'); }, hd(t) { R(t, 0, 0, 32, 32, '#1a1420'); R(t, 0, 2, 32, 1, '#2a2430'); R(t, 0, 15, 32, 2, '#ff4fa0'); R(t, 0, 17, 32, 1, '#7a1040'); R(t, 0, 26, 32, 6, '#0e0a12'); R(t, 0, 26, 32, 1, '#3a3440'); } });
+  E.Z('walltop_gbhall', { solid: true, draw(t) { R(t, 0, 0, 16, 16, '#0a080e'); }, hd(t) { R(t, 0, 0, 32, 32, '#0a080e'); R(t, 0, 30, 32, 2, '#2a2430'); } });
+  // 丸いすツール（座れる）
+  E.Z('gb_stool', { obj: true, draw(t) { R(t, 5, 8, 6, 3, '#c8102e'); R(t, 7, 11, 2, 3, '#9aa0aa'); }, hd(t) { t.fillStyle = 'rgba(0,0,0,0.3)'; t.fillRect(9, 25, 14, 3); R(t, 14, 18, 4, 8, '#8a8e98'); R(t, 14, 18, 1, 8, '#c8ccd4'); R(t, 9, 12, 14, 7, '#1c1a24'); R(t, 10, 12, 12, 5, '#d0203a'); R(t, 11, 12, 10, 1, '#ff7088'); R(t, 10, 26, 12, 2, '#5a5e68'); } });
+  E.Z('gb_mat', { draw(t) { R(t, 0, 0, 16, 16, '#3a3a44'); }, hd(t) { R(t, 0, 0, 32, 32, '#2a2a34'); for (let j = 2; j < 32; j += 4) R(t, 2, j, 28, 1, '#3e3e4a'); } });
+}
+// ---- 置物の絵（32px／タイル） ----
+const HALL_COL = ['#2f6fd0', '#e0702a', '#d0306a'];
+function hallArt(k, P, W, H, f, a) {
+  const r = P.r;
+  if (k === 'pachi' || k === 'slot') {
+    // データランプ（上）
+    r(5, 0, 22, 13, '#0a0a10'); r(6, 1, 20, 11, '#16141c'); const hot = a.hot && f % 2 === 0;
+    r(13, 1, 6, 3, hot ? '#ffe94a' : a.hot ? '#a08020' : '#3a3440'); if (hot) { r(11, 0, 10, 1, '#fff6a0'); }
+    const s = String(a.n), w = s.length * 4 - 1; s.split('').forEach((ch, i) => { const gg = P35[ch]; for (let q = 0; q < 15; q++) if (gg[q] === '1') r(16 - Math.floor(w / 2) + i * 4 + (q % 3), 5 + Math.floor(q / 3), 1, 1, '#ff3a2a'); });
+    // 本体
+    r(2, 13, 28, 51, '#1c1a24'); r(3, 14, 26, 49, k === 'slot' ? '#3a3e4c' : '#c8ccd8'); r(3, 14, 2, 49, k === 'slot' ? '#5a5e70' : '#f0f2f8'); r(27, 14, 2, 49, k === 'slot' ? '#22242e' : '#8a8e9a');
+    r(4, 15, 24, 6, a.col); r(4, 15, 24, 1, '#ffffff55');
+    if (k === 'pachi') {
+      P.oval(5, 21, 22, 22, '#3a1a5a'); P.oval(7, 23, 18, 18, '#5a2a8a');
+      for (let q = 0; q < 14; q++) { const ang = q / 14 * Math.PI * 2, rr = 7.5; r(Math.round(16 + Math.cos(ang) * rr), Math.round(32 + Math.sin(ang) * rr), 1, 1, '#ffd23f'); }
+      r(11, 28, 10, 6, '#0a0a14'); const d = [(f * 3 + a.n) % 9, (f * 5 + 2) % 9, (f * 7 + a.n * 3) % 9]; d.forEach((v, i) => r(12 + i * 3, 30, 2, 3, a.hot ? '#ffd23f' : v % 2 ? '#ff4a5a' : '#ffffff'));
+      r(4, 46, 24, 9, '#c82030'); r(6, 48, 20, 4, '#2a2a34'); for (let q = 0; q < (a.hot ? 9 : 4); q++) r(7 + q * 2, 49 - (q % 2), 2, 2, '#e0e4ec');
+      r(25, 56, 4, 4, '#e02030'); r(26, 57, 1, 1, '#ff9aa8');
+    } else {
+      r(6, 23, 20, 14, '#0a0a10'); for (let i = 0; i < 3; i++) { r(7 + i * 6, 24, 5, 12, '#f4f4f8'); const sy = (f + i) % 3; r(8 + i * 6, 25 + sy * 3, 3, 3, ['#e0202a', '#8a3ac8', '#f0c020'][(i + f) % 3]); }
+      r(6, 30, 20, 1, '#ff3050');
+      P.oval(7, 40, 6, 6, a.hot && f % 2 ? '#ffe94a' : '#3a3440');
+      r(16, 41, 10, 4, '#0a0a10'); r(17, 42, 2, 2, '#ff3a2a'); r(21, 42, 2, 2, '#ff3a2a');
+      for (let i = 0; i < 3; i++) r(8 + i * 6, 50, 4, 3, '#c83040');
+      r(5, 55, 22, 6, '#2a2a34'); for (let q = 0; q < (a.hot ? 8 : 3); q++) r(7 + q * 2, 57, 2, 2, '#ffd23f');
+    }
+    return;
+  }
+  if (k === 'box') { // ドル箱の山
+    const n = a.n || 2; for (let i = 0; i < n; i++) { const y = H - 10 - i * 9; r(5, y, 22, 10, '#1c1a24'); r(6, y + 1, 20, 8, '#c8a050'); r(6, y + 1, 20, 2, '#e0e4ec'); for (let q = 0; q < 9; q++) r(7 + q * 2, y + 1, 1, 1, '#ffffff'); }
+    return;
+  }
+  if (k === 'neon') { // 店名のネオン
+    r(0, 4, W, H - 8, '#0a080e'); r(1, 5, W - 2, H - 10, '#1a0a18'); const on = f % 6 !== 5;
+    P.t('ドットホール', W / 2, 9, { size: 16, color: on ? '#ff6ab4' : '#7a2a5a', align: 'center' }); if (on) { r(4, 6, W - 8, 1, '#ff4fa0'); r(4, H - 7, W - 8, 1, '#ff4fa0'); }
+    for (let i = 0; i < W - 8; i += 6) r(4 + i, H - 5, 3, 1, (i / 6 + f) % 2 ? '#ffd23f' : '#5a4a10');
+    return;
+  }
+  if (k === 'poster') { r(2, 2, W - 4, H - 4, '#1c1a24'); r(3, 3, W - 6, H - 6, a.bg); r(3, 3, W - 6, 2, '#ffffff55'); (a.lines || []).forEach((ln, i) => P.t(ln, W / 2, 6 + i * 11, { size: 10, color: a.fg, align: 'center' })); return; }
+  if (k === 'counter') { // 景品カウンター
+    P.slab(0, 8, W, H - 8, '#e8e0d0', '#c8102e', 10); r(2, 18, W - 4, 2, '#ffd23f');
+    P.t('景品カウンター', W / 2, 22, { size: 10, color: '#ffffff', align: 'center' });
+    for (let i = 0; i < 4; i++) { const x = 8 + i * Math.floor((W - 16) / 4); r(x, 9, 8, 6, ['#ffd23f', '#e8e8f0', '#c9962a', '#e8e8f0'][i]); r(x + 1, 10, 2, 1, '#ffffff'); }
+    return;
+  }
+  if (k === 'shelf') { // 景品の棚
+    r(0, 0, W, H, '#1c1a24'); r(1, 1, W - 2, H - 2, '#5a3a1a'); for (let row = 0; row < Math.max(1, Math.floor((H - 4) / 15)); row++) { const y = 2 + row * 15; r(1, y + 11, W - 2, 2, '#3a2410'); for (let x = 3; x < W - 6; x += 7) { const c2 = ['#e04a4a', '#3a8ae0', '#f0c040', '#5ac07a', '#e8e8f0', '#a05ad0', '#ff9a3c'][(x / 7 + row * 3) % 7 | 0]; r(x, y + 3, 5, 8, c2); r(x, y + 3, 5, 1, '#ffffff66'); } }
+    return;
+  }
+  if (k === 'smoke') { // 喫煙室（ガラス張り）
+    r(0, 0, W, H, '#1c1a24'); r(1, 1, W - 2, H - 2, '#2a3a4a'); r(2, 2, W - 4, H - 4, 'rgba(160,210,240,0.35)');
+    for (let x = 2; x < W - 2; x += 18) r(x, 2, 1, H - 4, '#8ab0c8');
+    r(6, H - 22, W - 12, 6, '#5a3a1a'); r(W / 2 - 3, H - 32, 6, 10, '#9aa0aa');
+    for (let i = 0; i < 4; i++) { const sx = 10 + i * 18 + ((f + i) % 3), sy = 10 + ((f * 3 + i * 7) % 18); r(sx, sy, 6, 3, 'rgba(230,230,240,0.45)'); }
+    P.t(a.label || '喫煙室', W / 2, 5, { size: 10, color: '#ffffff', align: 'center' });
+    return;
+  }
+  if (k === 'vend') { r(2, 0, W - 4, H, '#1c1a24'); r(3, 1, W - 6, H - 2, a.c || '#2a6ad0'); r(5, 4, W - 10, 18, '#e8f0ff'); for (let i = 0; i < 6; i++) r(7 + (i % 3) * 6, 6 + Math.floor(i / 3) * 8, 4, 6, ['#e04a4a', '#f0c040', '#5ac07a', '#3a8ae0', '#ff9a3c', '#e8e8f0'][i]); r(6, H - 12, W - 12, 6, '#0a0a14'); return; }
+  if (k === 'board') { // 本日の新台・データ公開ボード
+    r(0, 0, W, H, '#1c1a24'); r(1, 1, W - 2, H - 2, '#0a0a14'); P.t(a.title || '', W / 2, 3, { size: 10, color: '#ffd23f', align: 'center' });
+    (a.lines || []).forEach((ln, i) => P.t(ln, 5, 16 + i * 10, { size: 10, color: i % 2 ? '#9adfff' : '#ffffff' }));
+    return;
+  }
+  if (k === 'plant') { r(10, 22, 12, 10, '#5a3a1a'); r(11, 22, 10, 2, '#7a5a2a'); P.oval(5, 6, 22, 18, '#2a7a3a'); P.oval(8, 2, 14, 12, '#3a9a4a'); return; }
+}
+const hip = (k, x, y, w, h, up, o = {}) => IP(x, y, w, h, up, `hall:${k}:${JSON.stringify(o.a || {})}`, (P, W, H, f) => hallArt(k, P, W, H, f, o.a || {}), o);
+// ---- 台で遊ぶ ----
+async function hallPlay(g, cfg) {
+  const V = GB_VEN[cfg.kind === 's' ? 'slot' : 'pachinko'], d = hallData(g, cfg.i, cfg.kind), m = cfg.kind === 'p' ? PC_MACH[cfg.mi] : null;
+  const name = cfg.kind === 'p' ? `${pcPre(g)}${m.nm}（${cfg.rate}円）` : `ドットスター（${cfg.rate}円スロット）`;
+  const info = cfg.kind === 'p' ? `${cfg.no}番台　${name}\nデータランプ：大当たり ${d.hits}回・スタート ${d.spins}回\n${m.desc}` : `${cfg.no}番台　${name}\nデータランプ：BIG ${d.big}回・REG ${d.reg}回・${d.games}ゲーム`;
+  const k = await E.Ho(g, { title: 'パチンコ ドットホール', color: '#d0306a', text: info, choices: ['この台で打つ', 'やめておく'] });
+  if (k !== 0) return;
+  const r = await gbScene(g, { mode: cfg.kind === 'p' ? 'pachinko' : 'slot', preset: { mi: cfg.mi, rate: cfg.rate, adj: d.adj, no: cfg.no }, title: 'パチンコ ドットホール', sub: `${cfg.no}番台`, tcol: '#ff6ab4' });
+  gbAfter(g, r.mins); gbRec(g, cfg.kind === 'p' ? 'pachinko' : 'slot', r.bet, r.pay);
+  const L = []; if (r.note) L.push(r.note + '\n（店の外の交換所で換金する、いわゆる「三店方式」だ）'); if (r.bet || r.pay) L.push(`収支：${gbSign(r.pay - r.bet)}`); if (r.pay - r.bet < -30000) L.push('（…取り返さなきゃ、という気持ちがわいてくる）');
+  if (L.length) await E.qe(g, { title: 'パチンコ ドットホール', color: '#d0306a', text: L.join('\n') });
+}
+async function hallEnter(g) {
+  const V = GB_VEN.pachinko;
+  try { gbTick(g); } catch (e) { }
+  const back = async () => { try { await g.movePlayer(['down']); } catch (e) { } };
+  if (!gbOpenNow(g, V)) { await E.qe(g, { title: V.nm, color: V.col, text: `シャッターが閉まっている。（営業 ${gbHours(V)}）` }); await back(); return; }
+  if (ageOf(g) < 18) { await E.qe(g, { title: V.nm, color: V.col, text: '入口の店員さんに止められた。\n「18歳未満の方は入店できません」（風営法）' }); await back(); return; }
+  await g.enterPlace(HALL_ID);
+}
+function hallYear(g) { try { return dateOf(g, g.state.day).year; } catch (e) { return 2020; } }
+// ---- 店内のマップ ----
+function hallRegister() {
+  hallTiles();
+  const tiles = [
+    '##########################',
+    '#========================#',
+    '#........................#',
+    '#........................#',
+    '#.oooooooooooo...oooooo..#',
+    '#........................#',
+    '#........................#',
+    '#.oooooooooooo...oooooo..#',
+    '#........................#',
+    '#........................#',
+    '#.oooooooooooo...........#',
+    '#........................#',
+    '#........................#',
+    '#........................#',
+    '#........................#',
+    '#........................#',
+    '###########mm#############',
+  ];
+  const ents = [];
+  let no = 1, idx = 0;
+  const hot = (x, y) => HALL_HOT.some(([a, b]) => a === x && b === y + 1);
+  for (const row of HALL_ROWS) for (const [x0, x1, mi, rate] of row.seg) for (let x = x0; x <= x1; x++) {
+    const i = idx++, n = no++, isHot = hot(x, row.y), cfg = { kind: 'p', mi, rate, i, no: n };
+    ents.push(hip('pachi', x, row.y, 1, 1, 1, { frames: 4, speed: isHot ? 6 : 12, a: { col: rate === 1 ? '#2a9a50' : HALL_COL[mi], n: 0, hot: isHot, mi, rate, i }, talk: g => hallPlay(g, cfg), lab: n }));
+  }
+  for (const sr of HALL_SLOT) for (let x = sr.x0; x <= sr.x1; x++) { const i = idx++, n = no++, isHot = hot(x, sr.y), cfg = { kind: 's', rate: sr.rate, i, no: n }; ents.push(hip('slot', x, sr.y, 1, 1, 1, { frames: 3, speed: isHot ? 6 : 14, a: { col: sr.rate === 5 ? '#2a9a50' : '#2f6fd0', n: 0, hot: isHot, i }, talk: g => hallPlay(g, cfg) })); }
+  // データランプの数字は、その日の値で描きかえる（キャッシュキーに日付を入れる）
+  for (const e of ents) { const d0 = e; const orig = d0.draw; d0.draw = (c, px, py, g) => { const dd = hallData(g, d0.__i, d0.__k); const k = d0.__k; const key = `hall:${k}:${d0.__col}:${d0.__hot}:${dd.hits}`; const frames = d0.__hot ? 4 : 3, f = Math.floor(num(g && g.frame, 0) / (d0.__hot ? 6 : 13)) % frames; const cv = iArt(`${key}|${f}`, 32, 64, P => hallArt(k === 's' ? 'slot' : 'pachi', P, 32, 64, f, { col: d0.__col, n: k === 's' ? dd.big + dd.reg : dd.hits, hot: d0.__hot })); if (cv) c.drawImage(cv, px, py - 16, 16, 32); }; }
+  ents.forEach((e, k) => { const isSlot = k >= 36; const row = isSlot ? HALL_SLOT[Math.floor((k - 36) / 6)] : null; e.__k = isSlot ? 's' : 'p'; e.__i = k; e.__hot = HALL_HOT.some(([a, b]) => a === e.x && b === e.y + 1); e.__col = isSlot ? (row.rate === 5 ? '#2a9a50' : '#2f6fd0') : (() => { const R2 = HALL_ROWS.find(r => r.y === e.y), sg = R2.seg.find(([a, b]) => e.x >= a && e.x <= b); return sg[3] === 1 ? '#2a9a50' : HALL_COL[sg[2]]; })(); });
+  // 当たっている席のうしろに、ドル箱
+  ents.push(hip('box', 9, 5, 1, 1, 0.6, { a: { n: 3 }, text: 'ドル箱が3つ積まれている。…となりの人、かなり出ているようだ。' }));
+  ents.push(hip('box', 18, 5, 1, 1, 0.3, { a: { n: 2 }, text: 'メダルの箱が積まれている。' }));
+  // 壁の看板・ポスター
+  ents.push(hip('neon', 9, 1, 6, 1, 0, { solid: false, frames: 6, speed: 12, text: ['「ドットホール」のネオンが光っている。', 'ジャラジャラという音と、大音量の音楽。会話も大声でないと聞こえない。'] }));
+  ents.push(hip('poster', 3, 1, 2, 1, 0, { solid: false, a: { bg: '#c8102e', fg: '#ffffff', lines: ['新台入替'] }, text: '「新台入替」のポスター。新しい台には、朝から行列ができる。' }));
+  ents.push(hip('poster', 6, 1, 2, 1, 0, { solid: false, a: { bg: '#ffd23f', fg: '#3a1a00', lines: ['4円・1円'] }, text: '「4円パチンコ／1円パチンコ」の案内。1円は、少ないお金で長く遊べる。' }));
+  ents.push(hip('poster', 16, 1, 3, 1, 0, { solid: false, a: { bg: '#2a6ad0', fg: '#ffffff', lines: ['20スロ・5スロ'] }, text: '「20円スロット／5円スロット」のコーナー。' }));
+  ents.push(hip('poster', 20, 1, 4, 1, 0, { solid: false, a: { bg: '#f4f4f4', fg: '#1a1a24', lines: ['適度に楽しむ遊びです'] }, text: ['「パチンコ・パチスロは適度に楽しむ遊びです」', 'のめり込みに注意しましょう。困ったら相談窓口へ――と小さく書いてある。'] }));
+  // 景品カウンターと棚
+  ents.push(hip('shelf', 2, 15, 6, 1, 0, { text: ['景品の棚。お菓子、たばこ、日用品、ぬいぐるみ…。', '奥のケースには、金色の「特殊景品」が並んでいる。'] }));
+  ents.push(hip('counter', 2, 13, 6, 1, 0.5, { talk: g => hallCounter(g) }));
+  ents.push({ type: 'npc', id: 'hall_counter', x: 4, y: 14, dir: 'up', look: { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#c8102e', bottom: '#1a1a24' }, name: '景品カウンターの店員さん', talk: g => hallCounter(g) });
+  // 喫煙室・自販機・休憩所
+  ents.push(hip('smoke', 19, 12, 5, 2, 1, { frames: 3, speed: 20, a: { label: '喫煙室' }, talk: g => hallSmoke(g) }));
+  ents.push(hip('vend', 17, 12, 1, 1, 1, { a: { c: '#c8102e' }, text: ['自動販売機。缶コーヒーとエナジードリンクばかり売れている。'] }));
+  ents.push(hip('vend', 17, 14, 1, 1, 1, { a: { c: '#2a6ad0' }, text: ['水とお茶の自販機。'] }));
+  ents.push(hip('board', 9, 12, 5, 1, 1, { a: { title: '本日のおすすめ', lines: [`ネオン ミドル ${PC_MACH[2].pay}玉`, '甘デジ 1/99', 'スロット 20円・5円'] }, text: ['店のおすすめ機種のボード。', '（「出る」とは、どこにも書いていない）'] }));
+  ents.push(hip('plant', 1, 11, 1, 1, 1, {}), hip('plant', 24, 15, 1, 1, 1, {}));
+  // 人
+  const P_LOOK = [{ hair: 'short', hairColor: 'black', skin: 'tan', top: '#4a5a6a', bottom: '#2a3040' }, { hair: 'bald', skin: 'light', top: '#8a6a3a', bottom: '#3a3a44' }, { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#a04a7a', bottom: '#2a2a34', skirt: true }, { hair: 'spiky', hairColor: 'brown', skin: 'light', top: '#2a2a30', bottom: '#2a4a8a' }, { hair: 'short', hairColor: 'ash', skin: 'tan', top: '#5a7a4a', bottom: '#3a3a44', glasses: true }, { hair: 'long', hairColor: 'black', skin: 'light', top: '#e8e8f0', bottom: '#3a3a44' }];
+  const LINES = [['朝から打って、まだ1回も当たってない…。', 'あと1万円だけ。あと1万円…。'], ['（画面から目をはなさない）', '…話しかけないでくれ。いま、いいところなんだ。'], ['確変が終わらない！ 今日はついてる！', 'ドル箱、もう3箱目だよ。'], ['この台、きのうはよく回ったんだけどな…。'], ['年金の日は、ついここに来ちゃうのよ。'], ['1円パチンコなら、2千円で夕方まで遊べるの。'], ['…今月の家賃、どうしよう。'], ['スロットはね、目押しが大事なのよ。'], ['BIG、来い…来い…！'], ['朝イチから並んだんだ。新台、ぜんぜん当たらねえ。']];
+  HALL_SEAT.forEach(([x, y], i) => ents.push({ type: 'npc', id: 'hall_c' + i, x, y, dir: 'up', look: P_LOOK[i % P_LOOK.length], name: i === 2 || i === 8 ? '当たっているお客さん' : 'お客さん', text: LINES[i % LINES.length] }));
+  ents.push({ type: 'npc', id: 'hall_staff', x: 15, y: 8, dir: 'down', look: { hair: 'short', hairColor: 'black', skin: 'light', top: '#c8102e', bottom: '#1a1a24' }, name: 'ホールの店員さん', wander: 3, text: ['いらっしゃいませー！ 空いている台へどうぞ！', '玉がなくなったら、台の「玉貸し」ボタンを押してくださいね。', '（インカムで「〇番台、大当たりです！」と連絡している）'] });
+  ents.push({ type: 'npc', id: 'hall_staff2', x: 15, y: 14, dir: 'left', look: { hair: 'short', hairColor: 'brown', skin: 'light', top: '#c8102e', bottom: '#1a1a24' }, name: '店員さん', wander: 1, text: ['ドル箱、お運びしまーす！', 'のめり込みには、ご注意くださいね。'] });
+  E.qn({ id: HALL_ID, name: 'パチンコ ドットホール', kind: 'building', bgm: 'shop_live', start: { room: 'main', x: 12, y: 15, dir: 'up' }, rooms: { main: {
+    floor: 'gb_fl_hall', wall: 'gbhall', tiles, legend: { o: 'gb_stool', m: 'gb_mat' },
+    warps: [12, 13].map(x => ({ x, y: 16, place: 'kanraku', room: 'main', tx: 52, ty: 9, dir: 'down' })),
+    entities: ents, events: [],
+    drawOver(c, g, cam) {
+      const yr = hallYear(g), t = num(g && g.frame, 0);
+      // 2020年4月より前は、店内がたばこの煙でかすむ
+      if (yr < 2020) { c.save(); c.globalAlpha = 0.16; c.fillStyle = '#c8c8d0'; for (let i = 0; i < 14; i++) { const x = ((i * 53 + t * 0.15) % 360) - 20, y = (i * 37) % 170; c.fillRect(Math.round(x), Math.round(y), 30, 6); c.fillRect(Math.round(x) + 8, Math.round(y) - 3, 16, 3); } c.restore(); }
+      // 当たっている台のまわりがきらめく
+      for (const [x, y] of HALL_HOT) { if (t % 20 < 10) { c.fillStyle = '#ffe94a'; c.fillRect(Math.round(x * 16 + 2 - cam.x), Math.round((y - 2) * 16 - cam.y), 1, 1); c.fillRect(Math.round(x * 16 + 13 - cam.x), Math.round((y - 2) * 16 + 4 - cam.y), 1, 1); } }
+    },
+    onEnter: async g => { if (!g.flag('hall_intro')) { g.setFlag('hall_intro'); await g.wait(200); await g.say([hallYear(g) < 2020 ? '自動ドアが開いた瞬間、玉の音と大音量の音楽、たばこの煙がおしよせてきた。' : '自動ドアが開いた瞬間、玉の音と大音量の音楽がおしよせてきた。', '（空いている台の前に立って、Aボタンで打てる。データランプの数字は、その台の今日の大当たり回数だ）']); } },
+  } } });
+}
+async function hallCounter(g) {
+  const k = await E.Ho(g, { title: '景品カウンター', color: '#c8102e', text: '「いらっしゃいませ。景品のお取りかえですか？」', choices: ['特殊景品のことを聞く', 'お菓子を買う（¥300）', '収支を見る', 'やめる'] });
+  if (k === 0) await g.say(['「台で『やめて換金』を押すと、玉やメダルがレシートになります。', 'ここで、そのレシートを景品にお取りかえします」', '（金色の特殊景品は、店の外の交換所で現金にかえる。店・景品問屋・交換所が別々の「三店方式」だ）'], { name: '店員さん', look: { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#c8102e', bottom: '#1a1a24' } });
+  else if (k === 1) { if (num(g.state.money) < 300) { await E.qe(g, { title: '景品カウンター', color: '#c8102e', text: 'お金が足りない…。' }); return; } g.state.money -= 300; try { g.eat ? g.eat(10, { fill: 15, silent: true }) : g.addNeed('hunger', 10); } catch (e) { } await E.qe(g, { title: '景品カウンター', color: '#c8102e', text: 'チョコレート菓子を買った。打ちながら、ひと口。' }); }
+  else if (k === 2) await E.qe(g, { title: '収支メモ', color: '#3a3a4a', text: gbShushi(g, 'pachinko') });
+}
+async function hallSmoke(g) {
+  const y = hallYear(g);
+  await g.say(y >= 2020 ? ['ガラス張りの喫煙室だ。', '2020年4月から、法律でパチンコ店の中も原則禁煙になった。', 'たばこを吸う人は、ここで吸ってから台にもどっていく。'] : ['喫煙所のコーナーだ。', 'とはいえ、店内のどこでもたばこが吸えるので、ホール全体がけむっている…。']);
+}
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
