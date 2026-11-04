@@ -35213,9 +35213,10 @@ const GB_BLD = {
 };
 function gbPatchKanraku() {
   const M = E.Ke && E.Ke.kanraku; if (!M || !M.rooms || !M.rooms.main || M.rooms.main.__gb) return;
-  const g0 = M.rooms.main.generate;
+  const g0 = M.rooms.main.generate; M.rooms.main.__g0 = g0;
   M.rooms.main.generate = function (...a) {
     const r = g0.apply(this, a);
+    try { interPatchKanraku(r); } catch (e) { console.error('[gb] inter', e); }
     try {
       const LU = E.LU;
       r.entities.forEach((e, i) => {
@@ -35273,6 +35274,7 @@ const gbIconMemo = gbIcon('#3a3a4a', (c, x, y) => { c.fillStyle = '#f4f1e6'; c.f
 try { if (typeof FOLDERS !== 'undefined') { FOLDERS.push({ id: 'f_gamble', name: 'ギャンブル', color: '#b0202a', order: 35.2, apps: ['gb_onkaji', 'gb_fx', 'gb_takara', 'gb_memo'] }); for (const id of ['gb_onkaji', 'gb_fx', 'gb_takara', 'gb_memo']) FOLD_OF[id] = 'f_gamble'; } } catch (e) { console.error('[gb] folder', e); }
 function installGamble() {
   try { hallRegister(); } catch (e) { console.error('[gb] hall', e); }
+  try { interRegister(); } catch (e) { console.error('[gb] inter', e); }
   try { gbPatchKanraku(); } catch (e) { console.error('[gb] kanraku', e); }
   try { gbPatchTokyo(); } catch (e) { console.error('[gb] tokyo', e); }
   try {
@@ -35372,6 +35374,23 @@ function pHall(c, kind, t) {
   pBlit(c, cv, 0, 0);
   // 奥の台のランプの点滅
   if (kind === 'pachi' || kind === 'slot') for (let i = 0; i < 16; i++) { const on = ((t >> 3) + i * 5) % 7 < 3; if (on) pR(c, i * 42 + 8, 36, 22, 2, kind === 'slot' ? '#7ad0ff' : '#ffd23f'); }
+}
+// 部屋の範囲だけに描く（小さな部屋のまわりの黒い余白にはみ出さない）
+function pRoomClip(c, cam, w, h) { c.beginPath(); c.rect(Math.round(-cam.x), Math.round(-cam.y), w * 16, h * 16); c.clip(); }
+// たばこの煙：部屋の中をゆっくり上へ流れる、ふちのやわらかい煙のかたまり
+function pSmoke(c, cam, w, h, t, n, a, col) {
+  const W = w * 16, H = h * 16;
+  c.save(); pRoomClip(c, cam, w, h); c.fillStyle = col || '#d0d0d8';
+  for (let i = 0; i < n; i++) {
+    const vx = 0.08 + (i % 3) * 0.04, vy = 0.05 + (i % 4) * 0.02;
+    const x = ((i * 53 + t * vx) % (W + 48)) - 24 + Math.sin(t / 55 + i) * 3;
+    const y = H + 8 - ((i * 41 + t * vy) % (H + 16));
+    const s = 0.8 + (i % 3) * 0.3, k = Math.min(1, y / (H * 0.35));
+    c.globalAlpha = a * k * (0.7 + 0.3 * Math.sin(t / 70 + i * 1.7));
+    const X = Math.round(x - cam.x), Y = Math.round(y - cam.y), r = v => Math.max(1, Math.round(v * s));
+    c.fillRect(X, Y, r(22), r(5)); c.fillRect(X + r(4), Y - r(3), r(13), r(3)); c.fillRect(X + r(8), Y - r(5), r(6), r(2)); c.fillRect(X + r(3), Y + r(5), r(15), r(2));
+  }
+  c.restore();
 }
 
 // ===== ギャンブルの画面（共通の土台）：ドット絵のボタン・ウィンドウ・所持金・演出 =====
@@ -37069,7 +37088,7 @@ function hallRegister() {
     drawOver(c, g, cam) {
       const yr = hallYear(g), t = num(g && g.frame, 0);
       // 2020年4月より前は、店内がたばこの煙でかすむ
-      if (yr < 2020) { c.save(); c.globalAlpha = 0.16; c.fillStyle = '#c8c8d0'; for (let i = 0; i < 14; i++) { const x = ((i * 53 + t * 0.15) % 360) - 20, y = (i * 37) % 170; c.fillRect(Math.round(x), Math.round(y), 30, 6); c.fillRect(Math.round(x) + 8, Math.round(y) - 3, 16, 3); } c.restore(); }
+      if (yr < 2020) pSmoke(c, cam, tiles[0].length, tiles.length, t, 22, 0.16, '#c8c8d0');
       // 当たっている台のまわりがきらめく
       for (const [x, y] of HALL_HOT) { if (t % 20 < 10) { c.fillStyle = '#ffe94a'; c.fillRect(Math.round(x * 16 + 2 - cam.x), Math.round((y - 2) * 16 - cam.y), 1, 1); c.fillRect(Math.round(x * 16 + 13 - cam.x), Math.round((y - 2) * 16 + 4 - cam.y), 1, 1); } }
     },
@@ -37085,6 +37104,244 @@ async function hallCounter(g) {
 async function hallSmoke(g) {
   const y = hallYear(g);
   await g.say(y >= 2020 ? ['ガラス張りの喫煙室だ。', '2020年4月から、法律でパチンコ店の中も原則禁煙になった。', 'たばこを吸う人は、ここで吸ってから台にもどっていく。'] : ['喫煙所のコーナーだ。', 'とはいえ、店内のどこでもたばこが吸えるので、ホール全体がけむっている…。']);
+}
+
+// ===== ネオン街の店内：居酒屋ほろよい・牛丼ドット屋・カプセルホテル ドットイン・喫煙所 =====
+// もとの店の処理（食事・お酒・宿泊・一服）は、ネオン街の地図からそのまま受けつぐ
+const KAN_ORIG = {};
+function kanOrig() {
+  if (KAN_ORIG.ok) return KAN_ORIG;
+  try { const M = E.Ke.kanraku.rooms.main; const r = (M.__g0 || M.generate).call(M); kanCapture(r.entities); } catch (e) { console.error('[gb] orig', e); }
+  return KAN_ORIG;
+}
+function kanCapture(ents) {
+  for (const e of ents || []) {
+    if (!e) continue;
+    if (e.type === 'building' && e.name === '居酒屋 ほろよい' && e.talk) KAN_ORIG.iza = e.talk;
+    if (e.type === 'building' && e.name === '牛丼 ドット屋' && e.talk) KAN_ORIG.gyu = e.talk;
+    if (e.type === 'building' && e.name === 'カプセルホテル ドットイン' && e.talk) KAN_ORIG.hotel = e.talk;
+    if (e.type === 'prop' && e.x === 27 && e.y === 5 && e.w === 3 && e.h === 2 && e.talk) KAN_ORIG.smoke = e.talk;
+  }
+  if (KAN_ORIG.iza || KAN_ORIG.gyu) KAN_ORIG.ok = true;
+}
+const kanCall = (k, fb) => async g => { const O = kanOrig(); if (O[k]) return O[k](g); if (fb) return fb(g); };
+function kanYM(g) { try { const d = dateOf(g, g.state.day); return d.year * 100 + d.month; } catch (e) { return 202001; } }
+// ---- タイル ----
+function interTiles() {
+  if (!E.Z || interTiles.done) return; interTiles.done = true;
+  const R = (t, x, y, w, h, col) => { t.fillStyle = col; t.fillRect(x, y, w, h); };
+  const floor = (id, fn) => E.Z(id, { variants: 4, draw(t, rng, f, v) { const c2 = document.createElement('canvas'); c2.width = c2.height = 32; fn(c2.getContext('2d'), v); t.imageSmoothingEnabled = true; t.drawImage(c2, 0, 0, 16, 16); }, hd(t, rng, f, v) { fn(t, v); } });
+  const wall = (name, face, top) => { E.Z('wall_' + name, { solid: true, draw(t) { t.save(); t.scale(0.5, 0.5); face(t); t.restore(); }, hd(t) { face(t); } }); E.Z('walltop_' + name, { solid: true, draw(t) { R(t, 0, 0, 16, 16, top); }, hd(t) { R(t, 0, 0, 32, 32, top); R(t, 0, 30, 32, 2, shade(top, 0.3)); } }); };
+  floor('gb_fl_iza', (t, v) => { R(t, 0, 0, 32, 32, '#6a4628'); for (let y = 0; y < 32; y += 8) { R(t, 0, y, 32, 1, '#4a2e18'); R(t, ((y / 8) % 2) * 16 + v * 3, y + 1, 1, 7, '#4a2e18'); } R(t, 4 + v * 5, 4, 6, 1, '#7a5634'); R(t, 18, 20 - v, 5, 1, '#7a5634'); });
+  floor('gb_tatami', (t, v) => { R(t, 0, 0, 32, 32, '#c8c088'); for (let y = 1; y < 32; y += 2) R(t, 0, y, 32, 1, '#bab27a'); R(t, 0, 0, 32, 2, '#3a5a2a'); R(t, 0, 0, 2, 32, '#3a5a2a'); });
+  wall('gbiza', t => { R(t, 0, 0, 32, 32, '#e8dcc0'); R(t, 0, 2, 32, 1, '#f4ecd8'); R(t, 0, 20, 32, 12, '#5a3a1e'); R(t, 0, 20, 32, 2, '#8a5a2e'); for (let x = 3; x < 32; x += 8) R(t, x, 23, 1, 9, '#4a2a12'); }, '#2a1a0e');
+  floor('gb_fl_hotel', (t, v) => { R(t, 0, 0, 32, 32, '#4a5068'); for (let y = 0; y < 32; y += 4) for (let x = (y / 4 % 2) * 4; x < 32; x += 8) R(t, x, y, 2, 2, '#545a74'); if (v === 1) R(t, 20, 10, 2, 2, '#3a4058'); });
+  floor('gb_fl_capsule', (t, v) => { R(t, 0, 0, 32, 32, '#7a7e8a'); R(t, 0, 0, 32, 1, '#6a6e7a'); R(t, 0, 0, 1, 32, '#6a6e7a'); R(t, 6 + v * 4, 10, 3, 1, '#8a8e9a'); });
+  floor('gb_fl_bath', (t, v) => { R(t, 0, 0, 32, 32, '#d8e4ea'); for (let i = 0; i < 32; i += 8) { R(t, i, 0, 1, 32, '#b8c8d2'); R(t, 0, i, 32, 1, '#b8c8d2'); } R(t, 3 + v * 6, 4, 4, 1, '#ffffff'); if (v === 2) R(t, 20, 22, 6, 2, '#c4d8e4'); });
+  wall('gbhotel', t => { R(t, 0, 0, 32, 32, '#d8d0c0'); R(t, 0, 2, 32, 1, '#ece4d4'); R(t, 0, 24, 32, 8, '#4a4a5a'); R(t, 0, 24, 32, 1, '#7a7a8a'); R(t, 15, 4, 2, 18, '#c8c0b0'); }, '#2a2a34');
+  floor('gb_fl_kitsu', (t, v) => { R(t, 0, 0, 32, 32, '#8a8c92'); R(t, 0, 0, 32, 1, '#7a7c82'); R(t, 0, 0, 1, 32, '#7a7c82'); R(t, 16, 0, 1, 32, '#7e8086'); R(t, 0, 16, 32, 1, '#7e8086'); if (v === 1) R(t, 8, 9, 2, 1, '#5a5a60'); if (v === 3) R(t, 22, 24, 3, 1, '#9a9ca2'); });
+  wall('gbkitsu', t => { R(t, 0, 0, 32, 32, '#9ab8c8'); R(t, 0, 0, 32, 2, '#c8dce6'); R(t, 0, 0, 2, 32, '#6a7a88'); R(t, 30, 0, 2, 32, '#6a7a88'); R(t, 6, 6, 2, 14, 'rgba(255,255,255,0.5)'); R(t, 0, 26, 32, 6, '#5a6a78'); }, '#3a4450');
+  E.Z('gb_stool_iza', { obj: true, draw(t) { R(t, 4, 7, 8, 4, '#8a5a2a'); }, hd(t) { t.fillStyle = 'rgba(0,0,0,0.3)'; t.fillRect(9, 25, 14, 3); R(t, 10, 18, 2, 9, '#4a2e18'); R(t, 20, 18, 2, 9, '#4a2e18'); R(t, 8, 12, 16, 7, '#1c1a24'); R(t, 9, 12, 14, 5, '#a06a34'); R(t, 9, 12, 14, 1, '#c88a4a'); } });
+  E.Z('gb_zabuton', { obj: true, draw(t) { R(t, 3, 5, 10, 8, '#8a2a3a'); }, hd(t) { R(t, 6, 10, 20, 16, '#5a1a24'); R(t, 7, 10, 18, 14, '#a83a4a'); R(t, 7, 10, 18, 1, '#c85a6a'); R(t, 15, 16, 2, 2, '#e8c8a0'); } });
+}
+// ---- 置物の絵 ----
+function interArt(k, P, W, H, f, a) {
+  const r = P.r;
+  switch (k) {
+    case 'grill': { // 炭火の焼き台（煙が立つ）
+      r(0, H - 30, W, 28, '#1c1a24'); r(1, H - 29, W - 2, 26, '#8a8e98'); r(1, H - 29, W - 2, 2, '#c8ccd4');
+      r(6, H - 26, W - 12, 8, '#1a1010'); for (let x = 8; x < W - 8; x += 3) r(x, H - 24, 2, 4, (x + f) % 7 < 3 ? '#ff6a1a' : '#c83010');
+      for (let x = 10; x < W - 10; x += 16) { r(x, H - 30, 2, 8, '#d8c8a0'); for (let q = 0; q < 3; q++) r(x - 2, H - 34 + q * 3, 6, 3, q === 1 ? '#a85a2a' : '#c87a3a'); }
+      for (let i = 0; i < 5; i++) { const sy = (f * 3 + i * 9) % 24; P.c.fillStyle = `rgba(230,230,230,${0.45 - sy / 60})`; P.c.fillRect(12 + i * (W - 24) / 5 + Math.sin(f + i) * 2, H - 40 - sy, 4, 4); }
+      r(W - 40, H - 52, 30, 22, '#1c1a24'); r(W - 39, H - 51, 28, 20, '#c8ccd4'); r(W - 37, H - 49, 24, 8, '#3a3a44'); P.t('焼台', W - 25, H - 49, { size: 8, color: '#ffd23f', align: 'center' });
+      return;
+    }
+    case 'izshelf': { // 一升瓶の棚
+      r(0, 0, W, H, '#1c1a24'); r(1, 1, W - 2, H - 2, '#4a2e18');
+      for (let row = 0; row < 2; row++) { const y = 6 + row * 26; r(1, y + 22, W - 2, 3, '#2a1a0e'); for (let x = 4; x < W - 6; x += 9) { const col = ['#2a5a2a', '#5a3a1a', '#1a3a5a', '#3a3a3a'][(x / 9 + row) % 4 | 0]; r(x + 2, y, 3, 5, col); r(x, y + 5, 7, 17, col); r(x + 1, y + 8, 5, 7, '#f4ecd8'); r(x + 2, y + 9, 3, 1, '#c8102e'); } }
+      return;
+    }
+    case 'tanzaku': { // 壁の短冊メニュー
+      const items = a.items || []; items.forEach((it, i) => { const x = 2 + i * Math.floor((W - 4) / items.length); r(x, 2, 14, H - 6, '#1c1a24'); r(x + 1, 3, 12, H - 8, '#f8f4e8'); it.split('').slice(0, 5).forEach((ch, j) => P.t(ch, x + 7, 4 + j * 10, { size: 8, color: '#1a1a1a', align: 'center' })); });
+      return;
+    }
+    case 'chochin': { // 赤ちょうちん
+      const sw = Math.round(Math.sin(f / 2) * 1); r(14, 0, 4, 4, '#1c1a24'); P.oval(5 + sw, 4, 22, H - 8, '#1c1a24'); P.oval(6 + sw, 5, 20, H - 10, '#e02030'); for (let y = 10; y < H - 8; y += 5) r(7 + sw, y, 18, 1, '#a01020'); r(10 + sw, 4, 12, 3, '#1a1a1a'); r(10 + sw, H - 7, 12, 3, '#1a1a1a'); P.t(a.label || '酒', 16 + sw, H / 2 - 6, { size: 10, color: '#ffffff', align: 'center' });
+      return;
+    }
+    case 'izcounter': {
+      P.slab(0, H - 34, W, 32, '#c8a06a', '#5a3a1e', 12); r(1, H - 22, W - 2, 2, '#8a5a2e');
+      for (let x = 10; x < W - 20; x += 40) { r(x, H - 38, 9, 8, '#e8b030'); r(x, H - 38, 9, 2, '#ffffff'); r(x + 9, H - 35, 2, 4, '#c8ccd4'); P.oval(x + 16, H - 36, 14, 6, '#e8e0d0'); r(x + 18, H - 37, 10, 2, '#a85a2a'); }
+      return;
+    }
+    case 'zatable': { P.shadow(2, H - 8, W - 4, 8); r(2, H - 26, W - 4, 16, '#1c1a24'); r(3, H - 25, W - 6, 10, '#7a4a22'); r(3, H - 25, W - 6, 1, '#a06a3a'); r(3, H - 15, W - 6, 4, '#4a2a12'); for (let x = 8; x < W - 12; x += 18) { r(x, H - 30, 7, 6, '#e8b030'); r(x, H - 30, 7, 1, '#ffffff'); P.oval(x + 9, H - 27, 10, 4, '#e8e0d0'); } return; }
+    case 'beerfridge': { r(2, 0, W - 4, H, '#1c1a24'); r(3, 1, W - 6, H - 2, '#c8ccd4'); r(5, 4, W - 10, H - 16, '#a8d8f0'); for (let y = 8; y < H - 14; y += 10) for (let x = 7; x < W - 8; x += 5) { r(x, y, 3, 8, '#7a4a10'); r(x, y, 3, 2, '#f4f4f4'); } r(5, H - 10, W - 10, 4, '#3a3a44'); return; }
+    case 'crate': { for (let i = 0; i < (a.n || 2); i++) { const y = H - 12 - i * 10; r(3, y, W - 6, 11, '#1c1a24'); r(4, y + 1, W - 8, 9, '#e8b030'); r(4, y + 1, W - 8, 2, '#ffd860'); P.t('BEER', W / 2, y + 2, { size: 6, color: '#7a3a00', align: 'center' }); } return; }
+    // ---- カプセルホテル ----
+    case 'capsule': { // 2段のカプセル
+      for (let tier = 0; tier < 2; tier++) { const y = 2 + tier * 26, lit = ((a.n + tier) * 7 + Math.floor(f / 2)) % 5 === 0;
+        r(1, y, W - 2, 25, '#1c1a24'); r(2, y + 1, W - 4, 23, '#e8e8ee'); r(2, y + 1, W - 4, 2, '#ffffff'); P.oval(6, y + 4, W - 12, 18, '#2a2e3a');
+        const closed = (a.n + tier) % 3 !== 0; if (closed) { r(7, y + 5, W - 14, 16, '#3a5a8a'); for (let x = 9; x < W - 8; x += 4) r(x, y + 5, 1, 16, '#2a4a7a'); } else { r(8, y + 8, W - 16, 10, '#c8ccd4'); r(10, y + 9, 10, 4, '#ffffff'); }
+        if (lit && closed) r(8, y + 6, 4, 2, '#ffe9a0');
+        r(W / 2 - 6, y + 19, 12, 5, '#1a1a24'); P.t(String(a.n * 2 + tier + 101), W / 2, y + 18, { size: 6, color: '#ffd23f', align: 'center' }); }
+      if (a.ladder) for (let y = 30; y < 54; y += 5) r(W - 6, y, 4, 1, '#9aa0aa');
+      return;
+    }
+    case 'front': { // フロント
+      P.slab(0, H - 36, W, 34, '#e8e0d0', '#2a4a6a', 12); r(1, H - 22, W - 2, 2, '#c9962a'); P.t('FRONT フロント', W / 2, H - 20, { size: 8, color: '#ffffff', align: 'center' });
+      r(W - 26, H - 42, 10, 6, '#c9962a'); r(W - 22, H - 44, 2, 2, '#c9962a'); r(12, H - 40, 14, 4, '#f4f4f4'); r(14, H - 41, 10, 1, '#c8ccd4');
+      return;
+    }
+    case 'keyboard': { r(0, 2, W, H - 4, '#1c1a24'); r(1, 3, W - 2, H - 6, '#5a3a1e'); for (let i = 0; i < 12; i++) { const x = 4 + (i % 6) * 9, y = 6 + Math.floor(i / 6) * 11; r(x + 2, y, 2, 2, '#c9962a'); r(x, y + 2, 6, 6, i % 4 ? '#e8e8f0' : '#3a3a44'); } return; }
+    case 'shoebox': { r(0, 0, W, H, '#1c1a24'); r(1, 1, W - 2, H - 2, '#8a6a4a'); for (let y = 3; y < H - 4; y += 10) for (let x = 3; x < W - 6; x += 9) { r(x, y, 8, 9, '#6a4a2a'); r(x + 1, y + 1, 6, 7, '#a07a50'); r(x + 3, y + 3, 2, 3, '#c9962a'); } return; }
+    case 'tv': { r(0, 2, W, H - 6, '#1c1a24'); r(2, 4, W - 4, H - 12, ['#2a6ad0', '#3a8a3a', '#c83a3a', '#e8b030'][Math.floor(f / 2) % 4]); r(4, 6, W - 8, 4, '#ffffff55'); r(W / 2 - 6, H - 6, 12, 4, '#3a3a44'); P.t('NEWS', W / 2, H / 2 - 6, { size: 8, color: '#ffffff', align: 'center' }); return; }
+    case 'massage': { P.shadow(2, H - 7, W - 4, 7); r(4, H - 46, W - 8, 20, '#1c1a24'); r(5, H - 45, W - 10, 18, '#3a2a2a'); r(2, H - 28, W - 4, 22, '#1c1a24'); r(3, H - 27, W - 6, 18, '#5a3a3a'); r(3, H - 27, W - 6, 2, '#7a5a5a'); if (a.on && f % 2) r(8, H - 40, 4, 4, '#ff6a6a'); r(W - 8, H - 30, 4, 3, '#4fe08a'); return; }
+    case 'bath': { // 大浴場の湯ぶね（湯気）
+      r(0, 0, W, H, '#1c1a24'); r(1, 1, W - 2, H - 2, '#c8b890'); r(4, 4, W - 8, H - 10, '#4a9ac8'); for (let x = 6; x < W - 8; x += 7) r(x + ((f + x) % 3), 8 + ((x * 3 + f) % (H - 20)), 4, 1, '#8ad0f0');
+      for (let i = 0; i < 6; i++) { const sy = (f * 2 + i * 11) % 30; P.c.fillStyle = `rgba(255,255,255,${0.4 - sy / 90})`; P.c.fillRect(10 + i * (W - 20) / 6 + Math.sin(f / 2 + i) * 3, 2 - sy + 20, 6, 5); }
+      P.t('ゆ', W - 12, 4, { size: 10, color: '#c8102e', align: 'center' });
+      return;
+    }
+    case 'shower': { r(0, 0, W, H, '#c8d8e0'); for (let x = 2; x < W - 8; x += 20) { r(x, 4, 16, 14, '#1c1a24'); r(x + 1, 5, 14, 12, '#a8c8d8'); r(x + 3, 6, 4, 8, '#ffffff66'); r(x + 7, 20, 2, 6, '#9aa0aa'); r(x + 4, H - 14, 8, 6, '#e8e8ee'); r(x + 5, H - 8, 6, 4, '#f0a040'); } return; }
+    case 'yukata': { r(4, 6, W - 8, H - 10, '#1c1a24'); r(5, 7, W - 10, H - 12, '#e8e8f0'); for (let y = 10; y < H - 8; y += 6) r(5, y, W - 10, 2, '#5a7ab0'); P.t('館内着', W / 2, 2, { size: 6, color: '#1a1a24', align: 'center' }); return; }
+    // ---- 喫煙所 ----
+    case 'ashpole': { P.shadow(8, H - 6, 16, 6); r(14, 18, 4, H - 22, '#5a5e68'); r(14, 18, 1, H - 22, '#8a8e98'); r(8, H - 6, 16, 3, '#3a3e48'); r(6, 10, 20, 9, '#1c1a24'); r(7, 11, 18, 7, '#9aa0aa'); r(8, 11, 16, 3, '#2a2a30'); for (let i = 0; i < 3; i++) { const sy = (f * 2 + i * 5) % 14; P.c.fillStyle = `rgba(230,230,235,${0.5 - sy / 30})`; P.c.fillRect(11 + i * 4, 8 - sy, 3, 3); } return; }
+    case 'purifier': { r(2, 0, W - 4, H, '#1c1a24'); r(3, 1, W - 6, H - 2, '#d8dce4'); r(6, 6, W - 12, 18, '#3a3e48'); for (let i = 0; i < 4; i++) { const a2 = f * 0.8 + i * Math.PI / 2; r(W / 2 - 1 + Math.round(Math.cos(a2) * 5), 15 + Math.round(Math.sin(a2) * 5), 2, 2, '#9aa0aa'); } r(W / 2 - 2, 13, 4, 4, '#5a5e68'); P.t('分煙機', W / 2, 28, { size: 6, color: '#1a1a24', align: 'center' }); r(8, H - 10, 4, 3, '#4fe08a'); for (let y = 36; y < H - 14; y += 4) r(6, y, W - 12, 1, '#9aa0aa'); return; }
+    case 'kposter': { r(1, 2, W - 2, H - 4, '#1c1a24'); r(2, 3, W - 4, H - 6, a.bg || '#ffffff'); (a.lines || []).forEach((ln, i) => P.t(ln, W / 2, 5 + i * 10, { size: 8, color: a.fg || '#1a1a1a', align: 'center' })); return; }
+  }
+}
+const kip = (k, x, y, w, h, up, o = {}) => IP(x, y, w, h, up, `int:${k}:${JSON.stringify(o.a || {})}`, (P, W, H, f) => interArt(k, P, W, H, f, o.a || {}), o);
+const KL = { taisho: { hair: 'cap', hat: '#ffffff', hairColor: 'black', skin: 'tan', top: '#2a3a7a', bottom: '#3b3f48', apron: '#2a3a7a' }, staffIza: { hair: 'bob', hairColor: 'black', skin: 'light', top: '#2a3a7a', bottom: '#2a2a34', apron: '#f4f4f4' }, sala: { hair: 'short', hairColor: 'black', skin: 'tan', top: '#3a4a6a', bottom: '#2a3040' }, sala2: { hair: 'short', hairColor: 'brown', skin: 'light', top: '#5a5a66', bottom: '#2a2a34', glasses: true }, ol: { hair: 'long', hairColor: 'brown', skin: 'light', top: '#e8c8d8', bottom: '#3a3a44', skirt: true }, gyuStaff: { hair: 'short', hairColor: 'black', skin: 'light', top: '#ff8a1a', bottom: '#2a2a30' }, front: { hair: 'bob', hairColor: 'black', skin: 'light', top: '#2a4a6a', bottom: '#2a2a34' }, yukata: { hair: 'short', hairColor: 'black', skin: 'tan', top: '#e8e8f0', bottom: '#5a7ab0' } };
+const exitTo = (xs, y, tx, ty) => xs.map(x => ({ x, y, place: 'kanraku', room: 'main', tx, ty, dir: 'down' }));
+const NPC = (id, x, y, dir, look, name, text, o = {}) => ({ type: 'npc', id, x, y, dir, look, name, text, ...o });
+// ---- 牛丼のメニュー（もとの並盛のほか、大盛・定食・豚汁） ----
+async function gyuMenu(g) {
+  const L = [['牛丼（並）', 450, 32, 55], ['牛丼（大盛）', 580, 40, 70], ['牛皿定食', 650, 42, 70], ['豚汁', 190, 10, 15]];
+  const k = await E.Ho(g, { title: '牛丼 ドット屋', color: '#ff8a1a', text: '「いらっしゃいませー！ ご注文どうぞ！」\n24時間営業。早い、安い、うまい！', choices: [...L.map(x => `${x[0]}　¥${x[1]}`), 'やめておく'] });
+  if (k < 0 || k >= L.length) return;
+  const [nm, price, hp, fill] = L[k];
+  if (g.canEat && !g.canEat()) { await g.say('おなかいっぱいだ…。'); return; }
+  if (!g.spend(price)) { await g.say('お金が足りない…。'); return; }
+  tt.sfx('coin'); const got = g.eat ? g.eat(hp, { fill, silent: true }) : 0; try { g.advanceTime(10, 'eat'); } catch (e) { }
+  await g.say([`「${nm}、お待たせしましたー！」…早い。`, `${k === 3 ? '具だくさんの豚汁で、からだがあたたまる。' : 'カウンターで、ひと息にかきこんだ。'}${got ? `\n（体力 +${got}）` : ''}`], { name: '店員さん', look: KL.gyuStaff });
+}
+async function massage(g) {
+  const k = await E.Ho(g, { title: 'マッサージチェア', color: '#5a3a3a', text: '「10分 ¥100」のマッサージチェアだ。', choices: ['座ってみる（¥100）', 'やめておく'] });
+  if (k !== 0) return; if (!g.spend(100)) { await g.say('お金が足りない…。'); return; }
+  tt.sfx('coin'); try { g.addNeed('stress', -5); g.advanceTime(10, 'massage'); } catch (e) { }
+  await g.say(['ウィーン…ぐりぐり…。', '肩と腰がほぐれていく…。（ストレス -5）']);
+}
+// ---- 店内の登録 ----
+function interRegister() {
+  interTiles();
+  // 居酒屋 ほろよい
+  E.qn({ id: 'kan_izakaya', name: '居酒屋 ほろよい', kind: 'building', bgm: 'machi_shop', start: { room: 'main', x: 8, y: 10, dir: 'up' }, rooms: { main: {
+    floor: 'gb_fl_iza', wall: 'gbiza', legend: { s: 'gb_stool_iza', z: 'gb_tatami', u: 'gb_zabuton' },
+    tiles: ['##################', '#================#', '#................#', '#................#', '#................#', '#.sssssssss......#', '#................#', '#..........zzzzz.#', '#..........uzzzu.#', '#..........zuuuz.#', '#................#', '########..########'],
+    warps: exitTo([8, 9], 11, 18, 20),
+    entities: [
+      kip('tanzaku', 1, 1, 6, 1, 0.6, { solid: false, a: { items: ['生ビール', '焼き鳥', '枝豆', '唐揚げ', 'ほっけ', '冷奴'] }, text: ['壁の短冊メニュー。', '生ビール、焼き鳥、枝豆、唐揚げ、ほっけ、冷奴…。どれもうまそうだ。'] }),
+      kip('chochin', 8, 1, 1, 1, 0.8, { solid: false, frames: 4, speed: 20, a: { label: '酒' }, text: '赤ちょうちんがゆれている。' }),
+      kip('chochin', 10, 1, 1, 1, 0.8, { solid: false, frames: 4, speed: 22, a: { label: '焼' }, text: '赤ちょうちんがゆれている。' }),
+      kip('izshelf', 12, 2, 4, 1, 1.2, { text: ['一升瓶がずらりと並んでいる。', '「本日のおすすめ：純米吟醸」の札。'] }),
+      kip('grill', 1, 2, 7, 1, 1, { frames: 6, speed: 8, talk: kanCall('iza'), text: '炭火で焼き鳥が焼けている。いい匂いだ。' }),
+      NPC('iza_taisho', 4, 3, 'down', KL.taisho, '居酒屋の大将', null, { talk: kanCall('iza') }),
+      NPC('iza_staff', 7, 3, 'down', KL.staffIza, '店員さん', ['はーい、生ふたつ！ よろこんでー！', 'お通しは、きんぴらごぼうです！']),
+      kip('izcounter', 1, 4, 9, 1, 0.5, { talk: kanCall('iza') }),
+      kip('beerfridge', 15, 4, 1, 1, 1.2, { text: '瓶ビールの冷蔵庫。' }),
+      kip('crate', 16, 10, 1, 1, 0.4, { a: { n: 2 }, text: 'ビールケースが積まれている。' }),
+      kip('zatable', 12, 8, 3, 1, 0.3, { text: ['座敷の席。', '会社の飲み会が盛りあがっている。'] }),
+      NPC('iza_c1', 3, 5, 'up', KL.sala, 'サラリーマン', ['大将、ハイボールもう一杯！', '…明日も早いんだけどな。']),
+      NPC('iza_c2', 6, 5, 'up', KL.sala2, '常連さん', ['ここのつくねはね、たれが命なんだよ。']),
+      NPC('iza_c3', 11, 8, 'right', KL.ol, '会社員', ['課長、またその話ですかー？']),
+      NPC('iza_c4', 15, 8, 'left', KL.sala, '課長', ['いいか、おれが若いころはなあ…。']),
+      NPC('iza_c5', 12, 9, 'up', { ...KL.sala2, top: '#2a2a30' }, '新人さん', ['（笑顔がひきつっている）']),
+      NPC('iza_c6', 13, 9, 'up', { ...KL.ol, top: '#9ac8e8' }, '会社員', ['飲み放題、あと30分だって！']),
+    ], events: [{ x: 1, y: 5, w: 9, on: 'action', run: kanCall('iza') }],
+    drawOver(c, g, cam) { const t = num(g && g.frame, 0); c.save(); pRoomClip(c, cam, 18, 12); c.globalAlpha = 0.07 + 0.02 * Math.sin(t / 30); c.fillStyle = '#ffb060'; c.fillRect(0, 0, 320, 180); c.restore(); pSmoke(c, cam, 18, 5, t, 4, 0.12, '#e8e0d0'); },
+  } } });
+  // 牛丼 ドット屋
+  E.qn({ id: 'kan_gyudon', name: '牛丼 ドット屋', kind: 'building', bgm: 'machi_shop', start: { room: 'main', x: 9, y: 10, dir: 'up' }, rooms: { main: {
+    floor: 'np_fl_gyu', wall: 'npgyu', legend: { s: 'np_stool_gyu' },
+    tiles: ['###################', '#=================#', '#.................#', '#...s.........s...#', '#...s.........s...#', '#...s.........s...#', '#...s.........s...#', '#.................#', '#.....sssssss.....#', '#.................#', '#.................#', '########..#########'],
+    warps: exitTo([8, 9], 11, 22, 9),
+    entities: [
+      ip('menubd', 6, 1, 7, 1, 0.5, { solid: false, text: ['壁のメニュー。', '牛丼（並）¥450・大盛 ¥580・牛皿定食 ¥650・豚汁 ¥190'], a: { title: 'ドット屋 メニュー', c: '#ff8a1a', items: [['牛丼 並', '¥450', '#8a4a22', '#d83a3a'], ['大盛', '¥580', '#8a4a22'], ['牛皿定食', '¥650', '#8a4a22', '#f0c040'], ['豚汁', '¥190', '#c88a40']] } }),
+      ip('kitchen', 6, 2, 7, 1, 0.7, { frames: 12, speed: 8, talk: gyuMenu, text: '大きな鍋で、牛肉と玉ねぎがぐつぐつ煮えている。' }),
+      NPC('gyu_staff', 9, 4, 'down', KL.gyuStaff, '店員さん', null, { talk: gyuMenu }),
+      NPC('gyu_staff2', 7, 3, 'up', KL.gyuStaff, '店員さん', ['並、つゆだく、入りまーす！', '（ひとりで店を回している…ワンオペだ）']),
+      ip('cntr', 5, 3, 1, 4, 0.5, { talk: gyuMenu, a: { vert: 1, band: '#ff8a1a' } }), ip('cntr', 13, 3, 1, 4, 0.5, { talk: gyuMenu, a: { vert: 1, band: '#ff8a1a' } }),
+      ip('cntr', 5, 7, 9, 1, 0.5, { talk: gyuMenu, a: { band: '#ff8a1a', bowls: [58, 134, 214] } }),
+      ip('tbl', 2, 4, 1, 1, 0.5, { text: 'テーブル席。' }), ip('tbl', 16, 6, 1, 1, 0.5, { text: 'テーブル席。' }),
+      ip('vend', 17, 9, 1, 1, 1, { a: { c: '#ff8a1a' }, text: 'お茶のサーバーだ。セルフサービス。' }), ip('plant', 1, 9, 1, 1, 1, {}),
+      NPC('gyu_c1', 4, 4, 'right', KL.sala, 'サラリーマン', ['並、つゆだくで。5分で食べて会社に戻る。']),
+      NPC('gyu_c2', 14, 5, 'left', { hair: 'short', hairColor: 'brown', skin: 'tan', top: '#d8d8d8', bottom: '#2a3040' }, 'タクシー運転手', ['夜勤明けは、ここの牛丼にかぎる。']),
+      NPC('gyu_c3', 8, 8, 'up', { hair: 'spiky', hairColor: 'black', skin: 'light', top: '#2a2a30', bottom: '#2a4a8a' }, '若者', ['朝まで飲んで、しめの牛丼…。']),
+      NPC('gyu_c4', 11, 8, 'up', KL.ol, 'お客さん', ['ひとり牛丼、気楽でいいよね。']),
+    ], events: [{ x: 6, y: 8, w: 7, on: 'action', run: gyuMenu }],
+  } } });
+  // カプセルホテル ドットイン
+  const caps = []; let n = 0;
+  for (const y of [2, 5]) for (let x = 1; x <= (y === 2 ? 9 : 7); x += 2) caps.push(kip('capsule', x, y, 2, 1, 1.4, { frames: 2, speed: 40, a: { n: n++, ladder: x === 9 }, text: [`カプセル${101 + (n - 1) * 2}・${102 + (n - 1) * 2}番。`, (n % 3) ? 'カーテンの向こうから、いびきが聞こえる…。' : '空いているカプセル。フロントで受付すれば泊まれる。'] }));
+  E.qn({ id: 'kan_hotel', name: 'カプセルホテル ドットイン', kind: 'building', bgm: 'machi_shop', start: { room: 'main', x: 11, y: 13, dir: 'up' }, rooms: { main: {
+    floor: 'gb_fl_hotel', wall: 'gbhotel', legend: { k: 'gb_fl_capsule', w: 'gb_fl_bath' },
+    tiles: ['########################', '#==========#===========#', '#kkkkkkkkkk#wwwwwwwwwww#', '#kkkkkkkkkk#wwwwwwwwwww#', '#kkkkkkkkkk#wwwwwwwwwww#', '#kkkkkkkkkk#wwwwwwwwwww#', '#kkkkkkkkkk#wwwwwwwwwww#', '#####kk######ww#########', '#====kk======ww========#', '#......................#', '#......................#', '#......................#', '#......................#', '#......................#', '###########..###########'],
+    warps: exitTo([11, 12], 14, 5, 9),
+    entities: [
+      ...caps,
+      kip('shower', 12, 2, 10, 1, 0.8, { text: ['洗い場。シャワーがずらりと並んでいる。'] }),
+      kip('bath', 13, 4, 8, 2, 0.2, { frames: 6, speed: 10, text: ['大浴場だ。湯気がもうもうと立っている。', '（泊まると、ここでさっぱりしてから眠れる）'] }),
+      kip('front', 1, 10, 6, 1, 0.6, { talk: kanCall('hotel') }),
+      NPC('hotel_front', 3, 9, 'down', KL.front, 'フロント', null, { talk: kanCall('hotel') }),
+      kip('keyboard', 1, 8, 2, 1, 0, { solid: false, text: 'ロッカーの鍵がかかったボード。空いている番号が少ない。' }),
+      kip('yukata', 7, 9, 1, 1, 0.6, { text: '館内着とタオルの棚。「ご自由にお取りください」' }),
+      ip('manga', 15, 9, 4, 1, 1.2, { text: ['マンガと雑誌の棚。', '寝る前に一冊、という人が多い。'], a: { seed: 11, label: 'マンガ' } }),
+      kip('tv', 20, 8, 3, 1, 0.5, { solid: false, frames: 4, speed: 30, text: '休憩所のテレビ。深夜のニュースが流れている。' }),
+      kip('massage', 21, 10, 1, 1, 0.8, { frames: 2, speed: 8, a: { on: 1 }, talk: massage }),
+      kip('massage', 19, 10, 1, 1, 0.8, { talk: massage }),
+      ip('sofa', 17, 12, 3, 1, 0.6, { text: '休憩所のソファ。', a: { c: '#5a6a8a' } }),
+      kip('shoebox', 7, 13, 3, 1, 0.8, { text: ['下足箱。ここで靴をぬいで、鍵をフロントにあずける。'] }), kip('shoebox', 14, 13, 3, 1, 0.8, { text: '下足箱。' }),
+      ip('vend', 22, 12, 1, 1, 1, { a: { c: '#2a6ad0' }, text: 'ドリンクの自販機。ビールもある。' }),
+      NPC('hotel_c1', 20, 11, 'up', KL.yukata, 'お客さん', ['マッサージチェア、あ゛〜…きくぅ…。', '終電のがして、もう、ここでいいや。']),
+      NPC('hotel_c2', 18, 13, 'up', { ...KL.yukata, hairColor: 'brown' }, 'お客さん', ['出張なんだけど、ビジネスホテルが全部満室でさ。']),
+      NPC('hotel_c3', 4, 3, 'up', { ...KL.yukata, hair: 'bald' }, 'お客さん', ['（歯をみがきながら、カプセルにもどっていく）']),
+      NPC('hotel_c4', 16, 3, 'down', { ...KL.yukata, top: '#f0f0f0', bottom: '#f0f0f0' }, 'お客さん', ['（湯ぶねにつかって、天井を見上げている）', '…いい湯だ。']),
+    ], events: [],
+  } } });
+  // 喫煙所
+  E.qn({ id: 'kan_kitsuen', name: 'ネオン街の喫煙所', kind: 'building', bgm: 'night', start: { room: 'main', x: 4, y: 6, dir: 'up' }, rooms: { main: {
+    floor: 'gb_fl_kitsu', wall: 'gbkitsu', legend: {},
+    tiles: ['##########', '#========#', '#........#', '#........#', '#........#', '#........#', '#........#', '####..####'],
+    warps: exitTo([4, 5], 7, 28, 7),
+    entities: [
+      kip('kposter', 1, 1, 3, 1, 0.2, { solid: false, a: { bg: '#ffffff', fg: '#c8102e', lines: ['喫煙所', '飲食禁止'] }, text: '「喫煙所内での飲食はご遠慮ください」の貼り紙。' }),
+      kip('kposter', 5, 1, 3, 1, 0.2, { solid: false, a: { bg: '#2a6ad0', fg: '#ffffff', lines: ['受動喫煙を', 'ふせごう'] }, text: ['「受動喫煙防止のため、扉は必ず閉めてください」', '…扉の外まで、においがもれている。'] }),
+      kip('purifier', 8, 2, 1, 1, 1, { frames: 8, speed: 6, text: ['分煙機（空気清浄機）だ。', 'ゴォーッと音を立てて煙を吸いこんでいるが、追いついていない。'] }),
+      kip('ashpole', 2, 3, 1, 1, 0.4, { frames: 4, speed: 10, talk: kanCall('smoke') }),
+      kip('ashpole', 6, 3, 1, 1, 0.4, { frames: 4, speed: 12, talk: kanCall('smoke') }),
+      kip('ashpole', 4, 5, 1, 1, 0.4, { frames: 4, speed: 11, talk: kanCall('smoke') }),
+      NPC('kit_c1', 3, 3, 'left', KL.sala, 'サラリーマン', ['（無言でスマホを見ながら、煙をはいている）', '…一本吸ったら、仕事にもどる。']),
+      NPC('kit_c2', 7, 3, 'left', { hair: 'long', hairColor: 'brown', skin: 'light', top: '#2a2a30', bottom: '#2a2a34' }, 'お客さん', ['ここ、せまいよね。昔は道で吸えたのに。']),
+      NPC('kit_c3', 5, 5, 'left', { hair: 'short', hairColor: 'ash', skin: 'tan', top: '#5a7a4a', bottom: '#3a3a44' }, 'おじさん', ['値上げ、値上げで、もう1箱600円近いんだよ。', '…やめどきかなあ。']),
+    ], events: [],
+    drawOver(c, g, cam) { const t = num(g && g.frame, 0); c.save(); pRoomClip(c, cam, 10, 8); c.globalAlpha = 0.06; c.fillStyle = '#c8c8d0'; c.fillRect(0, 0, 320, 180); c.restore(); pSmoke(c, cam, 10, 8, t, 12, 0.24, '#d0d0d8'); },
+  } } });
+}
+// ネオン街の建物を、店内に入れるようにする
+function interPatchKanraku(r) {
+  kanCapture(r.entities);
+  const set = (e, place, enter) => { e.place = place; if (enter) e.enter = enter; delete e.talk; delete e.text; const dx = e.door != null ? e.door : Math.floor(e.w / 2); if (r.cells && r.cells[e.y + e.h - 1]) r.cells[e.y + e.h - 1][e.x + dx] = ['kanraku_side']; };
+  for (const e of r.entities) {
+    if (!e) continue;
+    if (e.type === 'building' && e.name === '居酒屋 ほろよい') set(e, 'kan_izakaya');
+    else if (e.type === 'building' && e.name === '牛丼 ドット屋') set(e, 'kan_gyudon');
+    else if (e.type === 'building' && e.name === 'カプセルホテル ドットイン') set(e, 'kan_hotel');
+    else if (e.type === 'prop' && e.x === 27 && e.y === 5 && e.w === 3 && e.h === 2 && e.talk && !e.__gb) {
+      const orig = e.talk; e.__gb = true;
+      // 2005年8月の路上喫煙禁止より後は、仕切りのある喫煙所に入れる
+      e.talk = async g => { if (kanYM(g) >= 200508) { tt.sfx('door'); await g.enterPlace('kan_kitsuen'); } else await orig(g); };
+    }
+  }
 }
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
