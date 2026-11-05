@@ -11638,7 +11638,7 @@ function applyTheme(N) {
 
 // ===== v2（ナイトゲーム×スポーツ紙）：トークンと部品。NpbScene 本体（ui2）だけが使う =====
 // UC には新しい意味を書きこまない（学校・目線・AI などのシーンが UC を書きかえるため）
-const NU = { bg0: '#02040a', bg1: '#071022', bg2: '#0c1830', panelTop: 'rgba(16,25,46,0.94)', panelBot: 'rgba(7,11,22,0.94)', edge: 'rgba(255,255,255,0.09)', inset: '#0a1120', board: '#03060b', t1: '#f1f4fa', t2: '#a7b3cc', t3: '#75839f', good: '#4be38a', bad: '#ff5d73', draw: '#8b97b1', info: '#5fd7ff', gold: '#ffd23f', led: '#ffc24a', red: '#e8213a', purple: '#b48cff', acc: '#f5c542', acc2: '#f9dc96', accSoft: 'rgba(245,197,66,0.16)', accLine: 'rgba(245,197,66,0.5)', base: '#0f2a52', baseDeep: '#061121', accInk: '#0a0e18', _k: '' };
+const NU = { bg0: '#02040a', bg1: '#071022', bg2: '#0c1830', panelTop: 'rgba(16,25,46,0.94)', panelBot: 'rgba(7,11,22,0.94)', edge: 'rgba(255,255,255,0.09)', inset: '#0a1120', board: '#03060b', t1: '#f1f4fa', t2: '#bac5da', t3: '#919fb9', good: '#4be38a', bad: '#ff5d73', draw: '#8b97b1', info: '#5fd7ff', gold: '#ffd23f', led: '#ffc24a', red: '#e8213a', purple: '#b48cff', acc: '#f5c542', acc2: '#f9dc96', accSoft: 'rgba(245,197,66,0.16)', accLine: 'rgba(245,197,66,0.5)', base: '#0f2a52', baseDeep: '#061121', accInk: '#0a0e18', _k: '' };
 function uHex(h) { h = String(h || '#000000').replace('#', ''); if (h.length === 3) h = h.split('').map(x => x + x).join(''); return '#' + (h + '000000').slice(0, 6).toLowerCase(); }
 // WCAG の相対輝度（sRGB を線形にしてから）
 function uLum(hex) { const v = parseInt(uHex(hex).slice(1), 16), f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(v >> 16 & 255) + 0.7152 * f(v >> 8 & 255) + 0.0722 * f(v & 255); }
@@ -24360,7 +24360,7 @@ function mgrRot(ctx, tid) {
   const T = ctx.L.teams[tid], me = mgrMe(ctx, tid);
   const R = T.pit.filter(id => id !== 'ME').map(ctx.P).filter(p => p && p.role === 'SP' && !(num(p.inj) > 0));
   if (me && me.p.pos === 'P' && me.role === 'SP') R.push(me.p);
-  return R.sort((a, b) => spvOf(b) - spvOf(a));
+  return R.sort((a, b) => mgrPitT(ctx.S, b, 1) - mgrPitT(ctx.S, a, 1));
 }
 // 先発：休養日数を見て、いちばんいい投手から
 function mgrPickSP(ctx, tid, peek) {
@@ -24373,6 +24373,106 @@ function mgrPickSP(ctx, tid, peek) {
   if (!peek) S.lsp[sp.id] = md;
   return sp;
 }
+// ---- 監督AIの見立て：能力だけでなく、今季の実績もまぜた「いまの実力」 ----
+function mgrTal(S, p) {
+  const b = S && S.bs && S.bs[p.id], pa = b ? num(b[B.PA]) : 0, w = pa / (pa + 180);
+  const rObp = p.con * 0.45 + p.eye * 0.55, rPow = num(p.pow), rOff = offOf(p);
+  if (!pa) return { off: rOff, obp: rObp, pow: rPow, w: 0 };
+  const ops = obpOf(b) + slgOf(b), sObp = 60 + (obpOf(b) - 0.325) * 260, sPow = 58 + (isoOf(b) - 0.140) * 300, sOff = 60 + (ops - 0.720) * 115;
+  return { off: rOff * (1 - w) + clamp(sOff, 15, 100) * w, obp: rObp * (1 - w) + clamp(sObp, 15, 100) * w, pow: rPow * (1 - w) + clamp(sPow, 10, 100) * w, w };
+}
+// 本職でない守備位置につくときの、守りの目減り
+const MGR_POS_PEN = { C: { '1B': 6, '3B': 14, OF: 14, DH: 0 }, SS: { '2B': 2, '3B': 3, '1B': 4, OF: 7, DH: 0 }, '2B': { SS: 9, '3B': 5, '1B': 4, OF: 8, DH: 0 }, '3B': { '1B': 3, SS: 12, '2B': 8, OF: 9, DH: 0 }, '1B': { '3B': 12, OF: 12, '2B': 18, SS: 24, DH: 0 }, OF: { '1B': 6, '3B': 14, '2B': 18, SS: 24, DH: 0 }, DH: { '1B': 8, OF: 12, '3B': 18, '2B': 22, SS: 28 } };
+const mgrPosPen = (from, to) => from === to ? 0 : to === 'C' ? 45 : (MGR_POS_PEN[from] && MGR_POS_PEN[from][to] != null ? MGR_POS_PEN[from][to] : 15);
+// スタメンと打順を組む（CPUの監督も、監督モードの「監督AIにおまかせ」も、同じ考え方）
+function mgrLineup(N, S, bats, dh, o = {}) {
+  const sty = o.sty || 'std', oth = o.oth || 'R', meP = o.meP || null, nm = o.nm || (p => shortName(p)), notes = [];
+  const fm = p => num(S && S.fm && S.fm[p.id]), fat = p => num(S && S.fat && S.fat[p.id]);
+  const TL = {}; for (const p of bats) TL[p.id] = mgrTal(S, p);
+  const plat = p => p.bt === 'S' ? 1 : p.bt !== oth ? 2 : -2.5;
+  const off = p => TL[p.id].off + fm(p) * (sty === 'kan' ? 7 : 3.5) + plat(p) * (sty === 'data' ? 2 : 1);
+  const natPos = p => p === meP && o.me ? (meP.pos === 'DH' && !dh ? '1B' : meP.pos) : p.pos;
+  const val = (p, ps) => {
+    const w = FW[ps] != null ? FW[ps] : 0.5, d = defOf(p) - mgrPosPen(natPos(p), ps);
+    // 打力は守備位置によらない。守備は「その位置の大事さ×平均との差」
+    let s = off(p) + (d - 50) * 0.42 * w + (ps !== natPos(p) ? -1.5 : 0);
+    const f = fat(p); if (f >= 12 && num(p.age) >= 32) s -= 7; else if (f >= 18) s -= 5;
+    if (sty === 'wakate' && num(p.age) <= 24) s += 3; if (o.giveUp && num(p.age) <= 25) s += 5; if (sty === 'vet' && num(p.age) >= 32) s += 3;
+    if (sty === 'shubi') s += (defOf(p) - 50) * 0.1 * (FW[ps] || 0.3); if (sty === 'kidou') s += (num(p.spd) - 50) * 0.06; if (sty === 'kyoda') s += (TL[p.id].pow - 50) * 0.06;
+    if (p === meP && o.me) s += o.me.role === 'starter' ? 5 : -3;
+    return s;
+  };
+  // ① 本職から順に（捕手→遊撃→二塁→三塁→一塁→外野）
+  const need = ['C', 'SS', '2B', '3B', '1B', 'OF', 'OF', 'OF'], slot = [], used = new Set();
+  for (const ps of need) {
+    const free = bats.filter(p => !used.has(p.id)), same = free.filter(p => natPos(p) === ps);
+    const L = (same.length ? same : free.filter(p => natPos(p) !== 'C' || ps === 'C')).slice().sort((a, b) => val(b, ps) - val(a, ps));
+    if (L[0]) { slot.push({ p: L[0], ps }); used.add(L[0].id); }
+  }
+  // ② 入れかえで良くなるなら直す（守備位置の交換・控えとの交代）
+  const total = () => slot.reduce((s, x) => s + val(x.p, x.ps), 0);
+  for (let it = 0; it < 40; it++) {
+    let best = 0, act = null; const base = total();
+    for (let i = 0; i < slot.length; i++) for (let j = i + 1; j < slot.length; j++) {
+      if (slot[i].ps === slot[j].ps) continue;
+      const d = val(slot[i].p, slot[j].ps) + val(slot[j].p, slot[i].ps) - val(slot[i].p, slot[i].ps) - val(slot[j].p, slot[j].ps);
+      if (d > best + 0.4) { best = d; act = ['sw', i, j]; }
+    }
+    for (let i = 0; i < slot.length; i++) for (const q of bats) {
+      if (used.has(q.id)) continue; const d = val(q, slot[i].ps) - val(slot[i].p, slot[i].ps);
+      if (d > best + 0.4) { best = d; act = ['in', i, q]; }
+    }
+    if (!act) break;
+    if (act[0] === 'sw') { const t = slot[act[1]].ps; slot[act[1]].ps = slot[act[2]].ps; slot[act[2]].ps = t; }
+    else { used.delete(slot[act[1]].p.id); slot[act[1]].p = act[2]; used.add(act[2].id); }
+    if (total() <= base) break;
+  }
+  const pos = {}, starters = [];
+  for (const x of slot) { starters.push(x.p); pos[x.p.id] = x.ps; }
+  if (dh) { const c = bats.filter(p => !used.has(p.id)).sort((a, b) => off(b) - off(a))[0]; if (c) { starters.push(c); pos[c.id] = 'DH'; used.add(c.id); } }
+  // 采配のメモ：能力どおりなら選ばれていた選手と比べる
+  for (const x of slot) {
+    if (notes.length >= 4) break;
+    const c = x.p, ps = x.ps, base = bats.filter(p => natPos(p) === ps).sort((a, b) => bvalOf(b, ps) - bvalOf(a, ps))[0];
+    if (!base || base === c || used.has(base.id)) continue;
+    if (plat(c) > plat(base) && plat(base) < 0) notes.push(`相手先発が${oth === 'L' ? '左腕' : '右腕'}のため、${nm(c)}を起用`);
+    else if (fat(base) >= 12) notes.push(`${nm(base)}は、疲れを考えて休ませた`);
+    else if (fm(base) < -0.3) notes.push(`不振の${nm(base)}を、スタメンから外した`);
+    else if (TL[c.id].w > 0.3 && TL[c.id].off > TL[base.id].off + 4) notes.push(`今季の打撃を買って、${nm(c)}を起用`);
+    else if (fm(c) > 0.3) notes.push(`好調の${nm(c)}を起用`);
+    else if (num(c.age) <= 25 && (sty === 'wakate' || o.giveUp)) notes.push(`若手の${nm(c)}を抜てき`);
+    else if (sty === 'shubi' && defOf(c) > defOf(base)) notes.push(`守備を重視して、${nm(c)}を起用`);
+  }
+  // ③ 打順
+  const fB = p => fm(p) * 4, ob = p => TL[p.id].obp + fB(p) + plat(p) * 0.6, pw = p => TL[p.id].pow + fB(p) + plat(p) * 0.6, of2 = p => off(p), sp = p => num(p.spd);
+  const pool = starters.slice(), pull = f => { pool.sort((a, b) => f(b) - f(a)); return pool.shift(); };
+  let order;
+  if (sty === 'kyoda') { const s2 = pull(p => of2(p) * 0.6 + pw(p) * 0.4), s4 = pull(p => pw(p) * 0.75 + of2(p) * 0.25), s3 = pull(of2), s1 = pull(p => ob(p) * 0.65 + sp(p) * 0.35), s5 = pull(pw); pool.sort((a, b) => of2(b) - of2(a)); order = [s1, s2, s3, s4, s5, ...pool]; if (s2) notes.push(`2番に強打の${nm(s2)}`); }
+  else if (sty === 'kidou') { const s1 = pull(p => sp(p) * 0.55 + ob(p) * 0.45), s2 = pull(p => sp(p) * 0.4 + ob(p) * 0.35 + num(p.con) * 0.25), s4 = pull(p => pw(p) * 0.75 + of2(p) * 0.25), s3 = pull(of2), s5 = pull(pw); const rest = pool.slice().sort((a, b) => of2(b) - of2(a)), last = rest.length > 1 ? rest.slice(1).sort((a, b) => sp(b) - sp(a))[0] : null; order = [s1, s2, s3, s4, s5, ...rest.filter(p => p !== last), ...(last ? [last] : [])]; }
+  else if (sty === 'data') {
+    // 打順の理論：上位3人を1・2・4番に、次の2人を3・5番に、あとは打力の順
+    const R = pool.slice().sort((a, b) => of2(b) - of2(a)), top = R.slice(0, 3), mid = R.slice(3, 5), low = R.slice(5);
+    const s1 = top.slice().sort((a, b) => ob(b) - ob(a))[0], s4 = top.filter(p => p !== s1).sort((a, b) => pw(b) - pw(a))[0], s2 = top.find(p => p !== s1 && p !== s4);
+    const s3 = mid.slice().sort((a, b) => ob(b) - ob(a))[0], s5 = mid.find(p => p !== s3);
+    order = [s1, s2, s3, s4, s5, ...low];
+  }
+  else {
+    // ふつう：1番は出塁と足、2番はつなぎ、3番は最高の打者、4番は長打、5番は長打と打率
+    const s4 = pull(p => pw(p) * 0.7 + of2(p) * 0.3), s3 = pull(p => of2(p) * 0.7 + ob(p) * 0.3), s1 = pull(p => ob(p) * 0.6 + sp(p) * 0.3 + of2(p) * 0.1), s5 = pull(p => pw(p) * 0.6 + of2(p) * 0.4), s2 = pull(p => ob(p) * 0.45 + num(p.con) * 0.25 + of2(p) * 0.3);
+    pool.sort((a, b) => of2(b) - of2(a)); order = [s1, s2, s3, s4, s5, ...pool];
+  }
+  order = order.filter(Boolean);
+  for (const p of starters) if (!order.includes(p)) order.push(p);
+  if (order[3] && fm(order[3]) > 0.35) notes.push(`好調の${nm(order[3])}を4番に`);
+  return { starters, pos, order, notes };
+}
+// ブルペン・先発の見立て（今季の結果もまぜる）
+function mgrPitT(S, p, sp) {
+  const s = S && S.ps && S.ps[p.id], out = s ? num(s[Pp.OUT]) : 0, base = sp ? spvOf(p) : rpvOf(p);
+  if (out < (sp ? 45 : 24)) return base;
+  const era = eraOf(s), w = out / (out + (sp ? 240 : 120));
+  return base + clamp(((sp ? 3.9 : 3.6) - era) * (sp ? 2.6 : 3), -9, 9) * w * 2;
+}
 function mgrPrep(ctx, tid, dh, opt = {}) {
   if (!ctx.S || !ctx.N || ctx.md == null || opt.raw || (typeof window !== 'undefined' && window.__MGR_OFF)) return null;
   const S = ctx.S, N = ctx.N, P = ctx.P, T = ctx.L.teams[tid]; if (!T) return null;
@@ -24383,47 +24483,9 @@ function mgrPrep(ctx, tid, dh, opt = {}) {
   const notes = [], nm = p => p === meP ? 'あなた' : shortName(p);
   const bats = T.bat.filter(id => id !== 'ME').map(P).filter(p => p && !(num(p.inj) > 0));
   if (meP && meP.pos !== 'P') bats.push(meP);
-  const plat = p => p.bt === 'S' ? 1 : p.bt !== oth ? 2 : -2.5;
-  const fm = p => num(S.fm[p.id]);
-  const score = (p, ps) => {
-    let s = bvalOf(p, ps) + plat(p) * (M.sty === 'data' ? 2 : 1) + fm(p) * (M.sty === 'kan' ? 7 : 3.5);
-    const f = num(S.fat[p.id]); if (f >= 12 && num(p.age) >= 32) s -= 7; else if (f >= 18) s -= 5;
-    if (M.sty === 'wakate' && num(p.age) <= 24) s += 3; if (giveUp && num(p.age) <= 25) s += 5; if (M.sty === 'vet' && num(p.age) >= 32) s += 3;
-    if (M.sty === 'shubi') s += (defOf(p) - 50) * 0.1 * (FW[ps] || 0.3); if (M.sty === 'kidou') s += (p.spd - 50) * 0.06; if (M.sty === 'kyoda') s += (p.pow - 50) * 0.06;
-    if (p === meP) s += me.role === 'starter' ? 5 : -3;
-    return s;
-  };
-  const pos = {}, starters = [], taken = new Set(), take = (p, ps) => { starters.push(p); taken.add(p.id); pos[p.id] = ps; };
-  const need = ['C', 'SS', '2B', '3B', '1B', 'OF', 'OF', 'OF'];
-  for (const ps of need) {
-    if (Object.values(pos).filter(x => x === ps).length >= need.filter(x => x === ps).length) continue;
-    const same = bats.filter(p => !taken.has(p.id) && (p.pos === ps || (p === meP && ps === (meP.pos === 'DH' && !dh ? '1B' : meP.pos))));
-    let L = same.length ? same : bats.filter(p => !taken.has(p.id) && p.pos !== 'C');
-    L = L.slice().sort((a, b) => score(b, ps) - score(a, ps));
-    const c = L[0]; if (!c) continue;
-    // 采配のメモ：能力どおりなら選ばれていた選手と比べる
-    const base = L.slice().sort((a, b) => bvalOf(b, ps) - bvalOf(a, ps))[0];
-    if (base && base !== c && notes.length < 4) {
-      if (plat(c) > plat(base) && plat(base) < 0) notes.push(`相手先発が${oth === 'L' ? '左腕' : '右腕'}のため、${nm(c)}を起用`);
-      else if (num(S.fat[base.id]) >= 12) notes.push(`${nm(base)}は、疲れを考えて休ませた`);
-      else if (fm(base) < -0.3) notes.push(`不振の${nm(base)}を、スタメンから外した`);
-      else if (fm(c) > 0.3) notes.push(`好調の${nm(c)}を起用`);
-      else if (num(c.age) <= 25 && (M.sty === 'wakate' || giveUp)) notes.push(`若手の${nm(c)}を抜てき`);
-      else if (M.sty === 'shubi' && defOf(c) > defOf(base)) notes.push(`守備を重視して、${nm(c)}を起用`);
-    }
-    take(c, ps);
-  }
-  if (dh && !Object.values(pos).includes('DH')) { const c = bats.filter(p => !taken.has(p.id)).sort((a, b) => (offOf(b) + fm(b) * 4 + plat(b)) - (offOf(a) + fm(a) * 4 + plat(a)))[0]; if (c) take(c, 'DH'); }
-  // 打順
-  const fmB = p => fm(p) * 4, obp = p => p.con * 0.45 + p.eye * 0.55 + fmB(p), pw = p => p.pow + fmB(p), off = p => offOf(p) + fmB(p) + plat(p);
-  const pool = starters.slice(), pull = f => { pool.sort((a, b) => f(b) - f(a)); return pool.shift(); };
-  let order;
-  if (M.sty === 'kyoda') { const s2 = pull(off), s4 = pull(p => pw(p) * 0.8 + p.con * 0.2), s3 = pull(off), s1 = pull(p => obp(p) * 0.6 + p.spd * 0.4), s5 = pull(pw); pool.sort((a, b) => off(b) - off(a)); order = [s1, s2, s3, s4, s5, ...pool]; if (notes.length < 4) notes.push(`2番に強打の${nm(s2)}`); }
-  else if (M.sty === 'kidou') { const s1 = pull(p => p.spd * 0.6 + obp(p) * 0.4), s2 = pull(p => p.spd * 0.45 + p.con * 0.55), s4 = pull(p => pw(p) * 0.75 + p.con * 0.25), s3 = pull(off), s5 = pull(pw); const last = pool.slice().sort((a, b) => b.spd - a.spd)[0]; const rest = pool.filter(p => p !== last).sort((a, b) => off(b) - off(a)); order = [s1, s2, s3, s4, s5, ...rest, ...(last ? [last] : [])]; }
-  else if (M.sty === 'data') { const s2 = pull(off), s4 = pull(off), s1 = pull(obp), s3 = pull(off), s5 = pull(off); pool.sort((a, b) => off(b) - off(a)); order = [s1, s2, s3, s4, s5, ...pool]; }
-  else { const s4 = pull(p => pw(p) * 0.75 + p.con * 0.25), s3 = pull(off), s1 = pull(p => p.spd * 0.45 + p.con * 0.3 + p.eye * 0.25 + fmB(p)), s5 = pull(p => pw(p) * 0.6 + p.con * 0.4), s2 = pull(p => p.con * 0.5 + p.spd * 0.3 + p.eye * 0.2 + fmB(p)); pool.sort((a, b) => off(b) - off(a)); order = [s1, s2, s3, s4, s5, ...pool]; }
-  order = order.filter(Boolean);
-  if (order[3] && fm(order[3]) > 0.35 && notes.length < 4) notes.push(`好調の${nm(order[3])}を4番に`);
+  const LU = mgrLineup(N, S, bats, dh, { oth, sty: M.sty, giveUp, meP, me, nm });
+  const { starters, pos, order } = LU, taken = new Set(starters.map(p => p.id)), fm = p => num(S.fm[p.id]);
+  for (const t of LU.notes) if (notes.length < 4) notes.push(t);
   // 先発投手
   const sp = mgrPickSP(ctx, tid, !!opt.noRotate) || P(T.pit[0]);
   if (!opt.noRotate) T.rot = (num(T.rot) + 1) % 6;
@@ -24432,7 +24494,9 @@ function mgrPrep(ctx, tid, dh, opt = {}) {
   let pen = pits.filter(p => p !== sp && p.role !== 'SP');
   if (meP && meP.pos === 'P' && me.role !== 'SP' && !pen.includes(meP)) pen.push(meP);
   const longs = pits.filter(p => p !== sp && p.role === 'SP').sort((a, b) => spvOf(a) - spvOf(b)).slice(0, 1);
-  pen.sort((a, b) => rpvOf(b) - rpvOf(a));
+  // 抑え・中継ぎ：役割の決まっている投手（実在の守護神など）を尊重しつつ、今季の結果もまぜる
+  const penV = p => mgrPitT(S, p, 0) + (p.kmRole === 'CL' ? 6 : p.kmRole === 'SU' ? 3 : 0);
+  pen.sort((a, b) => penV(b) - penV(a));
   let cl = pen[0], su1 = pen[1], su2 = pen[2];
   if (meP && meP.pos === 'P' && me.role !== 'SP') { const o = pen.filter(p => p !== meP); if (me.role === 'CL') { cl = meP; su1 = o[0]; su2 = o[1]; } else if (me.role === 'SU') { cl = o[0]; su1 = meP; su2 = o[1]; } else { cl = o[0]; su1 = o[1]; su2 = o[2]; } }
   if (pen.length < 4) pen = pen.concat(longs);
@@ -26958,7 +27022,7 @@ if (typeof window !== 'undefined' && window.__crit) {
 // 描画はすべて Canvas2D。重い処理（折り返し・紙の質感・白黒ロゴ）はキャッシュする。
 // ---- 色（暗いUI：FINAL SPEC §1.1 と同じ値／紙面：§1.2） ----
 const NW = {
-  d: { bg0: '#02040a', bg1: '#071022', bg2: '#0c1830', panelTop: 'rgba(16,25,46,0.94)', panelBot: 'rgba(7,11,22,0.94)', edge: 'rgba(255,255,255,0.09)', inset: '#0a1120', board: '#03060b', t1: '#f1f4fa', t2: '#a7b3cc', t3: '#75839f', good: '#4be38a', bad: '#ff5d73', draw: '#8b97b1', info: '#5fd7ff', gold: '#ffd23f', led: '#ffc24a', red: '#e8213a', purple: '#b48cff' },
+  d: { bg0: '#02040a', bg1: '#071022', bg2: '#0c1830', panelTop: 'rgba(16,25,46,0.94)', panelBot: 'rgba(7,11,22,0.94)', edge: 'rgba(255,255,255,0.09)', inset: '#0a1120', board: '#03060b', t1: '#f1f4fa', t2: '#bac5da', t3: '#919fb9', good: '#4be38a', bad: '#ff5d73', draw: '#8b97b1', info: '#5fd7ff', gold: '#ffd23f', led: '#ffc24a', red: '#e8213a', purple: '#b48cff' },
   p: { paper: '#f3eee1', paper2: '#e9e2cf', ink: '#16130f', ink2: '#3b362e', ink3: '#6b6457', red: '#c8102e', redDeep: '#8a1020', blue: '#0b4ea2', blueDeep: '#0b3f86', gold: '#ffd23f', goldInk: '#b8860b', wire: '#16130f', wireDeep: '#3b362e' },
   cat: { good: '#6aa8ff', crit: '#ff6b7d', wire: '#5fd7ff', mine: '#ffd23f' },
   tag: { good: '#8fb8ff', crit: '#ff9aa6', wire: '#9fe6ff' },
