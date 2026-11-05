@@ -24447,24 +24447,52 @@ function mgrLineup(N, S, bats, dh, o = {}) {
   const fB = p => fm(p) * 4, ob = p => TL[p.id].obp + fB(p) + plat(p) * 0.6, pw = p => TL[p.id].pow + fB(p) + plat(p) * 0.6, of2 = p => off(p), sp = p => num(p.spd);
   const pool = starters.slice(), pull = f => { pool.sort((a, b) => f(b) - f(a)); return pool.shift(); };
   let order;
-  if (sty === 'kyoda') { const s2 = pull(p => of2(p) * 0.6 + pw(p) * 0.4), s4 = pull(p => pw(p) * 0.75 + of2(p) * 0.25), s3 = pull(of2), s1 = pull(p => ob(p) * 0.65 + sp(p) * 0.35), s5 = pull(pw); pool.sort((a, b) => of2(b) - of2(a)); order = [s1, s2, s3, s4, s5, ...pool]; if (s2) notes.push(`2番に強打の${nm(s2)}`); }
-  else if (sty === 'kidou') { const s1 = pull(p => sp(p) * 0.55 + ob(p) * 0.45), s2 = pull(p => sp(p) * 0.4 + ob(p) * 0.35 + num(p.con) * 0.25), s4 = pull(p => pw(p) * 0.75 + of2(p) * 0.25), s3 = pull(of2), s5 = pull(pw); const rest = pool.slice().sort((a, b) => of2(b) - of2(a)), last = rest.length > 1 ? rest.slice(1).sort((a, b) => sp(b) - sp(a))[0] : null; order = [s1, s2, s3, s4, s5, ...rest.filter(p => p !== last), ...(last ? [last] : [])]; }
-  else if (sty === 'data') {
+  const ordT = o.ordT || mgrOrdFromSty(sty), best = of2, bat = p => of2(p) * 0.7 + ob(p) * 0.3, pow = p => pw(p) * 0.7 + of2(p) * 0.3, lead = p => ob(p) * 0.6 + sp(p) * 0.3 + of2(p) * 0.1, link = p => ob(p) * 0.45 + num(p.con) * 0.25 + of2(p) * 0.3;
+  if (ordT === 'book') {
     // 打順の理論：上位3人を1・2・4番に、次の2人を3・5番に、あとは打力の順
     const R = pool.slice().sort((a, b) => of2(b) - of2(a)), top = R.slice(0, 3), mid = R.slice(3, 5), low = R.slice(5);
     const s1 = top.slice().sort((a, b) => ob(b) - ob(a))[0], s4 = top.filter(p => p !== s1).sort((a, b) => pw(b) - pw(a))[0], s2 = top.find(p => p !== s1 && p !== s4);
     const s3 = mid.slice().sort((a, b) => ob(b) - ob(a))[0], s5 = mid.find(p => p !== s3);
     order = [s1, s2, s3, s4, s5, ...low];
-  }
-  else {
-    // ふつう：1番は出塁と足、2番はつなぎ、3番は最高の打者、4番は長打、5番は長打と打率
-    const s4 = pull(p => pw(p) * 0.7 + of2(p) * 0.3), s3 = pull(p => of2(p) * 0.7 + ob(p) * 0.3), s1 = pull(p => ob(p) * 0.6 + sp(p) * 0.3 + of2(p) * 0.1), s5 = pull(p => pw(p) * 0.6 + of2(p) * 0.4), s2 = pull(p => ob(p) * 0.45 + num(p.con) * 0.25 + of2(p) * 0.3);
-    pool.sort((a, b) => of2(b) - of2(a)); order = [s1, s2, s3, s4, s5, ...pool];
+  } else if (ordT === 'kidou') {
+    const s1 = pull(p => sp(p) * 0.55 + ob(p) * 0.45), s2 = pull(p => sp(p) * 0.4 + ob(p) * 0.35 + num(p.con) * 0.25), s4 = pull(pow), s3 = pull(best), s5 = pull(pw);
+    const rest = pool.slice().sort((a, b) => of2(b) - of2(a)), last = rest.length > 1 ? rest.slice(1).sort((a, b) => sp(b) - sp(a))[0] : null; order = [s1, s2, s3, s4, s5, ...rest.filter(p => p !== last), ...(last ? [last] : [])];
+  } else {
+    // 監督ごとの「最強打者を何番に置くか」。決まった順に打順を埋め、残りは打力の順に空いた打順へ
+    const T = MGR_ORD_T[ordT] || MGR_ORD_T.yon, fns = { best, bat, pow, lead, link }, slots = new Array(starters.length).fill(null);
+    for (const [k, f] of T) { if (k - 1 >= slots.length) continue; const p = pull(fns[f]); if (p) slots[k - 1] = p; }
+    pool.sort((a, b) => of2(b) - of2(a)); for (let k = 0; k < slots.length; k++) if (!slots[k]) slots[k] = pool.shift() || null;
+    order = slots;
+    const top = starters.slice().sort((a, b) => of2(b) - of2(a))[0], at = order.indexOf(top) + 1;
+    if (top && at && at !== 4 && at !== 3) notes.push(`最強打者の${nm(top)}を${at}番に置く打線`);
   }
   order = order.filter(Boolean);
   for (const p of starters) if (!order.includes(p)) order.push(p);
   if (order[3] && fm(order[3]) > 0.35) notes.push(`好調の${nm(order[3])}を4番に`);
   return { starters, pos, order, notes };
+}
+// ---- 打順の組み方（監督ごと） ----
+const MGR_ORD = { yon: '4番に最強打者', san: '3番に最強打者', ni: '2番に最強打者', ichi: '1番に最強打者', nana: '7番に最強打者', book: '打順の理論どおり', kidou: '上位に俊足を並べる' };
+const MGR_ORD_D = { yon: '昔ながらの組み方。4番に最強打者、3番・5番に好打者、1番は出塁と足', san: '3番に最強打者。1回に必ず回り、4番には長距離砲', ni: '攻撃的な2番。最強打者を2番に置いて、打席を多く回す', ichi: '最強打者をトップに。いちばん多く打席が回る', nana: '下位打線に最強打者を置く独特の打線。上位を出塁で固め、7番で返す', book: '上位3人を1・2・4番、次の2人を3・5番に置く', kidou: '1・2番に足の速い選手。かき回してクリーンアップで返す' };
+// [打順, 選び方] を上から順に決める。best=打力 bat=好打者 pow=長打 lead=出塁と足 link=つなぎ
+const MGR_ORD_T = {
+  yon: [[4, 'best'], [3, 'bat'], [1, 'lead'], [5, 'pow'], [2, 'link']],
+  san: [[3, 'best'], [4, 'pow'], [1, 'lead'], [5, 'pow'], [2, 'link']],
+  ni: [[2, 'best'], [4, 'pow'], [1, 'lead'], [3, 'bat'], [5, 'pow']],
+  ichi: [[1, 'best'], [4, 'pow'], [3, 'bat'], [2, 'link'], [5, 'pow']],
+  nana: [[7, 'best'], [4, 'pow'], [1, 'lead'], [3, 'bat'], [2, 'link'], [5, 'pow']],
+};
+const mgrOrdFromSty = sty => sty === 'kyoda' ? 'ni' : sty === 'data' ? 'book' : sty === 'kidou' ? 'kidou' : 'yon';
+// 実在の監督の打順の傾向（ゲーム上の見立て）
+const MGR_ORD_REAL = { '落合 博満': 'yon', '原 辰徳': 'san', '岡田 彰布': 'yon', '王 貞治': 'yon', '野村 克也': 'san', 'ボビー・バレンタイン': 'book', 'トレイ・ヒルマン': 'ni', '古田 敦也': 'san', '真弓 明信': 'ni', '和田 豊': 'yon', '伊東 勤': 'san', '梨田 昌孝': 'yon', '伊原 春樹': 'kidou', '山本 浩二': 'yon', '若松 勉': 'san', '堀内 恒夫': 'yon', '山下 大輔': 'san', '石毛 宏典': 'kidou', '大矢 明彦': 'yon', '尾花 高夫': 'book', 'テリー・コリンズ': 'ni', '大石 大二郎': 'kidou', '野村 謙二郎': 'ni', '小川 淳司': 'yon' };
+function mgrOrdOf(N, tid) {
+  const M = mgrOf(N, tid); if (M.ordT && MGR_ORD[M.ordT]) return M.ordT;
+  let t = MGR_ORD_REAL[M.n];
+  if (!t) {
+    if (M.sty === 'kyoda') t = 'ni'; else if (M.sty === 'data') t = 'book'; else if (M.sty === 'kidou') t = 'kidou';
+    else { const h = (hashStr('ord|' + M.n + '|' + tid) >>> 0) % 100; t = h < 42 ? 'yon' : h < 68 ? 'san' : h < 82 ? 'ni' : h < 91 ? 'ichi' : 'nana'; }
+  }
+  M.ordT = t; return t;
 }
 // ブルペン・先発の見立て（今季の結果もまぜる）
 function mgrPitT(S, p, sp) {
@@ -24483,7 +24511,7 @@ function mgrPrep(ctx, tid, dh, opt = {}) {
   const notes = [], nm = p => p === meP ? 'あなた' : shortName(p);
   const bats = T.bat.filter(id => id !== 'ME').map(P).filter(p => p && !(num(p.inj) > 0));
   if (meP && meP.pos !== 'P') bats.push(meP);
-  const LU = mgrLineup(N, S, bats, dh, { oth, sty: M.sty, giveUp, meP, me, nm });
+  const LU = mgrLineup(N, S, bats, dh, { oth, sty: M.sty, ordT: mgrOrdOf(N, tid), giveUp, meP, me, nm });
   const { starters, pos, order } = LU, taken = new Set(starters.map(p => p.id)), fm = p => num(S.fm[p.id]);
   for (const t of LU.notes) if (notes.length < 4) notes.push(t);
   // 先発投手
