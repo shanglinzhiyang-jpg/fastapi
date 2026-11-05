@@ -38233,7 +38233,7 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
 (function pcPlus() {
   const M = GB_MODES && GB_MODES.pachinko; if (!M || M.__plus) return; M.__plus = true;
   const init0 = M.init0, btn0 = M.btn, q0 = M.q;
-  M.init0 = function (s, g) { init0.call(this, s, g); Object.assign(s.S, { q: [], graph: [0], cur: 0, prev: null, push: null, den: 0, res: null, flash: 0, swarm: [], prom: 0 }); };
+  M.init0 = function (s, g) { init0.call(this, s, g); Object.assign(s.S, { q: [], graph: [0], cur: 0, prev: null, push: null, den: 0, res: null, flash: 0, swarm: [], prom: 0, gim: null, fl: [], rushBalls: 0, rushEnd: null, kyuin: 0 }); };
   // 電サポ中は右打ちで電チューをねらう（電チューの入りやすさに合わせて、今までと同じ回転数になるようにする）
   M.q = function (S) { if (S.jack) return 0; if (S.sup) return 0.42 * 0.94 / 0.97; return q0.call(this, S); };
   M.right = S => !!(S.sup && !S.jack);
@@ -38253,9 +38253,10 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
   };
   M.enter = function (s, b) {
     const S = s.S;
-    if (b.in === 'start' || b.in === 'den') { S.balls += 3; if (b.in === 'den') S.den = 18; if (S.q.length < 4) { S.q.push(this.lot(S)); S.hold = S.q.length; S.fly.push({ k: 'hold', t: 0 }); } }
+    if (b.in === 'start' || b.in === 'den') { S.balls += 3; if (b.in === 'den') S.den = 18; S.fl.push({ x: b.in === 'den' ? PC_DEN.x : PC_START.x, y: b.in === 'den' ? PC_DEN.y : PC_START.y, s: '+3', t: 0 });
+      if (S.q.length < 4) { const e = this.lot(S); S.q.push(e); S.hold = S.q.length; S.fly.push({ k: 'hold', t: 0 }); if (e.col === 'rainbow' || e.col === 'gold') { S.kyuin = 24; pcSnd('kyuin'); if (e.col === 'rainbow') S.gim = { t: 0 }; } } }
     else if (b.in === 'side') S.balls += 10;
-    else if (b.in === 'atk' && S.jack) { const add = Math.min(15, S.jack.pay - S.jack.paid); S.jack.paid += add; S.balls += add; S.fly.push({ k: 'atk', t: 0 }); if (s.t % 3 === 0) tt.sfx('coin'); }
+    else if (b.in === 'atk' && S.jack) { const add = Math.min(15, S.jack.pay - S.jack.paid); S.jack.paid += add; S.balls += add; S.fly.push({ k: 'atk', t: 0 }); S.fl.push({ x: PC_ATK.x, y: PC_ATK.y, s: '+' + add, t: 0 }); if (s.t % 3 === 0) pcSnd('jara'); }
   };
   M.startSpin = function (s) {
     const S = s.S, F = this.__force || null, e = { ...(S.q.shift() || this.lot(S)), ...((F && F.e) || {}) }; S.hold = S.q.length;
@@ -38279,7 +38280,7 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
     S.roll = { f: 0, len, res, hit, kk, reach, rt, giji, gj, gEnd, step, pre, cut, cutAt, swarm, stL, stR, promo, pushAt: rt === 'SPSP' ? len - 60 : -1, pushed: false, col: e.col, st: [stL, stR, len] };
     S.spins++; S.cur++;
   };
-  M.pushNow = function (s) { const S = s.S; if (!S.roll || !S.push) return; S.push = null; S.roll.pushed = true; S.flash = 14; tt.sfx('ok'); };
+  M.pushNow = function (s) { const S = s.S; if (!S.roll || !S.push) return; S.push = null; S.roll.pushed = true; S.flash = 14; pcSnd('push'); s.shake = 8; };
   M.key = function (s, g, inp) { const S = s.S; if (S.push && inp.pressed('a')) { this.pushNow(s); return true; } return false; };
   M.tap = function (s, g, p) { const S = s.S; if (S.push && p.x >= 258 && p.x <= 482 && p.y >= 38 && p.y <= 178) this.pushNow(s); };
   M.btn = function (s, id, g) { const S = s.S; if (id === 'push') { this.pushNow(s); return; } const r = btn0.call(this, s, id, g); if (S.hold === 0) S.q = []; if (S.ph === 'pick') { S.push = null; S.res = null; } return r; };
@@ -38292,7 +38293,9 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
     if ((S.shoot || S.jack) && S.ph === 'play') { S.acc += rate; while (S.acc >= 1) { S.acc -= 1; if (S.jack || S.balls >= 1) { if (!S.jack) S.balls -= 1; this.launch(s); } } }
     const keep = []; for (const b of S.bl) { if (pcStep(S, b)) keep.push(b); else if (b.in) this.enter(s, b); } S.bl = keep;
     for (const f of S.fly) f.t++; S.fly = S.fly.filter(f => f.t < 30);
-    if (S.den > 0) S.den--; if (S.flash > 0) S.flash--; if (S.prom > 0) S.prom--;
+    if (S.den > 0) S.den--; if (S.flash > 0) S.flash--; if (S.prom > 0) S.prom--; if (S.kyuin > 0) S.kyuin--;
+    if (S.gim && ++S.gim.t > 60) S.gim = null; for (const f of S.fl) f.t++; S.fl = S.fl.filter(f => f.t < 36);
+    if (S.rushEnd) { if (++S.rushEnd.t >= 140) S.rushEnd = null; else return; }
     // 大当たり終了の画面
     if (S.res) { S.res.t++; if (S.res.t === 130) { const r = S.res; S.res = null; if (r.kk) s.ban('確変突入！', '#ff6aa0', `${S.m.st}回転のあいだ、当たりやすい・右打ち`); else s.ban('時短', PW.good, `${S.m.jt}回転のあいだ、玉が減りにくい・右打ち`); } return; }
     // 大当たり（アタッカーが開いて、玉が入るたびに払い出し）
@@ -38303,7 +38306,7 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
       if (J.paid >= J.pay && J.f > 100) {
         S.atkOpen = false; S.jack = null; S.hits++; S.chain++; S.best = Math.max(S.best, S.chain);
         S.sup = J.kk ? { k: 'kak', n: S.m.st } : { k: 'jitan', n: S.m.jt };
-        S.res = { t: 0, got: J.pay, kk: J.kk, chain: S.chain }; this.sample(S);
+        S.rushBalls += J.pay; S.res = { t: 0, got: J.pay, kk: J.kk, chain: S.chain }; this.sample(S); if (J.kk) pcSnd('rush');
       }
       return;
     }
@@ -38312,20 +38315,23 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
       if (R.f === R.pushAt && !R.pushed) { if (!S.push) { S.push = { t: 0 }; tt.sfx('chime'); } S.push.t++; if (S.push.t > 160) this.pushNow(s); return; }
       R.f++;
       const f = R.f;
-      if (R.step && f < R.pre && (f - 16) % 12 === 0 && f >= 16) tt.sfx('cursor');
+      if (R.step && f < R.pre && (f - 16) % 12 === 0 && f >= 16) pcSnd('step');
       if (f > R.pre && f < R.gEnd && (f - R.pre) % 50 === 30) { tt.sfx('chime'); S.flash = 8; }
       if (R.rt !== 'ZEN' && (f === R.stL || f === R.stR)) tt.sfx('cursor');
-      if (R.reach && f === R.stR + 2 && R.rt !== 'ZEN') tt.sfx('drum');
-      if (R.rt === 'ZEN' && f === R.gEnd + 2) { tt.sfx('fanfare'); S.flash = 16; }
-      if (f === R.cutAt) { tt.sfx('chime'); }
-      if ((R.rt === 'SP' || R.rt === 'SPSP') && f === R.stR + 40) { tt.sfx('drum'); S.flash = 10; }
+      if (R.reach && f === R.stR + 2 && R.rt !== 'ZEN') { tt.sfx('drum'); pcSnd('tenpai'); }
+      if (R.reach && R.rt !== 'ZEN' && f > R.stR + 10 && f < R.len - 40 && (f - R.stR) % 26 === 0) pcSnd('beat');
+      if ((R.rt === 'SP' || R.rt === 'SPSP') && f === R.len - 40) pcSnd('push');
+      if ((R.rt === 'SP' || R.rt === 'SPSP') && f === R.len - 22) { pcSnd(R.hit ? 'win' : 'lose'); if (R.hit) S.flash = 14; }
+      if (R.rt === 'ZEN' && f === R.gEnd + 2) { pcSnd('kyuin'); S.flash = 16; S.gim = { t: 0 }; }
+      if (f === R.cutAt) { if (R.cut === 'gold') pcSnd('kyuin'); else tt.sfx('chime'); }
+      if ((R.rt === 'SP' || R.rt === 'SPSP') && f === R.stR + 40) { pcSnd('gakon'); S.flash = 10; S.gim = { t: 0 }; s.shake = 6; }
       if (f >= R.len) {
         S.reels = R.res.slice(); S.roll = null; this.sample(S);
-        if (R.hit) { tt.sfx('fanfare'); s.ban('大当たり！', PW.acc, `${R.res.join(' ')}${R.kk && !R.promo ? '　確変図柄！' : ''}`, { life: 140 }); s.shake = 14; s.burst(370, 120, 40, PW.acc, { coin: true, sp: 4 }); S.jack = { f: 0, pay: S.m.pay, paid: 0, kk: R.kk, promo: R.promo }; S.prev = S.cur; S.cur = 0; S.flash = 20; }
+        if (R.hit) { tt.sfx('fanfare'); s.ban('大当たり！', PW.acc, `${R.res.join(' ')}${R.kk && !R.promo ? '　確変図柄！' : ''}`, { life: 140 }); s.shake = 14; s.burst(370, 120, 40, PW.acc, { coin: true, sp: 4 }); S.jack = { f: 0, pay: S.m.pay, paid: 0, kk: R.kk, promo: R.promo }; S.prev = S.cur; S.cur = 0; S.flash = 20; S.gim = { t: 0 }; }
         else {
           if (R.rt === 'SPSP' || R.rt === 'SP') tt.sfx('buzz');
-          if (S.sup) { S.sup.n--; if (S.sup.n <= 0) { S.sup = null; S.hist.unshift(S.chain); if (S.hist.length > 8) S.hist.length = 8; S.chain = 0; s.tip('電サポ終了…左打ちにもどしてください', PW.dim); } }
-          else if (S.chain) { S.hist.unshift(S.chain); S.chain = 0; }
+          if (S.sup) { S.sup.n--; if (S.sup.n <= 0) { const wasK = S.sup.k === 'kak'; S.sup = null; S.hist.unshift(S.chain); if (S.hist.length > 8) S.hist.length = 8; S.rushEnd = { t: 0, chain: S.chain, balls: S.rushBalls, kak: wasK }; S.chain = 0; S.rushBalls = 0; s.tip('電サポ終了…左打ちにもどしてください', PW.dim); } }
+          else if (S.chain) { S.hist.unshift(S.chain); S.chain = 0; S.rushBalls = 0; }
         }
       }
       return;
@@ -38354,6 +38360,7 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
     const P = (x, y) => [X + x * sc, Y + y * sc];
     const R = S.roll, hotR = R && R.reach && R.f > R.stR && (R.rt === 'SP' || R.rt === 'SPSP' || R.rt === 'ZEN');
     const hot = S.jack || S.res ? PW.acc : hotR ? (R.rt === 'ZEN' ? pcRainbow(s.t) : '#ff3a5a') : S.sup && S.sup.k === 'kak' ? '#ff4f9a' : S.sup ? PW.good : null;
+    const th = pcTheme(S); if (hot || S.kyuin) pcLeds(c, P, sc, s.t, S.kyuin || (R && R.rt === 'ZEN') ? (i => pcRainbow(s.t, i)) : S.sup && S.sup.k === 'kak' && !S.jack ? (i => th.rc[i % 2]) : hot, !!(hotR || S.jack || S.kyuin));
     if (hot && Math.floor(s.t / (hotR ? 3 : 5)) % 2 === 0) { c.save(); c.globalAlpha = 0.6; for (const [x, y, w, h] of [[60, 150, 56, 240], [970, 150, 56, 240], [60, 780, 56, 200], [970, 780, 56, 200], [96, 40, 260, 70], [730, 40, 260, 70]]) { const [a, b] = P(x, y); pR(c, a, b, w * sc, h * sc, hot); } c.restore(); }
     // 液晶の小窓
     const cells = [[424, 496], [504, 580], [589, 672]];
@@ -38367,6 +38374,8 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
     if (S.atkOpen) { const [a, b] = P(498, 846); pR(c, a, b, 96 * sc, 22 * sc, '#1a0006'); if (s.t % 8 < 4) pR(c, a, b - 2, 96 * sc, 2, PW.acc); }
     // 玉（大きめ・つや）
     for (const b of S.bl) { const [x, y] = P(b.x, b.y); pR(c, x - 2, y - 2, 4, 4, '#8a90a0'); pR(c, x - 2, y - 2, 3, 3, '#c8ccd8'); pR(c, x - 1, y - 2, 1, 1, '#ffffff'); pR(c, x + 1, y + 1, 1, 1, '#4a5060'); }
+    for (const f of S.fl) { const [x, y] = P(f.x, f.y); c.save(); c.globalAlpha = Math.max(0, 1 - f.t / 36); pT(c, f.s, x, y - 10 - f.t * 0.6, { size: 12, color: f.s === '+3' ? '#7ad0ff' : '#ffe94a', align: 'center', outline: '#05030a', ow: 1 }); c.restore(); }
+    pcGimmick(c, P, sc, S.gim, s.t, th.rc[0]);
     const [tx0, ty0] = P(543, 1288); pR(c, tx0 - 42, ty0 - 9, 84, 18, '#0a0610'); pR(c, tx0 - 41, ty0 - 8, 82, 16, '#1a1020'); pT(c, `${Math.floor(S.balls).toLocaleString()}玉`, tx0, ty0 - 7, { size: 12, color: PW.cyan, align: 'center', shadow: null });
     return W;
   };
@@ -38406,22 +38415,20 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
   M.lcd = function (s, c, X, Y, W, H) {
     const S = s.S, R = S.roll, J = S.jack, t = s.t, kak = S.sup && S.sup.k === 'kak', jit = S.sup && S.sup.k === 'jitan';
     const reachOn = R && R.reach && R.rt !== 'ZEN' && R.f > R.stR, sp = reachOn && (R.rt === 'SP' || R.rt === 'SPSP') && R.f > R.stR + 40, zen = R && R.rt === 'ZEN' && R.f > R.gEnd;
-    const hitNow = (J && J.f < 80) || (R && R.hit && R.f >= R.len - 20 && R.f > R.stR && !R.reach);
+    const hitNow = (J && J.f < 80) || (R && R.hit && R.f >= R.len - 20 && R.f > R.stR && !R.reach), th = pcTheme(S);
     pBev(c, X - 4, Y - 4, W + 8, H + 8, '#c9962a'); pR(c, X, Y, W, H, '#000');
     c.save(); c.beginPath(); c.rect(X, Y, W, H); c.clip();
     // 背景
     if (J || S.res) { pBands(c, X, Y, W, H, ['#5a3000', '#7a4a00', '#c88a10', '#e8a810', '#ffd23f']); for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2 + t / 40; pLine(c, X + W / 2, Y + H / 2, X + W / 2 + Math.cos(a) * 170, Y + H / 2 + Math.sin(a) * 170, 'rgba(255,255,210,0.28)'); } }
     else if (zen) { for (let k = 0; k < 7; k++) pR(c, X, Y + Math.round(k * H / 7), W, Math.ceil(H / 7), pcRainbow(t, k)); pDith(c, X, Y, W, H, 'rgba(0,0,0,0.25)', t & 1); }
     else if (sp) { pBands(c, X, Y, W, H, ['#1a0008', '#3a0010', '#6a0018', '#3a0010', '#1a0008']); for (let k = 0; k < 22; k++) { const a = k / 22 * Math.PI * 2 + (k % 3) * 0.1, r0 = 30 + ((t * 4 + k * 13) % 60); pLine(c, X + W / 2 + Math.cos(a) * r0, Y + H / 2 + Math.sin(a) * r0, X + W / 2 + Math.cos(a) * (r0 + 40), Y + H / 2 + Math.sin(a) * (r0 + 40), 'rgba(255,120,120,0.35)'); }
-      pcHeroine(c, X + 40, Y + 100, 2, t); pcRival(c, X + W - 40, Y + 100, 2, t); if (t % 10 < 6) { pSpark(c, X + W / 2 + gbR(-8, 8), Y + 84 + gbR(-6, 6), (t >> 1) & 3, '#ffe94a'); } }
-    else if (kak) { pBands(c, X, Y, W, H, ['#3a0018', '#3a0018', '#7a1040', '#7a1040', '#c02a6a']); for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2 + t / 50; pLine(c, X + W / 2, Y + H + 10, X + W / 2 + Math.cos(a) * 200, Y + H + 10 + Math.sin(a) * 200, 'rgba(255,180,220,0.18)'); } }
-    else if (jit) pBands(c, X, Y, W, H, ['#002a18', '#002a18', '#0a5a34', '#0a5a34', '#1a8a50']);
-    else pBands(c, X, Y, W, H, ['#0a0a2a', '#0a0a2a', '#1a1a4a', '#1a1a4a', '#2a2a6a']);
-    if (!J && !S.res && !zen && !sp) {
-      for (let i = 0; i < 18; i++) { const sx = X + (i * 53) % W, sy = Y + (i * 29) % 60; if ((t + i * 9) % 40 < 30) pR(c, sx, sy, 1, 1, '#ffffff'); }
-      for (let j = 0; j < 40; j++) { const hw = Math.round(j * 1.6) + 6; pR(c, X + W / 2 - hw, Y + H - 40 + j, hw * 2, 1, j < 10 ? '#f0f4ff' : kak ? '#5a1a40' : jit ? '#1a4a3a' : '#3a3a7a'); }
-      for (const p of S.petals) { const px = X + p.x + Math.sin(p.ph + p.y / 9) * 6, py = Y + p.y; pR(c, px, py, 2, 1, '#ffb0d0'); pR(c, px + 1, py + 1, 1, 1, '#ff80b0'); }
-    }
+      const endK = R.len - R.f, cl = endK <= 40 && (R.rt !== 'SPSP' || R.pushed) ? 1 - Math.max(0, endK) / 40 : 0;
+      let hx = X + 40, rx = X + W - 40, hy = Y + 100, ry = Y + 100;
+      if (cl > 0) { if (R.hit) { hx += Math.min(1, cl * 2) * 60; if (cl > 0.55) ry += (cl - 0.55) * 90; } else { rx -= Math.min(1, cl * 2) * 60; if (cl > 0.55) hy += (cl - 0.55) * 90; } }
+      if (!(cl > 0.55 && !R.hit && t % 4 < 2)) pcHeroine(c, hx, hy, 2, t); if (!(cl > 0.55 && R.hit && t % 4 < 2)) th.rival(c, rx, ry, 2, t);
+      if (cl > 0.45 && cl < 0.62) { for (let k = 0; k < 4; k++) pLine(c, X + W / 2 - 40 + k * 6, Y + 40, X + W / 2 + 40 + k * 6, Y + 120, '#ffffff'); }
+      if (cl <= 0.62 && t % 10 < 6) { pSpark(c, X + W / 2 + gbR(-8, 8), Y + 84 + gbR(-6, 6), (t >> 1) & 3, '#ffe94a'); } }
+    else { th.bg(c, X, Y, W, H, t, S, kak ? 'kak' : jit ? 'jit' : 'normal'); if (kak) for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2 + t / 50; pLine(c, X + W / 2, Y + H + 10, X + W / 2 + Math.cos(a) * 200, Y + H + 10 + Math.sin(a) * 200, 'rgba(255,220,240,0.14)'); } }
     if (reachOn && !sp && t % 6 < 3) pR(c, X, Y, W, H, R.hit && R.f > R.stR + 60 ? 'rgba(255,210,63,0.25)' : 'rgba(255,40,80,0.22)');
     // 群予告（花びらのあらし）
     for (const w of S.swarm) { const px = X + w.x, py = Y + w.y + Math.sin(w.ph + w.x / 12) * 6; pR(c, px, py, 4, 2, '#ff9ac8'); pR(c, px + 1, py + 2, 2, 1, '#ff5a9a'); pR(c, px + 3, py - 1, 1, 1, '#ffffff'); }
@@ -38450,9 +38457,11 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
     if (reachOn && !(R.hit && R.f > R.len - 24)) {
       const k = R.f - R.stR;
       if (R.rt === 'N' || k <= 40) { const x = X + W - Math.min(W, k * 12); pT(c, 'リーチ！', Math.max(X + W / 2, x), Y + H - 30, { size: 24, color: '#ffe94a', align: 'center', outline: '#7a0020', ow: 2 }); }
-      else { pT(c, R.rt === 'SPSP' ? 'SPSPリーチ' : 'SPリーチ', X + W / 2, Y + 4, { size: 16, color: '#ffe94a', align: 'center', outline: '#5a0010', ow: 2 }); pT(c, 'VS', X + W / 2, Y + 22, { size: 16, color: '#ffffff', align: 'center', outline: '#5a0010', ow: 2 });
+      else if (k < 58) { pT(c, '発展!!', X + W / 2, Y + 44, { size: 32, color: '#ffffff', align: 'center', outline: '#c8102e', ow: 3 }); }
+      else if (R.len - R.f > 18) { pT(c, R.rt === 'SPSP' ? `SPSPリーチ　${th.rname}決戦` : 'SPリーチ', X + W / 2, Y + 4, { size: 16, color: '#ffe94a', align: 'center', outline: '#5a0010', ow: 2 }); pT(c, `VS ${th.rname}`, X + W / 2, Y + 22, { size: 16, color: '#ffffff', align: 'center', outline: '#5a0010', ow: 2 });
         if (R.rt === 'SPSP' && t % 20 < 14) { pR(c, X + W / 2 - 30, Y + H - 20, 60, 16, '#ffd23f'); pT(c, '激アツ', X + W / 2, Y + H - 19, { size: 12, color: '#7a0010', align: 'center', shadow: null }); } }
     }
+    if (sp) { const endK = R.len - R.f, cl = endK <= 40 && (R.rt !== 'SPSP' || R.pushed) ? 1 - Math.max(0, endK) / 40 : 0; if (cl > 0.62) { pR(c, X, Y + 56, W, 40, R.hit ? 'rgba(90,40,0,0.55)' : 'rgba(5,3,10,0.6)'); pT(c, R.hit ? 'WIN!!' : 'LOSE…', X + W / 2, Y + 58, { size: 32, color: R.hit ? '#ffe94a' : '#9aa3c7', align: 'center', outline: R.hit ? '#7a3000' : '#05030a', ow: 3 }); } }
     if (zen) pT(c, '全回転!!', X + W / 2, Y + 6, { size: 24, color: '#ffffff', align: 'center', outline: pcRainbow(t, 2), ow: 2 });
     // PUSHボタン
     if (S.push) { const pr = 18 + Math.round(Math.sin(t / 3) * 2); pCirc(c, X + W / 2, Y + H / 2 + 4, pr + 3, '#05030a'); pCirc(c, X + W / 2, Y + H / 2 + 4, pr, '#e8203a'); pCirc(c, X + W / 2 - 5, Y + H / 2 - 1, 5, '#ff8a9a'); pT(c, 'PUSH', X + W / 2, Y + H / 2 - 4, { size: 12, color: '#ffffff', align: 'center', shadow: null }); }
@@ -38464,8 +38473,13 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
     if (S.res) { const r = S.res; pR(c, X + 14, Y + 46, W - 28, 84, 'rgba(10,6,0,0.6)'); pT(c, '大当たり終了', X + W / 2, Y + 50, { size: 16, color: '#ffffff', align: 'center', outline: '#5a3000', ow: 2 });
       pT(c, `獲得 ${r.got.toLocaleString()}玉`, X + W / 2, Y + 72, { size: 24, color: '#fff4c0', align: 'center', outline: '#5a3000', ow: 2 });
       pT(c, r.kk ? 'CHANCE TIME 突入！' : '時短に突入', X + W / 2, Y + 102, { size: 16, color: r.kk ? '#ff8ab8' : '#8af0a8', align: 'center', outline: '#05030a', ow: 2 }); }
-    if (kak && !R && !J && !S.res) pT(c, `CHANCE TIME　残り${S.sup.n}回`, X + W / 2, Y + 6, { size: 16, color: '#ffe0f0', align: 'center', outline: '#5a0028' });
+    if (kak && !J && !S.res && !sp && !zen) { const [c1, c2] = th.rc; pR(c, X + 4, Y + 4, 98, 18, '#05030a'); pR(c, X + 5, Y + 5, 96, 16, t % 30 < 15 ? c1 : pShade(c1, -0.2)); pT(c, th.rush, X + 53, Y + 5, { size: 12, color: '#ffffff', align: 'center', outline: '#05030a', ow: 1 });
+      pT(c, `${S.chain}連`, X + W - 8, Y + 3, { size: 24, color: c2, align: 'right', outline: '#05030a', ow: 2 }); pT(c, `RUSH獲得 ${S.rushBalls.toLocaleString()}玉`, X + 8, Y + 24, { size: 12, color: '#ffffff', outline: '#05030a', ow: 1 });
+      const gw = W - 16, fr = Math.max(0, Math.min(1, S.sup.n / S.m.st)); pR(c, X + 8, Y + H - 9, gw, 6, '#05030a'); pR(c, X + 9, Y + H - 8, Math.round((gw - 2) * fr), 4, fr < 0.2 ? '#ff5d6c' : c1); if (!(R && R.reach && R.f > R.stR)) pT(c, `残り${S.sup.n}回`, X + W / 2, Y + H - 22, { size: 12, color: '#ffffff', align: 'center', outline: '#05030a', ow: 1 }); }
     else if (jit && !R && !J && !S.res) pT(c, `時短　残り${S.sup.n}回`, X + W / 2, Y + 6, { size: 16, color: '#e0ffe8', align: 'center', outline: '#003a18' });
+    if (S.rushEnd) { const r = S.rushEnd; pR(c, X, Y, W, H, 'rgba(5,3,10,0.7)'); pT(c, r.kak ? `${th.rush} 終了` : '時短 終了', X + W / 2, Y + 30, { size: 16, color: '#ffffff', align: 'center', outline: '#05030a', ow: 2 });
+      pT(c, `${r.chain}連チャン`, X + W / 2, Y + 54, { size: 32, color: th.rc[1], align: 'center', outline: '#05030a', ow: 3 }); pT(c, `総獲得 ${r.balls.toLocaleString()}玉`, X + W / 2, Y + 94, { size: 16, color: '#fff4c0', align: 'center', outline: '#05030a', ow: 2 }); }
+    if (S.kyuin > 0 && S.kyuin % 4 < 2) { for (let k = 0; k < 4; k++) pR(c, X + k, Y + k, W - k * 2, 1, pcRainbow(t, k)), pR(c, X + k, Y + H - 1 - k, W - k * 2, 1, pcRainbow(t, k + 2)), pR(c, X + k, Y + k, 1, H - k * 2, pcRainbow(t, k + 4)), pR(c, X + W - 1 - k, Y + k, 1, H - k * 2, pcRainbow(t, k + 6)); }
     // 右打ちの案内
     if (this.right(S) && !J && !S.res && (t >> 4) % 2) { pR(c, X + W - 58, Y + H - 20, 54, 16, '#ffd23f'); pT(c, '右打ち▶', X + W - 31, Y + H - 19, { size: 12, color: '#3a1a00', align: 'center', shadow: null }); }
     // 当該保留（いま回っている保留）
@@ -38474,6 +38488,59 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
     c.restore();
   };
 })();
+
+// ===== パチンコの向上2：機種ごとのテーマ・RUSH・決着演出・役物ギミック・LEDランプ・効果音 =====
+const PC_DRAGON = ["....KK........KK....", "...KRRK......KRRK...", "...KRRRK....KRRRK...", "....KRRRKKKKRRRK....", "...KRRRRRRRRRRRRK...", "..KRRRRRRRRRRRRRRK..", "..KRRYYRRRRRRYYRRK..", "..KRRYKRRRRRRKYRRK..", ".KRRRRRRRRRRRRRRRRK.", ".KRRRRRRRRRRRRRRRRK.", "KRRRRKKKKKKKKKKRRRRK", "KRRRKWKWKWKWKWKKRRRK", "KRRRKKKKKKKKKKKKRRRK", ".KRRRRRRRRRRRRRRRRK.", "..KRRRRRRRRRRRRRRK..", "..KOOKRRRRRRRRKOOK..", ".KOOOOKKKKKKKKOOOOK.", "KOOOOOOOOOOOOOOOOOOK", "KOOOOOOOOOOOOOOOOOOK", ".KKKKKKKKKKKKKKKKKK."];
+const PC_ROBOT = [".........KK.........", "........KCCK........", ".........KK.........", "....KKKKKKKKKKKK....", "...KMMMMMMMMMMMMK...", "...KMKKKKKKKKKKMK...", "...KMKCCKKKKCCKMK...", "...KMKCCKKKKCCKMK...", "...KMKKKKKKKKKKMK...", "...KMMMMMMMMMMMMK...", "...KMMMKKKKKKMMMK...", "...KMMMKCCCCKMMMK...", "....KKKKKKKKKKKK....", "..KKMMMMMMMMMMMMKK..", ".KMMKMMMMMMMMMMKMMK.", "KMMMKMMMPPPPMMMKMMMK", "KMMMKMMMPPPPMMMKMMMK", "KMMMKMMMMMMMMMMKMMMK", ".KKKKMMMMMMMMMMKKKK.", "....KKKKKKKKKKKK...."];
+const PC_DRAGON_PAL = { K: '#1a0806', R: '#c8301a', Y: '#ffd23f', W: '#f4f0e0', O: '#7a1a10' };
+const PC_ROBOT_PAL = { K: '#0a0a14', M: '#5a6a8a', C: '#5fd7ff', P: '#ff4fa0' };
+function pcSprite(c, key, rows, pal, x, y, s, t, ph) { const b = Math.round(Math.cos(t / 7 + (ph || 0))), cv = pArt(key, rows, pal); pBlit(c, cv, Math.round(x - 10 * s), Math.round(y - rows.length * s + b * s), { sc: s }); }
+// 機種ごとのテーマ（背景・敵・RUSHの名前）
+const PC_THEME = {
+  ama: { rush: 'さくらRUSH', rc: ['#ff6aa8', '#ffd0e8'], rival: (c, x, y, s, t) => pcRival(c, x, y, s, t), rname: '鬼',
+    bg(c, X, Y, W, H, t, S, mode) { pBands(c, X, Y, W, H, mode === 'kak' ? ['#3a0018', '#3a0018', '#7a1040', '#7a1040', '#c02a6a'] : mode === 'jit' ? ['#002a18', '#002a18', '#0a5a34', '#0a5a34', '#1a8a50'] : ['#0a0a2a', '#0a0a2a', '#1a1a4a', '#1a1a4a', '#2a2a6a']);
+      for (let i = 0; i < 18; i++) { const sx = X + (i * 53) % W, sy = Y + (i * 29) % 60; if ((t + i * 9) % 40 < 30) pR(c, sx, sy, 1, 1, '#ffffff'); }
+      for (let j = 0; j < 40; j++) { const hw = Math.round(j * 1.6) + 6; pR(c, X + W / 2 - hw, Y + H - 40 + j, hw * 2, 1, j < 10 ? '#f0f4ff' : mode === 'kak' ? '#5a1a40' : mode === 'jit' ? '#1a4a3a' : '#3a3a7a'); }
+      for (const p of S.petals) { const px = X + p.x + Math.sin(p.ph + p.y / 9) * 6, py = Y + p.y; pR(c, px, py, 2, 1, '#ffb0d0'); pR(c, px + 1, py + 1, 1, 1, '#ff80b0'); } } },
+  lmid: { rush: '烈火RUSH', rc: ['#ff5a1a', '#ffd23f'], rival: (c, x, y, s, t) => pcSprite(c, 'pc_dragon', PC_DRAGON, PC_DRAGON_PAL, x, y, s, t), rname: '炎竜',
+    bg(c, X, Y, W, H, t, S, mode) { pBands(c, X, Y, W, H, mode === 'kak' ? ['#2a0000', '#5a0a00', '#8a1a00', '#c83a00', '#ff6a1a'] : mode === 'jit' ? ['#2a1a00', '#4a3000', '#7a5000', '#a87010', '#d89a20'] : ['#140404', '#2a0808', '#4a0e0a', '#6a1a10', '#8a2a14']);
+      for (let j = 0; j < 46; j++) { const hw = Math.round(j * 2.2) + 8; pR(c, X + W / 2 - hw, Y + H - 46 + j, hw * 2, 1, j < 6 ? (t % 12 < 6 ? '#ffb020' : '#ff6a10') : '#2a0a06'); }
+      for (let k = 0; k < 4; k++) { const ly = Y + H - 40 + k * 8 + ((t >> 2) + k) % 3; pR(c, X + W / 2 - 3 - k, ly, 2, 6, '#ff6a10'); }
+      for (const p of S.petals) { const px = X + p.x + Math.sin(p.ph + p.y / 7) * 4, py = Y + H - p.y; pR(c, px, py, 2, 2, p.ph > 3 ? '#ffb020' : '#ff5a10'); pR(c, px, py, 1, 1, '#fff0a0'); } } },
+  mid: { rush: 'ネオンRUSH', rc: ['#5fd7ff', '#ff4fa0'], rival: (c, x, y, s, t) => pcSprite(c, 'pc_robot', PC_ROBOT, PC_ROBOT_PAL, x, y, s, t), rname: '鉄人',
+    bg(c, X, Y, W, H, t, S, mode) { pBands(c, X, Y, W, H, mode === 'kak' ? ['#1a0030', '#2a0050', '#4a0a7a', '#6a1aa0', '#8a2ac8'] : mode === 'jit' ? ['#001a2a', '#002a3a', '#004a5a', '#0a6a7a', '#1a8a9a'] : ['#05040e', '#0a0818', '#120e26', '#1a1434', '#241a44']);
+      for (let i = 0; i < 9; i++) { const bw = 18 + (i * 7) % 12, bh = 40 + (i * 13) % 50, bx = X + i * 26 - 6, by = Y + H - bh; pR(c, bx, by, bw, bh, '#0a0a18'); for (let wy = by + 4; wy < Y + H - 4; wy += 6) for (let wx = bx + 3; wx < bx + bw - 3; wx += 5) if (((wx * 7 + wy * 3 + (t >> 5)) % 11) < 4) pR(c, wx, wy, 2, 2, (wx + wy) % 3 ? '#ffe090' : '#a0e8ff'); }
+      const nc = ['#ff4fa0', '#5fd7ff', '#ffd23f']; for (let k = 0; k < 3; k++) { if ((t + k * 37) % 90 > 6) { pR(c, X + 20 + k * 70, Y + 40 + (k % 2) * 14, 36, 8, nc[k]); pR(c, X + 22 + k * 70, Y + 42 + (k % 2) * 14, 32, 4, pShade(nc[k], 0.5)); } }
+      for (let k = 0; k < 16; k++) { const rx = X + (k * 37 + t * 3) % W, ry = Y + (k * 23 + t * 6) % H; pR(c, rx, ry, 1, 4, 'rgba(160,200,255,0.35)'); } } },
+};
+function pcTheme(S) { return PC_THEME[S && S.m && S.m.id] || PC_THEME.ama; }
+// 効果音（WebAudio の音を組み合わせる）
+function pcSnd(k) {
+  try { const A = tt; if (!A || !A.ctx || A.muted || !A.tone) return; const t0 = A.ctx.currentTime + 0.005, T = (f, s, d, o) => A.tone(f, t0 + s, d, o || {}), N = (s, d, o) => A.noise && A.noise(t0 + s, d, o || {});
+    switch (k) {
+      case 'tenpai': [784, 988, 1175, 1568].forEach((f, i) => T(f, i * 0.05, 0.08, { vol: 0.05, wave: 'square' })); break;
+      case 'kyuin': for (let i = 0; i < 14; i++) T(700 + i * 130, i * 0.018, 0.03, { vol: 0.05, wave: 'square' }); T(2600, 0.26, 0.25, { vol: 0.05, wave: 'triangle' }); break;
+      case 'gakon': N(0, 0.14, { vol: 0.12, filter: 'lowpass', freq: 500 }); T(90, 0, 0.22, { vol: 0.12, wave: 'triangle' }); T(60, 0.08, 0.2, { vol: 0.1, wave: 'triangle' }); break;
+      case 'win': [659, 784, 1047, 1319, 1568].forEach((f, i) => T(f, i * 0.07, 0.12, { vol: 0.06, wave: 'square' })); T(1568, 0.36, 0.4, { vol: 0.05 }); break;
+      case 'lose': [392, 349, 294, 220].forEach((f, i) => T(f, i * 0.12, 0.16, { vol: 0.05, wave: 'sawtooth' })); break;
+      case 'beat': T(110, 0, 0.09, { vol: 0.07, wave: 'triangle' }); N(0.12, 0.03, { vol: 0.03, filter: 'highpass', freq: 6000 }); T(165, 0.24, 0.09, { vol: 0.06, wave: 'triangle' }); N(0.36, 0.03, { vol: 0.03, filter: 'highpass', freq: 6000 }); break;
+      case 'push': N(0, 0.1, { vol: 0.12, filter: 'lowpass', freq: 1200 }); T(220, 0, 0.18, { vol: 0.08, wave: 'square' }); T(440, 0.06, 0.2, { vol: 0.06, wave: 'square' }); break;
+      case 'jara': for (let i = 0; i < 4; i++) N(i * 0.035, 0.02, { vol: 0.04, filter: 'highpass', freq: 3500 + i * 400 }); break;
+      case 'step': T(880, 0, 0.06, { vol: 0.05, wave: 'square' }); T(1320, 0.05, 0.08, { vol: 0.05, wave: 'square' }); break;
+      case 'rush': [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => T(f, i * 0.09, 0.14, { vol: 0.06, wave: 'square' })); break;
+    } } catch (e) { }
+}
+// 役物（台の上から金のかざりが落ちてくる）
+function pcGimmick(c, P, sc, g, t, col) {
+  if (!g) return; const k = g.t, d = k < 12 ? k / 12 : k < 46 ? 1 : Math.max(0, 1 - (k - 46) / 12); if (d <= 0) return;
+  const [cx, y0] = P(543, 30), [, y1] = P(543, 300), cy = Math.round(y0 + (y1 - y0) * (d < 1 ? 1 - Math.pow(1 - d, 3) : 1)) + (k >= 12 && k < 16 ? (k % 2 ? 2 : -2) : 0);
+  const r = 15; pCirc(c, cx, cy, r + 2, '#3a2000'); pCirc(c, cx, cy, r, '#e8a810'); pCirc(c, cx, cy, r - 3, '#ffd23f'); for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 + t / 20; pR(c, Math.round(cx + Math.cos(a) * (r + 3)) - 1, Math.round(cy + Math.sin(a) * (r + 3)) - 1, 3, 3, i % 2 ? '#fff4c0' : '#ffd23f'); }
+  pCirc(c, cx, cy, 6, col || '#d0203a'); pR(c, cx - 3, cy - 4, 2, 2, '#ffffff'); pR(c, cx - 6, cy - r - 6, 12, 6, '#ffd23f'); pR(c, cx - 6, cy - r - 9, 3, 3, '#ffd23f'); pR(c, cx - 1, cy - r - 10, 3, 4, '#ffd23f'); pR(c, cx + 4, cy - r - 9, 3, 3, '#ffd23f');
+  if (k >= 12 && k < 30 && t % 4 < 2) { c.save(); c.globalAlpha = 0.35; pCirc(c, cx, cy, r + 10, '#fff4c0'); c.restore(); }
+}
+// 盤面のまわりを走るLEDランプ
+function pcLeds(c, P, sc, t, col, fast) { const n = 30, head = Math.floor(t / (fast ? 1 : 2)) % n;
+  for (let i = 0; i < n; i++) { const a = Math.PI * 1.5 + i / n * Math.PI * 2, [x, y] = P(543 + Math.cos(a) * 470, 640 + Math.sin(a) * 470), dd = (head - i + n) % n; const on = dd < 6; pR(c, Math.round(x) - 2, Math.round(y) - 2, 4, 4, '#1a0a10'); if (on) { c.save(); c.globalAlpha = 1 - dd / 6; pR(c, Math.round(x) - 2, Math.round(y) - 2, 4, 4, typeof col === 'function' ? col(i) : col); c.restore(); } } }
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
