@@ -35278,6 +35278,7 @@ function installGamble() {
   try { town2Install(); } catch (e) { console.error('[t2] install', e); }
   try { shInstall(); } catch (e) { console.error('[shikaku] install', e); }
   try { pmInstall(); } catch (e) { console.error('[pmgr] install', e); }
+  try { tbInstall(); } catch (e) { console.error('[smoke] install', e); }
   try { gbPatchKanraku(); } catch (e) { console.error('[gb] kanraku', e); }
   try { gbPatchTokyo(); } catch (e) { console.error('[gb] tokyo', e); }
   try {
@@ -37111,10 +37112,7 @@ async function hallCounter(g) {
   else if (k === 1) { if (num(g.state.money) < 300) { await E.qe(g, { title: '景品カウンター', color: '#c8102e', text: 'お金が足りない…。' }); return; } g.state.money -= 300; try { g.eat ? g.eat(10, { fill: 15, silent: true }) : g.addNeed('hunger', 10); } catch (e) { } await E.qe(g, { title: '景品カウンター', color: '#c8102e', text: 'チョコレート菓子を買った。打ちながら、ひと口。' }); }
   else if (k === 2) await E.qe(g, { title: '収支メモ', color: '#3a3a4a', text: gbShushi(g, 'pachinko') });
 }
-async function hallSmoke(g) {
-  const y = hallYear(g);
-  await g.say(y >= 2020 ? ['ガラス張りの喫煙室だ。', '2020年4月から、法律でパチンコ店の中も原則禁煙になった。', 'たばこを吸う人は、ここで吸ってから台にもどっていく。'] : ['喫煙所のコーナーだ。', 'とはいえ、店内のどこでもたばこが吸えるので、ホール全体がけむっている…。']);
-}
+async function hallSmoke(g) { return tbHallSmoke(g); }
 
 // ===== ネオン街の店内：居酒屋ほろよい・牛丼ドット屋・カプセルホテル ドットイン・喫煙所 =====
 // もとの店の処理（食事・お酒・宿泊・一服）は、ネオン街の地図からそのまま受けつぐ
@@ -37689,9 +37687,9 @@ function t2NewPlaces() {
       tp('copier', 14, 2, 1, 1, 0.8, { text: 'コピー機。チケットの発券もできる。' }), tp('atm', 15, 2, 1, 1, 1, { text: 'ATM。24時間お金をおろせる。' }),
       tp('kshelf', 2, 4, 4, 1, 0.9, { talk: t2Mart, a: { s: 1, label: 'おかし' } }), tp('kshelf', 2, 6, 4, 1, 0.9, { talk: t2Mart, a: { s: 3, label: '日用品', lc: '#3ab04a' } }),
       tp('kshelf', 7, 4, 4, 1, 0.9, { talk: t2Mart, a: { s: 5, label: 'パン' , lc: '#e8a830' } }), tp('kshelf', 7, 6, 4, 1, 0.9, { talk: t2Mart, a: { s: 7, label: 'カップめん', lc: '#c8282a' } }),
-      tp('kregister', 11, 7, 5, 1, 0.8, { frames: 4, speed: 14, talk: t2Mart }),
+      tp('kregister', 11, 7, 5, 1, 0.8, { frames: 4, speed: 14, talk: tbMartMenu }),
       tp('magrack', 1, 9, 5, 1, 0.5, { text: ['窓ぎわの雑誌コーナー。', '立ち読み禁止のテープが貼ってある雑誌もある。'] }),
-      t2npc(id + '_clerk', 13, 6, 'down', T2L.mart, '店員さん', null, { talk: t2Mart }),
+      t2npc(id + '_clerk', 13, 6, 'down', T2L.mart, '店員さん', null, { talk: tbMartMenu }),
       t2npc(id + '_clerk2', 6, 8, 'up', { ...T2L.mart, hair: 'bob', hairColor: 'black' }, '店員さん', ['（品出しをしている）', 'いらっしゃいませー！']),
       t2npc(id + '_c1', 6, 3, 'up', T2L.sala, 'サラリーマン', ['（お弁当を選んでいる）', 'からあげ弁当か、のり弁か…。']),
       t2npc(id + '_c2', 3, 8, 'down', T2L.stu, '学生', ['（マンガ雑誌を立ち読みしている）']),
@@ -40568,6 +40566,106 @@ function pmDrawLook(s, c, g, H) {
   s.btn('k-:' + i, '−', 192, 326, 22, 22, { size: 12, off: m.k === 's' ? num(I.k, 1) <= 1 : num(I.k) <= -2 }); s.btn('k+:' + i, '＋', 290, 326, 22, 22, { size: 12, off: m.k === 's' ? num(I.k, 1) >= 6 : num(I.k) >= 2 });
   pT(c, L && L.per[i] ? `前日：稼働 ${L.per[i][0]}%` : '前日：—', 322, 324, { size: 12, color: PW.dim }); if (gr != null) pT(c, `粗利 ${gbSign(gr)}`, 322, 339, { size: 12, color: gr >= 0 ? PW.good : PW.bad });
   s.btn('cat:' + i, '入替', 478, 324, 60, 26, { size: 12, kind: 'pri' }); s.btn('lkback', 'もどる', 544, 324, 84, 26, { size: 12, back: true });
+}
+
+// ===== たばこ：スマホの「たばこ」アプリ（持ち物・依存度・吸える場所・一服・購入・ニコチンガム・禁煙）、ホールの喫煙室、ドットマートのたばこカウンター =====
+// 吸う・買うのしくみ（年齢確認・場所のルール・過料・依存・禁断症状）は、もとのゲームの g.smoke / g.buyCigarettes / g.canSmokeHere を使う。
+const TB_PRICE = [[2026, 4, 600], [2021, 10, 580], [2020, 10, 540], [2018, 10, 480], [2014, 4, 430], [2010, 10, 410], [2006, 7, 300], [2003, 7, 270], [1998, 12, 250], [0, 0, 220]];
+function tbYM(g) { try { const d = dateOf(g, g.state.day); return d.year * 100 + d.month; } catch (e) { return 202604; } }
+function tbPrice(g) { const ym = tbYM(g); for (const [y, m, p] of TB_PRICE) if (ym >= y * 100 + m) return p; return 600; }
+function tbJ(g) { const J = isObj(g.state.justice) ? g.state.justice : {}; return { J, S: isObj(J.smoke) ? J.smoke : { cigs: 0, today: 0, total: 0, clean: 0, load: 0, day: 0, yesterday: 0 } }; }
+function tbX(g) { const s = g.state; if (!isObj(s.tbx)) s.tbx = { quit: false, gum: 0, best: 0 }; return s.tbx; }
+function tbPlace(g) { try { return g.map && g.map.placeId; } catch (e) { return null; } }
+const TB_STORE = /^(konbini|t2_mart_.*|super|shop_yakkyoku)$/, TB_VEND = /^(kan_kitsuen|kanraku_pachi|eki|station_.*|shop_tachinomi|shop_izakaya|shop_horoyoi|kan_izakaya|kan_hotel|w_.*_hotel|hotel|karaoke|shop_karaoke_.*|t2_laundry)$/;
+function tbCanBuy(g) { const id = tbPlace(g), K = id && E.Ke ? E.Ke[id] : null; if (!id) return { ok: false };
+  if (TB_STORE.test(id)) return { ok: true, counter: true, where: K ? K.name : 'コンビニ' }; if (TB_VEND.test(id)) return { ok: true, counter: false, where: 'たばこの自販機' };
+  if (K && K.kind !== 'building') return { ok: true, counter: false, where: '道ばたのたばこの自販機' }; return { ok: false, where: K ? K.name : '' }; }
+function tbHave(g) { const { S } = tbJ(g); return num(S.cigs) + num(g.state.items && g.state.items.tabako) * 20; }
+function tbHere(g) { try { return typeof g.canSmokeHere === 'function' ? g.canSmokeHere() : null; } catch (e) { return null; } }
+function tbMsg(g, text) { try { g.message({ from: 'たばこ', kind: 'chat', text }); } catch (e) { } }
+// ---- 吸う・買う（アプリを閉じてから、もとのゲームの流れで） ----
+async function tbSmokeNow(g, o = {}) {
+  const X = tbX(g); if (typeof g.smoke !== 'function') return null; let r = null;
+  try { r = await g.smoke(o); } catch (e) { console.error('[smoke]', e); return null; }
+  if (r && r.ok) { X.lastDay = g.state.day; X.lastMin = clockMin(g); if (X.quit) { X.quit = false; X.relapse = num(X.relapse) + 1; tbMsg(g, '禁煙中だったのに、吸ってしまった…。（禁煙モードは解除された）'); } try { g.advanceTime(5, 'smoke'); } catch (e) { } }
+  return r;
+}
+async function tbBuyNow(g, n = 1, item = 'tabako') {
+  const C = tbCanBuy(g); if (!C.ok) { await g.say('（ここではタバコを買えない。コンビニか、外の自販機へ）'); return false; }
+  if (item === 'gum') { const p = 980; if (num(g.state.money) < p) { await g.say('お金が足りない。'); return false; } g.state.money -= p; tbX(g).gum = num(tbX(g).gum) + 10; tt.sfx('coin'); await g.say(`ニコチンガムを買った。（10個入り ${yen(p)}）\nタバコを吸いたくなったら、かむと少し楽になる。`); return true; }
+  if (C.counter) { const k = await E.Ho(g, { title: 'たばこカウンター', color: '#3a5a8a', text: '「何番になさいますか？」\n（年齢確認のため、画面の「はい」を押してください）', choices: ['はい（20歳以上です）', 'やめる'] }); if (k !== 0) return false; }
+  let r = null; try { r = g.buyCigarettes(n, { counter: C.counter }); } catch (e) { console.error('[smoke] buy', e); return false; }
+  if (r && r.ok) { tt.sfx('coin'); await g.say(`タバコを${n}箱買った。（${yen(r.price)}・${C.where}）`); return true; } await g.say(r ? r.reason : '買えなかった。'); return false;
+}
+async function tbOpen(g) {
+  const r = await gbScene(g, { mode: 'tb', title: 'たばこ', sub: '吸える場所・依存度・禁煙', tcol: '#d8e0f0' });
+  if (r.act === 'smoke') await tbSmokeNow(g); else if (r.act === 'buy') await tbBuyNow(g, 1); else if (r.act === 'gumbuy') await tbBuyNow(g, 1, 'gum');
+}
+// ---- 毎朝（禁煙の記録） ----
+function tbTick(g) { const X = tbX(g), { J, S } = tbJ(g); if (!X.quit) return; const c = num(S.clean); X.best = Math.max(num(X.best), c);
+  for (const [d, t] of [[3, '禁煙3日目。いちばんつらい時期をこえた！'], [7, '禁煙1週間。食べ物がおいしく感じる。'], [30, '禁煙1か月！ 階段で息が切れにくくなった。'], [120, '禁煙1年！ 1年でタバコ代がだいぶ浮いた。']]) if (c === d && X.note !== d) { X.note = d; tbMsg(g, `【禁煙】${t}`); if (d >= 30) try { g.addNeed('stress', -10); } catch (e) { } } }
+// ---- アプリの画面 ----
+function tbPack(c, x, y, n, f) { // たばこの箱（上から見た20本）
+  const W = 110, H = 140; pR(c, x + 3, y + 3, W, H, 'rgba(0,0,0,0.4)'); pR(c, x, y, W, H, '#1c1a24'); pR(c, x + 2, y + 2, W - 4, H - 4, '#f4f2ee'); pR(c, x + 2, y + 38, W - 4, 34, '#2a4a8a'); pR(c, x + 2, y + 38, W - 4, 3, '#c9a24a');
+  pT(c, 'DOT', x + W / 2, y + 44, { size: 16, color: '#ffffff', align: 'center', shadow: null }); pT(c, 'MILD', x + W / 2, y + 59, { size: 12, color: '#c9d8f0', align: 'center', shadow: null });
+  pR(c, x + 5, y + 78, W - 10, 56, '#ffffff'); pR(c, x + 5, y + 78, W - 10, 1, '#3a3a4a'); ['喫煙は、あなたに', 'とって肺がんの', '原因の一つです'].forEach((t, i) => pT(c, t, x + W / 2, y + 82 + i * 16, { size: 12, color: '#3a3a4a', align: 'center', shadow: null }));
+  pR(c, x + 6, y + 6, W - 12, 28, '#c8c0b0'); for (let i = 0; i < 20; i++) { const cx = x + 10 + (i % 10) * 9.4, cy = y + 8 + Math.floor(i / 10) * 12; pCirc(c, cx + 4, cy + 5, 4, i < n ? '#e8a858' : '#5a5048'); if (i < n) pR(c, cx + 3, cy + 4, 2, 2, '#f8d8a8'); } }
+GB_MODES.tb = {
+  init(s, g) { s.S = { f: 0, qc: 0 }; },
+  btn(s, id, g) { const S = s.S, X = tbX(g);
+    if (id === 'close') { s.done(); return; }
+    if (id === 'smoke') { if (X.quit && S.qc !== 1) { S.qc = 1; s.tip('禁煙中…。もう一度押すと吸ってしまう', PW.bad); return; } s.done({ act: 'smoke' }); return; }
+    if (id === 'buy') { s.done({ act: 'buy' }); return; } if (id === 'gumbuy') { s.done({ act: 'gumbuy' }); return; }
+    if (id === 'gum') { if (num(X.gum) <= 0) return; X.gum--; const { J } = tbJ(g); J.smoker = Math.max(0, num(J.smoker) - 2); try { g.addNeed('stress', -5); } catch (e) { } s.tip('ニコチンガムをかんだ。少し落ちついた（ストレス −5・依存度 −2）', PW.good); return; }
+    if (id === 'quit') { X.quit = !X.quit; S.qc = 0; if (X.quit) { X.quitDay = g.state.day; s.ban('禁煙スタート！', PW.good, '吸いたくなったらニコチンガムを', { life: 90 }); } else s.tip('禁煙をやめた', PW.dim); return; }
+  },
+  update(s) { s.S.f++; },
+  draw(s, c, g) {
+    const S = s.S, X = tbX(g), { J, S: T } = tbJ(g), f = S.f, age = ageOf(g), minor = age < 20, have = tbHave(g), packs = num(g.state.items && g.state.items.tabako), cigs = num(T.cigs), dep = clamp(num(J.smoker), 0, 100), rule = tbHere(g), buy = tbCanBuy(g), price = tbPrice(g), ym = tbYM(g);
+    pBands(c, 0, 0, 640, 360, ['#10141e', '#141a26', '#18202e', '#1c2434']);
+    for (let i = 0; i < 6; i++) { const t = (f * 0.4 + i * 60) % 360; c.save(); c.globalAlpha = 0.05; pEll(c, 80 + i * 90 + Math.sin(t / 30) * 20, 360 - t, 40, 14, '#c8d0e0'); c.restore(); }
+    // 左：箱と灰皿
+    pFrame(c, 8, 34, 300, 320, { bg: '#121826' }); tbPack(c, 24, 50, cigs, f);
+    pT(c, `いまの箱 ${cigs}／20本`, 150, 58, { size: 12 }); pT(c, `予備の箱 ${packs}個`, 150, 76, { size: 12 }); pT(c, `あと ${have}本`, 150, 94, { size: 16, color: have ? PW.acc : PW.dim }); pT(c, `1箱 ${yen(price)}（20本）`, 150, 118, { size: 12, color: GB_C.t3 }); pT(c, `ニコチンガム ${num(X.gum)}個`, 150, 136, { size: 12, color: num(X.gum) ? PW.good : GB_C.t3 });
+    // 灰皿
+    const ax = 160, ay = 222; pEll(c, ax, ay + 6, 50, 12, '#0a0c12'); pEll(c, ax, ay, 48, 12, '#7a8090'); pEll(c, ax, ay - 1, 40, 9, '#3a3e48'); const butts = Math.min(14, num(T.today)); for (let i = 0; i < butts; i++) { const bx = ax - 30 + (i * 37) % 60, by = ay - 4 + (i * 13) % 7; pR(c, bx, by, 8, 2, '#f0eee8'); pR(c, bx + 6, by, 2, 2, '#e0a050'); }
+    const recent = X.lastDay === g.state.day && clockMin(g) - num(X.lastMin) < 60; if (recent || butts) for (let k = 0; k < 4; k++) { const t = (f + k * 22) % 88; c.save(); c.globalAlpha = (recent ? 0.5 : 0.2) * (1 - t / 88); pCirc(c, ax + 6 + Math.round(Math.sin((f + k * 30) / 12) * 6), ay - 10 - t, 3 + Math.floor(t / 22), '#d8dce8'); c.restore(); }
+    pT(c, `今日 ${num(T.day) === g.state.day ? num(T.today) : 0}本・昨日 ${num(T.yesterday)}本`, 24, 248, { size: 12 }); pT(c, `これまで ${num(T.total)}本`, 24, 266, { size: 12, color: PW.dim });
+    const lung = age + Math.round(num(T.load) / 250); pT(c, `肺の年齢 約${lung}歳（実年齢 ${age}歳）`, 24, 284, { size: 12, color: lung - age >= 5 ? PW.bad : GB_C.t3 });
+    if (num(T.total) > 0) pT(c, num(T.clean) > 0 ? `吸っていない日 ${num(T.clean)}日${X.quit ? '（禁煙中）' : ''}` : X.quit ? '禁煙中（今日から）' : '', 24, 302, { size: 12, color: X.quit ? PW.good : GB_C.t3 });
+    if (minor) pT(c, '20歳未満は吸えない・買えない（法律）', 24, 326, { size: 12, color: PW.bad });
+    // 右：依存度・場所・行動
+    pFrame(c, 316, 34, 316, 320, { title: 'いまの状態', bg: '#121826' });
+    pT(c, 'ニコチン依存', 328, 60, { size: 12, color: PW.dim }); shBar(c, 420, 62, 140, 10, dep / 100, dep >= 60 ? '#ff5d6c' : dep >= 30 ? '#ffd23f' : '#5ee07a'); pT(c, dep < 10 ? 'なし' : dep < 30 ? '少し' : dep < 60 ? 'ふつう' : dep < 85 ? '強い' : 'とても強い', 620, 60, { size: 12, align: 'right', color: dep >= 60 ? PW.bad : PW.text });
+    pT(c, dep >= 25 ? '吸わない日はイライラする（ストレス↑）' : '依存は弱い', 328, 78, { size: 12, color: GB_C.t3 });
+    pR(c, 326, 98, 296, 1, '#2a3450'); pT(c, `いる場所：${pFit(c, (rule && rule.area) || '—', 200, 12)}`, 328, 106, { size: 12 });
+    const ok = rule && rule.ok; pBev(c, 328, 124, 120, 20, ok ? '#2a8a4a' : rule && rule.smokingArea ? '#9a7a20' : '#9a2a3a'); pT(c, ok ? 'ここで吸える' : rule && rule.smokingArea ? '喫煙所でなら' : '禁煙', 388, 128, { size: 12, align: 'center', shadow: null });
+    if (rule && !ok) wrapDot(c, `${rule.law || ''}${rule.fine ? `（違反すると過料 ${yen(rule.fine)}）` : ''}`, 290, 12).slice(0, 2).forEach((ln, i) => pT(c, ln, 328, 150 + i * 14, { size: 12, color: GB_C.t3 })); else if (rule && rule.note) pT(c, pFit(c, rule.note, 290, 12), 328, 150, { size: 12, color: GB_C.t3 });
+    const spots = ['自分の部屋・実家', 'ネオン街の喫煙所', `パチンコ ドットホールの${ym >= 202004 ? '喫煙室' : '店内'}`]; if (ym < 202004) spots.push('居酒屋・喫茶店（2020年4月から原則禁煙）'); if (ym < 200904) spots.push('駅の喫煙コーナー');
+    pT(c, '吸える場所', 328, 182, { size: 12, color: PW.acc }); spots.slice(0, 4).forEach((t, i) => pT(c, `・${pFit(c, t, 270, 12)}`, 332, 198 + i * 14, { size: 12, color: GB_C.t3 }));
+    // ボタン
+    s.btn('smoke', X.quit ? '一服する（禁煙中…）' : '一服する（5分）', 326, 258, 148, 30, { kind: X.quit ? 'red' : 'pri', def: true, size: 12, off: have <= 0 });
+    s.btn('buy', buy.ok ? `タバコを買う ${yen(price)}` : '買えない（店・自販機へ）', 478, 258, 146, 30, { size: 12, kind: 'blue', off: !buy.ok });
+    s.btn(num(X.gum) > 0 ? 'gum' : 'gumbuy', num(X.gum) > 0 ? `ガムをかむ（${num(X.gum)}）` : 'ニコチンガム ¥980', 326, 292, 148, 26, { size: 12, off: num(X.gum) <= 0 && !buy.ok });
+    s.btn('quit', X.quit ? '禁煙をやめる' : '禁煙をはじめる', 478, 292, 146, 26, { size: 12, kind: X.quit ? 'norm' : 'green' });
+    s.btn('close', '閉じる', 326, 322, 298, 26, { back: true, size: 12 });
+  },
+};
+const tbIcon = gbIcon('#3a4a6a', (c, x, y) => { c.fillStyle = '#f4f2ee'; c.fillRect(x + 9, y + 6, 14, 20); c.fillStyle = '#2a4a8a'; c.fillRect(x + 9, y + 13, 14, 7); c.fillStyle = '#c9a24a'; c.fillRect(x + 9, y + 13, 14, 1); c.fillStyle = '#e8a858'; for (let i = 0; i < 3; i++) c.fillRect(x + 11 + i * 4, y + 3, 2, 4); c.fillStyle = '#d8dce8'; c.fillRect(x + 24, y + 4, 2, 2); c.fillRect(x + 25, y + 1, 2, 2); });
+// ---- ホールの喫煙室で一服 ----
+async function tbHallSmoke(g) {
+  const ym = tbYM(g); await g.say(ym >= 202004 ? ['ガラス張りの喫煙室だ。', '2020年4月から、法律でパチンコ店の中も原則禁煙になった。'] : ['喫煙所のコーナーだ。', 'とはいえ、店内のどこでもたばこが吸えるので、ホール全体がけむっている…。']);
+  if (ageOf(g) < 20) return; const have = tbHave(g) > 0;
+  const k = await E.Ho(g, { title: ym >= 202004 ? '喫煙室' : '喫煙コーナー', color: '#3a4a6a', text: have ? '一服していく？' : 'タバコを持っていない。\n入口の横に、たばこの自販機がある。', choices: have ? ['一服する（5分）', 'やめておく'] : [`自販機で買う（${yen(tbPrice(g))}）`, 'やめておく'] });
+  if (k !== 0) return; if (!have) { if (!(await tbBuyNow(g, 1))) return; } await tbSmokeNow(g, { place: 'kitsuenjo' });
+}
+// ---- ドットマートのレジ（買い物・たばこ） ----
+async function tbMartMenu(g) { const k = await E.Ho(g, { title: 'ドットマート', color: '#2a8a4a', text: '「いらっしゃいませー！」', choices: ['買い物をする', `タバコを買う（${yen(tbPrice(g))}）`, 'ニコチンガムを買う（¥980）', 'やめる'] });
+  if (k === 0) { if (typeof t2Mart === 'function') await t2Mart(g); } else if (k === 1) await tbBuyNow(g, 1); else if (k === 2) await tbBuyNow(g, 1, 'gum'); }
+function tbInstall() {
+  try { E.Un('tabako', { name: 'たばこ', color: '#3a4a6a', order: 31.5, iconHD: tbIcon, open: g => tbOpen(g) }); } catch (e) { console.error('[smoke] app', e); }
+  try { E.Tn && E.Tn(g => { try { tbTick(g); } catch (e) { console.error('[smoke] tick', e); } }); } catch (e) { }
+  if (typeof window !== 'undefined') window.__TB = { open: () => tbOpen(window.__game), smoke: o => tbSmokeNow(window.__game, o), buy: (n, it) => tbBuyNow(window.__game, n, it), x: () => tbX(window.__game), have: () => tbHave(window.__game), hall: () => tbHallSmoke(window.__game), mart: () => tbMartMenu(window.__game), canBuy: () => tbCanBuy(window.__game), places: () => Object.entries(E.Ke || {}).map(([k, v]) => [k, v && v.name, v && v.kind]) };
 }
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
