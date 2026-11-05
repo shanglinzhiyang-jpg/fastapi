@@ -37726,6 +37726,7 @@ function t2PatchTowns() {
   t2Wrap('minato', r => { t2SetPlace(r, 'コーヒースタンド', 't2_coffee'); t2SetPlace(r, 'ドットマート', 't2_mart_minato'); });
 }
 function town2Install() {
+  if (!E.Ke || !E.qn) return; // 地図のない環境（テスト用の計算だけの実行）では何もしない
   try { if (typeof window !== 'undefined') window.__KE = E.Ke; } catch (e) { }
   try { t2Tiles(); } catch (e) { console.error('[t2] tiles', e); }
   try { t2Brands(); } catch (e) { console.error('[t2] brands', e); }
