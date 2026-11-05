@@ -35953,7 +35953,7 @@ GB_MODES.slot = {
 const RC_COL = ['#f4f4f4', '#202024', '#e0302a', '#2a5ad0', '#f0d020', '#2a9a4a', '#f08a1a', '#f07ab0', '#8a4ac8'];
 const RC_INK = ['#111', '#fff', '#fff', '#fff', '#111', '#fff', '#111', '#111', '#fff'];
 const RC_SP = {
-  keiba: { n: 12, take: 0.22, lab: '競馬', unit: '頭', types: [['tan', '単勝', 1, true], ['fuku', '複勝', 1, true], ['ren', '馬連', 2, false], ['t3', '3連単', 3, true]] },
+  keiba: { n: 12, take: 0.22, lab: '競馬', unit: '頭', types: [['tan', '単勝', 1, true], ['fuku', '複勝', 1, true], ['ren', '馬連', 2, false], ['e2', '馬単', 2, true], ['wide', 'ワイド', 2, false], ['f3', '3連複', 3, false], ['t3', '3連単', 3, true]] },
   boat: { n: 6, take: 0.25, lab: 'ボートレース', unit: '艇', types: [['tan', '単勝', 1, true], ['e2', '2連単', 2, true], ['f3', '3連複', 3, false], ['t3', '3連単', 3, true]] },
   keirin: { n: 9, take: 0.25, lab: '競輪', unit: '車', types: [['e2', '2車単', 2, true], ['q2', '2車複', 2, false], ['t3', '3連単', 3, true]] },
 };
@@ -35994,6 +35994,7 @@ function rcPOrd(E, seq) { let p = 1, rest = E.reduce((a, e) => a + e.w, 0); for 
 function rcPerm(a) { if (a.length <= 1) return [a]; const out = []; a.forEach((x, i) => rcPerm(a.slice(0, i).concat(a.slice(i + 1))).forEach(r => out.push([x, ...r]))); return out; }
 function rcProb(E, type, sel) {
   if (type === 'fuku') { const top = E.length <= 7 ? 2 : 3, i = sel[0]; let p = 0; const others = E.map(e => e.no).filter(x => x !== i); p += rcPOrd(E, [i]); for (const a of others) p += rcPOrd(E, [a, i]); if (top === 3) for (const a of others) for (const b of others) if (a !== b) p += rcPOrd(E, [a, b, i]); return p; }
+  if (type === 'wide') { const [a, b] = sel, others = E.map(e => e.no).filter(x => x !== a && x !== b); let p = 0; for (const [x, y] of [[a, b], [b, a]]) { p += rcPOrd(E, [x, y]); for (const c of others) p += rcPOrd(E, [x, c, y]) + rcPOrd(E, [c, x, y]); } return p; } // ワイド：2頭とも3着以内
   const D = Object.values(RC_SP).flatMap(d => d.types).find(t => t[0] === type), ord = D ? D[3] : true;
   return ord ? rcPOrd(E, sel) : rcPerm(sel).reduce((a, q) => a + rcPOrd(E, q), 0);
 }
@@ -36001,19 +36002,20 @@ function rcOdds(R, type, sel) {
   const key = type + ':' + (RC_SP[R.sp].types.find(t => t[0] === type)[3] ? sel.join('-') : sel.slice().sort((a, b) => a - b).join('='));
   if (R.oc[key]) return R.oc[key];
   if (type === 'tan') return (R.oc[key] = R.E[sel[0] - 1].odds);
-  const p = rcProb(R.E, type, sel), take = RC_SP[R.sp].take + (type === 't3' ? 0.03 : 0);
+  const p = rcProb(R.Em || R.E, type, sel), take = RC_SP[R.sp].take + (type === 't3' ? 0.03 : 0); // オッズは「市場」の見立て（パドックの気配はふくまない）
   return (R.oc[key] = Math.max(1.0, Math.round((1 - take) / p * Math.exp(gbGauss() * 0.06) * 10) / 10));
 }
 function rcHit(type, sel, ord) {
   if (type === 'tan') return ord[0] === sel[0];
   if (type === 'fuku') return ord.slice(0, 3).includes(sel[0]);
   if (type === 'ren' || type === 'q2') return sel.length === 2 && ord.slice(0, 2).every(x => sel.includes(x));
+  if (type === 'wide') return sel.length === 2 && sel.every(x => ord.slice(0, 3).includes(x));
   if (type === 'e2') return ord[0] === sel[0] && ord[1] === sel[1];
   if (type === 'f3') return sel.length === 3 && ord.slice(0, 3).every(x => sel.includes(x));
   if (type === 't3') return ord[0] === sel[0] && ord[1] === sel[1] && ord[2] === sel[2];
   return false;
 }
-function rcWinSel(type, ord) { const k = { tan: 1, fuku: 1, ren: 2, q2: 2, e2: 2, f3: 3, t3: 3 }[type]; return ord.slice(0, k); }
+function rcWinSel(type, ord) { const k = { tan: 1, fuku: 1, ren: 2, q2: 2, e2: 2, wide: 2, f3: 3, t3: 3 }[type]; return ord.slice(0, k); }
 const RC_AMT = [100, 500, 1000, 3000, 5000, 10000, 30000, 100000];
 function gbWeekend(g) { try { const lab = g.dayLabel ? String(g.dayLabel()) : ''; return /（[土日]）/.test(lab); } catch (e) { return false; } }
 // ---- ドット絵の部品 ----
@@ -38625,6 +38627,282 @@ function pcDataPage(c, S, DX, DY) {
   row(37, 'この台の目安', `${S.m.spin}回`); row(52, '大当たり確率（通常時）', prob ? `1/${prob}` : '—'); row(67, '台のスペック', `1/${Math.round(1 / S.m.p)}　確変${Math.round(S.m.kr * 100)}%`);
   row(82, '総回転・最大連チャン', `${S.spins}回・${S.best}連`); row(97, '最高差玉', `+${mx.toLocaleString()}`, PW.good);
 }
+
+// ===== 競馬の向上：新聞の出馬表・パドック・ゲート・脚質・ミニマップ・写真判定・着差とタイム・全券種の払戻 =====
+// 着順の決まり方（強さの重みで抽選）は今までと同じ。見せ方と情報を本物に近づける。
+const RCX_STY = [['逃', '#d0203a', 'nige'], ['先', '#e88a1a', 'sen'], ['差', '#2a7ad0', 'sasi'], ['追', '#2a9a4a', 'oi']];
+const RCX_MARK = ['◎', '○', '▲', '△', '△'];
+const RCX_TIP = ['本紙', '記者A', '記者B'];
+function rcxSmooth(x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }
+// 着差（メートル）→ 表記
+function rcxMargin(m) { if (m < 0.08) return 'ハナ'; if (m < 0.22) return 'アタマ'; if (m < 0.5) return 'クビ'; if (m < 1.2) return '1/2'; if (m < 1.8) return '3/4'; const L = m / 2.4; if (L < 1.15) return '1'; if (L < 1.4) return '1 1/4'; if (L < 1.65) return '1 1/2'; if (L < 1.9) return '1 3/4'; if (L < 2.5) return '2'; if (L < 3.5) return '3'; if (L < 4.5) return '4'; if (L < 6) return '5'; return '大差'; }
+// ミニマップの楕円（下の直線を左→右、反時計回り）。frac=0 が下の直線の左はし
+function rcxOval(cx, cy, hw, rr, frac, off = 0) { const L = 4 * hw + 2 * Math.PI * rr; let q = ((frac % 1) + 1) % 1 * L, r = rr + off;
+  if (q < 2 * hw) return [cx - hw + q, cy + r]; q -= 2 * hw; if (q < Math.PI * rr) { const t = Math.PI / 2 - q / rr; return [cx + hw + Math.cos(t) * r, cy + Math.sin(t) * r]; } q -= Math.PI * rr;
+  if (q < 2 * hw) return [cx + hw - q, cy - r]; q -= 2 * hw; const t = -Math.PI / 2 - q / rr; return [cx - hw + Math.cos(t) * r, cy + Math.sin(t) * r]; }
+function rcxTime(sec) { const m = Math.floor(sec / 60), s = sec - m * 60; return `${m}:${s.toFixed(1).padStart(4, '0')}`; }
+// 効果音
+function rcxSnd(k) {
+  try { const A = tt; if (!A || !A.ctx || A.muted || !A.tone) return; const t0 = A.ctx.currentTime + 0.005, T = (f, s, d, o) => A.tone(f, t0 + s, d, o || {}), N = (s, d, o) => A.noise && A.noise(t0 + s, d, o || {});
+    switch (k) {
+      case 'fanfare': [[392, 0, 0.14], [523, 0.16, 0.14], [659, 0.32, 0.14], [784, 0.48, 0.5], [659, 1.02, 0.14], [784, 1.18, 0.14], [1047, 1.34, 0.8]].forEach(([f, s, d]) => { T(f, s, d, { vol: 0.06, wave: 'square' }); T(f / 2, s, d, { vol: 0.05, wave: 'triangle' }); }); break;
+      case 'gate': N(0, 0.12, { vol: 0.14, filter: 'lowpass', freq: 900 }); T(140, 0, 0.12, { vol: 0.1, wave: 'square' }); N(0.05, 0.1, { vol: 0.1, filter: 'highpass', freq: 2500 }); break;
+      case 'hoof': for (let i = 0; i < 3; i++) N(i * 0.06, 0.03, { vol: 0.035, filter: 'lowpass', freq: 380 }); break;
+      case 'crowd': N(0, 0.9, { vol: 0.05, filter: 'lowpass', freq: 1400 }); N(0.2, 0.7, { vol: 0.04, filter: 'bandpass', freq: 900 }); break;
+      case 'photo': T(1320, 0, 0.1, { vol: 0.05, wave: 'square' }); T(1320, 0.18, 0.1, { vol: 0.05, wave: 'square' }); break;
+      case 'kakutei': T(880, 0, 0.12, { vol: 0.05, wave: 'square' }); T(1175, 0.12, 0.25, { vol: 0.05, wave: 'square' }); break;
+    } } catch (e) { }
+}
+// 競馬だけの情報を足す（騎手・斤量・脚質・前走・馬体重・気配・予想印・馬場）
+function rcxAug(R) {
+  const E = R.E, n = E.length;
+  R.wea = pick(['晴', '晴', '晴', '曇', '曇', '雨']); R.ground = R.wea === '雨' ? pick(['稍重', '重', '不良']) : pick(['良', '良', '良', '稍重']);
+  R.grade = R.nar ? pick(['Jpn1', '重賞', '特別', '特別', 'A1']) : pick(['G1', 'G2', 'G3', 'OP', '特別']);
+  R.post = R.nar ? `20:${pick(['05', '15', '25', '40'])}` : `15:${pick(['25', '35', '40', '45'])}`;
+  const pr = E.map(e => ({ e, v: e.s + gbGauss() * 0.8 })).sort((a, b) => b.v - a.v);
+  pr.forEach((x, i) => { x.e.prev = i + 1; });
+  E.forEach(e => {
+    e.jk = pick(RC_SUR); e.kin = pick([54, 55, 55, 56, 56, 57, 57, 58]);
+    const r = Math.random(); e.sty = r < 0.12 ? 0 : r < 0.47 ? 1 : r < 0.8 ? 2 : 3;
+    const c = Math.random(); e.cond = c < 0.25 ? 1 : c < 0.75 ? 0 : -1;
+    e.bw = gbR(440, 520); e.bwd = e.cond < 0 ? pick([-12, -10, 10, 14]) : gbR(-6, 6);
+    e.w0 = e.w; e.w = e.w0 * Math.exp(0.15 * e.cond);
+    // パドックで見える気配（だいたい当たる）
+    const seen = Math.random() < 0.75 ? e.cond : gbR(-1, 1); e.pad = seen > 0 ? pick(['気合い乗り十分', '毛ヅヤがいい', '踏み込みが力強い']) : seen < 0 ? pick(['イレ込み気味', '発汗が目立つ', '覇気がない']) : pick(['落ち着いている', '平常どおり', 'いつもの感じ']); e.padK = seen;
+  });
+  if (!E.some(e => e.sty === 0)) E[gbR(0, n - 1)].sty = 0;
+  R.Em = E.map(e => ({ ...e, w: e.w0 }));
+  R.marks = RCX_TIP.map(() => { const r = E.map(e => ({ no: e.no, v: e.s + gbGauss() * 0.55 })).sort((a, b) => b.v - a.v), m = {}; RCX_MARK.forEach((mk, i) => { m[r[i].no] = mk; }); return m; });
+}
+(function rcxInstall() {
+  const M = GB_MODES && GB_MODES.race; if (!M || M.__rcx) return; M.__rcx = true;
+  const new0 = M.newRace, setup0 = M.setupAnim, dist0 = M.distAt, upd0 = M.update, set0 = M.settle, btn0 = M.btn, card0 = M.drawCard, over0 = M.over, keiba0 = M.drawKeiba, res0 = M.drawRes, draw0 = M.draw, run0 = M.drawRun;
+  const K = s => s.o.sp === 'keiba';
+  M.newRace = function (s, g) { new0.call(this, s, g); if (K(s)) { rcxAug(s.S.R); s.S.padI = 0; s.S.padT = 0; } };
+  M.setupAnim = function (s) {
+    if (!K(s)) return setup0.call(this, s);
+    const S = s.S, R = S.R, E = R.E, D = R.dist;
+    const pool = E.map(e => e.no), ord = [];
+    while (pool.length) { const W = pool.reduce((a, i) => a + E[i - 1].w, 0); let r = Math.random() * W, k = 0; for (; k < pool.length - 1; k++) { r -= E[pool[k] - 1].w; if (r <= 0) break; } ord.push(pool.splice(k, 1)[0]); }
+    S.ord = ord;
+    // 着差（メートル）：ときどき大接戦
+    let cum = 0; const gaps = ord.map((no, i) => { if (!i) return 0; const g = Math.random() < (i === 1 ? 0.2 : 0.12) ? 0.04 + Math.random() * 0.4 : 0.5 + (-Math.log(Math.random())) * 1.6; cum += g; return cum; });
+    S.photo = gaps[1] < 0.3;
+    const v = (R.sub.startsWith('芝') ? 16.7 : 15.9) - ({ 良: 0, 稍重: 0.15, 重: 0.3, 不良: 0.5 }[R.ground] || 0), wt = D / v + gbGauss() * 0.4;
+    E.forEach(e => { const rk = ord.indexOf(e.no); e.fin = gaps[rk]; e.rk = rk;
+      e.early = [9, 3.5, -3, -9][e.sty] + gbGauss() * 2; e.wob = Math.random() * 6; e.coat = (e.no * 7 + R.dist) % 4; e.d = 0; e.ph = Math.random() * 6; e.laneY = e.no - 1; e.lane = e.no - 1;
+      e.time = wt + e.fin / v; e.agari = (R.sub.startsWith('芝') ? 34.2 : 37.2) + [0.6, 0.25, -0.3, -0.7][e.sty] + rk * 0.12 + gbGauss() * 0.25 + (R.ground === '良' ? 0 : 0.6); e.late = false; });
+    if (Math.random() < 0.1) { const lz = E[gbR(0, E.length - 1)]; lz.late = true; lz.early -= 6; }
+    S.t = 0; S.len = 960; S.said = {}; S.pre = 220; S.cam = -60; S.slow = 1; S.dust = []; S.hoof = 0;
+  };
+  M.distAt = function (s, e, u) {
+    if (!K(s)) return dist0.call(this, s, e, u);
+    const D = s.S.R.dist, ks = rcxSmooth(u / 0.12), w = rcxSmooth((u - 0.55) / 0.42);
+    const off = (1 - w) * e.early * ks - w * e.fin + 0.7 * Math.sin(e.wob + u * 18) * ks * (1 - w);
+    return Math.max(0, D * u + off);
+  };
+  M.update = function (s, g) {
+    if (!K(s)) return upd0.call(this, s, g);
+    const S = s.S, R = S.R, E = R.E;
+    if (S.ph === 'paddock') { S.padT++; if (S.padT % 260 === 0) S.padI = (S.padI + 1) % E.length; return; }
+    if (S.ph === 'photo') { if (--S.photoT <= 0) { S.ph = 'res'; this.settle(s, g); S.flash = 12; rcxSnd('kakutei'); } return; }
+    if (S.ph !== 'run') return;
+    // ファンファーレ→ゲートイン→スタート
+    if (S.pre > 0) {
+      if (S.pre === 220) { rcxSnd('fanfare'); S.com = `${R.grade === 'G1' || R.grade === 'Jpn1' ? '大観衆の手拍子！ ' : ''}ファンファーレが鳴りひびきます`; }
+      S.pre -= S.fast; if (S.pre < 120 && !S.said.gi) { S.said.gi = 1; S.com = '各馬、順調にゲートイン。最後に大外の馬がおさまって…'; }
+      if (S.pre <= 0) { rcxSnd('gate'); S.gateT = 30; } return;
+    }
+    if (S.gateT > 0) S.gateT--;
+    const near = S.photo && S.t / S.len > 0.975 && S.t / S.len < 1.012; S.t += S.fast * (near ? 0.3 : 1); const u = S.t / S.len * 1.04;
+    E.forEach(e => { e.d = this.distAt(s, e, u); e.ph += (near ? 0.12 : 0.3) * S.fast; });
+    const lead = E.slice().sort((a, b) => b.d - a.d), L = lead[0], rk = {}; lead.forEach((e, i) => { rk[e.no] = i; });
+    // 内ラチ沿いへ寄る・直線で差し馬が外へ持ち出す
+    E.forEach(e => { let tgt; const r = rk[e.no];
+      if (u < 0.05) tgt = e.no - 1; else if (u < 0.7) tgt = (r % 3) * 1.3 + Math.floor(r / 3) * 0.35 + (e.sty === 3 ? 0.8 : 0); else tgt = e.sty >= 2 ? 2.5 + (r % 6) * 1.4 : (r % 3) * 1.1;
+      e.laneY += (clamp(tgt, 0, 11.4) - e.laneY) * 0.03 * S.fast; e.lane = e.laneY; });
+    const nm = e => `${e.no}番${e.nm}`, say = (k, t) => { if (!S.said[k]) { S.said[k] = 1; S.com = t; } };
+    const fav = E.slice().sort((a, b) => a.pop - b.pop)[0], lz = E.find(e => e.late);
+    if (u > 0.004) say('start', `スタートしました！${lz ? `　${lz.no}番、出遅れた！` : '　各馬そろった好スタート！'}`);
+    if (u > 0.09) say('hana', `ハナを切ったのは${nm(L)}。2番手に${lead[1].no}番`);
+    if (u > 0.22) say('c12', `1コーナーから2コーナー。先頭${L.no}番、人気の${fav.no}番は${rk[fav.no] + 1}番手`);
+    if (u > 0.4) { const sp = Math.max(1, Math.round((L.d - lead[lead.length - 1].d) / 2.4)); say('back', `向こう正面。先頭から最後方まで、およそ${sp}馬身`); }
+    if (u > 0.56) say('c3', '3コーナー。各馬、いっせいに仕掛けはじめた！');
+    if (u > 0.7) say('c4', '4コーナーを回って、最後の直線！');
+    if (u > 0.8) { const cl = lead.find(e => e.sty >= 2 && rk[e.no] <= 3); say('soto', cl ? `外から${nm(cl)}！ ぐんぐん伸びる！` : `${nm(L)}、粘る、粘る！`); }
+    if (u > 0.91) say('last', Math.abs(L.d - lead[1].d) < 2.4 ? `${L.no}番と${lead[1].no}番の叩き合い！ 残り100！` : `${nm(L)}が抜け出した！ リードは${Math.max(1, Math.round((L.d - lead[1].d) / 2.4))}馬身！`);
+    // 音
+    if ((S.hoof = (S.hoof || 0) + S.fast) >= 16) { S.hoof = 0; rcxSnd('hoof'); }
+    if (u > 0.72 && u < 1 && Math.floor(S.t) % 50 < S.fast) rcxSnd('crowd');
+    // 土ぼこり
+    for (const e of E) if (Math.random() < 0.22 * S.fast) S.dust.push({ d: e.d - 4, lane: e.laneY, y: 0, vx: -0.6 - Math.random(), vy: -1 - Math.random(), t: 0 });
+    for (const p of S.dust) { p.t++; p.d += p.vx; p.y += p.vy; p.vy += 0.15; if (p.y > 0) p.y = 0; } S.dust = S.dust.filter(p => p.t < 18);
+    if (S.t >= S.len) { if (S.photo) { S.ph = 'photo'; S.photoT = 120; S.com = '2頭ならんでゴールイン！　写真判定です！'; rcxSnd('photo'); } else { S.ph = 'res'; this.settle(s, g); S.flash = 12; rcxSnd('kakutei'); } }
+    else if (u > 1.0) say('goal', S.photo ? '並んだ！ 並んでゴール！' : `${nm(R.E[S.ord[0] - 1])}、1着でゴールイン！`);
+  };
+  M.settle = function (s, g) { set0.call(this, s, g); if (!K(s)) return; const S = s.S, ord = S.ord, R = S.R, w = R.E[ord[0] - 1]; S.com = `確定。1着${w.no}番${w.nm}（${w.jk}騎手）、勝ちタイム ${rcxTime(w.time)}`; };
+  M.btn = function (s, id, g) {
+    if (K(s)) { const S = s.S;
+      if (id === 'paddock') { S.ph = 'paddock'; S.padT = 0; tt.sfx('ok'); return; }
+      if (id === 'padback') { S.ph = 'card'; return; }
+      if (id === 'padprev') { S.padI = (S.padI + S.R.E.length - 1) % S.R.E.length; S.padT = 0; return; }
+      if (id === 'padnext') { S.padI = (S.padI + 1) % S.R.E.length; S.padT = 0; return; }
+      if (id === 'padsel') { const no = S.R.E[S.padI].no; S.ph = 'card'; return btn0.call(this, s, 'e:' + no, g); }
+    }
+    return btn0.call(this, s, id, g);
+  };
+  M.draw = function (s, c, g) { if (!K(s)) return draw0.call(this, s, c, g); const S = s.S; if (S.ph === 'card') this.drawCard(s, c, g); else if (S.ph === 'paddock') this.drawPaddock(s, c, g); else this.drawRun(s, c, g); };
+  M.drawRun = function (s, c, g) { if (!K(s) || s.S.ph !== 'photo') return run0.call(this, s, c, g); run0.call(this, s, c, g); this.drawPhoto(s, c); };
+  // ---- 出馬表（新聞） ----
+  M.drawCard = function (s, c, g) {
+    if (!K(s)) return card0.call(this, s, c, g);
+    const S = s.S, R = S.R, D = this.typeDef(s), n = R.E.length;
+    gbBack(c, s.t, 'race');
+    const px = 8, py = 34, pw = 380, ph = 318;
+    pR(c, px + 3, py + 3, pw, ph, '#000'); pR(c, px, py, pw, ph, '#f2ead6'); pDith(c, px, py, pw, ph, 'rgba(120,100,60,0.06)');
+    pR(c, px, py, pw, 26, '#2a1a10'); const gc = { G1: '#1a4ab0', G2: '#c8102e', G3: '#2a8a3a', Jpn1: '#1a4ab0', 重賞: '#c8102e' }[R.grade] || '#7a5a2a';
+    pR(c, px + 6, py + 5, 34, 16, gc); pT(c, R.grade, px + 23, py + 7, { size: 12, color: '#ffffff', align: 'center', shadow: null });
+    pT(c, pFit(c, R.title, pw - 56, 16), px + 46, py + 5, { size: 16, color: '#ffe9b0', shadow: null });
+    pT(c, `${R.sub}　天候 ${R.wea}・馬場 ${R.ground}　発走 ${R.post}`, px + 8, py + 29, { size: 12, color: '#5a4a30', shadow: null });
+    const rh = 20, y0 = py + 46;
+    const hd = (t, x, al) => pT(c, t, px + x, y0 - 2, { size: 12, color: '#7a6a4a', shadow: null, align: al || 'left' });
+    hd('本', 24, 'center'); hd('A', 38, 'center'); hd('B', 52, 'center'); hd('馬名', 82); hd('騎手', 170); hd('斤量', 204); hd('脚', 242, 'center'); hd('前走', 256); hd('単勝', 338, 'right'); hd('人気', 372, 'right');
+    pR(c, px + 6, y0 + 12, pw - 12, 1, '#7a6a4a');
+    S.__rows = []; R.E.forEach((e, i) => { const y = y0 + 15 + i * rh; s.btn('e:' + e.no, '', px + 4, y, pw - 8, rh - 1, { hide: true }); S.__rows.push({ e, y, rh }); });
+    // 右：券種（2段）と買い目
+    const bx = 396, bw = 236; pFrame(c, bx, 34, bw, 318, { title: '券種と買い目' });
+    const T = RC_SP.keiba.types; T.forEach((t, i) => { const row = i < 4 ? 0 : 1, k = row ? i - 4 : i, cnt = row ? 3 : 4, tw = Math.floor((bw - 16 - (cnt - 1) * 4) / cnt); s.btn('ty:' + t[0], t[1], bx + 8 + k * (tw + 4), 60 + row * 28, tw, 25, { kind: S.type === t[0] ? 'sel' : 'norm', size: 12 }); });
+    const need = D[2], ordered = D[3] && need > 1;
+    pT(c, `${need}頭選ぶ${ordered ? '（選んだ順＝着順）' : need > 1 ? '（順不同）' : ''}`, bx + 10, 118, { size: 12, color: PW.dim });
+    for (let k = 0; k < need; k++) { const x = bx + 12 + k * 58; pFrame(c, x, 134, 46, 30, { bg: '#0a0e22' }); const no = S.sel[k]; if (no) this.badge(c, R.E[no - 1], x + 12, 138, 22); else pT(c, '？', x + 23, 140, { size: 16, color: GB_C.t3, align: 'center' }); if (k < need - 1) pT(c, ordered ? '→' : '・', x + 52, 141, { size: 12, color: PW.dim, align: 'center' }); }
+    const full = S.sel.length === need, od = full ? rcOdds(R, S.type, S.sel) : null, amt = RC_AMT[S.amt];
+    pT(c, full ? `オッズ ${od}倍` : 'オッズ ―', bx + 10, 170, { size: 16, color: full ? PW.acc : GB_C.t3 });
+    gbAmtRow(s, bx + 10, 192, RC_AMT, 'amt', { w: 110 });
+    pT(c, full ? `的中で ${gbYen(Math.floor(amt / 100 * od * 100 / 10) * 10)}` : '馬券は100円から', bx + 10, 226, { size: 12, color: PW.dim });
+    s.btn('buy', '購入して観戦', bx + 8, 244, bw - 16, 38, { kind: 'pri', def: true, off: !full });
+    s.btn('paddock', 'パドック', bx + 8, 288, 70, 30, { size: 12, kind: 'blue' }); s.btn('skipbet', '見るだけ', bx + 83, 288, 70, 30, { size: 12 }); s.btn('quit', '帰る', bx + 158, 288, 70, 30, { back: true, size: 12 });
+    pT(c, '印：◎本命 ○対抗 ▲単穴 △連下', bx + 10, 326, { size: 12, color: GB_C.t3 });
+  };
+  M.over = function (s, c) {
+    if (!K(s)) return over0.call(this, s, c);
+    const S = s.S; if (S.ph !== 'card' || !S.__rows) return; const px = 8, R = S.R;
+    S.__rows.forEach(({ e, y, rh }, idx) => {
+      const si = S.sel.indexOf(e.no), on = si >= 0, sz = 16, yy = y + 1;
+      if (on) { pR(c, px + 4, y, 372, rh - 1, '#ffe08a'); pR(c, px + 4, y, 12, rh - 1, '#c83040'); pT(c, String(si + 1), px + 10, y + 3, { size: 12, color: '#ffffff', align: 'center', shadow: null }); } else if (idx % 2) pR(c, px + 4, y, 372, rh - 1, 'rgba(120,100,60,0.08)');
+      if (!on && s.fid === 'e:' + e.no && Math.floor(s.t / 10) % 2 === 0) for (let i = 0; i < 4; i++) pR(c, px + 6 + i, y + rh / 2 - 4 + i, 1, 8 - i * 2, '#c83040');
+      R.marks.forEach((m, k) => { const mk = m[e.no]; if (mk) pT(c, mk, px + 24 + k * 14, y + 3, { size: 12, color: mk === '◎' ? '#c8102e' : mk === '○' ? '#1a4ab0' : '#3a3020', align: 'center', shadow: null }); });
+      this.badge(c, e, px + 62, yy, sz);
+      pT(c, pFit(c, e.nm, 86, 12), px + 82, y + 3, { size: 12, color: '#1a1008', shadow: null }); pT(c, pFit(c, e.jk, 32, 12), px + 170, y + 3, { size: 12, color: '#5a4a30', shadow: null });
+      pT(c, String(e.kin), px + 208, y + 3, { size: 12, color: '#3a3020', shadow: null });
+      const st = RCX_STY[e.sty]; pR(c, px + 236, y + 3, 13, 13, st[1]); pT(c, st[0], px + 242, y + 3, { size: 12, color: '#ffffff', align: 'center', shadow: null });
+      pT(c, `${e.prev}着`, px + 256, y + 3, { size: 12, color: e.prev <= 3 ? '#c8102e' : '#3a3020', shadow: null });
+      pT(c, e.odds.toFixed(1), px + 338, y + 3, { size: 12, color: e.pop <= 3 ? '#c8102e' : '#1a1008', align: 'right', shadow: null });
+      pT(c, `${e.pop}`, px + 372, y + 3, { size: 12, color: '#6a5a3a', align: 'right', shadow: null });
+      pR(c, px + 6, y + rh - 1, 368, 1, 'rgba(120,100,60,0.25)');
+    });
+  };
+  // ---- パドック ----
+  M.drawPaddock = function (s, c, g) {
+    const S = s.S, R = S.R, E = R.E, e = E[S.padI], t = s.t, nar = R.nar;
+    pBands(c, 0, 30, 640, 90, nar ? ['#05051a', '#0a0a2a', '#14143a', '#1e1e4a'] : ['#7ab8e8', '#9ac8f0', '#bcdcf4', '#d8ecfa']);
+    for (let i = 0; i < 12; i++) { const x = i * 56 - 10; pCirc(c, x + 20, 104, 22, nar ? '#0a2a1a' : '#2a6a3a'); pCirc(c, x + 34, 96, 18, nar ? '#0e321e' : '#3a7a44'); }
+    pR(c, 0, 118, 640, 180, nar ? '#1a3a24' : '#5aa04a'); pR(c, 0, 150, 640, 90, nar ? '#5a4a3a' : '#c8a878'); for (let i = 0; i < 40; i++) pR(c, (i * 37) % 640, 152 + (i * 13) % 86, 3, 1, nar ? '#6a5a48' : '#d8bc90');
+    for (let x = -10; x < 650; x += 24) { pR(c, x, 138, 3, 14, '#f4f4f4'); } pR(c, 0, 138, 640, 3, '#f4f4f4'); pR(c, 0, 244, 640, 3, '#f4f4f4'); for (let x = -10; x < 650; x += 24) pR(c, x, 244, 3, 14, '#f4f4f4');
+    for (let i = 0; i < 30; i++) { const x = (i * 23) % 640, h = 10 + (i % 3) * 2; pR(c, x, 124 - h, 8, h, ['#3a3a4a', '#5a4a6a', '#2a4a6a', '#6a3a3a'][i % 4]); pCirc(c, x + 4, 124 - h - 3, 3, '#f0c8a0'); }
+    // 前後の馬（小さく）
+    const others = [E[(S.padI + E.length - 1) % E.length], E[(S.padI + 1) % E.length]];
+    others.forEach((o, k) => { const x = k ? 520 + ((t * 0.6) % 80) : 20 + ((t * 0.6) % 80), fi = Math.floor(t / 10) % 6, fc = RC_COL[(o.fr || o.no) - 1]; pBlit(c, rcHorse(fi, (o.no * 7 + R.dist) % 4, fc, fc, o.no), x, 170, { alpha: 0.7 }); });
+    // いまの馬（大きく、厩務員さんに引かれて歩く）
+    const fi = Math.floor(t / 9) % 6, fc = RC_COL[(e.fr || e.no) - 1], hx = 230 + Math.round(Math.sin(t / 60) * 16);
+    pEll(c, hx + 44, 238, 34, 4, 'rgba(0,0,0,0.3)'); pBlit(c, rcHorse(fi, (e.no * 7 + R.dist) % 4, fc, fc === '#202024' ? '#f4f4f4' : fc, e.no), hx, 168, { sc: 2 });
+    pR(c, hx + 92, 204, 8, 16, '#2a3a6a'); pCirc(c, hx + 96, 199, 5, '#f0c8a0'); pR(c, hx + 92, 220, 3, 14, '#2a2a34'); pR(c, hx + 97, 220, 3, 14, '#2a2a34'); pR(c, hx + 80, 202, 14, 1, '#5a3a1a');
+    // 情報パネル
+    pFrame(c, 8, 34, 300, 96, { bg: 'rgba(10,14,34,0.92)' }); this.badge(c, e, 18, 44, 22);
+    pT(c, pFit(c, e.nm, 170, 16), 48, 45, { size: 16 }); pT(c, `${e.jk}騎手・${e.kin}kg`, 222, 47, { size: 12, color: PW.dim });
+    pT(c, `馬体重 ${e.bw}kg（${e.bwd > 0 ? '+' : ''}${e.bwd}）`, 18, 72, { size: 12, color: Math.abs(e.bwd) >= 10 ? PW.bad : PW.text });
+    pT(c, `脚質 ${['逃げ', '先行', '差し', '追込'][e.sty]}・前走 ${e.prev}着`, 170, 72, { size: 12, color: PW.text });
+    pT(c, `気配：${e.pad}`, 18, 92, { size: 16, color: e.padK > 0 ? PW.good : e.padK < 0 ? PW.bad : PW.text });
+    pT(c, `単勝 ${e.odds.toFixed(1)}倍（${e.pop}番人気）`, 18, 112, { size: 12, color: PW.acc });
+    pT(c, R.marks.map((m, k) => `${RCX_TIP[k]}${m[e.no] || '―'}`).join('　'), 170, 112, { size: 12, color: PW.dim });
+    pFrame(c, 8, 300, 624, 52); pT(c, `パドック周回中　${S.padI + 1}/${E.length}　（自動で次の馬へ）`, 20, 306, { size: 12, color: PW.dim });
+    s.btn('padprev', '◀ 前の馬', 20, 322, 110, 26, { size: 12 }); s.btn('padnext', '次の馬 ▶', 136, 322, 110, 26, { size: 12, def: true }); s.btn('padsel', 'この馬を選ぶ', 360, 322, 130, 26, { size: 12, kind: 'blue' }); s.btn('padback', '出馬表へ', 496, 322, 124, 26, { size: 12, back: true });
+  };
+  // ---- レース ----
+  M.drawKeiba = function (s, c, u) {
+    const S = s.S, R = S.R, D = R.dist, PX = 2.4, E = R.E, nar = R.nar, turf = R.sub.startsWith('芝'), t = s.t;
+    const lead = Math.max(...E.map(e => e.d || 0)), want = S.pre > 0 ? -60 : clamp(lead * PX - 420, -60, D * PX - 520); S.cam += (want - S.cam) * 0.15; const cam = S.cam, f = lead / D;
+    // 空
+    pBands(c, 0, 30, 640, 70, nar ? ['#05051a', '#0a0a2a', '#14143a', '#1e1e4a'] : ['#5aa0e0', '#78b4ea', '#9ac8f2', '#bcdcf8']);
+    if (nar) for (let i = 0; i < 30; i++) pR(c, (i * 97) % 640, 32 + (i * 31) % 40, 1, 1, '#ffffff'); else for (let i = 0; i < 4; i++) { const cx = ((i * 190 - cam * 0.05) % 760 + 760) % 760 - 60; pR(c, cx, 44 + i * 6, 40, 4, '#f4f8ff'); pR(c, cx + 8, 40 + i * 6, 22, 4, '#f4f8ff'); }
+    // 景色：向こう正面（山と木と看板）→ 直線（スタンド）
+    const sw = rcxSmooth((f - 0.62) / 0.12), so = Math.floor(((cam * 0.35) % 512 + 512) % 512);
+    if (sw < 1) { c.save(); c.globalAlpha = 1 - sw; for (let i = 0; i < 8; i++) { const x = ((i * 120 - cam * 0.1) % 960 + 960) % 960 - 160; for (let j = 0; j < 30; j++) pR(c, x + 80 - j * 2.4, 100 - 30 + j, j * 4.8, 1, nar ? '#141a30' : '#6a8aa8'); }
+      for (let i = 0; i < 16; i++) { const x = ((i * 48 - cam * 0.3) % 768 + 768) % 768 - 64; pCirc(c, x, 112, 12, nar ? '#0a2014' : '#2a6a34'); pCirc(c, x + 10, 106, 10, nar ? '#0e2a18' : '#3a7a40'); }
+      for (let i = 0; i < 4; i++) { const x = ((i * 240 - cam * 0.32) % 960 + 960) % 960 - 120; pR(c, x, 94, 60, 18, '#f4f4f4'); pR(c, x + 2, 96, 56, 14, ['#c8102e', '#1a4ab0', '#2a8a3a', '#e8a810'][i]); pT(c, ['ドットビール', 'ネオン生命', 'さくら銀行', 'ゴールド自動車'][i], x + 30, 97, { size: 12, color: '#ffffff', align: 'center', shadow: null }); pR(c, x + 28, 112, 3, 12, '#9aa0aa'); }
+      c.restore(); }
+    if (sw > 0) { c.save(); c.globalAlpha = sw; const st = rcStand(nar); for (let k = -1; k < 2; k++) pBlit(c, st, k * 512 - so, 40); if (u > 0.85) for (let i = 0; i < 40; i++) { const x = (i * 53 + t * 7) % 640, y = 70 + (i * 17) % 40; if ((t + i) % 6 < 3) pR(c, x, y, 2, 3, ['#ffffff', '#ffd23f', '#e04a4a'][i % 3]); } c.restore(); }
+    // コース
+    pR(c, 0, 132, 640, 164, turf ? '#2f8a3a' : '#a07040'); const so2 = Math.floor(((cam) % 64 + 64) % 64);
+    if (turf) for (let i = -1; i < 12; i++) pR(c, i * 64 - so2, 132, 32, 164, '#2a7a34'); else for (let j = 0; j < 164; j += 4) for (let i = ((j / 4) & 1) * 6; i < 640; i += 12) pR(c, ((i - so2) % 640 + 640) % 640, 132 + j, 2, 1, '#8a5a30');
+    if (R.ground !== '良') { c.save(); c.globalAlpha = R.ground === '稍重' ? 0.08 : 0.16; pR(c, 0, 132, 640, 164, '#2a1a10'); c.restore(); }
+    pR(c, 0, 124, 640, 3, '#f4f4f4'); for (let i = -1; i < 22; i++) pR(c, i * 32 - Math.floor(((cam) % 32 + 32) % 32), 124, 2, 10, '#e0e0e0');
+    for (let m = 0; m <= D; m += 200) { const x = Math.round(m * PX - cam); if (x < -20 || x > 660) continue; if (m === D) { pR(c, x, 70, 4, 64, '#f4f4f4'); pCirc(c, x + 2, 68, 10, '#c8102e'); pT(c, 'ゴ', x + 2, 61, { size: 12, align: 'center', shadow: null }); pR(c, x, 132, 2, 164, 'rgba(255,255,255,0.5)'); } else { for (let k = 0; k < 6; k++) pR(c, x, 100 + k * 4, 3, 4, k % 2 ? '#c8102e' : '#f4f4f4'); pT(c, `${(D - m) / 200}F`, x + 5, 100, { size: 12, color: '#ffffff' }); } }
+    // ゲート
+    const gx = Math.round(-6 * PX - cam), showGate = S.pre > 0 || (S.gateT || 0) > 0 || u < 0.03;
+    if (showGate) { pR(c, gx - 4, 126, 40, 5, '#e8e8ee'); pR(c, gx - 2, 126, 3, 162, '#9aa0aa'); pR(c, gx + 30, 126, 3, 162, '#9aa0aa'); for (let k = 0; k <= 12; k++) pR(c, gx - 2, 283 - k * 10, 34, 2, '#c8ccd4'); }
+    for (const p of S.dust) { const x = Math.round(p.d * PX - cam), y = 246 - Math.round(p.lane * 10) + 30 + Math.round(p.y); pR(c, x, y, 2, 2, turf ? (p.t < 9 ? '#5aa04a' : '#3a7a34') : (p.t < 9 ? '#c8945a' : '#a07040')); }
+    // 馬（奥から順に）
+    for (const e of E.slice().sort((a, b) => b.laneY - a.laneY)) {
+      const x = S.pre > 0 ? gx - 16 : Math.round((e.d || 0) * PX - cam) - 26, y = 246 - Math.round(e.laneY * 10);
+      if (x < -50 || x > 660) continue;
+      const fi = S.pre > 0 ? 0 : Math.floor(e.ph) % 6, fc = RC_COL[(e.fr || e.no) - 1];
+      pEll(c, x + 22, y + 31, 14, 2, 'rgba(0,0,0,0.3)'); pBlit(c, rcHorse(fi, e.coat, fc, fc === '#202024' ? '#f4f4f4' : fc, e.no), x, y);
+      if (u > 0.78 && u < 1.02 && e.rk <= 4) { const up = Math.floor((t + e.no * 3) / 4) % 2; pLine(c, x + 22, y + 6, x + (up ? 14 : 16), y + (up ? -2 : 2), '#2a1a10'); }
+      if (S.bet && S.bet.sel.includes(e.no)) { const b = Math.floor(t / 8) % 2; pR(c, x + 26, y - 6 - b, 5, 1, PW.acc); pR(c, x + 27, y - 5 - b, 3, 1, PW.acc); pR(c, x + 28, y - 4 - b, 1, 1, PW.acc); }
+    }
+    if (showGate) { const open = S.pre <= 0; for (let k = 0; k < 12; k++) { const y = 274 - k * 10; if (!open) pR(c, gx + 30, y, 4, 9, '#e8b030'); else pR(c, gx + 33, y, 1, 9, '#e8b030'); } }
+    pR(c, 0, 284, 640, 3, '#f4f4f4'); for (let i = -1; i < 14; i++) pR(c, i * 48 - Math.floor(((cam * 1.3) % 48 + 48) % 48), 280, 3, 14, '#d8d8e0');
+    // ミニマップ（上から見たコース）
+    { const mx = 520, my = 92, mw = 112, mh = 66, cx = mx + 56, cy = my + 34, hw = 30, rr = 20, lap = 2000; pFrame(c, mx, my, mw, mh, { bg: 'rgba(8,24,12,0.92)' });
+      const Lp = 4 * hw + 2 * Math.PI * rr, fq = 1.6 * hw / Lp; pR(c, cx - hw, cy - rr + 3, hw * 2, rr * 2 - 6, nar ? '#14301c' : '#2a6a34'); pCirc(c, cx - hw, cy, rr - 3, nar ? '#14301c' : '#2a6a34'); pCirc(c, cx + hw, cy, rr - 3, nar ? '#14301c' : '#2a6a34');
+      for (let k = 0; k < 160; k++) { const [x, y] = rcxOval(cx, cy, hw, rr, k / 160); pR(c, Math.round(x) - 1, Math.round(y) - 1, 2, 2, turf ? '#7ad07a' : '#d8a468'); }
+      const [gx2, gy2] = rcxOval(cx, cy, hw, rr, fq); pR(c, Math.round(gx2), Math.round(gy2) - 5, 2, 9, '#ffffff'); pR(c, Math.round(gx2) + 2, Math.round(gy2) - 5, 4, 3, '#c8102e');
+      for (const e of E.slice().sort((a, b) => b.rk - a.rk)) { const [x, y] = rcxOval(cx, cy, hw, rr, fq - (D - (e.d || 0)) / lap, ((e.laneY || 0) - 3) * 0.35); pR(c, Math.round(x) - 2, Math.round(y) - 2, 5, 5, '#05030a'); pR(c, Math.round(x) - 1, Math.round(y) - 1, 3, 3, RC_COL[(e.fr || e.no) - 1]); if (S.bet && S.bet.sel.includes(e.no) && t % 16 < 10) pRing(c, Math.round(x), Math.round(y), 4, PW.acc); } }
+    // 残り距離・場所
+    const rem = Math.max(0, Math.round(D - lead)), place = S.pre > 0 ? 'ゲートイン' : f < 0.06 ? 'スタート' : f < 0.3 ? '1・2コーナー' : f < 0.55 ? '向こう正面' : f < 0.7 ? '3・4コーナー' : rem > 0 ? '最後の直線' : 'ゴール';
+    pFrame(c, 520, 64, 112, 26); pT(c, rem > 0 ? `${place}　${rem}m` : 'ゴール', 576, 70, { size: 12, align: 'center', color: rem < 400 ? PW.acc : PW.text });
+  };
+  // ---- 写真判定 ----
+  M.drawPhoto = function (s, c) {
+    const S = s.S, R = S.R, top = S.ord.slice(0, 3).map(n => R.E[n - 1]);
+    pR(c, 0, 0, 640, 360, 'rgba(0,0,0,0.35)'); pFrame(c, 150, 70, 340, 170, { bg: '#0a0a10', title: '写真判定' });
+    pR(c, 166, 98, 308, 120, '#c8b890'); pR(c, 400, 98, 2, 120, '#ffffff'); for (let i = 0; i < 20; i++) pR(c, 166 + (i * 31) % 300, 100 + (i * 17) % 116, 2, 1, '#b0a070');
+    c.save(); c.beginPath(); c.rect(166, 98, 308, 120); c.clip(); top.forEach((e, i) => { const fc = RC_COL[(e.fr || e.no) - 1], sc = 1.6, x = Math.round(400 - 42 * sc - e.fin * 40), y = 96 + i * 34; pBlit(c, rcHorse(2, e.coat, fc, fc, e.no), x, y, { sc }); }); c.restore();
+    if (s.t % 30 < 18) { pR(c, 240, 222, 160, 16, '#c8102e'); pT(c, '写真判定中', 320, 223, { size: 12, color: '#ffffff', align: 'center', shadow: null }); }
+  };
+  // ---- 確定・払戻 ----
+  M.drawRes = function (s, c) {
+    if (!K(s)) return res0.call(this, s, c);
+    const S = s.S, R = S.R, ord = S.ord, E = R.E;
+    pFrame(c, 40, 62, 560, 232, { bg: '#0a0a10', title: '確定' }); if (s.t % 40 < 30) { pR(c, 520, 64, 60, 16, '#c8102e'); pT(c, '確定', 550, 65, { size: 12, color: '#ffffff', align: 'center', shadow: null }); }
+    pT(c, '着　馬番　馬名　　　　着差　タイム', 54, 88, { size: 12, color: PW.dim });
+    ord.slice(0, 5).forEach((no, i) => { const e = E[no - 1], y = 106 + i * 24, prev = i ? E[ord[i - 1] - 1] : null;
+      pT(c, `${i + 1}`, 60, y + 2, { size: 16, color: i ? PW.text : PW.acc }); pSeg(c, String(no).padStart(2, ' '), 82, y, { w: 8, h: 16, on: '#ff9a2a', off: 'rgba(255,154,42,0.12)' });
+      pT(c, pFit(c, e.nm, 104, 12), 112, y + 3, { size: 12 }); pT(c, i ? rcxMargin(e.fin - prev.fin) : '', 236, y + 3, { size: 12, color: PW.cyan }); pT(c, rcxTime(e.time), 284, y + 3, { size: 12, color: i ? PW.dim : PW.acc }); });
+    pT(c, `上がり3F 最速 ${Math.min(...E.map(e => e.agari)).toFixed(1)}（${E.slice().sort((a, b) => a.agari - b.agari)[0].no}番）`, 54, 226, { size: 12, color: PW.dim });
+    // 払戻（100円あたり）
+    const L = [], yen = o => gbYen(Math.floor(o * 100 / 10) * 10), t3 = ord.slice(0, 3);
+    L.push(['単勝', `${ord[0]}`, yen(rcOdds(R, 'tan', [ord[0]]))]);
+    t3.forEach((no, i) => L.push([i ? '' : '複勝', `${no}`, yen(Math.max(1.0, Math.round((rcOdds(R, 'fuku', [no])) * 10) / 10))]));
+    L.push(['馬連', `${ord[0]}=${ord[1]}`, yen(rcOdds(R, 'ren', [ord[0], ord[1]]))]);
+    [[t3[0], t3[1]], [t3[0], t3[2]], [t3[1], t3[2]]].forEach((p, i) => L.push([i ? '' : 'ワイド', `${p[0]}=${p[1]}`, yen(rcOdds(R, 'wide', p))]));
+    L.push(['馬単', `${ord[0]}-${ord[1]}`, yen(rcOdds(R, 'e2', [ord[0], ord[1]]))]); L.push(['3連複', `${t3.join('=')}`, yen(rcOdds(R, 'f3', t3))]); L.push(['3連単', `${t3.join('-')}`, yen(rcOdds(R, 't3', t3))]);
+    pT(c, '払戻（100円あたり）', 372, 88, { size: 12, color: PW.dim });
+    L.forEach(([k, sel, v], i) => { const y = 102 + i * 15; pT(c, k, 372, y, { size: 12, color: PW.dim }); pT(c, sel, 440, y, { size: 12 }); pT(c, v, 588, y, { size: 12, color: PW.acc, align: 'right' }); });
+    if (S.bet) pT(c, S.bet.hit ? `的中！ 払戻 ${gbYen(S.bet.pay)}` : `はずれ（${S.bet.nm} ${S.bet.sel.join('-')}）`, 54, 242, { size: 16, color: S.bet.hit ? PW.acc : PW.bad });
+    s.btn('next', '次のレースへ', 54, 264, 140, 26, { kind: 'pri', def: true, size: 12 }); s.btn('quit', '帰る', 202, 264, 110, 26, { back: true, size: 12 });
+  };
+})();
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
