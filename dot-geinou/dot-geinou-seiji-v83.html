@@ -10502,7 +10502,7 @@ function playGame(N, S, h, a, kind, md, round, out, preRes) {
   const myTeam = N.mgr && N.mgr.team ? N.mgr.team : N.me && N.me.st === 'pro' ? N.me.team : null;
   if (myTeam && (h === myTeam || a === myTeam)) {
     const home = h === myTeam;
-    const e = { md, r: round, k: kind, o: home ? a : h, h: home ? 1 : 0, s: home ? [res.hs, res.as] : [res.as, res.hs], ls: home ? res.ls : [res.ls[1], res.ls[0]], inn: res.inn,
+    const e = { md, r: round, k: kind, o: home ? a : h, h: home ? 1 : 0, s: home ? [res.hs, res.as] : [res.as, res.hs], ls: home ? res.ls : [res.ls[1], res.ls[0]], hi: home ? [num(res.hh), num(res.ah)] : [num(res.ah), num(res.hh)], inn: res.inn,
       w: nameOf(N, res.w), l: nameOf(N, res.l), sv: nameOf(N, res.sv), wt: res.w ? (P_team(N, res.w)) : null,
       hr: res.hr.map(([id, n]) => [nameOf(N, id), n, P_team(N, id) === myTeam ? 1 : 0]), me: res.me || null };
     S.log.push(e);
@@ -31089,6 +31089,11 @@ function ptStatusBar(c, sc, N, L) {
     if (pill) uPill(c, W - 22, y + 8, pill[0], { h: 18, col: pill[1], solid: 1, right: 1 });
     if (num(S.N) > 0) { const pr = clamp(num(S.done) / num(S.N), 0, 1); c.save(); uRRPath(c, 12, y, W - 24, h, 10); c.clip(); fr(c, 12, y + h - 2, W - 24, 2, 'rgba(255,255,255,0.06)'); fr(c, 12, y + h - 2, (W - 24) * pr, 2, hexA(NU.acc, 0.8)); c.restore(); }
     ptHit(12, y, W - 24, h, () => { const i = TABS.findIndex(t => t.id === 'stand'); if (i >= 0) sc.setTab(i); });
+  } else if (myT && TEAM[myT]) {
+    drawLogo(c, myT, 20, y + 4, 24, false);
+    const tw0 = tw(c, TEAM[myT].short, 14, true);
+    tx(c, TEAM[myT].short, 50, y + 7, { size: 14, bold: true, color: '#ffffff' });
+    tx(c, fit(c, `${N.mgr && N.mgr.name ? `監督 ${N.mgr.name}　` : ''}${seasonPhase(N) || '開幕前'}`, W - 90 - tw0, 13), 58 + tw0, y + 8, { size: 13, color: NU.acc2 });
   } else {
     tx(c, fit(c, seasonPhase(N) || 'プロ野球', W - 48, 13), 24, y + 8, { size: 13, color: '#dfe6f6' });
   }
