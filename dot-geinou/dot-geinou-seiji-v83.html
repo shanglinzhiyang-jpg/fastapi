@@ -13249,7 +13249,7 @@ function homeStatus(N) {
     let st = '';
     if (pro) st = num(me.susp) > 0 ? `出場停止中（残り${me.susp}試合）` : me.inj > 0 ? `故障で離脱中（約${Math.ceil(me.inj / 2.3)}日）` : me.ikusei ? (me.lv3 ? '育成選手（三軍）' : '育成選手') : me.lv === 1 ? `一軍 ${ROLE_N[me.role] || ''}` : me.lv3 ? '三軍で鍛え直し中' : '二軍で調整中';
     else if (mlb) st = me.mlb.free ? '契約満了（去就を決めよう）' : me.inj > 0 ? '故障で離脱中' : me.mlb.lv === 1 ? `メジャー ${ROLE_N[me.mlb.role] || ''}` : 'マイナー（3A）';
-    else if (mnr && isAma(me)) st = me.offer ? `${TEAM[me.offer.team].short}から指名！` : me.minor.kind === 'univ' ? `大学${Math.min(4, amaYear(me, S ? S.y : 2026))}年生${me.shibou ? '・プロ志望届提出ずみ' : ''}` : me.minor.kind === 'hs' ? `高校野球部（${hsGrade(this.g) || 1}年生）${me.shibou ? '・志望届提出ずみ' : ''}` : me.minor.kind === 'jhs' ? '中学野球でプレー中' : '少年野球でプレー中';
+    else if (mnr && isAma(me)) st = me.offer ? `${TEAM[me.offer.team].short}から指名！` : me.minor.kind === 'univ' ? `大学${Math.min(4, amaYear(me, S ? S.y : 2026))}年生${me.shibou ? '・プロ志望届提出ずみ' : ''}` : me.minor.kind === 'hs' ? `高校野球部（${(() => { try { return hsGrade(CUR_G) || 1; } catch (e) { return 1; } })()}年生）${me.shibou ? '・志望届提出ずみ' : ''}` : me.minor.kind === 'jhs' ? '中学野球でプレー中' : '少年野球でプレー中';
     else if (mnr) st = me.offer ? `${TEAM[me.offer.team].short}から指名・獲得の話！` : me.minor.kind === 'corp' ? (corpDraftOK(me, S ? S.y : 2026) ? '社会人野球（今年からドラフト対象）' : `社会人野球（ドラフト解禁まで${(num(me.minor.joinAge, 22) <= 19 ? 3 : 2) - ((S ? S.y : 2026) - num(me.minor.y0) + 1)}年）`) : '独立リーグでNPBをめざす';
     else st = me.offer ? `${TEAM[me.offer.team].short}から入団の誘い！` : me.shibou ? 'プロ志望届を提出ずみ' : '';
   return { st, badSt: me.inj > 0 || num(me.susp) > 0 };
