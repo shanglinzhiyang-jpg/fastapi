@@ -37729,10 +37729,12 @@ function town2Install() {
   if (!E.Ke || !E.qn) return; // 地図のない環境（テスト用の計算だけの実行）では何もしない
   try { if (typeof window !== 'undefined') window.__KE = E.Ke; } catch (e) { }
   try { t2Tiles(); } catch (e) { console.error('[t2] tiles', e); }
+  try { t2Tiles2(); } catch (e) { console.error('[t2] tiles2', e); }
   try { t2Brands(); } catch (e) { console.error('[t2] brands', e); }
   try { t2Companies(); } catch (e) { console.error('[t2] companies', e); }
   try { t2Capsule(); } catch (e) { console.error('[t2] capsule', e); }
   try { t2NewPlaces(); t2PatchTowns(); } catch (e) { console.error('[t2] places', e); }
+  try { t2PolishAll(); } catch (e) { console.error('[t2] polish', e); }
 }
 
 // ===== 街の手直し2：置物のドット絵（チェーン店・新聞社・コーヒースタンド・コンビニ・コインランドリー・カプセル） =====
@@ -37760,6 +37762,10 @@ function t2Food(P, x, y, kind, s = 1) {
   }
   function a2(k) { return k === 'sushi' ? '#3a6ad0' : '#c8102e'; }
 }
+// 湯気（あたたかい料理の上にゆらゆら）
+const T2_HOT = new Set(['gyoza', 'ramen', 'chahan', 'gyudon', 'chicken', 'coffee', 'yakitori']);
+function t2Steam(P, x, y, f) { if (f == null) return; const c = P.c; for (let i = 0; i < 3; i++) { const t = (f * 2 + i * 3) % 8; c.fillStyle = `rgba(255,255,255,${(0.5 - t * 0.055).toFixed(3)})`; c.fillRect(Math.round(x + i * 3 + Math.sin((f + i * 2) * 0.9) * 1.5), Math.round(y - t * 1.6), 2, 3); } }
+function t2FoodS(P, x, y, kind, f, s = 1) { t2Food(P, x, y, kind, s); if (T2_HOT.has(kind)) t2Steam(P, x + 3 * s, y - 1, f); }
 // 料理の名前→アイコン
 const T2_FOODMAP = [[/餃子/, 'gyoza'], [/ラーメン|麺|そば|うどん/, 'ramen'], [/炒飯|チャーハン|飯$/, 'chahan'], [/バーガー|マック/, 'burger'], [/ポテト/, 'fries'], [/コーラ|ドリンク|シェイク|ジュース/, 'cup'], [/チキン|唐揚|からあげ/, 'chicken'], [/バーレル|パック|セット/, 'bucket'], [/牛丼|牛皿|丼/, 'gyudon'], [/まぐろ|サーモン|にぎり|皿|寿司/, 'sushi'], [/焼|串|つくね/, 'yakitori'], [/コーヒー|ラテ|マキアート/, 'coffee'], [/フラペ/, 'frappe'], [/ビール|ハイボール/, 'beer']];
 function t2FoodOf(name) { for (const [re, k] of T2_FOODMAP) if (re.test(name)) return k; return 'chahan'; }
@@ -37790,7 +37796,9 @@ function t2Art(k, P, W, H, f, a) {
     case 'chukatable': { // 4人がけテーブル（餃子のたれ・ラー油・酢）
       P.shadow(2, H - 8, W - 4, 8); r(2, H - 28, W - 4, 20, O); r(3, H - 27, W - 6, 12, a.top || '#c8282a'); r(3, H - 27, W - 6, 1, shade(a.top || '#c8282a', 0.3)); r(3, H - 15, W - 6, 5, shade(a.top || '#c8282a', -0.35));
       r(8, H - 10, 3, 6, '#3a3a40'); r(W - 11, H - 10, 3, 6, '#3a3a40');
-      const items = a.items || ['gyoza', 'ramen']; t2Food(P, 8, H - 36, items[0]); if (items[1]) t2Food(P, W - 24, H - 36, items[1]);
+      for (let x = 8; x < W - 8; x += 13) r(x, H - 24 + (x % 3), 7, 1, shade(a.top || '#c8282a', -0.1));
+      const items = a.items || ['gyoza', 'ramen']; r(6, H - 28, 18, 9, 'rgba(255,255,255,0.18)'); t2FoodS(P, 8, H - 36, items[0], f); if (items[1]) { r(W - 26, H - 28, 18, 9, 'rgba(255,255,255,0.18)'); t2FoodS(P, W - 24, H - 36, items[1], f); }
+      r(W / 2 - 10, H - 22, 1, 6, '#c8a060'); r(W / 2 - 8, H - 22, 1, 6, '#c8a060');
       if (a.cond !== 0) { r(W / 2 - 5, H - 32, 3, 6, '#3a2a1a'); r(W / 2 - 1, H - 32, 3, 6, '#c8282a'); r(W / 2 + 3, H - 32, 3, 6, '#e8d8a0'); }
       return;
     }
@@ -37842,13 +37850,18 @@ function t2Art(k, P, W, H, f, a) {
       const c1 = a.c || '#c8102e'; P.shadow(2, H - 8, W - 4, 8);
       r(2, H - 44, W - 4, 18, O); r(3, H - 43, W - 6, 15, c1); r(3, H - 43, W - 6, 2, shade(c1, 0.3)); for (let x = 3 + 14; x < W - 6; x += 16) r(x, H - 41, 1, 12, shade(c1, -0.3)); // 背もたれ
       r(4, H - 28, W - 8, 20, O); r(5, H - 27, W - 10, 10, a.top || '#e8d8b8'); r(5, H - 27, W - 10, 1, '#ffffff'); r(5, H - 17, W - 10, 6, shade(a.top || '#e8d8b8', -0.4));
-      (a.items || ['burger', 'fries']).forEach((it, i) => t2Food(P, 10 + i * ((W - 30) / Math.max(1, (a.items || [0, 0]).length - 1)), H - 35, it));
+      for (let x = 7; x < W - 8; x += 13) r(x, H - 25 + (x % 3), 7, 1, shade(a.top || '#e8d8b8', -0.08));
+      (a.items || ['burger', 'fries']).forEach((it, i) => { const x = 10 + i * ((W - 30) / Math.max(1, (a.items || [0, 0]).length - 1)); r(x - 2, H - 27, 18, 8, a.tray || '#c8402a'); t2FoodS(P, x, H - 35, it, f); });
       return;
     }
     case 'tray': { r(4, H - 30, W - 8, 26, O); r(5, H - 29, W - 10, 24, '#9aa0aa'); r(7, H - 27, W - 14, 8, '#3a3a44'); r(9, H - 26, W - 18, 2, '#a83a1a'); P.t(a.label || 'トレイ返却', W / 2, H - 16, { size: 6, color: '#ffffff', align: 'center' }); r(7, H - 10, W - 14, 3, '#5a5e68'); return; }
     case 'table2': { // 2人がけの小さなテーブル
-      P.shadow(4, H - 8, W - 8, 8); r(4, H - 26, W - 8, 16, O); r(5, H - 25, W - 10, 9, a.top || '#e8d8b8'); r(5, H - 25, W - 10, 1, '#ffffff'); r(5, H - 16, W - 10, 4, shade(a.top || '#e8d8b8', -0.4)); r(W / 2 - 2, H - 12, 4, 7, '#3a3a40');
-      (a.items || []).forEach((it, i) => t2Food(P, 7 + i * (W - 28), H - 33, it)); return;
+      const top = a.top || '#e8d8b8'; P.shadow(4, H - 9, W - 8, 9, 0.3);
+      r(4, H - 27, W - 8, 17, O); r(5, H - 26, W - 10, 10, top); r(5, H - 26, W - 10, 1, shade(top, 0.4));
+      for (let x = 9; x < W - 10; x += 11) r(x, H - 23 + (x % 3), 6, 1, shade(top, -0.09));
+      r(5, H - 16, W - 10, 4, shade(top, -0.38)); r(5, H - 13, W - 10, 1, shade(top, -0.55));
+      if (W >= 64) { r(9, H - 12, 3, 8, '#2a2a30'); r(W - 12, H - 12, 3, 8, '#2a2a30'); r(9, H - 12, 1, 8, '#55555e'); } else { r(W / 2 - 2, H - 12, 4, 7, '#2a2a30'); r(W / 2 - 6, H - 5, 12, 2, '#2a2a30'); }
+      const items = a.items || []; items.forEach((it, i) => { const x = items.length === 1 ? W / 2 - 7 : 7 + i * (W - 28) / Math.max(1, items.length - 1); r(x - 2, H - 26, 18, 8, a.mat || 'rgba(255,255,255,0.28)'); t2FoodS(P, x, H - 33, it, f); }); return;
     }
     case 'happy': { // キッズコーナー（ボールプールとすべり台）
       P.shadow(2, H - 8, W - 4, 8); const bw = Math.floor(W * 0.6);
@@ -37898,7 +37911,7 @@ function t2Art(k, P, W, H, f, a) {
     case 'sushibox': { // ボックス席のテーブル（タッチパネル・お茶・ガリ）
       P.shadow(2, H - 8, W - 4, 8); r(2, H - 28, W - 4, 20, O); r(3, H - 27, W - 6, 12, '#c8a06a'); r(3, H - 27, W - 6, 1, '#e8c890'); r(3, H - 15, W - 6, 5, '#7a4a22');
       r(W - 22, H - 44, 16, 14, O); r(W - 21, H - 43, 14, 10, '#2a3a4a'); r(W - 20, H - 42, 12, 4, ['#5ad0ff', '#ffd040', '#5ad06a'][f % 3]); r(W - 16, H - 33, 4, 4, '#3a3a44');
-      r(6, H - 38, 6, 10, '#3a3a40'); r(7, H - 37, 4, 2, '#5aa83a'); r(14, H - 34, 6, 6, '#e8b0a0'); r(22, H - 35, 5, 7, '#e8e8e0'); r(23, H - 34, 3, 3, '#7aa83a');
+      r(6, H - 38, 6, 10, '#3a3a40'); r(7, H - 37, 4, 2, '#5aa83a'); r(14, H - 34, 6, 6, '#e8b0a0'); r(22, H - 35, 5, 7, '#e8e8e0'); r(23, H - 34, 3, 3, '#7aa83a'); t2Steam(P, 21, H - 37, f);
       if (a.stack) for (let i = 0; i < a.stack; i++) { r(30, H - 30 - i * 3, 16, 3, O); r(31, H - 30 - i * 3, 14, 2, ['#3a6ad0', '#e8b030', '#c8282a'][i % 3]); }
       return;
     }
@@ -37914,7 +37927,7 @@ function t2Art(k, P, W, H, f, a) {
     case 'torbooth': { // 仕切りのある半個室（すだれ）
       P.shadow(2, H - 8, W - 4, 8); r(0, 0, 4, H - 6, O); r(1, 1, 2, H - 8, '#8a5a2e');
       r(4, H - 28, W - 8, 20, O); r(5, H - 27, W - 10, 12, '#a06a3a'); r(5, H - 27, W - 10, 1, '#c88a4a'); r(5, H - 15, W - 10, 5, '#5a3a1e');
-      t2Food(P, 10, H - 36, 'yakitori'); t2Food(P, W - 26, H - 36, 'beer'); r(W / 2 - 4, H - 34, 8, 6, '#e8e8e0');
+      t2FoodS(P, 10, H - 36, 'yakitori', f); t2Food(P, W - 26, H - 36, 'beer'); r(W / 2 - 4, H - 34, 8, 6, '#e8e8e0');
       const sb = H - 44; r(4, 0, W - 8, 3, '#5a3a1e'); for (let x = 5; x < W - 5; x += 3) r(x, 3, 2, Math.max(4, sb - 3 - ((x * 7) % 5)), x % 6 ? '#c8a060' : '#a88040'); r(5, sb - 2, W - 10, 1, '#7a5a30');
       return;
     }
@@ -38034,7 +38047,146 @@ function t2Art(k, P, W, H, f, a) {
       }
       return;
     }
+    default: return t2Art2(k, P, W, H, f, a);
   }
+}
+
+// ===== 街の手直し2・仕上げ：いす・照明・床・壁の飾り・動く店員 =====
+// ---- 追加の置物 ----
+function t2Art2(k, P, W, H, f, a) {
+  const r = P.r, O = T2_OL;
+  switch (k) {
+    case 'clock': { const cx = W / 2, cy = H / 2 - 2; P.oval(cx - 11, cy - 11, 22, 22, O); P.oval(cx - 10, cy - 10, 20, 20, a.c || '#f4f4f4'); P.oval(cx - 8, cy - 8, 16, 16, '#ffffff');
+      for (let i = 0; i < 12; i++) { const an = i / 12 * Math.PI * 2; r(cx + Math.round(Math.sin(an) * 7) - 0.5, cy - Math.round(Math.cos(an) * 7) - 0.5, 1, 1, '#3a3a44'); }
+      const m = (f % 12) / 12 * Math.PI * 2, h2 = 0.9 + f / 144 * Math.PI * 2; P.c.strokeStyle = '#1a1a24'; P.c.lineWidth = 1.2; P.c.beginPath(); P.c.moveTo(cx, cy); P.c.lineTo(cx + Math.sin(m) * 6.5, cy - Math.cos(m) * 6.5); P.c.stroke(); P.c.lineWidth = 1.8; P.c.beginPath(); P.c.moveTo(cx, cy); P.c.lineTo(cx + Math.sin(h2) * 4, cy - Math.cos(h2) * 4); P.c.stroke(); r(cx - 1, cy - 1, 2, 2, '#c8282a'); return; }
+    case 'poster': { // 額に入ったポスター
+      r(2, 1, W - 4, H - 3, O); r(3, 2, W - 6, H - 5, a.frame || '#e8e0d0'); const x = 5, y = 4, w = W - 10, h = H - 9; P.vg(x, y, w, h, a.c1 || '#c8282a', a.c2 || '#ffd23f');
+      if (a.kind === 'beer') { t2Food(P, x + w / 2 - 6, y + h / 2 - 6, 'beer', 1.1); } else if (a.kind === 'food') { t2Food(P, x + w / 2 - 7, y + h / 2 - 5, a.food || 'ramen', 1); } else if (a.kind === 'sea') { r(x, y + h - 8, w, 8, '#3a7ab0'); P.oval(x + w - 12, y + 3, 8, 8, '#ffe070'); }
+      if (a.text) P.t(a.text, W / 2, y + h - 10, { size: 6, color: a.tc || '#ffffff', align: 'center' }); return; }
+    case 'tvwall': { r(0, 2, W, H - 6, O); r(2, 4, W - 4, H - 10, '#1a1a24'); const cc = (a.cols || ['#2a6ad0', '#e8b030', '#c83a3a', '#3a9a5a'])[Math.floor(f / 3) % 4];
+      P.vg(3, 5, W - 6, H - 12, cc, shade(cc, -0.4)); if (a.food) t2Food(P, W / 2 - 7, 8, a.food[Math.floor(f / 3) % a.food.length], 1); P.t(a.text || '', W / 2, H - 18, { size: 6, color: '#ffffff', align: 'center' }); r(W / 2 - 6, H - 4, 12, 2, '#3a3a44'); return; }
+    case 'umbrella': { P.shadow(6, H - 6, W - 12, 6); r(8, H - 20, W - 16, 16, O); r(9, H - 19, W - 18, 14, '#7a7e88'); r(9, H - 19, W - 18, 2, '#a8acb6');
+      const cols = ['#2a6ad0', '#c83a3a', '#3a3a44', '#e8e8f0']; for (let i = 0; i < 4; i++) { const x = 10 + i * 4; r(x, H - 38 + (i % 2) * 3, 3, 20, cols[i]); r(x + 1, H - 41 + (i % 2) * 3, 1, 4, '#5a3a1a'); } return; }
+    case 'bins': { // 分別のごみ箱
+      const cols = a.cols || ['#3a8ad8', '#e8b030', '#c83a3a']; const n = cols.length, w = Math.floor((W - 4) / n);
+      cols.forEach((c2, i) => { const x = 2 + i * w; P.shadow(x, H - 6, w - 1, 6); r(x, H - 30, w - 1, 26, O); r(x + 1, H - 29, w - 3, 24, c2); r(x + 1, H - 29, w - 3, 3, shade(c2, 0.3)); r(x + 3, H - 24, w - 7, 3, '#1a1a24'); r(x + 3, H - 16, w - 7, 6, '#ffffff'); });
+      if (a.label) P.t(a.label, W / 2, H - 15, { size: 5, color: '#1a1a24', align: 'center' }); return; }
+    case 'menustand': { P.shadow(4, H - 6, W - 8, 6); r(6, H - 40, W - 12, 34, '#5a3a1e'); r(8, H - 38, W - 16, 28, '#2a3a32'); P.t(a.title || 'TODAY', W / 2, H - 37, { size: 6, color: '#ffd23f', align: 'center' });
+      (a.lines || ['おすすめ']).forEach((ln, i) => P.t(ln, W / 2, H - 28 + i * 7, { size: 5, color: '#ffffff', align: 'center' })); r(8, H - 8, 3, 4, '#5a3a1e'); r(W - 11, H - 8, 3, 4, '#5a3a1e'); return; }
+    case 'uketsuke': { // 受付の発券機
+      P.shadow(4, H - 6, W - 8, 6); r(6, H - 50, W - 12, 46, O); r(7, H - 49, W - 14, 44, '#e8e8ee'); r(7, H - 49, W - 14, 5, '#c8282a'); r(9, H - 42, W - 18, 14, '#2a3a4a'); r(10, H - 41, W - 20, 5, ['#5ad0ff', '#ffd040'][f % 2]);
+      r(W / 2 - 4, H - 24, 8, 3, '#3a3a44'); r(W / 2 - 3, H - 21 + (f % 2), 6, 4, '#ffffff'); P.t('受付', W / 2, H - 49, { size: 5, color: '#ffffff', align: 'center' }); return; }
+    case 'waitbench': { const c1 = a.c || '#8a2a2a'; P.shadow(2, H - 6, W - 4, 6); r(2, H - 22, W - 4, 14, O); r(3, H - 21, W - 6, 6, c1); r(3, H - 21, W - 6, 1, shade(c1, 0.3)); r(3, H - 15, W - 6, 5, shade(c1, -0.3)); for (let x = 6; x < W - 6; x += 24) r(x, H - 10, 2, 6, '#3a3a40'); return; }
+    case 'partition': { // 植物をのせた低い仕切り
+      P.shadow(2, H - 6, W - 4, 6); r(2, H - 26, W - 4, 22, O); r(3, H - 25, W - 6, 18, a.c || '#8a5a2e'); for (let x = 6; x < W - 6; x += 8) r(x, H - 24, 1, 16, shade(a.c || '#8a5a2e', -0.2)); r(3, H - 25, W - 6, 2, shade(a.c || '#8a5a2e', 0.3));
+      for (let x = 6; x < W - 10; x += 12) { P.oval(x, H - 36, 12, 12, '#2a6a3a'); P.oval(x + 2, H - 38, 8, 8, '#3a8a4a'); r(x + 4, H - 35, 2, 2, '#5aaa5a'); } return; }
+    case 'watercooler': { P.shadow(6, H - 6, W - 12, 6); r(9, H - 44, W - 18, 14, '#1c1a24'); r(10, H - 43, W - 20, 12, '#a8d8f0'); r(11, H - 42, 3, 9, '#d8f0ff'); r(8, H - 30, W - 16, 26, O); r(9, H - 29, W - 18, 24, '#e8e8ee'); r(W / 2 - 4, H - 24, 3, 3, '#3a6ad0'); r(W / 2 + 1, H - 24, 3, 3, '#c83a3a'); return; }
+    case 'kago': { // 買い物かごの山
+      for (let i = 0; i < 4; i++) { const y = H - 10 - i * 4; r(6, y, W - 12, 8, O); r(7, y + 1, W - 14, 6, a.c || '#2a6ad0'); for (let x = 9; x < W - 9; x += 4) r(x, y + 2, 2, 4, shade(a.c || '#2a6ad0', -0.3)); } r(8, H - 28, 2, 6, '#9aa0aa'); r(W - 10, H - 28, 2, 6, '#9aa0aa'); return; }
+    case 'cart': { P.shadow(4, H - 6, W - 8, 6); r(6, H - 28, W - 12, 18, O); r(7, H - 27, W - 14, 16, '#c8ccd4'); for (let x = 9; x < W - 9; x += 4) r(x, H - 26, 1, 14, '#9aa0aa'); r(8, H - 32, W - 16, 6, '#e86aa0'); r(10, H - 34, 8, 4, '#ffffff'); r(8, H - 8, 4, 4, '#3a3a44'); r(W - 12, H - 8, 4, 4, '#3a3a44'); return; }
+  }
+}
+// ---- いす（作り直し：背もたれ・座面・脚・かげ） ----
+function t2Tiles2() {
+  if (!E.Z) return;
+  const R = (t, x, y, w, h, col) => { t.fillStyle = col; t.fillRect(x, y, w, h); };
+  const sh = (t, x, y, w, h, a = 0.28) => { t.fillStyle = `rgba(0,0,0,${a})`; t.beginPath(); t.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, 7); t.fill(); };
+  const chair = (id, c, frame) => E.Z(id, { obj: true, draw(t) { R(t, 4, 3, 8, 5, shade(c, -0.2)); R(t, 4, 7, 8, 4, c); }, hd(t) {
+    sh(t, 6, 24, 20, 6);
+    R(t, 9, 19, 2, 8, frame); R(t, 21, 19, 2, 8, frame); R(t, 11, 18, 2, 6, shade(frame, -0.3)); R(t, 19, 18, 2, 6, shade(frame, -0.3));
+    R(t, 8, 3, 16, 12, T2_OL); R(t, 9, 4, 14, 10, shade(c, -0.12)); R(t, 9, 4, 14, 2, shade(c, 0.25)); R(t, 11, 6, 2, 7, shade(c, 0.12)); R(t, 9, 13, 14, 1, shade(c, -0.4));
+    R(t, 7, 13, 18, 8, T2_OL); R(t, 8, 14, 16, 4, c); R(t, 8, 14, 16, 1, shade(c, 0.35)); R(t, 8, 18, 16, 2, shade(c, -0.35)); } });
+  const stool = (id, c, pole) => E.Z(id, { obj: true, draw(t) { R(t, 4, 6, 8, 4, c); R(t, 7, 10, 2, 4, pole); }, hd(t) {
+    sh(t, 7, 25, 18, 5); R(t, 15, 16, 3, 10, pole); R(t, 15, 16, 1, 10, shade(pole, 0.4)); t.fillStyle = shade(pole, -0.2); t.beginPath(); t.ellipse(16.5, 26, 6, 2, 0, 0, 7); t.fill();
+    t.fillStyle = T2_OL; t.beginPath(); t.ellipse(16.5, 13, 10, 6, 0, 0, 7); t.fill(); t.fillStyle = shade(c, -0.3); t.beginPath(); t.ellipse(16.5, 13.5, 9, 4.5, 0, 0, 7); t.fill();
+    t.fillStyle = c; t.beginPath(); t.ellipse(16.5, 12, 9, 4, 0, 0, 7); t.fill(); R(t, 11, 10, 6, 1, shade(c, 0.45)); } });
+  const sofa = (id, c) => E.Z(id, { obj: true, draw(t) { R(t, 0, 3, 16, 6, shade(c, -0.15)); R(t, 0, 9, 16, 4, c); }, hd(t) {
+    t.fillStyle = 'rgba(0,0,0,0.25)'; t.fillRect(0, 26, 32, 3);
+    R(t, 0, 3, 32, 1, T2_OL); R(t, 0, 4, 32, 11, shade(c, -0.15)); R(t, 0, 4, 32, 2, shade(c, 0.2)); R(t, 15, 5, 2, 9, shade(c, -0.38)); R(t, 1, 6, 12, 1, shade(c, 0.05)); R(t, 18, 6, 12, 1, shade(c, 0.05));
+    R(t, 0, 15, 32, 1, shade(c, -0.45)); R(t, 0, 16, 32, 7, c); R(t, 0, 16, 32, 1, shade(c, 0.35)); R(t, 15, 16, 2, 7, shade(c, -0.25)); R(t, 0, 23, 32, 1, shade(c, -0.4)); R(t, 0, 24, 32, 2, shade(c, -0.55)); } });
+  chair('t2_chair_red', '#c8282a', '#3a3a40'); chair('t2_chair_mcd', '#e8a830', '#5a5e68'); chair('t2_chair_kfc', '#c8102e', '#2a2a30');
+  chair('t2_chair_wood', '#a87a4a', '#5a3a1e'); chair('t2_chair_office', '#2a3a5a', '#3a3a44');
+  stool('t2_stool_red', '#c8282a', '#b8bec8'); stool('t2_stool_wood', '#a06a34', '#5a3a1e'); stool('t2_stool_sukiya', '#d40010', '#b8bec8'); stool('t2_stool_bar', '#2a2a30', '#b8bec8');
+  sofa('t2_sofa_sushi', '#8a2a2a'); sofa('t2_sofa_green', '#2a6a4a'); sofa('t2_sofa_mcd', '#b82020'); sofa('t2_bench_tori', '#8a5a2e'); sofa('t2_bench_laundry', '#5a8ab8');
+}
+// ---- 照明と床 ----
+// 光のたまり（L: [x, y, 半径px, 色, 強さ] 単位はタイル）
+function t2Lights(c, cam, w, h, L, o = {}) {
+  c.save(); pRoomClip(c, cam, w, h);
+  if (o.dark) { c.fillStyle = `rgba(12,8,24,${o.dark})`; c.fillRect(0, 0, 320, 180); }
+  if (o.tint) { c.globalAlpha = o.tintA || 0.06; c.fillStyle = o.tint; c.fillRect(0, 0, 320, 180); c.globalAlpha = 1; }
+  c.globalCompositeOperation = 'lighter';
+  for (const [x, y, rr, col, al] of L) { const X = x * 16 - cam.x, Y = y * 16 - cam.y; const gr = c.createRadialGradient(X, Y, 1, X, Y, rr); gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)'); c.globalAlpha = al == null ? 0.16 : al; c.fillStyle = gr; c.fillRect(X - rr, Y - rr, rr * 2, rr * 2); }
+  c.restore();
+  if (o.vig) { c.save(); pRoomClip(c, cam, w, h); const cx = w * 8 - cam.x, cy = h * 8 - cam.y, RR = Math.max(w, h) * 10; const gr = c.createRadialGradient(cx, cy, RR * 0.4, cx, cy, RR); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, `rgba(0,0,0,${o.vig})`); c.fillStyle = gr; c.fillRect(0, 0, 320, 180); c.restore(); }
+}
+// 床の敷物（drawUnder で、人や家具より下に描く）
+function t2Rug(c, cam, x, y, w, h, c1, c2) { const X = Math.round(x * 16 - cam.x), Y = Math.round(y * 16 - cam.y), W = w * 16, H = h * 16; c.fillStyle = 'rgba(0,0,0,0.18)'; c.fillRect(X + 1, Y + 1, W, H); c.fillStyle = c1; c.fillRect(X, Y, W, H); c.fillStyle = c2; c.fillRect(X + 2, Y + 2, W - 4, 1); c.fillRect(X + 2, Y + H - 3, W - 4, 1); c.fillRect(X + 2, Y + 2, 1, H - 4); c.fillRect(X + W - 3, Y + 2, 1, H - 4); for (let i = X + 6; i < X + W - 6; i += 6) c.fillRect(i, Y + H / 2, 2, 1); }
+function t2Mat(c, cam, x, y, w) { const X = Math.round(x * 16 - cam.x) + 1, Y = Math.round(y * 16 - cam.y) + 3, W = w * 16 - 2; c.fillStyle = '#2a2a30'; c.fillRect(X, Y, W, 12); c.fillStyle = '#3a3a44'; for (let i = X + 2; i < X + W - 2; i += 3) c.fillRect(i, Y + 2, 1, 8); c.fillStyle = '#5a5a66'; c.fillRect(X, Y, W, 1); }
+// ---- 店ごとの仕上げ ----
+const t2d = (k, x, y, w, h, up, o = {}) => tp(k, x, y, w, h, up, o);
+function t2Polish(pid, P0) {
+  const R = P0 && P0.rooms && P0.rooms.main; if (!R) return; delete R._built;
+  const add = (...es) => R.entities.push(...es);
+  const npc = (id) => R.entities.find(e => e.type === 'npc' && e.id === id);
+  const warm = '#ffcf90', white = '#f4f8ff';
+  const tableLights = (pts, col, rr = 26, al = 0.16) => pts.map(([x, y]) => [x, y, rr, col, al]);
+  let W = 0, H = 0; try { W = R.tiles[0].length; H = R.tiles.length; } catch (e) { }
+  const set = (under, L, o) => { R.drawUnder = (c, g, cam) => { try { under && under(c, cam, num(g && g.frame, 0)); } catch (e) { } }; const prev = o.keepOver ? R.drawOver : null; R.drawOver = (c, g, cam) => { try { prev && prev(c, g, cam); t2Lights(c, cam, W, H, L, o); o.after && o.after(c, cam, num(g && g.frame, 0)); } catch (e) { } }; };
+  const doorMat = (c, cam) => { const ws = R.warps || []; if (!ws.length) return; const xs = ws.map(w => w.x); t2Mat(c, cam, Math.min(...xs), ws[0].y - 1, xs.length); };
+  if (pid === 'ramen') {
+    add(t2d('umbrella', 7, 9, 1, 1, 0.5, { text: '傘立て。' }), t2d('bins', 16, 9, 1, 1, 0.3, { a: { cols: ['#c83a3a'] }, text: 'ごみ箱。' }), ip('plant', 16, 4, 1, 1, 1, {}),
+      t2npc('ramen_hall', 10, 7, 'down', { hair: 'bob', hairColor: 'black', skin: 'light', top: '#ffffff', bottom: '#20232a', apron: '#e8343c' }, 'ホールの人', ['（お皿を両手に、テーブルのあいだを走りまわっている）', '「お待たせしましたー！ 餃子2人前です！」'], { wander: 2 }));
+    set((c, cam) => doorMat(c, cam), [...tableLights([[3, 6.2], [8, 6.2], [13, 6.2], [3, 8.2], [8, 8.2]], warm, 30, 0.2), ...tableLights([[3, 3], [6, 3], [9, 3]], '#ffe0b0', 24, 0.14), [5, 1.6, 40, '#ff7a30', 0.10]], { vig: 0.3, tint: '#ffd0a0', tintA: 0.05 });
+  } else if (pid === 'famires') {
+    add(t2d('poster', 13, 1, 1, 1, 0.4, { solid: false, a: { c1: '#ffc72c', c2: '#da0b0b', kind: 'food', food: 'burger', text: 'NEW' }, text: '新作バーガーのポスター。' }), t2d('clock', 18, 1, 1, 1, 0.3, { solid: false, frames: 12, speed: 90, text: '壁の時計。' }),
+      t2d('bins', 15, 3, 1, 1, 0.3, { a: { cols: ['#3a8ad8', '#e8b030'] }, text: '分別のごみ箱。「もえるごみ」「プラスチック」' }), ip('plant', 18, 4, 1, 1, 1, {}), ip('plant', 18, 11, 1, 1, 1, {}), t2d('umbrella', 11, 11, 1, 1, 0.5, { text: '傘立て。' }),
+      t2npc('famires_clean', 13, 6, 'down', { hair: 'short', hairColor: 'brown', skin: 'light', top: '#da0b0b', bottom: '#20232a', hat: '#ffc72c' }, 'クルーさん', ['（ダスターで、テーブルをきれいにふいている）', 'いらっしゃいませー！'], { wander: 2 }));
+    set((c, cam) => doorMat(c, cam), [...tableLights([[7, 7.2], [11, 7.2], [7, 9.2], [11, 9.2], [2, 6.2], [2, 8.2], [16, 7.6]], white, 28, 0.14), ...tableLights([[3, 4], [7, 4], [11, 4]], '#fff4d8', 26, 0.12)], { vig: 0.2 });
+  } else if (pid === 'shop_yakitori') {
+    add(t2d('poster', 11, 1, 1, 1, 0.4, { solid: false, a: { c1: '#c8102e', c2: '#7a0010', kind: 'food', food: 'bucket', text: 'パック' }, text: 'パックのポスター。' }), t2d('clock', 15, 1, 1, 1, 0.3, { solid: false, frames: 12, speed: 90, text: '壁の時計。' }),
+      ip('plant', 16, 4, 1, 1, 1, {}), t2d('bins', 15, 10, 1, 1, 0.3, { a: { cols: ['#2a2a30'] }, text: 'ごみ箱。' }), t2d('umbrella', 10, 10, 1, 1, 0.5, { text: '傘立て。' }),
+      t2npc('kfc_hall', 9, 9, 'down', { hair: 'short', hairColor: 'black', skin: 'light', top: '#c8102e', bottom: '#20232a' }, 'スタッフさん', ['（トレイを片づけている）'], { wander: 2 }));
+    set((c, cam) => doorMat(c, cam), [...tableLights([[3, 6.2], [8, 6.2], [13, 6.2], [3, 8.2], [8, 8.2], [13, 8.2]], warm, 28, 0.17), [6, 2.4, 50, '#ffb040', 0.09]], { vig: 0.28 });
+  } else if (pid === 'shop_chuka') {
+    add(ip('plant', 16, 5, 1, 1, 1, {}), t2d('bins', 16, 9, 1, 1, 0.3, { a: { cols: ['#d40010'] }, text: 'ごみ箱。' }), t2d('umbrella', 10, 9, 1, 1, 0.5, { text: '傘立て。' }),
+      t2npc('sukiya_hall', 14, 6, 'left', { hair: 'bob', hairColor: 'brown', skin: 'light', top: '#ffd94a', bottom: '#20232a', hat: '#d40010' }, '店員さん', ['（お茶を注いでまわっている）'], { wander: 2 }));
+    set((c, cam) => doorMat(c, cam), [...tableLights([[3, 7.2], [8, 7.2], [13, 7.2]], warm, 28, 0.17), ...tableLights([[2, 4.4], [5, 4.4], [8, 4.4], [11, 4.4]], '#fff0d0', 22, 0.12)], { vig: 0.22 });
+  } else if (/_co_sushiro$/.test(pid)) {
+    add(t2d('clock', 11, 1, 1, 1, 0.3, { solid: false, frames: 12, speed: 90, text: '壁の時計。' }), t2d('tvwall', 12, 1, 3, 1, 0.5, { solid: false, frames: 12, speed: 30, a: { text: '本日のおすすめ', food: ['sushi', 'ramen', 'sushi'] }, text: 'おすすめを映す画面。' }),
+      t2d('poster', 15, 1, 2, 1, 0.4, { solid: false, a: { c1: '#1a3a7a', c2: '#3a6ad0', kind: 'food', food: 'sushi', text: 'まぐろ祭り' }, text: '「まぐろ祭り」のポスター。' }),
+      t2d('uketsuke', 13, 10, 1, 1, 1, { frames: 2, speed: 40, text: ['受付の発券機。', '人数を入れると、席の番号が書かれた紙が出てくる。'] }), t2d('waitbench', 14, 10, 3, 1, 0.3, { a: { c: '#8a2a2a' }, text: '順番待ちのベンチ。' }),
+      ip('plant', 1, 10, 1, 1, 1, {}), ip('plant', 18, 10, 1, 1, 1, {}),
+      t2npc(pid + '_hall', 12, 9, 'down', { hair: 'bob', hairColor: 'black', skin: 'light', top: '#a8161c', bottom: '#20232a' }, '店員さん', ['（注文の品を、席まで運んでいる）', 'お待たせしましたー！'], { wander: 2 }));
+    set((c, cam) => doorMat(c, cam), [...tableLights([[3, 7.2], [7, 7.2], [11, 7.2], [15, 7.2]], warm, 30, 0.17), ...tableLights([[4, 3.6], [9, 3.6], [14, 3.6]], white, 30, 0.12)], { vig: 0.22 });
+  } else if (/_co_torikizoku$/.test(pid)) {
+    add(t2d('poster', 15, 1, 1, 1, 0.4, { solid: false, a: { c1: '#f5c400', c2: '#c89a00', kind: 'beer', text: '298' }, text: '生ビールのポスター。' }), kip('crate', 16, 4, 1, 1, 0.4, { a: { n: 3 }, text: 'ビールケースが積まれている。' }),
+      t2npc(pid + '_hall', 12, 5, 'down', { hair: 'short', hairColor: 'brown', skin: 'light', top: '#f5c400', bottom: '#20232a' }, '店員さん', ['（ジョッキを4つ、片手で運んでいる）', '「生ビール、おまちどおさまでーす！」'], { wander: 2 }));
+    set((c, cam) => doorMat(c, cam), [...tableLights([[3, 7.2], [6, 7.2], [9, 7.2], [12, 7.2], [15, 7.2]], '#ffc070', 26, 0.22), [5, 1.8, 54, '#ff5a1a', 0.14], [11, 1.4, 20, '#ffd23f', 0.2], [16, 1.4, 20, '#ffd23f', 0.2]],
+      { dark: 0.12, vig: 0.35, after: (c, cam, t) => pSmoke(c, cam, 18, 4, t, 5, 0.12, '#e8e0d0') });
+  } else if (/_co_starbucks$/.test(pid)) {
+    add(ip('plant', 1, 9, 1, 1, 1, {}), ip('plant', 16, 9, 1, 1, 1, {}), t2d('umbrella', 10, 9, 1, 1, 0.5, { text: '傘立て。' }),
+      t2d('menustand', 11, 7, 1, 1, 0.6, { a: { title: 'NEW', lines: ['季節の', 'フラペチーノ'] }, text: '店の中の立て看板。季節限定のおすすめが書いてある。' }));
+    set((c, cam) => { doorMat(c, cam); t2Rug(c, cam, 1, 6, 5, 3, '#c8b08a', '#8a6a42'); }, [...tableLights([[3, 3.6], [6, 3.6], [9, 3.6], [13, 3.6]], warm, 26, 0.22), ...tableLights([[8, 6.2], [8, 8.2], [14, 8.2], [4, 7.2]], warm, 24, 0.16), [14, 2.5, 60, '#fff4d8', 0.1]], { vig: 0.3, tint: '#ffd8a0', tintA: 0.05 });
+  } else if (pid === 't2_shinbun') {
+    add(ip('plant', 18, 2, 1, 1, 1, {}), ip('plant', 18, 11, 1, 1, 1, {}), t2d('watercooler', 18, 7, 1, 1, 0.8, { text: 'ウォーターサーバー。記者たちの給水所だ。' }),
+      t2d('partition', 15, 6, 3, 1, 0.5, { a: { c: '#9aa0aa' }, text: '局長席との仕切り。' }), t2d('bins', 10, 9, 1, 1, 0.3, { a: { cols: ['#3a8ad8', '#e8e8f0'] }, text: '「古紙」と書かれた回収箱。新聞社らしく、すぐいっぱいになる。' }));
+    set((c, cam) => doorMat(c, cam), [...tableLights([[3, 3.6], [11, 3.6], [3, 6.6], [11, 6.6], [16, 4.4]], white, 34, 0.14), [11, 1.4, 40, '#8ab8ff', 0.1]], { vig: 0.22 });
+  } else if (pid === 't2_coffee') {
+    add(t2d('menustand', 9, 6, 1, 1, 0.6, { a: { title: 'TODAY', lines: ['本日の豆', 'エチオピア'] }, text: '立て看板。「本日の豆：エチオピア」' }));
+    set((c, cam) => doorMat(c, cam), [...tableLights([[3, 3.6], [6, 3.6]], warm, 26, 0.24), ...tableLights([[12, 5.2], [12, 7.2], [12.5, 3.6]], warm, 22, 0.16), [12, 2.4, 60, '#e8f4ff', 0.12]], { vig: 0.3, tint: '#ffc890', tintA: 0.06 });
+  } else if (/^t2_mart_/.test(pid)) {
+    add(t2d('umbrella', 7, 9, 1, 1, 0.5, { text: '傘立て。ビニール傘ばかりだ。' }), t2d('kago', 10, 9, 1, 1, 0.4, { a: { c: '#2a6ad0' }, text: '買い物かご。' }));
+    set((c, cam) => doorMat(c, cam), [[5, 1.8, 70, '#e8f8ff', 0.16], ...tableLights([[4, 4.5], [9, 4.5], [4, 6.5], [9, 6.5], [13, 7.5]], white, 30, 0.1)], { vig: 0.16 });
+  } else if (pid === 't2_laundry') {
+    add(t2d('clock', 7, 1, 1, 1, 0.3, { solid: false, frames: 12, speed: 90, text: '壁の時計。乾燥機の残り時間と、にらめっこ。' }), t2d('poster', 14, 1, 1, 1, 0.4, { solid: false, a: { c1: '#e8f4ff', c2: '#8ac8f0', kind: 'sea', text: '布団OK', tc: '#1a3a7a' }, text: '「布団も洗えます」のポスター。' }),
+      ip('vend', 1, 4, 1, 1, 1, { a: { c: '#3a8ad8' }, text: '飲み物の自販機。' }), t2d('cart', 8, 5, 1, 1, 0.5, { text: '洗濯物を運ぶカート。' }));
+    set((c, cam) => doorMat(c, cam), [[4, 1.6, 50, '#ffd8a0', 0.1], ...tableLights([[5, 4.4], [11, 3.6], [3, 6.4]], white, 30, 0.12)], { vig: 0.2 });
+  }
+}
+function t2PolishAll() {
+  const K = E.Ke; if (!K) return;
+  for (const id of Object.keys(K)) if (/^(ramen|famires|shop_yakitori|shop_chuka|t2_shinbun|t2_coffee|t2_mart_.*|t2_laundry)$/.test(id) || /_co_(sushiro|torikizoku|starbucks)$/.test(id)) { try { t2Polish(id, K[id]); } catch (e) { console.error('[t2] polish', id, e); } }
 }
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
