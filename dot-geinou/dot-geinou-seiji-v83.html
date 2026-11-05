@@ -35276,6 +35276,7 @@ function installGamble() {
   try { hallRegister(); } catch (e) { console.error('[gb] hall', e); }
   try { interRegister(); } catch (e) { console.error('[gb] inter', e); }
   try { town2Install(); } catch (e) { console.error('[t2] install', e); }
+  try { shInstall(); } catch (e) { console.error('[shikaku] install', e); }
   try { gbPatchKanraku(); } catch (e) { console.error('[gb] kanraku', e); }
   try { gbPatchTokyo(); } catch (e) { console.error('[gb] tokyo', e); }
   try {
@@ -39196,6 +39197,497 @@ function tkxBall(c, x, y, r, n, col, txt) { pCirc(c, x, y + 1, r, 'rgba(0,0,0,0.
     if (!Lg.done) s.btn('skip', 'すぐ結果を見る', 330, 318, 140, 28, { size: 12 }); else { s.btn('menu', 'もどる', 330, 318, 110, 28, { kind: 'pri', def: true, size: 12 }); s.btn('quit', '閉じる', 446, 318, 90, 28, { back: true, size: 12 }); }
   };
 })();
+
+// ===== 資格：データ（資格・学校・資格を活かした仕事） =====
+// rate＝合格率（％）、h＝合格までの標準的な勉強時間（現実の時間）、fee＝受験料、mon＝試験の月（'cbt'＝いつでも受けられる）
+// st＝段階のある試験 [段階名, 合格率, 月（'same'＝同じ日）]、kam＝科目合格制、req＝受験資格、wait＝結果発表までの月数
+const SH_CAT = [['law', '法律・行政', '#3a5ad0'], ['acct', '会計・金融・経営', '#c9962a'], ['estate', '不動産・建築', '#a0602e'], ['med', '医療・福祉', '#d0406a'], ['it', 'IT・情報', '#2aa0b0'],
+  ['tech', '電気・技術・工業', '#e07a1a'], ['trans', '運転・交通・船', '#5a8a3a'], ['lang', '語学・教育・文化', '#8a4ac8'], ['life', '生活・食・自然', '#3a9a6a'], ['kentei', '英検・漢検・数検', '#c8302a']];
+const SH = {}, SH_LIST = [];
+function shQ(id, nm, cat, rate, h, fee, mon, o = {}) { const q = { id, nm, cat, rate, h, fee, mon, kind: '国家', wait: mon === 'cbt' ? 0 : 2, ...o }; SH[id] = q; SH_LIST.push(q); return q; }
+const M12 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+// ---- 法律・行政 ----
+shQ('yobi', '予備試験（司法試験予備試験）', 'law', 0, 8000, 17500, null, { st: [['短答式', 23, 7], ['論文式', 18, 9], ['口述', 95, 1]], keepM: 7, since: 201105, wait: 2, note: '合格すると、法科大学院に行かなくても司法試験を受けられる' });
+shQ('shiho', '司法試験', 'law', 0, 6000, 28000, [7], { st: [['短答式', 72, 'same'], ['論文式', 55, 'same']], wait: 4, req: { or: [{ need: ['yobi'] }, { edu: ['law'] }], txt: '予備試験に合格、または法科大学院を修了' }, fame: 40, note: '合格後に司法修習（1年）を終えると弁護士になれる' });
+shQ('shoshi', '司法書士', 'law', 0, 3000, 8000, null, { st: [['筆記', 5, 7], ['口述', 99, 10]], fame: 15 });
+shQ('benri', '弁理士', 'law', 0, 3000, 12000, null, { st: [['短答式', 14, 5], ['論文式', 28, 7], ['口述', 95, 10]], fame: 15 });
+shQ('gyosei', '行政書士', 'law', 11, 800, 10400, [11], { wait: 3 });
+shQ('sharo', '社会保険労務士（社労士）', 'law', 6, 1000, 15000, [8], { wait: 3, req: { or: [{ edu: ['univ'] }, { need: ['gyosei'] }, { age: 21 }], txt: '大学卒業、行政書士、または実務3年（21歳以上で判定）' } });
+shQ('tsukan', '通関士', 'law', 15, 500, 3000, [10], { wait: 3 });
+shQ('bizho', 'ビジネス実務法務検定 2級', 'law', 45, 80, 7700, [6, 10], { kind: '公的', wait: 1 });
+shQ('chizai', '知的財産管理技能検定 3級', 'law', 65, 50, 6100, [3, 7, 11], { wait: 1, since: 200803 });
+shQ('kinyugyomu', '金融業務能力検定', 'acct', 50, 50, 5000, 'cbt', { kind: '民間', since: 201904 });
+shQ('kojin', '個人情報保護士', 'law', 38, 50, 11000, [3, 6, 9, 12], { kind: '民間', since: 200507 });
+shQ('compl', 'コンプライアンス・オフィサー認定試験', 'law', 60, 40, 5500, [6, 10], { kind: '民間' });
+shQ('kashikin', '貸金業務取扱主任者', 'law', 30, 150, 8500, [11], { since: 200911 });
+// ---- 会計・金融・経営 ----
+shQ('kaikei', '公認会計士', 'acct', 0, 4000, 19500, null, { st: [['短答式', 12, 12], ['論文式', 36, 8]], keepM: 10, wait: 3, fame: 25 });
+shQ('zeiri', '税理士', 'acct', 0, 2500, 4000, [8], { kam: { n: 5, list: ['簿記論', '財務諸表論', '法人税法', '所得税法', '相続税法', '消費税法', '国税徴収法', '住民税', '事業税', '固定資産税', '酒税法'], rate: 16, max: 3, keep: 99 }, wait: 4,
+  req: { or: [{ need: ['boki1'] }, { edu: ['univ'] }, { age: 22 }, { ym: 202304 }], txt: '簿記1級、大学卒業、または実務2年（22歳以上で判定）。2023年からは簿記論・財務諸表論は誰でも受験可' }, note: '11科目のうち5科目に合格すると税理士。合格した科目は一生有効' });
+shQ('shindan', '中小企業診断士', 'acct', 0, 1000, 14500, null, { st: [['1次（7科目）', 25, 8], ['2次 筆記', 18, 10], ['2次 口述', 99, 12]], keepM: 24, wait: 2 });
+shQ('cma', '証券アナリスト（CMA）', 'acct', 0, 600, 25000, null, { kind: '民間', st: [['1次', 50, 4], ['2次', 48, 6]], keepM: 36, req: { edu: ['cmakoza'], txt: '日本証券アナリスト協会の講座を受講' } });
+shQ('boki1', '日商簿記検定 1級', 'acct', 10, 900, 7850, [6, 11], { kind: '公的', wait: 2 });
+shQ('boki2', '日商簿記検定 2級', 'acct', 22, 350, 5500, [6, 11, 2], { kind: '公的', wait: 1, cbtFrom: 202012 });
+shQ('kensetsu', '建設業経理士 2級', 'acct', 40, 120, 7100, [3, 9], { kind: '公的' });
+shQ('fp2', 'FP技能士 2級', 'acct', 0, 150, 11700, [1, 5, 9], { st: [['学科', 45, 'same'], ['実技', 55, 'same']], req: { or: [{ need: ['fp3'] }, { age: 20 }], txt: 'FP3級に合格、または実務2年（20歳以上で判定）' }, cbtFrom: 202304, wait: 1 });
+shQ('fp3', 'FP技能士 3級', 'acct', 0, 80, 8000, [1, 5, 9], { st: [['学科', 80, 'same'], ['実技', 85, 'same']], cbtFrom: 202304, wait: 1 });
+shQ('kinmado', '金融窓口サービス技能士 3級', 'acct', 70, 40, 6000, [1, 6, 9], { since: 200201 });
+shQ('nenkin', '年金アドバイザー 3級', 'acct', 40, 60, 5500, [3, 10], { kind: '民間' });
+shQ('sozoku', '相続診断士', 'acct', 70, 20, 30000, 'cbt', { kind: '民間', since: 201107, note: '受講料をふくむ' });
+shQ('shoukei', '事業承継士', 'acct', 85, 60, 330000, 'cbt', { kind: '民間', since: 201604, note: '講座の受講料をふくむ' });
+shQ('keiei', '経営学検定 初級', 'acct', 60, 50, 7500, [6, 12], { kind: '民間', since: 200412 });
+shQ('bizkai', 'ビジネス会計検定 2級', 'acct', 50, 80, 7480, [3, 10], { kind: '公的', since: 200712 });
+shQ('kyuyo', '給与計算実務能力検定 2級', 'acct', 70, 60, 8800, [3, 11], { kind: '民間', since: 200911 });
+shQ('boueki', '貿易実務検定 C級', 'acct', 65, 80, 6900, [3, 7, 10, 12], { kind: '民間' });
+shQ('hisho', '秘書技能検定 1級', 'acct', 25, 100, 7800, [2, 6, 11], { kind: '公的', st: [['筆記', 33, 'same'], ['面接', 75, 'same']] });
+// ---- 不動産・建築 ----
+shQ('fudoukan', '不動産鑑定士', 'estate', 0, 3700, 13000, null, { st: [['短答式', 33, 5], ['論文式', 16, 8]], keepM: 24, wait: 3, fame: 10 });
+shQ('takken', '宅地建物取引士（宅建士）', 'estate', 16, 350, 8200, [10], { wait: 2 });
+shQ('chosashi', '土地家屋調査士', 'estate', 0, 1000, 8300, null, { st: [['筆記', 10, 10], ['口述', 99, 1]], wait: 2 });
+shQ('mankan', 'マンション管理士', 'estate', 9, 500, 9400, [11], { wait: 3, since: 200111 });
+shQ('kanrigyomu', '管理業務主任者', 'estate', 20, 400, 8900, [12], { wait: 2, since: 200112 });
+shQ('kenchiku1', '一級建築士', 'estate', 0, 1000, 17000, null, { st: [['学科', 20, 7], ['設計製図', 35, 10]], keepM: 60, req: { or: [{ edu: ['kenchiku'] }, { need: ['kenchiku2'] }], txt: '大学の建築学科を卒業、または二級建築士' }, fame: 8 });
+shQ('kenchiku2', '二級建築士', 'estate', 0, 700, 18500, null, { st: [['学科', 38, 7], ['設計製図', 50, 9]], keepM: 60, req: { or: [{ edu: ['kenchiku'] }, { age: 25 }], txt: '建築学科を卒業、または実務7年（25歳以上で判定）' } });
+shQ('sokuryo', '測量士', 'estate', 10, 1000, 4250, [5], { wait: 2 });
+// ---- 医療・福祉 ----
+shQ('ishi', '医師', 'med', 91, 1500, 15300, [2], { req: { edu: ['med'], txt: '大学の医学部（6年）を卒業' }, wait: 1, fame: 15 });
+shQ('shikai', '歯科医師', 'med', 65, 1500, 18900, [2], { req: { edu: ['dent'], txt: '歯学部（6年）を卒業' }, wait: 1 });
+shQ('yaku', '薬剤師', 'med', 69, 1200, 6800, [2], { req: { edu: ['phar'], txt: '薬学部（6年）を卒業' }, wait: 1 });
+shQ('kango', '看護師', 'med', 90, 600, 5400, [2], { req: { edu: ['nurse'], txt: '看護学校・看護大学を卒業' }, wait: 1 });
+shQ('hoken', '保健師', 'med', 94, 300, 5400, [2], { req: { need: ['kango'], edu: ['phn'], all: true, txt: '看護師＋保健師課程（1年）' }, wait: 1 });
+shQ('josan', '助産師', 'med', 98, 300, 5400, [2], { req: { need: ['kango'], edu: ['midwife'], all: true, txt: '看護師＋助産師課程（1年）' }, wait: 1 });
+shQ('pt', '理学療法士', 'med', 85, 800, 10100, [2], { req: { edu: ['pt'], txt: '理学療法士の養成校を卒業' }, wait: 1 });
+shQ('ot', '作業療法士', 'med', 83, 800, 10100, [2], { req: { edu: ['ot'], txt: '作業療法士の養成校を卒業' }, wait: 1 });
+shQ('stp', '言語聴覚士', 'med', 70, 800, 34300, [2], { req: { edu: ['stc'], txt: '言語聴覚士の養成校を卒業' }, wait: 1 });
+shQ('rinken', '臨床検査技師', 'med', 75, 800, 11300, [2], { req: { edu: ['mt'], txt: '臨床検査技師の養成校を卒業' }, wait: 1 });
+shQ('housha', '診療放射線技師', 'med', 85, 800, 10900, [2], { req: { edu: ['rt'], txt: '診療放射線技師の養成校を卒業' }, wait: 1 });
+shQ('shinri', '公認心理師', 'med', 58, 600, 28700, [3], { req: { edu: ['psy'], txt: '大学と大学院で心理学を学ぶ' }, since: 201809, wait: 1 });
+shQ('dgiko', '歯科技工士', 'med', 95, 500, 30000, [2], { req: { edu: ['dtech'], txt: '歯科技工士の学校を卒業' }, wait: 1 });
+shQ('deisei', '歯科衛生士', 'med', 95, 500, 15000, [3], { req: { edu: ['dhyg'], txt: '歯科衛生士の学校を卒業' }, wait: 1 });
+shQ('judo', '柔道整復師', 'med', 65, 600, 16000, [3], { req: { edu: ['judo'], txt: '柔道整復師の養成校を卒業' }, wait: 1 });
+shQ('hari', 'はり師', 'med', 75, 500, 14400, [2], { req: { edu: ['shinkyu'], txt: '鍼灸の学校を卒業' }, wait: 1 });
+shQ('kyu', 'きゅう師', 'med', 76, 500, 14400, [2], { req: { edu: ['shinkyu'], txt: '鍼灸の学校を卒業' }, wait: 1 });
+shQ('touroku', '登録販売者', 'med', 45, 400, 13600, [9], { since: 200908, wait: 2 });
+shQ('hoiku', '保育士', 'med', 25, 600, 12950, [4, 10], { req: { or: [{ edu: ['univ'] }, { age: 20 }], txt: '大学・短大に2年以上、または児童福祉施設で実務（20歳以上で判定）' }, wait: 2 });
+shQ('kaigo', '介護福祉士', 'med', 78, 200, 18380, [1], { req: { age: 21, txt: '実務経験3年と実務者研修（21歳以上で判定）' }, wait: 2 });
+shQ('aiganK', '愛玩動物看護師', 'med', 70, 400, 30000, [2], { req: { edu: ['vetn'], txt: '愛玩動物看護師の養成校を卒業' }, since: 202302, wait: 1 });
+// ---- IT ----
+shQ('itpass', 'ITパスポート', 'it', 52, 100, 7500, 'cbt', { since: 200904 });
+shQ('fe', '基本情報技術者', 'it', 40, 200, 7500, [4, 10], { cbtFrom: 202304, wait: 2 });
+shQ('sc', '情報処理安全確保支援士', 'it', 20, 500, 7500, [4, 10], { since: 201610 });
+shQ('stg', 'ITストラテジスト', 'it', 15, 600, 7500, [4]);
+shQ('pm', 'プロジェクトマネージャ', 'it', 14, 400, 7500, [10]);
+shQ('nw', 'ネットワークスペシャリスト', 'it', 15, 500, 7500, [10]);
+shQ('db', 'データベーススペシャリスト', 'it', 16, 500, 7500, [4]);
+shQ('sa', 'システムアーキテクト', 'it', 15, 500, 7500, [4]);
+shQ('es', 'エンベデッドシステムスペシャリスト', 'it', 17, 500, 7500, [10]);
+shQ('sm', 'ITサービスマネージャ', 'it', 14, 400, 7500, [4]);
+shQ('au', 'システム監査技術者', 'it', 15, 500, 7500, [4]);
+shQ('webd', 'ウェブデザイン技能検定 3級', 'it', 60, 60, 6000, [2, 5, 8, 11], { since: 200702 });
+// ---- 電気・技術・工業 ----
+shQ('denken3', '電験三種（第三種電気主任技術者）', 'tech', 0, 1000, 7700, [8], { kam: { n: 4, list: ['理論', '電力', '機械', '法規'], rate: 26, max: 4, keep: 3 }, wait: 2, note: '4科目。合格した科目は3年間有効' });
+shQ('denken2', '電験二種（第二種電気主任技術者）', 'tech', 0, 2000, 15300, null, { st: [['一次', 25, 8], ['二次', 22, 11]], keepM: 24, fame: 5 });
+shQ('denken1', '電験一種（第一種電気主任技術者）', 'tech', 0, 3000, 15300, null, { st: [['一次', 25, 8], ['二次', 12, 11]], keepM: 24, fame: 10 });
+shQ('denko1', '第一種電気工事士', 'tech', 0, 200, 10900, null, { st: [['学科', 55, 10], ['技能', 62, 12]], keepM: 14 });
+shQ('denko2', '第二種電気工事士', 'tech', 0, 100, 9300, null, { st: [['学科', 60, 5], ['技能', 70, 7]], keepM: 14 });
+shQ('gijutsuho', '技術士補（技術士 一次試験）', 'tech', 45, 300, 11000, [11], { wait: 3 });
+shQ('gijutsushi', '技術士', 'tech', 0, 800, 14000, null, { st: [['筆記', 12, 7], ['口頭', 90, 12]], req: { need: ['gijutsuho'], age: 27, all: true, txt: '技術士補として実務4年（27歳以上で判定）' }, fame: 8 });
+shQ('enekan', 'エネルギー管理士', 'tech', 30, 300, 17000, [8]);
+shQ('boiler', 'ボイラー技士（2級）', 'tech', 55, 50, 8800, M12, { wait: 1 });
+shQ('shobo', '消防設備士（乙種6類）', 'tech', 35, 80, 4400, [2, 6, 9, 11], { wait: 1 });
+shQ('kouatsu', '高圧ガス製造保安責任者（丙種化学）', 'tech', 35, 120, 8800, [11]);
+shQ('reitou', '第三種冷凍機械責任者', 'tech', 35, 80, 8800, [11]);
+shQ('gasshu', 'ガス主任技術者（甲種）', 'tech', 15, 400, 17200, [11]);
+shQ('turbine', 'ボイラー・タービン主任技術者（第二種）', 'tech', 95, 100, 2000, 'cbt', { req: { age: 25, txt: '発電所などでの実務経験（25歳以上で判定）' }, note: '試験はなく、実務経験と書類の審査で交付される' });
+shQ('seibi', '自動車整備士（3級）', 'tech', 70, 200, 1700, [3, 10]);
+shQ('otsu4', '危険物取扱者（乙種第4類）', 'tech', 35, 60, 5300, M12, { wait: 1 });
+shQ('kou', '危険物取扱者（甲種）', 'tech', 40, 150, 6600, [1, 4, 7, 10], { wait: 1, req: { or: [{ need: ['otsu4'] }, { edu: ['univ'] }], txt: '乙種を持っている、または大学で化学を学んだ' } });
+shQ('kayaku', '火薬類取扱保安責任者（甲種）', 'tech', 30, 100, 8400, [11]);
+shQ('sagyokan', '作業環境測定士（第二種）', 'tech', 50, 300, 11800, [8]);
+shQ('eiseikan', '衛生管理者（第一種）', 'tech', 45, 120, 8800, M12, { wait: 1, req: { age: 19, txt: '実務経験1年など（19歳以上で判定）' } });
+shQ('eiseiko', '衛生工学衛生管理者', 'tech', 90, 60, 60000, 'cbt', { req: { need: ['eiseikan'], txt: '第一種衛生管理者を持っている' }, note: '講習（5日）を受けて修了試験' });
+shQ('kougai', '公害防止管理者（水質1種）', 'tech', 25, 200, 13000, [10]);
+shQ('keiryo', '環境計量士', 'tech', 18, 600, 8500, [12]);
+shQ('sensui', '潜水士', 'tech', 75, 40, 8800, M12, { wait: 1 });
+// ---- 運転・交通・船 ----
+shQ('oogata', '大型自動車免許', 'trans', 95, 60, 350000, 'cbt', { req: { age: 21, lic: 'futsu', txt: '21歳以上で、普通免許などを3年以上' }, note: '教習所を卒業すると、試験場の技能試験が免除。費用は教習料' });
+shQ('daitoku', '大型特殊自動車免許', 'trans', 95, 30, 100000, 'cbt', { req: { age: 18 }, note: '教習所で取る。費用は教習料' });
+shQ('kenin', 'けん引免許', 'trans', 92, 30, 150000, 'cbt', { req: { age: 18, lic: 'futsu', txt: '普通免許などを持っている' }, note: '教習所で取る。費用は教習料' });
+shQ('futsu2', '第二種運転免許（普通二種）', 'trans', 0, 0, 0, null, { via: 'base', note: 'スマホの「運転免許」から教習所に通って取る（ゲームにもともとある免許）' });
+shQ('unkanK', '運行管理者（貨物）', 'trans', 35, 60, 6000, [3, 8], { cbtFrom: 202103 });
+shQ('unkanR', '運行管理者（旅客）', 'trans', 35, 60, 6000, [3, 8], { cbtFrom: 202103 });
+shQ('kaigiN', '海技士（航海）3級', 'trans', 40, 300, 7200, [4, 7, 10, 2], { req: { age: 20, txt: '乗船履歴（20歳以上で判定）' } });
+shQ('kaigiE', '海技士（機関）3級', 'trans', 40, 300, 7200, [4, 7, 10, 2], { req: { age: 20, txt: '乗船履歴（20歳以上で判定）' } });
+shQ('kogata', '小型船舶操縦士（1級）', 'trans', 85, 30, 150000, 'cbt', { req: { age: 18 }, note: '登録教習所で講習と試験。費用は講習料' });
+shQ('kokumusen', '航空無線通信士', 'trans', 30, 150, 9000, [2, 8]);
+// ---- 語学・教育・文化 ----
+shQ('tsuyaku', '全国通訳案内士', 'lang', 0, 800, 11700, null, { st: [['筆記', 12, 8], ['口述', 65, 12]], fame: 5 });
+shQ('nihongo', '日本語教育能力検定試験', 'lang', 30, 400, 17000, [10], { kind: '民間', wait: 2 });
+shQ('kisho', '気象予報士', 'lang', 5, 1000, 11400, [1, 8], { since: 199408, wait: 2, fame: 20 });
+shQ('gakugei', '学芸員', 'lang', 50, 300, 3800, [11], { req: { edu: ['univ'], txt: '大学を卒業（資格認定の試験）' }, wait: 2 });
+shQ('shisho', '司書', 'lang', 0, 0, 0, null, { via: 'course', course: 'shishoK', note: '司書講習（約2か月）を修了すると取れる' });
+shQ('kyoinC', '中学校教諭免許状', 'lang', 0, 0, 0, null, { via: 'course', course: 'kyoshoku', note: '大学の教職課程で取る（教育実習あり）' });
+shQ('kyoinH', '高等学校教諭免許状', 'lang', 0, 0, 0, null, { via: 'course', course: 'kyoshoku', note: '大学の教職課程で取る（教育実習あり）' });
+shQ('kyoinT', '特別支援学校教諭免許状', 'lang', 0, 0, 0, null, { via: 'course', course: 'tokushi', note: '中学か高校の免許を持って、特別支援教育の課程を修了' });
+shQ('toeic', 'TOEIC Listening & Reading Test', 'lang', 0, 300, 7810, 'cbt', { kind: '民間', score: true, note: '合否ではなくスコア（10〜990点）で出る' });
+// ---- 生活・食・自然 ----
+shQ('chori', '調理師', 'life', 65, 120, 6100, [8], { req: { or: [{ age: 20 }, { edu: ['cook'] }], txt: '飲食店で実務2年（20歳以上で判定）' }, note: '調理師学校を卒業すると試験なしで取れる' });
+shQ('seika', '製菓衛生師', 'life', 70, 120, 9000, [8], { req: { or: [{ edu: ['seikaS'] }, { age: 20 }], txt: '製菓学校を卒業、または実務2年（20歳以上で判定）' } });
+shQ('cleaning', 'クリーニング師', 'life', 75, 80, 8000, [9]);
+shQ('aiganS', '愛玩動物飼養管理士 2級', 'life', 80, 50, 40000, [2, 7], { kind: '民間', note: '通信講座の受講料をふくむ' });
+shQ('ringyo', '林業技士', 'life', 40, 100, 90000, [9], { kind: '民間', note: '養成研修と試験' });
+shQ('shinrin', '森林インストラクター', 'life', 0, 200, 11000, null, { kind: '民間', st: [['1次', 30, 10], ['2次', 70, 12]] });
+shQ('fukyu', '普及指導員（農業）', 'life', 30, 300, 0, [11], { req: { age: 22, txt: '農業の実務経験（22歳以上で判定）' } });
+shQ('jinko', '家畜人工授精師', 'life', 90, 60, 100000, [7], { note: '講習（約1か月）と修了試験。費用は講習料' });
+shQ('jumokui', '樹木医', 'life', 20, 300, 300000, [7], { kind: '民間', req: { age: 25, txt: '樹木の実務7年（25歳以上で判定）' }, note: '選抜試験のあと、2週間の研修' });
+shQ('ryoju', '猟銃・空気銃 所持の技能講習', 'life', 80, 20, 30000, 'cbt', { req: { age: 20 }, note: '講習と教習射撃のあと、公安委員会の所持許可' });
+// ---- 英検・漢検・数検（級） ----
+const SH_GRADES = ['5級', '4級', '3級', '準2級', '2級', '準1級', '1級'];
+[['eiken', '実用英語技能検定（英検）', [[80, 20, 4100], [75, 40, 4700], [55, 80, 6900], [37, 150, 8500], [25, 300, 9100], [15, 700, 10500], [10, 1500, 12500]], [6, 10, 1], '公的'],
+ ['kanken', '日本漢字能力検定（漢検）', [[75, 20, 2500], [70, 30, 2500], [50, 50, 3500], [35, 80, 3500], [25, 150, 4500], [15, 600, 5500], [10, 1500, 6000]], [6, 10, 2], '公的'],
+ ['suken', '実用数学技能検定（数検）', [[75, 20, 3000], [70, 30, 3000], [60, 50, 4000], [30, 100, 4500], [25, 200, 5000], [20, 500, 6500], [8, 1000, 8000]], [4, 7, 11], '公的']]
+  .forEach(([g, nm, L, mon, kind]) => L.forEach(([rate, h, fee], i) => shQ(`${g}${i}`, `${nm.match(/（(.*)）/)[1]} ${SH_GRADES[i]}`, 'kentei', rate, h, fee, mon, { kind, grp: g, gnm: nm.match(/（(.*)）/)[1], full: nm.replace(/（.*）/, ''), lv: i, wait: 1 })));
+// ---- 学校・養成課程・講習 ----（年数・1年の学費・入学の条件・卒業で取れる資格）
+const SH_EDU = {
+  univ: { nm: '大学（4年制）', y: 4, fee: 800000, req: { age: 18 }, univ: true },
+  law: { nm: '法科大学院', y: 2, fee: 1200000, req: { edu: ['univ'] }, univ: true },
+  shushu: { nm: '司法修習', y: 1, fee: -1620000, req: { need: ['shiho'] }, note: '修習給付金（年162万円）が出る。修了すると弁護士になれる' },
+  med: { nm: '大学の医学部', y: 6, fee: 1500000, req: { age: 18 }, univ: true },
+  dent: { nm: '大学の歯学部', y: 6, fee: 1500000, req: { age: 18 }, univ: true },
+  phar: { nm: '大学の薬学部', y: 6, fee: 1500000, req: { age: 18 }, univ: true },
+  nurse: { nm: '看護学校', y: 3, fee: 1000000, req: { age: 18 } },
+  phn: { nm: '保健師課程', y: 1, fee: 1000000, req: { need: ['kango'] } },
+  midwife: { nm: '助産師課程', y: 1, fee: 1200000, req: { need: ['kango'] } },
+  pt: { nm: '理学療法士の養成校', y: 3, fee: 1300000, req: { age: 18 } },
+  ot: { nm: '作業療法士の養成校', y: 3, fee: 1300000, req: { age: 18 } },
+  stc: { nm: '言語聴覚士の養成校', y: 3, fee: 1300000, req: { age: 18 } },
+  mt: { nm: '臨床検査技師の養成校', y: 3, fee: 1200000, req: { age: 18 } },
+  rt: { nm: '診療放射線技師の養成校', y: 3, fee: 1200000, req: { age: 18 } },
+  dtech: { nm: '歯科技工士の学校', y: 2, fee: 1200000, req: { age: 18 } },
+  dhyg: { nm: '歯科衛生士の学校', y: 3, fee: 1100000, req: { age: 18 } },
+  judo: { nm: '柔道整復師の養成校', y: 3, fee: 1500000, req: { age: 18 } },
+  shinkyu: { nm: '鍼灸の学校', y: 3, fee: 1400000, req: { age: 18 } },
+  psy: { nm: '心理学の大学院（公認心理師コース）', y: 2, fee: 1000000, req: { edu: ['univ'] } },
+  vetn: { nm: '愛玩動物看護師の養成校', y: 3, fee: 1200000, req: { age: 18 } },
+  kenchiku: { nm: '大学の建築学科', y: 4, fee: 1200000, req: { age: 18 }, univ: true },
+  kyoshoku: { nm: '大学（教職課程）', y: 4, fee: 900000, req: { age: 18 }, univ: true, grants: ['kyoinC', 'kyoinH'], note: '卒業と同時に中学・高校の教諭免許状（教育実習あり）' },
+  tokushi: { nm: '特別支援教育の課程', y: 1, fee: 500000, req: { any: ['kyoinC', 'kyoinH'] }, grants: ['kyoinT'] },
+  cook: { nm: '調理師学校', y: 1, fee: 1200000, req: { age: 15 }, grants: ['chori'], note: '卒業すると試験なしで調理師' },
+  seikaS: { nm: '製菓学校', y: 1, fee: 1200000, req: { age: 15 } },
+  shishoK: { nm: '司書講習（夏の約2か月）', y: 0.2, fee: 150000, req: { age: 18 }, grants: ['shisho'] },
+  cmakoza: { nm: '証券アナリスト協会の講座', y: 0.5, fee: 50000, req: { age: 18 } },
+};
+// ---- 資格を活かした仕事 ----（給料・時間・ストレス・必要な資格）
+const SH_JOB = [
+  ['bengoshi', '法律相談（弁護士）', '法律事務所', 30000, 8, 8, { edu: ['shushu'] }], ['kansa', '会計監査', '監査法人', 24000, 8, 7, ['kaikei']], ['zeirij', '確定申告の手伝い', '税理士事務所', 20000, 8, 6, ['zeiri']],
+  ['shoshij', '登記の手続き', '司法書士事務所', 18000, 8, 6, ['shoshi']], ['benrij', '特許の出願', '特許事務所', 22000, 8, 6, ['benri']], ['gyoseij', '許認可の申請代行', '行政書士事務所', 12000, 6, 5, ['gyosei']],
+  ['sharoj', '労務の相談', '社労士事務所', 14000, 7, 5, ['sharo']], ['chosaj', '土地の測量と登記', '調査士事務所', 15000, 8, 6, ['chosashi']], ['tsukanj', '輸入品の通関', '通関業者', 11000, 8, 5, ['tsukan']],
+  ['consul', '経営コンサルティング', 'コンサル会社', 22000, 8, 7, ['shindan']], ['kantei', '不動産の鑑定', '鑑定事務所', 24000, 8, 6, ['fudoukan']], ['analyst', '金融アナリスト', '証券会社', 26000, 9, 8, ['cma']],
+  ['fpsoudan', 'お金の相談会', '保険ショップ', 9000, 6, 4, ['fp2']], ['fudosan', '重要事項の説明', '不動産屋', 10000, 7, 5, ['takken']], ['sekkei', '建物の設計', '設計事務所', 20000, 9, 7, ['kenchiku1', 'kenchiku2']],
+  ['touchoku', '当直医', '総合病院', 45000, 16, 14, ['ishi']], ['shikaij', '歯の診療', '歯科医院', 30000, 8, 7, ['shikai']], ['yakkyoku', '調剤', '調剤薬局', 14000, 8, 5, ['yaku']],
+  ['kangoj', '病棟の夜勤', '病院', 16000, 12, 12, ['kango', 'hoken', 'josan']], ['rehab', 'リハビリ', 'リハビリ病院', 12000, 8, 5, ['pt', 'ot', 'stp']], ['eisei', '歯のクリーニング', '歯科医院', 9000, 8, 4, ['deisei']],
+  ['seikotsu', '施術', '整骨院', 9000, 8, 4, ['judo']], ['shinkyuj', '鍼とお灸', '鍼灸院', 9000, 8, 4, ['hari', 'kyu']], ['counsel', 'カウンセリング', 'カウンセリングルーム', 11000, 6, 6, ['shinri']],
+  ['drug', '医薬品の販売', 'ドラッグストア', 6000, 8, 4, ['touroku']], ['hoikuen', '保育', '保育園', 7000, 8, 7, ['hoiku']], ['kaigoj', '介護', '介護施設', 7500, 8, 8, ['kaigo']], ['doubutsu', '動物の看護', '動物病院', 7000, 8, 5, ['aiganK']],
+  ['helpdesk', 'ヘルプデスク', 'IT企業', 7000, 8, 4, ['itpass']], ['syskai', 'システム開発', 'IT企業', 12000, 8, 6, ['fe']], ['syskai2', '大規模システムの開発', 'IT企業', 22000, 9, 8, ['sc', 'stg', 'pm', 'nw', 'db', 'sa', 'es', 'sm', 'au']],
+  ['webdj', 'ウェブ制作', '制作会社', 9000, 7, 5, ['webd']], ['birukan', 'ビルの電気設備の管理', 'ビル管理会社', 10000, 8, 4, ['denken3', 'denken2', 'denken1']], ['denkoj', '電気工事', '電気工事会社', 10000, 8, 6, ['denko1', 'denko2']],
+  ['consulT', '技術コンサルタント', '建設コンサル', 22000, 8, 7, ['gijutsushi']], ['seibij', '車の整備', '整備工場', 8000, 8, 5, ['seibi']], ['gs', '給油と点検', 'ガソリンスタンド', 5000, 6, 3, ['otsu4', 'kou']],
+  ['sensuij', '港の潜水作業', '港湾', 14000, 6, 10, ['sensui']], ['truck', '長距離トラック', '運送会社', 14000, 12, 8, ['oogata']], ['taxi', 'タクシー運転手', 'タクシー会社', 10000, 10, 7, ['futsu2']],
+  ['tsuribune', '釣り船の船長', '漁港', 9000, 6, 4, ['kogata']], ['guide', '外国人観光客のガイド', '観光地', 14000, 8, 5, ['tsuyaku']], ['nihongoj', '日本語教師', '日本語学校', 8000, 6, 5, ['nihongo']],
+  ['caster', 'お天気キャスター', 'テレビ局', 30000, 6, 8, ['kisho'], 2], ['museum', '博物館の展示づくり', '博物館', 8000, 8, 3, ['gakugei']], ['library', '図書館の司書', '図書館', 6000, 7, 2, ['shisho']],
+  ['juku', '塾講師', '学習塾', 8000, 5, 5, ['kyoinC', 'kyoinH']], ['honyaku', '翻訳', '翻訳会社', 12000, 6, 5, ['eiken6', 'toeic900']], ['kitchen', 'レストランの厨房', 'レストラン', 7000, 8, 6, ['chori']],
+  ['patissier', 'パティシエ', '洋菓子店', 7000, 8, 5, ['seika']], ['jumoku', '街路樹の診断', '造園会社', 15000, 7, 4, ['jumokui']], ['kujo', '害獣の駆除', '猟友会', 9000, 6, 6, ['ryoju']],
+].map(([id, nm, where, pay, h, st, need, fame]) => ({ id, nm, where, pay, h, st, need, fame: fame || 0 }));
+
+// ===== 資格：勉強・申し込み・受験・合格発表・資格手帳・学校・仕事（スマホの「資格」アプリ） =====
+// このゲームの1日は約3日分なので、勉強した時間は3倍にして数える。
+function shSt(g) { const s = g.state; let S = s.shikaku; if (!isObj(S)) S = s.shikaku = {}; for (const k of ['q', 'held', 'edu']) if (!isObj(S[k])) S[k] = {}; if (!Array.isArray(S.pend)) S.pend = []; if (!Array.isArray(S.log)) S.log = []; return S; }
+function shQs(S, id) { return S.q[id] || (S.q[id] = { hrs: 0, stage: 0, kam: {}, tries: 0 }); }
+function shYM(g, day) { const d = dateOf(g, day == null ? g.state.day : day); return { y: d.year, m: d.month, dom: d.dom, mi: d.year * 12 + d.month - 1, ym: d.year * 100 + d.month }; }
+function shDayOfMi(g, mi) { const d = shYM(g); return g.state.day - Math.floor((d.dom - 1) / 3) + (mi - d.mi) * 10; }
+const shMiLab = mi => `${Math.floor(mi / 12)}年${mi % 12 + 1}月`;
+function shLic(g, cls) { try { const L = g.state.license; return !!(L && L.classes && L.classes[cls]); } catch (e) { return false; } }
+function shHas(g, id) { const S = shSt(g); if (id === 'futsu2') return shLic(g, 'futsu2'); if (id === 'toeic900') return num((S.q.toeic || {}).best) >= 900; return !!S.held[id]; }
+function shEduDone(g, id) { const S = shSt(g), e = S.edu[id]; if (e && e.done) return true; if (id === 'univ') return Object.entries(S.edu).some(([k, v]) => v.done && SH_EDU[k] && SH_EDU[k].univ); return false; }
+function shAvail(g, q) { const ym = shYM(g).ym; return !(q.since && ym < q.since) && !(q.until && ym > q.until); }
+function shReqOk(g, r) {
+  if (!r) return true; if (r.or) return r.or.some(o => shReqOk(g, o));
+  if (r.age && ageOf(g) < r.age) return false; if (r.ym && shYM(g).ym < r.ym) return false;
+  if (r.lic && !['futsu', 'junchu', 'futsu2'].some(c => shLic(g, c))) return false;
+  if (r.any && !r.any.some(id => shHas(g, id))) return false;
+  return (!r.need || r.need.every(id => shHas(g, id))) && (!r.edu || r.edu.some(e => shEduDone(g, e)));
+}
+function shReqTxt(q) { const r = q.req; if (!r) return 'だれでも受けられる'; if (r.txt) return r.txt; const L = []; if (r.age) L.push(`${r.age}歳以上`); if (r.need) L.push(r.need.map(i => SH[i] ? SH[i].nm : i).join('・') + 'を持っている'); if (r.edu) L.push(r.edu.map(e => SH_EDU[e].nm).join('か') + 'を卒業'); return L.join('、'); }
+function shGaku(g) { try { const ls = lsOf(g); return num(ls && ls.stats && ls.stats.gaku, 50); } catch (e) { return 50; } }
+function shStress(g) { try { return num(g.state.life.stress, 30); } catch (e) { return 30; } }
+// 試験の回（段階をまとめた「1回の受験」）
+function shSits(g, q) {
+  const cbt = q.cbtFrom && shYM(g).ym >= q.cbtFrom;
+  if (q.kam) return [{ stages: [['本試験', q.kam.rate]], mon: q.mon }];
+  if (!q.st) return [{ stages: [['本試験', q.rate]], mon: cbt ? 'cbt' : q.mon }];
+  const out = []; q.st.forEach(([nm, rate, m], i) => { if (m === 'same' && out.length) out[out.length - 1].stages.push([nm, rate]); else out.push({ stages: [[nm, rate]], mon: cbt ? 'cbt' : m === 'same' ? q.mon : [m] }); });
+  return out;
+}
+function shNextMi(g, mon) { if (mon === 'cbt') return 'cbt'; const cur = shYM(g).mi; for (let k = 1; k <= 24; k++) { const mi = cur + k; if (mon.includes(mi % 12 + 1)) return mi; } return null; }
+function shMonTxt(g, q) { const S = shSits(g, q); return S.map(x => x.mon === 'cbt' ? 'いつでも（CBT）' : x.mon.length >= 12 ? '毎月' : x.mon.map(m => `${m}月`).join('・')).join(' → '); }
+// 合格の見込み
+function shReady(g, q, qs, nSub) { if (!q.h) return 1; if (q.kam) { const hp = q.h / q.kam.n, used = shKamPassed(g, q, qs).length * hp; return Math.max(0, qs.hrs - used) / (hp * Math.max(1, nSub || Math.min(q.kam.max, q.kam.n - shKamPassed(g, q, qs).length))); } return qs.hrs / q.h; }
+function shP(g, rate, r) { const P1 = clamp(0.25 + rate / 100 * 2, 0.2, 0.97), re = r * (0.85 + shGaku(g) * 0.003); let p = re < 1 ? P1 * Math.pow(Math.max(0, re), 2.5) : P1 + (0.985 - P1) * Math.min(1, (re - 1) / 0.5); if (shStress(g) > 80) p *= 0.85; return clamp(p, 0, 0.99); }
+function shSitP(g, q, qs, sit) { const r = shReady(g, q, qs); return sit.stages.reduce((a, [, rate]) => a * shP(g, rate, r), 1); }
+const shJudge = p => p >= 0.8 ? ['A', '#5ee07a'] : p >= 0.6 ? ['B', '#9ae05e'] : p >= 0.4 ? ['C', '#ffd23f'] : p >= 0.2 ? ['D', '#ff9a4a'] : ['E', '#ff5d6c'];
+function shKamPassed(g, q, qs) { const y = shYM(g).y; return Object.entries(qs.kam || {}).filter(([, yr]) => y - yr < (q.kam.keep || 99)).map(([k]) => k); }
+function shScore(pass, p, u) { return pass ? clamp(60 + Math.round((p - u) / Math.max(p, 0.01) * 35), 60, 100) : clamp(59 - Math.round((u - p) / Math.max(1 - p, 0.01) * 45), 5, 59); }
+// 受験（結果を決める）
+function shTake(g, q, qs, sitI) {
+  const sit = shSits(g, q)[sitI], r = shReady(g, q, qs);
+  if (q.score) { const re = Math.min(1.35, r * (0.85 + shGaku(g) * 0.003)); const sc = Math.round(clamp(10 + 900 * Math.sqrt(re / 1.35) + gbGauss() * 45, 10, 990) / 5) * 5, L = clamp(Math.round(sc * (0.48 + Math.random() * 0.08) / 5) * 5, 5, 495); return { score: sc, L, R: sc - L, pass: true }; }
+  if (q.kam) { const passed = shKamPassed(g, q, qs), todo = q.kam.list.filter(k => !passed.includes(k)).slice(0, q.kam.max), rr = shReady(g, q, qs, todo.length);
+    const subj = todo.map(nm => { const p = shP(g, q.kam.rate, rr), u = Math.random(), ok = u < p; return { nm, pass: ok, score: shScore(ok, p, u) }; }); return { subj, pass: subj.some(x => x.pass) }; }
+  const stages = []; let ok = true; for (const [nm, rate] of sit.stages) { if (!ok) { stages.push({ nm, skip: true }); continue; } const p = shP(g, rate, r), u = Math.random(); ok = u < p; stages.push({ nm, pass: ok, score: shScore(ok, p, u) }); }
+  return { stages, pass: ok };
+}
+function shGrant(g, id, how) {
+  const S = shSt(g), q = SH[id]; if (!q || S.held[id]) return; S.held[id] = g.state.day; S.log.push({ day: g.state.day, t: `${q.nm}を取得${how ? `（${how}）` : ''}` });
+  const fame = q.fame || (q.rate && q.rate <= 10 && !q.grp ? 4 : 0); try { if (fame) g.addFame(fame); } catch (e) { }
+  const jobs = SH_JOB.filter(j => Array.isArray(j.need) && j.need.includes(id)).map(j => j.nm);
+  try { g.message({ from: '資格', kind: 'chat', text: `【取得】${q.nm}${jobs.length ? `\n資格アプリの「仕事」で「${jobs.join('」「')}」ができるようになった。` : ''}` }); } catch (e) { }
+  if (fame >= 10) try { g.message({ from: 'ネットニュース', kind: 'chat', text: `【速報】${(g.state.profile && g.state.profile.name) || 'あの有名人'}さん、${q.nm}に合格！ 「努力の人」と話題に` }); } catch (e) { }
+}
+// 合格発表（状態に反映）
+function shAnnounce(g, P) {
+  if (P.done) return; P.done = true; const S = shSt(g), q = SH[P.id], qs = shQs(S, P.id), R = P.r, sits = shSits(g, q);
+  if (q.score) { qs.best = Math.max(num(qs.best), R.score); S.log.push({ day: g.state.day, t: `TOEIC ${R.score}点` }); return; }
+  if (q.kam) { R.subj.forEach(x => { if (x.pass) qs.kam[x.nm] = P.y; }); if (shKamPassed(g, q, qs).length >= q.kam.n) shGrant(g, P.id); return; }
+  if (R.pass) { qs.stage = P.sit + 1; qs.stageMi = P.mi; if (qs.stage >= sits.length) { qs.stage = 0; shGrant(g, P.id); } }
+  else { const keep = q.keepM || 12; if (P.sit > 0 && (P.mi - num(qs.stageMi, -999)) > keep) qs.stage = 0; }
+}
+// 毎朝の処理（試験の月・欠席・合格発表・学校）
+function shTick(g) {
+  const S = shSt(g), cur = shYM(g), day = g.state.day;
+  for (const [id, qs] of Object.entries(S.q)) { const A = qs.app; if (!A || A.mi === 'cbt' || A.taken) continue; const q = SH[id]; if (!q) { qs.app = null; continue; }
+    if (cur.mi > A.mi) { qs.app = null; qs.absent = num(qs.absent) + 1; try { g.message({ from: '資格', kind: 'chat', text: `${q.nm}の試験を受けなかった（欠席）。受験料はもどらない…。` }); } catch (e) { } }
+    else if (cur.mi === A.mi && !A.note) { A.note = 1; try { g.message({ from: '資格', kind: 'chat', text: `今月は${q.nm}の試験！ 資格アプリから受験しよう（今月中）。` }); } catch (e) { } } }
+  for (const P of S.pend) if (!P.done && day >= P.at) { shAnnounce(g, P); try { g.message({ from: '資格', kind: 'chat', text: `${SH[P.id].nm}の${SH[P.id].score ? 'スコア' : '合格発表'}の日です。資格アプリで確認しよう。` }); } catch (e) { } }
+  if (S.pend.length > 30) S.pend = S.pend.filter(P => !P.seen).concat(S.pend.filter(P => P.seen).slice(-10));
+  for (const [cid, e] of Object.entries(S.edu)) { const E2 = SH_EDU[cid]; if (!E2 || e.done) continue; const k = Math.floor((day - e.start) / 120);
+    if (k >= num(e.paid) && k < E2.y) { e.paid = k + 1; if (E2.fee > 0) { if (num(g.state.money) >= E2.fee) { g.state.money -= E2.fee; try { g.message({ from: '資格', kind: 'chat', text: `${E2.nm}の${k + 1}年目の学費 ${yen(E2.fee)} を払った。` }); } catch (er) { } } else e.unpaid = num(e.unpaid) + E2.fee; } else g.state.money = num(g.state.money) - E2.fee; }
+    shGradCheck(g, cid); }
+}
+function shAttNeed(E2) { return Math.max(4, Math.ceil(E2.y * 20)); }
+function shGradCheck(g, cid) { const S = shSt(g), e = S.edu[cid], E2 = SH_EDU[cid]; if (!e || e.done || e.unpaid) return false; if (g.state.day - e.start < E2.y * 120 || e.att < shAttNeed(E2)) return false;
+  e.done = g.state.day; S.log.push({ day: g.state.day, t: `${E2.nm}を卒業・修了` }); (E2.grants || []).forEach(id => shGrant(g, id, E2.nm));
+  try { g.message({ from: '資格', kind: 'chat', text: `${E2.nm}を卒業（修了）した！${E2.note ? '\n' + E2.note : ''}` }); } catch (er) { } return true; }
+function shUnseen(g) { return shSt(g).pend.filter(P => P.done && !P.seen); }
+function shNowExam(g) { const S = shSt(g), cur = shYM(g).mi; return Object.entries(S.q).filter(([, qs]) => qs.app && qs.app.mi === cur && !qs.app.taken).map(([id]) => id); }
+// ---- 資格を活かした仕事 ----
+function shJobOk(g, j) { if (Array.isArray(j.need)) return j.need.some(id => shHas(g, id)); if (j.need.edu) return j.need.edu.some(e => shEduDone(g, e)); return false; }
+function shJobNeedTxt(j) { if (Array.isArray(j.need)) return j.need.map(id => id === 'toeic900' ? 'TOEIC 900点' : SH[id] ? SH[id].nm : id).slice(0, 2).join('か'); return j.need.edu.map(e => SH_EDU[e].nm).join('か') + 'を修了'; }
+// ---- アイコン ----
+const shIcon = gbIcon('#2a5ad0', (c, x, y) => { c.fillStyle = '#f4f0e0'; c.fillRect(x + 7, y + 7, 18, 20); c.fillStyle = '#c8102e'; c.beginPath(); c.arc(x + 21, y + 22, 5, 0, Math.PI * 2); c.fill(); c.fillStyle = '#ffd23f'; c.fillRect(x + 19, y + 26, 2, 4); c.fillRect(x + 22, y + 26, 2, 4); c.fillStyle = '#5a5a6a'; for (let i = 0; i < 3; i++) c.fillRect(x + 10, y + 11 + i * 4, 11, 1.5); });
+async function shOpen(g) { try { shTick(g); } catch (e) { } const r = await gbScene(g, { mode: 'shikaku', title: '資格', sub: '勉強・受験・資格手帳', tcol: '#9ac8ff' }); try { if (r.mins > 0) g.advanceTime(Math.round(r.mins), 'study'); } catch (e) { } }
+function shInstall() {
+  try { E.Un('shikaku', { name: '資格', color: '#2a5ad0', order: 30.5, iconHD: shIcon, badge: g => { try { return shUnseen(g).length + shNowExam(g).length; } catch (e) { return 0; } }, open: g => shOpen(g) }); } catch (e) { console.error('[shikaku] app', e); }
+  try { E.Tn && E.Tn(g => { try { shTick(g); } catch (e) { console.error('[shikaku] tick', e); } }); } catch (e) { }
+  if (typeof window !== 'undefined') window.__SH = { st: () => shSt(window.__game), open: () => shOpen(window.__game), tick: () => shTick(window.__game), SH, SH_LIST, SH_EDU, SH_JOB };
+}
+
+// ===== 資格アプリの画面 =====
+const SH_TABS = [['find', 'さがす'], ['study', '勉強中'], ['held', '資格手帳'], ['school', '学校'], ['job', '仕事']];
+const shCatCol = id => (SH_CAT.find(c => c[0] === id) || [0, 0, '#5a6a8a'])[2];
+function shBg(c, t) { pBands(c, 0, 0, 640, 360, ['#0a1024', '#0c1430', '#0e1838', '#101c40']); for (let x = 0; x < 640; x += 32) pR(c, x, 0, 1, 360, 'rgba(120,160,255,0.04)'); for (let y = 0; y < 360; y += 32) pR(c, 0, y, 640, 1, 'rgba(120,160,255,0.04)'); }
+function shBar(c, x, y, w, h, f, col) { pR(c, x, y, w, h, '#05070f'); pR(c, x + 1, y + 1, w - 2, h - 2, '#1a2240'); pR(c, x + 1, y + 1, Math.round((w - 2) * clamp(f, 0, 1)), h - 2, col); if (f > 1) pR(c, x + w - 4, y + 1, 3, h - 2, '#ffffff'); }
+function shStat(g, q) { const S = shSt(g), qs = S.q[q.id] || {}; if (q.via === 'base') return shHas(g, q.id) ? ['取得', '#3a9a5a'] : ['教習所', '#5a6a8a'];
+  if (q.score) return qs.best ? [`${qs.best}点`, '#3a7ad0'] : qs.hrs ? [`${Math.round(Math.min(1, shReady(g, q, qs)) * 100)}%`, '#c9962a'] : ['', null];
+  if (S.held[q.id]) return ['取得', '#3a9a5a']; if (!shAvail(g, q)) return [`${Math.floor(q.since / 100)}年〜`, '#4a4a5a']; if (q.via === 'course') return ['学校', '#6a5aa0'];
+  if (qs.app) return [qs.app.mi === 'cbt' ? '申込' : '受験予定', '#2a6ad0']; if (!shReqOk(g, q.req)) return ['資格なし', '#5a3a3a']; if (qs.hrs > 0) return [`${Math.round(Math.min(1, shReady(g, q, qs)) * 100)}%`, '#c9962a']; return ['', null]; }
+function shNm(c, s, w, size) { return pFit(c, s, w, size); }
+GB_MODES.shikaku = {
+  noHud: false,
+  init(s, g) { s.S = { ph: 'home', tab: 'find', cat: 'law', pg: 0, sel: null, f: 0, anim: 0 }; const U = shUnseen(g); if (U.length) { s.S.ph = 'result'; s.S.rs = U[0]; U[0].seen = true; } },
+  left(s, g) { return Math.max(0, 1440 - num(g.state.clock && g.state.clock.min, 600) - s.mins); },
+  btn(s, id, g) {
+    const S = s.S, St = shSt(g);
+    if (id === 'close') { s.done(); return; }
+    if (id.startsWith('tab:')) { S.tab = id.slice(4); S.ph = 'home'; S.pg = 0; return; }
+    if (id.startsWith('cat:')) { S.cat = id.slice(4); S.pg = 0; return; }
+    if (id === 'pg:-1') { S.pg = Math.max(0, S.pg - 1); return; } if (id === 'pg:1') { S.pg++; return; }
+    if (id.startsWith('q:')) { S.sel = id.slice(2); S.ph = 'detail'; tt.sfx('ok'); return; }
+    if (id === 'back') { S.ph = 'home'; return; }
+    if (id === 'rview') { const U = shUnseen(g); if (U.length) { S.ph = 'result'; S.rs = U[0]; U[0].seen = true; } return; }
+    if (id === 'rback') { const U = shUnseen(g); if (U.length) { S.rs = U[0]; U[0].seen = true; return; } S.ph = S.sel ? 'detail' : 'home'; return; }
+    if (id === 'toSchool') { S.ph = 'home'; S.tab = 'school'; S.pg = 0; return; }
+    // 勉強
+    if (id === 'st2' || id === 'st4') { const q = SH[S.sel], qs = shQs(St, q.id), hr = id === 'st2' ? 2 : 4; if (this.left(s, g) < hr * 60) { s.tip('今日はもう時間がない（日付が変わる）', PW.bad); return; }
+      const m = (qs.text ? 1.1 : 1) * (qs.tsushin ? 1.3 : 1) * (qs.yobiko ? 1.6 : 1), eff = (0.7 + shGaku(g) * 0.006) * Math.min(2, m) * (shStress(g) > 70 ? 0.7 : 1), add = hr * 3 * eff;
+      qs.hrs += add; s.mins += hr * 60; try { g.addNeed('stress', hr * 1.5); } catch (e) { } S.anim = 60; S.animTxt = `${hr}時間勉強した（${Math.round(add)}時間ぶん進んだ）`; tt.sfx('cursor'); return; }
+    if (id.startsWith('buy:')) { const k = id.slice(4), q = SH[S.sel], qs = shQs(St, q.id), pr = this.price(q, k); if (qs[k]) return; if (!s.pay(pr)) return; qs[k] = true; s.tip({ text: 'テキストを買った（勉強の効率 ×1.1）', tsushin: '通信講座を申し込んだ（×1.3）', yobiko: '予備校に入った（×1.6）' }[k], PW.good); return; }
+    if (id === 'apply') { const q = SH[S.sel], qs = shQs(St, q.id);
+      if (St.held[q.id] && !q.score) { s.tip('もう持っている資格', PW.dim); return; } if (!shAvail(g, q)) { s.tip(`この資格は${Math.floor(q.since / 100)}年から`, PW.bad); return; } if (!shReqOk(g, q.req)) { s.tip('受験資格がない：' + shReqTxt(q), PW.bad); return; } if (qs.app) { s.tip('もう申し込んでいる', PW.dim); return; }
+      const si = q.kam || q.score ? 0 : num(qs.stage), sit = shSits(g, q)[si], mi = shNextMi(g, sit.mon); if (mi == null) { s.tip('しばらく試験がない', PW.bad); return; }
+      const fee = si > 0 ? 0 : q.fee; if (fee && !s.pay(fee)) return; qs.app = { sit: si, mi, fee }; if (mi === 'cbt') { this.startExam(s, g); return; } s.tip(`${shMiLab(mi)}の試験に申し込んだ`, PW.good); return; }
+    if (id === 'take') { this.startExam(s, g); return; }
+    // 学校
+    if (id.startsWith('enr:')) { const cid = id.slice(4), E2 = SH_EDU[cid]; if (St.edu[cid] && !St.edu[cid].done) return; if (!shReqOk(g, E2.req)) { s.tip('入学の条件をみたしていない', PW.bad); return; }
+      if (E2.y >= 1 && Object.entries(St.edu).some(([k, e]) => !e.done && SH_EDU[k] && SH_EDU[k].y >= 1)) { s.tip('長い課程は1つずつ（いまの学校を卒業してから）', PW.bad); return; }
+      if (E2.fee > 0 && !s.pay(E2.fee)) return; if (E2.fee < 0) s.win(-E2.fee); St.edu[cid] = { start: g.state.day, att: 0, paid: 1 }; tt.sfx('ok'); s.ban('入学！', PW.acc, E2.nm, { life: 70 }); return; }
+    if (id.startsWith('att:')) { const cid = id.slice(4), e = St.edu[cid]; if (!e || e.done) return; if (this.left(s, g) < 240) { s.tip('今日はもう時間がない', PW.bad); return; } e.att++; s.mins += 240; try { g.addNeed('stress', 3); } catch (er) { } S.anim = 50; S.animTxt = `授業に出た（出席 ${e.att}/${shAttNeed(SH_EDU[cid])}）`; if (shGradCheck(g, cid)) s.ban('卒業！', PW.acc, SH_EDU[cid].nm); return; }
+    if (id.startsWith('payf:')) { const e = St.edu[id.slice(5)]; if (!e || !e.unpaid) return; if (!s.pay(e.unpaid)) return; e.unpaid = 0; shGradCheck(g, id.slice(5)); return; }
+    if (id.startsWith('quit:')) { const cid = id.slice(5); if (S.qc !== cid) { S.qc = cid; s.tip('もう一度押すと退学する（学費はもどらない）', PW.bad); return; } delete St.edu[cid]; S.qc = null; s.tip('退学した', PW.dim); return; }
+    // 仕事
+    if (id.startsWith('w:')) { const j = SH_JOB.find(x => x.id === id.slice(2)); if (!j || !shJobOk(g, j)) return; if (St.workDay === g.state.day) { s.tip('資格の仕事は1日1回まで', PW.dim); return; } if (this.left(s, g) < j.h * 60) { s.tip('今日はもう時間がない', PW.bad); return; }
+      St.workDay = g.state.day; s.mins += j.h * 60; s.win(j.pay); try { g.addNeed('stress', j.st); if (j.fame) g.addFame(j.fame); } catch (e) { } St.earned = num(St.earned) + j.pay; S.anim = 60; S.animTxt = `${j.where}で働いた（+${yen(j.pay)}）`; tt.sfx('coin'); return; }
+  },
+  price(q, k) { return k === 'text' ? 3000 : k === 'tsushin' ? clamp(Math.round(q.h * 40 / 1000) * 1000, 15000, 300000) : clamp(Math.round(q.h * 200 / 10000) * 10000, 50000, 1500000); },
+  startExam(s, g) { const S = s.S, St = shSt(g), q = SH[S.sel], qs = shQs(St, q.id), A = qs.app, cur = shYM(g); if (!A) return; if (A.mi !== 'cbt' && A.mi !== cur.mi) { s.tip('まだ試験の月ではない', PW.dim); return; }
+    if (this.left(s, g) < 180) { s.tip('今日はもう時間がない（明日受けよう）', PW.bad); return; }
+    A.taken = true; qs.tries = num(qs.tries) + 1; s.mins += 180; try { g.addNeed('stress', 4); } catch (e) { }
+    S.ex = { id: q.id, sit: A.sit, mi: A.mi === 'cbt' ? cur.mi : A.mi, r: shTake(g, q, qs, A.sit), f: 0, cbt: A.mi === 'cbt' }; S.ph = 'exam'; tt.sfx('chime'); },
+  endExam(s, g) { const S = s.S, St = shSt(g), X = S.ex, q = SH[X.id], qs = shQs(St, q.id); qs.app = null;
+    const at = q.wait ? shDayOfMi(g, X.mi + q.wait) : g.state.day, P = { id: q.id, sit: X.sit, r: X.r, mi: X.mi, y: Math.floor(X.mi / 12), at, done: false, seen: false }; St.pend.push(P);
+    if (at <= g.state.day) { shAnnounce(g, P); P.seen = true; S.rs = P; S.ph = 'result'; } else { S.ph = 'detail'; s.tip(`おつかれさま。結果は${shMiLab(X.mi + q.wait)}に発表`, PW.text); } },
+  update(s, g) { const S = s.S; S.f++; if (S.anim > 0) S.anim--; if (S.ph === 'exam') { const X = S.ex; X.f++; if (X.f % 9 === 0 && X.f > 30 && X.f < 190) tt.sfx('cursor'); if (X.f === 190) tt.sfx('chime'); if (X.f >= 230) this.endExam(s, g); }
+    if (S.ph === 'result' && S.f % 1 === 0 && S.rs && !S.rsFx) { S.rsFx = S.rs; const R = S.rs.r; if (R.pass && !SH[S.rs.id].score) { tt.sfx('fanfare'); s.burst(320, 150, 40, PW.acc, { coin: false, sp: 4 }); } } if (S.ph !== 'result') S.rsFx = null; },
+  draw(s, c, g) { const S = s.S; shBg(c, s.t); if (S.ph === 'detail') return this.drawDetail(s, c, g); if (S.ph === 'exam') return this.drawExam(s, c, g); if (S.ph === 'result') return this.drawResult(s, c, g); this.drawHome(s, c, g); },
+  // ---- ホーム（タブ） ----
+  drawHome(s, c, g) {
+    const S = s.S, St = shSt(g);
+    SH_TABS.forEach(([k, nm], i) => s.btn('tab:' + k, nm, 8 + i * 106, 34, 102, 26, { kind: S.tab === k ? 'sel' : 'norm', size: 12, badge: k === 'study' ? (shUnseen(g).length + shNowExam(g).length ? String(shUnseen(g).length + shNowExam(g).length) : '') : '' }));
+    s.btn('close', '閉じる', 540, 34, 92, 26, { back: true, size: 12 });
+    if (S.tab === 'find') this.tabFind(s, c, g); else if (S.tab === 'study') this.tabStudy(s, c, g); else if (S.tab === 'held') this.tabHeld(s, c, g); else if (S.tab === 'school') this.tabSchool(s, c, g); else this.tabJob(s, c, g);
+    if (S.anim > 0) this.animOverlay(s, c);
+  },
+  pager(s, c, n, per, y) { const S = s.S, pages = Math.max(1, Math.ceil(n / per)); S.pg = Math.min(S.pg, pages - 1); if (pages > 1) { s.btn('pg:-1', '◀', 166, y, 40, 22, { size: 12, off: S.pg === 0 }); s.btn('pg:1', '▶', 592, y, 40, 22, { size: 12, off: S.pg >= pages - 1 }); pT(c, `${S.pg + 1} / ${pages}`, 399, y + 4, { size: 12, color: PW.dim, align: 'center' }); } },
+  qRow(s, c, g, q, x, y, w, h, i) { const [lab, col] = shStat(g, q), on = s.fid === 'q:' + q.id; s.btn('q:' + q.id, '', x, y, w, h, { hide: true });
+    pR(c, x, y, w, h - 2, on ? '#2a3a6a' : i % 2 ? '#141c3a' : '#18204a'); pR(c, x, y, 3, h - 2, shCatCol(q.cat)); if (on) pR(c, x, y + h - 3, w, 1, PW.acc);
+    if (lab) { pBev(c, x + 6, y + 4, 62, h - 10, col); pT(c, pFit(c, lab, 58, 12), x + 37, y + 6, { size: 12, align: 'center', shadow: null }); }
+    pT(c, pFit(c, q.nm, w - 210, 12), x + 76, y + 6, { size: 12, color: q.via ? '#c8b8ff' : PW.text });
+    pT(c, q.score ? 'スコア型' : q.via ? (q.via === 'base' ? '運転免許' : '学校で取得') : q.kam ? `科目 ${q.kam.n}/${q.kam.list.length}` : `合格率${q.st ? Math.max(1, Math.round(q.st.reduce((a, x) => a * x[1] / 100, 1) * 100)) : q.rate}%`, x + w - 128, y + 6, { size: 12, color: PW.dim });
+    if (q.h) pT(c, `${q.h.toLocaleString()}h`, x + w - 8, y + 6, { size: 12, color: GB_C.t3, align: 'right' }); },
+  tabFind(s, c, g) { const S = s.S;
+    SH_CAT.forEach(([k, nm, col], i) => { s.btn('cat:' + k, nm, 8, 66 + i * 29, 152, 26, { kind: S.cat === k ? 'sel' : 'norm', size: 12 }); if (S.cat !== k) pR(c, 10, 68 + i * 29, 3, 22, col); });
+    const L = SH_LIST.filter(q => q.cat === S.cat), per = 9, P = L.slice(S.pg * per, S.pg * per + per);
+    pT(c, `${SH_CAT.find(x => x[0] === S.cat)[1]}　${L.length}件`, 170, 66, { size: 12, color: PW.acc }); pT(c, '合格率', 504, 66, { size: 12, color: GB_C.t3 }); pT(c, '勉強時間の目安', 628, 66, { size: 12, color: GB_C.t3, align: 'right' });
+    P.forEach((q, i) => this.qRow(s, c, g, q, 166, 82 + i * 27, 466, 27, i)); this.pager(s, c, L.length, per, 330); },
+  tabStudy(s, c, g) { const S = s.S, St = shSt(g), U = shUnseen(g), now = shNowExam(g);
+    let y = 66; if (U.length) { s.btn('rview', `合格発表が${U.length}件 出ています！ 見る`, 8, y, 624, 28, { kind: 'red', def: true, size: 16 }); y += 34; }
+    const L = SH_LIST.filter(q => { const qs = St.q[q.id]; return qs && (qs.hrs > 0 || qs.app || qs.stage > 0 || Object.keys(qs.kam || {}).length) && (!St.held[q.id] || q.score); }).sort((a, b) => (now.includes(b.id) ? 1 : 0) - (now.includes(a.id) ? 1 : 0));
+    if (!L.length) { pFrame(c, 8, y, 624, 80); pT(c, 'まだ勉強している資格はない。「さがす」から資格をえらんで勉強しよう。', 20, y + 12, { size: 12 }); pT(c, '勉強は1回2時間か4時間。このゲームの1日は約3日分なので、3倍ぶん進む。', 20, y + 32, { size: 12, color: PW.dim }); pT(c, `いまの学力 ${shGaku(g)}（高いほど効率がいい）・ストレスが70をこえると効率が落ちる`, 20, y + 52, { size: 12, color: PW.dim }); return; }
+    const per = U.length ? 7 : 8; L.slice(S.pg * per, S.pg * per + per).forEach((q, i) => { const yy = y + i * 30, qs = St.q[q.id], r = shReady(g, q, qs), sit = shSits(g, q)[q.kam || q.score ? 0 : num(qs.stage)], p = q.score ? null : shSitP(g, q, qs, sit), on = s.fid === 'q:' + q.id;
+      s.btn('q:' + q.id, '', 8, yy, 624, 28, { hide: true }); pR(c, 8, yy, 624, 28, on ? '#2a3a6a' : i % 2 ? '#141c3a' : '#18204a'); pR(c, 8, yy, 3, 28, shCatCol(q.cat));
+      pT(c, pFit(c, q.nm, 220, 12), 18, yy + 7, { size: 12 }); shBar(c, 246, yy + 9, 150, 10, r, r >= 1 ? '#5ee07a' : '#c9962a'); pT(c, `${Math.round(qs.hrs)}/${q.kam ? Math.round(q.h / q.kam.n * Math.min(q.kam.max, q.kam.n - shKamPassed(g, q, qs).length)) + Math.round(shKamPassed(g, q, qs).length * q.h / q.kam.n) : q.h}h`, 402, yy + 7, { size: 12, color: PW.dim });
+      if (p != null) { const [j, jc] = shJudge(p); pBev(c, 470, yy + 4, 22, 20, jc); pT(c, j, 481, yy + 7, { size: 12, color: '#05070f', align: 'center', shadow: null }); } else if (qs.best) pT(c, `最高 ${qs.best}点`, 470, yy + 7, { size: 12, color: PW.cyan });
+      const A = qs.app; pT(c, now.includes(q.id) ? '今月が試験！' : A ? (A.mi === 'cbt' ? 'CBT' : `${shMiLab(A.mi)} 受験`) : num(qs.stage) > 0 ? `次は${sit.stages[0][0]}` : '未申込', 626, yy + 7, { size: 12, color: now.includes(q.id) ? PW.bad : A ? PW.cyan : GB_C.t3, align: 'right' }); });
+    this.pager(s, c, L.length, per, 330); },
+  tabHeld(s, c, g) { const S = s.S, St = shSt(g), L = SH_LIST.filter(q => shHas(g, q.id)).sort((a, b) => num(St.held[a.id]) - num(St.held[b.id])), tb = num((St.q.toeic || {}).best);
+    pT(c, `取得した資格　${L.length}／${SH_LIST.length}`, 12, 66, { size: 16, color: PW.acc }); if (tb) pT(c, `TOEIC 最高 ${tb}点`, 300, 68, { size: 12, color: PW.cyan }); pT(c, `資格の仕事でかせいだ額 ${yen(num(St.earned))}`, 628, 68, { size: 12, color: PW.dim, align: 'right' });
+    if (!L.length) { pFrame(c, 8, 92, 624, 60); pT(c, 'まだ資格を持っていない。合格すると、ここに証書がならぶ。', 20, 112, { size: 12, color: PW.dim }); return; }
+    const per = 12; L.slice(S.pg * per, S.pg * per + per).forEach((q, i) => { const x = 8 + (i % 3) * 210, y = 90 + Math.floor(i / 3) * 58, col = shCatCol(q.cat), d = St.held[q.id] != null ? shYM(g, St.held[q.id]) : null;
+      pR(c, x + 2, y + 2, 202, 52, '#000'); pR(c, x, y, 202, 52, '#f4efe0'); pR(c, x, y, 202, 10, col); pR(c, x + 4, y + 12, 194, 1, '#d8ccb0'); pT(c, pFit(c, q.nm, 186, 12), x + 8, y + 16, { size: 12, color: '#1a1408', shadow: null });
+      pT(c, d ? `${d.y}年${d.m}月 取得` : '取得', x + 8, y + 34, { size: 12, color: '#6a5a3a', shadow: null }); pCirc(c, x + 186, y + 38, 9, '#c8102e'); pT(c, '合', x + 186, y + 32, { size: 12, color: '#ffffff', align: 'center', shadow: null }); });
+    this.pager(s, c, L.length, per, 330); },
+  tabSchool(s, c, g) { const S = s.S, St = shSt(g), cur = Object.entries(St.edu).filter(([k, e]) => !e.done && SH_EDU[k]), done = Object.entries(St.edu).filter(([k, e]) => e.done && SH_EDU[k]);
+    pFrame(c, 8, 64, 280, 290, { title: '通っている学校' });
+    if (!cur.length) pT(c, '通っている学校はない', 20, 92, { size: 12, color: PW.dim });
+    cur.slice(0, 3).forEach(([cid, e], i) => { const E2 = SH_EDU[cid], y = 88 + i * 82, el = (g.state.day - e.start) / 120; pT(c, pFit(c, E2.nm, 256, 12), 20, y, { size: 12, color: PW.acc });
+      pT(c, `${Math.min(E2.y, el).toFixed(1)}／${E2.y}年　出席 ${e.att}／${shAttNeed(E2)}`, 20, y + 16, { size: 12, color: PW.dim }); shBar(c, 20, y + 32, 256, 8, Math.min(el / E2.y, e.att / shAttNeed(E2)), '#5a9ad0');
+      s.btn('att:' + cid, '授業に出る（4時間）', 20, y + 44, 150, 26, { size: 12, kind: 'blue', def: i === 0 }); if (e.unpaid) s.btn('payf:' + cid, `学費 ${yen(e.unpaid)}`, 176, y + 44, 100, 26, { size: 12, kind: 'red' }); else s.btn('quit:' + cid, '退学', 176, y + 44, 100, 26, { size: 12 }); });
+    if (done.length) pT(c, `卒業：${done.map(([k]) => SH_EDU[k].nm.replace('（', '(').split('(')[0]).join('・')}`.slice(0, 40), 20, 336, { size: 12, color: PW.good });
+    const L = Object.entries(SH_EDU).filter(([k]) => !St.edu[k] || (!St.edu[k].done && false)), per = 7; pT(c, '入学できる学校・課程', 300, 66, { size: 12, color: PW.acc });
+    L.slice(S.pg * per, S.pg * per + per).forEach(([cid, E2], i) => { const y = 84 + i * 34, ok = shReqOk(g, E2.req); pR(c, 296, y, 336, 32, i % 2 ? '#141c3a' : '#18204a'); pT(c, pFit(c, E2.nm, 190, 12), 304, y + 3, { size: 12, color: ok ? PW.text : GB_C.t3 });
+      pT(c, `${E2.y < 1 ? Math.round(E2.y * 12) + 'か月' : E2.y + '年'}・${E2.fee < 0 ? '給付あり' : yen(E2.fee) + '/年'}${E2.grants ? '・卒業で資格' : ''}`, 304, y + 17, { size: 12, color: GB_C.t3 });
+      s.btn('enr:' + cid, ok ? '入学' : '条件なし', 560, y + 4, 66, 24, { size: 12, kind: ok ? 'pri' : 'norm', off: !ok }); });
+    this.pager(s, c, L.length, per, 330); },
+  tabJob(s, c, g) { const S = s.S, St = shSt(g), L = SH_JOB.slice().sort((a, b) => (shJobOk(g, b) ? 1 : 0) - (shJobOk(g, a) ? 1 : 0)), per = 8, worked = St.workDay === g.state.day;
+    pT(c, `資格を活かした仕事（1日1回）${worked ? '　今日はもう働いた' : ''}`, 12, 66, { size: 12, color: PW.acc });
+    L.slice(S.pg * per, S.pg * per + per).forEach((j, i) => { const y = 84 + i * 30, ok = shJobOk(g, j); pR(c, 8, y, 624, 28, i % 2 ? '#141c3a' : '#18204a');
+      pT(c, pFit(c, j.nm, 180, 12), 18, y + 7, { size: 12, color: ok ? PW.text : GB_C.t3 }); pT(c, pFit(c, j.where, 110, 12), 206, y + 7, { size: 12, color: PW.dim }); pT(c, `${yen(j.pay)}／${j.h}時間`, 320, y + 7, { size: 12, color: ok ? PW.acc : GB_C.t3 });
+      pT(c, ok ? `ストレス +${j.st}${j.fame ? '・知名度+' : ''}` : pFit(c, `必要：${shJobNeedTxt(j)}`, 170, 12), 440, y + 7, { size: 12, color: ok ? PW.dim : '#a07a7a' }); s.btn('w:' + j.id, '働く', 566, y + 2, 60, 24, { size: 12, kind: ok ? 'pri' : 'norm', off: !ok || worked }); });
+    this.pager(s, c, L.length, per, 330); },
+  animOverlay(s, c) { const S = s.S, k = S.anim, a = Math.min(1, k / 10); c.save(); c.globalAlpha = a; pFrame(c, 130, 140, 380, 70, { bg: '#0a1024' });
+    pR(c, 150, 160, 40, 30, '#f4efe0'); pR(c, 170, 160, 1, 30, '#c8b890'); for (let i = 0; i < 4; i++) pR(c, 154, 165 + i * 6, 12, 1, '#8a7a5a'); const px = 174 + ((S.f * 2) % 14); pR(c, px, 178 - ((S.f >> 1) % 6), 2, 10, '#e8a830'); pR(c, px, 188 - ((S.f >> 1) % 6), 2, 2, '#1a1a1a');
+    pT(c, pFit(c, S.animTxt || '', 300, 12), 204, 166, { size: 12 }); c.restore(); },
+  // ---- 詳細 ----
+  drawDetail(s, c, g) {
+    const S = s.S, St = shSt(g), q = SH[S.sel], qs = shQs(St, q.id), sits = shSits(g, q), held = shHas(g, q.id), cur = shYM(g);
+    pFrame(c, 8, 34, 372, 320); pR(c, 10, 36, 4, 316, shCatCol(q.cat));
+    pT(c, pFit(c, q.nm, 350, 16), 22, 42, { size: 16, color: PW.acc }); pT(c, pFit(c, `${SH_CAT.find(x => x[0] === q.cat)[1]}・${q.kind}${q.full ? `（${q.full}）` : ''}`, 350, 12), 22, 64, { size: 12, color: PW.dim });
+    const row = (y, k, v, col) => { pT(c, k, 22, y, { size: 12, color: GB_C.t3 }); pT(c, pFit(c, v, 260, 12), 112, y, { size: 12, color: col || PW.text }); };
+    let y = 86;
+    if (q.via === 'base') { row(y, '取り方', 'スマホの「運転免許」から教習所へ'); row(y + 18, 'いま', held ? '持っている' : 'まだ持っていない', held ? PW.good : PW.dim); pT(c, pFit(c, q.note, 340, 12), 22, y + 44, { size: 12, color: PW.dim }); }
+    else if (q.via === 'course') { const E2 = SH_EDU[q.course]; row(y, '取り方', `${E2.nm}を修了`); row(y + 18, '期間・学費', `${E2.y < 1 ? Math.round(E2.y * 12) + 'か月' : E2.y + '年'}・${yen(E2.fee)}/年`); row(y + 36, 'いま', held ? '持っている' : St.edu[q.course] ? '在学中' : 'まだ', held ? PW.good : PW.dim); pT(c, pFit(c, q.note || '', 340, 12), 22, y + 60, { size: 12, color: PW.dim }); }
+    else {
+      row(y, '合格率', q.score ? 'スコアで出る（10〜990点）' : q.kam ? `1科目あたり約${q.kam.rate}%（${q.kam.n}科目で合格）` : q.st ? `約${Math.max(1, Math.round(q.st.reduce((a, x) => a * x[1] / 100, 1) * 100))}%（${q.st.map(x => `${x[0]}${x[1]}%`).join('→')}）` : `約${q.rate}%`); y += 18;
+      row(y, '勉強時間', `合格まで約${q.h.toLocaleString()}時間`); y += 18; row(y, '受験料', q.fee ? yen(q.fee) : 'なし'); y += 18; row(y, '試験', shMonTxt(g, q)); y += 18;
+      row(y, '受験資格', shReqTxt(q), shReqOk(g, q.req) ? PW.good : PW.bad); y += 18; if (!shAvail(g, q)) { row(y, '', `${Math.floor(q.since / 100)}年${q.since % 100}月にできる資格`, PW.bad); y += 18; }
+      if (q.note) { pT(c, pFit(c, q.note, 350, 12), 22, y, { size: 12, color: PW.dim }); y += 18; }
+      // 自分の状況
+      pR(c, 20, y + 2, 350, 1, '#2a3460'); y += 8;
+      if (q.kam) { const pas = shKamPassed(g, q, qs); pT(c, `合格した科目 ${pas.length}／${q.kam.n}`, 22, y, { size: 12, color: PW.acc }); y += 16; q.kam.list.forEach((k, i) => { const ok = pas.includes(k), x = 22 + (i % 4) * 88, yy = y + Math.floor(i / 4) * 16; pT(c, `${ok ? '✓' : '・'}${pFit(c, k, 72, 12)}`, x, yy, { size: 12, color: ok ? PW.good : GB_C.t3 }); }); y += Math.ceil(q.kam.list.length / 4) * 16 + 4; }
+      else if (sits.length > 1) { pT(c, `段階：${sits.map((x, i) => `${i < num(qs.stage) ? '✓' : i === num(qs.stage) ? '▶' : '・'}${x.stages.map(z => z[0]).join('＋')}`).join('　')}`.slice(0, 44), 22, y, { size: 12, color: PW.cyan }); y += 18; }
+      const r = shReady(g, q, qs); pT(c, '勉強の進み', 22, y, { size: 12, color: GB_C.t3 }); shBar(c, 112, y + 2, 180, 10, r, r >= 1 ? '#5ee07a' : '#c9962a'); pT(c, `${Math.round(r * 100)}%`, 300, y, { size: 12 }); y += 18;
+      if (!q.score) { const p = shSitP(g, q, qs, sits[q.kam ? 0 : num(qs.stage)]), [j, jc] = shJudge(p); pT(c, '合格の見込み', 22, y, { size: 12, color: GB_C.t3 }); pBev(c, 112, y - 2, 22, 18, jc); pT(c, j, 123, y, { size: 12, color: '#05070f', align: 'center', shadow: null }); pT(c, `判定（約${Math.round(p * 100)}%）　学力${shGaku(g)}`, 140, y, { size: 12, color: PW.dim }); y += 18; }
+      else if (qs.best) { row(y, '最高スコア', `${qs.best}点`, PW.cyan); y += 18; }
+      const methods = [qs.text && 'テキスト', qs.tsushin && '通信講座', qs.yobiko && '予備校'].filter(Boolean); if (methods.length) { row(y, '勉強の方法', methods.join('・')); y += 18; }
+      if (held) { pT(c, `${q.score ? '' : '取得ずみ'}`, 22, y, { size: 16, color: PW.good }); }
+      const jobs = SH_JOB.filter(j2 => Array.isArray(j2.need) && j2.need.includes(q.id)); if (jobs.length && y < 330) pT(c, pFit(c, `できる仕事：${jobs.map(j2 => j2.nm).join('・')}`, 350, 12), 22, 334, { size: 12, color: '#c8b8ff' });
+    }
+    // 右：行動
+    pFrame(c, 388, 34, 244, 320, { title: '行動' });
+    const left = this.left(s, g); pT(c, `今日のこり ${Math.floor(left / 60)}時間${left % 60 ? left % 60 + '分' : ''}`, 400, 58, { size: 12, color: PW.dim });
+    if (q.via) { s.btn(q.via === 'course' ? 'toSchool' : 'back', q.via === 'course' ? '学校のページへ' : 'もどる', 398, 84, 224, 34, { kind: 'pri', def: true, size: 12 }); s.btn('back', 'もどる', 398, 312, 224, 32, { back: true, size: 12 }); return; }
+    const can = !held || q.score;
+    s.btn('st2', '2時間 勉強', 398, 78, 110, 32, { kind: 'blue', size: 12, off: !can || left < 120, def: can && !qs.app }); s.btn('st4', '4時間 勉強', 512, 78, 110, 32, { kind: 'blue', size: 12, off: !can || left < 240 });
+    [['text', 'テキスト'], ['tsushin', '通信講座'], ['yobiko', '予備校']].forEach(([k, nm], i) => s.btn('buy:' + k, `${nm}\n${qs[k] ? '済み' : yen(this.price(q, k))}`, 398 + i * 76, 116, 72, 36, { size: 12, off: !!qs[k] || !can }));
+    const A = qs.app, sit = sits[q.kam || q.score ? 0 : num(qs.stage)], nmi = shNextMi(g, sit.mon);
+    if (A && (A.mi === cur.mi || A.mi === 'cbt')) s.btn('take', '受験する（3時間）', 398, 166, 224, 40, { kind: 'red', def: true, size: 16 });
+    else if (A) { pFrame(c, 398, 166, 224, 40, { bg: '#0a1430' }); pT(c, `${shMiLab(A.mi)}に受験`, 510, 172, { size: 12, color: PW.cyan, align: 'center' }); pT(c, `（${sit.stages.map(x => x[0]).join('＋')}）`, 510, 188, { size: 12, color: PW.dim, align: 'center' }); }
+    else if (can) { const fee = num(qs.stage) > 0 && !q.kam ? 0 : q.fee; s.btn('apply', nmi === 'cbt' ? `受験する（CBT・${yen(fee)}）` : nmi != null ? `申し込む（${shMiLab(nmi)}・${fee ? yen(fee) : '無料'}）` : '試験の予定がない', 398, 166, 224, 40, { kind: 'pri', size: 12, off: nmi == null || !shReqOk(g, q.req) || !shAvail(g, q) }); }
+    if (num(qs.stage) > 0 && sits.length > 1) pT(c, `次は「${sit.stages.map(x => x[0]).join('＋')}」（${q.keepM ? Math.round(q.keepM / 12 * 10) / 10 + '年以内' : '次の回'}）`, 400, 212, { size: 12, color: PW.cyan });
+    pT(c, '勉強は3倍ぶん進む（1日＝約3日）', 400, 236, { size: 12, color: GB_C.t3 }); pT(c, `効率：学力${shGaku(g)}${shStress(g) > 70 ? '・ストレスで低下中' : ''}`, 400, 252, { size: 12, color: GB_C.t3 });
+    pT(c, `受験回数 ${num(qs.tries)}回${qs.absent ? `・欠席 ${qs.absent}回` : ''}`, 400, 268, { size: 12, color: GB_C.t3 });
+    s.btn('back', 'もどる', 398, 312, 224, 32, { back: true, size: 12 });
+    if (S.anim > 0) this.animOverlay(s, c);
+  },
+  // ---- 試験会場 ----
+  drawExam(s, c, g) {
+    const S = s.S, X = S.ex, q = SH[X.id], f = X.f, sit = shSits(g, q)[X.sit];
+    pR(c, 0, 30, 640, 330, '#d8ccb0'); pR(c, 0, 30, 640, 110, '#e8e0c8'); pR(c, 0, 138, 640, 3, '#b8a888');
+    pR(c, 170, 46, 300, 70, '#2a4a3a'); pR(c, 168, 44, 304, 2, '#8a6a3a'); pT(c, X.cbt ? 'CBT試験会場' : '試験会場', 320, 52, { size: 12, color: '#e8f0e0', align: 'center', shadow: null }); pT(c, pFit(c, q.nm, 280, 16), 320, 70, { size: 16, color: '#ffffff', align: 'center', shadow: null }); pT(c, sit.stages.map(x => x[0]).join('・'), 320, 94, { size: 12, color: '#c8e0c8', align: 'center', shadow: null });
+    const cx = 560, cy = 76; pCirc(c, cx, cy, 22, '#2a2a30'); pCirc(c, cx, cy, 20, '#ffffff'); const a = -Math.PI / 2 + f / 230 * Math.PI * 2, a2 = -Math.PI / 2 + f / 230 * Math.PI / 6 + 0.4; pLine(c, cx, cy, cx + Math.cos(a) * 16, cy + Math.sin(a) * 16, '#1a1a1a'); pLine(c, cx, cy, cx + Math.cos(a2) * 10, cy + Math.sin(a2) * 10, '#c8102e');
+    pR(c, 80, 96, 12, 36, '#2a3a5a'); pCirc(c, 86, 90, 7, '#f0c8a0'); pR(c, 79, 82, 14, 5, '#3a3a3a');
+    // 受験者の列
+    for (let row = 0; row < 3; row++) for (let col = 0; col < 6; col++) { const x = 60 + col * 92 + (row % 2) * 10, y = 160 + row * 46; if (row === 2 && col === 3) continue; pR(c, x, y + 14, 60, 8, '#a07040'); pR(c, x, y + 22, 4, 14, '#7a5030'); pR(c, x + 56, y + 22, 4, 14, '#7a5030'); pR(c, x + 6, y + 12, 26, 4, '#f4f4f4');
+      const bob = ((f >> 3) + row + col) % 7 === 0 ? 1 : 0; pR(c, x + 22, y - 2 + bob, 16, 16, ['#2a3a5a', '#5a2a3a', '#3a5a3a', '#4a4a4a'][(row + col) % 4]); pCirc(c, x + 30, y - 6 + bob, 7, '#f0c8a0'); pR(c, x + 23, y - 13 + bob, 14, 5, ['#1a1a1a', '#5a3a1a', '#3a2a1a'][(row * col) % 3]); }
+    // 自分の机（手前）
+    const mx = 236, my = 266; pR(c, mx, my + 30, 168, 12, '#b07a48'); pR(c, mx + 30, my, 108, 34, '#ffffff'); pR(c, mx + 30, my, 108, 6, '#e8e0f0');
+    const prog = clamp((f - 30) / 160, 0, 1), marks = Math.floor(prog * 24); for (let i = 0; i < 24; i++) { const xx = mx + 36 + (i % 8) * 12, yy = my + 10 + Math.floor(i / 8) * 7; pR(c, xx, yy, 8, 4, i < marks ? '#1a1a1a' : '#d8d8e0'); }
+    const px = mx + 36 + (marks % 8) * 12, py = my + 10 + Math.floor(marks / 8) * 7 - 12; if (f > 30 && f < 190) { pR(c, px + 4, py, 3, 14, '#e8a830'); pR(c, px + 4, py + 14, 3, 2, '#1a1a1a'); }
+    pR(c, mx + 70, my - 22, 28, 22, '#2a3a6a'); pCirc(c, mx + 84, my - 28, 10, '#f0c8a0'); pR(c, mx + 74, my - 39, 20, 6, '#2a1a10');
+    const p = q.score ? 0.6 : shSitP(g, q, shQs(shSt(g), q.id), sit); if (f > 40 && f < 185 && f % 40 < 22) { const know = ((f / 40 | 0) * 37 % 100) / 100 < p; pR(c, mx + 100, my - 70, 40, 26, '#ffffff'); pR(c, mx + 96, my - 46, 6, 4, '#ffffff'); pT(c, know ? '！' : '？', mx + 120, my - 66, { size: 16, color: know ? '#2a8a3a' : '#c8302a', align: 'center', shadow: null }); }
+    const msg = f < 30 ? 'はじめてください' : f < 190 ? `解答中…　問 ${Math.max(1, Math.round(prog * 50))}／50` : 'そこまで！ 筆記用具を置いてください'; pFrame(c, 8, 322, 624, 32); pT(c, msg, 320, 330, { size: 16, align: 'center', color: f >= 190 ? PW.acc : PW.text });
+  },
+  // ---- 合格発表 ----
+  drawResult(s, c, g) {
+    const S = s.S, P = S.rs, q = SH[P.id], R = P.r, me = 1000 + ((P.mi * 37 + P.id.length * 101) % 8000), name = (g.state.profile && g.state.profile.name) || 'あなた';
+    if (q.score) { pFrame(c, 120, 50, 400, 250, { bg: '#f4f8ff', title: 'スコアレポート' }); pT(c, q.nm, 320, 80, { size: 16, color: '#1a2a5a', align: 'center', shadow: null }); pT(c, `${R.score}`, 320, 110, { size: 32, color: '#c8102e', align: 'center', shadow: null }); pT(c, '／990', 390, 126, { size: 12, color: '#5a5a6a', shadow: null });
+      pT(c, `Listening ${R.L}　Reading ${R.R}`, 320, 160, { size: 16, color: '#1a2a5a', align: 'center', shadow: null }); const lv = R.score >= 860 ? 'A' : R.score >= 730 ? 'B' : R.score >= 470 ? 'C' : R.score >= 220 ? 'D' : 'E'; pT(c, `レベル ${lv}${R.score >= 900 ? '（翻訳の仕事ができる）' : ''}`, 320, 190, { size: 12, color: '#3a4a7a', align: 'center', shadow: null });
+      shBar(c, 170, 220, 300, 12, R.score / 990, '#2a6ad0'); s.btn('rback', 'もどる', 260, 260, 120, 30, { kind: 'pri', def: true, size: 12 }); return; }
+    // 掲示板
+    pR(c, 20, 40, 300, 280, '#3a2a1a'); pR(c, 26, 46, 288, 268, '#f4efe0'); pT(c, '合格者 受験番号', 170, 52, { size: 16, color: '#1a1408', align: 'center', shadow: null }); pT(c, pFit(c, q.nm, 270, 12), 170, 72, { size: 12, color: '#5a4a3a', align: 'center', shadow: null });
+    const nums = []; for (let i = 0; i < 40; i++) { const n = me - 60 + i * 3 + (i % 3); if (Math.abs(n - me) < 2 && n !== me) continue; if (((n * 7) % 10) < 4) nums.push(n); } if (R.pass && !nums.includes(me)) nums.push(me); nums.sort((a, b) => a - b);
+    nums.slice(0, 30).forEach((n, i) => { const x = 46 + (i % 5) * 54, y = 94 + Math.floor(i / 5) * 24, mine = n === me; if (mine && S.f % 20 < 12) pR(c, x - 4, y - 2, 46, 20, '#ffd23f'); pT(c, String(n), x, y, { size: 12, color: mine ? '#c8102e' : '#1a1408', shadow: null }); });
+    pT(c, `あなたの番号：${me}`, 170, 250, { size: 16, color: '#1a1408', align: 'center', shadow: null }); pT(c, R.pass ? 'あった…！' : '…ない。', 170, 276, { size: 16, color: R.pass ? '#c8102e' : '#5a5a6a', align: 'center', shadow: null });
+    // 右：結果の内訳
+    pFrame(c, 330, 40, 302, 280, { title: '結果' });
+    let y = 66; if (R.subj) { pT(c, '科目別の結果', 342, y, { size: 12, color: PW.dim }); y += 18; R.subj.forEach(x => { pT(c, x.nm, 342, y, { size: 12 }); pT(c, x.pass ? '合格' : '不合格', 486, y, { size: 12, color: x.pass ? PW.good : PW.bad }); pT(c, `${x.score}点`, 620, y, { size: 12, color: PW.dim, align: 'right' }); y += 18; }); const qs = shQs(shSt(g), q.id); y += 6; pT(c, `合格科目 ${shKamPassed(g, q, qs).length}／${q.kam.n}`, 342, y, { size: 16, color: PW.acc }); y += 24; }
+    else (R.stages || []).forEach(x => { pT(c, x.nm, 342, y, { size: 12 }); pT(c, x.skip ? '—' : x.pass ? '合格' : '不合格', 452, y, { size: 12, color: x.skip ? GB_C.t3 : x.pass ? PW.good : PW.bad }); if (!x.skip) pT(c, `${x.score}点（合格60）`, 620, y, { size: 12, color: PW.dim, align: 'right' }); y += 20; });
+    const fin = shHas(g, q.id), sits = shSits(g, q), more = R.pass && !fin && !q.kam && P.sit + 1 < sits.length;
+    if (fin && R.pass) { pR(c, 346, y + 6, 270, 96, '#f4efe0'); pR(c, 350, y + 10, 262, 88, '#fffaf0'); pR(c, 350, y + 10, 262, 2, '#c9962a'); pT(c, q.kam || q.st ? '合格証書' : '合格証書', 481, y + 16, { size: 16, color: '#1a1408', align: 'center', shadow: null }); pT(c, pFit(c, `${name} 殿`, 240, 12), 481, y + 40, { size: 12, color: '#1a1408', align: 'center', shadow: null }); pT(c, pFit(c, `${q.nm}に合格したことを証する`, 250, 12), 481, y + 58, { size: 12, color: '#3a3020', align: 'center', shadow: null }); pCirc(c, 590, y + 82, 10, '#c8102e'); pT(c, '印', 590, y + 76, { size: 12, color: '#ffffff', align: 'center', shadow: null }); }
+    else if (more) pT(c, `次は「${sits[P.sit + 1].stages.map(x => x[0]).join('＋')}」！ 申し込もう`, 342, y + 10, { size: 12, color: PW.cyan });
+    else if (!R.pass) pT(c, 'また来年、挑戦しよう…', 342, y + 10, { size: 12, color: PW.dim });
+    s.btn('rback', shUnseen(g).length ? '次の発表へ' : 'もどる', 410, 284, 140, 30, { kind: 'pri', def: true, size: 12 });
+  },
+};
+
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
