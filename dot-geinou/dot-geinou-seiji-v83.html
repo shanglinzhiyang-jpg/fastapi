@@ -38904,6 +38904,299 @@ function rcxAug(R) {
   };
 })();
 
+// ===== 宝くじの向上：ロト6・ロト7・ミニロト・ナンバーズ（マークシートと抽せん機）、自分で削るスクラッチ、にぎやかな売り場 =====
+// 当せん確率と賞金は、本物のくじにあわせて還元率がおよそ45%になるように決めている。
+const TKX_L = {
+  loto6: { nm: 'ロト6', n: 43, k: 6, b: 1, cost: 200, wait: 3, col: '#d0306a', since: 200010, days: '毎週 月・木',
+    tiers: [['1等', 2e8, '6個一致'], ['2等', 1e7, '5個＋ボーナス'], ['3等', 3e5, '5個一致'], ['4等', 6800, '4個一致'], ['5等', 1000, '3個一致']], cap: 6e8 },
+  loto7: { nm: 'ロト7', n: 37, k: 7, b: 2, cost: 300, wait: 3, col: '#2a7ad0', since: 201304, days: '毎週 金',
+    tiers: [['1等', 6e8, '7個一致'], ['2等', 7.3e6, '6個＋ボーナス'], ['3等', 7.3e5, '6個一致'], ['4等', 9100, '5個一致'], ['5等', 1400, '4個一致'], ['6等', 1000, '3個＋ボーナス']], cap: 1e9 },
+  mini: { nm: 'ミニロト', n: 31, k: 5, b: 1, cost: 200, wait: 3, col: '#2a9a4a', since: 199904, days: '毎週 火',
+    tiers: [['1等', 1e7, '5個一致'], ['2等', 1.5e5, '4個＋ボーナス'], ['3等', 1e4, '4個一致'], ['4等', 1000, '3個一致']] },
+  n3: { nm: 'ナンバーズ3', d: 3, cost: 200, wait: 1, col: '#e07a1a', since: 199410, days: '毎日（平日）' },
+  n4: { nm: 'ナンバーズ4', d: 4, cost: 200, wait: 1, col: '#c8501a', since: 199410, days: '毎日（平日）' },
+};
+function tkxYM(g) { try { const d = dateOf(g, g.state.day); return d.year * 100 + d.month; } catch (e) { return 202001; } }
+function tkxOn(g, k) { return tkxYM(g) >= (TKX_L[k] ? TKX_L[k].since : 0); }
+function tkxSince(k) { const v = TKX_L[k].since; return `${Math.floor(v / 100)}年${v % 100}月から`; }
+// ナンバーズの賞金（ストレート・ボックス）
+function tkxNumPay(kind, sel, win, how) {
+  const D = TKX_L[kind].d, eq = sel.join('') === win.join('');
+  if (eq && how === 'st') return [D === 3 ? 90000 : 900000, 'ストレート'];
+  const a = sel.slice().sort().join(''), b = win.slice().sort().join('');
+  if (how === 'box' && a === b) { const cnt = Object.values(sel.reduce((m, x) => (m[x] = (m[x] || 0) + 1, m), {})).sort((x, y) => y - x), perm = cnt.reduce((p, c, i) => p / [1, 1, 2, 6, 24][c], [1, 1, 2, 6, 24][D]);
+    return [Math.round((D === 3 ? 90000 : 900000) / perm / 100) * 100, 'ボックス']; }
+  return [0, ''];
+}
+function tkxLotoPay(kind, sel, W) {
+  const L = TKX_L[kind], m = sel.filter(x => W.main.includes(x)).length, bm = sel.filter(x => W.bonus.includes(x)).length;
+  let tier = null;
+  if (kind === 'loto6') tier = m === 6 ? 0 : m === 5 && bm ? 1 : m === 5 ? 2 : m === 4 ? 3 : m === 3 ? 4 : null;
+  else if (kind === 'loto7') tier = m === 7 ? 0 : m === 6 && bm ? 1 : m === 6 ? 2 : m === 5 ? 3 : m === 4 ? 4 : m === 3 && bm ? 5 : null;
+  else tier = m === 5 ? 0 : m === 4 && bm ? 1 : m === 4 ? 2 : m === 3 ? 3 : null;
+  if (tier == null) return [0, ''];
+  const T = L.tiers[tier]; return [tier === 0 && W.carry ? L.cap : T[1], T[0]];
+}
+function tkxMakeDraw(kind) {
+  const L = TKX_L[kind];
+  if (L.d) return { num: Array.from({ length: L.d }, () => gbR(0, 9)) };
+  const a = gbShuffle(Array.from({ length: L.n }, (_, i) => i + 1));
+  return { main: a.slice(0, L.k).sort((x, y) => x - y), bonus: a.slice(L.k, L.k + L.b), carry: L.cap ? Math.random() < 0.1 : false };
+}
+// 抽せん日が来たくじに結果を入れる（同じ回のくじは同じ当せん番号）
+function tkxResolve(g) {
+  const G = gb(g); if (!Array.isArray(G.lt)) G.lt = []; if (!isObj(G.ld)) G.ld = {};
+  const day = num(g.state.day); let n = 0;
+  for (const t of G.lt) if (!t.res && day >= t.draw) {
+    const W = G.ld[t.gid] || (G.ld[t.gid] = tkxMakeDraw(t.kind));
+    t.res = TKX_L[t.kind].d ? tkxNumPay(t.kind, t.sel, W.num, t.how) : tkxLotoPay(t.kind, t.sel, W); n++;
+  }
+  const live = new Set(G.lt.filter(t => !t.paid).map(t => t.gid)); for (const k of Object.keys(G.ld)) if (!live.has(k)) delete G.ld[k];
+  if (G.lt.length > 150) G.lt = G.lt.filter(t => !t.paid).concat(G.lt.filter(t => t.paid).slice(-40));
+  return n;
+}
+// スクラッチのカード（同じ金額が3つで当たり）
+const TKX_SC = [200, 1000, 10000, 100000, 1000000];
+const TKX_SCP = [[1000000, 1 / 500000], [100000, 1 / 50000], [10000, 1 / 1000], [1000, 1 / 40], [200, 1 / 4]];
+function tkxScratchCard() {
+  let v = 0; { const r = Math.random(); let a = 0; for (const [x, p] of TKX_SCP) { a += p; if (r < a) { v = x; break; } } } let vals;
+  for (let tries = 0; tries < 200; tries++) {
+    vals = v ? [v, v, v] : [];
+    while (vals.length < 6) vals.push(TKX_SC[gbR(0, TKX_SC.length - 1)]);
+    vals = gbShuffle(vals); const cnt = {}; vals.forEach(x => cnt[x] = (cnt[x] || 0) + 1);
+    const triples = Object.entries(cnt).filter(([, c]) => c >= 3).map(([k]) => +k);
+    if (v ? (triples.length === 1 && triples[0] === v && cnt[v] === 3) : triples.length === 0) break;
+  }
+  return { v, vals, rev: Array(6).fill(0), cells: Array.from({ length: 6 }, () => new Uint8Array(13 * 8)), done: false, mask: null };
+}
+const TKX_CARD = { x: 30, y: 44, w: 392, h: 262 };
+function tkxSpot(i) { return { x: TKX_CARD.x + 20 + (i % 3) * 124, y: TKX_CARD.y + 86 + Math.floor(i / 3) * 72, w: 104, h: 64 }; }
+function tkxYenS(v) { return v >= 1e6 ? `${v / 1e6}00万円`.replace('100万', '100万') : v >= 1e4 ? `${v / 1e4}万円` : `${v.toLocaleString()}円`; }
+function tkxMask(card) {
+  if (card.mask || typeof document === 'undefined') return card.mask; const cv = document.createElement('canvas'); cv.width = TKX_CARD.w; cv.height = TKX_CARD.h; const x = cv.getContext('2d');
+  for (let i = 0; i < 6; i++) { const p = tkxSpot(i), X = p.x - TKX_CARD.x, Y = p.y - TKX_CARD.y; const gr = x.createLinearGradient(X, Y, X + p.w, Y + p.h); gr.addColorStop(0, '#c8ccd8'); gr.addColorStop(0.5, '#9aa0ae'); gr.addColorStop(1, '#c0c4d0'); x.fillStyle = gr; x.fillRect(X, Y, p.w, p.h);
+    x.fillStyle = 'rgba(255,255,255,0.35)'; for (let k = 0; k < 60; k++) x.fillRect(X + (k * 37) % p.w, Y + (k * 23) % p.h, 2, 1); x.fillStyle = '#7a8090'; x.font = '12px "DotGothic16", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('けずってね', X + p.w / 2, Y + p.h / 2); }
+  card.mask = cv; return cv;
+}
+// ---- 売り場の飾り（行列・LED・のぼり） ----
+function tkxBooth(c, s, g, X, Y) {
+  const t = s.t, m = (() => { try { return dateOf(g, g.state.day).month; } catch (e) { return 6; } })(), big = m >= 11 || m === 7 || m === 5;
+  // LEDの電光掲示（売り場の下）
+  const msgs = []; const J = tkJumbo(g); msgs.push(`${J.nm} 1等・前後賞あわせて${tkOku(J.p1 + J.pz * 2)}`); if (tkxOn(g, 'loto6')) msgs.push('ロト6 ' + (s.S.carry6 ? `キャリーオーバー発生中！ 1等最高${tkOku(TKX_L.loto6.cap)}` : '毎週月・木 抽せん')); if (tkxOn(g, 'loto7')) msgs.push('ロト7 1等最高10億円'); if (tkxOn(g, 'n3')) msgs.push('ナンバーズ 毎日抽せん');
+  const msg = '★ ' + msgs.join('　★ ') + '　'; pR(c, X + 20, Y + 204, 260, 18, '#120808'); c.save(); c.beginPath(); c.rect(X + 21, Y + 205, 258, 16); c.clip(); const tw = msg.length * 12, off = (t * 1.5) % (tw + 260); pT(c, msg, X + 280 - off, Y + 206, { size: 12, color: '#ff8a2a', shadow: null }); pT(c, msg, X + 280 - off + tw + 40, Y + 206, { size: 12, color: '#ff8a2a', shadow: null }); c.restore();
+  // 「当店から1等が出ました」の札
+  pR(c, X + 196, Y + 92, 40, 54, '#ffffff'); pR(c, X + 197, Y + 93, 38, 52, '#c8102e'); ['1等', '3本', '出ました'].forEach((w, i) => pT(c, w, X + 216, Y + 95 + i * 16, { size: 12, color: '#ffe94a', align: 'center', shadow: null }));
+  // 行列（ジャンボの時期は長い）
+  const n = big ? 9 : 4; pT(c, `行列 ${n}人${big ? '（ジャンボ発売中）' : ''}`, X, Y + 254, { size: 12, color: PW.dim });
+  for (let i = 0; i < n; i++) { const px = X + 270 - i * 30 + Math.round(Math.sin(t / 40 + i) * 1), py = Y + 290, cl = ['#3a4a6a', '#6a3a3a', '#3a6a4a', '#5a5a6a', '#8a6a3a', '#4a3a6a'][i % 6], bob = (t >> 4) + i & 1;
+    pR(c, px - 5, py - 18 + bob, 10, 14, cl); pCirc(c, px, py - 23 + bob, 5, '#f0c8a0'); pR(c, px - 5, py - 28 + bob, 10, 4, ['#2a1a10', '#5a3a1a', '#1a1a1a', '#8a8a8a'][i % 4]); pR(c, px - 4, py - 4, 3, 6, '#2a2a34'); pR(c, px + 1, py - 4, 3, 6, '#2a2a34'); }
+  if ((t % 400) < 120) { pR(c, X + 62, Y + 96, 110, 16, '#ffffff'); pT(c, 'いらっしゃいませ！', X + 117, Y + 97, { size: 12, color: '#c8102e', align: 'center', shadow: null }); }
+}
+// ナンバーズの風車
+function tkxWheel(c, cx, cy, r, rot, digit, spinning) {
+  for (let k = 0; k < 10; k++) { const a = rot + k / 10 * Math.PI * 2 - (spinning ? 0 : (digit / 10) * Math.PI * 2) - Math.PI / 2, x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r; pCirc(c, Math.round(x), Math.round(y), 9, k % 2 ? '#f4f4f4' : '#ffe94a'); pT(c, String(k), Math.round(x), Math.round(y) - 6, { size: 12, color: '#1a1a1a', align: 'center', shadow: null }); }
+  pCirc(c, cx, cy, 7, '#c8102e'); pCirc(c, cx, cy, 3, '#ffe94a');
+}
+function tkxBall(c, x, y, r, n, col, txt) { pCirc(c, x, y + 1, r, 'rgba(0,0,0,0.35)'); pCirc(c, x, y, r, col); pCirc(c, x, y, r - 3, '#ffffff'); pCirc(c, x - Math.round(r / 3), y - Math.round(r / 3), 2, 'rgba(255,255,255,0.9)'); if (n != null) pT(c, String(n), x, y - 6, { size: 12, color: txt || '#1a1a1a', align: 'center', shadow: null }); }
+(function tkxInstall() {
+  const M = GB_MODES && GB_MODES.takara; if (!M || M.__tkx) return; M.__tkx = true;
+  const init0 = M.init, btn0 = M.btn, upd0 = M.update, draw0 = M.draw;
+  try { const t0 = gbTick; gbTick = function (g) { const r = t0(g); try { const n = tkxResolve(g); if (n) g.message({ from: '宝くじ', kind: 'chat', text: `ロト・ナンバーズの抽せん結果が出ました（${n}口）。売り場か「宝くじ」アプリで確認できます。` }); } catch (e) { } return r; }; } catch (e) { }
+  try { const r0 = gbRecTk; gbRecTk = function (g, r) { r0(g, r); if (r.lbet || r.lpay) gbRec(g, 'takara', num(r.lbet), num(r.lpay), 'ロト・ナンバーズ'); if (r.sbet || r.spay) gbRec(g, 'quick', num(r.sbet), num(r.spay), 'スクラッチ'); }; } catch (e) { }
+  M.init = function (s, g) { init0.call(this, s, g); tkxResolve(g); s.S.carry6 = Math.random() < 0.3; s.S.ptr = null;
+    // スクラッチ用：指やマウスでなぞると削れる
+    if (typeof window !== 'undefined' && !s.__tkxPtr) { const cv = () => { let best = null, A = 0; for (const e of document.querySelectorAll('canvas')) { const r = e.getBoundingClientRect(), a = r.width * r.height; if (a > A) { A = a; best = r; } } return best; };
+      const pos = ev => { const r = cv(); if (!r) return null; return { x: (ev.clientX - r.left) * 640 / r.width, y: (ev.clientY - r.top) * 360 / r.height }; };
+      const dn = ev => { if (s.S && s.S.ph === 'scratch') { const p = pos(ev); if (p) s.S.ptr = { ...p, down: true }; } }, mv = ev => { if (s.S && s.S.ph === 'scratch' && s.S.ptr) { const p = pos(ev); if (p) s.S.ptr = { ...p, down: s.S.ptr.down || !!(ev.buttons & 1) }; } }, up = () => { if (s.S && s.S.ptr) s.S.ptr.down = false; };
+      window.addEventListener('pointerdown', dn); window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); s.__tkxPtr = true;
+      const d0 = s.done.bind(s); s.done = (...a) => { window.removeEventListener('pointerdown', dn); window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); return d0(...a); }; } };
+  const pend = g => { const G = gb(g); tkxResolve(g); return (G.lt || []).filter(t => t.res && !t.paid); };
+  M.btn = function (s, id, g) {
+    const S = s.S, G = gb(g);
+    if (id.startsWith('lk:')) { const k = id.slice(3); if (!tkxOn(g, k)) { s.tip(`${TKX_L[k].nm}は${tkxSince(k)}`, PW.dim); return; } S.ph = 'lsheet'; S.lk = k; S.pick = []; S.how = 'st'; tt.sfx('ok'); return; }
+    if (S.ph === 'lsheet') { const L = TKX_L[S.lk];
+      if (id.startsWith('m:')) { const n = +id.slice(2), i = S.pick.indexOf(n); if (i >= 0) S.pick.splice(i, 1); else if (S.pick.length < L.k) S.pick.push(n); else { s.tip(`${L.k}個までです`, PW.bad); return; } tt.sfx('cursor'); return; }
+      if (id.startsWith('d:')) { const [, col, d] = id.split(':').map(Number); S.pick[col] = d; tt.sfx('cursor'); return; }
+      if (id === 'qp') { S.pick = L.d ? Array.from({ length: L.d }, () => gbR(0, 9)) : gbShuffle(Array.from({ length: L.n }, (_, i) => i + 1)).slice(0, L.k); tt.sfx('ok'); return; }
+      if (id === 'clr') { S.pick = []; return; }
+      if (id === 'st' || id === 'box') { S.how = id; return; }
+      if (id === 'buy1' || id === 'buy5') {
+        const lines = id === 'buy5' ? Array.from({ length: 5 }, () => L.d ? Array.from({ length: L.d }, () => gbR(0, 9)) : gbShuffle(Array.from({ length: L.n }, (_, i) => i + 1)).slice(0, L.k)) : [S.pick.slice()];
+        if (id === 'buy1' && (L.d ? S.pick.filter(x => x != null).length !== L.d : S.pick.length !== L.k)) { s.tip(L.d ? `${L.d}けた全部えらんでください` : `数字を${L.k}個えらんでください`, PW.bad); return; }
+        const cost = L.cost * lines.length; if (!s.pay(cost)) return; if (!Array.isArray(G.lt)) G.lt = []; const day = num(g.state.day), dr = day + L.wait;
+        for (const sel of lines) G.lt.push({ kind: S.lk, sel: L.d ? sel : sel.slice().sort((a, b) => a - b), how: L.d ? S.how : null, cost: L.cost, buy: day, draw: dr, gid: `${S.lk}:${dr}`, res: null, paid: false });
+        s.res.lbet = (s.res.lbet || 0) + cost; s.mins += 3; tt.sfx('coin'); S.slip = { t: 0, n: lines.length }; s.tip(`${L.nm}を${lines.length}口購入。抽せんは${L.wait}日後`, PW.good); S.pick = []; return; }
+      if (id === 'menu') { S.ph = 'menu'; return; }
+    }
+    if (id === 'scratch') { S.ph = 'scratch'; S.cards = []; S.card = null; S.cx = 226; S.cy = 200; S.shav = []; return; }
+    if (S.ph === 'scratch') {
+      if (id === 'sc1' || id === 'sc5') { if (S.card && !S.card.done) return; const n = id === 'sc5' ? 5 : 1; if (!s.pay(200 * n)) return; S.cards = Array.from({ length: n }, () => tkxScratchCard()); S.card = S.cards.shift(); S.left = n - 1; s.res.sbet = (s.res.sbet || 0) + 200 * n; s.mins += 2; tt.sfx('coin'); return; }
+      if (id === 'scall') { if (S.card && !S.card.done) S.auto = { t: 0 }; return; }
+      if (id === 'scnext') { if (S.cards.length) { S.card = S.cards.shift(); S.left = S.cards.length; } return; }
+      if (id === 'menu') { if (S.card && !S.card.done) return; S.ph = 'menu'; return; }
+    }
+    if (id === 'check') { const P = pend(g); const jumbo = G.tix.some(x => x.res && !x.paid); if (!jumbo && P.length) { const gid = P[0].gid; S.ph = 'ldraw'; S.lg = { gid, kind: P[0].kind, W: (gb(g).ld || {})[gid], T: P.filter(t => t.gid === gid), f: 0, balls: null, out: [], paid: false }; tt.sfx('drum'); return; } }
+    if (S.ph === 'ldraw') { if (id === 'skip') { S.lg.f = 9999; return; } if (id === 'menu') { if (!S.lg.paid) return; S.ph = 'menu'; return; } if (id === 'quit' && !S.lg.paid) return; }
+    return btn0.call(this, s, id, g);
+  };
+  M.key = function (s, g, inp) { const S = s.S; if (S.ph !== 'scratch' || !S.card || S.card.done) return false; let used = false; const sp = 4;
+    if (inp.down && inp.down('left')) { S.cx -= sp; used = true; } if (inp.down && inp.down('right')) { S.cx += sp; used = true; } if (inp.down && inp.down('up')) { S.cy -= sp; used = true; } if (inp.down && inp.down('down')) { S.cy += sp; used = true; }
+    S.cx = clamp(S.cx, TKX_CARD.x, TKX_CARD.x + TKX_CARD.w); S.cy = clamp(S.cy, TKX_CARD.y, TKX_CARD.y + TKX_CARD.h);
+    if (inp.down && inp.down('a')) { this.scr(s, S.cx, S.cy, 8); used = true; } return used; };
+  const tap0 = M.tap; M.tap = function (s, g, p) { if (tap0) tap0.call(this, s, g, p); const S = s.S; if (S.ph === 'scratch' && S.card && !S.card.done) { S.cx = p.x; S.cy = p.y; this.scr(s, p.x, p.y, 11); } };
+  // 削る（円の中のセルを消す）
+  M.scr = function (s, x, y, r) { const S = s.S, C = S.card; if (!C || C.done) return; const mk = tkxMask(C); let hit = false;
+    for (let i = 0; i < 6; i++) { const p = tkxSpot(i); if (x < p.x - r || x > p.x + p.w + r || y < p.y - r || y > p.y + p.h + r) continue; hit = true; const cells = C.cells[i];
+      for (let cy = 0; cy < 8; cy++) for (let cx = 0; cx < 13; cx++) { const px = p.x + cx * 8 + 4, py = p.y + cy * 8 + 4; if ((px - x) ** 2 + (py - y) ** 2 <= (r + 3) ** 2) cells[cy * 13 + cx] = 1; }
+      C.rev[i] = cells.reduce((a, v) => a + v, 0) / cells.length; }
+    if (!hit) return; if (mk) { const x2 = mk.getContext('2d'); x2.save(); x2.globalCompositeOperation = 'destination-out'; x2.beginPath(); x2.arc(x - TKX_CARD.x, y - TKX_CARD.y, r, 0, Math.PI * 2); x2.fill(); x2.restore(); }
+    if (Math.random() < 0.6) S.shav.push({ x, y, vx: (Math.random() - 0.5) * 2, vy: -1 - Math.random(), t: 0 }); if (s.t % 5 === 0) tt.sfx('cursor');
+    if (C.rev.every(v => v >= 0.62)) this.scDone(s); };
+  M.scDone = function (s) { const S = s.S, C = S.card; if (C.done) return; C.done = true; const mk = tkxMask(C); if (mk) mk.getContext('2d').clearRect(0, 0, TKX_CARD.w, TKX_CARD.h);
+    if (C.v) { s.win(C.v); s.res.spay = (s.res.spay || 0) + C.v; tt.sfx('fanfare'); s.ban(C.v >= 1e5 ? '高額当せん！' : '当たり！', PW.acc, `${tkxYenS(C.v)}が3つそろった！`); s.burst(226, 170, C.v >= 1e4 ? 60 : 24, PW.acc, { coin: true, sp: 4 }); if (C.v >= 1e6) s.res.big = (s.res.big || 0) + C.v; }
+    else { tt.sfx('fail'); s.tip('3つそろわなかった…はずれ', PW.dim); } };
+  M.update = function (s, g) {
+    const S = s.S;
+    if (S.slip) { if (++S.slip.t > 70) S.slip = null; }
+    if (S.ph === 'scratch') { S.f++;
+      if (S.ptr && S.ptr.down) { const P = S.ptr, L = S.lastP; if (L) { const d = Math.hypot(P.x - L.x, P.y - L.y), n = Math.max(1, Math.ceil(d / 5)); for (let i = 1; i <= n; i++) this.scr(s, L.x + (P.x - L.x) * i / n, L.y + (P.y - L.y) * i / n, 9); } else this.scr(s, P.x, P.y, 9); S.lastP = { x: P.x, y: P.y }; S.cx = P.x; S.cy = P.y; } else S.lastP = null;
+      if (S.auto && S.card && !S.card.done) { const k = S.auto.t++; for (let i = 0; i < 6; i++) { const p = tkxSpot(i), row = Math.floor(k / 2) % 8, col = (k * 3) % 13; this.scr(s, p.x + 4 + ((k * 13) % 104), p.y + 6 + row * 8, 10); this.scr(s, p.x + 4 + col * 8, p.y + 6 + ((k * 5) % 64), 10); } if (S.auto.t > 140 && S.card && !S.card.done) this.scDone(s); if (S.card && S.card.done) S.auto = null; }
+      for (const p of S.shav) { p.t++; p.x += p.vx; p.y += p.vy; p.vy += 0.15; } S.shav = S.shav.filter(p => p.t < 30);
+      return; }
+    if (S.ph === 'lsheet') { S.f++; return; }
+    if (S.ph === 'ldraw') { const Lg = S.lg, L = TKX_L[Lg.kind]; Lg.f++;
+      if (!L.d) { if (!Lg.balls) Lg.balls = Array.from({ length: L.n }, (_, i) => ({ n: i + 1, x: 120 + (Math.random() - 0.5) * 80, y: 150 + (Math.random() - 0.5) * 80, vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 3 }));
+        if (!Lg.order) Lg.order = gbShuffle(Lg.W.main.slice()).concat(Lg.W.bonus); const order = Lg.order;
+        for (const b of Lg.balls) { if (Lg.out.includes(b.n)) continue; b.vy += 0.12; b.vx += (Math.random() - 0.5) * 0.9; b.vy += (Math.random() - 0.62) * 0.9; b.x += b.vx; b.y += b.vy; const dx = b.x - 120, dy = b.y - 150, d = Math.hypot(dx, dy); if (d > 62) { const nx = dx / d, ny = dy / d, vn = b.vx * nx + b.vy * ny; b.x = 120 + nx * 62; b.y = 150 + ny * 62; if (vn > 0) { b.vx -= 1.8 * vn * nx; b.vy -= 1.8 * vn * ny; } } }
+        const need = order.length, per = 46, k = Math.floor((Lg.f - 50) / per);
+        if (Lg.f >= 50 && k < need && (Lg.f - 50) % per === 0) { Lg.out.push(order[k]); tt.sfx(k >= L.k ? 'chime' : 'hit'); }
+        if (Lg.f > 9000 || (k >= need && Lg.f >= 50 + need * per + 30)) { if (Lg.f > 9000) Lg.out = order.slice(); this.lpay(s, g); } }
+      else { const per = 50; for (let i = 0; i < L.d; i++) if (Lg.f === 40 + i * per) tt.sfx('hit'); if (Lg.f > 9000 || Lg.f >= 40 + L.d * per + 30) this.lpay(s, g); }
+      return; }
+    return upd0.call(this, s, g);
+  };
+  M.lpay = function (s, g) { const S = s.S, Lg = S.lg; if (Lg.paid) return; Lg.paid = true; const tot = Lg.T.reduce((a, t) => a + t.res[0], 0); Lg.T.forEach(t => { t.paid = true; }); Lg.total = tot; Lg.done = true;
+    if (tot) { s.win(tot); s.res.lpay = (s.res.lpay || 0) + tot; if (tot >= 1e6) s.res.big = (s.res.big || 0) + tot; tt.sfx('fanfare'); s.ban(tot >= 1e6 ? '高額当せん！' : '当せん！', PW.acc, `合計 ${gbYen(tot)}`); s.burst(480, 200, tot >= 1e5 ? 70 : 24, PW.acc, { coin: true, sp: 4 }); }
+    else { tt.sfx('fail'); s.ban('はずれ', PW.dim, `${Lg.T.length}口とも、はずれ…`); } };
+  // ---- 画面 ----
+  M.draw = function (s, c, g) {
+    const S = s.S, G = gb(g), on = !!s.o.online;
+    if (S.ph === 'menu' || S.ph === 'bought') return this.drawMenu(s, c, g);
+    if (S.ph === 'lsheet') { gbBack(c, s.t, on ? 'fx' : 'kuji'); return this.drawSheet(s, c, g); }
+    if (S.ph === 'scratch') { gbBack(c, s.t, on ? 'fx' : 'kuji'); return this.drawScratch(s, c, g); }
+    if (S.ph === 'ldraw') { gbBack(c, s.t, on ? 'fx' : 'kuji'); return this.drawLdraw(s, c, g); }
+    return draw0.call(this, s, c, g);
+  };
+  M.drawMenu = function (s, c, g) {
+    const S = s.S, G = gb(g), on = !!s.o.online; gbBack(c, s.t, on ? 'fx' : 'kuji');
+    tkBooth(c, s, 14, 40, on); if (!on) tkxBooth(c, s, g, 14, 40);
+    const J = tkJumbo(g);
+    if (on) { pT(c, J.nm, 164, 76, { size: 16, color: '#c8102e', align: 'center', shadow: null }); pT(c, `1等・前後賞 ${tkOku(J.p1 + J.pz * 2)}`, 164, 100, { size: 16, color: '#1a1a1a', align: 'center', shadow: null }); pT(c, 'ジャンボ・ロト・ナンバーズ・スクラッチ', 164, 126, { size: 12, color: '#5a4a3a', align: 'center', shadow: null }); }
+    pFrame(c, 324, 36, 308, 56); pT(c, J.nm, 336, 42, { size: 16, color: PW.acc }); pT(c, `1等・前後賞あわせて ${tkOku(J.p1 + J.pz * 2)}　1枚300円`, 336, 64, { size: 12 });
+    s.btn('ren', '連番10枚 ¥3,000', 324, 96, 150, 30, { kind: 'pri', def: true, size: 12 }); s.btn('bara', 'バラ10枚 ¥3,000', 482, 96, 150, 30, { kind: 'pri', size: 12 });
+    [['loto6', 'ロト6'], ['loto7', 'ロト7'], ['mini', 'ミニロト']].forEach(([k, nm], i) => { const ok = tkxOn(g, k); s.btn('lk:' + k, ok ? `${nm}\n${TKX_L[k].cost}円` : `${nm}\n${Math.floor(TKX_L[k].since / 100)}年から`, 324 + i * 104, 130, 100, 36, { size: 12, off: !ok, kind: ok ? 'blue' : 'norm' }); });
+    s.btn('lk:n3', tkxOn(g, 'n3') ? 'ナンバーズ3\n200円' : 'ナンバーズ\n1994年から', 324, 170, 100, 36, { size: 12, off: !tkxOn(g, 'n3'), kind: 'blue' }); s.btn('lk:n4', 'ナンバーズ4\n200円', 428, 170, 100, 36, { size: 12, off: !tkxOn(g, 'n4'), kind: 'blue' });
+    s.btn('scratch', 'スクラッチ\n200円', 532, 170, 100, 36, { size: 12, kind: 'red' });
+    const un = G.tix.filter(t => t.res && !t.paid).length + pend(g).length;
+    s.btn('quick', 'クイックワン', 324, 210, 100, 30, { size: 12, kind: 'red' }); s.btn('check', '当せん確認', 428, 210, 100, 30, { size: 12, kind: un ? 'blue' : 'norm', off: !un, badge: un ? String(un) : '' }); s.btn('quit', on ? '閉じる' : 'はなれる', 532, 210, 100, 30, { back: true, size: 12 });
+    pFrame(c, 324, 246, 308, 108, { title: '手持ちのくじ' });
+    const L = [...G.tix.map(t => ({ at: t.buy, nm: t.nm.replace('宝くじ', ''), sub: t.renban ? `連番 ${String(t.T[0].k).padStart(3, '0')}組` : 'バラ10枚', st: t.paid ? gbYen(t.res.total) : t.res ? '抽選済み' : `あと${Math.max(0, t.draw - g.state.day)}日`, hot: t.res && !t.paid })),
+      ...(G.lt || []).map(t => ({ at: t.buy, nm: TKX_L[t.kind].nm, sub: TKX_L[t.kind].d ? `${t.sel.join('')}（${t.how === 'box' ? 'ボックス' : 'ストレート'}）` : t.sel.join(' '), st: t.paid ? (t.res[0] ? gbYen(t.res[0]) : 'はずれ') : t.res ? '抽選済み' : `あと${Math.max(0, t.draw - g.state.day)}日`, hot: t.res && !t.paid }))].sort((a, b) => b.at - a.at).slice(0, 4);
+    if (!L.length) pT(c, 'まだ買っていない', 336, 278, { size: 12, color: PW.dim });
+    L.forEach((t, i) => { const y = 272 + i * 19; pT(c, pFit(c, t.nm, 104, 12), 336, y, { size: 12 }); pT(c, pFit(c, t.sub, 120, 12), 444, y, { size: 12, color: PW.dim }); pT(c, t.st, 622, y, { size: 12, color: t.hot ? PW.acc : PW.dim, align: 'right' }); });
+    if (S.ph === 'bought' && S.view) { const a = gbEase(S.f / 18); for (let i = 0; i < 10; i++) { const x = 164 - 22 + (i - 4.5) * 22 * a, y = 226 - Math.sin(i / 9 * Math.PI) * 10 * a - (1 - a) * 30; tkTicket(c, x, y, S.view.T[i].n, S.view.T[i].k); } if (S.f < 40) pT(c, 'ありがとうございます！', 164, 110, { size: 16, color: '#c8102e', align: 'center', outline: '#ffffff' }); }
+  };
+  // マークシート
+  M.drawSheet = function (s, c, g) {
+    const S = s.S, L = TKX_L[S.lk], col = L.col;
+    pR(c, 14 + 3, 40 + 3, 300, 312, '#000'); pR(c, 14, 40, 300, 312, '#fffaf0'); pR(c, 14, 40, 300, 28, col); pT(c, `${L.nm}　申込カード`, 26, 46, { size: 16, color: '#ffffff', shadow: null });
+    for (let i = 0; i < 40; i++) pR(c, 16, 74 + i * 7, 3, 2, '#1a1a1a'); // 読み取りの目印
+    if (!L.d) {
+      pT(c, `1〜${L.n}から${L.k}個えらんでマーク`, 28, 74, { size: 12, color: '#5a4a3a', shadow: null });
+      const cols = 7, rows = Math.ceil(L.n / cols), ch = Math.min(30, Math.floor(244 / rows)), cw = 38;
+      for (let n = 1; n <= L.n; n++) { const i = n - 1, x = 30 + (i % cols) * 40, y = 96 + Math.floor(i / cols) * (ch + 2), on = S.pick.includes(n);
+        s.btn('m:' + n, '', x, y, cw, ch, { hide: true });
+        pR(c, x, y, cw, ch, col); pR(c, x + 1, y + 1, cw - 2, ch - 2, '#fffaf0'); pR(c, x + 6, y + 4, cw - 12, ch - 8, on ? '#1a1a24' : pShade(col, 0.75));
+        pT(c, String(n), x + cw / 2, y + ch / 2 - 6, { size: 12, color: on ? '#ffffff' : col, align: 'center', shadow: null });
+        if (s.fid === 'm:' + n && (s.t >> 3) % 2) pR(c, x, y + ch - 2, cw, 2, '#1a1a24'); }
+    } else {
+      pT(c, `各けたの数字を1つずつマーク（${L.d}けた）`, 28, 74, { size: 12, color: '#5a4a3a', shadow: null });
+      for (let k = 0; k < L.d; k++) { const x = 50 + k * 66; pT(c, ['百', '十', '一'][k + 3 - L.d] || ['千', '百', '十', '一'][k], x + 20, 92, { size: 12, color: col, align: 'center', shadow: null });
+        for (let d = 0; d < 10; d++) { const y = 108 + d * 23, on = S.pick[k] === d; s.btn(`d:${k}:${d}`, '', x, y, 40, 21, { hide: true }); pR(c, x, y, 40, 21, col); pR(c, x + 1, y + 1, 38, 19, '#fffaf0'); pR(c, x + 6, y + 3, 28, 15, on ? '#1a1a24' : pShade(col, 0.75)); pT(c, String(d), x + 20, y + 4, { size: 12, color: on ? '#ffffff' : col, align: 'center', shadow: null }); } }
+      if (L.d === 3) { /* 4けた目はない */ }
+    }
+    if (S.slip) { const k = S.slip.t, y = 300 - Math.min(1, k / 14) * 120; pR(c, 190, y, 110, 70, '#1a1a1a'); pR(c, 191, y + 1, 108, 68, '#fffaf0'); pR(c, 191, y + 1, 108, 12, col); pT(c, L.nm, 245, y + 1, { size: 12, color: '#ffffff', align: 'center', shadow: null }); pT(c, `${S.slip.n}口`, 245, y + 22, { size: 16, color: '#1a1a1a', align: 'center', shadow: null }); pT(c, '抽せん券', 245, y + 46, { size: 12, color: '#5a4a3a', align: 'center', shadow: null }); }
+    // 右：説明・賞金・買い目
+    pFrame(c, 324, 36, 308, 318);
+    pT(c, L.nm, 336, 44, { size: 16, color: col === '#2a7ad0' ? '#6ab0ff' : pShade(col, 0.3) }); pT(c, `1口${L.cost}円・抽せん ${L.days}`, 430, 48, { size: 12, color: PW.dim });
+    if (!L.d) { L.tiers.forEach(([t, v, how], i) => { const y = 68 + i * 15; pT(c, t, 336, y, { size: 12, color: PW.acc }); pT(c, how, 372, y, { size: 12, color: PW.dim }); pT(c, i === 0 && L.cap ? `約${tkOku(v)}（最高${tkOku(L.cap)}）` : `約${tkOku(v)}`, 622, y, { size: 12, align: 'right' }); }); }
+    else { const top = L.d === 3 ? 90000 : 900000; [['ストレート', `数字も順番もぴったり　約${tkOku(top)}`], ['ボックス', `順番はちがってもOK　約${tkOku(Math.round(top / (L.d === 3 ? 6 : 24) / 100) * 100)}〜`]].forEach(([a, b], i) => { pT(c, a, 336, 68 + i * 18, { size: 12, color: PW.acc }); pT(c, b, 420, 68 + i * 18, { size: 12, color: PW.dim }); }); }
+    pT(c, 'あなたの数字', 336, 168, { size: 12, color: PW.dim });
+    if (!L.d) { const P = S.pick.slice().sort((a, b) => a - b); for (let i = 0; i < L.k; i++) { const x = 348 + i * 38, y = 198; if (P[i] != null) tkxBall(c, x, y, 14, P[i], col); else { pRing(c, x, y, 13, '#3a4060'); pT(c, '？', x, y - 6, { size: 12, color: GB_C.t3, align: 'center' }); } } }
+    else { for (let k = 0; k < L.d; k++) { const x = 340 + k * 44, v = S.pick[k]; pBev(c, x, 184, 38, 30, '#0a0a10'); pT(c, v != null ? String(v) : '？', x + 19, 188, { size: 16, color: v != null ? PW.acc : GB_C.t3, align: 'center' }); }
+      s.btn('st', 'ストレート', 520, 180, 102, 17, { size: 12, kind: S.how === 'st' ? 'sel' : 'norm' }); s.btn('box', 'ボックス', 520, 199, 102, 17, { size: 12, kind: S.how === 'box' ? 'sel' : 'norm' }); }
+    s.btn('qp', 'クイックピック', 332, 222, 142, 28, { size: 12 }); s.btn('clr', '消す', 482, 222, 142, 28, { size: 12 });
+    s.btn('buy1', `1口 購入 ${gbYen(L.cost)}`, 332, 256, 142, 34, { kind: 'pri', def: true, size: 12 }); s.btn('buy5', `5口 おまかせ ${gbYen(L.cost * 5)}`, 482, 256, 142, 34, { kind: 'pri', size: 12 });
+    pT(c, `抽せんは買った${L.wait}日後`, 336, 302, { size: 12, color: PW.dim }); pT(c, '（クイックピック＝機械におまかせ）', 336, 318, { size: 12, color: GB_C.t3 });
+    s.btn('menu', 'もどる', 524, 314, 100, 30, { back: true, size: 12 });
+  };
+  // スクラッチ
+  M.drawScratch = function (s, c, g) {
+    const S = s.S, C = S.card, X = TKX_CARD.x, Y = TKX_CARD.y, W = TKX_CARD.w, H = TKX_CARD.h, t = s.t;
+    if (C) {
+      pR(c, X + 4, Y + 4, W, H, 'rgba(0,0,0,0.5)'); pR(c, X, Y, W, H, '#1a0a2a'); { const gr = c.createLinearGradient(X, Y, X + W, Y + H); gr.addColorStop(0, '#5a1a8a'); gr.addColorStop(0.5, '#c8204a'); gr.addColorStop(1, '#e8a810'); c.fillStyle = gr; c.fillRect(X + 3, Y + 3, W - 6, H - 6); }
+      for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2 + t / 90; pLine(c, X + W / 2, Y + 50, X + W / 2 + Math.cos(a) * 260, Y + 50 + Math.sin(a) * 260, 'rgba(255,255,255,0.07)'); }
+      pT(c, 'ドット☆ラッキー7', X + W / 2, Y + 10, { size: 24, color: '#ffe94a', align: 'center', outline: '#5a0020', ow: 2 }); pT(c, '同じ金額が3つそろえば、その金額が当たり！', X + W / 2, Y + 44, { size: 12, color: '#ffffff', align: 'center', outline: '#3a0018', ow: 1 });
+      pT(c, '1等100万円', X + W / 2, Y + 60, { size: 16, color: '#fff4c0', align: 'center', outline: '#5a2000', ow: 2 });
+      for (let i = 0; i < 6; i++) { const p = tkxSpot(i), v = C.vals[i], hot = C.done && C.v && v === C.v; pR(c, p.x - 2, p.y - 2, p.w + 4, p.h + 4, '#2a0a1a'); pR(c, p.x, p.y, p.w, p.h, hot ? (t % 10 < 5 ? '#fff4c0' : '#ffe08a') : '#fffaf0');
+        pT(c, tkxYenS(v), p.x + p.w / 2, p.y + p.h / 2 - (v >= 1e5 ? 8 : 12), { size: v >= 1e5 ? 16 : 24, color: v >= 1e5 ? '#c8102e' : v >= 1e4 ? '#c86a00' : '#2a2a4a', align: 'center', shadow: null }); pR(c, p.x + 8, p.y + p.h - 12, p.w - 16, 1, '#e0d8c0'); }
+      const mk = tkxMask(C); if (mk && !C.done) c.drawImage(mk, X, Y);
+      for (const p of S.shav) pR(c, Math.round(p.x), Math.round(p.y), 2, 2, p.t < 15 ? '#c8ccd8' : '#8a90a0');
+      if (!C.done) { const cx = Math.round(S.cx), cy = Math.round(S.cy); pCirc(c, cx + 1, cy + 2, 9, 'rgba(0,0,0,0.4)'); pCirc(c, cx, cy, 9, '#8a4a20'); pCirc(c, cx, cy, 7, '#c87a3a'); pT(c, '10', cx, cy - 6, { size: 12, color: '#5a2a10', align: 'center', shadow: null }); }
+      if (C.done) { pR(c, X + 40, Y + H - 30, W - 80, 24, C.v ? '#c8102e' : 'rgba(10,6,20,0.8)'); pT(c, C.v ? `当たり！ ${tkxYenS(C.v)}` : 'はずれ', X + W / 2, Y + H - 27, { size: 16, color: C.v ? '#ffe94a' : '#9aa3c7', align: 'center', shadow: null }); }
+    } else { pFrame(c, X, Y, W, H, { bg: 'rgba(10,6,20,0.9)' }); pT(c, 'スクラッチを買って、', X + W / 2, Y + 100, { size: 16, align: 'center' }); pT(c, '指やマウスで銀色の部分を削ろう', X + W / 2, Y + 124, { size: 16, align: 'center' }); pT(c, '（キーボード：方向キーでコイン移動、Aで削る）', X + W / 2, Y + 156, { size: 12, color: PW.dim, align: 'center' }); }
+    // 右
+    pFrame(c, 432, 36, 200, 318); pT(c, 'スクラッチ', 444, 44, { size: 16, color: PW.acc }); pT(c, '1枚200円', 540, 48, { size: 12, color: PW.dim });
+    TKX_SC.slice().reverse().forEach((v, i) => { pT(c, `${['1等', '2等', '3等', '4等', '5等'][i]}`, 444, 68 + i * 15, { size: 12, color: PW.acc }); pT(c, tkxYenS(v), 622, 68 + i * 15, { size: 12, align: 'right' }); });
+    const busy = C && !C.done; s.btn('sc1', '1枚 買う ¥200', 440, 150, 184, 30, { kind: 'pri', def: !busy && !(S.cards && S.cards.length), off: busy, size: 12 }); s.btn('sc5', '5枚 買う ¥1,000', 440, 184, 184, 30, { kind: 'pri', off: busy, size: 12 });
+    s.btn('scall', 'まとめて削る', 440, 222, 184, 30, { off: !busy, size: 12, def: busy }); s.btn('scnext', `次のカード（のこり${S.cards ? S.cards.length : 0}枚）`, 440, 256, 184, 30, { kind: 'blue', off: busy || !(S.cards && S.cards.length), def: !busy && S.cards && S.cards.length > 0, size: 12 });
+    if (C) { const pct = Math.round(C.rev.reduce((a, v) => a + Math.min(1, v / 0.62), 0) / 6 * 100); pT(c, C.done ? '結果が出ました' : `けずった ${pct}%`, 444, 296, { size: 12, color: PW.dim }); }
+    s.btn('menu', 'もどる', 524, 316, 100, 30, { back: true, off: busy, size: 12 });
+  };
+  // 抽せん（ロト：抽せん機、ナンバーズ：風車）
+  M.drawLdraw = function (s, c, g) {
+    const S = s.S, Lg = S.lg, L = TKX_L[Lg.kind], W = Lg.W, t = s.t, col = L.col;
+    pFrame(c, 8, 36, 300, 318, { title: `${L.nm}　抽せん会` });
+    if (!L.d) {
+      // 抽せん機
+      pCirc(c, 120, 152, 70, '#2a3050'); pCirc(c, 120, 150, 68, 'rgba(160,200,255,0.18)'); pRing(c, 120, 150, 68, '#c8d0e8');
+      for (const b of Lg.balls || []) if (!Lg.out.includes(b.n)) pCirc(c, Math.round(b.x), Math.round(b.y), 5, b.n % 2 ? '#ffffff' : pShade(col, 0.5));
+      pCirc(c, 100, 120, 14, 'rgba(255,255,255,0.12)'); pR(c, 110, 218, 20, 30, '#5a6070'); pR(c, 112, 218, 16, 30, '#2a3050');
+      pR(c, 60, 250, 120, 10, '#5a6070'); pT(c, '抽せん機', 120, 262, { size: 12, color: PW.dim, align: 'center' });
+      const per = 46, k = Math.floor((Lg.f - 50) / per), fr = (Lg.f - 50) % per; if (Lg.f >= 50 && k < Lg.out.length && fr < 16 && !Lg.done) { const yy = 220 + fr * 2; tkxBall(c, 120, yy, 9, null, col); }
+      // 出た番号
+      Lg.out.forEach((n, i) => { const bonus = i >= L.k, x = bonus ? 90 + (i - L.k) * 40 : 24 + i * 40, y = bonus ? 326 : 294; tkxBall(c, x + 14, y, 14, n, bonus ? '#e8a810' : col); });
+      if (Lg.out.length > L.k) pT(c, 'ボーナス', 24, 320, { size: 12, color: '#ffd23f' });
+      if (Lg.done && W.carry) pT(c, 'キャリーオーバー発生中', 158, 44, { size: 12, color: '#ff8ab8', align: 'center' });
+    } else {
+      for (let i = 0; i < L.d; i++) { const cx = 60 + i * (L.d === 3 ? 92 : 70), cy = 150, t0 = 40 + i * 50, spin = Lg.f < t0 && !Lg.done; tkxWheel(c, cx, cy, L.d === 3 ? 34 : 28, spin ? t * 0.25 + i : 0, W.num[i], spin);
+        if (Lg.f >= t0 - 14 && Lg.f < t0) { const k = (Lg.f - (t0 - 14)) / 14, ay = 230 - k * 50; pR(c, cx - 1, Math.round(ay), 2, 16, '#c8a060'); pR(c, cx - 3, Math.round(ay), 6, 3, '#e8e8f0'); }
+        if (!spin) { pR(c, cx - 1, cy - (L.d === 3 ? 48 : 42), 2, 14, '#c8a060'); pBev(c, cx - 14, 214, 28, 30, '#0a0a10'); pT(c, String(W.num[i]), cx, 220, { size: 16, color: PW.acc, align: 'center' }); } }
+      pT(c, '電動風車に矢を放って、当せん番号を決めます', 158, 270, { size: 12, color: PW.dim, align: 'center' });
+    }
+    // 自分のくじ
+    pFrame(c, 316, 36, 316, 318, { title: `あなたのくじ（${Lg.T.length}口）` });
+    const show = Lg.done;
+    Lg.T.slice(0, 9).forEach((tk, i) => { const y = 62 + i * 28;
+      if (!L.d) tk.sel.forEach((n, j) => { const x = 334 + j * 26, m = show && W.main.includes(n), b = show && W.bonus.includes(n); if (m) tkxBall(c, x, y + 8, 11, n, col); else if (b) tkxBall(c, x, y + 8, 11, n, '#e8a810'); else { pCirc(c, x, y + 8, 11, '#2a3050'); pT(c, String(n), x, y + 2, { size: 12, color: show ? GB_C.t3 : '#ffffff', align: 'center', shadow: null }); } });
+      else { tk.sel.forEach((d, j) => { const hit = show && (tk.res[0] && (tk.how === 'box' || W.num[j] === d)); pBev(c, 330 + j * 26, y, 22, 20, hit ? '#c9962a' : '#2a3050'); pT(c, String(d), 341 + j * 26, y + 3, { size: 12, align: 'center', shadow: null }); }); pT(c, tk.how === 'box' ? 'ボックス' : 'ストレート', 444, y + 3, { size: 12, color: PW.dim }); }
+      if (show) pT(c, tk.res[0] ? `${tk.res[1]} ${gbYen(tk.res[0])}` : 'はずれ', 622, y + 3, { size: 12, color: tk.res[0] >= 1e4 ? PW.acc : tk.res[0] ? PW.good : GB_C.t3, align: 'right' }); });
+    if (Lg.T.length > 9) pT(c, `ほか${Lg.T.length - 9}口`, 334, 314, { size: 12, color: PW.dim });
+    if (show) pT(c, `合計 ${gbYen(Lg.total || 0)}`, 622, 314, { size: 16, color: Lg.total ? PW.acc : PW.dim, align: 'right' });
+    if (!Lg.done) s.btn('skip', 'すぐ結果を見る', 330, 318, 140, 28, { size: 12 }); else { s.btn('menu', 'もどる', 330, 318, 110, 28, { kind: 'pri', def: true, size: 12 }); s.btn('quit', '閉じる', 446, 318, 90, 28, { back: true, size: 12 }); }
+  };
+})();
+
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
 try{NPB_factory({Un:Un,LA:LA,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt,$M:$M,Ho:Ho,qe:qe,Zc:Zc,setLae:function(f){Lae=f(Lae)},setVu:function(f){vu=f(vu)},cd:cd,r6t:r6t,ug:ug,R4:R4,bu:bu,cg:cg,wu:wu,sh:$h,Mm:Mm,Z:Z,getBQ:function(){return typeof BQ!=="undefined"?BQ:null},setXIa:function(f){try{XIa=f(XIa)}catch(e){console.error(e)}},apps:function(){return mCe.concat(Object.values(Mm))},x0t:x0t,VP:VP,L$t:L$t,$8:$8,aPa:aPa,Wn:Wn,v8:v8,Ur:Ur,Ut:Ut,U_e:U_e,rg:rg,L4:L4,Lf:Lf,jrt:jrt,XIa:XIa,set$8:function(f){try{$8=f($8)}catch(e){console.error(e)}},setCjt:function(f){try{Cjt=f(Cjt)}catch(e){console.error(e)}},LU:typeof lu!=="undefined"?lu:null,So:typeof So!=="undefined"?So:null}).install()}catch(e){console.error("[npb] install",e)}
