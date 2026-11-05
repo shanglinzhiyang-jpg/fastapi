@@ -35547,7 +35547,7 @@ const PC_F = { cx: 543, cy: 640, R: 438, br: 9, pr: 7 };
 const PC_BUMP = [[266, 524, 34], [810, 524, 34], [344, 704, 32], [736, 704, 32]]; // 風車
 const PC_ELL = [545, 468, 180, 128]; // 中央の役物（丸い枠）
 const PC_BOX = [[-99, -99, -98, -98], [536, 598, 550, 640], [480, 662, 606, 770], [296, 816, 392, 902], [692, 816, 788, 902], [458, 836, 632, 962]]; // 役物・ステージ・START・左右の入賞口・アタッカー
-const PC_START = { x: 543, y: 652 }, PC_ATK = { x: 545, y: 836 }, PC_SIDE = [{ x: 344, y: 818 }, { x: 740, y: 818 }];
+const PC_START = { x: 543, y: 652 }, PC_ATK = { x: 545, y: 836 }, PC_SIDE = [{ x: 344, y: 818 }, { x: 740, y: 818 }], PC_DEN = { x: 905, y: 770 }; // 電チュー：右打ちのルート（外周のレールぞい）
 function pcGrid() {
   if (PC_IMG.grid) return PC_IMG.grid;
   const pins = (typeof window !== 'undefined' && window.__NPB_PACHI && window.__NPB_PACHI.pins) || [], G = {};
@@ -35567,6 +35567,7 @@ function pcStep(S, b) {
     if (b.tgt === 'start' && b.y < 652 && (b.y > 560 || (b.y > 468 && Math.abs(b.x - 545) > 120))) { b.vx += clamp((PC_START.x - b.x) * (b.y > 560 ? 0.014 : 0.005), -0.32, 0.32); if (b.y > 560 && Math.abs(b.x - PC_START.x) > 30) b.vy = Math.min(b.vy, 2.2); } // 道釘にそって、ヘソへ流れる
     if (b.tgt === 'atk' && b.y > 560) { b.vx += clamp((PC_ATK.x - b.x) * (b.y > 740 ? 0.016 : 0.005), -0.34, 0.34); if (b.y > 740 && Math.abs(b.x - PC_ATK.x) > 40) b.vy = Math.min(b.vy, 2.4); }
     if (b.tgt === 'side' && b.y > 650) b.vx += clamp((b.sx - b.x) * 0.002, -0.07, 0.07);
+    if (b.tgt === 'den' && b.y > 560 && b.y < PC_DEN.y + 10) { b.vx += clamp((PC_DEN.x - b.x) * (b.y > 700 ? 0.014 : 0.006), -0.3, 0.3); if (b.y > 700 && Math.abs(b.x - PC_DEN.x) > 18) b.vy = Math.min(b.vy, 2.2); } // 右打ち：電チューへ
     if (b.tgt !== 'start' && b.y > 560 && b.y < 650 && Math.abs(b.x - PC_START.x) < 40) b.vx += (b.x < PC_START.x ? -0.05 : 0.05);
     const sp = Math.hypot(b.vx, b.vy); if (sp > 11) { b.vx *= 11 / sp; b.vy *= 11 / sp; }
     b.x += b.vx * 0.5; b.y += b.vy * 0.5;
@@ -35590,10 +35591,14 @@ function pcStep(S, b) {
   }
   // 止まりかけた玉は、台の振動で少し動く
   if (Math.abs(b.vx) + Math.abs(b.vy) < 0.4) { if (++b.slow > 20) { b.vx += (Math.random() - 0.5) * 2.4; b.vy -= 1; b.slow = 0; } } else b.slow = 0;
+  // その場でこまかく震えて動けない玉も、30フレームごとに位置を見て動かす
+  if (b.age > 420 && b.tgt && b.tgt !== 'atk') b.tgt = null; // ねらいを外れて長く迷っている玉は、ふつうに落ちていく
+  if ((b.age & 31) === 0) { if (b.lx != null && Math.abs(b.x - b.lx) + Math.abs(b.y - b.ly) < 8 && b.y < 960) { b.vx += (Math.random() < 0.5 ? -1 : 1) * (1.5 + Math.random()); b.vy -= 1.5; } b.lx = b.x; b.ly = b.y; }
   // 入賞
   if (b.tgt === 'start' && Math.abs(b.x - PC_START.x) < 22 && b.y > PC_START.y - 4 && b.y < PC_START.y + 18) { b.in = 'start'; return false; }
   if (b.tgt === 'atk' && S.atkOpen && Math.abs(b.x - PC_ATK.x) < 62 && b.y > PC_ATK.y - 8 && b.y < PC_ATK.y + 24) { b.in = 'atk'; return false; }
   if (b.tgt === 'side' && Math.abs(b.x - b.sx) < 22 && b.y > 812 && b.y < 838) { b.in = 'side'; return false; }
+  if (b.tgt === 'den' && Math.abs(b.x - PC_DEN.x) < 20 && b.y > PC_DEN.y - 14 && b.y < PC_DEN.y + 14) { b.in = 'den'; return false; }
   if (b.y > 995 || ++b.age > 900) return false;
   return true;
 }
@@ -38188,6 +38193,287 @@ function t2PolishAll() {
   const K = E.Ke; if (!K) return;
   for (const id of Object.keys(K)) if (/^(ramen|famires|shop_yakitori|shop_chuka|t2_shinbun|t2_coffee|t2_mart_.*|t2_laundry)$/.test(id) || /_co_(sushiro|torikizoku|starbucks)$/.test(id)) { try { t2Polish(id, K[id]); } catch (e) { console.error('[t2] polish', id, e); } }
 }
+
+// ===== パチンコの向上：演出（予告・リーチ・大当たり）、保留変化、右打ちと電チュー、出玉グラフ =====
+// 確率・出玉は今までと同じ。見せ方だけを本物の台に近づける。
+const PCX = {
+  holdCol: { white: '#e8e8f0', blue: '#4aa8ff', green: '#4ad06a', red: '#ff4a4a', gold: '#ffd23f', rainbow: null },
+  cutCol: { blue: ['#2a6ad0', 'チャンス'], green: ['#2a9a4a', 'チャンス！'], red: ['#d0203a', '激アツ!!'], gold: ['#e8a810', '超激アツ!!!'] },
+};
+function pcPick(list) { let r = Math.random(), a = 0; for (const [k, p] of list) { a += p; if (r < a) return k; } return list[list.length - 1][0]; }
+function pcRainbow(t, k = 0) { return `hsl(${(t * 6 + k * 40) % 360},90%,60%)`; }
+// 図柄：赤い奇数＝確変図柄（炎）、青い偶数＝通常図柄（波）
+function pcSym(c, v, cx, cy, sz, o = {}) {
+  const odd = v % 2 === 1, w = Math.round(sz * 0.82), h = Math.round(sz), x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
+  const base = o.gold ? '#e8a810' : odd ? '#d8283a' : '#2a6ad0', t = o.t || 0;
+  if (!o.bare) {
+    pR(c, x, y, w, h, '#05030a'); pR(c, x + 1, y + 1, w - 2, h - 2, pShade(base, -0.55)); pR(c, x + 2, y + 2, w - 4, Math.round(h * 0.5), pShade(base, -0.3)); pR(c, x + 2, y + 2, w - 4, 1, pShade(base, 0.45));
+    if (odd || o.gold) { for (let k = 0; k < 5; k++) { const fx = x + 4 + k * (w - 11) / 4, fh = Math.round(h * (0.16 + (((k * 7 + (t >> 2)) % 5) * 0.035))); pR(c, Math.round(fx), y + h - 3 - fh, 3, fh, k % 2 ? '#ff8a2a' : '#ffd23f'); pR(c, Math.round(fx) + 1, y + h - 3 - fh, 1, 1, '#fff4c0'); } }
+    else { for (let k = 0; k < w - 7; k += 3) pR(c, x + 3 + k, y + h - 7 - Math.round(Math.sin((k + (t >> 1)) / 3.5) * 2), 3, 2, k % 6 ? '#7ac8ff' : '#e8f6ff'); }
+  }
+  const sc = Math.max(2, Math.floor(sz / 9.5)), gw = 5 * sc, gh = 7 * sc;
+  pBig(c, String(v), Math.round(cx - gw / 2), Math.round(cy - gh / 2 - sz * 0.05), sc, o.dim ? pShade(base, 0.55) : (o.gold ? '#fff8d0' : odd ? '#fff0c0' : '#ffffff'), { edge: o.dim ? null : '#140814', shade: pShade(base, -0.05), hi: '#ffffff' });
+}
+// 保留のアイコン（色で期待度がわかる）
+function pcHoldIcon(c, x, y, r, col, t, big) {
+  const cc = col === 'rainbow' ? pcRainbow(t) : PCX.holdCol[col] || PCX.holdCol.white;
+  if (col === 'gold' || col === 'rainbow') { for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + t / 12; pR(c, Math.round(x + Math.cos(a) * (r + 3)), Math.round(y + Math.sin(a) * (r + 3)), 2, 2, cc); } }
+  pCirc(c, x, y, r + 1, '#05030a'); pCirc(c, x, y, r, cc); pCirc(c, x - Math.round(r / 3), y - Math.round(r / 3), Math.max(1, Math.round(r / 3)), '#ffffff');
+  if (big) pRing(c, x, y, r + 3, '#ffffff');
+}
+// 液晶の人物（ドット絵）
+const PC_HERO = ["......KKKKKKKK......", "....KKPPPPPPPPKK....", "...KPPPPPPPPPPPPK...", "..KPPPPPPPPPPPPPPK..", "RRKPPpPPPPPPPPpPPKRR", "RRKPPPpPPPPPPpPPPKRR", ".KPPPSSSSSSSSSSPPPK.", ".KPPSSSSSSSSSSSSPPK.", "KPPPSKKSSSSSSKKSPPPK", "KPPPSEWSSSSSSEWSPPPK", "KPPPSEESSSSSSEESPPPK", "KPPPSrSSSSSSSSrSPPPK", "KPPPPSSSSMMSSSSPPPPK", "KPPPPSSSSSSSSSSPPPPK", ".KPPPKSSSSSSSSKPPPK.", ".KPPPPKKSSSSKKPPPPK.", "KPPPKKCCCCCCCCKKPPPK", "KPPKCCCCBBBBCCCCKPPK", "KPKCCCCCCBBCCCCCCKPK", ".KKCCCCCCCCCCCCCCKK.", "..KCCCCCCCCCCCCCCK..", "..KccccccccccccccK.."];
+const PC_RIVAL = ["..K..............K..", ".KHK............KHK.", ".KHHK..KKKKKK..KHHK.", "..KHHKKDDDDDDKKHHK..", "...KKDDDDDDDDDDKK...", "...KDDDDDDDDDDDDK...", "..KDDDDDDDDDDDDDDK..", "..KDDYYDDDDDDYYDDK..", "..KDDYRYDDDDYRYDDK..", "..KDDDDDDDDDDDDDDK..", "..KDDDDDKKKKDDDDDK..", "...KDDDKWWWWKDDDK...", "...KKDDDKKKKDDDKK...", "..KAAKKDDDDDDKKAAK..", ".KAAAAKKKKKKKKAAAAK.", "KAAAAAAAMMMMAAAAAAAK", "KAAAAAAMMMMMMAAAAAAK", "KAAAAAAAMMMMAAAAAAAK", ".KAAAAAAAAAAAAAAAAK.", "..KKKKKKKKKKKKKKKK.."];
+const PC_HERO_PAL = { K: '#2a1a2a', P: '#ff6aa8', p: '#d0407a', S: '#f8d8c0', E: '#2a3a8a', W: '#ffffff', R: '#ffd23f', r: '#ff9ab0', M: '#c83a5a', C: '#ffffff', c: '#c8d0e8', B: '#3a6ad0' };
+const PC_RIVAL_PAL = { K: '#0a0612', H: '#8a3ab0', D: '#2a2440', Y: '#ff8a2a', R: '#ff2a2a', W: '#e8e8e8', A: '#3a3458', M: '#c8203a' };
+function pcHeroine(c, x, y, s, t) { const b = Math.round(Math.sin(t / 8)), cv = pArt('pc_hero', PC_HERO, PC_HERO_PAL), X0 = Math.round(x - 10 * s), Y0 = Math.round(y - 22 * s + b * s); pBlit(c, cv, X0, Y0, { sc: s });
+  if (t % 170 < 6) { pR(c, X0 + 5 * s, Y0 + 9 * s, 2 * s, 2 * s, '#f8d8c0'); pR(c, X0 + 13 * s, Y0 + 9 * s, 2 * s, 2 * s, '#f8d8c0'); pR(c, X0 + 5 * s, Y0 + 10 * s, 2 * s, s, '#2a1a2a'); pR(c, X0 + 13 * s, Y0 + 10 * s, 2 * s, s, '#2a1a2a'); } }
+function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pArt('pc_rival', PC_RIVAL, PC_RIVAL_PAL), X0 = Math.round(x - 10 * s), Y0 = Math.round(y - 20 * s + b * s); pBlit(c, cv, X0, Y0, { sc: s });
+  if (t % 20 < 10) { pR(c, X0 + 6 * s, Y0 + 8 * s, s, s, '#ffffff'); pR(c, X0 + 13 * s, Y0 + 8 * s, s, s, '#ffffff'); } }
+(function pcPlus() {
+  const M = GB_MODES && GB_MODES.pachinko; if (!M || M.__plus) return; M.__plus = true;
+  const init0 = M.init0, btn0 = M.btn, q0 = M.q;
+  M.init0 = function (s, g) { init0.call(this, s, g); Object.assign(s.S, { q: [], graph: [0], cur: 0, prev: null, push: null, den: 0, res: null, flash: 0, swarm: [], prom: 0 }); };
+  // 電サポ中は右打ちで電チューをねらう（電チューの入りやすさに合わせて、今までと同じ回転数になるようにする）
+  M.q = function (S) { if (S.jack) return 0; if (S.sup) return 0.42 * 0.94 / 0.97; return q0.call(this, S); };
+  M.right = S => !!(S.sup && !S.jack);
+  M.launch = function (s) {
+    const S = s.S, r = Math.random(), q = this.q(S), right = this.right(S);
+    let tgt = null; if (S.jack && S.atkOpen) tgt = Math.random() < 0.88 ? 'atk' : null; else if (right) tgt = r < q ? 'den' : null; else if (r < q) tgt = 'start'; else if (r < q + 0.012) tgt = 'side';
+    const b = right ? { x: 0, y: 0, rail: Math.PI * 0.74, w: 0.075 + Math.random() * 0.01, rel: Math.PI * (1.75 + Math.random() * 0.1), sp: 3 + Math.random() * 1.5, tgt, age: 0, right: true }
+      : { x: 0, y: 0, rail: Math.PI * 0.74, w: 0.075 + Math.random() * 0.01, rel: Math.PI * (1.2 + Math.random() * 0.1), sp: 3 + Math.random() * 2, tgt, age: 0 };
+    if (tgt === 'side') b.sx = PC_SIDE[Math.random() < 0.5 ? 0 : 1].x;
+    S.bl.push(b);
+  };
+  // 玉が入った瞬間に抽選する（だから保留の色で、先に期待度がわかる）
+  M.lot = function (S) {
+    const m = S.m, kak = S.sup && S.sup.k === 'kak', hit = Math.random() < (kak ? m.kp : m.p), kk = hit && Math.random() < m.kr, reach = hit || Math.random() < (kak ? 0.22 : 0.08);
+    const col = hit ? pcPick([['white', 0.25], ['blue', 0.13], ['green', 0.2], ['red', 0.26], ['gold', 0.11], ['rainbow', 0.05]]) : reach ? pcPick([['white', 0.72], ['blue', 0.15], ['green', 0.09], ['red', 0.04]]) : pcPick([['white', 0.95], ['blue', 0.045], ['green', 0.005]]);
+    return { hit, kk, reach, col };
+  };
+  M.enter = function (s, b) {
+    const S = s.S;
+    if (b.in === 'start' || b.in === 'den') { S.balls += 3; if (b.in === 'den') S.den = 18; if (S.q.length < 4) { S.q.push(this.lot(S)); S.hold = S.q.length; S.fly.push({ k: 'hold', t: 0 }); } }
+    else if (b.in === 'side') S.balls += 10;
+    else if (b.in === 'atk' && S.jack) { const add = Math.min(15, S.jack.pay - S.jack.paid); S.jack.paid += add; S.balls += add; S.fly.push({ k: 'atk', t: 0 }); if (s.t % 3 === 0) tt.sfx('coin'); }
+  };
+  M.startSpin = function (s) {
+    const S = s.S, F = this.__force || null, e = { ...(S.q.shift() || this.lot(S)), ...((F && F.e) || {}) }; S.hold = S.q.length;
+    const { hit, kk, reach } = e; let res, promo = false;
+    if (hit) { promo = kk && Math.random() < 0.3; const d = kk && !promo ? [1, 3, 5, 7, 9][gbR(0, 4)] : [2, 4, 6, 8][gbR(0, 3)]; res = [d, d, d]; }
+    else if (reach) { const d = gbR(1, 9), c2 = Math.random() < 0.5 ? (d % 9) + 1 : ((d + 7) % 9) + 1; res = [d, c2, d]; }
+    else { do { res = [gbR(1, 9), gbR(1, 9), gbR(1, 9)]; } while (res[0] === res[2]); }
+    let rt = !reach ? null : hit ? pcPick([['N', 0.14], ['SP', 0.42], ['SPSP', 0.36], ['ZEN', 0.08]]) : pcPick([['N', 0.7], ['SP', 0.24], ['SPSP', 0.06]]);
+    let giji = hit ? pcPick([[0, 0.45], [1, 0.25], [2, 0.2], [3, 0.1]]) : reach ? pcPick([[0, 0.8], [1, 0.15], [2, 0.05]]) : pcPick([[0, 0.97], [1, 0.03]]);
+    let step = hit ? pcPick([[0, 0.3], [2, 0.15], [3, 0.2], [4, 0.2], [5, 0.15]]) : reach ? pcPick([[0, 0.7], [1, 0.1], [2, 0.1], [3, 0.07], [4, 0.03]]) : pcPick([[0, 0.93], [1, 0.05], [2, 0.02]]);
+    let cut = hit ? pcPick([[null, 0.3], ['blue', 0.08], ['green', 0.14], ['red', 0.32], ['gold', 0.16]]) : reach ? pcPick([[null, 0.7], ['blue', 0.15], ['green', 0.1], ['red', 0.05]]) : pcPick([[null, 0.96], ['blue', 0.04]]);
+    let swarm = hit ? Math.random() < 0.15 : reach ? Math.random() < 0.04 : false;
+    if (F) { if ('rt' in F) rt = F.rt; if ('giji' in F) giji = F.giji; if ('step' in F) step = F.step; if ('cut' in F) cut = F.cut; if ('swarm' in F) swarm = F.swarm; if ('promo' in F) promo = F.promo; } // テスト用
+    const base = [0, 46, 24, 14][S.spd], pre = step ? 16 + step * 12 : 0, gEnd = pre + giji * 50;
+    const stL = gEnd + base + 18, stR = stL + (reach ? 16 : 10);
+    const rlen = !reach ? 0 : rt === 'N' ? 100 : rt === 'SP' ? 170 : rt === 'SPSP' ? 230 : 160;
+    let len = rt === 'ZEN' ? gEnd + 40 + rlen : (reach ? stR + rlen : stR + 6) + (hit ? 20 : 0);
+    let cutAt = -99; if (cut) { cutAt = reach ? stL + 4 : Math.max(gEnd, 6); len = Math.max(len, cutAt + 42); }
+    const gj = Array.from({ length: giji }, () => { let a; do { a = [gbR(1, 9), gbR(1, 9), gbR(1, 9)]; } while (a[0] === a[2]); return a; });
+    if (swarm) for (let i = 0; i < 26; i++) S.swarm.push({ x: -20 - Math.random() * 120, y: Math.random() * 130, v: 2 + Math.random() * 2, ph: Math.random() * 6 });
+    S.roll = { f: 0, len, res, hit, kk, reach, rt, giji, gj, gEnd, step, pre, cut, cutAt, swarm, stL, stR, promo, pushAt: rt === 'SPSP' ? len - 60 : -1, pushed: false, col: e.col, st: [stL, stR, len] };
+    S.spins++; S.cur++;
+  };
+  M.pushNow = function (s) { const S = s.S; if (!S.roll || !S.push) return; S.push = null; S.roll.pushed = true; S.flash = 14; tt.sfx('ok'); };
+  M.key = function (s, g, inp) { const S = s.S; if (S.push && inp.pressed('a')) { this.pushNow(s); return true; } return false; };
+  M.tap = function (s, g, p) { const S = s.S; if (S.push && p.x >= 258 && p.x <= 482 && p.y >= 38 && p.y <= 178) this.pushNow(s); };
+  M.btn = function (s, id, g) { const S = s.S; if (id === 'push') { this.pushNow(s); return; } const r = btn0.call(this, s, id, g); if (S.hold === 0) S.q = []; if (S.ph === 'pick') { S.push = null; S.res = null; } return r; };
+  M.sample = function (S) { const net = Math.round(S.balls - S.inv * (S.rate === 4 ? 0.25 : 1)); S.graph.push(net); if (S.graph.length > 240) S.graph = S.graph.filter((v, i) => i % 2 === 0 || i === S.graph.length - 1); };
+  M.update = function (s, g) {
+    const S = s.S; if (S.ph === 'pick') return;
+    if (s.t % 7 === 0) S.petals.push({ x: Math.random() * 200, y: -4, v: 0.3 + Math.random() * 0.4, ph: Math.random() * 6 }); S.petals = S.petals.filter(p => (p.y += p.v) < 140);
+    for (const w of S.swarm) w.x += w.v; S.swarm = S.swarm.filter(w => w.x < 240);
+    const rate = S.jack ? Math.max(0.4, [0, 0.1, 0.25, 0.5][S.spd]) : [0, 0.1, 0.25, 0.5][S.spd];
+    if ((S.shoot || S.jack) && S.ph === 'play') { S.acc += rate; while (S.acc >= 1) { S.acc -= 1; if (S.jack || S.balls >= 1) { if (!S.jack) S.balls -= 1; this.launch(s); } } }
+    const keep = []; for (const b of S.bl) { if (pcStep(S, b)) keep.push(b); else if (b.in) this.enter(s, b); } S.bl = keep;
+    for (const f of S.fly) f.t++; S.fly = S.fly.filter(f => f.t < 30);
+    if (S.den > 0) S.den--; if (S.flash > 0) S.flash--; if (S.prom > 0) S.prom--;
+    // 大当たり終了の画面
+    if (S.res) { S.res.t++; if (S.res.t === 130) { const r = S.res; S.res = null; if (r.kk) s.ban('確変突入！', '#ff6aa0', `${S.m.st}回転のあいだ、当たりやすい・右打ち`); else s.ban('時短', PW.good, `${S.m.jt}回転のあいだ、玉が減りにくい・右打ち`); } return; }
+    // 大当たり（アタッカーが開いて、玉が入るたびに払い出し）
+    if (S.jack) {
+      const J = S.jack; J.f++;
+      if (J.f === 80) { S.atkOpen = true; tt.sfx('chime'); }
+      if (J.promo && !J.promoted && J.paid >= J.pay * 0.7) { J.promoted = true; S.reels = S.reels.map(d => d % 2 ? d : d === 8 ? 9 : d + 1); S.prom = 90; S.flash = 18; tt.sfx('fanfare'); s.ban('確変昇格！', '#ff6aa0', '赤い数字に変わった！'); }
+      if (J.paid >= J.pay && J.f > 100) {
+        S.atkOpen = false; S.jack = null; S.hits++; S.chain++; S.best = Math.max(S.best, S.chain);
+        S.sup = J.kk ? { k: 'kak', n: S.m.st } : { k: 'jitan', n: S.m.jt };
+        S.res = { t: 0, got: J.pay, kk: J.kk, chain: S.chain }; this.sample(S);
+      }
+      return;
+    }
+    if (S.roll) {
+      const R = S.roll;
+      if (R.f === R.pushAt && !R.pushed) { if (!S.push) { S.push = { t: 0 }; tt.sfx('chime'); } S.push.t++; if (S.push.t > 160) this.pushNow(s); return; }
+      R.f++;
+      const f = R.f;
+      if (R.step && f < R.pre && (f - 16) % 12 === 0 && f >= 16) tt.sfx('cursor');
+      if (f > R.pre && f < R.gEnd && (f - R.pre) % 50 === 30) { tt.sfx('chime'); S.flash = 8; }
+      if (R.rt !== 'ZEN' && (f === R.stL || f === R.stR)) tt.sfx('cursor');
+      if (R.reach && f === R.stR + 2 && R.rt !== 'ZEN') tt.sfx('drum');
+      if (R.rt === 'ZEN' && f === R.gEnd + 2) { tt.sfx('fanfare'); S.flash = 16; }
+      if (f === R.cutAt) { tt.sfx('chime'); }
+      if ((R.rt === 'SP' || R.rt === 'SPSP') && f === R.stR + 40) { tt.sfx('drum'); S.flash = 10; }
+      if (f >= R.len) {
+        S.reels = R.res.slice(); S.roll = null; this.sample(S);
+        if (R.hit) { tt.sfx('fanfare'); s.ban('大当たり！', PW.acc, `${R.res.join(' ')}${R.kk && !R.promo ? '　確変図柄！' : ''}`, { life: 140 }); s.shake = 14; s.burst(370, 120, 40, PW.acc, { coin: true, sp: 4 }); S.jack = { f: 0, pay: S.m.pay, paid: 0, kk: R.kk, promo: R.promo }; S.prev = S.cur; S.cur = 0; S.flash = 20; }
+        else {
+          if (R.rt === 'SPSP' || R.rt === 'SP') tt.sfx('buzz');
+          if (S.sup) { S.sup.n--; if (S.sup.n <= 0) { S.sup = null; S.hist.unshift(S.chain); if (S.hist.length > 8) S.hist.length = 8; S.chain = 0; s.tip('電サポ終了…左打ちにもどしてください', PW.dim); } }
+          else if (S.chain) { S.hist.unshift(S.chain); S.chain = 0; }
+        }
+      }
+      return;
+    }
+    if (S.q.length > 0) { this.startSpin(s); return; }
+    if (S.ph === 'play' && S.balls < 1 && !S.bl.length && !S.sup) S.ph = 'need';
+  };
+  // 液晶の数字（予告・擬似連・リーチ・全回転）
+  M.digit = function (s, i) {
+    const S = s.S, R = S.roll; if (!R) return { v: S.reels[i], off: 0, roll: false };
+    const f = R.f, wrap = v => ((Math.floor(v) % 9) + 9) % 9 + 1;
+    const spin = () => { const tot = f * 0.55 + i * 3.3; return { v: wrap(tot), off: Math.round((tot % 1) * 44) - 22, roll: true }; };
+    const stop = (v, k) => ({ v, off: k < 6 ? Math.round(Math.sin(k / 6 * Math.PI) * -6) : 0, roll: false });
+    if (f < R.gEnd) { if (f < R.pre) return spin(); const k = Math.floor((f - R.pre) / 50), t = (f - R.pre) % 50; if (t >= 30) return { ...stop(R.gj[k][i], t - 30), giji: true }; return spin(); }
+    if (R.rt === 'ZEN') { const left = R.len - f; if (left <= 0) return stop(R.res[i], -left); const spd = 0.03 + Math.min(0.4, left / 260), tot = R.res[0] + 27 - left * spd; return { v: wrap(tot), off: Math.round((tot - Math.floor(tot)) * 44) - 22, roll: true, slow: true, zen: true }; }
+    const st = i === 0 ? R.stL : i === 2 ? R.stR : R.len;
+    if (f >= st) return stop(R.res[i], f - st);
+    if (i === 1 && R.reach && f > R.stR) { const left = st - f, sp = 0.02 + Math.min(0.35, left / 200), tot = R.res[1] + 27 - left * sp, jig = S.push ? Math.round(Math.sin(s.t / 3) * 3) : 0; return { v: wrap(tot), off: Math.round((tot - Math.floor(tot)) * 44) - 22 + jig, roll: true, slow: true }; }
+    return spin();
+  };
+  // ---- 台（右打ちランプ・電チュー・大きめの玉） ----
+  M.machine = function (s, c, X, Y, H, m, o = {}) {
+    const S = s.S, sc = H / 1448, W = Math.round(1086 * sc), im = pcImg();
+    if (im) { c.save(); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; if (m.hue) c.filter = `hue-rotate(${m.hue}deg) saturate(1.1)`; c.drawImage(im, X, Y, W, H); c.restore(); } else pBev(c, X, Y, W, H, '#c02030');
+    if (o.thumb) return W;
+    const P = (x, y) => [X + x * sc, Y + y * sc];
+    const R = S.roll, hotR = R && R.reach && R.f > R.stR && (R.rt === 'SP' || R.rt === 'SPSP' || R.rt === 'ZEN');
+    const hot = S.jack || S.res ? PW.acc : hotR ? (R.rt === 'ZEN' ? pcRainbow(s.t) : '#ff3a5a') : S.sup && S.sup.k === 'kak' ? '#ff4f9a' : S.sup ? PW.good : null;
+    if (hot && Math.floor(s.t / (hotR ? 3 : 5)) % 2 === 0) { c.save(); c.globalAlpha = 0.6; for (const [x, y, w, h] of [[60, 150, 56, 240], [970, 150, 56, 240], [60, 780, 56, 200], [970, 780, 56, 200], [96, 40, 260, 70], [730, 40, 260, 70]]) { const [a, b] = P(x, y); pR(c, a, b, w * sc, h * sc, hot); } c.restore(); }
+    // 液晶の小窓
+    const cells = [[424, 496], [504, 580], [589, 672]];
+    cells.forEach(([x0, x1], i) => { const [a, b] = P(x0, 431), w = (x1 - x0) * sc, h = 104 * sc; pR(c, a, b, w, h, '#1a1428'); const d = this.digit(s, i); if (d.v != null) pBig(c, String(d.v), Math.round(a + w / 2 - 7), Math.round(b + h / 2 - 10 + d.off * 0.4), 3, d.v % 2 ? '#ff3a4a' : '#7ab8ff'); });
+    // 電チュー（右打ちのルート）
+    { const [a, b] = P(PC_DEN.x, PC_DEN.y), open = S.den > 0 || (this.right(S) && s.t % 40 < 16); pR(c, a - 4, b + 1, 9, 4, '#5a3a10'); pR(c, a - 3, b + 1, 7, 2, '#ffd23f');
+      if (open) { pR(c, a - 7, b - 4, 3, 5, '#ffe94a'); pR(c, a + 5, b - 4, 3, 5, '#ffe94a'); pR(c, a - 7, b - 4, 1, 1, '#ffffff'); } else { pR(c, a - 4, b - 3, 2, 4, '#e8b030'); pR(c, a + 3, b - 3, 2, 4, '#e8b030'); } }
+    // 右打ちランプ
+    if (this.right(S)) { const [a, b] = P(780, 120), on = (s.t >> 3) % 2; pR(c, a - 26, b - 8, 52, 15, '#05030a'); pR(c, a - 25, b - 7, 50, 13, on ? '#ffd23f' : '#5a4a10'); pT(c, '右打ち▶', a, b - 7, { size: 12, color: on ? '#3a1a00' : '#c8b060', align: 'center', shadow: null }); }
+    // アタッカー
+    if (S.atkOpen) { const [a, b] = P(498, 846); pR(c, a, b, 96 * sc, 22 * sc, '#1a0006'); if (s.t % 8 < 4) pR(c, a, b - 2, 96 * sc, 2, PW.acc); }
+    // 玉（大きめ・つや）
+    for (const b of S.bl) { const [x, y] = P(b.x, b.y); pR(c, x - 2, y - 2, 4, 4, '#8a90a0'); pR(c, x - 2, y - 2, 3, 3, '#c8ccd8'); pR(c, x - 1, y - 2, 1, 1, '#ffffff'); pR(c, x + 1, y + 1, 1, 1, '#4a5060'); }
+    const [tx0, ty0] = P(543, 1288); pR(c, tx0 - 42, ty0 - 9, 84, 18, '#0a0610'); pR(c, tx0 - 41, ty0 - 8, 82, 16, '#1a1020'); pT(c, `${Math.floor(S.balls).toLocaleString()}玉`, tx0, ty0 - 7, { size: 12, color: PW.cyan, align: 'center', shadow: null });
+    return W;
+  };
+  // ---- 画面全体 ----
+  M.draw = function (s, c, g) {
+    const S = s.S; gbBack(c, s.t, 'pachi');
+    if (S.ph === 'pick') { this.drawPick(s, c, g); return; }
+    const m = S.m, kak = S.sup && S.sup.k === 'kak', jit = S.sup && S.sup.k === 'jitan';
+    this.machine(s, c, 8, 34, 322, m);
+    this.lcd(s, c, 258, 38, 224, 140);
+    // 保留（色つき）
+    pFrame(c, 258, 184, 224, 30); pT(c, '保留', 270, 191, { size: 16, color: PW.dim });
+    for (let i = 0; i < 4; i++) { const e = S.q[i], x = 330 + i * 36, y = 199, pop = S.fly.some(f => f.k === 'hold' && f.t < 10) && i === S.q.length - 1; if (e) pcHoldIcon(c, x, y, pop ? 8 : 6, e.col, s.t); else pCirc(c, x, y, 6, '#2a3050'); }
+    // データカウンター（出玉グラフつき）
+    const DX = 258, DY = 218; pFrame(c, DX, DY, 224, 116, { bg: '#0a0610' });
+    pT(c, 'スタート', DX + 10, DY + 7, { size: 12, color: PW.dim }); pSeg(c, String(S.cur).padStart(4, ' '), DX + 64, DY + 5, { w: 7, h: 13 });
+    pT(c, '大当り', DX + 122, DY + 7, { size: 12, color: PW.dim }); pSeg(c, String(S.hits).padStart(3, ' '), DX + 166, DY + 5, { w: 7, h: 13, on: '#ffd23f', off: 'rgba(255,210,63,0.12)' });
+    pT(c, S.jack ? `大当り中 ${Math.min(10, Math.floor(S.jack.paid / (S.jack.pay / 10)) + 1)}R` : kak ? `確変 残${S.sup.n}・右打ち` : jit ? `時短 残${S.sup.n}・右打ち` : S.prev != null ? `通常　前回 ${S.prev}回転で当たり` : '通常', DX + 10, DY + 27, { size: 12, color: S.jack ? PW.acc : kak ? '#ff8ab8' : jit ? PW.good : PW.text });
+    // 出玉グラフ（差玉）
+    { const gx = DX + 10, gy = DY + 46, gw = 204, gh = 38, G = S.graph; pR(c, gx, gy, gw, gh, '#120a1a'); for (let k = 1; k < 4; k++) pR(c, gx, gy + Math.round(gh * k / 4), gw, 1, '#22182c');
+      const mx = Math.max(250, ...G.map(Math.abs)), z = gy + gh / 2; pR(c, gx, Math.round(z), gw, 1, '#5a4a6a');
+      let px = null, py = null; G.forEach((v, k) => { const x = gx + Math.round(k / Math.max(1, G.length - 1) * (gw - 1)), y = Math.round(z - v / mx * (gh / 2 - 2)); if (px != null) pLine(c, px, py, x, y, v >= 0 ? '#5ee07a' : '#ff5d6c'); px = x; py = y; });
+      const last = G[G.length - 1] || 0; pR(c, gx + gw - 92, gy + 1, 90, 14, 'rgba(18,10,26,0.85)'); pT(c, `差玉 ${last >= 0 ? '+' : ''}${last.toLocaleString()}`, gx + gw - 2, gy + 1, { size: 12, color: last >= 0 ? PW.good : PW.bad, align: 'right', shadow: null }); }
+    pT(c, '履歴', DX + 10, DY + 92, { size: 12, color: PW.dim }); S.hist.slice(0, 6).forEach((h, i) => { const x = DX + 52 + i * 26; pBev(c, x, DY + 90, 22, 20, h >= 5 ? '#c83040' : h >= 2 ? '#c9962a' : '#3a3a5a'); pT(c, String(h), x + 11, DY + 93, { size: 12, align: 'center', shadow: null }); });
+    // 右：ボタン・ドル箱
+    const bx = 492, bw = 140;
+    s.btn('rent', `玉貸し\n¥1,000で${S.rate === 4 ? 250 : 1000}玉`, bx, 38, bw, 48, { kind: S.ph === 'need' ? 'pri' : 'norm', def: S.ph === 'need', size: 16 });
+    s.btn('shoot', S.shoot ? (this.right(S) ? '右打ち中' : '打ち出し中') : '止めている', bx, 92, bw, 32, { kind: S.shoot ? 'blue' : 'norm', off: S.ph === 'need' });
+    s.btn('spd', `速さ ${'▶'.repeat(S.spd)}`, bx, 130, bw, 32, { def: S.ph !== 'need' && !S.push });
+    if (!S.preset) s.btn('move', '台を移る', bx, 168, bw, 32, { off: !!S.jack || !!S.res });
+    s.btn('quit', 'やめて換金', bx, 206, bw, 32, { kind: 'red', back: true, off: !!S.jack || !!S.res || !!(S.roll && S.roll.hit) });
+    this.dolbako(s, c, bx, 246, bw, 88);
+    if (S.push) s.btn('push', 'PUSH!（Aボタン）', 296, 182, 148, 34, { kind: 'red', def: true, size: 16 });
+    if (S.ph === 'need') { const a = (s.t >> 4) % 2; pFrame(c, 8, 300, 236, 34); pT(c, a ? '玉がなくなった…' : '玉貸しボタンで玉を借りる', 126, 309, { size: 16, align: 'center', color: PW.acc }); }
+  };
+  // ---- 液晶 ----
+  M.lcd = function (s, c, X, Y, W, H) {
+    const S = s.S, R = S.roll, J = S.jack, t = s.t, kak = S.sup && S.sup.k === 'kak', jit = S.sup && S.sup.k === 'jitan';
+    const reachOn = R && R.reach && R.rt !== 'ZEN' && R.f > R.stR, sp = reachOn && (R.rt === 'SP' || R.rt === 'SPSP') && R.f > R.stR + 40, zen = R && R.rt === 'ZEN' && R.f > R.gEnd;
+    const hitNow = (J && J.f < 80) || (R && R.hit && R.f >= R.len - 20 && R.f > R.stR && !R.reach);
+    pBev(c, X - 4, Y - 4, W + 8, H + 8, '#c9962a'); pR(c, X, Y, W, H, '#000');
+    c.save(); c.beginPath(); c.rect(X, Y, W, H); c.clip();
+    // 背景
+    if (J || S.res) { pBands(c, X, Y, W, H, ['#5a3000', '#7a4a00', '#c88a10', '#e8a810', '#ffd23f']); for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2 + t / 40; pLine(c, X + W / 2, Y + H / 2, X + W / 2 + Math.cos(a) * 170, Y + H / 2 + Math.sin(a) * 170, 'rgba(255,255,210,0.28)'); } }
+    else if (zen) { for (let k = 0; k < 7; k++) pR(c, X, Y + Math.round(k * H / 7), W, Math.ceil(H / 7), pcRainbow(t, k)); pDith(c, X, Y, W, H, 'rgba(0,0,0,0.25)', t & 1); }
+    else if (sp) { pBands(c, X, Y, W, H, ['#1a0008', '#3a0010', '#6a0018', '#3a0010', '#1a0008']); for (let k = 0; k < 22; k++) { const a = k / 22 * Math.PI * 2 + (k % 3) * 0.1, r0 = 30 + ((t * 4 + k * 13) % 60); pLine(c, X + W / 2 + Math.cos(a) * r0, Y + H / 2 + Math.sin(a) * r0, X + W / 2 + Math.cos(a) * (r0 + 40), Y + H / 2 + Math.sin(a) * (r0 + 40), 'rgba(255,120,120,0.35)'); }
+      pcHeroine(c, X + 40, Y + 100, 2, t); pcRival(c, X + W - 40, Y + 100, 2, t); if (t % 10 < 6) { pSpark(c, X + W / 2 + gbR(-8, 8), Y + 84 + gbR(-6, 6), (t >> 1) & 3, '#ffe94a'); } }
+    else if (kak) { pBands(c, X, Y, W, H, ['#3a0018', '#3a0018', '#7a1040', '#7a1040', '#c02a6a']); for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2 + t / 50; pLine(c, X + W / 2, Y + H + 10, X + W / 2 + Math.cos(a) * 200, Y + H + 10 + Math.sin(a) * 200, 'rgba(255,180,220,0.18)'); } }
+    else if (jit) pBands(c, X, Y, W, H, ['#002a18', '#002a18', '#0a5a34', '#0a5a34', '#1a8a50']);
+    else pBands(c, X, Y, W, H, ['#0a0a2a', '#0a0a2a', '#1a1a4a', '#1a1a4a', '#2a2a6a']);
+    if (!J && !S.res && !zen && !sp) {
+      for (let i = 0; i < 18; i++) { const sx = X + (i * 53) % W, sy = Y + (i * 29) % 60; if ((t + i * 9) % 40 < 30) pR(c, sx, sy, 1, 1, '#ffffff'); }
+      for (let j = 0; j < 40; j++) { const hw = Math.round(j * 1.6) + 6; pR(c, X + W / 2 - hw, Y + H - 40 + j, hw * 2, 1, j < 10 ? '#f0f4ff' : kak ? '#5a1a40' : jit ? '#1a4a3a' : '#3a3a7a'); }
+      for (const p of S.petals) { const px = X + p.x + Math.sin(p.ph + p.y / 9) * 6, py = Y + p.y; pR(c, px, py, 2, 1, '#ffb0d0'); pR(c, px + 1, py + 1, 1, 1, '#ff80b0'); }
+    }
+    if (reachOn && !sp && t % 6 < 3) pR(c, X, Y, W, H, R.hit && R.f > R.stR + 60 ? 'rgba(255,210,63,0.25)' : 'rgba(255,40,80,0.22)');
+    // 群予告（花びらのあらし）
+    for (const w of S.swarm) { const px = X + w.x, py = Y + w.y + Math.sin(w.ph + w.x / 12) * 6; pR(c, px, py, 4, 2, '#ff9ac8'); pR(c, px + 1, py + 2, 2, 1, '#ff5a9a'); pR(c, px + 3, py - 1, 1, 1, '#ffffff'); }
+    // 図柄
+    const hitFlash = (J && J.f < 80 && t % 8 < 4) || hitNow;
+    const reel = (i, cx, cy, sz) => { const d = this.digit(s, i), bw = Math.round(sz * 0.86), bh = Math.round(sz * 1.08);
+      pR(c, cx - bw / 2, cy - bh / 2, bw, bh, 'rgba(0,0,0,0.45)');
+      c.save(); c.beginPath(); c.rect(cx - bw / 2, cy - bh / 2, bw, bh); c.clip();
+      if (d.roll) { const gap = sz * 1.02; for (let k = -1; k <= 1; k++) { const v = ((d.v - 1 - k) % 9 + 9) % 9 + 1; pcSym(c, v, cx, cy + (d.off / 44) * gap + k * gap, sz, { t, dim: !d.slow }); } if (!d.slow) pDith(c, cx - bw / 2, cy - bh / 2, bw, bh, 'rgba(10,10,40,0.45)', t & 1); }
+      else pcSym(c, d.v, cx, cy + d.off, sz, { t, gold: hitFlash || (S.prom > 0 && t % 6 < 3) });
+      c.restore(); };
+    if (J || S.res) { for (let i = 0; i < 3; i++) reel(i, X + W / 2 + (i - 1) * 34, Y + 26, 26); }
+    else if (sp) { reel(0, X + 20, Y + 20, 26); reel(2, X + W - 20, Y + 20, 26); reel(1, X + W / 2, Y + H / 2 + 6, 60); }
+    else { for (let i = 0; i < 3; i++) reel(i, X + W / 2 + (i - 1) * 68, Y + 66, 56); }
+    // ステップアップ予告
+    if (R && R.step && R.f < R.pre) { const lv = Math.min(R.step, 1 + Math.floor(Math.max(0, R.f - 4) / 12)), cc = ['#e8e8f0', '#4aa8ff', '#4ad06a', '#ff4a4a', '#ffd23f'][lv - 1];
+      pR(c, X + 40, Y + 52, W - 80, 36, '#05030a'); pR(c, X + 41, Y + 53, W - 82, 34, pShade(cc, -0.55)); pR(c, X + 41, Y + 53, W - 82, 2, cc);
+      pT(c, `STEP ${lv}`, X + W / 2, Y + 58, { size: 24, color: cc, align: 'center', outline: '#05030a', ow: 2 }); for (let k = 0; k < 5; k++) pR(c, X + 62 + k * 22, Y + 82, 16, 3, k < lv ? cc : '#2a2a3a'); }
+    // 擬似連
+    if (R && R.f >= R.pre && R.f < R.gEnd) { const k = Math.floor((R.f - R.pre) / 50), tt2 = (R.f - R.pre) % 50; if (tt2 >= 30) { const sc2 = tt2 < 36 ? 30 + (36 - tt2) * 3 : 30; pT(c, '擬似連', X + W / 2, Y + 8, { size: 16, color: '#ffe94a', align: 'center', outline: '#5a0028', ow: 2 }); pT(c, `×${k + 2}`, X + W / 2, Y + H - 44, { size: sc2 > 34 ? 32 : 24, color: k >= 1 ? '#ff5a5a' : '#ffffff', align: 'center', outline: '#05030a', ow: 2 }); } }
+    // カットイン
+    if (R && R.cut && R.f >= R.cutAt && R.f < R.cutAt + 36) { const k = R.f - R.cutAt, slide = Math.max(0, 1 - k / 6), [cc, tx] = PCX.cutCol[R.cut], by = Y + H / 2 - 24, ox = Math.round(slide * W);
+      pR(c, X + ox, by, W, 48, '#05030a'); pR(c, X + ox, by + 2, W, 44, R.cut === 'gold' ? (t % 4 < 2 ? '#ffd23f' : '#e8a810') : cc); pR(c, X + ox, by + 2, W, 3, '#ffffff');
+      pcHeroine(c, X + ox + 34, by + 46, 2, t); pT(c, tx, X + ox + W / 2 + 26, by + 12, { size: 24, color: '#ffffff', align: 'center', outline: '#05030a', ow: 2 }); }
+    // リーチの文字
+    if (reachOn && !(R.hit && R.f > R.len - 24)) {
+      const k = R.f - R.stR;
+      if (R.rt === 'N' || k <= 40) { const x = X + W - Math.min(W, k * 12); pT(c, 'リーチ！', Math.max(X + W / 2, x), Y + H - 30, { size: 24, color: '#ffe94a', align: 'center', outline: '#7a0020', ow: 2 }); }
+      else { pT(c, R.rt === 'SPSP' ? 'SPSPリーチ' : 'SPリーチ', X + W / 2, Y + 4, { size: 16, color: '#ffe94a', align: 'center', outline: '#5a0010', ow: 2 }); pT(c, 'VS', X + W / 2, Y + 22, { size: 16, color: '#ffffff', align: 'center', outline: '#5a0010', ow: 2 });
+        if (R.rt === 'SPSP' && t % 20 < 14) { pR(c, X + W / 2 - 30, Y + H - 20, 60, 16, '#ffd23f'); pT(c, '激アツ', X + W / 2, Y + H - 19, { size: 12, color: '#7a0010', align: 'center', shadow: null }); } }
+    }
+    if (zen) pT(c, '全回転!!', X + W / 2, Y + 6, { size: 24, color: '#ffffff', align: 'center', outline: pcRainbow(t, 2), ow: 2 });
+    // PUSHボタン
+    if (S.push) { const pr = 18 + Math.round(Math.sin(t / 3) * 2); pCirc(c, X + W / 2, Y + H / 2 + 4, pr + 3, '#05030a'); pCirc(c, X + W / 2, Y + H / 2 + 4, pr, '#e8203a'); pCirc(c, X + W / 2 - 5, Y + H / 2 - 1, 5, '#ff8a9a'); pT(c, 'PUSH', X + W / 2, Y + H / 2 - 4, { size: 12, color: '#ffffff', align: 'center', shadow: null }); }
+    // 大当たり・ラウンド・終了画面
+    if (J && J.f < 80) { const sx = ((t * 6) % (W + 80)) - 40; pT(c, '大当たり', X + W / 2, Y + 54, { size: 32, color: '#fff4c0', align: 'center', outline: '#7a3000', ow: 3 }); pR(c, X + sx, Y + 50, 10, 44, 'rgba(255,255,255,0.35)'); }
+    else if (J) { const rd = Math.min(10, Math.floor(J.paid / (J.pay / 10)) + 1); pT(c, `ROUND ${rd}/10`, X + W / 2, Y + 50, { size: 24, color: '#ffffff', align: 'center', outline: '#5a3000', ow: 2 });
+      pT(c, `出玉 ${J.paid.toLocaleString()}`, X + W / 2, Y + 80, { size: 16, color: '#fff4c0', align: 'center', outline: '#5a3000', ow: 2 }); pcHeroine(c, X + W - 28, Y + H - 6, 2, t * 2);
+      if (S.prom > 0) pT(c, '確変昇格！', X + W / 2, Y + H - 30, { size: 24, color: '#ff6aa0', align: 'center', outline: '#ffffff', ow: 2 }); }
+    if (S.res) { const r = S.res; pR(c, X + 14, Y + 46, W - 28, 84, 'rgba(10,6,0,0.6)'); pT(c, '大当たり終了', X + W / 2, Y + 50, { size: 16, color: '#ffffff', align: 'center', outline: '#5a3000', ow: 2 });
+      pT(c, `獲得 ${r.got.toLocaleString()}玉`, X + W / 2, Y + 72, { size: 24, color: '#fff4c0', align: 'center', outline: '#5a3000', ow: 2 });
+      pT(c, r.kk ? 'CHANCE TIME 突入！' : '時短に突入', X + W / 2, Y + 102, { size: 16, color: r.kk ? '#ff8ab8' : '#8af0a8', align: 'center', outline: '#05030a', ow: 2 }); }
+    if (kak && !R && !J && !S.res) pT(c, `CHANCE TIME　残り${S.sup.n}回`, X + W / 2, Y + 6, { size: 16, color: '#ffe0f0', align: 'center', outline: '#5a0028' });
+    else if (jit && !R && !J && !S.res) pT(c, `時短　残り${S.sup.n}回`, X + W / 2, Y + 6, { size: 16, color: '#e0ffe8', align: 'center', outline: '#003a18' });
+    // 右打ちの案内
+    if (this.right(S) && !J && !S.res && (t >> 4) % 2) { pR(c, X + W - 58, Y + H - 20, 54, 16, '#ffd23f'); pT(c, '右打ち▶', X + W - 31, Y + H - 19, { size: 12, color: '#3a1a00', align: 'center', shadow: null }); }
+    // 当該保留（いま回っている保留）
+    if (R && !J) pcHoldIcon(c, X + 12, Y + H - 12, 5, R.col, t, true);
+    if (S.flash > 0) { c.save(); c.globalAlpha = S.flash / 24; pR(c, X, Y, W, H, '#ffffff'); c.restore(); }
+    c.restore();
+  };
+})();
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
