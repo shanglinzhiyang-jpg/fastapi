@@ -39431,31 +39431,32 @@ function shNextMi(g, mon) { if (mon === 'cbt') return 'cbt'; const cur = shYM(g)
 function shMonTxt(g, q) { const S = shSits(g, q); return S.map(x => x.mon === 'cbt' ? 'いつでも（CBT）' : x.mon.length >= 12 ? '毎月' : x.mon.map(m => `${m}月`).join('・')).join(' → '); }
 // 合格の見込み
 function shReady(g, q, qs, nSub) { if (!q.h) return 1; if (q.kam) { const hp = q.h / q.kam.n, used = shKamPassed(g, q, qs).length * hp; return Math.max(0, qs.hrs - used) / (hp * Math.max(1, nSub || Math.min(q.kam.max, q.kam.n - shKamPassed(g, q, qs).length))); } return qs.hrs / q.h; }
-function shP(g, rate, r) { const P1 = clamp(0.25 + rate / 100 * 2, 0.2, 0.97), re = r * (0.85 + shGaku(g) * 0.003); let p = re < 1 ? P1 * Math.pow(Math.max(0, re), 2.5) : P1 + (0.985 - P1) * Math.min(1, (re - 1) / 0.5); if (shStress(g) > 80) p *= 0.85; return clamp(p, 0, 0.99); }
+function shP(g, rate, r, bonus = 0) { const P1 = clamp(0.25 + rate / 100 * 2, 0.2, 0.97), re = r * (0.85 + shGaku(g) * 0.003); let p = re < 1 ? P1 * Math.pow(Math.max(0, re), 2.5) : P1 + (0.985 - P1) * Math.min(1, (re - 1) / 0.5); if (shStress(g) > 80) p *= 0.85; return clamp(p + bonus, 0, 0.99); }
 function shSitP(g, q, qs, sit) { const r = shReady(g, q, qs); return sit.stages.reduce((a, [, rate]) => a * shP(g, rate, r), 1); }
 const shJudge = p => p >= 0.8 ? ['A', '#5ee07a'] : p >= 0.6 ? ['B', '#9ae05e'] : p >= 0.4 ? ['C', '#ffd23f'] : p >= 0.2 ? ['D', '#ff9a4a'] : ['E', '#ff5d6c'];
 function shKamPassed(g, q, qs) { const y = shYM(g).y; return Object.entries(qs.kam || {}).filter(([, yr]) => y - yr < (q.kam.keep || 99)).map(([k]) => k); }
 function shScore(pass, p, u) { return pass ? clamp(60 + Math.round((p - u) / Math.max(p, 0.01) * 35), 60, 100) : clamp(59 - Math.round((u - p) / Math.max(1 - p, 0.01) * 45), 5, 59); }
 // 受験（結果を決める）
-function shTake(g, q, qs, sitI) {
+function shTake(g, q, qs, sitI, bonus = 0) {
   const sit = shSits(g, q)[sitI], r = shReady(g, q, qs);
-  if (q.score) { const re = Math.min(1.35, r * (0.85 + shGaku(g) * 0.003)); const sc = Math.round(clamp(10 + 900 * Math.sqrt(re / 1.35) + gbGauss() * 45, 10, 990) / 5) * 5, L = clamp(Math.round(sc * (0.48 + Math.random() * 0.08) / 5) * 5, 5, 495); return { score: sc, L, R: sc - L, pass: true }; }
+  if (q.score) { const re = clamp(r * (0.85 + shGaku(g) * 0.003) + bonus * 3, 0, 1.35); const sc = Math.round(clamp(10 + 900 * Math.sqrt(re / 1.35) + gbGauss() * 45, 10, 990) / 5) * 5, L = clamp(Math.round(sc * (0.48 + Math.random() * 0.08) / 5) * 5, 5, 495); return { score: sc, L, R: sc - L, pass: true }; }
   if (q.kam) { const passed = shKamPassed(g, q, qs), todo = q.kam.list.filter(k => !passed.includes(k)).slice(0, q.kam.max), rr = shReady(g, q, qs, todo.length);
-    const subj = todo.map(nm => { const p = shP(g, q.kam.rate, rr), u = Math.random(), ok = u < p; return { nm, pass: ok, score: shScore(ok, p, u) }; }); return { subj, pass: subj.some(x => x.pass) }; }
-  const stages = []; let ok = true; for (const [nm, rate] of sit.stages) { if (!ok) { stages.push({ nm, skip: true }); continue; } const p = shP(g, rate, r), u = Math.random(); ok = u < p; stages.push({ nm, pass: ok, score: shScore(ok, p, u) }); }
+    const subj = todo.map(nm => { const p = shP(g, q.kam.rate, rr, bonus), u = Math.random(), ok = u < p; return { nm, pass: ok, score: shScore(ok, p, u) }; }); return { subj, pass: subj.some(x => x.pass) }; }
+  const stages = []; let ok = true; for (const [nm, rate] of sit.stages) { if (!ok) { stages.push({ nm, skip: true }); continue; } const p = shP(g, rate, r, bonus), u = Math.random(); ok = u < p; stages.push({ nm, pass: ok, score: shScore(ok, p, u) }); }
   return { stages, pass: ok };
 }
 function shGrant(g, id, how) {
-  const S = shSt(g), q = SH[id]; if (!q || S.held[id]) return; S.held[id] = g.state.day; S.log.push({ day: g.state.day, t: `${q.nm}を取得${how ? `（${how}）` : ''}` });
+  const S = shSt(g), q = SH[id]; if (!q || S.held[id]) return; S.held[id] = g.state.day; try { const age = ageOf(g); if (age < 20 && !q.via && !q.grp && !q.score && shRate(q) <= 10) S.young = 1; if (age >= 60) S.old = 1; } catch (e) { } S.log.push({ day: g.state.day, t: `${q.nm}を取得${how ? `（${how}）` : ''}` });
   const fame = q.fame || (q.rate && q.rate <= 10 && !q.grp ? 4 : 0); try { if (fame) g.addFame(fame); } catch (e) { }
   const jobs = SH_JOB.filter(j => Array.isArray(j.need) && j.need.includes(id)).map(j => j.nm);
   try { g.message({ from: '資格', kind: 'chat', text: `【取得】${q.nm}${jobs.length ? `\n資格アプリの「仕事」で「${jobs.join('」「')}」ができるようになった。` : ''}` }); } catch (e) { }
   if (fame >= 10) try { g.message({ from: 'ネットニュース', kind: 'chat', text: `【速報】${(g.state.profile && g.state.profile.name) || 'あの有名人'}さん、${q.nm}に合格！ 「努力の人」と話題に` }); } catch (e) { }
+  try { shTitleCheck(g); } catch (e) { }
 }
 // 合格発表（状態に反映）
 function shAnnounce(g, P) {
   if (P.done) return; P.done = true; const S = shSt(g), q = SH[P.id], qs = shQs(S, P.id), R = P.r, sits = shSits(g, q);
-  if (q.score) { qs.best = Math.max(num(qs.best), R.score); S.log.push({ day: g.state.day, t: `TOEIC ${R.score}点` }); return; }
+  if (q.score) { qs.best = Math.max(num(qs.best), R.score); S.log.push({ day: g.state.day, t: `TOEIC ${R.score}点` }); try { shTitleCheck(g); } catch (e) { } return; }
   if (q.kam) { R.subj.forEach(x => { if (x.pass) qs.kam[x.nm] = P.y; }); if (shKamPassed(g, q, qs).length >= q.kam.n) shGrant(g, P.id); return; }
   if (R.pass) { qs.stage = P.sit + 1; qs.stageMi = P.mi; if (qs.stage >= sits.length) { qs.stage = 0; shGrant(g, P.id); } }
   else { const keep = q.keepM || 12; if (P.sit > 0 && (P.mi - num(qs.stageMi, -999)) > keep) qs.stage = 0; }
@@ -39471,6 +39472,7 @@ function shTick(g) {
   for (const [cid, e] of Object.entries(S.edu)) { const E2 = SH_EDU[cid]; if (!E2 || e.done) continue; const k = Math.floor((day - e.start) / 120);
     if (k >= num(e.paid) && k < E2.y) { e.paid = k + 1; if (E2.fee > 0) { if (num(g.state.money) >= E2.fee) { g.state.money -= E2.fee; try { g.message({ from: '資格', kind: 'chat', text: `${E2.nm}の${k + 1}年目の学費 ${yen(E2.fee)} を払った。` }); } catch (er) { } } else e.unpaid = num(e.unpaid) + E2.fee; } else g.state.money = num(g.state.money) - E2.fee; }
     shGradCheck(g, cid); }
+  try { shPlusTick(g); } catch (e) { console.error('[shikaku+] tick', e); }
 }
 function shAttNeed(E2) { return Math.max(4, Math.ceil(E2.y * 20)); }
 function shGradCheck(g, cid) { const S = shSt(g), e = S.edu[cid], E2 = SH_EDU[cid]; if (!e || e.done || e.unpaid) return false; if (g.state.day - e.start < E2.y * 120 || e.att < shAttNeed(E2)) return false;
@@ -39487,11 +39489,11 @@ async function shOpen(g) { try { shTick(g); } catch (e) { } const r = await gbSc
 function shInstall() {
   try { E.Un('shikaku', { name: '資格', color: '#2a5ad0', order: 30.5, iconHD: shIcon, badge: g => { try { return shUnseen(g).length + shNowExam(g).length; } catch (e) { return 0; } }, open: g => shOpen(g) }); } catch (e) { console.error('[shikaku] app', e); }
   try { E.Tn && E.Tn(g => { try { shTick(g); } catch (e) { console.error('[shikaku] tick', e); } }); } catch (e) { }
-  if (typeof window !== 'undefined') window.__SH = { st: () => shSt(window.__game), open: () => shOpen(window.__game), tick: () => shTick(window.__game), SH, SH_LIST, SH_EDU, SH_JOB };
+  if (typeof window !== 'undefined') window.__SH = { st: () => shSt(window.__game), open: () => shOpen(window.__game), tick: () => shTick(window.__game), SH, SH_LIST, SH_EDU, SH_JOB, SH_OFFICE, SH_TITLES, titles: () => shTitleCheck(window.__game), office: id => shOfficeOpen(window.__game, SH_OFFICE.find(t => t.id === id)), otick: () => shOfficeTick(window.__game) };
 }
 
 // ===== 資格アプリの画面 =====
-const SH_TABS = [['find', 'さがす'], ['study', '勉強中'], ['held', '資格手帳'], ['school', '学校'], ['job', '仕事']];
+const SH_TABS = [['find', 'さがす'], ['study', '勉強中'], ['held', '資格手帳'], ['school', '学校'], ['job', '仕事'], ['office', '事務所']];
 const shCatCol = id => (SH_CAT.find(c => c[0] === id) || [0, 0, '#5a6a8a'])[2];
 function shBg(c, t) { pBands(c, 0, 0, 640, 360, ['#0a1024', '#0c1430', '#0e1838', '#101c40']); for (let x = 0; x < 640; x += 32) pR(c, x, 0, 1, 360, 'rgba(120,160,255,0.04)'); for (let y = 0; y < 360; y += 32) pR(c, 0, y, 640, 1, 'rgba(120,160,255,0.04)'); }
 function shBar(c, x, y, w, h, f, col) { pR(c, x, y, w, h, '#05070f'); pR(c, x + 1, y + 1, w - 2, h - 2, '#1a2240'); pR(c, x + 1, y + 1, Math.round((w - 2) * clamp(f, 0, 1)), h - 2, col); if (f > 1) pR(c, x + w - 4, y + 1, 3, h - 2, '#ffffff'); }
@@ -39502,11 +39504,12 @@ function shStat(g, q) { const S = shSt(g), qs = S.q[q.id] || {}; if (q.via === '
 function shNm(c, s, w, size) { return pFit(c, s, w, size); }
 GB_MODES.shikaku = {
   noHud: false,
-  init(s, g) { s.S = { ph: 'home', tab: 'find', cat: 'law', pg: 0, sel: null, f: 0, anim: 0 }; const U = shUnseen(g); if (U.length) { s.S.ph = 'result'; s.S.rs = U[0]; U[0].seen = true; } },
+  init(s, g) { s.S = { ph: 'home', tab: 'find', cat: 'law', pg: 0, sel: null, f: 0, anim: 0, oanim: 0, cal: false, hv: false }; const U = shUnseen(g); if (U.length) { s.S.ph = 'result'; s.S.rs = U[0]; U[0].seen = true; } },
   left(s, g) { return Math.max(0, 1440 - num(g.state.clock && g.state.clock.min, 600) - s.mins); },
   btn(s, id, g) {
     const S = s.S, St = shSt(g);
     if (id === 'close') { s.done(); return; }
+    if (shPlusBtn(s, id, g)) return;
     if (id.startsWith('tab:')) { S.tab = id.slice(4); S.ph = 'home'; S.pg = 0; return; }
     if (id.startsWith('cat:')) { S.cat = id.slice(4); S.pg = 0; return; }
     if (id === 'pg:-1') { S.pg = Math.max(0, S.pg - 1); return; } if (id === 'pg:1') { S.pg++; return; }
@@ -39516,14 +39519,11 @@ GB_MODES.shikaku = {
     if (id === 'rback') { const U = shUnseen(g); if (U.length) { S.rs = U[0]; U[0].seen = true; return; } S.ph = S.sel ? 'detail' : 'home'; return; }
     if (id === 'toSchool') { S.ph = 'home'; S.tab = 'school'; S.pg = 0; return; }
     // 勉強
-    if (id === 'st2' || id === 'st4') { const q = SH[S.sel], qs = shQs(St, q.id), hr = id === 'st2' ? 2 : 4; if (this.left(s, g) < hr * 60) { s.tip('今日はもう時間がない（日付が変わる）', PW.bad); return; }
-      const m = (qs.text ? 1.1 : 1) * (qs.tsushin ? 1.3 : 1) * (qs.yobiko ? 1.6 : 1), eff = (0.7 + shGaku(g) * 0.006) * Math.min(2, m) * (shStress(g) > 70 ? 0.7 : 1), add = hr * 3 * eff;
-      qs.hrs += add; s.mins += hr * 60; try { g.addNeed('stress', hr * 1.5); } catch (e) { } S.anim = 60; S.animTxt = `${hr}時間勉強した（${Math.round(add)}時間ぶん進んだ）`; tt.sfx('cursor'); return; }
-    if (id.startsWith('buy:')) { const k = id.slice(4), q = SH[S.sel], qs = shQs(St, q.id), pr = this.price(q, k); if (qs[k]) return; if (!s.pay(pr)) return; qs[k] = true; s.tip({ text: 'テキストを買った（勉強の効率 ×1.1）', tsushin: '通信講座を申し込んだ（×1.3）', yobiko: '予備校に入った（×1.6）' }[k], PW.good); return; }
+    if (id.startsWith('buy:')) { const k = id.slice(4), q = SH[S.sel], qs = shQs(St, q.id), pr = this.price(q, k); if (qs[k]) return; if (!s.pay(pr)) return; qs[k] = true; s.tip({ text: 'テキストを買った（勉強の効率 ×1.1）', kakomon: '過去問集を買った（×1.15）', tsushin: '通信講座を申し込んだ（×1.3）', yobiko: '予備校に入った（×1.6）' }[k], PW.good); return; }
     if (id === 'apply') { const q = SH[S.sel], qs = shQs(St, q.id);
       if (St.held[q.id] && !q.score) { s.tip('もう持っている資格', PW.dim); return; } if (!shAvail(g, q)) { s.tip(`この資格は${Math.floor(q.since / 100)}年から`, PW.bad); return; } if (!shReqOk(g, q.req)) { s.tip('受験資格がない：' + shReqTxt(q), PW.bad); return; } if (qs.app) { s.tip('もう申し込んでいる', PW.dim); return; }
       const si = q.kam || q.score ? 0 : num(qs.stage), sit = shSits(g, q)[si], mi = shNextMi(g, sit.mon); if (mi == null) { s.tip('しばらく試験がない', PW.bad); return; }
-      const fee = si > 0 ? 0 : q.fee; if (fee && !s.pay(fee)) return; qs.app = { sit: si, mi, fee }; if (mi === 'cbt') { this.startExam(s, g); return; } s.tip(`${shMiLab(mi)}の試験に申し込んだ`, PW.good); return; }
+      const fee = si > 0 ? 0 : q.fee; if (fee && !s.pay(fee)) return; qs.app = { sit: si, mi, fee }; shTicket(g, q, qs.app); if (mi === 'cbt') { this.startExam(s, g); return; } s.tip(`${shMiLab(mi)}の試験に申し込んだ`, PW.good); return; }
     if (id === 'take') { this.startExam(s, g); return; }
     // 学校
     if (id.startsWith('enr:')) { const cid = id.slice(4), E2 = SH_EDU[cid]; if (St.edu[cid] && !St.edu[cid].done) return; if (!shReqOk(g, E2.req)) { s.tip('入学の条件をみたしていない', PW.bad); return; }
@@ -39536,23 +39536,39 @@ GB_MODES.shikaku = {
     if (id.startsWith('w:')) { const j = SH_JOB.find(x => x.id === id.slice(2)); if (!j || !shJobOk(g, j)) return; if (St.workDay === g.state.day) { s.tip('資格の仕事は1日1回まで', PW.dim); return; } if (this.left(s, g) < j.h * 60) { s.tip('今日はもう時間がない', PW.bad); return; }
       St.workDay = g.state.day; s.mins += j.h * 60; s.win(j.pay); try { g.addNeed('stress', j.st); if (j.fame) g.addFame(j.fame); } catch (e) { } St.earned = num(St.earned) + j.pay; S.anim = 60; S.animTxt = `${j.where}で働いた（+${yen(j.pay)}）`; tt.sfx('coin'); return; }
   },
-  price(q, k) { return k === 'text' ? 3000 : k === 'tsushin' ? clamp(Math.round(q.h * 40 / 1000) * 1000, 15000, 300000) : clamp(Math.round(q.h * 200 / 10000) * 10000, 50000, 1500000); },
+  price(q, k) { return k === 'text' ? 3000 : k === 'kakomon' ? clamp(Math.round(q.h * 3 / 1000) * 1000, 2000, 8000) : k === 'tsushin' ? clamp(Math.round(q.h * 40 / 1000) * 1000, 15000, 300000) : clamp(Math.round(q.h * 200 / 10000) * 10000, 50000, 1500000); },
   startExam(s, g) { const S = s.S, St = shSt(g), q = SH[S.sel], qs = shQs(St, q.id), A = qs.app, cur = shYM(g); if (!A) return; if (A.mi !== 'cbt' && A.mi !== cur.mi) { s.tip('まだ試験の月ではない', PW.dim); return; }
     if (this.left(s, g) < 180) { s.tip('今日はもう時間がない（明日受けよう）', PW.bad); return; }
     A.taken = true; qs.tries = num(qs.tries) + 1; s.mins += 180; try { g.addNeed('stress', 4); } catch (e) { }
-    S.ex = { id: q.id, sit: A.sit, mi: A.mi === 'cbt' ? cur.mi : A.mi, r: shTake(g, q, qs, A.sit), f: 0, cbt: A.mi === 'cbt' }; S.ph = 'exam'; tt.sfx('chime'); },
-  endExam(s, g) { const S = s.S, St = shSt(g), X = S.ex, q = SH[X.id], qs = shQs(St, q.id); qs.app = null;
-    const at = q.wait ? shDayOfMi(g, X.mi + q.wait) : g.state.day, P = { id: q.id, sit: X.sit, r: X.r, mi: X.mi, y: Math.floor(X.mi / 12), at, done: false, seen: false }; St.pend.push(P);
+    const kind = shExamKind(shSits(g, q)[A.sit]); S.ex = { id: q.id, sit: A.sit, mi: A.mi === 'cbt' ? cur.mi : A.mi, f: 0, cbt: A.mi === 'cbt', kind, Q: kind === 'oral' ? [80, 150] : [70, 115, 160], qi: 0, mg: null, bonus: 0, no: A.no, hall: A.hall }; S.ph = 'exam'; tt.sfx('chime'); },
+  endExam(s, g) { const S = s.S, St = shSt(g), X = S.ex, q = SH[X.id], qs = shQs(St, q.id); qs.app = null; X.r = shTake(g, q, qs, X.sit, num(X.bonus));
+    const at = q.wait ? shDayOfMi(g, X.mi + q.wait) : g.state.day, P = { id: q.id, sit: X.sit, r: X.r, mi: X.mi, no: X.no, bonus: X.bonus, y: Math.floor(X.mi / 12), at, done: false, seen: false }; St.pend.push(P);
     if (at <= g.state.day) { shAnnounce(g, P); P.seen = true; S.rs = P; S.ph = 'result'; } else { S.ph = 'detail'; s.tip(`おつかれさま。結果は${shMiLab(X.mi + q.wait)}に発表`, PW.text); } },
-  update(s, g) { const S = s.S; S.f++; if (S.anim > 0) S.anim--; if (S.ph === 'exam') { const X = S.ex; X.f++; if (X.f % 9 === 0 && X.f > 30 && X.f < 190) tt.sfx('cursor'); if (X.f === 190) tt.sfx('chime'); if (X.f >= 230) this.endExam(s, g); }
-    if (S.ph === 'result' && S.f % 1 === 0 && S.rs && !S.rsFx) { S.rsFx = S.rs; const R = S.rs.r; if (R.pass && !SH[S.rs.id].score) { tt.sfx('fanfare'); s.burst(320, 150, 40, PW.acc, { coin: false, sp: 4 }); } } if (S.ph !== 'result') S.rsFx = null; },
-  draw(s, c, g) { const S = s.S; shBg(c, s.t); if (S.ph === 'detail') return this.drawDetail(s, c, g); if (S.ph === 'exam') return this.drawExam(s, c, g); if (S.ph === 'result') return this.drawResult(s, c, g); this.drawHome(s, c, g); },
+  update(s, g) { const S = s.S; S.f++; if (S.anim > 0) S.anim--; if (S.oanim > 0) S.oanim--;
+    if (S.ph === 'room' && S.rm) S.rm.f++; if (S.ph === 'moshi' && S.ms) S.ms.f++;
+    if (S.ph === 'exam') { const X = S.ex;
+      if (X.mg) { const m = X.mg; m.f++; if (m.res) { if (++m.rf > 45) X.mg = null; } else { m.pos = 1 - Math.abs(((m.f * m.sp) % 2) - 1); if (m.f > 170) shMgHit(s, X, null); } }
+      else { X.f++; if (X.qi < X.Q.length && X.f >= X.Q[X.qi]) { X.mg = shMgNew(g, X); X.qi++; tt.sfx('ok'); }
+        if (X.f % 9 === 0 && X.f > 30 && X.f < 190) tt.sfx('cursor'); if (X.f === 190) tt.sfx('chime'); if (X.f >= 230) this.endExam(s, g); } }
+    if (S.ph === 'result' && S.rs) { if (S.rsFx !== S.rs) { S.rsFx = S.rs; S.rsF = 0; S.rsRev = 0; } S.rsF++; const R = S.rs.r, q = SH[S.rs.id];
+      if (S.rsRev && S.rsF === S.rsRev) { if (q.score) tt.sfx('chime'); else if (R.pass) { tt.sfx('fanfare'); s.burst(170, 260, 50, PW.acc, { sp: 4, star: true }); } else tt.sfx('cancel'); } }
+    if (S.ph !== 'result') S.rsFx = null; },
+  skip(s) { const S = s.S;
+    if (S.ph === 'exam' && S.ex && S.ex.mg && !S.ex.mg.res) { shMgHit(s, S.ex, S.ex.mg.pos); return true; }
+    if (S.ph === 'room' && S.rm && S.rm.f < 120) { S.rm.f = 120; return true; }
+    if (S.ph === 'moshi' && S.ms && S.ms.f < 58) { S.ms.f = 58; return true; }
+    if (S.ph === 'result' && S.rsRev && S.rsF < S.rsRev - 1) { S.rsF = S.rsRev - 1; return true; }
+    return false; },
+  key(s, g, inp) { return inp.pressed('a') ? this.skip(s) : false; },
+  tap(s, g) { this.skip(s); },
+  over(s, c, g) { const S = s.S; if (S.ph !== 'home' || S.tab !== 'find') return; SH_CAT.forEach(([k, nm, col], i) => shCatIcon(c, k, 15, 73 + i * 29, 1, col, S.cat === k ? '#ffffff' : '#0a1024')); },
+  draw(s, c, g) { const S = s.S; shBg(c, s.t); if (S.ph === 'room' && S.rm) return shDrawRoom(s, c, g); if (S.ph === 'moshi' && S.ms) return shDrawMoshi(s, c, g); if (S.ph === 'detail') return this.drawDetail(s, c, g); if (S.ph === 'exam') return this.drawExam(s, c, g); if (S.ph === 'result') return this.drawResult(s, c, g); this.drawHome(s, c, g); },
   // ---- ホーム（タブ） ----
   drawHome(s, c, g) {
     const S = s.S, St = shSt(g);
-    SH_TABS.forEach(([k, nm], i) => s.btn('tab:' + k, nm, 8 + i * 106, 34, 102, 26, { kind: S.tab === k ? 'sel' : 'norm', size: 12, badge: k === 'study' ? (shUnseen(g).length + shNowExam(g).length ? String(shUnseen(g).length + shNowExam(g).length) : '') : '' }));
+    SH_TABS.forEach(([k, nm], i) => s.btn('tab:' + k, nm, 8 + i * 88, 34, 84, 26, { kind: S.tab === k ? 'sel' : 'norm', size: 12, badge: k === 'study' ? (shUnseen(g).length + shNowExam(g).length ? String(shUnseen(g).length + shNowExam(g).length) : '') : '' }));
     s.btn('close', '閉じる', 540, 34, 92, 26, { back: true, size: 12 });
-    if (S.tab === 'find') this.tabFind(s, c, g); else if (S.tab === 'study') this.tabStudy(s, c, g); else if (S.tab === 'held') this.tabHeld(s, c, g); else if (S.tab === 'school') this.tabSchool(s, c, g); else this.tabJob(s, c, g);
+    if (S.tab === 'find') this.tabFind(s, c, g); else if (S.tab === 'study') this.tabStudy(s, c, g); else if (S.tab === 'held') this.tabHeld(s, c, g); else if (S.tab === 'school') this.tabSchool(s, c, g); else if (S.tab === 'office') shTabOffice(s, c, g); else this.tabJob(s, c, g);
     if (S.anim > 0) this.animOverlay(s, c);
   },
   pager(s, c, n, per, y) { const S = s.S, pages = Math.max(1, Math.ceil(n / per)); S.pg = Math.min(S.pg, pages - 1); if (pages > 1) { s.btn('pg:-1', '◀', 166, y, 40, 22, { size: 12, off: S.pg === 0 }); s.btn('pg:1', '▶', 592, y, 40, 22, { size: 12, off: S.pg >= pages - 1 }); pT(c, `${S.pg + 1} / ${pages}`, 399, y + 4, { size: 12, color: PW.dim, align: 'center' }); } },
@@ -39568,21 +39584,27 @@ GB_MODES.shikaku = {
     pT(c, `${SH_CAT.find(x => x[0] === S.cat)[1]}　${L.length}件`, 170, 66, { size: 12, color: PW.acc }); pT(c, '合格率', 504, 66, { size: 12, color: GB_C.t3 }); pT(c, '勉強時間の目安', 628, 66, { size: 12, color: GB_C.t3, align: 'right' });
     P.forEach((q, i) => this.qRow(s, c, g, q, 166, 82 + i * 27, 466, 27, i)); this.pager(s, c, L.length, per, 330); },
   tabStudy(s, c, g) { const S = s.S, St = shSt(g), U = shUnseen(g), now = shNowExam(g);
+    if (S.cal) { shCalView(s, c, g); s.btn('cal', 'リストにもどる', 8, 330, 150, 22, { size: 12 }); return; }
     let y = 66; if (U.length) { s.btn('rview', `合格発表が${U.length}件 出ています！ 見る`, 8, y, 624, 28, { kind: 'red', def: true, size: 16 }); y += 34; }
     const L = SH_LIST.filter(q => { const qs = St.q[q.id]; return qs && (qs.hrs > 0 || qs.app || qs.stage > 0 || Object.keys(qs.kam || {}).length) && (!St.held[q.id] || q.score); }).sort((a, b) => (now.includes(b.id) ? 1 : 0) - (now.includes(a.id) ? 1 : 0));
     if (!L.length) { pFrame(c, 8, y, 624, 80); pT(c, 'まだ勉強している資格はない。「さがす」から資格をえらんで勉強しよう。', 20, y + 12, { size: 12 }); pT(c, '勉強は1回2時間か4時間。このゲームの1日は約3日分なので、3倍ぶん進む。', 20, y + 32, { size: 12, color: PW.dim }); pT(c, `いまの学力 ${shGaku(g)}（高いほど効率がいい）・ストレスが70をこえると効率が落ちる`, 20, y + 52, { size: 12, color: PW.dim }); return; }
     const per = U.length ? 7 : 8; L.slice(S.pg * per, S.pg * per + per).forEach((q, i) => { const yy = y + i * 30, qs = St.q[q.id], r = shReady(g, q, qs), sit = shSits(g, q)[q.kam || q.score ? 0 : num(qs.stage)], p = q.score ? null : shSitP(g, q, qs, sit), on = s.fid === 'q:' + q.id;
       s.btn('q:' + q.id, '', 8, yy, 624, 28, { hide: true }); pR(c, 8, yy, 624, 28, on ? '#2a3a6a' : i % 2 ? '#141c3a' : '#18204a'); pR(c, 8, yy, 3, 28, shCatCol(q.cat));
-      pT(c, pFit(c, q.nm, 220, 12), 18, yy + 7, { size: 12 }); shBar(c, 246, yy + 9, 150, 10, r, r >= 1 ? '#5ee07a' : '#c9962a'); pT(c, `${Math.round(qs.hrs)}/${q.kam ? Math.round(q.h / q.kam.n * Math.min(q.kam.max, q.kam.n - shKamPassed(g, q, qs).length)) + Math.round(shKamPassed(g, q, qs).length * q.h / q.kam.n) : q.h}h`, 402, yy + 7, { size: 12, color: PW.dim });
+      const fg = shForgetting(g, qs); pT(c, pFit(c, q.nm, fg ? 158 : 220, 12), 18, yy + 7, { size: 12 }); if (fg) pT(c, '忘れかけ', 238, yy + 7, { size: 12, color: PW.bad, align: 'right' }); shBar(c, 246, yy + 9, 150, 10, r, r >= 1 ? '#5ee07a' : '#c9962a'); pT(c, `${Math.round(qs.hrs)}/${q.kam ? Math.round(q.h / q.kam.n * Math.min(q.kam.max, q.kam.n - shKamPassed(g, q, qs).length)) + Math.round(shKamPassed(g, q, qs).length * q.h / q.kam.n) : q.h}h`, 402, yy + 7, { size: 12, color: PW.dim });
       if (p != null) { const [j, jc] = shJudge(p); pBev(c, 470, yy + 4, 22, 20, jc); pT(c, j, 481, yy + 7, { size: 12, color: '#05070f', align: 'center', shadow: null }); } else if (qs.best) pT(c, `最高 ${qs.best}点`, 470, yy + 7, { size: 12, color: PW.cyan });
       const A = qs.app; pT(c, now.includes(q.id) ? '今月が試験！' : A ? (A.mi === 'cbt' ? 'CBT' : `${shMiLab(A.mi)} 受験`) : num(qs.stage) > 0 ? `次は${sit.stages[0][0]}` : '未申込', 626, yy + 7, { size: 12, color: now.includes(q.id) ? PW.bad : A ? PW.cyan : GB_C.t3, align: 'right' }); });
-    this.pager(s, c, L.length, per, 330); },
-  tabHeld(s, c, g) { const S = s.S, St = shSt(g), L = SH_LIST.filter(q => shHas(g, q.id)).sort((a, b) => num(St.held[a.id]) - num(St.held[b.id])), tb = num((St.q.toeic || {}).best);
-    pT(c, `取得した資格　${L.length}／${SH_LIST.length}`, 12, 66, { size: 16, color: PW.acc }); if (tb) pT(c, `TOEIC 最高 ${tb}点`, 300, 68, { size: 12, color: PW.cyan }); pT(c, `資格の仕事でかせいだ額 ${yen(num(St.earned))}`, 628, 68, { size: 12, color: PW.dim, align: 'right' });
+    s.btn('cal', '試験カレンダー', 8, 330, 150, 22, { size: 12 }); this.pager(s, c, L.length, per, 330); },
+  tabHeld(s, c, g) { const S = s.S, St = shSt(g);
+    if (S.hv) { shTitlesView(s, c, g); s.btn('hview', '証書にもどる', 8, 330, 150, 22, { size: 12 }); return; }
+    const L = SH_LIST.filter(q => shHas(g, q.id)).sort((a, b) => num(St.held[a.id]) - num(St.held[b.id])), tb = num((St.q.toeic || {}).best), stars = L.reduce((a, q) => a + shStars(q), 0), nt = isObj(St.titles) ? Object.keys(St.titles).length : 0;
+    pT(c, `取得した資格　${L.length}／${SH_LIST.length}`, 12, 66, { size: 16, color: PW.acc }); pT(c, `難易度★ ${stars}`, 240, 68, { size: 12, color: '#ffd23f' }); if (tb) pT(c, `TOEIC 最高 ${tb}点`, 340, 68, { size: 12, color: PW.cyan }); pT(c, `資格でかせいだ額 ${yen(num(St.earned) + num(St.officeSales))}`, 628, 68, { size: 12, color: PW.dim, align: 'right' });
+    s.btn('hview', `称号を見る（${nt}）`, 8, 330, 150, 22, { size: 12, kind: nt ? 'pri' : 'norm' });
     if (!L.length) { pFrame(c, 8, 92, 624, 60); pT(c, 'まだ資格を持っていない。合格すると、ここに証書がならぶ。', 20, 112, { size: 12, color: PW.dim }); return; }
-    const per = 12; L.slice(S.pg * per, S.pg * per + per).forEach((q, i) => { const x = 8 + (i % 3) * 210, y = 90 + Math.floor(i / 3) * 58, col = shCatCol(q.cat), d = St.held[q.id] != null ? shYM(g, St.held[q.id]) : null;
-      pR(c, x + 2, y + 2, 202, 52, '#000'); pR(c, x, y, 202, 52, '#f4efe0'); pR(c, x, y, 202, 10, col); pR(c, x + 4, y + 12, 194, 1, '#d8ccb0'); pT(c, pFit(c, q.nm, 186, 12), x + 8, y + 16, { size: 12, color: '#1a1408', shadow: null });
-      pT(c, d ? `${d.y}年${d.m}月 取得` : '取得', x + 8, y + 34, { size: 12, color: '#6a5a3a', shadow: null }); pCirc(c, x + 186, y + 38, 9, '#c8102e'); pT(c, '合', x + 186, y + 32, { size: 12, color: '#ffffff', align: 'center', shadow: null }); });
+    const per = 12; L.slice(S.pg * per, S.pg * per + per).forEach((q, i) => { const x = 8 + (i % 3) * 210, y = 90 + Math.floor(i / 3) * 58, col = shCatCol(q.cat), d = St.held[q.id] != null ? shYM(g, St.held[q.id]) : null, st = shStars(q);
+      pR(c, x + 2, y + 2, 202, 52, '#000'); pR(c, x, y, 202, 52, '#f4efe0'); pR(c, x, y, 202, 2, col); pR(c, x + 4, y + 6, 32, 40, col); pR(c, x + 5, y + 7, 30, 1, pShade(col, 0.35)); pR(c, x + 5, y + 44, 30, 1, pShade(col, -0.35)); shCatIcon(c, q.cat, x + 8, y + 14, 2, '#ffffff', pShade(col, -0.45));
+      pT(c, pFit(c, q.nm, 132, 12), x + 42, y + 7, { size: 12, color: '#1a1408', shadow: null }); pT(c, d ? `${d.y}年${d.m}月 取得` : '取得', x + 42, y + 22, { size: 12, color: '#6a5a3a', shadow: null });
+      for (let k = 0; k < 5; k++) { const sx = x + 44 + k * 11, sy = y + 39; pR(c, sx + 3, sy, 3, 9, k < st ? '#e0a020' : '#d8ccb0'); pR(c, sx, sy + 3, 9, 3, k < st ? '#e0a020' : '#d8ccb0'); pR(c, sx + 1, sy + 1, 7, 7, k < st ? '#f0b830' : '#e0d6be'); }
+      pCirc(c, x + 186, y + 36, 9, '#c8102e'); pT(c, '合', x + 186, y + 30, { size: 12, color: '#ffffff', align: 'center', shadow: null }); });
     this.pager(s, c, L.length, per, 330); },
   tabSchool(s, c, g) { const S = s.S, St = shSt(g), cur = Object.entries(St.edu).filter(([k, e]) => !e.done && SH_EDU[k]), done = Object.entries(St.edu).filter(([k, e]) => e.done && SH_EDU[k]);
     pFrame(c, 8, 64, 280, 290, { title: '通っている学校' });
@@ -39626,7 +39648,7 @@ GB_MODES.shikaku = {
       const r = shReady(g, q, qs); pT(c, '勉強の進み', 22, y, { size: 12, color: GB_C.t3 }); shBar(c, 112, y + 2, 180, 10, r, r >= 1 ? '#5ee07a' : '#c9962a'); pT(c, `${Math.round(r * 100)}%`, 300, y, { size: 12 }); y += 18;
       if (!q.score) { const p = shSitP(g, q, qs, sits[q.kam ? 0 : num(qs.stage)]), [j, jc] = shJudge(p); pT(c, '合格の見込み', 22, y, { size: 12, color: GB_C.t3 }); pBev(c, 112, y - 2, 22, 18, jc); pT(c, j, 123, y, { size: 12, color: '#05070f', align: 'center', shadow: null }); pT(c, `判定（約${Math.round(p * 100)}%）　学力${shGaku(g)}`, 140, y, { size: 12, color: PW.dim }); y += 18; }
       else if (qs.best) { row(y, '最高スコア', `${qs.best}点`, PW.cyan); y += 18; }
-      const methods = [qs.text && 'テキスト', qs.tsushin && '通信講座', qs.yobiko && '予備校'].filter(Boolean); if (methods.length) { row(y, '勉強の方法', methods.join('・')); y += 18; }
+      const methods = [qs.text && 'テキスト', qs.kakomon && '過去問', qs.tsushin && '通信講座', qs.yobiko && '予備校'].filter(Boolean); if (methods.length) { row(y, '勉強の方法', methods.join('・')); y += 18; } if (qs.moshiN && y < 316) { row(y, '模試', `${qs.moshiN}回・最高偏差値 ${num(qs.devBest).toFixed(1)}`, PW.cyan); y += 18; }
       if (held) { pT(c, `${q.score ? '' : '取得ずみ'}`, 22, y, { size: 16, color: PW.good }); }
       const jobs = SH_JOB.filter(j2 => Array.isArray(j2.need) && j2.need.includes(q.id)); if (jobs.length && y < 330) pT(c, pFit(c, `できる仕事：${jobs.map(j2 => j2.nm).join('・')}`, 350, 12), 22, 334, { size: 12, color: '#c8b8ff' });
     }
@@ -39634,22 +39656,31 @@ GB_MODES.shikaku = {
     pFrame(c, 388, 34, 244, 320, { title: '行動' });
     const left = this.left(s, g); pT(c, `今日のこり ${Math.floor(left / 60)}時間${left % 60 ? left % 60 + '分' : ''}`, 400, 58, { size: 12, color: PW.dim });
     if (q.via) { s.btn(q.via === 'course' ? 'toSchool' : 'back', q.via === 'course' ? '学校のページへ' : 'もどる', 398, 84, 224, 34, { kind: 'pri', def: true, size: 12 }); s.btn('back', 'もどる', 398, 312, 224, 32, { back: true, size: 12 }); return; }
-    const can = !held || q.score;
-    s.btn('st2', '2時間 勉強', 398, 78, 110, 32, { kind: 'blue', size: 12, off: !can || left < 120, def: can && !qs.app }); s.btn('st4', '4時間 勉強', 512, 78, 110, 32, { kind: 'blue', size: 12, off: !can || left < 240 });
-    [['text', 'テキスト'], ['tsushin', '通信講座'], ['yobiko', '予備校']].forEach(([k, nm], i) => s.btn('buy:' + k, `${nm}\n${qs[k] ? '済み' : yen(this.price(q, k))}`, 398 + i * 76, 116, 72, 36, { size: 12, off: !!qs[k] || !can }));
+    const can = !held || q.score, E3 = shEff(g, qs), n = shStreak(g);
+    s.btn('st2', '2時間 勉強', 398, 76, 110, 30, { kind: 'blue', size: 12, off: !can || left < 120, def: can && !qs.app }); s.btn('st4', '4時間 勉強', 512, 76, 110, 30, { kind: 'blue', size: 12, off: !can || left < 240 });
+    [['text', 'テキスト'], ['kakomon', '過去問集'], ['tsushin', '通信講座'], ['yobiko', '予備校']].forEach(([k, nm], i) => s.btn('buy:' + k, `${nm}\n${qs[k] ? '済み' : yen(this.price(q, k))}`, 398 + (i % 2) * 114, 110 + Math.floor(i / 2) * 36, 110, 33, { size: 12, off: !!qs[k] || !can }));
+    const mDone = qs.moshiMi === cur.mi; s.btn('moshi', mDone ? '模試（今月は受けた）' : `模試を受ける（3時間・${yen(shMoshiFee(q))}）`, 398, 184, 224, 26, { size: 12, kind: 'green', off: !can || !shMoshiOk(q) || mDone || left < 180 });
     const A = qs.app, sit = sits[q.kam || q.score ? 0 : num(qs.stage)], nmi = shNextMi(g, sit.mon);
-    if (A && (A.mi === cur.mi || A.mi === 'cbt')) s.btn('take', '受験する（3時間）', 398, 166, 224, 40, { kind: 'red', def: true, size: 16 });
-    else if (A) { pFrame(c, 398, 166, 224, 40, { bg: '#0a1430' }); pT(c, `${shMiLab(A.mi)}に受験`, 510, 172, { size: 12, color: PW.cyan, align: 'center' }); pT(c, `（${sit.stages.map(x => x[0]).join('＋')}）`, 510, 188, { size: 12, color: PW.dim, align: 'center' }); }
-    else if (can) { const fee = num(qs.stage) > 0 && !q.kam ? 0 : q.fee; s.btn('apply', nmi === 'cbt' ? `受験する（CBT・${yen(fee)}）` : nmi != null ? `申し込む（${shMiLab(nmi)}・${fee ? yen(fee) : '無料'}）` : '試験の予定がない', 398, 166, 224, 40, { kind: 'pri', size: 12, off: nmi == null || !shReqOk(g, q.req) || !shAvail(g, q) }); }
-    if (num(qs.stage) > 0 && sits.length > 1) pT(c, `次は「${sit.stages.map(x => x[0]).join('＋')}」（${q.keepM ? Math.round(q.keepM / 12 * 10) / 10 + '年以内' : '次の回'}）`, 400, 212, { size: 12, color: PW.cyan });
-    pT(c, '勉強は3倍ぶん進む（1日＝約3日）', 400, 236, { size: 12, color: GB_C.t3 }); pT(c, `効率：学力${shGaku(g)}${shStress(g) > 70 ? '・ストレスで低下中' : ''}`, 400, 252, { size: 12, color: GB_C.t3 });
-    pT(c, `受験回数 ${num(qs.tries)}回${qs.absent ? `・欠席 ${qs.absent}回` : ''}`, 400, 268, { size: 12, color: GB_C.t3 });
+    if (A && (A.mi === cur.mi || A.mi === 'cbt')) s.btn('take', '受験する（3時間）', 398, 216, 224, 36, { kind: 'red', def: true, size: 16 });
+    else if (A) { pFrame(c, 398, 216, 224, 36, { bg: '#0a1430' }); pT(c, `${shMiLab(A.mi)}に受験${A.no ? `（${A.no}番）` : ''}`, 510, 220, { size: 12, color: PW.cyan, align: 'center' }); pT(c, pFit(c, `${A.hall ? A.hall + '・' : ''}${sit.stages.map(x => x[0]).join('＋')}`, 210, 12), 510, 236, { size: 12, color: PW.dim, align: 'center' }); }
+    else if (can) { const fee = num(qs.stage) > 0 && !q.kam ? 0 : q.fee; s.btn('apply', nmi === 'cbt' ? `受験する（CBT・${yen(fee)}）` : nmi != null ? `申し込む（${shMiLab(nmi)}・${fee ? yen(fee) : '無料'}）` : '試験の予定がない', 398, 216, 224, 36, { kind: 'pri', size: 12, off: nmi == null || !shReqOk(g, q.req) || !shAvail(g, q) }); }
+    let iy = 258; const info = (t, col) => { pT(c, pFit(c, t, 222, 12), 400, iy, { size: 12, color: col || GB_C.t3 }); iy += 16; };
+    if (num(qs.stage) > 0 && sits.length > 1) info(`次は「${sit.stages.map(x => x[0]).join('＋')}」（${q.keepM ? Math.round(q.keepM / 12 * 10) / 10 + '年以内' : '次の回'}）`, PW.cyan); else info('勉強は3倍ぶん進む（1日＝約3日）');
+    info(`効率 ×${E3.all.toFixed(2)}・連続${n}日${n > 1 ? `（+${Math.round(shStreakBonus(n) * 100)}%）` : ''}${shStress(g) > 70 ? '・ストレス' : ''}`, n >= 7 ? PW.acc : GB_C.t3);
+    info(`受験回数 ${num(qs.tries)}回${qs.absent ? `・欠席 ${qs.absent}回` : ''}${shForgetting(g, qs) ? '・忘れかけ！' : ''}`, shForgetting(g, qs) ? PW.bad : GB_C.t3);
     s.btn('back', 'もどる', 398, 312, 224, 32, { back: true, size: 12 });
     if (S.anim > 0) this.animOverlay(s, c);
   },
   // ---- 試験会場 ----
   drawExam(s, c, g) {
-    const S = s.S, X = S.ex, q = SH[X.id], f = X.f, sit = shSits(g, q)[X.sit];
+    const S = s.S, X = S.ex, q = SH[X.id], f = X.f, sit = shSits(g, q)[X.sit], prog = clamp((f - 30) / 160, 0, 1);
+    if (X.kind === 'oral') shDrawOral(s, c, g, X, q, f); else if (X.kind === 'prac') shDrawPrac(s, c, g, X, q, f); else if (X.kind === 'draw') shDrawDraft(s, c, g, X, q, f); else this.drawPaper(s, c, g, X, q, f, sit);
+    const K = { oral: ['では、はじめます', `質問 ${Math.max(1, Math.min(10, Math.ceil(prog * 10)))}／10`, 'これで終わります。おつかれさまでした'], prac: ['作業をはじめてください', `作業中…　${Math.round(prog * 100)}%`, 'やめてください。工具を置いて'], draw: ['製図をはじめてください', `製図中…　${Math.round(prog * 100)}%`, 'そこまで！ 鉛筆を置いてください'], paper: ['はじめてください', `解答中…　問 ${Math.max(1, Math.round(prog * 50))}／50`, 'そこまで！ 筆記用具を置いてください'] }[X.kind] || [];
+    const msg = f < 30 ? K[0] : f < 190 ? (X.mg ? '難問だ…！' : K[1]) : K[2]; pFrame(c, 8, 322, 624, 32); pT(c, msg, 320, 330, { size: 16, align: 'center', color: f >= 190 ? PW.acc : X.mg ? PW.bad : PW.text });
+    if (X.no) pT(c, `受験番号 ${X.no}`, 620, 333, { size: 12, color: GB_C.t3, align: 'right' }); if (X.hits && X.hits.length) X.hits.forEach((b, i) => { pBev(c, 18 + i * 18, 330, 14, 14, b > 0.02 ? '#3aa05a' : b > 0 ? '#c9962a' : b < 0 ? '#c83040' : '#4a4a5a'); });
+    shDrawMg(s, c, X);
+  },
+  drawPaper(s, c, g, X, q, f, sit) {
     pR(c, 0, 30, 640, 330, '#d8ccb0'); pR(c, 0, 30, 640, 110, '#e8e0c8'); pR(c, 0, 138, 640, 3, '#b8a888');
     pR(c, 170, 46, 300, 70, '#2a4a3a'); pR(c, 168, 44, 304, 2, '#8a6a3a'); pT(c, X.cbt ? 'CBT試験会場' : '試験会場', 320, 52, { size: 12, color: '#e8f0e0', align: 'center', shadow: null }); pT(c, pFit(c, q.nm, 280, 16), 320, 70, { size: 16, color: '#ffffff', align: 'center', shadow: null }); pT(c, sit.stages.map(x => x[0]).join('・'), 320, 94, { size: 12, color: '#c8e0c8', align: 'center', shadow: null });
     const cx = 560, cy = 76; pCirc(c, cx, cy, 22, '#2a2a30'); pCirc(c, cx, cy, 20, '#ffffff'); const a = -Math.PI / 2 + f / 230 * Math.PI * 2, a2 = -Math.PI / 2 + f / 230 * Math.PI / 6 + 0.4; pLine(c, cx, cy, cx + Math.cos(a) * 16, cy + Math.sin(a) * 16, '#1a1a1a'); pLine(c, cx, cy, cx + Math.cos(a2) * 10, cy + Math.sin(a2) * 10, '#c8102e');
@@ -39662,32 +39693,430 @@ GB_MODES.shikaku = {
     const prog = clamp((f - 30) / 160, 0, 1), marks = Math.floor(prog * 24); for (let i = 0; i < 24; i++) { const xx = mx + 36 + (i % 8) * 12, yy = my + 10 + Math.floor(i / 8) * 7; pR(c, xx, yy, 8, 4, i < marks ? '#1a1a1a' : '#d8d8e0'); }
     const px = mx + 36 + (marks % 8) * 12, py = my + 10 + Math.floor(marks / 8) * 7 - 12; if (f > 30 && f < 190) { pR(c, px + 4, py, 3, 14, '#e8a830'); pR(c, px + 4, py + 14, 3, 2, '#1a1a1a'); }
     pR(c, mx + 70, my - 22, 28, 22, '#2a3a6a'); pCirc(c, mx + 84, my - 28, 10, '#f0c8a0'); pR(c, mx + 74, my - 39, 20, 6, '#2a1a10');
-    const p = q.score ? 0.6 : shSitP(g, q, shQs(shSt(g), q.id), sit); if (f > 40 && f < 185 && f % 40 < 22) { const know = ((f / 40 | 0) * 37 % 100) / 100 < p; pR(c, mx + 100, my - 70, 40, 26, '#ffffff'); pR(c, mx + 96, my - 46, 6, 4, '#ffffff'); pT(c, know ? '！' : '？', mx + 120, my - 66, { size: 16, color: know ? '#2a8a3a' : '#c8302a', align: 'center', shadow: null }); }
-    const msg = f < 30 ? 'はじめてください' : f < 190 ? `解答中…　問 ${Math.max(1, Math.round(prog * 50))}／50` : 'そこまで！ 筆記用具を置いてください'; pFrame(c, 8, 322, 624, 32); pT(c, msg, 320, 330, { size: 16, align: 'center', color: f >= 190 ? PW.acc : PW.text });
+    const p = q.score ? 0.6 : shSitP(g, q, shQs(shSt(g), q.id), sit); if (!X.mg && f > 40 && f < 185 && f % 40 < 22) { const know = ((f / 40 | 0) * 37 % 100) / 100 < p; pR(c, mx + 100, my - 70, 40, 26, '#ffffff'); pR(c, mx + 96, my - 46, 6, 4, '#ffffff'); pT(c, know ? '！' : '？', mx + 120, my - 66, { size: 16, color: know ? '#2a8a3a' : '#c8302a', align: 'center', shadow: null }); }
   },
   // ---- 合格発表 ----
   drawResult(s, c, g) {
-    const S = s.S, P = S.rs, q = SH[P.id], R = P.r, me = 1000 + ((P.mi * 37 + P.id.length * 101) % 8000), name = (g.state.profile && g.state.profile.name) || 'あなた';
-    if (q.score) { pFrame(c, 120, 50, 400, 250, { bg: '#f4f8ff', title: 'スコアレポート' }); pT(c, q.nm, 320, 80, { size: 16, color: '#1a2a5a', align: 'center', shadow: null }); pT(c, `${R.score}`, 320, 110, { size: 32, color: '#c8102e', align: 'center', shadow: null }); pT(c, '／990', 390, 126, { size: 12, color: '#5a5a6a', shadow: null });
-      pT(c, `Listening ${R.L}　Reading ${R.R}`, 320, 160, { size: 16, color: '#1a2a5a', align: 'center', shadow: null }); const lv = R.score >= 860 ? 'A' : R.score >= 730 ? 'B' : R.score >= 470 ? 'C' : R.score >= 220 ? 'D' : 'E'; pT(c, `レベル ${lv}${R.score >= 900 ? '（翻訳の仕事ができる）' : ''}`, 320, 190, { size: 12, color: '#3a4a7a', align: 'center', shadow: null });
-      shBar(c, 170, 220, 300, 12, R.score / 990, '#2a6ad0'); s.btn('rback', 'もどる', 260, 260, 120, 30, { kind: 'pri', def: true, size: 12 }); return; }
-    // 掲示板
-    pR(c, 20, 40, 300, 280, '#3a2a1a'); pR(c, 26, 46, 288, 268, '#f4efe0'); pT(c, '合格者 受験番号', 170, 52, { size: 16, color: '#1a1408', align: 'center', shadow: null }); pT(c, pFit(c, q.nm, 270, 12), 170, 72, { size: 12, color: '#5a4a3a', align: 'center', shadow: null });
-    const nums = []; for (let i = 0; i < 40; i++) { const n = me - 60 + i * 3 + (i % 3); if (Math.abs(n - me) < 2 && n !== me) continue; if (((n * 7) % 10) < 4) nums.push(n); } if (R.pass && !nums.includes(me)) nums.push(me); nums.sort((a, b) => a - b);
-    nums.slice(0, 30).forEach((n, i) => { const x = 46 + (i % 5) * 54, y = 94 + Math.floor(i / 5) * 24, mine = n === me; if (mine && S.f % 20 < 12) pR(c, x - 4, y - 2, 46, 20, '#ffd23f'); pT(c, String(n), x, y, { size: 12, color: mine ? '#c8102e' : '#1a1408', shadow: null }); });
-    pT(c, `あなたの番号：${me}`, 170, 250, { size: 16, color: '#1a1408', align: 'center', shadow: null }); pT(c, R.pass ? 'あった…！' : '…ない。', 170, 276, { size: 16, color: R.pass ? '#c8102e' : '#5a5a6a', align: 'center', shadow: null });
+    const S = s.S, P = S.rs, q = SH[P.id], R = P.r, me = P.no || (1000 + ((P.mi * 37 + P.id.length * 101) % 8000)), name = (g.state.profile && g.state.profile.name) || 'あなた', F = num(S.rsF);
+    if (q.score) { S.rsRev = 70; const k = gbEase(clamp(F / 60, 0, 1)), sc = Math.round(R.score * k / 5) * 5, rev = F >= 70;
+      pFrame(c, 120, 50, 400, 250, { bg: '#f4f8ff', title: 'スコアレポート' }); pT(c, q.nm, 320, 80, { size: 16, color: '#1a2a5a', align: 'center', shadow: null }); pT(c, `${sc}`, 320, 110, { size: 32, color: '#c8102e', align: 'center', shadow: null }); pT(c, '／990', 390, 126, { size: 12, color: '#5a5a6a', shadow: null });
+      shBar(c, 170, 220, 300, 12, sc / 990, '#2a6ad0');
+      if (rev) { pT(c, `Listening ${R.L}　Reading ${R.R}`, 320, 160, { size: 16, color: '#1a2a5a', align: 'center', shadow: null }); const lv = R.score >= 860 ? 'A' : R.score >= 730 ? 'B' : R.score >= 470 ? 'C' : R.score >= 220 ? 'D' : 'E'; 
+        pT(c, `レベル ${lv}${R.score >= 900 ? '（翻訳の仕事ができる）' : ''}`, 320, 190, { size: 12, color: '#3a4a7a', align: 'center', shadow: null }); s.btn('rback', shUnseen(g).length ? '次の発表へ' : 'もどる', 260, 260, 120, 30, { kind: 'pri', def: true, size: 12 }); }
+      else pT(c, '採点中…', 320, 166, { size: 16, color: '#5a6a8a', align: 'center', shadow: null });
+      return; }
+    // 掲示板（番号が順に出てきて、自分の番号をさがす）
+    pR(c, 20, 40, 300, 280, '#3a2a1a'); pR(c, 26, 46, 288, 268, '#f4efe0'); for (let i = 0; i < 4; i++) pR(c, 26 + (i * 97) % 280, 46, 1, 268, 'rgba(160,140,100,0.15)'); pCirc(c, 34, 54, 3, '#c83040'); pCirc(c, 306, 54, 3, '#c83040');
+    pT(c, '合格者 受験番号', 170, 52, { size: 16, color: '#1a1408', align: 'center', shadow: null }); pT(c, pFit(c, q.nm, 270, 12), 170, 72, { size: 12, color: '#5a4a3a', align: 'center', shadow: null });
+    let nums = []; for (let i = 0; i < 40; i++) { const n = me - 60 + i * 3 + (i % 3); if (Math.abs(n - me) < 2 && n !== me) continue; if (((n * 7) % 10) < 4) nums.push(n); } nums = nums.filter(n => n !== me); if (R.pass) nums.push(me); nums.sort((a, b) => a - b);
+    if (nums.length > 30) { const k = R.pass ? nums.indexOf(me) : 15, st = clamp(k - 15, 0, nums.length - 30); nums = nums.slice(st, st + 30); }
+    S.rsRev = nums.length * 2 + 36; const nShow = Math.min(nums.length, Math.floor(F / 2)), rev = F >= S.rsRev;
+    nums.slice(0, nShow).forEach((n, i) => { const x = 46 + (i % 5) * 54, y = 94 + Math.floor(i / 5) * 24, mine = rev && n === me; if (mine && S.f % 20 < 12) pR(c, x - 4, y - 2, 46, 20, '#ffd23f'); pT(c, String(n), x, y, { size: 12, color: mine ? '#c8102e' : '#1a1408', shadow: null }); });
+    if (!rev) { const i = Math.max(0, nShow - 1), x = 46 + (i % 5) * 54 + 38, y = 94 + Math.floor(i / 5) * 24 + 2 + (S.f % 16 < 8 ? 0 : 1); pR(c, x, y + 3, 10, 6, '#f0c8a0'); pR(c, x - 6, y + 4, 7, 3, '#f0c8a0'); pR(c, x + 2, y + 9, 8, 3, '#3a5a9a'); }
+    pT(c, `あなたの番号：${me}`, 170, 250, { size: 16, color: '#1a1408', align: 'center', shadow: null });
+    if (rev) { pT(c, R.pass ? 'あった…！' : '…ない。', 170, 276, { size: 16, color: R.pass ? '#c8102e' : '#5a5a6a', align: 'center', shadow: null }); if (R.pass) { const a = clamp((F - S.rsRev) / 8, 0, 1); c.save(); c.globalAlpha = a; pRing(c, 268, 270, 18, '#c8102e'); pRing(c, 268, 270, 17, '#c8102e'); pT(c, '合格', 268, 263, { size: 12, color: '#c8102e', align: 'center', shadow: null }); c.restore(); } }
+    else pT(c, 'さがしている' + '・'.repeat(1 + (Math.floor(F / 8) % 3)), 170, 276, { size: 16, color: '#5a4a3a', align: 'center', shadow: null });
     // 右：結果の内訳
     pFrame(c, 330, 40, 302, 280, { title: '結果' });
+    if (!rev) { pT(c, 'ドキドキ…', 481, 150, { size: 16, color: PW.dim, align: 'center' }); pT(c, 'Zキー／タップで とばす', 481, 290, { size: 12, color: GB_C.t3, align: 'center' }); return; }
     let y = 66; if (R.subj) { pT(c, '科目別の結果', 342, y, { size: 12, color: PW.dim }); y += 18; R.subj.forEach(x => { pT(c, x.nm, 342, y, { size: 12 }); pT(c, x.pass ? '合格' : '不合格', 486, y, { size: 12, color: x.pass ? PW.good : PW.bad }); pT(c, `${x.score}点`, 620, y, { size: 12, color: PW.dim, align: 'right' }); y += 18; }); const qs = shQs(shSt(g), q.id); y += 6; pT(c, `合格科目 ${shKamPassed(g, q, qs).length}／${q.kam.n}`, 342, y, { size: 16, color: PW.acc }); y += 24; }
     else (R.stages || []).forEach(x => { pT(c, x.nm, 342, y, { size: 12 }); pT(c, x.skip ? '—' : x.pass ? '合格' : '不合格', 452, y, { size: 12, color: x.skip ? GB_C.t3 : x.pass ? PW.good : PW.bad }); if (!x.skip) pT(c, `${x.score}点（合格60）`, 620, y, { size: 12, color: PW.dim, align: 'right' }); y += 20; });
+    if (P.bonus) { pT(c, `本番の難問：${P.bonus > 0 ? '+' : ''}${Math.round(P.bonus * 100)}%`, 620, y - 2, { size: 12, color: P.bonus > 0 ? PW.good : PW.bad, align: 'right' }); y += 14; }
     const fin = shHas(g, q.id), sits = shSits(g, q), more = R.pass && !fin && !q.kam && P.sit + 1 < sits.length;
-    if (fin && R.pass) { pR(c, 346, y + 6, 270, 96, '#f4efe0'); pR(c, 350, y + 10, 262, 88, '#fffaf0'); pR(c, 350, y + 10, 262, 2, '#c9962a'); pT(c, q.kam || q.st ? '合格証書' : '合格証書', 481, y + 16, { size: 16, color: '#1a1408', align: 'center', shadow: null }); pT(c, pFit(c, `${name} 殿`, 240, 12), 481, y + 40, { size: 12, color: '#1a1408', align: 'center', shadow: null }); pT(c, pFit(c, `${q.nm}に合格したことを証する`, 250, 12), 481, y + 58, { size: 12, color: '#3a3020', align: 'center', shadow: null }); pCirc(c, 590, y + 82, 10, '#c8102e'); pT(c, '印', 590, y + 76, { size: 12, color: '#ffffff', align: 'center', shadow: null }); }
+    if (fin && R.pass) { pR(c, 346, y + 6, 270, 96, '#f4efe0'); pR(c, 350, y + 10, 262, 88, '#fffaf0'); pR(c, 350, y + 10, 262, 2, '#c9962a'); pR(c, 350, y + 96, 262, 2, '#c9962a'); pT(c, '合格証書', 481, y + 16, { size: 16, color: '#1a1408', align: 'center', shadow: null }); pT(c, pFit(c, `${name} 殿`, 240, 12), 481, y + 40, { size: 12, color: '#1a1408', align: 'center', shadow: null }); pT(c, pFit(c, `${q.nm}に`, 250, 12), 481, y + 56, { size: 12, color: '#3a3020', align: 'center', shadow: null }); pT(c, '合格したことを証する', 481, y + 72, { size: 12, color: '#3a3020', align: 'center', shadow: null }); pCirc(c, 590, y + 82, 10, '#c8102e'); pT(c, '印', 590, y + 76, { size: 12, color: '#ffffff', align: 'center', shadow: null }); }
     else if (more) pT(c, `次は「${sits[P.sit + 1].stages.map(x => x[0]).join('＋')}」！ 申し込もう`, 342, y + 10, { size: 12, color: PW.cyan });
     else if (!R.pass) pT(c, 'また来年、挑戦しよう…', 342, y + 10, { size: 12, color: PW.dim });
     s.btn('rback', shUnseen(g).length ? '次の発表へ' : 'もどる', 410, 284, 140, 30, { kind: 'pri', def: true, size: 12 });
   },
 };
 
+
+// ===== 資格アプリの追加（しくみ）：連続学習・忘却・過去問・勉強部屋・模試・本番の難問・事務所の開業・称号 =====
+// ---- 出題の範囲（模試の成績表と本番の難問に使う） ----
+const SH_AREA = { law: ['憲法', '民法', '行政法', '商法・会社法', '一般知識'], acct: ['簿記', '財務会計', '管理会計', '関係法規', '計算問題'], estate: ['権利関係', '法令上の制限', '業法', '税・その他', '計算'],
+  med: ['基礎医学', '臨床', '公衆衛生', '関係法規', '必修問題'], it: ['テクノロジ', 'マネジメント', 'ストラテジ', 'セキュリティ', '午後の記述'], tech: ['理論', '法規', '機械・装置', '安全管理', '計算'],
+  trans: ['法令', '構造・装置', '安全運転', '運航の知識', '気象・地理'], lang: ['語い', '読解', 'リスニング', '作文', '文化・知識'], life: ['基礎知識', '衛生・安全', '関係法規', '実技の知識', '応用'],
+  eiken: ['語い', '読解', 'リスニング', '英作文', '面接'], kanken: ['読み', '書き取り', '部首', '四字熟語', '送りがな'], suken: ['計算', '方程式', '図形', '関数', '統計'] };
+const SH_AREA_ID = { takken: ['権利関係', '宅建業法', '法令上の制限', '税・その他'], shiho: ['憲法', '民法', '刑法', '商法', '民事訴訟法', '刑事訴訟法'], yobi: ['憲法', '民法', '刑法', '商法', '民事訴訟法', '一般教養'],
+  gyosei: ['憲法', '民法', '行政法', '商法', '一般知識'], boki1: ['商業簿記', '会計学', '工業簿記', '原価計算'], boki2: ['仕訳', '決算整理', '工業簿記', '連結会計'], kaikei: ['財務会計論', '管理会計論', '監査論', '企業法', '租税法'],
+  denken3: ['理論', '電力', '機械', '法規'], denken2: ['理論', '電力', '機械', '法規'], denken1: ['理論', '電力', '機械', '法規'], fe: ['テクノロジ', 'マネジメント', 'ストラテジ', 'アルゴリズム', 'セキュリティ'] };
+function shAreas(q) { return SH_AREA_ID[q.id] || (q.kam ? q.kam.list.slice(0, 5) : q.grp ? SH_AREA[q.grp] : SH_AREA[q.cat] || SH_AREA.life); }
+function shRate(q) { return q.st ? Math.max(1, Math.round(q.st.reduce((a, x) => a * x[1] / 100, 1) * 100)) : q.kam ? q.kam.rate : num(q.rate); }
+function shStars(q) { const h = num(q.h), base = h >= 3000 ? 5 : h >= 1000 ? 4 : h >= 300 ? 3 : h >= 80 ? 2 : 1; return q.via === 'course' ? (q.cat === 'med' ? 4 : 3) : q.via === 'base' ? 2 : Math.min(5, base + (!q.score && shRate(q) <= 10 ? 1 : 0)); }
+// ---- 連続学習・効率 ----
+function shStreak(g) { const k = shSt(g).streak || {}; return g.state.day - num(k.last, -99) <= 1 ? num(k.n) : 0; }
+function shStreakHit(g) { const S = shSt(g), d = g.state.day, k = S.streak || (S.streak = { last: -99, n: 0, best: 0 }); if (k.last === d) return k.n; k.n = k.last === d - 1 ? k.n + 1 : 1; k.last = d; k.best = Math.max(num(k.best), k.n); return k.n; }
+const shStreakBonus = n => Math.min(0.2, Math.max(0, n - 1) * 0.02);
+function shMeth(qs) { return Math.min(2.2, (qs.text ? 1.1 : 1) * (qs.kakomon ? 1.15 : 1) * (qs.tsushin ? 1.3 : 1) * (qs.yobiko ? 1.6 : 1)); }
+function shEff(g, qs, n) { const gk = 0.7 + shGaku(g) * 0.006, m = shMeth(qs), sk = 1 + shStreakBonus(n == null ? shStreak(g) : n), st = shStress(g) > 70 ? 0.7 : 1; return { gk, m, sk, st, all: gk * m * sk * st }; }
+// ---- 忘却（30日以上勉強しないと少しずつ忘れる。いちばん進んだときの6割より下にはならない） ----
+function shKamUsed(g, q, qs) { return q.kam ? shKamPassed(g, q, qs).length * q.h / q.kam.n : 0; }
+function shForgetting(g, qs) { return !!qs && qs.last != null && g.state.day - qs.last > 30; }
+function shForget(g) { const S = shSt(g), d = g.state.day;
+  for (const [id, qs] of Object.entries(S.q)) { const q = SH[id]; if (!q || !(qs.hrs > 0) || (S.held[id] && !q.score)) continue; if (qs.last == null) { qs.last = d; qs.peak = Math.max(num(qs.peak), qs.hrs); continue; }
+    if (d - qs.last > 30) { const used = shKamUsed(g, q, qs), pk = Math.max(num(qs.peak), qs.hrs), fl = used + (pk - used) * 0.6; if (qs.hrs > fl) qs.hrs = Math.max(fl, qs.hrs - (qs.hrs - used) * 0.006); } } }
+// ---- 勉強（勉強部屋の場面へ） ----
+function shStudyEv(night, st) { const u = Math.random();
+  if (night && u < 0.3) return { t: 'ねむい…（効率ダウン）', k: 0.75, ic: 'z' }; if (u < 0.12) return { t: '集中できた！（効率アップ）', k: 1.25, ic: '!' }; if (u < 0.2) return { t: 'ひらめいた！ 苦手なところが分かった', k: 1.15, ic: '*' };
+  if (u < 0.27) return { t: 'ついスマホを見てしまった…', k: 0.85, ic: 'p' }; if (st > 60 && u < 0.4) return { t: '気分転換にストレッチ（ストレスが少なめ）', k: 1, st: 0.4, ic: 's' }; return { t: '', k: 1, ic: '' }; }
+function shStudy(s, g, hr) {
+  const S = s.S, St = shSt(g), q = SH[S.sel], M = GB_MODES.shikaku; if (!q) return; const qs = shQs(St, q.id);
+  if (M.left(s, g) < hr * 60) { s.tip('今日はもう時間がない（日付が変わる）', PW.bad); return; }
+  const m0 = num(g.state.clock && g.state.clock.min, 600) + s.mins, mm = m0 % 1440, night = mm >= 22 * 60 || mm < 5 * 60;
+  const n = shStreakHit(g), E2 = shEff(g, qs, n), ev = shStudyEv(night, shStress(g)), r0 = shReady(g, q, qs), add = hr * 3 * E2.all * ev.k;
+  qs.hrs += add; qs.last = g.state.day; qs.peak = Math.max(num(qs.peak), qs.hrs); s.mins += hr * 60; St.studyH = num(St.studyH) + hr;
+  try { g.addNeed('stress', hr * 1.5 * (ev.st || 1)); } catch (e) { }
+  S.rm = { id: q.id, hr, add, r0, r1: shReady(g, q, qs), f: 0, m0, n, E: E2, ev }; S.ph = 'room'; s.tst = null; tt.sfx('cursor');
+}
+// ---- 模試（月1回。成績表が出て、復習で少し力がつく） ----
+const shMoshiFee = q => clamp(Math.round(num(q.fee) * 0.5 / 500) * 500, 2000, 8000);
+const shMoshiOk = q => !q.via && num(q.h) >= 40;
+function shNorm(z) { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2), p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; }
+function shMoshiCalc(g, q, qs) {
+  const sit = shSits(g, q)[q.kam || q.score ? 0 : num(qs.stage)], ms = { id: q.id, f: 0, n: num(qs.moshiN) + 1 };
+  if (q.score) { const re = Math.min(1.35, shReady(g, q, qs) * (0.85 + shGaku(g) * 0.003)); ms.score = Math.round(clamp(10 + 900 * Math.sqrt(re / 1.35) + gbGauss() * 25, 10, 990) / 5) * 5; const L = clamp(Math.round(ms.score * (0.5 + gbGauss() * 0.03) / 5) * 5, 5, 495); ms.areas = [['Listening', L, 495], ['Reading', ms.score - L, 495]]; return ms; }
+  let areas = shAreas(q); if (q.kam) { const pas = shKamPassed(g, q, qs); areas = q.kam.list.filter(k => !pas.includes(k)).slice(0, Math.min(5, q.kam.max + 2)); }
+  const p = shSitP(g, q, qs, sit); ms.p = p; ms.sc = clamp(Math.round(60 + (p - 0.5) * 50 + gbGauss() * 4), 5, 100); ms.dev = clamp(Math.round((50 + (p - 0.4) * 35 + gbGauss() * 2) * 10) / 10, 25, 80);
+  ms.N = 1500 + Math.floor(Math.random() * 90) * 100; ms.rank = Math.max(1, Math.round(ms.N * (1 - shNorm((ms.dev - 50) / 10)))); ms.areas = areas.map(a => [a, clamp(Math.round(ms.sc + gbGauss() * 11), 5, 100), 100]);
+  ms.weak = ms.areas.reduce((a, b) => b[1] < a[1] ? b : a)[0]; return ms; }
+function shMoshi(s, g) {
+  const S = s.S, St = shSt(g), q = SH[S.sel], M = GB_MODES.shikaku; if (!q || !shMoshiOk(q)) return; const qs = shQs(St, q.id), cur = shYM(g);
+  if (qs.moshiMi === cur.mi) { s.tip('模試は月に1回まで', PW.dim); return; } if (M.left(s, g) < 180) { s.tip('今日はもう時間がない', PW.bad); return; }
+  const fee = shMoshiFee(q); if (!s.pay(fee)) return;
+  const ms = shMoshiCalc(g, q, qs); qs.moshiN = ms.n; qs.moshiMi = cur.mi; qs.moshiDay = g.state.day; s.mins += 180; try { g.addNeed('stress', 3); } catch (e) { }
+  if (ms.dev) qs.devBest = Math.max(num(qs.devBest), ms.dev); ms.plus = Math.min(q.h * 0.02, 20); qs.hrs += ms.plus; qs.last = g.state.day; qs.peak = Math.max(num(qs.peak), qs.hrs); ms.fee = fee;
+  S.ms = ms; S.ph = 'moshi'; tt.sfx('chime');
+}
+// ---- 本番の難問（ボタンで止める集中ゲーム。合格の見込みが少し上下する） ----
+function shExamKind(sit) { const nm = sit.stages.map(x => x[0]).join(''); if (/口述|面接|口頭/.test(nm) && !/筆記|学科|短答|論文/.test(nm)) return 'oral'; if (/製図/.test(nm)) return 'draw'; if (/実技|技能/.test(nm) && !/学科|筆記/.test(nm)) return 'prac'; return 'paper'; }
+const SH_PRAC = { tech: ['電線の被覆をむく', 'ランプレセプタクルを結線', 'リングスリーブで圧着', '器具を取りつける'], life: ['野菜を切る', '火加減を見る', '盛りつける', '仕上げ'], med: ['器具を準備', '手順どおり施術', '安全を確認', '記録をつける'], it: ['画面を設計', 'コードを書く', '動作を確認', '仕上げ'] };
+function shMgNew(g, X) {
+  const St = shSt(g), q = SH[X.id], qs = shQs(St, q.id), r = Math.min(1.2, shReady(g, q, qs)), mo = qs.moshiDay != null && g.state.day - qs.moshiDay <= 60;
+  const w = clamp(0.1 + r * 0.17 + (mo ? 0.06 : 0) + (shStress(g) > 80 ? -0.04 : 0), 0.08, 0.38), A = shAreas(q), area = A[(X.qi * 3 + X.f) % A.length], Pr = SH_PRAC[q.cat] || SH_PRAC.tech;
+  const t = X.kind === 'oral' ? `面接官「${area}について説明してください」` : X.kind === 'prac' ? `作業：${Pr[X.qi % Pr.length]}` : X.kind === 'draw' ? `製図：${['プランを決める', '寸法を入れる', '仕上げの線を引く'][X.qi % 3]}` : `問${[12, 27, 41][X.qi % 3]}：${area}の難問！`;
+  return { f: 0, pos: 0, c: clamp(0.22 + Math.random() * 0.56, w / 2 + 0.02, 0.98 - w / 2), w, sp: 0.02 + Math.random() * 0.01, t, mo, res: null, rf: 0 };
+}
+function shMgHit(s, X, pos) { const m = X.mg; if (!m || m.res) return; let b = 0;
+  if (pos == null) { m.res = '時間切れ… 勘で書いた'; m.col = PW.dim; }
+  else { const d = Math.abs(pos - m.c); if (d <= m.w / 2) { b = 0.03; m.res = X.kind === 'oral' ? 'はっきり答えられた！' : 'ひらめいた！ 解けた'; m.col = PW.good; tt.sfx('ok'); s.burst(320, 108, 18, PW.good, { sp: 3, star: true }); } else if (d <= m.w / 2 + 0.07) { b = 0.01; m.res = 'たぶん合っている…'; m.col = PW.acc; tt.sfx('cursor'); } else { b = -0.01; m.res = X.kind === 'oral' ? 'しどろもどろ…' : '…わからない'; m.col = PW.bad; tt.sfx('buzz'); } }
+  X.bonus = num(X.bonus) + b; X.hits = (X.hits || []).concat([b]); }
+// ---- 事務所・お店の開業（1つまで） ----
+// [id, 名前, 必要な資格, 開業資金, 家賃(月), 1件の報酬, 1日に自分でこなす数, 1か月の依頼の基本数, スタッフ1人が1か月にこなす数, スタッフの給料(月), 単位, 色, 見た目]
+const SH_OFFICE = [
+  ['law', '法律事務所', { edu: ['shushu'] }, 3000000, 400000, 300000, 1, 5, 3, 350000, '件', '#3a5ad0', 'office'], ['shoshi', '司法書士事務所', ['shoshi'], 1500000, 200000, 70000, 2, 12, 6, 250000, '件', '#3a5ad0', 'office'],
+  ['gyosei', '行政書士事務所', ['gyosei'], 500000, 80000, 40000, 2, 10, 5, 220000, '件', '#3a5ad0', 'office'], ['zeiri', '税理士事務所', ['zeiri'], 2000000, 250000, 100000, 2, 10, 6, 260000, '件', '#c9962a', 'office'],
+  ['kaikei', '公認会計士事務所', ['kaikei'], 3000000, 350000, 250000, 1, 6, 3, 320000, '件', '#c9962a', 'office'], ['sharo', '社労士事務所', ['sharo'], 800000, 120000, 50000, 2, 10, 6, 230000, '件', '#3a5ad0', 'office'],
+  ['benri', '特許事務所', ['benri'], 2500000, 300000, 350000, 1, 4, 2, 320000, '件', '#3a5ad0', 'office'], ['consul', '経営コンサルタント事務所', ['shindan'], 600000, 100000, 250000, 1, 3, 2, 300000, '件', '#c9962a', 'office'],
+  ['chosa', '土地家屋調査士事務所', ['chosashi'], 2000000, 200000, 120000, 1, 8, 4, 260000, '件', '#a0602e', 'office'], ['kantei', '不動産鑑定事務所', ['fudoukan'], 1500000, 200000, 300000, 1, 4, 2, 300000, '件', '#a0602e', 'office'],
+  ['sekkei', '設計事務所', ['kenchiku1', 'kenchiku2'], 2000000, 250000, 500000, 1, 3, 1, 300000, '件', '#a0602e', 'office'], ['fudosan', '不動産屋', ['takken'], 3000000, 300000, 150000, 1, 6, 4, 250000, '件', '#a0602e', 'shop'],
+  ['fp', 'FP事務所', ['fp2'], 300000, 60000, 20000, 3, 15, 8, 200000, '件', '#c9962a', 'office'], ['honyaku', '翻訳事務所', ['eiken6', 'toeic900'], 300000, 50000, 30000, 2, 12, 6, 250000, '件', '#8a4ac8', 'office'],
+  ['clinic', 'クリニック', ['ishi'], 40000000, 2000000, 8000, 80, 500, 120, 500000, '人', '#2a8ad0', 'clinic'], ['dental', '歯科医院', ['shikai'], 30000000, 900000, 7000, 50, 300, 80, 350000, '人', '#2aa0b0', 'clinic'],
+  ['pharm', '調剤薬局', ['yaku'], 20000000, 800000, 3500, 100, 600, 150, 350000, '人', '#3a9a5a', 'clinic'], ['seikotsu', '接骨院', ['judo'], 5000000, 300000, 3000, 25, 180, 60, 220000, '人', '#d0406a', 'clinic'],
+  ['shinkyu', '鍼灸院', ['hari', 'kyu'], 3000000, 200000, 5000, 12, 90, 30, 220000, '人', '#d0406a', 'clinic'], ['kaigo', '訪問介護事業所', ['kaigo'], 2000000, 200000, 4000, 8, 80, 40, 230000, '回', '#d0406a', 'office'],
+  ['teishoku', '定食屋', ['chori'], 8000000, 400000, 1000, 120, 900, 250, 220000, '人', '#e07a1a', 'shop'], ['yogashi', '洋菓子店', ['seika'], 6000000, 300000, 600, 120, 800, 250, 220000, '人', '#ff7eb6', 'shop'],
+  ['juku', '学習塾', ['kyoinC', 'kyoinH'], 1500000, 200000, 8000, 6, 60, 30, 220000, 'コマ', '#8a4ac8', 'office'], ['denki', '電気工事店', ['denko1', 'denko2'], 2000000, 150000, 40000, 2, 12, 6, 280000, '件', '#e07a1a', 'work'],
+  ['seibi', '自動車整備工場', ['seibi'], 10000000, 500000, 30000, 3, 30, 12, 280000, '台', '#5a8a3a', 'work'],
+].map(([id, nm, need, cost, rent, fee, perDay, base, staffM, sal, unit, col, look]) => ({ id, nm, need, cost, rent, fee, perDay, base, staffM, sal, unit, col, look }));
+function shOfficeOk(g, T) { return Array.isArray(T.need) ? T.need.some(id => shHas(g, id)) : T.need.edu.some(e => shEduDone(g, e)); }
+function shOfficeNeedTxt(T) { return Array.isArray(T.need) ? T.need.map(id => id === 'toeic900' ? 'TOEIC 900点' : SH[id] ? SH[id].nm.replace(/（.*）/, '') : id).slice(0, 2).join('か') : '司法修習を修了'; }
+const shOfficeT = O => O && SH_OFFICE.find(t => t.id === O.id);
+const shDemLab = T => ({ 件: '依頼', 人: 'お客', コマ: '授業', 台: '依頼', 回: '訪問' })[T.unit] || '依頼';
+const shAdCost = T => Math.max(50000, Math.round(T.rent * 0.4 / 10000) * 10000);
+function shOfficeName(g, T) { const nm = (g.state.profile && g.state.profile.name) || 'ドット'; return `${String(nm).split(/[ 　]/)[0]}${T.nm}`; }
+function shOfficeDem(O, T) { return Math.max(1, Math.round(T.base * (0.4 + O.rep / 100 * 1.2) * (O.ad ? 1.3 : 1) * (0.8 + Math.random() * 0.4))); }
+function shOfficeOpen(g, T) { const S = shSt(g), mi = shYM(g).mi; S.office = { id: T.id, day0: g.state.day, rep: 30, staff: 0, ad: false, mi, hist: [], total: 0, sales: 0, me: 0, meDays: 0 }; const O = S.office; O.dem = shOfficeDem(O, T); O.left = O.dem; S.opened = 1; S.log.push({ day: g.state.day, t: `${shOfficeName(g, T)}を開業` }); }
+function shMsg(g, from, text) { try { g.message({ from, kind: 'chat', text }); } catch (e) { } }
+function shOfficeSettle(g, O, T) {
+  const S = shSt(g), stf = Math.min(O.left, O.staff * T.staffM), stSales = stf * T.fee, cost = T.rent + O.staff * T.sal + (O.ad ? shAdCost(T) : 0), sales = O.sales + stSales;
+  const served = (O.me + stf) / Math.max(1, O.dem); let dr = served >= 0.9 ? 3 : served >= 0.6 ? 1 : served < 0.4 ? -4 : 0; dr -= 1; if (!O.meDays && !O.staff) dr -= 5;
+  O.rep = clamp(O.rep + dr, 0, 100); const net = stSales - cost; let money = num(g.state.money) + net, closed = false;
+  if (money < 0) { money = 0; closed = true; } g.state.money = Math.round(money);
+  const H = { mi: O.mi, dem: O.dem, me: O.me, stf, sales, cost, profit: sales - cost }; O.hist.push(H); if (O.hist.length > 24) O.hist.shift(); O.total += H.profit; S.officeTotal = num(S.officeTotal) + H.profit; S.officeSales = num(S.officeSales) + stSales;
+  shMsg(g, '事務所', `【${shMiLab(O.mi)}の収支】売上 ${yen(sales)}／経費 ${yen(cost)}\n利益 ${gbSign(H.profit)}（${shDemLab(T)} ${O.dem}${T.unit}のうち ${O.me + stf}${T.unit}をこなした）${!O.meDays && !O.staff ? '\n開店休業で評判が下がった…' : ''}`);
+  if (closed) { S.log.push({ day: g.state.day, t: `${T.nm}を閉業（資金がつきた）` }); S.office = null; shMsg(g, '事務所', '経費が払えず、事務所を閉めることになった…'); return false; }
+  return true;
+}
+const SH_OFFICE_EV = [
+  [0.1, (g, O, T) => { const v = T.fee * (3 + Math.floor(Math.random() * 4)); g.state.money = num(g.state.money) + v; O.rep = clamp(O.rep + 3, 0, 100); O.sales += v; return `大口の依頼が入った！ +${yen(v)}`; }],
+  [0.1, (g, O) => { O.rep = clamp(O.rep + 5, 0, 100); return '口コミで評判が広がっている（評判アップ）'; }],
+  [0.07, (g, O) => { O.rep = clamp(O.rep - 6, 0, 100); return 'お客さんからクレームが来た…（評判ダウン）'; }],
+  [0.05, (g, O) => { if (!O.staff) return null; O.staff--; return 'スタッフが1人やめてしまった…'; }],
+  [0.04, (g, O) => { if (O.rep < 60) return null; O.rep = clamp(O.rep + 5, 0, 100); try { g.addFame(3); } catch (e) { } return 'テレビの取材が来た！（評判と知名度アップ）'; }],
+];
+function shOfficeTick(g) {
+  const S = shSt(g), O = S.office, T = shOfficeT(O); if (!O) return; if (!T) { S.office = null; return; } const cur = shYM(g).mi; if (cur === O.mi) return;
+  if (!shOfficeSettle(g, O, T)) return;
+  O.mi = cur; O.sales = 0; O.me = 0; O.meDays = 0; O.dem = shOfficeDem(O, T); O.left = O.dem;
+  for (const [p, fn] of SH_OFFICE_EV) if (Math.random() < p) { const t = fn(g, O, T); if (t) { shMsg(g, '事務所', `【${T.nm}】${t}`); break; } }
+}
+// ---- 称号 ----
+const shHeldIds = g => SH_LIST.filter(q => shHas(g, q.id)).map(q => q.id);
+const shAll = L => (g, H) => L.every(id => H.includes(id));
+const SH_TITLES = [
+  ['first', 'はじめての資格', '資格を1つ取る', 1, (g, H) => H.length >= 1], ['c5', '資格コレクター', '資格を5つ取る', 2, (g, H) => H.length >= 5], ['c15', '資格マニア', '資格を15個取る', 4, (g, H) => H.length >= 15],
+  ['c30', '資格王', '資格を30個取る', 8, (g, H) => H.length >= 30], ['c60', '歩く資格辞典', '資格を60個取る', 15, (g, H) => H.length >= 60],
+  ['nankan', '難関突破', '合格率10%以下の試験に受かる', 3, (g, H) => H.some(id => { const q = SH[id]; return q && !q.via && !q.grp && !q.score && shRate(q) <= 10; })],
+  ['sandai', '三大国家資格', '医師・司法試験・公認会計士をすべて取る', 30, shAll(['ishi', 'shiho', 'kaikei'])],
+  ['shigyo', '士業コンプリート', '司法試験・司法書士・行政書士・弁理士・税理士・社労士・土地家屋調査士', 20, shAll(['shiho', 'shoshi', 'gyosei', 'benri', 'zeiri', 'sharo', 'chosashi'])],
+  ['kentei', '検定三冠', '英検・漢検・数検の1級', 10, shAll(['eiken6', 'kanken6', 'suken6'])], ['toeic', 'TOEIC満点', 'TOEICで990点', 8, g => num((shSt(g).q.toeic || {}).best) >= 990],
+  ['itall', 'IT高度試験 全冠', 'IT高度試験の9種をすべて取る', 12, shAll(['sc', 'stg', 'pm', 'nw', 'db', 'sa', 'es', 'sm', 'au'])], ['denken', '電験三冠', '電験の一種・二種・三種', 10, shAll(['denken1', 'denken2', 'denken3'])],
+  ['hakui', '白衣の人', '医療の国家資格を3つ取る', 3, (g, H) => H.filter(id => SH[id] && SH[id].cat === 'med' && SH[id].kind === '国家').length >= 3],
+  ['kuruma', 'はたらく車マスター', '大型・大型特殊・けん引・普通二種', 4, shAll(['oogata', 'daitoku', 'kenin', 'futsu2'])],
+  ['umisora', '海と空', '海技士・小型船舶・航空無線通信士', 4, (g, H) => (H.includes('kaigiN') || H.includes('kaigiE')) && H.includes('kogata') && H.includes('kokumusen')],
+  ['korobi', '七転び八起き', '5回以上落ちた資格に受かる', 3, (g, H) => H.some(id => num((shSt(g).q[id] || {}).tries) >= 6)], ['wakaki', '若き天才', '20歳になる前に合格率10%以下の試験に受かる', 10, g => !!shSt(g).young],
+  ['shogai', '生涯学習', '60歳をすぎてから資格を取る', 3, g => !!shSt(g).old], ['streak', '継続は力なり', '30日続けて勉強する', 3, g => num((shSt(g).streak || {}).best) >= 30],
+  ['study', '勉強の虫', '合計1,000時間勉強する', 4, g => num(shSt(g).studyH) >= 1000], ['owner', '一国一城の主', '自分の事務所・お店を開く', 3, g => !!shSt(g).opened],
+  ['kuroji', '黒字経営', '事務所の利益の合計が1,000万円をこえる', 6, g => num(shSt(g).officeTotal) >= 1e7], ['kasegu', '資格で稼ぐ人', '資格の仕事と事務所で1億円かせぐ', 10, g => num(shSt(g).earned) + num(shSt(g).officeSales) >= 1e8],
+].map(([id, nm, desc, fame, test]) => ({ id, nm, desc, fame, test }));
+function shTitleCheck(g) { const S = shSt(g); if (!isObj(S.titles)) S.titles = {}; const H = shHeldIds(g), out = [];
+  for (const T of SH_TITLES) { if (S.titles[T.id] != null) continue; let ok = false; try { ok = !!T.test(g, H); } catch (e) { } if (!ok) continue; S.titles[T.id] = g.state.day; out.push(T); try { if (T.fame) g.addFame(T.fame); } catch (e) { } shMsg(g, '資格', `【称号】「${T.nm}」を手に入れた！\n（${T.desc}）`); }
+  return out; }
+// ---- 毎朝 ----
+function shPlusTick(g) { shForget(g); shOfficeTick(g); shTitleCheck(g); }
+// ---- 受験票 ----
+const SH_HALL = ['ドット大学 本館', 'ドット国際展示場', 'ドット工業大学', 'ドット市民会館', 'ドット高校', 'ドット女子大学', 'ドット経済大学'];
+function shTicket(g, q, A) { A.no = 1000 + Math.floor(Math.random() * 8000); A.hall = A.mi === 'cbt' ? 'テストセンター（CBT）' : SH_HALL[(A.no + q.id.length) % SH_HALL.length]; if (A.mi !== 'cbt') shMsg(g, '資格', `【受験票】${q.nm}\n受験番号 ${A.no}・会場 ${A.hall}\n試験は${shMiLab(A.mi)}。がんばろう！`); }
+// ---- ボタン（ふえた分） ----
+function shPlusBtn(s, id, g) {
+  const S = s.S, St = shSt(g), M = GB_MODES.shikaku;
+  if (id === 'st2' || id === 'st4') { shStudy(s, g, id === 'st2' ? 2 : 4); return true; }
+  if (id === 'rmback') { S.ph = 'detail'; return true; }
+  if (id === 'moshi') { shMoshi(s, g); return true; }
+  if (id === 'msback') { S.ph = 'detail'; return true; }
+  if (id === 'cal') { S.cal = !S.cal; S.pg = 0; return true; }
+  if (id === 'hview') { S.hv = !S.hv; S.pg = 0; return true; }
+  // 事務所
+  if (id.startsWith('oopen:')) { const T = SH_OFFICE.find(t => t.id === id.slice(6)); if (!T) return true; if (St.office) { s.tip('事務所は1つまで', PW.dim); return true; } if (!shOfficeOk(g, T)) { s.tip('必要な資格：' + shOfficeNeedTxt(T), PW.bad); return true; }
+    if (!s.pay(T.cost)) return true; shOfficeOpen(g, T); tt.sfx('fanfare'); s.ban('開業！', PW.acc, shOfficeName(g, T), { life: 90 }); s.burst(320, 170, 40, PW.acc, { sp: 4, star: true }); try { shTitleCheck(g); } catch (e) { } return true; }
+  const O = St.office, T = shOfficeT(O);
+  if (id === 'ow') { if (!O) return true; if (O.workDay === g.state.day) { s.tip('事務所の仕事は1日1回まで', PW.dim); return true; } if (M.left(s, g) < 480) { s.tip('今日はもう時間がない', PW.bad); return true; }
+    if (O.left <= 0) { s.tip('今月の依頼はもうない（営業しよう）', PW.dim); return true; }
+    const n = Math.min(O.left, Math.ceil(T.perDay * (1 + 0.1 * O.staff))), v = n * T.fee; O.workDay = g.state.day; O.left -= n; O.me += n; O.meDays++; O.sales += v; O.rep = clamp(O.rep + 0.5, 0, 100); s.mins += 480; s.win(v); St.officeSales = num(St.officeSales) + v;
+    try { g.addNeed('stress', 6); } catch (e) { } S.oanim = 70; S.otxt = `${n}${T.unit}をこなした（+${yen(v)}）`; tt.sfx('coin'); return true; }
+  if (id === 'osale') { if (!O) return true; if (O.saleDay === g.state.day) { s.tip('営業は1日1回まで', PW.dim); return true; } if (M.left(s, g) < 240) { s.tip('今日はもう時間がない', PW.bad); return true; }
+    const n = Math.max(1, Math.round(T.base * 0.08)); O.saleDay = g.state.day; O.left += n; O.dem += n; O.rep = clamp(O.rep + 2, 0, 100); s.mins += 240; try { g.addNeed('stress', 3); } catch (e) { } S.oanim = 70; S.otxt = `営業まわりをした（依頼 +${n}${T.unit}・評判アップ）`; tt.sfx('ok'); return true; }
+  if (id === 'oad') { if (!O) return true; O.ad = !O.ad; s.tip(O.ad ? `来月から広告を出す（月 ${yen(shAdCost(T))}）` : '広告をやめた', PW.text); return true; }
+  if (id === 'ost+') { if (!O || O.staff >= 5) return true; O.staff++; s.tip(`スタッフを雇った（給料 月${yen(T.sal)}）`, PW.good); return true; }
+  if (id === 'ost-') { if (!O || O.staff <= 0) return true; O.staff--; s.tip('スタッフを1人減らした', PW.dim); return true; }
+  if (id === 'oclose') { if (!O) return true; if (S.oc !== 1) { S.oc = 1; s.tip('もう一度押すと閉業する（開業資金はもどらない）', PW.bad); return true; } St.log.push({ day: g.state.day, t: `${T.nm}を閉業` }); St.office = null; S.oc = 0; s.tip('事務所を閉めた', PW.dim); return true; }
+  return false;
+}
+
+// ===== 資格アプリの追加（画面）：分野のアイコン・勉強部屋・模試の成績表・面接/実技/製図の会場・難問・事務所・称号・試験カレンダー =====
+// ---- 分野のアイコン（12×12） ----
+const SH_ICON = {
+  law: ['.....##.....', '.##########.', '.#...##...#.', '.#...##...#.', '###..##..###', '###..##..###', '.....##.....', '.....##.....', '.....##.....', '....####....', '..########..', '............'],
+  acct: ['.##########.', '.#oooooooo#.', '.#oooooooo#.', '.##########.', '.#o#o#o#o##.', '.##########.', '.#o#o#o#o##.', '.##########.', '.#o#o#o#o##.', '.##########.', '.#o#o#o#o##.', '.##########.'],
+  estate: ['.....##.....', '....####....', '...######...', '..########..', '.##########.', '############', '..########..', '..#oo##oo#..', '..#oo##oo#..', '..####o###..', '..####o###..', '..####o###..'],
+  med: ['....####....', '....####....', '....####....', '....####....', '############', '############', '############', '############', '....####....', '....####....', '....####....', '....####....'],
+  it: ['############', '#oooooooooo#', '#o###oooooo#', '#oooo##oooo#', '#o####ooooo#', '#oooooooooo#', '############', '.....##.....', '.....##.....', '...######...', '............', '............'],
+  tech: ['......####..', '.....####...', '....####....', '...####.....', '..########..', '.########...', '.....####...', '....####....', '...####.....', '..###.......', '.##.........', '............'],
+  trans: ['............', '...######...', '..#oo##oo#..', '.#ooo##ooo#.', '############', '############', '##o######o##', '############', '.#oo#..#oo#.', '..##....##..', '............', '............'],
+  lang: ['.##########.', '############', '#####oo#####', '####o##o####', '####oooo####', '####o##o####', '####o##o####', '############', '.##########.', '...###......', '..##........', '.#..........'],
+  life: ['.........###', '......######', '....########', '...####o####', '..####o#####', '..###o######', '.###o######.', '.##o######..', '.#o#####....', '.o..........', 'o...........', '............'],
+  kentei: ['.........##.', '........#oo#', '.......#oo#.', '......####..', '.....####...', '....####....', '...####.....', '..####......', '.#o##.......', '.oo#........', 'o...........', '............'],
+};
+function shCatIcon(c, cat, x, y, sc, fg, bg) { const A = SH_ICON[cat]; if (!A) return; const cv = pArt(`shic_${cat}_${fg}_${bg}`, A, { '#': fg || '#ffffff', o: bg || '#1a2448' }); pBlit(c, cv, x, y, { sc: sc || 1 }); }
+function shMedal(c, x, y, col, on) { const k = on ? col : '#3a4060'; pR(c, x - 6, y - 14, 5, 10, on ? '#c83040' : '#2a2e48'); pR(c, x + 1, y - 14, 5, 10, on ? '#2f60c0' : '#2a2e48'); pCirc(c, x, y, 9, '#0a0a14'); pCirc(c, x, y, 8, k); pCirc(c, x, y, 5, on ? pShade(col, 0.35) : '#2a2e48'); if (on) pR(c, x - 3, y - 4, 2, 2, '#ffffff'); }
+// ---- 空の色（勉強部屋の窓） ----
+function shLerpCol(a, b, k) { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16), L = (s) => Math.round(((pa >> s) & 255) * (1 - k) + ((pb >> s) & 255) * k); return '#' + ((1 << 24) | (L(16) << 16) | (L(8) << 8) | L(0)).toString(16).slice(1); }
+const SH_SKY = [[0, '#0a1030', '#1a2048'], [300, '#0a1030', '#1a2048'], [360, '#40508a', '#f0a080'], [450, '#6aa8e8', '#bfe0f8'], [960, '#6aa8e8', '#bfe0f8'], [1050, '#e07040', '#f8c060'], [1140, '#302058', '#a05070'], [1200, '#0a1030', '#1a2048'], [1440, '#0a1030', '#1a2048']];
+function shSky(m) { m = ((m % 1440) + 1440) % 1440; for (let i = 1; i < SH_SKY.length; i++) if (m <= SH_SKY[i][0]) { const A = SH_SKY[i - 1], B = SH_SKY[i], k = (m - A[0]) / Math.max(1, B[0] - A[0]); return [shLerpCol(A[1], B[1], k), shLerpCol(A[2], B[2], k)]; } return ['#0a1030', '#1a2048']; }
+const shClockTxt = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; const h = Math.floor(m / 60); return `${h < 12 ? '午前' : '午後'}${h % 12 || 12}:${String(m % 60).padStart(2, '0')}`; };
+// ---- 勉強部屋 ----
+function shDrawRoom(s, c, g) {
+  const S = s.S, R = S.rm, q = SH[R.id], St = shSt(g), qs = shQs(St, q.id), f = R.f, k = clamp(f / 120, 0, 1), m = R.m0 + R.hr * 60 * gbEase(k), mm = ((m % 1440) + 1440) % 1440, night = mm >= 1140 || mm < 330, cur = shYM(g);
+  // 壁・床
+  pR(c, 0, 30, 640, 246, '#d8c8a4'); for (let x = 8; x < 640; x += 16) pR(c, x, 30, 1, 242, 'rgba(120,90,50,0.10)'); for (let y = 46; y < 270; y += 32) for (let x = (y / 32 % 2) * 8; x < 640; x += 16) pR(c, x + 4, y, 2, 2, 'rgba(150,110,60,0.18)');
+  pR(c, 0, 268, 640, 8, '#a88a5a'); pR(c, 0, 268, 640, 1, '#c8aa7a'); pR(c, 0, 276, 640, 84, '#8a5a34'); for (let y = 290; y < 360; y += 14) pR(c, 0, y, 640, 1, '#6a4224'); for (let i = 0; i < 16; i++) pR(c, (i * 97 + (i % 2) * 40) % 640, 277 + (i % 6) * 14, 1, 13, '#6a4224');
+  // 窓（時刻で空の色が変わる）
+  const [s1, s2] = shSky(m), wx = 236, wy = 52, ww = 168, wh = 112;
+  pR(c, wx - 6, wy - 6, ww + 12, wh + 12, '#f4efe0'); pR(c, wx - 6, wy + wh + 4, ww + 12, 4, '#c8c0a8'); pBands(c, wx, wy, ww, wh, [s1, shLerpCol(s1, s2, 0.25), shLerpCol(s1, s2, 0.5), shLerpCol(s1, s2, 0.75), s2]);
+  if (night) { for (let i = 0; i < 16; i++) { const sx = wx + 4 + (i * 53) % (ww - 8), sy = wy + 4 + (i * 29) % (wh - 40); if ((f + i * 7) % 50 < 42) pR(c, sx, sy, 1, 1, '#ffffff'); } pCirc(c, wx + 132, wy + 24, 9, '#f8f0c0'); pCirc(c, wx + 137, wy + 20, 8, s1); }
+  else { for (let i = 0; i < 2; i++) { const cx = wx - 30 + ((f * 0.35 + i * 110 + 20) % (ww + 60)), cy = wy + 22 + i * 18; pEll(c, cx, cy, 16, 5, 'rgba(255,255,255,0.85)'); pEll(c, cx + 12, cy - 4, 10, 5, 'rgba(255,255,255,0.85)'); } }
+  for (let i = 0; i < 8; i++) { const bx = wx + i * 22 - 2, bh = 18 + (i * 37) % 36; pR(c, bx, wy + wh - bh, 20, bh, night ? '#141830' : 'rgba(70,80,110,0.5)'); if (night) for (let j = 0; j < 4; j++) if ((i * 7 + j * 3) % 5 < 2) pR(c, bx + 4 + (j % 2) * 9, wy + wh - bh + 5 + Math.floor(j / 2) * 8, 3, 3, '#ffd870'); }
+  pR(c, wx + ww / 2 - 2, wy, 4, wh, '#f4efe0'); pR(c, wx, wy + wh / 2 - 2, ww, 4, '#f4efe0');
+  for (const x0 of [wx - 36, wx + ww + 8]) { pR(c, x0, wy - 12, 28, wh + 30, '#5a7ab0'); for (let i = 0; i < 4; i++) pR(c, x0 + 3 + i * 7, wy - 12, 2, wh + 30, '#4a6aa0'); pR(c, x0, wy + wh + 14, 28, 4, '#4a6aa0'); }
+  pR(c, wx - 42, wy - 16, ww + 84, 5, '#7a5a3a');
+  // 時計
+  const cx = 104, cy = 70; pCirc(c, cx, cy, 22, '#3a2a1a'); pCirc(c, cx, cy, 19, '#fbf8ee'); for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; pR(c, cx + Math.round(Math.sin(a) * 16), cy - Math.round(Math.cos(a) * 16), 1, 1, '#3a2a1a'); }
+  const am = (mm % 60) / 60 * Math.PI * 2, ah = ((mm / 60) % 12) / 12 * Math.PI * 2; pLine(c, cx, cy, cx + Math.sin(am) * 14, cy - Math.cos(am) * 14, '#1a1a1a'); pLine(c, cx, cy, cx + Math.sin(ah) * 9, cy - Math.cos(ah) * 9, '#c8102e'); pR(c, cx - 1, cy - 1, 2, 2, '#1a1a1a');
+  pT(c, shClockTxt(m), cx, cy + 26, { size: 12, color: '#4a3a2a', align: 'center', shadow: null });
+  // カレンダー（試験の月に赤い丸）
+  const A = qs.app, kx = 40, ky = 118; pR(c, kx + 2, ky + 2, 112, 74, 'rgba(0,0,0,0.18)'); pR(c, kx, ky, 112, 74, '#fbfaf4'); pR(c, kx + 54, ky - 6, 4, 6, '#8a7a5a'); pR(c, kx, ky, 108, 16, '#c8302a'); pT(c, `${cur.y}年${cur.m}月`, kx + 56, ky + 2, { size: 12, color: '#ffffff', align: 'center', shadow: null });
+  for (let i = 0; i < 10; i++) { const x = kx + 10 + (i % 5) * 20, y = ky + 22 + Math.floor(i / 5) * 14; pTiny(c, String(i * 3 + 1), x, y, i * 3 + 1 <= cur.dom ? '#b0a890' : '#3a3020'); if (i * 3 + 1 === cur.dom) pRing(c, x + 3, y + 2, 7, '#2a6ad0'); }
+  pT(c, A && A.mi !== 'cbt' ? (A.mi === cur.mi ? '今月が試験！' : `試験まで あと${A.mi - cur.mi}か月`) : A ? 'CBTで受験' : '試験：未申込', kx + 56, ky + 54, { size: 12, color: A ? '#c8302a' : '#7a6a4a', align: 'center', shadow: null });
+  // 合格証書の額（持っている資格の数だけ）
+  const nh = shHeldIds(g).length; for (let i = 0; i < Math.min(3, nh); i++) { const x = 436 + i * 26, y = 64 + (i % 2) * 10; pR(c, x, y, 22, 28, '#7a5a2a'); pR(c, x + 2, y + 2, 18, 24, '#fbf8ee'); pR(c, x + 5, y + 6, 12, 1, '#8a7a5a'); pR(c, x + 5, y + 10, 12, 1, '#8a7a5a'); pCirc(c, x + 15, y + 20, 2, '#c8102e'); }
+  // 本棚
+  const bx0 = 528, by0 = 64; pR(c, bx0 - 4, by0 - 4, 104, 212, '#6a4224'); pR(c, bx0, by0, 96, 204, '#3a2414'); const cols = SH_CAT.map(x => x[2]).concat(['#e8e0c8', '#2a2a3a', '#8a2a2a']);
+  for (let sh = 0; sh < 4; sh++) { const y = by0 + sh * 51; pR(c, bx0, y + 46, 96, 5, '#6a4224'); let x = bx0 + 3; for (let i = 0; x < bx0 + 90; i++) { const w = 6 + ((sh * 7 + i * 5) % 5), h = 30 + ((sh * 3 + i * 11) % 14); if ((sh * 5 + i * 3) % 9 === 0) { x += 8; continue; } pR(c, x, y + 46 - h, w, h, cols[(sh * 4 + i * 3) % cols.length]); pR(c, x + 1, y + 50 - h, w - 2, 1, 'rgba(255,255,255,0.35)'); x += w + 1; } }
+  // 机
+  pR(c, 112, 200, 416, 12, '#a06a3a'); pR(c, 112, 200, 416, 2, '#c08a5a'); pR(c, 112, 212, 416, 6, '#7a4a28'); pR(c, 122, 218, 10, 52, '#6a3a1a'); pR(c, 508, 218, 10, 52, '#6a3a1a'); pR(c, 400, 218, 100, 34, '#8a5a30'); pR(c, 440, 232, 20, 3, '#d8b880');
+  // スタンド
+  const lx = 190; pR(c, lx - 14, 194, 30, 6, '#2a2a3a'); pLine(c, lx, 194, lx + 14, 150, '#3a3a4a'); pLine(c, lx + 1, 194, lx + 15, 150, '#3a3a4a'); pR(c, lx + 4, 140, 30, 12, '#2a5aa0'); pR(c, lx + 6, 150, 26, 3, '#ffe8a0');
+  if (night) { c.save(); c.globalAlpha = 0.22; c.fillStyle = '#ffe8a0'; c.beginPath(); c.moveTo(lx + 6, 152); c.lineTo(lx + 32, 152); c.lineTo(lx + 150, 202); c.lineTo(lx - 30, 202); c.closePath(); c.fill(); c.restore(); }
+  // 本の山（勉強が進むほど高くなる）
+  const nb = 1 + Math.floor(Math.min(1, R.r0 + (R.r1 - R.r0) * k) * 6); for (let i = 0; i < nb; i++) pR(c, 440 + (i % 2) * 3, 192 - i * 7, 44 - (i % 3) * 4, 7, cols[(i * 3 + 1) % cols.length]);
+  // マグカップ
+  pR(c, 490, 186, 16, 14, '#f4f0e8'); pR(c, 506, 189, 4, 8, '#f4f0e8'); pR(c, 492, 188, 12, 2, '#6a3a1a'); for (let i = 0; i < 3; i++) { const t = (f + i * 13) % 39; pR(c, 495 + i * 4 + Math.round(Math.sin((f + i * 20) / 8) * 1.5), 182 - t / 3, 1, 3, `rgba(255,255,255,${0.6 - t / 80})`); }
+  // 自分（後ろ姿）
+  const px = 320, wr = f < 120 ? Math.round(Math.sin(f / 3) * 2) : 0, sl = R.ev.ic === 'z' && f > 30 && f < 100 ? 4 : 0;
+  pR(c, 268, 196, 36, 6, '#fbfaf4'); pR(c, 336, 196, 36, 6, '#fbfaf4'); pR(c, 286, 194, 2, 8, '#d8d0b8'); pR(c, 352, 194, 2, 8, '#d8d0b8');
+  pR(c, 296, 196 + sl, 48, 74, '#3a5a9a'); pR(c, 296, 196 + sl, 48, 6, '#4a6aaa'); pR(c, 318, 202 + sl, 4, 60, '#2a4a8a');
+  pR(c, 276, 200 + sl, 24, 10, '#3a5a9a'); pR(c, 272, 200 + sl, 8, 8, '#f0c8a0'); pR(c, 340, 199 + wr + sl, 26, 10, '#3a5a9a'); pR(c, 362, 198 + wr + sl, 8, 8, '#f0c8a0'); pR(c, 366, 190 + wr + sl, 2, 10, '#e8a830');
+  pCirc(c, px, 178 + sl, 19, '#2a1a10'); pR(c, px - 19, 178 + sl, 38, 10, '#2a1a10'); pR(c, px - 8, 162 + sl, 4, 3, '#4a3020'); pR(c, px - 21, 182 + sl, 4, 8, '#f0c8a0'); pR(c, px + 17, 182 + sl, 4, 8, '#f0c8a0');
+  pR(c, 290, 236, 60, 8, '#8a5a30'); pR(c, 294, 244, 6, 32, '#6a3a1a'); pR(c, 340, 244, 6, 32, '#6a3a1a'); pR(c, 300, 272, 40, 4, '#5a3a1a');
+  // 吹き出し（できごと）
+  if (R.ev.ic && f > 24 && f < 110) { const bx = 356, by = 112, lab = { '!': '集中！', z: 'zzz…', '*': 'ひらめき！', p: 'スマホ…', s: 'のび〜' }[R.ev.ic]; pR(c, bx, by, 72, 26, '#ffffff'); pR(c, bx - 1, by + 1, 74, 24, '#ffffff'); pR(c, bx + 6, by + 26, 6, 4, '#ffffff'); pR(c, bx + 2, by + 30, 4, 3, '#ffffff'); pT(c, lab, bx + 36, by + 6, { size: 12, color: R.ev.ic === 'z' || R.ev.ic === 'p' ? '#5a5a7a' : '#c8302a', align: 'center', shadow: null }); }
+  if (f < 120 && f % 18 < 9) for (let i = 0; i < 3; i++) pSpark(c, 300 + i * 22 + ((f + i * 9) % 20), 150 - ((f + i * 13) % 26), (f + i) >> 2, '#ffffff');
+  // 下のウィンドウ
+  pFrame(c, 6, 280, 628, 76, { bg: '#0a1024' }); const done = f >= 120, rr = R.r0 + (R.r1 - R.r0) * gbEase(k);
+  pT(c, pFit(c, done ? `${R.hr}時間 勉強した！ ${Math.round(R.add * 10) / 10}時間ぶん進んだ` : `${q.nm}　${R.hr}時間 勉強中…`, 380, 16), 18, 288, { size: 16, color: done ? PW.acc : PW.text });
+  shBar(c, 18, 312, 200, 12, rr, rr >= 1 ? '#5ee07a' : '#c9962a'); pT(c, `${Math.round(rr * 100)}%`, 226, 311, { size: 12 });
+  pT(c, `効率 ×${R.E.all.toFixed(2)}${R.ev.k !== 1 ? ` ×${R.ev.k}` : ''}`, 268, 311, { size: 12, color: PW.cyan }); pT(c, `連続${R.n}日${R.n > 1 ? `（+${Math.round(shStreakBonus(R.n) * 100)}%）` : ''}`, 18, 332, { size: 12, color: R.n >= 7 ? PW.acc : PW.dim });
+  if (R.ev.t) pT(c, pFit(c, R.ev.t, 230, 12), 150, 332, { size: 12, color: R.ev.k > 1 ? PW.good : R.ev.k < 1 ? PW.bad : PW.dim });
+  if (done) { const left = GB_MODES.shikaku.left(s, g); s.btn('st2', 'もう2時間', 400, 288, 72, 28, { size: 12, kind: 'blue', off: left < 120, def: true }); s.btn('st4', 'もう4時間', 478, 288, 72, 28, { size: 12, kind: 'blue', off: left < 240 }); s.btn('rmback', 'もどる', 556, 288, 70, 28, { size: 12, back: true });
+    pT(c, `学力${Math.round((R.E.gk - 0.7) / 0.006)}・方法×${R.E.m.toFixed(2)}${R.E.st < 1 ? '・ストレス×0.7' : ''}`, 626, 334, { size: 12, color: GB_C.t3, align: 'right' }); }
+  else pT(c, 'Zキー／タップで とばす', 626, 334, { size: 12, color: GB_C.t3, align: 'right' });
+}
+// ---- 模試の成績表 ----
+function shDrawMoshi(s, c, g) {
+  const S = s.S, ms = S.ms, q = SH[ms.id], f = ms.f, k = clamp(f / 50, 0, 1);
+  pR(c, 0, 30, 640, 330, '#20283a'); for (let i = 0; i < 20; i++) pR(c, (i * 71) % 640, 30 + (i * 37) % 330, 2, 2, 'rgba(255,255,255,0.05)');
+  const x0 = 40, y0 = 40, w = 560, h = 300; pR(c, x0 + 4, y0 + 4, w, h, 'rgba(0,0,0,0.4)'); pR(c, x0, y0, w, h, '#fbfaf4'); pR(c, x0, y0, w, 30, '#2a4a8a'); pR(c, x0, y0 + 30, w, 2, '#c9962a');
+  pT(c, `第${ms.n}回 全国公開模試　成績表`, x0 + 14, y0 + 8, { size: 16, color: '#ffffff', shadow: null }); pT(c, pFit(c, q.nm, 220, 12), x0 + w - 12, y0 + 10, { size: 12, color: '#c8d8ff', align: 'right', shadow: null });
+  const ink = '#1a1a2a', dim = '#6a6a7a';
+  if (q.score) { const sc = Math.round(ms.score * k / 5) * 5; pT(c, '予想スコア', x0 + 30, y0 + 50, { size: 12, color: dim, shadow: null }); pT(c, String(sc), x0 + 30, y0 + 66, { size: 32, color: '#c8102e', shadow: null }); pT(c, '／990', x0 + 30 + pW(c, String(sc), 32) + 6, y0 + 84, { size: 12, color: dim, shadow: null });
+    ms.areas.forEach(([nm, v, mx], i) => { const y = y0 + 130 + i * 40; pT(c, nm, x0 + 30, y, { size: 16, color: ink, shadow: null }); pR(c, x0 + 150, y + 2, 300, 14, '#e4e0d4'); pR(c, x0 + 150, y + 2, Math.round(300 * v / mx * k), 14, '#2a6ad0'); pT(c, `${Math.round(v * k / 5) * 5}／${mx}`, x0 + 460, y, { size: 12, color: ink, shadow: null }); });
+    pT(c, `本番に近い問題で、力だめしをした。復習で ${Math.round(ms.plus)}時間ぶん進んだ`, x0 + 30, y0 + 230, { size: 12, color: dim, shadow: null });
+  } else {
+    const [j, jc] = shJudge(ms.p), sc = Math.round(ms.sc * k);
+    pT(c, '得点', x0 + 24, y0 + 44, { size: 12, color: dim, shadow: null }); pT(c, `${sc}`, x0 + 24, y0 + 58, { size: 32, color: ink, shadow: null }); pT(c, '／100', x0 + 24 + pW(c, String(sc), 32) + 4, y0 + 76, { size: 12, color: dim, shadow: null });
+    pT(c, '偏差値', x0 + 130, y0 + 44, { size: 12, color: dim, shadow: null }); pT(c, (ms.dev * k).toFixed(1), x0 + 130, y0 + 58, { size: 32, color: '#2a4a8a', shadow: null });
+    pT(c, '順位', x0 + 24, y0 + 102, { size: 12, color: dim, shadow: null }); pT(c, `${Math.round(ms.rank + (ms.N - ms.rank) * (1 - k)).toLocaleString()}位 ／ ${ms.N.toLocaleString()}人`, x0 + 24, y0 + 118, { size: 16, color: ink, shadow: null });
+    // 判定のハンコ
+    if (f > 50) { const a = Math.min(1, (f - 50) / 8), sz = Math.round(30 + (1 - a) * 20); c.save(); c.globalAlpha = a; pCirc(c, x0 + 236, y0 + 100, sz, jc); pCirc(c, x0 + 236, y0 + 100, sz - 4, '#fbfaf4'); pCirc(c, x0 + 236, y0 + 100, sz - 6, jc); pT(c, j, x0 + 236, y0 + 84, { size: 32, color: '#ffffff', align: 'center', shadow: null }); c.restore(); pT(c, '判定', x0 + 236, y0 + 140, { size: 12, color: dim, align: 'center', shadow: null }); }
+    // 分野別
+    pT(c, '分野別の得点', x0 + 300, y0 + 44, { size: 12, color: dim, shadow: null }); pR(c, x0 + 300, y0 + 60, 240, 1, '#d8d0c0');
+    ms.areas.forEach(([nm, v], i) => { const y = y0 + 68 + i * 26, wk = nm === ms.weak; pT(c, pFit(c, nm, 96, 12), x0 + 300, y, { size: 12, color: wk ? '#c8302a' : ink, shadow: null }); pR(c, x0 + 400, y + 2, 110, 12, '#e4e0d4'); pR(c, x0 + 400, y + 2, Math.round(110 * v / 100 * k), 12, wk ? '#e05a4a' : v >= 60 ? '#3a9a5a' : '#c9962a'); pR(c, x0 + 400 + 66, y, 1, 16, '#8a8a9a'); pT(c, String(Math.round(v * k)), x0 + 540, y, { size: 12, color: ink, align: 'right', shadow: null }); });
+    pT(c, '｜は合格ライン（60点）', x0 + 300, y0 + 70 + ms.areas.length * 26, { size: 12, color: dim, shadow: null });
+    const cm = { A: '合格圏内！ この調子で本番へ。', B: 'あと一歩。弱点をかためれば合格できる。', C: 'ボーダーライン。ここからが勝負。', D: '合格にはもっと勉強が必要。', E: '基礎からやり直そう。' }[j];
+    pR(c, x0 + 20, y0 + 170, 260, 1, '#d8d0c0'); pT(c, '講評', x0 + 24, y0 + 178, { size: 12, color: dim, shadow: null }); pT(c, cm, x0 + 24, y0 + 196, { size: 12, color: ink, shadow: null }); pT(c, `弱点：${ms.weak}`, x0 + 24, y0 + 214, { size: 12, color: '#c8302a', shadow: null });
+    pT(c, `復習で ${Math.round(ms.plus * 10) / 10}時間ぶん進んだ。60日以内の本番は「難問」が少し解きやすくなる`, x0 + 24, y0 + 236, { size: 12, color: dim, shadow: null });
+  }
+  s.btn('msback', 'もどる', 260, 300, 120, 30, { kind: 'pri', def: true, back: true, size: 12 });
+}
+// ---- 試験会場：面接（口述） ----
+function shDrawOral(s, c, g, X, q, f) {
+  pR(c, 0, 30, 640, 330, '#cfc4a8'); pR(c, 0, 30, 640, 148, '#e6dcc4'); for (let x = 0; x < 640; x += 40) pR(c, x, 180, 2, 100, '#b8a888'); pR(c, 0, 176, 640, 4, '#8a6a4a'); pR(c, 0, 280, 640, 80, '#6a5a4a'); for (let x = 0; x < 640; x += 32) pR(c, x, 280, 1, 80, '#5a4a3a');
+  pR(c, 40, 50, 110, 88, '#cfe0f0'); for (let y = 52; y < 138; y += 6) pR(c, 40, y, 110, 2, '#e8eef4'); pR(c, 36, 46, 118, 4, '#8a8a8a'); pR(c, 500, 54, 90, 50, '#2a4a3a'); pT(c, q.cat === 'law' ? '口述試験' : '面接試験', 545, 70, { size: 12, color: '#e8f0e0', align: 'center', shadow: null });
+  for (let i = 0; i < 3; i++) { const x = 220 + i * 100, b = ((f >> 4) + i) % 5 === 0 ? 1 : 0, suit = ['#2a2a3a', '#3a3a4a', '#2a3a5a'][i];
+    pR(c, x - 17, 128 + b, 34, 44, suit); pR(c, x - 4, 130 + b, 8, 16, '#f4f4f4'); pR(c, x - 1, 132 + b, 2, 12, ['#c82a2a', '#2a5ac8', '#2a8a3a'][i]); pCirc(c, x, 116 + b, 11, '#f0c8a0'); pR(c, x - 11, 103 + b, 22, 7, ['#3a3a3a', '#9a9a9a', '#1a1a1a'][i]);
+    pR(c, x - 5, 115 + b, 3, 2, '#1a1a1a'); pR(c, x + 3, 115 + b, 3, 2, '#1a1a1a'); if (i === 1) { pR(c, x - 7, 113 + b, 6, 1, '#1a1a1a'); pR(c, x + 1, 113 + b, 6, 1, '#1a1a1a'); } pR(c, x - 2, 121 + b, 4, 1, '#a0605a'); }
+  pR(c, 150, 166, 340, 12, '#6a4a2a'); pR(c, 150, 166, 340, 2, '#8a6a4a'); pR(c, 150, 178, 340, 56, '#5a3a1a'); for (let i = 0; i < 3; i++) { pR(c, 202 + i * 100, 156, 36, 10, '#f4efe0'); pR(c, 244 + i * 100, 152, 5, 12, 'rgba(200,230,255,0.85)'); pR(c, 186 + i * 100, 162, 20, 4, '#ffffff'); }
+  const px = 320; pR(c, px - 24, 258, 48, 8, '#4a3a2a'); pR(c, px - 22, 266, 6, 30, '#3a2a1a'); pR(c, px + 16, 266, 6, 30, '#3a2a1a'); pR(c, px - 20, 214, 40, 50, '#2a3a6a'); pR(c, px - 26, 220, 8, 30, '#2a3a6a'); pR(c, px + 18, 220, 8, 30, '#2a3a6a'); pCirc(c, px, 198, 15, '#2a1a10'); pR(c, px - 15, 198, 30, 10, '#2a1a10'); pR(c, px - 17, 202, 3, 7, '#f0c8a0'); pR(c, px + 14, 202, 3, 7, '#f0c8a0');
+  const cyc = Math.floor(f / 40) % 2; if (f > 30 && f < 190 && !X.mg) { if (cyc === 0) { const ex = 220 + (Math.floor(f / 80) % 3) * 100; pR(c, ex - 70, 60, 140, 26, '#ffffff'); pR(c, ex - 4, 86, 8, 5, '#ffffff'); pT(c, pFit(c, `${shAreas(q)[Math.floor(f / 80) % shAreas(q).length]}について…`, 130, 12), ex, 66, { size: 12, color: '#1a1a2a', align: 'center', shadow: null }); }
+    else { pR(c, 350, 168, 110, 24, '#ffffff'); pR(c, 346, 180, 6, 6, '#ffffff'); pT(c, ['はい。それは…', 'えっと…', '〜と考えます'][Math.floor(f / 80) % 3], 405, 174, { size: 12, color: '#1a1a2a', align: 'center', shadow: null }); } }
+}
+// ---- 試験会場：実技 ----
+function shDrawPrac(s, c, g, X, q, f) {
+  const prog = clamp((f - 30) / 160, 0, 1), cook = q.cat === 'life';
+  pR(c, 0, 30, 640, 330, cook ? '#e8e4dc' : '#4a5260'); if (cook) for (let y = 30; y < 150; y += 16) for (let x = (y / 16 % 2) * 16; x < 640; x += 32) pR(c, x, y, 16, 16, '#dcd6cc'); else for (let x = 0; x < 640; x += 48) pR(c, x, 30, 2, 120, '#3a424e');
+  pR(c, 0, 148, 640, 4, cook ? '#b0a898' : '#2a3038'); pR(c, 30, 152, 580, 180, cook ? '#c0c4c8' : '#b08050'); pR(c, 30, 152, 580, 3, cook ? '#e0e4e8' : '#c89a68'); if (!cook) for (let i = 0; i < 12; i++) pR(c, 40 + i * 47, 160 + (i * 13) % 160, 30, 1, '#9a6a40');
+  const tl = Math.max(0, Math.round(40 * (1 - prog))); pR(c, 520, 48, 96, 34, '#1a1a1a'); const so = { on: '#ff5d6c', off: 'rgba(255,93,108,0.12)', w: 12, h: 22, t: 3 }; pSeg(c, String(tl).padStart(2, '0'), 528, 54, so); pR(c, 561, 60, 3, 3, '#ff5d6c'); pR(c, 561, 69, 3, 3, '#ff5d6c'); pSeg(c, '00', 570, 54, so);
+  if (cook) { pR(c, 200, 190, 220, 110, '#f0e2c0'); pR(c, 200, 296, 220, 4, '#c8b890'); const n = Math.floor(prog * 14); for (let i = 0; i < 14; i++) { const x = 220 + (i % 7) * 26, y = 210 + Math.floor(i / 7) * 40; if (i < n) { pR(c, x, y, 10, 10, '#f08a2a'); pR(c, x + 12, y + 2, 8, 8, '#f08a2a'); } else if (i === n) pR(c, x, y, 22, 10, '#f08a2a'); }
+    const kx = 230 + (n % 7) * 26, ky = 190 + Math.floor(n / 7) * 40 - (f % 10 < 5 ? 8 : 0); pR(c, kx + 20, ky, 4, 22, '#d8d8e0'); pR(c, kx + 19, ky - 10, 6, 12, '#3a2a1a'); pR(c, 460, 200, 70, 50, '#5a5a6a'); pR(c, 456, 196, 78, 6, '#7a7a8a'); for (let i = 0; i < 4; i++) { const t = (f + i * 9) % 36; pR(c, 470 + i * 14, 190 - t, 2, 4, `rgba(255,255,255,${0.7 - t / 60})`); } }
+  else { pR(c, 160, 176, 320, 130, '#e8e0c8'); pR(c, 160, 176, 320, 3, '#ffffff'); const pts = [[190, 200], [300, 200], [300, 260], [420, 260], [420, 210], [360, 210], [360, 290], [220, 290], [220, 230], [190, 230]], n = Math.floor(prog * (pts.length - 1));
+    for (const [x, y] of [[300, 200], [420, 260], [220, 290]]) { pR(c, x - 10, y - 10, 20, 20, '#5a5a6a'); pR(c, x - 8, y - 8, 16, 16, '#7a7a8a'); }
+    for (let i = 0; i < n; i++) { const [a, b] = pts[i], [c2, d] = pts[i + 1], col = ['#f0f0f0', '#1a1a1a', '#c82a2a'][i % 3], x = Math.min(a, c2), y = Math.min(b, d), w = Math.abs(c2 - a), h = Math.abs(d - b); pR(c, x - 3, y - 3, w + 6, h + 6, '#5a5a6a'); pR(c, x - 2, y - 2, w + 4, h + 4, col); }
+    const [hx, hy] = pts[Math.min(n, pts.length - 1)]; pR(c, hx - 6, hy + 4, 14, 10, '#f0c8a0'); pR(c, hx - 2, hy + 12, 30, 8, '#3a5a9a'); pR(c, hx - 14, hy - 6, 8, 18, '#c83030'); pR(c, hx - 12, hy - 12, 4, 8, '#8a8a8a');
+    pR(c, 500, 196, 46, 8, '#c83030'); pR(c, 500, 204, 8, 22, '#c83030'); pR(c, 538, 204, 8, 22, '#c83030'); pR(c, 512, 192, 22, 6, '#8a8a92'); pR(c, 500, 240, 64, 5, '#3a3a3a'); pR(c, 556, 236, 14, 12, '#e8b030');
+    for (const [x, y, col] of [[90, 200, '#e8e8e8'], [90, 260, '#1a1a1a'], [130, 230, '#c83030']]) { pCirc(c, x, y, 18, '#6a4a2a'); pCirc(c, x, y, 15, col); pCirc(c, x, y, 5, '#6a4a2a'); }
+    pR(c, 500, 270, 80, 34, '#5a5a6a'); pR(c, 502, 272, 76, 30, '#7a7a8a'); for (let i = 0; i < 8; i++) pR(c, 508 + (i % 4) * 18, 278 + Math.floor(i / 4) * 12, 6, 6, '#c8c8d0'); pT(c, '電線と器具', 320, 158, { size: 12, color: '#5a3a1a', align: 'center', shadow: null }); }
+}
+// ---- 試験会場：製図 ----
+function shDrawDraft(s, c, g, X, q, f) {
+  const prog = clamp((f - 30) / 160, 0, 1); pR(c, 0, 30, 640, 330, '#3a3a44'); pR(c, 60, 50, 520, 290, '#7a6a5a'); pR(c, 70, 58, 500, 270, '#fbfaf4'); for (let x = 70; x < 570; x += 20) pR(c, x, 58, 1, 270, '#e4ecf4'); for (let y = 58; y < 328; y += 20) pR(c, 70, y, 500, 1, '#e4ecf4');
+  const L = [[110, 90, 470, 90], [470, 90, 470, 290], [470, 290, 110, 290], [110, 290, 110, 90], [250, 90, 250, 200], [110, 200, 360, 200], [360, 200, 360, 290], [360, 140, 470, 140], [250, 240, 360, 240], [300, 200, 300, 240], [170, 200, 170, 290], [410, 90, 410, 140]], n = prog * L.length;
+  for (let i = 0; i < Math.floor(n); i++) { const [a, b, c2, d] = L[i]; pLine(c, a, b, c2, d, '#1a1a2a'); pLine(c, a + (a === c2 ? 1 : 0), b + (b === d ? 1 : 0), c2 + (a === c2 ? 1 : 0), d + (b === d ? 1 : 0), '#1a1a2a'); }
+  const i = Math.min(L.length - 1, Math.floor(n)), [a, b, c2, d] = L[i], t = n - Math.floor(n), ex = a + (c2 - a) * t, ey = b + (d - b) * t; if (prog < 1) { pLine(c, a, b, ex, ey, '#1a1a2a'); pR(c, ex, ey - 16, 3, 16, '#e8a830'); pR(c, ex, ey - 1, 3, 2, '#1a1a1a'); }
+  if (prog > 0.5) { pT(c, 'LDK', 300, 250, { size: 12, color: '#3a3a5a', align: 'center', shadow: null }); pT(c, '和室', 180, 140, { size: 12, color: '#3a3a5a', align: 'center', shadow: null }); } pR(c, 520, 300, 40, 4, '#d8d0b8');
+}
+// ---- 難問（集中ゲーム）の表示 ----
+function shDrawMg(s, c, X) { const m = X.mg; if (!m) return; pFrame(c, 110, 54, 420, 118, { bg: '#0a1024', edge: m.res ? m.col : PW.acc });
+  pT(c, pFit(c, m.t, 396, 16), 320, 62, { size: 16, color: PW.acc, align: 'center' }); const bx = 140, by = 90, bw = 360; pR(c, bx - 1, by - 1, bw + 2, 20, '#05070f'); pR(c, bx, by, bw, 18, '#2a2a4a');
+  const z0 = bx + bw * (m.c - m.w / 2), z1 = bx + bw * (m.c + m.w / 2), nr = bw * 0.07; pR(c, z0 - nr, by, z1 - z0 + nr * 2, 18, '#5a5a2a'); pR(c, z0, by, z1 - z0, 18, '#3aa05a'); pR(c, z0, by, z1 - z0, 3, '#7ae09a');
+  const cx = Math.round(bx + bw * m.pos); pR(c, cx - 2, by - 6, 5, 30, '#05070f'); pR(c, cx - 1, by - 5, 3, 28, '#ffffff');
+  pT(c, m.res || 'Zキー／タップで止める！（緑で止めると解ける）', 320, 120, { size: m.res ? 16 : 12, color: m.res ? m.col : PW.dim, align: 'center' }); if (!m.res) shBar(c, 140, 140, 360, 6, 1 - m.f / 170, '#5fd7ff'); if (m.mo) pT(c, '模試の効果で少し解きやすい', 320, 150, { size: 12, color: PW.cyan, align: 'center' }); }
+// ---- 事務所のタブ ----
+function shDrawOfficeArt(c, x, y, w, h, T, name, f, rep) {
+  pR(c, x, y, w, h, '#8ab8e8'); pR(c, x, y + h - 22, w, 22, '#a8a8b0'); pR(c, x, y + h - 22, w, 2, '#c8c8d0'); for (let i = 0; i < w; i += 24) pR(c, x + i, y + h - 12, 12, 1, '#8a8a92');
+  pEll(c, x + 40 + (f * 0.2 % (w + 60)) - 30, y + 18, 14, 4, 'rgba(255,255,255,0.9)');
+  const bx = x + 30, bw = w - 60, by = y + 16, bh = h - 38, L = T.look;
+  if (L === 'shop') { pR(c, bx, by + 10, bw, bh - 10, '#e8dcc8'); pR(c, bx - 4, by + 4, bw + 8, 12, '#3a2a1a'); pT(c, pFit(c, name, bw - 8, 12), bx + bw / 2, by + 4, { size: 12, color: '#ffe8a0', align: 'center', shadow: null }); for (let i = 0; i < bw; i += 16) pR(c, bx + i, by + 18, 8, 14, T.col); pR(c, bx, by + 18, bw, 14, 'rgba(255,255,255,0.0)'); for (let i = 8; i < bw; i += 16) pR(c, bx + i, by + 18, 8, 14, '#ffffff');
+    pR(c, bx + 10, by + 40, bw * 0.55, bh - 52, '#bfe0f8'); pR(c, bx + 12, by + 42, 10, bh - 56, 'rgba(255,255,255,0.4)'); pR(c, bx + bw - 44, by + 40, 34, bh - 40, '#6a4a2a'); pR(c, bx + bw - 40, by + 44, 26, bh - 52, '#bfe0f8'); }
+  else if (L === 'clinic') { pR(c, bx, by, bw, bh, '#f4f4f0'); pR(c, bx, by, bw, 4, '#d8d8d0'); for (let i = 0; i < 3; i++) { pR(c, bx + 14 + i * (bw - 28) / 3, by + 8, (bw - 28) / 3 - 10, 16, '#bfe0f8'); pR(c, bx + 16 + i * (bw - 28) / 3, by + 10, 4, 12, 'rgba(255,255,255,0.5)'); }
+    pR(c, bx + 10, by + 28, bw - 20, 16, '#ffffff'); pR(c, bx + 10, by + 28, bw - 20, 1, '#d8d8d0'); pR(c, bx + 10, by + 28, 16, 16, T.col); pR(c, bx + 16, by + 30, 4, 12, '#ffffff'); pR(c, bx + 12, by + 34, 12, 4, '#ffffff'); pT(c, pFit(c, name, bw - 44, 12), bx + bw / 2 + 8, by + 30, { size: 12, color: '#1a2a4a', align: 'center', shadow: null });
+    pR(c, bx + bw / 2 - 18, by + bh - 32, 36, 32, '#bfe0f8'); pR(c, bx + bw / 2, by + bh - 32, 1, 32, '#8aa8c8'); }
+  else if (L === 'work') { pR(c, bx, by, bw, bh, '#a8acb4'); pR(c, bx, by, bw, 18, '#3a3a44'); pT(c, pFit(c, name, bw - 8, 12), bx + bw / 2, by + 3, { size: 12, color: '#ffd23f', align: 'center', shadow: null }); pR(c, bx + 12, by + 26, bw * 0.6, bh - 26, '#8a8e96'); for (let yy = by + 28; yy < by + bh; yy += 5) pR(c, bx + 12, yy, bw * 0.6, 1, '#6a6e76'); pR(c, bx + bw - 40, by + 30, 28, bh - 30, '#5a4a3a'); }
+  else { pR(c, bx, by, bw, bh, '#d8d0c0'); pR(c, bx - 2, by - 4, bw + 4, 6, '#a89a88'); for (let r = 0; r < 2; r++) for (let i = 0; i < 4; i++) { const wx = bx + 10 + i * (bw - 20) / 4, wy = by + 6 + r * 19; pR(c, wx, wy, (bw - 20) / 4 - 8, 14, '#6a8ab8'); pR(c, wx + 2, wy + 2, 4, 10, 'rgba(255,255,255,0.35)'); }
+    pR(c, bx + 8, by + 44, bw - 16, 16, '#1a2a4a'); pR(c, bx + 8, by + 44, 4, 16, T.col); pT(c, pFit(c, name, bw - 28, 12), bx + bw / 2 + 2, by + 46, { size: 12, color: '#ffffff', align: 'center', shadow: null }); pR(c, bx + bw / 2 - 14, by + bh - 20, 28, 20, '#5a4a3a'); pR(c, bx + bw / 2 - 11, by + bh - 17, 22, 17, '#8ab0d8'); }
+  pR(c, bx - 14, y + h - 34, 10, 12, '#a0603a'); pCirc(c, bx - 9, y + h - 38, 7, '#3a8a3a'); pR(c, bx + bw + 4, y + h - 34, 10, 12, '#a0603a'); pCirc(c, bx + bw + 9, y + h - 38, 7, '#3a8a3a');
+  const nP = Math.round(rep / 25); for (let i = 0; i < nP; i++) { const px = x + ((f * (0.5 + i * 0.13) + i * 70) % (w + 20)) - 10, py = y + h - 20, sh = (Math.floor(f / 6) + i) % 2; pR(c, px - 3, py - 14, 7, 9, ['#c83040', '#2f60c0', '#3a9a5a', '#e8b030'][i % 4]); pCirc(c, px, py - 17, 3, '#f0c8a0'); pR(c, px - 2, py - 5, 2, 5 - sh, '#2a2a3a'); pR(c, px + 1, py - 5, 2, 4 + sh, '#2a2a3a'); }
+}
+function shTabOffice(s, c, g) {
+  const S = s.S, St = shSt(g), O = St.office, T = shOfficeT(O);
+  if (!O || !T) { pT(c, '資格を活かして、自分の事務所・お店を開く（1つまで）', 12, 66, { size: 12, color: PW.acc });
+    const L = SH_OFFICE.slice().sort((a, b) => (shOfficeOk(g, b) ? 1 : 0) - (shOfficeOk(g, a) ? 1 : 0)), per = 7;
+    L.slice(S.pg * per, S.pg * per + per).forEach((T2, i) => { const y = 84 + i * 34, ok = shOfficeOk(g, T2); pR(c, 8, y, 624, 32, i % 2 ? '#141c3a' : '#18204a'); pR(c, 8, y, 3, 32, T2.col);
+      pT(c, pFit(c, T2.nm, 170, 12), 18, y + 3, { size: 12, color: ok ? PW.text : GB_C.t3 }); pT(c, pFit(c, ok ? `1${T2.unit} ${yen(T2.fee)}・1か月の${shDemLab(T2)} 約${T2.base}${T2.unit}` : `必要：${shOfficeNeedTxt(T2)}`, 270, 12), 18, y + 17, { size: 12, color: ok ? PW.dim : '#a07a7a' });
+      pT(c, `開業 ${yen(T2.cost)}`, 300, y + 3, { size: 12, color: ok ? PW.acc : GB_C.t3 }); pT(c, `家賃 ${yen(T2.rent)}/月`, 300, y + 17, { size: 12, color: GB_C.t3 }); pT(c, pFit(c, `給料 ${yen(T2.sal)}/月`, 116, 12), 444, y + 10, { size: 12, color: GB_C.t3 });
+      s.btn('oopen:' + T2.id, ok ? '開業' : '資格なし', 566, y + 4, 60, 24, { size: 12, kind: ok ? 'pri' : 'norm', off: !ok }); });
+    GB_MODES.shikaku.pager(s, c, L.length, per, 330); return; }
+  const nm = shOfficeName(g, T); pFrame(c, 8, 64, 290, 262); shDrawOfficeArt(c, 14, 70, 278, 120, T, nm, S.f, O.rep);
+  pT(c, '評判', 18, 198, { size: 12, color: PW.dim }); shBar(c, 56, 200, 180, 10, O.rep / 100, O.rep >= 60 ? '#5ee07a' : O.rep >= 30 ? '#ffd23f' : '#ff5d6c'); pT(c, `${Math.round(O.rep)}`, 288, 198, { size: 12, align: 'right' });
+  pT(c, `スタッフ ${O.staff}人（給料 ${yen(T.sal)}/月）`, 18, 220, { size: 12 }); s.btn('ost-', '−', 226, 216, 28, 22, { size: 12, off: O.staff <= 0 }); s.btn('ost+', '＋', 258, 216, 28, 22, { size: 12, off: O.staff >= 5 });
+  s.btn('oad', O.ad ? `広告：出している（月${yen(shAdCost(T))}）` : `広告を出す（月${yen(shAdCost(T))}）`, 18, 244, 268, 22, { size: 12, kind: O.ad ? 'green' : 'norm' });
+  const left = GB_MODES.shikaku.left(s, g); s.btn('ow', O.workDay === g.state.day ? '今日は働いた' : '働く（8時間）', 18, 272, 130, 30, { size: 12, kind: 'pri', def: true, off: O.workDay === g.state.day || left < 480 || O.left <= 0 });
+  s.btn('osale', O.saleDay === g.state.day ? '今日は営業した' : '営業（4時間）', 154, 272, 132, 30, { size: 12, kind: 'blue', off: O.saleDay === g.state.day || left < 240 });
+  pT(c, `開業 ${shYM(g, O.day0).y}年${shYM(g, O.day0).m}月`, 18, 308, { size: 12, color: GB_C.t3 });
+  // 右：経営
+  pFrame(c, 306, 64, 326, 262, { title: `${shYM(g).m}月の経営` }); let y = 92; const kv = (k, v, col) => { pT(c, k, 318, y, { size: 12, color: PW.dim }); pT(c, v, 620, y, { size: 12, color: col || PW.text, align: 'right' }); y += 17; };
+  kv(`今月の${shDemLab(T)}`, `${O.dem}${T.unit}（のこり ${O.left}${T.unit}）`); kv('自分でこなした', `${O.me}${T.unit}・${O.meDays}日`); kv('スタッフの見込み', `${Math.min(O.left, O.staff * T.staffM)}${T.unit}（月末）`); kv('今月の売上（自分）', yen(O.sales), PW.acc);
+  kv('月末の経費', `${yen(T.rent + O.staff * T.sal + (O.ad ? shAdCost(T) : 0))}`, PW.bad); pR(c, 318, y + 1, 302, 1, '#2a3460'); y += 6;
+  const H = O.hist.slice(-6), mx = Math.max(1, ...H.map(h => Math.abs(h.profit))); pT(c, '月ごとの利益', 318, y, { size: 12, color: PW.dim }); y += 16;
+  const base = y + 34; pR(c, 318, base, 302, 1, '#4a5480'); if (!H.length) pT(c, 'まだ記録がない（月末にしめる）', 469, base - 22, { size: 12, color: GB_C.t3, align: 'center' });
+  H.forEach((h, i) => { const x = 324 + i * 50, hh = Math.round(30 * Math.abs(h.profit) / mx); pR(c, x, h.profit >= 0 ? base - hh : base + 1, 34, Math.max(1, hh), h.profit >= 0 ? '#3aa05a' : '#c83040'); pTiny(c, String(h.mi % 12 + 1), x + 12, base + (h.profit >= 0 ? 4 : hh + 4), PW.dim); });
+  y = base + 40; kv('先月の利益', H.length ? gbSign(H[H.length - 1].profit) : '—', H.length && H[H.length - 1].profit < 0 ? PW.bad : PW.good); kv('利益の合計', gbSign(O.total), O.total >= 0 ? PW.good : PW.bad);
+  s.btn('oclose', S.oc === 1 ? 'もう一度で閉業' : '閉業', 186, 304, 100, 18, { size: 12, kind: S.oc === 1 ? 'red' : 'norm' });
+  if (S.oanim > 0) { const a = Math.min(1, S.oanim / 10); c.save(); c.globalAlpha = a; pFrame(c, 150, 150, 340, 44, { bg: '#0a1024', edge: PW.acc }); pT(c, pFit(c, S.otxt || '', 310, 16), 320, 163, { size: 16, color: PW.acc, align: 'center' }); c.restore(); }
+}
+// ---- 称号の一覧 ----
+function shTitlesView(s, c, g) {
+  const S = s.S, St = shSt(g), TT = isObj(St.titles) ? St.titles : {}, got = SH_TITLES.filter(t => TT[t.id] != null).length, per = 12;
+  pT(c, `称号　${got}／${SH_TITLES.length}`, 12, 66, { size: 16, color: PW.acc });
+  SH_TITLES.slice(S.pg * per, S.pg * per + per).forEach((T, i) => { const on = TT[T.id] != null, x = 8 + (i % 3) * 210, y = 90 + Math.floor(i / 3) * 58;
+    pR(c, x + 2, y + 2, 202, 52, '#000'); pR(c, x, y, 202, 52, on ? '#2a2448' : '#141a30'); pR(c, x, y, 202, 1, on ? '#c9962a' : '#2a3050'); shMedal(c, x + 20, y + 30, ['#ffd23f', '#d8d8e8', '#e0a060'][i % 3], on);
+    pT(c, pFit(c, on ? T.nm : '？？？', on && T.fame ? 106 : 160, 12), x + 38, y + 8, { size: 12, color: on ? PW.acc : GB_C.t3 }); pT(c, pFit(c, T.desc, 160, 12), x + 38, y + 26, { size: 12, color: on ? PW.dim : '#4a5070' });
+    if (on && T.fame) pT(c, `知名度+${T.fame}`, x + 196, y + 8, { size: 12, color: '#c8b8ff', align: 'right' }); if (on) pT(c, `${shYM(g, TT[T.id]).y}年${shYM(g, TT[T.id]).m}月`, x + 196, y + 38, { size: 12, color: GB_C.t3, align: 'right' }); });
+  GB_MODES.shikaku.pager(s, c, SH_TITLES.length, per, 330);
+}
+// ---- 試験カレンダー ----
+function shCalView(s, c, g) {
+  const S = s.S, St = shSt(g), cur = shYM(g), L = SH_LIST.filter(q => { const qs = St.q[q.id]; return qs && !q.via && (qs.hrs > 0 || qs.app || num(qs.stage) > 0) && (!St.held[q.id] || q.score); }), per = 8, x0 = 196, cw = 36;
+  pT(c, '試験カレンダー（12か月）', 12, 66, { size: 12, color: PW.acc });
+  for (let i = 0; i < 12; i++) { const mi = cur.mi + i, x = x0 + i * cw; pR(c, x, 84, cw - 2, 18, i === 0 ? '#2a4a8a' : '#18204a'); pT(c, `${mi % 12 + 1}月`, x + cw / 2 - 1, 87, { size: 12, color: i === 0 ? PW.acc : PW.dim, align: 'center' }); if (mi % 12 === 0) pT(c, `${Math.floor(mi / 12)}年`, x + 2, 70, { size: 12, color: GB_C.t3 }); }
+  if (!L.length) { pT(c, '勉強している資格がない', 320, 140, { size: 12, color: PW.dim, align: 'center' }); return; }
+  L.slice(S.pg * per, S.pg * per + per).forEach((q, j) => { const qs = St.q[q.id], y = 106 + j * 27, sit = shSits(g, q)[q.kam || q.score ? 0 : num(qs.stage)], A = qs.app;
+    pR(c, 8, y, 624, 25, j % 2 ? '#141c3a' : '#18204a'); pR(c, 8, y, 3, 25, shCatCol(q.cat)); pT(c, pFit(c, q.nm, 176, 12), 16, y + 6, { size: 12 });
+    const pend = St.pend.filter(P => P.id === q.id && !P.done);
+    for (let i = 0; i < 12; i++) { const mi = cur.mi + i, x = x0 + i * cw; let lab = '', col = null;
+      if (sit.mon === 'cbt') { lab = '随時'; col = '#2a3a5a'; } else if (sit.mon && sit.mon.includes(mi % 12 + 1)) { lab = '試験'; col = '#2a5a8a'; }
+      if (A && A.mi === mi) { lab = '受験'; col = '#c83040'; } if (pend.some(P => shYM(g, P.at).mi === mi)) { lab = '発表'; col = '#c9962a'; }
+      if (col) { pBev(c, x + 1, y + 3, cw - 4, 19, col); pT(c, lab, x + cw / 2 - 1, y + 6, { size: 12, align: 'center', shadow: null }); } else pR(c, x + cw / 2 - 2, y + 12, 2, 2, '#2a3050'); } });
+  GB_MODES.shikaku.pager(s, c, L.length, per, 330);
+}
 
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
