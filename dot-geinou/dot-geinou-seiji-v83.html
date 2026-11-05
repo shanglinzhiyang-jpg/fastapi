@@ -38372,6 +38372,12 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
     if (this.right(S)) { const [a, b] = P(780, 120), on = (s.t >> 3) % 2; pR(c, a - 26, b - 8, 52, 15, '#05030a'); pR(c, a - 25, b - 7, 50, 13, on ? '#ffd23f' : '#5a4a10'); pT(c, '右打ち▶', a, b - 7, { size: 12, color: on ? '#3a1a00' : '#c8b060', align: 'center', shadow: null }); }
     // アタッカー
     if (S.atkOpen) { const [a, b] = P(498, 846); pR(c, a, b, 96 * sc, 22 * sc, '#1a0006'); if (s.t % 8 < 4) pR(c, a, b - 2, 96 * sc, 2, PW.acc); }
+    // 上皿（持ち玉の量に合わせて、丸い玉が山になってたまる）
+    { const [ax, ay] = P(232, 1066), [bx2, by2] = P(714, 1138), w = Math.round(bx2 - ax), h = Math.round(by2 - ay), f = Math.max(0, Math.min(1, S.balls / 500)); pR(c, ax, ay, w, h, '#1a0c10'); pR(c, ax, ay, w, 2, '#0a0408');
+      const per = Math.floor((w - 2) / 5), rows = Math.max(1, Math.floor((h - 1) / 4)), tot = f * per * rows;
+      const ball = (x, y) => { pR(c, x + 1, y, 3, 1, '#9aa0ac'); pR(c, x, y + 1, 5, 3, '#9aa0ac'); pR(c, x + 1, y + 4, 3, 1, '#6a6e7a'); pR(c, x + 1, y + 1, 2, 2, '#d8dce6'); pR(c, x + 1, y + 1, 1, 1, '#ffffff'); pR(c, x + 3, y + 3, 1, 1, '#5a5e6a'); };
+      for (let j = 0; j < rows; j++) { const fill = Math.max(0, Math.min(1, tot / per - j)); if (fill <= 0) break; const n = j === rows - 1 || fill < 1 ? Math.round(per * fill * (0.85 + 0.15 * Math.sin(j))) : per - (j % 2);
+        const x0 = ax + 1 + Math.round((w - 2 - n * 5) / 2) + (j % 2 ? 2 : 0), y = by2 - 5 - j * 4; for (let i = 0; i < n; i++) ball(x0 + i * 5, y - ((i * 7 + j * 3) % 3 === 0 ? 1 : 0)); } }
     // 玉（大きめ・つや）
     for (const b of S.bl) { const [x, y] = P(b.x, b.y); pR(c, x - 2, y - 2, 4, 4, '#8a90a0'); pR(c, x - 2, y - 2, 3, 3, '#c8ccd8'); pR(c, x - 1, y - 2, 1, 1, '#ffffff'); pR(c, x + 1, y + 1, 1, 1, '#4a5060'); }
     for (const f of S.fl) { const [x, y] = P(f.x, f.y); c.save(); c.globalAlpha = Math.max(0, 1 - f.t / 36); pT(c, f.s, x, y - 10 - f.t * 0.6, { size: 12, color: f.s === '+3' ? '#7ad0ff' : '#ffe94a', align: 'center', outline: '#05030a', ow: 1 }); c.restore(); }
@@ -38388,9 +38394,10 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
     this.lcd(s, c, 258, 38, 224, 140);
     // 保留（色つき）
     pFrame(c, 258, 184, 224, 30); pT(c, '保留', 270, 191, { size: 16, color: PW.dim });
-    for (let i = 0; i < 4; i++) { const e = S.q[i], x = 330 + i * 36, y = 199, pop = S.fly.some(f => f.k === 'hold' && f.t < 10) && i === S.q.length - 1; if (e) pcHoldIcon(c, x, y, pop ? 8 : 6, e.col, s.t); else pCirc(c, x, y, 6, '#2a3050'); }
+    for (let i = 0; i < 4; i++) { const e = S.q[i], x = 330 + i * 36, y = 199, pop = S.fly.some(f => f.k === 'hold' && f.t < 10) && i === S.q.length - 1; if (e) pcHoldIcon(c, x, y, pop || e.anim ? 8 : 6, pcHoldShown(e, s.t), s.t); else pCirc(c, x, y, 6, '#2a3050'); }
     // データカウンター（出玉グラフつき）
     const DX = 258, DY = 218; pFrame(c, DX, DY, 224, 116, { bg: '#0a0610' });
+    if (S.dpage) pcDataPage(c, S, DX, DY); else {
     pT(c, 'スタート', DX + 10, DY + 7, { size: 12, color: PW.dim }); pSeg(c, String(S.cur).padStart(4, ' '), DX + 64, DY + 5, { w: 7, h: 13 });
     pT(c, '大当り', DX + 122, DY + 7, { size: 12, color: PW.dim }); pSeg(c, String(S.hits).padStart(3, ' '), DX + 166, DY + 5, { w: 7, h: 13, on: '#ffd23f', off: 'rgba(255,210,63,0.12)' });
     pT(c, S.jack ? `大当り中 ${Math.min(10, Math.floor(S.jack.paid / (S.jack.pay / 10)) + 1)}R` : kak ? `確変 残${S.sup.n}・右打ち` : jit ? `時短 残${S.sup.n}・右打ち` : S.prev != null ? `通常　前回 ${S.prev}回転で当たり` : '通常', DX + 10, DY + 27, { size: 12, color: S.jack ? PW.acc : kak ? '#ff8ab8' : jit ? PW.good : PW.text });
@@ -38400,6 +38407,7 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
       let px = null, py = null; G.forEach((v, k) => { const x = gx + Math.round(k / Math.max(1, G.length - 1) * (gw - 1)), y = Math.round(z - v / mx * (gh / 2 - 2)); if (px != null) pLine(c, px, py, x, y, v >= 0 ? '#5ee07a' : '#ff5d6c'); px = x; py = y; });
       const last = G[G.length - 1] || 0; pR(c, gx + gw - 92, gy + 1, 90, 14, 'rgba(18,10,26,0.85)'); pT(c, `差玉 ${last >= 0 ? '+' : ''}${last.toLocaleString()}`, gx + gw - 2, gy + 1, { size: 12, color: last >= 0 ? PW.good : PW.bad, align: 'right', shadow: null }); }
     pT(c, '履歴', DX + 10, DY + 92, { size: 12, color: PW.dim }); S.hist.slice(0, 6).forEach((h, i) => { const x = DX + 52 + i * 26; pBev(c, x, DY + 90, 22, 20, h >= 5 ? '#c83040' : h >= 2 ? '#c9962a' : '#3a3a5a'); pT(c, String(h), x + 11, DY + 93, { size: 12, align: 'center', shadow: null }); });
+    if (S.hist.length < 4) pT(c, 'タップで台データ', DX + 214, DY + 93, { size: 12, color: GB_C.t3, align: 'right' }); }
     // 右：ボタン・ドル箱
     const bx = 492, bw = 140;
     s.btn('rent', `玉貸し\n¥1,000で${S.rate === 4 ? 250 : 1000}玉`, bx, 38, bw, 48, { kind: S.ph === 'need' ? 'pri' : 'norm', def: S.ph === 'need', size: 16 });
@@ -38430,6 +38438,8 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
       if (cl <= 0.62 && t % 10 < 6) { pSpark(c, X + W / 2 + gbR(-8, 8), Y + 84 + gbR(-6, 6), (t >> 1) & 3, '#ffe94a'); } }
     else { th.bg(c, X, Y, W, H, t, S, kak ? 'kak' : jit ? 'jit' : 'normal'); if (kak) for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2 + t / 50; pLine(c, X + W / 2, Y + H + 10, X + W / 2 + Math.cos(a) * 200, Y + H + 10 + Math.sin(a) * 200, 'rgba(255,220,240,0.14)'); } }
     if (reachOn && !sp && t % 6 < 3) pR(c, X, Y, W, H, R.hit && R.f > R.stR + 60 ? 'rgba(255,210,63,0.25)' : 'rgba(255,40,80,0.22)');
+    if (R && R.zone && !J && !S.res && !sp && !zen) { const zc = th.rc[0]; c.save(); c.globalAlpha = 0.16 + 0.06 * Math.sin(t / 6); pR(c, X, Y, W, H, zc); c.restore(); for (let k = 0; k < 6; k++) { const yy = Y + ((t * 2 + k * 24) % H); pR(c, X, yy, 3, 8, zc); pR(c, X + W - 3, yy, 3, 8, zc); }
+      pR(c, X + W / 2 - 46, Y + 3, 92, 16, '#05030a'); pR(c, X + W / 2 - 45, Y + 4, 90, 14, t % 16 < 8 ? zc : pShade(zc, -0.3)); pT(c, `連続予告 ${Math.max(1, S.zoneN)}回目`, X + W / 2, Y + 4, { size: 12, color: '#ffffff', align: 'center', outline: '#05030a', ow: 1 }); }
     // 群予告（花びらのあらし）
     for (const w of S.swarm) { const px = X + w.x, py = Y + w.y + Math.sin(w.ph + w.x / 12) * 6; pR(c, px, py, 4, 2, '#ff9ac8'); pR(c, px + 1, py + 2, 2, 1, '#ff5a9a'); pR(c, px + 3, py - 1, 1, 1, '#ffffff'); }
     // 図柄
@@ -38482,6 +38492,7 @@ function pcRival(c, x, y, s, t) { const b = Math.round(Math.cos(t / 7)), cv = pA
     if (S.kyuin > 0 && S.kyuin % 4 < 2) { for (let k = 0; k < 4; k++) pR(c, X + k, Y + k, W - k * 2, 1, pcRainbow(t, k)), pR(c, X + k, Y + H - 1 - k, W - k * 2, 1, pcRainbow(t, k + 2)), pR(c, X + k, Y + k, 1, H - k * 2, pcRainbow(t, k + 4)), pR(c, X + W - 1 - k, Y + k, 1, H - k * 2, pcRainbow(t, k + 6)); }
     // 右打ちの案内
     if (this.right(S) && !J && !S.res && (t >> 4) % 2) { pR(c, X + W - 58, Y + H - 20, 54, 16, '#ffd23f'); pT(c, '右打ち▶', X + W - 31, Y + H - 19, { size: 12, color: '#3a1a00', align: 'center', shadow: null }); }
+    if (R && R.colUp > 0) { pT(c, '保留変化！', X + 54, Y + H - 22, { size: 16, color: R.col === 'gold' ? '#ffd23f' : '#ff5a5a', outline: '#05030a', ow: 2 }); }
     // 当該保留（いま回っている保留）
     if (R && !J) pcHoldIcon(c, X + 12, Y + H - 12, 5, R.col, t, true);
     if (S.flash > 0) { c.save(); c.globalAlpha = S.flash / 24; pR(c, X, Y, W, H, '#ffffff'); c.restore(); }
@@ -38542,9 +38553,82 @@ function pcGimmick(c, P, sc, g, t, col) {
 function pcLeds(c, P, sc, t, col, fast) { const n = 30, head = Math.floor(t / (fast ? 1 : 2)) % n;
   for (let i = 0; i < n; i++) { const a = Math.PI * 1.5 + i / n * Math.PI * 2, [x, y] = P(543 + Math.cos(a) * 470, 640 + Math.sin(a) * 470), dd = (head - i + n) % n; const on = dd < 6; pR(c, Math.round(x) - 2, Math.round(y) - 2, 4, 4, '#1a0a10'); if (on) { c.save(); c.globalAlpha = 1 - dd / 6; pR(c, Math.round(x) - 2, Math.round(y) - 2, 4, 4, typeof col === 'function' ? col(i) : col); c.restore(); } } }
 
+// ---- 機種の曲（オリジナル）：通常・リーチ・大当たり・RUSH ----
+const PC_SONGS = {
+  pc_sakura: { bpm: 100, step: 0.5, tracks: [
+    { wave: 'square', vol: 0.03, notes: 'A4 . C5 . E5 . F5 E5 | C5 . B4 . A4 . . . | E5 . F5 . A5 . F5 E5 | F5 E5 C5 . B4 . . . | A4 . C5 E5 F5 . E5 . | C5 . E5 . B4 . A4 . | B4 . C5 . E5 . F5 . | E5 - - - . . . .' },
+    { wave: 'triangle', vol: 0.09, notes: 'A2 . E3 . A2 . E3 . | F2 . C3 . F2 . C3 . | A2 . E3 . A2 . E3 . | E2 . B2 . E2 . B2 . | A2 . E3 . A2 . E3 . | F2 . C3 . F2 . C3 . | G2 . D3 . G2 . D3 . | E2 . B2 . E2 . E2 .' },
+    { wave: 'drum', vol: 0.045, notes: 'k . h . s . h . | k . h . s . h h' } ] },
+  pc_dragon: { bpm: 138, step: 0.5, tracks: [
+    { wave: 'square', vol: 0.03, notes: 'A4 . A4 C5 D5 . E5 . | G5 . E5 D5 C5 . D5 . | A4 . A4 C5 D5 . E5 G5 | A5 - - . G5 E5 D5 . | F5 . F5 E5 D5 . C5 . | D5 . D5 C5 A4 . G4 . | A4 . C5 . D5 . E5 . | A4 - - - . . . .' },
+    { wave: 'triangle', vol: 0.1, notes: 'A2 A2 . A2 A2 . G2 . | F2 F2 . F2 G2 . G2 . | A2 A2 . A2 A2 . G2 . | F2 . G2 . A2 . . . | F2 F2 . F2 F2 . E2 . | D2 D2 . D2 E2 . E2 . | F2 . G2 . A2 . G2 . | A2 . . . A2 . . .' },
+    { wave: 'drum', vol: 0.055, notes: 'k . s . k k s . | k . s . k . s s' } ] },
+  pc_neon: { bpm: 116, step: 0.5, tracks: [
+    { wave: 'square', vol: 0.028, notes: 'E5 . . B4 . . E5 . | D5 . . A4 . . D5 . | C5 . . G4 . . C5 . | B4 . D5 . E5 - . . | G5 . . E5 . . G5 . | F#5 . . D5 . . F#5 . | E5 . . C5 . . E5 . | D5 . B4 . E5 - - .' },
+    { wave: 'triangle', vol: 0.09, notes: 'E2 E3 E2 E3 E2 E3 E2 E3 | D2 D3 D2 D3 D2 D3 D2 D3 | C2 C3 C2 C3 C2 C3 C2 C3 | B1 B2 B1 B2 B1 B2 B1 B2' },
+    { wave: 'drum', vol: 0.05, notes: 'k . h . s . h . | k k h . s . h h' } ] },
+  pc_reach: { bpm: 152, step: 0.5, tracks: [
+    { wave: 'square', vol: 0.032, notes: 'E5 F5 E5 F5 G5 . . . | E5 F5 E5 F5 A5 . . . | E5 F5 E5 F5 B5 . . . | C6 . B5 . A5 . G#5 .' },
+    { wave: 'triangle', vol: 0.1, notes: 'E2 . E2 . E2 . E2 . | F2 . F2 . F2 . F2 . | G2 . G2 . G2 . G2 . | A2 . A2 . G#2 . G#2 .' },
+    { wave: 'drum', vol: 0.06, notes: 'k . s . k k s . | k k s . k k s s' } ] },
+  pc_jack: { bpm: 132, step: 0.5, tracks: [
+    { wave: 'square', vol: 0.032, notes: 'C5 . E5 . G5 . C6 . | B5 . G5 . A5 . G5 . | F5 . A5 . C6 . A5 . | G5 . E5 . D5 . C5 . | C5 . E5 . G5 . C6 . | D6 . C6 . B5 . A5 . | G5 . A5 . B5 . D6 . | C6 - - - . . . .' },
+    { wave: 'triangle', vol: 0.1, notes: 'C3 . G3 . C3 . G3 . | G2 . D3 . G2 . D3 . | F2 . C3 . F2 . C3 . | G2 . D3 . C3 . G2 . | C3 . G3 . C3 . G3 . | F2 . C3 . F2 . C3 . | G2 . D3 . G2 . B2 . | C3 . G2 . C3 . . .' },
+    { wave: 'drum', vol: 0.055, notes: 'k . h . s . h . | k . h k s . h h' } ] },
+  pc_rush: { bpm: 160, step: 0.5, tracks: [
+    { wave: 'square', vol: 0.03, notes: 'A5 . A5 G5 A5 . C6 . | G5 . G5 E5 G5 . A5 . | F5 . F5 E5 F5 . G5 . | E5 . D5 . E5 - . . | A5 . A5 G5 A5 . C6 . | D6 . C6 . A5 . G5 . | F5 . G5 . A5 . B5 . | A5 - - - . . . .' },
+    { wave: 'triangle', vol: 0.09, notes: 'A2 A3 A2 A3 A2 A3 A2 A3 | G2 G3 G2 G3 G2 G3 G2 G3 | F2 F3 F2 F3 F2 F3 F2 F3 | E2 E3 E2 E3 E2 E3 E2 E3' },
+    { wave: 'drum', vol: 0.055, notes: 'k h s h k h s h | k h s h k k s s' } ] },
+};
+function pcSongsReg() { if (pcSongsReg.done || !E.So) return; pcSongsReg.done = true; for (const k of Object.keys(PC_SONGS)) { try { E.So(k, PC_SONGS[k]); } catch (e) { } } }
+function pcMusic(s) {
+  const S = s.S; if (!E.So || !S || S.ph === 'pick' || !S.m) return; pcSongsReg(); const R = S.roll;
+  let want = S.m.id === 'lmid' ? 'pc_dragon' : S.m.id === 'mid' ? 'pc_neon' : 'pc_sakura';
+  if (S.jack || S.res) want = 'pc_jack'; else if (R && R.reach && (R.rt === 'ZEN' ? R.f > R.gEnd : R.f > R.stR)) want = 'pc_reach'; else if (S.sup && S.sup.k === 'kak') want = 'pc_rush';
+  if (S.music !== want) { S.music = want; try { tt.bgm(want); } catch (e) { } }
+}
+// ---- 店内放送 ----
+function pcAnnounce(s) { const S = s.S; if (S.ph !== 'play' || !s.tip) return; S.annT = (S.annT || 1800 + gbR(0, 2400)) - 1; if (S.annT > 0) return; S.annT = 2400 + gbR(0, 3000);
+  const n = gbR(1, 160), L = [`【店内放送】${n}番台のお客様、大当たりおめでとうございます！`, `【店内放送】ただいま${gbR(5, 12)}連チャン中の台がございます！`, '【店内放送】本日もドットホールにご来店いただき、まことにありがとうございます。', '【店内放送】お客様にお願いいたします。台のお席を離れる際は、お声がけください。', `【店内放送】${n}番台、ドル箱の交換にうかがいます！`];
+  s.tip(L[gbR(0, L.length - 1)], PW.dim); }
+// ---- パチンコの向上3：曲・連続予告・保留変化・台データ・店内放送・上皿 ----
+(function pcPlus3() {
+  const M = GB_MODES && GB_MODES.pachinko; if (!M || M.__plus3) return; M.__plus3 = true;
+  const init0 = M.init0, upd0 = M.update, start0 = M.startSpin, enter0 = M.enter, launch0 = M.launch, tap0 = M.tap, lot0 = M.lot;
+  M.init0 = function (s, g) { init0.call(this, s, g); Object.assign(s.S, { nSpins: 0, nBalls: 0, nHits: 0, dpage: 0, zoneN: 0, music: null });
+    if (!s.__pcBgm) { s.__pcBgm = true; try { s.__prevBgm = (tt.current && tt.current.name) || tt.wanted || null; } catch (e) { } const d0 = s.done.bind(s); s.done = (...a) => { try { if (s.S && s.S.music) tt.bgm(s.__prevBgm || null); } catch (e) { } return d0(...a); }; } };
+  M.lot = function (S) { const e = lot0.call(this, S); e.zone = e.hit ? Math.random() < 0.45 : e.reach ? Math.random() < 0.12 : Math.random() < 0.015; e.anim = e.col !== 'white' ? 24 : 0; return e; };
+  M.launch = function (s) { const S = s.S; if (!S.sup && !S.jack) S.nBalls++; return launch0.call(this, s); };
+  M.enter = function (s, b) { const S = s.S, n = S.q.length; enter0.call(this, s, b); const e = S.q[S.q.length - 1]; if (S.q.length > n && e && e.anim) pcSnd('step'); };
+  M.startSpin = function (s) {
+    const S = s.S, nrm = !S.sup, zoneAhead = S.q.some(e => e.zone);
+    start0.call(this, s); const R = S.roll; if (!R) return;
+    if (nrm) { S.nSpins++; if (R.hit) S.nHits++; }
+    R.zone = zoneAhead; S.zoneN = zoneAhead ? S.zoneN + 1 : 0;
+    // 当該変化（いま回る保留の色が、回りはじめに上がる）
+    const low = ['white', 'blue', 'green'].includes(R.col);
+    if (low && ((R.hit && Math.random() < 0.3) || (!R.hit && R.reach && Math.random() < 0.06) || (!R.reach && Math.random() < 0.01))) { R.col = R.hit ? (Math.random() < 0.7 ? 'red' : 'gold') : R.reach ? 'green' : 'blue'; R.colUp = 50; S.flash = Math.max(S.flash, 8); pcSnd(R.col === 'gold' ? 'kyuin' : 'step'); }
+  };
+  M.update = function (s, g) { const S = s.S; for (const e of S.q || []) if (e.anim > 0) e.anim--; if (S.roll && S.roll.colUp > 0) S.roll.colUp--; upd0.call(this, s, g); pcMusic(s); pcAnnounce(s);
+    if (S.jack && S.jack.f === 2 && s.tip) s.tip(`【店内放送】${(s.o.preset && s.o.preset.no) || gbR(1, 160)}番台のお客様、大当たりおめでとうございます！`, PW.acc); };
+  M.tap = function (s, g, p) { if (tap0) tap0.call(this, s, g, p); const S = s.S; if (p.x >= 258 && p.x <= 482 && p.y >= 218 && p.y <= 334) { S.dpage = S.dpage ? 0 : 1; tt.sfx('cursor'); } };
+})();
+// 保留の色の変化（白→…→本当の色へ、段階的に上がる）
+const PC_COLSEQ = ['white', 'blue', 'green', 'red', 'gold', 'rainbow'];
+function pcHoldShown(e, t) { if (!e.anim) return e.col; const fin = PC_COLSEQ.indexOf(e.col), k = Math.floor((24 - e.anim) / 5); return PC_COLSEQ[Math.min(fin, k)]; }
+// 台データのページ
+function pcDataPage(c, S, DX, DY) {
+  const bpk = S.rate === 4 ? 250 : 1000, rot = S.nBalls > 0 ? S.nSpins / (S.nBalls / bpk) : 0, prob = S.nHits ? Math.round(S.nSpins / S.nHits) : null, mx = Math.max(0, ...S.graph);
+  const row = (y, k, v, col) => { pT(c, k, DX + 10, DY + y, { size: 12, color: PW.dim }); pT(c, v, DX + 214, DY + y, { size: 12, color: col || PW.text, align: 'right' }); };
+  pT(c, '台データ', DX + 10, DY + 6, { size: 12, color: PW.acc }); pT(c, 'タップで切替', DX + 214, DY + 6, { size: 12, color: GB_C.t3, align: 'right' });
+  row(22, '回転率（千円あたり）', S.nBalls >= 50 ? `${rot.toFixed(1)}回` : '—', rot && rot >= S.m.spin ? PW.good : rot ? PW.bad : null);
+  row(37, 'この台の目安', `${S.m.spin}回`); row(52, '大当たり確率（通常時）', prob ? `1/${prob}` : '—'); row(67, '台のスペック', `1/${Math.round(1 / S.m.p)}　確変${Math.round(S.m.kr * 100)}%`);
+  row(82, '総回転・最大連チャン', `${S.spins}回・${S.best}連`); row(97, '最高差玉', `+${mx.toLocaleString()}`, PW.good);
+}
+
 return { gko, gkMorning, gkAttend, gkConsult, gkCare, gkTest, openSchool, casteTable, gkLabels, amaJoin, univTryout, setOrigin, evPush, playEvents, buildEvent, EVENTS, joinMinor, minorTryout, isMinor, bodyPlan, restDay, useCheat, cheatMenu, jointTryout, tryoutJointOK, unionMeeting, charity, farmStandings, ballOf, bmiOf, kouhakusen, punish, mlbEligible, mlbOffers, joinMLB, decideAfterMLB, doOffJob, teamPlayers, arsenalOf, careerCands, careerRecordList, CREC, install, advance, getN, openNPB, morningHook, processDay, practice, joinTeam, meOvr, careerTot, standings, leaders, NpbScene, TEAMS, takeTryout, acceptOffer, retire, keiyaku, summary };
 }
-try{NPB_factory({Un:Un,LA:LA,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt,$M:$M,Ho:Ho,qe:qe,Zc:Zc,setLae:function(f){Lae=f(Lae)},setVu:function(f){vu=f(vu)},cd:cd,r6t:r6t,ug:ug,R4:R4,bu:bu,cg:cg,wu:wu,sh:$h,Mm:Mm,Z:Z,getBQ:function(){return typeof BQ!=="undefined"?BQ:null},setXIa:function(f){try{XIa=f(XIa)}catch(e){console.error(e)}},apps:function(){return mCe.concat(Object.values(Mm))},x0t:x0t,VP:VP,L$t:L$t,$8:$8,aPa:aPa,Wn:Wn,v8:v8,Ur:Ur,Ut:Ut,U_e:U_e,rg:rg,L4:L4,Lf:Lf,jrt:jrt,XIa:XIa,set$8:function(f){try{$8=f($8)}catch(e){console.error(e)}},setCjt:function(f){try{Cjt=f(Cjt)}catch(e){console.error(e)}},LU:typeof lu!=="undefined"?lu:null}).install()}catch(e){console.error("[npb] install",e)}
+try{NPB_factory({Un:Un,LA:LA,Tn:Tn,fl:fl,er:er,Jh:Jh,en:en,I:I,Tlt:Tlt,D:D,wt:wt,Ka:Ka,lo:lo,Bf:Bf,Mc:Mc,Kj:Kj,wu:wu,tt:tt,Oa:Oa,Ke:Ke,qn:qn,PA:PA,B6:B6,ga:ga,za:za,Ge:Ge,M8:M8,rw:rw,J_:J_,NE:NE,udt:udt,$M:$M,Ho:Ho,qe:qe,Zc:Zc,setLae:function(f){Lae=f(Lae)},setVu:function(f){vu=f(vu)},cd:cd,r6t:r6t,ug:ug,R4:R4,bu:bu,cg:cg,wu:wu,sh:$h,Mm:Mm,Z:Z,getBQ:function(){return typeof BQ!=="undefined"?BQ:null},setXIa:function(f){try{XIa=f(XIa)}catch(e){console.error(e)}},apps:function(){return mCe.concat(Object.values(Mm))},x0t:x0t,VP:VP,L$t:L$t,$8:$8,aPa:aPa,Wn:Wn,v8:v8,Ur:Ur,Ut:Ut,U_e:U_e,rg:rg,L4:L4,Lf:Lf,jrt:jrt,XIa:XIa,set$8:function(f){try{$8=f($8)}catch(e){console.error(e)}},setCjt:function(f){try{Cjt=f(Cjt)}catch(e){console.error(e)}},LU:typeof lu!=="undefined"?lu:null,So:typeof So!=="undefined"?So:null}).install()}catch(e){console.error("[npb] install",e)}
 DBa().catch(t=>{console.error(t),vTe(window.__game,"\u30B2\u30FC\u30E0\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u2026","\u30DA\u30FC\u30B8\u3092\u518D\u8AAD\u307F\u8FBC\u307F\u3057\u3066\u304F\u3060\u3055\u3044")});})();
 
 </script>
