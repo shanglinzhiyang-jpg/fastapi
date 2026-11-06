@@ -10560,7 +10560,9 @@ function playGame(N, S, h, a, kind, md, round, out, preRes) {
       w: nameOf(N, res.w), l: nameOf(N, res.l), sv: nameOf(N, res.sv), wt: res.w ? (P_team(N, res.w)) : null,
       hr: res.hr.map(([id, n]) => [nameOf(N, id), n, P_team(N, id) === myTeam ? 1 : 0, kind === 'R' && S.bs && S.bs[id] ? num(S.bs[id][B.HR]) : 0]), me: res.me || null };
     // 試合の詳細（打者・投手の成績）：試合の画面でタップして見る
-    try { const sd = id => P_team(N, id) === myTeam ? 0 : 1; e.bx = { b: Object.entries(res.bl || {}).map(([id, v]) => [id, sd(id), v[1], v[2], v[5], v[4], v[7], v[3]]), p: Object.entries(res.pl || {}).sort((u, v) => num(u[1][8]) - num(v[1][8])).map(([id, v]) => [id, sd(id), v[1], v[2], v[3], v[4], v[5], v[6], v[9]]), wi: res.w || null, li: res.l || null, si: res.sv || null, sayo: res.sayo ? 1 : 0 }; } catch (er) { }
+    try { const sd = id => P_team(N, id) === myTeam ? 0 : 1; const sb = id => { const q = kind === 'R' && S.bs && S.bs[id]; return q ? [num(q[B.AB]), num(q[B.H]), num(q[B.HR]), num(q[B.RBI])] : null; }, sp = id => { const q = kind === 'R' && S.ps && S.ps[id]; return q ? [num(q[Pp.OUT]), num(q[Pp.ER]), num(q[Pp.W]), num(q[Pp.L]), num(q[Pp.SV])] : null; };
+      // 末尾は試合後の時点の今季成績（打者：打数・安打・本塁打・打点／投手：アウト・自責・勝・敗・S）
+      e.bx = { b: Object.entries(res.bl || {}).map(([id, v]) => [id, sd(id), v[1], v[2], v[5], v[4], v[7], v[3], sb(id)]), p: Object.entries(res.pl || {}).map((q, i) => [q, i]).sort((u, v) => (num(v[0][1][0]) - num(u[0][1][0])) || (u[1] - v[1])).map(q => q[0]).map(([id, v]) => [id, sd(id), v[1], v[2], v[3], v[4], v[5], v[6], v[9], sp(id)]), wi: res.w || null, li: res.l || null, si: res.sv || null, sayo: res.sayo ? 1 : 0 }; } catch (er) { }
     S.log.push(e);
     if (S.log.length > 220) S.log.shift();
     if (out) out.games.push(e);
@@ -31158,7 +31160,7 @@ function ptChips(c, x, y, w, labels, active, onPick, o = {}) {
 function ptTable(c, x, y, w, cols, rows, o = {}) {
   const rh = o.rh || 34, fixed = cols.reduce((s, q) => s + (q.w || 0), 0), flex = Math.max(40, w - 16 - fixed), W2 = cols.map(q => q.w || flex);
   let yy = y;
-  if (!o.noHead) { let cx = x + 8; cols.forEach((q, i) => { const al = q.al || (i ? 'right' : 'left'); tx(c, q.t, al === 'right' ? cx + W2[i] - 4 : al === 'center' ? cx + W2[i] / 2 : cx, yy + 2, { size: 11, color: NU.t3, align: al }); cx += W2[i]; }); yy += 20; fr(c, x + 6, yy - 2, w - 12, 1, 'rgba(255,255,255,0.10)'); }
+  if (!o.noHead) { let cx = x + 8; cols.forEach((q, i) => { const al = q.al || (i ? 'right' : 'left'); tx(c, q.t, al === 'right' ? cx + W2[i] - 4 : al === 'center' ? cx + W2[i] / 2 : cx, yy + 2, { size: 11, color: q.hc || NU.t3, align: al }); cx += W2[i]; }); yy += 20; fr(c, x + 6, yy - 2, w - 12, 1, 'rgba(255,255,255,0.10)'); }
   rows.forEach((r, k) => {
     if (r.mine) { uRR(c, x + 2, yy + 1, w - 4, rh - 2, 8, NU.accSoft); fr(c, x + 2, yy + 7, 3, rh - 14, NU.acc); }
     let cx = x + 8;
