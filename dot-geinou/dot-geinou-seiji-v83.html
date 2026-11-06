@@ -10572,6 +10572,23 @@ function playGame(N, S, h, a, kind, md, round, out, preRes) {
 }
 const P_team = (N, id) => id === 'ME' ? (N.me && N.me.team) : (N.L.players[id] && N.L.players[id].team);
 
+// 公式戦の1カード分（全球場の1試合ずつ）を進める
+function playRoundR(g, N, S, out) {
+  const r = S.done, rmd = roundMd(S, r);
+  S.curMd = rmd;
+  for (const [h, a] of (typeof p5Pairs === 'function' ? p5Pairs(N, S, r) : roundPairs(S, r))) playGame(N, S, h, a, 'R', rmd, r, out); // 雨天中止はあすダブルヘッダー
+  farmDay(g, N, S, r, rmd, out);
+  try { minorDay(g, N, S, r, rmd, out); } catch (e) { console.error('[npb] minor', e); }
+  try { farmRound(N, S); if (N.me && (N.me.st === 'pro' || meMLB(N))) suspendedTick(g, N, S, out); } catch (e) { console.error('[npb] more round', e); }
+  try { mlbDay(g, N, S, r, rmd, out); evoAfterRound(g, N, S, out); } catch (e) { console.error('[npb] evo round', e); }
+  try { if (typeof critRound === 'function' && !(typeof window !== 'undefined' && window.__CRIT_OFF)) critRound(N, S, r); } catch (e) { console.error('[crit] round', e); }
+  try { pnRound(g, N, S, r, out); } catch (e) { console.error('[npb] pennant round', e); }
+  try { p2Round(g, N, S, r, out); } catch (e) { console.error('[npb] pennant2 round', e); }
+  try { p3Round(g, N, S, r, out); } catch (e) { console.error('[npb] pennant3 round', e); }
+  try { if (r === S.N - 1) envRecord(N, S); } catch (e) { console.error('[npb] env rec', e); }
+  S.done++;
+  if (S.done % 8 === 0) updateRole(g, N, S, out, false);
+}
 // ---- 1日分の進行 ----
 function processDay0(g, N, day, out) {
   CUR_OUT = out;
@@ -10586,22 +10603,7 @@ function processDay0(g, N, day, out) {
   // 前日までの公式戦
   const pdt = dateOf(g, day - 1), pmd = pdt.year === y ? mdOf(pdt) : -1;
   const due = dueRounds(S, pmd);
-  while (S.done < due) {
-    const r = S.done, rmd = roundMd(S, r);
-    S.curMd = rmd;
-    for (const [h, a] of (typeof p5Pairs === 'function' ? p5Pairs(N, S, r) : roundPairs(S, r))) playGame(N, S, h, a, 'R', rmd, r, out); // 雨天中止はあすダブルヘッダー
-    farmDay(g, N, S, r, rmd, out);
-    try { minorDay(g, N, S, r, rmd, out); } catch (e) { console.error('[npb] minor', e); }
-    try { farmRound(N, S); if (N.me && (N.me.st === 'pro' || meMLB(N))) suspendedTick(g, N, S, out); } catch (e) { console.error('[npb] more round', e); }
-    try { mlbDay(g, N, S, r, rmd, out); evoAfterRound(g, N, S, out); } catch (e) { console.error('[npb] evo round', e); }
-    try { if (typeof critRound === 'function' && !(typeof window !== 'undefined' && window.__CRIT_OFF)) critRound(N, S, r); } catch (e) { console.error('[crit] round', e); }
-    try { pnRound(g, N, S, r, out); } catch (e) { console.error('[npb] pennant round', e); }
-    try { p2Round(g, N, S, r, out); } catch (e) { console.error('[npb] pennant2 round', e); }
-    try { p3Round(g, N, S, r, out); } catch (e) { console.error('[npb] pennant3 round', e); }
-    try { if (r === S.N - 1) envRecord(N, S); } catch (e) { console.error('[npb] env rec', e); }
-    S.done++;
-    if (S.done % 8 === 0) updateRole(g, N, S, out, false);
-  }
+  while (S.done < due) playRoundR(g, N, S, out);
   const ev = S.ev;
   const at = (k, m) => md >= m && !ev[k] && (ev[k] = 1);
   if (at('camp', MD.camp)) springCamp(g, N, S, out);
