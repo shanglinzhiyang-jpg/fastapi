@@ -10027,11 +10027,21 @@ function* simGameGen(ctx, home, away, opt = {}) {
     if (inn >= 9 && lead >= 0 && lead <= 3 && ok(T.su1)) return T.su1;
     if (inn === 7 && lead >= 0 && lead <= 3 && ok(T.su2)) return T.su2;
     const rest = T.pen.filter(id => id !== T.cl && id !== T.su1 && id !== T.su2 && ok(id));
-    if (rest.length) return Math.abs(lead) <= 2 ? rest[0] : pick(rest);
+    if (rest.length) {
+      // 接戦の6〜8回、次の打者が左なら左のリリーフ（ワンポイント）
+      const nb = P(Bt.lineup[Bt.bi]);
+      if (nb && nb.bt === 'L' && inn >= 6 && inn <= 8 && Math.abs(lead) <= 2) { const lh = rest.filter(id => P(id) && P(id).th === 'L'); if (lh.length && RND() < 0.7) return lh[0]; }
+      // 接戦・終盤の1〜3点ビハインドは、いいリリーフから。大差なら下位のリリーフで休ませる
+      if (Math.abs(lead) <= 2 || (lead < 0 && lead >= -3 && inn >= 7)) return rest[0];
+      if (Math.abs(lead) >= 5) return rest[rest.length - 1];
+      return rest[Math.min(rest.length - 1, 1 + Math.floor(RND() * Math.max(1, rest.length - 1)))];
+    }
     const any = T.pen.filter(id => !F.used.has(id));
     return any.length ? any[0] : null;
   }
   function manage(F, Bt, inn, mid) {
+    // 投手の打順で代打を出したら、次の守りでリリーフをその打順に入れる
+    if (!mid && F.phForP != null) { const k = F.phForP; F.phForP = null; const id = chooseRel(F, Bt, inn); if (id) { changePitcher(F, Bt, id, inn); F.lineup[k] = id; } else F.lineup[k] = F.pit; return; }
     const cur = F.pit, isSt = cur === F.starter, p = pl(cur), L = limitOf(cur, isSt);
     const lead = F.runs - Bt.runs;
     let pull = false;
@@ -10203,11 +10213,15 @@ function* simGameGen(ctx, home, away, opt = {}) {
       }
       // 代打（CPU球団）：終盤の接戦で、控えにずっと打てる選手がいれば
       if (Bt.T.bench && inn >= 7 && num(Bt.phN) < 2 && Math.abs(Bt.runs - F.runs) <= 3 && !(typeof window !== 'undefined' && window.__PH_OFF)) {
-        const cur = Bt.lineup[Bt.bi], cp = P(cur);
-        if (cp && cur !== 'ME' && cp.pos !== 'P' && Bt.T.pos && Bt.T.pos[cur]) {
-          const used = Bt.phSet || (Bt.phSet = new Set());
-          const cand = Bt.T.bench.filter(id => id !== 'ME' && !used.has(id) && !Bt.lineup.includes(id)).map(id => P(id)).filter(q => q && q.pos !== 'P' && !(num(q.inj) > 0)).sort((x, y) => offOf(y) - offOf(x))[0];
-          if (cand && offOf(cand) >= offOf(cp) + 8 && RND() < 0.35) { Bt.lineup[Bt.bi] = cand.id; used.add(cand.id); Bt.phN = num(Bt.phN) + 1; Bt.phNew = cand.id; }
+        const cur = Bt.lineup[Bt.bi], cp = P(cur), isPit = cp && cp.pos === 'P', diff = Bt.runs - F.runs, onB = !!(bases[0] || bases[1] || bases[2]);
+        // 投手の打順（DHなし）：7回以降の同点・ビハインド、または6回以降のビハインドで走者がいれば代打
+        const isRel = cur !== Bt.starter, pitPH = isPit && !Bt.T.dh && (inn >= 7 ? diff <= (isRel ? 1 : 0) : inn >= 6 && diff < 0 && onB);
+        if (cp && cur !== 'ME' && (isPit ? pitPH : Bt.T.pos && Bt.T.pos[cur])) {
+          const used = Bt.phSet || (Bt.phSet = new Set()), pth = P(F.pit) ? P(F.pit).th : 'R';
+          // 相手投手の左右も見る（左投手には右打者、右投手には左打者）
+          const phv = q => offOf(q) + (q.bt === 'S' ? 1.5 : q.bt !== pth ? 3 : -2);
+          const cand = Bt.T.bench.filter(id => id !== 'ME' && !used.has(id) && !Bt.lineup.includes(id)).map(id => P(id)).filter(q => q && q.pos !== 'P' && !(num(q.inj) > 0)).sort((x, y) => phv(y) - phv(x))[0];
+          if (cand && (isPit ? RND() < 0.85 : phv(cand) >= phv(cp) + 8 && RND() < 0.35)) { Bt.lineup[Bt.bi] = cand.id; used.add(cand.id); Bt.phN = num(Bt.phN) + (isPit ? 0 : 1); Bt.phNew = cand.id; if (isPit) Bt.phForP = Bt.bi; }
         }
       }
       // 盗塁
@@ -10245,6 +10259,11 @@ function* simGameGen(ctx, home, away, opt = {}) {
       if (ctx.live && meId && (bid === meId || F.pit === meId)) {
         const roll = (db = {}, dp = {}) => { const b2 = { ...b }, p2 = { ...p }; for (const k in db) b2[k] = num(b2[k]) + db[k]; for (const k in dp) p2[k] = num(p2[k]) + dp[k]; return paResult(b2, p2, F, bases, inn, { Bt, outs, bottom, bh: bl(bid).h, pbf: pl(F.pit).bf }); };
         r = yield { kind: bid === meId ? 'bat' : 'pit', b, p, bid, pid: F.pit, bases: bases.map(x => x ? x.id : null), outs, inn, bottom, hs: H.runs, as: A.runs, pc: F.pc, roll };
+      }
+      // 敬遠：終盤の接戦で一塁が空き、得点圏に走者。強打者を歩かせて、次の弱い打者と勝負する
+      if (!r && inn >= 8 && !bases[0] && (bases[1] || bases[2]) && Math.abs(Bt.runs - F.runs) <= 1 && !(typeof window !== 'undefined' && window.__IBB_OFF)) {
+        const nx = P(Bt.lineup[(Bt.bi + 1) % Bt.lineup.length]);
+        if (nx && offOf(b) >= offOf(nx) + 12 && offOf(b) >= 62 && RND() < 0.55) r = { c: 'BB', pc: 4, ibb: 1 };
       }
       if (!r) r = paResult(b, p, F, bases, inn, { Bt, outs, bottom, bh: bl(bid).h, pbf: pl(F.pit).bf });
       // 球数：省エネ投球・ストライク先行は少なく、初球打ちの打者も少なく
