@@ -9611,8 +9611,8 @@ const POS1 = { P: '投', C: '捕', '1B': '一', '2B': '二', '3B': '三', SS: '�
 const FW = { C: 1, SS: 1, '2B': .85, '3B': .7, OF: .6, '1B': .3, DH: 0, P: .2 };
 
 // 打撃成績 index
-const B = { G: 0, PA: 1, AB: 2, H: 3, D: 4, T: 5, HR: 6, RBI: 7, R: 8, BB: 9, K: 10, SB: 11, CS: 12, SF: 13, DP: 14, HBP: 15, RAB: 16, RH: 17, GS: 18, SAYO: 19, MULTI: 20, SH: 21, NP: 22, SW: 23, WHF: 24, GB: 25, FB: 26, LD: 27, IFH: 28, PULL: 29, CENT: 30, OPPO: 31, CLAB: 32, CLH: 33, XBO: 34, XBT: 35, OOB: 36, WPA: 37, RE24: 38, LI: 39, WLI: 40, GDPO: 41 };
-const BL = 42, PL_ = 37;
+const B = { G: 0, PA: 1, AB: 2, H: 3, D: 4, T: 5, HR: 6, RBI: 7, R: 8, BB: 9, K: 10, SB: 11, CS: 12, SF: 13, DP: 14, HBP: 15, RAB: 16, RH: 17, GS: 18, SAYO: 19, MULTI: 20, SH: 21, NP: 22, SW: 23, WHF: 24, GB: 25, FB: 26, LD: 27, IFH: 28, PULL: 29, CENT: 30, OPPO: 31, CLAB: 32, CLH: 33, XBO: 34, XBT: 35, OOB: 36, WPA: 37, RE24: 38, LI: 39, WLI: 40, GDPO: 41, BRL: 42 };
+const BL = 43, PL_ = 38;
 // ---- 得点期待値（RE24）と勝利確率（WPA・LI） ----
 const RE_T = [[0.481, 0.859, 1.100, 1.437, 1.350, 1.784, 1.964, 2.292], [0.254, 0.509, 0.664, 0.884, 0.950, 1.130, 1.376, 1.541], [0.098, 0.224, 0.319, 0.429, 0.353, 0.478, 0.580, 0.752]];
 const reOf = (outs, bb) => outs >= 3 ? 0 : RE_T[outs][bb & 7];
@@ -9638,11 +9638,17 @@ function bbTypeOf(r) {
     case '2B': { const x = RND(); return x < 0.5 ? 'ld' : x < 0.95 ? 'fb' : 'gb'; }
     case '3B': return RND() < 0.4 ? 'ld' : 'fb'; default: return null; }
 }
+// バレル（打球速度と角度が最もよい「芯でとらえた」打球）になったか。本塁打の約8割、二塁打の約3割。打者のパワー・投手の球威で上下する
+function brlP(r, b, p, t) {
+  const f = clamp(1 + (num(b.pow) - 50) / 70 + (abv(b, 'hard') - 50) / 200 - (num(p && p.vel, 145) - 145) / 90, 0.45, 1.7);
+  switch (r.c) { case 'HR': return clamp(0.74 + (num(b.pow) - 50) * 0.003, 0.55, 0.92); case '2B': return t === 'gb' ? 0.02 : 0.27 * f; case '3B': return 0.2 * f;
+    case '1B': return r.inf ? 0 : t === 'ld' ? 0.06 * f : 0.01; case 'LO': return 0.11 * f; case 'FO': return 0.045 * f; case 'GO': return 0.004; default: return 0; }
+}
 // 打球の方向（引っ張り・センター・流し）
 function dirOf(b) { const pu = clamp(0.38 + 0.14 * (abv(b, 'pull') - 50) / 50 + 0.04 * (num(b.pow) - 50) / 50, 0.2, 0.62), op = clamp(0.24 - 0.08 * (abv(b, 'pull') - 50) / 50 + 0.04 * (abv(b, 'lin') - 50) / 50, 0.1, 0.4), x = RND(); return x < pu ? 'pull' : x < pu + op ? 'oppo' : 'cent'; }
 let SW_WH = 0;
-const BX_K = [['whf', 24], ['gb', 25], ['fb', 26], ['ld', 27], ['ifh', 28], ['pull', 29], ['cent', 30], ['oppo', 31], ['clab', 32], ['clh', 33], ['xbo', 34], ['xbt', 35], ['oob', 36], ['wpa', 37], ['re24', 38], ['li', 39], ['wli', 40], ['gdpo', 41]];
-const PX_K = [['swi', 21], ['whf', 22], ['gb', 23], ['fb', 24], ['ld', 25], ['ir', 26], ['irs', 27], ['bs', 29], ['wpa', 30], ['re24', 31], ['li', 32], ['wli', 33], ['rab', 35], ['rh', 36]];
+const BX_K = [['whf', 24], ['gb', 25], ['fb', 26], ['ld', 27], ['ifh', 28], ['pull', 29], ['cent', 30], ['oppo', 31], ['clab', 32], ['clh', 33], ['xbo', 34], ['xbt', 35], ['oob', 36], ['wpa', 37], ['re24', 38], ['li', 39], ['wli', 40], ['gdpo', 41], ['brl', 42]];
+const PX_K = [['swi', 21], ['whf', 22], ['gb', 23], ['fb', 24], ['ld', 25], ['ir', 26], ['irs', 27], ['bs', 29], ['wpa', 30], ['re24', 31], ['li', 32], ['wli', 33], ['rab', 35], ['rh', 36], ['brl', 37]];
 // 1打席のスイング数（見た球数と結果から。積極的な打者・パワーのある打者ほど振る）
 function swingsOf(r, b, p) {
   const pc = Math.max(1, num(r.pc)), sp = clamp(0.33 + 0.1 * (num(b.pow) - 50) / 50 + 0.08 * (abv(b, 'fps') - 50) / 50 + 0.05 * (abv(b, 'swg') - 50) / 50 - 0.1 * (num(b.eye) - 50) / 50, 0.18, 0.62);
@@ -9654,7 +9660,7 @@ function swingsOf(r, b, p) {
 const fdE = (...a) => { if (typeof fdEv === 'function') fdEv(...a); }; // 守備の記録（p81）
 const ifhCap = v => v > 0.06 ? 0.06 + 0.025 * (1 - Math.exp(-(v - 0.06) / 0.025)) : v; // 内野安打の確率もなだらかに頭打ち（最大8.5％ほど）
 // 投手成績 index
-const Pp = { G: 0, GS: 1, W: 2, L: 3, SV: 4, HLD: 5, OUT: 6, H: 7, HR: 8, BB: 9, K: 10, R: 11, ER: 12, CG: 13, SHO: 14, BF: 15, NP: 16, QS: 17, WP: 18, HBP: 19, NH: 20, SWI: 21, WHF: 22, GB: 23, FB: 24, LD: 25, IR: 26, IRS: 27, SVO: 28, BS: 29, WPA: 30, RE24: 31, LI: 32, WLI: 33, GSC: 34, RAB: 35, RH: 36 };
+const Pp = { G: 0, GS: 1, W: 2, L: 3, SV: 4, HLD: 5, OUT: 6, H: 7, HR: 8, BB: 9, K: 10, R: 11, ER: 12, CG: 13, SHO: 14, BF: 15, NP: 16, QS: 17, WP: 18, HBP: 19, NH: 20, SWI: 21, WHF: 22, GB: 23, FB: 24, LD: 25, IR: 26, IRS: 27, SVO: 28, BS: 29, WPA: 30, RE24: 31, LI: 32, WLI: 33, GSC: 34, RAB: 35, RH: 36, BRL: 37 };
 const newB = () => new Array(BL).fill(0);
 const newP = () => new Array(PL_).fill(0);
 const padA = (a, n) => { if (Array.isArray(a)) while (a.length < n) a.push(0); return a; };
@@ -9998,9 +10004,9 @@ function* simGameGen(ctx, home, away, opt = {}) {
   try { if (typeof foTeamMods === 'function' && ctx.N) { home.fo = foTeamMods(ctx.N, home.id); away.fo = foTeamMods(ctx.N, away.id); } } catch (e) { } // スコアラー・研究・打撃投手など
   const sides = { H, A };
   const rat = id => { const p = ensureAb(P(id)); if (!p) return null; if (id === meId && (cond || adj)) { const c = cond, a = adj || {}; return { ...p, con: p.con + c + num(a.con), pow: p.pow + c * .8 + num(a.pow), eye: p.eye + c * .5 + num(a.eye), spd: p.spd + num(a.spd), ctl: p.ctl + c + num(a.ctl), brk: p.brk + c * .7 + num(a.brk), vel: p.vel + c * .25 + num(a.vel), sta: p.sta + num(a.sta) }; } return p; };
-  const pl = id => pg[id] || (pg[id] = { outs: 0, h: 0, r: 0, er: 0, bb: 0, k: 0, hr: 0, bf: 0, pc: 0, np: 0, wp: 0, hbp: 0, entry: 0, exit: null, st: false, swi: 0, whf: 0, gb: 0, fb: 0, ld: 0, ir: 0, irs: 0, svo: 0, bs: 0, wpa: 0, re24: 0, li: 0, wli: 0, rab: 0, rh: 0 });
+  const pl = id => pg[id] || (pg[id] = { outs: 0, h: 0, r: 0, er: 0, bb: 0, k: 0, hr: 0, bf: 0, pc: 0, np: 0, wp: 0, hbp: 0, entry: 0, exit: null, st: false, swi: 0, whf: 0, gb: 0, fb: 0, ld: 0, ir: 0, irs: 0, svo: 0, bs: 0, wpa: 0, re24: 0, li: 0, wli: 0, rab: 0, rh: 0, brl: 0 });
   let curBases = null;
-  const bl = id => bg[id] || (bg[id] = { pa: 0, ab: 0, h: 0, d: 0, t: 0, hr: 0, rbi: 0, r: 0, bb: 0, k: 0, sb: 0, cs: 0, sf: 0, dp: 0, hbp: 0, rab: 0, rh: 0, gs: 0, sayo: 0, sh: 0, np: 0, sw: 0, whf: 0, gb: 0, fb: 0, ld: 0, ifh: 0, pull: 0, cent: 0, oppo: 0, clab: 0, clh: 0, xbo: 0, xbt: 0, oob: 0, wpa: 0, re24: 0, li: 0, wli: 0, gdpo: 0 });
+  const bl = id => bg[id] || (bg[id] = { pa: 0, ab: 0, h: 0, d: 0, t: 0, hr: 0, rbi: 0, r: 0, bb: 0, k: 0, sb: 0, cs: 0, sf: 0, dp: 0, hbp: 0, rab: 0, rh: 0, gs: 0, sayo: 0, sh: 0, np: 0, sw: 0, whf: 0, gb: 0, fb: 0, ld: 0, ifh: 0, pull: 0, cent: 0, oppo: 0, clab: 0, clh: 0, xbo: 0, xbt: 0, oob: 0, wpa: 0, re24: 0, li: 0, wli: 0, gdpo: 0, brl: 0 });
   pl(H.pit).st = true; pl(A.pit).st = true;
   let winC = { H: null, A: null }, loseC = { H: null, A: null }, gwC = { H: null, A: null }; const res0 = {};
   const limitOf = (id, starter) => { const p = P(id); return (starter ? 84 + p.sta * 0.48 : 18 + p.sta * 0.3) + (hasT(p, 'iron') ? 10 : 0) + (abv(p, 'tgh') - 50) * 0.3 - (hasT(p, 'y_stam') ? 12 : 0); };
@@ -10294,7 +10300,7 @@ function* simGameGen(ctx, home, away, opt = {}) {
       F.pc += r.pc;
       const L = bl(bid), PL = pl(F.pit);
       L.pa++; PL.bf++; PL.np += r.pc; L.np += r.pc; { const sw = swingsOf(r, b, p); L.sw += sw; L.whf += SW_WH; PL.swi += sw; PL.whf += SW_WH; }
-      { const t = bbTypeOf(r); if (t) { L[t]++; PL[t]++; if (r.c !== 'HR' || true) { const d = dirOf(b); L[d]++; } } if (r.c === '1B' && r.inf) L.ifh++; }
+      { const t = bbTypeOf(r); if (t) { L[t]++; PL[t]++; if (r.c !== 'HR' || true) { const d = dirOf(b); L[d]++; } if (RND() < brlP(r, b, p, t)) { L.brl++; PL.brl++; } } if (r.c === '1B' && r.inf) L.ifh++; }
       const bb0 = bitsOf(bases), dH0 = H.runs - A.runs; if (bases[0] && outs < 2) L.gdpo++;
       const risp = !!(bases[1] || bases[2]), ab0 = L.ab, h0 = L.h, rbi0 = L.rbi, runs0 = Bt.runs, full = !!(bases[0] && bases[1] && bases[2]), outs0 = outs;
       const runner = { id: bid, resp: F.pit, er: true };
@@ -25137,7 +25143,7 @@ function crPost(N, S, a) {
   C.today.k = isObj(C.today.k) ? C.today.k : {};
   const ck = `${S.y}:${a.tid}:${a.kind}`; C.cnt = isObj(C.cnt) ? C.cnt : {};
   // 試合の記事は、試合ごとにまとめて選ぶので（critRound）、1日の上限は数えない
-  const capN = a.good ? 'ng' : 'n', capMax = a.good ? 2 : CR_CAP;
+  const capN = a.good ? 'ng' : 'n', capMax = a.good ? 3 : CR_CAP;
   if (!game && !C.force && pri < 8 && (num(C.today[capN]) >= capMax || C.today.k[a.kind] || (CR_TCAP[a.kind] && num(C.cnt[ck]) >= CR_TCAP[a.kind] && !a.mine))) return null;
   if (!game) { C.today[capN] = num(C.today[capN]) + 1; C.today.k[a.kind] = 1; }
   C.cnt[ck] = num(C.cnt[ck]) + 1;
@@ -25265,7 +25271,7 @@ function crFan(c, kind) {
   // 勝ち越していて上位（借金なし・3位以内）のチームには、「辞めろ」などの激しいヤジは使わない
   if (c.debt <= 0 && c.rank <= 3) {
     const mild = crP(crFw(c, c.ks ? ['「なにしとんねん！」', '「しっかりせえ！」', '「次は頼むで！」'] : ['「しっかりしろ！」', '「何やってんだ！」', '「次は頼むぞ！」']));
-    const snsM = crP(crFw(c, ['こんな負け方はもったいない', '今日は相手が上だった', '切り替えていこう', '明日は頼むぞ', 'たまにはこういう日もある', '上位にいるんだから、こんな試合はしないでほしい']));
+    const snsM = crP(crFw(c, ['こんな負け方はもったいない', '今日は相手が上だった', '切り替えていこう', '明日は頼むぞ', 'たまにはこういう日もある', '上位にいるんだから、こんな試合はしないでほしい', '首位チームでもこういう日はある', '負けても応援は続ける', '今日は早く寝よう', '気持ちを切り替えよう', '負けから学べばいい']));
     return crP([
       `試合後、${c.gpark || c.park}のスタンドからは${mild}の声が飛んだ。SNS上でも「${snsM}」と、${c.fan}のため息があふれた。`,
       `上位を走るチームだけに、${c.fan}の落胆は大きい。SNS上には「${snsM}」という声が並んだ。`,
@@ -25687,7 +25693,7 @@ function critRound(N, S, r) {
   const L = CR_BUF.filter(x => x.r === r).map(x => ({ ...x, sc: x.sc >= 300 ? x.sc : x.sc - Math.min(30, 1.5 * num(C.kc[kcK(x.k)])) })).sort((x, y) => y.sc - x.sc); CR_BUF = [];
   const n = [0, 0], used = {};
   // 1節に批判4本・良いニュース2本まで。同じ種類は1本だけ（連敗や快挙などの大きなニュースは別）
-  for (const x of L) { if (x.sc < 300 && (n[x.good] >= (x.good ? 2 : 4) || used[x.k])) continue; try { if (x.fn()) { n[x.good]++; used[x.k] = 1; C.kc[kcK(x.k)] = num(C.kc[kcK(x.k)]) + 1; } } catch (e) { console.error('[crit] game', e); } }
+  for (const x of L) { if (x.sc < 300 && (n[x.good] >= (x.good ? 3 : 4) || used[x.k])) continue; try { if (x.fn()) { n[x.good]++; used[x.k] = 1; C.kc[kcK(x.k)] = num(C.kc[kcK(x.k)]) + 1; } } catch (e) { console.error('[crit] game', e); } }
   for (const k of Object.keys(C.kc)) if (!k.startsWith(S.y + ':')) delete C.kc[k];
 }
 // ================= 判定：毎日 =================
@@ -26859,7 +26865,7 @@ function gdObQ(c, q) {
   return `球団OBで野球評論家の${c.ob}氏は「${s.replace(/\{T\}/g, c.team).replace(/\{S\}/g, c.sur || '')}」と${crP(['評価する', '目を細める', '太鼓判を押す', '手放しで褒めた'])}。`;
 }
 function gdFan(c) {
-  const sns = crP(['最高の試合だった', 'これだから野球はやめられない', '球場に行ってよかった', '鳥肌が立った', '泣いた', ...(crLastDay(c) ? [] : ['今年は違う', 'このまま突っ走れ'])]);
+  const sns = crP(['最高の試合だった', 'これだから野球はやめられない', '球場に行ってよかった', '鳥肌が立った', '泣いた', '声が枯れた', 'ビールがうまい', '仕事中なのにニヤけてしまう', '今日のヒーローに乾杯', '見ていて元気が出た', 'ハイライトを何回も見てる', '家族で大喜び', ...(crLastDay(c) ? [] : ['今年は違う', 'このまま突っ走れ', '明日も勝つぞ', 'チケット取らなきゃ', '今年はいける気がする'])]);
   return crP([
     `${c.gpark || c.park}のスタンドは総立ちとなり、${c.fan}の歓声がいつまでも鳴りやまなかった。SNS上には「${sns}」という声があふれた。`,
     `試合後、${c.fan}は勝利の歌を何度も繰り返し、選手たちに手を振った。「${sns}」と、目を潤ませるファンの姿もあった。`,
@@ -27137,6 +27143,23 @@ if (typeof window !== 'undefined' && window.__crit) {
       r = f ? f() : null;
     } finally { C.force = 0; } return r ? r.head : null; };
 }
+
+// ---- 記事の言葉をふやす（同じ言い回しがくり返し出ないように） ----
+(() => {
+  const more = (arr, L) => { if (Array.isArray(arr)) for (const x of L) if (!arr.includes(x)) arr.push(x); };
+  more(CR_OBQ.toukai, ['勝負どころで腕が振れていない。打たれることを怖がっている', '配球が単調。打者に読まれている', '捕手との意思疎通ができていない。サインに首を振る場面が多すぎる', '序盤の失点が多すぎる。先発が試合をつくれない', '投手コーチの手腕も問われる。このままでは投手陣が崩壊する', '低めに集めるという基本ができていない', '内角を攻めきれないから、外の球を踏み込まれる', '球数がかさみ、中盤で力尽きる。毎試合同じ展開だ', '相手打線に研究されている。投球の幅を広げないと抑えられない', '一つの四球から崩れる。メンタルの弱さが気になる']);
+  more(CR_OBQ.hinda, ['初球から振る積極性がない。追い込まれてから打てる打者はそういない', '相手投手の決め球を捨てきれていない。狙い球を絞る勇気が必要だ', '中軸が機能していない。4番が打てないと、打線は線にならない', '凡打の山を築いている。ベンチの指示も徹底されていない', '打席での粘りがない。相手投手に楽をさせている', '練習でできていることが、試合でできていない。精神的な問題もある', '打順をいじりすぎて、選手が自分の役割を見失っている', '早打ちで凡退をくり返している。チームとしての狙いが見えない', '変化球への対応が悪い。相手バッテリーはそこを突いてくる', '一人ひとりが「自分が決める」と力みすぎている']);
+  more(CR_OBQ.slump, ['結果を求めすぎて、ボール球に手を出している', '下半身が使えていない。手打ちになっている', '一度ベンチで頭を冷やすのも手だ', '打撃コーチと一緒に、映像で好調時と比べてみるべきだ', '体の開きが早い。外の球に届いていない', 'タイミングの取り方が狂っている。足の上げ方を見直したい']);
+  more(CR_OBQ.pslump, ['勝負球の精度が落ちている。決め球が甘く入っている', '直球の走りが戻っていない。疲労が抜けていないのでは', '投球のテンポが悪い。守備のリズムまで崩れている', '腕の振りが緩んでいる。変化球が見極められている', '一度ローテーションを外れて、調整し直すべきだ', '同じ球種を続けて痛打されている。配球も見直す必要がある']);
+  more(CR_OBQ.team, ['チームの方向性が見えない。若手を育てるのか、勝ちにいくのか', '選手の自主性に任せすぎている。締めるところは締めないと', 'ベンチに危機感が感じられない。負けに慣れてはいけない', '戦力の問題ではない。戦い方の問題だ']);
+  more(CR_MQ.curt, ['……ノーコメントで', '……また明日、話します', '（足早に引き揚げた）', '……すべて、私の責任です']);
+  more(CR_MQ.blame, ['同じ失敗を何度も見せられている。もう一度、基本からやり直す', 'こんな試合を続けていたら、ファンが離れていく', '一人ひとりが、プロとしての自覚を持ってほしい', '準備不足と言われても仕方がない内容']);
+  more(CR_MQ.luck, ['悪い流れの時こそ、全員で声を出していく', 'ツキがないと言えばそれまで。でも、それを言い訳にはしない', '打球が正面を突くのも野球。いずれ風向きは変わる', '我慢の時期。ここを乗り越えたら強くなる']);
+  more(CR_MQ.defy, ['ここから巻き返す。そのための準備はできている', '負けを引きずらない。明日はまた新しい試合', 'チーム全員で前を向く。下を向いても何も変わらない']);
+  more(GD_MQ, ['全員で取った1点を、全員で守り切った', '投手陣がよく粘ってくれた', '打線がつながった。思い描いていた野球ができた', 'ベンチの雰囲気がいい。誰かが打てなくても、誰かがカバーしてくれる', '若い選手が思い切ってやってくれた', '相手もいい投手だった。少ないチャンスをよくものにしてくれた', '準備してきたことが、そのまま形になった', '勝ちは勝ち。反省するところは反省して、また明日', '選手を信じて待った。それが報われた', 'こういう勝ち方ができると、チームは強くなる']);
+  more(GD_OBQ, ['ベンチワークが冴えている。継投も代打も、ひとつひとつが当たっている', '主力が仕事をして、脇役がつなぐ。理想的な形だ', '大崩れしないのが今年の強み。投打のバランスがいい', 'こういう勝ち方ができるチームは強い。終盤に自信がついている', '若手とベテランがうまくかみ合っている']);
+  more(GD_OBQ_P, ['{S}は、打席での準備が素晴らしい。狙い球をきっちり仕留めている', '{S}の成長は目覚ましい。去年とは別人だ', '{S}は、ここ一番での集中力が違う', '{S}のような選手がいると、チームに活気が出る']);
+})();
 
 // ===== ニュース v2：新聞スタンド（一覧）・記事リーダー・ニュースタブの中身 =====
 // 描画はすべて Canvas2D。重い処理（折り返し・紙の質感・白黒ロゴ）はキャッシュする。
@@ -31516,7 +31539,7 @@ const PT_YRV_B = [
   { n: '基本', c: [['試合', a => a[B.G], 38], ['打率', a => fmtAvg(avgOf(a)), 50], ['本', a => a[B.HR], 32], ['打点', a => a[B.RBI], 40], ['盗塁', a => a[B.SB], 38], ['OPS', a => fmtAvg(obpOf(a) + slgOf(a))]] },
   { n: '打撃', c: [['打席', a => a[B.PA], 42], ['打数', a => a[B.AB], 42], ['安打', a => a[B.H], 40], ['二塁', a => a[B.D], 36], ['三塁', a => a[B.T], 36], ['得点', a => a[B.R]]] },
   { n: '選球・走塁', c: [['四球', a => a[B.BB], 38], ['死球', a => a[B.HBP], 36], ['三振', a => a[B.K], 40], ['犠打', a => a[B.SH], 36], ['犠飛', a => a[B.SF], 36], ['併殺', a => a[B.DP]]] },
-  { n: '率・指標', c: [['出塁率', a => fmtAvg(obpOf(a)), 52], ['長打率', a => fmtAvg(slgOf(a)), 52], ['IsoP', a => fmtAvg(slgOf(a) - avgOf(a)), 48], ['BB/K', a => ptR(a[B.BB], a[B.K]).toFixed(2), 44], ['WAR', (a, r) => num(r.w).toFixed(1)]] },
+  { n: '率・指標', c: [['出塁率', a => fmtAvg(obpOf(a)), 52], ['長打率', a => fmtAvg(slgOf(a)), 52], ['IsoP', a => fmtAvg(slgOf(a) - avgOf(a)), 48], ['バレル', a => { const bip = num(a[B.GB]) + num(a[B.FB]) + num(a[B.LD]); return bip ? `${(num(a[B.BRL]) / bip * 100).toFixed(1)}%` : '－'; }, 48], ['WAR', (a, r) => num(r.w).toFixed(1)]] },
 ];
 const PT_YRV_P = [
   { n: '基本', c: [['登板', a => a[Pp.G], 38], ['勝', a => a[Pp.W], 30], ['敗', a => a[Pp.L], 30], ['S', a => a[Pp.SV], 30], ['H', a => a[Pp.HLD], 30], ['防御率', a => fmtERA(eraOf(a))]] },
@@ -31542,56 +31565,60 @@ function ptZones(c, sc, N, p, x, y, w) {
   const fmt = v => v == null ? '－' : mt === 0 ? fmtAvg(v) : mt === 1 ? `${(v * 100).toFixed(1)}%` : `${Math.round(v * 100)}%`;
   // 色：高いほど赤、低いほど青（中間は落ち着いたグレー）
   const heat = v => { if (v == null) return 'rgba(255,255,255,0.05)'; const d = clamp((v - base) / span, -1, 1); const r = d >= 0 ? [Math.round(70 + 170 * d), Math.round(76 - 30 * d), Math.round(92 - 52 * d)] : [Math.round(70 + 10 * d), Math.round(76 + 40 * -d), Math.round(92 + 140 * -d)]; return `rgba(${r[0]},${r[1]},${r[2]},${0.55 + 0.4 * Math.abs(d)})`; };
-  // 配置：打者の立つ側に余白をとり、ゾーンはできるだけ大きく
-  const lhb = !isP && p.bt === 'L', sw = !isP && p.bt === 'S', side = 66, band = 24;
-  const zw = Math.min(w - side - band * 2 - 16, 300), cs = zw / 3, zh = cs * 3 * 1.12, ch = zh / 3;
-  const gx = lhb ? x + band + 8 : x + side + band + 8, gy = yy + band + 4;
-  // 背景（グラウンドの土の色をうっすら）
-  uRR(c, x, yy - 4, w, zh + band * 2 + 92, 14, 'rgba(255,255,255,0.035)');
-  const cell = (zl, X, Y, W, H, big) => {
-    const v = metric(zl), a = sum(zl, A);
-    uRR(c, X + 1, Y + 1, W - 2, H - 2, big ? 6 : 4, heat(v));
+  // 配置：ゾーンを横幅いっぱいに大きく（捕手の後ろから見た中継の画面のように）
+  const lhb = !isP && p.bt === 'L', sw = !isP && p.bt === 'S', band = 24, mg = 12;
+  const zw = w - band * 2 - mg * 2, cs = zw / 3, zh = Math.round(zw * 1.2), ch = zh / 3;
+  const gx = x + mg + band, gy = yy + band + 14, panH = zh + band * 2 + 92;
+  // 背景：スタンドの暗がりから、ホームベースまわりの土へ
+  c.save(); uRRPath(c, x, yy, w, panH, 16); c.clip();
+  c.fillStyle = lgrad(c, 0, yy, 0, yy + panH, [[0, '#0a1222'], [0.62, '#101a2c'], [0.8, '#3b2a1d'], [1, '#2a1d14']]); c.fillRect(x, yy, w, panH);
+  { const rg = c.createRadialGradient(gx + zw / 2, gy + zh * 0.45, 10, gx + zw / 2, gy + zh * 0.45, zw); rg.addColorStop(0, 'rgba(120,160,230,0.14)'); rg.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = rg; c.fillRect(x, yy, w, panH); }
+  // バッターボックスの白線（奥行きをつけて）
+  { const hy = gy + zh + band + 26, cx0 = gx + zw / 2; c.strokeStyle = 'rgba(255,255,255,0.22)'; c.lineWidth = 2;
+    for (const sd of [-1, 1]) { const ix = cx0 + sd * (zw * 0.36), ox = cx0 + sd * (zw * 0.62); c.beginPath(); c.moveTo(ix, hy - 34); c.lineTo(ox, hy - 34); c.lineTo(ox + sd * 14, hy + 40); c.lineTo(ix + sd * 6, hy + 40); c.closePath(); c.stroke(); } }
+  c.restore();
+  // ゾーンの影
+  c.save(); c.shadowColor = 'rgba(0,0,0,0.55)'; c.shadowBlur = 18; c.shadowOffsetY = 6; uRR(c, gx - band, gy - band, zw + band * 2, zh + band * 2, 12, 'rgba(10,16,30,0.9)'); c.restore();
+  const ball = (bx, by, r) => { c.fillStyle = '#f6f4ee'; c.beginPath(); c.arc(bx, by, r, 0, 7); c.fill(); c.strokeStyle = '#d0342c'; c.lineWidth = 1.2; c.beginPath(); c.arc(bx - r * 1.25, by, r * 0.95, -0.7, 0.7); c.stroke(); c.beginPath(); c.arc(bx + r * 1.25, by, r * 0.95, Math.PI - 0.7, Math.PI + 0.7); c.stroke(); };
+  const cell = (zl, X, Y, W, H, big, lab) => {
+    const v = metric(zl), a = sum(zl, A), r = big ? 7 : 6;
+    uRR(c, X + 1.5, Y + 1.5, W - 3, H - 3, r, heat(v));
+    // つやを少し（上半分を明るく）
+    c.save(); uRRPath(c, X + 1.5, Y + 1.5, W - 3, H - 3, r); c.clip(); c.fillStyle = lgrad(c, 0, Y, 0, Y + H, [[0, 'rgba(255,255,255,0.16)'], [0.5, 'rgba(255,255,255,0.03)'], [1, 'rgba(0,0,0,0.12)']]); c.fillRect(X, Y, W, H); c.restore();
     if (big) {
-      tx(c, fmt(v), X + W / 2, Y + H / 2 - 17, { size: Math.min(20, W / 4.2), bold: true, color: '#ffffff', align: 'center', numF: 1 });
-      const sub = mt === 0 ? `${sum(zl, Hh)}-${a}` : mt === 1 ? `${sum(zl, HR)}本/${a}` : `${sum(zl, K)}振/${a}`;
-      tx(c, sub, X + W / 2, Y + H / 2 + 6, { size: 11, color: 'rgba(255,255,255,0.78)', align: 'center' });
-      const hr = sum(zl, HR); if (hr && mt !== 1) { c.fillStyle = '#ffd040'; c.beginPath(); c.arc(X + W - 13, Y + 12, 4, 0, 7); c.fill(); tx(c, String(hr), X + W - 20, Y + 6, { size: 10, bold: true, color: '#ffd040', align: 'right' }); }
+      c.save(); c.shadowColor = 'rgba(0,0,0,0.45)'; c.shadowBlur = 4; c.shadowOffsetY = 1;
+      tx(c, fmt(v), X + W / 2, Y + H / 2 - 20, { size: Math.min(25, W / 3.7), bold: true, color: '#ffffff', align: 'center', numF: 1 }); c.restore();
+      const sub = mt === 0 ? `${sum(zl, Hh)}安打／${a}打数` : mt === 1 ? `${sum(zl, HR)}本／${a}打数` : `${sum(zl, K)}三振／${a}打数`;
+      let fz = 11; while (fz > 8 && tw(c, sub, fz) > W - 10) fz--;
+      tx(c, sub, X + W / 2, Y + H / 2 + 10, { size: fz, color: 'rgba(255,255,255,0.82)', align: 'center' });
+      const hr = sum(zl, HR); if (hr && mt !== 1) { const n = Math.min(hr, 4); for (let k = 0; k < n; k++) ball(X + W - 12 - k * 11, Y + 12, 4.2); if (hr > 4) tx(c, `${hr}`, X + W - 12 - n * 11, Y + 6, { size: 10, bold: true, color: '#ffe08a', align: 'right' }); }
     } else {
-      const sv = fmt(v); let fz = 11; while (fz > 8 && tw(c, sv, fz) > Math.max(W, H) - 6) fz--;
-      if (W >= H) tx(c, `${sv}`, X + W / 2, Y + H / 2 - fz / 2 - 1, { size: fz, color: 'rgba(255,255,255,0.9)', align: 'center' });
-      else { c.save(); c.translate(X + W / 2, Y + H / 2); c.rotate(-Math.PI / 2); tx(c, sv, 0, -fz / 2 - 1, { size: fz, color: 'rgba(255,255,255,0.9)', align: 'center' }); c.restore(); }
+      const sv = fmt(v); let fz = 12; while (fz > 8 && tw(c, sv, fz) > Math.max(W, H) - 30) fz--;
+      if (W >= H) { tx(c, sv, X + W / 2, Y + H / 2 - fz / 2 - 1, { size: fz, bold: true, color: 'rgba(255,255,255,0.92)', align: 'center' }); if (lab) tx(c, lab, X + 10, Y + H / 2 - 5, { size: 9, color: 'rgba(255,255,255,0.55)' }); }
+      else { c.save(); c.translate(X + W / 2, Y + H / 2); c.rotate(-Math.PI / 2); tx(c, sv, 0, -fz / 2 - 1, { size: fz, bold: true, color: 'rgba(255,255,255,0.92)', align: 'center' }); c.restore(); }
     }
   };
-  // ボールゾーン（上下左右の帯）
-  cell([9], gx, gy - band, cs * 3, band - 2); cell([10], gx, gy + zh + 2, cs * 3, band - 2);
-  cell([11], gx - band, gy, band - 2, zh); cell([12], gx + cs * 3 + 2, gy, band - 2, zh);
+  // ボールゾーン（上下左右の帯）とストライクゾーン
+  cell([9], gx, gy - band, zw, band - 2, false, '高めボール'); cell([10], gx, gy + zh + 2, zw, band - 2, false, '低めボール');
+  cell([11], gx - band, gy, band - 2, zh); cell([12], gx + zw + 2, gy, band - 2, zh);
   for (let z = 0; z < 9; z++) cell([z], gx + (z % 3) * cs, gy + Math.floor(z / 3) * ch, cs, ch, true);
-  c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 2; c.strokeRect(gx, gy, cs * 3, zh);
-  c.strokeStyle = 'rgba(255,255,255,0.18)'; c.lineWidth = 1; c.setLineDash([3, 3]); c.strokeRect(gx + cs / 2, gy + ch / 2, cs * 2, ch * 2); c.setLineDash([]);
-  // ホームベース（少し奥行きをつけて）
-  { const hx = gx + cs * 1.5, hy = gy + zh + band + 10, hw = cs * 0.9; c.fillStyle = '#ecebe4'; c.beginPath(); c.moveTo(hx - hw, hy); c.lineTo(hx + hw, hy); c.lineTo(hx + hw * 0.92, hy + 7); c.lineTo(hx, hy + 16); c.lineTo(hx - hw * 0.92, hy + 7); c.closePath(); c.fill(); c.strokeStyle = 'rgba(0,0,0,0.25)'; c.lineWidth = 1; c.stroke(); }
-  // 打者（右打者は捕手から見て左側に立つ）
-  const drawBatter = (bx, left) => {
-    const col = 'rgba(200,212,236,0.32)', s2 = (zh + band) / 170 * 0.82, top = gy + zh + band - 146 * s2, f = left ? -1 : 1;
-    c.save(); c.translate(bx, top); c.scale(s2 * f, s2); c.fillStyle = col; c.strokeStyle = col; c.lineCap = 'round';
-    c.beginPath(); c.arc(0, 12, 10, 0, 7); c.fill(); // ヘルメット
-    c.fillRect(-4, 6, 16, 5);
-    c.lineWidth = 15; c.beginPath(); c.moveTo(-2, 28); c.lineTo(-6, 78); c.stroke(); // 胴
-    c.lineWidth = 9; c.beginPath(); c.moveTo(-6, 78); c.lineTo(-18, 112); c.lineTo(-20, 146); c.stroke(); c.beginPath(); c.moveTo(-6, 78); c.lineTo(10, 110); c.lineTo(8, 146); c.stroke(); // 脚
-    c.lineWidth = 7; c.beginPath(); c.moveTo(-2, 34); c.lineTo(-18, 46); c.lineTo(-24, 30); c.stroke(); // 腕
-    c.lineWidth = 4; c.strokeStyle = 'rgba(214,180,120,0.8)'; c.beginPath(); c.moveTo(-24, 30); c.lineTo(-6, -22); c.stroke(); // バット
-    c.restore();
-  };
-  if (!isP && !sw) { const s2 = (zh + band) / 170 * 0.82; drawBatter(lhb ? gx + cs * 3 + band + 6 + 12 * s2 : gx - band - 6 - 12 * s2, lhb); }
+  c.save(); c.shadowColor = 'rgba(255,255,255,0.55)'; c.shadowBlur = 6; c.strokeStyle = '#ffffff'; c.lineWidth = 2.5; c.strokeRect(gx, gy, zw, zh); c.restore();
+  // ホームベース（奥行きをつけて、影も）
+  { const hx = gx + zw / 2, hy = gy + zh + band + 16, hw = zw * 0.36;
+    const path = () => { c.beginPath(); c.moveTo(hx - hw, hy); c.lineTo(hx + hw, hy); c.lineTo(hx + hw * 0.93, hy + 9); c.lineTo(hx, hy + 22); c.lineTo(hx - hw * 0.93, hy + 9); c.closePath(); };
+    c.save(); c.translate(0, 4); c.fillStyle = 'rgba(0,0,0,0.35)'; path(); c.fill(); c.restore();
+    c.fillStyle = lgrad(c, 0, hy, 0, hy + 22, [[0, '#ffffff'], [1, '#d9d6cc']]); path(); c.fill(); }
   // 軸ラベル
-  const inL = lhb ? '外角' : '内角', outL = lhb ? '内角' : '外角', ly = gy + zh + band + 30;
-  if (!isP && !sw) { tx(c, `← ${inL}`, gx, ly, { size: 11, color: NU.t3 }); tx(c, `${outL} →`, gx + cs * 3, ly, { size: 11, color: NU.t3, align: 'right' }); }
-  else tx(c, isP ? '（対戦した打者全体）' : '（両打ち：左右を合算）', gx + cs * 1.5, ly, { size: 11, color: NU.t3, align: 'center' });
+  const inL = lhb ? '外角' : '内角', outL = lhb ? '内角' : '外角', ly = gy + zh + band + 50;
+  if (!isP && !sw) { tx(c, `← ${inL}`, gx - band + 2, ly, { size: 12, bold: true, color: 'rgba(255,255,255,0.75)' }); tx(c, `${outL} →`, gx + zw + band - 2, ly, { size: 12, bold: true, color: 'rgba(255,255,255,0.75)', align: 'right' }); tx(c, lhb ? '左打者' : '右打者', gx + zw / 2, ly, { size: 11, color: 'rgba(255,255,255,0.55)', align: 'center' }); }
+  else tx(c, isP ? '対戦した打者全体' : '両打ち（左右を合算）', gx + zw / 2, ly, { size: 11, color: 'rgba(255,255,255,0.6)', align: 'center' });
+  yy += panH + 10;
   // 凡例
-  { const lw = Math.min(130, w - 190), lx = x + w - lw - 36, lgy = ly + 22; const g2 = c.createLinearGradient(lx, 0, lx + lw, 0); g2.addColorStop(0, heat(base - span)); g2.addColorStop(0.5, heat(base)); g2.addColorStop(1, heat(base + span)); c.fillStyle = g2; uRR(c, lx, lgy, lw, 8, 4, g2);
+  { const lw = Math.min(130, w - 190), lx = x + w - lw - 36, lgy = yy + 4; const g2 = c.createLinearGradient(lx, 0, lx + lw, 0); g2.addColorStop(0, heat(base - span)); g2.addColorStop(0.5, heat(base)); g2.addColorStop(1, heat(base + span)); uRR(c, lx, lgy, lw, 8, 4, g2);
     tx(c, '低い', lx - 6, lgy - 3, { size: 10, color: NU.t3, align: 'right' }); tx(c, '高い', lx + lw + 6, lgy - 3, { size: 10, color: NU.t3 });
-    tx(c, `全体 ${fmt(base)}（${allAB}打数）`, x + 10, lgy - 3, { size: 11, color: NU.t2 }); }
-  yy = ly + 46;
+    tx(c, `全体 ${fmt(base)}（${allAB}打数）`, x + 4, lgy - 3, { size: 11, color: NU.t2 }); }
+  const ly2 = yy;
+  yy = ly2 + 28;
   // 高め・真ん中・低め／内角・真ん中・外角 のまとめ（バー）
   const rowsH = [['高め', [0, 1, 2, 9]], ['真ん中', [3, 4, 5]], ['低め', [6, 7, 8, 10]]];
   const L0 = [0, 3, 6, 11], C0 = [1, 4, 7], R0 = [2, 5, 8, 12], rowsW = isP || sw ? [['左', L0], ['中', C0], ['右', R0]] : [[inL, lhb ? R0 : L0], ['真ん中', C0], [outL, lhb ? L0 : R0]];
@@ -33450,7 +33477,7 @@ function psMainTiles(N, a, isP, rk) {
 function psDetailTiles(a, isP) {
   const T = (lab, val) => ({ lab, val: String(val) });
   return isP ? [T('登板', bv(a, Pp.G)), T('先発', bv(a, Pp.GS)), T('投球回', fmtIP(bv(a, Pp.OUT))), T('完投', bv(a, Pp.CG)), T('完封', bv(a, Pp.SHO)), T('QS', bv(a, Pp.QS)), T('被安打', bv(a, Pp.H)), T('被本塁打', bv(a, Pp.HR)), T('与四球', bv(a, Pp.BB)), T('WHIP', f2(whipOf(a))), T('奪三振率', f2(k9Of(a))), T('被打率', fmtAvg(oppAvgOf(a)))]
-    : [T('試合', bv(a, B.G)), T('打席', bv(a, B.PA)), T('安打', bv(a, B.H)), T('二塁打', bv(a, B.D)), T('三塁打', bv(a, B.T)), T('得点', bv(a, B.R)), T('四球', bv(a, B.BB)), T('三振', bv(a, B.K)), T('出塁率', fmtAvg(obpOf(a))), T('長打率', fmtAvg(slgOf(a))), T('OPS', fmtAvg(obpOf(a) + slgOf(a))), T('併殺打', bv(a, B.DP))];
+    : [T('試合', bv(a, B.G)), T('打席', bv(a, B.PA)), T('安打', bv(a, B.H)), T('二塁打', bv(a, B.D)), T('三塁打', bv(a, B.T)), T('得点', bv(a, B.R)), T('四球', bv(a, B.BB)), T('三振', bv(a, B.K)), T('出塁率', fmtAvg(obpOf(a))), T('長打率', fmtAvg(slgOf(a))), T('バレル率', (() => { const bip = bv(a, B.GB) + bv(a, B.FB) + bv(a, B.LD); return bip ? `${(bv(a, B.BRL) / bip * 100).toFixed(1)}%` : '－'; })()), T('OPS', fmtAvg(obpOf(a) + slgOf(a))), T('併殺打', bv(a, B.DP))];
 }
 const psOpsBar = (a, isP) => isP ? { v: Math.max(0.2, 8 - Math.min(8, eraOf(a))), txt: fmtERA(eraOf(a)), col: eraOf(a) <= 2.5 ? NU.good : eraOf(a) >= 5 ? NU.bad : NU.acc } : { v: obpOf(a) + slgOf(a), txt: fmtAvg(obpOf(a) + slgOf(a)), col: obpOf(a) + slgOf(a) >= 0.9 ? NU.good : obpOf(a) + slgOf(a) < 0.6 ? NU.bad : NU.acc };
 function psYearBlocks(N, p, isP) {
@@ -33658,6 +33685,8 @@ function ppArticle(c, A, o) {
       }
       z += 10;
     }
+    if (A.score) { try { z += ppScoreBox(c, A.score, x, z, w) + 12; } catch (e) { } }
+    if (A.facts && A.facts.length) { try { z += ppFacts(c, A.facts, x, z, w, A.score ? '試合のデータ' : 'データ') + 12; } catch (e) { } }
     if (A.paras && A.paras.length) { fr(c, x + w - 30, z, 30, 2, P.ink3); z += 10; tx(c, `（${PP_NAME}）`, x + w, z, { size: 11, color: P.ink3, align: 'right' }); z += 24; }
     return z - yy + 20;
   });
@@ -33685,6 +33714,33 @@ function ptNewsV2(c, sc, N, x, y, w) {
   yy += ppChips(c, 14, yy, W - 28, N, f.id, id => { PT.newsF = id; }) + 14;
   yy += ppFront(c, 14, yy, W - 28, N, list, newIds, i => { tt.sfx('ok'); PT.art = { list, i }; }, { wire: !!f.wire });
   return yy - y + 20;
+}
+
+// ---- 記事の下：スコアボードとデータ欄 ----
+function ppScoreBox(c, S0, x, y, w) {
+  const P = NW.p, n = Math.max(9, S0.ls[0].length, S0.ls[1].length), nameW = 54, rw = 30, hw = 28, cw = (w - nameW - rw - hw - 12) / n, rh = 26;
+  fr(c, x, y, w, rh * 3 + 8, hexA(P.ink, 0.04)); fr(c, x, y, w, 2, P.ink); fr(c, x, y + rh * 3 + 6, w, 1, hexA(P.ink, 0.5));
+  let cx = x + 6 + nameW; for (let i = 0; i < n; i++) { tx(c, String(i + 1), cx + cw / 2, y + 6, { size: 11, color: P.ink3, align: 'center' }); cx += cw; }
+  tx(c, 'R', cx + rw / 2 + 4, y + 6, { size: 11, bold: true, color: P.ink3, align: 'center' }); tx(c, 'H', cx + rw + hw / 2 + 4, y + 6, { size: 11, color: P.ink3, align: 'center' });
+  for (let k = 0; k < 2; k++) {
+    const yy = y + rh * (k + 1) + 2, tid = S0.t[k], win = S0.r[k] > S0.r[1 - k];
+    fr(c, x + 4, yy - 1, w - 8, 1, hexA(P.ink, 0.15));
+    tx(c, TEAM[tid] ? TEAM[tid].short : '', x + 8, yy + 5, { size: 13, bold: true, color: win ? P.ink : P.ink2 });
+    let cx2 = x + 6 + nameW;
+    for (let i = 0; i < n; i++) { const v = S0.ls[k][i]; const s = v == null ? '' : String(v); tx(c, s === '0' ? '0' : s, cx2 + cw / 2, yy + 5, { size: 13, color: Number(v) > 0 ? P.red : P.ink, bold: Number(v) > 0, align: 'center' }); cx2 += cw; }
+    fr(c, cx2 + 2, yy - 1, 1, rh, hexA(P.ink, 0.25));
+    tx(c, String(S0.r[k]), cx2 + rw / 2 + 4, yy + 4, { size: 15, bold: true, color: win ? P.red : P.ink, align: 'center' });
+    tx(c, String(S0.hh[k]), cx2 + rw + hw / 2 + 4, yy + 5, { size: 13, color: P.ink2, align: 'center' });
+  }
+  return rh * 3 + 8;
+}
+function ppFacts(c, L, x, y, w, title) {
+  const P = NW.p, lines = []; for (const s of L) for (const l of nwWrap(c, s, w - 24, 13, false).filter(Boolean)) lines.push(l);
+  const h = 34 + lines.length * 21 + 8;
+  fr(c, x, y, w, h, hexA(P.ink, 0.05)); fr(c, x, y, w, 2, P.red); fr(c, x, y + h - 1, w, 1, hexA(P.ink, 0.3));
+  tx(c, title || 'データ', x + 10, y + 9, { size: 13, bold: true, color: P.red });
+  lines.forEach((l, i) => tx(c, l, x + 12, y + 34 + i * 21, { size: 13, color: P.ink }));
+  return h;
 }
 
 // ===== 縦画面：球団（専用画面）と記録（専用画面） =====
@@ -35107,7 +35163,7 @@ const MT_B = [
   ['ppa', 'P/PA', '選球・スイング', a => mdv(mv(a, B.NP), mv(a, B.PA)), mF2, '1打席に投げさせた球数', 1], ['swg', 'スイング率', '選球・スイング', a => mdv(mv(a, B.SW), mv(a, B.NP)), mP1, '振った球÷見た球', 0], ['con', 'コンタクト率', '選球・スイング', a => 1 - mdv(mv(a, B.WHF), mv(a, B.SW)), mP1, 'バットに当てた割合', 1],
   ['swstr', '空振り率（SwStr%）', '選球・スイング', a => mdv(mv(a, B.WHF), mv(a, B.NP)), mP1, '空振り÷見た球', -1], ['whiff', 'Whiff%', '選球・スイング', a => mdv(mv(a, B.WHF), mv(a, B.SW)), mP1, '空振り÷スイング', -1],
   ['gbp', 'ゴロ率', '打球', a => mdv(mv(a, B.GB), bip3(a)), mP1, '', 0], ['fbp', 'フライ率', '打球', a => mdv(mv(a, B.FB), bip3(a)), mP1, '', 0], ['ldp', 'ライナー率', '打球', a => mdv(mv(a, B.LD), bip3(a)), mP1, '', 1], ['gbfb', 'GB/FB', '打球', a => mdv(mv(a, B.GB), mv(a, B.FB)), mF2, 'ゴロ÷フライ', 0],
-  ['hrfb', 'HR/FB', '打球', a => mdv(mv(a, B.HR), mv(a, B.FB)), mP1, 'フライが本塁打になった割合', 1], ['ifh', '内野安打率', '打球', a => mdv(mv(a, B.IFH), mv(a, B.GB)), mP1, 'ゴロが内野安打になった割合', 1],
+  ['brl', 'バレル率', '打球', a => mdv(mv(a, B.BRL), bip3(a)), mP1, '打球のうち、速さと角度が最もよい「芯でとらえた」打球の割合（長打・本塁打になりやすい）', 1], ['brlpa', 'バレル/打席', '打球', a => mdv(mv(a, B.BRL), mv(a, B.PA)), mP1, '1打席あたりのバレルの割合', 1], ['hrfb', 'HR/FB', '打球', a => mdv(mv(a, B.HR), mv(a, B.FB)), mP1, 'フライが本塁打になった割合', 1], ['ifh', '内野安打率', '打球', a => mdv(mv(a, B.IFH), mv(a, B.GB)), mP1, 'ゴロが内野安打になった割合', 1],
   ['pull', '引っ張り率', '打球', a => mdv(mv(a, B.PULL), dir3(a)), mP1, '', 0], ['cent', 'センター返し率', '打球', a => mdv(mv(a, B.CENT), dir3(a)), mP1, '', 0], ['oppo', '流し打ち率', '打球', a => mdv(mv(a, B.OPPO), dir3(a)), mP1, '', 0],
   ['risp', '得点圏打率', '状況・クラッチ', a => rispOf(a), mF3, '走者二・三塁での打率', 1], ['cl', '終盤接戦の打率', '状況・クラッチ', a => mdv(mv(a, B.CLH), mv(a, B.CLAB)), mF3, '7回以降・1点差以内', 1],
   ['wpa', 'WPA', '状況・クラッチ', a => mv(a, B.WPA), mS2, '勝利確率をどれだけ上げたか', 1], ['re24', 'RE24', '状況・クラッチ', a => mv(a, B.RE24), mS1, '得点期待値をどれだけ上げたか', 1], ['pli', 'pLI', '状況・クラッチ', a => mdv(mv(a, B.LI), mv(a, B.PA)), mF2, '打席の場面の重要度（1が平均）', 0],
@@ -35131,7 +35187,7 @@ const MT_P = [
   ['qsp', 'QS率', '投球', a => mdv(mv(a, Pp.QS), mv(a, Pp.GS)), mP1, '6回以上・自責点3以下の先発の割合', 1], ['gsc', 'ゲームスコア（平均）', '投球', a => mdv(mv(a, Pp.GSC), mv(a, Pp.GS)), mF1, '先発試合の内容（50が平均）', 1], ['ipgs', '1先発の投球回', '投球', a => mdv(ipA(a), mv(a, Pp.GS)), mF2, '', 1],
   ['pswg', '被スイング率', '空振り・打球', a => mdv(mv(a, Pp.SWI), mv(a, Pp.NP)), mP1, '打者に振らせた割合', 1], ['pcon', '被コンタクト率', '空振り・打球', a => 1 - mdv(mv(a, Pp.WHF), mv(a, Pp.SWI)), mP1, '振られて当てられた割合', -1], ['pswstr', '空振り率（SwStr%）', '空振り・打球', a => mdv(mv(a, Pp.WHF), mv(a, Pp.NP)), mP1, '空振り÷投げた球', 1],
   ['pgb', 'ゴロ率', '空振り・打球', a => mdv(mv(a, Pp.GB), mv(a, Pp.GB) + mv(a, Pp.FB) + mv(a, Pp.LD)), mP1, '', 1], ['pfb', 'フライ率', '空振り・打球', a => mdv(mv(a, Pp.FB), mv(a, Pp.GB) + mv(a, Pp.FB) + mv(a, Pp.LD)), mP1, '', -1], ['pld', 'ライナー率', '空振り・打球', a => mdv(mv(a, Pp.LD), mv(a, Pp.GB) + mv(a, Pp.FB) + mv(a, Pp.LD)), mP1, '', -1],
-  ['pgbfb', 'GB/FB', '空振り・打球', a => mdv(mv(a, Pp.GB), mv(a, Pp.FB)), mF2, '', 1], ['phrfb', 'HR/FB', '空振り・打球', a => mdv(mv(a, Pp.HR), mv(a, Pp.FB)), mP1, '', -1],
+  ['pgbfb', 'GB/FB', '空振り・打球', a => mdv(mv(a, Pp.GB), mv(a, Pp.FB)), mF2, '', 1], ['phrfb', 'HR/FB', '空振り・打球', a => mdv(mv(a, Pp.HR), mv(a, Pp.FB)), mP1, '', -1], ['pbrl', '被バレル率', '空振り・打球', a => mdv(mv(a, Pp.BRL), mv(a, Pp.GB) + mv(a, Pp.FB) + mv(a, Pp.LD)), mP1, '打たれた打球のうち、芯でとらえられた割合', -1],
   ['svo', 'セーブ機会', '救援', a => mv(a, Pp.SVO), mI, 'セーブ＋セーブ失敗', 0], ['svp', 'セーブ成功率', '救援', a => mdv(mv(a, Pp.SV), mv(a, Pp.SVO)), mP1, '', 1], ['bs', 'セーブ失敗', '救援', a => mv(a, Pp.BS), mI, 'リードを守れなかった数', -1], ['hld', 'ホールド', '救援', a => mv(a, Pp.HLD), mI, '', 1],
   ['ir', '引き継いだ走者', '救援', a => mv(a, Pp.IR), mI, '', 0], ['irsp', '引き継いだ走者の生還率', '救援', a => mdv(mv(a, Pp.IRS), mv(a, Pp.IR)), mP1, '低いほど火消しがうまい', -1], ['gmli', 'gmLI', '救援', a => mdv(mv(a, Pp.LI), mv(a, Pp.BF)), mF2, '登板場面の重要度（1が平均）', 0],
   ['prisp', '得点圏被打率', '状況', a => mdv(mv(a, Pp.RH), mv(a, Pp.RAB)), mF3, '', -1], ['pwpa', 'WPA', '状況', a => mv(a, Pp.WPA), mS2, '勝利確率をどれだけ上げたか', 1], ['pre24', 'RE24', '状況', a => mv(a, Pp.RE24), mS1, '失点期待値をどれだけ下げたか', 1],
