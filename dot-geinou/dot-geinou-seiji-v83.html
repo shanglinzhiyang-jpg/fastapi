@@ -31025,6 +31025,7 @@ function ptDown(e) {
   e.preventDefault(); e.stopPropagation(); try { PT.el.setPointerCapture(e.pointerId); } catch (er) { }
   const p = ptPos(e), reg = PT.regions.slice().reverse().find(r => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h);
   PT.drag = { id: e.pointerId, x0: p.x, y0: p.y, x: p.x, y: p.y, t0: performance.now(), moved: false, reg, s0: reg ? num(PT.scroll[reg.key]) : 0, vy: 0, lt: performance.now(), ly: p.y, axis: null };
+  { const R = PT.navRect, sc0 = PT.sc; if (R && sc0 && !sc0.modal && !PT.more && !PT.art && p.x >= R.x && p.x < R.x + R.w && p.y >= R.y && p.y < R.y + R.h) { PT.drag.nav = 1; PT.drag.nx0 = num(PT.navX); PT.navVel = 0; } PT.navMoved = false; }
   if (reg) PT.vel[reg.key] = 0;
   const hh = PT.hits.slice().reverse().find(r => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h);
   PT.hold = hh && !hh.nofx && (hh.w < PT.W - 4 || hh.h < PT.H - 40) ? { x: hh.x, y: hh.y, w: hh.w, h: hh.h } : null;
@@ -31033,6 +31034,7 @@ function ptMove(e) {
   const d = PT.drag; if (!d || d.id !== e.pointerId) return; e.preventDefault(); e.stopPropagation();
   const p = ptPos(e), dx = p.x - d.x0, dy = p.y - d.y0;
   if (!d.moved && Math.hypot(dx, dy) > 8) { d.moved = true; d.axis = Math.abs(dy) >= Math.abs(dx) ? 'y' : 'x'; PT.hold = null; }
+  if (d.moved && d.nav) { PT.navMoved = true; PT.navX = clamp(d.nx0 - dx, -40, num(PT.navMax) + 40); const now = performance.now(), dt = Math.max(1, now - d.lt); d.vx = (num(d.lx, p.x) - p.x) / dt * 16; d.lt = now; d.lx = p.x; d.x = p.x; d.y = p.y; return; }
   if (d.moved && d.axis === 'y' && d.reg) { PT.scroll[d.reg.key] = clamp(d.s0 - dy, -40, d.reg.max + 40); const now = performance.now(), dt = Math.max(1, now - d.lt); d.vy = (d.ly - p.y) / dt * 16; d.lt = now; d.ly = p.y; }
   d.x = p.x; d.y = p.y;
 }
@@ -31040,6 +31042,7 @@ function ptUp(e) {
   const d = PT.drag; if (!d || d.id !== e.pointerId) return; e.preventDefault(); e.stopPropagation(); PT.drag = null; PT.hold = null;
   const sc = PT.sc;
   if (!d.moved) { ptTap(d.x0, d.y0); return; }
+  if (d.nav) { PT.navVel = clamp(num(d.vx), -40, 40); setTimeout(() => { PT.navMoved = false; }, 0); return; }
   if (d.axis === 'y' && d.reg) { PT.vel[d.reg.key] = clamp(d.vy, -40, 40); return; }
   // 左右スワイプ：コンテンツ上ならタブ切りかえ（カードならページ切りかえ）
   const dx = d.x - d.x0, dy = d.y - d.y0;
@@ -31057,6 +31060,9 @@ function ptTap(x, y) {
   try { h.fn(); } catch (er) { console.error('[npb] portrait tap', er); }
 }
 function ptPhysics() {
+  { // 下のバーの慣性とはみ出しの戻り
+    if (!(PT.drag && PT.drag.nav)) { let v = num(PT.navVel), nx = num(PT.navX) + v; v *= 0.9; if (Math.abs(v) < 0.2) v = 0; const mx = num(PT.navMax); if (nx < 0) { nx = nx * 0.75 > -0.5 ? 0 : nx * 0.75; v = 0; } else if (nx > mx) { nx = nx - mx < 0.5 ? mx : mx + (nx - mx) * 0.75; v = 0; } PT.navX = nx; PT.navVel = v; }
+  }
   for (const r of PT.regions.length ? PT.regions : []) { }
   for (const k of Object.keys(PT.vel)) {
     if (PT.drag && PT.drag.reg && PT.drag.reg.key === k) continue;
@@ -31318,22 +31324,53 @@ function ptTicker(c, sc, N, L) {
   c.restore();
   ptHit(0, y, W, h, () => { const i = TABS.findIndex(t => t.id === 'news'); if (i >= 0) sc.setTab(i); });
 }
+// 下のバー：タブと「もっと」の中身をすべて並べ、横にスライドできるようにする
+function ptNavItems(sc, N) {
+  const T = id => TABS.find(t => t.id === id), ICON = { stats: 'chart', lead: 'trophy', team: 'person', car: 'calendar' };
+  const go = id => () => { const k = TABS.findIndex(t => t.id === id); if (k >= 0 && k !== sc.tab) sc.setTab(k); else if (k === sc.tab) { const key = Object.keys(PT.scroll).find(q => q.startsWith(`t:${id}:`)); if (key) PT.vel[key] = -Math.max(20, num(PT.scroll[key]) / 12); } };
+  const L = PT_NAV.filter(r => r[0] !== 'more').map(([id, label, icon]) => ({ id, label, icon, fn: go(id) }));
+  for (const id of PT_MORE_TABS) { const t = T(id); if (t) L.push({ id, label: t.n, icon: ICON[id] || 'star', fn: go(id) }); }
+  for (const it of ptMoreActs(sc, N)) L.push(it);
+  return L;
+}
+function ptMoreActs(sc, N) {
+  const g = sc.g;
+  return [
+    { id: '@p2', label: 'ペナント', icon: 'flag', fn: () => { if (typeof p2Menu === 'function') sc.act(() => p2Menu(sc, N)); } },
+    { id: '@ana', label: '分析', icon: 'chart', fn: () => { if (typeof anaMenu === 'function') sc.act(() => anaMenu(sc, g, N)); } },
+    { id: '@std', label: '球場設定', icon: 'gear', fn: () => { if (typeof npbStadiumMenu === 'function') sc.act(() => npbStadiumMenu(sc, g, N)); } },
+    { id: '@ori', label: '画面の向き', icon: 'info', fn: () => { sc.act(async () => { const o = ['auto', 'tate', 'yoko'], cur = o.indexOf(ptMode(N)); const k = await sc.pick('画面の向き（プロ野球）', [{ label: '自動', right: '縦長の画面なら縦表示' }, { label: '縦画面', right: 'スマホ向け・タップ操作' }, { label: '横画面', right: '従来の表示' }], { idx: Math.max(0, cur) }); if (k >= 0) { npbCfg(N).ori = o[k]; } }); } },
+  ];
+}
 function ptNav(c, sc, N, L) {
-  const W = PT.W, x = 10, y = L.navY, w = W - 20, h = L.navH, n = PT_NAV.length, cw = w / n;
+  const W = PT.W, x = 10, y = L.navY, w = W - 20, h = L.navH, items = ptNavItems(sc, N), cw = Math.max(58, Math.floor((w - 12) / 5.4)), inner = items.length * cw + 12;
+  const max = Math.max(0, inner - w); PT.navMax = max; PT.navRect = { x, y, w, h };
   c.save(); c.fillStyle = lgrad(c, 0, y - 28, 0, PT.H, [[0, 'rgba(3,6,14,0)'], [0.45, 'rgba(3,6,14,0.82)'], [1, 'rgba(3,6,14,0.96)']]); c.fillRect(0, y - 28, W, PT.H - y + 28); c.restore(); // タブの後ろをなじませる
   c.save(); uRRPath(c, x + 2, y + 6, w - 4, h, 24); c.fillStyle = 'rgba(0,0,0,0.45)'; c.fill(); c.restore(); // 影
   c.save(); uRRPath(c, x, y, w, h, 24); c.fillStyle = lgrad(c, 0, y, 0, y + h, [[0, 'rgba(24,32,54,0.97)'], [1, 'rgba(8,12,24,0.98)']]); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.12)'; c.lineWidth = 1; c.stroke(); c.restore();
   ptGloss(c, x, y, w, h, 24);
   ptHit(0, y - 4, W, h + 14 + PT.insB, () => { }, { always: true, nofx: true }); // すきまのタップは下に通さない
-  const cur = PT_MORE_TABS.includes(sc.tabId) ? 'more' : sc.tabId;
-  PT_NAV.forEach(([id, label, icon], i) => {
-    const bx = x + i * cw, on = id === cur, col = on ? NU.accInk : NU.t2;
-    if (on) { c.save(); uRRPath(c, bx + 5, y + 7, cw - 10, h - 14, 18); c.fillStyle = lgrad(c, bx, y, bx, y + h, [[0, shade(NU.acc, 0.12)], [1, shade(NU.acc, -0.18)]]); c.shadowColor = hexA(NU.acc, 0.6); c.shadowBlur = 12; c.fill(); c.restore(); }
-    uIcon(c, icon, bx + cw / 2 - 10, y + 12, 20, col);
-    tx(c, label, bx + cw / 2, y + 38, { size: 10, bold: on, color: on ? NU.accInk : NU.t2, align: 'center' });
-    if (id === 'news' && num(N.paperNew) > 0) { c.beginPath(); c.arc(bx + cw / 2 + 13, y + 12, 4.5, 0, Math.PI * 2); c.fillStyle = NU.bad; c.fill(); }
-    ptHit(bx, y, cw, h, () => { if (id === 'more') { tt.sfx('ok'); PT.more = { t0: PT.t }; return; } const k = TABS.findIndex(t => t.id === id); if (k >= 0 && k !== sc.tab) sc.setTab(k); else if (k === sc.tab) { const key = Object.keys(PT.scroll).find(q => q.startsWith(`t:${id}:`)); if (key) PT.vel[key] = -Math.max(20, num(PT.scroll[key]) / 12); } });
+  const cur = sc.tabId, ci = items.findIndex(it => it.id === cur);
+  // 今のタブが見えるように（タブが変わったとき）
+  if (PT._navTab !== cur) { PT._navTab = cur; if (ci >= 0) { const a = 6 + ci * cw, b = a + cw; const sx = num(PT.navX); if (a < sx) PT.navX = Math.max(0, a - cw * 0.4); else if (b > sx + w) PT.navX = Math.min(max, b - w + cw * 0.4); } }
+  PT.navX = clamp(num(PT.navX), -40, max + 40); const sx = num(PT.navX);
+  c.save(); uRRPath(c, x, y, w, h, 24); c.clip();
+  items.forEach((it, i) => {
+    const bx = x + 6 + i * cw - sx, on = it.id === cur, col = on ? NU.accInk : NU.t2;
+    if (bx + cw < x || bx > x + w) return;
+    if (on) { c.save(); uRRPath(c, bx + 4, y + 7, cw - 8, h - 14, 18); c.fillStyle = lgrad(c, bx, y, bx, y + h, [[0, shade(NU.acc, 0.12)], [1, shade(NU.acc, -0.18)]]); c.shadowColor = hexA(NU.acc, 0.6); c.shadowBlur = 12; c.fill(); c.restore(); }
+    uIcon(c, it.icon, bx + cw / 2 - 10, y + 12, 20, col);
+    tx(c, fit(c, it.label, cw - 6, 10), bx + cw / 2, y + 38, { size: 10, bold: on, color: on ? NU.accInk : NU.t2, align: 'center' });
+    if (it.id === 'news' && num(N.paperNew) > 0) { c.beginPath(); c.arc(bx + cw / 2 + 13, y + 12, 4.5, 0, Math.PI * 2); c.fillStyle = NU.bad; c.fill(); }
+    if (it.id[0] === '@' && i === items.findIndex(q => q.id[0] === '@')) fr(c, bx, y + 14, 1, h - 28, 'rgba(255,255,255,0.12)'); // タブとメニューの区切り
+    const hx0 = Math.max(bx, x), hx1 = Math.min(bx + cw, x + w);
+    if (hx1 - hx0 > cw * 0.5) ptHit(hx0, y, hx1 - hx0, h, () => { if (PT.navMoved) return; tt.sfx(it.id[0] === '@' ? 'ok' : 'cursor'); it.fn(); });
   });
+  c.restore();
+  // 端のぼかし（まだ先があることを知らせる）
+  const fade = (fx, dir) => { c.save(); uRRPath(c, x, y, w, h, 24); c.clip(); c.fillStyle = lgrad(c, fx, 0, fx + dir * 26, 0, [[0, 'rgba(10,14,28,0.95)'], [1, 'rgba(10,14,28,0)']]); c.fillRect(dir > 0 ? fx : fx - 26, y, 26, h); c.restore(); };
+  if (sx > 4) { fade(x, 1); tx(c, '‹', x + 9, y + h / 2 - 9, { size: 16, bold: true, color: 'rgba(255,255,255,0.55)' }); }
+  if (sx < max - 4) { fade(x + w, -1); tx(c, '›', x + w - 9, y + h / 2 - 9, { size: 16, bold: true, color: 'rgba(255,255,255,0.55)', align: 'right' }); }
 }
 function ptToast(c, sc, L) {
   const t = sc.toast; if (!t) return; const W = PT.W, s = String(t.text), lines = wrap(c, s, W - 72, 13).slice(0, 3), h = 22 + lines.length * 20, y = L.navY - h - 12;
