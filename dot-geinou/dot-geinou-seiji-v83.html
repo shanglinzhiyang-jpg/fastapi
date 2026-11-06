@@ -10559,6 +10559,8 @@ function playGame(N, S, h, a, kind, md, round, out, preRes) {
     const e = { md, r: round, k: kind, o: home ? a : h, h: home ? 1 : 0, s: home ? [res.hs, res.as] : [res.as, res.hs], ls: home ? res.ls : [res.ls[1], res.ls[0]], hi: home ? [num(res.hh), num(res.ah)] : [num(res.ah), num(res.hh)], inn: res.inn,
       w: nameOf(N, res.w), l: nameOf(N, res.l), sv: nameOf(N, res.sv), wt: res.w ? (P_team(N, res.w)) : null,
       hr: res.hr.map(([id, n]) => [nameOf(N, id), n, P_team(N, id) === myTeam ? 1 : 0]), me: res.me || null };
+    // 試合の詳細（打者・投手の成績）：試合の画面でタップして見る
+    try { const sd = id => P_team(N, id) === myTeam ? 0 : 1; e.bx = { b: Object.entries(res.bl || {}).map(([id, v]) => [id, sd(id), v[1], v[2], v[5], v[4], v[7], v[3]]), p: Object.entries(res.pl || {}).sort((u, v) => num(u[1][8]) - num(v[1][8])).map(([id, v]) => [id, sd(id), v[1], v[2], v[3], v[4], v[5], v[6], v[9]]), wi: res.w || null, li: res.l || null, si: res.sv || null, sayo: res.sayo ? 1 : 0 }; } catch (er) { }
     S.log.push(e);
     if (S.log.length > 220) S.log.shift();
     if (out) out.games.push(e);
@@ -33755,14 +33757,14 @@ function ptNewsV2(c, sc, N, x, y, w) {
 
 // ---- 記事の下：スコアボードとデータ欄 ----
 function ppScoreBox(c, S0, x, y, w) {
-  const P = NW.p, n = Math.max(9, S0.ls[0].length, S0.ls[1].length), nameW = 54, rw = 30, hw = 28, cw = (w - nameW - rw - hw - 12) / n, rh = 26;
+  const P = NW.p, n = Math.max(9, S0.ls[0].length, S0.ls[1].length), nameW = 70, rw = 30, hw = 28, cw = (w - nameW - rw - hw - 12) / n, rh = 26;
   fr(c, x, y, w, rh * 3 + 8, hexA(P.ink, 0.04)); fr(c, x, y, w, 2, P.ink); fr(c, x, y + rh * 3 + 6, w, 1, hexA(P.ink, 0.5));
   let cx = x + 6 + nameW; for (let i = 0; i < n; i++) { tx(c, String(i + 1), cx + cw / 2, y + 6, { size: 11, color: P.ink3, align: 'center' }); cx += cw; }
   tx(c, 'R', cx + rw / 2 + 4, y + 6, { size: 11, bold: true, color: P.ink3, align: 'center' }); tx(c, 'H', cx + rw + hw / 2 + 4, y + 6, { size: 11, color: P.ink3, align: 'center' });
   for (let k = 0; k < 2; k++) {
     const yy = y + rh * (k + 1) + 2, tid = S0.t[k], win = S0.r[k] > S0.r[1 - k];
     fr(c, x + 4, yy - 1, w - 8, 1, hexA(P.ink, 0.15));
-    tx(c, TEAM[tid] ? TEAM[tid].short : '', x + 8, yy + 5, { size: 13, bold: true, color: win ? P.ink : P.ink2 });
+    { const nm = TEAM[tid] ? TEAM[tid].short : ''; let fz = 13; while (fz > 9 && tw(c, nm, fz, true) > nameW - 4) fz--; tx(c, fit(c, nm, nameW - 4, fz, true), x + 8, yy + 5 + (13 - fz) / 2, { size: fz, bold: true, color: win ? P.ink : P.ink2 }); } // 長い球団名は小さく
     let cx2 = x + 6 + nameW;
     for (let i = 0; i < n; i++) { const v = S0.ls[k][i]; const s = v == null ? '' : String(v); tx(c, s === '0' ? '0' : s, cx2 + cw / 2, yy + 5, { size: 13, color: Number(v) > 0 ? P.red : P.ink, bold: Number(v) > 0, align: 'center' }); cx2 += cw; }
     fr(c, cx2 + 2, yy - 1, 1, rh, hexA(P.ink, 0.25));
