@@ -10748,8 +10748,8 @@ function awards(g, N, S, out) {
     const val = id => valueOf(N, S, id) * (P_team(N, id) === champ ? 1.25 : 1) * (rankOfTeam(S, P_team(N, id)) <= 3 ? 1.05 : 0.9);
     const mvp = cands.slice().sort((a, b) => val(b) - val(a))[0];
     give(lg, 'mvp', '最優秀選手（MVP）', mvp);
-    // 新人王：プロ1〜2年目
-    const rook = cands.filter(id => { const p = id === 'ME' ? me && me.p : N.L.players[id]; return p && !p.fr && num(p.yrs) <= 1 && (id !== 'ME' || num(me.yrs) <= 2); }).sort((a, b) => valueOf(N, S, b) - valueOf(N, S, a))[0];
+    // 新人王：NPBの資格（海外のプロ経験なし・支配下登録から5年以内・前年までの一軍が60打席／30投球回以内）
+    const rook = cands.filter(id => royElig(N, S, id)).sort((a, b) => valueOf(N, S, b) - valueOf(N, S, a))[0];
     if (rook && valueOf(N, S, rook) > 1) give(lg, 'roy', '最優秀新人（新人王）', rook);
     // ベストナイン
     const bn = {};
@@ -10839,6 +10839,32 @@ function ageDevelop(p) {
   if (p.pos === 'P') { for (const k of ['kir', 'omo', 'qk', 'nob']) fa(k, bd * 0.8); for (const k of ['pin', 'uta', 'tac', 'vlh', 'gb', 'mot', 'strk', 'ins', 'wpA', 'eff', 'vrh', 'clo', 'ken']) fa(k, sk); fa('shi', bd * 0.5); fa('rec', bd); fa('dur', a >= 32 ? -1.2 : 0.2); }
   else { for (const k of ['run', 'stl', 'tri', 'ifh', 'rng']) fa(k, bd); for (const k of ['clu', 'vsl', 'bnt', 'avk', 'spr', 'cat', 'gap', 'vsr', 'man', 'sayo', 'sfA', 'dpA', 'hbpA', 'pull', 'lin', 'fps', 'lat', 'mul', 'thr', 'ofa']) fa(k, sk); if (p.pos === 'C') { fa('lead', sk + 0.6); fa('frm', sk + 0.4); fa('blk', sk); fa('csA', bd * 0.6); } fa('rec', bd * 0.6); fa('dur', a >= 32 ? -1.2 : 0.2); }
 }
+
+// ---- 新人王の資格（NPBの規定）----
+// ① 海外のプロ野球リーグでプレーした経験がない（外国人選手・日本球界に戻った選手は対象外）
+// ② はじめて支配下登録されてから5年以内（その年が6年目以降なら対象外）
+// ③ 前年までの一軍の通算が、野手は60打席以内、投手は30投球回以内
+function royElig(N, S, id) {
+  if (id === 'ME') {
+    const me = N.me; if (!me || !me.p || me.p.fr || me.mlbX || me.ikusei) return false;
+    if (num(me.yrs) > 4) return false;
+    let pa = 0, outs = 0; for (const c of me.career || []) if (c.y < S.y) { if (c.b) pa += num(c.b[B.PA]); if (c.p) outs += num(c.p[Pp.OUT]); }
+    return me.p.pos === 'P' ? outs <= 90 : pa <= 60;
+  }
+  const p = N.L.players[id]; if (!p || p.fr || p.fo || p.mlbX) return false;
+  let yrs = p.yrs;
+  if (p.joinY != null) yrs = Math.max(num(yrs), S.y - p.joinY);
+  if (p.yrsEst) return false; // 実在の選手で経歴が分からない（記事がない）ときは対象にしない
+  if (yrs == null) { if (p.real) return false; yrs = Math.max(0, num(p.age, 30) - 23); } // 最初の名簿の架空選手は、年齢からプロ何年目かを見積もる
+  if (yrs > 4) return false;
+  return royPrior(p, S) ;
+}
+function royPrior(p, S) {
+  let pa = 0, outs = 0;
+  for (const r of p.cy || []) if (r && r.y < S.y && r.a) { if (p.pos === 'P') outs += num(r.a[Pp.OUT]); else pa += num(r.a[B.PA]); }
+  return p.pos === 'P' ? outs <= 90 : pa <= 60;
+}
+if (typeof window !== 'undefined') window.__royElig = royElig;
 
 // ===== あなたのプロ野球人生 =====
 const MAN = 10000;
@@ -24434,6 +24460,15 @@ function mgrTal(S, p) {
 // 本職でない守備位置につくときの、守りの目減り
 const MGR_POS_PEN = { C: { '1B': 6, '3B': 14, OF: 14, DH: 0 }, SS: { '2B': 2, '3B': 3, '1B': 4, OF: 7, DH: 0 }, '2B': { SS: 9, '3B': 5, '1B': 4, OF: 8, DH: 0 }, '3B': { '1B': 3, SS: 12, '2B': 8, OF: 9, DH: 0 }, '1B': { '3B': 12, OF: 12, '2B': 18, SS: 24, DH: 0 }, OF: { '1B': 6, '3B': 14, '2B': 18, SS: 24, DH: 0 }, DH: { '1B': 8, OF: 12, '3B': 18, '2B': 22, SS: 28 } };
 const mgrPosPen = (from, to) => from === to ? 0 : to === 'C' ? 45 : (MGR_POS_PEN[from] && MGR_POS_PEN[from][to] != null ? MGR_POS_PEN[from][to] : 15);
+// サブポジション：p.sub＝[[守備位置, 2(十分こなせる)|1(守れる)]]。ないときは本職から見立てる（選手IDで決まる）
+const SUB_GEN = { SS: [['2B', 0.55, 2], ['3B', 0.35, 1]], '2B': [['SS', 0.3, 1], ['3B', 0.25, 1], ['1B', 0.15, 1]], '3B': [['1B', 0.45, 2], ['2B', 0.15, 1]], '1B': [['OF', 0.3, 1], ['3B', 0.15, 1]], OF: [['1B', 0.25, 1]], C: [['1B', 0.12, 1]], DH: [['1B', 0.5, 1], ['OF', 0.25, 1]] };
+function subPosOf(p) {
+  if (!p || p.pos === 'P') return [];
+  if (!Array.isArray(p.sub)) { const o = []; let h = hashStr(`sub|${p.id}|${p.n}`) >>> 0; for (const [ps, pr, lv] of SUB_GEN[p.pos] || []) { const r = (h % 1000) / 1000; h = (h * 1103515245 + 12345) >>> 0; if (r < pr) o.push([ps, lv === 2 && r > pr * 0.5 ? 1 : lv]); } p.sub = o.slice(0, 2); }
+  return p.sub;
+}
+function mgrSubLv(p, ps) { const e = subPosOf(p).find(x => x[0] === ps); return e ? e[1] : 0; }
+const mgrPosPenP = (p, from, to) => { const b = mgrPosPen(from, to); if (!b || to === 'DH') return b; const lv = mgrSubLv(p, to); return lv === 2 ? Math.round(b * 0.15) : lv === 1 ? Math.round(b * 0.45) : b; };
 // スタメンと打順を組む（CPUの監督も、監督モードの「監督AIにおまかせ」も、同じ考え方）
 function mgrLineup(N, S, bats, dh, o = {}) {
   const sty = o.sty || 'std', oth = o.oth || 'R', meP = o.meP || null, nm = o.nm || (p => shortName(p)), notes = [];
@@ -24443,9 +24478,9 @@ function mgrLineup(N, S, bats, dh, o = {}) {
   const off = p => TL[p.id].off + fm(p) * (sty === 'kan' ? 7 : 3.5) + plat(p) * (sty === 'data' ? 2 : 1);
   const natPos = p => p === meP && o.me ? (meP.pos === 'DH' && !dh ? '1B' : meP.pos) : p.pos;
   const val = (p, ps) => {
-    const w = FW[ps] != null ? FW[ps] : 0.5, d = defOf(p) - mgrPosPen(natPos(p), ps);
+    const w = FW[ps] != null ? FW[ps] : 0.5, d = defOf(p) - mgrPosPenP(p, natPos(p), ps);
     // 打力は守備位置によらない。守備は「その位置の大事さ×平均との差」
-    let s = off(p) + (d - 50) * 0.42 * w + (ps !== natPos(p) ? -1.5 : 0);
+    let s = off(p) + (d - 50) * 0.42 * w + (ps !== natPos(p) ? (mgrSubLv(p, ps) === 2 ? -0.4 : -1.5) : 0);
     const f = fat(p); if (f >= 12 && num(p.age) >= 32) s -= 7; else if (f >= 18) s -= 5;
     if (sty === 'wakate' && num(p.age) <= 24) s += 3; if (o.giveUp && num(p.age) <= 25) s += 5; if (sty === 'vet' && num(p.age) >= 32) s += 3;
     if (sty === 'shubi') s += (defOf(p) - 50) * 0.1 * (FW[ps] || 0.3); if (sty === 'kidou') s += (num(p.spd) - 50) * 0.06; if (sty === 'kyoda') s += (TL[p.id].pow - 50) * 0.06;
@@ -24580,7 +24615,7 @@ function mgrPrep(ctx, tid, dh, opt = {}) {
   if (pen.length < 4) pen = pen.concat(longs);
   const bench = bats.filter(p => !taken.has(p.id));
   let dw = 0, ds = 0, carm = 50;
-  for (const p of starters) { const ps = pos[p.id], w = FW[ps] || 0; dw += w; ds += w * (defOf(p) + (hasT(p, 'glove') ? 7 : 0)); if (ps === 'C') carm = p.arm; }
+  for (const p of starters) { const ps = pos[p.id], w = FW[ps] || 0; dw += w; ds += w * (defOf(p) - (p === meP ? 0 : mgrPosPenP(p, p.pos, ps) * 0.6) + (hasT(p, 'glove') ? 7 : 0)); if (ps === 'C') carm = p.arm; }
   const AG = abTeam(starters, pos);
   const team = { id: tid, dh, sty: M.sty, lineup: order.map(p => p.id), pos, sp: sp.id, pen: pen.map(p => p.id), cl: cl && cl.id, su1: su1 && su1.id, su2: su2 && su2.id, bench: bench.map(p => p.id), def: dw ? ds / dw : 50, carm, ...AG };
   if (!dh) team.lineup.push(sp.id);
@@ -27025,7 +27060,7 @@ function crGoodRoster(N, S, tid) {
     const p = crPl(N, id); if (!p) continue; const isP = p.pos === 'P', b = S.bs[id], q = S.ps[id], pa = b ? b[B.PA] : 0, outs = q ? q[Pp.OUT] : 0, M = crPm(C, S, id);
     const pk = (k, cond, f) => { const kk = `${k}:${S.y}:${tid}`; if (!crSeen(C, kk) && cond() && f()) crMark(C, kk); };
     const goodB = pa >= 150 && opsOfB(b) >= 0.820, goodP = outs >= 150 && eraOf(q) <= 2.9;
-    if (num(p.yrs) === 0 || (id === 'ME' && num(me.yrs) <= 1)) pk('g_rookie', () => isP ? outs >= 120 && eraOf(q) <= 3.2 : pa >= 150 && opsOfB(b) >= 0.760, () => gdPlayer(N, S, id, 'rookie'));
+    if (typeof royElig === 'function' ? royElig(N, S, id) : (!p.fr && (num(p.yrs) === 0 || (id === 'ME' && num(me.yrs) <= 1)))) pk('g_rookie', () => isP ? outs >= 120 && eraOf(q) <= 3.2 : pa >= 150 && opsOfB(b) >= 0.760, () => gdPlayer(N, S, id, 'rookie'));
     else if (num(p.age) <= 23) pk('g_wakate', () => isP ? goodP : goodB, () => gdPlayer(N, S, id, 'wakate'));
     const pv = (p.cy || []).find(r => r.y === S.y - 1);
     if (pv && num(p.age) >= 29) pk('g_fukkatsu', () => isP ? pv.a[Pp.OUT] >= 60 && eraOf(pv.a) >= 4.8 && goodP : pv.a[B.PA] >= 100 && opsOfB(pv.a) < 0.650 && goodB, () => gdPlayer(N, S, id, 'fukkatsu', pv));
@@ -28765,7 +28800,7 @@ const EX_PREF = [['北海道', 1, 4], ['青森県', 1, 2], ['岩手県', 1, 2], 
   ['富山県', 0, 1], ['石川県', 0, 2], ['福井県', 0, 1], ['岐阜県', 0, 2], ['愛知県', 0, 6], ['三重県', 0, 2], ['滋賀県', 0, 1], ['京都府', 0, 3], ['大阪府', 0, 8], ['兵庫県', 0, 6], ['奈良県', 0, 2], ['和歌山県', 0, 2], ['鳥取県', 0, 1], ['島根県', 0, 1], ['岡山県', 0, 2], ['広島県', 0, 3], ['山口県', 0, 2], ['徳島県', 0, 1], ['香川県', 0, 1], ['愛媛県', 0, 2], ['高知県', 0, 1], ['福岡県', 0, 5], ['佐賀県', 0, 1], ['長崎県', 0, 2], ['熊本県', 0, 2], ['大分県', 0, 1], ['宮崎県', 0, 2], ['鹿児島県', 0, 2], ['沖縄県', 0, 3]];
 const EX_PREF_W = EX_PREF.reduce((s, x) => s + x[2], 0);
 function exHome(p) {
-  if (!p || p.fr) return null;
+  if (!p || p.fr || p.homeX) return null; // 海外生まれの選手は対象外
   if (p.home) return EX_PREF.find(x => x[0] === p.home) || null;
   let x = abHash(`${p.id}|${p.n}|home`) % EX_PREF_W;
   for (const pr of EX_PREF) { x -= pr[2]; if (x < 0) { p.home = pr[0]; return pr; } }
@@ -31389,6 +31424,7 @@ function ptCardPage(c, sc, N, p, pg, x, y, w) {
   const isP = p.pos === 'P', me = p.id === 'ME', S = N.S; let yy = y;
   if (pg === 7 && typeof mtPlayerBlocks === 'function') return rbDraw(c, sc, null, mtPlayerBlocks(N, S, me ? 'ME' : p.id, sc), x, y, w);
   if (pg === 0) {
+    try { yy += ptProfile(c, sc, N, p, x, yy, w); } catch (e) { console.error('[npb] profile', e); }
     try { if (typeof rkSummary === 'function') { const rb = rkSummary(N, S, me ? 'ME' : p.id); if (rb.length) yy += rbDraw(c, sc, null, rb, x, yy, w) + 14; } } catch (e) { console.error('[npb] rk card', e); }
     yy += ptSec(c, x, yy, w, '基本能力', isP ? (abv(p, 'gb') >= 62 ? 'ゴロ投手' : abv(p, 'gb') <= 38 ? 'フライ投手' : 'バランス型') : `弾道 ${trajOf(p)}`);
     const ks = isP ? ['vel', 'ctl', 'sta', 'brk'] : ['con', 'pow', 'eye', 'spd', 'fld', 'arm'];
@@ -31412,20 +31448,27 @@ function ptCardPage(c, sc, N, p, pg, x, y, w) {
   if (pg === 4) {
     const rows = yearRows(N, p), car = playerCareer(N, p), lg = S ? lgOf(S) : null;
     if (typeof rpPlayerStats === 'function' && sc.rich) { yy += ptBtn(c, x, yy, w, 42, '成績をくわしく見る（グラフ・内訳）', () => { const keep = sc.modal; sc.modal = null; sc.rich(`${p.id === 'ME' ? 'あなた' : shortName(p)}の成績`, () => rpPlayerStats(N, p)).then(() => { if (!sc.closed && !sc.modal) sc.modal = keep; }); }, { always: true }) + 12; }
+    const shifted = rows.some(r => r.ry && r.ry !== r.y);
     yy += ptSec(c, x, yy, w, '年度別成績', `${rows.length}年`);
     if (!rows.length) { tx(c, 'まだ一軍の成績がない', x + 10, yy + 4, { size: 13, color: NU.t3 }); return yy + 30 - y; }
-    const cols = isP ? [{ t: '年', w: 50 }, { t: '球団', w: 64, al: 'left' }, { t: '登板', w: 42 }, { t: '勝-敗-S' }, { t: '防御率', w: 58 }, { t: '奪三振', w: 52 }] : [{ t: '年', w: 50 }, { t: '球団', w: 64, al: 'left' }, { t: '試合', w: 42 }, { t: '打率', w: 54 }, { t: '本', w: 34 }, { t: '打点', w: 42 }, { t: 'OPS' }];
-    const cell = a => isP ? [a[Pp.G], `${a[Pp.W]}-${a[Pp.L]}-${a[Pp.SV]}`, fmtERA(eraOf(a)), a[Pp.K]] : [a[B.G], fmtAvg(avgOf(a)), a[B.HR], a[B.RBI], fmtAvg(obpOf(a) + slgOf(a))];
-    const tr = rows.slice().reverse().map(r => ({ c: [`${r.y}${r.now ? '*' : ''}`, TEAM[r.t] ? TEAM[r.t].short : r.t || '', ...cell(r.a)], mine: !!r.now }));
-    const tot = isP ? car.p : car.b; if (tot && (isP ? tot[Pp.BF] : tot[B.PA])) tr.push({ c: ['通算', '', ...cell(tot)], col: [NU.acc, NU.acc, NU.acc, NU.acc, NU.acc, NU.acc, NU.acc] });
-    yy += ptTable(c, x, yy, w, cols, tr, { rh: 32 });
+    // 項目のまとまりを切りかえて、くわしく見る（縦画面で1行に入る列数におさえる）
+    sc.sub = sc.sub || {}; const V = isP ? PT_YRV_P : PT_YRV_B, vi = num(sc.sub.yrv) % V.length, view = V[vi];
+    yy += ptChips(c, x, yy, w, V.map(v => v.n), vi, k => { sc.sub.yrv = k; }, { h: 32, minW: 64 }) + 10;
+    const cols = [{ t: '年', w: 46 }, { t: '球団', w: 56, al: 'left' }, ...view.c.map(q => ({ t: q[0], w: q[2] || null }))];
+    const cell = (a, r) => view.c.map(q => { try { return q[1](a, r); } catch (e) { return '-'; } });
+    const tnm = r => { const n = k => TEAM[k] ? TEAM[k].short : k || ''; return r.t2 ? `${n(r.t)}/${n(r.t2)}` : n(r.t); };
+    const tr = rows.slice().reverse().map(r => ({ c: [`${r.y}${r.now ? '*' : ''}`, tnm(r), ...cell(r.a, r)], mine: !!r.now }));
+    const tot = isP ? car.p : car.b;
+    if (tot && (isP ? tot[Pp.BF] || tot[Pp.OUT] : tot[B.PA])) { const tw2 = rows.reduce((s2, r) => s2 + num(r.w), 0); tr.push({ c: ['通算', `${rows.length}年`, ...cell(tot, { w: tw2, tot: 1 })], col: new Array(cols.length).fill(NU.acc) }); }
+    yy += ptTable(c, x, yy, w, cols, tr, { rh: 30 });
+    if (shifted) { yy += 4; yy += ptText(c, x + 6, yy, w - 12, ['※再現チームの選手は、実際の年度を2004年開幕にあわせて置きかえて表示しています。'], { size: 11, lh: 17, color: NU.t3 }); }
     return yy - y;
   }
   if (pg === 5) {
     // コース別（ゾーン）。横画面の図をそのまま、幅に合わせて描く
-    yy += ptSec(c, x, yy, w, 'コース別');
-    try { c.save(); c.translate(x + 4, yy); cardZones(sc, c, N, p, 0, 0, w - 8, 300, NU.acc2); c.restore(); } catch (e) { c.restore(); }
-    return yy + 320 - y;
+    yy += ptSec(c, x, yy, w, 'コース別', '捕手から見た図');
+    try { yy += ptZones(c, sc, N, p, x, yy, w); } catch (e) { console.error('[npb] zones', e); }
+    return yy - y;
   }
   const L2 = typeof cardCareerLines === 'function' ? cardCareerLines(N, p, 200) : ['（経歴なし）'];
   yy += ptText(c, x + 6, yy, w - 12, L2, { size: 14, lh: 24 });
@@ -31465,6 +31508,124 @@ if (typeof window !== 'undefined') window.__pt = {
   hits: () => PT.hits.map(h => [Math.round(h.x), Math.round(h.y), Math.round(h.w), Math.round(h.h)]),
   scroll: (key, v) => { if (key == null) return PT.scroll; PT.scroll[key] = v; },
 };
+
+// 年度別成績の表示セット（カードの「年度別」ページ）
+const ptIp = a => { const o = num(a[Pp.OUT]); return `${Math.floor(o / 3)}${o % 3 ? '.' + (o % 3) : ''}`; };
+const ptR = (n, d) => d ? n / d : 0;
+const PT_YRV_B = [
+  { n: '基本', c: [['試合', a => a[B.G], 38], ['打率', a => fmtAvg(avgOf(a)), 50], ['本', a => a[B.HR], 32], ['打点', a => a[B.RBI], 40], ['盗塁', a => a[B.SB], 38], ['OPS', a => fmtAvg(obpOf(a) + slgOf(a))]] },
+  { n: '打撃', c: [['打席', a => a[B.PA], 42], ['打数', a => a[B.AB], 42], ['安打', a => a[B.H], 40], ['二塁', a => a[B.D], 36], ['三塁', a => a[B.T], 36], ['得点', a => a[B.R]]] },
+  { n: '選球・走塁', c: [['四球', a => a[B.BB], 38], ['死球', a => a[B.HBP], 36], ['三振', a => a[B.K], 40], ['犠打', a => a[B.SH], 36], ['犠飛', a => a[B.SF], 36], ['併殺', a => a[B.DP]]] },
+  { n: '率・指標', c: [['出塁率', a => fmtAvg(obpOf(a)), 52], ['長打率', a => fmtAvg(slgOf(a)), 52], ['IsoP', a => fmtAvg(slgOf(a) - avgOf(a)), 48], ['BB/K', a => ptR(a[B.BB], a[B.K]).toFixed(2), 44], ['WAR', (a, r) => num(r.w).toFixed(1)]] },
+];
+const PT_YRV_P = [
+  { n: '基本', c: [['登板', a => a[Pp.G], 38], ['勝', a => a[Pp.W], 30], ['敗', a => a[Pp.L], 30], ['S', a => a[Pp.SV], 30], ['H', a => a[Pp.HLD], 30], ['防御率', a => fmtERA(eraOf(a))]] },
+  { n: '投球', c: [['先発', a => a[Pp.GS], 36], ['完投', a => a[Pp.CG], 36], ['完封', a => a[Pp.SHO], 36], ['投球回', a => ptIp(a), 52], ['奪三振', a => a[Pp.K]]] },
+  { n: '内容', c: [['被安打', a => a[Pp.H], 46], ['被本', a => a[Pp.HR], 36], ['四球', a => a[Pp.BB], 36], ['死球', a => a[Pp.HBP], 36], ['失点', a => a[Pp.R], 36], ['自責', a => a[Pp.ER]]] },
+  { n: '率・指標', c: [['WHIP', a => whipOf(a).toFixed(2), 48], ['K/9', a => ptR(a[Pp.K] * 27, a[Pp.OUT]).toFixed(1), 42], ['BB/9', a => ptR(a[Pp.BB] * 27, a[Pp.OUT]).toFixed(1), 44], ['K/BB', a => ptR(a[Pp.K], a[Pp.BB]).toFixed(1), 42], ['WAR', (a, r) => num(r.w).toFixed(1)]] },
+];
+
+// ---- コース別成績（縦画面用）：大きなストライクゾーンのヒートマップ＋打者・ホームベース＋高低・内外のまとめ ----
+function ptZones(c, sc, N, p, x, y, w) {
+  const isP = p.pos === 'P', zs = zoneOf(N, p, 'season'), zc = zoneOf(N, p, 'career'), ab = Z => Z ? Z.filter((v, i) => i % ZF === 0).reduce((s2, v) => s2 + v, 0) : 0;
+  sc.sub = sc.sub || {}; const hasS = ab(zs) >= 30, scope = hasS && num(sc.sub.zsc) === 0 ? 0 : 1, mt = num(sc.sub.zmt) % 3;
+  let yy = y;
+  yy += ptChips(c, x, yy, w, [N.S ? `${N.S.y}年` : '今季', '通算'], scope, k => { sc.sub.zsc = k; }, { h: 30, minW: 64, dis: [!hasS, false] }) + 8;
+  yy += ptChips(c, x, yy, w, [isP ? '被打率' : '打率', '本塁打率', '三振率'], mt, k => { sc.sub.zmt = k; }, { h: 30, minW: 64 }) + 12;
+  const Z = scope === 0 ? zs : zc, tot = ab(Z);
+  if (!Z || tot < 10) { uRR(c, x, yy, w, 60, 12, 'rgba(255,255,255,0.04)'); tx(c, 'まだデータが少ない（試合に出ると記録される）', x + w / 2, yy + 22, { size: 13, color: NU.t3, align: 'center' }); return yy + 70 - y; }
+  const A = z => Z[z * ZF], Hh = z => Z[z * ZF + 1], HR = z => Z[z * ZF + 2], K = z => Z[z * ZF + 3];
+  const sum = (zs2, f) => zs2.reduce((s2, z) => s2 + f(z), 0);
+  const ALL = [...Array(ZN).keys()], allAB = sum(ALL, A);
+  const metric = (zl) => { const a = sum(zl, A); if (a < 3) return null; return mt === 0 ? sum(zl, Hh) / a : mt === 1 ? sum(zl, HR) / a : sum(zl, K) / a; };
+  const base = metric(ALL) || 0, span = mt === 0 ? 0.09 : mt === 1 ? Math.max(0.012, base * 0.8) : Math.max(0.05, base * 0.5);
+  const fmt = v => v == null ? '－' : mt === 0 ? fmtAvg(v) : mt === 1 ? `${(v * 100).toFixed(1)}%` : `${Math.round(v * 100)}%`;
+  // 色：高いほど赤、低いほど青（中間は落ち着いたグレー）
+  const heat = v => { if (v == null) return 'rgba(255,255,255,0.05)'; const d = clamp((v - base) / span, -1, 1); const r = d >= 0 ? [Math.round(70 + 170 * d), Math.round(76 - 30 * d), Math.round(92 - 52 * d)] : [Math.round(70 + 10 * d), Math.round(76 + 40 * -d), Math.round(92 + 140 * -d)]; return `rgba(${r[0]},${r[1]},${r[2]},${0.55 + 0.4 * Math.abs(d)})`; };
+  // 配置：打者の立つ側に余白をとり、ゾーンはできるだけ大きく
+  const lhb = !isP && p.bt === 'L', sw = !isP && p.bt === 'S', side = 66, band = 24;
+  const zw = Math.min(w - side - band * 2 - 16, 300), cs = zw / 3, zh = cs * 3 * 1.12, ch = zh / 3;
+  const gx = lhb ? x + band + 8 : x + side + band + 8, gy = yy + band + 4;
+  // 背景（グラウンドの土の色をうっすら）
+  uRR(c, x, yy - 4, w, zh + band * 2 + 92, 14, 'rgba(255,255,255,0.035)');
+  const cell = (zl, X, Y, W, H, big) => {
+    const v = metric(zl), a = sum(zl, A);
+    uRR(c, X + 1, Y + 1, W - 2, H - 2, big ? 6 : 4, heat(v));
+    if (big) {
+      tx(c, fmt(v), X + W / 2, Y + H / 2 - 17, { size: Math.min(20, W / 4.2), bold: true, color: '#ffffff', align: 'center', numF: 1 });
+      const sub = mt === 0 ? `${sum(zl, Hh)}-${a}` : mt === 1 ? `${sum(zl, HR)}本/${a}` : `${sum(zl, K)}振/${a}`;
+      tx(c, sub, X + W / 2, Y + H / 2 + 6, { size: 11, color: 'rgba(255,255,255,0.78)', align: 'center' });
+      const hr = sum(zl, HR); if (hr && mt !== 1) { c.fillStyle = '#ffd040'; c.beginPath(); c.arc(X + W - 13, Y + 12, 4, 0, 7); c.fill(); tx(c, String(hr), X + W - 20, Y + 6, { size: 10, bold: true, color: '#ffd040', align: 'right' }); }
+    } else {
+      const sv = fmt(v); let fz = 11; while (fz > 8 && tw(c, sv, fz) > Math.max(W, H) - 6) fz--;
+      if (W >= H) tx(c, `${sv}`, X + W / 2, Y + H / 2 - fz / 2 - 1, { size: fz, color: 'rgba(255,255,255,0.9)', align: 'center' });
+      else { c.save(); c.translate(X + W / 2, Y + H / 2); c.rotate(-Math.PI / 2); tx(c, sv, 0, -fz / 2 - 1, { size: fz, color: 'rgba(255,255,255,0.9)', align: 'center' }); c.restore(); }
+    }
+  };
+  // ボールゾーン（上下左右の帯）
+  cell([9], gx, gy - band, cs * 3, band - 2); cell([10], gx, gy + zh + 2, cs * 3, band - 2);
+  cell([11], gx - band, gy, band - 2, zh); cell([12], gx + cs * 3 + 2, gy, band - 2, zh);
+  for (let z = 0; z < 9; z++) cell([z], gx + (z % 3) * cs, gy + Math.floor(z / 3) * ch, cs, ch, true);
+  c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 2; c.strokeRect(gx, gy, cs * 3, zh);
+  c.strokeStyle = 'rgba(255,255,255,0.18)'; c.lineWidth = 1; c.setLineDash([3, 3]); c.strokeRect(gx + cs / 2, gy + ch / 2, cs * 2, ch * 2); c.setLineDash([]);
+  // ホームベース（少し奥行きをつけて）
+  { const hx = gx + cs * 1.5, hy = gy + zh + band + 10, hw = cs * 0.9; c.fillStyle = '#ecebe4'; c.beginPath(); c.moveTo(hx - hw, hy); c.lineTo(hx + hw, hy); c.lineTo(hx + hw * 0.92, hy + 7); c.lineTo(hx, hy + 16); c.lineTo(hx - hw * 0.92, hy + 7); c.closePath(); c.fill(); c.strokeStyle = 'rgba(0,0,0,0.25)'; c.lineWidth = 1; c.stroke(); }
+  // 打者（右打者は捕手から見て左側に立つ）
+  const drawBatter = (bx, left) => {
+    const col = 'rgba(200,212,236,0.32)', s2 = (zh + band) / 170 * 0.82, top = gy + zh + band - 146 * s2, f = left ? -1 : 1;
+    c.save(); c.translate(bx, top); c.scale(s2 * f, s2); c.fillStyle = col; c.strokeStyle = col; c.lineCap = 'round';
+    c.beginPath(); c.arc(0, 12, 10, 0, 7); c.fill(); // ヘルメット
+    c.fillRect(-4, 6, 16, 5);
+    c.lineWidth = 15; c.beginPath(); c.moveTo(-2, 28); c.lineTo(-6, 78); c.stroke(); // 胴
+    c.lineWidth = 9; c.beginPath(); c.moveTo(-6, 78); c.lineTo(-18, 112); c.lineTo(-20, 146); c.stroke(); c.beginPath(); c.moveTo(-6, 78); c.lineTo(10, 110); c.lineTo(8, 146); c.stroke(); // 脚
+    c.lineWidth = 7; c.beginPath(); c.moveTo(-2, 34); c.lineTo(-18, 46); c.lineTo(-24, 30); c.stroke(); // 腕
+    c.lineWidth = 4; c.strokeStyle = 'rgba(214,180,120,0.8)'; c.beginPath(); c.moveTo(-24, 30); c.lineTo(-6, -22); c.stroke(); // バット
+    c.restore();
+  };
+  if (!isP && !sw) { const s2 = (zh + band) / 170 * 0.82; drawBatter(lhb ? gx + cs * 3 + band + 6 + 12 * s2 : gx - band - 6 - 12 * s2, lhb); }
+  // 軸ラベル
+  const inL = lhb ? '外角' : '内角', outL = lhb ? '内角' : '外角', ly = gy + zh + band + 30;
+  if (!isP && !sw) { tx(c, `← ${inL}`, gx, ly, { size: 11, color: NU.t3 }); tx(c, `${outL} →`, gx + cs * 3, ly, { size: 11, color: NU.t3, align: 'right' }); }
+  else tx(c, isP ? '（対戦した打者全体）' : '（両打ち：左右を合算）', gx + cs * 1.5, ly, { size: 11, color: NU.t3, align: 'center' });
+  // 凡例
+  { const lw = Math.min(130, w - 190), lx = x + w - lw - 36, lgy = ly + 22; const g2 = c.createLinearGradient(lx, 0, lx + lw, 0); g2.addColorStop(0, heat(base - span)); g2.addColorStop(0.5, heat(base)); g2.addColorStop(1, heat(base + span)); c.fillStyle = g2; uRR(c, lx, lgy, lw, 8, 4, g2);
+    tx(c, '低い', lx - 6, lgy - 3, { size: 10, color: NU.t3, align: 'right' }); tx(c, '高い', lx + lw + 6, lgy - 3, { size: 10, color: NU.t3 });
+    tx(c, `全体 ${fmt(base)}（${allAB}打数）`, x + 10, lgy - 3, { size: 11, color: NU.t2 }); }
+  yy = ly + 46;
+  // 高め・真ん中・低め／内角・真ん中・外角 のまとめ（バー）
+  const rowsH = [['高め', [0, 1, 2, 9]], ['真ん中', [3, 4, 5]], ['低め', [6, 7, 8, 10]]];
+  const L0 = [0, 3, 6, 11], C0 = [1, 4, 7], R0 = [2, 5, 8, 12], rowsW = isP || sw ? [['左', L0], ['中', C0], ['右', R0]] : [[inL, lhb ? R0 : L0], ['真ん中', C0], [outL, lhb ? L0 : R0]];
+  const bar = (lab, zl, bx, by, bw) => { const v = metric(zl), d = v == null ? 0 : clamp((v - base) / span, -1, 1); tx(c, lab, bx, by + 2, { size: 12, color: NU.t2 }); const tx0 = bx + 48, tw0 = bw - 48 - 50; uRR(c, tx0, by + 5, tw0, 10, 5, 'rgba(255,255,255,0.07)'); const fw = tw0 * clamp(0.5 + d * 0.45, 0.04, 1); uRR(c, tx0, by + 5, fw, 10, 5, heat(v)); tx(c, fmt(v), bx + bw, by + 1, { size: 13, bold: true, color: '#ffffff', align: 'right', numF: 1 }); };
+  const half = (w - 12) / 2;
+  tx(c, '高さ別', x + 4, yy, { size: 11, bold: true, color: NU.acc }); tx(c, isP || sw ? 'コース別' : '内外別', x + half + 16, yy, { size: 11, bold: true, color: NU.acc }); yy += 20;
+  for (let i = 0; i < 3; i++) { bar(rowsH[i][0], rowsH[i][1], x + 4, yy + i * 24, half - 4); bar(rowsW[i][0], rowsW[i][1], x + half + 16, yy + i * 24, half - 8); }
+  yy += 80;
+  // 得意・苦手・本塁打ゾーン
+  const zn = z => { if (z >= 9) { if (z < 11 || isP || sw) return ZONE_NAME[z]; return ((z === 11) !== lhb ? '内角' : '外角') + 'ボール'; } if (isP || sw) return ZONE_NAME[z]; const row = ['高め', '真ん中', '低め'][Math.floor(z / 3)], col = z % 3 === 1 ? '' : ((z % 3 === 0) !== lhb ? '内角' : '外角'); return z === 4 ? 'ど真ん中' : row + col; };
+  const cand = []; for (let z = 0; z < 9; z++) { const a = A(z); if (a >= 6) cand.push([z, Hh(z) / a]); } cand.sort((u, v) => v[1] - u[1]);
+  const hrz = []; for (let z = 0; z < ZN; z++) if (HR(z)) hrz.push([z, HR(z)]); hrz.sort((u, v) => v[1] - u[1]);
+  const good = isP ? cand.slice(-1)[0] : cand[0], bad = isP ? cand[0] : cand.slice(-1)[0];
+  const tiles = [[isP ? '強いコース' : '得意なコース', good ? zn(good[0]) : '－', good ? fmtAvg(good[1]) : '', '#ff8a7a'], [isP ? '打たれるコース' : '苦手なコース', bad ? zn(bad[0]) : '－', bad ? fmtAvg(bad[1]) : '', '#7ab0ff'], [isP ? '被本塁打ゾーン' : '本塁打ゾーン', hrz.length ? zn(hrz[0][0]) : 'なし', hrz.length ? `${hrz[0][1]}本` : '', '#ffd040']];
+  const tw3 = (w - 16) / 3;
+  tiles.forEach(([t, n, v, col], i) => { const X = x + i * (tw3 + 8); uRR(c, X, yy, tw3, 66, 10, 'rgba(255,255,255,0.05)', hexA(col, 0.4)); tx(c, t, X + 8, yy + 7, { size: 10, bold: true, color: col }); tx(c, fit(c, n, tw3 - 14, 13), X + 8, yy + 25, { size: 13, bold: true, color: '#ffffff' }); tx(c, v, X + 8, yy + 45, { size: 12, color: NU.t2, numF: 1 }); });
+  yy += 76;
+  return yy - y;
+}
+
+// カード1ページ目の上：出身地・プロ何年目・守備位置（サブポジション）
+function ptProfile(c, sc, N, p, x, y, w) {
+  const me = p.id === 'ME', isP = p.pos === 'P', S = N.S;
+  let home = '－';
+  if (p.fo && p.fo.nat) home = p.fo.nat; else if (p.homeX) home = p.homeX; else if (p.fr) home = '海外'; else if (p.real && !p.home) home = '－'; else { const h = typeof exHome === 'function' ? exHome(p) : null; if (h) home = `${h[0]}${p.city ? p.city : ''}`; }
+  let yrs = me ? num(N.me.yrs) : p.joinY != null && S ? Math.max(num(p.yrs), S.y - p.joinY) : p.yrs;
+  const pro = yrs == null ? '－' : `${num(yrs) + 1}年目${p.fo ? '（日本）' : ''}`;
+  const sub = isP || typeof subPosOf !== 'function' ? [] : subPosOf(me ? N.me.p : p);
+  const posT = `${POSN[p.pos] || p.pos || '－'}`, subT = sub.length ? sub.map(([k, lv]) => `${(POSN[k] || k).replace('手', '')}${lv === 2 ? '◎' : '○'}`).join(' ') : (isP ? '' : 'なし');
+  const items = [['出身', home], ['プロ', pro], [isP ? '守備' : 'サブ守備', isP ? posT : subT]];
+  const tw3 = (w - 12) / 3;
+  items.forEach(([k, v], i) => { const X = x + i * (tw3 + 6); uRR(c, X, y, tw3, 50, 10, 'rgba(255,255,255,0.045)', 'rgba(255,255,255,0.07)'); tx(c, k, X + 9, y + 6, { size: 10, color: NU.t3 }); tx(c, fit(c, v, tw3 - 14, 13, true), X + 9, y + 24, { size: 13, bold: true, color: '#ffffff' }); });
+  return 60;
+}
 
 // ===== 縦画面：各タブの中身（縦に並べてスクロール。ページ送りはせず、ぜんぶ下に続ける） =====
 function ptTab(c, sc, N, y0) {
@@ -33427,9 +33588,10 @@ function ppFront(c, x, y, w, N, list, newIds, onOpen, o = {}) {
     const colW = 46, vcol = nwHasCol(lead, 24, 230) ? colW + 10 : 0;
     nwKicker(c, lead, x, yy, x + w - vcol, newIds.has(lead.id), { mineLong: 1 }); yy += 24;
     const hs = nwLines(c, lead.head || '', w - vcol, 26, true, 4); hs.forEach((l, i) => tx(c, l, x, yy + i * 34, { size: 26, bold: true, color: lead.good ? P.blueDeep : P.ink })); yy += hs.length * 34 + 4;
-    if (vcol) nwVCol(c, lead, x + w - colW, y0, colW, Math.max(140, yy - y0 + 40), 24);
+    const colH = vcol ? Math.min(236, 22 + nwVCells(lead.tag).length * 26) : 0; // 縦見出しの柱は、文字が全部入る高さにして写真に重ねない
+    if (vcol) nwVCol(c, lead, x + w - colW, y0, colW, colH + 12, 24);
     if (lead.sub) { const ss = nwLines(c, lead.sub, w - vcol, 15, true, 2); ss.forEach((l, i) => tx(c, l, x, yy + i * 22, { size: 15, bold: true, color: P.ink2 })); yy += ss.length * 22 + 6; }
-    yy = Math.max(yy, vcol ? y0 + 150 : yy);
+    yy = Math.max(yy, vcol ? y0 + colH + 16 : yy);
     const ph = Math.round(w * 0.52); nwPhoto(c, lead, x, yy, w, ph); yy += ph + 6;
     tx(c, fit(c, lead.cap || `${lead.date || ''}`, w, 11), x, yy, { size: 11, color: P.ink3 }); yy += 22;
     const ex = nwWrap(c, nwExcerpt(lead), w, 14, false).filter(Boolean).slice(0, 4); ex.forEach((l, i) => tx(c, l, x, yy + i * 23, { size: 14, color: P.ink })); yy += ex.length * 23 + 4;
@@ -33835,7 +33997,8 @@ function phStandRows(c, x, y, w, N, S, rows, o = {}) {
     // 下の帯：首位との差のバー・直近10試合・札
     const bx = x + 84, bw = w - 84 - 120; uRR(c, bx, yy + 56, bw, 6, 3, 'rgba(255,255,255,0.07)'); uRR(c, bx, yy + 56, Math.max(6, bw * (1 - num(r.gb) / (maxGb * 1.15)) * clamp(num(PT.anim, 1), 0, 1)), 6, 3, uTeamCol(r.id));
     if (C && C.l10 && C.l10.length) phDots(c, x + w - 108, yy + 59, C.l10, 4, 10);
-    if (r.tag) { const tw0 = Math.ceil(tw(c, r.tag, 10, true)) + 12; uRR(c, x + 150, yy + 14, tw0, 16, 8, hexA(r.tagCol || NU.gold, 0.22)); tx(c, r.tag, x + 150 + tw0 / 2, yy + 16, { size: 10, bold: true, color: r.tagCol || NU.gold, align: 'center' }); }
+    // 札はチーム名の幅のすぐ右に（長いチーム名に重ならないように）
+    if (r.tag) { const tw0 = Math.ceil(tw(c, r.tag, 10, true)) + 12, px = Math.max(x + 150, x + 84 + Math.ceil(tw(c, TEAM[r.id].short, 16, true)) + 10); uRR(c, px, yy + 14, tw0, 16, 8, hexA(r.tagCol || NU.gold, 0.22)); tx(c, r.tag, px + tw0 / 2, yy + 16, { size: 10, bold: true, color: r.tagCol || NU.gold, align: 'center' }); }
     yy += h + 8;
   });
   return yy - y;
@@ -34193,8 +34356,8 @@ function p6Plays(g, N, S, out) {
   const Q = p6St(S), Z = p6N(N), me = p2Me(N), reg = [];
   for (const [id, b] of Object.entries(S.bs || {})) { if (num(b[B.PA]) < 250) continue; const p = id === 'ME' ? (N.me && N.me.p) : N.L.players[id]; if (!p || p.pos === 'P') continue; reg.push([id, num(p.fld) * 0.7 + num(p.spd) * 0.2 + num(p.arm) * 0.2 + ((hashStr(`gp|${S.y}|${id}`) >>> 0) % 40) / 2]); }
   reg.sort((x, y) => y[1] - x[1]);
-  const good = reg.slice(0, 5).map(([id], i) => ({ id, nm: p2Nm(N, id), what: P6_GOOD[(hashStr(`gpw|${S.y}|${id}`) >>> 0) % P6_GOOD.length], rank: i + 1 }));
-  const pool = pnShuf(reg.map(r => r[0])).slice(0, 4), bad = pool.map(id => ({ id, nm: p2Nm(N, id), what: P6_FUNNY[(hashStr(`bpw|${S.y}|${id}`) >>> 0) % P6_FUNNY.length] }));
+  const good = reg.slice(0, 5).map(([id], i) => ({ id, t: p6TeamOf(N, id), nm: p2Nm(N, id), what: P6_GOOD[(hashStr(`gpw|${S.y}|${id}`) >>> 0) % P6_GOOD.length], rank: i + 1 }));
+  const pool = pnShuf(reg.map(r => r[0])).slice(0, 4), bad = pool.map(id => ({ id, t: p6TeamOf(N, id), nm: p2Nm(N, id), what: P6_FUNNY[(hashStr(`bpw|${S.y}|${id}`) >>> 0) % P6_FUNNY.length] }));
   Q.plays = [{ good, bad }]; p6Keep(N, S, 'plays', Q.plays);
   if (good[0]) { Z.gp[good[0].id] = num(Z.gp[good[0].id]) + 1; p6Push(N, S, 'trophy', `【好プレー大賞】${good[0].nm}。${good[0].what}`, { me: good[0].id === 'ME' }); }
   if (bad[0]) p6Push(N, S, 'news', `【珍プレー大賞】${bad[0].nm}。${bad[0].what}`, { me: bad[0].id === 'ME' });
@@ -34394,7 +34557,7 @@ function p6Pages(N) {
     { label: '最多安打', blocks: Q.hc && Q.hc.h ? [{ t: 'tiles', cols: 2, items: [{ lab: 'トップ', val: String(Q.hc.nm).replace(/^[^・]+・/, ''), sub: TEAM[p6TeamOf(N, Q.hc.id)] ? TEAM[p6TeamOf(N, Q.hc.id)].short : '' }, { lab: '安打', val: `${Q.hc.h}本`, col: NU.acc }, { lab: 'シーズンのペース', val: `${Q.hc.pace}本`, col: Q.hc.pace >= 200 ? NU.good : '#ffffff' }, { lab: '200本まで', val: Q.hc.h >= 200 ? '達成！' : `あと${200 - Q.hc.h}本`, col: Q.hc.h >= 200 ? NU.gold : '#ffffff' }], vsize: 18 }, { t: 'note', text: '5月から毎日集計。200安打ペースに乗ると、ニュースになる。' }] : [{ t: 'empty', text: '5月から集計' }] },
   ] }; } });
   P.push({ lab: 'オフの話題', sub: '好プレー・珍プレー・流行語・秋季キャンプ・新球場', icon: 'trophy', page: () => { const [Pl, tp] = p6Lo(N, S, 'plays'), [Bz, tb] = p6Lo(N, S, 'buzz'), [Cp, tc] = p6Lo(N, S, 'camp'), [Pn, tn] = p6Lo(N, S, 'plan'); const sd = Object.entries(Z.stad).filter(([, s]) => s && !s.done); return { tabs: [
-    { label: '好プレー', blocks: Pl.length ? [{ t: 'sec', title: '好プレー大賞', sub: tp }, rpCards(Pl[0].good, x => ({ num: x.rank, title: x.nm, sub: x.what, hl: x.id === 'ME', team: p6TeamOf(N, x.id) })), { t: 'sec', title: '珍プレー' }, rpCards(Pl[0].bad, x => ({ title: x.nm, sub: x.what, hl: x.id === 'ME', team: p6TeamOf(N, x.id), tag: '珍', tagCol: NU.acc }))] : [{ t: 'empty', text: 'シーズン後に発表' }] },
+    { label: '好プレー', blocks: Pl.length ? [{ t: 'sec', title: '好プレー大賞', sub: tp }, rpCards(Pl[0].good, x => ({ num: x.rank, title: x.nm, sub: x.what, hl: x.id === 'ME', team: x.t || p6TeamOf(N, x.id) })), { t: 'sec', title: '珍プレー' }, rpCards(Pl[0].bad, x => ({ title: x.nm, sub: x.what, hl: x.id === 'ME', team: x.t || p6TeamOf(N, x.id), tag: '珍', tagCol: NU.acc }))] : [{ t: 'empty', text: 'シーズン後に発表' }] },
     { label: '流行語', blocks: Bz.length ? [{ t: 'cards', items: [{ title: `「${Bz[0].w}」`, sub: `年間大賞${tb}`, tag: Bz[0].me ? 'あなた' : '大賞', tagCol: NU.gold, hl: !!Bz[0].me, team: Bz[0].t }] }, { t: 'sec', title: 'ノミネート' }, rpCards(Bz[0].cands, w => ({ title: `「${w}」` })), ...(Z.buzzH.length > 1 ? [{ t: 'sec', title: 'これまでの大賞' }, { t: 'table', cols: [70, 280], rows: Z.buzzH.slice().reverse().map(x => ({ c: [`${x.y}`, `「${x.w}」${x.me ? '★' : ''}`], hl: !!x.me })) }] : [])] : [{ t: 'empty', text: '12月に発表' }] },
     { label: 'キャンプ', blocks: [{ t: 'sec', title: '伸びた若手', sub: tc }, rpCards(Cp, u => ({ title: u.nm, sub: `${P6_KN[u.k] || u.k}が上がった`, right: `+${u.v}`, rightCol: NU.good, team: u.t, hl: u.t === myT }), '11月に行う'), ...(isObj(Z.campMe) ? [{ t: 'note', text: Z.campMe.rest ? `あなた（${Z.campMe.y}年）：休養にあてた` : `あなた（${Z.campMe.y}年）：志願して参加。${(Z.campMe.ks || []).map(k => P6_KN[k] || k).join('・')}が伸びた` }] : [])] },
     { label: '新球場', blocks: [{ t: 'sec', title: 'オフの発表', sub: tn }, rpCards(Pn, x => ({ title: x }), 'なし'), ...(sd.length ? [{ t: 'sec', title: '建設中の新球場' }, rpCards(sd, ([t, s]) => ({ title: s.nm, sub: `${TEAM[t].short}　${s.open}年開業予定`, team: t, hl: t === myT }))] : []), ...(Z.sale.length ? [{ t: 'sec', title: '球団売却の歴史' }, rpCards(Z.sale.slice().reverse(), x => ({ title: `${x.y}年　${x.co}`, sub: `${TEAM[x.t].short}の経営権を取得`, team: x.t }))] : [])] },
@@ -34789,7 +34952,7 @@ function awSeason(g, N, S, A, won, give, out) {
     { const best = []; for (const t of TEAMS.filter(t => t.lg === lg)) { const ps = L.filter(id => P_team(N, id) === t.id && pit(id) && num(pit(id)[Pp.OUT]) >= 300).sort((a, b) => val(b) - val(a))[0]; const cs = Object.entries(S.fs || {}).filter(([k]) => k.endsWith('@C')).map(([k, v]) => [k.slice(0, -2), num(v[FDI.OUT])]).filter(([id]) => P_team(N, id) === t.id).sort((a, b) => b[1] - a[1])[0]; if (ps && cs) best.push([ps, cs[0], val(ps) + val(cs[0]) * 0.5]); }
       const w = best.sort((a, b) => b[2] - a[2])[0]; if (w) { give(lg, 'bat', '最優秀バッテリー賞', w[0], `・${nameOf(N, w[1])}`); if (w[1] === 'ME') won.push('最優秀バッテリー賞'); else pHistId(N, w[1], S.y, '最優秀バッテリー賞'); } }
     { const c = L.filter(id => pit(id) && num(pit(id)[Pp.OUT]) >= 300).map(id => { const p = pit(id), ip = num(p[Pp.OUT]) / 3; return [id, num(p[Pp.NP]) / ip + 1.5 * num(p[Pp.BB]) * 9 / ip, num(p[Pp.NP]) / ip]; }).sort((a, b) => a[1] - b[1])[0]; if (c) give(lg, 'speed', 'スピードアップ賞', c[0], ` 1回平均${c[2].toFixed(1)}球`); }
-    { const c = L.filter(id => { const p = awP(N, id); return p && !p.fr && (id === 'ME' ? num(me && me.yrs) <= 1 : num(p.yrs) <= 1) && !roy(lg).startsWith(nameOf(N, id)); }).sort((a, b) => val(b) - val(a))[0]; if (c && val(c) >= 1.5) give(lg, 'rookS', '新人特別賞', c, ` WAR${val(c).toFixed(1)}`); }
+    { const c = L.filter(id => { const p = awP(N, id); return p && !p.fr && !p.fo && (typeof royElig === 'function' ? royElig(N, S, id) : (id === 'ME' ? num(me && me.yrs) <= 1 : num(p.yrs) <= 1)) && !roy(lg).startsWith(nameOf(N, id)); }).sort((a, b) => val(b) - val(a))[0]; if (c && val(c) >= 1.5) give(lg, 'rookS', '新人特別賞', c, ` WAR${val(c).toFixed(1)}`); }
     if (prev) { const c = L.map(id => { const pv = prev[id], p = awP(N, id); if (!pv || !p || num(p.age) < 25) return null; const w = val(id); return (num(pv.war) < 0.5 || num(pv.g) < 40) && w >= 2.5 && w - num(pv.war) >= 2.5 ? [id, w - num(pv.war)] : null; }).filter(Boolean).sort((a, b) => b[1] - a[1])[0]; if (c) give(lg, 'comeback', 'カムバック賞', c[0], ` WAR${num(prev[c[0]].war).toFixed(1)}→${val(c[0]).toFixed(1)}`); }
     // オリジナル表彰
     { const c = L.filter(id => isBat(id) && bat(id) && num(bat(id)[B.DP]) > 15 && num(bat(id)[B.PA]) >= 200).map(id => [id, num(bat(id)[B.DP]) / num(bat(id)[B.PA])]).sort((a, b) => b[1] - a[1])[0]; if (c) bad(lg, 'dpk', '併殺王', c[0], ` ${bat(c[0])[B.DP]}併殺（${(c[1] * 100).toFixed(1)}％）`, `今季は${bat(c[0])[B.DP]}本の併殺打。チャンスでつぶしてしまう場面が多かった。`); }
