@@ -11516,7 +11516,9 @@ function fr(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(Math.round(x), M
 // プロ野球アプリだけは、ドット文字ではなくなめらかなフォントで描く
 const NPB_FONT = '"NPBSans", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", "Noto Sans CJK JP", sans-serif';
 const KINSOKU = new Set('、。，．・：；？！ー～…‥）」』】〕〉》’”ぁぃぅぇぉっゃゅょァィゥェォッャュョ'.split(''));
-function setF(c, size, bold, numF) { c.font = numF ? `${bold ? 700 : 600} ${size}px "NPBNum", ${NPB_FONT}` : `${bold ? 700 : 500} ${size}px ${NPB_FONT}`; }
+// 文字の大きさの設定（1＝標準）。小さい文字ほど大きくする
+let NPB_FS = 1;
+function setF(c, size, bold, numF) { if (NPB_FS !== 1) { const k = size <= 13 ? NPB_FS : size <= 16 ? 1 + (NPB_FS - 1) * 0.5 : 1; size = Math.round(size * k * 2) / 2; } c.font = numF ? `${bold ? 700 : 600} ${size}px "NPBNum", ${NPB_FONT}` : `${bold ? 700 : 500} ${size}px ${NPB_FONT}`; }
 let FONT_OK = false;
 function loadNpbFont() {
   try { if (FONT_OK || typeof document === 'undefined' || !document.fonts) return; const ps = []; document.fonts.forEach(f => { if (/NPBSans|NPBNum/.test(f.family) && f.status !== 'loaded') ps.push(f.load().catch(() => null)); }); FONT_OK = true; Promise.all(ps).then(() => { FONT_OK = true; }); } catch (e) { }
