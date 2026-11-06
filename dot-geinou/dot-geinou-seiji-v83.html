@@ -33651,7 +33651,7 @@ function ptTeamV2(c, sc, N, x, y, w) {
     }
     const war = p => { const a = S && (p.pos === 'P' ? S.ps[p.id] : S.bs[p.id]); return a && (p.pos === 'P' ? a[Pp.OUT] : a[B.PA]) ? warOf(a, p.pos === 'P', p.pos, lgOf(S)) : -99; };
     const hb = players.filter(p => p.pos !== 'P').map(p => [p, war(p)]).filter(z => z[1] > -99).sort((a, b) => b[1] - a[1]).slice(0, 3), hp = players.filter(p => p.pos === 'P').map(p => [p, war(p)]).filter(z => z[1] > -99).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    if (hb.length || hp.length) bl.push({ t: 'sec', title: '今季の主力', sub: 'WAR上位' }, { t: 'lineup', items: [...hb.map(([p, v]) => ({ ...item(p, (POSN[p.pos] || '').replace(/手$/, ''), statB(p)), stat: `${statB(p)}　WAR${f1(v)}` })), ...hp.map(([p, v]) => ({ ...item(p, p.role === 'SP' ? '先発' : '救援', statP(p)), stat: `${statP(p)}　WAR${f1(v)}` }))] });
+    if (hb.length || hp.length) bl.push({ t: 'sec', title: '今季の主力', sub: 'WAR上位' }, { t: 'lineup', items: [...hb.map(([p, v]) => ({ ...item(p, (POSN[p.pos] || '').replace(/手$/, ''), statB(p)), stat: `WAR${f1(v)}　${statB(p)}` })), ...hp.map(([p, v]) => ({ ...item(p, p.role === 'SP' ? '先発' : '救援', statP(p)), stat: `WAR${f1(v)}　${statP(p)}` }))] });
     const O = typeof p3Order === 'function' ? p3Order(N, tid) : null;
     if (O) bl.push({ t: 'sec', title: 'スタメン予想', sub: '能力から組んだ打順' }, { t: 'lineup', items: O.ord.map((z, i) => ({ ...item(z.p, (POSN[z.pos] || z.pos).replace(/手$/, ''), statB(z.p)), num: i + 1 })) });
     const Mg = typeof mgrOf === 'function' ? mgrOf(N, tid) : null, F = typeof foOf === 'function' ? foOf(N, tid) : null, cap = S && S.p2 && S.p2.capt ? S.p2.capt[tid] : null;
@@ -33675,8 +33675,8 @@ function phDots(c, x, y, arr, r = 7, gap = 18) { (arr || []).forEach((k, i) => {
 function phCard(c, x, y, w, h, col) { ptShade(c, x, y, w, h, 16); c.save(); uRRPath(c, x, y, w, h, 16); c.fillStyle = col ? lgrad(c, x, y, x + w, y + h, [[0, shade(col, -0.05)], [1, shade(col, -0.62)]]) : lgrad(c, 0, y, 0, y + h, [[0, 'rgba(22,32,58,0.95)'], [1, 'rgba(10,15,30,0.95)']]); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.08)'; c.lineWidth = 1; c.stroke(); c.restore(); ptGloss(c, x, y, w, h, 16); }
 function phSec(c, x, y, w, t, s) { fr(c, x + 2, y + 3, 4, 18, NU.acc); tx(c, t, x + 14, y + 2, { size: 16, bold: true, color: '#ffffff' }); const st = s ? fit(c, s, w - 160, 12) : ''; if (st) tx(c, st, x + w, y + 5, { size: 12, color: NU.t2, align: 'right' }); ptSecLine(c, x + 24 + tw(c, t, 16, true), x + w - (st ? tw(c, st, 12) + 12 : 0), y + 12); return 30; }
 function phNextGame(N, S) {
-  const me = N.me; if (!S || !me || me.st !== 'pro' || !me.team || S.done >= S.N) return null;
-  for (let r = S.done; r < Math.min(S.N, S.done + 3); r++) { const pr = roundPairs(S, r).find(([h, a]) => h === me.team || a === me.team); if (pr) return { r, h: pr[0], a: pr[1], md: roundMd(S, r), home: pr[0] === me.team, o: pr[0] === me.team ? pr[1] : pr[0] }; }
+  const me = N.me, tid = (N.mgr && N.mgr.team) || (me && me.st === 'pro' && me.team) || null; if (!S || !tid || S.done >= S.N) return null; // 監督モードでは監督の球団
+  for (let r = S.done; r < Math.min(S.N, S.done + 3); r++) { const pr = roundPairs(S, r).find(([h, a]) => h === tid || a === tid); if (pr) return { r, h: pr[0], a: pr[1], md: roundMd(S, r), home: pr[0] === tid, o: pr[0] === tid ? pr[1] : pr[0] }; }
   return null;
 }
 // ---- 試合のスコアボード（1試合） ----
@@ -33686,7 +33686,8 @@ function phScore(c, x, y, w, N, e, o = {}) {
   tx(c, gDate(e), x + 16, y + 10, { size: 12, color: NU.t2 });
   const kn = e.k !== 'R' && KIND_N[e.k] ? KIND_N[e.k] : ''; if (kn) uPill(c, x + 70, y + 8, kn, { h: 18, col: /F|AAA|IND|CORP/.test(e.k) ? NU.info : NU.acc, maxW: 120 });
   uRR(c, x + w - 52, y + 8, 40, 22, 11, hexA(rc, 0.22), hexA(rc, 0.7)); tx(c, res === 'W' ? '勝ち' : res === 'L' ? '負け' : '引分', x + w - 32, y + 11, { size: 12, bold: true, color: rc, align: 'center' });
-  const rowY = [y + 36, y + 64], teams = [{ nm: o.myName || (myT && TEAM[myT] ? TEAM[myT].short : '自チーム'), t: myT, s: e.s[0], mk: o.myLogo }, { nm: oppName(e), t: e.o && TEAM[e.o] && !e.on ? e.o : null, s: e.s[1], mlb: e.k === 'MLB' && e.ot != null ? 'MLB_' + e.ot : null }];
+  const myT2 = myT || (N && N.mgr && N.mgr.team) || null;
+  const rowY = [y + 36, y + 64], teams = [{ nm: o.myName || (myT2 && TEAM[myT2] ? TEAM[myT2].short : '自チーム'), t: myT2, s: e.s[0], mk: o.myLogo }, { nm: oppName(e), t: e.o && TEAM[e.o] && !e.on ? e.o : null, s: e.s[1], mlb: e.k === 'MLB' && e.ot != null ? 'MLB_' + e.ot : null }];
   const order = e.h ? [1, 0] : [0, 1]; // 上がビジター、下がホーム
   order.forEach((k, j) => {
     const T = teams[k], yy = rowY[j], win = (k === 0 && res === 'W') || (k === 1 && res === 'L');
@@ -33694,7 +33695,7 @@ function phScore(c, x, y, w, N, e, o = {}) {
     tx(c, fit(c, T.nm + (j === 1 ? '' : ''), w - 150, 15, win), lx, yy + 3, { size: 15, bold: win, color: win ? '#ffffff' : NU.t2 });
     tx(c, String(T.s), x + w - 22, yy - 4, { size: 26, bold: true, color: win ? '#ffffff' : NU.t3, align: 'right' });
   });
-  if (!o.compact) { const ml = meLine(e); tx(c, fit(c, ml, w - 32, 12), x + 16, y + h - 22, { size: 12, color: !e.me ? NU.t3 : /本塁打|勝利投手|猛打/.test(ml) ? NU.gold : NU.acc2 }); }
+  if (!o.compact) { const mg = N && N.mgr && N.mgr.team, ml = mg ? [e.w && `勝 ${e.w}`, e.l && `負 ${e.l}`, e.sv && `S ${e.sv}`].filter(Boolean).join('　') : meLine(e); tx(c, fit(c, ml, w - 32, 12), x + 16, y + h - 22, { size: 12, color: mg ? NU.t2 : !e.me ? NU.t3 : /本塁打|勝利投手|猛打/.test(ml) ? NU.gold : NU.acc2 }); } // 監督モードでは勝ち負けの投手
   return h;
 }
 // ================= ホーム =================
@@ -33786,24 +33787,25 @@ function ptHomeV2(c, sc, N, x, y, w) {
 }
 // ================= 試合 =================
 function ptGamesV2(c, sc, N, x, y, w) {
-  const me = N.me, S = N.S, rows = sc.rows(), pro = me.st === 'pro' && me.team, mlb = me.st === 'mlb' && me.mlb, mnr = isMinor(me); let yy = y + 10;
+  const me = N.me, S = N.S, rows = sc.rows(), mgT = N.mgr && N.mgr.team, pro = mgT || (me.st === 'pro' && me.team), myTid = mgT || me.team, mlb = !mgT && me.st === 'mlb' && me.mlb, mnr = !mgT && isMinor(me); let yy = y + 10;
+  const yr = S ? S.y : (() => { try { return dateOf(sc.g, sc.g.state.day).year; } catch (e) { return ''; } })();
   const log = mlb && S && S.mlb ? S.mlb.log : mnr && S && S.mn ? S.mn.log : S ? S.log : null;
   // 上：成績の札
-  { const h = 108, col = pro ? uTeamCol(me.team) : NU.base; phCard(c, x, yy, w, h, col);
-    if (pro) { try { drawLogo(c, me.team, x + 14, yy + 14, 40, false); } catch (e) { } }
-    tx(c, pro ? TEAM[me.team].name : mlb ? mlbName(me.mlb.t, S ? S.y : 2026) : mnr ? me.minor.team : '試合', x + (pro ? 64 : 16), yy + 14, { size: 16, bold: true, color: '#ffffff' });
+  { const h = 108, col = pro ? uTeamCol(myTid) : NU.base; phCard(c, x, yy, w, h, col);
+    if (pro) { try { drawLogo(c, myTid, x + 14, yy + 14, 40, false); } catch (e) { } }
+    tx(c, pro ? TEAM[myTid].name : mlb ? mlbName(me.mlb.t, S ? S.y : 2026) : mnr ? me.minor.team : '試合', x + (pro ? 64 : 16), yy + 14, { size: 16, bold: true, color: '#ffffff' });
     const F = Array.isArray(log) && log.length ? uForm(log, S.y, false) : null, R = (log || []).filter(e => e.s && e.k === 'R'), w0 = R.filter(e => e.s[0] > e.s[1]).length, l0 = R.filter(e => e.s[0] < e.s[1]).length;
-    tx(c, `${S ? S.y : ''}年　公式戦 ${w0}勝${l0}敗`, x + (pro ? 64 : 16), yy + 38, { size: 13, color: 'rgba(255,255,255,0.8)' });
+    tx(c, `${yr}年　公式戦 ${w0}勝${l0}敗`, x + (pro ? 64 : 16), yy + 38, { size: 13, color: 'rgba(255,255,255,0.8)' });
     if (F) { tx(c, '直近10試合', x + 14, yy + 74, { size: 11, color: 'rgba(255,255,255,0.7)' }); phDots(c, x + 92, yy + 80, F.dots, 7, 17); tx(c, `${F.w}勝${F.l}敗${F.d ? F.d + '分' : ''}`, x + w - 16, yy + 73, { size: 14, bold: true, color: '#ffffff', align: 'right' }); }
     yy += h + 12; }
   const ng = phNextGame(N, S);
   if (ng) { const h = 56; phCard(c, x, yy, w, h); tx(c, '次の試合', x + 14, yy + 9, { size: 11, color: NU.t2 }); tx(c, (ng.r != null ? rdDate(S, ng.r).replace('/', '月') + '日' : mdText(ng.md).replace('ごろ', '')), x + 14, yy + 28, { size: 13, bold: true, color: '#ffffff' }); try { drawLogo(c, ng.o, x + 120, yy + 14, 28, false); } catch (e) { } tx(c, `${ng.home ? 'vs' : '@'} ${TEAM[ng.o].short}`, x + 156, yy + 19, { size: 15, bold: true, color: '#ffffff' }); tx(c, fit(c, TEAM[ng.h].park, 110, 11), x + w - 14, yy + 21, { size: 11, color: NU.t3, align: 'right' }); yy += h + 12; }
-  if (!rows.length) { const t = me.st === 'pro' || me.st === 'mlb' ? 'まだ試合はない。公式戦は4月に開幕。試合はすべて自動で進み、結果がここに並ぶ。' : 'プロ入りすると、所属球団の試合結果がここに並ぶ。'; return yy - y + rbDraw(c, sc, null, [{ t: 'empty', text: t }], x, yy, w); }
+  if (!rows.length) { const t = mgT || me.st === 'pro' || me.st === 'mlb' ? 'まだ試合はない。公式戦は4月に開幕。試合はすべて自動で進み、結果がここに並ぶ。' : 'プロ入りすると、所属球団の試合結果がここに並ぶ。'; return yy - y + rbDraw(c, sc, null, [{ t: 'empty', text: t }], x, yy, w); }
   let lastM = -1;
   rows.forEach((r, i) => {
     const e = r.e, m = Math.floor(num(e.md) / 10) + 1;
     if (m !== lastM) { lastM = m; yy += phSec(c, x, yy, w, `${m}月`, ''); }
-    const h = phScore(c, x, yy, w, N, e, { myT: pro ? me.team : null, myName: mlb ? mlbName(me.mlb.t, S.y) : mnr ? me.minor.team : null });
+    const h = phScore(c, x, yy, w, N, e, { myT: pro ? myTid : null, myName: mlb ? mlbName(me.mlb.t, S.y) : mnr ? me.minor.team : null });
     if ((sc.sel.games | 0) === i) { c.save(); uRRPath(c, x, yy, w, h, 16); c.strokeStyle = hexA(NU.acc, 0.6); c.lineWidth = 1.5; c.stroke(); c.restore(); }
     ptHit(x, yy, w, h, () => { sc.sel.games = i; ptAct(sc, r)(); });
     yy += h + 10;
