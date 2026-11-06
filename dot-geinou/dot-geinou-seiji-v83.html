@@ -10050,6 +10050,11 @@ function* simGameGen(ctx, home, away, opt = {}) {
     let pull = false;
     if (mid) {
       if (F.pc >= L + 12 || (isSt && F.innR >= 4) || (!isSt && F.innR >= 3) || (!isSt && F.pc >= L + 8)) pull = true;
+      // ピンチの継投：終盤の接戦で走者が2人以上、先発の球数がかさんでいれば代える
+      const onB = curBases ? curBases.filter(Boolean).length : 0;
+      if (isSt && inn >= 6 && Math.abs(lead) <= 2 && onB >= 2 && F.pc >= L * 0.8) pull = true;
+      // 打たれているリリーフ（この回2点以上・接戦）も早めに代える。抑えは信頼して続投
+      if (!isSt && cur !== F.T.cl && F.innR >= 2 && Math.abs(lead) <= 2 && onB >= 1) pull = true;
     } else if (isSt) {
       if (F.pc >= L || (inn >= 6 && F.pc >= L * 0.86) || p.r >= 6 || (inn >= 5 && p.r >= 5)) pull = true;
       if (inn >= 9 && lead >= 1 && lead <= 3 && !(F.pc < L * 0.85 && p.r <= 1)) pull = true;
