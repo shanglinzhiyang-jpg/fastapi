@@ -10017,6 +10017,9 @@ function* simGameGen(ctx, home, away, opt = {}) {
     // DHなしなら投手の打順も交代
     if (!F.T.dh) { const k = F.lineup.indexOf(F.lineup.find(x => P(x) && P(x).pos === 'P' && F.used.has(x) && x !== id)); if (k >= 0) F.lineup[k] = id; }
   }
+  // 監督の采配スタイルと点差で、盗塁・バントの積極さを変える
+  function stealMult(Bt, F, inn) { const d = Bt.runs - F.runs, s = Bt.T.sty; let m = s === 'kidou' ? 1.7 : s === 'kyoda' ? 0.75 : s === 'data' ? 0.85 : s === 'kan' ? 1.2 : 1; if (Math.abs(d) >= 5) m *= 0.35; else if (d <= -3 && inn >= 7) m *= 0.4; else if (Math.abs(d) <= 1 && inn >= 7) m *= 1.25; return m; }
+  function buntMult(Bt) { const s = Bt.T.sty; return s === 'kyoda' ? 0.5 : s === 'data' ? 0.6 : s === 'shubi' ? 1.3 : s === 'kidou' ? 1.1 : 1; }
   function chooseRel(F, Bt, inn) {
     const lead = F.runs - Bt.runs;
     const T = F.T;
@@ -10224,11 +10227,22 @@ function* simGameGen(ctx, home, away, opt = {}) {
           if (cand && (isPit ? RND() < 0.85 : phv(cand) >= phv(cp) + 8 && RND() < 0.35)) { Bt.lineup[Bt.bi] = cand.id; used.add(cand.id); Bt.phN = num(Bt.phN) + (isPit ? 0 : 1); Bt.phNew = cand.id; if (isPit) Bt.phForP = Bt.bi; }
         }
       }
+      // 代走：終盤の接戦で、同点・勝ち越しの走者が足の遅い選手なら、控えの俊足と代える
+      if (Bt.T.bench && inn >= 8 && Math.abs(Bt.runs - F.runs) <= 1 && num(Bt.prN) < 2 && !(typeof window !== 'undefined' && window.__PR_OFF)) {
+        for (const k of [1, 0]) {
+          const rn = bases[k], rp = rn && P(rn.id); if (!rp || rn.id === 'ME' || rp.pos === 'P' || num(rp.spd) >= 45) continue;
+          const used = Bt.phSet || (Bt.phSet = new Set());
+          const c = Bt.T.bench.filter(id => id !== 'ME' && !used.has(id) && !Bt.lineup.includes(id)).map(id => P(id)).filter(q => q && q.pos !== 'P' && !(num(q.inj) > 0)).sort((x, y) => num(y.spd) - num(x.spd))[0];
+          if (!c || num(c.spd) < num(rp.spd) + 20 || RND() > 0.7) continue;
+          const li = Bt.lineup.indexOf(rn.id); if (li < 0) continue;
+          Bt.lineup[li] = c.id; rn.id = c.id; used.add(c.id); Bt.prN = num(Bt.prN) + 1; break;
+        }
+      }
       // 盗塁
       if (bases[0] && !bases[1] && outs < 2) {
         const rp = P(bases[0].id), pp = P(F.pit), st = rp ? (rp.spd + abv(rp, 'stl')) / 2 + (abv(rp, 'jmp') - 50) * 0.3 + (hasT(rp, 'steal2') ? 10 : 0) + (hasT(rp, 'sbking') ? 18 : 0) : 0, qk = abv(pp, 'qk') + (hasT(pp, 'quickp') ? 25 : 0) - (hasT(pp, 'y_slow') ? 25 : 0), kn = abv(pp, 'ken') + (hasT(pp, 'kenp') ? 35 : 0); // 盗塁：走力と盗塁の技術・一歩目、投手のクイック・牽制、捕手の盗塁阻止（特殊能力も）
-        if (rp && RND() < 0.004 * Math.exp(0.9 * (kn - 50) / 50)) { bl(rp.id).cs++; bases[0] = null; outs++; pl(F.pit).outs++; fdE(ctx, F, 'PK'); if (outs >= 3) break; } // 牽制で刺す
-        else if (rp && rp.spd >= 48 && st >= 52 && RND() < (st - 51 + (hasT(rp, 'fast') ? 8 : 0) - (qk - 50) * 0.15 - (kn - 50) * 0.12) / 112) {
+        if (rp && RND() < 0.0015 * Math.exp(0.9 * (kn - 50) / 50)) { bl(rp.id).cs++; bases[0] = null; outs++; pl(F.pit).outs++; fdE(ctx, F, 'PK'); if (outs >= 3) break; } // 牽制で刺す
+        else if (rp && rp.spd >= 48 && st >= 52 && RND() < (st - 51 + (hasT(rp, 'fast') ? 8 : 0) - (qk - 50) * 0.15 - (kn - 50) * 0.12) / 112 * ((m0 => m0 > 1 ? 1 + (m0 - 1) * clamp((st - 56) / 14, 0, 1) : m0)(stealMult(Bt, F, inn)))) {
           const sp = clamp(0.6 + (st - 55 + (hasT(rp, 'fast') ? 8 : 0)) / 80 - (F.T.carm - 50) / 200 - (qk - 50) / 220 - (num(F.T.csA, 50) - 50) / 200, 0.3, 0.93);
           if (RND() < sp) { bl(rp.id).sb++; bases[1] = bases[0]; bases[0] = null; fdE(ctx, F, 'SB'); }
           else { bl(rp.id).cs++; bases[0] = null; outs++; pl(F.pit).outs++; fdE(ctx, F, 'CS'); if (outs >= 3) break; }
@@ -10243,7 +10257,10 @@ function* simGameGen(ctx, home, away, opt = {}) {
       const bid = Bt.lineup[Bt.bi];
       const b = rat(bid), p = rat(F.pit);
       // 送りバント（投手・非力な打者、無死一塁、接戦）
-      if (outs === 0 && bases[0] && !bases[2] && Math.abs(Bt.runs - F.runs) <= 2 && (b.pos === 'P' || offOf(b) < 36 || ((abv(b, 'bnt') >= 66 || hasT(b, 'bunter')) && offOf(b) < 54 && inn <= 7)) && RND() < (b.pos === 'P' ? 0.8 : offOf(b) < 36 ? 0.45 : 0.3)) {
+      const lateClose = inn >= 8 && Math.abs(Bt.runs - F.runs) <= 1 && offOf(b) < 58 && Bt.bi !== 2 && Bt.bi !== 3;
+      // 無死一塁（一・二塁）で2番打者や下位打線（日本流の送りバント）。強打・データ重視の監督はあまりしない
+      const early2 = inn <= 8 && (Bt.bi === 1 ? offOf(b) < 64 : Bt.bi >= 6 && offOf(b) < 56);
+      if (outs === 0 && bases[0] && !bases[2] && Math.abs(Bt.runs - F.runs) <= 2 && (b.pos === 'P' || offOf(b) < 36 || lateClose || early2 || ((abv(b, 'bnt') >= 66 || hasT(b, 'bunter')) && offOf(b) < 54 && inn <= 7)) && RND() < (b.pos === 'P' ? 0.8 : offOf(b) < 36 ? 0.5 : lateClose ? 0.45 : early2 ? 0.42 : 0.35) * (b.pos === 'P' ? 1 : buntMult(Bt))) {
         const L0 = bl(bid), P0 = pl(F.pit);
         L0.pa++; P0.bf++; P0.np += 2; F.pc += 2; L0.np += 2; L0.sw += 1;
         let code0;
@@ -24551,7 +24568,7 @@ function mgrPrep(ctx, tid, dh, opt = {}) {
   let dw = 0, ds = 0, carm = 50;
   for (const p of starters) { const ps = pos[p.id], w = FW[ps] || 0; dw += w; ds += w * (defOf(p) + (hasT(p, 'glove') ? 7 : 0)); if (ps === 'C') carm = p.arm; }
   const AG = abTeam(starters, pos);
-  const team = { id: tid, dh, lineup: order.map(p => p.id), pos, sp: sp.id, pen: pen.map(p => p.id), cl: cl && cl.id, su1: su1 && su1.id, su2: su2 && su2.id, bench: bench.map(p => p.id), def: dw ? ds / dw : 50, carm, ...AG };
+  const team = { id: tid, dh, sty: M.sty, lineup: order.map(p => p.id), pos, sp: sp.id, pen: pen.map(p => p.id), cl: cl && cl.id, su1: su1 && su1.id, su2: su2 && su2.id, bench: bench.map(p => p.id), def: dw ? ds / dw : 50, carm, ...AG };
   if (!dh) team.lineup.push(sp.id);
   if (meP && meP.pos !== 'P' && !taken.has(meP.id)) team.ph = meP.id;
   // 疲れ
