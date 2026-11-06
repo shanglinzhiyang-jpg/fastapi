@@ -10558,7 +10558,7 @@ function playGame(N, S, h, a, kind, md, round, out, preRes) {
     const home = h === myTeam;
     const e = { md, r: round, k: kind, o: home ? a : h, h: home ? 1 : 0, s: home ? [res.hs, res.as] : [res.as, res.hs], ls: home ? res.ls : [res.ls[1], res.ls[0]], hi: home ? [num(res.hh), num(res.ah)] : [num(res.ah), num(res.hh)], inn: res.inn,
       w: nameOf(N, res.w), l: nameOf(N, res.l), sv: nameOf(N, res.sv), wt: res.w ? (P_team(N, res.w)) : null,
-      hr: res.hr.map(([id, n]) => [nameOf(N, id), n, P_team(N, id) === myTeam ? 1 : 0]), me: res.me || null };
+      hr: res.hr.map(([id, n]) => [nameOf(N, id), n, P_team(N, id) === myTeam ? 1 : 0, kind === 'R' && S.bs && S.bs[id] ? num(S.bs[id][B.HR]) : 0]), me: res.me || null };
     // 試合の詳細（打者・投手の成績）：試合の画面でタップして見る
     try { const sd = id => P_team(N, id) === myTeam ? 0 : 1; e.bx = { b: Object.entries(res.bl || {}).map(([id, v]) => [id, sd(id), v[1], v[2], v[5], v[4], v[7], v[3]]), p: Object.entries(res.pl || {}).sort((u, v) => num(u[1][8]) - num(v[1][8])).map(([id, v]) => [id, sd(id), v[1], v[2], v[3], v[4], v[5], v[6], v[9]]), wi: res.w || null, li: res.l || null, si: res.sv || null, sayo: res.sayo ? 1 : 0 }; } catch (er) { }
     S.log.push(e);
