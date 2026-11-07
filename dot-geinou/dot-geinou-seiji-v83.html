@@ -10317,6 +10317,8 @@ function* simGameGen(ctx, home, away, opt = {}) {
           bases[0] = runner; break;
         }
         case 'HR': {
+          // 本塁打の記録：[打者, 投手, 回, 裏か, 走者の数, アウト, 打つ前の自分の点, 相手の点, 代打か, サヨナラか]
+          (res0.hre || (res0.hre = [])).push([bid, F.pit, inn, bottom ? 1 : 0, (bases[0] ? 1 : 0) + (bases[1] ? 1 : 0) + (bases[2] ? 1 : 0), outs, Bt.runs, F.runs, Bt.phNew === bid ? 1 : 0, 0]);
           L.ab++; L.h++; L.hr++; PL.h++; PL.hr++; Bt.hits++; Bt.hrN = (Bt.hrN || 0) + 1; if (full) L.gs++; if (!bases[0] && !bases[1] && !bases[2]) Bt.soloN = (Bt.soloN || 0) + 1;
           for (let i = 2; i >= 0; i--) if (bases[i]) { scoreRun(Bt, F, bases[i], bid); bases[i] = null; }
           scoreRun(Bt, F, runner, bid); code = pick(DIR_H) + '本'; break;
@@ -10379,7 +10381,7 @@ function* simGameGen(ctx, home, away, opt = {}) {
       }
       if (Bt.phNew === bid) { Bt.phNew = null; const bf = runs0 - F.runs, af = Bt.runs - F.runs; (res0.ph || (res0.ph = [])).push([bid, L.h - h0, ['2B', '3B', 'HR'].includes(r.c) ? 1 : 0, L.rbi - rbi0, r.c === 'BB' || r.c === 'HBP' ? 1 : 0, inn >= 7 && Math.abs(bf) <= 2 ? 1 : 0, bf <= 0 && af > 0 ? 1 : 0, bf < 0 && af === 0 ? 1 : 0, bottom && inn >= 9 && af > 0 && bf <= 0 ? 1 : 0, ['K', 'GO', 'FO', 'LO'].includes(r.c) ? 1 : 0]); }
       if (meId && (bid === meId || F.pit === meId)) { const bs2 = b.bt === 'S' ? (p.th === 'L' ? 'R' : 'L') : b.bt; const hk = bid === meId ? 'b' + (p.th === 'L' ? 'L' : 'R') : 'p' + (bs2 === 'L' ? 'L' : 'R'); const X = hand[hk] || (hand[hk] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); X[0]++; X[1] += L.ab - ab0; X[2] += L.h - h0; X[3] += r.c === 'HR' ? 1 : 0; X[4] += r.c === 'BB' || r.c === 'HBP' ? 1 : 0; X[5] += r.c === 'K' ? 1 : 0; X[6] += r.c === '2B' ? 1 : 0; X[7] += r.c === '3B' ? 1 : 0; X[8] += Bt.runs - runs0; X[10] += outs - outs0; }
-      if (bottom && inn >= 9 && Bt.runs > F.runs && Bt.runs > runs0) { L.sayo++; sayo = { id: bid, hr: r.c === 'HR' }; }
+      if (bottom && inn >= 9 && Bt.runs > F.runs && Bt.runs > runs0) { L.sayo++; sayo = { id: bid, hr: r.c === 'HR' }; if (r.c === 'HR' && res0.hre && res0.hre.length) res0.hre[res0.hre.length - 1][9] = 1; }
       if (bid === meId) meLog.push(code);
       if (ctx.live) yield { kind: 'pbp', bid, pid: F.pit, code, c: r.c, outs, bases: bases.map(x => x ? x.id : null), hs: H.runs, as: A.runs, inn, bottom, scored: Bt.runs - runs0 };
       Bt.bi = (Bt.bi + 1) % Bt.lineup.length;
@@ -10420,6 +10422,7 @@ function* simGameGen(ctx, home, away, opt = {}) {
     const q = pl(id); if (q.entry >= 1 && q.entry <= 3 && q.outs >= 1 && q.exit != null && q.exit >= 1) res.hld.push(id);
   }
   res.ph = res0.ph || [];
+  res.hre = res0.hre || [];
   res.full = []; for (const S of [H, A]) S.lineup.forEach((id, i) => { if (id === S.T.lineup[i] && S.T.pos && S.T.pos[id] && S.T.pos[id] !== 'DH') res.full.push(id); });
   // 成績へ反映
   const appeared = new Set();
@@ -10562,7 +10565,9 @@ function playGame(N, S, h, a, kind, md, round, out, preRes) {
     // 試合の詳細（打者・投手の成績）：試合の画面でタップして見る
     try { const sd = id => P_team(N, id) === myTeam ? 0 : 1; const sb = id => { const q = kind === 'R' && S.bs && S.bs[id]; return q ? [num(q[B.AB]), num(q[B.H]), num(q[B.HR]), num(q[B.RBI])] : null; }, sp = id => { const q = kind === 'R' && S.ps && S.ps[id]; return q ? [num(q[Pp.OUT]), num(q[Pp.ER]), num(q[Pp.W]), num(q[Pp.L]), num(q[Pp.SV])] : null; };
       // 末尾は試合後の時点の今季成績（打者：打数・安打・本塁打・打点／投手：アウト・自責・勝・敗・S）
-      e.bx = { b: Object.entries(res.bl || {}).map(([id, v]) => [id, sd(id), v[1], v[2], v[5], v[4], v[7], v[3], sb(id)]), p: Object.entries(res.pl || {}).map((q, i) => [q, i]).sort((u, v) => (num(v[0][1][0]) - num(u[0][1][0])) || (u[1] - v[1])).map(q => q[0]).map(([id, v]) => [id, sd(id), v[1], v[2], v[3], v[4], v[5], v[6], v[9], sp(id)]), wi: res.w || null, li: res.l || null, si: res.sv || null, sayo: res.sayo ? 1 : 0 }; } catch (er) { }
+      e.bx = { b: Object.entries(res.bl || {}).map(([id, v]) => [id, sd(id), v[1], v[2], v[5], v[4], v[7], v[3], sb(id)]), p: Object.entries(res.pl || {}).map((q, i) => [q, i]).sort((u, v) => (num(v[0][1][0]) - num(u[0][1][0])) || (u[1] - v[1])).map(q => q[0]).map(([id, v]) => [id, sd(id), v[1], v[2], v[3], v[4], v[5], v[6], v[9], sp(id)]), wi: res.w || null, li: res.l || null, si: res.sv || null, sayo: res.sayo ? 1 : 0 };
+      // 本塁打ひとつずつ：[打者, 自分0/相手1, 投手, 回, 裏, 走者, アウト, 打つ前の打った側の点, 守った側の点, 代打, サヨナラ, 今季何号]
+      { const H2 = res.hre || []; e.bx.hr = H2.map((q, i) => { const later = H2.slice(i + 1).filter(z => z[0] === q[0]).length, tot = kind === 'R' && S.bs[q[0]] ? num(S.bs[q[0]][B.HR]) : 0; return [q[0], sd(q[0]), q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8], q[9], tot ? tot - later : 0]; }); } } catch (er) { }
     S.log.push(e);
     if (S.log.length > 220) S.log.shift();
     if (out) out.games.push(e);
