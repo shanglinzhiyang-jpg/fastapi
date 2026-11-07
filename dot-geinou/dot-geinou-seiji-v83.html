@@ -13962,6 +13962,7 @@ function accumulateCareer(N, S, p, retiring) {
   if (cur) { try { p.cy = (p.cy || []).filter(r => r.y !== S.y); p.cy.push({ y: S.y, t: p.team, a: cur.slice(), w: Math.round(warOf(cur, isP, p.pos, lg) * 100) / 100 }); if (p.cy.length > 25) p.cy.shift(); } catch (e) { } }
   if (cur) {
     if (isP) p.cp = addArr(padA(p.cp || [], PL_), cur); else p.cb = addArr(padA(p.cb || [], BL), cur);
+    if (isP && S.bs[p.id]) { try { p.cbx = addArr(padA(p.cbx || [], BL), S.bs[p.id]); } catch (e) { } } // 投手の打撃（通算）：初本塁打などの判定用
     p.cw = Math.round((num(p.cw) + warOf(cur, isP, p.pos, lg)) * 100) / 100;
     if (p.y0 == null) p.y0 = S.y;
   }
@@ -25327,7 +25328,7 @@ function crDebt(N, S, tid, th) {
     ? (lostL ? `${crFactLast(c)}、借金${d}でシーズンを終えた。` : `${c.team}は借金${d}でシーズンを終えた。${c.last ? `最終戦の${TEAM[c.last.opp].short}戦は${c.last.rs}－${c.last.ra}で${c.last.rs > c.last.ra ? '勝ったものの' : '引き分けたが'}、1年間に積み重ねた黒星は、あまりにも重い。` : ''}`) 
     : (lostL ? `${crFactLast(c)}、${ls ? `${ls}。` : ''}ついに借金は${d}に膨らんだ。` : `借金が${d}に達した。${c.last ? `この日の${TEAM[c.last.opp].short}戦は${c.last.rs}－${c.last.ra}で${c.last.rs > c.last.ra ? '勝ったものの' : '引き分けたが'}、ここまでに積み重ねた黒星は、あまりにも重い。` : ''}`) + `${c.g}試合を終えて${c.w}勝${c.l}敗${c.tt ? c.tt + '分' : ''}。首位${TEAM[c.top.id].short}の背中は、もう見えない。`;
   const P = [fact, crStat(c)];
-  const prevY = `${H.length ? `昨季は${H[H.length - 1].w}勝${H[H.length - 1].l}敗で${H[H.length - 1].rank}位。` : ''}${H.length && H[H.length - 1].rank >= 4 ? '低迷は、もはや一時的なものではない。' : '昨季からの落差は、あまりにも大きい。'}`;
+  const prevY = `${H.length ? `昨季は${H[H.length - 1].w}勝${H[H.length - 1].l}敗で${H[H.length - 1].rank}位。` : ''}${!H.length ? '' : H[H.length - 1].rank >= 4 ? '低迷は、もはや一時的なものではない。' : '昨季からの落差は、あまりにも大きい。'}`;
   if (th === 25 && !end) P.push(`借金25は、球界で古くから「監督休養ライン」とささやかれてきた数字だ。過去にも、この数字を境に指揮官が退いた例は少なくない。球団幹部は「シーズン途中で動くことは考えていない」と話すが、その表情は硬かった。`);
   if (th >= 30) P.push(end ? prevY : `このままのペースなら、シーズン${pace}敗。${pace >= 90 ? '90敗の大台も、現実味を帯びてきた。' : '屈辱的なシーズンになるのは間違いない。'}${prevY}`);
   // この日の試合に負けていないときは、試合の内容を謝る言葉（sorry・curt）は使わない
@@ -26365,8 +26366,8 @@ function crHeisatsu(N, S, id, dp) {
 // 限界説・衰え
 function crGenkai(N, S, id) {
   const c = crPlayerCtx(N, S, id); if (!c) return null; const p = c.p, isP = p.pos === 'P', line = isP ? crPline(c.ps) : `打率${fmtAvg(avgOf(c.b))}、${crHRs(c.b[B.HR])}`;
-  const car = (p.cy || []).slice(-1)[0];
-  const P = [`${c.team}の${c.nm}（${p.age}歳）に、「限界説」がささやかれている。今季は${line}。${car ? `昨季（${car.y}年）までの姿とは、明らかに違う。` : ''}`,
+  const car = (p.cy || []).find(r => r.y === S.y - 1); // 「昨季」はちょうど前の年の記録があるときだけ
+  const P = [`${c.team}の${c.nm}（${p.age}歳）に、「限界説」がささやかれている。今季は${line}。${car ? `昨季までの姿とは、明らかに違う。` : ''}`,
     `${isP ? `直球の球速は${Math.round(num(p.vel, 140))}キロ前後。全盛期のような球威はなく、打者に簡単に捉えられる場面が増えた。` : '打球の速さ、守備での一歩目、走塁。どれを取っても、衰えは隠せない。'}${num(p.yrs) >= 10 ? `プロ${num(p.yrs) + 1}年目。チームを長く支えてきた功労者だけに、首脳陣も扱いに頭を悩ませている。` : ''}`,
     `${c.sur}は「${crP(['まだやれる。自分がいちばん、そう信じている', '年齢は言い訳にしたくない', '結果が出なければ、それがすべて'])}」と話す。${c.ms}は「${crP(['経験のある選手は、チームに必要', '状態を見ながら判断する', '若い選手との競争に勝ってほしい'])}」と、明言を避けた。`,
     crObQ(c, 'kitai'), crP(['ベテランの意地を、見せられるか。', 'ユニホームを脱ぐ日は、自分で決めたい。', '時の流れは、残酷だ。'])];
@@ -26522,7 +26523,7 @@ function crGameCands3(N, S, C, G, T, cand, lost, won) {
   }
   // 相手のルーキーにプロ初勝利・プロ初本塁打を献上
   if (lost && res.w && res.w !== 'ME' && !ofT(res.w)) { const p = N.L.players[res.w], q = S.ps[res.w]; if (p && num(p.yrs) === 0 && q && q[Pp.W] === 1 && !num(p.cp && p.cp[Pp.W])) cand('hatsushori', 36, () => crHatsuShori(N, S, tid, G, res.w)); }
-  for (const [bid, b] of Object.entries(res.bl || {})) { if (bid === 'ME' || ofT(bid) || !b[4]) continue; const p = N.L.players[bid], sb = S.bs[bid]; if (!p || !sb) continue; if (num(p.cb && p.cb[B.HR]) + sb[B.HR] === b[4]) { cand('hatsuhr', 26 + (lost ? 6 : 0), () => crHatsuHR(N, S, tid, G, bid)); break; } }
+  for (const [bid, b] of Object.entries(res.bl || {})) { if (bid === 'ME' || ofT(bid) || !b[4]) continue; const p = N.L.players[bid], sb = S.bs[bid]; if (!p || !sb) continue; if (num(p.cb && p.cb[B.HR]) + num(p.cbx && p.cbx[B.HR]) + sb[B.HR] === b[4]) { cand('hatsuhr', 26 + (lost ? 6 : 0), () => crHatsuHR(N, S, tid, G, bid)); break; } }
   // 暴投
   const wp = Object.entries(res.pl || {}).filter(([id]) => ofT(id)).reduce((x, [, L]) => x + num(L[10]), 0);
   if (wp >= 3) cand('boutou', 28 + wp * 3, () => crBoutou(N, S, tid, G, wp));
@@ -26781,7 +26782,7 @@ function crMendoza(N, S, id) {
 function crKyuuen(N, S, id) {
   const c = crPlayerCtx(N, S, id); if (!c || !c.ps) return null; const q = c.ps;
   const P = [`${c.team}の救援投手・${c.nm}の防御率が${fmtERA(eraOf(q))}に達した。${q[Pp.G]}試合に登板して${fmtIP(q[Pp.OUT])}回、自責点${q[Pp.ER]}。登板すれば失点する、という状態が続いている。`,
-    `${crP(['ブルペンの一角として期待されたが', '昨季の好投から一転', '勝ちパターンを任された時期もあったが'])}、今季は${crP(['被打率が高く、走者を背負うと崩れる', '四球で自滅する場面が目立つ', '一発を浴びるケースが多い'])}。スタンドからは、登板が告げられるたびにため息が漏れる。`,
+    `${crP(['ブルペンの一角として期待されたが', '勝ちパターンを任された時期もあったが', ...((() => { const pv = (c.p.cy || []).find(r => r.y === S.y - 1); return pv && pv.a && num(pv.a[Pp.OUT]) >= 60 && eraOf(pv.a) <= 3.0 ? ['昨季の好投から一転'] : []; })())])}、今季は${crP(['被打率が高く、走者を背負うと崩れる', '四球で自滅する場面が目立つ', '一発を浴びるケースが多い'])}。スタンドからは、登板が告げられるたびにため息が漏れる。`,
     crObQ(c, 'pslump'), crP(['ブルペンの火種は、消えないままだ。', '救援投手に必要なのは、信頼だ。それが今はない。'])];
   return crPost(N, S, { kind: 'kyuuen', tag: '救援崩壊', tid: c.tid, pid: id, pri: 4, mine: c.mine, head: crP([`${c.sur}、救援防御率${fmtERA(eraOf(q))}　“炎上”止まらず`, `${c.team}ブルペンの穴　${c.sur}が防御率${fmtERA(eraOf(q))}`]), sub: `${q[Pp.G]}試合 防御率${fmtERA(eraOf(q))}`, paras: P, cap: `降板を告げられる${c.sur}` });
 }
@@ -26902,7 +26903,7 @@ function crGoodCands(N, S, C, G, T, cand, lost, won) {
   if (h4) cand('g_moda', 30 + h4[1][2] * 3 + meB(h4[0]), () => gdModa(N, S, h4[0], h4[1], G));
   const gs = sp.find(x => x[0] === 'gs'); if (gs) cand('g_gs', 36 + meB(gs[1]), () => gdGrand(N, S, gs[1], G));
   if (res.w && ofT(res.w) && res.w !== 'ME') { const p = N.L.players[res.w], q = S.ps[res.w]; if (p && num(p.yrs) === 0 && q && q[Pp.W] === 1 && !num(p.cp && p.cp[Pp.W])) cand('g_first', 40, () => gdFirst(N, S, res.w, 'w', G)); }
-  for (const [id, b] of myB) { if (id === 'ME' || !b[4]) continue; const p = N.L.players[id], sb = S.bs[id]; if (p && sb && num(p.cb && p.cb[B.HR]) + sb[B.HR] === b[4] && num(p.yrs) <= 1) { cand('g_firsthr', 32, () => gdFirst(N, S, id, 'hr', G)); break; } }
+  for (const [id, b] of myB) { if (id === 'ME' || !b[4]) continue; const p = N.L.players[id], sb = S.bs[id]; if (p && sb && num(p.cb && p.cb[B.HR]) + num(p.cbx && p.cbx[B.HR]) + sb[B.HR] === b[4] && num(p.yrs) <= 1) { cand('g_firsthr', 32, () => gdFirst(N, S, id, 'hr', G)); break; } }
   // 借金1で迎えた試合に勝てば、ちょうど5割（シーズン最終日＝最後の3節は「上位争い」の文言が合わないので出さない）
   if (st && st[1] - st[0] === 1 && S.done >= 20 && S.done + 3 < S.N) cand('g_gowari', 34, () => gdGowari(N, S, tid, G));
 }
@@ -31714,7 +31715,6 @@ function ptZones(c, sc, N, p, x, y, w) {
   c.restore();
   // ゾーンの影
   c.save(); c.shadowColor = 'rgba(0,0,0,0.55)'; c.shadowBlur = 18; c.shadowOffsetY = 6; uRR(c, gx - band, gy - band, zw + band * 2, zh + band * 2, 12, 'rgba(10,16,30,0.9)'); c.restore();
-  const ball = (bx, by, r) => { c.fillStyle = '#f6f4ee'; c.beginPath(); c.arc(bx, by, r, 0, 7); c.fill(); c.strokeStyle = '#d0342c'; c.lineWidth = 1.2; c.beginPath(); c.arc(bx - r * 1.25, by, r * 0.95, -0.7, 0.7); c.stroke(); c.beginPath(); c.arc(bx + r * 1.25, by, r * 0.95, Math.PI - 0.7, Math.PI + 0.7); c.stroke(); };
   const cell = (zl, X, Y, W, H, big, lab) => {
     const v = metric(zl), a = sum(zl, A), r = big ? 7 : 6;
     uRR(c, X + 1.5, Y + 1.5, W - 3, H - 3, r, heat(v));
@@ -31726,7 +31726,7 @@ function ptZones(c, sc, N, p, x, y, w) {
       const sub = mt === 0 ? `${sum(zl, Hh)}安打／${a}打数` : mt === 1 ? `${sum(zl, HR)}本／${a}打数` : `${sum(zl, K)}三振／${a}打数`;
       let fz = 11; while (fz > 8 && tw(c, sub, fz) > W - 10) fz--;
       tx(c, sub, X + W / 2, Y + H / 2 + 10, { size: fz, color: 'rgba(255,255,255,0.82)', align: 'center' });
-      const hr = sum(zl, HR); if (hr && mt !== 1) { const n = Math.min(hr, 4); for (let k = 0; k < n; k++) ball(X + W - 12 - k * 11, Y + 12, 4.2); if (hr > 4) tx(c, `${hr}`, X + W - 12 - n * 11, Y + 6, { size: 10, bold: true, color: '#ffe08a', align: 'right' }); }
+      // 本塁打のボールの印は出さない（見づらいため）
     } else {
       const sv = fmt(v); let fz = 12; while (fz > 8 && tw(c, sv, fz) > Math.max(W, H) - 30) fz--;
       if (W >= H) { tx(c, sv, X + W / 2, Y + H / 2 - fz / 2 - 1, { size: fz, bold: true, color: 'rgba(255,255,255,0.92)', align: 'center' }); if (lab) tx(c, lab, X + 10, Y + H / 2 - 5, { size: 9, color: 'rgba(255,255,255,0.55)' }); }
