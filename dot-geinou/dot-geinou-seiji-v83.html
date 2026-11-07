@@ -31173,11 +31173,12 @@ function ptTable(c, x, y, w, cols, rows, o = {}) {
     if (r.mine) { uRR(c, x + 2, yy + 1, w - 4, rh - 2, 8, NU.accSoft); fr(c, x + 2, yy + 7, 3, rh - 14, NU.acc); }
     let cx = x + 8;
     cols.forEach((q, i) => {
-      const al = q.al || (i ? 'right' : 'left'), v = r.c[i] == null ? '' : String(r.c[i]), sz = q.sz || (i ? 13 : 14), bold = i === 0 && r.mine || q.bold;
+      const al = q.al || (i ? 'right' : 'left'), v = r.c[i] == null ? '' : String(r.c[i]), bold = i === 0 && r.mine || q.bold; let sz = q.sz || (i ? 13 : 14);
       let tx0 = cx;
       if (i === 0 && r.logo) { if (TEAM[r.logo]) drawLogo(c, r.logo, cx, yy + rh / 2 - 11, 22, false); else if (typeof drawKeyLogo === 'function' && logoImg(r.logo)) drawKeyLogo(c, r.logo, cx, yy + rh / 2 - 11, 22, 22, false); tx0 += 28; }
       if (i === 0 && r.bar) fr(c, tx0, yy + rh / 2 - 8, 3, 16, r.bar), tx0 += 9;
       const maxW = W2[i] - (tx0 - cx) - 4;
+      { const mn = q.minSz || (i ? 9 : 10); while (sz > mn && tw(c, v, sz, bold) > maxW) sz--; } // 入りきらないときは、まず字を小さくする（それでもだめなら…）
       tx(c, fit(c, v, maxW, sz, bold), al === 'right' ? cx + W2[i] - 4 : al === 'center' ? cx + W2[i] / 2 : tx0, yy + rh / 2 - sz / 2 - 1, { size: sz, bold, color: (r.col && r.col[i]) || (i ? '#e8eefc' : '#ffffff'), align: al });
       cx += W2[i];
     });
