@@ -32593,7 +32593,15 @@ function p5St(S) {
   return Q;
 }
 function p5N(N) { const Z = N.p5 = isObj(N.p5) ? N.p5 : {}; for (const k of ['nick', 'park', 'mw', 'mas', 'finH', 'mvote', 'nm']) Z[k] = isObj(Z[k]) ? Z[k] : {}; return Z; }
-const p5Mascot0 = t => `${P5_MAS[t] || 'ドット'}${P5_MSUF[(hashStr('mas|' + t) >>> 0) % P5_MSUF.length]}`;
+// 実在の球団マスコット（球団名から時代を見分ける：近鉄→楽天、日本ハムの北海道移転、横浜→DeNA）
+const P5_MASCOT = { G: 'ジャビット', T: 'トラッキー', D: 'ドアラ', YB: 'ホッシー', C: 'スラィリー', S: 'つば九郎', H: 'ハリーホーク', L: 'レオ', F: 'B☆B', M: 'マーくん', Bu: 'バフィリード', BW: 'ネッピー' };
+function p5Mascot0(t) {
+  const nm = TEAM[t] ? String(TEAM[t].name || '') : '';
+  if (t === 'Bu' && /楽天|イーグルス/.test(nm)) return 'クラッチ';
+  if (t === 'F' && nm && !/北海道/.test(nm)) return 'ファイティー';
+  if (t === 'YB' && /DeNA/.test(nm)) return 'DB.スターマン';
+  return P5_MASCOT[t] || `${P5_MAS[t] || 'ドット'}${P5_MSUF[(hashStr('mas|' + t) >>> 0) % P5_MSUF.length]}`;
+}
 const p5Nm = (N, id) => { const Z = p5N(N), p = id === 'ME' ? null : N.L.players[id]; return id !== 'ME' && (!p || !p.team) && Z.nm[id] ? `${Z.nm[id]}（引退）` : p2Nm(N, id); };
 const p5Player = (N, id) => id === 'ME' ? (N.me && N.me.p) : N.L.players[id];
 const p5Min = m => `${Math.floor(m / 60)}時間${String(m % 60).padStart(2, '0')}分`;
@@ -33067,7 +33075,7 @@ function ptRich(c, sc, N, m, L) {
     tabs.forEach((tb, i) => {
       const on = i === E.st.tab, tx0 = 16 + i * tw0;
       if (on) uRR(c, tx0 + 3, y + 3, tw0 - 6, 32, 16, NU.acc);
-      tx(c, fit(c, tb.label, tw0 - 12, 13, true), tx0 + tw0 / 2, y + 11, { size: 13, bold: true, color: on ? NU.accInk : NU.t2, align: 'center' });
+      { let fz = 13; while (fz > 10 && tw(c, tb.label, fz, true) > tw0 - 12) fz--; tx(c, fit(c, tb.label, tw0 - 12, fz, true), tx0 + tw0 / 2, y + 11 + (13 - fz) / 2, { size: fz, bold: true, color: on ? NU.accInk : NU.t2, align: 'center' }); }
       ptHit(tx0, y, tw0, 38, () => { if (E.st.tab !== i) { E.st.tab = i; tt.sfx('cursor'); } }, { always: true });
     });
     y += 48;
@@ -33227,9 +33235,13 @@ const RB = {
       ptPanel(c, tx0, ty, gw, th, { r: 14, fill: 'rgba(255,255,255,0.06)', edge: 'rgba(255,255,255,0.10)' });
       c.save(); c.beginPath(); c.arc(tx0 + 26, ty + 26, 15, 0, Math.PI * 2); c.fillStyle = hexA(it.col || NU.acc, 0.2); c.fill(); c.restore();
       try { uIcon(c, it.icon || 'info', tx0 + 18, ty + 18, 16, it.col || NU.acc); } catch (e) { }
-      const ls = wrap(c, it.lab, gw - 22, 14, true).filter(Boolean).slice(0, 2);
-      ls.forEach((l, j) => tx(c, l, tx0 + 12, ty + 48 + j * 19 - (ls.length > 1 ? 4 : 0), { size: 14, bold: true, color: '#ffffff' }));
-      if (it.sub && ls.length < 2) tx(c, fit(c, it.sub, gw - 22, 11), tx0 + 12, ty + 70, { size: 11, color: NU.t3 });
+      // 見出しは2行に収まるまで字を小さくする（だめなら小さい字で3行）。行末の禁則のぶら下がり分もあけておく
+      let sz = 14, ls = [];
+      for (const z of [14, 13, 12, 11]) { sz = z; ls = wrap(c, it.lab, gw - 24 - z, z, true).filter(Boolean); if (ls.length <= 2) break; }
+      if (ls.length > 2) { sz = 11; ls = wrap(c, it.lab, gw - 24 - sz, sz, true).filter(Boolean).slice(0, 3); }
+      const lh = sz + 5, ly = ls.length >= 3 ? ty + 42 : ty + 48 - (ls.length > 1 ? 4 : 0);
+      ls.forEach((l, j) => tx(c, l, tx0 + 12, ly + j * lh, { size: sz, bold: true, color: '#ffffff' }));
+      if (it.sub && ls.length < 2) tx(c, fit(c, it.sub, gw - 24, 11), tx0 + 12, ty + 70, { size: 11, color: NU.t3 });
       ptChev(c, tx0 + gw - 14, ty + 26, NU.t3);
       ptHit(tx0, ty, gw, th, () => { tt.sfx('ok'); const e = typeof it.go === 'function' ? it.go() : null; if (e && e.page) m.stack.push(e); }, { always: true });
     });
@@ -34425,6 +34437,7 @@ function p6Game(N, S, h, a, res, kind, md, out) {
   else if (((hashStr(`fp|${S.y}|${h}|${md}|${a}`) >>> 0) % 100) < 1) p6FirstPitch(N, S, h, a, md, out, 'day');
 }
 function p6FirstPitch(N, S, h, a, md, out, why) {
+  { const Q0 = p6St(S); Q0.fpK = Q0.fpK || {}; const k0 = `${h}|${md}`; if (Q0.fpK[k0]) return; Q0.fpK[k0] = 1; for (const k1 of Object.keys(Q0.fpK)) if (+k1.split('|')[1] < md - 30) delete Q0.fpK[k1]; } // 同じ球場で同じ日に2度はしない
   const Q = p6St(S), C = p6Celeb(S, `${h}|${md}|${why}`), me = p2Me(N), r = (hashStr(`fpr|${S.y}|${h}|${md}`) >>> 0) % 100;
   const res = r < 18 ? '見事なノーバウンドのストライク' : r < 52 ? 'ノーバウンド投球' : r < 86 ? 'ワンバウンド' : '大暴投';
   const e = { md, h, a, why, kind: C.kind, nm: C.nm, res }; Q.fp.push(e); if (Q.fp.length > 40) Q.fp.shift();
