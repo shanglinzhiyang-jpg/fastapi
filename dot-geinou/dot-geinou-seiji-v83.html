@@ -12066,8 +12066,9 @@ class NpbScene {
     if (this.modal) { this.updModal(inp, tap); return; }
     if (this.busy) return;
     if (this.N && Array.isArray(this.N.evq) && this.N.evq.length && !(this.N.opt && this.N.opt.ev === 'off')) { this.act(() => playEvents(this.g, this.N)); return; }
-    if (this.N && this.N.splash && this.N.splash.kind === 'oly') { const sp = this.N.splash; this.N.splash = null; const IH = (this.N.IH || []).slice(-1)[0]; this.act(() => this.info(sp.title || 'オリンピック 野球', [`日本代表の結果：${sp.result}${sp.result === '金メダル' ? '　金メダル！' : ''}`].concat(IH && IH.y === sp.y ? IH.lines : [], IH && IH.y === sp.y && IH.table ? ['', `予選リーグ：${IH.table}`] : [], sp.sel ? ['', `あなたも日本代表として出場した。${IH && IH.sum ? `（${IH.sum}）` : ''}`] : []), { logos: ['SJ'] })); return; }
-    if (this.N && this.N.splash) { const sp = this.N.splash; this.N.splash = null; const IH = (this.N.IH || []).slice(-1)[0]; this.act(() => this.info(`第${wbcNo(sp.y)}回 ワールド・ベースボール・クラシック`, [`侍ジャパンの結果：${sp.result}${sp.result === '優勝' ? '　世界一！' : ''}`].concat(IH && IH.y === sp.y ? IH.lines : [], sp.sel ? ['', `あなたも日本代表として出場した。${IH && IH.sum ? `（${IH.sum}）` : ''}`] : []), { logos: ['WBC', 'SJ'] })); return; }
+    if (this.N && this.N.splash) { const sp = this.N.splash; this.N.splash = null; const IH = (this.N.IH || []).slice(-1)[0]; const oly = sp.kind === 'oly', title = oly ? (sp.title || 'オリンピック 野球') : `第${wbcNo(sp.y)}回 ワールド・ベースボール・クラシック`;
+      if (typeof intlShow === 'function' && this.rich) { this.act(() => intlShow(this, this.N, { ...sp, title })); return; }
+      this.act(() => this.info(title, [`${oly ? '日本代表' : '侍ジャパン'}の結果：${sp.result}`].concat(IH && IH.y === sp.y ? IH.lines : [], IH && IH.y === sp.y && IH.table ? ['', `予選リーグ：${IH.table}`] : [], sp.sel ? ['', `あなたも日本代表として出場した。${IH && IH.sum ? `（${IH.sum}）` : ''}`] : []), { logos: oly ? ['SJ'] : ['WBC', 'SJ'] })); return; }
     if (this.queue.length) { const q = this.queue.shift(); this.act(() => this.info(q.title || 'おしらせ', q.text)); return; }
     if (tap) { this.onTap(tap); return; }
     if (inp.pressed('menu') || inp.pressed('b')) { tt.sfx('cancel'); this.close(); return; }
@@ -14813,7 +14814,7 @@ function intlEvent(g, N, S, out) {
   const fake = {};
   const P = id => id === 'ME' ? me.p : N.L.players[id] || fake[id];
   const bs = {}, psk = {};
-  const lines = [];
+  const lines = [], games = [];
   let gi = 0;
   const play = (oppName, label) => {
     const opp = mkSynth(fake, 'o' + gi + '_', INTL_OPP[oppName] || 52);
@@ -14824,6 +14825,7 @@ function intlEvent(g, N, S, out) {
     if (res.hs === res.as) win = chance(0.55); // タイブレーク
     const ml = res.me ? meLine({ me: res.me }) : '';
     lines.push(`${label} ${win ? '○' : '●'} 日本 ${res.hs}-${res.as}${res.hs === res.as ? '（タイブレーク）' : ''} ${oppName}${ml && sel ? `　あなた：${ml}` : ''}`);
+    games.push({ lab: label === '1次R' ? '1次ラウンド' : label, win, hs: res.hs, as: res.as, opp: oppName, tb: res.hs === res.as, me: sel ? ml : '' });
     return win;
   };
   const pool = Object.keys(INTL_OPP).filter(k => INTL_OPP[k] <= 58).sort(() => RND() - 0.5).slice(0, 3);
@@ -14844,7 +14846,7 @@ function intlEvent(g, N, S, out) {
   const champ = result === '優勝' || result === '金メダル';
   const title = INTL_NAME[kind];
   const IH = N.IH = Array.isArray(N.IH) ? N.IH : [];
-  const ihe = { y: S.y, kind, result, champ, sel, lines: sel ? lines.slice() : lines.slice(-3) };
+  const ihe = { y: S.y, kind, result, champ, sel, lines: sel ? lines.slice() : lines.slice(-3), games };
   IH.push(ihe); if (IH.length > 30) IH.shift();
   if (kind === 'wbc') N.splash = { kind: 'wbc', y: S.y, result, sel };
   newsPush(S, `${S.y}年 ${title.replace(/（.*）/, '')}：日本は${result}${champ ? '！ 世界一！' : ''}`, sel);
@@ -29320,7 +29322,7 @@ function olyEvent(g, N, S, out) {
     if (pro) { const ps = exNPB(N, p => !p.fr), grp = me.p.pos === 'P' ? ps.filter(p => p.pos === 'P') : ps.filter(p => p.pos !== 'P'), vals = grp.map(ovrOf).sort((a, b) => b - a); sel = meOvr(me) >= (vals[me.p.pos === 'P' ? 12 : 14] ?? 70) || (me.st === 'mlb' && meOvr(me) >= 72); }
     sq = japanSquad(N, sel);
   }
-  const P = id => id === 'ME' ? me.p : N.L.players[id] || fake[id], bs = {}, psk = {}, lines = [];
+  const P = id => id === 'ME' ? me.p : N.L.players[id] || fake[id], bs = {}, psk = {}, lines = [], games = []; let stRows = null;
   let gi = 0;
   const play = (oppName, label) => {
     const op = mkSynth(fake, 'oo' + gi + '_', opp[oppName] || 50), jp = japanTeam(sq, gi); gi++;
@@ -29329,6 +29331,7 @@ function olyEvent(g, N, S, out) {
     let win = res.hs > res.as; if (res.hs === res.as) win = chance(0.5);
     const ml = res.me && sel ? meLine({ me: res.me }) : '';
     lines.push(`${label}　${win ? '○' : '●'} 日本 ${res.hs}－${res.as} ${oppName}${res.hs === res.as ? '（タイブレーク）' : ''}${ml ? `　あなた：${ml}` : ''}`);
+    games.push({ lab: label, win, hs: res.hs, as: res.as, opp: oppName, tb: res.hs === res.as, me: sel ? ml : '' });
     return win;
   };
   const host = O.host ? null : O.city === 'ロサンゼルス' ? 'アメリカ' : O.city === 'シドニー' ? 'オーストラリア' : O.city === 'アトランタ' ? 'アメリカ' : O.city === 'バルセロナ' ? 'スペイン' : O.city === 'アテネ' ? 'イタリア' : O.city === '北京' ? '中国' : null;
@@ -29340,7 +29343,7 @@ function olyEvent(g, N, S, out) {
     for (const n of names) { const w = play(n, '予選リーグ'); rec.日本[w ? 0 : 1]++; rec[n][w ? 1 : 0]++; }
     for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) { const a = names[i], b = names[j], pa = clamp(0.5 + ((opp[a] || 50) - (opp[b] || 50)) / 30, 0.1, 0.9); if (RND() < pa) { rec[a][0]++; rec[b][1]++; } else { rec[b][0]++; rec[a][1]++; } }
     const st = Object.entries(rec).sort((x, y) => y[1][0] - x[1][0] || (opp[y[0]] || 55) - (opp[x[0]] || 55));
-    table = st.map(([n, r], i) => `${i + 1}位 ${n} ${r[0]}勝${r[1]}敗`).join('　');
+    table = st.map(([n, r], i) => `${i + 1}位 ${n} ${r[0]}勝${r[1]}敗`).join('　'); stRows = st.map(([n, r]) => [n, r[0], r[1]]);
     const rk = st.findIndex(x => x[0] === '日本') + 1;
     if (rk > 4) result = `予選リーグ${rk}位（敗退）`;
     else {
@@ -29360,7 +29363,7 @@ function olyEvent(g, N, S, out) {
   const champ = result === '金メダル', medal = /メダル/.test(result);
   const title = `${S.y === 2021 ? '東京2020' : `${O.city}`}オリンピック 野球`;
   const IH = N.IH = Array.isArray(N.IH) ? N.IH : [];
-  const ihe = { y: S.y, kind: 'oly', result, champ, sel, lines: sel ? lines.slice() : lines.slice(-3), table };
+  const ihe = { y: S.y, kind: 'oly', result, champ, sel, lines: sel ? lines.slice() : lines.slice(-3), table, games, st: stRows, city: S.y === 2021 ? '東京2020' : O.city, ama: O.ama ? 1 : 0, mix: O.mix ? 1 : 0 };
   IH.push(ihe); if (IH.length > 30) IH.shift();
   N.splash = { kind: 'oly', y: S.y, result, sel, title };
   newsPush(S, `${title}：日本は${result}${champ ? '！' : ''}`, sel);
@@ -31320,6 +31323,29 @@ function ptText(c, x, y, w, lines, o = {}) {
   }
   return yy - y;
 }
+// おしらせの本文：見出し・箇条書き・「項目：値」・試合結果（○●）・注記を見分けて、読みやすく組む
+function ptNotice(c, x, y, w, lines) {
+  let yy = y; const L = [].concat(lines).map(v => String(v == null ? '' : v));
+  const para = (s, o) => { const ls = wrap(c, s, w - (o.ind || 0) - 8, o.size, !!o.bold).filter(z => z !== ''); ls.forEach(l => { tx(c, l, x + (o.ind || 0), yy, { size: o.size, bold: !!o.bold, color: o.color }); yy += o.lh; }); return ls.length; };
+  for (let i = 0; i < L.length; i++) {
+    const s = L[i], t = s.trim();
+    if (!t) { yy += 8; continue; }
+    let m;
+    if ((m = /^【([^】]+)】$/.exec(t))) { if (yy > y) yy += 6; const pw = Math.min(w, Math.ceil(tw(c, m[1], 13, true)) + 22); uRR(c, x, yy, pw, 26, 13, hexA(NU.acc, 0.16), hexA(NU.acc, 0.55)); tx(c, fit(c, m[1], pw - 16, 13, true), x + pw / 2, yy + 5, { size: 13, bold: true, color: NU.acc2, align: 'center' }); yy += 34; continue; }
+    if ((m = /^■\s*(.+)$/.exec(t))) { if (yy > y) yy += 8; fr(c, x, yy + 3, 4, 15, NU.acc); tx(c, fit(c, m[1], w - 14, 15, true), x + 12, yy, { size: 15, bold: true, color: '#ffffff' }); ptSecLine(c, x + 20 + tw(c, m[1], 15, true), x + w, yy + 10); yy += 28; continue; }
+    if ((m = /^[・•]\s*(.+)$/.exec(t))) { c.save(); c.beginPath(); c.arc(x + 7, yy + 9, 3, 0, Math.PI * 2); c.fillStyle = NU.acc; c.fill(); c.restore(); para(m[1], { ind: 20, size: 14, lh: 22, color: '#e6ecf8' }); yy += 2; continue; }
+    if ((m = /^(.*?)([○●△])\s*(日本|.+?)\s*(\d+)\s*[－\-]\s*(\d+)\s*(.+)$/.exec(t)) && !/。/.test(t)) {
+      const win = m[2] === '○', col = win ? NU.good : m[2] === '●' ? NU.bad : NU.t2; uRR(c, x, yy, w, 36, 10, 'rgba(255,255,255,0.045)', 'rgba(255,255,255,0.07)'); fr(c, x, yy + 6, 3, 24, col);
+      const lab = m[1].trim(); if (lab) tx(c, fit(c, lab, 86, 11, true), x + 12, yy + 11, { size: 11, bold: true, color: NU.t2 });
+      const sx = x + (lab ? 104 : 12); tx(c, `${m[3]} ${m[4]} - ${m[5]} ${m[6].split(/[　（]/)[0]}`, sx, yy + 9, { size: 14, bold: true, color: '#ffffff' });
+      uRR(c, x + w - 44, yy + 9, 34, 18, 9, hexA(col, 0.2)); tx(c, win ? '勝' : m[2] === '●' ? '負' : '分', x + w - 27, yy + 10, { size: 11, bold: true, color: col, align: 'center' }); yy += 42; continue; }
+    if ((m = /^[（(](.+)[）)]$/.exec(t)) || /^※/.test(t)) { para(m ? m[1] : t.replace(/^※\s*/, '※'), { size: 12, lh: 19, color: NU.t3 }); yy += 2; continue; }
+    if ((m = /^([^：:。]{1,14})[：:]\s*(.+)$/.exec(t)) && !/。/.test(m[2]) && m[2].length <= 28) {
+      const kw = Math.min(110, Math.ceil(tw(c, m[1], 12)) + 10); uRR(c, x, yy, w, 30, 8, 'rgba(255,255,255,0.035)'); tx(c, m[1], x + 10, yy + 8, { size: 12, color: NU.t2 }); tx(c, fit(c, m[2], w - kw - 22, 14, true), x + kw + 10, yy + 7, { size: 14, bold: true, color: '#ffffff' }); yy += 34; continue; }
+    para(s, { size: 14, lh: 23, color: '#e6ecf8' }); yy += 4;
+  }
+  return yy - y;
+}
 function ptBtn(c, x, y, w, h, label, fn, o = {}) {
   if (!o.fill && !o.ghost) { c.save(); uRRPath(c, x, y, w, h, h / 2); c.fillStyle = lgrad(c, 0, y, 0, y + h, [[0, shade(NU.acc, 0.16)], [1, shade(NU.acc, -0.2)]]); c.shadowColor = hexA(NU.acc, 0.45); c.shadowBlur = 14; c.shadowOffsetY = 3; c.fill(); c.restore(); }
   else uRR(c, x, y, w, h, h / 2, o.fill || 'rgba(255,255,255,0.08)', o.ghost ? 'rgba(255,255,255,0.18)' : null);
@@ -31525,7 +31551,7 @@ function ptInfo(c, sc, N, m, L) {
   const hy = y + 20 + tl.length * 22 + 12; fr(c, x + 16, hy - 6, w - 32, 1, 'rgba(255,255,255,0.08)');
   let lx = 0; if (Array.isArray(m.logos) && m.logos.length) { m.logos.slice(0, 3).forEach((lk, i) => { if (logoImg(lk)) drawKeyLogo(c, lk, x + 20 + i * 70, hy, 60, 36, false); }); lx = 44; }
   const by = h - 74;
-  ptScroll(c, 'm:info:' + (m.title || ''), x, hy + lx, w, y + by - hy - lx, y0 => ptText(c, x + 22, y0 + 4, w - 44, m.lines, { size: 14 }) + 16);
+  ptScroll(c, 'm:info:' + (m.title || ''), x, hy + lx, w, y + by - hy - lx, y0 => ptNotice(c, x + 18, y0 + 4, w - 36, m.lines) + 16);
   ptBtn(c, x + 20, y + h - 62, w - 40, 48, 'とじる', () => { tt.sfx('ok'); sc.endModal(0); }, { always: true });
 }
 function ptPick(c, sc, N, m, L) {
@@ -35671,6 +35697,86 @@ function rkMyLeaders(N, S, lg) {
     if (i >= 0) items.push({ lab: n, val: String(L[i].s), sub: `${rkLgS(lg)}${i + 1}位／${L.length}人`, col: i < 3 ? NU.gold : NU.acc });
   }
   return items.length ? [{ t: 'sec', title: 'あなたの順位', sub: '各部門' }, { t: 'tiles', cols: 2, h: 72, vsize: 18, items: items.slice(0, 8) }] : [];
+}
+
+// ===== 国際大会（オリンピック・WBC）の結果画面：メダル・試合ごとのスコア・予選の順位表・日本代表の歴史 =====
+const INTL_CODE = { 日本: 'JPN', 韓国: 'KOR', 台湾: 'TPE', 中国: 'CHN', オーストラリア: 'AUS', キューバ: 'CUB', オランダ: 'NED', アメリカ: 'USA', ドミニカ共和国: 'DOM', ベネズエラ: 'VEN', プエルトリコ: 'PUR', メキシコ: 'MEX', イタリア: 'ITA', チェコ: 'CZE', イスラエル: 'ISR', スペイン: 'ESP', ニカラグア: 'NCA', カナダ: 'CAN', パナマ: 'PAN' };
+const INTL_MEDAL = { 金メダル: ['#ffd23f', '金'], 優勝: ['#ffd23f', '優'], 銀メダル: ['#d7dde8', '銀'], 準優勝: ['#d7dde8', '準'], 銅メダル: ['#d79a5a', '銅'] };
+const intlCode = n => INTL_CODE[n] || String(n || '').slice(0, 3);
+// 試合の記録：新しい記録は games に、古いセーブは文章から読みとる
+function intlGames(ihe) {
+  if (Array.isArray(ihe.games)) return ihe.games;
+  const out = [];
+  for (const s of ihe.lines || []) {
+    const m = /^(.+?)[\s　]+([○●])[\s　]*日本[\s　]*(\d+)[－\-](\d+)[\s　]*(（タイブレーク）)?[\s　]*(\S+?)(?:[\s　]+あなた：(.*))?$/.exec(String(s).replace(/（タイブレーク）\s*(\S+)/, '$1（タイブレーク）'));
+    if (m) out.push({ lab: m[1].trim(), win: m[2] === '○', hs: +m[3], as: +m[4], opp: m[6].replace('（タイブレーク）', ''), tb: !!m[5] || /タイブレーク/.test(s), me: m[7] || '' });
+  }
+  return out;
+}
+function intlStand(ihe) {
+  if (Array.isArray(ihe.st)) return ihe.st;
+  if (!ihe.table) return null;
+  const rows = []; for (const m of String(ihe.table).matchAll(/(\d+)位\s*(\S+?)\s*(\d+)勝(\d+)敗/g)) rows.push([m[2], +m[3], +m[4]]);
+  return rows.length ? rows : null;
+}
+function intlTitle(ihe) { return ihe.kind === 'wbc' ? `第${typeof wbcNo === 'function' ? wbcNo(ihe.y) : ''}回 ワールド・ベースボール・クラシック` : `${ihe.city ? ihe.city : ''}オリンピック 野球`; }
+// メダル（丸いメダルとリボン）
+function intlMedal(c, x, y, r, col) {
+  c.save();
+  c.fillStyle = '#c0392b'; c.beginPath(); c.moveTo(x - r * 0.55, y - r * 1.5); c.lineTo(x - r * 0.1, y - r * 0.4); c.lineTo(x + r * 0.1, y - r * 0.4); c.lineTo(x + r * 0.55, y - r * 1.5); c.closePath(); c.fill();
+  c.fillStyle = '#1f4e9c'; c.beginPath(); c.moveTo(x - r * 0.55, y - r * 1.5); c.lineTo(x - r * 0.1, y - r * 0.4); c.lineTo(x - r * 0.32, y - r * 1.5); c.closePath(); c.fill();
+  c.shadowColor = hexA(col, 0.7); c.shadowBlur = 14; c.fillStyle = lgrad(c, x - r, y - r, x + r, y + r, [[0, shade(col, 0.25)], [0.5, col], [1, shade(col, -0.3)]]); c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+  c.strokeStyle = shade(col, -0.35); c.lineWidth = 2; c.beginPath(); c.arc(x, y, r * 0.78, 0, Math.PI * 2); c.stroke();
+  c.restore();
+}
+RB.intlHero = function (c, b, x, y, w) {
+  const I = b.ihe, md = INTL_MEDAL[I.result], col = md ? md[0] : I.result && /4位|ベスト|敗退|5位/.test(I.result) ? '#9fb4d8' : NU.acc, h = 146;
+  ptPanel(c, x, y, w, h, { r: 18, fill: lgrad(c, x, y, x + w, y + h, [[0, hexA(col, 0.22)], [0.55, 'rgba(14,20,38,0.96)'], [1, 'rgba(8,12,24,0.98)']]), edge: hexA(col, 0.5) });
+  c.save(); uRRPath(c, x, y, w, h, 18); c.clip(); c.globalAlpha = 0.07; for (let i = 0; i < 7; i++) { c.fillStyle = col; c.beginPath(); c.moveTo(x + w - 10 - i * 26, y); c.lineTo(x + w + 30 - i * 26, y); c.lineTo(x + w - 50 - i * 26, y + h); c.lineTo(x + w - 90 - i * 26, y + h); c.closePath(); c.fill(); } c.restore();
+  if (typeof drawKeyLogo === 'function') drawKeyLogo(c, 'SJ', x + 14, y + 14, 66, 50, false);
+  tx(c, '日本代表の結果', x + 92, y + 14, { size: 11, color: NU.t2 });
+  tx(c, fit(c, I.result || '－', w - 92 - (md ? 70 : 14) - 10, 30, true), x + 92, y + 30, { size: 30, bold: true, color: col });
+  const sub = `${I.y}年${I.sel ? '　あなたも日本代表として出場' : ''}${I.mvp ? '　大会MVP' : ''}`; tx(c, fit(c, sub, w - 92 - 14, 12), x + 92, y + 68, { size: 12, color: '#dfe6f6' });
+  if (md) intlMedal(c, x + w - 44, y + 46, 20, md[0]);
+  // 戦績
+  const G = intlGames(I), wn = G.filter(g => g.win).length;
+  tx(c, G.length ? `${G.length}試合 ${wn}勝${G.length - wn}敗` : '', x + 92, y + 86, { size: 13, bold: true, color: '#ffffff' });
+  { const pills = [I.kind === 'wbc' ? 'WBC' : 'オリンピック', I.ama ? 'アマチュア代表' : I.mix ? 'プロ・アマ混成' : 'プロ野球選手で編成'].filter(Boolean); let px = x + 14; for (const p of pills) { const pw = Math.ceil(tw(c, p, 10, true)) + 14; uRR(c, px, y + h - 28, pw, 18, 9, 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.16)'); tx(c, p, px + pw / 2, y + h - 26, { size: 10, bold: true, color: '#dfe6f6', align: 'center' }); px += pw + 6; } }
+  return h;
+};
+RB.intlGames = function (c, b, x, y, w) {
+  const G = b.games; if (!G.length) return RB.empty(c, { text: '試合の記録がない' }, x, y, w);
+  let yy = y;
+  G.forEach((g, i) => {
+    const h = g.me ? 74 : 56, col = g.win ? NU.good : NU.bad, fin = /決勝$/.test(g.lab) && !/準/.test(g.lab);
+    ptPanel(c, x, yy, w, h, { r: 12, acc: col, fill: fin ? 'rgba(80,62,14,0.35)' : null });
+    // 左：ステージ
+    const lw = 76; tx(c, fit(c, g.lab, lw - 10, 11, true), x + 16, yy + 10, { size: 11, bold: true, color: fin ? NU.gold : NU.t2 });
+    uRR(c, x + 16, yy + 30, 34, 16, 8, hexA(col, 0.2)); tx(c, g.win ? '勝ち' : '負け', x + 33, yy + 31, { size: 10, bold: true, color: col, align: 'center' });
+    // 中：日本 n - n 相手（国コード）
+    const cx = x + lw + (w - lw) / 2 + 6;
+    tx(c, 'JPN', cx - 44, yy + 10, { size: 11, bold: true, color: '#ffffff', align: 'right' }); tx(c, intlCode(g.opp), cx + 44, yy + 10, { size: 11, bold: true, color: '#dfe6f6', align: 'left' });
+    tx(c, String(g.hs), cx - 14, yy + 20, { size: 24, bold: true, color: g.win ? '#ffffff' : NU.t2, align: 'right', num: true }); tx(c, '-', cx, yy + 24, { size: 16, bold: true, color: NU.t3, align: 'center' }); tx(c, String(g.as), cx + 14, yy + 20, { size: 24, bold: true, color: g.win ? NU.t2 : '#ffffff', align: 'left', num: true });
+    tx(c, fit(c, `${g.opp}${g.tb ? '　タイブレーク' : ''}`, w - lw - 24, 10), x + w - 12, yy + 36, { size: 10, color: NU.t3, align: 'right' });
+    if (g.me) tx(c, fit(c, `あなた　${g.me}`, w - 28, 11), x + 16, yy + 54, { size: 11, color: NU.acc2 });
+    yy += h + 8;
+  });
+  return yy - y - 8;
+};
+function intlBlocks(N, I) {
+  const G = intlGames(I), ST = intlStand(I), bl = [{ t: 'intlHero', ihe: I }];
+  bl.push({ t: 'sec', title: '試合結果', sub: G.length ? `${G.length}試合` : '' }, { t: 'intlGames', games: G });
+  if (ST && ST.length) bl.push({ t: 'sec', title: '予選リーグ', sub: '上位4チームが準決勝へ' }, { t: 'table', head: ['', 'チーム', '勝', '敗'], cols: [12, 52, 18, 18], align: ['c', 'l', 'r', 'r'], rh: 34, logo: false, rows: ST.map((r, i) => ({ c: [String(i + 1), `${r[0]}（${intlCode(r[0])}）`, String(r[1]), String(r[2])], hl: r[0] === '日本', dim: i >= 4 })) });
+  if (I.sel && I.sum) bl.push({ t: 'sec', title: 'あなたの成績' }, { t: 'note', text: `${I.sum}${I.mvp ? '　大会MVPに選ばれた！' : ''}` });
+  const H = (N.IH || []).filter(e => e !== I).slice(-12).reverse();
+  if (H.length) bl.push({ t: 'sec', title: 'これまでの日本代表', sub: `${H.length}大会` }, { t: 'table', head: ['年', '大会', '結果'], cols: [16, 48, 36], align: ['l', 'l', 'r'], rh: 34, logo: false, rows: H.map(e => ({ c: [String(e.y), e.kind === 'wbc' ? 'WBC' : `${e.city || ''}五輪`, { s: e.result, col: INTL_MEDAL[e.result] ? INTL_MEDAL[e.result][0] : NU.t2, b: !!INTL_MEDAL[e.result] }], sub: e.sel ? 'あなたも出場' : null })) });
+  return bl;
+}
+function intlShow(sc, N, sp) {
+  const IH = N.IH || [], I = IH.slice().reverse().find(e => e.y === sp.y && (!sp.kind || e.kind === sp.kind)) || IH[IH.length - 1];
+  if (!I) return sc.info(sp.title || '国際大会', [`日本代表の結果：${sp.result}`]);
+  if (!I.city && sp.title) { const m = /^(.+?)オリンピック/.exec(sp.title); if (m) I.city = m[1]; }
+  return sc.rich(sp.title || intlTitle(I), () => ({ blocks: intlBlocks(N, I) }));
 }
 
 // ===== ネオン街のギャンブル：店・収支・のめりこみ（依存）・違法な賭博の摘発・スマホのアプリ =====
