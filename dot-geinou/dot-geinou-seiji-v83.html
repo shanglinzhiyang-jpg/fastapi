@@ -30933,7 +30933,8 @@ function frTrim(N, S) {
 }
 
 // ---- 選手の経歴 ----
-function pHist(p, y, txt) { if (!p || p.id === 'ME' || !txt) return; p.hx = Array.isArray(p.hx) ? p.hx : []; if (p.hx.some(x => x[0] === y && x[1] === txt)) return; p.hx.push([y, txt]); if (p.hx.length > 60) p.hx.shift(); }
+function pHist(p, y, txt) { if (!p || p.id === 'ME' || !txt) return; p.hx = Array.isArray(p.hx) ? p.hx : []; if (p.hx.some(x => x[0] === y && x[1] === txt)) return; p.hx.push([y, txt]); if (p.hx.length > 60) p.hx.shift();
+  if (typeof ptIsTitle === 'function' && ptIsTitle(txt)) { p.tt = Array.isArray(p.tt) ? p.tt : []; if (!p.tt.some(x => x[0] === y && x[1] === txt)) p.tt.push([y, txt]); } } // 獲得タイトル・表彰は、経歴が60件をこえても消えないように別に持つ
 const pHistId = (N, id, y, txt) => { if (id && id !== 'ME') pHist(N.L.players[id], y, txt); };
 
 // ---- 新しい要素 ----
@@ -31021,6 +31022,7 @@ function cardCareerLines(N, p, wd = 31) {
   if (S && tid && !ys.some(x => x[0] === S.y)) ys.push([S.y, tid]);
   ys.sort((a, b) => a[0] - b[0]); const seg = [];
   for (const [y, t] of ys) { const l = seg[seg.length - 1]; if (l && l.t === t && y <= l.y1 + 1) l.y1 = y; else seg.push({ t, y0: y, y1: y }); }
+  { const TL = typeof ptTitleList === 'function' ? ptTitleList(N, P, me) : []; L.push('', `■ 獲得タイトル・表彰${TL.length ? `（${TL.reduce((q, z) => q + z.ys.length, 0)}回）` : ''}`); if (!TL.length) L.push('　まだ獲得していない'); for (const q of TL.slice(0, 14)) L.push(`　★${q.lab}　${q.ys.length > 1 ? q.ys.length + '回　' : ''}${q.ys.join('・')}`); }
   L.push('', '■ 所属球団'); if (!seg.length) L.push('　－'); for (const s of seg) L.push(`　${s.y0}${s.y1 > s.y0 ? `〜${s.y1}` : ''}年　${TEAM[s.t] ? TEAM[s.t].name : s.t}`);
   // 経歴（できごと）
   let ev = [];
@@ -31657,6 +31659,14 @@ function ptCareerData(N, p) {
   let leader = false; try { if (tid && TEAM[tid]) { const vl = vetLdr(N, tid); leader = vl.who === (me ? 'ME' : P.id) && vl.v >= 65; } } catch (e) { }
   return { P, me, isP, tid, home, seg, yrs, join, sub, ev, leader };
 }
+// 獲得タイトル・表彰（月間や不名誉なものはのぞく）
+const PT_TITLE_RE = /王|首位打者|最高出塁率|最多(勝|セーブ|安打|盗塁|ホールド|打点|本塁打)|最優秀|MVP|ベストナイン|ゴールデン|沢村賞|新人|優秀選手|奪三振|勝率第一位/;
+const ptIsTitle = t => { t = String(t || ''); return PT_TITLE_RE.test(t) && !/月間|ワースト|不名誉|ラジー|悪守|エラー王|「|」|呼ばれ|ように|と話|達成|記録/.test(t) && t.length <= 22; };
+function ptTitleList(N, P, me) {
+  const src = me ? (N.me.titles || []) : [...(P.tt || []), ...(P.hx || []).filter(x => ptIsTitle(x[1]))], seen = new Set(), g = new Map();
+  for (const [y, t] of src) { if (!ptIsTitle(t)) continue; const k = `${y}|${t}`; if (seen.has(k)) continue; seen.add(k); const lab = String(t).replace(/^[\d]+年/, '').replace(/[（(].*$/, '').trim(); if (!g.has(lab)) g.set(lab, []); g.get(lab).push(y); }
+  return [...g.entries()].map(([lab, ys]) => ({ lab, ys: ys.sort((a, b) => a - b) })).sort((a, b) => b.ys.length - a.ys.length || b.ys[b.ys.length - 1] - a.ys[a.ys.length - 1]);
+}
 function ptEvKind(t) {
   if (/故障|離脱|手術|けが|怪我|登録抹消/.test(t)) return ['info', '#ff7a7a'];
   if (/賞|MVP|タイトル|王|ベストナイン|ゴールデン|首位打者|最多|新人|表彰|選出|月間/.test(t)) return ['trophy', NU.gold];
@@ -31673,6 +31683,22 @@ function ptCareerPage(c, sc, N, p, x, y, w) {
   const tw3 = (w - 12) / 3;
   prof.forEach(([k, v, s2], i) => { const X = x + (i % 3) * (tw3 + 6), Y = yy + Math.floor(i / 3) * 62; uRR(c, X, Y, tw3, 56, 12, 'rgba(255,255,255,0.045)', 'rgba(255,255,255,0.08)'); tx(c, k, X + 10, Y + 7, { size: 10, color: NU.t3 }); let fz = 15; while (fz > 11 && tw(c, v, fz, true) > tw3 - 18) fz--; tx(c, fit(c, v, tw3 - 16, fz, true), X + 10, Y + 23 + (15 - fz) / 2, { size: fz, bold: true, color: '#ffffff' }); if (s2) tx(c, fit(c, s2, tw3 - 16, 10), X + 10, Y + 41, { size: 10, color: NU.acc2 }); });
   yy += 62 * 2 + 8;
+  // 獲得タイトル・表彰
+  { const TL = ptTitleList(N, P, D.me), tot = TL.reduce((a, q) => a + q.ys.length, 0);
+    yy += ptSec(c, x, yy, w, '獲得タイトル・表彰', tot ? `${tot}回` : '');
+    if (!TL.length) { uRR(c, x, yy, w, 44, 12, 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0.06)'); tx(c, 'まだ獲得していない（ゲーム内での獲得を記録）', x + 14, yy + 14, { size: 12, color: NU.t3 }); yy += 56; }
+    else {
+      const rows = TL.slice(0, 14).map(q => { const ys = q.ys.map(v => `${v}`).join('・'); return { q, ls: wrap(c, ys, w - 130, 11).filter(z => z !== '').slice(0, 3) }; });
+      const hh = rows.reduce((a, r) => a + Math.max(40, r.ls.length * 15 + 22), 0) + 8; uRR(c, x, yy, w, hh, 14, hexA(NU.gold, 0.06), hexA(NU.gold, 0.3));
+      let Y = yy + 4;
+      rows.forEach((r, i) => { const rh = Math.max(40, r.ls.length * 15 + 22); if (i) fr(c, x + 14, Y, w - 28, 1, 'rgba(255,255,255,0.07)');
+        c.save(); c.beginPath(); c.arc(x + 26, Y + rh / 2, 13, 0, Math.PI * 2); c.fillStyle = hexA(NU.gold, 0.2); c.fill(); c.strokeStyle = hexA(NU.gold, 0.7); c.lineWidth = 1; c.stroke(); c.restore(); tx(c, '★', x + 26, Y + rh / 2 - 8, { size: 15, bold: true, color: NU.gold, align: 'center' });
+        tx(c, fit(c, r.q.lab, w - 150, 14, true), x + 48, Y + 7, { size: 14, bold: true, color: '#ffffff' });
+        r.ls.forEach((l, j) => tx(c, l, x + 48, Y + 25 + j * 15, { size: 11, color: NU.t2, num: true }));
+        const n = r.q.ys.length; uRR(c, x + w - 58, Y + rh / 2 - 12, 46, 24, 12, hexA(NU.gold, n > 1 ? 0.28 : 0.14), hexA(NU.gold, 0.7)); tx(c, `${n}回`, x + w - 35, Y + rh / 2 - 8, { size: 13, bold: true, color: NU.gold, align: 'center', num: true });
+        Y += rh; });
+      yy += hh + 12;
+    } }
   // タイプ
   yy += ptSec(c, x, yy, w, 'タイプ');
   const pr = potRank(P), prL = pr.charAt(0), prD = (pr.match(/（(.+)）/) || [, ''])[1], prCol = { A: NU.gold, B: '#5fe08f', C: '#8fd0ff', D: '#c9d2e6', E: '#ff9a7a' }[prL] || '#c9d2e6';
