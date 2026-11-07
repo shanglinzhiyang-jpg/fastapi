@@ -10003,6 +10003,8 @@ function* simGameGen(ctx, home, away, opt = {}) {
   const gform = {}, gseed = typeof p4Adj === 'function' && ctx.N ? Math.floor(RND() * 1e9) : 0; // その試合の出来（試合前の調整）
   try { if (typeof foTeamMods === 'function' && ctx.N) { home.fo = foTeamMods(ctx.N, home.id); away.fo = foTeamMods(ctx.N, away.id); } } catch (e) { } // スコアラー・研究・打撃投手など
   const sides = { H, A };
+  const LV = ctx.mgrLive || null; // 試合采配：この球団の監督は自分（打席ごとに指示を受け取る。おまかせにした側は監督AI）
+  const lvMine = X => !!(LV && X.T.id === LV && !X.autoMgr);
   const rat = id => { const p = ensureAb(P(id)); if (!p) return null; if (id === meId && (cond || adj)) { const c = cond, a = adj || {}; return { ...p, con: p.con + c + num(a.con), pow: p.pow + c * .8 + num(a.pow), eye: p.eye + c * .5 + num(a.eye), spd: p.spd + num(a.spd), ctl: p.ctl + c + num(a.ctl), brk: p.brk + c * .7 + num(a.brk), vel: p.vel + c * .25 + num(a.vel), sta: p.sta + num(a.sta) }; } return p; };
   const pl = id => pg[id] || (pg[id] = { outs: 0, h: 0, r: 0, er: 0, bb: 0, k: 0, hr: 0, bf: 0, pc: 0, np: 0, wp: 0, hbp: 0, entry: 0, exit: null, st: false, swi: 0, whf: 0, gb: 0, fb: 0, ld: 0, ir: 0, irs: 0, svo: 0, bs: 0, wpa: 0, re24: 0, li: 0, wli: 0, rab: 0, rh: 0, brl: 0 });
   let curBases = null;
@@ -10116,6 +10118,7 @@ function* simGameGen(ctx, home, away, opt = {}) {
     // 第3弾：バットコントロール・スイングスピード・動体視力・変化球対応・集中力・メンタル・リーダーシップ／野球脳・投球術・打者観察・出どころ
     let aEye = 0, kM = 1, bbM = 1, hrM = 1, babA = 0, hbpM = 1, goA = 0;
     if (UMP_CUR) { kM *= UMP_CUR.k; bbM *= UMP_CUR.bb; } // 球審のゾーン
+    if (X && X.mod) { kM *= num(X.mod.k, 1); bbM *= num(X.mod.bb, 1); hrM *= num(X.mod.hr, 1); babA += num(X.mod.bab); goA += num(X.mod.go); } // 試合采配：強振・ミート・狙い球・守備シフト
     if (ENV_CUR) { aEye += ENV_CUR.eye; if (ENV_CUR.m) { kM *= ENV_CUR.m.k; bbM *= ENV_CUR.m.bb; hrM *= ENV_CUR.m.hr; babA += ENV_CUR.m.bab; } } if (p4q) { kM *= p4q.k; bbM *= p4q.b; hrM *= p4q.h; }
     { const bc = abv(b0, 'bct') - 50, sw = abv(b0, 'swg') - 50; aCon += bc * 0.12; aPow += sw * 0.15; kM *= Math.exp(-0.15 * bc / 50 + 0.08 * sw / 50); }
     if (velScore(num(p0.vel, 140)) >= 60) aCon += (abv(b0, 'vis') - 50) * 0.35;
@@ -10215,10 +10218,25 @@ function* simGameGen(ctx, home, away, opt = {}) {
     let outs = 0; const bases = [null, null, null];
     Bt.innR = 0; F.innR = 0;
     curBases = bases;
-    manage(F, Bt, inn, false);
-    defSub(F, Bt, inn);
+    if (!lvMine(F)) manage(F, Bt, inn, false);
+    if (!lvMine(F)) defSub(F, Bt, inn);
     let guard = 0;
     while (outs < 3 && guard++ < 40) {
+      let cmd = null;
+      if (LV) {
+        cmd = (yield { kind: 'pa', side: Bt.T.id === LV ? 'bat' : 'pit', inn, bottom, outs, bases: bases.map(x => x ? x.id : null), bid: Bt.lineup[Bt.bi], bi: Bt.bi, pid: F.pit, hs: H.runs, as: A.runs, pc: F.pc, pl: pl(F.pit), bl, Bt, F, needPit: F.T.id === LV && F.phForP != null }) || {};
+        if (cmd.auto === 'bat') Bt.autoMgr = true; if (cmd.auto === 'pit') F.autoMgr = true;
+        if (F.T.id === LV) {
+          if (cmd.pit && cmd.pit !== F.pit && !F.used.has(cmd.pit)) { const k = F.phForP; changePitcher(F, Bt, cmd.pit, inn); if (k != null) { F.lineup[k] = cmd.pit; F.phForP = null; } }
+          if (F.phForP != null) { const k = F.phForP; F.phForP = null; const id = chooseRel(F, Bt, inn); if (id) { changePitcher(F, Bt, id, inn); F.lineup[k] = id; } else F.lineup[k] = F.pit; } // 代打を出した投手の穴：指示がなければ監督AIが選ぶ
+          if (cmd.def) for (const [k, id] of cmd.def) { const old = F.lineup[k]; if (old && id && old !== id && !F.lineup.includes(id)) { if (F.T.pos) F.T.pos[id] = F.T.pos[old]; F.lineup[k] = id; (F.phSet || (F.phSet = new Set())).add(id); F.defSubN = num(F.defSubN) + 1; } }
+          F.shift = cmd.shift || null;
+        }
+        if (Bt.T.id === LV) {
+          if (cmd.ph && !Bt.lineup.includes(cmd.ph)) { const old = Bt.lineup[Bt.bi], op = P(old); Bt.lineup[Bt.bi] = cmd.ph; (Bt.phSet || (Bt.phSet = new Set())).add(cmd.ph); Bt.phNew = cmd.ph; if (op && op.pos === 'P' && !Bt.T.dh) Bt.phForP = Bt.bi; else Bt.phN = num(Bt.phN) + 1; }
+          if (cmd.pr) for (const [k, id] of cmd.pr) { const rn = bases[k]; if (rn && id && !Bt.lineup.includes(id)) { const li = Bt.lineup.indexOf(rn.id); if (li >= 0) Bt.lineup[li] = id; rn.id = id; (Bt.phSet || (Bt.phSet = new Set())).add(id); Bt.prN = num(Bt.prN) + 1; } }
+        }
+      }
       // 代打（控えの自分）
       if (Bt.T.ph && !Bt.phUsed && inn >= 7 && !Bt.lineup.includes(Bt.T.ph)) {
         const cur = Bt.lineup[Bt.bi], cp = P(cur);
@@ -10226,7 +10244,7 @@ function* simGameGen(ctx, home, away, opt = {}) {
         if (weak && RND() < 0.55) { Bt.lineup[Bt.bi] = Bt.T.ph; Bt.phUsed = true; Bt.phNew = Bt.T.ph; }
       }
       // 代打（CPU球団）：終盤の接戦で、控えにずっと打てる選手がいれば
-      if (Bt.T.bench && inn >= 7 && num(Bt.phN) < 2 && Math.abs(Bt.runs - F.runs) <= 3 && !(typeof window !== 'undefined' && window.__PH_OFF)) {
+      if (!lvMine(Bt) && Bt.T.bench && inn >= 7 && num(Bt.phN) < 2 && Math.abs(Bt.runs - F.runs) <= 3 && !(typeof window !== 'undefined' && window.__PH_OFF)) {
         const cur = Bt.lineup[Bt.bi], cp = P(cur), isPit = cp && cp.pos === 'P', diff = Bt.runs - F.runs, onB = !!(bases[0] || bases[1] || bases[2]);
         // 投手の打順（DHなし）：7回以降の同点・ビハインド、または6回以降のビハインドで走者がいれば代打
         const isRel = cur !== Bt.starter, pitPH = isPit && !Bt.T.dh && (inn >= 7 ? diff <= (isRel ? 1 : 0) : inn >= 6 && diff < 0 && onB);
@@ -10239,7 +10257,7 @@ function* simGameGen(ctx, home, away, opt = {}) {
         }
       }
       // 代走：終盤の接戦で、同点・勝ち越しの走者が足の遅い選手なら、控えの俊足と代える
-      if (Bt.T.bench && inn >= 8 && Math.abs(Bt.runs - F.runs) <= 1 && num(Bt.prN) < 2 && !(typeof window !== 'undefined' && window.__PR_OFF)) {
+      if (!lvMine(Bt) && Bt.T.bench && inn >= 8 && Math.abs(Bt.runs - F.runs) <= 1 && num(Bt.prN) < 2 && !(typeof window !== 'undefined' && window.__PR_OFF)) {
         for (const k of [1, 0]) {
           const rn = bases[k], rp = rn && P(rn.id); if (!rp || rn.id === 'ME' || rp.pos === 'P' || num(rp.spd) >= 45) continue;
           const used = Bt.phSet || (Bt.phSet = new Set());
@@ -10249,20 +10267,28 @@ function* simGameGen(ctx, home, away, opt = {}) {
           Bt.lineup[li] = c.id; rn.id = c.id; used.add(c.id); Bt.prN = num(Bt.prN) + 1; break;
         }
       }
-      // 盗塁
-      if (bases[0] && !bases[1] && outs < 2) {
+      // 盗塁（試合采配：走れ・走るな）
+      const stl = cmd && Bt.T.id === LV && !Bt.autoMgr ? cmd.steal : null;
+      if (stl === 'go' && outs < 2 && ((bases[0] && !bases[1]) || (bases[1] && !bases[2]))) {
+        const from = bases[1] && !bases[2] ? 1 : 0, rp = P(bases[from].id), pp = P(F.pit), st = rp ? (rp.spd + abv(rp, 'stl')) / 2 + (abv(rp, 'jmp') - 50) * 0.3 + (hasT(rp, 'steal2') ? 10 : 0) + (hasT(rp, 'sbking') ? 18 : 0) : 0, qk = abv(pp, 'qk') + (hasT(pp, 'quickp') ? 25 : 0) - (hasT(pp, 'y_slow') ? 25 : 0);
+        const sp = clamp(0.6 + (st - 55 + (hasT(rp, 'fast') ? 8 : 0)) / 80 - (F.T.carm - 50) / 200 - (qk - 50) / 220 - (num(F.T.csA, 50) - 50) / 200 - (from === 1 ? 0.1 : 0), 0.2, 0.93);
+        if (RND() < sp) { bl(rp.id).sb++; bases[from + 1] = bases[from]; bases[from] = null; fdE(ctx, F, 'SB'); if (ctx.live) yield { kind: 'ev', ev: 'SB', rid: rp.id, outs, bases: bases.map(x => x ? x.id : null), inn, bottom, hs: H.runs, as: A.runs }; }
+        else { bl(rp.id).cs++; bases[from] = null; outs++; pl(F.pit).outs++; fdE(ctx, F, 'CS'); if (ctx.live) yield { kind: 'ev', ev: 'CS', rid: rp.id, outs, bases: bases.map(x => x ? x.id : null), inn, bottom, hs: H.runs, as: A.runs }; if (outs >= 3) break; }
+      }
+      else if (stl !== 'no' && bases[0] && !bases[1] && outs < 2) {
         const rp = P(bases[0].id), pp = P(F.pit), st = rp ? (rp.spd + abv(rp, 'stl')) / 2 + (abv(rp, 'jmp') - 50) * 0.3 + (hasT(rp, 'steal2') ? 10 : 0) + (hasT(rp, 'sbking') ? 18 : 0) : 0, qk = abv(pp, 'qk') + (hasT(pp, 'quickp') ? 25 : 0) - (hasT(pp, 'y_slow') ? 25 : 0), kn = abv(pp, 'ken') + (hasT(pp, 'kenp') ? 35 : 0); // 盗塁：走力と盗塁の技術・一歩目、投手のクイック・牽制、捕手の盗塁阻止（特殊能力も）
-        if (rp && RND() < 0.0015 * Math.exp(0.9 * (kn - 50) / 50)) { bl(rp.id).cs++; bases[0] = null; outs++; pl(F.pit).outs++; fdE(ctx, F, 'PK'); if (outs >= 3) break; } // 牽制で刺す
+        if (rp && RND() < 0.0015 * Math.exp(0.9 * (kn - 50) / 50)) { bl(rp.id).cs++; bases[0] = null; outs++; pl(F.pit).outs++; fdE(ctx, F, 'PK'); if (ctx.live) yield { kind: 'ev', ev: 'PK', rid: rp.id, outs, bases: bases.map(x => x ? x.id : null), inn, bottom, hs: H.runs, as: A.runs }; if (outs >= 3) break; } // 牽制で刺す
         else if (rp && rp.spd >= 48 && st >= 52 && RND() < (st - 51 + (hasT(rp, 'fast') ? 8 : 0) - (qk - 50) * 0.15 - (kn - 50) * 0.12) / 112 * ((m0 => m0 > 1 ? 1 + (m0 - 1) * clamp((st - 56) / 14, 0, 1) : m0)(stealMult(Bt, F, inn)))) {
           const sp = clamp(0.6 + (st - 55 + (hasT(rp, 'fast') ? 8 : 0)) / 80 - (F.T.carm - 50) / 200 - (qk - 50) / 220 - (num(F.T.csA, 50) - 50) / 200, 0.3, 0.93);
-          if (RND() < sp) { bl(rp.id).sb++; bases[1] = bases[0]; bases[0] = null; fdE(ctx, F, 'SB'); }
-          else { bl(rp.id).cs++; bases[0] = null; outs++; pl(F.pit).outs++; fdE(ctx, F, 'CS'); if (outs >= 3) break; }
+          if (RND() < sp) { bl(rp.id).sb++; bases[1] = bases[0]; bases[0] = null; fdE(ctx, F, 'SB'); if (ctx.live) yield { kind: 'ev', ev: 'SB', rid: rp.id, outs, bases: bases.map(x => x ? x.id : null), inn, bottom, hs: H.runs, as: A.runs }; }
+          else { bl(rp.id).cs++; bases[0] = null; outs++; pl(F.pit).outs++; fdE(ctx, F, 'CS'); if (ctx.live) yield { kind: 'ev', ev: 'CS', rid: rp.id, outs, bases: bases.map(x => x ? x.id : null), inn, bottom, hs: H.runs, as: A.runs }; if (outs >= 3) break; }
         }
       }
       if (RND() < 0.004 * (hasT(P(F.pit), 'y_wp') ? 2.2 : 1) * Math.exp(-0.7 * (abv(P(F.pit), 'wpA') - 50) / 50 - 0.6 * (num(F.T.blk, 50) - 50) / 50) && (bases[0] || bases[1] || bases[2])) { // 暴投（投手の暴投しにくさ・捕手のブロッキング）
         pl(F.pit).wp++; fdE(ctx, F, 'WP');
         if (bases[2]) { scoreRun(Bt, F, bases[2], null); }
         bases[2] = bases[1]; bases[1] = bases[0]; bases[0] = null;
+        if (ctx.live) yield { kind: 'ev', ev: 'WP', rid: F.pit, outs, bases: bases.map(x => x ? x.id : null), inn, bottom, hs: H.runs, as: A.runs, scored: 0 };
         if (bottom && inn >= 9 && Bt.runs > F.runs) break;
       }
       const bid = Bt.lineup[Bt.bi];
@@ -10271,32 +10297,46 @@ function* simGameGen(ctx, home, away, opt = {}) {
       const lateClose = inn >= 8 && Math.abs(Bt.runs - F.runs) <= 1 && offOf(b) < 58 && Bt.bi !== 2 && Bt.bi !== 3;
       // 無死一塁（一・二塁）で2番打者や下位打線（日本流の送りバント）。強打・データ重視の監督はあまりしない
       const early2 = inn <= 8 && (Bt.bi === 1 ? offOf(b) < 64 : Bt.bi >= 6 && offOf(b) < 56);
-      if (outs === 0 && bases[0] && !bases[2] && Math.abs(Bt.runs - F.runs) <= 2 && (b.pos === 'P' || offOf(b) < 36 || lateClose || early2 || ((abv(b, 'bnt') >= 66 || hasT(b, 'bunter')) && offOf(b) < 54 && inn <= 7)) && RND() < (b.pos === 'P' ? 0.8 : offOf(b) < 36 ? 0.5 : lateClose ? 0.45 : early2 ? 0.42 : 0.35) * (b.pos === 'P' ? 1 : buntMult(Bt))) {
+      const bc = cmd && Bt.T.id === LV && !Bt.autoMgr ? cmd.bunt : null;
+      const autoBunt = !lvMine(Bt) && outs === 0 && bases[0] && !bases[2] && Math.abs(Bt.runs - F.runs) <= 2 && (b.pos === 'P' || offOf(b) < 36 || lateClose || early2 || ((abv(b, 'bnt') >= 66 || hasT(b, 'bunter')) && offOf(b) < 54 && inn <= 7)) && RND() < (b.pos === 'P' ? 0.8 : offOf(b) < 36 ? 0.5 : lateClose ? 0.45 : early2 ? 0.42 : 0.35) * (b.pos === 'P' ? 1 : buntMult(Bt));
+      if (bc === 'safety') {
+        const L0 = bl(bid), P0 = pl(F.pit); L0.pa++; P0.bf++; P0.np += 2; F.pc += 2; L0.np += 2; L0.sw += 1; L0.ab++;
+        const ok = RND() < clamp(0.24 + 0.12 * (num(b.spd) - 50) / 50 + 0.1 * (abv(b, 'bnt') - 50) / 50 - 0.1 * (abv(p, 'pfd') - 50) / 50 - (F.shift === 'bunt' ? 0.1 : 0) - (F.shift === 'in' ? 0.06 : 0), 0.06, 0.5);
+        let code0; const runner = { id: bid, resp: F.pit, er: true };
+        if (ok) { L0.h++; P0.h++; Bt.hits++; L0.ifh++; if (bases[2] && outs < 2) { scoreRun(Bt, F, bases[2], bid); bases[2] = null; } if (bases[1]) { bases[2] = bases[1]; bases[1] = null; } if (bases[0]) { bases[1] = bases[0]; bases[0] = null; } bases[0] = runner; code0 = pick(['三', '一', '投']) + '安'; fdE(ctx, F, 'INF'); }
+        else { outs++; P0.outs++; if (outs < 3) { if (bases[1] && !bases[2]) { bases[2] = bases[1]; bases[1] = null; } if (bases[0] && !bases[1]) { bases[1] = bases[0]; bases[0] = null; } } code0 = pick(['投', '捕', '三', '一']) + 'ゴロ'; fdE(ctx, F, 'GO'); }
+        if (ctx.live) yield { kind: 'pbp', bid, pid: F.pit, code: code0, c: ok ? '1B' : 'GO', outs, bases: bases.map(x => x ? x.id : null), hs: H.runs, as: A.runs, inn, bottom, scored: 0, safety: 1 };
+        Bt.bi = (Bt.bi + 1) % Bt.lineup.length;
+        if (outs < 3 && !lvMine(F)) manage(F, Bt, inn, true);
+        continue;
+      }
+      if (bc === 'sac' ? (outs < 2 && (bases[0] || bases[1])) : autoBunt) {
         const L0 = bl(bid), P0 = pl(F.pit);
         L0.pa++; P0.bf++; P0.np += 2; F.pc += 2; L0.np += 2; L0.sw += 1;
         let code0;
-        if (RND() < clamp(0.82 + 0.2 * (abv(b, 'bnt') - 50) / 50 + (hasT(b, 'bunter') ? 0.12 : 0) - (hasT(b, 'x_bunt') ? 0.25 : 0) - 0.24 * (abv(p, 'pfd') - 50) / 50, 0.4, 0.98)) { L0.sh++; outs++; P0.outs++; if (bases[1]) bases[2] = bases[1]; bases[1] = bases[0]; bases[0] = null; code0 = pick(['投', '捕', '一', '三']) + '犠打'; fdE(ctx, F, 'SH'); }
+        if (RND() < clamp(0.82 + 0.2 * (abv(b, 'bnt') - 50) / 50 + (hasT(b, 'bunter') ? 0.12 : 0) - (hasT(b, 'x_bunt') ? 0.25 : 0) - 0.24 * (abv(p, 'pfd') - 50) / 50 - (F.shift === 'bunt' ? 0.22 : 0), 0.3, 0.98)) { L0.sh++; outs++; P0.outs++; if (bases[1]) bases[2] = bases[1]; bases[1] = bases[0]; bases[0] = null; code0 = pick(['投', '捕', '一', '三']) + '犠打'; fdE(ctx, F, 'SH'); }
         else { L0.ab++; outs++; P0.outs++; bases[0] = { id: bid, resp: F.pit, er: true }; code0 = pick(['投', '捕', '三']) + 'ゴロ'; fdE(ctx, F, 'SH'); }
         if (bid === meId) meLog.push(code0);
         if (ctx.live) yield { kind: 'pbp', bid, pid: F.pit, code: code0, c: 'SH', outs, bases: bases.map(x => x ? x.id : null), hs: H.runs, as: A.runs, inn, bottom, scored: 0 };
         Bt.bi = (Bt.bi + 1) % Bt.lineup.length;
-        if (outs < 3) manage(F, Bt, inn, true);
+        if (outs < 3 && !lvMine(F)) manage(F, Bt, inn, true);
         continue;
       }
       let r = null;
-      if (ctx.live && meId && (bid === meId || F.pit === meId)) {
-        const roll = (db = {}, dp = {}) => { const b2 = { ...b }, p2 = { ...p }; for (const k in db) b2[k] = num(b2[k]) + db[k]; for (const k in dp) p2[k] = num(p2[k]) + dp[k]; return paResult(b2, p2, F, bases, inn, { Bt, outs, bottom, bh: bl(bid).h, pbf: pl(F.pit).bf }); };
-        r = yield { kind: bid === meId ? 'bat' : 'pit', b, p, bid, pid: F.pit, bases: bases.map(x => x ? x.id : null), outs, inn, bottom, hs: H.runs, as: A.runs, pc: F.pc, roll };
+      if (ctx.live && (LV || (meId && (bid === meId || F.pit === meId)))) {
+        const roll = (db = {}, dp = {}, mod = null) => { const b2 = { ...b }, p2 = { ...p }; for (const k in db) b2[k] = num(b2[k]) + db[k]; for (const k in dp) p2[k] = num(p2[k]) + dp[k]; return paResult(b2, p2, F, bases, inn, { Bt, outs, bottom, bh: bl(bid).h, pbf: pl(F.pit).bf, mod }); };
+        r = yield { kind: LV ? (Bt.T.id === LV ? 'bat' : 'pit') : (bid === meId ? 'bat' : 'pit'), b, p, bid, pid: F.pit, bases: bases.map(x => x ? x.id : null), outs, inn, bottom, hs: H.runs, as: A.runs, pc: F.pc, roll };
       }
+      if (cmd && cmd.ibb && F.T.id === LV && !F.autoMgr && !bases[0]) r = { c: 'BB', pc: 4, ibb: 1 };
       // 敬遠：終盤の接戦で一塁が空き、得点圏に走者。強打者を歩かせて、次の弱い打者と勝負する
-      if (!r && inn >= 8 && !bases[0] && (bases[1] || bases[2]) && Math.abs(Bt.runs - F.runs) <= 1 && !(typeof window !== 'undefined' && window.__IBB_OFF)) {
+      if (!r && !lvMine(F) && inn >= 8 && !bases[0] && (bases[1] || bases[2]) && Math.abs(Bt.runs - F.runs) <= 1 && !(typeof window !== 'undefined' && window.__IBB_OFF)) {
         const nx = P(Bt.lineup[(Bt.bi + 1) % Bt.lineup.length]);
         if (nx && offOf(b) >= offOf(nx) + 12 && offOf(b) >= 62 && RND() < 0.55) r = { c: 'BB', pc: 4, ibb: 1 };
       }
       if (!r) r = paResult(b, p, F, bases, inn, { Bt, outs, bottom, bh: bl(bid).h, pbf: pl(F.pit).bf });
       // 球数：省エネ投球・ストライク先行は少なく、初球打ちの打者も少なく
       r.pc = Math.max(1, Math.floor(r.pc * clamp(1 - (abv(p, 'eff') - 50) / 220 - (abv(b, 'fps') - 50) / 300, 0.7, 1.3) + RND()));
-      if (sink.zone) sink.zone(bid, F.pit, r.c, b, p);
+      if (sink.zone) sink.zone(bid, F.pit, r.c, b, p, r.z);
       F.pc += r.pc;
       const L = bl(bid), PL = pl(F.pit);
       L.pa++; PL.bf++; PL.np += r.pc; L.np += r.pc; { const sw = swingsOf(r, b, p); L.sw += sw; L.whf += SW_WH; PL.swi += sw; PL.whf += SW_WH; }
@@ -10351,7 +10391,7 @@ function* simGameGen(ctx, home, away, opt = {}) {
           } else {
             outs++; PL.outs++; code = pos + 'ゴロ'; fdE(ctx, F, 'GO');
             if (outs < 3) {
-              if (bases[2] && RND() < 0.5) { scoreRun(Bt, F, bases[2], bid); bases[2] = null; }
+              if (bases[2] && RND() < (F.shift === 'in' ? 0.2 : 0.5)) { scoreRun(Bt, F, bases[2], bid); bases[2] = null; }
               if (bases[1] && !bases[2] && RND() < 0.55) { bases[2] = bases[1]; bases[1] = null; }
               if (bases[0] && !bases[1]) { if (RND() < 0.25) { bases[0] = null; bases[0] = runner; runner.resp = F.pit; } else { bases[1] = bases[0]; bases[0] = null; } }
             }
@@ -10383,10 +10423,10 @@ function* simGameGen(ctx, home, away, opt = {}) {
       if (meId && (bid === meId || F.pit === meId)) { const bs2 = b.bt === 'S' ? (p.th === 'L' ? 'R' : 'L') : b.bt; const hk = bid === meId ? 'b' + (p.th === 'L' ? 'L' : 'R') : 'p' + (bs2 === 'L' ? 'L' : 'R'); const X = hand[hk] || (hand[hk] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); X[0]++; X[1] += L.ab - ab0; X[2] += L.h - h0; X[3] += r.c === 'HR' ? 1 : 0; X[4] += r.c === 'BB' || r.c === 'HBP' ? 1 : 0; X[5] += r.c === 'K' ? 1 : 0; X[6] += r.c === '2B' ? 1 : 0; X[7] += r.c === '3B' ? 1 : 0; X[8] += Bt.runs - runs0; X[10] += outs - outs0; }
       if (bottom && inn >= 9 && Bt.runs > F.runs && Bt.runs > runs0) { L.sayo++; sayo = { id: bid, hr: r.c === 'HR' }; if (r.c === 'HR' && res0.hre && res0.hre.length) res0.hre[res0.hre.length - 1][9] = 1; }
       if (bid === meId) meLog.push(code);
-      if (ctx.live) yield { kind: 'pbp', bid, pid: F.pit, code, c: r.c, outs, bases: bases.map(x => x ? x.id : null), hs: H.runs, as: A.runs, inn, bottom, scored: Bt.runs - runs0 };
+      if (ctx.live) yield { kind: 'pbp', bid, pid: F.pit, code, c: r.c, outs, bases: bases.map(x => x ? x.id : null), hs: H.runs, as: A.runs, inn, bottom, scored: Bt.runs - runs0, inf: r.inf ? 1 : 0, ibb: r.ibb ? 1 : 0 };
       Bt.bi = (Bt.bi + 1) % Bt.lineup.length;
       if (bottom && inn >= 9 && Bt.runs > F.runs) break;
-      if (outs < 3) manage(F, Bt, inn, true);
+      if (outs < 3 && !lvMine(F)) manage(F, Bt, inn, true);
     }
     fdE(ctx, F, 'END', { outs, runs: Bt.innR });
     return outs;
@@ -10532,11 +10572,16 @@ function mkCtx(N, S, round) {
 }
 const nameOf = (N, id) => { if (!id) return ''; const p = id === 'ME' ? N.me && N.me.p : N.L.players[id]; return p ? shortName(p) : '？'; };
 
+// 試合の文脈（球場・球審・ペナントの要素・成績の記録先）。試合采配（k14）も同じものを使う
+function mkGameCtx(N, S, h, a, kind, md, round) {
+  const ctx = mkCtx(N, S, round);
+  { ctx.md = md; ctx.home = h; ctx.away = a; ctx.kind = kind; try { if (!(typeof window !== 'undefined' && window.__PF_OFF)) ctx.pfHR = parkHR(N, S, h); } catch (e) { } try { if (typeof p5Ctx === 'function') ctx.p5 = p5Ctx(N, S, h, a, kind, md, round, ctx); } catch (e) { console.error('[npb] p5 ctx', e); } }
+  if (kind !== 'R') { const PB0 = S.pbs = isObj(S.pbs) ? S.pbs : {}, PP0 = S.pps = isObj(S.pps) ? S.pps : {}, PB = PB0[kind] = isObj(PB0[kind]) ? PB0[kind] : {}, PP = PP0[kind] = isObj(PP0[kind]) ? PP0[kind] : {}; ctx.sink = { ...ctx.sink, bat: id => padA(PB[id] || (PB[id] = newB()), BL), pit: id => padA(PP[id] || (PP[id] = newP()), PL_), fld: null, fldT: null, zone: null }; } // ポストシーズンは公式戦の個人成績に入れない
+  return ctx;
+}
 function playGame(N, S, h, a, kind, md, round, out, preRes) {
   // 自分でプレイした試合は、翌朝の計算では飛ばす
-  const ctx = preRes ? null : mkCtx(N, S, round);
-  if (ctx) { ctx.md = md; ctx.home = h; ctx.away = a; ctx.kind = kind; try { if (!(typeof window !== 'undefined' && window.__PF_OFF)) ctx.pfHR = parkHR(N, S, h); } catch (e) { } try { if (typeof p5Ctx === 'function') ctx.p5 = p5Ctx(N, S, h, a, kind, md, round, ctx); } catch (e) { console.error('[npb] p5 ctx', e); } }
-  if (ctx && kind !== 'R') { const PB0 = S.pbs = isObj(S.pbs) ? S.pbs : {}, PP0 = S.pps = isObj(S.pps) ? S.pps : {}, PB = PB0[kind] = isObj(PB0[kind]) ? PB0[kind] : {}, PP = PP0[kind] = isObj(PP0[kind]) ? PP0[kind] : {}; ctx.sink = { ...ctx.sink, bat: id => padA(PB[id] || (PB[id] = newB()), BL), pit: id => padA(PP[id] || (PP[id] = newP()), PL_), fld: null, fldT: null, zone: null }; } // ポストシーズンは公式戦の個人成績に入れない
+  const ctx = preRes ? null : mkGameCtx(N, S, h, a, kind, md, round);
   const dh = TEAM[h].lg === 'P';
   if (!preRes) { try { UMP_CUR = typeof umpPick === 'function' ? umpPick(N, S, h, a, round, kind) : null; } catch (e) { UMP_CUR = null; } ENV_CUR = S.env || null; }
   const umpUsed = preRes ? null : UMP_CUR;
@@ -10578,10 +10623,10 @@ function playGame(N, S, h, a, kind, md, round, out, preRes) {
 const P_team = (N, id) => id === 'ME' ? (N.me && N.me.team) : (N.L.players[id] && N.L.players[id].team);
 
 // 公式戦の1カード分（全球場の1試合ずつ）を進める
-function playRoundR(g, N, S, out) {
+function playRoundR(g, N, S, out, pre) {
   const r = S.done, rmd = roundMd(S, r);
   S.curMd = rmd;
-  for (const [h, a] of (typeof p5Pairs === 'function' ? p5Pairs(N, S, r) : roundPairs(S, r))) playGame(N, S, h, a, 'R', rmd, r, out); // 雨天中止はあすダブルヘッダー
+  for (const [h, a] of (typeof p5Pairs === 'function' ? p5Pairs(N, S, r) : roundPairs(S, r))) playGame(N, S, h, a, 'R', rmd, r, out, pre && pre[h + '|' + a]); // 雨天中止はあすダブルヘッダー。pre：試合采配で先に終えた試合の結果
   farmDay(g, N, S, r, rmd, out);
   try { minorDay(g, N, S, r, rmd, out); } catch (e) { console.error('[npb] minor', e); }
   try { farmRound(N, S); if (N.me && (N.me.st === 'pro' || meMLB(N))) suspendedTick(g, N, S, out); } catch (e) { console.error('[npb] more round', e); }
@@ -20310,10 +20355,10 @@ function zoneAdd(arr, z, c) {
   if (c === 'K') arr[i + 3]++;
 }
 function zoneSink(S, N) {
-  return (bid, pid, c, b, p) => {
+  return (bid, pid, c, b, p, z0) => {
     try {
       if (['BB', 'HBP'].includes(c)) return;
-      const z = zonePick(c, b, p, zoneHot(bid, b));
+      const z = z0 != null && z0 >= 0 && z0 < ZN ? z0 : zonePick(c, b, p, zoneHot(bid, b));
       S.zb = S.zb || {}; S.zp = S.zp || {};
       zoneAdd(S.zb[bid] || (S.zb[bid] = zArr()), z, c);
       zoneAdd(S.zp[pid] || (S.zp[pid] = zArr()), z, c);
