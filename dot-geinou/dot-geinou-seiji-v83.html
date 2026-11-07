@@ -31624,7 +31624,7 @@ function ptCardPage(c, sc, N, p, pg, x, y, w) {
     const tot = isP ? car.p : car.b;
     if (tot && (isP ? tot[Pp.BF] || tot[Pp.OUT] : tot[B.PA])) { const tw2 = rows.reduce((s2, r) => s2 + num(r.w), 0); tr.push({ c: ['通算', `${rows.length}年`, ...cell(tot, { w: tw2, tot: 1 })], col: new Array(cols.length).fill(NU.acc) }); }
     yy += ptTable(c, x, yy, w, cols, tr, { rh: 30 });
-    if (shifted) { yy += 4; yy += ptText(c, x + 6, yy, w - 12, ['※再現チームの選手は、実際の年度を2004年開幕にあわせて置きかえて表示しています。'], { size: 11, lh: 17, color: NU.t3 }); }
+    if (shifted) { yy += 4; yy += ptText(c, x + 6, yy, w - 12, ['※再現チームの選手は、実際の年度を、はじめた年の開幕にあわせて置きかえて表示しています。'], { size: 11, lh: 17, color: NU.t3 }); }
     return yy - y;
   }
   if (pg === 5) {
