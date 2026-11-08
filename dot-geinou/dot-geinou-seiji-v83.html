@@ -13853,6 +13853,7 @@ function install() {
   try { installDK(); } catch (e) { console.error('[dk] install', e); }
   try { installNet(); } catch (e) { console.error('[net] install', e); }
   try { installRP(); } catch (e) { console.error('[rp] install', e); }
+  try { installRP2(); } catch (e) { console.error('[rp] install2', e); }
   try { installRel(); } catch (e) { console.error('[rel] install', e); }
   try { installRel2(); } catch (e) { console.error('[rel] install2', e); }
   try {
@@ -44999,6 +45000,137 @@ function installRP() {
 }
 // 新しいゲームの設定に「実在の政党」を追加（はじめはON）
 try { if (typeof NPX_OPTS !== 'undefined' && !NPX_OPTS.some(o => o[0] === 'realParties')) { NPX_OPTS.push(['realParties', '実在の政党', [['ON', 1], ['OFF', 0]], 'ONだと、日本共産党・公明党・日本維新の会・社民党・参政党・国民民主党・日本保守党・れいわ新選組・チームみらいが登場し、党首や幹部は実在の政治家になる。OFFだと架空の政党。']); NPX_SECT.realParties = '政治'; } } catch (e) { console.error('[rp] npx', e); }
+// ===== 実在の政党2：党首選の実名候補と開票中継、政党の合流・分裂・連立の組み替え =====
+// 党首選（総裁選・代表選）が起きたとき、その時代の実際の候補者が立候補し、史実の勝者が有力になる（結果は選挙しだい）。
+// 結果は「党首選」アプリで、開票中継として見られる。
+const RP_CAND = [
+  rpP('kaifu', '海部 俊樹', 1931, 1960, 'm', 'クリーン・弁舌', [80, 66, 70, 52, 62], [30, 10, 20, 20, 10, 0, 10], '早稲田雄弁会出身の弁舌家。リクルート事件後の党の顔として総裁・首相に選ばれた。', ['1960年 衆議院議員に初当選', '1989〜91年 自民党総裁・内閣総理大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('hayashi_y', '林 義郎', 1927, 1969, 'm', '政策通', [56, 76, 70, 60, 60], [40, 20, 30, 10, 0, 0, 10], '大蔵省出身の政策通。厚生大臣・大蔵大臣を務めた。林芳正の父。', ['1969年 衆議院議員に初当選', '1992〜93年 大蔵大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('ishihara_s', '石原 慎太郎', 1932, 1968, 'm', '作家・タカ派', [92, 66, 46, 50, 86], [40, 40, 80, 30, -10, 20, 20], '芥川賞作家から政界へ。のちに東京都知事を4期務めた。', ['1968年 参議院議員に初当選', '1999〜2012年 東京都知事'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('miyazawa', '宮沢 喜一', 1919, 1953, 'm', '国際派・ハト派', [66, 90, 70, 74, 60], [20, 10, 0, 40, 10, 0, 20], '大蔵省出身の国際派。英語に堪能で、経済・外交の第一人者とされた。', ['1953年 参議院議員に初当選', '1991〜93年 自民党総裁・内閣総理大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('watanabe_m', '渡辺 美智雄', 1923, 1963, 'm', '庶民派・毒舌', [84, 70, 62, 76, 74], [60, 20, 40, 20, 0, 0, 10], '「ミッチー」とよばれた庶民派。歯に衣着せぬ物言いで知られた。', ['1963年 衆議院議員に初当選', '1991〜93年 副総理・外務大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('mitsuzuka', '三塚 博', 1927, 1972, 'm', '派閥の領袖', [56, 70, 74, 82, 62], [40, 20, 40, 10, 0, 0, 10], '清和会（安倍派の前身）を率いた派閥の領袖。大蔵大臣などを務めた。', ['1972年 衆議院議員に初当選', '1996〜98年 大蔵大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('obuchi', '小渕 恵三', 1937, 1963, 'm', '調整型・人柄', [62, 72, 88, 84, 66], [30, 20, 30, 20, 0, 0, 10], '「平成おじさん」として知られる。首相時代に自自公連立をつくった。', ['1963年 衆議院議員に初当選', '1998〜2000年 自民党総裁・内閣総理大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('kajiyama_s', '梶山 静六', 1926, 1969, 'm', '武闘派', [70, 74, 74, 72, 86], [40, 30, 40, 10, 0, 0, 0], '「武闘派」とよばれた実力者。内閣官房長官を務めた。梶山弘志の父。', ['1969年 衆議院議員に初当選', '1996〜97年 内閣官房長官'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('kamei', '亀井 静香', 1936, 1979, 'm', '反構造改革', [80, 64, 66, 70, 82], [-20, 30, 50, 0, 0, 20, 0], '警察官僚出身。郵政民営化に反対して自民党を離れ、国民新党をつくった。', ['1979年 衆議院議員に初当選', '2009〜10年 郵政改革担当大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('fujii_ta', '藤井 孝男', 1943, 1986, 'm', '調整型', [56, 66, 72, 64, 60], [30, 20, 30, 10, 0, 0, 0], '運輸大臣などを務めた。2003年の総裁選に立候補した。', ['1986年 参議院議員に初当選', '1997〜98年 運輸大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('komura', '高村 正彦', 1942, 1980, 'm', '外交・法律', [60, 80, 80, 70, 66], [30, 30, 40, 30, 0, 0, 10], '弁護士出身。外務大臣・防衛大臣、党副総裁を務めた。', ['1980年 衆議院議員に初当選', '2012〜18年 自民党副総裁'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('aso', '麻生 太郎', 1940, 1979, 'm', '保守・べらんめえ', [82, 74, 70, 82, 76], [40, 40, 60, 30, 0, -10, 30], '吉田茂の孫。漫画好きでも知られ、首相・副総理・財務大臣を長く務めた。', ['1979年 衆議院議員に初当選', '2008〜09年 自民党総裁・内閣総理大臣', '2012〜21年 副総理・財務大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('tanigaki', '谷垣 禎一', 1945, 1983, 'm', '穏健・財政', [62, 80, 82, 72, 62], [30, 10, 20, 20, 10, 0, 10], '野党時代の自民党総裁として党を立て直した穏健派。', ['1983年 衆議院議員に初当選', '2009〜12年 自民党総裁'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('fukuda_y', '福田 康夫', 1936, 1990, 'm', '調整型・アジア重視', [60, 80, 84, 74, 62], [30, 10, 20, 40, 10, 0, 10], '福田赳夫の長男。内閣官房長官を長く務め、首相となった。', ['1990年 衆議院議員に初当選', '2000〜04年 内閣官房長官', '2007〜08年 自民党総裁・内閣総理大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('yosano', '与謝野 馨', 1938, 1976, 'm', '財政規律', [60, 86, 72, 64, 66], [20, 20, 30, 20, 0, 0, 20], '財政再建を重んじた政策通。歌人・与謝野晶子の孫。', ['1976年 衆議院議員に初当選', '2008年 財務・金融担当大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('koike_y', '小池 百合子', 1952, 1992, 'f', '発信力・改革', [90, 72, 66, 62, 84], [40, 40, 40, 30, 20, 20, 30], 'ニュースキャスターから政界へ。環境大臣・防衛大臣をへて、2016年から東京都知事。', ['1992年 参議院議員に初当選', '2007年 防衛大臣', '2016年〜 東京都知事'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('ishihara_n', '石原 伸晃', 1957, 1990, 'm', '政策・都市', [70, 72, 70, 70, 62], [40, 20, 30, 20, 0, 0, 20], '石原慎太郎の長男。党幹事長などを務めた。', ['1990年 衆議院議員に初当選', '2010〜12年 自民党幹事長'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('ishiba', '石破 茂', 1957, 1986, 'm', '安保・地方', [78, 84, 58, 60, 76], [30, 20, 40, 20, 10, 30, 20], '防衛・地方創生に通じた論客。党員の人気が高く、5回目の挑戦で総裁・首相になった。', ['1986年 衆議院議員に初当選', '2007〜08年 防衛大臣', '2024〜25年 自民党総裁・内閣総理大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('kono_t', '河野 太郎', 1963, 1996, 'm', '突破力・SNS', [86, 78, 54, 56, 84], [50, 30, 0, 40, 30, 10, 70], '河野洋平の長男。外務・防衛・デジタル大臣などを歴任し、SNSでの発信力が強い。', ['1996年 衆議院議員に初当選', '2017〜19年 外務大臣', '2022〜24年 デジタル大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('nishimura_y', '西村 康稔', 1962, 2003, 'm', '政策・経済', [64, 78, 68, 60, 66], [40, 20, 30, 20, 0, 0, 30], '通産省出身。経済再生担当大臣・経済産業大臣などを務めた。', ['2003年 衆議院議員に初当選', '2019〜21年 経済再生担当大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('machimura', '町村 信孝', 1944, 1983, 'm', '派閥の領袖', [58, 76, 74, 80, 64], [40, 30, 50, 20, 0, 0, 10], '町村派を率いた。外務大臣・内閣官房長官・衆議院議長を務めた。', ['1983年 衆議院議員に初当選', '2014〜15年 衆議院議長'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('hayashi_ym', '林 芳正', 1961, 1995, 'm', '政策通・国際派', [66, 88, 80, 66, 64], [30, 10, 20, 30, 10, 0, 30], '商社・財務省勤務をへて政界へ。外務大臣・内閣官房長官などを務めた政策通。', ['1995年 参議院議員に初当選', '2021〜23年 外務大臣', '2023年〜 内閣官房長官'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('suga_y', '菅 義偉', 1948, 1996, 'm', '実務・叩き上げ', [60, 76, 84, 72, 84], [40, 40, 30, 10, 0, 10, 50], '秋田の農家出身の叩き上げ。官房長官を7年8か月務めたのち首相となった。', ['1996年 衆議院議員に初当選', '2012〜20年 内閣官房長官', '2020〜21年 自民党総裁・内閣総理大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('kishida', '岸田 文雄', 1957, 1993, 'm', '聞く力・穏健', [62, 76, 82, 76, 60], [20, 10, 20, 30, 10, 0, 30], '宏池会を率いる穏健派。外務大臣を長く務め、「新しい資本主義」をかかげて首相となった。', ['1993年 衆議院議員に初当選', '2012〜17年 外務大臣', '2021〜24年 自民党総裁・内閣総理大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('noda_s', '野田 聖子', 1960, 1993, 'f', '多様性・少子化', [74, 72, 70, 56, 70], [20, 10, -20, 20, 10, 0, 20], '郵政大臣・総務大臣・こども政策担当大臣などを務めた。', ['1993年 衆議院議員に初当選', '1998〜99年 郵政大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('koizumi_s', '小泉 進次郎', 1981, 2009, 'm', '発信力・若手', [90, 64, 62, 62, 74], [40, 30, 0, 20, 40, 10, 50], '小泉純一郎の次男。環境大臣・農林水産大臣などを務めた。', ['2009年 衆議院議員に初当選', '2019〜21年 環境大臣', '2025年 農林水産大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('motegi', '茂木 敏充', 1955, 1993, 'm', '政策・交渉', [62, 86, 66, 72, 76], [40, 20, 30, 30, 0, 0, 30], '外務大臣・党幹事長などを務めた政策通。日米貿易交渉を担った。', ['1993年 衆議院議員に初当選', '2019〜21年 外務大臣', '2021〜24年 自民党幹事長'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('kamikawa', '上川 陽子', 1953, 2000, 'f', '法務・外交', [64, 80, 72, 60, 74], [20, 20, 20, 30, 10, 0, 20], '法務大臣を3度、外務大臣を務めた。', ['2000年 衆議院議員に初当選', '2023〜24年 外務大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('kato_ka', '加藤 勝信', 1955, 2003, 'm', '実務・社会保障', [56, 80, 80, 66, 62], [30, 20, 30, 10, 0, 0, 20], '大蔵省出身。厚生労働大臣・官房長官・財務大臣などを務めた。', ['2003年 衆議院議員に初当選', '2020〜21年 内閣官房長官'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('maehara', '前原 誠司', 1962, 1993, 'm', '安保・改革', [76, 78, 58, 62, 76], [30, 20, 20, 20, 10, 10, 30], '松下政経塾出身。43歳で民主党代表となり、のちに外務大臣を務めた。', ['1993年 衆議院議員に初当選', '2005〜06年 民主党代表', '2010〜11年 外務大臣'], '', [['minshu', 'cand', 0, 0]]),
+  rpP('ozawa', '小沢 一郎', 1942, 1969, 'm', '剛腕・選挙', [68, 76, 70, 90, 92], [20, 50, 20, 10, 0, 10, 10], '27歳で初当選。自民党幹事長から新党をいくつも立ち上げ、「剛腕」とよばれた選挙の名手。', ['1969年 衆議院議員に初当選', '1989〜91年 自民党幹事長', '2006〜09年 民主党代表'], '', [['minshu', 'cand', 0, 0]]),
+  rpP('kaieda', '海江田 万里', 1949, 1993, 'm', '経済評論家', [70, 74, 66, 60, 60], [0, 0, -10, 0, 10, 0, 20], '経済評論家から政界へ。経済産業大臣、民主党代表を務めた。', ['1993年 衆議院議員に初当選', '2012〜14年 民主党代表'], '', [['minshu', 'cand', 0, 0]]),
+  rpP('kano_m', '鹿野 道彦', 1942, 1976, 'm', '農政', [54, 72, 76, 60, 60], [0, 10, 10, 0, 0, 10, 0], '農林水産大臣を務めた農政通。', ['1976年 衆議院議員に初当選', '2010〜12年 農林水産大臣'], '', [['minshu', 'cand', 0, 0]]),
+  rpP('mabuchi', '馬淵 澄夫', 1960, 2003, 'm', '実務', [64, 74, 66, 56, 70], [10, 10, -10, 0, 10, 0, 30], '国土交通大臣を務めた。', ['2003年 衆議院議員に初当選', '2010〜11年 国土交通大臣'], '', [['minshu', 'cand', 0, 0]]),
+  rpP('yokomichi', '横路 孝弘', 1941, 1969, 'm', 'リベラル', [62, 72, 72, 66, 60], [-40, -20, -40, -20, 20, 10, 0], '北海道知事をへて民主党へ。のちに衆議院議長を務めた。', ['1969年 衆議院議員に初当選', '1983〜95年 北海道知事', '2009〜12年 衆議院議長'], '', [['minshu', 'cand', 0, 0]]),
+  rpP('hosono', '細野 豪志', 1971, 2000, 'm', '若手・原発事故対応', [74, 72, 66, 56, 70], [20, 10, 0, 10, 20, 0, 30], '東日本大震災の原発事故の対応にあたった。', ['2000年 衆議院議員に初当選', '2011〜12年 環境大臣・原発事故担当大臣'], '', [['minshu', 'cand', 0, 0]]),
+  rpP('nagatsuma', '長妻 昭', 1960, 2003, 'm', '年金・追及', [74, 76, 60, 58, 70], [-30, -10, -30, -10, 20, 0, 20], '「消えた年金」問題の追及で知られ、厚生労働大臣を務めた。', ['2003年 衆議院議員に初当選', '2009〜10年 厚生労働大臣'], '', [['minshu', 'cand', 0, 0]]),
+  rpP('tsumura', '津村 啓介', 1971, 2003, 'm', '若手・政策', [60, 70, 62, 50, 62], [10, 0, -10, 10, 10, 0, 30], '日本銀行出身。2018年の国民民主党代表選に立候補した。', ['2003年 衆議院議員に初当選'], '', [['kokumin', 'cand', 0, 0]]),
+];
+// 党首選の顔ぶれ（勝者を先頭に）
+const RP_RACE = {
+  jimin: [[1989.5, 1991.7, ['kaifu', 'hayashi_y', 'ishihara_s']], [1991.7, 1993.6, ['miyazawa', 'watanabe_m', 'mitsuzuka']], [1995.6, 1998.5, ['hashimoto_r', 'koizumi']], [1998.5, 1999.6, ['obuchi', 'kajiyama_s', 'koizumi']], [1999.6, 2001.2, ['obuchi', 'kato_k', 'yamasaki_t']],
+    [2001.2, 2003.6, ['koizumi', 'hashimoto_r', 'aso', 'kamei']], [2003.6, 2006.6, ['koizumi', 'kamei', 'fujii_ta', 'komura']], [2006.6, 2007.6, ['abe', 'aso', 'tanigaki']], [2007.6, 2008.6, ['fukuda_y', 'aso']], [2008.6, 2009.6, ['aso', 'yosano', 'koike_y', 'ishihara_n', 'ishiba']],
+    [2009.6, 2012.6, ['tanigaki', 'kono_t', 'nishimura_y']], [2012.6, 2015.6, ['abe', 'ishiba', 'ishihara_n', 'machimura', 'hayashi_ym']], [2015.6, 2018.0, ['abe']], [2018.0, 2020.6, ['abe', 'ishiba']], [2020.6, 2021.6, ['suga_y', 'kishida', 'ishiba']],
+    [2021.6, 2024.5, ['kishida', 'kono_t', 'takaichi', 'noda_s']], [2024.5, 2025.6, ['ishiba', 'takaichi', 'koizumi_s', 'hayashi_ym', 'kobayashi_t', 'motegi', 'kamikawa', 'kato_ka', 'kono_t']], [2025.6, 2026.6, ['takaichi', 'koizumi_s', 'hayashi_ym', 'kobayashi_t', 'motegi']]],
+  minshu: [[1999.6, 2002.6, ['hatoyama', 'kan']], [2002.6, 2004.3, ['hatoyama', 'kan', 'noda', 'yokomichi']], [2004.3, 2005.7, ['okada']], [2005.7, 2006.2, ['maehara', 'kan']], [2006.2, 2009.4, ['ozawa', 'kan']], [2009.4, 2010.4, ['hatoyama', 'okada']],
+    [2010.4, 2011.6, ['kan', 'ozawa']], [2011.6, 2012.9, ['noda', 'kaieda', 'maehara', 'kano_m', 'mabuchi']], [2012.9, 2014.9, ['kaieda', 'mabuchi']], [2014.9, 2016.3, ['okada', 'hosono', 'nagatsuma']]],
+  kokumin: [[2018.6, 2020.7, ['tamaki', 'tsumura']]],
+};
+function rpRaceRoster(P, pid, yr) { const L = RP_RACE[pid] || []; const w = L.find(([a, b]) => yr >= a && yr < b); if (!w) return null; const key = pid + ':' + w[0]; if ((P.flags.rpRaceUsed || {})[key]) return null; return { key, keys: w[2] }; }
+function rpCandNpc(t, P, party, key, exclude, yr) { const d3 = rpEv('d3'), WNe = rpEv('WNe'), S = d3[key]; if (!S) return null; const R = P.real || (P.real = { map: {}, served: [] }); if (!R.map) R.map = {};
+  const cur = R.map[key] && P.npcs[R.map[key]]; if (cur && cur.real === key && !cur.dead && cur.party === party.id && cur.office) return cur;
+  if (cur && cur.real === key && !cur.dead) return null; // ほかの党にいる
+  const pool = Object.values(P.npcs).filter(n => n && n.party === party.id && n.office && !n.real && !n.dead && !exclude.has(n.id) && n.id !== party.leader).sort((a, b) => (b.traits.charisma + b.traits.ambition) - (a.traits.charisma + a.traits.ambition));
+  const npc = pool[0]; if (!npc) return null; const was = npc.house === 'sangi'; WNe(P, npc, S, Math.floor(yr)); rpLook(npc, S); if (S.house === 'sangi' && was) { npc.house = 'sangi'; npc.office = 'sangi'; }
+  npc.age = Math.max(25, Math.floor(yr) - S.birth); npc.wins = Math.max(1, S.first <= yr ? Math.floor((yr - S.first) / 3.1) + 1 : 1); R.map[key] = npc.id; return npc; }
+function rpApplyRace(t, P, party, h, out) {
+  const yr = rpYear(t), ro = rpRaceRoster(P, party.id, yr); if (!ro) return false;
+  const used = new Set(), C = []; for (const key of ro.keys) { const npc = rpCandNpc(t, P, party, key, used, yr); if (!npc || npc.id === out) continue; used.add(npc.id); C.push(npc); }
+  if (!C.length) return false; (P.flags.rpRaceUsed || (P.flags.rpRaceUsed = {}))[ro.key] = 1;
+  const mxD = Math.max(2, ...h.map(x => num(x.diet))), mxM = Math.max(.5, ...h.map(x => num(x.member)));
+  const fac = n => (party.factions || []).find(f => f.leader === n.id);
+  const nh = C.map((n, i) => ({ id: n.id, name: n.name, party: party.id, diet: i === 0 ? mxD * 1.9 : mxD * (0.35 + Math.random() * 0.45) + (fac(n) ? fac(n).size * 0.3 : 0), member: i === 0 ? mxM * 1.6 + 0.3 : mxM * (0.4 + Math.random() * 0.6) }));
+  // 党員に人気があった候補（石破・小泉・河野・高市）は党員票を厚く
+  for (const c of nh.slice(1)) { const k = P.npcs[c.id] && P.npcs[c.id].real; if (/ishiba|koizumi_s|kono_t|takaichi|koike_y/.test(k || '')) c.member *= 1.5; }
+  h.length = 0; h.push(...nh); return true;
+}
+// 結果を記録して、党首選アプリで中継を見られるようにする
+function rpRecordRace(t, P, a, r) { try { const party = P.parties[a.party]; if (!party || !r || !r.candidates || !r.candidates.length) return;
+  const L = P.flags.rpRaces || (P.flags.rpRaces = []); L.unshift({ day: t.state.day, yr: rpYear(t), party: party.id, pname: party.name, title: party.leaderTitle, kind: party.id === 'jimin' ? '総裁選' : `${party.leaderTitle}選`, cands: r.candidates.map(c => ({ ...c })), runoff: r.runoff || null, win: r.winners && r.winners[0] && r.winners[0].name, seen: 0 }); if (L.length > 24) L.length = 24;
+  const w = L[0]; rpEv('z1')(t, `【${party.short}${w.kind}】${w.win}氏が新しい${party.leaderTitle}に選ばれました。${w.runoff ? `決選投票で${w.runoff.a.name}氏と${w.runoff.b.name}氏が争いました。` : ''}（「党首選」アプリで開票の様子を見られます）`); } catch (e) { console.error('[rp] race rec', e); } }
+// ---- 開票中継の画面 ----
+GB_MODES.rprace = {
+  noHud: true,
+  init(s, g) { const P = g.state.politics, L = (P && P.flags && P.flags.rpRaces) || []; s.S = { i: 0, f: 0, L }; if (L[0]) L[0].seen = 1; },
+  btn(s, id, g) { const S = s.S; if (id === 'close') { s.done(); return; } if (id === 'replay') { S.f = 0; return; } if (id.startsWith('r:')) { S.i = +id.slice(2); S.f = 0; if (S.L[S.i]) S.L[S.i].seen = 1; return; } if (id === 'skip') { S.f = 9999; return; } },
+  update(s) { s.S.f++; },
+  draw(s, c, g) { const S = s.S, L = S.L, R = L[S.i]; pBands(c, 0, 0, 640, 360, ['#0a0e1c', '#0c1222', '#0e1528', '#10182e']); pR(c, 0, 0, 640, 30, '#060912'); pR(c, 0, 29, 640, 1, '#e8b030'); pT(c, '党首選 開票中継', 10, 7, { size: 16, color: '#fff' }); s.btn('close', '閉じる', 572, 4, 62, 22, { size: 12, back: true });
+    if (!R) { pT(c, 'まだ党首選は行われていない', 320, 170, { size: 12, color: GB_C.t3, align: 'center' }); return; }
+    pFrame(c, 4, 36, 150, 318, { title: 'これまでの党首選', bg: '#0e1426', edge: '#2a3a6a' }); L.slice(0, 12).forEach((x, i) => { const y = 60 + i * 24, on = i === S.i; pR(c, 8, y, 142, 22, on ? '#22305a' : i % 2 ? '#111a30' : '#131d36'); pT(c, pFit(c, `${Math.floor(x.yr)} ${x.pname.replace('自由民主党', '自民').replace('民主党', '民主').replace('国民民主党', '国民')}`, 132, 12), 14, y + 4, { size: 12, color: on ? '#fff' : GB_C.t2 }); s.btn('r:' + i, '', 8, y, 142, 22, { kind: 'clear', nofocus: true }); });
+    const x0 = 162, w0 = 470; pFrame(c, x0, 36, w0, 318, { title: `${Math.floor(R.yr)}年 ${R.pname} ${R.kind}`, bg: '#0e1426', edge: '#e8b030' }); try { up(c, R.party, x0 + w0 - 70, 42, 60, 22, {}); } catch (e) { }
+    const f = S.f, C = R.cands.slice(), tot = C.reduce((a, x) => a + num(x.votes), 0) || 1, mx = Math.max(...C.map(x => num(x.votes)), 1);
+    const ph1 = Math.min(1, f / 90), ph2 = Math.min(1, Math.max(0, (f - 100) / 90)); // 議員票 → 党員票
+    pT(c, f < 100 ? '国会議員票を開票中…' : f < 200 ? '党員・党友票を開票中…' : R.runoff && f < 290 ? '過半数に届かず、決選投票へ' : `開票終了　新しい${R.title}は ${R.win} 氏`, x0 + 12, 64, { size: 12, color: '#ffd23f' });
+    const rows = Math.min(C.length, 9), bh = Math.min(26, Math.floor(200 / rows));
+    C.slice(0, rows).forEach((x, i) => { const y = 86 + i * (bh + 2), v = num(x.dietVotes) * ph1 + num(x.memberVotes) * ph2, win = x.name === R.win && f >= (R.runoff ? 290 : 200); const npc = (g.state.politics.npcs || {});
+      pR(c, x0 + 10, y, w0 - 20, bh, win ? '#3a2e10' : '#141e38'); pT(c, pFit(c, (win ? '★' : '') + x.name + (x.isPlayer ? '（あなた）' : ''), 120, 12), x0 + 16, y + (bh - 12) / 2 - 1, { size: 12, color: win ? '#ffe08a' : '#fff' });
+      const bw = Math.round((w0 - 230) * v / mx); pR(c, x0 + 140, y + 4, bw, bh - 8, win ? '#e8b030' : '#3a7ad0'); pR(c, x0 + 140, y + 4, Math.round((w0 - 230) * num(x.dietVotes) * ph1 / mx), 3, '#9ac0ff');
+      pT(c, `${Math.round(v)}票`, x0 + w0 - 16, y + (bh - 12) / 2 - 1, { size: 12, color: '#fff', align: 'right' }); });
+    if (R.runoff && f >= 200) { const yy = 86 + rows * (bh + 2) + 8, k = Math.min(1, (f - 200) / 80); pFrame(c, x0 + 10, yy, w0 - 20, 54, { title: '決選投票', bg: '#18142a', edge: '#e8b030' }); [R.runoff.a, R.runoff.b].forEach((z, j) => pT(c, `${z.name}　${Math.round(z.votes * k)}票`, x0 + 24 + j * 220, yy + 26, { size: 12, color: z.name === R.win && f >= 290 ? '#ffd23f' : '#fff' })); }
+    s.btn('replay', 'もう一度', x0 + 10, 326, 90, 22, { size: 12 }); s.btn('skip', '結果へ', x0 + 106, 326, 80, 22, { size: 12 });
+  },
+};
+const rpRaceIcon = gbIcon('#c0302a', (c, x, y) => { c.fillStyle = '#fff'; c.fillRect(x + 6, y + 8, 20, 18); c.fillStyle = '#c0302a'; c.fillRect(x + 9, y + 12, 4, 10); c.fillRect(x + 15, y + 16, 4, 6); c.fillRect(x + 21, y + 10, 3, 12); });
+async function rpRaceOpen(g) { const r = await gbScene(g, { mode: 'rprace', title: '党首選' }); gbAfter(g, r && r.mins); }
+try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_seiji'); if (F && !F.apps.includes('rprace')) F.apps.push('rprace'); FOLD_OF.rprace = 'f_seiji'; } } catch (e) { }
+// ---- 政党の合流・分裂・連立の組み替え（実在の政党モード） ----
+function rpPmParty(P) { const pm = P.cabinet && P.cabinet.pm; return pm === 'player' ? P.me.party : pm && P.npcs[pm] ? P.npcs[pm].party : (P.cabinet.partyIds || [])[0]; }
+function rpCoalLeave(t, P, pid) { const C = P.cabinet.partyIds || []; if (!C.includes(pid) || rpPmParty(P) === pid) return false; P.cabinet.partyIds = C.filter(x => x !== pid);
+  for (const [k, v] of Object.entries(P.cabinet.ministers || {})) { const n = v !== 'player' && P.npcs[v]; if (n && n.party === pid) delete P.cabinet.ministers[k]; }
+  try { rpEv('BP')(t, P, { keep: true, quiet: true }); } catch (e) { } try { rpEv('O0')(t, 'cabinet', {}); } catch (e) { } return true; }
+function rpCoalJoin(t, P, pid) { const C = P.cabinet.partyIds || []; if (C.includes(pid) || !P.parties[pid]) return false; P.cabinet.partyIds = [...C, pid]; try { rpEv('BP')(t, P, { keep: true, quiet: true }); } catch (e) { } try { rpEv('O0')(t, 'cabinet', {}); } catch (e) { } return true; }
+function rpMoveAll(P, from, to, frac) { const gt = rpEv('gt'), F4 = rpEv('F4'), Sm = rpEv('Sm'); let s = 0, a = 0; const SH = P.diet.shugi.seats, mv = Math.round(gt(SH[from]) * frac); SH[from] = gt(SH[from]) - mv; SH[to] = gt(SH[to]) + mv; s = mv;
+  for (const C of P.diet.sangi.classes || []) { const m = Math.round(gt(C.seats[from]) * frac); C.seats[from] = gt(C.seats[from]) - m; C.seats[to] = gt(C.seats[to]) + m; a += m; }
+  const CL = P.diet.sangi.classes || []; if (CL.length) { P.diet.sangi.seats = F4({}, CL[0].seats); for (const C of CL.slice(1)) F4(P.diet.sangi.seats, C.seats); P.diet.sangi.total = Sm(P.diet.sangi.seats); }
+  for (const seg of Object.keys(P.support.base || {})) { const l = P.support.base[seg]; if (l[from] > 0) { const u = l[from] * frac; l[from] -= u; l[to] = (l[to] || 0) + u; } } return [s, a]; }
+const RP_REALIGN = [
+  { k: 'shamin98', at: 1998.42, ok: P => (P.cabinet.partyIds || []).includes('shamin') && rpPmParty(P) === 'jimin', run: (t, P) => rpCoalLeave(t, P, 'shamin') && '社民党が、自民党との連立（閣外協力）を解消した（史実では1998年5〜6月）' },
+  { k: 'jijiko99', at: 1999.79, ok: P => rpPmParty(P) === 'jimin' && P.parties.komei && !(P.cabinet.partyIds || []).includes('komei'), run: (t, P) => rpCoalJoin(t, P, 'komei') && '公明党が連立政権に加わり、自民党との連立（自自公→自公）が始まった（史実では1999年10月）' },
+  { k: 'shamin10', at: 2010.41, ok: P => (P.cabinet.partyIds || []).includes('shamin') && rpPmParty(P) === 'minshu', run: (t, P) => rpCoalLeave(t, P, 'shamin') && '普天間基地の移設問題をめぐり、社民党が連立政権を離脱した（史実では2010年5月）' },
+  { k: 'kibo17', at: 2017.78, ok: P => !!P.parties.tomoshibi, run: (t, P) => '野党第一党が分裂し、希望の党と立憲民主党などに分かれた（史実では2017年10月）。ゲームでは、ともしび党が受け皿として残る' },
+  { k: 'kokumin20', at: 2020.7, ok: P => P.parties.kokumin && P.parties.tomoshibi && rpEv('k8')(P, 'kokumin') > 20, run: (t, P) => { const [s, a] = rpMoveAll(P, 'kokumin', 'tomoshibi', 0.7); return `国民民主党の多くの議員が合流新党に移り、残った議員で国民民主党を再結成した（史実では2020年9月）。衆議院${s}人・参議院${a}人がともしび党へ`; } },
+  { k: 'ishin15', at: 2015.9, ok: P => P.parties.ishin && rpEv('k8')(P, 'ishin') > 10, run: (t, P) => '維新の党が分裂し、大阪系の議員が「おおさか維新の会」をつくった（史実では2015年10月、のちに日本維新の会）' },
+  { k: 'komei25', at: 2025.78, ok: P => (P.cabinet.partyIds || []).includes('komei') && rpPmParty(P) === 'jimin', run: (t, P) => rpCoalLeave(t, P, 'komei') && '公明党が、自民党との連立政権から離脱した。26年続いた自公連立が終わった（史実では2025年10月）' },
+  { k: 'jishin25', at: 2025.8, ok: P => rpPmParty(P) === 'jimin' && P.parties.ishin && !(P.cabinet.partyIds || []).includes('ishin'), run: (t, P) => rpCoalJoin(t, P, 'ishin') && '自民党と日本維新の会が連立政権で合意した（史実では2025年10月）' },
+];
+function rpRealignTick(t, P) { const yr = rpYear(t), st = num(P.flags.rpStart, 9999); const D = P.flags.rpRe || (P.flags.rpRe = {});
+  for (const E0 of RP_REALIGN) { if (D[E0.k] || yr < E0.at) continue; D[E0.k] = 1; if (st >= E0.at) continue; if (!E0.ok(P)) continue;
+    let txt = null; try { txt = E0.run(t, P); } catch (e) { console.error('[rp] realign', E0.k, e); } if (txt) { try { rpEv('Io')(P, t, txt); } catch (e) { } try { rpEv('z1')(t, `【政界】${txt}`); } catch (e) { } } } }
+function installRP2() { if (!RP_X) return; const d3 = rpEv('d3');
+  for (const S of RP_CAND) { if (!d3[S.key]) { d3[S.key] = { ...S, party: S.w[0][0], slot: 'cand', photo: undefined }; delete d3[S.key].w; } }
+  RP_X.set('KNe', orig => function (t, e, a, n, o) { try { if (e && e.flags && e.flags.realParties === 1 && t.state && t.state.realPols !== false && rpApplyRace(t, e, a, n, o)) return; } catch (er) { console.error('[rp] race', er); } return orig(t, e, a, n, o); });
+  RP_X.set('LNe', orig => function (t, e, a) { const r = orig(t, e, a); try { if (e && e.flags && e.flags.realParties === 1) rpRecordRace(t, e, a, r); } catch (er) { } return r; });
+  const rt0 = rpTick; rpTick = function (g) { rt0(g); try { const P = g.state && g.state.politics; if (P && P.flags && P.flags.realParties === 1 && P.parties) rpRealignTick(g, P); } catch (e) { console.error('[rp] realign tick', e); } };
+  E.Un('rprace', { name: '党首選', color: '#c0302a', order: 36.47, iconHD: rpRaceIcon, badge: g => { try { const L = g.state.politics.flags.rpRaces; return L && L[0] && !L[0].seen ? 1 : 0; } catch (e) { return 0; } }, open: g => rpRaceOpen(g) });
+  if (window.__RP) Object.assign(window.__RP, { tick: rpTick, race: rpApplyRace, rec: rpRecordRace, realign: rpRealignTick, raceOpen: rpRaceOpen });
+}
 // ===== 宗教：世界の宗教（7）と教団（6）、教祖・指導者、入信・活動・階位・迷い・脱会、勧誘と家族、宗教2世、歴史の出来事（信者の目線）、政治との連動 =====
 // 事件は史実どおりにニュース・出来事として起きる。主人公が犯罪を実行する展開はない（信者として体験し、残る・離れる・協力するを選ぶ）。
 const REL_W = {
