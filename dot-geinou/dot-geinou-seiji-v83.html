@@ -13854,6 +13854,7 @@ function install() {
   try { installNet(); } catch (e) { console.error('[net] install', e); }
   try { installRP(); } catch (e) { console.error('[rp] install', e); }
   try { installRel(); } catch (e) { console.error('[rel] install', e); }
+  try { installRel2(); } catch (e) { console.error('[rel] install2', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -45367,6 +45368,151 @@ function installRel() {
   if (E.ug) E.ug('np_rel', (g, it, k, auto) => { try { return relResp(g, it.data || {}, k) || ''; } catch (e) { console.error('[rel] resp', e); return ''; } });
   window.__REL = { st: relSt, tick: relTick, join: relJoin, leave: relLeave, act: relDo, acts: relActList, resp: relResp, yf: relYF, open: relOpen, box: g => { try { return E.fl(g).inbox; } catch (e) { return []; } } };
 }
+// ===== 宗教2：街の宗教施設・施設の中の画面・宗教用語の図鑑・宗教間の対話 =====
+// 街の空き建物（説明だけの建物）を、寺・教会・モスク・道場などにする。入ると施設の画面が開く。
+const REL_FAC = [
+  { id: 'f_church', town: 'tokyo', match: 'リハーサルスタジオ', kind: 'w', rel: 'christ', name: () => 'ドット教会', sign: ['教会', '#f4efe4', '#5a3a2a'], area: '東京エリア' },
+  { id: 'f_syn', town: 'tokyo', match: 'ひなた荘', kind: 'w', rel: 'jud', name: () => 'ドット・シナゴーグ', sign: ['シナゴーグ', '#e8eef8', '#2a4a8a'], area: '東京エリア' },
+  { id: 'f_jw', town: 'tokyo', match: 'ダンススタジオ', kind: 'o', rel: 'jw', name: () => 'エホバの証人 王国会館', sign: ['王国会館', '#eef2f6', '#3a5a7a'], area: '東京エリア' },
+  { id: 'f_mosque', town: 'minato', match: 'しおかぜビル', kind: 'w', rel: 'islam', name: () => 'ドット・モスク', sign: ['モスク', '#eaf4ee', '#1f6a3a'], area: 'テレビ局エリア' },
+  { id: 'f_soka', town: 'minato', match: 'スターヒル タワー', kind: 'o', rel: 'soka', name: () => '創価学会 ドット文化会館', sign: ['文化会館', '#f2f2f6', '#2f4fa0'], area: 'テレビ局エリア' },
+  { id: 'f_unif', town: 'minato', match: 'ホテル ドット港', kind: 'o', rel: 'unif', name: y => y >= 2015.62 ? '家庭連合 ドット教会' : y >= 1959.83 ? '統一教会 ドット教会' : null, sign: ['教会', '#f0f0f8', '#2a2a8a'], area: 'テレビ局エリア' },
+  { id: 'f_hindu', town: 'namba', match: 'ドラッグストア', kind: 'w', rel: 'hindu', name: () => 'ドット・ヒンドゥー寺院', sign: ['寺院', '#fff0dc', '#c0501a'], area: 'なんばエリア' },
+  { id: 'f_sikh', town: 'namba', match: '靴屋', kind: 'w', rel: 'sikh', name: () => 'ドット・グルドワラ', sign: ['グルドワラ', '#fff6dc', '#b07a10'], area: 'なんばエリア' },
+  { id: 'f_jain', town: 'namba', match: 'ビジネスホテル', kind: 'w', rel: 'jain', name: () => 'ジャイナ教寺院', sign: ['ジャイナ寺院', '#fbf6f0', '#a03a3a'], area: 'なんばエリア' },
+  { id: 'f_aum', town: 'kanraku', match: '雑居ビル', at: [23, 33], kind: 'o', rel: 'aum', name: y => y >= 2000.1 ? 'アレフ ドット道場' : y >= 1987.5 ? 'オウム真理教 ドット道場' : y >= 1984.2 ? 'オウム神仙の会 道場' : null, sign: ['道場', '#f4f4f4', '#2a2a2a'], area: 'ネオン街' },
+  { id: 'f_kofuku', town: 'kanraku', match: '雑居ビル', at: [44, 32], kind: 'o', rel: 'kofuku', name: y => y >= 1986.82 ? '幸福の科学 ドット支部' : null, sign: ['支部精舎', '#fff8e0', '#b08a20'], area: 'ネオン街' },
+  { id: 'f_kensei', town: 'kanraku', match: '雑居ビル', at: [2, 22], kind: 'o', rel: 'kensei', name: y => y >= 1957.6 ? '顕正会 ドット会館' : null, sign: ['会館', '#f0f4fa', '#4a6aa0'], area: 'ネオン街' },
+  { id: 'f_tera', town: 'ekimae_asakusa', match: 'お寺の本堂', kind: 'w', rel: 'buddh', name: () => null, keepName: true, area: '浅草' },
+];
+function relFacName(F, y) { return F.keepName ? F.match : F.name(y); }
+function relWrapTown(town, fn) {
+  const M = E.Ke && E.Ke[town] && E.Ke[town].rooms && E.Ke[town].rooms.main; if (!M || M.__rel) return; const g0 = M.generate; if (!g0) return;
+  M.generate = function (...a) { const r = g0.apply(this, a); try { fn(r); } catch (e) { console.error('[rel] town', town, e); } return r; };
+  M.__rel = true; delete M._built;
+}
+function relPatchTown(town, r) { const g = window.__game, y = g ? relYF(g) : 2026;
+  for (const F of REL_FAC.filter(f => f.town === town)) {
+    const C = (r.entities || []).filter(e => e && e.type === 'building' && e.name === F.match && (!F.at || (e.x === F.at[0] && e.y === F.at[1])));
+    const e = C[0]; if (!e) continue; const nm = relFacName(F, y); if (!nm) continue;
+    const orig = e.talk; e.name = nm; e.__relFac = F.id; delete e.text; delete e.place;
+    if (F.sign) e.sign = { text: F.sign[0], bg: F.sign[2], color: F.sign[1] };
+    e.talk = async g2 => { await relFacOpen(g2, F.id, orig); };
+  } }
+async function relFacOpen(g, fid, orig) { try { relTick(g); } catch (e) { } const r = await gbScene(g, { mode: 'relfac', title: '施設', fid }); gbAfter(g, r && r.mins); if (r && r.orig && orig) { try { await orig(g); } catch (e) { } } }
+// ---- 施設の中で話せる信者（宗教間の対話） ----
+const REL_TALK = {
+  buddh: ['「お線香は、まっすぐ立てても寝かせても、宗派によっていろいろなんですよ」', '「仏教では、すべては移り変わる（諸行無常）と考えます。だからこそ、いまを大切に」', '「お盆は、ご先祖さまが帰ってくる時期。迎え火と送り火をたきます」'],
+  christ: ['「日曜日は礼拝の日。でも、信者でない人もいつでも来ていいんですよ」', '「『隣人を自分のように愛しなさい』。イエスの教えでいちばん大切なものの一つです」', '「クリスマスはイエスの誕生日。でも本当に大切なのはイースター（復活祭）なんです」'],
+  islam: ['「1日5回、メッカの方角に向かって礼拝します。スマホのアプリで方角がわかるんですよ」', '「ラマダン月は、日の出から日没まで何も食べません。日没後の食事（イフタール）はみんなで楽しく」', '「豚肉やお酒は口にしません。ハラールの店が増えて助かっています」'],
+  hindu: ['「神さまはたくさんいます。ガネーシャは、ものごとの始まりを守る象の頭の神さまです」', '「牛は神聖な生きものなので、牛肉は食べない人が多いです」', '「ディーワーリーには家じゅうに灯りをともして、お菓子を配ります」'],
+  sikh: ['「ターバンは信仰のあかし。髪を切らずに、大切に包んでいます」', '「ここでは誰でも無料でランガル（食事）を食べられます。身分も宗教も関係なく」', '「シク教では、神の前ではみんな平等だと考えます」'],
+  jud: ['「金曜の日没から土曜の日没までは安息日（シャバット）。仕事も電気のスイッチも休みます」', '「食べものの決まり（コーシェル）があって、肉と乳製品をいっしょに食べません」', '「13歳になると、バル・ミツバという成人の儀式をします」'],
+  jain: ['「アヒンサー（不殺生）を守ります。根菜は、土の中の生きものを傷つけるので食べない人もいます」', '「日が沈んだら食事をしない人もいます。虫を誤って食べないように」', '「お坊さんは、裸足で歩いて旅をします」'],
+  soka: ['「南無妙法蓮華経と唱えると、元気が出るんです」', '「座談会では、みんなで悩みや体験を話し合います」', '「選挙のときは、公明党を応援する人が多いですね」'],
+  kofuku: ['「総裁先生の本は、もう何千冊も出ているんですよ」', '「『正しき心の探究』が私たちのテーマです」', '「幸福実現党も応援しています」'],
+  kensei: ['「日蓮大聖人の仏法で、日本を救いたいんです」', '「勤行は朝夕にします。毎日の積み重ねが大事」', '「…あなたも、いっしょにやってみませんか？」'],
+  jw: ['「聖書をいっしょに読んでみませんか？無料ですよ」', '「誕生日は祝いませんが、そのぶん毎日を感謝して過ごしています」', '「輸血は受けません。そのかわり、無輸血の治療をしてくれる病院を探します」'],
+  unif: ['「家庭の大切さを学んでいます」', '「祝福（合同結婚式）で結婚しました。相手は韓国の人です」', '「最近は報道のせいで、つらい思いをしている信者も多いんです」'],
+  aum: ['「ヨーガと瞑想で、心と体が軽くなりました」', '「ここでは、世間の目が冷たくて…。でも修行は続けています」', '「事件のことは、私たちも考え続けています」'],
+};
+// ---- 施設の画面 ----
+GB_MODES.relfac = {
+  noHud: true,
+  init(s, g) { relSt(g); s.S = { fid: (s.o && s.o.fid) || 'f_church', f: 0, talk: -1 }; },
+  left(s, g) { try { return Math.max(0, 1440 - (clockMin(g) % 1440) - s.mins); } catch (e) { return 999; } },
+  btn(s, id, g) { const S = s.S, R = relSt(g), F = REL_FAC.find(f => f.id === S.fid), y = relYF(g);
+    if (id === 'close') { s.done(); return; } if (id === 'resok') { S.res = null; return; } if (id === 'orig') { s.done({ orig: 1 }); return; }
+    const time = m => { if (this.left(s, g) < m) { s.tip('今日はもう時間がない', PW.bad); return false; } s.mins += m; return true; };
+    if (id === 'visit') { if (this.left(s, g) < 60) { s.tip('今日はもう時間がない', PW.bad); return; } const r = relVisit(g, F.rel); if (!r.ok) { s.tip(r.why, PW.bad); return; } s.mins += 60; S.res = r.text; return; }
+    if (id === 'fest') { const H = relHoliNext(F.rel, g); const k = 'fest_' + F.rel + '_' + dateOf(g, g.state.day).year; if (R.visits[k]) { s.tip('今年はもう参加した', PW.bad); return; } if (!time(120)) return; R.visits[k] = 1; R.under = num(R.under) + 4; try { g.addNeed('stress', -10); } catch (e) { } S.res = `「${H.nm}」に参加した。${H.ds}。\n地域の人も、外国から来た人も、いっしょに祝った。`; relLog(R, g, `${REL_W[F.rel].name}の「${H.nm}」に参加した`); return; }
+    if (id === 'talk') { if (!time(30)) return; const L = REL_TALK[F.rel] || ['「こんにちは」']; const n = num(R.visits['t_' + F.rel]); R.visits['t_' + F.rel] = n + 1; R.under = num(R.under) + (F.kind === 'w' ? 2 : 1); S.res = `${relFacName(F, y)}の人と話した。\n${L[n % L.length]}`; if (n + 1 === 3) { S.res += `\n\n★ ${F.kind === 'w' ? REL_W[F.rel].name : relOName(F.rel, y)}のことを、少し深く知ることができた`; relLog(R, g, `${F.kind === 'w' ? REL_W[F.rel].name : REL_O[F.rel].short}の人と語り合った`); } return; }
+    if (id === 'wfaith') { S.res = relWorldFaith(g, F.rel); return; }
+    if (id === 'join') { const r = relJoin(g, F.rel); if (!r.ok) { s.tip(r.why, PW.bad); return; } S.res = r.text; return; }
+    if (id === 'tour') { if (!time(60)) return; R.lean = { org: F.rel, d: g.state.day }; S.res = `${relFacName(F, y)}を見学した。\n${REL_O[F.rel].desc.slice(0, 70)}…\n帰りぎわに「また来てください」とパンフレットをもらった。`; return; }
+    if (id.startsWith('a:')) { const aid = id.slice(2), A = relActList(g).find(a => a.id === aid); if (A && A.mins && this.left(s, g) < A.mins) { s.tip('今日はもう時間がない', PW.bad); return; } const r = relDo(g, aid); if (!r.ok) { s.tip(r.why, PW.bad); return; } s.mins += num(r.mins); S.res = r.text; return; }
+  },
+  update(s) { s.S.f++; },
+  draw(s, c, g) { const S = s.S, R = relSt(g), F = REL_FAC.find(f => f.id === S.fid), y = relYF(g), nm = relFacName(F, y) || '建物';
+    relFacArt(c, F, g, S.f); pR(c, 0, 0, 640, 30, 'rgba(10,8,16,0.85)'); pT(c, nm, 10, 7, { size: 16, color: REL_C.t }); pT(c, F.area, 10 + pW(c, nm, 16) + 12, 10, { size: 12, color: REL_C.acc }); s.btn('close', '出る', 572, 4, 62, 22, { size: 12, back: true });
+    const x = 404, y0 = 40, w = 228; pFrame(c, x, y0, w, 312, { title: 'できること', bg: 'rgba(20,16,32,0.92)', edge: REL_C.ed }); let by = y0 + 26; const B = (id, lab, o = {}) => { s.btn(id, lab, x + 10, by, w - 20, 28, { size: 12, ...o }); by += 34; };
+    if (F.kind === 'w') { const W = REL_W[F.rel], H = relHoliNext(F.rel, g); B('visit', '見学・参拝する（60分）', { kind: 'pri', def: true }); if (H && H.dist === 0) B('fest', '今月の行事に参加する（120分）'); B('talk', '信者の人と話す（30分）'); B('wfaith', R.wr === F.rel ? '信仰をやめる' : '信仰する');
+      if (F.id === 'f_tera') B('orig', 'お寺の中を歩く');
+      pT(c, `日本の信者 ${relPopTxt(relPop(W.pop, y))}`, x + 10, y0 + 270, { size: 12, color: GB_C.t2 }); if (H) pT(c, H.dist === 0 ? `今月は「${H.nm}」` : `次は${H.m}月ごろ「${H.nm}」`, x + 10, y0 + 286, { size: 12, color: '#e0c070' });
+    } else { const id = F.rel; if (R.org === id) { pT(c, `${relRankName(R)}・信仰心 ${Math.round(R.faith)}`, x + 10, by, { size: 12, color: REL_C.acc }); by += 20; for (const A of relActList(g).slice(0, 6)) B('a:' + A.id, pFit(c, A.nm + (A.mins ? `（${A.mins}分）` : ''), w - 30, 12), { off: R.act[A.id] === g.state.day && !A.give }); }
+      else { B('tour', '見学する（60分）', { kind: 'pri', def: true }); B('talk', '信者の人と話す（30分）'); B('join', '入信する', { off: !!R.org }); if (R.org) pT(c, `（いまは${relOName(R.org, y)}の信者）`, x + 10, by, { size: 12, color: GB_C.t3 }); }
+      pT(c, pFit(c, relAt(REL_O[id].size, y), w - 20, 12), x + 10, y0 + 286, { size: 12, color: GB_C.t2 }); }
+    if (S.res) { s.btns.length = 0; pR(c, 0, 0, 640, 360, 'rgba(0,0,0,0.6)'); pFrame(c, 100, 80, 440, 190, { bg: '#18142a', edge: REL_C.acc }); wrapDot(c, S.res, 410, 12).slice(0, 10).forEach((ln, i) => pT(c, ln, 116, 94 + i * 15, { size: 12, color: REL_C.t })); s.btn('resok', 'OK', 270, 234, 100, 26, { kind: 'pri', def: true, size: 12 }); }
+  },
+};
+// 施設の中のドット絵
+function relPpl(c, x, y, col, f, i) { const b = ((f >> 5) + i) % 2; pCirc(c, x, y - 14, 5, '#f0d0b0'); pR(c, x - 6, y - 9, 12, 14, col); pR(c, x - 5, y + 5, 4, 6 + b, '#2a2a34'); pR(c, x + 1, y + 5, 4, 7 - b, '#2a2a34'); }
+function relFacArt(c, F, g, f) { const k = F.kind === 'w' ? F.rel : F.rel;
+  const P = { buddh: ['#3a2a1a', '#6a4a2a', '#8a6a3a'], christ: ['#2a2a3a', '#d8d0c0', '#7a4a2a'], islam: ['#1a2a24', '#e8e4d8', '#2a7a4a'], hindu: ['#3a1a14', '#f0c890', '#c0501a'], sikh: ['#2a2014', '#f4ecd8', '#e0a020'], jud: ['#1a2030', '#e4e0d4', '#3a5a9a'], jain: ['#2a2420', '#f6f2ec', '#c04a4a'],
+    soka: ['#1a2030', '#ece8e0', '#2f4fa0'], kofuku: ['#2a2010', '#f8f0d8', '#d8a838'], kensei: ['#1a2030', '#e8ecf4', '#4a6aa0'], jw: ['#1a2028', '#eef0f2', '#4a7aa8'], unif: ['#14142a', '#ecebf4', '#2a2a8a'], aum: ['#181818', '#f0eee8', '#8a1a1a'] }[k] || ['#222', '#ddd', '#888'];
+  pR(c, 0, 0, 640, 360, P[0]); pR(c, 0, 30, 400, 200, P[1]); pR(c, 0, 230, 400, 130, P[2]); for (let x = 0; x < 400; x += 40) pR(c, x, 230, 1, 130, 'rgba(0,0,0,0.15)');
+  const cx = 200;
+  if (k === 'buddh' || k === 'soka' || k === 'kensei') { pR(c, cx - 70, 60, 140, 150, '#1a1410'); pR(c, cx - 64, 66, 128, 138, k === 'buddh' ? '#c8a040' : '#2a2018'); if (k === 'buddh') { pCirc(c, cx, 104, 18, '#e0c060'); pR(c, cx - 30, 120, 60, 70, '#e0c060'); pCirc(c, cx, 92, 34, 'rgba(255,230,140,0.25)'); } else { pR(c, cx - 30, 90, 60, 90, '#f4f0e0'); for (let i = 0; i < 6; i++) pR(c, cx - 2, 96 + i * 13, 4, 8, '#1a1a1a'); } pR(c, cx - 20, 210, 40, 12, '#8a6a3a'); if ((f >> 4) % 2) pR(c, cx - 1, 196, 2, 14, '#aaa'); }
+  if (k === 'christ') { for (let i = 0; i < 3; i++) { pR(c, 40 + i * 120, 50, 40, 90, ['#c04040', '#3a6ad0', '#e0b040'][i]); pR(c, 44 + i * 120, 54, 32, 82, 'rgba(255,255,255,0.25)'); } pR(c, cx - 4, 60, 8, 60, '#6a4a2a'); pR(c, cx - 22, 76, 44, 8, '#6a4a2a'); for (let r = 0; r < 3; r++) pR(c, 60, 250 + r * 34, 280, 12, '#5a3a1a'); }
+  if (k === 'islam') { pR(c, cx - 40, 70, 80, 150, '#1f6a3a'); pCirc(c, cx, 70, 40, '#1f6a3a'); pR(c, cx - 30, 90, 60, 130, '#e8e4d8'); pCirc(c, cx, 90, 30, '#e8e4d8'); for (let x = 0; x < 400; x += 50) for (let r = 0; r < 3; r++) pR(c, x + 4, 238 + r * 40, 42, 34, r % 2 ? '#2a8a5a' : '#c04a3a'); }
+  if (k === 'hindu') { for (let i = 0; i < 12; i++) pCirc(c, 20 + i * 32, 46 + (i % 2) * 6, 6, ['#f0a020', '#e04060', '#f0e040'][i % 3]); pR(c, cx - 40, 80, 80, 140, '#8a3a1a'); pCirc(c, cx, 118, 16, '#4a7ad8'); pR(c, cx - 20, 134, 40, 60, '#4a7ad8'); pR(c, cx - 34, 140, 14, 6, '#4a7ad8'); pR(c, cx + 20, 140, 14, 6, '#4a7ad8'); if ((f >> 3) % 2) pCirc(c, cx + 50, 206, 4, '#ffd040'); }
+  if (k === 'sikh') { pR(c, cx - 80, 60, 160, 20, '#e0a020'); pR(c, cx - 70, 80, 140, 100, '#f0e0b0'); pR(c, cx - 50, 160, 100, 30, '#c06020'); for (let r = 0; r < 2; r++) pR(c, 40, 260 + r * 50, 320, 10, '#b08a50'); }
+  if (k === 'jud') { pR(c, cx - 50, 60, 100, 140, '#3a2a1a'); pR(c, cx - 44, 66, 88, 128, '#7a1a2a'); pT(c, '✡', cx, 110, { size: 16, color: '#f0d060', align: 'center' }); for (let i = -3; i <= 3; i++) { pR(c, cx + i * 12 - 1, 214 - (3 - Math.abs(i)) * 0, 2, 16, '#c8a040'); if ((f >> 4) % 2 || i % 2) pCirc(c, cx + i * 12, 210, 2, '#ffd040'); } }
+  if (k === 'jain') { pR(c, cx - 50, 70, 100, 150, '#f8f6f2'); pCirc(c, cx, 106, 16, '#e8e4dc'); pR(c, cx - 22, 122, 44, 70, '#e8e4dc'); pR(c, cx - 30, 186, 60, 10, '#d0ccc4'); }
+  if (k === 'kofuku') { pR(c, cx - 90, 70, 180, 130, '#d8a838'); pR(c, cx - 80, 80, 160, 110, '#f4e4a0'); pCirc(c, cx, 120, 26, '#f8f0c8'); pT(c, 'Ⓡ', cx, 112, { size: 16, color: '#b08a20', align: 'center' }); }
+  if (k === 'jw') { pR(c, cx - 30, 150, 60, 50, '#7a5a3a'); for (let r = 0; r < 3; r++) for (let i = 0; i < 8; i++) pR(c, 40 + i * 40, 248 + r * 34, 28, 14, '#4a7aa8'); pR(c, cx - 70, 60, 140, 60, '#ffffff'); pT(c, '今週の聖書通読', cx, 82, { size: 12, color: '#3a5a7a', align: 'center' }); }
+  if (k === 'unif') { relImg(c, 'L_unif', cx - 50, 60, 100, 100); pR(c, cx - 40, 170, 80, 40, '#8a7a5a'); for (let r = 0; r < 3; r++) pR(c, 60, 250 + r * 34, 280, 12, '#4a3a5a'); }
+  if (k === 'aum') { pR(c, cx - 60, 60, 120, 150, '#6a1a1a'); pR(c, cx - 30, 74, 60, 72, '#f0e8d8'); relImg(c, 'P_asahara', cx - 26, 78, 52, 64); relImg(c, 'L_aum', cx - 18, 156, 36, 36); for (let r = 0; r < 3; r++) for (let i = 0; i < 6; i++) pR(c, 40 + i * 56, 250 + r * 36, 44, 26, '#c8b890'); }
+  const cols = ['#5a6a9a', '#9a5a6a', '#6a8a5a', '#8a7a5a', '#6a5a8a']; for (let i = 0; i < 5; i++) relPpl(c, 60 + i * 66, 300 + (i % 2) * 22, cols[i], f, i);
+}
+// ---- 宗教用語の図鑑 ----
+const REL_TERMS = [
+  ['信教の自由', '憲法20条が保障する、どの宗教を信じても、信じなくてもよい自由。'], ['政教分離', '国や自治体が特定の宗教を優遇したり、宗教活動をしたりしてはいけないという原則（憲法20条・89条）。'],
+  ['宗教法人', '宗教法人法にもとづいて都道府県知事や文部科学大臣の認証を受けた団体。税の優遇がある。'], ['解散命令', '法令に違反して著しく公共の福祉を害した宗教法人に、裁判所が出す命令。オウム真理教（1996年）、旧統一教会（2025年・地裁）など。'],
+  ['団体規制法', '1999年に成立。無差別大量殺人を行った団体を観察処分などで規制する。アレフ・ひかりの輪が対象。'], ['観察処分', '団体規制法にもとづき、公安調査庁が団体の活動を報告させ、立ち入り検査をすること。'],
+  ['破壊活動防止法', 'テロなどを行った団体の解散を指定できる法律。オウム真理教への適用は1997年に見送られた。'], ['被害者救済法', '2022年に成立。霊感などで不安をあおって寄付をさせることを禁じた。'],
+  ['霊感商法', '「先祖の因縁」などと不安をあおり、つぼや印鑑などを高く売りつける手口。'], ['宗教2世', '親が信者の家に生まれ、信仰を受けついだ子ども。進路・結婚・人間関係で悩む人も多い。'],
+  ['折伏（しゃくぶく）', '日蓮系の団体で、相手の考えを打ち破って信仰をすすめること。'], ['座談会', '創価学会の地域の集まり。体験や悩みを話し合う。'], ['勤行（ごんぎょう）', 'お経を読み、題目を唱えるおつとめ。'], ['題目', '「南無妙法蓮華経」。日蓮系で唱える言葉。'],
+  ['財務', '創価学会の会員が年に一度行う寄付。'], ['植福', '幸福の科学での布施（寄付）のこと。'], ['霊言', '大川隆法が、歴史上の人物などの霊の言葉を伝えるとした説法。'], ['三帰誓願', '幸福の科学で、仏・法・僧に帰依することを誓う儀式。'],
+  ['広宣流布', '日蓮の仏法を世の中に広めること。'], ['国立戒壇', '国の手で戒壇（信仰の中心となる場）をつくるという顕正会の主張。'],
+  ['王国会館', 'エホバの証人の集会所。'], ['奉仕（戸別訪問）', 'エホバの証人が家々を回って聖書の話をする活動。'], ['排斥・忌避', 'エホバの証人で、教えにそむいた人を会衆から外し、交流を絶つこと。'], ['輸血拒否', 'エホバの証人は聖書の解釈から輸血を受けない。'],
+  ['祝福（合同結婚式）', '旧統一教会で、教団が相手を選び、多くのカップルがいっしょに結婚式をあげる儀式。'], ['献金', '教団への寄付。旧統一教会では高額献金が社会問題になった。'], ['統一原理', '文鮮明の教え。'],
+  ['出家', 'オウム真理教で、財産を布施して道場で共同生活をし、修行に専念すること。'], ['サマナ', 'オウム真理教の出家修行者。'], ['イニシエーション', 'オウム真理教の特別な修行・儀式。高額な布施が必要だった。'], ['尊師', 'オウム真理教で、麻原彰晃をよんだ呼び名。'],
+  ['ハラール', 'イスラム教で許された食べもの。豚肉やお酒は禁じられる。'], ['ラマダン', 'イスラム暦の第9月。日中の断食をする。'], ['礼拝（サラート）', 'イスラム教徒が1日5回、メッカの方角に向かって祈ること。'],
+  ['輪廻', 'ヒンドゥー教・仏教などで、生と死をくり返すという考え。'], ['カルマ（業）', 'おこないの結果が、のちの人生や来世に返ってくるという考え。'], ['ランガル', 'シク教の寺院で誰にでもふるまわれる無料の食事。'], ['ターバン', 'シク教の男性が髪を包む布。'],
+  ['安息日（シャバット）', 'ユダヤ教で金曜の日没から土曜の日没まで、仕事を休む日。'], ['コーシェル', 'ユダヤ教の食の決まり。'], ['アヒンサー', 'ジャイナ教などの不殺生（生きものを傷つけない）の教え。'],
+  ['お盆', '先祖の霊をまつる仏教の行事。'], ['檀家', '特定のお寺に属し、葬儀などをまかせる家。'], ['ミサ・礼拝', 'キリスト教の儀式。カトリックではミサ、プロテスタントでは礼拝という。'],
+];
+// ---- 宗教間の対話：ちがう宗教の人と出会う出来事 ----
+const REL_MEET = [
+  { k: 'iftar', rel: 'islam', when: (g, m) => m === relHoliNext('islam', g).m, title: 'イフタールに招かれた', text: '職場のイスラム教徒の同僚から、ラマダン中の日没後の食事（イフタール）に招かれた。', ch: ['喜んで行く', '豚肉の入ったお菓子を手みやげに持っていく', '忙しいので断る'], r: [['日没を待って、いっしょにデーツ（なつめやし）と温かいスープをいただいた。「来てくれてうれしい」と同僚は笑った。', 5, -6], ['手みやげを見て、同僚は困ったように笑った。「ありがとう。でも、豚肉は食べられないんだ」。気まずい空気になった。', -2, 4], ['断った。', 0, 0]] },
+  { k: 'shabbat', rel: 'jud', title: '土曜日の仕事', text: '取引先のユダヤ教徒の人から「土曜日は安息日なので、打ち合わせを別の日にしてほしい」と頼まれた。', ch: ['金曜の昼にずらす', '「仕事なんだから」と押し切る'], r: [['金曜の昼に打ち合わせをした。「理解してくれて助かる」と感謝された。', 4, -2], ['押し切ろうとしたら、相手の会社から担当を外された。', -3, 6]] },
+  { k: 'turban', rel: 'sikh', title: 'ターバンの友だち', text: 'シク教徒の友人のターバンを、知り合いがからかっている。', ch: ['やめるように言う', 'いっしょに笑う', '見て見ぬふりをする'], r: [['「信仰のあかしなんだよ」と止めた。友人はあとで「ありがとう」と言った。', 5, 2], ['友人は黙って帰っていった。それきり連絡が来ない。', -4, 3], ['何も言えなかった。', 0, 2]] },
+  { k: 'diwali', rel: 'hindu', when: (g, m) => m === 10 || m === 11, title: 'ディーワーリーのお菓子', text: '近所のインド人の家族から、ディーワーリー（光の祭り）のお菓子をもらった。', ch: ['お礼を言って、お返しをする', 'もらうだけ'], r: [['和菓子をお返しにした。灯りのともった家に招かれ、祭りの話を聞いた。', 5, -4], ['お礼を言って受けとった。甘くておいしかった。', 1, -1]] },
+  { k: 'jain', rel: 'jain', title: '会食の席で', text: '会食にジャイナ教徒の人が来る。肉や魚だけでなく、根菜も食べないという。', ch: ['店に相談して菜食の料理を用意する', '「好き嫌いはよくない」と言う'], r: [['店に相談して料理を用意した。「こんなに気をつかってもらったのは初めて」と喜ばれた。', 5, 1], ['相手は静かにほほえんで、何も食べずに帰った。', -4, 3]] },
+  { k: 'wedding', rel: 'christ', title: '教会の結婚式', text: '友人の結婚式は教会で行われる。讃美歌を歌い、牧師が聖書を読むそうだ。', ch: ['いっしょに讃美歌を歌う', '後ろで静かに見守る'], r: [['歌詞カードを見ながら歌った。厳かで、あたたかい式だった。', 3, -4], ['静かに見守った。二人の誓いの言葉に胸が熱くなった。', 2, -3]] },
+  { k: 'soshiki', rel: 'buddh', title: 'お葬式の作法', text: '知り合いのお葬式に出る。宗派によって、お焼香の回数がちがうと聞いた。', ch: ['前の人にならって、ていねいにお焼香する', 'よくわからないので適当にすませる'], r: [['前の人にならってお焼香した。遺族に深くおじぎをした。', 3, 0], ['手順をまちがえて、少し恥ずかしかった。', 0, 2]] },
+  { k: 'nisei', rel: null, title: '宗教2世の友人', text: '友人が「実は親が信者で、子どものころから集会に連れていかれていた」と打ち明けてくれた。', ch: ['じっくり話を聞く', '「宗教ってこわいよね」と言う'], r: [['否定も肯定もせず、話を聞いた。「話せてよかった」と友人は言った。', 5, -2], ['友人の顔がこわばった。「…親のことは、そんなふうに言われたくない」', -3, 3]] },
+];
+function relMeetTick(g) { const R = relSt(g), day = g.state.day; if (day - num(R.meetDay, -99) < 50 || RND() > 0.02) return; const m = dateOf(g, day).month;
+  const L = REL_MEET.filter(M => !R.mev['meet_' + M.k] && (!M.when || M.when(g, m))); if (!L.length) return; const M = L[Math.floor(RND() * L.length)]; R.meetDay = day; R.mev['meet_' + M.k] = day;
+  relAsk(g, 'meet_' + M.k, M.title, M.text, M.ch, M.ch.length - 1, { t: 'meet', k: M.k }); }
+function relMeetResp(g, D, k) { const R = relSt(g), M = REL_MEET.find(x => x.k === D.k); if (!M) return ''; const r = M.r[clamp(k, 0, M.r.length - 1)]; R.under = Math.max(0, num(R.under) + r[1]); try { if (r[2]) g.addNeed('stress', r[2]); } catch (e) { } if (r[1] >= 4) relLog(R, g, `${M.title}（理解が深まった）`); return r[0]; }
+function relUnderTitle(v) { return v >= 40 ? '宗教の架け橋' : v >= 20 ? 'よき理解者' : v >= 8 ? '少しわかってきた' : 'まだよく知らない'; }
+// 既存の画面と応答に足す
+(() => { const o = relResp; relResp = function (g, D, k) { if (D && D.t === 'meet') return relMeetResp(g, D, k < 0 ? num(D.def) : k); return o(g, D, k); }; })();
+(() => { const o = relTick; relTick = function (g) { const R = relSt(g), first = R.day !== g.state.day; o(g); if (first && R.y0 != null) { try { relMeetTick(g); } catch (e) { console.error('[rel] meet', e); } } }; })();
+REL_TABS.splice(4, 0, ['fac', '施設'], ['yogo', '用語']);
+GB_MODES.rel.d_fac = function (s, c, g, R, y, x0, y0) { pFrame(c, x0, y0, 550, 316, { title: '街の宗教施設（建物に入ると、見学や活動ができる）', bg: REL_C.fr, edge: REL_C.ed });
+  REL_FAC.forEach((F, i) => { const yy = y0 + 24 + i * 20, nm = relFacName(F, y); pR(c, x0 + 6, yy, 538, 19, i % 2 ? '#1c1828' : '#1e1a2c'); pR(c, x0 + 6, yy, 3, 19, F.kind === 'w' ? REL_W[F.rel].color : REL_O[F.rel].color);
+    pT(c, nm || '（この時代にはまだない）', x0 + 14, yy + 3, { size: 12, color: nm ? REL_C.t : GB_C.t3 }); pT(c, F.kind === 'w' ? REL_W[F.rel].name : REL_O[F.rel].short, x0 + 330, yy + 2, { size: 12, color: GB_C.t2 }); pT(c, F.area, x0 + 538, yy + 3, { size: 12, color: REL_C.acc, align: 'right' }); });
+  pT(c, `宗教への理解：${relUnderTitle(num(R.under))}（${Math.round(num(R.under))}）`, x0 + 10, y0 + 24 + REL_FAC.length * 20 + 8, { size: 12, color: '#e0c070' }); };
+GB_MODES.rel.d_yogo = function (s, c, g, R, y, x0, y0) { const w = 466, per = 12, n = Math.ceil(REL_TERMS.length / per), pg = clamp(num(s.S.yp), 0, n - 1); s.S.yp = pg; pFrame(c, x0, y0, w, 316, { title: `宗教用語（${pg + 1}/${n}）`, bg: REL_C.fr, edge: REL_C.ed });
+  REL_TERMS.slice(pg * per, pg * per + per).forEach(([t, d], i) => { const yy = y0 + 24 + i * 24; pR(c, x0 + 6, yy, w - 12, 22, i % 2 ? '#1c1828' : '#1e1a2c'); pT(c, pFit(c, t, 120, 12), x0 + 12, yy + 4, { size: 12, color: REL_C.acc }); pT(c, pFit(c, d, w - 150, 12), x0 + 138, yy + 4, { size: 12, color: GB_C.t2 }); s.btn('yt:' + (pg * per + i), '', x0 + 6, yy, w - 12, 22, { kind: 'clear', nofocus: true }); });
+  s.btn('yp-', '◀', x0 + w + 4, y0 + 120, 30, 30, { size: 12 }); s.btn('yp+', '▶', x0 + w + 4, y0 + 160, 30, 30, { size: 12 }); };
+(() => { const M = GB_MODES.rel, ob = M.btn; M.btn = function (s, id, g) { if (id === 'yp-' || id === 'yp+') { s.S.yp = Math.max(0, num(s.S.yp) + (id === 'yp+' ? 1 : -1)); return; } if (id.startsWith('yt:')) { const T = REL_TERMS[+id.slice(3)]; if (T) s.S.res = `【${T[0]}】\n${T[1]}`; return; } return ob.call(this, s, id, g); };
+  const od = M.draw; M.draw = function (s, c, g) { const B0 = s.btn; s.btn = function (id, lab, x, y, w, h, o) { if (id.startsWith('tab:') && x === 4) { const i = REL_TABS.findIndex(t => 'tab:' + t[0] === id); return B0.call(this, id, lab, 4, 34 + i * 46, 74, 42, o); } return B0.call(this, id, lab, x, y, w, h, o); }; try { od.call(this, s, c, g); } finally { s.btn = B0; } }; })();
+function installRel2() { for (const t of [...new Set(REL_FAC.map(f => f.town))]) relWrapTown(t, r => relPatchTown(t, r)); if (window.__REL) Object.assign(window.__REL, { facOpen: relFacOpen, meet: relMeetResp, FAC: REL_FAC }); }
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
