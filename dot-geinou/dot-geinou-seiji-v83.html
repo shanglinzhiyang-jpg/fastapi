@@ -42325,10 +42325,10 @@ function ytThumb(c, P, x, y, w, h, f) {
   const [c1, c2] = YT_KCOL[P.kind] || ['#3a3a3a', '#ffffff'], seed = hashStr('th' + P.id);
   pR(c, x, y, w, h, c1);
   if (P.kind === 'neta') { for (let i = 0; i < w; i += 8) pR(c, x + i, y, 4, h, '#a8202e'); pR(c, x + w / 2 - 1, y + h * 0.35, 2, h * 0.55, '#c0c0c8'); pCirc(c, x + w / 2, y + h * 0.33, 4, '#404048'); }
-  else if (P.kind === 'uta') { for (let i = 0; i < 5; i++) { const nx = x + 10 + ((seed >> i) % Math.max(1, w - 20)), ny = y + 8 + i * (h / 6); pCirc(c, nx, ny + 6, 3, c2); pR(c, nx + 2, ny - 2, 1, 8, c2); } }
+  else if (P.kind === 'uta') { pR(c, x, y + h * 0.72, w, h * 0.28, '#2a1850'); for (let i = 0; i < 6; i++) { const bw = w * 0.5 * (i + 1) / 6, by = y + i * (h * 0.72 / 6); pR(c, x + w / 2 - bw / 2, by, bw, Math.ceil(h * 0.72 / 6), `rgba(255,240,200,${0.05 + i * 0.012})`); } pR(c, x + w * 0.62, y + h * 0.32, 2, h * 0.4, '#c8c8d0'); pCirc(c, x + w * 0.62 + 1, y + h * 0.3, 3, '#e8e8f0'); pT(c, '♪', x + w * 0.2, y + h * 0.18, { size: 16, color: c2, shadow: null }); pT(c, '♫', x + w * 0.74, y + h * 0.1, { size: 12, color: c2, shadow: null }); }
   else if (P.kind === 'vlog') { pR(c, x, y + h * 0.6, w, h * 0.4, '#6a8a5a'); pCirc(c, x + w - 20, y + 14, 8, '#ffe08a'); }
   else if (P.kind === 'kikaku') { for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; for (let t = 6; t < Math.min(w, h) * 0.45; t += 2) pR(c, x + w / 2 + Math.cos(a) * t, y + h / 2 + Math.sin(a) * t, 2, 2, i % 2 ? '#ff8a1a' : '#fff04a'); } }
-  else if (P.kind === 'mane') { pR(c, x + w / 2, y, w / 2, h, '#1a6a4a'); pCirc(c, x + w * 0.3, y + h * 0.45, 12, '#f0d0b0'); pCirc(c, x + w * 0.7, y + h * 0.45, 12, '#f0d0b0'); pR(c, x + w * 0.3 - 6, y + h * 0.3, 12, 4, '#2a2018'); pR(c, x + w * 0.7 - 6, y + h * 0.3, 12, 4, '#2a2018'); }
+  else if (P.kind === 'mane') { pR(c, x + w / 2, y, w / 2, h, '#1a6a4a'); for (const fx of [0.3, 0.7]) { const cx2 = x + w * fx, cy2 = y + h * 0.45; pCirc(c, cx2, cy2, 12, '#f0d0b0'); pR(c, cx2 - 6, cy2 - 15, 12, 4, '#2a2018'); pR(c, cx2 - 6, cy2 - 4, 3, 3, '#2a2018'); pR(c, cx2 + 3, cy2 - 4, 3, 3, '#2a2018'); pR(c, cx2 - 4, cy2 + 4, 8, 2, '#a0504a'); } }
   else if (P.kind === 'short') { pR(c, x + w / 2 - h * 0.28, y + 4, h * 0.56, h - 8, '#2a2a2a'); pR(c, x + w / 2 - h * 0.28 + 3, y + 7, h * 0.56 - 6, h - 14, '#ff4a6a'); }
   else if (P.kind === 'jikkyo') { pR(c, x + 8, y + 6, w - 16, h - 22, '#0a1a2a'); for (let i = 0; i < 6; i++) pR(c, x + 14 + i * ((w - 30) / 6), y + h - 30 - (seed >> i) % 20, 6, 6, ['#ff5d6c', '#5ee07a', '#ffd23f'][i % 3]); pR(c, x + w / 2 - 14, y + h - 14, 28, 9, '#d8d8e0'); }
   else if (P.kind === 'ryouri') { pEll(c, x + w / 2, y + h * 0.6, w * 0.3, h * 0.18, '#3a3a3a'); pEll(c, x + w / 2, y + h * 0.56, w * 0.24, h * 0.12, '#f0b040'); pR(c, x + w / 2 + w * 0.28, y + h * 0.58, w * 0.18, 4, '#3a3a3a'); }
@@ -42378,6 +42378,21 @@ function ytAdvice(g) {
   const fl = L.filter(p => p.flame), tsuri = L.filter(p => p.plan && p.plan.title === 'tsuri'); if (fl.length) out.push(`炎上は${fl.length}回。${tsuri.length && fl.some(p => p.plan && p.plan.title === 'tsuri') ? '釣りタイトルは控えめに。' : '体を張る企画は気をつけて。'}`);
   const q = L.reduce((a, p) => a + num(p.q), 0) / L.length; out.push(q < 45 ? 'できばえが低め。ネタや歌の練習で底上げしよう。' : q >= 70 ? 'できばえは十分。あとは投稿の頻度を上げよう。' : 'できばえは平均的。得意なジャンルに寄せてみよう。');
   return out;
+}
+function ytStage(c, g, x, y, w, h, t) { // 歌ってみた：ステージで歌う
+  pBands(c, x, y, w, h, ['#140a2a', '#1a0e36', '#20123e', '#281848']);
+  for (let i = 0; i < 14; i++) pR(c, x + (i * 61) % w, y + 6 + (i * 29) % (h * 0.5), 2, 2, 'rgba(255,255,255,0.35)');
+  // スポットライト
+  for (let i = 0; i < 12; i++) { const bw = w * 0.46 * (i + 1) / 12, by = y + i * (h * 0.78 / 12); pR(c, x + w / 2 - bw / 2, by, bw, Math.ceil(h * 0.78 / 12), `rgba(255,236,190,${0.05 + i * 0.011})`); }
+  pR(c, x, y + h * 0.78, w, h * 0.22, '#2a1a4a'); pR(c, x, y + h * 0.78, w, 2, '#6a4aa0'); pEll(c, x + w / 2, y + h * 0.84, w * 0.2, 7, 'rgba(255,236,190,0.25)');
+  // 歌う自分（口をあける動き）とマイク
+  const sh = Eo((g.state && g.state.look) || {}), fr = sh && sh.down && sh.down[0];
+  if (fr) { c.save(); c.imageSmoothingEnabled = false; const bob = Math.round(Math.sin(t / 7) * 2), k = 5; c.drawImage(fr, x + w / 2 - 8 * k, y + h * 0.84 - 20 * k + 6 + bob, 16 * k, 20 * k); c.restore(); }
+  pR(c, x + w / 2 + 34, y + h * 0.42, 2, h * 0.42, '#b8b8c4'); pCirc(c, x + w / 2 + 35, y + h * 0.4, 4, '#2a2a34'); pR(c, x + w / 2 + 20, y + h * 0.84, 30, 3, '#7a7a88');
+  // 音符：ゆっくり昇って消える
+  for (let i = 0; i < 7; i++) { const ph = ((t * 0.8 + i * 37) % 130) / 130, nx = x + 30 + ((i * 53) % (w - 60)) + Math.sin(ph * 6 + i) * 8, ny = y + h * 0.72 - ph * h * 0.7; c.save(); c.globalAlpha = Math.min(1, (1 - ph) * 1.6); pT(c, i % 2 ? '♪' : '♫', nx, ny, { size: i % 3 ? 16 : 12, color: ['#ff9ad8', '#9ae0ff', '#ffe08a'][i % 3], shadow: null }); c.restore(); }
+  // 歌詞テロップ
+  const L = ['ラララ…', '〜〜♪', 'ララ〜ラ…', '♪〜♪〜']; pR(c, x + w * 0.2, y + h - 22, w * 0.6, 16, 'rgba(0,0,0,0.55)'); pT(c, L[Math.floor(t / 50) % L.length], x + w / 2, y + h - 21, { size: 12, align: 'center', color: '#fff', shadow: null });
 }
 // ---- 専用画面 ----
 GB_MODES.yt = {
@@ -42465,9 +42480,8 @@ GB_MODES.yt = {
     const x0 = 76, L = V.posts || [], P = L.find(p => p.id === S.sel) || L[0]; if (!P) { S.ph = 'main'; return; }
     const pw = 400, ph = 225, px = x0, py = 38; pR(c, px, py, pw, ph, '#000');
     // プレーヤー：ジャンルごとの小さなアニメ
-    ytThumb(c, { ...P, title: '', buzz: false, flame: false, live: false, plan: null }, px, py, pw, ph - 18, S.f);
-    const t = S.f; try { const sh = Eo((g.state && g.state.look) || {}), dirs = ['down', 'left', 'down', 'right'], fr = sh && sh[dirs[Math.floor(t / 40) % 4]] && sh[dirs[Math.floor(t / 40) % 4]][Math.floor(t / 10) % 2 ? 1 : 0]; if (fr && !['jikkyo', 'short', 'uta'].includes(P.kind)) { c.save(); c.imageSmoothingEnabled = false; const bob = Math.round(Math.abs(Math.sin(t / 8)) * 4); c.drawImage(fr, px + pw / 2 - 30, py + 70 - bob, 60, 75); c.restore(); } } catch (e) { }
-    if (P.kind === 'uta') for (let i = 0; i < 6; i++) { const yy = py + 180 - ((t * 1.2 + i * 40) % 170); pCirc(c, px + 60 + i * 55, yy, 4, '#ff9ad8'); pR(c, px + 63 + i * 55, yy - 10, 1, 10, '#ff9ad8'); }
+    if (P.kind !== 'uta') ytThumb(c, { ...P, title: '', buzz: false, flame: false, live: false, plan: null }, px, py, pw, ph - 18, S.f);
+    const t = S.f; if (P.kind === 'uta') ytStage(c, g, px, py, pw, ph - 18, t); else try { const sh = Eo((g.state && g.state.look) || {}), dirs = ['down', 'left', 'down', 'right'], fr = sh && sh[dirs[Math.floor(t / 40) % 4]] && sh[dirs[Math.floor(t / 40) % 4]][Math.floor(t / 10) % 2 ? 1 : 0]; if (fr && !['jikkyo', 'short'].includes(P.kind)) { c.save(); c.imageSmoothingEnabled = false; const bob = Math.round(Math.abs(Math.sin(t / 8)) * 4); c.drawImage(fr, px + pw / 2 - 30, py + 70 - bob, 60, 75); c.restore(); } } catch (e) { }
     if (P.kind === 'jikkyo') for (let i = 0; i < 8; i++) pR(c, px + 30 + ((i * 47 + t * 2) % (pw - 60)), py + 40 + (i * 23) % 120, 10, 10, ['#ff5d6c', '#5ee07a', '#ffd23f'][i % 3]);
     if (P.kind === 'ryouri') for (let i = 0; i < 5; i++) pR(c, px + pw / 2 - 30 + i * 14, py + 90 - ((t + i * 9) % 30), 3, 8, 'rgba(255,255,255,0.5)');
     const dur = 300, pos = (t % dur) / dur; pR(c, px, py + ph - 18, pw, 18, 'rgba(0,0,0,0.85)'); pR(c, px + 30, py + ph - 10, pw - 110, 3, '#555'); pR(c, px + 30, py + ph - 10, (pw - 110) * pos, 3, YT.red); pCirc(c, px + 30 + (pw - 110) * pos, py + ph - 9, 4, YT.red);
