@@ -43355,7 +43355,8 @@ function pyTitle(s, c, g, S, W) {
   pT(c, '落ちてくる豆を舌で食べよう。高い所で食べるほど高得点。', 320, 320, { size: 12, align: 'center', color: '#0a3a38' });
   pT(c, '豆が地面に落ちると足場がこわれる。白い豆は足場を直し、光る豆は画面の豆をぜんぶ消す。', 320, 338, { size: 12, align: 'center', color: '#0a3a38' });
 }
-const pyIcon = gbIcon('#3ad8c8', (c, x, y) => { c.strokeStyle = '#d0306a'; c.lineWidth = 2.2; c.lineCap = 'round'; c.beginPath(); c.moveTo(x + 15, y + 15); c.lineTo(x + 12, y + 12); c.stroke(); pyBean(c, x + 10, y + 12, 'n', 0, 1.6); pyBird(c, x + 20, y + 26, -1, true, 1.3, 0); });
+const PY_ICON = ['...g....g.......', '....g..g........', '....ddgdd.......', '...gllgggg......', '..gllggggg......', '..glgggggd......', '..gggggggd......', '...gggggd.......', '....dgdd........', '....p...rrrr....', '....p..rrrrrr...', '..yyyprrrwkrrr..', '...yyrrrrrrrrr..', '......rrrrrrDD..', '.......rrrrrD...', '.......y..y.....'];
+const pyIcon = gbIcon('#3ad8c8', (c, x, y) => { const P = { g: '#2aa02a', l: '#a0f080', d: '#1a6a1a', p: '#ff5a90', r: '#e02828', D: '#a01414', w: '#ffffff', k: '#101010', y: '#ffb020' }; PY_ICON.forEach((row, j) => { for (let i = 0; i < row.length; i++) { const col = P[row[i]]; if (col) { c.fillStyle = col; c.fillRect(x + i * 2, y + j * 2, 2, 2); } } }); });
 async function pyOpen(g) { const r = await gbScene(g, { mode: 'piyoro', title: 'ピヨロ' }); gbAfter(g, r && r.mins); }
 try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_enta'); if (F && !F.apps.includes('piyoro')) F.apps.push('piyoro'); FOLD_OF.piyoro = 'f_enta'; } } catch (e) { console.error('[py] folder', e); }
 function installPiyoro() { E.Un('piyoro', { name: 'ピヨロ', color: '#3ad8c8', order: 74.5, iconHD: pyIcon, open: g => pyOpen(g) }); }
