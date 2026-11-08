@@ -13845,6 +13845,7 @@ function install() {
   try { installCustHyg(); } catch (e) { console.error('[custhyg] install', e); }
   try { installHB(); } catch (e) { console.error('[hb] install', e); }
   try { installGamble(); } catch (e) { console.error('[gb] install', e); }
+  try { installPiyoro(); } catch (e) { console.error('[py] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -43075,6 +43076,288 @@ const PM_ALC = { bad: ['#ff5d6c', '!'], warn: ['#ffd23f', '!'], info: ['#5fd7ff'
     L.slice(S.cpg * per, S.cpg * per + per).forEach((m, j) => { const y = 84 + j * 36; pR(c, 14, y + 1, 32, 32, j % 2 ? '#1a0e26' : '#20122e'); pmArt(c, m, 16, y + 2, 28, 30, s.t); if (PM_ART[m.id]) { pR(c, 12, y + 1, 2, 32, PW.acc); } }); }; }
 })();
 if (typeof window !== 'undefined' && window.__PM) { window.__PM.alerts = () => { const H = pmCur(pmSt(window.__game)); return H ? pmAlerts(window.__game, H) : []; }; }
+// ===== ピヨロ：舌を斜めにのばして、落ちてくる豆を食べる鳥のゲーム（スマホの「エンタメ」フォルダ） =====
+const PY = { COLS: 32, BW: 20, GY: 334, BIRD_Y: 334, SPD: 2.4, TSPD: 8, TBACK: 14 };
+function pySt(g) { const s = g.state; if (!isObj(s.piyoro)) s.piyoro = { best: 10000, plays: 0, top: 0, day: -1, relief: 0, beans: 0 }; return s.piyoro; }
+// ドット絵（1文字＝1ドット）
+const PY_BIRD = [
+  '....rrrr......',
+  '...rrrrrr.....',
+  '..rrrwwrrr....',
+  '..rrrwkrrryy..',
+  '.rrrrrrrryyyy.',
+  '.rrrrrrrrryy..',
+  'rrrrrrrrrr....',
+  'rrDDrrrrrr....',
+  'rDDDDrrrrr....',
+  '.rDDrrrrr.....',
+  '..rrrrrr......',
+  '...y..y.......',
+  '..yy.yy.......',
+];
+const PY_BIRD_OPEN = PY_BIRD.map((r, i) => i === 3 ? '..rrrwkrrryyy.' : i === 4 ? '.rrrrrrrrrppp.' : i === 5 ? '.rrrrrrrrryyy.' : r);
+const PY_BEAN = [
+  ['.l...l.', '.ll.ll.', '..lsl..', '...s...', '..bbb..', '.bbbbb.', '.bhbbb.', '.bbbbb.', '..bbb..'],
+  ['l.....l', '.ll.ll.', '..lsl..', '...s...', '..bbb..', '.bbbbb.', '.bhbbb.', '.bbbbb.', '..bbb..'],
+];
+const PY_PAL = {
+  r: '#e02828', D: '#a01414', w: '#ffffff', k: '#101010', y: '#ffb020', p: '#ff7aa0',
+};
+const PY_BEANPAL = {
+  n: { l: '#3ac83a', s: '#1a8a2a', b: '#2aa02a', h: '#a0f080' },
+  w: { l: '#ff8ab0', s: '#d05a80', b: '#f4f4f4', h: '#ffffff' },
+};
+function pyDraw(c, map, x, y, k, pal, flip) {
+  const w = map[0].length;
+  for (let j = 0; j < map.length; j++) { const row = map[j]; for (let i = 0; i < w; i++) { const ch = row[i]; if (ch === '.') continue; const col = pal[ch]; if (!col) continue; const ii = flip ? w - 1 - i : i; c.fillStyle = col; c.fillRect(Math.round(x + ii * k), Math.round(y + j * k), k, k); } }
+}
+function pyBird(c, x, y, face, open, k = 2, t = 0, hit = false) {
+  const map = open ? PY_BIRD_OPEN : PY_BIRD, w = map[0].length * k, h = map.length * k;
+  const pal = hit && (t >> 2) % 2 ? { ...PY_PAL, r: '#ffffff', D: '#ffd0d0' } : PY_PAL;
+  pyDraw(c, map, x - w / 2, y - h, k, pal, face < 0);
+}
+function pyBean(c, x, y, type, t, k = 2) {
+  const fr = PY_BEAN[(t >> 4) % 2];
+  let pal = PY_BEANPAL[type === 'w' ? 'w' : 'n'];
+  if (type === 'f') { const hue = (t * 12) % 360; pal = { l: `hsl(${hue},90%,60%)`, s: `hsl(${(hue + 60) % 360},80%,40%)`, b: `hsl(${(hue + 180) % 360},90%,55%)`, h: '#ffffff' }; }
+  pyDraw(c, fr, x - 7 * k / 2, y - 9 * k / 2, k, pal, false);
+}
+// 背景：夕方から夜へ。点数が上がるほど暗くなる
+function pyMix(a, b, t) { const pa = [1, 3, 5].map(i => parseInt(a.substr(i, 2), 16)), pb = [1, 3, 5].map(i => parseInt(b.substr(i, 2), 16)); return '#' + pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, '0')).join(''); }
+function pySky(c, S, night) {
+  const day = ['#2a2a78', '#3c3488', '#5a4a94', '#86689a', '#b88a7a', '#d8b060'], nite = ['#06061a', '#0a0a26', '#121434', '#1a1c42', '#242650', '#30305a'];
+  const bands = day.map((d, i) => pyMix(d, nite[i], night));
+  const H = PY.GY, n = 24;
+  for (let i = 0; i < n; i++) { const f = i / (n - 1), idx = Math.min(bands.length - 2, Math.floor(f * (bands.length - 1))), lt = f * (bands.length - 1) - idx; c.fillStyle = pyMix(bands[idx], bands[idx + 1], lt); c.fillRect(0, Math.floor(H * i / n), 640, Math.ceil(H / n) + 1); }
+  for (let i = 0; i < 26; i++) { const x = (i * 149 + 37) % 640, y = 36 + (i * 71) % 170, tw = ((S.t >> 3) + i) % 9; if (tw === 0 && night < 0.5) continue; const s = i % 5 === 0 ? 2 : 1; c.fillStyle = `rgba(255,255,255,${0.5 + night * 0.5})`; c.fillRect(x, y, s, s); if (i % 5 === 0 && tw < 3) { c.fillRect(x - 2, y, 1, 1); c.fillRect(x + 3, y, 1, 1); c.fillRect(x, y - 2, 1, 1); c.fillRect(x, y + 3, 1, 1); } }
+  // 丘（サボテンのような山並み）
+  const g1 = pyMix('#2a7a3a', '#0e2a18', night), g2 = pyMix('#1a5a2a', '#081a10', night), hl = pyMix('#4aa04a', '#1a4024', night);
+  const hill = (pts, col) => { c.fillStyle = col; c.beginPath(); c.moveTo(0, PY.GY); for (const [x, y] of pts) c.lineTo(x, y); c.lineTo(640, PY.GY); c.closePath(); c.fill(); };
+  const back = []; for (let x = 0; x <= 640; x += 8) { const y = PY.GY - 52 - Math.round(16 * Math.sin(x / 47) + 10 * Math.sin(x / 19 + 1) + (x < 120 ? (120 - x) * 0.9 : 0)); back.push([x, y]); }
+  hill(back, g2);
+  // 手前の山：丸い頭の柱が並ぶ
+  c.fillStyle = g1;
+  const cols = [[0, 150, 34], [30, 128, 30], [58, 112, 26], [82, 96, 22], [104, 80, 22], [150, 60, 22], [190, 74, 18], [240, 58, 24], [292, 88, 18], [330, 64, 22], [380, 52, 20], [430, 70, 22], [478, 96, 18], [520, 66, 22], [566, 84, 20], [606, 62, 24]];
+  for (const [x, h, w] of cols) { c.fillRect(x, PY.GY - h + w / 2, w, h - w / 2); c.beginPath(); c.arc(x + w / 2, PY.GY - h + w / 2, w / 2, Math.PI, 0); c.fill(); }
+  c.fillRect(0, PY.GY - 30, 640, 30);
+  c.fillStyle = hl; for (const [x, h, w] of cols) c.fillRect(x + 3, PY.GY - h + w / 2, 2, Math.max(0, h - w / 2 - 34));
+}
+function pyGround(c, S) {
+  const y = PY.GY, bw = PY.BW;
+  pR(c, 0, y, 640, 360 - y, '#141018');
+  for (let i = 0; i < PY.COLS; i++) {
+    const x = i * bw;
+    if (!S.blocks[i]) continue;
+    pR(c, x, y, bw, 12, '#8a8a7a'); pR(c, x, y, bw, 2, '#d8d8c0'); pR(c, x, y + 10, bw, 2, '#4a4a40'); pR(c, x, y, 2, 12, '#b8b8a0'); pR(c, x + bw - 2, y, 2, 12, '#5a5a4c');
+    pR(c, x + 5, y + 4, 3, 3, '#6a6a5a'); pR(c, x + 12, y + 5, 3, 3, '#6a6a5a');
+    pR(c, x, y + 12, bw, 14, '#5a4a3a'); pR(c, x, y + 12, bw, 2, '#3a2e24');
+  }
+}
+function pyNum(n, d = 6) { return String(Math.max(0, Math.floor(n))).padStart(d, '0').slice(-d); }
+function pyHud(c, S, W) {
+  pT(c, 'SCORE', 10, 6, { size: 12, color: '#ffffff', outline: '#101030', ow: 2 });
+  pT(c, pyNum(S.score), 60, 3, { size: 18, color: '#ffffff', outline: '#101030', ow: 2 });
+  pT(c, 'HISCORE', 400, 6, { size: 12, color: '#ffffff', outline: '#101030', ow: 2 });
+  pT(c, pyNum(Math.max(W.best, S.score)), 468, 3, { size: 18, color: '#ffffff', outline: '#101030', ow: 2 });
+}
+function pyReset(S) {
+  Object.assign(S, { scene: 'play', score: 0, x: 40, face: 1, walk: 0, tongue: 0, tst: 'off', tapHold: false, caught: null, beans: [], pops: [], crumbs: [], angels: [], blocks: Array(PY.COLS).fill(true), spawn: 70, t: 0, over: 0, eaten: 0, broken: 0, fallY: 0, fallV: 0, chain: 0 });
+}
+function pyLevel(S) { return Math.min(1, S.score / 40000); }
+function pyBeak(S) { return { x: S.x + S.face * 12, y: PY.BIRD_Y - 18 }; }
+function pyTip(S) { const b = pyBeak(S), d = S.tongue / Math.SQRT2; return { x: b.x + S.face * d, y: b.y - d }; }
+function pyCanStand(S, x) { const a = Math.floor((x - 9) / PY.BW), b = Math.floor((x + 9) / PY.BW); for (let i = a; i <= b; i++) if (i < 0 || i >= PY.COLS || !S.blocks[i]) return false; return true; }
+function pyRestore(S, n) {
+  for (let k = 0; k < n; k++) {
+    const miss = []; for (let i = 0; i < PY.COLS; i++) if (!S.blocks[i] && !S.angels.some(a => a.col === i)) miss.push(i);
+    if (!miss.length) return;
+    const col = miss[Math.floor(Math.random() * miss.length)];
+    S.angels.push({ col, y: -20 - k * 30, t: 0 });
+  }
+}
+function pyGameOver(s, g, S) {
+  if (S.scene !== 'play') return;
+  S.scene = 'dying'; S.over = 0; S.fallV = -5; S.fallY = 0;
+  const W = pySt(g); W.plays++; W.beans += S.eaten;
+  S.newBest = S.score > W.best; if (S.newBest) W.best = S.score; W.top = Math.max(W.top || 0, S.score);
+  const day = num(g.state.day); if (W.day !== day) { W.day = day; W.relief = 0; }
+  let rel = 0; if (W.relief < 2 && S.score >= 1000) { rel = S.score >= 20000 ? 10 : S.score >= 5000 ? 6 : 3; try { g.addNeed('stress', -rel); } catch (e) { } W.relief++; }
+  S.rel = rel; s.mins += Math.round(4 + S.t / 3600 * 2);
+  try { tt.sfx('fail'); } catch (e) { }
+}
+GB_MODES.piyoro = {
+  noHud: true,
+  init(s, g) { const S = s.S; pySt(g); S.scene = 'title'; S.t = 0; pyReset(S); S.scene = 'title'; },
+  btn(s, id, g) {
+    const S = s.S;
+    if (id === 'start' || id === 'again') { pyReset(S); tt.sfx('ok'); }
+    else if (id === 'exit') s.done();
+    else if (id === 'title') { S.scene = 'title'; }
+    else if (id === 'pause') { if (S.scene === 'play') S.scene = 'pause'; }
+    else if (id === 'resume') { S.scene = 'play'; }
+  },
+  tap(s, g, p) {
+    const S = s.S;
+    if (S.scene === 'play') { if (p.y > PY.GY - 4) { S.face = p.x < S.x ? -1 : 1; S.tapWalk = { to: p.x, f: 0 }; } else if (S.tst === 'off') { S.face = p.x < S.x ? -1 : 1; S.tapHold = true; } }
+    else if (S.scene === 'title') pyReset(S);
+  },
+  key(s, g, inp) {
+    const S = s.S;
+    if (S.scene === 'play') { if (inp.pressed('b') || inp.pressed('menu')) { S.scene = 'pause'; tt.sfx('cancel'); } return true; }
+    return false;
+  },
+  update(s, g) {
+    const S = s.S, inp = g.input; S.t++;
+    if (S.scene === 'dying') { S.over++; if (S.over > 20) { S.fallY += S.fallV; S.fallV += 0.35; } if (S.over > 110) { S.scene = 'over'; } }
+    for (const p of S.pops) p.t++; S.pops = S.pops.filter(p => p.t < 50);
+    for (const p of S.crumbs) { p.t++; p.x += p.vx; p.y += p.vy; p.vy += 0.3; } S.crumbs = S.crumbs.filter(p => p.t < 60);
+    // 天使がブロックを直しにくる
+    for (const a of S.angels) { a.t++; a.y += 4; if (a.y >= PY.GY - 6 && !a.done) { a.done = true; S.blocks[a.col] = true; s.burst(a.col * PY.BW + 10, PY.GY, 8, '#fff6a0', { sp: 2, star: true, g: 0.05, life: 30 }); } }
+    S.angels = S.angels.filter(a => !a.done || a.t < 0);
+    if (S.scene !== 'play') return;
+    const lv = pyLevel(S);
+    // 移動（舌を出している間は動けない）
+    const held = inp.down('a') || S.tapHold;
+    if (S.tst === 'off') {
+      let dx = 0;
+      if (inp.down('left')) { dx = -1; S.tapWalk = null; } else if (inp.down('right')) { dx = 1; S.tapWalk = null; }
+      else if (S.tapWalk) { const d = S.tapWalk.to - S.x; if (Math.abs(d) < PY.SPD || ++S.tapWalk.f > 200) S.tapWalk = null; else dx = Math.sign(d); }
+      if (dx) { S.face = dx; const nx = clamp(S.x + dx * PY.SPD, 10, 630); if (pyCanStand(S, nx)) { S.x = nx; S.walk++; } else S.tapWalk = null; }
+      if (inp.pressed('a') || S.tapHold) { S.tst = 'out'; S.tongue = 4; S.caught = null; S.tapWalk = null; }
+    }
+    if (S.tst === 'out') {
+      if (!held) S.tst = 'back';
+      else {
+        S.tongue += PY.TSPD;
+        const tp = pyTip(S);
+        if (tp.x < 0 || tp.x > 640 || tp.y < 26) S.tst = 'back';
+        for (const b of S.beans) { if (b.dead) continue; if (Math.hypot(b.x - tp.x, b.y - tp.y) < 14) { b.dead = true; S.caught = b; S.tst = 'back'; S.tapHold = false; pyCatch(s, S, b); break; } }
+      }
+    }
+    if (S.tst === 'back') { S.tongue -= PY.TBACK; if (S.tongue <= 0) { S.tongue = 0; S.tst = 'off'; S.tapHold = false; S.caught = null; } }
+    // 豆が降ってくる
+    if (--S.spawn <= 0) {
+      const used = new Set(S.beans.filter(b => b.y < 80).map(b => b.col));
+      let col = Math.floor(Math.random() * PY.COLS); for (let k = 0; k < 6 && used.has(col); k++) col = Math.floor(Math.random() * PY.COLS);
+      const r = Math.random();
+      const type = S.score >= 3000 && r < 0.035 ? 'f' : r < 0.16 ? 'w' : 'n';
+      S.beans.push({ col, x: col * PY.BW + PY.BW / 2, y: -10, v: 0.55 + lv * 1.25 + Math.random() * (0.2 + lv * 0.5), type, t: Math.floor(Math.random() * 30) });
+      S.spawn = Math.round(Math.max(22, 78 - lv * 56) * (0.7 + Math.random() * 0.6));
+    }
+    for (const b of S.beans) {
+      if (b.dead) continue;
+      b.t++; b.y += b.v;
+      // 鳥に当たったら終わり
+      if (S.scene === 'play' && Math.abs(b.x - S.x) < 16 && b.y + 8 > PY.BIRD_Y - 24 && b.y - 8 < PY.BIRD_Y) { b.dead = true; pyGameOver(s, g, S); break; }
+      if (b.y + 9 >= PY.GY && !b.gone) {
+        if (S.blocks[b.col]) { S.blocks[b.col] = false; b.dead = true; S.broken++; for (let i = 0; i < 8; i++) S.crumbs.push({ x: b.col * PY.BW + 4 + Math.random() * 12, y: PY.GY + 2, vx: (Math.random() - 0.5) * 3, vy: -1 - Math.random() * 3, t: 0, col: i % 2 ? '#8a8a7a' : '#5a4a3a' }); try { tt.sfx('hit'); } catch (e) { } }
+        else b.gone = true;
+      }
+      if (b.y > 380) b.dead = true;
+    }
+    S.beans = S.beans.filter(b => !b.dead || b === S.caught);
+    // 足もとのブロックがなくなったら落ちる
+    if (S.scene === 'play' && !pyCanStand(S, S.x)) {
+      // 立てる場所に少しずらす（それでもなければ落ちる）
+      let ok = false; for (const d of [4, -4, 8, -8, 12, -12]) if (pyCanStand(S, S.x + d)) { S.x += d; ok = true; break; }
+      if (!ok) pyGameOver(s, g, S);
+    }
+  },
+  draw(s, c, g) {
+    const S = s.S, W = pySt(g);
+    if (S.scene === 'title') return pyTitle(s, c, g, S, W);
+    const night = Math.min(1, S.score / 50000);
+    pySky(c, S, night);
+    pyGround(c, S);
+    for (const p of S.crumbs) pR(c, p.x, p.y, 3, 3, p.col);
+    for (const a of S.angels) pyAngel(c, a.col * PY.BW + 10, a.y, a.t);
+    for (const b of S.beans) { if (b === S.caught) continue; pyBean(c, b.x, b.y, b.type, b.t + S.t); }
+    // 舌
+    const bk = pyBeak(S), by = PY.BIRD_Y + S.fallY;
+    if (S.tongue > 0) {
+      const tp = pyTip(S);
+      c.save(); c.lineCap = 'round';
+      c.strokeStyle = '#7a1a3a'; c.lineWidth = 5; c.beginPath(); c.moveTo(bk.x, bk.y); c.lineTo(tp.x, tp.y); c.stroke();
+      c.strokeStyle = '#ff7aa0'; c.lineWidth = 3; c.beginPath(); c.moveTo(bk.x, bk.y); c.lineTo(tp.x, tp.y); c.stroke();
+      c.restore();
+      pR(c, tp.x - 3, tp.y - 3, 6, 6, '#ffb0c8');
+      if (S.caught) pyBean(c, tp.x, tp.y, S.caught.type, S.t);
+    }
+    if (S.scene === 'dying' || S.scene === 'over') { c.save(); c.translate(S.x, by - 12); c.rotate(S.over > 20 ? Math.PI : 0); pyBird(c, 0, 12, S.face, true, 2, S.over, S.over < 20); c.restore(); }
+    else pyBird(c, S.x, by - (S.tst === 'off' && S.walk % 12 < 6 && S.walk > 0 ? 1 : 0), S.face, S.tst !== 'off', 2, S.t);
+    for (const p of S.pops) pT(c, String(p.v), p.x, p.y - p.t * 0.5, { size: 12, align: 'center', color: p.col, outline: '#101030', ow: 1 });
+    pyHud(c, S, W);
+    if (S.scene === 'play') s.btn('pause', 'II', 600, 28, 32, 24, { size: 12, nofocus: true, kind: 'clear' });
+    if (S.scene === 'play' && S.t < 200) { c.globalAlpha = S.t < 150 ? 1 : (200 - S.t) / 50; pFrame(c, 120, 140, 400, 54); pT(c, '←→：あるく　A（長押し）：舌をのばす', 320, 150, { size: 16, align: 'center' }); pT(c, '画面タップ：舌　地面タップ：そこへ歩く', 320, 172, { size: 12, align: 'center', color: PW.dim }); c.globalAlpha = 1; }
+    if (S.scene === 'pause') {
+      pR(c, 0, 0, 640, 360, 'rgba(0,0,0,0.55)');
+      pT(c, 'PAUSE', 320, 110, { size: 32, align: 'center', color: '#fff', outline: '#000', ow: 2 });
+      s.btn('resume', 'つづける', 230, 170, 180, 34, { def: true, back: true });
+      s.btn('title', 'タイトルへ', 230, 212, 180, 34);
+      s.btn('exit', 'やめる', 230, 254, 180, 34);
+    }
+    if (S.scene === 'over') {
+      pR(c, 0, 0, 640, 360, 'rgba(0,0,20,0.5)');
+      pT(c, 'GAME OVER', 320, 72, { size: 40, align: 'center', color: '#ff5a5a', outline: '#000', ow: 3 });
+      pFrame(c, 170, 124, 300, 104);
+      pT(c, 'SCORE', 196, 138, { size: 12, color: PW.dim }); pT(c, pyNum(S.score), 444, 132, { size: 24, align: 'right', color: '#fff' });
+      if (S.newBest && S.t % 40 < 28) pT(c, 'ハイスコア更新！', 320, 164, { size: 16, align: 'center', color: '#ffd23f' });
+      else pT(c, `HISCORE ${pyNum(W.best)}`, 320, 166, { size: 12, align: 'center', color: PW.dim });
+      pT(c, `食べた豆 ${S.eaten}　こわれた地面 ${S.broken}`, 320, 188, { size: 12, align: 'center', color: PW.text });
+      if (S.rel) pT(c, `ストレス -${S.rel}`, 320, 206, { size: 12, align: 'center', color: PW.good });
+      s.btn('again', 'もう一度', 150, 246, 160, 36, { def: true });
+      s.btn('title', 'タイトルへ', 330, 246, 160, 36, { back: true });
+    }
+  },
+};
+function pyCatch(s, S, b) {
+  const tp = pyTip(S), h = PY.GY - tp.y;
+  const v = h > 250 ? 1000 : h > 180 ? 300 : h > 100 ? 100 : 50;
+  S.score += v; S.eaten++;
+  S.pops.push({ x: tp.x, y: tp.y - 12, v, t: 0, col: v >= 1000 ? '#ffd23f' : v >= 300 ? '#ffffff' : '#8ad0ff' });
+  try { tt.sfx(v >= 300 ? 'chime' : 'coin'); } catch (e) { }
+  if (b.type === 'w') pyRestore(S, 1);
+  if (b.type === 'f') {
+    // 光る豆：画面の豆をぜんぶ消して、地面を直す
+    let n = 0; for (const o of S.beans) if (!o.dead && o !== b) { o.dead = true; n++; S.score += 50; S.pops.push({ x: o.x, y: o.y, v: 50, t: 0, col: '#ff9ad0' }); s.burst(o.x, o.y, 6, '#ffffff', { star: true, sp: 2, g: 0.04 }); }
+    pyRestore(S, Math.max(3, n)); s.shake = 8; try { tt.sfx('fanfare'); } catch (e) { }
+  }
+}
+function pyAngel(c, x, y, t) {
+  const f = (t >> 3) % 2;
+  pR(c, x - 4, y - 8, 8, 8, '#ffe0c0'); pR(c, x - 5, y - 11, 10, 2, '#ffe060');
+  pR(c, x - 4, y, 8, 8, '#ffffff'); pR(c, x - 10, y - 2 - f * 2, 6, 6, '#e8f0ff'); pR(c, x + 4, y - 2 - f * 2, 6, 6, '#e8f0ff');
+  pR(c, x - 2, y - 5, 1, 1, '#000'); pR(c, x + 1, y - 5, 1, 1, '#000');
+}
+function pyTitle(s, c, g, S, W) {
+  pR(c, 0, 0, 640, 360, '#3ad8c8');
+  for (let x = 0; x < 640; x += 32) pR(c, x, 0, 2, 360, '#7ae8dc');
+  for (let y = 0; y < 360; y += 32) pR(c, 0, y, 640, 2, '#7ae8dc');
+  const bob = Math.round(Math.sin(S.t / 14) * 3);
+  // ロゴ
+  const L = ['ピ', 'ヨ', 'ロ'], cols = ['#8ae020', '#a0e830', '#8ae020'];
+  for (let i = 0; i < 3; i++) { const yy = 46 + bob * (i % 2 ? -1 : 1); pT(c, L[i], 236 + i * 84, yy + 4, { size: 72, align: 'center', color: '#2a6a10', outline: '#2a6a10', ow: 4 }); pT(c, L[i], 236 + i * 84, yy, { size: 72, align: 'center', color: cols[i], outline: '#1a4a08', ow: 3 }); }
+  // 目玉と星
+  pCirc(c, 272, 40 + bob, 11, '#1a4a08'); pCirc(c, 272, 40 + bob, 9, '#ffffff'); pCirc(c, 275, 42 + bob, 4, '#101010');
+  pT(c, '★', 420, 120 - bob, { size: 32, color: '#ffd020', outline: '#a06000', ow: 2, align: 'center' });
+  // 鳥と舌のデモ
+  const tl = 40 + (S.t * 3) % 120;
+  c.save(); c.lineCap = 'round'; c.strokeStyle = '#d0306a'; c.lineWidth = 5; c.beginPath(); c.moveTo(180, 112); c.lineTo(180 - tl * 0.7, 112 - tl * 0.25); c.stroke(); c.restore();
+  pyBird(c, 196, 128, -1, true, 3, S.t);
+  pyBean(c, 120, 60 + ((S.t * 1.2) % 120), 'n', S.t, 3); pyBean(c, 520, 40 + ((S.t * 0.9 + 60) % 140), 'w', S.t, 3);
+  pFrame(c, 196, 166, 248, 44);
+  pT(c, `HISCORE ${pyNum(W.best)}`, 320, 172, { size: 16, align: 'center', color: '#ffd23f' });
+  pT(c, `あそんだ回数 ${W.plays}　食べた豆 ${W.beans}`, 320, 192, { size: 12, align: 'center', color: PW.dim });
+  s.btn('start', 'A　スタート', 220, 226, 200, 38, { def: true });
+  s.btn('exit', 'B　やめる', 220, 272, 200, 38, { back: true });
+  pT(c, '落ちてくる豆を舌で食べよう。高い所で食べるほど高得点。', 320, 320, { size: 12, align: 'center', color: '#0a3a38' });
+  pT(c, '豆が地面に落ちると足場がこわれる。白い豆は足場を直し、光る豆は画面の豆をぜんぶ消す。', 320, 338, { size: 12, align: 'center', color: '#0a3a38' });
+}
+const pyIcon = gbIcon('#3ad8c8', (c, x, y) => { pyBird(c, x + 18, y + 27, -1, true, 1.4, 0); c.strokeStyle = '#d0306a'; c.lineWidth = 2; c.beginPath(); c.moveTo(x + 10, y + 16); c.lineTo(x + 3, y + 8); c.stroke(); pyBean(c, x + 24, y + 9, 'n', 0, 1); });
+async function pyOpen(g) { await gbScene(g, { mode: 'piyoro', title: 'ピヨロ' }); }
+try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_enta'); if (F && !F.apps.includes('piyoro')) F.apps.push('piyoro'); FOLD_OF.piyoro = 'f_enta'; } } catch (e) { console.error('[py] folder', e); }
+function installPiyoro() { E.Un('piyoro', { name: 'ピヨロ', color: '#3ad8c8', order: 74.5, iconHD: pyIcon, open: g => pyOpen(g) }); }
+if (typeof window !== 'undefined') window.__PY = { open: g => pyOpen(g || window.__game), st: () => pySt(window.__game) };
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
