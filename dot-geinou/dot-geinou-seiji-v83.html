@@ -35849,6 +35849,7 @@ function gbRec(g, kind, bet, pay, note) {
   const b = G.by[kind] || (G.by[kind] = { n: 0, bet: 0, pay: 0, best: 0, worst: 0 });
   const net = pay - bet; b.n++; b.bet += bet; b.pay += pay; b.best = Math.max(b.best, net); b.worst = Math.min(b.worst, net);
   G.tin += bet; G.tout += pay;
+  try { gbMonRec(g, kind, bet, pay); } catch (e) { }
   let d = kind === 'takara' ? 0.4 : kind === 'fx' ? 1.2 : 1.6 + Math.min(3, Math.log10(1 + bet / 1000));
   if (net > bet * 3 && net > 20000) d += 4; // 大勝ちの記憶が、またやりたくさせる
   if (net < 0 && G.streak < 0) d += 1.2; // 負けを取り返したくなる
@@ -35890,7 +35891,74 @@ async function gbCounsel(g, V) {
   G.counsel = day; G.add = Math.max(0, G.add - 22); gbAfter(g, 40);
   try { g.addNeed('stress', -6); } catch (e) { }
   await E.qe(g, { title: '相談窓口', color: '#2a8a6a', text: '相談員さんは、責めずに最後まで話を聞いてくれた。\n「使っていいお金を先に決める」「借金をしてまで遊ばない」「家族に話す」…\nできることから始めよう、と言われた。（のめりこみ度が下がった）' });
+  try { await gbBanOffer(g); } catch (e) { }
 }
+
+// ---- 収支メモの強化：月ごとの収支表・年間の称号・自己申告の入店制限・常連と顔なじみ ----
+function gbYM(g) { try { const d = dateOf(g, g.state.day); return { y: d.year, m: d.month, key: `${d.year}-${String(d.month).padStart(2, '0')}` }; } catch (e) { return { y: 0, m: 0, key: '0' }; } }
+function gbMonRec(g, kind, bet, pay) { const G = gb(g); if (!isObj(G.mon)) G.mon = {}; const Y = gbYM(g); const M = G.mon[Y.key] || (G.mon[Y.key] = { bet: 0, pay: 0, n: 0, by: {}, days: [] }); M.bet += bet; M.pay += pay; M.n++; const b = M.by[kind] || (M.by[kind] = [0, 0]); b[0] += bet; b[1] += pay; const d = num(g.state.day); if (!M.days.includes(d)) M.days.push(d); const ks = Object.keys(G.mon).sort(); while (ks.length > 36) delete G.mon[ks.shift()]; }
+function gbMonBrief(g) { const G = gb(g), Y = gbYM(g), M = isObj(G.mon) ? G.mon[Y.key] : null; let t = `今月（${Y.m}月）：` + (M ? `${M.n}回・${M.days.length}日　収支 ${gbSign(M.pay - M.bet)}` : 'まだ遊んでいない'); const ys = gbYearSum(g, Y.y); t += `\n今年（${Y.y}年）：` + (ys.n ? `収支 ${gbSign(ys.pay - ys.bet)}` : '記録なし'); t += `\nのめりこみ度：${Math.round(G.add)}／100（${gbAddLab(G.add)}）`; if (G.ban && G.ban.until > num(g.state.day)) t += `\n入店制限：あと${G.ban.until - num(g.state.day)}日`; return t; }
+function gbYearSum(g, y) { const G = gb(g), o = { bet: 0, pay: 0, n: 0, days: 0, by: {}, best: null, worst: null }; if (!isObj(G.mon)) return o; for (const [k, M] of Object.entries(G.mon)) { if (!k.startsWith(y + '-')) continue; o.bet += M.bet; o.pay += M.pay; o.n += M.n; o.days += M.days.length; const net = M.pay - M.bet; if (!o.best || net > o.best[1]) o.best = [k, net]; if (!o.worst || net < o.worst[1]) o.worst = [k, net]; for (const [kk, b] of Object.entries(M.by)) { const x = o.by[kk] || (o.by[kk] = [0, 0]); x[0] += b[0]; x[1] += b[1]; } } return o; }
+async function gbMonTable(g) {
+  const G = gb(g), ks = Object.keys(isObj(G.mon) ? G.mon : {}).sort().reverse().slice(0, 12);
+  if (!ks.length) { await E.qe(g, { title: '月ごとの収支表', color: '#3a3a4a', text: 'まだ記録がない。' }); return; }
+  const L = ks.map(k => { const M = G.mon[k], net = M.pay - M.bet, top = Object.entries(M.by).sort((a, b) => b[1][0] - a[1][0])[0]; const bar = net >= 0 ? '▲' : '▼'; return `${k.replace('-', '年').replace(/^(\d+年)0?/, '$1')}月　${bar}${gbSign(net)}　${M.days.length}日${top ? `（${GB_KIND[top[0]] || top[0]}が中心）` : ''}`; });
+  const Y = gbYM(g), ys = gbYearSum(g, Y.y);
+  await E.qe(g, { title: '月ごとの収支表', color: '#3a3a4a', text: L.join('\n') + `\n\n${Y.y}年の合計：使った ${gbYen(ys.bet)}　もどった ${gbYen(ys.pay)}　収支 ${gbSign(ys.pay - ys.bet)}` + (ys.best && ys.n ? `\nいちばん良かった月：${ys.best[0].split('-')[1] | 0}月（${gbSign(ys.best[1])}）　悪かった月：${ys.worst[0].split('-')[1] | 0}月（${gbSign(ys.worst[1])}）` : '') });
+}
+const GB_TITLES = [
+  ['plus', '年間プラス収支', o => o.n >= 20 && o.pay > o.bet, '1年を通して勝ち越した。…ただし、続けるほど胴元が勝つのがギャンブルだ。'],
+  ['big_plus', '勝ち組ギャンブラー', o => o.pay - o.bet >= 500000, '年間で50万円以上のプラス。周りに自慢したくなるが、黙っておくのが吉。'],
+  ['minus', '養分', o => o.pay - o.bet <= -300000, '年間で30万円以上のマイナス。店の電気代を払っているのは、だれだろう。'],
+  ['big_minus', '大負けの年', o => o.pay - o.bet <= -1000000, '年間で100万円以上のマイナス。…一度、使っていいお金を決めなおしたい。'],
+  ['daily', '皆勤ギャンブラー', o => o.days >= 150, '1年で150日以上、どこかで賭けていた。'],
+  ['allround', 'なんでも屋', o => Object.keys(o.by).length >= 5, '1年で5種類以上のギャンブルに手を出した。'],
+  ['horse', '競馬ファン', o => (o.by.keiba || [0])[0] >= 200000, '1年で20万円以上を競馬につぎこんだ。'],
+  ['pachi', 'パチンカー', o => ((o.by.pachinko || [0])[0] + (o.by.slot || [0])[0]) >= 500000, '1年で50万円以上をパチンコ・スロットに使った。'],
+  ['quit', '卒業', (o, G) => o.n === 0 && num(G.everN) > 0, '前の年まで遊んでいたのに、1年まるごと一度も賭けなかった。'],
+];
+function gbYearEnd(g) {
+  const G = gb(g), Y = gbYM(g); if (!G.yrSeen) { G.yrSeen = Y.y; return; } if (G.yrSeen >= Y.y) return;
+  const y = G.yrSeen; G.yrSeen = Y.y; const o = gbYearSum(g, y); if (!Array.isArray(G.titles)) G.titles = [];
+  const got = GB_TITLES.filter(T => { try { return T[2](o, G); } catch (e) { return false; } });
+  for (const T of got) G.titles.push({ y, id: T[0], nm: T[1] }); if (o.n) G.everN = num(G.everN) + o.n;
+  if (o.n || got.length) try { g.message({ from: '収支メモ', kind: 'chat', text: `【${y}年のギャンブル収支】\n収支 ${gbSign(o.pay - o.bet)}（${o.days}日・${o.n}回）` + (got.length ? `\n称号：${got.map(T => '「' + T[1] + '」').join('')}` : '') }); } catch (e) { }
+}
+async function gbTitleView(g) {
+  const G = gb(g), T = Array.isArray(G.titles) ? G.titles.slice().reverse() : [];
+  const L = T.length ? T.slice(0, 14).map(t => { const d = GB_TITLES.find(x => x[0] === t.id); return `${t.y}年「${t.nm}」\n　${d ? d[3] : ''}`; }) : ['まだ称号はない。', '（年が明けると、前の年の収支から称号が決まる）', '', ...GB_TITLES.map(x => `・${x[1]}`)];
+  await E.qe(g, { title: '年間の称号', color: '#3a3a4a', text: L.join('\n') });
+}
+// 自己申告の入店制限（実在する「自己申告・家族申告プログラム」をもとにした仕組み）
+async function gbBanOffer(g, fromApp) {
+  const G = gb(g), day = num(g.state.day);
+  if (G.ban && G.ban.until > day) { if (fromApp) await E.qe(g, { title: '入店制限', color: '#2a8a6a', text: `いま、入店制限を申し込んでいる。\nあと${G.ban.until - day}日。\n破った回数：${num(G.ban.broke)}回` }); return; }
+  if (!fromApp && G.add < 35) return;
+  const k = await E.Ho(g, { title: '入店制限', color: '#2a8a6a', text: '「自己申告プログラム」で、自分から入店や購入を制限してもらうことができる。\n顔写真を登録すると、店の人が入口で声をかけてくれる。\n期間を選ぶ。', choices: ['30日', '90日', '180日', 'やめておく'] });
+  if (k < 0 || k > 2) return; const days = [30, 90, 180][k];
+  G.ban = { from: day, until: day + days, broke: 0 }; G.add = Math.max(0, G.add - 6); try { g.addNeed('stress', -4); } catch (e) { }
+  await E.qe(g, { title: '入店制限', color: '#2a8a6a', text: `${days}日間の入店制限を申し込んだ。\nパチンコ・スロット・場外券売場などで、入口で声をかけられるようになる。\n（宝くじは対象外）` });
+}
+async function gbBanCheck(g, V, nm) {
+  const G = gb(g), day = num(g.state.day); if (!G.ban || G.ban.until <= day) return false;
+  const k = await E.Ho(g, { title: V.nm, color: V.col, text: `${nm}\n\n入口で店員さんに呼び止められた。\n「申し訳ありません。○○様は入店制限のお申し込みをいただいておりまして…」\n（あと${G.ban.until - day}日）`, choices: ['帰る', '「今日だけ」と押し切る'] });
+  if (k !== 1) { G.add = Math.max(0, G.add - 2); try { g.addNeed('stress', -2); } catch (e) { } await gbMsg(g, V, '店を出た。…少しだけ、自分をほめてもいい。'); return true; }
+  G.ban.broke = num(G.ban.broke) + 1; G.add = clamp(G.add + 8, 0, 100); try { g.addNeed('stress', 6); } catch (e) { }
+  if (G.ban.broke >= 2) { await gbMsg(g, V, '「規則ですので」と、きっぱり断られた。\n（制限を2回以上破ろうとすると、店は入れてくれない）'); return true; }
+  await gbMsg(g, V, '押し切って中に入った。\n自分で決めたことを破った後ろめたさが、胸に残る…。'); return false;
+}
+// 常連・顔なじみ
+const GB_REG_TALK = {
+  pachinko: ['「今日は海の島、朝から回ってますよ」', '「新台、明日入りますよ」', '「最近よく来ますね。…たまには休んでくださいね」'],
+  slot: ['「角台、昨日は出てましたね」', '「無理しないでくださいね」'],
+  keiba: ['新聞を持った常連のおじさん：「今日のメインは、内枠が有利だな」', '「あんた、また来たのか。当たってるか？」'],
+  boat: ['「今日は向かい風。インが強いぞ」', '常連さん：「1号艇から買っとけば間違いない…たぶんな」'],
+  keirin: ['「今日のラインは、地元が強いぞ」', '常連さん：「先行選手が逃げ切ると見た」'],
+  mahjong: ['店員：「いつもありがとうございます。今日はメンバーそろってますよ」'],
+};
+function gbRegVisit(g, k) { const G = gb(g); if (!isObj(G.reg)) G.reg = {}; const R = G.reg[k] || (G.reg[k] = { n: 0, last: 0 }); const d = num(g.state.day); if (R.last !== d) { R.n++; R.last = d; } if (R.n === 10 || R.n === 30) try { g.notify && g.notify(R.n === 10 ? `${GB_KIND[k]}の店で「常連さん」と呼ばれるようになった` : `${GB_KIND[k]}の店の顔なじみになった`, { color: '#ffd23f' }); } catch (e) { } if (R.n >= 30 && R.n % 10 === 0) try { g.addNeed('stress', -3); } catch (e) { } }
+function gbRegLine(g, k) { const G = gb(g), R = isObj(G.reg) ? G.reg[k] : null; if (!R || R.n < 10) return ''; const T = GB_REG_TALK[k]; const lv = R.n >= 30 ? '顔なじみ' : '常連'; const t = T ? T[(num(g.state.day) + R.n) % T.length] : ''; return `\n\n【${lv}・${R.n}日目】${t}` + (R.n >= 30 ? '\n（店員さんが缶コーヒーをくれた）' : ''); }
+if (typeof window !== 'undefined') window.__GBX = { rec: (k, b, p) => gbRec(window.__game, k, b, p), brief: () => gbMonBrief(window.__game), yearEnd: () => gbYearEnd(window.__game), G: () => gb(window.__game), sum: y => gbYearSum(window.__game, y), regLine: k => gbRegLine(window.__game, k), visit: k => gbRegVisit(window.__game, k), summary: () => gbSummary(window.__game), enter: k => gbEnter(window.__game, k) };
 // ---- 店に入る ----
 async function gbEnter(g, k) {
   const V = GB_VEN[k]; if (!V) return;
@@ -35900,13 +35968,15 @@ async function gbEnter(g, k) {
   if (k === 'mahjong') return gbMahjong(g);
   const nm = k === 'boat' ? `${V.nm}（${gbBoatName(g)}）` : V.nm;
   if (!gbOpenNow(g, V)) { await gbMsg(g, V, `${nm}\n\n営業時間外だ。（営業 ${gbHours(V)}）`); return; }
+  if (k !== 'takara' && await gbBanCheck(g, V, nm)) return;
   if (V.age && age < V.age) { await gbMsg(g, V, `入口で年齢確認をされた。\n「${V.age}歳未満の方は、ご遠慮ください」\n（${V.law}で、${V.age}歳未満は${k === 'pachinko' || k === 'slot' ? '入店できない' : '投票券を買えない'}）`); return; }
   const ch = ['遊ぶ', '収支を見る']; if (G.add >= 45) ch.push('入口の「相談窓口」のポスターを見る'); ch.push('やめておく');
-  const txt = `${nm}（${gbHours(V)}）\n${V.intro.join('\n')}` + (G.add >= 60 ? '\n\n（…気づくと、また足がここに向いていた）' : '');
+  const txt = `${nm}（${gbHours(V)}）\n${V.intro.join('\n')}` + gbRegLine(g, k) + (G.add >= 60 ? '\n\n（…気づくと、また足がここに向いていた）' : '');
   const c = await E.Ho(g, { title: V.nm, color: V.col, text: txt, choices: ch });
   if (ch[c] === '収支を見る') { await gbMsg(g, V, gbShushi(g, k)); return gbEnter(g, k); }
   if (ch[c] && ch[c].startsWith('入口')) { await gbCounsel(g, V); return; }
   if (ch[c] !== '遊ぶ') return;
+  try { gbRegVisit(g, k); } catch (e) { }
   const r = await gbScene(g, { mode: V.mode, sp: V.sp, title: nm, sub: k === 'race' ? '' : '', tcol: V.col });
   gbAfter(g, r.mins);
   if (k === 'takara') gbRecTk(g, r); else gbRec(g, k, r.bet, r.pay);
@@ -36018,6 +36088,10 @@ async function gbTakaraApp(g) {
 }
 function gbRecTk(g, r) { if (r.tk || r.jpay) gbRec(g, 'takara', num(r.tk) * 3000, num(r.jpay), 'ジャンボ'); if (r.qk) gbRec(g, 'quick', num(r.qk) * 200, num(r.qpay), 'クイックワン'); }
 async function gbSummary(g) {
+  for (;;) { const k = await E.Ho(g, { title: '収支メモ', color: '#3a3a4a', text: gbMonBrief(g), choices: ['これまでの合計', '月ごとの収支表', '年間の称号', gb(g).ban && gb(g).ban.until > num(g.state.day) ? '入店制限（申し込み中）' : '入店制限を申し込む', 'とじる'] });
+    if (k === 0) { await gbSummary0(g); continue; } if (k === 1) { await gbMonTable(g); continue; } if (k === 2) { await gbTitleView(g); continue; } if (k === 3) { await gbBanOffer(g, true); continue; } return; }
+}
+async function gbSummary0(g) {
   const G = gb(g), rows = Object.entries(G.by).filter(([, b]) => b.n).sort((a, b) => b[1].bet - a[1].bet);
   const L = rows.map(([k, b]) => `${GB_KIND[k] || k}：${b.n}回　${gbSign(b.pay - b.bet)}`);
   const unchecked = G.tix.filter(t => t.res && !t.paid).length, wait = G.tix.filter(t => !t.res).length;
@@ -36028,6 +36102,7 @@ function gbTick(g) {
   const s = g && g.state; if (!s || !isObj(s.gamb)) return 0;
   const G = gb(g), day = num(s.day); if (G.lastDay === day) return 0;
   const dd = Math.max(1, day - num(G.lastDay, day)); G.lastDay = day;
+  try { gbYearEnd(g); } catch (e) { }
   const idle = day - G.lastPlay;
   if (idle >= 1) G.add = Math.max(0, G.add - (day - G.counsel < 30 ? 2 : 1) * dd);
   if (G.add >= 60 && idle >= 2 && Math.random() < 0.5) { try { g.addNeed('stress', 3); g.notify && g.notify('（パチンコ屋の音が、頭から離れない…）', { color: '#ff9ab0' }); } catch (e) { } }
@@ -41858,6 +41933,50 @@ function stInstall() {
   if (typeof window !== 'undefined') window.__ST = { open: () => stOpen(window.__game), st: () => stSt(window.__game), tick: () => stTick(window.__game), SF };
 }
 
+// ===== 政治：番記者の「囲み取材（ぶら下がり）」— 毎日のように記者に囲まれ、答え方で評判と支持率が動く。失言のリスクも =====
+const KK_NEWS = ['毎朝新聞', '読日新聞', 'ドット通信', '東都新聞', 'NHK政治部', '民放キー局'];
+function kkTopic(g, P, R) {
+  const E2 = P.economy || {}, C = P.cabinet || {}, W = g.state.world || {}, T = [];
+  if (num(C.scandal) > 0) T.push(['scandal', '内閣をめぐる疑惑が報じられています。説明責任をどう果たしますか？']);
+  if (num(E2.inflation) >= 2.5) T.push(['price', `物価の上昇が続いています（前年比${num(E2.inflation).toFixed(1)}%）。家計への対策は？`]);
+  if (num(E2.growth) < 0) T.push(['econ', '景気の後退が鮮明です。追加の経済対策は考えていますか？']);
+  if (num(W.tension) >= 55) T.push(['security', '国際情勢が緊迫しています。日本の安全保障への影響は？']);
+  if (R.pm && num(C.approval) < 30) T.push(['approval', `内閣支持率が${Math.round(num(C.approval))}%まで下がりました。退陣は考えていますか？`]);
+  if (num(P.me && P.me.secret) > 0) T.push(['money', '政治資金の使い道について、一部で指摘が出ています。']);
+  T.push(['diet', '国会の審議日程について、野党は反発しています。今後の見通しは？'], ['local', '地元の要望について、どう取り組んでいきますか？'], ['policy', '今の政権の看板政策、手ごたえはどうですか？']);
+  return T[Math.floor(RND() * T.length)];
+}
+function kkTick(g) {
+  const P = g.state.politics; if (!P || !P.me) return; let R = {}; try { R = g.govtRole() || {}; } catch (e) { return; }
+  if (!R.diet && !R.pm && !(R.posts && R.posts.length)) return;
+  const day = num(g.state.day), M = P.me; if (!isObj(M.kk)) M.kk = { last: 0, n: 0, gaffe: 0, rep: null, paper: null };
+  const K = M.kk; if (day - K.last < 2) return;
+  const p = R.pm ? 0.3 : R.posts && R.posts.length ? 0.16 : 0.05; if (!chance(p)) return;
+  K.last = day; if (!K.rep) { K.rep = pick(SURN); K.paper = pick(KK_NEWS); }
+  const tp = kkTopic(g, P, R), where = R.pm ? '官邸のエントランス' : R.posts && R.posts.length ? '省庁の廊下' : '議員会館の前';
+  try { E.R4(g, { kind: 'np_kakomi', key: 'np_kakomi', title: `${where}で記者に囲まれた`, text: `「${K.paper}の${K.rep}です。」\n番記者たちがマイクを向けてくる。\n\n記者：「${tp[1]}」`, choices: ['丁寧に説明する', 'はぐらかす', '強気で言い切る', '本音で答える'], def: 1, days: 2, data: { tp: tp[0], pm: !!R.pm } }); } catch (e) { console.error('[kakomi]', e); }
+}
+const KK_GAFFE = ['「そんなことは、国民のみなさんが気にすることではない」', '「物価なんて、そのうち落ち着くでしょう。私はスーパーに行かないので分かりませんが」', '「地元の声？ 票にならない話は後回しですよ」', '「疑惑？ 記憶にございません。…いや、ないことにしてください」', '「まあ、これくらいは政治の世界ではよくあることで」'];
+function kkHandler(g, it, k, auto) {
+  const P = g.state.politics; if (!P || !P.me) return '';
+  const M = P.me, C = P.cabinet || {}, K = M.kk || (M.kk = { n: 0, gaffe: 0 }), d = it.data || {};
+  const adj = (rep, ap, media) => { M.reputation = clamp(num(M.reputation) + rep, -100, 100); M.media = clamp(num(M.media) + media, -100, 100); if (d.pm && C) C.approval = clamp(num(C.approval) + ap, 3, 90); };
+  K.n = num(K.n) + 1;
+  if (k === 0) { adj(1, 0.3, 1); return '言葉を選びながら、ひとつひとつ丁寧に答えた。\n夕方のニュースでは「誠実な説明」と短く紹介された。'; }
+  if (k === 1 || k < 0) { adj(-1, -0.1, -1); return '「現時点では、お答えを差し控えます」\n無難に切り抜けたが、記者たちは不満そうだった。'; }
+  const risk = k === 2 ? 0.22 : 0.16;
+  if (chance(risk)) {
+    K.gaffe = num(K.gaffe) + 1; const line = pick(KK_GAFFE);
+    adj(k === 2 ? -6 : -8, -2.5, -6); if (d.pm && C) C.scandal = num(C.scandal);
+    try { g.notify && g.notify('失言が切り取られ、SNSで炎上している…', { color: '#ff6a7a' }); } catch (e) { }
+    try { g.addNeed('stress', 10); } catch (e) { }
+    return `勢いで、口がすべった。\n${line}\n\n…その一言だけが切り取られ、夜のニュースとSNSで一気に広まった。\n（評判・メディアの印象が大きく下がった${d.pm ? '。内閣支持率も下がった' : ''}）`;
+  }
+  if (k === 2) { adj(3, 0.8, 1); return '「やるべきことは、やり抜きます」\n力強い言葉が見出しになった。支持者からは「頼もしい」という声。'; }
+  adj(4, 0.6, 3); return '飾らない本音で答えた。\n「政治家らしくない」と、若い世代を中心に好意的な反応が広がった。';
+}
+try { E.Tn(g => { try { kkTick(g); } catch (e) { console.error('[kakomi]', e); } }); if (E.ug) E.ug('np_kakomi', (g, it, k, auto) => kkHandler(g, it, k, auto)); } catch (e) { console.error('[kakomi] install', e); }
+if (typeof window !== 'undefined') window.__KK = { tick: () => kkTick(window.__game), handle: (k, d) => kkHandler(window.__game, { data: d || {} }, k), topic: () => { const g = window.__game; return kkTopic(g, g.state.politics, g.govtRole()); } };
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
