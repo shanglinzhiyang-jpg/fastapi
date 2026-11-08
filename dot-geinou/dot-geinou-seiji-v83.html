@@ -44312,240 +44312,398 @@ const pmPoachP = r => clamp(0.35 + (60 - r.hp) / 150, 0.15, 0.8);
   const al0 = pmAlerts; pmAlerts = function (g, H) { const A = al0(g, H), Q = pmTrQ(H); if (Q.length) A.unshift(['bad', `トラブル対応 ${Q.length}件`, PM_TR[Q[0].k].t, 'trouble']); const low = (H.crew || []).filter(m => m.loy < 40).length; if (low) A.push(['warn', `やる気の低いスタッフ ${low}人`, '引き抜かれるかも。昇給や研修を', 'mgmt']); return A.filter(a => !(a[1] === '順調です' && A.length > 1)); };
 })();
 if (typeof window !== 'undefined') window.__PMB = { crew: H => pmCrew(H, window.__game.state.day), trAdd: (H, k, ex) => pmTrAdd(window.__game, H, k, ex), TR: PM_TR, price: r => pmRvPrice(r) };
-// ===== ネット世論：トレンド・内閣へのネットの空気・自分のアカウント（発信・ライブ・工作）・炎上と対応・デマ・切り抜き（スマホの「ネット世論」アプリ） =====
-// 時代で呼び名が変わる：〜2003 掲示板、2004〜2009 ブログ・掲示板、2010〜 SNS（切り抜き動画は2018〜、ライブ配信は2016〜）
+// ===== ネット世論：層ごとのネットの声・投稿づくり・トレンドの連鎖（まとめ→ネットニュース→ワイドショー→社説）・敵対アカウントと支持者・炎上と対応・デマ（災害デマも）・ふり返り・ネット戦略の人材・タイムライン・広がりの地図（スマホの「ネット世論」アプリ） =====
+// 時代で呼び名が変わる：〜2003 掲示板、2004〜2009 ブログ・掲示板、2010〜 SNS。動画は2012〜、ライブ配信は2016〜、切り抜き・短い動画は2018〜、ネット選挙運動は2013〜
 function ntYear(g) { try { return dateOf(g, g.state.day).year; } catch (e) { return 2026; } }
 function ntPlat(g) { const y = ntYear(g); return y < 2004 ? 'ネット掲示板' : y < 2010 ? 'ブログ・掲示板' : 'SNS'; }
-function ntSt(g) { const s = g.state; if (!isObj(s.netop)) s.netop = { v: 1, tr: [], cab: 0, me: 0, acc: null, posts: [], fl: null, flog: [], hist: [], day: -1, bots: -1, botsExp: false, scN: 0, kkSeen: 0 };
-  const N = s.netop; if (!Array.isArray(N.tr)) N.tr = []; if (!Array.isArray(N.posts)) N.posts = []; if (!Array.isArray(N.flog)) N.flog = []; if (!Array.isArray(N.hist)) N.hist = []; return N; }
+const NT_SEGK = ['young', 'families', 'employees', 'elderly', 'selfemployed', 'business', 'farmers', 'unions', 'urban', 'rural', 'floating'];
+function ntSegPlace(g, k) { const y = ntYear(g); return { young: y >= 2018 ? '短い動画' : y >= 2010 ? 'SNS' : '掲示板', families: y >= 2010 ? 'ブログ・グループ' : 'ブログ', employees: y >= 2010 ? 'SNS' : '掲示板', elderly: 'ニュースのコメント欄', selfemployed: 'SNS', business: y >= 2012 ? 'ビジネスSNS' : 'ニュースサイト', farmers: '地域の掲示板', unions: '組合の掲示板', urban: y >= 2010 ? 'SNS' : 'ブログ', rural: '地域の掲示板', floating: 'まとめサイト' }[k]; }
+const NT_SEGH = { young: '@daigakusei22', families: '@kosodate_mama', employees: '@kaisha_in_k', elderly: '@ojiichan_net', selfemployed: '@jieigyou_san', business: '@keiei_tsushin', farmers: '@nouka_kun', unions: '@kumiai_dayori', urban: '@tokyo_kurashi', rural: '@inaka_life', floating: '@nonpoli_jp' };
+const NT_SEGISS = { young: ['labor', 'education', 'digital', 'economy'], families: ['childcare', 'education', 'welfare'], employees: ['economy', 'tax', 'labor'], elderly: ['welfare', 'health', 'safety'], selfemployed: ['tax', 'economy'], business: ['economy', 'tax', 'digital', 'energy'], farmers: ['agriculture', 'regional'], unions: ['labor', 'welfare'], urban: ['digital', 'economy', 'childcare'], rural: ['regional', 'agriculture', 'disaster'], floating: ['admin', 'finance', 'economy'] };
+function ntSt(g) { const s = g.state; if (!isObj(s.netop)) s.netop = { v: 2 };
+  const N = s.netop; for (const k of ['tr', 'posts', 'flog', 'hist', 'tl', 'foes']) if (!Array.isArray(N[k])) N[k] = [];
+  if (!isObj(N.sg)) { N.sg = {}; for (const k of NT_SEGK) N.sg[k] = num(N.me); } if (!isObj(N.stf)) N.stf = { sns: 0, pr: 0, cons: 0 }; if (!isObj(N.fan)) N.fan = { n: 0, heat: 20, off: -99 }; if (!isObj(N.scSt)) N.scSt = {};
+  if (N.day == null) N.day = -1; if (N.cab == null) N.cab = 0; return N; }
+function ntMeCalc(N) { N.me = Math.round(NT_SEGK.reduce((a, k) => a + num(N.sg[k]), 0) / NT_SEGK.length * 10) / 10; return N.me; }
+function ntMeAdd(N, v, segs) { for (const k of segs || NT_SEGK) N.sg[k] = clamp(num(N.sg[k]) + v, -100, 100); return ntMeCalc(N); }
 function ntRole(g) { let R = {}; try { R = g.govtRole() || {}; } catch (e) { } const P = g.state.politics, M = P && P.me; return { pm: !!R.pm, min: !!(R.posts && R.posts.length), diet: !!R.diet, pol: !!(R.pm || R.diet || (R.posts && R.posts.length) || (M && (M.office || M.candidacy))), party: R.party || (M && M.party) || null, ruling: !!R.ruling }; }
 function ntMyName(g) { try { const p = g.state.profile; const n = p && ((p.familyName || '') + (p.givenName || '')); return n || g.state.name || 'あなた'; } catch (e) { return 'あなた'; } }
 function ntFamily(g) { try { const p = g.state.profile; return (p && p.familyName) || ntMyName(g).slice(0, 2); } catch (e) { return 'あなた'; } }
 function ntPm(g) { try { const n = stPmName(g); return n && n !== '—' ? String(n).split(/[ 　]/)[0] : '首相'; } catch (e) { return '首相'; } }
 const ntFmt = n => n >= 1e8 ? `${(n / 1e8).toFixed(1)}億` : n >= 1e4 ? `${(n / 1e4).toFixed(n >= 1e5 ? 0 : 1)}万` : String(Math.round(n));
-const NT_HANDLE = ['@seiji_watch', '@kosodate_mama', '@kaisha_in_k', '@ojiichan_net', '@genki_jp', '@kokumin_no_koe', '@daigakusei22', '@jieigyou_san', '@nouka_kun', '@hoshu_no_mikata', '@liberal_dot', '@matome_sokuho'];
+const ntPick = L => L[Math.floor(RND() * L.length)];
+const ntRnd = (a, b) => a + Math.floor(RND() * (b - a + 1));
 const NT_REPLY = {
   pos: ['応援してます！', 'わかりやすい説明ありがとうございます', 'こういう政治家を待ってた', '地元の誇りです', '実行力に期待してます', 'ちゃんと現場に来てくれるのがうれしい'],
   neg: ['で、あの件の説明は？', 'パフォーマンスはいいから仕事しろ', '支持者以外はどうでもいいんだね', '口だけ', '選挙のときだけ発信するよね', '税金で何してるの？'],
   mid: ['財源はどうするの？', '具体的にはいつから？', '地方のことも考えてほしい', 'もう少しくわしく', '前に言ってたことと違わない？', '若い世代はどうなるの？'],
 };
-// ---- トレンド（世の中の動きから毎日できる） ----
+function ntTL(N, it) { N.tl.unshift(it); if (N.tl.length > 60) N.tl.length = 60; }
+// ---- トレンドと、話題の連鎖 ----
+const NT_CHAIN = ['トレンド', 'まとめ記事', 'ネットニュース', 'ワイドショー', '社説'];
 function ntTrendCands(g) {
   const P = g.state.politics || {}, C = P.cabinet || {}, E2 = P.economy || {}, pm = ntPm(g), y = ntYear(g), L = [], ap = num(C.approval), N = ntSt(g), me = ntFamily(g), R = ntRole(g);
   let scOpen = 0; try { scOpen = g.scandals().open; } catch (e) { }
   if (num(C.scandal) > 0 || scOpen) L.push([`${pm}首相は説明しろ`, -1, 70, 'cab']);
-  if (ap && ap < 30) L.push([`${pm}内閣は退陣を`, -1, 60, 'cab']); if (ap >= 50) L.push([`${pm}総理がんばれ`, 1, 45, 'cab']); if (num(E2.growth) >= 1.5) L.push(['景気回復', 1, 40, 'cab']); if (num(E2.inflation) < 2 && num(E2.inflation) > -0.5 && num(E2.growth) >= 0) L.push(['賃上げ', 1, 30, 'cab']);
+  if (ap && ap < 30) L.push([`${pm}内閣は退陣を`, -1, 60, 'cab']); if (ap >= 50) L.push([`${pm}総理がんばれ`, 1, 45, 'cab']);
+  if (num(E2.growth) >= 1.5) L.push(['景気回復', 1, 40, 'cab']); if (num(E2.inflation) < 2 && num(E2.inflation) > -0.5 && num(E2.growth) >= 0) L.push(['賃上げ', 1, 30, 'cab']);
   if (num(E2.inflation) >= 2.5) L.push(['物価高', -1, 55, 'cab']); if (num(E2.growth) < 0) L.push(['不景気', -1, 45, 'cab']);
   const law = (P.laws || []).slice(-1)[0]; if (law && num(law.day, -99) >= num(g.state.day) - 4) { const nm = String(law.title || law.name || '').replace(/に関する法律案?$|法律案?$/, ''); if (nm) L.push([`${nm.slice(0, 12)}法`, chance(0.5) ? 1 : -1, 50, 'cab']); }
   try { const X = pxSt(g); if (X.sg) L.push([`${X.sg.pref}の${X.sg.nm}`, 0, 65, 'news'], [`がんばれ${X.sg.pref.replace(/[県府都]$/, '')}`, 1, 40, 'news']); } catch (e) { }
   const O = P.opinion && P.opinion.issues; if (O) { const top = Object.entries(O).sort((a, b) => b[1] - a[1]).slice(0, 3); for (const [k, v] of top) L.push([{ tax: '増税反対', welfare: '年金どうなる', childcare: '少子化対策', economy: '景気対策を', health: '医療崩壊', diplomacy: '外交', constitution: '憲法改正', energy: '電気代', labor: '働き方改革', education: '教育無償化', safety: '治安', digital: 'マイナンバー', disaster: '防災', agriculture: '米の値段', regional: '地方創生', finance: '財政赤字', environment: '気候変動', admin: '行政改革', culture: '推し活', society: '夫婦別姓' }[k] || '政治', chance(0.4) ? 1 : -1, 25 + v * 40, 'issue']); }
-  try { const U = g.upcomingElections(); const e0 = Array.isArray(U) ? U[0] : null; if (e0 && num(e0.day, 999) - num(g.state.day) < 20) L.push(['選挙に行こう', 1, 50, 'news']); } catch (e) { }
+  const e0 = ntElec(g); if (e0 && e0.day - num(g.state.day) < 20) L.push(['選挙に行こう', 1, 50, 'news']);
   if (R.pol && N.acc && num(N.me) >= 35 && chance(0.35)) L.push([`${me}議員`, 1, 30 + num(N.me) / 3, 'me']);
-  if (y >= 2010) L.push([['推しの政治家', '政治家の給料', '国会中継', '永田町の常識', '議員宿舎'][Math.floor(RND() * 5)], 0, 20, 'misc']);
+  if (y >= 2010) L.push([ntPick(['推しの政治家', '政治家の給料', '国会中継', '永田町の常識', '議員宿舎']), 0, 20, 'misc']);
   return L;
 }
 function ntTrendDay(g) {
   const N = ntSt(g), d = num(g.state.day);
-  for (const t of N.tr) t.h = Math.round(t.h * 0.84);
+  for (const t of N.tr) t.h = Math.round(t.h * (0.8 + num(t.st) * 0.03));
   N.tr = N.tr.filter(t => t.h >= 8);
-  const C = ntTrendCands(g); for (let k = 0; k < 2 && C.length; k++) { const [tag, tone, h, kind] = C.splice(Math.floor(RND() * C.length), 1)[0]; const ex = N.tr.find(t => t.tag === tag); if (ex) ex.h = Math.min(100, ex.h + h * 0.5); else N.tr.push({ tag, tone, h: Math.round(h * (0.8 + RND() * 0.4)), kind, d }); }
+  const C = ntTrendCands(g); for (let k = 0; k < 2 && C.length; k++) { const [tag, tone, h, kind] = C.splice(Math.floor(RND() * C.length), 1)[0]; const ex = N.tr.find(t => t.tag === tag); if (ex) ex.h = Math.min(100, ex.h + h * 0.5); else N.tr.push({ tag, tone, h: Math.round(h * (0.8 + RND() * 0.4)), kind, d, st: 0 }); }
+  // 話題の連鎖：熱い話題は、まとめ記事→ネットニュース→ワイドショー→社説へ広がる
+  for (const t of N.tr) { const st = num(t.st); if (t.h < 50 + st * 8 || st >= 4 || d - num(t.sd, -99) < 2 || !chance(0.16)) continue; if (st === 3 && d - num(N.edLast, -99) < 21) continue; t.st = st + 1; t.sd = d; if (t.st === 4) N.edLast = d; ntChainFx(g, t); }
   N.tr.sort((a, b) => b.h - a.h); if (N.tr.length > 10) N.tr.length = 10;
 }
-function ntAddTrend(g, tag, tone, h, kind) { const N = ntSt(g), ex = N.tr.find(t => t.tag === tag); if (ex) ex.h = Math.min(100, Math.max(ex.h, h)); else N.tr.unshift({ tag, tone, h, kind, d: num(g.state.day) }); N.tr.sort((a, b) => b.h - a.h); if (N.tr.length > 10) N.tr.length = 10; }
+function ntChainFx(g, t) {
+  const N = ntSt(g), P = g.state.politics || {}, M = P.me, C = P.cabinet;
+  if (t.st === 2) ntTL(N, { d: num(g.state.day), h: '@dot_news', nm: 'ドットニュース', txt: `ネットで話題の「#${t.tag}」、広がる波紋`, tone: t.tone > 0 ? 'pos' : t.tone < 0 ? 'neg' : 'mid', likes: Math.round(t.h * 80), kind: 'news' });
+  if (t.st === 3) { if (t.kind === 'me' && M) M.media = clamp(num(M.media) + (t.tone > 0 ? 3 : -3), -100, 100); if (t.kind === 'cab' && C) C.approval = clamp(num(C.approval) + (t.tone > 0 ? 0.5 : -0.5), 3, 90); try { pxMark(g, `ワイドショーが「#${t.tag}」を特集`, t.tone > 0 ? '#6ab0ff' : '#ff9a8a'); } catch (e) { } }
+  if (t.st === 4) { try { const X = pxSt(g), d = num(g.state.day), L = [['毎朝新聞', -2], ['読日新聞', 1]]; for (const [p, lean] of L) { const tone = clamp(t.tone * 0.8 + lean * 0.3 * (t.kind === 'cab' ? 1 : 0), -1.5, 1.5); X.ed.unshift({ d, p, lean, tone, h: tone > 0.3 ? `ネットの「#${t.tag}」、声に耳を傾けよ` : tone < -0.3 ? `「#${t.tag}」、ネットの怒りを軽く見るな` : `「#${t.tag}」が問いかけるもの`, t: 'ネット' }); } X.ed = X.ed.slice(0, 25); X.edUnread = 1; pxMark(g, `「#${t.tag}」が社説に`, '#c9a24a'); } catch (e) { } }
+}
+function ntAddTrend(g, tag, tone, h, kind, st) { const N = ntSt(g), ex = N.tr.find(t => t.tag === tag); if (ex) { ex.h = Math.min(100, Math.max(ex.h, h)); ex.st = Math.max(num(ex.st), num(st)); } else N.tr.unshift({ tag, tone, h, kind, d: num(g.state.day), st: num(st) }); N.tr.sort((a, b) => b.h - a.h); if (N.tr.length > 10) N.tr.length = 10; }
+// ---- 選挙 ----
+function ntElec(g) { try { const U = g.upcomingElections(); return (Array.isArray(U) ? U : []).filter(e => e && e.kind !== 'sosaisen' && e.status !== 'done' && num(e.day, -1) >= num(g.state.day)).sort((a, b) => a.day - b.day)[0] || null; } catch (e) { return null; } }
+function ntCampaign(g) { const e = ntElec(g), d = num(g.state.day); return e && d >= num(e.koji, e.day - 12) && d <= e.day ? e : null; }
 // ---- 炎上 ----
 const NT_FST = ['拡散中', 'まとめサイトに', 'テレビ・新聞が報道', '鎮火'];
+const NT_CAUSE = { post: '投稿', attack: '攻撃的な投稿', live: 'ライブ配信', gaffe: '囲み取材の失言', scandal: '疑惑の報道', bots: 'ネット工作', block: 'ブロック', fans: '支持者の暴走', test: 'テスト' };
 function ntFlame(g, cause, heat, topic) {
   const N = ntSt(g), d = num(g.state.day), R = ntRole(g); if (!R.pol) return null;
   if (N.fl && N.fl.h > 10) { N.fl.h = Math.min(100, N.fl.h + heat * 0.4); return N.fl; }
-  N.fl = { d, cause, h: heat, topic, st: 0, resp: null, rd: null, peak: heat }; ntAddTrend(g, `${ntFamily(g)}議員`, -1, heat, 'me');
-  try { g.notify && g.notify(`${ntPlat(g)}で炎上している：${topic}`, { color: '#ff6a7a' }); } catch (e) { }
+  const rep = N.flog.filter(o => o.cause === cause && d - o.d < 180).length >= 2; if (rep) { heat = Math.min(100, heat + 15); ntMeAdd(N, -5); }
+  N.fl = { d, cause, h: heat, topic, st: 0, resp: null, rd: null, peak: heat, learn: rep }; ntAddTrend(g, `${ntFamily(g)}議員`, -1, heat, 'me');
+  try { g.notify && g.notify(`${ntPlat(g)}で炎上している：${topic}${rep ? '（またか…）' : ''}`, { color: '#ff6a7a' }); } catch (e) { }
   try { pxMark(g, `ネットで炎上（${topic}）`, '#ff6a7a'); } catch (e) { }
-  try { E.R4(g, { kind: 'np_net', key: 'np_net_fl', title: `${ntPlat(g)}で炎上している`, text: `「${topic}」が${ntPlat(g)}で大きく広がっている。\nリプライ欄には、批判の言葉が次々に書きこまれていく…。\n\nどう対応する？`, choices: ['すぐに謝罪する', '説明・反論する', '何も言わない', '投稿を削除する'], def: 2, days: 3, data: { fl: d } }); } catch (e) { console.error('[net] R4', e); }
+  try { E.R4(g, { kind: 'np_net', key: 'np_net_fl', title: `${ntPlat(g)}で炎上している`, text: `「${topic}」が${ntPlat(g)}で大きく広がっている。${rep ? '\n「また同じ失敗。学習しない政治家だ」という声まで出ている…。' : ''}\nリプライ欄には、批判の言葉が次々に書きこまれていく…。\n\nどう対応する？`, choices: ['すぐに謝罪する', '説明・反論する', '何も言わない', '投稿を削除する'], def: 2, days: 3, data: { fl: d } }); } catch (e) { console.error('[net] R4', e); }
+  for (let i = 0; i < 3; i++) ntTL(N, { d, h: ntPick(Object.values(NT_SEGH)), txt: `${ntPick(NT_REPLY.neg)} #${ntFamily(g)}議員`, tone: 'neg', likes: Math.round(heat * (20 + RND() * 60)), kind: 'reply' });
   return N.fl;
 }
 function ntFlResp(g, k) {
   const N = ntSt(g), F = N.fl; if (!F || F.resp) return '（この炎上への対応は、もう決めている）';
-  const P = g.state.politics, M = P && P.me, early = num(g.state.day) - F.d <= 1; F.resp = ['sorry', 'explain', 'silent', 'delete'][k] || 'silent'; F.rd = num(g.state.day);
-  if (F.resp === 'sorry') { F.h -= early ? 25 : 12; if (M) M.reputation = clamp(num(M.reputation) - 1, -100, 100); return early ? 'すぐに謝罪文を出した。\n「対応が早い」と、一部で評価する声も出はじめた。（炎上がおさまりはじめた）' : '謝罪文を出した。\n「遅すぎる」という声もあるが、少しずつ落ち着いてきた。'; }
-  if (F.resp === 'explain') { const ok = num(N.me) > 15 || chance(0.4); if (ok) { F.h -= 20; return '経緯をていねいに説明した。\n「そういうことだったのか」と、誤解がとけていく。（炎上がおさまってきた）'; } F.h = Math.min(100, F.h + 15); return '反論したら、「逆ギレ」と言われてさらに燃え広がった…。（火に油）'; }
-  if (F.resp === 'delete') { if (chance(0.55)) { F.h = Math.min(100, F.h + 18); return '投稿を消したが、画面の保存（魚拓）が出回った。\n「消して逃げた」と、さらに批判が強まっている…。'; } F.h -= 10; return '投稿を消した。いまのところ、話題は下火になりつつある。'; }
+  const P = g.state.politics, M = P && P.me, early = num(g.state.day) - F.d <= 1, cs = N.stf.cons ? 1.5 : 1; F.resp = ['sorry', 'explain', 'silent', 'delete'][k] || 'silent'; F.rd = num(g.state.day);
+  const tip = N.stf.cons ? '\n（炎上対策のコンサルの助言どおりに動いた）' : '';
+  if (F.resp === 'sorry') { F.h -= (early ? 25 : 12) * cs; if (M) M.reputation = clamp(num(M.reputation) - 1, -100, 100); return (early ? 'すぐに謝罪文を出した。\n「対応が早い」と、一部で評価する声も出はじめた。（炎上がおさまりはじめた）' : '謝罪文を出した。\n「遅すぎる」という声もあるが、少しずつ落ち着いてきた。') + tip; }
+  if (F.resp === 'explain') { const ok = num(N.me) > 15 || chance(0.4 + (N.stf.cons ? 0.25 : 0)); if (ok) { F.h -= 20 * cs; return '経緯をていねいに説明した。\n「そういうことだったのか」と、誤解がとけていく。（炎上がおさまってきた）' + tip; } F.h = Math.min(100, F.h + 15); return '反論したら、「逆ギレ」と言われてさらに燃え広がった…。（火に油）'; }
+  if (F.resp === 'delete') { if (chance(N.stf.cons ? 0.28 : 0.55)) { F.h = Math.min(100, F.h + 18); return '投稿を消したが、画面の保存（魚拓）が出回った。\n「消して逃げた」と、さらに批判が強まっている…。'; } F.h -= 10 * cs; return '投稿を消した。いまのところ、話題は下火になりつつある。' + tip; }
   return '何も言わずに、嵐が過ぎるのを待つことにした。';
 }
 function ntFlDay(g) {
   const N = ntSt(g), F = N.fl; if (!F) return; const d = num(g.state.day), P = g.state.politics, M = P && P.me, C = P && P.cabinet, R = ntRole(g), age = d - F.d;
-  F.h += age <= 1 && !F.resp ? 6 : F.resp === 'silent' ? -6 : F.resp ? -8 : -3; F.h = clamp(F.h, 0, 100); F.peak = Math.max(F.peak, F.h);
-  const st = F.h < 15 ? 3 : age >= 2 && F.peak >= 70 ? 2 : age >= 1 ? 1 : 0; if (st === 2 && F.st < 2) { if (M) M.media = clamp(num(M.media) - 6, -100, 100); try { g.notify && g.notify(`炎上がテレビのワイドショーで取り上げられた`, { color: '#ff6a7a' }); } catch (e) { } } F.st = Math.max(F.st, st);
-  if (F.h > 35) { if (M) { M.reputation = clamp(num(M.reputation) - 0.5, -100, 100); M.media = clamp(num(M.media) - 0.5, -100, 100); } N.me = clamp(num(N.me) - 2, -100, 100); if (N.acc) N.acc.fol = Math.max(0, Math.round(N.acc.fol * 0.993)); if (R.pm && C) C.approval = clamp(num(C.approval) - 0.2, 3, 90); }
-  if (F.h < 15 || age > 21) { N.flog.unshift({ d: F.d, topic: F.topic, peak: Math.round(F.peak), resp: F.resp, end: d }); if (N.flog.length > 20) N.flog.length = 20; N.fl = null; try { g.notify && g.notify('炎上が落ち着いた', { color: '#8ab0d0' }); } catch (e) { } }
+  F.h += age <= 1 && !F.resp ? 6 : F.resp === 'silent' ? -6 : F.resp ? -8 : -3;
+  const fanDef = Math.min(6, num(N.fan.n) / 2000); if (fanDef >= 1 && F.h > 20) { F.h -= fanDef; F.fanDef = true; }
+  F.h = clamp(F.h, 0, 100); F.peak = Math.max(F.peak, F.h);
+  const st = F.h < 15 ? 3 : age >= 2 && F.peak >= 70 ? 2 : age >= 1 ? 1 : 0; if (st === 2 && F.st < 2) { if (M) M.media = clamp(num(M.media) - 6, -100, 100); try { g.notify && g.notify('炎上がテレビのワイドショーで取り上げられた', { color: '#ff6a7a' }); } catch (e) { } } F.st = Math.max(F.st, st);
+  if (F.h > 35) { if (M) { M.reputation = clamp(num(M.reputation) - 0.5, -100, 100); M.media = clamp(num(M.media) - 0.5, -100, 100); } ntMeAdd(N, -2); if (N.acc) N.acc.fol = Math.max(0, Math.round(N.acc.fol * 0.993)); if (R.pm && C) C.approval = clamp(num(C.approval) - 0.2, 3, 90); if (chance(0.08)) ntFoeNew(g, ntPick(['critic', 'troll', 'matome'])); }
+  if (F.h < 15 || age > 21) { N.flog.unshift({ d: F.d, topic: F.topic, cause: F.cause, peak: Math.round(F.peak), resp: F.resp, end: d, path: F.st, learn: !!F.learn, fan: !!F.fanDef }); if (N.flog.length > 20) N.flog.length = 20; N.fl = null; try { g.notify && g.notify('炎上が落ち着いた', { color: '#8ab0d0' }); } catch (e) { } }
 }
-// ---- デマ・切り抜き ----
+// ---- デマ（ふだん・災害のとき） ----
 const NT_DEMA = ['高級料亭で毎晩飲み歩いているという写真（別人）', '「国民は我慢しろ」と言ったという発言（言っていない）', '海外の団体からお金をもらっているという話（根拠なし）', '被災地で記念撮影だけして帰ったという話（切り取り）', '家族が税金で旅行しているという話（事実ではない）'];
+const NT_DSDEMA = ['ダムが決壊したというデマ', '水道水に毒が入ったというデマ', '動物園から猛獣が逃げたというデマ', '避難所が閉鎖されたというデマ', 'もっと大きな地震が来るという予言のデマ'];
 function ntDema(g) {
-  const N = ntSt(g), d = num(g.state.day); if (N.dema && num(N.dema.d) > d - 30) return; const topic = NT_DEMA[Math.floor(RND() * NT_DEMA.length)]; N.dema = { d, topic, done: false };
-  ntAddTrend(g, `${ntFamily(g)}議員`, -1, 45, 'me'); N.me = clamp(num(N.me) - 6, -100, 100);
+  const N = ntSt(g), d = num(g.state.day); if (N.dema && num(N.dema.d) > d - 30) return; const topic = ntPick(NT_DEMA); N.dema = { d, topic, done: false };
+  ntAddTrend(g, `${ntFamily(g)}議員`, -1, 45, 'me'); ntMeAdd(N, -6, ['floating', 'young', 'urban', 'elderly']);
   try { E.R4(g, { kind: 'np_net', key: 'np_net_dm', title: 'デマが広まっている', text: `${ntPlat(g)}で、あなたについての${topic}が出回っている。\n信じてしまう人も多いようだ。`, choices: ['ファクトチェックで反論する', '発信者の情報開示を請求する（¥500,000）', '相手にしない'], def: 2, days: 4, data: { dm: d } }); } catch (e) { }
 }
 function ntDemaResp(g, k) {
   const N = ntSt(g), D = N.dema; if (!D || D.done) return '（もう対応ずみ）'; D.done = true; const P = g.state.politics, M = P && P.me;
-  if (k === 0) { const ok = chance(0.5 + Math.min(0.35, (N.acc ? N.acc.fol : 0) / 400000)); if (ok) { N.me = clamp(num(N.me) + 8, -100, 100); return '証拠をそろえて反論した。\n「デマだったのか」と、訂正が広がった。（ネットの評判が回復）'; } N.me = clamp(num(N.me) - 2, -100, 100); return '反論したが、デマのほうが速く広がってしまった…。'; }
-  if (k === 1) { if (!g.spend || !g.spend(500000)) return 'お金が足りない…。'; N.me = clamp(num(N.me) + 6, -100, 100); if (M) M.media = clamp(num(M.media) + 2, -100, 100); return '弁護士を通じて、発信者情報の開示を請求した。\n「法的措置へ」と報じられ、デマの投稿は次々に消されていった。'; }
-  N.me = clamp(num(N.me) - 5, -100, 100); return '相手にしないことにした。…デマは、しばらく残り続けた。';
+  if (k === 0) { const ok = chance(0.5 + Math.min(0.35, (N.acc ? N.acc.fol : 0) / 400000)); if (ok) { ntMeAdd(N, 8); return '証拠をそろえて反論した。\n「デマだったのか」と、訂正が広がった。（ネットの評判が回復）'; } ntMeAdd(N, -2); return '反論したが、デマのほうが速く広がってしまった…。'; }
+  if (k === 1) { if (!g.spend || !g.spend(500000)) { D.done = false; return 'お金が足りない…。'; } ntMeAdd(N, 6); if (M) M.media = clamp(num(M.media) + 2, -100, 100); return '弁護士を通じて、発信者情報の開示を請求した。\n「法的措置へ」と報じられ、デマの投稿は次々に消されていった。'; }
+  ntMeAdd(N, -5); return '相手にしないことにした。…デマは、しばらく残り続けた。';
 }
-// ---- 自分のアカウント ----
-function ntAccOpen(g) { const N = ntSt(g), R = ntRole(g), fame = num(g.state.fame); N.acc = { fol: Math.round(300 + fame * 15 + (R.pm ? 250000 : R.min ? 40000 : R.diet ? 4000 : 500)), h: `@${['dot', 'seiji', 'kokkai', 'jimoto'][Math.floor(RND() * 4)]}_${Math.floor(RND() * 900 + 100)}`, d0: num(g.state.day), last: -1, live: -99, hist: [] }; return N.acc; }
-const NT_ACT = {
-  policy: { nm: '政策を発信する', desc: 'いま関心の高い話題だと伸びる。リスクは低い', risk: 0.03, mul: 1, me: 2, rep: 0.25 },
-  daily: { nm: '日常を投稿する', desc: '親しみがわく。伸びは小さいが安全', risk: 0.01, mul: 0.6, me: 1.5, rep: 0.1 },
-  attack: { nm: '他党を批判する', desc: '大きく伸びるが、炎上しやすい', risk: 0.18, mul: 2.4, me: 0.5, rep: 0 },
-  live: { nm: 'ライブ配信する（2時間）', desc: '2016年〜・7日に1回。大きく伸びるが失言の危険', risk: 0.1, mul: 3, me: 3, rep: 0.4, since: 2016, cd: 7 },
-  bots: { nm: 'ネット工作を頼む（¥3,000,000）', desc: '2週間、評判を水増しする。ばれると大炎上', risk: 0, mul: 0, me: 0, rep: 0, cost: 3000000, since: 2008, cd: 30 },
-};
-const NT_TXT = {
-  policy: iss => [`【${iss}】現場の声を聞いてきました。必ず形にします。`, `${iss}について、きょう委員会で質問しました。`, `${iss}は待ったなしです。私の考えをまとめました。`],
-  daily: () => ['地元の朝市に行ってきました。とれたてのトマトがおいしい！', '久しぶりに家族と夕飯。明日からまたがんばります。', '議員会館の食堂のカレー、今日もおいしかった。', '駅前で朝の街頭演説。声をかけてくれた方、ありがとうございました。'],
-  attack: p => [`${p}の政策は、国民の生活をまったく見ていない。`, `${p}は説明から逃げている。国会で追及します。`, `${p}のやり方では、この国は良くならない。`],
-  live: () => ['今夜はライブ配信で、みなさんの質問に答えます！', 'ライブ配信、たくさんの質問ありがとうございました。'],
-};
-function ntPost(g, kind) {
-  const N = ntSt(g), A = N.acc, T = NT_ACT[kind], d = num(g.state.day), P = g.state.politics || {}, M = P.me, R = ntRole(g); if (!A || !T) return { ok: false, why: 'アカウントがない' };
-  if (T.since && ntYear(g) < T.since) return { ok: false, why: `${T.since}年から` };
-  if (kind !== 'bots' && A.last === d) return { ok: false, why: '今日はもう投稿した（1日1回）' };
-  if (kind === 'live' && d - num(A.live, -99) < 7) return { ok: false, why: `ライブ配信は7日に1回（あと${7 - (d - A.live)}日）` };
-  if (kind === 'bots') { if (num(N.bots, -99) >= d) return { ok: false, why: '工作はもう頼んでいる' }; if (!g.spend || !g.spend(T.cost)) return { ok: false, why: 'お金が足りない' }; N.bots = d + 14; N.botsExp = false; return { ok: true, text: 'ネット工作の業者に頼んだ。\nこれから2週間、あなたをほめる投稿と「いいね」が水増しされる…。（ばれないといいが）' }; }
-  const iss = (() => { const O = P.opinion && P.opinion.issues; const k = O ? Object.entries(O).sort((a, b) => b[1] - a[1])[0] : null; return k ? (PX_ISS[k[0]] || k[0]) : '景気・経済'; })();
-  const rival = (() => { const ids = Object.keys(P.parties || {}).filter(id => id !== R.party); const id = R.ruling ? ids.find(i => !(P.cabinet && (P.cabinet.partyIds || []).includes(i))) : (P.cabinet && (P.cabinet.partyIds || [])[0]); return id ? pxPName(P, id) : '与党'; })();
-  const txt = (L => L[Math.floor(RND() * L.length)])(NT_TXT[kind](kind === 'attack' ? rival : iss));
-  const match = kind === 'policy' ? 1.5 : 1, base = Math.max(30, A.fol) * (0.006 + RND() * 0.02) * T.mul * match * (1 + num(N.me) / 200);
-  const likes = Math.round(base), rt = Math.round(likes * (0.1 + RND() * 0.25)), gain = Math.round(likes * (0.15 + RND() * 0.15) + (kind === 'live' ? A.fol * 0.02 : 0));
-  A.fol += gain; A.last = d; if (kind === 'live') A.live = d;
-  N.me = clamp(num(N.me) + T.me + (kind === 'policy' ? 1 : 0), -100, 100); if (M) M.reputation = clamp(num(M.reputation) + T.rep, -100, 100);
-  if (kind === 'attack') { N.me = clamp(num(N.me) + (chance(0.5) ? 2 : -2), -100, 100); if (!R.ruling) N.cab = clamp(num(N.cab) - 2, -100, 100); }
-  const tone = kind === 'attack' ? (chance(0.5) ? 'neg' : 'pos') : chance(0.55 + num(N.me) / 300) ? 'pos' : chance(0.5) ? 'mid' : 'neg';
-  const reply = { h: NT_HANDLE[Math.floor(RND() * NT_HANDLE.length)], t: NT_REPLY[tone][Math.floor(RND() * NT_REPLY[tone].length)], tone };
-  N.posts.unshift({ d, kind, txt, likes, rt, reply }); if (N.posts.length > 30) N.posts.length = 30;
+function ntDsDay(g) { // 災害のときのデマ
+  const N = ntSt(g), d = num(g.state.day); let S = null; try { S = pxSt(g).sg; } catch (e) { } if (!S) { if (N.ds && !N.ds.done && d - N.ds.d > 5) N.ds = null; return; }
+  if (!N.ds || N.ds.sid !== S.id) { N.ds = { sid: S.id, d, txt: ntPick(NT_DSDEMA), pref: S.pref, done: false }; ntAddTrend(g, `${S.pref.replace(/[県府都]$/, '')}${N.ds.txt.replace('というデマ', '')}`, -1, 60, 'news'); ntTL(N, { d, h: '@matome_sokuho', txt: `【拡散希望】${S.pref}で${N.ds.txt.replace('というデマ', '')}らしい！`, tone: 'neg', likes: 4800, kind: 'foe' }); return; }
+  if (!N.ds.done && d - N.ds.d >= 3) { N.ds.done = true; N.cab = clamp(num(N.cab) - 5, -100, 100); const R = ntRole(g), M = g.state.politics && g.state.politics.me; if ((R.pm || R.min) && M) M.reputation = clamp(num(M.reputation) - 2, -100, 100); try { g.notify && g.notify(`${N.ds.txt}が広がり、現場が混乱した…`, { color: '#ff9a4a' }); } catch (e) { } }
+}
+// ---- 敵対アカウント・支持者コミュニティ ----
+const NT_FOE = { critic: ['批判アカウント', ['@seiji_kiru', '@tadashii_hihan', '@yatou_ouen'], [2, 5]], matome: ['まとめサイト', ['@matome_sokuho', '@seikai_matome', '@nyusu_2ch'], [4, 8]], troll: ['粘着アカウント', ['@nebaneba_kun', '@24h_watcher', '@anti_dot'], [1, 3]] };
+function ntFoeNew(g, kind) { const N = ntSt(g); if (N.foes.length >= 4) return null; const T = NT_FOE[kind], used = new Set(N.foes.map(f => f.h)), h = T[1].find(x => !used.has(x)); if (!h) return null; const f = { kind, h, power: ntRnd(T[2][0], T[2][1]), anger: 50, d0: num(g.state.day), act: -1 }; N.foes.push(f); ntTL(N, { d: num(g.state.day), h, txt: kind === 'matome' ? `【悲報】${ntFamily(g)}議員、またやらかす【まとめ】` : kind === 'critic' ? `${ntFamily(g)}議員の発言、ちょっとひどくないですか？` : `今日も${ntFamily(g)}議員を監視中`, tone: 'neg', likes: f.power * 300, kind: 'foe' }); return f; }
+function ntFoeAct(g, i, a) {
+  const N = ntSt(g), f = N.foes[i], d = num(g.state.day); if (!f) return ''; if (f.act === d) return '（今日はもう対応した）'; f.act = d;
+  if (a === 'ignore') { f.anger = Math.max(0, f.anger - 15); f.power = Math.max(0, f.power - 0.3); return '相手にしなかった。少しずつ熱が冷めていく…。'; }
+  if (a === 'block') { N.foes.splice(i, 1); if (chance(0.15)) { ntFlame(g, 'block', 40, `${f.h}をブロック`); return 'ブロックしたら、そのスクリーンショットが「批判から逃げた」と出回った…。'; } return `${f.h}をブロックした。タイムラインが静かになった。`; }
+  if (a === 'talk') { const p = clamp(0.3 + num(N.me) / 200 + (f.kind === 'critic' ? 0.1 : -0.15), 0.05, 0.85); if (chance(p)) { N.foes.splice(i, 1); ntMeAdd(N, 2, ['floating', 'urban']); return `${f.h}にていねいに返信した。「ちゃんと答えてくれるんだ」と、逆に好意的な反応が広がった。`; } f.anger += 20; f.power += 1; return '返信したら、言葉じりを取られて言い合いに…。かえって注目を集めてしまった。'; }
+  if (a === 'fix') { const p = 0.6 + (N.stf.sns ? 0.25 : 0); if (chance(p)) { f.power -= 4; ntMeAdd(N, 2, ['floating', 'young']); if (f.power <= 0.5) { N.foes.splice(i, 1); return `資料をそろえて訂正を求めたら、${f.h}は記事を削除した。`; } return '資料つきで訂正を求めた。まちがいを認める追記が出た。'; } return '訂正を求めたが、無視された…。'; }
+  return '';
+}
+function ntFanAct(g, a) {
+  const N = ntSt(g), F = N.fan, d = num(g.state.day);
+  if (a === 'off') { if (d - num(F.off, -99) < 30) return '交流会は30日に1回まで'; if (!g.spend || !g.spend(200000)) return 'お金が足りない'; F.off = d; F.heat = Math.min(100, F.heat + 15); F.n = Math.round(F.n * 1.05 + 30); ntMeAdd(N, 2, ['young', 'families', 'urban']); return '支持者との交流会を開いた。「直接話せてうれしい」と、応援の輪が広がった。'; }
+  if (a === 'calm') { F.heat = Math.max(0, F.heat - 30); return '「ほかの人を攻撃しないでください」と、支持者に呼びかけた。熱が少し落ち着いた。'; }
+  return '';
+}
+// ---- ネット戦略の人材 ----
+const NT_STF = { sns: ['SNS担当の秘書', 15000, '投稿前に層ごとの反応が分かる・炎上しにくい'], pr: ['広報会社', 40000, '投稿が伸びる（×1.3）・広告が半額'], cons: ['炎上対策のコンサル', 10000, '炎上への対応がよく効く（×1.5）'] };
+// ---- 投稿づくり ----
+const NT_TONE = { serious: ['真面目', { elderly: 1.5, business: 1.5, employees: 1, young: -0.5, floating: 0.5 }, 0.5, 1, 1], friendly: ['親しみ', { young: 1.5, families: 1.5, floating: 1, urban: 1, elderly: 0.5, business: -0.5 }, 0.5, 1.15, 1], strong: ['強め', { unions: 1, selfemployed: 1, rural: 0.5, floating: -1, families: -1, elderly: -0.5, business: -0.5, young: 0.5 }, 0, 1.6, 2.5] };
+const NT_ATT = { none: ['なし', {}, 1, 1, 0], photo: ['写真', { families: 0.5, young: 0.5 }, 1.3, 1, 2004], video: ['動画', { young: 1.5, elderly: -0.3 }, 1.7, 1.1, 2012], data: ['データ', { business: 1, employees: 1, elderly: 1 }, 0.8, 0.6, 0] };
+function ntTopics(g) {
+  const P = g.state.politics || {}, O = P.opinion && P.opinion.issues, L = [];
+  if (O) Object.entries(O).sort((a, b) => b[1] - a[1]).slice(0, 3).forEach(([k, v]) => L.push({ id: 'iss:' + k, nm: PX_ISS[k] || k, iss: k, heat: v }));
+  L.push({ id: 'daily', nm: '日常・活動報告' }, { id: 'attack', nm: '他党を批判' });
+  try { const S = pxSt(g).sg; if (S) L.push({ id: 'disaster', nm: `${S.pref}の災害情報`, pref: S.pref }); } catch (e) { }
+  let sc = null; try { sc = (g.scandals().cases || []).find(c => c.mine && c.stage !== 'closed'); } catch (e) { } if (sc) L.push({ id: 'scandal', nm: '疑惑について説明' });
+  return L;
+}
+function ntRival(g) { const P = g.state.politics || {}, R = ntRole(g), ids = Object.keys(P.parties || {}).filter(id => id !== R.party), cab = (P.cabinet && P.cabinet.partyIds) || []; const id = R.ruling ? ids.find(i => !cab.includes(i)) : cab[0]; return id || null; }
+function ntPostText(g, tp, tone, att) {
+  const iss = tp.nm, rv = ntRival(g), rn = rv ? pxPName(g.state.politics, rv) : '与党';
+  const T = {
+    iss: { serious: [`${iss}について、委員会で質問しました。`, `${iss}の具体策をまとめました。`, `${iss}について、政府に申し入れをしました。`], friendly: [`${iss}のこと、現場で聞いてきました！ みなさんの声、届けます`, `${iss}、一緒に考えませんか？ コメントで意見ください`], strong: [`${iss}、このままでは未来はない。私は絶対にあきらめない。`, `${iss}を放置する政治は、もう終わりにする。`] },
+    daily: { serious: ['本日の活動報告です。地元の会合に出席しました。', '朝の街頭演説を終えました。ご声援ありがとうございました。'], friendly: ['お昼は駅前のラーメン！ 午後もがんばります', '地元の朝市でとれたてのトマト。おいしい！'], strong: ['休んでいる暇はない。今日も地元を回る。'] },
+    attack: { serious: [`${rn}の政策には、財源の裏付けがありません。`], friendly: [`${rn}さんの案、ちょっと現実的じゃないかも…`], strong: [`${rn}は国民をなめている。`, `${rn}のやり方では、この国は良くならない。`] },
+    disaster: { serious: [`【${tp.pref}】避難所と給水の情報をまとめました。`], friendly: [`${tp.pref}のみなさん、無理せず避難を。情報を発信し続けます`], strong: [`${tp.pref}の被害、政府はもっと早く動くべきだ。`] },
+    scandal: { serious: ['報道された件について、経緯をご説明します。'], friendly: ['ご心配をおかけしています。きちんと説明します'], strong: ['報道は事実と異なります。'] },
+  }[tp.id.startsWith('iss:') ? 'iss' : tp.id][tone];
+  return ntPick(T) + ({ photo: '［写真］', video: '［動画］', data: '［資料］' }[att] || '');
+}
+// 層ごとの反応（投稿する前の予想にも使う）
+function ntReact(g, tp, tone, att) {
+  const P = g.state.politics || {}, R = ntRole(g), O = P.opinion || {}, T = NT_TONE[tone], A = NT_ATT[att], r = {}, rv = ntRival(g);
+  for (const k of NT_SEGK) {
+    let v = 0.3 + (T[1][k] != null ? T[1][k] : T[2]) + num(A[1][k]);
+    if (tp.iss) v += NT_SEGISS[k].includes(tp.iss) ? 1 + num(tp.heat) * 2 : 0;
+    if (tp.id === 'daily') v += 0.4;
+    if (tp.id === 'attack') { const S = O[k] || {}; v += rv && num(S[rv]) > num(S[R.party]) ? -2 : num(S[R.party]) > 0.15 ? 1.5 : -0.3; }
+    if (tp.id === 'disaster') v += ['rural', 'families', 'elderly'].includes(k) ? 3 : 1;
+    if (tp.id === 'scandal') v += att === 'data' ? 1.5 : 0.6;
+    r[k] = Math.round(v * 10) / 10;
+  }
+  const base = { daily: 0.01, attack: 0.15, disaster: 0.01, scandal: 0.06 }[tp.id] || 0.03, N = ntSt(g), learn = N.flog.filter(o => num(g.state.day) - o.d < 180).length >= 3 ? 0.03 : 0;
+  const risk = clamp((base + learn) * T[4] * A[3] * (N.stf.sns ? 0.7 : 1), 0, 0.6);
+  return { r, risk };
+}
+function ntPost(g, tp, tone, att) {
+  const N = ntSt(g), A = N.acc, d = num(g.state.day), P = g.state.politics || {}, M = P.me, R = ntRole(g); if (!A) return { ok: false, why: 'アカウントがない' };
+  if (A.last === d) return { ok: false, why: '今日はもう投稿した（1日1回）' };
+  const cp = ntCampaign(g); if (cp && ntYear(g) < 2013) return { ok: false, why: '選挙期間中。この時代はネットでの選挙運動が禁止されている' };
+  if (NT_ATT[att][4] && ntYear(g) < NT_ATT[att][4]) return { ok: false, why: `${NT_ATT[att][0]}は${NT_ATT[att][4]}年から` };
+  const { r, risk } = ntReact(g, tp, tone, att), T = NT_TONE[tone], AT = NT_ATT[att];
+  const reach = (tp.heat ? 1 + tp.heat : 1) * T[3] * AT[2] * (N.stf.pr ? 1.3 : 1) * (1 + Math.min(0.3, num(N.fan.n) / Math.max(1, A.fol))) * (cp ? 1.3 : 1) * (1 + num(N.me) / 200);
+  const likes = Math.round(Math.max(30, A.fol) * (0.006 + RND() * 0.02) * reach), rt = Math.round(likes * (0.1 + RND() * 0.25)), gain = Math.round(likes * (0.15 + RND() * 0.15));
+  A.fol += gain; A.last = d; for (const k of NT_SEGK) N.sg[k] = clamp(num(N.sg[k]) + r[k], -100, 100); ntMeCalc(N);
+  if (M) M.reputation = clamp(num(M.reputation) + (tone === 'strong' ? 0 : 0.2), -100, 100);
+  if (tp.id === 'attack' && !R.ruling) N.cab = clamp(num(N.cab) - 2, -100, 100);
+  if (tone !== 'strong' && tp.id !== 'attack') { N.fan.n = Math.round(num(N.fan.n) + A.fol * 0.002 * (tone === 'friendly' ? 1.5 : 1)); N.fan.heat = Math.min(100, num(N.fan.heat) + 2); }
+  if (tp.id === 'attack') N.fan.heat = Math.min(100, num(N.fan.heat) + 5);
+  const txt = ntPostText(g, tp, tone, att), post = { d, kind: tp.id, txt, likes, rt, tone };
+  const order = NT_SEGK.slice().sort((a, b) => Math.abs(r[b]) - Math.abs(r[a])).slice(0, 4);
+  post.reps = order.map(k => { const tn = r[k] >= 1.5 ? 'pos' : r[k] <= -0.5 ? 'neg' : 'mid'; return { h: NT_SEGH[k], t: ntPick(NT_REPLY[tn]), tone: tn, k }; });
+  N.posts.unshift(post); if (N.posts.length > 30) N.posts.length = 30;
+  for (const rp of post.reps.slice().reverse()) ntTL(N, { d, h: rp.h, txt: rp.t, tone: rp.tone, likes: Math.round(likes * (0.02 + RND() * 0.08)), kind: 'reply', fresh: true });
+  N.tl.splice(post.reps.length, 0, { d, h: A.h, nm: ntMyName(g), txt, tone: 'me', likes, rt, kind: 'me' });
+  // 広がり（層と地域）
+  const pref = {}; for (const nm of Object.keys(PX_PREFXY)) { const rural = ['岩手県', '長野県', '高知県', '熊本県', '和歌山県', '石川県'].includes(nm); pref[nm] = Math.max(0, (rural ? r.rural : r.urban) + RND() * 1.5) * likes; }
+  N.last = { d, txt, seg: r, pref, likes };
   let extra = '';
-  if (chance(T.risk)) { const topic = kind === 'attack' ? `${rival}への攻撃的な投稿` : kind === 'live' ? 'ライブ配信での失言' : '投稿の言葉選び'; ntFlame(g, 'post', kind === 'attack' ? 70 : 55, topic); extra = '\n\n…この投稿が、思わぬ形で燃え広がりはじめた！'; }
-  else if (likes > A.fol * 0.05 && likes > 500) { ntAddTrend(g, `${ntFamily(g)}議員`, 1, 50, 'me'); extra = '\n\n投稿がバズって、トレンド入りした！'; }
-  return { ok: true, text: `投稿した：「${txt}」\n\nいいね ${ntFmt(likes)}・リポスト ${ntFmt(rt)}・フォロワー +${ntFmt(gain)}${extra}`, likes, gain };
+  if (tp.id === 'disaster') { if (M) M.reputation = clamp(num(M.reputation) + 1, -100, 100); if (N.ds && !N.ds.done) { N.ds.done = true; N.ds.fixed = true; N.tr = N.tr.filter(t => t.kind !== 'news' || !/決壊|毒|猛獣|閉鎖|予言/.test(t.tag)); extra += '\n\n正しい情報を出したことで、出回っていた災害のデマが打ち消された。'; } }
+  if (tp.id === 'scandal' && N.fl) { N.fl.h = Math.max(0, N.fl.h - (att === 'data' ? 18 : 10)); extra += '\n\n説明を出したことで、炎上が少しおさまった。'; }
+  if (chance(risk)) { const topic = tp.id === 'attack' ? '攻撃的な投稿' : tone === 'strong' ? '強すぎる言葉' : '投稿の言葉選び'; ntFlame(g, tp.id === 'attack' ? 'attack' : 'post', tp.id === 'attack' ? 70 : 55, topic); extra += '\n\n…この投稿が、思わぬ形で燃え広がりはじめた！'; }
+  else if (likes > A.fol * 0.05 && likes > 500) { ntAddTrend(g, `${ntFamily(g)}議員`, 1, 50, 'me'); extra += '\n\n投稿がバズって、トレンド入りした！'; }
+  if (tp.id === 'attack' && num(N.fan.heat) > 85 && chance(0.25)) { ntFlame(g, 'fans', 60, '支持者が相手を集団で攻撃'); extra += '\n\n熱くなった支持者が、相手を集団で攻撃しはじめた…。'; }
+  if (tp.id === 'attack' && chance(0.15)) ntFoeNew(g, 'critic');
+  return { ok: true, post, r, text: `投稿した：「${txt}」\n\nいいね ${ntFmt(likes)}・リポスト ${ntFmt(rt)}・フォロワー +${ntFmt(gain)}${cp ? '（選挙期間中で注目度アップ）' : ''}${extra}` };
+}
+// ライブ配信・ネット広告・工作
+function ntAccOpen(g) { const N = ntSt(g), R = ntRole(g), fame = num(g.state.fame); N.acc = { fol: Math.round(300 + fame * 15 + (R.pm ? 250000 : R.min ? 40000 : R.diet ? 4000 : 500)), h: `@${['dot', 'seiji', 'kokkai', 'jimoto'][Math.floor(RND() * 4)]}_${Math.floor(RND() * 900 + 100)}`, d0: num(g.state.day), last: -1, live: -99, ad: -99, hist: [] }; return N.acc; }
+function ntSpecial(g, k) {
+  const N = ntSt(g), A = N.acc, d = num(g.state.day), y = ntYear(g); if (!A) return { ok: false, why: 'アカウントがない' };
+  if (k === 'live') { if (y < 2016) return { ok: false, why: 'ライブ配信は2016年から' }; if (d - num(A.live, -99) < 7) return { ok: false, why: `ライブ配信は7日に1回（あと${7 - (d - A.live)}日）` }; A.live = d; const gain = Math.round(A.fol * (0.02 + RND() * 0.02)); A.fol += gain; ntMeAdd(N, 3, ['young', 'urban', 'floating']); N.fan.n = Math.round(num(N.fan.n) + gain * 0.3); N.fan.heat = Math.min(100, num(N.fan.heat) + 5);
+    ntTL(N, { d, h: A.h, nm: ntMyName(g), txt: '今夜はライブ配信で、みなさんの質問に答えました！', tone: 'me', likes: Math.round(gain * 2), kind: 'me' });
+    if (chance(0.1 * (N.stf.sns ? 0.7 : 1))) { ntFlame(g, 'live', 60, 'ライブ配信での失言'); return { ok: true, text: `2時間のライブ配信。フォロワー +${ntFmt(gain)}\n\n…が、配信中の一言が切り取られて燃えはじめた！` }; } return { ok: true, text: `2時間のライブ配信で、質問に答えつづけた。\nフォロワー +${ntFmt(gain)}・若い層の反応がとてもよかった。` }; }
+  if (k === 'ad') { if (y < 2013) return { ok: false, why: 'ネット広告（ネット選挙）は2013年から' }; if (d - num(A.ad, -99) < 7) return { ok: false, why: '広告は7日に1回' }; const cost = N.stf.pr ? 500000 : 1000000; if (!g.spend || !g.spend(cost)) return { ok: false, why: 'お金が足りない' }; A.ad = d; const gain = Math.round(A.fol * 0.015 + 300); A.fol += gain; ntMeAdd(N, 3, ['young', 'urban', 'floating']); return { ok: true, text: `ネット広告を出した（${yen(cost)}）。\n若い層・都市部・無党派層に届いた。フォロワー +${ntFmt(gain)}` }; }
+  if (k === 'bots') { if (y < 2008) return { ok: false, why: '2008年から' }; if (num(N.bots, -99) >= d) return { ok: false, why: '工作はもう頼んでいる' }; if (!g.spend || !g.spend(3000000)) return { ok: false, why: 'お金が足りない' }; N.bots = d + 14; N.botsExp = false; return { ok: true, text: 'ネット工作の業者に頼んだ。\nこれから2週間、あなたをほめる投稿と「いいね」が水増しされる…。（ばれないといいが）' }; }
+  return { ok: false, why: '' };
 }
 // ---- 毎日 ----
 function ntTick(g) {
   const N = ntSt(g), d = num(g.state.day); if (N.day === d) return; N.day = d; if (!g.state.politics) return;
   const P = g.state.politics, C = P.cabinet || {}, M = P.me, R = ntRole(g), y = ntYear(g);
   ntTrendDay(g);
-  // 内閣へのネットの空気
   const trTone = N.tr.filter(t => t.kind === 'cab').reduce((a, t) => a + t.tone * t.h, 0) / 100;
   const E3 = P.economy || {}, tgt = clamp((num(C.approval) - 45) * 0.5 + trTone * 15 - (num(C.scandal) > 0 ? 25 : 0) - (num(E3.inflation) >= 2.5 ? 10 : 0) - (num(E3.growth) < 0 ? 10 : 0), -100, 100); N.cab = Math.round((num(N.cab) * 0.9 + tgt * 0.1) * 10) / 10;
   if (C && C.approval != null) { const dv = N.cab * 0.0008; C.approval = clamp(num(C.approval) + dv, 3, 90); N.apAdj = Math.round((num(N.apAdj) + dv) * 100) / 100; }
-  // 自分のネットの評判
+  for (const t of N.tr.slice(0, 2)) { const tn = t.tone > 0 ? 'pos' : t.tone < 0 ? 'neg' : 'mid', k = ntPick(NT_SEGK); ntTL(N, { d, h: NT_SEGH[k], txt: `${ntPick(NT_REPLY[tn])} #${t.tag}`, tone: tn, likes: Math.round(t.h * (30 + RND() * 90)), kind: 'trend' }); }
   if (R.pol) {
-    const bot = num(N.bots, -99) >= d; N.me = Math.round((num(N.me) * 0.97 + (bot ? 2.5 : 0)) * 10) / 10;
-    if (bot && !N.botsExp && chance(0.025)) { N.botsExp = true; N.bots = -1; N.me = clamp(num(N.me) - 30, -100, 100); if (M) { M.reputation = clamp(num(M.reputation) - 10, -100, 100); M.media = clamp(num(M.media) - 10, -100, 100); } ntFlame(g, 'bots', 90, 'ネット工作（ステマ）の発覚'); }
+    const bot = num(N.bots, -99) >= d; for (const k of NT_SEGK) N.sg[k] = Math.round((num(N.sg[k]) * 0.97 + (bot ? 2.5 : 0)) * 10) / 10; ntMeCalc(N);
+    if (bot && !N.botsExp && chance(0.025)) { N.botsExp = true; N.bots = -1; const mul = N.stf.pr ? 1.3 : 1; ntMeAdd(N, -30 * mul); if (M) { M.reputation = clamp(num(M.reputation) - 10 * mul, -100, 100); M.media = clamp(num(M.media) - 10 * mul, -100, 100); } ntFlame(g, 'bots', 90, N.stf.pr ? 'ネット工作（広報会社が関与）の発覚' : 'ネット工作（ステマ）の発覚'); }
     if (M) { M.reputation = clamp(num(M.reputation) + clamp(num(N.me), -100, 100) * 0.0025, -100, 100); M.media = clamp(num(M.media) + clamp(num(N.me), -100, 100) * 0.002, -100, 100); }
     if (N.acc) { const A = N.acc; A.fol = Math.max(0, Math.round(A.fol * (1 + clamp(num(N.me), -60, 60) / 30000) + (RND() - 0.45) * Math.sqrt(A.fol) * 0.3)); if (!Array.isArray(A.hist)) A.hist = []; A.hist.push(A.fol); if (A.hist.length > 30) A.hist.shift(); }
-    // スキャンダルが出たら燃える
-    let open = 0; try { open = g.scandals().open; } catch (e) { } if (open > num(N.scN)) ntFlame(g, 'scandal', 80, '疑惑の報道'); N.scN = open;
+    // 層ごとのネットの声が、その層の支持をほんの少し動かす（支持なし層とのあいだで）
+    if (R.party && P.opinion) for (const k of NT_SEGK) { const S = P.opinion[k]; if (!isObj(S)) continue; const dl = clamp(num(N.sg[k]), -100, 100) * 0.000004; if (dl > 0 && num(S.none) > 0.05) { S.none -= dl; S[R.party] = num(S[R.party]) + dl; } else if (dl < 0 && num(S[R.party]) > 0.02) { S[R.party] += dl; S.none = num(S.none) - dl; } }
+    // 疑惑（スキャンダル）の段階ごとに、ネットが動く
+    try { for (const c of (g.scandals().cases || [])) { if (!c.mine) continue; const prev = N.scSt[c.id]; if (prev === c.stage) continue; N.scSt[c.id] = c.stage; const H = { scoop: 70, follow: 15, probe: 20, charged: 30, trial: 10, pressure: 25 }[c.stage];
+      if (c.stage === 'closed') { ntAddTrend(g, `${ntFamily(g)}議員の疑惑`, 0, 25, 'me'); continue; } if (!prev) ntFlame(g, 'scandal', H || 60, `${c.name || '疑惑'}（${c.stageName || '報道'}）`); else if (N.fl) N.fl.h = Math.min(100, N.fl.h + num(H, 10)); else ntFlame(g, 'scandal', 40 + num(H, 10), `${c.name || '疑惑'}（${c.stageName || ''}）`); } } catch (e) { }
     if (y >= 2014 && (N.acc || R.min || R.pm) && chance(0.008)) ntDema(g);
+    if (num(N.me) < -20 && chance(0.03)) ntFoeNew(g, ntPick(['critic', 'troll']));
+    for (const f of N.foes) { const segs = f.kind === 'matome' ? ['floating', 'young'] : f.kind === 'critic' ? ['floating', 'urban'] : NT_SEGK; ntMeAdd(N, -f.power * 0.05, segs); f.power = Math.max(0, f.power - 0.04); if (chance(0.15)) ntTL(N, { d, h: f.h, txt: ntPick(NT_REPLY.neg) + ` #${ntFamily(g)}議員`, tone: 'neg', likes: Math.round(f.power * 200), kind: 'foe' }); }
+    N.foes = N.foes.filter(f => f.power > 0.5);
+    N.fan.heat = Math.max(0, num(N.fan.heat) - 2); if (N.fan.n > 0 && chance(0.12)) ntTL(N, { d, h: '@ouen_' + (N.acc ? N.acc.h.slice(1, 5) : 'dot'), txt: ntPick(['今日も応援してます！', '地元の誇り！', 'この人に任せたい']), tone: 'pos', likes: Math.round(N.fan.n * 0.05), kind: 'fan' });
+    for (const [k, T] of Object.entries(NT_STF)) { if (!N.stf[k]) continue; if (num(g.state.money) >= T[1]) g.state.money = num(g.state.money) - T[1]; else { N.stf[k] = 0; try { g.notify && g.notify(`お金が払えず、${T[0]}との契約が切れた`, { color: '#ff9a4a' }); } catch (e) { } } }
+    // 選挙の結果とネットの声
+    const wl = num(M && M.wins) + num(M && M.losses); if (N.wl == null) { N.wl = wl; N.wlW = num(M && M.wins); } else if (wl > N.wl) { const won = num(M.wins) > num(N.wlW); N.wl = wl; N.wlW = num(M.wins); const msg = won ? (num(N.me) >= 20 ? 'ネットの勢いが、そのまま票につながった。' : 'ネットの評判はいまひとつだったが、地元の組織が票を支えた。') : (num(N.me) >= 20 ? 'ネットでは人気だったが、票にはつながらなかった…。ネットと投票は別物だ。' : 'ネットでも票でも、支持が広がらなかった。'); try { g.message({ from: 'ネット世論', kind: 'chat', text: `【選挙を終えて】${msg}\n（ネットでの評判 ${Math.round(num(N.me))}）` }); } catch (e) { } }
   }
-  ntFlDay(g);
+  ntDsDay(g); ntFlDay(g);
   N.hist.push({ d, cab: Math.round(N.cab), me: Math.round(num(N.me)), fol: N.acc ? N.acc.fol : 0, ap: Math.round(num(C.approval)) }); if (N.hist.length > 120) N.hist.splice(0, N.hist.length - 120);
 }
-// ---- 囲み取材とつなぐ：失言は炎上、本音は切り抜きでバズることも ----
+// ---- 囲み取材とつなぐ：答え方ごとにネットの反応。失言は炎上、本音は切り抜きでバズることも ----
 (function ntHookKK() { if (typeof kkHandler !== 'function' || kkHandler.__nt) return; const kk0 = kkHandler;
-  kkHandler = function (g, it, k, auto) { const t = kk0(g, it, k, auto); try { if (/口がすべった/.test(t)) ntFlame(g, 'gaffe', 72, '囲み取材での失言');
-      else if (k === 3 && ntYear(g) >= 2018 && chance(0.18)) { const N = ntSt(g); N.me = clamp(num(N.me) + 6, -100, 100); if (N.acc) N.acc.fol = Math.round(N.acc.fol * 1.05 + 500); ntAddTrend(g, `${ntFamily(g)}議員の本音`, 1, 55, 'me'); return t + '\n\nこの場面が「切り抜き動画」になり、ネットで大きく再生された！（ネットの評判アップ）'; } } catch (e) { } return t; }; kkHandler.__nt = true; })();
+  kkHandler = function (g, it, k, auto) { const t = kk0(g, it, k, auto); try { const N = ntSt(g);
+      if (/口がすべった/.test(t)) { ntFlame(g, 'gaffe', 72, '囲み取材での失言'); ntAddTrend(g, `${ntFamily(g)}議員の失言`, -1, 70, 'me', 1); return t + '\n\n（ネットの反応：切り抜かれた映像が、まとめサイトに一気に広がっている…）'; }
+      const RR = { 0: [['elderly', 'business', 'employees'], 1.5, '「誠実」と、高齢層やビジネス層から好評'], 1: [['floating', 'young'], -1.5, '「また逃げた」と、無党派層と若者が冷ややか'], 2: [['unions', 'selfemployed', 'rural'], 1.5, '「頼もしい」という声の一方で、子育て世代からは「強すぎる」'], 3: [['young', 'floating', 'urban'], 2, '「本音で話す政治家」と、若者と無党派層が好意的'] }[k < 0 ? 1 : k];
+      if (RR) { ntMeAdd(N, RR[1], RR[0]); if (k === 2) ntMeAdd(N, -1, ['families']); }
+      if (k === 3 && ntYear(g) >= 2018 && chance(0.18)) { ntMeAdd(N, 4, ['young', 'floating']); if (N.acc) N.acc.fol = Math.round(N.acc.fol * 1.05 + 500); ntAddTrend(g, `${ntFamily(g)}議員の本音`, 1, 55, 'me', 1); return t + '\n\nこの場面が「切り抜き動画」になり、ネットで大きく再生された！'; }
+      if (RR && ntRole(g).pol) return t + `\n（ネットの反応：${RR[2]}）`; } catch (e) { } return t; }; kkHandler.__nt = true; })();
 // ---- 画面 ----
-const NT_TABS = [['tr', 'トレンド'], ['me', '発信'], ['fl', '炎上'], ['an', '分析']];
-const NT_C = { bg: ['#0b0f18', '#0d1220', '#0f1526', '#11182b'], acc: '#3aa0ff', pos: '#4ab0ff', neg: '#ff5a6a', mid: '#b0b8c8' };
+const NT_TABS = [['tr', 'トレンド'], ['tl', 'TL'], ['me', '発信'], ['cm', '関係'], ['fl', '炎上'], ['an', '分析']];
+const NT_C = { bg: ['#0b0f18', '#0d1220', '#0f1526', '#11182b'], acc: '#3aa0ff', pos: '#4ab0ff', neg: '#ff5a6a', mid: '#b0b8c8', fr: '#10182a', ed: '#2a4a7a' };
 function ntGauge(c, x, y, w, v, lab) { pR(c, x, y, w, 10, '#1c2436'); const m = x + w / 2; pR(c, m, y - 2, 1, 14, '#5a6680'); const vv = clamp(v, -100, 100), len = Math.round(w / 2 * Math.abs(vv) / 100); pR(c, vv >= 0 ? m : m - len, y, len, 10, vv >= 0 ? NT_C.pos : NT_C.neg);
-  pT(c, lab, x, y - 16, { size: 12, color: GB_C.t2 }); pT(c, `${vv >= 0 ? '+' : ''}${Math.round(vv)}`, x + w, y - 16, { size: 12, color: vv >= 0 ? NT_C.pos : NT_C.neg, align: 'right' }); pT(c, '批判', x, y + 13, { size: 12, color: GB_C.t3 }); pT(c, '好意', x + w, y + 13, { size: 12, color: GB_C.t3, align: 'right' }); }
+  if (lab) pT(c, lab, x, y - 16, { size: 12, color: GB_C.t2 }); pT(c, `${vv >= 0 ? '+' : ''}${Math.round(vv)}`, x + w, y - 16, { size: 12, color: vv >= 0 ? NT_C.pos : NT_C.neg, align: 'right' }); pT(c, '批判', x, y + 13, { size: 12, color: GB_C.t3 }); pT(c, '好意', x + w, y + 13, { size: 12, color: GB_C.t3, align: 'right' }); }
+function ntBar(c, x, y, w, v, h = 6) { const m = x + w / 2; pR(c, x, y, w, h, '#1c2436'); pR(c, m, y - 1, 1, h + 2, '#5a6680'); const vv = clamp(v, -100, 100), len = Math.round(w / 2 * Math.abs(vv) / 100); pR(c, vv >= 0 ? m : m - len, y, len, h, vv >= 0 ? NT_C.pos : NT_C.neg); }
 function ntSpark(c, x, y, w, h, vals, col, lo, hi) { if (vals.length < 2) { pT(c, 'データが少ない', x + w / 2, y + h / 2 - 6, { size: 12, color: GB_C.t3, align: 'center' }); return; } const mn = lo != null ? lo : Math.min(...vals), mx = hi != null ? hi : Math.max(...vals), rg = Math.max(1e-6, mx - mn);
   for (let i = 1; i < vals.length; i++) { const ax = x + (i - 1) * w / (vals.length - 1), bx = x + i * w / (vals.length - 1), ay = y + h - (vals[i - 1] - mn) / rg * h, by = y + h - (vals[i] - mn) / rg * h; pLine(c, ax, ay, bx, by, col); pLine(c, ax, ay + 1, bx, by + 1, col); } }
 function ntAvatar(c, g, x, y, sc) { try { wrSpr(c, wrLook(g, null), x, y, sc, 'down', 0); } catch (e) { pCirc(c, x, y - 10, 8, '#f0d0b0'); } }
+const NT_ICOL = ['#4a6aa0', '#a06a4a', '#6aa06a', '#a04a8a', '#8a8a4a', '#4a8a8a'];
+function ntPostCard(c, x, y, w, it, fresh) { const col = it.kind === 'me' ? '#1c3a6a' : it.kind === 'foe' ? '#3a1a24' : it.kind === 'fan' ? '#1a3428' : it.kind === 'news' ? '#2a2a1a' : '#141f36';
+  pR(c, x, y, w, 46, col); if (fresh) pR(c, x, y, 3, 46, NT_C.acc); const hh = String(it.h || ''); pCirc(c, x + 14, y + 13, 8, it.kind === 'me' ? NT_C.acc : NT_ICOL[hh.length % NT_ICOL.length]);
+  pT(c, pFit(c, `${it.nm ? it.nm + ' ' : ''}${hh}`, w - 120, 12), x + 28, y + 3, { size: 12, color: it.kind === 'foe' ? '#ff9aa8' : GB_C.t3 }); pT(c, { foe: '敵対', fan: '支持者', news: 'ニュース', reply: '返信' }[it.kind] || '', x + w - 8, y + 3, { size: 12, color: GB_C.t3, align: 'right' });
+  pT(c, pFit(c, it.txt, w - 36, 12), x + 28, y + 17, { size: 12, color: it.tone === 'pos' ? '#bfe0ff' : it.tone === 'neg' ? '#ffc0c8' : '#e8f2ff' }); pT(c, `♥ ${ntFmt(num(it.likes))}${it.rt ? `　⇄ ${ntFmt(it.rt)}` : ''}`, x + 28, y + 31, { size: 12, color: '#ff8ab0' }); }
+const ntSegNm = k => (PX_SEG.find(z => z[0] === k) || [k, k])[1];
 GB_MODES.netop = {
   noHud: true,
-  init(s, g) { s.S = { tab: 'tr', f: 0, sel: 0 }; try { ntSt(g); } catch (e) { } },
+  init(s, g) { ntSt(g); s.S = { tab: 'tr', f: 0, sel: 0, tp: 0, tone: 'serious', att: 'none', tlp: 0, fsel: 0, rev: 99 }; },
+  left(s, g) { try { return Math.max(0, 1440 - (clockMin(g) % 1440) - s.mins); } catch (e) { return 999; } },
   btn(s, id, g) { const S = s.S, N = ntSt(g);
     if (id === 'close') { s.done(); return; } if (id.startsWith('tab:')) { S.tab = id.slice(4); return; } if (id.startsWith('trs:')) { S.sel = +id.slice(4); return; }
     if (id === 'open') { ntAccOpen(g); tt.sfx('chime'); s.ban('アカウントを作った', NT_C.acc, `${N.acc.h}（フォロワー ${ntFmt(N.acc.fol)}）`, { life: 90 }); return; }
-    if (id.startsWith('post:')) { const k = id.slice(5); if (k === 'live' && this.left && this.left(s, g) < 120) { s.tip('今日はもう時間がない', PW.bad); return; } const r = ntPost(g, k); if (!r.ok) { s.tip(r.why, PW.bad); return; } if (k === 'live') s.mins += 120; else s.mins += 10; S.res = r.text; tt.sfx(/燃え広がり/.test(r.text) ? 'buzz' : 'ok'); return; }
-    if (id === 'resok') { S.res = null; return; }
+    if (id.startsWith('tp:')) { S.tp = +id.slice(3); return; } if (id.startsWith('tone:')) { S.tone = id.slice(5); return; } if (id.startsWith('att:')) { S.att = id.slice(4); return; }
+    if (id === 'post') { const T = ntTopics(g), tp = T[clamp(S.tp, 0, T.length - 1)]; const r = ntPost(g, tp, S.tone, S.att); if (!r.ok) { s.tip(r.why, PW.bad); return; } s.mins += 10; S.res = r.text; S.resSeg = r.r; S.rev = 0; S.tlp = 0; tt.sfx(/燃え広がり|集団で攻撃/.test(r.text) ? 'buzz' : 'ok'); return; }
+    if (id.startsWith('sp:')) { const k = id.slice(3); if (k === 'live' && this.left(s, g) < 120) { s.tip('今日はもう時間がない', PW.bad); return; } const r = ntSpecial(g, k); if (!r.ok) { s.tip(r.why, PW.bad); return; } if (k === 'live') s.mins += 120; S.res = r.text; S.resSeg = null; tt.sfx('ok'); return; }
+    if (id === 'resok') { S.res = null; S.resSeg = null; return; }
     if (id.startsWith('fr:')) { S.res = ntFlResp(g, +id.slice(3)); return; } if (id.startsWith('dr:')) { S.res = ntDemaResp(g, +id.slice(3)); return; }
+    if (id.startsWith('foe:')) { const [, i, a] = id.split(':'); S.res = ntFoeAct(g, +i, a); return; } if (id.startsWith('fan:')) { S.res = ntFanAct(g, id.slice(4)); return; }
+    if (id.startsWith('stf:')) { const k = id.slice(4); N.stf[k] = N.stf[k] ? 0 : 1; s.tip(N.stf[k] ? `${NT_STF[k][0]}と契約した（1日 ${yen(NT_STF[k][1])}）` : `${NT_STF[k][0]}との契約をやめた`, PW.text); return; }
+    if (id === 'tlp:-1' || id === 'tlp:1') { S.tlp = Math.max(0, num(S.tlp) + (id === 'tlp:1' ? 1 : -1)); return; } if (id.startsWith('fs:')) { S.fsel = +id.slice(3); return; }
+    if (id === 'dsfix') { const T = ntTopics(g), i = T.findIndex(t => t.id === 'disaster'); if (i >= 0) { S.tab = 'me'; S.tp = i; S.att = 'data'; S.tone = 'serious'; } return; }
   },
-  left(s, g) { try { return Math.max(0, 1440 - (clockMin(g) % 1440) - s.mins); } catch (e) { return 999; } },
-  update(s) { s.S.f++; },
+  update(s) { s.S.f++; if (s.S.rev < 99 && s.S.f % 30 === 0) s.S.rev++; },
   draw(s, c, g) {
     const S = s.S, N = ntSt(g), R = ntRole(g), f = S.f; pBands(c, 0, 0, 640, 360, NT_C.bg); for (let x = 0; x < 640; x += 32) pR(c, x, 30, 1, 330, 'rgba(80,160,255,0.03)');
     pR(c, 0, 0, 640, 30, '#070a12'); pR(c, 0, 29, 640, 1, NT_C.acc); pT(c, 'ネット世論', 10, 7, { size: 16, color: '#e8f2ff' }); pT(c, ntPlat(g), 104, 10, { size: 12, color: NT_C.acc });
-    if (N.fl) { const a = (f >> 4) % 2; pR(c, 200, 6, 150, 18, a ? '#5a1020' : '#3a0a18'); pT(c, `炎上中 ${Math.round(N.fl.h)}`, 275, 8, { size: 12, color: '#ffb0b8', align: 'center' }); }
+    if (N.fl) { const a = (f >> 4) % 2; pR(c, 196, 6, 120, 18, a ? '#5a1020' : '#3a0a18'); pT(c, `炎上中 ${Math.round(N.fl.h)}`, 256, 8, { size: 12, color: '#ffb0b8', align: 'center' }); }
+    const cp = ntCampaign(g); if (cp) pT(c, ntYear(g) < 2013 ? '選挙期間（ネット運動は禁止）' : '選挙期間中', 324, 10, { size: 12, color: '#ffd23f' });
     pT(c, `内閣支持率 ${Math.round(pxAp(g))}%`, 560, 8, { size: 12, align: 'right', color: '#fff' }); s.btn('close', '閉じる', 572, 4, 62, 22, { size: 12, back: true });
-    NT_TABS.forEach(([id, nm], i) => s.btn('tab:' + id, nm + (id === 'fl' && (N.fl && !N.fl.resp || N.dema && !N.dema.done) ? '！' : ''), 6, 40 + i * 44, 70, 36, { size: 12, kind: S.tab === id ? 'pri' : 'norm', def: S.tab === id && i === 0 }));
+    const badge = { fl: (N.fl && !N.fl.resp) || (N.dema && !N.dema.done) || (N.ds && !N.ds.done), cm: N.foes.length > 0, tl: S.rev < 99 };
+    NT_TABS.forEach(([id, nm], i) => s.btn('tab:' + id, nm + (badge[id] ? '！' : ''), 4, 36 + i * 52, 74, 46, { size: 12, kind: S.tab === id ? 'pri' : 'norm', def: S.tab === id && i === 0 }));
     const x0 = 84, y0 = 38; try { this['d_' + S.tab](s, c, g, N, R, x0, y0, f); } catch (e) { console.error('[net] draw', e); pT(c, '（表示エラー）', 360, 180, { color: PW.bad }); }
-    if (S.res) { pR(c, 0, 0, 640, 360, 'rgba(0,0,0,0.55)'); pFrame(c, 110, 90, 420, 170, { bg: '#121a2c', edge: NT_C.acc }); wrapDot(c, S.res, 392, 12).slice(0, 9).forEach((ln, i) => pT(c, ln, 126, 106 + i * 16, { size: 12, color: '#e8f2ff' })); s.btn('resok', 'OK', 270, 224, 100, 26, { kind: 'pri', def: true, size: 12 }); }
+    if (S.res) { s.btns.length = 0; pR(c, 0, 0, 640, 360, 'rgba(0,0,0,0.55)'); const segs = S.resSeg, hh = segs ? 236 : 170, yy = segs ? 60 : 90; pFrame(c, 100, yy, 440, hh, { bg: '#121a2c', edge: NT_C.acc }); wrapDot(c, S.res, 410, 12).slice(0, segs ? 7 : 8).forEach((ln, i) => pT(c, ln, 116, yy + 14 + i * 15, { size: 12, color: '#e8f2ff' }));
+      if (segs) { pT(c, '層ごとの反応', 116, yy + 126, { size: 12, color: NT_C.acc }); NT_SEGK.forEach((k, i) => { const x = 116 + (i % 4) * 104, y = yy + 144 + Math.floor(i / 4) * 18, v = segs[k]; pT(c, pFit(c, ntSegNm(k), 54, 12), x, y, { size: 12, color: GB_C.t2 }); pT(c, `${v >= 0 ? '▲' : '▼'}${Math.abs(v).toFixed(1)}`, x + 96, y, { size: 12, color: v >= 1.5 ? NT_C.pos : v < 0 ? NT_C.neg : GB_C.t3, align: 'right' }); }); }
+      s.btn('resok', 'OK', 270, yy + hh - 34, 100, 26, { kind: 'pri', def: true, size: 12 }); }
   },
-  // トレンド
   d_tr(s, c, g, N, R, x0, y0, f) {
-    pFrame(c, x0, y0, 300, 316, { title: `いまのトレンド（${ntPlat(g)}）`, bg: '#10182a', edge: '#2a4a7a' });
+    pFrame(c, x0, y0, 300, 316, { title: `いまのトレンド（${ntPlat(g)}）`, bg: NT_C.fr, edge: NT_C.ed });
     if (!N.tr.length) pT(c, '明日の朝からトレンドが出る', x0 + 150, y0 + 140, { size: 12, color: GB_C.t3, align: 'center' });
     N.tr.slice(0, 9).forEach((t, i) => { const y = y0 + 26 + i * 32, on = s.S.sel === i, col = t.tone > 0 ? NT_C.pos : t.tone < 0 ? NT_C.neg : NT_C.mid; pR(c, x0 + 6, y, 288, 30, on ? '#1c2c4a' : i % 2 ? '#121c30' : '#141f36'); if (on) pR(c, x0 + 6, y, 3, 30, NT_C.acc);
-      pT(c, String(i + 1), x0 + 20, y + 8, { size: 12, color: i < 3 ? '#ffd23f' : GB_C.t2, align: 'center' }); pT(c, pFit(c, `#${t.tag}`, 170, 12), x0 + 34, y + 3, { size: 12, color: '#ffffff' }); pT(c, `${ntFmt(t.h * 1200 + 800)}件の投稿`, x0 + 34, y + 17, { size: 12, color: GB_C.t3 });
+      pT(c, String(i + 1), x0 + 20, y + 8, { size: 12, color: i < 3 ? '#ffd23f' : GB_C.t2, align: 'center' }); pT(c, pFit(c, `#${t.tag}`, 160, 12), x0 + 34, y + 3, { size: 12, color: '#ffffff' }); pT(c, `${ntFmt(t.h * 1200 + 800)}件`, x0 + 34, y + 17, { size: 12, color: GB_C.t3 });
+      if (num(t.st) > 0) { const lab = NT_CHAIN[num(t.st)], w = pW(c, lab, 12) + 8; pR(c, x0 + 208 - w, y + 16, w, 13, num(t.st) >= 3 ? '#7a5a1a' : '#2a3a5a'); pT(c, lab, x0 + 208 - w / 2, y + 16, { size: 12, color: '#ffe8b0', align: 'center', shadow: null }); }
       pR(c, x0 + 214, y + 12, 70, 6, '#1c2436'); pR(c, x0 + 214, y + 12, Math.round(70 * t.h / 100), 6, col); s.btn('trs:' + i, '', x0 + 6, y, 288, 30, { kind: 'clear', nofocus: true }); });
-    const x1 = x0 + 308, w1 = 242; pFrame(c, x1, y0, w1, 116, { title: '内閣へのネットの空気', bg: '#10182a', edge: '#2a4a7a' }); ntGauge(c, x1 + 14, y0 + 52, w1 - 28, N.cab, `${ntPm(g)}内閣`);
-    pT(c, N.cab <= -30 ? '批判が多い。支持率がじわじわ下がる' : N.cab >= 30 ? '好意的。支持率の追い風に' : 'ネットの声は割れている', x1 + 14, y0 + 90, { size: 12, color: GB_C.t2 });
-    const t = N.tr[clamp(s.S.sel, 0, Math.max(0, N.tr.length - 1))]; pFrame(c, x1, y0 + 124, w1, 192, { title: t ? `#${t.tag}` : '投稿', bg: '#10182a', edge: '#2a4a7a' });
-    if (t) for (let i = 0; i < 4; i++) { const tone = t.tone > 0 ? (i === 3 ? 'mid' : 'pos') : t.tone < 0 ? (i === 3 ? 'mid' : 'neg') : ['mid', 'pos', 'neg', 'mid'][i], h = NT_HANDLE[(i * 5 + t.tag.length) % NT_HANDLE.length], tx = NT_REPLY[tone][(i * 3 + t.tag.length) % NT_REPLY[tone].length], y = y0 + 148 + i * 41;
-      pR(c, x1 + 8, y, w1 - 16, 38, '#141f36'); pCirc(c, x1 + 22, y + 13, 8, ['#4a6aa0', '#a06a4a', '#6aa06a', '#a04a8a'][i]); pT(c, h, x1 + 36, y + 3, { size: 12, color: GB_C.t3 }); pT(c, pFit(c, `${tx} #${t.tag}`, w1 - 52, 12), x1 + 36, y + 19, { size: 12, color: tone === 'pos' ? '#bfe0ff' : tone === 'neg' ? '#ffc0c8' : '#e0e4ec' }); }
+    const x1 = x0 + 308, w1 = 242; pFrame(c, x1, y0, w1, 100, { title: '内閣へのネットの空気', bg: NT_C.fr, edge: NT_C.ed }); ntGauge(c, x1 + 14, y0 + 50, w1 - 28, N.cab, `${ntPm(g)}内閣`);
+    pT(c, N.cab <= -30 ? '批判が多い。支持率がじわじわ下がる' : N.cab >= 30 ? '好意的。支持率の追い風に' : 'ネットの声は割れている', x1 + 14, y0 + 78, { size: 12, color: GB_C.t2 });
+    const t = N.tr[clamp(s.S.sel, 0, Math.max(0, N.tr.length - 1))]; pFrame(c, x1, y0 + 108, w1, 208, { title: t ? pFit(c, `#${t.tag}`, w1 - 20, 12) : '話題', bg: NT_C.fr, edge: NT_C.ed });
+    if (t) { for (let i = 0; i < 5; i++) { const x = x1 + 10 + i * 45, on = i <= num(t.st); pR(c, x, y0 + 132, 41, 16, on ? (i >= 3 ? '#8a6a20' : '#2a5a9a') : '#1c2436'); pT(c, ['ネット', 'まとめ', 'ニュース', 'TV', '社説'][i], x + 20, y0 + 134, { size: 12, color: on ? '#ffffff' : GB_C.t3, align: 'center', shadow: null }); }
+      for (let i = 0; i < 3; i++) { const tone = t.tone > 0 ? (i === 2 ? 'mid' : 'pos') : t.tone < 0 ? (i === 2 ? 'mid' : 'neg') : ['mid', 'pos', 'neg'][i], k = NT_SEGK[(i * 4 + t.tag.length) % NT_SEGK.length], tx = NT_REPLY[tone][(i * 3 + t.tag.length) % NT_REPLY[tone].length];
+        ntPostCard(c, x1 + 8, y0 + 156 + i * 52, w1 - 16, { h: NT_SEGH[k], txt: `${tx} #${t.tag}`, tone, likes: Math.round(t.h * (40 + i * 30)), kind: 'trend' }); } }
   },
-  // アカウント
+  d_tl(s, c, g, N, R, x0, y0, f) {
+    const S = s.S, per = 6, L = N.tl, pages = Math.max(1, Math.ceil(L.length / per)); S.tlp = clamp(num(S.tlp), 0, pages - 1);
+    pFrame(c, x0, y0, 550, 316, { title: 'タイムライン', bg: NT_C.fr, edge: NT_C.ed }); if (!L.length) { pT(c, 'まだ投稿が流れていない', x0 + 275, y0 + 150, { size: 12, color: GB_C.t3, align: 'center' }); return; }
+    const freshN = L.filter(x => x.fresh).length, hide = S.rev < 99 ? Math.max(0, freshN - S.rev) : 0, vis = L.slice(hide);
+    vis.slice(S.tlp * per, S.tlp * per + per).forEach((it, j) => ntPostCard(c, x0 + 8, y0 + 24 + j * 48, 500, it, it.fresh));
+    if (hide > 0) pT(c, '返信がついています…', x0 + 260, y0 + 6, { size: 12, color: NT_C.acc, align: 'center' }); else if (freshN && S.rev >= freshN) { for (const it of L) delete it.fresh; S.rev = 99; }
+    s.btn('tlp:-1', '▲', x0 + 514, y0 + 26, 30, 130, { size: 12, off: S.tlp === 0 }); s.btn('tlp:1', '▼', x0 + 514, y0 + 162, 30, 130, { size: 12, off: S.tlp >= pages - 1 }); pT(c, `${S.tlp + 1}/${pages}`, x0 + 529, y0 + 298, { size: 12, color: GB_C.t3, align: 'center' });
+  },
   d_me(s, c, g, N, R, x0, y0, f) {
-    if (!R.pol) { pFrame(c, x0, y0, 550, 316, { title: '自分のアカウント', bg: '#10182a', edge: '#2a4a7a' }); pT(c, '政治家（議員・大臣・候補者）になると、', x0 + 275, y0 + 130, { size: 16, align: 'center', color: GB_C.t2 }); pT(c, '自分のアカウントで発信できる。', x0 + 275, y0 + 156, { size: 16, align: 'center', color: GB_C.t2 }); return; }
-    const A = N.acc; if (!A) { pFrame(c, x0, y0, 550, 316, { title: '自分のアカウント', bg: '#10182a', edge: '#2a4a7a' }); ntAvatar(c, g, x0 + 275, y0 + 130, 3); pT(c, `${ntPlat(g)}のアカウントを作って、自分の言葉で発信しよう`, x0 + 275, y0 + 150, { size: 12, align: 'center', color: GB_C.t2 }); s.btn('open', 'アカウントを作る', x0 + 195, y0 + 180, 160, 32, { kind: 'pri', def: true, size: 12 }); return; }
-    pFrame(c, x0, y0, 230, 150, { title: 'プロフィール', bg: '#10182a', edge: '#2a4a7a' }); pR(c, x0 + 6, y0 + 22, 218, 30, '#1c3a6a'); pCirc(c, x0 + 34, y0 + 58, 20, '#0d1220'); c.save(); c.beginPath(); c.arc(x0 + 34, y0 + 58, 18, 0, Math.PI * 2); c.clip(); ntAvatar(c, g, x0 + 34, y0 + 86, 2); c.restore();
-    pT(c, pFit(c, ntMyName(g), 160, 12), x0 + 60, y0 + 54, { size: 12, color: '#ffffff' }); pT(c, A.h, x0 + 60, y0 + 68, { size: 12, color: GB_C.t3 }); pT(c, ntFmt(A.fol), x0 + 14, y0 + 82, { size: 24, color: '#ffffff' }); pT(c, 'フォロワー', x0 + 18 + pW(c, ntFmt(A.fol), 24), y0 + 92, { size: 12, color: GB_C.t3 });
-    ntGauge(c, x0 + 14, y0 + 126, 202, N.me, 'ネットでの評判');
-    pFrame(c, x0, y0 + 158, 230, 158, { title: '発信する（1日1回）', bg: '#10182a', edge: '#2a4a7a' }); const d = num(g.state.day), y = ntYear(g);
-    Object.entries(NT_ACT).forEach(([k, T], i) => { const off = (T.since && y < T.since) || (k !== 'bots' && A.last === d) || (k === 'live' && d - num(A.live, -99) < 7) || (k === 'bots' && num(N.bots, -99) >= d); s.btn('post:' + k, T.nm, x0 + 8, y0 + 180 + i * 27, 214, 24, { size: 12, kind: k === 'bots' ? 'red' : i === 0 ? 'pri' : 'norm', off }); });
-    const x1 = x0 + 238, w1 = 312; pFrame(c, x1, y0, w1, 316, { title: '最近の投稿', bg: '#10182a', edge: '#2a4a7a' });
-    if (!N.posts.length) pT(c, 'まだ投稿していない', x1 + w1 / 2, y0 + 140, { size: 12, color: GB_C.t3, align: 'center' });
-    N.posts.slice(0, 4).forEach((p, i) => { const yy = y0 + 24 + i * 72; pR(c, x1 + 8, yy, w1 - 16, 68, '#141f36'); let dl = ''; try { const D = dateOf(g, p.d); dl = `${D.month}/${D.dom}`; } catch (e) { } pT(c, `${A.h}・${dl}`, x1 + 16, yy + 3, { size: 12, color: GB_C.t3 });
-      wrapDot(c, p.txt, w1 - 36, 12).slice(0, 2).forEach((ln, j) => pT(c, ln, x1 + 16, yy + 18 + j * 14, { size: 12, color: '#e8f2ff' })); pT(c, `♥ ${ntFmt(p.likes)}　⇄ ${ntFmt(p.rt)}`, x1 + 16, yy + 50, { size: 12, color: '#ff8ab0' });
-      if (p.reply) pT(c, pFit(c, `↳ ${p.reply.t}`, 150, 12), x1 + w1 - 14, yy + 50, { size: 12, color: p.reply.tone === 'pos' ? '#9ad0ff' : p.reply.tone === 'neg' ? '#ff9aa8' : GB_C.t3, align: 'right' }); });
+    const S = s.S; if (!R.pol) { pFrame(c, x0, y0, 550, 316, { title: '自分のアカウント', bg: NT_C.fr, edge: NT_C.ed }); pT(c, '政治家（議員・大臣・候補者）になると、', x0 + 275, y0 + 130, { size: 16, align: 'center', color: GB_C.t2 }); pT(c, '自分のアカウントで発信できる。', x0 + 275, y0 + 156, { size: 16, align: 'center', color: GB_C.t2 }); return; }
+    const A = N.acc; if (!A) { pFrame(c, x0, y0, 550, 316, { title: '自分のアカウント', bg: NT_C.fr, edge: NT_C.ed }); ntAvatar(c, g, x0 + 275, y0 + 130, 3); pT(c, `${ntPlat(g)}のアカウントを作って、自分の言葉で発信しよう`, x0 + 275, y0 + 150, { size: 12, align: 'center', color: GB_C.t2 }); s.btn('open', 'アカウントを作る', x0 + 195, y0 + 180, 160, 32, { kind: 'pri', def: true, size: 12 }); return; }
+    pFrame(c, x0, y0, 200, 150, { title: 'プロフィール', bg: NT_C.fr, edge: NT_C.ed }); pR(c, x0 + 6, y0 + 22, 188, 26, '#1c3a6a'); pCirc(c, x0 + 30, y0 + 52, 18, '#0d1220'); c.save(); c.beginPath(); c.arc(x0 + 30, y0 + 52, 16, 0, Math.PI * 2); c.clip(); ntAvatar(c, g, x0 + 30, y0 + 78, 2); c.restore();
+    pT(c, pFit(c, ntMyName(g), 136, 12), x0 + 54, y0 + 50, { size: 12, color: '#ffffff' }); pT(c, A.h, x0 + 54, y0 + 64, { size: 12, color: GB_C.t3 }); pT(c, ntFmt(A.fol), x0 + 12, y0 + 80, { size: 24, color: '#ffffff' }); pT(c, 'フォロワー', x0 + 16 + pW(c, ntFmt(A.fol), 24), y0 + 90, { size: 12, color: GB_C.t3 });
+    ntGauge(c, x0 + 12, y0 + 126, 176, N.me, 'ネットでの評判');
+    pFrame(c, x0, y0 + 158, 200, 158, { title: 'そのほか', bg: NT_C.fr, edge: NT_C.ed }); const d = num(g.state.day), y = ntYear(g);
+    [['live', 'ライブ配信（2時間）', y < 2016 || d - num(A.live, -99) < 7], ['ad', `ネット広告 ${N.stf.pr ? '¥50万' : '¥100万'}`, y < 2013 || d - num(A.ad, -99) < 7], ['bots', 'ネット工作 ¥300万', y < 2008 || num(N.bots, -99) >= d]].forEach(([k, nm, off], i) => s.btn('sp:' + k, nm, x0 + 8, y0 + 180 + i * 30, 184, 26, { size: 12, kind: k === 'bots' ? 'red' : 'norm', off }));
+    pT(c, '工作はばれると大炎上', x0 + 100, y0 + 274, { size: 12, color: GB_C.t3, align: 'center' }); pT(c, y < 2016 ? 'ライブ配信は2016年〜' : y < 2013 ? 'ネット広告は2013年〜' : '', x0 + 100, y0 + 290, { size: 12, color: GB_C.t3, align: 'center' });
+    const x1 = x0 + 208, w1 = 342; pFrame(c, x1, y0, w1, 316, { title: A.last === d ? '投稿づくり（今日はもう投稿した）' : '投稿づくり（1日1回）', bg: NT_C.fr, edge: NT_C.ed });
+    const T = ntTopics(g); S.tp = clamp(S.tp, 0, T.length - 1); const tp = T[S.tp];
+    pT(c, '話題', x1 + 10, y0 + 22, { size: 12, color: NT_C.acc }); T.forEach((t, i) => s.btn('tp:' + i, pFit(c, t.nm, 96, 12), x1 + 10 + (i % 3) * 108, y0 + 38 + Math.floor(i / 3) * 26, 104, 22, { size: 12, kind: S.tp === i ? 'sel' : 'norm' }));
+    const ty = y0 + 38 + Math.ceil(T.length / 3) * 26 + 2; pT(c, 'トーン', x1 + 10, ty + 4, { size: 12, color: NT_C.acc }); Object.entries(NT_TONE).forEach(([k, v], i) => s.btn('tone:' + k, v[0], x1 + 60 + i * 92, ty, 88, 22, { size: 12, kind: S.tone === k ? 'sel' : 'norm' }));
+    const ay = ty + 26; pT(c, '添付', x1 + 10, ay + 4, { size: 12, color: NT_C.acc }); Object.entries(NT_ATT).forEach(([k, v], i) => s.btn('att:' + k, v[0], x1 + 60 + i * 69, ay, 65, 22, { size: 12, kind: S.att === k ? 'sel' : 'norm', off: v[4] && y < v[4] }));
+    const py = ay + 28; pR(c, x1 + 8, py, w1 - 16, 34, '#141f36'); const pk = `${S.tp}|${S.tone}|${S.att}|${d}|${tp.id}`; if (S.prevK !== pk) { S.prev = ntPostText(g, tp, S.tone, S.att); S.prevK = pk; } wrapDot(c, S.prev, w1 - 32, 12).slice(0, 2).forEach((ln, i) => pT(c, ln, x1 + 16, py + 3 + i * 15, { size: 12, color: '#e8f2ff' }));
+    const ry = py + 40; if (N.stf.sns) { const { r, risk } = ntReact(g, tp, S.tone, S.att); pT(c, `秘書の予想：炎上リスク ${Math.round(risk * 100)}%`, x1 + 10, ry, { size: 12, color: risk >= 0.15 ? NT_C.neg : '#9adfff' });
+      NT_SEGK.forEach((k, i) => { const x = x1 + 10 + (i % 4) * 82, yy = ry + 16 + Math.floor(i / 4) * 15; pT(c, pFit(c, ntSegNm(k), 56, 12), x, yy, { size: 12, color: GB_C.t3 }); pT(c, r[k] >= 1.5 ? '◎' : r[k] >= 0.5 ? '○' : r[k] >= 0 ? '△' : '×', x + 66, yy, { size: 12, color: r[k] >= 1.5 ? NT_C.pos : r[k] < 0 ? NT_C.neg : GB_C.t2 }); }); }
+    else pT(c, 'SNS担当の秘書を雇うと、層ごとの反応の予想が出る', x1 + 10, ry, { size: 12, color: GB_C.t3 });
+    const cp = ntCampaign(g), blocked = cp && y < 2013; s.btn('post', blocked ? '選挙期間中は投稿できない' : '投稿する', x1 + 90, y0 + 286, 162, 24, { kind: 'pri', size: 12, def: true, off: A.last === d || blocked });
   },
-  // 炎上・デマ
+  d_cm(s, c, g, N, R, x0, y0, f) {
+    if (!R.pol || !N.acc) { pFrame(c, x0, y0, 550, 316, { title: 'つながり', bg: NT_C.fr, edge: NT_C.ed }); pT(c, '自分のアカウントを作ると使える', x0 + 275, y0 + 150, { size: 16, align: 'center', color: GB_C.t2 }); return; }
+    pFrame(c, x0, y0, 270, 316, { title: `敵対アカウント（${N.foes.length}）`, bg: NT_C.fr, edge: N.foes.length ? '#7a3040' : NT_C.ed }); const d = num(g.state.day);
+    if (!N.foes.length) { pT(c, 'いまは目立つ敵はいない', x0 + 135, y0 + 130, { size: 12, color: GB_C.t3, align: 'center' }); pT(c, '他党への批判や炎上で現れることがある', x0 + 135, y0 + 150, { size: 12, color: GB_C.t3, align: 'center' }); }
+    N.foes.slice(0, 4).forEach((fo, i) => { const y = y0 + 24 + i * 72, T = NT_FOE[fo.kind], done = fo.act === d; pR(c, x0 + 6, y, 258, 68, '#1a1424'); pCirc(c, x0 + 22, y + 14, 9, '#7a2a3a'); pT(c, fo.h, x0 + 36, y + 4, { size: 12, color: '#ff9aa8' }); pT(c, T[0], x0 + 256, y + 4, { size: 12, color: GB_C.t3, align: 'right' });
+      pT(c, '影響力', x0 + 36, y + 22, { size: 12, color: GB_C.t3 }); pR(c, x0 + 84, y + 26, 100, 6, '#2a2030'); pR(c, x0 + 84, y + 26, Math.round(100 * clamp(fo.power / 8, 0, 1)), 6, '#ff5a6a');
+      const acts = fo.kind === 'matome' ? [['ignore', '無視'], ['fix', '訂正を求める']] : [['ignore', '無視'], ['block', 'ブロック'], ['talk', '対話']]; acts.forEach(([a, nm], j) => s.btn(`foe:${i}:${a}`, nm, x0 + 10 + j * (acts.length === 2 ? 124 : 83), y + 40, acts.length === 2 ? 120 : 79, 22, { size: 12, off: done, kind: a === 'block' ? 'red' : 'norm' })); });
+    const F = N.fan; pFrame(c, x0 + 278, y0, 272, 150, { title: '支持者のコミュニティ', bg: NT_C.fr, edge: NT_C.ed }); pT(c, pFit(c, `${ntFamily(g)}さんを応援する会`, 170, 12), x0 + 290, y0 + 26, { size: 12, color: '#9ae0b0' }); pT(c, `${ntFmt(num(F.n))}人`, x0 + 540, y0 + 24, { size: 16, color: '#ffffff', align: 'right' });
+    pT(c, '熱量', x0 + 290, y0 + 50, { size: 12, color: GB_C.t3 }); pR(c, x0 + 324, y0 + 54, 120, 7, '#1c2436'); pR(c, x0 + 324, y0 + 54, Math.round(120 * num(F.heat) / 100), 7, num(F.heat) > 85 ? '#ff5a6a' : '#5ee07a'); pT(c, num(F.heat) > 85 ? '暴走注意' : '', x0 + 540, y0 + 50, { size: 12, color: NT_C.neg, align: 'right' });
+    pT(c, '炎上のとき擁護してくれる・投稿が伸びる', x0 + 290, y0 + 70, { size: 12, color: GB_C.t3 }); s.btn('fan:off', '交流会（¥20万・30日ごと）', x0 + 286, y0 + 90, 256, 24, { size: 12, kind: 'pri', off: d - num(F.off, -99) < 30 }); s.btn('fan:calm', '支持者をいさめる', x0 + 286, y0 + 118, 256, 24, { size: 12, off: num(F.heat) < 40 });
+    pFrame(c, x0 + 278, y0 + 158, 272, 158, { title: 'ネット戦略の人材', bg: NT_C.fr, edge: NT_C.ed });
+    Object.entries(NT_STF).forEach(([k, T], i) => { const y = y0 + 180 + i * 44, on = !!N.stf[k]; pT(c, `${T[0]}（1日${yen(T[1])}）`, x0 + 288, y, { size: 12, color: on ? '#9ae0b0' : '#ffffff' }); pT(c, pFit(c, T[2], 180, 12), x0 + 288, y + 16, { size: 12, color: GB_C.t3 }); s.btn('stf:' + k, on ? '契約中' : '雇う', x0 + 476, y + 4, 66, 24, { size: 12, kind: on ? 'green' : 'pri' }); });
+  },
   d_fl(s, c, g, N, R, x0, y0, f) {
-    const F = N.fl, d = num(g.state.day); pFrame(c, x0, y0, 550, 176, { title: '炎上', bg: '#10182a', edge: F ? '#a03040' : '#2a4a7a' });
-    if (!F) { pT(c, 'いまは炎上していない', x0 + 275, y0 + 70, { size: 16, color: '#8ab0d0', align: 'center' }); pT(c, '失言・攻撃的な投稿・疑惑の報道・ネット工作の発覚で燃えることがある', x0 + 275, y0 + 100, { size: 12, color: GB_C.t3, align: 'center' }); }
-    else { pT(c, `「${F.topic}」`, x0 + 14, y0 + 26, { size: 16, color: '#ffc0c8' }); pT(c, `炎上の強さ ${Math.round(F.h)}（最大 ${Math.round(F.peak)}）・${d - F.d}日目`, x0 + 14, y0 + 50, { size: 12, color: GB_C.t2 });
-      for (let i = 0; i < 4; i++) { const x = x0 + 14 + i * 132, on = i === (F.h < 15 ? 3 : F.st); pR(c, x, y0 + 70, 122, 22, on ? (i === 3 ? '#2a6a4a' : '#7a2030') : '#1c2436'); pT(c, NT_FST[i], x + 61, y0 + 74, { size: 12, color: on ? '#ffffff' : GB_C.t3, align: 'center' }); if (i < 3) pT(c, '▶', x + 126, y0 + 74, { size: 12, color: GB_C.t3 }); }
-      for (let i = 0; i < 24; i++) { const hh = Math.max(2, Math.round((F.h / 100) * 30 * (0.5 + 0.5 * Math.sin((f + i * 13) / 6)))); pR(c, x0 + 14 + i * 22, y0 + 130 - hh, 14, hh, i % 3 ? '#ff6a3a' : '#ffb03a'); }
-      if (!F.resp) ['すぐに謝罪する', '説明・反論する', '何も言わない', '投稿を削除する'].forEach((nm, i) => s.btn('fr:' + i, nm, x0 + 14 + i * 132, y0 + 140, 122, 28, { size: 12, kind: i === 0 ? 'pri' : i === 3 ? 'red' : 'norm' }));
-      else pT(c, `対応：${{ sorry: '謝罪した', explain: '説明・反論した', silent: '何も言わずに待っている', delete: '投稿を削除した' }[F.resp]}`, x0 + 14, y0 + 146, { size: 12, color: GB_C.t2 }); }
-    const D = N.dema; pFrame(c, x0, y0 + 184, 270, 132, { title: 'デマ', bg: '#10182a', edge: D && !D.done ? '#a07030' : '#2a4a7a' });
-    if (D && !D.done) { wrapDot(c, `${D.topic}が出回っている`, 246, 12).slice(0, 2).forEach((ln, i) => pT(c, ln, x0 + 12, y0 + 208 + i * 15, { size: 12, color: '#ffd8a0' })); ['ファクトで反論', '開示請求 ¥50万', '相手にしない'].forEach((nm, i) => s.btn('dr:' + i, nm, x0 + 10 + (i % 2) * 126, y0 + 246 + Math.floor(i / 2) * 32, i === 1 ? 128 : 122, 28, { size: 12, kind: i === 0 ? 'pri' : 'norm' })); }
-    else pT(c, ntYear(g) >= 2014 ? 'いまは目立つデマはない' : 'まだネットのデマは少ない時代', x0 + 135, y0 + 250, { size: 12, color: GB_C.t3, align: 'center' });
-    pFrame(c, x0 + 278, y0 + 184, 272, 132, { title: 'これまでの炎上', bg: '#10182a', edge: '#2a4a7a' });
-    if (!N.flog.length) pT(c, 'まだない', x0 + 414, y0 + 250, { size: 12, color: GB_C.t3, align: 'center' });
-    N.flog.slice(0, 5).forEach((o, i) => { let dl = ''; try { const Dt = dateOf(g, o.d); dl = `${Dt.year % 100}/${Dt.month}/${Dt.dom}`; } catch (e) { } const yy = y0 + 206 + i * 21; pT(c, dl, x0 + 288, yy, { size: 12, color: GB_C.t3 }); pT(c, pFit(c, o.topic, 136, 12), x0 + 346, yy, { size: 12 }); pT(c, `最大${o.peak}`, x0 + 540, yy, { size: 12, color: '#ff9aa8', align: 'right' }); });
+    const F = N.fl, d = num(g.state.day), S = s.S; pFrame(c, x0, y0, 550, 150, { title: '炎上', bg: NT_C.fr, edge: F ? '#a03040' : NT_C.ed });
+    if (!F) { pT(c, 'いまは炎上していない', x0 + 275, y0 + 60, { size: 16, color: '#8ab0d0', align: 'center' }); pT(c, '失言・攻撃的な投稿・疑惑の報道・ネット工作の発覚で燃えることがある', x0 + 275, y0 + 90, { size: 12, color: GB_C.t3, align: 'center' }); }
+    else { pT(c, pFit(c, `「${F.topic}」${F.learn ? '（またか…）' : ''}`, 520, 16), x0 + 14, y0 + 22, { size: 16, color: '#ffc0c8' }); pT(c, `炎上の強さ ${Math.round(F.h)}（最大 ${Math.round(F.peak)}）・${d - F.d}日目${F.fanDef ? '・支持者が擁護中' : ''}`, x0 + 14, y0 + 44, { size: 12, color: GB_C.t2 });
+      for (let i = 0; i < 4; i++) { const x = x0 + 14 + i * 132, on = i === (F.h < 15 ? 3 : F.st); pR(c, x, y0 + 62, 122, 20, on ? (i === 3 ? '#2a6a4a' : '#7a2030') : '#1c2436'); pT(c, NT_FST[i], x + 61, y0 + 65, { size: 12, color: on ? '#ffffff' : GB_C.t3, align: 'center' }); }
+      for (let i = 0; i < 24; i++) { const hh = Math.max(2, Math.round((F.h / 100) * 22 * (0.5 + 0.5 * Math.sin((f + i * 13) / 6)))); pR(c, x0 + 14 + i * 22, y0 + 112 - hh, 14, hh, i % 3 ? '#ff6a3a' : '#ffb03a'); }
+      if (!F.resp) ['すぐに謝罪する', '説明・反論する', '何も言わない', '投稿を削除する'].forEach((nm, i) => s.btn('fr:' + i, nm, x0 + 14 + i * 132, y0 + 118, 122, 26, { size: 12, kind: i === 0 ? 'pri' : i === 3 ? 'red' : 'norm' }));
+      else pT(c, `対応：${{ sorry: '謝罪した', explain: '説明・反論した', silent: '何も言わずに待っている', delete: '投稿を削除した' }[F.resp]}${N.stf.cons ? '（コンサルの助言つき）' : ''}`, x0 + 14, y0 + 124, { size: 12, color: GB_C.t2 }); }
+    const D = N.dema, DS = N.ds; pFrame(c, x0, y0 + 158, 270, 158, { title: 'デマ', bg: NT_C.fr, edge: (D && !D.done) || (DS && !DS.done) ? '#a07030' : NT_C.ed });
+    let yy = y0 + 180; if (DS && !DS.done) { pT(c, pFit(c, `【災害】${DS.pref}で${DS.txt}`, 250, 12), x0 + 12, yy, { size: 12, color: '#ffb080' }); s.btn('dsfix', '正しい情報を発信する', x0 + 10, yy + 18, 250, 24, { size: 12, kind: 'pri', off: !R.pol || !N.acc }); yy += 50; }
+    if (D && !D.done) { wrapDot(c, `${D.topic}が出回っている`, 246, 12).slice(0, 2).forEach((ln, i) => pT(c, ln, x0 + 12, yy + i * 15, { size: 12, color: '#ffd8a0' })); [['ファクトで反論', 0], ['開示請求 ¥50万', 1], ['相手にしない', 2]].forEach(([nm, i], j) => s.btn('dr:' + i, nm, x0 + 8 + (j % 2) * 128, yy + 32 + Math.floor(j / 2) * 26, 124, 24, { size: 12, kind: i === 0 ? 'pri' : 'norm' })); }
+    else if (!(DS && !DS.done)) pT(c, ntYear(g) >= 2014 ? 'いまは目立つデマはない' : 'まだネットのデマは少ない時代', x0 + 135, y0 + 236, { size: 12, color: GB_C.t3, align: 'center' });
+    pFrame(c, x0 + 278, y0 + 158, 272, 158, { title: '炎上のふり返り', bg: NT_C.fr, edge: NT_C.ed });
+    if (!N.flog.length) pT(c, 'まだない', x0 + 414, y0 + 236, { size: 12, color: GB_C.t3, align: 'center' });
+    else { S.fsel = clamp(num(S.fsel), 0, Math.min(3, N.flog.length - 1)); N.flog.slice(0, 4).forEach((o, i) => { const yy2 = y0 + 178 + i * 18, on = i === S.fsel; if (on) pR(c, x0 + 284, yy2 - 2, 260, 17, '#1c2c4a'); let dl = ''; try { const Dt = dateOf(g, o.d); dl = `${Dt.year % 100}/${Dt.month}/${Dt.dom}`; } catch (e) { } pT(c, dl, x0 + 288, yy2, { size: 12, color: GB_C.t3 }); pT(c, pFit(c, o.topic, 140, 12), x0 + 344, yy2, { size: 12, color: on ? '#ffffff' : GB_C.t2 }); pT(c, `${o.peak}`, x0 + 540, yy2, { size: 12, color: '#ff9aa8', align: 'right' }); s.btn('fs:' + i, '', x0 + 284, yy2 - 2, 260, 17, { kind: 'clear', nofocus: true }); });
+      const o = N.flog[S.fsel]; pR(c, x0 + 284, y0 + 252, 260, 1, '#2a3450'); const days = Math.max(1, num(o.end) - o.d), lesson = { attack: '他党への強い言葉は、燃えやすい', gaffe: '囲み取材では、勢いで答えない', scandal: '疑惑は早めの説明が効く', bots: '工作はいつかばれる', post: '言葉選びに気をつける', live: '生配信は言い直せない', block: 'ブロックは逃げに見られる', fans: '支持者の熱にも気を配る' }[o.cause] || '同じ失敗をくり返さない';
+      pT(c, pFit(c, `原因：${NT_CAUSE[o.cause] || '—'}・${days}日で鎮火・${NT_FST[Math.min(2, num(o.path))]}まで`, 256, 12), x0 + 288, y0 + 258, { size: 12, color: GB_C.t2 }); pT(c, pFit(c, `対応：${{ sorry: '謝罪', explain: '説明・反論', silent: '沈黙', delete: '削除' }[o.resp] || '対応なし'}${o.fan ? '・支持者が擁護' : ''}${o.learn ? '・くり返しの失敗' : ''}`, 256, 12), x0 + 288, y0 + 274, { size: 12, color: GB_C.t2 }); pT(c, pFit(c, `教訓：${lesson}`, 256, 12), x0 + 288, y0 + 292, { size: 12, color: '#ffd23f' }); }
   },
-  // 分析
   d_an(s, c, g, N, R, x0, y0, f) {
-    const H = N.hist.slice(-60); pFrame(c, x0, y0, 550, 150, { title: 'ネットの空気と内閣支持率（60日）', bg: '#10182a', edge: '#2a4a7a' });
-    pR(c, x0 + 14, y0 + 84, 522, 1, '#2a3450'); ntSpark(c, x0 + 14, y0 + 30, 522, 108, H.map(h => h.cab), NT_C.pos, -100, 100); ntSpark(c, x0 + 14, y0 + 30, 522, 108, H.map(h => h.ap * 2 - 100), '#ffd23f', -100, 100);
-    pT(c, '― ネットの空気', x0 + 360, y0 + 4, { size: 12, color: NT_C.pos }); pT(c, '― 支持率', x0 + 470, y0 + 4, { size: 12, color: '#ffd23f' });
-    pFrame(c, x0, y0 + 158, 270, 158, { title: 'フォロワーの推移（30日）', bg: '#10182a', edge: '#2a4a7a' }); const fh = (N.acc && N.acc.hist) || []; if (N.acc) { ntSpark(c, x0 + 14, y0 + 190, 242, 90, fh, '#ff8ab0'); pT(c, ntFmt(N.acc.fol), x0 + 256, y0 + 290, { size: 16, color: '#ffffff', align: 'right' }); } else pT(c, 'アカウントがない', x0 + 135, y0 + 230, { size: 12, color: GB_C.t3, align: 'center' });
-    pFrame(c, x0 + 278, y0 + 158, 272, 158, { title: 'ネット世論の効き方', bg: '#10182a', edge: '#2a4a7a' });
-    ['ネットの空気が好意的だと、内閣支持率が少しずつ上がる', 'ネットでの評判は、自分の評判とメディアの印象に効く', '炎上中は評判・メディア・フォロワーが下がる', '工作は2週間効くが、ばれると大炎上', '本音の答えが「切り抜き」でバズることも（2018年〜）'].forEach((t, i) => wrapDot(c, `・${t}`, 252, 12).slice(0, 2).forEach((ln, j) => pT(c, ln, x0 + 288, y0 + 182 + i * 26 + j * 13, { size: 12, color: GB_C.t2 })));
+    pFrame(c, x0, y0, 300, 204, { title: '層ごとのネットの声（自分への）', bg: NT_C.fr, edge: NT_C.ed });
+    NT_SEGK.forEach((k, i) => { const y = y0 + 24 + i * 16; try { pxSegIcon(c, k, x0 + 8, y + 1); } catch (e) { } pT(c, ntSegNm(k), x0 + 26, y, { size: 12, color: GB_C.t2 }); pT(c, pFit(c, ntSegPlace(g, k), 90, 12), x0 + 96, y, { size: 12, color: GB_C.t3 }); ntBar(c, x0 + 190, y + 4, 76, num(N.sg[k])); pT(c, `${Math.round(num(N.sg[k]))}`, x0 + 292, y, { size: 12, color: num(N.sg[k]) >= 0 ? NT_C.pos : NT_C.neg, align: 'right' }); });
+    pFrame(c, x0 + 308, y0, 242, 204, { title: '直近の投稿の広がり', bg: NT_C.fr, edge: NT_C.ed }); const L = N.last;
+    c.save(); c.beginPath(); c.rect(x0 + 312, y0 + 20, 234, 162); c.clip(); c.translate(x0 + 316 - 340 * 0.78, y0 + 22 - 64 * 0.78); c.scale(0.78, 0.78); try { pxJapan(c, 0, 0, null, f); } catch (e) { }
+    if (L && L.pref) { const mx = Math.max(1, ...Object.values(L.pref)); for (const [nm, v] of Object.entries(L.pref)) { const xy = PX_PREFXY[nm]; if (!xy) continue; const r = 3 + 14 * v / mx, ph = (f + nm.length * 9) % 40 / 40; c.globalAlpha = 0.35 * (1 - ph); pCirc(c, xy[0], xy[1], r * (1 + ph), NT_C.acc); c.globalAlpha = 0.85; pCirc(c, xy[0], xy[1], Math.max(2, r * 0.5), '#9adfff'); c.globalAlpha = 1; } }
+    c.restore(); if (L) pT(c, pFit(c, `「${L.txt}」`, 226, 12), x0 + 316, y0 + 186, { size: 12, color: GB_C.t2 }); else pT(c, '投稿すると、どこに広がったかが出る', x0 + 429, y0 + 186, { size: 12, color: GB_C.t3, align: 'center' });
+    const H = N.hist.slice(-60); pFrame(c, x0, y0 + 212, 270, 104, { title: '空気と支持率（60日）', bg: NT_C.fr, edge: NT_C.ed }); ntSpark(c, x0 + 10, y0 + 236, 250, 72, H.map(h => h.cab), NT_C.pos, -100, 100); ntSpark(c, x0 + 10, y0 + 236, 250, 72, H.map(h => h.ap * 2 - 100), '#ffd23f', -100, 100); pT(c, '内閣の空気', x0 + 150, y0 + 214, { size: 12, color: NT_C.pos }); pT(c, '支持率', x0 + 224, y0 + 214, { size: 12, color: '#ffd23f' });
+    pFrame(c, x0 + 278, y0 + 212, 272, 104, { title: 'フォロワー（30日）', bg: NT_C.fr, edge: NT_C.ed }); const fh = (N.acc && N.acc.hist) || []; if (N.acc) { ntSpark(c, x0 + 288, y0 + 236, 252, 66, fh, '#ff8ab0'); pT(c, ntFmt(N.acc.fol), x0 + 540, y0 + 214, { size: 12, color: '#ffffff', align: 'right' }); } else pT(c, 'アカウントがない', x0 + 414, y0 + 264, { size: 12, color: GB_C.t3, align: 'center' });
   },
 };
 const ntIcon = gbIcon('#1a5ac8', (c, x, y) => { c.fillStyle = '#e8f2ff'; c.fillRect(x + 6, y + 8, 20, 14); c.fillRect(x + 10, y + 22, 4, 4); c.fillStyle = '#1a5ac8'; c.fillRect(x + 9, y + 12, 14, 2); c.fillRect(x + 9, y + 16, 9, 2); c.fillStyle = '#ff5a6a'; c.fillRect(x + 21, y + 4, 7, 7); c.fillStyle = '#ffffff'; c.fillRect(x + 24, y + 5, 1, 3); c.fillRect(x + 24, y + 9, 1, 1); });
 async function ntOpen(g) { try { ntTick(g); } catch (e) { } const r = await gbScene(g, { mode: 'netop', title: 'ネット世論' }); gbAfter(g, r && r.mins); }
 try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_seiji'); if (F && !F.apps.includes('netop')) F.apps.splice(Math.max(0, F.apps.indexOf('koho') + 1), 0, 'netop'); FOLD_OF.netop = 'f_seiji'; } } catch (e) { console.error('[net] folder', e); }
 function installNet() {
-  E.Un('netop', { name: 'ネット世論', color: '#1a5ac8', order: 36.46, iconHD: ntIcon, badge: g => { try { const N = ntSt(g); return (N.fl && !N.fl.resp) || (N.dema && !N.dema.done) ? 1 : 0; } catch (e) { return 0; } }, open: g => ntOpen(g) });
+  E.Un('netop', { name: 'ネット世論', color: '#1a5ac8', order: 36.46, iconHD: ntIcon, badge: g => { try { const N = ntSt(g); return (N.fl && !N.fl.resp) || (N.dema && !N.dema.done) || (N.ds && !N.ds.done) ? 1 : 0; } catch (e) { return 0; } }, open: g => ntOpen(g) });
   E.Tn(g => { try { ntTick(g); } catch (e) { console.error('[net] tick', e); } });
   if (E.ug) E.ug('np_net', (g, it, k, auto) => { const dd = it.data || {}; if (dd.fl != null) return ntFlResp(g, k < 0 ? 2 : k); if (dd.dm != null) return ntDemaResp(g, k < 0 ? 2 : k); return ''; });
 }
-if (typeof window !== 'undefined') window.__NT = { st: () => ntSt(window.__game), tick: () => ntTick(window.__game), open: () => ntOpen(window.__game), flame: (t, h) => ntFlame(window.__game, 'test', h || 70, t || 'テスト'), post: k => ntPost(window.__game, k), acc: () => ntAccOpen(window.__game), dema: () => ntDema(window.__game), role: () => ntRole(window.__game) };
+if (typeof window !== 'undefined') window.__NT = { st: () => ntSt(window.__game), tick: () => ntTick(window.__game), open: () => ntOpen(window.__game), flame: (t, h, cs) => ntFlame(window.__game, cs || 'test', h || 70, t || 'テスト'), post: (ti, tone, att) => { const g = window.__game, T = ntTopics(g); return ntPost(g, T[ti || 0], tone || 'serious', att || 'none'); }, topics: () => ntTopics(window.__game), sp: k => ntSpecial(window.__game, k), acc: () => ntAccOpen(window.__game), dema: () => ntDema(window.__game), foe: k => ntFoeNew(window.__game, k || 'critic'), foeAct: (i, a) => ntFoeAct(window.__game, i, a), role: () => ntRole(window.__game) };
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
