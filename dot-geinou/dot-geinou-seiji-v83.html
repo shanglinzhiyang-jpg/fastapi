@@ -42922,6 +42922,159 @@ async function wrOpen(g) { for (let i = 0; i < 30; i++) { const r = await gbScen
 if (typeof window !== 'undefined') window.__WR = { open: g => wrOpen(g || window.__game), games: () => WR_GAMES, st: () => wrSt(window.__game),
   test: (n = 400) => { const g = window.__game, sheets = wrSheets(g), fam = sheets.length > 1 ? sheets.slice(1) : sheets, cv = document.createElement('canvas'); cv.width = 640; cv.height = 360; const c = cv.getContext('2d'); const out = [];
     for (const d of WR_GAMES) { let err = null, win = null; try { const G = { id: d.id, def: d, t: 0, T: d.dur || WR_BASE, k: 1.2, win: undefined, me: sheets[0], fam, r: RND }; G.fr = i => fam[((i % fam.length) + fam.length) % fam.length]; G.end = w => { if (G.win === undefined) { G.win = !!w; } }; d.init(G); for (let f = 0; f < n && G.win === undefined; f++) { const rr = RND(); G.A = rr < 0.08; G.Ah = rr < 0.3; G.L = rr > 0.9; G.R = rr > 0.8 && rr <= 0.9; G.U = rr > 0.7 && rr <= 0.8; G.D = rr > 0.6 && rr <= 0.7; G.Lh = G.L; G.Rh = G.R; G.Uh = G.U; G.Dh = G.D; G.tap = rr < 0.02 ? { x: RND() * 640, y: RND() * 360 } : null; G.t++; d.upd(G); if (f % 10 === 0) d.drw(c, G); if (G.win === undefined && G.t >= G.T) G.end(!!d.surv); } d.drw(c, G); win = G.win; } catch (e) { err = String(e && e.message || e); } out.push([d.id, win, err]); } return out; } };
+// ===== ホール経営の画面（向上）：ホーム（ダッシュボード）・大きな見下ろし図と島の詳細・台の絵つきの島カード・お客のドット絵・日報のハイライト =====
+(function pmNewMach() { if (PM_MACH.some(m => m.id === 'ko')) return; PM_MACH.push({ id: 'ko', nm: 'KOナックル', k: 'p', sp: 'ミドル', pop: 1.2, price: 460000, vol: 1.2, col: '#d83030', since: 2016, ever: false }, { id: 'matsuri', nm: '龍神祭り', k: 'p', sp: 'ライトミドル', pop: 1.15, price: 430000, vol: 0.9, col: '#3a6ad8', since: 2019, ever: false }); })();
+const PM_ART = { ama: ['old', 200], lmid: ['old', 25], mid: ['old', 0], umi: ['umi', 0], hokuto: ['hokuto', 0], ko: ['ko', 0], matsuri: ['matsuri', 0] };
+// 台の絵：いただいた台の絵がある機種はそれを、ない機種はドット絵の筐体を描く
+function pmArt(c, m, x, y, w, h, t) {
+  const A = PM_ART[m.id]; let im = null; try { if (A) im = A[0] === 'old' ? pcImg() : pcImgFor({ gk: A[0] }); } catch (e) { }
+  if (im) { const ar = im.naturalWidth / im.naturalHeight, ww = Math.min(w, h * ar), hh = ww / ar; c.save(); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; if (A[1]) c.filter = `hue-rotate(${A[1]}deg) saturate(1.1)`; c.drawImage(im, Math.round(x + (w - ww) / 2), Math.round(y + (h - hh) / 2), Math.round(ww), Math.round(hh)); c.restore(); return; }
+  const col = m.col, ww = Math.min(w, Math.round(h * 0.72)), xx = Math.round(x + (w - ww) / 2), hh = h, dk = pShade(col, -0.45), lt = pShade(col, 0.35);
+  pR(c, xx, y, ww, hh, '#0a0810'); pR(c, xx + 1, y + 1, ww - 2, hh - 2, '#b8bcc8'); pR(c, xx + 2, y + 2, ww - 4, hh - 4, col); pR(c, xx + 2, y + 2, ww - 4, 2, lt);
+  if (m.k === 's') { // スロット
+    pR(c, xx + 3, y + 3, ww - 6, Math.round(hh * 0.12), lt); const ry = y + Math.round(hh * 0.22), rh = Math.round(hh * 0.3), rw = Math.floor((ww - 10) / 3);
+    pR(c, xx + 3, ry - 2, ww - 6, rh + 4, '#0a0810'); for (let i = 0; i < 3; i++) { const rx = xx + 5 + i * (rw + 1); pR(c, rx, ry, rw, rh, '#f4f4f0'); const sc = rh >= 14 ? 2 : 1; pBig(c, '7', Math.round(rx + rw / 2 - 2.5 * sc), Math.round(ry + rh / 2 - 3.5 * sc), sc, (Math.floor((t || 0) / 20) + i) % 3 === 0 ? '#e0202a' : '#d02030'); }
+    pR(c, xx + 3, y + Math.round(hh * 0.58), ww - 6, Math.round(hh * 0.16), dk); for (let i = 0; i < 3; i++) pR(c, xx + 6 + i * Math.round((ww - 12) / 3), y + Math.round(hh * 0.62), 3, 3, '#ffd23f');
+    pR(c, xx + 3, y + Math.round(hh * 0.8), ww - 6, Math.round(hh * 0.14), '#1a1420');
+  } else { // パチンコ
+    const bc = y + Math.round(hh * 0.4), br = Math.round(Math.min(ww * 0.42, hh * 0.32)); pEll(c, xx + ww / 2, bc, br + 1, br + 1, '#0a0810'); pEll(c, xx + ww / 2, bc, br, br, pShade(col, -0.25));
+    for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2, r2 = br * (0.55 + (i % 3) * 0.12); pR(c, Math.round(xx + ww / 2 + Math.cos(a) * r2), Math.round(bc + Math.sin(a) * r2), 1, 1, '#ffd23f'); }
+    const lw = Math.round(br * 1.1), lh = Math.max(5, Math.round(br * 0.55)); pR(c, Math.round(xx + ww / 2 - lw / 2), Math.round(bc - lh / 2), lw, lh, '#0a0810'); pR(c, Math.round(xx + ww / 2 - lw / 2) + 1, Math.round(bc - lh / 2) + 1, lw - 2, lh - 2, (Math.floor((t || 0) / 24) % 2) ? '#3a1a5a' : '#2a1a4a');
+    if (lh >= 9) for (let i = 0; i < 3; i++) pR(c, Math.round(xx + ww / 2 - lw / 2 + 2 + i * (lw - 4) / 3 + (lw - 4) / 6 - 1), Math.round(bc - 2), 2, 4, '#ff3a4a');
+    pR(c, xx + 3, y + Math.round(hh * 0.76), ww - 6, Math.round(hh * 0.14), dk); pR(c, xx + 5, y + Math.round(hh * 0.79), ww - 10, Math.max(2, Math.round(hh * 0.06)), '#c8ccd8');
+  }
+  pR(c, xx + 2, y + hh - 4, ww - 4, 2, dk);
+}
+// お客（客層）のドット絵
+const PM_SEG_REL = { old: 'grandfather', sala: 'father', young: 'brother_younger', mama: 'mother', pro: 'sister_older' };
+function pmSegSpr(c, g, k, x, y, sc = 2, t = 0) { const SG = PM_SEG[k]; try { const sh = wrLook(g, PM_SEG_REL[SG.id] || 'father'); wrSpr(c, sh, x, y, sc, 'down', (t >> 4) % 6 === 0 ? 1 : 0); } catch (e) { pmFace(c, x, y - 8, SG); } }
+const PM_TABS2 = [['home', 'ホーム'], ['hall', 'ホール'], ['isl', '島と台'], ['cust', 'お客'], ['ev', 'イベント'], ['eq', '設備'], ['mgmt', '経営'], ['rep', '日報']];
+function pmAlerts(g, H) {
+  const A = [], d = g.state.day, P = pmSt(g), y = pmYear(g), need = pmNeed(H);
+  if (!H.opened) A.push(['info', `グランドオープンまで あと${Math.max(0, H.openDay - d)}日`, '内装工事と台の搬入中', 'isl']);
+  H.isl.forEach((I, i) => { if (I.down === d) A.push(['bad', `島${i + 1}が故障中`, `${PM_M(I.m).nm}は今日は休止（修理中）`, 'isl']); });
+  if (H.staff < need) A.push(['bad', `スタッフが${need - H.staff}人たりない`, 'トラブルがふえ、評判が下がる', 'mgmt']);
+  if (y >= 2020 && !pmEqLv(H, 'bunen')) A.push(['bad', '分煙ルームが必要', '2020年から屋内は原則禁煙', 'eq']);
+  if (y >= 2024 && !pmEqLv(H, 'shishi')) A.push(['bad', '新紙幣対応ユニットが必要', 'お客が少しへっている', 'eq']);
+  if (num(H.rival) >= d) A.push(['warn', `ライバル店が営業中（あと${H.rival - d}日）`, 'お客 −20%。イベントで対抗', 'ev']);
+  if (H.opened && H.rep < 35) A.push(['warn', `評判が低い（${Math.round(H.rep)}）`, '釘をあける・イベント・店に出る', 'isl']);
+  const old = H.isl.filter(I => d - num(I.inst, H.day0) > 240).length; if (old) A.push(['warn', `古い台が${old}島`, '新台に入れ替えるとお客が集まる', 'isl']);
+  if (H.opened && !PM_EV.some(E2 => { const u = H.ev[E2.id]; return E2.id === 'shuzai' ? u === d || u === d + 1 : num(u, -1) >= d; })) A.push(['info', 'いまイベントをしていない', 'SNS告知なら ¥50,000 から', 'ev']);
+  if (H.mon && H.mon.net < 0) A.push(['warn', `今月は赤字（${gbSign(H.mon.net)}）`, '経費や釘を見直そう', 'rep']);
+  if (P.loan.amt > 0) A.push(['info', `借入 ${yen(P.loan.amt)}`, `利息 1日 ${yen(Math.round(P.loan.amt * PM_LOAN_RATE))}`, 'mgmt']);
+  if (!A.length) A.push(['good', '順調です', 'このまま営業を続けよう', 'rep']);
+  return A;
+}
+const PM_ALC = { bad: ['#ff5d6c', '!'], warn: ['#ffd23f', '!'], info: ['#5fd7ff', 'i'], good: ['#5ee07a', '✓'] };
+(function pmPlus() {
+  const M = GB_MODES.pmgr; if (!M || M.__plus) return; M.__plus = true;
+  const init0 = M.init, btn0 = M.btn, tap0 = M.tap;
+  M.init = function (s, g) { init0.call(this, s, g); s.S.tab = 'home'; s.S.hsel = 0; };
+  M.btn = function (s, id, g) { const S = s.S, H = pmCur(pmSt(g));
+    if (id.startsWith('go:')) { S.tab = id.slice(3); S.ph = 'home'; S.pg = 0; return; }
+    if (H && id.startsWith('hsel2:')) { S.hsel = clamp(+id.slice(6), 0, H.isl.length - 1); return; }
+    if (H && (id === 'hsl:-1' || id === 'hsl:1')) { S.hsel = (num(S.hsel) + (id === 'hsl:1' ? 1 : -1) + H.isl.length) % H.isl.length; return; }
+    return btn0.call(this, s, id, g); };
+  // ホール：島をタップすると選択、もう一度タップで近くで見る
+  M.tap = function (s, g, t) { const S = s.S; if (S.ph !== 'home' || S.tab !== 'hall' || !S.isR) return; const r = S.isR.find(([x, y, w, h]) => t.x >= x && t.x <= x + w && t.y >= y && t.y <= y + h); if (!r) return; if (S.hsel === r[4]) { S.li = r[4]; S.ph = 'look'; S.lf = 0; tt.sfx('ok'); } else { S.hsel = r[4]; tt.sfx('cursor'); } };
+  M.draw = function (s, c, g) { const S = s.S, P = pmSt(g), H = pmCur(P); s.o.sub = H ? H.name : 'パチンコ・スロット'; pBands(c, 0, 0, 640, 360, ['#12061a', '#160820', '#1a0a26', '#1e0c2c']); for (let x = 0; x < 640; x += 32) pR(c, x, 0, 1, 360, 'rgba(255,80,160,0.035)');
+    if (S.ph === 'new' || !H) return this.drawNew(s, c, g);
+    if (S.ph === 'look') return pmDrawLook(s, c, g, H);
+    PM_TABS2.forEach(([k, nm], i) => s.btn('tab:' + k, nm, 8 + i * 69, 34, 66, 26, { kind: S.tab === k && S.ph !== 'cat' ? 'sel' : 'norm', size: 12 })); s.btn('close', '閉じる', 562, 34, 70, 26, { back: true, size: 12 });
+    if (S.ph === 'cat') return this.drawCat(s, c, g, H);
+    const T = { home: 'tabHome', hall: 'tabHall', isl: 'tabIsl', cust: 'tabCust', ev: 'tabEv', eq: 'tabEq', mgmt: 'tabMgmt', rep: 'tabRep' }[S.tab] || 'tabHome'; this[T](s, c, g, H); };
+  // ---- ホーム（ダッシュボード） ----
+  M.tabHome = function (s, c, g, H) {
+    const S = s.S, P = pmSt(g), L1 = H.hist[H.hist.length - 1], L0 = H.hist[H.hist.length - 2];
+    const K = [['来店', L1 ? `${L1.cust.toLocaleString()}人` : '—', L1 && L0 ? L1.cust - L0.cust : null, v => `${v >= 0 ? '+' : ''}${v.toLocaleString()}人`, '#ff9ad0'], ['粗利', L1 ? gbSign(L1.gross) : '—', L1 && L0 ? L1.gross - L0.gross : null, v => gbSign(v), '#ffd23f'], ['利益', L1 ? gbSign(L1.net) : '—', L1 && L0 ? L1.net - L0.net : null, v => gbSign(v), L1 && L1.net < 0 ? '#ff5d6c' : '#5ee07a'], ['評判', String(Math.round(H.rep)), null, null, H.rep >= 60 ? '#5ee07a' : H.rep >= 35 ? '#ffd23f' : '#ff5d6c']];
+    K.forEach(([k, v, dlt, fm, col], i) => { const x = 8 + i * 157, y = 64, w = 151, h = 60; pR(c, x + 2, y + 2, w, h, '#05030a'); pR(c, x, y, w, h, '#1c0f2a'); pR(c, x, y, w, 3, col); pT(c, k, x + 10, y + 8, { size: 12, color: PW.dim });
+      pT(c, pFit(c, v, w - 20, 24), x + w - 10, y + 22, { size: 24, color: '#ffffff', align: 'right' });
+      if (i === 3) shBar(c, x + 10, y + 48, w - 20, 7, H.rep / 100, col); else if (dlt != null) pT(c, `${dlt >= 0 ? '▲' : '▼'} ${fm(Math.abs(dlt) * (dlt < 0 ? 1 : 1)).replace(/^[+−-]/, '')}　前日比`, x + 10, y + 44, { size: 12, color: dlt >= 0 ? '#5ee07a' : '#ff8a8a' }); else pT(c, L1 ? '前日のデータ' : '営業後に集計', x + 10, y + 44, { size: 12, color: GB_C.t3 }); });
+    // 7日間のグラフ
+    const gx = 8, gy = 130, gw = 384, gh = 196; pFrame(c, gx, gy, gw, gh, { title: '7日間の利益（棒）とお客（線）' });
+    const L = H.hist.slice(-7); if (!L.length) { for (let i = 0; i < 7; i++) { const hh = 20 + ((i * 37) % 50); pR(c, gx + 24 + i * 50, gy + 150 - hh, 30, hh, 'rgba(255,255,255,0.06)'); } pT(c, '営業を始めると、ここに毎日の成績が出る', gx + gw / 2, gy + 90, { size: 12, color: PW.dim, align: 'center' }); }
+    else { const mx = Math.max(1, ...L.map(r => Math.abs(r.net))), mc = Math.max(1, ...L.map(r => r.cust)), base = gy + 120, bw = 32; pR(c, gx + 14, base, gw - 28, 1, '#5a4a6a');
+      L.forEach((r, i) => { const x = gx + 24 + i * 50, hh = Math.round(80 * Math.abs(r.net) / mx); pR(c, x, r.net >= 0 ? base - hh : base + 1, bw, Math.max(1, hh), r.net >= 0 ? '#3aa05a' : '#c83040'); pR(c, x, r.net >= 0 ? base - hh : base + 1, bw, 2, r.net >= 0 ? '#7ae09a' : '#ff8a8a'); const D = dateOf(g, r.day); pT(c, `${D.month}/${D.dom}`, x + bw / 2, gy + 172, { size: 12, color: PW.dim, align: 'center' }); });
+      for (let i = 1; i < L.length; i++) { const ax = gx + 40 + (i - 1) * 50, ay = gy + 30 + Math.round(70 * (1 - L[i - 1].cust / mc)), bx = gx + 40 + i * 50, by = gy + 30 + Math.round(70 * (1 - L[i].cust / mc)); pLine(c, ax, ay, bx, by, '#ff9ad0'); pLine(c, ax, ay + 1, bx, by + 1, '#ff9ad0'); }
+      L.forEach((r, i) => pCirc(c, gx + 40 + i * 50, gy + 30 + Math.round(70 * (1 - r.cust / mc)), 2, '#ffd0e8'));
+      const sum = L.reduce((a, r) => a + r.net, 0); pT(c, `7日の合計 ${gbSign(sum)}`, gx + gw - 10, gy + 6, { size: 12, color: sum >= 0 ? PW.good : PW.bad, align: 'right' }); }
+    // やること
+    const ax = 398, aw = 234; pFrame(c, ax, gy, aw, gh, { title: 'いま気にすること' });
+    pmAlerts(g, H).slice(0, 5).forEach(([lv, t, sub, go], i) => { const y = gy + 28 + i * 33, [col, ic] = PM_ALC[lv]; pR(c, ax + 8, y, aw - 16, 30, '#1c0f2a'); pR(c, ax + 8, y, 3, 30, col); pCirc(c, ax + 22, y + 15, 7, col); pT(c, ic, ax + 22, y + 9, { size: 12, color: '#1a0a20', align: 'center', shadow: null });
+      pT(c, pFit(c, t, aw - 50, 12), ax + 34, y + 2, { size: 12, color: '#ffffff' }); pT(c, pFit(c, sub, aw - 50, 12), ax + 34, y + 16, { size: 12, color: GB_C.t3 }); s.btn('go:' + go, '', ax + 8, y, aw - 16, 30, { kind: 'clear', nofocus: i > 0 }); });
+    if (P.halls.length > 1) { s.btn('hs:-1', '◀', 520, 130, 26, 18, { size: 12 }); s.btn('hs:1', '▶', 600, 130, 26, 18, { size: 12 }); }
+  };
+  // ---- ホール（大きな見下ろし図＋選んだ島） ----
+  M.tabHall = function (s, c, g, H) {
+    const S = s.S, P = pmSt(g); pFrame(c, 8, 64, 448, 262); pmDrawHall(s, c, g, H, 12, 68, 440, 254);
+    const hs = clamp(num(S.hsel), 0, H.isl.length - 1); S.hsel = hs; const r = (S.isR || [])[hs]; if (r && H.opened) { const t = s.t || 0, col = t % 30 < 15 ? '#ffd23f' : '#ff6ab4'; pR(c, r[0] - 2, r[1] - 2, r[2] + 4, 2, col); pR(c, r[0] - 2, r[1] + r[3], r[2] + 4, 2, col); pR(c, r[0] - 2, r[1] - 2, 2, r[3] + 4, col); pR(c, r[0] + r[2], r[1] - 2, 2, r[3] + 4, col); }
+    const x0 = 462, w0 = 170, I = H.isl[hs], m = PM_M(I.m), L = H.hist[H.hist.length - 1], pr = pmPr(H, I), age = g.state.day - num(I.inst, H.day0);
+    pFrame(c, x0, 64, w0, 196, { title: `島${hs + 1}` }); s.btn('hsl:-1', '◀', x0 + w0 - 62, 68, 26, 18, { size: 12 }); s.btn('hsl:1', '▶', x0 + w0 - 32, 68, 26, 18, { size: 12 });
+    pmArt(c, m, x0 + 8, 92, 52, 72, s.t);
+    pT(c, pFit(c, m.nm, w0 - 74, 12), x0 + 66, 92, { size: 12, color: m.k === 's' ? '#9adfff' : '#ffffff' }); pT(c, pFit(c, `${m.k === 's' ? 'スロ' : 'パチ'}・${m.sp}`, w0 - 74, 12), x0 + 66, 108, { size: 12, color: GB_C.t3 }); pT(c, age < 30 ? `新台 ${age + 1}日目` : age > 240 ? '古い台' : `導入 ${age}日`, x0 + 66, 124, { size: 12, color: age < 30 ? PW.acc : age > 240 ? PW.bad : GB_C.t3 });
+    s.btn('rt:' + hs, PM_RATE[m.k][I.rate][0], x0 + 66, 142, 50, 20, { size: 12, kind: I.rate ? 'blue' : 'norm' });
+    const oc = L && L.per[hs] ? L.per[hs][0] : null, gr = L && L.per[hs] ? L.per[hs][1] : null;
+    pT(c, '稼働', x0 + 10, 172, { size: 12, color: PW.dim }); shBar(c, x0 + 46, 174, 80, 8, (oc || 0) / 100, '#ff6ab4'); pT(c, oc != null ? `${oc}%` : '—', x0 + w0 - 10, 172, { size: 12, align: 'right' });
+    pT(c, '粗利', x0 + 10, 188, { size: 12, color: PW.dim }); pT(c, gr != null ? gbSign(gr) : '—', x0 + w0 - 10, 188, { size: 12, color: gr == null ? GB_C.t3 : gr >= 0 ? PW.good : PW.bad, align: 'right' });
+    pT(c, m.k === 's' ? `設定${num(I.k, 1)}` : `釘：${PM_KUGI[clamp(num(I.k), -2, 2)]}`, x0 + 10, 206, { size: 12, color: pr > pmBase(m) + 0.01 ? PW.good : pr < pmBase(m) - 0.01 ? PW.bad : PW.text }); s.btn('k-:' + hs, '−', x0 + w0 - 62, 202, 26, 20, { size: 12, off: m.k === 's' ? num(I.k, 1) <= 1 : num(I.k) <= -2 }); s.btn('k+:' + hs, '＋', x0 + w0 - 32, 202, 26, 20, { size: 12, off: m.k === 's' ? num(I.k, 1) >= 6 : num(I.k) >= 2 });
+    s.btn('look:' + hs, '近くで見る', x0 + 6, 230, 92, 22, { size: 12, off: !H.opened }); s.btn('cat:' + hs, '入替', x0 + 102, 230, 62, 22, { size: 12, kind: 'pri' });
+    pFrame(c, x0, 264, w0, 62, { bg: '#16101c' }); const st = !H.opened ? `許可待ち あと${Math.max(0, H.openDay - g.state.day)}日` : pmOpenNow(g) ? '営業中' : '閉店中'; pT(c, st, x0 + 10, 270, { size: 12, color: !H.opened ? PW.acc : pmOpenNow(g) ? PW.good : PW.dim }); pT(c, `評判 ${Math.round(H.rep)}`, x0 + w0 - 10, 270, { size: 12, align: 'right' });
+    const left = this.left(s, g); s.btn('work', H.workDay === g.state.day ? '今日は店に出た' : '店に出る（8時間）', x0 + 8, 292, w0 - 16, 26, { kind: 'pri', size: 12, def: true, off: !H.opened || H.workDay === g.state.day || left < 480 });
+    pT(c, '島をタップで選択、もう一度で近くで見る', 232, 328, { size: 12, color: GB_C.t3, align: 'center' });
+    if (S.wa > 0) { const a = Math.min(1, S.wa / 10); c.save(); c.globalAlpha = a; pFrame(c, 40, 160, 380, 44, { bg: '#1a0a20', edge: '#ff6ab4' }); pT(c, pFit(c, S.wt || '', 356, 12), 230, 168, { size: 12, color: PW.acc, align: 'center' }); pT(c, '評判 +1・今日のトラブルが起きにくい', 230, 184, { size: 12, color: PW.dim, align: 'center' }); c.restore(); }
+  };
+  // ---- 島と台（台の絵つきカード） ----
+  M.tabIsl = function (s, c, g, H) {
+    const S = s.S, per = 6, L = H.hist[H.hist.length - 1];
+    H.isl.slice(S.pg * per, S.pg * per + per).forEach((I, j) => { const i = S.pg * per + j, m = PM_M(I.m), x = 8 + (j % 3) * 209, y = 64 + Math.floor(j / 3) * 124, w = 205, h = 120, age = g.state.day - num(I.inst, H.day0), pr = pmPr(H, I), oc = L && L.per[i] ? L.per[i][0] : null, gr = L && L.per[i] ? L.per[i][1] : null;
+      pR(c, x + 2, y + 2, w, h, '#05030a'); pR(c, x, y, w, h, gr == null ? '#1c0f2a' : gr >= 0 ? '#14261c' : '#2a1018'); pR(c, x, y, w, 3, m.col);
+      pmArt(c, m, x + 6, y + 8, 46, 64, s.t); pT(c, `島${i + 1}`, x + 29, y + 76, { size: 12, color: PW.dim, align: 'center' }); if (I.down === g.state.day) pT(c, '故障', x + 29, y + 90, { size: 12, color: PW.bad, align: 'center' });
+      pT(c, pFit(c, m.nm, w - 64, 12), x + 58, y + 6, { size: 12, color: m.k === 's' ? '#9adfff' : '#ffffff' }); pT(c, pFit(c, `${m.k === 's' ? 'スロ' : 'パチ'}・${m.sp}`, w - 64, 12), x + 58, y + 21, { size: 12, color: GB_C.t3 });
+      if (age < 30) { pR(c, x + w - 44, y + 22, 40, 13, '#c8102e'); pT(c, '新台', x + w - 24, y + 22, { size: 12, color: '#fff', align: 'center', shadow: null }); } else if (age > 240) { pR(c, x + w - 44, y + 22, 40, 13, '#5a4a3a'); pT(c, '古い', x + w - 24, y + 22, { size: 12, color: '#e8d8c0', align: 'center', shadow: null }); }
+      s.btn('rt:' + i, PM_RATE[m.k][I.rate][0], x + 58, y + 38, 44, 18, { size: 12, kind: I.rate ? 'blue' : 'norm' });
+      // 釘・設定のメーター
+      const lvN = m.k === 's' ? 6 : 5, lv = m.k === 's' ? num(I.k, 1) - 1 : clamp(num(I.k), -2, 2) + 2; s.btn('k-:' + i, '−', x + 106, y + 38, 20, 18, { size: 12, off: lv <= 0 }); for (let k = 0; k < lvN; k++) { const on = k <= lv, cc = k < lvN / 2 - 0.5 ? '#ff6a5a' : k > lvN / 2 - 0.5 ? '#5ee07a' : '#ffd23f'; pR(c, x + 130 + k * (lvN === 6 ? 7 : 8), y + 42, (lvN === 6 ? 5 : 6), 10, on ? cc : '#2a2236'); } s.btn('k+:' + i, '＋', x + w - 26, y + 38, 20, 18, { size: 12, off: lv >= lvN - 1 });
+      pT(c, m.k === 's' ? `設定${num(I.k, 1)}・出玉率${Math.round(pr * 100)}%` : `釘：${PM_KUGI[clamp(num(I.k), -2, 2)]}・出玉率${Math.round(pr * 100)}%`, x + 58, y + 60, { size: 12, color: pr > pmBase(m) + 0.01 ? PW.good : pr < pmBase(m) - 0.01 ? PW.bad : GB_C.t3 });
+      pT(c, '稼働', x + 58, y + 78, { size: 12, color: PW.dim }); shBar(c, x + 90, y + 80, 64, 8, (oc || 0) / 100, '#ff6ab4'); pT(c, oc != null ? `${oc}%` : '—', x + w - 8, y + 78, { size: 12, align: 'right' });
+      pT(c, gr != null ? `粗利 ${gbSign(gr)}` : '粗利 —', x + 58, y + 98, { size: 12, color: gr == null ? GB_C.t3 : gr >= 0 ? PW.good : PW.bad }); s.btn('cat:' + i, '入替', x + w - 50, y + 94, 44, 20, { size: 12, kind: 'pri' }); });
+    pT(c, '釘をあける／設定を上げる → 出る台になってお客と評判が上がるが、1台あたりのもうけは減る', 14, 314, { size: 12, color: GB_C.t3 }); if (H.isl.length > per) this.pager(s, c, H.isl.length, per, 332);
+  };
+  // ---- お客（ドット絵の客層） ----
+  M.tabCust = function (s, c, g, H) {
+    const sh = pmSegShare(H), sat = pmSegSat(g, H, sh), t = s.t || 0; pFrame(c, 8, 64, 330, 262, { title: '客層（どんなお客が来ているか）' });
+    let x = 20; sh.forEach((v, k) => { const w = Math.round(306 * v); pR(c, x, 88, Math.max(1, w), 12, PM_SEG[k].body); pR(c, x, 88, Math.max(1, w), 2, pShade(PM_SEG[k].body, 0.35)); x += w; });
+    PM_SEG.forEach((SG, k) => { const y = 106 + k * 43; pR(c, 14, y, 318, 40, k % 2 ? '#1a0e26' : '#20122e'); pmSegSpr(c, g, k, 34, y + 40, 2, t + k * 9);
+      pT(c, SG.nm, 56, y + 3, { size: 12, color: PW.text }); pT(c, `${Math.round(sh[k] * 100)}%`, 326, y + 3, { size: 16, color: PW.acc, align: 'right' });
+      shBar(c, 56, y + 20, 150, 8, sat[k] / 100, sat[k] >= 65 ? '#5ee07a' : sat[k] >= 40 ? '#ffd23f' : '#ff5d6c'); pT(c, `満足 ${sat[k]}`, 214, y + 18, { size: 12, color: PW.dim }); pT(c, pFit(c, `好き：${SG.like}`, 270, 12), 56, y + 28, { size: 12, color: GB_C.t3 }); });
+    pFrame(c, 346, 64, 286, 262, { title: 'お客の声' });
+    pmVoices(g, H).forEach(([k, tx], i) => { const y = 88 + i * 39; if (k >= 0) pmSegSpr(c, g, k, 364, y + 36, 1.5, t + i * 13); else { pmFace(c, 364, y + 16, { col: '#2a1a10', body: '#f4f4f4' }); } pR(c, 382, y + 2, 242, 32, '#f4eef8'); pR(c, 378, y + 14, 4, 6, '#f4eef8');
+      wrapDot(c, tx, 230, 12).slice(0, 2).forEach((ln, j) => pT(c, ln, 388, y + 5 + j * 14, { size: 12, color: '#2a1a34', shadow: null })); });
+  };
+  // ---- 日報（ハイライトつき） ----
+  M.tabRep = function (s, c, g, H) {
+    const L = H.hist.slice(-14); pFrame(c, 8, 64, 624, 150, { title: '毎日の利益（棒）とお客の数（線）・14日' });
+    if (!L.length) { for (let i = 0; i < 14; i++) { const hh = 14 + ((i * 29) % 44); pR(c, 24 + i * 42, 150 - hh, 34, hh, 'rgba(255,255,255,0.05)'); } pT(c, '営業を始めると、ここに毎日の成績が出る', 320, 120, { size: 12, color: PW.dim, align: 'center' }); }
+    else { const mx = Math.max(1, ...L.map(r => Math.abs(r.net))), mc = Math.max(1, ...L.map(r => r.cust)), base = 150, bw = 34; pR(c, 20, base, 600, 1, '#5a4a6a');
+      L.forEach((r, i) => { const x = 24 + i * 42, hh = Math.round(52 * Math.abs(r.net) / mx); pR(c, x, r.net >= 0 ? base - hh : base + 1, bw, Math.max(1, hh), r.net >= 0 ? '#3aa05a' : '#c83040'); pR(c, x, r.net >= 0 ? base - hh : base + 1, bw, 2, r.net >= 0 ? '#7ae09a' : '#ff8a8a'); const D = dateOf(g, r.day); pT(c, String(D.dom), x + bw / 2, 196, { size: 12, color: PW.dim, align: 'center' }); });
+      for (let i = 1; i < L.length; i++) { const ax = 41 + (i - 1) * 42, ay = 150 - Math.round(56 * L[i - 1].cust / mc), bx = 41 + i * 42, by = 150 - Math.round(56 * L[i].cust / mc); pLine(c, ax, ay, bx, by, '#ff9ad0'); pLine(c, ax, ay + 1, bx, by + 1, '#ff9ad0'); }
+      pT(c, `最高 ${gbSign(Math.max(...L.map(r => r.net)))}`, 620, 86, { size: 12, color: PW.good, align: 'right' }); pT(c, `お客 最大 ${mc}人`, 620, 102, { size: 12, color: '#ff9ad0', align: 'right' }); }
+    // 今月
+    pFrame(c, 8, 220, 200, 106, { title: H.mon ? `${pmMiLab(H.mon.mi)}（今月）` : '今月' }); let y = 244; const kv = (k, v, col) => { pT(c, k, 20, y, { size: 12, color: PW.dim }); pT(c, v, 198, y, { size: 12, color: col || PW.text, align: 'right' }); y += 15; };
+    if (H.mon) { kv('来店', `${H.mon.cust.toLocaleString()}人`); kv('売上', yen(H.mon.sales)); kv('粗利', gbSign(H.mon.gross)); kv('経費', yen(H.mon.cost), PW.dim); kv('利益', gbSign(H.mon.net), H.mon.net >= 0 ? PW.good : PW.bad); } else pT(c, 'まだ記録がない', 108, 270, { size: 12, color: GB_C.t3, align: 'center' });
+    // ハイライト（新聞の切り抜き風）
+    pR(c, 216, 222, 196, 104, '#efe8d6'); pT(c, 'ホールの記録', 226, 228, { size: 12, color: '#7a1a1a', shadow: null }); pR(c, 224, 243, 180, 1, '#5a4a3a');
+    const best = H.hist.length ? H.hist.reduce((a, b) => b.net > a.net ? b : a) : null; let run = 0; for (let i = H.hist.length - 1; i >= 0 && H.hist[i].net > 0; i--) run++;
+    [[`最高の日 ${best ? gbSign(best.net) : '—'}`, best ? (() => { const D = dateOf(g, best.day); return `${D.month}月${D.dom}日`; })() : ''], [`最多来店 ${num(H.bestCust) ? H.bestCust.toLocaleString() + '人' : '—'}`, ''], [`連続黒字 ${run}日`, run >= 7 ? '好調！' : ''], [`利益の合計 ${gbSign(H.total)}`, '']].forEach(([a, b], i) => { pT(c, pFit(c, a, 130, 12), 226, 250 + i * 18, { size: 12, color: '#1a1410', shadow: null }); if (b) pT(c, b, 404, 250 + i * 18, { size: 12, color: '#7a4a2a', align: 'right', shadow: null }); });
+    // 島ランキング
+    pFrame(c, 420, 220, 212, 106, { title: '前日の島ランキング' }); const R = H.hist[H.hist.length - 1];
+    if (R && R.per) R.per.map((x, i) => [i, x[0], x[1]]).sort((a, b) => b[2] - a[2]).slice(0, 5).forEach(([i, oc, gr], k) => { const m = PM_M(H.isl[i].m), yy = 244 + k * 15; pT(c, `${k + 1}. ${pFit(c, m.nm, 100, 12)}`, 430, yy, { size: 12, color: k === 0 ? PW.acc : PW.text }); pT(c, gbSign(gr), 622, yy, { size: 12, color: gr >= 0 ? PW.good : PW.bad, align: 'right' }); });
+    else pT(c, 'まだ記録がない', 526, 270, { size: 12, color: GB_C.t3, align: 'center' });
+  };
+  // ---- 台のカタログ：アイコンを台の絵に ----
+  { const cat0 = M.drawCat; M.drawCat = function (s, c, g, H) { cat0.call(this, s, c, g, H); const S = s.S, I = H.isl[S.cat], cur = PM_M(I.m), per = 6, cf = S.cf || 'all', L = PM_MACH.filter(m => cf === 'all' || m.k === cf).sort((a, b) => (pmAvail(g, b) ? 1 : 0) - (pmAvail(g, a) ? 1 : 0) || b.since - a.since); void cur;
+    L.slice(S.cpg * per, S.cpg * per + per).forEach((m, j) => { const y = 84 + j * 36; pR(c, 14, y + 1, 32, 32, j % 2 ? '#1a0e26' : '#20122e'); pmArt(c, m, 16, y + 2, 28, 30, s.t); if (PM_ART[m.id]) { pR(c, 12, y + 1, 2, 32, PW.acc); } }); }; }
+})();
+if (typeof window !== 'undefined' && window.__PM) { window.__PM.alerts = () => { const H = pmCur(pmSt(window.__game)); return H ? pmAlerts(window.__game, H) : []; }; }
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
