@@ -15928,6 +15928,7 @@ class EvScene {
     let sc = null;
     try { sc = ev.school ? buildSchoolEvent(this.g, ev) : buildEvent(this.g, this.N, ev); } catch (e) { console.error('[npb] event build', ev && ev.id, e); }
     if (!sc) { this.next(); return; }
+    if (ev.school && !ev.replay) { const md = schoolBriefMode(this.g, ev); if (md === 'skip') { this.sc = sc; this.si = -1; try { this.applyRest(); } catch (e) { } try { schoolBriefNote(this.g, sc); } catch (e) { } this.next(); return; } if (md === 'brief') schoolTrim(sc); }
     if (!ev.replay && !ev.school) try { evRemember(this.N, ev); } catch (e) { }
     this.sc = sc; this.si = -1; this.actors = {}; this.fx = []; this.text = null; this.zoom = null; this.choice = null;
     this.bgKey = sc.bg || 'stadium'; this.theme = sc.theme; this.tt = 0; this.titleT = 80; this.fadeOut = 0; this.shakeT = 0;
@@ -17697,7 +17698,7 @@ class SchoolScene extends NpbScene {
   rows() {
     const g = this.g, K = this.K, hs = isHS(g), ls = gkLs(g), C = GK_CTX;
     const whoRow = this.whoList().length > 1 ? [{ kind: 'sc', id: 'who', label: '見る人を切りかえる', sub: `いま：${this.whoLabel()}` }] : [];
-    if (!hs) return this.tabId === 'home' ? [...whoRow, { kind: 'sc', id: 'evopt', label: 'イベント演出', sub: { auto: '自動で再生する', app: 'アプリを開いたときに再生', off: '再生しない' }[K.opt.ev || 'auto'] }] : [];
+    if (!hs) return this.tabId === 'home' ? [...whoRow, { kind: 'sc', id: 'evopt', label: 'イベント演出', sub: { auto: '自動で再生する', app: 'アプリを開いたときに再生', off: '再生しない' }[K.opt.ev || 'auto'] }, { kind: 'sc', id: 'sdopt', label: '学校イベントの量', sub: SC_BRIEF[K.opt.sd || 'normal'][0] + '：' + SC_BRIEF[K.opt.sd || 'normal'][1] }, { kind: 'sc', id: 'hvopt', label: '重いイベントは通常の長さで見る', sub: K.opt.hv === 0 ? 'OFF（いじめ・進路なども短くする）' : 'ON（いじめ・不登校・進路などは短くしない）' }, { kind: 'sc', id: 'autoopt', label: '自分以外の学校生活は自動で進める', sub: K.opt.autoOth === 0 ? 'OFF（子や弟妹の場面も自分で見る）' : 'ON（子や弟妹の場面は結果だけ知らせる）' }] : [];
     switch (this.tabId) {
       case 'home': return [...whoRow,
         { kind: 'sc', id: 'policy', label: '授業中の過ごし方', sub: `いま：${ATTI[K.policy][0]}` },
@@ -17705,7 +17706,7 @@ class SchoolScene extends NpbScene {
         { kind: 'sc', id: 'image', label: 'イメチェンする', sub: '髪型・身だしなみを変える（¥5,000）' },
         ...(!C ? [{ kind: 'sc', id: 'design', label: 'キャラデザインを変える', sub: (() => { const H = g.state.flags.meHd || {}, l = (L, k) => k ? (L.find(x => x[1] === k) || ['？'])[0].replace(/^(男子|女子)：/, '') : 'おまかせ'; return `制服：${l(NPX_HD_U, H.u)}／私服：${l(NPX_HD_C, H.c)}`; })() }] : []),
         { kind: 'sc', id: 'cheat', label: 'テストでカンニングする', sub: K.cheat ? 'ON（バレたら0点＋停学）' : 'OFF', danger: K.cheat },
-        { kind: 'sc', id: 'evopt', label: 'イベント演出', sub: { auto: '自動で再生する', app: 'アプリを開いたときに再生', off: '再生しない' }[K.opt.ev || 'auto'] },
+        { kind: 'sc', id: 'evopt', label: 'イベント演出', sub: { auto: '自動で再生する', app: 'アプリを開いたときに再生', off: '再生しない' }[K.opt.ev || 'auto'] }, { kind: 'sc', id: 'sdopt', label: '学校イベントの量', sub: SC_BRIEF[K.opt.sd || 'normal'][0] + '：' + SC_BRIEF[K.opt.sd || 'normal'][1] }, { kind: 'sc', id: 'hvopt', label: '重いイベントは通常の長さで見る', sub: K.opt.hv === 0 ? 'OFF（いじめ・進路なども短くする）' : 'ON（いじめ・不登校・進路などは短くしない）' }, { kind: 'sc', id: 'autoopt', label: '自分以外の学校生活は自動で進める', sub: K.opt.autoOth === 0 ? 'OFF（子や弟妹の場面も自分で見る）' : 'ON（子や弟妹の場面は結果だけ知らせる）' },
         { kind: 'sc', id: 'help', label: 'このアプリについて', sub: 'スクールライフの遊びかた' }];
       case 'cls': return casteTable(g, K).filter(r => r.id !== 'me').map(r => ({ kind: 'cm', c: K.cls.find(x => x.id === r.id), tier: r.tier }));
       case 'grade': return [{ kind: 'sc', id: 'policy', label: '授業中の過ごし方', sub: `いま：${ATTI[K.policy][0]}` }];
@@ -17768,6 +17769,9 @@ class SchoolScene extends NpbScene {
     if (id === 'p_juku') { const H = gkLs(g).high; if (!H.cram) { if (!g.spend(15000)) { this.say('お金が足りない（¥15,000）', UC.bad); return; } H.cram = true; K.cramDay = g.state.day; this.say('塾に通わせることにした'); } else { H.cram = false; this.say('塾をやめさせた'); } return; }
     if (id === 'f_transfer') { const k = await this.pick('転校させる？', [{ label: 'やめておく' }, { label: '転校させる' }], { note: '引っ越しや越境通学で、別の学校に移る。いじめからは離れられるが、友だちもゼロからやり直し。' }); if (k === 1) await this.info('転校', gkFamTransfer(g, K)); return; }
     if (id === 'evopt') { const o = ['auto', 'app', 'off']; K.opt.ev = o[(o.indexOf(K.opt.ev || 'auto') + 1) % 3]; return; }
+    if (id === 'sdopt') { const o = ['normal', 'brief', 'min', 'off']; K.opt.sd = o[(o.indexOf(K.opt.sd || 'normal') + 1) % 4]; return; }
+    if (id === 'hvopt') { K.opt.hv = K.opt.hv === 0 ? 1 : 0; return; }
+    if (id === 'autoopt') { K.opt.autoOth = K.opt.autoOth === 0 ? 1 : 0; return; }
     if (id === 'policy') { const keys = Object.keys(ATTI); const k = await this.pick('授業中の過ごし方', keys.map(x => ({ label: ATTI[x][0], right: K.policy === x ? 'いま' : '' })), { note: keys.map(x => `${ATTI[x][0]}：${ATTI[x][1]}`).join('\n') }); if (k >= 0) { K.policy = keys[k]; this.say(`授業中は「${ATTI[keys[k]][0]}」でいく`); } return; }
     if (id === 'hobby') { const H = ['アニメ', 'ゲーム', 'アイドル', 'ボカロ・音楽', '鉄道', 'マンガ', 'やめる']; const k = await this.pick('趣味・推し活', H.map(x => ({ label: x }))); if (k < 0) return; K.otaku = k === H.length - 1 ? null : H[k]; if (K.otaku) { K.mood = clamp(K.mood + 4, 0, 100); const o = K.cls.filter(c => c.a === 'otaku'); o.forEach(c => c.aff = clamp(c.aff + 6, 0, 100)); this.say(`${K.otaku}に夢中！ 同じ趣味の仲間と話が合うようになった`); } return; }
     if (id === 'design') { await openMeHd(g); this.say('キャラデザインを変えた'); return; }
@@ -17981,6 +17985,26 @@ function mkSchoolCast(g, K, role, v) {
   if (h) return C(shortName(h), schoolSpec(g, K, 'h', { n: h.n, f: GIVN_F.includes(h.n.split(' ')[1]), wheel: h.nd === 'wheel', aid: h.nd === 'hear', nd: h.nd }), '#d8a020');
   return C(role, charSpec('casual'));
 }
+// ---- 学校イベントの簡潔化：通常／簡潔／最小／オフ。重いイベントは例外にでき、自分以外の学校生活は自動で進められる ----
+const SC_HEAVY = new Set(['sc_bully1', 'sc_bully3', 'sc_bully_end', 'sc_witness', 'sc_futoko', 'sc_return', 'sc_counsel', 'sc_dep', 'sc_recover', 'sc_grad', 'sc_transfer', 'sc_hm_asd', 'sc_hm_wheel', 'sc_hm_hear', 'sc_hm_mock']);
+const SC_BRIEF = { normal: ['通常', '今までどおり、場面を最後まで見る'], brief: ['簡潔', '会話と選択肢を短くまとめる'], min: ['最小', '場面は出さず、結果を1行で知らせる'], off: ['オフ', '場面を出さず、数値だけ自動で進める'] };
+function schoolBriefMode(g, ev) {
+  const K = gko(g, false); if (!K) return 'normal'; const o = K.opt || {};
+  let lv = o.sd || 'normal';
+  if (GK_CTX && o.autoOth !== 0) lv = lv === 'normal' ? 'min' : lv; // 自分以外の学校生活は、まず自動で進める
+  if (lv === 'normal') return 'normal';
+  if (SC_HEAVY.has(ev.id) && o.hv !== 0) return 'normal';
+  return lv === 'brief' ? 'brief' : 'skip';
+}
+function schoolBriefNote(g, sc) { const K = gko(g, false); if (!K || (K.opt && K.opt.sd === 'off')) return; const t = (() => { const x = sc.steps.find(x => x && x[0] === 'n') || sc.steps.find(x => x && !['in', 'out', 'bg', 'fx', 'big', 'ex', 'shake', 'zoom', 'sfx', 'choice', 'wait'].includes(x[0]) && typeof x[3] === 'string'); return x ? (x[0] === 'n' ? x[1] : x[3]) : ''; })(); gkNote(g, `【${sc.title}】${t ? String(t).slice(0, 38) : ''}`); }
+function schoolTrim(sc) {
+  const st = sc.steps, isTxt = x => x && (x[0] === 'n' || (typeof x[3] === 'string' && x.length >= 4 && !['in', 'out', 'bg', 'fx', 'big', 'ex', 'shake', 'zoom', 'sfx', 'choice', 'wait'].includes(x[0])));
+  const ci = st.findIndex(x => x && x[0] === 'choice'); const out = []; let before = 0;
+  st.forEach((x, i) => { if (!x) return; if (!isTxt(x)) { if (x[0] === 'choice') { const c = x.slice(); c[1] = x[1].slice(0, 2); out.push(c); } else out.push(x); return; }
+    const after = ci >= 0 && i > ci; if (!after) { if (before < 2) { out.push(x); before++; } } else if (st.slice(i + 1).every(y => !isTxt(y))) out.push(x); });
+  sc.steps = out;
+}
+if (typeof window !== 'undefined') window.__schoolDbg = { trim: schoolTrim, mode: schoolBriefMode, ev: () => SC_EVENTS, build: (g, ev) => buildSchoolEvent(g, ev), gko: (g, c) => gko(g, c), play: g => playSchoolEvents(g), evq: (g, id) => gkEv(g, id) };
 function buildSchoolEvent(g, ev) {
   const K = gko(g); const def = SC_EVENTS[ev.id]; if (!def) return null;
   const nm = gkName(g);
@@ -19202,12 +19226,14 @@ class MesenScene extends NpbScene {
     if (this.toast) { const w = Math.min(560, tw(c, this.toast.text) + 36); fr(c, 320 - w / 2, 306, w, 26, 'rgba(4,12,20,0.92)'); fr(c, 320 - w / 2, 330, w, 2, this.toast.col); tx(c, this.toast.text, 320, 311, { align: 'center' }); }
     if (this.modal) this.drawModal(c, this.N);
   }
-  scenePanel(c, bgKey, spec, st, label) {
+  scenePanel(c, bgKey, spec, st, label, dot) {
     const x = 8, y = 66, w = 250, h = 272;
     c.save(); c.beginPath(); c.rect(x, y, w, h); c.clip();
+    if (dot && dot.look) { try { dotRoom(c, x, y, w, h - 44, dot.place || 'living', this.t); dotActor(c, dot, x + w / 2, y + h - 44 - 62, this.t); } catch (e) { console.error('[mesen] dot', e); fr(c, x, y, w, h, '#1a2a3a'); } }
+    else {
     const bg = evBg(bgKey, {}); if (bg) c.drawImage(bg, 309, 0, 662, 720, x, y, w, h); else fr(c, x, y, w, h, '#1a2a3a');
     fr(c, x, y, w, h, 'rgba(0,10,20,0.18)');
-    if (spec) drawChar(c, spec, { x: x + w / 2, y: y + 236, sc: st.sc || 1.6, expr: st.expr, pose: st.pose || 'down', t: this.t, mot: st.mot });
+    if (spec) drawChar(c, spec, { x: x + w / 2, y: y + 236, sc: st.sc || 1.6, expr: st.expr, pose: st.pose || 'down', t: this.t, mot: st.mot }); }
     c.restore();
     fr(c, x, y + h - 44, w, 44, 'rgba(0,0,0,0.6)'); fr(c, x, y + h - 44, 3, 44, UC.acc);
     wrap(c, label, w - 20, 12).slice(0, 2).forEach((l, i) => tx(c, l, x + 12, y + h - 38 + i * 16, { color: '#fff' }));
@@ -19217,7 +19243,7 @@ class MesenScene extends NpbScene {
     const A = agOf(g, m), act = nowAct(g, m, A), me = meSum(g); me.g = (() => { try { return E.Bf(g.state).gender; } catch (e) { return 'x'; } })();
     const small = A.role === 'baby' || A.role === 'toddler';
     const msp = memSpec(g, m, A, act), hdk = hdKeyOf(msp);
-    this.scenePanel(c, MS_BG[act.place] || 'living', msp, { sc: A.role === 'baby' && !hdk ? 0.9 : small && !hdk ? 1.15 : 1.6, expr: A.role === 'baby' ? ({ sleep: 'sleep', cry: 'cry', milk: 'drink', play: (Math.floor(this.t / 240) % 2 ? 'crawl' : 'play') })[act.k] || 'smile' : act.k === 'sleep' ? 'closed' : exprOf(A), mot: act.k === 'cry' ? 'tremble' : '' }, `いま：${act.what}（${hhmm(act.s)}〜）`);
+    this.scenePanel(c, MS_BG[act.place] || 'living', msp, { sc: A.role === 'baby' && !hdk ? 0.9 : small && !hdk ? 1.15 : 1.6, expr: A.role === 'baby' ? ({ sleep: 'sleep', cry: 'cry', milk: 'drink', play: (Math.floor(this.t / 240) % 2 ? 'crawl' : 'play') })[act.k] || 'smile' : act.k === 'sleep' ? 'closed' : exprOf(A), mot: act.k === 'cry' ? 'tremble' : '' }, `いま：${act.what}（${hhmm(act.s)}〜）`, { look: faiLook(g, m), place: act.place, k: act.k, small });
     // 右：心の声・予定・状態
     box(c, 266, 66, 366, 272);
     tx(c, `${m.name}　${m.age}歳　${roleName(A.role, m)}`, 278, 72, { size: 14, bold: true });
@@ -19244,7 +19270,7 @@ class MesenScene extends NpbScene {
     try { if (isHS(g) && ob && ob.kind === 'school' && t >= ob.start && t < ob.end) spec = schoolSpec(g, gko(g), 'me'); else spec = meSpec(g, { me: {} }, 'casual'); } catch (e) { }
     if (!spec) try { const lk = lookOf(g); spec = archCasual(me.arch, archLook(me.arch, { skin: lk.skin, hair: lk.hair, style: lk.style })); } catch (e) { }
     const lab = ob && t >= ob.start && t < ob.end ? `いま：${ob.label}（AIが進行中）` : `いま：${t >= 1380 || t < 360 ? 'ねる準備' : 'AIが次の行動を考えている'}`;
-    this.scenePanel(c, ob && ob.kind === 'school' ? 'classroom' : ob && ob.kind === 'work' ? 'office' : t >= 1140 ? 'night' : 'living', spec, { sc: 1.6, expr: me.stress > 70 ? 'worry' : 'normal' }, lab);
+    this.scenePanel(c, ob && ob.kind === 'school' ? 'classroom' : ob && ob.kind === 'work' ? 'office' : t >= 1140 ? 'night' : 'living', spec, { sc: 1.6, expr: me.stress > 70 ? 'worry' : 'normal' }, lab, { look: (g.state && g.state.look) || {}, place: ob && ob.kind === 'school' ? 'classroom' : ob && ob.kind === 'work' ? 'office' : t >= 1140 ? 'bedroom' : 'living', k: '', me: 1 });
     box(c, 266, 66, 366, 272);
     tx(c, `${me.nm}（${me.age}歳）`, 278, 72, { size: 14, bold: true }); tx(c, fit(c, me.label || '', 340, 11), 278, 90, { size: 11, color: UC.dim });
     const st = g.state, rows = [['所持金', yen(num(st.money, 0))], ['体力', `${num(st.stamina, 0)}/${num(st.maxStamina, 100)}`], ['空腹', `${Math.round(num(st.life && st.life.hunger, 0))}`], ['ストレス', `${Math.round(me.stress)}`], ['キャラ', me.arch === 'inkya' ? '陰キャ' : me.arch === 'youkya' ? '陽キャ' : 'ふつう'], ...(meCxLabel(g) ? [['コンプレックス', meCxLabel(g)]] : [])];
@@ -21534,6 +21560,36 @@ async function faiResolve(g, m, A, w, say, once) {
 }
 // ---- 家の中にあらわれる ----
 let FAI_MAP = { room: null, ents: {}, spots: null };
+// ---- 目線画面：町と同じドット絵の人物を、小さなドット絵の部屋に立たせる ----
+function dotRoom(c, x, y, w, h, place, t) {
+  const R = (rx, ry, rw, rh, col) => { c.fillStyle = col; c.fillRect(Math.round(x + rx), Math.round(y + ry), rw, rh); };
+  const P = { living: ['#d9c7a0', '#a9774a', '#8a5a36'], kitchen: ['#e2dccb', '#c9c2b0', '#9a9482'], bedroom: ['#b4c2dc', '#9a6f4a', '#7a5636'], bath: ['#bfe4ea', '#9fc7cf', '#7aa5ae'], classroom: ['#d8d3b4', '#b08a58', '#8a6a3e'], hallway: ['#d0d4c0', '#a8a08a', '#847c68'], gym: ['#d6c08a', '#c89a54', '#a07838'], office: ['#c4ccd8', '#8a929e', '#6a727e'], station: ['#b8bcc8', '#8a8e9a', '#6a6e7a'], street: ['#7ab4e0', '#6a6a72', '#4a4a52'], river: ['#7ab4e0', '#6aa860', '#4a8040'], school: ['#7ab4e0', '#b8a888', '#8a7a5a'], hospital: ['#e4eef2', '#c8d8de', '#a0b4bc'], night: ['#1a2448', '#4a3a2a', '#2a2018'] };
+  const pc = P[place] || P.living, wall = pc[0], fl = pc[1], fl2 = pc[2], wh = Math.round(h * 0.56);
+  R(0, 0, w, wh, wall); for (let i = 0; i < w; i += 16) R(i, 0, 1, wh, 'rgba(0,0,0,0.05)');
+  R(0, wh - 6, w, 6, shade(wall, -0.18)); R(0, wh - 6, w, 1, shade(wall, 0.2));
+  R(0, wh, w, h - wh, fl); for (let j = 0; j < h - wh; j += 12) R(0, wh + j, w, 1, fl2); for (let i = 0; i < w; i += 36) for (let j = 0; j < h - wh; j += 24) R(i + ((j / 12) % 2 ? 18 : 0), wh + j, 1, 12, fl2);
+  const outdoor = place === 'street' || place === 'river' || place === 'school' || place === 'station';
+  if (outdoor) { R(0, 0, w, wh, '#7ab4e0'); R(0, wh - 40, w, 40, '#98a0b0'); for (let i = 0; i < w; i += 40) { R(i + 6, wh - 62 + (i % 3) * 6, 28, 62 - (i % 3) * 6, shade('#8a92a6', (i % 4) * 0.06)); for (let q = 0; q < 3; q++) R(i + 10 + q * 8, wh - 54 + (i % 3) * 6, 4, 5, '#ffe9a0'); } }
+  else { const wx = 24, wy = 20, ww = 52, wh2 = 44; R(wx - 2, wy - 2, ww + 4, wh2 + 4, '#6a4a2e'); R(wx, wy, ww, wh2, place === 'night' ? '#0c1230' : '#9ad4f4'); R(wx + ww / 2 - 1, wy, 2, wh2, '#6a4a2e'); R(wx, wy + wh2 / 2 - 1, ww, 2, '#6a4a2e'); R(wx + 4, wy + 4, 10, 4, 'rgba(255,255,255,0.7)'); }
+  const prop = {
+    living: () => { R(w - 98, wh - 30, 80, 30, '#7a4a3a'); R(w - 98, wh - 36, 80, 8, '#9a6a52'); R(w - 62, wh - 66, 40, 30, '#202028'); R(w - 59, wh - 63, 34, 24, '#5a86a6'); R(30, wh + 8, 56, 18, '#c96a5a'); },
+    kitchen: () => { R(14, wh - 34, w - 28, 34, '#8a6a4a'); R(14, wh - 40, w - 28, 8, '#d8d2c0'); R(w - 70, wh - 66, 26, 26, '#b8bcc4'); R(30, wh - 62, 40, 20, '#c9a24a'); },
+    bedroom: () => { R(w - 108, wh - 8, 98, 52, '#6a5a8a'); R(w - 108, wh - 8, 98, 12, '#e8e0f0'); R(w - 108, wh + 30, 98, 14, '#4a3a6a'); R(16, wh - 30, 56, 30, '#8a6a4a'); R(20, wh - 52, 30, 22, '#3a4a6a'); },
+    bath: () => { R(w - 100, wh - 4, 90, 40, '#f0f4f6'); R(w - 96, wh + 2, 82, 28, '#7ac4e4'); R(14, wh - 30, 20, 30, '#e8ecef'); },
+    classroom: () => { R(24, 12, w - 48, 32, '#2a5a42'); R(24, 12, w - 48, 3, '#c8b078'); R(14, wh + 18, 48, 18, '#c9a46a'); R(w - 62, wh + 18, 48, 18, '#c9a46a'); },
+    office: () => { R(16, wh - 4, 70, 22, '#8a929e'); R(30, wh - 24, 30, 20, '#3a4252'); R(w - 70, wh - 56, 40, 56, '#9aa2ae'); },
+    hospital: () => { R(w - 100, wh - 6, 90, 38, '#f4f8fa'); R(w - 100, wh - 6, 90, 8, '#9acce0'); R(18, wh - 40, 20, 40, '#7ac4a0'); R(24, wh - 34, 8, 14, '#fff'); }
+  }[place]; if (prop) prop();
+  R(0, h - 2, w, 2, 'rgba(0,0,0,0.25)');
+}
+function dotActor(c, o, cx, fy, t) {
+  const sh = Eo(o.look || {}); if (!sh) return; const dir = o.k === 'sleep' ? 'down' : (Math.floor(t / 150) % 4 === 3 ? 'left' : 'down'); const fr0 = (sh[dir] && sh[dir][0]) || (sh.down && sh.down[0]); if (!fr0) return;
+  const k = o.small ? 4 : 5, wpx = 16 * k, hpx = 20 * k, bob = (o.k === 'walk' || o.k === 'commute') ? Math.round(Math.abs(Math.sin(t / 8)) * 3) : 0;
+  c.save(); c.imageSmoothingEnabled = false; c.fillStyle = 'rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(cx, fy + hpx / 2 + 4, 26, 6, 0, 0, Math.PI * 2); c.fill();
+  if (o.k === 'sleep') { c.translate(cx, fy + hpx / 2 - 6); c.rotate(-Math.PI / 2); c.drawImage(fr0, -wpx / 2, -hpx / 2, wpx, hpx); }
+  else c.drawImage(fr0, Math.round(cx - wpx / 2), Math.round(fy - hpx / 2 - bob), wpx, hpx);
+  c.restore();
+}
 function faiLook(g, m) {
   try { const id = m.fid || m.pid || (m.k && m.k.id); const U = id && E.Ut && E.Ut[id]; if (U && U.look) return U.look; } catch (e) { }
   const rel = m.frel || (m.kind === 'kid' ? (m.age >= 18 ? (m.g === 'f' ? 'sister_older' : 'brother_older') : m.g === 'f' ? 'sister_younger' : 'brother_younger') : m.kind === 'sp' ? (m.g === 'f' ? 'mother' : 'father') : 'father');
@@ -41471,12 +41527,24 @@ const GEO_BIOME = (() => { const M = {}, put = (col, ids) => ids.split(' ').forE
   put('#8a8f56', '840 156 484 032 152 710 792 724 620 300 100 642 004 524 064');
   return M; })();
 const GEO_DDR = [[10.9, 55.5], [10.85, 53.9], [10.75, 53.55], [11.3, 53.1], [11.6, 52.9], [10.95, 52.5], [10.6, 52.0], [10.4, 51.6], [10.0, 51.3], [10.15, 50.6], [11.2, 50.4], [11.9, 50.4], [12.3, 50.0], [16.5, 49.0], [16.5, 55.5]];
+// 日付変更線（経度180度）をまたぐ輪郭は、東西2つに切って描く（さもないと地図を横切る帯になる）
+function geoSplit180(r) {
+  let cross = false; for (let i = 2; i < r.length; i += 2) if (Math.abs(r[i] - r[i - 2]) > 180) { cross = true; break; }
+  if (!cross) return [r];
+  const P = []; let off = 0; for (let i = 0; i < r.length; i += 2) { if (i && Math.abs(r[i] - r[i - 2] - 0) > 180) { /* wrap */ } P.push([r[i], r[i + 1]]); }
+  // 経度をつなぎなおす（-180側を+360して連続にする）
+  for (let i = 1; i < P.length; i++) { let d = P[i][0] + off - P[i - 1][0]; if (d > 180) off -= 360; else if (d < -180) off += 360; P[i][0] += off; }
+  const clip = (pts, keepLE) => { const out = [], inside = p => keepLE ? p[0] <= 180 : p[0] >= 180; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length], ia = inside(a), ib = inside(b); if (ia) out.push(a); if (ia !== ib) { const t = (180 - a[0]) / (b[0] - a[0]); out.push([180, a[1] + (b[1] - a[1]) * t]); } } return out; };
+  const res = []; for (const [keep, sh] of [[true, 0], [false, -360]]) { const q = clip(P, keep); if (q.length < 3) continue; const f = new Float32Array(q.length * 2); q.forEach((p, k) => { f[k * 2] = p[0] + sh; f[k * 2 + 1] = p[1]; }); res.push(f); }
+  // 連続化したあとの経度が -180〜180 に収まらない場合のため、全体を平行移動して範囲に合わせる
+  return res.length ? res : [r];
+}
 function geoInit() {
   if (GEO.ok) return true; if (typeof window === 'undefined' || !Array.isArray(window.__NPB_GEO)) return false;
   for (const c of window.__NPB_GEO) {
     const rings = [], rbb = []; let X0 = 999, X1 = -999, Y0 = 999, Y1 = -999, best = null, bestA = -1;
-    for (const s of c.r) { const a = s.split(','), out = new Float32Array(a.length); let x = 0, y = 0, x0 = 999, x1 = -999, y0 = 999, y1 = -999;
-      for (let i = 0; i < a.length; i += 2) { x += +a[i]; y += +a[i + 1]; const lx = x / 100, ly = y / 100; out[i] = lx; out[i + 1] = ly; if (lx < x0) x0 = lx; if (lx > x1) x1 = lx; if (ly < y0) y0 = ly; if (ly > y1) y1 = ly; }
+    const parts = []; for (const s of c.r) { const a = s.split(','), o0 = new Float32Array(a.length); let x = 0, y = 0; for (let i = 0; i < a.length; i += 2) { x += +a[i]; y += +a[i + 1]; o0[i] = x / 100; o0[i + 1] = y / 100; } for (const q of geoSplit180(o0)) parts.push(q); }
+    for (const out of parts) { let x0 = 999, x1 = -999, y0 = 999, y1 = -999; for (let i = 0; i < out.length; i += 2) { const lx = out[i], ly = out[i + 1]; if (lx < x0) x0 = lx; if (lx > x1) x1 = lx; if (ly < y0) y0 = ly; if (ly > y1) y1 = ly; }
       rings.push(out); rbb.push([x0, y0, x1, y1]); X0 = Math.min(X0, x0); X1 = Math.max(X1, x1); Y0 = Math.min(Y0, y0); Y1 = Math.max(Y1, y1); const A = (x1 - x0) * (y1 - y0); if (A > bestA) { bestA = A; best = [x0, y0, x1, y1, out]; } }
     // ラベルの位置：いちばん大きい島の、だいたいの中心
     let lx = (best[0] + best[2]) / 2, ly = (best[1] + best[3]) / 2; { const r = best[4]; let sx = 0, sy = 0, n = 0; for (let i = 0; i < r.length; i += 2) { sx += r[i]; sy += r[i + 1]; n++; } if (n) { lx = lx * 0.5 + sx / n * 0.5; ly = ly * 0.5 + sy / n * 0.5; } }
