@@ -42311,6 +42311,7 @@ async function ytOpen(g) {
     try { ytApplyPlan(g); } catch (e) { }
     const r = await gbScene(g, { mode: 'yt', title: 'YouTube', tcol: '#ffffff' });
     if (!r || !r.act) return;
+    if (r.act === 'upneta') { const up = r.up; const a = await WXt(g); if (!a) continue; const V = ytV(g), last = V && V.posts && V.posts.length ? Math.max(...V.posts.map(p => num(p.id))) : -1; ytSt(g).plan = { title: YT_TITLE[up.t][0], thumb: YT_THUMB[up.h][0], time: YT_TIME[up.m][0], after: last, day: num(g.state.day) }; const n = H9t(g, 'neta', { neta: a, title: up.t === 0 ? undefined : ytTitleFor(g, 'neta', up.t) }); if (!n.ok) { ytSt(g).plan = null; await E.qe(g, { title: 'YouTube', color: YT.red, text: n.why }); continue; } const ap = ytApplyPlan(g); ytSt(g).lastUp = { id: n.post.id, first: n.first, mult: ap ? ap.mult : 1 }; ytSt(g).openPh = 'uping'; continue; }
     if (r.act === 'post') { const ok = await ytPlanDialog(g); if (!ok) continue; const res = await LFe(g); if (res === 'left') return; const a = ytApplyPlan(g); if (a && a.mult !== 1) await E.qe(g, { title: '企画の効果', color: YT.red, text: `タイトル・サムネ・投稿時間の工夫で、再生の見こみが ×${a.mult.toFixed(2)} になった。${a.P.flame ? '\n…ただ、釣りタイトルが反感を買って炎上してしまった。' : ''}` }); continue; }
     if (r.act === 'live') { await zFe(g); continue; }
     if (r.act === 'help') { await E.qe(g, { title: 'しくみ', color: YT.red, lines: PFe(g).filter(Boolean).concat(['', '【企画】タイトル・サムネイル・投稿時間で再生の伸びが変わる。釣りタイトルは炎上に注意。', '【コメント】ハートや返信でファンがふえる。アンチに強く言い返すと炎上することも。', '【盾】登録者1,000人で収益化、10万人で銀の盾、100万人で金の盾、1000万人でダイヤの盾。']) }); continue; }
@@ -42335,7 +42336,7 @@ function ytThumb(c, P, x, y, w, h, f) {
   const tt2 = pFit(c, String(P.title || ''), w - 10, 12); pT(c, tt2, x + 5, y + h - 30, { size: 12, color: c2, outline: '#000000', ow: 1 });
   if (P.plan && P.plan.thumb === 'hade') { pR(c, x + 4, y + h * 0.18, w * 0.5, 14, '#ffef00'); pT(c, '衝撃', x + 8, y + h * 0.18, { size: 12, color: '#e00000', shadow: null }); }
   const dur = P.live ? '' : P.kind === 'short' ? '0:' + String(15 + seed % 45).padStart(2, '0') : `${5 + seed % 15}:${String(seed % 60).padStart(2, '0')}`;
-  if (dur) { const dw = pW(c, dur, 12) + 6; pR(c, x + w - dw - 3, y + h - 15, dw, 13, 'rgba(0,0,0,0.85)'); pT(c, dur, x + w - dw, y + h - 15, { size: 12, shadow: null }); }
+  if (dur && w >= 60) { const dw = pW(c, dur, 12) + 6; pR(c, x + w - dw - 3, y + h - 15, dw, 13, 'rgba(0,0,0,0.85)'); pT(c, dur, x + w - dw, y + h - 15, { size: 12, shadow: null }); }
   if (P.buzz) { pR(c, x + w - 46, y + 4, 42, 13, '#ff0033'); pT(c, '急上昇', x + w - 25, y + 4, { size: 12, align: 'center', shadow: null }); }
   else if (P.flame) { pR(c, x + w - 34, y + 4, 30, 13, '#ff6a00'); pT(c, '炎上', x + w - 19, y + 4, { size: 12, align: 'center', shadow: null }); }
 }
@@ -42343,21 +42344,65 @@ function ytAvatar(c, g, cx, cy, r) {
   pCirc(c, cx, cy, r + 2, '#ffffff'); pCirc(c, cx, cy, r, '#3a5a8a');
   try { const sh = Eo((g.state && g.state.look) || {}), fr0 = sh && sh.down && sh.down[0]; if (fr0) { c.save(); c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.clip(); c.imageSmoothingEnabled = false; const k = r * 2 / 12; c.drawImage(fr0, 0, 0, 16, 14, cx - 8 * k, cy - r * 0.95, 16 * k, 14 * k); c.restore(); } } catch (e) { }
 }
+// ---- YouTube 専用画面の拡張：画面内アップロード・視聴ページ・スタジオ ----
+const YT_TT = {
+  neta: ['ネタ動画 #{n}', '【爆笑】会場が凍りついたネタ', '新ネタ{n}本目を全力でやってみました'],
+  uta: ['歌ってみた #{n}', '【鳥肌】一発撮りで歌ったら…', '歌ってみた｜原キーで丁寧に歌いました'],
+  vlog: ['今日の日常 #{n}', '【閲覧注意】部屋がヤバすぎた', '一人暮らしの休日の過ごし方'],
+  kikaku: ['やってみた #{n}', '【衝撃】24時間○○してみた結果…', '体を張って検証してみた（安全に配慮）'],
+  mane: ['ものまね #{n}', '【本人公認？】似すぎて事件', 'ものまねのコツを解説しながらやってみた'],
+  short: ['#shorts {n}', '最後まで見て。#shorts', '30秒でわかる○○ #shorts'],
+  jikkyo: ['ゲーム実況 part{n}', '【絶叫】このゲーム怖すぎる', '初見プレイを丁寧に実況します part{n}'],
+  ryouri: ['料理 #{n}', '【神レシピ】これは店超えた', '失敗しない基本の作り方を解説'],
+};
+const YT_AUD = { neta: [0.42, 0.33, 0.2, 0.05], uta: [0.55, 0.25, 0.15, 0.05], vlog: [0.38, 0.32, 0.22, 0.08], kikaku: [0.6, 0.25, 0.12, 0.03], mane: [0.3, 0.3, 0.28, 0.12], short: [0.7, 0.2, 0.08, 0.02], jikkyo: [0.62, 0.28, 0.09, 0.01], ryouri: [0.18, 0.34, 0.33, 0.15] };
+const YT_AUDL = ['10〜20代', '30代', '40〜50代', '60代〜'];
+function ytKinds(g) { try { return Object.keys(cw).filter(k => !(cw[k].smart && fo(g) !== 'smart') && !(cw[k].from && ey(g) < cw[k].from)); } catch (e) { return []; } }
+function ytKName(g, k) { try { return Y9t(g, k); } catch (e) { return k; } }
+function ytTitleFor(g, k, st) { const V = ytV(g), n = (V && V.posts ? V.posts.filter(p => p.kind === k).length : 0) + 1; return ((YT_TT[k] || ['動画 #{n}', '【衝撃】動画 #{n}', '動画 #{n}'])[st] || '').replace(/\{n\}/g, n); }
+function ytLikes(P) { return Math.round(num(P.live ? P.total : P.got) * (0.015 + num(P.q) / 2500)); }
+function ytDis(P) { return Math.round(num(P.live ? P.total : P.got) * (P.flame ? 0.03 : 0.004)); }
+function ytUpload(g, up) { // 画面の中で投稿する（ネタ動画以外）
+  const k = up.k, V = ytV(g); const why = (() => { try { return kut(g, k); } catch (e) { return null; } })(); if (why) return { ok: false, why };
+  const last = V && V.posts && V.posts.length ? Math.max(...V.posts.map(p => num(p.id))) : -1;
+  ytSt(g).plan = { title: YT_TITLE[up.t][0], thumb: YT_THUMB[up.h][0], time: YT_TIME[up.m][0], after: last, day: num(g.state.day) };
+  const n = H9t(g, k, { title: ytTitleFor(g, k, up.t) }); if (!n.ok) { ytSt(g).plan = null; return n; }
+  const a = ytApplyPlan(g); ytSt(g).lastUp = { id: n.post.id, first: n.first, mult: a ? a.mult : 1 }; return { ok: true };
+}
+function ytAdvice(g) {
+  const V = ytV(g), L = (V && V.posts || []).filter(p => !p.live && p.step >= 1); const out = [];
+  if (L.length < 3) return ['動画が3本以上たまると、傾向からアドバイスが出る。'];
+  const avg = (arr) => arr.length ? arr.reduce((a, p) => a + num(p.total), 0) / arr.length : 0;
+  const byK = {}; for (const p of L) (byK[p.kind] = byK[p.kind] || []).push(p); const bk = Object.entries(byK).filter(([, a]) => a.length >= 1).sort((a, b) => avg(b[1]) - avg(a[1]))[0]; if (bk) out.push(`いちばん伸びるジャンルは「${ytKName(g, bk[0])}」（平均 ${ytN(avg(bk[1]))}回）。`);
+  const byT = {}; for (const p of L) if (p.plan) (byT[p.plan.time] = byT[p.plan.time] || []).push(p); const bt = Object.entries(byT).sort((a, b) => avg(b[1]) - avg(a[1]))[0]; if (bt) { const T = YT_TIME.find(x => x[0] === bt[0]); out.push(`投稿は「${T ? T[1] : bt[0]}」がいちばん伸びている。`); }
+  const fl = L.filter(p => p.flame), tsuri = L.filter(p => p.plan && p.plan.title === 'tsuri'); if (fl.length) out.push(`炎上は${fl.length}回。${tsuri.length && fl.some(p => p.plan && p.plan.title === 'tsuri') ? '釣りタイトルは控えめに。' : '体を張る企画は気をつけて。'}`);
+  const q = L.reduce((a, p) => a + num(p.q), 0) / L.length; out.push(q < 45 ? 'できばえが低め。ネタや歌の練習で底上げしよう。' : q >= 70 ? 'できばえは十分。あとは投稿の頻度を上げよう。' : 'できばえは平均的。得意なジャンルに寄せてみよう。');
+  return out;
+}
 // ---- 専用画面 ----
 GB_MODES.yt = {
   noHud: true,
-  init(s, g) { s.S = { tab: 'home', f: 0, page: 0, sel: null, rep: null, toast: null }; ytGenres(); },
+  init(s, g) { s.S = { tab: 'home', ph: 'main', f: 0, page: 0, sel: null, rep: null, toast: null, up: null, upF: 0, ssel: null }; ytGenres(); const Y = ytSt(g); if (Y.openPh) { s.S.ph = Y.openPh; s.S.upF = 0; Y.openPh = null; } },
   btn(s, id, g) { const S = s.S, V = ytV(g);
-    if (id === 'close') { s.done(); return; } if (id.startsWith('tab:')) { S.tab = id.slice(4); S.rep = null; return; }
-    if (id === 'post' || id === 'live' || id === 'help') { s.done({ act: id }); return; }
+    if (id === 'close') { s.done(); return; } if (id.startsWith('tab:')) { S.tab = id.slice(4); S.rep = null; S.ph = 'main'; return; }
+    if (id === 'post') { const ks = ytKinds(g); const k0 = ks.find(k => { try { return !kut(g, k); } catch (e) { return false; } }) || ks[0]; S.up = { k: k0, t: 0, h: 0, m: 2 }; S.ph = 'up'; return; }
+    if (id === 'live' || id === 'help') { s.done({ act: id }); return; }
+    if (id.startsWith('uk:')) { S.up.k = id.slice(3); return; } if (id.startsWith('ut:')) { S.up.t = +id.slice(3); return; } if (id.startsWith('uh:')) { S.up.h = +id.slice(3); return; } if (id.startsWith('um:')) { S.up.m = +id.slice(3); return; }
+    if (id === 'ucancel') { S.ph = 'main'; return; }
+    if (id === 'upub') { if (S.up.k === 'neta') { s.done({ act: 'upneta', up: S.up }); return; } const r = ytUpload(g, S.up); if (!r.ok) { s.tip(r.why || '投稿できない', PW.bad); tt.sfx('buzz'); return; } tt.sfx('ok'); S.ph = 'uping'; S.upF = 0; return; }
+    if (id === 'uwatch') { const Y = ytSt(g); S.sel = Y.lastUp ? Y.lastUp.id : null; S.ph = 'watch'; return; }
+    if (id === 'uhome') { S.ph = 'main'; S.tab = 'home'; return; }
+    if (id.startsWith('w:')) { S.sel = +id.slice(2); S.ph = 'watch'; return; }
+    if (id === 'wcm') { S.tab = 'cm'; S.ph = 'main'; return; }
+    if (id.startsWith('ss:')) { S.ssel = +id.slice(3); return; }
     if (id === 'pg-') { S.page = Math.max(0, S.page - 1); return; } if (id === 'pg+') { S.page++; return; }
-    if (id.startsWith('v:')) { S.sel = +id.slice(2); S.tab = 'cm'; S.rep = null; return; }
+    if (id.startsWith('v:')) { S.sel = +id.slice(2); S.ph = 'watch'; S.rep = null; return; }
     const P = V && V.posts ? V.posts.find(p => p.id === S.sel) || V.posts[0] : null; if (!P) return;
     if (id.startsWith('h:')) { const t = ytHeart(g, P, +id.slice(2)); if (t) s.tip(t, PW.good); return; }
     if (id.startsWith('r:')) { S.rep = +id.slice(2); return; }
     if (id.startsWith('rw:')) { const [ci, how] = id.slice(3).split(':'); const t = ytReply(g, P, +ci, how); S.rep = null; if (t) s.done({ act: 'msg', text: t }); return; }
     if (id.startsWith('p:')) { const t = ytPin(g, P, +id.slice(2)); if (t) s.tip(t, PW.acc); return; } },
-  update(s) { s.S.f++; },
+  update(s) { s.S.f++; s.S.upF++; },
   draw(s, c, g) {
     const S = s.S, V = ytV(g) || { subs: 0, views: 0, posts: [], earned: 0 }; ytSt(g);
     pR(c, 0, 0, 640, 360, YT.bg);
@@ -42366,9 +42411,9 @@ GB_MODES.yt = {
     pR(c, 220, 6, 220, 20, '#121212'); pR(c, 220, 6, 220, 1, YT.line); pR(c, 220, 25, 220, 1, YT.line); pR(c, 220, 6, 1, 20, YT.line); pR(c, 440, 6, 34, 20, YT.panel); pT(c, '検索', 228, 9, { size: 12, color: '#717171', shadow: null }); pCirc(c, 456, 15, 4, YT.t2); pCirc(c, 456, 15, 2, YT.panel);
     ytAvatar(c, g, 560, 16, 10); s.btn('close', '閉じる', 580, 5, 54, 22, { size: 12, back: true, kind: 'ytg' });
     // 左ナビ
-    const NAV = [['home', 'ホーム'], ['vid', '動画'], ['cm', 'コメント'], ['ana', '分析']];
-    NAV.forEach(([id, nm], i) => { const on = S.tab === id, y = 42 + i * 52; if (on) pR(c, 2, y, 70, 46, YT.panel); s.btn('tab:' + id, nm, 3, y + 2, 68, 42, { size: 12, kind: on ? 'ytw' : 'ytg', def: on && i === 0 }); });
-    try { this['d_' + S.tab](s, c, g, V, S); } catch (e) { console.error('[yt] draw', e); pT(c, '（表示エラー）', 340, 180, { color: PW.bad }); }
+    const NAV = [['home', 'ホーム'], ['vid', '動画'], ['cm', 'コメント'], ['st', 'スタジオ'], ['ana', '分析']];
+    NAV.forEach(([id, nm], i) => { const on = S.tab === id && S.ph === 'main', y = 40 + i * 50; if (on) pR(c, 2, y, 70, 46, YT.panel); s.btn('tab:' + id, nm, 3, y + 2, 68, 42, { size: 12, kind: on ? 'ytw' : 'ytg', def: on && i === 0 }); });
+    try { this['d_' + (S.ph === 'main' ? S.tab : S.ph)](s, c, g, V, S); } catch (e) { console.error('[yt] draw', e); pT(c, '（表示エラー）', 340, 180, { color: PW.bad }); }
   },
   actions(s, g, V, x, y) {
     const day = num(g.state.day); let blk = null; try { blk = ay(g); } catch (e) { } if (!blk && V.lastPost === day) blk = '今日はもう投稿した';
@@ -42388,6 +42433,69 @@ GB_MODES.yt = {
     L.forEach((P, i) => { const tx = x0 + i * 140, ty = 214; ytThumb(c, P, tx, ty, 132, 74, S.f); s.btn('v:' + P.id, '', tx, ty, 132, 74, { size: 12, nofocus: true, kind: 'clear' }); pT(c, pFit(c, P.title, 130, 12), tx, ty + 78, { size: 12, color: YT.t1, shadow: null }); pT(c, `${ytN(P.live ? P.total : P.got)}${P.live ? '人が視聴' : '回視聴'}・${ytAgo(g, P.day)}`, tx, ty + 94, { size: 12, color: YT.t2, shadow: null }); });
     // 盾
     let sx = x0 + 410; YT_SHIELD.slice(1).forEach(([id, th, nm2, col]) => { const got = !!Y.sh[id]; this.shield(c, sx, 104, col, got); sx += 48; });
+  },
+  d_up(s, c, g, V, S) {
+    const x0 = 76, U = S.up; pT(c, '動画をアップロード', x0, 38, { size: 16, color: YT.t1, shadow: null });
+    pT(c, 'ジャンル', x0, 62, { size: 12, color: YT.t2, shadow: null });
+    ytKinds(g).forEach((k, i) => { let why = null; try { why = kut(g, k); } catch (e) { } const bx = x0 + 60 + (i % 4) * 92, by = 58 + Math.floor(i / 4) * 24; s.btn('uk:' + k, pFit(c, ytKName(g, k), 80, 12), bx, by, 88, 21, { size: 12, kind: U.k === k ? 'ytw' : 'ytg', off: !!why }); });
+    const ty = 112; pT(c, 'タイトル', x0, ty + 4, { size: 12, color: YT.t2, shadow: null }); [0, 1, 2].forEach(i => s.btn('ut:' + i, pFit(c, ytTitleFor(g, U.k, i), 160, 12), x0 + 60 + i * 168, ty, 164, 22, { size: 12, kind: U.t === i ? 'ytw' : 'ytg' }));
+    pT(c, YT_TITLE[U.t][2], x0 + 60, ty + 26, { size: 12, color: U.t === 1 ? '#ffb08a' : YT.t2, shadow: null });
+    const hy = 156; pT(c, 'サムネ', x0, hy + 4, { size: 12, color: YT.t2, shadow: null });
+    [0, 1, 2].forEach(i => { const P = { id: 9000 + i, kind: U.k, title: ytTitleFor(g, U.k, U.t), plan: { thumb: YT_THUMB[i][0] } }, bx = x0 + 60 + i * 168, on = U.h === i; if (on) pR(c, bx - 3, hy - 3, 150, 90, YT.blue); ytThumb(c, P, bx, hy, 144, 84, S.f); if (i === 2) { try { const sh = Eo((g.state && g.state.look) || {}), fr0 = sh && sh.down && sh.down[0]; if (fr0) { c.save(); c.imageSmoothingEnabled = false; c.drawImage(fr0, 0, 0, 16, 14, bx + 92, hy + 18, 48, 42); c.restore(); pT(c, '!?', bx + 82, hy + 16, { size: 16, color: '#ffef00', outline: '#000', ow: 1 }); } } catch (e) { } } s.btn('uh:' + i, '', bx, hy, 144, 84, { size: 12, kind: 'clear' }); pT(c, `${YT_THUMB[i][1]}`, bx, hy + 88, { size: 12, color: on ? YT.t1 : YT.t2, shadow: null }); });
+    const my = 270; pT(c, '公開時間', x0, my + 4, { size: 12, color: YT.t2, shadow: null }); YT_TIME.forEach((T, i) => s.btn('um:' + i, T[1].replace('（ゴールデン）', '★'), x0 + 60 + i * 124, my, 120, 22, { size: 12, kind: U.m === i ? 'ytw' : 'ytg' }));
+    const mult = YT_TITLE[U.t][3] * YT_THUMB[U.h][3] * YT_TIME[U.m][3], fm = YT_TITLE[U.t][4] * YT_THUMB[U.h][4];
+    let why = null; try { why = kut(g, U.k); } catch (e) { } const st = cw[U.k] ? cw[U.k].stamina : 0;
+    pR(c, x0, 302, 558, 1, YT.line); pT(c, `再生の見こみ ×${mult.toFixed(2)}　ファンのなりやすさ ×${fm.toFixed(2)}　体力 -${st}${YT_TITLE[U.t][5] ? '　炎上注意' : ''}`, x0, 310, { size: 12, color: mult >= 1.3 ? '#7ae09a' : YT.t1, shadow: null });
+    if (why) pT(c, pFit(c, why, 340, 12), x0, 330, { size: 12, color: '#ff8a8a', shadow: null });
+    s.btn('ucancel', 'キャンセル', 634 - 210, 326, 96, 26, { size: 12, kind: 'ytg' }); s.btn('upub', U.k === 'neta' ? 'ネタを選んで公開' : '公開する', 634 - 108, 326, 108, 26, { size: 12, kind: 'yt', off: !!why, def: true });
+  },
+  d_uping(s, c, g, V, S) {
+    const x0 = 76, Y = ytSt(g), L = Y.lastUp, P = L && (V.posts || []).find(p => p.id === L.id); if (!P) { S.ph = 'main'; return; }
+    const pr = clamp(S.upF / 70, 0, 1); pT(c, pr < 1 ? 'アップロード中…' : '公開しました！', x0, 40, { size: 16, color: pr < 1 ? YT.t1 : '#7ae09a', shadow: null });
+    ytThumb(c, P, x0, 66, 256, 144, S.f); pR(c, x0, 216, 256, 6, '#3a3a3a'); pR(c, x0, 216, 256 * pr, 6, YT.red); pT(c, `${Math.round(pr * 100)}%`, x0 + 262, 212, { size: 12, color: YT.t2, shadow: null });
+    pT(c, pFit(c, P.title, 290, 16), x0 + 270, 70, { size: 16, color: YT.t1, shadow: null });
+    if (pr < 1) { pT(c, ['エンコード中…', 'サムネイルを設定中…', 'チェック中（著作権・ガイドライン）…'][Math.floor(S.upF / 24) % 3], x0 + 270, 100, { size: 12, color: YT.t2, shadow: null }); return; }
+    if (S.upF === 71) tt.sfx(P.buzz ? 'fanfare' : P.flame ? 'buzz' : 'good');
+    const rows = [['できばえ', `${P.q}点`], ['今日の再生', `${ytN(L.first)}回（あと2日のびる）`], ['企画の効果', `×${num(L.mult, 1).toFixed(2)}`]]; if (P.buzz) rows.push(['', `${(() => { try { return SG(g); } catch (e) { return 'SNS'; } })()}で話題に！ 急上昇入り`]); if (P.flame) rows.push(['', 'コメント欄が荒れている…（炎上）']);
+    rows.forEach(([k, v], i) => { pT(c, k, x0 + 270, 100 + i * 20, { size: 12, color: YT.t2, shadow: null }); pT(c, v, x0 + 350, 100 + i * 20, { size: 12, color: v.includes('炎上') ? '#ff8a8a' : v.includes('話題') ? '#ffd23f' : YT.t1, shadow: null }); });
+    if (P.buzz) for (let i = 0; i < 14; i++) pR(c, x0 + ((i * 53 + S.f * 3) % 558), 40 + ((i * 37 + S.f * 2) % 200), 3, 3, ['#ffd23f', '#ff0033', '#3ea6ff'][i % 3]);
+    s.btn('uwatch', '動画を見る', x0 + 270, 250, 120, 28, { size: 12, kind: 'yt', def: true }); s.btn('uhome', 'チャンネルへ', x0 + 400, 250, 120, 28, { size: 12, kind: 'ytg' });
+  },
+  d_watch(s, c, g, V, S) {
+    const x0 = 76, L = V.posts || [], P = L.find(p => p.id === S.sel) || L[0]; if (!P) { S.ph = 'main'; return; }
+    const pw = 400, ph = 225, px = x0, py = 38; pR(c, px, py, pw, ph, '#000');
+    // プレーヤー：ジャンルごとの小さなアニメ
+    ytThumb(c, { ...P, title: '', buzz: false, flame: false, live: false, plan: null }, px, py, pw, ph - 18, S.f);
+    const t = S.f; try { const sh = Eo((g.state && g.state.look) || {}), dirs = ['down', 'left', 'down', 'right'], fr = sh && sh[dirs[Math.floor(t / 40) % 4]] && sh[dirs[Math.floor(t / 40) % 4]][Math.floor(t / 10) % 2 ? 1 : 0]; if (fr && !['jikkyo', 'short', 'uta'].includes(P.kind)) { c.save(); c.imageSmoothingEnabled = false; const bob = Math.round(Math.abs(Math.sin(t / 8)) * 4); c.drawImage(fr, px + pw / 2 - 30, py + 70 - bob, 60, 75); c.restore(); } } catch (e) { }
+    if (P.kind === 'uta') for (let i = 0; i < 6; i++) { const yy = py + 180 - ((t * 1.2 + i * 40) % 170); pCirc(c, px + 60 + i * 55, yy, 4, '#ff9ad8'); pR(c, px + 63 + i * 55, yy - 10, 1, 10, '#ff9ad8'); }
+    if (P.kind === 'jikkyo') for (let i = 0; i < 8; i++) pR(c, px + 30 + ((i * 47 + t * 2) % (pw - 60)), py + 40 + (i * 23) % 120, 10, 10, ['#ff5d6c', '#5ee07a', '#ffd23f'][i % 3]);
+    if (P.kind === 'ryouri') for (let i = 0; i < 5; i++) pR(c, px + pw / 2 - 30 + i * 14, py + 90 - ((t + i * 9) % 30), 3, 8, 'rgba(255,255,255,0.5)');
+    const dur = 300, pos = (t % dur) / dur; pR(c, px, py + ph - 18, pw, 18, 'rgba(0,0,0,0.85)'); pR(c, px + 30, py + ph - 10, pw - 110, 3, '#555'); pR(c, px + 30, py + ph - 10, (pw - 110) * pos, 3, YT.red); pCirc(c, px + 30 + (pw - 110) * pos, py + ph - 9, 4, YT.red);
+    for (let i = 0; i < 6; i++) pR(c, px + 10 + i, py + ph - 14 + i / 2, 1, 8 - i, '#fff'); pT(c, `${Math.floor(pos * 9)}:${String(Math.floor(pos * 540) % 60).padStart(2, '0')}`, px + pw - 74, py + ph - 16, { size: 12, color: '#fff', shadow: null });
+    // タイトル・チャンネル
+    pT(c, pFit(c, P.title, pw, 16), px, py + ph + 6, { size: 16, color: YT.t1, shadow: null });
+    ytAvatar(c, g, px + 12, py + ph + 40, 11); const nm = g.state.name || 'あなた'; pT(c, pFit(c, nm, 120, 12), px + 30, py + ph + 30, { size: 12, color: YT.t1, shadow: null }); pT(c, `登録者 ${ytN(V.subs)}人`, px + 30, py + ph + 44, { size: 12, color: YT.t2, shadow: null });
+    const lk = ytLikes(P), dk = ytDis(P); pR(c, px + 200, py + ph + 30, 120, 26, YT.panel); pT(c, `👍 ${ytN(lk)}`, px + 210, py + ph + 36, { size: 12, color: YT.t1, shadow: null }); pR(c, px + 266, py + ph + 34, 1, 18, '#555'); pT(c, `👎 ${ytN(dk)}`, px + 272, py + ph + 36, { size: 12, color: YT.t1, shadow: null });
+    const rr = lk + dk ? lk / (lk + dk) : 1; pR(c, px + 200, py + ph + 58, 120, 2, '#555'); pR(c, px + 200, py + ph + 58, 120 * rr, 2, YT.t1);
+    s.btn('wcm', 'コメント', px + 328, py + ph + 30, 72, 26, { size: 12, kind: 'ytg' });
+    pR(c, px, py + ph + 66, pw, 28, YT.panel); pT(c, pFit(c, `${ytN(P.live ? P.total : P.got)}${P.live ? '人が視聴' : '回視聴'}・${ytAgo(g, P.day)}　できばえ ${P.q}点${P.plan ? `　企画：${(YT_TIME.find(x => x[0] === P.plan.time) || ['', ''])[1]}公開` : ''}`, pw - 12, 12), px + 6, py + ph + 74, { size: 12, color: YT.t1, shadow: null });
+    // おすすめ
+    const R = L.filter(p => p.id !== P.id).slice(0, 4), rx = px + pw + 8; pT(c, 'おすすめ', rx, py, { size: 12, color: YT.t2, shadow: null });
+    R.forEach((Q, i) => { const ry = py + 16 + i * 76; ytThumb(c, Q, rx, ry, 110, 62, S.f); s.btn('w:' + Q.id, '', rx, ry, 110, 62, { size: 12, kind: 'clear', nofocus: true }); pT(c, pFit(c, Q.title, 150 - 112 + 30, 12), rx, ry + 62, { size: 12, color: YT.t1, shadow: null }); });
+  },
+  d_st(s, c, g, V, S) {
+    const x0 = 76, L = (V.posts || []).slice(0, 8); pT(c, 'YouTube Studio', x0, 38, { size: 16, color: YT.t1, shadow: null });
+    if (!L.length) { pT(c, 'まだ動画がない。', x0, 70, { size: 12, color: YT.t2, shadow: null }); return; }
+    const hd = [['動画', 0], ['再生', 196], ['高評価', 244], ['登録者', 290], ['収益', 336]]; hd.forEach(([t2, x]) => pT(c, t2, x0 + x, 62, { size: 12, color: YT.t2, shadow: null })); pR(c, x0, 76, 380, 1, YT.line);
+    if (S.ssel == null || !L.find(p => p.id === S.ssel)) S.ssel = L[0].id;
+    L.forEach((P, i) => { const y = 80 + i * 30, on = P.id === S.ssel; if (on) pR(c, x0, y, 380, 28, YT.panel); ytThumb(c, { ...P, title: '', buzz: false, flame: false }, x0 + 2, y + 2, 44, 24, S.f); s.btn('ss:' + P.id, '', x0, y, 380, 28, { size: 12, kind: 'clear', nofocus: i > 0 });
+      pT(c, pFit(c, P.title, 140, 12), x0 + 50, y + 7, { size: 12, color: YT.t1, shadow: null }); pT(c, ytN(P.live ? P.total : P.got), x0 + 196, y + 7, { size: 12, color: YT.t1, shadow: null }); pT(c, ytN(ytLikes(P)), x0 + 244, y + 7, { size: 12, color: YT.t1, shadow: null }); pT(c, `+${ytN(P.subs)}`, x0 + 290, y + 7, { size: 12, color: YT.t1, shadow: null }); pT(c, P.money ? `¥${ytN(P.money)}` : '－', x0 + 336, y + 7, { size: 12, color: YT.t1, shadow: null }); });
+    const P = L.find(p => p.id === S.ssel), rx = x0 + 392, rw = 634 - rx;
+    pR(c, rx, 58, rw, 120, YT.bg2); pT(c, '再生の伸び（3日）', rx + 8, 62, { size: 12, color: YT.t2, shadow: null });
+    const part = [0.5, 0.3, 0.2].map(f => Math.round(num(P.total) * f)), mx = Math.max(1, ...part); part.forEach((v, i) => { const done = i < num(P.step) || P.live, bh = 70 * v / mx, bx = rx + 16 + i * 52; pR(c, bx, 160 - bh, 34, bh, done ? YT.blue : '#3a4a5a'); pT(c, `${i + 1}日目`, bx + 17, 162, { size: 12, align: 'center', color: YT.t2, shadow: null }); pT(c, ytN(v), bx + 17, 146 - bh, { size: 12, align: 'center', color: done ? YT.t1 : YT.t2, shadow: null }); });
+    pR(c, rx, 184, rw, 74, YT.bg2); pT(c, '視聴者の年代', rx + 8, 188, { size: 12, color: YT.t2, shadow: null }); const A = (YT_AUD[P.kind] || [0.4, 0.3, 0.2, 0.1]).map((v, i) => v * (0.85 + ((hashStr('au' + P.id + i) % 30) / 100))), sum = A.reduce((a, b) => a + b, 0);
+    A.forEach((v, i) => { const y = 204 + i * 13, w2 = (rw - 110) * v / sum; pT(c, YT_AUDL[i], rx + 8, y - 2, { size: 12, color: YT.t2, shadow: null }); pR(c, rx + 78, y + 2, w2, 8, ['#3ea6ff', '#7ae09a', '#ffd23f', '#ff8a5a'][i]); pT(c, `${Math.round(v / sum * 100)}%`, rx + 82 + w2, y - 2, { size: 12, color: YT.t1, shadow: null }); });
+    pR(c, x0, 324 - 60, 558, 92, YT.bg2); pT(c, '次の動画へのアドバイス', x0 + 8, 268, { size: 12, color: '#ffd23f', shadow: null }); ytAdvice(g).slice(0, 4).forEach((t2, i) => pT(c, pFit(c, '・' + t2, 540, 12), x0 + 8, 286 + i * 16, { size: 12, color: YT.t1, shadow: null }));
   },
   shield(c, x, y, col, got) { const a = got ? col : '#3a3a3a'; pR(c, x, y, 34, 40, a); pR(c, x + 2, y + 2, 30, 36, got ? pShade(col, -0.2) : '#2a2a2a'); pR(c, x + 7, y + 10, 20, 14, got ? YT.red : '#444'); for (let i = 0; i < 6; i++) pR(c, x + 14 + i, y + 13 + i / 2, 1, 7 - i, got ? '#fff' : '#666'); pR(c, x + 6, y + 40, 22, 4, a); },
   d_vid(s, c, g, V, S) {
