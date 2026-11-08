@@ -41319,7 +41319,7 @@ function pmSimDay(g, H, day) {
 function pmIncident(g, H, day, R) {
   const short = H.staff < pmNeed(H), safe = H.boss || H.workDay === day, ac = pmEqLv(H, 'aircon') ? 0.5 : 1, L = [
     [0.02, () => { if (pmEqLv(H, 'camera')) return 'ゴト師（不正な道具で玉を出す集団）が来たが、防犯カメラで見つけて追い出した。'; const v = 300000 + Math.floor(Math.random() * 12) * 100000; R.net -= v; R.gross -= v; return `ゴト師にやられた…。不正に玉を抜かれ、${yen(v)}の損。（防犯カメラがあれば防げる）`; }],
-    [0.03, () => { const i = Math.floor(Math.random() * H.isl.length); H.isl[i].down = day + 1; R.net -= 100000; R.cost += 100000; return `島${i + 1}（${PM_M(H.isl[i].m).nm}）の台が故障。明日は修理で止める（修理代 ${yen(100000)}）。`; }],
+    [0.03 * pmCrewFixMul(H), () => { const i = Math.floor(Math.random() * H.isl.length); H.isl[i].down = day + 1; R.net -= 100000; R.cost += 100000; return `島${i + 1}（${PM_M(H.isl[i].m).nm}）の台が故障。明日は修理で止める（修理代 ${yen(100000)}）。`; }],
     [0.03, () => { H.buzz = day + 1; H.rep = clamp(H.rep + 3, 0, 100); return 'お客さんの大連チャンがSNSで話題に！ 明日はお客が少し増えそう。'; }],
     [short && !safe ? 0.05 * ac : 0, () => { H.rep = clamp(H.rep - 3, 0, 100); return 'スタッフが足りず、お客さん同士のトラブルを止められなかった（評判ダウン）'; }],
     [0.01, () => { if (!short || safe) { H.rep = clamp(H.rep + 2, 0, 100); return '駐車場の見回りで、車に残された子どもを見つけて保護した。（見回りは大事）'; } H.rep = clamp(H.rep - 8, 0, 100); return '駐車場の車に子どもが残されていたのを、通行人が見つけて通報…。見回りが足りなかった（評判が大きく下がった）'; }],
@@ -44063,6 +44063,254 @@ if (typeof window !== 'undefined') window.__PMA = ({ risk: H => pmRisk(window.__
 // 開業時の台：撤去期限の過ぎた機種は選ばない
 (function pmADefault() { if (typeof pmDefault !== 'function' || pmDefault.__a) return; const def0 = pmDefault;
   pmDefault = function (g, i) { const D = def0(g, i); if (!pmBan(g, PM_M(D.m))) return D; const y = pmYear(g), L = PM_MACH.filter(m => m.k === PM_M(D.m).k && m.since <= y && !pmBan(g, m) && !pmHot(g, m)).sort((a, b) => b.since - a.since); return { m: (L[0] || PM_MACH[0]).id, rate: D.rate }; }; pmDefault.__a = true; })();
+// ===== ホール経営の新要素B：トラブル対応（選択肢つきの出来事）／スタッフの名簿と育成・店長への一任／ライバル店との直接対決（引き抜き・ぶつけイベント・噂・買収） =====
+// ---- スタッフ ----
+const PM_SN = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '渡辺', '山本', '中村', '小林', '加藤', '吉田', '山田', '松本', '井上', '木村', '林', '清水', '山口', '森', '池田', '橋本', '石川', '前田', '藤田', '岡田', '後藤', '長谷川', '村上', '近藤', '坂本'];
+const PM_GN = { m: ['翔太', '大輔', '健太', '拓也', '直樹', '誠', '亮', '学', '剛', '浩二', '勇気', '蓮'], f: ['美咲', '彩', '真由美', '恵', '舞', '優子', '愛', '奈々', '里美', '結衣', '麻衣', '陽菜'] };
+const PM_SK = [['svc', '接客', '#ff9ad0'], ['fix', '修理', '#5fd7ff'], ['kugi', '釘', '#ffd23f'], ['kind', '人柄', '#5ee07a']];
+const PM_ROLE = { floor: ['ホール', '#c8205a'], chief: ['主任', '#2a5ad8'], boss: ['店長', '#1a1a1a'] };
+const pmRnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+function pmCrewNew(H, lo, hi, role) { const sx = Math.random() < 0.45 ? 'f' : 'm', id = (num(H.crewId) || 0) + 1; H.crewId = id;
+  return { id, nm: `${PM_SN[pmRnd(0, PM_SN.length - 1)]} ${PM_GN[sx][pmRnd(0, PM_GN[sx].length - 1)]}`, sx, svc: pmRnd(lo, hi), fix: pmRnd(lo, hi), kugi: pmRnd(Math.max(5, lo - 15), Math.max(10, hi - 10)), kind: pmRnd(lo, hi + 10), loy: pmRnd(45, 65), raise: 0, role: role || 'floor', day0: null,
+    hair: sx === 'f' ? ['long', 'bob', 'twin', 'bob'][pmRnd(0, 3)] : ['short', 'slick', 'spiky', 'short'][pmRnd(0, 3)], hc: ['black', 'black', 'brown', 'brown', 'blonde', 'silver'][pmRnd(0, 5)], skin: ['fair', 'light', 'tan'][pmRnd(0, 2)] }; }
+// 名簿の人数を、ホールスタッフの人数と店長のあり・なしに合わせる
+function pmCrew(H, day) {
+  if (!Array.isArray(H.crew)) { H.crew = []; for (let i = 0; i < H.staff; i++) H.crew.push(pmCrewNew(H, 20, 50)); if (H.boss) H.crew.push(pmCrewNew(H, 40, 65, 'boss')); }
+  const fl = H.crew.filter(m => m.role !== 'boss');
+  while (fl.length < H.staff) { const m = pmCrewNew(H, 15, 40); m.day0 = day; H.crew.push(m); fl.push(m); }
+  while (fl.length > H.staff) { const w = fl.filter(m => m.role !== 'chief').sort((a, b) => pmCrewTot(a) - pmCrewTot(b))[0] || fl[fl.length - 1]; H.crew = H.crew.filter(m => m !== w); fl.splice(fl.indexOf(w), 1); }
+  const bs = H.crew.filter(m => m.role === 'boss'); if (H.boss && !bs.length) H.crew.push(pmCrewNew(H, 40, 65, 'boss')); if (!H.boss && bs.length) H.crew = H.crew.filter(m => m.role !== 'boss');
+  if (H.crew.filter(m => m.role === 'boss').length > 1) { let k = 0; H.crew = H.crew.filter(m => m.role !== 'boss' || k++ === 0); }
+  return H.crew;
+}
+const pmCrewTot = m => m.svc + m.fix + m.kugi + m.kind;
+function pmCrewAvg(H, k) { const L = H.crew || []; if (!L.length) return 35; return L.reduce((a, m) => a + num(m[k]), 0) / L.length; }
+function pmCrewBest(H, k) { const L = H.crew || []; return L.length ? Math.max(...L.map(m => num(m[k]))) : 30; }
+const pmBoss = H => (H.crew || []).find(m => m.role === 'boss') || null;
+const pmCrewFixMul = H => clamp(1.4 - pmCrewAvg(H, 'fix') / 100, 0.5, 1.3);
+// スタッフの見た目（ドット絵）。作った絵はとっておく
+const PM_CREW_SPR = new Map();
+function pmCrewSpr(c, m, x, y, sc = 2, t = 0) {
+  let sh = PM_CREW_SPR.get(m.id + ':' + m.role); if (sh === undefined) { try { sh = Eo({ hair: m.hair, hairColor: m.hc, skin: m.skin, top: PM_ROLE[m.role][1], bottom: m.role === 'boss' ? '#1a1a1a' : '#2a2a3a', tie: m.role === 'boss' ? '#c8102e' : undefined }); } catch (e) { sh = null; } PM_CREW_SPR.set(m.id + ':' + m.role, sh); }
+  if (sh) { try { wrSpr(c, sh, x, y, sc, 'down', (t >> 4) % 7 === 0 ? 1 : 0); return; } catch (e) { } }
+  pmFace(c, x, y - 8 * sc / 2, { col: m.hc === 'blonde' ? '#e8c060' : '#2a1a10', body: PM_ROLE[m.role][1] }, sc / 2);
+}
+// 毎日：経験を積む・やる気（忠誠）が動く・店長の自動運用
+function pmCrewDay(g, H, d) {
+  const L = pmCrew(H, d), worked = H.workDay === d, B = pmBoss(H);
+  for (const m of L) {
+    for (const [k] of PM_SK) { const v = num(m[k]), gain = (Math.random() < 0.25 ? 0.08 : 0.015) * (1.3 - v / 100) + (worked ? 0.15 : 0) + (m.role === 'chief' && k === 'svc' ? 0.05 : 0); m[k] = Math.min(100, Math.round((v + gain) * 100) / 100); }
+    const tgt = 42 + (m.kind - 50) * 0.1 + m.raise / 100 + (num(H.workDay, -99) >= d - 7 ? 8 : 0) + (B && B !== m ? (B.kind - 50) * 0.2 : 0) + (m.role !== 'floor' ? 10 : 0) + (H.rep - 50) * 0.1;
+    m.loy = clamp(Math.round((m.loy + (tgt - m.loy) * 0.02) * 100) / 100, 0, 100);
+  }
+  // 店長に任せる：稼働の低い島は釘をあけ、高い島はしめる（腕がよいほど上手）
+  if (B && H.auto) { const Ld = H.hist[H.hist.length - 1]; if (Ld && Ld.per && d % 3 === 0) { const skill = B.kugi / 100, top = pmTopBrand(H)[0];
+    H.isl.forEach((I, i) => { const m = PM_M(I.m), oc = (Ld.per[i] || [40])[0] / 100, want = top === 'dedama' ? 1 : 0, dir = oc < 0.32 ? 1 : oc > 0.6 ? -1 : (Math.sign(want - num(I.k)) || 0); if (!dir || Math.random() > 0.4 + skill * 0.5) return;
+      if (m.k === 's') I.k = clamp(num(I.k, 3) + dir, 2, 5); else I.k = clamp(num(I.k) + dir, skill >= 0.7 ? -1 : -2, skill >= 0.7 ? 1 : 2); }); } }
+}
+// ---- トラブル（選択肢つき）。毎日起きることがあり、アプリで対応する。3日放っておくと最後の選択肢になる ----
+const pmChk = (v, base = 0) => clamp(0.2 + (v - 30) / 80 + base, 0.1, 0.95);
+const PM_TR = {
+  tsumari: { t: '玉が詰まって、お客が怒っている', who: 1, txt: '「さっきから玉が出てこないぞ！ 当たってたのに！」\n台の前で、お客さんがどなっている。',
+    ch: (g, H) => { const f = pmCrewBest(H, 'fix'), p = pmChk(f, 0.1); return [
+      { lab: '修理の得意な店員が直す', hint: `成功 約${Math.round(p * 100)}%（修理）`, run: () => Math.random() < p ? (H.rep += 2, '手早く直して、出なかった分の玉も補償した。お客さんは笑顔に。（評判 +2）') : (H.rep -= 2, '直すのに手間取って、お客さんは怒って帰ってしまった…。（評判 −2）') },
+      { lab: 'サービス玉で謝る', hint: '¥30,000・確実', cost: 30000, run: () => (H.rep += 1, 'サービスの玉を出して、ていねいに謝った。（評判 +1）') },
+      { lab: 'あとで対応する', hint: '評判が下がる', run: () => (H.rep -= 3, '後回しにしたら、お客さんがネットに書き込んだ…。（評判 −3）') }]; } },
+  kenka: { t: 'お客同士がけんかを始めた', who: 2, txt: '「その台はオレが先に取ってたんだ！」\n台の取り合いで、お客さん同士が言い争っている。',
+    ch: (g, H) => { const v = pmCrewBest(H, 'svc'), p = pmChk(v); return [
+      { lab: '店員が間に入っておさめる', hint: `成功 約${Math.round(p * 100)}%（接客）`, run: () => Math.random() < p ? (H.rep += 2, 'うまく間に入って、両方の言い分を聞いておさめた。（評判 +2）') : (H.rep -= 3, 'おさめきれず、つかみ合いに…。ほかのお客さんも帰ってしまった。（評判 −3）') },
+      { lab: '警察を呼ぶ', hint: '確実だが少し悪目立ち', run: () => (H.rep -= 1, 'すぐに警察を呼んで、二人とも帰ってもらった。（評判 −1）') },
+      { lab: '放っておく', hint: '評判と検査リスク', run: () => (H.rep -= 4, pmCp(H).bump = g.state.day + 30, 'けんかは長引き、通報された。警察から「管理が甘い」と言われた。（評判 −4・しばらく検査リスク +5）') }]; } },
+  dorobo: { t: 'ドル箱の持ち逃げ', who: 4, txt: '「わたしの玉がなくなってる！ トイレに行ってるあいだに…」\nお客さんの出玉を、だれかが持ち去ったらしい。',
+    ch: (g, H) => { const cam = pmEqLv(H, 'camera'); return [
+      { lab: '防犯カメラで確認する', hint: cam ? '犯人を見つけられる' : '防犯カメラがない', off: !cam, run: () => (H.rep += 3, '防犯カメラで犯人を特定し、玉を取り返した。「この店は安心」と評判に。（評判 +3）') },
+      { lab: '店から補償する', hint: '¥50,000', cost: 50000, run: () => (H.rep += 1, '店から補償して、見回りを増やすと約束した。（評判 +1）') },
+      { lab: '自己責任だと伝える', hint: '評判が下がる', run: () => (H.rep -= 3, '「お客様の責任で…」と伝えたら、悲しそうに帰っていった。（評判 −3）') }]; } },
+  tsuho: { t: '「釘をいじっている」という書き込み', who: 4, txt: 'ネットの掲示板に「この店は毎日釘をいじっている。通報した」と書き込まれた。\n警察が来るかもしれない。',
+    ch: (g, H) => { const C = pmCp(H), kn = !!C.meas.kanri; return [
+      { lab: '管理台帳をそろえておく', hint: kn ? '台帳があるので安心' : '管理台帳の対策が必要', off: !kn, run: () => (H.rep += 1, '台帳をそろえて待った。立ち寄った警察官も、すぐに帰っていった。（評判 +1）') },
+      { lab: '釘をすべてふつうに戻す', hint: 'リスクは下がるが、出方が変わる', run: () => { H.isl.forEach(I => { if (PM_M(I.m).k === 'p') I.k = 0; }); return 'パチンコの釘を、すべて「ふつう」に戻した。'; } },
+      { lab: '気にしない', hint: '検査が来やすくなる', run: () => { pmCp(H).bump = g.state.day + 30; if (Math.random() < 0.5) { const R = { net: 0, cost: 0 }; const r = pmInspect(g, H, g.state.day, R, true); if (R.cost) { g.state.money = Math.max(0, num(g.state.money) - R.cost); } return `書き込みを見た警察が、立入検査に来た。（結果：${{ ok: '問題なし', shido: '口頭指導', shiji: '指示処分', teishi: '営業停止' }[r] || '—'}）`; } return '今のところ何も起きていないが、目をつけられたかもしれない。（しばらく検査リスク +5）'; } }]; } },
+  izon: { t: '使いすぎの常連さん', who: 0, txt: '毎日朝から晩まで打っている常連さんの家族が、「もう生活費まで使っている。止めてほしい」と相談に来た。',
+    ch: (g, H) => { const C = pmCp(H), iz = !!C.meas.izon; return [
+      { lab: '自己申告プログラムを案内する', hint: iz ? '依存症対策があるのでできる' : '依存症対策が必要', off: !iz, run: () => { H.rep += 2; pmBr(H).light = Math.min(100, pmBr(H).light + 3); return '本人と家族に、使える金額を自分で決めるしくみを案内した。「ありがとう」と言われた。（評判 +2・ライトな店の評判 +3）'; } },
+      { lab: 'しばらく入店を断る', hint: '少し売上が減る', run: () => (H.rep += 1, '本人と話して、しばらく来店を控えてもらうことにした。（評判 +1）') },
+      { lab: 'お客さんの自由だと伝える', hint: '評判が下がる', run: () => { H.rep -= 2; if (pmYear(g) >= 2018) pmCp(H).bump = g.state.day + 30; return '家族は泣きながら帰っていった…。（評判 −2）'; } }]; } },
+  goto: { t: 'あやしい集団が来ている', who: 2, txt: '同じ服の男たちが、何台かの台の前を行ったり来たりしている。\nゴト師（不正な道具で玉を抜く集団）かもしれない。',
+    ch: (g, H) => { const cam = pmEqLv(H, 'camera'), p = pmChk(pmCrewAvg(H, 'svc'), cam ? 0.35 : 0); return [
+      { lab: '店員に見張らせる', hint: `防げる 約${Math.round(p * 100)}%`, run: () => { if (Math.random() < p) return '店員がぴったり見張ったら、男たちは何もせずに帰っていった。'; const v = 300000 + pmRnd(0, 6) * 100000; g.state.money = Math.max(0, num(g.state.money) - v); return `目を離したすきに、玉を抜かれた…。（損失 ${yen(v)}）`; } },
+      { lab: '警察に通報する', hint: '確実だが ¥0', run: () => '通報したら、男たちはあわてて出ていった。近くの店でも同じ被害があったらしい。' },
+      { lab: '様子を見る', hint: '被害が出るかも', run: () => { if (cam && Math.random() < 0.6) return '防犯カメラに気づいたのか、男たちは帰っていった。'; const v = 500000 + pmRnd(0, 10) * 100000; g.state.money = Math.max(0, num(g.state.money) - v); return `やられた…。閉店後に計算したら、${yen(v)}も抜かれていた。`; } }]; } },
+  kujo: { t: '「ぜんぜん出ない」という苦情', who: 1, txt: '「この島、ぜんぜん回らないじゃないか。釘しめすぎだろ！」\n常連さんが文句を言っている。',
+    ch: (g, H) => { const v = pmCrewBest(H, 'svc'), p = pmChk(v, 0.05), lo = H.isl.reduce((b, I, i) => PM_M(I.m).k === 'p' && num(I.k) < num(H.isl[b].k) ? i : b, 0); return [
+      { lab: 'ていねいに話を聞く', hint: `成功 約${Math.round(p * 100)}%（接客）`, run: () => Math.random() < p ? (H.rep += 2, '話をよく聞いて、お茶も出した。「また来るよ」と言ってくれた。（評判 +2）') : (H.rep -= 1, '「口だけだな」と言われてしまった…。（評判 −1）') },
+      { lab: `島${lo + 1}の釘を少しあける`, hint: '出方が少しよくなる', run: () => { const I = H.isl[lo]; if (PM_M(I.m).k === 's') I.k = clamp(num(I.k, 3) + 1, 1, 6); else I.k = clamp(num(I.k) + 1, -2, 2); H.rep += 1; return `島${lo + 1}を少しあけた。「お、回るようになった」（評判 +1）`; } },
+      { lab: '聞き流す', hint: '評判が下がる', run: () => (H.rep -= 2, '常連さんは、ライバル店に行ってしまった…。（評判 −2）') }]; } },
+  miss: { t: '新人スタッフのミス', who: -1, txt: '新人スタッフが、景品の数をまちがえて渡してしまった。\nお客さんには気づかれていないが…。',
+    ch: (g, H, E) => { const m = (H.crew || []).find(x => x.id === E.mid) || (H.crew || [])[0]; return [
+      { lab: 'ていねいに教える', hint: '育つ・やる気アップ', run: () => { if (m) { m.svc = Math.min(100, m.svc + 4); m.loy = Math.min(100, m.loy + 6); } return `${m ? m.nm : '新人'}に、景品の渡し方をていねいに教えた。（接客 +4・やる気アップ）`; } },
+      { lab: 'きびしく叱る', hint: '早く覚えるが、やる気ダウン', run: () => { if (m) { m.svc = Math.min(100, m.svc + 6); m.loy = Math.max(0, m.loy - 10); } return `${m ? m.nm : '新人'}を強く叱った。仕事は覚えたが、落ちこんでいる。（接客 +6・やる気ダウン）`; } },
+      { lab: '見なかったことにする', hint: '何も変わらない', run: () => '今回は見なかったことにした。' }]; } },
+  hikinuki: { t: 'ライバル店からの引き抜き', who: -1, txt: '', rv: true,
+    ch: (g, H, E) => { const m = (H.crew || []).find(x => x.id === E.mid), r = (H.rv || [])[E.ri]; return [
+      { lab: '昇給して引き止める', hint: '日給 +¥3,000・やる気アップ', run: () => { if (!m) return 'もう店を辞めていた…。'; m.raise += 3000; m.loy = Math.min(100, m.loy + 30); return `${m.nm}の日給を上げて、引き止めた。「この店でがんばります」（毎日 +¥3,000）`; } },
+      { lab: '気持ちを聞いて話し合う', hint: `成功 約${Math.round(pmChk(m ? m.loy : 30, 0.1) * 100)}%`, run: () => { if (!m) return 'もう店を辞めていた…。'; if (Math.random() < pmChk(m.loy, 0.1)) { m.loy = Math.min(100, m.loy + 15); return `${m.nm}とじっくり話した。「やっぱりここが好きです」と残ってくれた。`; } return pmCrewLeave(H, m, r); } },
+      { lab: '気持ちよく送り出す', hint: '辞めてしまう', run: () => m ? pmCrewLeave(H, m, r) : 'もう店を辞めていた。' }]; },
+    txtf: (g, H, E) => { const m = (H.crew || []).find(x => x.id === E.mid), r = (H.rv || [])[E.ri]; return `${r ? r.nm : 'ライバル店'}が、うちの${m ? `${PM_ROLE[m.role][0]}の${m.nm}` : 'スタッフ'}に「うちに来ないか」と声をかけているらしい。\n本人は迷っているようだ。`; } },
+  uwasa: { t: 'ライバル店が悪い噂を流している', who: -1, txt: '', rv: true,
+    ch: (g, H, E) => { const [tk, tv] = pmTopBrand(H); return [
+      { lab: '店内とSNSで説明する', hint: `¥100,000・ブランドが強いほど効く`, cost: 100000, run: () => { const ok = Math.random() < 0.4 + tv / 200; if (ok) { H.rep += 1; return 'データを出して、ていねいに説明した。「やっぱりこの店は信用できる」と言われた。（評判 +1）'; } H.rep -= 1; return '説明したが、噂はなかなか消えない…。（評判 −1）'; } },
+      { lab: '対抗イベントを打つ', hint: '¥200,000・2日間お客 +6%', cost: 200000, run: () => { H.ev.sns = g.state.day + 1; H.rep -= 1; return 'イベントで対抗した。お客は戻ってきたが、噂は少し残った。（評判 −1）'; } },
+      { lab: '相手にしない', hint: '評判が下がる', run: () => (H.rep -= 4, '噂が広まり、「あの店はサクラを使っている」と言われるように…。（評判 −4）') }]; },
+    txtf: (g, H, E) => { const r = (H.rv || [])[E.ri]; return `「${H.name}はサクラ（店の仕込み客）に出させている」という噂が流れている。\nどうやら、${r ? r.nm : 'ライバル店'}の関係者が広めているらしい。`; } },
+};
+function pmCrewLeave(H, m, r) { H.crew = H.crew.filter(x => x !== m); if (m.role === 'boss') H.boss = false; else H.staff = Math.max(1, H.staff - 1); if (r) { r.pow = Math.min(1.6, r.pow + 0.04); r.hp = Math.min(100, r.hp + 5); } return `${m.nm}は${r ? r.nm : 'ほかの店'}に移っていった…。（スタッフ −1）`; }
+function pmTrQ(H) { if (!Array.isArray(H.trq)) H.trq = []; return H.trq; }
+function pmTrAdd(g, H, kind, extra) { const Q = pmTrQ(H); if (Q.length >= 3 || Q.some(e => e.k === kind)) return null; const E = { k: kind, day: g.state.day, ...(extra || {}) }; Q.push(E); pmMsg(g, `【${H.name}】トラブル：${PM_TR[kind].t}\n（ホール経営アプリで対応を決めよう）`); return E; }
+function pmTrGen(g, H, d) {
+  const short = H.staff < pmNeed(H), p = 0.045 + (short ? 0.03 : 0) - (pmCrewAvg(H, 'svc') - 40) / 2000; if (Math.random() >= p) return;
+  const W = [['tsumari', 3 * pmCrewFixMul(H)], ['kenka', short ? 3 : 1.5], ['dorobo', 1.5], ['tsuho', H.isl.some(I => PM_M(I.m).k === 'p' && Math.abs(num(I.k)) >= 2) ? 2.5 : 0.4], ['izon', pmYear(g) >= 2006 ? 1.2 : 0], ['goto', 1], ['kujo', H.isl.some(I => num(I.k) <= -1) ? 2.5 : 0.8], ['miss', (H.crew || []).some(m => m.day0 != null && d - m.day0 < 60) ? 2 : 0.3]];
+  const tot = W.reduce((a, x) => a + x[1], 0); let u = Math.random() * tot; for (const [k, w] of W) { if ((u -= w) < 0) { const ex = k === 'miss' ? { mid: ((H.crew || []).filter(m => m.role === 'floor').sort((a, b) => num(b.day0, -1e9) - num(a.day0, -1e9))[0] || {}).id } : null; pmTrAdd(g, H, k, ex); return; } }
+}
+// 3日たっても対応しなかったトラブルは、最後の選択肢（放っておく）になる
+function pmTrAuto(g, H, d) { const Q = pmTrQ(H); for (const E of Q.slice()) { if (d - E.day < 3) continue; const L = PM_TR[E.k].ch(g, H, E), last = L[L.length - 1]; let t = ''; try { t = last.run(); } catch (e) { } H.rep = clamp(H.rep, 0, 100); H.trq = Q.filter(x => x !== E); pmMsg(g, `【${H.name}】${PM_TR[E.k].t}（対応しなかった）\n${t}`); } }
+// ---- ライバル店：相手からの仕掛け ----
+function pmRvMoves(g, H, d) {
+  for (const [i, r] of (H.rv || []).entries()) { if (r.closed != null) continue;
+    const weak = (H.crew || []).filter(m => m.loy < 40).sort((a, b) => pmCrewTot(b) - pmCrewTot(a))[0];
+    if (weak && Math.random() < 0.012) pmTrAdd(g, H, 'hikinuki', { mid: weak.id, ri: i });
+    if (r.hp > 55 && Math.random() < (r.st === 'event' ? 0.006 : 0.003)) pmTrAdd(g, H, 'uwasa', { ri: i });
+  }
+}
+// ---- つなぎこみ（毎日の計算） ----
+(function pmBHook() {
+  if (typeof pmSimDay !== 'function' || pmSimDay.__b) return;
+  const sim0 = pmSimDay, cost0 = pmCostDay, risk0 = pmRisk;
+  pmSimDay = function (g, H, day) {
+    const R = sim0(g, H, day);
+    try { pmCrewDay(g, H, day); const sv = pmCrewAvg(H, 'svc'); if (!R.susp) H.rep = clamp(H.rep + (sv - 45) * 0.01, 0, 100);
+      if (H.opened && !R.susp) { pmTrAuto(g, H, day); pmTrGen(g, H, day); pmRvMoves(g, H, day); } } catch (e) { console.error('[pmB] day', e); }
+    return R;
+  }; pmSimDay.__b = true;
+  pmCostDay = function (H) { return cost0(H) + (H.crew || []).reduce((a, m) => a + num(m.raise), 0); };
+  // 検査リスク：店長の釘の腕・トラブルの放置
+  pmRisk = function (g, H) { const r = risk0(g, H), B = pmBoss(H), d = g.state.day; if (B && B.kugi >= 70) { const k = r.parts.find(p => /釘/.test(p[0])); if (k) { const dn = Math.round(k[1] * 0.3); k[1] -= dn; r.tot -= dn; } }
+    if (num(H.cp && H.cp.bump, -1) >= d) { r.parts.push(['通報・苦情（30日）', 5]); r.tot += 5; } r.tot = clamp(r.tot, 0, 100); return r; };
+  // 接客の店のブランド：スタッフの接客の腕で上がる
+  const brT0 = pmBrTarget; pmBrTarget = function (g, H, d, R) { const T = brT0(g, H, d, R); T.service = clamp(T.service + (pmCrewAvg(H, 'svc') - 45) * 0.3, 0, 100); return T; };
+})();
+// ---- 画面 ----
+function pmTrScene(c, g, H, E, x, y, w, h, t) {
+  pR(c, x, y, w, h, '#3a1020'); for (let j = 0; j < h; j += 12) for (let q = ((j / 12) % 2) * 12; q < w; q += 24) pR(c, x + q + 5, y + j + 4, 2, 2, '#5a2030');
+  pR(c, x, y, w, 30, '#16101c'); for (let i = 0; i < Math.floor(w / 44); i++) { pR(c, x + 6 + i * 44, y + 34, 36, 40, '#d8dce8'); pR(c, x + 6 + i * 44, y + 34, 36, 6, '#c8205a'); pCirc(c, x + 24 + i * 44, y + 56, 9, '#3a2a6a'); }
+  const T = PM_TR[E.k], m = E.mid != null ? (H.crew || []).find(z => z.id === E.mid) : (H.crew || [])[0];
+  if (T.who >= 0) { pmSegSpr(c, g, T.who, x + w * 0.38, y + h - 8, 3, t); if (E.k === 'kenka' || E.k === 'goto') pmSegSpr(c, g, E.k === 'goto' ? 4 : 1, x + w * 0.58, y + h - 8, 3, t + 20); }
+  else if (T.rv) { const r = (H.rv || [])[E.ri]; if (r) { try { pmRvArt(c, x + w * 0.5 - 40, y + 40, 80, r, t, false); } catch (e) { } } }
+  if (m) pmCrewSpr(c, m, x + w * 0.18, y + h - 8, 3, t);
+  if ((t >> 3) % 6 < 4 && E.k !== 'miss') { pR(c, x + w * 0.38 + 18, y + 34, 22, 18, '#ffffff'); pT(c, '！', x + w * 0.38 + 29, y + 35, { size: 16, color: '#c8102e', align: 'center', shadow: null }); }
+}
+Object.assign(GB_MODES.pmgr, {
+  // トラブル対応
+  phTrouble(s, c, g, H) {
+    const S = s.S, Q = pmTrQ(H); s.btn('trback', 'もどる', 562, 34, 70, 26, { back: true, size: 12 });
+    pT(c, `トラブル対応（${Q.length}件）`, 14, 38, { size: 16, color: '#ff9ad0' });
+    if (S.trRes) { pFrame(c, 60, 90, 520, 180, { title: S.trRes.t }); wrapDot(c, S.trRes.r, 490, 16).slice(0, 6).forEach((ln, i) => pT(c, ln, 76, 122 + i * 24, { size: 16 })); s.btn('trnext', Q.length ? '次のトラブルへ' : 'ホームへもどる', 220, 284, 200, 34, { kind: 'pri', def: true, size: 16 }); return; }
+    const E = Q[0]; if (!E) { pT(c, 'いま対応が必要なトラブルはない', 320, 170, { size: 16, color: PW.dim, align: 'center' }); s.btn('trback', 'もどる', 260, 210, 120, 30, { back: true }); return; }
+    const T = PM_TR[E.k]; pmTrScene(c, g, H, E, 8, 64, 300, 262, s.t || 0);
+    pFrame(c, 316, 64, 316, 120, { title: T.t }); wrapDot(c, T.txtf ? T.txtf(g, H, E) : T.txt, 296, 12).slice(0, 6).forEach((ln, i) => pT(c, ln, 326, 88 + i * 15, { size: 12 }));
+    pT(c, `${Math.max(0, g.state.day - E.day)}日前に発生（3日で「${T.ch(g, H, E).slice(-1)[0].lab}」になる）`, 324, 190, { size: 12, color: GB_C.t3 });
+    T.ch(g, H, E).forEach((C2, i) => { const y = 208 + i * 40; s.btn('trc:' + i, `${C2.lab}\n${C2.hint}`, 316, y, 316, 36, { size: 12, kind: i === 0 && !C2.off ? 'pri' : 'norm', off: !!C2.off, def: i === 0 && !C2.off }); });
+  },
+  // スタッフ名簿
+  phCrew(s, c, g, H) {
+    const S = s.S, L = pmCrew(H, g.state.day).slice().sort((a, b) => ({ boss: 0, chief: 1, floor: 2 }[a.role] - { boss: 0, chief: 1, floor: 2 }[b.role]) || pmCrewTot(b) - pmCrewTot(a)), per = 7, t = s.t || 0;
+    s.btn('crback', 'もどる', 562, 34, 70, 26, { back: true, size: 12 }); pT(c, `スタッフ名簿（${L.length}人）`, 14, 38, { size: 16, color: '#ff9ad0' });
+    const pages = Math.max(1, Math.ceil(L.length / per)); S.crp = clamp(num(S.crp), 0, pages - 1); if (S.crsel == null || !L.some(m => m.id === S.crsel)) S.crsel = L[0] && L[0].id;
+    PM_SK.forEach(([k, nm, col], i) => { pT(c, `${nm} ${Math.round(pmCrewAvg(H, k))}`, 214 + i * 74, 40, { size: 12, color: col }); });
+    L.slice(S.crp * per, S.crp * per + per).forEach((m, j) => { const y = 64 + j * 36, on = m.id === S.crsel; pR(c, 8, y, 392, 34, on ? '#3a1a3a' : j % 2 ? '#1a0e26' : '#20122e'); if (on) pR(c, 8, y, 3, 34, PW.acc);
+      c.save(); c.beginPath(); c.rect(12, y, 30, 34); c.clip(); pmCrewSpr(c, m, 27, y + 44, 2, t + j * 7); c.restore();
+      pT(c, pFit(c, m.nm, 92, 12), 46, y + 3, { size: 12, color: '#ffffff' }); pR(c, 46, y + 19, 34, 13, PM_ROLE[m.role][1]); pT(c, PM_ROLE[m.role][0], 63, y + 19, { size: 12, color: '#ffffff', align: 'center', shadow: null });
+      pT(c, `やる気${Math.round(m.loy)}`, 84, y + 19, { size: 12, color: m.loy < 40 ? PW.bad : GB_C.t3 });
+      PM_SK.forEach(([k, nm, col], i) => { const x = 150 + i * 62; pT(c, nm, x, y + 3, { size: 12, color: GB_C.t3 }); shBar(c, x, y + 20, 54, 7, m[k] / 100, col); pT(c, String(Math.round(m[k])), x + 54, y + 3, { size: 12, align: 'right' }); });
+      s.btn('crs:' + m.id, '', 8, y, 392, 34, { kind: 'clear', nofocus: true }); });
+    if (pages > 1) { s.btn('crp:-1', '◀', 8, 320, 40, 22, { size: 12, off: S.crp === 0 }); s.btn('crp:1', '▶', 360, 320, 40, 22, { size: 12, off: S.crp >= pages - 1 }); pT(c, `${S.crp + 1} / ${pages}`, 204, 324, { size: 12, color: PW.dim, align: 'center' }); }
+    // 選んだ人
+    const m = L.find(x => x.id === S.crsel); pFrame(c, 406, 64, 226, 262, { title: m ? m.nm : '—' }); if (!m) return;
+    pmCrewSpr(c, m, 440, 150, 3, t); pT(c, PM_ROLE[m.role][0], 476, 92, { size: 12, color: '#ffffff' }); pT(c, m.raise ? `日給 +${yen(m.raise)}` : '日給 ふつう', 476, 108, { size: 12, color: GB_C.t3 }); pT(c, `やる気 ${Math.round(m.loy)}${m.loy < 40 ? '（引き抜き注意）' : ''}`, 476, 124, { size: 12, color: m.loy < 40 ? PW.bad : PW.text });
+    const TR = [['svc', '接客の研修', 100000, 8], ['fix', '修理の講習', 150000, 8], ['kugi', '釘の勉強会', 200000, 6]];
+    TR.forEach(([k, nm, cost, up], i) => s.btn(`crt:${m.id}:${k}`, `${nm} +${up}\n${yen(cost)}`, 414, 158 + i * 34, 104, 30, { size: 12, kind: 'pri', off: m[k] >= 100 || num(m.tr) === g.state.day }));
+    s.btn(`crr:${m.id}`, '昇給する\n日給+¥2,000', 522, 158, 102, 30, { size: 12 });
+    if (m.role === 'floor') s.btn(`crc:${m.id}`, '主任にする', 522, 192, 102, 30, { size: 12, off: H.crew.filter(x => x.role === 'chief').length >= Math.max(1, Math.floor(H.isl.length / 4)) });
+    else if (m.role === 'chief') s.btn(`crc:${m.id}`, 'ホールにもどす', 522, 192, 102, 30, { size: 12 });
+    if (m.role !== 'boss') s.btn(`crb:${m.id}`, H.boss ? '店長と交代' : '店長に昇格', 522, 226, 102, 30, { size: 12, kind: 'blue' });
+    if (num(m.tr) === g.state.day) pT(c, '今日はもう研修した', 519, 260, { size: 12, color: GB_C.t3, align: 'center' });
+    const B = pmBoss(H); pR(c, 414, 270, 210, 1, '#5a4a6a');
+    if (B) { s.btn('auto', H.auto ? '釘と設定：店長に任せている' : '釘と設定を店長に任せる', 414, 278, 210, 24, { size: 12, kind: H.auto ? 'green' : 'norm' }); pT(c, `店長 ${B.nm}（釘${Math.round(B.kugi)}）${B.kugi >= 70 ? '・慎重で安全' : ''}`, 519, 306, { size: 12, color: GB_C.t3, align: 'center' }); }
+    else pT(c, '店長がいると、釘と設定を任せられる', 519, 290, { size: 12, color: GB_C.t3, align: 'center' });
+  },
+  // ライバル店へ仕掛ける
+  phRvAct(s, c, g, H) {
+    const S = s.S, r = (H.rv || [])[S.rvi], d = g.state.day; s.btn('raback', 'もどる', 562, 34, 70, 26, { back: true, size: 12 }); if (!r || r.closed != null) { S.ph = 'home'; return; }
+    pT(c, `${r.nm}に仕掛ける`, 14, 38, { size: 16, color: '#ff9ad0' }); pFrame(c, 8, 64, 220, 262, { title: r.nm }); try { pmRvArt(c, 28, 92, 180, r, s.t || 0, false); } catch (e) { }
+    let y = 150; const kv = (k, v, col) => { pT(c, k, 20, y, { size: 12, color: PW.dim }); pT(c, v, 218, y, { size: 12, color: col || PW.text, align: 'right' }); y += 18; };
+    kv('規模', `${PM_RV_SZ[r.sz][0]}店`); kv('方針', PM_STY[r.st][1], PM_STY[r.st][2]); kv('体力', `${Math.round(r.hp)}`, r.hp < 35 ? PW.good : PW.text); kv('勢い', `${Math.round(pmRvP(H, r, d) * 100)}`); kv('今', r.bu >= d ? `${r.act}（あと${r.bu - d + 1}日）` : 'ふだんどおり', r.bu >= d ? PW.acc : GB_C.t3);
+    const cd = num(r.cd, -99) > d - 14, P = pmSt(g), price = pmRvPrice(r), canOwn = P.halls.length < 3;
+    const A = [
+      ['poach', '店員を引き抜く', '¥500,000・成功 約' + Math.round(pmPoachP(r) * 100) + '%・腕のいい店員が来る', 500000, cd],
+      ['clash', 'ぶつけイベント', '¥400,000・相手のイベントの勢いを止める', 400000, cd || r.bu < d],
+      ['rumor', '悪い噂を流す', '¥200,000・成功で相手の体力−12、ばれると評判−8', 200000, cd],
+      ['buy', '買収して閉めさせる', `${yen(price)}・体力35未満で交渉できる`, price, r.hp >= 35],
+      ['own', '買収して自分の店にする', `${yen(Math.round(price * 1.3))}・${canOwn ? '体力35未満・お店がひとつ増える' : 'お店は3つまで'}`, Math.round(price * 1.3), r.hp >= 35 || !canOwn],
+    ];
+    A.forEach(([id, nm, desc, cost, off], i) => { const yy = 70 + i * 50; pR(c, 236, yy, 396, 46, i % 2 ? '#1a0e26' : '#20122e'); pT(c, nm, 248, yy + 5, { size: 12, color: off ? GB_C.t3 : '#ffffff' }); pT(c, pFit(c, desc, 270, 12), 248, yy + 24, { size: 12, color: GB_C.t3 }); s.btn('ra:' + id, '実行', 540, yy + 10, 84, 26, { size: 12, kind: id === 'rumor' ? 'red' : 'pri', off: off || s.money() < cost }); });
+    pT(c, cd ? `次に仕掛けられるのは ${num(r.cd) + 14 - d}日後` : '仕掛けは14日に1回まで（買収は別）', 432, 324, { size: 12, color: GB_C.t3, align: 'center' });
+  },
+});
+const pmRvPrice = r => Math.round(PM_SIZE.find(z => z.id === r.sz).cost * 0.5 * (0.5 + clamp(r.hp, 0, 100) / 100) / 100000) * 100000;
+const pmPoachP = r => clamp(0.35 + (60 - r.hp) / 150, 0.15, 0.8);
+// ---- ボタンと画面の切り替え ----
+(function pmBUi() {
+  const M = GB_MODES.pmgr; if (!M || M.__b) return; M.__b = true;
+  const btn0 = M.btn, draw0 = M.draw, mg0 = M.tabMgmt, rv0 = M.bzRv;
+  M.draw = function (s, c, g) { const S = s.S, P = pmSt(g), H = pmCur(P); const ph = { trouble: 'phTrouble', crew: 'phCrew', rvact: 'phRvAct' }[S.ph];
+    if (ph && H) { s.o.sub = H.name; pBands(c, 0, 0, 640, 360, ['#12061a', '#160820', '#1a0a26', '#1e0c2c']); for (let x = 0; x < 640; x += 32) pR(c, x, 0, 1, 360, 'rgba(255,80,160,0.035)'); this[ph](s, c, g, H); return; }
+    return draw0.call(this, s, c, g); };
+  M.tabMgmt = function (s, c, g, H) { pmCrew(H, g.state.day); mg0.call(this, s, c, g, H); s.btn('crew', '名簿・研修', 196, 164, 102, 22, { size: 12, kind: 'pri' }); };
+  M.bzRv = function (s, c, g, H) { rv0.call(this, s, c, g, H); const d = g.state.day, L = H.rv || [], show = L.filter(r => r.closed == null).concat(L.filter(r => r.closed != null)).slice(0, 3);
+    show.forEach((r, i) => { if (r.closed != null || r.seen < d) return; const x = 8 + i * 209, y = 92, w = 205, b = s.btns.find(z => z.id === 'scout:' + L.indexOf(r)); if (b) { b.w = 92; b.label = `偵察ずみ ${r.seen - d + 1}日`; } s.btn('rvact:' + L.indexOf(r), '仕掛ける', x + 106, y + 134, w - 116, 24, { size: 12, kind: 'red' }); }); };
+  M.btn = function (s, id, g) {
+    const S = s.S, P = pmSt(g), H = pmCur(P), d = g.state.day;
+    if (!H) return btn0.call(this, s, id, g);
+    if (id === 'go:trouble') { S.ph = 'trouble'; S.trRes = null; return; }
+    if (id === 'trback') { S.ph = 'home'; S.trRes = null; return; }
+    if (id === 'trnext') { S.trRes = null; if (!pmTrQ(H).length) S.ph = 'home'; return; }
+    if (id.startsWith('trc:')) { const E = pmTrQ(H)[0]; if (!E) return; const C2 = PM_TR[E.k].ch(g, H, E)[+id.slice(4)]; if (!C2 || C2.off) return; if (C2.cost && !s.pay(C2.cost)) return; let r = ''; try { r = C2.run(); } catch (e) { console.error('[pmB] tr', e); }
+      H.rep = clamp(H.rep, 0, 100); H.trq = pmTrQ(H).filter(x => x !== E); S.trRes = { t: PM_TR[E.k].t, r }; tt.sfx('ok'); return; }
+    if (id === 'crew') { S.ph = 'crew'; return; } if (id === 'crback') { S.ph = 'home'; S.tab = 'mgmt'; return; }
+    if (id.startsWith('crs:')) { S.crsel = +id.slice(4); return; } if (id === 'crp:-1' || id === 'crp:1') { S.crp = num(S.crp) + (id === 'crp:1' ? 1 : -1); return; }
+    const mOf = k => (H.crew || []).find(x => x.id === +k);
+    if (id.startsWith('crt:')) { const [, mid, k] = id.split(':'), m = mOf(mid), T = { svc: [100000, 8], fix: [150000, 8], kugi: [200000, 6] }[k]; if (!m || !T || num(m.tr) === d) return; if (!s.pay(T[0])) return; m[k] = Math.min(100, m[k] + T[1]); m.loy = Math.min(100, m.loy + 4); m.tr = d; tt.sfx('chime'); s.tip(`${m.nm}：${{ svc: '接客', fix: '修理', kugi: '釘' }[k]} +${T[1]}（やる気も少しアップ）`, PW.good); return; }
+    if (id.startsWith('crr:')) { const m = mOf(id.slice(4)); if (!m) return; m.raise += 2000; m.loy = Math.min(100, m.loy + 18); s.tip(`${m.nm}の日給を上げた（毎日 +¥2,000）`, PW.text); return; }
+    if (id.startsWith('crc:')) { const m = mOf(id.slice(4)); if (!m) return; m.role = m.role === 'chief' ? 'floor' : 'chief'; if (m.role === 'chief') m.loy = Math.min(100, m.loy + 10); s.tip(m.role === 'chief' ? `${m.nm}を主任にした` : `${m.nm}をホールにもどした`, PW.text); return; }
+    if (id.startsWith('crb:')) { const m = mOf(id.slice(4)); if (!m) return; const B = pmBoss(H); if (B) { B.role = 'floor'; H.staff += 1; } else { H.boss = true; } m.role = 'boss'; H.staff = Math.max(1, H.staff - 1); m.loy = Math.min(100, m.loy + 20); pmCrew(H, d); tt.sfx('fanfare'); s.ban('店長に昇格！', PW.acc, `${m.nm}（日給 ¥30,000）`, { life: 90 }); return; }
+    if (id === 'auto') { H.auto = !H.auto; s.tip(H.auto ? '釘と設定を店長に任せた（3日ごとに調整）' : '釘と設定を自分で決める', PW.text); return; }
+    if (id.startsWith('rvact:')) { S.rvi = +id.slice(6); S.ph = 'rvact'; return; } if (id === 'raback') { S.ph = 'home'; S.tab = 'biz'; S.bz = 'rv'; return; }
+    if (id.startsWith('ra:')) { const r = (H.rv || [])[S.rvi]; if (!r || r.closed != null) return; const k = id.slice(3);
+      if (k === 'poach') { if (!s.pay(500000)) return; r.cd = d; if (Math.random() < pmPoachP(r)) { const m = pmCrewNew(H, 50, 75); m.day0 = d; m.loy = 55; H.crew.push(m); H.staff += 1; r.pow = Math.max(0.5, r.pow - 0.05); r.hp -= 5; tt.sfx('fanfare'); s.ban('引き抜き成功！', PW.acc, `${m.nm}（接客${m.svc}・修理${m.fix}）が来てくれた`, { life: 110 }); } else { tt.sfx('buzz'); s.ban('断られた…', PW.bad, `${r.nm}の店員は、首をたてにふらなかった`, { life: 90 }); } return; }
+      if (k === 'clash') { if (r.bu < d || !s.pay(400000)) return; r.cd = d; r.bu = d - 1; r.hp -= 6; H.ev.sns = Math.max(num(H.ev.sns, -1), d + 1); tt.sfx('chime'); s.ban('ぶつけイベント！', PW.acc, `${r.nm}の「${r.act}」からお客を取り返した`, { life: 100 }); return; }
+      if (k === 'rumor') { if (!s.pay(200000)) return; r.cd = d; if (Math.random() < 0.6) { r.hp -= 12; r.pow = Math.max(0.5, r.pow - 0.05); s.ban('噂が広まった', PW.acc, `${r.nm}の客足がにぶった（体力 −12）`, { life: 100 }); } else { H.rep = clamp(H.rep - 8, 0, 100); tt.sfx('buzz'); s.ban('ばれてしまった…', PW.bad, '「汚いことをする店だ」と評判が大きく下がった（評判 −8）', { life: 120 }); } return; }
+      if (k === 'buy' || k === 'own') { if (r.hp >= 35) return; const own = k === 'own'; if (own && P.halls.length >= 3) return; const price = Math.round(pmRvPrice(r) * (own ? 1.3 : 1)); if (!s.pay(price)) return;
+        r.closed = d; r.bought = true; const gain = 0.04 * PM_RV_SZ[r.sz][1] * (own ? 0.5 : 1.5); H.rvGain = Math.min(0.15, num(H.rvGain) + gain); H.rvWin = num(H.rvWin) + 1; H.rvNext = d + 180 + pmRnd(0, 120); P.log.push({ day: d, t: `ライバル店「${r.nm}」を買収` });
+        if (own) { const om = g.message; g.message = () => { }; let H2; try { H2 = pmOpenHall(g, r.sz, r.nm); } finally { g.message = om; } H2.openDay = d + 3; pmMsg(g, `【買収】${r.nm}を買い取った。\n3日間の改装のあと、うちの店として再オープンする。`); H2.invest = price; H2.rep = 45; P.cur = P.halls.indexOf(H); tt.sfx('fanfare'); s.ban('買収成立！', PW.acc, `「${r.nm}」がうちの${P.halls.length}号店になる（3日後に再オープン）`, { life: 130 }); }
+        else { tt.sfx('fanfare'); s.ban('買収成立！', PW.acc, `「${r.nm}」は閉店。常連さんがうちに来る（お客 +${Math.round(gain * 100)}%）`, { life: 130 }); }
+        S.ph = 'home'; S.tab = 'biz'; S.bz = 'rv'; return; }
+      return; }
+    return btn0.call(this, s, id, g);
+  };
+  // アラート：対応待ちのトラブル
+  const al0 = pmAlerts; pmAlerts = function (g, H) { const A = al0(g, H), Q = pmTrQ(H); if (Q.length) A.unshift(['bad', `トラブル対応 ${Q.length}件`, PM_TR[Q[0].k].t, 'trouble']); const low = (H.crew || []).filter(m => m.loy < 40).length; if (low) A.push(['warn', `やる気の低いスタッフ ${low}人`, '引き抜かれるかも。昇給や研修を', 'mgmt']); return A.filter(a => !(a[1] === '順調です' && A.length > 1)); };
+})();
+if (typeof window !== 'undefined') window.__PMB = { crew: H => pmCrew(H, window.__game.state.day), trAdd: (H, k, ex) => pmTrAdd(window.__game, H, k, ex), TR: PM_TR, price: r => pmRvPrice(r) };
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
