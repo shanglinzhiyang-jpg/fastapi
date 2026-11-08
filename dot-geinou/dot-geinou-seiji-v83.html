@@ -19633,7 +19633,7 @@ const FOLDERS = [
   { id: 'f_hito', name: '人づきあい', color: '#d0703a', order: 34.5, apps: ['contacts', 'family', 'romance'] },
   { id: 'f_enta', name: 'エンタメ', color: '#9a5ad8', order: 35, apps: ['dotter', 'douga', 'news', 'music', 'game', 'uranai', 'zukan', 'jisseki', 'quiz', 'scoop'] },
   { id: 'f_owarai', name: 'お笑い', color: '#e09a20', order: 35.5, apps: ['geinin', 'aikata', 'neta', 'netatimer', 'yougo', 'm1', 'koc', 'r1', 'abcgp', 'shourace', 'legend', 'ura'] },
-  { id: 'f_seiji', name: '政治', color: '#3a5ad8', order: 36, apps: ['politics', 'politician_book', 'navi', 'kiki', 'touchi', 'senji', 'senkyo', 'jichi', 'habatsu', 'koho', 'taisaku', 'voices', 'kokkai_live', 'govt_console', 'world', 'groups', 'dokusai', 'ikusa'] },
+  { id: 'f_seiji', name: '政治', color: '#3a5ad8', order: 36, apps: ['politics', 'polx', 'politician_book', 'navi', 'kiki', 'touchi', 'senji', 'senkyo', 'jichi', 'habatsu', 'koho', 'taisaku', 'voices', 'kokkai_live', 'govt_console', 'world', 'groups', 'dokusai', 'ikusa'] },
   { id: 'f_sports', name: '学校・スポーツ', color: '#1f7a46', order: 36.5, apps: ['npb', 'gakko'] },
 ];
 const FOLD_OF = {}; FOLDERS.forEach(f => f.apps.forEach(id => { FOLD_OF[id] = f.id; }));
@@ -36191,6 +36191,7 @@ function installGamble() {
   try { geoInstall(); } catch (e) { console.error('[geo] install', e); }
   try { stInstall(); } catch (e) { console.error('[strat] install', e); }
   try { tnInstall(); } catch (e) { console.error('[tenno] install', e); }
+  try { kkInstall(); } catch (e) { console.error('[kakomi] install', e); }
   try { gbPatchKanraku(); } catch (e) { console.error('[gb] kanraku', e); }
   try { gbPatchTokyo(); } catch (e) { console.error('[gb] tokyo', e); }
   try {
@@ -41975,8 +41976,108 @@ function kkHandler(g, it, k, auto) {
   if (k === 2) { adj(3, 0.8, 1); return '「やるべきことは、やり抜きます」\n力強い言葉が見出しになった。支持者からは「頼もしい」という声。'; }
   adj(4, 0.6, 3); return '飾らない本音で答えた。\n「政治家らしくない」と、若い世代を中心に好意的な反応が広がった。';
 }
-try { E.Tn(g => { try { kkTick(g); } catch (e) { console.error('[kakomi]', e); } }); if (E.ug) E.ug('np_kakomi', (g, it, k, auto) => kkHandler(g, it, k, auto)); } catch (e) { console.error('[kakomi] install', e); }
+function kkInstall() { try { E.Tn(g => { try { kkTick(g); } catch (e) { console.error('[kakomi]', e); } try { pxTick(g); } catch (e) { console.error('[polx]', e); } }); if (E.ug) { E.ug('np_kakomi', (g, it, k, auto) => kkHandler(g, it, k, auto)); E.ug('np_saigai', (g, it, k, auto) => sgHandler(g, it, k, auto)); } E.Un('polx', { name: '政局ノート', color: '#2a4a8a', order: 36.45, iconHD: pxIcon, badge: g => { try { const X = pxSt(g); return X.edUnread ? 1 : 0; } catch (e) { return 0; } }, open: g => pxOpen(g) }); } catch (e) { console.error('[kakomi] install', e); } }
 if (typeof window !== 'undefined') window.__KK = { tick: () => kkTick(window.__game), handle: (k, d) => kkHandler(window.__game, { data: d || {} }, k), topic: () => { const g = window.__game; return kkTopic(g, g.state.politics, g.govtRole()); } };
+// ===== 政局ノート：支持層ごとの支持・各紙の社説・災害の初動対応 =====
+const PX_SEG = [['young', '若者'], ['families', '子育て世代'], ['employees', '会社員'], ['elderly', '高齢者'], ['selfemployed', '自営業'], ['business', '経営者'], ['farmers', '農家'], ['unions', '労働組合'], ['urban', '都市部'], ['rural', '地方'], ['floating', '無党派層']];
+const PX_ISS = { economy: '景気・経済', finance: '財政', tax: '税', welfare: '年金・福祉', health: '医療', childcare: '子育て', education: '教育', labor: '働き方', diplomacy: '外交', constitution: '憲法', energy: 'エネルギー', environment: '環境', agriculture: '農業', regional: '地方', admin: '行政改革', safety: '治安', digital: 'デジタル', disaster: '防災', culture: '文化', society: '社会' };
+const PX_PAPER = [['毎朝新聞', -2], ['東都新聞', -1], ['ドット経済新聞', 0], ['読日新聞', 1], ['国民新報', 2]];
+function pxSt(g) { const s = g.state; if (!isObj(s.polx)) s.polx = { v: 1, ed: [], edDay: 0, edUnread: 0, sg: null, sgNext: 0, sgLog: [] }; const X = s.polx; if (!Array.isArray(X.ed)) X.ed = []; if (!Array.isArray(X.sgLog)) X.sgLog = []; return X; }
+const pxIcon = gbIcon('#2a4a8a', (c, x, y) => { c.fillStyle = '#f4f0e0'; c.fillRect(x + 7, y + 6, 18, 21); c.fillStyle = '#2a4a8a'; for (let i = 0; i < 4; i++) c.fillRect(x + 10, y + 10 + i * 4, 12 - (i % 2) * 4, 2); c.fillStyle = '#d04040'; c.fillRect(x + 19, y + 20, 5, 5); });
+function pxPName(P, id) { const p = P.parties && P.parties[id]; return p ? (p.short || p.name) : id === 'none' ? '支持なし' : id; }
+function pxSegText(g) {
+  const P = g.state.politics; if (!P || !P.opinion) return '世論のデータがない。';
+  const O = P.opinion, ruling = (P.cabinet && P.cabinet.partyIds) || [], mine = P.me && P.me.party;
+  const L = [`内閣支持率 ${Math.round(num(P.cabinet && P.cabinet.approval))}%`, '', '【層ごとの与党支持】'];
+  for (const [k, nm] of PX_SEG) { const S = O[k]; if (!isObj(S)) continue; const r = ruling.reduce((a, id) => a + num(S[id]), 0), m = mine ? num(S[mine]) : 0, none = num(S.none); const top = Object.entries(S).filter(([id]) => id !== 'none').sort((a, b) => b[1] - a[1])[0];
+    const bar = '■'.repeat(Math.round(r * 8)) + '□'.repeat(Math.max(0, 8 - Math.round(r * 8))); L.push(`${nm.padEnd(5, '　')}${bar} ${Math.round(r * 100)}%\n　${mine ? `${pxPName(P, mine)}${Math.round(m * 100)}%・` : ''}支持なし${Math.round(none * 100)}%${top ? `・1位 ${pxPName(P, top[0])}` : ''}`); }
+  const iss = Object.entries(O.issues || {}).sort((a, b) => b[1] - a[1]).slice(0, 5); if (iss.length) L.push('', '【いま国民が気にしていること】', iss.map(([k, v], i) => `${i + 1}. ${PX_ISS[k] || k}（関心 ${Math.round(v * 100)}）`).join('\n'));
+  const weak = PX_SEG.map(([k, nm]) => [nm, ruling.reduce((a, id) => a + num(O[k] && O[k][id]), 0)]).sort((a, b) => a[1] - b[1]).slice(0, 2); L.push('', `与党が弱いのは「${weak.map(w => w[0]).join('」「')}」。ここに届く政策が、次の選挙のカギになりそうだ。`);
+  return L.join('\n');
+}
+function pxEditorial(g) {
+  const P = g.state.politics, X = pxSt(g); if (!P) return;
+  const C = P.cabinet || {}, E2 = P.economy || {}, ap = num(C.approval), sc = num(C.scandal) > 0, law = (P.laws || []).slice(-1)[0], W = g.state.world || {};
+  const pmName = (() => { try { return stPmName(g); } catch (e) { return '首相'; } })() || '首相';
+  const topic = sc ? '疑惑' : num(E2.inflation) >= 2.5 ? '物価' : num(E2.growth) < 0 ? '景気' : num(W.tension) >= 55 ? '安全保障' : law ? '新法' : '政権運営';
+  const day = num(g.state.day), out = [];
+  for (const [nm, lean] of PX_PAPER) {
+    const tone = clamp((ap - 40) / 25 + lean * 0.45 - (sc ? 0.9 : 0) + (RND() - 0.5) * 0.5, -1.5, 1.5);
+    const head = {
+      疑惑: tone > 0.3 ? '疑惑の解明は丁寧に。政策を止めるな' : tone < -0.3 ? '説明から逃げるな。首相は自ら語れ' : '疑惑の説明、まだ足りない',
+      物価: tone > 0.3 ? '物価対策は着実に進んでいる' : tone < -0.3 ? '家計の悲鳴が聞こえないのか' : '物価高、実効ある手を急げ',
+      景気: tone > 0.3 ? '景気の下支え、方向性は正しい' : tone < -0.3 ? '無策の経済運営、責任は重い' : '景気後退、次の一手を示せ',
+      安全保障: tone > 0.3 ? '毅然とした外交姿勢を評価する' : tone < -0.3 ? '緊張をあおる外交は危うい' : '国際情勢、冷静な対応を',
+      新法: law ? (tone > 0.3 ? `「${String(law.title || law.name || '').replace(/に関する法律案?$/, '')}」成立を評価する` : tone < -0.3 ? `「${String(law.title || law.name || '').replace(/に関する法律案?$/, '')}」審議は尽くされたか` : `新法の運用、国民への説明を`) : '',
+      政権運営: tone > 0.3 ? `${pmName}政権、安定した滑り出し` : tone < -0.3 ? `${pmName}政権は国民の声を聞け` : `${pmName}政権、問われる実行力`,
+    }[topic];
+    out.push({ d: day, p: nm, lean, tone: Math.round(tone * 100) / 100, h: head, t: topic });
+  }
+  X.ed = out.concat(X.ed).slice(0, 25); X.edDay = day; X.edUnread = 1;
+  const pos = out.filter(o => o.tone > 0.3).length, neg = out.filter(o => o.tone < -0.3).length;
+  try { if (P.cabinet) P.cabinet.approval = clamp(num(P.cabinet.approval) + (pos - neg) * 0.15, 3, 90); } catch (e) { }
+}
+function pxEdText(g) {
+  const X = pxSt(g); X.edUnread = 0; if (!X.ed.length) return 'まだ社説がない。（毎週月曜に各紙の社説が出る）';
+  const d0 = X.ed[0].d, cur = X.ed.filter(o => o.d === d0), L = [`【今週の社説】テーマ：${cur[0].t}`];
+  for (const o of cur) L.push(`${o.tone > 0.3 ? '◎' : o.tone < -0.3 ? '×' : '△'}${o.p}（${o.lean < 0 ? 'リベラル' : o.lean > 0 ? '保守' : '中道'}）\n　「${o.h}」`);
+  const pos = cur.filter(o => o.tone > 0.3).length, neg = cur.filter(o => o.tone < -0.3).length; L.push('', `好意的 ${pos}紙・批判的 ${neg}紙。${neg >= 3 ? '論調は厳しい。支持率にもじわじわ響きそうだ。' : pos >= 3 ? '追い風が吹いている。' : '論調は割れている。'}`);
+  return L.join('\n');
+}
+// ---- 災害の初動対応 ----
+const SG_KINDS = [['jishin', '地震', '最大震度6強の地震が発生。建物の倒壊や停電の情報が入っている。'], ['gou', '豪雨', '線状降水帯による記録的な豪雨。河川の氾濫と土砂崩れが相次いでいる。'], ['taifu', '台風', '大型で非常に強い台風が上陸。広い範囲で停電と浸水の被害が出ている。']];
+const SG_PREF = ['北海道', '宮城県', '新潟県', '静岡県', '石川県', '広島県', '熊本県', '福岡県', '高知県', '岩手県', '長野県', '和歌山県'];
+function sgRole(g) { let R = {}; try { R = g.govtRole() || {}; } catch (e) { } return R.pm ? 'pm' : R.posts && R.posts.length ? 'min' : R.diet ? 'diet' : 'cit'; }
+function sgStart(g) {
+  const X = pxSt(g), K = pick(SG_KINDS), pref = pick(SG_PREF), day = num(g.state.day), role = sgRole(g);
+  X.sg = { id: day, k: K[0], nm: K[1], pref, day, role, step: 1, score: 0 };
+  const txt = `【緊急】${pref}で${K[1]}\n${K[2]}`;
+  try { g.notify && g.notify(`${pref}で${K[1]}の被害。各地で救助が続いている`, { color: '#ff8a5a' }); } catch (e) { }
+  const ch = role === 'pm' ? ['ただちに官邸対策室を設置し、自分が指揮をとる', '関係省庁に任せ、報告を待つ', '予定どおり公務を続ける'] : role === 'min' ? ['所管の省で災害対策本部を立ち上げる', '官邸の指示を待つ', '予定どおり公務を続ける'] : role === 'diet' ? ['地元・党の対策本部に駆けつける', 'SNSで情報を発信する', '様子を見る'] : ['義援金を送る（¥5,000）', 'ボランティアに参加する（週末）', 'ニュースを見守る'];
+  try { E.R4(g, { kind: 'np_saigai', key: 'np_saigai1', title: `${pref}で${K[1]}が発生`, text: txt + (role === 'pm' ? '\n\n総理、初動の判断をお願いします。' : role === 'min' ? '\n\n大臣、どう動きますか。' : ''), choices: ch, def: role === 'cit' ? 2 : 1, days: 3, data: { step: 1 } }); } catch (e) { console.error('[saigai]', e); }
+}
+function sgAdj(g, ap, rep) { const P = g.state.politics; if (!P) return; if (P.cabinet && ap) P.cabinet.approval = clamp(num(P.cabinet.approval) + ap, 3, 90); if (P.me && rep) P.me.reputation = clamp(num(P.me.reputation) + rep, -100, 100); }
+function sgHandler(g, it, k, auto) {
+  const X = pxSt(g), S = X.sg; if (!S) return ''; const d = it.data || {}, role = S.role;
+  if (d.step === 1) {
+    if (role === 'cit') { if (k === 0) { if (!g.spend || g.spend(5000)) { try { g.addNeed('stress', -3); } catch (e) { } X.sgLog.unshift({ d: S.day, t: `${S.pref}の${S.nm}に義援金を送った` }); return '日本赤十字社を通じて、義援金を送った。\n少しでも役に立てばいい。'; } return 'お金が足りない…。'; } if (k === 1) { try { g.addNeed('stress', 8); g.state.stamina = Math.max(0, num(g.state.stamina) - 20); } catch (e) { } X.sgLog.unshift({ d: S.day, t: `${S.pref}でボランティアに参加した` }); return '週末、泥かきのボランティアに参加した。\n体はくたくただが、「ありがとう」の声が胸に残った。'; } X.sg = null; return 'ニュースの映像を、ただ見守った。'; }
+    if (role === 'diet') { if (k === 0) { sgAdj(g, 0, 4); X.sgLog.unshift({ d: S.day, t: `${S.nm}で現地の対策本部に入った` }); X.sg = null; return '長靴にはき替え、対策本部へ。\n被災者の声を直接聞き、政府に要望を伝えた。（評判が上がった）'; } if (k === 1) { sgAdj(g, 0, chance(0.2) ? -5 : 1); X.sg = null; return 'SNSで避難所や給水の情報を発信した。'; } sgAdj(g, 0, -2); X.sg = null; return '様子を見ることにした。\n「地元の議員は何をしているのか」という声も…。'; }
+    // pm / min：初動 → 2段めの判断
+    S.score += k === 0 ? 3 : k === 1 ? 0 : -4;
+    if (k === 2) { sgAdj(g, role === 'pm' ? -5 : -1, -6); try { g.notify && g.notify('「災害時に会食」と批判が殺到している…', { color: '#ff6a7a' }); } catch (e) { } }
+    const ch2 = role === 'pm' ? ['自衛隊の災害派遣を大規模に指示し、翌日に現地を視察する', '自衛隊を派遣し、視察は落ち着いてから', '予備費の使用をすぐ閣議決定し、激甚災害の指定を急ぐ'] : ['被災地に入り、自治体の要望を聞く', '省内で支援策の取りまとめを急ぐ', '記者会見で支援策を発表する'];
+    S.step = 2;
+    try { E.R4(g, { kind: 'np_saigai', key: 'np_saigai2', title: `${S.pref}の${S.nm}：次の一手`, text: `被害の全容が見えてきた。避難している人は数万人にのぼる。\n${k === 0 ? '初動が早かったことは、報道でも評価されている。' : k === 1 ? '「政府の動きが遅い」という声も出はじめている。' : '初動の遅れが、厳しく批判されている。'}`, choices: ch2, def: 1, days: 4, data: { step: 2 } }); } catch (e) { }
+    return k === 0 ? (role === 'pm' ? '官邸対策室を設置し、関係閣僚会議を開いた。\n「人命第一で、あらゆる手を尽くしてください」' : '省内に災害対策本部を立ち上げた。') : k === 1 ? '関係省庁からの報告を待つことにした。' : '予定どおり公務を続けた。…その夜、会食の写真がSNSに出回った。';
+  }
+  if (d.step === 2) {
+    let msg = '';
+    if (role === 'pm') { if (k === 0) { const early = chance(0.3); S.score += early ? 0 : 3; msg = early ? '翌日、現地を視察した。\n「救助の妨げになる」という批判も一部で出た。' : '翌日、防災服で現地に入った。避難所で被災者の手をにぎり、声に耳をかたむけた。'; } else if (k === 1) { S.score += 2; msg = '自衛隊の派遣を指示し、視察は救助が落ち着いてからにした。'; } else { S.score += 3; msg = '予備費の使用を閣議決定し、激甚災害に指定した。\n自治体の首長から「心強い」という声が届いた。'; try { const E2 = g.state.politics.economy; if (E2) E2.growth = num(E2.growth) - 0.05; } catch (e) { } } }
+    else { S.score += k === 0 ? 3 : k === 1 ? 2 : 1; msg = ['被災地に入り、首長たちの要望を直接聞いた。', '省内で支援策をまとめ、官邸に上げた。', '記者会見で支援策を発表した。'][k] || '対応を続けた。'; }
+    const sc = S.score, ap = role === 'pm' ? (sc >= 5 ? 4 : sc >= 2 ? 1.5 : sc >= 0 ? -1 : -4) : sc >= 4 ? 0.5 : 0, rep = sc >= 5 ? 6 : sc >= 2 ? 2 : sc >= 0 ? -1 : -5;
+    sgAdj(g, ap, rep);
+    X.sgLog.unshift({ d: S.day, t: `${S.pref}の${S.nm}：対応の評価 ${sc >= 5 ? 'A' : sc >= 2 ? 'B' : sc >= 0 ? 'C' : 'D'}` }); if (X.sgLog.length > 20) X.sgLog.length = 20; X.sg = null;
+    return `${msg}\n\n【対応の評価：${sc >= 5 ? 'A（迅速・的確）' : sc >= 2 ? 'B（おおむね適切）' : sc >= 0 ? 'C（遅れが目立った）' : 'D（厳しい批判）'}】${role === 'pm' ? `\n内閣支持率 ${ap >= 0 ? '+' : ''}${ap}` : ''}`;
+  }
+  return '';
+}
+function pxTick(g) {
+  const X = pxSt(g), day = num(g.state.day);
+  let wd = 1; try { wd = Qo(day); } catch (e) { }
+  if (day - num(X.edDay) >= 7 || (wd === 1 && day - num(X.edDay) >= 3)) { try { pxEditorial(g); } catch (e) { console.error('[polx] ed', e); } }
+  if (!X.sgNext) X.sgNext = day + 60 + Math.floor(RND() * 80);
+  if (day >= X.sgNext && !X.sg) { X.sgNext = day + 90 + Math.floor(RND() * 120); try { sgStart(g); } catch (e) { console.error('[polx] saigai', e); } }
+}
+async function pxOpen(g) {
+  for (;;) {
+    const X = pxSt(g), k = await E.Ho(g, { title: '政局ノート', color: '#2a4a8a', text: `いまの内閣支持率：${Math.round(num(g.state.politics && g.state.politics.cabinet && g.state.politics.cabinet.approval))}%\n${X.edUnread ? '★ 新しい社説が出ています' : ''}`, choices: ['支持層の内訳', '今週の社説', '災害対応の記録', 'とじる'] });
+    if (k === 0) { await E.qe(g, { title: '支持層の内訳', color: '#2a4a8a', text: pxSegText(g) }); continue; }
+    if (k === 1) { await E.qe(g, { title: '今週の社説', color: '#2a4a8a', text: pxEdText(g) }); continue; }
+    if (k === 2) { const L = X.sgLog.slice(0, 12).map(o => { let dd = ''; try { const D = dateOf(g, o.d); dd = `${D.year}/${D.month}/${D.dom} `; } catch (e) { } return dd + o.t; }); await E.qe(g, { title: '災害対応の記録', color: '#2a4a8a', text: L.length ? L.join('\n') : 'まだ記録はない。' }); continue; }
+    return;
+  }
+}
+if (typeof window !== 'undefined') window.__PX = { seg: () => pxSegText(window.__game), ed: () => { pxEditorial(window.__game); return pxEdText(window.__game); }, sg: () => sgStart(window.__game), sgH: (k, step) => sgHandler(window.__game, { data: { step } }, k), st: () => pxSt(window.__game), open: () => pxOpen(window.__game), tick: () => pxTick(window.__game) };
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
