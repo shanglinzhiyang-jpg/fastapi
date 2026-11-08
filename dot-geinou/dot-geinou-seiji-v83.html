@@ -13846,6 +13846,7 @@ function install() {
   try { installHB(); } catch (e) { console.error('[hb] install', e); }
   try { installGamble(); } catch (e) { console.error('[gb] install', e); }
   try { installPiyoro(); } catch (e) { console.error('[py] install', e); }
+  try { installDK(); } catch (e) { console.error('[dk] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -14475,9 +14476,10 @@ async function companyAct(g, key, host) {
   }
   if (co.type === 'play' || co.type === 'relax') {
     const acts = co.acts;
-    const k = await g.list({ title: `${co.name}（所持金 ${yen(g.state.money)}）`, items: acts.map(a => ({ label: a[0], right: a[1] ? yen(a[1]) : '無料', disabled: g.state.money < a[1] })), x: 12, y: 44, w: 400, px: true, describe: i => co.type === 'relax' ? `${acts[i][2]}分・体力+${acts[i][3]}・ストレス-${acts[i][4]}` : `${acts[i][2]}分・ストレス-${acts[i][3]}` });
+    const k = await g.list({ title: `${co.name}（所持金 ${yen(g.state.money)}）`, items: acts.map(a => ({ label: a[0], right: a[1] ? yen(a[1]) : '無料', disabled: g.state.money < a[1] })), x: 12, y: 44, w: 400, px: true, describe: i => co.type === 'relax' ? `${acts[i][2]}分・体力+${acts[i][3]}・ストレス-${acts[i][4]}` : (acts[i][5] === 'dk' ? '1981年のアーケード。1プレイ100円' : `${acts[i][2]}分・ストレス-${acts[i][3]}`) });
     if (k < 0) return;
     const a = acts[k];
+    if (a[5] === 'dk') return dkCab(g);
     if (a[1] && !g.spend(a[1])) { await g.say('お金が足りない…。'); return; }
     if (co.type === 'relax') { take(a[2], a[4], () => { g.state.stamina = Math.min(g.state.maxStamina, num(g.state.stamina) + a[3]); }); return g.say(a[5]); }
     take(a[2], a[3]); return g.say(a[4]);
@@ -43354,10 +43356,404 @@ function pyTitle(s, c, g, S, W) {
   pT(c, '豆が地面に落ちると足場がこわれる。白い豆は足場を直し、光る豆は画面の豆をぜんぶ消す。', 320, 338, { size: 12, align: 'center', color: '#0a3a38' });
 }
 const pyIcon = gbIcon('#3ad8c8', (c, x, y) => { pyBird(c, x + 18, y + 27, -1, true, 1.4, 0); c.strokeStyle = '#d0306a'; c.lineWidth = 2; c.beginPath(); c.moveTo(x + 10, y + 16); c.lineTo(x + 3, y + 8); c.stroke(); pyBean(c, x + 24, y + 9, 'n', 0, 1); });
-async function pyOpen(g) { await gbScene(g, { mode: 'piyoro', title: 'ピヨロ' }); }
+async function pyOpen(g) { const r = await gbScene(g, { mode: 'piyoro', title: 'ピヨロ' }); gbAfter(g, r && r.mins); }
 try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_enta'); if (F && !F.apps.includes('piyoro')) F.apps.push('piyoro'); FOLD_OF.piyoro = 'f_enta'; } } catch (e) { console.error('[py] folder', e); }
 function installPiyoro() { E.Un('piyoro', { name: 'ピヨロ', color: '#3ad8c8', order: 74.5, iconHD: pyIcon, open: g => pyOpen(g) }); }
 if (typeof window !== 'undefined') window.__PY = { open: g => pyOpen(g || window.__game), st: () => pySt(window.__game) };
+// ===== レトロ筐体「DONKEY KONG」（1981年のアーケード、25mステージ）：ゲームセンターで100円で遊べる =====
+const DK = { W: 224, H: 256, SC: 1.375, OX: 166, OY: 4 };
+const DK_COL = { gird: '#ff1f5a', girdD: '#a0103a', lad: '#00e8e8', red: '#ff2020', white: '#ffffff', blue: '#2050ff', cyan: '#3ad8ff', yel: '#ffd800', org: '#ff8a20' };
+function dkSt(g) { const s = g.state; if (!isObj(s.dkong)) s.dkong = { plays: 0, best: 0, top: [7650, 6100, 5950, 5050, 4300], coins: 0, clears: 0 }; return s.dkong; }
+// ---- 5x7 のドット文字 ----
+const DK_FONT = {
+  A: '01110100011000111111100011000110001', B: '11110100011000111110100011000111110', C: '01110100011000010000100001000101110', D: '11110100011000110001100011000111110',
+  E: '11111100001000011110100001000011111', F: '11111100001000011110100001000010000', G: '01110100011000010111100011000101111', H: '10001100011000111111100011000110001',
+  I: '01110001000010000100001000010001110', J: '00111000100001000010000101001001100', K: '10001100101010011000101001001010001', L: '10000100001000010000100001000011111',
+  M: '10001110111010110101100011000110001', N: '10001100011100110101100111000110001', O: '01110100011000110001100011000101110', P: '11110100011000111110100001000010000',
+  Q: '01110100011000110001101011001001101', R: '11110100011000111110101001001010001', S: '01111100001000001110000010000111110', T: '11111001000010000100001000010000100',
+  U: '10001100011000110001100011000101110', V: '10001100011000110001100010101000100', W: '10001100011000110101101011010101010', X: '10001100010101000100010101000110001',
+  Y: '10001100011000101010001000010000100', Z: '11111000010001000100010001000011111',
+  0: '01110100011001110101110011000101110', 1: '00100011000010000100001000010001110', 2: '01110100010000100010001000100011111', 3: '11111000100010000010000011000101110',
+  4: '00010001100101010010111110001000010', 5: '11111100001111000001000011000101110', 6: '00110010001000011110100011000101110', 7: '11111000010001000100010000100001000',
+  8: '01110100011000101110100011000101110', 9: '01110100011000101111000010001001100',
+  '=': '00000000001111100000111110000000000', '?': '01110100010000100010001000000000100', '!': '00100001000010000100001000000000100', '.': '00000000000000000000000000110001100',
+  '-': '00000000000000011111000000000000000', '©': '01110100011011110100101111000101110', "'": '00100001000100000000000000000000000',
+};
+function dkTxt(c, s, x, y, col, sp = 8) { c.fillStyle = col; s = String(s); for (let i = 0; i < s.length; i++) { const f = DK_FONT[s[i]]; if (!f) continue; for (let b = 0; b < 35; b++) if (f[b] === '1') c.fillRect(x + i * sp + (b % 5), y + ((b / 5) | 0), sp < 8 ? 1 : 1.6, 1); } }
+// ロゴ：ドットひとつを、すじの入った青いブロックで描く
+function dkLogo(c, s, x, y, k) { for (let i = 0; i < s.length; i++) { const f = DK_FONT[s[i]]; if (!f) continue; for (let b = 0; b < 35; b++) if (f[b] === '1') { const px = x + i * (k * 6) + (b % 5) * k, py = y + ((b / 5) | 0) * k; c.fillStyle = '#1a3cff'; c.fillRect(px, py, k - 0.5, k - 0.5); c.fillStyle = '#0a1a90'; for (let q = 1; q < k; q += 2) c.fillRect(px, py + q, k - 0.5, 0.6); } } }
+// ---- ドット絵 ----
+function dkMap(c, map, x, y, pal, flip) { const w = Math.max(...map.map(r => r.length)); for (let j = 0; j < map.length; j++) for (let i = 0; i < map[j].length; i++) { const ch = map[j][i], col = pal[ch]; if (!col) continue; c.fillStyle = col; c.fillRect(Math.round(x + (flip ? w - 1 - i : i)), Math.round(y + j), 1, 1); } }
+const DK_MARIO_TOP = ['...RRRRR....', '..RRRRRRRRR.', '..KKKSSKS...', '.KSKSSSKSSS.', '.KSKKSSSKSSS', '.KKSSSSKKKK.', '...SSSSSSS..', '..RRBRRR....', '.RRRBRRBRRR.', 'RRRRBBBBRRRR', 'SSRBSBBSBRSS', 'SSSBBBBBBSSS'];
+const DK_MARIO_LEGS = [['SSBBBBBBBBSS', '..BBB..BBB..', '.KKK....KKK.', 'KKKK....KKKK'], ['..BBBBBBB...', '.BBBB.BBBB..', 'KKK....KKK..', 'KKKK...KKKK.'], ['...BBBBBB...', '....BBBB....', '....KKKK....', '....KKKKK...']];
+const DK_MARIO_CLIMB = ['...RRRRR....', '..RRRRRRRR..', '..KKKKKKKK..', '..KKKKKKKK..', '...KKKKKK...', '....SSSS....', 'SRRRRRRRRRR.', 'SRRRBRRBRRR.', 'SSRRBRRBRRSS', 'SS.BBBBBB.SS', '...BBBBBB...', '...BBBBBB...', '..BBB..BBB..', '..BBB...BBB.', '.KKK.....KKK', '.KKK.....KKK'];
+const DK_MPAL = { R: '#ff2020', B: '#3050ff', S: '#ffb878', K: '#904010' };
+function dkMario(c, x, y, face, fr, mode) {
+  if (mode === 'climb') { dkMap(c, DK_MARIO_CLIMB, x - 6, y - 16, DK_MPAL, fr % 2 === 1); return; }
+  const legs = DK_MARIO_LEGS[fr % 3]; dkMap(c, DK_MARIO_TOP.concat(legs), x - 6, y - 16, DK_MPAL, face < 0);
+}
+const DK_KONG = ['............oooooooo............', '..........oooooooooooo..........', '.........oooooooooooooo.........', '........ooosssoooosssooo........', '........oosswwsoosswwsoo........', '........ossswksooskwssso........', '.......oossssssssssssssoo.......', '.......osssssssssssssssso.......', '.......osskkkkkkkkkkkksso.......', '.......ossswwwwwwwwwwssso.......', '........ossskkkkkkkksso.........', '......ooooossssssssooooo........', '....oooooooooooooooooooooo......', '...ooooooosssssssssssooooooo....', '..oooooossssssssssssssoooooooo..', '.oooooosssssssssssssssssoooooo..', '.oooooossssssssssssssssssooooo..', 'oooooo.osssssssssssssssso.oooooo', 'ssss...oossssssssssssssoo...ssss', 'sssss..ooooossssssssooooo..sssss', '.sss...oooooooooooooooooo...sss.', '.......ooooooooooooooooooo......', '......ooooooo......ooooooo......', '.....oooooo..........oooooo.....', '....sssssss..........sssssss....', '...ssssssss..........ssssssss...'];
+const DK_KONG_UP = DK_KONG.map((r, j) => j >= 11 && j <= 20 ? (j <= 13 ? 'ss' + r.slice(2, 30) + 'ss' : j <= 16 ? 'so' + r.slice(2, 30) + 'os' : '..' + r.slice(2, 30) + '..') : j >= 8 && j <= 10 ? 'ss' + r.slice(2, 30) + 'ss' : r);
+const DK_KPAL = { o: '#b04a10', s: '#ffb070', w: '#ffffff', k: '#301008' };
+function dkKong(c, x, y, pose, t) {
+  // x = 中心, y = 足もと
+  const map = pose === 'up' || pose === 'beat' && (t >> 3) % 2 ? DK_KONG_UP : DK_KONG;
+  dkMap(c, map, x - 16, y - 26, DK_KPAL, pose === 'beat' && (t >> 4) % 2);
+}
+const DK_PAUL = ['...hhhhh....', '..hhhhhhh...', '.hhhssshh...', '.hhsskssh...', '.hhsssssh...', '..hhssss....', '..hh.ss.....', '..ppppppp...', '.ppwppppps..', '.pppppppps..', '..ppppppp...', '..ppppppp...', '.ppppppppp..', '.ppppppppp..', 'ppppppppppp.', 'ppppppppppp.', 'wwwwwwwwwww.', '...ss..ss...', '...ww..ww...'];
+function dkPauline(c, x, y, t, flip) { dkMap(c, DK_PAUL, x - 6, y - 19, { h: '#ff9a40', s: '#ffb878', k: '#202020', p: '#ff70c0', w: '#ffffff' }, flip); }
+function dkBarrel(c, x, y, rot, blue, front) {
+  const b = blue ? '#40b0ff' : '#d0701a', d = blue ? '#1040c0' : '#702a00', h = blue ? '#c0f0ff' : '#ffb060';
+  if (front) { c.fillStyle = d; c.fillRect(x - 7, y - 9, 14, 9); c.fillStyle = b; c.fillRect(x - 6, y - 8, 12, 7); c.fillStyle = d; c.fillRect(x - 6, y - 7, 12, 1); c.fillRect(x - 6, y - 3, 12, 1); c.fillStyle = h; c.fillRect(x - 5, y - 6, 2, 2); return; }
+  c.fillStyle = d; c.fillRect(x - 4, y - 10, 8, 10); c.fillRect(x - 5, y - 9, 10, 8);
+  c.fillStyle = b; c.fillRect(x - 3, y - 9, 6, 8); c.fillRect(x - 4, y - 8, 8, 6);
+  c.fillStyle = d; const r = rot & 3; if (r === 0) { c.fillRect(x - 4, y - 6, 8, 1); c.fillRect(x - 4, y - 4, 8, 1); } else if (r === 1) { c.fillRect(x - 3, y - 8, 1, 1); c.fillRect(x - 2, y - 7, 1, 1); c.fillRect(x - 1, y - 6, 2, 2); c.fillRect(x + 1, y - 4, 1, 1); c.fillRect(x + 2, y - 3, 1, 1); } else if (r === 2) { c.fillRect(x - 1, y - 9, 1, 8); c.fillRect(x + 1, y - 9, 1, 8); } else { c.fillRect(x + 2, y - 8, 1, 1); c.fillRect(x + 1, y - 7, 1, 1); c.fillRect(x - 1, y - 6, 2, 2); c.fillRect(x - 2, y - 4, 1, 1); c.fillRect(x - 3, y - 3, 1, 1); }
+  c.fillStyle = h; c.fillRect(x - 2, y - 8, 1, 1);
+}
+function dkFire(c, x, y, t) {
+  const f = (t >> 2) % 2;
+  c.fillStyle = '#ff2000'; c.fillRect(x - 5, y - 8, 10, 8); c.fillRect(x - 3, y - 11 - f, 6, 3);
+  c.fillStyle = '#ffd000'; c.fillRect(x - 4, y - 7, 8, 6); c.fillRect(x - 2, y - 9 - f, 4, 2);
+  c.fillStyle = '#ffffff'; c.fillRect(x - 3, y - 6, 2, 2); c.fillRect(x + 1, y - 6, 2, 2);
+  c.fillStyle = '#2040ff'; c.fillRect(x - 2, y - 5, 1, 1); c.fillRect(x + 2, y - 5, 1, 1);
+}
+function dkDrum(c, x, y, lit, t) {
+  c.fillStyle = '#2050ff'; c.fillRect(x, y - 16, 16, 16); c.fillStyle = '#80b0ff'; c.fillRect(x, y - 16, 16, 2); c.fillRect(x, y - 2, 16, 2); c.fillRect(x, y - 13, 16, 1); c.fillRect(x, y - 5, 16, 1);
+  dkTxt(c, 'OIL', x + 0, y - 11, '#ffffff', 5.5);
+  if (lit) { const f = (t >> 3) % 3; c.fillStyle = '#ff3000'; c.fillRect(x + 2, y - 22 - f, 12, 6 + f); c.fillStyle = '#ffd000'; c.fillRect(x + 4, y - 20 - (f === 1 ? 2 : 0), 3, 4); c.fillRect(x + 9, y - 21 + (f === 2 ? 2 : 0), 3, 5); c.fillStyle = '#ffffff'; c.fillRect(x + 6, y - 18, 3, 2); }
+}
+function dkHammer(c, x, y, up) {
+  if (up) { c.fillStyle = '#d0a060'; c.fillRect(x - 1, y - 8, 2, 8); c.fillStyle = '#904010'; c.fillRect(x - 4, y - 12, 8, 5); c.fillStyle = '#ffd080'; c.fillRect(x - 3, y - 11, 6, 1); }
+  else { c.fillStyle = '#d0a060'; c.fillRect(x, y - 1, 8, 2); c.fillStyle = '#904010'; c.fillRect(x + 7, y - 4, 5, 8); c.fillStyle = '#ffd080'; c.fillRect(x + 8, y - 3, 1, 6); }
+}
+function dkHeart(c, x, y, broken) { c.fillStyle = '#ff2060'; const M = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...']; for (let j = 0; j < 6; j++) for (let i = 0; i < 7; i++) if (M[j][i] === 'X' && !(broken && i === 3)) c.fillRect(x - 7 + i * 2, y - 12 + j * 2, 2, 2); }
+// ---- ステージ（25m） ----
+const DK_G = [
+  { x0: 0, n: 14, ys: i => i < 7 ? 248 : 248 - (i - 6), down: -1, flat: 248 },
+  { x0: 0, n: 13, ys: i => 205 + i, down: 1, flat: 215 },
+  { x0: 16, n: 13, ys: i => 184 - i, down: -1, flat: 182 },
+  { x0: 0, n: 13, ys: i => 139 + i, down: 1, flat: 149 },
+  { x0: 16, n: 13, ys: i => 118 - i, down: -1, flat: 116 },
+  { x0: 0, n: 13, ys: i => i < 9 ? 84 : 84 + (i - 8), down: 1, flat: 84 },
+  { x0: 88, n: 3, ys: () => 56, down: 0, flat: 56 },
+];
+const DK_L = [[80, 1, 0, 1], [184, 1, 0, 0], [96, 2, 1, 0], [32, 2, 1, 0], [64, 3, 2, 1], [112, 3, 2, 0], [184, 3, 2, 0], [72, 4, 3, 0], [32, 4, 3, 0], [168, 4, 3, 1], [184, 5, 4, 0], [100, 5, 4, 1], [128, 6, 5, 0]];
+function dkGx1(G) { return G.x0 + G.n * 16; }
+function dkGY(S, gi, x) { const G = DK_G[gi], i = clamp(Math.floor((x - G.x0) / 16), 0, G.n - 1), sl = S ? (S.slant ? S.slant[gi] : 1) : 1; return Math.round(G.flat + (G.ys(i) - G.flat) * sl); }
+function dkOnG(gi, x) { const G = DK_G[gi]; return x >= G.x0 && x < dkGx1(G); }
+function dkBelow(S, x, y) { let best = -1, by = 1e9; for (let gi = 0; gi < DK_G.length; gi++) { if (!dkOnG(gi, x)) continue; const gy = dkGY(S, gi, x); if (gy >= y - 1 && gy < by) { by = gy; best = gi; } } return best; }
+function dkDrawStage(c, S, ladders) {
+  if (ladders) for (const [lx, up, lo, br] of DK_L) {
+    const top = dkGY(S, up, lx + 4) + 8, bot = dkGY(S, lo, lx + 4); c.fillStyle = DK_COL.lad;
+    for (let y = top; y < bot; y++) { if (br && y > top + 4 && y < bot - 6) continue; c.fillRect(lx, y, 1, 1); c.fillRect(lx + 7, y, 1, 1); if ((y - top) % 4 === 2) c.fillRect(lx, y, 8, 1); }
+  }
+  for (let gi = 0; gi < DK_G.length; gi++) {
+    const G = DK_G[gi];
+    for (let i = 0; i < G.n; i++) {
+      const x = G.x0 + i * 16, y = dkGY(S, gi, x);
+      c.fillStyle = DK_COL.gird; c.fillRect(x, y, 16, 1); c.fillRect(x, y + 7, 16, 1);
+      for (let k = 0; k < 16; k++) { const a = k % 8, yy = a < 4 ? y + 1 + a + (a > 1 ? 1 : 0) : y + 6 - (a - 4) - (a > 5 ? 1 : 0); c.fillRect(x + k, Math.min(y + 6, yy), 1, 1); }
+    }
+  }
+}
+// ---- 状態 ----
+function dkNewStage(S) {
+  Object.assign(S, { mx: 40, my: dkGY(S, 0, 40), face: 1, mode: 'walk', mfr: 0, vy: 0, jy0: 0, jx: 0, cl: null, gi: 0, ham: 0, hams: [{ x: 24, gi: 4, got: false }, { x: 168, gi: 1, got: false }], bars: [], fires: [], pops: [], throwT: 90, kpose: 'stand', kt: 0, lit: false, bonus: 5000 + 0 * S.lv, bt: 0, dieT: 0, clearT: 0, first: true, help: 0 });
+  S.bonus = Math.min(8000, 5000 + (S.lv - 1) * 1000);
+}
+function dkSpd(S) { return 1 + Math.min(0.9, (S.lv - 1) * 0.18); }
+function dkKill(S) { if (S.mode === 'die') return; S.mode = 'die'; S.dieT = 0; S.ham = 0; try { tt.sfx('fail'); } catch (e) { } }
+function dkPop(S, x, y, v) { S.pops.push({ x, y, v, t: 0 }); S.score += v; }
+GB_MODES.dkong = {
+  noHud: true,
+  init(s, g) { const S = s.S; dkSt(g); S.scene = 'attract'; S.t = 0; S.credit = 0; S.score = 0; S.lv = 1; S.lives = 3; S.slant = DK_G.map(() => 1); S.cv = document.createElement('canvas'); S.cv.width = DK.W; S.cv.height = DK.H; S.coins = 0; S.games = 0; },
+  btn(s, id, g) {
+    const S = s.S;
+    if (id === 'coin') { if (s.pay(100)) { S.credit++; S.coins++; dkSt(g).coins++; } }
+    else if (id === 'start') dkStart(s, g);
+    else if (id === 'exit') dkLeave(s, g);
+  },
+  tap(s, g, p) { const S = s.S; if (S.scene === 'play') S.tapJump = true; else if (S.scene === 'intro' || S.scene === 'howhigh') S.skip = true; },
+  key(s, g, inp) {
+    const S = s.S;
+    if (S.scene === 'play' || S.scene === 'intro' || S.scene === 'howhigh') { if (S.scene !== 'play' && inp.pressed('a')) S.skip = true; if (inp.pressed('b') || inp.pressed('menu')) { S.pauseQ = !S.pauseQ; tt.sfx('cancel'); } return true; }
+    if (S.scene === 'attract') { if (inp.pressed('a')) { if (S.credit > 0) dkStart(s, g); else GB_MODES.dkong.btn(s, 'coin', g); return true; } if (inp.pressed('b') || inp.pressed('menu')) { dkLeave(s, g); return true; } return true; }
+    return false;
+  },
+  update(s, g) { dkUpdate(s, g); },
+  draw(s, c, g) { dkDraw(s, c, g); },
+};
+function dkStart(s, g) { const S = s.S; if (S.credit <= 0) { s.tip('100円玉を入れてください', PW.bad); return; } S.credit--; S.games++; dkSt(g).plays++; S.score = 0; S.lv = 1; S.lives = 3; S.slant = DK_G.map((_, i) => i === 6 || i === 0 ? 1 : 0); S.scene = 'intro'; S.it = 0; S.skip = false; try { tt.sfx('ok'); } catch (e) { } }
+function dkLeave(s, g) {
+  const S = s.S; const W = dkSt(g);
+  const rel = S.games ? Math.min(12, 3 + Math.floor(S.bestRun / 2000) * 2) : 0; if (rel) try { g.addNeed('stress', -rel); } catch (e) { }
+  s.mins = Math.max(S.games ? 10 : 2, Math.round(S.playF / 3600 + S.games * 3)); s.res = { games: S.games, best: S.bestRun || 0, rel }; s.done();
+}
+function dkGameOver(s, g, S) {
+  const W = dkSt(g); S.bestRun = Math.max(S.bestRun || 0, S.score); W.best = Math.max(W.best, S.score);
+  const top = W.top.concat([S.score]).sort((a, b) => b - a).slice(0, 5); S.rank = top.indexOf(S.score) >= 0 && S.score > 0 && W.top.indexOf(S.score) < 0 ? top.indexOf(S.score) + 1 : 0; W.top = top;
+  S.scene = 'over'; S.ot = 0;
+}
+function dkUpdate(s, g) {
+  const S = s.S, inp = g.input; S.t++;
+  for (const p of S.pops || []) p.t++; if (S.pops) S.pops = S.pops.filter(p => p.t < 50);
+  if (S.pauseQ) return;
+  if (S.scene === 'over') { if (++S.ot > 180 || (S.ot > 40 && inp.pressed('a'))) S.scene = 'attract'; return; }
+  if (S.scene === 'intro') {
+    S.it++; const T = S.it;
+    // ゴリラがはしごを登り、5回飛びはねて鉄骨をゆがませる
+    if (S.skip || T > 520) { S.slant = DK_G.map(() => 1); S.scene = 'howhigh'; S.ht = 0; S.skip = false; return; }
+    if (T > 220) { const k = Math.floor((T - 220) / 50); for (let gi = 0; gi < 6; gi++) { const ord = 4 - gi; if (gi === 5) S.slant[5] = k >= 1 ? 1 : 0; else if (k > ord + 1) S.slant[gi] = 1; else if (k === ord + 1) S.slant[gi] = clamp(((T - 220) % 50) / 12, 0, 1); } if ((T - 220) % 50 === 24) try { tt.sfx('drum'); } catch (e) { } }
+    return;
+  }
+  if (S.scene === 'howhigh') { if (++S.ht > 150 || S.skip) { S.skip = false; S.scene = 'play'; dkNewStage(S); } return; }
+  if (S.scene !== 'play') return;
+  S.playF = (S.playF || 0) + 1;
+  if (S.mode === 'die') { if (++S.dieT > 170) { S.lives--; if (S.lives <= 0) dkGameOver(s, g, S); else { S.scene = 'howhigh'; S.ht = 60; } } return; }
+  if (S.clearT) { if (++S.clearT > 200) { S.score += S.bonus; S.lv++; dkSt(g).clears++; S.scene = 'howhigh'; S.ht = 0; } return; }
+  // ボーナスタイマー
+  if (++S.bt >= 120) { S.bt = 0; S.bonus = Math.max(0, S.bonus - 100); if (S.bonus <= 0) { dkKill(S); return; } }
+  if (++S.help > 400) S.help = 0;
+  dkMarioUpd(s, S, inp);
+  dkKongUpd(S);
+  dkBarUpd(s, S);
+  dkFireUpd(S);
+  // ハンマー
+  if (S.ham > 0) S.ham--;
+  for (const h of S.hams) { if (h.got) continue; const hy = dkGY(S, h.gi, h.x) - 22; if (Math.abs(S.mx - h.x) < 7 && S.my - 16 < hy + 2 && S.my - 16 > hy - 12 && S.mode !== 'climb') { h.got = true; S.ham = 600; try { tt.sfx('chime'); } catch (e) { } } }
+  // ゴール
+  if (S.mode === 'walk' && S.gi === 6) { S.clearT = 1; try { tt.sfx('fanfare'); } catch (e) { } }
+}
+function dkMarioUpd(s, S, inp) {
+  const L = inp.down('left'), R = inp.down('right'), U = inp.down('up'), D = inp.down('down'), J = inp.pressed('a') || S.tapJump; S.tapJump = false;
+  const sp = 0.85;
+  if (S.mode === 'walk') {
+    let dx = 0; if (L) dx = -1; else if (R) dx = 1;
+    if (dx) { S.face = dx; S.mx = clamp(S.mx + dx * sp, 6, 218); S.mfr = (S.mfr + 1) % 24; }
+    // はしご
+    if (!S.ham && (U || D)) {
+      for (const [lx, up, lo, br] of DK_L) {
+        if (br || Math.abs(S.mx - (lx + 4)) > 3) continue;
+        if (U && S.gi === lo) { S.mode = 'climb'; S.cl = { lx, up, lo }; S.mx = lx + 4; break; }
+        if (D && S.gi === up) { S.mode = 'climb'; S.cl = { lx, up, lo }; S.mx = lx + 4; S.my += 1; break; }
+      }
+      if (S.mode === 'climb') return;
+    }
+    if (J && !S.ham) { S.mode = 'jump'; S.vy = -1.9; S.jy0 = S.my; S.jx = dx * sp; S.jumped = new Set(); try { tt.sfx('cursor'); } catch (e) { } return; }
+    if (!dkOnG(S.gi, S.mx)) { S.mode = 'fall'; S.vy = 0; S.jy0 = S.my; return; }
+    S.my = dkGY(S, S.gi, S.mx);
+    return;
+  }
+  if (S.mode === 'climb') {
+    const C = S.cl, top = dkGY(S, C.up, C.lx + 4), bot = dkGY(S, C.lo, C.lx + 4);
+    if (U) { S.my -= 0.7; S.mfr++; } else if (D) { S.my += 0.7; S.mfr++; }
+    if (S.my <= top) { S.my = top; S.mode = 'walk'; S.gi = C.up; S.cl = null; }
+    else if (S.my >= bot) { S.my = bot; S.mode = 'walk'; S.gi = C.lo; S.cl = null; }
+    return;
+  }
+  if (S.mode === 'jump' || S.mode === 'fall') {
+    const py = S.my; S.my += S.vy; S.vy = Math.min(3, S.vy + (S.mode === 'jump' ? 0.12 : 0.2)); if (S.mode === 'jump') S.mx = clamp(S.mx + S.jx, 6, 218);
+    // バレルを飛びこえた
+    if (S.mode === 'jump') for (const b of S.bars) { if (b.dead || S.jumped.has(b)) continue; if (Math.abs(b.x - S.mx) < 6 && b.y > S.my && b.y - S.my < 26 && (b.mode === 'roll' || b.mode === 'wild')) { S.jumped.add(b); dkPop(S, b.x, b.y - 12, S.jumped.size >= 2 ? 300 : 100); try { tt.sfx('coin'); } catch (e) { } } }
+    if (S.vy > 0) {
+      for (let gi = 0; gi < DK_G.length; gi++) { if (!dkOnG(gi, S.mx)) continue; const gy = dkGY(S, gi, S.mx); if (py <= gy && S.my >= gy) { S.my = gy; S.gi = gi; const drop = gy - S.jy0; S.mode = 'walk'; if (drop > 15) dkKill(S); return; } }
+      if (S.my > 260) dkKill(S);
+    }
+  }
+}
+function dkKongUpd(S) {
+  S.kt++;
+  if (--S.throwT <= 0) {
+    if (S.kpose === 'stand' || S.kpose === 'beat') { S.kpose = 'grab'; S.throwT = 30; }
+    else if (S.kpose === 'grab') { S.kpose = 'throw'; S.throwT = 14; const wild = S.first; S.first = false; const blue = wild || Math.random() < 0.12; S.bars.push(wild ? { x: 46, y: 86, mode: 'wild', vy: 0, vx: 0.25, blue: true, rot: 0, tgt: 4 } : { x: 76, y: dkGY(S, 5, 76), gi: 5, mode: 'roll', dir: 1, blue, rot: 0, ls: new Set() }); }
+    else { S.kpose = Math.random() < 0.3 ? 'beat' : 'stand'; S.throwT = Math.round((S.kpose === 'beat' ? 70 : 40) + Math.max(20, 120 - S.lv * 14) * Math.random()); }
+  }
+}
+function dkBarUpd(s, S) {
+  const v = 1.0 * dkSpd(S);
+  for (const b of S.bars) {
+    if (b.dead) continue;
+    b.rot += b.mode === 'roll' ? 0.25 : 0.1;
+    if (b.mode === 'roll') {
+      b.x += b.dir * v;
+      // はしごを下りるか
+      for (const [lx, up, lo] of DK_L) { if (up !== b.gi || b.ls.has(lx) || Math.abs(b.x - (lx + 4)) > 1) continue; b.ls.add(lx); const below = S.my > b.y + 4; if (Math.random() < (below ? 0.4 : 0.15)) { b.mode = 'ladder'; b.x = lx + 4; b.lo = lo; break; } }
+      if (b.mode === 'roll') { if (!dkOnG(b.gi, b.x)) { b.mode = 'fall'; b.vy = 0; b.fromGi = b.gi; } else b.y = dkGY(S, b.gi, b.x); }
+      if (b.gi === 0 && b.x < 22) { b.dead = true; dkDrumHit(S, b); }
+    } else if (b.mode === 'ladder') {
+      b.y += 0.8 * dkSpd(S); const gy = dkGY(S, b.lo, b.x); if (b.y >= gy) { b.y = gy; b.gi = b.lo; b.mode = 'roll'; b.dir = DK_G[b.gi].down || 1; b.ls = new Set(); }
+    } else if (b.mode === 'fall') {
+      const py = b.y; b.y += b.vy; b.vy = Math.min(3, b.vy + 0.18); b.x += b.dir * 0.4;
+      for (let gi = 0; gi < b.fromGi; gi++) { if (!dkOnG(gi, b.x)) continue; const gy = dkGY(S, gi, b.x); if (py <= gy && b.y >= gy) { b.y = gy; b.gi = gi; b.mode = 'roll'; b.dir = DK_G[gi].down || -b.dir; b.ls = new Set(); break; } }
+      if (b.y > 270) b.dead = true;
+    } else if (b.mode === 'wild') {
+      // 青いバレルをまっすぐ下へ投げ落とす（鉄骨ごとにはねる）
+      const py = b.y; b.y += b.vy; b.vy = Math.min(3.2, b.vy + 0.2); b.x += b.vx;
+      { const gi = b.tgt; if (gi >= 0 && dkOnG(gi, b.x)) { const gy = dkGY(S, gi, b.x); if (py <= gy && b.y >= gy) { if (gi === 0) { b.y = gy; b.gi = 0; b.mode = 'roll'; b.dir = -1; b.ls = new Set(); } else { b.vy = -0.9; b.vx = -b.vx; b.tgt--; } } } else if (b.y > 252) { b.tgt = 0; } }
+    }
+    // マリオに当たる
+    if (S.mode !== 'die' && !b.dead) {
+      if (S.ham > 0) { const hx = S.mx + S.face * 9, hy = (S.t >> 3) % 2 ? S.my - 20 : S.my - 8; if (Math.abs(b.x - hx) < 9 && Math.abs((b.y - 5) - hy) < 10) { b.dead = true; dkPop(S, b.x, b.y - 10, [300, 500, 800][Math.floor(Math.random() * 3)]); s.burst(DK.OX + b.x * DK.SC, DK.OY + b.y * DK.SC, 8, '#ffd000', { star: true, sp: 2 }); try { tt.sfx('hit'); } catch (e) { } continue; } }
+      if (Math.abs(b.x - S.mx) < 7 && b.y - 9 < S.my - 1 && b.y > S.my - 14) dkKill(S);
+    }
+  }
+  S.bars = S.bars.filter(b => !b.dead);
+}
+function dkDrumHit(S, b) {
+  if (!S.lit) { S.lit = true; }
+  if ((b.blue || S.fires.length === 0 && Math.random() < 0.5) && S.fires.length < 4 + S.lv) S.fires.push({ x: 24, y: dkGY(S, 0, 24) - 18, gi: 0, mode: 'pop', vy: -1.6, dir: 1, t: 0, cl: null });
+}
+function dkFireUpd(S) {
+  const v = 0.45 + S.lv * 0.05;
+  for (const f of S.fires) {
+    f.t++;
+    if (f.mode === 'pop') { f.y += f.vy; f.vy += 0.1; f.x += 0.6; const gy = dkGY(S, 0, f.x); if (f.vy > 0 && f.y >= gy) { f.y = gy; f.mode = 'walk'; f.gi = 0; } continue; }
+    if (f.mode === 'walk') {
+      if (f.t % 90 === 0) f.dir = Math.random() < 0.65 ? Math.sign(S.mx - f.x) || 1 : -f.dir;
+      f.x += f.dir * v; const G = DK_G[f.gi]; if (f.x < G.x0 + 4 || f.x > dkGx1(G) - 4) { f.dir = -f.dir; f.x = clamp(f.x, G.x0 + 4, dkGx1(G) - 4); }
+      f.y = dkGY(S, f.gi, f.x);
+      for (const [lx, up, lo, br] of DK_L) { if (br || up === 6 || Math.abs(f.x - (lx + 4)) > 0.5) continue; const want = S.my < f.y - 8 ? 0.5 : 0.15; if (f.gi === lo && Math.random() < want) { f.mode = 'climb'; f.cl = { lx, up, lo, d: -1 }; f.x = lx + 4; break; } if (f.gi === up && Math.random() < 0.12) { f.mode = 'climb'; f.cl = { lx, up, lo, d: 1 }; f.x = lx + 4; break; } }
+    } else if (f.mode === 'climb') {
+      const C = f.cl; f.y += C.d * 0.5; const top = dkGY(S, C.up, C.lx + 4), bot = dkGY(S, C.lo, C.lx + 4);
+      if (f.y <= top) { f.y = top; f.gi = C.up; f.mode = 'walk'; } else if (f.y >= bot) { f.y = bot; f.gi = C.lo; f.mode = 'walk'; }
+    }
+    if (S.mode !== 'die') {
+      if (S.ham > 0) { const hx = S.mx + S.face * 9; if (Math.abs(f.x - hx) < 9 && Math.abs(f.y - S.my) < 14) { f.dead = true; dkPop(S, f.x, f.y - 10, 500); continue; } }
+      if (Math.abs(f.x - S.mx) < 8 && Math.abs((f.y - 5) - (S.my - 8)) < 10) dkKill(S);
+    }
+  }
+  S.fires = S.fires.filter(f => !f.dead);
+}
+// ---- 描画 ----
+function dkHud(c, S, W) {
+  dkTxt(c, '1UP', 24, 0, DK_COL.red); dkTxt(c, 'HIGH SCORE', 80, 0, DK_COL.red);
+  dkTxt(c, pyNum(S.score), 8, 9, DK_COL.white); dkTxt(c, pyNum(Math.max(W.top[0], S.score)), 88, 9, DK_COL.white);
+  for (let i = 0; i < Math.max(0, S.lives - 1); i++) { c.fillStyle = '#ff2020'; c.fillRect(8 + i * 8, 22, 5, 2); c.fillStyle = '#3050ff'; c.fillRect(8 + i * 8, 24, 5, 3); c.fillStyle = '#ffb878'; c.fillRect(9 + i * 8, 20, 3, 2); }
+  dkTxt(c, 'L=' + String(Math.min(99, S.lv)).padStart(2, '0'), 172, 18, DK_COL.blue);
+  c.fillStyle = DK_COL.blue; c.fillRect(170, 27, 46, 1); c.fillRect(170, 50, 46, 1); c.fillRect(170, 27, 1, 24); c.fillRect(215, 27, 1, 24);
+  c.fillStyle = '#3ad8ff'; c.fillRect(172, 29, 42, 1); c.fillRect(172, 48, 42, 1); c.fillRect(172, 29, 1, 20); c.fillRect(213, 29, 1, 20);
+  dkTxt(c, 'BONUS', 174, 31, '#ff60ff'); dkTxt(c, String(S.bonus).padStart(4, '0'), 177, 40, DK_COL.cyan);
+}
+function dkDraw(s, c, g) {
+  const S = s.S, W = dkSt(g), x = S.cv.getContext('2d'); x.imageSmoothingEnabled = false;
+  x.fillStyle = '#000'; x.fillRect(0, 0, DK.W, DK.H);
+  if (S.scene === 'attract') dkAttract(x, S, W);
+  else if (S.scene === 'howhigh') dkHowHigh(x, S, W);
+  else if (S.scene === 'intro') dkIntro(x, S, W);
+  else dkPlayDraw(x, S, W);
+  if (S.scene === 'over') { x.fillStyle = '#000'; x.fillRect(56, 116, 112, 40); x.fillStyle = DK_COL.cyan; x.fillRect(56, 116, 112, 1); x.fillRect(56, 155, 112, 1); dkTxt(x, 'GAME  OVER', 72, 124, DK_COL.cyan); if (S.rank) dkTxt(x, 'RANK ' + S.rank, 84, 140, DK_COL.yel); }
+  if (S.pauseQ) { x.fillStyle = 'rgba(0,0,0,0.6)'; x.fillRect(0, 0, DK.W, DK.H); dkTxt(x, 'PAUSE', 92, 120, DK_COL.white); }
+  // 筐体
+  dkCabinet(s, c, S, W);
+  c.imageSmoothingEnabled = false; c.drawImage(S.cv, DK.OX, DK.OY, DK.W * DK.SC, DK.H * DK.SC);
+  // ブラウン管のすじ
+  c.fillStyle = 'rgba(0,0,0,0.12)'; for (let yy = DK.OY; yy < DK.OY + DK.H * DK.SC; yy += 3) c.fillRect(DK.OX, yy, DK.W * DK.SC, 1);
+}
+function dkCabinet(s, c, S, W) {
+  pR(c, 0, 0, 640, 360, '#120a06');
+  // 木目の側板
+  for (const x0 of [0, 480]) { pR(c, x0, 0, 160, 360, '#3a1e10'); for (let y = 0; y < 360; y += 6) pR(c, x0, y, 160, 1, 'rgba(0,0,0,0.25)'); pR(c, x0 + 6, 6, 148, 348, '#1a0e08'); }
+  pR(c, DK.OX - 6, 0, DK.W * DK.SC + 12, 360, '#000'); pR(c, DK.OX - 4, DK.OY - 2, DK.W * DK.SC + 8, 2, '#2a2a2a');
+  // 左：遊び方
+  pT(c, 'DONKEY KONG', 80, 16, { size: 16, align: 'center', color: '#ff7a3a', outline: '#000', ow: 2 });
+  pT(c, '1981 ARCADE', 80, 36, { size: 12, align: 'center', color: '#c8a070' });
+  pFrame(c, 14, 58, 132, 132);
+  pT(c, 'あそびかた', 80, 66, { size: 12, align: 'center', color: PW.acc });
+  const L = [['←→', 'あるく'], ['↑↓', 'はしご'], ['A', 'ジャンプ'], ['B', '一時停止'], ['タップ', 'ジャンプ']];
+  L.forEach(([k, v], i) => { pT(c, k, 30, 86 + i * 20, { size: 12, color: '#fff' }); pT(c, v, 82, 86 + i * 20, { size: 12, color: PW.text }); });
+  pT(c, 'バレルを飛びこえて', 80, 204, { size: 12, align: 'center', color: PW.dim }); pT(c, 'てっぺんのレディを', 80, 220, { size: 12, align: 'center', color: PW.dim }); pT(c, '助けだそう', 80, 236, { size: 12, align: 'center', color: PW.dim });
+  // コイン投入口
+  pR(c, 40, 262, 80, 70, '#2a2a30'); pR(c, 44, 266, 72, 62, '#3a3a44'); pR(c, 76, 276, 8, 24, '#0a0a0a'); pT(c, '100', 80, 304, { size: 12, align: 'center', color: '#ffd23f' }); pT(c, '円', 80, 316, { size: 12, align: 'center', color: '#ffd23f' });
+  // 右：クレジットとお金
+  pFrame(c, 494, 14, 132, 64);
+  pT(c, '所持金', 506, 22, { size: 12, color: PW.dim }); pT(c, gbYen(s.money()), 614, 38, { size: 16, align: 'right', color: PW.acc });
+  pT(c, `CREDIT ${String(S.credit).padStart(2, '0')}`, 560, 58, { size: 12, align: 'center', color: '#5fe05f' });
+  pFrame(c, 494, 86, 132, 74);
+  pT(c, '自己ベスト', 506, 94, { size: 12, color: PW.dim }); pT(c, pyNum(W.best), 614, 110, { size: 16, align: 'right', color: '#fff' });
+  pT(c, `プレイ${W.plays}回 クリア${W.clears}回`, 560, 136, { size: 12, align: 'center', color: PW.text });
+  const play = S.scene !== 'attract';
+  s.btn('coin', '100円を入れる', 494, 176, 132, 34, { def: !play && S.credit === 0, off: play && S.scene !== 'over' });
+  s.btn('start', '1P スタート', 494, 218, 132, 34, { def: S.credit > 0, off: S.credit <= 0 || play });
+  s.btn('exit', '席を立つ', 494, 300, 132, 34, { back: true, off: play && S.scene !== 'over' });
+}
+function dkAttract(x, S, W) {
+  dkLogo(x, 'DONKEY', 6, 16, 3); dkLogo(x, 'KONG', 24, 44, 3);
+  dkKong(x, 52, 120, (S.t >> 5) % 2 ? 'beat' : 'stand', S.t);
+  dkTxt(x, '© 1981', 28, 136, DK_COL.yel);
+  dkTxt(x, 'PUSH', 148, 14, DK_COL.cyan); dkTxt(x, 'ONLY 1', 140, 26, DK_COL.cyan); dkTxt(x, 'PLAYER', 140, 36, DK_COL.cyan); dkTxt(x, 'BUTTON', 140, 46, DK_COL.cyan);
+  dkTxt(x, 'RANK  SCORE', 40, 160, DK_COL.cyan); dkTxt(x, 'NAME', 152, 160, DK_COL.cyan);
+  const rk = ['1ST', '2ND', '3RD', '4TH', '5TH'], rc = [DK_COL.red, DK_COL.red, DK_COL.red, DK_COL.yel, DK_COL.yel];
+  for (let i = 0; i < 5; i++) dkTxt(x, rk[i] + '   ' + pyNum(W.top[i] || 0), 40, 176 + i * 12, rc[i]);
+  if (S.credit > 0 && (S.t >> 4) % 2) dkTxt(x, 'PUSH START', 72, 112 + 128, DK_COL.white);
+  dkTxt(x, 'CREDIT ' + String(S.credit).padStart(2, '0'), 128, 244, '#40e040');
+}
+function dkHowHigh(x, S, W) {
+  const n = Math.min(4, S.lv);
+  for (let i = 0; i < n; i++) { dkKong(x, 112, 200 - i * 34, 'stand', 0); dkTxt(x, (25 * (i + 1)) + ' m', 40, 186 - i * 34, DK_COL.white); }
+  dkTxt(x, 'HOW HIGH CAN YOU GET ?', 24, 224, DK_COL.white);
+  dkHud(x, { ...S, bonus: Math.min(8000, 5000 + (S.lv - 1) * 1000) }, W);
+}
+function dkIntro(x, S, W) {
+  const T = S.it;
+  dkDrawStage(x, S, false);
+  // ゴリラが登る二本の長いはしご
+  x.fillStyle = DK_COL.lad;
+  if (T < 220) for (const lx of [96, 112]) for (let y = 56; y < 248; y++) { x.fillRect(lx, y, 1, 1); x.fillRect(lx + 7, y, 1, 1); if (y % 4 === 0) x.fillRect(lx, y, 8, 1); }
+  for (const lx of [64, 80]) for (let y = 20; y < 84; y++) { x.fillRect(lx, y, 1, 1); x.fillRect(lx + 7, y, 1, 1); if (y % 4 === 0) x.fillRect(lx, y, 8, 1); }
+  if (T < 180) { const ky = 248 - (T / 180) * 192; dkKong(x, 108, ky, 'up', T); dkPauline(x, 108, ky - 14, T); }
+  else if (T < 220) { const k = (T - 180) / 40; dkKong(x, 108 - k * 60, 84 - Math.sin(k * Math.PI) * 20, 'stand', T); dkPauline(x, 112, 56, T); }
+  else { const ph = (T - 220) % 50, up = ph < 24 ? Math.sin(ph / 24 * Math.PI) * 10 : 0; dkKong(x, 48, 84 - up, 'up', T); dkPauline(x, 112, 56, T); }
+  dkHud(x, S, W);
+}
+function dkPlayDraw(x, S, W) {
+  dkDrawStage(x, S, true);
+  // DKの横のはしご（飾り）
+  x.fillStyle = DK_COL.lad; for (const lx of [64, 80]) for (let y = 20; y < 84; y++) { x.fillRect(lx, y, 1, 1); x.fillRect(lx + 7, y, 1, 1); if (y % 4 === 0) x.fillRect(lx, y, 8, 1); }
+  // 積んだバレル
+  for (const [bx, by] of [[4, 84], [12, 84], [4, 74], [12, 74]]) dkBarrel(x, bx + 1, by, 2, false, false);
+  dkPauline(x, 112, 56, S.t, S.mode === 'die');
+  if (S.help < 60 && S.mode !== 'die') dkTxt(x, 'HELP!', 120, 32, DK_COL.cyan);
+  const kp = S.kpose;
+  dkKong(x, 44, 84, kp === 'grab' || kp === 'throw' ? 'up' : kp, S.t);
+  if (kp === 'grab') dkBarrel(x, 44, 64, 0, S.first, true);
+  if (kp === 'throw') dkBarrel(x, 66, 82, 0, false, false);
+  dkDrum(x, 16, dkGY(S, 0, 20), S.lit, S.t);
+  for (const h of S.hams) if (!h.got) dkHammer(x, h.x, dkGY(S, h.gi, h.x) - 12, true);
+  for (const b of S.bars) dkBarrel(x, b.x, b.y, Math.floor(b.rot), b.blue, b.mode === 'ladder');
+  for (const f of S.fires) dkFire(x, f.x, f.y, f.t);
+  // マリオ
+  if (S.mode === 'die') {
+    const k = S.dieT; x.save(); x.translate(Math.round(S.mx), Math.round(S.my - 8));
+    if (k < 90) x.rotate(Math.floor(k / 8) * Math.PI / 2); else x.rotate(Math.PI / 2);
+    dkMario(x, 0, 8, S.face, 0, 'walk'); x.restore();
+    if (k > 100) { x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(S.mx, S.my - 18, 6, 2, 0, 0, Math.PI * 2); x.strokeStyle = '#ffffff'; x.stroke(); }
+  } else {
+    const fr = S.mode === 'jump' || S.mode === 'fall' ? 1 : S.mode === 'climb' ? (S.my >> 2) % 2 : S.mfr ? ((S.mfr >> 3) % 3 === 1 ? 1 : (S.mfr >> 3) % 3 === 2 ? 2 : 0) : 0;
+    if (S.ham > 0 && (S.ham > 120 || (S.t >> 2) % 2)) { const up = (S.t >> 3) % 2; dkHammer(x, up ? S.mx + S.face * 2 : S.mx + (S.face > 0 ? 4 : -14), up ? S.my - 16 : S.my - 8, up); }
+    dkMario(x, Math.round(S.mx), Math.round(S.my), S.face, fr, S.mode === 'climb' ? 'climb' : 'walk');
+  }
+  if (S.clearT) { dkHeart(x, 124, 34, false); }
+  for (const p of S.pops) dkTxt(x, String(p.v), p.x - 10, p.y - (p.t >> 3), DK_COL.white);
+  dkHud(x, S, W);
+}
+// ---- ゲームセンターへの設置 ----
+async function dkPlay(g) { const r = await gbScene(g, { mode: 'dkong', title: 'DONKEY KONG' }); gbAfter(g, r && r.mins); return r; }
+async function dkCab(g) {
+  const W = dkSt(g);
+  const k = await g.ask(['レトロな筐体がある。「DONKEY KONG」…1981年のアーケードゲームだ。', `1プレイ100円。${W.best ? `（自己ベスト ${W.best}点）` : ''}`], ['遊ぶ', 'やめる'], { cancel: 1 });
+  if (k !== 0) return;
+  const r = await dkPlay(g);
+  if (r && r.games) await g.say(r.rel ? `いい暇つぶしになった。（ストレス -${r.rel}）` : '筐体から立ち上がった。');
+}
+function dkPatchArcade() {
+  const P = E.Ke && E.Ke.gamecen; if (!P || !P.rooms || !P.rooms.floor || P.rooms.floor.__dk) return;
+  const R = P.rooms.floor; R.__dk = true;
+  if (Array.isArray(R.tiles) && R.tiles[5] && R.tiles[5][9] === '.' && R.tiles[5][10] === '.') R.tiles[5] = R.tiles[5].slice(0, 9) + 'AA' + R.tiles[5].slice(11);
+  if (Array.isArray(R.events)) R.events.push({ x: 9, y: 5, w: 2, on: 'action', run: g => dkCab(g) });
+}
+try { if (typeof COMPANIES !== 'undefined' && COMPANIES.sega && !COMPANIES.sega.acts.some(a => a[5] === 'dk')) COMPANIES.sega.acts.push(['レトロゲーム「DONKEY KONG」', 0, 0, 0, '', 'dk']); } catch (e) { console.error('[dk] sega', e); }
+function installDK() { dkPatchArcade(); }
+if (typeof window !== 'undefined') window.__DK = { open: g => dkPlay(g || window.__game), cab: g => dkCab(g || window.__game), st: () => dkSt(window.__game) };
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
