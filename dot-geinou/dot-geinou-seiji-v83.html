@@ -41306,7 +41306,7 @@ function pmCostDay(H) { return pmZ(H).fix + H.staff * 13000 + (H.boss ? 30000 : 
 function pmSimDay(g, H, day) {
   const Z = pmZ(H), cust = pmCust(g, H, day) * (0.9 + Math.random() * 0.2), ratio = cust / Z.cust, sh = pmSegShare(H);
   const A = H.isl.map(I => { const m = PM_M(I.m); return pmPop(g, H, I, day) * PM_RATE[m.k][I.rate][2] * pmSegMul(H, I, sh); }), aAvg = A.reduce((a, b) => a + b, 0) / A.length;
-  let sales = 0, out = 0, loose = 0; const per = H.isl.map((I, i) => { const m = PM_M(I.m), pr = pmPr(H, I), occ = I.down === day ? 0 : clamp(0.42 * ratio * A[i] / aAvg * clamp(1 + (pr - pmBase(m)) * 5, 0.4, 1.6), 0.03, 0.97), s = PM_PER * occ * 13 * PM_RATE[m.k][I.rate][1];
+  let sales = 0, out = 0, loose = 0; const per = H.isl.map((I, i) => { const m = PM_M(I.m), pr = pmPr(H, I), occ = (I.down === day || I.stop) ? 0 : clamp(0.42 * ratio * A[i] / aAvg * clamp(1 + (pr - pmBase(m)) * 5, 0.4, 1.6), 0.03, 0.97), s = PM_PER * occ * 13 * PM_RATE[m.k][I.rate][1];
     const o = s * Math.max(0.5, pr + gbGauss() * 0.04 * m.vol) * (pr > 0.9 ? 1 + sh[4] * 0.06 : 1); sales += s; out += o; loose += s * (pr - pmBase(m)); return { occ, s: Math.round(s), g: Math.round(s - o), pr: s ? o / s : 0 }; });
   const cost = pmCostDay(H), gross = sales - out, lz = sales ? loose / sales : 0;
   const need = pmNeed(H), svc = H.staff >= need ? 0 : -14 * (need - H.staff) / need, worked = H.workDay === day;
@@ -41323,8 +41323,8 @@ function pmIncident(g, H, day, R) {
     [0.03, () => { H.buzz = day + 1; H.rep = clamp(H.rep + 3, 0, 100); return 'お客さんの大連チャンがSNSで話題に！ 明日はお客が少し増えそう。'; }],
     [short && !safe ? 0.05 * ac : 0, () => { H.rep = clamp(H.rep - 3, 0, 100); return 'スタッフが足りず、お客さん同士のトラブルを止められなかった（評判ダウン）'; }],
     [0.01, () => { if (!short || safe) { H.rep = clamp(H.rep + 2, 0, 100); return '駐車場の見回りで、車に残された子どもを見つけて保護した。（見回りは大事）'; } H.rep = clamp(H.rep - 8, 0, 100); return '駐車場の車に子どもが残されていたのを、通行人が見つけて通報…。見回りが足りなかった（評判が大きく下がった）'; }],
-    [0.015, () => { if (short && !safe) { H.rep = clamp(H.rep - 2, 0, 100); return '警察の立ち入り検査。年齢確認と見回りが足りないと指導された。'; } return '警察の立ち入り検査があったが、問題なしだった。'; }],
-    [num(H.rival) < day - 60 ? 0.005 : 0, () => { H.rival = day + 60; return '近くに大型店「パーラーギャラクシー」がオープン…。しばらくお客をとられそうだ。'; }],
+    [0, () => { if (short && !safe) { H.rep = clamp(H.rep - 2, 0, 100); return '警察の立ち入り検査。年齢確認と見回りが足りないと指導された。'; } return '警察の立ち入り検査があったが、問題なしだった。'; }],
+    [0, () => { H.rival = day + 60; return '近くに大型店「パーラーギャラクシー」がオープン…。しばらくお客をとられそうだ。'; }],
     [R.sh && R.sh[4] > 0.12 ? 0.04 : 0, () => { const v = Math.round(R.sales * 0.01); R.net -= v; R.gross -= v; return `専業（プロ）の集団が高設定の台を独占…。今日は${yen(v)}多く出た。`; }],
   ];
   let u = Math.random(), t = null; for (const [p, fn] of L) { if (u < p) { t = fn(); break; } u -= p; }
@@ -41367,7 +41367,7 @@ function pmTimeK(g) { const t = clockMin(g) % 1440; return t < 720 ? 0.7 : t < 1
 function pmLastOcc(H, i) { const L = H.hist[H.hist.length - 1]; return L && L.per && L.per[i] ? L.per[i][0] / 100 : 0.4; }
 // ---- ホールの見下ろし図 ----
 function pmDrawHall(s, c, g, H, x, y, w, h) {
-  const f = s.S.f, open = H.opened && pmOpenNow(g), n = H.isl.length;
+  const f = s.S.f, open = H.opened && pmOpenNow(g) && !pmSusp(H, g.state.day), n = H.isl.length;
   // 床（赤いじゅうたん）・壁
   pR(c, x, y, w, h, '#4a1020'); for (let j = 0; j < h; j += 12) for (let i = ((j / 12) % 2) * 12; i < w; i += 24) { pR(c, x + i + 5, y + j + 4, 2, 2, '#7a2a3a'); pR(c, x + i + 4, y + j + 5, 4, 1, '#7a2a3a'); }
   pR(c, x, y, w, 16, '#1a1420'); pR(c, x, y + 12, w, 2, open ? '#ff4fa0' : '#5a2a40'); pT(c, pFit(c, H.name, 200, 12), x + w / 2, y + 1, { size: 12, color: open ? (f % 40 < 36 ? '#ff9ad0' : '#ff4fa0') : '#7a5a6a', align: 'center', shadow: null });
@@ -41399,7 +41399,7 @@ function pmDrawHall(s, c, g, H, x, y, w, h) {
   if (H.opened && g.state.day - H.openDay < 7) { for (const fx of [x + w / 2 - 54, x + w / 2 + 42]) { pR(c, fx + 5, y + h - 22, 2, 18, '#8a6a3a'); pCirc(c, fx + 6, y + h - 28, 7, '#ffffff'); for (let q = 0; q < 6; q++) { const a = q / 6 * Math.PI * 2 + f / 40; pCirc(c, fx + 6 + Math.round(Math.cos(a) * 5), y + h - 28 + Math.round(Math.sin(a) * 5), 2, ['#ff5a8a', '#ffd23f', '#ff9ad0'][q % 3]); } pR(c, fx + 4, y + h - 30, 4, 4, '#ff3a6a'); }
     pR(c, x + w / 2 - 70, y + 17, 140, 12, '#c8102e'); pT(c, '祝 グランドオープン', x + w / 2, y + 17, { size: 12, color: '#ffe8a0', align: 'center', shadow: null }); }
   if (open && pmEvMul(H, g.state.day) > 1.05) for (let k = 0; k < 6; k++) { const qx = x + w / 2 - 50 - k * 9, qy = y + h - 10 + (k % 2); pR(c, qx - 3, qy - 2, 6, 3, ['#3a5a9a', '#9a3a3a', '#3a7a4a'][k % 3]); pCirc(c, qx, qy - 4, 2, '#2a1a10'); }
-  if (!open) { c.save(); c.globalAlpha = 0.5; pR(c, x, y + 16, w, h - 16, '#05060c'); c.restore(); pR(c, x + w / 2 - 80, y + h / 2 - 12, 160, 24, 'rgba(10,10,20,0.85)'); pT(c, clockMin(g) % 1440 < PM_OPEN ? '開店前（10:00 開店）' : '本日の営業は終了', x + w / 2, y + h / 2 - 6, { size: 12, color: PW.dim, align: 'center' }); }
+  if (!open) { c.save(); c.globalAlpha = 0.5; pR(c, x, y + 16, w, h - 16, '#05060c'); c.restore(); pR(c, x + w / 2 - 80, y + h / 2 - 12, 160, 24, 'rgba(10,10,20,0.85)'); pT(c, pmSusp(H, g.state.day) ? '営業停止中' : clockMin(g) % 1440 < PM_OPEN ? '開店前（10:00 開店）' : '本日の営業は終了', x + w / 2, y + h / 2 - 6, { size: 12, color: PW.dim, align: 'center' }); }
 }
 // ---- 画面 ----
 GB_MODES.pmgr = {
@@ -41584,7 +41584,7 @@ Object.assign(GB_MODES.pmgr, {
 });
 // ---- 島の様子（近くで見る） ----
 function pmDrawLook(s, c, g, H) {
-  const S = s.S, i = clamp(S.li, 0, H.isl.length - 1), I = H.isl[i], m = PM_M(I.m), f = S.f, open = H.opened && pmOpenNow(g), occ = open ? clamp(pmLastOcc(H, i) * pmTimeK(g), 0, 0.97) : 0, pr = pmPr(H, I), tight = pr < 0.87, sh = pmSegShare(H), down = I.down === g.state.day, slot = Math.floor(f / 420);
+  const S = s.S, i = clamp(S.li, 0, H.isl.length - 1), I = H.isl[i], m = PM_M(I.m), f = S.f, open = H.opened && pmOpenNow(g) && !pmSusp(H, g.state.day), occ = open ? clamp(pmLastOcc(H, i) * pmTimeK(g), 0, 0.97) : 0, pr = pmPr(H, I), tight = pr < 0.87, sh = pmSegShare(H), down = I.down === g.state.day, slot = Math.floor(f / 420);
   const segOf = u => { let a = 0; for (let k = 0; k < sh.length; k++) { a += sh[k]; if (u < a) return PM_SEG[k]; } return PM_SEG[1]; };
   pR(c, 0, 30, 640, 330, '#3a1020'); for (let j = 0; j < 330; j += 12) for (let q = ((j / 12) % 2) * 12; q < 640; q += 24) pR(c, q + 5, 30 + j + 4, 2, 2, '#5a2030');
   pR(c, 0, 30, 640, 40, '#16101c'); pR(c, 0, 66, 640, 3, open ? '#ff4fa0' : '#5a2a40');
@@ -41615,7 +41615,7 @@ function pmDrawLook(s, c, g, H) {
   }
   // スタッフ（ドル箱を運ぶ）
   if (open) { const sx = (f * 1.2) % 760 - 60; if (sx > -20 && sx < 660) { pR(c, sx - 6, 304, 12, 12, '#f4f4f4'); pR(c, sx - 3, 304, 6, 12, '#1a1a1a'); pCirc(c, sx, 298, 5, '#2a1a10'); pR(c, sx + 6, 300, 14, 10, '#c8a050'); pR(c, sx + 6, 300, 14, 2, '#e8ecf4'); } }
-  if (!open) { c.save(); c.globalAlpha = 0.5; pR(c, 0, 70, 640, 250, '#05060c'); c.restore(); pT(c, H.opened ? '閉店中' : '工事中', 320, 170, { size: 16, color: PW.dim, align: 'center' }); }
+  if (!open) { c.save(); c.globalAlpha = 0.5; pR(c, 0, 70, 640, 250, '#05060c'); c.restore(); pT(c, !H.opened ? '工事中' : pmSusp(H, g.state.day) ? '営業停止中' : '閉店中', 320, 170, { size: 16, color: PW.dim, align: 'center' }); }
   // 下の操作
   pFrame(c, 6, 318, 628, 40, { bg: '#16101c' }); s.btn('lk:-1', '◀ 前の島', 12, 324, 80, 26, { size: 12 }); s.btn('lk:1', '次の島 ▶', 96, 324, 80, 26, { size: 12, def: true });
   pT(c, m.k === 's' ? `設定${num(I.k, 1)}` : `釘：${PM_KUGI[clamp(num(I.k), -2, 2)]}`, 252, 324, { size: 12, color: pr > 0.89 ? PW.good : pr < 0.87 ? PW.bad : PW.text, align: 'center' }); pT(c, `出玉率 約${Math.round(pr * 100)}%`, 252, 339, { size: 12, color: GB_C.t3, align: 'center' });
@@ -42983,9 +42983,9 @@ const PM_ALC = { bad: ['#ff5d6c', '!'], warn: ['#ffd23f', '!'], info: ['#5fd7ff'
   M.draw = function (s, c, g) { const S = s.S, P = pmSt(g), H = pmCur(P); s.o.sub = H ? H.name : 'パチンコ・スロット'; pBands(c, 0, 0, 640, 360, ['#12061a', '#160820', '#1a0a26', '#1e0c2c']); for (let x = 0; x < 640; x += 32) pR(c, x, 0, 1, 360, 'rgba(255,80,160,0.035)');
     if (S.ph === 'new' || !H) return this.drawNew(s, c, g);
     if (S.ph === 'look') return pmDrawLook(s, c, g, H);
-    PM_TABS2.forEach(([k, nm], i) => s.btn('tab:' + k, nm, 8 + i * 69, 34, 66, 26, { kind: S.tab === k && S.ph !== 'cat' ? 'sel' : 'norm', size: 12 })); s.btn('close', '閉じる', 562, 34, 70, 26, { back: true, size: 12 });
+    PM_TABS2.forEach(([k, nm], i) => s.btn('tab:' + k, nm, 8 + i * 61, 34, 58, 26, { kind: S.tab === k && S.ph !== 'cat' ? 'sel' : 'norm', size: 12 })); s.btn('close', '閉じる', 562, 34, 70, 26, { back: true, size: 12 });
     if (S.ph === 'cat') return this.drawCat(s, c, g, H);
-    const T = { home: 'tabHome', hall: 'tabHall', isl: 'tabIsl', cust: 'tabCust', ev: 'tabEv', eq: 'tabEq', mgmt: 'tabMgmt', rep: 'tabRep' }[S.tab] || 'tabHome'; this[T](s, c, g, H); };
+    const T = { home: 'tabHome', hall: 'tabHall', isl: 'tabIsl', cust: 'tabCust', ev: 'tabEv', eq: 'tabEq', mgmt: 'tabMgmt', rep: 'tabRep', biz: 'tabBiz' }[S.tab] || 'tabHome'; this[T](s, c, g, H); };
   // ---- ホーム（ダッシュボード） ----
   M.tabHome = function (s, c, g, H) {
     const S = s.S, P = pmSt(g), L1 = H.hist[H.hist.length - 1], L0 = H.hist[H.hist.length - 2];
@@ -43021,7 +43021,7 @@ const PM_ALC = { bad: ['#ff5d6c', '!'], warn: ['#ffd23f', '!'], info: ['#5fd7ff'
     pT(c, '粗利', x0 + 10, 188, { size: 12, color: PW.dim }); pT(c, gr != null ? gbSign(gr) : '—', x0 + w0 - 10, 188, { size: 12, color: gr == null ? GB_C.t3 : gr >= 0 ? PW.good : PW.bad, align: 'right' });
     pT(c, m.k === 's' ? `設定${num(I.k, 1)}` : `釘：${PM_KUGI[clamp(num(I.k), -2, 2)]}`, x0 + 10, 206, { size: 12, color: pr > pmBase(m) + 0.01 ? PW.good : pr < pmBase(m) - 0.01 ? PW.bad : PW.text }); s.btn('k-:' + hs, '−', x0 + w0 - 62, 202, 26, 20, { size: 12, off: m.k === 's' ? num(I.k, 1) <= 1 : num(I.k) <= -2 }); s.btn('k+:' + hs, '＋', x0 + w0 - 32, 202, 26, 20, { size: 12, off: m.k === 's' ? num(I.k, 1) >= 6 : num(I.k) >= 2 });
     s.btn('look:' + hs, '近くで見る', x0 + 6, 230, 92, 22, { size: 12, off: !H.opened }); s.btn('cat:' + hs, '入替', x0 + 102, 230, 62, 22, { size: 12, kind: 'pri' });
-    pFrame(c, x0, 264, w0, 62, { bg: '#16101c' }); const st = !H.opened ? `許可待ち あと${Math.max(0, H.openDay - g.state.day)}日` : pmOpenNow(g) ? '営業中' : '閉店中'; pT(c, st, x0 + 10, 270, { size: 12, color: !H.opened ? PW.acc : pmOpenNow(g) ? PW.good : PW.dim }); pT(c, `評判 ${Math.round(H.rep)}`, x0 + w0 - 10, 270, { size: 12, align: 'right' });
+    pFrame(c, x0, 264, w0, 62, { bg: '#16101c' }); const sus = pmSusp(H, g.state.day), st = !H.opened ? `許可待ち あと${Math.max(0, H.openDay - g.state.day)}日` : sus ? `営業停止 あと${H.cp.susp - g.state.day + 1}日` : pmOpenNow(g) ? '営業中' : '閉店中'; pT(c, st, x0 + 10, 270, { size: 12, color: !H.opened ? PW.acc : sus ? PW.bad : pmOpenNow(g) ? PW.good : PW.dim }); pT(c, `評判 ${Math.round(H.rep)}`, x0 + w0 - 10, 270, { size: 12, align: 'right' });
     const left = this.left(s, g); s.btn('work', H.workDay === g.state.day ? '今日は店に出た' : '店に出る（8時間）', x0 + 8, 292, w0 - 16, 26, { kind: 'pri', size: 12, def: true, off: !H.opened || H.workDay === g.state.day || left < 480 });
     pT(c, '島をタップで選択、もう一度で近くで見る', 232, 328, { size: 12, color: GB_C.t3, align: 'center' });
     if (S.wa > 0) { const a = Math.min(1, S.wa / 10); c.save(); c.globalAlpha = a; pFrame(c, 40, 160, 380, 44, { bg: '#1a0a20', edge: '#ff6ab4' }); pT(c, pFit(c, S.wt || '', 356, 12), 230, 168, { size: 12, color: PW.acc, align: 'center' }); pT(c, '評判 +1・今日のトラブルが起きにくい', 230, 184, { size: 12, color: PW.dim, align: 'center' }); c.restore(); }
@@ -43755,6 +43755,314 @@ function dkPatchArcade() {
 try { if (typeof COMPANIES !== 'undefined' && COMPANIES.sega && !COMPANIES.sega.acts.some(a => a[5] === 'dk')) COMPANIES.sega.acts.push(['レトロゲーム「DONKEY KONG」', 0, 0, 0, '', 'dk']); } catch (e) { console.error('[dk] sega', e); }
 function installDK() { dkPatchArcade(); }
 if (typeof window !== 'undefined') window.__DK = { open: g => dkPlay(g || window.__game), cab: g => dkCab(g || window.__game), st: () => dkSt(window.__game) };
+// ===== ホール経営の新要素A：規制・立入検査／近隣のライバル店／メーカーと新台の導入枠／店のブランド（スマホの「ホール経営」の「業界」タブ） =====
+// ---- 時代ごとの規制（年月はおおよそ） ----
+// mi＝年×12＋月−1。ban(m)＝撤去の対象になる機種。dl＝撤去期限
+const PM_REG = [
+  { id: 'r2004', y: 2004, m: 7, nm: '遊技機の規則改正（4号機から5号機へ）', txt: '射幸性の高いスロット（ストック機・爆裂AT機）は、検定が切れたら撤去しなければならない。', dl: [2007, 9], ban: m => m.k === 's' && /ストック機|AT機（爆裂）/.test(m.sp) && m.since < 2007 },
+  { id: 'r2012', y: 2012, m: 1, nm: '広告・宣伝の規制が強化', txt: '「出す」とにおわせる広告や来店取材イベントは、射幸心をあおるとして取り締まりの対象に。', ad: true },
+  { id: 'r2015', y: 2015, m: 6, nm: '高射幸性パチンコ（MAX機）の撤去', txt: '大当たり確率の低い、荒いパチンコは期限までに撤去することに。', dl: [2016, 12], ban: m => m.k === 'p' && m.vol >= 1.45 && m.since < 2016 },
+  { id: 'r2018', y: 2018, m: 2, nm: '規則改正・依存症対策', txt: '出玉の上限が下がった（6号機・設定つきパチンコ）。ギャンブル等依存症対策基本法で、ホールにも対策が求められる。', izon: true },
+  { id: 'r2020', y: 2020, m: 4, nm: '屋内の原則禁煙（改正健康増進法）', txt: 'ホールの中は原則禁煙。たばこは分煙ルームで。' },
+  { id: 'r2021', y: 2021, m: 1, nm: '旧規則機（5号機AT機）の撤去', txt: '経過措置が終わり、荒い5号機のAT機は撤去期限をむかえる。', dl: [2022, 1], ban: m => m.k === 's' && /AT機/.test(m.sp) && !m.ever && m.vol >= 1.4 && m.since < 2018 },
+].map(R => ({ ...R, mi: R.y * 12 + R.m - 1, dmi: R.dl ? R.dl[0] * 12 + R.dl[1] - 1 : null }));
+// 撤去期限が過ぎた機種か（過ぎていればその規制を返す）
+function pmBan(g, m) { const mi = pmMi(g); return PM_REG.find(R => R.ban && R.dmi != null && mi > R.dmi && R.ban(m)) || null; }
+function pmBanSoon(g, m) { const mi = pmMi(g); return PM_REG.find(R => R.ban && R.dmi != null && mi >= R.mi && mi <= R.dmi && R.ban(m)) || null; }
+// ---- 規制への対策 ----
+const PM_COMP = [
+  ['kanri', '遊技機の管理台帳', 1000000, '釘のリスクが半分になる', 0],
+  ['age', '年齢確認・見回りの研修', 500000, '見回り不足のリスクがへる', 0],
+  ['adchk', '広告の事前チェック', 300000, '広告のリスクが半分になる', 2012],
+  ['izon', '依存症対策（自己申告・相談窓口）', 800000, '2018年から必要。ライト客に好評', 2006],
+  ['lawyer', '顧問弁護士（1日 ¥15,000）', 0, '処分が軽く、停止日数が4割へる', 0],
+].map(([id, nm, cost, desc, since]) => ({ id, nm, cost, desc, since }));
+function pmCp(H) { if (!isObj(H.cp)) H.cp = { meas: {}, warn: 0, susp: -1, hist: [], ins: -999 }; if (!isObj(H.cp.meas)) H.cp.meas = {}; if (!Array.isArray(H.cp.hist)) H.cp.hist = []; return H.cp; }
+const pmSusp = (H, day) => !!H.cp && num(H.cp.susp, -1) >= day;
+// 規制のリスク（0〜100）と内訳
+function pmRisk(g, H) {
+  const C = pmCp(H), M = C.meas, y = pmYear(g), d = g.state.day, P = [];
+  let ku = 0; for (const I of H.isl) { if (PM_M(I.m).k !== 'p') continue; const a = Math.abs(num(I.k)); ku += a >= 2 ? 6 : a >= 1 ? 1.5 : 0; } ku = Math.min(30, ku) * (M.kanri ? 0.5 : 1); if (ku >= 1) P.push(['釘を大きく曲げている', Math.round(ku)]);
+  const il = H.isl.filter(I => !I.stop && num(I.grace, -1) < d && pmBan(g, PM_M(I.m))).length; if (il) P.push([`撤去期限切れの台（${il}島）`, Math.min(80, il * 40)]);
+  if (y >= 2012) { const e = H.ev || {}, adv = (num(e.shuzai, -99) >= d - 7) || (num(e.cm, -99) >= d - 3); if (adv) P.push(['取材イベント・CMの宣伝', M.adchk ? 7 : 15]); }
+  if (H.staff < pmNeed(H)) P.push(['見回りが足りない', M.age ? 4 : 10]); else if (!M.age) P.push(['年齢確認の研修をしていない', 3]);
+  if (y >= 2018 && !M.izon) P.push(['依存症対策がない', 12]);
+  if (C.warn > 0) P.push([`前の処分（${C.warn}回）`, Math.round(C.warn * 6)]);
+  const tot = clamp(P.reduce((a, x) => a + x[1], 0), 0, 100); return { tot, parts: P };
+}
+// 立入検査（毎日、リスクに応じて）
+function pmInspect(g, H, d, R, force) {
+  const C = pmCp(H); if (pmSusp(H, d)) return null;
+  const rk = pmRisk(g, H), p = 0.004 + rk.tot / 100 * 0.022; if (!force && Math.random() >= p) return null;
+  C.ins = d; const ill = H.isl.map((I, i) => [I, i]).filter(([I]) => !I.stop && num(I.grace, -1) < d && pmBan(g, PM_M(I.m)));
+  let res, t;
+  if (!ill.length && Math.random() * 100 >= rk.tot * 0.7) { res = 'ok'; t = '警察の立入検査があったが、問題なしだった。'; if (rk.tot < 15) { H.rep = clamp(H.rep + 1, 0, 100); t += '（きちんとした店だと評価された）'; } }
+  else {
+    const sev = rk.tot + C.warn * 10 + Math.random() * 20 + (ill.length ? 40 : 0), law = C.meas.lawyer ? 0.6 : 1;
+    if (sev < 40) { res = 'shido'; H.rep = clamp(H.rep - 2, 0, 100); t = `警察の立入検査で、口頭で指導を受けた。（${rk.parts[0] ? rk.parts[0][0] : '管理の甘さ'}）`; }
+    else if (sev < 70 && !ill.length) { res = 'shiji'; C.warn++; H.rep = clamp(H.rep - 5, 0, 100); const v = 500000; R.net -= v; R.cost += v; t = `立入検査で違反が見つかり、公安委員会から「指示処分」を受けた。改善報告と是正の費用 ${yen(v)}。`; }
+    else { res = 'teishi'; C.warn++; const days = Math.round(Math.min(40, 7 + C.warn * 5) * law); C.susp = d + days; H.rep = clamp(H.rep - 15, 0, 100); t = `立入検査で重い違反が見つかり、「営業停止 ${days}日」の行政処分…。そのあいだ営業できない。`;
+      for (const [I] of ill) { I.stop = true; } if (ill.length) t += `\n撤去期限切れの台（${ill.map(([, i]) => `島${i + 1}`).join('・')}）は撤去命令。入れ替えるまで動かせない。`; }
+  }
+  C.hist.push({ day: d, res, risk: rk.tot }); if (C.hist.length > 12) C.hist.shift();
+  if (res === 'shiji' || res === 'teishi') C.lastV = d;
+  if (C.warn >= 6 && res === 'teishi') { H.revoke = d; t += '\n処分が重なり、営業許可の取り消しが決まった…。'; }
+  pmMsg(g, `【${H.name}】${t}`); return res;
+}
+// ---- 2023年からの新機種（毎年、パチンコとスロットが1つずつ出る） ----
+const PM_GEN_P = ['ドット戦記', '超電磁ドット', '大海原ドット', 'ネオン侍', '宇宙ドット刑事', '魔法少女ドット', '激闘ドット道', '百鬼夜行ドット', 'ドット水滸伝', '新世紀ドット'];
+const PM_GEN_S = ['スマスロ ドット無双', '魔王ドット', 'ドットハンター', 'ネオン番長', '黄金ドット', '天空ドット', 'スマスロ 鉄拳ドット', 'ドット伝説', 'ドットジャグ', 'スマスロ 銀河ドット'];
+function pmGenMach(y) { for (let yr = 2023; yr <= Math.min(2100, y); yr++) { const i = yr - 2023, suf = i >= 10 ? ` ${Math.floor(i / 10) + 1}` : '', hue = (i * 67) % 360, col = h => { const c = (n) => { const k = (n + h / 30) % 12, a = 0.55 * Math.min(0.5, 1 - 0.5); return Math.round(255 * (0.5 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); }; return '#' + [c(0), c(8), c(4)].map(v => v.toString(16).padStart(2, '0')).join(''); };
+    if (!PM_MACH.some(m => m.id === `gp${yr}`)) PM_MACH.push({ id: `gp${yr}`, nm: PM_GEN_P[i % 10] + suf, k: 'p', sp: ['1種2種', 'ミドル', 'ライトミドル', 'ミドル'][i % 4], pop: 1.3 + (i * 7 % 15) / 100, price: 520000 + (i % 4) * 20000, vol: 1.1 + (i % 3) * 0.12, col: col(hue), since: yr, ever: false, gen: true });
+    if (!PM_MACH.some(m => m.id === `gs${yr}`)) PM_MACH.push({ id: `gs${yr}`, nm: PM_GEN_S[i % 10] + suf, k: 's', sp: ['スマスロ', 'AT機', 'スマスロ', 'Aタイプ'][i % 4], pop: 1.3 + (i * 11 % 15) / 100, price: 600000 + (i % 3) * 30000, vol: [1.5, 1.3, 1.5, 0.7][i % 4], col: col((hue + 180) % 360), since: yr, ever: false, gen: true }); } }
+// ---- メーカー ----
+const PM_MKR = [
+  { id: 'sky', nm: 'スカイ物産', sh: 'スカイ', col: '#3a8ad8' }, { id: 'marin', nm: 'マリン工業', sh: 'マリン', col: '#2ab0c0' }, { id: 'neon', nm: 'ネオンゲームズ', sh: 'ネオン', col: '#d83a8a' },
+  { id: 'kaiser', nm: 'カイザー電機', sh: 'カイザー', col: '#c8a020' }, { id: 'daichi', nm: '大地技研', sh: '大地', col: '#5aa040' },
+];
+const PM_MKR_OF = { umi: 'marin', island: 'marin', hokuto: 'kaiser', mgod: 'kaiser', hades: 'kaiser', juggler: 'daichi', star: 'daichi', eva: 'neon', symph: 'neon', akb: 'neon', garo: 'sky', keiji: 'sky', ko: 'sky', matsuri: 'marin' };
+function pmMkOf(m) { if (PM_MKR_OF[m.id]) return PM_MKR.find(k => k.id === PM_MKR_OF[m.id]); let h = 0; for (const ch of m.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return PM_MKR[h % PM_MKR.length]; }
+function pmMkRel(P, id) { if (!isObj(P.mk)) P.mk = {}; if (P.mk[id] == null) P.mk[id] = 25; return P.mk[id]; }
+// 人気の新機種：発売した年とその次の年は、抽選で当たらないと買えない
+const pmHot = (g, m) => m.pop >= 1.3 && pmYear(g) >= m.since && pmYear(g) <= m.since + 1;
+function pmAl(P) { if (!isObj(P.al)) P.al = {}; if (!isObj(P.lot)) P.lot = {}; return P.al; }
+function pmAlLeft(g, P, mid) { const A = pmAl(P)[mid]; return A && A.exp >= g.state.day ? num(A.n) : 0; }
+function pmLotChance(g, P, m) { const rel = pmMkRel(P, pmMkOf(m).id); if (rel >= 85) return 1; const big = P.halls.reduce((a, H) => a + (H.size === 'l' ? 0.1 : H.size === 'm' ? 0.05 : 0), 0); return clamp(0.12 + rel * 0.007 + big + P.halls.length * 0.03, 0.08, 0.95); }
+// ---- ライバル店 ----
+const PM_RV_NM = ['パーラーギャラクシー', 'キングドット', 'ニューオーシャン', '楽園ホール', 'ネオンパレス', 'スターダスト', 'グランド太陽', 'ミリオン会館', 'ドリーム21', '夢の島会館'];
+const PM_STY = { dedama: ['出玉', '出玉で勝負', '#ff6a3a'], shindai: ['新台', '新台で勝負', '#3ab0ff'], event: ['イベント', 'イベントで勝負', '#ff5ab4'], service: ['接客', '接客で勝負', '#5ee07a'], light: ['ライト', '低貸し・安心で勝負', '#ffd23f'] };
+const PM_STY_K = Object.keys(PM_STY);
+const PM_RV_SZ = { s: ['小型', 0.7], m: ['中型', 1], l: ['大型', 1.5] };
+function pmRvNew(H, day, grand) { const used = new Set((H.rv || []).map(r => r.nm)), nm = PM_RV_NM.find((n, i) => !used.has(n) && Math.random() < 0.4 + i * 0.05) || PM_RV_NM.find(n => !used.has(n)) || 'ホール新世界';
+  const sz = ['s', 'm', 'm', 'l'][Math.floor(Math.random() * 4)]; return { nm, sz, st: PM_STY_K[Math.floor(Math.random() * PM_STY_K.length)], pow: Math.round((0.75 + Math.random() * 0.5) * 100) / 100, hp: 60 + Math.floor(Math.random() * 30), kugi: Math.round((Math.random() * 2 - 1) * 10) / 10, born: day, closed: null, seen: -1, bu: grand ? day + 14 : -1, bm: grand ? 1.8 : 1, act: grand ? 'グランドオープン' : '', actDay: grand ? day : -1 }; }
+function pmRvInit(H, day) { if (Array.isArray(H.rv)) return H.rv; H.rv = []; const n = H.size === 'l' ? 3 : 2; for (let i = 0; i < n; i++) H.rv.push(pmRvNew(H, day, false)); return H.rv; }
+const pmRvOpen = H => (H.rv || []).filter(r => r.closed == null);
+function pmTopBrand(H) { const B = pmBr(H); let k = null, v = 0; for (const x of PM_STY_K) if (B[x] > v) { v = B[x]; k = x; } return v >= 60 ? [k, v] : [null, v]; }
+function pmRvP(H, r, day) { const [tk] = pmTopBrand(H), clash = tk && tk === r.st ? 0.7 : 1; return 0.12 * PM_RV_SZ[r.sz][1] * r.pow * (r.bu >= day ? r.bm : 1) * clash; }
+function pmRvMul(H, day) { const sp = pmRvOpen(H).reduce((a, r) => a + pmRvP(H, r, day), 0); return 1.24 / (1 + sp) * (1 + Math.min(0.15, num(H.rvGain))); }
+function pmMyPow(g, H, day) { const [, bv] = pmTopBrand(H); return (H.rep / 50) * (1 + Math.max(0, bv - 40) / 200) * Math.min(1.5, pmEvMul(H, day)); }
+function pmRvDay(g, H, d) {
+  const L = pmRvInit(H, d), me = pmMyPow(g, H, d);
+  for (const r of L) {
+    if (r.closed != null) continue;
+    // その店の動き
+    const pa = r.st === 'event' ? 0.06 : 0.04; if (Math.random() < pa) {
+      if (r.st === 'shindai') { r.bu = d + 10; r.bm = 1.4; r.act = '新台入替'; }
+      else if (r.st === 'event') { r.bu = d + 2; r.bm = 1.5; r.act = '来店イベント'; }
+      else if (r.st === 'dedama') { r.bu = d + 7; r.bm = 1.25; r.act = '釘をあけた（出す日）'; r.kugi = Math.min(1, r.kugi + 0.4); }
+      else if (r.st === 'service') { r.pow = Math.min(1.6, r.pow + 0.04); r.act = '改装・サービスを強化'; }
+      else { r.pow = Math.min(1.6, r.pow + 0.03); r.act = '1円・5円コーナーを拡大'; }
+      r.actDay = d; if (r.seen >= d || (r.st === 'shindai' && r.bu >= d && Math.random() < 0.35)) pmMsg(g, `【近所のライバル店】${r.nm}が「${r.act}」${r.bu >= d ? `（${r.bu - d + 1}日間）` : ''}`);
+    }
+    r.kugi = clamp(r.kugi * 0.98 + (Math.random() - 0.5) * 0.06, -1, 1);
+    const rs = r.pow * (r.bu >= d ? r.bm : 1) * Math.pow(PM_RV_SZ[r.sz][1], 0.3);
+    r.hp = clamp(r.hp + (rs - me) * 0.55 + 0.03, -5, 100);
+    if (r.hp <= 0) { r.closed = d; const gain = 0.04 * PM_RV_SZ[r.sz][1]; H.rvGain = Math.min(0.15, num(H.rvGain) + gain); H.rvNext = d + 120 + Math.floor(Math.random() * 120); H.rvWin = num(H.rvWin) + 1;
+      pmMsg(g, `【${H.name}】近所のライバル店「${r.nm}」が閉店した…！\nあちらの常連さんの一部が、うちに流れてきた（お客 +${Math.round(gain * 100)}%）`); pmSt(g).log.push({ day: d, t: `ライバル店「${r.nm}」が閉店` }); }
+  }
+  // 閉店したぶん、しばらくして新しい店ができることがある
+  if (num(H.rvNext) && d >= H.rvNext && pmRvOpen(H).length < (H.size === 'l' ? 3 : 2)) { const r = pmRvNew(H, d, true); L.push(r); H.rvNext = 0; pmMsg(g, `【${H.name}】近くに新しいホール「${r.nm}」（${PM_RV_SZ[r.sz][0]}店・${PM_STY[r.st][1]}）がグランドオープン…。しばらくお客をとられそうだ。`); }
+  if (L.length > 6) H.rv = L.filter(r => r.closed == null || d - r.closed < 200);
+  H.rvGain = Math.max(0, num(H.rvGain) - 0.00005);
+}
+// ---- 店のブランド ----
+function pmBr(H) { if (!isObj(H.br)) H.br = { dedama: 30, shindai: 30, event: 20, service: 40, light: 30 }; for (const k of PM_STY_K) if (H.br[k] == null) H.br[k] = 30; return H.br; }
+function pmBrTarget(g, H, d, R) {
+  const n = Math.max(1, H.isl.length), age = I => d - num(I.inst, H.day0), lowF = H.isl.filter(I => I.rate === 1).length / n, amaF = H.isl.filter(I => /甘デジ|羽根/.test(PM_M(I.m).sp)).length / n;
+  if (!Array.isArray(H.evDays)) H.evDays = []; H.evDays.push(pmEvMul(H, d) > 1.001 ? 1 : 0); if (H.evDays.length > 30) H.evDays.shift(); const evN = H.evDays.reduce((a, b) => a + b, 0);
+  const worked = num(H.workDay, -99) >= d - 7, C = pmCp(H);
+  return {
+    dedama: clamp(50 + num(R && R.lz) * 900 + (H.kokan === 'tou' ? 12 : H.kokan === 'low' ? -12 : 0), 0, 100),
+    shindai: clamp(15 + 85 * H.isl.filter(I => age(I) < 60).length / n + (H.isl.some(I => age(I) < 14) ? 10 : 0), 0, 100),
+    event: clamp(10 + evN * 4, 0, 100),
+    service: clamp(30 + (H.staff >= pmNeed(H) ? 20 : -20) + (H.boss ? 10 : 0) + pmEqLv(H, 'lounge') * 10 + pmEqLv(H, 'aircon') * 8 + (worked ? 10 : 0) + num(H.renov) * 3, 0, 100),
+    light: clamp(15 + lowF * 60 + amaF * 30 + (C.meas.izon ? 10 : 0) + (pmEqLv(H, 'bunen') ? 5 : 0), 0, 100),
+  };
+}
+function pmBrDay(g, H, d, R) { const B = pmBr(H), T = pmBrTarget(g, H, d, R); for (const k of PM_STY_K) { const pol = H.pol === k, t = Math.min(100, T[k] + (pol ? 10 : 0)); B[k] = Math.round((B[k] + (t - B[k]) * 0.03 * (pol ? 1.5 : 1)) * 10) / 10; } }
+const PM_BR_TITLE = { dedama: '出玉の店', shindai: '新台の店', event: 'イベントの店', service: '接客の店', light: 'ライトで安心の店' };
+const PM_BR_EFF = { dedama: '専業と若者がふえる', shindai: '若者と会社員がふえる', event: '若者・会社員・専業がふえる', service: '常連と主婦がふえる', light: '常連と主婦がふえ、専業がへる' };
+// ---- 既存の計算へのつなぎこみ ----
+(function pmAHook() {
+  if (typeof pmCust !== 'function' || pmCust.__a) return;
+  const cust0 = pmCust, sim0 = pmSimDay, share0 = pmSegShare, voices0 = pmVoices, cost0 = pmCostDay, swap0 = pmSwap, tick0 = pmTick, tickH0 = pmTickHall;
+  // お客の数：ライバル店とブランド
+  pmCust = function (g, H, day) { if (pmSusp(H, day) || H.revoke != null) return 0; const [, bv] = pmTopBrand(H); return cust0(g, H, day) * pmRvMul(H, day) * (1 + Math.max(0, bv - 50) / 400); }; pmCust.__a = true;
+  pmCostDay = function (H) { return cost0(H) + (H.cp && H.cp.meas && H.cp.meas.lawyer ? 15000 : 0); };
+  // 1日の営業：営業停止の日は売上ゼロ。そのあと検査・ライバル店・ブランドを動かす
+  pmSimDay = function (g, H, day) {
+    let R;
+    if (pmSusp(H, day) || H.revoke != null) { const cost = H.revoke != null ? 0 : Math.round(pmCostDay(H) * 0.7); R = { day, cust: 0, sales: 0, gross: 0, cost, net: -cost, pr: 0, occ: 0, per: H.isl.map(() => ({ occ: 0, s: 0, g: 0, pr: 0 })), lz: 0, sh: pmSegShare(H), susp: true }; }
+    else R = sim0(g, H, day);
+    try { const C = pmCp(H); if (C.warn > 0 && day - num(C.lastV, day) >= 120) { C.warn--; C.lastV = day; } if (!R.susp) pmInspect(g, H, day, R); pmRvDay(g, H, day); pmBrDay(g, H, day, R); } catch (e) { console.error('[pmA] day', e); }
+    return R;
+  };
+  // 客層：ブランドで変わる
+  pmSegShare = function (H) { const sh = share0(H), B = pmBr(H), v = k => Math.max(0, B[k] - 40) / 60; const mul = [1 + v('service') * 0.4 + v('light') * 0.5, 1 + v('shindai') * 0.3 + v('event') * 0.3, 1 + v('dedama') * 0.3 + v('shindai') * 0.5 + v('event') * 0.4, 1 + v('service') * 0.4 + v('light') * 0.5, Math.max(0.2, 1 + v('dedama') * 0.8 + v('event') * 0.2 - v('light') * 0.3)];
+    const w = sh.map((x, k) => x * mul[k]), s = w.reduce((a, b) => a + b, 0); return w.map(x => x / s); };
+  pmVoices = function (g, H) { const V = voices0(g, H), [tk] = pmTopBrand(H), d = g.state.day, X = [];
+    if (tk === 'dedama') X.push([4, 'ここは出るって評判だよ。遠くから来た']); if (tk === 'shindai') X.push([2, '新台はまずここで打つって決めてる']); if (tk === 'event') X.push([1, 'イベントの日は朝から並ぶよ']); if (tk === 'service') X.push([0, '店員さんの感じがいいから通ってるの']); if (tk === 'light') X.push([3, '1円でゆっくり遊べて安心']);
+    const rb = pmRvOpen(H).find(r => r.bu >= d); if (rb) X.push([2, `${rb.nm}が${rb.act}してるらしい。今日はあっちかな`]);
+    if (pmSusp(H, d)) X.unshift([-1, '営業停止中…。常連さんがよその店に流れている（スタッフ）']);
+    return X.concat(V).slice(0, 6); };
+  // 台の入替：撤去命令の島を戻す
+  pmSwap = function (g, H, i, id, used) { swap0(g, H, i, id, used); const I = H.isl[i]; if (I) delete I.stop; };
+  pmTickHall = function (g, P, H, day) { tickH0(g, P, H, day); if (H.revoke != null && P.halls.includes(H)) { const v = Math.round(H.invest * 0.25); g.state.money = num(g.state.money) + v; P.halls = P.halls.filter(x => x !== H); P.cur = 0; P.log.push({ day, t: `${H.name} 営業許可の取り消し（${yen(v)}で処分）` }); pmMsg(g, `【${H.name}】営業許可が取り消され、ホールを閉めた。設備は${yen(v)}で処分した。`); } };
+  // 毎朝：時代の規制のお知らせ・メーカーとの関係
+  pmTick = function (g) { try { pmGenMach(pmYear(g)); } catch (e) { } tick0(g); try { pmTickA(g); } catch (e) { console.error('[pmA] tick', e); } };
+})();
+function pmTickA(g) {
+  const P = pmSt(g), d = g.state.day; if (!P.halls.length) return; if (P.aDay === d) return; const dd = P.aDay == null ? 1 : Math.min(60, d - P.aDay); P.aDay = d;
+  if (!isObj(P.regSeen)) P.regSeen = {}; const mi = pmMi(g);
+  if (!P.aInit) { P.aInit = d; let n = 0; for (const H of P.halls) for (const I of H.isl) if (pmBan(g, PM_M(I.m))) { I.grace = d + 60; n++; } if (n) pmMsg(g, `【業界ニュース】うちのホールに、撤去期限が過ぎた台が${n}島ある。\n60日以内に入れ替えないと、立入検査で重い処分を受けるおそれがある。`); }
+  for (const R of PM_REG) {
+    if (mi >= R.mi && !P.regSeen[R.id]) { P.regSeen[R.id] = d; if (mi - R.mi > 12) continue; pmMsg(g, `【業界ニュース】${R.nm}\n${R.txt}${R.dl ? `\n撤去期限：${R.dl[0]}年${R.dl[1]}月` : ''}`); P.log.push({ day: d, t: R.nm }); }
+    if (R.dmi != null && mi >= R.dmi - 3 && mi <= R.dmi && !P.regSeen[R.id + '_w']) { const n = P.halls.reduce((a, H) => a + H.isl.filter(I => R.ban(PM_M(I.m))).length, 0); if (n) { P.regSeen[R.id + '_w'] = d; pmMsg(g, `【業界ニュース】撤去期限（${R.dl[0]}年${R.dl[1]}月）まで、あと少し。\nうちの店には対象の台が${n}島ある。期限までに入れ替えないと、営業すると違反になる。`); } }
+  }
+  for (const k of PM_MKR) { const v = pmMkRel(P, k.id); P.mk[k.id] = Math.max(0, Math.round((v - 0.03 * dd) * 100) / 100); }
+  // メーカーとの関係がよいと、人気の新機種の先行導入枠がもらえる
+  pmAl(P); if (!isObj(P.offer)) P.offer = {};
+  for (const m of PM_MACH) { if (!pmHot(g, m) || P.offer[m.id] || pmAlLeft(g, P, m.id) > 0) continue; const mk = pmMkOf(m), rel = pmMkRel(P, mk.id); if (rel < 70 || Math.random() > 0.05 * dd) continue;
+    P.offer[m.id] = d; P.al[m.id] = { exp: d + 30, n: rel >= 85 ? 2 : 1 }; pmMsg(g, `【${mk.nm}】いつもお世話になっております。\n人気の新機種「${m.nm}」の先行導入枠（${P.al[m.id].n}島ぶん・30日以内）をご用意しました。`); }
+}
+function pmAAlerts(g, H) {
+  const A = [], d = g.state.day, P = pmSt(g), C = pmCp(H);
+  if (pmSusp(H, d)) A.push(['bad', `営業停止中（あと${C.susp - d + 1}日）`, '処分が終わるまで営業できない', 'biz:law']);
+  const il = H.isl.filter(I => !I.stop && pmBan(g, PM_M(I.m))), gr = il.filter(I => num(I.grace, -1) >= d); if (il.length) A.push(['bad', `撤去期限切れの台が${il.length}島`, gr.length ? `猶予あと${Math.max(...gr.map(I => I.grace)) - d + 1}日。入れ替えよう` : '営業すると違反。すぐ入れ替えよう', 'isl']);
+  const sp = H.isl.filter(I => I.stop).length; if (sp) A.push(['bad', `撤去命令で止めている島が${sp}つ`, '新しい台に入れ替えると動かせる', 'isl']);
+  const soon = H.isl.map(I => pmBanSoon(g, PM_M(I.m))).filter(Boolean); if (soon.length) A.push(['warn', `撤去期限が近い台が${soon.length}島`, `期限 ${soon[0].dl[0]}年${soon[0].dl[1]}月`, 'isl']);
+  const rk = pmRisk(g, H).tot; if (rk >= 45) A.push(['warn', `立入検査のリスク ${rk}`, '対策をして、リスクを下げよう', 'biz:law']);
+  const rb = pmRvOpen(H).filter(r => r.bu >= d); if (rb.length) A.push(['info', `${rb[0].nm}が${rb[0].act}`, `あと${rb[0].bu - d + 1}日。お客をとられている`, 'biz:rv']);
+  const al = PM_MACH.filter(m => pmAlLeft(g, P, m.id) > 0); if (al.length) A.push(['good', `「${al[0].nm}」の導入枠あり`, `${pmAlLeft(g, P, al[0].id)}島ぶん・あと${P.al[al[0].id].exp - d + 1}日`, 'isl']);
+  return A;
+}
+// ---- 画面：業界タブ（ライバル店・規制・メーカー・ブランド） ----
+const PM_BZ = [['rv', 'ライバル店'], ['law', '規制・検査'], ['mk', 'メーカー'], ['br', 'ブランド']];
+function pmRvArt(c, x, y, w, r, t, closed) {
+  const col = PM_STY[r.st][2], h = 46; pR(c, x, y + 10, w, h - 10, closed ? '#2a2630' : '#e8e0d0'); pR(c, x, y, w, 12, closed ? '#3a3440' : col); pR(c, x, y + 12, w, 2, closed ? '#2a2630' : pShade(col, -0.3));
+  for (let k = 0; k < Math.floor((w - 8) / 14); k++) pR(c, x + 6 + k * 14, y + 18, 10, 8, closed ? '#1a1820' : (t + k * 9) % 40 < 20 ? '#ffd23f' : '#ff6ab4');
+  pR(c, x + w / 2 - 7, y + 30, 14, 16, closed ? '#1a1820' : '#5a7a9a'); if (closed) { pR(c, x + 4, y + 26, w - 8, 12, '#c8a020'); pT(c, '閉店', x + w / 2, y + 26, { size: 12, color: '#1a1a1a', align: 'center', shadow: null }); }
+}
+Object.assign(GB_MODES.pmgr, {
+  tabBiz(s, c, g, H) {
+    const S = s.S; if (!S.bz) S.bz = 'rv';
+    PM_BZ.forEach(([k, nm], i) => s.btn('bz:' + k, nm, 8 + i * 106, 64, 100, 22, { size: 12, kind: S.bz === k ? 'sel' : 'norm' }));
+    const C = pmCp(H), rk = pmRisk(g, H).tot; pT(c, `検査リスク ${rk}`, 632, 68, { size: 12, color: rk >= 45 ? PW.bad : rk >= 20 ? PW.acc : PW.good, align: 'right' });
+    if (S.bz === 'rv') this.bzRv(s, c, g, H); else if (S.bz === 'law') this.bzLaw(s, c, g, H, C); else if (S.bz === 'mk') this.bzMk(s, c, g, H); else this.bzBr(s, c, g, H);
+  },
+  // ライバル店
+  bzRv(s, c, g, H) {
+    const d = g.state.day, L = pmRvInit(H, d), show = L.filter(r => r.closed == null).concat(L.filter(r => r.closed != null)).slice(0, 3), t = s.t || 0;
+    show.forEach((r, i) => { const x = 8 + i * 209, y = 92, w = 205, h = 166, cl = r.closed != null, seen = r.seen >= d;
+      pR(c, x + 2, y + 2, w, h, '#05030a'); pR(c, x, y, w, h, cl ? '#16121c' : '#1c0f2a'); pRvArtSafe(c, x + 8, y + 8, 70, r, t, cl);
+      pT(c, pFit(c, r.nm, w - 90, 12), x + 84, y + 8, { size: 12, color: cl ? GB_C.t3 : '#ffffff' }); pT(c, `${PM_RV_SZ[r.sz][0]}店`, x + 84, y + 24, { size: 12, color: GB_C.t3 });
+      if (cl) { pT(c, `閉店（${Math.max(0, d - r.closed)}日前）`, x + 84, y + 40, { size: 12, color: PW.good }); pT(c, 'お客の一部がうちに流れた', x + 10, y + 70, { size: 12, color: GB_C.t3 }); return; }
+      pT(c, seen ? PM_STY[r.st][1] : '方針：？（偵察で分かる）', x + 84, y + 40, { size: 12, color: seen ? PM_STY[r.st][2] : GB_C.t3 });
+      const p = pmRvP(H, r, d); pT(c, '勢い', x + 10, y + 62, { size: 12, color: PW.dim }); shBar(c, x + 52, y + 64, 100, 8, clamp(p / 0.3, 0, 1), '#ff5d6c'); pT(c, `${Math.round(p * 100)}`, x + w - 10, y + 62, { size: 12, align: 'right' });
+      pT(c, '体力', x + 10, y + 80, { size: 12, color: PW.dim }); if (seen) { shBar(c, x + 52, y + 82, 100, 8, clamp(r.hp / 100, 0, 1), r.hp < 30 ? '#ffd23f' : '#5ee07a'); pT(c, `${Math.round(r.hp)}`, x + w - 10, y + 80, { size: 12, align: 'right' }); } else pT(c, '？', x + w - 10, y + 80, { size: 12, align: 'right', color: GB_C.t3 });
+      pT(c, seen ? `釘：${r.kugi > 0.3 ? 'あけている' : r.kugi < -0.3 ? 'しめている' : 'ふつう'}` : '釘：？', x + 10, y + 98, { size: 12, color: seen ? (r.kugi > 0.3 ? PW.bad : r.kugi < -0.3 ? PW.good : PW.text) : GB_C.t3 });
+      pT(c, pFit(c, r.actDay >= d - 14 && r.act ? `最近：${r.act}${r.bu >= d ? `（あと${r.bu - d + 1}日）` : ''}` : '最近：目立った動きはない', w - 20, 12), x + 10, y + 116, { size: 12, color: r.bu >= d ? PW.acc : GB_C.t3 });
+      s.btn('scout:' + L.indexOf(r), seen ? `偵察ずみ（あと${r.seen - d + 1}日）` : '偵察に行く（2時間）', x + 10, y + 134, w - 20, 24, { size: 12, kind: seen ? 'norm' : 'pri', off: seen }); });
+    // お客の取り合い
+    pFrame(c, 8, 264, 400, 62, { title: 'このあたりのお客の取り合い' }); const all = [['うち', 1, '#ff6ab4']].concat(pmRvOpen(H).map(r => [r.nm, pmRvP(H, r, d) / 0.12, PM_STY[r.st][2]])), sum = all.reduce((a, x) => a + x[1], 0);
+    let x = 18; all.forEach(([nm, v, col], i) => { const w = Math.round(380 * v / sum); pR(c, x, 290, Math.max(1, w - 1), 12, i ? pShade(col, -0.35) : col); if (w > 40) pT(c, pFit(c, nm, w - 6, 12), x + 3, 304, { size: 12, color: i ? GB_C.t3 : PW.acc }); x += w; });
+    pFrame(c, 414, 264, 218, 62, { title: 'うちの方針' }); pT(c, H.pol ? PM_STY[H.pol][1] : 'まだ決めていない', 424, 288, { size: 12, color: H.pol ? PM_STY[H.pol][2] : GB_C.t3 }); s.btn('bz:br', '方針を決める', 532, 296, 92, 22, { size: 12, kind: 'pri' });
+    pT(c, `閉店させたライバル ${num(H.rvWin)}店・お客の上乗せ +${Math.round(num(H.rvGain) * 100)}%`, 16, 330, { size: 12, color: GB_C.t3 });
+  },
+  // 規制・検査
+  bzLaw(s, c, g, H, C) {
+    const d = g.state.day, rk = pmRisk(g, H); pFrame(c, 8, 92, 250, 234, { title: '立入検査のリスク' });
+    const col = rk.tot >= 45 ? '#ff5d6c' : rk.tot >= 20 ? '#ffd23f' : '#5ee07a'; pT(c, String(rk.tot), 70, 116, { size: 32, color: col, align: 'center' }); shBar(c, 118, 126, 128, 10, rk.tot / 100, col); pT(c, rk.tot >= 45 ? '目をつけられている' : rk.tot >= 20 ? 'やや注意' : 'きちんとしている', 118, 140, { size: 12, color: GB_C.t3 });
+    rk.parts.slice(0, 6).forEach(([k, v], i) => { const y = 162 + i * 18; pT(c, pFit(c, k, 190, 12), 18, y, { size: 12, color: PW.text }); pT(c, `+${v}`, 248, y, { size: 12, color: PW.bad, align: 'right' }); });
+    if (!rk.parts.length) pT(c, '問題になりそうなことはない', 133, 180, { size: 12, color: PW.good, align: 'center' });
+    const lastH = C.hist[C.hist.length - 1], RES = { ok: ['問題なし', PW.good], shido: ['口頭指導', PW.acc], shiji: ['指示処分', PW.bad], teishi: ['営業停止', PW.bad] };
+    pT(c, pmSusp(H, d) ? `営業停止中 あと${C.susp - d + 1}日` : lastH ? `前の検査：${RES[lastH.res][0]}（${Math.max(0, d - lastH.day)}日前）` : 'まだ検査は来ていない', 18, 274, { size: 12, color: pmSusp(H, d) ? PW.bad : lastH ? RES[lastH.res][1] : GB_C.t3 });
+    pT(c, `処分の回数 ${C.warn}（6回で許可取消）`, 18, 292, { size: 12, color: C.warn >= 4 ? PW.bad : GB_C.t3 }); pT(c, '釘の大きな変更・期限切れの台は危険', 18, 308, { size: 12, color: GB_C.t3 });
+    // 対策
+    pFrame(c, 264, 92, 368, 160, { title: '対策' }); const y0 = pmYear(g);
+    PM_COMP.forEach((M2, i) => { const y = 114 + i * 27, on = !!C.meas[M2.id], ny = M2.since && y0 < M2.since; pT(c, pFit(c, M2.nm, 170, 12), 274, y + 2, { size: 12, color: on ? PW.good : ny ? GB_C.t3 : PW.text }); pT(c, pFit(c, M2.desc, 236, 12), 274, y + 13, { size: 12, color: GB_C.t3 });
+      const lab = M2.id === 'lawyer' ? (on ? '契約中（やめる）' : '契約する') : on ? '実施ずみ' : ny ? `${M2.since}年〜` : yen(M2.cost); s.btn('cp:' + M2.id, lab, 524, y, 100, 22, { size: 12, kind: on ? (M2.id === 'lawyer' ? 'green' : 'green') : 'pri', off: (on && M2.id !== 'lawyer') || ny }); });
+    // 時代の規制
+    pFrame(c, 264, 256, 368, 70, { title: '業界の規制（時代の流れ）' }); const mi = pmMi(g), past = PM_REG.filter(R => mi >= R.mi), next = PM_REG.find(R => mi < R.mi), dl = PM_REG.find(R => R.dmi != null && mi >= R.mi && mi <= R.dmi);
+    const lines = []; if (dl) lines.push([`撤去期限 ${dl.dl[0]}年${dl.dl[1]}月：${dl.nm}`, PW.bad]); if (past.length) lines.push([`最近：${past[past.length - 1].nm}（${past[past.length - 1].y}年）`, PW.text]); if (next) lines.push([`この先：${next.y}年ごろ ${next.nm}`, GB_C.t3]); if (!lines.length) lines.push(['いまは大きな規制の動きはない', GB_C.t3]);
+    lines.slice(0, 3).forEach(([t, col], i) => pT(c, pFit(c, t, 348, 12), 274, 276 + i * 15, { size: 12, color: col }));
+  },
+  // メーカー
+  bzMk(s, c, g, H) {
+    const P = pmSt(g), d = g.state.day; if (!isObj(P.st8)) P.st8 = {};
+    pT(c, '人気の新機種は発売から約1年、抽選に当たらないと入れられない。新台購入・接待で関係が深まる', 14, 92, { size: 12, color: GB_C.t3 });
+    PM_MKR.forEach((k, i) => { const y = 110 + i * 43, rel = pmMkRel(P, k.id), hot = PM_MACH.filter(m => pmMkOf(m) === k && pmHot(g, m)), cool = num(P.st8[k.id], -99) > d - 7;
+      pR(c, 8, y, 624, 40, i % 2 ? '#1a0e26' : '#20122e'); pR(c, 8, y, 4, 40, k.col); pT(c, k.nm, 20, y + 4, { size: 12, color: '#ffffff' });
+      pT(c, '関係', 20, y + 22, { size: 12, color: PW.dim }); shBar(c, 52, y + 24, 110, 8, rel / 100, rel >= 85 ? '#ffd23f' : rel >= 70 ? '#5ee07a' : '#5fd7ff'); pT(c, rel >= 85 ? '特約' : rel >= 70 ? '優先' : rel >= 40 ? 'ふつう' : 'うすい', 168, y + 22, { size: 12, color: rel >= 70 ? PW.good : GB_C.t3 });
+      if (hot.length) { const m = hot[0], left = pmAlLeft(g, P, m.id); pT(c, pFit(c, `人気の新機種：${m.nm}`, 230, 12), 216, y + 4, { size: 12, color: PW.acc }); pT(c, left > 0 ? `導入枠 ${left}島ぶん（あと${P.al[m.id].exp - d + 1}日）` : `抽選の当たりやすさ 約${Math.round(pmLotChance(g, P, m) * 100)}%`, 216, y + 22, { size: 12, color: left > 0 ? PW.good : GB_C.t3 }); }
+      else pT(c, 'いま人気の新機種はない', 216, y + 12, { size: 12, color: GB_C.t3 });
+      s.btn('settai:' + k.id, cool ? '接待した（7日ごと）' : '接待する ¥300,000', 470, y + 8, 154, 24, { size: 12, kind: cool ? 'norm' : 'pri', off: cool }); });
+  },
+  // ブランド
+  bzBr(s, c, g, H) {
+    const B = pmBr(H), [tk, tv] = pmTopBrand(H); pFrame(c, 8, 92, 400, 234, { title: '店のブランド（お客の評判）' });
+    pT(c, tk ? `「${PM_BR_TITLE[tk]}」として知られている` : 'まだ、これといった評判はない（60で定着）', 20, 116, { size: 12, color: tk ? PM_STY[tk][2] : GB_C.t3 });
+    PM_STY_K.forEach((k, i) => { const y = 140 + i * 36, v = B[k], col = PM_STY[k][2]; pT(c, PM_BR_TITLE[k], 20, y, { size: 12, color: k === tk ? col : PW.text }); shBar(c, 150, y + 2, 200, 9, v / 100, col); pR(c, 150 + 200 * 0.6, y, 1, 13, '#ffffff'); pT(c, String(Math.round(v)), 396, y, { size: 12, align: 'right' }); pT(c, PM_BR_EFF[k], 20, y + 16, { size: 12, color: GB_C.t3 }); });
+    pFrame(c, 414, 92, 218, 234, { title: 'うちの方針（何で勝負する？）' }); pT(c, '選んだ評判が育ちやすくなる', 424, 116, { size: 12, color: GB_C.t3 });
+    PM_STY_K.forEach((k, i) => s.btn('pol:' + k, PM_STY[k][1], 424, 136 + i * 30, 198, 24, { size: 12, kind: H.pol === k ? 'sel' : 'norm' })); s.btn('pol:none', '方針なし', 424, 290, 198, 24, { size: 12, kind: !H.pol ? 'sel' : 'norm' });
+    pT(c, '同じ方針のライバル店には強くなる', 523, 318, { size: 12, color: GB_C.t3, align: 'center' }); void tv;
+  },
+});
+function pRvArtSafe(c, x, y, w, r, t, cl) { try { pmRvArt(c, x, y, w, r, t, cl); } catch (e) { } }
+// ---- ボタン・タブ・カタログ・アラートのつなぎこみ ----
+(function pmAUi() {
+  const M = GB_MODES.pmgr; if (!M || M.__a) return; M.__a = true;
+  if (!PM_TABS2.some(x => x[0] === 'biz')) PM_TABS2.push(['biz', '業界']); const evT = PM_TABS2.find(x => x[0] === 'ev'); if (evT) evT[1] = '集客';
+  const btn0 = M.btn, cat0 = M.drawCat;
+  M.btn = function (s, id, g) {
+    const S = s.S, P = pmSt(g), H = pmCur(P), d = g.state.day;
+    if (id.startsWith('go:biz')) { S.tab = 'biz'; S.ph = 'home'; S.bz = id.split(':')[2] || S.bz || 'rv'; return; }
+    if (id === 'tab:biz') { S.tab = 'biz'; S.ph = 'home'; return; }
+    if (H && pmSusp(H, d) && (id === 'work' || id.startsWith('ev:'))) { s.tip('営業停止中はできない', PW.bad); return; }
+    if (id.startsWith('bz:')) { S.tab = 'biz'; S.bz = id.slice(3); return; }
+    if (H && id.startsWith('scout:')) { const r = (H.rv || [])[+id.slice(6)]; if (!r) return; if (this.left(s, g) < 120) { s.tip('今日はもう時間がない', PW.bad); return; } s.mins += 120; r.seen = d + 13; tt.sfx('ok'); s.tip(`${r.nm}を偵察した：${PM_STY[r.st][1]}・釘は${r.kugi > 0.3 ? 'あけている' : r.kugi < -0.3 ? 'しめている' : 'ふつう'}`, PW.text); return; }
+    if (H && id.startsWith('pol:')) { const k = id.slice(4); H.pol = k === 'none' ? null : k; s.tip(H.pol ? `方針：${PM_STY[k][1]}` : '方針をやめた', PW.text); return; }
+    if (H && id.startsWith('cp:')) { const C = pmCp(H), M2 = PM_COMP.find(x => x.id === id.slice(3)); if (!M2) return;
+      if (M2.id === 'lawyer') { C.meas.lawyer = C.meas.lawyer ? 0 : 1; s.tip(C.meas.lawyer ? '顧問弁護士と契約した（1日 ¥15,000）' : '顧問契約をやめた', PW.text); return; }
+      if (C.meas[M2.id]) return; if (!s.pay(M2.cost)) return; C.meas[M2.id] = d; H.invest += M2.cost; tt.sfx('chime'); s.ban('対策を実施', PW.acc, M2.nm, { life: 80 }); return; }
+    if (id.startsWith('settai:')) { const k = PM_MKR.find(x => x.id === id.slice(7)); if (!k) return; if (!isObj(P.st8)) P.st8 = {}; if (num(P.st8[k.id], -99) > d - 7) return; if (this.left(s, g) < 240) { s.tip('今日はもう時間がない', PW.bad); return; } if (!s.pay(300000)) return;
+      P.st8[k.id] = d; P.mk[k.id] = Math.min(100, pmMkRel(P, k.id) + 10); s.mins += 240; try { g.addNeed('stress', 3); } catch (e) { } tt.sfx('ok'); s.tip(`${k.nm}の営業部長とゴルフと会食。関係が深まった`, PW.good); return; }
+    // 新台の購入：撤去期限・抽選・メーカーとの関係
+    if (H && (id.startsWith('buy:') || id.startsWith('used:'))) { const used = id.startsWith('used:'), m = PM_M(id.slice(used ? 5 : 4));
+      if (pmBan(g, m)) { s.tip('撤去期限が過ぎた機種。もう入れられない', PW.bad); return; }
+      if (pmHot(g, m) && pmAvail(g, m) && H.isl[S.cat].m !== m.id) {
+        if (used) { s.tip('人気の新機種。中古はまだ出回っていない', PW.dim); return; }
+        if (pmAlLeft(g, P, m.id) <= 0) { const last = num(P.lot[m.id], -99); if (last > d - 7) { s.tip(`抽選は${last + 7 - d}日後にまた申し込める`, PW.dim); return; }
+          P.lot[m.id] = d; const ch = pmLotChance(g, P, m), win = Math.random() < ch, mk = pmMkOf(m);
+          if (!win) { P.mk[mk.id] = Math.min(100, pmMkRel(P, mk.id) + 2); tt.sfx('buzz'); s.ban('抽選にはずれた…', PW.bad, `${m.nm}（当たりやすさ 約${Math.round(ch * 100)}%）。関係を深めよう`, { life: 110 }); return; }
+          P.al[m.id] = { exp: d + 30, n: pmMkRel(P, mk.id) >= 60 ? 2 : 1 }; tt.sfx('fanfare'); s.ban('抽選に当たった！', PW.acc, `${m.nm}：${P.al[m.id].n}島ぶん入れられる（30日以内）`, { life: 110 }); return; }
+      }
+      const before = H.isl[S.cat] && H.isl[S.cat].m; btn0.call(this, s, id, g);
+      if (H.isl[S.cat] && H.isl[S.cat].m === m.id && before !== m.id) { const mk = pmMkOf(m); P.mk[mk.id] = Math.min(100, pmMkRel(P, mk.id) + (used ? 1 : 6)); if (!used && pmHot(g, m) && P.al[m.id]) P.al[m.id].n = Math.max(0, num(P.al[m.id].n) - 1); }
+      return; }
+    return btn0.call(this, s, id, g);
+  };
+  // カタログ：メーカー名・抽選・撤去のしるし
+  M.drawCat = function (s, c, g, H) { cat0.call(this, s, c, g, H); const S = s.S, P = pmSt(g), per = 6, cf = S.cf || 'all', L = PM_MACH.filter(m => cf === 'all' || m.k === cf).sort((a, b) => (pmAvail(g, b) ? 1 : 0) - (pmAvail(g, a) ? 1 : 0) || b.since - a.since);
+    L.slice(S.cpg * per, S.cpg * per + per).forEach((m, j) => { const y = 84 + j * 36, ban = pmBan(g, m), soon = pmBanSoon(g, m), hot = pmAvail(g, m) && pmHot(g, m), left = pmAlLeft(g, P, m.id);
+      const tag = ban ? ['撤去', '#5a4a3a', '#e8d8c0'] : soon ? ['期限', '#8a5a1a', '#ffe0a0'] : hot ? [left > 0 ? '枠あり' : '抽選', left > 0 ? '#2a9a50' : '#c8102e', '#ffffff'] : null;
+      if (tag) { const tw = Math.max(36, pW(c, tag[0], 12) + 8); pR(c, 312, y + 3, tw, 14, tag[1]); pT(c, tag[0], 312 + tw / 2, y + 4, { size: 12, color: tag[2], align: 'center', shadow: null }); }
+      pT(c, pFit(c, pmMkOf(m).sh, 50, 12), 312, y + 19, { size: 12, color: GB_C.t3 });
+      const b = s.btns.find(x => x.id === 'buy:' + m.id), u = s.btns.find(x => x.id === 'used:' + m.id);
+      if (b && ban) { b.off = true; b.label = '撤去対象'; } if (u && ban) u.off = true;
+      if (b && hot && !ban && left <= 0) { const last = num(P.lot && P.lot[m.id], -99), wait = last > g.state.day - 7; b.label = wait ? `抽選\n${last + 7 - g.state.day}日後` : `抽選に申込\n約${Math.round(pmLotChance(g, P, m) * 100)}%`; b.off = wait || !pmAvail(g, m); }
+      if (u && hot && !ban) { u.off = true; u.label = '中古\nまだない'; } }); };
+  // 島カード：撤去の印
+  const isl0 = M.tabIsl; M.tabIsl = function (s, c, g, H) { isl0.call(this, s, c, g, H); const S = s.S, per = 6, d = g.state.day;
+    H.isl.slice(S.pg * per, S.pg * per + per).forEach((I, j) => { const x = 8 + (j % 3) * 209, y = 64 + Math.floor(j / 3) * 124, w = 205, m = PM_M(I.m), ban = pmBan(g, m), soon = pmBanSoon(g, m);
+      const tag = I.stop ? ['撤去命令', '#c8102e', '#ffffff'] : ban ? ['期限切れ', '#c8102e', '#ffffff'] : soon ? [`期限${soon.dl[0]}`, '#8a5a1a', '#ffe0a0'] : null; if (!tag) return; const tw = Math.max(40, pW(c, tag[0], 12) + 8); pR(c, x + w - tw - 4, y + 22, tw, 13, tag[1]); pT(c, tag[0], x + w - 4 - tw / 2, y + 22, { size: 12, color: tag[2], align: 'center', shadow: null }); if (I.stop) { pR(c, x + 6, y + 30, 46, 16, '#c8a020'); pT(c, '停止中', x + 29, y + 31, { size: 12, color: '#1a1a1a', align: 'center', shadow: null }); } }); };
+  // アラート
+  const al0 = pmAlerts; pmAlerts = function (g, H) { const A = pmAAlerts(g, H).concat(al0(g, H)); const ord = { bad: 0, warn: 1, good: 2, info: 3 }; const B = A.filter(a => a[0] !== 'good' || a[1] !== '順調です'); if (!B.length) return A; return B.sort((a, b) => ord[a[0]] - ord[b[0]]); };
+})();
+if (typeof window !== 'undefined') window.__PMA = ({ risk: H => pmRisk(window.__game, H), inspect: (H, force) => pmInspect(window.__game, H, window.__game.state.day, { net: 0, cost: 0 }, force), rvMul: H => pmRvMul(H, window.__game.state.day), br: H => pmBr(H), top: H => pmTopBrand(H), ban: id => pmBan(window.__game, PM_M(id)), hot: id => pmHot(window.__game, PM_M(id)), tickA: () => pmTickA(window.__game), REG: PM_REG });
+// 開業時の台：撤去期限の過ぎた機種は選ばない
+(function pmADefault() { if (typeof pmDefault !== 'function' || pmDefault.__a) return; const def0 = pmDefault;
+  pmDefault = function (g, i) { const D = def0(g, i); if (!pmBan(g, PM_M(D.m))) return D; const y = pmYear(g), L = PM_MACH.filter(m => m.k === PM_M(D.m).k && m.since <= y && !pmBan(g, m) && !pmHot(g, m)).sort((a, b) => b.since - a.since); return { m: (L[0] || PM_MACH[0]).id, rate: D.rate }; }; pmDefault.__a = true; })();
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
