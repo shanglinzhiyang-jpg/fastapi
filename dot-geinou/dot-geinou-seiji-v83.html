@@ -13855,6 +13855,7 @@ function install() {
   try { installRP(); } catch (e) { console.error('[rp] install', e); }
   try { installRP2(); } catch (e) { console.error('[rp] install2', e); }
   try { installRP3(); } catch (e) { console.error('[rp] install3', e); }
+  try { installRP4(); } catch (e) { console.error('[rp] install4', e); }
   try { installRel(); } catch (e) { console.error('[rel] install', e); }
   try { installRel2(); } catch (e) { console.error('[rel] install2', e); }
   try {
@@ -45185,7 +45186,7 @@ function rpBackApply(t, P, party, h) { const B = P.flags.rpBack; if (!B || B.par
   const me = P.me, i = Math.max(1, rpEv('k8')(P, party.id)), inf = B.diet ? 1 + num(me.standing) / 60 + num(me.reputation) / 80 : 0.2; const fac = (party.factions || []).find(f => f.id === me.faction);
   c.diet += i * 0.02 * inf + (B.diet && fac && fac.leader !== c.id ? fac.size * 0.1 : 0); c.member += 0.03 * inf; }
 function rpBackResult(t, P, a, r) { const B = P.flags.rpBack; if (!B || B.party !== a.party || !r || !r.winners || !r.winners[0]) return; P.flags.rpBack = null; const me = P.me, won = r.winners[0].name === B.name;
-  if (won) { me.reputation = num(me.reputation) + (B.diet ? 6 : 2); me.standing = num(me.standing) + (B.diet ? 8 : 2); rpEv('z1')(t, B.diet ? `【党首選】支持した${B.name}氏が勝った。新しい執行部から「これからも力を貸してほしい」と声がかかった。（党内での立場が上がった）` : `【党首選】票を投じた${B.name}氏が勝った。`); }
+  if (won) { P.flags.rpBackWon = num(P.flags.rpBackWon) + 1; if (B.diet && typeof rpPostOffer === 'function') { try { rpPostOffer(t, P, a.party, B.name); } catch (e) { console.error('[rp] post', e); } } me.reputation = num(me.reputation) + (B.diet ? 6 : 2); me.standing = num(me.standing) + (B.diet ? 8 : 2); rpEv('z1')(t, B.diet ? `【党首選】支持した${B.name}氏が勝った。新しい執行部から「これからも力を貸してほしい」と声がかかった。（党内での立場が上がった）` : `【党首選】票を投じた${B.name}氏が勝った。`); }
   else { if (B.diet) { me.standing = Math.max(0, num(me.standing) - 6); } rpEv('z1')(t, B.diet ? `【党首選】支持した${B.name}氏は敗れた。新しい執行部からは、しばらく冷たくされそうだ。（党内での立場が下がった）` : `【党首選】票を投じた${B.name}氏は敗れた。`); } }
 function installRP3() { if (!RP_X) return; const d3 = rpEv('d3');
   for (const S of RP_CAND2) if (!d3[S.key]) { d3[S.key] = { ...S, party: S.w[0][0], slot: 'cand', photo: undefined }; delete d3[S.key].w; }
@@ -45196,8 +45197,80 @@ function installRP3() { if (!RP_X) return; const d3 = rpEv('d3');
   RP_X.set('KNe', orig => function (t, e, a, n, o) { const r = orig(t, e, a, n, o); try { if (e && e.flags) rpBackApply(t, e, a, n); } catch (er) { console.error('[rp] back', er); } return r; });
   RP_X.set('LNe', orig => function (t, e, a) { const r = orig(t, e, a); try { if (e && e.flags) rpBackResult(t, e, a, r); } catch (er) { console.error('[rp] back res', er); } return r; });
   const rt0 = rpTick; rpTick = function (g) { rt0(g); try { const P = g.state && g.state.politics; if (P && P.flags && P.parties) { rpBackTick(g, P); const J = P.parties.jimin; for (const f of (J && J.factions) || []) { if (!f.club) continue; const ld = P.npcs[f.leader]; if (!ld) continue; const sur = String(ld.name).split(' ')[0], nm = f.club.startsWith('旧') ? `${f.club}・${sur}グループ` : `${f.club}・${sur}派`; if (f.name !== nm) f.name = nm; } } } catch (e) { console.error('[rp] back tick', e); } };
-  if (E.ug) E.ug('np_rp', (g, it, k) => { try { const D = it.data || {}; if (D.t === 'back') return rpBackResp(g, D, k < 0 ? D.N.length : k); } catch (e) { console.error('[rp] resp', e); } return ''; });
+  if (E.ug) E.ug('np_rp', (g, it, k) => { try { const D = it.data || {}; if (D.t === 'back') return rpBackResp(g, D, k < 0 ? D.N.length : k); if (typeof rpResp4 === 'function') return rpResp4(g, D, k); } catch (e) { console.error('[rp] resp', e); } return ''; });
   if (window.__RP) Object.assign(window.__RP, { tick: rpTick, facs: rpFactions, backAsk: rpBackTick, backResp: rpBackResp });
+}
+// ===== 実在の政党4：派閥の世代交代、勝った候補からのポストの打診、歴史モードのシナリオ =====
+// ---- 派閥の世代交代（自民党・実在の政党モード） ----
+const RP_FACEV = [
+  { k: 'keisei92', at: 1992.95, from: '経世会', to: '平成研究会', size: 0.72, text: '経世会（竹下派）が分裂。羽田孜・小沢一郎らが出て「改革フォーラム21」をつくり、残った議員は小渕恵三を会長に再出発した（のちの平成研究会）' },
+  { k: 'seiwa98', at: 1998.7, from: '清和会', to: '清和政策研究会', size: 1, text: '清和会が森喜朗を会長に迎え、清和政策研究会（森派）として新しく出発した' },
+  { k: 'kinmirai98', at: 1998.9, from: '政策科学研究所', to: '近未来政治研究会', size: 0.55, text: '旧渡辺派（政策科学研究所）が分裂。山崎拓らが「近未来政治研究会」を、江藤隆美・亀井静香らが「志帥会」をつくった' },
+  { k: 'kochi01', at: 2001.0, from: '宏池会', to: '宏池会', size: 0.6, text: '「加藤の乱」のあと、宏池会が加藤派と堀内派に分裂した' },
+  { k: 'shiko17', at: 2017.5, from: '番町政策研究所', to: '志公会', size: 1.6, text: '番町政策研究所（山東派）などが麻生派に合流し、「志公会」ができた' },
+  { k: 'kaisan24', at: 2024.05, all: true, text: '政治資金パーティーの収入をめぐる問題を受け、清和政策研究会・志帥会・宏池会・平成研究会・近未来政治研究会が解散を決めた。志公会（麻生派）だけが残った（2024年1〜4月）' },
+];
+function rpFacEvTick(t, P) { const J = P.parties.jimin; if (!J || !Array.isArray(J.factions)) return; const yr = rpYear(t), st = num(P.flags.rpStart, 9999), D = P.flags.rpFacEv || (P.flags.rpFacEv = {});
+  for (const E0 of RP_FACEV) { if (D[E0.k] || yr < E0.at) continue; D[E0.k] = 1; if (st >= E0.at) continue; let hit = false;
+    if (E0.all) { for (const f of J.factions) if (f.club && f.club !== '志公会' && !f.club.startsWith('旧')) { f.club = '旧' + f.club; hit = true; } }
+    else { const f = J.factions.find(x => x.club === E0.from); if (f) { f.club = E0.to; f.size = Math.max(2, Math.round(num(f.size) * E0.size)); hit = true; } }
+    if (hit) { try { rpEv('Io')(P, t, E0.text); } catch (e) { } try { rpEv('z1')(t, `【政界】${E0.text}`); } catch (e) { } } } }
+// ---- 勝った候補からのポストの打診 ----
+function rpPostOffer(t, P, pid, winner) { const me = P.me, party = P.parties[pid]; if (!party || !(me.office === 'shugi' || me.office === 'sangi')) return; const tn = rpEv('tn');
+  const slots = ['seichokai', 'sentai', 'kokutai', 'somukai', 'kanjicho'].filter(u => tn[u] && (!tn[u].parties || tn[u].parties.includes(pid)) && !(me.posts || []).includes(u));
+  const ok = slots.filter(u => u !== 'kanjicho' || num(me.standing) >= 70); if (!ok.length) return; const slot = ok[Math.floor(Math.random() * ok.length)];
+  try { E.R4(t, { kind: 'np_rp', key: 'np_rp_post_' + t.state.day, title: `新${party.leaderTitle}から${tn[slot].name}の打診`, text: `${winner}${party.leaderTitle}から電話があった。\n「党首選では本当に助かった。新しい執行部で、${tn[slot].name}をお願いしたい」`, choices: [`${tn[slot].name}を引き受ける`, '今回は辞退する'], def: 1, days: 5, data: { t: 'post', party: pid, slot } }); } catch (e) { console.error('[rp] post ask', e); } }
+function rpPostAccept(t, D) { const P = t.state.politics, me = P.me, party = P.parties[D.party], tn = rpEv('tn'); if (!party || me.party !== D.party) return '党が変わっていたため、話はなくなった。';
+  const old = party.posts[D.slot], on = old && old !== 'player' && P.npcs[old]; if (on) on.posts = (on.posts || []).filter(x => x !== D.slot);
+  party.posts[D.slot] = 'player'; me.posts = me.posts || []; if (!me.posts.includes(D.slot)) me.posts.push(D.slot); me.standing = num(me.standing) + 6; me.reputation = num(me.reputation) + 3;
+  return `${tn[D.slot].name}に就任した。${on ? `前任の${on.name}氏から引き継ぎを受けた。` : ''}\n記者に囲まれ、初めての会見にのぞむ。`; }
+function rpResp4(t, D, k) { if (D.t === 'post') { if (k === 0) return rpPostAccept(t, D); const P = t.state.politics; P.me.standing = num(P.me.standing) + 1; return '辞退した。「謙虚な人だ」という声も、「せっかくの機会を」という声もある。'; } return ''; }
+// ---- 歴史モードのシナリオ ----
+const RP_SCN = {
+  showa: { title: '平成への扉', yr: 1987, intro: '1987年春。中曽根康弘内閣の最後の年。秋には竹下登が後継の総裁に選ばれ、やがて消費税、リクルート事件、昭和の終わりと、時代が大きく動く。あなたは政治の世界に飛びこむ。',
+    goals: ['party', 'faction', 'elected', 'backWin', 'partyPost'], miles: [[1987.84, '竹下登内閣が発足'], [1989.0, '昭和天皇が崩御、元号が「平成」に'], [1989.25, '消費税（3%）が始まる'], [1989.5, '海部俊樹が総裁に'], [1991.84, '宮沢喜一が総裁に'], [1992.95, '経世会が分裂'], [1993.6, '自民党が下野し、細川連立政権が発足（史実）']] },
+  heisei_early: { title: '再編の時代', yr: 1996, intro: '1996年春。橋本龍太郎内閣は、社民党・さきがけと連立を組んでいる。野党第一党は大きな新党。2年後には民主党ができ、公明党が再結成され、連立の組み合わせが次々に変わっていく。',
+    goals: ['party', 'national', 'backWin', 'ruling', 'minister'], miles: [[1996.05, '日本社会党が社民党に'], [1997.25, '消費税が5%に'], [1998.32, '民主党が結成'], [1998.42, '社民党が連立を離脱'], [1998.85, '公明党が再結成'], [1999.79, '自自公連立が始まる'], [2001.3, '小泉純一郎が総裁に（史実）']] },
+  heisei: { title: '小泉劇場から政権交代へ', yr: 2004, intro: '2004年春。小泉純一郎首相は「自民党をぶっ壊す」と構造改革を進める。民主党は二大政党の一角に育ち、やがて政権交代の波がやってくる。',
+    goals: ['party', 'national', 'backWin', 'regime', 'minister'], miles: [[2005.7, '郵政解散・総選挙（史実）'], [2006.72, '安倍晋三が総裁に（史実）'], [2009.67, '民主党が政権交代（史実）'], [2010.41, '社民党が連立を離脱'], [2011.2, '東日本大震災（史実）'], [2012.95, '自民党が政権に復帰（史実）'], [2016.23, '民主党が民進党に']] },
+  reiwa: { title: '高市政権の時代', yr: 2026, intro: '2026年春。初の女性首相・高市早苗のもと、自民党は日本維新の会と連立を組む。公明党は連立を離れ、参政党・国民民主党・チームみらいなど新しい党が勢いを増す。多党化の時代に、あなたはどう動く？',
+    goals: ['party', 'elected', 'backWin', 'partyPost', 'ruling'], miles: [[2026.1, '衆議院総選挙で自民党が大勝（史実）'], [2027.3, '統一地方選挙'], [2028.5, '参議院選挙'], [2030, 'この先はあなたしだい']] },
+};
+const RP_GOAL = {
+  party: ['政党に入る', (P) => !!P.me.party], faction: ['派閥・グループに入る', (P) => !!P.me.faction],
+  elected: ['選挙に当選する', (P) => ['shugi', 'sangi', 'kugi', 'togi', 'shicho', 'chiji'].includes(P.me.office)], national: ['国会議員になる', (P) => P.me.office === 'shugi' || P.me.office === 'sangi'],
+  backWin: ['党首選で支持した候補を勝たせる', (P) => num(P.flags.rpBackWon) > 0], partyPost: ['党の役職に就く', (P, tn) => (P.me.posts || []).some(x => tn[x] && tn[x].kind === 'party')],
+  minister: ['大臣になる', (P, tn) => (P.me.posts || []).some(x => tn[x] && tn[x].kind === 'cabinet')], ruling: ['与党の国会議員になる', (P) => (P.me.office === 'shugi' || P.me.office === 'sangi') && (P.cabinet.partyIds || []).includes(P.me.party)],
+  regime: ['国会議員として政権交代を経験する', (P) => !!P.flags.rpScnRegime],
+};
+function rpScnTick(t, P) { const S = P.flags.rpScn; if (!S || S.clear) return; const tn = rpEv('tn'), sc = RP_SCN[S.id]; if (!sc) return;
+  const pmP = (() => { try { const pm = P.cabinet.pm; return pm === 'player' ? P.me.party : pm && P.npcs[pm] ? P.npcs[pm].party : null; } catch (e) { return null; } })();
+  if (S.pm && pmP && pmP !== S.pm && (P.me.office === 'shugi' || P.me.office === 'sangi')) P.flags.rpScnRegime = 1; if (pmP) S.pm = pmP;
+  for (const gk of sc.goals) { if (S.done[gk]) continue; const G = RP_GOAL[gk]; let ok = false; try { ok = G[1](P, tn); } catch (e) { } if (ok) { S.done[gk] = t.state.day; P.me.reputation = num(P.me.reputation) + 3; rpEv('z1')(t, `【シナリオ「${sc.title}」】目標を達成：${G[0]}（${Object.keys(S.done).length}/${sc.goals.length}）`, 'シナリオ'); } }
+  if (sc.goals.every(gk => S.done[gk])) { S.clear = t.state.day; P.me.reputation = num(P.me.reputation) + 10; rpEv('z1')(t, `【シナリオ「${sc.title}」クリア】すべての目標を達成した！ 歴史に名を残す政治家への道を歩んでいる。`, 'シナリオ'); } }
+function rpScnStart(t) { const P = t.state.politics; if (!P) return null; const sc = RP_SCN[P.era]; if (!sc) return null; P.flags.rpScn = { id: P.era, day: t.state.day, done: {}, pm: null }; rpScnTick(t, P); return sc; }
+GB_MODES.rpscn = {
+  noHud: true,
+  init(s, g) { s.S = { f: 0 }; },
+  btn(s, id, g) { if (id === 'close') { s.done(); return; } if (id === 'start') { const sc = rpScnStart(g); if (sc) { s.S.res = `シナリオ「${sc.title}」を始めた。\n\n${sc.intro}`; tt.sfx('ok'); } else s.tip('この時代にはシナリオがない', PW.bad); return; } if (id === 'resok') { s.S.res = null; return; } },
+  update(s) { s.S.f++; },
+  draw(s, c, g) { const P = g.state.politics, S = P && P.flags && P.flags.rpScn, sc = RP_SCN[(S && S.id) || (P && P.era)], tn = rpEv('tn'), yr = rpYear(g);
+    pBands(c, 0, 0, 640, 360, ['#141008', '#18130a', '#1c160c', '#20190e']); pR(c, 0, 0, 640, 30, '#0c0904'); pR(c, 0, 29, 640, 1, '#d8a838'); pT(c, '歴史モード', 10, 7, { size: 16, color: '#fff4dc' }); s.btn('close', '閉じる', 572, 4, 62, 22, { size: 12, back: true });
+    if (!sc) { pT(c, 'この時代にはシナリオがない', 320, 170, { size: 12, color: GB_C.t3, align: 'center' }); return; }
+    pFrame(c, 8, 38, 360, 314, { title: `${sc.yr}年〜「${sc.title}」`, bg: '#1a150c', edge: '#8a6a2a' }); wrapDot(c, sc.intro, 336, 12).slice(0, 6).forEach((ln, i) => pT(c, ln, 20, 62 + i * 15, { size: 12, color: '#e8dcc0' }));
+    pT(c, '目標', 20, 160, { size: 12, color: '#d8a838' }); sc.goals.forEach((gk, i) => { const G = RP_GOAL[gk], d = S && S.done[gk], y = 178 + i * 26; pR(c, 16, y, 344, 24, d ? '#3a2e10' : '#221c10'); pT(c, d ? '✓' : '・', 26, y + 5, { size: 12, color: d ? '#ffd23f' : GB_C.t3 }); pT(c, G[0], 42, y + 5, { size: 12, color: d ? '#ffe08a' : '#e8dcc0' }); });
+    if (!S) s.btn('start', 'このシナリオを始める', 110, 316, 160, 28, { kind: 'pri', def: true, size: 12 }); else pT(c, S.clear ? '★ シナリオクリア！' : `達成 ${Object.keys(S.done).length}/${sc.goals.length}`, 188, 322, { size: 12, color: '#ffd23f', align: 'center' });
+    pFrame(c, 376, 38, 256, 314, { title: '時代の流れ', bg: '#1a150c', edge: '#8a6a2a' }); sc.miles.forEach(([y, txt], i) => { const yy = 62 + i * 38, past = yr >= y; pR(c, 386, yy + 6, 8, 8, past ? '#d8a838' : '#4a3a20'); if (i < sc.miles.length - 1) pR(c, 389, yy + 14, 2, 30, '#4a3a20'); pT(c, `${Math.floor(y)}年`, 402, yy, { size: 12, color: past ? '#d8a838' : GB_C.t3 }); wrapDot(c, txt, 210, 12).slice(0, 2).forEach((ln, j) => pT(c, ln, 402, yy + 14 + j * 13, { size: 12, color: past ? '#e8dcc0' : GB_C.t3 })); });
+    if (s.S.res) { s.btns.length = 0; pR(c, 0, 0, 640, 360, 'rgba(0,0,0,0.6)'); pFrame(c, 100, 70, 440, 210, { bg: '#1a150c', edge: '#d8a838' }); wrapDot(c, s.S.res, 410, 12).slice(0, 11).forEach((ln, i) => pT(c, ln, 116, 84 + i * 15, { size: 12, color: '#fff4dc' })); s.btn('resok', 'OK', 270, 244, 100, 26, { kind: 'pri', def: true, size: 12 }); }
+  },
+};
+const rpScnIcon = gbIcon('#8a6a2a', (c, x, y) => { c.fillStyle = '#f4e8c8'; c.fillRect(x + 7, y + 6, 18, 22); c.fillStyle = '#8a6a2a'; for (let i = 0; i < 4; i++) c.fillRect(x + 10, y + 10 + i * 4, 12, 2); c.fillStyle = '#d8a838'; c.fillRect(x + 5, y + 4, 22, 3); });
+async function rpScnOpen(g) { const r = await gbScene(g, { mode: 'rpscn', title: '歴史モード' }); gbAfter(g, r && r.mins); }
+try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_seiji'); if (F && !F.apps.includes('rpscn')) F.apps.push('rpscn'); FOLD_OF.rpscn = 'f_seiji'; } } catch (e) { }
+function installRP4() { if (!RP_X) return;
+  const rt0 = rpTick; rpTick = function (g) { rt0(g); try { const P = g.state && g.state.politics; if (P && P.flags && P.parties) { if (P.flags.realParties === 1) rpFacEvTick(g, P); rpScnTick(g, P); } } catch (e) { console.error('[rp] tick4', e); } };
+  E.Un('rpscn', { name: '歴史モード', color: '#8a6a2a', order: 36.48, iconHD: rpScnIcon, open: g => rpScnOpen(g) });
+  if (window.__RP) Object.assign(window.__RP, { tick: rpTick, facEv: rpFacEvTick, postOffer: rpPostOffer, resp4: rpResp4, scnStart: rpScnStart, scnOpen: rpScnOpen });
 }
 // ===== 宗教：世界の宗教（7）と教団（6）、教祖・指導者、入信・活動・階位・迷い・脱会、勧誘と家族、宗教2世、歴史の出来事（信者の目線）、政治との連動 =====
 // 事件は史実どおりにニュース・出来事として起きる。主人公が犯罪を実行する展開はない（信者として体験し、残る・離れる・協力するを選ぶ）。
