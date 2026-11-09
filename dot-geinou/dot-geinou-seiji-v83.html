@@ -46333,6 +46333,131 @@ function installHist() {
   if (E.ug) E.ug('np_hist', (g, it, k) => { try { return hiResp(g, it.data || {}, k < 0 ? 1 : k) || ''; } catch (e) { console.error('[hist] resp', e); return ''; } });
   window.__HI = { st: hiSt, tick: hiTick, resp: hiResp, open: hiOpen };
 }
+// ===== 戦争と平和の歴史2：沖縄・広島・満州・学徒出陣の物語、祖父母（曾祖父母）の戦争体験、記憶を伝える活動 =====
+const HI_ST2 = {
+  tokyo: { title: '東京・下町の家族', era: '1944〜1946年', who: '下町に暮らす子ども', ch: HI_STORY, end: H => hiEnding({ story: H }) },
+  okinawa: { title: '沖縄・ガマの記憶', era: '1944〜1972年', who: '女学校に通う15歳の少女', end: S => [
+      S.nurse ? '多くの学友が、南部の壕やその周辺で命を落とした。生き残ったあなたは、長いあいだ、そのことを誰にも話せなかった。' : '家族とともに北部の山中でしのいだ。食べ物がなく、マラリアで亡くなる人も多かった。',
+      S.out ? 'ガマを出て収容所に入った。戦争が終わったと知ったのは、そこでだった。' : 'ガマの中で、ハワイ帰りのおじさんが「アメリカ兵は住民を殺さない」と皆を説得し、全員でガマを出た。',
+      '沖縄はその後27年間アメリカの統治下に置かれ、1972年5月15日に日本に復帰した。基地は今も多く残っている。',
+      '6月23日の「慰霊の日」、糸満の「平和の礎」に刻まれた24万人をこえる名前の前で、あなたは毎年手を合わせる。', '\n――この物語は、多くの人の体験をもとにしたフィクションです。'].join('\n'),
+    ch: [
+      { y: '1944年 10月', bg: 'fire', title: '十・十空襲', text: '朝、那覇の空にアメリカの飛行機があらわれた。港や町が燃え、那覇の大半が焼けた（十・十空襲）。\nあなたの家も焼け、家族は親戚の家に身を寄せた。', ch: [['焼け跡で、家族の荷物を探す', { kz: 3 }, '焼け残った茶碗をひとつ見つけた。母はそれを大事に包んだ。'], ['近所の人の手当てを手伝う', { safe: -2, kz: 2 }, '包帯が足りず、着物を裂いて使った。']] },
+      { y: '1945年 3月', bg: 'station', title: '学徒動員', text: '女学校の生徒たちに、陸軍病院で看護の手伝いをするよう命令が出た。「お国のため」と先生は言う。母は泣いて止めた。', ch: [['学友たちと、看護要員として陸軍病院へ行く', { nurse: 1, safe: -10 }, '南風原の丘に掘られた壕の病院。うめき声と、血と膿のにおいが満ちていた。'], ['家族と北部の山へ避難する', { nurse: 0, kz: 6 }, '「生きていればいい」。父はそう言って、あなたの手を引いた。']] },
+      { y: '1945年 4月1日', bg: 'fire', title: '米軍上陸', text: '沖縄本島の西の海岸に、アメリカ軍が上陸した。海は軍艦でうめつくされ、「鉄の暴風」とよばれる砲撃が続いた。', ch: [['壕の奥で、じっと息をひそめる', { safe: 2 }, '砲弾の音が近づくたび、地面がゆれた。'], ['水をくみに、夜の壕の外へ出る', { safe: -4, kz: 3 }, '月明かりの下を走った。水をもって戻ると、皆が手をとって喜んだ。']] },
+      { y: '1945年 5月', bg: 'street', title: '南部への撤退', text: '日本軍は首里から南部へ下がることを決めた。住民が多く避難している南部に、戦場が移っていく。', ch: [['軍とともに、さらに南へ向かう', { safe: -6 }, '雨の中、ぬかるんだ道を歩いた。道ばたには、たおれた人がたくさんいた。'], ['住民が多く隠れている自然の洞窟（ガマ）にとどまる', { safe: 2 }, 'ガマには、おおぜいの家族が身を寄せあっていた。']] },
+      { y: '1945年 6月', bg: 'radio', title: 'ガマの中で', text: 'ガマの外から、拡声器で「出てきなさい、殺さない」という日本語の呼びかけが聞こえる。\n「出たらひどい目にあう」と言う人もいる。皆が迷っている。', ch: [['勇気を出して、ガマの外へ出る', { out: 1, safe: 6 }, '両手をあげて外に出た。アメリカ兵は、水と食べ物をくれた。'], ['ガマにとどまる', { out: 0 }, 'ガマの中は、静まりかえっていた。']] },
+      { y: '1945年〜', bg: 'market', title: '戦のあと', text: '6月23日ごろ、沖縄での組織的な戦闘が終わったとされる。住民を含めて20万人以上が亡くなった。', ch: [['これからを思う', {}, '']] },
+    ] },
+  hiroshima: { title: '広島・あの朝', era: '1945〜1970年代', who: '中学1年生の少年', end: S => [
+      S.city ? '市の中心で家族を探したあなたは、のちに入市被爆者と認められた。' : 'あなたは郊外の救護所で、多くの人の最期を見とった。',
+      S.lost ? '妹は、建物疎開の作業に出ていて、帰ってこなかった。遺骨も見つからなかった。' : '妹は、たまたま熱を出して作業を休んでいて、助かった。',
+      '何年もたってから、体がだるく、白血病で亡くなる友人もいた。結婚の話が「被爆者だから」と断られたこともあった。',
+      '1957年、被爆者健康手帳の交付が始まった。年をとってから、あなたは修学旅行の子どもたちに体験を語るようになった。「二度と、誰にも、同じ思いをさせないでほしい」', '\n――この物語は、多くの人の体験をもとにしたフィクションです。'].join('\n'),
+    ch: [
+      { y: '1945年 春', bg: 'street', title: '建物疎開', text: '空襲で火が広がらないよう、家を取りこわして空き地をつくる「建物疎開」に、中学生も動員されていた。あなたも毎日、瓦をはがし、柱を引きたおす作業をしている。', ch: [['まじめに作業にはげむ', { kz: 1 }, '夕方、汗だくで帰ると、母が麦飯を炊いて待っていた。'], ['妹と、作業の帰りに川で遊ぶ', { kz: 4 }, '太田川の水は冷たくて気持ちよかった。妹が笑った。']] },
+      { y: '1945年 8月5日', bg: 'home', title: '前の晩', text: '夜、空襲警報が何度も鳴った。明日は、妹も市の中心での建物疎開の作業に出ることになっている。', ch: [['「明日はがんばれよ」と妹に声をかける', { lost: 1 }, '妹は「うん」とうなずいて、早く眠った。'], ['「熱っぽいなら休め」と言う', { lost: 0 }, '妹は少し熱があった。母も「休みなさい」と言った。']] },
+      { y: '1945年 8月6日 午前8時15分', bg: 'fire', title: 'ピカ', text: '空がまっ白に光った。次の瞬間、ものすごい音と風で、家がくずれた。\nがれきの中からはい出すと、市の中心のほうに、巨大な雲がもくもくとのぼっていた。', ch: [['家族を探しに、市の中心へ向かう', { city: 1, safe: -8 }, '橋の上も川の中も、やけどをした人でいっぱいだった。「水を、水を」という声が、耳から離れない。'], ['近くの救護所で、けが人の手伝いをする', { city: 0, kz: 3 }, '薬はなく、油を塗ることしかできなかった。']] },
+      { y: '1945年 8月6日 午後', bg: 'radio', title: '黒い雨', text: '夕方、黒くてねばねばした雨が降ってきた。服も手も、まっ黒になった。', ch: [['雨の中を、家族を探し続ける', { safe: -4 }, ''], ['軒下に入って、雨がやむのを待つ', { safe: 2 }, '']] },
+      { y: '1945年〜', bg: 'market', title: 'それから', text: '8月9日には長崎にも原子爆弾が落とされた。その年のうちに、広島で約14万人、長崎で約7万人が亡くなったとされる。', ch: [['これからを思う', {}, '']] },
+    ] },
+  manshu: { title: '満州からの引き揚げ', era: '1943〜1981年', who: '開拓団の家族の長女', end: S => [
+      S.left ? '幼い弟を託した中国人の夫婦とは、あの日以来、連絡がとれなかった。' : '弟は、引き揚げの途中で病気になり、北の大地に眠っている。',
+      '1946年、葫芦島（ころとう）から引き揚げ船に乗り、博多の港に着いた。満州の開拓団では、ソ連の侵攻後に多くの人が亡くなった。',
+      'その土地は、もとは中国の人々が耕していた土地でもあった。そのことを知ったのは、ずっと後になってからだ。',
+      S.left ? '1981年、中国残留孤児の肉親探しの訪日調査がテレビで流れた。その中に、弟の面影のある中年の男性がいた――。' : '毎年夏、あなたは弟の名前を呼んで、北の空に手を合わせる。', '\n――この物語は、多くの人の体験をもとにしたフィクションです。'].join('\n'),
+    ch: [
+      { y: '1943年', bg: 'station', title: '大陸へ', text: '「満州に行けば、広い土地がもらえる」。父は村の開拓団に加わり、家族で海を渡った。\n与えられた畑のそばには、もとの持ち主らしい中国人の村があった。', ch: [['畑仕事に精を出す', { food: 6 }, 'とうもろこしと大豆が、見わたすかぎり実った。'], ['近くの村の子どもと仲よくなる', { kz: 4 }, 'ことばは通じなかったが、いっしょに凧をあげた。']] },
+      { y: '1945年 8月9日', bg: 'fire', title: 'ソ連軍の侵攻', text: 'ソ連軍が国境をこえて攻めこんできた。開拓団の男たちの多くは、少し前に兵隊にとられていた。父もいない。\n団長が「すぐに逃げる」と叫んだ。', ch: [['最低限の荷物を持って、すぐに逃げる', { safe: 4 }, ''], ['家族の写真と食べ物を取りに戻る', { kz: 3, safe: -4 }, '写真だけは、なんとか持ち出せた。']] },
+      { y: '1945年 8月', bg: 'street', title: '逃避行', text: '歩いて、歩いて、南をめざした。食べ物はつき、幼い子やお年寄りが次々とたおれていく。', ch: [['鉄道の駅をめざす', { safe: -2 }, '駅には人があふれていたが、列車は来なかった。'], ['山をこえて、別の道を行く', { safe: -4 }, '夜の山道で、何人もの人とはぐれた。']] },
+      { y: '1945年 秋', bg: 'home', title: '弟のこと', text: '弟は高い熱を出し、このままでは助からないかもしれない。泊めてくれた中国人の夫婦が、「この子をあずかって育てよう」と言ってくれた。', ch: [['弟を、中国人の夫婦に託す', { left: 1 }, '母は弟を抱きしめ、何度も頭を下げた。振り返ると、夫婦が弟を抱いて立っていた。'], ['弟を連れて、いっしょに行く', { left: 0, kz: 3 }, '「家族は、離れちゃいけない」。母は弟を背負って歩きだした。']] },
+      { y: '1946年', bg: 'market', title: '引き揚げ船', text: '収容所で冬をこし、ようやく引き揚げの順番がきた。日本へ向かう船の上で、あなたは北の大地をふり返った。', ch: [['これからを思う', {}, '']] },
+    ] },
+  gakuto: { title: '学徒出陣', era: '1943〜1950年代', who: '東京の大学に通う20歳の学生', end: S => [
+      S.vol ? '特攻の出撃命令は、とうとう出なかった。出撃の前の日に、戦争が終わったのだ。' : '「否」と書いたあなたは、上官に呼び出され、何日も殴られた。それでも、生きて終戦を迎えた。',
+      '同じ兵舎にいた仲間の多くは、南の空へ飛び立ったまま、帰らなかった。',
+      S.visit ? '戦後、あなたは仲間の家族を一軒ずつ訪ねた。仲間の母親は、息子の最後の手紙を、ぼろぼろになるまで持っていた。' : '戦後、あなたは大学に戻った。教室には、空いた席がいくつもあった。',
+      '戦没学生の手記は、のちに『きけ わだつみのこえ』という本にまとめられた。', '\n――この物語は、多くの人の体験をもとにしたフィクションです。'].join('\n'),
+    ch: [
+      { y: '1943年 10月21日', bg: 'radio', title: '雨の壮行会', text: '冷たい雨の明治神宮外苑競技場。学生服に銃をかついだ学生たちが、行進していく。スタンドの女子学生たちが、旗をふって見送っている。\nあなたもその列の中にいた。', ch: [['胸をはって行進する', { kz: 1 }, ''], ['スタンドの家族の姿を探す', { kz: 4 }, '母と妹が、雨にぬれながら手をふっていた。']] },
+      { y: '1944年', bg: 'station', title: '入営', text: '兵営での毎日は、殴られることから始まった。「たるんでいる」と、理由もなく上官に殴られる。本を読む時間はない。', ch: [['日記に、本当の気持ちを書きつける', { kz: 3 }, '見つかれば、ただではすまない。小さな字で、ノートのすみに書いた。'], ['何も考えないようにして耐える', { safe: 2 }, '']] },
+      { y: '1945年 春', bg: 'home', title: '志願の紙', text: '飛行隊で、一枚の紙が配られた。特別攻撃隊への志願について、「熱望」「望」「否」のどれかを書けという。\n仲間たちは、黙って鉛筆を動かしている。', ch: [['「望」と書く', { vol: 1 }, '手がふるえた。'], ['「否」と書く', { vol: 0, safe: -4 }, '書いたあとで、心臓がばくばくと鳴った。']] },
+      { y: '1945年 夏', bg: 'station', title: '遺書', text: '出撃を待つ日々。仲間たちは、家族への遺書を書いている。「母上様、先立つ不孝をお許しください」――', ch: [['家族に手紙を書く', { kz: 4 }, '書いては消し、消しては書いた。最後に「生まれてきてよかった」とだけ書いた。'], ['先に飛び立った仲間の遺品を整理する', { visit: 1 }, '仲間のノートに、恋人の名前が何度も書かれていた。']] },
+      { y: '1945年 8月15日', bg: 'radio', title: '終戦', text: 'ラジオの放送で、戦争が終わったと知った。滑走路のはしで、あなたは長いあいだ空を見上げていた。', ch: [['これからを思う', {}, '']] },
+    ] },
+};
+function hiSS(H, sid) { if (sid === 'tokyo') return H.story; H.stories = H.stories || {}; return H.stories[sid] || (H.stories[sid] = { ch: 0, kz: 50, food: 50, safe: 50, done: 0 }); }
+GB_MODES.histstory = {
+  noHud: true,
+  init(s, g) { s.S = { f: 0, res: null, sid: (s.o && s.o.sid) || 'tokyo' }; },
+  btn(s, id, g) { const H = hiSt(g), sid = s.S.sid, T = HI_ST2[sid], S = hiSS(H, sid); if (id === 'close') { s.done(); return; }
+    if (id === 'restart') { for (const k of Object.keys(S)) if (k !== 'done') delete S[k]; Object.assign(S, { ch: 0, kz: 50, food: 50, safe: 50 }); s.S.res = null; return; }
+    if (id === 'next') { s.S.res = null; if (S.ch < T.ch.length - 1) S.ch++; return; }
+    if (id.startsWith('c:')) { const C = T.ch[S.ch], k = +id.slice(2), c = C.ch[k]; for (const [kk, v] of Object.entries(c[1])) { if (['kz', 'food', 'safe'].includes(kk)) S[kk] = clamp(num(S[kk]) + v, 0, 100); else S[kk] = v; } S['ev' + S.ch] = k; if (sid === 'tokyo' && S.ch === 3) S.brother = RND() < 0.5; let t = c[2];
+      if (S.ch === T.ch.length - 1) { t = T.end(S); S.done = num(S.done) + 1; S.ch = T.ch.length; H.read = H.read || {}; H.read[sid] = 1; } s.S.res = t || '……'; tt.sfx('ok'); return; } },
+  update(s) { s.S.f++; },
+  draw(s, c, g) { const H = hiSt(g), sid = s.S.sid, T = HI_ST2[sid], S = hiSS(H, sid), fin = S.ch >= T.ch.length, C = T.ch[Math.min(S.ch, T.ch.length - 1)];
+    hiArt(c, fin ? 'market' : C.bg, s.S.f); pR(c, 0, 0, 640, 30, 'rgba(8,6,4,0.85)'); pT(c, T.title, 10, 7, { size: 16, color: '#f4ead8' }); pT(c, fin ? 'おわり' : `${C.y}「${C.title}」`, 20 + pW(c, T.title, 16), 10, { size: 12, color: '#d8b070' }); s.btn('close', '閉じる', 572, 4, 62, 22, { size: 12, back: true });
+    pFrame(c, 20, 196, 600, 156, { bg: 'rgba(16,12,8,0.92)', edge: '#8a6a3a' });
+    if (s.S.res) { wrapDot(c, s.S.res, 570, 12).slice(0, 8).forEach((ln, i) => pT(c, ln, 34, 208 + i * 15, { size: 12, color: '#f4ead8' })); if (fin) s.btn('restart', 'もう一度はじめから', 470, 322, 140, 24, { size: 12 }); else s.btn('next', '次へ', 530, 322, 80, 24, { size: 12, kind: 'pri', def: true }); return; }
+    if (fin) { pT(c, '物語は終わった。', 34, 210, { size: 12, color: '#f4ead8' }); s.btn('restart', 'もう一度はじめから', 470, 322, 140, 24, { size: 12, kind: 'pri', def: true }); return; }
+    wrapDot(c, C.text, 570, 12).slice(0, Math.max(2, 7 - C.ch.length * 1.5 | 0)).forEach((ln, i) => pT(c, ln, 34, 208 + i * 15, { size: 12, color: '#f4ead8' }));
+    C.ch.forEach((ch, i) => s.btn('c:' + i, pFit(c, ch[0], 560, 12), 34, 300 - (C.ch.length - 1) * 26 + i * 26 + 20, 572, 22, { size: 12, def: i === 0 })); },
+};
+// ---- 祖父母（曾祖父母）の戦争体験 ----
+const HI_EXP = {
+  senchi: ['兵士として出征', '中国大陸や南の島で戦った。戦地のことは、家族にもほとんど話さなかった。', 'gakuto'], doin: ['勤労動員', '女学校から軍需工場に動員され、毎日、兵器の部品をつくっていた。', 'tokyo'],
+  kushu: ['東京大空襲', '下町で空襲にあい、炎の中を逃げのびた。', 'tokyo'], sokai: ['学童疎開', '学校ごと地方の寺に疎開し、いつもおなかをすかせていた。', 'tokyo'],
+  hikiage: ['満州からの引き揚げ', '開拓団の家族として満州に渡り、終戦後、命からがら引き揚げてきた。', 'manshu'], okinawa: ['沖縄戦', '沖縄でガマに隠れて、地上戦を生きのびた。', 'okinawa'],
+  hibaku: ['広島で被爆', '広島で被爆した。被爆者健康手帳を持っている。', 'hiroshima'], baby: ['終戦の年に生まれた', '終戦の前後に生まれ、戦争の記憶はない。親から、戦争中の苦労をよく聞かされた。', null],
+};
+function hiGP(g) { const H = hiSt(g); if (Array.isArray(H.gp)) return H.gp; let y = 2026, age = 20; try { y = dateOf(g, g.state.day).year; age = ageOf(g); } catch (e) { } const pb = y - age; let gen = 2; if (pb - 56 > 1945) gen = 3; if (pb - 84 > 1945) gen = 4;
+  const lab = { 2: ['父方の祖父', '母方の祖母'], 3: ['父方の曾祖父', '母方の曾祖母'], 4: ['ひいひいおじいさん', 'ひいひいおばあさん'] }[gen]; const sur = String((g.state.profile && g.state.profile.familyName) || 'ドット');
+  H.gp = lab.map((rel, i) => { const born = pb - gen * 28 + Math.floor(RND() * 9) - 4 - (i === 0 ? 2 : 0), male = i === 0, r = RND(); let exp;
+    if (born > 1944) exp = 'baby'; else if (male && born <= 1925) exp = 'senchi'; else if (!male && born <= 1928) exp = r < 0.6 ? 'doin' : 'kushu'; else exp = r < 0.35 ? 'sokai' : r < 0.6 ? 'kushu' : r < 0.78 ? 'hikiage' : r < 0.9 ? 'okinawa' : 'hibaku';
+    const alive = y - born < 88 + Math.floor(RND() * 10); return { rel, name: `${male ? sur : ['山田', '佐藤', '中村', '吉田'][Math.floor(RND() * 4)]} ${male ? ['正一', '勇', '武雄', '清'][Math.floor(RND() * 4)] : ['ハル', 'キヨ', '静子', '文子'][Math.floor(RND() * 4)]}`, born, exp, alive, heard: 0 }; }); return H.gp; }
+function hiGPTick(g) { const H = hiSt(g); let d; try { d = dateOf(g, g.state.day); } catch (e) { return; } if (d.month !== 8 || num(d.dom) < 10) return; if (num(H.gpYear) === d.year) return; const G = hiGP(g).find(x => !x.heard && x.exp !== 'baby'); if (!G) return; H.gpYear = d.year;
+  const E0 = HI_EXP[G.exp]; try { E.R4(g, { kind: 'np_hist', key: 'np_hist_gp_' + G.rel, title: G.alive ? `${G.rel}の昔の話` : `${G.rel}の遺品`, text: G.alive ? `お盆に、${G.rel}（${G.name}、${G.born}年生まれ）が、めずらしく昔の話を始めた。` : `お盆の片づけで、母が${G.rel}（${G.name}、${G.born}年生まれ）の古い日記と写真を見つけた。`, choices: ['じっくり話を聞く（読む）', 'また今度にする'], def: 1, days: 6, data: { t: 'gp', rel: G.rel } }); } catch (e) { } }
+function hiGPResp(g, D, k) { const G = hiGP(g).find(x => x.rel === D.rel); if (!G) return ''; if (k !== 0) { const H = hiSt(g); H.gpYear = 0; return 'また今度にした。'; } G.heard = 1; const E0 = HI_EXP[G.exp], T = E0[2] && HI_ST2[E0[2]];
+  return `${G.rel}・${G.name}（${G.born}年生まれ）は、${E0[0]}を体験していた。\n${E0[1]}\n${G.alive ? '「あんたたちには、あんな思いはさせたくない」と、最後に小さくつぶやいた。' : '日記の最後のページには、「平和がいちばん」とだけ書かれていた。'}${T ? `\n\n（「戦争と平和の歴史」アプリの物語「${T.title}」に、同じような体験が描かれている）` : ''}`; }
+// ---- 記憶を伝える活動 ----
+const HI_ACTS = [
+  { id: 'museum', nm: '戦争の資料館を見学する', cost: 300, mins: 120, pts: 1, text: () => ['東京大空襲・戦災資料センターで、焼け焦げた防空頭巾や、空襲の夜の地図を見た。', '昭和館で、戦時中の配給切符や、疎開先から子どもが親に送ったはがきを見た。', 'しょうけい館で、戦地で傷ついた兵士たちのその後の暮らしを知った。'][Math.floor(RND() * 3)] },
+  { id: 'hiro', nm: '広島へ行く（平和記念公園・原爆ドーム）', cost: 40000, mins: 600, pts: 3, yearly: 1, text: () => '原爆ドームの前に立ち、平和記念資料館で、焼けた三輪車や黒くこげた弁当箱を見た。折り鶴を一羽、原爆の子の像にささげた。', story: 'hiroshima' },
+  { id: 'naga', nm: '長崎へ行く（平和公園・原爆資料館）', cost: 45000, mins: 600, pts: 3, yearly: 1, text: () => '平和祈念像の前で手を合わせ、原爆資料館で、11時2分で止まった柱時計を見た。' },
+  { id: 'oki', nm: '沖縄へ行く（ひめゆり平和祈念資料館・平和の礎）', cost: 50000, mins: 600, pts: 3, yearly: 1, text: () => 'ひめゆり平和祈念資料館で、学徒隊の少女たちの写真と手記を見た。糸満の平和の礎には、国籍を問わず、沖縄戦で亡くなった人の名前が刻まれていた。', story: 'okinawa' },
+  { id: 'irei', nm: '慰霊の式典に参加する', cost: 0, mins: 180, pts: 2, memo: 1, text: () => '式典で、黙とうをささげた。遺族の代表が、震える声で平和への誓いを読み上げた。' },
+  { id: 'kikigaki', nm: '聞いた話を「聞き書き」にまとめる', cost: 3000, mins: 480, pts: 6, need: 3, text: () => '語り部や家族から聞いた話を、一冊の小さな冊子にまとめた。町内会の集会所と、近くの図書館に置いてもらえることになった。' },
+];
+function hiActPts(H) { return num(H.actPts); }
+function hiTitle(H) { const p = hiActPts(H) + Object.keys(H.read || {}).length * 2 + (H.kata || []).length + (H.gp || []).filter(x => x.heard).length; return p >= 30 ? '平和の語り継ぎ手' : p >= 15 ? '記憶の継承者' : p >= 5 ? '平和を学ぶ人' : '—'; }
+function hiMemoDay(g) { try { const d = dateOf(g, g.state.day); return [[3, 10], [6, 23], [8, 6], [8, 9], [8, 15]].some(([m, dd]) => d.month === m && Math.abs(num(d.dom) - dd) <= 2); } catch (e) { return false; } }
+function hiDoAct(g, id) { const H = hiSt(g), A = HI_ACTS.find(x => x.id === id); if (!A) return { ok: false, why: '?' }; let y = 2026; try { y = dateOf(g, g.state.day).year; } catch (e) { } H.acts = H.acts || {};
+  if (A.yearly && H.acts[id + '_' + y]) return { ok: false, why: '今年はもう行った' }; if (A.memo && !hiMemoDay(g)) return { ok: false, why: '慰霊の日（3/10・6/23・8/6・8/9・8/15）の前後だけ' }; if (A.memo && H.acts[id + '_' + y + '_' + g.state.day]) return { ok: false, why: 'もう参加した' };
+  if (A.need) { const n = (H.kata || []).length + (H.gp || []).filter(x => x.heard).length; if (n < A.need) return { ok: false, why: `聞いた話が${A.need}つ以上必要（いま${n}）` }; if (H.acts.kikigaki) return { ok: false, why: 'もうまとめた' }; }
+  if (num(g.state.money) < A.cost) return { ok: false, why: 'お金が足りない' }; g.state.money -= A.cost; H.acts[A.yearly ? id + '_' + y : A.memo ? id + '_' + y + '_' + g.state.day : id] = 1; if (A.need) H.acts.kikigaki = 1; H.actPts = hiActPts(H) + A.pts; try { g.addNeed('stress', -3); } catch (e) { }
+  if (A.need) { try { const P = g.state.politics; if (P && P.me) { P.me.reputation = num(P.me.reputation) + 3; P.me.localSupport = num(P.me.localSupport) + 1; } } catch (e) { } }
+  return { ok: true, mins: A.mins, text: `${A.text()}${A.story && !(H.read || {})[A.story] ? `\n\n（物語「${HI_ST2[A.story].title}」を読むと、もっと深く知ることができる）` : ''}\n\n称号：${hiTitle(H)}` }; }
+// ---- アプリへの追加（物語の一覧・家族の記憶・伝える） ----
+(() => { const M = GB_MODES.hist, od = M.draw, ob = M.btn; M.left = function (s, g) { try { return Math.max(0, 1440 - (clockMin(g) % 1440) - s.mins); } catch (e) { return 999; } };
+  M.btn = function (s, id, g) { const S = s.S; if (id.startsWith('st:')) { s.done({ story: id.slice(3) }); return; } if (id === 'tab:fam' || id === 'tab:act') { S.tab = id.slice(4); return; }
+    if (id.startsWith('act:')) { const A = HI_ACTS.find(x => x.id === id.slice(4)); if (A && this.left(s, g) < A.mins) { s.tip('今日はもう時間がない', PW.bad); return; } const r = hiDoAct(g, id.slice(4)); if (!r.ok) { s.tip(r.why, PW.bad); return; } s.mins += r.mins; S.res = r.text; tt.sfx('ok'); return; }
+    if (id.startsWith('gp:')) { const G = hiGP(g)[+id.slice(3)]; if (G) S.res = G.heard ? `${G.rel}・${G.name}（${G.born}年生まれ）\n${HI_EXP[G.exp][0]}：${HI_EXP[G.exp][1]}` : `${G.rel}・${G.name}（${G.born}年生まれ）\nまだ、戦争のころの話を聞いていない。（お盆のころに話を聞けるかもしれない）`; return; }
+    return ob.call(this, s, id, g); };
+  M.draw = function (s, c, g) { const S = s.S, H = hiSt(g); od.call(this, s, c, g); if (S.res) return; const x0 = 84, y0 = 38, w = 510;
+    s.btn('tab:fam', '家族', 4, 36 + 4 * 52, 74, 46, { size: 12, kind: S.tab === 'fam' ? 'pri' : 'norm' }); s.btn('tab:act', '伝える', 4, 36 + 5 * 52, 74, 46, { size: 12, kind: S.tab === 'act' ? 'pri' : 'norm' });
+    if (S.tab === 'story') { s.btns = s.btns.filter(b => b.id !== 'story'); pFrame(c, x0, y0, w, 316, { title: '物語（多くの人の体験をもとにしたフィクション）', bg: '#1a1612', edge: '#6a5a3a' });
+      Object.entries(HI_ST2).forEach(([sid, T], i) => { const yy = y0 + 26 + i * 56, St = hiSS(H, sid), rd = (H.read || {})[sid] || (sid === 'tokyo' && num(St.done) > 0); pR(c, x0 + 8, yy, w - 16, 52, rd ? '#241e16' : '#1c1814'); pT(c, T.title, x0 + 18, yy + 6, { size: 12, color: '#f4ead8' }); pT(c, `${T.era}　${T.who}の目線`, x0 + 18, yy + 24, { size: 12, color: GB_C.t3 });
+        pT(c, rd ? '読んだ' : St.ch > 0 && St.ch < T.ch.length ? 'とちゅう' : '', x0 + w - 110, yy + 6, { size: 12, color: '#d8b070', align: 'right' }); s.btn('st:' + sid, St.ch > 0 && St.ch < T.ch.length ? 'つづき' : '読む', x0 + w - 96, yy + 14, 80, 24, { size: 12 }); }); }
+    if (S.tab === 'fam') { pFrame(c, x0, y0, w, 316, { title: '家族の記憶', bg: '#1a1612', edge: '#6a5a3a' }); wrapDot(c, 'あなたの家族にも、戦争の時代を生きた人がいる。お盆のころ、話を聞けることがある。', w - 24, 12).forEach((ln, i) => pT(c, ln, x0 + 12, y0 + 26 + i * 15, { size: 12, color: GB_C.t2 }));
+      hiGP(g).forEach((G, i) => { const yy = y0 + 66 + i * 64; pR(c, x0 + 8, yy, w - 16, 58, '#201b16'); pT(c, `${G.rel}　${G.name}（${G.born}年生まれ${G.alive ? '' : '・故人'}）`, x0 + 18, yy + 6, { size: 12, color: '#f4ead8' }); pT(c, G.heard ? HI_EXP[G.exp][0] : G.exp === 'baby' ? '戦後まもなく生まれた' : '？？？（まだ聞いていない）', x0 + 18, yy + 26, { size: 12, color: G.heard ? '#d8b070' : GB_C.t3 }); s.btn('gp:' + i, 'くわしく', x0 + w - 96, yy + 16, 80, 24, { size: 12 }); });
+      pT(c, `称号：${hiTitle(H)}`, x0 + 12, y0 + 290, { size: 12, color: '#d8b070' }); }
+    if (S.tab === 'act') { pFrame(c, x0, y0, w, 316, { title: '記憶を伝える', bg: '#1a1612', edge: '#6a5a3a' }); HI_ACTS.forEach((A, i) => { const yy = y0 + 24 + i * 42; pR(c, x0 + 8, yy, w - 16, 38, '#201b16'); pT(c, A.nm, x0 + 18, yy + 4, { size: 12, color: '#f4ead8' }); pT(c, `${A.cost ? yen(A.cost) : '無料'}・${A.mins >= 600 ? '1日' : A.mins + '分'}${A.memo ? '（慰霊の日の前後）' : ''}${A.need ? `（聞いた話が${A.need}つ以上）` : ''}`, x0 + 18, yy + 20, { size: 12, color: GB_C.t3 }); s.btn('act:' + A.id, 'する', x0 + w - 80, yy + 7, 64, 24, { size: 12 }); });
+      pT(c, `称号：${hiTitle(H)}`, x0 + 12, y0 + 290, { size: 12, color: '#d8b070' }); } }; })();
+HI_DAYS.push([6, 23, 'okinawa', '今日は沖縄慰霊の日（1945年6月23日ごろ、沖縄戦の組織的戦闘が終わったとされる）。糸満の平和祈念公園で追悼式が行われた。']);
+(() => { const o = hiResp; hiResp = function (g, D, k) { if (D && D.t === 'gp') return hiGPResp(g, D, k); return o(g, D, k); }; })();
+(() => { const o = hiTick; hiTick = function (g) { const H = hiSt(g), first = H.day !== g.state.day; o(g); if (first) { try { hiGPTick(g); } catch (e) { console.error('[hist] gp', e); } } }; })();
+hiOpen = async function (g) { try { hiTick(g); } catch (e) { } const r = await gbScene(g, { mode: 'hist', title: '戦争と平和の歴史' }); gbAfter(g, r && r.mins); if (r && r.story) { const sid = typeof r.story === 'string' ? r.story : 'tokyo'; const r2 = await gbScene(g, { mode: 'histstory', title: '物語', sid }); gbAfter(g, r2 && r2.mins); } };
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
