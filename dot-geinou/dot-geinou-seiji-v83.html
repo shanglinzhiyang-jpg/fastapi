@@ -13859,6 +13859,7 @@ function install() {
   try { installRP5(); } catch (e) { console.error('[rp] install5', e); }
   try { installRP6(); } catch (e) { console.error('[rp] install6', e); }
   try { installRP7(); } catch (e) { console.error('[rp] install7', e); }
+  try { installRP8(); } catch (e) { console.error('[rp] install8', e); }
   try { installRel(); } catch (e) { console.error('[rel] install', e); }
   try { installRel2(); } catch (e) { console.error('[rel] install2', e); }
   try { installKurashi(); } catch (e) { console.error('[ku] install', e); }
@@ -45474,6 +45475,37 @@ Object.assign(RP_CAB_FULL, {
   ishiba: [2024.75, 2025.79, { minister_internal: 'murakami_s', minister_justice: 'makihara', minister_education: 'abe_t', minister_health: 'fukuoka_t', minister_agri: 'ozato', minister_trade: 'muto_y', minister_transport: 'nakano_h', minister_env: 'asao', minister_defense: 'nakatani', minister_reconstruction: 'ito_t', minister_npsc: 'sakai_m', minister_digital: 'taira', minister_econ: 'akazawa' }],
 });
 function installRP7() { if (!RP_X) return; const d3 = rpEv('d3'); for (const S of RP_MIN3) if (!d3[S.key]) { d3[S.key] = { ...S, party: S.w[0][0], slot: 'minister', photo: undefined }; delete d3[S.key].w; } }
+// ===== 実在の政党8：東京都知事と都知事選の実在の候補者 =====
+const RP_GOV = [
+  rpMM('suzuki_g', '鈴木 俊一', 1910, 0, 'm', 'ind', 'shugi', '1979〜95年の東京都知事（4期）。内務官僚出身で、都庁の新宿移転を進めた'),
+  rpMM('aoshima', '青島 幸男', 1932, 1968, 'm', 'ind', 'sangi', '放送作家・タレントから参議院議員に。1995〜99年の東京都知事。世界都市博覧会の中止を決めた'),
+  rpMM('inose', '猪瀬 直樹', 1946, 0, 'm', 'ind', 'shugi', '作家出身。石原都政の副知事をへて、2012〜13年の東京都知事'),
+  rpMM('masuzoe', '舛添 要一', 1948, 2001, 'm', 'ind', 'sangi', '国際政治学者から参議院議員・厚生労働大臣に。2014〜16年の東京都知事'),
+  rpMM('isomura', '磯村 尚徳', 1929, 0, 'm', 'ind', 'shugi', 'NHKの元キャスター。1991年の都知事選に立候補した'), rpMM('ishihara_nb', '石原 信雄', 1926, 0, 'm', 'ind', 'shugi', '元内閣官房副長官。1995年の都知事選に立候補した'),
+  rpMM('hatoyama_k', '鳩山 邦夫', 1948, 1976, 'm', 'ind', 'shugi', '鳩山由紀夫の弟。文部大臣・総務大臣などを務め、1999年の都知事選にも立候補した'), rpMM('akashi', '明石 康', 1931, 0, 'm', 'ind', 'shugi', '元国連事務次長。1999年の都知事選に立候補した'),
+  rpMM('higuchi_k', '樋口 恵子', 1932, 0, 'f', 'ind', 'shugi', '評論家。2003年の都知事選に立候補した'), rpMM('asano_s', '浅野 史郎', 1948, 0, 'm', 'ind', 'shugi', '元宮城県知事。2007年の都知事選に立候補した'),
+  rpMM('higashikokubaru', '東国原 英夫', 1957, 0, 'm', 'ind', 'shugi', 'タレントから宮崎県知事に。2011年の都知事選に立候補した'), rpMM('watanabe_mk', '渡辺 美樹', 1959, 0, 'm', 'ind', 'shugi', '外食チェーンの創業者。2011年の都知事選に立候補した'),
+  rpMM('utsunomiya', '宇都宮 健児', 1946, 0, 'm', 'ind', 'shugi', '元日本弁護士連合会会長。都知事選に何度も立候補した'), rpMM('matsuzawa', '松沢 成文', 1958, 1993, 'm', 'ind', 'shugi', '元神奈川県知事。2012年の都知事選に立候補した'),
+  rpMM('hosokawa', '細川 護熙', 1938, 1971, 'm', 'ind', 'shugi', '元内閣総理大臣（1993〜94年）。2014年の都知事選に立候補した'), rpMM('tamogami', '田母神 俊雄', 1948, 0, 'm', 'ind', 'shugi', '元航空幕僚長。2014年の都知事選に立候補した'),
+  rpMM('masuda_h', '増田 寛也', 1951, 0, 'm', 'ind', 'shugi', '元岩手県知事・総務大臣。2016年の都知事選に立候補した'), rpMM('torigoe', '鳥越 俊太郎', 1940, 0, 'm', 'ind', 'shugi', 'ジャーナリスト。2016年の都知事選に立候補した'),
+  rpMM('ishimaru', '石丸 伸二', 1982, 0, 'm', 'ind', 'shugi', '元広島県安芸高田市長。SNSでの発信で注目され、2024年の都知事選で2位になった'), rpMM('renho', '蓮舫', 1967, 2004, 'f', 'ind', 'sangi', 'タレントから参議院議員に。行政刷新担当大臣などを務め、2024年の都知事選に立候補した'),
+];
+// 都知事選（勝者が先頭）。ゲームの選挙の時期に、いちばん近い史実の選挙をあてる
+const RP_GOVRACE = [[1987.3, ['suzuki_g']], [1991.3, ['suzuki_g', 'isomura']], [1995.3, ['aoshima', 'ishihara_nb']], [1999.3, ['ishihara_s', 'hatoyama_k', 'masuzoe', 'akashi']], [2003.3, ['ishihara_s', 'higuchi_k']], [2007.3, ['ishihara_s', 'asano_s']],
+  [2011.3, ['ishihara_s', 'higashikokubaru', 'watanabe_mk']], [2012.95, ['inose', 'utsunomiya', 'matsuzawa']], [2014.1, ['masuzoe', 'utsunomiya', 'hosokawa', 'tamogami']], [2016.55, ['koike_y', 'masuda_h', 'torigoe']], [2020.5, ['koike_y', 'utsunomiya', 'yamamoto_t']], [2024.5, ['koike_y', 'ishimaru', 'renho']]];
+const RP_GOV0 = { showa: 'suzuki_g', heisei_early: 'aoshima', heisei: 'ishihara_s', reiwa: 'koike_y' };
+function rpGovConvert(t, P, npc, key) { const d3 = rpEv('d3'), S = d3[key]; if (!S || !npc || npc.real || npc.id === 'player') return; const yr = rpYear(t), off = npc.office, house = npc.house; rpEv('WNe')(P, npc, S, Math.floor(yr)); rpLook(npc, S); npc.office = off; npc.house = house; npc.age = Math.max(30, Math.floor(yr) - S.birth); const R = P.real || (P.real = { map: {}, served: [] }); (R.map || (R.map = {}))[key] = npc.id; }
+function rpGovStart(t, P) { if (t.state.realPols === false) return; const key = RP_GOV0[P.era], L = P.local && P.local.chiji; if (!key || !L) return; const npc = P.npcs[L.holder]; if (npc && !npc.real) rpGovConvert(t, P, npc, key); }
+function rpGovRoster(P, yr) { const U = P.flags.rpGovUsed || (P.flags.rpGovUsed = {}); let best = null; for (const [y, L] of RP_GOVRACE) { if (U[y]) continue; const d = Math.abs(y - yr); if (d <= 1.6 && (!best || d < best.d)) best = { y, L, d }; } return best; }
+function installRP8() { if (!RP_X) return; const d3 = rpEv('d3');
+  for (const S of RP_GOV) if (!d3[S.key]) { d3[S.key] = { ...S, party: 'ind', slot: 'gov', photo: undefined }; delete d3[S.key].w; }
+  RP_X.set('Bft', orig => function (t) { const o = orig(t); try { if (o && o.flags && o.flags.realParties === 1) rpGovStart(t, o); } catch (e) { console.error('[rp] gov0', e); } return o; });
+  RP_X.set('GKt', orig => function (t, e, a, n) { const C = orig(t, e, a, n); try { if (a === 'chiji' && t.flags && t.flags.realParties === 1) { const ro = rpGovRoster(t, n); if (ro) { t.flags.rpGovUsed[ro.y] = 1; t.flags.rpGovPend = ro.L.slice(); const d3 = rpEv('d3'), R = (t.real && t.real.map) || {};
+      const nc = ro.L.map((k, i) => { const S = d3[k]; const cur = R[k] && t.npcs[R[k]]; const base = C[i] || C[C.length - 1] || {}; return { ...base, id: cur && cur.real === k ? cur.id : (i === 0 && base.incumbent && t.npcs[base.id] && t.npcs[base.id].real === k ? base.id : undefined), name: S ? S.name : base.name, party: 'ind', Q: i === 0 ? 1.3 : (k === 'ishimaru' ? 0.85 : 0.45 + Math.random() * 0.3), incumbent: !!(cur && t.local.chiji.holder === cur.id), backers: base.backers || [] }; });
+      C.length = 0; C.push(...nc); } } } catch (er) { console.error('[rp] gov race', er); } return C; });
+  RP_X.set('PNe', orig => function (t, e, a, n) { const r = orig(t, e, a, n); try { if (a && a.kind === 'chiji' && e.flags && e.flags.realParties === 1 && e.flags.rpGovPend) { const L = e.local.chiji, npc = e.npcs[L.holder], d3 = rpEv('d3'); const key = e.flags.rpGovPend.find(k => d3[k] && npc && npc.name === d3[k].name); if (key && npc && !npc.real) rpGovConvert(t, e, npc, key); e.flags.rpGovPend = null; } } catch (er) { console.error('[rp] gov res', er); } return r; });
+  if (window.__RP) Object.assign(window.__RP, { govStart: rpGovStart });
+}
 // ===== 宗教：世界の宗教（7）と教団（6）、教祖・指導者、入信・活動・階位・迷い・脱会、勧誘と家族、宗教2世、歴史の出来事（信者の目線）、政治との連動 =====
 // 事件は史実どおりにニュース・出来事として起きる。主人公が犯罪を実行する展開はない（信者として体験し、残る・離れる・協力するを選ぶ）。
 const REL_W = {
@@ -46099,6 +46131,52 @@ function installKurashi() {
   window.__KU = { st: kuSt, tick: kuTick, resp: kuResp, join: kuJoin, open: kuOpen, ev: kuEvent };
 }
 try { if (typeof RP_GUIDE !== 'undefined' && !RP_GUIDE.some(x => x[0] === 'kurashi')) RP_GUIDE.push(['kurashi', '町内会', '町内会の活動（回覧板・行事・自治会長）と、冠婚葬祭のつきあい']); } catch (e) { }
+// ===== 暮らし2：町内会と地方選挙の連動、災害と防災（史実の大災害・台風・防災グッズ・危機管理の災害への市民の対応） =====
+// ---- 町内会と選挙 ----
+function kuElecTick(g) { const K = kuSt(g), C = K.ch; if (!C.member) return; let U = []; try { U = g.upcomingElections() || []; } catch (e) { return; } const day = g.state.day;
+  const e0 = U.find(e => e && ['kugi', 'shicho', 'togi', 'chiji'].includes(e.kind) && e.day - day <= 20 && e.day > day); if (!e0) return; const key = e0.kind + '_' + e0.day; const D = K.elecAsk || (K.elecAsk = {}); if (D[key]) return; D[key] = 1;
+  const nm = { kugi: 'ドット区議会議員選挙', shicho: 'ドット区長選挙', togi: '東京都議会議員選挙', chiji: '東京都知事選挙' }[e0.kind]; const me = e0.declared && e0.declared.player;
+  if (me && C.rep >= 50) kuAsk(g, 'suisen_' + key, '町内会からの推薦', `${nm}に立候補したあなたを、町内会の役員会が推薦してくれるという。\n回覧板で「推薦のお知らせ」を回し、行事でもあいさつの時間をくれるそうだ。`, ['ありがたく受ける', '町内会は中立であるべきなので辞退する'], 0, { t: 'suisen', kind: e0.kind });
+  else if (!me && C.role >= 2) kuAsk(g, 'irai_' + key, '候補者から推薦の依頼', `${nm}に出る候補者の陣営から、「${KU_ROLES[C.role]}として、町内会で推薦してもらえないか」と頼まれた。`, ['推薦する', '町内会は中立を守ると断る'], 1, { t: 'irai', kind: e0.kind }); }
+function kuElecResp(g, D, k) { const K = kuSt(g), C = K.ch, P = g.state.politics, me = P && P.me;
+  if (D.t === 'suisen') { if (k !== 0) { C.rep = clamp(C.rep + 3, 0, 100); return '辞退した。「筋を通す人だ」と、かえって評判が上がった。'; } const v = 3 + C.role * 2 + Math.round(C.rep / 25); if (me) { me.localSupport = Math.min(70, num(me.localSupport) + v); me.kouenkai = num(me.kouenkai) + 2; } C.rep = clamp(C.rep - 2, 0, 100); kuLog(K, g, '町内会の推薦を受けて選挙に出た'); return `町内会の推薦を受けた。回覧板で推薦のお知らせが回り、近所の人が「応援してるよ」と声をかけてくれる。\n（地元での支持 +${v}。ただし、ほかの候補を応援する住民には少し不満もある）`; }
+  if (D.t === 'irai') { if (k === 0) { C.rep = clamp(C.rep - 5, 0, 100); return '推薦することにした。候補者の陣営は喜んだが、「町内会を選挙に使うな」という声も出た。'; } C.rep = clamp(C.rep + 2, 0, 100); return '町内会は中立を守ると伝えた。どの候補にも同じように掲示板を使ってもらう。'; }
+  return ''; }
+// ---- 災害と防災 ----
+const KU_DIS = [
+  { k: 'hanshin', at: 1995.05, name: '阪神・淡路大震災', text: '兵庫県南部を震度7の地震が襲った（阪神・淡路大震災）。6400人以上が亡くなり、多くの建物や高速道路が倒れた。全国から多くのボランティアがかけつけ、「ボランティア元年」とよばれた。', tokyo: false },
+  { k: 'chuetsu', at: 2004.81, name: '新潟県中越地震', text: '新潟県中越地方で震度7の地震（新潟県中越地震）。山あいの集落が孤立し、新幹線が脱線した。', tokyo: false },
+  { k: 'tohoku', at: 2011.19, name: '東日本大震災', text: '東北地方の太平洋沖でマグニチュード9.0の巨大地震。大津波が沿岸を襲い、原子力発電所の事故も起きた（東日本大震災）。死者・行方不明者は2万2000人をこえた。東京も震度5強の揺れで、交通がとまった。', tokyo: true },
+  { k: 'kumamoto', at: 2016.29, name: '熊本地震', text: '熊本県で震度7の揺れが2度起きた（熊本地震）。熊本城の石垣も崩れた。', tokyo: false },
+  { k: 'nishinihon', at: 2018.52, name: '西日本豪雨', text: '西日本を中心に記録的な大雨（平成30年7月豪雨）。岡山・広島・愛媛などで川があふれ、土砂崩れが相次いだ。', tokyo: false },
+  { k: 'hagibis', at: 2019.78, name: '令和元年東日本台風', text: '大型の台風19号が関東・東北を直撃（令和元年東日本台風）。多くの川で堤防が決壊した。東京でも多摩川があふれた。', tokyo: true },
+  { k: 'noto', at: 2024.0, name: '能登半島地震', text: '元日の夕方、石川県能登地方で震度7の地震（能登半島地震）。道路が寸断され、輪島の朝市通りが焼けた。', tokyo: false },
+];
+function kuDisTick(g) { const K = kuSt(g), day = g.state.day; let yr = 2026; try { const d = dateOf(g, day); yr = d.year + (d.month - 1) / 12 + (num(d.dom, 1) - 1) / 365; } catch (e) { } if (K.y0 == null) { K.y0 = yr; for (const D of KU_DIS) if (D.at <= yr) (K.dis || (K.dis = {}))[D.k] = 1; } const S = K.dis || (K.dis = {});
+  for (const D of KU_DIS) { if (S[D.k] || yr < D.at) continue; S[D.k] = 1; try { g.message({ from: 'ドット新聞 社会部', text: `【災害】${D.text}`, kind: 'news' }); } catch (e) { }
+    kuAsk(g, 'dis_' + D.k, `${D.name}`, `${D.text}\n\nあなたにできることは？`, ['義援金を送る（¥10,000）', 'ボランティアに行く（3日間）', '防災グッズを見直す（¥15,000）', 'ニュースを見守る'], 3, { t: 'dis', k: D.k });
+    if (D.tokyo) kuAsk(g, 'distk_' + D.k, '東京でも大きな影響', D.k === 'tohoku' ? '電車がすべてとまり、駅には帰れない人があふれている。スーパーの棚からは水やパンが消えた。' : '近くの川の水位が上がり、避難勧告が出た。', ['近所の安否を確認して回る', '家で備蓄を使ってしのぐ'], 1, { t: 'distk', k: D.k }); }
+  // 台風（8〜10月）
+  let m = 4; try { m = dateOf(g, day).month; } catch (e) { } if ((m >= 8 && m <= 10) && day - num(K.tyDay, -99) > 25 && RND() < 0.012) { K.tyDay = day; kuAsk(g, 'ty_' + day, '台風が近づいている', '大型の台風が関東に近づいている。明日の夜には暴風域に入るという。', ['雨戸を閉めて、水と食料を買っておく（¥3,000）', 'いつもどおり過ごす'], 1, { t: 'ty' }); }
+  // 危機管理の災害（ゲーム内で起きた災害）への市民の対応
+  try { const d = typeof g.disaster === 'function' ? g.disaster() : null; if (d && d.id && K.gDis !== d.id && num(d.tier) >= 2) { K.gDis = d.id; kuAsk(g, 'gdis_' + d.id, `${d.name || '大きな災害'}が起きた`, `${d.name || '大きな災害'}の被害が伝えられている。避難所では人手が足りないという。`, ['避難所の手伝いに行く', '義援金を送る（¥10,000）', '自分の身を守ることを優先する'], 2, { t: 'gdis' }); } } catch (e) { } }
+function kuDisResp(g, D, k) { const K = kuSt(g), C = K.ch, st = v => { try { g.addNeed('stress', v); } catch (e) { } };
+  if (D.t === 'dis') { if (k === 0) { if (!kuPay(g, 1e4)) return 'お金が足りなかった。'; K.tsuki += 2; kuLog(K, g, `${D.k === 'tohoku' ? '東日本大震災' : '被災地'}に義援金を送った`); return '日本赤十字社を通じて義援金を送った。少しでも役に立てばいい。'; }
+    if (k === 1) { st(10); K.tsuki += 5; kuLog(K, g, '被災地でボランティアをした'); kuPolBonus(g, 1); return '夜行バスで被災地へ向かい、泥のかき出しや救援物資の仕分けを手伝った。\n「来てくれてありがとう」という言葉が、ずっと耳に残っている。'; }
+    if (k === 2) { if (!kuPay(g, 15000)) return 'お金が足りなかった。'; K.bosai = g.state.day; return '水・非常食・ラジオ・懐中電灯・簡易トイレをそろえ、家具の転倒防止もした。'; } return 'ニュースを見守った。'; }
+  if (D.t === 'distk') { const prep = K.bosai && g.state.day - K.bosai < 600; const drill = Object.keys(C.done || {}).some(x => x.endsWith('_9'));
+    if (k === 0) { C.rep = clamp(C.rep + (C.member ? 8 : 3), 0, 100); kuPolBonus(g, 1); return `近所のお年寄りや一人暮らしの家を回って、声をかけた。${drill ? '防災訓練で決めていた集合場所に、みんなすぐ集まれた。' : 'どこに集まればいいのか、みんな迷っていた。'}\n町内の人から深く感謝された。`; }
+    if (prep) { st(-2); return '備蓄していた水と食料で、落ちついてしのげた。防災グッズをそろえておいてよかった。'; } st(10); if (num(g.state.money) > 5000) g.state.money -= 5000; return '備えがなく、コンビニを何軒も回ったが、どこも品切れだった。不安な夜を過ごした。'; }
+  if (D.t === 'ty') { if (k === 0) { if (!kuPay(g, 3000)) return 'お金が足りなかった。'; K.tyPrep = g.state.day; return '雨戸を閉め、ベランダの物を片づけ、水と食料を買っておいた。夜中の暴風にも落ちついていられた。'; }
+    if (RND() < 0.5) { const dmg = 15000; if (num(g.state.money) >= dmg) g.state.money -= dmg; st(6); return `夜中の暴風で、ベランダの物干しざおが飛ばされ、窓ガラスが割れた（修理代 ${yen(dmg)}）。`; } return '台風は少しそれて、大きな被害はなかった。'; }
+  if (D.t === 'gdis') { if (k === 0) { st(8); K.tsuki += 4; C.rep = clamp(C.rep + 4, 0, 100); kuPolBonus(g, 1); return '避難所で、炊き出しと物資の配布を手伝った。'; } if (k === 1) { if (!kuPay(g, 1e4)) return 'お金が足りなかった。'; K.tsuki += 1; return '義援金を送った。'; } return '自分と家族の安全を優先した。'; }
+  return ''; }
+// 既存の応答・毎日の処理・画面に足す
+(() => { const o = kuResp; kuResp = function (g, D, k) { if (k < 0) k = num(D.def); if (D.t === 'suisen' || D.t === 'irai') return kuElecResp(g, D, k); if (['dis', 'distk', 'ty', 'gdis'].includes(D.t)) return kuDisResp(g, D, k); return o(g, D, k); }; })();
+(() => { const o = kuTick; kuTick = function (g) { const K = kuSt(g), first = K.day !== g.state.day; o(g); if (!first) return; try { kuElecTick(g); } catch (e) { console.error('[ku] elec', e); } try { kuDisTick(g); } catch (e) { console.error('[ku] dis', e); } }; })();
+(() => { const M = GB_MODES.kurashi, od = M.draw, ob = M.btn;
+  M.btn = function (s, id, g) { if (id === 'bosai') { const K = kuSt(g); if (K.bosai && g.state.day - K.bosai < 600) { s.tip('もうそろえてある', PW.bad); return; } if (!kuPay(g, 15000)) { s.tip('お金が足りない', PW.bad); return; } K.bosai = g.state.day; s.S.res = '防災グッズをそろえた（¥15,000）。\n水3日分・非常食・ラジオ・懐中電灯・モバイルバッテリー・簡易トイレ。家具の転倒防止もした。'; return; } return ob.call(this, s, id, g); };
+  M.draw = function (s, c, g) { od.call(this, s, c, g); if (s.S.res || s.S.tab !== 'ch' || !kuSt(g).ch.member) return; const K = kuSt(g), ok = K.bosai && g.state.day - K.bosai < 600; pT(c, ok ? '防災グッズ：そろっている' : '防災グッズ：まだない', 20, 236, { size: 12, color: ok ? '#a0e080' : '#ffb080' }); s.btn('bosai', 'そろえる（¥15,000）', 160, 232, 136, 22, { size: 12, off: !!ok }); }; })();
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
