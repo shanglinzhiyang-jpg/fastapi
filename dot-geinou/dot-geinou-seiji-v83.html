@@ -13858,8 +13858,10 @@ function install() {
   try { installRP4(); } catch (e) { console.error('[rp] install4', e); }
   try { installRP5(); } catch (e) { console.error('[rp] install5', e); }
   try { installRP6(); } catch (e) { console.error('[rp] install6', e); }
+  try { installRP7(); } catch (e) { console.error('[rp] install7', e); }
   try { installRel(); } catch (e) { console.error('[rel] install', e); }
   try { installRel2(); } catch (e) { console.error('[rel] install2', e); }
+  try { installKurashi(); } catch (e) { console.error('[ku] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -45440,6 +45442,38 @@ function installRP6() { if (!RP_X) return; const d3 = rpEv('d3');
   const M0 = GB_MODES.rprace, od = M0.draw; M0.draw = function (s, c, g) { od.call(this, s, c, g); try { const P = g.state.politics, w = num(P.flags.rpWind); pT(c, `解散風 ${w}%`, 470, 10, { size: 12, color: w >= 60 ? '#ff8a6a' : '#9ab0d0', align: 'right' }); } catch (e) { } };
   if (window.__RP) Object.assign(window.__RP, { tick: rpTick, cabFull: rpCabFull, wind: rpWind, resp6: rpResp6, ura: rpUraTick });
 }
+// ===== 実在の政党7：鳩山・第2次安倍・菅・岸田・石破の各内閣の全閣僚 =====
+const RP_MIN3 = [
+  // 鳩山内閣（2009年）
+  rpMM('haraguchi', '原口 一博', 1959, 1996, 'm', 'minshu', 'shugi', '鳩山内閣の総務大臣'), rpMM('chiba_k', '千葉 景子', 1948, 1986, 'f', 'minshu', 'sangi', '鳩山内閣の法務大臣'), rpMM('kawabata', '川端 達夫', 1945, 1986, 'm', 'minshu', 'shugi', '鳩山内閣の文部科学大臣'),
+  rpMM('akamatsu', '赤松 広隆', 1948, 1990, 'm', 'minshu', 'shugi', '鳩山内閣の農林水産大臣'), rpMM('naoshima', '直嶋 正行', 1945, 1992, 'm', 'minshu', 'sangi', '鳩山内閣の経済産業大臣'), rpMM('ozawa_s', '小沢 鋭仁', 1954, 1993, 'm', 'minshu', 'shugi', '鳩山内閣の環境大臣'),
+  rpMM('kitazawa', '北沢 俊美', 1938, 1992, 'm', 'minshu', 'sangi', '鳩山内閣の防衛大臣'), rpMM('nakai_h', '中井 洽', 1942, 1976, 'm', 'minshu', 'shugi', '鳩山内閣の国家公安委員長'),
+  // 第2次安倍内閣（2012年）
+  rpMM('shindo', '新藤 義孝', 1958, 1996, 'm', 'jimin', 'shugi', '第2次安倍内閣の総務大臣'), rpMM('shimomura', '下村 博文', 1954, 1996, 'm', 'jimin', 'shugi', '第2次安倍内閣の文部科学大臣'), rpMM('tamura_n', '田村 憲久', 1964, 1996, 'm', 'jimin', 'shugi', '第2次安倍内閣・菅内閣の厚生労働大臣'),
+  rpMM('onodera', '小野寺 五典', 1960, 1997, 'm', 'jimin', 'shugi', '第2次安倍内閣の防衛大臣'), rpMM('nemoto', '根本 匠', 1951, 1993, 'm', 'jimin', 'shugi', '第2次安倍内閣の復興大臣'), rpMM('yamamoto_i', '山本 一太', 1958, 1995, 'm', 'jimin', 'sangi', '第2次安倍内閣の沖縄・北方担当大臣（のちに群馬県知事）'),
+  rpMM('amari', '甘利 明', 1949, 1983, 'm', 'jimin', 'shugi', '第2次安倍内閣の経済再生担当大臣'), rpMM('mori_m', '森 まさこ', 1964, 2007, 'f', 'jimin', 'sangi', '第2次安倍内閣の少子化担当大臣'), rpMM('inada', '稲田 朋美', 1959, 2005, 'f', 'jimin', 'shugi', '第2次安倍内閣の行政改革担当大臣（のちに防衛大臣）'),
+  // 菅内閣（2020年）
+  rpMM('takeda_r', '武田 良太', 1968, 2003, 'm', 'jimin', 'shugi', '菅内閣の総務大臣'), rpMM('hagiuda', '萩生田 光一', 1963, 2003, 'm', 'jimin', 'shugi', '菅内閣の文部科学大臣、岸田内閣の経済産業大臣'), rpMM('nogami', '野上 浩太郎', 1967, 2001, 'm', 'jimin', 'sangi', '菅内閣の農林水産大臣'),
+  rpMM('akaba', '赤羽 一嘉', 1958, 1993, 'm', 'komei', 'shugi', '菅内閣の国土交通大臣'), rpMM('kishi_n', '岸 信夫', 1959, 2004, 'm', 'jimin', 'shugi', '菅内閣・岸田内閣の防衛大臣（安倍晋三の実弟）'), rpMM('hirasawa', '平沢 勝栄', 1945, 1996, 'm', 'jimin', 'shugi', '菅内閣の復興大臣'),
+  rpMM('okonogi', '小此木 八郎', 1965, 1993, 'm', 'jimin', 'shugi', '菅内閣の国家公安委員長'), rpMM('hashimoto_s', '橋本 聖子', 1964, 1995, 'f', 'jimin', 'sangi', '菅内閣の五輪担当大臣（元スピードスケート・自転車の選手）'),
+  // 岸田内閣（2021年）
+  rpMM('furukawa_y', '古川 禎久', 1965, 2003, 'm', 'jimin', 'shugi', '岸田内閣の法務大臣'), rpMM('suematsu', '末松 信介', 1955, 1998, 'm', 'jimin', 'sangi', '岸田内閣の文部科学大臣'), rpMM('goto_s', '後藤 茂之', 1955, 2000, 'm', 'jimin', 'shugi', '岸田内閣の厚生労働大臣'),
+  rpMM('kaneko_g', '金子 原二郎', 1944, 1983, 'm', 'jimin', 'sangi', '岸田内閣の農林水産大臣'), rpMM('yamaguchi_ts', '山口 壮', 1954, 2000, 'm', 'jimin', 'shugi', '岸田内閣の環境大臣'), rpMM('nishime', '西銘 恒三郎', 1954, 2003, 'm', 'jimin', 'shugi', '岸田内閣の復興大臣'),
+  rpMM('ninoyu', '二之湯 智', 1944, 2004, 'm', 'jimin', 'sangi', '岸田内閣の国家公安委員長'), rpMM('makishima', '牧島 かれん', 1976, 2012, 'f', 'jimin', 'shugi', '岸田内閣のデジタル大臣'), rpMM('yamagiwa', '山際 大志郎', 1968, 2003, 'm', 'jimin', 'shugi', '岸田内閣の経済再生担当大臣'),
+  // 石破内閣（2024年）
+  rpMM('murakami_s', '村上 誠一郎', 1952, 1986, 'm', 'jimin', 'shugi', '石破内閣の総務大臣'), rpMM('makihara', '牧原 秀樹', 1971, 2005, 'm', 'jimin', 'shugi', '石破内閣の法務大臣'), rpMM('abe_t', '阿部 俊子', 1959, 2005, 'f', 'jimin', 'shugi', '石破内閣の文部科学大臣'),
+  rpMM('fukuoka_t', '福岡 資麿', 1973, 2003, 'm', 'jimin', 'sangi', '石破内閣の厚生労働大臣'), rpMM('ozato', '小里 泰弘', 1958, 2005, 'm', 'jimin', 'shugi', '石破内閣の農林水産大臣'), rpMM('muto_y', '武藤 容治', 1955, 2005, 'm', 'jimin', 'shugi', '石破内閣の経済産業大臣'),
+  rpMM('nakano_h', '中野 洋昌', 1978, 2012, 'm', 'komei', 'shugi', '石破内閣の国土交通大臣'), rpMM('asao', '浅尾 慶一郎', 1964, 1998, 'm', 'jimin', 'sangi', '石破内閣の環境大臣'), rpMM('nakatani', '中谷 元', 1957, 1990, 'm', 'jimin', 'shugi', '石破内閣の防衛大臣（自衛隊出身）'),
+  rpMM('ito_t', '伊藤 忠彦', 1964, 2005, 'm', 'jimin', 'shugi', '石破内閣の復興大臣'), rpMM('sakai_m', '坂井 学', 1965, 2005, 'm', 'jimin', 'shugi', '石破内閣の国家公安委員長'), rpMM('taira', '平 将明', 1967, 2005, 'm', 'jimin', 'shugi', '石破内閣のデジタル大臣'),
+];
+Object.assign(RP_CAB_FULL, {
+  hatoyama: [2009.7, 2010.45, { minister_internal: 'haraguchi', minister_justice: 'chiba_k', minister_education: 'kawabata', minister_health: 'nagatsuma', minister_agri: 'akamatsu', minister_trade: 'naoshima', minister_transport: 'maehara', minister_env: 'ozawa_s', minister_defense: 'kitazawa', minister_npsc: 'nakai_h', minister_special: 'fukushima', minister_econ: 'kan' }],
+  abe: [2012.95, 2014.7, { minister_internal: 'shindo', minister_justice: 'tanigaki', minister_education: 'shimomura', minister_health: 'tamura_n', minister_agri: 'hayashi_ym', minister_trade: 'motegi', minister_transport: 'ota_a', minister_env: 'ishihara_n', minister_defense: 'onodera', minister_reconstruction: 'nemoto', minister_npsc: 'furuya', minister_econ: 'amari', minister_special: 'yamamoto_i' }],
+  suga_y: [2020.7, 2021.8, { minister_internal: 'takeda_r', minister_justice: 'kamikawa', minister_education: 'hagiuda', minister_health: 'tamura_n', minister_agri: 'nogami', minister_trade: 'kajiyama', minister_transport: 'akaba', minister_env: 'koizumi_s', minister_defense: 'kishi_n', minister_reconstruction: 'hirasawa', minister_npsc: 'okonogi', minister_econ: 'nishimura_y', minister_special: 'kono_t' }],
+  kishida: [2021.75, 2022.6, { minister_internal: 'kaneko_y', minister_justice: 'furukawa_y', minister_education: 'suematsu', minister_health: 'goto_s', minister_agri: 'kaneko_g', minister_trade: 'hagiuda', minister_transport: 'saito_t', minister_env: 'yamaguchi_ts', minister_defense: 'kishi_n', minister_reconstruction: 'nishime', minister_npsc: 'ninoyu', minister_digital: 'makishima', minister_econ: 'yamagiwa', minister_special: 'kobayashi_t' }],
+  ishiba: [2024.75, 2025.79, { minister_internal: 'murakami_s', minister_justice: 'makihara', minister_education: 'abe_t', minister_health: 'fukuoka_t', minister_agri: 'ozato', minister_trade: 'muto_y', minister_transport: 'nakano_h', minister_env: 'asao', minister_defense: 'nakatani', minister_reconstruction: 'ito_t', minister_npsc: 'sakai_m', minister_digital: 'taira', minister_econ: 'akazawa' }],
+});
+function installRP7() { if (!RP_X) return; const d3 = rpEv('d3'); for (const S of RP_MIN3) if (!d3[S.key]) { d3[S.key] = { ...S, party: S.w[0][0], slot: 'minister', photo: undefined }; delete d3[S.key].w; } }
 // ===== 宗教：世界の宗教（7）と教団（6）、教祖・指導者、入信・活動・階位・迷い・脱会、勧誘と家族、宗教2世、歴史の出来事（信者の目線）、政治との連動 =====
 // 事件は史実どおりにニュース・出来事として起きる。主人公が犯罪を実行する展開はない（信者として体験し、残る・離れる・協力するを選ぶ）。
 const REL_W = {
@@ -45954,6 +45988,117 @@ GB_MODES.rel.d_yogo = function (s, c, g, R, y, x0, y0) { const w = 466, per = 12
 (() => { const M = GB_MODES.rel, ob = M.btn; M.btn = function (s, id, g) { if (id === 'yp-' || id === 'yp+') { s.S.yp = Math.max(0, num(s.S.yp) + (id === 'yp+' ? 1 : -1)); return; } if (id.startsWith('yt:')) { const T = REL_TERMS[+id.slice(3)]; if (T) s.S.res = `【${T[0]}】\n${T[1]}`; return; } return ob.call(this, s, id, g); };
   const od = M.draw; M.draw = function (s, c, g) { const B0 = s.btn; s.btn = function (id, lab, x, y, w, h, o) { if (id.startsWith('tab:') && x === 4) { const i = REL_TABS.findIndex(t => 'tab:' + t[0] === id); return B0.call(this, id, lab, 4, 34 + i * 46, 74, 42, o); } return B0.call(this, id, lab, x, y, w, h, o); }; try { od.call(this, s, c, g); } finally { s.btn = B0; } }; })();
 function installRel2() { for (const t of [...new Set(REL_FAC.map(f => f.town))]) relWrapTown(t, r => relPatchTown(t, r)); if (window.__REL) Object.assign(window.__REL, { facOpen: relFacOpen, meet: relMeetResp, FAC: REL_FAC }); }
+// ===== 暮らし：冠婚葬祭（結婚式・葬儀・法事・出産祝い・お中元/お歳暮/年賀状）と町内会（回覧板・ゴミ当番・地域の行事・役員・自治会長） =====
+function kuSt(g) { const s = g.state; if (!isObj(s.kurashi)) s.kurashi = { v: 1 }; const K = s.kurashi;
+  for (const k of ['log', 'mem']) if (!Array.isArray(K[k])) K[k] = []; if (!isObj(K.ch)) K.ch = { member: 0, rep: 30, role: 0, kairan: null, gomi: null, done: {}, joinDay: -1 }; if (!isObj(K.yr)) K.yr = {};
+  K.manner = clamp(num(K.manner, 50), 0, 100); K.tsuki = clamp(num(K.tsuki, 50), 0, 100); K.spent = num(K.spent); return K; }
+function kuYear(g) { try { return dateOf(g, g.state.day).year; } catch (e) { return 2026; } }
+function kuMonth(g) { try { return dateOf(g, g.state.day).month; } catch (e) { return 4; } }
+function kuLog(K, g, t) { K.log.unshift({ d: g.state.day, y: kuYear(g), t }); if (K.log.length > 40) K.log.length = 40; }
+function kuPay(g, v) { v = Math.round(v); if (num(g.state.money) < v) return false; g.state.money -= v; kuSt(g).spent += v; return true; }
+function kuAsk(g, key, title, text, choices, def, data) { try { E.R4(g, { kind: 'np_kurashi', key: 'np_ku_' + key, title, text, choices, def, days: 5, data: { ...data, def } }); return true; } catch (e) { return false; } }
+const KU_NAMES = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '渡辺', '山本', '中村', '小林', '加藤', '吉田', '山田', '松本', '井上', '木村'];
+const kuPick = L => L[Math.floor(RND() * L.length)];
+// ---- 冠婚葬祭 ----
+const KU_WED = [
+  { st: '神前式', place: '神社', note: '三三九度の盃と、玉串を捧げる儀式があった。' }, { st: '教会式', place: 'チャペル', note: '讃美歌を歌い、牧師の前で二人が誓いの言葉を交わした。' },
+  { st: '人前式', place: 'レストラン', note: '参列者みんなが証人になり、拍手で結婚を認めた。' }, { st: '仏前式', place: 'お寺', note: '本堂で数珠を受けわたし、仏さまに結婚を報告した。' },
+];
+const KU_FUN = [
+  { st: '仏式', act: 'お焼香', ok: '数珠を持ち、前の人にならってお焼香をした。', ng: 'お焼香の回数をまちがえて、少しあわてた。', word: 'ご愁傷さまです' },
+  { st: '神式（神葬祭）', act: '玉串奉奠', ok: '玉串を時計回りに回して捧げ、音を立てない「しのび手」で二礼二拍手一礼をした。', ng: 'ふつうに手を打ってしまい、周りの人がちらりとこちらを見た。', word: '御霊のご平安をお祈りします' },
+  { st: 'キリスト教式', act: '献花', ok: '白い花を、茎を祭壇側に向けて捧げた。「ご冥福を」は使わないと聞いていた。', ng: '「ご冥福をお祈りします」と言ってしまい、遺族が少し困った顔をした（キリスト教では使わない）。', word: '安らかな眠りをお祈りします' },
+  { st: '友人葬（創価学会）', act: '焼香', ok: '僧侶はおらず、友人たちが題目を唱えて送った。静かにお焼香をした。', ng: '「お坊さんはいつ来るの？」と聞いてしまい、気まずくなった。', word: 'ご愁傷さまです' },
+];
+function kuWedding(g, K) { const W = kuPick(KU_WED), nm = kuPick(KU_NAMES); kuAsk(g, 'wed_' + g.state.day, `${nm}さんの結婚式の招待状`, `友人の${nm}さんから、結婚式の招待状が届いた。${W.st}で、会場は${W.place}だという。\nご祝儀はいくら包む？`, ['3万円を包んで出席する', '2万円を包んで出席する', '5万円を包んで出席する', '欠席して、お祝いだけ送る（1万円）'], 3, { t: 'wed', nm, w: KU_WED.indexOf(W) }); }
+function kuFuneral(g, K) { const F = kuPick(KU_FUN), who = RND() < 0.5 ? `${kuPick(KU_NAMES)}さん（知人）のお父さん` : `${kuPick(KU_NAMES)}さん（昔の恩師）`; kuAsk(g, 'fun_' + g.state.day, '訃報が届いた', `${who}が亡くなったと連絡があった。葬儀は${F.st}で行われる。\nどうする？`, ['喪服で通夜に参列する（香典 5千円）', '告別式に参列する（香典 1万円）', '香典だけ郵送する（5千円）', '行かない'], 2, { t: 'fun', f: KU_FUN.indexOf(F), who }); }
+function kuHoji(g, K) { const F = relFamily(g).filter(f => /grand/.test(f.rel || '') && f.alive === false); kuAsk(g, 'hoji_' + kuYear(g), '法事の案内', `親戚から、${F.length ? '祖父母' : '亡くなった大おじさん'}の三回忌の法事の案内が来た。お寺でお経をあげ、そのあと会食をするそうだ。`, ['出席する（お供え 1万円）', '欠席して、お供えだけ送る（5千円）'], 1, { t: 'hoji' }); }
+function kuBirth(g, K) { const nm = kuPick(KU_NAMES); kuAsk(g, 'birth_' + g.state.day, `${nm}さんに赤ちゃんが生まれた`, `友人の${nm}さんに赤ちゃんが生まれたと知らせが来た。お祝いを贈る？`, ['ベビー服を贈る（5千円）', '現金でお祝い（1万円）', 'メッセージだけ送る'], 2, { t: 'birth', nm }); }
+function kuSeason(g, K, kind) { const L = { chugen: ['お中元', '夏のごあいさつ。お世話になった人に贈り物をする季節だ。'], seibo: ['お歳暮', '年の瀬のごあいさつ。お世話になった人に贈り物をする季節だ。'], nenga: ['年賀状', '年賀状を出す？ 出さなかった人からも届くかもしれない。'] }[kind];
+  kuAsk(g, kind + '_' + kuYear(g), `${L[0]}の季節`, L[1], kind === 'nenga' ? ['30枚出す（¥2,000）', 'SNSでのあいさつですませる', '出さない'] : ['お世話になった人に贈る（¥5,000）', '今年は贈らない'], kind === 'nenga' ? 2 : 1, { t: 'season', kind }); }
+function kuKkResp(g, D, k) { const K = kuSt(g); const st = (v) => { try { g.addNeed('stress', v); } catch (e) { } };
+  switch (D.t) {
+    case 'wed': { const W = KU_WED[D.w]; if (k === 3) { if (!kuPay(g, 1e4)) return 'お金が足りなかった。'; K.tsuki += 1; kuLog(K, g, `${D.nm}さんの結婚式にお祝いを送った`); return '欠席の返事を出し、お祝いを送った。後日、お礼のメッセージが届いた。'; }
+      const amt = [3e4, 2e4, 5e4][k]; if (!kuPay(g, amt)) return 'お金が足りなかった。'; st(-6); K.tsuki += 4; kuLog(K, g, `${D.nm}さんの結婚式（${W.st}）に出席した`);
+      let t = `ご祝儀${amt / 1e4}万円を包んで、${W.place}での${W.st}に出席した。\n${W.note}`; if (amt === 2e4) { K.manner -= 3; t += '\n受付で、年配の親戚に「2万円は割り切れる数だから…」と小声で言われた（ご祝儀は奇数の金額がよいとされる。最近は気にしない人も増えている）。'; } else { K.manner += 2; } if (amt === 5e4) t += '\n新郎新婦はとても喜んでくれた。'; return t; }
+    case 'fun': { const F = KU_FUN[D.f]; if (k === 3) { K.tsuki -= 3; return '行かなかった。あとで共通の知り合いから「来なかったね」と言われた。'; } const amt = [5000, 1e4, 5000][k]; if (!kuPay(g, amt)) return 'お金が足りなかった。';
+      if (k === 2) { K.tsuki += 1; kuLog(K, g, `${D.who}の葬儀に香典を送った`); return '香典に手紙を添えて、現金書留で送った。'; }
+      const good = RND() < 0.45 + K.manner / 200; K.manner += good ? 3 : -2; K.tsuki += 3; st(4); kuLog(K, g, `${D.who}の葬儀（${F.st}）に参列した`);
+      return `${F.st}の${k === 0 ? '通夜' : '告別式'}に参列し、香典を渡した。受付では「${F.word}」とあいさつした。\n${good ? F.ok : F.ng}`; }
+    case 'hoji': { if (k === 0) { if (!kuPay(g, 1e4)) return 'お金が足りなかった。'; K.tsuki += 3; K.manner += 1; kuLog(K, g, '法事に出席した'); return 'お寺でお経を聞き、お焼香をした。会食では、久しぶりに会った親戚に「大きくなったね」「仕事はどう？」と質問ぜめにあった。'; } if (!kuPay(g, 5000)) return 'お金が足りなかった。'; return 'お供えを送った。'; }
+    case 'birth': { if (k === 2) return 'お祝いのメッセージを送った。'; const amt = [5000, 1e4][k]; if (!kuPay(g, amt)) return 'お金が足りなかった。'; K.tsuki += 2; kuLog(K, g, `${D.nm}さんに出産祝いを贈った`); return k === 0 ? 'かわいいベビー服を選んで贈った。写真つきのお礼が届いた。' : 'のし袋に「御出産御祝」と書いて贈った。数か月後、内祝いのお返しが届いた。'; }
+    case 'season': { if (D.kind === 'nenga') { if (k === 0) { if (!kuPay(g, 2000)) return 'お金が足りなかった。'; K.tsuki += 2; return '30枚の年賀状を書いて出した。元日に、思いがけない人からも届いた。'; } if (k === 1) { K.tsuki += 1; return 'SNSで新年のあいさつをした。'; } return '今年は出さなかった。'; }
+      if (k === 0) { if (!kuPay(g, 5000)) return 'お金が足りなかった。'; K.tsuki += 2; return 'デパートで贈り物を選んで送った。お礼の電話がかかってきた。'; } return '今年は贈らなかった。'; }
+  } return ''; }
+// ---- 町内会 ----
+const KU_EVENTS = [[1, '新年会', '公民館で新年会。おせちをつまみながら、近所の人と顔を合わせた。'], [3, '地域の清掃活動', '朝から公園と側溝の掃除。軍手とゴミ袋が配られた。'], [6, '防犯パトロール', '夜、拍子木を鳴らしながら町内を回った。'],
+  [8, '夏祭り', '盆踊りのやぐらを組み、焼きそばの屋台を手伝った。子どもたちがはしゃいでいる。'], [9, '防災訓練', '防災の日にあわせて、消火器の使い方と避難所までの道を確認した。'], [10, '運動会', '町内対抗の運動会。綱引きで腰を痛めそうになった。'], [12, '餅つき', '臼と杵で餅をついた。つきたてのお餅は格別だ。']];
+const KU_ROLES = ['会員', '班長', '役員（会計）', '自治会長'];
+function kuJoin(g) { const K = kuSt(g), C = K.ch; if (C.member) return { ok: false, why: 'もう入っている' }; if (!kuPay(g, 3000)) return { ok: false, why: 'お金が足りない' }; C.member = 1; C.joinDay = g.state.day; C.rep = Math.max(C.rep, 35); kuLog(K, g, '町内会に入った'); return { ok: true, text: '町内会に入った（年会費 ¥3,000）。\n班長さんから回覧板の回し方と、ゴミ当番の表をもらった。' }; }
+function kuLeave(g) { const K = kuSt(g), C = K.ch; if (!C.member) return { ok: false, why: '入っていない' }; C.member = 0; C.role = 0; C.rep = Math.max(0, C.rep - 10); kuLog(K, g, '町内会をやめた'); return { ok: true, text: '町内会をやめた。ゴミ集積所の利用について、少し気まずい空気になった。' }; }
+function kuKairan(g) { const C = kuSt(g).ch; if (!C.kairan) return { ok: false, why: '回覧板は来ていない' }; const late = g.state.day - C.kairan.day > 2; C.kairan = null; C.rep = clamp(C.rep + (late ? 0 : 2), 0, 100); return { ok: true, mins: 10, text: late ? '回覧板を隣の家に回した。「ちょっと遅かったね」と言われた。' : '回覧板を読んで、ハンコを押し、隣の家に回した。中身は「ゴミの分別の徹底について」と夏祭りのお知らせだった。' }; }
+function kuGomi(g) { const C = kuSt(g).ch; if (!C.gomi) return { ok: false, why: '当番ではない' }; C.gomi = null; C.rep = clamp(C.rep + 3, 0, 100); try { g.addNeed('stress', 2); } catch (e) { } return { ok: true, mins: 30, text: '朝早く起きて、ゴミ集積所のネットをかけ直し、カラスに荒らされたゴミを片づけた。' }; }
+function kuEvent(g) { const K = kuSt(g), C = K.ch, m = kuMonth(g), y = kuYear(g), E0 = KU_EVENTS.find(e => e[0] === m); if (!C.member) return { ok: false, why: '町内会に入っていない' }; if (!E0) return { ok: false, why: '今月は行事がない' }; const key = y + '_' + m; if (C.done[key]) return { ok: false, why: 'もう参加した' };
+  C.done[key] = 1; C.rep = clamp(C.rep + 5 + C.role, 0, 100); K.tsuki += 2; try { g.addNeed('stress', -5); } catch (e) { } kuLog(K, g, `町内会の${E0[1]}に参加した`); kuPolBonus(g, 0.5); return { ok: true, mins: 180, text: `町内会の「${E0[1]}」に参加した。\n${E0[2]}` }; }
+function kuPolBonus(g, v) { try { const P = g.state.politics; if (P && P.me) P.me.localSupport = Math.min(60, num(P.me.localSupport) + v); } catch (e) { } }
+// 毎日の処理
+function kuTick(g) { const K = kuSt(g), C = K.ch, day = g.state.day; if (K.day === day) return; K.day = day; const y = kuYear(g), m = kuMonth(g); let age = 20; try { age = ageOf(g); } catch (e) { }
+  if (age >= 18) { // 冠婚葬祭
+    if (day - num(K.kkDay, -99) > 70 && RND() < 0.02) { K.kkDay = day; const r = RND(); if (r < 0.38) kuWedding(g, K); else if (r < 0.62) kuFuneral(g, K); else if (r < 0.82) kuBirth(g, K); else kuHoji(g, K); }
+    const Y = K.yr[y] || (K.yr[y] = {}); if (m === 7 && !Y.chugen) { Y.chugen = 1; kuSeason(g, K, 'chugen'); } if (m === 12 && !Y.seibo) { Y.seibo = 1; kuSeason(g, K, 'seibo'); } if (m === 12 && !Y.nenga && RND() < 0.3) { Y.nenga = 1; kuSeason(g, K, 'nenga'); } }
+  if (C.member) { if (!C.kairan && RND() < 0.06) C.kairan = { day }; if (C.kairan && day - C.kairan.day > 5) { C.kairan = null; C.rep = clamp(C.rep - 4, 0, 100); try { g.notify('（回覧板を止めてしまい、近所の人に注意された）', { color: '#ffd0a0' }); } catch (e) { } }
+    if (!C.gomi && RND() < 0.02) C.gomi = { day }; if (C.gomi && day - C.gomi.day > 3) { C.gomi = null; C.rep = clamp(C.rep - 5, 0, 100); }
+    if (day - num(C.nbDay, -99) > 60 && RND() < 0.02) { C.nbDay = day; kuNeighbor(g, K); }
+    if (C.role < 3 && C.rep >= [0, 45, 65, 80][C.role + 1] && day - num(C.roleAsk, -99) > 90 && RND() < 0.05) { C.roleAsk = day; const nx = KU_ROLES[C.role + 1]; kuAsk(g, 'role_' + day, `${nx}を頼まれた`, C.role + 1 === 3 ? '春の総会で、次の自治会長を決める。みんなの推薦で、あなたの名前があがった。\n自治会長になると、町内の顔として、区役所や議員とのやりとりも増える。' : `町内会の人から「次の${nx}をお願いできませんか」と頼まれた。`, ['引き受ける', '今回は断る'], 1, { t: 'role', r: C.role + 1 }); } } }
+const KU_NB = [
+  { k: 'noise', title: '騒音トラブル', text: '隣の部屋の夜中の物音がうるさい、と別の住人から相談された。町内会で話を聞いてほしいという。', ch: ['間に入って話し合いの場をつくる', '管理会社に任せる'], r: [['話し合いの場をつくった。夜10時以降は静かにする約束になり、お互い少しすっきりした。', 6], ['管理会社に任せた。', 0]] },
+  { k: 'fee', title: '町内会費の使い道', text: '総会で「夏祭りにお金をかけすぎだ」「防犯灯を増やすべきだ」と意見が割れた。', ch: ['防犯灯を優先しようと発言する', '夏祭りを続けようと発言する', '黙っている'], r: [['防犯灯の数を増やすことになった。お年寄りや子育て世帯から感謝された。', 5], ['夏祭りは続けることになった。子どもたちが喜んでいる。', 4], ['結論は持ち越しになった。', 0]] },
+  { k: 'mimamori', title: '一人暮らしのお年寄り', text: '一人暮らしの高齢の住人を、最近見かけないと班の人が心配している。', ch: ['様子を見に行く', '民生委員に連絡する', '気にしない'], r: [['様子を見に行くと、風邪で寝こんでいた。買い物を代わりにして、とても感謝された。', 8], ['民生委員に連絡した。すぐに訪問してくれることになった。', 4], ['数日後、救急車が来ていたと聞いた…。', -5]] },
+  { k: 'poster', title: '選挙ポスターの掲示板', text: '選挙が近い。町内の掲示板に、候補者のポスターを貼りたいという依頼が来た。', ch: ['決まりどおりに場所を割りふる', '知り合いの候補を目立つ場所にする'], r: [['公平に割りふった。どの陣営からも文句は出なかった。', 3], ['ほかの陣営から抗議が来て、町内会がもめてしまった。', -6]] },
+];
+function kuNeighbor(g, K) { const N = kuPick(KU_NB); kuAsk(g, 'nb_' + N.k + '_' + g.state.day, N.title, N.text, N.ch, N.ch.length - 1, { t: 'nb', k: N.k }); }
+function kuChResp(g, D, k) { const K = kuSt(g), C = K.ch;
+  if (D.t === 'nb') { const N = KU_NB.find(x => x.k === D.k), r = N.r[clamp(k, 0, N.r.length - 1)]; C.rep = clamp(C.rep + r[1], 0, 100); if (r[1] > 3) kuPolBonus(g, 0.5); return r[0]; }
+  if (D.t === 'role') { if (k !== 0) { C.rep = clamp(C.rep - 2, 0, 100); return '今回は断った。'; } C.role = D.r; kuLog(K, g, `町内会の${KU_ROLES[D.r]}になった`); if (D.r === 3) { kuPolBonus(g, 5); return '自治会長に選ばれた。町内の顔として、区役所との交渉や防災計画づくりを任される。\n地元での知名度が上がった（区議選などの地元の支持に効く）。'; } return `${KU_ROLES[D.r]}を引き受けた。`; }
+  return ''; }
+function kuResp(g, D, k) { if (k < 0) k = num(D.def); if (['nb', 'role'].includes(D.t)) return kuChResp(g, D, k); return kuKkResp(g, D, k); }
+// ---- 画面 ----
+GB_MODES.kurashi = {
+  noHud: true,
+  init(s, g) { kuSt(g); s.S = { tab: 'ch', f: 0 }; },
+  left(s, g) { try { return Math.max(0, 1440 - (clockMin(g) % 1440) - s.mins); } catch (e) { return 999; } },
+  btn(s, id, g) { const S = s.S; if (id === 'close') { s.done(); return; } if (id === 'resok') { S.res = null; return; } if (id.startsWith('tab:')) { S.tab = id.slice(4); return; }
+    const run = r => { if (!r.ok) { s.tip(r.why, PW.bad); return; } if (r.mins) { if (this.left(s, g) < r.mins) { s.tip('今日はもう時間がない', PW.bad); return; } s.mins += r.mins; } S.res = r.text; tt.sfx('ok'); };
+    if (id === 'join') run(kuJoin(g)); else if (id === 'leave') run(kuLeave(g)); else if (id === 'kairan') run(kuKairan(g)); else if (id === 'gomi') run(kuGomi(g)); else if (id === 'event') { if (this.left(s, g) < 180) { s.tip('今日はもう時間がない', PW.bad); return; } run(kuEvent(g)); } },
+  update(s) { s.S.f++; },
+  draw(s, c, g) { const S = s.S, K = kuSt(g), C = K.ch, m = kuMonth(g), y = kuYear(g);
+    pBands(c, 0, 0, 640, 360, ['#141812', '#171c14', '#1a2016', '#1d2418']); pR(c, 0, 0, 640, 30, '#0c100a'); pR(c, 0, 29, 640, 1, '#a0c070'); pT(c, '町内会・冠婚葬祭', 10, 7, { size: 16, color: '#f4ffe8' }); s.btn('close', '閉じる', 572, 4, 62, 22, { size: 12, back: true });
+    s.btn('tab:ch', '町内会', 200, 4, 80, 22, { size: 12, kind: S.tab === 'ch' ? 'pri' : 'norm' }); s.btn('tab:kk', '冠婚葬祭', 286, 4, 80, 22, { size: 12, kind: S.tab === 'kk' ? 'pri' : 'norm' });
+    if (S.tab === 'ch') { pFrame(c, 8, 38, 300, 314, { title: 'ドット町内会', bg: '#182014', edge: '#5a7a3a' });
+      pT(c, C.member ? `${KU_ROLES[C.role]}（${Math.max(0, g.state.day - num(C.joinDay))}日目）` : 'まだ入っていない', 20, 62, { size: 12, color: '#e0f0c0' }); pT(c, '町内での評判', 20, 84, { size: 12, color: GB_C.t2 }); pR(c, 20, 102, 270, 8, '#26301e'); pR(c, 20, 102, Math.round(270 * C.rep / 100), 8, '#a0c070'); pT(c, String(Math.round(C.rep)), 290, 84, { size: 12, color: '#a0c070', align: 'right' });
+      if (C.member) { const nx = [0, 45, 65, 80][C.role + 1]; pT(c, nx ? `評判${nx}で「${KU_ROLES[C.role + 1]}」を頼まれるかも` : '町内の顔として活躍中', 20, 118, { size: 12, color: GB_C.t3 });
+        pT(c, C.kairan ? `回覧板が来ている（${g.state.day - C.kairan.day}日目）` : '回覧板：なし', 20, 144, { size: 12, color: C.kairan ? '#ffd080' : GB_C.t2 }); s.btn('kairan', '回覧板を回す', 190, 140, 106, 22, { size: 12, off: !C.kairan });
+        pT(c, C.gomi ? '今週はゴミ当番！' : 'ゴミ当番：なし', 20, 172, { size: 12, color: C.gomi ? '#ffd080' : GB_C.t2 }); s.btn('gomi', '当番をする', 190, 168, 106, 22, { size: 12, off: !C.gomi });
+        const E0 = KU_EVENTS.find(e => e[0] === m); pT(c, E0 ? `今月の行事：${E0[1]}` : '今月の行事：なし', 20, 200, { size: 12, color: E0 ? '#e0f0c0' : GB_C.t2 }); s.btn('event', '参加する（3時間）', 160, 196, 136, 22, { size: 12, off: !E0 || C.done[y + '_' + m] });
+        s.btn('leave', '町内会をやめる', 20, 322, 120, 22, { size: 12 }); }
+      else { wrapDot(c, '町内会に入ると、回覧板・ゴミ当番・地域の行事に参加できる。評判が上がると役員を頼まれ、自治会長になると地元の顔に（区議選などの地元の支持に効く）。', 270, 12).forEach((ln, i) => pT(c, ln, 20, 126 + i * 15, { size: 12, color: GB_C.t2 })); s.btn('join', '町内会に入る（年会費 ¥3,000）', 20, 220, 270, 28, { size: 12, kind: 'pri', def: true }); }
+      pFrame(c, 316, 38, 316, 314, { title: '行事カレンダー', bg: '#182014', edge: '#5a7a3a' }); KU_EVENTS.forEach(([mm, nm, ds], i) => { const yy = 62 + i * 40, now = mm === m, done = C.done[y + '_' + mm]; pR(c, 324, yy, 300, 36, now ? '#2a3a1e' : '#1c2618'); pT(c, `${mm}月`, 334, yy + 4, { size: 12, color: now ? '#ffd080' : '#a0c070' }); pT(c, nm + (done ? '　✓参加' : ''), 374, yy + 4, { size: 12, color: '#f4ffe8' }); pT(c, pFit(c, ds, 240, 12), 374, yy + 19, { size: 12, color: GB_C.t3 }); }); }
+    else { pFrame(c, 8, 38, 300, 314, { title: 'つきあい', bg: '#182014', edge: '#5a7a3a' }); [['人づきあい', K.tsuki, '#e0b070'], ['作法・マナー', K.manner, '#a0c0e0']].forEach(([nm, v, col], i) => { const yy = 66 + i * 40; pT(c, nm, 20, yy, { size: 12, color: GB_C.t2 }); pT(c, String(Math.round(clamp(v, 0, 100))), 290, yy, { size: 12, color: col, align: 'right' }); pR(c, 20, yy + 18, 270, 8, '#26301e'); pR(c, 20, yy + 18, Math.round(270 * clamp(v, 0, 100) / 100), 8, col); });
+      pT(c, `ご祝儀・香典・贈り物の合計 ${yen(K.spent)}`, 20, 160, { size: 12, color: GB_C.t2 }); wrapDot(c, '結婚式・葬儀・法事・出産祝い・お中元・お歳暮・年賀状の知らせは、受信箱に届く。宗教ごとの作法のちがいにも気をつけよう。', 270, 12).forEach((ln, i) => pT(c, ln, 20, 186 + i * 15, { size: 12, color: GB_C.t3 }));
+      pFrame(c, 316, 38, 316, 314, { title: 'これまでのこと', bg: '#182014', edge: '#5a7a3a' }); if (!K.log.length) pT(c, 'まだ記録はない', 474, 180, { size: 12, color: GB_C.t3, align: 'center' }); K.log.slice(0, 13).forEach((l, i) => pT(c, pFit(c, `${l.y}年 ${l.t}`, 296, 12), 326, 62 + i * 22, { size: 12, color: GB_C.t2 })); }
+    if (S.res) { s.btns.length = 0; pR(c, 0, 0, 640, 360, 'rgba(0,0,0,0.6)'); pFrame(c, 100, 80, 440, 190, { bg: '#182014', edge: '#a0c070' }); wrapDot(c, S.res, 410, 12).slice(0, 10).forEach((ln, i) => pT(c, ln, 116, 94 + i * 15, { size: 12, color: '#f4ffe8' })); s.btn('resok', 'OK', 270, 234, 100, 26, { kind: 'pri', def: true, size: 12 }); }
+  },
+};
+const kuIcon = gbIcon('#5a7a3a', (c, x, y) => { c.fillStyle = '#f4ffe8'; c.fillRect(x + 6, y + 14, 20, 12); c.fillStyle = '#c04a3a'; c.fillRect(x + 4, y + 10, 24, 5); c.fillRect(x + 10, y + 6, 12, 5); c.fillStyle = '#5a7a3a'; c.fillRect(x + 14, y + 18, 4, 8); });
+async function kuOpen(g) { try { kuTick(g); } catch (e) { } const r = await gbScene(g, { mode: 'kurashi', title: '町内会・冠婚葬祭' }); gbAfter(g, r && r.mins); }
+try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_seiji'); if (F && !F.apps.includes('kurashi')) F.apps.push('kurashi'); FOLD_OF.kurashi = 'f_seiji'; } } catch (e) { }
+function installKurashi() {
+  E.Un('kurashi', { name: '町内会', color: '#5a7a3a', order: 36.6, iconHD: kuIcon, badge: g => { try { const C = kuSt(g).ch; return C.kairan || C.gomi ? 1 : 0; } catch (e) { return 0; } }, open: g => kuOpen(g) });
+  E.Tn(g => { try { kuTick(g); } catch (e) { console.error('[ku] tick', e); } });
+  if (E.ug) E.ug('np_kurashi', (g, it, k) => { try { return kuResp(g, it.data || {}, k) || ''; } catch (e) { console.error('[ku] resp', e); return ''; } });
+  window.__KU = { st: kuSt, tick: kuTick, resp: kuResp, join: kuJoin, open: kuOpen, ev: kuEvent };
+}
+try { if (typeof RP_GUIDE !== 'undefined' && !RP_GUIDE.some(x => x[0] === 'kurashi')) RP_GUIDE.push(['kurashi', '町内会', '町内会の活動（回覧板・行事・自治会長）と、冠婚葬祭のつきあい']); } catch (e) { }
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
