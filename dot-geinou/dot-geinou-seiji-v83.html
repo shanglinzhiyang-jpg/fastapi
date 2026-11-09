@@ -46208,7 +46208,7 @@ const HI_NEN = [
   [2017, '核兵器禁止条約', '核兵器の開発・保有・使用を禁じる条約が国連で採択された（2021年発効。日本は参加していない）。', 'kaku'],
   [2024, '日本被団協にノーベル平和賞', '被爆者の団体・日本原水爆被害者団体協議会が、核兵器のない世界を訴え続けた活動でノーベル平和賞を受けた。', 'kaku'],
 ];
-const HI_CAT = { jo: ['条約・外交', '#c8a040'], sei: ['政治・憲法', '#5a8ad0'], sen: ['戦争', '#c05040'], kurashi: ['暮らし', '#6aa060'], kaku: ['核兵器', '#a060c0'] };
+const HI_CAT = { jo: ['条約', '#c8a040'], sei: ['政治', '#5a8ad0'], sen: ['戦争', '#c05040'], kurashi: ['暮らし', '#6aa060'], kaku: ['核兵器', '#a060c0'] };
 const HI_TERMS = [
   ['jo', '不平等条約', '幕末に欧米と結んだ、日本に不利な条約。領事裁判権を認め、関税自主権がなかった。'], ['jo', '領事裁判権（治外法権）', '日本で罪を犯した外国人を、日本の法律ではなく、その国の領事が裁く権利。1894年に撤廃。'],
   ['jo', '関税自主権', '輸入品にかける税（関税）の率を、自分の国で決める権利。1911年に回復。'], ['jo', '保護国', '外交などの権利を他の国にゆだね、その国の保護のもとに置かれた国。韓国は1905年に日本の保護国とされた。'],
@@ -46311,7 +46311,7 @@ GB_MODES.hist = {
       HI_NEN.slice(pg * per, pg * per + per).forEach((N, i) => { const yy = y0 + 24 + i * 32, cat = HI_CAT[N[3]]; pR(c, x0 + 6, yy, w - 12, 30, i % 2 ? '#1c1814' : '#201b16'); pR(c, x0 + 6, yy, 3, 30, cat[1]); pT(c, `${Math.floor(N[0])}年`, x0 + 14, yy + 2, { size: 12, color: '#d8b070' }); pT(c, N[1], x0 + 62, yy + 2, { size: 12, color: '#f4ead8' }); pT(c, pFit(c, N[2], w - 80, 12), x0 + 62, yy + 16, { size: 12, color: GB_C.t3 }); s.btn('n:' + (pg * per + i), '', x0 + 6, yy, w - 12, 30, { kind: 'clear', nofocus: true }); });
       s.btn('np-', '◀', x0 + w + 4, y0 + 120, 34, 30, { size: 12 }); s.btn('np+', '▶', x0 + w + 4, y0 + 160, 34, 30, { size: 12 }); }
     if (S.tab === 'zukan') { const L = HI_TERMS.map((T, i) => [T, i]).filter(([T]) => !S.cat || T[0] === S.cat), per = 10, n = Math.max(1, Math.ceil(L.length / per)), pg = clamp(S.tp, 0, n - 1); S.tp = pg; pFrame(c, x0, y0, w, 316, { title: `図鑑（${pg + 1}/${n}）`, bg: '#1a1612', edge: '#6a5a3a' });
-      Object.entries(HI_CAT).forEach(([k, [nm, col]], i) => s.btn('cat:' + k, nm, x0 + 8 + i * 100, y0 + 22, 94, 20, { size: 12, kind: S.cat === k ? 'pri' : 'norm' }));
+      Object.entries(HI_CAT).forEach(([k, [nm, col]], i, A) => s.btn('cat:' + k, nm, x0 + 8 + i * Math.floor((w - 16) / A.length), y0 + 22, Math.floor((w - 16) / A.length) - 6, 20, { size: 12, kind: S.cat === k ? 'pri' : 'norm' }));
       L.slice(pg * per, pg * per + per).forEach(([T, idx], i) => { const yy = y0 + 48 + i * 26; pR(c, x0 + 6, yy, w - 12, 24, i % 2 ? '#1c1814' : '#201b16'); pR(c, x0 + 6, yy, 3, 24, HI_CAT[T[0]][1]); pT(c, pFit(c, T[1], 150, 12), x0 + 14, yy + 5, { size: 12, color: '#f4ead8' }); pT(c, pFit(c, T[2], w - 190, 12), x0 + 172, yy + 5, { size: 12, color: GB_C.t3 }); s.btn('t:' + idx, '', x0 + 6, yy, w - 12, 24, { kind: 'clear', nofocus: true }); });
       s.btn('tp-', '◀', x0 + w + 4, y0 + 120, 34, 30, { size: 12 }); s.btn('tp+', '▶', x0 + w + 4, y0 + 160, 34, 30, { size: 12 }); }
     if (S.tab === 'story') { pFrame(c, x0, y0, w, 316, { title: '物語「ある家族の1944〜1946年」', bg: '#1a1612', edge: '#6a5a3a' });
@@ -46458,6 +46458,55 @@ HI_DAYS.push([6, 23, 'okinawa', '今日は沖縄慰霊の日（1945年6月23日�
 (() => { const o = hiResp; hiResp = function (g, D, k) { if (D && D.t === 'gp') return hiGPResp(g, D, k); return o(g, D, k); }; })();
 (() => { const o = hiTick; hiTick = function (g) { const H = hiSt(g), first = H.day !== g.state.day; o(g); if (first) { try { hiGPTick(g); } catch (e) { console.error('[hist] gp', e); } } }; })();
 hiOpen = async function (g) { try { hiTick(g); } catch (e) { } const r = await gbScene(g, { mode: 'hist', title: '戦争と平和の歴史' }); gbAfter(g, r && r.mins); if (r && r.story) { const sid = typeof r.story === 'string' ? r.story : 'tokyo'; const r2 = await gbScene(g, { mode: 'histstory', title: '物語', sid }); gbAfter(g, r2 && r2.mins); } };
+// ===== 戦争と平和の歴史3：現代（1987年〜）の戦争・紛争と、ゲームの中で戦争が起きたときの「現代の赤紙・空襲・疎開・大本営発表・配給」 =====
+HI_CAT.gendai = ['現代', '#4a9ad0'];
+const HI_MOD = [
+  { k: 'gulf', at: 1991.05, name: '湾岸戦争', text: 'イラクのクウェート侵攻をきっかけに、アメリカを中心とする多国籍軍がイラクを攻撃した（湾岸戦争）。日本は130億ドルを資金で支援したが、「お金だけ出して人を出さない」と批判され、戦後に海上自衛隊の掃海艇をペルシャ湾へ送った。', ch: [['募金や支援のニュースを追う', { pts: 1 }], ['「日本は何をすべきか」を友人と話し合う', { pts: 1, tsuki: 2 }], ['ニュースを見守る', {}]] },
+  { k: 'pko', at: 1992.45, name: 'PKO協力法の成立', text: '国連の平和維持活動（PKO）に自衛隊が参加できる法律が成立した。秋にはカンボジアへ自衛隊が派遣された。国会では、牛のようにゆっくり投票する「牛歩戦術」で野党が抵抗した。', ch: [['賛成の立場で意見を書く', { pts: 1 }], ['反対の集会に参加する', { pts: 1, stress: 2 }], ['ニュースを見守る', {}]] },
+  { k: 'sept11', at: 2001.7, name: 'アメリカ同時多発テロ', text: 'ニューヨークの世界貿易センタービルなどに、乗っ取られた旅客機が突っこんだ（アメリカ同時多発テロ）。約3000人が亡くなった。アメリカはアフガニスタンを攻撃し、日本はインド洋で給油活動を行った。', ch: [['被害者への募金をする（¥10,000）', { cost: 1e4, pts: 1 }], ['ニュースを見守る', {}]] },
+  { k: 'iraq', at: 2003.22, name: 'イラク戦争と自衛隊派遣', text: 'アメリカなどがイラクを攻撃した（イラク戦争）。日本は特別措置法をつくり、2004年から陸上自衛隊をイラク南部のサマワへ派遣した。戦闘地域かどうかをめぐって国会で議論が続いた。', ch: [['派遣に賛成する', { pts: 1 }], ['派遣に反対するデモに参加する', { pts: 1, stress: 2 }], ['ニュースを見守る', {}]] },
+  { k: 'nk06', at: 2006.78, name: '北朝鮮の核実験', text: '北朝鮮が初めての核実験を行ったと発表した。国連の安全保障理事会は制裁を決議した。', ch: [['核兵器について調べる', { pts: 1 }], ['ニュースを見守る', {}]] },
+  { k: 'anpo15', at: 2015.71, name: '安全保障関連法の成立', text: '集団的自衛権の行使を一部認める安全保障関連法が成立した。国会の前では連日、学生団体などによる大規模な反対デモが行われた。賛成する人は「抑止力が高まる」と訴えた。', ch: [['国会前のデモに参加する', { pts: 1, stress: 3 }], ['抑止力の必要性を考える', { pts: 1 }], ['ニュースを見守る', {}]] },
+  { k: 'jalert17', at: 2017.66, name: 'Jアラート', text: '北朝鮮が発射した弾道ミサイルが北海道の上空を通過し、東北・北海道などに全国瞬時警報システム（Jアラート）が鳴った。早朝の警報に、多くの人がどこへ逃げればいいのかとまどった。', ch: [['避難の方法を家族と確認する', { pts: 1, bosai: 1 }], ['ニュースを見守る', {}]] },
+  { k: 'ukraine', at: 2022.15, name: 'ロシアのウクライナ侵攻', text: 'ロシアがウクライナに全面的に侵攻した。多くの市民が亡くなり、数百万人が国外に逃れた。日本もウクライナからの避難民を受け入れた。物価の高騰も、暮らしに影響した。', ch: [['人道支援の募金をする（¥10,000）', { cost: 1e4, pts: 1 }], ['避難民の支援ボランティアに参加する', { pts: 2, tsuki: 3 }], ['ニュースを見守る', {}]] },
+  { k: 'gaza', at: 2023.77, name: 'ガザでの戦闘', text: 'パレスチナのイスラム組織ハマスがイスラエルを攻撃し、多くの人が殺害・拉致された。イスラエルはガザ地区への大規模な攻撃を始め、ガザでは子どもを含む多くの市民が犠牲になった。', ch: [['人道支援の募金をする（¥10,000）', { cost: 1e4, pts: 1 }], ['さまざまな立場の報道を読み比べる', { pts: 1 }], ['ニュースを見守る', {}]] },
+];
+for (const M of HI_MOD) HI_NEN.push([M.at, M.name, M.text, 'gendai']); HI_NEN.sort((a, b) => a[0] - b[0]);
+HI_TERMS.push(['gendai', 'PKO（国連平和維持活動）', '紛争の停戦の監視や、復興を国連が手助けする活動。日本は1992年から自衛隊を派遣している。'], ['gendai', '集団的自衛権', '自分の国が攻撃されていなくても、密接な関係にある国への攻撃に対して、武力で反撃する権利。2015年の安保法制で一部の行使が認められた。'],
+  ['gendai', 'Jアラート', '弾道ミサイルや大規模災害のときに、国から自治体を通じて住民に瞬時に知らせるしくみ。'], ['gendai', '避難民・難民', '戦争や迫害から逃れて、国外に避難した人々。'], ['gendai', '良心的兵役拒否', '信念や良心にもとづいて、兵役を拒むこと。認める国もある。'], ['gendai', '情報戦・偽情報', '戦争のときに、相手を混乱させるために、うその情報を広めること。SNSでも大量に流れる。']);
+function hiModTick(g, H) { let yr = 2026; try { const d = dateOf(g, g.state.day); yr = d.year + (d.month - 1) / 12 + (num(d.dom, 1) - 1) / 365; } catch (e) { return; } const D = H.mod || (H.mod = {});
+  if (H.modY0 == null) { H.modY0 = yr; for (const M of HI_MOD) if (M.at <= yr) D[M.k] = 1; return; }
+  for (const M of HI_MOD) { if (D[M.k] || yr < M.at) continue; D[M.k] = 1; try { g.message({ from: 'ドット新聞 国際部', text: `【${M.name}】${M.text}`, kind: 'news' }); } catch (e) { }
+    try { E.R4(g, { kind: 'np_hist', key: 'np_hist_mod_' + M.k, title: M.name, text: `${M.text}\n\nあなたは？`, choices: M.ch.map(c => c[0]), def: M.ch.length - 1, days: 6, data: { t: 'mod', k: M.k } }); } catch (e) { } } }
+function hiModResp(g, D, k) { const H = hiSt(g), M = HI_MOD.find(x => x.k === D.k); if (!M) return ''; const c = M.ch[clamp(k, 0, M.ch.length - 1)], fx = c[1]; if (fx.cost) { if (num(g.state.money) < fx.cost) return 'お金が足りなかった。'; g.state.money -= fx.cost; }
+  H.actPts = num(H.actPts) + num(fx.pts); try { if (fx.stress) g.addNeed('stress', fx.stress); } catch (e) { } try { const K = kuSt(g); if (fx.tsuki) K.tsuki = clamp(K.tsuki + fx.tsuki, 0, 100); if (fx.bosai) K.bosai = K.bosai || g.state.day; } catch (e) { }
+  return `「${c[0]}」\n${M.name}のニュースを、遠い国のことではなく、自分のこととして考えた。${fx.cost ? `（${yen(fx.cost)}）` : ''}`; }
+// ---- ゲームの中で戦争が起きたとき ----
+function hiWar(g) { try { const w = typeof g.war === 'function' ? g.war() : null; return w && w.phase === 'war' ? w : null; } catch (e) { return null; } }
+function hiEnemy(w) { return (w && (w.enemyName || (w.enemy && w.enemy.name) || (typeof w.enemy === 'string' ? w.enemy : ''))) || '相手国'; }
+function hiWarTick(g, H) { const w = hiWar(g), day = g.state.day, W = H.war || (H.war = {}); let age = 20; try { age = ageOf(g); } catch (e) { }
+  if (!w) { if (W.on) { W.on = 0; W.ended = day; try { g.message({ from: 'ドット新聞 社会部', text: '停戦が成立した。街には、ほっとした表情と、失われたものへの悲しみが入りまじっている。', kind: 'news' }); } catch (e) { } hiAsk(g, 'war_end_' + day, '停戦', '戦争が止まった。テレビは、亡くなった人たちの名前と、壊れた町を映している。\n80年前の戦争を体験したお年寄りが「また、こんなことになるとは」とつぶやいた。', ['亡くなった人たちに黙とうする', '家族と無事を喜び合う'], 1, { t: 'war', k: 'end' }); } return; }
+  const en = hiEnemy(w); if (!W.on) { W.on = 1; W.start = day; W.done = {}; hiAsk(g, 'war_start_' + day, '臨時ニュース：開戦', `テレビの番組が中断され、臨時ニュースが流れた。${en}との間で、戦闘が始まったという。\nスマホには家族や友人からの連絡が次々と届く。`, ['家族と、これからのことを話し合う', 'スーパーに買い出しに行く', '戦争に反対する集会に参加する'], 0, { t: 'war', k: 'start' }); return; }
+  const done = W.done; const since = day - num(W.start);
+  if (!done.info && since >= 5) { done.info = day; hiAsk(g, 'war_info_' + day, '政府発表とSNS', `政府は「わが国の被害は軽微」と発表した。けれどもSNSには、被害を伝える動画や、それを「偽情報だ」とする投稿が入りまじって流れてくる。\n80年前の「大本営発表」を思い出す人もいる。`, ['政府の発表を信じる', '複数の報道機関の情報を確かめる', '衝撃的な動画をそのまま拡散する'], 1, { t: 'war', k: 'info' }); return; }
+  if (!done.call && (w.conscription || num(w.mob) >= 2) && since >= 10) { done.call = day; const me = age >= 18 && age <= 45; hiAsk(g, 'war_call_' + day, me ? '招集の通知' : '友人への招集', me ? '郵便受けに、防衛省からの通知が入っていた。徴兵制が復活し、あなたも招集の対象になったという。\n80年前の「赤紙」と同じように、拒むことは難しい。' : '親しい友人に、招集の通知が届いた。「行きたくない」と、友人は震える声で言った。', me ? ['招集に応じる（後方の部隊で数週間の勤務）', '良心的兵役拒否を申し立てる', '家族と相談してから決める'] : ['友人を励まし、駅で見送る', '弁護士や支援団体を紹介する'], me ? 2 : 0, { t: 'war', k: me ? 'call' : 'callf' }); return; }
+  if (since >= 15 && day - num(done.raid, -99) > 30 && RND() < 0.08) { done.raid = day; hiAsk(g, 'war_raid_' + day, 'ミサイル警報', 'スマホから、けたたましい警報音が鳴った。「ミサイル発射。建物の中、または地下に避難してください」\n80年前の空襲警報と同じように、人々が地下鉄の駅へと走っていく。', ['近くの地下駅に避難する', '家の窓から離れた部屋に身をひそめる', '「どうせ来ない」と、そのまま過ごす'], 0, { t: 'war', k: 'raid' }); return; }
+  if (!done.sokai && since >= 25) { done.sokai = day; hiAsk(g, 'war_sokai_' + day, '子どもたちの避難', '自治体が、子どもや高齢者を地方へ避難させる計画を発表した。「現代の疎開だ」と報道されている。', ['近所の子どもの避難を手伝う', '自分の家族を地方の親戚のもとへ避難させる', 'このまま東京にとどまる'], 2, { t: 'war', k: 'sokai' }); return; }
+  if (!done.ration && since >= 35) { done.ration = day; hiAsk(g, 'war_ration_' + day, '物資の不足', '輸入が止まり、ガソリンや小麦粉、薬が品薄になってきた。政府は購入の上限を設けた（配給のような制度）。', ['決められた量だけを買う', 'ネットで高値で買い占める', '近所の人と分け合う'], 0, { t: 'war', k: 'ration' }); return; } }
+function hiAsk(g, key, title, text, choices, def, data) { try { E.R4(g, { kind: 'np_hist', key: 'np_hist_' + key, title, text, choices, def, days: 5, data: { ...data, def } }); } catch (e) { } }
+function hiWarResp(g, D, k) { const H = hiSt(g), st = v => { try { g.addNeed('stress', v); } catch (e) { } }, K = (() => { try { return kuSt(g); } catch (e) { return null; } })(), money = v => { if (num(g.state.money) >= v) { g.state.money -= v; return true; } return false; };
+  switch (D.k) {
+    case 'start': if (k === 1) { money(5000); return 'スーパーは人であふれ、水やカップ麺の棚はからっぽだった。なんとか少しだけ買えた。'; } if (k === 2) { st(3); H.actPts = num(H.actPts) + 1; return '駅前の集会には、思ったよりたくさんの人が集まっていた。「戦争をやめろ」という声が響く。'; } return '家族で、避難する場所や連絡の方法を確かめあった。';
+    case 'info': if (k === 1) { H.actPts = num(H.actPts) + 1; return 'いくつもの報道を読み比べた。わからないことは、わからないままにしておくことにした。'; } if (k === 2) { st(5); try { ntFlame(g, '偽の戦場動画を拡散した', 55, 'post'); } catch (e) { } return '拡散した動画は、別の国の古い映像だったことがわかった。「デマを広めた」と批判のコメントが届いた。'; } return '政府の発表を信じることにした。';
+    case 'call': if (k === 0) { st(15); money(0); return '指定された基地に出頭し、数週間、物資を運ぶ後方の部隊で働いた。夜、遠くで光る閃光を見た。家に帰ったとき、家族は泣いて迎えてくれた。'; } if (k === 1) { st(10); return '良心的兵役拒否を申し立てた。「非国民」とののしるメッセージも届いたが、支えてくれる人たちもいた。審査の結果を待つ日々が続く。'; } st(4); return '家族と夜通し話し合った。答えはまだ出ない。';
+    case 'callf': if (K) K.tsuki = clamp(K.tsuki + 3, 0, 100); return k === 0 ? '駅で友人を見送った。「必ず帰ってこいよ」。80年前にも、同じ言葉を交わした人たちがいたのだろう。' : '弁護士と支援団体を紹介した。友人は少しだけ落ちついた顔になった。';
+    case 'raid': { const prep = K && K.bosai && g.state.day - K.bosai < 600; if (k === 0) { st(6); return `地下鉄の駅には、人がぎっしり集まっていた。${prep ? '持ってきた防災リュックの水を、隣の子どもに分けた。' : '何も持たずに来てしまい、心細かった。'}しばらくして、警報は解除された。`; } if (k === 1) { st(5); return '窓から離れた部屋で、家族と身を寄せあった。遠くで、低い爆発音がした。'; } st(12); if (RND() < 0.3) { money(30000); return '近くに破片が落ち、窓ガラスが割れた（修理代がかかった）。「逃げておけばよかった」と後悔した。'; } return '何も起きなかった。けれど、次も大丈夫だとは限らない。'; }
+    case 'sokai': if (k === 0) { if (K) { K.tsuki = clamp(K.tsuki + 4, 0, 100); K.ch.rep = clamp(K.ch.rep + 5, 0, 100); } return '町内会で、子どもたちを乗せたバスを見送った。窓から手をふる子どもたちの顔が、いつまでも忘れられない。'; } if (k === 1) { st(4); return '家族を地方の親戚のもとへ送り出した。家の中が、急に広く感じられた。'; } return '東京にとどまることにした。';
+    case 'ration': if (k === 1) { money(20000); st(4); if (K) K.ch.rep = clamp(K.ch.rep - 8, 0, 100); return '高値で買い占めた。近所の人には、冷たい目で見られた。'; } if (k === 2) { if (K) { K.tsuki = clamp(K.tsuki + 4, 0, 100); K.ch.rep = clamp(K.ch.rep + 5, 0, 100); } return '隣の家と、薬や食べ物を分け合った。80年前の隣組を思い出したお年寄りが、少しさびしそうに笑った。'; } return '決められた量だけを買って、なんとかやりくりした。';
+    case 'end': H.actPts = num(H.actPts) + (k === 0 ? 2 : 1); return k === 0 ? '黙とうをささげた。二度とこんなことが起きないように、自分にできることは何だろう。' : '家族の無事を、心から喜び合った。';
+  } return ''; }
+(() => { const o = hiResp; hiResp = function (g, D, k) { if (D && D.t === 'mod') { const M = HI_MOD.find(x => x.k === D.k); return hiModResp(g, D, k < 0 ? (M ? M.ch.length - 1 : 0) : k); } if (D && D.t === 'war') return hiWarResp(g, D, k < 0 ? num(D.def) : k); return o(g, D, k); }; })();
+(() => { const o = hiTick; hiTick = function (g) { const H = hiSt(g), first = H.day !== g.state.day; o(g); if (!first) return; try { hiModTick(g, H); } catch (e) { console.error('[hist] mod', e); } try { hiWarTick(g, H); } catch (e) { console.error('[hist] war', e); } }; })();
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
