@@ -13864,6 +13864,7 @@ function install() {
   try { installRel2(); } catch (e) { console.error('[rel] install2', e); }
   try { installKurashi(); } catch (e) { console.error('[ku] install', e); }
   try { installHist(); } catch (e) { console.error('[hist] install', e); }
+  try { installWar(); } catch (e) { console.error('[war] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -46507,6 +46508,116 @@ function hiWarResp(g, D, k) { const H = hiSt(g), st = v => { try { g.addNeed('st
   } return ''; }
 (() => { const o = hiResp; hiResp = function (g, D, k) { if (D && D.t === 'mod') { const M = HI_MOD.find(x => x.k === D.k); return hiModResp(g, D, k < 0 ? (M ? M.ch.length - 1 : 0) : k); } if (D && D.t === 'war') return hiWarResp(g, D, k < 0 ? num(D.def) : k); return o(g, D, k); }; })();
 (() => { const o = hiTick; hiTick = function (g) { const H = hiSt(g), first = H.day !== g.state.day; o(g); if (!first) return; try { hiModTick(g, H); } catch (e) { console.error('[hist] mod', e); } try { hiWarTick(g, H); } catch (e) { console.error('[hist] war', e); } }; })();
+// ===== 作戦室：架空の国どうしの戦争シミュレーション（作戦の選択・犠牲の記録・国内の影響・停戦）、戦争への道、戦争の記録 =====
+// 架空の国「東和国」と「北嶺連邦」。国家規模の作戦判断だけを扱い、犠牲と代償を必ず見せる。
+const WS_FR = [['land', '陸'], ['sea', '海'], ['air', '空']];
+const WS_NAMES = ['佐々木', '大野', '村田', '石井', '森', '藤田', '岡本', '西村', '今井', '岩田', '原田', '小山', '内田', '川村', '野口', '杉山'];
+const WS_GIV = ['翔太', '大輝', '健人', '陸', '蓮', '悠真', '拓海', '颯', '航', '大和'];
+const WS_PREF = ['北海道', '青森県', '宮城県', '新潟県', '長野県', '静岡県', '愛知県', '大阪府', '広島県', '福岡県', '鹿児島県', '沖縄県'];
+function wsRnd(a, b) { return a + Math.floor(RND() * (b - a + 1)); }
+function wsSt(g) { const H = hiSt(g); if (!isObj(H.sim)) H.sim = null; if (!Array.isArray(H.wars)) H.wars = []; if (!Array.isArray(H.wlog)) H.wlog = []; return H; }
+function wsNew(g, mode) { const H = wsSt(g); H.sim = { mode, week: 1, fr: { land: mode === 'def' ? -15 : 0, sea: 0, air: mode === 'def' ? -10 : 0 }, troops: 60, supply: 70, support: mode === 'def' ? 75 : 62, intl: mode === 'def' ? 70 : 40, econ: 80,
+  cas: { own: 0, wounded: 0, enemy: 0, civOwn: 0, civEnemy: 0 }, log: [], flags: {}, over: null, stance: 'normal' }; return H.sim; }
+function wsVig(S, kind) { const nm = `${WS_NAMES[wsRnd(0, WS_NAMES.length - 1)]} ${WS_GIV[wsRnd(0, WS_GIV.length - 1)]}`, age = wsRnd(19, 38), pref = WS_PREF[wsRnd(0, WS_PREF.length - 1)];
+  const L = kind === 'civ' ? [`空襲で亡くなった、${pref}に住む8歳の女の子の祖母「あの子は、来月が誕生日だったんです」`, `避難の途中で家族とはぐれた男性「妻と娘を探しています。誰か、見ていませんか」`] :
+    [`戦死した${nm}さん（${age}歳・${pref}出身）の母「小さいころから、人の役に立ちたいと言っていた子でした」`, `戦死した${nm}さん（${age}歳）の妻「生まれたばかりの娘を、一度しか抱けませんでした」`, `前線から戻った${nm}さん（${age}歳）「夜になると、仲間の声が聞こえる気がするんです」`, `敵国の兵士の遺品から、家族の写真と手紙が見つかった。「早く帰って、畑を手伝ってね」と書かれていた`];
+  return L[wsRnd(0, L.length - 1)]; }
+const WS_ACTS = [
+  ['atk_land', '陸で攻勢をかける'], ['atk_sea', '海で攻勢をかける'], ['atk_air', '空で攻勢をかける'], ['defend', '全体を防衛に切りかえる'],
+  ['supply', '補給線を立て直す'], ['mobilize', '動員する（予備役・志願兵）'], ['ally', '同盟国に支援を求める'], ['talks', '第三国を通じて停戦を交渉する'], ['surrender', '降伏する'],
+];
+function wsAvg(S) { return (S.fr.land + S.fr.sea + S.fr.air) / 3; }
+function wsCas(S, own, enemy, civO, civE) { S.cas.own += own; S.cas.wounded += Math.round(own * 2.6); S.cas.enemy += enemy; S.cas.civOwn += civO; S.cas.civEnemy += civE; const P = [[own, '自国の兵士'], [enemy, '相手の兵士'], [civO, '自国の市民'], [civE, '相手の市民']].filter(x => x[0] > 0).map(x => `${x[1]} ${x[0].toLocaleString()}人`); return P.length ? `（${P.join('・')}が死亡）` : ''; }
+function wsTurn(g, act) { const H = wsSt(g), S = H.sim; if (!S || S.over) return null; const L = []; const pw = (S.troops / 60) * (0.5 + S.supply / 140);
+  if (act.startsWith('atk_')) { const f = act.slice(4), odds = clamp(0.5 + (pw - 1) * 0.4 + S.fr[f] / 400, 0.15, 0.85), win = RND() < odds; const d = win ? wsRnd(12, 22) : -wsRnd(3, 8); S.fr[f] = clamp(S.fr[f] + d, -100, 100); if (win) for (const [o] of WS_FR) if (o !== f) S.fr[o] = clamp(S.fr[o] + 3, -100, 100); S.supply = clamp(S.supply - 8, 0, 100); if (win) S.support = clamp(S.support + 2, 0, 100); S.troops = clamp(S.troops - wsRnd(3, 6), 0, 100); S.stance = 'atk';
+    const own = wsRnd(300, 900) * (win ? 1 : 1.5) | 0, en = wsRnd(300, 900) * (win ? 1.5 : 1) | 0, civE = f === 'air' ? wsRnd(80, 400) : f === 'land' && win ? wsRnd(40, 200) : 0;
+    L.push(`${WS_FR.find(x => x[0] === f)[1]}の前線で攻勢をかけた。${win ? '前線を押しあげた。' : '攻撃は失敗し、押しもどされた。'}（見込み ${Math.round(odds * 100)}%）${wsCas(S, own, en, 0, civE)}`); }
+  else if (act === 'defend') { S.stance = 'def'; for (const [f] of WS_FR) S.fr[f] = clamp(S.fr[f] - wsRnd(0, 3), -100, 100); S.supply = clamp(S.supply + 4, 0, 100); L.push(`全体を防衛に切りかえた。前線はほとんど動かなかった。${wsCas(S, wsRnd(80, 260), wsRnd(120, 320), 0, 0)}`); }
+  else if (act === 'supply') { S.supply = clamp(S.supply + 25, 0, 100); S.econ = clamp(S.econ - 3, 0, 100); L.push(`輸送路と弾薬・燃料・食料の補給を立て直した。（補給 +25）${wsCas(S, wsRnd(40, 120), wsRnd(40, 120), 0, 0)}`); }
+  else if (act === 'mobilize') { S.troops = clamp(S.troops + 20, 0, 100); S.econ = clamp(S.econ - 10, 0, 100); S.support = clamp(S.support - 6, 0, 100); L.push(`予備役の招集と志願兵の募集を行った。工場や病院からも人手が消えた。（兵力 +20・経済 −10・支持 −6）`); }
+  else if (act === 'ally') { const ok = RND() < 0.25 + S.intl / 150; if (ok) { S.supply = clamp(S.supply + 20, 0, 100); S.troops = clamp(S.troops + 8, 0, 100); L.push('同盟国が、武器と物資の支援を約束した。（補給 +20・兵力 +8）'); } else { S.intl = clamp(S.intl - 3, 0, 100); L.push('同盟国は「状況を見守る」と答えるだけだった。'); } }
+  else if (act === 'talks') { const p = clamp(0.1 + (wsAvg(S) + 40) / 200 + S.intl / 300 + S.week / 80, 0.05, 0.9); if (RND() < p) { S.over = wsAvg(S) >= 20 ? 'ceasefire_good' : wsAvg(S) <= -20 ? 'ceasefire_bad' : 'ceasefire'; L.push(`第三国の仲介で、停戦が成立した。（見込み ${Math.round(p * 100)}%）`); } else L.push(`交渉は決裂した。相手は「いまの前線のままでは応じられない」と答えた。（見込み ${Math.round(p * 100)}%）`); }
+  else if (act === 'surrender') { S.over = 'surrender'; L.push('降伏を決めた。戦闘は止まったが、重い条件を受け入れることになる。'); }
+  // 相手の動き
+  if (!S.over) { const en = RND(); if (en < 0.4) { const f = WS_FR[wsRnd(0, 2)][0], hit = RND() < 0.4 + (S.stance === 'def' ? -0.15 : 0); S.fr[f] = clamp(S.fr[f] + (hit ? -wsRnd(3, 7) : wsRnd(1, 4)), -100, 100); L.push(`相手が${WS_FR.find(x => x[0] === f)[1]}の前線で反撃してきた。${hit ? '押しこまれた。' : 'なんとか防いだ。'}${wsCas(S, wsRnd(150, 500), wsRnd(150, 500), 0, 0)}`); }
+    else if (en < 0.7) { const civ = wsRnd(50, 600); S.support = clamp(S.support + (S.mode === 'def' ? 3 : -2), 0, 100); L.push(`相手のミサイルが自国の都市に落ちた。${wsCas(S, 0, 0, civ, 0)}`); H.wlog.unshift({ w: S.week, t: wsVig(S, 'civ') }); } }
+  // 毎週の消耗と世論
+  S.supply = clamp(S.supply - 4, 0, 100); S.econ = clamp(S.econ - 2, 0, 100); S.support = clamp(S.support - (S.mode === 'def' ? 0.8 : 1.1) - (S.cas.own > 20000 ? 1 : 0), 0, 100);
+  if (RND() < 0.45) H.wlog.unshift({ w: S.week, t: wsVig(S, 'mil') }); if (H.wlog.length > 40) H.wlog.length = 40;
+  // 終わり方
+  if (!S.over) { if (wsAvg(S) >= 50) S.over = 'victory'; else if (wsAvg(S) <= -55) S.over = 'defeat'; else if (S.support <= 8) S.over = 'collapse'; else if (S.week >= 40) S.over = 'ceasefire'; }
+  S.week++; S.log.unshift(...L.reverse()); if (S.log.length > 30) S.log.length = 30;
+  // 選択をせまる出来事
+  if (!S.over && RND() < 0.4) S.dilemma = wsPickDilemma(S);
+  if (S.over) wsFinish(g, S); return L.join('\n'); }
+const WS_DIL = [
+  { k: 'power', text: '参謀が進言してきた。「相手の発電所を攻撃すれば、敵の軍需工場が止まります。ただし、冬の都市で暮らす市民も電気を失います」', ch: [['攻撃を許可する', S => { S.fr.land += 8; S.intl -= 15; return '発電所への攻撃で、相手の都市は停電した。前線は有利になったが、凍える市民の映像が世界に流れ、国際的な非難が集まった。' + wsCas(S, 0, 0, 0, wsRnd(300, 1500)); }], ['許可しない', S => { S.intl += 4; return '市民の生活基盤への攻撃は行わないと決めた。'; }]] },
+  { k: 'pow', text: '前線で、相手の兵士およそ500人が投降してきた。仲間を殺された兵たちは、怒りをおさえられないでいる。', ch: [['国際法にしたがって捕虜を保護する', S => { S.intl += 8; return '捕虜を後方の収容所に移し、赤十字の訪問も受け入れた。'; }], ['報復の暴行を黙認する', S => { S.intl -= 20; S.support -= 4; return '捕虜への暴行が報道され、戦争犯罪として国際社会から厳しく非難された。戦後、責任を問われることになる。'; }]] },
+  { k: 'press', text: '報道官がたずねてきた。「今週の戦死者は過去最多です。どう発表しますか」', ch: [['被害を小さく発表する', S => { S.support += 5; S.flags.lie = (S.flags.lie || 0) + 1; return '「被害は軽微」と発表した。しかし、SNSには戦場の映像があふれている。80年前の大本営発表と同じ道だ、という声も出た。'; }], ['正直に発表する', S => { S.support -= 4; S.intl += 2; return '戦死者の数をそのまま発表した。国民は衝撃を受けたが、政府への信頼は保たれた。'; }]] },
+  { k: 'demo', text: '首都で、数万人規模の反戦デモが起きている。「息子を返せ」というプラカードも見える。', ch: [['デモを取り締まる', S => { S.support -= 8; S.intl -= 6; return '警察がデモ隊を排除した。逮捕者が出て、海外メディアが一斉に報じた。'; }], ['代表者と対話する', S => { S.support += 3; return '首相官邸で、デモの代表者と会った。「早く終わらせてほしい」という声を、正面から受けとめた。'; }]] },
+  { k: 'civ', text: '前線の近くの町に、まだ多くの市民が残っている。避難には、輸送部隊を作戦から外す必要がある。', ch: [['輸送部隊を回して、市民を避難させる', S => { S.supply -= 10; return '数万人の市民が、無事に後方へ避難した。その間、前線は補給が苦しくなった。'; }], ['作戦を優先する', S => { S.fr.land += 4; return '作戦は進んだが、町に残った市民が戦闘に巻きこまれた。' + wsCas(S, 0, 0, wsRnd(200, 900), 0); }]] },
+  { k: 'nuke', text: '相手国の首脳が「核兵器の使用もためらわない」と発言した。世界中が息をのんでいる。', ch: [['ただちに停戦交渉を呼びかける', S => { S.intl += 6; S.flags.calm = 1; return '国連と第三国を通じて、停戦交渉を呼びかけた。緊張は少しだけ和らいだ。'; }], ['同盟国とともに強く警告する', S => { S.support += 3; return '同盟国とともに、強い警告の声明を出した。にらみ合いが続く。'; }]] },
+];
+function wsPickDilemma(S) { const L = WS_DIL.filter(d => !(S.flags['d_' + d.k] >= 2)); if (!L.length) return null; const d = L[wsRnd(0, L.length - 1)]; S.flags['d_' + d.k] = (S.flags['d_' + d.k] || 0) + 1; return d.k; }
+function wsDilemma(g, k) { const H = wsSt(g), S = H.sim; if (!S || !S.dilemma) return ''; const D = WS_DIL.find(x => x.k === S.dilemma); S.dilemma = null; const t = D.ch[k][1](S); for (const key of ['support', 'intl', 'supply']) S[key] = clamp(S[key], 0, 100); for (const [f] of WS_FR) S.fr[f] = clamp(S.fr[f], -100, 100); S.log.unshift(t); return t; }
+const WS_END = { victory: '勝利', defeat: '敗北', collapse: '政権の崩壊', ceasefire: '停戦', ceasefire_good: '有利な条件での停戦', ceasefire_bad: '不利な条件での停戦', surrender: '降伏' };
+function wsFinish(g, S) { const H = wsSt(g); const total = S.cas.own + S.cas.enemy + S.cas.civOwn + S.cas.civEnemy; let y = 2026; try { y = dateOf(g, g.state.day).year; } catch (e) { }
+  H.wars.unshift({ kind: 'sim', y, title: `作戦室（架空）・${S.mode === 'def' ? '防衛戦' : '領土紛争'}`, result: WS_END[S.over], weeks: S.week - 1, cas: { ...S.cas }, total, lie: S.flags.lie || 0 }); if (H.wars.length > 20) H.wars.length = 20;
+  H.actPts = num(H.actPts) + 2; }
+function wsEndText(S) { const total = S.cas.own + S.cas.enemy + S.cas.civOwn + S.cas.civEnemy; const L = [`結果：${WS_END[S.over]}（${S.week - 1}週間）`];
+  L.push({ victory: '相手は前線から兵を引き、停戦に応じた。国中が勝利にわいたが、遺族の家には、喜べない夜が続く。', defeat: '前線が崩れ、首都に迫られた。屈辱的な講和を受け入れるしかなかった。', collapse: '国民の支持を失い、内閣は総辞職した。新しい政権が、ただちに停戦を申し入れた。', ceasefire: '前線はほぼ元の位置のまま、停戦が成立した。何のための戦争だったのか、という問いが残った。', ceasefire_good: '有利な条件で停戦できた。しかし、失われた命は戻らない。', ceasefire_bad: '不利な条件での停戦となった。領土の一部を失った。', surrender: '降伏した。賠償と占領が待っている。' }[S.over]);
+  L.push(`この戦争で失われた命：およそ ${total.toLocaleString()}人`); L.push(`（自国の兵士 ${S.cas.own.toLocaleString()}人・相手の兵士 ${S.cas.enemy.toLocaleString()}人・自国の市民 ${S.cas.civOwn.toLocaleString()}人・相手の市民 ${S.cas.civEnemy.toLocaleString()}人。負傷者 ${S.cas.wounded.toLocaleString()}人）`);
+  if (S.flags.lie) L.push('被害を小さく発表したことは、戦後に明らかになり、厳しい批判を受けた。'); L.push('\n戦争は、始めることより、終わらせることのほうがずっと難しい。'); return L.join('\n'); }
+// ---- エンジンの戦争（ゲームの中の日本の戦争）の記録 ----
+function wsRealTick(g) { const H = wsSt(g); let w = null; try { w = typeof g.war === 'function' ? g.war() : null; } catch (e) { } const R = H.realWar || (H.realWar = {});
+  if (w && w.phase === 'war') { if (!R.on) { R.on = 1; R.start = g.state.day; R.enemy = w.enemyName || '相手国'; R.aggr = !!w.aggressor; } const c = w.cas || {}; R.cas = { own: num(c.soldiers && c.soldiers.dead), civ: num(c.civilians && c.civilians.dead), wounded: num(c.soldiers && c.soldiers.wounded) + num(c.civilians && c.civilians.wounded) };
+    if (g.state.day - num(R.vig, -99) >= 8) { R.vig = g.state.day; H.wlog.unshift({ w: 'いま', t: wsVig({}, RND() < 0.6 ? 'mil' : 'civ') }); if (H.wlog.length > 40) H.wlog.length = 40; } return; }
+  if (R.on) { R.on = 0; let L = null; try { L = g.lastWar && g.lastWar(); } catch (e) { } const c = (L && L.cas) || {}; const own = num(c.soldiers && c.soldiers.dead, R.cas && R.cas.own), civ = num(c.civilians && c.civilians.dead, R.cas && R.cas.civ); let y = 2026; try { y = dateOf(g, g.state.day).year; } catch (e) { }
+    H.wars.unshift({ kind: 'real', y, title: `日本と${R.enemy}の戦争（${R.aggr ? '日本から開戦' : '防衛・参戦'}）`, result: (L && (L.result || L.outcome)) || '終戦', weeks: Math.round((g.state.day - num(R.start)) / 7), cas: { own, civOwn: civ, enemy: 0, civEnemy: 0, wounded: num(R.cas && R.cas.wounded) }, total: own + civ });
+    try { g.message({ from: 'ドット新聞 社会部', text: `【終戦】${R.enemy}との戦争が終わった。日本側の死者は兵士${own.toLocaleString()}人・市民${civ.toLocaleString()}人にのぼった。全国で追悼の式典が行われた。`, kind: 'news' }); } catch (e) { } } }
+// ---- 画面 ----
+GB_MODES.warroom = {
+  noHud: true,
+  init(s, g) { wsSt(g); s.S = { tab: 'sim', f: 0 }; },
+  left(s, g) { try { return Math.max(0, 1440 - (clockMin(g) % 1440) - s.mins); } catch (e) { return 999; } },
+  btn(s, id, g) { const S = s.S, H = wsSt(g); if (id === 'close') { s.done(); return; } if (id === 'resok') { S.res = null; return; } if (id.startsWith('tab:')) { S.tab = id.slice(4); return; }
+    if (id === 'new_def' || id === 'new_atk') { wsNew(g, id === 'new_def' ? 'def' : 'atk'); S.res = id === 'new_def' ? '北嶺連邦の部隊が、国境をこえて東和国に侵攻してきた。あなたは東和国の首相として、国を守る戦いを指揮する。\n\n※架空の国どうしの戦争のシミュレーションです。' : '国境の島をめぐって、東和国と北嶺連邦の対立が続いてきた。あなたは東和国の首相として、武力で島を取りもどすことを決めた。\n\n※架空の国どうしの戦争のシミュレーションです。'; return; }
+    if (id.startsWith('a:')) { if (this.left(s, g) < 30) { s.tip('今日はもう時間がない', PW.bad); return; } const t = wsTurn(g, id.slice(2)); s.mins += 30; if (t) { S.res = t; tt.sfx(/成立|勝利/.test(t) ? 'ok' : 'buzz'); } return; }
+    if (id.startsWith('d:')) { S.res = wsDilemma(g, +id.slice(2)); return; }
+    if (id === 'quit') { H.sim = null; return; }
+    if (id.startsWith('open:')) { s.done({ go: id.slice(5) }); return; } },
+  update(s) { s.S.f++; },
+  draw(s, c, g) { const S = s.S, H = wsSt(g), SIM = H.sim; pBands(c, 0, 0, 640, 360, ['#0e1210', '#101512', '#121814', '#141b16']); pR(c, 0, 0, 640, 30, '#080a08'); pR(c, 0, 29, 640, 1, '#8a9a6a'); pT(c, '作戦室', 10, 7, { size: 16, color: '#eef4e0' }); s.btn('close', '閉じる', 572, 4, 62, 22, { size: 12, back: true });
+    [['sim', '作戦室'], ['path', '開戦条件'], ['rec', '記録']].forEach(([id, nm], i) => s.btn('tab:' + id, nm, 4, 36 + i * 52, 74, 46, { size: 12, kind: S.tab === id ? 'pri' : 'norm', def: S.tab === id && i === 0 }));
+    const x0 = 84, y0 = 38, w = 548;
+    if (S.tab === 'sim') { if (!SIM) { pFrame(c, x0, y0, w, 316, { title: '架空の戦争シミュレーション', bg: '#141a14', edge: '#4a5a3a' }); wrapDot(c, '架空の国「東和国」の首相として、「北嶺連邦」との戦争を指揮する。作戦・補給・動員・外交を選び、停戦をめざす。作戦のたびに、兵士と市民の命が失われる。勝っても負けても、その数は記録に残る。', w - 24, 12).forEach((ln, i) => pT(c, ln, x0 + 12, y0 + 28 + i * 16, { size: 12, color: '#e0e8d0' }));
+        s.btn('new_def', '防衛戦（侵攻を受けた）', x0 + 12, y0 + 130, 240, 30, { size: 12, kind: 'pri', def: true }); s.btn('new_atk', '領土紛争（こちらから攻める）', x0 + 264, y0 + 130, 240, 30, { size: 12 }); return; }
+      pFrame(c, x0, y0, 250, 316, { title: `第${SIM.week}週`, bg: '#141a14', edge: '#4a5a3a' }); WS_FR.forEach(([f, nm], i) => { const yy = y0 + 28 + i * 30, v = SIM.fr[f]; pT(c, `${nm}の前線`, x0 + 10, yy, { size: 12, color: '#e0e8d0' }); pR(c, x0 + 70, yy + 4, 160, 10, '#2a1a1a'); pR(c, x0 + 150, yy + 2, 1, 14, '#888'); const len = Math.round(80 * Math.abs(v) / 100); pR(c, v >= 0 ? x0 + 150 : x0 + 150 - len, yy + 4, len, 10, v >= 0 ? '#5aa05a' : '#c05a4a'); });
+      [['兵力', SIM.troops], ['補給', SIM.supply], ['国内の支持', SIM.support], ['国際的評価', SIM.intl], ['経済', SIM.econ]].forEach(([nm, v], i) => { const yy = y0 + 124 + i * 22; pT(c, nm, x0 + 10, yy, { size: 12, color: GB_C.t2 }); pR(c, x0 + 90, yy + 4, 140, 8, '#26302a'); pR(c, x0 + 90, yy + 4, Math.round(140 * v / 100), 8, v < 25 ? '#c05a4a' : '#8ab07a'); });
+      pT(c, '失われた命', x0 + 10, y0 + 238, { size: 12, color: '#ff9a8a' }); pT(c, `兵士 ${(SIM.cas.own + SIM.cas.enemy).toLocaleString()}人`, x0 + 10, y0 + 256, { size: 12, color: '#f0d0c8' }); pT(c, `市民 ${(SIM.cas.civOwn + SIM.cas.civEnemy).toLocaleString()}人`, x0 + 10, y0 + 274, { size: 12, color: '#f0d0c8' }); pT(c, `負傷 ${SIM.cas.wounded.toLocaleString()}人`, x0 + 130, y0 + 256, { size: 12, color: GB_C.t3 });
+      const x1 = x0 + 258, w1 = w - 258; if (SIM.over) { pFrame(c, x1, y0, w1, 316, { title: '戦争の終わり', bg: '#141a14', edge: '#8a9a6a' }); wrapDot(c, wsEndText(SIM), w1 - 20, 12).slice(0, 16).forEach((ln, i) => pT(c, ln, x1 + 10, y0 + 24 + i * 15, { size: 12, color: '#eef4e0' })); s.btn('quit', '作戦室を閉じる（記録に残る）', x1 + 10, y0 + 286, w1 - 20, 24, { size: 12, kind: 'pri' }); return; }
+      if (SIM.dilemma) { const D = WS_DIL.find(x => x.k === SIM.dilemma); pFrame(c, x1, y0, w1, 316, { title: '決断', bg: '#1a1612', edge: '#c8a060' }); wrapDot(c, D.text, w1 - 20, 12).slice(0, 8).forEach((ln, i) => pT(c, ln, x1 + 10, y0 + 26 + i * 15, { size: 12, color: '#f4ead8' })); D.ch.forEach((ch, i) => s.btn('d:' + i, ch[0], x1 + 10, y0 + 230 + i * 34, w1 - 20, 28, { size: 12, def: i === 0 })); return; }
+      pFrame(c, x1, y0, w1, 316, { title: '命令（1回30分）', bg: '#141a14', edge: '#4a5a3a' }); WS_ACTS.forEach(([id, nm], i) => s.btn('a:' + id, nm, x1 + 10, y0 + 24 + i * 31, w1 - 20, 26, { size: 12, kind: id === 'talks' ? 'pri' : 'norm' })); }
+    if (S.tab === 'path') { let P = null; try { P = g.warPaths(); } catch (e) { } pFrame(c, x0, y0, w, 316, { title: 'ゲームの中の日本が戦争をするには', bg: '#141a14', edge: '#4a5a3a' });
+      if (!P) { pT(c, '（政治の情報がまだない）', x0 + 12, y0 + 30, { size: 12, color: GB_C.t3 }); return; } const reg = { democracy: '民主主義', dictatorship: '独裁体制' }[P.regime] || P.regime;
+      [`いまの体制：${reg}`, `憲法9条の改正：${P.art9 ? '済み（交戦権を容認）' : 'まだ'}`, `国軍：${P.army ? 'あり' : 'なし（自衛隊）'}`, `集団的自衛権：${P.collective || 'なし'}`, `宣戦布告：${P.declare ? `できない（${P.declare}）` : 'できる'}`, `国会で戦争が承認される見込み：${Math.round(num(P.dietOdds) * 100)}%`].forEach((t, i) => pT(c, pFit(c, t, w - 24, 12), x0 + 12, y0 + 26 + i * 18, { size: 12, color: '#e0e8d0' }));
+      wrapDot(c, String(P.paths || ''), w - 24, 12).slice(0, 7).forEach((ln, i) => pT(c, ln, x0 + 12, y0 + 140 + i * 15, { size: 12, color: GB_C.t2 }));
+      s.btn('open:strat', '戦略マップを開く', x0 + 12, y0 + 284, 150, 24, { size: 12 }); s.btn('open:politics', '政治アプリを開く', x0 + 172, y0 + 284, 150, 24, { size: 12 }); }
+    if (S.tab === 'rec') { pFrame(c, x0, y0, 290, 316, { title: '戦争の記録', bg: '#141a14', edge: '#4a5a3a' }); if (!H.wars.length) pT(c, 'まだ記録はない', x0 + 145, y0 + 150, { size: 12, color: GB_C.t3, align: 'center' });
+      H.wars.slice(0, 6).forEach((W, i) => { const yy = y0 + 24 + i * 48; pR(c, x0 + 6, yy, 278, 44, '#1a2018'); pT(c, pFit(c, `${W.y}年 ${W.title}`, 266, 12), x0 + 12, yy + 4, { size: 12, color: '#eef4e0' }); pT(c, `${W.result}・${W.weeks}週間`, x0 + 12, yy + 18, { size: 12, color: '#c8d0a0' }); pT(c, `失われた命 約${num(W.total).toLocaleString()}人`, x0 + 12, yy + 31, { size: 12, color: '#ff9a8a' }); });
+      pFrame(c, x0 + 298, y0, w - 298, 316, { title: '戦争で亡くなった人の家族の声', bg: '#141a14', edge: '#4a5a3a' }); if (!H.wlog.length) pT(c, '（まだない）', x0 + 298 + (w - 298) / 2, y0 + 150, { size: 12, color: GB_C.t3, align: 'center' }); let yy = y0 + 24; for (const v of H.wlog.slice(0, 8)) { const L = wrapDot(c, v.t, w - 318, 12).slice(0, 3); if (yy + L.length * 14 > y0 + 308) break; L.forEach((ln, j) => pT(c, ln, x0 + 306, yy + j * 14, { size: 12, color: '#e8dccc' })); yy += L.length * 14 + 6; if (yy > y0 + 300) break; } }
+    if (S.res) { s.btns.length = 0; pR(c, 0, 0, 640, 360, 'rgba(0,0,0,0.6)'); pFrame(c, 90, 60, 460, 230, { bg: '#141a14', edge: '#8a9a6a' }); wrapDot(c, S.res, 430, 12).slice(0, 12).forEach((ln, i) => pT(c, ln, 106, 74 + i * 15, { size: 12, color: '#eef4e0' })); s.btn('resok', 'OK', 270, 254, 100, 26, { kind: 'pri', def: true, size: 12 }); }
+  },
+};
+const wsIcon = gbIcon('#4a5a3a', (c, x, y) => { c.fillStyle = '#e0e8d0'; c.fillRect(x + 5, y + 8, 22, 16); c.fillStyle = '#4a5a3a'; c.fillRect(x + 8, y + 12, 6, 4); c.fillRect(x + 17, y + 17, 7, 3); c.fillStyle = '#c05a4a'; c.fillRect(x + 14, y + 10, 3, 3); });
+async function wsOpen(g) { try { wsRealTick(g); } catch (e) { } const r = await gbScene(g, { mode: 'warroom', title: '作戦室' }); gbAfter(g, r && r.mins); if (r && r.go) { try { const M = window.__RP && window.__RP.X.ev('Mm'); if (M && M[r.go] && M[r.go].open) await M[r.go].open(g); } catch (e) { console.error('[war] go', e); } } }
+try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_seiji'); if (F && !F.apps.includes('warroom')) F.apps.push('warroom'); FOLD_OF.warroom = 'f_seiji'; } } catch (e) { }
+try { if (typeof RP_GUIDE !== 'undefined' && !RP_GUIDE.some(x => x[0] === 'warroom')) RP_GUIDE.push(['warroom', '作戦室', '架空の国どうしの戦争シミュレーション、ゲームの中の日本が戦争をするための道、戦争の記録']); } catch (e) { }
+function installWar() {
+  E.Un('warroom', { name: '作戦室', color: '#4a5a3a', order: 36.75, iconHD: wsIcon, open: g => wsOpen(g) });
+  E.Tn(g => { try { wsRealTick(g); } catch (e) { console.error('[war] tick', e); } });
+  window.__WS = { st: wsSt, new: wsNew, turn: wsTurn, dil: wsDilemma, open: wsOpen, real: wsRealTick };
+}
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
