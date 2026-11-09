@@ -13854,6 +13854,7 @@ function install() {
   try { installNet(); } catch (e) { console.error('[net] install', e); }
   try { installRP(); } catch (e) { console.error('[rp] install', e); }
   try { installRP2(); } catch (e) { console.error('[rp] install2', e); }
+  try { installRP3(); } catch (e) { console.error('[rp] install3', e); }
   try { installRel(); } catch (e) { console.error('[rel] install', e); }
   try { installRel2(); } catch (e) { console.error('[rel] install2', e); }
   try {
@@ -45130,6 +45131,73 @@ function installRP2() { if (!RP_X) return; const d3 = rpEv('d3');
   const rt0 = rpTick; rpTick = function (g) { rt0(g); try { const P = g.state && g.state.politics; if (P && P.flags && P.flags.realParties === 1 && P.parties) rpRealignTick(g, P); } catch (e) { console.error('[rp] realign tick', e); } };
   E.Un('rprace', { name: '党首選', color: '#c0302a', order: 36.47, iconHD: rpRaceIcon, badge: g => { try { const L = g.state.politics.flags.rpRaces; return L && L[0] && !L[0].seen ? 1 : 0; } catch (e) { return 0; } }, open: g => rpRaceOpen(g) });
   if (window.__RP) Object.assign(window.__RP, { tick: rpTick, race: rpApplyRace, rec: rpRecordRace, realign: rpRealignTick, raceOpen: rpRaceOpen });
+}
+// ===== 実在の政党3：ほかの党の党首選の実名候補、主人公が党首選で誰を支持するか、自民党の派閥の実名化 =====
+const RP_CAND2 = [
+  rpP('ishida_k', '石田 幸四郎', 1930, 1967, 'm', '党務・調整', [60, 70, 76, 74, 62], [-10, 0, 10, 0, 10, 0, 0], '1989年から公明党委員長。細川連立政権では総務庁長官を務めた。', ['1967年 衆議院議員に初当選', '1989〜94年 公明党委員長'], '', [['komei', 'cand', 0, 0]]),
+  rpP('ota_a', '太田 昭宏', 1945, 1990, 'm', '現場主義', [66, 74, 80, 76, 66], [-10, 0, 10, 0, 10, 0, 10], '2006年から公明党代表。のちに国土交通大臣を務めた。', ['1990年 衆議院議員に初当選', '2006〜09年 公明党代表', '2012〜15年 国土交通大臣'], '', [['komei', 'cand', 0, 0]]),
+  rpP('yamaguchi_n', '山口 那津男', 1952, 1990, 'm', '弁護士・安定', [76, 78, 84, 82, 66], [-10, 0, 10, 10, 10, 0, 10], '弁護士出身。2009年から15年にわたり公明党代表を務め、自公連立を支えた。', ['1990年 衆議院議員に初当選', '2001年〜 参議院議員', '2009〜24年 公明党代表'], '', [['komei', 'cand', 0, 0]], 'sangi'),
+  rpP('ishii_k', '石井 啓一', 1958, 1993, 'm', '政策・実務', [58, 78, 76, 70, 62], [-10, 0, 0, 0, 10, 0, 20], '国土交通大臣・党幹事長をへて2024年に代表に就いたが、直後の総選挙で落選し、辞任した。', ['1993年 衆議院議員に初当選', '2015〜19年 国土交通大臣', '2024年 公明党代表'], '', [['komei', 'cand', 0, 0]]),
+  rpP('yoshida_t', '吉田 忠智', 1956, 2010, 'm', '労組出身', [56, 66, 70, 60, 60], [-50, -30, -40, -30, 20, 10, 0], '大分県出身。2013年から社民党党首を務めた。', ['2010年 参議院議員に初当選', '2013〜18年 社民党党首'], '', [['shamin', 'cand', 0, 0]], 'sangi'),
+  rpP('baba_n', '馬場 伸幸', 1965, 2012, 'm', '党務・実務', [64, 68, 74, 74, 70], [50, 30, 20, 10, 0, 40, 20], '堺市議会議員から国政へ。2022年から日本維新の会代表を務めた。', ['2012年 衆議院議員に初当選', '2022〜24年 日本維新の会代表'], '', [['ishin', 'cand', 0, 0]]),
+  rpP('adachi_y', '足立 康史', 1965, 2012, 'm', '論客・毒舌', [80, 70, 50, 50, 76], [60, 30, 20, 10, 0, 30, 30], '経済産業省出身。歯に衣着せぬ論戦で知られた。', ['2012年 衆議院議員に初当選'], '', [['ishin', 'cand', 0, 0]]),
+  rpP('umemura_m', '梅村 みずほ', 1978, 2019, 'f', '若手・発信', [72, 60, 56, 46, 66], [50, 30, 20, 10, 0, 30, 30], 'フリーアナウンサー出身。2022年の維新代表選に立候補した。', ['2019年 参議院議員に初当選'], '', [['ishin', 'cand', 0, 0]], 'sangi'),
+  rpP('kanemura_r', '金村 龍那', 1979, 2021, 'm', '若手', [62, 62, 60, 46, 64], [50, 30, 20, 10, 0, 40, 30], '2024年の維新代表選に立候補した。', ['2021年 衆議院議員に初当選'], '', [['ishin', 'cand', 0, 0]]),
+  rpP('mori_y', '森 喜朗', 1937, 1969, 'm', '派閥の領袖・スポーツ', [62, 64, 80, 88, 66], [40, 30, 50, 10, 0, 0, 10], '清和会を率いた派閥の領袖。首相のあとは、スポーツ界でも要職を務めた。', ['1969年 衆議院議員に初当選', '2000〜01年 自民党総裁・内閣総理大臣'], '', [['jimin', 'cand', 0, 0]]),
+  rpP('komoto', '河本 敏夫', 1911, 1949, 'm', '派閥の領袖', [56, 72, 72, 76, 62], [30, 20, 20, 20, 0, 0, 0], '三光汽船の創業者。番町政策研究所（河本派）を率いた。', ['1949年 衆議院議員に初当選', '経済企画庁長官などを歴任'], '', [['jimin', 'cand', 0, 0]]),
+];
+const RP_RACE2 = {
+  komei: [[1989.4, 1994.9, ['ishida_k']], [1998.85, 2006.7, ['kanzaki']], [2006.7, 2009.65, ['ota_a']], [2009.65, 2024.7, ['yamaguchi_n']], [2024.7, 2024.85, ['ishii_k']], [2024.85, 2030, ['saito_t']]],
+  kyosan: [[1989.4, 2000.85, ['fuwa']], [2000.85, 2024.0, ['shii']], [2024.0, 2035, ['tamura_t']]],
+  shamin: [[1996.7, 2003.85, ['doi']], [2003.85, 2013.7, ['fukushima']], [2013.7, 2018.1, ['yoshida_t']], [2018.1, 2020.1, ['mataichi']], [2020.1, 2035, ['fukushima']]],
+  ishin: [[2015.8, 2022.5, ['matsui']], [2022.5, 2024.9, ['baba_n', 'adachi_y', 'umemura_m']], [2024.9, 2035, ['yoshimura', 'kanemura_r']]],
+  kokumin: [[2020.6, 2035, ['tamaki']]], reiwa: [[2019.2, 2035, ['yamamoto_t']]], sansei: [[2023.4, 2035, ['kamiya']]], hoshu: [[2023.7, 2035, ['hyakuta']]], mirai: [[2025.3, 2035, ['anno']]],
+};
+// ---- 自民党の派閥：時代ごとの実名（大きい順） ----
+const RP_FAC = {
+  showa: [['経世会', 'takeshita'], ['清和会', 'abe_shintaro'], ['宏池会', 'miyazawa'], ['政策科学研究所', 'nakasone'], ['番町政策研究所', 'komoto']],
+  heisei_early: [['平成研究会', 'obuchi'], ['清和会', 'mitsuzuka'], ['宏池会', 'miyazawa'], ['政策科学研究所', null], ['番町政策研究所', 'komoto']],
+  heisei: [['平成研究会', 'hashimoto_r'], ['清和政策研究会', 'mori_y'], ['宏池会', 'horiuchi'], ['志帥会', 'kamei'], ['近未来政治研究会', 'yamasaki_t']],
+  reiwa: [['志公会', 'aso'], ['旧平成研究会', 'motegi'], ['旧宏池会', 'kishida']],
+};
+function rpFactions(t, P) { const J = P.parties.jimin; if (!J || !Array.isArray(J.factions) || !J.factions.length) return; const L = RP_FAC[P.era]; if (!L) return;
+  const d3 = rpEv('d3'), WNe = rpEv('WNe'), yr = num(P.flags.rpStart, 2026), R = P.real || (P.real = { map: {}, served: [] }); if (!R.map) R.map = {};
+  const F = J.factions.slice().sort((a, b) => num(b.size) - num(a.size));
+  F.forEach((f, i) => { const sp = L[i]; if (!sp) return; const [club, key] = sp; f.club = club;
+    if (key && d3[key] && t.state.realPols !== false) { let npc = R.map[key] && P.npcs[R.map[key]];
+      if (npc && npc.real === key && npc.party === 'jimin') { const old = P.npcs[f.leader]; f.leader = npc.id; npc.faction = f.id; if (old && old !== npc && !old.real) old.faction = f.id; }
+      else { npc = P.npcs[f.leader]; if (npc && !npc.real && npc.id !== 'player') { WNe(P, npc, d3[key], Math.floor(yr)); rpLook(npc, d3[key]); npc.age = Math.max(25, Math.floor(yr) - d3[key].birth); npc.wins = Math.max(1, Math.floor((yr - d3[key].first) / 3.1) + 1); R.map[key] = npc.id; } } }
+    const ld = P.npcs[f.leader], sur = ld ? String(ld.name).split(' ')[0] : '';
+    f.name = club.startsWith('旧') ? `${club}・${sur}グループ` : `${club}・${sur}派`; }); }
+// ---- 主人公が党首選で誰を支持するか ----
+function rpRaceNames(P, pid, yr) { const T = { ...RP_RACE, ...RP_RACE2 }[pid] || []; const w = T.find(([a, b]) => yr >= a && yr < b); const d3 = rpEv('d3'); const used = (P.flags.rpRaceUsed || {})[pid + ':' + (w && w[0])];
+  if (w && !used) return w[2].map(k => ({ key: k, name: d3[k] ? d3[k].name : k }));
+  const party = P.parties[pid]; const ids = new Set(); for (const f of party.factions || []) if (P.npcs[f.leader]) ids.add(f.leader); for (const v of Object.values(party.posts || {})) if (P.npcs[v]) ids.add(v);
+  return [...ids].slice(0, 4).map(id => ({ id, name: P.npcs[id].name })); }
+function rpBackTick(t, P) { const me = P.me; if (!me || !me.party) return; let U = []; try { U = t.upcomingElections() || []; } catch (e) { return; }
+  const e0 = U.find(e => e && e.kind === 'sosaisen' && e.party === me.party && e.day - t.state.day <= 12 && e.day > t.state.day); if (!e0) return; const key = 'back_' + me.party + '_' + e0.day; const D = P.flags.rpBackAsk || (P.flags.rpBackAsk = {}); if (D[key]) return; D[key] = 1;
+  const party = P.parties[me.party]; if (!party) return; const N = rpRaceNames(P, me.party, rpYear(t)).slice(0, 5); if (!N.length) return;
+  const diet = me.office === 'shugi' || me.office === 'sangi'; const kind = me.party === 'jimin' ? '総裁選' : `${party.leaderTitle}選`;
+  try { E.R4(t, { kind: 'np_rp', key: 'np_rp_' + key, title: `${party.short}${kind}、誰を支持する？`, text: `${party.name}の${kind}が近づいてきた。\n${diet ? '国会議員として1票を持っている。陣営からは応援演説や票の取りまとめも頼まれる。' : '党員として、党員票を投じられる。'}\n立候補が見込まれるのは：${N.map(x => x.name).join('、')}`, choices: [...N.map(x => `${x.name}を支持する`), '誰も支持しない'], def: N.length, days: 10, data: { t: 'back', party: me.party, day: e0.day, N, diet } }); } catch (er) { console.error('[rp] back ask', er); } }
+function rpBackResp(t, D, k) { const P = t.state.politics; if (!P) return ''; if (k < 0 || k >= D.N.length) { P.flags.rpBack = null; return '今回は、誰も支持しないことにした。'; } const c = D.N[k]; P.flags.rpBack = { party: D.party, key: c.key || null, id: c.id || null, name: c.name, day: D.day, diet: !!D.diet };
+  return D.diet ? `${c.name}氏の陣営に加わった。議員の票をまとめ、地方の党員にも電話をかけて回る。\n勝てば、新しい執行部で重く用いられるかもしれない。負ければ……。` : `${c.name}氏に党員票を投じることにした。`; }
+function rpBackApply(t, P, party, h) { const B = P.flags.rpBack; if (!B || B.party !== party.id) return; const R = P.real && P.real.map || {}; const id = B.key ? R[B.key] : B.id; const c = h.find(x => x.id === id || x.name === B.name); if (!c) return; B.cand = c.id;
+  const me = P.me, i = Math.max(1, rpEv('k8')(P, party.id)), inf = B.diet ? 1 + num(me.standing) / 60 + num(me.reputation) / 80 : 0.2; const fac = (party.factions || []).find(f => f.id === me.faction);
+  c.diet += i * 0.02 * inf + (B.diet && fac && fac.leader !== c.id ? fac.size * 0.1 : 0); c.member += 0.03 * inf; }
+function rpBackResult(t, P, a, r) { const B = P.flags.rpBack; if (!B || B.party !== a.party || !r || !r.winners || !r.winners[0]) return; P.flags.rpBack = null; const me = P.me, won = r.winners[0].name === B.name;
+  if (won) { me.reputation = num(me.reputation) + (B.diet ? 6 : 2); me.standing = num(me.standing) + (B.diet ? 8 : 2); rpEv('z1')(t, B.diet ? `【党首選】支持した${B.name}氏が勝った。新しい執行部から「これからも力を貸してほしい」と声がかかった。（党内での立場が上がった）` : `【党首選】票を投じた${B.name}氏が勝った。`); }
+  else { if (B.diet) { me.standing = Math.max(0, num(me.standing) - 6); } rpEv('z1')(t, B.diet ? `【党首選】支持した${B.name}氏は敗れた。新しい執行部からは、しばらく冷たくされそうだ。（党内での立場が下がった）` : `【党首選】票を投じた${B.name}氏は敗れた。`); } }
+function installRP3() { if (!RP_X) return; const d3 = rpEv('d3');
+  for (const S of RP_CAND2) if (!d3[S.key]) { d3[S.key] = { ...S, party: S.w[0][0], slot: 'cand', photo: undefined }; delete d3[S.key].w; }
+  for (const [k, v] of Object.entries(RP_RACE2)) RP_RACE[k] = (RP_RACE[k] || []).concat(v);
+  // 派閥：世界をつくったあとに実名化
+  RP_X.set('Bft', orig => function (t) { const o = orig(t); try { if (o && o.flags && o.flags.realParties === 1) rpFactions(t, o); } catch (e) { console.error('[rp] factions', e); } return o; });
+  // 主人公の支持を党首選に反映（実名候補の差し込みのあと）
+  RP_X.set('KNe', orig => function (t, e, a, n, o) { const r = orig(t, e, a, n, o); try { if (e && e.flags) rpBackApply(t, e, a, n); } catch (er) { console.error('[rp] back', er); } return r; });
+  RP_X.set('LNe', orig => function (t, e, a) { const r = orig(t, e, a); try { if (e && e.flags) rpBackResult(t, e, a, r); } catch (er) { console.error('[rp] back res', er); } return r; });
+  const rt0 = rpTick; rpTick = function (g) { rt0(g); try { const P = g.state && g.state.politics; if (P && P.flags && P.parties) { rpBackTick(g, P); const J = P.parties.jimin; for (const f of (J && J.factions) || []) { if (!f.club) continue; const ld = P.npcs[f.leader]; if (!ld) continue; const sur = String(ld.name).split(' ')[0], nm = f.club.startsWith('旧') ? `${f.club}・${sur}グループ` : `${f.club}・${sur}派`; if (f.name !== nm) f.name = nm; } } } catch (e) { console.error('[rp] back tick', e); } };
+  if (E.ug) E.ug('np_rp', (g, it, k) => { try { const D = it.data || {}; if (D.t === 'back') return rpBackResp(g, D, k < 0 ? D.N.length : k); } catch (e) { console.error('[rp] resp', e); } return ''; });
+  if (window.__RP) Object.assign(window.__RP, { tick: rpTick, facs: rpFactions, backAsk: rpBackTick, backResp: rpBackResp });
 }
 // ===== 宗教：世界の宗教（7）と教団（6）、教祖・指導者、入信・活動・階位・迷い・脱会、勧誘と家族、宗教2世、歴史の出来事（信者の目線）、政治との連動 =====
 // 事件は史実どおりにニュース・出来事として起きる。主人公が犯罪を実行する展開はない（信者として体験し、残る・離れる・協力するを選ぶ）。
