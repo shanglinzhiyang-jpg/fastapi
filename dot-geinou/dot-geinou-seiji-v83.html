@@ -13857,6 +13857,7 @@ function install() {
   try { installRP3(); } catch (e) { console.error('[rp] install3', e); }
   try { installRP4(); } catch (e) { console.error('[rp] install4', e); }
   try { installRP5(); } catch (e) { console.error('[rp] install5', e); }
+  try { installRP6(); } catch (e) { console.error('[rp] install6', e); }
   try { installRel(); } catch (e) { console.error('[rel] install', e); }
   try { installRel2(); } catch (e) { console.error('[rel] install2', e); }
   try {
@@ -45315,7 +45316,7 @@ function rpCabFix(t, P) { if (!P || !P.cabinet || t.state.realPols === false) re
   const yr = rpYear(t), L = RP_CAB[pn.real](yr), d3 = rpEv('d3'), WNe = rpEv('WNe'), coal = P.cabinet.partyIds || [], M = P.cabinet.ministers || (P.cabinet.ministers = {}); const R = P.real || (P.real = { map: {}, served: [] }); if (!R.map) R.map = {};
   RP_CABP.forEach((post, i) => { const key = L[i]; if (!key || !d3[key]) return; const S = d3[key], party = S.party || 'jimin'; if (!coal.includes(party)) return; const cur = M[post]; if (cur === 'player') return;
     let npc = R.map[key] && P.npcs[R.map[key]]; if (npc && (npc.real !== key || npc.dead || !coal.includes(npc.party))) npc = null;
-    if (!npc) { const curN = cur && P.npcs[cur]; const inCab = new Set(Object.values(M)); const cands = [curN, ...Object.values(P.npcs)].filter(n => n && n.party === party && n.office && !n.real && !n.dead && n.id !== pm && (n === curN || !inCab.has(n.id))); npc = cands[0]; if (!npc) return;
+    if (!npc) { const curN = cur && P.npcs[cur]; const inCab = new Set(Object.values(M)); const cands = [curN, ...Object.values(P.npcs)].filter(n => n && n.party === party && n.office && !n.real && !n.dead && n.id !== pm && (n === curN || !inCab.has(n.id))); npc = cands[0] || (() => { try { return rpEv('Tm')(P, { party, house: S.house || 'shugi', office: S.house || 'shugi', wins: 5, age: 60 }); } catch (e) { return null; } })(); if (!npc) return;
       const was = npc.house === 'sangi'; WNe(P, npc, S, Math.floor(yr)); rpLook(npc, S); if (S.house === 'sangi' && was) { npc.house = 'sangi'; npc.office = 'sangi'; } npc.age = Math.max(25, Math.floor(yr) - S.birth); npc.wins = Math.max(1, S.first <= yr ? Math.floor((yr - S.first) / 3.1) + 1 : 1); R.map[key] = npc.id; }
     if (M[post] === npc.id) return; for (const [k, v] of Object.entries(M)) if (v === npc.id && k !== post) { delete M[k]; npc.posts = (npc.posts || []).filter(x => x !== k); }
     const old = cur && P.npcs[cur]; if (old) old.posts = (old.posts || []).filter(x => x !== post); M[post] = npc.id; npc.posts = npc.posts || []; if (!npc.posts.includes(post)) npc.posts.push(post); }); }
@@ -45365,6 +45366,79 @@ function installRP5() { if (!RP_X) return; const d3 = rpEv('d3');
     s.btn('tab:race', '党首選', 170, 4, 80, 22, { size: 12, kind: S.tab !== 'elec' ? 'pri' : 'norm' }); s.btn('tab:elec', '国政選挙', 256, 4, 80, 22, { size: 12, kind: S.tab === 'elec' ? 'pri' : 'norm' }); };
   E.Un('rpguide', { name: '政治ガイド', color: '#2a8a7a', order: 36.40, iconHD: rpGuideIcon, open: g => rpGuideOpen(g) });
   if (window.__RP) Object.assign(window.__RP, { cab: rpCabFix, recElec: rpRecElec, guideOpen: rpGuideOpen });
+}
+// ===== 実在の政党6：全閣僚の実名化（開始時の4内閣）、解散風と進言、政治資金パーティー収入の問題 =====
+function rpMM(key, name, birth, first, g, party, house, role) { const st = [56 + key.length % 9, 66 + key.length % 11, 64 + key.length % 13, 56 + key.length % 7, 58 + key.length % 9];
+  const P = rpP(key, name, birth, first, g, '閣僚', st, [20, 10, 20, 10, 0, 0, 10], `${role}を務めた。`, [first ? `${first}年 ${house === 'sangi' ? '参議院' : '衆議院'}議員に初当選` : '民間から起用', role], '', [[party, 'minister', 0, 0]], house); return P; }
+const RP_MIN2 = [
+  // 中曽根内閣（1987年）
+  rpMM('endo_k', '遠藤 要', 1915, 1971, 'm', 'jimin', 'sangi', '中曽根内閣の法務大臣'), rpMM('saito_j', '斎藤 十朗', 1940, 1972, 'm', 'jimin', 'sangi', '中曽根内閣の厚生大臣（のちに参議院議長）'), rpMM('kato_m', '加藤 六月', 1926, 1967, 'm', 'jimin', 'shugi', '中曽根内閣の農林水産大臣'),
+  rpMM('tamura_h', '田村 元', 1924, 1955, 'm', 'jimin', 'shugi', '中曽根内閣の通商産業大臣（のちに衆議院議長）'), rpMM('karasawa', '唐沢 俊二郎', 1930, 1969, 'm', 'jimin', 'shugi', '中曽根内閣の郵政大臣'), rpMM('hirai_t', '平井 卓志', 1931, 1974, 'm', 'jimin', 'sangi', '中曽根内閣の労働大臣'),
+  rpMM('amano_m', '天野 光晴', 1907, 1960, 'm', 'jimin', 'shugi', '中曽根内閣の建設大臣'), rpMM('hanashi', '葉梨 信行', 1928, 1967, 'm', 'jimin', 'shugi', '中曽根内閣の自治大臣'), rpMM('kurihara', '栗原 祐幸', 1920, 1959, 'm', 'jimin', 'shugi', '中曽根内閣の防衛庁長官'),
+  rpMM('yamashita_t', '山下 徳夫', 1919, 1960, 'm', 'jimin', 'shugi', '中曽根内閣の総務庁長官'), rpMM('kondo_t', '近藤 鉄雄', 1929, 1972, 'm', 'jimin', 'shugi', '中曽根内閣の経済企画庁長官'),
+  // 橋本内閣（1996年）
+  rpMM('nagao_r', '長尾 立子', 1933, 0, 'f', 'jimin', 'shugi', '橋本内閣の法務大臣（民間から起用）'), rpMM('okuda_m', '奥田 幹生', 1928, 1976, 'm', 'jimin', 'shugi', '橋本内閣の文部大臣'), rpMM('ohara_i', '大原 一三', 1924, 1983, 'm', 'jimin', 'shugi', '橋本内閣の農林水産大臣'),
+  rpMM('tsukahara', '塚原 俊平', 1947, 1976, 'm', 'jimin', 'shugi', '橋本内閣の通商産業大臣'), rpMM('kamei_y', '亀井 善之', 1936, 1979, 'm', 'jimin', 'shugi', '橋本内閣の運輸大臣、小泉内閣の農林水産大臣'), rpMM('hino', '日野 市朗', 1934, 1976, 'm', 'shamin', 'shugi', '橋本内閣の郵政大臣'),
+  rpMM('nagai_t', '永井 孝信', 1930, 1979, 'm', 'shamin', 'shugi', '橋本内閣の労働大臣'), rpMM('nakao_e', '中尾 栄一', 1930, 1967, 'm', 'jimin', 'shugi', '橋本内閣の建設大臣'), rpMM('kurata', '倉田 寛之', 1938, 1980, 'm', 'jimin', 'sangi', '橋本内閣の自治大臣（のちに参議院議長）'),
+  rpMM('usui', '臼井 日出男', 1939, 1980, 'm', 'jimin', 'shugi', '橋本内閣の防衛庁長官'), rpMM('nakanishi_s', '中西 績介', 1926, 1969, 'm', 'shamin', 'shugi', '橋本内閣の総務庁長官'), rpMM('iwatare', '岩垂 寿喜男', 1929, 1972, 'm', 'shamin', 'shugi', '橋本内閣の環境庁長官'),
+  rpMM('suzuki_kz', '鈴木 和美', 1929, 1980, 'm', 'shamin', 'sangi', '橋本内閣の国土庁長官'), rpMM('nakagawa_h', '中川 秀直', 1944, 1976, 'm', 'jimin', 'shugi', '橋本内閣の科学技術庁長官（のちに党幹事長）'), rpMM('okabe', '岡部 三郎', 1926, 1983, 'm', 'jimin', 'sangi', '橋本内閣の北海道・沖縄開発庁長官'),
+  // 小泉内閣（2004年）
+  rpMM('nozawa', '野沢 太三', 1933, 1986, 'm', 'jimin', 'sangi', '小泉内閣の法務大臣'), rpMM('sakaguchi', '坂口 力', 1934, 1972, 'm', 'komei', 'shugi', '小泉内閣の厚生労働大臣'), rpMM('ono_k', '小野 清子', 1936, 1986, 'f', 'jimin', 'sangi', '小泉内閣の国家公安委員長（元体操選手）'),
+  rpMM('takenaka', '竹中 平蔵', 1951, 2004, 'm', 'jimin', 'sangi', '小泉内閣の経済財政政策・金融担当大臣（経済学者から起用）'),
+  // 高市内閣（2025年〜）
+  rpMM('hiraguchi', '平口 洋', 1948, 2005, 'm', 'jimin', 'shugi', '高市内閣の法務大臣'), rpMM('matsumoto_yh', '松本 洋平', 1973, 2005, 'm', 'jimin', 'shugi', '高市内閣の文部科学大臣'), rpMM('ueno_k', '上野 賢一郎', 1965, 2005, 'm', 'jimin', 'shugi', '高市内閣の厚生労働大臣'),
+  rpMM('suzuki_nk', '鈴木 憲和', 1982, 2012, 'm', 'jimin', 'shugi', '高市内閣の農林水産大臣'), rpMM('akazawa', '赤沢 亮正', 1961, 2005, 'm', 'jimin', 'shugi', '高市内閣の経済産業大臣（石破内閣では日米関税交渉を担当）'), rpMM('kaneko_y', '金子 恭之', 1961, 2000, 'm', 'jimin', 'shugi', '高市内閣の国土交通大臣'),
+  rpMM('ishihara_h', '石原 宏高', 1964, 2005, 'm', 'jimin', 'shugi', '高市内閣の環境大臣'), rpMM('matsumoto_hs', '松本 尚', 1962, 2021, 'm', 'jimin', 'shugi', '高市内閣のデジタル大臣（救急医出身）'), rpMM('makino_t', '牧野 たかお', 1958, 2007, 'm', 'jimin', 'sangi', '高市内閣の復興大臣'),
+  rpMM('akama', '赤間 二郎', 1968, 2005, 'm', 'jimin', 'shugi', '高市内閣の国家公安委員長'), rpMM('kiuchi', '城内 実', 1965, 2003, 'm', 'jimin', 'shugi', '高市内閣の経済財政政策担当大臣'), rpMM('onoda', '小野田 紀美', 1982, 2016, 'f', 'jimin', 'sangi', '高市内閣の経済安全保障担当大臣'),
+];
+const RP_CAB_FULL = {
+  nakasone: [1986.5, 1987.84, { minister_justice: 'endo_k', minister_education: 'shiokawa', minister_health: 'saito_j', minister_agri: 'kato_m', minister_trade: 'tamura_h', minister_transport: 'hashimoto_r', minister_posts: 'karasawa', minister_labor: 'hirai_t', minister_construction: 'amano_m', minister_home: 'hanashi', minister_defense: 'kurihara', minister_mgmt: 'yamashita_t', minister_epa: 'kondo_t' }],
+  hashimoto_r: [1996.0, 1996.85, { minister_justice: 'nagao_r', minister_education: 'okuda_m', minister_agri: 'ohara_i', minister_trade: 'tsukahara', minister_transport: 'kamei_y', minister_posts: 'hino', minister_labor: 'nagai_t', minister_construction: 'nakao_e', minister_home: 'kurata', minister_defense: 'usui', minister_mgmt: 'nakanishi_s', minister_env: 'iwatare', minister_land: 'suzuki_kz', minister_sci: 'nakagawa_h', minister_hokkaido: 'okabe', minister_okinawa: 'okabe' }],
+  koizumi: [2003.85, 2004.7, { minister_internal: 'aso', minister_justice: 'nozawa', minister_education: 'kawamura_t', minister_health: 'sakaguchi', minister_agri: 'kamei_y', minister_trade: 'nakagawa_s', minister_transport: 'ishihara_n', minister_env: 'koike_y', minister_defense: 'ishiba', minister_npsc: 'ono_k', minister_econ: 'takenaka', minister_special: 'motegi' }],
+  takaichi: [2025.79, 2027.5, { minister_internal: 'hayashi_ym', minister_justice: 'hiraguchi', minister_education: 'matsumoto_yh', minister_health: 'ueno_k', minister_agri: 'suzuki_nk', minister_trade: 'akazawa', minister_transport: 'kaneko_y', minister_env: 'ishihara_h', minister_defense: 'koizumi_s', minister_digital: 'matsumoto_hs', minister_reconstruction: 'makino_t', minister_npsc: 'akama', minister_econ: 'kiuchi', minister_special: 'onoda' }],
+};
+function rpCabFull(t, P) { if (!P || !P.cabinet || t.state.realPols === false) return; const pm = P.cabinet.pm, pn = pm && pm !== 'player' && P.npcs[pm]; if (!pn || !pn.real) return; const T = RP_CAB_FULL[pn.real]; if (!T) return; const yr = rpYear(t); if (yr < T[0] || yr >= T[1]) return;
+  const d3 = rpEv('d3'), WNe = rpEv('WNe'), tn = rpEv('tn'), coal = P.cabinet.partyIds || [], M = P.cabinet.ministers || (P.cabinet.ministers = {}); const R = P.real || (P.real = { map: {}, served: [] }); if (!R.map) R.map = {};
+  let H4 = null; try { H4 = rpEv('H4'); } catch (e) { }
+  for (const [post, key] of Object.entries(T[2])) { if (!tn[post] || !d3[key]) continue; if (H4 && !H4(post, yr, P.flags)) continue; const S = d3[key], party = S.party || 'jimin'; if (!coal.includes(party)) continue; const cur = M[post]; if (cur === 'player') continue;
+    let npc = R.map[key] && P.npcs[R.map[key]]; if (npc && (npc.real !== key || npc.dead || !coal.includes(npc.party))) npc = null;
+    if (!npc) { const curN = cur && P.npcs[cur]; const inCab = new Set(Object.values(M)); const cands = [curN, ...Object.values(P.npcs)].filter(n => n && n.party === party && n.office && !n.real && !n.dead && n.id !== pm && (n === curN || !inCab.has(n.id))); npc = cands[0] || (() => { try { return rpEv('Tm')(P, { party, house: S.house || 'shugi', office: S.house || 'shugi', wins: 5, age: 60 }); } catch (e) { return null; } })(); if (!npc) continue;
+      const was = npc.house === 'sangi'; WNe(P, npc, S, Math.floor(yr)); rpLook(npc, S); if (S.house === 'sangi' && was) { npc.house = 'sangi'; npc.office = 'sangi'; } npc.age = Math.max(25, Math.floor(yr) - S.birth); npc.wins = Math.max(1, S.first && S.first <= yr ? Math.floor((yr - S.first) / 3.1) + 1 : 1); R.map[key] = npc.id; }
+    if (M[post] === npc.id) continue; if (key !== 'okabe') for (const [k, v] of Object.entries(M)) if (v === npc.id && k !== post && !RP_CABP.includes(k)) { delete M[k]; npc.posts = (npc.posts || []).filter(x => x !== k); }
+    const old = cur && P.npcs[cur]; if (old && old !== npc) old.posts = (old.posts || []).filter(x => x !== post); M[post] = npc.id; npc.posts = npc.posts || []; if (!npc.posts.includes(post)) npc.posts.push(post); } }
+// ---- 解散風 ----
+const RP_DISSO = [[1990.08, '消費税解散'], [1993.47, 'うそつき解散'], [1996.73, '小選挙区解散'], [2000.42, '神の国解散'], [2003.78, 'マニフェスト解散'], [2005.6, '郵政解散'], [2009.55, '政権選択解散'], [2012.87, '近いうち解散'], [2014.89, 'アベノミクス解散'], [2017.74, '国難突破解散']];
+function rpWind(t, P) { const S = P.diet && P.diet.shugi; if (!S || S.dissolved) return 0; let el = 0; try { el = (rpEv('Tc')(P, rpEv('Ln')(t)) - num(S.last)) / 480; } catch (e) { el = 0.5; } const ap = num(P.cabinet.approval, 40);
+  return Math.round(clamp(el * 70 + Math.max(0, ap - 40) * 0.9 + (num(P.cabinet.honeymoon) > 0 ? 8 : 0) - (P.flags.nejire ? 5 : 0), 0, 100)); }
+function rpWindTick(t, P) { const w = rpWind(t, P); P.flags.rpWind = w; const S = P.diet.shugi; const key = 'w' + num(S.last); const D = P.flags.rpWindAsk || (P.flags.rpWindAsk = {}); const me = P.me;
+  if (w >= 60 && !D[key]) { D[key] = 1; try { rpEv('Io')(P, t, '永田町に「解散風」が吹きはじめた。各党が選挙の準備を急いでいる'); } catch (e) { }
+    if (P.cabinet.pm === 'player') { try { E.R4(t, { kind: 'np_rp', key: 'np_rp_dis_' + key, title: '幹事長が解散を進言', text: `幹事長が官邸にやってきた。\n「総理、内閣支持率は${Math.round(num(P.cabinet.approval))}%。いまなら勝てます。解散を決断してください」\n解散すれば、約12日後に総選挙になる。`, choices: ['衆議院を解散する', 'まだ見送る'], def: 1, days: 6, data: { t: 'dis' } }); } catch (e) { } }
+    else if (me && me.office === 'shugi') { try { E.R4(t, { kind: 'np_rp', key: 'np_rp_prep_' + key, title: '解散風が吹いてきた', text: '永田町に解散風が吹きはじめた。地元の後援会からは「早く帰ってきて」と電話が来る。\nいまのうちに選挙の準備を始める？（¥1,000,000）', choices: ['地元に戻って準備を始める', '国会の仕事を優先する'], def: 1, days: 6, data: { t: 'prep' } }); } catch (e) { } } } }
+function rpResp6(t, D, k) { const P = t.state.politics, me = P.me;
+  if (D.t === 'dis') { if (k !== 0) { P.cabinet.approval = num(P.cabinet.approval) - 1; return '解散を見送った。「決断できない総理」という声も出はじめた。'; } try { const r = rpEv('QQ')(t, P, '首相の決断'); return r ? '衆議院を解散した。万歳三唱が議場に響いた。いよいよ総選挙だ。' : '解散できなかった（前の総選挙から日が浅い）。'; } catch (e) { return '解散できなかった。'; } }
+  if (D.t === 'prep') { if (k !== 0) return '国会の仕事を優先した。'; if (num(t.state.money) < 1e6) return 'お金が足りなかった。'; t.state.money -= 1e6; me.localSupport = num(me.localSupport) + 4; me.kouenkai = num(me.kouenkai) + 3; return '地元に戻り、後援会の集会や駅前の朝立ちを始めた。地元での支持が少し上がった。'; }
+  if (D.t === 'ura') { if (k === 0) { me.reputation = num(me.reputation) - 2; me.standing = num(me.standing) - 2; return '収支報告書を訂正し、記者会見で経緯を説明した。「遅すぎる」という声もあるが、一定の理解も得た。'; } if (k === 1) { me.reputation = num(me.reputation) - 6; try { ntFlame(t, '「秘書に任せていた」という説明', 62, 'post'); } catch (e) { } return '「会計は秘書に任せていた」と説明した。ネットでは「また秘書のせいか」と批判が広がった。'; } me.reputation = num(me.reputation) - 4; try { ntFlame(t, '取材に応じない', 52, 'post'); } catch (e) { } return '取材に応じなかった。事務所の前には記者が張りついている。'; }
+  return ''; }
+// ---- 政治資金パーティー収入の問題（2023〜24年） ----
+const RP_URA = [
+  { k: 'ura1', at: 2023.92, text: '自民党の安倍派・二階派などで、政治資金パーティー収入の一部が政治資金収支報告書に記載されていなかった疑いが浮上し、東京地検特捜部が捜査を始めた', fx: (t, P) => { P.cabinet.approval = Math.max(5, num(P.cabinet.approval) - 8); try { relBoost(t, 'jimin', -0.02); } catch (e) { } } },
+  { k: 'ura2', at: 2023.96, text: 'パーティー収入の問題を受け、安倍派の閣僚や党役員が交代した', fx: (t, P) => { try { rpEv('BP')(t, P, { keep: true, quiet: true }); } catch (e) { } } },
+  { k: 'ura3', at: 2024.05, text: '東京地検特捜部が、安倍派・二階派・岸田派の会計責任者らを政治資金規正法違反の罪で起訴した', fx: (t, P) => { const me = P.me, J = P.parties.jimin, f = J && (J.factions || []).find(x => x.id === me.faction); if (me.party === 'jimin' && (me.office === 'shugi' || me.office === 'sangi') && f && /清和|志帥/.test(f.club || '')) { try { E.R4(t, { kind: 'np_rp', key: 'np_rp_ura', title: '事務所に問い合わせ', text: `あなたが所属する${f.club}のパーティー券収入について、報道各社から「収支報告書に記載していない収入はないか」と問い合わせが来ている。\nどう対応する？`, choices: ['収支報告書を訂正して説明する', '「秘書に任せていた」と説明する', '取材に応じない'], def: 2, days: 5, data: { t: 'ura' } }); } catch (e) { } } } },
+  { k: 'ura4', at: 2024.27, text: '自民党が、パーティー収入の問題に関わった議員らの処分を決めた' },
+  { k: 'ura5', at: 2024.46, text: '政治資金パーティー券の購入者の公開基準を引き下げるなどの改正政治資金規正法が成立した' },
+];
+function rpUraTick(t, P) { if (!P.parties.jimin) return; const yr = rpYear(t), st = num(P.flags.rpStart, 9999), D = P.flags.rpUra || (P.flags.rpUra = {});
+  for (const E0 of RP_URA) { if (D[E0.k] || yr < E0.at) continue; D[E0.k] = 1; if (st >= E0.at) continue; try { rpEv('Io')(P, t, E0.text); } catch (e) { } try { rpEv('z1')(t, `【政界】${E0.text}`); } catch (e) { } try { if (E0.fx) E0.fx(t, P); } catch (e) { console.error('[rp] ura', e); } } }
+function installRP6() { if (!RP_X) return; const d3 = rpEv('d3');
+  for (const S of RP_MIN2) if (!d3[S.key]) { d3[S.key] = { ...S, party: S.w[0][0], slot: 'minister', photo: undefined }; delete d3[S.key].w; }
+  RP_X.set('BP', orig => function (t, e, a) { const r = orig(t, e, a); try { if (e && e.flags && e.flags.realParties === 1) rpCabFull(t, e); } catch (er) { console.error('[rp] cabfull', er); } return r; });
+  RP_X.set('Bft', orig => function (t) { const o = orig(t); try { if (o && o.flags && o.flags.realParties === 1) rpCabFull(t, o); } catch (er) { console.error('[rp] cabfull0', er); } return o; });
+  RP_X.set('QQ', orig => function (t, e, a) { const r = orig(t, e, a); try { if (r && e && e.flags && e.flags.realParties === 1) { const yr = rpYear(t), U = e.flags.rpDisso || (e.flags.rpDisso = {}); const h = RP_DISSO.find(([y]) => Math.abs(y - yr) < 0.35 && !U[y]); if (h) { U[h[0]] = 1; rpEv('Io')(e, t, `（史実では、このころの解散は「${h[1]}」とよばれた）`); } } } catch (er) { } return r; });
+  const rt0 = rpTick; rpTick = function (g) { rt0(g); try { const P = g.state && g.state.politics; if (P && P.flags && P.parties && P.diet) { rpWindTick(g, P); if (P.flags.realParties === 1) rpUraTick(g, P); } } catch (e) { console.error('[rp] tick6', e); } };
+  const r4 = rpResp4; rpResp4 = function (t, D, k) { const x = r4(t, D, k); if (x) return x; return rpResp6(t, D, k < 0 ? num(D.def, 1) : k); };
+  // 開票特番の画面に解散風を表示
+  const M0 = GB_MODES.rprace, od = M0.draw; M0.draw = function (s, c, g) { od.call(this, s, c, g); try { const P = g.state.politics, w = num(P.flags.rpWind); pT(c, `解散風 ${w}%`, 470, 10, { size: 12, color: w >= 60 ? '#ff8a6a' : '#9ab0d0', align: 'right' }); } catch (e) { } };
+  if (window.__RP) Object.assign(window.__RP, { tick: rpTick, cabFull: rpCabFull, wind: rpWind, resp6: rpResp6, ura: rpUraTick });
 }
 // ===== 宗教：世界の宗教（7）と教団（6）、教祖・指導者、入信・活動・階位・迷い・脱会、勧誘と家族、宗教2世、歴史の出来事（信者の目線）、政治との連動 =====
 // 事件は史実どおりにニュース・出来事として起きる。主人公が犯罪を実行する展開はない（信者として体験し、残る・離れる・協力するを選ぶ）。
