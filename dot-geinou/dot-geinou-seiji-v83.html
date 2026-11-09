@@ -13860,6 +13860,7 @@ function install() {
   try { installRP6(); } catch (e) { console.error('[rp] install6', e); }
   try { installRP7(); } catch (e) { console.error('[rp] install7', e); }
   try { installRP8(); } catch (e) { console.error('[rp] install8', e); }
+  try { installRP9(); } catch (e) { console.error('[rp] install9', e); }
   try { installRel(); } catch (e) { console.error('[rel] install', e); }
   try { installRel2(); } catch (e) { console.error('[rel] install2', e); }
   try { installKurashi(); } catch (e) { console.error('[ku] install', e); }
@@ -44956,7 +44957,7 @@ function rpEnsureTomoshibi(g, P) {
 function rpTick(g) {
   const P = g.state && g.state.politics; if (!P || typeof P !== 'object' || !P.parties || !P.flags || P.flags.realParties !== 1) return;
   const yr = rpYear(g); rpNames(P, yr);
-  if (!P.flags.rpKomei && yr >= 1998.85 && P.era === 'heisei_early') { P.flags.rpKomei = 1; try { rpKomeiReunite(g, P); } catch (e) { console.error('[rp] komei', e); } }
+  if (!P.flags.rpKomei && yr >= 1998.85 && (P.era === 'heisei_early' || P.flags.rpShin94)) { P.flags.rpKomei = 1; try { rpKomeiReunite(g, P); } catch (e) { console.error('[rp] komei', e); } }
   if (!P.flags.rpRename96 && yr >= 1996.05 && P.flags.rpStart < 1996.05) { P.flags.rpRename96 = 1; try { rpEv('Io')(P, g, '日本社会党が党名を社会民主党に改めた（1996年1月19日）'); } catch (e) { } }
   for (const F of RP_FOUND) {
     if (yr < F.at || P.parties[F.id] || P.flags['rpF_' + F.id]) continue;
@@ -45320,7 +45321,8 @@ const RP_CABP = ['kanbo', 'minister_finance', 'minister_foreign'];
 function rpCabFix(t, P) { if (!P || !P.cabinet || t.state.realPols === false) return; const pm = P.cabinet.pm, pn = pm && pm !== 'player' && P.npcs[pm]; if (!pn || !pn.real || !RP_CAB[pn.real]) return;
   const yr = rpYear(t), L = RP_CAB[pn.real](yr), d3 = rpEv('d3'), WNe = rpEv('WNe'), coal = P.cabinet.partyIds || [], M = P.cabinet.ministers || (P.cabinet.ministers = {}); const R = P.real || (P.real = { map: {}, served: [] }); if (!R.map) R.map = {};
   RP_CABP.forEach((post, i) => { const key = L[i]; if (!key || !d3[key]) return; const S = d3[key], party = S.party || 'jimin'; if (!coal.includes(party)) return; const cur = M[post]; if (cur === 'player') return;
-    let npc = R.map[key] && P.npcs[R.map[key]]; if (npc && (npc.real !== key || npc.dead || !coal.includes(npc.party))) npc = null;
+    let npc = R.map[key] && P.npcs[R.map[key]]; if (npc && npc.real === key && npc.dead) return; if (npc && (npc.real !== key || npc.dead || !coal.includes(npc.party))) npc = null;
+    if (!npc) { const live = Object.values(P.npcs).filter(n => n && n.real === key && !n.dead); npc = live.find(n => coal.includes(n.party)) || null; if (!npc && live.length) return; if (npc) R.map[key] = npc.id; }
     if (!npc) { const curN = cur && P.npcs[cur]; const inCab = new Set(Object.values(M)); const cands = [curN, ...Object.values(P.npcs)].filter(n => n && n.party === party && n.office && !n.real && !n.dead && n.id !== pm && (n === curN || !inCab.has(n.id))); npc = cands[0] || (() => { try { return rpEv('Tm')(P, { party, house: S.house || 'shugi', office: S.house || 'shugi', wins: 5, age: 60 }); } catch (e) { return null; } })(); if (!npc) return;
       const was = npc.house === 'sangi'; WNe(P, npc, S, Math.floor(yr)); rpLook(npc, S); if (S.house === 'sangi' && was) { npc.house = 'sangi'; npc.office = 'sangi'; } npc.age = Math.max(25, Math.floor(yr) - S.birth); npc.wins = Math.max(1, S.first <= yr ? Math.floor((yr - S.first) / 3.1) + 1 : 1); R.map[key] = npc.id; }
     if (M[post] === npc.id) return; for (const [k, v] of Object.entries(M)) if (v === npc.id && k !== post) { delete M[k]; npc.posts = (npc.posts || []).filter(x => x !== k); }
@@ -45406,7 +45408,8 @@ function rpCabFull(t, P) { if (!P || !P.cabinet || t.state.realPols === false) r
   const d3 = rpEv('d3'), WNe = rpEv('WNe'), tn = rpEv('tn'), coal = P.cabinet.partyIds || [], M = P.cabinet.ministers || (P.cabinet.ministers = {}); const R = P.real || (P.real = { map: {}, served: [] }); if (!R.map) R.map = {};
   let H4 = null; try { H4 = rpEv('H4'); } catch (e) { }
   for (const [post, key] of Object.entries(T[2])) { if (!tn[post] || !d3[key]) continue; if (H4 && !H4(post, yr, P.flags)) continue; const S = d3[key], party = S.party || 'jimin'; if (!coal.includes(party)) continue; const cur = M[post]; if (cur === 'player') continue;
-    let npc = R.map[key] && P.npcs[R.map[key]]; if (npc && (npc.real !== key || npc.dead || !coal.includes(npc.party))) npc = null;
+    let npc = R.map[key] && P.npcs[R.map[key]]; if (npc && npc.real === key && npc.dead) continue; if (npc && (npc.real !== key || npc.dead || !coal.includes(npc.party))) npc = null;
+    if (!npc) { const live = Object.values(P.npcs).filter(n => n && n.real === key && !n.dead); npc = live.find(n => coal.includes(n.party)) || null; if (!npc && live.length) continue; if (npc) R.map[key] = npc.id; }
     if (!npc) { const curN = cur && P.npcs[cur]; const inCab = new Set(Object.values(M)); const cands = [curN, ...Object.values(P.npcs)].filter(n => n && n.party === party && n.office && !n.real && !n.dead && n.id !== pm && (n === curN || !inCab.has(n.id))); npc = cands[0] || (() => { try { return rpEv('Tm')(P, { party, house: S.house || 'shugi', office: S.house || 'shugi', wins: 5, age: 60 }); } catch (e) { return null; } })(); if (!npc) continue;
       const was = npc.house === 'sangi'; WNe(P, npc, S, Math.floor(yr)); rpLook(npc, S); if (S.house === 'sangi' && was) { npc.house = 'sangi'; npc.office = 'sangi'; } npc.age = Math.max(25, Math.floor(yr) - S.birth); npc.wins = Math.max(1, S.first && S.first <= yr ? Math.floor((yr - S.first) / 3.1) + 1 : 1); R.map[key] = npc.id; }
     if (M[post] === npc.id) continue; if (key !== 'okabe') for (const [k, v] of Object.entries(M)) if (v === npc.id && k !== post && !RP_CABP.includes(k)) { delete M[k]; npc.posts = (npc.posts || []).filter(x => x !== k); }
@@ -45507,6 +45510,202 @@ function installRP8() { if (!RP_X) return; const d3 = rpEv('d3');
       C.length = 0; C.push(...nc); } } } catch (er) { console.error('[rp] gov race', er); } return C; });
   RP_X.set('PNe', orig => function (t, e, a, n) { const r = orig(t, e, a, n); try { if (a && a.kind === 'chiji' && e.flags && e.flags.realParties === 1 && e.flags.rpGovPend) { const L = e.local.chiji, npc = e.npcs[L.holder], d3 = rpEv('d3'); const key = e.flags.rpGovPend.find(k => d3[k] && npc && npc.name === d3[k].name); if (key && npc && !npc.real) rpGovConvert(t, e, npc, key); e.flags.rpGovPend = null; } } catch (er) { console.error('[rp] gov res', er); } return r; });
   if (window.__RP) Object.assign(window.__RP, { govStart: rpGovStart });
+}
+// ===== 政治の不具合修正（実在政党モード）：歴史の進行・連立・実在の人物の役職・選挙の振れ幅 =====
+// ---- 1. 歴史の進行：総選挙の結果を史実に寄せる（2026年まで） ----
+// [年, 定数, 議席]。ゲームの党に置きかえ（新進党・自由党・希望の党・立憲民主党 → ともしび党 など）
+const RP_HS = [
+  [1986.52, 512, { jimin: 306, shamin: 85, komei: 56, tomoshibi: 30, kyosan: 26, ind: 9 }],
+  [1990.13, 512, { jimin: 275, shamin: 136, komei: 45, kyosan: 16, tomoshibi: 18, ind: 22 }],
+  [1993.55, 511, { jimin: 223, shamin: 70, tomoshibi: 109, komei: 51, kyosan: 15, ind: 43 }],
+  [1996.8, 500, { jimin: 239, tomoshibi: 156, minshu: 52, kyosan: 26, shamin: 15, ind: 12 }],
+  [2000.48, 480, { jimin: 240, minshu: 127, komei: 31, tomoshibi: 22, kyosan: 20, shamin: 19, ind: 21 }],
+  [2003.86, 480, { jimin: 241, minshu: 177, komei: 34, kyosan: 9, shamin: 6, ind: 13 }],
+  [2005.69, 480, { jimin: 296, minshu: 113, komei: 31, kyosan: 9, shamin: 7, ind: 24 }],
+  [2009.66, 480, { minshu: 308, jimin: 119, komei: 21, kyosan: 9, shamin: 7, ind: 16 }],
+  [2012.96, 480, { jimin: 294, minshu: 57, ishin: 54, komei: 31, kyosan: 8, shamin: 2, ind: 34 }],
+  [2014.95, 475, { jimin: 291, minshu: 73, ishin: 41, komei: 35, kyosan: 21, shamin: 2, ind: 12 }],
+  [2017.81, 465, { jimin: 284, tomoshibi: 105, komei: 29, kyosan: 12, ishin: 11, shamin: 2, ind: 22 }],
+  [2021.83, 465, { jimin: 261, tomoshibi: 96, ishin: 41, komei: 32, kokumin: 11, kyosan: 10, reiwa: 3, shamin: 1, ind: 10 }],
+  [2024.82, 465, { jimin: 191, tomoshibi: 148, ishin: 38, kokumin: 28, komei: 24, reiwa: 9, kyosan: 8, sansei: 3, hoshu: 3, shamin: 1, ind: 12 }],
+  [2026.1, 465, { jimin: 316, ishin: 36, kokumin: 28, tomoshibi: 28, komei: 21, sansei: 15, mirai: 11, kyosan: 4, hoshu: 2, reiwa: 1, shamin: 1, ind: 2 }],
+];
+const RP_HS_W = 0.55, RP_HS_SPAN = 1.5;
+// ---- 4. 選挙の振れ幅：1回の総選挙で失う議席は、ふだんは前回の35%まで（大逆風の与党第一党は55%まで） ----
+function rpCapSwing(e, before, c) {
+  const gt = rpEv('gt'); const core = rpPmParty(e), ap = num(e.cabinet && e.cabinet.approval, 40); let need = 0; const floor = {};
+  for (const p of Object.keys(before)) { if (p === 'ind' || !e.parties[p]) continue; const b = gt(before[p]); if (b < 8) continue; const d = p === core && ap < 22 ? 0.55 : 0.35; const f = Math.floor(b * (1 - d)); floor[p] = f; if (gt(c[p]) < f) { need += f - gt(c[p]); c[p] = f; } }
+  let moved = need;
+  while (need > 0) { let pick = null, w = 0;
+    for (const p of Object.keys(c)) { const gain = gt(c[p]) - gt(before[p]); if (gain > w) { w = gain; pick = p; } }
+    if (!pick) for (const p of Object.keys(c)) { const room = gt(c[p]) - (floor[p] != null ? floor[p] : 0); if (room > w) { w = room; pick = p; } }
+    if (!pick) break; c[pick] = gt(c[pick]) - 1; need--; }
+  return moved;
+}
+function rpAnchor(t, e, c) {
+  if (!e.flags || e.flags.realParties !== 1) return null;
+  const gt = rpEv('gt'), yr = rpYear(t), st = num(e.flags.rpStart, 9999); let best = null, bd = 9;
+  for (const H of RP_HS) { const d = Math.abs(H[0] - yr); if (d < bd && st < H[0] - 0.05) { bd = d; best = H; } }
+  if (!best || bd > RP_HS_SPAN || yr > 2026.3) return null;
+  const tot = Object.values(c).reduce((x, y) => x + gt(y), 0); if (!tot) return null;
+  const mine = Object.keys(e.parties).filter(p => e.parties[p].leader === 'player');
+  let al = RP_HS_W * (1 - bd / RP_HS_SPAN); if (e.cabinet.pm === 'player' || mine.some(p => gt(c[p]) >= tot * 0.05)) al *= 0.6;
+  const ids = [...new Set([...Object.keys(c), ...Object.keys(best[2])])].filter(p => (p === 'ind' || e.parties[p]) && !mine.includes(p));
+  const avail = tot - mine.reduce((s, p) => s + gt(c[p]), 0), hsum = ids.reduce((s, p) => s + (best[2][p] || 0), 0), csum = ids.reduce((s, p) => s + gt(c[p]), 0);
+  if (!hsum || !csum || avail <= 0) return null;
+  const raw = {}, fl = {}; let s = 0;
+  for (const p of ids) { raw[p] = (1 - al) * avail * gt(c[p]) / csum + al * avail * (best[2][p] || 0) / hsum; fl[p] = Math.floor(raw[p]); s += fl[p]; }
+  const order = ids.slice().sort((x, y) => (raw[y] - fl[y]) - (raw[x] - fl[x])); for (let i = 0; s < avail && order.length; i = (i + 1) % order.length) { fl[order[i]]++; s++; }
+  const sim = {}; for (const p of ids) sim[p] = gt(c[p]);
+  for (const p of ids) { if (fl[p] > 0) c[p] = fl[p]; else delete c[p]; }
+  // 選挙結果を、各党の支持の土台にも少し反映する（次の選挙で元に戻りすぎないように）
+  for (const seg of Object.keys(e.support && e.support.base || {})) { const l = e.support.base[seg]; if (!l) continue;
+    for (const p of ids) { if (p === 'ind' || !(l[p] > 0)) continue; const f = clamp(Math.sqrt((fl[p] / avail + 0.01) / (sim[p] / avail + 0.01)), 0.7, 1.4); l[p] *= f; }
+    const sum = Object.values(l).reduce((x, y) => x + (+y || 0), 0); if (sum > .95) for (const k of Object.keys(l)) l[k] *= .95 / sum; }
+  return { year: best[0], al };
+}
+function rpElecFix(t, e, before, r) {
+  if (!e || !e.diet || !e.diet.shugi || !r || !r.seats) return; const c = e.diet.shugi.seats; if (!c || !Object.keys(c).length) return;
+  const gt = rpEv('gt'), Sm = rpEv('Sm'), tot0 = Sm(c);
+  const capped = rpCapSwing(e, before, c);
+  const anc = rpAnchor(t, e, c);
+  // 自分が当選しているのに、自分の党が0議席にならないように
+  const me = e.me; if (me && me.office === 'shugi' && me.party && me.party !== 'ind' && gt(c[me.party]) < 1) { const big = Object.keys(c).filter(p => p !== me.party).sort((x, y) => gt(c[y]) - gt(c[x]))[0]; if (big) { c[big] = gt(c[big]) - 1; c[me.party] = 1; } }
+  for (const k of Object.keys(c)) if (!(gt(c[k]) > 0)) delete c[k];
+  const tot = Sm(c); if (tot !== tot0) { const big = Object.keys(c).sort((x, y) => gt(c[y]) - gt(c[x]))[0]; if (big) c[big] = gt(c[big]) + tot0 - tot; }
+  e.diet.shugi.total = Sm(c); r.seats = { ...c }; r.total = Sm(c);
+  if (capped || anc) { const L = e.flags.rpFix || (e.flags.rpFix = []); L.unshift({ yr: rpYear(t), capped, anchor: anc && anc.year, al: anc && Math.round(anc.al * 100) / 100 }); if (L.length > 12) L.length = 12; }
+}
+// ---- 1b. 民主党の結成（1996年9月）と、新しい民主党への合流（1998年4月） ----
+function rpMinshu96(g, P) {
+  if (P.parties.minshu) return false;
+  const Jft = rpEv('Jft'), MKt = rpEv('MKt'), Ln = rpEv('Ln'), Tc = rpEv('Tc'), gt = rpEv('gt'); const yr = rpYear(g);
+  const SH = P.diet.shugi.seats, sh = gt(SH.shamin), takeS = Math.max(0, Math.min(45, Math.round(sh * 0.5), sh - 10));
+  let sa = 0; for (const C of P.diet.sangi.classes || []) sa += gt(C.seats.shamin); const takeA = Math.max(0, Math.min(8, Math.round(sa * 0.2)));
+  const party = Jft(P, 'minshu', yr, { funds: 1.2e9, members: 2.5e4, founded: Ln(g) });
+  const [s1, a1] = rpSeatsMove(P, 'minshu', ['shamin'], takeS, takeA);
+  const [s2] = rpSeatsMove(P, 'minshu', ['ind', 'tomoshibi'], Math.max(0, 52 - s1), 0);
+  MKt(P, party, yr, s1 + s2 + a1); rpSupport(P, 'minshu', .015, ['shamin'], .45);
+  try { rpEv('f$t')(P, 'minshu', Tc(P, Ln(g))); } catch (e) { }
+  P.flags.minshuFounded = true; try { rpEv('e0t')(g, P); } catch (e) { } rpMap(g, P, 'minshu');
+  const txt = '民主党が結成された（史実では1996年9月28日。社民党や新党さきがけの議員などが参加し、鳩山由紀夫・菅直人が代表に）';
+  try { rpEv('Io')(P, g, txt); } catch (e) { } try { rpEv('z1')(g, `【政界】社民党やさきがけの議員らが新党「民主党」を結成しました。衆議院${s1 + s2}人・参議院${a1}人で出発します。`); } catch (e) { }
+  try { rpEv('O0')(g, 'party', { kind: 'founded', party: 'minshu' }); } catch (e) { }
+  return true;
+}
+function rpMinshu98(g, P) {
+  if (!P.parties.minshu) return false; const gt = rpEv('gt');
+  const needS = Math.max(0, 93 - gt(P.diet.shugi.seats.minshu)); let sa = 0; for (const C of P.diet.sangi.classes || []) sa += gt(C.seats.minshu); const needA = Math.max(0, 38 - sa);
+  const [s, a] = rpSeatsMove(P, 'minshu', ['tomoshibi', 'ind'], needS, needA); rpSupport(P, 'minshu', .01, ['tomoshibi'], .35);
+  const txt = '民政党・新党友愛など、新進党の解党後に生まれた党が民主党に合流し、新しい民主党になった（史実では1998年4月27日、菅直人代表）';
+  try { rpEv('Io')(P, g, txt); } catch (e) { } try { rpEv('z1')(g, `【政界】野党の議員が民主党に合流し、新しい「民主党」が誕生しました。${s + a > 0 ? `衆議院${s}人・参議院${a}人が加わり、` : ''}野党第一党に。`); } catch (e) { }
+  return true;
+}
+// 新進党の結成（1994年12月）：公明党の衆議院議員らが、ともしび党（新進党の受け皿）に移る
+function rpShinshin94(g, P) {
+  if (!P.parties.komei || !P.parties.tomoshibi) return false;
+  const [s, a] = rpMoveAll(P, 'komei', 'tomoshibi', 0.8); P.flags.rpShin94 = 1;
+  const txt = `新進党が結成され、公明党の衆議院議員らも加わった（史実では1994年12月10日）。ゲームでは、ともしび党が新進党の受け皿になる（衆議院${s}人・参議院${a}人が移った）`;
+  try { rpEv('Io')(P, g, txt); } catch (e) { } try { rpEv('z1')(g, `【政界】${txt}`); } catch (e) { }
+  return true;
+}
+const RP_HIST2 = [
+  { k: 'shin94', at: 1994.94, run: rpShinshin94 },
+  { k: 'min96', at: 1996.74, run: rpMinshu96 },
+  { k: 'min98', at: 1998.33, run: rpMinshu98 },
+];
+function rpHist2Tick(g, P) { const yr = rpYear(g), st = num(P.flags.rpStart, 9999), D = P.flags.rpH2 || (P.flags.rpH2 = {});
+  for (const H of RP_HIST2) { if (D[H.k] || yr < H.at) continue; D[H.k] = 1; if (st >= H.at) continue; try { H.run(g, P); } catch (e) { console.error('[rp] hist2', H.k, e); } } }
+// ---- 2. 連立の制限：最大3党、共産党とは組まない、政策の近い党だけ（史実の連立は例外として認める） ----
+const RP_PIN = [['jimin', 'shamin', 1994.4, 1998.42], ['jimin', 'komei', 1999.75, 2025.78], ['jimin', 'ishin', 2025.8, 9999], ['minshu', 'shamin', 2009.6, 2010.41]];
+const RP_COAL_MAX = 3;
+function rpPinned(core, p, yr) { return RP_PIN.some(([a, b, f, to]) => a === core && b === p && yr >= f && yr < to); }
+function rpDist(P, a, b) { const u = P.parties[a] && P.parties[a].ideology || {}, h = P.parties[b] && P.parties[b].ideology || {}; return Math.abs(num(u.econ) - num(h.econ)) + Math.abs(num(u.social) - num(h.social)) + Math.abs(num(u.security) - num(h.security)); }
+function rpCoalOk(P, core, p, yr) {
+  if (core === p) return false; const pc = P.parties[core], pp = P.parties[p]; if (!pc || !pp) return false;
+  if (pp.leader === 'player') { const h = P.me && P.me.coalitionStance; return h === 'refuse' ? false : h === 'accept' ? true : rpDist(P, core, p) < 2.6; }
+  if (pc.leader === 'player') return rpDist(P, core, p) < 3.2;
+  if (core === 'kyosan' || p === 'kyosan') return false;
+  if (rpPinned(core, p, yr)) return true;
+  // 史実の連立相手がいる期間は、その党としか組まない（例：1999〜2025年の公明党は自民党とだけ）
+  if (RP_PIN.some(([c0, b, f, to]) => b === p && c0 !== core && yr >= f && yr < to && P.parties[c0])) return false;
+  return rpDist(P, core, p) < 2.6;
+}
+function rpCoalBuild(P, core, excl, yr) {
+  const gt = rpEv('gt'), A = P.diet.shugi, need = Math.floor(A.total / 2) + 1, cur = P.cabinet.partyIds || []; let seats = gt(A.seats[core]); const parts = [];
+  const cands = Object.keys(P.parties).filter(p => p !== core && !excl.includes(p) && gt(A.seats[p]) > 0 && rpCoalOk(P, core, p, yr));
+  for (const p of cands) if (rpPinned(core, p, yr) && parts.length < RP_COAL_MAX - 1) { parts.push(p); seats += gt(A.seats[p]); }
+  let rest = cands.filter(p => !parts.includes(p));
+  const pref = (x, y) => (cur.includes(y) ? 1 : 0) - (cur.includes(x) ? 1 : 0) || Math.round(rpDist(P, core, x)) - Math.round(rpDist(P, core, y)) || gt(A.seats[y]) - gt(A.seats[x]);
+  while (seats < need && parts.length < RP_COAL_MAX - 1 && rest.length) {
+    const gap = need - seats, enough = rest.filter(p => gt(A.seats[p]) >= gap).sort(pref);
+    const p = enough[0] || rest.slice().sort((x, y) => gt(A.seats[y]) - gt(A.seats[x]))[0];
+    parts.push(p); seats += gt(A.seats[p]); rest = rest.filter(x => x !== p); }
+  return { core, partners: parts, seats };
+}
+function rpCoalPick(t, P) {
+  const gt = rpEv('gt'), A = P.diet.shugi, need = Math.floor(A.total / 2) + 1, yr = rpYear(t);
+  const o = Object.keys(P.parties).filter(p => gt(A.seats[p]) > 0).sort((x, y) => gt(A.seats[y]) - gt(A.seats[x]));
+  if (!o.length) return null;
+  const l = rpCoalBuild(P, o[0], [], yr); if (l.seats >= need) return l;
+  if (o[1]) { const f = rpCoalBuild(P, o[1], [o[0]], yr); if (f.seats >= need && Math.random() < .45) return f; }
+  return l;
+}
+// ---- 3・5. 組閣のあと：実在の人物は史実の役職だけ／兼任・与党外・故人の大臣を入れかえ ----
+function rpCabAllow(t, P) {
+  // 首相ごとの史実の閣僚表。表の期間が終わったあとも、同じ顔ぶれが続くのは認める
+  const pm = P.cabinet.pm, pn = pm && pm !== 'player' && P.npcs[pm], allow = {}; if (!pn || !pn.real) return { allow, strict: false };
+  const yr = rpYear(t); let strict = false; const add = (post, key) => { if (!key) return; (allow[post] || (allow[post] = new Set())).add(key); };
+  try { if (RP_CAB[pn.real]) { strict = true; for (const y of [yr - 1, yr - 0.5, yr, yr + 0.5]) { const L = RP_CAB[pn.real](y) || []; RP_CABP.forEach((post, i) => add(post, L[i])); } } } catch (e) { }
+  try { const T = RP_CAB_FULL[pn.real]; if (T) { strict = true; for (const [post, key] of Object.entries(T[2])) add(post, key); } } catch (e) { }
+  try { const U = rpEv('tUt'); if (U && U[pn.real]) { strict = true; for (const [post, key] of Object.entries(U[pn.real])) add(post, key); } } catch (e) { }
+  return { allow, strict };
+}
+function rpCabProblems(t, P) {
+  const M = P.cabinet.ministers || {}, coal = P.cabinet.partyIds || [], pm = P.cabinet.pm, { allow, strict } = rpCabAllow(t, P);
+  const tableIds = new Set(); for (const [post, id] of Object.entries(M)) { const n = id && id !== 'player' && P.npcs[id]; if (n && n.real && allow[post] && allow[post].has(n.real)) tableIds.add(id); }
+  const used = new Set(), bad = [];
+  for (const [post, id] of Object.entries(M)) { if (post === 'pm' || !id || id === 'player') continue; const n = P.npcs[id];
+    let why = !n ? 'none' : n.dead ? 'dead' : (!coal.includes(n.party) && n.party !== 'ind') ? 'coal' : null;
+    const tableOk = !!(n && n.real && allow[post] && allow[post].has(n.real));
+    if (!why && n.real && strict && !tableOk) why = 'real';
+    if (!why && !tableOk && (used.has(id) || tableIds.has(id) || id === pm)) why = 'dup';
+    if (why) bad.push([post, why]); else used.add(id); }
+  return bad;
+}
+function rpCabClean(t, P) {
+  if (!P || !P.cabinet || !P.cabinet.ministers || t.state.realPols === false) return 0;
+  const bad = rpCabProblems(t, P); if (!bad.length) return 0;
+  const M = P.cabinet.ministers, coal = P.cabinet.partyIds || [], pm = P.cabinet.pm, tn = rpEv('tn'); const pmParty = rpPmParty(P) || coal[0];
+  const inCab = new Set(Object.values(M).filter(v => v && v !== 'player')); if (pm && pm !== 'player') inCab.add(pm);
+  for (const [post] of bad) {
+    const oldId = M[post], old = oldId && P.npcs[oldId];
+    const party = old && coal.includes(old.party) ? old.party : pmParty; if (!party) { delete M[post]; continue; }
+    if (old) { old.posts = (old.posts || []).filter(x => x !== post); }
+    const stillIn = old && Object.entries(M).some(([k, v]) => v === oldId && k !== post); if (old && !stillIn) inCab.delete(oldId);
+    const cands = Object.values(P.npcs).filter(n => n && !n.dead && !n.real && n.party === party && (n.office === 'shugi' || n.office === 'sangi') && n.id !== pm && !inCab.has(n.id) && !(n.posts || []).some(c => tn[c] && tn[c].kind !== 'party')).sort((x, y) => num(y.wins) - num(x.wins));
+    let x = cands.length ? cands[Math.floor(Math.random() * Math.min(5, cands.length))] : null;
+    if (!x) { try { x = rpEv('Tm')(P, { party, house: Math.random() < .85 ? 'shugi' : 'sangi', wins: 4 + Math.floor(Math.random() * 6), age: 50 + Math.floor(Math.random() * 20) }); x.office = x.house; } catch (e) { x = null; } }
+    if (!x) { delete M[post]; continue; }
+    M[post] = x.id; x.posts = x.posts || []; if (!x.posts.includes(post)) x.posts.push(post); inCab.add(x.id);
+  }
+  return bad.length;
+}
+// ---- 6. 監査（テスト用）：いまの政界に不具合がないか調べる ----
+function rpAuditNow(t) {
+  const P = t.state && t.state.politics; if (!P || !P.cabinet) return {}; const gt = rpEv('gt'), out = {};
+  const C = P.cabinet.partyIds || []; if (C.length > RP_COAL_MAX) out.coalBig = C.length; if (C.includes('kyosan') && rpPmParty(P) !== 'kyosan') out.coalKyosan = 1;
+  const det = []; for (const [post, why] of rpCabProblems(t, P)) { out['cab_' + why] = (out['cab_' + why] || 0) + 1; const id = P.cabinet.ministers[post], n = P.npcs[id], pn = P.npcs[P.cabinet.pm]; det.push(`${rpYear(t).toFixed(2)} ${why} ${post}=${n ? n.name + '(' + (n.real || '') + ')' : id} 首相=${pn ? pn.name : P.cabinet.pm}`); }
+  if (det.length) Object.defineProperty(out, 'det', { value: det, enumerable: false });
+  return out;
+}
+function installRP9() {
+  if (!RP_X) return;
+  RP_X.set('RNe', orig => function (t, e, a, n) { const before = e && e.diet && e.diet.shugi ? { ...e.diet.shugi.seats } : {}; const r = orig(t, e, a, n); try { rpElecFix(t, e, before, r); } catch (er) { console.error('[rp] elecfix', er); } return r; });
+  RP_X.set('JNe', orig => function (t, e) { if (!(e && e.flags && e.flags.realParties === 1)) return orig(t, e); try { const r = rpCoalPick(t, e); if (r) return r; } catch (er) { console.error('[rp] coal', er); } return orig(t, e); });
+  RP_X.set('BP', orig => function (t, e, a) { const r = orig(t, e, a); try { if (e && e.flags && e.flags.realParties === 1 && rpCabClean(t, e)) return e.cabinet.ministers; } catch (er) { console.error('[rp] cabclean', er); } return r; });
+  const rt0 = rpTick; rpTick = function (g) { rt0(g); try { const P = g.state && g.state.politics; if (P && P.flags && P.flags.realParties === 1 && P.parties && P.diet) { rpHist2Tick(g, P); rpCabClean(g, P); } } catch (e) { console.error('[rp] tick9', e); } };
+  if (window.__RP) Object.assign(window.__RP, { tick: rpTick, audit: rpAuditNow, cabClean: rpCabClean, coalPick: rpCoalPick, anchor: RP_HS });
 }
 // ===== 宗教：世界の宗教（7）と教団（6）、教祖・指導者、入信・活動・階位・迷い・脱会、勧誘と家族、宗教2世、歴史の出来事（信者の目線）、政治との連動 =====
 // 事件は史実どおりにニュース・出来事として起きる。主人公が犯罪を実行する展開はない（信者として体験し、残る・離れる・協力するを選ぶ）。
