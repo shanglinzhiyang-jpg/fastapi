@@ -13863,6 +13863,7 @@ function install() {
   try { installRel(); } catch (e) { console.error('[rel] install', e); }
   try { installRel2(); } catch (e) { console.error('[rel] install2', e); }
   try { installKurashi(); } catch (e) { console.error('[ku] install', e); }
+  try { installHist(); } catch (e) { console.error('[hist] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -46177,6 +46178,161 @@ function kuDisResp(g, D, k) { const K = kuSt(g), C = K.ch, st = v => { try { g.a
 (() => { const M = GB_MODES.kurashi, od = M.draw, ob = M.btn;
   M.btn = function (s, id, g) { if (id === 'bosai') { const K = kuSt(g); if (K.bosai && g.state.day - K.bosai < 600) { s.tip('もうそろえてある', PW.bad); return; } if (!kuPay(g, 15000)) { s.tip('お金が足りない', PW.bad); return; } K.bosai = g.state.day; s.S.res = '防災グッズをそろえた（¥15,000）。\n水3日分・非常食・ラジオ・懐中電灯・モバイルバッテリー・簡易トイレ。家具の転倒防止もした。'; return; } return ob.call(this, s, id, g); };
   M.draw = function (s, c, g) { od.call(this, s, c, g); if (s.S.res || s.S.tab !== 'ch' || !kuSt(g).ch.member) return; const K = kuSt(g), ok = K.bosai && g.state.day - K.bosai < 600; pT(c, ok ? '防災グッズ：そろっている' : '防災グッズ：まだない', 20, 236, { size: 12, color: ok ? '#a0e080' : '#ffb080' }); s.btn('bosai', 'そろえる（¥15,000）', 160, 232, 136, 22, { size: 12, off: !!ok }); }; })();
+// ===== 戦争と平和の歴史：不平等条約と条約改正、軍の組織と装備（図鑑）、核兵器の歴史、戦時下の暮らしの物語、語り部、記念日 =====
+// 史実を学ぶ内容として扱う。兵器の性能や使い方は書かず、時代と社会への影響を中心にする。
+const HI_NEN = [
+  [1858, '日米修好通商条約', '江戸幕府がアメリカと結んだ条約。外国人を日本の法律で裁けない「領事裁判権」を認め、輸入品の税率を自分で決める「関税自主権」がない不平等条約だった。', 'jo'],
+  [1886, 'ノルマントン号事件', 'イギリスの貨物船が沈没し、日本人の乗客が全員亡くなった。イギリス人の船長は領事裁判で軽い罪にとどまり、条約改正を求める声が高まった。', 'jo'],
+  [1889, '大日本帝国憲法の発布', 'アジアで初めての近代的な憲法。天皇が軍を統帥する（指揮する）と定めた。', 'sei'],
+  [1894, '領事裁判権の撤廃', '外務大臣・陸奥宗光がイギリスとの条約改正に成功し、領事裁判権がなくなった。同じ年、日清戦争が始まった。', 'jo'],
+  [1904, '日露戦争', 'ロシアとの戦争（〜1905年）。日本は勝ったが、多くの戦死者と戦費の負担が残った。', 'sen'],
+  [1905, '韓国の保護国化', '第2次日韓協約で、日本が韓国の外交権を奪い、保護国とした。1910年には韓国併合へと進んだ。', 'jo'],
+  [1911, '関税自主権の回復', '外務大臣・小村寿太郎がアメリカとの条約改正に成功し、関税自主権を取りもどした。不平等条約の改正が完了した。', 'jo'],
+  [1914, '第一次世界大戦', 'ヨーロッパを中心とした大戦争（〜1918年）。機関銃・戦車・飛行機・毒ガスが使われ、戦争のしかたが大きく変わった。', 'sen'],
+  [1931, '満州事変', '日本の関東軍が中国東北部で軍事行動を起こした。翌年、満州国がつくられた。', 'sen'],
+  [1937, '日中戦争と大本営の設置', '中国との全面的な戦争が始まり、戦争を指導する最高機関「大本営」が置かれた。', 'sen'],
+  [1938, '国家総動員法', '戦争のために、国が人や物資を自由に動かせるようにした法律。', 'kurashi'],
+  [1940, '隣組の制度化', '近所の数軒〜十数軒をひとまとめにした「隣組」。配給や防空、回覧板などを担った。', 'kurashi'],
+  [1941, '太平洋戦争の開戦', '12月8日、日本軍がハワイの真珠湾とマレー半島を攻撃し、アメリカ・イギリスなどとの戦争が始まった。', 'sen'],
+  [1942, 'ミッドウェー海戦', '日本海軍が主力の空母4隻を失い、戦局の転機となった。大本営発表では、損害は小さく伝えられた。', 'sen'],
+  [1943, '学徒出陣', '大学などの学生の徴兵猶予が停止され、多くの学生が戦地へ送られた。', 'sen'],
+  [1944, '学童疎開と特別攻撃隊', '都市の子どもたちを地方へ移す疎開が本格化した。10月には、体当たり攻撃を行う「特別攻撃隊（特攻隊）」の出撃が始まった。', 'kurashi'],
+  [1945.19, '東京大空襲', '3月10日未明、アメリカ軍の爆撃機が東京の下町に焼夷弾を落とし、一晩でおよそ10万人が亡くなった。', 'kurashi'],
+  [1945.3, '沖縄戦', '4月から6月にかけて、沖縄で地上戦が行われた。住民を含め、20万人以上が亡くなった。', 'sen'],
+  [1945.6, '広島・長崎への原子爆弾', '8月6日に広島、8月9日に長崎に原子爆弾が落とされた。その年のうちに、あわせて20万人以上が亡くなった。', 'kaku'],
+  [1945.62, '玉音放送と終戦', '8月15日、天皇の声でポツダム宣言の受け入れがラジオで伝えられた。9月2日に降伏文書に調印した。', 'sei'],
+  [1946, '日本国憲法の公布', '戦争の放棄（第9条）、国民主権、基本的人権の尊重を定めた。1947年5月3日に施行された。', 'sei'],
+  [1950, '朝鮮戦争と警察予備隊', '朝鮮戦争が始まり、日本では警察予備隊がつくられた（のちの自衛隊）。', 'sei'],
+  [1954, '自衛隊の発足と第五福竜丸', '陸・海・空の自衛隊が発足した。同じ年、アメリカのビキニ環礁での水爆実験で、日本の漁船・第五福竜丸の乗組員が被ばくした。', 'kaku'],
+  [1971, '非核三原則', '「核兵器を持たず、つくらず、持ちこませず」を国会で決議した。', 'kaku'],
+  [2017, '核兵器禁止条約', '核兵器の開発・保有・使用を禁じる条約が国連で採択された（2021年発効。日本は参加していない）。', 'kaku'],
+  [2024, '日本被団協にノーベル平和賞', '被爆者の団体・日本原水爆被害者団体協議会が、核兵器のない世界を訴え続けた活動でノーベル平和賞を受けた。', 'kaku'],
+];
+const HI_CAT = { jo: ['条約・外交', '#c8a040'], sei: ['政治・憲法', '#5a8ad0'], sen: ['戦争', '#c05040'], kurashi: ['暮らし', '#6aa060'], kaku: ['核兵器', '#a060c0'] };
+const HI_TERMS = [
+  ['jo', '不平等条約', '幕末に欧米と結んだ、日本に不利な条約。領事裁判権を認め、関税自主権がなかった。'], ['jo', '領事裁判権（治外法権）', '日本で罪を犯した外国人を、日本の法律ではなく、その国の領事が裁く権利。1894年に撤廃。'],
+  ['jo', '関税自主権', '輸入品にかける税（関税）の率を、自分の国で決める権利。1911年に回復。'], ['jo', '保護国', '外交などの権利を他の国にゆだね、その国の保護のもとに置かれた国。韓国は1905年に日本の保護国とされた。'],
+  ['sen', '陸軍', '陸上で戦う軍。日本の陸軍は1945年に解体された。'], ['sen', '海軍', '海上で戦う軍。軍艦や航空母艦を持っていた。日本の海軍は1945年に解体された。'],
+  ['sen', '空軍', '空で戦う軍。日本の旧軍には独立した空軍はなく、陸軍と海軍がそれぞれ航空部隊を持っていた。いまの自衛隊には航空自衛隊がある。'], ['sei', '自衛隊', '1954年に発足した陸上・海上・航空の自衛隊。憲法9条との関係がずっと議論されている。'],
+  ['sen', '大本営', '戦争のときに天皇のもとに置かれた、陸軍と海軍の最高指導機関。'], ['sen', '大本営発表', '大本営が発表した戦況。戦争の後半には、負けた戦いを勝ったように伝えるなど、事実と大きくかけ離れていった。'],
+  ['kurashi', '赤紙（召集令状）', '軍隊に入るよう命じる通知。赤っぽい紙に印刷されていたことからこうよばれた。届いた人は断れなかった。'], ['kurashi', '徴兵', '国民を強制的に兵士にする制度。満20歳の男子は徴兵検査を受けた。'],
+  ['kurashi', '学徒出陣', '1943年から、学生の徴兵猶予が停止され、多くの大学生が戦地へ向かった。'], ['kurashi', '縁故疎開', '空襲をさけるため、地方の親戚や知人をたよって子どもや家族が移り住むこと。'],
+  ['kurashi', '集団疎開（学童疎開）', '縁故のない子どもたちが、学校ごとに地方の寺や旅館などで集団生活をしたこと。'], ['kurashi', '空襲', '飛行機から都市などに爆弾を落とす攻撃。日本の多くの都市が焼け野原になった。'],
+  ['kurashi', '防空壕', '空襲から身を守るために地面を掘ってつくった避難所。'], ['kurashi', '隣組', '近所の家をまとめた組織。配給・防空訓練・回覧板・相互の監視などを担った。'],
+  ['kurashi', '配給', '米や砂糖などの食料・日用品を、国が決めた量だけ切符で分け与えた制度。量は足りず、多くの人が飢えに苦しんだ。'], ['sen', '特攻隊（特別攻撃隊）', '飛行機や小型の船に爆弾を積み、敵の艦船に体当たりする攻撃を行った部隊。多くの若者が命を落とした。'],
+  ['sen', '戦車', '装甲で守られ、キャタピラで動く戦闘車両。第一次世界大戦で初めて使われ、陸上の戦いを大きく変えた。'], ['sen', '機関銃', '弾を連続して撃てる銃。第一次世界大戦では、塹壕にこもって撃ち合う戦いが長く続き、多くの死傷者を出した。'],
+  ['sen', '手榴弾', '手で投げる小型の爆発物。沖縄戦などでは、住民が「集団自決」に追いこまれる悲劇にも使われた。'], ['sen', '爆弾・焼夷弾', '爆発で破壊する爆弾と、火災を起こす焼夷弾。木造の家が多い日本の都市には焼夷弾が大量に落とされた。'],
+  ['sen', '軍艦', '戦うための艦船。戦艦・巡洋艦・駆逐艦・航空母艦などがある。'], ['sen', '戦艦大和', '日本海軍の巨大戦艦。1945年4月、沖縄へ向かう途中で撃沈され、約3000人が亡くなった。'],
+  ['kaku', '核兵器', '核分裂や核融合のエネルギーを使う、きわめて破壊力の大きい兵器。原子爆弾・水素爆弾など。'], ['kaku', '原子爆弾', '1945年に広島・長崎に落とされた。爆風・熱線・放射線で、多くの人が亡くなり、生き残った人も長く病気に苦しんだ。'],
+  ['kaku', '被爆者', '原子爆弾の被害を受けた人。被爆者健康手帳を持つ人は、2020年代に10万人を下回った。'], ['kaku', '非核三原則', '「核兵器を持たず、つくらず、持ちこませず」という日本の方針。1971年に国会で決議。'],
+  ['kaku', '核兵器禁止条約', '2017年採択・2021年発効。核兵器を全面的に禁じる初めての条約。'], ['sei', '玉音放送', '1945年8月15日正午、昭和天皇がラジオで戦争の終わりを国民に伝えた放送。'],
+  ['kurashi', '闇市', '戦後、駅前などに自然にできた市場。配給だけでは生きられず、多くの人が高い値段で食べ物を買った。'], ['kurashi', '引き揚げ', '戦争が終わって、海外にいた日本人が日本に帰ってくること。約600万人が引き揚げた。シベリアに抑留された人もいた。'],
+  ['kurashi', '戦災孤児', '空襲などで親を亡くした子どもたち。12万人以上いたとされる。'],
+];
+function hiSt(g) { const s = g.state; if (!isObj(s.hist)) s.hist = { v: 1 }; const H = s.hist; if (!isObj(H.story)) H.story = { ch: 0, kz: 50, food: 50, safe: 50, log: [], done: 0, brother: null }; if (!Array.isArray(H.kata)) H.kata = []; if (!isObj(H.days)) H.days = {}; return H; }
+// ---- 物語「ある家族の1944〜1946年」 ----
+const HI_STORY = [
+  { y: '1944年 春', bg: 'home', title: '赤紙', text: '東京の下町。父のもとに、赤い紙の召集令状が届いた。\n母は黙って紙を見つめている。弟の健太はまだ8歳で、何が起きたのかわかっていない。\n出発は3日後だ。',
+    ch: [['駅で、近所の人たちと万歳をして見送る', { kz: 2 }, '駅には「祝 入営」ののぼりが立ち、みんなが万歳を叫んだ。父は一度だけふり返って、小さく手をあげた。'], ['家の前で、家族だけで静かに見送る', { kz: 6 }, '父は健太の頭をなで、「母さんを頼むぞ」と言った。その手の温かさを、ずっと忘れない。'], ['「行かないで」と父の服をつかむ', { kz: 4, safe: -2 }, '「そんなことを言うな」と隣組の人ににらまれた。父は困った顔で笑い、「必ず帰る」と言った。']] },
+  { y: '1944年 夏', bg: 'station', title: '縁故疎開', text: '空襲がはげしくなるといううわさが広がっている。田舎の祖母から「健太だけでもこちらに」と手紙が来た。',
+    ch: [['健太を祖母の家に疎開させる', { safe: 8, kz: -3 }, '駅で健太は泣かなかった。汽車が見えなくなってから、母が声をあげて泣いた。'], ['家族いっしょに東京に残る', { kz: 5, safe: -8 }, '「離れて暮らすくらいなら、いっしょにいたい」。健太は母のそばを離れなかった。']] },
+  { y: '1944年 秋', bg: 'street', title: '配給と隣組', text: '配給の米はどんどん減り、さつまいもや大豆かすが混じるようになった。おなかがすいて眠れない夜もある。',
+    ch: [['母の着物を持って、農家に食べ物と交換しに行く', { food: 10, kz: 1 }, '大事な着物は、米一升とさつまいもに変わった。帰りの汽車で警察に見つかりそうになり、心臓が止まりそうだった。'], ['配給だけで、なんとかしのぐ', { food: -8 }, '道ばたの草を摘んで、すいとんに入れた。'], ['隣組で、食べ物を分けあう', { food: 4, kz: 3 }, '隣のおばさんが、少しだけ砂糖を分けてくれた。お返しに、裏庭のかぼちゃを届けた。']] },
+  { y: '1944年 冬', bg: 'home', title: '兄からの手紙', text: '予科練に入った兄から手紙が来た。「特別攻撃隊に志願しました。お国のために立派に務めます。母上、どうかお元気で」\n手紙は検閲されていて、ところどころ黒く消されている。',
+    ch: [['兄に返事を書く。「生きて帰ってきて」と', { kz: 6 }, '検閲で消されるかもしれない。それでも、書かずにはいられなかった。'], ['母に手紙を読んで聞かせる', { kz: 4 }, '母は最後まで黙って聞き、手紙を胸に抱いたまま、長いあいだ動かなかった。']] },
+  { y: '1945年 3月10日', bg: 'fire', title: '東京大空襲', text: '真夜中、空襲警報が鳴りひびいた。空が赤く染まり、焼夷弾が雨のように降ってくる。風が強く、火がみるみる広がっていく。',
+    ch: [['防空壕に入る', { safe: -4 }, '防空壕の中まで熱い煙が入ってきて、息ができなくなった。母に手を引かれ、外へ飛び出した。'], ['火の少ない方へ、とにかく走って逃げる', { safe: 4 }, '川の方は人でいっぱいだった。母の手をつかみ、焼け残った寺の境内へ走りこんだ。'], ['隣組の人たちと、バケツで火を消そうとする', { safe: -6, kz: 3 }, 'バケツの水では、どうにもならなかった。「逃げろ！」という声で、ようやく走り出した。']] },
+  { y: '1945年 夏', bg: 'street', title: '大本営発表', text: '朝、焼け跡に戻ると、家はあとかたもなかった。隣組のおばさんの姿も、もうない。\nラジオの大本営発表は、今日も「わが軍は敵に大打撃を与えた」と伝えている。',
+    ch: [['大本営発表を信じて、がんばろうと思う', { kz: 1 }, '「勝つまでは」。そう言い聞かせないと、立っていられなかった。'], ['「本当は負けているのでは」とひそかに思う', { safe: 2 }, '口に出せば、非国民と言われる。母とだけ、目で話した。']] },
+  { y: '1945年 8月15日', bg: 'radio', title: '玉音放送', text: '正午、ラジオから天皇の声が流れた。雑音でよく聞きとれなかったが、大人たちが泣きくずれるのを見て、戦争が終わったのだとわかった。',
+    ch: [['空を見上げる', {}, 'その夜、町に明かりがともった。灯火管制のない夜は、何年ぶりだろう。']] },
+  { y: '1946年', bg: 'market', title: '焼け跡から', text: '駅前には闇市ができ、人であふれている。新しい憲法ができるという。',
+    ch: [['家族のこれからを考える', {}, '']] },
+];
+function hiStoryApply(H, eff) { const S = H.story; for (const [k, v] of Object.entries(eff)) S[k] = clamp(num(S[k]) + v, 0, 100); }
+function hiEnding(H) { const S = H.story, L = [];
+  L.push(S.brother ? '冬のはじめ、兄が復員してきた。出撃の命令が出る前に、戦争が終わったのだという。兄はやせて、ほとんど話さなかったが、母は兄を抱きしめて離さなかった。' : '秋、兄の戦死の知らせが届いた。沖縄の海で、特攻機で出撃したという。母は泣かなかった。ただ、兄の手紙を毎晩読みかえしていた。');
+  L.push(S.safe >= 50 ? '1947年の春、父がシベリアから引き揚げてきた。' : '父の消息は、まだわからない。復員船が着くたびに、母は港へ通った。');
+  if (S.ev1 === 0) L.push('疎開していた健太も帰ってきた。田舎ですっかり日焼けして、背がのびていた。'); else L.push('健太はいまも、母のそばを離れない。');
+  L.push(S.kz >= 60 ? '焼け跡のバラックで、家族は肩を寄せあって暮らした。貧しかったが、笑い声が戻ってきた。' : '暮らしは苦しく、家族の会話も少なかった。それでも、生きていくしかなかった。');
+  L.push('\n――この物語は、多くの人の体験をもとにしたフィクションです。'); return L.join('\n'); }
+GB_MODES.histstory = {
+  noHud: true,
+  init(s, g) { const H = hiSt(g); s.S = { f: 0, res: null }; if (H.story.ch >= HI_STORY.length) H.story.ch = HI_STORY.length - 1; },
+  btn(s, id, g) { const H = hiSt(g), S = H.story; if (id === 'close') { s.done(); return; }
+    if (id === 'restart') { H.story = { ch: 0, kz: 50, food: 50, safe: 50, log: [], done: S.done, brother: null }; s.S.res = null; return; }
+    if (id === 'next') { s.S.res = null; if (S.ch < HI_STORY.length - 1) S.ch++; return; }
+    if (id.startsWith('c:')) { const C = HI_STORY[S.ch], k = +id.slice(2), c = C.ch[k]; hiStoryApply(H, c[1]); S['ev' + S.ch] = k; if (S.ch === 3) S.brother = RND() < 0.5; let t = c[2];
+      if (S.ch === HI_STORY.length - 1) { t = hiEnding(H); S.done = num(S.done) + 1; S.ch = HI_STORY.length; } s.S.res = t; tt.sfx('ok'); return; } },
+  update(s) { s.S.f++; },
+  draw(s, c, g) { const H = hiSt(g), S = H.story, C = HI_STORY[Math.min(S.ch, HI_STORY.length - 1)], fin = S.ch >= HI_STORY.length;
+    hiArt(c, fin ? 'market' : C.bg, s.S.f); pR(c, 0, 0, 640, 30, 'rgba(8,6,4,0.85)'); pT(c, 'ある家族の1944〜1946年', 10, 7, { size: 16, color: '#f4ead8' }); pT(c, fin ? 'おわり' : `${C.y}「${C.title}」`, 250, 10, { size: 12, color: '#d8b070' }); s.btn('close', '閉じる', 572, 4, 62, 22, { size: 12, back: true });
+    pFrame(c, 20, 196, 600, 156, { bg: 'rgba(16,12,8,0.92)', edge: '#8a6a3a' });
+    if (s.S.res) { wrapDot(c, s.S.res, 570, 12).slice(0, 8).forEach((ln, i) => pT(c, ln, 34, 208 + i * 15, { size: 12, color: '#f4ead8' })); if (fin) s.btn('restart', 'もう一度はじめから', 470, 322, 140, 24, { size: 12 }); else s.btn('next', '次へ', 530, 322, 80, 24, { size: 12, kind: 'pri', def: true }); return; }
+    if (fin) { pT(c, '物語は終わった。', 34, 210, { size: 12, color: '#f4ead8' }); s.btn('restart', 'もう一度はじめから', 470, 322, 140, 24, { size: 12, kind: 'pri', def: true }); return; }
+    wrapDot(c, C.text, 570, 12).slice(0, Math.max(2, 7 - C.ch.length * 1.5 | 0)).forEach((ln, i) => pT(c, ln, 34, 208 + i * 15, { size: 12, color: '#f4ead8' }));
+    C.ch.forEach((ch, i) => s.btn('c:' + i, pFit(c, ch[0], 560, 12), 34, 300 - (C.ch.length - 1) * 26 + i * 26 + 20, 572, 22, { size: 12, def: i === 0 })); },
+};
+function hiArt(c, bg, f) { const P = { home: ['#2a2018', '#5a4632', '#3a2c20'], station: ['#30302c', '#6a6a60', '#4a4a44'], street: ['#2c2a24', '#5a5446', '#3c382e'], fire: ['#200808', '#7a2010', '#2a1008'], radio: ['#28241c', '#5c503c', '#3a3228'], market: ['#2a2824', '#6a604c', '#403a30'] }[bg] || ['#222', '#444', '#333'];
+  pR(c, 0, 0, 640, 360, P[0]); pR(c, 0, 30, 640, 120, P[1]); pR(c, 0, 150, 640, 50, P[2]);
+  if (bg === 'home') { pR(c, 60, 60, 120, 80, '#d8c8a0'); pR(c, 66, 66, 52, 68, '#8a7a5a'); pR(c, 122, 66, 52, 68, '#8a7a5a'); pR(c, 420, 90, 140, 50, '#3a2a1a'); pR(c, 470, 70, 40, 20, '#c8a060'); }
+  if (bg === 'station') { pR(c, 0, 120, 640, 10, '#2a2a28'); for (let x = 0; x < 640; x += 40) pR(c, x, 128, 20, 4, '#5a4a3a'); pR(c, 100, 70, 220, 50, '#3a4a3a'); for (let i = 0; i < 6; i++) pR(c, 112 + i * 34, 80, 22, 18, '#d8d0a0'); }
+  if (bg === 'street') { for (let i = 0; i < 5; i++) { pR(c, 20 + i * 130, 70, 100, 80, '#4a3e30'); pR(c, 30 + i * 130, 60, 80, 12, '#2a221a'); } }
+  if (bg === 'fire') { for (let i = 0; i < 12; i++) { const h = 40 + ((i * 37 + (f >> 2)) % 50); pR(c, i * 56, 150 - h, 40, h, i % 2 ? '#c84010' : '#e87020'); } for (let i = 0; i < 20; i++) pR(c, (i * 97 + f * 3) % 640, (i * 53 + f * 4) % 150 + 30, 2, 6, '#ffd060'); }
+  if (bg === 'radio') { pR(c, 270, 70, 100, 70, '#5a3a20'); pCirc(c, 320, 100, 22, '#3a2a18'); pR(c, 290, 126, 60, 6, '#c8a060'); }
+  if (bg === 'market') { for (let i = 0; i < 6; i++) { pR(c, 20 + i * 104, 100, 90, 50, '#6a5a40'); pR(c, 20 + i * 104, 90, 90, 12, ['#8a3a2a', '#3a5a8a', '#6a6a3a'][i % 3]); } }
+  for (let i = 0; i < 4; i++) { const x = 140 + i * 110; pCirc(c, x, 168, 6, '#e0c8a8'); pR(c, x - 6, 174, 12, 16, ['#4a4a5a', '#6a4a3a', '#5a5a3a', '#3a4a5a'][i]); }
+}
+// ---- 語り部・記念日 ----
+const HI_KATA = [
+  { k: 'kushu', title: '空襲の話', who: '町内のおばあさん（当時9歳）', text: '「3月10日の夜はね、空が昼間みたいに明るかったの。母に手を引かれて、燃える町を走った。川には人がいっぱい浮いていた。あの光景は、80年たっても夢に見るのよ」' },
+  { k: 'sokai', title: '疎開の話', who: '町内のおじいさん（当時10歳）', text: '「学校ごと、山の寺に疎開したんだ。いつもおなかがすいていて、夜になると母ちゃんに会いたくて、みんなで布団の中で泣いた。東京に帰ったら、家も家族もなくなっていた友だちもいたよ」' },
+  { k: 'hikiage', title: '引き揚げの話', who: '町内のおばあさん（満州から引き揚げ）', text: '「満州から、歩いて、貨車に乗って、船でやっと帰ってきた。途中で妹が亡くなって、そこに埋めるしかなかった。あの子の分も生きなきゃって、ずっと思ってきたの」' },
+  { k: 'tokko', title: '特攻隊の話', who: '町内のおじいさん（元・予科練生）', text: '「わしは出撃の前に終戦になった。先に行った仲間たちは、みんな18か19だった。かっこいいもんじゃない。生きていたら、どんな人生を送ったろうと、今でも思う」' },
+];
+const HI_DAYS = [[3, 10, 'kushu', '今日は東京大空襲の日（1945年3月10日）。東京都慰霊堂で法要が営まれた。'], [8, 6, 'hiro', '今日は広島原爆の日（1945年8月6日）。午前8時15分、平和記念式典で黙とうがささげられた。'], [8, 9, 'naga', '今日は長崎原爆の日（1945年8月9日）。午前11時2分、平和祈念式典で黙とうがささげられた。'], [8, 15, 'shusen', '今日は終戦の日（1945年8月15日）。全国戦没者追悼式が行われ、正午に黙とうがささげられた。']];
+function hiTick(g) { const H = hiSt(g), day = g.state.day; if (H.day === day) return; H.day = day; let d = null; try { d = dateOf(g, day); } catch (e) { return; }
+  for (const [m, dd, k, txt] of HI_DAYS) { const key = d.year + '_' + k; if (H.days[key] || d.month !== m || Math.abs(num(d.dom, 1) - dd) > 2) continue; H.days[key] = 1; try { g.message({ from: 'ドット新聞 社会部', text: txt, kind: 'news' }); } catch (e) { } }
+  if (d.year <= 2030 && day - num(H.kataDay, -99) > 100 && RND() < 0.012) { const L = HI_KATA.filter(x => !H.kata.includes(x.k)); if (L.length) { const K0 = L[Math.floor(RND() * L.length)]; H.kataDay = day; try { E.R4(g, { kind: 'np_hist', key: 'np_hist_' + K0.k, title: `${K0.who}の${K0.title}`, text: `${K0.who}が、昔の話をしてくれるという。`, choices: ['じっくり話を聞く', 'いまは用事がある'], def: 1, days: 6, data: { t: 'kata', k: K0.k } }); } catch (e) { } } } }
+function hiResp(g, D, k) { const H = hiSt(g); if (D.t === 'kata') { if (k !== 0) return 'また今度、と伝えた。'; const K0 = HI_KATA.find(x => x.k === D.k); if (!H.kata.includes(D.k)) H.kata.push(D.k); try { g.addNeed('stress', -2); } catch (e) { } try { const KS = kuSt(g); KS.tsuki = clamp(KS.tsuki + 2, 0, 100); } catch (e) { } return `${K0.who}の話を聞いた。\n${K0.text}\n\n（「戦争と平和の歴史」アプリの「語り部」に記録した）`; } return ''; }
+// ---- アプリ ----
+GB_MODES.hist = {
+  noHud: true,
+  init(s, g) { hiSt(g); s.S = { tab: 'nen', f: 0, np: 0, tp: 0, cat: null }; },
+  btn(s, id, g) { const S = s.S; if (id === 'close') { s.done(); return; } if (id === 'resok') { S.res = null; return; } if (id.startsWith('tab:')) { S.tab = id.slice(4); return; }
+    if (id === 'np-' || id === 'np+') { S.np = Math.max(0, S.np + (id === 'np+' ? 1 : -1)); return; } if (id === 'tp-' || id === 'tp+') { S.tp = Math.max(0, S.tp + (id === 'tp+' ? 1 : -1)); return; }
+    if (id.startsWith('cat:')) { const v = id.slice(4); S.cat = S.cat === v ? null : v; S.tp = 0; return; } if (id.startsWith('t:')) { const T = HI_TERMS[+id.slice(2)]; S.res = `【${T[1]}】\n${T[2]}`; return; } if (id.startsWith('n:')) { const N = HI_NEN[+id.slice(2)]; S.res = `【${Math.floor(N[0])}年 ${N[1]}】\n${N[2]}`; return; }
+    if (id === 'story') { s.done({ story: 1 }); return; } if (id.startsWith('k:')) { const K0 = HI_KATA.find(x => x.k === id.slice(2)); if (K0) S.res = `【${K0.title}】${K0.who}\n${K0.text}`; return; } },
+  update(s) { s.S.f++; },
+  draw(s, c, g) { const S = s.S, H = hiSt(g); pBands(c, 0, 0, 640, 360, ['#141210', '#171412', '#1a1714', '#1d1a16']); pR(c, 0, 0, 640, 30, '#0c0a08'); pR(c, 0, 29, 640, 1, '#c8a060'); pT(c, '戦争と平和の歴史', 10, 7, { size: 16, color: '#f4ead8' }); s.btn('close', '閉じる', 572, 4, 62, 22, { size: 12, back: true });
+    [['nen', '年表'], ['zukan', '図鑑'], ['story', '物語'], ['kata', '語り部']].forEach(([id, nm], i) => s.btn('tab:' + id, nm, 4, 36 + i * 52, 74, 46, { size: 12, kind: S.tab === id ? 'pri' : 'norm', def: S.tab === id && i === 0 }));
+    const x0 = 84, y0 = 38, w = 510;
+    if (S.tab === 'nen') { const per = 9, n = Math.ceil(HI_NEN.length / per), pg = clamp(S.np, 0, n - 1); S.np = pg; pFrame(c, x0, y0, w, 316, { title: `年表（${pg + 1}/${n}）`, bg: '#1a1612', edge: '#6a5a3a' });
+      HI_NEN.slice(pg * per, pg * per + per).forEach((N, i) => { const yy = y0 + 24 + i * 32, cat = HI_CAT[N[3]]; pR(c, x0 + 6, yy, w - 12, 30, i % 2 ? '#1c1814' : '#201b16'); pR(c, x0 + 6, yy, 3, 30, cat[1]); pT(c, `${Math.floor(N[0])}年`, x0 + 14, yy + 2, { size: 12, color: '#d8b070' }); pT(c, N[1], x0 + 62, yy + 2, { size: 12, color: '#f4ead8' }); pT(c, pFit(c, N[2], w - 80, 12), x0 + 62, yy + 16, { size: 12, color: GB_C.t3 }); s.btn('n:' + (pg * per + i), '', x0 + 6, yy, w - 12, 30, { kind: 'clear', nofocus: true }); });
+      s.btn('np-', '◀', x0 + w + 4, y0 + 120, 34, 30, { size: 12 }); s.btn('np+', '▶', x0 + w + 4, y0 + 160, 34, 30, { size: 12 }); }
+    if (S.tab === 'zukan') { const L = HI_TERMS.map((T, i) => [T, i]).filter(([T]) => !S.cat || T[0] === S.cat), per = 10, n = Math.max(1, Math.ceil(L.length / per)), pg = clamp(S.tp, 0, n - 1); S.tp = pg; pFrame(c, x0, y0, w, 316, { title: `図鑑（${pg + 1}/${n}）`, bg: '#1a1612', edge: '#6a5a3a' });
+      Object.entries(HI_CAT).forEach(([k, [nm, col]], i) => s.btn('cat:' + k, nm, x0 + 8 + i * 100, y0 + 22, 94, 20, { size: 12, kind: S.cat === k ? 'pri' : 'norm' }));
+      L.slice(pg * per, pg * per + per).forEach(([T, idx], i) => { const yy = y0 + 48 + i * 26; pR(c, x0 + 6, yy, w - 12, 24, i % 2 ? '#1c1814' : '#201b16'); pR(c, x0 + 6, yy, 3, 24, HI_CAT[T[0]][1]); pT(c, pFit(c, T[1], 150, 12), x0 + 14, yy + 5, { size: 12, color: '#f4ead8' }); pT(c, pFit(c, T[2], w - 190, 12), x0 + 172, yy + 5, { size: 12, color: GB_C.t3 }); s.btn('t:' + idx, '', x0 + 6, yy, w - 12, 24, { kind: 'clear', nofocus: true }); });
+      s.btn('tp-', '◀', x0 + w + 4, y0 + 120, 34, 30, { size: 12 }); s.btn('tp+', '▶', x0 + w + 4, y0 + 160, 34, 30, { size: 12 }); }
+    if (S.tab === 'story') { pFrame(c, x0, y0, w, 316, { title: '物語「ある家族の1944〜1946年」', bg: '#1a1612', edge: '#6a5a3a' });
+      wrapDot(c, '東京の下町に暮らす一家の、1944年の春から戦後までの物語。父の出征、弟の疎開、配給の暮らし、特攻隊に志願した兄の手紙、東京大空襲、玉音放送、そして焼け跡から――。あなたの選んだことで、家族のその後が少しずつ変わる。', w - 30, 12).forEach((ln, i) => pT(c, ln, x0 + 16, y0 + 30 + i * 16, { size: 12, color: '#f4ead8' }));
+      const St = H.story; pT(c, St.ch >= HI_STORY.length ? `読み終えた（${num(St.done)}回）` : St.ch > 0 ? `つづきから（${HI_STORY[St.ch].y}）` : 'まだ読んでいない', x0 + 16, y0 + 150, { size: 12, color: '#d8b070' });
+      pT(c, '※ 多くの人の体験をもとにしたフィクションです。', x0 + 16, y0 + 172, { size: 12, color: GB_C.t3 }); s.btn('story', St.ch > 0 && St.ch < HI_STORY.length ? 'つづきを読む' : '読む', x0 + 16, y0 + 200, 160, 30, { size: 12, kind: 'pri' }); }
+    if (S.tab === 'kata') { pFrame(c, x0, y0, w, 316, { title: '語り部の記録', bg: '#1a1612', edge: '#6a5a3a' }); pT(c, '町内のお年寄りから、戦争の体験を聞くことがある（受信箱に届く）。', x0 + 12, y0 + 26, { size: 12, color: GB_C.t2 });
+      HI_KATA.forEach((K0, i) => { const got = H.kata.includes(K0.k), yy = y0 + 52 + i * 60; pR(c, x0 + 8, yy, w - 16, 54, got ? '#241e16' : '#1a1612'); pT(c, got ? K0.title : '？？？', x0 + 18, yy + 6, { size: 12, color: got ? '#f4ead8' : GB_C.t3 }); pT(c, got ? K0.who : 'まだ聞いていない', x0 + 18, yy + 24, { size: 12, color: GB_C.t3 }); if (got) s.btn('k:' + K0.k, '読む', x0 + w - 80, yy + 14, 60, 24, { size: 12 }); }); }
+    if (S.res) { s.btns.length = 0; pR(c, 0, 0, 640, 360, 'rgba(0,0,0,0.6)'); pFrame(c, 90, 60, 460, 230, { bg: '#1a1612', edge: '#c8a060' }); wrapDot(c, S.res, 430, 12).slice(0, 12).forEach((ln, i) => pT(c, ln, 106, 74 + i * 15, { size: 12, color: '#f4ead8' })); s.btn('resok', 'OK', 270, 254, 100, 26, { kind: 'pri', def: true, size: 12 }); }
+  },
+};
+const hiIcon = gbIcon('#6a5a3a', (c, x, y) => { c.fillStyle = '#f4ead8'; c.fillRect(x + 6, y + 6, 20, 22); c.fillStyle = '#6a5a3a'; c.fillRect(x + 9, y + 10, 14, 2); c.fillRect(x + 9, y + 15, 14, 2); c.fillRect(x + 9, y + 20, 9, 2); c.fillStyle = '#c84a3a'; c.fillRect(x + 20, y + 3, 6, 8); });
+async function hiOpen(g) { try { hiTick(g); } catch (e) { } const r = await gbScene(g, { mode: 'hist', title: '戦争と平和の歴史' }); gbAfter(g, r && r.mins); if (r && r.story) { const r2 = await gbScene(g, { mode: 'histstory', title: '物語' }); gbAfter(g, r2 && r2.mins); } }
+try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_seiji'); if (F && !F.apps.includes('hist')) F.apps.push('hist'); FOLD_OF.hist = 'f_seiji'; } } catch (e) { }
+try { if (typeof RP_GUIDE !== 'undefined' && !RP_GUIDE.some(x => x[0] === 'hist')) RP_GUIDE.push(['hist', '戦争と平和の歴史', '不平等条約・戦争・核兵器の年表と図鑑、戦時下の家族の物語、語り部']); } catch (e) { }
+function installHist() {
+  E.Un('hist', { name: '戦争と平和の歴史', color: '#6a5a3a', order: 36.7, iconHD: hiIcon, open: g => hiOpen(g) });
+  E.Tn(g => { try { hiTick(g); } catch (e) { console.error('[hist] tick', e); } });
+  if (E.ug) E.ug('np_hist', (g, it, k) => { try { return hiResp(g, it.data || {}, k < 0 ? 1 : k) || ''; } catch (e) { console.error('[hist] resp', e); return ''; } });
+  window.__HI = { st: hiSt, tick: hiTick, resp: hiResp, open: hiOpen };
+}
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
 function tnDn(g) { try { const d = dateOf(g, g.state.day); return d.year * 10000 + d.month * 100 + d.dom; } catch (e) { return 20260401; } }
