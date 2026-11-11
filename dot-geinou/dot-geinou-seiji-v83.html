@@ -13866,6 +13866,7 @@ function install() {
   try { installKurashi(); } catch (e) { console.error('[ku] install', e); }
   try { installHist(); } catch (e) { console.error('[hist] install', e); }
   try { installWar(); } catch (e) { console.error('[war] install', e); }
+  try { installKT(); } catch (e) { console.error('[kt] install', e); }
   try {
     Object.defineProperty(E.Oa.prototype, 'npbScreen', { value: function () { return openNPB(this); }, writable: true, configurable: true });
   } catch (e) { }
@@ -46816,6 +46817,600 @@ function installWar() {
   E.Un('warroom', { name: '作戦室', color: '#4a5a3a', order: 36.75, iconHD: wsIcon, open: g => wsOpen(g) });
   E.Tn(g => { try { wsRealTick(g); } catch (e) { console.error('[war] tick', e); } });
   window.__WS = { st: wsSt, new: wsNew, turn: wsTurn, dil: wsDilemma, open: wsOpen, real: wsRealTick };
+}
+// ===== ボクシング（キャリアモード）のしくみ：ジム入門・練習・プロテスト・減量と計量・試合のオファー・試合の中身・ランキングとタイトル・新人王・引退 =====
+// 団体（JBC・OPBF・WBA・WBC・IBF・WBO）と会場は実在の名前。ジムと選手の名前はすべて架空。
+// ゲームの1年は120日（1日＝現実の約3日）なので、試合の間隔や出場停止の日数は現実の約3分の1にしてある。
+const KT_CLS = [['アトム', 46.26], ['ミニマム', 47.62], ['ライトフライ', 48.97], ['フライ', 50.8], ['スーパーフライ', 52.16], ['バンタム', 53.52], ['スーパーバンタム', 55.34], ['フェザー', 57.15], ['スーパーフェザー', 58.97], ['ライト', 61.23], ['スーパーライト', 63.5], ['ウェルター', 66.68], ['スーパーウェルター', 69.85], ['ミドル', 72.57], ['スーパーミドル', 76.2], ['ライトヘビー', 79.38], ['クルーザー', 90.72], ['ヘビー', 0]];
+const KT_AB = [['pow', 'パンチ力'], ['spd', 'スピード'], ['sta', 'スタミナ'], ['tec', 'テクニック'], ['def', 'ディフェンス'], ['chin', '打たれ強さ'], ['men', 'メンタル']];
+const KT_W = { pow: 0.17, spd: 0.17, sta: 0.14, tec: 0.18, def: 0.16, chin: 0.1, men: 0.08 };
+const KT_STY = {
+  fighter: ['ファイター', '前に出て打ちあう。パンチ力と打たれ強さが伸びやすい', { pow: 5, chin: 4, spd: -3, def: -3 }],
+  boxer: ['アウトボクサー', '足とジャブで距離を取る。スピードと技術が伸びやすい', { spd: 5, tec: 3, def: 2, pow: -5 }],
+  bf: ['ボクサーファイター', '打ってよし、離れてよし。かたよりがない', {}],
+  counter: ['カウンターパンチャー', '相手の打ち終わりを狙う。技術と守りが伸びやすい', { tec: 4, def: 4, sta: -3, spd: -2 }],
+};
+const KT_ST = {
+  press: { n: '前に出て攻める', agg: 1.3, acc: 1.0, pw: 1.05, df: 0.86, stc: 1.25, body: 0.3, ctr: 0.05, rec: 0.8, d: '手数で押す。スタミナを使う' },
+  box: { n: '足とジャブでさばく', agg: 0.9, acc: 1.08, pw: 0.8, df: 1.2, stc: 0.9, body: 0.12, ctr: 0.1, rec: 1.0, d: 'ポイント重視。打たれにくい' },
+  counter: { n: 'カウンターを狙う', agg: 0.55, acc: 1.0, pw: 1.0, df: 1.1, stc: 0.8, body: 0.1, ctr: 0.45, rec: 1.1, d: '相手が出てくるほど効く' },
+  body: { n: 'ボディを攻める', agg: 1.1, acc: 0.96, pw: 0.92, df: 0.95, stc: 1.1, body: 0.8, ctr: 0.05, rec: 0.9, d: 'スタミナを削る。後半に効く' },
+  rest: { n: '守って休む', agg: 0.35, acc: 0.85, pw: 0.7, df: 1.3, stc: 0.45, body: 0.1, ctr: 0.12, rec: 1.9, d: 'スタミナ回復。点は取られる' },
+  ko: { n: 'KOを狙って強振', agg: 1.2, acc: 0.8, pw: 1.45, df: 0.76, stc: 1.5, body: 0.1, ctr: 0, rec: 0.7, d: '当たれば倒せる。反撃に注意' },
+};
+const KT_SYN = { fighter: { press: 1.06, body: 1.06, ko: 1.05 }, boxer: { box: 1.08 }, counter: { counter: 1.1 }, bf: { press: 1.03, box: 1.03, counter: 1.03, body: 1.03 } };
+const KT_MOM = { rush: { n: 'ラッシュをかける', agg: 1.6, pw: 1.1, df: 0.8, stc: 1.5 }, calm: { n: '落ちついて急所を狙う', acc: 1.25, pw: 1.05 }, clinch: { n: 'クリンチでしのぐ', agg: 0.15, df: 1.8 }, move: { n: '足を使って逃げる', agg: 0.4, df: 1.25, st: -3 }, trade: { n: '打ちかえす', agg: 1.3, pw: 1.25, df: 0.7 } };
+const KT_PN = { jab: { n: 'ジャブ', d: 1.0, a: 0.08, c: 0.7 }, straight: { n: 'ストレート', d: 2.6, a: 0, c: 1.1 }, hook: { n: 'フック', d: 2.8, a: -0.02, c: 1.15 }, upper: { n: 'アッパー', d: 3.0, a: -0.05, c: 1.2 }, body: { n: 'ボディブロー', d: 2.2, a: 0.03, c: 1.0 } };
+const KT_GYM = [
+  { id: 'sumida', n: '隅田拳闘会', boss: '権藤会長', ent: 10000, fee: 8000, tr: 0.95, hard: 1.0, care: 1.0, pw: 1, pay: 0.9, d: '下町の小さなジム。月謝が安く、会長が親身に教えてくれる。興行の力は弱く、大きな試合は組みにくい。' },
+  { id: 'teito', n: '帝都ボクシングジム', boss: '神崎会長', ent: 20000, fee: 15000, tr: 1.15, hard: 1.2, care: 1.0, pw: 3, pay: 1.15, d: '世界王者を何人も育てた名門。練習はきびしいが、よく伸びる。世界戦を組む力があり、ファイトマネーも高い。' },
+  { id: 'world', n: 'ワールドスポーツジム', boss: '早乙女会長', ent: 20000, fee: 20000, tr: 1.05, hard: 0.85, care: 0.6, pw: 2, pay: 1.0, d: '科学的なトレーニングと体のケアが売りの新しいジム。疲れにくく、けがが少ない。月謝は高い。' },
+];
+const KT_TR = [
+  { id: 'road', n: 'ロードワーク', mins: 60, stm: 14, fat: 8, g: { sta: 1.0, men: 0.25 }, wt: -0.18, light: 1, d: '走りこみ。スタミナの土台。体重も落ちる' },
+  { id: 'rope', n: '縄とび・ステップ', mins: 40, stm: 9, fat: 5, g: { spd: 0.7, sta: 0.3 }, wt: -0.06, light: 1, d: '足さばきとリズムをつくる' },
+  { id: 'shadow', n: 'シャドーボクシング', mins: 45, stm: 9, fat: 5, g: { tec: 0.6, spd: 0.35 }, light: 1, d: '鏡の前でフォームを固める' },
+  { id: 'bag', n: 'サンドバッグ', mins: 45, stm: 12, fat: 7, g: { pow: 0.8, sta: 0.25 }, inj: 0.004, d: '重いバッグを打ちこむ。パンチ力がつく' },
+  { id: 'mitt', n: 'ミット打ち', mins: 45, stm: 12, fat: 7, g: { tec: 0.7, pow: 0.35, spd: 0.2 }, tr: 1, d: 'トレーナーとコンビネーションをみがく' },
+  { id: 'def', n: 'ディフェンス練習', mins: 45, stm: 10, fat: 6, g: { def: 0.9, tec: 0.2 }, d: 'ガード・ウィービング・ブロッキング' },
+  { id: 'spar', n: 'スパーリング', mins: 60, stm: 20, fat: 12, g: { tec: 0.45, def: 0.45, chin: 0.35, men: 0.4, spd: 0.15 }, dmg: 0.03, inj: 0.012, tr: 1, d: '実戦の練習。ぜんぶ伸びるが、ダメージもたまる' },
+  { id: 'weight', n: '筋力トレーニング', mins: 50, stm: 13, fat: 8, g: { pow: 0.6, chin: 0.3 }, nat: 0.01, d: '体を強くする。ふだんの体重は少し増える' },
+];
+const KT_KEYS = ['jp', 'opbf', 'wba', 'wbc', 'ibf', 'wbo'], KT_WORLD = ['wba', 'wbc', 'ibf', 'wbo'];
+const KT_ORG = { jp: ['日本', 'JBC'], opbf: ['東洋太平洋', 'OPBF'], wba: ['WBA世界', 'WBA'], wbc: ['WBC世界', 'WBC'], ibf: ['IBF世界', 'IBF'], wbo: ['WBO世界', 'WBO'] };
+const KT_TIER = { jp: 1, opbf: 2, wba: 3, wbc: 3, ibf: 3, wbo: 3 };
+const KT_SIG = { jab: 'ジャブ', straight: 'ストレート', hook: 'フック', upper: 'アッパー', body: 'ボディブロー' };
+const KT_CO = { jp: '日本', th: 'タイ', ph: 'フィリピン', kr: '韓国', id: 'インドネシア', au: 'オーストラリア', cn: '中国', mx: 'メキシコ', us: 'アメリカ', uk: 'イギリス', pr: 'プエルトリコ', ar: 'アルゼンチン', ua: 'ウクライナ', za: '南アフリカ' };
+const KT_ASIA = ['jp', 'th', 'ph', 'kr', 'id', 'au', 'cn'];
+const KT_NM = {
+  jpS: ['佐藤', '鈴木', '高橋', '田中', '渡辺', '伊藤', '山本', '中村', '小林', '加藤', '吉田', '山田', '佐々木', '松本', '木村', '林', '斎藤', '清水', '山口', '森', '池田', '橋本', '阿部', '石川', '前田', '藤田', '岡田', '後藤', '長谷部', '近藤', '坂本', '遠藤', '青木', '藤井', '西村', '福田', '太田', '三浦', '岡本', '中島'],
+  jpM: ['翔', '大地', '健太', '亮', '拓也', '直樹', '剛', '隼人', '蓮', '陸', '悠斗', '誠', '一輝', '勇気', '竜也', '圭', '祐介', '大和', '颯太', '力'],
+  jpF: ['美咲', '葵', '結衣', '千夏', '真央', '彩', '遥', '七海', '麻衣', '優奈', '楓', '里奈'],
+  th: [['ソムチャイ', 'ウィチャイ', 'ナロンサック', 'スリヤー', 'パノム', 'デーンチャイ', 'チャイヤー', 'ペットノイ'], ['シットサイトーン', 'ポー・ブーンミー', 'ソー・ジャルンチャイ', 'ギャットナコーン', 'トー・シンハー', 'ムアンチョン']],
+  thF: [['ノンマイ', 'サオワラック', 'ファーサイ', 'ペットジージャー'], ['シットサイトーン', 'ポー・ブーンミー', 'ソー・ジャルンチャイ', 'ギャットナコーン']],
+  ph: [['ジュン', 'マーク', 'レイ', 'ジェリー', 'ロメル', 'アルビン', 'ダニー', 'エドガー'], ['サントス', 'レイエス', 'クルス', 'バウティスタ', 'ガルシア', 'ラモス', 'デラクルス', 'メンドーサ']],
+  phF: [['マリア', 'ジョイ', 'アンジェラ', 'グレース'], ['サントス', 'レイエス', 'クルス', 'バウティスタ', 'ラモス']],
+  mx: [['ルイス', 'カルロス', 'ミゲル', 'フアン', 'エドゥアルド', 'ラファエル', 'ダビド', 'オスカル'], ['エルナンデス', 'ロペス', 'マルティネス', 'ゴンサレス', 'ラミレス', 'トーレス', 'フローレス', 'モラレス']],
+  mxF: [['マリア', 'ガブリエラ', 'ルピタ', 'ジャッキー'], ['エルナンデス', 'ロペス', 'マルティネス', 'ゴンサレス', 'トーレス']],
+  us: [['ジェームズ', 'テレンス', 'アンソニー', 'ブランドン', 'デショーン', 'ライアン', 'タイラー', 'マーカス'], ['ジョンソン', 'ウィリアムズ', 'ブラウン', 'デービス', 'ミラー', 'ウィルソン', 'ジャクソン', 'トンプソン']],
+  usF: [['ジェシカ', 'アシュリー', 'ケイラ', 'サマンサ'], ['ジョンソン', 'ウィリアムズ', 'ブラウン', 'ミラー', 'ウィルソン']],
+  pr: [['アンヘル', 'ハビエル', 'ホルヘ', 'エクトル'], ['リベラ', 'オルティス', 'コロン', 'バスケス']],
+  ar: [['マルコス', 'ルーカス', 'セバスチャン', 'ディエゴ'], ['フェルナンデス', 'ロメロ', 'アコスタ', 'ソーサ']],
+  au: [['ジャック', 'リアム', 'ルーク', 'ネイサン'], ['テイラー', 'マーティン', 'ケリー', 'ホワイト']],
+  kr: ['キム・ジュンホ', 'パク・ソンミン', 'イ・テホ', 'チェ・ヨンジェ', 'チョン・ウジン', 'カン・ミンス'], krF: ['キム・ミンジ', 'パク・ソヨン', 'イ・ジウ', 'チェ・ユナ'],
+  id: ['アグス・スラメット', 'リオ・プラタマ', 'ヘンドラ・ウィジャヤ', 'デニ・サプトラ'], cn: ['ワン・ハオ', 'リー・チャン', 'チャン・ウェイ', 'リウ・ヤン'],
+  uk: ['ジョシュ・ハリス', 'リアム・エバンス', 'カラム・ライト', 'ビリー・ウォーカー', 'コナー・ヒューズ'], ua: ['オレクサンドル・コバル', 'アンドリー・メルニク', 'ドミトロ・ボンダル', 'イワン・シェフチェンコ'], za: ['シフォ・ンドロブ', 'タボ・モコエナ', 'ルンギレ・ドラミニ', 'シヤ・クマロ'],
+};
+const KT_QUIZ = [
+  ['プロボクシングの1ラウンドは、男子では何分？', ['2分', '3分', '5分'], 1], ['ラウンドとラウンドの間の休み（インターバル）は？', ['30秒', '1分', '2分'], 1],
+  ['ダウンしてから、カウントいくつで立てなければKO負け？', ['8', '10', '12'], 1], ['ベルトラインより下を打つ「ローブロー」は？', ['有効打になる', '反則', '2回まで許される'], 1],
+  ['後頭部を打つ「ラビットパンチ」は？', ['反則', '有効打になる', '世界戦だけ有効'], 0], ['プロテストに受かって最初にもらえるライセンスは？', ['A級', 'B級', 'C級'], 2],
+  ['C級ボクサーが出られる試合は何回戦？', ['4回戦', '8回戦', '12回戦'], 0], ['採点の「10ポイントマストシステム」で、ラウンドを取った選手につく点は？', ['5点', '10点', '100点'], 1],
+  ['ダウンした相手を打つのは？', ['反則', '有効打になる', 'レフェリーしだい'], 0], ['公式計量は、ふつう試合のいつ行われる？', ['試合の前日', '試合の1週間前', '試合の直後'], 0],
+  ['世界タイトルマッチは、いまは何回戦？', ['10回戦', '12回戦', '15回戦'], 1], ['試合中にセコンドが棄権を伝えるために投げ入れるものは？', ['グローブ', 'タオル', 'マウスピース'], 1],
+];
+const KT_GROW = 0.4, KT_DMG = 0.8, KT_KD = 0.45, KT_ACC = 150, KT_FORM = 0.09;
+const ktG = () => (RND() + RND() + RND() - 1.5) * 1.15; // おおよそ正規分布（標準偏差 約0.58）
+const ktHash = s => { let h = 7; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+const ktR1 = v => Math.round(v * 10) / 10;
+function ktFem(g) { try { return g.state.profile.gender === 'f'; } catch (e) { return false; } }
+function ktYear(g, d) { try { return dateOf(g, d == null ? g.state.day : d).year; } catch (e) { return 2026; } }
+function ktMonth(g, d) { try { return dateOf(g, d == null ? g.state.day : d).month; } catch (e) { return 4; } }
+function ktMyName(g) { try { const P = g.state.profile || {}; return `${P.familyName || ''} ${P.givenName || g.state.name || ''}`.trim() || 'あなた'; } catch (e) { return 'あなた'; } }
+function ktSt(g) { const s = g.state; if (!isObj(s.boxing)) s.boxing = { v: 1, st: 'none' }; const B = s.boxing;
+  if (!isObj(B.body)) B.body = { nat: ktR1(ktFem(g) ? 47 + RND() * 13 : 54 + RND() * 20) };
+  for (const k of ['news', 'pool']) if (!Array.isArray(B[k])) B[k] = []; if (!isObj(B.T)) B.T = {}; if (!['none', 'gym', 'pro', 'retired'].includes(B.st)) B.st = 'none';
+  if (B.me && !isObj(B.me)) B.me = null; if ((B.st === 'gym' || B.st === 'pro' || B.st === 'retired') && !B.me) B.st = 'none'; return B; }
+const ktLim = ci => { const v = KT_CLS[clamp(num(ci, 5), 0, KT_CLS.length - 1)][1]; return v || Infinity; };
+const ktClsN = ci => KT_CLS[clamp(num(ci, 5), 0, KT_CLS.length - 1)][0] + '級';
+function ktOvr(a) { let s = 0; for (const [k] of KT_AB) s += num(a && a[k], 30) * KT_W[k]; return s; }
+const ktRecStr = p => `${num(p.w) + num(p.l) + num(p.d)}戦${num(p.w)}勝(${num(p.ko)}KO)${num(p.l)}敗${num(p.d) ? num(p.d) + '分' : ''}`;
+const ktGym = B => KT_GYM.find(x => x.id === (B.me && B.me.gym)) || KT_GYM[0];
+function ktNews(B, g, d, t) { B.news.unshift({ d, y: ktYear(g, d), m: ktMonth(g, d), t }); if (B.news.length > 40) B.news.length = 40; }
+const ktBy = (B, id) => B.pool.find(p => p.id === id) || null;
+const ktTitleN = (B, key) => `${KT_ORG[key][0]}${ktClsN(B.cls)}王座`;
+function ktOrgOK(g, key, d) { const y = ktYear(g, d); if (key === 'ibf' || key === 'wbo') return y >= 2013; return true; } // JBCがIBF・WBOを認めたのは2013年
+// 体重に合う階級の候補（ふだんの体重から3〜12%落とす階級）
+function ktClsOpts(g, nat) { const f = ktFem(g), out = []; for (let i = f ? 0 : 1; i < KT_CLS.length; i++) { const lim = ktLim(i); if (lim === Infinity) { if (nat > 86) out.push(i); continue; } if (lim <= nat * 0.985 && lim >= nat * 0.87) out.push(i); } if (!out.length) { let b = f ? 0 : 1; for (let i = b; i < KT_CLS.length - 1; i++) if (ktLim(i) <= nat) b = i; out.push(b); } return out.slice(-3); }
+// ---- 選手（相手・ランキング）の生成 ----
+function ktName(B, co, f) { const N = KT_NM; let nm = ''; for (let t = 0; t < 30; t++) {
+    if (co === 'jp') nm = `${pick(N.jpS)} ${pick(f ? N.jpF : N.jpM)}`; else { const L = (f && N[co + 'F']) || N[co] || N.us; nm = Array.isArray(L[0]) ? `${pick(L[0])}・${pick(L[1])}` : pick(L); }
+    if (!B.pool.some(p => p.n === nm)) break; } return nm; }
+function ktMkBoxer(B, g, ovr, co, age, tier, d) { const f = ktFem(g), sty = pick(['fighter', 'boxer', 'bf', 'bf', 'counter']), bias = KT_STY[sty][2], a = {};
+  for (const [k] of KT_AB) a[k] = clamp(Math.round(ovr + num(bias[k]) + ktG() * 9), 15, 99);
+  const o = ktOvr(a); for (const [k] of KT_AB) a[k] = clamp(Math.round(a[k] + (ovr - o)), 15, 99);
+  const n = clamp(Math.round((age - 17.5) * 1.9 + RND() * 4), 0, 40), wr = clamp(0.4 + (ovr - 35) / 80, 0.35, 0.97), dr = n > 6 && RND() < 0.4 ? 1 : 0; let w = Math.round(n * wr), l = Math.max(0, n - w - dr); if (tier === 'C') { w = Math.min(w, Math.floor(RND() * 4)); l = Math.min(l, 1 + Math.floor(RND() * 5)); } /* C級は4勝未満 */
+  B.seq = num(B.seq) + 1; const p = { id: 'k' + B.seq, n: ktName(B, co, f), co, age, a, sty, sig: pick(['jab', 'straight', 'hook', 'upper', 'body']), w, l, d: dr, ko: Math.round(w * clamp(0.22 + a.pow / 230, 0.2, 0.75)), rp: clamp(ktR1((ovr - 30) * 1.5 + ktG() * 4), 0, 100), pot: clamp(Math.round(ovr + (age < 25 ? RND() * 22 : RND() * 5)), 30, 95), tier, last: num(d) - Math.floor(RND() * 30) };
+  B.pool.push(p); return p; }
+function ktGenPool(B, g) { const f = ktFem(g), d = g.state.day; B.pool = []; B.T = {}; const W = f ? ['mx', 'us', 'ph', 'th', 'kr'] : ['mx', 'us', 'uk', 'pr', 'ar', 'ua', 'za', 'ph', 'th'], A = f ? ['th', 'ph', 'kr'] : ['th', 'ph', 'kr', 'id', 'au', 'cn'];
+  const T = [['W', 6, 82, 93, 0.15, W, 25, 33], ['V', 8, 74, 84, 0.3, W, 24, 33], ['R', 10, 66, 76, 0.5, A, 23, 32], ['N', 12, 56, 67, 1, A, 22, 31], ['A', 8, 46, 57, 0.85, A, 20, 30], ['C', 10, 33, 47, 1, A, 17, 24]];
+  for (const [tier, n, lo, hi, jp, L, a0, a1] of T) for (let i = 0; i < n; i++) ktMkBoxer(B, g, lo + (hi - lo) * (i + RND()) / n, RND() < jp ? 'jp' : pick(L), a0 + Math.floor(RND() * (a1 - a0 + 1)), tier, d);
+  const S = B.pool.slice().sort((x, y) => y.rp - x.rp); KT_WORLD.forEach((k, i) => { B.T[k] = S[i].id; S[i].rp = Math.max(S[i].rp, 90 + RND() * 6); });
+  const wc = KT_WORLD.map(k => B.T[k]), op = S.find(p => KT_ASIA.includes(p.co) && !wc.includes(p.id)); B.T.opbf = op ? op.id : null; const jp = S.find(p => p.co === 'jp' && !wc.includes(p.id) && p.id !== B.T.opbf); B.T.jp = jp ? jp.id : null; }
+// ---- ランキング ----
+function ktMeRow(B, g) { const me = B.me; return { id: 'me', n: ktMyName(g), co: 'jp', rp: me.rp, w: me.w, l: me.l, d: me.d, ko: me.ko, age: ageOf(g), me: 1, a: me.a, sty: me.sty }; }
+function ktAll(B, g) { const L = B.pool.slice(); if (B.me && B.st === 'pro') L.push(ktMeRow(B, g)); return L; }
+function ktRank(B, g, key) { const T = B.T, all = ktAll(B, g), wc = KT_WORLD.map(k => T[k]).filter(Boolean); let L = all, ex = wc;
+  if (key === 'jp') { L = all.filter(p => p.co === 'jp'); ex = [T.jp, T.opbf, ...wc]; } else if (key === 'opbf') { L = all.filter(p => KT_ASIA.includes(p.co)); ex = [T.opbf, ...wc]; }
+  const bias = p => KT_TIER[key] < 3 ? 0 : ((ktHash(p.id + key) % 7) - 3) * 0.8;
+  const list = L.filter(p => !ex.includes(p.id) && num(p.w) + num(p.l) + num(p.d) > 0).map(p => ({ p, v: p.rp + bias(p) })).sort((x, y) => y.v - x.v).slice(0, 15).map(x => x.p);
+  return { champ: T[key] ? all.find(p => p.id === T[key]) || null : null, list }; }
+// 自分の順位：王者なら0、ランク外なら null
+function ktMyRank(B, g, key) { if (!B.me || B.st !== 'pro') return null; if (B.T[key] === 'me') return 0; const i = ktRank(B, g, key).list.findIndex(p => p.me); return i < 0 ? null : i + 1; }
+const ktTopTier = me => Math.max(0, ...Object.keys(me.titles || {}).map(k => KT_TIER[k]));
+// ---- 入門・移籍・階級 ----
+function ktCanJoin(g) { if (ageOf(g) < 13) return '入門は13歳から'; try { const N = g.state.npb; if (N && N.me && ['pro', 'mlb'].includes(N.me.st)) return 'プロ野球選手とは両立できない'; } catch (e) { } return ''; }
+function ktJoin(g, gymId, sty, ci) { const B = ktSt(g), G = KT_GYM.find(x => x.id === gymId) || KT_GYM[0], why = ktCanJoin(g); if (why) return { ok: false, why }; if (B.st !== 'none') return { ok: false, why: 'もうジムに入っている' };
+  const cost = G.ent + G.fee; if (num(g.state.money) < cost) return { ok: false, why: `入会金と最初の月謝で ${yen(cost)} が必要` }; g.state.money -= cost;
+  const age = ageOf(g), a = {}, cap = {}, adj = age < 16 ? -3 : age > 30 ? -3 : 0, bias = (KT_STY[sty] || KT_STY.bf)[2];
+  for (const [k] of KT_AB) { a[k] = ktR1(clamp(23 + RND() * 9 + adj + num(bias[k]) * 0.6, 12, 45)); cap[k] = Math.round(clamp(80 + RND() * 15 + num(bias[k]), 70, 98)); }
+  const ks = KT_AB.map(x => x[0]).sort(() => RND() - 0.5); cap[ks[0]] = Math.max(cap[ks[0]], 94 + Math.floor(RND() * 5)); cap[ks[1]] = Math.max(cap[ks[1]], 90 + Math.floor(RND() * 6));
+  B.cls = clamp(num(ci, 5), ktFem(g) ? 0 : 1, KT_CLS.length - 1); B.st = 'gym'; B.day = g.state.day; B.lastM = ktMonth(g); B.lastY = ktYear(g);
+  B.me = { a, cap, sty: KT_STY[sty] ? sty : 'bf', nat: B.body.nat, wt: B.body.nat, fat: 0, dmg: 0, inj: null, lic: null, w: 0, l: 0, d: 0, ko: 0, hist: [], rp: 0, titles: {}, won: [], gym: G.id, joinDay: g.state.day, fight: null, offers: [], susp: 0, ses: 0, bond: 20, sig: null, feeDebt: 0, trd: [], earn: 0 };
+  ktGenPool(B, g); ktNews(B, g, g.state.day, `${G.n}に入門した`);
+  return { ok: true, text: `${G.n}に入門した（入会金 ${yen(G.ent)}・月謝 ${yen(G.fee)}）。\n${G.boss}「うちに来たからには、本気でやれよ。まずは基本だ。走って、縄をとんで、鏡の前でフォームを固めろ」\n階級は${ktClsN(B.cls)}（リミット ${ktLim(B.cls) === Infinity ? 'なし' : ktLim(B.cls).toFixed(2) + 'kg'}）。16歳になり、入門から20日たてば、プロテストを受けられる。` }; }
+function ktMove(g, gymId) { const B = ktSt(g), me = B.me, G = KT_GYM.find(x => x.id === gymId); if (!me || !G || !['gym', 'pro'].includes(B.st)) return { ok: false, why: 'ジムに入っていない' }; if (me.gym === G.id) return { ok: false, why: 'いまのジムだ' }; if (me.fight) return { ok: false, why: '試合が決まっているあいだは移れない' };
+  const cost = B.st === 'pro' ? 300000 : G.ent; if (num(g.state.money) < cost) return { ok: false, why: `${B.st === 'pro' ? '移籍金' : '入会金'} ${yen(cost)} が必要` }; g.state.money -= cost; me.gym = G.id; me.bond = 10; me.offers = []; ktNews(B, g, g.state.day, `${G.n}に移籍した`); return { ok: true, text: `${G.n}に移った（${B.st === 'pro' ? '移籍金' : '入会金'} ${yen(cost)}）。\n${G.boss}「よく来た。うちのやり方でやってもらうぞ」` }; }
+function ktReclass(g, ci) { const B = ktSt(g), me = B.me; if (!me || !['gym', 'pro'].includes(B.st)) return { ok: false, why: 'ジムに入っていない' }; if (me.fight) return { ok: false, why: '試合が決まっているあいだは変えられない' }; ci = clamp(num(ci), ktFem(g) ? 0 : 1, KT_CLS.length - 1); if (ci === B.cls) return { ok: false, why: 'いまの階級だ' };
+  const had = Object.keys(me.titles); for (const k of had) delete me.titles[k]; B.cls = ci; me.rp = ktR1(me.rp * 0.85); me.offers = []; me.rk = null; ktGenPool(B, g); ktNews(B, g, g.state.day, `${ktClsN(ci)}に階級を変えた${had.length ? '（王座は返上）' : ''}`); return { ok: true, text: `階級を${ktClsN(ci)}に変えた。${had.length ? '持っていた王座は返上した。' : ''}\nランキングは、新しい階級で一から積みなおしになる。` }; }
+// ---- 練習 ----
+const ktAgeMul = age => age < 17 ? 1.05 : age <= 24 ? 1 : age <= 28 ? 0.8 : age <= 31 ? 0.55 : age <= 34 ? 0.35 : 0.2;
+const ktFloor = me => me.nat * 0.86;
+const KT_INJ = { '拳の痛み': 6, '足首のねんざ': 5, '腰の痛み': 5, '肩の痛み': 6, 'ろっ骨のひび': 12, 'まぶたのカット': 8, '鼻の骨折': 12, '拳の骨折': 25, '眼窩底骨折': 40 };
+function ktInjure(g, B, name, d) { const me = B.me, day = d == null ? g.state.day : d; me.inj = { n: name, until: day + (KT_INJ[name] || 6) }; return `${name}（全治 約${(KT_INJ[name] || 6) * 3}日）`; }
+function ktTrain(g, id) { const B = ktSt(g), me = B.me, M = KT_TR.find(x => x.id === id), day = g.state.day; if (!me || !M || !['gym', 'pro'].includes(B.st)) return { ok: false, why: 'ジムに入っていない' };
+  if (me.feeDebt >= 2) return { ok: false, why: '月謝を2か月ためている。払うまで練習できない' }; if (me.inj && !M.light) return { ok: false, why: `${me.inj.n}が治るまで、この練習はできない` }; if (me.fight && me.fight.day === day) return { ok: false, why: '今日は試合だ' };
+  if (id === 'spar' && day - me.joinDay < 5) return { ok: false, why: 'スパーリングは、入門して5日たってから' }; if (num(g.state.stamina) < M.stm) return { ok: false, why: '体力が足りない' };
+  g.state.stamina -= M.stm; const G = ktGym(B), am = ktAgeMul(ageOf(g)), fm = me.fat > 80 ? 0.4 : me.fat > 60 ? 0.7 : 1, up = [];
+  for (const [k, v] of Object.entries(M.g)) { const cur = me.a[k], cap = me.cap[k], dim = clamp((cap - cur) / 15, 0.05, 1) * clamp(1.35 - cur / 75, 0.12, 1); const gain = v * G.tr * am * fm * dim * (M.tr ? 0.85 + me.bond / 250 : 1) * (0.8 + RND() * 0.4) * KT_GROW; me.a[k] = Math.min(99, cur + gain); if (Math.floor(me.a[k]) > Math.floor(cur)) up.push(k); }
+  me.fat = clamp(me.fat + M.fat * G.hard, 0, 100); if (M.wt) me.wt = Math.max(ktFloor(me), me.wt + M.wt); if (M.nat) me.nat = Math.min(B.body.nat + 3, me.nat + M.nat); if (M.dmg) me.dmg = clamp(me.dmg + M.dmg * (RND() < 0.3 ? 2 : 0.5), 0, 100);
+  me.ses++; me.trd.push(day); if (me.trd.length > 40) me.trd.shift(); if (M.tr) me.bond = clamp(me.bond + 0.4, 0, 100);
+  let inj = ''; if (RND() < (num(M.inj) + (me.fat > 85 ? 0.06 : 0)) * G.care) inj = ktInjure(g, B, id === 'spar' ? pick(['ろっ骨のひび', 'まぶたのカット', '鼻の骨折']) : id === 'bag' ? '拳の痛み' : pick(['足首のねんざ', '腰の痛み', '肩の痛み']));
+  const say = inj ? `練習中にけがをした：${inj}` : me.fat > 80 ? `${G.boss}「動きが重い。やりすぎだ。休むのも練習のうちだぞ」` : up.length ? pick([`${G.boss}「いいぞ。今のを体に覚えこませろ」`, 'トレーナー「ナイス！ 前より良くなってる」', `${G.boss}「その調子だ」`]) : pick(['黙々とメニューをこなした。', '汗が床に落ちる。', 'トレーナー「集中、集中！」', '鏡の中の自分と向きあった。']);
+  return { ok: true, mins: M.mins, text: `${M.n}をした。${up.length ? `（${up.map(k => KT_AB.find(x => x[0] === k)[1]).join('・')}が上がった）` : ''}\n${say}`, up, inj: !!inj }; }
+function ktCare(g) { const B = ktSt(g), me = B.me; if (!me || !['gym', 'pro'].includes(B.st)) return { ok: false, why: 'ジムに入っていない' }; if (me.fat < 5) return { ok: false, why: '疲れはたまっていない' }; if (num(g.state.money) < 3000) return { ok: false, why: 'お金が足りない（¥3,000）' }; g.state.money -= 3000; me.fat = Math.max(0, me.fat - 30); return { ok: true, mins: 60, text: 'マッサージと交代浴で体をほぐした。（疲れ −30・¥3,000）' }; }
+function ktSetSig(g, k) { const B = ktSt(g), me = B.me, day = g.state.day; if (!me || !KT_SIG[k]) return { ok: false, why: '選べない' }; if (me.sig && day - num(me.sigDay, -99) < 40) return { ok: false, why: `得意パンチは、決めてから40日は変えられない（あと${40 - (day - me.sigDay)}日）` }; me.sig = k; me.sigDay = day; return { ok: true, text: `得意パンチを「${KT_SIG[k]}」にした。\n試合でよく出るようになり、当たりやすく、威力も少し上がる。` }; }
+// ---- プロテスト ----
+function ktTestWhy(g) { const B = ktSt(g), me = B.me, age = ageOf(g), day = g.state.day; if (B.st !== 'gym' || !me) return 'ジムの練習生だけが受けられる'; if (age < 16) return 'プロテストは16歳から'; if (age > 34) return 'プロテストを受けられるのは34歳まで'; if (ktFem(g) && ktYear(g) < 2008) return '女子のプロテストが始まるのは2008年';
+  if (day - me.joinDay < 20) return `入門して20日たってから（あと${20 - (day - me.joinDay)}日）`; if (ktOvr(me.a) < 33) return `${ktGym(B).boss}「まだ早い。基本ができてからだ」（総合力33以上）`; if (day < num(me.testCD)) return `次に受けられるのは${me.testCD - day}日後`; if (me.inj) return 'けがが治ってから'; if (num(g.state.money) < 10000) return '受験料 ¥10,000 が必要'; return ''; }
+function ktTestRun(g, correct) { const B = ktSt(g), me = B.me, why = ktTestWhy(g); if (why) return { ok: false, why }; g.state.money -= 10000; const ovr = ktOvr(me.a), wr = num(correct) >= 2, p = clamp(0.3 + (ovr - 33) / 16, 0.15, 0.97), pr = RND() < p, day = g.state.day;
+  const L = [`【筆記】3問中${num(correct)}問正解。${wr ? '合格ライン。' : '不合格…。'}`]; if (wr) L.push(`【実技】ほかの受験者と2ラウンドのスパーリング。${pr ? pick(['ジャブを突き、ガードを下げずに最後まで動けた。', '足が止まらず、ワンツーがきれいに出た。']) : pick(['緊張で手が出ず、ガードも下がってしまった。', '2ラウンド目にスタミナが切れ、棒立ちになった。'])}`);
+  if (wr && pr) { me.lic = 'C'; B.st = 'pro'; me.proDay = day; me.rp = ktR1(clamp((ovr - 30) * 1.2, 2, 12)); me.nextOffer = day + 3; try { g.addFame && g.addFame(2, true); } catch (e) { } ktNews(B, g, day, 'プロテストに合格。C級ライセンスを手にした'); L.push('', '合格！ C級ライセンス（4回戦）を手にした。今日から、プロボクサーだ。', `${ktGym(B).boss}「おめでとう。だが、ここがスタートだ。デビュー戦の相手を探してやる」`); return { ok: true, pass: true, text: L.join('\n') }; }
+  me.testCD = day + 10; L.push('', '不合格だった。10日後から、また受けられる。'); return { ok: true, pass: false, text: L.join('\n') }; }
+// ---- 減量・計量 ----
+function ktSauna(g) { const B = ktSt(g), me = B.me, fi = me && me.fight, day = g.state.day; if (!fi) return { ok: false, why: '試合が決まっていない' }; if (fi.wi) return { ok: false, why: '計量はもう終わった' }; if (fi.day - day > 2) return { ok: false, why: '水抜きは、計量の直前（試合の2日前から）だけ' }; if (num(me.dry) >= 2.4) return { ok: false, why: 'これ以上は危険だ' }; if (num(g.state.stamina) < 15) return { ok: false, why: '体力が足りない' };
+  g.state.stamina -= 15; me.wt = Math.max(ktFloor(me) - 1.5, me.wt - 0.8); me.dry = num(me.dry) + 0.8; return { ok: true, mins: 90, text: `サウナスーツを着て汗を出し、水分を抜いた。（−0.8kg → ${me.wt.toFixed(1)}kg）\nのどがからからだ。やりすぎると、試合の動きが落ちる。` }; }
+function ktCancelFight(g, B, d, why, notes) { const me = B.me, fi = me.fight; if (!fi) return; me.fight = null; me.diet = false; me.dry = 0; if (fi.kind === 'rookie' && me.rk) me.rk.alive = false; if (notes) notes.push(`【試合中止】${why}`); }
+function ktWeigh(g, B, d, notes) { const me = B.me, fi = me.fight, lim = ktLim(B.cls); let pen = 0, t = ''; if (lim === Infinity) { fi.wi = { ok: 1, pen: 0 }; notes.push('【前日計量】ヘビー級に体重の上限はない。計量をすませた。あすは試合だ。'); return; }
+  pen += Math.max(0, (me.nat - Math.min(me.wt, lim)) / me.nat - 0.04) * 220 + num(me.dry) * 5;
+  if (me.wt <= lim + 0.049) t = `【前日計量】${me.wt.toFixed(1)}kg（リミット ${lim.toFixed(2)}kg）。一発でパスした。`;
+  else if (me.wt - lim <= 1.2) { const ov = me.wt - lim; pen += 6 + ov * 9; me.wt = lim; t = `【前日計量】${ov.toFixed(1)}kgオーバー。2時間の猶予のあいだにサウナと縄とびで落とし、再計量でパスした。体はからからだ。`; }
+  else { const ov = me.wt - lim, fine = Math.max(30000, Math.round(fi.purse * 0.3)), key = fi.title; g.state.money = Math.max(0, num(g.state.money) - fine); me.rp = Math.max(0, me.rp - 6); me.susp = d + 20; me.bond = clamp(me.bond - 15, 0, 100);
+    let ex = ''; if (key && fi.champ && me.titles[key]) { delete me.titles[key]; B.T[key] = null; ex = `${ktTitleN(B, key)}は、はく奪された。`; ktNews(B, g, d, `${ktMyName(g)}が計量失格。${ktTitleN(B, key)}をはく奪`); }
+    ktCancelFight(g, B, d, `前日計量で${ov.toFixed(1)}kgオーバー。計量失格で、試合は中止になった。罰金 ${yen(fine)}。${ex}\n${ktGym(B).boss}「プロ失格だ。相手にも、お客さんにも、顔向けできん」`, notes); return; }
+  fi.wi = { ok: 1, pen: Math.round(pen) }; me.dry = 0; me.diet = false; me.wt = Math.min(me.nat, me.wt + me.nat * 0.035 + 1);
+  notes.push(`${t}${pen >= 18 ? '\n無理な減量がたたって、体に力が入らない。' : pen >= 9 ? '\n減量はきつかった。' : ''}\n計量のあとは、水分と食事で体を戻す。あすは試合だ。`); }
+function ktCond(g, B, d) { const me = B.me, fi = me.fight || {}, n = me.trd.filter(x => d - x <= 12 && d - x >= 0).length; return clamp(100 - num(fi.wi && fi.wi.pen) - me.fat * 0.3 - (me.inj ? 10 : 0) + (n >= 8 ? 4 : n <= 2 ? -8 : 0), 45, 104); }
+// ---- オファー ----
+function ktPurse(B, o) { const G = ktGym(B), me = B.me; let v; if (o.title) { const b = { jp: [1e6, 2.5e6], opbf: [2e6, 4e6], wba: [1e7, 3e7], wbc: [1e7, 3e7], ibf: [8e6, 2.5e7], wbo: [8e6, 2.5e7] }[o.title]; v = b[o.champ ? 1 : 0] * (o.champ ? Math.min(2, 1 + num(me.titles[o.title] && me.titles[o.title].def) * 0.15) : 1) * (o.unify ? 2 : 1); }
+  else v = ({ 4: 6e4, 6: 1.2e5, 8: 2.5e5, 10: 6e5, 12: 1e6 }[o.rounds] || 6e4) * (o.rounds >= 8 ? 1 + clamp((me.rp - 40) / 60, 0, 1.5) : 1) * (o.tier === 'hard' ? 1.15 : 1);
+  v *= G.pay; return v >= 1e6 ? Math.round(v / 1e5) * 1e5 : Math.round(v / 1e3) * 1e3; }
+function ktMkOffers(g, B, d) { const me = B.me, G = ktGym(B), out = [], jr = ktMyRank(B, g, 'jp'), top = ktTopTier(me);
+  const rounds = me.lic === 'C' ? 4 : me.lic === 'B' ? 6 : (jr != null || me.rp >= 50) ? 10 : 8, champs = Object.values(B.T);
+  const mk = (opp, o) => { const day = d + (o.title ? 20 + Math.floor(RND() * 8) : 12 + Math.floor(RND() * 8)); B.oseq = num(B.oseq) + 1; const of = { id: 'o' + B.oseq, opp: opp.id, on: opp.n, rounds: o.rounds || rounds, day, exp: d + 6, kind: 'normal', ...o }; of.purse = ktPurse(B, of); out.push(of); return of; };
+  // ふつうの試合：格下・同格・格上
+  if (!top) { const used = new Set(); for (const [tier, lo, hi] of [['easy', -12, -3.5], ['even', -3.5, 3.5], ['hard', 3.5, 11]]) { let c = B.pool.filter(p => !used.has(p.id) && !champs.includes(p.id) && p.rp - me.rp >= lo && p.rp - me.rp <= hi && (me.lic === 'A' || p.co === 'jp'));
+        if (!c.length && tier === 'even') { const p = ktMkBoxer(B, g, clamp(ktOvr(me.a) + ktG() * 3, 28, 70), 'jp', 18 + Math.floor(RND() * 6), 'C', d); p.rp = ktR1(Math.max(0, me.rp + ktG() * 2)); const n0 = me.w + me.l + me.d; p.w = Math.max(0, Math.round(n0 * 0.6 + RND() * 2 - 0.5)); p.l = Math.floor(RND() * 2); p.d = 0; p.ko = Math.floor(p.w * (0.2 + RND() * 0.4)); c = [p]; }
+        if (!c.length) continue; const p = pick(c); used.add(p.id); mk(p, { tier }); } }
+  // タイトルマッチ
+  if (me.lic === 'A') { const myT = Object.keys(me.titles).sort((x, y) => KT_TIER[y] - KT_TIER[x]);
+    if (myT.length) { const key = myT[0], R = ktRank(B, g, key).list.filter(p => !p.me); if (R.length) { const i = RND() < 0.35 ? 0 : Math.min(R.length - 1, 1 + Math.floor(RND() * 5)); mk(R[i], { title: key, champ: 1, rounds: key === 'jp' ? 10 : 12, kind: 'title', mand: i === 0 ? 1 : 0 }); }
+      if (top >= 3 && RND() < 0.2) { const ok = KT_WORLD.filter(k => !me.titles[k] && B.T[k] && B.T[k] !== 'me' && ktOrgOK(g, k, d)); if (ok.length) { const k2 = pick(ok), p = ktBy(B, B.T[k2]); if (p) mk(p, { title: key, title2: k2, champ: 1, unify: 1, rounds: 12, kind: 'title' }); } } }
+    let done = false; const tryT = (key, need, prob) => { if (done || KT_TIER[key] <= top || !ktOrgOK(g, key, d)) return; const r = ktMyRank(B, g, key); if (r == null || r === 0 || r > need || RND() > prob) return; const hold = B.T[key] ? ktBy(B, B.T[key]) : null, R = ktRank(B, g, key).list.filter(p => !p.me), opp = hold || R[0]; if (!opp) return; mk(opp, { title: key, champ: 0, vac: hold ? 0 : 1, rounds: key === 'jp' ? 10 : 12, kind: 'title' }); done = true; };
+    const wn = G.pw >= 3 ? 10 : G.pw === 2 ? 6 : 3; for (const k of KT_WORLD.slice().sort(() => RND() - 0.5)) tryT(k, wn, 0.5); tryT('opbf', 8, 0.6); const r = ktMyRank(B, g, 'jp'); tryT('jp', 10, r != null && r <= 3 ? 1 : 0.6); }
+  return out; }
+function ktAccept(g, id) { const B = ktSt(g), me = B.me, o = me && me.offers.find(x => x.id === id); if (!o) return { ok: false, why: 'その話はもうない' }; if (me.fight) return { ok: false, why: 'もう試合が決まっている' };
+  if (o.kind === 'rkentry') { me.rk = { y: ktYear(g), stage: 0, alive: true }; me.offers = []; ktNews(B, g, g.state.day, `${ktYear(g)}年の新人王トーナメントにエントリーした`); return { ok: true, text: '新人王トーナメントにエントリーした。\n予選（5月）・準決勝（8月）・東日本決勝（11月）・全日本新人王決定戦（12月）と、4つ勝てば全日本新人王だ。\n新人王になると、A級に昇格し、日本ランキングに入る。' }; }
+  me.fight = { ...o, acc: g.state.day }; me.offers = []; me.dry = 0; const lim = ktLim(B.cls); return { ok: true, text: `試合が決まった。\n相手：${o.on}（${o.rounds}回戦${o.title ? '・' + ktTitleN(B, o.title) + (o.unify ? '統一戦' : o.vac ? '決定戦' : o.champ ? 'の防衛戦' : 'への挑戦') : ''}）\nあと${o.day - g.state.day}日。前日に公式計量がある${lim === Infinity ? '' : `（リミット ${lim.toFixed(2)}kg・いま ${me.wt.toFixed(1)}kg）`}。\n${ktGym(B).boss}「準備をおこたるなよ」` }; }
+// ---- 試合の中身 ----
+function ktFtr(src, cond, human) { const k = (0.82 + 0.18 * cond / 100) * (1 + ktG() * KT_FORM), a = {}; /* その日の出来（調子の波） */ for (const [key] of KT_AB) a[key] = clamp(num(src.a && src.a[key], 40) * k, 5, 110); if (src.dmg) a.chin = Math.max(10, a.chin - src.dmg * 0.15);
+  return { id: src.id, n: src.n, co: src.co || 'jp', sty: src.sty || 'bf', sig: src.sig || null, a, cond, hp: 100, st: clamp(52 + cond * 0.48, 45, 100), body: 0, cut: 0, kd: 0, kdT: 0, hurt: 0, took: 0, land: 0, thr: 0, rs: 0, rl: 0, rt: 0, strat: 'box', tmp: null, human: !!human, rec: src.rec || '' }; }
+function ktFightNew(a, b, o) { return { f: [a, b], rounds: o.rounds, rd: 0, ex: 0, exN: o.women ? 6 : 9, sec: o.women ? 120 : 180, kdRule: o.rounds <= 4 ? 2 : 3, title: o.title || null, cards: [[], [], []], over: null, pend: null, open: o.title === 'wbc' }; }
+function ktSP(X) { const b = KT_ST[X.strat] || KT_ST.box, t = X.tmp || {}, syn = (KT_SYN[X.sty] || {})[X.strat] || 1; return { agg: b.agg * num(t.agg, 1), acc: b.acc * syn * num(t.acc, 1), pw: b.pw * num(t.pw, 1), df: b.df * num(t.df, 1), stc: b.stc * num(t.stc, 1), body: b.body, ctr: b.ctr * (X.tmp ? 0.5 : 1), rec: b.rec }; }
+const ktFat = X => 0.62 + 0.38 * Math.min(1, X.st / 45);
+function ktEnd(F, w, how, why) { F.over = { w, how, why, rd: F.rd, sec: clamp(Math.round((F.ex - RND()) / F.exN * F.sec), 5, F.sec - 1), ko: true }; F.pend = null; }
+function ktRoundStart(F, s0, s1) { F.rd++; F.ex = 0; F.f[0].strat = KT_ST[s0] ? s0 : 'box'; F.f[1].strat = KT_ST[s1] ? s1 : 'box'; for (const X of F.f) { X.kd = 0; X.rs = 0; X.rl = 0; X.rt = 0; X.hurt = 0; X.tmp = null; } return [{ t: 'bell', rd: F.rd }]; }
+function ktMomentSet(F, j) { if (F.over || F.ex >= F.exN) return; const Y = F.f[j], X = F.f[1 - j];
+  if (!X.human) X.tmp = { ...KT_MOM[RND() < 0.5 + (X.a.men - 50) / 200 ? 'rush' : 'calm'] }; if (!Y.human) { const r = RND(), k = r < 0.45 ? 'clinch' : r < 0.75 ? 'move' : 'trade', m = { ...KT_MOM[k] }; if (k === 'move') m.df = 1.1 + Y.a.spd / 200; Y.tmp = m; }
+  if ((X.human || Y.human) && !F.pend) F.pend = { t: 'moment', hurt: j }; }
+function ktMoment(F, choice) { const P = F.pend; if (!P || P.t !== 'moment') return; F.pend = null; const H = F.f.find(x => x.human); if (!H) return; const j = F.f.indexOf(H), mine = P.hurt === j; let k = choice;
+  if (!KT_MOM[k] || (mine ? !['clinch', 'move', 'trade'].includes(k) : !['rush', 'calm'].includes(k))) k = mine ? (RND() < 0.5 ? 'clinch' : 'move') : (RND() < 0.6 ? 'rush' : 'calm'); const m = { ...KT_MOM[k] }; if (k === 'move') { m.df = 1.1 + H.a.spd / 200; H.st = Math.max(0, H.st - 3); } H.tmp = m; return k; }
+function ktDown(F, j, ev, d, kind) { const Y = F.f[j]; Y.kd++; Y.kdT++; Y.hp = Math.max(Y.hp, 6); Y.hurt = 3; ev.push({ t: 'kd', who: j, k: kind, n: Y.kd });
+  if (Y.kd >= F.kdRule) { ktEnd(F, 1 - j, 'TKO', `${F.kdRule}度のダウン`); ev.push({ t: 'end' }); return; }
+  const gu = clamp(0.3 + Y.hp / 125 + (Y.a.men - 50) / 180 - (Y.kdT - 1) * 0.14 - Math.max(0, d - 4.5) * 0.07, 0.03, 0.97); if (Y.human) { F.pend = { t: 'kd', who: j, gu }; return; } ktKdDone(F, RND() < gu, ev, j); }
+function ktKdDone(F, up, ev, j) { if (j == null) j = F.pend ? F.pend.who : 0; F.pend = null; ev = ev || []; const Y = F.f[j]; if (!up) { ktEnd(F, 1 - j, 'KO', '10カウント'); ev.push({ t: 'ko', who: j }, { t: 'end' }); return ev; } Y.hp = Math.max(Y.hp, 14 + Y.a.men * 0.08); ev.push({ t: 'up', who: j }); ktMomentSet(F, j); return ev; }
+function ktPunch(F, i, ev, o) { const X = F.f[i], Y = F.f[1 - i], sx = ktSP(X), sy = ktSP(Y), fx = ktFat(X), fy = ktFat(Y); let kind; const r = RND();
+  if (!o.ctr && RND() < sx.body) kind = 'body'; else if (o.ctr) kind = pick(['straight', 'hook', 'straight', 'upper']); else { const jab = X.strat === 'box' ? 0.5 : X.strat === 'ko' ? 0.15 : 0.36; kind = r < jab ? 'jab' : r < jab + (1 - jab) * 0.42 ? 'straight' : r < jab + (1 - jab) * 0.82 ? 'hook' : 'upper'; }
+  const sg = !o.ctr && X.sig && RND() < 0.18; if (sg) kind = X.sig; const P = KT_PN[kind], mu = X.strat === 'press' && Y.strat === 'box' ? 1.06 : X.strat === 'box' && Y.strat === 'counter' ? 1.09 : 1;
+  X.thr++; X.rt++; X.st = Math.max(0, X.st - 0.8 * sx.stc * P.c * (1.25 - X.a.sta / 200));
+  const off = (X.a.tec * 0.5 + X.a.spd * 0.4 + 12) * sx.acc * fx * (sg ? 1.08 : 1) * mu * (1 + num(X.mo)), dfn = (Y.a.def * 0.55 + Y.a.spd * 0.3 + Y.a.tec * 0.15) * sy.df * (0.75 + 0.25 * fy) * (Y.hurt > 0 ? 0.72 : 1) * (1 - Y.cut * 0.04) * (1 + num(Y.mo));
+  const p = clamp(0.27 + P.a + (off - dfn) / KT_ACC + (60 - Y.a.def) / 500 + (o.ctr ? 0.12 : 0), 0.06, 0.82); /* 守りの技術が低いほど、もらいやすい */ if (RND() >= p) { ev.push({ t: 'p', by: i, k: kind, hit: 0, ctr: o.ctr ? 1 : 0 }); return; }
+  const crit = RND() < 0.05 + X.a.pow / 1400 + (X.strat === 'ko' ? 0.05 : 0) + (o.ctr ? 0.07 : 0);
+  let d = P.d * (0.75 + X.a.pow / 200) * sx.pw * Math.pow(fx, 0.6) * (0.75 + RND() * 0.5) * (o.ctr ? 1.45 : 1) * (crit ? 2.5 : 1) * (sg ? 1.1 : 1) * KT_DMG; X.land++; X.rl++;
+  if (kind === 'body') { d *= 1.15 - Y.a.sta / 500; Y.st = Math.max(0, Y.st - d * 1.6); Y.body += d; X.rs += d * 0.8; ev.push({ t: 'p', by: i, k: kind, hit: 1, d, crit: crit ? 1 : 0, ctr: 0 }); if (crit && Y.st < 12 && RND() < 0.35) ktDown(F, 1 - i, ev, d, kind); return; }
+  d *= 1.2 - Y.a.chin / 250; Y.hp -= d; Y.took += d; X.rs += d; ev.push({ t: 'p', by: i, k: kind, hit: 1, d, crit: crit ? 1 : 0, ctr: o.ctr ? 1 : 0 });
+  if (kind !== 'jab' && RND() < 0.012 + (crit ? 0.03 : 0)) { Y.cut++; ev.push({ t: 'cut', who: 1 - i, lv: Y.cut }); if (Y.cut >= 3) { ktEnd(F, i, 'TKO', 'ドクターストップ（出血）'); ev.push({ t: 'end' }); return; } }
+  let kp = 0; if (d >= 3) kp += (d - 3) / 10; if (Y.hp < 30) kp += (30 - Y.hp) / 130 * Math.min(1.5, d / 2.2); if (crit) kp += 0.1; kp *= (1.25 - Y.a.chin / 220) * KT_KD; if (kind === 'jab') kp *= 0.25;
+  if (Y.hp <= 0 || RND() < clamp(kp, 0, 0.9)) { ktDown(F, 1 - i, ev, d, kind); return; }
+  if (Y.hp < 9 && Y.hurt > 0 && RND() < 0.4) { ktEnd(F, i, 'TKO', 'レフェリーストップ'); ev.push({ t: 'end' }); return; }
+  if (!Y.hurt && ((crit && Y.hp < 60) || (d > 5 && Y.hp < 45))) { Y.hurt = 2; ev.push({ t: 'hurt', who: 1 - i }); ktMomentSet(F, 1 - i); } }
+function ktAttack(F, i, ev) { const X = F.f[i], Y = F.f[1 - i], sx = ktSP(X), sy = ktSP(Y), kd0 = Y.kdT, kx0 = X.kdT; let n = Math.round(0.6 + sx.agg * 1.7 * (0.6 + 0.4 * ktFat(X)) + RND() * 1.3); if (X.hurt > 0) n--; n = clamp(n, 0, 5); if (!n) return;
+  let cp = sy.ctr * (0.55 + (Y.a.tec + Y.a.spd - X.a.spd - 50) / 220) + ((X.strat === 'press' || X.strat === 'ko') && Y.strat === 'counter' ? 0.14 : 0); if (Y.hurt > 0) cp *= 0.4;
+  if (RND() < cp) { ktPunch(F, 1 - i, ev, { ctr: 1 }); n -= 2; if (F.over || F.pend || X.kdT > kx0) return; }
+  for (let k = 0; k < n; k++) { ktPunch(F, i, ev, {}); if (F.over || F.pend || Y.kdT > kd0) return; } }
+function ktExchange(F) { const ev = []; if (F.over || F.pend) return ev; F.ex++; const ini = X => X.a.spd * 0.5 + X.a.tec * 0.2 + ktSP(X).agg * 30 + RND() * 40, order = ini(F.f[0]) >= ini(F.f[1]) ? [0, 1] : [1, 0], tmp0 = [F.f[0].tmp, F.f[1].tmp];
+  for (const i of order) { if (F.over || F.pend) break; ktAttack(F, i, ev); }
+  F.f.forEach((X, i) => { X.st = clamp(X.st + 1.0 * ktSP(X).rec * (0.5 + X.a.sta / 100) - (X.body > 20 ? 0.3 : 0), 0, 100); if (X.hurt > 0) X.hurt--; if (X.tmp && X.tmp === tmp0[i]) X.tmp = null; }); return ev; }
+function ktDecide(F) { const tot = F.cards.map(c => c.reduce((s, r) => [s[0] + r[0], s[1] + r[1]], [0, 0])); let va = 0, vb = 0; for (const [a, b] of tot) { if (a > b) va++; else if (b > a) vb++; }
+  const w = va >= 2 ? 0 : vb >= 2 ? 1 : -1; F.over = { w, how: w < 0 ? '引き分け' : `判定${Math.max(va, vb)}-${Math.min(va, vb)}`, why: '', rd: F.rounds, tot, ko: false }; }
+function ktRoundEnd(F) { const ev = [], [A, B2] = F.f; if (F.over) return ev; const sc = X => X.rs + X.rl * 0.35 + X.rt * 0.03, a0 = sc(A), b0 = sc(B2), rc = [];
+  for (let j = 0; j < 3; j++) { const va = a0 * (1 + ktG() * 0.12) + ktG() * 0.6, vb = b0 * (1 + ktG() * 0.12) + ktG() * 0.6; let w = va >= vb ? 0 : 1; if (A.kd !== B2.kd) w = A.kd < B2.kd ? 0 : 1; const lose = Math.max(6, 9 - Math.abs(A.kd - B2.kd)), r = [w === 0 ? 10 : lose, w === 1 ? 10 : lose]; F.cards[j].push(r); rc.push(r); }
+  ev.push({ t: 'score', rc }); const rw = rc.filter(r => r[0] > r[1]).length >= 2 ? 0 : 1; F.f.forEach((X, i) => { X.mo = clamp(num(X.mo) + (i === rw ? 0.025 : -0.025), -0.06, 0.06); }); /* 流れ：ラウンドを取ると勢いがつく */ for (const X of F.f) { X.st = clamp(X.st + 9 + X.a.sta * 0.17 - X.body * 0.1, 0, 100); X.hp = Math.min(100, X.hp + Math.min(15, (100 - X.hp) * 0.32) * (0.7 + X.a.chin / 200)); X.hurt = 0; X.tmp = null; }
+  if (F.rd >= F.rounds) { ktDecide(F); ev.push({ t: 'end' }); } return ev; }
+function ktLead(F, i) { let s = 0; for (const c of F.cards) for (const r of c) s += r[i] - r[1 - i]; return s / 3; }
+function ktAI(F, i) { const X = F.f[i], Y = F.f[1 - i], left = F.rounds - F.rd, lead = ktLead(F, i), base = { fighter: ['press', 'press', 'body', 'ko'], boxer: ['box', 'box', 'box', 'counter'], counter: ['counter', 'counter', 'box'], bf: ['press', 'box', 'counter', 'body'] }[X.sty] || ['box'];
+  if (X.st < 22) return RND() < 0.7 ? 'rest' : 'box'; if (Y.hp < 30 && X.st > 30) return RND() < 0.6 ? 'ko' : 'press'; if (X.hp < 28) return pick(['box', 'box', 'counter', 'rest']);
+  if (left <= 2 && lead < -1) return RND() < 0.6 ? 'ko' : 'press'; if (left <= 2 && lead > 2) return RND() < 0.7 ? 'box' : 'counter'; if (Y.st < 30 && RND() < 0.5) return 'press'; if (F.rd < F.rounds / 2 && X.sty === 'fighter' && RND() < 0.3) return 'body'; return pick(base); }
+function ktCorner(F) { const X = F.f[0], Y = F.f[1], est = ktLead(F, 0) + ktG() * 0.8, left = F.rounds - F.rd, L = [];
+  L.push(F.rd === 0 ? '会長「まず相手を見ろ。自分のボクシングをすれば勝てる」' : est > 1.5 ? '会長「ポイントは取っている。このままでいい」' : est < -1.5 ? `会長「ポイントで負けている。${left <= 2 ? '倒しにいけ！' : '手を出せ！'}」` : '会長「ここまで五分だ。次のラウンドが大事だぞ」');
+  if (F.rd > 0) { if (X.st < 30) L.push('「息が上がっているぞ。深呼吸しろ。1ラウンド休んでもいい」'); else if (Y.st < 30) L.push('「相手は足が止まってきた。前に出ればつかまえられる」');
+    if (Y.hp < 35) L.push('「相手は効いている！ チャンスだ」'); if (X.hp < 35) L.push('「ガードを上げろ。もらいすぎだ」');
+    if (Y.strat === 'counter') L.push('「カウンターを狙われている。大振りするな、ジャブから入れ」'); else if (Y.strat === 'press' || Y.strat === 'ko') L.push('「相手は出てきている。打ち終わりにカウンターを合わせろ」'); else if (Y.strat === 'box') L.push('「足を使われている。前に出て、ロープにつめろ」');
+    if (X.cut >= 2) L.push('「傷が深い。次に開いたら止められるぞ」'); }
+  return L.slice(0, 3); }
+function ktAuto(F) { let guard = 0; while (!F.over && guard++ < 40) { ktRoundStart(F, ktAI(F, 0), ktAI(F, 1)); for (let e = 0; e < F.exN && !F.over; e++) { ktExchange(F); if (F.pend) { if (F.pend.t === 'kd') ktKdDone(F, RND() < F.pend.gu); else ktMoment(F, null); } } if (!F.over) ktRoundEnd(F); } return F.over; }
+function ktQuick(a, b) { const da = ktOvr(a.a) - ktOvr(b.a), p = 1 / (1 + Math.pow(10, -da / 11)); if (RND() < 0.04) return { w: -1, ko: false }; const w = RND() < p ? 0 : 1, W = w === 0 ? a : b; return { w, ko: RND() < 0.3 + W.a.pow / 250 }; }
+function ktFightBuild(g, B, d, human) { const me = B.me, fi = me.fight, opp = ktBy(B, fi.opp) || { id: fi.opp, n: fi.on, co: 'jp', a: me.a, sty: 'bf', w: 0, l: 0, d: 0, ko: 0 };
+  const A = ktFtr({ id: 'me', n: ktMyName(g), co: 'jp', a: me.a, sty: me.sty, sig: me.sig, dmg: me.dmg, rec: ktRecStr(me) }, ktCond(g, B, d), human), Bf = ktFtr({ ...opp, rec: ktRecStr(opp) }, 86 + RND() * 16, false);
+  const F = ktFightNew(A, Bf, { rounds: fi.rounds, title: fi.title, women: ktFem(g) }); F.cond = A.cond; return F; }
+// ---- 試合のあと ----
+function ktXp(me, k, v) { const cur = me.a[k], cap = Math.min(99, me.cap[k] + 4); me.a[k] = Math.min(cap, cur + v * (cur < me.cap[k] ? 1 : 0.5)); }
+function ktAfter(g, B, F, d) { const me = B.me, fi = me.fight, opp = ktBy(B, fi.opp), O = F.over, X = F.f[0], res = O.w === 0 ? 'W' : O.w === 1 ? 'L' : 'D', G = ktGym(B), L = [], nm = ktMyName(g), y = ktYear(g, d);
+  if (res === 'W') { me.w++; if (O.ko) me.ko++; if (opp) opp.l++; } else if (res === 'L') { me.l++; if (opp) { opp.w++; if (O.ko) opp.ko++; } } else { me.d++; if (opp) opp.d++; }
+  const how = O.ko ? `${O.rd}回${O.how}` : O.how; L.push(res === 'W' ? `${how}で勝った！` : res === 'L' ? `${how}で敗れた。` : '引き分けだった。');
+  const orp = opp ? opp.rp : me.rp; let dm = res === 'W' ? clamp(4 + (orp - me.rp) * 0.5, 1.5, 14) + (O.ko ? 0.8 : 0) : res === 'L' ? -clamp(3 + (me.rp - orp) * 0.35, 1.5, 10) : clamp((orp - me.rp) * 0.2, -2, 3);
+  me.rp = ktR1(clamp(me.rp + dm, 0, 110)); if (opp) { opp.rp = ktR1(clamp(opp.rp - dm * 0.8, 0, 108)); opp.last = d; }
+  // タイトル
+  let fame = res === 'W' ? ({ 4: 2, 6: 4, 8: 8, 10: 15, 12: 25 }[fi.rounds] || 2) : fi.rounds >= 10 ? 3 : 0; const key = fi.title;
+  if (key) { const tn = ktTitleN(B, key);
+    if (fi.champ) { const T = me.titles[key]; if (res === 'L') { B.T[key] = opp ? opp.id : null; delete me.titles[key]; if (fi.unify && me.titles) { /* 統一戦に負けても、ほかの王座は残る */ } L.push(`${tn}を失った…。`); ktNews(B, g, d, `【${tn}】${opp ? opp.n : fi.on}が${nm}に${how}で勝ち、新王者に`); }
+      else { if (T) { T.def = num(T.def) + 1; T.last = d; } fame += { 1: 30, 2: 50, 3: 300 }[KT_TIER[key]]; L.push(`${tn}の${T ? T.def : 1}度目の防衛に成功${res === 'D' ? '（引き分け防衛）' : ''}。`); ktNews(B, g, d, `【${tn}】王者 ${nm}が${fi.on}を${res === 'D' ? '引き分けで退け' : how + 'で下し'}、${T ? T.def : 1}度目の防衛`);
+        if (fi.unify && fi.title2 && res === 'W') { const k2 = fi.title2; B.T[k2] = 'me'; me.titles[k2] = { day: d, y, def: 0, last: d }; me.won.push({ k: k2, y, cls: B.cls }); fame += 600; L.push(`${ktTitleN(B, k2)}も手にした。統一王者だ！`); ktNews(B, g, d, `【王座統一】${nm}が${ktTitleN(B, k2)}も獲得`); } } }
+    else if (res === 'W') { B.T[key] = 'me'; me.titles[key] = { day: d, y, def: 0, last: d }; me.won.push({ k: key, y, cls: B.cls }); me.rp = Math.max(me.rp, { 1: 62, 2: 72, 3: 88 }[KT_TIER[key]]); fame += { 1: 120, 2: 200, 3: me.won.filter(x => KT_TIER[x.k] >= 3).length > 1 ? 500 : 1500 }[KT_TIER[key]];
+      L.push(`${tn}を手にした！ 新チャンピオンだ！`); ktNews(B, g, d, `【${tn}】${nm}が${fi.on}に${how}で勝ち、新王者に`);
+      for (const k of Object.keys(me.titles)) if (KT_TIER[k] < KT_TIER[key]) { delete me.titles[k]; B.T[k] = null; L.push(`（${ktTitleN(B, k)}は返上した）`); } }
+    else L.push(res === 'D' ? `引き分けのため、${tn}には届かなかった。` : `${tn}には届かなかった。`); }
+  // 新人王
+  if (fi.kind === 'rookie' && me.rk) { const SN = ['予選', '準決勝', '東日本決勝', '全日本新人王決定戦'][fi.stage] || ''; const adv = res === 'W' || (res === 'D' && RND() < 0.5);
+    if (adv) { me.rk.stage = fi.stage + 1; if (res === 'D') L.push('引き分けだが、優勢点で勝ちあがった。'); if (me.rk.stage >= 4) { me.rk.alive = false; me.rk.won = 1; me.lic = 'A'; me.rp = Math.max(me.rp, 47); fame += 40; me.won.push({ k: 'rookie', y, cls: B.cls }); L.push('全日本新人王に輝いた！ A級に昇格し、日本ランキングに入った。'); ktNews(B, g, d, `${nm}が${y}年の${ktClsN(B.cls)}全日本新人王に`); } else L.push(`新人王トーナメント${SN}を突破した。`); }
+    else { me.rk.alive = false; L.push(`新人王トーナメントは、${SN}で敗退した。`); } }
+  // ライセンス
+  if (me.lic === 'C' && me.w >= 4) { me.lic = 'B'; L.push('4勝を挙げ、B級（6回戦）に昇格した。'); } else if (me.lic === 'B' && me.w >= 6) { me.lic = 'A'; L.push('A級（8回戦以上）に昇格した。タイトルに挑戦できるようになる。'); }
+  // ファイトマネー（ジムのマネジメント料 33%）
+  const net = Math.round(fi.purse * 0.67); let pay = net, pt = `ファイトマネー ${yen(fi.purse)}（マネジメント料33%を引いて ${yen(net)}）`;
+  if (fi.rounds <= 4 && !key) { const sold = clamp(0.4 + num(g.state.fame) / 1500 + RND() * 0.35, 0.35, 1); pay = Math.round(net * sold / 1000) * 1000; pt = `ファイトマネーはチケットで ${yen(net)}ぶん。手売りして ${yen(pay)} になった`; }
+  if (res === 'W' && !key && RND() < 0.5) { const b = Math.round((5000 + RND() * 25000) * (fi.rounds / 4) / 1000) * 1000; pay += b; pt += `。後援者から激励賞 ${yen(b)}`; }
+  g.state.money = num(g.state.money) + pay; me.earn = num(me.earn) + pay; L.push(pt + '。');
+  // ダメージ・けが・休み
+  me.dmg = clamp(me.dmg + X.took * 0.008 + X.kdT * 0.3 + (res === 'L' && O.ko ? 1.0 : 0), 0, 100); me.fat = clamp(me.fat + 45, 0, 100); me.susp = d + (res === 'L' && O.ko ? 30 : 6); me.nextOffer = me.susp + 2 + Math.floor(RND() * 5);
+  if (res === 'L' && O.ko) L.push('KO負けのため、30日間（現実の約90日）は試合に出られない。');
+  if (X.cut >= 2) L.push(`けが：${ktInjure(g, B, 'まぶたのカット', d)}`); else if (RND() < 0.03 + X.land / 4000) L.push(`けが：${ktInjure(g, B, RND() < 0.25 ? '拳の骨折' : '拳の痛み', d)}`); else if (res === 'L' && O.ko && RND() < 0.12) L.push(`けが：${ktInjure(g, B, '眼窩底骨折', d)}`);
+  // 経験
+  const xp = 0.25 + O.rd * 0.07 + (orp > me.rp ? 0.3 : 0); ktXp(me, 'tec', xp * 0.6); ktXp(me, 'men', xp * 0.8); ktXp(me, 'def', xp * 0.4); ktXp(me, 'chin', xp * 0.15); me.bond = clamp(me.bond + (res === 'W' ? 3 : 1), 0, 100);
+  if (fame) { try { g.addFame ? g.addFame(fame, true) : (g.state.fame = num(g.state.fame) + fame); } catch (e) { } L.push(`知名度 +${fame}`); }
+  try { g.addNeed && g.addNeed('stress', res === 'W' ? -12 : res === 'L' ? 14 : 2); } catch (e) { }
+  me.hist.unshift({ d, y, n: fi.on, co: opp ? opp.co : 'jp', res, how: O.how, rd: O.rd, rounds: fi.rounds, title: key || null, kind: fi.kind, rec: opp ? ktRecStr(opp) : '' }); if (me.hist.length > 80) me.hist.length = 80;
+  me.fight = null; me.diet = false; me.offers = []; return { res, lines: L, pay, fame }; }
+// ---- 世界の動き（ほかの選手の試合・王座の移動・世代交代） ----
+function ktCpuFight(B, g, a, b, d, key) { const r = ktQuick(a, b), w = r.w === 0 ? a : r.w === 1 ? b : null, l = w === a ? b : w === b ? a : null; if (w) { w.w++; l.l++; if (r.ko) w.ko++; const dm = clamp(4 + (l.rp - w.rp) * 0.5, 1.2, 12); w.rp = ktR1(Math.min(108, w.rp + dm)); l.rp = ktR1(Math.max(0, l.rp - dm * 0.8)); } else { a.d++; b.d++; } a.last = b.last = d;
+  if (key) { const tn = ktTitleN(B, key), how = r.ko ? `${2 + Math.floor(RND() * 9)}回${RND() < 0.6 ? 'TKO' : 'KO'}` : '判定'; if (B.T[key] !== a.id) { if (w) { B.T[key] = w.id; ktNews(B, g, d, `【${tn}決定戦】${w.n}が${l.n}に${how}で勝ち、新王者に`); } }
+    else if (w === b) { B.T[key] = b.id; ktNews(B, g, d, `【${tn}】${b.n}が王者 ${a.n}に${how}で勝ち、新王者に`); } else if (RND() < 0.5) ktNews(B, g, d, `【${tn}】王者 ${a.n}が${b.n}を${w ? how + 'で下し' : '引き分けで退け'}、防衛`);
+    if (w && B.T[key] === w.id) for (const k of KT_KEYS) if (KT_TIER[k] < KT_TIER[key] && B.T[k] === w.id) B.T[k] = null; }
+  return r; }
+function ktWorld(g, B, d) { const lock = B.me && B.me.fight ? B.me.fight.opp : null, act = B.pool; if (act.length < 4) return;
+  for (let i = 0; i < 4; i++) { const a = pick(act); if (a.id === lock || d - num(a.last, -99) < 12) continue; const c = act.filter(b => b !== a && b.id !== lock && Math.abs(b.rp - a.rp) < 12 && d - num(b.last, -99) >= 12 && (a.rp > 55 || b.co === a.co || KT_ASIA.includes(a.co) === KT_ASIA.includes(b.co))); if (c.length) ktCpuFight(B, g, a, pick(c), d, null); }
+  for (const key of KT_KEYS) { if (B.T[key] === 'me') continue; const R = ktRank(B, g, key).list.filter(p => !p.me && p.id !== lock && d - num(p.last, -99) >= 12), ch = B.T[key] ? ktBy(B, B.T[key]) : null; if (!ch) { B.T[key] = null; if (R.length >= 2 && RND() < 0.5) ktCpuFight(B, g, R[0], R[1], d, key); continue; }
+    if (ch.id === lock || !R.length || d - num(ch.last, -99) < 12 || RND() > 0.25) continue; ktCpuFight(B, g, ch, R[Math.min(R.length - 1, Math.floor(RND() * 5))], d, key); } }
+function ktYearly(g, B, d, notes) { const me = B.me, lock = me && me.fight ? me.fight.opp : null, age = ageOf(g), y = ktYear(g, d), TB = { W: [80, 86, 23, 26], V: [72, 78, 22, 25], R: [64, 70, 21, 24], N: [54, 60, 20, 23], A: [44, 50, 19, 22], C: [33, 44, 17, 21] };
+  for (const p of B.pool.slice()) { p.age++; const o = ktOvr(p.a); if (p.age <= 26 && o < p.pot) for (const [k] of KT_AB) p.a[k] = clamp(p.a[k] + RND() * 2.6, 15, 99); else if (p.age >= 32) for (const [k] of KT_AB) p.a[k] = clamp(p.a[k] - (0.6 + RND() * 1.6) * (k === 'spd' ? 1.4 : 1), 15, 99); p.rp = ktR1(p.rp * 0.985);
+    if (p.id !== lock && p.age >= 34 && RND() < (p.age - 33) * 0.22) { for (const k of KT_KEYS) if (B.T[k] === p.id) { B.T[k] = null; ktNews(B, g, d, `${ktTitleN(B, k)}の王者 ${p.n}が引退を表明。王座は空位に`); } B.pool.splice(B.pool.indexOf(p), 1); const t = TB[p.tier] || TB.C; ktMkBoxer(B, g, t[0] + RND() * (t[1] - t[0]), p.co, t[2] + Math.floor(RND() * (t[3] - t[2] + 1)), p.tier, d); } }
+  if (!me || !['gym', 'pro'].includes(B.st)) return; if (age >= 32) { me.a.spd = Math.max(15, me.a.spd - 1.0); me.a.sta = Math.max(15, me.a.sta - 0.8); me.a.chin = Math.max(15, me.a.chin - 0.6); me.a.pow = Math.max(15, me.a.pow - 0.3); }
+  me.dmg = Math.max(0, me.dmg - 1); if (B.st !== 'pro') return;
+  if (me.dmg >= 88 && !me.fight) { notes.push(`【引退勧告】年に一度の健康診断（CT検査）で、異常が見つかった。JBCのドクターは、これ以上リングに上がることを認めなかった。\n${ktRetire(g, d).text}`); return; }
+  if (me.dmg >= 60) notes.push('【健康診断】CT検査は通ったが、ドクターから「ダメージがたまっている。打たれる試合を続けると危険だ」と言われた。');
+  if (y < 2023 && age >= 37 && !me.won.some(x => x.k !== 'rookie') && ktMyRank(B, g, 'jp') == null && !me.fight) notes.push(`【ライセンス失効】当時の決まりで、37歳をむかえたボクサーのライセンスは、元王者や上位ランカーをのぞいて更新されない。\n${ktRetire(g, d).text}`); }
+function ktRetire(g, d) { const B = ktSt(g), me = B.me; if (!me || B.st !== 'pro') return { ok: false, why: 'プロではない' }; d = d == null ? g.state.day : d; for (const k of Object.keys(me.titles)) { B.T[k] = null; delete me.titles[k]; } me.fight = null; me.offers = []; me.retDay = d; me.rk = null; B.st = 'retired'; ktNews(B, g, d, `${ktMyName(g)}が現役を引退。通算 ${ktRecStr(me)}`);
+  const big = me.won.filter(x => KT_TIER[x.k] >= 3).length; return { ok: true, text: `現役を引退した。\n通算成績：${ktRecStr(me)}\n${big ? '世界のベルトを巻いた日のことは、一生わすれない。' : me.won.length ? 'ベルトを巻いたあの夜は、いまも胸に残っている。' : 'チャンピオンにはなれなかったが、リングに立った日々は本物だった。'}` }; }
+function ktComeback(g) { const B = ktSt(g), me = B.me, day = g.state.day; if (B.st !== 'retired' || !me) return { ok: false, why: '引退していない' }; if (ageOf(g) > 36) return { ok: false, why: '現役復帰は36歳まで' }; if (me.dmg >= 85) return { ok: false, why: 'ドクターの許可が出ない' }; if (day - num(me.retDay) < 30) return { ok: false, why: `引退から30日たってから（あと${30 - (day - me.retDay)}日）` };
+  for (const [k] of KT_AB) me.a[k] = ktR1(me.a[k] * 0.93); me.rp = ktR1(me.rp * 0.6); me.susp = day + 10; me.nextOffer = day + 12; B.st = me.lic ? 'pro' : 'gym'; B.day = day; ktNews(B, g, day, `${ktMyName(g)}が現役復帰を表明`); return { ok: true, text: '現役に復帰した。\nブランクで体はなまっている（全能力 −7%）。もう一度、一から作りなおしだ。' }; }
+// ---- 毎日の処理 ----
+function ktMonthly(g, B, d, m, notes, today) { const me = B.me, G = ktGym(B);
+  if (B.st === 'gym') { const due = G.fee * (1 + num(me.feeDebt)); if (num(g.state.money) >= due) { g.state.money -= due; me.feeDebt = 0; } else { me.feeDebt = num(me.feeDebt) + 1; notes.push(`（ジムの月謝 ${yen(G.fee)} を払えなかった。${me.feeDebt >= 2 ? '払うまで、練習はさせてもらえない' : 'ためると、練習できなくなる'}）`); } }
+  if (B.st === 'pro') { let sp = 0; for (const k of Object.keys(me.titles)) sp += { 1: 50000, 2: 100000, 3: 800000 }[KT_TIER[k]]; if (sp) { g.state.money = num(g.state.money) + sp; me.earn = num(me.earn) + sp; me.spons = sp; } else me.spons = 0; }
+  try { ktWorld(g, B, d); } catch (e) { console.error('[kt] world', e); }
+  if (B.st !== 'pro' || me.fight) return; const y = ktYear(g, d);
+  if ((m === 2 || m === 3) && me.lic === 'C' && me.w + me.l + me.d <= 6 && (!me.rk || me.rk.y !== y) && !me.offers.some(o => o.kind === 'rkentry')) { B.oseq = num(B.oseq) + 1; me.offers.push({ id: 'o' + B.oseq, kind: 'rkentry', exp: d + 9, on: '', rounds: 4, purse: 0, day: 0 }); notes.push('（会長から「今年の新人王トーナメントに出てみないか」と声をかけられた。ボクシングアプリで返事をしよう）'); } }
+function ktRookieFight(g, B, d, notes) { const me = B.me, G = ktGym(B), st = me.rk.stage, p = ktMkBoxer(B, g, clamp(38 + st * 3.5 + ktG() * 3, 30, 60), 'jp', 18 + Math.floor(RND() * 6), 'C', d); p.rp = ktR1(8 + st * 5 + RND() * 4); p.w = st + 1 + Math.floor(RND() * 3); p.l = Math.floor(RND() * 2); p.d = 0; p.ko = Math.floor(p.w * (0.2 + RND() * 0.4)); B.oseq = num(B.oseq) + 1;
+  me.fight = { id: 'o' + B.oseq, opp: p.id, on: p.n, rounds: 4, day: d + 4, kind: 'rookie', stage: st, purse: Math.round(6e4 * G.pay / 1e3) * 1e3 * (st >= 3 ? 2 : 1), acc: d }; me.offers = []; me.dry = 0; notes.push(`【新人王トーナメント】${['予選', '準決勝', '東日本決勝', '全日本新人王決定戦'][st]}の相手が、${p.n}（${ktRecStr(p)}）に決まった。試合は4日後。前日に計量がある。`); }
+function ktDay(g, B, d, notes, today) { const me = B.me, m = ktMonth(g, d), y = ktYear(g, d); if (!me || B.st === 'none') { B.lastM = m; B.lastY = y; return; }
+  if (B.lastM != null && m !== B.lastM) ktMonthly(g, B, d, m, notes, today); if (B.lastY != null && y !== B.lastY) ktYearly(g, B, d, notes); B.lastM = m; B.lastY = y;
+  if (B.st !== 'gym' && B.st !== 'pro') return;
+  me.fat = Math.max(0, me.fat - 20); if (me.inj && d >= me.inj.until) { notes.push(`（${me.inj.n}が治った。練習を再開できる）`); me.inj = null; }
+  if (me.diet) { const lm = ktLim(B.cls); me.wt = Math.max(ktFloor(me), lm === Infinity ? 0 : Math.min(me.wt, lm - 0.1), me.wt - 0.22); /* リミットより下までは落とさない */ if (today) try { g.addNeed && g.addNeed('stress', 1); } catch (e) { } } else if (me.wt < me.nat) me.wt = Math.min(me.nat, me.wt + 0.15); else me.wt = Math.max(me.nat, me.wt - 0.05);
+  let fi = me.fight;
+  if (fi) { if (me.inj && me.inj.until > fi.day) ktCancelFight(g, B, d, `${me.inj.n}のため、${fi.on}との試合は中止になった。`, notes);
+    else if (d === fi.day - 1 && !fi.wi) ktWeigh(g, B, d, notes);
+    else if (d === fi.day && today) notes.push(`【試合当日】今日は${fi.on}との${fi.rounds}回戦${fi.title ? `（${ktTitleN(B, fi.title)}）` : ''}。スマホの「ボクシング」から会場へ向かおう。\n（今日のうちに行かないと、セコンドに任せて自動で試合が進む）`);
+    else if (d > fi.day) { if (!fi.wi) ktWeigh(g, B, fi.day - 1, notes); if (me.fight) { const F = ktFightBuild(g, B, fi.day, false); ktAuto(F); const R = ktAfter(g, B, F, fi.day); notes.push(`【試合結果】${fi.on}との${fi.rounds}回戦は、セコンドに任せて行われた。\n${R.lines.join('\n')}`); } } }
+  if (B.st !== 'pro') return;
+  for (const k of Object.keys(me.titles)) { const T = me.titles[k]; if (me.fight && me.fight.title === k) continue; const gap = d - num(T.last, d); if (gap === 42) notes.push(`（${ktTitleN(B, k)}の防衛戦を、そろそろ行わなければならない。あと20日のうちに試合を決めないと、王座をはく奪される）`); if (gap > 62) { delete me.titles[k]; B.T[k] = null; notes.push(`【王座はく奪】防衛戦を行わなかったため、${ktTitleN(B, k)}をはく奪された。`); ktNews(B, g, d, `${ktMyName(g)}が${ktTitleN(B, k)}をはく奪される（防衛戦の期限切れ）`); } }
+  if (me.rk && me.rk.alive) { const sm = [5, 8, 11, 12][me.rk.stage]; if (me.rk.y !== y) me.rk.alive = false; else if (!me.fight) { if (m === sm && !me.inj && d >= num(me.susp)) ktRookieFight(g, B, d, notes); else if (m > sm) { me.rk.alive = false; notes.push('（新人王トーナメントは、試合に出られず、棄権になった）'); } } }
+  me.offers = me.offers.filter(o => o.exp >= d);
+  if (!me.fight && d >= num(me.susp) && !me.inj && !(me.rk && me.rk.alive) && !me.offers.some(o => o.kind !== 'rkentry') && d >= num(me.nextOffer)) { const L = ktMkOffers(g, B, d); me.offers = me.offers.concat(L); me.nextOffer = d + 9 + Math.floor(RND() * 6); if (L.length) notes.push(`（${ktGym(B).boss}から、試合の話が${L.length}件きている。スマホの「ボクシング」で確認しよう）`); } }
+function ktTick(g) { const B = ktSt(g), today = num(g.state.day, 1); if (B.st === 'none' || !B.me) { B.day = today; return; } if (B.day == null || !Number.isFinite(B.day)) B.day = today - 1; if (B.day >= today) return; const notes = [];
+  for (let d = Math.max(B.day + 1, today - 400); d <= today; d++) { try { ktDay(g, B, d, notes, d === today); } catch (e) { console.error('[kt] day', d, e); } B.day = d; }
+  if (notes.length) g.morningNotes = (g.morningNotes || []).concat(notes.slice(-5)); }
+// ===== ボクシング（キャリアモード）の画面：スマホの「ボクシング」アプリ（ホーム・練習・試合・ランキング・戦績）と、ドット絵のリングでの試合 =====
+const KT_C = { bg: ['#140e12', '#181016', '#1c121a', '#20141c'], bar: '#0e080c', line: '#e04a3a', panel: '#1c1218', edge: '#a0443a', row: '#261820', t1: '#ffece4', t2: '#c8a8a0', t3: '#8a6a68', gold: '#ffd23f', red: '#ff6a5a', blue: '#6aa8ff', good: '#5ee07a' };
+const KT_POSE = {
+  guard: { lean: 0, cr: 0, hx: 0, hy: 0, lx: 7, ly: -27, rx: 4, ry: -25, rot: 0 },
+  jab: { lean: 2, lx: 15, ly: -27 }, straight: { lean: 3, lx: 6, ly: -26, rx: 16, ry: -26.5 }, hook: { lean: 3, lx: 12, ly: -29.5 }, upper: { lean: 2, lx: 6, ly: -26, rx: 11, ry: -31 }, body: { lean: 4, cr: 2, rx: 14, ry: -19 },
+  block: { lean: -1, lx: 6, ly: -29.5, rx: 5, ry: -27.5 }, slip: { lean: -3, cr: 2, hy: 1, lx: 6, ly: -26, rx: 3, ry: -24 }, hit: { lean: -3, hx: -3, hy: 0.5, lx: 6, ly: -25, rx: 3, ry: -24 }, hitbody: { lean: 3, cr: 1.5, hy: 2, lx: 5, ly: -21, rx: 3, ry: -20 },
+  stagger: { lean: -2, cr: 1, hx: -1, lx: 6, ly: -21, rx: 2, ry: -20 }, down: { rot: 1, lx: 5, ly: -22, rx: 0, ry: -22 }, win: { lx: 4, ly: -39, rx: -3, ry: -39 }, lose: { lean: 2, hy: 2, cr: 1, lx: 4, ly: -14, rx: -1, ry: -14 },
+};
+const ktPoseOf = k => ({ ...KT_POSE.guard, ...(KT_POSE[k] || {}) });
+const KT_LIC = { C: 'C級（4回戦）', B: 'B級（6回戦）', A: 'A級（8回戦〜）' };
+const KT_SEEN = { press: '前に出てきた', box: '足を使って距離を取っている', counter: 'じっと打ち終わりを待っている', body: 'ボディを狙ってきた', rest: 'ガードを固めて休んでいる', ko: '大振りで倒しにきた' };
+function ktBar(c, x, y, w, h, v, col, bg) { pR(c, x, y, w, h, bg || '#2e1e26'); pR(c, x, y, Math.round(w * clamp(v, 0, 1)), h, col); }
+function ktLines(c, t, x, y, w, o = {}) { const sz = o.size || 12, lh = o.lh || sz + 3, L = wrapDot(c, t, w, sz).slice(0, o.max || 99); L.forEach((ln, i) => pT(c, ln, x, y + i * lh, { size: sz, color: o.color || KT_C.t1 })); return y + L.length * lh; }
+function ktLookMe(g) { let L = { skin: 'fair', hair: 'black' }; try { L = lookOf(g); } catch (e) { } let sk = '#f6c9a0', hr = '#2a2430'; try { sk = EV_SKIN[L.skin] || sk; hr = EV_HAIR[L.hair] || hr; } catch (e) { } return { skin: sk, hair: hr, trunks: '#c8303a', band: '#ffffff', glove: '#e03a3a', shoe: '#f0f0f4', top: ktFem(g) ? '#c8303a' : null }; }
+function ktLookOpp(p, f) { const h = ktHash(String(p.id) + p.n), sk = { jp: ['#f6c9a0', '#e0a878'], th: ['#d29a68', '#b97a50'], ph: ['#d29a68', '#b97a50'], kr: ['#f6c9a0', '#ffe0c4'], id: ['#b97a50', '#d29a68'], cn: ['#f6c9a0', '#ffe0c4'], au: ['#ffe0c4', '#f6c9a0'], mx: ['#e0a878', '#b97a50'], us: ['#8a5a3a', '#f6c9a0', '#b97a50'], uk: ['#ffe0c4', '#8a5a3a'], pr: ['#e0a878', '#b97a50'], ar: ['#f6c9a0', '#e0a878'], ua: ['#ffe0c4'], za: ['#6a4229', '#8a5a3a'] }[p.co] || ['#f6c9a0'];
+  return { skin: sk[h % sk.length], hair: ['#2a2430', '#2a2430', '#6b4226', '#1a1418'][(h >>> 3) % 4], trunks: ['#2f60c0', '#1a8a5a', '#26262e', '#e8e8f0', '#8a4ac8'][(h >>> 5) % 5], band: '#ffd23f', glove: '#3a6ae0', shoe: '#26262e', top: f ? '#2f60c0' : null }; }
+// ボクサーのドット絵（横向き）。x,y は足もと。U は1マスの大きさ。dir=1 で右向き
+function ktDrawBoxer(c, x, y, P, L, U, dir) { c.save(); c.translate(Math.round(x), Math.round(y)); c.scale(dir, 1); if (P.rot > 0.02) c.rotate(-P.rot * Math.PI / 2);
+  const r = (ux, uy, uw, uh, col) => { c.fillStyle = col; c.fillRect(Math.round(ux * U), Math.round(uy * U), Math.max(1, Math.round(uw * U)), Math.max(1, Math.round(uh * U))); };
+  const ln = P.lean, cr = P.cr, hy = -13 + cr, tx = ln * 0.6, shx = 1 + tx + ln * 0.3, shy = hy - 13, dk = pShade(L.skin, -0.22);
+  const arm = (gx, gy, far) => { gx += ln * 0.8; gy += cr; const n = 6, col = far ? dk : L.skin; for (let k = 0; k <= n; k++) r(shx + (gx - shx) * k / n - 1, shy + (gy - shy) * k / n - 1, 2, 2, col); r(gx - 2.2, gy - 2.2, 4.4, 4.4, far ? pShade(L.glove, -0.25) : L.glove); r(gx - 1.6, gy - 1.6, 1.4, 1.4, pShade(L.glove, 0.45)); r(gx - 3, gy - 1.2, 1, 2.6, '#f4f4f4'); };
+  if (P.rot < 0.3) { c.fillStyle = 'rgba(0,0,0,0.28)'; c.fillRect(-7 * U, -1 * U, 14 * U, 2 * U); }
+  arm(P.rx, P.ry, true);
+  r(-5, -2, 4.4, 2, L.shoe); r(2, -2, 4.4, 2, L.shoe); r(-4.2, hy, 2.6, -hy - 2, dk); r(1.6, hy, 2.6, -hy - 2, L.skin);
+  r(-4.5 + ln * 0.3, hy - 5, 9, 6.4, L.trunks); r(-4.5 + ln * 0.3, hy - 5, 9, 1.2, L.band); r(3 + ln * 0.3, hy - 3.8, 1, 5, pShade(L.trunks, 0.3));
+  r(-3.5 + tx, hy - 15, 7, 10.2, L.skin); r(-3.5 + tx, hy - 15, 1.6, 10.2, dk); if (L.top) r(-3.5 + tx, hy - 15, 7, 5.5, L.top);
+  r(-0.4 + tx + ln * 0.4, hy - 16.4, 2.6, 1.6, dk);
+  const hx0 = -1.6 + tx + ln * 0.5 + P.hx, hy0 = hy - 22.6 + P.hy; r(hx0, hy0, 6, 6.4, L.skin); r(hx0 - 0.6, hy0 - 1, 7, 2.4, L.hair); r(hx0 - 0.6, hy0, 1.6, 4.2, L.hair); r(hx0 + 4.2, hy0 + 2.6, 1, 1.1, '#1a1418'); r(hx0 + 5, hy0 + 3.4, 1.2, 1, dk);
+  if (L.cut) r(hx0 + 3.6, hy0 + 1.4, 1.8, 0.8, '#e02020'); if (L.cut >= 2) r(hx0 + 4.4, hy0 + 2.2, 0.8, 2.4, '#c01818');
+  arm(P.lx, P.ly, false); c.restore(); }
+function ktDrawRef(c, x, y, up) { const r = (a, b, w, h, col) => pR(c, x + a, y + b, w, h, col); r(-6, -2, 5, 3, '#16161c'); r(1, -2, 5, 3, '#16161c'); r(-5, -22, 4, 20, '#22222c'); r(1, -22, 4, 20, '#22222c'); r(-6, -42, 12, 21, '#e8ecf4'); r(-1, -40, 2, 3, '#16161c'); r(-4, -54, 8, 11, '#e0a878'); r(-4, -55, 8, 4, '#3a3038');
+  if (up) { r(6, -52, 3, 14, '#e8ecf4'); r(6, -56, 4, 5, '#e0a878'); } else { r(6, -40, 3, 14, '#e8ecf4'); } r(-9, -40, 3, 14, '#e8ecf4'); }
+function ktRingBg(c, t) { const cv = pSpr('kt:ring', 640, 360, x => { pBands(x, 0, 0, 640, 360, ['#07060c', '#0b0a14', '#100e1c', '#151226', '#1a1630', '#151226']);
+    for (let row = 0; row < 7; row++) { const y = 44 + row * 15, n = 44 + row * 2; for (let i = 0; i < n; i++) { const hx = Math.round(i * 640 / n + ((row * 37 + i * 13) % 9)), k = (row * 31 + i * 17) % 7; pR(x, hx, y + (k % 3), 7, 7, ['#2a2438', '#332a40', '#3a2c34', '#28303e', '#3a3444', '#2c2634', '#403040'][k]); pR(x, hx - 2, y + 7 + (k % 3), 11, 9, ['#1c1a2a', '#221c2c', '#261c24', '#1a2230', '#262234', '#1e1a26', '#2a2030'][k]); } }
+    pDith(x, 0, 38, 640, 116, 'rgba(8,6,14,0.5)'); pR(x, 0, 0, 640, 8, '#04040a');
+    for (let i = 0; i < 6; i++) { const lx = 60 + i * 104; pR(x, lx, 36, 28, 5, '#2a2a3a'); pR(x, lx + 3, 41, 22, 2, '#fff6d8'); for (let k = 0; k < 7; k++) pDith(x, lx + 3 - k * 3, 43 + k * 6, 22 + k * 6, 6, 'rgba(255,244,210,0.07)', k); }
+    const rx0 = 84, rx1 = 556, my = 238; for (const [ry, col] of [[150, '#b02a34'], [172, '#d8d8e0'], [194, '#2a4ab0'], [216, '#d8d8e0']]) { pR(x, rx0, ry, rx1 - rx0, 2, pShade(col, -0.4)); pR(x, rx0, ry, rx1 - rx0, 1, col); }
+    pR(x, rx0 - 6, 140, 8, my - 140, '#8a1a24'); pR(x, rx0 - 6, 140, 8, 3, '#e04a54'); pR(x, rx0 - 9, 146, 14, 74, '#c8303a'); pR(x, rx0 - 8, 148, 12, 2, '#f08088');
+    pR(x, rx1 - 2, 140, 8, my - 140, '#1a2a8a'); pR(x, rx1 - 2, 140, 8, 3, '#4a6ae0'); pR(x, rx1 - 5, 146, 14, 74, '#2f50c0'); pR(x, rx1 - 4, 148, 12, 2, '#8098f0');
+    pR(x, rx0 - 24, my, rx1 - rx0 + 48, 26, '#b8c4cc'); pR(x, rx0 - 24, my, rx1 - rx0 + 48, 2, '#e4ecf0'); pDith(x, rx0 - 24, my + 14, rx1 - rx0 + 48, 12, 'rgba(60,80,100,0.22)'); pEll(x, 320, my + 13, 64, 8, '#a8b6c0'); pT(x, 'DOT', 320, my + 7, { size: 12, color: '#8494a0', align: 'center', shadow: null });
+    pR(x, rx0 - 24, my + 26, rx1 - rx0 + 48, 40, '#16204a'); pR(x, rx0 - 24, my + 26, rx1 - rx0 + 48, 2, '#2a3a7a'); pT(x, 'DOT BOXING', 320, my + 38, { size: 16, color: '#4a5aa0', align: 'center', shadow: null }); pR(x, 0, my + 66, 640, 360 - my - 66, '#0a0810'); });
+  pBlit(c, cv, 0, 0); for (let i = 0; i < 5; i++) { const k = (t + i * 23) % 97, e = Math.floor((t + i * 23) / 97); if (k < 4) pSpark(c, (i * 131 + e * 71) % 620 + 10, 50 + ((i * 47 + e * 29) % 90), k, '#ffffff'); } }
+// ---- ランキングの見出し ----
+function ktRanks(S, B, g) { const key = B.day + ':' + B.pool.length + ':' + (B.me ? B.me.rp : 0); if (!S.cache || S.cache.key !== key) { const R = {}; for (const k of KT_KEYS) R[k] = ktRank(B, g, k); S.cache = { key, R }; } return S.cache.R; }
+function ktRankTxt(R, B, id) { const out = []; for (const k of ['wba', 'wbc', 'ibf', 'wbo', 'opbf', 'jp']) { if (B.T[k] === id) out.push(`${KT_ORG[k][0]}王者`); else { const i = R[k].list.findIndex(p => p.id === id); if (i >= 0 && (KT_TIER[k] < 3 || !out.some(t => /世界|WB|IBF/.test(t)))) out.push(`${KT_ORG[k][1] === 'JBC' ? '日本' : KT_ORG[k][1]}${i + 1}位`); } } return out.slice(0, 2).join('・') || 'ランク外'; }
+const KT_CC = { jp: 'JPN', th: 'THA', ph: 'PHI', kr: 'KOR', id: 'INA', au: 'AUS', cn: 'CHN', mx: 'MEX', us: 'USA', uk: 'GBR', pr: 'PUR', ar: 'ARG', ua: 'UKR', za: 'RSA' };
+const ktGrade = v => v >= 85 ? 'S' : v >= 75 ? 'A' : v >= 65 ? 'B' : v >= 55 ? 'C' : v >= 45 ? 'D' : 'E';
+function ktDateTxt(g, d) { try { const D = dateOf(g, d); return `${D.month}月${D.dom}日`; } catch (e) { return ''; } }
+// ---- アプリの画面 ----
+GB_MODES.ktapp = {
+  noHud: true,
+  init(s, g) { const B = ktSt(g); const opts = ktClsOpts(g, B.body.nat); s.S = { tab: 'home', f: 0, sty: 'bf', cls: opts[opts.length - 1], rk: 'jp', hp: 0 }; },
+  left(s, g) { try { return Math.max(0, 1440 - (clockMin(g) % 1440) - s.mins); } catch (e) { return 999; } },
+  run(s, g, r, mins) { const S = s.S; S.cache = null; if (!r || !r.ok) { s.tip((r && r.why) || 'できない', PW.bad); tt.sfx('buzz'); return false; } const m = num(r.mins, num(mins)); if (m) s.mins += m; S.res = r.text; tt.sfx('ok'); return true; },
+  btn(s, id, g) { const S = s.S, B = ktSt(g), me = B.me, T = this;
+    if (id === 'close') { s.done(); return; } if (id === 'resok') { S.res = null; return; } if (id === 'cn' || id === 'pkx') { S.confirm = null; S.pick = null; return; }
+    if (id === 'cy') { const f = S.confirm && S.confirm.yes; S.confirm = null; if (f) f(); return; }
+    if (id.startsWith('pk:')) { const P = S.pick, it = P && P.items[+id.slice(3)]; S.pick = null; if (it && P.on) P.on(it); return; }
+    if (id.startsWith('qz:')) { const Q = S.quiz; if (!Q) return; if (+id.slice(3) === Q.q[Q.i][2]) Q.ok++; Q.i++; if (Q.i >= Q.q.length) { S.quiz = null; T.run(s, g, ktTestRun(g, Q.ok), 180); } return; }
+    if (id.startsWith('tab:')) { S.tab = id.slice(4); return; } if (id.startsWith('sty:')) { S.sty = id.slice(4); return; } if (id.startsWith('cls:')) { S.cls = +id.slice(4); return; } if (id.startsWith('rk:')) { S.rk = id.slice(3); return; }
+    if (id.startsWith('join:')) { if (T.run(s, g, ktJoin(g, id.slice(5), S.sty, S.cls))) S.tab = 'home'; return; }
+    if (id.startsWith('tr:')) { const M = KT_TR.find(x => x.id === id.slice(3)); if (!M) return; if (T.left(s, g) < M.mins) { s.tip('今日はもう時間がない', PW.bad); return; } const r = ktTrain(g, M.id); if (!r.ok) { s.tip(r.why, PW.bad); tt.sfx('buzz'); return; } s.mins += r.mins; S.cache = null; S.last = { t: r.text, f: S.f, inj: r.inj }; tt.sfx(r.inj ? 'fail' : r.up && r.up.length ? 'good' : 'ok'); if (r.inj) S.res = r.text; return; }
+    if (id === 'care') { if (T.left(s, g) < 60) { s.tip('今日はもう時間がない', PW.bad); return; } T.run(s, g, ktCare(g)); return; }
+    if (id === 'sig') { S.pick = { title: '得意パンチをえらぶ', items: Object.entries(KT_SIG).map(([k, n]) => ({ k, label: n })), on: it => T.run(s, g, ktSetSig(g, it.k)) }; return; }
+    if (id === 'test') { const why = ktTestWhy(g); if (why) { s.tip(why, PW.bad); return; } if (T.left(s, g) < 180) { s.tip('今日はもう時間がない（約3時間かかる）', PW.bad); return; } S.quiz = { q: KT_QUIZ.slice().sort(() => RND() - 0.5).slice(0, 3), i: 0, ok: 0 }; tt.sfx('ok'); return; }
+    if (id === 'diet') { if (me) { me.diet = !me.diet; s.tip(me.diet ? '食事をしぼる（1日 −0.2kgほど）' : 'ふつうの食事にもどす', PW.text); } return; } if (id === 'sauna') { if (T.left(s, g) < 90) { s.tip('今日はもう時間がない', PW.bad); return; } T.run(s, g, ktSauna(g)); return; }
+    if (id === 'gofight') { s.done({ go: 'fight' }); return; } if (id === 'tofight') { S.tab = 'fight'; return; }
+    if (id.startsWith('acc:')) { if (T.run(s, g, ktAccept(g, id.slice(4)))) S.tab = 'home'; return; }
+    if (id === 'hp-') { S.hp = Math.max(0, S.hp - 1); return; } if (id === 'hp+') { S.hp++; return; }
+    if (id === 'reclass') { const f = ktFem(g), set = new Set([...ktClsOpts(g, me.nat), B.cls - 1, B.cls + 1]); S.pick = { title: '階級を変える（王座は返上・ランキングは作りなおし）', items: [...set].filter(i => i >= (f ? 0 : 1) && i < KT_CLS.length && i !== B.cls).sort((a, b) => a - b).map(i => ({ ci: i, label: ktClsN(i), sub: ktLim(i) === Infinity ? '体重の上限なし' : `リミット ${ktLim(i).toFixed(2)}kg` })), on: it => T.run(s, g, ktReclass(g, it.ci)) }; return; }
+    if (id === 'move') { S.pick = { title: 'ジムを移る', items: KT_GYM.filter(G => G.id !== me.gym).map(G => ({ gid: G.id, label: G.n, sub: `${B.st === 'pro' ? '移籍金 ¥300,000' : '入会金 ' + yen(G.ent)}・月謝 ${yen(G.fee)}` })), on: it => T.run(s, g, ktMove(g, it.gid)) }; return; }
+    if (id === 'retire') { S.confirm = { text: '本当に引退する？\n持っている王座は返上になる。36歳までなら、30日後から現役に復帰できる。', yes: () => T.run(s, g, ktRetire(g)) }; return; }
+    if (id === 'comeback') { T.run(s, g, ktComeback(g)); return; } },
+  update(s) { s.S.f++; },
+  draw(s, c, g) { const S = s.S, B = ktSt(g), me = B.me, day = g.state.day, T = this; pBands(c, 0, 0, 640, 360, KT_C.bg); pR(c, 0, 0, 640, 30, KT_C.bar); pR(c, 0, 29, 640, 1, KT_C.line); pT(c, 'ボクシング', 10, 7, { size: 16, color: KT_C.t1 });
+    const nOf = me ? me.offers.length : 0; if (B.st !== 'none') [['home', 'ホーム'], ['train', '練習'], ['fight', '試合'], ['rank', 'ランキング'], ['rec', '戦績']].forEach(([k, n], i) => s.btn('tab:' + k, n, 112 + i * 90, 4, 86, 22, { size: 12, kind: S.tab === k ? 'pri' : 'norm', badge: k === 'fight' && nOf ? String(nOf) : undefined }));
+    s.btn('close', '閉じる', 572, 4, 62, 22, { size: 12, back: true });
+    try { if (B.st === 'none') T.dEntry(s, c, g, B); else if (S.tab === 'train') T.dTrain(s, c, g, B); else if (S.tab === 'fight') T.dFight(s, c, g, B); else if (S.tab === 'rank') T.dRank(s, c, g, B); else if (S.tab === 'rec') T.dRec(s, c, g, B); else T.dHome(s, c, g, B); } catch (e) { console.error('[kt] draw', e); }
+    // ポップアップ
+    const pop = (w, h, col) => { s.btns.length = 0; pR(c, 0, 0, 640, 360, 'rgba(0,0,0,0.62)'); const x = (640 - w) >> 1, y = (360 - h) >> 1; pFrame(c, x, y, w, h, { bg: '#1c1218', edge: col || KT_C.line }); return [x, y]; };
+    if (S.quiz) { const Q = S.quiz, q = Q.q[Q.i], [x, y] = pop(460, 220, KT_C.gold); pT(c, `プロテスト・筆記　第${Q.i + 1}問（3問中2問で合格）`, x + 14, y + 12, { size: 12, color: KT_C.gold }); ktLines(c, q[0], x + 14, y + 38, 430, { size: 16, lh: 20 }); q[1].forEach((t, i) => s.btn('qz:' + i, t, x + 30, y + 100 + i * 36, 400, 30, { size: 16, def: i === 0 })); }
+    else if (S.pick) { const P = S.pick, ih = P.items.some(it => it.sub) ? 42 : 32, h = 72 + P.items.length * ih, [x, y] = pop(420, h); pT(c, pFit(c, P.title, 390, 12), x + 14, y + 12, { size: 12, color: KT_C.gold }); P.items.forEach((it, i) => s.btn('pk:' + i, it.sub ? `${it.label}\n${it.sub}` : it.label, x + 20, y + 34 + i * ih, 380, ih - 4, { size: 12, def: i === 0 })); s.btn('pkx', 'やめる', x + 160, y + h - 30, 100, 22, { size: 12, back: true }); }
+    else if (S.confirm) { const [x, y] = pop(420, 150); ktLines(c, S.confirm.text, x + 16, y + 16, 388, {}); s.btn('cy', 'はい', x + 80, y + 108, 110, 28, { size: 12, kind: 'red' }); s.btn('cn', 'いいえ', x + 230, y + 108, 110, 28, { size: 12, def: true, back: true }); }
+    else if (S.res) { const L = wrapDot(c, S.res, 440, 12).slice(0, 15), h = 64 + L.length * 15, [x, y] = pop(472, h); L.forEach((ln, i) => pT(c, ln, x + 16, y + 14 + i * 15, { size: 12, color: KT_C.t1 })); s.btn('resok', 'OK', x + 186, y + h - 36, 100, 26, { kind: 'pri', def: true, size: 12 }); } },
+  // 入門
+  dEntry(s, c, g, B) { const S = s.S, nat = B.body.nat, why = ktCanJoin(g), opts = ktClsOpts(g, nat); if (!opts.includes(S.cls)) S.cls = opts[opts.length - 1];
+    pFrame(c, 8, 38, 300, 314, { title: 'ボクシングをはじめる', bg: KT_C.panel, edge: KT_C.edge }); pT(c, `${ageOf(g)}歳・ふだんの体重 ${nat.toFixed(1)}kg`, 20, 62, { size: 12, color: KT_C.gold });
+    ktLines(c, 'ジムに入って練習し、プロテストに受かればプロボクサー。4回戦からはじめて、日本、東洋太平洋、そして世界の王座をめざす。', 20, 80, 276, { color: KT_C.t2 });
+    pT(c, 'ファイトスタイル', 20, 132, { size: 12, color: KT_C.t3 }); Object.entries(KT_STY).forEach(([k, v], i) => s.btn('sty:' + k, v[0], 16 + (i % 2) * 144, 148 + (i >> 1) * 28, 140, 24, { size: 12, kind: S.sty === k ? 'pri' : 'norm' })); ktLines(c, KT_STY[S.sty][1], 20, 206, 276, { color: KT_C.t2, max: 2 });
+    pT(c, '階級（落とす体重が多いほど、試合で動きが落ちる）', 20, 240, { size: 12, color: KT_C.t3 }); opts.forEach((ci, i) => s.btn('cls:' + ci, `${ktClsN(ci)}（${ktLim(ci) === Infinity ? '上限なし' : 'リミット ' + ktLim(ci).toFixed(2) + 'kg'}）`, 16, 256 + i * 25, 284, 22, { size: 12, kind: S.cls === ci ? 'pri' : 'norm' }));
+    pT(c, '※選手とジムの名前は架空です', 20, 334, { size: 12, color: KT_C.t3 });
+    pFrame(c, 316, 38, 316, 314, { title: 'ジムをえらぶ', bg: KT_C.panel, edge: KT_C.edge }); if (why) pT(c, pFit(c, why, 190, 12), 622, 44, { size: 12, color: KT_C.red, align: 'right' });
+    KT_GYM.forEach((G, i) => { const y = 62 + i * 96; pR(c, 324, y, 300, 92, KT_C.row); pT(c, G.n, 332, y + 5, { size: 12, color: KT_C.t1 }); pT(c, `入会金 ${yen(G.ent)}・月謝 ${yen(G.fee)}`, 332, y + 21, { size: 12, color: KT_C.gold }); ktLines(c, G.d, 332, y + 38, 284, { color: KT_C.t2, max: 3 }); s.btn('join:' + G.id, '入門する', 548, y + 5, 70, 24, { size: 12, kind: 'pri', off: !!why, def: i === 0 }); }); },
+  // ホーム
+  dHome(s, c, g, B) { const S = s.S, me = B.me, G = ktGym(B), day = g.state.day, R = ktRanks(S, B, g), lim = ktLim(B.cls), fi = me.fight;
+    pFrame(c, 8, 38, 300, 314, { title: '選手カード', bg: KT_C.panel, edge: KT_C.edge }); pR(c, 16, 62, 76, 102, '#120c10'); const P = ktPoseOf('guard'); P.cr = Math.sin(S.f / 9) * 0.4; ktDrawBoxer(c, 50, 158, P, ktLookMe(g), 2.4, 1);
+    pT(c, pFit(c, ktMyName(g), 196, 16), 100, 60, { size: 16, color: KT_C.t1 }); pT(c, pFit(c, G.n, 196, 12), 100, 82, { size: 12, color: KT_C.t2 }); pT(c, pFit(c, `${ktClsN(B.cls)}・${B.st === 'retired' ? '引退' : me.lic ? me.lic + '級' : '練習生'}`, 196, 12), 100, 98, { size: 12, color: KT_C.t2 });
+    pT(c, ktRecStr(me), 100, 116, { size: 12, color: KT_C.t1 }); const tl = Object.keys(me.titles); pT(c, pFit(c, B.st === 'pro' ? (tl.length ? tl.map(k => KT_ORG[k][0] + '王者').join('・') : ktRankTxt(R, B, 'me')) : '', 196, 12), 100, 132, { size: 12, color: tl.length ? KT_C.gold : KT_C.blue });
+    if (me.rk && me.rk.alive) pT(c, pFit(c, `新人王トーナメント ${['予選', '準決勝', '東日本決勝', '全日本決定戦'][me.rk.stage]}へ`, 196, 12), 100, 148, { size: 12, color: KT_C.good });
+    [['総合力', ktOvr(me.a), '#ffd23f'], ['疲れ', me.fat, me.fat > 70 ? '#ff6a5a' : '#e0a060'], ['ダメージ', me.dmg, me.dmg >= 60 ? '#ff4a4a' : '#c06a8a'], ['会長の信頼', me.bond, '#6aa8ff']].forEach(([n, v, col], i) => { const y = 174 + i * 22; pT(c, n, 20, y, { size: 12, color: KT_C.t2 }); ktBar(c, 104, y + 3, 150, 8, v / 100, col); pT(c, String(Math.round(v)), 296, y, { size: 12, color: col, align: 'right' }); });
+    pT(c, pFit(c, `体重 ${me.wt.toFixed(1)}kg（ふだん ${me.nat.toFixed(1)}kg）${lim === Infinity ? '' : '・リミット ' + lim.toFixed(2)}`, 280, 12), 20, 266, { size: 12, color: KT_C.t2 });
+    pT(c, pFit(c, me.inj ? `けが：${me.inj.n}（あと${Math.max(1, me.inj.until - day)}日）` : me.feeDebt ? `月謝の未払い ${me.feeDebt}か月ぶん` : me.spons ? `スポンサー料 月${yen(me.spons)}` : 'けがはない', 280, 12), 20, 284, { size: 12, color: me.inj || me.feeDebt ? KT_C.red : me.spons ? KT_C.gold : KT_C.t3 });
+    pT(c, pFit(c, `かせいだお金 ${yen(num(me.earn))}`, 280, 12), 20, 302, { size: 12, color: KT_C.t3 }); pT(c, pFit(c, `${KT_STY[me.sty][0]}・得意：${me.sig ? KT_SIG[me.sig] : 'まだ決めていない'}`, 280, 12), 20, 320, { size: 12, color: KT_C.t3 });
+    // 右：つぎの予定
+    const x0 = 316; pFrame(c, x0, 38, 316, 204, { title: B.st === 'retired' ? '引退' : fi ? 'つぎの試合' : B.st === 'gym' ? 'プロをめざす' : '試合の予定', bg: KT_C.panel, edge: KT_C.edge });
+    if (B.st === 'retired') { ktLines(c, `通算 ${ktRecStr(me)}\n${me.won.length ? '獲得：' + me.won.slice(-4).map(w => w.k === 'rookie' ? '全日本新人王' : KT_ORG[w.k][0] + '王座').join('・') : 'リングに立った日々は、本物だった。'}`, x0 + 12, 64, 292, { color: KT_C.t2 }); s.btn('comeback', '現役に復帰する', x0 + 12, 200, 292, 30, { size: 12, kind: 'pri' }); }
+    else if (fi) { const dd = fi.day - day; pT(c, pFit(c, `vs ${fi.on}`, 292, 16), x0 + 12, 62, { size: 16, color: KT_C.t1 }); pT(c, pFit(c, `${fi.rounds}回戦${fi.title ? '・' + ktTitleN(B, fi.title) + (fi.unify ? '統一戦' : fi.vac ? '決定戦' : fi.champ ? '防衛戦' : '挑戦') : fi.kind === 'rookie' ? '・新人王トーナメント' : ''}`, 292, 12), x0 + 12, 84, { size: 12, color: fi.title ? KT_C.gold : KT_C.t2 });
+      pT(c, dd <= 0 ? '今日が試合！' : `${ktDateTxt(g, fi.day)}（あと${dd}日）・ファイトマネー ${yen(fi.purse)}`, x0 + 12, 100, { size: 12, color: dd <= 0 ? KT_C.red : KT_C.t2 });
+      if (fi.wi) pT(c, `計量：パス（コンディション ${ktCondTxt(ktCond(g, B, day))}）`, x0 + 12, 122, { size: 12, color: KT_C.good });
+      else if (lim !== Infinity) { const ov = me.wt - lim; pT(c, `体重 ${me.wt.toFixed(1)}kg ／ リミット ${lim.toFixed(2)}kg`, x0 + 12, 120, { size: 12, color: KT_C.t1 }); pT(c, ov > 0.049 ? `あと ${ov.toFixed(1)}kg（計量は試合の前日）` : 'リミットに入っている', x0 + 12, 136, { size: 12, color: ov > 0.049 ? (ov > Math.max(0, dd - 1) * 0.22 + 0.8 ? KT_C.red : KT_C.gold) : KT_C.good });
+        ktBar(c, x0 + 12, 154, 292, 6, clamp(1 - ov / Math.max(0.5, me.nat - lim), 0, 1), ov > 0.049 ? '#e0a060' : '#5ee07a'); s.btn('diet', me.diet ? '食事をしぼる：ON' : '食事をしぼる：OFF', x0 + 12, 166, 150, 24, { size: 12, kind: me.diet ? 'green' : 'norm' }); s.btn('sauna', '水抜き（サウナ）', x0 + 170, 166, 134, 24, { size: 12, off: dd > 2 }); }
+      else pT(c, 'ヘビー級に体重の上限はない', x0 + 12, 122, { size: 12, color: KT_C.t3 });
+      if (dd <= 0) s.btn('gofight', '会場へ向かう（試合開始）', x0 + 12, 200, 292, 34, { size: 16, kind: 'red', def: true }); else s.btn('tofight', '相手のデータを見る', x0 + 12, 204, 292, 26, { size: 12 }); }
+    else if (B.st === 'gym') { const age = ageOf(g), ok = [[age >= 16 && age <= 34, `年齢 16〜34歳（いま${age}歳）`], [day - me.joinDay >= 20, `入門から20日（いま${day - me.joinDay}日）`], [ktOvr(me.a) >= 33, `総合力 33以上（いま${Math.floor(ktOvr(me.a))}）`], [num(g.state.money) >= 10000, '受験料 ¥10,000']]; ok.forEach(([v, t], i) => pT(c, `${v ? '○' : '×'} ${t}`, x0 + 12, 62 + i * 18, { size: 12, color: v ? KT_C.good : KT_C.t3 }));
+      ktLines(c, '筆記（ルールの3問）と、実技（スパーリング）。約3時間。受かるとC級ライセンスがもらえ、4回戦に出られる。', x0 + 12, 138, 292, { color: KT_C.t2, max: 3 }); s.btn('test', 'プロテストを受ける', x0 + 12, 200, 292, 32, { size: 16, kind: 'pri', off: !!ktTestWhy(g), def: true }); }
+    else { const n = me.offers.length; if (n) { ktLines(c, `${G.boss}から、話が${n}件きている。`, x0 + 12, 64, 292, {}); s.btn('tofight', '話を聞く（試合タブへ）', x0 + 12, 200, 292, 32, { size: 16, kind: 'pri', def: true }); } else ktLines(c, me.inj ? 'けがを治すのが先だ。' : day < num(me.susp) ? `試合のあとの休養中（あと${me.susp - day}日）。体を休めて、次にそなえよう。` : me.rk && me.rk.alive ? `新人王トーナメントの次の試合は ${[5, 8, 11, 12][me.rk.stage]}月。相手が決まるのを待とう。` : 'いまは試合の話がない。練習を続けていれば、会長が相手を探してくれる。', x0 + 12, 64, 292, { color: KT_C.t2 });
+      const td = Object.keys(me.titles)[0]; if (td) pT(c, pFit(c, `防衛戦の期限：あと${Math.max(0, 62 - (day - num(me.titles[td].last, day)))}日`, 292, 12), x0 + 12, 150, { size: 12, color: KT_C.gold }); }
+    pFrame(c, x0, 246, 316, 106, { title: 'ボクシングニュース', bg: KT_C.panel, edge: KT_C.edge }); if (!B.news.length) pT(c, 'まだニュースはない', x0 + 158, 296, { size: 12, color: KT_C.t3, align: 'center' }); { let ln = 0; for (let i = 0; i < B.news.length && ln < 5; i++) { const n = B.news[i], hd = `${n.m}月 `, hw = pW(c, hd, 12), FL = wrapDot(c, n.t, 296 - hw, 12), lim = Math.min(2, 5 - ln), W = FL.slice(0, lim); if (FL.length > lim) W[lim - 1] = pFit(c, W[lim - 1] + 'ーーー', 296 - hw, 12); pT(c, hd, x0 + 10, 268 + ln * 16, { size: 12, color: KT_C.t3 }); W.forEach((t, j) => pT(c, t, x0 + 10 + hw, 268 + (ln + j) * 16, { size: 12, color: i ? KT_C.t3 : KT_C.t2 })); ln += W.length; } } },
+  // 練習
+  dTrain(s, c, g, B) { const S = s.S, me = B.me, G = ktGym(B), act = B.st === 'gym' || B.st === 'pro'; pFrame(c, 8, 38, 300, 314, { title: `練習メニュー（${G.n}）`, bg: KT_C.panel, edge: KT_C.edge });
+    KT_TR.forEach((M, i) => s.btn('tr:' + M.id, `${M.n}\n${M.mins}分・体力${M.stm}`, 16 + (i % 2) * 144, 62 + (i >> 1) * 40, 140, 36, { size: 12, off: !act || num(g.state.stamina) < M.stm || (me.inj && !M.light), def: i === 0 }));
+    s.btn('care', 'マッサージ・ケア（60分・¥3,000・疲れ −30）', 16, 224, 284, 24, { size: 12, off: !act });
+    pT(c, '体力', 20, 256, { size: 12, color: KT_C.t2 }); ktBar(c, 64, 259, 190, 8, num(g.state.stamina) / Math.max(1, num(g.state.maxStamina, 100)), '#5ee07a'); pT(c, String(Math.round(num(g.state.stamina))), 296, 256, { size: 12, color: '#5ee07a', align: 'right' });
+    pT(c, '疲れ', 20, 274, { size: 12, color: KT_C.t2 }); ktBar(c, 64, 277, 190, 8, me.fat / 100, me.fat > 70 ? '#ff6a5a' : '#e0a060'); pT(c, String(Math.round(me.fat)), 296, 274, { size: 12, color: me.fat > 70 ? '#ff6a5a' : '#e0a060', align: 'right' });
+    const fb = KT_TR.find(M => 'tr:' + M.id === s.fid), lf = T_left(this, s, g); pT(c, pFit(c, S.last && S.f - S.last.f < 240 ? S.last.t.split('\n').pop() : fb ? fb.d : me.fat > 70 ? '疲れがたまると伸びにくく、けがもしやすい' : 'メニューを選ぼう', 280, 12), 20, 296, { size: 12, color: S.last && S.f - S.last.f < 240 ? KT_C.gold : KT_C.t2 });
+    pT(c, pFit(c, S.last && S.f - S.last.f < 240 ? S.last.t.split('\n')[0] : `今日の残り時間 ${Math.floor(lf / 60)}時間${lf % 60}分`, 280, 12), 20, 316, { size: 12, color: KT_C.t3 });
+    pFrame(c, 316, 38, 316, 314, { title: '能力', bg: KT_C.panel, edge: KT_C.edge }); KT_AB.forEach(([k, n], i) => { const y = 62 + i * 25, v = me.a[k], cp = me.cap[k]; pT(c, n, 326, y, { size: 12, color: KT_C.t2 }); ktBar(c, 412, y + 3, 170, 8, v / 100, v >= 80 ? '#ffd23f' : v >= 60 ? '#5ee07a' : '#6aa8ff'); pR(c, 412 + Math.round(170 * cp / 100), y + 1, 1, 12, '#ffffff'); pT(c, String(Math.floor(v)), 622, y, { size: 12, color: KT_C.t1, align: 'right' }); });
+    pT(c, `総合力 ${Math.floor(ktOvr(me.a))}`, 326, 240, { size: 16, color: KT_C.gold }); pT(c, '（白い線＝いまの限界）', 622, 244, { size: 12, color: KT_C.t3, align: 'right' });
+    pT(c, pFit(c, `得意パンチ：${me.sig ? KT_SIG[me.sig] : 'まだ決めていない'}`, 220, 12), 326, 268, { size: 12, color: KT_C.t1 }); s.btn('sig', '決める', 560, 264, 62, 22, { size: 12, off: !act });
+    const top = KT_AB.slice().sort((a, b) => me.cap[b[0]] - me.cap[a[0]]).slice(0, 2).map(x => x[1]); ktLines(c, `${G.boss}「お前の武器は、${top.join('と')}だ。そこを伸ばせ」`, 326, 296, 296, { color: KT_C.t2, max: 3 }); },
+  // 試合
+  dFight(s, c, g, B) { const S = s.S, me = B.me, G = ktGym(B), day = g.state.day, R = ktRanks(S, B, g), fi = me.fight;
+    if (fi) { const p = ktBy(B, fi.opp) || { n: fi.on, co: 'jp', a: me.a, sty: 'bf', w: 0, l: 0, d: 0, ko: 0, id: fi.opp, age: 20 }; pFrame(c, 8, 38, 300, 314, { title: '決まっている試合', bg: KT_C.panel, edge: KT_C.edge });
+      pT(c, pFit(c, `${fi.rounds}回戦${fi.title ? '・' + ktTitleN(B, fi.title) : fi.kind === 'rookie' ? '・新人王トーナメント' : ''}`, 280, 12), 20, 62, { size: 12, color: fi.title ? KT_C.gold : KT_C.t1 }); pT(c, `${ktDateTxt(g, fi.day)}（あと${Math.max(0, fi.day - day)}日）`, 20, 80, { size: 12, color: KT_C.t2 }); pT(c, `ファイトマネー ${yen(fi.purse)}（うち33%はジムへ）`, 20, 98, { size: 12, color: KT_C.t2 });
+      pT(c, `${fi.rounds <= 4 ? '2' : '3'}回ダウンでTKO（ノックダウン制）`, 20, 116, { size: 12, color: KT_C.t3 }); if (fi.title === 'wbc') pT(c, 'WBCルール：4回・8回のあとに採点を公開', 20, 134, { size: 12, color: KT_C.t3 });
+      const d = ktOvr(p.a) - ktOvr(me.a), tip = { fighter: '打ちあいに付きあうな。足を使え', boxer: '足を使われる。前に出てロープにつめろ', counter: 'カウンターを狙ってくる。大振りはするな', bf: '穴の少ない相手だ。自分の強みで勝負しろ' }[p.sty] || '';
+      ktLines(c, `${G.boss}「${d > 6 ? '相手は格上だ。まともに打ちあうな' : d < -6 ? '力はお前が上だ。油断だけはするな' : '五分の相手だ。作戦が勝負を分ける'}。${tip}」`, 20, 160, 276, { color: KT_C.t1, max: 4 });
+      ktLines(c, '前日に公式計量。試合当日に、ホームの「会場へ向かう」から試合をはじめる。', 20, 240, 276, { color: KT_C.t3, max: 3 });
+      pFrame(c, 316, 38, 316, 314, { title: '相手のデータ', bg: KT_C.panel, edge: KT_C.edge }); pR(c, 324, 62, 76, 102, '#120c10'); const P = ktPoseOf('guard'); P.cr = Math.sin(S.f / 9 + 2) * 0.4; ktDrawBoxer(c, 366, 158, P, ktLookOpp(p, ktFem(g)), 2.4, -1);
+      pT(c, pFit(c, p.n, 212, 16), 408, 60, { size: 16, color: KT_C.t1 }); pT(c, `${KT_CO[p.co] || ''}・${p.age || '?'}歳`, 408, 82, { size: 12, color: KT_C.t2 }); pT(c, ktRecStr(p), 408, 98, { size: 12, color: KT_C.t1 }); pT(c, pFit(c, ktRankTxt(R, B, p.id), 212, 12), 408, 114, { size: 12, color: KT_C.blue }); pT(c, pFit(c, `${KT_STY[p.sty] ? KT_STY[p.sty][0] : ''}・得意は${KT_SIG[p.sig] || '？'}`, 212, 12), 408, 130, { size: 12, color: KT_C.t2 });
+      KT_AB.forEach(([k, n], i) => { const y = 176 + i * 22, gr = ktGrade(num(p.a[k], 40)); pT(c, n, 330, y, { size: 12, color: KT_C.t2 }); ktBar(c, 420, y + 3, 150, 8, num(p.a[k], 40) / 100, '#6aa8ff'); pT(c, gr, 600, y, { size: 12, color: gr === 'S' || gr === 'A' ? KT_C.gold : KT_C.t1, align: 'center' }); pT(c, ktGrade(me.a[k]), 622, y, { size: 12, color: KT_C.t3, align: 'right' }); });
+      pT(c, '相手　自分', 626, 160, { size: 12, color: KT_C.t3, align: 'right' }); return; }
+    pFrame(c, 8, 38, 624, 314, { title: B.st === 'pro' ? `試合の話（${G.boss}から）` : '試合', bg: KT_C.panel, edge: KT_C.edge });
+    if (B.st !== 'pro') { pT(c, B.st === 'gym' ? '試合に出られるのは、プロテストに受かってから。' : '引退している。', 320, 180, { size: 12, color: KT_C.t3, align: 'center' }); return; }
+    if (!me.offers.length) { ktLines(c, me.inj ? `けが（${me.inj.n}）が治るまで、試合は組めない。` : day < num(me.susp) ? `試合のあとの休養中。あと${me.susp - day}日は、試合を組めない。` : me.rk && me.rk.alive ? '新人王トーナメントの次の相手が決まるのを待っている。' : 'いまは話がない。数日おきに、会長が相手を探してくる。', 30, 150, 580, { color: KT_C.t2 }); return; }
+    me.offers.slice(0, 4).forEach((o, i) => { const y = 62 + i * 71; pR(c, 16, y, 608, 67, KT_C.row);
+      if (o.kind === 'rkentry') { pBev(c, 22, y + 6, 76, 20, '#2a8a9a'); pT(c, '新人王', 60, y + 10, { size: 12, align: 'center', shadow: null }); pT(c, `${ktYear(g)}年 新人王トーナメント（${ktClsN(B.cls)}）`, 108, y + 6, { size: 12, color: KT_C.t1 }); pT(c, '4回戦を4つ勝てば、全日本新人王。A級に上がり、日本ランキングに入る。', 108, y + 24, { size: 12, color: KT_C.t2 }); pT(c, '出るあいだ、ほかの試合は組まれない。', 108, y + 42, { size: 12, color: KT_C.t3 }); s.btn('acc:' + o.id, 'エントリー', 530, y + 20, 88, 28, { size: 12, kind: 'pri', def: i === 0 }); return; }
+      const p = ktBy(B, o.opp) || { n: o.on, co: 'jp', w: 0, l: 0, d: 0, ko: 0, id: o.opp, a: me.a }, tag = o.kind === 'title' ? ['タイトル', '#8a4ac8'] : o.tier === 'easy' ? ['格下', '#2a9a50'] : o.tier === 'hard' ? ['格上', '#c83040'] : ['同格', '#b08020'];
+      pBev(c, 22, y + 6, 76, 20, tag[1]); pT(c, tag[0], 60, y + 10, { size: 12, align: 'center', shadow: null }); pT(c, pFit(c, `${p.n}（${KT_CO[p.co] || ''}）`, 250, 12), 108, y + 6, { size: 12, color: KT_C.t1 }); pT(c, pFit(c, `${ktRecStr(p)}・${ktRankTxt(R, B, p.id)}`, 250, 12), 108, y + 24, { size: 12, color: KT_C.t2 });
+      pT(c, pFit(c, o.title ? ktTitleN(B, o.title) + (o.unify ? '統一戦' : o.vac ? '決定戦' : o.champ ? `の防衛戦${o.mand ? '（指名試合）' : ''}` : 'に挑戦') : { easy: '「まず勝って、自信をつけろ」', hard: '「勝てば、一気に上へ行けるぞ」' }[o.tier] || '「いい勝負になるはずだ」', 250, 12), 108, y + 42, { size: 12, color: o.title ? KT_C.gold : KT_C.t3 });
+      pT(c, `${o.rounds}回戦`, 372, y + 6, { size: 12, color: KT_C.t1 }); pT(c, `${ktDateTxt(g, o.day)}（${o.day - day}日後）`, 372, y + 24, { size: 12, color: KT_C.t2 }); pT(c, yen(o.purse), 372, y + 42, { size: 12, color: KT_C.gold }); pT(c, `返事はあと${Math.max(0, o.exp - day)}日`, 522, y + 50, { size: 12, color: KT_C.t3, align: 'right' });
+      s.btn('acc:' + o.id, '受ける', 530, y + 16, 88, 30, { size: 12, kind: 'pri', def: i === 0 }); }); },
+  // ランキング
+  dRank(s, c, g, B) { const S = s.S, R = ktRanks(S, B, g), key = KT_KEYS.includes(S.rk) ? S.rk : 'jp', X = R[key]; KT_KEYS.forEach((k, i) => s.btn('rk:' + k, KT_ORG[k][1] === 'JBC' ? '日本' : KT_ORG[k][1], 12 + i * 103, 36, 99, 22, { size: 12, kind: key === k ? 'pri' : 'norm' }));
+    pFrame(c, 8, 62, 624, 290, { title: `${ktTitleN(B, key).replace('王座', '')}ランキング`, bg: KT_C.panel, edge: KT_C.edge }); if (!ktOrgOK(g, key)) pT(c, '※JBCがIBF・WBOを認めるのは2013年から（それまでは挑戦できない）', 622, 68, { size: 12, color: KT_C.t3, align: 'right' });
+    const row = (p, x, y, lab, col) => { if (p && p.me) pR(c, x - 4, y - 2, 300, 18, '#4a3418'); pT(c, lab, x, y, { size: 12, color: col }); if (!p) { pT(c, '空位', x + 34, y, { size: 12, color: KT_C.t3 }); return; } pT(c, pFit(c, p.n, 142, 12), x + 34, y, { size: 12, color: p.me ? KT_C.gold : KT_C.t1 }); pT(c, KT_CC[p.co] || '', x + 180, y, { size: 12, color: KT_C.t3 }); pT(c, pFit(c, `${num(p.w)}勝(${num(p.ko)})${num(p.l)}敗${num(p.d) ? num(p.d) + '分' : ''}`, 94, 12), x + 298, y, { size: 12, color: KT_C.t2, align: 'right' }); };
+    row(X.champ, 20, 88, '王者', KT_C.gold); pR(c, 16, 108, 608, 1, 'rgba(255,255,255,0.2)'); X.list.forEach((p, i) => row(p, i < 8 ? 20 : 328, 116 + (i < 8 ? i : i - 8) * 28, `${i + 1}位`, i < 3 ? KT_C.red : KT_C.t2)); if (!X.list.length) pT(c, '（選手がいない）', 320, 200, { size: 12, color: KT_C.t3, align: 'center' }); },
+  // 戦績
+  dRec(s, c, g, B) { const S = s.S, me = B.me, n = me.w + me.l + me.d, pages = Math.max(1, Math.ceil(me.hist.length / 12)); S.hp = clamp(S.hp, 0, pages - 1); pFrame(c, 8, 38, 392, 314, { title: `戦績（${ktRecStr(me)}）`, bg: KT_C.panel, edge: KT_C.edge });
+    if (!me.hist.length) pT(c, 'まだ試合をしていない', 204, 180, { size: 12, color: KT_C.t3, align: 'center' });
+    me.hist.slice(S.hp * 12, S.hp * 12 + 12).forEach((h, i) => { const y = 62 + i * 22, col = h.res === 'W' ? KT_C.good : h.res === 'L' ? KT_C.red : KT_C.t2; pT(c, `${h.y}`, 18, y, { size: 12, color: KT_C.t3 }); pT(c, h.res === 'W' ? '○' : h.res === 'L' ? '●' : '△', 56, y, { size: 12, color: col }); pT(c, pFit(c, h.how.startsWith('判定') || h.how === '引き分け' ? h.how : `${h.rd}回${h.how}`, 70, 12), 74, y, { size: 12, color: col }); pT(c, pFit(c, h.n, 172, 12), 148, y, { size: 12, color: KT_C.t1 }); pT(c, pFit(c, h.title ? (KT_ORG[h.title][1] === 'JBC' ? '日本' : KT_ORG[h.title][1]) + '王座戦' : h.kind === 'rookie' ? '新人王' : `${h.rounds}回戦`, 70, 12), 392, y, { size: 12, color: h.title ? KT_C.gold : KT_C.t3, align: 'right' }); });
+    if (pages > 1) { s.btn('hp-', '◀', 150, 326, 30, 20, { size: 12, off: S.hp <= 0 }); pT(c, `${S.hp + 1}/${pages}`, 204, 330, { size: 12, color: KT_C.t2, align: 'center' }); s.btn('hp+', '▶', 228, 326, 30, 20, { size: 12, off: S.hp >= pages - 1 }); }
+    pFrame(c, 408, 38, 224, 314, { title: 'キャリア', bg: KT_C.panel, edge: KT_C.edge }); pT(c, `KO率 ${n ? Math.round(me.ko / n * 100) : 0}%`, 420, 62, { size: 12, color: KT_C.t1 }); pT(c, pFit(c, `かせいだお金 ${yen(num(me.earn))}`, 200, 12), 420, 80, { size: 12, color: KT_C.t2 }); pT(c, '獲得したタイトル', 420, 104, { size: 12, color: KT_C.t3 });
+    if (!me.won.length) pT(c, 'まだない', 420, 122, { size: 12, color: KT_C.t3 }); me.won.slice(-6).forEach((w, i) => pT(c, pFit(c, `${w.y}年 ${w.k === 'rookie' ? '全日本新人王' : (KT_ORG[w.k][1] === 'JBC' ? '日本' : KT_ORG[w.k][1]) + ' ' + KT_CLS[w.cls][0].replace('スーパー', 'S') + '級'}`, 200, 12), 420, 122 + i * 16, { size: 12, color: KT_C.gold }));
+    const act = B.st === 'gym' || B.st === 'pro'; s.btn('reclass', '階級を変える', 420, 232, 200, 24, { size: 12, off: !act }); s.btn('move', 'ジムを移る', 420, 262, 200, 24, { size: 12, off: !act }); if (B.st === 'retired') s.btn('comeback', '現役に復帰する', 420, 292, 200, 24, { size: 12, kind: 'pri' }); else s.btn('retire', '引退する', 420, 292, 200, 24, { size: 12, off: B.st !== 'pro' }); },
+};
+function T_left(M, s, g) { try { return M.left(s, g); } catch (e) { return 0; } }
+function ktBigNum(c, n, cx, y, sc, col) { const str = String(n), w = str.length * 6 * sc - sc; Array.from(str).forEach((ch, i) => pBig(c, ch, Math.round(cx - w / 2) + i * 6 * sc, y, sc, col, { edge: '#000000' })); }
+const ktCondTxt = v => v >= 98 ? '絶好調' : v >= 88 ? '良好' : v >= 74 ? 'ふつう' : v >= 60 ? '重い' : '最悪';
+// ---- 試合の画面 ----
+GB_MODES.ktfight = {
+  noHud: true,
+  init(s, g) { const B = ktSt(g), me = B.me; if (me.fight && !me.fight.wi) { const nt = []; ktWeigh(g, B, g.state.day, nt); } if (!me.fight) { s.S = { dead: 1, f: 0 }; return; } const F = ktFightBuild(g, B, g.state.day, !g.auto), opp = ktBy(B, me.fight.opp) || { id: me.fight.opp, n: me.fight.on, co: 'jp' };
+    s.S = { B, F, fi: me.fight, ph: 'intro', f: 0, q: [], cur: null, msg: '', fast: false, P: [ktPoseOf('guard'), ktPoseOf('guard')], T: ['guard', 'guard'], X: [274, 366], XT: [274, 366], dhp: [100, 100], dst: [F.f[0].st, F.f[1].st], look: [ktLookMe(g), ktLookOpp(opp, ktFem(g))], R: null, cnt: 0, stag: [0, 0], adv: [] }; },
+  finish(s, g) { const S = s.S, F = S.F, O = F.over; S.ph = 'end'; s.fid = null; S.endT = 0; S.q = []; S.cur = null; try { S.R = ktAfter(g, S.B, F, g.state.day); } catch (e) { console.error('[kt] after', e); S.R = { res: O.w === 0 ? 'W' : O.w === 1 ? 'L' : 'D', lines: ['（結果の記録に失敗した）'] }; }
+    const w = O.w; S.T = w === 0 ? ['win', O.ko ? 'down' : 'lose'] : w === 1 ? [O.ko ? 'down' : 'lose', 'win'] : ['guard', 'guard']; const how = O.ko ? `${O.rd}回 ${Math.floor(O.sec / 60)}分${String(O.sec % 60).padStart(2, '0')}秒 ${O.how}` : O.how;
+    if (w === 0) { s.ban('勝利！', PW.acc, how, { life: 150 }); tt.sfx('fanfare'); s.burst(320, 120, 60, PW.acc, { star: true, sp: 5 }); } else if (w === 1) { s.ban('敗北…', '#8a9ac0', how, { life: 150 }); tt.sfx('fail'); } else { s.ban('引き分け', '#c8c8d8', '', { life: 150 }); tt.sfx('chime'); }
+    S.msg = w === 0 ? `勝者、${F.f[0].n}！` : w === 1 ? `勝者、${F.f[1].n}。` : 'ドロー。'; },
+  begin(s, g, k) { const S = s.S, F = S.F; ktRoundStart(F, k, ktAI(F, 1)); S.ph = 'round'; s.fid = null; S.rdone = 0; S.T = ['guard', 'guard']; S.msg = `第${F.rd}ラウンド！ ${F.f[1].n}は、${KT_SEEN[F.f[1].strat] || ''}。`; tt.sfx('chime'); S.cur = { ev: { t: 'wait' }, t: 0, dur: S.fast ? 10 : 30 }; },
+  btn(s, id, g) { const S = s.S, F = S.F; if (id === 'close') { s.done({ fought: 1 }); return; } if (S.dead) return; if (id === 'fast' || id === 'fastr') { S.fast = !S.fast; return; }
+    if (S.ph === 'intro') { if (id === 'go') { S.ph = 'strat'; s.fid = null; S.adv = ktCorner(F); tt.sfx('ok'); } else if (id === 'skip') { F.f[0].human = false; ktAuto(F); this.finish(s, g); } return; }
+    if (S.ph === 'strat') { if (id.startsWith('st:')) this.begin(s, g, id.slice(3)); else if (id === 'auto') { F.f[0].human = false; ktAuto(F); this.finish(s, g); } else if (id === 'towel') { F.rd = Math.max(1, F.rd); F.over = { w: 1, how: 'TKO', why: '棄権（タオル投入）', rd: F.rd, sec: 1, ko: true }; this.finish(s, g); } return; }
+    if (S.ph === 'moment' && id.startsWith('mo:')) { const k = ktMoment(F, id.slice(3)); S.msg = `${F.f[0].n}、${(KT_MOM[k] || {}).n || ''}！`; S.ph = 'round'; s.fid = null; return; }
+    if (S.ph === 'kd' && id === 'mash') { S.kd.n++; tt.sfx('cursor'); return; } },
+  // 1つのできごとを画面に出す
+  start(s, ev) { const S = s.S, F = S.F, nm = i => F.f[i].n;
+    if (ev.t === 'p') { const a = ev.by, d = 1 - a; S.T[a] = ev.k === 'jab' ? 'jab' : ev.k; S.XT[a] = [274, 366][a] + (a === 0 ? 12 : -12); }
+    else if (ev.t === 'hurt') { S.stag[ev.who] = 100; S.msg = `${nm(ev.who)}、足にきている！`; }
+    else if (ev.t === 'cut') { S.msg = ev.lv >= 2 ? `${nm(ev.who)}の傷が開いた。出血がひどい！` : `${nm(ev.who)}、まぶたを切った！`; }
+    else if (ev.t === 'kd') { S.T[ev.who] = 'down'; S.T[1 - ev.who] = 'guard'; s.ban('ダウン！', ev.who === 0 ? PW.bad : PW.acc, `${nm(ev.who)}がたおれた`, { life: 70 }); s.shake = 14; tt.sfx('drum'); S.msg = `ダウン！ ${nm(ev.who)}がキャンバスに沈んだ！`; S.cnt = 0; }
+    else if (ev.t === 'up') { S.msg = `${nm(ev.who)}、立ちあがった！ 試合続行！`; }
+    else if (ev.t === 'ko') { S.msg = `${nm(ev.who)}、立てない！`; } },
+  anim(s, C) { const S = s.S, F = S.F, ev = C.ev, t = C.t, imp = Math.max(1, Math.round(C.dur * 0.45));
+    if (ev.t === 'p' && t === imp) { const a = ev.by, d = 1 - a, A = F.f[a], D = F.f[d], pn = KT_PN[ev.k].n, dir = a === 0 ? 1 : -1, ix = S.X[d] - dir * 8, iy = ev.k === 'body' ? 196 : 162;
+      if (ev.hit) { S.T[d] = ev.k === 'body' ? 'hitbody' : 'hit'; S.XT[d] = [274, 366][d] + dir * (ev.crit ? 10 : 5); s.burst(ix, iy, ev.crit ? 16 : 6, ev.crit ? '#ffd23f' : '#ffffff', { sp: ev.crit ? 4 : 2.2, life: 16, star: !!ev.crit }); tt.sfx('hit'); if (ev.crit) s.shake = 8;
+        if (ev.k === 'body') S.dst[d] = Math.max(0, S.dst[d] - ev.d * 1.6); else S.dhp[d] = Math.max(0, S.dhp[d] - ev.d);
+        if (ev.crit || ev.ctr || ev.d > 3) S.msg = ev.ctr ? `${A.n}、カウンターの${pn}！` : ev.crit ? `${A.n}の${pn}がクリーンヒット！` : `${A.n}の${pn}が入った！`; }
+      else { S.T[d] = ev.k === 'body' ? 'block' : RND() < 0.5 ? 'slip' : 'block'; } }
+    if (ev.t === 'p' && t === C.dur - 1) { for (const i of [0, 1]) { S.T[i] = S.stag[i] > 0 ? 'stagger' : 'guard'; S.XT[i] = [274, 366][i]; } }
+    if ((ev.t === 'up' || ev.t === 'ko') && t % (S.fast ? 5 : 11) === 0) { const lim = ev.t === 'up' ? 8 : 10; if (S.cnt < lim) { S.cnt++; if (S.cnt % 2 === 0) tt.sfx('cursor'); } if (ev.t === 'up' && t >= C.dur - 2) { S.T[ev.who] = 'guard'; S.stag[ev.who] = 80; } } },
+  dur(ev, fast) { const d = ev.t === 'p' ? (ev.hit ? 15 : 10) : { hurt: 26, cut: 28, kd: 60, up: 90, ko: 120, wait: 10 }[ev.t] || 10; return fast ? Math.max(4, Math.round(d * 0.36)) : d; },
+  update(s, g) { const S = s.S; S.f++; if (S.dead) return; const F = S.F, k = S.fast ? 0.7 : 0.42;
+    for (const i of [0, 1]) { const tg = ktPoseOf(S.stag[i] > 0 && S.T[i] === 'guard' ? 'stagger' : S.T[i]), P = S.P[i]; if (S.stag[i] > 0) { S.stag[i]--; if (S.T[i] !== 'down') tg.lean += Math.sin(S.f / 5) * 1.5; } for (const key of Object.keys(tg)) P[key] += (tg[key] - P[key]) * k; S.X[i] += (S.XT[i] - S.X[i]) * 0.5; }
+    if (!S.q.length && !S.cur) for (const i of [0, 1]) { S.dhp[i] += (F.f[i].hp - S.dhp[i]) * 0.25; S.dst[i] += (F.f[i].st - S.dst[i]) * 0.25; }
+    if (S.ph === 'end') { S.endT++; return; }
+    if (S.ph === 'moment') { const M = S.mom; if (++M.t >= M.lim || g.auto) { const kx = ktMoment(F, null); S.msg = `${F.f[0].n}、${(KT_MOM[kx] || {}).n || ''}！`; S.ph = 'round'; s.fid = null; } return; }
+    if (S.ph === 'kd') { const K = S.kd; K.t++; if (g.auto && K.t === 2) K.autoUp = RND() < K.gu; if (K.t % 34 === 0) { K.c++; tt.sfx('cursor'); } const up = g.auto ? (K.autoUp && K.c >= 6) : K.n >= K.need; if (up || K.c >= 10) { S.cnt = Math.min(10, K.c); const ev = ktKdDone(F, up && K.c < 10, []); S.q = ev.filter(e => e.t !== 'end' && e.t !== 'up' && e.t !== 'ko'); if (up && K.c < 10) { S.T[0] = 'guard'; S.stag[0] = 80; S.msg = `${F.f[0].n}、カウント${Math.max(1, K.c)}で立ちあがった！`; tt.sfx('good'); } else S.msg = `${F.f[0].n}、立てない！ 10カウント！`; S.kd = null; S.ph = 'round'; s.fid = null; } return; }
+    if (S.ph !== 'round') return;
+    if (S.cur) { S.cur.t++; this.anim(s, S.cur); if (S.cur.t >= S.cur.dur) S.cur = null; return; }
+    if (S.q.length) { const ev = S.q.shift(); S.cur = { ev, t: 0, dur: this.dur(ev, S.fast) }; this.start(s, ev); return; }
+    if (F.over) { this.finish(s, g); return; }
+    if (F.pend) { if (F.pend.t === 'kd') { const gu = F.pend.gu; S.ph = 'kd'; s.fid = null; S.kd = { gu, need: clamp(Math.round(8 + (1 - gu) * 30), 6, 36), n: 0, c: 0, t: 0 }; } else { S.ph = 'moment'; s.fid = null; S.mom = { mine: F.pend.hurt === 0, t: 0, lim: 260 }; S.msg = S.mom.mine ? '効いてしまった！ どうする？' : '相手が効いている！ どうする？'; } return; }
+    if (F.ex >= F.exN) { if (!S.rdone) { S.rdone = 1; ktRoundEnd(F); if (!F.over || !F.over.ko) { S.msg = `第${F.rd}ラウンド終了のゴング。`; tt.sfx('chime'); } S.cur = { ev: { t: 'wait' }, t: 0, dur: S.fast ? 14 : 46 }; return; } S.rdone = 0; if (F.over) { this.finish(s, g); return; } S.ph = 'strat'; s.fid = null; S.adv = ktCorner(F); S.T = ['guard', 'guard']; if (g.auto) this.begin(s, g, ktAI(F, 0)); return; }
+    const ev = ktExchange(F); S.q = ev.filter(e => e.t !== 'end'); if (!S.q.length) S.q.push({ t: 'wait' }); },
+  draw(s, c, g) { const S = s.S; if (S.dead) { pR(c, 0, 0, 640, 360, '#0a0810'); pT(c, '試合は行われなかった', 320, 160, { size: 16, align: 'center' }); s.btn('close', '閉じる', 270, 220, 100, 28, { kind: 'pri', def: true, back: true }); return; }
+    const F = S.F, [A, B2] = F.f, fi = S.fi, bob = i => (S.T[i] === 'guard' && S.ph !== 'end' ? Math.sin(S.f / 7 + i * 2) * 1.2 : 0); ktRingBg(c, S.f);
+    const kdw = S.T[0] === 'down' ? 0 : S.T[1] === 'down' ? 1 : -1; ktDrawRef(c, kdw < 0 ? 452 + Math.sin(S.f / 50) * 18 : S.X[kdw] + (kdw === 0 ? 70 : -70), kdw < 0 ? 242 : 246, kdw >= 0 && Math.floor(S.f / 10) % 2 === 0);
+    for (const i of [1, 0]) ktDrawBoxer(c, S.X[i], 252 + bob(i), S.P[i], { ...S.look[i], cut: F.f[i].cut }, 3, i === 0 ? 1 : -1);
+    if (kdw >= 0 && S.cnt > 0 && S.ph !== 'end' && S.ph !== 'kd') ktBigNum(c, S.cnt, 320, 70, 8, '#ffd23f');
+    // 上の表示
+    pR(c, 0, 0, 640, 36, 'rgba(6,5,12,0.88)'); pR(c, 0, 35, 640, 1, '#3a3050'); pR(c, 8, 5, 8, 8, '#e03a3a'); pT(c, pFit(c, A.n, 200, 12), 20, 2, { size: 12 }); pR(c, 624, 5, 8, 8, '#3a6ae0'); pT(c, pFit(c, B2.n, 200, 12), 620, 2, { size: 12, align: 'right' });
+    const hc = v => v > 55 ? '#5ee07a' : v > 28 ? '#ffd23f' : '#ff5d6c'; ktBar(c, 8, 18, 250, 8, S.dhp[0] / 100, hc(S.dhp[0]), '#2a2030'); ktBar(c, 8, 28, 250, 4, S.dst[0] / 100, '#6ac8ff', '#2a2030');
+    pR(c, 382, 18, 250, 8, '#2a2030'); pR(c, 632 - Math.round(250 * clamp(S.dhp[1] / 100, 0, 1)), 18, Math.round(250 * clamp(S.dhp[1] / 100, 0, 1)), 8, hc(S.dhp[1])); pR(c, 382, 28, 250, 4, '#2a2030'); pR(c, 632 - Math.round(250 * clamp(S.dst[1] / 100, 0, 1)), 28, Math.round(250 * clamp(S.dst[1] / 100, 0, 1)), 4, '#6ac8ff');
+    const left = Math.max(0, Math.round(F.sec * (1 - F.ex / F.exN))); pT(c, `R${Math.max(1, F.rd)}/${F.rounds}`, 320, 1, { size: 16, color: PW.acc, align: 'center' }); pT(c, `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`, 320, 20, { size: 12, align: 'center' });
+    for (let k = 0; k < A.kdT; k++) pR(c, 264 + k * 7, 20, 5, 5, '#ff5d6c'); for (let k = 0; k < B2.kdT; k++) pR(c, 371 - k * 7, 20, 5, 5, '#ff5d6c');
+    // 下のメッセージ
+    pFrame(c, 8, 304, 624, 52, { bg: '#0e0a16' }); wrapDot(c, S.msg || '', 600, 12).slice(0, 2).forEach((ln, i) => pT(c, ln, 20, 312 + i * 17, { size: 12 }));
+    if (S.ph === 'round') { s.btn('fastr', S.fast ? '早送り：ON' : '早送り：OFF', 540, 40, 92, 20, { size: 12, kind: S.fast ? 'green' : 'norm' }); if (F.rd > 0) pT(c, `作戦：${KT_ST[A.strat].n}`, 8, 40, { size: 12, color: '#ffd0c8' }); }
+    else if (S.ph === 'intro') { pR(c, 0, 36, 640, 268, 'rgba(0,0,0,0.5)'); pFrame(c, 110, 56, 420, 196, { bg: '#141020', edge: PW.acc }); pT(c, pFit(c, fi.title ? ktTitleN(S.B, fi.title) + (fi.unify ? ' 統一戦' : fi.vac ? ' 決定戦' : ' タイトルマッチ') : fi.kind === 'rookie' ? '新人王トーナメント' : `${ktClsN(S.B.cls)} ${fi.rounds}回戦`, 396, 16), 320, 66, { size: 16, color: PW.acc, align: 'center' }); pT(c, `${fi.rounds}回戦・${F.sec / 60}分×${fi.rounds}R・${F.kdRule}ノックダウン制`, 320, 88, { size: 12, color: PW.dim, align: 'center' });
+      pR(c, 126, 112, 8, 8, '#e03a3a'); pT(c, pFit(c, `赤コーナー　${A.n}`, 380, 12), 140, 110, { size: 12 }); pT(c, `${A.rec}・コンディション ${ktCondTxt(F.cond)}`, 140, 126, { size: 12, color: PW.dim }); pR(c, 126, 152, 8, 8, '#3a6ae0'); pT(c, pFit(c, `青コーナー　${B2.n}（${KT_CO[B2.co] || ''}）`, 380, 12), 140, 150, { size: 12 }); pT(c, `${B2.rec}`, 140, 166, { size: 12, color: PW.dim });
+      s.btn('go', 'ゴング！（試合をはじめる）', 126, 200, 250, 36, { size: 16, kind: 'red', def: true }); s.btn('skip', '結果だけ見る', 386, 204, 128, 28, { size: 12 }); }
+    else if (S.ph === 'strat') { pR(c, 0, 36, 640, 268, 'rgba(0,0,0,0.55)'); pFrame(c, 24, 44, 592, 254, { bg: '#141020', edge: '#e04a3a', title: F.rd === 0 ? 'セコンドアウト！ 第1ラウンドの作戦' : `インターバル　第${F.rd + 1}ラウンドの作戦`, tcol: PW.acc });
+      S.adv.forEach((t, i) => pT(c, pFit(c, t, 566, 12), 36, 72 + i * 16, { size: 12, color: i ? '#c8d0e8' : '#ffffff' }));
+      const word = X => X.hp < 30 ? 'ふらふら' : X.hp < 55 ? 'ダメージあり' : X.st < 30 ? '息が上がっている' : 'まだ元気'; pT(c, `自分：体力 ${Math.round(A.hp)}・スタミナ ${Math.round(A.st)}${A.cut ? '・カット' + A.cut : ''}　／　相手：${word(B2)}${B2.cut ? '・カットあり' : ''}`, 36, 124, { size: 12, color: PW.dim });
+      if (F.open && F.rd > 0 && F.rd % 4 === 0) pT(c, pFit(c, `公開採点：${F.cards.map(cd => cd.reduce((a, r) => [a[0] + r[0], a[1] + r[1]], [0, 0]).join('-')).join('　')}`, 566, 12), 36, 142, { size: 12, color: PW.acc });
+      Object.entries(KT_ST).forEach(([k, v], i) => s.btn('st:' + k, `${v.n}\n${v.d}`, 36 + (i % 3) * 190, 162 + Math.floor(i / 3) * 46, 184, 42, { size: 12, def: F.rd === 0 ? i === 1 : k === A.strat, kind: (KT_SYN[A.sty] || {})[k] ? 'blue' : 'norm' }));
+      s.btn('auto', '残りはセコンドに任せる', 36, 262, 184, 26, { size: 12 }); s.btn('fast', S.fast ? '早送り：ON' : '早送り：OFF', 226, 262, 120, 26, { size: 12, kind: S.fast ? 'green' : 'norm' }); if (F.rd > 0) s.btn('towel', '棄権する（タオル）', 446, 262, 158, 26, { size: 12, off: A.hp > 45 }); pT(c, '青いボタン＝自分のスタイルに合う作戦', 604, 148, { size: 12, color: PW.dim, align: 'right' }); }
+    else if (S.ph === 'moment') { const M = S.mom, L = M.mine ? ['clinch', 'move', 'trade'] : ['rush', 'calm']; pFrame(c, 60, 264, 520, 92, { bg: '#141020', edge: M.mine ? PW.bad : PW.acc, title: M.mine ? 'ピンチ！ 効いてしまった。どうする？' : 'チャンス！ 相手が効いている。どうする？', tcol: M.mine ? PW.bad : PW.acc }); ktBar(c, 72, 290, 496, 4, 1 - M.t / M.lim, M.mine ? '#ff5d6c' : '#ffd23f', '#2a2030'); const w = Math.floor(496 / L.length); L.forEach((k, i) => s.btn('mo:' + k, KT_MOM[k].n, 72 + i * w, 302, w - 6, 44, { size: 16, def: i === 0 })); }
+    else if (S.ph === 'kd') { const K = S.kd; if (K.c > 0) ktBigNum(c, K.c, 320, 64, 8, '#ff5d6c'); pFrame(c, 60, 264, 520, 92, { bg: '#141020', edge: PW.bad, title: 'ダウン！ ボタンを連打して立ちあがれ！', tcol: PW.bad }); ktBar(c, 72, 290, 496, 8, K.n / K.need, '#ffd23f', '#2a2030'); s.btn('mash', '立て！（連打）', 150, 304, 340, 44, { size: 16, kind: 'red', def: true }); }
+    else if (S.ph === 'end' && S.endT > 130) { const O = F.over, px = O.w === 1 ? 8 : 336, L = (S.R ? S.R.lines : []).flatMap(t => wrapDot(c, t, 272, 12)).slice(0, 13), h = 86 + L.length * 15; pFrame(c, px, 44, 296, h, { bg: '#141020', edge: O.w === 0 ? PW.acc : '#8a9ac0', title: '試合結果', tcol: PW.acc });
+      if (O.tot) pT(c, pFit(c, `採点 ${O.tot.map(t => t.join('-')).join(' ')}`, 272, 12), px + 12, 70, { size: 12, color: PW.dim }); else pT(c, pFit(c, O.why || '', 272, 12), px + 12, 70, { size: 12, color: PW.dim }); L.forEach((ln, i) => pT(c, ln, px + 12, 90 + i * 15, { size: 12 })); s.btn('close', '閉じる', px + 98, 44 + h - 34, 100, 26, { kind: 'pri', def: true, back: true, size: 12 }); } },
+};
+const ktIcon = gbIcon('#a02830', (c, x, y) => { c.fillStyle = '#f04a4a'; c.fillRect(x + 8, y + 6, 14, 14); c.fillRect(x + 6, y + 10, 4, 8); c.fillStyle = '#ff8a8a'; c.fillRect(x + 10, y + 8, 5, 3); c.fillStyle = '#c02a34'; c.fillRect(x + 8, y + 17, 14, 3); c.fillStyle = '#f4f4f4'; c.fillRect(x + 10, y + 20, 11, 6); c.fillStyle = '#c8c8d0'; c.fillRect(x + 10, y + 24, 11, 2); });
+async function ktOpen(g) { if (g.auto) return null; try { ktTick(g); } catch (e) { console.error('[kt] tick', e); }
+  for (let n = 0; n < 6; n++) { const r = await gbScene(g, { mode: 'ktapp', title: 'ボクシング' }); gbAfter(g, r && r.mins); if (!(r && r.go === 'fight')) break; const B = ktSt(g); if (!B.me || !B.me.fight || B.me.fight.day !== g.state.day) break; await gbScene(g, { mode: 'ktfight', title: 'ボクシング' }); gbAfter(g, 150); } }
+try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_sports'); if (F && !F.apps.includes('boxing')) F.apps.push('boxing'); FOLD_OF.boxing = 'f_sports'; } } catch (e) { }
+try { if (typeof RP_GUIDE !== 'undefined' && !RP_GUIDE.some(x => x[0] === 'boxing')) RP_GUIDE.push(['boxing', 'ボクシング', 'ジムに入って練習し、プロテスト・4回戦から日本・東洋太平洋・世界の王座をめざすキャリア。減量と計量、ラウンドごとの作戦']); } catch (e) { }
+function installKT() {
+  E.Un('boxing', { name: 'ボクシング', color: '#a02830', order: 30.4, iconHD: ktIcon, badge: g => { try { const B = g.state.boxing, me = B && B.me; if (!me) return 0; return (me.offers || []).length + (me.fight && me.fight.day === g.state.day ? 1 : 0); } catch (e) { return 0; } }, open: g => ktOpen(g) });
+  E.Tn(g => { try { ktTick(g); } catch (e) { console.error('[kt] tick', e); } });
+  window.__KT = { st: ktSt, tick: ktTick, open: ktOpen, join: ktJoin, train: ktTrain, testWhy: ktTestWhy, testRun: ktTestRun, accept: ktAccept, build: ktFightBuild, auto: ktAuto, after: ktAfter, ovr: ktOvr, rank: ktRank, myRank: ktMyRank, offers: ktMkOffers, rec: ktRecStr, clsOpts: ktClsOpts, retire: ktRetire, fightScene: g => { gbScene(g, { mode: 'ktfight', title: 'ボクシング' }); } };
 }
 // ===== 天皇・皇室：時代ごとの天皇、スマホの「皇室」アプリ（憲法・国事行為・一年の行事）、新年一般参賀・天皇誕生日・園遊会・親任式／認証式・国会の開会式・勲章と褒章 =====
 // 実在の方々を扱うので、絵は遠くからの小さな人物だけにし、おことばの中身をつくって書くことはしない。
