@@ -47362,7 +47362,8 @@ GB_MODES.ktfight = {
     if ((ev.t === 'up' || ev.t === 'ko') && t % (S.fast ? 5 : 11) === 0) { const lim = ev.t === 'up' ? 8 : 10; if (S.cnt < lim) { S.cnt++; if (S.cnt % 2 === 0) tt.sfx('cursor'); } if (ev.t === 'up' && t >= C.dur - 2) { S.T[ev.who] = 'guard'; S.stag[ev.who] = 80; } } },
   dur(ev, fast) { const d = ev.t === 'p' ? (ev.hit ? 15 : 10) : { hurt: 26, cut: 28, kd: 60, up: 90, ko: 120, wait: 10 }[ev.t] || 10; return fast ? Math.max(4, Math.round(d * 0.36)) : d; },
   update(s, g) { const S = s.S; S.f++; if (S.dead) return; const F = S.F, k = S.fast ? 0.7 : 0.42;
-    for (const i of [0, 1]) { const tg = ktPoseOf(S.stag[i] > 0 && S.T[i] === 'guard' ? 'stagger' : S.T[i]), P = S.P[i]; if (S.stag[i] > 0) { S.stag[i]--; if (S.T[i] !== 'down') tg.lean += Math.sin(S.f / 5) * 1.5; } for (const key of Object.keys(tg)) P[key] += (tg[key] - P[key]) * k; S.X[i] += (S.XT[i] - S.X[i]) * 0.5; }
+    { const dn = S.T[0] === 'down' ? 0 : S.T[1] === 'down' ? 1 : -1; if (dn >= 0) S.XT[1 - dn] = dn === 0 ? 470 : 170; else for (const i of [0, 1]) if (Math.abs(S.XT[i] - [274, 366][i]) > 40) S.XT[i] = [274, 366][i]; }
+    for (const i of [0, 1]) { const tg = ktPoseOf(S.stag[i] > 0 && S.T[i] === 'guard' ? 'stagger' : S.T[i]), P = S.P[i]; if (S.stag[i] > 0) { S.stag[i]--; if (S.T[i] !== 'down') tg.lean += Math.sin(S.f / 5) * 1.5; } for (const key of Object.keys(tg)) P[key] += (tg[key] - P[key]) * k; S.X[i] += clamp((S.XT[i] - S.X[i]) * 0.5, -6, 6); }
     if (!S.q.length && !S.cur) for (const i of [0, 1]) { S.dhp[i] += (F.f[i].hp - S.dhp[i]) * 0.25; S.dst[i] += (F.f[i].st - S.dst[i]) * 0.25; }
     if (S.ph === 'end') { S.endT++; return; }
     if (S.ph === 'moment') { const M = S.mom; if (++M.t >= M.lim || g.auto) { const kx = ktMoment(F, null); S.msg = `${F.f[0].n}、${(KT_MOM[kx] || {}).n || ''}！`; S.ph = 'round'; s.fid = null; } return; }
