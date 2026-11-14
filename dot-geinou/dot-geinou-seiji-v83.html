@@ -55643,6 +55643,7 @@ async function kyOpenApp(g, tab) { if (g.auto) return null; try { kyTick(g); } c
 function installKY() { E.Un('kigyo', { name: '起業', color: '#6a4a10', order: 30.6, iconHD: kyIconHD, badge: g => { try { const K = g.state.kigyo; return K && K.st === 'run' ? ((K.evq || []).length + (K.selfD !== num(g.state.day, 1) ? 1 : 0)) : 0; } catch (e) { return 0; } }, open: g => kyOpenApp(g) }); E.Tn(g => { try { kyTick(g); } catch (e) { console.error('[ky] tick', e); } });
   try { if (typeof FOLDERS !== 'undefined') { const F = FOLDERS.find(f => f.id === 'f_kurashi'); if (F && !F.apps.includes('kigyo')) F.apps.push('kigyo'); if (F) FOLD_OF.kigyo = F.id; } } catch (e) { }
   try { if (typeof RP_GUIDE !== 'undefined' && !RP_GUIDE.some(x => x[0] === 'kigyo')) RP_GUIDE.push(['kigyo', '起業', '業種をえらんで会社を作るキャリア。飲食店・IT・小売・製造・建設・不動産・美容室・運送の8つ。社名とロゴ、本社のオフィスの間取り、部署と部長、制度と理念も自分で決める。融資・出資・上場、時代のできごと（石油ショック、バブル、金融危機、感染症など）もある。「ブラック企業ルート」をえらぶと、解説キャラのブラックくんと黒い会社をめざす（施策・目標・階級つき、代償は少しやさしい）。']); } catch (e) { }
+  try { if (typeof installKYBk3 === 'function') installKYBk3(); } catch (e) { console.error('[kybk3] install', e); }
   try { if (typeof installKYBk === 'function') installKYBk(); } catch (e) { console.error('[kybk] install', e); }
   try { if (typeof installKYLink === 'function') installKYLink(); } catch (e) { console.error('[ky] link', e); }
   window.__KYB = { open: kyOpenApp, art: kyArt }; }
@@ -55763,6 +55764,7 @@ function kyBkTab(s, c, g, K, S) { const C = kyBkFix(K), r = kyBkR(K), R = KY_BKR
   y += 112; pT(c, R.n, 14, y, { size: 16, color: '#ff5468', shadow: null }); pT(c, `黒ポイント ${Math.floor(num(C.bp))}`, 250, y + 3, { size: 12, color: NX.t2, align: 'right', shadow: null }); nxGauge(c, 14, y + 22, 236, 7, nx ? (num(C.bp) - R.bp) / (nx.bp - R.bp) : 1, '#ff5468'); pT(c, nx ? `次の「${nx.n}」まで ${Math.ceil(nx.bp - num(C.bp))}` : '最高の階級', 14, y + 32, { size: 12, color: NX.t3, shadow: null });
   pT(c, 'このルートの代償', 14, y + 54, { size: 12, color: NX.t2, shadow: null }); [[`悪評のたまり方 ×${k.heat.toFixed(2)}`, `やめる人 ×${k.quit.toFixed(2)}`], [`罰金・事故 ×${k.ev.toFixed(2)}`, `評判の下がり方 ×${k.rep.toFixed(2)}`]].forEach((row, i) => row.forEach((t, j) => pT(c, t, 14 + j * 122, y + 70 + i * 15, { size: 12, color: NX.green, shadow: null })));
   nxBtn(s, c, 'bkquit', S.sure === 'bkq' ? '本当にやめる？' : 'ルートを降りる', 14, 326, 236, 24, { col: NX.red, on: S.sure === 'bkq' });
+  if (typeof kyBkSubTabs === 'function' && kyBkSubTabs(s, c, g, K, S)) return;
   y = nxPanel(c, 264, 62, 370, 182, { title: '施策（押して使う・やめる）', col: '#ff5468' }); KY_BKT.forEach((T, i) => { const why = kyBkTacOk(K, T), on = !!C.tac[T.id], x = 272 + (i % 3) * 120, yy = y + Math.floor(i / 3) * 30; nxBtn(s, c, 'bkt:' + T.id, why ? `◇${T.n}` : T.n, x, yy, 116, 26, { on, col: why ? NX.dim : '#ff5468', size: 12, kind: T.act && !why ? 'gold' : undefined }); if (why) pR(c, x + 1, yy + 1, 114, 24, 'rgba(6,4,14,0.45)'); });
   const F = fT; pR(c, 272, y + 92, 354, 64, '#0c0a20'); if (F) { const why = kyBkTacOk(K, F); const eff = []; if (F.out) eff.push(`仕事+${Math.round(F.out * 100)}%`); if (F.sal) eff.push(`人件費−${Math.round(F.sal * 100)}%`); if (F.dem) eff.push(`客+${Math.round(F.dem * 100)}%`); if (F.hire) eff.push(`応募+${F.hire}`); if (F.quit) eff.push(`やめる人×${F.quit}`); if (F.back) eff.push(`未払い分−${Math.round(F.back * 100)}%`); if (F.mor) eff.push(`士気${F.mor > 0 ? '+' : ''}${F.mor}`); if (F.act) eff.push('士気+12（3か月）'); eff.push(`悪評+${F.heat}${F.act ? '' : '/月'}`); pT(c, pFit(c, `${F.n}：${eff.join('・')}${why ? `（${why}）` : ''}`, 346, 12), 276, y + 96, { size: 12, color: why ? NX.t3 : NX.gold, shadow: null }); kyLines(c, `ほんとうは：${F.real}`, 276, y + 114, 346, { color: '#8ad8ff', max: 2 }); } else kyLines(c, '施策にカーソルを合わせると、ブラックくんが解説する。「ほんとうは」の行は、現実の決まり。', 276, y + 100, 346, { color: NX.t3, max: 3 });
   y = nxPanel(c, 264, 248, 370, 108, { title: `目標（${Object.keys(C.goal).length}／${KY_BKG.length}）`, col: '#ff5468' }); KY_BKG.forEach((G, i) => { const d = !!C.goal[G.id], x = 272 + (i % 2) * 182, yy = y + Math.floor(i / 2) * 16; pT(c, d ? '●' : '・', x, yy, { size: 12, color: d ? NX.green : NX.t3, shadow: null }); pT(c, pFit(c, G.n, 138, 12), x + 12, yy, { size: 12, color: d ? NX.green : NX.t2, shadow: null }); pT(c, `+${G.b}`, x + 176, yy, { size: 12, color: d ? NX.green : NX.t3, align: 'right', shadow: null }); }); }
@@ -55794,6 +55796,92 @@ if (typeof kyBkMonth === 'function' && !kyBkMonth.__v2) { const o0 = kyBkMonth; 
 function kyBkMood(g, K) { const C = K.bkc, heat = num(K.bk && K.bk.heat), last = K.hist[K.hist.length - 1], r = kyBkR(K), nx = KY_BKR[r + 1]; if (heat >= 70) return ['sweat', `悪評が${Math.round(heat)}！ ランキング入りも近いよ……。`]; if (last && last.prof < 0) return ['shock', `先月は赤字だよ！ ${kyMan2(Math.abs(last.prof))}も！ 働かせ方を見直す？`]; if (heat >= 40) return ['sweat', '労基署の気配がするよ。記録はちゃんと……いや、なんでもない。']; if (nx && nx.bp - num(C.bp) <= 20) return ['wink', `もうすぐ「${nx.n}」だよ！ あと${Math.ceil(nx.bp - num(C.bp))}ポイント。`]; const avg = K.staff.length ? K.staff.reduce((a, s) => a + s.mor, 0) / K.staff.length : 60; if (K.staff.length && avg < 40) return ['sweat', `みんなの目が死んでるよ（やる気 平均${Math.round(avg)}）。やめる人が出そう……。`]; return ['grin', KUN_TIPS[Math.floor(num(g.state.day, 1) / 3) % KUN_TIPS.length]]; }
 kyBkHomeKun = function (s, c, g, K, S) { if (!kyBkOn(K)) return; const [face, t] = kyBkMood(g, K); c.save(); c.beginPath(); c.rect(6, 62, 318, 176); c.clip(); pR(c, 6, 186, 318, 52, 'rgba(10,6,20,0.82)'); kunDraw(c, 12, 190, 1.75, S.f, face); kyLines(c, t, 58, 194, 260, { color: face === 'grin' ? '#f4f0ff' : face === 'wink' ? '#ffd23f' : '#ff9aa8', max: 3 }); c.restore(); s.btn('tab:bk', '', 6, 186, 318, 52, { kind: 'clear' }); };
 try { if (typeof window !== 'undefined') window.__KYBK2 = { E: KY_BKE, mood: kyBkMood }; } catch (e) { }
+// ===== ブラック企業ルート3：ブラック企業大賞・口コミサイト・エンディング画面と図鑑 =====
+// ---- データ ----
+const KY_BKRIV = ['株式会社ネムレン', '深夜急便ホールディングス', 'ムキュウ建設', 'サビザン商事', 'ゴールナシフーズ', 'エンドレス企画'];
+const KY_BKEP = [
+  { id: 'retire', n: '帝王の引退', face: 'wink', hint: '帝王になってから、会社を売る', t: '帝王のまま会社を売りはらい、大金を手にして表舞台から消えた。残された社員たちが、その後どうなったのかは、だれも知らない。', kun: 'お金は手に入ったね。でも、社員の人生はお金で買いもどせないんだ。' },
+  { id: 'legend', n: '伝説の帝王', face: 'grin', hint: '帝王になってから、さらに1年つづける', t: '帝王の座に君臨しつづけ、ついに「伝説」と呼ばれるようになった。ビジネス書の悪い見本として、名前がのこった。', kun: 'ここまで来た人は、はじめてだよ。……ほめてないけどね。' },
+  { id: 'white', n: 'ホワイト企業への転生', face: 'wink', hint: '帝王になってから、心を入れかえる', t: '帝王の座をすて、働き方を改めると宣言した。最初はだれも信じなかったが、少しずつ社員の顔に笑顔がもどってきた。', kun: 'ほんとうはね、ぼく、この結末がいちばん好きなんだ。' },
+  { id: 'arrest', n: '社長、書類送検', face: 'shock', hint: '労基署の調査で3回ごまかしがばれる', t: '何度も記録をごまかした結果、社長の名前で書類送検された。ニュースで顔写真が流れ、会社には二度ともどれなかった。', kun: 'ゲームでよかったね。現実なら、人生がかかってるよ。' },
+  { id: 'exodus', n: 'そして、だれもいなくなった', face: 'sweat', hint: '社員がいっせいにやめ、会社をたたむ', t: 'ある月、社員たちがいっせいに会社を去った。だれもいないオフィスで、鳴りやまない電話だけが、会社のあった証だった。', kun: '会社は、人がいなければ動かない。あたりまえのことなんだけどね。' },
+];
+const KY_BKEPI = id => KY_BKEP.find(x => x.id === id);
+const KY_BKREAL = 'ほんとうは：長時間労働や残業代の未払い、退職させないことは、法律違反になりうる。現実で困ったら、労働基準監督署や、国の「労働条件相談ほっとライン」に相談できる。';
+// 口コミ：[条件, 星, 文]
+const KY_BKREV = [
+  [(K, C) => C.tac.minashi, 2, '「固定残業代込み」と書いてあったけど、何時間働いても給料は同じ。時給にしたら、たぶん最低賃金くらい。'],
+  [(K, C) => C.tac.yarigai, 2, '面接で「やりがい」という言葉を20回は聞いた。給料の話は一回も出なかった。'],
+  [(K, C) => C.tac.nabakari, 1, '入社2年で「店長」になった。管理職だから残業代は出ないらしい。部下はいない。'],
+  [(K, C) => C.tac.kyujin, 1, '求人には「月給30万円」。実際は基本給18万円に、いろいろな手当。入ってから知った。'],
+  [(K, C) => C.tac.hikitome, 1, '退職届を3回出したけど、3回ともなかったことにされた。最後は退職代行を使った。'],
+  [(K, C) => C.tac.norma, 1, '毎月のノルマが終わらず、自分で商品を買っている。家が在庫だらけ。'],
+  [(K, C) => C.tac.gisou, 2, '「業務委託」のはずなのに、毎日タイムカードを押して、上司の指示どおりに働いている。'],
+  [(K, C) => C.tac.nonstop, 1, '24時間営業で、夜はひとりで番をしている。休憩は「お客さんが来ないとき」。'],
+  [(K, C, d) => num(C.brainD) > d, 5, '研修合宿から帰ってきたら、なぜか会社が大好きになっていた。毎日が楽しいです！（なんでだろう）'],
+  [K => num(K.design.black) >= 2, 1, '終電で帰れたらラッキー。会社の近くのネットカフェが、第二の家。'],
+  [K => num(K.bk && K.bk.heat) >= 60, 1, '社名で検索すると「ブラック」と出てくる。親に会社の名前を言えない。'],
+  [K => K.staff.length && K.staff.reduce((a, s) => a + s.mor, 0) / K.staff.length < 40, 2, '社内で会話がない。みんな画面だけ見ている。目が死んでいる。'],
+  [(K, C) => num(C.mLeft) >= 2, 2, '同期のほとんどがやめた。送別会も、もう開かれなくなった。'],
+  [K => { const h = K.hist[K.hist.length - 1]; return h && h.prof > 0; }, 3, '給料は安いけど、会社はもうかっているらしい。社長の車が新しくなった。'],
+  [K => num(K.cash) < 0, 2, '給料日が1日おくれた。「来月まとめて」と言われた。'],
+  [() => true, 3, '社長がよく、だれもいない方に向かって話しかけている。「ブラックくん」と呼んでいるらしい。'],
+  [() => true, 3, '成長はできる。体がもてば。'],
+  [K => K.staff.length && K.staff.reduce((a, s) => a + s.mor, 0) / K.staff.length >= 65, 4, '忙しいけど、仲間はいい人ばかり。……忙しすぎるけど。'],
+];
+const KY_BKWHO = [['元社員', '現社員'], ['営業', '現場', '事務', '企画', '店舗'], ['20代', '30代', '40代']];
+// ---- 追加のできごと ----
+const KY_BKE3 = [
+  { id: 'bkaward', t: 'ブラック企業大賞', b: K => `今年の「ブラック企業大賞」に、${K.name}がえらばれてしまった。授賞式への招待状が届いている。ネットでは、もう話題になっている。`, c: [['授賞式に出る', (g, K) => { kyBkAdd(K, 60); kyBkHeat(K, 12); K.rep = clamp(num(K.rep) - 4, 0, 100); return 'トロフィーを受けとった。会場は静まりかえっていた（黒ポイント+60・悪評+12・評判−4）。'; }], ['知らないふりをする', (g, K) => { kyBkAdd(K, 20); return '何も言わずにやりすごした。でも、受賞の記録は残る（黒ポイント+20）。'; }]] },
+  { id: 'bklegend', t: '伝説の帝王', b: K => `帝王になってから1年。${K.name}のやり方は、業界で「伝説」と呼ばれるようになった。そろそろ、ひと区切りつけてもいいころだ。`, c: [['伝説として引退する', (g, K) => { const v = Math.round(kyValue(g, K) * num(K.share, 100) / 100); g.state.money = num(g.state.money) + v; kyEnd(g, K, 'sold', `伝説の帝王として引退した。会社を売って${kyMan2(v)}を手にした。`); kyBkEnding(g, K, 'legend'); return `会社を売って ${kyMan2(v)} を手にし、伝説になった。`; }], ['まだまだ帝王を続ける', (g, K) => { kyBkAdd(K, 100); K.bkc.contD = num(g.state.day, 1); return 'ブラックくん「えっ、まだやるの……？」（黒ポイント+100）'; }]] },
+  { id: 'bkexodus', t: '一斉退職', b: (K, e) => `この1か月で、${num(e.n)}人がいっせいに会社をやめた。退職代行の会社から、まとめて書類が届いている。残った社員も、机の上を片づけはじめた……。`, c: [['会社をたたむ', (g, K) => { const r = kyCloseCo(g); kyBkEnding(g, K, 'exodus'); return r && r.ok ? `会社をたたんだ。${r.v > 0 ? `残ったお金 ${kyMan2(r.v)} を受けとった。` : '借金を返すと、何も残らなかった。'}` : '会社をたたもうとしたが、できなかった。'; }], ['残った人でやり直す', (g, K) => { K.design.black = Math.min(1, num(K.design.black)); kyBkHeat(K, -15); kyBkMor(K, 6); kyBkAdd(K, 10); return '働き方を「グレー」まで下げて、残った社員と話しあった（士気+6・悪評−15）。'; }]] },
+];
+for (const E of KY_BKE3) KY_EVB.push(Object.assign({ w: 0, ok: () => false }, E));
+Object.assign(KUN_EV, { bkaward: ['grin', '大賞だって！ ……これ、ほめられてるんじゃないからね？'], bklegend: ['grin', ''], bkexodus: ['shock', ''] });
+// ---- エンディングの記録 ----
+function kyBkStats(g, K) { const C = kyBkFix(K), day = num(g.state.day, 1), revs = K.revs || []; return { yrs: Math.max(0, (day - num(C.d0, day)) / 120), rank: KY_BKR[Math.max(num(C.maxR), kyBkR(K))].n, bp: Math.floor(num(C.bp)), left: num(C.left), dodge: num(C.cnt.dodge), caught: num(C.cnt.caught), best: K.hist.reduce((a, h) => Math.max(a, num(h.rev)), 0), aw: num(C.awBest), star: revs.length ? revs.reduce((a, r) => a + r.st, 0) / revs.length : 0 }; }
+function kyBkEnding(g, K, id) { try { const E = g.state.kyEnds = isObj(g.state.kyEnds) ? g.state.kyEnds : {}, d = kyD(g); if (!E[id]) E[id] = { y: d.year, co: K.name }; K.bkEpQ = Object.assign({ id, co: K.name }, kyBkStats(g, K)); kyLog(g, K, `エンディング「${KY_BKEPI(id).n}」を見た。`); } catch (e) { console.error('[kybk3] end', e); } }
+// 既存のエンディングの選択肢に、記録をつなぐ
+(function () { const W = (id, i, f) => { const E = KY_EVB.find(x => x.id === id); if (!E || !E.c[i]) return; const o = E.c[i][1]; E.c[i][1] = function (g, K, e) { const r = o(g, K, e); try { f(g, K); } catch (er) { console.error('[kybk3] wrap', er); } return r; }; };
+  W('bkend', 0, (g, K) => { K.bkc.contD = num(g.state.day, 1); }); W('bkend', 1, (g, K) => kyBkEnding(g, K, 'retire')); W('bkend', 2, (g, K) => kyBkEnding(g, K, 'white')); W('bkarrest', 0, (g, K) => kyBkEnding(g, K, 'arrest')); })();
+// ---- 大賞の点数 ----
+function kyBkAwScore(g, K) { const C = K.bkc, tac = Object.values(C.tac).filter(Boolean).length; return Math.round(num(K.bk && K.bk.heat) * 0.5 + Math.max(0, num(C.bp) - num(C.yBp0)) * 0.12 + tac * 3 + num(K.design.black) * 6 + Math.min(20, num(C.yLeft) * 1.5)); }
+function kyBkRivals(g, K) { const C = K.bkc, y = kyD(g).year; if (!C.rv || C.rvY !== y) { const pool = KY_BKRIV.slice(), out = []; for (let i = 0; i < 3; i++) { const j = Math.floor(kyR() * pool.length); out.push({ n: pool.splice(j, 1)[0], s: Math.round(75 + kyR() * 65 + i * 3) }); } C.rv = out; C.rvY = y; C.yBp0 = num(C.bp); C.yLeft = 0; } return C.rv; }
+function kyBkStand(g, K) { return kyBkRivals(g, K).map(r => ({ n: r.n, s: r.s })).concat([{ n: K.name, s: kyBkAwScore(g, K), me: 1 }]).sort((a, b) => b.s - a.s); }
+// ---- 毎月 ----
+if (typeof kyBkMonth === 'function' && !kyBkMonth.__v3) { const o0 = kyBkMonth; kyBkMonth = function (g, K, E, notes) { o0(g, K, E, notes); try { if (!kyBkOn(K)) return; const C = K.bkc, day = num(g.state.day, 1), d = kyD(g); C.maxR = Math.max(num(C.maxR), kyBkR(K)); kyBkRivals(g, K);
+  // 去った社員
+  const ids = K.staff.map(s => s.id), prev = Array.isArray(C.ids) ? C.ids : ids, gone = prev.filter(i => !ids.includes(i)).length; C.left = num(C.left) + gone; C.yLeft = num(C.yLeft) + gone; C.mLeft = gone; C.ids = ids;
+  // 口コミ
+  if (K.staff.length && kyR() < 0.7) { const rec = (K.revs || []).slice(-4).map(r => r.t), L = KY_BKREV.filter(x => { try { return !rec.includes(x[2]) && x[0](K, C, day); } catch (e) { return false; } }), x = L[Math.floor(kyR() * L.length)]; if (x) { const W = KY_BKWHO.map(a => a[Math.floor(kyR() * a.length)]); K.revs = (K.revs || []).concat([{ d: day, y: d.year, m: d.month, st: x[1], who: W.join('・'), t: x[2] }]).slice(-12); } }
+  // 大賞（12月）
+  if (d.month === 12 && C.awY !== d.year) { C.awY = d.year; const St = kyBkStand(g, K), rk = St.findIndex(x => x.me) + 1; C.aw = (C.aw || []).concat([{ y: d.year, rk, s: St.find(x => x.me).s, top: St[0].n }]).slice(-6); if (!num(C.awBest) || rk < C.awBest) C.awBest = rk; if (rk === 1) K.evq.push({ k: 'bkaward' }); else kyLog(g, K, `ブラック企業大賞：${K.name}は${rk}位だった（大賞は${St[0].n}）。`); }
+  if (K.evq.length) return;
+  if (prev.length >= 10 && gone >= Math.max(3, Math.ceil(prev.length * 0.12)) && !(num(C.exoU) > day)) { C.exoU = day + 360; K.evq.push({ k: 'bkexodus', n: gone }); return; }
+  if (C.contD && day - num(C.contD) >= 120 * 1 && kyBkR(K) >= 4 && C.legD !== C.contD) { C.legD = C.contD; K.evq.push({ k: 'bklegend' }); } } catch (e) { console.error('[kybk3] month', e); } }; kyBkMonth.__v3 = 1; }
+// ---- 画面：ブラック道のサブタブ ----
+const KY_BKSUB = [['main', '道'], ['rev', '口コミ'], ['aw', '大賞'], ['end', '図鑑']];
+const kyStars = (c, x, y, v, sz) => { for (let i = 0; i < 5; i++) pT(c, '★', x + i * (sz + 1), y, { size: sz, color: v >= i + 0.75 ? NX.gold : v >= i + 0.25 ? '#a08a3a' : '#3a3458', shadow: null }); };
+function kyBkSubTabs(s, c, g, K, S) { const sub = S.bks || 'main'; KY_BKSUB.forEach(([id, n], i) => nxBtn(s, c, 'bks:' + id, n, 14 + i * 60, 298, 56, 22, { on: sub === id, col: '#ff5468', size: 12 })); if (sub === 'main') return false; ({ rev: kyBkRevScr, aw: kyBkAwScr, end: kyBkEndScr }[sub] || (() => { }))(s, c, g, K, S); return true; }
+function kyBkRevScr(s, c, g, K, S) { const R = (K.revs || []).slice().reverse(), avg = R.length ? R.reduce((a, r) => a + r.st, 0) / R.length : 0; let y = nxPanel(c, 264, 62, 370, 294, { title: 'ドット転職クチコミ（社員の口コミ）', col: '#ff5468' }); if (!R.length) { kunDraw(c, 280, y + 10, 2, S.f, 'wink'); kunSay(c, 336, y + 10, 280, 'まだ口コミはないよ。社員がいれば、毎月だれかが書きこむかも……。', { max: 3 }); return; }
+  kyStars(c, 274, y, avg, 14); pT(c, `${avg.toFixed(1)}（${R.length}件）`, 356, y + 1, { size: 12, color: NX.gold, shadow: null }); pT(c, avg < 2 ? '評価：最悪' : avg < 3 ? '評価：悪い' : '評価：ふつう', 624, y + 1, { size: 12, color: avg < 2.5 ? NX.red : NX.t2, align: 'right', shadow: null }); y += 22;
+  const per = 4, pg = clamp(num(S.bkpg), 0, Math.max(0, Math.ceil(R.length / per) - 1)); R.slice(pg * per, pg * per + per).forEach((r, i) => { const yy = y + i * 54; pR(c, 272, yy, 354, 50, i % 2 ? '#120e26' : '#16102c'); kyStars(c, 278, yy + 5, r.st, 10); pT(c, pFit(c, `${r.who}・${r.y}年${r.m}月`, 240, 12), 620, yy + 3, { size: 12, color: NX.t3, align: 'right', shadow: null }); kyLines(c, r.t, 278, yy + 20, 342, { color: NX.t1, max: 2, size: 12 }); });
+  if (R.length > per) { nxBtn(s, c, 'bkpg-', '◀', 272, 330, 40, 20, { off: pg <= 0, size: 12 }); pT(c, `${pg + 1}／${Math.ceil(R.length / per)}`, 449, 333, { size: 12, color: NX.t2, align: 'center', shadow: null }); nxBtn(s, c, 'bkpg+', '▶', 586, 330, 40, 20, { off: pg >= Math.ceil(R.length / per) - 1, size: 12 }); } }
+function kyBkAwScr(s, c, g, K, S) { const C = K.bkc, d = kyD(g), St = kyBkStand(g, K), mx = Math.max(100, ...St.map(x => x.s)); let y = nxPanel(c, 264, 62, 370, 294, { title: `ブラック企業大賞 ${d.year}（12月に発表）`, col: '#ff5468' }); pT(c, '今の順位（悪評・黒ポイント・施策・働き方・去った社員で決まる）', 272, y, { size: 12, color: NX.t3, shadow: null }); y += 18;
+  St.forEach((x, i) => { const yy = y + i * 30; pR(c, 272, yy, 354, 26, x.me ? '#2a1020' : '#141030'); pT(c, `${i + 1}位`, 278, yy + 6, { size: 12, color: i === 0 ? NX.gold : NX.t2, shadow: null }); pT(c, pFit(c, x.n, 120, 12), 310, yy + 6, { size: 12, color: x.me ? '#ff5468' : NX.t1, shadow: null }); nxGauge(c, 436, yy + 9, 150, 8, x.s / mx, x.me ? '#ff5468' : '#6a5a9a'); pT(c, String(x.s), 620, yy + 6, { size: 12, color: NX.t2, align: 'right', shadow: null }); });
+  y += 128; pT(c, 'これまでの結果', 272, y, { size: 12, color: NX.t2, shadow: null }); y += 16; const A = (C.aw || []).slice().reverse().slice(0, 3); if (!A.length) pT(c, 'まだ発表されていない。', 272, y, { size: 12, color: NX.t3, shadow: null }); A.forEach((a, i) => pT(c, pFit(c, a.rk === 1 ? `${a.y}年：大賞を受賞（${a.s}点）` : `${a.y}年：${a.rk}位（大賞は${a.top}）`, 350, 12), 272, y + i * 15, { size: 12, color: a.rk === 1 ? NX.gold : NX.t2, shadow: null }));
+  kyLines(c, 'ブラックくん「大賞をとると黒ポイントがたくさん入るよ。でも、全国に名前が知られちゃうけどね」', 272, 316, 354, { color: '#ffd23f', max: 2 }); }
+function kyBkEndScr(s, c, g, K, S) { const E = isObj(g.state.kyEnds) ? g.state.kyEnds : {}, n = KY_BKEP.filter(x => E[x.id]).length; let y = nxPanel(c, 264, 62, 370, 294, { title: `エンディング図鑑（${n}／${KY_BKEP.length}）`, col: '#ff5468' });
+  KY_BKEP.forEach((x, i) => { const got = E[x.id], yy = y + i * 52; pR(c, 272, yy, 354, 50, got ? '#1e1028' : '#100c22'); kunDraw(c, 276, yy + 4, 1.4, S.f, got ? x.face : 'sweat'); if (!got) pR(c, 276, yy + 4, 34, 38, 'rgba(10,8,22,0.7)'); pT(c, got ? x.n : '？？？', 316, yy + 3, { size: 12, color: got ? NX.gold : NX.t3, shadow: null }); if (got) pT(c, pFit(c, `${got.y}年・${got.co}`, 150, 12), 620, yy + 3, { size: 12, color: NX.t3, align: 'right', shadow: null }); kyLines(c, got ? x.t : `ヒント：${x.hint}`, 316, yy + 19, 304, { color: got ? NX.t2 : NX.t3, max: got ? 2 : 1, size: 12 }); }); }
+// ---- エンディング画面（重ねて出す） ----
+function kyBkEpDraw(s, c, g, K, S) { const P = K.bkEpQ, X = KY_BKEPI(P.id); if (!X) { K.bkEpQ = null; return; } const E = isObj(g.state.kyEnds) ? g.state.kyEnds : {}, n = KY_BKEP.filter(x => E[x.id]).length, [x, y] = nxPop(s, c, 580, 318, { title: `ENDING ${KY_BKEP.indexOf(X) + 1}　${X.n}`, col: '#ff5468' });
+  kunDraw(c, x + 16, y + 34, 4, S.f, X.face, { card: true }); pT(c, `図鑑 ${n}／${KY_BKEP.length}`, x + 64, y + 146, { size: 12, color: NX.t3, align: 'center', shadow: null });
+  const ty = kyLines(c, X.t, x + 128, y + 32, 436, { color: NX.t1, max: 3 }); const L = [['会社', P.co], ['ルートの年数', `${P.yrs.toFixed(1)}年`], ['最高の階級', P.rank], ['黒ポイント', String(P.bp)], ['会社を去った社員', `${P.left}人`], ['労基署', `乗り切り${P.dodge}・発覚${P.caught}`], ['最高の月商', kyMan2(P.best)], ['大賞', P.aw ? (P.aw === 1 ? '受賞' : `最高${P.aw}位`) : 'なし']];
+  const sy = Math.max(ty + 6, y + 82); L.forEach(([a, b], i) => { const xx = x + 128 + (i % 2) * 222, yy = sy + Math.floor(i / 2) * 17; pT(c, a, xx, yy, { size: 12, color: NX.t3, shadow: null }); pT(c, pFit(c, b, 120, 12), xx + 212, yy, { size: 12, color: NX.gold, align: 'right', shadow: null }); });
+  kunSay(c, x + 16, y + 172, 548, `ブラックくん「${X.kun}」`, { max: 2 }); kyLines(c, KY_BKREAL, x + 16, y + 214, 548, { color: '#8ad8ff', max: 3 }); nxBtn(s, c, 'epok', 'とじる', x + 240, y + 318 - 38, 100, 28, { kind: 'pri', def: true }); }
+// ---- つなぎ ----
+function installKYBk3() { try { const M = GB_MODES.kyapp; if (!M || M.__bk3) return; const od = M.draw, ob = M.btn; M.draw = function (s, c, g) { try { const K0 = kySt(g); if (K0.st !== 'run' && K0.bkEpQ) s.S.evR = null; } catch (e) { } od.call(this, s, c, g); try { const K = kySt(g); if (K.bkEpQ && !s.S.evR && !(K.st === 'run' && K.evq.length)) kyBkEpDraw(s, c, g, K, s.S); } catch (e) { console.error('[kybk3] draw', e); } }; M.btn = function (s, id, g) { const K = kySt(g); if (K.st !== 'run' && K.bkEpQ) s.S.evR = null; if (K.bkEpQ && !s.S.evR && !(K.st === 'run' && K.evq.length)) { if (id === 'epok') { K.bkEpQ = null; tt.sfx('ok'); } return; } if (id.startsWith('bks:')) { s.S.bks = id.slice(4); s.S.bkpg = 0; return; } if (id === 'bkpg-' || id === 'bkpg+') { s.S.bkpg = Math.max(0, num(s.S.bkpg) + (id === 'bkpg+' ? 1 : -1)); return; } return ob.call(this, s, id, g); }; M.__bk3 = 1; } catch (e) { console.error('[kybk3] install', e); } }
+try { if (typeof window !== 'undefined') window.__KYBK3 = { EP: KY_BKEP, end: kyBkEnding, stand: kyBkStand, score: kyBkAwScore, REV: KY_BKREV }; } catch (e) { }
 // ===== 会社づくりを、ゲーム会社にも =====
 const KYL_GDDEP = [['pg', 'プログラム部', '技術・面白さ・バグ取り'], ['gr', 'デザイン部', '絵'], ['sd', 'サウンド部', '音'], ['pl', '企画部', '面白さ・物語'], ['db', 'デバッグ部', 'バグ取り']];
 const kylSeat = (G, D) => { let k = 1; for (const id of D.pol || []) { const P = KY_POLI(id); if (P && P.seat) k = Math.min(k, P.seat); } return Math.ceil((num(G.staff && G.staff.length) + 1) * k); };
